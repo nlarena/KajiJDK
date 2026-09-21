@@ -15,10 +15,9 @@ public class Exception extends Throwable {
     }
 
     /**
-     * El constructor con los dos interruptores de `Throwable`: la supresion y la escritura del
-     * stack trace. Es `protected` porque solo tiene sentido para una subclase que quiera una
-     * excepcion **barata** -- una que se lanza como senal de control muchas veces y cuya pila nadie
-     * va a mirar.
+     * The constructor with `Throwable`'s two switches: suppression and writing the stack trace. It
+     * is `protected` because it only makes sense for a subclass that wants a **cheap** exception --
+     * one thrown many times as a control signal and whose stack nobody is going to look at.
      */
     protected Exception(String message, Throwable cause, boolean enableSuppression,
             boolean writableStackTrace) {

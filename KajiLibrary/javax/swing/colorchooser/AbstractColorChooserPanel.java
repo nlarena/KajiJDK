@@ -8,98 +8,99 @@ import javax.swing.JColorChooser;
 import javax.swing.JPanel;
 
 /**
- * Una solapa del selector de color: una forma de elegir el mismo color.
+ * A tab of the colour chooser: one way of picking the same colour.
  *
- * <p>Cada panel --RGB, HSV, CMYK, las muestras-- presenta el color de una manera distinta, pero
- * **ninguno tiene el color**: todos leen y escriben el {@link ColorSelectionModel} del
- * {@link JColorChooser} que los hospeda. Por eso las solapas quedan sincronizadas sin conocerse
- * entre si, y por eso el ciclo de vida del panel gira alrededor de
- * {@link #installChooserPanel} y {@link #uninstallChooserPanel}: instalarlo es engancharlo al
- * modelo, desinstalarlo es soltarlo.
+ * <p>Each panel --RGB, HSV, CMYK, the swatches-- presents the colour in a different way, but
+ * **none of them holds the colour**: they all read and write the {@link ColorSelectionModel} of
+ * the {@link JColorChooser} that hosts them. That is why the tabs stay in step without knowing
+ * about each other, and why the panel's life cycle revolves around
+ * {@link #installChooserPanel} and {@link #uninstallChooserPanel}: installing it is hooking it
+ * to the model, uninstalling it is letting go.
  *
- * <p>Una subclase implementa cinco cosas: {@link #buildChooser} arma la interfaz una sola vez,
- * {@link #updateChooser} la refresca cada vez que el modelo cambia, y
- * {@link #getDisplayName}, {@link #getSmallDisplayIcon} y {@link #getLargeDisplayIcon} dicen como
- * se lo nombra en la solapa.
+ * <p>A subclass implements five things: {@link #buildChooser} builds the interface once,
+ * {@link #updateChooser} refreshes it every time the model changes, and
+ * {@link #getDisplayName}, {@link #getSmallDisplayIcon} and {@link #getLargeDisplayIcon} say how
+ * it is named on the tab.
  *
  * <h2>A KajiLibrary subset</h2>
  *
- * <p>El ciclo de vida y el acceso al modelo estan hechos. {@link #paint} delega en la superclase y
- * no dibuja nada propio --el JDK aprovecha ese punto para refrescar el panel cuando cambia el
- * `LookAndFeel`, y aca no hay ninguno-- y el enganche del `enabled` con el selector, que en el JDK
- * es un {@link PropertyChangeListener} sobre una propiedad ligada, tampoco: el `JComponent` de esta
- * biblioteca no tiene propiedades ligadas todavia.
+ * <p>The life cycle and the access to the model are done. {@link #paint} delegates to the
+ * superclass and paints nothing of its own --the JDK takes advantage of that point to refresh
+ * the panel when the `LookAndFeel` changes, and here there is none-- and neither is the hook of
+ * `enabled` to the chooser, which in the JDK is a {@link PropertyChangeListener} over a bound
+ * property: this library's `JComponent` has no bound properties yet.
  */
 public abstract class AbstractColorChooserPanel extends JPanel {
 
-    /** El nombre de la propiedad que dice si se puede elegir transparencia. */
+    /** The name of the property that says whether transparency can be picked. */
     public static final String TRANSPARENCY_ENABLED_PROPERTY = "TransparencyEnabled";
 
     /**
-     * El escucha que en el JDK sigue el `enabled` del selector. Aca no se registra --ver la nota de
-     * la clase-- pero el campo queda porque es donde iria.
+     * The listener that in the JDK follows the chooser's `enabled`. Here it is not registered --see
+     * the class note-- but the field stays because it is where it would go.
      */
     private final PropertyChangeListener enabledListener = null;
 
-    /** El selector que hospeda a este panel, o `null` si no esta instalado. */
+    /** The chooser that hosts this panel, or `null` if it is not installed. */
     private JColorChooser chooser;
 
-    /** Si se puede elegir transparencia. */
+    /** Whether transparency can be picked. */
     private boolean transparencyEnabled = true;
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected AbstractColorChooserPanel() {
         super();
     }
 
     /**
-     * Refresca la interfaz del panel con el color que hay en el modelo.
+     * Refreshes the panel's interface with the colour in the model.
      *
-     * <p>Lo llama el selector cada vez que el color cambia, venga de este panel o de otro.
+     * <p>The chooser calls it every time the colour changes, whether it came from this panel or
+     * from another.
      */
     public abstract void updateChooser();
 
     /**
-     * Arma la interfaz del panel.
+     * Builds the panel's interface.
      *
-     * <p>Se llama una sola vez, desde {@link #installChooserPanel}.
+     * <p>It is called only once, from {@link #installChooserPanel}.
      */
     protected abstract void buildChooser();
 
-    /** El nombre de la solapa. */
+    /** The tab's name. */
     public abstract String getDisplayName();
 
     /**
-     * El caracter mnemonico de la solapa, o 0 si no tiene.
+     * The tab's mnemonic character, or 0 if it has none.
      *
-     * <p>Cero por omision: un mnemonico repetido entre solapas es peor que ninguno, y la clase base
-     * no puede saber cuales estan libres.
+     * <p>Zero by default: a mnemonic repeated between tabs is worse than none, and the base class
+     * cannot know which ones are free.
      */
     public int getMnemonic() {
         return 0;
     }
 
     /**
-     * Que letra del nombre subrayar como mnemonico, o -1 si ninguna.
+     * Which letter of the name to underline as the mnemonic, or -1 for none.
      *
-     * <p>Es un indice y no un caracter porque el nombre puede repetir la letra, y hay que subrayar
-     * una sola.
+     * <p>It is an index and not a character because the name may repeat the letter, and only one
+     * has to be underlined.
      */
     public int getDisplayedMnemonicIndex() {
         return -1;
     }
 
-    /** El icono chico de la solapa, o `null` si no tiene. */
+    /** The tab's small icon, or `null` if it has none. */
     public abstract Icon getSmallDisplayIcon();
 
-    /** El icono grande de la solapa, o `null` si no tiene. */
+    /** The tab's large icon, or `null` if it has none. */
     public abstract Icon getLargeDisplayIcon();
 
     /**
-     * Engancha el panel a ese selector y arma su interfaz.
+     * Hooks the panel to that chooser and builds its interface.
      *
-     * <p>Lo llama el selector; una subclase que lo redefina tiene que llamar a `super`, o el panel
-     * queda sin modelo.
+     * <p>The chooser calls it; a subclass that overrides it has to call `super`, or the panel is
+     * left without a model.
      */
     public void installChooserPanel(JColorChooser enclosingChooser) {
         if (this.chooser != null) {
@@ -111,50 +112,52 @@ public abstract class AbstractColorChooserPanel extends JPanel {
     }
 
     /**
-     * Suelta el panel del selector.
+     * Lets the panel go from the chooser.
      *
-     * <p>Una subclase que lo redefina tiene que llamar a `super`, o el panel queda creyendo que
-     * sigue instalado.
+     * <p>A subclass that overrides it has to call `super`, or the panel is left believing it is
+     * still installed.
      */
     public void uninstallChooserPanel(JColorChooser enclosingChooser) {
         this.chooser = null;
     }
 
-    /** El modelo del selector que lo hospeda, o `null` si no esta instalado. */
+    /** The model of the chooser that hosts it, or `null` if it is not installed. */
     public ColorSelectionModel getColorSelectionModel() {
         return this.chooser == null ? null : this.chooser.getSelectionModel();
     }
 
-    /** El color que hay en el modelo, o `null` si el panel no esta instalado. */
+    /** The colour in the model, or `null` if the panel is not installed. */
     protected Color getColorFromModel() {
-        ColorSelectionModel modelo = getColorSelectionModel();
-        return modelo == null ? null : modelo.getSelectedColor();
+        ColorSelectionModel model = getColorSelectionModel();
+        return model == null ? null : model.getSelectedColor();
     }
 
-    /** Escribe el color en el modelo. De paquete: es como el panel le contesta al selector. */
+    /**
+     * Writes the colour into the model. Package access: it is how the panel answers the chooser.
+     */
     void setSelectedColor(Color color) {
-        ColorSelectionModel modelo = getColorSelectionModel();
-        if (modelo != null) {
-            modelo.setSelectedColor(color);
+        ColorSelectionModel model = getColorSelectionModel();
+        if (model != null) {
+            model.setSelectedColor(color);
         }
     }
 
     /**
-     * Prende o apaga la eleccion de transparencia en este panel.
+     * Turns the picking of transparency on or off in this panel.
      *
-     * <p>Se guarda; hacerla efectiva es cosa de la subclase, que es la que tiene el control del
-     * canal alfa --si es que lo tiene.
+     * <p>It is kept; making it effective is the subclass's business, since it is the one that has
+     * control of the alpha channel -- if it has one at all.
      */
     public void setColorTransparencySelectionEnabled(boolean b) {
         this.transparencyEnabled = b;
     }
 
-    /** Si este panel deja elegir transparencia. Por omision, si. */
+    /** Whether this panel lets transparency be picked. By default, yes. */
     public boolean isColorTransparencySelectionEnabled() {
         return this.transparencyEnabled;
     }
 
-    /** Dibuja el panel. Ver la nota de la clase: no agrega nada propio. */
+    /** Paints the panel. See the class note: it adds nothing of its own. */
     public void paint(Graphics g) {
         super.paint(g);
     }

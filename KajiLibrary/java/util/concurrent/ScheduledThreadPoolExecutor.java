@@ -456,7 +456,7 @@ final class SchedTask<V> implements RunnableScheduledFuture<V> {
 
     // No `throws` on either get: restating a compiled superinterface's clause is rejected
     // (finding #104), and the descriptor is unchanged without it.
-    public V get() {
+    public V get() throws ExecutionException {
         synchronized (lock) {
             while (!done) {
                 try {
@@ -469,7 +469,7 @@ final class SchedTask<V> implements RunnableScheduledFuture<V> {
         return report();
     }
 
-    public V get(long timeout, TimeUnit unit) {
+    public V get(long timeout, TimeUnit unit) throws ExecutionException, TimeoutException {
         long millis = unit.toMillis(timeout);
         long deadline = System.currentTimeMillis() + millis;
         synchronized (lock) {
@@ -489,7 +489,7 @@ final class SchedTask<V> implements RunnableScheduledFuture<V> {
         return report();
     }
 
-    private V report() {
+    private V report() throws ExecutionException {
         V value;
         synchronized (lock) {
             if (cancelled) {
@@ -528,9 +528,9 @@ final class SchedTimer extends Thread {
         while (running) {
             long wait = next - System.currentTimeMillis();
             if (wait > 0L) {
-                // Ver la nota de `CfDelayedTask.run`: una interrupcion es cancelacion. Se restaura
-                // la marca y se corta el bucle en vez de seguir esperando, que es lo que hace un
-                // `ScheduledThreadPoolExecutor` real cuando le apagan el hilo.
+                // See `CfDelayedTask.run`'s note: an interruption is cancellation. The flag is
+                // restored and the loop is cut short instead of going on waiting, which is what a
+                // real `ScheduledThreadPoolExecutor` does when its thread is shut down.
                 try {
                     Thread.sleep(wait);
                 } catch (InterruptedException e) {

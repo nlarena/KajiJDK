@@ -6,9 +6,10 @@ package javax.lang.model.element;
 // which is the *canonical* order modifiers are written in source.
 //
 // toString() returns the modifier spelled as it is in source: lowercase, and NON_SEALED
-// prints as "non-sealed". The JDK gets this from name().toLowerCase(Locale.US); KajiLibrary's
-// java.lang.String has no toLowerCase, so the spellings are switched out explicitly. The
-// observable behaviour is the same.
+// prints as "non-sealed". The JDK gets this from name().toLowerCase(Locale.US); the spellings
+// are switched out explicitly here because KajiLibrary's java.lang.String had no toLowerCase
+// when this was written. It has one now, so that is no longer a reason. The observable
+// behaviour is the same.
 public enum Modifier {
 
     PUBLIC,

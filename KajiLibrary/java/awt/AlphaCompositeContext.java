@@ -5,44 +5,45 @@ import java.awt.image.Raster;
 import java.awt.image.WritableRaster;
 
 /**
- * El contexto que mezcla de verdad: las doce reglas de Porter-Duff, píxel por píxel.
+ * The context that really blends: the twelve Porter-Duff rules, pixel by pixel.
  *
- * <p>Toda la mezcla se reduce a dos números por operando. Cada regla dice qué fracción del origen y
- * qué fracción del destino sobreviven —{@code Fa} y {@code Fb}— y el resultado es siempre
+ * <p>All blending comes down to two numbers per operand. Each rule says what fraction of the source
+ * and what fraction of the destination survive —{@code Fa} and {@code Fb}— and the result is always
  *
- * <pre>color = Fa * colorOrigen + Fb * colorDestino
- * alfa  = Fa * alfaOrigen  + Fb * alfaDestino</pre>
+ * <pre>colour = Fa * sourceColour + Fb * destinationColour
+ * alpha  = Fa * sourceAlpha  + Fb * destinationAlpha</pre>
  *
- * <p>Eso es cierto **sólo** con el color premultiplicado por su alfa, y es la razón de que este
- * contexto premultiplique al entrar y deshaga al salir. Sin premultiplicar, cada regla necesitaría
- * su propio caso especial para no teñir el resultado con el color de un píxel invisible.
+ * <p>That holds **only** with the colour premultiplied by its alpha, and it is why this context
+ * premultiplies on the way in and undoes it on the way out. Without premultiplying, every rule
+ * would need its own special case so as not to tint the result with the colour of an invisible
+ * pixel.
  *
- * <p>Los dos factores dependen únicamente de los alfas, y de ahí sale la tabla de doce filas que es
- * el corazón de la clase. `SRC_OVER`, la de siempre, es `Fa = 1` y `Fb = 1 - alfaOrigen`: el origen
- * entero, y del destino lo que el origen deje ver.
+ * <p>The two factors depend only on the alphas, and from that comes the twelve-row table that is
+ * the heart of the class. `SRC_OVER`, the usual one, is `Fa = 1` and `Fb = 1 - sourceAlpha`: the
+ * whole source, and of the destination whatever the source lets through.
  *
- * <p>No es pública: es cómo está escrito {@link AlphaComposite#createContext}.
+ * <p>It is not public: it is how {@link AlphaComposite#createContext} is written.
  */
 class AlphaCompositeContext implements CompositeContext {
 
     private final int rule;
     private final float extraAlpha;
 
-    /** Con la regla y el alfa extra que se aplica al origen. */
+    /** With the rule and the extra alpha applied to the source. */
     AlphaCompositeContext(int rule, float extraAlpha) {
         this.rule = rule;
         this.extraAlpha = extraAlpha;
     }
 
-    /** No hay recursos que soltar. */
+    /** There are no resources to release. */
     public void dispose() {
     }
 
     /**
-     * Mezcla el origen con el destino y escribe el resultado.
+     * Blends the source with the destination and writes the result.
      *
-     * <p>Los tres rásters se recorren en su **propio** origen y por el rectángulo más chico de los
-     * tres: no tienen por qué estar en el mismo lugar del plano ni medir lo mismo.
+     * <p>The three rasters are walked from their **own** origin and over the smallest rectangle of
+     * the three: they need not be at the same place on the plane nor be the same size.
      */
     public void compose(Raster src, Raster dstIn, WritableRaster dstOut) {
         int w = Math.min(Math.min(src.getWidth(), dstIn.getWidth()), dstOut.getWidth());
@@ -53,9 +54,9 @@ class AlphaCompositeContext implements CompositeContext {
         int iy = dstIn.getMinY();
         int ox = dstOut.getMinX();
         int oy = dstOut.getMinY();
-        boolean srcAlfa = src.getNumBands() > 3;
-        boolean inAlfa = dstIn.getNumBands() > 3;
-        boolean outAlfa = dstOut.getNumBands() > 3;
+        boolean srcHasAlpha = src.getNumBands() > 3;
+        boolean inHasAlpha = dstIn.getNumBands() > 3;
+        boolean outHasAlpha = dstOut.getNumBands() > 3;
         int[] s = new int[src.getNumBands()];
         int[] d = new int[dstIn.getNumBands()];
         int[] o = new int[dstOut.getNumBands()];
@@ -64,25 +65,25 @@ class AlphaCompositeContext implements CompositeContext {
             for (int i = 0; i < w; i++) {
                 s = src.getPixel(sx + i, sy + j, s);
                 d = dstIn.getPixel(ix + i, iy + j, d);
-                float as = (srcAlfa ? s[3] / 255.0f : 1.0f) * this.extraAlpha;
-                float ad = inAlfa ? d[3] / 255.0f : 1.0f;
-                this.factores(as, ad, f);
-                float alfa = f[0] * as + f[1] * ad;
+                float as = (srcHasAlpha ? s[3] / 255.0f : 1.0f) * this.extraAlpha;
+                float ad = inHasAlpha ? d[3] / 255.0f : 1.0f;
+                this.factors(as, ad, f);
+                float alpha = f[0] * as + f[1] * ad;
                 for (int c = 0; c < 3; c++) {
-                    // Premultiplicar, mezclar, y deshacer: el color de un pixel invisible no aporta
-                    // nada, que es justamente lo que la premultiplicacion garantiza.
+                    // Premultiply, blend and undo: an invisible pixel's colour contributes nothing,
+                    // which is exactly what premultiplication guarantees.
                     float cs = s[c] * as;
                     float cd = d[c] * ad;
                     float v = f[0] * cs + f[1] * cd;
-                    if (alfa > 0.0f) {
-                        v = v / alfa;
+                    if (alpha > 0.0f) {
+                        v = v / alpha;
                     } else {
                         v = 0.0f;
                     }
-                    o[c] = recortar(v);
+                    o[c] = clampByte(v);
                 }
-                if (outAlfa) {
-                    o[3] = recortar(alfa * 255.0f);
+                if (outHasAlpha) {
+                    o[3] = clampByte(alpha * 255.0f);
                 }
                 dstOut.setPixel(ox + i, oy + j, o);
             }
@@ -90,12 +91,12 @@ class AlphaCompositeContext implements CompositeContext {
     }
 
     /**
-     * Los dos factores de la regla, para esos alfas.
+     * The rule's two factors, for those alphas.
      *
-     * <p>Es la tabla de Porter-Duff. `f[0]` es cuánto del origen sobrevive y `f[1]` cuánto del
-     * destino.
+     * <p>It is the Porter-Duff table. `f[0]` is how much of the source survives and `f[1]` how much
+     * of the destination.
      */
-    private void factores(float as, float ad, float[] f) {
+    private void factors(float as, float ad, float[] f) {
         if (this.rule == AlphaComposite.CLEAR) {
             f[0] = 0.0f;
             f[1] = 0.0f;
@@ -130,14 +131,14 @@ class AlphaCompositeContext implements CompositeContext {
             f[0] = 1.0f - ad;
             f[1] = as;
         } else {
-            // XOR: cada uno sobrevive donde el otro no esta.
+            // XOR: each survives where the other is not.
             f[0] = 1.0f - ad;
             f[1] = 1.0f - as;
         }
     }
 
-    /** Un valor llevado a un byte. */
-    private static int recortar(float v) {
+    /** A value brought into a byte. */
+    private static int clampByte(float v) {
         int i = (int) (v + 0.5f);
         if (i < 0) {
             return 0;

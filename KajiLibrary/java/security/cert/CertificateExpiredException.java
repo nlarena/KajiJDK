@@ -1,13 +1,13 @@
 package java.security.cert;
 
-// El certificado ya vencio.
+// The certificate has expired.
 //
-// Es una de las dos unicas condiciones de validez que tienen excepcion propia —la otra es
-// `CertificateNotYetValidException`— y eso es porque son las unicas que dependen solo del reloj:
-// se comprueban sin mirar ninguna firma ni consultar a nadie. Todo el resto de las razones por las
-// que un certificado puede no servir viven en `CertPathValidatorException`.
+// It is one of the only two validity conditions that have an exception of their own —the other is
+// `CertificateNotYetValidException`— and that is because they are the only ones that depend on the
+// clock alone: they are checked without looking at any signature or consulting anybody. All the
+// rest of the reasons why a certificate may not serve live in `CertPathValidatorException`.
 //
-// No lleva constructor con causa: no hay nada que envolver, la fecha ya paso.
+// It carries no constructor with a cause: there is nothing to wrap, the date has passed.
 public class CertificateExpiredException extends CertificateException {
 
     private static final long serialVersionUID = 9071001339691533771L;

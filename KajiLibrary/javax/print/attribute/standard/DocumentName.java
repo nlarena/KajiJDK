@@ -6,26 +6,25 @@ import javax.print.attribute.DocAttribute;
 import javax.print.attribute.TextSyntax;
 
 /*
- * CABECERA DE FAMILIA -- los atributos {@code TextSyntax} de este paquete.
+ * FAMILY HEADER -- this package's {@code TextSyntax} attributes.
  *
- * <p>Texto libre con el idioma en el que esta escrito. El par (cadena, locale) va junto porque un
- * nombre de trabajo o un mensaje del operador se muestran a una persona, y sin saber el idioma no
- * se puede ni ordenarlos ni partirlos en lineas bien.
+ * <p>Free text with the language it is written in. The (string, locale) pair goes together because
+ * a job name or an operator message is shown to a person, and without knowing the language they
+ * cannot even be sorted or broken into lines properly.
  *
- * <p>El mecanismo esta en {@link javax.print.attribute.TextSyntax TextSyntax}: la cadena null es
- * error, el locale null significa "el de por aca" y se resuelve al default en el constructor.
- * {@code toString()} devuelve la cadena pelada, sin el locale.
+ * <p>The mechanism is in {@link javax.print.attribute.TextSyntax TextSyntax}: a null string is an
+ * error, a null locale means "the local one" and is resolved to the default in the constructor.
+ * {@code toString()} returns the bare string, without the locale.
  *
- * <p>A diferencia de {@link javax.print.attribute.EnumSyntax EnumSyntax}, aca el valor no viene de
- * ninguna tabla: es lo que el usuario escribio. Lo unico que cada subclase aporta es que pregunta
- * contesta ese texto.
+ * <p>Unlike {@link javax.print.attribute.EnumSyntax EnumSyntax}, here the value comes from no
+ * table: it is what the user wrote. The only thing each subclass contributes is which question that
+ * text answers.
  */
 
 /**
- * El nombre de un documento suelto dentro del trabajo.
+ * The name of a single document within the job.
  *
- * <p>Un trabajo con varios documentos le pone uno a cada uno; el nombre del trabajo entero es
- * {@link JobName}.
+ * <p>A job with several documents gives each one its own; the whole job's name is {@link JobName}.
  */
 public final class DocumentName extends TextSyntax implements DocAttribute {
 

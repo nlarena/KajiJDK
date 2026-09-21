@@ -8,33 +8,33 @@ import javax.swing.colorchooser.ColorSelectionModel;
 import javax.swing.colorchooser.DefaultColorSelectionModel;
 
 /**
- * El selector de color: un panel con varias formas de elegir un color y una sola respuesta.
+ * The colour chooser: a pane with several ways of choosing a colour and a single answer.
  *
- * <p>La pieza que lo ordena todo es el {@link ColorSelectionModel}: las solapas --RGB, HSV, CMYK,
- * las muestras-- son {@link AbstractColorChooserPanel} distintos que **comparten el mismo modelo**.
- * Por eso mover un deslizador en RGB actualiza lo que se ve en HSV sin que ninguno de los dos sepa
- * del otro: los dos escuchan al modelo.
+ * <p>The piece that orders it all is the {@link ColorSelectionModel}: the tabs -- RGB, HSV,
+ * CMYK, the swatches -- are different {@link AbstractColorChooserPanel}s that **share the same
+ * model**. That is why moving a slider in RGB updates what is seen in HSV without either of the
+ * two knowing about the other: both listen to the model.
  *
  * <h2>A KajiLibrary subset</h2>
  *
- * <p>Esta la parte que es estado: los constructores, el modelo, el color, los paneles y el panel de
- * vista previa. Falta lo que necesita ventanas o `LookAndFeel`: `showDialog` y `createDialog`
- * --que abren un dialogo modal-- y `getUI`/`setUI`/`updateUI`.
+ * <p>The part that is state is there: the constructors, the model, the colour, the panels and
+ * the preview panel. What is missing is what needs windows or a `LookAndFeel`: `showDialog` and
+ * `createDialog` -- which open a modal dialog -- and `getUI`/`setUI`/`updateUI`.
  *
- * <p>Tampoco se disparan los eventos de cambio de propiedad al reemplazar el modelo o los paneles:
- * el `JComponent` de esta biblioteca todavia no tiene el soporte de propiedades ligadas, y
- * fabricarlo aca solo para esta clase seria peor.
+ * <p>Nor are the property change events fired when the model or the panels are replaced: this
+ * library's `JComponent` does not have bound property support yet, and manufacturing it here
+ * just for this class would be worse.
  */
 public class JColorChooser extends JComponent {
 
 
-    /** El nombre de la propiedad ligada del modelo de seleccion. */
+    /** The name of the selection model's bound property. */
     public static final String SELECTION_MODEL_PROPERTY = "selectionModel";
 
-    /** El nombre de la propiedad ligada del panel de vista previa. */
+    /** The name of the preview panel's bound property. */
     public static final String PREVIEW_PANEL_PROPERTY = "previewPanel";
 
-    /** El nombre de la propiedad ligada del arreglo de paneles. */
+    /** The name of the panel array's bound property. */
     public static final String CHOOSER_PANELS_PROPERTY = "chooserPanels";
 
     private ColorSelectionModel selectionModel;
@@ -42,169 +42,171 @@ public class JColorChooser extends JComponent {
     private AbstractColorChooserPanel[] chooserPanels = new AbstractColorChooserPanel[0];
     private boolean dragEnabled;
 
-    /** Un selector con el blanco elegido. */
+    /** A chooser with white chosen. */
     public JColorChooser() {
         this(Color.white);
     }
 
     /**
-     * Un selector con ese color elegido.
+     * A chooser with that colour chosen.
      *
-     * @param initialColor el color inicial
+     * @param initialColor the initial colour
      */
     public JColorChooser(Color initialColor) {
         this(new DefaultColorSelectionModel(initialColor));
     }
 
     /**
-     * Un selector sobre ese modelo.
+     * A chooser over that model.
      *
-     * @param model el modelo que comparten los paneles
+     * @param model the model the panels share
      */
     public JColorChooser(ColorSelectionModel model) {
         super();
         this.selectionModel = model;
     }
 
-    /** La clave con la que el `LookAndFeel` busca el aspecto: {@code "ColorChooserUI"}. */
+    /** The key the `LookAndFeel` looks the look and feel up with: {@code "ColorChooserUI"}. */
     public String getUIClassID() {
         return "ColorChooserUI";
     }
 
-    /** El color elegido. */
+    /** The chosen colour. */
     public Color getColor() {
         return this.selectionModel.getSelectedColor();
     }
 
     /**
-     * Elige ese color.
+     * It chooses that colour.
      *
-     * @throws NullPointerException si es nulo
+     * @throws NullPointerException if it is null
      */
     public void setColor(Color color) {
         this.selectionModel.setSelectedColor(color);
     }
 
     /**
-     * Elige el color con esas tres componentes.
+     * It chooses the colour with those three components.
      *
-     * @throws IllegalArgumentException si alguna se sale de 0..255
+     * @throws IllegalArgumentException if one of them goes outside 0..255
      */
     public void setColor(int r, int g, int b) {
         setColor(new Color(r, g, b));
     }
 
     /**
-     * Elige el color empaquetado en un entero, en el formato 0xRRGGBB.
+     * It chooses the colour packed in an integer, in the format 0xRRGGBB.
      *
-     * <p>Los ocho bits de mas arriba se ignoran: el selector no elige transparencia por esta via.
+     * <p>The top eight bits are ignored: the chooser does not choose transparency this way.
      */
     public void setColor(int c) {
         setColor(new Color(c & 0xFFFFFF));
     }
 
     /**
-     * Prende o apaga el arrastre del color hacia afuera del selector.
+     * It switches the dragging of the colour out of the chooser on or off.
      *
-     * <p>Se guarda, pero no hay arrastre: eso lo maneja el aspecto instalado, que aca no hay.
+     * <p>It is kept, but there is no dragging: that is handled by the installed look and feel,
+     * which there is none of here.
      */
     public void setDragEnabled(boolean b) {
         this.dragEnabled = b;
     }
 
-    /** Si el color se puede arrastrar afuera. */
+    /** Whether the colour can be dragged outside. */
     public boolean getDragEnabled() {
         return this.dragEnabled;
     }
 
     /**
-     * Fija el panel que muestra el color elegido, o `null` para que no haya ninguno.
+     * It fixes the panel that shows the chosen colour, or `null` for there to be none.
      *
-     * <p>El JDK distingue `null` de un componente vacio: `null` pide el panel de siempre, y un
-     * `JPanel` sin nada adentro es como se pide que no haya vista previa. Aca vale lo mismo.
+     * <p>The JDK tells `null` from an empty component: `null` asks for the usual panel, and a
+     * `JPanel` with nothing inside is how one asks for there to be no preview. The same holds
+     * here.
      */
     public void setPreviewPanel(JComponent preview) {
         this.previewPanel = preview;
     }
 
-    /** El panel de vista previa, o `null` si es el de siempre. */
+    /** The preview panel, or `null` if it is the usual one. */
     public JComponent getPreviewPanel() {
         return this.previewPanel;
     }
 
-    /** Agrega un panel de eleccion al final de los que ya hay. */
+    /** It adds a chooser panel at the end of those that are already there. */
     public void addChooserPanel(AbstractColorChooserPanel panel) {
-        AbstractColorChooserPanel[] nuevos =
+        AbstractColorChooserPanel[] added =
                 new AbstractColorChooserPanel[this.chooserPanels.length + 1];
-        System.arraycopy(this.chooserPanels, 0, nuevos, 0, this.chooserPanels.length);
-        nuevos[this.chooserPanels.length] = panel;
-        setChooserPanels(nuevos);
+        System.arraycopy(this.chooserPanels, 0, added, 0, this.chooserPanels.length);
+        added[this.chooserPanels.length] = panel;
+        setChooserPanels(added);
     }
 
     /**
-     * Saca un panel de eleccion.
+     * It removes a chooser panel.
      *
-     * @return el panel que se saco
-     * @throws IllegalArgumentException si ese panel no estaba
+     * @return the panel that was removed
+     * @throws IllegalArgumentException if that panel was not there
      */
     public AbstractColorChooserPanel removeChooserPanel(AbstractColorChooserPanel panel) {
-        int donde = -1;
+        int where = -1;
         for (int i = 0; i < this.chooserPanels.length; i++) {
             if (this.chooserPanels[i] == panel) {
-                donde = i;
+                where = i;
                 break;
             }
         }
-        if (donde < 0) {
+        if (where < 0) {
             throw new IllegalArgumentException("chooser panel not in this chooser");
         }
-        List<AbstractColorChooserPanel> quedan = new ArrayList<AbstractColorChooserPanel>();
+        List<AbstractColorChooserPanel> left = new ArrayList<AbstractColorChooserPanel>();
         for (int i = 0; i < this.chooserPanels.length; i++) {
-            if (i != donde) {
-                quedan.add(this.chooserPanels[i]);
+            if (i != where) {
+                left.add(this.chooserPanels[i]);
             }
         }
-        AbstractColorChooserPanel[] nuevos = new AbstractColorChooserPanel[quedan.size()];
-        for (int i = 0; i < nuevos.length; i++) {
-            nuevos[i] = quedan.get(i);
+        AbstractColorChooserPanel[] added = new AbstractColorChooserPanel[left.size()];
+        for (int i = 0; i < added.length; i++) {
+            added[i] = left.get(i);
         }
-        setChooserPanels(nuevos);
+        setChooserPanels(added);
         panel.uninstallChooserPanel(this);
         return panel;
     }
 
-    /** Reemplaza el juego de paneles de eleccion. */
+    /** It replaces the set of chooser panels. */
     public void setChooserPanels(AbstractColorChooserPanel[] panels) {
         this.chooserPanels = panels;
     }
 
-    /** Los paneles de eleccion. */
+    /** The chooser panels. */
     public AbstractColorChooserPanel[] getChooserPanels() {
         return this.chooserPanels;
     }
 
-    /** El modelo que comparten los paneles. */
+    /** The model the panels share. */
     public ColorSelectionModel getSelectionModel() {
         return this.selectionModel;
     }
 
     /**
-     * Reemplaza el modelo.
+     * It replaces the model.
      *
-     * <p>Los paneles instalados siguen escuchando al **modelo viejo** hasta que se los reinstale;
-     * es asi tambien en el JDK.
+     * <p>The installed panels go on listening to the **old model** until they are reinstalled; it
+     * is like that in the JDK too.
      */
     public void setSelectionModel(ColorSelectionModel newModel) {
         this.selectionModel = newModel;
     }
 
-    // -- el dialogo ------------------------------------------------------------------------------
+    // -- the dialog ----------------------------------------------------------------------------
 
     /**
-     * Abre un dialogo modal para elegir un color.
+     * It opens a modal dialog for choosing a colour.
      *
-     * @return el color elegido, o nulo si el usuario cancelo
-     * @throws java.awt.HeadlessException si no hay pantalla
+     * @return the chosen colour, or null if the user cancelled
+     * @throws java.awt.HeadlessException if there is no screen
      */
     public static Color showDialog(java.awt.Component component, String title,
             Color initialColor) throws java.awt.HeadlessException {
@@ -212,14 +214,14 @@ public class JColorChooser extends JComponent {
     }
 
     /**
-     * Lo mismo, pudiendo esconder el panel de transparencia.
+     * The same, being able to hide the transparency panel.
      *
-     * <p><strong>Aca el dialogo no bloquea</strong>, igual que en {@link JOptionPane} y por el mismo
-     * motivo: esta biblioteca no reparte eventos de ventana. Se arma todo, se muestra y se devuelve
-     * nulo, que es lo que corresponde a un dialogo cerrado sin elegir.
+     * <p><strong>Here the dialog does not block</strong>, just as in {@link JOptionPane} and for
+     * the same reason: this library does not hand out window events. Everything is built, it is
+     * shown and null is returned, which is what corresponds to a dialog closed without choosing.
      *
-     * @return el color elegido, o nulo si el usuario cancelo
-     * @throws java.awt.HeadlessException si no hay pantalla
+     * @return the chosen colour, or null if the user cancelled
+     * @throws java.awt.HeadlessException if there is no screen
      */
     public static Color showDialog(java.awt.Component component, String title, Color initialColor,
             boolean colorTransparencySelectionEnabled) throws java.awt.HeadlessException {
@@ -233,65 +235,65 @@ public class JColorChooser extends JComponent {
     }
 
     /**
-     * Arma el dialogo que contiene a ese selector, con sus tres botones.
+     * It builds the dialog that contains that chooser, with its three buttons.
      *
-     * <p>Los dos oyentes son los de Aceptar y Cancelar; cualquiera de los dos puede ser nulo. El
-     * boton de Restablecer devuelve el color al que tenia al abrirse, y no necesita oyente porque no
-     * cierra nada.
+     * <p>The two listeners are OK's and Cancel's; either of the two may be null. The Reset button
+     * gives the colour back the one it had on opening, and it needs no listener because it closes
+     * nothing.
      *
-     * @throws java.awt.HeadlessException si no hay pantalla
+     * @throws java.awt.HeadlessException if there is no screen
      */
     public static JDialog createDialog(java.awt.Component c, String title, boolean modal,
             JColorChooser chooserPane, java.awt.event.ActionListener okListener,
             java.awt.event.ActionListener cancelListener) throws java.awt.HeadlessException {
-        java.awt.Window duena = (c == null) ? null : SwingUtilities.getWindowAncestor(c);
+        java.awt.Window owner = (c == null) ? null : SwingUtilities.getWindowAncestor(c);
         JDialog dialog;
-        if (duena instanceof java.awt.Dialog) {
-            dialog = new JDialog((java.awt.Dialog) duena, title, modal);
-        } else if (duena instanceof java.awt.Frame) {
-            dialog = new JDialog((java.awt.Frame) duena, title, modal);
+        if (owner instanceof java.awt.Dialog) {
+            dialog = new JDialog((java.awt.Dialog) owner, title, modal);
+        } else if (owner instanceof java.awt.Frame) {
+            dialog = new JDialog((java.awt.Frame) owner, title, modal);
         } else {
             dialog = new JDialog((java.awt.Frame) null, title, modal);
         }
-        java.awt.Container contenido = dialog.getContentPane();
-        contenido.setLayout(new java.awt.BorderLayout());
-        contenido.add(chooserPane, java.awt.BorderLayout.CENTER);
+        java.awt.Container content = dialog.getContentPane();
+        content.setLayout(new java.awt.BorderLayout());
+        content.add(chooserPane, java.awt.BorderLayout.CENTER);
 
-        JPanel botones = new JPanel();
-        JButton aceptar = new JButton(UIManager.getString("ColorChooser.okText") != null
+        JPanel buttons = new JPanel();
+        JButton accept = new JButton(UIManager.getString("ColorChooser.okText") != null
                 ? UIManager.getString("ColorChooser.okText") : "OK");
-        JButton cancelar = new JButton(UIManager.getString("ColorChooser.cancelText") != null
+        JButton cancel = new JButton(UIManager.getString("ColorChooser.cancelText") != null
                 ? UIManager.getString("ColorChooser.cancelText") : "Cancel");
-        JButton restablecer = new JButton(UIManager.getString("ColorChooser.resetText") != null
+        JButton reset = new JButton(UIManager.getString("ColorChooser.resetText") != null
                 ? UIManager.getString("ColorChooser.resetText") : "Reset");
         if (okListener != null) {
-            aceptar.addActionListener(okListener);
+            accept.addActionListener(okListener);
         }
-        aceptar.addActionListener(new CierraElDialogo(dialog));
+        accept.addActionListener(new CloseDialog(dialog));
         if (cancelListener != null) {
-            cancelar.addActionListener(cancelListener);
+            cancel.addActionListener(cancelListener);
         }
-        cancelar.addActionListener(new CierraElDialogo(dialog));
-        restablecer.addActionListener(new Restablece(chooserPane, chooserPane.getColor()));
-        botones.add(aceptar);
-        botones.add(cancelar);
-        botones.add(restablecer);
-        contenido.add(botones, java.awt.BorderLayout.SOUTH);
+        cancel.addActionListener(new CloseDialog(dialog));
+        reset.addActionListener(new Reset(chooserPane, chooserPane.getColor()));
+        buttons.add(accept);
+        buttons.add(cancel);
+        buttons.add(reset);
+        content.add(buttons, java.awt.BorderLayout.SOUTH);
         dialog.pack();
         return dialog;
     }
 
-    /** El aspecto instalado. */
+    /** The installed look and feel. */
     public javax.swing.plaf.ColorChooserUI getUI() {
         return (javax.swing.plaf.ColorChooserUI) ui;
     }
 
-    /** Instala ese aspecto. */
+    /** It installs that look and feel. */
     public void setUI(javax.swing.plaf.ColorChooserUI ui) {
         super.setUI(ui);
     }
 
-    /** Se queda con el color al aceptar; nulo si nunca se acepto. */
+    /** It keeps the colour on accepting; null if it was never accepted. */
     private static class ColorTracker implements java.awt.event.ActionListener {
 
         private final JColorChooser chooser;
@@ -310,27 +312,27 @@ public class JColorChooser extends JComponent {
         }
     }
 
-    /** Cierra el dialogo; es lo que hacen los dos botones que terminan. */
-    private static class CierraElDialogo implements java.awt.event.ActionListener {
+    /** It closes the dialog; it is what the two buttons that finish do. */
+    private static class CloseDialog implements java.awt.event.ActionListener {
 
-        private final JDialog dialogo;
+        private final JDialog dialog;
 
-        CierraElDialogo(JDialog d) {
-            dialogo = d;
+        CloseDialog(JDialog d) {
+            dialog = d;
         }
 
         public void actionPerformed(java.awt.event.ActionEvent e) {
-            dialogo.setVisible(false);
+            dialog.setVisible(false);
         }
     }
 
-    /** Devuelve el color al que tenia al abrirse. */
-    private static class Restablece implements java.awt.event.ActionListener {
+    /** It gives the colour back the one it had on opening. */
+    private static class Reset implements java.awt.event.ActionListener {
 
         private final JColorChooser chooser;
         private final Color original;
 
-        Restablece(JColorChooser c, Color original) {
+        Reset(JColorChooser c, Color original) {
             this.chooser = c;
             this.original = original;
         }

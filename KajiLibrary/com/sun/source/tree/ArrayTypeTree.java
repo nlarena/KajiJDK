@@ -1,7 +1,7 @@
 package com.sun.source.tree;
 
 /**
- * El tipo `T[]`.
+ * The type `T[]`.
  */
 public interface ArrayTypeTree extends Tree {
 

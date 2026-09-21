@@ -2,27 +2,27 @@ package java.lang.classfile.constantpool;
 
 import java.lang.classfile.BootstrapMethodEntry;
 
-// La forma común de `CONSTANT_Dynamic` y `CONSTANT_InvokeDynamic` (JVMS §4.4.10): un índice al
-// atributo `BootstrapMethods` de la clase más un `NameAndType`. Ese índice NO es un índice del pool;
-// apunta a la tabla del atributo, y por eso estas dos entradas no se pueden resolver del todo sin
-// haber leído antes ese atributo.
+// The common shape of `CONSTANT_Dynamic` and `CONSTANT_InvokeDynamic` (JVMS §4.4.10): an index into
+// the class's `BootstrapMethods` attribute plus a `NameAndType`. That index is NOT a pool index; it
+// points into the attribute's table, and that is why these two entries cannot be fully resolved
+// without having read that attribute first.
 public interface DynamicConstantPoolEntry extends PoolEntry {
 
-    /** El índice dentro de la tabla del atributo `BootstrapMethods`. */
+    /** The index within the `BootstrapMethods` attribute's table. */
     int bootstrapMethodIndex();
 
-    /** La entrada de esa tabla. */
+    /** That table's entry. */
     BootstrapMethodEntry bootstrap();
 
-    /** El par nombre/descriptor. */
+    /** The name/descriptor pair. */
     NameAndTypeEntry nameAndType();
 
-    /** Atajo a `nameAndType().name()`. */
+    /** A shortcut to `nameAndType().name()`. */
     default Utf8Entry name() {
         return nameAndType().name();
     }
 
-    /** Atajo a `nameAndType().type()`. */
+    /** A shortcut to `nameAndType().type()`. */
     default Utf8Entry type() {
         return nameAndType().type();
     }

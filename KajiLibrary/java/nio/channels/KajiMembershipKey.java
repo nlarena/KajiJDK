@@ -5,55 +5,56 @@ import java.net.InetAddress;
 import java.net.NetworkInterface;
 
 /**
- * El comprobante que devuelve {@link KajiDatagramChannel#join}.
+ * The receipt {@link KajiDatagramChannel#join} returns.
  *
- * <p>Guarda las tres cosas que identifican una membresia --grupo, placa y emisor-- porque las tres
- * hacen falta para distinguirla: el mismo grupo por dos placas son dos membresias, y darlas de baja
- * por direccion en vez de por llave no podria decir cual de las dos.
+ * <p>It keeps the three things that identify a membership --group, card and sender-- because all
+ * three are needed to tell it apart: the same group through two cards are two memberships, and
+ * dropping them by address instead of by key could not say which of the two.
  *
- * <h2>{@code block} y {@code unblock} no estan sostenidos, y se dice</h2>
+ * <h2>{@code block} and {@code unblock} are not sustained, and it is said</h2>
  *
- * <p>Filtrar emisores dentro de un grupo es un filtro **del sistema**, no del programa: su gracia es
- * que el trafico bloqueado ni siquiera sube. La costura de esta VM no sabe pedirlo, y hacerlo en Java
- * --descartando los paquetes despues de recibirlos-- cumpliria la firma y no la promesa: el trafico
- * seguiria subiendo, el ancho de banda seguiria gastado, y quien uso `block` para defenderse de una
- * inundacion no estaria defendido. Tiran {@link UnsupportedOperationException}, que es lo que el
- * contrato prevé para una pila que no filtra por emisor.
+ * <p>Filtering senders inside a group is a filter **of the system**, not of the program: its point
+ * is that the blocked traffic does not even come up. The seam of this VM does not know how to ask
+ * for it, and doing it in Java --discarding the packets after receiving them-- would fulfil the
+ * signature and not the promise: the traffic would go on coming up, the bandwidth would go on being
+ * spent, and whoever used `block` to defend themselves from a flood would not be defended. They
+ * throw {@link UnsupportedOperationException}, which is what the contract foresees for a stack that
+ * does not filter by sender.
  */
 final class KajiMembershipKey extends MembershipKey {
 
-    private final KajiDatagramChannel canal;
-    private final InetAddress grupo;
-    private final NetworkInterface placa;
-    private final InetAddress emisor;
+    private final KajiDatagramChannel chan;
+    private final InetAddress groupAddr;
+    private final NetworkInterface card;
+    private final InetAddress sender;
 
-    /** Como se le nombro la placa a la costura; hace falta para dar de baja por el mismo camino. */
-    private final String nombreDePlaca;
+    /** How the card was named to the seam; it is needed to drop out by the same road. */
+    private final String cardName;
 
-    private boolean vigente = true;
+    private boolean valid = true;
 
-    KajiMembershipKey(KajiDatagramChannel canal, InetAddress grupo, NetworkInterface placa,
-            InetAddress emisor, String nombreDePlaca) {
-        this.canal = canal;
-        this.grupo = grupo;
-        this.placa = placa;
-        this.emisor = emisor;
-        this.nombreDePlaca = nombreDePlaca;
+    KajiMembershipKey(KajiDatagramChannel chan, InetAddress groupAddr, NetworkInterface card,
+            InetAddress sender, String cardName) {
+        this.chan = chan;
+        this.groupAddr = groupAddr;
+        this.card = card;
+        this.sender = sender;
+        this.cardName = cardName;
     }
 
     public boolean isValid() {
-        return this.vigente;
+        return this.valid;
     }
 
     public void drop() {
-        // Sobre una llave ya invalida no hace nada, y esa idempotencia es a proposito: la baja
-        // tambien ocurre sola al cerrar el canal, asi que el `drop()` explicito y el cierre se pisan
-        // todo el tiempo en cualquier programa que limpie bien.
-        if (!this.vigente) {
+        // Over an already invalid key it does nothing, and that idempotence is on purpose: the
+        // dropping also happens by itself when the channel is closed, so the explicit `drop()` and the
+        // closing step on each other all the time in any program that cleans up properly.
+        if (!this.valid) {
             return;
         }
-        this.vigente = false;
-        this.canal.soltar(this);
+        this.valid = false;
+        this.chan.release(this);
     }
 
     public MembershipKey block(InetAddress source) throws IOException {
@@ -65,34 +66,34 @@ final class KajiMembershipKey extends MembershipKey {
     }
 
     public MulticastChannel channel() {
-        return this.canal;
+        return this.chan;
     }
 
     public InetAddress group() {
-        return this.grupo;
+        return this.groupAddr;
     }
 
     public InetAddress sourceAddress() {
-        return this.emisor;
+        return this.sender;
     }
 
     public NetworkInterface networkInterface() {
-        return this.placa;
+        return this.card;
     }
 
-    // ---- lo que necesita el canal -------------------------------------------------------------
+    // ---- what the channel needs --------------------------------------------------------------
 
-    String placa() {
-        return this.nombreDePlaca;
+    String card() {
+        return this.cardName;
     }
 
-    boolean mismaPlaca(NetworkInterface otra) {
-        return this.placa == null ? otra == null : this.placa.equals(otra);
+    boolean sameCard(NetworkInterface other) {
+        return this.card == null ? other == null : this.card.equals(other);
     }
 
-    // La invalida sin dar de baja nada: la usa el cierre del canal, que ya cierra el socket y con
-    // eso el sistema suelta todas las membresias de una.
-    void invalidar() {
-        this.vigente = false;
+    // It invalidates it without dropping anything: it is used by the closing of the channel, which
+    // closes the socket already and with that the system releases every membership at once.
+    void invalidateKey() {
+        this.valid = false;
     }
 }

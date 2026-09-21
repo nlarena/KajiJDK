@@ -4,88 +4,87 @@ import java.awt.Rectangle;
 import java.util.Vector;
 
 /**
- * Una imagen de sólo lectura, posiblemente **por mosaicos**.
+ * A read-only image, possibly **by tiles**.
  *
- * <p>Es la abstracción con la que se puede hablar de una imagen más grande que la memoria. En vez de
- * un rectángulo de píxeles hay una grilla de mosaicos, cada uno un {@link Raster}, y quien la use
- * pide de a uno. Una imagen chica como {@link BufferedImage} es el caso degenerado: un solo mosaico
- * que ocupa todo.
+ * <p>It is the abstraction with which one can talk about an image bigger than memory. Instead of a
+ * rectangle of pixels there is a grid of tiles, each one a {@link Raster}, and whoever uses it asks
+ * for one at a time. A small image such as {@link BufferedImage} is the degenerate case: a single
+ * tile that takes it all.
  *
- * <p>La grilla no tiene por qué estar alineada con el origen de la imagen, y por eso están
- * `getTileGridXOffset` y `getMinTileX`: el mosaico (0,0) puede empezar en cualquier lado, e incluso
- * los índices de mosaico pueden ser negativos.
+ * <p>The grid does not have to be aligned with the origin of the image, and that is why
+ * `getTileGridXOffset` and `getMinTileX` are there: tile (0,0) can start anywhere, and the tile
+ * indices can even be negative.
  */
 public interface RenderedImage {
 
-    /** Las imágenes de las que ésta se calcula, o `null` si no hay. */
+    /** The images this one is computed from, or `null` if there are none. */
     Vector<RenderedImage> getSources();
 
     /**
-     * Una propiedad de la imagen.
+     * A property of the image.
      *
-     * @return el valor, o `Image.UndefinedProperty` si no está definida
+     * @return the value, or `Image.UndefinedProperty` if it is not defined
      */
     Object getProperty(String name);
 
-    /** Los nombres de las propiedades, o `null` si no hay ninguna. */
+    /** The names of the properties, or `null` if there are none. */
     String[] getPropertyNames();
 
-    /** El modelo de color, o `null` si los datos no se pueden interpretar como color. */
+    /** The colour model, or `null` if the data cannot be read as colour. */
     ColorModel getColorModel();
 
-    /** Cómo están dispuestos los píxeles. */
+    /** How the pixels are laid out. */
     SampleModel getSampleModel();
 
-    /** Ancho, en píxeles. */
+    /** Width, in pixels. */
     int getWidth();
 
-    /** Alto, en píxeles. */
+    /** Height, in pixels. */
     int getHeight();
 
-    /** Coordenada X del ángulo superior izquierdo. */
+    /** X coordinate of the top left corner. */
     int getMinX();
 
-    /** Coordenada Y del ángulo superior izquierdo. */
+    /** Y coordinate of the top left corner. */
     int getMinY();
 
-    /** Cuántos mosaicos hay a lo ancho. */
+    /** How many tiles there are across. */
     int getNumXTiles();
 
-    /** Cuántos mosaicos hay a lo alto. */
+    /** How many tiles there are down. */
     int getNumYTiles();
 
-    /** El menor índice de mosaico a lo ancho. */
+    /** The smallest tile index across. */
     int getMinTileX();
 
-    /** El menor índice de mosaico a lo alto. */
+    /** The smallest tile index down. */
     int getMinTileY();
 
-    /** Ancho de un mosaico, en píxeles. */
+    /** Width of a tile, in pixels. */
     int getTileWidth();
 
-    /** Alto de un mosaico, en píxeles. */
+    /** Height of a tile, in pixels. */
     int getTileHeight();
 
-    /** Dónde empieza el mosaico (0,0) respecto del origen de la imagen. */
+    /** Where tile (0,0) starts with respect to the origin of the image. */
     int getTileGridXOffset();
 
-    /** Lo mismo en el otro eje. */
+    /** The same on the other axis. */
     int getTileGridYOffset();
 
-    /** Un mosaico, como ráster de sólo lectura. */
+    /** One tile, as a read-only raster. */
     Raster getTile(int tileX, int tileY);
 
-    /** La imagen entera en un ráster. */
+    /** The whole image in one raster. */
     Raster getData();
 
-    /** Una región de la imagen en un ráster. */
+    /** A region of the image in one raster. */
     Raster getData(Rectangle rect);
 
     /**
-     * Copia la imagen en el ráster dado, o en uno nuevo si es `null`.
+     * Copies the image into the given raster, or into a new one if it is `null`.
      *
-     * <p>A diferencia de {@link #getData()}, esto siempre copia: el resultado no comparte datos con
-     * la imagen.
+     * <p>Unlike {@link #getData()}, this always copies: the result shares no data with the image.
      */
     WritableRaster copyData(WritableRaster raster);
 }

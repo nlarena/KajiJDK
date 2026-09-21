@@ -15,38 +15,38 @@ import javax.accessibility.Accessible;
 import javax.accessibility.AccessibleContext;
 
 /**
- * Una ventana secundaria de Swing.
+ * A secondary Swing window.
  *
- * <h2>Los hijos van al contenido, no al dialogo</h2>
+ * <h2>The children go to the content, not to the dialog</h2>
  *
- * <p>Un {@code JDialog} tiene adentro un {@link JRootPane}, y todo lo que se agregue va a su panel
- * de contenido. {@link #addImpl} lo redirige solo: {@code dialogo.add(boton)} en realidad agrega al
- * contenido.
+ * <p>A {@code JDialog} has a {@link JRootPane} inside, and everything that is added goes to its
+ * content pane. {@link #addImpl} redirects it by itself: {@code dialog.add(button)} really adds
+ * to the content.
  *
- * <p>Esa redireccion se puede apagar con {@link #setRootPaneCheckingEnabled}, y es lo que hace el
- * constructor mientras arma el panel raiz: si estuviera prendida, agregar el panel raiz se
- * redirigiria a si mismo.
+ * <p>That redirection can be switched off with {@link #setRootPaneCheckingEnabled}, and it is
+ * what the constructor does while it builds the root pane: if it were switched on, adding the
+ * root pane would redirect to itself.
  *
- * <h2>Que hacer al cerrar</h2>
+ * <h2>What to do on closing</h2>
  *
- * <p>{@link #setDefaultCloseOperation} decide entre esconder, destruir, no hacer nada, o terminar
- * el programa. Por omision esconde, que es lo correcto para un dialogo que se va a volver a abrir;
- * destruir libera la ventana del sistema y obliga a rearmarla.
+ * <p>{@link #setDefaultCloseOperation} decides between hiding, destroying, doing nothing, or
+ * ending the program. By default it hides, which is what is right for a dialog that is going to
+ * be opened again; destroying releases the system window and forces it to be rebuilt.
  *
- * <h2>Sin pantalla</h2>
+ * <h2>With no screen</h2>
  *
- * <p>Un dialogo necesita una ventana del sistema. Sin pantalla se puede construir y configurar --
- * y eso es lo que hace falta para que compile lo que lo usa -- pero no mostrarse.
+ * <p>A dialog needs a system window. With no screen it can be built and configured -- and that
+ * is what is needed for whatever uses it to compile -- but not shown.
  */
 public class JDialog extends Dialog implements WindowConstants, Accessible,
         RootPaneContainer, TransferHandler$HasGetTransferHandler {
 
     private static boolean defaultLookAndFeelDecorated = false;
 
-    /** El panel raiz; ver la nota de la clase. */
+    /** The root pane; see the class note. */
     protected JRootPane rootPane;
 
-    /** Si agregar redirige al contenido. */
+    /** Whether adding redirects to the content. */
     protected boolean rootPaneCheckingEnabled = false;
 
     protected AccessibleContext accessibleContext;
@@ -54,39 +54,39 @@ public class JDialog extends Dialog implements WindowConstants, Accessible,
     private int defaultCloseOperation = HIDE_ON_CLOSE;
     private TransferHandler transferHandler;
 
-    /** Un dialogo sin dueno y no modal. */
+    /** A dialog with no owner and not modal. */
     public JDialog() {
         this((Frame) null, false);
     }
 
-    /** Un dialogo de esa ventana, no modal. */
+    /** A dialog of that window, not modal. */
     public JDialog(Frame owner) {
         this(owner, false);
     }
 
-    /** Un dialogo de esa ventana. */
+    /** A dialog of that window. */
     public JDialog(Frame owner, boolean modal) {
         this(owner, null, modal);
     }
 
-    /** Un dialogo con ese titulo, no modal. */
+    /** A dialog with that title, not modal. */
     public JDialog(Frame owner, String title) {
         this(owner, title, false);
     }
 
-    /** Un dialogo con ese titulo. */
+    /** A dialog with that title. */
     public JDialog(Frame owner, String title, boolean modal) {
         super(owner, title, modal);
         dialogInit();
     }
 
-    /** Un dialogo en esa configuracion de pantalla. */
+    /** A dialog in that screen configuration. */
     public JDialog(Frame owner, String title, boolean modal, GraphicsConfiguration gc) {
         super(owner, title, modal, gc);
         dialogInit();
     }
 
-    /** Un dialogo de otro dialogo, no modal. */
+    /** A dialog of another dialog, not modal. */
     public JDialog(Dialog owner) {
         this(owner, false);
     }
@@ -109,12 +109,12 @@ public class JDialog extends Dialog implements WindowConstants, Accessible,
         dialogInit();
     }
 
-    /** Un dialogo de esa ventana, no modal. */
+    /** A dialog of that window, not modal. */
     public JDialog(Window owner) {
         this(owner, Dialog$ModalityType.MODELESS);
     }
 
-    /** Un dialogo con ese tipo de modalidad. */
+    /** A dialog with that modality type. */
     public JDialog(Window owner, Dialog$ModalityType modalityType) {
         this(owner, null, modalityType);
     }
@@ -135,9 +135,9 @@ public class JDialog extends Dialog implements WindowConstants, Accessible,
     }
 
     /**
-     * Arma el panel raiz.
+     * It builds the root pane.
      *
-     * <p>La redireccion se prende recien al final; ver la nota de la clase.
+     * <p>The redirection is switched on only at the end; see the class note.
      */
     protected void dialogInit() {
         enableEvents(java.awt.AWTEvent.KEY_EVENT_MASK | java.awt.AWTEvent.WINDOW_EVENT_MASK);
@@ -155,7 +155,7 @@ public class JDialog extends Dialog implements WindowConstants, Accessible,
         return rp;
     }
 
-    /** Atiende el cierre segun {@link #setDefaultCloseOperation}. */
+    /** It attends the closing according to {@link #setDefaultCloseOperation}. */
     protected void processWindowEvent(WindowEvent e) {
         super.processWindowEvent(e);
         if (e.getID() == WindowEvent.WINDOW_CLOSING) {
@@ -170,9 +170,9 @@ public class JDialog extends Dialog implements WindowConstants, Accessible,
     }
 
     /**
-     * Que hacer cuando el usuario cierra el dialogo.
+     * What to do when the user closes the dialog.
      *
-     * @throws IllegalArgumentException si no es una de las cuatro.
+     * @throws IllegalArgumentException if it is not one of the four.
      */
     public void setDefaultCloseOperation(int operation) {
         if (operation != DO_NOTHING_ON_CLOSE && operation != HIDE_ON_CLOSE
@@ -201,9 +201,10 @@ public class JDialog extends Dialog implements WindowConstants, Accessible,
     }
 
     /**
-     * Dibuja sin borrar el fondo primero.
+     * It draws without clearing the background first.
      *
-     * <p>Swing dibuja cada pixel que le toca, asi que borrar antes solo produce un parpadeo.
+     * <p>Swing draws every pixel that falls to it, so clearing beforehand only produces a
+     * flicker.
      */
     public void update(Graphics g) {
         paint(g);
@@ -226,10 +227,10 @@ public class JDialog extends Dialog implements WindowConstants, Accessible,
     }
 
     /**
-     * Agrega al contenido, no al dialogo.
+     * It adds to the content, not to the dialog.
      *
-     * @throws IllegalArgumentException si se intenta agregar el panel raiz con la redireccion
-     *     prendida.
+     * @throws IllegalArgumentException if the root pane is added with the redirection switched
+     *     on.
      */
     protected void addImpl(Component comp, Object constraints, int index) {
         if (isRootPaneCheckingEnabled()) {
@@ -239,7 +240,7 @@ public class JDialog extends Dialog implements WindowConstants, Accessible,
         }
     }
 
-    /** Saca del contenido, salvo que sea el panel raiz. */
+    /** It removes from the content, unless it is the root pane. */
     public void remove(Component comp) {
         if (comp == rootPane) {
             super.remove(comp);
@@ -248,7 +249,7 @@ public class JDialog extends Dialog implements WindowConstants, Accessible,
         }
     }
 
-    /** Le pone acomodador al contenido, no al dialogo. */
+    /** It gives the layout to the content, not to the dialog. */
     public void setLayout(LayoutManager manager) {
         if (isRootPaneCheckingEnabled()) {
             getContentPane().setLayout(manager);
@@ -269,7 +270,7 @@ public class JDialog extends Dialog implements WindowConstants, Accessible,
         if (rootPane != null) {
             boolean checkingEnabled = isRootPaneCheckingEnabled();
             try {
-                // Apagado mientras se agrega el panel raiz; ver la nota de la clase.
+                // Switched off while the root pane is added; see the class note.
                 setRootPaneCheckingEnabled(false);
                 add(rootPane, java.awt.BorderLayout.CENTER);
             } finally {
@@ -311,10 +312,10 @@ public class JDialog extends Dialog implements WindowConstants, Accessible,
     }
 
     /**
-     * Si los dialogos nuevos dibujan su propio marco.
+     * Whether new dialogs draw their own frame.
      *
-     * <p>Es una decision del programa entero, no de un dialogo: mezclar marcos del sistema y de
-     * Swing en la misma aplicacion se ve mal.
+     * <p>It is a decision of the whole program, not of one dialog: mixing system and Swing frames
+     * in the same application looks wrong.
      */
     public static void setDefaultLookAndFeelDecorated(boolean defaultLookAndFeelDecorated) {
         JDialog.defaultLookAndFeelDecorated = defaultLookAndFeelDecorated;

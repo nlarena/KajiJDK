@@ -4,114 +4,115 @@ import java.security.Principal;
 import java.security.cert.Certificate;
 
 /**
- * Lo que dos puntas negociaron una vez y pueden reusar muchas.
+ * What two ends negotiated once and can reuse many times.
  *
- * <h2>Por que una sesion no es una conexion</h2>
+ * <h2>Why a session is not a connection</h2>
  *
- * <p>Es la distincion central de este tipo. El handshake completo es caro —criptografia asimetrica,
- * varios viajes de ida y vuelta— y una aplicacion abre y cierra conexiones todo el tiempo. La sesion
- * guarda lo acordado (la suite, el secreto maestro, los certificados) para que una conexion nueva
- * pueda <em>reanudarla</em> con un handshake abreviado. Muchas conexiones, una sesion.
+ * <p>It is the central distinction of this type. The complete handshake is expensive --asymmetric
+ * cryptography, several round trips-- and an application opens and closes connections all the time.
+ * The session keeps what was agreed (the suite, the master secret, the certificates) so that a new
+ * connection can <em>resume</em> it with an abbreviated handshake. Many connections, one session.
  *
- * <p>De ahi que {@link #invalidate} no cierre nada: solo prohibe que futuras conexiones la reanuden.
+ * <p>Hence {@link #invalidate} closes nothing: it only forbids future connections from resuming it.
  *
- * <h2>El almacen de valores</h2>
+ * <h2>The value store</h2>
  *
- * <p>{@link #putValue} y compania dejan colgarle datos de la aplicacion, y sirve justamente porque
- * la sesion sobrevive a la conexion: es donde poner algo que vale para todas las conexiones con ese
- * par. Un valor que implemente {@link SSLSessionBindingListener} se entera cuando entra y sale.
+ * <p>{@link #putValue} and company let application data hang from it, and that is useful precisely
+ * because the session outlives the connection: it is where to put something valid for all the
+ * connections with that peer. A value implementing {@link SSLSessionBindingListener} finds out when
+ * it goes in and out.
  */
 public interface SSLSession {
 
-    /** El identificador que le puso el servidor. */
+    /** The identifier the server gave it. */
     byte[] getId();
 
-    /** El contexto que la administra, o {@code null} si no esta en ninguno. */
+    /** The context managing it, or {@code null} if it is in none. */
     SSLSessionContext getSessionContext();
 
-    /** Cuando se creo, en milisegundos desde la epoca. */
+    /** When it was created, in milliseconds since the epoch. */
     long getCreationTime();
 
-    /** Cuando se uso por ultima vez. Es lo que mira el contexto para vencerla. */
+    /** When it was last used. It is what the context looks at to expire it. */
     long getLastAccessedTime();
 
     /**
-     * Prohibe reanudarla.
+     * Forbids resuming it.
      *
-     * <p>No cierra las conexiones que ya la estan usando: esas siguen. Lo que impide es que una
-     * conexion nueva se ahorre el handshake completo.
+     * <p>It does not close the connections already using it: those go on. What it prevents is a new
+     * connection saving itself the complete handshake.
      */
     void invalidate();
 
-    /** Si todavia se puede reanudar. */
+    /** Whether it can still be resumed. */
     boolean isValid();
 
-    /** Guarda un valor de la aplicacion. */
+    /** Keeps an application value. */
     void putValue(String name, Object value);
 
-    /** El valor guardado con ese nombre, o {@code null}. */
+    /** The value kept with that name, or {@code null}. */
     Object getValue(String name);
 
-    /** Saca un valor. */
+    /** Removes a value. */
     void removeValue(String name);
 
-    /** Los nombres de los valores guardados. */
+    /** The names of the kept values. */
     String[] getValueNames();
 
     /**
-     * Los certificados que presento el par.
+     * The certificates the peer presented.
      *
-     * @throws SSLPeerUnverifiedException si el par no se autentico — lo que puede pasar con una
-     *     sesion perfectamente valida, porque cifrar y autenticar son cosas distintas
+     * @throws SSLPeerUnverifiedException if the peer did not authenticate — which may happen with a
+     *     perfectly valid session, because encrypting and authenticating are different things
      */
     Certificate[] getPeerCertificates() throws SSLPeerUnverifiedException;
 
-    /** Los certificados que se presentaron, o {@code null} si no se presento ninguno. */
+    /** The certificates that were presented, or {@code null} if none was presented. */
     Certificate[] getLocalCertificates();
 
     /**
-     * Los certificados del par, en el tipo viejo de {@code javax.security.cert}.
+     * The peer's certificates, in the old {@code javax.security.cert} type.
      *
-     * @deprecated ese paquete quedo obsoleto; usar {@link #getPeerCertificates}
+     * @deprecated that package became obsolete; use {@link #getPeerCertificates}
      */
     @Deprecated(since = "9")
     default javax.security.cert.X509Certificate[] getPeerCertificateChain()
             throws SSLPeerUnverifiedException {
         throw new UnsupportedOperationException(
-                "esta sesion no soporta el tipo obsoleto javax.security.cert");
+                "this session does not support the obsolete javax.security.cert type");
     }
 
     /**
-     * Quien es el par.
+     * Who the peer is.
      *
-     * @throws SSLPeerUnverifiedException si no se autentico
+     * @throws SSLPeerUnverifiedException if it did not authenticate
      */
     Principal getPeerPrincipal() throws SSLPeerUnverifiedException;
 
-    /** Quien nos presentamos como, o {@code null}. */
+    /** Who we presented ourselves as, or {@code null}. */
     Principal getLocalPrincipal();
 
-    /** La suite de cifrado acordada. */
+    /** The agreed cipher suite. */
     String getCipherSuite();
 
-    /** La version de protocolo acordada. */
+    /** The agreed protocol version. */
     String getProtocol();
 
-    /** El nombre del par tal como se pidio, sin resolver ni verificar. */
+    /** The peer's name as it was asked for, neither resolved nor verified. */
     String getPeerHost();
 
-    /** El puerto del par. */
+    /** The peer's port. */
     int getPeerPort();
 
     /**
-     * El buffer mas grande que hace falta para un registro de red.
+     * The largest buffer needed for a network record.
      *
-     * <p>Es mayor que {@link #getApplicationBufferSize}: un registro TLS lleva encabezado, relleno y
-     * MAC ademas de los datos. Quien usa un {@link SSLEngine} dimensiona con estos dos numeros y no
-     * adivinando, o se come un {@code BUFFER_OVERFLOW} en el peor momento.
+     * <p>It is larger than {@link #getApplicationBufferSize}: a TLS record carries a header,
+     * padding and a MAC besides the data. Whoever uses an {@link SSLEngine} sizes with these two
+     * numbers and not by guessing, or eats a {@code BUFFER_OVERFLOW} at the worst moment.
      */
     int getPacketBufferSize();
 
-    /** Los datos mas grandes que puede entregar de una. */
+    /** The largest data it can deliver at once. */
     int getApplicationBufferSize();
 }

@@ -3,16 +3,16 @@ package javax.swing.event;
 import java.util.EventListener;
 
 /**
- * Quien quiere enterarse del teclado sobre un menu abierto; ver {@link MenuKeyEvent}.
+ * Whoever wants to hear about the keyboard over an open menu; see {@link MenuKeyEvent}.
  */
 public interface MenuKeyListener extends EventListener {
 
-    /** Se tipeo una tecla. */
+    /** A key was typed. */
     void menuKeyTyped(MenuKeyEvent e);
 
-    /** Se apreto una tecla. */
+    /** A key was pressed. */
     void menuKeyPressed(MenuKeyEvent e);
 
-    /** Se solto una tecla. */
+    /** A key was released. */
     void menuKeyReleased(MenuKeyEvent e);
 }

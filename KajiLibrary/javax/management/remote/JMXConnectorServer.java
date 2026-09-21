@@ -10,65 +10,65 @@ import javax.management.NotificationBroadcasterSupport;
 import javax.management.ObjectName;
 
 /**
- * KajiLibrary's javax.management.remote.JMXConnectorServer -- la base de los servidores de conectores.
+ * KajiLibrary's javax.management.remote.JMXConnectorServer -- the base of connector servers.
  *
- * <p>Junta tres papeles, y la lista de interfaces lo dice: es un {@link JMXConnectorServerMBean} para
- * poder registrarse, un {@link MBeanRegistration} para enterarse de cuando lo registran, y un
- * {@link NotificationBroadcasterSupport} para avisar de las conexiones.
+ * <p>It joins three roles, and the interface list says so: it is a
+ * {@link JMXConnectorServerMBean} so as to be registrable, an {@link MBeanRegistration} to learn
+ * when it is registered, and a {@link NotificationBroadcasterSupport} to report connections.
  *
- * <h2>El servidor de MBeans puede venir de dos lados</h2>
+ * <h2>The MBean server can come from two sides</h2>
  *
- * <p>Por el constructor, o por el registro: si se construye sin uno y despues se registra como MBean,
- * {@link #preRegister} toma el servidor donde lo registraron. Es lo que permite escribir en una
- * configuracion "registra este conector" sin nombrar el servidor.
+ * <p>Through the constructor, or through registration: if it is built without one and then
+ * registered as an MBean, {@link #preRegister} takes the server it was registered in. It is what
+ * allows writing "register this connector" in a configuration without naming the server.
  *
- * <h2>{@link #setMBeanServerForwarder} apila al reves</h2>
+ * <h2>{@link #setMBeanServerForwarder} stacks backwards</h2>
  *
- * <p>Cada llamada pone el nuevo interceptor <b>delante</b> de lo que ya habia, asi que el ultimo
- * agregado es el primero en ver las llamadas. Ver {@link MBeanServerForwarder}.
+ * <p>Each call puts the new interceptor <b>in front</b> of what was already there, so the last
+ * one added is the first to see the calls. See {@link MBeanServerForwarder}.
  *
  * <h2>A KajiLibrary subset</h2>
  *
- * <p>Esta clase esta entera: lo que le falta a esta biblioteca es un <b>protocolo</b>, y eso vive en
- * las subclases que trae un proveedor. Ver {@link JMXConnectorServerFactory}.
+ * <p>This class is whole: what this library lacks is a <b>protocol</b>, and that lives in the
+ * subclasses a provider brings. See {@link JMXConnectorServerFactory}.
  */
 public abstract class JMXConnectorServer extends NotificationBroadcasterSupport
     implements JMXConnectorServerMBean, MBeanRegistration, JMXAddressable {
 
-    /** La clave del entorno donde va el {@link JMXAuthenticator}. */
+    /** The environment key where the {@link JMXAuthenticator} goes. */
     public static final String AUTHENTICATOR = "jmx.remote.authenticator";
 
-    /** A que servidor de MBeans expone. */
+    /** Which MBean server it exposes. */
     private MBeanServer mbeanServer = null;
 
-    /** Con que nombre se registro, o null. */
+    /** Under what name it was registered, or null. */
     private ObjectName myName;
 
-    /** Las conexiones abiertas. */
+    /** The open connections. */
     private final ArrayList<String> connectionIds = new ArrayList<String>();
 
-    /** El proximo numero de secuencia de las notificaciones. */
+    /** The notifications' next sequence number. */
     private long sequenceNumber = 0;
 
-    /** Sin servidor de MBeans; se toma al registrarlo. */
+    /** Without an MBean server; it is taken when registering it. */
     public JMXConnectorServer() {
         this(null);
     }
 
-    /** @param mbeanServer a que servidor expone, o null */
+    /** @param mbeanServer which server it exposes, or null */
     public JMXConnectorServer(MBeanServer mbeanServer) {
         this.mbeanServer = mbeanServer;
     }
 
-    /** A que servidor de MBeans expone. */
+    /** Which MBean server it exposes. */
     public synchronized MBeanServer getMBeanServer() {
         return this.mbeanServer;
     }
 
     /**
-     * Encadena un interceptor delante. Ver la nota de la clase sobre el orden.
+     * Chains an interceptor in front. See the class note on the order.
      *
-     * @throws IllegalArgumentException si es null
+     * @throws IllegalArgumentException if it is null
      */
     public synchronized void setMBeanServerForwarder(MBeanServerForwarder mbsf) {
         if (mbsf == null) {
@@ -80,7 +80,7 @@ public abstract class JMXConnectorServer extends NotificationBroadcasterSupport
         this.mbeanServer = mbsf;
     }
 
-    /** Los identificadores de las conexiones abiertas. */
+    /** The identifiers of the open connections. */
     public String[] getConnectionIds() {
         synchronized (this.connectionIds) {
             return this.connectionIds.toArray(new String[this.connectionIds.size()]);
@@ -88,13 +88,13 @@ public abstract class JMXConnectorServer extends NotificationBroadcasterSupport
     }
 
     /**
-     * Un conector cliente hacia este servidor.
+     * A client connector towards this server.
      *
-     * <p>Va por {@link JMXConnectorFactory} con la direccion propia, sin atajos: eso es lo que hace
-     * que sirva para probar el camino remoto de verdad.
+     * <p>It goes through {@link JMXConnectorFactory} with its own address, without shortcuts: that
+     * is what makes it serve to really exercise the remote path.
      *
-     * @throws IllegalStateException si no esta activo
-     * @throws IOException si no se pudo
+     * @throws IllegalStateException if it is not active
+     * @throws IOException if it could not
      */
     public JMXConnector toJMXConnector(Map<String, ?> env) throws IOException {
         if (!isActive()) {
@@ -108,7 +108,7 @@ public abstract class JMXConnectorServer extends NotificationBroadcasterSupport
         return JMXConnectorFactory.newJMXConnector(address, env);
     }
 
-    /** Las tres notificaciones de conexion que emite esta clase. */
+    /** The three connection notifications this class emits. */
     public MBeanNotificationInfo[] getNotificationInfo() {
         final String[] types = {
             JMXConnectionNotification.OPENED,
@@ -122,7 +122,7 @@ public abstract class JMXConnectorServer extends NotificationBroadcasterSupport
         };
     }
 
-    /** Para que la subclase avise que se abrio una conexion. */
+    /** For the subclass to report that a connection was opened. */
     protected void connectionOpened(String connectionId, String message, Object userData) {
         synchronized (this.connectionIds) {
             this.connectionIds.add(connectionId);
@@ -130,7 +130,7 @@ public abstract class JMXConnectorServer extends NotificationBroadcasterSupport
         sendNotification(JMXConnectionNotification.OPENED, connectionId, message, userData);
     }
 
-    /** Idem, cerrada ordenadamente. */
+    /** The same, closed in an orderly way. */
     protected void connectionClosed(String connectionId, String message, Object userData) {
         synchronized (this.connectionIds) {
             this.connectionIds.remove(connectionId);
@@ -138,7 +138,7 @@ public abstract class JMXConnectorServer extends NotificationBroadcasterSupport
         sendNotification(JMXConnectionNotification.CLOSED, connectionId, message, userData);
     }
 
-    /** Idem, cortada sola. */
+    /** The same, cut by itself. */
     protected void connectionFailed(String connectionId, String message, Object userData) {
         synchronized (this.connectionIds) {
             this.connectionIds.remove(connectionId);
@@ -147,11 +147,12 @@ public abstract class JMXConnectorServer extends NotificationBroadcasterSupport
     }
 
     /**
-     * Toma el servidor donde lo registran, si no tenia uno.
+     * Takes the server it is registered in, if it had none.
      *
-     * <p>Ver la nota de la clase. Solo lo toma la primera vez: registrarlo dos veces no lo mueve.
+     * <p>See the class note. It only takes it the first time: registering it twice does not move
+     * it.
      *
-     * @throws NullPointerException si el servidor o el nombre son null
+     * @throws NullPointerException if the server or the name are null
      */
     public synchronized ObjectName preRegister(MBeanServer mbs, ObjectName name) {
         if (mbs == null || name == null) {
@@ -164,16 +165,16 @@ public abstract class JMXConnectorServer extends NotificationBroadcasterSupport
         return name;
     }
 
-    /** No hace nada. */
+    /** It does nothing. */
     public void postRegister(Boolean registrationDone) {
     }
 
     /**
-     * Lo para antes de sacarlo del registro.
+     * Stops it before taking it out of the registry.
      *
-     * <p>Es lo que evita dejar un puerto escuchando despues de desregistrar el MBean.
+     * <p>It is what avoids leaving a port listening after unregistering the MBean.
      *
-     * @throws IOException si fallo al parar
+     * @throws IOException if it failed while stopping
      */
     public synchronized void preDeregister() throws Exception {
         if (this.myName != null && isActive()) {
@@ -182,12 +183,12 @@ public abstract class JMXConnectorServer extends NotificationBroadcasterSupport
         }
     }
 
-    /** Se olvida del nombre. */
+    /** It forgets the name. */
     public void postDeregister() {
         this.myName = null;
     }
 
-    /** El armado comun de las tres notificaciones de conexion. */
+    /** The common building of the three connection notifications. */
     private void sendNotification(String type, String connectionId, String message,
                                   Object userData) {
         long seq;
@@ -200,10 +201,11 @@ public abstract class JMXConnectorServer extends NotificationBroadcasterSupport
     }
 
     /**
-     * Quien figura como fuente de las notificaciones.
+     * Who appears as the notifications' source.
      *
-     * <p>El nombre con el que se registro si lo hay, y si no el objeto. Poner el nombre es lo correcto
-     * cuando las notificaciones cruzan la red: el objeto no viaja, el nombre si.
+     * <p>The name it was registered under if there is one, and the object otherwise. Putting the
+     * name is the right thing when the notifications cross the network: the object does not travel,
+     * the name does.
      */
     private Object getNotificationSource() {
         if (this.myName != null) {

@@ -1,21 +1,21 @@
 package java.awt.image;
 
 /**
- * Los elementos se leen **sin signo**: un byte 0xFF vale 255 y no -1.
+ * The elements are read **unsigned**: a byte 0xFF is 255 and not -1.
  *
- * <p>Es la unica diferencia interesante de esta clase y la mas facil de olvidar. Java no tiene byte
- * sin signo, asi que sin el enmascarado de `getElem` la mitad clara de una imagen saldria como
- * valores negativos.
+ * <p>It is the only interesting difference of this class and the easiest to forget. Java has no
+ * unsigned byte, so without the masking of `getElem` the light half of an image would come out as
+ * negative values.
  */
 public final class DataBufferByte extends DataBuffer {
 
-    // Los datos de cada banco. `data` es un atajo al banco 0: se usa en cada lectura
-    // y bajar por `bankdata[0]` cada vez seria una indireccion de mas en el camino
-    // mas caliente de todo el paquete.
+    // The data of each bank. `data` is a shortcut to bank 0: it is used on every read
+    // and going down through `bankdata[0]` every time would be one indirection too many
+    // on the hottest path of the whole package.
     private byte[] data;
     private byte[][] bankdata;
 
-    /** Un banco de `size` elementos, en cero. */
+    /** One bank of `size` elements, at zero. */
     public DataBufferByte(int size) {
         super(DataBuffer.TYPE_BYTE, size);
         this.data = new byte[size];
@@ -23,7 +23,7 @@ public final class DataBufferByte extends DataBuffer {
         this.bankdata[0] = this.data;
     }
 
-    /** `numBanks` bancos de `size` elementos, en cero. */
+    /** `numBanks` banks of `size` elements, at zero. */
     public DataBufferByte(int size, int numBanks) {
         super(DataBuffer.TYPE_BYTE, size, numBanks);
         this.bankdata = new byte[numBanks][];
@@ -34,11 +34,11 @@ public final class DataBufferByte extends DataBuffer {
     }
 
     /**
-     * Un banco sobre ese arreglo, **sin copiarlo**.
+     * One bank over that array, **without copying it**.
      *
-     * <p>El buffer se queda con el arreglo que se le da: escribirle por afuera cambia la
-     * imagen. Es a proposito y es lo que permite armar una imagen sobre memoria que ya
-     * existe sin duplicarla.
+     * <p>The buffer keeps the array it is given: writing to it from outside changes the
+     * image. It is on purpose and it is what makes it possible to build an image over
+     * memory that already exists without duplicating it.
      */
     public DataBufferByte(byte[] dataArray, int size) {
         super(DataBuffer.TYPE_BYTE, size);
@@ -47,7 +47,7 @@ public final class DataBufferByte extends DataBuffer {
         this.bankdata[0] = this.data;
     }
 
-    /** Como el anterior, empezando en `offset`. */
+    /** Like the previous one, starting at `offset`. */
     public DataBufferByte(byte[] dataArray, int size, int offset) {
         super(DataBuffer.TYPE_BYTE, size, 1, offset);
         this.data = dataArray;
@@ -55,37 +55,37 @@ public final class DataBufferByte extends DataBuffer {
         this.bankdata[0] = this.data;
     }
 
-    /** Varios bancos sobre esos arreglos, sin copiarlos. */
+    /** Several banks over those arrays, without copying them. */
     public DataBufferByte(byte[][] dataArray, int size) {
         super(DataBuffer.TYPE_BYTE, size, dataArray.length);
         this.bankdata = dataArray;
         this.data = this.bankdata[0];
     }
 
-    /** Varios bancos, cada uno con su desplazamiento. */
+    /** Several banks, each one with its own offset. */
     public DataBufferByte(byte[][] dataArray, int size, int[] offsets) {
         super(DataBuffer.TYPE_BYTE, size, dataArray.length, offsets);
         this.bankdata = dataArray;
         this.data = this.bankdata[0];
     }
 
-    /** El arreglo del banco 0, sin copiar. */
+    /** The array of bank 0, without copying. */
     public byte[] getData() {
         return this.data;
     }
 
-    /** El arreglo de ese banco, sin copiar. */
+    /** The array of that bank, without copying. */
     public byte[] getData(int bank) {
         return this.bankdata[bank];
     }
 
     /**
-     * Los bancos.
+     * The banks.
      *
-     * <p>El arreglo de afuera es una **copia**; los de adentro no. O sea que agregar o
-     * quitar bancos en lo que devuelve no toca al buffer, pero escribir en un banco si.
-     * Es asimetrico y es lo que hace el JDK -- comprobado, porque la primera version de
-     * esta clase devolvia el arreglo de afuera sin clonar.
+     * <p>The outer array is a **copy**; the inner ones are not. That is, adding or
+     * removing banks in what it returns does not touch the buffer, but writing into a bank
+     * does. It is asymmetric and it is what the JDK does -- checked, because the first
+     * version of this class returned the outer array without cloning it.
      */
     public byte[][] getBankData() {
         byte[][] out = new byte[this.bankdata.length][];
@@ -93,12 +93,12 @@ public final class DataBufferByte extends DataBuffer {
         return out;
     }
 
-    /** Sin signo: ver la nota de la clase. */
+    /** Unsigned: see the note of the class. */
     public int getElem(int i) {
         return this.data[i + this.offset] & 0xFF;
     }
 
-    /** Sin signo: ver la nota de la clase. */
+    /** Unsigned: see the note of the class. */
     public int getElem(int bank, int i) {
         return this.bankdata[bank][i + this.offsets[bank]] & 0xFF;
     }

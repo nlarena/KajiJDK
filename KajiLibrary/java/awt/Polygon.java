@@ -7,28 +7,28 @@ import java.awt.geom.Point2D;
 import java.awt.geom.Rectangle2D;
 
 /**
- * Un poligono cerrado con vertices enteros.
+ * A closed polygon with integer vertices.
  *
- * <p>Los tres campos que definen la figura --{@code npoints}, {@code xpoints}, {@code ypoints}--
- * son publicos y mutables, que es una decision de 1.0 con la que hay que convivir. La consecuencia
- * es que la caja envolvente no se puede cachear a ciegas: quien toca los arreglos por afuera tiene
- * que llamar a {@code invalidate()}, y por eso existe ese metodo.
+ * <p>The three fields that define the figure --{@code npoints}, {@code xpoints}, {@code ypoints}--
+ * are public and mutable, which is a decision from 1.0 one has to live with. The consequence is
+ * that the bounding box cannot be cached blindly: whoever touches the arrays from outside has to
+ * call {@code invalidate()}, and that is why that method exists.
  *
- * <p>Los arreglos pueden ser mas largos que {@code npoints}. {@code addPoint} los duplica cuando se
- * llenan --amortizado-- asi que armar un poligono punto por punto no es cuadratico.
+ * <p>The arrays may be longer than {@code npoints}. {@code addPoint} doubles them when they fill up
+ * --amortised-- so building a polygon point by point is not quadratic.
  *
- * <h2>Como se decide si un punto esta adentro</h2>
+ * <h2>How it is decided whether a point is inside</h2>
  *
- * <p>Regla par-impar: se cuentan los cruces de una semirrecta horizontal con los lados y se mira la
- * paridad. La consecuencia visible es que en un poligono que se autointersecta el "adentro" alterna,
- * y que los bordes de arriba y de la izquierda cuentan como adentro pero los de abajo y la derecha
- * no. Ese semiabierto no es un descuido: es lo que hace que dos poligonos pegados no compartan
- * ningun pixel y no se pise el borde al rellenar los dos.
+ * <p>Even-odd rule: the crossings of a horizontal ray with the sides are counted and the parity is
+ * looked at. The visible consequence is that in a self-intersecting polygon the "inside"
+ * alternates, and that the top and left edges count as inside but the bottom and right ones do not.
+ * That half-open behaviour is not an oversight: it is what makes two polygons placed side by side
+ * share no pixel and not step on the edge when both are filled.
  *
- * <p>Las pruebas contra un rectangulo se delegan en {@code Path2D} con
- * {@code WIND_EVEN_ODD}, que es la misma maquinaria de cruces que usa el resto de
- * {@code java.awt.geom}. Escribir un contador de cruces propio para esto seria repetir --y poder
- * equivocar-- un algoritmo que ya esta y ya se probo.
+ * <p>The tests against a rectangle are delegated to {@code Path2D} with {@code WIND_EVEN_ODD},
+ * which is the same crossing machinery the rest of {@code java.awt.geom} uses. Writing a crossing
+ * counter of our own for this would be repeating --and being able to get wrong-- an algorithm that
+ * is already there and already tested.
  */
 public class Polygon implements Shape, java.io.Serializable {
 
@@ -42,7 +42,7 @@ public class Polygon implements Shape, java.io.Serializable {
 
     public int[] ypoints;
 
-    /** La caja envolvente cacheada, o null si hay que recalcularla. */
+    /** The cached bounding box, or null if it has to be worked out again. */
     protected Rectangle bounds;
 
     public Polygon() {
@@ -51,8 +51,8 @@ public class Polygon implements Shape, java.io.Serializable {
     }
 
     public Polygon(int[] xpoints, int[] ypoints, int npoints) {
-        // El orden importa: primero el largo negativo --que es un error del que llama-- y despues
-        // el desborde, para que el mensaje describa la causa y no el sintoma.
+        // The overflow is checked first and the negative count second: a negative is never greater
+        // than a length, so it falls through to the check whose message describes the cause.
         if (npoints > xpoints.length || npoints > ypoints.length) {
             throw new IndexOutOfBoundsException(
                     "npoints > xpoints.length || npoints > ypoints.length");
@@ -70,7 +70,9 @@ public class Polygon implements Shape, java.io.Serializable {
         bounds = null;
     }
 
-    /** Hay que llamarlo si se tocaron los arreglos publicos: el cache no se entera solo. */
+    /**
+     * It has to be called if the public arrays were touched: the cache does not find out by itself.
+     */
     public void invalidate() {
         bounds = null;
     }
@@ -81,7 +83,7 @@ public class Polygon implements Shape, java.io.Serializable {
             ypoints[i] += deltaY;
         }
         if (bounds != null) {
-            // Trasladar la caja es exacto y evita recorrer los puntos una segunda vez.
+            // Translating the box is exact and saves walking the points a second time.
             bounds.translate(deltaX, deltaY);
         }
     }
@@ -143,7 +145,9 @@ public class Polygon implements Shape, java.io.Serializable {
         return getBoundingBox();
     }
 
-    /** El nombre de 1.0. En el JDK es el que hace el trabajo y {@code getBounds()} delega. */
+    /**
+     * The 1.0 name. In the JDK it is the one that does the work and {@code getBounds()} delegates.
+     */
     public Rectangle getBoundingBox() {
         if (npoints == 0) {
             return new Rectangle();
@@ -162,7 +166,7 @@ public class Polygon implements Shape, java.io.Serializable {
         return contains((double) x, (double) y);
     }
 
-    /** El nombre de 1.0. */
+    /** The 1.0 name. */
     public boolean inside(int x, int y) {
         return contains((double) x, (double) y);
     }
@@ -172,11 +176,11 @@ public class Polygon implements Shape, java.io.Serializable {
     }
 
     /**
-     * Cuenta cruces con la semirrecta que sale del punto hacia la izquierda y mira la paridad.
+     * Counts the crossings with the ray that leaves the point to the left and looks at the parity.
      *
-     * <p>Los lados horizontales se saltean: no aportan cruce y ademas dividir por su altura seria
-     * dividir por cero. Los otros descartes tempranos --por caja, por lado enteramente a la
-     * izquierda o a la derecha-- estan para que el caso comun no llegue nunca a la division.
+     * <p>The horizontal sides are skipped: they contribute no crossing and besides, dividing by
+     * their height would be dividing by zero. The other early discards --by box, by a side wholly
+     * to the left or to the right-- are there so that the common case never reaches the division.
      */
     public boolean contains(double x, double y) {
         if (npoints <= 2 || !getBoundingBox().contains(x, y)) {
@@ -246,22 +250,22 @@ public class Polygon implements Shape, java.io.Serializable {
         return contains(p.getX(), p.getY());
     }
 
-    /** El poligono como camino, para poder reusar los cruces contra rectangulo de Path2D. */
-    private Path2D.Double comoCamino() {
-        Path2D.Double camino = new Path2D.Double(Path2D.WIND_EVEN_ODD, npoints);
-        camino.moveTo(xpoints[0], ypoints[0]);
+    /** The polygon as a path, so the rectangle crossings of Path2D can be reused. */
+    private Path2D.Double asPath() {
+        Path2D.Double path = new Path2D.Double(Path2D.WIND_EVEN_ODD, npoints);
+        path.moveTo(xpoints[0], ypoints[0]);
         for (int i = 1; i < npoints; i++) {
-            camino.lineTo(xpoints[i], ypoints[i]);
+            path.lineTo(xpoints[i], ypoints[i]);
         }
-        camino.closePath();
-        return camino;
+        path.closePath();
+        return path;
     }
 
     public boolean intersects(double x, double y, double w, double h) {
         if (npoints <= 0 || !getBoundingBox().intersects(x, y, w, h)) {
             return false;
         }
-        return comoCamino().intersects(x, y, w, h);
+        return asPath().intersects(x, y, w, h);
     }
 
     public boolean intersects(Rectangle2D r) {
@@ -272,7 +276,7 @@ public class Polygon implements Shape, java.io.Serializable {
         if (npoints <= 0 || !getBoundingBox().intersects(x, y, w, h)) {
             return false;
         }
-        return comoCamino().contains(x, y, w, h);
+        return asPath().contains(x, y, w, h);
     }
 
     public boolean contains(Rectangle2D r) {
@@ -284,8 +288,8 @@ public class Polygon implements Shape, java.io.Serializable {
     }
 
     /**
-     * La tolerancia de aplanado se ignora, y no es una omision: un poligono ya es una sucesion de
-     * segmentos rectos, asi que aplanarlo no puede cambiar nada.
+     * The flattening tolerance is ignored, and that is not an omission: a polygon already is a
+     * sequence of straight segments, so flattening it cannot change anything.
      */
     public PathIterator getPathIterator(AffineTransform at, double flatness) {
         return getPathIterator(at);
@@ -303,15 +307,15 @@ public class Polygon implements Shape, java.io.Serializable {
             poly = pg;
             transform = at;
             if (pg.npoints == 0) {
-                // Un poligono vacio ya esta terminado: se salta hasta el final para que el
-                // recorrido no emita un SEG_CLOSE que no cierra nada.
+                // An empty polygon is already finished: it skips to the end so that the walk does
+                // not emit a SEG_CLOSE that closes nothing.
                 index = 1;
             }
         }
 
         public int getWindingRule() {
-            // Calificado a proposito: ver #469 en COMPILER_FINDINGS.md -- los campos de una
-            // interfaz implementada no se heredan y sin el prefijo no compila.
+            // Qualified on purpose: see #469 in COMPILER_FINDINGS.md -- the fields of an
+            // implemented interface are not inherited and without the prefix it does not compile.
             return PathIterator.WIND_EVEN_ODD;
         }
 

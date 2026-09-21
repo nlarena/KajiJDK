@@ -1,17 +1,17 @@
 package org.w3c.dom;
 
 /**
- * KajiLibrary's org.w3c.dom.CharacterData -- lo que comparten los nodos que son una tira de
- * caracteres: `Text`, `Comment` y `CDATASection`.
+ * KajiLibrary's org.w3c.dom.CharacterData -- what the nodes that are a string of characters share:
+ * `Text`, `Comment` and `CDATASection`.
  *
- * <p>Lo que agrega sobre `Node` son las operaciones de edicion sobre esa tira --insertar, borrar,
- * reemplazar por rango-- que existen para no tener que leer el texto entero, modificarlo en Java y
- * volver a escribirlo. En un nodo de varios megas la diferencia se nota.
+ * <p>What it adds over `Node` are the editing operations on that string --inserting, deleting,
+ * replacing by range-- which exist so as not to have to read the whole text, modify it in Java and
+ * write it back. On a node of several megabytes the difference shows.
  *
- * <p><strong>Los offsets son en unidades de 16 bits, no en puntos de codigo.</strong> `getLength()`
- * cuenta lo mismo que `String.length()`, asi que un caracter fuera del plano basico cuenta dos y un
- * `deleteData` mal calculado puede partir un par sustituto por el medio. La norma lo hereda de
- * `DOMString`, que se definio como UTF-16 y no como texto.
+ * <p><strong>The offsets are in 16-bit units, not in code points.</strong> `getLength()` counts the
+ * same as `String.length()`, so a character outside the basic plane counts as two and a badly
+ * calculated `deleteData` can split a surrogate pair in half. The standard inherits it from
+ * `DOMString`, which was defined as UTF-16 and not as text.
  */
 public interface CharacterData extends Node {
 
@@ -19,12 +19,12 @@ public interface CharacterData extends Node {
 
     void setData(String data) throws DOMException;
 
-    /** En unidades de 16 bits. */
+    /** In 16-bit units. */
     int getLength();
 
     /**
-     * @throws DOMException con `INDEX_SIZE_ERR` si `offset` esta fuera de rango o `count` es
-     *         negativo. Que `offset + count` pase del final **no** es error: se recorta.
+     * @throws DOMException with `INDEX_SIZE_ERR` if `offset` is out of range or `count` is
+     *         negative. That `offset + count` goes past the end is **not** an error: it is trimmed.
      */
     String substringData(int offset, int count) throws DOMException;
 
@@ -34,6 +34,8 @@ public interface CharacterData extends Node {
 
     void deleteData(int offset, int count) throws DOMException;
 
-    /** No equivale a `deleteData` mas `insertData`: es una sola operacion y una sola mutacion. */
+    /**
+     * It is not equivalent to `deleteData` plus `insertData`: it is one operation and one mutation.
+     */
     void replaceData(int offset, int count, String arg) throws DOMException;
 }

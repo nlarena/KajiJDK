@@ -3,19 +3,21 @@ package com.sun.source.util;
 import javax.lang.model.element.VariableElement;
 
 /**
- * De donde saca el compilador el nombre de un parametro cuando el {@code .class} no lo trae.
+ * Where the compiler gets a parameter's name from when the {@code .class} does not bring it.
  *
- * <h2>Por que puede no traerlo</h2>
+ * <h2>Why it may not bring it</h2>
  *
- * <p>Porque guardar los nombres de los parametros es opcional: {@code javac} solo los emite con
- * {@code -parameters}. Sin eso, una clase compilada expone {@code arg0}, {@code arg1} — que
- * compila igual pero es inservible para una herramienta que genere codigo o documentacion.
+ * <p>Because keeping the parameters' names is optional: {@code javac} only emits them with
+ * {@code -parameters}. Without that, a compiled class exposes {@code arg0}, {@code arg1} --
+ * which compiles all the same but is useless for a tool that generates code or
+ * documentation.
  *
- * <p>Este enganche deja completarlos desde otro lado: un archivo de metadatos, el fuente si esta a
- * mano, una convencion. Devolver {@code null} es decir "no se", y ahi queda el {@code argN}.
+ * <p>This hook allows them to be completed from somewhere else: a metadata file, the source if
+ * it is at hand, a convention. Returning {@code null} is saying "I do not know", and there the
+ * {@code argN} stays.
  */
 public interface ParameterNameProvider {
 
-    /** El nombre de ese parametro, o {@code null} si no se sabe. */
+    /** That parameter's name, or {@code null} if it is not known. */
     CharSequence getParameterName(VariableElement parameter);
 }

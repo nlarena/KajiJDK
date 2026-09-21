@@ -17,23 +17,25 @@ import javax.swing.border.StrokeBorder;
 import javax.swing.border.TitledBorder;
 
 /**
- * Fabrica bordes, y comparte los que no tienen estado.
+ * It makes borders, and shares those that have no state.
  *
- * <h2>Para que existe si los constructores son publicos</h2>
+ * <h2>What it exists for if the constructors are public</h2>
  *
- * <p>Por el compartir. Un borde no guarda a que componente pertenece -- se le pasa el componente en
- * cada dibujada --, asi que dos botones con el mismo borde pueden usar el <em>mismo objeto</em>. Los
- * que no llevan ningun parametro se arman una sola vez y se devuelven siempre, y en una pantalla con
- * doscientos componentes eso es doscientos objetos que no se crean.
+ * <p>For the sharing. A border does not keep which component it belongs to -- it is passed the
+ * component on each drawing --, so two buttons with the same border may use the <em>same
+ * object</em>. Those that carry no parameter are built once and always returned, and on a
+ * screen with two hundred components that is two hundred objects that are not created.
  *
- * <p>Los que si llevan parametros se crean cada vez, porque no hay nada que compartir. Nada obliga a
- * pasar por aca: los constructores publicos siguen estando y hacen lo mismo, solo que sin compartir.
+ * <p>Those that do carry parameters are created each time, because there is nothing to share.
+ * Nothing forces one to go through here: the public constructors are still there and do the
+ * same, only without sharing.
  *
- * <h2>Un borde compartido no se puede tocar</h2>
+ * <h2>A shared border cannot be touched</h2>
  *
- * <p>Es la contracara y conviene tenerla presente: el que devuelve {@link #createEtchedBorder} lo
- * estan usando otros. Los bordes de esta biblioteca son inmutables, asi que no hay como equivocarse;
- * el cuidado va para quien escriba uno propio.
+ * <p>It is the other side and it is worth keeping in mind: the one
+ * {@link #createEtchedBorder} returns is being used by others. This library's borders are
+ * immutable, so there is no way of going wrong; the care is for whoever writes one of their
+ * own.
  */
 public class BorderFactory {
 
@@ -45,52 +47,52 @@ public class BorderFactory {
     static final Border sharedEtchedBorder = new EtchedBorder();
     static final Border emptyBorder = new EmptyBorder(0, 0, 0, 0);
 
-    /** Una linea de un pixel de ese color. */
+    /** A one-pixel line of that colour. */
     public static Border createLineBorder(Color color) {
         return new LineBorder(color, 1);
     }
 
-    /** Una linea de ese grosor. */
+    /** A line of that thickness. */
     public static Border createLineBorder(Color color, int thickness) {
         return new LineBorder(color, thickness);
     }
 
-    /** Una linea, con las esquinas redondeadas o no. */
+    /** A line, with the corners rounded or not. */
     public static Border createLineBorder(Color color, int thickness, boolean rounded) {
         return new LineBorder(color, thickness, rounded);
     }
 
-    /** El relieve que sobresale; compartido. */
+    /** The relief that sticks out; shared. */
     public static Border createRaisedBevelBorder() {
         return createSharedBevel(BevelBorder.RAISED);
     }
 
-    /** El relieve que se hunde; compartido. */
+    /** The relief that sinks; shared. */
     public static Border createLoweredBevelBorder() {
         return createSharedBevel(BevelBorder.LOWERED);
     }
 
     /**
-     * El relieve de ese tipo.
+     * The relief of that type.
      *
-     * @throws IllegalArgumentException si el tipo no es RAISED ni LOWERED.
+     * @throws IllegalArgumentException if the type is neither RAISED nor LOWERED.
      */
     public static Border createBevelBorder(int type) {
         return createSharedBevel(type);
     }
 
-    /** El relieve con esos dos colores. */
+    /** The relief with those two colours. */
     public static Border createBevelBorder(int type, Color highlight, Color shadow) {
         return new BevelBorder(type, highlight, shadow);
     }
 
-    /** El relieve con los cuatro colores puestos a mano. */
+    /** The relief with the four colours set by hand. */
     public static Border createBevelBorder(int type, Color highlightOuter, Color highlightInner,
             Color shadowOuter, Color shadowInner) {
         return new BevelBorder(type, highlightOuter, highlightInner, shadowOuter, shadowInner);
     }
 
-    /** El compartido si el tipo es uno de los dos; si no, uno nuevo. */
+    /** The shared one if the type is one of the two; if not, a new one. */
     static Border createSharedBevel(int type) {
         if (type == BevelBorder.RAISED) {
             return sharedRaisedBevel;
@@ -100,17 +102,17 @@ public class BorderFactory {
         return null;
     }
 
-    /** El relieve suave que sobresale. */
+    /** The soft relief that sticks out. */
     public static Border createRaisedSoftBevelBorder() {
         return new SoftBevelBorder(BevelBorder.RAISED);
     }
 
-    /** El relieve suave que se hunde. */
+    /** The soft relief that sinks. */
     public static Border createLoweredSoftBevelBorder() {
         return new SoftBevelBorder(BevelBorder.LOWERED);
     }
 
-    /** El relieve suave de ese tipo; nulo si el tipo no es ninguno de los dos. */
+    /** The soft relief of that type; null if the type is neither of the two. */
     public static Border createSoftBevelBorder(int type) {
         if (type == BevelBorder.RAISED) {
             return createRaisedSoftBevelBorder();
@@ -130,17 +132,17 @@ public class BorderFactory {
                 shadowInner);
     }
 
-    /** El surco hundido; compartido. */
+    /** The sunken groove; shared. */
     public static Border createEtchedBorder() {
         return sharedEtchedBorder;
     }
 
-    /** El surco con esos dos colores. */
+    /** The groove with those two colours. */
     public static Border createEtchedBorder(Color highlight, Color shadow) {
         return new EtchedBorder(highlight, shadow);
     }
 
-    /** El surco de ese tipo; el hundido es el compartido. */
+    /** The groove of that type; the sunken one is the shared one. */
     public static Border createEtchedBorder(int type) {
         if (type == EtchedBorder.LOWERED) {
             return sharedEtchedBorder;
@@ -152,34 +154,34 @@ public class BorderFactory {
         return new EtchedBorder(type, highlight, shadow);
     }
 
-    /** Un titulo, sin borde alrededor. */
+    /** A title, with no border around it. */
     public static TitledBorder createTitledBorder(String title) {
         return new TitledBorder(title);
     }
 
-    /** Ese borde con lugar para un titulo. */
+    /** That border with room for a title. */
     public static TitledBorder createTitledBorder(Border border) {
         return new TitledBorder(border);
     }
 
-    /** Ese borde con ese titulo. */
+    /** That border with that title. */
     public static TitledBorder createTitledBorder(Border border, String title) {
         return new TitledBorder(border, title);
     }
 
-    /** Con el titulo puesto de ese lado. */
+    /** With the title set on that side. */
     public static TitledBorder createTitledBorder(Border border, String title,
             int titleJustification, int titlePosition) {
         return new TitledBorder(border, title, titleJustification, titlePosition);
     }
 
-    /** Y con esa tipografia. */
+    /** And with that typeface. */
     public static TitledBorder createTitledBorder(Border border, String title,
             int titleJustification, int titlePosition, Font titleFont) {
         return new TitledBorder(border, title, titleJustification, titlePosition, titleFont);
     }
 
-    /** Y con ese color. */
+    /** And with that colour. */
     public static TitledBorder createTitledBorder(Border border, String title,
             int titleJustification, int titlePosition, Font titleFont, Color titleColor) {
         return new TitledBorder(border, title, titleJustification, titlePosition, titleFont,
@@ -187,104 +189,107 @@ public class BorderFactory {
     }
 
     /**
-     * Un borde que no se ve y no ocupa nada; compartido.
+     * A border that is not seen and takes up nothing; shared.
      *
-     * <p>Sirve para sacarle el borde a un componente sin dejarlo en nulo: nulo significa "el que
-     * ponga el aspecto", y esto significa "ninguno".
+     * <p>It serves to take a component's border away without leaving it null: null means "the one
+     * the look and feel sets", and this means "none".
      */
     public static Border createEmptyBorder() {
         return emptyBorder;
     }
 
-    /** Un borde invisible que igual ocupa ese lugar; es como se pone margen sin acomodador. */
+    /**
+     * An invisible border that takes up that room all the same; it is how a margin is set with no
+     * layout.
+     */
     public static Border createEmptyBorder(int top, int left, int bottom, int right) {
         return new EmptyBorder(top, left, bottom, right);
     }
 
-    /** Dos bordes vacios, uno adentro del otro. */
+    /** Two empty borders, one inside the other. */
     public static CompoundBorder createCompoundBorder() {
         return new CompoundBorder();
     }
 
-    /** Uno adentro del otro; el de afuera se dibuja primero. */
+    /** One inside the other; the outer one is drawn first. */
     public static CompoundBorder createCompoundBorder(Border outsideBorder,
             Border insideBorder) {
         return new CompoundBorder(outsideBorder, insideBorder);
     }
 
-    /** Un marco de ese color con esos cuatro grosores. */
+    /** A frame of that colour with those four thicknesses. */
     public static MatteBorder createMatteBorder(int top, int left, int bottom, int right,
             Color color) {
         return new MatteBorder(top, left, bottom, right, color);
     }
 
-    /** Un marco hecho repitiendo ese icono. */
+    /** A frame made by repeating that icon. */
     public static MatteBorder createMatteBorder(int top, int left, int bottom, int right,
             Icon tileIcon) {
         return new MatteBorder(top, left, bottom, right, tileIcon);
     }
 
     /**
-     * Un borde dibujado con ese trazo, del color del componente.
+     * A border drawn with that stroke, in the component's colour.
      *
-     * @throws NullPointerException si el trazo es nulo
+     * @throws NullPointerException if the stroke is null
      */
     public static Border createStrokeBorder(BasicStroke stroke) {
         return new StrokeBorder(stroke);
     }
 
     /**
-     * Un borde dibujado con ese trazo y esa pintura.
+     * A border drawn with that stroke and that paint.
      *
-     * @throws NullPointerException si el trazo es nulo
+     * @throws NullPointerException if the stroke is null
      */
     public static Border createStrokeBorder(BasicStroke stroke, Paint paint) {
         return new StrokeBorder(stroke, paint);
     }
 
     /**
-     * Una linea de guiones de esa pintura, con las medidas de siempre.
+     * A line of dashes of that paint, with the usual measurements.
      *
-     * @throws NullPointerException si la pintura es nula
+     * @throws NullPointerException if the paint is null
      */
     public static Border createDashedBorder(Paint paint) {
         return createDashedBorder(paint, 1.0f, 1.0f, 1.0f, false);
     }
 
     /**
-     * Guiones de ese largo y con ese hueco.
+     * Dashes of that length and with that gap.
      *
-     * @throws NullPointerException si la pintura es nula
-     * @throws IllegalArgumentException si alguna medida no es positiva
+     * @throws NullPointerException if the paint is null
+     * @throws IllegalArgumentException if some measurement is not positive
      */
     public static Border createDashedBorder(Paint paint, float length, float spacing) {
         return createDashedBorder(paint, 1.0f, length, spacing, false);
     }
 
     /**
-     * El borde de guiones completo.
+     * The complete dashed border.
      *
-     * <p>Con {@code rounded} en cierto los guiones llevan las puntas y las esquinas redondeadas; el
-     * largo y el hueco se miden en multiplos del grosor, no en pixeles, para que un borde mas grueso
-     * lleve guiones proporcionalmente mas largos.
+     * <p>With {@code rounded} at true the dashes carry rounded ends and corners; the length and
+     * the gap are measured in multiples of the thickness, not in pixels, so that a thicker border
+     * carries proportionally longer dashes.
      *
-     * @throws NullPointerException si la pintura es nula
-     * @throws IllegalArgumentException si alguna medida no es positiva
+     * @throws NullPointerException if the paint is null
+     * @throws IllegalArgumentException if some measurement is not positive
      */
     public static Border createDashedBorder(Paint paint, float thickness, float length,
             float spacing, boolean rounded) {
         boolean shared = !rounded && thickness == 1.0f && length == 1.0f && spacing == 1.0f;
         if (shared && paint == null) {
-            // Sin pintura y con las medidas de siempre no hay nada que distinga a este borde de
-            // otro igual, asi que se podria compartir. No se comparte: el JDK arma uno nuevo, y
-            // devolver el mismo objeto cambiaria una comparacion por identidad que alguien puede
-            // estar haciendo.
+            // With no paint and with the usual measurements there is nothing that tells this border
+                        // from another one the same, so it could be shared. It is not shared: the
+                        // JDK builds a new one, and returning the same object would change an
+                        // identity comparison somebody may be making.
             return new StrokeBorder(trazo(thickness, length, spacing, rounded), null);
         }
         return new StrokeBorder(trazo(thickness, length, spacing, rounded), paint);
     }
 
-    /** El trazo punteado que corresponde a esas medidas. */
+    /** The dotted stroke that corresponds to those measurements. */
     private static BasicStroke trazo(float thickness, float length, float spacing,
             boolean rounded) {
         int cap = rounded ? BasicStroke.CAP_ROUND : BasicStroke.CAP_SQUARE;

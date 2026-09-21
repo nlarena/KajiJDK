@@ -1,18 +1,19 @@
 package java.util;
 
-// El lado Map de los envoltorios de Collections: unmodifiableMap, synchronizedMap y checkedMap,
-// con sus variantes ordenadas y navegables. Misma idea que GuardedCollection -- una sola familia
-// con tres interruptores -- y las mismas reglas sobre el cerrojo.
+// The Map side of Collections's wrappers: unmodifiableMap, synchronizedMap and checkedMap, with
+// their sorted and navigable variants. The same idea as GuardedCollection -- a single family with
+// three switches -- and the same rules about the lock.
 //
-// Lo especifico de un mapa son las tres **vistas**: keySet, values y entrySet. Todas tienen que
-// salir envueltas, o serian el atajo obvio para modificar un mapa de solo lectura: bastaria con
-// `unmodifiableMap(m).keySet().remove(k)`. Y entrySet necesita ademas que cada entrada salga
-// envuelta, porque `Map.Entry.setValue` escribe en el mapa sin pasar por ninguna de sus vistas.
+// What is specific to a map is the three **views**: keySet, values and entrySet. All of them have to
+// come out wrapped, or they would be the obvious shortcut for modifying a read-only map:
+// `unmodifiableMap(m).keySet().remove(k)` would be enough. And entrySet needs each entry to come out
+// wrapped as well, because `Map.Entry.setValue` writes into the map without going through any of its
+// views.
 //
-// Divergencia anotada: en el JDK las vistas de un synchronizedMap comparten el mutex del mapa,
-// asi que `synchronized (mapa) { ... }` tambien excluye a quien recorre el keySet. Aca cada vista
-// toma su propio monitor. Para el uso normal -- sincronizar sobre el mapa mientras se lo recorre
-// entero -- da lo mismo; para el que mezcle vistas y mapa desde dos hilos, no.
+// A noted divergence: in the JDK a synchronizedMap's views share the map's mutex, so
+// `synchronized (map) { ... }` also excludes whoever is walking the keySet. Here each view takes its
+// own monitor. For the normal use -- synchronising on the map while walking the whole of it -- it
+// comes to the same; for whoever mixes views and map from two threads, it does not.
 class GuardedMap<K, V> implements Map<K, V> {
 
     final Map<K, V> back;
@@ -92,8 +93,8 @@ class GuardedMap<K, V> implements Map<K, V> {
         }
     }
 
-    // Se valida el lote entero antes de escribir nada: dejar un mapa a medio copiar y despues
-    // tirar ClassCastException seria peor que no copiar.
+    // The whole batch is validated before anything is written: leaving a map half copied and then
+    // throwing ClassCastException would be worse than not copying.
     public void putAll(Map<? extends K, ? extends V> m) {
         this.noWrite();
         if (this.keyType != null || this.valueType != null) {
@@ -136,9 +137,9 @@ class GuardedMap<K, V> implements Map<K, V> {
         }
     }
 
-    // Los defaults de Map que escriben. Van explicitos aunque el `put` de abajo ya se negaria:
-    // `putIfAbsent` sobre una clave presente no llega a llamarlo, y devolveria el valor viejo tan
-    // campante en un mapa que se declaro de solo lectura.
+    // Map's defaults that write. They are explicit even though the `put` below would already refuse:
+    // `putIfAbsent` on a key that is present never reaches it, and would blithely return the old
+    // value on a map that was declared read-only.
     public V putIfAbsent(K key, V value) {
         this.noWrite();
         this.check(key, value);
@@ -270,7 +271,7 @@ class GuardedSequencedMap<K, V> extends GuardedMap<K, V> implements SequencedMap
         }
     }
 
-    // Una entrada de solo lectura sale envuelta; una que se pueda escribir, tal cual.
+    // A read-only entry comes out wrapped; a writable one, as it is.
     final Map.Entry<K, V> wrapEntry(Map.Entry<K, V> e) {
         if (e == null || !this.readOnly) {
             return e;
@@ -459,8 +460,8 @@ class GuardedNavigableMap<K, V> extends GuardedSortedMap<K, V> implements Naviga
     }
 }
 
-// El entrySet de un mapa de solo lectura. Hereda todo de GuardedSet y solo cambia el iterador,
-// que es de donde salen las entradas.
+// A read-only map's entrySet. It inherits everything from GuardedSet and changes only the iterator,
+// which is where the entries come from.
 final class GuardedEntrySet<K, V> extends GuardedSet<Map.Entry<K, V>> {
 
     GuardedEntrySet(Set<Map.Entry<K, V>> back) {
@@ -493,9 +494,8 @@ final class GuardedEntryItr<K, V> implements Iterator<Map.Entry<K, V>> {
     }
 }
 
-// Una entrada que deja leer y no deja escribir. `equals`/`hashCode` delegan porque Map.Entry los
-// define por contenido, y una entrada envuelta tiene que seguir encontrandose dentro del mismo
-// entrySet.
+// An entry that lets one read and not write. `equals`/`hashCode` delegate because Map.Entry defines
+// them by content, and a wrapped entry has to go on being found inside the same entrySet.
 final class GuardedEntry<K, V> implements Map.Entry<K, V> {
 
     private final Map.Entry<K, V> back;

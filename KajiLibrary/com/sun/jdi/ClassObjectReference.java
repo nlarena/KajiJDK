@@ -1,16 +1,16 @@
 package com.sun.jdi;
 
 /**
- * El objeto {@code Class} de un tipo, del otro lado.
+ * A type's {@code Class} object, on the other side.
  *
  * @since 1.3
  */
 public interface ClassObjectReference extends ObjectReference {
 
     /**
-     * El reflected type.
+     * The reflected type.
      *
-     * @return el resultado
+     * @return the result
      */
     ReferenceType reflectedType();
 }

@@ -3,41 +3,41 @@ package java.awt;
 import java.io.Serializable;
 
 /**
- * Lo que se le pide a una configuración gráfica, para que el sistema elija la que mejor cumpla.
+ * What is asked of a graphics configuration, so that the system picks the one that meets it best.
  *
- * <p>En vez de enumerar las configuraciones y comparar a mano, se declara qué hace falta —doble
- * buffer sí, estéreo no— y el dispositivo devuelve la más adecuada. Cada requisito puede ser
- * obligatorio, deseable o indeseable, y esa gradación es la que permite ordenar candidatas en vez de
- * sólo aceptarlas o rechazarlas.
+ * <p>Instead of enumerating the configurations and comparing by hand, one declares what is needed
+ * —double buffering yes, stereo no— and the device returns the most suitable one. Each requirement
+ * can be required, preferred or unnecessary, and that gradation is what allows ranking candidates
+ * instead of just accepting or rejecting them.
  */
 public abstract class GraphicsConfigTemplate implements Serializable {
 
     private static final long serialVersionUID = -8061369279557787079L;
 
-    /** El requisito tiene que cumplirse. */
+    /** The requirement has to be met. */
     public static final int REQUIRED = 1;
 
-    /** Mejor si se cumple. */
+    /** Better if it is met. */
     public static final int PREFERRED = 2;
 
-    /** Mejor si no se cumple. */
+    /** Better if it is not met. */
     public static final int UNNECESSARY = 3;
 
-    /** Para las subclases. */
+    /** For subclasses. */
     public GraphicsConfigTemplate() {
     }
 
     /**
-     * La mejor de esas configuraciones, o `null` si ninguna sirve.
+     * The best of those configurations, or `null` if none will do.
      *
-     * @throws NullPointerException si el arreglo es `null`
+     * @throws NullPointerException if the array is `null`
      */
     public abstract GraphicsConfiguration getBestConfiguration(GraphicsConfiguration[] gc);
 
     /**
-     * Si esa configuración cumple los requisitos obligatorios.
+     * Whether that configuration meets the required requirements.
      *
-     * @throws NullPointerException si la configuración es `null`
+     * @throws NullPointerException if the configuration is `null`
      */
     public abstract boolean isGraphicsConfigSupported(GraphicsConfiguration gc);
 }

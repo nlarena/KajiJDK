@@ -1,21 +1,22 @@
 package javax.swing;
 
 /**
- * Una lista desplegable a la que se le pueden agregar y sacar elementos.
+ * A combo box list that elements can be added to and removed from.
  *
- * <p>{@link ComboBoxModel} solo deja mirar. Esta agrega los cuatro metodos que hacen falta para
- * cambiarla, y es la que espera {@link JComboBox} cuando se le pide agregar algo directamente.
+ * <p>{@link ComboBoxModel} only allows looking. This one adds the four methods needed in order
+ * to change it, and it is what {@link JComboBox} expects when it is asked to add something
+ * directly.
  *
- * @param <E> el tipo de los elementos.
+ * @param <E> the elements' type.
  */
 public interface MutableComboBoxModel<E> extends ComboBoxModel<E> {
 
-    /** Agrega al final. */
+    /** It adds at the end. */
     void addElement(E item);
 
     void removeElement(Object obj);
 
-    /** Inserta en esa posicion. */
+    /** It inserts at that position. */
     void insertElementAt(E item, int index);
 
     void removeElementAt(int index);

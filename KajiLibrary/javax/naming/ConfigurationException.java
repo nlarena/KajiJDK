@@ -1,11 +1,11 @@
 package javax.naming;
 
 /**
- * Se lanza cuando la configuracion del cliente o del proveedor esta mal: una propiedad con un
- * valor imposible, una clase de fabrica que no se puede cargar, un `PROVIDER_URL` inservible.
- * Reintentar nunca ayuda; hay que cambiar la configuracion.
+ * Thrown when the client's or the provider's configuration is wrong: a property with an impossible
+ * value, a factory class that cannot be loaded, an unusable `PROVIDER_URL`. Retrying never helps;
+ * the configuration has to change.
  *
- * <p>La jerarquia entera y el estado que arrastra estan explicados en `NamingException`.
+ * <p>The whole hierarchy and the state it carries are explained in `NamingException`.
  */
 public class ConfigurationException extends NamingException {
 

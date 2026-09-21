@@ -5,73 +5,75 @@ import javax.security.auth.callback.CallbackHandler;
 import javax.security.auth.login.LoginException;
 
 /**
- * KajiLibrary's javax.security.auth.spi.LoginModule -- un mecanismo de autenticacion enchufable.
+ * KajiLibrary's javax.security.auth.spi.LoginModule -- a pluggable authentication mechanism.
  *
- * <h2>Las dos fases, que es lo unico dificil de esta interfaz</h2>
+ * <h2>The two phases, which are the only hard thing about this interface</h2>
  *
- * <p>Autenticar no es un metodo sino <b>dos</b>: {@link #login()} y {@link #commit()}. La razon es
- * que una configuracion puede apilar varios modulos --contraseña, certificado, segundo factor-- y
- * exigir que pasen todos. Si el primero escribiera los principals en el Subject apenas termina, y el
- * tercero fallara, el Subject quedaria con una identidad a medias: autenticado por uno y rechazado
- * por otro.
+ * <p>Authenticating is not one method but <b>two</b>: {@link #login()} and {@link #commit()}. The
+ * reason is that a configuration can stack several modules --password, certificate, second factor--
+ * and require all of them to pass. If the first wrote the principals into the Subject as soon as it
+ * finished, and the third failed, the Subject would be left with half an identity: authenticated by
+ * one and rejected by another.
  *
- * <p>Por eso {@code login()} solo verifica y guarda el resultado <b>adentro del modulo</b>, y recien
- * {@code commit()} --que corre cuando <b>todos</b> pasaron-- lo escribe en el Subject. Si alguno
- * fallo se llama a {@link #abort()} y cada modulo tira lo suyo.
+ * <p>That is why {@code login()} only verifies and keeps the result <b>inside the module</b>, and
+ * only {@code commit()} --which runs when <b>all</b> passed-- writes it into the Subject. If any
+ * failed, {@link #abort()} is called and each module throws away its own.
  *
- * <h2>Lo que devuelve cada metodo</h2>
+ * <h2>What each method returns</h2>
  *
- * <p>{@code true} quiere decir "este modulo hizo algo", {@code false} quiere decir "no me tocaba".
- * Un modulo que no aplica --por ejemplo uno de tarjeta inteligente en una maquina sin lector--
- * devuelve false en vez de lanzar, y la configuracion sigue con el siguiente.
+ * <p>{@code true} means "this module did something", {@code false} means "it was not my turn". A
+ * module that does not apply --for example a smart card one on a machine without a reader-- returns
+ * false instead of throwing, and the configuration goes on with the next one.
  *
- * <p><b>Esta biblioteca no trae ningun modulo</b>: la interfaz esta para que uno que se escriba
- * encaje, igual que {@code X509Certificate} esta sin que haya ningun parser de certificados.
+ * <p><b>This library comes with no module</b>: the interface is there so that one that gets written
+ * fits, just as {@code X509Certificate} is there without there being any certificate parser.
  */
 public interface LoginModule {
 
     /**
-     * Le da al modulo lo que necesita antes de empezar.
+     * Gives the module what it needs before starting.
      *
-     * @param subject         donde se van a escribir las identidades, en {@link #commit()}
-     * @param callbackHandler por donde se le pregunta al usuario. Ver
-     *     {@link javax.security.auth.callback.Callback} para por que el modulo no pregunta solo
-     * @param sharedState     lo que los modulos de la misma pila se pasan entre si -- tipicamente la
-     *     contraseña, para que el segundo no se la vuelva a pedir al usuario
-     * @param options         la configuracion de este modulo en esta pila
+     * @param subject         where the identities are going to be written, in {@link #commit()}
+     * @param callbackHandler how the user is asked. See
+     *     {@link javax.security.auth.callback.Callback} for why the module does not ask on its own
+     * @param sharedState     what the modules of the same stack pass each other -- typically the
+     *     password, so that the second does not ask the user for it again
+     * @param options         this module's configuration in this stack
      */
     void initialize(Subject subject, CallbackHandler callbackHandler,
         java.util.Map<String, ?> sharedState, java.util.Map<String, ?> options);
 
     /**
-     * Verifica. <b>No</b> escribe en el Subject; ver la nota de la clase.
+     * Verifies. It does <b>not</b> write to the Subject; see the class note.
      *
-     * @return si este modulo hizo algo
-     * @throws LoginException si la autenticacion fallo
+     * @return whether this module did something
+     * @throws LoginException if the authentication failed
      */
     boolean login() throws LoginException;
 
     /**
-     * Escribe en el Subject lo que {@link #login()} verifico. Corre solo si <b>toda</b> la pila paso.
+     * Writes into the Subject what {@link #login()} verified. It runs only if the <b>whole</b>
+     * stack passed.
      *
-     * @return si este modulo hizo algo
-     * @throws LoginException si no se pudo escribir
+     * @return whether this module did something
+     * @throws LoginException if it could not be written
      */
     boolean commit() throws LoginException;
 
     /**
-     * Tira lo que {@link #login()} habia verificado. Corre cuando algun otro modulo de la pila fallo.
+     * Throws away what {@link #login()} had verified. It runs when some other module of the stack
+     * failed.
      *
-     * @return si este modulo hizo algo
-     * @throws LoginException si no se pudo deshacer
+     * @return whether this module did something
+     * @throws LoginException if it could not be undone
      */
     boolean abort() throws LoginException;
 
     /**
-     * Saca del Subject lo que este modulo le puso.
+     * Removes from the Subject what this module put there.
      *
-     * @return si este modulo hizo algo
-     * @throws LoginException si no se pudo
+     * @return whether this module did something
+     * @throws LoginException if it could not
      */
     boolean logout() throws LoginException;
 }

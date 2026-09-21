@@ -6,38 +6,38 @@ import java.lang.classfile.Signature;
 import java.lang.classfile.constantpool.Utf8Entry;
 import jdk.internal.classfile.impl.Instructions;
 
-// Una fila del `LocalVariableTypeTable`. Es la gemela genérica de {@link LocalVariable}: existe
-// aparte y no como un campo más de aquélla porque el formato sólo la emite para las variables cuyo
-// tipo NO se puede escribir como descriptor, y una variable puede estar en las dos tablas a la vez.
+// A row of the `LocalVariableTypeTable`. It is {@link LocalVariable}'s generic twin: it exists apart
+// and not as one more field of that one because the format only emits it for the variables whose type
+// canNOT be written as a descriptor, and a variable may be in both tables at once.
 public interface LocalVariableType extends PseudoInstruction {
 
-    /** La ranura de variable local. */
+    /** The local variable slot. */
     int slot();
 
-    /** El nombre de la variable. */
+    /** The variable's name. */
     Utf8Entry name();
 
-    /** La firma genérica, como `Utf8`. */
+    /** The generic signature, as a `Utf8`. */
     Utf8Entry signature();
 
-    /** La firma genérica ya analizada. */
+    /** The generic signature already parsed. */
     default Signature signatureSymbol() {
         return Signature.parseFrom(signature().stringValue());
     }
 
-    /** Dónde empieza el alcance. */
+    /** Where the scope begins. */
     Label startScope();
 
-    /** Dónde termina, sin incluirlo. */
+    /** Where it ends, exclusive. */
     Label endScope();
 
-    /** La fila con estos valores. */
+    /** The row with these values. */
     public static LocalVariableType of(int slot, Utf8Entry name, Utf8Entry signature,
             Label startScope, Label endScope) {
         return Instructions.localVariableType(slot, name, signature, startScope, endScope);
     }
 
-    /** La fila con estos valores. */
+    /** The row with these values. */
     public static LocalVariableType of(int slot, String name, Signature signature, Label startScope,
             Label endScope) {
         return Instructions.localVariableType(slot, name, signature, startScope, endScope);

@@ -5,88 +5,89 @@ import java.net.InetAddress;
 import java.net.ServerSocket;
 
 /**
- * Un {@link ServerSocket} cuyos {@code accept} devuelven {@link SSLSocket}.
+ * A {@link ServerSocket} whose {@code accept}s return {@link SSLSocket}s.
  *
- * <h2>Para que sirve configurarlo aca y no en cada socket aceptado</h2>
+ * <h2>Why configure it here and not on each accepted socket</h2>
  *
- * <p>Porque lo que se fija en este objeto son los <strong>valores por omision</strong> de todo lo
- * que acepte de ahi en mas. Un servidor que exige certificado de cliente lo dice una vez, y no en
- * cada conexion — donde ademas seria tarde: la configuracion tiene que estar puesta antes de que
- * empiece el handshake, y el handshake empieza solo.
+ * <p>Because what is set on this object are the <strong>defaults</strong> of everything it accepts
+ * from then on. A server that requires a client certificate says so once, and not on each
+ * connection — where it would also be too late: the configuration has to be in place before the
+ * handshake starts, and the handshake starts by itself.
  *
- * <p>Los mismos setters existen en {@link SSLSocket} para el caso contrario: cambiarle algo a
- * <em>una</em> conexion sin tocar las demas.
+ * <p>The same setters exist on {@link SSLSocket} for the opposite case: changing something on
+ * <em>one</em> connection without touching the rest.
  */
 public abstract class SSLServerSocket extends ServerSocket {
 
-    /** Sin ligar. */
+    /** Unbound. */
     protected SSLServerSocket() throws IOException {
         super();
     }
 
-    /** Escuchando en un puerto. */
+    /** Listening on a port. */
     protected SSLServerSocket(int port) throws IOException {
         super(port);
     }
 
-    /** Con la cantidad de conexiones en espera. */
+    /** With the number of pending connections. */
     protected SSLServerSocket(int port, int backlog) throws IOException {
         super(port, backlog);
     }
 
-    /** Ligado ademas a una direccion local concreta. */
+    /** Also bound to a concrete local address. */
     protected SSLServerSocket(int port, int backlog, InetAddress address) throws IOException {
         super(port, backlog, address);
     }
 
-    /** Las suites habilitadas por omision para lo que se acepte. */
+    /** The suites enabled by default for what is accepted. */
     public abstract String[] getEnabledCipherSuites();
 
-    /** Fija las suites habilitadas. */
+    /** Sets the enabled suites. */
     public abstract void setEnabledCipherSuites(String[] suites);
 
-    /** Todas las suites que se conocen. */
+    /** All the suites known. */
     public abstract String[] getSupportedCipherSuites();
 
-    /** Todos los protocolos que se conocen. */
+    /** All the protocols known. */
     public abstract String[] getSupportedProtocols();
 
-    /** Los protocolos habilitados por omision. */
+    /** The protocols enabled by default. */
     public abstract String[] getEnabledProtocols();
 
-    /** Fija los protocolos habilitados. */
+    /** Sets the enabled protocols. */
     public abstract void setEnabledProtocols(String[] protocols);
 
-    /** Exige autenticacion de cliente en lo que se acepte. */
+    /** Requires client authentication on what is accepted. */
     public abstract void setNeedClientAuth(boolean need);
 
-    /** Si se exige. */
+    /** Whether it is required. */
     public abstract boolean getNeedClientAuth();
 
-    /** La pide sin exigirla. */
+    /** Requests it without requiring it. */
     public abstract void setWantClientAuth(boolean want);
 
-    /** Si se pide. */
+    /** Whether it is requested. */
     public abstract boolean getWantClientAuth();
 
     /**
-     * Si los sockets aceptados actuan como cliente.
+     * Whether the accepted sockets act as client.
      *
-     * <p>Suena contradictorio y no lo es: en TLS el rol del handshake no tiene por que coincidir con
-     * quien abrio la conexion TCP. Hay protocolos donde el que acepta es el cliente TLS.
+     * <p>It sounds contradictory and it is not: in TLS the handshake role does not have to match
+     * who opened the TCP connection. There are protocols where the accepting side is the TLS
+     * client.
      */
     public abstract void setUseClientMode(boolean mode);
 
-    /** Si los aceptados actuan como cliente. */
+    /** Whether the accepted ones act as client. */
     public abstract boolean getUseClientMode();
 
-    /** Si se pueden crear sesiones nuevas. */
+    /** Whether new sessions can be created. */
     public abstract void setEnableSessionCreation(boolean flag);
 
-    /** Si se pueden crear sesiones nuevas. */
+    /** Whether new sessions can be created. */
     public abstract boolean getEnableSessionCreation();
 
-    /** Toda la configuracion por omision, junta. */
+    /** All the default configuration, together. */
     public SSLParameters getSSLParameters() {
         SSLParameters p = new SSLParameters();
         p.setCipherSuites(getEnabledCipherSuites());
@@ -99,7 +100,7 @@ public abstract class SSLServerSocket extends ServerSocket {
         return p;
     }
 
-    /** Aplica la configuracion; solo lo que no sea {@code null}. */
+    /** Applies the configuration; only what is not {@code null}. */
     public void setSSLParameters(SSLParameters params) {
         String[] s = params.getCipherSuites();
         if (s != null) {

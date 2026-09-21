@@ -4,21 +4,21 @@ import java.io.Serializable;
 import java.security.Principal;
 
 /**
- * El UID de Unix: el numero que de verdad identifica a un usuario.
+ * The Unix UID: the number that really identifies a user.
  *
- * <h2>Por que el numero y no el nombre</h2>
+ * <h2>Why the number and not the name</h2>
  *
- * <p>Porque el nombre es una etiqueta que vive en {@code /etc/passwd} y el nucleo no la conoce:
- * todos los permisos del sistema de archivos se resuelven contra el UID. Dos nombres pueden apuntar
- * al mismo UID —y ahi son la misma identidad, aunque se escriban distinto—; un nombre reciclado
- * apunta a un UID nuevo.
+ * <p>Because the name is a label that lives in {@code /etc/passwd} and the kernel does not know
+ * it: all the file system's permissions are resolved against the UID. Two names may point at
+ * the same UID -- and there they are the same identity, even though they are written
+ * differently; a recycled name points at a new UID.
  *
- * <p>De ahi que exista este principal aparte de {@link UnixPrincipal}: uno es como se llama, el otro
- * es quien es.
+ * <p>Hence this principal exists apart from {@link UnixPrincipal}: one is what it is called, the
+ * other is who it is.
  *
- * <p>Los dos constructores son el mismo dato en dos formas, y {@link #getName} devuelve el texto
- * mientras {@link #longValue} devuelve el numero — util porque el UID llega como cadena de casi
- * todos lados.
+ * <p>The two constructors are the same datum in two forms, and {@link #getName} returns the text
+ * while {@link #longValue} returns the number -- useful because the UID arrives as a string from
+ * almost everywhere.
  */
 public class UnixNumericUserPrincipal implements Principal, Serializable {
 
@@ -27,28 +27,28 @@ public class UnixNumericUserPrincipal implements Principal, Serializable {
     private final String name;
 
     /**
-     * @throws NullPointerException si es {@code null}
-     * @throws NumberFormatException si no es un numero
+     * @throws NullPointerException if it is {@code null}
+     * @throws NumberFormatException if it is not a number
      */
     public UnixNumericUserPrincipal(String name) {
         if (name == null) {
-            throw new NullPointerException("el UID no puede ser null");
+            throw new NullPointerException("the UID cannot be null");
         }
         Long.parseLong(name);
         this.name = name;
     }
 
-    /** Desde el numero. */
+    /** From the number. */
     public UnixNumericUserPrincipal(long name) {
         this.name = Long.toString(name);
     }
 
-    /** El UID como texto. */
+    /** The UID as text. */
     public String getName() {
         return this.name;
     }
 
-    /** El UID como numero. */
+    /** The UID as a number. */
     public long longValue() {
         return Long.parseLong(this.name);
     }
@@ -57,7 +57,7 @@ public class UnixNumericUserPrincipal implements Principal, Serializable {
         return "UnixNumericUserPrincipal: " + this.name;
     }
 
-    /** Por clase exacta y UID. */
+    /** By exact class and UID. */
     public boolean equals(Object o) {
         if (o == this) {
             return true;

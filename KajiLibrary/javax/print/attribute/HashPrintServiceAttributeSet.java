@@ -3,35 +3,34 @@ package javax.print.attribute;
 import java.io.Serializable;
 
 /**
- * KajiLibrary's javax.print.attribute.HashPrintServiceAttributeSet -- un {@link HashAttributeSet} que
- * solo acepta {@link PrintServiceAttribute}, o sea atributos de servicio de impresion.
+ * KajiLibrary's javax.print.attribute.HashPrintServiceAttributeSet -- a {@link HashAttributeSet}
+ * that only accepts {@link PrintServiceAttribute}s, that is print service attributes.
  *
- * <p>Sin cuerpo, igual que sus tres hermanas: los constructores le pasan
- * {@code PrintServiceAttribute.class} a la clase base y la restriccion la hace
- * {@code HashAttributeSet.add}. Ver {@link HashDocAttributeSet} para la explicacion completa del
- * mecanismo.
+ * <p>No body, just like its three siblings: the constructors pass {@code
+ * PrintServiceAttribute.class} to the base class and {@code HashAttributeSet.add} does the
+ * restriction. See {@link HashDocAttributeSet} for the full explanation of the mechanism.
  */
 public class HashPrintServiceAttributeSet extends HashAttributeSet
         implements PrintServiceAttributeSet, Serializable {
 
     private static final long serialVersionUID = 6642904616179203070L;
 
-    /** Vacio. */
+    /** Empty. */
     public HashPrintServiceAttributeSet() {
         super(PrintServiceAttribute.class);
     }
 
-    /** Con un atributo. NullPointerException si es null. */
+    /** With one attribute. NullPointerException if it is null. */
     public HashPrintServiceAttributeSet(PrintServiceAttribute attribute) {
         super(attribute, PrintServiceAttribute.class);
     }
 
-    /** Con los de otro conjunto del mismo tipo. Un conjunto null da el conjunto vacio. */
+    /** With another set of the same type's attributes. A null set gives the empty set. */
     public HashPrintServiceAttributeSet(PrintServiceAttributeSet attributes) {
         super(attributes, PrintServiceAttribute.class);
     }
 
-    /** Con los del arreglo, en orden: si hay dos de la misma categoria gana el ultimo. */
+    /** With the array's, in order: if there are two of the same category the last one wins. */
     public HashPrintServiceAttributeSet(PrintServiceAttribute[] attributes) {
         super(attributes, PrintServiceAttribute.class);
     }

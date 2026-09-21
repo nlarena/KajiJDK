@@ -1,6 +1,6 @@
 package javax.management;
 
-/** El valor no es del tipo que el atributo declara. */
+/** The value is not of the type the attribute declares. */
 public class InvalidAttributeValueException extends OperationsException {
 
     private static final long serialVersionUID = 2164571879317142449L;

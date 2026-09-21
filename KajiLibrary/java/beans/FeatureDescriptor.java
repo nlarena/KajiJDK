@@ -24,7 +24,7 @@ public class FeatureDescriptor {
     private boolean preferred;
 
     // Free attributes. It is created lazily: most descriptors never receive one.
-    private Map<String, Object> tabla;
+    private Map<String, Object> table;
 
     public FeatureDescriptor() {
     }
@@ -96,22 +96,22 @@ public class FeatureDescriptor {
     public void setValue(String attributeName, Object value) {
         if (attributeName != null) {
             if (value == null) {
-                if (this.tabla != null) {
-                    this.tabla.remove(attributeName);
+                if (this.table != null) {
+                    this.table.remove(attributeName);
                 }
             } else {
-                if (this.tabla == null) {
-                    this.tabla = new HashMap<String, Object>();
+                if (this.table == null) {
+                    this.table = new HashMap<String, Object>();
                 }
-                this.tabla.put(attributeName, value);
+                this.table.put(attributeName, value);
             }
         }
     }
 
     public Object getValue(String attributeName) {
         Object v = null;
-        if (this.tabla != null && attributeName != null) {
-            v = this.tabla.get(attributeName);
+        if (this.table != null && attributeName != null) {
+            v = this.table.get(attributeName);
         }
         return v;
     }
@@ -119,36 +119,36 @@ public class FeatureDescriptor {
     // The names of the hung attributes. Enumeration and not Iterator: it is the JDK's signature,
     // which predates Iterator and cannot be changed without breaking the contract.
     public Enumeration<String> attributeNames() {
-        List<String> nombres = new ArrayList<String>();
-        if (this.tabla != null) {
-            Object[] claves = this.tabla.keySet().toArray();
-            for (int i = 0; i < claves.length; i++) {
-                nombres.add((String) claves[i]);
+        List<String> names = new ArrayList<String>();
+        if (this.table != null) {
+            Object[] keys = this.table.keySet().toArray();
+            for (int i = 0; i < keys.length; i++) {
+                names.add((String) keys[i]);
             }
         }
-        return new ListEnumeration(nombres);
+        return new ListEnumeration(names);
     }
 
     // It copies `other`'s fields over this one's. Introspector uses it when merging the descriptor
     // worked out by reflection with the one an explicit BeanInfo contributes.
-    void copyFrom(FeatureDescriptor otro) {
-        if (otro.name != null) {
-            this.name = otro.name;
+    void copyFrom(FeatureDescriptor other) {
+        if (other.name != null) {
+            this.name = other.name;
         }
-        if (otro.displayName != null) {
-            this.displayName = otro.displayName;
+        if (other.displayName != null) {
+            this.displayName = other.displayName;
         }
-        if (otro.shortDescription != null) {
-            this.shortDescription = otro.shortDescription;
+        if (other.shortDescription != null) {
+            this.shortDescription = other.shortDescription;
         }
-        this.expert = this.expert || otro.expert;
-        this.hidden = this.hidden || otro.hidden;
-        this.preferred = this.preferred || otro.preferred;
-        if (otro.tabla != null) {
-            Object[] claves = otro.tabla.keySet().toArray();
-            for (int i = 0; i < claves.length; i++) {
-                String c = (String) claves[i];
-                this.setValue(c, otro.tabla.get(c));
+        this.expert = this.expert || other.expert;
+        this.hidden = this.hidden || other.hidden;
+        this.preferred = this.preferred || other.preferred;
+        if (other.table != null) {
+            Object[] keys = other.table.keySet().toArray();
+            for (int i = 0; i < keys.length; i++) {
+                String c = (String) keys[i];
+                this.setValue(c, other.table.get(c));
             }
         }
     }
@@ -157,20 +157,20 @@ public class FeatureDescriptor {
     // tree the for-each over a collection does not compile properly (finding #113).
     private static class ListEnumeration implements Enumeration<String> {
 
-        private List<String> datos;
+        private List<String> data;
         private int pos;
 
-        ListEnumeration(List<String> datos) {
-            this.datos = datos;
+        ListEnumeration(List<String> data) {
+            this.data = data;
             this.pos = 0;
         }
 
         public boolean hasMoreElements() {
-            return this.pos < this.datos.size();
+            return this.pos < this.data.size();
         }
 
         public String nextElement() {
-            String s = this.datos.get(this.pos);
+            String s = this.data.get(this.pos);
             this.pos = this.pos + 1;
             return s;
         }

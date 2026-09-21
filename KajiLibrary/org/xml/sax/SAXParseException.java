@@ -1,24 +1,25 @@
 package org.xml.sax;
 
 /**
- * KajiLibrary's org.xml.sax.SAXParseException -- un `SAXException` que ademas sabe **donde** paso.
+ * KajiLibrary's org.xml.sax.SAXParseException -- a `SAXException` that also knows **where** it
+ * happened.
  *
- * <p>Lo que agrega sobre `SAXException` son las cuatro coordenadas de un {@link Locator}
- * --identificador publico, identificador de sistema, linea y columna-- pero **copiadas**, no la
- * referencia al localizador. Esa copia es la razon de ser de la clase: el `Locator` que da el parser
- * esta vivo y sigue moviendose, asi que guardarlo dentro de una excepcion que se va a mirar despues
- * daria la posicion equivocada. Aca se congelan en el constructor y ya no cambian.
+ * <p>What it adds over `SAXException` are the four coordinates of a {@link Locator} --public
+ * identifier, system identifier, line and column-- but **copied**, not the reference to the
+ * locator. That copy is the reason for the class: the `Locator` the parser gives is alive and keeps
+ * moving, so keeping it inside an exception that is going to be looked at later would give the
+ * wrong position. Here they are frozen in the constructor and do not change any more.
  *
- * <p>Es el tipo que reciben los tres metodos de {@link ErrorHandler}, y por eso llega tanto para
- * errores fatales como para avisos: que la instancia sea una excepcion no significa que se haya
- * lanzado. Un `warning` la construye, se la pasa al manejador y sigue parseando.
+ * <p>It is the type the three methods of {@link ErrorHandler} receive, and that is why it arrives
+ * both for fatal errors and for warnings: that the instance is an exception does not mean it was
+ * thrown. A `warning` builds it, passes it to the handler and goes on parsing.
  *
- * <p><strong>Un detalle del `toString` que parece un error de tipeo y no lo es.</strong> El JDK
- * escribe el nombre de la clase y **pega** `publicId: ...` sin separador, mientras que los otros tres
- * campos si van precedidos por `"; "`. Sale
- * `org.xml.sax.SAXParseExceptionpublicId: p; systemId: s; lineNumber: 3; columnNumber: 7; mensaje`.
- * Se reproduce tal cual porque el formato es observable y hay salidas de herramientas que ya lo
- * tienen escrito; "arreglarlo" seria cambiar el comportamiento, no corregirlo.
+ * <p><strong>A detail of `toString` that looks like a typo and is not.</strong> The JDK writes the
+ * name of the class and **glues** `publicId: ...` on with no separator, while the other three
+ * fields do go preceded by `"; "`. What comes out is `org.xml.sax.SAXParseExceptionpublicId: p;
+ * systemId: s; lineNumber: 3; columnNumber: 7; message`. It is reproduced as it is because the
+ * format is observable and there are tool outputs that already have it written down; "fixing" it
+ * would be changing the behaviour, not correcting it.
  */
 public class SAXParseException extends SAXException {
 
@@ -30,8 +31,8 @@ public class SAXParseException extends SAXException {
     private int columnNumber;
 
     /**
-     * @param locator si es `null`, las cuatro coordenadas quedan en "desconocido" en vez de fallar:
-     *        un parser puede reportar un problema antes de tener una posicion.
+     * @param locator if it is `null`, the four coordinates are left at "unknown" instead of
+     *        failing: a parser may report a problem before it has a position.
      */
     public SAXParseException(String message, Locator locator) {
         super(message);
@@ -53,7 +54,7 @@ public class SAXParseException extends SAXException {
         }
     }
 
-    /** La forma explicita, para quien no tiene un `Locator` a mano. */
+    /** The explicit form, for whoever does not have a `Locator` at hand. */
     public SAXParseException(String message, String publicId, String systemId,
             int lineNumber, int columnNumber) {
         super(message);
@@ -81,20 +82,22 @@ public class SAXParseException extends SAXException {
         return this.systemId;
     }
 
-    /** Base 1, y -1 si no se sabe. Apunta al **final** del constructo, no a su principio. */
+    /**
+     * Base 1, and -1 if it is not known. It points at the **end** of the construct, not its start.
+     */
     public int getLineNumber() {
         return this.lineNumber;
     }
 
-    /** Base 1, y -1 si no se sabe. */
+    /** Base 1, and -1 if it is not known. */
     public int getColumnNumber() {
         return this.columnNumber;
     }
 
     /**
-     * Ver el comentario de la cabecera: el pegote entre el nombre de la clase y `publicId` es del
-     * JDK y se copia a proposito. Los campos en -1 o `null` no se escriben, asi que una excepcion sin
-     * posicion sale como `org.xml.sax.SAXParseException; mensaje`.
+     * See the comment of the header: the gluing of the name of the class and `publicId` is the
+     * JDK's and is copied on purpose. The fields at -1 or `null` are not written, so an exception
+     * with no position comes out as `org.xml.sax.SAXParseException; message`.
      */
     public String toString() {
         StringBuilder buf = new StringBuilder(getClass().getName());

@@ -1,76 +1,76 @@
 package javax.sound.sampled;
 
 /**
- * KajiLibrary's javax.sound.sampled.Control -- una perilla de una linea de audio.
+ * KajiLibrary's javax.sound.sampled.Control -- a knob of an audio line.
  *
- * <p>Volumen, silencio, balance, reverberacion. Una {@link Line} publica los que tenga y se piden por
- * {@link Control.Type}.
+ * <p>Volume, mute, balance, reverb. A {@link Line} publishes the ones it has and they are asked for
+ * by {@link Control.Type}.
  *
- * <h2>Por que se pide por tipo y no hay metodos</h2>
+ * <h2>Why they are asked for by type and there are no methods</h2>
  *
- * <p>Porque que controles existen depende del dispositivo, y no se sabe hasta abrir la linea. Si
- * {@code Line} tuviera {@code setVolume}, habria que decidir que hace en una linea que no tiene
- * volumen. Con este esquema, un programa pregunta con {@code isControlSupported} y adapta su interfaz
- * a lo que hay.
+ * <p>Because which controls exist depends on the device, and is not known until the line is opened.
+ * If {@code Line} had {@code setVolume}, it would have to be decided what it does on a line that
+ * has no volume. With this scheme, a program asks with {@code isControlSupported} and adapts its
+ * interface to what there is.
  *
- * <p>Las cuatro subclases cubren las cuatro formas de una perilla: booleana, continua, de opciones, y
- * compuesta. Un proveedor puede definir tipos nuevos, pero no formas nuevas.
+ * <p>The four subclasses cover the four shapes of a knob: boolean, continuous, of options, and
+ * compound. A provider can define new types, but not new shapes.
  */
 public abstract class Control {
 
-    /** Que perilla es. */
+    /** Which knob it is. */
     private final Type type;
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected Control(Type type) {
         this.type = type;
     }
 
-    /** Que perilla es. */
+    /** Which knob it is. */
     public Type getType() {
         return this.type;
     }
 
-    /** El tipo y la palabra {@code control}. */
+    /** The type and the word {@code control}. */
     @Override
     public String toString() {
         return getType() + " control";
     }
 
     /**
-     * Que perilla es.
+     * Which knob it is.
      *
-     * <p>No es un enum: el constructor es protegido para que un proveedor pueda definir controles que
-     * la plataforma no conoce. La igualdad es por <b>identidad</b>, no por nombre -- a diferencia de
-     * {@link AudioFormat.Encoding}, donde es por nombre.
+     * <p>It is not an enum: the constructor is protected so that a provider can define controls the
+     * platform does not know. Equality is by <b>identity</b>, not by name -- unlike
+     * {@link AudioFormat.Encoding}, where it is by name.
      *
-     * <p>Esa diferencia es deliberada y conviene notarla: una codificacion con el mismo nombre <b>es</b>
-     * la misma codificacion, mientras que dos controles que se llamen igual en mezcladores distintos no
-     * son la misma perilla.
+     * <p>That difference is deliberate and worth noting: an encoding with the same name <b>is</b>
+     * the same encoding, whereas two controls with the same name on different mixers are not the
+     * same knob.
      */
     public static class Type {
 
-        /** El nombre, para mostrar. */
+        /** The name, for display. */
         private final String name;
 
-        /** Protegido: los tipos los define quien provee el mezclador. */
+        /** Protected: the types are defined by whoever provides the mixer. */
         protected Type(String name) {
             this.name = name;
         }
 
-        /** Por identidad. Ver la nota de la clase. */
+        /** By identity. See the class note. */
         @Override
         public final boolean equals(Object obj) {
             return super.equals(obj);
         }
 
-        /** El de identidad. */
+        /** The identity one. */
         @Override
         public final int hashCode() {
             return super.hashCode();
         }
 
-        /** El nombre. */
+        /** The name. */
         @Override
         public final String toString() {
             return this.name;

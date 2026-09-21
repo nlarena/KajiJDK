@@ -2,39 +2,39 @@ package java.util;
 
 import java.time.ZonedDateTime;
 
-// El calendario gregoriano: la implementacion concreta de `Calendar`.
+// The Gregorian calendar: `Calendar`'s concrete implementation.
 //
-// Traduce en las dos direcciones entre un instante —milisegundos desde 1970-01-01T00:00:00Z— y
-// los campos civiles (año, mes, dia, hora...) en una zona horaria. Esa traduccion es todo lo que
-// hace, y es menos obvia de lo que parece: los meses tienen largos distintos, los años bisiestos
-// siguen tres reglas encadenadas, y la zona corre el instante antes de partirlo.
+// It translates in both directions between an instant —milliseconds since 1970-01-01T00:00:00Z—
+// and the civil fields (year, month, day, hour...) in a time zone. That translation is all it does,
+// and it is less obvious than it looks: months have different lengths, leap years follow three
+// chained rules, and the zone shifts the instant before it is split.
 //
-// **A KajiLibrary subset, y esto hay que saberlo antes de usarla con fechas antiguas:** el
-// calendario es **proleptico**, o sea que aplica las reglas gregorianas hacia atras hasta el
-// infinito. El JDK cambia a juliano antes del 15 de octubre de 1582 —los diez dias que el papa
-// Gregorio borro— y expone ese corte con `setGregorianChange`. Aca ese corte no existe:
-// `getGregorianChange()` devuelve el instante mas antiguo posible y `setGregorianChange` lo
-// rechaza en vez de fingir. Para cualquier fecha posterior a 1582 no hay diferencia; para una
-// anterior, esta clase da la fecha proleptica y el JDK la juliana.
+// **A KajiLibrary subset, and this has to be known before using it with old dates:** the calendar is
+// **proleptic**, that is, it applies the Gregorian rules backwards without end. The JDK switches to
+// Julian before 15 October 1582 —the ten days pope Gregory deleted— and exposes that cutover with
+// `setGregorianChange`. Here that cutover does not exist: `getGregorianChange()` returns the oldest
+// representable instant and `setGregorianChange` rejects it rather than pretend. For any date after
+// 1582 there is no difference; for an earlier one, this class gives the proleptic date and the JDK
+// the Julian one.
 //
-// La aritmetica de dias es la de Howard Hinnant: exacta, sin tablas y sin bucles, sobre un
-// calendario que empieza el año en marzo para que el dia bisiesto quede al final.
+// The day arithmetic is Howard Hinnant's: exact, with no tables and no loops, over a calendar that
+// starts the year in March so the leap day falls at the end.
 public class GregorianCalendar extends Calendar {
 
-    // La era anterior al año 1.
+    // The era before year 1.
     public static final int BC = 0;
 
-    // La era del año 1 en adelante.
+    // The era from year 1 onwards.
     public static final int AD = 1;
 
-    private static final long MS_POR_DIA = 86400000L;
-    private static final long MS_POR_HORA = 3600000L;
-    private static final long MS_POR_MINUTO = 60000L;
+    private static final long MS_PER_DAY = 86400000L;
+    private static final long MS_PER_HOUR = 3600000L;
+    private static final long MS_PER_MINUTE = 60000L;
 
-    // Largo de cada mes, y de febrero en año bisiesto.
-    private static final int[] LARGO_MES = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+    // The length of each month, and of February in a leap year.
+    private static final int[] MONTH_LENGTHS = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
 
-    // Un calendario con la fecha y hora actuales, en la zona y el locale por defecto.
+    // A calendar with the current date and time, in the default zone and locale.
     public GregorianCalendar() {
         this(TimeZone.getDefault(), Locale.getDefault());
     }
@@ -52,7 +52,7 @@ public class GregorianCalendar extends Calendar {
         this.setTimeInMillis(System.currentTimeMillis());
     }
 
-    // Un calendario en la fecha dada, a medianoche. `month` es 0-based, como en todo Calendar.
+    // A calendar on the given date, at midnight. `month` is 0-based, as everywhere in Calendar.
     public GregorianCalendar(int year, int month, int dayOfMonth) {
         this(year, month, dayOfMonth, 0, 0, 0);
     }
@@ -73,28 +73,28 @@ public class GregorianCalendar extends Calendar {
         this.set(MILLISECOND, 0);
     }
 
-    // ---- la aritmetica de dias ---------------------------------------------------------------
+    // ---- the day arithmetic    ---------------------------------------------------------------
 
-    // Dias desde 1970-01-01 para una fecha civil. `m` es 1..12.
+    // Days since 1970-01-01 for a civil date. `m` is 1..12.
     //
-    // El truco es correr el año para que empiece en marzo: asi el 29 de febrero queda al FINAL
-    // del año y el largo de los meses se vuelve una progresion regular, que es lo que permite
-    // calcular el dia del año con una sola formula en vez de una tabla.
-    static long diasDesdeCivil(long y, int m, int d) {
+    // The trick is shifting the year so it starts in March: that way 29 February falls at the END of
+    // the year and the months' lengths turn into a regular progression, which is what allows the day
+    // of the year to be computed with a single formula instead of a table.
+    static long daysFromCivil(long y, int m, int d) {
         long yy = y;
         if (m <= 2) {
             yy = yy - 1;
         }
         long era = (yy >= 0 ? yy : yy - 399) / 400;
         long yoe = yy - era * 400;
-        int desplazado = m + (m > 2 ? -3 : 9);
-        long doy = (153L * desplazado + 2) / 5 + d - 1;
+        int shifted = m + (m > 2 ? -3 : 9);
+        long doy = (153L * shifted + 2) / 5 + d - 1;
         long doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
         return era * 146097 + doe - 719468;
     }
 
-    // La inversa: fecha civil de un dia desde 1970-01-01. Devuelve { año, mes 1..12, dia }.
-    static long[] civilDesdeDias(long z) {
+    // The inverse: the civil date of a day since 1970-01-01. It returns { year, month 1..12, day }.
+    static long[] civilFromDays(long z) {
         long zz = z + 719468;
         long era = (zz >= 0 ? zz : zz - 146096) / 146097;
         long doe = zz - era * 146097;
@@ -114,7 +114,8 @@ public class GregorianCalendar extends Calendar {
         return out;
     }
 
-    // Si `year` es bisiesto: divisible por 4, salvo los seculares que no lo son por 400.
+    // Whether `year` is a leap year: divisible by 4, except the century ones which are not unless
+    // by 400.
     public boolean isLeapYear(int year) {
         if (year % 4 != 0) {
             return false;
@@ -125,60 +126,60 @@ public class GregorianCalendar extends Calendar {
         return year % 400 == 0;
     }
 
-    // Dias del mes `month` (0-based) del año dado.
-    private int diasDelMes(int year, int month) {
+    // The days of month `month` (0-based) of the given year.
+    private int daysInMonth(int year, int month) {
         if (month == 1 && this.isLeapYear(year)) {
             return 29;
         }
-        return LARGO_MES[month];
+        return MONTH_LENGTHS[month];
     }
 
-    // ---- las dos traducciones ----------------------------------------------------------------
+    // ---- the two translations ----------------------------------------------------------------
 
-    // Instante -> campos.
+    // Instant -> fields.
     protected void computeFields() {
         int offset = this.getTimeZone().getOffset(this.time);
         long local = this.time + offset;
-        long dias = Math.floorDiv(local, MS_POR_DIA);
-        int msDia = (int) Math.floorMod(local, MS_POR_DIA);
+        long days = Math.floorDiv(local, MS_PER_DAY);
+        int msOfDay = (int) Math.floorMod(local, MS_PER_DAY);
 
-        long[] ymd = civilDesdeDias(dias);
-        int año = (int) ymd[0];
-        int mes = (int) ymd[1] - 1;
-        int dia = (int) ymd[2];
+        long[] ymd = civilFromDays(days);
+        int yearNum = (int) ymd[0];
+        int monthNum = (int) ymd[1] - 1;
+        int day = (int) ymd[2];
 
-        if (año > 0) {
+        if (yearNum > 0) {
             this.fields[ERA] = AD;
-            this.fields[YEAR] = año;
+            this.fields[YEAR] = yearNum;
         } else {
             this.fields[ERA] = BC;
-            this.fields[YEAR] = 1 - año;
+            this.fields[YEAR] = 1 - yearNum;
         }
-        this.fields[MONTH] = mes;
-        this.fields[DAY_OF_MONTH] = dia;
+        this.fields[MONTH] = monthNum;
+        this.fields[DAY_OF_MONTH] = day;
 
-        // El 1970-01-01 fue jueves, y THURSDAY vale 5 con SUNDAY = 1.
-        this.fields[DAY_OF_WEEK] = (int) Math.floorMod(dias + 4, 7L) + 1;
+        // 1970-01-01 was a Thursday, and THURSDAY is 5 with SUNDAY = 1.
+        this.fields[DAY_OF_WEEK] = (int) Math.floorMod(days + 4, 7L) + 1;
 
-        long primeroDelAño = diasDesdeCivil(ymd[0], 1, 1);
-        int diaDelAño = (int) (dias - primeroDelAño) + 1;
-        this.fields[DAY_OF_YEAR] = diaDelAño;
-        this.fields[DAY_OF_WEEK_IN_MONTH] = (dia - 1) / 7 + 1;
+        long firstOfYear = daysFromCivil(ymd[0], 1, 1);
+        int dayOfYear = (int) (days - firstOfYear) + 1;
+        this.fields[DAY_OF_YEAR] = dayOfYear;
+        this.fields[DAY_OF_WEEK_IN_MONTH] = (day - 1) / 7 + 1;
 
-        int dowPrimeroDelAño = (int) Math.floorMod(primeroDelAño + 4, 7L) + 1;
-        this.fields[WEEK_OF_YEAR] = numeroDeSemana(diaDelAño, dowPrimeroDelAño);
+        int dowOfFirstOfYear = (int) Math.floorMod(firstOfYear + 4, 7L) + 1;
+        this.fields[WEEK_OF_YEAR] = weekNumber(dayOfYear, dowOfFirstOfYear);
 
-        long primeroDelMes = diasDesdeCivil(ymd[0], (int) ymd[1], 1);
-        int dowPrimeroDelMes = (int) Math.floorMod(primeroDelMes + 4, 7L) + 1;
-        this.fields[WEEK_OF_MONTH] = numeroDeSemana(dia, dowPrimeroDelMes);
+        long firstOfMonth = daysFromCivil(ymd[0], (int) ymd[1], 1);
+        int dowOfFirstOfMonth = (int) Math.floorMod(firstOfMonth + 4, 7L) + 1;
+        this.fields[WEEK_OF_MONTH] = weekNumber(day, dowOfFirstOfMonth);
 
-        int hora = msDia / (int) MS_POR_HORA;
-        this.fields[HOUR_OF_DAY] = hora;
-        this.fields[AM_PM] = hora < 12 ? 0 : 1;
-        this.fields[HOUR] = hora % 12;
-        this.fields[MINUTE] = (msDia / (int) MS_POR_MINUTO) % 60;
-        this.fields[SECOND] = (msDia / 1000) % 60;
-        this.fields[MILLISECOND] = msDia % 1000;
+        int hour = msOfDay / (int) MS_PER_HOUR;
+        this.fields[HOUR_OF_DAY] = hour;
+        this.fields[AM_PM] = hour < 12 ? 0 : 1;
+        this.fields[HOUR] = hour % 12;
+        this.fields[MINUTE] = (msOfDay / (int) MS_PER_MINUTE) % 60;
+        this.fields[SECOND] = (msOfDay / 1000) % 60;
+        this.fields[MILLISECOND] = msOfDay % 1000;
         this.fields[ZONE_OFFSET] = this.getTimeZone().getRawOffset();
         this.fields[DST_OFFSET] = offset - this.getTimeZone().getRawOffset();
 
@@ -189,96 +190,96 @@ public class GregorianCalendar extends Calendar {
         }
     }
 
-    // El numero de semana de `diaDelPeriodo` sabiendo que dia de la semana cayo el primero.
+    // The week number of `dayOfPeriod`, knowing which day of the week the first fell on.
     //
-    // Las dos convenciones configurables entran aca: `firstDayOfWeek` decide donde se corta la
-    // semana, y `minimalDaysInFirstWeek` decide si los primeros dias sueltos cuentan como semana
-    // 1 o como la ultima del periodo anterior (y entonces esto devuelve 0).
-    private int numeroDeSemana(int diaDelPeriodo, int dowDelPrimero) {
-        int corrimiento = Math.floorMod(dowDelPrimero - this.getFirstDayOfWeek(), 7);
-        int semana = (diaDelPeriodo + corrimiento - 1) / 7 + 1;
-        if (7 - corrimiento < this.getMinimalDaysInFirstWeek()) {
-            semana = semana - 1;
+    // The two configurable conventions come in here: `firstDayOfWeek` decides where the week is cut,
+    // and `minimalDaysInFirstWeek` decides whether the first loose days count as week 1 or as the
+    // last of the previous period (and then this returns 0).
+    private int weekNumber(int dayOfPeriod, int dowOfFirst) {
+        int displacement = Math.floorMod(dowOfFirst - this.getFirstDayOfWeek(), 7);
+        int week = (dayOfPeriod + displacement - 1) / 7 + 1;
+        if (7 - displacement < this.getMinimalDaysInFirstWeek()) {
+            week = week - 1;
         }
-        return semana;
+        return week;
     }
 
-    // Campos -> instante.
+    // Fields -> instant.
     protected void computeTime() {
-        int año = this.fields[YEAR];
+        int yearNum = this.fields[YEAR];
         if (this.isSet[ERA] && this.fields[ERA] == BC) {
-            año = 1 - año;
+            yearNum = 1 - yearNum;
         }
-        int mes = this.fields[MONTH];
-        // Un mes fuera de 0..11 desborda al año: `set(MONTH, 12)` es enero del siguiente. Es el
-        // modo `lenient`, que es el de por defecto.
-        año = año + Math.floorDiv(mes, 12);
-        mes = Math.floorMod(mes, 12);
+        int monthNum = this.fields[MONTH];
+        // A month outside 0..11 overflows into the year: `set(MONTH, 12)` is January of the next
+        // one. It is `lenient` mode, which is the default.
+        yearNum = yearNum + Math.floorDiv(monthNum, 12);
+        monthNum = Math.floorMod(monthNum, 12);
 
-        int dia = this.isSet[DAY_OF_MONTH] ? this.fields[DAY_OF_MONTH] : 1;
+        int day = this.isSet[DAY_OF_MONTH] ? this.fields[DAY_OF_MONTH] : 1;
 
-        int hora;
+        int hour;
         if (this.isSet[HOUR_OF_DAY]) {
-            hora = this.fields[HOUR_OF_DAY];
+            hour = this.fields[HOUR_OF_DAY];
         } else if (this.isSet[HOUR]) {
-            hora = this.fields[HOUR] + (this.isSet[AM_PM] && this.fields[AM_PM] == 1 ? 12 : 0);
+            hour = this.fields[HOUR] + (this.isSet[AM_PM] && this.fields[AM_PM] == 1 ? 12 : 0);
         } else {
-            hora = 0;
+            hour = 0;
         }
 
-        long dias = diasDesdeCivil(año, mes + 1, dia);
-        long local = dias * MS_POR_DIA
-            + hora * MS_POR_HORA
-            + this.fields[MINUTE] * MS_POR_MINUTO
+        long days = daysFromCivil(yearNum, monthNum + 1, day);
+        long local = days * MS_PER_DAY
+            + hour * MS_PER_HOUR
+            + this.fields[MINUTE] * MS_PER_MINUTE
             + this.fields[SECOND] * 1000L
             + this.fields[MILLISECOND];
         this.time = local - this.getTimeZone().getRawOffset();
     }
 
-    // ---- aritmetica sobre campos --------------------------------------------------------------
+    // ---- arithmetic over fields  --------------------------------------------------------------
 
-    // Suma `amount` al campo, propagando a los mas grandes.
+    // It adds `amount` to the field, carrying into the larger ones.
     public void add(int field, int amount) {
         if (amount == 0) {
             return;
         }
         this.complete();
         if (field == YEAR || field == MONTH) {
-            int año = this.get(YEAR);
-            int mes = this.get(MONTH);
-            int dia = this.get(DAY_OF_MONTH);
+            int yearNum = this.get(YEAR);
+            int monthNum = this.get(MONTH);
+            int day = this.get(DAY_OF_MONTH);
             if (field == YEAR) {
-                año = año + amount;
+                yearNum = yearNum + amount;
             } else {
-                int total = año * 12 + mes + amount;
-                año = Math.floorDiv(total, 12);
-                mes = Math.floorMod(total, 12);
+                int total = yearNum * 12 + monthNum + amount;
+                yearNum = Math.floorDiv(total, 12);
+                monthNum = Math.floorMod(total, 12);
             }
-            // El recorte va ANTES de escribir los campos, no despues.
+            // The clamping goes BEFORE writing the fields, not after.
             //
-            // Si se escribe "31 de febrero" y recien despues se mira, `computeTime` ya lo
-            // convirtio en el 2 de marzo y no queda rastro de que hubo desborde: el dia 2 es
-            // perfectamente valido en marzo. El JDK da 29 de febrero, y esa es la semantica que
-            // importa — sumar un mes no deberia saltar dos.
-            int max = this.diasDelMes(año, mes);
-            if (dia > max) {
-                dia = max;
+            // If "31 February" is written and only looked at afterwards, `computeTime` has already
+            // turned it into 2 March and no trace is left that there was an overflow: day 2 is
+            // perfectly valid in March. The JDK gives 29 February, and that is the semantics that
+            // matters — adding one month should not jump two.
+            int max = this.daysInMonth(yearNum, monthNum);
+            if (day > max) {
+                day = max;
             }
-            this.set(YEAR, año);
-            this.set(MONTH, mes);
-            this.set(DAY_OF_MONTH, dia);
+            this.set(YEAR, yearNum);
+            this.set(MONTH, monthNum);
+            this.set(DAY_OF_MONTH, day);
             return;
         }
         long delta;
         if (field == DAY_OF_MONTH || field == DAY_OF_YEAR || field == DAY_OF_WEEK
                 || field == DAY_OF_WEEK_IN_MONTH) {
-            delta = (long) amount * MS_POR_DIA;
+            delta = (long) amount * MS_PER_DAY;
         } else if (field == WEEK_OF_YEAR || field == WEEK_OF_MONTH) {
-            delta = (long) amount * 7 * MS_POR_DIA;
+            delta = (long) amount * 7 * MS_PER_DAY;
         } else if (field == HOUR || field == HOUR_OF_DAY) {
-            delta = (long) amount * MS_POR_HORA;
+            delta = (long) amount * MS_PER_HOUR;
         } else if (field == MINUTE) {
-            delta = (long) amount * MS_POR_MINUTO;
+            delta = (long) amount * MS_PER_MINUTE;
         } else if (field == SECOND) {
             delta = (long) amount * 1000L;
         } else if (field == MILLISECOND) {
@@ -289,12 +290,12 @@ public class GregorianCalendar extends Calendar {
         this.setTimeInMillis(this.getTimeInMillis() + delta);
     }
 
-    // Suma 1 (o resta 1) al campo SIN tocar los mas grandes.
+    // It adds 1 (or subtracts 1) to the field WITHOUT touching the larger ones.
     public void roll(int field, boolean up) {
         this.roll(field, up ? 1 : -1);
     }
 
-    // Suma `amount` al campo sin tocar los mas grandes, dando la vuelta dentro de su rango.
+    // It adds `amount` to the field without touching the larger ones, wrapping within its range.
     public void roll(int field, int amount) {
         if (amount == 0) {
             return;
@@ -302,27 +303,30 @@ public class GregorianCalendar extends Calendar {
         this.complete();
         int min = this.getActualMinimum(field);
         int max = this.getActualMaximum(field);
-        int rango = max - min + 1;
-        int valor = this.get(field);
-        int nuevo = Math.floorMod(valor - min + amount, rango) + min;
+        int span = max - min + 1;
+        int value = this.get(field);
+        int updated = Math.floorMod(value - min + amount, span) + min;
         if (field == YEAR || field == MONTH) {
-            // Mismo cuidado que en `add`: recortar el dia antes de escribir, no despues.
-            int año = field == YEAR ? nuevo : this.get(YEAR);
-            int mes = field == MONTH ? nuevo : this.get(MONTH);
-            int dia = this.get(DAY_OF_MONTH);
-            int max = this.diasDelMes(año, mes);
-            if (dia > max) {
-                dia = max;
+            // The same care as in `add`: clamp the day before writing, not after.
+            int yearNum = field == YEAR ? updated : this.get(YEAR);
+            int monthNum = field == MONTH ? updated : this.get(MONTH);
+            int day = this.get(DAY_OF_MONTH);
+            // `maxDay` and not `max`: the `max` above --the maximum of the field being rolled--
+            // is still in scope, and §6.4 does not allow redeclaring it. They are two different
+            // things besides: one is the field's ceiling and the other the days of the month.
+            int maxDay = this.daysInMonth(yearNum, monthNum);
+            if (day > maxDay) {
+                day = maxDay;
             }
-            this.set(YEAR, año);
-            this.set(MONTH, mes);
-            this.set(DAY_OF_MONTH, dia);
+            this.set(YEAR, yearNum);
+            this.set(MONTH, monthNum);
+            this.set(DAY_OF_MONTH, day);
             return;
         }
-        this.set(field, nuevo);
+        this.set(field, updated);
     }
 
-    // ---- rangos de los campos ------------------------------------------------------------------
+    // ---- the fields' ranges   ------------------------------------------------------------------
 
     public int getMinimum(int field) {
         if (field == ERA) {
@@ -393,11 +397,10 @@ public class GregorianCalendar extends Calendar {
         return 7200000;
     }
 
-    // El mayor valor que el campo alcanza en TODOS los casos.
+    // The largest value the field reaches in ALL cases.
     //
-    // Distinto de `getMaximum`: DAY_OF_MONTH llega a 31 en algun mes, pero 28 es el unico que
-    // esta garantizado en todos. Un codigo que quiera un dia valido para cualquier mes tiene que
-    // usar este.
+    // Different from `getMaximum`: DAY_OF_MONTH reaches 31 in some month, but 28 is the only one
+    // guaranteed in every one. Code that wants a day valid for any month has to use this.
     public int getLeastMaximum(int field) {
         if (field == DAY_OF_MONTH) {
             return 28;
@@ -425,34 +428,35 @@ public class GregorianCalendar extends Calendar {
         return this.getMinimum(field);
     }
 
-    // El mayor valor del campo EN ESTA fecha: es aca donde DAY_OF_MONTH devuelve 28, 29, 30 o 31.
+    // The largest value of the field ON THIS date: this is where DAY_OF_MONTH returns 28, 29, 30
+    // or 31.
     public int getActualMaximum(int field) {
         this.complete();
         if (field == DAY_OF_MONTH) {
-            return this.diasDelMes(this.get(YEAR), this.get(MONTH));
+            return this.daysInMonth(this.get(YEAR), this.get(MONTH));
         }
         if (field == DAY_OF_YEAR) {
             return this.isLeapYear(this.get(YEAR)) ? 366 : 365;
         }
         if (field == DAY_OF_WEEK_IN_MONTH) {
-            return (this.diasDelMes(this.get(YEAR), this.get(MONTH)) - 1) / 7 + 1;
+            return (this.daysInMonth(this.get(YEAR), this.get(MONTH)) - 1) / 7 + 1;
         }
         return this.getMaximum(field);
     }
 
-    // ---- el corte juliano/gregoriano, que aca no existe ----------------------------------------
+    // ---- the Julian/Gregorian cutover, which here does not exist ----------------------------------------
 
-    // Rechaza cambiar el corte.
+    // It refuses to change the cutover.
     //
-    // A KajiLibrary subset: el calendario es proleptico, sin corte. Lanzar es preferible a
-    // aceptar la llamada y seguir dando fechas prolepticas, que es lo que haria un no-op: el
-    // llamador creeria tener fechas julianas y no las tendria.
+    // A KajiLibrary subset: the calendar is proleptic, with no cutover. Throwing is preferable to
+    // accepting the call and going on giving proleptic dates, which is what a no-op would do: the
+    // caller would believe they had Julian dates and would not.
     public void setGregorianChange(Date date) {
         throw new UnsupportedOperationException(
-            "KajiLibrary usa un calendario gregoriano proleptico, sin corte juliano");
+            "KajiLibrary uses a proleptic Gregorian calendar, with no Julian cutover");
     }
 
-    // El instante del corte. Al ser proleptico, el mas antiguo representable.
+    // The instant of the cutover. Being proleptic, the oldest representable one.
     public final Date getGregorianChange() {
         return new Date(-9223372036854775808L);
     }
@@ -461,22 +465,22 @@ public class GregorianCalendar extends Calendar {
         return "gregory";
     }
 
-    // ---- fecha por semana ISO -----------------------------------------------------------------
+    // ---- date by ISO week      -----------------------------------------------------------------
 
     public final boolean isWeekDateSupported() {
         return true;
     }
 
-    // El año al que pertenece la semana de esta fecha, que no siempre es el año calendario: el 1
-    // de enero puede caer en la ultima semana del año anterior.
+    // The year this date's week belongs to, which is not always the calendar year: 1 January can
+    // fall in the last week of the previous year.
     public int getWeekYear() {
         this.complete();
-        int semana = this.get(WEEK_OF_YEAR);
-        int mes = this.get(MONTH);
-        if (semana >= 52 && mes == 0) {
+        int week = this.get(WEEK_OF_YEAR);
+        int monthNum = this.get(MONTH);
+        if (week >= 52 && monthNum == 0) {
             return this.get(YEAR) - 1;
         }
-        if (semana == 1 && mes == 11) {
+        if (week == 1 && monthNum == 11) {
             return this.get(YEAR) + 1;
         }
         return this.get(YEAR);
@@ -490,31 +494,31 @@ public class GregorianCalendar extends Calendar {
         this.set(MONTH, 0);
         this.set(DAY_OF_MONTH, 1);
         this.complete();
-        int dowDelPrimero = this.get(DAY_OF_WEEK);
-        int corrimiento = Math.floorMod(dowDelPrimero - this.getFirstDayOfWeek(), 7);
-        int diaDelAño = (weekOfYear - 1) * 7 + Math.floorMod(dayOfWeek - this.getFirstDayOfWeek(), 7)
-            - corrimiento + 1;
-        if (7 - corrimiento < this.getMinimalDaysInFirstWeek()) {
-            diaDelAño = diaDelAño + 7;
+        int dowOfFirst = this.get(DAY_OF_WEEK);
+        int displacement = Math.floorMod(dowOfFirst - this.getFirstDayOfWeek(), 7);
+        int dayOfYear = (weekOfYear - 1) * 7 + Math.floorMod(dayOfWeek - this.getFirstDayOfWeek(), 7)
+            - displacement + 1;
+        if (7 - displacement < this.getMinimalDaysInFirstWeek()) {
+            dayOfYear = dayOfYear + 7;
         }
         this.set(DAY_OF_MONTH, 1);
-        this.setTimeInMillis(this.getTimeInMillis() + (long) (diaDelAño - 1) * MS_POR_DIA);
+        this.setTimeInMillis(this.getTimeInMillis() + (long) (dayOfYear - 1) * MS_PER_DAY);
     }
 
     public int getWeeksInWeekYear() {
         this.complete();
-        int año = this.getWeekYear();
-        GregorianCalendar fin = new GregorianCalendar(año, 11, 31);
-        fin.setFirstDayOfWeek(this.getFirstDayOfWeek());
-        fin.setMinimalDaysInFirstWeek(this.getMinimalDaysInFirstWeek());
-        int semana = fin.get(WEEK_OF_YEAR);
-        if (semana == 1) {
+        int yearNum = this.getWeekYear();
+        GregorianCalendar end = new GregorianCalendar(yearNum, 11, 31);
+        end.setFirstDayOfWeek(this.getFirstDayOfWeek());
+        end.setMinimalDaysInFirstWeek(this.getMinimalDaysInFirstWeek());
+        int week = end.get(WEEK_OF_YEAR);
+        if (week == 1) {
             return 52;
         }
-        return semana;
+        return week;
     }
 
-    // ---- igualdad, copia y puentes con java.time ----------------------------------------------
+    // ---- equality, copying and bridges to java.time ----------------------------------------------
 
     public boolean equals(Object obj) {
         if (this == obj) {
@@ -534,19 +538,19 @@ public class GregorianCalendar extends Calendar {
     }
 
     public Object clone() {
-        GregorianCalendar copia = new GregorianCalendar(this.getTimeZone(), Locale.getDefault());
-        copia.setTimeInMillis(this.getTimeInMillis());
-        copia.setFirstDayOfWeek(this.getFirstDayOfWeek());
-        copia.setMinimalDaysInFirstWeek(this.getMinimalDaysInFirstWeek());
-        return copia;
+        GregorianCalendar copied = new GregorianCalendar(this.getTimeZone(), Locale.getDefault());
+        copied.setTimeInMillis(this.getTimeInMillis());
+        copied.setFirstDayOfWeek(this.getFirstDayOfWeek());
+        copied.setMinimalDaysInFirstWeek(this.getMinimalDaysInFirstWeek());
+        return copied;
     }
 
-    // Esta fecha como ZonedDateTime.
+    // This date as a ZonedDateTime.
     public ZonedDateTime toZonedDateTime() {
         return ZonedDateTime.ofInstant(this.toInstant(), this.getTimeZone().toZoneId());
     }
 
-    // Un calendario en el instante y la zona del ZonedDateTime dado.
+    // A calendar at the given ZonedDateTime's instant and zone.
     public static GregorianCalendar from(ZonedDateTime zdt) {
         GregorianCalendar cal = new GregorianCalendar(TimeZone.getTimeZone(zdt.getZone()),
             Locale.getDefault());

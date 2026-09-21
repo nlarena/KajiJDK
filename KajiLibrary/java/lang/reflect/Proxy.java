@@ -42,42 +42,43 @@ public class Proxy implements Serializable {
     /** The invocation handler every call on this proxy is routed to. */
     protected InvocationHandler h;
 
-    // ---- estado global de la fabrica ----
+    // ---- the factory's global state ----
     //
-    // Un candado para el cache y el contador de nombres: los dos se tocan una vez por CLASE de
-    // proxy, no una vez por instancia, asi que no hay nada que ganar afinandolos.
+    // One lock for the cache and the name counter: both are touched once per proxy CLASS, not once
+    // per instance, so there is nothing to gain by making them finer.
 
-    private static final Object CANDADO = new Object();
+    private static final Object LOCK = new Object();
 
-    /** De la lista de interfaces (sus nombres, en orden) a la clase generada. */
+    /** From the list of interfaces (their names, in order) to the generated class. */
     private static final HashMap<String, Class<?>> CACHE = new HashMap<String, Class<?>>();
 
     /**
-     * Las clases que esta fabrica genero, para que {@link #isProxyClass} no adivine.
+     * The classes this factory generated, so {@link #isProxyClass} does not have to guess.
      *
-     * <p>Concurrente y fuera del candado a proposito: {@link #getInvocationHandler} la consulta, y
-     * {@code getInvocationHandler} esta en el camino de CADA llamada a CADA proxy del programa.
-     * Un candado global ahi convertiria a todo proxy en un punto de serializacion. Se escribe una
-     * sola vez por clase, con el candado tomado igual.
+     * <p>Concurrent and outside the lock on purpose: {@link #getInvocationHandler} consults it, and
+     * {@code getInvocationHandler} is on the path of EVERY call to EVERY proxy in the program. A
+     * global lock there would turn every proxy into a serialisation point. It is written once per
+     * class, with the lock held all the same.
      */
     private static final ConcurrentHashMap<Class<?>, Boolean> GENERADAS =
             new ConcurrentHashMap<Class<?>, Boolean>();
 
-    private static int siguienteNumero;
+    private static int nextNumber;
 
     /**
-     * El cargador que define las clases generadas.
+     * The loader that defines the generated classes.
      *
-     * <p>`defineClass` es `protected`: la unica forma de llegarle es desde una subclase, y por eso
-     * hay una. No es una jerarquia de delegacion -- es el permiso, escrito como herencia.
+     * <p>`defineClass` is `protected`: the only way to reach it is from a subclass, and that is why
+     * there is one. It is not a delegation hierarchy -- it is the permission, written as
+     * inheritance.
      */
-    private static final class CargadorDeProxy extends ClassLoader {
-        Class<?> definir(String nombre, byte[] bytes) {
-            return this.defineClass(nombre, bytes, 0, bytes.length);
+    private static final class ProxyLoader extends ClassLoader {
+        Class<?> define(String name, byte[] bytes) {
+            return this.defineClass(name, bytes, 0, bytes.length);
         }
     }
 
-    private static final CargadorDeProxy CARGADOR = new CargadorDeProxy();
+    private static final ProxyLoader LOADER = new ProxyLoader();
 
     /**
      * The constructor a generated proxy class calls.
@@ -91,7 +92,7 @@ public class Proxy implements Serializable {
         this.h = h;
     }
 
-    // Sin manejador no hay proxy: existe para que nadie herede de Proxy y se saltee el argumento.
+    // No handler, no proxy: it exists so nobody inherits from Proxy and skips the argument.
     private Proxy() {
     }
 
@@ -107,7 +108,7 @@ public class Proxy implements Serializable {
     @Deprecated
     public static Class<?> getProxyClass(ClassLoader loader, Class<?>... interfaces)
             throws IllegalArgumentException {
-        return Proxy.claseDeProxy(Proxy.copiarYValidar(interfaces));
+        return Proxy.proxyClass(Proxy.copyAndValidate(interfaces));
     }
 
     /**
@@ -125,26 +126,27 @@ public class Proxy implements Serializable {
         if (h == null) {
             throw new NullPointerException("h");
         }
-        Class<?>[] copia = Proxy.copiarYValidar(interfaces);
-        Class<?> clase = Proxy.claseDeProxy(copia);
+        Class<?>[] copy = Proxy.copyAndValidate(interfaces);
+        Class<?> clazz = Proxy.proxyClass(copy);
         try {
-            Constructor<?> ctor = clase.getDeclaredConstructor(
+            Constructor<?> ctor = clazz.getDeclaredConstructor(
                     new Class<?>[] { InvocationHandler.class });
             ctor.setAccessible(true);
             return ctor.newInstance(new Object[] { h });
-        } catch (InvocationTargetException fallo) {
-            // El constructor generado es `super(h)` y nada mas; si eso tira, el error viene de
-            // Proxy, no del usuario, y devolverlo desnudo es lo unico util.
-            Throwable causa = fallo.getCause();
-            if (causa instanceof RuntimeException) {
-                throw (RuntimeException) causa;
+        } catch (InvocationTargetException failure) {
+            // The generated constructor is `super(h)` and nothing else; if that throws, the error
+            // comes from Proxy and not from the user, and handing it back bare is the only useful
+            // thing.
+            Throwable cause = failure.getCause();
+            if (cause instanceof RuntimeException) {
+                throw (RuntimeException) cause;
             }
-            if (causa instanceof Error) {
-                throw (Error) causa;
+            if (cause instanceof Error) {
+                throw (Error) cause;
             }
-            throw new InternalError(fallo.toString());
-        } catch (NoSuchMethodException imposible) {
-            throw new InternalError(imposible.toString());
+            throw new InternalError(failure.toString());
+        } catch (NoSuchMethodException impossible) {
+            throw new InternalError(impossible.toString());
         }
     }
 
@@ -176,26 +178,27 @@ public class Proxy implements Serializable {
         return ((Proxy) proxy).h;
     }
 
-    // ------------------------------------------------------------------ fabrica
+    // ------------------------------------------------------------------ factory
 
     /**
-     * Copia el arreglo de interfaces y lo valida.
+     * It copies the array of interfaces and validates it.
      *
-     * <p>La copia no es paranoia: entre validar y generar hay reflexion sobre cada elemento, y un
-     * arreglo que el llamador puede seguir escribiendo convierte "ya lo valide" en una mentira.
+     * <p>The copy is not paranoia: between validating and generating there is reflection over each
+     * element, and an array the caller can go on writing turns "I already validated it" into a
+     * lie.
      */
-    private static Class<?>[] copiarYValidar(Class<?>[] interfaces) {
+    private static Class<?>[] copyAndValidate(Class<?>[] interfaces) {
         if (interfaces == null) {
             throw new NullPointerException("interfaces");
         }
-        Class<?>[] copia = new Class<?>[interfaces.length];
-        System.arraycopy(interfaces, 0, copia, 0, interfaces.length);
-        if (copia.length > 65535) {
-            throw new IllegalArgumentException("interface limit exceeded: " + copia.length);
+        Class<?>[] copy = new Class<?>[interfaces.length];
+        System.arraycopy(interfaces, 0, copy, 0, interfaces.length);
+        if (copy.length > 65535) {
+            throw new IllegalArgumentException("interface limit exceeded: " + copy.length);
         }
         int i = 0;
-        while (i < copia.length) {
-            Class<?> intf = copia[i];
+        while (i < copy.length) {
+            Class<?> intf = copy[i];
             if (intf == null) {
                 throw new NullPointerException("interfaces[" + i + "]");
             }
@@ -204,35 +207,35 @@ public class Proxy implements Serializable {
             }
             int j = 0;
             while (j < i) {
-                if (copia[j] == intf) {
+                if (copy[j] == intf) {
                     throw new IllegalArgumentException("repeated interface: " + intf.getName());
                 }
                 j = j + 1;
             }
             i = i + 1;
         }
-        return copia;
+        return copy;
     }
 
-    private static Class<?> claseDeProxy(Class<?>[] interfaces) {
-        String clave = Proxy.clave(interfaces);
-        synchronized (Proxy.CANDADO) {
-            Class<?> ya = Proxy.CACHE.get(clave);
-            if (ya != null) {
-                return ya;
+    private static Class<?> proxyClass(Class<?>[] interfaces) {
+        String key = Proxy.key(interfaces);
+        synchronized (Proxy.LOCK) {
+            Class<?> seen = Proxy.CACHE.get(key);
+            if (seen != null) {
+                return seen;
             }
-            Class<?> nueva = Proxy.generar(interfaces);
-            Proxy.CACHE.put(clave, nueva);
-            Proxy.GENERADAS.put(nueva, Boolean.TRUE);
-            return nueva;
+            Class<?> fresh = Proxy.generate(interfaces);
+            Proxy.CACHE.put(key, fresh);
+            Proxy.GENERADAS.put(fresh, Boolean.TRUE);
+            return fresh;
         }
     }
 
     /**
-     * La clave del cache: los nombres de las interfaces en orden, separados por un caracter que no
-     * puede aparecer en un nombre binario -- si no, `{A, BC}` y `{AB, C}` colisionarian.
+     * The cache's key: the interfaces' names in order, separated by a character that cannot appear
+     * in a binary name -- otherwise `{A, BC}` and `{AB, C}` would collide.
      */
-    private static String clave(Class<?>[] interfaces) {
+    private static String key(Class<?>[] interfaces) {
         StringBuilder sb = new StringBuilder();
         int i = 0;
         while (i < interfaces.length) {
@@ -243,119 +246,120 @@ public class Proxy implements Serializable {
         return sb.toString();
     }
 
-    // ------------------------------------------------------------------ tabla de metodos
+    // ------------------------------------------------------------------ the method table
 
     /**
-     * Un metodo del proxy mientras se lo arma: el `Method` que va a recibir el manejador, su
-     * descriptor y las excepciones que declara despues de fundir todas las interfaces que lo
-     * declaran.
+     * One of the proxy's methods while it is being built: the `Method` the handler will receive,
+     * its descriptor, and the exceptions it declares after merging every interface that declares it.
      */
-    private static final class Entrada {
-        final Method metodo;
-        final String firmaCorta;
-        final Class<?> retorno;
-        Class<?>[] excepciones;
+    private static final class ProxyMethod {
+        final Method method;
+        final String shortSignature;
+        final Class<?> returnType;
+        Class<?>[] exceptions;
 
-        Entrada(Method metodo, String firmaCorta) {
-            this.metodo = metodo;
-            this.firmaCorta = firmaCorta;
-            this.retorno = metodo.getReturnType();
-            this.excepciones = metodo.getExceptionTypes();
+        ProxyMethod(Method method, String shortSignature) {
+            this.method = method;
+            this.shortSignature = shortSignature;
+            this.returnType = method.getReturnType();
+            this.exceptions = method.getExceptionTypes();
         }
     }
 
-    private static Class<?> generar(Class<?>[] interfaces) {
-        ArrayList<Entrada> entradas = new ArrayList<Entrada>();
-        // De firma completa (nombre + parametros + retorno) a la entrada ya creada. Es lo que hace
-        // que un metodo declarado por dos interfaces se implemente UNA vez -- y, como la primera
-        // que lo declara es la que dejo la entrada, es tambien lo que decide que `Method` recibe
-        // el manejador.
-        HashMap<String, Entrada> porFirma = new HashMap<String, Entrada>();
+    private static Class<?> generate(Class<?>[] interfaces) {
+        ArrayList<ProxyMethod> entries = new ArrayList<ProxyMethod>();
+        // From the full signature (name + parameters + return) to the entry already created. It is
+        // what makes a method declared by two interfaces implemented ONCE -- and, since the first to
+        // declare it is the one that left the entry, it is also what decides which `Method` the
+        // handler receives.
+        HashMap<String, ProxyMethod> bySignature = new HashMap<String, ProxyMethod>();
 
-        // Object primero: hashCode, equals y toString son los tres metodos de Object que no son
-        // finales, y por eso son los tres -- y los unicos -- que un proxy puede interceptar.
-        Proxy.agregar(entradas, porFirma, Proxy.metodoDeObject("hashCode", new Class<?>[0]));
-        Proxy.agregar(entradas, porFirma,
-                Proxy.metodoDeObject("equals", new Class<?>[] { Object.class }));
-        Proxy.agregar(entradas, porFirma, Proxy.metodoDeObject("toString", new Class<?>[0]));
+        // Object first: hashCode, equals and toString are the three methods of Object that are not
+        // final, and that is why they are the three -- and the only three -- a proxy can
+        // intercept.
+        Proxy.add(entries, bySignature, Proxy.objectMethod("hashCode", new Class<?>[0]));
+        Proxy.add(entries, bySignature,
+                Proxy.objectMethod("equals", new Class<?>[] { Object.class }));
+        Proxy.add(entries, bySignature, Proxy.objectMethod("toString", new Class<?>[0]));
 
         int i = 0;
         while (i < interfaces.length) {
-            Method[] publicos = interfaces[i].getMethods();
+            Method[] publicMethods = interfaces[i].getMethods();
             int j = 0;
-            while (j < publicos.length) {
-                Method m = publicos[j];
-                // Los estaticos de una interfaz no se heredan: no hay nada que sobrescribir.
+            while (j < publicMethods.length) {
+                Method m = publicMethods[j];
+                // An interface's statics are not inherited: there is nothing to override.
                 if (!Modifier.isStatic(m.getModifiers())) {
-                    Proxy.agregar(entradas, porFirma, m);
+                    Proxy.add(entries, bySignature, m);
                 }
                 j = j + 1;
             }
             i = i + 1;
         }
 
-        Proxy.verificarRetornos(entradas);
+        Proxy.checkReturns(entries);
 
-        Method[] metodos = new Method[entradas.size()];
-        Class<?>[][] declaradas = new Class<?>[entradas.size()][];
+        Method[] methods = new Method[entries.size()];
+        Class<?>[][] declared = new Class<?>[entries.size()][];
         i = 0;
-        while (i < entradas.size()) {
-            metodos[i] = entradas.get(i).metodo;
-            declaradas[i] = entradas.get(i).excepciones;
+        while (i < entries.size()) {
+            methods[i] = entries.get(i).method;
+            declared[i] = entries.get(i).exceptions;
             i = i + 1;
         }
 
-        boolean publica = Proxy.todasPublicas(interfaces);
-        String paquete = Proxy.paquete(interfaces, publica);
-        String nombre;
-        synchronized (Proxy.CANDADO) {
-            // Sin paquete no va el punto: "$Proxy0" es un nombre binario valido, ".$Proxy0" no.
-            String prefijo = paquete.isEmpty() ? "" : paquete + ".";
-            nombre = prefijo + "$Proxy" + Proxy.siguienteNumero;
-            Proxy.siguienteNumero = Proxy.siguienteNumero + 1;
+        boolean isPublic = Proxy.allPublic(interfaces);
+        String packageOf = Proxy.packageOf(interfaces, isPublic);
+        String name;
+        synchronized (Proxy.LOCK) {
+            // With no package the dot does not go in: "$Proxy0" is a valid binary name, ".$Proxy0"
+            // is not.
+            String prefix = packageOf.isEmpty() ? "" : packageOf + ".";
+            name = prefix + "$Proxy" + Proxy.nextNumber;
+            Proxy.nextNumber = Proxy.nextNumber + 1;
         }
 
-        byte[] bytes = ProxyGenerator.generar(nombre, interfaces, publica, metodos);
-        Class<?> clase = Proxy.CARGADOR.definir(nombre, bytes);
-        // Registrar ANTES de que exista la primera instancia: en este hueco la clase ya esta
-        // definida pero todavia no la puede invocar nadie.
-        ProxyDispatcher.registrar(clase, metodos, declaradas);
-        return clase;
+        byte[] bytes = ProxyGenerator.generate(name, interfaces, isPublic, methods);
+        Class<?> clazz = Proxy.LOADER.define(name, bytes);
+        // Register BEFORE the first instance exists: in this gap the class is already defined but
+        // nobody can invoke it yet.
+        ProxyDispatcher.register(clazz, methods, declared);
+        return clazz;
     }
 
-    private static Method metodoDeObject(String nombre, Class<?>[] parametros) {
+    private static Method objectMethod(String name, Class<?>[] params) {
         try {
-            return Object.class.getMethod(nombre, parametros);
-        } catch (NoSuchMethodException imposible) {
-            throw new InternalError(imposible.toString());
+            return Object.class.getMethod(name, params);
+        } catch (NoSuchMethodException impossible) {
+            throw new InternalError(impossible.toString());
         }
     }
 
-    private static void agregar(ArrayList<Entrada> entradas, HashMap<String, Entrada> porFirma,
+    private static void add(ArrayList<ProxyMethod> entries, HashMap<String, ProxyMethod> bySignature,
             Method m) {
-        String corta = Proxy.firmaCorta(m);
-        String completa = corta + ProxyGenerator.descriptor(m.getReturnType());
-        Entrada ya = porFirma.get(completa);
-        if (ya != null) {
-            // Mismo metodo por segunda vez: la entrada no se duplica, pero las excepciones si se
-            // funden. Un proxy solo puede declarar lo que TODAS las interfaces permiten -- si una
-            // declara IOException y la otra no declara nada, el proxy no puede tirar IOException.
-            ya.excepciones = Proxy.fundirExcepciones(ya.excepciones, m.getExceptionTypes());
+        String shortSig = Proxy.shortSignature(m);
+        String full = shortSig + ProxyGenerator.descriptor(m.getReturnType());
+        ProxyMethod seen = bySignature.get(full);
+        if (seen != null) {
+            // The same method a second time: the entry is not duplicated, but the exceptions are
+            // merged. A proxy can only declare what ALL the interfaces allow -- if one declares
+            // IOException and the other declares nothing, the proxy cannot throw IOException.
+            seen.exceptions = Proxy.mergeExceptions(seen.exceptions, m.getExceptionTypes());
             return;
         }
-        Entrada nueva = new Entrada(m, corta);
-        porFirma.put(completa, nueva);
-        entradas.add(nueva);
+        ProxyMethod fresh = new ProxyMethod(m, shortSig);
+        bySignature.put(full, fresh);
+        entries.add(fresh);
     }
 
-    /** Nombre + descriptores de los parametros: lo que define "el mismo metodo" al sobrescribir. */
-    private static String firmaCorta(Method m) {
-        Class<?>[] parametros = m.getParameterTypes();
+    /** Name + the parameters' descriptors: what defines "the same method" when overriding. */
+    private static String shortSignature(Method m) {
+        Class<?>[] params = m.getParameterTypes();
         StringBuilder sb = new StringBuilder(m.getName());
         sb.append('(');
         int i = 0;
-        while (i < parametros.length) {
-            sb.append(ProxyGenerator.descriptor(parametros[i]));
+        while (i < params.length) {
+            sb.append(ProxyGenerator.descriptor(params[i]));
             i = i + 1;
         }
         sb.append(')');
@@ -363,29 +367,29 @@ public class Proxy implements Serializable {
     }
 
     /**
-     * La interseccion util de dos listas de excepciones declaradas: de cada lista, lo que la otra
-     * ya cubre. No es la interseccion literal -- si una declara `IOException` y la otra
-     * `FileNotFoundException`, lo que queda es `FileNotFoundException`, que es lo unico que las
-     * dos firmas admiten.
+     * The useful intersection of two lists of declared exceptions: from each list, what the other
+     * already covers. It is not the literal intersection -- if one declares `IOException` and the
+     * other `FileNotFoundException`, what is left is `FileNotFoundException`, which is the only
+     * thing both signatures admit.
      */
-    private static Class<?>[] fundirExcepciones(Class<?>[] a, Class<?>[] b) {
-        ArrayList<Class<?>> salida = new ArrayList<Class<?>>();
-        Proxy.recogerCubiertas(a, b, salida);
-        Proxy.recogerCubiertas(b, a, salida);
-        return salida.toArray(new Class<?>[salida.size()]);
+    private static Class<?>[] mergeExceptions(Class<?>[] a, Class<?>[] b) {
+        ArrayList<Class<?>> out = new ArrayList<Class<?>>();
+        Proxy.collectCovered(a, b, out);
+        Proxy.collectCovered(b, a, out);
+        return out.toArray(new Class<?>[out.size()]);
     }
 
-    private static void recogerCubiertas(Class<?>[] desde, Class<?>[] contra,
-            ArrayList<Class<?>> salida) {
+    private static void collectCovered(Class<?>[] from, Class<?>[] against,
+            ArrayList<Class<?>> out) {
         int i = 0;
-        while (i < desde.length) {
+        while (i < from.length) {
             int j = 0;
-            while (j < contra.length) {
-                if (contra[j].isAssignableFrom(desde[i])) {
-                    if (!salida.contains(desde[i])) {
-                        salida.add(desde[i]);
+            while (j < against.length) {
+                if (against[j].isAssignableFrom(from[i])) {
+                    if (!out.contains(from[i])) {
+                        out.add(from[i]);
                     }
-                    j = contra.length;
+                    j = against.length;
                 } else {
                     j = j + 1;
                 }
@@ -395,69 +399,69 @@ public class Proxy implements Serializable {
     }
 
     /**
-     * Rechaza dos interfaces que declaran el mismo metodo con retornos que no se pueden reconciliar.
+     * It rejects two interfaces declaring the same method with returns that cannot be reconciled.
      *
-     * <p>Retornos DISTINTOS no son un error por si mismos: un archivo de clase admite dos metodos
-     * con el mismo nombre y los mismos parametros y distinto retorno, y eso es lo que se genera
-     * para retornos covariantes (`Object valor()` y `String valor()` conviven). Lo que no se puede
-     * es que ninguno de los retornos cubra a los demas -- `String` e `Integer` no tienen un metodo
-     * que sirva para los dos --, y ahi el pedido es imposible y hay que decirlo antes de generar
-     * nada. Un primitivo nunca cubre ni es cubierto, asi que basta con que aparezca uno en un grupo
-     * de mas de uno para que el grupo sea imposible.
+     * <p>DIFFERENT returns are not an error in themselves: a class file admits two methods with the
+     * same name, the same parameters and different returns, and that is what gets generated for
+     * covariant returns (`Object value()` and `String value()` coexist). What cannot happen is that
+     * none of the returns covers the others -- `String` and `Integer` have no method serving both
+     * --, and there the request is impossible and has to be called out before anything is generated.
+     * A primitive never covers and is never covered, so one appearing in a group of more than one is
+     * enough to make the group impossible.
      */
-    private static void verificarRetornos(ArrayList<Entrada> entradas) {
-        HashMap<String, ArrayList<Entrada>> grupos = new HashMap<String, ArrayList<Entrada>>();
+    private static void checkReturns(ArrayList<ProxyMethod> entries) {
+        HashMap<String, ArrayList<ProxyMethod>> groups = new HashMap<String, ArrayList<ProxyMethod>>();
         int i = 0;
-        while (i < entradas.size()) {
-            Entrada e = entradas.get(i);
-            ArrayList<Entrada> grupo = grupos.get(e.firmaCorta);
-            if (grupo == null) {
-                grupo = new ArrayList<Entrada>();
-                grupos.put(e.firmaCorta, grupo);
+        while (i < entries.size()) {
+            ProxyMethod e = entries.get(i);
+            ArrayList<ProxyMethod> group = groups.get(e.shortSignature);
+            if (group == null) {
+                group = new ArrayList<ProxyMethod>();
+                groups.put(e.shortSignature, group);
             }
-            grupo.add(e);
+            group.add(e);
             i = i + 1;
         }
-        java.util.Iterator<ArrayList<Entrada>> it = grupos.values().iterator();
+        java.util.Iterator<ArrayList<ProxyMethod>> it = groups.values().iterator();
         while (it.hasNext()) {
-            ArrayList<Entrada> grupo = it.next();
-            if (grupo.size() < 2) {
+            ArrayList<ProxyMethod> group = it.next();
+            if (group.size() < 2) {
                 continue;
             }
-            ArrayList<Class<?>> sinCubrir = new ArrayList<Class<?>>();
+            ArrayList<Class<?>> uncovered = new ArrayList<Class<?>>();
             int k = 0;
-            while (k < grupo.size()) {
-                Class<?> nuevo = grupo.get(k).retorno;
-                if (nuevo.isPrimitive()) {
+            while (k < group.size()) {
+                Class<?> fresh = group.get(k).returnType;
+                if (fresh.isPrimitive()) {
                     throw new IllegalArgumentException("methods with same signature "
-                            + grupo.get(0).firmaCorta + " but incompatible return types");
+                            + group.get(0).shortSignature + " but incompatible return types");
                 }
-                boolean cubierto = false;
+                boolean covered = false;
                 int t = 0;
-                while (t < sinCubrir.size()) {
-                    Class<?> viejo = sinCubrir.get(t);
-                    if (nuevo.isAssignableFrom(viejo)) {
-                        cubierto = true;
-                        t = sinCubrir.size();
-                    } else if (viejo.isAssignableFrom(nuevo)) {
-                        sinCubrir.remove(t);
+                while (t < uncovered.size()) {
+                    Class<?> old = uncovered.get(t);
+                    if (fresh.isAssignableFrom(old)) {
+                        covered = true;
+                        t = uncovered.size();
+                    } else if (old.isAssignableFrom(fresh)) {
+                        uncovered.remove(t);
                     } else {
                         t = t + 1;
                     }
                 }
-                if (!cubierto) {
-                    sinCubrir.add(nuevo);
+                if (!covered) {
+                    uncovered.add(fresh);
                 }
                 k = k + 1;
             }
-            if (sinCubrir.size() > 1) {
+            if (uncovered.size() > 1) {
                 throw new IllegalArgumentException("methods with same signature "
-                        + grupo.get(0).firmaCorta + " but incompatible return types");
+                        + group.get(0).shortSignature + " but incompatible return types");
             }
         }
     }
 
-    private static boolean todasPublicas(Class<?>[] interfaces) {
+    private static boolean allPublic(Class<?>[] interfaces) {
         int i = 0;
         while (i < interfaces.length) {
             if (!Modifier.isPublic(interfaces[i].getModifiers())) {
@@ -469,31 +473,31 @@ public class Proxy implements Serializable {
     }
 
     /**
-     * El paquete de la clase generada.
+     * The generated class's package.
      *
-     * <p>Con todas las interfaces publicas va a uno propio y la clase es publica. Con alguna que no
-     * lo es, la clase TIENE que caer en el paquete de esa interfaz -- una interfaz de paquete no se
-     * puede implementar desde afuera --, y por eso dos interfaces no publicas de paquetes distintos
-     * no se pueden proxiar juntas: no existe un paquete donde las dos sean visibles.
+     * <p>With every interface public it goes into one of its own and the class is public. With one
+     * that is not, the class HAS to land in that interface's package -- a package-private interface
+     * cannot be implemented from outside --, and that is why two non-public interfaces from
+     * different packages cannot be proxied together: there is no package where both are visible.
      */
-    private static String paquete(Class<?>[] interfaces, boolean publica) {
-        if (publica) {
+    private static String packageOf(Class<?>[] interfaces, boolean isPublic) {
+        if (isPublic) {
             return "com.sun.proxy";
         }
-        String elegido = null;
+        String chosen = null;
         int i = 0;
         while (i < interfaces.length) {
             if (!Modifier.isPublic(interfaces[i].getModifiers())) {
                 String p = interfaces[i].getPackageName();
-                if (elegido == null) {
-                    elegido = p;
-                } else if (!elegido.equals(p)) {
+                if (chosen == null) {
+                    chosen = p;
+                } else if (!chosen.equals(p)) {
                     throw new IllegalArgumentException(
                             "non-public interfaces from different packages");
                 }
             }
             i = i + 1;
         }
-        return elegido;
+        return chosen;
     }
 }

@@ -1,27 +1,27 @@
 package java.rmi;
 
 /**
- * KajiLibrary's java.rmi.StubNotFoundException -- Falta la clase talon.
+ * KajiLibrary's java.rmi.StubNotFoundException -- The stub class is missing.
  *
- * <p>No se encontro la clase talon --el intermediario que traduce una llamada local en una remota--
- * al exportar un objeto o al recibir una referencia.
+ * <p>The stub class --the intermediary that turns a local call into a remote one-- was not found
+ * when exporting an object or when receiving a reference.
  *
- * <p>Es una excepcion de otra epoca. Desde 1.5 los talones se generan solos con
- * {@code java.lang.reflect.Proxy}, asi que en la practica solo aparece con codigo compilado con
+ * <p>It is an exception from another era. Since 1.5 stubs are generated on their own with
+ * {@code java.lang.reflect.Proxy}, so in practice it only appears with code compiled with
  * {@code rmic}.
  */
 public class StubNotFoundException extends RemoteException {
 
     private static final long serialVersionUID = -7088199405468872373L;
 
-    /** @param s el mensaje */
+    /** @param s the message */
     public StubNotFoundException(String s) {
         super(s);
     }
 
     /**
-     * @param s el mensaje
-     * @param ex la causa
+     * @param s the message
+     * @param ex the cause
      */
     public StubNotFoundException(String s, Exception ex) {
         super(s, ex);

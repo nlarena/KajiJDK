@@ -1,10 +1,10 @@
 package java.security;
 
-// Fallo en una operacion de digest.
+// A failure in a digest operation.
 //
-// En la practica la tira un solo metodo, `MessageDigest.digest(byte[], int, int)`, cuando el
-// buffer que le dan no tiene lugar para el resultado. Los demas caminos del digest no pueden
-// fallar: alimentar bytes a una funcion de hash no tiene modo de error.
+// In practice a single method throws it, `MessageDigest.digest(byte[], int, int)`, when the buffer
+// it is given has no room for the result. The other roads of the digest cannot fail: feeding bytes
+// to a hash function has no failure mode.
 public class DigestException extends GeneralSecurityException {
 
     public DigestException() {

@@ -3,8 +3,8 @@ package com.sun.source.tree;
 import java.util.List;
 
 /**
- * Un tipo interseccion `A & B`, que aparece en los limites de un
- * parametro de tipo y en algunos casts.
+ * An intersection type `A & B`, which appears in the bounds of a type
+ * parameter and in some casts.
  */
 public interface IntersectionTypeTree extends Tree {
 

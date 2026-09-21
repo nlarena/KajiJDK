@@ -7,48 +7,49 @@ import java.util.List;
 import javax.imageio.metadata.IIOMetadata;
 
 /**
- * KajiLibrary's javax.imageio.IIOImage -- una imagen con sus miniaturas y sus metadatos.
+ * KajiLibrary's javax.imageio.IIOImage -- an image with its thumbnails and its metadata.
  *
- * <p>Lo que se lee o se escribe de una vez: el pixel, las vistas previas que el formato traiga
- * incrustadas, y la informacion asociada.
+ * <p>What is read or written in one go: the pixels, the previews the format carries embedded, and
+ * the associated information.
  *
- * <h2>Imagen o raster, nunca los dos</h2>
+ * <h2>Image or raster, never both</h2>
  *
- * <p>Es la parte que define la clase. Lleva <b>o</b> una {@link RenderedImage} <b>o</b> un
- * {@link Raster}, y {@link #hasRaster} dice cual. Poner uno pone el otro en null.
+ * <p>It is the part that defines the class. It carries <b>either</b> a {@link RenderedImage}
+ * <b>or</b> a {@link Raster}, and {@link #hasRaster} says which. Setting one sets the other to
+ * null.
  *
- * <p>La diferencia es que una imagen sabe interpretar sus pixeles --tiene modelo de color-- y un
- * raster son numeros crudos. El raster existe para los formatos cuyos datos <b>no son colores</b>: una
- * imagen medica en unidades Hounsfield, una banda satelital en reflectancia. Forzar un modelo de color
- * ahi seria inventar.
+ * <p>The difference is that an image knows how to interpret its pixels --it has a colour model--
+ * and a raster is raw numbers. The raster exists for formats whose data <b>are not colours</b>: a
+ * medical image in Hounsfield units, a satellite band in reflectance. Forcing a colour model there
+ * would be making things up.
  *
- * <p>Pedir el que no es no falla: devuelve null.
+ * <p>Asking for the one that is not there does not fail: it returns null.
  *
- * <h2>Las miniaturas no se copian</h2>
+ * <h2>Thumbnails are not copied</h2>
  *
- * <p>La lista se guarda por referencia, y {@link #getThumbnails} la devuelve tal cual. Modificarla
- * despues cambia lo que la imagen tiene. Es lo que hace el JDK.
+ * <p>The list is kept by reference, and {@link #getThumbnails} returns it as is. Modifying it
+ * afterwards changes what the image holds. It is what the JDK does.
  */
 public class IIOImage {
 
-    /** El pixel como imagen, o null si hay raster. */
+    /** The pixels as an image, or null if there is a raster. */
     protected RenderedImage image;
 
-    /** El pixel como numeros crudos, o null si hay imagen. */
+    /** The pixels as raw numbers, or null if there is an image. */
     protected Raster raster;
 
-    /** Las vistas previas, o null. */
+    /** The previews, or null. */
     protected List<? extends BufferedImage> thumbnails = null;
 
-    /** La informacion asociada, o null. */
+    /** The associated information, or null. */
     protected IIOMetadata metadata;
 
     /**
-     * Con una imagen.
+     * With an image.
      *
-     * @param thumbnails las vistas previas, o null; no se copia
-     * @param metadata la informacion asociada, o null
-     * @throws IllegalArgumentException si la imagen es null
+     * @param thumbnails the previews, or null; not copied
+     * @param metadata the associated information, or null
+     * @throws IllegalArgumentException if the image is null
      */
     public IIOImage(RenderedImage image, List<? extends BufferedImage> thumbnails,
                     IIOMetadata metadata) {
@@ -62,9 +63,9 @@ public class IIOImage {
     }
 
     /**
-     * Con un raster. Ver la nota de la clase sobre cuando corresponde.
+     * With a raster. See the class note about when that fits.
      *
-     * @throws IllegalArgumentException si el raster es null
+     * @throws IllegalArgumentException if the raster is null
      */
     public IIOImage(Raster raster, List<? extends BufferedImage> thumbnails,
                     IIOMetadata metadata) {
@@ -77,12 +78,12 @@ public class IIOImage {
         this.metadata = metadata;
     }
 
-    /** La imagen, o null si lo que hay es un raster. */
+    /** The image, or null if what it holds is a raster. */
     public RenderedImage getRenderedImage() {
         return this.image;
     }
 
-    /** La pone, y saca el raster. */
+    /** Sets it, and drops the raster. */
     public void setRenderedImage(RenderedImage image) {
         if (image == null) {
             throw new IllegalArgumentException("image == null!");
@@ -91,17 +92,17 @@ public class IIOImage {
         this.raster = null;
     }
 
-    /** Cual de los dos lleva. Ver la nota de la clase. */
+    /** Which of the two it carries. See the class note. */
     public boolean hasRaster() {
         return this.raster != null;
     }
 
-    /** El raster, o null si lo que hay es una imagen. */
+    /** The raster, or null if what it holds is an image. */
     public Raster getRaster() {
         return this.raster;
     }
 
-    /** Lo pone, y saca la imagen. */
+    /** Sets it, and drops the image. */
     public void setRaster(Raster raster) {
         if (raster == null) {
             throw new IllegalArgumentException("raster == null!");
@@ -110,7 +111,7 @@ public class IIOImage {
         this.image = null;
     }
 
-    /** Cuantas vistas previas. */
+    /** How many previews. */
     public int getNumThumbnails() {
         if (this.thumbnails == null) {
             return 0;
@@ -119,9 +120,9 @@ public class IIOImage {
     }
 
     /**
-     * Una vista previa.
+     * A preview.
      *
-     * @throws IndexOutOfBoundsException si no existe, o si no hay ninguna
+     * @throws IndexOutOfBoundsException if it does not exist, or if there are none
      */
     public BufferedImage getThumbnail(int index) {
         if (this.thumbnails == null) {
@@ -130,22 +131,22 @@ public class IIOImage {
         return this.thumbnails.get(index);
     }
 
-    /** Las vistas previas, sin copiar. Ver la nota de la clase. */
+    /** The previews, not copied. See the class note. */
     public List<? extends BufferedImage> getThumbnails() {
         return this.thumbnails;
     }
 
-    /** Las cambia; tampoco copia. */
+    /** Replaces them; does not copy either. */
     public void setThumbnails(List<? extends BufferedImage> thumbnails) {
         this.thumbnails = thumbnails;
     }
 
-    /** La informacion asociada, o null. */
+    /** The associated information, or null. */
     public IIOMetadata getMetadata() {
         return this.metadata;
     }
 
-    /** La cambia. */
+    /** Replaces it. */
     public void setMetadata(IIOMetadata metadata) {
         this.metadata = metadata;
     }

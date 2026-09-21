@@ -5,14 +5,14 @@ import java.net.InetAddress;
 import java.net.ServerSocket;
 
 /**
- * La fabrica que devuelve {@code ServerSocketFactory.getDefault()}.
+ * The factory {@code ServerSocketFactory.getDefault()} returns.
  *
- * <p>De acceso de paquete: no es API. Cada metodo es el constructor de {@link ServerSocket} que le
- * corresponde; ver {@link DefaultSocketFactory}.
+ * <p>Package-private: it is not API. Each method is the {@link ServerSocket} constructor that
+ * corresponds to it; see {@link DefaultSocketFactory}.
  */
 final class DefaultServerSocketFactory extends ServerSocketFactory {
 
-    /** Uno sin atar; esta fabrica si sabe. */
+    /** An unbound one; this factory does know how. */
     @Override
     public ServerSocket createServerSocket() throws IOException {
         return new ServerSocket();

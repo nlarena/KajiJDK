@@ -6,19 +6,19 @@ import java.lang.classfile.constantpool.ClassEntry;
 import java.lang.constant.ClassDesc;
 import jdk.internal.classfile.impl.Instructions;
 
-// `checkcast` o `instanceof`. Las dos preguntan lo mismo; lo que cambia es qué hacen con la
-// respuesta, y eso lo dice `opcode()`.
+// `checkcast` or `instanceof`. Both ask the same thing; what changes is what they do with the
+// answer, and `opcode()` is what says that.
 public interface TypeCheckInstruction extends Instruction {
 
-    /** El tipo contra el que se compara. */
+    /** The type it is compared against. */
     ClassEntry type();
 
-    /** La instrucción de este opcode contra este tipo. */
+    /** The instruction of this opcode against this type. */
     public static TypeCheckInstruction of(Opcode op, ClassEntry type) {
         return Instructions.typeCheck(op, type);
     }
 
-    /** La instrucción de este opcode contra este tipo. */
+    /** The instruction of this opcode against this type. */
     public static TypeCheckInstruction of(Opcode op, ClassDesc type) {
         return Instructions.typeCheck(op, type);
     }

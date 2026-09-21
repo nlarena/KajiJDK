@@ -7,18 +7,20 @@ import java.awt.geom.Rectangle2D;
 import java.awt.image.ColorModel;
 
 /**
- * Un degradé que sale **desde un punto** en círculos concéntricos.
+ * A gradient that comes **out of a point** in concentric circles.
  *
- * <p>La primera parada está en el foco y la última sobre la circunferencia; en el medio, el color
- * depende de qué fracción del camino del foco al borde se recorrió.
+ * <p>The first stop is at the focus and the last on the circumference; in between, the colour
+ * depends on what fraction of the way from the focus to the edge has been covered.
  *
- * <p>El **foco** es lo que le da el aspecto de brillo. Con el foco en el centro, los anillos son
- * concéntricos y la cosa se ve plana; corriéndolo, los anillos se apiñan de un lado y se separan del
- * otro, y aparece la ilusión de una esfera iluminada desde ese punto.
+ * <p>The **focus** is what gives it the look of a highlight. With the focus at the centre, the
+ * rings are concentric and it looks flat; moving it, the rings crowd on one side and spread on the
+ * other, and the illusion of a sphere lit from that point appears.
  *
- * <p>Un foco sobre la circunferencia o fuera de ella no tiene solución —la fracción se iría a
- * infinito— así que se lo empuja hasta un 99% del radio. Es lo mismo que hace el JDK, y es preferible
- * a tirar por un punto que el que dibuja no eligió a propósito.
+ * <p>A focus on the circumference or outside it has no solution —the fraction would go to infinity—
+ * so it is pushed in to 99% of the radius. The JDK does the same with a slightly different
+ * threshold: it moves the focus when its squared distance passes 99% of the squared radius, which
+ * leaves it at about 99.5% of the radius. That is preferable to throwing over a point whoever draws
+ * did not choose on purpose.
  */
 public final class RadialGradientPaint extends MultipleGradientPaint {
 
@@ -27,9 +29,9 @@ public final class RadialGradientPaint extends MultipleGradientPaint {
     private final float radius;
 
     /**
-     * Con centro y radio, el foco en el centro, sin ciclo y en sRGB.
+     * With centre and radius, the focus at the centre, without cycling and in sRGB.
      *
-     * @throws IllegalArgumentException si el radio no es positivo o las paradas no son válidas
+     * @throws IllegalArgumentException if the radius is not positive or the stops are not valid
      */
     public RadialGradientPaint(float cx, float cy, float radius, float[] fractions,
             Color[] colors) {
@@ -37,18 +39,18 @@ public final class RadialGradientPaint extends MultipleGradientPaint {
     }
 
     /**
-     * Lo mismo, con el centro como objeto.
+     * The same, with the centre as an object.
      *
-     * @throws IllegalArgumentException si el radio no es positivo o las paradas no son válidas
+     * @throws IllegalArgumentException if the radius is not positive or the stops are not valid
      */
     public RadialGradientPaint(Point2D center, float radius, float[] fractions, Color[] colors) {
         this(center, radius, fractions, colors, CycleMethod.NO_CYCLE);
     }
 
     /**
-     * Con el ciclo dado.
+     * With the given cycle.
      *
-     * @throws IllegalArgumentException si el radio no es positivo o las paradas no son válidas
+     * @throws IllegalArgumentException if the radius is not positive or the stops are not valid
      */
     public RadialGradientPaint(float cx, float cy, float radius, float[] fractions,
             Color[] colors, CycleMethod cycleMethod) {
@@ -56,9 +58,9 @@ public final class RadialGradientPaint extends MultipleGradientPaint {
     }
 
     /**
-     * Con el ciclo dado y el centro como objeto.
+     * With the given cycle and the centre as an object.
      *
-     * @throws IllegalArgumentException si el radio no es positivo o las paradas no son válidas
+     * @throws IllegalArgumentException if the radius is not positive or the stops are not valid
      */
     public RadialGradientPaint(Point2D center, float radius, float[] fractions, Color[] colors,
             CycleMethod cycleMethod) {
@@ -67,9 +69,9 @@ public final class RadialGradientPaint extends MultipleGradientPaint {
     }
 
     /**
-     * Con el foco separado del centro.
+     * With the focus apart from the centre.
      *
-     * @throws IllegalArgumentException si el radio no es positivo o las paradas no son válidas
+     * @throws IllegalArgumentException if the radius is not positive or the stops are not valid
      */
     public RadialGradientPaint(float cx, float cy, float radius, float fx, float fy,
             float[] fractions, Color[] colors, CycleMethod cycleMethod) {
@@ -78,9 +80,9 @@ public final class RadialGradientPaint extends MultipleGradientPaint {
     }
 
     /**
-     * Con el foco separado del centro, ambos como objetos.
+     * With the focus apart from the centre, both as objects.
      *
-     * @throws IllegalArgumentException si el radio no es positivo o las paradas no son válidas
+     * @throws IllegalArgumentException if the radius is not positive or the stops are not valid
      */
     public RadialGradientPaint(Point2D center, float radius, Point2D focus, float[] fractions,
             Color[] colors, CycleMethod cycleMethod) {
@@ -89,12 +91,13 @@ public final class RadialGradientPaint extends MultipleGradientPaint {
     }
 
     /**
-     * A partir del rectángulo que encierra al círculo.
+     * From the rectangle that encloses the circle.
      *
-     * <p>Con un rectángulo que no sea cuadrado, el degradé sale **elíptico**: la transformación que
-     * lleva el cuadrado al rectángulo se guarda como transformación propia del degradé.
+     * <p>With a rectangle that is not square, the gradient comes out **elliptical**: the
+     * transformation that takes the square to the rectangle is kept as the gradient's own
+     * transformation.
      *
-     * @throws IllegalArgumentException si el rectángulo es vacío o las paradas no son válidas
+     * @throws IllegalArgumentException if the rectangle is empty or the stops are not valid
      */
     public RadialGradientPaint(Rectangle2D gradientBounds, float[] fractions, Color[] colors,
             CycleMethod cycleMethod) {
@@ -102,15 +105,15 @@ public final class RadialGradientPaint extends MultipleGradientPaint {
                 1.0f,
                 new Point2D.Double(gradientBounds.getCenterX(), gradientBounds.getCenterY()),
                 fractions, colors, cycleMethod, ColorSpaceType.SRGB,
-                transformacionDe(gradientBounds));
+                boundsTransform(gradientBounds));
     }
 
     /**
-     * La transformación que lleva el círculo unitario centrado en el rectángulo al rectángulo.
+     * The transformation that takes the unit circle centred on the rectangle to the rectangle.
      *
-     * @throws IllegalArgumentException si el rectángulo es vacío
+     * @throws IllegalArgumentException if the rectangle is empty
      */
-    private static AffineTransform transformacionDe(Rectangle2D r) {
+    private static AffineTransform boundsTransform(Rectangle2D r) {
         if (r == null) {
             throw new NullPointerException("Gradient bounds cannot be null");
         }
@@ -127,11 +130,11 @@ public final class RadialGradientPaint extends MultipleGradientPaint {
     }
 
     /**
-     * El constructor general.
+     * The general constructor.
      *
-     * @throws NullPointerException si falta cualquiera de los argumentos
-     * @throws IllegalArgumentException si el radio no es positivo, si hay menos de dos paradas o si
-     *     las fracciones no crecen
+     * @throws NullPointerException if any of the arguments is missing
+     * @throws IllegalArgumentException if the radius is not positive, if there are fewer than two
+     *     stops or if the fractions do not increase
      */
     public RadialGradientPaint(Point2D center, float radius, Point2D focus, float[] fractions,
             Color[] colors, CycleMethod cycleMethod, ColorSpaceType colorSpace,
@@ -148,85 +151,85 @@ public final class RadialGradientPaint extends MultipleGradientPaint {
         }
         this.center = new Point2D.Double(center.getX(), center.getY());
         this.radius = radius;
-        this.focus = ajustarFoco(center, focus, radius);
+        this.focus = clampFocus(center, focus, radius);
     }
 
-    /** El foco, empujado adentro del círculo si hacía falta. */
-    private static Point2D ajustarFoco(Point2D center, Point2D focus, float radius) {
+    /** The focus, pushed inside the circle if needed. */
+    private static Point2D clampFocus(Point2D center, Point2D focus, float radius) {
         double dx = focus.getX() - center.getX();
         double dy = focus.getY() - center.getY();
         double d = Math.sqrt(dx * dx + dy * dy);
-        double maximo = radius * 0.99;
-        if (d <= maximo) {
+        double limit = radius * 0.99;
+        if (d <= limit) {
             return new Point2D.Double(focus.getX(), focus.getY());
         }
-        double escala = maximo / d;
-        return new Point2D.Double(center.getX() + dx * escala, center.getY() + dy * escala);
+        double scale = limit / d;
+        return new Point2D.Double(center.getX() + dx * scale, center.getY() + dy * scale);
     }
 
-    /** El centro del círculo. */
+    /** The centre of the circle. */
     public Point2D getCenterPoint() {
         return new Point2D.Double(this.center.getX(), this.center.getY());
     }
 
-    /** Desde dónde sale el degradé. */
+    /** Where the gradient comes out of. */
     public Point2D getFocusPoint() {
         return new Point2D.Double(this.focus.getX(), this.focus.getY());
     }
 
-    /** El radio del círculo. */
+    /** The radius of the circle. */
     public float getRadius() {
         return this.radius;
     }
 
     /**
-     * Arma la máquina que genera los píxeles.
+     * Builds the machine that generates the pixels.
      *
-     * <p>Si la transformación combinada no se puede invertir, el degradé se degrada a la primera
-     * parada.
+     * <p>If the combined transformation cannot be inverted, the gradient degrades to the first
+     * stop.
      */
     public PaintContext createContext(ColorModel cm, Rectangle deviceBounds,
             Rectangle2D userBounds, AffineTransform xform, RenderingHints hints) {
         AffineTransform total = new AffineTransform(xform);
         total.concatenate(this.gradientTransform);
         try {
-            return new Contexto(total);
+            return new GradientContext(total);
         } catch (NoninvertibleTransformException e) {
             return this.colors[0].createContext(cm, deviceBounds, userBounds, xform, hints);
         }
     }
 
-    /** El contexto que calcula el degradé punto por punto. */
-    private final class Contexto extends RasterPaintContext {
+    /** The context that computes the gradient point by point. */
+    private final class GradientContext extends RasterPaintContext {
 
-        Contexto(AffineTransform xform) throws NoninvertibleTransformException {
+        GradientContext(AffineTransform xform) throws NoninvertibleTransformException {
             super(xform);
         }
 
-        int colorDe(double ux, double uy) {
+        int colorAt(double ux, double uy) {
             RadialGradientPaint p = RadialGradientPaint.this;
             double dx = ux - p.focus.getX();
             double dy = uy - p.focus.getY();
             double a = dx * dx + dy * dy;
             if (a == 0.0) {
-                return p.colorEn(0.0f);
+                return p.colorForFraction(0.0f);
             }
-            // Hasta donde llega el rayo foco->punto antes de salir del circulo: se resuelve la
-            // cuadratica |f + s*d - c|^2 = r^2 y se toma la raiz positiva. La fraccion es 1/s,
-            // porque el punto esta a distancia 1 del foco en unidades de ese rayo.
+            // How far the focus->point ray reaches before leaving the circle: the quadratic
+            // |f + s*d - c|^2 = r^2 is solved and the positive root taken. The fraction is 1/s,
+            // because the point is at distance 1 from the focus in units of that ray.
             double fx = p.focus.getX() - p.center.getX();
             double fy = p.focus.getY() - p.center.getY();
             double b = 2 * (fx * dx + fy * dy);
             double c = fx * fx + fy * fy - p.radius * (double) p.radius;
             double disc = b * b - 4 * a * c;
             if (disc < 0) {
-                return p.colorEn(1.0f);
+                return p.colorForFraction(1.0f);
             }
             double s = (-b + Math.sqrt(disc)) / (2 * a);
             if (s <= 0) {
-                return p.colorEn(1.0f);
+                return p.colorForFraction(1.0f);
             }
-            return p.colorEn((float) (1.0 / s));
+            return p.colorForFraction((float) (1.0 / s));
         }
     }
 }

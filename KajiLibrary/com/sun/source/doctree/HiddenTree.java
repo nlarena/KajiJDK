@@ -3,7 +3,7 @@ package com.sun.source.doctree;
 import java.util.List;
 
 /**
- * El nodo de `@hidden`, que saca al elemento de la documentacion generada.
+ * The node of `@hidden`, which takes the element out of the generated documentation.
  */
 public interface HiddenTree extends BlockTagTree {
 

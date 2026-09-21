@@ -5,27 +5,27 @@ import java.awt.Component;
 import javax.swing.JTable;
 
 /**
- * Como se dibuja una celda.
+ * How a cell is drawn.
  *
- * <h2>Un componente prestado, no uno por celda</h2>
+ * <h2>A borrowed component, not one per cell</h2>
  *
- * <p>El metodo devuelve un {@link Component}, y la tentacion es pensar que cada celda tiene el suyo.
- * No: una tabla de diez mil filas creando diez mil etiquetas seria inviable. Lo que se hace es
- * devolver <strong>siempre el mismo componente</strong>, reconfigurado con el valor de la celda que
- * toca, usarlo para pintar, y pasar a la siguiente.
+ * <p>The method returns a {@link Component}, and the temptation is to think each cell has its
+ * own. It does not: a table of ten thousand rows creating ten thousand labels would be unviable.
+ * What is done is to return <strong>always the same component</strong>, reconfigured with the
+ * value of the cell in turn, use it to paint, and move on to the next.
  *
- * <p>De ahi que el componente devuelto no deba guardarse ni suscribirse a nada: vive lo que dura un
- * pintado. Es el patron que el JDK llama <em>rubber stamp</em>, y explica que todos los parametros
- * —seleccionada, con foco, fila, columna— lleguen juntos: son todo lo que hace falta para
- * reconfigurarlo de una vez.
+ * <p>Hence the returned component must not be kept nor subscribed to anything: it lives as long
+ * as a paint lasts. It is the pattern the JDK calls <em>rubber stamp</em>, and it explains why
+ * all the parameters --selected, focused, row, column-- arrive together: they are everything
+ * needed to reconfigure it in one go.
  */
 public interface TableCellRenderer {
 
     /**
-     * Configura y devuelve el componente con el que pintar esa celda.
+     * Configures and returns the component to paint that cell with.
      *
-     * @param isSelected si la celda esta seleccionada
-     * @param hasFocus si tiene el foco del teclado
+     * @param isSelected whether the cell is selected
+     * @param hasFocus whether it has the keyboard focus
      */
     Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
             boolean hasFocus, int row, int column);

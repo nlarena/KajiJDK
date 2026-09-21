@@ -7,24 +7,24 @@ import java.io.InputStream;
 import java.io.InterruptedIOException;
 
 /**
- * Un flujo de entrada que muestra el progreso de la lectura.
+ * An input stream that shows the reading's progress.
  *
- * <h2>Se envuelve, no se configura</h2>
+ * <h2>It is wrapped, not configured</h2>
  *
- * <p>Se le pasa el flujo de verdad y se lee de este. Cada lectura avanza el
- * {@link ProgressMonitor}, y el monitor decide solo si vale la pena mostrar un cartel -- ver su
- * nota, que explica las dos demoras.
+ * <p>It is passed the real stream and this one is read from. Each reading advances the
+ * {@link ProgressMonitor}, and the monitor decides on its own whether it is worth showing a
+ * notice -- see its note, which explains the two delays.
  *
- * <p>El maximo sale de {@code available()}, que para un archivo es su tamano. Para algo que no lo
- * sabe -- una conexion de red -- da cero y la barra queda quieta: no hay de donde sacar cuanto
- * falta, y esta clase no lo inventa.
+ * <p>The maximum comes from {@code available()}, which for a file is its size. For something
+ * that does not know it -- a network connection -- it gives zero and the bar stays still: there
+ * is nothing to work out how much is left from, and this class does not invent it.
  *
- * <h2>Cancelar corta la lectura</h2>
+ * <h2>Cancelling cuts the reading off</h2>
  *
- * <p>Y lo hace como corresponde: lanzando {@link InterruptedIOException}, que es una
- * {@link IOException} y por lo tanto la atrapa cualquiera que ya estuviera manejando errores de
- * lectura. Es la unica forma de que una cancelacion no se pierda en un {@code catch} que solo mira
- * problemas de disco.
+ * <p>And it does it properly: by throwing {@link InterruptedIOException}, which is an
+ * {@link IOException} and therefore is caught by anybody who was already handling reading
+ * errors. It is the only way for a cancellation not to be lost in a {@code catch} that only
+ * looks at disk problems.
  */
 public class ProgressMonitorInputStream extends FilterInputStream {
 
@@ -36,10 +36,10 @@ public class ProgressMonitorInputStream extends FilterInputStream {
     Object message;
 
     /**
-     * Envuelve ese flujo.
+     * It wraps that stream.
      *
-     * <p>Lee {@code available()} para saber el total; si el flujo no lo sabe, queda en cero. Ver la
-     * nota de la clase.
+     * <p>It reads {@code available()} in order to know the total; if the stream does not know it,
+     * it is left at zero. See the class note.
      */
     public ProgressMonitorInputStream(Component parentComponent, Object message,
             InputStream in) {
@@ -49,20 +49,22 @@ public class ProgressMonitorInputStream extends FilterInputStream {
         try {
             size = in.available();
         } catch (IOException ioe) {
-            // Un flujo que no sabe cuanto tiene no es un error: la barra queda quieta.
+            // A stream that does not know how much it has is not an error: the bar stays still.
             size = 0;
         }
         monitor = new ProgressMonitor(parentComponent, message, null, 0, size);
     }
 
-    /** El monitor, por si hay que cambiarle una demora o leer si lo cancelaron. */
+    /**
+     * The monitor, in case a delay has to be changed or whether it was cancelled has to be read.
+     */
     public ProgressMonitor getProgressMonitor() {
         return monitor;
     }
 
     /**
-     * @throws InterruptedIOException si el usuario cancelo
-     * @throws IOException si falla la lectura
+     * @throws InterruptedIOException if the user cancelled
+     * @throws IOException if the reading fails
      */
     public int read() throws IOException {
         int c = in.read();
@@ -70,13 +72,13 @@ public class ProgressMonitorInputStream extends FilterInputStream {
             nread = nread + 1;
             monitor.setProgress(nread);
         }
-        controlarCancelacion();
+        checkCancel();
         return c;
     }
 
     /**
-     * @throws InterruptedIOException si el usuario cancelo
-     * @throws IOException si falla la lectura
+     * @throws InterruptedIOException if the user cancelled
+     * @throws IOException if the reading fails
      */
     public int read(byte[] b) throws IOException {
         int nr = in.read(b);
@@ -84,13 +86,13 @@ public class ProgressMonitorInputStream extends FilterInputStream {
             nread = nread + nr;
             monitor.setProgress(nread);
         }
-        controlarCancelacion();
+        checkCancel();
         return nr;
     }
 
     /**
-     * @throws InterruptedIOException si el usuario cancelo
-     * @throws IOException si falla la lectura
+     * @throws InterruptedIOException if the user cancelled
+     * @throws IOException if the reading fails
      */
     public int read(byte[] b, int off, int len) throws IOException {
         int nr = in.read(b, off, len);
@@ -98,14 +100,14 @@ public class ProgressMonitorInputStream extends FilterInputStream {
             nread = nread + nr;
             monitor.setProgress(nread);
         }
-        controlarCancelacion();
+        checkCancel();
         return nr;
     }
 
     /**
-     * Saltea bytes; tambien cuentan como avance.
+     * It skips bytes; they count as progress too.
      *
-     * @throws IOException si falla
+     * @throws IOException if it fails
      */
     public long skip(long n) throws IOException {
         long nr = in.skip(n);
@@ -117,9 +119,9 @@ public class ProgressMonitorInputStream extends FilterInputStream {
     }
 
     /**
-     * Cierra el flujo y el cartel.
+     * It closes the stream and the notice.
      *
-     * @throws IOException si falla el cierre
+     * @throws IOException if the closing fails
      */
     public void close() throws IOException {
         in.close();
@@ -127,9 +129,9 @@ public class ProgressMonitorInputStream extends FilterInputStream {
     }
 
     /**
-     * Vuelve al principio; el progreso vuelve con el.
+     * It goes back to the beginning; the progress goes back with it.
      *
-     * @throws IOException si el flujo no soporta volver
+     * @throws IOException if the stream does not support going back
      */
     public synchronized void reset() throws IOException {
         in.reset();
@@ -138,9 +140,9 @@ public class ProgressMonitorInputStream extends FilterInputStream {
     }
 
     /**
-     * @throws InterruptedIOException si el usuario cancelo
+     * @throws InterruptedIOException if the user cancelled
      */
-    private void controlarCancelacion() throws InterruptedIOException {
+    private void checkCancel() throws InterruptedIOException {
         if (monitor.isCanceled()) {
             InterruptedIOException exc = new InterruptedIOException("progress");
             exc.bytesTransferred = nread;

@@ -7,11 +7,11 @@ import javax.swing.MenuElement;
 import javax.swing.MenuSelectionManager;
 
 /**
- * El mouse se arrastro sobre un menu abierto.
+ * The mouse was dragged over an open menu.
  *
- * <p>Es un {@link MouseEvent} <strong>mas el camino</strong>. Sin el camino, un item de menu que
- * recibe un arrastre no sabria de que submenu viene el mouse, y eso es lo que decide que cerrar al
- * pasar de una rama a otra. Ver {@link MenuElement}.
+ * <p>It is a {@link MouseEvent} <strong>plus the path</strong>. Without the path, a menu item
+ * that receives a drag would not know which submenu the mouse is coming from, and that is what
+ * decides what to close when going from one branch to another. See {@link MenuElement}.
  */
 public class MenuDragMouseEvent extends MouseEvent {
 
@@ -20,7 +20,7 @@ public class MenuDragMouseEvent extends MouseEvent {
     private MenuElement[] path;
     private MenuSelectionManager manager;
 
-    /** Sin cantidad de clics ni boton, que en un arrastre no aportan. */
+    /** Without click count or button, which in a drag add nothing. */
     public MenuDragMouseEvent(Component source, int id, long when, int modifiers, int x, int y,
             int clickCount, boolean popupTrigger, MenuElement[] p, MenuSelectionManager m) {
         super(source, id, when, modifiers, x, y, clickCount, popupTrigger);
@@ -28,7 +28,7 @@ public class MenuDragMouseEvent extends MouseEvent {
         this.manager = m;
     }
 
-    /** Con posicion absoluta y boton. */
+    /** With absolute position and button. */
     public MenuDragMouseEvent(Component source, int id, long when, int modifiers, int x, int y,
             int xAbs, int yAbs, int clickCount, boolean popupTrigger, MenuElement[] p,
             MenuSelectionManager m) {
@@ -38,12 +38,12 @@ public class MenuDragMouseEvent extends MouseEvent {
         this.manager = m;
     }
 
-    /** El camino desde la barra hasta el elemento. */
+    /** The path from the bar to the element. */
     public MenuElement[] getPath() {
         return this.path;
     }
 
-    /** Quien administra la seleccion del menu. */
+    /** Who manages the menu's selection. */
     public MenuSelectionManager getMenuSelectionManager() {
         return this.manager;
     }

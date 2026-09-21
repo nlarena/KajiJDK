@@ -1,26 +1,26 @@
 package javax.management;
 
 /**
- * "El atributo, que es una cadena, coincide con este patron."
+ * "The attribute, which is a string, matches this pattern."
  *
- * <p>De paquete: se fabrica con {@link Query#match} y con los tres atajos de subcadena.
+ * <p>Package-private: it is made with {@link Query#match} and with the three substring shortcuts.
  *
- * <p>Su lenguaje de patrones <b>no</b> es el de {@link ObjectName}. Ademas de {@code *} y {@code ?}
- * tiene <b>clases de caracteres</b> entre corchetes, con rangos ({@code [a-z]}) y negacion
- * ({@code [!abc]}), y una barra invertida que escapa el caracter siguiente. Es mas parecido a un
- * glob de shell que a un comodin de JMX, y confundirlos es un error facil.
+ * <p>Its pattern language is <b>not</b> that of {@link ObjectName}. Besides {@code *} and {@code ?}
+ * it has <b>character classes</b> in brackets, with ranges ({@code [a-z]}) and negation
+ * ({@code [!abc]}), and a backslash that escapes the next character. It is more like a shell glob
+ * than a JMX wildcard, and confusing them is an easy mistake.
  */
 class MatchQueryExp extends QueryEval implements QueryExp {
 
     private static final long serialVersionUID = -7156603696948215014L;
 
     /**
-     * @serial el atributo
+     * @serial the attribute
      */
     private AttributeValueExp exp;
 
     /**
-     * @serial el patron
+     * @serial the pattern
      */
     private String pattern;
 
@@ -59,52 +59,52 @@ class MatchQueryExp extends QueryEval implements QueryExp {
     }
 
     /**
-     * Coincidencia estilo glob, sin recursion.
+     * Glob-style matching, without recursion.
      *
-     * <p>Se resuelve con retroceso sobre la ultima {@code *} vista, igual que el comodin de
-     * {@link ObjectName}, para que un patron hostil no pueda desbordar la pila.
+     * <p>It is resolved by backtracking over the last {@code *} seen, like {@link ObjectName}'s
+     * wildcard, so that a hostile pattern cannot overflow the stack.
      */
-    private static boolean coincide(String pat, String texto) {
+    private static boolean coincide(String pat, String text) {
         int p = 0;
         int t = 0;
-        int estrella = -1;
-        int marca = 0;
-        while (t < texto.length()) {
-            boolean avanza = false;
+        int star = -1;
+        int mark = 0;
+        while (t < text.length()) {
+            boolean advances = false;
             if (p < pat.length()) {
                 char c = pat.charAt(p);
                 if (c == '\\') {
-                    if (p + 1 < pat.length() && pat.charAt(p + 1) == texto.charAt(t)) {
+                    if (p + 1 < pat.length() && pat.charAt(p + 1) == text.charAt(t)) {
                         p += 2;
                         t++;
-                        avanza = true;
+                        advances = true;
                     }
                 } else if (c == '[') {
-                    int fin = cierre(pat, p);
-                    if (fin > 0 && enClase(pat, p, fin, texto.charAt(t))) {
-                        p = fin + 1;
+                    int end = closing(pat, p);
+                    if (end > 0 && inClass(pat, p, end, text.charAt(t))) {
+                        p = end + 1;
                         t++;
-                        avanza = true;
+                        advances = true;
                     }
-                } else if (c == '?' || c == texto.charAt(t)) {
+                } else if (c == '?' || c == text.charAt(t)) {
                     p++;
                     t++;
-                    avanza = true;
+                    advances = true;
                 }
             }
-            if (avanza) {
+            if (advances) {
                 continue;
             }
             if (p < pat.length() && pat.charAt(p) == '*') {
-                estrella = p;
-                marca = t;
+                star = p;
+                mark = t;
                 p++;
                 continue;
             }
-            if (estrella >= 0) {
-                p = estrella + 1;
-                marca++;
-                t = marca;
+            if (star >= 0) {
+                p = star + 1;
+                mark++;
+                t = mark;
                 continue;
             }
             return false;
@@ -115,9 +115,9 @@ class MatchQueryExp extends QueryEval implements QueryExp {
         return p == pat.length();
     }
 
-    /** Indice del {@code ]} que cierra la clase que abre en `inicio`, o -1. */
-    private static int cierre(String pat, int inicio) {
-        int i = inicio + 1;
+    /** Index of the {@code ]} that closes the class opening at {@code start}, or -1. */
+    private static int closing(String pat, int start) {
+        int i = start + 1;
         if (i < pat.length() && pat.charAt(i) == '!') {
             i++;
         }
@@ -133,29 +133,29 @@ class MatchQueryExp extends QueryEval implements QueryExp {
         return -1;
     }
 
-    private static boolean enClase(String pat, int inicio, int fin, char c) {
-        int i = inicio + 1;
-        boolean negada = false;
-        if (i < fin && pat.charAt(i) == '!') {
-            negada = true;
+    private static boolean inClass(String pat, int start, int end, char c) {
+        int i = start + 1;
+        boolean negated = false;
+        if (i < end && pat.charAt(i) == '!') {
+            negated = true;
             i++;
         }
-        boolean hay = false;
-        while (i < fin) {
+        boolean any = false;
+        while (i < end) {
             char a = pat.charAt(i);
-            if (i + 2 < fin && pat.charAt(i + 1) == '-') {
+            if (i + 2 < end && pat.charAt(i + 1) == '-') {
                 char b = pat.charAt(i + 2);
                 if (a <= c && c <= b) {
-                    hay = true;
+                    any = true;
                 }
                 i += 3;
             } else {
                 if (a == c) {
-                    hay = true;
+                    any = true;
                 }
                 i++;
             }
         }
-        return negada ? !hay : hay;
+        return negated ? !any : any;
     }
 }

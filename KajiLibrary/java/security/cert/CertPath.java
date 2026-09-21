@@ -5,16 +5,16 @@ import java.io.Serializable;
 import java.util.Iterator;
 import java.util.List;
 
-// Una cadena de certificados: del que interesa hacia arriba, en orden.
+// A chain of certificates: from the one of interest upwards, in order.
 //
-// El orden es parte del tipo y no una convencion: el primero es el certificado del sujeto, cada
-// uno esta firmado por el siguiente, y el ultimo suele ser el que se compara contra un ancla de
-// confianza. Una lista desordenada seria un conjunto de certificados, no un camino, y validar un
-// camino es exactamente seguir esa cadena.
+// The order is part of the type and not a convention: the first is the certificate of the subject,
+// each one is signed by the next, and the last is usually the one that is compared against a trust
+// anchor. An unordered list would be a set of certificates, not a path, and validating a path is
+// exactly following that chain.
 //
-// Igual que `Certificate`, la igualdad es por contenido —mismo tipo y misma lista— y todo lo que
-// requiere criptografia es abstracto. Esta clase no valida nada; validar es trabajo de
-// `CertPathValidator`, que no existe en esta biblioteca.
+// Just like `Certificate`, the equality is by contents —the same type and the same list— and
+// everything that requires cryptography is abstract. This class validates nothing; validating is
+// the work of `CertPathValidator`, which does not exist in this library.
 public abstract class CertPath implements Serializable {
 
     private final String type;
@@ -27,7 +27,7 @@ public abstract class CertPath implements Serializable {
         return this.type;
     }
 
-    // Los nombres de las codificaciones soportadas, con la preferida primero.
+    // The names of the supported encodings, with the preferred one first.
     public abstract Iterator<String> getEncodings();
 
     @Override
@@ -78,11 +78,11 @@ public abstract class CertPath implements Serializable {
 
     public abstract byte[] getEncoded(String encoding) throws CertificateEncodingException;
 
-    // Los certificados, del sujeto hacia la raiz. Inmutable.
+    // The certificates, from the subject towards the root. Immutable.
     public abstract List<? extends Certificate> getCertificates();
 
-    // A KajiLibrary subset, por el mismo motivo que en `Certificate`: sin `CertificateFactory` no
-    // hay forma de reconstruir el camino al deserializar.
+    // A KajiLibrary subset, for the same reason as in `Certificate`: without `CertificateFactory`
+    // there is no way of rebuilding the path when deserialising.
     protected Object writeReplace() throws ObjectStreamException {
         throw new java.io.NotSerializableException(
             "java.security.cert.CertPath: no CertificateFactory available to restore it");

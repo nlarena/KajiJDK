@@ -21,35 +21,37 @@ import javax.swing.event.DocumentListener;
 import javax.swing.event.EventListenerList;
 
 /**
- * El cursor de siempre: una raya vertical que parpadea, con la seleccion como resaltado.
+ * The usual cursor: a blinking vertical line, with the selection as a highlight.
  *
- * <h2>Es un rectangulo</h2>
+ * <h2>It is a rectangle</h2>
  *
- * <p>Hereda de {@link Rectangle}, y eso no es una rareza: el cursor <em>es</em> el rectangulo que
- * ocupa, y tenerlo como campos propios evita reservar uno por cada repintado. Los campos {@code x},
- * {@code y}, {@code width} y {@code height} son su posicion en la pantalla.
+ * <p>It inherits from {@link Rectangle}, and that is not an oddity: the cursor <em>is</em> the
+ * rectangle it occupies, and having it as fields of its own avoids allocating one on every
+ * repaint. The fields {@code x}, {@code y}, {@code width} and {@code height} are its position on
+ * the screen.
  *
- * <h2>La seleccion no la dibuja el cursor</h2>
+ * <h2>The cursor does not draw the selection</h2>
  *
- * <p>El cursor pone un resaltado en el {@link Highlighter} del componente y lo va cambiando de
- * rango. Por eso {@link #setSelectionVisible} solo agrega o saca ese resaltado: la seleccion
- * existe en el modelo aunque no se vea.
+ * <p>The cursor puts a highlight in the component's {@link Highlighter} and keeps changing its
+ * range. That is why {@link #setSelectionVisible} only adds or removes that highlight: the
+ * selection exists in the model even if it is not seen.
  *
- * <h2>El parpadeo</h2>
+ * <h2>The blinking</h2>
  *
- * <p>Un {@link Timer} lo prende y lo apaga. Sin pantalla no hay nada que se vea parpadear, pero el
- * reloj corre igual y el cursor cambia de visible a invisible: lo que falta es quien lo dibuje.
+ * <p>A {@link Timer} turns it on and off. Without a screen there is nothing to be seen blinking,
+ * but the clock runs all the same and the cursor goes from visible to invisible: what is missing
+ * is somebody to draw it.
  */
 public class DefaultCaret extends Rectangle implements Caret, FocusListener, MouseListener,
         MouseMotionListener {
 
-    /** Actualizar la posicion solo si el cambio vino del hilo de eventos. */
+    /** Update the position only if the change came from the event thread. */
     public static final int UPDATE_WHEN_ON_EDT = 0;
 
-    /** No acomodar nunca la posicion cuando el documento cambia. */
+    /** Never fix up the position when the document changes. */
     public static final int NEVER_UPDATE = 1;
 
-    /** Acomodarla siempre. */
+    /** Always fix it up. */
     public static final int ALWAYS_UPDATE = 2;
 
     protected EventListenerList listenerList = new EventListenerList();
@@ -75,13 +77,13 @@ public class DefaultCaret extends Rectangle implements Caret, FocusListener, Mou
     private transient int[] flagXPoints = new int[3];
     private transient int[] flagYPoints = new int[3];
 
-    /** Un cursor en la posicion cero, invisible hasta que lo instalen. */
+    /** A cursor at position zero, invisible until it is installed. */
     public DefaultCaret() {
         dotBias = Position.Bias.Forward;
         markBias = Position.Bias.Forward;
     }
 
-    /** Cuando acomodar la posicion ante un cambio del documento. */
+    /** When to fix up the position on a change of the document. */
     public void setUpdatePolicy(int policy) {
         updatePolicy = policy;
     }
@@ -94,7 +96,7 @@ public class DefaultCaret extends Rectangle implements Caret, FocusListener, Mou
         return component;
     }
 
-    /** Manda repintar donde esta el cursor. */
+    /** It asks for a repaint where the cursor is. */
     protected final synchronized void repaint() {
         if (component != null) {
             component.repaint(x, y, width, height);
@@ -102,10 +104,10 @@ public class DefaultCaret extends Rectangle implements Caret, FocusListener, Mou
     }
 
     /**
-     * Calcula el rectangulo del cursor y lo manda repintar.
+     * It computes the cursor's rectangle and asks for a repaint.
      *
-     * <p>Repinta lo viejo y lo nuevo: si solo repintara lo nuevo, quedaria un cursor dibujado
-     * donde ya no esta.
+     * <p>It repaints the old and the new: if it repainted only the new, a cursor would be left
+     * drawn where it no longer is.
      */
     protected synchronized void damage(Rectangle r) {
         if (r != null) {
@@ -118,7 +120,7 @@ public class DefaultCaret extends Rectangle implements Caret, FocusListener, Mou
         }
     }
 
-    /** Pide que el componente se desplace para que el cursor se vea. */
+    /** It asks the component to scroll so that the cursor is seen. */
     protected void adjustVisibility(Rectangle nloc) {
         if (component == null) {
             return;
@@ -126,12 +128,12 @@ public class DefaultCaret extends Rectangle implements Caret, FocusListener, Mou
         component.scrollRectToVisible(nloc);
     }
 
-    /** Quien pinta la seleccion: el pintor por omision del resaltador. */
+    /** Who paints the selection: the highlighter's default painter. */
     protected Highlighter.HighlightPainter getSelectionPainter() {
         return DefaultHighlighter.DefaultPainter;
     }
 
-    /** Lleva el cursor a donde se hizo clic. */
+    /** It takes the cursor to where the click happened. */
     protected void positionCaret(MouseEvent e) {
         Point pt = new Point(e.getX(), e.getY());
         Position.Bias[] biasRet = new Position.Bias[1];
@@ -144,7 +146,7 @@ public class DefaultCaret extends Rectangle implements Caret, FocusListener, Mou
         }
     }
 
-    /** Extiende la seleccion hasta donde se arrastro. */
+    /** It extends the selection to where the drag went. */
     protected void moveCaret(MouseEvent e) {
         Point pt = new Point(e.getX(), e.getY());
         Position.Bias[] biasRet = new Position.Bias[1];
@@ -174,7 +176,7 @@ public class DefaultCaret extends Rectangle implements Caret, FocusListener, Mou
     public void mouseClicked(MouseEvent e) {
     }
 
-    /** Un clic ubica el cursor; con Shift, extiende la seleccion. */
+    /** A click places the cursor; with Shift, it extends the selection. */
     public void mousePressed(MouseEvent e) {
         if (SwingUtilities.isLeftMouseButton(e)) {
             adjustCaretAndFocus(e);
@@ -196,7 +198,7 @@ public class DefaultCaret extends Rectangle implements Caret, FocusListener, Mou
     public void mouseExited(MouseEvent e) {
     }
 
-    /** Arrastrar extiende la seleccion. */
+    /** Dragging extends the selection. */
     public void mouseDragged(MouseEvent e) {
         if (SwingUtilities.isLeftMouseButton(e)) {
             moveCaret(e);
@@ -206,7 +208,7 @@ public class DefaultCaret extends Rectangle implements Caret, FocusListener, Mou
     public void mouseMoved(MouseEvent e) {
     }
 
-    /** Dibuja la raya, si esta visible. */
+    /** It draws the line, if it is visible. */
     public void paint(Graphics g) {
         if (isVisible()) {
             try {
@@ -222,7 +224,7 @@ public class DefaultCaret extends Rectangle implements Caret, FocusListener, Mou
                     return;
                 }
                 if (width > 0 && height > 0 && !this.contains(r.x, r.y, r.width, r.height)) {
-                    // Se movio sin que nadie repintara: se acomoda el rectangulo.
+                    // It moved without anybody repainting: the rectangle is fixed up.
                     Rectangle clip = g.getClipBounds();
                     if (clip != null && !clip.contains(this)) {
                         repaint();
@@ -234,12 +236,12 @@ public class DefaultCaret extends Rectangle implements Caret, FocusListener, Mou
                 r.x = r.x - paintWidth / 2;
                 g.fillRect(r.x, r.y, paintWidth, r.height);
             } catch (BadLocationException e) {
-                // No se pudo ubicar: no se dibuja nada.
+                // It could not be placed: nothing is drawn.
             }
         }
     }
 
-    /** Se engancha al componente y a su documento. */
+    /** It hooks itself to the component and to its document. */
     public void install(JTextComponent c) {
         component = c;
         Document doc = c.getDocument();
@@ -286,7 +288,7 @@ public class DefaultCaret extends Rectangle implements Caret, FocusListener, Mou
         return listenerList.getListeners(ChangeListener.class);
     }
 
-    /** Avisa que el cursor se movio; el componente lo reenvia como evento de cursor. */
+    /** It reports that the cursor moved; the component forwards it as a caret event. */
     protected void fireStateChanged() {
         Object[] listeners = listenerList.getListenerList();
         for (int i = listeners.length - 2; i >= 0; i = i - 2) {
@@ -303,7 +305,7 @@ public class DefaultCaret extends Rectangle implements Caret, FocusListener, Mou
         return listenerList.getListeners(listenerType);
     }
 
-    /** Pone o saca el resaltado de la seleccion; ver la nota de la clase. */
+    /** It adds or removes the selection's highlight; see the class note. */
     public void setSelectionVisible(boolean vis) {
         if (vis != selectionVisible) {
             selectionVisible = vis;
@@ -333,7 +335,7 @@ public class DefaultCaret extends Rectangle implements Caret, FocusListener, Mou
         return selectionVisible;
     }
 
-    /** Si el cursor esta prendido en este instante del parpadeo. */
+    /** Whether the cursor is on at this instant of the blinking. */
     public boolean isActive() {
         return active;
     }
@@ -342,7 +344,7 @@ public class DefaultCaret extends Rectangle implements Caret, FocusListener, Mou
         return visible;
     }
 
-    /** Prende o apaga el cursor, y con el, el reloj del parpadeo. */
+    /** It turns the cursor on or off, and with it, the blinking clock. */
     public void setVisible(boolean e) {
         if (component != null) {
             validateBounds();
@@ -361,11 +363,11 @@ public class DefaultCaret extends Rectangle implements Caret, FocusListener, Mou
         active = e;
     }
 
-    /** Cada cuanto parpadea; cero lo deja fijo. */
+    /** How often it blinks; zero leaves it steady. */
     public void setBlinkRate(int rate) {
         if (rate != 0) {
             if (flasher == null) {
-                flasher = new Timer(rate, new Parpadeo(this));
+                flasher = new Timer(rate, new Blink(this));
             }
             flasher.setDelay(rate);
         } else {
@@ -388,12 +390,12 @@ public class DefaultCaret extends Rectangle implements Caret, FocusListener, Mou
         return mark;
     }
 
-    /** Mueve el cursor y deshace la seleccion. */
+    /** It moves the cursor and undoes the selection. */
     public void setDot(int dot) {
         setDot(dot, Position.Bias.Forward);
     }
 
-    /** Mueve el cursor y extiende la seleccion. */
+    /** It moves the cursor and extends the selection. */
     public void moveDot(int dot) {
         moveDot(dot, Position.Bias.Forward);
     }
@@ -435,7 +437,7 @@ public class DefaultCaret extends Rectangle implements Caret, FocusListener, Mou
                             selectionTag = h.addHighlight(p0, p1, p);
                         }
                     } catch (BadLocationException e) {
-                        // El tramo dejo de existir: se ignora.
+                        // The stretch stopped existing: it is ignored.
                     }
                 }
             }
@@ -500,7 +502,7 @@ public class DefaultCaret extends Rectangle implements Caret, FocusListener, Mou
         return Position.Bias.Forward;
     }
 
-    /** Cambia la posicion, repinta lo viejo y lo nuevo, y avisa. */
+    /** It changes the position, repaints the old and the new, and reports. */
     void changeCaretPosition(int dot, Position.Bias dotBias) {
         repaint();
         this.dot = dot;
@@ -532,11 +534,11 @@ public class DefaultCaret extends Rectangle implements Caret, FocusListener, Mou
         }
     }
 
-    /** Recalcula el rectangulo si el componente cambio de tamano. */
+    /** It recomputes the rectangle if the component changed size. */
     private void validateBounds() {
     }
 
-    /** La columna que el cursor recuerda al subir y bajar; ver {@link Caret}. */
+    /** The column the cursor remembers when going up and down; see {@link Caret}. */
     public void setMagicCaretPosition(Point p) {
         magicCaretPosition = p;
     }
@@ -555,7 +557,7 @@ public class DefaultCaret extends Rectangle implements Caret, FocusListener, Mou
         return s;
     }
 
-    /** El ancho de la raya; uno, salvo que el componente pida otro. */
+    /** The line's width; one, unless the component asks for another. */
     int getCaretWidth(int height) {
         return 1;
     }
@@ -569,7 +571,7 @@ public class DefaultCaret extends Rectangle implements Caret, FocusListener, Mou
         return filterBypass;
     }
 
-    /** El atajo que usa el filtro de navegacion para mover el cursor de verdad. */
+    /** The shortcut the navigation filter uses to really move the cursor. */
     static class DefaultFilterBypass extends NavigationFilter.FilterBypass {
 
         private final DefaultCaret cursor;
@@ -591,12 +593,12 @@ public class DefaultCaret extends Rectangle implements Caret, FocusListener, Mou
         }
     }
 
-    /** Prende y apaga el cursor; lo llama el reloj. */
-    static class Parpadeo implements ActionListener {
+    /** It turns the cursor on and off; the clock calls it. */
+    static class Blink implements ActionListener {
 
         private final DefaultCaret cursor;
 
-        Parpadeo(DefaultCaret cursor) {
+        Blink(DefaultCaret cursor) {
             this.cursor = cursor;
         }
 
@@ -607,11 +609,11 @@ public class DefaultCaret extends Rectangle implements Caret, FocusListener, Mou
     }
 
     /**
-     * Acomoda la posicion cuando el documento cambia.
+     * It fixes up the position when the document changes.
      *
-     * <p>Si se inserto antes del cursor, el cursor se corre; si se borro alrededor, se pega al
-     * hueco. Sin esto, escribir al principio de un texto dejaria el cursor donde estaba y el
-     * usuario veria su cursor "retroceder".
+     * <p>If something was inserted before the cursor, the cursor shifts; if something was removed
+     * around it, it sticks to the gap. Without this, typing at the start of a text would leave the
+     * cursor where it was and the user would see their cursor "go backwards".
      */
     static class Handler implements DocumentListener, java.beans.PropertyChangeListener {
 

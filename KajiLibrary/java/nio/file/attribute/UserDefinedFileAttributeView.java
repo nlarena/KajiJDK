@@ -4,31 +4,31 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
 
-// La vista `"user"`: atributos extendidos, pares nombre-bytes que el usuario cuelga del archivo y
-// que el sistema no interpreta.
+// The `"user"` view: extended attributes, name-bytes pairs the user hangs off the file and the
+// system does not interpret.
 //
-// `read` y `write` toman un `ByteBuffer` en vez de un `byte[]` porque el valor puede ser grande y
-// asi quien llama elige donde vive el buffer; el valor se lee o se escribe **entero de una**, no hay
-// posicion dentro del atributo.
+// `read` and `write` take a `ByteBuffer` rather than a `byte[]` because the value can be large and
+// that way the caller chooses where the buffer lives; the value is read or written **whole at
+// once**, there is no position within the attribute.
 //
-// Sin implementacion en KajiJDK: no hay nativo de atributos extendidos.
+// Without an implementation in KajiJDK: there is no native for extended attributes.
 public interface UserDefinedFileAttributeView extends FileAttributeView {
 
-    /** Siempre `"user"`. */
+    /** Always `"user"`. */
     String name();
 
-    /** Los nombres de los atributos que tiene el archivo. */
+    /** The names of the attributes the file has. */
     List<String> list() throws IOException;
 
-    /** El tamaño en bytes del atributo `name`. */
+    /** The size in bytes of the attribute `name`. */
     int size(String name) throws IOException;
 
-    /** Copia el valor de `name` en `dst`; devuelve cuantos bytes copio. */
+    /** It copies `name`'s value into `dst`; it returns how many bytes it copied. */
     int read(String name, ByteBuffer dst) throws IOException;
 
-    /** Escribe el valor de `name` desde `src`; devuelve cuantos bytes escribio. */
+    /** It writes `name`'s value from `src`; it returns how many bytes it wrote. */
     int write(String name, ByteBuffer src) throws IOException;
 
-    /** Borra el atributo `name`. */
+    /** It deletes the attribute `name`. */
     void delete(String name) throws IOException;
 }

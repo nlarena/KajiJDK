@@ -4,28 +4,28 @@ import javax.imageio.IIOException;
 import org.w3c.dom.Node;
 
 /**
- * KajiLibrary's javax.imageio.metadata.IIOInvalidTreeException -- ese arbol de metadatos no sirve.
+ * KajiLibrary's javax.imageio.metadata.IIOInvalidTreeException -- that metadata tree is not valid.
  *
- * <p>La lanzan {@code IIOMetadata.setFromTree} y {@code mergeTree} cuando el arbol que se les da no
- * respeta el formato declarado.
+ * <p>Thrown by {@code IIOMetadata.setFromTree} and {@code mergeTree} when the tree they are given
+ * does not follow the declared format.
  *
- * <p>Lo que la hace util es {@link #getOffendingNode}: dice <b>cual</b> nodo esta mal. Un arbol de
- * metadatos tiene decenas de nodos y un mensaje del estilo "atributo invalido" sin decir donde obliga
- * a buscarlo a mano.
+ * <p>What makes it useful is {@link #getOffendingNode}: it says <b>which</b> node is wrong. A
+ * metadata tree has dozens of nodes, and a message like "invalid attribute" without saying where
+ * forces you to search for it by hand.
  *
- * <p>Puede devolver null si el problema es del arbol entero --la raiz no es la que el formato pide--
- * y no de un nodo en particular.
+ * <p>It may return null if the problem is with the whole tree --the root is not the one the format
+ * asks for-- and not with a particular node.
  */
 public class IIOInvalidTreeException extends IIOException {
 
     private static final long serialVersionUID = -1314083172544132777L;
 
-    /** Cual nodo esta mal, o null. */
+    /** Which node is wrong, or null. */
     protected Node offendingNode = null;
 
     /**
-     * @param message que esta mal
-     * @param offendingNode cual nodo, o null
+     * @param message what is wrong
+     * @param offendingNode which node, or null
      */
     public IIOInvalidTreeException(String message, Node offendingNode) {
         super(message);
@@ -33,16 +33,16 @@ public class IIOInvalidTreeException extends IIOException {
     }
 
     /**
-     * Idem, envolviendo la original.
+     * Same, wrapping the original.
      *
-     * @param cause lo que fallo mientras se recorria el arbol
+     * @param cause what failed while the tree was being walked
      */
     public IIOInvalidTreeException(String message, Throwable cause, Node offendingNode) {
         super(message, cause);
         this.offendingNode = offendingNode;
     }
 
-    /** Cual nodo esta mal, o null. Ver la nota de la clase. */
+    /** Which node is wrong, or null. See the class note. */
     public Node getOffendingNode() {
         return this.offendingNode;
     }

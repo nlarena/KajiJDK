@@ -5,38 +5,37 @@ import java.io.IOException;
 import javax.imageio.stream.ImageInputStream;
 
 /**
- * KajiLibrary's javax.imageio.spi.ImageInputStreamSpi -- el proveedor de un flujo de entrada de
- * imagenes.
+ * KajiLibrary's javax.imageio.spi.ImageInputStreamSpi -- the provider of an image input stream.
  *
- * <p>Sabe envolver objetos de <b>una</b> clase --{@link #getInputClass}: un {@code File}, un
- * {@code InputStream}, una {@code URL}-- en un {@link ImageInputStream}. Es lo que
- * {@code ImageIO.createImageInputStream} consulta.
+ * <p>It knows how to wrap objects of <b>one</b> class --{@link #getInputClass}: a {@code File}, an
+ * {@code InputStream}, a {@code URL}-- in an {@link ImageInputStream}. It is what
+ * {@code ImageIO.createImageInputStream} consults.
  *
- * <h2>La cache</h2>
+ * <h2>The cache</h2>
  *
- * <p>{@link #canUseCacheFile} y {@link #needsCacheFile} son distintos y la diferencia decide si el
- * argumento {@code cacheDir} sirve de algo:
+ * <p>{@link #canUseCacheFile} and {@link #needsCacheFile} are different, and the difference decides
+ * whether the {@code cacheDir} argument is of any use:
  *
  * <ul>
- *   <li><b>puede</b>: sabe funcionar con archivo de cache y tambien sin el. Un {@code InputStream}
- *       cae aca -- se puede cachear en disco o en memoria;
- *   <li><b>necesita</b>: no funciona sin archivo. Implica que puede.
+ *   <li><b>can</b>: it knows how to work with a cache file and also without one. An
+ *       {@code InputStream} falls here -- it can be cached on disk or in memory;
+ *   <li><b>needs</b>: it does not work without a file. It implies can.
  * </ul>
  *
- * <p>Un proveedor sobre {@code File} no precisa ninguna de las dos: el archivo ya se posiciona solo.
+ * <p>A provider over {@code File} needs neither: the file already seeks on its own.
  */
 public abstract class ImageInputStreamSpi extends IIOServiceProvider {
 
-    /** Que clase de objeto sabe envolver. */
+    /** Which class of object it knows how to wrap. */
     protected Class<?> inputClass;
 
-    /** El que exige el cargador de servicios. */
+    /** The one the service loader requires. */
     protected ImageInputStreamSpi() {
     }
 
     /**
-     * @param inputClass que clase sabe envolver
-     * @throws IllegalArgumentException si es null
+     * @param inputClass which class it knows how to wrap
+     * @throws IllegalArgumentException if it is null
      */
     public ImageInputStreamSpi(String vendorName, String version, Class<?> inputClass) {
         super(vendorName, version);
@@ -46,37 +45,37 @@ public abstract class ImageInputStreamSpi extends IIOServiceProvider {
         this.inputClass = inputClass;
     }
 
-    /** Que clase sabe envolver. */
+    /** Which class it knows how to wrap. */
     public Class<?> getInputClass() {
         return this.inputClass;
     }
 
-    /** Si sabe usar un archivo de cache. Ver la nota de la clase. */
+    /** Whether it can use a cache file. See the class note. */
     public boolean canUseCacheFile() {
         return false;
     }
 
-    /** Si lo necesita. Ver la nota de la clase: implica que puede. */
+    /** Whether it needs one. See the class note: it implies it can. */
     public boolean needsCacheFile() {
         return false;
     }
 
     /**
-     * Envuelve ese objeto.
+     * Wraps that object.
      *
-     * @param useCache si usar un archivo de cache; se ignora si no lo soporta
-     * @param cacheDir donde ponerlo, o null para el del sistema
-     * @throws IllegalArgumentException si el objeto no es de la clase esperada, o si el directorio no
-     *     lo es
-     * @throws IOException si no se pudo crear
+     * @param useCache whether to use a cache file; ignored if not supported
+     * @param cacheDir where to put it, or null for the system's
+     * @throws IllegalArgumentException if the object is not of the expected class, or if the
+     *     directory is not one
+     * @throws IOException if it could not be created
      */
     public abstract ImageInputStream createInputStreamInstance(Object input, boolean useCache,
                                                                File cacheDir) throws IOException;
 
     /**
-     * Idem, con cache si el proveedor la necesita y sin ella si no.
+     * Same, with a cache if the provider needs one and without it if not.
      *
-     * @throws IOException si no se pudo crear
+     * @throws IOException if it could not be created
      */
     public ImageInputStream createInputStreamInstance(Object input) throws IOException {
         return createInputStreamInstance(input, true, null);

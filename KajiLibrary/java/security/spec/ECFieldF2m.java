@@ -3,36 +3,37 @@ package java.security.spec;
 import java.math.BigInteger;
 import java.util.Arrays;
 
-// El cuerpo binario GF(2^m): polinomios sobre GF(2) modulo un polinomio de reduccion irreducible.
+// The binary field GF(2^m): polynomials over GF(2) modulo an irreducible reduction polynomial.
 //
-// Un elemento es un polinomio de grado < m, y la reduccion se hace modulo otro polinomio de grado
-// exactamente m. Ese polinomio se puede dar de tres formas y las tres describen lo mismo:
+// An element is a polynomial of degree < m, and reduction is done modulo another polynomial of
+// degree exactly m. That polynomial can be given in three ways and all three describe the same
+// thing:
 //
-//   - sin polinomio: cuerpo "generico", sin base fijada. No se puede operar, pero sirve para decir
-//     de que tamaño es el cuerpo.
-//   - como `BigInteger`: el bit i prendido significa que el termino x^i esta.
-//   - como los indices de los terminos del medio: para un trinomio x^m + x^k + 1 es {k}, para un
-//     pentanomio x^m + x^k3 + x^k2 + x^k1 + 1 es {k3, k2, k1}.
+//   - no polynomial: a "generic" field, with no fixed basis. It cannot be operated on, but it
+//     serves to say what size the field is.
+//   - as a `BigInteger`: bit i set means the term x^i is present.
+//   - as the indices of the middle terms: for a trinomial x^m + x^k + 1 it is {k}, for a
+//     pentanomial x^m + x^k3 + x^k2 + x^k1 + 1 it is {k3, k2, k1}.
 //
-// Las dos ultimas se convierten una en la otra en el constructor, asi que despues de construir
-// ambos accesores responden, den por donde den. Por eso `equals` compara solo m y los indices: el
-// `BigInteger` es redundante y compararlo tambien seria trabajo de mas por el mismo resultado.
+// The last two are converted into each other in the constructor, so after construction both
+// accessors answer, whichever was given. That is why `equals` compares only m and the indices: the
+// `BigInteger` is redundant and comparing it too would be extra work for the same result.
 //
-// Solo se aceptan trinomios y pentanomios (bitCount 3 o 5). No es una limitacion de esta clase
-// sino de lo que la practica usa: los estandares eligen siempre uno de los dos porque la reduccion
-// es barata, y aceptar un polinomio arbitrario abriria la puerta a uno reducible, que no genera un
-// cuerpo.
+// Only trinomials and pentanomials are accepted (bitCount 3 or 5), as the JDK specifies: standards
+// always choose one of the two because reduction is cheap. This note added that accepting an
+// arbitrary polynomial would open the door to a reducible one; nothing here checks irreducibility,
+// and a trinomial or a pentanomial can be reducible too.
 public class ECFieldF2m implements ECField {
 
     private final int m;
 
-    // El polinomio de reduccion como bits, o null si el cuerpo se creo sin base.
+    // The reduction polynomial as bits, or null if the field was created without a basis.
     private final BigInteger rp;
 
-    // Los indices de los terminos del medio, en orden **descendente**. Null si no hay polinomio.
+    // The indices of the middle terms, in **descending** order. Null if there is no polynomial.
     private final int[] ks;
 
-    // Cuerpo sin base fijada: se conoce el tamaño y nada mas.
+    // A field with no fixed basis: its size is known and nothing else.
     public ECFieldF2m(int m) {
         if (m <= 0) {
             throw new IllegalArgumentException("m is not positive");
@@ -46,24 +47,26 @@ public class ECFieldF2m implements ECField {
         if (m <= 0) {
             throw new IllegalArgumentException("m is not positive");
         }
-        // Sin `rp` no hay nada que validar: que reviente aca con NPE es lo mismo que hace el JDK.
-        int cuenta = rp.bitCount();
-        // El termino independiente y el de grado m tienen que estar: el primero porque sin el el
-        // polinomio es divisible por x —o sea reducible—, el segundo porque es lo que fija el grado.
-        if (!rp.testBit(0) || !rp.testBit(m) || ((cuenta != 3) && (cuenta != 5))) {
+        // Without `rp` there is nothing to validate: blowing up here with an NPE is what the JDK
+        // does.
+        int count = rp.bitCount();
+        // The constant term and the degree-m term have to be present: the first because without it
+        // the polynomial is divisible by x —that is, reducible—, the second because it is what
+        // fixes the degree.
+        if (!rp.testBit(0) || !rp.testBit(m) || ((count != 3) && (count != 5))) {
             throw new IllegalArgumentException("rp does not represent a valid reduction polynomial");
         }
         this.m = m;
         this.rp = rp;
-        // Se sacan los dos extremos y quedan justo los terminos del medio.
-        BigInteger resto = rp.clearBit(0).clearBit(m);
-        this.ks = new int[cuenta - 2];
-        // Se llena de atras para adelante porque `getLowestSetBit` devuelve los indices de menor a
-        // mayor y el contrato pide orden descendente.
+        // The two ends are removed and exactly the middle terms remain.
+        BigInteger rest = rp.clearBit(0).clearBit(m);
+        this.ks = new int[count - 2];
+        // Filled from back to front because `getLowestSetBit` returns the indices from lowest to
+        // highest and the contract asks for descending order.
         for (int i = this.ks.length - 1; i >= 0; i--) {
-            int indice = resto.getLowestSetBit();
-            this.ks[i] = indice;
-            resto = resto.clearBit(indice);
+            int index = rest.getLowestSetBit();
+            this.ks[i] = index;
+            rest = rest.clearBit(index);
         }
     }
 
@@ -71,30 +74,30 @@ public class ECFieldF2m implements ECField {
         if (m <= 0) {
             throw new IllegalArgumentException("m is not positive");
         }
-        int[] copia = new int[ks.length];
-        System.arraycopy(ks, 0, copia, 0, ks.length);
-        if ((copia.length != 1) && (copia.length != 3)) {
+        int[] copy = new int[ks.length];
+        System.arraycopy(ks, 0, copy, 0, ks.length);
+        if ((copy.length != 1) && (copy.length != 3)) {
             throw new IllegalArgumentException("length of ks is neither 1 nor 3");
         }
-        for (int i = 0; i < copia.length; i++) {
-            // Un termino del medio con indice 0 o m seria uno de los extremos, que van implicitos.
-            if ((copia[i] < 1) || (copia[i] > m - 1)) {
+        for (int i = 0; i < copy.length; i++) {
+            // A middle term with index 0 or m would be one of the ends, which are implicit.
+            if ((copy[i] < 1) || (copy[i] > m - 1)) {
                 throw new IllegalArgumentException("ks[" + i + "] is out of range");
             }
-            if ((i != 0) && (copia[i] >= copia[i - 1])) {
+            if ((i != 0) && (copy[i] >= copy[i - 1])) {
                 throw new IllegalArgumentException("values in ks are not in descending order");
             }
         }
         this.m = m;
-        this.ks = copia;
+        this.ks = copy;
         BigInteger p = BigInteger.ONE.setBit(m);
-        for (int i = 0; i < copia.length; i++) {
-            p = p.setBit(copia[i]);
+        for (int i = 0; i < copy.length; i++) {
+            p = p.setBit(copy[i]);
         }
         this.rp = p;
     }
 
-    // En un cuerpo binario un elemento son exactamente m bits, sin importar el polinomio.
+    // In a binary field an element is exactly m bits, whatever the polynomial.
     @Override
     public int getFieldSize() {
         return this.m;
@@ -104,12 +107,12 @@ public class ECFieldF2m implements ECField {
         return this.m;
     }
 
-    // El polinomio de reduccion, o null si el cuerpo se creo sin base.
+    // The reduction polynomial, or null if the field was created without a basis.
     public BigInteger getReductionPolynomial() {
         return this.rp;
     }
 
-    // Copia de los indices de los terminos del medio, o null si no hay polinomio.
+    // A copy of the indices of the middle terms, or null if there is no polynomial.
     public int[] getMidTermsOfReductionPolynomial() {
         if (this.ks == null) {
             return null;
@@ -125,9 +128,9 @@ public class ECFieldF2m implements ECField {
             return true;
         }
         if (obj instanceof ECFieldF2m) {
-            ECFieldF2m otro = (ECFieldF2m) obj;
-            // No hace falta mirar `rp`: es funcion de m y ks.
-            return (this.m == otro.m) && Arrays.equals(this.ks, otro.ks);
+            ECFieldF2m other = (ECFieldF2m) obj;
+            // No need to look at `rp`: it is a function of m and ks.
+            return (this.m == other.m) && Arrays.equals(this.ks, other.ks);
         }
         return false;
     }

@@ -14,12 +14,12 @@ public class PropertyEditorSupport implements PropertyEditor {
 
     private Object value;
     private Object source;
-    private List<PropertyChangeListener> oyentes;
+    private List<PropertyChangeListener> listeners;
 
     // The editor is its own event source.
     public PropertyEditorSupport() {
         this.source = this;
-        this.oyentes = new ArrayList<PropertyChangeListener>();
+        this.listeners = new ArrayList<PropertyChangeListener>();
     }
 
     // The events are going to say they come from `source`, not from this editor.
@@ -28,7 +28,7 @@ public class PropertyEditorSupport implements PropertyEditor {
             throw new NullPointerException();
         }
         this.source = source;
-        this.oyentes = new ArrayList<PropertyChangeListener>();
+        this.listeners = new ArrayList<PropertyChangeListener>();
     }
 
     public Object getSource() {
@@ -116,35 +116,35 @@ public class PropertyEditorSupport implements PropertyEditor {
 
     public synchronized void addPropertyChangeListener(PropertyChangeListener listener) {
         if (listener != null) {
-            this.oyentes.add(listener);
+            this.listeners.add(listener);
         }
     }
 
     public synchronized void removePropertyChangeListener(PropertyChangeListener listener) {
         if (listener != null) {
-            this.oyentes.remove(listener);
+            this.listeners.remove(listener);
         }
     }
 
     // It reports that the value changed. Just as in PropertyChangeSupport it dispatches over a
     // copy, for the same reason: a listener may unsubscribe from inside.
     public void firePropertyChange() {
-        PropertyChangeListener[] copia = this.instantanea();
-        if (copia.length > 0) {
+        PropertyChangeListener[] copy = this.snapshot();
+        if (copy.length > 0) {
             // The JDK sends the three fields as null: the editor does not carry the name of the
             // property it edits, and an event with an invented name would be worse than one with no
             // name.
             PropertyChangeEvent evt = new PropertyChangeEvent(this.source, null, null, null);
-            for (int i = 0; i < copia.length; i++) {
-                copia[i].propertyChange(evt);
+            for (int i = 0; i < copy.length; i++) {
+                copy[i].propertyChange(evt);
             }
         }
     }
 
-    private synchronized PropertyChangeListener[] instantanea() {
-        PropertyChangeListener[] a = new PropertyChangeListener[this.oyentes.size()];
-        for (int i = 0; i < this.oyentes.size(); i++) {
-            a[i] = this.oyentes.get(i);
+    private synchronized PropertyChangeListener[] snapshot() {
+        PropertyChangeListener[] a = new PropertyChangeListener[this.listeners.size()];
+        for (int i = 0; i < this.listeners.size(); i++) {
+            a[i] = this.listeners.get(i);
         }
         return a;
     }

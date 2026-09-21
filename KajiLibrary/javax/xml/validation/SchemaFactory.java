@@ -13,56 +13,58 @@ import org.xml.sax.SAXNotRecognizedException;
 import org.xml.sax.SAXNotSupportedException;
 
 /**
- * KajiLibrary's javax.xml.validation.SchemaFactory -- lee esquemas y los compila.
+ * KajiLibrary's javax.xml.validation.SchemaFactory -- reads schemas and compiles them.
  *
- * <p>Una fabrica <b>por lenguaje de esquema</b>: se pide con el URI del lenguaje --XML Schema, RELAX
- * NG-- y devuelve una implementacion que lo entienda. Es la diferencia con
- * {@code DocumentBuilderFactory}, que tiene un solo {@code newInstance} sin argumento: ahi hay un
- * solo XML posible y aca hay varios lenguajes de esquema en competencia.
+ * <p>A factory <b>per schema language</b>: it is asked for with the language's URI --XML Schema,
+ * RELAX NG-- and returns an implementation that understands it. It is the difference from {@code
+ * DocumentBuilderFactory}, which has a single no-argument {@code newInstance}: there there is only
+ * one possible XML and here there are several competing schema languages.
  *
- * <h2>Como se elige</h2>
+ * <h2>How it is chosen</h2>
  *
- * <p>{@link #newInstance(String)} busca en orden: la propiedad de sistema
- * {@code javax.xml.validation.SchemaFactory:<lenguaje>} --con el URI del lenguaje pegado al nombre,
- * que es lo que permite configurar cada uno por separado--, despues los proveedores registrados como
- * servicio, quedandose con el primero que <b>diga que soporta</b> ese lenguaje, y por ultimo la
- * implementacion incluida en la plataforma.
+ * <p>{@link #newInstance(String)} searches in order: the system property {@code
+ * javax.xml.validation.SchemaFactory:<language>} --with the language's URI stuck to the name, which
+ * is what allows configuring each one separately--, then the providers registered as a service,
+ * keeping the first that <b>says it supports</b> that language, and finally the implementation
+ * included in the platform. (The JDK also reads {@code $java.home/conf/jaxp.properties} after the
+ * property; this does not.)
  *
- * <p>Que no haya ninguna es un {@link IllegalArgumentException} y no un error de configuracion. Tiene
- * sentido: el argumento fue un lenguaje que nadie sabe leer, y eso es un problema del pedido.
+ * <p>That there is none is an {@link IllegalArgumentException} and not a configuration error. It
+ * makes sense: the argument was a language nobody knows how to read, and that is a problem of the
+ * request.
  *
- * <h2>Los cuatro {@code newSchema}</h2>
+ * <h2>The four {@code newSchema}s</h2>
  *
- * <p>Los tres con argumento arman un {@code Source} y llaman al que recibe un arreglo. El del arreglo
- * es el interesante: compila <b>varios documentos como un solo esquema</b>, que es lo que hace falta
- * cuando un esquema esta partido en archivos que se importan entre si. No es lo mismo que compilar
- * cada uno por separado -- las referencias cruzadas solo cierran si estan todos juntos.
+ * <p>The three with an argument build a {@code Source} and call the one that receives an array. The
+ * array one is the interesting one: it compiles <b>several documents as a single schema</b>, which
+ * is what is needed when a schema is split into files that import each other. It is not the same as
+ * compiling each separately -- the cross references only close if they are all together.
  *
- * <p>{@link #newSchema()} sin argumentos es el mas raro y el mas util a veces: devuelve un esquema
- * "especial" que valida cada documento contra <b>lo que el documento mismo declare</b> con
- * {@code xsi:schemaLocation}. Es comodo y es exactamente lo que no hay que hacer si el documento
- * viene de afuera: deja que el documento elija sus propias reglas.
+ * <p>{@link #newSchema()} without arguments is the oddest and sometimes the most useful: it returns
+ * a "special" schema that validates each document against <b>whatever the document itself
+ * declares</b> with {@code xsi:schemaLocation}. It is convenient and it is exactly what should not
+ * be done if the document comes from outside: it lets the document choose its own rules.
  *
  * <h2>A KajiLibrary subset</h2>
  *
- * <p>{@link #newDefaultInstance} lanza {@link SchemaFactoryConfigurationError} porque esta biblioteca
- * no trae una implementacion de esquemas incluida, y {@link #newInstance(String)} termina en
- * {@link IllegalArgumentException} mientras no haya ninguna registrada. Las dos son salidas que esos
- * metodos ya declaran; con un proveedor registrado, funcionan como en el JDK.
+ * <p>{@link #newDefaultInstance} throws {@link SchemaFactoryConfigurationError} because this
+ * library comes with no included schema implementation, and {@link #newInstance(String)} ends in
+ * {@link IllegalArgumentException} as long as none is registered. Both are ways out those methods
+ * already declare; with a registered provider, they work as in the JDK.
  */
 public abstract class SchemaFactory {
 
-    /** El prefijo de la propiedad de sistema; se le pega el URI del lenguaje. */
+    /** The prefix of the system property; the language's URI is appended to it. */
     private static final String PROPERTY_PREFIX = "javax.xml.validation.SchemaFactory:";
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected SchemaFactory() {
     }
 
     /**
-     * La implementacion incluida en la plataforma.
+     * The implementation included in the platform.
      *
-     * @throws SchemaFactoryConfigurationError siempre en KajiLibrary; ver la nota de la clase
+     * @throws SchemaFactoryConfigurationError always in KajiLibrary; see the class note
      */
     public static SchemaFactory newDefaultInstance() {
         throw new SchemaFactoryConfigurationError(
@@ -71,12 +73,12 @@ public abstract class SchemaFactory {
     }
 
     /**
-     * La fabrica que entiende ese lenguaje.
+     * The factory that understands that language.
      *
-     * <p>Ver el orden de busqueda en la nota de la clase.
+     * <p>See the search order in the class note.
      *
-     * @throws IllegalArgumentException si ninguna lo soporta
-     * @throws NullPointerException si el lenguaje es null
+     * @throws IllegalArgumentException if none supports it
+     * @throws NullPointerException if the language is null
      */
     public static SchemaFactory newInstance(String schemaLanguage) {
         if (schemaLanguage == null) {
@@ -86,7 +88,7 @@ public abstract class SchemaFactory {
         try {
             configured = System.getProperty(PROPERTY_PREFIX + schemaLanguage);
         } catch (SecurityException e) {
-            // Sin permiso para leerla: se sigue con los servicios.
+            // Without permission to read it: carry on with the services.
         }
         if (configured != null && configured.length() > 0) {
             return newInstance(schemaLanguage, configured, null);
@@ -95,8 +97,8 @@ public abstract class SchemaFactory {
         Iterator<SchemaFactory> it = loader.iterator();
         while (it.hasNext()) {
             SchemaFactory candidate = it.next();
-            // Se le pregunta a cada uno: un proveedor registrado no tiene por que saber todos los
-            // lenguajes, y quedarse con el primero a ciegas daria una fabrica que no sirve.
+            // Each one is asked: a registered provider need not know every language, and keeping
+            // the first one blindly would give a factory that is no good.
             if (candidate.isSchemaLanguageSupported(schemaLanguage)) {
                 return candidate;
             }
@@ -107,11 +109,11 @@ public abstract class SchemaFactory {
     }
 
     /**
-     * Esa clase y ninguna otra, para ese lenguaje.
+     * That class and no other, for that language.
      *
-     * @param classLoader con el que se carga; null significa el del contexto o el de esta clase
-     * @throws IllegalArgumentException si no se puede construir, o si la construida no soporta ese
-     *     lenguaje
+     * @param classLoader the one it is loaded with; null means the context one or this class's
+     * @throws IllegalArgumentException if it cannot be built, or if the one built does not support
+     *     that language
      */
     public static SchemaFactory newInstance(String schemaLanguage, String factoryClassName,
                                             ClassLoader classLoader) {
@@ -144,21 +146,21 @@ public abstract class SchemaFactory {
     }
 
     /**
-     * Si esta fabrica entiende ese lenguaje.
+     * Whether this factory understands that language.
      *
-     * @throws NullPointerException si es null
-     * @throws IllegalArgumentException si es la cadena vacia
+     * @throws NullPointerException if it is null
+     * @throws IllegalArgumentException if it is the empty string
      */
     public abstract boolean isSchemaLanguageSupported(String schemaLanguage);
 
     /**
-     * El valor de una bandera.
+     * The value of a flag.
      *
-     * <p>Por omision no conoce ninguna. La que toda implementacion tiene que reconocer es
-     * {@code javax.xml.XMLConstants.FEATURE_SECURE_PROCESSING}, que es la que apaga el acceso a
-     * recursos externos.
+     * <p>By default it knows none. The one every implementation has to recognize is {@code
+     * javax.xml.XMLConstants.FEATURE_SECURE_PROCESSING}, which is the one that turns off access to
+     * external resources.
      *
-     * @throws SAXNotRecognizedException si no conoce ese nombre
+     * @throws SAXNotRecognizedException if it does not know that name
      */
     public boolean getFeature(String name)
         throws SAXNotRecognizedException, SAXNotSupportedException {
@@ -169,9 +171,9 @@ public abstract class SchemaFactory {
     }
 
     /**
-     * Cambia una bandera.
+     * Changes a flag.
      *
-     * @throws SAXNotRecognizedException si no conoce ese nombre
+     * @throws SAXNotRecognizedException if it does not know that name
      */
     public void setFeature(String name, boolean value)
         throws SAXNotRecognizedException, SAXNotSupportedException {
@@ -182,9 +184,9 @@ public abstract class SchemaFactory {
     }
 
     /**
-     * Cambia una propiedad.
+     * Changes a property.
      *
-     * @throws SAXNotRecognizedException si no conoce ese nombre
+     * @throws SAXNotRecognizedException if it does not know that name
      */
     public void setProperty(String name, Object object)
         throws SAXNotRecognizedException, SAXNotSupportedException {
@@ -195,9 +197,9 @@ public abstract class SchemaFactory {
     }
 
     /**
-     * El valor de una propiedad.
+     * The value of a property.
      *
-     * @throws SAXNotRecognizedException si no conoce ese nombre
+     * @throws SAXNotRecognizedException if it does not know that name
      */
     public Object getProperty(String name)
         throws SAXNotRecognizedException, SAXNotSupportedException {
@@ -207,23 +209,23 @@ public abstract class SchemaFactory {
         throw new SAXNotRecognizedException(name);
     }
 
-    /** Quien recibe los errores al <b>compilar el esquema</b>, no al validar documentos. */
+    /** Who receives the errors when <b>compiling the schema</b>, not when validating documents. */
     public abstract void setErrorHandler(ErrorHandler errorHandler);
 
     /** Ver {@link #setErrorHandler}. */
     public abstract ErrorHandler getErrorHandler();
 
-    /** Quien resuelve lo que el esquema importe o incluya. */
+    /** Who resolves whatever the schema imports or includes. */
     public abstract void setResourceResolver(LSResourceResolver resourceResolver);
 
     /** Ver {@link #setResourceResolver}. */
     public abstract LSResourceResolver getResourceResolver();
 
     /**
-     * Compila un esquema de una fuente.
+     * Compiles a schema from a source.
      *
-     * @throws SAXException si el esquema esta mal
-     * @throws NullPointerException si la fuente es null
+     * @throws SAXException if the schema is wrong
+     * @throws NullPointerException if the source is null
      */
     public Schema newSchema(Source schema) throws SAXException {
         if (schema == null) {
@@ -233,9 +235,9 @@ public abstract class SchemaFactory {
     }
 
     /**
-     * Idem, de un archivo.
+     * Likewise, from a file.
      *
-     * @throws NullPointerException si el archivo es null
+     * @throws NullPointerException if the file is null
      */
     public Schema newSchema(File schema) throws SAXException {
         if (schema == null) {
@@ -245,9 +247,9 @@ public abstract class SchemaFactory {
     }
 
     /**
-     * Idem, de un URL.
+     * Likewise, from a URL.
      *
-     * @throws NullPointerException si el URL es null
+     * @throws NullPointerException if the URL is null
      */
     public Schema newSchema(URL schema) throws SAXException {
         if (schema == null) {
@@ -257,16 +259,16 @@ public abstract class SchemaFactory {
     }
 
     /**
-     * Compila <b>varias</b> fuentes como un solo esquema.
+     * Compiles <b>several</b> sources as a single schema.
      *
-     * <p>Ver la nota de la clase sobre por que no es lo mismo que compilarlas por separado.
+     * <p>See the class note on why it is not the same as compiling them separately.
      */
     public abstract Schema newSchema(Source[] schemas) throws SAXException;
 
     /**
-     * El esquema que valida cada documento contra lo que el documento declare.
+     * The schema that validates each document against whatever the document declares.
      *
-     * <p>Comodo y peligroso; ver la nota de la clase.
+     * <p>Convenient and dangerous; see the class note.
      */
     public abstract Schema newSchema() throws SAXException;
 }

@@ -10,97 +10,99 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * Una anotacion de metadatos, descrita como <strong>datos</strong> en vez de como anotacion Java.
+ * A metadata annotation, described as <strong>data</strong> instead of as a Java annotation.
  *
- * <h2>Por que hace falta describirla como datos</h2>
+ * <h2>Why it has to be described as data</h2>
  *
- * <p>Por dos razones distintas y las dos importan.
+ * <p>For two different reasons and both matter.
  *
- * <p>La primera: un evento se puede fabricar en tiempo de ejecucion con {@link EventFactory}, sin
- * que exista una clase Java para el. Ahi no hay donde poner una anotacion, y sin embargo el evento
- * tiene que poder llevar su etiqueta y su descripcion. Esta clase es como se las pone.
+ * <p>The first one: an event can be manufactured at run time with {@link EventFactory}, without a
+ * Java class existing for it. There there is nowhere to put an annotation, and yet the event has to
+ * be able to carry its label and its description. This class is how they are put on it.
  *
- * <p>La segunda: una grabacion se lee en <strong>otro</strong> proceso, que puede no tener en su
- * classpath las anotaciones que el que grabo uso. Guardando nombre y valores en vez de la anotacion
- * misma, el que lee puede mostrarlas igual.
+ * <p>The second one: a recording is read in <strong>another</strong> process, which may not have on
+ * its classpath the annotations the one that recorded used. By keeping the name and the values
+ * instead of the annotation itself, the one who reads can show them all the same.
  *
- * <h2>Que se puede guardar adentro</h2>
+ * <h2>What can be kept inside</h2>
  *
- * <p>Solo tipos simples: los primitivos, {@code String}, {@code Class}, enumeraciones, y arreglos
- * de esos. No hay anotaciones anidadas como valor. Es la misma restriccion que el formato de la
- * grabacion impone, y por eso esta aca y no mas abajo.
+ * <p>Only simple types: the primitives, {@code String}, {@code Class}, enumerations, and arrays of
+ * those. There are no nested annotations as a value. It is the same restriction the format of the
+ * recording imposes, and that is why it is here and not further down.
  *
- * <h2>Las meta-anotaciones viajan tambien</h2>
+ * <h2>The meta-annotations travel as well</h2>
  *
- * <p>{@link #getAnnotationElements} devuelve las anotaciones <strong>de la anotacion</strong>. Es
- * lo que permite que quien lee sepa que {@code @Timespan} es un {@link ContentType} y por lo tanto
- * que el numero que acompana es una duracion — sin tener la clase {@code Timespan} a mano.
+ * <p>{@link #getAnnotationElements} returns the annotations <strong>of the annotation</strong>. It
+ * is what allows whoever reads to know that {@code @Timespan} is a {@link ContentType} and
+ * therefore that the number that accompanies it is a duration -- without having the {@code
+ * Timespan} class at hand.
  *
  * @since 9
  */
 public final class AnnotationElement {
 
-    private final Class<? extends Annotation> tipo;
-    private final List<ValueDescriptor> descriptores;
-    private final List<Object> valores;
-    private final Map<String, Object> porNombre;
+    private final Class<? extends Annotation> type;
+    private final List<ValueDescriptor> descriptors;
+    private final List<Object> values_;
+    private final Map<String, Object> byName;
 
     /**
-     * Una anotacion con varios valores, dados por nombre de miembro.
+     * An annotation with several values, given by member name.
      *
-     * @param annotationType el tipo de la anotacion
-     * @param values los valores, por nombre de miembro
-     * @throws NullPointerException si alguno de los dos es {@code null}
-     * @throws IllegalArgumentException si un nombre no es un miembro de la anotacion, si falta un
-     * miembro sin valor por omision, o si un valor no es de un tipo permitido
+     * @param annotationType the type of the annotation
+     * @param values the values, by member name
+     * @throws NullPointerException if either of the two is {@code null}
+     * @throws IllegalArgumentException if a name is not a member of the annotation, if a member
+     * with no default value is missing, or if a value is not of an allowed type
      */
     public AnnotationElement(final Class<? extends Annotation> annotationType,
             final Map<String, Object> values) {
-        this.tipo = Objects.requireNonNull(annotationType, "annotationType");
+        this.type = Objects.requireNonNull(annotationType, "annotationType");
         Objects.requireNonNull(values, "values");
 
         final List<ValueDescriptor> ds = new ArrayList<ValueDescriptor>();
         final List<Object> vs = new ArrayList<Object>();
-        final Map<String, Object> mapa = new LinkedHashMap<String, Object>();
+        final Map<String, Object> map = new LinkedHashMap<String, Object>();
 
-        // Se recorren los miembros de la anotacion, no las claves del mapa: asi el orden de los
-        // valores es el de la declaracion y no el del mapa que paso el que llama, que puede ser
-        // cualquiera.
+        // The members of the annotation are walked, not the keys of the map: that way the order of
+        // the values is that of the declaration and not that of the map the caller passed, which
+        // may be any one at all.
         for (final Method m : annotationType.getDeclaredMethods()) {
-            final String nombre = m.getName();
-            Object v = values.get(nombre);
+            final String member = m.getName();
+            Object v = values.get(member);
             if (v == null) {
                 v = m.getDefaultValue();
                 if (v == null) {
                     throw new IllegalArgumentException(
-                            "falta el valor del miembro " + nombre + " de " + annotationType);
+                            "the value of the member " + member + " of " + annotationType
+                            + " is missing");
                 }
             }
-            revisar(v, nombre);
-            ds.add(new ValueDescriptor(m.getReturnType(), nombre));
+            check(v, member);
+            ds.add(new ValueDescriptor(m.getReturnType(), member));
             vs.add(v);
-            mapa.put(nombre, v);
+            map.put(member, v);
         }
-        for (final String clave : values.keySet()) {
-            if (!mapa.containsKey(clave)) {
+        for (final String key : values.keySet()) {
+            if (!map.containsKey(key)) {
                 throw new IllegalArgumentException(
-                        clave + " no es un miembro de " + annotationType);
+                        key + " is not a member of " + annotationType);
             }
         }
 
-        this.descriptores = Collections.unmodifiableList(ds);
-        this.valores = Collections.unmodifiableList(vs);
-        this.porNombre = Collections.unmodifiableMap(mapa);
+        this.descriptors = Collections.unmodifiableList(ds);
+        this.values_ = Collections.unmodifiableList(vs);
+        this.byName = Collections.unmodifiableMap(map);
     }
 
     /**
-     * Una anotacion de un solo miembro, el llamado {@code value}.
+     * An annotation with a single member, the one called {@code value}.
      *
-     * @param annotationType el tipo de la anotacion
-     * @param value el valor
-     * @throws NullPointerException si alguno de los dos es {@code null}
-     * @throws IllegalArgumentException si la anotacion no tiene un miembro {@code value} o el valor
-     * no es de un tipo permitido
+     * @param annotationType the type of the annotation
+     * @param value the value
+     * @throws NullPointerException if either of the two is {@code null}
+     * @throws IllegalArgumentException if the annotation has no {@code value} member or the value
+     * is not of an allowed type
      */
     public AnnotationElement(final Class<? extends Annotation> annotationType, final Object value) {
         this(annotationType, Collections.singletonMap("value",
@@ -108,23 +110,23 @@ public final class AnnotationElement {
     }
 
     /**
-     * Una anotacion sin valores, o con todos sus miembros en el valor por omision.
+     * An annotation with no values, or with every member at its default value.
      *
-     * @param annotationType el tipo de la anotacion
-     * @throws NullPointerException si es {@code null}
-     * @throws IllegalArgumentException si algun miembro no tiene valor por omision
+     * @param annotationType the type of the annotation
+     * @throws NullPointerException if it is {@code null}
+     * @throws IllegalArgumentException if some member has no default value
      */
     public AnnotationElement(final Class<? extends Annotation> annotationType) {
         this(annotationType, Collections.<String, Object>emptyMap());
     }
 
     /**
-     * Los tipos que el formato de la grabacion sabe guardar.
+     * The types the format of the recording knows how to keep.
      *
-     * <p>Rechazar aca y no mas tarde importa: un valor de tipo no soportado descubierto al escribir
-     * el archivo arruinaria una grabacion que ya empezo.
+     * <p>Rejecting here and not later matters: a value of an unsupported type discovered when
+     * writing the file would ruin a recording that has already begun.
      */
-    private static void revisar(final Object v, final String nombre) {
+    private static void check(final Object v, final String member) {
         Class<?> c = v.getClass();
         if (c.isArray()) {
             c = c.getComponentType();
@@ -136,60 +138,60 @@ public final class AnnotationElement {
             return;
         }
         throw new IllegalArgumentException(
-                "el valor del miembro " + nombre + " es de un tipo que no se puede guardar en una "
-                + "grabacion: " + c.getName());
+                "the value of the member " + member + " is of a type that cannot be kept in a "
+                + "recording: " + c.getName());
     }
 
     /**
-     * Los valores, en el orden en que la anotacion declara sus miembros.
+     * The values, in the order in which the annotation declares its members.
      *
-     * @return los valores
+     * @return the values
      */
     public List<Object> getValues() {
-        return valores;
+        return values_;
     }
 
     /**
-     * Los miembros de la anotacion, descritos.
+     * The members of the annotation, described.
      *
-     * <p>Se corresponden posicion a posicion con {@link #getValues}.
+     * <p>They correspond position by position with {@link #getValues}.
      *
-     * @return los descriptores
+     * @return the descriptors
      */
     public List<ValueDescriptor> getValueDescriptors() {
-        return descriptores;
+        return descriptors;
     }
 
     /**
-     * Las anotaciones que lleva puestas <strong>esta</strong> anotacion.
+     * The annotations <strong>this</strong> annotation carries.
      *
-     * <p>Se saltean las de {@code java.lang.annotation} —{@code @Retention}, {@code @Target} y
-     * companeras— porque describen como funciona la anotacion en Java y no dicen nada sobre el
-     * evento. Al que lee la grabacion no le sirven.
+     * <p>The ones of {@code java.lang.annotation} --{@code @Retention}, {@code @Target} and
+     * company-- are skipped because they describe how the annotation works in Java and say nothing
+     * about the event. They are of no use to the one who reads the recording.
      *
-     * @return las meta-anotaciones
+     * @return the meta-annotations
      */
     public List<AnnotationElement> getAnnotationElements() {
         final List<AnnotationElement> out = new ArrayList<AnnotationElement>();
-        for (final Annotation a : tipo.getAnnotations()) {
+        for (final Annotation a : type.getAnnotations()) {
             final Class<? extends Annotation> t = a.annotationType();
             if (t.getName().startsWith("java.lang.annotation.")) {
                 continue;
             }
-            out.add(desde(a));
+            out.add(from(a));
         }
         return Collections.unmodifiableList(out);
     }
 
-    /** Arma un elemento a partir de una anotacion viva, leyendole los miembros por reflexion. */
-    private static AnnotationElement desde(final Annotation a) {
+    /** It puts an element together from a live annotation, reading its members by reflection. */
+    private static AnnotationElement from(final Annotation a) {
         final Map<String, Object> vals = new LinkedHashMap<String, Object>();
         for (final Method m : a.annotationType().getDeclaredMethods()) {
             try {
                 vals.put(m.getName(), m.invoke(a));
             } catch (final ReflectiveOperationException e) {
-                // Un miembro que no se puede leer no deberia hacer desaparecer a los demas: se
-                // omite y el elemento queda con lo que si se pudo leer.
+                // A member that cannot be read should not make the others disappear: it is left out
+                // and the element is left with what could be read.
                 continue;
             }
         }
@@ -197,65 +199,65 @@ public final class AnnotationElement {
     }
 
     /**
-     * El nombre completo del tipo de la anotacion.
+     * The complete name of the type of the annotation.
      *
-     * @return el nombre
+     * @return the name
      */
     public String getTypeName() {
-        return tipo.getName();
+        return type.getName();
     }
 
     /**
-     * El valor de ese miembro.
+     * The value of that member.
      *
-     * @param name el nombre del miembro
-     * @return el valor
-     * @throws IllegalArgumentException si la anotacion no tiene ese miembro
+     * @param name the name of the member
+     * @return the value
+     * @throws IllegalArgumentException if the annotation does not have that member
      */
     public Object getValue(final String name) {
         Objects.requireNonNull(name, "name");
-        if (!porNombre.containsKey(name)) {
+        if (!byName.containsKey(name)) {
             throw new IllegalArgumentException(
-                    name + " no es un miembro de " + tipo.getName());
+                    name + " is not a member of " + type.getName());
         }
-        return porNombre.get(name);
+        return byName.get(name);
     }
 
     /**
-     * Si la anotacion tiene ese miembro.
+     * Whether the annotation has that member.
      *
-     * @param name el nombre del miembro
-     * @return si lo tiene
+     * @param name the name of the member
+     * @return whether it has it
      */
     public boolean hasValue(final String name) {
-        return porNombre.containsKey(Objects.requireNonNull(name, "name"));
+        return byName.containsKey(Objects.requireNonNull(name, "name"));
     }
 
     /**
-     * La meta-anotacion de ese tipo que lleva esta anotacion, si la lleva.
+     * The meta-annotation of that type this annotation carries, if it carries it.
      *
-     * <p>La firma es la del JDK, con un parametro de tipo sin acotar: el resultado no esta ligado
-     * al argumento y la conversion no se puede comprobar. Es una rareza de la API que se reproduce
-     * tal cual.
+     * <p>The signature is that of the JDK, with an unbounded type parameter: the result is not tied
+     * to the argument and the conversion cannot be checked. It is an oddity of the API that is
+     * reproduced as it is.
      *
-     * @param <A> el tipo esperado
-     * @param annotationType el tipo de la meta-anotacion
-     * @return la anotacion, o {@code null} si no esta
+     * @param <A> the expected type
+     * @param annotationType the type of the meta-annotation
+     * @return the annotation, or {@code null} if it is not there
      */
     @SuppressWarnings("unchecked")
     public final <A> A getAnnotation(final Class<? extends Annotation> annotationType) {
         Objects.requireNonNull(annotationType, "annotationType");
-        return (A) tipo.getAnnotation(annotationType);
+        return (A) type.getAnnotation(annotationType);
     }
 
     /**
-     * El identificador numerico del tipo de esta anotacion.
+     * The numeric identifier of the type of this annotation.
      *
-     * <p>Vale dentro de esta ejecucion de la VM y no fuera; ver {@code Tipos}.
+     * <p>It is valid inside this run of the VM and not outside; see {@code Types}.
      *
-     * @return el identificador
+     * @return the identifier
      */
     public long getTypeId() {
-        return Tipos.id(tipo);
+        return Types.id(type);
     }
 }

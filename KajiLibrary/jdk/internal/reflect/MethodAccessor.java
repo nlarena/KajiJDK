@@ -3,61 +3,66 @@ package jdk.internal.reflect;
 import java.lang.reflect.InvocationTargetException;
 
 /**
- * KajiLibrary's jdk.internal.reflect.MethodAccessor — el contrato de "invocar este metodo".
+ * KajiLibrary's jdk.internal.reflect.MethodAccessor -- the contract of "invoke this method".
  *
- * <h2>Por que esta interfaz existe, y por que aca significa algo distinto que en HotSpot</h2>
+ * <h2>Why this interface exists, and why here it means something different than in HotSpot</h2>
  *
- * <p>En el JDK la flecha va {@code Method.invoke} &rarr; {@code MethodAccessor.invoke}: {@code Method}
- * hace el chequeo de acceso una vez, fabrica un accesor y le delega todas las llamadas. El accesor es
- * la maquinaria, y {@code Method} la cascara.
+ * <p>In the JDK the arrow goes {@code Method.invoke} &rarr; {@code MethodAccessor.invoke}: {@code
+ * Method} does the check of access once, manufactures an accessor and delegates every call to it.
+ * The accessor is the machinery, and {@code Method} the shell.
  *
- * <p>En esta VM la flecha va al reves. {@code Method.invoke} es un <strong>intrinseco del
- * interprete</strong> ({@code Intrinsic::MethodInvoke}): el opcode de invocacion lo reconoce por
- * {@code (clase, nombre, descriptor)} y empuja el frame del metodo destino en vez de correr el cuerpo
- * Java, que por eso tira. La maquinaria esta abajo del piso de Java y no hay accesor en el medio.
+ * <p>In this VM the arrow goes the other way round. {@code Method.invoke} is an <strong>intrinsic
+ * of the interpreter</strong> ({@code Intrinsic::MethodInvoke}): the opcode of invocation
+ * recognises it by {@code (class, name, descriptor)} and pushes the frame of the destination method
+ * instead of running the Java body, which is why that one throws. The machinery is below the floor
+ * of Java and there is no accessor in the middle.
  *
- * <p>Eso no vuelve inutil a esta interfaz: la vuelve <strong>una declaracion pura</strong>, que es lo
- * que siempre fue. Una interfaz no tiene cuerpos que puedan mentir; declara una forma —"un objeto que
- * sabe invocar un metodo"— y esa forma es exactamente la del intrinseco que ya funciona. Quien quiera
- * un accesor lo pide por {@link ReflectionFactory#newMethodAccessor}, que devuelve uno enchufado a esa
- * maquinaria y no a una segunda copia de ella.
+ * <p>That does not make this interface useless: it makes it <strong>a pure declaration</strong>,
+ * which is what it always was. An interface has no bodies that can lie; it declares a shape --"an
+ * object that knows how to invoke a method"-- and that shape is exactly that of the intrinsic that
+ * already works. Whoever wants an accessor asks for it with {@link
+ * ReflectionFactory#newMethodAccessor}, which returns one plugged into that machinery and not into
+ * a second copy of it.
  *
- * <p>El precedente del criterio esta escrito en {@code jdk.internal.vm.VMSupport}: la interfaz anidada
- * {@code AnnotationDecoder} entro por lo mismo, "una declaracion pura cuyo contrato no depende de que
- * haya quien la use".
+ * <p>The precedent of the criterion is written in {@code jdk.internal.vm.VMSupport}: the nested
+ * interface {@code AnnotationDecoder} came in for the same reason, "a pure declaration whose
+ * contract does not depend on there being somebody who uses it".
  */
 public interface MethodAccessor {
 
     /**
-     * Invoca el metodo sobre {@code obj} con {@code args}.
+     * It invokes the method on {@code obj} with {@code args}.
      *
-     * @param obj el receptor, o {@code null} si el metodo es estatico
-     * @param args los argumentos, ya en el orden de los parametros
-     * @return el resultado, boxeado si el tipo de retorno es primitivo; {@code null} si es {@code void}
-     * @throws IllegalArgumentException si el receptor o los argumentos no corresponden
-     * @throws InvocationTargetException envolviendo lo que haya tirado el metodo destino
+     * @param obj the receiver, or {@code null} if the method is static
+     * @param args the arguments, already in the order of the parameters
+     * @return the result, boxed if the return type is primitive; {@code null} if it is {@code void}
+     * @throws IllegalArgumentException if the receiver or the arguments do not correspond
+     * @throws InvocationTargetException wrapping whatever the destination method threw
      */
     Object invoke(Object obj, Object[] args)
             throws IllegalArgumentException, InvocationTargetException;
 
     /**
-     * Igual que {@link #invoke(Object, Object[])} pero diciendo quien llama.
+     * The same as {@link #invoke(Object, Object[])} but saying who calls.
      *
-     * <p>La sobrecarga existe en el JDK por los metodos {@code @CallerSensitive}, que miran el frame
-     * de quien los invoco para decidir que contestar: pasando por reflexion ese frame seria el del
-     * accesor, asi que el llamador real hay que pasarlo a mano.
+     * <p>The overload exists in the JDK because of the {@code @CallerSensitive} methods, which look
+     * at the frame of whoever invoked them in order to decide what to answer: going through
+     * reflection that frame would be that of the accessor, so the real caller has to be passed by
+     * hand.
      *
-     * <p>En esta VM no hay maquinaria sensible al llamador —no existe {@code Reflection.getCallerClass}
-     * ni la anotacion que lo dispara, y los motivos estan en {@link Reflection}—, asi que no hay nada
-     * que el argumento pueda cambiar. La firma se declara igual porque es parte del contrato, y su
-     * implementacion en esta biblioteca lo documenta en vez de fingir que lo usa.
+     * <p>The note said that in this VM there was no machinery sensitive to the caller, neither
+     * {@code Reflection.getCallerClass} nor the annotation that triggers it; both are there now.
+     * What does hold is that the argument changes nothing here, and the reason is in
+     * {@link Reflection#getCallerClass()}: this VM interposes no frame when invoking reflectively,
+     * so the walk of the stack already sees the real caller. The signature is declared all the same
+     * because it is part of the contract.
      *
-     * @param obj el receptor, o {@code null} si el metodo es estatico
-     * @param args los argumentos
-     * @param caller la clase que se hace pasar por el llamador
-     * @return el resultado, boxeado si el tipo de retorno es primitivo
-     * @throws IllegalArgumentException si el receptor o los argumentos no corresponden
-     * @throws InvocationTargetException envolviendo lo que haya tirado el metodo destino
+     * @param obj the receiver, or {@code null} if the method is static
+     * @param args the arguments
+     * @param caller the class that passes itself off as the caller
+     * @return the result, boxed if the return type is primitive
+     * @throws IllegalArgumentException if the receiver or the arguments do not correspond
+     * @throws InvocationTargetException wrapping whatever the destination method threw
      */
     Object invoke(Object obj, Object[] args, Class<?> caller)
             throws IllegalArgumentException, InvocationTargetException;

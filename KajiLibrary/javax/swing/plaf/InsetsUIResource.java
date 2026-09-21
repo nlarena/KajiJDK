@@ -2,7 +2,7 @@ package javax.swing.plaf;
 
 import java.awt.Insets;
 
-/** Unos {@link Insets} que puso el aspecto; ver {@link UIResource}. */
+/** An {@link Insets} the look and feel set; see {@link UIResource}. */
 public class InsetsUIResource extends Insets implements UIResource {
 
     public InsetsUIResource(int top, int left, int bottom, int right) {

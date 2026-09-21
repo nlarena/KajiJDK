@@ -1,31 +1,31 @@
 package com.sun.jdi;
 
 /**
- * DoubleValue de la maquina depurada.
+ * DoubleValue of the debugged machine.
  *
  * @since 1.3
  */
 public interface DoubleValue extends PrimitiveValue, Comparable<DoubleValue> {
 
     /**
-     * El valor.
+     * The value.
      *
-     * @return el resultado
+     * @return the result
      */
     double value();
 
     /**
-     * Dos reflejos son iguales si nombran a lo mismo en la misma VM.
+     * Two mirrors are equal if they name the same thing in the same VM.
      *
-     * @param obj el Object
-     * @return el resultado
+     * @param obj the Object
+     * @return the result
      */
     boolean equals(Object obj);
 
     /**
-     * Coherente con {@link #equals}.
+     * Consistent with {@link #equals}.
      *
-     * @return el resultado
+     * @return the result
      */
     int hashCode();
 }

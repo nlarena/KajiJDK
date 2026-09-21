@@ -1,20 +1,20 @@
 package javax.management.openmbean;
 
 /**
- * Una clave que no es un nombre de item válido para el tipo compuesto o tabular que se consultó.
+ * A key that is not a valid item name for the composite or tabular type queried.
  *
- * <p>De ejecución, como {@link InvalidOpenTypeException}.
+ * <p>Unchecked, like {@link InvalidOpenTypeException}.
  */
 public class InvalidKeyException extends IllegalArgumentException {
 
     private static final long serialVersionUID = 4224269443946322062L;
 
-    /** Sin mensaje. */
+    /** Without a message. */
     public InvalidKeyException() {
         super();
     }
 
-    /** Con ese mensaje. */
+    /** With that message. */
     public InvalidKeyException(String msg) {
         super(msg);
     }

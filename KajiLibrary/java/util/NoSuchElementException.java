@@ -12,8 +12,8 @@ public class NoSuchElementException extends RuntimeException {
         super(s);
     }
 
-    // Las dos formas con causa, que llegaron en Java 15. Sirven para lo de siempre: envolver el
-    // error de mas abajo sin perderlo.
+    // The two forms with a cause, which arrived in Java 15. They serve the usual purpose: wrapping
+    // the error from further down without losing it.
     public NoSuchElementException(String s, Throwable cause) {
         super(s, cause);
     }

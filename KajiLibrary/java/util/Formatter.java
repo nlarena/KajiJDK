@@ -30,13 +30,13 @@ public final class Formatter implements Closeable, Flushable {
 
     private Appendable out;
     private Locale locale;
-    // La ultima IOException que tiro el destino, o null. `ioException()` la devuelve.
+    // The last IOException the destination threw, or null. `ioException()` returns it.
     //
-    // Este campo existio un tiempo sin poder llenarse nunca, porque `Appendable.append` de esta
-    // biblioteca no declaraba IOException. Ahora si la declara, asi que el mecanismo funciona: un
-    // `Formatter` **no tira** por fallas de E/S --su contrato es que formatear no obliga a atrapar--
-    // las anota y las cuenta cuando se pregunta.
-    private java.io.IOException ultimaIo;
+    // This field existed for a while with no way of ever being filled, because this library's
+    // `Appendable.append` did not declare IOException. It does now, so the mechanism works: a
+    // `Formatter` does **not throw** on I/O failures --its contract is that formatting does not force
+    // a catch-- it notes them and reports them when asked.
+    private java.io.IOException lastIo;
 
     public Formatter() {
         this.out = new StringBuilder();
@@ -59,29 +59,28 @@ public final class Formatter implements Closeable, Flushable {
     }
 
     /**
-     * Un `Formatter` que escribe a un stream de bytes, codificando con `charset`.
+     * A `Formatter` that writes to a byte stream, encoding with `charset`.
      *
-     * <p>Esta forma **si** se puede implementar de verdad, a diferencia de las de `File` y de nombre
-     * de archivo: el stream lo aporta quien llama, ya abierto, asi que no hace falta que la
-     * biblioteca sepa tocar el sistema de archivos.
+     * <p>The stream is supplied by the caller, already open, so the library does not have to know how
+     * to touch the filesystem for this form.
      */
     public Formatter(java.io.OutputStream os, Charset charset, Locale l) {
         if (os == null || charset == null) {
             throw new NullPointerException();
         }
-        this.out = new SalidaCodificada(this, os, charset);
+        this.out = new EncodedOutput(this, os, charset);
         this.locale = l;
     }
 
     /**
-     * Un `Formatter` que escribe a un archivo, **truncando** lo que hubiera.
+     * A `Formatter` that writes to a file, **truncating** whatever was there.
      *
-     * <p>Se apoya en `FileOutputStream`, y de ahi viene la advertencia que importa: **hay que
-     * cerrar**. Lo escrito se acumula en un buffer y va al disco en `flush`/`close`; un `Formatter`
-     * de archivo que se abandona pierde lo que quedaba. La forma segura es un try-with-resources,
-     * que es para lo que la clase implementa `Closeable`.
+     * <p>It leans on `FileOutputStream`, and that is where the warning that matters comes from: **it
+     * has to be closed**. What is written piles up in a buffer and goes to disk on `flush`/`close`; a
+     * file `Formatter` that is abandoned loses what was left. The safe form is a try-with-resources,
+     * which is what the class implements `Closeable` for.
      *
-     * @throws java.io.FileNotFoundException si es un directorio, o no se puede escribir ahi
+     * @throws java.io.FileNotFoundException if it is a directory, or cannot be written to
      */
     public Formatter(java.io.File file) throws java.io.FileNotFoundException {
         this(file, Charset.defaultCharset(), Locale.getDefault());
@@ -89,12 +88,12 @@ public final class Formatter implements Closeable, Flushable {
 
     public Formatter(java.io.File file, String charsetName)
             throws java.io.FileNotFoundException, java.io.UnsupportedEncodingException {
-        this(file, cargarCharset(charsetName), Locale.getDefault());
+        this(file, loadCharset(charsetName), Locale.getDefault());
     }
 
     public Formatter(java.io.File file, String charsetName, Locale l)
             throws java.io.FileNotFoundException, java.io.UnsupportedEncodingException {
-        this(file, cargarCharset(charsetName), l);
+        this(file, loadCharset(charsetName), l);
     }
 
     public Formatter(java.io.File file, Charset charset, Locale l)
@@ -103,10 +102,10 @@ public final class Formatter implements Closeable, Flushable {
     }
 
     /**
-     * Idem, por nombre de archivo.
+     * The same, by file name.
      *
-     * <p>Es `new Formatter(new File(fileName))`, y existe porque el caso mas comun --escribir a una
-     * ruta-- no deberia pedir construir un objeto intermedio.
+     * <p>It is `new Formatter(new File(fileName))`, and it exists because the commonest case
+     * --writing to a path-- should not require building an intermediate object.
      */
     public Formatter(String fileName) throws java.io.FileNotFoundException {
         this(fileName == null ? null : new java.io.File(fileName));
@@ -132,12 +131,12 @@ public final class Formatter implements Closeable, Flushable {
     }
 
     /**
-     * Un `Formatter` que escribe a un `PrintStream`.
+     * A `Formatter` that writes to a `PrintStream`.
      *
-     * <p>Existe aparte de la forma con `OutputStream` --de la que un `PrintStream` **es** un caso--
-     * porque el JDK la declara, y porque el charset que se usa es el del stream y no el por defecto:
-     * un `PrintStream` ya eligio el suyo al construirse, y pisarlo aca daria bytes distintos de los
-     * que ese mismo stream produce con `print`.
+     * <p>It exists apart from the `OutputStream` form --of which a `PrintStream` **is** a case--
+     * because the JDK declares it, and because the charset used is the stream's and not the default
+     * one: a `PrintStream` already chose its own on construction, and overriding it here would give
+     * bytes different from the ones that same stream produces with `print`.
      */
     public Formatter(java.io.PrintStream ps) {
         if (ps == null) {
@@ -148,52 +147,54 @@ public final class Formatter implements Closeable, Flushable {
     }
 
     /**
-     * Ídem, nombrando el charset.
+     * The same, naming the charset.
      *
-     * <p>Declara `UnsupportedEncodingException` --chequeada-- y no la `UnsupportedCharsetException`
-     * que tira `Charset.forName`, porque es lo que declara el JDK y **el `throws` es parte del
-     * contrato**: el que llama esta obligado a atajarla, y cambiarla por una no chequeada le sacaria
-     * esa obligacion sin avisar.
+     * <p>It declares `UnsupportedEncodingException` --checked-- and not the
+     * `UnsupportedCharsetException` `Charset.forName` throws, because it is what the JDK declares and
+     * **the `throws` is part of the contract**: the caller is obliged to catch it, and swapping it
+     * for an unchecked one would lift that obligation without warning.
      *
-     * <p>Vale anotarlo: `apidiff` **no** habria visto esta diferencia --normaliza sacando la
-     * clausula `throws`--. La encontro compilar la prueba con el `javac` real, que se nego.
+     * <p>Worth noting: `apidiff` would **not** have seen this difference --it normalises by stripping
+     * the `throws` clause. What found it was compiling the test with the inner `javac`, which
+     * refused.
      */
     public Formatter(java.io.OutputStream os, String charsetName)
             throws java.io.UnsupportedEncodingException {
-        this(os, cargarCharset(charsetName), Locale.getDefault());
+        this(os, loadCharset(charsetName), Locale.getDefault());
     }
 
     public Formatter(java.io.OutputStream os, String charsetName, Locale l)
             throws java.io.UnsupportedEncodingException {
-        this(os, cargarCharset(charsetName), l);
+        this(os, loadCharset(charsetName), l);
     }
 
-    // `Charset.forName` tira `UnsupportedCharsetException`, que no es la que el contrato pide.
-    private static Charset cargarCharset(String nombre) throws java.io.UnsupportedEncodingException {
-        if (nombre == null) {
+    // `Charset.forName` throws `UnsupportedCharsetException`, which is not the one the contract
+    // asks for.
+    private static Charset loadCharset(String name) throws java.io.UnsupportedEncodingException {
+        if (name == null) {
             throw new NullPointerException();
         }
         try {
-            return Charset.forName(nombre);
+            return Charset.forName(name);
         } catch (RuntimeException e) {
-            throw new java.io.UnsupportedEncodingException(nombre);
+            throw new java.io.UnsupportedEncodingException(name);
         }
     }
 
     /**
-     * La ultima `IOException` que tiro el destino, o `null` si no hubo.
+     * The last `IOException` the destination threw, or `null` if there was none.
      *
-     * <p>Es la razon por la que `Formatter` **no propaga** los errores de escritura: sus metodos
-     * `format` devuelven `this` para poder encadenarse, y una excepcion chequeada lo rompe. Se
-     * guarda y se pregunta despues.
+     * <p>It is the reason `Formatter` does **not propagate** write errors: its `format` methods
+     * return `this` so they can be chained, and a checked exception breaks that. It is stored and
+     * asked for afterwards.
      */
     public java.io.IOException ioException() {
-        return this.ultimaIo;
+        return this.lastIo;
     }
 
-    // Lo llama `SalidaCodificada` cuando el stream falla. Package-private: no es API.
-    void registrarIo(java.io.IOException e) {
-        this.ultimaIo = e;
+    // `EncodedOutput` calls it when the stream fails. Package-private: it is not API.
+    void recordIo(java.io.IOException e) {
+        this.lastIo = e;
     }
 
     public Appendable out() {
@@ -209,15 +210,15 @@ public final class Formatter implements Closeable, Flushable {
     }
 
     public void flush() {
-        if (this.out instanceof SalidaCodificada) {
-            ((SalidaCodificada) this.out).vaciar();
+        if (this.out instanceof EncodedOutput) {
+            ((EncodedOutput) this.out).emptyOut();
         }
     }
 
     public void close() {
         this.flush();
-        if (this.out instanceof SalidaCodificada) {
-            ((SalidaCodificada) this.out).cerrar();
+        if (this.out instanceof EncodedOutput) {
+            ((EncodedOutput) this.out).closeOut();
         }
     }
 
@@ -232,16 +233,16 @@ public final class Formatter implements Closeable, Flushable {
 
     public Formatter format(String format, Object... args) {
         try {
-            return this.formatear(format, args);
+            return this.formatValue(format, args);
         } catch (java.io.IOException e) {
-            this.ultimaIo = e;
+            this.lastIo = e;
             return this;
         }
     }
 
-    // El formateo de verdad. Declara la excepcion; el publico de arriba la atrapa y la anota, que es
-    // el contrato de `Formatter`.
-    private Formatter formatear(String format, Object... args) throws java.io.IOException {
+    // The inner formatting. It declares the exception; the public one above catches it and notes it,
+    // which is `Formatter`'s contract.
+    private Formatter formatValue(String format, Object... args) throws java.io.IOException {
         int argIndex = 0;
         int lastArgIndex = -1;
         int i = 0;
@@ -1044,72 +1045,72 @@ public final class Formatter implements Closeable, Flushable {
     }
 }
 
-// El `Appendable` que hay detras de `new Formatter(OutputStream, ...)`: acumula caracteres y los
-// escribe codificados al stream.
+// The `Appendable` behind `new Formatter(OutputStream, ...)`: it piles up characters and writes them
+// encoded to the stream.
 //
-// Acumula en vez de codificar caracter por caracter porque un caracter no es una unidad de
-// codificacion: un par suplente (un emoji, por ejemplo) son dos `char` que juntos dan cuatro bytes en
-// UTF-8, y codificar cada mitad por separado daria basura. Se vacia en `flush`/`close`, y tambien
-// cuando el buffer crece, cortando **solo** en un limite seguro.
-final class SalidaCodificada implements Appendable {
+// It piles them up instead of encoding character by character because a character is not a unit of
+// encoding: a surrogate pair (an emoji, say) is two `char`s that together give four bytes in UTF-8,
+// and encoding each half separately would give rubbish. It is emptied on `flush`/`close`, and also
+// when the buffer grows, cutting **only** at a safe boundary.
+final class EncodedOutput implements Appendable {
 
-    private final Formatter duenio;
-    private final java.io.OutputStream destino;
+    private final Formatter owner;
+    private final java.io.OutputStream target;
     private final Charset charset;
-    private final StringBuilder pendiente = new StringBuilder();
+    private final StringBuilder pending = new StringBuilder();
 
-    SalidaCodificada(Formatter duenio, java.io.OutputStream destino, Charset charset) {
-        this.duenio = duenio;
-        this.destino = destino;
+    EncodedOutput(Formatter owner, java.io.OutputStream target, Charset charset) {
+        this.owner = owner;
+        this.target = target;
         this.charset = charset;
     }
 
     public Appendable append(CharSequence csq) {
-        this.pendiente.append(csq == null ? "null" : csq);
+        this.pending.append(csq == null ? "null" : csq);
         return this;
     }
 
     public Appendable append(CharSequence csq, int start, int end) {
-        this.pendiente.append(csq == null ? "null" : csq, start, end);
+        this.pending.append(csq == null ? "null" : csq, start, end);
         return this;
     }
 
     public Appendable append(char c) {
-        this.pendiente.append(c);
+        this.pending.append(c);
         return this;
     }
 
-    void vaciar() {
-        if (this.pendiente.length() == 0) {
+    void emptyOut() {
+        if (this.pending.length() == 0) {
             return;
         }
-        // Si el ultimo char es la mitad alta de un par suplente, se lo deja para la proxima: su
-        // compañero todavia no llego, y codificarlo solo daria el reemplazo.
-        int fin = this.pendiente.length();
-        if (Character.isHighSurrogate(this.pendiente.charAt(fin - 1))) {
-            fin = fin - 1;
+        // If the last char is the high half of a surrogate pair, it is left for next time: its
+        // partner has not arrived yet, and encoding it alone would give the replacement.
+        int endAt = this.pending.length();
+        if (Character.isHighSurrogate(this.pending.charAt(endAt - 1))) {
+            endAt = endAt - 1;
         }
-        if (fin == 0) {
+        if (endAt == 0) {
             return;
         }
-        byte[] bytes = this.pendiente.substring(0, fin).getBytes(this.charset);
-        this.pendiente.delete(0, fin);
+        byte[] bytes = this.pending.substring(0, endAt).getBytes(this.charset);
+        this.pending.delete(0, endAt);
         try {
-            this.destino.write(bytes, 0, bytes.length);
+            this.target.write(bytes, 0, bytes.length);
         } catch (java.io.IOException e) {
-            this.duenio.registrarIo(e);
+            this.owner.recordIo(e);
         }
     }
 
-    void cerrar() {
+    void closeOut() {
         try {
-            this.destino.close();
+            this.target.close();
         } catch (java.io.IOException e) {
-            this.duenio.registrarIo(e);
+            this.owner.recordIo(e);
         }
     }
 
     public String toString() {
-        return this.pendiente.toString();
+        return this.pending.toString();
     }
 }

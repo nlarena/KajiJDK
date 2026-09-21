@@ -1,19 +1,19 @@
 package java.io;
 
-// KajiLibrary's java.io.PipedReader -- la punta de lectura de una tuberia de **caracteres**.
+// KajiLibrary's java.io.PipedReader -- the reading end of a pipe of **characters**.
 //
-// El mismo buffer circular que `PipedInputStream` con `char` en vez de `byte`, y por la misma razon
-// que existen `Reader` y `InputStream` por separado: pasar texto por una tuberia de bytes obliga a
-// codificar de un lado y decodificar del otro, y si los dos extremos son Java eso es trabajo puro
-// --y una fuente de caracteres partidos al medio cuando un caracter multibyte cae justo en el
-// borde del buffer.
+// The same circular buffer as `PipedInputStream` with `char` instead of `byte`, and for the same
+// reason `Reader` and `InputStream` exist separately: passing text through a pipe of bytes forces
+// encoding on one side and decoding on the other, and if both ends are Java that is pure work --and
+// a source of characters split down the middle when a multi-byte character falls right on the
+// buffer's edge.
 //
-// Todo lo dicho en `PipedInputStream` vale igual: el centinela `in == -1` para distinguir vacio de
-// lleno, las esperas con plazo de un segundo para poder detectar que el otro extremo se murio, y
-// la sincronizacion concentrada de este lado.
+// Everything said in `PipedInputStream` holds just as well: the `in == -1` sentinel for telling
+// empty from full, the waits with a one-second deadline so as to be able to detect that the other
+// end has died, and the synchronization concentrated on this side.
 //
-// Las excepciones son las del JDK y chequeadas, como en `PipedInputStream`; ver la nota de alla
-// por que durante un tiempo no lo fueron.
+// The exceptions are the JDK's and checked, as in `PipedInputStream`; see the note over there for
+// why for a while they were not.
 public class PipedReader extends Reader {
 
     boolean closedByWriter = false;
@@ -29,42 +29,42 @@ public class PipedReader extends Reader {
 
     char[] buffer;
 
-    /** Donde se escribe el proximo caracter; **-1 si la tuberia esta vacia**. */
+    /** Where the next character is written; **-1 if the pipe is empty**. */
     int in = -1;
 
-    /** De donde se lee el proximo caracter. */
+    /** Where the next character is read from. */
     int out = 0;
 
-    /** Conecta esta punta a `src` con el buffer del tamano por omision. */
+    /** Connects this end to `src` with the default-sized buffer. */
     public PipedReader(PipedWriter src) throws IOException {
         this(src, DEFAULT_PIPE_SIZE);
     }
 
     /**
-     * Conecta esta punta a `src`.
+     * Connects this end to `src`.
      *
-     * @throws IllegalArgumentException si `pipeSize` no es positivo
+     * @throws IllegalArgumentException if `pipeSize` is not positive
      */
     public PipedReader(PipedWriter src, int pipeSize) throws IOException {
-        this.iniciarBuffer(pipeSize);
+        this.initBuffer(pipeSize);
         this.connect(src);
     }
 
-    /** Sin conectar: hace falta un `connect` antes de usarla. */
+    /** Unconnected: a `connect` is needed before using it. */
     public PipedReader() {
-        this.iniciarBuffer(DEFAULT_PIPE_SIZE);
+        this.initBuffer(DEFAULT_PIPE_SIZE);
     }
 
     /**
-     * Sin conectar, con el buffer del tamano dado.
+     * Unconnected, with a buffer of the given size.
      *
-     * @throws IllegalArgumentException si `pipeSize` no es positivo
+     * @throws IllegalArgumentException if `pipeSize` is not positive
      */
     public PipedReader(int pipeSize) {
-        this.iniciarBuffer(pipeSize);
+        this.initBuffer(pipeSize);
     }
 
-    private void iniciarBuffer(int pipeSize) {
+    private void initBuffer(int pipeSize) {
         if (pipeSize <= 0) {
             throw new IllegalArgumentException("Pipe size <= 0");
         }
@@ -72,15 +72,15 @@ public class PipedReader extends Reader {
     }
 
     /**
-     * Conecta esta punta al `PipedWriter` dado.
+     * Connects this end to the given `PipedWriter`.
      *
-     * @throws IOException si alguna de las dos puntas ya estaba conectada
+     * @throws IOException if either of the two ends was already connected
      */
     public void connect(PipedWriter src) throws IOException {
         src.connect(this);
     }
 
-    /** Recibe un caracter del escritor. **Bloquea si la tuberia esta llena.** */
+    /** It receives a character from the writer. **It blocks if the pipe is full.** */
     synchronized void receive(int c) throws IOException {
         if (!this.connected) {
             throw new IOException("Pipe not connected");
@@ -116,12 +116,12 @@ public class PipedReader extends Reader {
     }
 
     synchronized void receive(char[] c, int off, int len) throws IOException {
-        int desde = off;
-        int quedan = len;
-        while (quedan > 0) {
-            this.receive(c[desde]);
-            desde = desde + 1;
-            quedan = quedan - 1;
+        int from = off;
+        int left = len;
+        while (left > 0) {
+            this.receive(c[from]);
+            from = from + 1;
+            left = left - 1;
         }
     }
 
@@ -131,9 +131,9 @@ public class PipedReader extends Reader {
     }
 
     /**
-     * Lee un caracter. **Bloquea hasta que haya uno**, o hasta que el escritor cierre.
+     * Reads one character. **It blocks until there is one**, or until the writer closes.
      *
-     * @return el caracter, o -1 si se acabo
+     * @return the character, or -1 if it has run out
      */
     public synchronized int read() throws IOException {
         if (!this.connected) {
@@ -178,9 +178,9 @@ public class PipedReader extends Reader {
     }
 
     /**
-     * Lee hasta `len` caracteres. Bloquea hasta que haya **al menos uno**.
+     * Reads up to `len` characters. It blocks until there is **at least one**.
      *
-     * @return cuantos se leyeron, o -1 si se acabo
+     * @return how many were read, or -1 if it has run out
      */
     public synchronized int read(char[] cbuf, int off, int len) throws IOException {
         if (cbuf == null) {
@@ -222,7 +222,7 @@ public class PipedReader extends Reader {
         return rlen;
     }
 
-    /** Si hay al menos un caracter listo para leer sin bloquear. */
+    /** Whether there is at least one character ready to be read without blocking. */
     public synchronized boolean ready() throws IOException {
         if (!this.connected) {
             throw new IOException("Pipe not connected");
@@ -233,7 +233,7 @@ public class PipedReader extends Reader {
         return this.in >= 0;
     }
 
-    /** Cierra la punta de lectura. */
+    /** Closes the reading end. */
     public void close() throws IOException {
         this.in = -1;
         this.closedByReader = true;

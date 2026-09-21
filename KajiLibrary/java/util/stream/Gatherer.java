@@ -6,76 +6,77 @@ import java.util.function.BiConsumer;
 import java.util.function.BinaryOperator;
 
 /**
- * La receta de una operacion intermedia definida por el usuario: lo que `Stream.gather` ejecuta.
+ * The recipe of a user-defined intermediate operation: what `Stream.gather` runs.
  *
- * <p>Un `Gatherer` tiene cuatro piezas, igual que un `Collector`: como crear el estado privado
- * (`initializer`), que hacer con cada elemento (`integrator`), como fusionar dos estados
- * parciales (`combiner`) y que emitir al terminar (`finisher`).
+ * <p>A `Gatherer` has four pieces, just like a `Collector`: how to create the private state
+ * (`initializer`), what to do with each element (`integrator`), how to merge two partial states
+ * (`combiner`) and what to emit at the end (`finisher`).
  *
- * <p><b>Por que este tipo si entra en una biblioteca de flujos ansiosos, y `generate` no.</b> La
- * diferencia esta en quien empuja. Un flujo perezoso <em>tira</em> de su fuente, y por eso una
- * fuente sin fin se puede representar sin materializarla; un `Gatherer` <em>empuja</em> hacia el
- * `Downstream` que le pasan. Empujar no necesita pereza: recorremos el arreglo de entrada una vez,
- * llamamos al integrador por elemento y juntamos lo que salga. El unico rasgo del modelo perezoso
- * que hay que emular a mano es el <b>corte</b>, y esta contemplado: si `integrate` devuelve
- * `false` el recorrido para ahi, sin visitar el resto (ver `Stream.gather`).
+ * <p><b>Why this type does fit a library of eager streams, and `generate` does not.</b> The
+ * difference is in who pushes. A lazy stream <em>pulls</em> from its source, and that is why an
+ * endless source can be represented without materialising it; a `Gatherer` <em>pushes</em> towards
+ * the `Downstream` it is given. Pushing needs no laziness: we walk the input array once, call the
+ * integrator per element and gather whatever comes out. The one trait of the lazy model that has to
+ * be emulated by hand is the <b>short-circuit</b>, and it is provided for: if `integrate` returns
+ * `false` the traversal stops there, without visiting the rest (see `Stream.gather`).
  *
- * <p><b>Cuatro fabricas estan declaradas pero HOY NO SE PUEDEN LLAMAR, y la culpa es del
- * compilador, no de la implementacion.</b> Son las cuatro que reciben un finalizador:
+ * <p><b>Four factories are declared but CANNOT BE CALLED TODAY, and the fault is the compiler's,
+ * not the implementation's.</b> They are the four that take a finisher:
  * `of(Integrator, BiConsumer)`, `of(Supplier, Integrator, BinaryOperator, BiConsumer)`,
- * `ofSequential(Integrator, BiConsumer)` y `ofSequential(Supplier, Integrator, BiConsumer)`. Este
- * javac no da por aplicable ningun metodo cuyo <b>parametro</b> meta una variable de tipo dentro
- * de un argumento de tipo <b>invariante</b> --la forma `BiConsumer&lt;A, Downstream&lt;R&gt;&gt;`--,
- * aunque el argumento tenga exactamente ese tipo escrito a mano y aunque se le pase un `witness`
- * explicito. Lo que salva el caso es un comodin <em>en esa posicion</em>
- * (`Supplier&lt;? extends Spliterator&lt;T&gt;&gt;` si resuelve, y por eso `StreamSupport` se puede
- * llamar entero); el `? super R` de estas cuatro esta <em>adentro</em> de `Downstream`, no en la
- * posicion anidada, asi que no salva. Es la misma familia que ya tenia anotada `Stream.mapMulti`,
- * solo que aca sale como error duro ("no resolvio a ningun metodo") y no en silencio. Repro con las
- * cinco variantes: java/WcLib3.java + java/WcUse3.java.
- * Los cuerpos son correctos y el dia que el compilador resuelva la llamada quedan andando; mientras
- * tanto, `Gatherers` arma sus `GathererImpl` con el constructor, que si resuelve porque los
- * argumentos de tipo de la clase se escriben y no se infieren. Lo que SI se puede llamar hoy esta
- * cubierto por la sonda java/GfacProbe.java.
+ * `ofSequential(Integrator, BiConsumer)` and `ofSequential(Supplier, Integrator, BiConsumer)`. This
+ * javac holds no method applicable whose <b>parameter</b> puts a type variable inside an
+ * <b>invariant</b> type argument --the shape `BiConsumer&lt;A, Downstream&lt;R&gt;&gt;`-- even when
+ * the argument has exactly that type written by hand and even when an explicit `witness` is passed.
+ * What saves the case is a wildcard <em>in that position</em>
+ * (`Supplier&lt;? extends Spliterator&lt;T&gt;&gt;` does resolve, which is why `StreamSupport` can
+ * be called in full); these four's `? super R` is <em>inside</em> `Downstream`, not at the nested
+ * position, so it does not save it. It is the same family `Stream.mapMulti` already had noted, only
+ * that here it comes out as a hard error ("resolved to no method") and not in silence. Repro with
+ * the five variants: java/WcLib3.java + java/WcUse3.java.
+ * The bodies are correct and the day the compiler resolves the call they work; in the meantime,
+ * `Gatherers` builds its `GathererImpl` with the constructor, which does resolve because the
+ * class's type arguments are written and not inferred. What CAN be called today is covered by the
+ * probe java/GfacProbe.java.
  *
- * <p><b>Divergencia con el JDK, y es la unica.</b> `combiner()` describe como fusionar dos estados
- * de dos mitades evaluadas <em>en paralelo</em>. Nuestro `gather` es secuencial y nunca parte la
- * entrada, asi que nunca lo llama. El combinador por omision de `defaultCombiner()` se niega al
- * ser invocado, exactamente como el del JDK: un combinador que no puede fusionar honestamente es
- * mejor que uno que devuelve cualquiera de los dos lados y finge.
+ * <p><b>A divergence from the JDK, and it is the only one.</b> `combiner()` describes how to merge
+ * two states of two halves evaluated <em>in parallel</em>. Our `gather` is sequential and never
+ * splits the input, so it never calls it. `defaultCombiner()`'s default combiner refuses when
+ * invoked, exactly as the JDK's does: a combiner that cannot merge honestly is better than one that
+ * returns either side and pretends.
  *
- * @param <T> el tipo de los elementos que entran
- * @param <A> el tipo del estado privado (`Void` si no hace falta ninguno)
- * @param <R> el tipo de los elementos que salen
+ * @param <T> the type of the elements that come in
+ * @param <A> the private state's type (`Void` if none is needed)
+ * @param <R> the type of the elements that come out
  */
 public interface Gatherer<T, A, R> {
 
     /**
-     * Adonde un `Gatherer` empuja los elementos que produce.
+     * Where a `Gatherer` pushes the elements it produces.
      *
-     * <p>`push` devuelve `false` cuando lo de abajo ya no quiere mas -- porque hubo un `limit`, o
-     * porque un `Gatherer` compuesto mas abajo corto. Un integrador que respeta esa respuesta es
-     * lo que hace que un corte se propague hacia arriba en vez de recorrer la entrada entera.
+     * <p>`push` returns `false` when what is below wants no more -- because there was a `limit`, or
+     * because a composed `Gatherer` further down short-circuited. An integrator that respects that
+     * answer is what makes a short-circuit propagate upwards instead of walking the whole input.
      *
-     * @param <T> el tipo de lo que se empuja
+     * @param <T> the type of what is pushed
      */
     interface Downstream<T> {
 
         /**
-         * Empuja un elemento hacia abajo.
+         * It pushes an element downwards.
          *
-         * @param element el elemento
-         * @return `false` si de aca en adelante no se acepta nada mas
+         * @param element the element
+         * @return `false` if nothing more will be accepted from here on
          */
         boolean push(T element);
 
         /**
-         * Si ya se sabe que ningun `push` posterior va a ser aceptado.
+         * Whether it is already known that no later `push` will be accepted.
          *
-         * <p>Es una pregunta, no una promesa al reves: un `false` no garantiza que el proximo
-         * `push` se acepte. Sirve para abandonar un calculo caro que igual se iba a descartar.
+         * <p>It is a question, not a promise the other way: a `false` does not guarantee the next
+         * `push` will be accepted. It serves to abandon an expensive computation that was going to
+         * be discarded anyway.
          *
-         * @return `true` si esta rechazando
+         * @return `true` if it is rejecting
          */
         default boolean isRejecting() {
             return false;
@@ -83,38 +84,38 @@ public interface Gatherer<T, A, R> {
     }
 
     /**
-     * Que hacer con cada elemento de entrada.
+     * What to do with each input element.
      *
-     * <p>El orden de los parametros de tipo es `A, T, R` --estado, entrada, salida-- y no el
-     * `T, A, R` del `Gatherer` que lo contiene. Es el orden del JDK y se respeta tal cual: es el
-     * orden en que aparecen en `integrate`.
+     * <p>The type parameters' order is `A, T, R` --state, input, output-- and not the `T, A, R` of
+     * the `Gatherer` that contains it. It is the JDK's order and it is kept as it stands: it is the
+     * order they appear in in `integrate`.
      *
-     * @param <A> el estado privado
-     * @param <T> el tipo de entrada
-     * @param <R> el tipo de salida
+     * @param <A> the private state
+     * @param <T> the input type
+     * @param <R> the output type
      */
     interface Integrator<A, T, R> {
 
         /**
-         * Procesa un elemento, empujando cero o mas elementos hacia `downstream`.
+         * It processes an element, pushing zero or more elements towards `downstream`.
          *
-         * @param state el estado privado
-         * @param element el elemento de entrada
-         * @param downstream adonde empujar lo producido
-         * @return `false` para pedir que no se le mande ningun elemento mas
+         * @param state the private state
+         * @param element the input element
+         * @param downstream where to push what is produced
+         * @return `false` to ask that no further element be sent
          */
         boolean integrate(A state, T element, Downstream<? super R> downstream);
 
         /**
-         * Devuelve su argumento.
+         * It returns its argument.
          *
-         * <p>Existe solo para darle a una lambda un tipo objetivo donde escribirla; en el JDK
-         * lleva `@ForceInline` porque el `invokestatic` desaparece en la compilacion JIT.
+         * <p>It exists only to give a lambda a target type to be written at; in the JDK it carries
+         * `@ForceInline` because the `invokestatic` disappears under JIT compilation.
          *
-         * @param integrator el integrador
-         * @param <A> el estado
-         * @param <T> el tipo de entrada
-         * @param <R> el tipo de salida
+         * @param integrator the integrator
+         * @param <A> the state
+         * @param <T> the input type
+         * @param <R> the output type
          * @return `integrator`
          */
         static <A, T, R> Integrator<A, T, R> of(Integrator<A, T, R> integrator) {
@@ -122,12 +123,12 @@ public interface Gatherer<T, A, R> {
         }
 
         /**
-         * Devuelve su argumento, tipado como `Greedy`.
+         * It returns its argument, typed as `Greedy`.
          *
-         * @param greedy el integrador voraz
-         * @param <A> el estado
-         * @param <T> el tipo de entrada
-         * @param <R> el tipo de salida
+         * @param greedy the greedy integrator
+         * @param <A> the state
+         * @param <T> the input type
+         * @param <R> the output type
          * @return `greedy`
          */
         static <A, T, R> Integrator.Greedy<A, T, R> ofGreedy(Integrator.Greedy<A, T, R> greedy) {
@@ -135,140 +136,141 @@ public interface Gatherer<T, A, R> {
         }
 
         /**
-         * Un integrador que promete no cortar nunca: su `integrate` siempre devuelve `true`.
+         * An integrator that promises never to short-circuit: its `integrate` always returns
+         * `true`.
          *
-         * <p>Es una interfaz marcadora --no agrega ningun miembro--, y esa promesa le sirve al
-         * JDK para saltearse el chequeo de corte. Nuestro `gather` mira el valor devuelto de
-         * todas formas, asi que aca el marcador no cambia el resultado, solo lo documenta.
+         * <p>It is a marker interface --it adds no member-- and that promise lets the JDK skip the
+         * short-circuit check. Our `gather` looks at the returned value anyway, so here the marker
+         * changes no result, it only documents it.
          *
-         * @param <A> el estado
-         * @param <T> el tipo de entrada
-         * @param <R> el tipo de salida
+         * @param <A> the state
+         * @param <T> the input type
+         * @param <R> the output type
          */
         interface Greedy<A, T, R> extends Integrator<A, T, R> {
         }
     }
 
     /**
-     * Como crear el estado privado. Por omision, uno que no existe (`null`).
+     * How to create the private state. By default, one that does not exist (`null`).
      *
-     * @return el proveedor del estado inicial
+     * @return the initial state's supplier
      */
     default Supplier<A> initializer() {
         return Gatherer.<A>defaultInitializer();
     }
 
     /**
-     * Que hacer con cada elemento. Es la unica pieza obligatoria.
+     * What to do with each element. It is the only mandatory piece.
      *
-     * @return el integrador
+     * @return the integrator
      */
     Integrator<A, T, R> integrator();
 
     /**
-     * Como fusionar dos estados parciales. Por omision, no se puede: ver `defaultCombiner`.
+     * How to merge two partial states. By default, it cannot be done: see `defaultCombiner`.
      *
-     * @return el combinador
+     * @return the combiner
      */
     default BinaryOperator<A> combiner() {
         return Gatherer.<A>defaultCombiner();
     }
 
     /**
-     * Que emitir cuando se acabo la entrada. Por omision, nada.
+     * What to emit when the input has run out. By default, nothing.
      *
-     * @return el finalizador
+     * @return the finisher
      */
     default BiConsumer<A, Downstream<? super R>> finisher() {
         return Gatherer.<A, R>defaultFinisher();
     }
 
     /**
-     * Este `Gatherer` seguido de `that`: lo que este empuja es lo que aquel recibe.
+     * This `Gatherer` followed by `that`: what this one pushes is what that one receives.
      *
-     * <p>El compuesto lleva los dos estados en un `Object[2]` y le da al primero un `Downstream`
-     * intermedio que alimenta al segundo. El corte viaja en las dos direcciones: si el segundo
-     * rechaza, el `push` del intermedio devuelve `false` y el primero se entera; si el primero
-     * corta, el recorrido termina y solo quedan los dos finalizadores, en orden.
+     * <p>The composition carries both states in an `Object[2]` and gives the first an intermediate
+     * `Downstream` that feeds the second. The short-circuit travels both ways: if the second
+     * rejects, the intermediate's `push` returns `false` and the first finds out; if the first
+     * short-circuits, the traversal ends and only the two finishers are left, in order.
      *
-     * @param that el `Gatherer` que va despues
-     * @param <RR> lo que sale del compuesto
-     * @return la composicion
-     * @throws NullPointerException si `that` es null
+     * @param that the `Gatherer` that comes after
+     * @param <RR> what comes out of the composition
+     * @return the composition
+     * @throws NullPointerException if `that` is null
      */
     default <RR> Gatherer<T, ?, RR> andThen(Gatherer<? super R, ?, ? extends RR> that) {
         Objects.requireNonNull(that);
-        // Los dos lados se ven como `Gatherer<..., Object, ...>`: el estado de cada mitad es
-        // opaco para el compuesto, que solo lo guarda y lo pasa. La conversion es no chequeada
-        // en el sentido de las genericas y exacta en el del borrado.
+        // Both sides are seen as `Gatherer<..., Object, ...>`: each half's state is opaque to the
+        // composition, which only stores it and passes it on. The conversion is unchecked in the
+        // generics' sense and exact in erasure's.
         Object self = this;
         Object other = that;
-        Gatherer<T, Object, R> primero = (Gatherer<T, Object, R>) self;
-        Gatherer<R, Object, RR> segundo = (Gatherer<R, Object, RR>) other;
-        return new CompositeGatherer<T, R, RR>(primero, segundo);
+        Gatherer<T, Object, R> first = (Gatherer<T, Object, R>) self;
+        Gatherer<R, Object, RR> second = (Gatherer<R, Object, RR>) other;
+        return new CompositeGatherer<T, R, RR>(first, second);
     }
 
     /**
-     * El inicializador por omision: no hay estado, y `get()` devuelve `null`.
+     * The default initializer: there is no state, and `get()` returns `null`.
      *
-     * @param <A> el estado nominal (en la practica `Void`)
-     * @return un proveedor de `null`
+     * @param <A> the nominal state (in practice `Void`)
+     * @return a supplier of `null`
      */
     static <A> Supplier<A> defaultInitializer() {
         return new NoStateInitializer<A>();
     }
 
     /**
-     * El combinador por omision: se niega a fusionar.
+     * The default combiner: it refuses to merge.
      *
-     * <p>Un `Gatherer` que no dice como fusionar dos mitades no se puede evaluar en paralelo, y
-     * el JDK lo expresa con un combinador que tira `UnsupportedOperationException` en vez de con
-     * uno que devuelve el lado izquierdo. Aca se copia esa decision, aunque nuestro `gather`
-     * nunca lo llame: el dia que alguien lea `combiner()` y lo invoque, la respuesta honesta es
-     * "no se puede", no un resultado silenciosamente incompleto.
+     * <p>A `Gatherer` that does not say how to merge two halves cannot be evaluated in parallel, and
+     * the JDK expresses that with a combiner that throws `UnsupportedOperationException` instead of
+     * one that returns the left-hand side. That decision is copied here, even though our `gather`
+     * never calls it: the day somebody reads `combiner()` and invokes it, the honest answer is "it
+     * cannot be done", not a silently incomplete result.
      *
-     * @param <A> el estado
-     * @return un combinador que siempre falla
+     * @param <A> the state
+     * @return a combiner that always fails
      */
     static <A> BinaryOperator<A> defaultCombiner() {
         return new NoCombiner<A>();
     }
 
     /**
-     * El finalizador por omision: no emite nada al terminar.
+     * The default finisher: it emits nothing at the end.
      *
-     * @param <A> el estado
-     * @param <R> el tipo de salida
-     * @return un finalizador que no hace nada
+     * @param <A> the state
+     * @param <R> the output type
+     * @return a finisher that does nothing
      */
     static <A, R> BiConsumer<A, Downstream<? super R>> defaultFinisher() {
         return new NoFinisher<A, R>();
     }
 
     /**
-     * Un `Gatherer` sin estado ni finalizador, marcado como secuencial.
+     * A `Gatherer` with neither state nor finisher, marked sequential.
      *
-     * @param integrator el integrador
-     * @param <T> el tipo de entrada
-     * @param <R> el tipo de salida
-     * @return el `Gatherer`
+     * @param integrator the integrator
+     * @param <T> the input type
+     * @param <R> the output type
+     * @return the `Gatherer`
      */
     static <T, R> Gatherer<T, Void, R> ofSequential(Integrator<Void, T, R> integrator) {
         Objects.requireNonNull(integrator);
         Supplier<Void> init = Gatherer.<Void>defaultInitializer();
         BinaryOperator<Void> comb = Gatherer.<Void>defaultCombiner();
-        BiConsumer<Void, Downstream<? super R>> fin = Gatherer.<Void, R>defaultFinisher();
-        return new GathererImpl<T, Void, R>(init, integrator, comb, fin);
+        BiConsumer<Void, Downstream<? super R>> end = Gatherer.<Void, R>defaultFinisher();
+        return new GathererImpl<T, Void, R>(init, integrator, comb, end);
     }
 
     /**
-     * Un `Gatherer` sin estado, con finalizador, marcado como secuencial.
+     * A `Gatherer` with no state and a finisher, marked sequential.
      *
-     * @param integrator el integrador
-     * @param finisher el finalizador
-     * @param <T> el tipo de entrada
-     * @param <R> el tipo de salida
-     * @return el `Gatherer`
+     * @param integrator the integrator
+     * @param finisher the finisher
+     * @param <T> the input type
+     * @param <R> the output type
+     * @return the `Gatherer`
      */
     static <T, R> Gatherer<T, Void, R> ofSequential(Integrator<Void, T, R> integrator,
                                                     BiConsumer<Void, Downstream<? super R>> finisher) {
@@ -280,33 +282,33 @@ public interface Gatherer<T, A, R> {
     }
 
     /**
-     * Un `Gatherer` con estado, sin finalizador, marcado como secuencial.
+     * A `Gatherer` with state and no finisher, marked sequential.
      *
-     * @param initializer como crear el estado
-     * @param integrator el integrador
-     * @param <T> el tipo de entrada
-     * @param <A> el estado
-     * @param <R> el tipo de salida
-     * @return el `Gatherer`
+     * @param initializer how to create the state
+     * @param integrator the integrator
+     * @param <T> the input type
+     * @param <A> the state
+     * @param <R> the output type
+     * @return the `Gatherer`
      */
     static <T, A, R> Gatherer<T, A, R> ofSequential(Supplier<A> initializer, Integrator<A, T, R> integrator) {
         Objects.requireNonNull(initializer);
         Objects.requireNonNull(integrator);
         BinaryOperator<A> comb = Gatherer.<A>defaultCombiner();
-        BiConsumer<A, Downstream<? super R>> fin = Gatherer.<A, R>defaultFinisher();
-        return new GathererImpl<T, A, R>(initializer, integrator, comb, fin);
+        BiConsumer<A, Downstream<? super R>> end = Gatherer.<A, R>defaultFinisher();
+        return new GathererImpl<T, A, R>(initializer, integrator, comb, end);
     }
 
     /**
-     * Un `Gatherer` con estado y finalizador, marcado como secuencial.
+     * A `Gatherer` with state and a finisher, marked sequential.
      *
-     * @param initializer como crear el estado
-     * @param integrator el integrador
-     * @param finisher el finalizador
-     * @param <T> el tipo de entrada
-     * @param <A> el estado
-     * @param <R> el tipo de salida
-     * @return el `Gatherer`
+     * @param initializer how to create the state
+     * @param integrator the integrator
+     * @param finisher the finisher
+     * @param <T> the input type
+     * @param <A> the state
+     * @param <R> the output type
+     * @return the `Gatherer`
      */
     static <T, A, R> Gatherer<T, A, R> ofSequential(Supplier<A> initializer, Integrator<A, T, R> integrator,
                                                     BiConsumer<A, Downstream<? super R>> finisher) {
@@ -318,32 +320,32 @@ public interface Gatherer<T, A, R> {
     }
 
     /**
-     * Un `Gatherer` sin estado ni finalizador, apto para paralelo.
+     * A `Gatherer` with neither state nor finisher, fit for parallel use.
      *
-     * <p>El combinador que le corresponde fusiona dos "sin estado", que es trivial: devuelve
-     * `null`. Es el unico caso en que el combinador por omision <em>no</em> es el que se niega.
+     * <p>Its combiner merges two "stateless" states, which is trivial: it returns `null`. It is
+     * the one case where the default combiner is <em>not</em> the one that refuses.
      *
-     * @param integrator el integrador
-     * @param <T> el tipo de entrada
-     * @param <R> el tipo de salida
-     * @return el `Gatherer`
+     * @param integrator the integrator
+     * @param <T> the input type
+     * @param <R> the output type
+     * @return the `Gatherer`
      */
     static <T, R> Gatherer<T, Void, R> of(Integrator<Void, T, R> integrator) {
         Objects.requireNonNull(integrator);
         Supplier<Void> init = Gatherer.<Void>defaultInitializer();
         BinaryOperator<Void> comb = new StatelessCombiner();
-        BiConsumer<Void, Downstream<? super R>> fin = Gatherer.<Void, R>defaultFinisher();
-        return new GathererImpl<T, Void, R>(init, integrator, comb, fin);
+        BiConsumer<Void, Downstream<? super R>> end = Gatherer.<Void, R>defaultFinisher();
+        return new GathererImpl<T, Void, R>(init, integrator, comb, end);
     }
 
     /**
-     * Un `Gatherer` sin estado, con finalizador, apto para paralelo.
+     * A `Gatherer` with no state and a finisher, fit for parallel use.
      *
-     * @param integrator el integrador
-     * @param finisher el finalizador
-     * @param <T> el tipo de entrada
-     * @param <R> el tipo de salida
-     * @return el `Gatherer`
+     * @param integrator the integrator
+     * @param finisher the finisher
+     * @param <T> the input type
+     * @param <R> the output type
+     * @return the `Gatherer`
      */
     static <T, R> Gatherer<T, Void, R> of(Integrator<Void, T, R> integrator,
                                           BiConsumer<Void, Downstream<? super R>> finisher) {
@@ -355,17 +357,17 @@ public interface Gatherer<T, A, R> {
     }
 
     /**
-     * Un `Gatherer` con las cuatro piezas dadas.
+     * A `Gatherer` with the four pieces given.
      *
-     * @param initializer como crear el estado
-     * @param integrator el integrador
-     * @param combiner el combinador
-     * @param finisher el finalizador
-     * @param <T> el tipo de entrada
-     * @param <A> el estado
-     * @param <R> el tipo de salida
-     * @return el `Gatherer`
-     * @throws NullPointerException si alguna pieza es null
+     * @param initializer how to create the state
+     * @param integrator the integrator
+     * @param combiner the combiner
+     * @param finisher the finisher
+     * @param <T> the input type
+     * @param <A> the state
+     * @param <R> the output type
+     * @return the `Gatherer`
+     * @throws NullPointerException if any of the pieces is null
      */
     static <T, A, R> Gatherer<T, A, R> of(Supplier<A> initializer, Integrator<A, T, R> integrator,
                                           BinaryOperator<A> combiner,
@@ -378,11 +380,11 @@ public interface Gatherer<T, A, R> {
     }
 }
 
-// ---- las piezas por omision -------------------------------------------------------------------
+// ---- the default pieces -------------------------------------------------------------------------
 //
-// Clases con nombre y no lambdas, por la regla de la casa que ya rige en Collectors.java: una
-// lambda alcanzada a traves de un *campo* de otro objeto no se ejecuta bien en nuestra VM. Estos
-// objetos viven justamente ahi, en campos de GathererImpl.
+// Named classes and not lambdas, by the house rule that already governs Collectors.java: a lambda
+// reached through a *field* of another object does not execute correctly on our VM. These objects
+// live exactly there, in GathererImpl's fields.
 
 final class NoStateInitializer<A> implements Supplier<A> {
     public A get() {
@@ -390,16 +392,16 @@ final class NoStateInitializer<A> implements Supplier<A> {
     }
 }
 
-// El combinador que se niega. Ver Gatherer.defaultCombiner().
+// The combiner that refuses. See Gatherer.defaultCombiner().
 final class NoCombiner<A> implements BinaryOperator<A> {
     public A apply(A left, A right) {
-        // Mensaje constante: la concatenacion de String en tiempo de ejecucion no esta
-        // disponible en nuestra VM (#226).
-        throw new UnsupportedOperationException("este combinador no se puede usar");
+        // A constant message: String concatenation at run time is not
+        // available in our VM (#226).
+        throw new UnsupportedOperationException("this combiner cannot be used");
     }
 }
 
-// Fusionar dos estados que no existen: no hay nada que fusionar.
+// Merging two states that do not exist: there is nothing to merge.
 final class StatelessCombiner implements BinaryOperator<Void> {
     public Void apply(Void left, Void right) {
         return null;
@@ -411,7 +413,7 @@ final class NoFinisher<A, R> implements BiConsumer<A, Gatherer.Downstream<? supe
     }
 }
 
-// ---- la implementacion que devuelven las fabricas ---------------------------------------------
+// ---- the implementation the factories return ----------------------------------------------------
 
 final class GathererImpl<T, A, R> implements Gatherer<T, A, R> {
 
@@ -445,10 +447,11 @@ final class GathererImpl<T, A, R> implements Gatherer<T, A, R> {
     }
 }
 
-// ---- el buffer al que empuja `Stream.gather` --------------------------------------------------
+// ---- the buffer `Stream.gather` pushes into -----------------------------------------------------
 
-// Junta lo que el Gatherer empuja. Nunca rechaza: es el final de la cadena y el flujo resultante
-// se materializa entero, asi que no hay nada mas abajo que pueda pedir que se corte.
+// It gathers what the Gatherer pushes. It never rejects: it is the end of the chain and the
+// resulting stream is materialised whole, so there is nothing further down that could ask to
+// short-circuit.
 final class GatherBuffer<R> implements Gatherer.Downstream<R> {
 
     private Object[] data;
@@ -476,7 +479,7 @@ final class GatherBuffer<R> implements Gatherer.Downstream<R> {
         return false;
     }
 
-    // Una copia exacta, del largo vivo.
+    // An exact copy, of the live length.
     Object[] toArray() {
         Object[] out = new Object[this.size];
         for (int i = 0; i < this.size; i++) {
@@ -486,140 +489,140 @@ final class GatherBuffer<R> implements Gatherer.Downstream<R> {
     }
 }
 
-// ---- la composicion de dos Gatherers ----------------------------------------------------------
+// ---- the composition of two Gatherers -----------------------------------------------------------
 
-// El `Downstream` que el primero de los dos ve: cada `push` es un `integrate` del segundo.
+// The `Downstream` the first of the two sees: each `push` is an `integrate` of the second.
 final class MidDownstream<R, RR> implements Gatherer.Downstream<R> {
 
     private final Gatherer.Integrator<Object, R, RR> integrator;
-    // El estado del segundo vive en `estado[1]` del Object[2] compartido, no en un campo propio:
-    // el finalizador del compuesto necesita el mismo estado que vio el integrador.
-    private final Object[] estado;
-    private final Gatherer.Downstream<RR> abajo;
-    private boolean rechazando;
+    // The second's state lives in `state[1]` of the shared Object[2] and not in a field of its
+    // own: the composition's finisher needs the same state the integrator saw.
+    private final Object[] state;
+    private final Gatherer.Downstream<RR> down;
+    private boolean rejecting;
 
-    MidDownstream(Gatherer.Integrator<Object, R, RR> integrator, Object[] estado,
-                  Gatherer.Downstream<RR> abajo) {
+    MidDownstream(Gatherer.Integrator<Object, R, RR> integrator, Object[] state,
+                  Gatherer.Downstream<RR> down) {
         this.integrator = integrator;
-        this.estado = estado;
-        this.abajo = abajo;
-        this.rechazando = false;
+        this.state = state;
+        this.down = down;
+        this.rejecting = false;
     }
 
     public boolean push(R element) {
-        if (this.rechazando) {
+        if (this.rejecting) {
             return false;
         }
-        boolean sigue = this.integrator.integrate(this.estado[1], element, this.abajo);
-        if (!sigue) {
-            this.rechazando = true;
+        boolean goOn = this.integrator.integrate(this.state[1], element, this.down);
+        if (!goOn) {
+            this.rejecting = true;
         }
-        return sigue;
+        return goOn;
     }
 
     public boolean isRejecting() {
-        if (this.rechazando) {
+        if (this.rejecting) {
             return true;
         }
-        return this.abajo.isRejecting();
+        return this.down.isRejecting();
     }
 
-    boolean rechazo() {
-        return this.rechazando;
+    boolean rejected() {
+        return this.rejecting;
     }
 }
 
 final class CompositeIntegrator<T, R, RR> implements Gatherer.Integrator<Object[], T, RR> {
 
-    private final Gatherer<T, Object, R> primero;
-    private final Gatherer<R, Object, RR> segundo;
+    private final Gatherer<T, Object, R> first;
+    private final Gatherer<R, Object, RR> second;
 
-    CompositeIntegrator(Gatherer<T, Object, R> primero, Gatherer<R, Object, RR> segundo) {
-        this.primero = primero;
-        this.segundo = segundo;
+    CompositeIntegrator(Gatherer<T, Object, R> first, Gatherer<R, Object, RR> second) {
+        this.first = first;
+        this.second = second;
     }
 
-    public boolean integrate(Object[] estado, T element, Gatherer.Downstream<? super RR> downstream) {
-        Gatherer.Downstream<RR> abajo = (Gatherer.Downstream<RR>) downstream;
-        Gatherer.Integrator<Object, R, RR> i2 = this.segundo.integrator();
-        MidDownstream<R, RR> medio = new MidDownstream<R, RR>(i2, estado, abajo);
-        Gatherer.Integrator<Object, T, R> i1 = this.primero.integrator();
-        boolean sigue = i1.integrate(estado[0], element, medio);
-        if (!sigue) {
+    public boolean integrate(Object[] state, T element, Gatherer.Downstream<? super RR> downstream) {
+        Gatherer.Downstream<RR> down = (Gatherer.Downstream<RR>) downstream;
+        Gatherer.Integrator<Object, R, RR> i2 = this.second.integrator();
+        MidDownstream<R, RR> mid = new MidDownstream<R, RR>(i2, state, down);
+        Gatherer.Integrator<Object, T, R> i1 = this.first.integrator();
+        boolean goOn = i1.integrate(state[0], element, mid);
+        if (!goOn) {
             return false;
         }
-        return !medio.rechazo();
+        return !mid.rejected();
     }
 }
 
 final class CompositeInitializer<T, R, RR> implements Supplier<Object[]> {
 
-    private final Gatherer<T, Object, R> primero;
-    private final Gatherer<R, Object, RR> segundo;
+    private final Gatherer<T, Object, R> first;
+    private final Gatherer<R, Object, RR> second;
 
-    CompositeInitializer(Gatherer<T, Object, R> primero, Gatherer<R, Object, RR> segundo) {
-        this.primero = primero;
-        this.segundo = segundo;
+    CompositeInitializer(Gatherer<T, Object, R> first, Gatherer<R, Object, RR> second) {
+        this.first = first;
+        this.second = second;
     }
 
     public Object[] get() {
-        Supplier<Object> s1 = this.primero.initializer();
-        Supplier<Object> s2 = this.segundo.initializer();
-        Object[] estado = new Object[2];
-        estado[0] = s1.get();
-        estado[1] = s2.get();
-        return estado;
+        Supplier<Object> s1 = this.first.initializer();
+        Supplier<Object> s2 = this.second.initializer();
+        Object[] state = new Object[2];
+        state[0] = s1.get();
+        state[1] = s2.get();
+        return state;
     }
 }
 
-// Los dos finalizadores, en orden: lo que emita el primero todavia tiene que pasar por el segundo.
+// Both finishers, in order: what the first emits still has to go through the second.
 final class CompositeFinisher<T, R, RR> implements BiConsumer<Object[], Gatherer.Downstream<? super RR>> {
 
-    private final Gatherer<T, Object, R> primero;
-    private final Gatherer<R, Object, RR> segundo;
+    private final Gatherer<T, Object, R> first;
+    private final Gatherer<R, Object, RR> second;
 
-    CompositeFinisher(Gatherer<T, Object, R> primero, Gatherer<R, Object, RR> segundo) {
-        this.primero = primero;
-        this.segundo = segundo;
+    CompositeFinisher(Gatherer<T, Object, R> first, Gatherer<R, Object, RR> second) {
+        this.first = first;
+        this.second = second;
     }
 
-    public void accept(Object[] estado, Gatherer.Downstream<? super RR> downstream) {
-        Gatherer.Downstream<RR> abajo = (Gatherer.Downstream<RR>) downstream;
-        Gatherer.Integrator<Object, R, RR> i2 = this.segundo.integrator();
-        MidDownstream<R, RR> medio = new MidDownstream<R, RR>(i2, estado, abajo);
-        BiConsumer<Object, Gatherer.Downstream<? super R>> f1 = this.primero.finisher();
-        Gatherer.Downstream<? super R> destinoMedio = medio;
-        f1.accept(estado[0], destinoMedio);
-        BiConsumer<Object, Gatherer.Downstream<? super RR>> f2 = this.segundo.finisher();
-        f2.accept(estado[1], downstream);
+    public void accept(Object[] state, Gatherer.Downstream<? super RR> downstream) {
+        Gatherer.Downstream<RR> down = (Gatherer.Downstream<RR>) downstream;
+        Gatherer.Integrator<Object, R, RR> i2 = this.second.integrator();
+        MidDownstream<R, RR> mid = new MidDownstream<R, RR>(i2, state, down);
+        BiConsumer<Object, Gatherer.Downstream<? super R>> f1 = this.first.finisher();
+        Gatherer.Downstream<? super R> midTarget = mid;
+        f1.accept(state[0], midTarget);
+        BiConsumer<Object, Gatherer.Downstream<? super RR>> f2 = this.second.finisher();
+        f2.accept(state[1], downstream);
     }
 }
 
 final class CompositeGatherer<T, R, RR> implements Gatherer<T, Object[], RR> {
 
-    private final Gatherer<T, Object, R> primero;
-    private final Gatherer<R, Object, RR> segundo;
+    private final Gatherer<T, Object, R> first;
+    private final Gatherer<R, Object, RR> second;
 
-    CompositeGatherer(Gatherer<T, Object, R> primero, Gatherer<R, Object, RR> segundo) {
-        this.primero = primero;
-        this.segundo = segundo;
+    CompositeGatherer(Gatherer<T, Object, R> first, Gatherer<R, Object, RR> second) {
+        this.first = first;
+        this.second = second;
     }
 
     public Supplier<Object[]> initializer() {
-        return new CompositeInitializer<T, R, RR>(this.primero, this.segundo);
+        return new CompositeInitializer<T, R, RR>(this.first, this.second);
     }
 
     public Gatherer.Integrator<Object[], T, RR> integrator() {
-        return new CompositeIntegrator<T, R, RR>(this.primero, this.segundo);
+        return new CompositeIntegrator<T, R, RR>(this.first, this.second);
     }
 
-    // Un compuesto no sabe fusionar: haria falta fusionar las dos mitades de cada lado, y el
-    // combinador de cualquiera de los dos puede ser el que se niega. Se niega el compuesto.
+    // A composition does not know how to merge: it would take merging each side's two halves, and
+    // either one's combiner may be the one that refuses. The composition refuses.
     public BinaryOperator<Object[]> combiner() {
         return new NoCombiner<Object[]>();
     }
 
     public BiConsumer<Object[], Gatherer.Downstream<? super RR>> finisher() {
-        return new CompositeFinisher<T, R, RR>(this.primero, this.segundo);
+        return new CompositeFinisher<T, R, RR>(this.first, this.second);
     }
 }

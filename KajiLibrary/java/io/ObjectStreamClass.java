@@ -4,137 +4,142 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 
 /**
- * KajiLibrary's java.io.ObjectStreamClass -- la forma serializable de una clase: que campos salen al
- * flujo, en que orden y en que lugar.
+ * KajiLibrary's java.io.ObjectStreamClass -- a class's serializable form: which fields go out to
+ * the stream, in what order and in what place.
  *
- * <p>Es una consulta reflexiva y por eso se puede contestar de verdad: "¿que se guardaria de esta
- * clase?" no necesita guardar nada. Sirve tal cual esta para inspeccionar una jerarquia antes de
- * decidir un {@code transient}, o para comparar dos versiones de una clase campo por campo.
+ * <p>It is a reflective query and that is why it can really be answered: "what would be stored of
+ * this class?" needs to store nothing. It serves as it stands for inspecting a hierarchy before
+ * deciding on a {@code transient}, or for comparing two versions of a class field by field.
  *
- * <h2>Como se eligen los campos</h2>
+ * <h2>How the fields are chosen</h2>
  *
- * <p>Si la clase declara {@code private static final ObjectStreamField[] serialPersistentFields},
- * esa lista **manda** y los campos reales no se miran: es la forma de fijar la representacion
- * serializada de una clase para que sobreviva a que se le renombren los campos por dentro. Si no la
- * declara, salen los campos **declarados** por la clase --no los heredados, que le tocan a su propio
- * descriptor-- salteando los {@code static} y los {@code transient}.
+ * <p>If the class declares {@code private static final ObjectStreamField[] serialPersistentFields},
+ * that list **rules** and the real fields are not looked at: it is the way of fixing a class's
+ * serialized representation so that it survives its fields being renamed inside. If it does not
+ * declare one, the fields **declared** by the class go out --not the inherited ones, which belong
+ * to their own descriptor-- skipping the {@code static} and the {@code transient} ones.
  *
- * <p>El orden no es el de declaracion sino el del flujo: primitivos primero, y por nombre dentro de
- * cada grupo. El porque esta en {@link ObjectStreamField}.
+ * <p>The order is not the declaration one but the stream's: primitives first, and by name within
+ * each group. The why is in {@link ObjectStreamField}.
  *
- * <h2>{@code getSerialVersionUID()} y el dato que la reflexion no da</h2>
+ * <h2>{@code getSerialVersionUID()} and the datum reflection does not give</h2>
  *
- * <p>Cuando la clase declara su {@code serialVersionUID} el valor esta ahi y no hay nada que
- * calcular. Cuando no lo declara, la especificacion manda calcularlo: un SHA-1 sobre una forma
- * canonica que incluye el nombre, los modificadores, las interfaces, los campos, los constructores,
- * los metodos, y --el punto delicado-- **si la clase tiene inicializador estatico**.
+ * <p>When the class declares its {@code serialVersionUID} the value is right there and there is
+ * nothing to work out. When it does not declare one, the specification orders it computed: a SHA-1
+ * over a canonical form including the name, the modifiers, the interfaces, the fields, the
+ * constructors, the methods, and --the delicate point-- **whether the class has a static
+ * initializer**.
  *
- * <p>Ese ultimo dato no se puede averiguar por reflexion: {@code getDeclaredMethods()} filtra
- * {@code <clinit>} a proposito, en esta VM y en el JDK. Por eso el JDK tampoco lo resuelve por
- * reflexion sino con un **nativo**, y aca se hace igual: {@link #hasStaticInitializer} lee el
- * archivo de clase. Sin ese nativo el numero saldria bien para las clases sin bloque estatico y
- * mal para las demas --que son la mayoria, porque cualquier campo estatico con inicializador no
- * constante genera uno--, y un {@code serialVersionUID} equivocado es la peor forma de estar
- * equivocado que tiene esta API: su unico proposito es que dos JVM se pongan de acuerdo en si dos
- * clases son la misma version, y el que llama recibe un {@code long} perfectamente creible sin
- * manera de notar que no coincide con el del JDK.
+ * <p>That last datum cannot be found out by reflection: {@code getDeclaredMethods()} filters {@code
+ * <clinit>} on purpose, on this VM and in the JDK. That is why the JDK does not resolve it by
+ * reflection either but with a **native**, and here it is done the same way: {@link
+ * #hasStaticInitializer} reads the class file. Without that native the number would come out right
+ * for the classes with no static block and wrong for the rest --which are most of them, because any
+ * static field with a non-constant initializer generates one-- and a wrong {@code serialVersionUID}
+ * is the worst way of being wrong this API has: its only purpose is for two JVMs to agree on
+ * whether two classes are the same version, and the caller receives a perfectly believable {@code
+ * long} with no way of noticing that it does not match the JDK's.
  */
 public final class ObjectStreamClass implements Serializable {
 
-    /** El arreglo vacio, para una clase que no aporta campos. Compartido: no tiene estado. */
+    /** The empty array, for a class contributing no fields. Shared: it has no state. */
     public static final ObjectStreamField[] NO_FIELDS = new ObjectStreamField[0];
 
-    // No es `final` por el lado que lee: un descriptor que viene del flujo nace **sin** clase local
-    // --el nombre es lo unico que trajo-- y la consigue recien cuando `resolveClass` la encuentra.
-    // Un descriptor armado por reflexion la fija en el constructor y no la cambia nunca mas.
-    private Class<?> clase;
-    private final String nombre;
-    private final ObjectStreamField[] campos;
-    // Perezoso y cacheado: calcular el UID es un SHA-1 sobre toda la superficie reflexiva de la
-    // clase, y la mayoria de los descriptores no lo piden nunca. `Long` y no `long` porque 0 es un
-    // UID valido y haria falta un centinela aparte.
+    // It is not `final` because of the reading side: a descriptor coming from the stream is born
+    // **without** a local class --the name is all it brought-- and only gets one when
+    // `resolveClass` finds it. A descriptor built by reflection sets it in the constructor and
+    // never changes it.
+    private Class<?> cls;
+    private final String name;
+    private final ObjectStreamField[] fields;
+    // Lazy and cached: working out the UID is a SHA-1 over the class's whole reflective surface,
+    // and most descriptors never ask for it. `Long` and not `long` because 0 is a valid UID and a
+    // separate sentinel would be needed.
     private Long uid;
 
-    // ---- solo para un descriptor leido de un flujo ----
-    // Las banderas `SC_*` tal como vinieron. Importan al leer y no al describir: dicen si el que
-    // escribio uso un `writeObject` propio, y por lo tanto si los datos de este tramo estan
-    // enmarcados en registros de bloque o van crudos. Adivinarlo mirando la clase local seria el
-    // error clasico: la clase de este lado puede tener --o no tener-- el metodo que la del otro
-    // tenia, y el marco del flujo lo decidio el que escribio.
-    private int banderasFlujo;
-    // El descriptor de la superclase, tambien del flujo. La cadena termina en `null`, y ese `null`
-    // es el que dice donde se acaba la parte de la jerarquia que aporto datos.
-    private ObjectStreamClass superiorFlujo;
-    private boolean deFlujo;
+    // ---- only for a descriptor read from a stream ----
+    // The `SC_*` flags as they came. They matter when reading and not when describing: they say
+    // whether the writer used a `writeObject` of its own, and therefore whether this stretch's data
+    // is framed in block records or goes raw. Guessing that by looking at the local class would be
+    // the classic mistake: the class on this side may have --or not have-- the method the other one
+    // had, and the stream's framing was decided by whoever wrote it.
+    private int streamFlags;
+    // The superclass's descriptor, also from the stream. The chain ends in `null`, and that `null`
+    // is the one that says where the part of the hierarchy that contributed data ends.
+    private ObjectStreamClass streamSuper;
+    private boolean fromStream;
 
-    private ObjectStreamClass(Class<?> clase, ObjectStreamField[] campos) {
-        this.clase = clase;
-        this.nombre = clase.getName();
-        // Un enum no tiene forma serializada propia: al flujo va **el nombre de la constante** y
-        // nada mas, porque la constante ya existe del otro lado y lo unico que hay que decir es
-        // cual es. De ahi las dos excepciones que hace la especificacion y que hay que respetar al
-        // byte, porque el JDK las mira al leer y rechaza el flujo si no estan:
+    private ObjectStreamClass(Class<?> cls, ObjectStreamField[] fields) {
+        this.cls = cls;
+        this.name = cls.getName();
+        // An enum has no serialized form of its own: what goes to the stream is **the constant's
+        // name** and nothing else, because the constant already exists on the other side and all
+        // there is to say is which one it is. Hence the two exceptions the specification makes and
+        // that have to be honoured to the byte, because the JDK looks at them when reading and
+        // rejects the stream if they are not there:
         //
-        //   - `serialVersionUID` es **cero**, y no la huella calculada. No es que no importe: un
-        //     enum no puede cambiar de forma serializada, asi que versionarla no significa nada, y
-        //     el lector del JDK trata un valor distinto de cero como flujo invalido.
-        //   - **sin campos**, aunque `name` y `ordinal` esten ahi. Escribirlos ademas del nombre
-        //     seria decir dos veces la misma cosa, y `ordinal` encima ata el flujo al orden en que
-        //     estan declaradas las constantes hoy.
-        boolean esEnum = Enum.class.isAssignableFrom(clase);
-        this.campos = esEnum ? NO_FIELDS : campos;
-        if (esEnum) {
+        //   - `serialVersionUID` is **zero**, and not the computed fingerprint. It is not that it
+        //     does not matter: an enum cannot change its serialized form, so versioning it means
+        //     nothing, and the JDK's reader treats a non-zero value as an invalid stream.
+        //   - **no fields**, even though `name` and `ordinal` are there. Writing them on top of the
+        //     name would be saying the same thing twice, and `ordinal` on top of that ties the
+        //     stream to the order the constants are declared in today.
+        boolean isEnum = Enum.class.isAssignableFrom(cls);
+        this.fields = isEnum ? NO_FIELDS : fields;
+        if (isEnum) {
             this.uid = Long.valueOf(0L);
         }
     }
 
     /**
-     * El descriptor tal como venia en el flujo, todavia sin clase local.
+     * The descriptor as it came in the stream, still with no local class.
      *
-     * <p>El UID se fija de entrada con el del flujo en vez de calcularse: para un descriptor leido,
-     * el numero **es** el que vino, y calcular el de la clase local daria el de la otra version --
-     * justo la que se quiere comparar contra esta, no la que se quiere reportar.
+     * <p>The UID is set from the start with the stream's instead of being computed: for a
+     * descriptor that was read, the number **is** the one that came, and computing the local
+     * class's would give the other version's -- exactly the one that is to be compared against
+     * this, not the one that is to be reported.
      */
-    ObjectStreamClass(String nombre, long uid, int banderas, ObjectStreamField[] campos) {
-        this.clase = null;
-        this.nombre = nombre;
-        this.campos = campos;
+    ObjectStreamClass(String name, long uid, int flags, ObjectStreamField[] fields) {
+        this.cls = null;
+        this.name = name;
+        this.fields = fields;
         this.uid = Long.valueOf(uid);
-        this.banderasFlujo = banderas;
-        this.deFlujo = true;
-        asignarOffsets(campos);
+        this.streamFlags = flags;
+        this.fromStream = true;
+        assignOffsets(fields);
     }
 
-    /** La clase local que le toco a este descriptor leido, o `null` si de este lado no hay ninguna. */
-    void resolvioA(Class<?> cl) {
-        this.clase = cl;
+    /** The local class this read descriptor was given, or `null` if there is none on this
+     * side. */
+    void resolvedTo(Class<?> cl) {
+        this.cls = cl;
     }
 
-    void superiorFlujo(ObjectStreamClass sup) {
-        this.superiorFlujo = sup;
+    void streamSuper(ObjectStreamClass sup) {
+        this.streamSuper = sup;
     }
 
-    ObjectStreamClass superiorFlujo() {
-        return this.superiorFlujo;
+    ObjectStreamClass streamSuper() {
+        return this.streamSuper;
     }
 
-    int banderasFlujo() {
-        return this.banderasFlujo;
+    int streamFlags() {
+        return this.streamFlags;
     }
 
-    boolean deFlujo() {
-        return this.deFlujo;
+    boolean fromStream() {
+        return this.fromStream;
     }
 
     /**
-     * El descriptor de `cl`, o `null` si `cl` no es serializable.
+     * `cl`'s descriptor, or `null` if `cl` is not serializable.
      *
-     * <p>El `null` es la respuesta, no un error: preguntar por una clase que no se serializa es
-     * legitimo --es como se averigua que no se serializa-- y devolver un descriptor vacio haria que
-     * "no participa" se confundiera con "participa sin campos", que es lo que le pasa a una
-     * {@link Externalizable}.
+     * <p>The `null` is the answer, not an error: asking about a class that is not serialized is
+     * legitimate --it is how one finds out that it is not-- and returning an empty descriptor would
+     * make "it does not take part" be confused with "it takes part with no fields", which is what
+     * happens to an {@link Externalizable}.
      *
-     * @throws NullPointerException si `cl` es `null`
+     * @throws NullPointerException if `cl` is `null`
      */
     public static ObjectStreamClass lookup(Class<?> cl) {
         if (cl == null) {
@@ -143,57 +148,57 @@ public final class ObjectStreamClass implements Serializable {
         if (!Serializable.class.isAssignableFrom(cl)) {
             return null;
         }
-        return new ObjectStreamClass(cl, camposDe(cl));
+        return new ObjectStreamClass(cl, fieldsOf(cl));
     }
 
     /**
-     * El descriptor de `cl`, sea serializable o no.
+     * `cl`'s descriptor, serializable or not.
      *
-     * <p>Existe para poder describir una clase que aparece en un flujo aunque de este lado no
-     * implemente {@link Serializable}: sin esto no habria con que nombrarla al informar el
-     * desajuste.
+     * <p>It exists so that a class turning up in a stream can be described even if on this side it
+     * does not implement {@link Serializable}: without this there would be nothing to name it with
+     * when reporting the mismatch.
      *
-     * @throws NullPointerException si `cl` es `null`
+     * @throws NullPointerException if `cl` is `null`
      */
     public static ObjectStreamClass lookupAny(Class<?> cl) {
         if (cl == null) {
             throw new NullPointerException();
         }
         if (!Serializable.class.isAssignableFrom(cl)) {
-            // Sin campos, y no los suyos: una clase que no se serializa no tiene forma serializada,
-            // y listar sus campos sugeriria que alguno saldria al flujo.
+            // No fields, and not its own: a class that is not serialized has no serialized form,
+            // and listing its fields would suggest that some of them would go out to the stream.
             return new ObjectStreamClass(cl, NO_FIELDS);
         }
-        return new ObjectStreamClass(cl, camposDe(cl));
+        return new ObjectStreamClass(cl, fieldsOf(cl));
     }
 
     public String getName() {
-        return this.nombre;
+        return this.name;
     }
 
     public Class<?> forClass() {
-        return this.clase;
+        return this.cls;
     }
 
     /**
-     * Los campos que saldrian al flujo, ya ordenados y con sus desplazamientos.
+     * The fields that would go out to the stream, already sorted and with their offsets.
      *
-     * <p>Devuelve **una copia** en cada llamada. No es prolijidad: `setOffset` es `protected` pero
-     * accesible desde una subclase de {@link ObjectStreamField}, y un descriptor cuyos offsets
-     * pudieran moverse desde afuera describiria un formato distinto del que el flujo usa.
+     * <p>It returns **a copy** on every call. It is not tidiness: `setOffset` is `protected` but
+     * reachable from a subclass of {@link ObjectStreamField}, and a descriptor whose offsets could
+     * be moved from outside would describe a format different from the one the stream uses.
      */
     public ObjectStreamField[] getFields() {
-        ObjectStreamField[] copia = new ObjectStreamField[this.campos.length];
-        System.arraycopy(this.campos, 0, copia, 0, this.campos.length);
-        return copia;
+        ObjectStreamField[] copy = new ObjectStreamField[this.fields.length];
+        System.arraycopy(this.fields, 0, copy, 0, this.fields.length);
+        return copy;
     }
 
-    /** El campo llamado `name`, o `null` si no hay ninguno. */
+    /** The field called `name`, or `null` if there is none. */
     public ObjectStreamField getField(String name) {
         int i = 0;
-        while (i < this.campos.length) {
-            if (this.campos[i].getName().equals(name)) {
-                return this.campos[i];
+        while (i < this.fields.length) {
+            if (this.fields[i].getName().equals(name)) {
+                return this.fields[i];
             }
             i = i + 1;
         }
@@ -201,63 +206,64 @@ public final class ObjectStreamClass implements Serializable {
     }
 
     /**
-     * El numero de version de la forma serializada de esta clase.
+     * The version number of this class's serialized form.
      *
-     * <p>Si la clase declara {@code static final long serialVersionUID}, ese valor **manda** y no se
-     * calcula nada: declararlo es justamente la forma de decir "mi formato no cambio aunque el
-     * codigo si". Si no lo declara, sale del SHA-1 de la forma canonica que describe
-     * {@link #huellaDe}.
+     * <p>If the class declares {@code static final long serialVersionUID}, that value **rules** and
+     * nothing is computed: declaring it is precisely the way of saying "my format did not change
+     * even though the code did". If it does not declare one, it comes from the SHA-1 of the
+     * canonical form {@link #fingerprintOf} describes.
      *
-     * <p>Cero para lo que no tiene forma serializada --un arreglo, una primitiva-- que es lo que el
-     * JDK devuelve.
+     * <p>Zero for what has no serialized form --an array, a primitive-- which is what the JDK
+     * returns.
      */
     public long getSerialVersionUID() {
         if (this.uid == null) {
-            this.uid = Long.valueOf(calcularUid(this.clase));
+            this.uid = Long.valueOf(computeUid(this.cls));
         }
         return this.uid.longValue();
     }
 
-    /** El formato del JDK: el nombre y despues la linea de la declaracion del SUID. */
+    /** The JDK's format: the name and then the line of the SUID's declaration. */
     public String toString() {
-        return this.nombre + ": static final long serialVersionUID = "
+        return this.name + ": static final long serialVersionUID = "
                 + this.getSerialVersionUID() + "L;";
     }
 
     // ---- serialVersionUID ------------------------------------------------------------------------
 
-    // Si la clase tiene `<clinit>`. Nativo por la misma razon que en el JDK: `getDeclaredMethods`
-    // filtra `<clinit>`, asi que la reflexion no puede contestarlo y el dato entra en la huella.
+    // Whether the class has a `<clinit>`. Native for the same reason as in the JDK:
+    // `getDeclaredMethods` filters `<clinit>` out, so reflection cannot answer it and the datum
+    // goes into the fingerprint.
     private static native boolean hasStaticInitializer(Class<?> cl);
 
     /**
-     * Una instancia de `cl` con todos sus campos en el valor por defecto y **sin correr ningun
-     * constructor**, o `null` si `cl` no se puede instanciar.
+     * An instance of `cl` with every field at its default value and **without running any
+     * constructor**, or `null` if `cl` cannot be instantiated.
      *
-     * <p>Es la unica pieza de la deserializacion que no se puede escribir en Java, y por eso es
-     * nativa. Reconstruir no es construir: los campos vienen del flujo, y correr el constructor
-     * ejecutaria sus efectos --validaciones, contadores, altas en tablas globales-- por un objeto
-     * que no se esta creando. Vive aca, package-private, porque su unico llamador legitimo es
-     * {@link ObjectInputStream}: expuesta seria una forma de saltearse todo constructor del
-     * sistema.
+     * <p>It is deserialization's only piece that cannot be written in Java, and that is why it is
+     * native. Rebuilding is not constructing: the fields come from the stream, and running the
+     * constructor would carry out its effects --validations, counters, registrations in global
+     * tables-- for an object that is not being created. It lives here, package-private, because its
+     * only legitimate caller is {@link ObjectInputStream}: exposed it would be a way of bypassing
+     * every constructor in the system.
      */
     static native Object allocateInstance(Class<?> cl);
 
-    private static long calcularUid(Class<?> cl) {
-        long declarado = declaredUid(cl);
-        if (declarado != NO_DECLARADO) {
-            return declarado;
+    private static long computeUid(Class<?> cl) {
+        long declared = declaredUid(cl);
+        if (declared != NOT_DECLARED) {
+            return declared;
         }
         if (!Serializable.class.isAssignableFrom(cl)) {
-            // Lo que no se serializa no tiene version de formato. Cero, y no una huella calculada:
-            // un numero ahi sugeriria que hay un formato con el que compararse.
+            // What is not serialized has no format version. Zero, and not a computed fingerprint: a
+            // number there would suggest there is a format to compare against.
             return 0L;
         }
         try {
-            byte[] h = sha1(huellaDe(cl));
-            // Los ocho primeros bytes del SHA-1, leidos **al reves**: el byte 0 termina en la parte
-            // baja del long. No es una eleccion, es lo que hace el JDK, y el numero tiene que dar
-            // igual byte por byte o los dos lados no se entienden.
+            byte[] h = sha1(fingerprintOf(cl));
+            // The SHA-1's first eight bytes, read **backwards**: byte 0 ends up in the long's low
+            // part. It is no choice, it is what the JDK does, and the number has to come out the
+            // same byte for byte or the two sides do not understand each other.
             long uid = 0L;
             int i = 7;
             while (i >= 0) {
@@ -265,102 +271,104 @@ public final class ObjectStreamClass implements Serializable {
                 i = i - 1;
             }
             return uid;
-        } catch (IOException imposible) {
-            // La huella se arma sobre un `ByteArrayOutputStream`, que no tiene con que fallar.
-            throw new InternalError(imposible);
+        } catch (IOException impossible) {
+            // The fingerprint is built over a `ByteArrayOutputStream`, which has nothing to fail
+            // with.
+            throw new InternalError(impossible);
         }
     }
 
-    // Un `long` no tiene valor "ausente", asi que hace falta un centinela para "la clase no lo
-    // declara" -- y no puede ser 0, que es un SUID declarado perfectamente valido.
-    private static final long NO_DECLARADO = 0x8000_0000_0000_0001L;
+    // A `long` has no "absent" value, so a sentinel is needed for "the class does not declare it"
+    // -- and it cannot be 0, which is a perfectly valid declared SUID.
+    private static final long NOT_DECLARED = 0x8000_0000_0000_0001L;
 
     private static long declaredUid(Class<?> cl) {
         Field f;
         try {
             f = cl.getDeclaredField("serialVersionUID");
         } catch (NoSuchFieldException ex) {
-            return NO_DECLARADO;
+            return NOT_DECLARED;
         }
         int m = f.getModifiers();
         if (!Modifier.isStatic(m) || !Modifier.isFinal(m) || f.getType() != long.class) {
-            return NO_DECLARADO;
+            return NOT_DECLARED;
         }
         f.setAccessible(true);
         return f.getLong(null);
     }
 
     /**
-     * La forma canonica de la que sale el SHA-1, byte por byte como la define la especificacion de
-     * serializacion.
+     * The canonical form the SHA-1 comes out of, byte by byte as the serialization specification
+     * defines it.
      *
-     * <p>El orden es fijo y los ordenamientos tambien --interfaces y campos por nombre,
-     * constructores por firma, metodos por nombre y despues por firma-- porque el numero tiene que
-     * salir igual en dos JVM que vieron la misma clase, y ni la reflexion ni el archivo de clase
-     * garantizan un orden de declaracion estable.
+     * <p>The order is fixed and so are the sortings --interfaces and fields by name, constructors
+     * by signature, methods by name and then by signature-- because the number has to come out the
+     * same on two JVMs that saw the same class, and neither reflection nor the class file
+     * guarantees a stable declaration order.
      *
-     * <p>Los `private` quedan afuera de metodos y constructores, y de los campos solo los
-     * `private static` y `private transient`: lo privado que no sale al flujo no es parte del
-     * contrato con la otra JVM, asi que renombrarlo no tiene por que cambiar la version.
+     * <p>The `private` ones are left out of methods and constructors, and of the fields only the
+     * `private static` and `private transient` ones: what is private and does not go out to the
+     * stream is no part of the contract with the other JVM, so renaming it has no reason to change
+     * the version.
      */
-    private static byte[] huellaDe(Class<?> cl) throws IOException {
+    private static byte[] fingerprintOf(Class<?> cl) throws IOException {
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         DataOutputStream d = new DataOutputStream(bytes);
         d.writeUTF(cl.getName());
 
         int mods = cl.getModifiers()
                 & (Modifier.PUBLIC | Modifier.FINAL | Modifier.INTERFACE | Modifier.ABSTRACT);
-        java.lang.reflect.Method[] metodos = cl.getDeclaredMethods();
+        java.lang.reflect.Method[] methods = cl.getDeclaredMethods();
         if ((mods & Modifier.INTERFACE) != 0) {
-            // Una interfaz sin metodos no lleva ABSTRACT y con metodos si. Parece arbitrario y lo
-            // es: viene de como los compiladores viejos marcaban las interfaces, y se conserva
-            // porque cambiarlo moveria el UID de todas las interfaces del mundo.
-            mods = metodos.length > 0 ? (mods | Modifier.ABSTRACT) : (mods & ~Modifier.ABSTRACT);
+            // An interface with no methods does not carry ABSTRACT and one with methods does. It
+            // looks arbitrary and it is: it comes from how old compilers marked interfaces, and it
+            // is kept because changing it would move the UID of every interface in the world.
+            mods = methods.length > 0 ? (mods | Modifier.ABSTRACT) : (mods & ~Modifier.ABSTRACT);
         }
         d.writeInt(mods);
 
         if (cl.isArray()) {
-            // **Un arreglo termina aca**: nombre y modificadores, y nada mas. No es una
-            // simplificacion nuestra sino una compensacion historica del JDK -- hasta 1.2,
-            // `getInterfaces()` de un arreglo devolvia vacio, y cuando empezo a devolver
-            // `Cloneable` y `Serializable` habria movido el UID de todos los arreglos del mundo.
-            // Se congelo la forma vieja. Sin esto, `int[]` da un numero distinto del real y ningun
-            // flujo con arreglos se lee del otro lado.
+            // **An array ends here**: name and modifiers, and nothing else. It is no simplification
+            // of ours but a historical compensation of the JDK's -- up to 1.2, an array's
+            // `getInterfaces()` returned empty, and when it started returning `Cloneable` and
+            // `Serializable` it would have moved the UID of every array in the world. The old form
+            // was frozen. Without this, `int[]` gives a number different from the real one and no
+            // stream with arrays reads on the other side.
             return bytes.toByteArray();
         }
 
         Class<?>[] ifaces = cl.getInterfaces();
-        String[] nombresIfaces = new String[ifaces.length];
+        String[] ifaceNames = new String[ifaces.length];
         int i = 0;
         while (i < ifaces.length) {
-            nombresIfaces[i] = ifaces[i].getName();
+            ifaceNames[i] = ifaces[i].getName();
             i = i + 1;
         }
-        ordenarCadenas(nombresIfaces);
+        sortStrings(ifaceNames);
         i = 0;
-        while (i < nombresIfaces.length) {
-            d.writeUTF(nombresIfaces[i]);
+        while (i < ifaceNames.length) {
+            d.writeUTF(ifaceNames[i]);
             i = i + 1;
         }
 
-        Field[] campos = cl.getDeclaredFields();
-        String[] clavesCampos = new String[campos.length];
+        Field[] fields = cl.getDeclaredFields();
+        String[] fieldKeys = new String[fields.length];
         i = 0;
-        while (i < campos.length) {
-            clavesCampos[i] = campos[i].getName();
+        while (i < fields.length) {
+            fieldKeys[i] = fields[i].getName();
             i = i + 1;
         }
-        ordenarPorClave(clavesCampos, campos);
+        sortByKey(fieldKeys, fields);
         i = 0;
-        while (i < campos.length) {
-            int fm = campos[i].getModifiers()
+        while (i < fields.length) {
+            int fm = fields[i].getModifiers()
                     & (Modifier.PUBLIC | Modifier.PRIVATE | Modifier.PROTECTED | Modifier.STATIC
                             | Modifier.FINAL | Modifier.VOLATILE | Modifier.TRANSIENT);
             if ((fm & Modifier.PRIVATE) == 0
                     || (fm & (Modifier.STATIC | Modifier.TRANSIENT)) == 0) {
-                d.writeUTF(campos[i].getName());
+                d.writeUTF(fields[i].getName());
                 d.writeInt(fm);
-                d.writeUTF(campos[i].getType().descriptorString());
+                d.writeUTF(fields[i].getType().descriptorString());
             }
             i = i + 1;
         }
@@ -372,90 +380,91 @@ public final class ObjectStreamClass implements Serializable {
         }
 
         java.lang.reflect.Constructor<?>[] ctors = cl.getDeclaredConstructors();
-        String[] clavesCtors = new String[ctors.length];
+        String[] ctorKeys = new String[ctors.length];
         i = 0;
         while (i < ctors.length) {
-            clavesCtors[i] = descriptorDe(ctors[i].getParameterTypes(), void.class);
+            ctorKeys[i] = descriptorOf(ctors[i].getParameterTypes(), void.class);
             i = i + 1;
         }
-        ordenarPorClave(clavesCtors, ctors);
+        sortByKey(ctorKeys, ctors);
         i = 0;
         while (i < ctors.length) {
-            int cm = ctors[i].getModifiers() & MODS_EJECUTABLE;
+            int cm = ctors[i].getModifiers() & EXECUTABLE_MODS;
             if ((cm & Modifier.PRIVATE) == 0) {
                 d.writeUTF("<init>");
                 d.writeInt(cm);
-                d.writeUTF(descriptorDe(ctors[i].getParameterTypes(), void.class).replace('/', '.'));
+                d.writeUTF(descriptorOf(ctors[i].getParameterTypes(), void.class).replace('/', '.'));
             }
             i = i + 1;
         }
 
-        String[] clavesMetodos = new String[metodos.length];
+        String[] methodKeys = new String[methods.length];
         i = 0;
-        while (i < metodos.length) {
-            // Nombre y firma en la misma clave: el orden es por nombre y **despues** por firma, y
-            // pegarlos con un separador que no puede aparecer en un nombre da ese orden con una
-            // sola comparacion de cadenas.
-            clavesMetodos[i] = metodos[i].getName() + " "
-                    + descriptorDe(metodos[i].getParameterTypes(), metodos[i].getReturnType());
+        while (i < methods.length) {
+            // Name and signature in the same key: the order is by name and **then** by signature,
+            // and gluing them with a separator that cannot appear in a name gives that order with a
+            // single string comparison.
+            methodKeys[i] = methods[i].getName() + " "
+                    + descriptorOf(methods[i].getParameterTypes(), methods[i].getReturnType());
             i = i + 1;
         }
-        ordenarPorClave(clavesMetodos, metodos);
+        sortByKey(methodKeys, methods);
         i = 0;
-        while (i < metodos.length) {
-            int mm = metodos[i].getModifiers() & MODS_EJECUTABLE;
+        while (i < methods.length) {
+            int mm = methods[i].getModifiers() & EXECUTABLE_MODS;
             if ((mm & Modifier.PRIVATE) == 0) {
-                d.writeUTF(metodos[i].getName());
+                d.writeUTF(methods[i].getName());
                 d.writeInt(mm);
-                d.writeUTF(descriptorDe(metodos[i].getParameterTypes(),
-                        metodos[i].getReturnType()).replace('/', '.'));
+                d.writeUTF(descriptorOf(methods[i].getParameterTypes(),
+                        methods[i].getReturnType()).replace('/', '.'));
             }
             i = i + 1;
         }
         return bytes.toByteArray();
     }
 
-    private static final int MODS_EJECUTABLE = Modifier.PUBLIC | Modifier.PRIVATE
+    private static final int EXECUTABLE_MODS = Modifier.PUBLIC | Modifier.PRIVATE
             | Modifier.PROTECTED | Modifier.STATIC | Modifier.FINAL | Modifier.SYNCHRONIZED
             | Modifier.NATIVE | Modifier.ABSTRACT | Modifier.STRICT;
 
-    private static String descriptorDe(Class<?>[] params, Class<?> retorno) {
+    private static String descriptorOf(Class<?>[] params, Class<?> returnType) {
         StringBuilder sb = new StringBuilder("(");
         int i = 0;
         while (i < params.length) {
             sb.append(params[i].descriptorString());
             i = i + 1;
         }
-        sb.append(')').append(retorno.descriptorString());
+        sb.append(')').append(returnType.descriptorString());
         return sb.toString();
     }
 
     /**
-     * SHA-1 de `datos`, veinte bytes.
+     * SHA-1 of `data`, twenty bytes.
      *
-     * <p>Escrito aca adentro y no llamando a {@code java.security.MessageDigest}, que es lo que hace
-     * el JDK. La razon es de dependencias y no de gusto: {@code java.io} es la base de media
-     * biblioteca --{@code java.security} misma se apoya en el, sus digests son
-     * {@link FilterOutputStream}-- y hacer que un {@code serialVersionUID} arrastre el registro de
-     * proveedores, {@code Security}, {@code Provider.Service} y el mapa que los indexa es meterle a
-     * la base un ciclo hacia una capa muy de arriba. El algoritmo son cincuenta lineas sin estado;
-     * el registro de proveedores, no.
+     * <p>Written in here and not by calling {@code java.security.MessageDigest}, which is what the
+     * JDK does. The reason is about dependencies and not about taste: {@code java.io} is the base
+     * of half the library --{@code java.security} itself rests on it, its digests are {@link
+     * FilterOutputStream}-- and making a {@code serialVersionUID} drag in the provider register,
+     * {@code Security}, {@code Provider.Service} and the map that indexes them is putting a cycle
+     * from the base towards a very high layer. The algorithm is fifty stateless lines; the provider
+     * register is not.
      *
-     * <p>Es una funcion de resumen usada como **identificador de version**, no como defensa: que
-     * SHA-1 este roto para firmar no cambia nada aca, y cambiarlo por otro algoritmo cambiaria
-     * todos los UID del mundo.
+     * <p>It is a digest function used as a **version identifier**, not as a defence: that SHA-1 is
+     * broken for signing changes nothing here, and swapping it for another algorithm would change
+     * every UID in the world.
      */
-    private static byte[] sha1(byte[] datos) {
+    private static byte[] sha1(byte[] data) {
         int[] h = new int[] { 0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476, 0xC3D2E1F0 };
 
-        // El relleno: un bit en 1, ceros, y el largo en **bits** como big-endian de 64. El largo va
-        // adentro del hash a proposito -- sin el, "abc" y "abc" con ceros atras darian lo mismo.
-        int resto = datos.length % 64;
-        int ceros = (resto < 56 ? 56 : 120) - resto;
-        byte[] m = new byte[datos.length + ceros + 8];
-        System.arraycopy(datos, 0, m, 0, datos.length);
-        m[datos.length] = (byte) 0x80;
-        long bits = ((long) datos.length) * 8L;
+        // The padding: one bit set, zeros, and the length in **bits** as a 64-bit big-endian. The
+        // length goes inside the hash on purpose -- without it, "abc" and "abc" with zeros behind
+        // it would give the same thing.
+        int rest = data.length % 64;
+        int zeros = (rest < 56 ? 56 : 120) - rest;
+        byte[] m = new byte[data.length + zeros + 8];
+        System.arraycopy(data, 0, m, 0, data.length);
+        m[data.length] = (byte) 0x80;
+        long bits = ((long) data.length) * 8L;
         int i = 0;
         while (i < 8) {
             m[m.length - 1 - i] = (byte) (bits >>> (8 * i));
@@ -527,7 +536,7 @@ public final class ObjectStreamClass implements Serializable {
         return out;
     }
 
-    private static void ordenarCadenas(String[] a) {
+    private static void sortStrings(String[] a) {
         int i = 1;
         while (i < a.length) {
             String x = a[i];
@@ -541,53 +550,54 @@ public final class ObjectStreamClass implements Serializable {
         }
     }
 
-    // Ordena `datos` por `claves`, moviendo los dos a la par. Insercion, como el resto de la clase:
-    // son unas decenas de miembros y no vale traerse un `sort` generico.
-    private static void ordenarPorClave(String[] claves, Object[] datos) {
+    // It sorts `data` by `keys`, moving both together. Insertion sort, like the rest of the class:
+    // it is a few dozen members and it is not worth dragging in a generic `sort`.
+    private static void sortByKey(String[] keys, Object[] data) {
         int i = 1;
-        while (i < claves.length) {
-            String ck = claves[i];
-            Object cd = datos[i];
+        while (i < keys.length) {
+            String ck = keys[i];
+            Object cd = data[i];
             int j = i - 1;
-            while (j >= 0 && claves[j].compareTo(ck) > 0) {
-                claves[j + 1] = claves[j];
-                datos[j + 1] = datos[j];
+            while (j >= 0 && keys[j].compareTo(ck) > 0) {
+                keys[j + 1] = keys[j];
+                data[j + 1] = data[j];
                 j = j - 1;
             }
-            claves[j + 1] = ck;
-            datos[j + 1] = cd;
+            keys[j + 1] = ck;
+            data[j + 1] = cd;
             i = i + 1;
         }
     }
 
-    // ---- de donde salen los campos ---------------------------------------------------------------
+    // ---- where the fields come from --------------------------------------------------------------
 
-    private static ObjectStreamField[] camposDe(Class<?> cl) {
+    private static ObjectStreamField[] fieldsOf(Class<?> cl) {
         if (cl.isArray() || cl.isPrimitive() || cl.isInterface()) {
-            // Un arreglo se escribe con su largo y sus elementos, y una interfaz no tiene estado:
-            // en los dos casos no hay campos que enumerar.
+            // An array is written with its length and its elements, and an interface has no state:
+            // in both cases there are no fields to enumerate.
             return NO_FIELDS;
         }
         if (Externalizable.class.isAssignableFrom(cl)) {
-            // Una externalizable escribe **ella** lo suyo en `writeExternal`. Listar sus campos
-            // diria que el flujo los va a guardar solo, que es justo lo que no pasa.
+            // An externalizable writes its own things **itself** in `writeExternal`. Listing its
+            // fields would say the stream is going to store them by itself, which is exactly what
+            // does not happen.
             return NO_FIELDS;
         }
-        ObjectStreamField[] declarados = serialPersistentFields(cl);
-        if (declarados == null) {
-            declarados = deLosCamposReales(cl);
+        ObjectStreamField[] declared = serialPersistentFields(cl);
+        if (declared == null) {
+            declared = fromRealFields(cl);
         }
-        ordenar(declarados);
-        asignarOffsets(declarados);
-        return declarados;
+        sortFields(declared);
+        assignOffsets(declared);
+        return declared;
     }
 
-    // La lista explicita, si la clase la declara con el tipo, el nombre y los modificadores exactos.
+    // The explicit list, if the class declares it with the exact type, name and modifiers.
     //
-    // Los tres tienen que dar: `private static final ObjectStreamField[]`. La especificacion es
-    // estricta ahi porque un campo con ese nombre pero publico o no estatico es otra cosa --puede
-    // ser un campo de instancia legitimo-- y tomarlo por la declaracion de formato cambiaria en
-    // silencio lo que la clase escribe.
+    // All three have to match: `private static final ObjectStreamField[]`. The specification is
+    // strict there because a field with that name but public or non-static is another thing --it
+    // may be a legitimate instance field-- and taking it for the format declaration would silently
+    // change what the class writes.
     private static ObjectStreamField[] serialPersistentFields(Class<?> cl) {
         Field f;
         try {
@@ -605,28 +615,28 @@ public final class ObjectStreamClass implements Serializable {
             return null;
         }
         ObjectStreamField[] src = (ObjectStreamField[]) v;
-        // Copia, por lo mismo que `getFields`: la clase se quedo con una referencia al arreglo y
-        // podria tocarlo despues.
+        // A copy, for the same reason as in `getFields`: the class kept a reference to the array
+        // and could touch it afterwards.
         ObjectStreamField[] out = new ObjectStreamField[src.length];
         System.arraycopy(src, 0, out, 0, src.length);
         return out;
     }
 
-    private static ObjectStreamField[] deLosCamposReales(Class<?> cl) {
+    private static ObjectStreamField[] fromRealFields(Class<?> cl) {
         Field[] fs = cl.getDeclaredFields();
-        int cuantos = 0;
+        int howMany = 0;
         int i = 0;
         while (i < fs.length) {
-            if (participa(fs[i])) {
-                cuantos = cuantos + 1;
+            if (takesPart(fs[i])) {
+                howMany = howMany + 1;
             }
             i = i + 1;
         }
-        ObjectStreamField[] out = new ObjectStreamField[cuantos];
+        ObjectStreamField[] out = new ObjectStreamField[howMany];
         int k = 0;
         i = 0;
         while (i < fs.length) {
-            if (participa(fs[i])) {
+            if (takesPart(fs[i])) {
                 out[k] = new ObjectStreamField(fs[i].getName(), fs[i].getType());
                 k = k + 1;
             }
@@ -635,17 +645,17 @@ public final class ObjectStreamClass implements Serializable {
         return out;
     }
 
-    // `static` queda afuera porque pertenece a la clase y no al objeto; `transient`, porque es la
-    // unica forma que tiene el autor de decir "esto no se guarda" -- una contrase&ntilde;a en claro,
-    // una conexion abierta, un cache que hay que rehacer.
-    private static boolean participa(Field f) {
+    // `static` is left out because it belongs to the class and not to the object; `transient`,
+    // because it is the author's only way of saying "this is not stored" -- a password in the
+    // clear, an open connection, a cache that has to be rebuilt.
+    private static boolean takesPart(Field f) {
         int m = f.getModifiers();
         return !Modifier.isStatic(m) && !Modifier.isTransient(m);
     }
 
-    // Insercion, no un `sort` de biblioteca: son un pu&ntilde;ado de campos y la comparacion es la
-    // de `ObjectStreamField`, que ya tiene escrito el criterio.
-    private static void ordenar(ObjectStreamField[] a) {
+    // Insertion sort, not a library `sort`: it is a handful of fields and the comparison is
+    // `ObjectStreamField`'s, which has the criterion written already.
+    private static void sortFields(ObjectStreamField[] a) {
         int i = 1;
         while (i < a.length) {
             ObjectStreamField x = a[i];
@@ -659,11 +669,11 @@ public final class ObjectStreamClass implements Serializable {
         }
     }
 
-    // Dos contadores independientes, y de ahi que los primitivos vayan primero en el orden: el de
-    // los primitivos cuenta **bytes** dentro del bloque de datos, el de las referencias cuenta
-    // **posiciones** en la tabla de objetos. Son unidades distintas, y si los dos grupos se
-    // intercalaran no habria un solo numero que sirviera para los dos.
-    private static void asignarOffsets(ObjectStreamField[] a) {
+    // Two independent counters, and hence the primitives coming first in the order: the primitives'
+    // one counts **bytes** inside the data block, the references' one counts **positions** in the
+    // object table. They are different units, and if the two groups were interleaved there would be
+    // no single number serving both.
+    private static void assignOffsets(ObjectStreamField[] a) {
         int bytes = 0;
         int refs = 0;
         int i = 0;
@@ -674,13 +684,13 @@ public final class ObjectStreamClass implements Serializable {
                 refs = refs + 1;
             } else {
                 a[i].setOffset(bytes);
-                bytes = bytes + anchoDe(c);
+                bytes = bytes + widthOf(c);
             }
             i = i + 1;
         }
     }
 
-    private static int anchoDe(char c) {
+    private static int widthOf(char c) {
         if (c == 'Z' || c == 'B') {
             return 1;
         }

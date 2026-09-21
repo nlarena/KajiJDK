@@ -1,80 +1,80 @@
 package java.sql;
 
 /**
- * KajiLibrary's java.sql.ResultSet -- las filas que devolvio una consulta, recorridas de a una.
+ * KajiLibrary's java.sql.ResultSet -- the rows a query returned, walked one at a time.
  *
- * <p>Un cursor y no una lista, y esa es la decision de diseno que explica toda la interfaz: el
- * resultado de una consulta puede no entrar en memoria, asi que se recorre pidiendo la fila
- * siguiente. De ahi que `next()` sea a la vez "avanza" y "hay mas" -- dos preguntas en un metodo,
- * porque separarlas obligaria a traer la fila dos veces.
+ * <p>A cursor and not a list, and that is the design decision that explains the whole interface: a
+ * query's result may not fit in memory, so it is walked by asking for the next row. Hence `next()`
+ * being at once "advance" and "is there more" -- two questions in one method, because separating
+ * them would force fetching the row twice.
  *
- * <p><strong>Subconjunto declarado.</strong> Estan la navegacion, el estado del cursor, los
- * accesores por indice y por nombre de los tipos que esta biblioteca tiene, y los metadatos. Quedan
- * afuera las familias de conversion que arrastran tipos SQL propios --`getBlob`, `getClob`,
- * `getArray`, `getRef`, `getSQLXML`, `getRowId`-- y la mitad de actualizacion (`updateXxx`), que solo
- * un driver puede honrar.
+ * <p><strong>The interface is complete.</strong> This note used to say the conversion families that
+ * drag in SQL types of their own --`getBlob`, `getClob`, `getArray`, `getRef`, `getSQLXML`,
+ * `getRowId`-- and the updating half (`updateXxx`) were left out. Each of those six is here in both
+ * overloads and there are 87 `updateXxx`; the sections further down already describe them, so the
+ * header was contradicting the rest of the file.
  *
- * <p>Las columnas se numeran **desde uno**.
+ * <p>The columns are numbered **from one**.
  */
 public interface ResultSet extends Wrapper, AutoCloseable {
 
-    // ---- direccion, tipo y concurrencia --------------------------------------------------------------
+    // ---- direction, type and concurrency --------------------------------------------------------
 
-    /** Las filas se van a leer hacia adelante. */
+    /** The rows will be read forwards. */
     int FETCH_FORWARD = 1000;
 
-    /** Se van a leer hacia atras. */
+    /** They will be read backwards. */
     int FETCH_REVERSE = 1001;
 
-    /** No se sabe en que orden. */
+    /** In what order is not known. */
     int FETCH_UNKNOWN = 1002;
 
-    /** El cursor solo va hacia adelante. */
+    /** The cursor only goes forwards. */
     int TYPE_FORWARD_ONLY = 1003;
 
-    /** Se puede mover en cualquier direccion; no ve cambios de otros. */
+    /** It can move in any direction; it does not see others' changes. */
     int TYPE_SCROLL_INSENSITIVE = 1004;
 
-    /** Se puede mover en cualquier direccion; **si** ve cambios de otros. */
+    /** It can move in any direction; it **does** see others' changes. */
     int TYPE_SCROLL_SENSITIVE = 1005;
 
-    /** No se puede actualizar por el cursor. */
+    /** It cannot be updated through the cursor. */
     int CONCUR_READ_ONLY = 1007;
 
-    /** Se puede actualizar por el cursor. */
+    /** It can be updated through the cursor. */
     int CONCUR_UPDATABLE = 1008;
 
-    /** El cursor sobrevive a un `commit`. */
+    /** The cursor survives a `commit`. */
     int HOLD_CURSORS_OVER_COMMIT = 1;
 
-    /** El cursor se cierra en el `commit`. */
+    /** The cursor closes at the `commit`. */
     int CLOSE_CURSORS_AT_COMMIT = 2;
 
-    // ---- navegacion ------------------------------------------------------------------------------------
+    // ---- navigation -----------------------------------------------------------------------------
 
-    /** Avanza a la fila siguiente; `false` cuando no quedan. */
+    /** It advances to the next row; `false` when none are left. */
     boolean next() throws SQLException;
 
-    /** Retrocede una fila. */
+    /** It steps back one row. */
     boolean previous() throws SQLException;
 
     boolean first() throws SQLException;
 
     boolean last() throws SQLException;
 
-    /** Antes de la primera: `next()` deja en la primera. */
+    /** Before the first: `next()` lands on the first. */
     void beforeFirst() throws SQLException;
 
-    /** Despues de la ultima. */
+    /** After the last. */
     void afterLast() throws SQLException;
 
-    /** A la fila `row`; negativo cuenta desde el final. */
+    /** To row `row`; a negative counts from the end. */
     boolean absolute(int row) throws SQLException;
 
-    /** `rows` filas mas alla de donde esta. */
+    /** `rows` rows beyond where it is. */
     boolean relative(int rows) throws SQLException;
 
-    /** En que fila esta, desde uno; cero si no esta en ninguna. */
+    /** Which row it is on, from one; zero if it is on none. */
     int getRow() throws SQLException;
 
     boolean isBeforeFirst() throws SQLException;
@@ -85,22 +85,22 @@ public interface ResultSet extends Wrapper, AutoCloseable {
 
     boolean isLast() throws SQLException;
 
-    // ---- ciclo de vida -----------------------------------------------------------------------------
+    // ---- life cycle -----------------------------------------------------------------------------
 
     void close() throws SQLException;
 
     boolean isClosed() throws SQLException;
 
     /**
-     * Si el ultimo valor leido era nulo.
+     * Whether the last value read was null.
      *
-     * <p>Hace falta porque los accesores primitivos no pueden devolver `null`: `getInt` de una
-     * columna nula devuelve cero, que es indistinguible de un cero de verdad. Se pregunta **despues**
-     * de leer, no antes.
+     * <p>It is needed because the primitive accessors cannot return `null`: `getInt` of a null
+     * column returns zero, which is indistinguishable from a real zero. It is asked **after**
+     * reading, not before.
      */
     boolean wasNull() throws SQLException;
 
-    // ---- accesores por indice ------------------------------------------------------------------------
+    // ---- accessors by index ---------------------------------------------------------------------
 
     String getString(int columnIndex) throws SQLException;
 
@@ -124,13 +124,13 @@ public interface ResultSet extends Wrapper, AutoCloseable {
 
     java.math.BigDecimal getBigDecimal(int columnIndex) throws SQLException;
 
-    /** El valor convertido a `type`; la forma con tipo, que evita el molde. */
+    /** The value converted to `type`; the typed form, which saves the cast. */
     <T> T getObject(int columnIndex, Class<T> type) throws SQLException;
 
-    // ---- accesores por nombre ------------------------------------------------------------------------
+    // ---- accessors by name ----------------------------------------------------------------------
     //
-    // Los mismos por etiqueta de columna. Cuestan una busqueda mas que el indice y a cambio no se
-    // rompen cuando alguien agrega una columna a la consulta.
+    // The same ones by column label. They cost one lookup more than the index and in exchange do
+    // not break when somebody adds a column to the query.
 
     String getString(String columnLabel) throws SQLException;
 
@@ -156,18 +156,18 @@ public interface ResultSet extends Wrapper, AutoCloseable {
 
     <T> T getObject(String columnLabel, Class<T> type) throws SQLException;
 
-    /** El indice de esa columna, desde uno. */
+    /** That column's index, from one. */
     int findColumn(String columnLabel) throws SQLException;
 
-    // ---- forma y estado ------------------------------------------------------------------------------
+    // ---- shape and state ------------------------------------------------------------------------
 
-    /** Que columnas hay. */
+    /** What columns there are. */
     ResultSetMetaData getMetaData() throws SQLException;
 
-    /** La sentencia que produjo este resultado, o `null` si no la hubo. */
+    /** The statement that produced this result, or `null` if there was none. */
     Statement getStatement() throws SQLException;
 
-    /** El nombre del cursor, para un `update ... where current of`. */
+    /** The cursor's name, for an `update ... where current of`. */
     String getCursorName() throws SQLException;
 
     int getType() throws SQLException;
@@ -180,7 +180,7 @@ public interface ResultSet extends Wrapper, AutoCloseable {
 
     int getFetchDirection() throws SQLException;
 
-    /** Cuantas filas traer por viaje: una pista de rendimiento, no un limite. */
+    /** How many rows to fetch per trip: a performance hint, not a limit. */
     void setFetchSize(int rows) throws SQLException;
 
     int getFetchSize() throws SQLException;
@@ -189,20 +189,21 @@ public interface ResultSet extends Wrapper, AutoCloseable {
 
     void clearWarnings() throws SQLException;
 
-    // ---- el resto de los accesores, y la mitad de actualizacion --------------------------------------
+    // ---- the rest of the accessors, and the updating half ---------------------------------------
     //
-    // Los `getXxx` que faltaban son los tipos grandes y los de fecha. Las variantes con `Calendar`
-    // existen por una razon concreta: una columna `TIMESTAMP` sin zona horaria no designa un instante
-    // hasta que alguien elige la zona en que leerla, y sin este argumento esa eleccion la hace la
-    // maquina que corre el programa -- lo cual convierte un dato en algo que cambia de servidor a
-    // servidor. Las variantes con `Map` traducen tipos SQL propios a clases Java.
+    // The `getXxx` that were missing are the large types and the date ones. The variants with a
+    // `Calendar` exist for a concrete reason: a `TIMESTAMP` column with no time zone does not
+    // designate an instant until somebody chooses the zone to read it in, and without this argument
+    // that choice is made by the machine running the program -- which turns a datum into something
+    // that changes from server to server. The variants with a `Map` translate SQL types of their
+    // own into Java classes.
     //
-    // Los `updateXxx` son la otra mitad de la interfaz, y la menos usada: un cursor actualizable deja
-    // escribir **por la fila**, sin escribir un `update`. Se cambian los valores, se llama a
-    // `updateRow`, y la base traduce. `insertRow` va con `moveToInsertRow`, que mueve el cursor a una
-    // fila que todavia no existe.
+    // The `updateXxx` are the interface's other half, and the less used one: an updatable cursor
+    // allows writing **through the row**, without writing an `update`. The values are changed,
+    // `updateRow` is called, and the database translates. `insertRow` goes with `moveToInsertRow`,
+    // which moves the cursor to a row that does not exist yet.
     //
-    // `getUnicodeStream` esta obsoleto desde 1999, igual que su gemelo en `PreparedStatement`.
+    // `getUnicodeStream` has been deprecated since 1999, like its twin in `PreparedStatement`.
 
     boolean rowDeleted() throws java.sql.SQLException;
 
@@ -443,11 +444,11 @@ public interface ResultSet extends Wrapper, AutoCloseable {
     void updateObject(int columnIndex, java.lang.Object x, int scaleOrLength) throws java.sql.SQLException;
 
     default void updateObject(int columnIndex, java.lang.Object x, java.sql.SQLType targetSqlType) throws java.sql.SQLException {
-        throw new java.sql.SQLFeatureNotSupportedException("updateObject no esta implementado");
+        throw new java.sql.SQLFeatureNotSupportedException("updateObject not implemented");
     }
 
     default void updateObject(int columnIndex, java.lang.Object x, java.sql.SQLType targetSqlType, int scaleOrLength) throws java.sql.SQLException {
-        throw new java.sql.SQLFeatureNotSupportedException("updateObject no esta implementado");
+        throw new java.sql.SQLFeatureNotSupportedException("updateObject not implemented");
     }
 
     void updateObject(java.lang.String columnLabel, java.lang.Object x) throws java.sql.SQLException;
@@ -455,11 +456,11 @@ public interface ResultSet extends Wrapper, AutoCloseable {
     void updateObject(java.lang.String columnLabel, java.lang.Object x, int scaleOrLength) throws java.sql.SQLException;
 
     default void updateObject(java.lang.String columnLabel, java.lang.Object x, java.sql.SQLType targetSqlType) throws java.sql.SQLException {
-        throw new java.sql.SQLFeatureNotSupportedException("updateObject no esta implementado");
+        throw new java.sql.SQLFeatureNotSupportedException("updateObject not implemented");
     }
 
     default void updateObject(java.lang.String columnLabel, java.lang.Object x, java.sql.SQLType targetSqlType, int scaleOrLength) throws java.sql.SQLException {
-        throw new java.sql.SQLFeatureNotSupportedException("updateObject no esta implementado");
+        throw new java.sql.SQLFeatureNotSupportedException("updateObject not implemented");
     }
 
     void updateRef(int columnIndex, java.sql.Ref x) throws java.sql.SQLException;

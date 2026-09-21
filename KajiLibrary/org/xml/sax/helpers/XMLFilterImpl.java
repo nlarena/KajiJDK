@@ -16,55 +16,55 @@ import org.xml.sax.SAXParseException;
 import org.xml.sax.XMLFilter;
 import org.xml.sax.XMLReader;
 
-// KajiLibrary's org.xml.sax.helpers.XMLFilterImpl -- un eslabon en una cadena de lectores SAX.
+// KajiLibrary's org.xml.sax.helpers.XMLFilterImpl -- a link in a chain of SAX readers.
 //
-// Es un XMLReader que no lee nada: tiene un XMLReader *padre* que si lee, y se para entre ese
-// padre y la aplicacion. Hacia abajo parece un manejador (el padre le manda eventos); hacia
-// arriba parece un lector (la aplicacion le registra manejadores y le llama parse). Todo lo que
-// recibe lo pasa, sin cambiarlo, y todo lo que le preguntan se lo pregunta al padre.
+// It is an XMLReader that reads nothing: it has a *parent* XMLReader that does read, and it stands
+// between that parent and the application. Downwards it looks like a handler (the parent sends it
+// events); upwards it looks like a reader (the application registers handlers with it and calls
+// parse on it). Everything it receives it passes on, unchanged, and everything it is asked it asks
+// the parent.
 //
-// Por si solo eso no hace nada, y esa es justamente la idea: es una clase base. Una subclase
-// redefine los dos o tres eventos que le importan, llama a super para el resto, y tiene un
-// filtro andando. La forma canonica es
+// On its own that does nothing, and that is precisely the idea: it is a base class. A subclass
+// overrides the two or three events it cares about, calls super for the rest, and has a filter
+// running. The canonical form is
 //
 //     public void startElement(String uri, String ln, String qn, Attributes a)
 //             throws SAXException {
-//         super.startElement(uri, ln, qn, rewrite(a));   // reenviar no es opcional
+//         super.startElement(uri, ln, qn, rewrite(a));   // forwarding is not optional
 //     }
 //
-// y el bug clasico es olvidarse de la llamada a super, que borra el evento del flujo en
-// silencio. Cada uno de los diecisiete metodos de manejador de aca abajo reenvia; un filtro que
-// se come uno se lo come para todo lo que viene rio abajo.
+// and the classic bug is forgetting the call to super, which silently erases the event from the
+// stream. Each of the seventeen handler methods below forwards; a filter that eats one eats it for
+// everything downstream.
 //
-// El cableado pasa en setupParse(), que se llama al principio de las dos sobrecargas de
-// parse(): el filtro se registra *a si mismo* en el padre como resolvedor de entidades,
-// manejador de DTD, manejador de contenido y manejador de errores, pisando lo que hubiera. Asi
-// que un manejador puesto directo en el padre se pierde en el momento en que el filtro analiza;
-// los manejadores van en el filtro.
+// The wiring happens in setupParse(), which is called at the start of both overloads of parse():
+// the filter registers *itself* on the parent as entity resolver, DTD handler, content handler and
+// error handler, overwriting whatever was there. So a handler set directly on the parent is lost
+// the moment the filter analyses; the handlers go on the filter.
 //
-// Notar el almacenamiento de manejadores en dos niveles que esto genera. setContentHandler()
-// sobre el filtro anota el manejador *de la aplicacion*, para reenviarle; el manejador de
-// contenido del padre es el filtro mismo. Los getters contestan con el manejador de aplicacion
-// anotado, no con lo que el padre tenga en este momento.
+// Note the two-level storage of handlers this produces. setContentHandler() on the filter records
+// the handler *of the application*, to forward to; the content handler of the parent is the filter
+// itself. The getters answer with the recorded application handler, not with whatever the parent
+// has at this moment.
 //
-// Un manejador en null no es un error en ningun momento: cada metodo que reenvia chequea y no
-// hace nada cuando no hay nadie escuchando. Eso es lo que hace usable un filtro antes de estar
-// cableado del todo.
+// A null handler is not an error at any moment: each forwarding method checks and does nothing
+// when nobody is listening. That is what makes a filter usable before it is fully wired.
 //
-// Las llamadas de feature y propiedad pasan derecho al padre y lanzan
-// SAXNotRecognizedException cuando no hay padre, porque sin nadie a quien preguntarle no se
-// puede afirmar que ninguna feature sea reconocida.
+// The feature and property calls go straight to the parent and throw SAXNotRecognizedException
+// when there is no parent, because with nobody to ask it cannot be asserted that any feature is
+// recognised.
 //
-// NOTA DE COMPILACION, y no es cosmetica: `ContentHandler` esta escrito con nombre completo en la
-// clausula `implements` de abajo. El javac de esta casa, cuando recibe en la MISMA invocacion el
-// fuente de org/xml/sax/ContentHandler.java y este archivo, ignora el `import
-// org.xml.sax.ContentHandler` de aca y resuelve el nombre simple contra java.net.ContentHandler,
-// que existe y es otra cosa. El .class sale declarando que implementa la interfaz equivocada:
-// compila, mide bien, y despues `x instanceof ContentHandler` da false y ningun parser acepta
-// esta clase como manejador. Compilando este archivo solo no pasa; el proyecto pide compilar los
-// tipos que se referencian entre si en una sola invocacion, asi que la salida es calificar.
-// Es el bug #466 del informe, con el repro y la ablacion del disparador; que ademas salga en
-// silencio en vez de dar un error de compilacion es el #467.
+// COMPILATION NOTE, and it is not cosmetic: `ContentHandler` is written with its full name in the
+// `implements` clause below. The house javac, when it receives in the SAME invocation the source of
+// org/xml/sax/ContentHandler.java and this file, ignores the `import org.xml.sax.ContentHandler`
+// here and resolves the simple name against java.net.ContentHandler, which exists and is something
+// else. The .class comes out declaring that it implements the wrong interface: it compiles,
+// measures fine, and then `x instanceof ContentHandler` gives false and no parser accepts this
+// class as a handler. Compiling this file alone it does not happen; the project asks for the types
+// that reference each other to be compiled in one single invocation, so the way out is to qualify.
+// It is finding #530 of the report (the note said #466, the number it had before the renumbering),
+// with the repro and the ablation of the trigger; that it also comes out silently instead of as a
+// compilation error is #467. Still reproduces as of 2026-09-18.
 public class XMLFilterImpl
         implements XMLFilter, EntityResolver, DTDHandler,
                    org.xml.sax.ContentHandler, ErrorHandler {
@@ -76,7 +76,7 @@ public class XMLFilterImpl
     private org.xml.sax.ContentHandler contentHandler = null;
     private ErrorHandler errorHandler = null;
 
-    // Un filtro todavia sin padre; hay que ponerle uno antes de analizar.
+    // A filter with no parent yet; one has to be set before analysing.
     public XMLFilterImpl() {
         super();
     }
@@ -99,7 +99,7 @@ public class XMLFilterImpl
     }
 
     ////////////////////////////////////////////////////////////////////
-    // XMLReader: configuracion, toda delegada
+    // XMLReader: configuration, all of it delegated
     ////////////////////////////////////////////////////////////////////
 
     public void setFeature(String name, boolean value)
@@ -138,8 +138,8 @@ public class XMLFilterImpl
         }
     }
 
-    // Estos cuatro anotan los manejadores de la aplicacion. A proposito *no* se reenvian al
-    // padre: los manejadores del padre los pone en `this` setupParse().
+    // These four record the handlers of the application. On purpose they are *not* forwarded to the
+    // parent: setupParse() sets the parent's handlers to `this`.
     public void setEntityResolver(EntityResolver resolver) {
         entityResolver = resolver;
     }
@@ -172,8 +172,8 @@ public class XMLFilterImpl
         return errorHandler;
     }
 
-    // Analizar es tarea del padre; todo lo que hace esto es interponerse antes. Un padre en null
-    // da una NullPointerException, que es honesto: no hay con que analizar.
+    // Analysing is the parent's job; all this does is get in the way first. A null parent gives a
+    // NullPointerException, which is honest: there is nothing to analyse with.
     public void parse(InputSource input) throws SAXException, IOException {
         setupParse();
         parent.parse(input);
@@ -217,11 +217,10 @@ public class XMLFilterImpl
     }
 
     ////////////////////////////////////////////////////////////////////
-    // ContentHandler: los once que no hay que olvidarse
+    // ContentHandler: the eleven one must not forget
     ////////////////////////////////////////////////////////////////////
 
-    // Se guarda tambien aca, para que una subclase pueda preguntar donde esta sin interceptar el
-    // evento.
+    // It is also kept here, so that a subclass can ask where it is without intercepting the event.
     public void setDocumentLocator(Locator locator) {
         this.locator = locator;
         if (contentHandler != null) {
@@ -311,8 +310,8 @@ public class XMLFilterImpl
         }
     }
 
-    // Notar que sin manejador de errores esto vuelve en silencio incluso ante un error fatal: un
-    // XMLFilterImpl es un conducto, no una politica. El relanzado vive en DefaultHandler.
+    // Note that with no error handler this returns silently even on a fatal error: an XMLFilterImpl
+    // is a conduit, not a policy. The rethrowing lives in DefaultHandler.
     public void fatalError(SAXParseException e) throws SAXException {
         if (errorHandler != null) {
             errorHandler.fatalError(e);
@@ -321,9 +320,9 @@ public class XMLFilterImpl
 
     ////////////////////////////////////////////////////////////////////
 
-    // Interpone este filtro entre el padre y la aplicacion, reemplazando lo que el padre tuviera
-    // registrado. Ver el comentario de la clase: los manejadores puestos directo en el padre no
-    // sobreviven a esto.
+    // It puts this filter between the parent and the application, replacing whatever the parent had
+    // registered. See the comment of the class: the handlers set directly on the parent do not
+    // survive this.
     private void setupParse() {
         parent.setEntityResolver(this);
         parent.setDTDHandler(this);

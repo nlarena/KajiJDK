@@ -12,46 +12,44 @@ import org.xml.sax.Locator;
 import org.xml.sax.SAXException;
 import org.xml.sax.SAXParseException;
 
-// KajiLibrary's org.xml.sax.helpers.DefaultHandler -- la clase base de SAX2 que la gente
-// realmente extiende.
+// KajiLibrary's org.xml.sax.helpers.DefaultHandler -- the SAX2 base class people really extend.
 //
-// Implementa EntityResolver, DTDHandler, ContentHandler y ErrorHandler con cuerpos vacios, asi
-// que el manejador tipico de "solo me importan startElement y characters" son dos metodos y no
-// diecisiete. Se le pasa una misma instancia a setContentHandler, setErrorHandler, setDTDHandler y
-// setEntityResolver y el parser queda enteramente conectado.
+// It implements EntityResolver, DTDHandler, ContentHandler and ErrorHandler with empty bodies, so
+// the typical "I only care about startElement and characters" handler is two methods and not
+// seventeen. One same instance is passed to setContentHandler, setErrorHandler, setDTDHandler and
+// setEntityResolver and the parser is left fully connected.
 //
-// Es la contraparte de SAX2 del viejo org.xml.sax.HandlerBase, y se diferencia de el exactamente
-// en los lugares donde SAX2 se diferencia de SAX1: ContentHandler en vez de DocumentHandler, con
-// lo que aca hay startPrefixMapping/endPrefixMapping/skippedEntity que HandlerBase ni conoce, y
-// startElement lleva (uri, localName, qName, Attributes) en vez de un nombre pelado y un
+// It is the SAX2 counterpart of the old org.xml.sax.HandlerBase, and it differs from it exactly
+// where SAX2 differs from SAX1: ContentHandler instead of DocumentHandler, which means that here
+// there are startPrefixMapping/endPrefixMapping/skippedEntity which HandlerBase does not even
+// know, and startElement carries (uri, localName, qName, Attributes) instead of a bare name and an
 // AttributeList.
 //
-// Dos de las respuestas por omision son decisiones, no huecos:
+// Two of the default answers are decisions, not gaps:
 //
-//   - resolveEntity devuelve null, que significa "sin sustitucion, abri vos mismo el system id".
-//   - warning() y error() vuelven calladas, asi que los problemas recuperables se aceptan en
-//     silencio; solo fatalError() tira, relanzando lo que le dieron. Un error fatal termina el
-//     analisis por definicion, y tragarselo dejaria a quien llama creyendo que el documento se
-//     leyo.
+//   - resolveEntity returns null, which means "no substitution, open the system id yourself".
+//   - warning() and error() return quietly, so recoverable problems are accepted silently; only
+//     fatalError() throws, rethrowing what it was given. A fatal error ends the analysis by
+//     definition, and swallowing it would leave the caller believing the document was read.
 //
-// A diferencia de HandlerBase.resolveEntity, esta conserva IOException en su clausula throws,
-// porque una subclase que abre un archivo o una URL para contestar necesita algun lugar donde
-// poner la falla.
+// Unlike HandlerBase.resolveEntity, this one keeps IOException in its throws clause, because a
+// subclass that opens a file or a URL in order to answer needs somewhere to put the failure.
 //
-// ContentHandler.declaration() no se redefine aca: es un metodo default de la interfaz cuyo
-// cuerpo por omision ya no hace nada, que es la misma respuesta que daria esta clase.
-// Redefinirlo con un cuerpo vacio agregaria un miembro que el JDK no declara en esta clase.
+// ContentHandler.declaration() is not overridden here: it is a default method of the interface
+// whose default body already does nothing, which is the same answer this class would give.
+// Overriding it with an empty body would add a member the JDK does not declare in this class.
 //
-// NOTA DE COMPILACION, y no es cosmetica: `ContentHandler` esta escrito con nombre completo en la
-// clausula `implements` de abajo. El javac de esta casa, cuando recibe en la MISMA invocacion el
-// fuente de org/xml/sax/ContentHandler.java y este archivo, ignora el `import
-// org.xml.sax.ContentHandler` de aca y resuelve el nombre simple contra java.net.ContentHandler,
-// que existe y es otra cosa. El .class sale declarando que implementa la interfaz equivocada:
-// compila, mide bien, y despues `x instanceof ContentHandler` da false y ningun parser acepta
-// esta clase como manejador. Compilando este archivo solo no pasa; el proyecto pide compilar los
-// tipos que se referencian entre si en una sola invocacion, asi que la salida es calificar.
-// Es el bug #466 del informe, con el repro y la ablacion del disparador; que ademas salga en
-// silencio en vez de dar un error de compilacion es el #467.
+// COMPILATION NOTE, and it is not cosmetic: `ContentHandler` is written with its full name in the
+// `implements` clause below. The house javac, when it receives in the SAME invocation the source of
+// org/xml/sax/ContentHandler.java and this file, ignores the `import org.xml.sax.ContentHandler`
+// here and resolves the simple name against java.net.ContentHandler, which exists and is something
+// else. The .class comes out declaring that it implements the wrong interface: it compiles,
+// measures fine, and then `x instanceof ContentHandler` gives false and no parser accepts this
+// class as a handler. Compiling this file alone it does not happen; the project asks for the types
+// that reference each other to be compiled in one single invocation, so the way out is to qualify.
+// It is finding #530 of the report (the note said #466, the number it had before the renumbering),
+// with the repro and the ablation of the trigger; that it also comes out silently instead of as a
+// compilation error is #467. Still reproduces as of 2026-09-18.
 public class DefaultHandler
         implements EntityResolver, DTDHandler,
                    org.xml.sax.ContentHandler, ErrorHandler {
@@ -135,7 +133,7 @@ public class DefaultHandler
     public void error(SAXParseException e) throws SAXException {
     }
 
-    // El que no se queda callado, por la razon que da el comentario de la clase.
+    // The one that does not keep quiet, for the reason the comment of the class gives.
     public void fatalError(SAXParseException e) throws SAXException {
         throw e;
     }

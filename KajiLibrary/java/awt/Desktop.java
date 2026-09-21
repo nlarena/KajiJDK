@@ -13,117 +13,119 @@ import java.io.IOException;
 import java.net.URI;
 
 /**
- * El escritorio: abrir un archivo con el programa que le corresponde, mandar un mail, ir a una
- * página.
+ * The desktop: opening a file with the program it belongs to, sending mail, going to a page.
  *
- * <p>La idea es delegar. En vez de traer un visor de PDF, el programa le pide al escritorio que abra
- * el archivo y el sistema decide con qué. Lo mismo con `mailto:` y con las direcciones web.
+ * <p>The idea is to delegate. Instead of shipping a PDF viewer, the program asks the desktop to
+ * open the file and the system decides with what. The same goes for `mailto:` and for web
+ * addresses.
  *
- * <p>Como {@link Taskbar}, cada cosa se admite o no por separado y hay que preguntar con
- * {@link #isSupported} antes de usarla. Y como en {@link SystemTray}, la instancia es única y se pide
- * con {@link #getDesktop}.
+ * <p>As in {@link Taskbar}, each thing is supported or not on its own and has to be asked about
+ * with {@link #isSupported} before being used. And as in {@link SystemTray}, the instance is unique
+ * and is asked for with {@link #getDesktop}.
  *
- * <p><strong>Acá no hay escritorio</strong>: {@link #isDesktopSupported} da `false` y
- * {@link #getDesktop} tira {@link HeadlessException}, que es lo que hace el JDK sin pantalla. Los
- * métodos de instancia están declarados porque son parte de la clase, pero no existe ninguna
- * instancia desde la que llamarlos.
+ * <p><strong>Here there is no desktop</strong>: {@link #isDesktopSupported} gives `false` and
+ * {@link #getDesktop} throws {@link HeadlessException}, which is what the JDK does without a
+ * screen. The instance methods are declared because they are part of the class, but no instance
+ * exists to call them on.
  *
- * <p><strong>{@link #setDefaultMenuBar} es el único método de todo `java.awt` cuya firma nombra un
- * tipo de Swing</strong>, y esta biblioteca no trae Swing. Para poder declararlo hay dos clases
- * puestas como lugar reservado —{@link javax.swing.JComponent} y {@link javax.swing.JMenuBar}—, que
- * se anuncian como lo que son: un nombre con la jerarquía correcta y ningún miembro. El método está
- * entero de todas formas, porque acá tira igual que los otros veinticuatro.
+ * <p><strong>{@link #setDefaultMenuBar} is the only method of `java.awt` whose signature names a
+ * Swing type outside the accessibility classes</strong> —the accessible context of
+ * {@link TextComponent} returns a {@code javax.swing.text.AttributeSet}— and this library ships no
+ * Swing. To be able to declare it there are two classes put in as placeholders
+ * —{@link javax.swing.JComponent} and {@link javax.swing.JMenuBar}—, which announce themselves as
+ * what they are: a name with the right hierarchy and no members. The method is written in full all
+ * the same, because here it throws just like the other twenty-one.
  */
 public class Desktop {
 
-    /** Cada cosa que un escritorio puede saber hacer. */
+    /** Each thing a desktop may know how to do. */
     public static enum Action {
 
-        /** Abrir un archivo con el programa que le corresponde. */
+        /** Open a file with the program it belongs to. */
         OPEN,
 
-        /** Abrirlo para editarlo. */
+        /** Open it for editing. */
         EDIT,
 
-        /** Imprimirlo. */
+        /** To print it. */
         PRINT,
 
-        /** Abrir el programa de correo. */
+        /** Open the mail program. */
         MAIL,
 
-        /** Abrir una dirección en el navegador. */
+        /** Open an address in the browser. */
         BROWSE,
 
-        /** Avisar cuando el programa pasa a primer plano. */
+        /** Report when the program comes to the foreground. */
         APP_EVENT_FOREGROUND,
 
-        /** Avisar cuando se lo esconde. */
+        /** Report when it is hidden. */
         APP_EVENT_HIDDEN,
 
-        /** Avisar cuando se lo vuelve a abrir. */
+        /** Report when it is opened again. */
         APP_EVENT_REOPENED,
 
-        /** Avisar cuando la pantalla se duerme. */
+        /** Report when the screen goes to sleep. */
         APP_EVENT_SCREEN_SLEEP,
 
-        /** Avisar cuando el sistema se duerme. */
+        /** Report when the system goes to sleep. */
         APP_EVENT_SYSTEM_SLEEP,
 
-        /** Avisar cuando cambia la sesión del usuario. */
+        /** Report when the user session changes. */
         APP_EVENT_USER_SESSION,
 
-        /** Atender la entrada "Acerca de" del menú del sistema. */
+        /** Handle the "About" entry of the system menu. */
         APP_ABOUT,
 
-        /** Atender la entrada "Preferencias". */
+        /** Handle the "Preferences" entry. */
         APP_PREFERENCES,
 
-        /** Atender el pedido de abrir archivos hecho desde el escritorio. */
+        /** Handle the request to open files made from the desktop. */
         APP_OPEN_FILE,
 
-        /** Atender el pedido de imprimir archivos. */
+        /** Handle the request to print files. */
         APP_PRINT_FILE,
 
-        /** Atender el pedido de abrir una dirección. */
+        /** Handle the request to open an address. */
         APP_OPEN_URI,
 
-        /** Atender el pedido de salir. */
+        /** Handle the request to quit. */
         APP_QUIT_HANDLER,
 
-        /** Elegir cómo se sale. */
+        /** Choose how quitting happens. */
         APP_QUIT_STRATEGY,
 
-        /** Permitir que el sistema mate el programa sin avisar. */
+        /** Let the system kill the program without warning. */
         APP_SUDDEN_TERMINATION,
 
-        /** Pedir pasar a primer plano. */
+        /** Ask to come to the foreground. */
         APP_REQUEST_FOREGROUND,
 
-        /** Abrir la ayuda del programa. */
+        /** Open the program's help. */
         APP_HELP_VIEWER,
 
-        /** Poner la barra de menú del programa en la del sistema. */
+        /** Put the program's menu bar in the system's. */
         APP_MENU_BAR,
 
-        /** Abrir el directorio de un archivo y dejarlo seleccionado. */
+        /** Open the directory of a file and leave it selected. */
         BROWSE_FILE_DIR,
 
-        /** Mandar un archivo a la papelera. */
+        /** Send a file to the trash. */
         MOVE_TO_TRASH
     }
 
-    /** El único escritorio, si alguna vez se llega a pedir. */
-    private static Desktop unico;
+    /** The only desktop, if it ever gets asked for. */
+    private static Desktop instance;
 
-    /** No se instancia desde afuera. */
+    /** Not instantiated from outside. */
     private Desktop() {
     }
 
     /**
-     * El escritorio de esta sesión.
+     * The desktop of this session.
      *
-     * @throws HeadlessException siempre acá: sin pantalla no hay escritorio
-     * @throws UnsupportedOperationException si hay pantalla pero el escritorio no se puede manejar
+     * @throws HeadlessException always here: with no screen there is no desktop
+     * @throws UnsupportedOperationException if there is a screen but the desktop cannot be driven
      */
     public static synchronized Desktop getDesktop() {
         if (GraphicsEnvironment.isHeadless()) {
@@ -132,26 +134,26 @@ public class Desktop {
         if (!isDesktopSupported()) {
             throw new UnsupportedOperationException("Desktop API is not supported on the current platform");
         }
-        if (unico == null) {
-            unico = new Desktop();
+        if (instance == null) {
+            instance = new Desktop();
         }
-        return unico;
+        return instance;
     }
 
     /**
-     * Si esta plataforma tiene un escritorio manejable.
+     * Whether this platform has a desktop that can be driven.
      *
-     * @return `false` siempre
+     * @return `false` always
      */
     public static boolean isDesktopSupported() {
         return false;
     }
 
     /**
-     * Si admite esa acción.
+     * Whether it supports that action.
      *
-     * @return `false` para todas
-     * @throws NullPointerException si la acción es `null`
+     * @return `false` for all of them
+     * @throws NullPointerException if the action is `null`
      */
     public boolean isSupported(Action action) {
         if (action == null) {
@@ -161,71 +163,71 @@ public class Desktop {
     }
 
     /**
-     * Abre el archivo con el programa que le corresponde.
+     * Opens the file with the program it belongs to.
      *
-     * @throws NullPointerException si el archivo es `null`
-     * @throws IllegalArgumentException si el archivo no existe
-     * @throws UnsupportedOperationException si no se admite {@link Action#OPEN}
-     * @throws IOException si no hay ningún programa asociado o si falló al arrancar
+     * @throws NullPointerException if the file is `null`
+     * @throws IllegalArgumentException if the file does not exist
+     * @throws UnsupportedOperationException if {@link Action#OPEN} is not supported
+     * @throws IOException if there is no program associated with it or it failed to start
      */
     public void open(File file) throws IOException {
-        this.comprobarArchivo(file);
-        this.exigir(Action.OPEN);
+        this.checkFile(file);
+        this.require(Action.OPEN);
     }
 
     /**
-     * Lo abre para editarlo.
+     * Opens it for editing.
      *
-     * @throws UnsupportedOperationException si no se admite {@link Action#EDIT}
-     * @throws IOException si no hay editor asociado
+     * @throws UnsupportedOperationException if {@link Action#EDIT} is not supported
+     * @throws IOException if there is no editor associated with it
      */
     public void edit(File file) throws IOException {
-        this.comprobarArchivo(file);
-        this.exigir(Action.EDIT);
+        this.checkFile(file);
+        this.require(Action.EDIT);
     }
 
     /**
-     * Lo imprime.
+     * Prints it.
      *
-     * @throws UnsupportedOperationException si no se admite {@link Action#PRINT}
-     * @throws IOException si no hay programa que sepa imprimirlo
+     * @throws UnsupportedOperationException if {@link Action#PRINT} is not supported
+     * @throws IOException if there is no program that knows how to print it
      */
     public void print(File file) throws IOException {
-        this.comprobarArchivo(file);
-        this.exigir(Action.PRINT);
+        this.checkFile(file);
+        this.require(Action.PRINT);
     }
 
     /**
-     * Abre esa dirección en el navegador.
+     * Opens that address in the browser.
      *
-     * @throws NullPointerException si la dirección es `null`
-     * @throws UnsupportedOperationException si no se admite {@link Action#BROWSE}
-     * @throws IOException si el navegador no arrancó
+     * @throws NullPointerException if the address is `null`
+     * @throws UnsupportedOperationException if {@link Action#BROWSE} is not supported
+     * @throws IOException if the browser did not start
      */
     public void browse(URI uri) throws IOException {
         if (uri == null) {
             throw new NullPointerException("uri");
         }
-        this.exigir(Action.BROWSE);
+        this.require(Action.BROWSE);
     }
 
     /**
-     * Abre el programa de correo con un mensaje en blanco.
+     * Opens the mail program with a blank message.
      *
-     * @throws UnsupportedOperationException si no se admite {@link Action#MAIL}
-     * @throws IOException si no arrancó
+     * @throws UnsupportedOperationException if {@link Action#MAIL} is not supported
+     * @throws IOException if it did not start
      */
     public void mail() throws IOException {
-        this.exigir(Action.MAIL);
+        this.require(Action.MAIL);
     }
 
     /**
-     * Abre el programa de correo con lo que diga esa dirección `mailto:`.
+     * Opens the mail program with whatever that `mailto:` address says.
      *
-     * @throws NullPointerException si la dirección es `null`
-     * @throws IllegalArgumentException si el esquema no es `mailto`
-     * @throws UnsupportedOperationException si no se admite {@link Action#MAIL}
-     * @throws IOException si no arrancó
+     * @throws NullPointerException if the address is `null`
+     * @throws IllegalArgumentException if the scheme is not `mailto`
+     * @throws UnsupportedOperationException if {@link Action#MAIL} is not supported
+     * @throws IOException if it did not start
      */
     public void mail(URI mailtoURI) throws IOException {
         if (mailtoURI == null) {
@@ -234,41 +236,42 @@ public class Desktop {
         if (!"mailto".equalsIgnoreCase(mailtoURI.getScheme())) {
             throw new IllegalArgumentException("URI scheme is not \"mailto\"");
         }
-        this.exigir(Action.MAIL);
+        this.require(Action.MAIL);
     }
 
     /**
-     * Abre el directorio del archivo y lo deja seleccionado.
+     * Opens the directory of the file and leaves it selected.
      *
-     * <p>Es lo que hace "Mostrar en la carpeta": no abre el archivo, muestra dónde está.
+     * <p>It is what "Show in folder" does: it does not open the file, it shows where it is.
      *
-     * @throws UnsupportedOperationException si no se admite {@link Action#BROWSE_FILE_DIR}
+     * @throws UnsupportedOperationException if {@link Action#BROWSE_FILE_DIR} is not supported
      */
     public void browseFileDirectory(File file) {
-        this.comprobarArchivo(file);
-        this.exigir(Action.BROWSE_FILE_DIR);
+        this.checkFile(file);
+        this.require(Action.BROWSE_FILE_DIR);
     }
 
     /**
-     * Manda el archivo a la papelera.
+     * Sends the file to the trash.
      *
-     * <p>Es distinto de borrarlo: se puede recuperar.
+     * <p>It is different from deleting it: it can be recovered.
      *
-     * @return `true` si llegó a la papelera
-     * @throws UnsupportedOperationException si no se admite {@link Action#MOVE_TO_TRASH}
+     * @return `true` if it made it to the trash
+     * @throws UnsupportedOperationException if {@link Action#MOVE_TO_TRASH} is not supported
      */
     public boolean moveToTrash(File file) {
-        this.comprobarArchivo(file);
-        this.exigir(Action.MOVE_TO_TRASH);
+        this.checkFile(file);
+        this.require(Action.MOVE_TO_TRASH);
         return false;
     }
 
     /**
-     * Registra un oyente de eventos del sistema.
+     * Registers a listener of system events.
      *
-     * <p>Un oyente `null` se ignora, que es lo que hace el JDK: registrar nada es no hacer nada.
+     * <p>A `null` listener is ignored, which is what the JDK does: registering nothing is doing
+     * nothing.
      *
-     * @throws UnsupportedOperationException si el escritorio no admite esa clase de evento
+     * @throws UnsupportedOperationException if the desktop does not support that kind of event
      */
     public void addAppEventListener(SystemEventListener listener) {
         if (listener == null) {
@@ -278,9 +281,9 @@ public class Desktop {
     }
 
     /**
-     * Saca un oyente de eventos del sistema.
+     * Removes a listener of system events.
      *
-     * @throws UnsupportedOperationException si el escritorio no admite esa clase de evento
+     * @throws UnsupportedOperationException if the desktop does not support that kind of event
      */
     public void removeAppEventListener(SystemEventListener listener) {
         if (listener == null) {
@@ -290,140 +293,144 @@ public class Desktop {
     }
 
     /**
-     * Quién atiende la entrada "Acerca de" del menú del sistema.
+     * Who handles the "About" entry of the system menu.
      *
-     * @param aboutHandler el manejador, o `null` para volver al de fábrica
-     * @throws UnsupportedOperationException si no se admite {@link Action#APP_ABOUT}
+     * @param aboutHandler the handler, or `null` to go back to the default one
+     * @throws UnsupportedOperationException if {@link Action#APP_ABOUT} is not supported
      */
     public void setAboutHandler(AboutHandler aboutHandler) {
-        this.exigir(Action.APP_ABOUT);
+        this.require(Action.APP_ABOUT);
     }
 
     /**
-     * Quién atiende "Preferencias".
+     * Who handles "Preferences".
      *
-     * <p>Pasar `null` **esconde la entrada** del menú, que es distinto de dejarla sin hacer nada.
+     * <p>Passing `null` **hides the entry** of the menu, which is different from leaving it doing
+     * nothing.
      *
-     * @throws UnsupportedOperationException si no se admite {@link Action#APP_PREFERENCES}
+     * @throws UnsupportedOperationException if {@link Action#APP_PREFERENCES} is not supported
      */
     public void setPreferencesHandler(PreferencesHandler preferencesHandler) {
-        this.exigir(Action.APP_PREFERENCES);
+        this.require(Action.APP_PREFERENCES);
     }
 
     /**
-     * Pone esa barra de menús en la del sistema.
+     * Puts that menu bar in the system's.
      *
-     * <p>Es de macOS: la barra de menús del programa va en la franja de arriba de la pantalla, fuera
-     * de la ventana. En el resto de los sistemas nunca se admite, y acá tampoco.
+     * <p>It is a macOS thing: the program's menu bar goes in the strip at the top of the screen,
+     * outside the window. On the other systems it is never supported, and here it is not either.
      *
-     * <p>El {@link javax.swing.JMenuBar} que recibe es un **lugar reservado** de esta biblioteca, no
-     * el de Swing: alcanza para declarar el método, que es todo lo que hace falta, porque el método
-     * tira antes de mirarlo.
+     * <p>The {@link javax.swing.JMenuBar} it takes is a **placeholder** of this library, not
+     * Swing's: it is enough to declare the method, which is all that is needed, because the method
+     * throws before looking at it.
      *
-     * @throws UnsupportedOperationException si no se admite {@link Action#APP_MENU_BAR}
+     * @throws UnsupportedOperationException if {@link Action#APP_MENU_BAR} is not supported
      */
     public void setDefaultMenuBar(javax.swing.JMenuBar menuBar) {
-        this.exigir(Action.APP_MENU_BAR);
+        this.require(Action.APP_MENU_BAR);
     }
 
     /**
-     * Quién atiende el pedido de abrir archivos hecho desde el escritorio.
+     * Who handles the request to open files made from the desktop.
      *
-     * @throws UnsupportedOperationException si no se admite {@link Action#APP_OPEN_FILE}
+     * @throws UnsupportedOperationException if {@link Action#APP_OPEN_FILE} is not supported
      */
     public void setOpenFileHandler(OpenFilesHandler openFileHandler) {
-        this.exigir(Action.APP_OPEN_FILE);
+        this.require(Action.APP_OPEN_FILE);
     }
 
     /**
-     * Quién atiende el pedido de imprimir archivos.
+     * Who handles the request to print files.
      *
-     * @throws UnsupportedOperationException si no se admite {@link Action#APP_PRINT_FILE}
+     * @throws UnsupportedOperationException if {@link Action#APP_PRINT_FILE} is not supported
      */
     public void setPrintFileHandler(PrintFilesHandler printFileHandler) {
-        this.exigir(Action.APP_PRINT_FILE);
+        this.require(Action.APP_PRINT_FILE);
     }
 
     /**
-     * Quién atiende el pedido de abrir una dirección.
+     * Who handles the request to open an address.
      *
-     * @throws UnsupportedOperationException si no se admite {@link Action#APP_OPEN_URI}
+     * @throws UnsupportedOperationException if {@link Action#APP_OPEN_URI} is not supported
      */
     public void setOpenURIHandler(OpenURIHandler openURIHandler) {
-        this.exigir(Action.APP_OPEN_URI);
+        this.require(Action.APP_OPEN_URI);
     }
 
     /**
-     * Quién atiende el pedido de salir.
+     * Who handles the request to quit.
      *
-     * <p>El manejador recibe una respuesta y **tiene que contestarla**: hasta que conteste, el
-     * sistema espera. Es lo que permite preguntar "¿guardo los cambios?" antes de cerrar.
+     * <p>The handler receives a response and **has to answer it**: until it answers, the system
+     * waits. It is what makes it possible to ask "shall I save the changes?" before closing.
      *
-     * @throws UnsupportedOperationException si no se admite {@link Action#APP_QUIT_HANDLER}
+     * @throws UnsupportedOperationException if {@link Action#APP_QUIT_HANDLER} is not supported
      */
     public void setQuitHandler(QuitHandler quitHandler) {
-        this.exigir(Action.APP_QUIT_HANDLER);
+        this.require(Action.APP_QUIT_HANDLER);
     }
 
     /**
-     * Elige cómo se sale del programa.
+     * Chooses how the program quits.
      *
-     * @throws UnsupportedOperationException si no se admite {@link Action#APP_QUIT_STRATEGY}
+     * @throws UnsupportedOperationException if {@link Action#APP_QUIT_STRATEGY} is not supported
      */
     public void setQuitStrategy(QuitStrategy strategy) {
-        this.exigir(Action.APP_QUIT_STRATEGY);
+        this.require(Action.APP_QUIT_STRATEGY);
     }
 
     /**
-     * Deja que el sistema mate el programa sin avisar.
+     * Lets the system kill the program without warning.
      *
-     * <p>Sirve para acelerar el apagado: si el programa no tiene nada que guardar, no hace falta
-     * darle la oportunidad de negarse.
+     * <p>It serves to speed up the shutdown: if the program has nothing to save, there is no need
+     * to give it the chance to refuse.
      *
-     * @throws UnsupportedOperationException si no se admite {@link Action#APP_SUDDEN_TERMINATION}
+     * @throws UnsupportedOperationException if {@link Action#APP_SUDDEN_TERMINATION} is not
+     *     supported
      */
     public void enableSuddenTermination() {
-        this.exigir(Action.APP_SUDDEN_TERMINATION);
+        this.require(Action.APP_SUDDEN_TERMINATION);
     }
 
     /**
-     * Vuelve a exigir que se le avise antes de matarlo.
+     * Demands again that it be warned before being killed.
      *
-     * @throws UnsupportedOperationException si no se admite {@link Action#APP_SUDDEN_TERMINATION}
+     * @throws UnsupportedOperationException if {@link Action#APP_SUDDEN_TERMINATION} is not
+     *     supported
      */
     public void disableSuddenTermination() {
-        this.exigir(Action.APP_SUDDEN_TERMINATION);
+        this.require(Action.APP_SUDDEN_TERMINATION);
     }
 
     /**
-     * Pide pasar a primer plano.
+     * Asks to come to the foreground.
      *
-     * @param allWindows si traer todas las ventanas o sólo la de adelante
-     * @throws UnsupportedOperationException si no se admite {@link Action#APP_REQUEST_FOREGROUND}
+     * @param allWindows whether to bring every window or only the front one
+     * @throws UnsupportedOperationException if {@link Action#APP_REQUEST_FOREGROUND} is not
+     *     supported
      */
     public void requestForeground(boolean allWindows) {
-        this.exigir(Action.APP_REQUEST_FOREGROUND);
+        this.require(Action.APP_REQUEST_FOREGROUND);
     }
 
     /**
-     * Abre la ayuda del programa.
+     * Opens the program's help.
      *
-     * @throws UnsupportedOperationException si no se admite {@link Action#APP_HELP_VIEWER}
+     * @throws UnsupportedOperationException if {@link Action#APP_HELP_VIEWER} is not supported
      */
     public void openHelpViewer() {
-        this.exigir(Action.APP_HELP_VIEWER);
+        this.require(Action.APP_HELP_VIEWER);
     }
 
-    /** Tira si esa acción no se admite. */
-    private void exigir(Action a) {
+    /** Throws if that action is not supported. */
+    private void require(Action a) {
         if (!this.isSupported(a)) {
             throw new UnsupportedOperationException("The " + a.name()
                     + " action is not supported on the current platform!");
         }
     }
 
-    /** Que el archivo exista. */
-    private void comprobarArchivo(File file) {
+    /** That the file exists. */
+    private void checkFile(File file) {
         if (file == null) {
             throw new NullPointerException("file");
         }

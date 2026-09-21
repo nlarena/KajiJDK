@@ -6,10 +6,10 @@ import javax.print.attribute.DateTimeSyntax;
 import javax.print.attribute.PrintJobAttribute;
 
 /**
- * Cuando la impresora acepto el trabajo.
+ * When the printer accepted the job.
  *
- * <p>Es el momento en que quedo encolado, no en que empezo a imprimirse: eso es {@link
- * DateTimeAtProcessing}.
+ * <p>It is the moment it was queued, not when it started printing: that is
+ * {@link DateTimeAtProcessing}.
  */
 public final class DateTimeAtCreation extends DateTimeSyntax implements PrintJobAttribute {
 

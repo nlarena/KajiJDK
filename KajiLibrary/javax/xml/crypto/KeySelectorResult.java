@@ -3,19 +3,21 @@ package javax.xml.crypto;
 import java.security.Key;
 
 /**
- * KajiLibrary's javax.xml.crypto.KeySelectorResult -- la clave que eligio un {@link KeySelector}.
+ * KajiLibrary's javax.xml.crypto.KeySelectorResult -- the key a {@link KeySelector} chose.
  *
- * <p>Un envoltorio de una sola clave, y parece de mas hasta que se ve para que esta: quien valida una
- * firma necesita saber <b>con que clave</b> se valido, no solo si valido. Sin esto, el resultado
- * seria un booleano y la aplicacion no podria decidir si esa clave era una en la que confia.
+ * <p>A wrapper of a single key, and it looks superfluous until one sees what it is for: whoever
+ * validates a signature needs to know <b>with which key</b> it was validated, not only whether it
+ * validated. Without this, the result would be a boolean and the application could not decide
+ * whether that key was one it trusts.
  *
- * <p>Esa es la trampa central de XML-DSig y vale decirla: una firma que valida solo demuestra que
- * quien tiene <b>esa</b> clave la produjo. Si la clave salio del propio documento --de su
- * {@code KeyInfo}-- eso no demuestra nada, porque quien escribio el documento eligio la clave.
- * Comparar la clave de aca contra una lista de confianza es el paso que falta, y el que se olvida.
+ * <p>That is the central trap of XML-DSig and it is worth saying: a signature that validates only
+ * shows that whoever holds <b>that</b> key produced it. If the key came from the document itself
+ * --from its {@code KeyInfo}-- that shows nothing, because whoever wrote the document chose the
+ * key. Comparing the key here against a trust list is the missing step, and the one that gets
+ * forgotten.
  */
 public interface KeySelectorResult {
 
-    /** La clave elegida. Ver la nota de la clase sobre por que hay que mirarla. */
+    /** The chosen key. See the class note on why it has to be looked at. */
     Key getKey();
 }

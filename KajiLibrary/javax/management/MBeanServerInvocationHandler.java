@@ -5,81 +5,83 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 
 /**
- * Traduce llamadas Java comunes a operaciones contra un MBean.
+ * Translates ordinary Java calls into operations against an MBean.
  *
- * <p>Es el reverso exacto de {@link StandardMBean}: alla una interfaz mas un objeto se convierten
- * en {@link DynamicMBean}; aca una interfaz mas un {@link ObjectName} se convierten en un objeto
- * que parece implementarla. Las dos usan la misma regla de nombres --`getX`/`isX`/`setX` son
- * atributos, el resto son operaciones--, cada una en un sentido.
+ * <p>It is the exact reverse of {@link StandardMBean}: there an interface plus an object become a
+ * {@link DynamicMBean}; here an interface plus an {@link ObjectName} become an object that seems to
+ * implement it. Both use the same naming rule --{@code getX}/{@code isX}/{@code setX} are
+ * attributes, the rest are operations--, each in one direction.
  *
- * <p>Que se hace con lo que no es del MBean:
+ * <p>What is done with what does not belong to the MBean:
  *
  * <ul>
- *   <li>los tres metodos de `Object` --`equals`, `hashCode`, `toString`-- se contestan <b>aca</b>
- *       y no viajan. Mandar `hashCode()` al agente devolveria el del objeto remoto, que no tiene
- *       nada que ver con el proxy y romperia cualquier `HashMap` local;
- *   <li>los de {@link NotificationEmitter} se reenvian a los de la conexion, que llevan el
- *       `ObjectName` como primer argumento. Es lo que hace que un proxy pedido con
- *       `notificationBroadcaster` sirva de verdad para escuchar.
+ *   <li>the three methods of {@code Object} --{@code equals}, {@code hashCode}, {@code toString}--
+ *       are answered <b>here</b> and do not travel. Sending {@code hashCode()} to the agent would
+ *       return the remote object's, which has nothing to do with the proxy and would break any
+ *       local {@code HashMap};
+ *   <li>those of {@link NotificationEmitter} are forwarded to the connection's, which take the
+ *       {@code ObjectName} as first argument. It is what makes a proxy requested with
+ *       {@code notificationBroadcaster} really useful for listening.
  * </ul>
  *
- * <h2>El modo MXBean</h2>
+ * <h2>MXBean mode</h2>
  *
- * <p>Con `isMXBean` en `true` el handler <b>convierte</b>: los argumentos van al servidor como tipos
- * abiertos y los resultados vuelven a los tipos Java de la interfaz. Esa es toda la diferencia entre
- * un proxy MBean y uno MXBean, y la hace {@link MXMapeo}.
+ * <p>With {@code isMXBean} set to {@code true} the handler <b>converts</b>: the arguments go to the
+ * server as open types and the results come back as the interface's Java types. That is the whole
+ * difference between an MBean proxy and an MXBean one, and {@link MXMapping} does it.
  *
- * <p>La conversion se resuelve <b>al construir el proxy</b>, no en cada llamada: si algun tipo de la
- * interfaz no se puede mapear, el proxy no se crea. Es el momento en que quien escribe el codigo
- * puede hacer algo al respecto, y evita el peor caso -- un proxy que anda para la mitad de los
- * metodos. Que tipos entran y cuales no esta en la nota de {@link MXMapeo}.
+ * <p>The conversion is resolved <b>when the proxy is built</b>, not on every call: if some type of
+ * the interface cannot be mapped, the proxy is not created. It is the moment when whoever writes
+ * the code can do something about it, and it avoids the worst case -- a proxy that works for half
+ * the methods. Which types go in and which do not is in the note of {@link MXMapping}.
  */
 public class MBeanServerInvocationHandler implements InvocationHandler {
 
-    private final MBeanServerConnection conexion;
-    private final ObjectName nombre;
+    private final MBeanServerConnection connection;
+    private final ObjectName name;
     private final boolean mxbean;
 
-    /** Equivale a `isMXBean = false`. */
+    /** Equivalent to {@code isMXBean = false}. */
     public MBeanServerInvocationHandler(MBeanServerConnection connection, ObjectName objectName) {
         this(connection, objectName, false);
     }
 
     /**
-     * @param isMXBean si hay que convertir a tipos abiertos; ver la nota de la clase
+     * @param isMXBean whether to convert to open types; see the class note
      */
     public MBeanServerInvocationHandler(MBeanServerConnection connection, ObjectName objectName,
                                         boolean isMXBean) {
         this.mxbean = isMXBean;
         if (connection == null) {
-            throw new IllegalArgumentException("La conexion no puede ser null");
+            throw new IllegalArgumentException("The connection cannot be null");
         }
         if (objectName == null) {
-            throw new IllegalArgumentException("El ObjectName no puede ser null");
+            throw new IllegalArgumentException("The ObjectName cannot be null");
         }
-        this.conexion = connection;
-        this.nombre = objectName;
+        this.connection = connection;
+        this.name = objectName;
     }
 
     public MBeanServerConnection getMBeanServerConnection() {
-        return conexion;
+        return connection;
     }
 
     public ObjectName getObjectName() {
-        return nombre;
+        return name;
     }
 
-    /** Si este proxy convierte a tipos abiertos. */
+    /** Whether this proxy converts to open types. */
     public boolean isMXBean() {
         return this.mxbean;
     }
 
     /**
-     * Arma el proxy.
+     * Builds the proxy.
      *
-     * @param notificationBroadcaster si ademas de `interfaceClass` el proxy tiene que implementar
-     *        {@link NotificationEmitter}. Es un `boolean` y no se deduce de la interfaz porque
-     *        escuchar notificaciones es independiente de lo que el MBean expone como atributos.
+     * @param notificationBroadcaster whether, besides {@code interfaceClass}, the proxy also has to
+     *        implement {@link NotificationEmitter}. It is a {@code boolean} and not deduced from
+     *        the interface because listening to notifications is independent of what the MBean
+     *        exposes as attributes.
      */
     public static <T> T newProxyInstance(MBeanServerConnection connection, ObjectName objectName,
                                          Class<T> interfaceClass,
@@ -88,15 +90,15 @@ public class MBeanServerInvocationHandler implements InvocationHandler {
                                 false);
     }
 
-    // La forma general: la de arriba es esta con `mxbean` en false.
+    // The general form: the one above is this with `mxbean` false.
     @SuppressWarnings("unchecked")
     static <T> T newProxyInstance(MBeanServerConnection connection, ObjectName objectName,
                                   Class<T> interfaceClass, boolean notificationBroadcaster,
                                   boolean mxbean) {
         if (mxbean) {
-            // Se resuelve el mapeo de toda la interfaz ahora: si algo no se puede mapear, el proxy
-            // no llega a existir. Ver la nota de la clase.
-            MBeanServerInvocationHandler.exigirMapeable(interfaceClass);
+            // The mapping of the whole interface is resolved now: if something cannot be mapped,
+            // the proxy never comes to exist. See the class note.
+            MBeanServerInvocationHandler.requireMappable(interfaceClass);
         }
         InvocationHandler h = new MBeanServerInvocationHandler(connection, objectName, mxbean);
         Class<?>[] interfaces;
@@ -110,49 +112,49 @@ public class MBeanServerInvocationHandler implements InvocationHandler {
     }
 
     public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
-        Class<?> declara = method.getDeclaringClass();
+        Class<?> declares = method.getDeclaringClass();
         String nom = method.getName();
-        Class<?>[] tipos = method.getParameterTypes();
+        Class<?>[] types = method.getParameterTypes();
 
-        if (declara == Object.class) {
-            return deObject(proxy, nom, args);
+        if (declares == Object.class) {
+            return objectMethod(proxy, nom, args);
         }
-        if (declara == NotificationBroadcaster.class || declara == NotificationEmitter.class) {
-            return deNotificaciones(nom, tipos, args);
+        if (declares == NotificationBroadcaster.class || declares == NotificationEmitter.class) {
+            return notificationMethod(nom, types, args);
         }
 
         try {
-            if (tipos.length == 0 && nom.startsWith("get") && nom.length() > 3
+            if (types.length == 0 && nom.startsWith("get") && nom.length() > 3
                     && method.getReturnType() != Void.TYPE) {
-                return aJava(conexion.getAttribute(nombre, nom.substring(3)),
+                return toJava(connection.getAttribute(name, nom.substring(3)),
                              method.getReturnType());
             }
-            if (tipos.length == 0 && nom.startsWith("is") && nom.length() > 2
+            if (types.length == 0 && nom.startsWith("is") && nom.length() > 2
                     && method.getReturnType() == Boolean.TYPE) {
-                return aJava(conexion.getAttribute(nombre, nom.substring(2)),
+                return toJava(connection.getAttribute(name, nom.substring(2)),
                              method.getReturnType());
             }
-            if (tipos.length == 1 && nom.startsWith("set") && nom.length() > 3
+            if (types.length == 1 && nom.startsWith("set") && nom.length() > 3
                     && method.getReturnType() == Void.TYPE) {
-                conexion.setAttribute(nombre,
-                        new Attribute(nom.substring(3), aAbierto(args[0], tipos[0])));
+                connection.setAttribute(name,
+                        new Attribute(nom.substring(3), toOpen(args[0], types[0])));
                 return null;
             }
-            // La firma que se manda es la de los tipos **abiertos** cuando el proxy es MXBean: es
-            // lo que el servidor declara, y mandarle los tipos Java de la interfaz haria que no
-            // encontrara la operacion.
-            String[] firma = new String[tipos.length];
-            Object[] pasados = args == null ? null : new Object[args.length];
-            for (int i = 0; i < tipos.length; i++) {
-                firma[i] = this.mxbean
-                        ? MBeanServerInvocationHandler.nombreAbierto(tipos[i])
-                        : tipos[i].getName();
-                pasados[i] = aAbierto(args[i], tipos[i]);
+            // The signature sent is that of the *open* types when the proxy is an MXBean: it is
+            // what the server declares, and sending it the interface's Java types would make it not
+            // find the operation.
+            String[] signature = new String[types.length];
+            Object[] passed = args == null ? null : new Object[args.length];
+            for (int i = 0; i < types.length; i++) {
+                signature[i] = this.mxbean
+                        ? MBeanServerInvocationHandler.openName(types[i])
+                        : types[i].getName();
+                passed[i] = toOpen(args[i], types[i]);
             }
-            return aJava(conexion.invoke(nombre, nom, pasados, firma), method.getReturnType());
+            return toJava(connection.invoke(name, nom, passed, signature), method.getReturnType());
         } catch (MBeanException e) {
-            // Se desenvuelve: el que llama al proxy escribio una interfaz Java y espera **su**
-            // excepcion, no el sobre en que JMX la transporto.
+            // It is unwrapped: whoever calls the proxy wrote a Java interface and expects *their*
+            // exception, not the envelope JMX carried it in.
             throw e.getTargetException();
         } catch (RuntimeMBeanException e) {
             throw e.getTargetException();
@@ -161,40 +163,41 @@ public class MBeanServerInvocationHandler implements InvocationHandler {
         }
     }
 
-    private Object deObject(Object proxy, String nom, Object[] args) {
+    private Object objectMethod(Object proxy, String nom, Object[] args) {
         if (nom.equals("hashCode")) {
-            return Integer.valueOf(nombre.hashCode());
+            return Integer.valueOf(name.hashCode());
         }
         if (nom.equals("toString")) {
-            return getClass().getName() + "[" + nombre + "]";
+            return getClass().getName() + "[" + name + "]";
         }
-        // equals: dos proxies son iguales si apuntan al mismo MBean por la misma conexion.
-        Object otro = args[0];
-        if (otro == null || !Proxy.isProxyClass(otro.getClass())) {
+        // equals: two proxies are equal if they point to the same MBean over the same connection.
+        Object other = args[0];
+        if (other == null || !Proxy.isProxyClass(other.getClass())) {
             return Boolean.FALSE;
         }
-        InvocationHandler h = Proxy.getInvocationHandler(otro);
+        InvocationHandler h = Proxy.getInvocationHandler(other);
         if (!(h instanceof MBeanServerInvocationHandler)) {
             return Boolean.FALSE;
         }
         MBeanServerInvocationHandler q = (MBeanServerInvocationHandler) h;
-        return Boolean.valueOf(nombre.equals(q.nombre) && conexion == q.conexion);
+        return Boolean.valueOf(name.equals(q.name) && connection == q.connection);
     }
 
-    private Object deNotificaciones(String nom, Class<?>[] tipos, Object[] args) throws Exception {
+    private Object notificationMethod(String nom, Class<?>[] types, Object[] args)
+            throws Exception {
         if (nom.equals("getNotificationInfo")) {
-            return conexion.getMBeanInfo(nombre).getNotifications();
+            return connection.getMBeanInfo(name).getNotifications();
         }
         if (nom.equals("addNotificationListener")) {
-            conexion.addNotificationListener(nombre, (NotificationListener) args[0],
+            connection.addNotificationListener(name, (NotificationListener) args[0],
                                              (NotificationFilter) args[1], args[2]);
             return null;
         }
         if (nom.equals("removeNotificationListener")) {
-            if (tipos.length == 1) {
-                conexion.removeNotificationListener(nombre, (NotificationListener) args[0]);
+            if (types.length == 1) {
+                connection.removeNotificationListener(name, (NotificationListener) args[0]);
             } else {
-                conexion.removeNotificationListener(nombre, (NotificationListener) args[0],
+                connection.removeNotificationListener(name, (NotificationListener) args[0],
                                                      (NotificationFilter) args[1], args[2]);
             }
             return null;
@@ -202,24 +205,24 @@ public class MBeanServerInvocationHandler implements InvocationHandler {
         throw new UnsupportedOperationException(nom);
     }
 
-    // ---- el modo MXBean ----------------------------------------------------------------------
+    // ---- MXBean mode ------------------------------------------------------------------------
 
     /**
-     * Comprueba que todos los tipos que la interfaz menciona se puedan mapear.
+     * Checks that all the types the interface mentions can be mapped.
      *
-     * @throws IllegalArgumentException si alguno no; el mensaje nombra el metodo y el tipo
+     * @throws IllegalArgumentException if one cannot; the message names the method and the type
      */
-    private static void exigirMapeable(Class<?> interfaceClass) {
+    private static void requireMappable(Class<?> interfaceClass) {
         for (Method m : interfaceClass.getMethods()) {
             if (m.getDeclaringClass() == Object.class) {
                 continue;
             }
             try {
                 if (m.getReturnType() != Void.TYPE) {
-                    MXMapeo.de(m.getReturnType());
+                    MXMapping.de(m.getReturnType());
                 }
                 for (Class<?> p : m.getParameterTypes()) {
-                    MXMapeo.de(p);
+                    MXMapping.de(p);
                 }
             } catch (IllegalArgumentException e) {
                 throw new IllegalArgumentException(interfaceClass.getName() + "." + m.getName()
@@ -228,29 +231,29 @@ public class MBeanServerInvocationHandler implements InvocationHandler {
         }
     }
 
-    /** El valor que va al servidor. */
-    private Object aAbierto(Object v, Class<?> tipo) throws Exception {
+    /** The value that goes to the server. */
+    private Object toOpen(Object v, Class<?> type) throws Exception {
         if (!this.mxbean || v == null) {
             return v;
         }
-        return MXMapeo.de(tipo).aAbierto(v);
+        return MXMapping.de(type).toOpen(v);
     }
 
-    /** El valor que vuelve al que llamo. */
-    private Object aJava(Object v, Class<?> tipo) throws Exception {
+    /** The value that comes back to the caller. */
+    private Object toJava(Object v, Class<?> type) throws Exception {
         if (!this.mxbean || v == null) {
             return v;
         }
-        return MXMapeo.de(tipo).aJava(v);
+        return MXMapping.de(type).toJava(v);
     }
 
-    // El nombre de clase con el que un tipo mapeado viaja en una firma.
-    private static String nombreAbierto(Class<?> tipo) {
-        MXMapeo m = MXMapeo.de(tipo);
-        if (m.esIdentidad()) {
-            return tipo.getName();
+    // The class name with which a mapped type travels in a signature.
+    private static String openName(Class<?> type) {
+        MXMapping m = MXMapping.de(type);
+        if (m.isIdentity()) {
+            return type.getName();
         }
-        javax.management.openmbean.OpenType<?> t = m.tipoAbierto();
-        return t == null ? tipo.getName() : t.getClassName();
+        javax.management.openmbean.OpenType<?> t = m.openType();
+        return t == null ? type.getName() : t.getClassName();
     }
 }

@@ -59,5 +59,5 @@ public interface CollectionJoin<Z, E>
      * @return metamodel type representing the {@code Collection} that is
      *         the target of the join
      */
-    // OMITIDO (subset): CollectionAttribute<? super Z, E> getModel();  -- finding #123, se hereda de PluralJoin
+    // OMITTED (subset): CollectionAttribute<? super Z, E> getModel();  -- finding #123, inherited from PluralJoin
 }

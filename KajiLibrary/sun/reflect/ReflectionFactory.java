@@ -9,50 +9,50 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 
 /**
- * Los ganchos de serializacion que necesita una biblioteca que serializa por su cuenta.
+ * The serialisation hooks a library that serialises on its own needs.
  *
- * <p>Existe para una sola clase de cliente: el que reimplementa el formato de
- * {@code ObjectOutputStream} --un ORB de CORBA, un marco de persistencia-- y necesita hacer las
- * mismas cosas que hace el JDK y que **ningun** API publico permite: construir un objeto sin correr
- * su constructor, llamar a un {@code readObject} privado, saber si una clase tiene inicializador
- * estatico.
+ * <p>It exists for one single kind of client: the one that reimplements the format of {@code
+ * ObjectOutputStream} --a CORBA ORB, a persistence framework-- and needs to do the same things the
+ * JDK does and that **no** public API allows: building an object without running its constructor,
+ * calling a private {@code readObject}, knowing whether a class has a static initialiser.
  *
- * <p>Por eso el paquete se llama `sun.` y sigue exportado: no es API para cualquiera, pero
- * quitarlo romperia a esos clientes, que no tienen sustituto.
+ * <p>That is why the package is called `sun.` and is still exported: it is not API for anybody, but
+ * taking it away would break those clients, which have no substitute.
  *
  * <h2>A KajiLibrary subset</h2>
  *
- * <p>La mayor parte de esta clase **no se puede implementar desde Java**. Los tres agujeros:
+ * <p>Most of this class **cannot be implemented from Java**. The three holes:
  *
  * <ul>
- *   <li>Los `newConstructorForSerialization` fabrican un {@link Constructor} que, al invocarse,
- *       reserva una instancia de una clase y corre el constructor de **otra**. Eso lo hace la VM
- *       con un accesor generado; no hay forma de expresarlo en Java.
- *   <li>Los que devuelven {@link MethodHandle} necesitan una busqueda con acceso privado sobre una
- *       clase ajena ({@code MethodHandles.privateLookupIn}), que es justamente el permiso que el
- *       lenguaje no da.
- *   <li>{@link #hasStaticInitializerForSerialization} pregunta si una clase tiene {@code <clinit>},
- *       que la reflexion no expone: {@code <clinit>} no es un {@link java.lang.reflect.Method}.
+ *   <li>The `newConstructorForSerialization` manufacture a {@link Constructor} that, when invoked,
+ *       allocates an instance of one class and runs the constructor of **another**. The VM does
+ *       that with a generated accessor; there is no way of expressing it in Java.
+ *   <li>The ones that return {@link MethodHandle} need a lookup with private access over somebody
+ *       else's class ({@code MethodHandles.privateLookupIn}), which is precisely the permission the
+ *       language does not give.
+ *   <li>{@link #hasStaticInitializerForSerialization} asks whether a class has a {@code <clinit>},
+ *       which reflection does not expose: {@code <clinit>} is not a {@link
+ *       java.lang.reflect.Method}.
  * </ul>
  *
- * <p>Esos diez lanzan {@link UnsupportedOperationException} con el motivo. Devolver `null` --que es
- * lo que el JDK devuelve cuando la clase de verdad no tiene el metodo-- seria peor: el cliente lo
- * leeria como "esta clase no define `readObject`" y seguiria de largo serializando mal, en vez de
- * enterarse.
+ * <p>Those throw {@link UnsupportedOperationException} with the reason, and so does
+ * {@link #newOptionalDataExceptionForSerialization}, for a fourth reason given in its own javadoc.
+ * The note said "those ten"; they are eleven. Returning `null` --which is what the JDK returns when
+ * the class really does not have the method-- would be worse: the client would read it as "this
+ * class does not define `readObject`" and go on serialising wrongly, instead of finding out.
  *
- * <p>Los tres que si se pueden estan hechos de verdad:
- * {@link #getReflectionFactory}, {@link #newConstructorForExternalization} --que es solo buscar el
- * constructor publico sin argumentos-- y {@link #serialPersistentFields}, que es leer un campo
- * estatico.
+ * <p>The three that can be done are done for real: {@link #getReflectionFactory},
+ * {@link #newConstructorForExternalization} --which is only looking up the public constructor with
+ * no arguments-- and {@link #serialPersistentFields}, which is reading a static field.
  */
 public class ReflectionFactory {
 
     private static final ReflectionFactory soleInstance = new ReflectionFactory();
 
     /**
-     * La de adentro, la que en el JDK hace el trabajo. Aca no tiene los metodos de serializacion
-     * --ver la nota de la clase-- pero se conserva el campo porque es donde iria el puente el dia
-     * que los tenga.
+     * The inner one, the one that does the work in the JDK. Here it does not have the serialisation
+     * methods --see the note of the class-- but the field is kept because it is where the bridge
+     * would go the day it has them.
      */
     private static final jdk.internal.reflect.ReflectionFactory delegate =
             jdk.internal.reflect.ReflectionFactory.getReflectionFactory();
@@ -60,47 +60,47 @@ public class ReflectionFactory {
     private ReflectionFactory() {
     }
 
-    /** La unica instancia. */
+    /** The only instance. */
     public static ReflectionFactory getReflectionFactory() {
         return soleInstance;
     }
 
     /**
-     * Un constructor que reserva una instancia de `cl` y corre el cuerpo de `constructorToCall`.
+     * A constructor that allocates an instance of `cl` and runs the body of `constructorToCall`.
      *
-     * <p><b>No implementado.</b> Ver la nota de la clase.
+     * <p><b>Not implemented.</b> See the note of the class.
      *
-     * @throws UnsupportedOperationException siempre, en esta biblioteca
+     * @throws UnsupportedOperationException always, in this library
      */
     public Constructor<?> newConstructorForSerialization(Class<?> cl,
             Constructor<?> constructorToCall) {
         throw new UnsupportedOperationException(
-                "cannot synthesize a serialization constructor for " + nombre(cl)
+                "cannot synthesize a serialization constructor for " + nameOf(cl)
                 + ": allocating an instance without running its constructor needs VM support");
     }
 
     /**
-     * Como {@link #newConstructorForSerialization(Class, Constructor)}, tomando el constructor sin
-     * argumentos de la superclase no serializable.
+     * Like {@link #newConstructorForSerialization(Class, Constructor)}, taking the constructor with
+     * no arguments of the non-serialisable superclass.
      *
-     * <p><b>No implementado.</b> Ver la nota de la clase.
+     * <p><b>Not implemented.</b> See the note of the class.
      *
-     * @throws UnsupportedOperationException siempre, en esta biblioteca
+     * @throws UnsupportedOperationException always, in this library
      */
     public final Constructor<?> newConstructorForSerialization(Class<?> cl) {
         throw new UnsupportedOperationException(
-                "cannot synthesize a serialization constructor for " + nombre(cl)
+                "cannot synthesize a serialization constructor for " + nameOf(cl)
                 + ": allocating an instance without running its constructor needs VM support");
     }
 
     /**
-     * El constructor publico sin argumentos que {@link Externalizable} exige.
+     * The public constructor with no arguments {@link Externalizable} demands.
      *
-     * <p>Este si esta hecho: no tiene nada de magico, es el constructor que la propia clase
-     * declara. El JDK lo devuelve accesible aunque la clase no lo sea, y eso tambien.
+     * <p>This one is done: there is nothing magic about it, it is the constructor the class itself
+     * declares. The JDK returns it accessible even if the class is not, and so does this.
      *
-     * @return el constructor, o `null` si la clase no lo tiene
-     * @throws NullPointerException si `cl` es nulo
+     * @return the constructor, or `null` if the class does not have it
+     * @throws NullPointerException if `cl` is null
      */
     public final Constructor<?> newConstructorForExternalization(Class<?> cl) {
         if (cl == null) {
@@ -119,106 +119,106 @@ public class ReflectionFactory {
     }
 
     /**
-     * Un asa al {@code readObject} privado de `cl`.
+     * A handle to the private {@code readObject} of `cl`.
      *
-     * <p><b>No implementado.</b> Ver la nota de la clase.
+     * <p><b>Not implemented.</b> See the note of the class.
      *
-     * @throws UnsupportedOperationException siempre, en esta biblioteca
+     * @throws UnsupportedOperationException always, in this library
      */
     public final MethodHandle readObjectForSerialization(Class<?> cl) {
-        throw noHayAsa("readObject", cl);
+        throw noHandle("readObject", cl);
     }
 
     /**
-     * Un asa al {@code readObjectNoData} privado de `cl`.
+     * A handle to the private {@code readObjectNoData} of `cl`.
      *
-     * <p><b>No implementado.</b> Ver la nota de la clase.
+     * <p><b>Not implemented.</b> See the note of the class.
      *
-     * @throws UnsupportedOperationException siempre, en esta biblioteca
+     * @throws UnsupportedOperationException always, in this library
      */
     public final MethodHandle readObjectNoDataForSerialization(Class<?> cl) {
-        throw noHayAsa("readObjectNoData", cl);
+        throw noHandle("readObjectNoData", cl);
     }
 
     /**
-     * Un asa que lee los campos por omision de `cl` desde el flujo.
+     * A handle to what reads the default fields of `cl` from the stream.
      *
-     * <p><b>No implementado.</b> Ver la nota de la clase.
+     * <p><b>Not implemented.</b> See the note of the class.
      *
-     * @throws UnsupportedOperationException siempre, en esta biblioteca
+     * @throws UnsupportedOperationException always, in this library
      */
     public final MethodHandle defaultReadObjectForSerialization(Class<?> cl) {
-        throw noHayAsa("defaultReadObject", cl);
+        throw noHandle("defaultReadObject", cl);
     }
 
     /**
-     * Un asa al {@code writeObject} privado de `cl`.
+     * A handle to the private {@code writeObject} of `cl`.
      *
-     * <p><b>No implementado.</b> Ver la nota de la clase.
+     * <p><b>Not implemented.</b> See the note of the class.
      *
-     * @throws UnsupportedOperationException siempre, en esta biblioteca
+     * @throws UnsupportedOperationException always, in this library
      */
     public final MethodHandle writeObjectForSerialization(Class<?> cl) {
-        throw noHayAsa("writeObject", cl);
+        throw noHandle("writeObject", cl);
     }
 
     /**
-     * Un asa que escribe los campos por omision de `cl` al flujo.
+     * A handle to what writes the default fields of `cl` to the stream.
      *
-     * <p><b>No implementado.</b> Ver la nota de la clase.
+     * <p><b>Not implemented.</b> See the note of the class.
      *
-     * @throws UnsupportedOperationException siempre, en esta biblioteca
+     * @throws UnsupportedOperationException always, in this library
      */
     public final MethodHandle defaultWriteObjectForSerialization(Class<?> cl) {
-        throw noHayAsa("defaultWriteObject", cl);
+        throw noHandle("defaultWriteObject", cl);
     }
 
     /**
-     * Un asa al {@code readResolve} de `cl`.
+     * A handle to the {@code readResolve} of `cl`.
      *
-     * <p><b>No implementado.</b> Ver la nota de la clase.
+     * <p><b>Not implemented.</b> See the note of the class.
      *
-     * @throws UnsupportedOperationException siempre, en esta biblioteca
+     * @throws UnsupportedOperationException always, in this library
      */
     public final MethodHandle readResolveForSerialization(Class<?> cl) {
-        throw noHayAsa("readResolve", cl);
+        throw noHandle("readResolve", cl);
     }
 
     /**
-     * Un asa al {@code writeReplace} de `cl`.
+     * A handle to the {@code writeReplace} of `cl`.
      *
-     * <p><b>No implementado.</b> Ver la nota de la clase.
+     * <p><b>Not implemented.</b> See the note of the class.
      *
-     * @throws UnsupportedOperationException siempre, en esta biblioteca
+     * @throws UnsupportedOperationException always, in this library
      */
     public final MethodHandle writeReplaceForSerialization(Class<?> cl) {
-        throw noHayAsa("writeReplace", cl);
+        throw noHandle("writeReplace", cl);
     }
 
     /**
-     * Si `cl` tiene inicializador estatico.
+     * Whether `cl` has a static initialiser.
      *
-     * <p><b>No implementado.</b> {@code <clinit>} no es un {@link java.lang.reflect.Method} y la
-     * reflexion no lo lista. Devolver `false` seria una respuesta concreta y equivocada: el que
-     * pregunta lo usa para decidir si la deserializacion tiene que forzar la inicializacion de la
-     * clase, y contestarle que no cuando si la deja a medio inicializar.
+     * <p><b>Not implemented.</b> {@code <clinit>} is not a {@link java.lang.reflect.Method} and
+     * reflection does not list it. Returning `false` would be a concrete and wrong answer: the one
+     * who asks uses it to decide whether deserialisation has to force the initialisation of the
+     * class, and answering no when it is yes leaves it half initialised.
      *
-     * @throws UnsupportedOperationException siempre, en esta biblioteca
+     * @throws UnsupportedOperationException always, in this library
      */
     public final boolean hasStaticInitializerForSerialization(Class<?> cl) {
         throw new UnsupportedOperationException(
-                "cannot tell whether " + nombre(cl) + " has a static initializer: <clinit> is not "
+                "cannot tell whether " + nameOf(cl) + " has a static initializer: <clinit> is not "
                 + "reachable through java.lang.reflect");
     }
 
     /**
-     * Una {@link OptionalDataException} con la bandera de fin de datos puesta.
+     * An {@link OptionalDataException} with the end-of-data flag set.
      *
-     * <p><b>No implementado.</b> Los dos constructores de `OptionalDataException` son de paquete
-     * --a proposito: solo la maquinaria de serializacion tiene por que fabricarla-- y desde
-     * `sun.reflect` no se los ve.
+     * <p><b>Not implemented.</b> The two constructors of `OptionalDataException` are
+     * package-private --on purpose: only the serialisation machinery has any reason to manufacture
+     * it-- and from `sun.reflect` they cannot be seen.
      *
-     * @throws UnsupportedOperationException siempre, en esta biblioteca
+     * @throws UnsupportedOperationException always, in this library
      */
     public final OptionalDataException newOptionalDataExceptionForSerialization(boolean bool) {
         throw new UnsupportedOperationException(
@@ -227,13 +227,14 @@ public class ReflectionFactory {
     }
 
     /**
-     * Los {@code serialPersistentFields} declarados por `cl`, o `null` si no declara ninguno.
+     * The {@code serialPersistentFields} `cl` declares, or `null` if it declares none.
      *
-     * <p>Este si esta hecho: es leer un campo estatico. Solo cuenta si esta declarado como manda la
-     * especificacion --{@code private static final ObjectStreamField[]}-- porque un campo con ese
-     * nombre y otros modificadores no es el contrato y la serializacion del JDK tampoco lo mira.
+     * <p>This one is done: it is reading a static field. It only counts if it is declared as the
+     * specification says --{@code private static final ObjectStreamField[]}-- because a field with
+     * that name and other modifiers is not the contract and the serialisation of the JDK does not
+     * look at it either.
      *
-     * @throws NullPointerException si `cl` es nulo
+     * @throws NullPointerException if `cl` is null
      */
     public final ObjectStreamField[] serialPersistentFields(Class<?> cl) {
         if (cl == null) {
@@ -249,22 +250,22 @@ public class ReflectionFactory {
                 return null;
             }
             f.setAccessible(true);
-            ObjectStreamField[] campos = (ObjectStreamField[]) f.get(null);
-            return campos == null ? null : campos.clone();
+            ObjectStreamField[] fields = (ObjectStreamField[]) f.get(null);
+            return fields == null ? null : fields.clone();
         } catch (Exception e) {
             return null;
         }
     }
 
-    /** El mensaje que comparten los siete que devuelven un asa. */
-    private static UnsupportedOperationException noHayAsa(String metodo, Class<?> cl) {
+    /** The message the seven that return a handle share. */
+    private static UnsupportedOperationException noHandle(String method, Class<?> cl) {
         return new UnsupportedOperationException(
-                "cannot bind a MethodHandle to " + nombre(cl) + "." + metodo
+                "cannot bind a MethodHandle to " + nameOf(cl) + "." + method
                 + ": a private lookup into another class is not available in this library");
     }
 
-    /** El nombre de la clase, tolerando el nulo: esto es para un mensaje de error. */
-    private static String nombre(Class<?> cl) {
+    /** The name of the class, tolerating null: this is for an error message. */
+    private static String nameOf(Class<?> cl) {
         return cl == null ? "null" : cl.getName();
     }
 }

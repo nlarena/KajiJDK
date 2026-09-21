@@ -6,13 +6,13 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Donde ubicar el evento en el arbol de categorias de una herramienta.
+ * Where to place the event in the tree of categories of a tool.
  *
- * <p>Es un arreglo porque el arbol tiene niveles: {@code {"Java Application", "Statistics"}} pone
- * al evento bajo "Statistics", que cuelga de "Java Application".
+ * <p>It is an array because the tree has levels: {@code {"Java Application", "Statistics"}} puts
+ * the event under "Statistics", which hangs from "Java Application".
  *
- * <p>Sin esto, un evento propio queda suelto entre cientos, que es la diferencia entre una lista
- * navegable y uno que nadie encuentra.
+ * <p>Without this, an event of one's own is left loose among hundreds, which is the difference
+ * between a navigable list and one nobody finds.
  *
  * @since 9
  */
@@ -22,9 +22,9 @@ import java.lang.annotation.Target;
 public @interface Category {
 
     /**
-     * El valor de la anotacion.
+     * The value of the annotation.
      *
-     * @return el valor
+     * @return the value
      */
     String[] value();
 }

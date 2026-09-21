@@ -3,47 +3,47 @@ package com.sun.nio.sctp;
 import java.net.SocketAddress;
 
 /**
- * Una direccion del par cambio de estado.
+ * An address of the peer changed state.
  *
- * <h2>Por que existe: el multihoming</h2>
+ * <h2>Why it exists: multihoming</h2>
  *
- * <p>Una punta SCTP puede tener <strong>varias direcciones</strong> a la vez, y la asociacion sigue
- * viva mientras alguna funcione. Eso es lo que le da tolerancia a fallas sin reconectar — y es
- * tambien lo que hace falta notificar, porque el conjunto de direcciones cambia mientras la
- * asociacion esta abierta.
+ * <p>An SCTP end may have <strong>several addresses</strong> at once, and the association goes
+ * on being alive while some one of them works. That is what gives it fault tolerance without
+ * reconnecting -- and it is also what has to be notified, because the set of addresses changes
+ * while the association is open.
  *
- * <p>Una de ellas es la <em>primaria</em>: la que se usa por omision. {@link AddressChangeEvent}
- * incluye el cambio de primaria por eso.
+ * <p>One of them is the <em>primary</em>: the one that is used by default.
+ * {@link AddressChangeEvent} includes the change of primary for that reason.
  */
 public abstract class PeerAddressChangeNotification implements Notification {
 
-    /** Que le paso a la direccion. */
+    /** What happened to the address. */
     public enum AddressChangeEvent {
 
-        /** Volvio a estar disponible. */
+        /** It became available again. */
         ADDR_AVAILABLE,
-        /** Dejo de responder. */
+        /** It stopped answering. */
         ADDR_UNREACHABLE,
-        /** El par la saco de la asociacion. */
+        /** The peer took it out of the association. */
         ADDR_REMOVED,
-        /** El par la agrego a la asociacion. */
+        /** The peer added it to the association. */
         ADDR_ADDED,
-        /** Paso a ser la primaria. */
+        /** It became the primary one. */
         ADDR_MADE_PRIMARY,
-        /** Se confirmo que es alcanzable. */
+        /** It was confirmed to be reachable. */
         ADDR_CONFIRMED
     }
 
-    /** Para las implementaciones de SCTP. */
+    /** For the SCTP implementations. */
     protected PeerAddressChangeNotification() {
     }
 
-    /** La direccion que cambio. */
+    /** The address that changed. */
     public abstract SocketAddress address();
 
-    /** La asociacion a la que pertenece. */
+    /** The association it belongs to. */
     public abstract Association association();
 
-    /** Cual de los seis eventos fue. */
+    /** Which of the six events it was. */
     public abstract AddressChangeEvent event();
 }

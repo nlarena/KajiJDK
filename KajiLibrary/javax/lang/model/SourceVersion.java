@@ -1,22 +1,21 @@
 package javax.lang.model;
 
 /**
- * Las versiones del **lenguaje** Java que un procesador de anotaciones puede declarar que entiende.
+ * The versions of the Java **language** an annotation processor can declare it understands.
  *
- * <p>No son las versiones del JDK ni las del formato de clase: son las del lenguaje, y por eso la
- * lista tiene huecos historicos donde una version no cambio nada del idioma. La constante que
- * importa en la practica es {@link #latestSupported()}, que es la que un procesador devuelve para
- * decir "puedo con esto"; si devuelve menos de la version que se esta compilando, el compilador
- * avisa.
+ * <p>They are neither the JDK versions nor the class-file format ones: they are the language's, and
+ * that is why the list has historical gaps where a version changed nothing in the language. The
+ * constant that matters in practice is {@link #latestSupported()}, which is the one a processor
+ * returns to say "I can handle this"; if it returns less than the version being compiled, the
+ * compiler warns.
  *
- * <p>Aca estan **todas** las constantes hasta la 25, incluidas las que esta implementacion no
- * distingue por dentro: una constante que falta no es "no soporto esa version", es que el enum ni
- * siquiera se puede nombrar, y un `switch` sobre versiones de un procesador de terceros no
- * compilaria.
+ * <p>**All** the constants up to 25 are here, including the ones this implementation does not tell
+ * apart inside: a missing constant is not "I do not support that version", it is that the enum
+ * cannot even be named, and a `switch` over versions in a third-party processor would not compile.
  */
 public enum SourceVersion {
 
-    /** Java 1.0 y 1.1. */
+    /** Java 1.0 and 1.1. */
     RELEASE_0,
     RELEASE_1,
     RELEASE_2,
@@ -44,21 +43,21 @@ public enum SourceVersion {
     RELEASE_24,
     RELEASE_25;
 
-    /** La ultima version que el lenguaje tiene. */
+    /** The latest version the language has. */
     public static SourceVersion latest() {
         return RELEASE_25;
     }
 
-    /** La ultima que **esta** implementacion entiende. Coincide con `latest()`. */
+    /** The latest one **this** implementation understands. It matches `latest()`. */
     public static SourceVersion latestSupported() {
         return RELEASE_25;
     }
 
     /**
-     * La version del entorno de ejecucion que corresponde a esta version del lenguaje.
+     * The runtime version that corresponds to this language version.
      *
-     * <p>El numero de la constante **es** el numero de feature, salvo `RELEASE_0` y `RELEASE_1`, que
-     * son las dos la 1.
+     * <p>The constant's number **is** the feature number, except for `RELEASE_0` and `RELEASE_1`,
+     * which are both 1.
      */
     public Runtime.Version runtimeVersion() {
         int n = this.ordinal();
@@ -69,10 +68,10 @@ public enum SourceVersion {
     }
 
     /**
-     * La version del lenguaje que corresponde a esa version del entorno.
+     * The language version that corresponds to that runtime version.
      *
-     * @throws IllegalArgumentException si esa version no corresponde a ninguna del lenguaje
-     * @throws NullPointerException si `rv` es `null`
+     * @throws IllegalArgumentException if that version corresponds to none of the language's
+     * @throws NullPointerException if `rv` is `null`
      */
     public static SourceVersion valueOf(Runtime.Version rv) {
         if (rv == null) {
@@ -82,29 +81,30 @@ public enum SourceVersion {
         if (feature < 1) {
             throw new IllegalArgumentException("No SourceVersion for " + rv);
         }
-        SourceVersion[] todas = SourceVersion.values();
-        if (feature >= todas.length) {
+        SourceVersion[] all = SourceVersion.values();
+        if (feature >= all.length) {
             throw new IllegalArgumentException("No SourceVersion for " + rv);
         }
-        return todas[feature];
+        return all[feature];
     }
 
-    // ---- las tres preguntas sobre una cadena --------------------------------------------------------
+    // ---- the three questions about a string -----------------------------------------------------
     //
-    // Son tres preguntas **distintas** y conviene no confundirlas, porque la diferencia es justo lo
-    // que hace util a cada una:
+    // They are three **different** questions and it is as well not to confuse them, because the
+    // difference is exactly what makes each one useful:
     //
-    //   - `isIdentifier`: la forma lexica. `class` **es** un identificador bien formado.
-    //   - `isKeyword`: si esa forma esta reservada. `class` lo esta.
-    //   - `isName`: si se puede usar como nombre. `class` no, porque es palabra clave.
+    //   - `isIdentifier`: the lexical form. `class` **is** a well-formed identifier.
+    //   - `isKeyword`: whether that form is reserved. `class` is.
+    //   - `isName`: whether it can be used as a name. `class` cannot, because it is a keyword.
     //
-    // Un generador de codigo que arma nombres usa `isName`; uno que valida un fragmento leido usa
-    // `isIdentifier`; y `isKeyword` es la que los separa.
+    // A code generator that builds names uses `isName`; one that validates a fragment it read uses
+    // `isIdentifier`; and `isKeyword` is the one that separates them.
 
-    // Las 50 reservadas del lenguaje. `var`, `yield`, `record`, `sealed`, `permits` y compania **no**
-    // estan: son contextuales, o sea que solo significan algo en una posicion y siguen siendo
-    // nombres validos en cualquier otra.
-    private static String[] reservadas() {
+    // The language's 50 reserved words, plus the three literals below. `var`, `yield`, `record`,
+    // `sealed`, `permits` and company are **not** here: they are contextual, that is they only mean
+    // something in one position and are still valid names anywhere else. `_` is not here either,
+    // and it should be: it has been a keyword since 9 (JDK 25's `isKeyword("_")` is true).
+    private static String[] reservedWords() {
         return new String[] {
             "abstract", "assert", "boolean", "break", "byte", "case", "catch", "char", "class",
             "const", "continue", "default", "do", "double", "else", "enum", "extends", "final",
@@ -112,13 +112,13 @@ public enum SourceVersion {
             "interface", "long", "native", "new", "package", "private", "protected", "public",
             "return", "short", "static", "strictfp", "super", "switch", "synchronized", "this",
             "throw", "throws", "transient", "try", "void", "volatile", "while",
-            // Los tres literales. El JLS los llama literales y no palabras clave, pero tampoco se
-            // pueden usar como nombre, y `isKeyword` los cuenta -- que es lo que importa aca.
+            // The three literals. The JLS calls them literals and not keywords, but they cannot be
+            // used as names either, and `isKeyword` counts them -- which is what matters here.
             "true", "false", "null",
         };
     }
 
-    /** Si `name` tiene la forma lexica de un identificador (§3.8). Una palabra clave la tiene. */
+    /** Whether `name` has the lexical form of an identifier (§3.8). A keyword has it. */
     public static boolean isIdentifier(CharSequence name) {
         if (name == null) {
             throw new NullPointerException("name");
@@ -140,17 +140,20 @@ public enum SourceVersion {
         return true;
     }
 
-    /** Si `s` es una palabra reservada en la ultima version del lenguaje. */
+    /** Whether `s` is a reserved word in the latest version of the language. */
     public static boolean isKeyword(CharSequence s) {
         return isKeyword(s, latest());
     }
 
     /**
-     * Si `s` es una palabra reservada en esa version.
+     * Whether `s` is a reserved word in that version.
      *
-     * <p>La version se acepta y **no cambia la respuesta**: las reservadas del lenguaje no se
-     * agregaron desde la 1.5 --lo que se agrego desde entonces son palabras *contextuales*, que no
-     * son reservadas en ninguna version--. Se documenta en vez de fingir que se distinguen.
+     * <p>The version is accepted and **does not change the answer**. The note said that is because
+     * no reserved word was added after 1.5; **that is false**: `_` became a keyword in 9, and
+     * `assert` (1.4), `enum` (5) and `strictfp` (1.2) were not keywords before. The JDK answers per
+     * version -- `isKeyword("_", RELEASE_8)` is false and `isKeyword("enum", RELEASE_4)` is false--
+     * and this one answers the same for every version, without `_` (checked against JDK 25 on
+     * 2026-09-18).
      */
     public static boolean isKeyword(CharSequence s, SourceVersion version) {
         if (s == null) {
@@ -160,10 +163,10 @@ public enum SourceVersion {
             throw new NullPointerException("version");
         }
         String t = s.toString();
-        String[] todas = reservadas();
+        String[] all = reservedWords();
         int i = 0;
-        while (i < todas.length) {
-            if (todas[i].equals(t)) {
+        while (i < all.length) {
+            if (all[i].equals(t)) {
                 return true;
             }
             i = i + 1;
@@ -172,17 +175,17 @@ public enum SourceVersion {
     }
 
     /**
-     * Si `name` se puede usar como nombre: un identificador que no sea palabra clave, o varios
-     * separados por puntos.
+     * Whether `name` can be used as a name: an identifier that is not a keyword, or several
+     * separated by dots.
      *
-     * <p>Los puntos son parte del contrato: `java.util.List` **es** un nombre valido, y por eso esto
-     * no es simplemente "identificador y no reservada".
+     * <p>The dots are part of the contract: `java.util.List` **is** a valid name, and that is why
+     * this is not simply "identifier and not reserved".
      */
     public static boolean isName(CharSequence name) {
         return isName(name, latest());
     }
 
-    /** El de arriba, para esa version. */
+    /** The one above, for that version. */
     public static boolean isName(CharSequence name, SourceVersion version) {
         if (name == null) {
             throw new NullPointerException("name");
@@ -191,22 +194,22 @@ public enum SourceVersion {
         if (s.length() == 0) {
             return false;
         }
-        int desde = 0;
+        int from = 0;
         while (true) {
-            int punto = s.indexOf('.', desde);
-            String pieza;
-            if (punto < 0) {
-                pieza = s.substring(desde);
+            int dot = s.indexOf('.', from);
+            String piece;
+            if (dot < 0) {
+                piece = s.substring(from);
             } else {
-                pieza = s.substring(desde, punto);
+                piece = s.substring(from, dot);
             }
-            if (!isIdentifier(pieza) || isKeyword(pieza, version)) {
+            if (!isIdentifier(piece) || isKeyword(piece, version)) {
                 return false;
             }
-            if (punto < 0) {
+            if (dot < 0) {
                 return true;
             }
-            desde = punto + 1;
+            from = dot + 1;
         }
     }
 }

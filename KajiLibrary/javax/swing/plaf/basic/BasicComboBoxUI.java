@@ -41,49 +41,53 @@ import javax.swing.plaf.FontUIResource;
 import javax.swing.plaf.UIResource;
 
 /**
- * El aspecto basico de un combo.
+ * The basic look and feel of a combo box.
  *
- * <h2>Tres piezas que se arman y se desarman</h2>
+ * <h2>Three pieces that are put together and taken apart</h2>
  *
- * <p>Un combo no editable tiene el valor dibujado y una flechita; uno editable tiene ademas un campo
- * de texto encima del valor. Cambiar de uno a otro en caliente --{@code setEditable}-- agrega o saca
- * el editor sin rehacer nada mas, y de eso se ocupan {@link #addEditor} y {@link #removeEditor}.
+ * <p>A non-editable combo box has the value drawn and a little arrow; an editable one has on
+ * top of that a text field over the value. Changing from one to the other on the fly
+ * -- {@code setEditable} -- adds or removes the editor without rebuilding anything else, and
+ * {@link #addEditor} and {@link #removeEditor} take care of that.
  *
- * <p>El valor de un combo no editable no es un componente: se dibuja con el dibujante de la lista
- * sobre un {@link CellRendererPane}, igual que una celda. Por eso {@link #paintCurrentValue} existe
- * y no hay una etiqueta adentro.
+ * <p>A non-editable combo box's value is not a component: it is drawn with the list's renderer
+ * over a {@link CellRendererPane}, just like a cell. That is why {@link #paintCurrentValue}
+ * exists and there is no label inside.
  *
- * <h2>El tamano se cachea porque medirlo es caro</h2>
+ * <h2>The size is cached because measuring it is expensive</h2>
  *
- * <p>El ancho de un combo es el del item mas ancho, y saberlo obliga a armar el dibujante con
- * <em>cada</em> item. Para un combo de mil items eso es carisimo y no cambia entre dos dibujados,
- * asi que se guarda en {@link #cachedMinimumSize} y se recalcula solo cuando
- * {@link #isMinimumSizeDirty} lo pide -- al cambiar el modelo, la fuente o el dibujante --.
+ * <p>A combo box's width is that of the widest item, and knowing it forces the renderer to be
+ * built with <em>each</em> item. For a combo box of a thousand items that is terribly expensive
+ * and does not change between two paints, so it is kept in {@link #cachedMinimumSize} and is
+ * recomputed only when {@link #isMinimumSizeDirty} asks for it -- on changing the model, the
+ * typeface or the renderer --.
  *
- * <p>El ancho total es el del item mas ancho mas el de la flechita. El preferido y el minimo son el
- * mismo numero: un combo no tiene por que ser mas ancho de lo que necesita.
+ * <p>The total width is that of the widest item plus that of the little arrow. The preferred
+ * one and the minimum are the same number: there is no reason for a combo box to be wider than
+ * it needs.
  *
- * <h2>Que teclas son de navegacion</h2>
+ * <h2>Which keys are navigation ones</h2>
  *
- * <p>{@link #isNavigationKey} contesta que si solo a las flechas de arriba y abajo. Ni Re Pag ni Av
- * Pag ni Enter: esta medido, y tiene sentido -- un combo no pagina, y Enter es del dialogo --.
+ * <p>{@link #isNavigationKey} answers yes only to the up and down arrows. Neither Page Up nor
+ * Page Down nor Enter: it is measured, and it makes sense -- a combo box does not page, and
+ * Enter belongs to the dialog --.
  *
- * <h2>Lo que queda dicho</h2>
+ * <h2>What is left said</h2>
  *
- * <p>Los dos escuchas que quedan en nulo son el de items y el de teclas de la ventana emergente.
- * Medido, y es la misma historia que en los otros UI: hay un solo objeto que escucha todo, y
- * engancharlo dos veces lo haria reaccionar dos veces.
+ * <p>The two listeners that are left null are the item one and the popup window's key one.
+ * Measured, and it is the same story as in the other looks and feels: there is a single object
+ * that listens to everything, and hooking it twice would make it react twice.
  */
 public class BasicComboBoxUI extends ComboBoxUI {
 
     protected JComboBox comboBox;
 
-    /** Si el combo tiene el foco; de eso depende como se dibuja el valor. */
+    /** Whether the combo box has the focus; how the value is drawn depends on that. */
     protected boolean hasFocus = false;
 
     protected JList listBox;
 
-    /** Donde se dibuja el valor de un combo no editable; ver la nota de la clase. */
+    /** Where a non-editable combo box's value is drawn; see the class note. */
     protected CellRendererPane currentValuePane = new CellRendererPane();
 
     protected Component editor;
@@ -99,25 +103,25 @@ public class BasicComboBoxUI extends ComboBoxUI {
     protected KeyListener popupKeyListener;
     protected ListDataListener listDataListener;
 
-    /** Si el tamano guardado quedo viejo; ver la nota de la clase. */
+    /** Whether the kept size went stale; see the class note. */
     protected boolean isMinimumSizeDirty = true;
 
     protected Dimension cachedMinimumSize = new Dimension(0, 0);
 
-    /** Si la flechita tiene que ser cuadrada. */
+    /** Whether the little arrow has to be square. */
     protected boolean squareButton = true;
 
-    /** Lo que se le agrega al valor dibujado; nulo si el aspecto no pide ninguno. */
+    /** What is added to the drawn value; null if the look and feel asks for none. */
     protected Insets padding;
 
-    private static final ColorUIResource FONDO = new ColorUIResource(238, 238, 238);
-    private static final ColorUIResource FRENTE = new ColorUIResource(51, 51, 51);
-    private static final FontUIResource FUENTE = new FontUIResource("Dialog", Font.BOLD, 12);
+    private static final ColorUIResource BACKGROUND = new ColorUIResource(238, 238, 238);
+    private static final ColorUIResource FOREGROUND = new ColorUIResource(51, 51, 51);
+    private static final FontUIResource FONT = new FontUIResource("Dialog", Font.BOLD, 12);
 
     public BasicComboBoxUI() {
     }
 
-    /** Uno nuevo por combo: guarda el componente, su lista y su tamano medido. */
+    /** A new one per combo box: it keeps the component, its list and its measured size. */
     public static ComponentUI createUI(JComponent c) {
         return new BasicComboBoxUI();
     }
@@ -157,26 +161,26 @@ public class BasicComboBoxUI extends ComboBoxUI {
         popup = null;
     }
 
-    /** Colores, fuente y relleno; los valores son los de {@code ComboBox.*} en Metal. */
+    /** Colours, typeface and padding; the values are those of {@code ComboBox.*} in Metal. */
     protected void installDefaults() {
-        Color fondo = comboBox.getBackground();
-        if (fondo == null || fondo instanceof UIResource) {
-            comboBox.setBackground(FONDO);
+        Color background = comboBox.getBackground();
+        if (background == null || background instanceof UIResource) {
+            comboBox.setBackground(BACKGROUND);
         }
-        Color frente = comboBox.getForeground();
-        if (frente == null || frente instanceof UIResource) {
-            comboBox.setForeground(FRENTE);
+        Color foreground = comboBox.getForeground();
+        if (foreground == null || foreground instanceof UIResource) {
+            comboBox.setForeground(FOREGROUND);
         }
-        Font fuente = comboBox.getFont();
-        if (fuente == null || fuente instanceof UIResource) {
-            comboBox.setFont(FUENTE);
+        Font font = comboBox.getFont();
+        if (font == null || font instanceof UIResource) {
+            comboBox.setFont(FONT);
         }
         LookAndFeel.installProperty(comboBox, "opaque", Boolean.TRUE);
         squareButton = true;
         padding = null;
     }
 
-    /** No saca nada; ver {@link BasicPanelUI#uninstallDefaults}. */
+    /** It removes nothing; see {@link BasicPanelUI#uninstallDefaults}. */
     protected void uninstallDefaults() {
     }
 
@@ -250,14 +254,14 @@ public class BasicComboBoxUI extends ComboBoxUI {
         listDataListener = null;
     }
 
-    /** Sin atajos propios: las flechas las maneja el escucha de teclas. */
+    /** With no shortcuts of its own: the arrows are handled by the key listener. */
     protected void installKeyboardActions() {
     }
 
     protected void uninstallKeyboardActions() {
     }
 
-    /** Pone la flechita, y el editor si el combo es editable. */
+    /** It puts in the little arrow, and the editor if the combo box is editable. */
     protected void installComponents() {
         arrowButton = createArrowButton();
         if (arrowButton != null) {
@@ -289,7 +293,7 @@ public class BasicComboBoxUI extends ComboBoxUI {
         return new Handler(this);
     }
 
-    /** Ninguno; ver la nota de la clase. */
+    /** None; see the class note. */
     protected ItemListener createItemListener() {
         return null;
     }
@@ -306,7 +310,7 @@ public class BasicComboBoxUI extends ComboBoxUI {
         return new Handler(this);
     }
 
-    /** El dibujante de los items: el mismo para la lista y para el valor de arriba. */
+    /** The items' renderer: the same one for the list and for the value at the top. */
     protected ListCellRenderer createRenderer() {
         return new BasicComboBoxRenderer.UIResource();
     }
@@ -319,14 +323,14 @@ public class BasicComboBoxUI extends ComboBoxUI {
         return new BasicComboPopup(comboBox);
     }
 
-    /** Una flecha para abajo; sin foco, porque el foco lo tiene el combo. */
+    /** A down arrow; with no focus, because the focus is held by the combo box. */
     protected JButton createArrowButton() {
         JButton b = new BasicArrowButton(SwingConstants.SOUTH);
         b.setName("ComboBox.arrowButton");
         return b;
     }
 
-    /** Le engancha los escuchas del combo, para que apretarla abra la lista. */
+    /** It hooks the combo box's listeners to it, so that pressing it opens the list. */
     public void configureArrowButton() {
         if (arrowButton != null) {
             arrowButton.setEnabled(comboBox.isEnabled());
@@ -346,7 +350,7 @@ public class BasicComboBoxUI extends ComboBoxUI {
         }
     }
 
-    /** Agrega el campo de texto de un combo editable. */
+    /** It adds an editable combo box's text field. */
     public void addEditor() {
         removeEditor();
         editor = comboBox.getEditor().getEditorComponent();
@@ -367,7 +371,7 @@ public class BasicComboBoxUI extends ComboBoxUI {
         }
     }
 
-    /** Le pasa al editor la fuente, los colores y el valor. */
+    /** It passes the typeface, the colours and the value on to the editor. */
     protected void configureEditor() {
         editor.setFont(comboBox.getFont());
         editor.setForeground(comboBox.getForeground());
@@ -395,17 +399,17 @@ public class BasicComboBoxUI extends ComboBoxUI {
         }
     }
 
-    /** Un combo comun si; uno con la flechita apagada no. */
+    /** An ordinary combo box yes; one with the little arrow switched off no. */
     public boolean isFocusTraversable(JComboBox c) {
         return !comboBox.isEditable();
     }
 
-    /** Abre si esta cerrado y cierra si esta abierto. */
+    /** It opens if it is closed and closes if it is open. */
     protected void toggleOpenClose() {
         setPopupVisible(comboBox, !isPopupVisible(comboBox));
     }
 
-    /** Elige el valor siguiente del modelo. */
+    /** It chooses the model's next value. */
     protected void selectNextPossibleValue() {
         int si = isPopupVisible(comboBox) ? listBox.getSelectedIndex()
                 : comboBox.getSelectedIndex();
@@ -419,7 +423,7 @@ public class BasicComboBoxUI extends ComboBoxUI {
         }
     }
 
-    /** Y el anterior. */
+    /** And the previous one. */
     protected void selectPreviousPossibleValue() {
         int si = isPopupVisible(comboBox) ? listBox.getSelectedIndex()
                 : comboBox.getSelectedIndex();
@@ -433,7 +437,7 @@ public class BasicComboBoxUI extends ComboBoxUI {
         }
     }
 
-    /** Solo las flechas de arriba y abajo; ver la nota de la clase. */
+    /** Only the up and down arrows; see the class note. */
     protected boolean isNavigationKey(int keyCode) {
         return keyCode == KeyEvent.VK_UP || keyCode == KeyEvent.VK_DOWN;
     }
@@ -442,7 +446,7 @@ public class BasicComboBoxUI extends ComboBoxUI {
         return comboBox.getInsets();
     }
 
-    /** Donde va el valor: todo lo que queda a la izquierda de la flechita. */
+    /** Where the value goes: everything left over to the left of the little arrow. */
     protected Rectangle rectangleForCurrentValue() {
         int width = comboBox.getWidth();
         int height = comboBox.getHeight();
@@ -461,7 +465,7 @@ public class BasicComboBoxUI extends ComboBoxUI {
                 height - (insets.top + insets.bottom));
     }
 
-    /** Lo que mide ese componente ya armado por el dibujante. */
+    /** How much that component measures once built by the renderer. */
     protected Dimension getSizeForComponent(Component comp) {
         currentValuePane.add(comp);
         comp.setFont(comboBox.getFont());
@@ -470,7 +474,7 @@ public class BasicComboBoxUI extends ComboBoxUI {
         return d;
     }
 
-    /** El tamano de un renglon vacio; el piso de cualquier combo. */
+    /** An empty line's size; the floor of any combo box. */
     protected Dimension getDefaultSize() {
         ListCellRenderer renderer = comboBox.getRenderer();
         if (renderer == null) {
@@ -480,7 +484,7 @@ public class BasicComboBoxUI extends ComboBoxUI {
         return getSizeForComponent(c);
     }
 
-    /** El del item mas ancho; ver la nota de la clase sobre por que se guarda. */
+    /** The widest item's; see the class note about why it is kept. */
     protected Dimension getDisplaySize() {
         Dimension result = new Dimension();
         ListCellRenderer renderer = comboBox.getRenderer();
@@ -517,15 +521,15 @@ public class BasicComboBoxUI extends ComboBoxUI {
         return result;
     }
 
-    /** El del item mas ancho mas la flechita; ver la nota de la clase. */
+    /** The widest item's plus the little arrow; see the class note. */
     public Dimension getMinimumSize(JComponent c) {
         if (!isMinimumSizeDirty) {
             return new Dimension(cachedMinimumSize);
         }
         Dimension size = getDisplaySize();
         Insets insets = getInsets();
-        // La flechita es cuadrada: su ancho es el alto del renglon, no su ancho preferido. Con
-        // `squareButton` apagado si se le pregunta a ella. Esta medido.
+        // The little arrow is square: its width is the line's height, not its preferred width.
+                    // With `squareButton` off it is asked. It is measured.
         int buttonHeight = size.height;
         int buttonWidth = squareButton ? buttonHeight
                 : ((arrowButton != null) ? arrowButton.getPreferredSize().width : buttonHeight);
@@ -536,21 +540,21 @@ public class BasicComboBoxUI extends ComboBoxUI {
         return new Dimension(size);
     }
 
-    /** El mismo que el minimo; ver la nota de la clase. */
+    /** The same as the minimum; see the class note. */
     public Dimension getPreferredSize(JComponent c) {
         return getMinimumSize(c);
     }
 
-    /** Sin tope: un combo se estira todo lo que le den. */
+    /** No cap: a combo box stretches as far as it is given. */
     public Dimension getMaximumSize(JComponent c) {
         return new Dimension(Short.MAX_VALUE, Short.MAX_VALUE);
     }
 
     /**
-     * Donde apoya el texto del valor.
+     * Where the value's text rests.
      *
-     * @throws NullPointerException si el componente es nulo
-     * @throws IllegalArgumentException si el ancho o el alto son negativos
+     * @throws NullPointerException if the component is null
+     * @throws IllegalArgumentException if the width or the height are negative
      */
     public int getBaseline(JComponent c, int width, int height) {
         super.getBaseline(c, width, height);
@@ -582,16 +586,16 @@ public class BasicComboBoxUI extends ComboBoxUI {
     }
 
     /**
-     * {@code CENTER_OFFSET}: el valor va centrado.
+     * {@code CENTER_OFFSET}: the value goes centred.
      *
-     * @throws NullPointerException si el componente es nulo
+     * @throws NullPointerException if the component is null
      */
     public Component.BaselineResizeBehavior getBaselineResizeBehavior(JComponent c) {
         super.getBaselineResizeBehavior(c);
         return Component.BaselineResizeBehavior.CENTER_OFFSET;
     }
 
-    /** El valor, si el combo no es editable; si lo es, lo dibuja el editor. */
+    /** The value, if the combo box is not editable; if it is, it is drawn by the editor. */
     public void paint(Graphics g, JComponent c) {
         hasFocus = comboBox.hasFocus();
         if (!comboBox.isEditable()) {
@@ -601,7 +605,7 @@ public class BasicComboBoxUI extends ComboBoxUI {
         }
     }
 
-    /** El valor, dibujado con el dibujante de la lista; ver la nota de la clase. */
+    /** The value, drawn with the list's renderer; see the class note. */
     public void paintCurrentValue(Graphics g, Rectangle bounds, boolean hasFocus) {
         ListCellRenderer renderer = comboBox.getRenderer();
         if (renderer == null) {
@@ -617,8 +621,8 @@ public class BasicComboBoxUI extends ComboBoxUI {
             c.setForeground(comboBox.getForeground());
             c.setBackground(comboBox.getBackground());
         } else {
-            c.setForeground(FRENTE);
-            c.setBackground(FONDO);
+            c.setForeground(FOREGROUND);
+            c.setBackground(BACKGROUND);
         }
         boolean shouldValidate = (c instanceof Container);
         int x = bounds.x;
@@ -634,20 +638,20 @@ public class BasicComboBoxUI extends ComboBoxUI {
         currentValuePane.paintComponent(g, c, comboBox, x, y, w, h, shouldValidate);
     }
 
-    /** El fondo de donde va el valor. */
+    /** The background of where the value goes. */
     public void paintCurrentValueBackground(Graphics g, Rectangle bounds, boolean hasFocus) {
         Color t = g.getColor();
-        g.setColor(comboBox.isEnabled() ? comboBox.getBackground() : FONDO);
+        g.setColor(comboBox.isEnabled() ? comboBox.getBackground() : BACKGROUND);
         g.fillRect(bounds.x, bounds.y, bounds.width, bounds.height);
         g.setColor(t);
     }
 
-    /** Uno: la lista desplegable. */
+    /** One: the drop-down list. */
     public int getAccessibleChildrenCount(JComponent c) {
         return 1;
     }
 
-    /** La lista desplegable, si es accesible. */
+    /** The drop-down list, if it is accessible. */
     public javax.accessibility.Accessible getAccessibleChild(JComponent c, int i) {
         if (i == 0 && popup instanceof javax.accessibility.Accessible) {
             return (javax.accessibility.Accessible) popup;
@@ -656,10 +660,10 @@ public class BasicComboBoxUI extends ComboBoxUI {
     }
 
     /**
-     * El que escucha todo y ademas acomoda.
+     * The one that listens to everything and also lays out.
      *
-     * <p>El acomodador es parte del mismo objeto porque el reparto depende de si el combo es
-     * editable, que es justo lo que este escucha sigue.
+     * <p>The layout is part of the same object because the sharing out depends on whether the
+     * combo box is editable, which is just what this listener follows.
      */
     private static class Handler implements KeyListener, FocusListener, PropertyChangeListener,
             LayoutManager, ListDataListener, ItemListener, ActionListener {
@@ -702,13 +706,13 @@ public class BasicComboBoxUI extends ComboBoxUI {
             String propertyName = e.getPropertyName();
             JComboBox comboBox = ui.comboBox;
             if ("model".equals(propertyName)) {
-                ComboBoxModel viejo = (ComboBoxModel) e.getOldValue();
-                ComboBoxModel nuevo = (ComboBoxModel) e.getNewValue();
-                if (viejo != null && ui.listDataListener != null) {
-                    viejo.removeListDataListener(ui.listDataListener);
+                ComboBoxModel old = (ComboBoxModel) e.getOldValue();
+                ComboBoxModel newValue = (ComboBoxModel) e.getNewValue();
+                if (old != null && ui.listDataListener != null) {
+                    old.removeListDataListener(ui.listDataListener);
                 }
-                if (nuevo != null && ui.listDataListener != null) {
-                    nuevo.addListDataListener(ui.listDataListener);
+                if (newValue != null && ui.listDataListener != null) {
+                    newValue.addListDataListener(ui.listDataListener);
                 }
                 ui.isMinimumSizeDirty = true;
                 comboBox.revalidate();
@@ -754,7 +758,7 @@ public class BasicComboBoxUI extends ComboBoxUI {
             return ui.getMinimumSize((JComponent) parent);
         }
 
-        /** La flechita a la derecha y el resto para el valor o el editor. */
+        /** The little arrow on the right and the rest for the value or the editor. */
         public void layoutContainer(Container parent) {
             JComboBox cb = (JComboBox) parent;
             int width = cb.getWidth();

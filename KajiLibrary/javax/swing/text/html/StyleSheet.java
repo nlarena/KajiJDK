@@ -22,27 +22,28 @@ import javax.swing.text.StyleContext$SmallAttributeSet;
 import javax.swing.text.View;
 
 /**
- * Una hoja de estilos: reglas de CSS que le dan atributos a los elementos.
+ * A style sheet: CSS rules that give attributes to the elements.
  *
- * <h2>Es un {@link StyleContext}, y eso no es casual</h2>
+ * <h2>It is a {@link StyleContext}, and that is no accident</h2>
  *
- * <p>Un contexto de estilos ya sabe compartir conjuntos de atributos y buscarlos por nombre. Una
- * hoja de estilos necesita exactamente eso, mas la parte de CSS: leer reglas, elegir cual se aplica
- * a un elemento, y traducir los atributos viejos de HTML (<code>bgcolor</code>,
- * <code>align</code>) a propiedades de CSS.
+ * <p>A style context already knows how to share attribute sets and look them up by name. A style
+ * sheet needs exactly that, plus the CSS part: reading rules, choosing which one applies to an
+ * element, and translating the old HTML attributes (<code>bgcolor</code>, <code>align</code>) to
+ * CSS properties.
  *
- * <h2>Como se elige la regla</h2>
+ * <h2>How the rule is chosen</h2>
  *
- * <p>Una regla se guarda con un nombre que es el camino de elementos que la selecciona, por ejemplo
- * <code>html body p</code>. Para un elemento del documento se arma su camino y se buscan todas las
- * reglas que sean un sufijo de el; las que aparecen se juntan, y la mas especifica gana.
+ * <p>A rule is kept under a name that is the path of elements that selects it, for instance
+ * <code>html body p</code>. For a document element its path is built and every rule that is a
+ * suffix of it is looked up; those that appear are joined, and the most specific one wins.
  *
- * <h2>Hasta donde llega esta implementacion</h2>
+ * <h2>How far this implementation goes</h2>
  *
- * <p>Lee reglas, las junta, resuelve colores y tamanos de letra, y traduce los atributos de HTML.
- * Lo que no hace es el modelo de caja completo: {@link BoxPainter} y {@link ListPainter} calculan
- * margenes y dibujan vinetas, pero no bordes con estilo ni imagenes de fondo. Son las partes que
- * solo se notan con una pantalla, y esta biblioteca todavia no tiene con que compararlas.
+ * <p>It reads rules, joins them, resolves colours and letter sizes, and translates the HTML
+ * attributes. What it does not do is the full box model: {@link BoxPainter} and
+ * {@link ListPainter} compute margins and draw bullets, but not styled borders or background
+ * images. They are the parts that only show with a screen, and this library has nothing to
+ * compare them against yet.
  */
 public class StyleSheet extends StyleContext {
 
@@ -50,107 +51,106 @@ public class StyleSheet extends StyleContext {
     private URL base;
     private int baseFontSize = 4;
 
-    /** Los tamanos de letra de HTML, del 1 al 7. */
+    /** HTML's letter sizes, from 1 to 7. */
     private static final int[] sizeMapDefault = {8, 10, 12, 14, 18, 24, 36};
 
-    private static final Hashtable<String, Color> colores = new Hashtable<String, Color>();
+    private static final Hashtable<String, Color> colors = new Hashtable<String, Color>();
 
-    /** Una hoja vacia. */
+    /** An empty sheet. */
     public StyleSheet() {
         super();
     }
 
     /**
-     * La regla que se aplica a ese elemento con esa etiqueta.
+     * The rule that applies to that element with that tag.
      *
-     * <p>Arma el camino desde la raiz y junta todo lo que coincida; ver la nota de la clase.
+     * <p>It builds the path from the root and joins everything that matches; see the class note.
      */
     public Style getRule(HTML.Tag t, Element e) {
-        String camino = caminoDe(t, e);
-        return getRule(camino);
+        String path = pathOf(t, e);
+        return getRule(path);
     }
 
-    /** El camino de un elemento, de la raiz hacia abajo, para buscar reglas. */
-    private String caminoDe(HTML.Tag t, Element e) {
-        Vector<String> partes = new Vector<String>();
-        partes.addElement(t.toString());
+    /** An element's path, from the root downwards, for looking up rules. */
+    private String pathOf(HTML.Tag t, Element e) {
+        Vector<String> parts = new Vector<String>();
+        parts.addElement(t.toString());
         for (Element p = (e == null) ? null : e.getParentElement(); p != null;
                 p = p.getParentElement()) {
             AttributeSet a = p.getAttributes();
-            Object nombre = a.getAttribute(StyleConstants.NameAttribute);
-            if (nombre instanceof HTML.Tag) {
-                partes.insertElementAt(nombre.toString(), 0);
+            Object name = a.getAttribute(StyleConstants.NameAttribute);
+            if (name instanceof HTML.Tag) {
+                parts.insertElementAt(name.toString(), 0);
             }
         }
         StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < partes.size(); i++) {
+        for (int i = 0; i < parts.size(); i++) {
             if (i > 0) {
                 sb.append(' ');
             }
-            sb.append(partes.elementAt(i));
+            sb.append(parts.elementAt(i));
         }
         return sb.toString();
     }
 
     /**
-     * La regla con ese selector.
+     * The rule with that selector.
      *
-     * <p>Junta la regla exacta y todas las que sean un sufijo del camino: para
-     * <code>html body p</code> tambien entran <code>body p</code> y <code>p</code>. Se aplican de
-     * la menos especifica a la mas especifica, asi que la mas larga gana.
+     * <p>It joins the exact rule and every one that is a suffix of the path: for <code>html body
+     * p</code>, <code>body p</code> and <code>p</code> come in too. They are applied from the least
+     * specific to the most specific, so the longest one wins.
      */
     public Style getRule(String selector) {
-        selector = limpiarSelector(selector);
-        String[] partes = partirCamino(selector);
-        Vector<Style> encontradas = new Vector<Style>();
-        // De la mas larga a la mas corta: la primera que conteste gana.
-        for (int desde = 0; desde < partes.length; desde++) {
+        selector = cleanSelector(selector);
+        String[] parts = splitPath(selector);
+        Vector<Style> found = new Vector<Style>();
+        // From the longest to the shortest: the first one that answers wins.
+        for (int from = 0; from < parts.length; from++) {
             StringBuilder sb = new StringBuilder();
-            for (int i = desde; i < partes.length; i++) {
-                if (i > desde) {
+            for (int i = from; i < parts.length; i++) {
+                if (i > from) {
                     sb.append(' ');
                 }
-                sb.append(partes[i]);
+                sb.append(parts[i]);
             }
             Style s = getStyle(sb.toString());
             if (s != null) {
-                encontradas.addElement(s);
+                found.addElement(s);
             }
         }
-        Style[] arr = new Style[encontradas.size()];
-        encontradas.copyInto(arr);
-        return new EstiloResuelto(selector, arr);
+        Style[] arr = new Style[found.size()];
+        found.copyInto(arr);
+        return new ResolvedStyle(selector, arr);
     }
 
     /**
-     * El estilo que devuelve {@link #getRule}: una vista sobre las reglas que coincidieron.
+     * The style {@link #getRule} returns: a view over the rules that matched.
      *
-     * <h2>No copia, multiplexa</h2>
+     * <h2>It does not copy, it multiplexes</h2>
      *
-     * <p>Guarda las reglas que coincidieron, de la mas especifica a la menos, y contesta cada
-     * consulta recorriendolas en ese orden. La primera que tenga el atributo gana.
+     * <p>It keeps the rules that matched, from the most specific to the least, and answers each
+     * query by walking them in that order. The first one that has the attribute wins.
      *
-     * <p>Multiplexar en lugar de copiar tiene una consecuencia que se ve: un atributo que esta en
-     * dos reglas aparece dos veces al enumerar, aunque {@code getAttribute} devuelva siempre el de
-     * la mas especifica. Es la forma del JDK y se conserva porque {@code getAttributeCount} es
-     * publico y alguien puede estar contando.
+     * <p>Multiplexing instead of copying has a consequence that shows: an attribute that is in two
+     * rules appears twice when enumerating, even though {@code getAttribute} always returns the one
+     * from the most specific. It is the JDK's form and it is kept because
+     * {@code getAttributeCount} is public and somebody may be counting.
      *
-     * <p>Tampoco se registra en la hoja. Si se registrara, cada consulta con un camino nuevo
-     * dejaria un estilo guardado para siempre, y una pagina larga los acumularia sin que nadie los
-     * borre.
+     * <p>Neither is it registered in the sheet. If it were, every query with a new path would leave
+     * a style kept for ever, and a long page would pile them up with nobody to delete them.
      */
-    static final class EstiloResuelto implements Style {
+    static final class ResolvedStyle implements Style {
 
-        private final String nombre;
+        private final String name;
         private final Style[] reglas;
 
-        EstiloResuelto(String nombre, Style[] reglas) {
-            this.nombre = nombre;
+        ResolvedStyle(String name, Style[] reglas) {
+            this.name = name;
             this.reglas = reglas;
         }
 
         public String getName() {
-            return nombre;
+            return name;
         }
 
         public void addChangeListener(javax.swing.event.ChangeListener l) {
@@ -182,9 +182,9 @@ public class StyleSheet extends StyleContext {
         }
 
         public AttributeSet copyAttributes() {
-            SimpleAttributeSet copia = new SimpleAttributeSet();
-            copia.addAttributes(this);
-            return copia;
+            SimpleAttributeSet copy = new SimpleAttributeSet();
+            copy.addAttributes(this);
+            return copy;
         }
 
         public Object getAttribute(Object key) {
@@ -198,14 +198,14 @@ public class StyleSheet extends StyleContext {
         }
 
         public Enumeration<?> getAttributeNames() {
-            Vector<Object> todos = new Vector<Object>();
+            Vector<Object> all = new Vector<Object>();
             for (int i = 0; i < reglas.length; i++) {
                 Enumeration<?> e = reglas[i].getAttributeNames();
                 while (e.hasMoreElements()) {
-                    todos.addElement(e.nextElement());
+                    all.addElement(e.nextElement());
                 }
             }
-            return todos.elements();
+            return all.elements();
         }
 
         public boolean containsAttribute(Object name, Object value) {
@@ -216,8 +216,8 @@ public class StyleSheet extends StyleContext {
         public boolean containsAttributes(AttributeSet attrs) {
             Enumeration<?> e = attrs.getAttributeNames();
             while (e.hasMoreElements()) {
-                Object nombre = e.nextElement();
-                if (!containsAttribute(nombre, attrs.getAttribute(nombre))) {
+                Object name = e.nextElement();
+                if (!containsAttribute(name, attrs.getAttribute(name))) {
                     return false;
                 }
             }
@@ -247,7 +247,7 @@ public class StyleSheet extends StyleContext {
         }
     }
 
-    private static String limpiarSelector(String s) {
+    private static String cleanSelector(String s) {
         StringBuilder sb = new StringBuilder();
         StringTokenizer st = new StringTokenizer(s.toLowerCase(java.util.Locale.ROOT),
                 " \t\n\r\f");
@@ -260,7 +260,7 @@ public class StyleSheet extends StyleContext {
         return sb.toString();
     }
 
-    private static String[] partirCamino(String s) {
+    private static String[] splitPath(String s) {
         StringTokenizer st = new StringTokenizer(s, " ");
         String[] out = new String[st.countTokens()];
         for (int i = 0; st.hasMoreTokens(); i++) {
@@ -270,31 +270,31 @@ public class StyleSheet extends StyleContext {
     }
 
     /**
-     * Agrega una regla escrita en CSS.
+     * It adds a rule written in CSS.
      *
-     * <p>Un selector con comas define varias reglas iguales, y por eso se parte: escribir
-     * <code>h1, h2 { color: red }</code> es lo mismo que escribir las dos por separado.
+     * <p>A selector with commas defines several equal rules, and that is why it is split: writing
+     * <code>h1, h2 { color: red }</code> is the same as writing the two separately.
      */
     public void addRule(String rule) {
         if (rule == null) {
             return;
         }
-        String texto = sinComentarios(rule);
+        String text = withoutComments(rule);
         int i = 0;
-        while (i < texto.length()) {
-            int abre = texto.indexOf('{', i);
-            if (abre < 0) {
+        while (i < text.length()) {
+            int opens = text.indexOf('{', i);
+            if (opens < 0) {
                 break;
             }
-            int cierra = texto.indexOf('}', abre);
-            if (cierra < 0) {
+            int closes = text.indexOf('}', opens);
+            if (closes < 0) {
                 break;
             }
-            String selectores = texto.substring(i, abre).trim();
-            AttributeSet decl = getDeclaration(texto.substring(abre + 1, cierra));
-            StringTokenizer st = new StringTokenizer(selectores, ",");
+            String selectors = text.substring(i, opens).trim();
+            AttributeSet decl = getDeclaration(text.substring(opens + 1, closes));
+            StringTokenizer st = new StringTokenizer(selectors, ",");
             while (st.hasMoreTokens()) {
-                String sel = limpiarSelector(st.nextToken());
+                String sel = cleanSelector(st.nextToken());
                 if (sel.length() > 0) {
                     Style s = getStyle(sel);
                     if (s == null) {
@@ -303,54 +303,54 @@ public class StyleSheet extends StyleContext {
                     s.addAttributes(decl);
                 }
             }
-            i = cierra + 1;
+            i = closes + 1;
         }
     }
 
-    /** Saca los comentarios; una regla adentro de un comentario no cuenta. */
-    private static String sinComentarios(String s) {
+    /** It removes the comments; a rule inside a comment does not count. */
+    private static String withoutComments(String s) {
         StringBuilder sb = new StringBuilder();
         int i = 0;
         while (i < s.length()) {
-            int abre = s.indexOf("/*", i);
-            if (abre < 0) {
+            int opens = s.indexOf("/*", i);
+            if (opens < 0) {
                 sb.append(s.substring(i));
                 break;
             }
-            sb.append(s, i, abre);
-            int cierra = s.indexOf("*/", abre + 2);
-            if (cierra < 0) {
+            sb.append(s, i, opens);
+            int closes = s.indexOf("*/", opens + 2);
+            if (closes < 0) {
                 break;
             }
-            i = cierra + 2;
+            i = closes + 2;
         }
         return sb.toString();
     }
 
-    /** Los atributos que declara ese texto, sin las llaves ni el selector. */
+    /** The attributes that text declares, without the braces or the selector. */
     public AttributeSet getDeclaration(String decl) {
         MutableAttributeSet a = new SimpleAttributeSet();
         if (decl == null) {
             return a;
         }
-        StringTokenizer st = new StringTokenizer(sinComentarios(decl), ";");
+        StringTokenizer st = new StringTokenizer(withoutComments(decl), ";");
         while (st.hasMoreTokens()) {
-            String par = st.nextToken();
-            int dosp = par.indexOf(':');
-            if (dosp < 0) {
+            String pair = st.nextToken();
+            int colon = pair.indexOf(':');
+            if (colon < 0) {
                 continue;
             }
-            String nombre = par.substring(0, dosp).trim().toLowerCase(java.util.Locale.ROOT);
-            String valor = par.substring(dosp + 1).trim();
-            CSS.Attribute clave = CSS.getAttribute(nombre);
-            if (clave != null && valor.length() > 0) {
-                addCSSAttribute(a, clave, valor);
+            String name = pair.substring(0, colon).trim().toLowerCase(java.util.Locale.ROOT);
+            String value = pair.substring(colon + 1).trim();
+            CSS.Attribute key = CSS.getAttribute(name);
+            if (key != null && value.length() > 0) {
+                addCSSAttribute(a, key, value);
             }
         }
         return a;
     }
 
-    /** Lee reglas de un texto; la direccion sirve para resolver las que sean relativas. */
+    /** It reads rules from a text; the address serves to resolve those that are relative. */
     public void loadRules(Reader in, URL ref) throws IOException {
         StringBuilder sb = new StringBuilder();
         char[] buf = new char[1024];
@@ -361,7 +361,7 @@ public class StyleSheet extends StyleContext {
         addRule(sb.toString());
     }
 
-    /** Los atributos que le tocan a esa vista, ya resueltos. */
+    /** The attributes that fall to that view, already resolved. */
     public AttributeSet getViewAttributes(View v) {
         return v.getElement().getAttributes();
     }
@@ -371,10 +371,10 @@ public class StyleSheet extends StyleContext {
     }
 
     /**
-     * Agrega otra hoja debajo de esta.
+     * It adds another sheet underneath this one.
      *
-     * <p>Las hojas agregadas se consultan despues de las reglas propias, en el orden en que se
-     * agregaron. Es lo que permite tener una hoja del programa y encima la de la pagina.
+     * <p>The added sheets are consulted after the rules of its own, in the order they were added.
+     * It is what allows having a sheet of the program's and on top of it the page's.
      */
     public void addStyleSheet(StyleSheet ss) {
         synchronized (this) {
@@ -388,11 +388,11 @@ public class StyleSheet extends StyleContext {
     }
 
     /**
-     * Saca una hoja agregada.
+     * It removes an added sheet.
      *
-     * <p>Cuando se va la ultima, la lista vuelve a ser nula y {@link #getStyleSheets} vuelve a
-     * contestar nulo, no un arreglo vacio. Es la misma respuesta que antes de agregar la primera:
-     * el estado despues de sacar todo es el estado inicial, y no uno parecido.
+     * <p>When the last one goes, the list becomes null again and {@link #getStyleSheets} answers
+     * null again, not an empty array. It is the same answer as before adding the first one: the
+     * state after removing everything is the initial state, and not one that looks like it.
      */
     public void removeStyleSheet(StyleSheet ss) {
         synchronized (this) {
@@ -405,7 +405,7 @@ public class StyleSheet extends StyleContext {
         }
     }
 
-    /** Las hojas agregadas, o nulo si no hay ninguna. */
+    /** The added sheets, or null if there are none. */
     public StyleSheet[] getStyleSheets() {
         StyleSheet[] retValue = null;
         synchronized (this) {
@@ -417,7 +417,7 @@ public class StyleSheet extends StyleContext {
         return retValue;
     }
 
-    /** Trae una hoja de esa direccion y la agrega. */
+    /** It fetches a sheet from that address and adds it. */
     public void importStyleSheet(URL url) {
         if (url == null) {
             return;
@@ -430,11 +430,11 @@ public class StyleSheet extends StyleContext {
             r.close();
             addStyleSheet(ss);
         } catch (Throwable e) {
-            // Una hoja que no se puede traer se ignora: la pagina se muestra sin ella.
+            // A sheet that cannot be fetched is ignored: the page is shown without it.
         }
     }
 
-    /** La direccion contra la que se resuelven las relativas. */
+    /** The address the relative ones are resolved against. */
     public void setBase(URL base) {
         this.base = base;
     }
@@ -443,25 +443,25 @@ public class StyleSheet extends StyleContext {
         return base;
     }
 
-    /** Pone una propiedad de CSS con su valor escrito como en la hoja. */
+    /** It sets a CSS property with its value written as in the sheet. */
     public void addCSSAttribute(MutableAttributeSet attr, CSS.Attribute key, String value) {
         attr.addAttribute(key, value);
     }
 
     /**
-     * Igual, pero avisa si el valor no se entiende.
+     * The same, but it reports whether the value is not understood.
      *
-     * <p>La diferencia con {@link #addCSSAttribute} es quien decide: cuando el valor viene de un
-     * atributo de HTML y no de una hoja, conviene no guardar basura, porque el HTML viejo trae
-     * valores que no son CSS.
+     * <p>The difference from {@link #addCSSAttribute} is who decides: when the value comes from an
+     * HTML attribute and not from a sheet, it is better not to keep rubbish, because old HTML
+     * carries values that are not CSS.
      */
     public boolean addCSSAttributeFromHTML(MutableAttributeSet attr, CSS.Attribute key,
             String value) {
         if (value == null) {
             return false;
         }
-        // La cadena vacia si vale: para un color es negro. Rechazarla de entrada seria mas
-        // prolijo y no seria lo que hace el JDK.
+        // The empty string does hold: for a colour it is black. Rejecting it up front would be
+                // tidier and would not be what the JDK does.
         if (key == CSS.Attribute.COLOR || key == CSS.Attribute.BACKGROUND_COLOR) {
             if (stringToColor(value) == null) {
                 return false;
@@ -472,11 +472,12 @@ public class StyleSheet extends StyleContext {
     }
 
     /**
-     * Traduce los atributos viejos de HTML a propiedades de CSS.
+     * It translates the old HTML attributes to CSS properties.
      *
-     * <p>Es lo que permite que <code>&lt;font color="red"&gt;</code> y
-     * <code>&lt;span style="color: red"&gt;</code> terminen en el mismo lugar. Sin esta traduccion
-     * habria dos caminos para cada aspecto y las reglas de precedencia no se podrian escribir.
+     * <p>It is what makes <code>&lt;font color="red"&gt;</code> and
+     * <code>&lt;span style="color: red"&gt;</code> end up in the same place. Without this
+     * translation there would be two paths for each aspect and the precedence rules could not be
+     * written.
      */
     public AttributeSet translateHTMLToCSS(AttributeSet htmlAttrSet) {
         MutableAttributeSet cssAttrSet = new SimpleAttributeSet();
@@ -487,14 +488,14 @@ public class StyleSheet extends StyleContext {
                 HTML.Attribute a = (HTML.Attribute) name;
                 Object v = htmlAttrSet.getAttribute(a);
                 if (v != null) {
-                    traducir(cssAttrSet, a, v.toString());
+                    translate(cssAttrSet, a, v.toString());
                 }
             }
         }
         return cssAttrSet;
     }
 
-    private void traducir(MutableAttributeSet out, HTML.Attribute a, String v) {
+    private void translate(MutableAttributeSet out, HTML.Attribute a, String v) {
         if (a == HTML.Attribute.COLOR) {
             addCSSAttributeFromHTML(out, CSS.Attribute.COLOR, v);
         } else if (a == HTML.Attribute.TEXT) {
@@ -552,63 +553,63 @@ public class StyleSheet extends StyleContext {
         return super.createLargeAttributeSet(a);
     }
 
-    /** La tipografia que corresponde a esos atributos. */
+    /** The typeface that corresponds to those attributes. */
     public Font getFont(AttributeSet a) {
-        String familia = valor(a, CSS.Attribute.FONT_FAMILY);
-        if (familia == null) {
-            familia = "SansSerif";
+        String family = value(a, CSS.Attribute.FONT_FAMILY);
+        if (family == null) {
+            family = "SansSerif";
         }
-        int estilo = Font.PLAIN;
-        String peso = valor(a, CSS.Attribute.FONT_WEIGHT);
+        int style = Font.PLAIN;
+        String peso = value(a, CSS.Attribute.FONT_WEIGHT);
         if (peso != null && (peso.equals("bold") || peso.equals("bolder"))) {
-            estilo = estilo | Font.BOLD;
+            style = style | Font.BOLD;
         }
-        String inclinacion = valor(a, CSS.Attribute.FONT_STYLE);
-        if (inclinacion != null && (inclinacion.equals("italic")
-                || inclinacion.equals("oblique"))) {
-            estilo = estilo | Font.ITALIC;
+        String slant = value(a, CSS.Attribute.FONT_STYLE);
+        if (slant != null && (slant.equals("italic")
+                || slant.equals("oblique"))) {
+            style = style | Font.ITALIC;
         }
-        String tam = valor(a, CSS.Attribute.FONT_SIZE);
-        int puntos = (tam == null) ? 12 : (int) tamanoEnPuntos(tam);
-        return getFont(familia, estilo, puntos);
+        String tam = value(a, CSS.Attribute.FONT_SIZE);
+        int points = (tam == null) ? 12 : (int) sizeInPoints(tam);
+        return getFont(family, style, points);
     }
 
-    /** El color de la letra, o negro. */
+    /** The letter's colour, or black. */
     public Color getForeground(AttributeSet a) {
-        String c = valor(a, CSS.Attribute.COLOR);
+        String c = value(a, CSS.Attribute.COLOR);
         Color col = (c == null) ? null : stringToColor(c);
         return (col == null) ? Color.black : col;
     }
 
-    /** El color de fondo, o nulo si es transparente. */
+    /** The background colour, or null if it is transparent. */
     public Color getBackground(AttributeSet a) {
-        String c = valor(a, CSS.Attribute.BACKGROUND_COLOR);
+        String c = value(a, CSS.Attribute.BACKGROUND_COLOR);
         if (c == null || "transparent".equals(c)) {
             return null;
         }
         return stringToColor(c);
     }
 
-    private static String valor(AttributeSet a, CSS.Attribute clave) {
-        Object v = a.getAttribute(clave);
+    private static String value(AttributeSet a, CSS.Attribute key) {
+        Object v = a.getAttribute(key);
         return (v == null) ? null : v.toString();
     }
 
-    /** Quien calcula margenes y dibuja el fondo de un bloque. */
+    /** Who computes margins and draws a block's background. */
     public BoxPainter getBoxPainter(AttributeSet a) {
         return new BoxPainter(a, this);
     }
 
-    /** Quien dibuja las vinetas o los numeros de una lista. */
+    /** Who draws a list's bullets or numbers. */
     public ListPainter getListPainter(AttributeSet a) {
         return new ListPainter(a, this);
     }
 
     /**
-     * El tamano base con el que se cuentan los relativos.
+     * The base size the relative ones are counted from.
      *
-     * <p>No cambia lo que devuelve {@link #getPointSize(int)}: los tamanos del 1 al 7 son fijos.
-     * Cambia el punto de partida de los que se escriben como <code>+1</code> o <code>-2</code>.
+     * <p>It does not change what {@link #getPointSize(int)} returns: the sizes from 1 to 7 are
+     * fixed. It changes the starting point of those written as <code>+1</code> or <code>-2</code>.
      */
     public void setBaseFontSize(int sz) {
         if (sz < 1) {
@@ -620,7 +621,7 @@ public class StyleSheet extends StyleContext {
         }
     }
 
-    /** Igual, con el tamano escrito; acepta las formas relativas. */
+    /** The same, with the size written out; it accepts the relative forms. */
     public void setBaseFontSize(String size) {
         if (size == null) {
             return;
@@ -629,8 +630,8 @@ public class StyleSheet extends StyleContext {
         if (size.length() == 0) {
             return;
         }
-        // Un tamano que no se entiende sale como NumberFormatException, igual que en el JDK.
-        // Tragarlo dejaria al programa creyendo que puso un tamano que nunca se puso.
+        // A size that is not understood comes out as NumberFormatException, as in the JDK.
+                // Swallowing it would leave the program believing it set a size that was never set.
         if (size.charAt(0) == '+') {
             setBaseFontSize(baseFontSize + Integer.parseInt(size.substring(1)));
         } else if (size.charAt(0) == '-') {
@@ -641,9 +642,10 @@ public class StyleSheet extends StyleContext {
     }
 
     /**
-     * En cual de los siete tamanos de HTML cae esa cantidad de puntos.
+     * Which of HTML's seven sizes that number of points falls in.
      *
-     * <p>Se elige el primero que llegue o pase: 9 puntos ya no entra en el 1, asi que es el 2.
+     * <p>The first one that reaches or exceeds is chosen: 9 points no longer fits in 1, so it is
+     * 2.
      */
     public static int getIndexOfSize(float pt) {
         for (int i = 0; i < sizeMapDefault.length; i++) {
@@ -654,7 +656,7 @@ public class StyleSheet extends StyleContext {
         return sizeMapDefault.length;
     }
 
-    /** Los puntos que valen ese tamano de HTML, del 1 al 7. */
+    /** The points that HTML size is worth, from 1 to 7. */
     public float getPointSize(int index) {
         if (index < 1) {
             index = 1;
@@ -665,25 +667,25 @@ public class StyleSheet extends StyleContext {
     }
 
     /**
-     * Los puntos de un tamano escrito, absoluto o relativo al base.
+     * The points of a written size, absolute or relative to the base one.
      *
-     * @throws NumberFormatException si no es un numero.
+     * @throws NumberFormatException if it is not a number.
      */
     public float getPointSize(String size) {
-        int relativo = 0;
+        int relative = 0;
         if (size.startsWith("+")) {
-            relativo = Integer.parseInt(size.substring(1));
-            return getPointSize(baseFontSize + relativo);
+            relative = Integer.parseInt(size.substring(1));
+            return getPointSize(baseFontSize + relative);
         }
         if (size.startsWith("-")) {
-            relativo = Integer.parseInt(size.substring(1));
-            return getPointSize(baseFontSize - relativo);
+            relative = Integer.parseInt(size.substring(1));
+            return getPointSize(baseFontSize - relative);
         }
         return getPointSize(Integer.parseInt(size));
     }
 
-    /** Los puntos de un tamano de CSS, con o sin unidad. */
-    private float tamanoEnPuntos(String v) {
+    /** The points of a CSS size, with or without a unit. */
+    private float sizeInPoints(String v) {
         v = v.trim().toLowerCase(java.util.Locale.ROOT);
         try {
             if (v.endsWith("pt")) {
@@ -699,17 +701,18 @@ public class StyleSheet extends StyleContext {
     }
 
     /**
-     * El color que nombra ese texto, o nulo si no se entiende.
+     * The colour that text names, or null if it is not understood.
      *
-     * <p>Acepta los dieciseis nombres de CSS sin distinguir mayusculas, un numero hexadecimal con
-     * o sin <code>#</code>, y <code>rgb(r,g,b)</code> en minusculas.
+     * <p>It accepts CSS's sixteen names ignoring case, a hexadecimal number with or without
+     * <code>#</code>, and <code>rgb(r,g,b)</code> in lower case.
      *
-     * <p>Devolver nulo y no negro importa: quien pregunta necesita distinguir "pidieron negro" de
-     * "no se pudo leer", porque en el segundo caso hay que dejar el color que ya estaba. La unica
-     * excepcion es la cadena vacia, que da negro.
+     * <p>Returning null and not black matters: whoever asks needs to tell "black was asked for"
+     * from "it could not be read", because in the second case the colour that was already there
+     * has to be left. The only exception is the empty string, which gives black.
      *
-     * <p>No se recortan los espacios. Parece una omision y no lo es: un <code>" red"</code> con un
-     * espacio adelante no es un color valido en CSS, y aceptarlo taparia un error de la hoja.
+     * <p>The spaces are not trimmed. It looks like an omission and it is not: a <code>" red"</code>
+     * with a space in front is not a valid colour in CSS, and accepting it would cover up an error
+     * in the sheet.
      */
     public Color stringToColor(String str) {
         if (str == null) {
@@ -719,88 +722,89 @@ public class StyleSheet extends StyleContext {
             return Color.black;
         }
         if (str.startsWith("rgb(")) {
-            return leerRGB(str);
+            return readRGB(str);
         }
         if (str.charAt(0) == '#') {
-            return hexAColor(str);
+            return hexToColor(str);
         }
-        Color nombrado = colores.get(str.toLowerCase(java.util.Locale.ROOT));
-        if (nombrado != null) {
-            return nombrado;
+        Color named = colors.get(str.toLowerCase(java.util.Locale.ROOT));
+        if (named != null) {
+            return named;
         }
-        // Lo que no es un nombre se prueba como hexadecimal sin `#`; asi anda `ff0000`.
-        return hexAColor(str);
+        // What is not a name is tried as hexadecimal without `#`; that way `ff0000` works.
+        return hexToColor(str);
     }
 
     /**
-     * Un color escrito en hexadecimal.
+     * A colour written in hexadecimal.
      *
-     * <p>Se toman a lo sumo seis digitos y se leen como un solo numero, asi que
-     * <code>#ff00</code> es verde y no un error. Los de tres digitos se duplican: <code>#f00</code>
-     * es <code>#ff0000</code>.
+     * <p>At most six digits are taken and read as a single number, so <code>#ff00</code> is green
+     * and not an error. Those of three digits are doubled: <code>#f00</code> is
+     * <code>#ff0000</code>.
      */
-    private static Color hexAColor(String value) {
-        String digitos;
+    private static Color hexToColor(String value) {
+        String digits;
         if (value.startsWith("#")) {
-            digitos = value.substring(1, Math.min(value.length(), 7));
+            digits = value.substring(1, Math.min(value.length(), 7));
         } else {
-            digitos = value;
+            digits = value;
         }
-        if (digitos.length() == 3) {
-            digitos = "" + digitos.charAt(0) + digitos.charAt(0) + digitos.charAt(1)
-                    + digitos.charAt(1) + digitos.charAt(2) + digitos.charAt(2);
+        if (digits.length() == 3) {
+            digits = "" + digits.charAt(0) + digits.charAt(0) + digits.charAt(1)
+                    + digits.charAt(1) + digits.charAt(2) + digits.charAt(2);
         }
         try {
-            return Color.decode("0x" + digitos);
+            return Color.decode("0x" + digits);
         } catch (NumberFormatException nfe) {
             return null;
         }
     }
 
     /**
-     * Un color escrito como <code>rgb(r,g,b)</code>.
+     * A colour written as <code>rgb(r,g,b)</code>.
      *
-     * <p>Los componentes que falten valen cero y los que se pasen se recortan a 0..255. Es a
-     * proposito: un color mal escrito se muestra igual, en lugar de dejar la pagina sin color.
+     * <p>The components that are missing are worth zero and those that overflow are clamped to
+     * 0..255. It is on purpose: a badly written colour is shown all the same, instead of leaving
+     * the page with no colour.
      */
-    private static Color leerRGB(String string) {
-        int[] indice = new int[1];
-        indice[0] = 4;
-        int rojo = componente(string, indice);
-        int verde = componente(string, indice);
-        int azul = componente(string, indice);
-        return new Color(rojo, verde, azul);
+    private static Color readRGB(String string) {
+        int[] index = new int[1];
+        index[0] = 4;
+        int red = component(string, index);
+        int green = component(string, index);
+        int blue = component(string, index);
+        return new Color(red, green, blue);
     }
 
-    /** El proximo numero de la cadena, recortado a 0..255; cero si no hay ninguno. */
-    private static int componente(String string, int[] indice) {
-        int largo = string.length();
+    /** The next number in the string, clamped to 0..255; zero if there is none. */
+    private static int component(String string, int[] index) {
+        int length = string.length();
         char c;
-        while (indice[0] < largo && (c = string.charAt(indice[0])) != '-'
+        while (index[0] < length && (c = string.charAt(index[0])) != '-'
                 && !Character.isDigit(c) && c != '.') {
-            indice[0] = indice[0] + 1;
+            index[0] = index[0] + 1;
         }
-        int desde = indice[0];
-        if (desde < largo && string.charAt(indice[0]) == '-') {
-            indice[0] = indice[0] + 1;
+        int from = index[0];
+        if (from < length && string.charAt(index[0]) == '-') {
+            index[0] = index[0] + 1;
         }
-        while (indice[0] < largo && Character.isDigit(string.charAt(indice[0]))) {
-            indice[0] = indice[0] + 1;
+        while (index[0] < length && Character.isDigit(string.charAt(index[0]))) {
+            index[0] = index[0] + 1;
         }
-        if (indice[0] < largo && string.charAt(indice[0]) == '.') {
-            indice[0] = indice[0] + 1;
-            while (indice[0] < largo && Character.isDigit(string.charAt(indice[0]))) {
-                indice[0] = indice[0] + 1;
+        if (index[0] < length && string.charAt(index[0]) == '.') {
+            index[0] = index[0] + 1;
+            while (index[0] < length && Character.isDigit(string.charAt(index[0]))) {
+                index[0] = index[0] + 1;
             }
         }
-        if (desde != indice[0]) {
+        if (from != index[0]) {
             try {
-                float valor = Float.parseFloat(string.substring(desde, indice[0]));
-                if (indice[0] < largo && string.charAt(indice[0]) == '%') {
-                    indice[0] = indice[0] + 1;
-                    valor = valor * 255f / 100f;
+                float value = Float.parseFloat(string.substring(from, index[0]));
+                if (index[0] < length && string.charAt(index[0]) == '%') {
+                    index[0] = index[0] + 1;
+                    value = value * 255f / 100f;
                 }
-                return Math.min(255, Math.max(0, (int) valor));
+                return Math.min(255, Math.max(0, (int) value));
             } catch (NumberFormatException nfe) {
                 return 0;
             }
@@ -809,34 +813,35 @@ public class StyleSheet extends StyleContext {
     }
 
     /**
-     * Los margenes y el fondo de un bloque.
+     * A block's margins and background.
      *
-     * <p>En el JDK es una clase interna; aca es estatica y recibe la hoja, por los hallazgos #507 y
-     * #508. La firma que queda no es publica, asi que no se ve desde afuera.
+     * <p>In the JDK it is an inner class; here it is static and takes the sheet, because of
+     * findings #507 and #508. The resulting signature is not public, so it is not seen from
+     * outside.
      */
     public static final class BoxPainter implements java.io.Serializable {
 
         private final AttributeSet a;
-        private final StyleSheet hoja;
+        private final StyleSheet sheet;
 
-        BoxPainter(AttributeSet a, StyleSheet hoja) {
+        BoxPainter(AttributeSet a, StyleSheet sheet) {
             this.a = a;
-            this.hoja = hoja;
+            this.sheet = sheet;
         }
 
-        /** Cuanto margen deja de ese lado, en pixeles. */
+        /** How much margin it leaves on that side, in pixels. */
         public float getInset(int side, View v) {
-            CSS.Attribute clave;
+            CSS.Attribute key;
             if (side == View.TOP) {
-                clave = CSS.Attribute.MARGIN_TOP;
+                key = CSS.Attribute.MARGIN_TOP;
             } else if (side == View.BOTTOM) {
-                clave = CSS.Attribute.MARGIN_BOTTOM;
+                key = CSS.Attribute.MARGIN_BOTTOM;
             } else if (side == View.LEFT) {
-                clave = CSS.Attribute.MARGIN_LEFT;
+                key = CSS.Attribute.MARGIN_LEFT;
             } else {
-                clave = CSS.Attribute.MARGIN_RIGHT;
+                key = CSS.Attribute.MARGIN_RIGHT;
             }
-            Object o = a.getAttribute(clave);
+            Object o = a.getAttribute(key);
             if (o == null) {
                 return 0f;
             }
@@ -851,50 +856,50 @@ public class StyleSheet extends StyleContext {
             }
         }
 
-        /** Pinta el fondo del bloque, si tiene color. */
+        /** It paints the block's background, if it has a colour. */
         public void paint(Graphics g, float x, float y, float w, float h, View v) {
-            Color fondo = hoja.getBackground(a);
-            if (fondo != null) {
-                g.setColor(fondo);
+            Color background = sheet.getBackground(a);
+            if (background != null) {
+                g.setColor(background);
                 g.fillRect((int) x, (int) y, (int) w, (int) h);
             }
         }
     }
 
     /**
-     * La vineta o el numero de un renglon de lista.
+     * A list row's bullet or number.
      *
-     * <p>El numero del renglon llega como parametro y no se guarda: la misma lista se dibuja muchas
-     * veces y guardarlo obligaria a un pintor por renglon.
+     * <p>The row's number arrives as a parameter and is not kept: the same list is drawn many times
+     * and keeping it would force one painter per row.
      */
     public static final class ListPainter implements java.io.Serializable {
 
         private final AttributeSet a;
-        private final StyleSheet hoja;
+        private final StyleSheet sheet;
 
-        ListPainter(AttributeSet a, StyleSheet hoja) {
+        ListPainter(AttributeSet a, StyleSheet sheet) {
             this.a = a;
-            this.hoja = hoja;
+            this.sheet = sheet;
         }
 
-        /** Dibuja la marca del renglon numero tal. */
+        /** It draws the mark of row number such and such. */
         public void paint(Graphics g, float x, float y, float w, float h, View v, int item) {
             Object o = a.getAttribute(CSS.Attribute.LIST_STYLE_TYPE);
-            String tipo = (o == null) ? "disc" : o.toString();
-            g.setColor(hoja.getForeground(a));
-            if ("none".equals(tipo)) {
+            String type = (o == null) ? "disc" : o.toString();
+            g.setColor(sheet.getForeground(a));
+            if ("none".equals(type)) {
                 return;
             }
-            if ("decimal".equals(tipo)) {
+            if ("decimal".equals(type)) {
                 g.drawString((item + 1) + ".", (int) x, (int) (y + h));
                 return;
             }
             int d = (int) Math.max(4, h / 3);
             int cx = (int) x;
             int cy = (int) (y + (h - d) / 2);
-            if ("circle".equals(tipo)) {
+            if ("circle".equals(type)) {
                 g.drawOval(cx, cy, d, d);
-            } else if ("square".equals(tipo)) {
+            } else if ("square".equals(type)) {
                 g.fillRect(cx, cy, d, d);
             } else {
                 g.fillOval(cx, cy, d, d);
@@ -903,21 +908,21 @@ public class StyleSheet extends StyleContext {
     }
 
     static {
-        colores.put("black", new Color(0, 0, 0));
-        colores.put("silver", new Color(192, 192, 192));
-        colores.put("gray", new Color(128, 128, 128));
-        colores.put("white", new Color(255, 255, 255));
-        colores.put("maroon", new Color(128, 0, 0));
-        colores.put("red", new Color(255, 0, 0));
-        colores.put("purple", new Color(128, 0, 128));
-        colores.put("fuchsia", new Color(255, 0, 255));
-        colores.put("green", new Color(0, 128, 0));
-        colores.put("lime", new Color(0, 255, 0));
-        colores.put("olive", new Color(128, 128, 0));
-        colores.put("yellow", new Color(255, 255, 0));
-        colores.put("navy", new Color(0, 0, 128));
-        colores.put("blue", new Color(0, 0, 255));
-        colores.put("teal", new Color(0, 128, 128));
-        colores.put("aqua", new Color(0, 255, 255));
+        colors.put("black", new Color(0, 0, 0));
+        colors.put("silver", new Color(192, 192, 192));
+        colors.put("gray", new Color(128, 128, 128));
+        colors.put("white", new Color(255, 255, 255));
+        colors.put("maroon", new Color(128, 0, 0));
+        colors.put("red", new Color(255, 0, 0));
+        colors.put("purple", new Color(128, 0, 128));
+        colors.put("fuchsia", new Color(255, 0, 255));
+        colors.put("green", new Color(0, 128, 0));
+        colors.put("lime", new Color(0, 255, 0));
+        colors.put("olive", new Color(128, 128, 0));
+        colors.put("yellow", new Color(255, 255, 0));
+        colors.put("navy", new Color(0, 0, 128));
+        colors.put("blue", new Color(0, 0, 255));
+        colors.put("teal", new Color(0, 128, 128));
+        colors.put("aqua", new Color(0, 255, 255));
     }
 }

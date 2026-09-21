@@ -1,31 +1,30 @@
 package javax.print.event;
 
 /**
- * KajiLibrary's javax.print.event.PrintJobListener -- escucha los cambios de estado de un trabajo.
+ * KajiLibrary's javax.print.event.PrintJobListener -- listens to a job's changes of state.
  *
- * <p>Los seis metodos corresponden a las seis constantes de {@link PrintJobEvent}; ver ahi el orden en
- * que pueden llegar, y sobre todo por que hay que implementar
- * {@link #printJobNoMoreEvents}.
+ * <p>The six methods correspond to the six constants of {@link PrintJobEvent}; see there the order
+ * in which they may arrive, and above all why {@link #printJobNoMoreEvents} has to be implemented.
  *
- * <p>Si solo interesan algunos, {@link PrintJobAdapter} los trae todos vacios.
+ * <p>If only some are of interest, {@link PrintJobAdapter} brings them all empty.
  */
 public interface PrintJobListener {
 
-    /** El servicio ya leyo el documento entero. */
+    /** The service already read the whole document. */
     void printDataTransferCompleted(PrintJobEvent pje);
 
-    /** Termino bien. */
+    /** It finished well. */
     void printJobCompleted(PrintJobEvent pje);
 
-    /** Fallo. */
+    /** It failed. */
     void printJobFailed(PrintJobEvent pje);
 
-    /** Lo cancelaron. */
+    /** It was cancelled. */
     void printJobCanceled(PrintJobEvent pje);
 
-    /** No se informa mas. Ver {@link PrintJobEvent#NO_MORE_EVENTS}. */
+    /** Nothing more is reported. See {@link PrintJobEvent#NO_MORE_EVENTS}. */
     void printJobNoMoreEvents(PrintJobEvent pje);
 
-    /** Papel trabado, sin tinta, algo asi. */
+    /** A paper jam, no ink, something like that. */
     void printJobRequiresAttention(PrintJobEvent pje);
 }

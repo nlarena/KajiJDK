@@ -71,7 +71,7 @@ public class Hashtable<K, V> extends Dictionary<K, V> implements Map<K, V>, Seri
         init(initialCapacity, 0.75f);
     }
 
-    // Copia los pares de otro mapa.
+    // It copies another map's pairs.
     public Hashtable(Map<? extends K, ? extends V> t) {
         this();
         this.putAll(t);
@@ -101,15 +101,15 @@ public class Hashtable<K, V> extends Dictionary<K, V> implements Map<K, V>, Seri
 
     // --- unsynchronized internals ---------------------------------------------------
     //
-    // The real work lives here, lock-free; the public methods are a thin locked shell over
+    // The inner work lives here, lock-free; the public methods are a thin locked shell over
     // these. Keeping the two apart means the locking is visible in one place instead of
     // tangled through the chain walking — and it lets `put` call itself from `rehash`
     // without thinking about reentrancy.
 
     // Which bucket a hash belongs in. The mask clears the sign bit: `%` on a negative int
     // yields a negative result, which would index out of the array.
-    // Las claves vivas: recorrer los buckets y sus cadenas de colision (finding #205).
-    // `synchronized` como el resto de `Hashtable`, que es su razon de ser (§#201).
+    // The live keys: walking the buckets and their collision chains (finding #205). `synchronized`
+    // like the rest of `Hashtable`, which is its reason to exist (§#201).
     public synchronized Set<K> keySet() {
         HashSet<K> out = new HashSet<K>();
         int i = 0;
@@ -262,7 +262,7 @@ public class Hashtable<K, V> extends Dictionary<K, V> implements Map<K, V>, Seri
 
     // --- Dictionary / Map -----------------------------------------------------------
 
-    public int size() {
+    public synchronized int size() {
         int n;
         synchronized (this) {
             n = count;
@@ -270,7 +270,7 @@ public class Hashtable<K, V> extends Dictionary<K, V> implements Map<K, V>, Seri
         return n;
     }
 
-    public boolean isEmpty() {
+    public synchronized boolean isEmpty() {
         boolean empty;
         synchronized (this) {
             empty = count == 0;
@@ -278,7 +278,7 @@ public class Hashtable<K, V> extends Dictionary<K, V> implements Map<K, V>, Seri
         return empty;
     }
 
-    public boolean containsKey(Object key) {
+    public synchronized boolean containsKey(Object key) {
         boolean found;
         synchronized (this) {
             found = entryFor(key) != null;
@@ -290,7 +290,7 @@ public class Hashtable<K, V> extends Dictionary<K, V> implements Map<K, V>, Seri
     // asymmetry it caused: `contains` on a Map means "contains this value", while `contains`
     // on a Collection means "contains this element" — one of the naming accidents the
     // collections framework was introduced to clean up.
-    public boolean contains(Object value) {
+    public synchronized boolean contains(Object value) {
         boolean found;
         synchronized (this) {
             found = containsValueUnlocked(value);
@@ -302,7 +302,7 @@ public class Hashtable<K, V> extends Dictionary<K, V> implements Map<K, V>, Seri
         return contains(value);
     }
 
-    public V get(Object key) {
+    public synchronized V get(Object key) {
         Object v;
         synchronized (this) {
             HtEntry<K, V> e = entryFor(key);
@@ -315,7 +315,7 @@ public class Hashtable<K, V> extends Dictionary<K, V> implements Map<K, V>, Seri
         return (V) v;
     }
 
-    public V put(K key, V value) {
+    public synchronized V put(K key, V value) {
         Object old;
         synchronized (this) {
             old = putUnlocked(key, value);
@@ -323,7 +323,7 @@ public class Hashtable<K, V> extends Dictionary<K, V> implements Map<K, V>, Seri
         return (V) old;
     }
 
-    public V remove(Object key) {
+    public synchronized V remove(Object key) {
         Object old;
         synchronized (this) {
             old = removeUnlocked(key);
@@ -331,7 +331,7 @@ public class Hashtable<K, V> extends Dictionary<K, V> implements Map<K, V>, Seri
         return (V) old;
     }
 
-    public void clear() {
+    public synchronized void clear() {
         synchronized (this) {
             for (int i = 0; i < table.length; i++) {
                 table[i] = null;
@@ -355,15 +355,15 @@ public class Hashtable<K, V> extends Dictionary<K, V> implements Map<K, V>, Seri
     // what {@link Map}'s keySet/values/entrySet views replaced: an Enumeration can only be
     // consumed, while a view is a live Collection you can pass on, filter, or remove through.
 
-    public Enumeration<K> keys() {
+    public synchronized Enumeration<K> keys() {
         return new HashtableEnumerator<K, V, K>(this, true);
     }
 
-    public Enumeration<V> elements() {
+    public synchronized Enumeration<V> elements() {
         return new HashtableEnumerator<K, V, V>(this, false);
     }
 
-    public String toString() {
+    public synchronized String toString() {
         StringBuilder b = new StringBuilder();
         synchronized (this) {
             b.append('{');
@@ -390,11 +390,11 @@ public class Hashtable<K, V> extends Dictionary<K, V> implements Map<K, V>, Seri
     }
 
     /**
-     * Los valores de este mapa.
+     * This map's values.
      *
-     * <p>**Divergencia deliberada**, la misma que ya declara `keySet()`: la del JDK es una *vista*
-     * respaldada por el mapa; esta es una copia sacada en el momento. Y a diferencia de `keySet()`
-     * es una `Collection` y no un `Set`, porque los valores **si** pueden repetirse.
+     * <p>**A deliberate divergence**, the same one `keySet()` already declares: the JDK's is a *view*
+     * backed by the map; this one is a copy taken at the moment of asking. And unlike `keySet()` this
+     * is a `Collection` and not a `Set`, because values **can** repeat.
      */
     public java.util.Collection<V> values() {
         java.util.ArrayList<V> out = new java.util.ArrayList<V>();
@@ -406,11 +406,12 @@ public class Hashtable<K, V> extends Dictionary<K, V> implements Map<K, V>, Seri
     }
 
     /**
-     * Los pares de este mapa.
+     * This map's pairs.
      *
-     * <p>Misma divergencia que `values()`: copia, no vista. Los pares que devuelve son inmutables,
-     * asi que `setValue` sobre uno de ellos lanza en vez de escribir en el mapa — que es lo
-     * coherente con que sea una copia: escribir en un par que nadie mira seria peor que negarse.
+     * <p>The same divergence as `values()`: a copy, not a view. The pairs it returns are immutable,
+     * so `setValue` on one of them throws instead of writing into the map — which is what is
+     * consistent with it being a copy: writing into a pair nobody looks at would be worse than
+     * refusing.
      */
     public java.util.Set<java.util.Map.Entry<K, V>> entrySet() {
         java.util.HashSet<java.util.Map.Entry<K, V>> out =
@@ -423,14 +424,14 @@ public class Hashtable<K, V> extends Dictionary<K, V> implements Map<K, V>, Seri
         return out;
     }
     /**
-     * Igualdad y hash por contenido, como exige el contrato de Map.
+     * Equality and hash by content, as Map's contract requires.
      *
-     * <p>Van escritos aca -- y no heredados -- porque esta clase no desciende de AbstractMap, que
-     * es donde vive la version comun. Sin esto, un Hashtable con el mismo contenido que un HashMap
-     * no era igual a el, y la simetria que el contrato de Map promete entre implementaciones
-     * distintas se rompia en cuanto aparecia Hashtable.
+     * <p>They are written here -- and not inherited -- because this class does not descend from
+     * AbstractMap, which is where the common version lives. Without this, a Hashtable with the same
+     * content as a HashMap was not equal to it, and the symmetry Map's contract promises between
+     * different implementations broke as soon as a Hashtable turned up.
      */
-    public boolean equals(Object o) {
+    public synchronized boolean equals(Object o) {
         if (o == this) {
             return true;
         }
@@ -459,7 +460,7 @@ public class Hashtable<K, V> extends Dictionary<K, V> implements Map<K, V>, Seri
         return true;
     }
 
-    public int hashCode() {
+    public synchronized int hashCode() {
         int h = 0;
         Iterator<K> it = this.keySet().iterator();
         while (it.hasNext()) {

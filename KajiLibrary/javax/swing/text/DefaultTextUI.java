@@ -3,18 +3,18 @@ package javax.swing.text;
 import javax.swing.plaf.basic.BasicTextUI;
 
 /**
- * El nombre viejo de {@link BasicTextUI}.
+ * The old name of {@link BasicTextUI}.
  *
- * <p>No agrega nada: existe solo para que el codigo escrito antes de que la clase se mudara a
- * <code>javax.swing.plaf.basic</code> siga compilando. Es una clase vacia a proposito, y borrarla
- * romperia ese codigo sin ganar nada.
+ * <p>It adds nothing: it exists only so that the code written before the class moved to
+ * <code>javax.swing.plaf.basic</code> goes on compiling. It is an empty class on purpose, and
+ * deleting it would break that code without gaining anything.
  *
- * @deprecated Usar {@link BasicTextUI}.
+ * @deprecated Use {@link BasicTextUI}.
  */
 @Deprecated
 public abstract class DefaultTextUI extends BasicTextUI {
 
-    /** Nada que construir; ver la nota de la clase. */
+    /** Nothing to build; see the class note. */
     protected DefaultTextUI() {
     }
 }

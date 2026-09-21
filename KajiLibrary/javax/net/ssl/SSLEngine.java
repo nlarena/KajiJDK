@@ -5,78 +5,79 @@ import java.util.List;
 import java.util.function.BiFunction;
 
 /**
- * TLS sin transporte: una maquina de estados que traduce entre bytes de aplicacion y bytes de red.
+ * TLS without transport: a state machine that translates between application bytes and network
+ * bytes.
  *
- * <h2>Por que existe si ya hay {@link SSLSocket}</h2>
+ * <h2>Why it exists if there is already {@link SSLSocket}</h2>
  *
- * <p>Porque un {@code SSLSocket} decide por vos como se lee y se escribe — bloqueando, un hilo por
- * conexion. Un servidor con muchas conexiones no puede pagar eso, y quiere multiplexar con un
- * selector; otro puede querer TLS sobre algo que ni siquiera es TCP.
+ * <p>Because an {@code SSLSocket} decides for you how reading and writing are done — blocking, one
+ * thread per connection. A server with many connections cannot pay for that, and wants to multiplex
+ * with a selector; another may want TLS over something that is not even TCP.
  *
- * <p>Este motor separa las dos cosas: <strong>no toca la red</strong>. Se le dan buffers y devuelve
- * buffers; quien lo usa decide como viajan. Es potencia a cambio de responsabilidad, y por eso su
- * uso correcto es notoriamente delicado.
+ * <p>This engine separates the two things: <strong>it does not touch the network</strong>. It is
+ * given buffers and returns buffers; whoever uses it decides how they travel. It is power in
+ * exchange for responsibility, and that is why using it correctly is notoriously delicate.
  *
- * <h2>El bucle, que es lo unico que hay que entender</h2>
+ * <h2>The loop, which is the only thing to understand</h2>
  *
- * <p>Cada llamada devuelve un {@link SSLEngineResult} con dos estados, y quien llama tiene que
- * <strong>obedecerlos</strong>:
+ * <p>Each call returns an {@link SSLEngineResult} with two statuses, and the caller has to
+ * <strong>obey them</strong>:
  *
  * <ul>
- * <li>{@code NEED_WRAP} — el motor tiene algo que mandar; llamar a {@link #wrap};</li>
- * <li>{@code NEED_UNWRAP} — necesita datos; leer de la red y llamar a {@link #unwrap};</li>
- * <li>{@code NEED_TASK} — hay trabajo pesado pendiente. Sacarlo con {@link #getDelegatedTask} y
- *     <strong>correrlo</strong>. Ignorar esto es el error mas comun: el handshake se queda quieto
- *     para siempre y no hay ninguna excepcion que lo diga;</li>
- * <li>{@code BUFFER_OVERFLOW} / {@code BUFFER_UNDERFLOW} — no son fallas: son pedidos de mas lugar
- *     o mas datos. Dimensionar con {@link SSLSession#getPacketBufferSize} y
- *     {@link SSLSession#getApplicationBufferSize} y reintentar.</li>
+ * <li>{@code NEED_WRAP} — the engine has something to send; call {@link #wrap};</li>
+ * <li>{@code NEED_UNWRAP} — it needs data; read from the network and call {@link #unwrap};</li>
+ * <li>{@code NEED_TASK} — there is heavy work pending. Take it with {@link #getDelegatedTask} and
+ *     <strong>run it</strong>. Ignoring this is the most common error: the handshake stays still
+ *     forever and no exception says so;</li>
+ * <li>{@code BUFFER_OVERFLOW} / {@code BUFFER_UNDERFLOW} — they are not failures: they are requests
+ *     for more room or more data. Size with {@link SSLSession#getPacketBufferSize} and
+ *     {@link SSLSession#getApplicationBufferSize} and retry.</li>
  * </ul>
  *
- * <h2>Los dos sentidos se cierran por separado</h2>
+ * <h2>The two directions are closed separately</h2>
  *
- * <p>{@link #closeOutbound} y {@link #closeInbound} son distintos a proposito: TLS cierra cada
- * direccion con su propio aviso, y cerrar la salida sin haber recibido la del par deja la entrada
- * viva. Es lo que permite detectar un truncamiento — que alguien haya cortado la conexion para que
- * parezca que el mensaje termino ahi.
+ * <p>{@link #closeOutbound} and {@link #closeInbound} are different on purpose: TLS closes each
+ * direction with its own alert, and closing the output without having received the peer's leaves
+ * the input alive. It is what allows detecting a truncation — somebody having cut the connection to
+ * make it look as if the message ended there.
  */
 public abstract class SSLEngine {
 
     private final String peerHost;
     private final int peerPort;
 
-    /** Sin datos del par: no se puede reanudar sesion ni mandar SNI. */
+    /** Without peer data: a session cannot be resumed nor SNI sent. */
     protected SSLEngine() {
         this(null, -1);
     }
 
     /**
-     * Con el par sugerido.
+     * With the suggested peer.
      *
-     * <p>Es una <em>pista</em>, no un destino: el motor no se conecta a nada. Sirve para dos cosas
-     * concretas — reanudar una sesion con ese par, y mandar su nombre por SNI.
+     * <p>It is a <em>hint</em>, not a destination: the engine connects to nothing. It serves two
+     * concrete things — resuming a session with that peer, and sending its name through SNI.
      */
     protected SSLEngine(String peerHost, int peerPort) {
         this.peerHost = peerHost;
         this.peerPort = peerPort;
     }
 
-    /** El nombre del par que se sugirio, o {@code null}. */
+    /** The suggested peer's name, or {@code null}. */
     public String getPeerHost() {
         return this.peerHost;
     }
 
-    /** El puerto del par que se sugirio, o {@code -1}. */
+    /** The suggested peer's port, or {@code -1}. */
     public int getPeerPort() {
         return this.peerPort;
     }
 
-    /** Cifra los datos de {@code src} hacia {@code dst}. */
+    /** Encrypts the data of {@code src} into {@code dst}. */
     public SSLEngineResult wrap(ByteBuffer src, ByteBuffer dst) throws SSLException {
         return wrap(new ByteBuffer[] { src }, 0, 1, dst);
     }
 
-    /** Igual, tomando de varios buffers. */
+    /** The same, taking from several buffers. */
     public SSLEngineResult wrap(ByteBuffer[] srcs, ByteBuffer dst) throws SSLException {
         if (srcs == null) {
             throw new IllegalArgumentException("srcs");
@@ -85,20 +86,20 @@ public abstract class SSLEngine {
     }
 
     /**
-     * La forma general, sobre un tramo de {@code srcs}.
+     * The general form, over a range of {@code srcs}.
      *
-     * <p>Es la unica abstracta de las tres: las otras dos delegan aca. Una implementacion escribe
-     * una sola.
+     * <p>It is the only abstract one of the three: the other two delegate here. An implementation
+     * writes just one.
      */
     public abstract SSLEngineResult wrap(ByteBuffer[] srcs, int offset, int length, ByteBuffer dst)
             throws SSLException;
 
-    /** Descifra los datos de {@code src} hacia {@code dst}. */
+    /** Decrypts the data of {@code src} into {@code dst}. */
     public SSLEngineResult unwrap(ByteBuffer src, ByteBuffer dst) throws SSLException {
         return unwrap(src, new ByteBuffer[] { dst }, 0, 1);
     }
 
-    /** Igual, repartiendo en varios buffers. */
+    /** The same, spreading over several buffers. */
     public SSLEngineResult unwrap(ByteBuffer src, ByteBuffer[] dsts) throws SSLException {
         if (dsts == null) {
             throw new IllegalArgumentException("dsts");
@@ -106,108 +107,109 @@ public abstract class SSLEngine {
         return unwrap(src, dsts, 0, dsts.length);
     }
 
-    /** La forma general, sobre un tramo de {@code dsts}. */
+    /** The general form, over a range of {@code dsts}. */
     public abstract SSLEngineResult unwrap(ByteBuffer src, ByteBuffer[] dsts, int offset,
             int length) throws SSLException;
 
     /**
-     * Una tarea pendiente, o {@code null} si no hay.
+     * A pending task, or {@code null} if there is none.
      *
-     * <p>Se sacan y se corren hasta que devuelva {@code null}. Pueden correrse en otro hilo — es
-     * justamente para eso que existen — pero <strong>tienen que correrse</strong>.
+     * <p>They are taken and run until it returns {@code null}. They may be run in another thread —
+     * that is exactly what they exist for — but <strong>they have to be run</strong>.
      */
     public abstract Runnable getDelegatedTask();
 
     /**
-     * Cierra la entrada.
+     * Closes the input.
      *
-     * @throws SSLException si el par no habia mandado su aviso de cierre, lo que puede significar un
-     *     truncamiento y no un cierre
+     * @throws SSLException if the peer had not sent its close alert, which may mean a truncation
+     *     and not a close
      */
     public abstract void closeInbound() throws SSLException;
 
-    /** Si ya no se va a aceptar mas entrada. */
+    /** Whether no more input is going to be accepted. */
     public abstract boolean isInboundDone();
 
-    /** Cierra la salida. Todavia hay que hacer un {@link #wrap} para emitir el aviso. */
+    /** Closes the output. A {@link #wrap} still has to be done to emit the alert. */
     public abstract void closeOutbound();
 
-    /** Si ya se emitio el aviso de cierre de salida. */
+    /** Whether the output close alert was already emitted. */
     public abstract boolean isOutboundDone();
 
-    /** Todas las suites que el motor conoce. */
+    /** All the suites the engine knows. */
     public abstract String[] getSupportedCipherSuites();
 
-    /** Las suites habilitadas ahora. */
+    /** The suites enabled now. */
     public abstract String[] getEnabledCipherSuites();
 
-    /** Fija las suites habilitadas. */
+    /** Sets the enabled suites. */
     public abstract void setEnabledCipherSuites(String[] suites);
 
-    /** Todos los protocolos que el motor conoce. */
+    /** All the protocols the engine knows. */
     public abstract String[] getSupportedProtocols();
 
-    /** Los protocolos habilitados ahora. */
+    /** The protocols enabled now. */
     public abstract String[] getEnabledProtocols();
 
-    /** Fija los protocolos habilitados. */
+    /** Sets the enabled protocols. */
     public abstract void setEnabledProtocols(String[] protocols);
 
     /**
-     * La sesion vigente.
+     * The current session.
      *
-     * <p>Antes del primer handshake devuelve una sesion vacia, con suite {@code SSL_NULL_WITH_NULL_NULL}
-     * — no {@code null}. Es incomodo pero deliberado: obliga a mirar la suite en vez de suponer que
-     * tener sesion significa estar autenticado.
+     * <p>Before the first handshake it returns an empty session, with suite {@code
+     * SSL_NULL_WITH_NULL_NULL} — not {@code null}. It is awkward but deliberate: it forces looking
+     * at the suite instead of assuming that having a session means being authenticated.
      */
     public abstract SSLSession getSession();
 
     /**
-     * La sesion que se esta negociando, o {@code null} si no hay handshake en curso.
+     * The session being negotiated, or {@code null} if there is no handshake in progress.
      *
-     * <p>Existe para poder decidir <em>durante</em> el handshake — elegir un certificado mirando el
-     * SNI que acaba de llegar, por ejemplo— cuando {@link #getSession} todavia devuelve la vieja.
+     * <p>It exists to be able to decide <em>during</em> the handshake — choosing a certificate by
+     * looking at the SNI that just arrived, for example— when {@link #getSession} still returns the
+     * old one.
      */
     public SSLSession getHandshakeSession() {
-        throw new UnsupportedOperationException("este motor no expone la sesion en negociacion");
+        throw new UnsupportedOperationException("engine exposes no handshake session");
     }
 
-    /** Arranca o renegocia el handshake. */
+    /** Starts or renegotiates the handshake. */
     public abstract void beginHandshake() throws SSLException;
 
-    /** Que hace falta hacer ahora; ver el bucle en la descripcion de la clase. */
+    /** What has to be done now; see the loop in the class description. */
     public abstract SSLEngineResult.HandshakeStatus getHandshakeStatus();
 
     /**
-     * Si este motor es el cliente.
+     * Whether this engine is the client.
      *
-     * @throws IllegalArgumentException si ya empezo el handshake — el rol define todo el protocolo y
-     *     cambiarlo a mitad de camino no significa nada
+     * @throws IllegalArgumentException if the handshake already started — the role defines the
+     *     whole protocol and changing it halfway means nothing
      */
     public abstract void setUseClientMode(boolean mode);
 
-    /** Si es el cliente. */
+    /** Whether it is the client. */
     public abstract boolean getUseClientMode();
 
-    /** Exige autenticacion de cliente; solo tiene sentido del lado servidor. */
+    /** Requires client authentication; only makes sense on the server side. */
     public abstract void setNeedClientAuth(boolean need);
 
-    /** Si se exige autenticacion de cliente. */
+    /** Whether client authentication is required. */
     public abstract boolean getNeedClientAuth();
 
-    /** Pide autenticacion de cliente sin exigirla. */
+    /** Requests client authentication without requiring it. */
     public abstract void setWantClientAuth(boolean want);
 
-    /** Si se pide autenticacion de cliente. */
+    /** Whether client authentication is requested. */
     public abstract boolean getWantClientAuth();
 
-    /** Si se pueden crear sesiones nuevas, o solo reanudar las que ya hay. */
+    /** Whether new sessions can be created, or only the existing ones resumed. */
     public abstract void setEnableSessionCreation(boolean flag);
 
-    /** Si se pueden crear sesiones nuevas. */
+    /** Whether new sessions can be created. */
     public abstract boolean getEnableSessionCreation();
 
-    /** Toda la configuracion junta; ver {@link SSLParameters}. */
+    /** All the configuration together; see {@link SSLParameters}. */
     public SSLParameters getSSLParameters() {
         SSLParameters p = new SSLParameters();
         p.setCipherSuites(getEnabledCipherSuites());
@@ -221,10 +223,10 @@ public abstract class SSLEngine {
     }
 
     /**
-     * Aplica la configuracion.
+     * Applies the configuration.
      *
-     * <p>Solo lo que no sea {@code null}: un {@link SSLParameters} recien creado tiene casi todo sin
-     * fijar, y aplicarlo entero borraria lo que el motor ya tenia.
+     * <p>Only what is not {@code null}: a freshly created {@link SSLParameters} has almost
+     * everything unset, and applying it whole would erase what the engine already had.
      */
     public void setSSLParameters(SSLParameters params) {
         String[] s = params.getCipherSuites();
@@ -244,29 +246,31 @@ public abstract class SSLEngine {
         }
     }
 
-    /** El protocolo de aplicacion acordado por ALPN, {@code ""} si ninguno, {@code null} si no se negocio. */
+    /**
+     * The application protocol agreed by ALPN, {@code ""} if none, {@code null} if not negotiated.
+     */
     public String getApplicationProtocol() {
-        throw new UnsupportedOperationException("este motor no soporta ALPN");
+        throw new UnsupportedOperationException("this engine does not support ALPN");
     }
 
-    /** El que se va acordando mientras dura el handshake. */
+    /** The one being agreed while the handshake lasts. */
     public String getHandshakeApplicationProtocol() {
-        throw new UnsupportedOperationException("este motor no soporta ALPN");
+        throw new UnsupportedOperationException("this engine does not support ALPN");
     }
 
     /**
-     * Elige el protocolo de aplicacion con una funcion propia en vez de la lista.
+     * Chooses the application protocol with a function of its own instead of the list.
      *
-     * <p>Sirve del lado servidor, donde la eleccion puede depender de algo que solo se sabe mirando
-     * al cliente concreto.
+     * <p>It serves on the server side, where the choice may depend on something only known by
+     * looking at the concrete client.
      */
     public void setHandshakeApplicationProtocolSelector(
             BiFunction<SSLEngine, List<String>, String> selector) {
-        throw new UnsupportedOperationException("este motor no soporta ALPN");
+        throw new UnsupportedOperationException("this engine does not support ALPN");
     }
 
-    /** El selector puesto, o {@code null}. */
+    /** The selector set, or {@code null}. */
     public BiFunction<SSLEngine, List<String>, String> getHandshakeApplicationProtocolSelector() {
-        throw new UnsupportedOperationException("este motor no soporta ALPN");
+        throw new UnsupportedOperationException("this engine does not support ALPN");
     }
 }

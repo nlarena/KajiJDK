@@ -5,17 +5,17 @@ import java.awt.geom.PathIterator;
 import java.awt.geom.Point2D;
 import java.awt.geom.Rectangle2D;
 
-// java.awt.Shape de KajiLibrary.
+// KajiLibrary's java.awt.Shape.
 //
-// Vive en `java.awt` y no en `java.awt.geom`, pero todo el paquete geom lo necesita: es el tipo que
-// devuelven `AffineTransform.createTransformedShape` y `Path2D.createTransformedShape`, y el que
-// toman `new Area(Shape)` y `new GeneralPath(Shape)`. Se escribio aca por esa dependencia, no como
-// principio de implementar java.awt: el resto del paquete padre (Component, Graphics, Toolkit...)
-// sigue sin empezar y no hace falta para la geometria.
+// It lives in `java.awt` and not in `java.awt.geom`, but the whole geom package needs it: it is the
+// type `AffineTransform.createTransformedShape` and `Path2D.createTransformedShape` return, and the
+// one `new Area(Shape)` and `new GeneralPath(Shape)` take. It was written here for that dependency.
+// (This note added that the rest of the parent package --Component, Graphics, Toolkit...-- had not
+// been started; it has been since.)
 //
-// Nota sobre `contains`: la definicion de la spec es "insideness" -- un punto sobre el borde
-// izquierdo o superior pertenece a la figura, uno sobre el derecho o inferior no. Esa asimetria es
-// deliberada (hace que figuras adyacentes teselen sin solaparse) y esta respetada en todo el paquete.
+// A note on `contains`: the spec's definition is "insideness" -- a point on the left or top edge
+// belongs to the shape, one on the right or bottom edge does not. That asymmetry is deliberate (it
+// makes adjacent shapes tile without overlapping) and it is respected throughout the package.
 public interface Shape {
 
     public abstract Rectangle getBounds();

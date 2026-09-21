@@ -12,19 +12,21 @@ import javax.swing.plaf.ComponentUI;
 import javax.swing.plaf.MenuBarUI;
 
 /**
- * La barra de menu de una ventana.
+ * A window's menu bar.
  *
- * <h2>Es un contenedor y un elemento de menu</h2>
+ * <h2>It is a container and a menu element</h2>
  *
- * <p>Como contenedor tiene a los {@link JMenu} de arriba; como {@link MenuElement} participa del
- * recorrido con el teclado y el mouse. Lo segundo es lo que hace que moverse con las flechas entre
- * dos menus de la barra funcione: el recorrido pasa por la barra, no salta de un menu al otro.
+ * <p>As a container it holds the top {@link JMenu}s; as a {@link MenuElement} it takes part in
+ * the walk with the keyboard and the mouse. The second is what makes moving with the arrows
+ * between two menus of the bar work: the walk goes through the bar, it does not jump from one
+ * menu to the other.
  *
- * <h2>El menu de ayuda</h2>
+ * <h2>The help menu</h2>
  *
- * <p>{@link #setHelpMenu} existe porque en algunos sistemas ese menu va pegado a la derecha. No
- * esta implementado -- ni en el JDK -- y lanza {@code Error}: es preferible a guardarlo y no
- * hacerle nada, que dejaria al programa creyendo que lo puso.
+ * <p>{@link #setHelpMenu} exists because on some systems that menu goes stuck to the right. It
+ * is not implemented -- not in the JDK either -- and throws {@code Error}: it is preferable to
+ * keeping it and doing nothing with it, which would leave the program believing it had set
+ * it.
  */
 public class JMenuBar extends JComponent implements Accessible, MenuElement {
 
@@ -35,7 +37,7 @@ public class JMenuBar extends JComponent implements Accessible, MenuElement {
     private Insets margin = null;
     private AccessibleContext accessibleContext;
 
-    /** Una barra vacia. */
+    /** An empty bar. */
     public JMenuBar() {
         super();
         setSelectionModel(new DefaultSingleSelectionModel());
@@ -58,7 +60,7 @@ public class JMenuBar extends JComponent implements Accessible, MenuElement {
         return uiClassID;
     }
 
-    /** Cual menu de la barra esta abierto. */
+    /** Which menu of the bar is open. */
     public SingleSelectionModel getSelectionModel() {
         return selectionModel;
     }
@@ -75,10 +77,10 @@ public class JMenuBar extends JComponent implements Accessible, MenuElement {
     }
 
     /**
-     * El menu numero tal.
+     * Menu number such-and-such.
      *
-     * <p>Devuelve nulo si en esa posicion hay algo que no es un menu; la barra puede tener otros
-     * componentes.
+     * <p>It returns null if at that position there is something that is not a menu; the bar may
+     * have other components.
      */
     public JMenu getMenu(int index) {
         Component c = getComponentAtIndex(index);
@@ -93,27 +95,27 @@ public class JMenuBar extends JComponent implements Accessible, MenuElement {
     }
 
     /**
-     * El menu de ayuda.
+     * The help menu.
      *
-     * @throws Error siempre; ver la nota de la clase.
+     * @throws Error always; see the class note.
      */
     public void setHelpMenu(JMenu menu) {
         throw new Error("setHelpMenu() not yet implemented.");
     }
 
     /**
-     * El menu de ayuda.
+     * The help menu.
      *
-     * @throws Error siempre.
+     * @throws Error always.
      */
     public JMenu getHelpMenu() {
         throw new Error("getHelpMenu() not yet implemented.");
     }
 
     /**
-     * El componente numero tal.
+     * Component number such-and-such.
      *
-     * @deprecated Usar {@link java.awt.Container#getComponent(int)}.
+     * @deprecated Use {@link java.awt.Container#getComponent(int)}.
      */
     @Deprecated
     public Component getComponentAtIndex(int i) {
@@ -134,14 +136,14 @@ public class JMenuBar extends JComponent implements Accessible, MenuElement {
         return -1;
     }
 
-    /** Abre ese menu de la barra. */
+    /** It opens that menu of the bar. */
     public void setSelected(Component sel) {
         SingleSelectionModel model = getSelectionModel();
         int index = getComponentIndex(sel);
         model.setSelectedIndex(index);
     }
 
-    /** Si algun menu de la barra esta abierto. */
+    /** Whether some menu of the bar is open. */
     public boolean isSelected() {
         return selectionModel.isSelected();
     }
@@ -191,14 +193,14 @@ public class JMenuBar extends JComponent implements Accessible, MenuElement {
             MenuSelectionManager manager) {
     }
 
-    /** El recorrido dejo la barra: se cierra lo que hubiera abierto. */
+    /** The walk left the bar: whatever was open is closed. */
     public void menuSelectionChanged(boolean isIncluded) {
         if (!isIncluded) {
             getSelectionModel().clearSelection();
         }
     }
 
-    /** Los menus de la barra que participan del recorrido. */
+    /** The bar's menus that take part in the walk. */
     public MenuElement[] getSubElements() {
         java.util.Vector<MenuElement> tmp = new java.util.Vector<MenuElement>();
         for (int i = 0; i < getComponentCount(); i++) {

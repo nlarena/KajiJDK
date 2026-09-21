@@ -1,18 +1,19 @@
 package com.sun.nio.sctp;
 
 /**
- * Se pidio recibir por un canal que no puede hacerlo ahora — por ejemplo un {@link SctpMultiChannel} sin asociaciones.
+ * Receiving was asked for over a channel that cannot do it now -- for example a
+ * {@link SctpMultiChannel} with no associations.
  */
 public class IllegalReceiveException extends IllegalStateException {
 
     private static final long serialVersionUID = 742758972917L;
 
-    /** Sin detalle. */
+    /** With no detail. */
     public IllegalReceiveException() {
         super();
     }
 
-    /** Con un mensaje que explique el caso. */
+    /** With a message that explains the case. */
     public IllegalReceiveException(String msg) {
         super(msg);
     }

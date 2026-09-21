@@ -3,20 +3,20 @@ package java.lang.management;
 import javax.management.openmbean.CompositeData;
 
 /**
- * Arma un {@link StackTraceElement} desde un {@link CompositeData}.
+ * It builds a {@link StackTraceElement} out of a {@link CompositeData}.
  *
- * <p>De acceso de paquete: no es API. Lo usan {@link MonitorInfo} y {@link ThreadInfo}, que son los
- * dos que pueden recibir marcos de pila por la red.
+ * <p>Package-private: not API. {@link MonitorInfo} and {@link ThreadInfo} use it, which are the two
+ * that can receive stack frames over the network.
  *
- * <p>Los items obligatorios son los cuatro de siempre; los de modulo y cargador de clases aparecieron
- * en Java 9 y se leen si estan.
+ * <p>The mandatory items are the usual four; the module and class loader ones appeared in Java 9 and
+ * are read if they are there.
  */
 final class StackTraceElements {
 
     private StackTraceElements() {
     }
 
-    /** El marco, o null si el dato es null. */
+    /** The frame, or null if the datum is null. */
     static StackTraceElement from(CompositeData cd) {
         if (cd == null) {
             return null;

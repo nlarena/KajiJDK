@@ -4,16 +4,16 @@ import javax.swing.JComponent;
 import javax.swing.plaf.ComponentUI;
 
 /**
- * El aspecto basico de un campo con formato.
+ * The basic look and feel of a formatted field.
  *
- * <p>Es {@link BasicTextFieldUI} con otro prefijo, y nada mas. Un campo con formato se ve igual que
- * uno comun --misma vista, misma linea de base, mismo borde--; lo que lo hace distinto es el
- * formateador, que vive en {@link javax.swing.JFormattedTextField} y no tiene nada que ver con el
- * aspecto.
+ * <p>It is {@link BasicTextFieldUI} with another prefix, and nothing else. A formatted field
+ * looks the same as an ordinary one -- same view, same baseline, same border --; what makes it
+ * different is the formatter, which lives in {@link javax.swing.JFormattedTextField} and has
+ * nothing to do with the look and feel.
  *
- * <p>Existe igual, y no es de mas: el prefijo distinto es lo que deja que un aspecto le ponga a los
- * campos con formato un borde o un color que no tengan los comunes --marcar en rojo uno con un
- * valor invalido, por ejemplo-- sin tocar los demas.
+ * <p>It exists all the same, and it is not spare: the different prefix is what lets a look and
+ * feel give formatted fields a border or a colour that ordinary ones do not have -- marking one
+ * with an invalid value in red, for instance -- without touching the rest.
  */
 public class BasicFormattedTextFieldUI extends BasicTextFieldUI {
 
@@ -21,7 +21,7 @@ public class BasicFormattedTextFieldUI extends BasicTextFieldUI {
         super();
     }
 
-    /** Uno nuevo por campo: un UI de texto guarda el componente. */
+    /** A new one per field: a text look and feel keeps the component. */
     public static ComponentUI createUI(JComponent c) {
         return new BasicFormattedTextFieldUI();
     }

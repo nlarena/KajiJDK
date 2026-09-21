@@ -6,306 +6,306 @@ import java.util.function;
 import java.util.function.IntUnaryOperator;
 
 /**
- * El tipo de carril mas la forma del vector: cuantos carriles hay y de que tamano.
+ * The lane type plus the vector's shape: how many lanes there are and of what size.
  *
- * <p>Es lo primero que se pide y lo que decide todo lo demas. Un {@code VectorSpecies<Integer>} de
- * 256 bits tiene ocho carriles; el mismo tipo con 128 bits tiene cuatro.
+ * <p>It is the first thing asked for and what decides everything else. A 256-bit {@code
+ * VectorSpecies<Integer>} has eight lanes; the same type with 128 bits has four.
  *
- * <p>{@link #loopBound} es el metodo que hay que usar y el que se olvida: devuelve hasta donde
- * llega el bucle vectorial, y lo que sobra --el remanente-- se hace de a un elemento. Sin eso, un
- * arreglo cuyo largo no es multiplo del numero de carriles se procesa mal o se sale de rango.
+ * <p>{@link #loopBound} is the method one has to use and the one that gets forgotten: it returns
+ * how far the vector loop goes, and what is left over --the remainder-- is done one element at a
+ * time. Without it, an array whose length is not a multiple of the lane count is processed wrongly
+ * or goes out of range.
  *
- * <p>En esta biblioteca los metadatos son reales: {@link #length}, {@link #vectorBitSize},
- * {@link #elementSize} y {@link #loopBound} calculan de verdad. Lo que no puede funcionar es
- * fabricar vectores.
+ * <p>In this library the metadata is real: {@link #length}, {@link #vectorBitSize}, {@link
+ * #elementSize} and {@link #loopBound} really compute. What cannot work is making vectors.
  *
  * @since 16
  */
 public interface VectorSpecies<E extends Object> {
 
     /**
-     * El tipo de las posiciones.
+     * The type of the lanes.
      *
-     * @return el {@code Class<E>}
+     * @return the {@code Class<E>}
      */
     Class<E> elementType();
 
     /**
-     * La clase de los vectores de esta especie.
+     * The class of the vectors of this species.
      *
-     * @return el {@code Class<? extends Vector<E>>}
+     * @return the {@code Class<? extends Vector<E>>}
      */
     Class<? extends Vector<E>> vectorType();
 
     /**
-     * La clase de las mascaras de esta especie.
+     * The class of the masks of this species.
      *
-     * @return el {@code Class<? extends VectorMask<E>>}
+     * @return the {@code Class<? extends VectorMask<E>>}
      */
     Class<? extends VectorMask<E>> maskType();
 
     /**
-     * El tamano de una posicion, en bits.
+     * The size of a lane, in bits.
      *
-     * @return el numero
+     * @return the number
      */
     int elementSize();
 
     /**
-     * La forma de esta especie.
+     * The shape of this species.
      *
-     * @return el {@code VectorShape}
+     * @return the {@code VectorShape}
      */
     VectorShape vectorShape();
 
     /**
-     * Cuantas posiciones tiene.
+     * How many lanes it has.
      *
-     * @return el numero
+     * @return the number
      */
     int length();
 
     /**
-     * El tamano del vector, en bits.
+     * The size of the vector, in bits.
      *
-     * @return el numero
+     * @return the number
      */
     int vectorBitSize();
 
     /**
-     * El tamano del vector, en bytes.
+     * The size of the vector, in bytes.
      *
-     * @return el numero
+     * @return the number
      */
     int vectorByteSize();
 
     /**
-     * El multiplo de la cantidad de posiciones mas grande que no pasa de ese numero.
+     * The largest multiple of the lane count that does not exceed that number.
      *
-     * @param i el {@code int}
-     * @return el numero
+     * @param i the {@code int}
+     * @return the number
      */
     int loopBound(int i);
 
     /**
-     * El multiplo de la cantidad de posiciones mas grande que no pasa de ese numero.
+     * The largest multiple of the lane count that does not exceed that number.
      *
-     * @param l el {@code long}
-     * @return el numero
+     * @param l the {@code long}
+     * @return the number
      */
     long loopBound(long l);
 
     /**
-     * La mascara de las posiciones cuyo indice todavia entra en el rango.
+     * The mask of the lanes whose index still falls within the range.
      *
-     * @param i el {@code int}
-     * @param i2 el {@code int}
-     * @return el {@code VectorMask<E>}
+     * @param i the {@code int}
+     * @param i2 the {@code int}
+     * @return the {@code VectorMask<E>}
      */
     VectorMask<E> indexInRange(int i, int i2);
 
     /**
-     * La mascara de las posiciones cuyo indice todavia entra en el rango.
+     * The mask of the lanes whose index still falls within the range.
      *
-     * @param l el {@code long}
-     * @param l2 el {@code long}
-     * @return el {@code VectorMask<E>}
+     * @param l the {@code long}
+     * @param l2 the {@code long}
+     * @return the {@code VectorMask<E>}
      */
     VectorMask<E> indexInRange(long l, long l2);
 
     /**
-     * Comprueba que el tipo de posicion sea ese y devuelve lo mismo, ya tipado.
+     * Checks that the lane type is that one and returns the same, already typed.
      *
-     * @param <F> el tipo, en su version envuelta
-     * @param classArg el {@code Class<F>}
-     * @return el {@code VectorSpecies<F>}
+     * @param <F> the type, in its boxed form
+     * @param classArg the {@code Class<F>}
+     * @return the {@code VectorSpecies<F>}
      */
     <F extends Object> VectorSpecies<F> check(Class<F> classArg);
 
     /**
-     * Cuantas partes hacen falta para pasar a la otra especie.
+     * How many parts it takes to go to the other species.
      *
-     * @param vectorSpecies el {@code VectorSpecies<?>}
-     * @param flag el {@code boolean}
-     * @return el numero
+     * @param vectorSpecies the {@code VectorSpecies<?>}
+     * @param flag the {@code boolean}
+     * @return the number
      */
     int partLimit(VectorSpecies<?> vectorSpecies, boolean flag);
 
     /**
-     * La misma forma con otro tipo de posicion.
+     * The same shape with another lane type.
      *
-     * @param <F> el tipo, en su version envuelta
-     * @param classArg el {@code Class<F>}
-     * @return el {@code VectorSpecies<F>}
+     * @param <F> the type, in its boxed form
+     * @param classArg the {@code Class<F>}
+     * @return the {@code VectorSpecies<F>}
      */
     <F extends Object> VectorSpecies<F> withLanes(Class<F> classArg);
 
     /**
-     * El mismo tipo de posicion con otra forma.
+     * The same lane type with another shape.
      *
-     * @param vectorShape el {@code VectorShape}
-     * @return el {@code VectorSpecies<E>}
+     * @param vectorShape the {@code VectorShape}
+     * @return the {@code VectorSpecies<E>}
      */
     VectorSpecies<E> withShape(VectorShape vectorShape);
 
     /**
-     * La especie de ese tipo y esa forma.
+     * The species of that type and that shape.
      *
-     * @param <E> el tipo, en su version envuelta
-     * @param classArg el {@code Class<E>}
-     * @param vectorShape el {@code VectorShape}
-     * @return el {@code VectorSpecies<E>}
+     * @param <E> the type, in its boxed form
+     * @param classArg the {@code Class<E>}
+     * @param vectorShape the {@code VectorShape}
+     * @return the {@code VectorSpecies<E>}
      */
     static <E extends Object> VectorSpecies<E> of(Class<E> classArg, VectorShape vectorShape) {
-        return Especie.de(classArg, vectorShape);
+        return SpeciesImpl.create(classArg, vectorShape);
     }
 
     /**
-     * La especie de ese tipo con la forma mas grande de esta maquina.
+     * The species of that type with this machine's largest shape.
      *
-     * @param <E> el tipo, en su version envuelta
-     * @param classArg el {@code Class<E>}
-     * @return el {@code VectorSpecies<E>}
+     * @param <E> the type, in its boxed form
+     * @param classArg the {@code Class<E>}
+     * @return the {@code VectorSpecies<E>}
      */
     static <E extends Object> VectorSpecies<E> ofLargestShape(Class<E> classArg) {
-        return Especie.de(classArg, VectorShape.largestShapeFor(classArg));
+        return SpeciesImpl.create(classArg, VectorShape.largestShapeFor(classArg));
     }
 
     /**
-     * La especie de ese tipo con la forma que conviene en esta maquina.
+     * The species of that type with this machine's preferred shape.
      *
-     * @param <E> el tipo, en su version envuelta
-     * @param classArg el {@code Class<E>}
-     * @return el {@code VectorSpecies<E>}
+     * @param <E> the type, in its boxed form
+     * @param classArg the {@code Class<E>}
+     * @return the {@code VectorSpecies<E>}
      */
     static <E extends Object> VectorSpecies<E> ofPreferred(Class<E> classArg) {
-        return Especie.de(classArg, VectorShape.preferredShape());
+        return SpeciesImpl.create(classArg, VectorShape.preferredShape());
     }
 
     /**
-     * El tamano de una posicion, en bits.
+     * The size of a lane, in bits.
      *
-     * @param classArg el {@code Class<?>}
-     * @return el numero
+     * @param classArg the {@code Class<?>}
+     * @return the number
      */
     static int elementSize(Class<?> classArg) {
-        return Especie.bitsDe(classArg);
+        return SpeciesImpl.bitsOf(classArg);
     }
 
     /**
-     * Un vector con todas las posiciones en cero.
+     * A vector with every lane at zero.
      *
-     * @return el {@code Vector<E>}
+     * @return the {@code Vector<E>}
      */
     Vector<E> zero();
 
     /**
-     * Un vector leido de ese arreglo.
+     * A vector read from that array.
      *
-     * @param obj el {@code Object}
-     * @param i el {@code int}
-     * @return el {@code Vector<E>}
+     * @param obj the {@code Object}
+     * @param i the {@code int}
+     * @return the {@code Vector<E>}
      */
     Vector<E> fromArray(Object obj, int i);
 
     /**
-     * Un vector leido de esa zona de memoria.
+     * A vector read from that memory segment.
      *
-     * @param memorySegment el {@code java.lang.foreign.MemorySegment}
-     * @param l el {@code long}
-     * @param byteOrder el {@code java.nio.ByteOrder}
-     * @return el {@code Vector<E>}
+     * @param memorySegment the {@code java.lang.foreign.MemorySegment}
+     * @param l the {@code long}
+     * @param byteOrder the {@code java.nio.ByteOrder}
+     * @return the {@code Vector<E>}
      */
     Vector<E> fromMemorySegment(java.lang.foreign.MemorySegment memorySegment, long l,
             java.nio.ByteOrder byteOrder);
 
     /**
-     * Una mascara leida de ese arreglo de banderas.
+     * A mask read from that array of flags.
      *
-     * @param flags el {@code boolean[]}
-     * @param i el {@code int}
-     * @return el {@code VectorMask<E>}
+     * @param flags the {@code boolean[]}
+     * @param i the {@code int}
+     * @return the {@code VectorMask<E>}
      */
     VectorMask<E> loadMask(boolean[] flags, int i);
 
     /**
-     * Una mascara con todas las posiciones en ese valor.
+     * A mask with every lane at that value.
      *
-     * @param flag el {@code boolean}
-     * @return el {@code VectorMask<E>}
+     * @param flag the {@code boolean}
+     * @return the {@code VectorMask<E>}
      */
     VectorMask<E> maskAll(boolean flag);
 
     /**
-     * Un vector con el mismo valor en todas las posiciones.
+     * A vector with the same value in every lane.
      *
-     * @param l el {@code long}
-     * @return el {@code Vector<E>}
+     * @param l the {@code long}
+     * @return the {@code Vector<E>}
      */
     Vector<E> broadcast(long l);
 
     /**
-     * Comprueba que ese valor entre en una posicion de esta especie.
+     * Checks that the value fits in a lane of this species.
      *
-     * @param l el {@code long}
-     * @return el numero
+     * @param l the {@code long}
+     * @return the number
      */
     long checkValue(long l);
 
     /**
-     * Un barajado con esos indices.
+     * A shuffle with those indices.
      *
-     * @param i el {@code int...}
-     * @return el {@code VectorShuffle<E>}
+     * @param i the {@code int...}
+     * @return the {@code VectorShuffle<E>}
      */
     VectorShuffle<E> shuffleFromValues(int... i);
 
     /**
-     * Un barajado leido de ese arreglo.
+     * A shuffle read from that array.
      *
-     * @param is el {@code int[]}
-     * @param i el {@code int}
-     * @return el {@code VectorShuffle<E>}
+     * @param is the {@code int[]}
+     * @param i the {@code int}
+     * @return the {@code VectorShuffle<E>}
      */
     VectorShuffle<E> shuffleFromArray(int[] is, int i);
 
     /**
-     * Un barajado cuyos indices los calcula esa funcion.
+     * A shuffle whose indices that function computes.
      *
-     * @param intUnaryOperator el {@code java.util.function.IntUnaryOperator}
-     * @return el {@code VectorShuffle<E>}
+     * @param intUnaryOperator the {@code java.util.function.IntUnaryOperator}
+     * @return the {@code VectorShuffle<E>}
      */
     VectorShuffle<E> shuffleFromOp(java.util.function.IntUnaryOperator intUnaryOperator);
 
     /**
-     * Un barajado que cuenta, de esta especie.
+     * A counting shuffle, of this species.
      *
-     * @param i el {@code int}
-     * @param i2 el {@code int}
-     * @param flag el {@code boolean}
-     * @return el {@code VectorShuffle<E>}
+     * @param i the {@code int}
+     * @param i2 the {@code int}
+     * @param flag the {@code boolean}
+     * @return the {@code VectorShuffle<E>}
      */
     VectorShuffle<E> iotaShuffle(int i, int i2, boolean flag);
 
     /**
-     * Una representacion legible.
+     * A readable representation.
      *
-     * @return el texto
+     * @return the text
      */
     String toString();
 
     /**
-     * Si el otro es igual a este.
+     * Whether the other one is equal to this one.
      *
-     * @param obj el {@code Object}
-     * @return cierto o falso, segun corresponda
+     * @param obj the {@code Object}
+     * @return true or false, as the case may be
      */
     boolean equals(Object obj);
 
     /**
-     * El codigo de dispersion.
+     * The hash code.
      *
-     * @return el numero
+     * @return the number
      */
     int hashCode();
 }

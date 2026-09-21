@@ -1,22 +1,22 @@
 package javax.management;
 
 /**
- * "El valor es uno de estos."
+ * "The value is one of these."
  *
- * <p>De paquete: se fabrica con {@link Query#in}. Como {@link BetweenQueryExp}, evalua el valor a
- * revisar una sola vez y despues recorre la lista.
+ * <p>Package-private: it is made with {@link Query#in}. Like {@link BetweenQueryExp}, it evaluates
+ * the value to check only once and then walks the list.
  */
 class InQueryExp extends QueryEval implements QueryExp {
 
     private static final long serialVersionUID = -5801329450358952434L;
 
     /**
-     * @serial el valor a revisar
+     * @serial the value to check
      */
     private ValueExp val;
 
     /**
-     * @serial los valores admitidos
+     * @serial the admitted values
      */
     private ValueExp[] valueList;
 
@@ -36,7 +36,7 @@ class InQueryExp extends QueryEval implements QueryExp {
         return valueList;
     }
 
-    /** Con la lista vacia da `false`: nada pertenece al conjunto vacio. */
+    /** With the list empty it gives {@code false}: nothing belongs to the empty set. */
     public boolean apply(ObjectName name) throws BadStringOperationException,
             BadBinaryOpValueExpException, BadAttributeValueExpException,
             InvalidApplicationException {
@@ -44,15 +44,15 @@ class InQueryExp extends QueryEval implements QueryExp {
             return false;
         }
         ValueExp v = val.apply(name);
-        boolean numerico = v instanceof NumericValueExp;
+        boolean numeric = v instanceof NumericValueExp;
         for (int i = 0; i < valueList.length; i++) {
-            ValueExp otro = valueList[i].apply(name);
-            if (numerico) {
-                if (!(otro instanceof NumericValueExp)) {
+            ValueExp other = valueList[i].apply(name);
+            if (numeric) {
+                if (!(other instanceof NumericValueExp)) {
                     continue;
                 }
                 NumericValueExp a = (NumericValueExp) v;
-                NumericValueExp b = (NumericValueExp) otro;
+                NumericValueExp b = (NumericValueExp) other;
                 if (a.isLong() && b.isLong()) {
                     if (a.longValue() == b.longValue()) {
                         return true;
@@ -60,14 +60,14 @@ class InQueryExp extends QueryEval implements QueryExp {
                 } else if (a.doubleValue() == b.doubleValue()) {
                     return true;
                 }
-            } else if (v instanceof StringValueExp && otro instanceof StringValueExp) {
+            } else if (v instanceof StringValueExp && other instanceof StringValueExp) {
                 String a = ((StringValueExp) v).getValue();
-                String b = ((StringValueExp) otro).getValue();
+                String b = ((StringValueExp) other).getValue();
                 if (a == null ? b == null : a.equals(b)) {
                     return true;
                 }
-            } else if (v instanceof BooleanValueExp && otro instanceof BooleanValueExp) {
-                if (((BooleanValueExp) v).getValue().equals(((BooleanValueExp) otro).getValue())) {
+            } else if (v instanceof BooleanValueExp && other instanceof BooleanValueExp) {
+                if (((BooleanValueExp) v).getValue().equals(((BooleanValueExp) other).getValue())) {
                     return true;
                 }
             }
@@ -76,10 +76,10 @@ class InQueryExp extends QueryEval implements QueryExp {
     }
 
     public String toString() {
-        return val + " in (" + listaTexto() + ")";
+        return val + " in (" + listText() + ")";
     }
 
-    private String listaTexto() {
+    private String listText() {
         StringBuilder b = new StringBuilder();
         if (valueList != null) {
             for (int i = 0; i < valueList.length; i++) {

@@ -4,33 +4,33 @@ import java.nio.ByteBuffer;
 import java.util.concurrent.Future;
 
 /**
- * KajiLibrary's java.nio.channels.AsynchronousByteChannel — lee y escribe bytes sin esperar.
+ * KajiLibrary's java.nio.channels.AsynchronousByteChannel — reads and writes bytes without waiting.
  *
- * <p>Cada operacion viene en **dos formas**, y la eleccion no es de gusto:
+ * <p>Each operation comes in **two forms**, and the choice is not a matter of taste:
  *
  * <ul>
- * <li>La que devuelve {@link Future} sirve cuando el que pide quiere esperar el resultado en algun
- *     momento, en su propio hilo.</li>
- * <li>La que toma un {@link CompletionHandler} sirve cuando no hay a quien hacer esperar: el aviso
- *     llega solo, en el hilo que el canal elija.</li>
+ * <li>The one that returns a {@link Future} serves when the caller wants to wait for the result at
+ *     some moment, in their own thread.</li>
+ * <li>The one that takes a {@link CompletionHandler} serves when there is nobody to make wait: the
+ *     notice arrives by itself, in the thread the channel chooses.</li>
  * </ul>
  *
- * <p>Un canal admite **una lectura y una escritura** en curso a la vez; pedir una segunda tira
- * {@link ReadPendingException} o {@link WritePendingException}. No es una limitacion de la
- * implementacion sino parte del contrato: dos lecturas simultaneas sobre el mismo canal no tendrian
- * un orden definido para los bytes.
+ * <p>A channel admits **one read and one write** under way at a time; asking for a second one
+ * throws {@link ReadPendingException} or {@link WritePendingException}. It is not a limitation of
+ * the implementation but part of the contract: two simultaneous reads over the same channel would
+ * have no defined order for the bytes.
  */
 public interface AsynchronousByteChannel extends AsynchronousChannel {
 
-    /** Lee, avisando por el manejador. */
+    /** Reads, giving notice through the handler. */
     <A> void read(ByteBuffer dst, A attachment, CompletionHandler<Integer, ? super A> handler);
 
-    /** Lee, entregando un `Future` con la cantidad leida. */
+    /** Reads, handing over a `Future` with the amount read. */
     Future<Integer> read(ByteBuffer dst);
 
-    /** Escribe, avisando por el manejador. */
+    /** Writes, giving notice through the handler. */
     <A> void write(ByteBuffer src, A attachment, CompletionHandler<Integer, ? super A> handler);
 
-    /** Escribe, entregando un `Future` con la cantidad escrita. */
+    /** Writes, handing over a `Future` with the amount written. */
     Future<Integer> write(ByteBuffer src);
 }

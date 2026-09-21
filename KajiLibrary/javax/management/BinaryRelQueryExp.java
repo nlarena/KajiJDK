@@ -1,32 +1,32 @@
 package javax.management;
 
 /**
- * Una comparacion entre dos valores.
+ * A comparison between two values.
  *
- * <p>De paquete: se fabrica con {@link Query#eq}, {@link Query#gt} y compa&ntilde;ia. Los cinco
- * operadores viven en la misma clase con un `int` para distinguirlos, en vez de cinco clases: es
- * como esta en el JDK y lo que hace que {@code getOperator()} tenga sentido.
+ * <p>Package-private: it is made with {@link Query#eq}, {@link Query#gt} and friends. The five
+ * operators live in the same class with an {@code int} to tell them apart, instead of five classes:
+ * it is how it is in the JDK and what makes {@code getOperator()} make sense.
  *
- * <p>La comparacion se elige por el <b>tipo del lado izquierdo</b>, y esa asimetria importa.
- * Numeros enteros se comparan en `long` --si los dos lo son--, en `double` si alguno es flotante,
- * cadenas por orden lexicografico y booleanos con {@code false &lt; true}.
+ * <p>The comparison is chosen by the <b>type of the left side</b>, and that asymmetry matters.
+ * Integers are compared as {@code long} --if both are--, as {@code double} if either is floating
+ * point, strings in lexicographic order and booleans with {@code false &lt; true}.
  */
 class BinaryRelQueryExp extends QueryEval implements QueryExp {
 
     private static final long serialVersionUID = -5690656271650491000L;
 
     /**
-     * @serial el operador
+     * @serial the operator
      */
     private int relOp;
 
     /**
-     * @serial el lado izquierdo
+     * @serial the left side
      */
     private ValueExp exp1;
 
     /**
-     * @serial el lado derecho
+     * @serial the right side
      */
     private ValueExp exp2;
 
@@ -39,8 +39,10 @@ class BinaryRelQueryExp extends QueryEval implements QueryExp {
         exp2 = v2;
     }
 
-    /** Uno de {@link Query#GT}, {@link Query#LT}, {@link Query#GE}, {@link Query#LE},
-     * {@link Query#EQ}. */
+    /**
+     * One of {@link Query#GT}, {@link Query#LT}, {@link Query#GE}, {@link Query#LE},
+     * {@link Query#EQ}.
+     */
     public int getOperator() {
         return relOp;
     }
@@ -54,9 +56,10 @@ class BinaryRelQueryExp extends QueryEval implements QueryExp {
     }
 
     /**
-     * <p>El despacho va con `if` encadenados y no con un `switch`, que seria lo natural: nuestro
-     * javac todavia no acepta en una etiqueta `case` una constante que viene de otro archivo, y
-     * `Query.GT` y compa&ntilde;ia viven en `Query`. Ver el hallazgo #461.
+     * <p>The dispatch goes with chained {@code if}s and not with a {@code switch}, which would be
+     * the natural thing: our javac does not yet accept in a {@code case} label a constant that
+     * comes from another file, and {@code Query.GT} and friends live in {@code Query}. See finding
+     * #461.
      */
     public boolean apply(ObjectName name) throws BadStringOperationException,
             BadBinaryOpValueExpException, BadAttributeValueExpException,
@@ -84,8 +87,8 @@ class BinaryRelQueryExp extends QueryEval implements QueryExp {
                 }
                 return relOp == Query.EQ && a == b;
             }
-            // Con los operadores crudos y no con `Double.compare`, para que NaN se comporte como
-            // en el JDK: NaN no es igual, ni mayor, ni menor que nada, ni siquiera que si mismo.
+            // With the raw operators and not with `Double.compare`, so that NaN behaves as in the
+            // JDK: NaN is not equal to, greater than or less than anything, not even itself.
             double a = n1.doubleValue();
             double b = n2.doubleValue();
             if (relOp == Query.GT) {
@@ -106,7 +109,7 @@ class BinaryRelQueryExp extends QueryEval implements QueryExp {
         if (val1 instanceof BooleanValueExp) {
             boolean a = ((BooleanValueExp) val1).getValue().booleanValue();
             boolean b = ((BooleanValueExp) val2).getValue().booleanValue();
-            // El orden natural del tipo: false < true.
+            // The type's natural order: false < true.
             if (relOp == Query.GT) {
                 return a && !b;
             }

@@ -3,41 +3,41 @@ package java.util;
 import java.io.Serializable;
 import java.util.stream.Stream;
 
-// Una moneda ISO 4217: su codigo de tres letras, su codigo numerico y cuantos decimales usa.
+// An ISO 4217 currency: its three-letter code, its numeric code and how many decimals it uses.
 //
-// Es la respuesta a "cuantos decimales tiene esta plata", que es la unica pregunta que el formateo
-// de numeros de `java.text` le hace. Yen y won no tienen ninguno; dinar kuwaiti tiene tres. Un
-// formateador que asuma dos se equivoca en ambos extremos.
+// It is the answer to "how many decimals does this money have", which is the only question
+// `java.text`'s number formatting asks it. Yen and won have none; the Kuwaiti dinar has three. A
+// formatter that assumes two is wrong at both ends.
 //
-// **Instancias unicas**: `getInstance` devuelve siempre el mismo objeto para el mismo codigo, asi
-// que `==` funciona. Es del contrato del JDK, no una optimizacion.
+// **Unique instances**: `getInstance` always returns the same object for the same code, so `==`
+// works. It is from the JDK's contract, not an optimisation.
 //
-// A KajiLibrary subset, y conviene tenerlo claro antes de usarla:
+// A KajiLibrary subset, and it is worth being clear about before using it:
 //
-//   - La tabla es de las **59 monedas** de abajo, no de las ~180 de la norma. El JDK trae la tabla
-//     entera en un archivo binario; replicarla es un problema de datos, no de codigo. Un codigo
-//     bien formado que no este en la tabla se rechaza con IllegalArgumentException, que es lo que
-//     el JDK hace con un codigo que no conoce.
-//   - `getSymbol()` y `getDisplayName()` devuelven el **codigo**. El JDK los saca de los bundles
-//     de locale, que aca no existen — la misma decision que ya tomo `TimeZone.getDisplayName`. Es
-//     menos amable y nunca miente sobre que moneda es.
-//   - `getInstance(Locale)` cubre los paises de las monedas de la tabla.
+//   - The table is of the **59 currencies** below, not the ~180 of the standard. The JDK carries the
+//     whole table in a binary file; replicating it is a data problem, not a code one. A well-formed
+//     code that is not in the table is rejected with IllegalArgumentException, which is what the JDK
+//     does with a code it does not know.
+//   - `getSymbol()` and `getDisplayName()` return the **code**. The JDK takes them from the locale
+//     bundles, which are not here — the same decision `TimeZone.getDisplayName` already took. It is
+//     less friendly and it never lies about which currency it is.
+//   - `getInstance(Locale)` covers the countries of the table's currencies.
 public final class Currency implements Serializable {
 
-    // La tabla, en tres arreglos paralelos: `CODIGOS[i]` tiene el codigo numerico `NUMERICOS[i]`
-    // y usa `DECIMALES[i]` decimales.
+    // The table, in three parallel arrays: `CODES[i]` has the numeric code `NUMERIC_CODES[i]` and uses
+    // `DECIMALS[i]` decimals.
     //
-    // Paralelos y no un `Object[]` de tripletes: no hay boxeo, no hay casts y no hay aritmetica
-    // de indices de por medio.
+    // Parallel and not an `Object[]` of triples: there is no boxing, no casts and no index arithmetic
+    // in between.
     //
-    // La forma con `Object[]` mezclado fue lo que destapo el finding #289 —el inicializador no
-    // boxeaba los enteros y emitia un `aastore` con un `int` crudo—, pero eso ya esta arreglado.
-    // Esta forma se conserva porque es mejor por si misma, no por el defecto.
+    // The mixed `Object[]` form is what uncovered finding #289 —the initialiser did not box the
+    // integers and emitted an `aastore` with a raw `int`— but that is fixed. This form is kept
+    // because it is better in itself, not because of the defect.
     //
-    // Los decimales son lo que tiene que ser exacto. Casi todas usan 2; las que no son las que
-    // rompen a quien asume: 0 para las que no fraccionan (JPY, KRW, CLP, ISK, VND, UGX, RWF, XOF,
-    // XAF, PYG, VUV, KMF, DJF, GNF) y 3 para los dinares (BHD, IQD, JOD, KWD, LYD, OMR, TND).
-    private static final String[] CODIGOS = {
+    // The decimals are what has to be exact. Almost all use 2; the ones that do not are the ones that
+    // break whoever assumes: 0 for those that do not fraction (JPY, KRW, CLP, ISK, VND, UGX, RWF,
+    // XOF, XAF, PYG, VUV, KMF, DJF, GNF) and 3 for the dinars (BHD, IQD, JOD, KWD, LYD, OMR, TND).
+    private static final String[] CODES = {
         "AED", "ARS", "AUD", "BGN", "BHD", "BRL", "CAD", "CHF", "CLP", "CNY",
         "COP", "CZK", "DJF", "DKK", "EGP", "EUR", "GBP", "GNF", "HKD", "HUF",
         "IDR", "ILS", "INR", "IQD", "ISK", "JOD", "JPY", "KMF", "KRW", "KWD",
@@ -46,7 +46,7 @@ public final class Currency implements Serializable {
         "UAH", "UGX", "USD", "UYU", "VND", "VUV", "XAF", "XOF", "ZAR",
     };
 
-    private static final int[] NUMERICOS = {
+    private static final int[] NUMERIC_CODES = {
         784,  32,  36, 975,  48, 986, 124, 756, 152, 156,
         170, 203, 262, 208, 818, 978, 826, 324, 344, 348,
         360, 376, 356, 368, 352, 400, 392, 174, 410, 414,
@@ -55,7 +55,7 @@ public final class Currency implements Serializable {
         980, 800, 840, 858, 704, 548, 950, 952, 710,
     };
 
-    private static final int[] DECIMALES = {
+    private static final int[] DECIMALS = {
           2,   2,   2,   2,   3,   2,   2,   2,   0,   2,
           2,   2,   0,   2,   2,   2,   2,   0,   2,   2,
           2,   2,   2,   3,   0,   3,   0,   0,   0,   3,
@@ -64,8 +64,8 @@ public final class Currency implements Serializable {
           2,   0,   2,   2,   0,   0,   0,   0,   2,
     };
 
-    // Pais ISO 3166 -> codigo de moneda, en pares. Cubre los paises de la tabla de arriba.
-    private static final String[] PAISES = {
+    // ISO 3166 country -> currency code, in pairs. It covers the countries of the table above.
+    private static final String[] COUNTRIES = {
         "AE", "AED", "AR", "ARS", "AT", "EUR", "AU", "AUD", "BE", "EUR",
         "BG", "BGN", "BH", "BHD", "BR", "BRL", "CA", "CAD", "CH", "CHF",
         "CL", "CLP", "CN", "CNY", "CO", "COP", "CZ", "CZK", "DE", "EUR",
@@ -81,7 +81,7 @@ public final class Currency implements Serializable {
         "ZA", "ZAR",
     };
 
-    // Las instancias ya entregadas, para que `==` funcione. La clave es el codigo.
+    // The instances already handed out, so `==` works. The key is the code.
     private static final HashMap<String, Currency> CACHE = new HashMap<String, Currency>();
 
     private final String currencyCode;
@@ -94,24 +94,24 @@ public final class Currency implements Serializable {
         this.defaultFractionDigits = defaultFractionDigits;
     }
 
-    // La moneda del codigo ISO 4217 dado.
+    // The currency of the given ISO 4217 code.
     //
-    // Siempre la MISMA instancia para el mismo codigo. Un codigo desconocido —o que no sean tres
-    // letras— es IllegalArgumentException, no null: pedir una moneda que no existe es un error del
-    // llamador, y devolverle null lo movería al primer uso.
+    // Always the SAME instance for the same code. An unknown code —or one that is not three letters—
+    // is IllegalArgumentException, not null: asking for a currency that does not exist is the
+    // caller's error, and returning null would move it to the first use.
     public static Currency getInstance(String currencyCode) {
         if (currencyCode == null) {
             throw new NullPointerException();
         }
         synchronized (CACHE) {
-            Currency ya = CACHE.get(currencyCode);
-            if (ya != null) {
-                return ya;
+            Currency cached = CACHE.get(currencyCode);
+            if (cached != null) {
+                return cached;
             }
             int i = 0;
-            while (i < CODIGOS.length) {
-                if (CODIGOS[i].equals(currencyCode)) {
-                    Currency c = new Currency(currencyCode, NUMERICOS[i], DECIMALES[i]);
+            while (i < CODES.length) {
+                if (CODES[i].equals(currencyCode)) {
+                    Currency c = new Currency(currencyCode, NUMERIC_CODES[i], DECIMALS[i]);
                     CACHE.put(currencyCode, c);
                     return c;
                 }
@@ -121,20 +121,20 @@ public final class Currency implements Serializable {
         throw new IllegalArgumentException(currencyCode);
     }
 
-    // La moneda del pais de `locale`.
+    // The currency of `locale`'s country.
     public static Currency getInstance(Locale locale) {
         if (locale == null) {
             throw new NullPointerException();
         }
-        String pais = locale.getCountry();
-        if (pais.length() != 2) {
+        String country = locale.getCountry();
+        if (country.length() != 2) {
             throw new IllegalArgumentException(
                 "The country of the argument locale is not a supported ISO 3166 country code.");
         }
         int i = 0;
-        while (i < PAISES.length) {
-            if (PAISES[i].equals(pais)) {
-                return getInstance(PAISES[i + 1]);
+        while (i < COUNTRIES.length) {
+            if (COUNTRIES[i].equals(country)) {
+                return getInstance(COUNTRIES[i + 1]);
             }
             i = i + 2;
         }
@@ -142,23 +142,23 @@ public final class Currency implements Serializable {
             "The country of the argument locale is not a supported ISO 3166 country code.");
     }
 
-    // Todas las monedas que esta biblioteca conoce.
+    // Every currency this library knows.
     public static Set<Currency> getAvailableCurrencies() {
         HashSet<Currency> out = new HashSet<Currency>();
         int i = 0;
-        while (i < CODIGOS.length) {
-            out.add(getInstance(CODIGOS[i]));
+        while (i < CODES.length) {
+            out.add(getInstance(CODES[i]));
             i = i + 1;
         }
         return out;
     }
 
-    // Lo mismo, como stream.
+    // The same, as a stream.
     public static Stream<Currency> availableCurrencies() {
-        Set<Currency> todas = getAvailableCurrencies();
-        Object[] a = new Object[todas.size()];
+        Set<Currency> all = getAvailableCurrencies();
+        Object[] a = new Object[all.size()];
         int i = 0;
-        Iterator<Currency> it = todas.iterator();
+        Iterator<Currency> it = all.iterator();
         while (it.hasNext()) {
             a[i] = it.next();
             i = i + 1;
@@ -166,17 +166,17 @@ public final class Currency implements Serializable {
         return (Stream<Currency>) Stream.of(a);
     }
 
-    // El codigo ISO 4217 de tres letras.
+    // The three-letter ISO 4217 code.
     public String getCurrencyCode() {
         return this.currencyCode;
     }
 
-    // El simbolo en el locale por defecto. A KajiLibrary subset: devuelve el codigo.
+    // The symbol in the default locale. A KajiLibrary subset: it returns the code.
     public String getSymbol() {
         return this.currencyCode;
     }
 
-    // El simbolo en el locale dado. A KajiLibrary subset: devuelve el codigo.
+    // The symbol in the given locale. A KajiLibrary subset: it returns the code.
     public String getSymbol(Locale locale) {
         if (locale == null) {
             throw new NullPointerException();
@@ -184,17 +184,17 @@ public final class Currency implements Serializable {
         return this.currencyCode;
     }
 
-    // Cuantos decimales usa esta moneda: 2 para casi todas, 0 para el yen, 3 para los dinares.
+    // How many decimals this currency uses: 2 for almost all, 0 for the yen, 3 for the dinars.
     public int getDefaultFractionDigits() {
         return this.defaultFractionDigits;
     }
 
-    // El codigo numerico ISO 4217.
+    // The numeric ISO 4217 code.
     public int getNumericCode() {
         return this.numericCode;
     }
 
-    // El codigo numerico con tres digitos, rellenado con ceros ("032" para el peso argentino).
+    // The numeric code with three digits, padded with zeros ("032" for the Argentine peso).
     public String getNumericCodeAsString() {
         String s = "" + this.numericCode;
         while (s.length() < 3) {
@@ -203,12 +203,12 @@ public final class Currency implements Serializable {
         return s;
     }
 
-    // El nombre en el locale por defecto. A KajiLibrary subset: devuelve el codigo.
+    // The name in the default locale. A KajiLibrary subset: it returns the code.
     public String getDisplayName() {
         return this.currencyCode;
     }
 
-    // El nombre en el locale dado. A KajiLibrary subset: devuelve el codigo.
+    // The name in the given locale. A KajiLibrary subset: it returns the code.
     public String getDisplayName(Locale locale) {
         if (locale == null) {
             throw new NullPointerException();
@@ -216,7 +216,7 @@ public final class Currency implements Serializable {
         return this.currencyCode;
     }
 
-    // El codigo ISO 4217, que es lo que el JDK imprime.
+    // The ISO 4217 code, which is what the JDK prints.
     public String toString() {
         return this.currencyCode;
     }

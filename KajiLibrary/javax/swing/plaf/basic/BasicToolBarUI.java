@@ -34,42 +34,43 @@ import javax.swing.plaf.ToolBarUI;
 import javax.swing.plaf.UIResource;
 
 /**
- * El aspecto basico de una barra de herramientas.
+ * The basic look and feel of a tool bar.
  *
- * <h2>Una barra que se puede arrancar de su lugar</h2>
+ * <h2>A bar that can be torn from its place</h2>
  *
- * <p>Lo que distingue a una barra de herramientas de una fila de botones es que se puede agarrar del
- * borde y llevar a otro lado: a otro costado de la ventana, o afuera, flotando en una ventanita
- * propia. Eso es casi todo lo que hace esta clase, y es la razon de sus cuatro colores --dos para
- * la barra anclada y dos para la que flota-- y de la {@code DragWindow}, el rectangulo que se ve
- * mientras se arrastra.
+ * <p>What distinguishes a tool bar from a row of buttons is that it can be grabbed by the edge
+ * and taken somewhere else: to another side of the window, or outside, floating in a little
+ * window of its own. That is almost everything this class does, and it is the reason for its
+ * four colours -- two for the docked bar and two for the floating one -- and for the
+ * {@code DragWindow}, the rectangle that is seen while dragging.
  *
- * <p>{@link #constraintBeforeFloating} guarda de que lado estaba antes de salir volando, para poder
- * devolverla ahi. Arranca en {@code "North"}, que es donde va una barra que nadie movio.
+ * <p>{@link #constraintBeforeFloating} keeps which side it was on before flying off, so as to
+ * be able to put it back there. It starts at {@code "North"}, which is where a bar nobody
+ * moved goes.
  *
- * <h2>Bordes que aparecen al pasar el mouse</h2>
+ * <h2>Borders that appear when the mouse passes over</h2>
  *
- * <p>Los botones de una barra no llevan borde hasta que el mouse pasa por encima; eso es lo que hace
- * que una barra se vea como una fila de iconos y no como una fila de botones.
- * {@link #setRolloverBorders} cambia entre los dos juegos, y los dos bordes se crean una sola vez y
- * se comparten -- {@link #getRolloverBorder} devuelve siempre el mismo objeto --.
+ * <p>A bar's buttons carry no border until the mouse passes over them; that is what makes a bar
+ * look like a row of icons and not like a row of buttons. {@link #setRolloverBorders} switches
+ * between the two sets, and both borders are created once and shared
+ * -- {@link #getRolloverBorder} always returns the same object --.
  *
- * <h2>Lo que queda dicho</h2>
+ * <h2>What is left said</h2>
  *
- * <p>Sacar la barra a flotar necesita una ventana de verdad: {@link #createFloatingWindow} y
- * {@link #floatAt} estan escritos y no se pueden probar sin pantalla. Lo que si se prueba es el
- * estado: los colores, los bordes, y que {@link #isFloating} diga que no.
+ * <p>Taking the bar out to float needs a real window: {@link #createFloatingWindow} and
+ * {@link #floatAt} are written and cannot be tested without a screen. What can be tested is the
+ * state: the colours, the borders, and that {@link #isFloating} says no.
  *
- * <p>{@link #canDock} revienta con un componente nulo, igual que el JDK: pregunta si el punto cae
- * adentro sin comprobar nada primero.
+ * <p>{@link #canDock} blows up with a null component, just like the JDK: it asks whether the
+ * point falls inside without checking anything first.
  *
- * <p>Las cuatro teclas protegidas quedan en nulo, como en {@link BasicSplitPaneUI}.
+ * <p>The four protected keys are left null, as in {@link BasicSplitPaneUI}.
  */
 public class BasicToolBarUI extends ToolBarUI implements SwingConstants {
 
     protected JToolBar toolBar;
 
-    /** Cual boton tenia el foco antes de arrastrar; -1 si ninguno. */
+    /** Which button had the focus before dragging; -1 if none. */
     protected int focusedCompIndex = -1;
 
     protected Color dockingColor;
@@ -82,22 +83,22 @@ public class BasicToolBarUI extends ToolBarUI implements SwingConstants {
     protected ContainerListener toolBarContListener;
     protected FocusListener toolBarFocusListener;
 
-    /** De que lado estaba antes de flotar; ver la nota de la clase. */
-    protected String constraintBeforeFloating = BorderLayoutNorte.NORTH;
+    /** Which side it was on before floating; see the class note. */
+    protected String constraintBeforeFloating = NorthBorderLayout.NORTH;
 
-    /** Sin uso; ver la nota de la clase. */
+    /** Unused; see the class note. */
     protected KeyStroke upKey;
 
-    /** Sin uso; ver la nota de la clase. */
+    /** Unused; see the class note. */
     protected KeyStroke downKey;
 
-    /** Sin uso; ver la nota de la clase. */
+    /** Unused; see the class note. */
     protected KeyStroke leftKey;
 
-    /** Sin uso; ver la nota de la clase. */
+    /** Unused; see the class note. */
     protected KeyStroke rightKey;
 
-    /** El rectangulo que se ve al arrastrar; nulo hasta que alguien arrastra. */
+    /** The rectangle that is seen when dragging; null until somebody drags. */
     protected DragWindow dragWindow;
 
     private boolean rolloverBorders = true;
@@ -105,16 +106,16 @@ public class BasicToolBarUI extends ToolBarUI implements SwingConstants {
     private Border rolloverBorder;
     private Border nonRolloverBorder;
 
-    private static final ColorUIResource FONDO = new ColorUIResource(238, 238, 238);
-    private static final ColorUIResource FRENTE = new ColorUIResource(51, 51, 51);
-    private static final ColorUIResource BORDE_ANCLAJE = new ColorUIResource(99, 130, 191);
-    private static final ColorUIResource BORDE_FLOTANTE = new ColorUIResource(184, 207, 229);
-    private static final FontUIResource FUENTE = new FontUIResource("Dialog", Font.BOLD, 12);
+    private static final ColorUIResource BACKGROUND = new ColorUIResource(238, 238, 238);
+    private static final ColorUIResource FOREGROUND = new ColorUIResource(51, 51, 51);
+    private static final ColorUIResource DOCK_BORDER = new ColorUIResource(99, 130, 191);
+    private static final ColorUIResource FLOATING_BORDER = new ColorUIResource(184, 207, 229);
+    private static final FontUIResource FONT = new FontUIResource("Dialog", Font.BOLD, 12);
 
     public BasicToolBarUI() {
     }
 
-    /** Uno nuevo por barra: guarda la barra, sus colores y el estado del arrastre. */
+    /** A new one per bar: it keeps the bar, its colours and the drag's state. */
     public static ComponentUI createUI(JComponent c) {
         return new BasicToolBarUI();
     }
@@ -137,34 +138,34 @@ public class BasicToolBarUI extends ToolBarUI implements SwingConstants {
         toolBar = null;
     }
 
-    /** Colores, fuente y bordes; los valores son los de {@code ToolBar.*} en Metal. */
+    /** Colours, typeface and borders; the values are those of {@code ToolBar.*} in Metal. */
     protected void installDefaults() {
-        Color fondo = toolBar.getBackground();
-        if (fondo == null || fondo instanceof UIResource) {
-            toolBar.setBackground(FONDO);
+        Color background = toolBar.getBackground();
+        if (background == null || background instanceof UIResource) {
+            toolBar.setBackground(BACKGROUND);
         }
-        Color frente = toolBar.getForeground();
-        if (frente == null || frente instanceof UIResource) {
-            toolBar.setForeground(FRENTE);
+        Color foreground = toolBar.getForeground();
+        if (foreground == null || foreground instanceof UIResource) {
+            toolBar.setForeground(FOREGROUND);
         }
-        Font fuente = toolBar.getFont();
-        if (fuente == null || fuente instanceof UIResource) {
-            toolBar.setFont(FUENTE);
+        Font font = toolBar.getFont();
+        if (font == null || font instanceof UIResource) {
+            toolBar.setFont(FONT);
         }
         LookAndFeel.installProperty(toolBar, "opaque", Boolean.TRUE);
-        dockingColor = FONDO;
-        floatingColor = FONDO;
-        dockingBorderColor = BORDE_ANCLAJE;
-        floatingBorderColor = BORDE_FLOTANTE;
+        dockingColor = BACKGROUND;
+        floatingColor = BACKGROUND;
+        dockingBorderColor = DOCK_BORDER;
+        floatingBorderColor = FLOATING_BORDER;
         rolloverBorders = true;
         setRolloverBorders(rolloverBorders);
     }
 
-    /** No saca nada; ver {@link BasicPanelUI#uninstallDefaults}. */
+    /** It removes nothing; see {@link BasicPanelUI#uninstallDefaults}. */
     protected void uninstallDefaults() {
     }
 
-    /** Nada: los botones los pone el programa. */
+    /** Nothing: the buttons are put in by the program. */
     protected void installComponents() {
     }
 
@@ -215,7 +216,7 @@ public class BasicToolBarUI extends ToolBarUI implements SwingConstants {
         toolBarFocusListener = null;
     }
 
-    /** Sin atajos propios; ver la nota de la clase sobre las cuatro teclas. */
+    /** With no shortcuts of its own; see the class note about the four keys. */
     protected void installKeyboardActions() {
     }
 
@@ -242,21 +243,21 @@ public class BasicToolBarUI extends ToolBarUI implements SwingConstants {
         return new Handler(this);
     }
 
-    /** El borde que se ve al pasar el mouse; ver la nota de la clase. */
+    /** The border that is seen when the mouse passes over; see the class note. */
     protected Border createRolloverBorder() {
         return new CompoundBorder(
                 new javax.swing.border.EtchedBorder(),
                 new BasicBorders.MarginBorder());
     }
 
-    /** Y el que se ve cuando no. */
+    /** And the one that is seen when it does not. */
     protected Border createNonRolloverBorder() {
         return new CompoundBorder(
                 new javax.swing.border.EmptyBorder(2, 2, 2, 2),
                 new BasicBorders.MarginBorder());
     }
 
-    /** El mismo objeto siempre; ver la nota de la clase. */
+    /** Always the same object; see the class note. */
     protected Border getRolloverBorder(AbstractButton b) {
         if (rolloverBorder == null) {
             rolloverBorder = createRolloverBorder();
@@ -264,7 +265,7 @@ public class BasicToolBarUI extends ToolBarUI implements SwingConstants {
         return rolloverBorder;
     }
 
-    /** Idem. */
+    /** The same. */
     protected Border getNonRolloverBorder(AbstractButton b) {
         if (nonRolloverBorder == null) {
             nonRolloverBorder = createNonRolloverBorder();
@@ -276,7 +277,7 @@ public class BasicToolBarUI extends ToolBarUI implements SwingConstants {
         return rolloverBorders;
     }
 
-    /** Cambia los botones de un juego de bordes al otro. */
+    /** It switches the buttons from one set of borders to the other. */
     public void setRolloverBorders(boolean rollover) {
         rolloverBorders = rollover;
         if (toolBar == null) {
@@ -309,7 +310,7 @@ public class BasicToolBarUI extends ToolBarUI implements SwingConstants {
         }
     }
 
-    /** Les devuelve a los botones el borde que traian. */
+    /** It gives the buttons back the border they came with. */
     protected void installNormalBorders(JComponent c) {
         for (int i = 0; i < c.getComponentCount(); i++) {
             Component comp = c.getComponent(i);
@@ -321,13 +322,13 @@ public class BasicToolBarUI extends ToolBarUI implements SwingConstants {
     }
 
     /**
-     * Le pone al boton el borde de pasar el mouse.
+     * It gives the button the mouse-over border.
      *
-     * <p>Solo si el que tiene lo puso un aspecto. Eso tiene una consecuencia que sorprende y esta
-     * medida: <strong>una vez cambiado, no se vuelve atras</strong>. El borde que pone este metodo
-     * no es {@link UIResource}, asi que la proxima llamada --a este o a
-     * {@link #setBorderToNonRollover}-- ya no lo toca. Cambiar de juego de bordes en caliente
-     * funciona una sola vez por boton.
+     * <p>Only if the one it has was set by a look and feel. That has a consequence that is
+     * surprising and is measured: <strong>once changed, there is no going back</strong>. The
+     * border this method sets is not a {@link UIResource}, so the next call -- to this one or to
+     * {@link #setBorderToNonRollover} -- no longer touches it. Changing the set of borders on the
+     * fly works only once per button.
      */
     protected void setBorderToRollover(Component c) {
         if (c instanceof AbstractButton) {
@@ -339,7 +340,7 @@ public class BasicToolBarUI extends ToolBarUI implements SwingConstants {
         }
     }
 
-    /** Idem al reves; ver {@link #setBorderToRollover}. */
+    /** The same the other way round; see {@link #setBorderToRollover}. */
     protected void setBorderToNonRollover(Component c) {
         if (c instanceof AbstractButton) {
             AbstractButton b = (AbstractButton) c;
@@ -379,7 +380,7 @@ public class BasicToolBarUI extends ToolBarUI implements SwingConstants {
         return floating;
     }
 
-    /** Saca la barra a flotar o la devuelve; ver la nota de la clase. */
+    /** It takes the bar out to float or brings it back; see the class note. */
     public void setFloating(boolean b, Point p) {
         if (toolBar.isFloatable()) {
             floating = b;
@@ -389,7 +390,7 @@ public class BasicToolBarUI extends ToolBarUI implements SwingConstants {
     public void setFloatingLocation(int x, int y) {
     }
 
-    /** Cambia el eje de la barra. */
+    /** It changes the bar's axis. */
     public void setOrientation(int orientation) {
         toolBar.setOrientation(orientation);
         if (dragWindow != null) {
@@ -398,20 +399,20 @@ public class BasicToolBarUI extends ToolBarUI implements SwingConstants {
     }
 
     /**
-     * Si la barra se puede anclar en ese componente y en ese punto.
+     * Whether the bar can be docked in that component and at that point.
      *
-     * @throws NullPointerException si el componente es nulo; el JDK tampoco lo comprueba
+     * @throws NullPointerException if the component is null; the JDK does not check it either
      */
     public boolean canDock(Component c, Point p) {
         return p != null && c.contains(p);
     }
 
-    /** La ventanita en la que flota la barra; ver la nota de la clase. */
+    /** The little window the bar floats in; see the class note. */
     protected JFrame createFloatingFrame(JToolBar toolbar) {
         return new JFrame(toolbar.getName());
     }
 
-    /** Idem, cuando el aspecto prefiere un dialogo. */
+    /** The same, when the look and feel prefers a dialog. */
     protected RootPaneContainer createFloatingWindow(JToolBar toolbar) {
         return createFloatingFrame(toolbar);
     }
@@ -420,7 +421,7 @@ public class BasicToolBarUI extends ToolBarUI implements SwingConstants {
         return new DragWindow(this);
     }
 
-    /** Mueve el rectangulo de arrastre. */
+    /** It moves the drag rectangle. */
     protected void dragTo(Point position, Point origin) {
         if (!toolBar.isFloatable()) {
             return;
@@ -432,14 +433,14 @@ public class BasicToolBarUI extends ToolBarUI implements SwingConstants {
         dragWindow.setBorderColor(dockingBorderColor);
     }
 
-    /** Suelta la barra donde este; ver la nota de la clase. */
+    /** It drops the bar wherever it is; see the class note. */
     protected void floatAt(Point position, Point origin) {
         if (toolBar.isFloatable()) {
             setFloating(true, position);
         }
     }
 
-    /** El rectangulo del arrastre. */
+    /** The drag's rectangle. */
     protected void paintDragWindow(Graphics g) {
         g.setColor(dragWindow.getBorderColor());
         int w = dragWindow.getWidth();
@@ -447,7 +448,7 @@ public class BasicToolBarUI extends ToolBarUI implements SwingConstants {
         g.drawRect(0, 0, w - 1, h - 1);
     }
 
-    /** Mueve el foco al boton siguiente o al anterior. */
+    /** It moves the focus to the next button or to the previous one. */
     protected void navigateFocusedComp(int direction) {
         int nComp = toolBar.getComponentCount();
         if (focusedCompIndex < 0 || focusedCompIndex >= nComp) {
@@ -465,10 +466,11 @@ public class BasicToolBarUI extends ToolBarUI implements SwingConstants {
     }
 
     /**
-     * El rectangulo que se ve mientras se arrastra la barra.
+     * The rectangle that is seen while the bar is dragged.
      *
-     * <p>Es una ventana propia en el JDK. Aca es un componente suelto: sin pantalla no hay ventana
-     * que mostrar, y lo unico que se puede probar de el es su color y su orientacion.
+     * <p>It is a window of its own in the JDK. Here it is a loose component: with no screen there
+     * is no window to show, and the only thing that can be tested of it is its colour and its
+     * orientation.
      */
     protected class DragWindow extends java.awt.Window {
 
@@ -504,18 +506,20 @@ public class BasicToolBarUI extends ToolBarUI implements SwingConstants {
         }
     }
 
-    /** Los nombres de los cuatro costados, sin depender de {@code java.awt.BorderLayout}. */
-    private static final class BorderLayoutNorte {
+    /** The four sides' names, without depending on {@code java.awt.BorderLayout}. */
+    private static final class NorthBorderLayout {
         static final String NORTH = "North";
 
-        private BorderLayoutNorte() {
+        private NorthBorderLayout() {
         }
     }
 
     /**
-     * El que escucha todo: el arrastre, los cambios de la barra, y los botones que entran y salen.
+     * The one that listens to everything: the dragging, the bar's changes, and the buttons that
+     * come and go.
      *
-     * <p>Estatico y con el UI como campo, por lo mismo que en todo el paquete; ver el hallazgo #518.
+     * <p>Static and with the look and feel as a field, for the same reason as everywhere in the
+     * package; see finding #518.
      */
     private static class Handler implements MouseInputListener, PropertyChangeListener,
             ContainerListener, FocusListener, WindowListener {
@@ -561,10 +565,10 @@ public class BasicToolBarUI extends ToolBarUI implements SwingConstants {
         }
 
         public void propertyChange(PropertyChangeEvent e) {
-            String nombre = e.getPropertyName();
-            if ("rollover".equals(nombre)) {
+            String name = e.getPropertyName();
+            if ("rollover".equals(name)) {
                 ui.setRolloverBorders(Boolean.TRUE.equals(e.getNewValue()));
-            } else if ("orientation".equals(nombre) && ui.dragWindow != null) {
+            } else if ("orientation".equals(name) && ui.dragWindow != null) {
                 ui.dragWindow.setOrientation(ui.toolBar.getOrientation());
             }
         }

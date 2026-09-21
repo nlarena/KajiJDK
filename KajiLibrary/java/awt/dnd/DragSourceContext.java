@@ -9,35 +9,36 @@ import java.io.Serializable;
 import java.util.TooManyListenersException;
 
 /**
- * El estado de **un** arrastre en curso, del lado del origen.
+ * The state of **one** drag under way, on the source's side.
  *
- * <p>Mientras {@link DragSource} es único y no recuerda nada, éste se arma por cada arrastre y lleva
- * todo lo que dura: qué se está arrastrando, con qué cursor, quién quiere enterarse.
+ * <p>While {@link DragSource} is unique and remembers nothing, this one is built for each drag and
+ * carries everything that lasts: what is being dragged, with which cursor, who wants to hear.
  *
- * <p>Es {@link DragSourceListener} y {@link DragSourceMotionListener} él mismo, y ahí está su
- * trabajo real: recibe los avisos del sistema, actualiza el cursor según el destino acepte o no, y
- * después se los reparte al oyente del arrastre y a los del origen. Esa repetición —cursor primero,
- * avisos después— es lo que hace que la realimentación visual sea coherente aunque nadie escuche.
+ * <p>It is a {@link DragSourceListener} and a {@link DragSourceMotionListener} itself, and there is
+ * its real work: it receives the notices from the system, updates the cursor according to whether
+ * the destination accepts or not, and then hands them out to the listener of the drag and to those
+ * of the source. That repetition —cursor first, notices afterwards— is what makes the visual
+ * feedback coherent even when nobody is listening.
  *
- * <p>{@link #setCursor} con `null` no apaga el cursor: **devuelve el control** al comportamiento
- * automático. Es la diferencia entre "no quiero cursor" y "elegilo vos", y sólo la segunda tiene
- * sentido durante un arrastre.
+ * <p>{@link #setCursor} with `null` does not turn the cursor off: it **gives control back** to the
+ * automatic behaviour. It is the difference between "I want no cursor" and "you choose it", and
+ * only the second makes sense during a drag.
  */
 public class DragSourceContext
         implements DragSourceListener, DragSourceMotionListener, Serializable {
 
     private static final long serialVersionUID = -115407898692194719L;
 
-    /** El cursor todavía no se decidió. */
+    /** The cursor has not been decided yet. */
     protected static final int DEFAULT = 0;
 
-    /** El arrastre entró a un destino. */
+    /** The drag entered a destination. */
     protected static final int ENTER = 1;
 
-    /** El arrastre se mueve sobre un destino. */
+    /** The drag is moving over a destination. */
     protected static final int OVER = 2;
 
-    /** Cambió la acción elegida. */
+    /** The chosen action changed. */
     protected static final int CHANGED = 3;
 
     private final DragGestureEvent trigger;
@@ -51,12 +52,12 @@ public class DragSourceContext
     private boolean useCustomCursor;
 
     /**
-     * Con el gesto que lo disparó y lo que se arrastra.
+     * With the gesture that fired it and what is being dragged.
      *
-     * @throws IllegalArgumentException si el disparador es `null`, si su componente o su origen de
-     *     arrastre son `null`, si su acción es {@code ACTION_NONE}, o si se da una imagen sin su
-     *     desplazamiento
-     * @throws NullPointerException si el transferible es `null`
+     * @throws IllegalArgumentException if the trigger is `null`, if its component or its drag
+     *     source is `null`, if its action is {@code ACTION_NONE}, or if an image is given without
+     *     its offset
+     * @throws NullPointerException if the transferable is `null`
      */
     public DragSourceContext(DragGestureEvent trigger, Cursor dragCursor, Image dragImage,
             Point offset, Transferable t, DragSourceListener dsl) {
@@ -75,8 +76,8 @@ public class DragSourceContext
         if (trigger.getDragAction() == DnDConstants.ACTION_NONE) {
             throw new IllegalArgumentException("Drag Action");
         }
-        // Una imagen sin desplazamiento no se puede ubicar: no se sabe qué punto de ella sigue al
-        // puntero.
+        // An image with no offset cannot be placed: there is no knowing which point of it follows
+        // the pointer.
         if (dragImage != null && offset == null) {
             throw new IllegalArgumentException("Image Offset");
         }
@@ -91,46 +92,46 @@ public class DragSourceContext
         this.useCustomCursor = dragCursor != null;
     }
 
-    /** Quién lleva adelante el arrastre. */
+    /** Who carries the drag through. */
     public DragSource getDragSource() {
         return this.trigger.getDragSource();
     }
 
-    /** Desde qué componente salió. */
+    /** Which component it came from. */
     public Component getComponent() {
         return this.component;
     }
 
-    /** El gesto que lo empezó. */
+    /** The gesture that started it. */
     public DragGestureEvent getTrigger() {
         return this.trigger;
     }
 
-    /** Qué acciones acepta el origen. */
+    /** Which actions the source accepts. */
     public int getSourceActions() {
         return this.sourceActions;
     }
 
     /**
-     * Cambia el cursor del arrastre.
+     * Changes the cursor of the drag.
      *
-     * <p>Con `null` se vuelve al cursor automático, el que sale de si el destino acepta o no. No es
-     * lo mismo que no tener cursor.
+     * <p>With `null` it goes back to the automatic cursor, the one that comes out of whether the
+     * destination accepts or not. It is not the same as having no cursor.
      */
     public synchronized void setCursor(Cursor c) {
         this.useCustomCursor = c != null;
         this.cursor = c;
     }
 
-    /** El cursor actual. */
+    /** The current cursor. */
     public Cursor getCursor() {
         return this.cursor;
     }
 
     /**
-     * Registra un oyente además del que se dio al construir.
+     * Registers a listener besides the one given when constructing.
      *
-     * @throws TooManyListenersException si ya hay uno
+     * @throws TooManyListenersException if there is one already
      */
     public synchronized void addDragSourceListener(DragSourceListener dsl)
             throws TooManyListenersException {
@@ -145,103 +146,103 @@ public class DragSourceContext
         }
     }
 
-    /** Saca al oyente. */
+    /** Removes the listener. */
     public synchronized void removeDragSourceListener(DragSourceListener dsl) {
     }
 
-    /** Avisa que cambiaron los formatos que se pueden entregar. */
+    /** Tells that the formats that can be delivered changed. */
     public void transferablesFlavorsChanged() {
     }
 
     /**
-     * El arrastre entró a un destino: actualiza el cursor y reparte el aviso.
+     * The drag entered a destination: it updates the cursor and hands the notice out.
      *
-     * <p>El orden importa: primero el cursor, después los oyentes. Si un oyente cambia el cursor a
-     * mano, su cambio tiene que ser el último en aplicarse.
+     * <p>The order matters: the cursor first, the listeners afterwards. If a listener changes the
+     * cursor by hand, its change has to be the last one applied.
      */
     public void dragEnter(DragSourceDragEvent dsde) {
         if (this.listener != null) {
             this.listener.dragEnter(dsde);
         }
-        DragSourceListener[] otros = this.getDragSource().getDragSourceListeners();
-        for (int i = 0; i < otros.length; i++) {
-            otros[i].dragEnter(dsde);
+        DragSourceListener[] others = this.getDragSource().getDragSourceListeners();
+        for (int i = 0; i < others.length; i++) {
+            others[i].dragEnter(dsde);
         }
         this.updateCurrentCursor(dsde.getDropAction(), dsde.getTargetActions(), ENTER);
     }
 
-    /** El arrastre se mueve sobre un destino. */
+    /** The drag is moving over a destination. */
     public void dragOver(DragSourceDragEvent dsde) {
         if (this.listener != null) {
             this.listener.dragOver(dsde);
         }
-        DragSourceListener[] otros = this.getDragSource().getDragSourceListeners();
-        for (int i = 0; i < otros.length; i++) {
-            otros[i].dragOver(dsde);
+        DragSourceListener[] others = this.getDragSource().getDragSourceListeners();
+        for (int i = 0; i < others.length; i++) {
+            others[i].dragOver(dsde);
         }
         this.updateCurrentCursor(dsde.getDropAction(), dsde.getTargetActions(), OVER);
     }
 
-    /** El arrastre salió del destino: vuelve al cursor de "acá no". */
+    /** The drag left the destination: it goes back to the "not here" cursor. */
     public void dragExit(DragSourceEvent dse) {
         if (this.listener != null) {
             this.listener.dragExit(dse);
         }
-        DragSourceListener[] otros = this.getDragSource().getDragSourceListeners();
-        for (int i = 0; i < otros.length; i++) {
-            otros[i].dragExit(dse);
+        DragSourceListener[] others = this.getDragSource().getDragSourceListeners();
+        for (int i = 0; i < others.length; i++) {
+            others[i].dragExit(dse);
         }
         this.updateCurrentCursor(DnDConstants.ACTION_NONE, DnDConstants.ACTION_NONE, DEFAULT);
     }
 
-    /** Cambió la acción elegida. */
+    /** The chosen action changed. */
     public void dropActionChanged(DragSourceDragEvent dsde) {
         if (this.listener != null) {
             this.listener.dropActionChanged(dsde);
         }
-        DragSourceListener[] otros = this.getDragSource().getDragSourceListeners();
-        for (int i = 0; i < otros.length; i++) {
-            otros[i].dropActionChanged(dsde);
+        DragSourceListener[] others = this.getDragSource().getDragSourceListeners();
+        for (int i = 0; i < others.length; i++) {
+            others[i].dropActionChanged(dsde);
         }
         this.updateCurrentCursor(dsde.getDropAction(), dsde.getTargetActions(), CHANGED);
     }
 
-    /** Terminó el arrastre. */
+    /** The drag finished. */
     public void dragDropEnd(DragSourceDropEvent dsde) {
         if (this.listener != null) {
             this.listener.dragDropEnd(dsde);
         }
-        DragSourceListener[] otros = this.getDragSource().getDragSourceListeners();
-        for (int i = 0; i < otros.length; i++) {
-            otros[i].dragDropEnd(dsde);
+        DragSourceListener[] others = this.getDragSource().getDragSourceListeners();
+        for (int i = 0; i < others.length; i++) {
+            others[i].dragDropEnd(dsde);
         }
     }
 
-    /** El ratón se movió durante el arrastre. */
+    /** The mouse moved during the drag. */
     public void dragMouseMoved(DragSourceDragEvent dsde) {
-        DragSourceMotionListener[] otros = this.getDragSource().getDragSourceMotionListeners();
-        for (int i = 0; i < otros.length; i++) {
-            otros[i].dragMouseMoved(dsde);
+        DragSourceMotionListener[] others = this.getDragSource().getDragSourceMotionListeners();
+        for (int i = 0; i < others.length; i++) {
+            others[i].dragMouseMoved(dsde);
         }
     }
 
-    /** Lo que se está arrastrando. */
+    /** What is being dragged. */
     public Transferable getTransferable() {
         return this.transferable;
     }
 
     /**
-     * Elige el cursor que corresponde al estado del arrastre.
+     * Chooses the cursor that corresponds to the state of the drag.
      *
-     * <p>No hace nada si alguien puso un cursor a mano: un cursor propio gana sobre el automático,
-     * porque quien lo puso sabe algo que este objeto no.
+     * <p>It does nothing if somebody put a cursor by hand: a cursor of one's own wins over the
+     * automatic one, because whoever put it knows something this object does not.
      */
     protected synchronized void updateCurrentCursor(int dropOp, int targetAct, int status) {
         if (this.useCustomCursor) {
             return;
         }
-        int accion = dropOp & targetAct;
-        if (status == DEFAULT || accion == DnDConstants.ACTION_NONE) {
+        int action = dropOp & targetAct;
+        if (status == DEFAULT || action == DnDConstants.ACTION_NONE) {
             if ((dropOp & DnDConstants.ACTION_LINK) != 0) {
                 this.cursor = DragSource.DefaultLinkNoDrop;
             } else if ((dropOp & DnDConstants.ACTION_MOVE) != 0) {
@@ -251,9 +252,9 @@ public class DragSourceContext
             }
             return;
         }
-        if ((accion & DnDConstants.ACTION_LINK) != 0) {
+        if ((action & DnDConstants.ACTION_LINK) != 0) {
             this.cursor = DragSource.DefaultLinkDrop;
-        } else if ((accion & DnDConstants.ACTION_MOVE) != 0) {
+        } else if ((action & DnDConstants.ACTION_MOVE) != 0) {
             this.cursor = DragSource.DefaultMoveDrop;
         } else {
             this.cursor = DragSource.DefaultCopyDrop;

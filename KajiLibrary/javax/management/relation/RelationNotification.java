@@ -7,46 +7,45 @@ import javax.management.Notification;
 import javax.management.ObjectName;
 
 /**
- * El aviso de que una relacion se creo, cambio o se borro.
+ * The notice that a relation was created, changed or removed.
  *
- * <h2>Los seis tipos, y por que son seis y no tres</h2>
+ * <h2>The six types, and why six and not three</h2>
  *
- * <p>Las tres cosas que pueden pasar —creacion, actualizacion, borrado— vienen cada una en dos
- * sabores: <strong>BASIC</strong> y <strong>MBEAN</strong>. La diferencia es de que estaba hecha la
- * relacion.
+ * <p>The three things that can happen --creation, update, removal-- come in two flavours each:
+ * <b>BASIC</b> and <b>MBEAN</b>. The difference is what the relation was made of.
  *
- * <p>Una relacion "basica" la administra el servicio internamente; una "MBean" es un objeto
- * registrado en el servidor, con su propio {@link ObjectName}. Quien escucha suele querer tratar las
- * dos igual, pero quien limpia recursos no: solo la segunda deja un MBean que quizas haya que
- * desregistrar, y {@link #getMBeansToUnregister} existe justamente para eso.
+ * <p>A "basic" relation is managed internally by the service; an "MBean" one is an object
+ * registered in the server, with its own {@link ObjectName}. Whoever listens usually wants to treat
+ * both the same, but whoever cleans up resources does not: only the second leaves an MBean that may
+ * have to be unregistered, and {@link #getMBeansToUnregister} exists precisely for that.
  *
- * <h2>Los tres campos de la actualizacion</h2>
+ * <h2>The three update fields</h2>
  *
- * <p>{@link #getRoleName}, {@link #getOldRoleValue} y {@link #getNewRoleValue} solo tienen valor en
- * las notificaciones de actualizacion. Que venga el valor <em>viejo</em> ademas del nuevo es lo que
- * permite reaccionar al cambio —saber que MBean dejo de estar referenciado— sin haber guardado el
- * estado anterior por las dudas.
+ * <p>{@link #getRoleName}, {@link #getOldRoleValue} and {@link #getNewRoleValue} only have a value
+ * in update notifications. That the <em>old</em> value comes along with the new one is what allows
+ * reacting to the change --knowing which MBean stopped being referenced-- without having kept the
+ * previous state just in case.
  */
 public class RelationNotification extends Notification {
 
     private static final long serialVersionUID = -6871117877523310399L;
 
-    /** Se creo una relacion administrada internamente. */
+    /** An internally managed relation was created. */
     public static final String RELATION_BASIC_CREATION = "jmx.relation.creation.basic";
 
-    /** Se agrego una relacion que es un MBean. */
+    /** A relation that is an MBean was added. */
     public static final String RELATION_MBEAN_CREATION = "jmx.relation.creation.mbean";
 
-    /** Cambio un rol de una relacion interna. */
+    /** A role of an internal relation changed. */
     public static final String RELATION_BASIC_UPDATE = "jmx.relation.update.basic";
 
-    /** Cambio un rol de una relacion que es un MBean. */
+    /** A role of a relation that is an MBean changed. */
     public static final String RELATION_MBEAN_UPDATE = "jmx.relation.update.mbean";
 
-    /** Se borro una relacion interna. */
+    /** An internal relation was removed. */
     public static final String RELATION_BASIC_REMOVAL = "jmx.relation.removal.basic";
 
-    /** Se saco una relacion que es un MBean. */
+    /** A relation that is an MBean was removed. */
     public static final String RELATION_MBEAN_REMOVAL = "jmx.relation.removal.mbean";
 
     private String relationId;
@@ -58,96 +57,96 @@ public class RelationNotification extends Notification {
     private List<ObjectName> newRoleValue;
 
     /**
-     * Para creacion y borrado.
+     * For creation and removal.
      *
-     * @throws IllegalArgumentException si el tipo de notificacion no es de creacion ni de borrado,
-     *     o si falta algo obligatorio
+     * @throws IllegalArgumentException if the notification type is neither creation nor removal, or
+     *     if something mandatory is missing
      */
     public RelationNotification(String notifType, Object sourceObj, long sequence,
             long timeStamp, String message, String id, String typeName, ObjectName objectName,
             List<ObjectName> unregMBeanList) throws IllegalArgumentException {
         super(notifType, sourceObj, sequence, timeStamp, message);
-        if (notifType == null || !esCreacionOBorrado(notifType)) {
+        if (notifType == null || !isCreationOrRemoval(notifType)) {
             throw new IllegalArgumentException(
-                    "el tipo no es de creacion ni de borrado: " + String.valueOf(notifType));
+                    "the type is neither creation nor removal: " + String.valueOf(notifType));
         }
-        revisarComun(sourceObj, id, typeName);
+        checkCommon(sourceObj, id, typeName);
         this.relationId = id;
         this.relationTypeName = typeName;
         this.relationObjName = objectName;
-        this.unregisterMBeanList = copiar(unregMBeanList);
+        this.unregisterMBeanList = copy(unregMBeanList);
     }
 
     /**
-     * Para actualizacion.
+     * For an update.
      *
-     * @throws IllegalArgumentException si el tipo no es de actualizacion, o si falta el rol
+     * @throws IllegalArgumentException if the type is not an update, or if the role is missing
      */
     public RelationNotification(String notifType, Object sourceObj, long sequence,
             long timeStamp, String message, String id, String typeName, ObjectName objectName,
             String name, List<ObjectName> newValue, List<ObjectName> oldValue)
             throws IllegalArgumentException {
         super(notifType, sourceObj, sequence, timeStamp, message);
-        if (notifType == null || !esActualizacion(notifType)) {
+        if (notifType == null || !isUpdate(notifType)) {
             throw new IllegalArgumentException(
-                    "el tipo no es de actualizacion: " + String.valueOf(notifType));
+                    "the type is not an update: " + String.valueOf(notifType));
         }
-        revisarComun(sourceObj, id, typeName);
+        checkCommon(sourceObj, id, typeName);
         if (name == null || newValue == null || oldValue == null) {
             throw new IllegalArgumentException(
-                    "una actualizacion necesita el rol y sus dos valores");
+                    "an update needs the role and its two values");
         }
         this.relationId = id;
         this.relationTypeName = typeName;
         this.relationObjName = objectName;
         this.roleName = name;
-        this.newRoleValue = copiar(newValue);
-        this.oldRoleValue = copiar(oldValue);
+        this.newRoleValue = copy(newValue);
+        this.oldRoleValue = copy(oldValue);
     }
 
-    private static void revisarComun(Object sourceObj, String id, String typeName) {
+    private static void checkCommon(Object sourceObj, String id, String typeName) {
         if (id == null || typeName == null) {
-            throw new IllegalArgumentException("faltan el identificador o el tipo de la relacion");
+            throw new IllegalArgumentException("the relation's identifier or type is missing");
         }
         if (sourceObj == null) {
-            throw new IllegalArgumentException("falta la fuente de la notificacion");
+            throw new IllegalArgumentException("the notification source is missing");
         }
     }
 
-    private static boolean esCreacionOBorrado(String t) {
+    private static boolean isCreationOrRemoval(String t) {
         return t.equals(RELATION_BASIC_CREATION) || t.equals(RELATION_MBEAN_CREATION)
                 || t.equals(RELATION_BASIC_REMOVAL) || t.equals(RELATION_MBEAN_REMOVAL);
     }
 
-    private static boolean esActualizacion(String t) {
+    private static boolean isUpdate(String t) {
         return t.equals(RELATION_BASIC_UPDATE) || t.equals(RELATION_MBEAN_UPDATE);
     }
 
-    private static List<ObjectName> copiar(List<ObjectName> l) {
+    private static List<ObjectName> copy(List<ObjectName> l) {
         return l == null ? null : new ArrayList<ObjectName>(l);
     }
 
-    /** El identificador de la relacion. */
+    /** The relation's identifier. */
     public String getRelationId() {
         return this.relationId;
     }
 
-    /** El nombre de su tipo. */
+    /** The name of its type. */
     public String getRelationTypeName() {
         return this.relationTypeName;
     }
 
-    /** El nombre del MBean de la relacion, o {@code null} si es interna. */
+    /** The name of the relation's MBean, or {@code null} if it is internal. */
     public ObjectName getObjectName() {
         return this.relationObjName;
     }
 
     /**
-     * Los MBeans que quedaron sin referencia y se pueden desregistrar.
+     * The MBeans left with no reference that can be unregistered.
      *
-     * <p>Solo en las notificaciones de borrado. Es una <strong>sugerencia</strong>, no una orden: el
-     * servicio de relaciones no desregistra nada por su cuenta, porque no sabe si esos MBeans le
-     * importan a alguien mas.
+     * <p>Only in removal notifications. It is a <b>suggestion</b>, not an order: the relation
+     * service unregisters nothing on its own, because it does not know whether those MBeans matter
+     * to someone else.
      */
     public List<ObjectName> getMBeansToUnregister() {
         return this.unregisterMBeanList == null
@@ -155,19 +154,19 @@ public class RelationNotification extends Notification {
                 : new ArrayList<ObjectName>(this.unregisterMBeanList);
     }
 
-    /** El rol que cambio, o {@code null} si no es una actualizacion. */
+    /** The role that changed, or {@code null} if this is not an update. */
     public String getRoleName() {
         return this.roleName;
     }
 
-    /** Lo que el rol tenia antes; ver la nota de la clase. */
+    /** What the role had before; see the class note. */
     public List<ObjectName> getOldRoleValue() {
         return this.oldRoleValue == null
                 ? new ArrayList<ObjectName>()
                 : new ArrayList<ObjectName>(this.oldRoleValue);
     }
 
-    /** Lo que tiene ahora. */
+    /** What it has now. */
     public List<ObjectName> getNewRoleValue() {
         return this.newRoleValue == null
                 ? new ArrayList<ObjectName>()

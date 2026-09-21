@@ -7,21 +7,22 @@ import java.awt.event.ItemListener;
 import javax.swing.event.ChangeListener;
 
 /**
- * El estado de un boton, separado del boton.
+ * A button's state, separate from the button.
  *
- * <p>Cinco bits —armado, seleccionado, habilitado, apretado, con el cursor encima— mas un
- * mnemonico, un comando y un grupo. El boton es una vista de esto: el aspecto lee el modelo para
- * decidir como pintar, y el escucha del mouse escribe en el modelo, no en el boton. La separacion
- * hace que un boton se pueda "apretar" desde un programa ({@code doClick}) exactamente como lo
- * apretaria un mouse.
+ * <p>Five bits -- armed, selected, enabled, pressed, with the cursor over it -- plus a mnemonic,
+ * a command and a group. The button is a view of this: the look and feel reads the model in
+ * order to decide how to paint, and the mouse listener writes into the model, not into the
+ * button. The separation makes it possible for a button to be "pressed" from a program
+ * ({@code doClick}) exactly as a mouse would press it.
  *
- * <p>La secuencia de un click es armar al entrar, apretar al bajar el boton del mouse, y disparar
- * la accion al soltarlo <em>si sigue armado</em>: mover el mouse afuera antes de soltar desarma, y
- * entonces soltar no dispara nada. Es lo que hace que un click arrepentido no cuente.
+ * <p>A click's sequence is arming on entering, pressing on the mouse button going down, and
+ * firing the action on releasing it <em>if it is still armed</em>: moving the mouse outside
+ * before releasing disarms, and then releasing fires nothing. It is what makes a regretted click
+ * not count.
  */
 public interface ButtonModel extends ItemSelectable {
 
-    /** Si soltar el mouse ahora dispararia la accion. */
+    /** Whether releasing the mouse now would fire the action. */
     boolean isArmed();
 
     boolean isSelected();
@@ -30,7 +31,7 @@ public interface ButtonModel extends ItemSelectable {
 
     boolean isPressed();
 
-    /** Si el cursor esta encima. */
+    /** Whether the cursor is over it. */
     boolean isRollover();
 
     void setArmed(boolean b);
@@ -43,7 +44,7 @@ public interface ButtonModel extends ItemSelectable {
 
     void setRollover(boolean b);
 
-    /** El mnemonico, como tecla virtual de {@code KeyEvent}. */
+    /** The mnemonic, as a {@code KeyEvent} virtual key. */
     void setMnemonic(int key);
 
     int getMnemonic();
@@ -52,10 +53,10 @@ public interface ButtonModel extends ItemSelectable {
 
     String getActionCommand();
 
-    /** El grupo de exclusion al que pertenece; lo llama el grupo al agregar y quitar. */
+    /** The exclusion group it belongs to; the group calls it on adding and removing. */
     void setGroup(ButtonGroup group);
 
-    /** El grupo, o {@code null}; por omision ninguno. */
+    /** The group, or {@code null}; by default none. */
     default ButtonGroup getGroup() {
         return null;
     }

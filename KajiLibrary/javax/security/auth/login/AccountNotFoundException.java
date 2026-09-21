@@ -1,22 +1,22 @@
 package javax.security.auth.login;
 
 /**
- * KajiLibrary's javax.security.auth.login.AccountNotFoundException -- no hay tal cuenta.
+ * KajiLibrary's javax.security.auth.login.AccountNotFoundException -- there is no such account.
  *
- * <p>Por lo de arriba, casi nunca conviene mostrarla tal cual: junto con
- * {@link AccountLockedException} deja distinguir cuentas que existen de las que no. Adentro del
- * sistema si vale la pena distinguirla, para los registros.
+ * <p>Because of the above, it is almost never wise to show it as is: together with
+ * {@link AccountLockedException} it lets accounts that exist be told from those that do not. Inside
+ * the system it is worth telling apart, for the logs.
  */
 public class AccountNotFoundException extends AccountException {
 
     private static final long serialVersionUID = 1498349563916294614L;
 
-    /** Sin detalle. */
+    /** Without detail. */
     public AccountNotFoundException() {
         super();
     }
 
-    /** Con un mensaje que diga que paso. */
+    /** With a message that says what happened. */
     public AccountNotFoundException(String msg) {
         super(msg);
     }

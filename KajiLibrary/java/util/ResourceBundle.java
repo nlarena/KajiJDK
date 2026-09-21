@@ -10,12 +10,15 @@ package java.util;
 //
 // A KajiLibrary subset, stated up front:
 //
-//   - The two getBundle overloads that take a java.lang.Module are absent, because
-//     java.lang.Module does not exist here. Every other getBundle overload is present.
+//   - This note used to say the two getBundle overloads taking a java.lang.Module are absent
+//     because that class does not exist. It does, and both are declared below. Every getBundle
+//     overload is present.
 //   - Only the "java.class" format loads. "java.properties" is accepted by Control and reported
-//     in getFormats, but newBundle returns null for it, because PropertyResourceBundle and the
-//     .properties reader are not implemented yet. A bundle written as a class works; a bundle
-//     written as a .properties file is simply not found.
+//     in getFormats, but newBundle returns null for it. The note here used to blame
+//     PropertyResourceBundle not existing; that class exists. What is missing is the call -- and
+//     the built-in loaders serve no resources anyway, so a .properties bundle could not be found
+//     even with it. A bundle written as a class works; one written as a .properties file is
+//     simply not found.
 //   - The cache is not per-ClassLoader, so clearCache(ClassLoader) clears everything.
 public abstract class ResourceBundle {
 
@@ -105,25 +108,25 @@ public abstract class ResourceBundle {
     }
 
     /**
-     * El bundle de `baseName`, buscado a traves del **modulo** dado.
+     * The bundle for `baseName`, looked up through the given **module**.
      *
-     * <p>Se resuelve por el cargador del modulo, que es lo que el modulo *es* a los efectos de
-     * encontrar un recurso: `Module.getClassLoader()` devuelve el cargador real que lo posee, asi
-     * que esto encuentra exactamente lo mismo que `getBundle(baseName, locale, cargador)`.
+     * <p>It resolves through the module's loader, which is what the module *is* as far as finding a
+     * resource goes: `Module.getClassLoader()` returns the inner loader that owns it, so this finds
+     * exactly the same thing as `getBundle(baseName, locale, loader)`.
      */
     public static ResourceBundle getBundle(String baseName, Module module) {
         return ResourceBundle.getBundle(baseName, Locale.getDefault(), module);
     }
 
-    /** El bundle de `baseName` en `locale`, buscado a traves del modulo dado. */
+    /** The bundle for `baseName` in `locale`, looked up through the given module. */
     public static ResourceBundle getBundle(String baseName, Locale locale, Module module) {
         if (baseName == null || locale == null || module == null) {
             throw new NullPointerException();
         }
-        // Un cargador `null` significa el **bootstrap**, que en el JDK no es un objeto. Para buscar
-        // un recurso hay que caer al del sistema, que es lo mismo que hacen las formas sin modulo
-        // (ver `loader()` mas abajo). `Class.getModule()` devuelve un modulo con cargador nulo para
-        // las clases del arranque, asi que este caso no es raro: es el comun.
+        // A `null` loader means the **bootstrap** one, which in the JDK is not an object. To look
+        // up a resource one has to fall back to the system loader, which is what the module-less
+        // forms do (see `loader()` further down). `Class.getModule()` returns a module with a null
+        // loader for the boot classes, so this case is not rare: it is the common one.
         ClassLoader cl = module.getClassLoader();
         if (cl == null) {
             cl = loader();
@@ -437,9 +440,10 @@ public abstract class ResourceBundle {
         // Instantiates the bundle for `baseName` and `locale` in `format`, or returns null if
         // there is none.
         //
-        // A KajiLibrary subset: only "java.class" loads. For "java.properties" this returns null,
-        // because PropertyResourceBundle does not exist yet — a .properties bundle is therefore
-        // never found rather than found and mis-parsed.
+        // A KajiLibrary subset: only "java.class" loads. For "java.properties" this returns null.
+        // The note here used to blame PropertyResourceBundle not existing; it exists. What is
+        // missing is the call to it, and the built-in loaders serve no resources for it to read
+        // anyway — so a .properties bundle is never found rather than found and mis-parsed.
         public ResourceBundle newBundle(String baseName, Locale locale, String format,
                                         ClassLoader loader, boolean reload)
                 throws IllegalAccessException, InstantiationException {

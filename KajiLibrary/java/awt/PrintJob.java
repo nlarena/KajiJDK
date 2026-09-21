@@ -1,48 +1,48 @@
 package java.awt;
 
 /**
- * Un trabajo de impresión en curso.
+ * A print job in progress.
  *
- * <p>El modelo es de 1.1 y se nota: se pide una página con {@link #getGraphics}, se dibuja en ella
- * como en cualquier otra superficie, y se la suelta con {@code dispose}. La página siguiente es otro
- * {@code getGraphics}. Al final, {@link #end}.
+ * <p>The model is from 1.1 and it shows: a page is asked for with {@link #getGraphics}, drawn on
+ * like any other surface, and released with {@code dispose}. The next page is another {@code
+ * getGraphics}. At the end, {@link #end}.
  *
- * <p>{@link #lastPageFirst} existe por una peculiaridad de las impresoras de la época: muchas
- * apilaban las hojas boca arriba, así que imprimir en orden dejaba el documento al revés. Preguntarlo
- * permitía dibujar las páginas en el orden que hiciera falta.
+ * <p>{@link #lastPageFirst} exists because of a quirk of the printers of the time: many stacked the
+ * sheets face up, so printing in order left the document backwards. Asking allowed drawing the
+ * pages in whatever order was needed.
  *
- * <p>La API moderna es {@code java.awt.print}; ésta se conserva porque {@link Toolkit} la devuelve.
+ * <p>The modern API is {@code java.awt.print}; this one is kept because {@link Toolkit} returns it.
  */
 public abstract class PrintJob {
 
-    /** Para las subclases. */
+    /** For subclasses. */
     protected PrintJob() {
     }
 
     /**
-     * Una página nueva para dibujar.
+     * A new page to draw on.
      *
-     * @return el contexto de la página, o `null` si no hay más páginas
+     * @return the page's context, or `null` if there are no more pages
      */
     public abstract Graphics getGraphics();
 
-    /** Cuánto mide una página, en píxeles de impresión. */
+    /** How big a page is, in print pixels. */
     public abstract Dimension getPageDimension();
 
-    /** Cuántos puntos por pulgada tiene la página. */
+    /** How many dots per inch the page has. */
     public abstract int getPageResolution();
 
-    /** Si conviene dibujar la última página primero. */
+    /** Whether it is better to draw the last page first. */
     public abstract boolean lastPageFirst();
 
-    /** Termina el trabajo y lo manda a imprimir. */
+    /** Ends the job and sends it to print. */
     public abstract void end();
 
     /**
-     * Termina el trabajo si nadie lo terminó.
+     * Ends the job if nobody ended it.
      *
-     * @deprecated depende de la recolección de basura, que no garantiza ni cuándo corre ni que
-     *     corra. Hay que llamar a {@link #end} a mano.
+     * @deprecated it depends on garbage collection, which guarantees neither when it runs nor that
+     *     it runs. {@link #end} has to be called by hand.
      */
     @Deprecated
     public void finalize() {

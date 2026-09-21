@@ -11,35 +11,36 @@ import java.util.TreeMap;
 import java.util.function.BiFunction;
 
 /**
- * Los encabezados de un pedido o una respuesta.
+ * The headers of a request or of a response.
  *
- * <h2>Las dos rarezas, y las dos son del protocolo</h2>
+ * <h2>The two oddities, and both are the protocol's</h2>
  *
- * <p><strong>El valor es una lista.</strong> HTTP permite repetir un encabezado, y varios lo
- * necesitan —{@code Set-Cookie} manda uno por galleta—. Un {@code Map<String, String>} obligaria a
- * pegarlos con comas, que para algunos encabezados es equivalente y para otros no.
+ * <p><strong>The value is a list.</strong> HTTP allows a header to be repeated, and several
+ * need it -- {@code Set-Cookie} sends one per cookie --. A {@code Map<String, String>} would
+ * force them to be joined with commas, which for some headers is equivalent and for others is
+ * not.
  *
- * <p><strong>La clave no distingue mayusculas.</strong> {@code Content-Type} y
- * {@code content-type} son el mismo encabezado, asi que este mapa normaliza al guardar y al buscar.
- * Es la razon de que no sea un {@code HashMap} pelado.
+ * <p><strong>The key ignores case.</strong> {@code Content-Type} and {@code content-type} are
+ * the same header, so this map normalizes on keeping and on looking up. It is the reason it is
+ * not a bare {@code HashMap}.
  *
- * <p>La normalizacion es a la forma {@code Xxxx-Yyyy}, que es la convencional. Y usa
- * {@link Locale#ENGLISH} explicito: con el turco, la {@code i} sube a una I con punto y
- * {@code "if-match"} dejaria de coincidir con {@code "If-Match"}. Un encabezado HTTP no depende del
- * idioma de quien corre el servidor.
+ * <p>The normalization is to the {@code Xxxx-Yyyy} form, which is the conventional one. And it
+ * uses an explicit {@link Locale#ENGLISH}: with Turkish, the {@code i} goes up to a dotted I
+ * and {@code "if-match"} would stop matching {@code "If-Match"}. An HTTP header does not
+ * depend on the language of whoever runs the server.
  */
 public class Headers implements Map<String, List<String>> {
 
     private final Map<String, List<String>> map = new TreeMap<String, List<String>>();
 
-    /** Vacios. */
+    /** Empty. */
     public Headers() {
     }
 
     /**
-     * Con lo que traiga {@code headers}, normalizando las claves.
+     * With whatever {@code headers} brings, normalizing the keys.
      *
-     * @throws NullPointerException si el mapa, o alguna clave o valor, es {@code null}
+     * @throws NullPointerException if the map, or some key or value, is {@code null}
      */
     public Headers(Map<String, List<String>> headers) {
         if (headers == null) {
@@ -49,25 +50,25 @@ public class Headers implements Map<String, List<String>> {
     }
 
     /**
-     * {@code content-type} y {@code CONTENT-TYPE} se guardan los dos como {@code Content-Type}.
+     * {@code content-type} and {@code CONTENT-TYPE} are both kept as {@code Content-Type}.
      *
-     * <p>{@code null} pasa tal cual: es una clave invalida, pero rechazarla aca escondería el error
-     * detras de una excepcion menos clara que la que tira el mapa.
+     * <p>{@code null} passes as it is: it is an invalid key, but rejecting it here would hide the
+     * mistake behind an exception less clear than the one the map throws.
      */
-    private static String normalizar(String clave) {
-        if (clave == null || clave.isEmpty()) {
-            return clave;
+    private static String normalize(String key) {
+        if (key == null || key.isEmpty()) {
+            return key;
         }
-        StringBuilder sb = new StringBuilder(clave.length());
-        boolean arranque = true;
-        for (int i = 0; i < clave.length(); i++) {
-            char c = clave.charAt(i);
-            if (arranque) {
+        StringBuilder sb = new StringBuilder(key.length());
+        boolean start = true;
+        for (int i = 0; i < key.length(); i++) {
+            char c = key.charAt(i);
+            if (start) {
                 sb.append(Character.toUpperCase(c));
-                arranque = false;
+                start = false;
             } else if (c == '-') {
                 sb.append(c);
-                arranque = true;
+                start = true;
             } else {
                 sb.append(Character.toLowerCase(c));
             }
@@ -75,8 +76,8 @@ public class Headers implements Map<String, List<String>> {
         return sb.toString();
     }
 
-    private static String comoClave(Object o) {
-        return o instanceof String ? normalizar((String) o) : null;
+    private static String asKey(Object o) {
+        return o instanceof String ? normalize((String) o) : null;
     }
 
     public int size() {
@@ -88,7 +89,7 @@ public class Headers implements Map<String, List<String>> {
     }
 
     public boolean containsKey(Object key) {
-        return this.map.containsKey(comoClave(key));
+        return this.map.containsKey(asKey(key));
     }
 
     public boolean containsValue(Object value) {
@@ -96,27 +97,27 @@ public class Headers implements Map<String, List<String>> {
     }
 
     public List<String> get(Object key) {
-        return this.map.get(comoClave(key));
+        return this.map.get(asKey(key));
     }
 
     /**
-     * El primer valor, o {@code null} si no hay.
+     * The first value, or {@code null} if there is none.
      *
-     * <p>Es el acceso que se usa casi siempre: la mayoria de los encabezados aparecen una sola vez, y
-     * pedir la lista para sacarle el elemento cero es ruido.
+     * <p>It is the access that is used almost always: most headers appear only once, and asking
+     * for the list in order to take element zero out of it is noise.
      */
     public String getFirst(String key) {
-        List<String> l = this.map.get(normalizar(key));
+        List<String> l = this.map.get(normalize(key));
         return l == null || l.isEmpty() ? null : l.get(0);
     }
 
     public List<String> put(String key, List<String> value) {
-        return this.map.put(normalizar(key), value);
+        return this.map.put(normalize(key), value);
     }
 
-    /** Agrega un valor mas, sin pisar los que ya estaban. */
+    /** It adds one more value, without overwriting those that were already there. */
     public void add(String key, String value) {
-        String k = normalizar(key);
+        String k = normalize(key);
         List<String> l = this.map.get(k);
         if (l == null) {
             l = new LinkedList<String>();
@@ -125,7 +126,7 @@ public class Headers implements Map<String, List<String>> {
         l.add(value);
     }
 
-    /** Deja este encabezado con ese unico valor, pisando lo anterior. */
+    /** It leaves this header with that single value, overwriting what was there. */
     public void set(String key, String value) {
         List<String> l = new LinkedList<String>();
         l.add(value);
@@ -133,7 +134,7 @@ public class Headers implements Map<String, List<String>> {
     }
 
     public List<String> remove(Object key) {
-        return this.map.remove(comoClave(key));
+        return this.map.remove(asKey(key));
     }
 
     public void putAll(Map<? extends String, ? extends List<String>> t) {
@@ -176,29 +177,29 @@ public class Headers implements Map<String, List<String>> {
     }
 
     /**
-     * Desde pares nombre/valor sueltos.
+     * From loose name/value pairs.
      *
-     * @throws IllegalArgumentException si la cantidad es impar — un par a medias no es un encabezado
-     * @throws NullPointerException si algun elemento es {@code null}
+     * @throws IllegalArgumentException if the number is odd -- half a pair is not a header
+     * @throws NullPointerException if some element is {@code null}
      */
     public static Headers of(String... pairs) {
         if (pairs == null) {
             throw new NullPointerException("pairs");
         }
         if (pairs.length % 2 != 0) {
-            throw new IllegalArgumentException("hacen falta pares nombre/valor");
+            throw new IllegalArgumentException("name/value pairs are needed");
         }
         Headers h = new Headers();
         for (int i = 0; i < pairs.length; i += 2) {
             if (pairs[i] == null || pairs[i + 1] == null) {
-                throw new NullPointerException("ni el nombre ni el valor pueden ser null");
+                throw new NullPointerException("neither the name nor the value may be null");
             }
             h.add(pairs[i], pairs[i + 1]);
         }
         return h;
     }
 
-    /** Desde un mapa, copiando las listas para que no queden compartidas. */
+    /** From a map, copying the lists so that they do not end up shared. */
     public static Headers of(Map<String, List<String>> headers) {
         if (headers == null) {
             throw new NullPointerException("headers");
@@ -206,7 +207,7 @@ public class Headers implements Map<String, List<String>> {
         Headers h = new Headers();
         for (Map.Entry<String, List<String>> e : headers.entrySet()) {
             if (e.getKey() == null || e.getValue() == null) {
-                throw new NullPointerException("ni la clave ni el valor pueden ser null");
+                throw new NullPointerException("neither the key nor the value may be null");
             }
             h.put(e.getKey(), new ArrayList<String>(e.getValue()));
         }

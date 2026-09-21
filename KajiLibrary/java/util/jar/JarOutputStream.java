@@ -6,20 +6,20 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 /**
- * Un JAR escrito de corrido: un {@link ZipOutputStream} que arranca poniendo el manifiesto.
+ * A JAR written straight through: a {@link ZipOutputStream} that starts by putting the manifest in.
  *
- * <p>El orden no es un detalle. El manifiesto tiene que ser la primera entrada del archivo para que
- * un lector secuencial --{@link JarInputStream}, que solo puede ir hacia adelante-- lo encuentre sin
- * haber leido todo lo demas. Por eso el constructor que lo recibe lo escribe ahi mismo.
+ * <p>The order is not a detail. The manifest has to be the file's first entry so that a sequential
+ * reader --{@link JarInputStream}, which can only go forwards-- finds it without having read
+ * everything else. That is why the constructor that receives it writes it right there.
  *
- * <h2>Lo que queda afuera, y por que</h2>
+ * <h2>What is left out, and why</h2>
  *
- * <p>Nada de la superficie publica. Si hay una diferencia de bytes con el JDK que conviene anotar:
- * el JDK le mete a la primera entrada un campo `extra` de cuatro bytes con el numero magico `0xCAFE`.
- * Aca no, porque el `ZipOutputStream` de esta biblioteca no escribe campos `extra` en absoluto
- * --escribe un largo de 0 en la cabecera local--, asi que ponerlo seria escribirlo en un objeto que
- * despues nadie serializa. No hace falta para nada: ninguna herramienta lo exige, y los JAR que
- * escribe este flujo los lee el `java` real.
+ * <p>Nothing of the public surface. There IS one byte-level difference from the JDK worth noting:
+ * the JDK puts a four-byte `extra` field with the magic number `0xCAFE` on the first entry. Not here,
+ * because this library's `ZipOutputStream` does not write `extra` fields at all --it writes a length
+ * of 0 in the local header-- so setting it would be writing it into an object nobody then
+ * serialises. It is not needed for anything: no tool demands it, and the JARs that
+ * this stream writes are read by the real `java`.
  */
 public class JarOutputStream extends ZipOutputStream {
 
@@ -28,9 +28,9 @@ public class JarOutputStream extends ZipOutputStream {
     }
 
     /**
-     * Escribe el manifiesto como primera entrada y deja el flujo listo para el resto.
+     * It writes the manifest as the first entry and leaves the stream ready for the rest.
      *
-     * @throws NullPointerException si `man` es `null`
+     * @throws NullPointerException if `man` is `null`
      */
     public JarOutputStream(OutputStream out, Manifest man) throws IOException {
         super(out);
@@ -42,7 +42,7 @@ public class JarOutputStream extends ZipOutputStream {
         closeEntry();
     }
 
-    /** Empieza una entrada nueva. */
+    /** It starts a fresh entry. */
     public void putNextEntry(ZipEntry ze) throws IOException {
         super.putNextEntry(ze);
     }

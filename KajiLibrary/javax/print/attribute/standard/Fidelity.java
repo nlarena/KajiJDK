@@ -6,11 +6,11 @@ import javax.print.attribute.PrintJobAttribute;
 import javax.print.attribute.PrintRequestAttribute;
 
 /**
- * Que hacer cuando la impresora no soporta alguno de los atributos pedidos: fallar el trabajo
- * entero ({@code FIDELITY_TRUE}) o imprimir lo mejor que se pueda ({@code FIDELITY_FALSE}).
+ * What to do when the printer does not support some of the requested attributes: fail the whole job
+ * ({@code FIDELITY_TRUE}) or print as best it can ({@code FIDELITY_FALSE}).
  *
- * <p>Los nombres de las constantes llevan prefijo porque {@code TRUE} y {@code FALSE} pelados no
- * dirian de que.
+ * <p>The constants' names carry a prefix because bare {@code TRUE} and {@code FALSE} would not say
+ * of what.
  */
 public final class Fidelity extends EnumSyntax implements PrintJobAttribute, PrintRequestAttribute {
 

@@ -3,53 +3,61 @@ package java.util;
 import java.lang.Cloneable;
 import java.io.Serializable;
 
-// Un conjunto ordenado, apoyado en un {@link TreeMap} — exactamente como lo arma el JDK. Un
-// conjunto es un mapa cuyos valores no dicen nada, asi que cada elemento se guarda como clave
-// apuntando a un unico objeto centinela compartido; todo el trabajo (orden, balanceo, busqueda
-// en O(log n)) es del arbol, y esta clase es la proyeccion delgada que esconde los valores.
+// A sorted set, resting on a {@link TreeMap} — exactly as the JDK builds it. A set is a map whose
+// values say nothing, so each element is stored as a key pointing at a single shared sentinel object;
+// all the work (ordering, balancing, O(log n) search) is the tree's, and this class is the thin
+// projection that hides the values.
 //
-// Ese es el diseno entero: `add` es `put`, `contains` es `containsKey`, `remove` es `remove`, y
-// recorrer es recorrer el arbol en orden.
+// That is the whole design: `add` is `put`, `contains` is `containsKey`, `remove` is `remove`, and
+// walking is walking the tree in order.
 //
-// Lo que se apoya no es un `TreeMap` sino un **`NavigableMap` cualquiera**, y eso es lo que hace
-// que las vistas salgan gratis: `headSet(x)` es este mismo conjunto sobre `mapa.headMap(x)`, y
-// `descendingSet()` sobre `mapa.descendingMap()`. Los quince metodos de navegacion se escriben una
-// sola vez y funcionan igual sobre el conjunto entero o sobre un corte de un corte al reves.
+// What it rests on is not a `TreeMap` but **any `NavigableMap`**, and that is what makes the views
+// come free: `headSet(x)` is this same set over `map.headMap(x)`, and `descendingSet()` over
+// `map.descendingMap()`. The fifteen navigation methods are written once and work the same over the
+// whole set or over a reversed slice of a slice.
 //
-// El mismo mecanismo da las vistas de clave de un mapa: `TreeMap.navigableKeySet()` devuelve un
-// TreeSet sobre el mapa, con `noAdd` puesto. Es la unica diferencia entre un conjunto y la vista
-// de claves de un mapa: la vista **no** puede agregar, porque no sabria que valor poner.
+// The same mechanism gives a map's key views: `TreeMap.navigableKeySet()` returns a TreeSet over the
+// map, with `noAdd` set. That is the only difference between a set and a map's key view: the view
+// **cannot** add, because it would not know what value to put.
 public class TreeSet<E> extends AbstractSet<E> implements NavigableSet<E>, Serializable, Cloneable {
 
-    // El unico valor al que apunta toda clave. Su identidad no importa — solo cuenta que "hay una
-    // entrada aca" — asi que una instancia alcanza para todos los elementos de todos los TreeSet.
+    // The single value every key points at. Its identity does not matter — all that counts is that
+    // "there is an entry here" — so one instance is enough for every element of every TreeSet.
     private static final Object PRESENT = new Object();
 
     private final NavigableMap<E, Object> map;
 
-    // El mismo mapa visto como recorrible. Se guarda aparte porque `NavigableMap` no promete
-    // saber caminarse nodo a nodo; los dos que llegan aca — TreeMap y TmView — si.
+    // The same map seen as walkable. It is kept separately because `NavigableMap` does not promise to
+    // know how to be walked node by node; the two that arrive here — TreeMap and TmView — do.
     private final TmWalk<E, Object> walk;
 
-    // Puesto cuando este conjunto es la vista de claves de un mapa: entonces `add` se niega.
+    // Set when this set is a map's key view: then `add` refuses.
     private final boolean noAdd;
 
     public TreeSet() {
         this(new TreeMap<E, Object>(), false);
     }
 
-    public TreeSet(Comparator<E> comparator) {
+    /**
+     * With a comparator of its own.
+     *
+     * <p>The parameter is `Comparator<? super E>` and not `Comparator<E>`, which is what the JDK
+     * declares: a comparator of `Object` knows how to compare `Integer`, so it has to be allowed in.
+     * With the narrow form, `new TreeSet<Integer>(Collections.reverseOrder())` did not compile.
+     */
+    public TreeSet(Comparator<? super E> comparator) {
         this(new TreeMap<E, Object>(comparator), false);
     }
 
-    // Copia los elementos de otra coleccion, ordenandolos por su orden natural.
+    // It copies another collection's elements, sorting them by their natural order.
     public TreeSet(Collection<? extends E> c) {
         this(new TreeMap<E, Object>(), false);
         this.addAll(c);
     }
 
-    // Copia un conjunto que **ya viene ordenado**, y se queda con su comparador — igual que
-    // `TreeMap(SortedMap)`, y por la misma razon: sin el comparador la copia se reordenaria.
+    // It copies a set that **already comes sorted**, and keeps its comparator — like
+    // `TreeMap(SortedMap)`, and for the same reason: without the comparator the copy would be
+    // reordered.
     public TreeSet(SortedSet<E> s) {
         this(new TreeMap<E, Object>((Comparator<E>) s.comparator()), false);
         this.addAll(s);
@@ -61,8 +69,8 @@ public class TreeSet<E> extends AbstractSet<E> implements NavigableSet<E>, Seria
         this.noAdd = noAdd;
     }
 
-    // Envuelve una vista del mapa de atras conservando la restriccion de agregado: un corte de
-    // una vista de claves sigue sin poder agregar.
+    // It wraps a view of the map behind keeping the add restriction: a slice of a key view still
+    // cannot add.
     private TreeSet<E> over(NavigableMap<E, Object> view) {
         return new TreeSet<E>(view, this.noAdd);
     }
@@ -79,8 +87,8 @@ public class TreeSet<E> extends AbstractSet<E> implements NavigableSet<E>, Seria
         return this.map.containsKey(o);
     }
 
-    // Un `add` de conjunto informa si el elemento era **nuevo**, que es exactamente si el `put` no
-    // encontro nada antes.
+    // A set's `add` reports whether the element was **new**, which is exactly whether the `put` found
+    // nothing before.
     public boolean add(E e) {
         if (this.noAdd) {
             throw new UnsupportedOperationException();
@@ -120,8 +128,8 @@ public class TreeSet<E> extends AbstractSet<E> implements NavigableSet<E>, Seria
 
     // --- SequencedCollection ---
     //
-    // Los extremos se leen y se sacan, pero **no se ponen**: en un conjunto ordenado la posicion
-    // la decide el orden, no quien inserta. Es la misma negativa que `TreeMap.putFirst`.
+    // The ends are read and taken out, but **not put**: in a sorted set the position is decided by the
+    // order, not by whoever inserts. It is the same refusal as `TreeMap.putFirst`.
 
     public E getFirst() {
         return this.first();
@@ -151,18 +159,18 @@ public class TreeSet<E> extends AbstractSet<E> implements NavigableSet<E>, Seria
         throw new UnsupportedOperationException();
     }
 
-    // Se estrecha a NavigableSet, que es lo que `NavigableSet.reversed()` promete desde que lleva
-    // su propio default.
+    // It is narrowed to NavigableSet, which is what `NavigableSet.reversed()` promises now that it
+    // carries a default of its own.
     public NavigableSet<E> reversed() {
         return this.descendingSet();
     }
 
-    // --- NavigableSet: los vecinos ---
+    // --- NavigableSet: the neighbours ---
     //
-    // Las cuatro son la navegacion del mapa mirando solo las claves. `lower` es el mayor elemento
-    // estrictamente menor; `floor`, el mayor <=; y `ceiling`/`higher` los simetricos hacia
-    // arriba. Devuelven null cuando no hay ninguno, que es la unica respuesta razonable — a
-    // diferencia de `first`/`last`, que prometen un elemento y por eso lanzan.
+    // The four are the map's navigation looking only at the keys. `lower` is the largest element
+    // strictly smaller; `floor`, the largest <=; and `ceiling`/`higher` the symmetric ones upwards.
+    // They return null when there is none, which is the only reasonable answer — unlike `first`/
+    // `last`, which promise an element and therefore throw.
 
     public E lower(E e) {
         return this.map.lowerKey(e);
@@ -196,7 +204,7 @@ public class TreeSet<E> extends AbstractSet<E> implements NavigableSet<E>, Seria
         return e.getKey();
     }
 
-    // --- NavigableSet: las vistas ---
+    // --- NavigableSet: the views ---
 
     public NavigableSet<E> descendingSet() {
         return this.over(this.map.descendingMap());
@@ -214,7 +222,7 @@ public class TreeSet<E> extends AbstractSet<E> implements NavigableSet<E>, Seria
         return this.over(this.map.tailMap(from, inclusive));
     }
 
-    // Las tres formas de SortedSet: el piso entra, el techo no.
+    // SortedSet's three forms: the floor is in, the ceiling is not.
     public SortedSet<E> subSet(E from, E to) {
         return this.subSet(from, true, to, false);
     }

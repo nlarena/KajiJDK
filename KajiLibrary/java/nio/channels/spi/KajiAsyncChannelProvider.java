@@ -50,8 +50,8 @@ final class KajiAsyncChannelProvider extends AsynchronousChannelProvider {
             throw new NullPointerException("executor");
         }
         // `initialSize` is a hint about how many threads to start reading from the pool. Here there
-        // are no threads reading from anywhere --each operation is sent to the pool when it is asked
-        // for-- so there is nothing to size. Any value is accepted, as in the JDK.
+        // are no threads reading from anywhere --each operation is sent to the pool when it is
+        // asked for-- so there is nothing to size. Any value is accepted, as in the JDK.
         return group(executor, false);
     }
 
@@ -70,8 +70,8 @@ final class KajiAsyncChannelProvider extends AsynchronousChannelProvider {
     /**
      * The fallback group, built the first time somebody opens a channel with no group.
      *
-     * <p>It is a pool that grows --`newCachedThreadPool`-- because that is what the JDK uses for its
-     * own: a group shared by the whole program cannot have a cap chosen in advance.
+     * <p>It is a pool that grows --`newCachedThreadPool`-- because that is what the JDK uses for
+     * its own: a group shared by the whole program cannot have a cap chosen in advance.
      */
     synchronized AsynchronousChannelGroup defaultGroup() {
         if (this.fallback == null) {

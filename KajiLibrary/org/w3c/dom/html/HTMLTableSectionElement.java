@@ -3,48 +3,48 @@ package org.w3c.dom.html;
 import org.w3c.dom.DOMException;
 
 /**
- * Un `<thead>`, `<tbody>` o `<tfoot>`. Las tres son la misma interfaz.
+ * A `<thead>`, `<tbody>` or `<tfoot>`. The three are the same interface.
  */
 public interface HTMLTableSectionElement extends HTMLElement {
 
-    /** La alineacion (presentacion; HTML 4 la desaconseja). */
+    /** The alignment (presentational; HTML 4 deprecates it). */
     String getAlign();
 
-    /** Fija la alineacion (presentacion; HTML 4 la desaconseja). */
+    /** It sets the alignment (presentational; HTML 4 deprecates it). */
     void setAlign(String align);
 
-    /** El atributo `ch`. */
+    /** The `ch` attribute. */
     String getCh();
 
-    /** Fija el atributo `ch`. */
+    /** It sets the `ch` attribute. */
     void setCh(String ch);
 
-    /** El atributo `chOff`. */
+    /** The `chOff` attribute. */
     String getChOff();
 
-    /** Fija el atributo `chOff`. */
+    /** It sets the `chOff` attribute. */
     void setChOff(String chOff);
 
-    /** El atributo `vAlign`. */
+    /** The `vAlign` attribute. */
     String getVAlign();
 
-    /** Fija el atributo `vAlign`. */
+    /** It sets the `vAlign` attribute. */
     void setVAlign(String vAlign);
 
-    /** Las filas, en una coleccion viva. */
+    /** The rows, in a live collection. */
     HTMLCollection getRows();
 
     /**
-     * Inserta una fila en esa posicion; -1 agrega al final.
+     * It inserts a row at that position; -1 appends at the end.
      *
-     * @throws DOMException `INDEX_SIZE_ERR` si el indice esta fuera de rango
+     * @throws DOMException `INDEX_SIZE_ERR` if the index is out of range
      */
     HTMLElement insertRow(int index) throws org.w3c.dom.DOMException;
 
     /**
-     * Borra la fila de esa posicion; -1 borra la ultima.
+     * It deletes the row at that position; -1 deletes the last one.
      *
-     * @throws DOMException `INDEX_SIZE_ERR` si el indice esta fuera de rango
+     * @throws DOMException `INDEX_SIZE_ERR` if the index is out of range
      */
     void deleteRow(int index) throws org.w3c.dom.DOMException;
 }

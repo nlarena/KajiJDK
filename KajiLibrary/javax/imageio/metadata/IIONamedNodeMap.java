@@ -6,19 +6,20 @@ import org.w3c.dom.Node;
 import org.w3c.dom.NamedNodeMap;
 
 /**
- * Los atributos de un {@link IIOMetadataNode}, vistos como mapa del DOM.
+ * The attributes of an {@link IIOMetadataNode}, seen as a DOM map.
  *
- * <p>De acceso de paquete: no es API. La devuelve {@code Node.getAttributes}.
+ * <p>Package-private: it is not API. {@code Node.getAttributes} returns it.
  *
- * <p>Es de <b>solo lectura</b>: {@code setNamedItem} y {@code removeNamedItem} lanzan
- * {@link DOMException} con {@code NO_MODIFICATION_ALLOWED_ERR}. Para cambiar atributos estan los
- * metodos del propio elemento.
+ * <p>It is <b>read-only</b>: {@code setNamedItem} and {@code removeNamedItem} throw
+ * {@link DOMException} with {@code NO_MODIFICATION_ALLOWED_ERR}. To change attributes there are
+ * the element's own methods.
  *
- * <p>Igual que {@link IIONodeList}, es una foto tomada al pedirla.
+ * <p>Like {@link IIONodeList}, it is a snapshot taken when asked for. (In the JDK this map wraps
+ * the node's live attribute list instead.)
  */
 class IIONamedNodeMap implements NamedNodeMap {
 
-    /** Los atributos. */
+    /** The attributes. */
     private final List<Node> nodes;
 
     IIONamedNodeMap(List<Node> nodes) {
@@ -29,7 +30,7 @@ class IIONamedNodeMap implements NamedNodeMap {
         return this.nodes.size();
     }
 
-    /** El atributo con ese nombre, o null. */
+    /** The attribute with that name, or null. */
     public Node getNamedItem(String name) {
         int i = 0;
         while (i < this.nodes.size()) {
@@ -41,7 +42,7 @@ class IIONamedNodeMap implements NamedNodeMap {
         return null;
     }
 
-    /** El numero {@code index}, o null. */
+    /** Number {@code index}, or null. */
     public Node item(int index) {
         if (index < 0 || index >= this.nodes.size()) {
             return null;
@@ -49,30 +50,30 @@ class IIONamedNodeMap implements NamedNodeMap {
         return this.nodes.get(index);
     }
 
-    /** No: es de solo lectura. Ver la nota de la clase. */
+    /** No: it is read-only. See the class note. */
     public Node removeNamedItem(String name) {
         throw new DOMException(DOMException.NO_MODIFICATION_ALLOWED_ERR,
                                "This NamedNodeMap is read-only!");
     }
 
-    /** No: es de solo lectura. */
+    /** No: it is read-only. */
     public Node setNamedItem(Node arg) {
         throw new DOMException(DOMException.NO_MODIFICATION_ALLOWED_ERR,
                                "This NamedNodeMap is read-only!");
     }
 
-    /** Los espacios de nombres no se soportan; ver {@link IIOMetadataNode}. */
+    /** Namespaces are not supported; see {@link IIOMetadataNode}. */
     public Node getNamedItemNS(String namespaceURI, String localName) {
         return getNamedItem(localName);
     }
 
-    /** No: es de solo lectura. */
+    /** No: it is read-only. */
     public Node setNamedItemNS(Node arg) {
         throw new DOMException(DOMException.NO_MODIFICATION_ALLOWED_ERR,
                                "This NamedNodeMap is read-only!");
     }
 
-    /** No: es de solo lectura. */
+    /** No: it is read-only. */
     public Node removeNamedItemNS(String namespaceURI, String localName) {
         throw new DOMException(DOMException.NO_MODIFICATION_ALLOWED_ERR,
                                "This NamedNodeMap is read-only!");

@@ -1,35 +1,39 @@
 package org.w3c.dom;
 
 /**
- * KajiLibrary's org.w3c.dom.Text -- el texto suelto entre etiquetas.
+ * KajiLibrary's org.w3c.dom.Text -- the loose text between tags.
  *
- * <p>Lo que agrega sobre `CharacterData` es la nocion de **texto logico**: un mismo parrafo del
- * documento puede estar partido en varios nodos `Text` y `CDATASection` adyacentes --pasa cuando en
- * el medio habia una referencia a entidad que se expandio-- y `getWholeText()` devuelve la
- * concatenacion de todos ellos, que es lo que el autor del XML escribio. `replaceWholeText` hace la
- * operacion inversa: reemplaza el grupo entero por un solo nodo.
+ * <p>What it adds over `CharacterData` is the notion of **logical text**: one same paragraph of the
+ * document may be split into several adjacent `Text` and `CDATASection` nodes --it happens when
+ * there was an entity reference in the middle that was expanded-- and `getWholeText()` returns the
+ * concatenation of all of them, which is what the author of the XML wrote. `replaceWholeText` does
+ * the inverse operation: it replaces the whole group by a single node.
  */
 public interface Text extends CharacterData {
 
     /**
-     * Parte este nodo en dos hermanos y devuelve el **segundo**, el que se queda con lo de `offset`
-     * en adelante.
+     * It splits this node into two siblings and returns the **second**, the one that keeps what
+     * goes from `offset` onwards.
      *
-     * @throws DOMException con `INDEX_SIZE_ERR` si el offset esta fuera de rango.
+     * @throws DOMException with `INDEX_SIZE_ERR` if the offset is out of range.
      */
     Text splitText(int offset) throws DOMException;
 
     /**
-     * Si este nodo es blanco **ignorable**, o sea sangria que la DTD dice que no es contenido.
+     * Whether this node is **ignorable** white space, that is indentation the DTD says is not
+     * content.
      *
-     * <p>Sin DTD ni esquema no hay manera de saberlo, y entonces devuelve `false`: no es lo mismo
-     * "no es ignorable" que "no se sabe", pero la interfaz solo tiene un `boolean` para decirlo.
+     * <p>With no DTD nor schema there is no way of knowing, and then it returns `false`: "it is not
+     * ignorable" is not the same as "it is not known", but the interface only has a `boolean` to
+     * say it.
      */
     boolean isElementContentWhitespace();
 
-    /** El texto de este nodo mas el de sus hermanos de texto adyacentes. */
+    /** The text of this node plus that of its adjacent text siblings. */
     String getWholeText();
 
-    /** Devuelve el nodo que quedo: este, uno nuevo, o `null` si el contenido era vacio. */
+    /**
+     * It returns the node that was left: this one, a new one, or `null` if the content was empty.
+     */
     Text replaceWholeText(String content) throws DOMException;
 }

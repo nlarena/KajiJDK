@@ -6,35 +6,36 @@ import javax.print.attribute.PrintJobAttribute;
 import javax.print.attribute.PrintRequestAttribute;
 
 /*
- * CABECERA DE FAMILIA -- los atributos {@code IntegerSyntax} de este paquete.
+ * FAMILY HEADER -- this package's {@code IntegerSyntax} attributes.
  *
- * <p>Un atributo entero es un numero con un rango legal y un nombre. Todo el mecanismo esta en
- * {@link javax.print.attribute.IntegerSyntax IntegerSyntax}; cada subclase de aca solo elige los
- * dos extremos y los pasa al constructor de tres argumentos, que es el que tira
- * {@code IllegalArgumentException} cuando el valor se sale.
+ * <p>An integer attribute is a number with a legal range and a name. The whole mechanism is in
+ * {@link javax.print.attribute.IntegerSyntax IntegerSyntax}; each subclass here only chooses the
+ * two ends and passes them to the three-argument constructor, which is the one that throws {@code
+ * IllegalArgumentException} when the value goes out.
  *
- * <p>El rango es lo unico que las distingue de verdad, y casi todas caen en tres moldes:
+ * <p>The range is the only thing that really tells them apart, and almost all fall into three
+ * moulds:
  * <ul>
- * <li><b>1..MAX_VALUE</b> -- las que cuentan cosas que se piden y no tiene sentido pedir cero:
- *     {@link Copies}, {@link NumberUp}.</li>
- * <li><b>0..MAX_VALUE</b> -- las que <em>miden</em> algo ya hecho o el tamano de algo, donde cero
- *     es una medida legitima: {@link JobKOctets}, {@link QueuedJobCount}, todas las
- *     {@code ...Completed}.</li>
- * <li><b>1..100</b> -- las dos prioridades, que IPP fija en esa escala.</li>
+ * <li><b>1..MAX_VALUE</b> -- the ones that count things one asks for and where asking for zero
+ *     makes no sense: {@link Copies}, {@link NumberUp}.</li>
+ * <li><b>0..MAX_VALUE</b> -- the ones that <em>measure</em> something already done or the size of
+ *     something, where zero is a legitimate measure: {@link JobKOctets}, {@link QueuedJobCount},
+ *     all the {@code ...Completed}.</li>
+ * <li><b>1..100</b> -- the two priorities, which IPP fixes on that scale.</li>
  * </ul>
  *
- * <p>El {@code equals()} de cada subclase agrega un {@code instanceof} sobre el de la base: sin
- * eso {@code new Copies(1)} y {@code new NumberUp(1)} darian iguales, porque el de la base solo
- * compara el entero. La comparacion no es simetrica entre una clase y su subclase, y es asi en el
- * JDK tambien.
+ * <p>Each subclass's {@code equals()} adds an {@code instanceof} over the base's: without it
+ * {@code new Copies(1)} and {@code new NumberUp(1)} would come out equal, because the base's only
+ * compares the integer. The comparison is not symmetric between a class and its subclass, and it is
+ * so in the JDK too.
  */
 
 /**
- * Cuantas copias del documento se imprimen.
+ * How many copies of the document are printed.
  *
- * <p>Arranca en 1 y no en 0 porque pedir cero copias no es pedir nada, es un error de quien pide.
- * Como se acomodan esas copias en el papel lo deciden {@link SheetCollate} y {@link
- * MultipleDocumentHandling}.
+ * <p>It starts at 1 and not at 0 because asking for zero copies is not asking for anything, it is
+ * the asker's error. How those copies are laid out on the paper is decided by {@link SheetCollate}
+ * and {@link MultipleDocumentHandling}.
  */
 public final class Copies extends IntegerSyntax implements PrintRequestAttribute, PrintJobAttribute {
 
@@ -44,8 +45,10 @@ public final class Copies extends IntegerSyntax implements PrintRequestAttribute
         super(value, 1, Integer.MAX_VALUE);
     }
 
-    /** El {@code instanceof} es lo que impide que un Copies de igual a otro atributo
-     * entero con el mismo numero. */
+    /**
+     * The {@code instanceof} is what keeps a Copies from being equal to another
+     * integer attribute with the same number.
+     */
     public boolean equals(Object object) {
         return super.equals(object) && object instanceof Copies;
     }

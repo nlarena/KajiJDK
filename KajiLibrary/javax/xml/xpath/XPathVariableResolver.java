@@ -3,24 +3,24 @@ package javax.xml.xpath;
 import javax.xml.namespace.QName;
 
 /**
- * KajiLibrary's javax.xml.xpath.XPathVariableResolver -- de donde salen las variables.
+ * KajiLibrary's javax.xml.xpath.XPathVariableResolver -- where the variables come from.
  *
- * <p>Una expresion puede nombrar variables con {@code $nombre}, y XPath no tiene forma de
- * asignarlas: se resuelven por afuera, con esto.
+ * <p>An expression can name variables with {@code $name}, and XPath has no way to assign them: they
+ * are resolved from the outside, with this.
  *
- * <p>Es lo que evita armar expresiones concatenando texto, que es el equivalente en XPath de la
- * inyeccion SQL: un valor con una comilla adentro cambia lo que la expresion selecciona. Con una
- * variable, el valor nunca pasa por el parser.
+ * <p>It is what avoids building expressions by concatenating text, which is XPath's equivalent of
+ * SQL injection: a value with a quote inside changes what the expression selects. With a variable,
+ * the value never goes through the parser.
  *
- * <p>Se lo consulta <b>en cada evaluacion</b>, no al compilar. Por eso la misma expresion compilada
- * sirve para muchos valores distintos, que es el otro motivo para usarlas.
+ * <p>It is consulted <b>on every evaluation</b>, not when compiling. That is why the same compiled
+ * expression serves for many different values, which is the other reason to use them.
  */
 public interface XPathVariableResolver {
 
     /**
-     * El valor de esa variable.
+     * The value of that variable.
      *
-     * @return null si este resolvedor no la conoce
+     * @return null if this resolver does not know it
      */
     Object resolveVariable(QName variableName);
 }

@@ -4,40 +4,40 @@ import java.util.List;
 import java.util.Vector;
 
 /**
- * Filtro por tipo de notificacion, con la semantica de <b>prefijo</b>.
+ * Filter by notification type, with <b>prefix</b> semantics.
  *
- * <p>La sutileza esta ahi: `enableType("a.b")` no habilita el tipo `a.b` sino todo el que
- * <b>empiece</b> con `a.b`. Es lo que hace util la convencion de puntos --`jmx.mbean.registered` y
- * `jmx.mbean.unregistered` se habilitan los dos con `jmx.mbean`-- y tambien lo que explica que
- * `enableType("")` habilite todo.
+ * <p>The subtlety is there: {@code enableType("a.b")} does not enable the type {@code a.b} but
+ * everything that <b>starts</b> with {@code a.b}. It is what makes the dotted convention useful
+ * --{@code jmx.mbean.registered} and {@code jmx.mbean.unregistered} are both enabled with
+ * {@code jmx.mbean}-- and also what explains that {@code enableType("")} enables everything.
  *
- * <p>Arranca con la lista vacia, o sea <b>bloqueando</b> todo. Es al reves de lo que sugiere
- * "filtro por omision" y es intencional: un filtro recien construido y nunca configurado no deja
- * pasar nada.
+ * <p>It starts with the list empty, that is, <b>blocking</b> everything. It is the opposite of what
+ * "default filter" suggests and it is intentional: a filter just built and never configured lets
+ * nothing through.
  */
 public class NotificationFilterSupport implements NotificationFilter {
 
     private static final long serialVersionUID = 6579080007561786969L;
 
     /**
-     * @serial los prefijos habilitados
+     * @serial the enabled prefixes
      */
     private List<String> enabledTypes = new Vector<String>();
 
-    /** Con la lista vacia: no pasa ninguna notificacion hasta que se habilite algun prefijo. */
+    /** With the list empty: no notification passes until some prefix is enabled. */
     public NotificationFilterSupport() {
     }
 
     /**
-     * Deja pasar si el tipo de la notificacion empieza con alguno de los prefijos habilitados.
+     * Lets through if the notification's type starts with one of the enabled prefixes.
      */
     public synchronized boolean isNotificationEnabled(Notification notification) {
-        String tipo = notification.getType();
-        if (tipo == null) {
+        String type = notification.getType();
+        if (type == null) {
             return false;
         }
         for (int i = 0; i < enabledTypes.size(); i++) {
-            if (tipo.startsWith(enabledTypes.get(i))) {
+            if (type.startsWith(enabledTypes.get(i))) {
                 return true;
             }
         }
@@ -45,37 +45,39 @@ public class NotificationFilterSupport implements NotificationFilter {
     }
 
     /**
-     * Habilita un prefijo.
+     * Enables a prefix.
      *
-     * @throws IllegalArgumentException si es `null`. No se acepta porque un `null` en la lista
-     *         haria fallar cada evaluacion posterior del filtro, lejos de donde estuvo el error.
+     * @throws IllegalArgumentException if it is {@code null}. It is not accepted because a {@code
+     *         null} in the list would make every later evaluation of the filter fail, far from
+     *         where the mistake was.
      */
     public synchronized void enableType(String prefix) throws IllegalArgumentException {
         if (prefix == null) {
-            throw new IllegalArgumentException("El prefijo del tipo no puede ser null");
+            throw new IllegalArgumentException("The type prefix cannot be null");
         }
-        // Idempotente: repetir el mismo prefijo no cambia lo que el filtro deja pasar, y guardarlo
-        // dos veces solo alargaria el recorrido.
+        // Idempotent: repeating the same prefix does not change what the filter lets through, and
+        // storing it twice would only make the walk longer.
         if (!enabledTypes.contains(prefix)) {
             enabledTypes.add(prefix);
         }
     }
 
-    /** Saca ese prefijo exacto; si no estaba, no hace nada. */
+    /** Removes that exact prefix; if it was not there, does nothing. */
     public synchronized void disableType(String prefix) {
         enabledTypes.remove(prefix);
     }
 
-    /** Vuelve al estado inicial: bloquea todo. */
+    /** Back to the initial state: blocks everything. */
     public synchronized void disableAllTypes() {
         enabledTypes.clear();
     }
 
     /**
-     * Los prefijos habilitados.
+     * The enabled prefixes.
      *
-     * <p>Devuelve la lista <b>interna</b>, igual que el JDK: modificarla modifica el filtro. La
-     * firma historica es `Vector` y no se puede angostar sin romper a quien la asigne.
+     * <p>It returns the <b>internal</b> list, as the JDK does: modifying it modifies the filter.
+     * The historical signature is {@code Vector} and cannot be narrowed without breaking whoever
+     * assigns it.
      */
     public synchronized Vector<String> getEnabledTypes() {
         return (Vector<String>) enabledTypes;

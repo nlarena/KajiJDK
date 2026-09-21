@@ -3,30 +3,30 @@ package java.awt.dnd;
 import java.util.EventListener;
 
 /**
- * Quien atiende un arrastre que pasa por encima de un componente.
+ * Whoever attends a drag that passes over a component.
  *
- * <p>Los cinco métodos son las cinco cosas que pueden pasar, y sólo el último es el soltado. Los
- * otros cuatro existen para que el destino pueda **responder mientras el arrastre está en curso**:
- * cambiar el cursor, resaltar dónde va a caer, desplazarse.
+ * <p>The five methods are the five things that can happen, and only the last one is the drop. The
+ * other four exist so that the destination can **answer while the drag is under way**: change the
+ * cursor, highlight where it is going to fall, scroll.
  *
- * <p>La regla que se olvida: en {@code dragEnter} y {@code dragOver} hay que llamar a
- * {@code acceptDrag} o a {@code rejectDrag}. Sin eso el usuario no ve si puede soltar ahí, y el
- * cursor le dice que no aunque el componente sí acepte.
+ * <p>The rule that gets forgotten: in {@code dragEnter} and {@code dragOver} {@code acceptDrag} or
+ * {@code rejectDrag} has to be called. Without that the user does not see whether they can drop
+ * there, and the cursor tells them they cannot even though the component does accept.
  */
 public interface DropTargetListener extends EventListener {
 
-    /** El arrastre entró al componente. */
+    /** The drag entered the component. */
     void dragEnter(DropTargetDragEvent dtde);
 
-    /** El arrastre se está moviendo por encima. */
+    /** The drag is moving over it. */
     void dragOver(DropTargetDragEvent dtde);
 
-    /** El usuario cambió la acción, normalmente apretando una tecla. */
+    /** The user changed the action, usually by pressing a key. */
     void dropActionChanged(DropTargetDragEvent dtde);
 
-    /** El arrastre salió del componente o se canceló. */
+    /** The drag left the component or was cancelled. */
     void dragExit(DropTargetEvent dte);
 
-    /** Se soltó acá. */
+    /** It was dropped here. */
     void drop(DropTargetDropEvent dtde);
 }

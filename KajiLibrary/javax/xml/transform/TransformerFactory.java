@@ -8,73 +8,73 @@ import java.util.Properties;
 import java.util.ServiceLoader;
 
 /**
- * KajiLibrary's javax.xml.transform.TransformerFactory -- de donde salen los transformadores.
+ * KajiLibrary's javax.xml.transform.TransformerFactory -- where the transformers come from.
  *
- * <p>Es el punto de entrada de toda la API de XSLT y, mas interesante, el ejemplo canonico del
- * patron de fabrica conectable de JAXP: el codigo de la aplicacion nombra **esta** clase abstracta y
- * nunca a un procesador concreto, y {@link #newInstance()} descubre en tiempo de ejecucion cual hay
- * instalado. Cambiar de Xalan a Saxon es cambiar el classpath, no el codigo.
+ * <p>It is the entry point of the whole XSLT API and, more interestingly, the canonical example of
+ * the JAXP pluggable factory pattern: the application's code names **this** abstract class and
+ * never a concrete processor, and {@link #newInstance()} discovers at run time which one is
+ * installed. Switching from Xalan to Saxon is changing the classpath, not the code.
  *
- * <h2>El orden de busqueda, que es el contrato</h2>
+ * <h2>The search order, which is the contract</h2>
  *
- * <p>{@link #newInstance()} mira, y se queda con el primero que encuentre:
+ * <p>{@link #newInstance()} looks, and keeps the first it finds:
  *
  * <ol>
- *   <li>la propiedad de sistema {@code javax.xml.transform.TransformerFactory};
- *   <li>el archivo {@code $java.home/conf/jaxp.properties}, con esa misma clave;
- *   <li>los proveedores declarados via {@link ServiceLoader}, o sea
- *       {@code META-INF/services/javax.xml.transform.TransformerFactory} en el classpath;
- *   <li>la implementacion por omision de la plataforma.
+ *   <li>the system property {@code javax.xml.transform.TransformerFactory};
+ *   <li>the file {@code $java.home/conf/jaxp.properties}, with that same key;
+ *   <li>the providers declared via {@link ServiceLoader}, that is
+ *       {@code META-INF/services/javax.xml.transform.TransformerFactory} on the classpath;
+ *   <li>the platform's default implementation.
  * </ol>
  *
- * <p>El orden no es arbitrario y explica de que sirve cada escalon: la propiedad de sistema le gana
- * a todo porque es lo que uno puede cambiar sin tocar el despliegue, el archivo es la configuracion
- * de la instalacion, y el `ServiceLoader` es lo que trae un jar por el solo hecho de estar. Los tres
- * primeros estan implementados aca tal cual. **El cuarto no existe en esta biblioteca**, y de ahi
- * sale todo lo que sigue.
+ * <p>The order is not arbitrary and it explains what each step is for: the system property beats
+ * everything because it is what one can change without touching the deployment, the file is the
+ * installation's configuration, and the `ServiceLoader` is what a jar brings just by being there.
+ * The first three are implemented here as they are. **The fourth does not exist in this library**,
+ * and everything that follows comes from that.
  *
- * <h2>Que hay escrito aca y que no, y por que</h2>
+ * <h2>What is written here and what is not, and why</h2>
  *
- * <p>La API esta entera: las trece operaciones abstractas, los tres puntos de entrada estaticos y el
- * constructor protegido. Lo que **no** hay es un procesador de XSLT. XSLT es un lenguaje de
- * transformacion completo --su propia sintaxis, su modelo de arbol, y XPath adentro-- y escribirlo
- * es un proyecto aparte, no un miembro de esta clase.
+ * <p>The API is whole: the twelve abstract operations, the three static entry points and the
+ * protected constructor. (The note said thirteen operations.) What there is **not** is an XSLT
+ * processor. XSLT is a complete transformation language --its own syntax, its tree model, and XPath
+ * inside-- and writing it is a separate project, not a member of this class.
  *
- * <p>Asi que {@link #newInstance()} recorre los tres escalones que si estan y, cuando ninguno da
- * nada, lanza {@link TransformerFactoryConfigurationError} -- que es **exactamente** lo que el JDK
- * hace cuando no encuentra implementacion, y por eso no es un stub sino el camino previsto por el
- * contrato. Que el JDK real casi nunca lo tome es un accidente de que trae Xalan adentro, no otra
- * regla.
+ * <p>So {@link #newInstance()} walks the three steps that are there and, when none gives anything,
+ * throws {@link TransformerFactoryConfigurationError} -- which is **exactly** what the JDK does
+ * when it finds no implementation, and that is why it is not a stub but the path the contract
+ * foresees. That the real JDK almost never takes it is an accident of it bringing Xalan inside, not
+ * another rule.
  *
- * <p>La alternativa tentadora --devolver una fabrica cuyo `Transformer` copie la entrada en la
- * salida-- se descarto a proposito, y vale dejar dicho el motivo porque parece mas util: un
- * transformador que no transforma **falla en silencio**. El llamador recibe un documento, lo da por
- * transformado, y la hoja de estilo no se aplico nunca. Un error al construir la fabrica se ve en la
- * primera corrida; un documento sin transformar se ve cuando ya esta en produccion. Entre las dos,
- * la unica honesta es la que rompe temprano.
+ * <p>The tempting alternative --returning a factory whose `Transformer` copies the input to the
+ * output-- was discarded on purpose, and the reason is worth leaving written because it seems more
+ * useful: a transformer that does not transform **fails silently**. The caller receives a document,
+ * takes it as transformed, and the stylesheet was never applied. An error when building the factory
+ * is seen on the first run; an untransformed document is seen when it is already in production. Of
+ * the two, the only honest one is the one that breaks early.
  */
 public abstract class TransformerFactory {
 
-    /** La clave, que es a la vez el nombre del servicio y el de la propiedad de sistema. */
-    private static final String CLAVE = "javax.xml.transform.TransformerFactory";
+    /** The key, which is both the name of the service and that of the system property. */
+    private static final String KEY = "javax.xml.transform.TransformerFactory";
 
-    /** Para las subclases; no hay estado que inicializar. */
+    /** For the subclasses; there is no state to initialize. */
     protected TransformerFactory() {
     }
 
-    // ---- descubrimiento ----------------------------------------------------------------------
+    // ---- discovery ---------------------------------------------------------------------------
 
     /**
-     * La implementacion **de la plataforma**, sin mirar la configuracion.
+     * The implementation **of the platform**, without looking at the configuration.
      *
-     * <p>Se salta los cuatro escalones de {@link #newInstance()} a proposito: existe para que una
-     * pieza que necesita el procesador de referencia --y no el que la aplicacion haya enchufado--
-     * lo pueda pedir. Es el escape de la conectabilidad, no un atajo.
+     * <p>It skips the four steps of {@link #newInstance()} on purpose: it exists so that a piece
+     * that needs the reference processor --and not the one the application may have plugged in--
+     * can ask for it. It is the escape hatch from pluggability, not a shortcut.
      *
-     * <p>Aca no hay ninguna, asi que siempre falla. Ver el encabezado de la clase.
+     * <p>Here there is none, so it always fails. See the class header.
      *
-     * @return nunca vuelve
-     * @throws TransformerFactoryConfigurationError siempre: esta biblioteca no trae XSLT
+     * @return never returns
+     * @throws TransformerFactoryConfigurationError always: this library brings no XSLT
      */
     public static TransformerFactory newDefaultInstance() {
         throw new TransformerFactoryConfigurationError(
@@ -82,110 +82,113 @@ public abstract class TransformerFactory {
     }
 
     /**
-     * La fabrica configurada, buscada en los cuatro escalones del encabezado.
+     * The configured factory, looked for in the four steps of the header.
      *
-     * @return la fabrica encontrada
-     * @throws TransformerFactoryConfigurationError si ninguno de los escalones da una
+     * @return the factory found
+     * @throws TransformerFactoryConfigurationError if none of the steps gives one
      */
     public static TransformerFactory newInstance() throws TransformerFactoryConfigurationError {
-        // 1. La propiedad de sistema.
-        String nombre = null;
+        // 1. The system property.
+        String className = null;
         try {
-            nombre = System.getProperty(CLAVE);
-        } catch (SecurityException ignorada) {
-            // Sin permiso para leerla es lo mismo que no estar puesta: se sigue al proximo escalon.
+            className = System.getProperty(KEY);
+        } catch (SecurityException ignored) {
+            // Without permission to read it, it is the same as not being set: carry on to the next
+            // step.
         }
-        if (nombre != null && nombre.length() > 0) {
-            return instanciar(nombre, null);
+        if (className != null && className.length() > 0) {
+            return instantiate(className, null);
         }
 
         // 2. $java.home/conf/jaxp.properties.
-        nombre = deJaxpProperties();
-        if (nombre != null && nombre.length() > 0) {
-            return instanciar(nombre, null);
+        className = fromJaxpProperties();
+        if (className != null && className.length() > 0) {
+            return instantiate(className, null);
         }
 
-        // 3. Los proveedores declarados en el classpath.
-        TransformerFactory delServicio = deServiceLoader();
-        if (delServicio != null) {
-            return delServicio;
+        // 3. The providers declared on the classpath.
+        TransformerFactory fromService = fromServiceLoader();
+        if (fromService != null) {
+            return fromService;
         }
 
-        // 4. La implementacion por omision, que aca no existe.
-        throw new TransformerFactoryConfigurationError("Provider for " + CLAVE + " cannot be found");
+        // 4. The default implementation, which does not exist here.
+        throw new TransformerFactoryConfigurationError("Provider for " + KEY + " cannot be found");
     }
 
     /**
-     * Una fabrica de una clase nombrada, sin descubrimiento ninguno.
+     * A factory of a named class, without any discovery.
      *
-     * <p>Para cuando la aplicacion necesita **dos** procesadores a la vez y no le sirve que haya uno
-     * solo elegido globalmente.
+     * <p>For when the application needs **two** processors at once and one chosen globally does not
+     * do.
      *
-     * @param factoryClassName el nombre completo de la clase
-     * @param classLoader con que cargarla; null usa el que corresponda por omision
-     * @return la fabrica
-     * @throws TransformerFactoryConfigurationError si la clase no esta o no se puede instanciar
+     * @param factoryClassName the fully qualified name of the class
+     * @param classLoader what to load it with; null uses the one that corresponds by default
+     * @return the factory
+     * @throws TransformerFactoryConfigurationError if the class is not there or cannot be
+     *     instantiated
      */
     public static TransformerFactory newInstance(String factoryClassName, ClassLoader classLoader)
             throws TransformerFactoryConfigurationError {
         if (factoryClassName == null) {
-            // El JDK llega aca con una NullPointerException de adentro y la reporta envuelta; se
-            // reproduce el mismo texto porque hay codigo que lo lee.
+            // The JDK gets here with an inner NullPointerException and reports it wrapped; the same
+            // text is reproduced because there is code that reads it.
             NullPointerException e = new NullPointerException();
             throw new TransformerFactoryConfigurationError(
                     e, "Provider " + factoryClassName + " could not be instantiated: " + e);
         }
-        return instanciar(factoryClassName, classLoader);
+        return instantiate(factoryClassName, classLoader);
     }
 
-    // ---- las tuercas del descubrimiento ------------------------------------------------------
+    // ---- the nuts and bolts of discovery --------------------------------------------------------
 
     /**
-     * Carga e instancia la clase nombrada, con los mensajes de error que el contrato define.
+     * Loads and instantiates the named class, with the error messages the contract defines.
      *
-     * <p>Los dos casos se distinguen porque se arreglan distinto: **not found** es un jar que falta,
-     * **could not be instantiated** es una clase que esta pero no sirve --sin constructor sin
-     * argumentos, o que no es una `TransformerFactory`--.
+     * <p>The two cases are told apart because they are fixed differently: **not found** is a
+     * missing jar, **could not be instantiated** is a class that is there but is no good --without
+     * a no-argument constructor, or not a `TransformerFactory`--.
      */
-    private static TransformerFactory instanciar(String nombre, ClassLoader loader) {
-        Class<?> clase;
+    private static TransformerFactory instantiate(String className, ClassLoader loader) {
+        Class<?> cls;
         try {
             if (loader == null) {
-                clase = Class.forName(nombre);
+                cls = Class.forName(className);
             } else {
-                clase = Class.forName(nombre, false, loader);
+                cls = Class.forName(className, false, loader);
             }
         } catch (ClassNotFoundException e) {
-            throw new TransformerFactoryConfigurationError(e, "Provider " + nombre + " not found");
+            throw new TransformerFactoryConfigurationError(
+                    e, "Provider " + className + " not found");
         }
-        Object objeto;
+        Object obj;
         try {
-            objeto = clase.newInstance();
+            obj = cls.newInstance();
         } catch (Exception e) {
             throw new TransformerFactoryConfigurationError(
-                    e, "Provider " + nombre + " could not be instantiated: " + e);
+                    e, "Provider " + className + " could not be instantiated: " + e);
         }
-        if (!(objeto instanceof TransformerFactory)) {
-            ClassCastException e = new ClassCastException(nombre + " cannot be cast to " + CLAVE);
+        if (!(obj instanceof TransformerFactory)) {
+            ClassCastException e = new ClassCastException(className + " cannot be cast to " + KEY);
             throw new TransformerFactoryConfigurationError(
-                    e, "Provider " + nombre + " could not be instantiated: " + e);
+                    e, "Provider " + className + " could not be instantiated: " + e);
         }
-        return (TransformerFactory) objeto;
+        return (TransformerFactory) obj;
     }
 
     /**
-     * El nombre de clase que declare {@code $java.home/conf/jaxp.properties}, o null.
+     * The class name {@code $java.home/conf/jaxp.properties} declares, or null.
      *
-     * <p>Sin cache a proposito: el JDK lee el archivo una sola vez por VM, y esa es una decision de
-     * rendimiento que aca no compra nada --este camino se recorre cuando alguien pide una fabrica,
-     * no en un bucle-- y que a cambio hace imposible probarlo.
+     * <p>Without a cache on purpose: the JDK reads the file only once per VM, and that is a
+     * performance decision that buys nothing here --this path is walked when someone asks for a
+     * factory, not in a loop-- and that in exchange makes it impossible to test.
      *
-     * <p>Cualquier fallo de lectura devuelve null en vez de propagar: el archivo es **opcional**, y
-     * que no se pueda leer no es un error de configuracion sino la ausencia de configuracion. En
-     * esta VM {@code java.home} no esta definida, asi que este escalon no aporta nada todavia; el
-     * codigo esta escrito para el dia que lo este.
+     * <p>Any read failure returns null instead of propagating: the file is **optional**, and not
+     * being able to read it is not a configuration error but the absence of configuration. In this
+     * VM {@code java.home} is not defined, so this step contributes nothing yet; the code is
+     * written for the day it is.
      */
-    private static String deJaxpProperties() {
+    private static String fromJaxpProperties() {
         try {
             String home = System.getProperty("java.home");
             if (home == null) {
@@ -202,147 +205,147 @@ public abstract class TransformerFactory {
             } finally {
                 in.close();
             }
-            return props.getProperty(CLAVE);
-        } catch (Throwable ignorada) {
+            return props.getProperty(KEY);
+        } catch (Throwable ignored) {
             return null;
         }
     }
 
     /**
-     * La primera fabrica que declare un proveedor del classpath, o null si no hay ninguno.
+     * The first factory a classpath provider declares, or null if there is none.
      *
-     * <p>Hoy siempre da null, y no por un atajo de aca: el {@link ServiceLoader} de esta biblioteca
-     * no puede enumerar {@code META-INF/services} porque nuestro {@code ClassLoader} no tiene
-     * recursos. La maquinaria esta enchufada donde va, asi que el dia que los recursos existan este
-     * escalon empieza a encontrar proveedores sin tocar una linea.
+     * <p>Today it always gives null, and not because of a shortcut here: this library's {@link
+     * ServiceLoader} cannot enumerate {@code META-INF/services} because our {@code ClassLoader} has
+     * no resources. The machinery is plugged in where it goes, so the day the resources exist this
+     * step starts finding providers without touching a line.
      */
-    private static TransformerFactory deServiceLoader() {
+    private static TransformerFactory fromServiceLoader() {
         try {
             ServiceLoader<TransformerFactory> sl = ServiceLoader.load(TransformerFactory.class);
             Iterator<TransformerFactory> it = sl.iterator();
             if (it.hasNext()) {
                 return it.next();
             }
-        } catch (Throwable ignorada) {
-            // Un proveedor roto no puede impedir que se pruebe el escalon siguiente.
+        } catch (Throwable ignored) {
+            // A broken provider cannot stop the next step from being tried.
         }
         return null;
     }
 
-    // ---- el contrato de la fabrica -----------------------------------------------------------
+    // ---- the factory's contract -----------------------------------------------------------------
 
     /**
-     * Un transformador que aplica la hoja de estilo de {@code source}.
+     * A transformer that applies the stylesheet of {@code source}.
      *
-     * @param source la hoja de estilo
-     * @return el transformador
-     * @throws TransformerConfigurationException si la hoja no se puede compilar
+     * @param source the stylesheet
+     * @return the transformer
+     * @throws TransformerConfigurationException if the stylesheet cannot be compiled
      */
     public abstract Transformer newTransformer(Source source) throws TransformerConfigurationException;
 
     /**
-     * Un transformador **de copia**: sin hoja de estilo, mueve la entrada a la salida.
+     * A **copying** transformer: without a stylesheet, it moves the input to the output.
      *
-     * <p>Es la unica transformacion identidad que la API define, y esta bien que exista porque el
-     * llamador la pide explicitamente y sabe lo que recibe. Sirve para serializar: se le da un
-     * arbol y un flujo, y se aprovechan las propiedades de {@link OutputKeys} sin escribir un
-     * serializador.
+     * <p>It is the only identity transformation the API defines, and it is right that it exists
+     * because the caller asks for it explicitly and knows what they get. It serves for serializing:
+     * it is given a tree and a stream, and the {@link OutputKeys} properties are used without
+     * writing a serializer.
      *
-     * @return el transformador de copia
-     * @throws TransformerConfigurationException si no se puede construir
+     * @return the copying transformer
+     * @throws TransformerConfigurationException if it cannot be built
      */
     public abstract Transformer newTransformer() throws TransformerConfigurationException;
 
     /**
-     * Compila la hoja de estilo una vez para reusarla muchas.
+     * Compiles the stylesheet once to reuse it many times.
      *
-     * @param source la hoja de estilo
-     * @return la hoja compilada
-     * @throws TransformerConfigurationException si no se puede compilar
+     * @param source the stylesheet
+     * @return the compiled stylesheet
+     * @throws TransformerConfigurationException if it cannot be compiled
      */
     public abstract Templates newTemplates(Source source) throws TransformerConfigurationException;
 
     /**
-     * La hoja de estilo que el propio documento se asocia con {@code &lt;?xml-stylesheet?&gt;}.
+     * The stylesheet the document itself associates with {@code &lt;?xml-stylesheet?&gt;}.
      *
-     * <p>Los tres criterios --medio, titulo, juego de caracteres-- filtran entre varias
-     * instrucciones; null en cualquiera significa "no me importa esa". Devuelve null si ninguna
-     * coincide, que no es un error: un documento no tiene por que traer hoja de estilo.
+     * <p>The three criteria --media, title, charset-- filter among several instructions; null in
+     * any of them means "I do not care about that one". It returns null if none matches, which is
+     * not an error: a document need not bring a stylesheet.
      *
-     * @param source el documento
-     * @param media el medio buscado, o null
-     * @param title el titulo buscado, o null
-     * @param charset el juego de caracteres buscado, o null
-     * @return la fuente de la hoja de estilo, o null
-     * @throws TransformerConfigurationException si el documento no se puede leer
+     * @param source the document
+     * @param media the media looked for, or null
+     * @param title the title looked for, or null
+     * @param charset the charset looked for, or null
+     * @return the source of the stylesheet, or null
+     * @throws TransformerConfigurationException if the document cannot be read
      */
     public abstract Source getAssociatedStylesheet(Source source, String media, String title, String charset)
             throws TransformerConfigurationException;
 
     /**
-     * Quien resuelve los `href` de los transformadores que salgan de aca.
+     * Who resolves the `href`s of the transformers that come out of here.
      *
-     * @param resolver el resolvedor, o null para volver al de por omision
+     * @param resolver the resolver, or null to go back to the default one
      */
     public abstract void setURIResolver(URIResolver resolver);
 
-    /** El resolvedor en uso, o null. */
+    /** The resolver in use, or null. */
     public abstract URIResolver getURIResolver();
 
     /**
-     * Prende o apaga una caracteristica.
+     * Turns a feature on or off.
      *
-     * <p>La unica que la spec obliga a soportar es
-     * {@code javax.xml.XMLConstants.FEATURE_SECURE_PROCESSING}, y a esa **no se le puede decir que
-     * no**: una implementacion que la tenga prendida no esta obligada a dejar apagarla, porque el
-     * modo seguro puede venir impuesto por el entorno.
+     * <p>The only one the spec requires to be supported is {@code
+     * javax.xml.XMLConstants.FEATURE_SECURE_PROCESSING}, and that one **may refuse a no**: an
+     * implementation that has it on is not obliged to let it be turned off, because secure mode can
+     * be imposed by the environment.
      *
-     * @param name el nombre de la caracteristica
-     * @param value si se quiere prendida
-     * @throws TransformerConfigurationException si no se reconoce o no se puede poner asi
+     * @param name the name of the feature
+     * @param value whether it is wanted on
+     * @throws TransformerConfigurationException if it is not recognized or cannot be set that way
      */
     public abstract void setFeature(String name, boolean value) throws TransformerConfigurationException;
 
     /**
-     * Si una caracteristica esta prendida.
+     * Whether a feature is on.
      *
-     * <p>Un {@code false} es ambiguo a proposito: puede ser "esta apagada" o "no la conozco". La
-     * API no distingue.
+     * <p>A {@code false} is ambiguous on purpose: it can be "it is off" or "I do not know it". The
+     * API does not tell them apart.
      *
-     * @param name el nombre de la caracteristica
-     * @return si esta soportada y prendida
+     * @param name the name of the feature
+     * @return whether it is supported and on
      */
     public abstract boolean getFeature(String name);
 
     /**
-     * Fija un atributo especifico de la implementacion.
+     * Sets an implementation-specific attribute.
      *
-     * @param name el nombre del atributo
-     * @param value el valor
-     * @throws IllegalArgumentException si no se reconoce
+     * @param name the name of the attribute
+     * @param value the value
+     * @throws IllegalArgumentException if it is not recognized
      */
     public abstract void setAttribute(String name, Object value);
 
     /**
-     * El valor de un atributo especifico de la implementacion.
+     * The value of an implementation-specific attribute.
      *
-     * @param name el nombre del atributo
-     * @return el valor
-     * @throws IllegalArgumentException si no se reconoce
+     * @param name the name of the attribute
+     * @return the value
+     * @throws IllegalArgumentException if it is not recognized
      */
     public abstract Object getAttribute(String name);
 
     /**
-     * Quien recibe los errores **de compilar hojas de estilo**.
+     * Who receives the errors **of compiling stylesheets**.
      *
-     * <p>No es el mismo oyente que el del {@link Transformer}: aca se reportan los problemas de
-     * armar la transformacion, alla los de correrla.
+     * <p>It is not the same listener as the {@link Transformer}'s: here the problems of setting up
+     * the transformation are reported, there those of running it.
      *
-     * @param listener el oyente; no puede ser null
-     * @throws IllegalArgumentException si es null
+     * @param listener the listener; cannot be null
+     * @throws IllegalArgumentException if it is null
      */
     public abstract void setErrorListener(ErrorListener listener);
 
-    /** El oyente en uso; nunca null. */
+    /** The listener in use; never null. */
     public abstract ErrorListener getErrorListener();
 }

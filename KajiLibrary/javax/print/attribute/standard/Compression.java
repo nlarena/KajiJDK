@@ -5,10 +5,10 @@ import javax.print.attribute.DocAttribute;
 import javax.print.attribute.EnumSyntax;
 
 /**
- * Con que algoritmo viene comprimido el flujo de datos del documento.
+ * Which algorithm the document's data stream comes compressed with.
  *
- * <p>Describe el transporte, no el contenido: la impresora tiene que descomprimir antes de mirar el
- * formato del documento.
+ * <p>It describes the transport, not the content: the printer has to decompress before
+ * looking at the document's format.
  */
 public class Compression extends EnumSyntax implements DocAttribute {
 

@@ -1,21 +1,21 @@
 package com.sun.jdi;
 
 /**
- * InconsistentDebugInfoException de la maquina depurada.
+ * InconsistentDebugInfoException of the debugged machine.
  *
  * @since 1.3
  */
 public class InconsistentDebugInfoException extends RuntimeException {
 
-    /** Sin detalle. */
+    /** With no detail. */
     public InconsistentDebugInfoException() {
         super();
     }
 
     /**
-     * Con un mensaje.
+     * With a message.
      *
-     * @param s el mensaje
+     * @param s the message
      */
     public InconsistentDebugInfoException(String s) {
         super(s);

@@ -10,21 +10,21 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Los {@link ServicePermission} de una politica, juntados por servicio.
+ * The {@link ServicePermission}s of a policy, merged by service.
  *
- * <p>Agregar {@code accept} y despues {@code initiate} sobre el mismo servicio deja <b>un</b> permiso
- * con las dos acciones, no dos permisos; es lo que hace que la coleccion conteste bien a un pedido
- * que necesite las dos a la vez. El que se llame {@code "*"} cubre a todos los demas.
+ * <p>Adding {@code accept} and then {@code initiate} on the same service leaves <b>one</b>
+ * permission with both actions, not two permissions; it is what makes the collection answer right
+ * to a request that needs both at once. The one named {@code "*"} covers all the others.
  */
 final class KrbServicePermissionCollection extends PermissionCollection {
 
     private static final long serialVersionUID = -4118834211490102011L;
 
-    /** Un permiso por servicio, en orden de llegada. */
+    /** One permission per service, in order of arrival. */
     private final Map<String, ServicePermission> perms =
         new LinkedHashMap<String, ServicePermission>();
 
-    /** Si alguno de la coleccion alcanza. */
+    /** Whether any of the collection's is enough. */
     @Override
     public boolean implies(Permission permission) {
         if (!(permission instanceof ServicePermission)) {
@@ -50,10 +50,10 @@ final class KrbServicePermissionCollection extends PermissionCollection {
     }
 
     /**
-     * Agrega, juntando con el que hubiera para el mismo servicio.
+     * Adds, merging with whatever there was for the same service.
      *
-     * @throws IllegalArgumentException si no es un {@link ServicePermission}
-     * @throws SecurityException si la coleccion es de solo lectura
+     * @throws IllegalArgumentException if it is not a {@link ServicePermission}
+     * @throws SecurityException if the collection is read-only
      */
     @Override
     public void add(Permission permission) {
@@ -79,7 +79,7 @@ final class KrbServicePermissionCollection extends PermissionCollection {
         }
     }
 
-    /** Los permisos, uno por servicio. */
+    /** The permissions, one per service. */
     @Override
     public Enumeration<Permission> elements() {
         List<Permission> snapshot;

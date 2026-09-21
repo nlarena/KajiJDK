@@ -4,27 +4,27 @@ import java.io.Serializable;
 import java.util.Arrays;
 
 /**
- * KajiLibrary's javax.smartcardio.ResponseAPDU -- lo que contesta la tarjeta.
+ * KajiLibrary's javax.smartcardio.ResponseAPDU -- what the card answers.
  *
- * <p>Una respuesta son los datos --que pueden ser cero-- y siempre <b>dos bytes de estado</b> al
- * final, SW1 y SW2. Por eso una respuesta valida nunca mide menos de dos bytes.
+ * <p>An answer is the data --which may be zero bytes-- and always <b>two status bytes</b> at the
+ * end, SW1 and SW2. That is why a valid answer never measures less than two bytes.
  *
- * <p>{@code 9000} es "todo bien"; {@code 6A82} es "no existe ese archivo"; {@code 61xx} es "hay xx
- * bytes mas esperando". {@link #getSW} devuelve los dos juntos, que es la forma en que estan
- * tabulados en la norma.
+ * <p>{@code 9000} is "all fine"; {@code 6A82} is "that file does not exist"; {@code 61xx} is "there
+ * are xx more bytes waiting". {@link #getSW} returns both together, which is the form in which they
+ * are tabulated in the standard.
  */
 public final class ResponseAPDU implements Serializable {
 
     private static final long serialVersionUID = 6962744978375594225L;
 
-    /** La respuesta completa, datos mas estado. */
+    /** The whole answer, data plus status. */
     private final byte[] apdu;
 
     /**
-     * Con esos bytes. El arreglo se copia.
+     * With those bytes. The array is copied.
      *
-     * @throws NullPointerException si es null
-     * @throws IllegalArgumentException si mide menos de dos bytes
+     * @throws NullPointerException if it is null
+     * @throws IllegalArgumentException if it measures less than two bytes
      */
     public ResponseAPDU(byte[] apdu) {
         apdu = apdu.clone();
@@ -34,46 +34,46 @@ public final class ResponseAPDU implements Serializable {
         this.apdu = apdu;
     }
 
-    /** Cuantos bytes de datos hay, sin contar el estado. */
+    /** How many data bytes there are, without counting the status. */
     public int getNr() {
         return this.apdu.length - 2;
     }
 
-    /** Los datos, sin el estado. Una copia. */
+    /** The data, without the status. A copy. */
     public byte[] getData() {
         byte[] data = new byte[this.apdu.length - 2];
         System.arraycopy(this.apdu, 0, data, 0, data.length);
         return data;
     }
 
-    /** El primer byte de estado. */
+    /** The first status byte. */
     public int getSW1() {
         return this.apdu[this.apdu.length - 2] & 0xFF;
     }
 
-    /** El segundo. */
+    /** The second. */
     public int getSW2() {
         return this.apdu[this.apdu.length - 1] & 0xFF;
     }
 
-    /** Los dos juntos, SW1 arriba. Ver la nota de la clase. */
+    /** Both together, SW1 on top. See the class note. */
     public int getSW() {
         return (getSW1() << 8) | getSW2();
     }
 
-    /** La respuesta completa. Una copia. */
+    /** The whole answer. A copy. */
     public byte[] getBytes() {
         return this.apdu.clone();
     }
 
-    /** El tamano y el estado en hexadecimal. */
+    /** The size and the status in hexadecimal. */
     @Override
     public String toString() {
         return "ResponseAPDU: " + this.apdu.length + " bytes, SW="
             + Integer.toHexString(getSW() | 0x10000).substring(1);
     }
 
-    /** Dos respuestas son iguales si tienen los mismos bytes. */
+    /** Two answers are equal if they have the same bytes. */
     @Override
     public boolean equals(Object obj) {
         if (this == obj) {

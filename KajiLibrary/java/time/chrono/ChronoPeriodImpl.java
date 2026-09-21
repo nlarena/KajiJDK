@@ -7,18 +7,19 @@ import java.time.temporal.TemporalAmount;
 import java.time.temporal.TemporalUnit;
 import java.time.temporal.ChronoUnit;
 
-// El `ChronoPeriod` de un calendario que no es el ISO: años, meses y dias mas la cronologia a la que
-// pertenecen.
+// The `ChronoPeriod` of a calendar that is not ISO: years, months and days plus the chronology they
+// belong to.
 //
-// La cronologia no es un adorno. Un periodo de "un mes" solo significa algo dentro de un calendario,
-// y sumar un periodo Minguo a una fecha Hijri no tiene sentido: `plus` y `minus` lo rechazan en vez
-// de dar un resultado que parece razonable y no lo es.
+// The chronology is not an ornament. A period of "one month" only means something within a calendar,
+// and adding a Minguo period to a Hijrah date makes no sense: `plus` and `minus` reject it rather
+// than give a result that looks reasonable and is not.
 //
-// Los tres campos son independientes, como en `java.time.Period`: "1 mes y 1 dia" no son 31 dias ni
-// 32, y cuantos resulten depende de a que fecha se le sumen.
-// Queda afuera `writeReplace()`: es el gancho de la serializacion de Java, y esta biblioteca no la
-// implementa. Un `writeReplace` que devuelva cualquier cosa sin que exista el mecanismo del otro lado
-// seria un miembro con la firma correcta y ningun efecto.
+// The three fields are independent, as in `java.time.Period`: "1 month and 1 day" is neither 31 days
+// nor 32, and how many it turns out to be depends on which date it is added to.
+//
+// `writeReplace()` is left out: it is Java serialisation's hook, and this library does not implement
+// it. A `writeReplace` returning anything at all with no mechanism on the other side would be a
+// member with the right signature and no effect.
 final class ChronoPeriodImpl implements ChronoPeriod {
 
     private final Chronology chrono;
@@ -67,33 +68,33 @@ final class ChronoPeriodImpl implements ChronoPeriod {
     }
 
     public ChronoPeriod plus(TemporalAmount amountToAdd) {
-        ChronoPeriodImpl otro = this.mismo(amountToAdd);
-        return new ChronoPeriodImpl(this.chrono, this.years + otro.years,
-                this.months + otro.months, this.days + otro.days);
+        ChronoPeriodImpl other = this.same(amountToAdd);
+        return new ChronoPeriodImpl(this.chrono, this.years + other.years,
+                this.months + other.months, this.days + other.days);
     }
 
     public ChronoPeriod minus(TemporalAmount amountToSubtract) {
-        ChronoPeriodImpl otro = this.mismo(amountToSubtract);
-        return new ChronoPeriodImpl(this.chrono, this.years - otro.years,
-                this.months - otro.months, this.days - otro.days);
+        ChronoPeriodImpl other = this.same(amountToSubtract);
+        return new ChronoPeriodImpl(this.chrono, this.years - other.years,
+                this.months - other.months, this.days - other.days);
     }
 
-    // Sumar o restar solo tiene sentido entre periodos del **mismo** calendario: "un mes" mide cosas
-    // distintas en cada uno. Rechazarlo es lo unico honesto.
-    private ChronoPeriodImpl mismo(TemporalAmount amount) {
+    // Adding or subtracting only makes sense between periods of the **same** calendar: "one month"
+    // measures different things in each. Rejecting it is the only honest thing.
+    private ChronoPeriodImpl same(TemporalAmount amount) {
         if (amount == null) {
             throw new NullPointerException("amount");
         }
         if (!(amount instanceof ChronoPeriodImpl)) {
             throw new java.time.DateTimeException("Unable to add amount: " + amount);
         }
-        ChronoPeriodImpl otro = (ChronoPeriodImpl) amount;
-        if (!otro.chrono.getId().equals(this.chrono.getId())) {
+        ChronoPeriodImpl other = (ChronoPeriodImpl) amount;
+        if (!other.chrono.getId().equals(this.chrono.getId())) {
             throw new java.time.DateTimeException(
                     "Chronology mismatch, expected: " + this.chrono.getId()
-                            + ", actual: " + otro.chrono.getId());
+                            + ", actual: " + other.chrono.getId());
         }
-        return otro;
+        return other;
     }
 
     public ChronoPeriod multipliedBy(int scalar) {
@@ -105,20 +106,20 @@ final class ChronoPeriodImpl implements ChronoPeriod {
     }
 
     /**
-     * Los meses sobrantes pasados a años.
+     * The leftover months turned into years.
      *
-     * <p>Solo se puede normalizar si el calendario tiene una cantidad fija de meses por año -- si no,
-     * "doce meses" no es "un año". Los tres de esta biblioteca tienen doce.
+     * <p>It can only be normalised if the calendar has a fixed number of months per year -- otherwise
+     * "twelve months" is not "one year". This library's three have twelve.
      */
     public ChronoPeriod normalized() {
-        // Los tres calendarios de esta biblioteca --Minguo, ThaiBuddhist, Japanese-- solo renumeran
-        // los años sobre el ISO: doce meses, y meses de la misma longitud. `Chronology` todavia no
-        // expone `range`, asi que el doce va escrito, con esta nota que dice de donde sale y que un
-        // calendario de otra forma necesitaria preguntarselo.
-        long mesesPorAnio = 12L;
-        long total = this.years * mesesPorAnio + this.months;
-        return new ChronoPeriodImpl(this.chrono, (int) (total / mesesPorAnio),
-                (int) (total % mesesPorAnio), this.days);
+        // This library's three calendars --Minguo, ThaiBuddhist, Japanese-- only renumber the years
+        // over ISO: twelve months, and months of the same length. `Chronology` does not expose
+        // `range` yet, so the twelve is written out, with this note saying where it comes from and
+        // that a calendar of another shape would have to be asked.
+        long monthsPerYear = 12L;
+        long total = this.years * monthsPerYear + this.months;
+        return new ChronoPeriodImpl(this.chrono, (int) (total / monthsPerYear),
+                (int) (total % monthsPerYear), this.days);
     }
 
     public Temporal addTo(Temporal temporal) {

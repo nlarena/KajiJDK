@@ -25,9 +25,10 @@ import java.util.random.RandomGenerator;
 // extras. `nextInt()` and `nextLong()` stay, because the JDK overrides those too (mix32/mix64 are
 // cheaper and better than deriving them from the primitive).
 //
-// Subset: the stream methods (ints/longs/doubles/splits) are omitted, as is the nested
-// Implementa `RandomGenerator.SplittableGenerator`, que es donde vive el contrato de partirse.
-// La nota vieja decia que un tipo anidado no resolvia (#101); eso quedo arreglado.
+// It implements `RandomGenerator.SplittableGenerator`, which is where the splitting contract lives.
+// The old note said a nested type did not resolve (#101); that is fixed, and it also listed the
+// stream methods (ints/longs/doubles/splits) as omitted -- ints/longs/doubles come from
+// RandomGenerator as defaults and `splits` is declared below.
 public final class SplittableRandom
         implements RandomGenerator, RandomGenerator.SplittableGenerator {
 
@@ -127,11 +128,11 @@ public final class SplittableRandom
 
 
     /**
-     * Un generador nuevo, con la entropia sacada de `source` en vez de la propia.
+     * A fresh generator, with its entropy taken from `source` instead of its own.
      *
-     * <p>Es lo que permite **reproducir** una particion entera: dos corridas que partan del mismo
-     * `source` obtienen exactamente los mismos hijos, sin importar cuanto haya consumido este
-     * generador por su cuenta.
+     * <p>It is what allows a whole split to be **reproduced**: two runs starting from the same
+     * `source` get exactly the same children, no matter how much this generator has consumed on its
+     * own.
      */
     public SplittableRandom split(RandomGenerator.SplittableGenerator source) {
         long newSeed = source.nextLong();

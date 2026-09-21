@@ -1,13 +1,13 @@
 package javax.naming;
 
 /**
- * Una direccion que es texto: una URL, un nombre de host, un identificador.
+ * An address that is text: a URL, a host name, an identifier.
  *
- * <p>Es el caso comun y no agrega nada mas que el contenido. `equals`, `hashCode` y `toString`
- * salen tal cual de `RefAddr`, y ahi funcionan bien porque el `equals` de `String` es el correcto
- * --que es justo lo que no pasa con `BinaryRefAddr`, ver ahi--.
+ * <p>It is the common case and adds nothing but the content. `equals`, `hashCode` and `toString`
+ * come as they are from `RefAddr`, and work fine there because `String`'s `equals` is the right one
+ * --which is exactly what does not happen with `BinaryRefAddr`, see there.
  *
- * <p>El contenido puede ser `null`: hay direcciones que se identifican solo por su tipo.
+ * <p>The content may be `null`: some addresses are identified only by their type.
  */
 public class StringRefAddr extends RefAddr {
 

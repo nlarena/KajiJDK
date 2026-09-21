@@ -6,33 +6,33 @@ import java.util.Map;
 import java.util.Vector;
 
 /**
- * KajiLibrary's javax.sql.rowset.serial.SQLOutputImpl -- un {@link SQLOutput} sobre un vector.
+ * KajiLibrary's javax.sql.rowset.serial.SQLOutputImpl -- an {@link SQLOutput} over a vector.
  *
- * <p>La contracara de {@link SQLInputImpl}: lo que un {@code SQLData} usa para <b>escribirse</b>.
- * Cada {@code write} agrega un atributo al final del vector, en el orden en que se llamen.
+ * <p>The counterpart of {@link SQLInputImpl}: what an {@code SQLData} uses to <b>write</b> itself.
+ * Each {@code write} appends an attribute at the end of the vector, in the order they are called.
  *
- * <p>Ese orden es el contrato: lo que se escriba aca tiene que leerse en el mismo orden del otro
- * lado. Es la parte del API que no valida nada y que rompe en silencio.
+ * <p>That order is the contract: whatever is written here has to be read in the same order on the
+ * other side. It is the part of the API that validates nothing and breaks silently.
  *
- * <p>Los {@code write} de tipos que no sobreviven a la conexion --BLOB, CLOB, referencias,
- * arreglos, estructuras-- guardan la copia de este paquete y no el objeto del driver. Es lo que hace
- * que el vector resultante se pueda serializar.
+ * <p>The {@code write}s of types that do not survive the connection --BLOB, CLOB, references,
+ * arrays, structs-- keep this package's copy and not the driver's object. It is what makes the
+ * resulting vector serializable.
  *
- * <p>{@link #writeObject} es el caso recursivo: le pide al objeto que se escriba en un
- * {@code SQLOutputImpl} nuevo y guarda el {@link SerialStruct} que sale.
+ * <p>{@link #writeObject} is the recursive case: it asks the object to write itself into a new
+ * {@code SQLOutputImpl} and keeps the {@link SerialStruct} that comes out.
  */
 public class SQLOutputImpl implements SQLOutput {
 
-    /** Adonde se van agregando los atributos. */
+    /** Where the attributes are appended. */
     private final Vector<Object> attribs;
 
-    /** El mapa de tipos definidos por el usuario. */
+    /** The map of user-defined types. */
     private final Map<String, ?> map;
 
     /**
-     * @param attributes el vector donde se acumulan; se usa el que se pasa, no una copia
-     * @param map la traduccion de tipos definidos por el usuario
-     * @throws SQLException si alguno de los dos es null
+     * @param attributes the vector where they accumulate; the one passed is used, not a copy
+     * @param map the translation of user-defined types
+     * @throws SQLException if either of the two is null
      */
     @SuppressWarnings("unchecked")
     public SQLOutputImpl(Vector<?> attributes, Map<String, ?> map) throws SQLException {
@@ -44,9 +44,9 @@ public class SQLOutputImpl implements SQLOutput {
     }
 
     /**
-     * Escribe un objeto que sabe mapearse a SQL.
+     * Writes an object that knows how to map itself to SQL.
      *
-     * <p>Guarda un {@link SerialStruct}; ver la nota de la clase.
+     * <p>It keeps a {@link SerialStruct}; see the class note.
      */
     public void writeObject(java.sql.SQLData x) throws SQLException {
         if (x == null) {
@@ -56,93 +56,93 @@ public class SQLOutputImpl implements SQLOutput {
         this.attribs.add(new SerialStruct(x, castMap()));
     }
 
-    /** El mapa con el tipo que pide {@link SerialStruct}. */
+    /** The map with the type {@link SerialStruct} asks for. */
     @SuppressWarnings("unchecked")
     private Map<String, Class<?>> castMap() {
         return (Map<String, Class<?>>) this.map;
     }
 
-    /** Agrega el atributo al final. Ver la nota de la clase sobre el orden. */
+    /** Appends the attribute at the end. See the class note on the order. */
     public void writeString(String x) throws SQLException {
         this.attribs.add(x);
     }
 
-    /** Agrega el atributo al final. Ver la nota de la clase sobre el orden. */
+    /** Appends the attribute at the end. See the class note on the order. */
     public void writeBoolean(boolean x) throws SQLException {
         this.attribs.add(Boolean.valueOf(x));
     }
 
-    /** Agrega el atributo al final. Ver la nota de la clase sobre el orden. */
+    /** Appends the attribute at the end. See the class note on the order. */
     public void writeByte(byte x) throws SQLException {
         this.attribs.add(Byte.valueOf(x));
     }
 
-    /** Agrega el atributo al final. Ver la nota de la clase sobre el orden. */
+    /** Appends the attribute at the end. See the class note on the order. */
     public void writeShort(short x) throws SQLException {
         this.attribs.add(Short.valueOf(x));
     }
 
-    /** Agrega el atributo al final. Ver la nota de la clase sobre el orden. */
+    /** Appends the attribute at the end. See the class note on the order. */
     public void writeInt(int x) throws SQLException {
         this.attribs.add(Integer.valueOf(x));
     }
 
-    /** Agrega el atributo al final. Ver la nota de la clase sobre el orden. */
+    /** Appends the attribute at the end. See the class note on the order. */
     public void writeLong(long x) throws SQLException {
         this.attribs.add(Long.valueOf(x));
     }
 
-    /** Agrega el atributo al final. Ver la nota de la clase sobre el orden. */
+    /** Appends the attribute at the end. See the class note on the order. */
     public void writeFloat(float x) throws SQLException {
         this.attribs.add(Float.valueOf(x));
     }
 
-    /** Agrega el atributo al final. Ver la nota de la clase sobre el orden. */
+    /** Appends the attribute at the end. See the class note on the order. */
     public void writeDouble(double x) throws SQLException {
         this.attribs.add(Double.valueOf(x));
     }
 
-    /** Agrega el atributo al final. Ver la nota de la clase sobre el orden. */
+    /** Appends the attribute at the end. See the class note on the order. */
     public void writeBigDecimal(java.math.BigDecimal x) throws SQLException {
         this.attribs.add(x);
     }
 
-    /** Agrega el atributo al final. Ver la nota de la clase sobre el orden. */
+    /** Appends the attribute at the end. See the class note on the order. */
     public void writeBytes(byte[] x) throws SQLException {
         this.attribs.add(x);
     }
 
-    /** Agrega el atributo al final. Ver la nota de la clase sobre el orden. */
+    /** Appends the attribute at the end. See the class note on the order. */
     public void writeDate(java.sql.Date x) throws SQLException {
         this.attribs.add(x);
     }
 
-    /** Agrega el atributo al final. Ver la nota de la clase sobre el orden. */
+    /** Appends the attribute at the end. See the class note on the order. */
     public void writeTime(java.sql.Time x) throws SQLException {
         this.attribs.add(x);
     }
 
-    /** Agrega el atributo al final. Ver la nota de la clase sobre el orden. */
+    /** Appends the attribute at the end. See the class note on the order. */
     public void writeTimestamp(java.sql.Timestamp x) throws SQLException {
         this.attribs.add(x);
     }
 
-    /** Agrega el atributo al final. Ver la nota de la clase sobre el orden. */
+    /** Appends the attribute at the end. See the class note on the order. */
     public void writeCharacterStream(java.io.Reader x) throws SQLException {
         this.attribs.add(x);
     }
 
-    /** Agrega el atributo al final. Ver la nota de la clase sobre el orden. */
+    /** Appends the attribute at the end. See the class note on the order. */
     public void writeAsciiStream(java.io.InputStream x) throws SQLException {
         this.attribs.add(x);
     }
 
-    /** Agrega el atributo al final. Ver la nota de la clase sobre el orden. */
+    /** Appends the attribute at the end. See the class note on the order. */
     public void writeBinaryStream(java.io.InputStream x) throws SQLException {
         this.attribs.add(x);
     }
 
-    /** Agrega el atributo al final. Ver la nota de la clase sobre el orden. */
+    /** Appends the attribute at the end. See the class note on the order. */
     public void writeRef(java.sql.Ref x) throws SQLException {
         if (x == null) {
             this.attribs.add(null);
@@ -151,7 +151,7 @@ public class SQLOutputImpl implements SQLOutput {
         this.attribs.add(new SerialRef(x));
     }
 
-    /** Agrega el atributo al final. Ver la nota de la clase sobre el orden. */
+    /** Appends the attribute at the end. See the class note on the order. */
     public void writeBlob(java.sql.Blob x) throws SQLException {
         if (x == null) {
             this.attribs.add(null);
@@ -160,7 +160,7 @@ public class SQLOutputImpl implements SQLOutput {
         this.attribs.add(new SerialBlob(x));
     }
 
-    /** Agrega el atributo al final. Ver la nota de la clase sobre el orden. */
+    /** Appends the attribute at the end. See the class note on the order. */
     public void writeClob(java.sql.Clob x) throws SQLException {
         if (x == null) {
             this.attribs.add(null);
@@ -169,7 +169,7 @@ public class SQLOutputImpl implements SQLOutput {
         this.attribs.add(new SerialClob(x));
     }
 
-    /** Agrega el atributo al final. Ver la nota de la clase sobre el orden. */
+    /** Appends the attribute at the end. See the class note on the order. */
     public void writeStruct(java.sql.Struct x) throws SQLException {
         if (x == null) {
             this.attribs.add(null);
@@ -178,7 +178,7 @@ public class SQLOutputImpl implements SQLOutput {
         this.attribs.add(new SerialStruct(x, castMap()));
     }
 
-    /** Agrega el atributo al final. Ver la nota de la clase sobre el orden. */
+    /** Appends the attribute at the end. See the class note on the order. */
     public void writeArray(java.sql.Array x) throws SQLException {
         if (x == null) {
             this.attribs.add(null);
@@ -187,27 +187,27 @@ public class SQLOutputImpl implements SQLOutput {
         this.attribs.add(new SerialArray(x));
     }
 
-    /** Agrega el atributo al final. Ver la nota de la clase sobre el orden. */
+    /** Appends the attribute at the end. See the class note on the order. */
     public void writeURL(java.net.URL x) throws SQLException {
         this.attribs.add(x);
     }
 
-    /** Agrega el atributo al final. Ver la nota de la clase sobre el orden. */
+    /** Appends the attribute at the end. See the class note on the order. */
     public void writeNString(String x) throws SQLException {
         this.attribs.add(x);
     }
 
-    /** Agrega el atributo al final. Ver la nota de la clase sobre el orden. */
+    /** Appends the attribute at the end. See the class note on the order. */
     public void writeNClob(java.sql.NClob x) throws SQLException {
         this.attribs.add(x);
     }
 
-    /** Agrega el atributo al final. Ver la nota de la clase sobre el orden. */
+    /** Appends the attribute at the end. See the class note on the order. */
     public void writeRowId(java.sql.RowId x) throws SQLException {
         this.attribs.add(x);
     }
 
-    /** Agrega el atributo al final. Ver la nota de la clase sobre el orden. */
+    /** Appends the attribute at the end. See the class note on the order. */
     public void writeSQLXML(java.sql.SQLXML x) throws SQLException {
         this.attribs.add(x);
     }

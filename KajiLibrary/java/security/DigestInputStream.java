@@ -4,28 +4,29 @@ import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 
-// Un stream que le va pasando al digest todo lo que se lee de el.
+// A stream that passes on to the digest everything that is read from it.
 //
-// Sirve para hashear algo sin leerlo dos veces ni tenerlo entero en memoria: se lee normal, y al
-// terminar el digest ya esta calculado. La trampa es que **solo cuenta lo que se leyo**: si el
-// consumidor corta antes de fin de archivo, o hace `skip`, el digest es el del prefijo que paso
-// por aca, no el del archivo. Esta clase no puede detectar la diferencia, y comparar ese digest
-// contra el del archivo completo da distinto sin que nada haya fallado.
+// It serves for hashing something without reading it twice and without having it whole in memory:
+// it is read normally, and when it finishes the digest is computed already. The trap is that **only
+// what was read counts**: if the consumer stops before end of file, or does a `skip`, the digest is
+// that of the prefix that went through here, not that of the file. This class cannot detect the
+// difference, and comparing that digest against that of the complete file gives a different result
+// without anything having failed.
 //
-// `skip()` no se sobreescribe —lo hereda de `FilterInputStream`, que lee y descarta— asi que los
-// bytes salteados **si** entran al digest. Es el comportamiento del JDK y es el menos sorpresivo:
-// saltear no deberia cambiar el hash del contenido recorrido.
+// `skip()` is not overridden —it is inherited from `FilterInputStream`, which reads and discards—
+// so the skipped bytes **do** enter the digest. It is the behaviour of the JDK and it is the least
+// surprising: skipping should not change the hash of the content walked.
 //
-// Los dos `read` declaran `throws IOException`, igual que en el JDK. Hasta hace poco no podian:
-// `java.io.FilterInputStream` de esta biblioteca no lo declaraba en los suyos y Java prohibe que
-// una subclase declare **mas** excepciones chequeadas que el metodo que sobreescribe. Ahora que
-// java.io alineo sus firmas, la diferencia desaparecio.
+// Both `read`s declare `throws IOException`, just as in the JDK. Until recently they could not: the
+// `java.io.FilterInputStream` of this library did not declare it in its own and Java forbids a
+// subclass to declare **more** checked exceptions than the method it overrides. Now that java.io
+// has aligned its signatures, the difference has disappeared.
 public class DigestInputStream extends FilterInputStream {
 
-    // Protegido, como en el JDK: una subclase puede necesitar tocarlo.
+    // Protected, as in the JDK: a subclass may need to touch it.
     protected MessageDigest digest;
 
-    // Si el digest esta escuchando. Empieza prendido.
+    // Whether the digest is listening. It starts on.
     private boolean on = true;
 
     public DigestInputStream(InputStream stream, MessageDigest digest) {
@@ -37,8 +38,8 @@ public class DigestInputStream extends FilterInputStream {
         return this.digest;
     }
 
-    // Cambiar el digest a mitad de camino es legal y a veces es el punto: se lee una cabecera con
-    // uno y el cuerpo con otro.
+    // Changing the digest halfway is legal and sometimes it is the point: a header is read with one
+    // and the body with another.
     public void setMessageDigest(MessageDigest digest) {
         this.digest = digest;
     }
@@ -52,7 +53,7 @@ public class DigestInputStream extends FilterInputStream {
         return ch;
     }
 
-    // Alimenta solo los bytes que **realmente** se leyeron, no `len`.
+    // It feeds only the bytes that were **really** read, not `len`.
     @Override
     public int read(byte[] b, int off, int len) throws IOException {
         int result = this.in.read(b, off, len);
@@ -62,10 +63,10 @@ public class DigestInputStream extends FilterInputStream {
         return result;
     }
 
-    // Prende o apaga la alimentacion del digest.
+    // It turns the feeding of the digest on or off.
     //
-    // Es lo que permite hashear un pedazo del stream y no otro: por ejemplo, saltearse un campo de
-    // firma que esta embebido en el mismo archivo que se esta verificando.
+    // It is what allows a piece of the stream to be hashed and not another: for example, skipping a
+    // signature field that is embedded in the same file that is being verified.
     public void on(boolean on) {
         this.on = on;
     }

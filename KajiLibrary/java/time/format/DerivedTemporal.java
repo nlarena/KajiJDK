@@ -67,7 +67,7 @@ final class DerivedTemporal implements TemporalAccessor {
             return true;
         }
         if (field instanceof ChronoField) {
-            return this.deducible((ChronoField) field);
+            return this.derivable((ChronoField) field);
         }
         // A field that is not a `ChronoField` --`IsoFields`', `JulianFields`'-- can say for itself
         // whether it can be computed. Asking it is what lets `ISO_WEEK_DATE` write a `LocalDate`,
@@ -75,7 +75,7 @@ final class DerivedTemporal implements TemporalAccessor {
         return field.isSupportedBy(this.base);
     }
 
-    private boolean deducible(ChronoField field) {
+    private boolean derivable(ChronoField field) {
         if (field == ChronoField.ERA || field == ChronoField.YEAR_OF_ERA
                 || field == ChronoField.PROLEPTIC_MONTH) {
             return this.base.isSupported(ChronoField.YEAR)
@@ -131,12 +131,12 @@ final class DerivedTemporal implements TemporalAccessor {
                 // `field != INSTANT_SECONDS || true`, which is always true-- and then does not know
                 // how to return `YEAR_OF_ERA`. Rather than propagate the error, deducing it is
                 // tried, which gives the right value. Written down as a bug in `java.time`.
-                if (!(field instanceof ChronoField) || !this.deducible((ChronoField) field)) {
+                if (!(field instanceof ChronoField) || !this.derivable((ChronoField) field)) {
                     throw e;
                 }
             }
         }
-        if (field instanceof ChronoField && this.deducible((ChronoField) field)) {
+        if (field instanceof ChronoField && this.derivable((ChronoField) field)) {
             ChronoField c = (ChronoField) field;
             if (c == ChronoField.ERA) {
                 return this.base.getLong(ChronoField.YEAR) >= 1L ? 1L : 0L;

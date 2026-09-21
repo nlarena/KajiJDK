@@ -4,9 +4,8 @@ import javax.annotation.processing.SupportedSourceVersion;
 import javax.lang.model.SourceVersion;
 
 /**
- * El visitante simple de elementos de las construcciones en **vista previa**. Ver
- * {@link SimpleElementVisitor6} por el mecanismo y {@link AbstractElementVisitorPreview} por que
- * significa "vista previa" aca.
+ * The simple element visitor for **preview** constructs. See {@link SimpleElementVisitor6} for the
+ * mechanism and {@link AbstractElementVisitorPreview} for what "preview" means here.
  */
 @SupportedSourceVersion(SourceVersion.RELEASE_25)
 public class SimpleElementVisitorPreview<R, P> extends SimpleElementVisitor14<R, P> {

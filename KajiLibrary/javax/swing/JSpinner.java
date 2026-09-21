@@ -27,36 +27,38 @@ import javax.swing.text.DefaultFormatterFactory;
 import javax.swing.text.NumberFormatter;
 
 /**
- * Un campo con dos flechas para recorrer una secuencia.
+ * A field with two arrows for walking through a sequence.
  *
- * <h2>Tres piezas, no una</h2>
+ * <h2>Three pieces, not one</h2>
  *
- * <p>El {@link SpinnerModel} sabe cual es el valor y cual viene despues. El <em>editor</em> lo
- * muestra y deja escribirlo. El aspecto dibuja las flechas. Cambiar el modelo cambia la secuencia
- * <em>y</em> el editor, salvo que se haya puesto uno a mano: ver {@link #setEditor}.
+ * <p>The {@link SpinnerModel} knows which the value is and which comes afterwards. The
+ * <em>editor</em> shows it and allows it to be typed. The look and feel draws the arrows.
+ * Changing the model changes the sequence <em>and</em> the editor, unless one was set by hand:
+ * see {@link #setEditor}.
  *
- * <h2>Por que el editor es un panel y no un campo</h2>
+ * <h2>Why the editor is a pane and not a field</h2>
  *
- * <p>{@link DefaultEditor} es un {@link JPanel} con un {@link JFormattedTextField} adentro, y es su
- * propio acomodador. Podria ser el campo directamente; no lo es porque asi un editor propio puede
- * tener varias piezas -- tres campos para una fecha, por ejemplo -- sin cambiar nada de arriba.
+ * <p>{@link DefaultEditor} is a {@link JPanel} with a {@link JFormattedTextField} inside, and
+ * it is its own layout. It could be the field directly; it is not because that way an editor of
+ * one's own may have several pieces -- three fields for a date, for instance -- without
+ * changing anything above.
  *
- * <h2>El valor viaja en las dos direcciones</h2>
+ * <h2>The value travels in both directions</h2>
  *
- * <p>Cuando el modelo cambia, el editor escucha y actualiza el campo. Cuando el usuario escribe y
- * confirma, el campo avisa y el editor se lo pasa al modelo. Si el modelo lo rechaza, el editor
- * devuelve el campo al valor anterior: es lo que evita que quede en pantalla un valor que el modelo
- * nunca acepto.
+ * <p>When the model changes, the editor listens and updates the field. When the user types and
+ * confirms, the field gives notice and the editor passes it on to the model. If the model
+ * rejects it, the editor gives the field back its previous value: it is what keeps a value the
+ * model never accepted from staying on the screen.
  */
 public class JSpinner extends JComponent implements Accessible {
 
     private static final String uiClassID = "SpinnerUI";
 
     /**
-     * Una accion apagada, para tapar las del campo de texto.
+     * A switched-off action, for covering the text field's.
      *
-     * <p>Una atadura de teclas a una accion apagada cuenta como si no existiera, asi que poner esta
-     * en el mapa del campo deja que las flechas del control ganen sobre las del campo.
+     * <p>A binding from keys to a switched-off action counts as though it did not exist, so
+     * putting this one into the field's map lets the control's arrows win over the field's.
      */
     private static final Action DISABLED_ACTION = new DisabledAction();
 
@@ -67,9 +69,9 @@ public class JSpinner extends JComponent implements Accessible {
     private boolean editorExplicitlySet = false;
 
     /**
-     * Con ese modelo.
+     * With that model.
      *
-     * @throws NullPointerException si el modelo es nulo.
+     * @throws NullPointerException if the model is null.
      */
     public JSpinner(SpinnerModel model) {
         if (model == null) {
@@ -81,7 +83,7 @@ public class JSpinner extends JComponent implements Accessible {
         updateUI();
     }
 
-    /** Con un {@link SpinnerNumberModel} recien hecho: enteros desde cero, de a uno. */
+    /** With a freshly made {@link SpinnerNumberModel}: integers from zero, one at a time. */
     public JSpinner() {
         this(new SpinnerNumberModel());
     }
@@ -102,11 +104,12 @@ public class JSpinner extends JComponent implements Accessible {
     }
 
     /**
-     * Elige el editor que le va a ese modelo.
+     * It chooses the editor that suits that model.
      *
-     * <p>El orden importa: se pregunta por fecha y por lista antes que por numero, porque son los
-     * casos con editor propio. Un modelo que no sea ninguno de los tres se queda con el editor de
-     * base, que muestra el valor pero no deja escribirlo -- no habria como interpretar lo escrito.
+     * <p>The order matters: date and list are asked about before number, because they are the
+     * cases with an editor of their own. A model that is none of the three is left with the base
+     * editor, which shows the value but does not allow it to be typed -- there would be no way of
+     * interpreting what was typed.
      */
     protected JComponent createEditor(SpinnerModel model) {
         if (model instanceof SpinnerDateModel) {
@@ -121,12 +124,12 @@ public class JSpinner extends JComponent implements Accessible {
     }
 
     /**
-     * Cambia el modelo, y con el el editor.
+     * It changes the model, and with it the editor.
      *
-     * <p>Salvo que el editor se haya puesto a mano: en ese caso se respeta, porque cambiarlo
-     * borraria una decision del programa.
+     * <p>Unless the editor was set by hand: in that case it is respected, because changing it
+     * would erase a decision of the program's.
      *
-     * @throws IllegalArgumentException si el modelo es nulo.
+     * @throws IllegalArgumentException if the model is null.
      */
     public void setModel(SpinnerModel model) {
         if (model == null) {
@@ -153,35 +156,35 @@ public class JSpinner extends JComponent implements Accessible {
         return model;
     }
 
-    /** El valor, preguntandoselo al modelo. */
+    /** The value, asking the model for it. */
     public Object getValue() {
         return getModel().getValue();
     }
 
     /**
-     * Cambia el valor.
+     * It changes the value.
      *
-     * @throws IllegalArgumentException si el modelo no lo acepta.
+     * @throws IllegalArgumentException if the model does not accept it.
      */
     public void setValue(Object value) {
         getModel().setValue(value);
     }
 
-    /** El siguiente de la secuencia, o nulo si no hay. */
+    /** The next one in the sequence, or null if there is none. */
     public Object getNextValue() {
         return getModel().getNextValue();
     }
 
-    /** El anterior, o nulo si no hay. */
+    /** The previous one, or null if there is none. */
     public Object getPreviousValue() {
         return getModel().getPreviousValue();
     }
 
     /**
-     * Escucha los cambios de valor.
+     * It listens to the changes of value.
      *
-     * <p>El control se anota en el modelo recien cuando alguien se anota en el control, y no antes:
-     * un control sin oyentes no tiene por que escuchar a su modelo.
+     * <p>The control signs itself up on the model only when somebody signs up on the control, and
+     * not before: a control with no listeners has no reason to listen to its model.
      */
     public void addChangeListener(ChangeListener listener) {
         if (modelListener == null) {
@@ -199,7 +202,7 @@ public class JSpinner extends JComponent implements Accessible {
         return listenerList.getListeners(ChangeListener.class);
     }
 
-    /** Reparte un aviso de cambio; el evento se arma una vez y se reusa. */
+    /** It hands out a change notice; the event is built once and reused. */
     protected void fireStateChanged() {
         Object[] listeners = listenerList.getListenerList();
         for (int i = listeners.length - 2; i >= 0; i = i - 2) {
@@ -213,12 +216,12 @@ public class JSpinner extends JComponent implements Accessible {
     }
 
     /**
-     * Pone un editor propio.
+     * It sets an editor of one's own.
      *
-     * <p>Al editor que sale se le avisa con {@code dismiss} para que se desanote del modelo; si no,
-     * seguiria reaccionando a cambios de un control que ya no muestra.
+     * <p>The editor that leaves is told with {@code dismiss} so that it signs off from the model;
+     * otherwise, it would go on reacting to the changes of a control it no longer shows.
      *
-     * @throws IllegalArgumentException si es nulo.
+     * @throws IllegalArgumentException if it is null.
      */
     public void setEditor(JComponent editor) {
         if (editor == null) {
@@ -242,9 +245,9 @@ public class JSpinner extends JComponent implements Accessible {
     }
 
     /**
-     * Le pide al editor que confirme lo escrito.
+     * It asks the editor to confirm what was typed.
      *
-     * @throws ParseException si lo escrito no se puede interpretar.
+     * @throws ParseException if what was typed cannot be interpreted.
      */
     public void commitEdit() throws ParseException {
         JComponent editor = getEditor();
@@ -257,7 +260,7 @@ public class JSpinner extends JComponent implements Accessible {
         return accessibleContext;
     }
 
-    /** Pasa el aviso del modelo a los oyentes del control. */
+    /** It passes the model's notice on to the control's listeners. */
     private static class ModelListener implements ChangeListener, java.io.Serializable {
 
         private final JSpinner control;
@@ -299,19 +302,19 @@ public class JSpinner extends JComponent implements Accessible {
     }
 
     /**
-     * El editor de base: un campo de texto que muestra el valor.
+     * The base editor: a text field that shows the value.
      *
-     * <p>Es tambien su propio acomodador -- implementa {@link LayoutManager} -- porque lo unico que
-     * tiene que hacer es darle al campo todo el espacio menos los margenes. Un acomodador de los de
-     * verdad seria mas codigo del que ahorra.
+     * <p>It is also its own layout -- it implements {@link LayoutManager} -- because the only
+     * thing it has to do is give the field all the space but the margins. A real layout would be
+     * more code than it saves.
      *
-     * <p>De base el campo no es editable: el editor generico no sabe interpretar lo que se escriba.
-     * Los tres editores que siguen lo prenden, cada uno con su formateador.
+     * <p>By default the field is not editable: the generic editor does not know how to interpret
+     * whatever is typed. The three editors that follow switch it on, each with its formatter.
      */
     public static class DefaultEditor extends JPanel
             implements ChangeListener, PropertyChangeListener, LayoutManager {
 
-        /** Con el campo ya conectado a ese control. */
+        /** With the field already connected to that control. */
         public DefaultEditor(JSpinner spinner) {
             super(null);
             JFormattedTextField ftf = new JFormattedTextField();
@@ -327,7 +330,7 @@ public class JSpinner extends JComponent implements Accessible {
             add(ftf);
             setLayout(this);
             spinner.addChangeListener(this);
-            // Ver DISABLED_ACTION: las flechas del control tienen que ganarle a las del campo.
+            // See DISABLED_ACTION: the control's arrows have to beat the field's.
             ActionMap ftfMap = ftf.getActionMap();
             if (ftfMap != null) {
                 ftfMap.put("increment", DISABLED_ACTION);
@@ -335,12 +338,12 @@ public class JSpinner extends JComponent implements Accessible {
             }
         }
 
-        /** Lo desconecta del control; ver {@link JSpinner#setEditor}. */
+        /** It disconnects it from the control; see {@link JSpinner#setEditor}. */
         public void dismiss(JSpinner spinner) {
             spinner.removeChangeListener(this);
         }
 
-        /** El control que lo contiene, buscando hacia arriba, o nulo si no esta puesto. */
+        /** The control that contains it, looking upwards, or null if it is not set. */
         public JSpinner getSpinner() {
             for (Component c = this; c != null; c = c.getParent()) {
                 if (c instanceof JSpinner) {
@@ -354,22 +357,22 @@ public class JSpinner extends JComponent implements Accessible {
             return (JFormattedTextField) getComponent(0);
         }
 
-        /** El modelo cambio: se lo pasa al campo. */
+        /** The model changed: it is passed on to the field. */
         public void stateChanged(ChangeEvent e) {
             JSpinner spinner = (JSpinner) (e.getSource());
             getTextField().setValue(spinner.getValue());
         }
 
         /**
-         * El campo cambio: se lo pasa al modelo.
+         * The field changed: it is passed on to the model.
          *
-         * <p>Si el modelo lo rechaza, el campo vuelve al valor de antes. Ver la nota de
-         * {@link JSpinner}.
+         * <p>If the model rejects it, the field goes back to the previous value. See
+         * {@link JSpinner}'s note.
          */
         public void propertyChange(PropertyChangeEvent e) {
             JSpinner spinner = getSpinner();
             if (spinner == null) {
-                // No esta puesto en ningun control: no hay a quien avisarle.
+                // It is not set in any control: there is nobody to tell.
                 return;
             }
             Object source = e.getSource();
@@ -382,8 +385,9 @@ public class JSpinner extends JComponent implements Accessible {
                     try {
                         ((JFormattedTextField) source).setValue(lastValue);
                     } catch (IllegalArgumentException iae2) {
-                        // Ni el valor viejo sirve: no queda nada por hacer y los dos quedan
-                        // desacoplados, que es lo que hace el JDK.
+                        // Not even the old value serves: there is nothing left to do and the two
+                        // are
+                                                // left uncoupled, which is what the JDK does.
                     }
                 }
             }
@@ -395,7 +399,7 @@ public class JSpinner extends JComponent implements Accessible {
         public void removeLayoutComponent(Component child) {
         }
 
-        /** Lo que ocupan los margenes. */
+        /** What the margins take up. */
         private Dimension insetSize(Container parent) {
             Insets insets = parent.getInsets();
             int w = insets.left + insets.right;
@@ -423,7 +427,7 @@ public class JSpinner extends JComponent implements Accessible {
             return minimumSize;
         }
 
-        /** Le da al campo todo menos los margenes. */
+        /** It gives the field everything but the margins. */
         public void layoutContainer(Container parent) {
             if (parent.getComponentCount() > 0) {
                 Insets insets = parent.getInsets();
@@ -434,15 +438,15 @@ public class JSpinner extends JComponent implements Accessible {
         }
 
         /**
-         * Confirma lo escrito.
+         * It confirms what was typed.
          *
-         * @throws ParseException si no se puede interpretar.
+         * @throws ParseException if it cannot be interpreted.
          */
         public void commitEdit() throws ParseException {
             getTextField().commitEdit();
         }
 
-        /** La linea de base es la del campo, corrida por el margen de arriba. */
+        /** The baseline is the field's, shifted by the top margin. */
         public int getBaseline(int width, int height) {
             super.getBaseline(width, height);
             Insets insets = getInsets();
@@ -461,22 +465,22 @@ public class JSpinner extends JComponent implements Accessible {
     }
 
     /**
-     * El editor para un {@link SpinnerNumberModel}.
+     * The editor for a {@link SpinnerNumberModel}.
      *
-     * <p>El formateador conoce los limites del modelo, asi que escribir algo fuera de rango se
-     * marca como invalido antes de llegar al modelo.
+     * <p>The formatter knows the model's bounds, so typing something out of range is marked as
+     * invalid before reaching the model.
      */
     public static class NumberEditor extends DefaultEditor {
 
-        /** Con el formato de numeros del idioma del control. */
+        /** With the number format of the control's language. */
         public NumberEditor(JSpinner spinner) {
-            this(spinner, patronPorOmision(spinner.getLocale()));
+            this(spinner, defaultPattern(spinner.getLocale()));
         }
 
         /**
-         * Con ese patron de {@link DecimalFormat}.
+         * With that {@link DecimalFormat} pattern.
          *
-         * @throws IllegalArgumentException si el modelo no es un {@link SpinnerNumberModel}.
+         * @throws IllegalArgumentException if the model is not a {@link SpinnerNumberModel}.
          */
         public NumberEditor(JSpinner spinner, String decimalFormatPattern) {
             super(spinner);
@@ -485,25 +489,26 @@ public class JSpinner extends JComponent implements Accessible {
             }
             DecimalFormat format = new DecimalFormat(decimalFormatPattern);
             SpinnerNumberModel model = (SpinnerNumberModel) spinner.getModel();
-            NumberFormatter formatter = new FormateadorDeNumero(model, format);
+            NumberFormatter formatter = new NumberEditorFormatter(model, format);
             DefaultFormatterFactory factory = new DefaultFormatterFactory(formatter);
             JFormattedTextField ftf = getTextField();
             ftf.setEditable(true);
             ftf.setFormatterFactory(factory);
             ftf.setHorizontalAlignment(JTextField.RIGHT);
-            // El ancho sale del limite mas largo: es lo unico que se sabe de antemano sobre
-            // cuanto va a ocupar el numero.
+            // The width comes from the longest bound: it is the only thing that is known in advance
+                        // about how much room the number is going to take.
             try {
                 String maxString = formatter.valueToString(model.getMinimum());
                 String minString = formatter.valueToString(model.getMaximum());
                 ftf.setColumns(Math.max(maxString.length(), minString.length()));
             } catch (ParseException e) {
-                // Sin limites no hay de donde sacar el ancho; se deja el que traiga el campo.
+                // With no bounds there is nothing to get the width from; the one the field brings
+                // is left.
             }
         }
 
-        /** El patron de numeros de ese idioma. */
-        private static String patronPorOmision(Locale locale) {
+        /** That language's number pattern. */
+        private static String defaultPattern(Locale locale) {
             NumberFormat nf = (locale == null) ? NumberFormat.getInstance()
                     : NumberFormat.getInstance(locale);
             if (nf instanceof DecimalFormat) {
@@ -526,12 +531,12 @@ public class JSpinner extends JComponent implements Accessible {
         }
     }
 
-    /** Ata el formateador a los limites del modelo; ver {@link NumberEditor}. */
-    private static class FormateadorDeNumero extends NumberFormatter {
+    /** It ties the formatter to the model's bounds; see {@link NumberEditor}. */
+    private static class NumberEditorFormatter extends NumberFormatter {
 
         private final SpinnerNumberModel model;
 
-        FormateadorDeNumero(SpinnerNumberModel model, Format format) {
+        NumberEditorFormatter(SpinnerNumberModel model, Format format) {
             super((NumberFormat) format);
             this.model = model;
             setValueClass(model.getValue().getClass());
@@ -555,14 +560,14 @@ public class JSpinner extends JComponent implements Accessible {
     }
 
     /**
-     * El editor para un {@link SpinnerListModel}.
+     * The editor for a {@link SpinnerListModel}.
      *
-     * <p>No hay nada que formatear: los elementos van y vienen por su {@code toString}.
+     * <p>There is nothing to format: the elements come and go through their {@code toString}.
      */
     public static class ListEditor extends DefaultEditor {
 
         /**
-         * @throws IllegalArgumentException si el modelo no es un {@link SpinnerListModel}.
+         * @throws IllegalArgumentException if the model is not a {@link SpinnerListModel}.
          */
         public ListEditor(JSpinner spinner) {
             super(spinner);
@@ -571,7 +576,7 @@ public class JSpinner extends JComponent implements Accessible {
             }
             getTextField().setEditable(true);
             getTextField().setFormatterFactory(
-                    new DefaultFormatterFactory(new FormateadorDeLista()));
+                    new DefaultFormatterFactory(new ListEditorFormatter()));
         }
 
         public SpinnerListModel getModel() {
@@ -579,8 +584,8 @@ public class JSpinner extends JComponent implements Accessible {
         }
     }
 
-    /** El texto es el valor y el valor es el texto; ver {@link ListEditor}. */
-    private static class FormateadorDeLista extends JFormattedTextField.AbstractFormatter {
+    /** The text is the value and the value is the text; see {@link ListEditor}. */
+    private static class ListEditorFormatter extends JFormattedTextField.AbstractFormatter {
 
         public String valueToString(Object value) throws ParseException {
             return (value == null) ? "" : value.toString();
@@ -592,21 +597,21 @@ public class JSpinner extends JComponent implements Accessible {
     }
 
     /**
-     * El editor para un {@link SpinnerDateModel}.
+     * The editor for a {@link SpinnerDateModel}.
      *
-     * <p>Como en {@link NumberEditor}, el formateador conoce los limites del modelo.
+     * <p>As in {@link NumberEditor}, the formatter knows the model's bounds.
      */
     public static class DateEditor extends DefaultEditor {
 
-        /** Con el formato de fecha y hora del idioma del control. */
+        /** With the date and time format of the control's language. */
         public DateEditor(JSpinner spinner) {
-            this(spinner, patronPorOmision(spinner.getLocale()));
+            this(spinner, defaultPattern(spinner.getLocale()));
         }
 
         /**
-         * Con ese patron de {@link SimpleDateFormat}.
+         * With that {@link SimpleDateFormat} pattern.
          *
-         * @throws IllegalArgumentException si el modelo no es un {@link SpinnerDateModel}.
+         * @throws IllegalArgumentException if the model is not a {@link SpinnerDateModel}.
          */
         public DateEditor(JSpinner spinner, String dateFormatPattern) {
             super(spinner);
@@ -617,15 +622,15 @@ public class JSpinner extends JComponent implements Accessible {
             SimpleDateFormat format = (loc == null) ? new SimpleDateFormat(dateFormatPattern)
                     : new SimpleDateFormat(dateFormatPattern, loc);
             SpinnerDateModel model = (SpinnerDateModel) spinner.getModel();
-            DateFormatter formatter = new FormateadorDeFecha(model, format);
+            DateFormatter formatter = new DateEditorFormatter(model, format);
             DefaultFormatterFactory factory = new DefaultFormatterFactory(formatter);
             JFormattedTextField ftf = getTextField();
             ftf.setEditable(true);
             ftf.setFormatterFactory(factory);
         }
 
-        /** El patron de fecha y hora de ese idioma. */
-        private static String patronPorOmision(Locale locale) {
+        /** That language's date and time pattern. */
+        private static String defaultPattern(Locale locale) {
             DateFormat df = DateFormat.getDateTimeInstance();
             if (df instanceof SimpleDateFormat) {
                 return ((SimpleDateFormat) df).toPattern();
@@ -643,18 +648,18 @@ public class JSpinner extends JComponent implements Accessible {
         }
     }
 
-    /** Ata el formateador a los limites del modelo; ver {@link DateEditor}. */
-    private static class FormateadorDeFecha extends DateFormatter {
+    /** It ties the formatter to the model's bounds; see {@link DateEditor}. */
+    private static class DateEditorFormatter extends DateFormatter {
 
         private final SpinnerDateModel model;
 
-        FormateadorDeFecha(SpinnerDateModel model, DateFormat format) {
+        DateEditorFormatter(SpinnerDateModel model, DateFormat format) {
             super(format);
             this.model = model;
         }
 
         public void setMinimum(Comparable<?> min) {
-            model.setStart(comoFecha(min));
+            model.setStart(asDate(min));
         }
 
         public Comparable<?> getMinimum() {
@@ -662,16 +667,16 @@ public class JSpinner extends JComponent implements Accessible {
         }
 
         public void setMaximum(Comparable<?> max) {
-            model.setEnd(comoFecha(max));
+            model.setEnd(asDate(max));
         }
 
         public Comparable<?> getMaximum() {
             return model.getEnd();
         }
 
-        /** El descarte de generico, en un solo lugar. */
+        /** The generic discard, in a single place. */
         @SuppressWarnings("unchecked")
-        private static Comparable<java.util.Date> comoFecha(Comparable<?> c) {
+        private static Comparable<java.util.Date> asDate(Comparable<?> c) {
             return (Comparable<java.util.Date>) c;
         }
     }

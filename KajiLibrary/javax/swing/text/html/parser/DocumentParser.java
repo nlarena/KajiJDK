@@ -8,29 +8,29 @@ import javax.swing.text.SimpleAttributeSet;
 import javax.swing.text.html.HTMLEditorKit;
 
 /**
- * Un {@link Parser} que reenvia lo que encuentra a un
+ * A {@link Parser} that forwards what it finds to an
  * {@link HTMLEditorKit.ParserCallback}.
  *
- * <h2>Es un adaptador</h2>
+ * <h2>It is an adapter</h2>
  *
- * <p>El analizador avisa sobrescribiendo metodos protegidos; el resto de la biblioteca escucha por
- * una interfaz de devolucion. Esta clase es el puente entre las dos formas, y no hace nada mas.
+ * <p>The parser reports by overriding protected methods; the rest of the library listens through
+ * a callback interface. This class is the bridge between the two forms, and does nothing else.
  *
- * <p>La traduccion no es solo de nombres: el analizador habla de {@link Element}, que viene de la
- * DTD, y quien escucha habla de {@link javax.swing.text.html.HTML.Tag}, que es como se muestra. La
- * conversion la hace {@link TagElement}.
+ * <p>The translation is not only of names: the parser talks about {@link Element}, which comes
+ * from the DTD, and whoever listens talks about {@link javax.swing.text.html.HTML.Tag}, which is
+ * how it is shown. {@link TagElement} does the conversion.
  */
 public class DocumentParser extends Parser {
 
     private HTMLEditorKit.ParserCallback callback;
     private boolean ignoreCharSet = false;
 
-    /** Un analizador que usa esa DTD. */
+    /** A parser that uses that DTD. */
     public DocumentParser(DTD dtd) {
         super(dtd);
     }
 
-    /** Analiza y reenvia todo a quien escucha. */
+    /** It parses and forwards everything to whoever listens. */
     public void parse(Reader in, HTMLEditorKit.ParserCallback callback, boolean ignoreCharSet)
             throws IOException {
         this.callback = callback;
@@ -61,10 +61,10 @@ public class DocumentParser extends Parser {
     }
 
     /**
-     * Una etiqueta sin cierre.
+     * A tag with no closing.
      *
-     * @throws ChangedCharSetException si era un {@code <meta>} que cambia la codificacion y no se
-     *     pidio ignorarla.
+     * @throws ChangedCharSetException if it was a {@code <meta>} that changes the encoding and
+     *     ignoring it was not asked for.
      */
     protected void handleEmptyTag(TagElement tag) throws ChangedCharSetException {
         if (callback != null) {

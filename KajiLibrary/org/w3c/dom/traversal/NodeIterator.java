@@ -4,58 +4,59 @@ import org.w3c.dom.DOMException;
 import org.w3c.dom.Node;
 
 /**
- * KajiLibrary's org.w3c.dom.traversal.NodeIterator -- recorre un documento como si fuera una lista.
+ * KajiLibrary's org.w3c.dom.traversal.NodeIterator -- it walks a document as if it were a list.
  *
- * <p>Aplana el arbol a su orden de documento y va y viene por el. Es la mitad simple de
- * {@code org.w3c.dom.traversal}; la otra, {@link TreeWalker}, conserva la forma del arbol.
+ * <p>It flattens the tree to its document order and goes back and forth over it. It is the simple
+ * half of {@code org.w3c.dom.traversal}; the other, {@link TreeWalker}, keeps the shape of the
+ * tree.
  *
- * <h2>La posicion esta entre dos nodos, no sobre uno</h2>
+ * <h2>The position is between two nodes, not on one</h2>
  *
- * <p>Es lo que hace que {@link #nextNode()} y {@link #previousNode()} se comporten como uno espera al
- * cambiar de direccion: la posicion es un <b>hueco</b> en la lista, asi que llamar a `nextNode` y
- * despues a `previousNode` devuelve <b>el mismo nodo</b>, no el anterior. Quien lo lea como un cursor
- * sobre un nodo se pierde uno cada vez que da vuelta.
+ * <p>It is what makes {@link #nextNode()} and {@link #previousNode()} behave as one expects when
+ * changing direction: the position is a <b>gap</b> in the list, so calling `nextNode` and then
+ * `previousNode` returns <b>the same node</b>, not the previous one. Whoever reads it as a cursor
+ * on a node loses one each time they turn round.
  *
- * <h2>El iterador sigue vivo si el documento cambia</h2>
+ * <h2>The iterator stays alive if the document changes</h2>
  *
- * <p>No lanza {@code ConcurrentModificationException}: se <b>ajusta</b>. Si alguien borra el nodo
- * donde estaba parado, el iterador se acomoda para que el recorrido siga teniendo sentido. Eso lo
- * hace util y caro a la vez, y por eso existe {@link #detach()}: hasta que se llame, el documento
- * tiene que seguir avisandole de cada cambio.
+ * <p>It does not throw {@code ConcurrentModificationException}: it <b>adjusts</b>. If somebody
+ * deletes the node where it was standing, the iterator rearranges itself so that the walk still
+ * makes sense. That makes it useful and expensive at the same time, and that is why {@link
+ * #detach()} exists: until it is called, the document has to keep telling it about every change.
  */
 public interface NodeIterator {
 
-    /** La raiz del recorrido. */
+    /** The root of the walk. */
     Node getRoot();
 
-    /** La mascara de tipos, un OR de las {@code SHOW_*} de {@link NodeFilter}. */
+    /** The mask of types, an OR of the {@code SHOW_*} of {@link NodeFilter}. */
     int getWhatToShow();
 
-    /** El filtro, o null si no hay. */
+    /** The filter, or null if there is none. */
     NodeFilter getFilter();
 
-    /** Si las referencias a entidad se expanden al recorrer. */
+    /** Whether entity references are expanded while walking. */
     boolean getExpandEntityReferences();
 
     /**
-     * El siguiente nodo visible, o null si se acabo.
+     * The next visible node, or null if it ran out.
      *
-     * @throws DOMException {@code INVALID_STATE_ERR} si ya se llamo a {@link #detach()}
+     * @throws DOMException {@code INVALID_STATE_ERR} if {@link #detach()} was already called
      */
     Node nextNode() throws DOMException;
 
     /**
-     * El anterior, o null si se llego al principio. Ver la nota de la clase sobre que devuelve al
-     * cambiar de direccion.
+     * The previous one, or null if the start was reached. See the note of the class on what it
+     * returns when changing direction.
      *
-     * @throws DOMException {@code INVALID_STATE_ERR} si ya se llamo a {@link #detach()}
+     * @throws DOMException {@code INVALID_STATE_ERR} if {@link #detach()} was already called
      */
     Node previousNode() throws DOMException;
 
     /**
-     * Suelta el iterador: el documento deja de tener que avisarle de los cambios.
+     * It lets go of the iterator: the document no longer has to tell it about changes.
      *
-     * <p>Despues de esto los dos metodos de recorrido lanzan. Llamarlo dos veces no hace nada.
+     * <p>After this the two walking methods throw. Calling it twice does nothing.
      */
     void detach();
 }

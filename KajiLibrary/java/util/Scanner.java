@@ -17,76 +17,72 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
-// Un lector de texto que parte la entrada en piezas con sentido: palabras, numeros, lineas.
+// A text reader that splits the input into meaningful pieces: words, numbers, lines.
 //
-// La idea entera cabe en una linea: **la entrada se parte por un patron de delimitadores**, y
-// todo lo demas -- `next`, `nextInt`, `hasNextDouble` -- son variaciones sobre eso. El delimitador
-// por defecto es "uno o mas espacios en blanco", y se puede cambiar por cualquier expresion
-// regular con `useDelimiter`. Por eso Scanner es a la vez el atajo para leer un entero de la
-// consola y un partidor de CSV.
+// The whole idea fits in one line: **the input is split by a delimiter pattern**, and everything
+// else -- `next`, `nextInt`, `hasNextDouble` -- is a variation on that. The default delimiter is
+// "one or more whitespace characters", and it can be changed to any regular expression with
+// `useDelimiter`. That is why Scanner is at once the shortcut for reading an integer from the
+// console and a CSV splitter.
 //
-// Los pares `hasNextX`/`nextX` van juntos y no por casualidad: `hasNextX` mira el proximo token
-// **sin consumirlo**, `nextX` lo consume. Esa asimetria es la que hace que un bucle
-// `while (sc.hasNextInt()) suma += sc.nextInt();` termine solo cuando aparece algo que no es un
-// numero -- sin perderlo.
+// The `hasNextX`/`nextX` pairs go together and not by chance: `hasNextX` looks at the next token
+// **without consuming it**, `nextX` consumes it. That asymmetry is what makes a loop
+// `while (sc.hasNextInt()) sum += sc.nextInt();` stop by itself when something that is not a number
+// appears -- without losing it.
 //
-// La trampa clasica queda dicha porque no es un detalle de implementacion sino del diseno:
-// `nextInt()` consume el numero y **deja el fin de linea**, asi que el `nextLine()` que sigue
-// devuelve el resto vacio de esa linea y no la siguiente. No es un bug, es lo que significa "token".
+// The classic trap is stated here because it is not an implementation detail but a design one:
+// `nextInt()` consumes the number and **leaves the line ending**, so the `nextLine()` that follows
+// returns that line's empty remainder and not the next one. It is not a bug, it is what "token"
+// means.
 //
-// ---- lo que esta y lo que no --------------------------------------------------------------------
+// ---- what is here and what is not ----------------------------------------------------------------
 //
-// **64 de los 73 miembros del contrato.** Los nueve que faltan son constructores, y faltan por
-// tipos que la biblioteca todavia no tiene:
+// This note used to say nine constructors were missing "for types the library does not have yet" --
+// the three over `java.io.File`, the three over `java.nio.file.Path` and the three over
+// `java.nio.channels.ReadableByteChannel`. All nine are declared below, each with its own javadoc
+// saying how it reads its source. The types arrived and the constructors with them.
 //
-//   Scanner(File), (File, String), (File, Charset)                     java.io.File
-//   Scanner(Path), (Path, String), (Path, Charset)                     java.nio.file.Path
-//   Scanner(ReadableByteChannel) y sus dos variantes                   java.nio.channels
-//
-// Ninguno de los tres es un problema de Scanner: en cuanto exista `java.io.File` los tres primeros
-// son tres lineas.
-//
-// ---- divergencias deliberadas -------------------------------------------------------------------
+// ---- deliberate divergences ----------------------------------------------------------------------
 //
 // | | |
 // |---|---|
-// | una fuente `InputStream` se lee **entera** al construir | decodificar por trozos parte los caracteres multibyte que caen en el borde, y no hay `InputStreamReader` para hacerlo bien. Consecuencia: un Scanner sobre `System.in` espera al fin de la entrada en vez de leer linea a linea |
-// | el buffer no se compacta | lo consumido se conserva, asi que la memoria crece con la entrada. `match()` y `findInLine` se apoyan en eso, y para entradas de tamano razonable no molesta |
-// | separador de miles `,` y decimal `.`, fijos | nuestro `Locale` no lleva simbolos numericos, asi que `useLocale` se guarda y no cambia el analisis |
-// | `tokens()` y `findAll()` son **ansiosos** | juntan todo y devuelven un Stream sobre el resultado, en vez de producir a demanda |
+// | an `InputStream` source is read **whole** on construction | decoding in chunks splits the multibyte characters that fall on the boundary, and there is no `InputStreamReader` to do it properly. Consequence: a Scanner over `System.in` waits for the end of the input instead of reading line by line |
+// | the buffer is not compacted | what has been consumed is kept, so memory grows with the input. `match()` and `findInLine` lean on that, and for inputs of reasonable size it does not get in the way |
+// | thousands separator `,` and decimal `.`, fixed | our `Locale` carries no numeric symbols, so `useLocale` is stored and does not change the parsing |
+// | `tokens()` and `findAll()` are **eager** | they gather everything and return a Stream over the result, instead of producing on demand |
 public final class Scanner implements Iterator<String>, Closeable {
 
-    // "uno o mas espacios en blanco". El JDK usa `\p{javaWhitespace}+`, que es casi lo mismo con
-    // mas puntos de codigo.
-    private static final Pattern ESPACIOS = Pattern.compile("\\s+");
+    // "one or more whitespace characters". The JDK uses `\p{javaWhitespace}+`, which is almost the
+    // same with more code points.
+    private static final Pattern WHITESPACE = Pattern.compile("\\s+");
 
-    // Los seis finales de linea que reconoce el JDK, con `\r\n` primero para que no se parta en dos.
-    private static final Pattern FIN_DE_LINEA =
+    // The six line endings the JDK recognises, with `\r\n` first so it does not get split in two.
+    private static final Pattern LINE_ENDING =
             Pattern.compile("\r\n|[\n\r  ]");
 
-    // La fuente de la que todavia queda por leer, o null si ya se agoto.
+    // The source there is still something to read from, or null if it has run out.
     private Readable source;
 
-    // Todo lo leido hasta ahora. `position` es lo consumido; lo de atras se conserva porque
-    // `match()` y `findInLine` miran hacia atras.
+    // Everything read so far. `position` is what has been consumed; what is behind is kept because
+    // `match()` and `findInLine` look backwards.
     private final StringBuilder buf = new StringBuilder();
     private int position;
 
     private boolean sourceClosed;
     private boolean closed;
 
-    private Pattern delimiter = ESPACIOS;
+    private Pattern delimiter = WHITESPACE;
     private Locale locale = Locale.getDefault();
     private int radix = 10;
 
     private MatchResult lastResult;
     private IOException lastException;
 
-    // Los limites del token que localizo `ubicarToken`.
+    // The bounds of the token `locateToken` located.
     private int tokenStart;
     private int tokenEnd;
 
-    // ---- construccion ------------------------------------------------------------------------------
+    // ---- construction ---------------------------------------------------------------------------
 
     public Scanner(Readable source) {
         if (source == null) {
@@ -95,7 +91,7 @@ public final class Scanner implements Iterator<String>, Closeable {
         this.source = source;
     }
 
-    // La fuente mas simple: el texto ya esta entero.
+    // The simplest source: the text is already there whole.
     public Scanner(String source) {
         if (source == null) {
             throw new NullPointerException();
@@ -105,13 +101,14 @@ public final class Scanner implements Iterator<String>, Closeable {
     }
 
     /**
-     * Un `Scanner` sobre el contenido de un archivo.
+     * A `Scanner` over a file's content.
      *
-     * <p>Se apoya en `FileInputStream`, que lee el archivo entero al abrirse. Vale la nota de aquel:
-     * lo que se recorre es la **foto** del momento de construir el `Scanner`, no un archivo que se
-     * sigue leyendo -- un cambio posterior no se ve.
+     * <p>It leans on `FileInputStream`, which reads the whole file on opening. That one's note
+     * applies: what is walked is the **snapshot** from the moment the `Scanner` was constructed, not
+     * a file that goes on being read -- a later change is not seen.
      *
-     * @throws java.io.FileNotFoundException si no existe, es un directorio, o no se puede leer
+     * @throws java.io.FileNotFoundException if it does not exist, is a directory, or cannot be
+     *         read
      */
     public Scanner(java.io.File source) throws java.io.FileNotFoundException {
         this(source, Charset.defaultCharset());
@@ -126,11 +123,11 @@ public final class Scanner implements Iterator<String>, Closeable {
     }
 
     /**
-     * Idem, por `Path`.
+     * The same, by `Path`.
      *
-     * <p>Un `Path` de esta biblioteca es una ruta y nada mas, asi que esto es exactamente la forma
-     * con `File` pasando por `toString()`. Existen las dos porque el JDK tiene las dos, y porque
-     * quien ya tiene un `Path` no deberia tener que convertirlo a mano.
+     * <p>A `Path` in this library is a path and nothing more, so this is exactly the `File` form
+     * going through `toString()`. Both exist because the JDK has both, and because whoever already
+     * has a `Path` should not have to convert it by hand.
      */
     public Scanner(java.nio.file.Path source) throws java.io.FileNotFoundException {
         this(source, Charset.defaultCharset());
@@ -155,51 +152,50 @@ public final class Scanner implements Iterator<String>, Closeable {
     }
 
     /**
-     * Un `Scanner` sobre un canal.
+     * A `Scanner` over a channel.
      *
-     * <p>Esta forma **si** se puede implementar de verdad en KajiJDK, a diferencia de las de `File`
-     * y `Path`: la fuente la aporta quien llama, ya abierta, asi que no hace falta que la biblioteca
-     * sepa tocar el sistema de archivos.
+     * <p>The source is supplied by the caller, already open, so the library does not have to know
+     * how to touch the filesystem for this form.
      *
-     * <p>Como las de `InputStream`, lee el canal **entero** de una y despues decodifica. Ojo con el
-     * `0`: en un canal es un resultado legitimo --el buffer estaba lleno, o uno no bloqueante no
-     * tenia nada listo-- y **no** es fin de flujo, que es `-1`. Tratarlo como fin cortaria la
-     * lectura antes de tiempo; por eso el bucle solo termina con el negativo.
+     * <p>Like the `InputStream` ones, it reads the channel **whole** in one go and then decodes.
+     * Mind the `0`: on a channel it is a legitimate result --the buffer was full, or a non-blocking
+     * one had nothing ready-- and it is **not** end of stream, which is `-1`. Treating it as the end
+     * would cut the read short; that is why the loop only ends on the negative.
      */
     public Scanner(java.nio.channels.ReadableByteChannel source, Charset charset) {
         if (source == null || charset == null) {
             throw new NullPointerException();
         }
         this.sourceClosed = true;
-        byte[] todo = new byte[0];
-        int usados = 0;
-        java.nio.ByteBuffer trozo = java.nio.ByteBuffer.allocate(8192);
+        byte[] whole = new byte[0];
+        int used = 0;
+        java.nio.ByteBuffer chunk = java.nio.ByteBuffer.allocate(8192);
         try {
-            int n = source.read(trozo);
+            int n = source.read(chunk);
             while (n >= 0) {
                 if (n > 0) {
-                    if (usados + n > todo.length) {
-                        int nuevo = todo.length * 2;
-                        if (nuevo < usados + n) {
-                            nuevo = usados + n;
+                    if (used + n > whole.length) {
+                        int updated = whole.length * 2;
+                        if (updated < used + n) {
+                            updated = used + n;
                         }
-                        byte[] mas = new byte[nuevo];
-                        System.arraycopy(todo, 0, mas, 0, usados);
-                        todo = mas;
+                        byte[] bigger = new byte[updated];
+                        System.arraycopy(whole, 0, bigger, 0, used);
+                        whole = bigger;
                     }
-                    trozo.flip();
-                    trozo.get(todo, usados, n);
-                    usados = usados + n;
-                    trozo.clear();
+                    chunk.flip();
+                    chunk.get(whole, used, n);
+                    used = used + n;
+                    chunk.clear();
                 }
-                n = source.read(trozo);
+                n = source.read(chunk);
             }
         } catch (java.io.IOException e) {
-            // Lo leido hasta aca es lo que hay: un `Scanner` no puede propagar una excepcion
-            // chequeada desde su constructor sin declararla, y el JDK tampoco la declara para esta
-            // forma.
+            // What has been read so far is what there is: a `Scanner` cannot propagate a checked
+            // exception from its constructor without declaring it, and the JDK does not declare one
+            // for this form either.
         }
-        this.buf.append(new String(todo, 0, usados, charset));
+        this.buf.append(new String(whole, 0, used, charset));
     }
 
     public Scanner(InputStream source) {
@@ -210,45 +206,46 @@ public final class Scanner implements Iterator<String>, Closeable {
         this(source, Charset.forName(charsetName));
     }
 
-    // Se lee el stream **entero** y se decodifica de una. Ver la tabla de divergencias.
+    // The stream is read **whole** and decoded in one go. See the divergence table.
     public Scanner(InputStream source, Charset charset) {
         if (source == null || charset == null) {
             throw new NullPointerException();
         }
         this.sourceClosed = true;
-        byte[] todo = new byte[0];
-        int usados = 0;
-        byte[] trozo = new byte[8192];
+        byte[] whole = new byte[0];
+        int used = 0;
+        byte[] chunk = new byte[8192];
         try {
-            int n = source.read(trozo, 0, trozo.length);
+            int n = source.read(chunk, 0, chunk.length);
             while (n > 0) {
-                if (usados + n > todo.length) {
-                    int nuevo = todo.length * 2;
-                    if (nuevo < usados + n) {
-                        nuevo = usados + n;
+                if (used + n > whole.length) {
+                    int updated = whole.length * 2;
+                    if (updated < used + n) {
+                        updated = used + n;
                     }
-                    byte[] mas = new byte[nuevo];
-                    System.arraycopy(todo, 0, mas, 0, usados);
-                    todo = mas;
+                    byte[] bigger = new byte[updated];
+                    System.arraycopy(whole, 0, bigger, 0, used);
+                    whole = bigger;
                 }
-                System.arraycopy(trozo, 0, todo, usados, n);
-                usados = usados + n;
-                n = source.read(trozo, 0, trozo.length);
+                System.arraycopy(chunk, 0, whole, used, n);
+                used = used + n;
+                n = source.read(chunk, 0, chunk.length);
             }
         } catch (java.io.IOException e) {
-            // Se corta la lectura y lo leido hasta aca es lo que hay: un `Scanner` **no tira** por
-            // fallas de E/S, las anota y las cuenta por `ioException()`. Ese es su contrato.
+            // The read is cut short and what has been read is what there is: a `Scanner` **does not
+            // throw** on I/O failures, it notes them and reports them through `ioException()`. That
+            // is its contract.
             this.lastException = e;
         } catch (RuntimeException e) {
-            // Idem para una falla no chequeada del origen.
+            // The same for an unchecked failure of the source's.
         }
-        this.buf.append(new String(todo, 0, usados, charset));
+        this.buf.append(new String(whole, 0, used, charset));
     }
 
-    // ---- el buffer --------------------------------------------------------------------------------
+    // ---- the buffer -------------------------------------------------------------------------------
 
-    // Trae mas caracteres de la fuente. Devuelve si trajo alguno.
-    private boolean leerMas() {
+    // It brings more characters from the source. It returns whether it brought any.
+    private boolean readMore() {
         if (this.sourceClosed || this.source == null) {
             return false;
         }
@@ -266,95 +263,94 @@ public final class Scanner implements Iterator<String>, Closeable {
             return false;
         }
         if (n == 0) {
-            // Cero no es fin de entrada: el buffer no tenia lugar. Con uno recien creado no puede
-            // pasar, asi que se toma como que no hay nada mas por ahora.
+            // Zero is not end of input: the buffer had no room. With a freshly created one it cannot
+            // happen, so it is taken as there being nothing more for now.
             return false;
         }
         cb.flip();
-        char[] leidos = new char[n];
-        cb.get(leidos, 0, n);
-        this.buf.append(leidos, 0, n);
+        char[] readCount = new char[n];
+        cb.get(readCount, 0, n);
+        this.buf.append(readCount, 0, n);
         return true;
     }
 
-    private void chequearAbierto() {
+    private void checkOpen() {
         if (this.closed) {
             throw new IllegalStateException("Scanner closed");
         }
     }
 
-    // Ubica el proximo token sin consumirlo. Deja los limites en tokenStart/tokenEnd.
+    // It locates the next token without consuming it. It leaves the bounds in tokenStart/tokenEnd.
     //
-    // El bucle es por la lectura incremental: cuando lo que hay en el buffer no alcanza para
-    // decidir --los delimitadores llegan hasta el final, o el token no cerro-- se trae mas y se
-    // vuelve a empezar.
-    private boolean ubicarToken() {
+    // The loop is there because of the incremental reading: when what is in the buffer is not enough
+    // to decide --the delimiters reach the end, or the token did not close-- more is brought and it
+    // starts again.
+    private boolean locateToken() {
         while (true) {
             int p = this.position;
             Matcher m = this.delimiter.matcher(this.buf);
             m.region(p, this.buf.length());
             if (m.lookingAt()) {
                 p = m.end();
-                if (p == this.buf.length() && !this.sourceClosed && this.leerMas()) {
+                if (p == this.buf.length() && !this.sourceClosed && this.readMore()) {
                     continue;
                 }
             }
             if (p >= this.buf.length()) {
-                if (!this.sourceClosed && this.leerMas()) {
+                if (!this.sourceClosed && this.readMore()) {
                     continue;
                 }
-                return false; // solo delimitadores hasta el final
+                return false; // only delimiters through to the end
             }
             Matcher d = this.delimiter.matcher(this.buf);
             d.region(p, this.buf.length());
-            int fin;
+            int end;
             if (d.find()) {
-                fin = d.start();
+                end = d.start();
             } else {
-                if (!this.sourceClosed && this.leerMas()) {
+                if (!this.sourceClosed && this.readMore()) {
                     continue;
                 }
-                fin = this.buf.length();
+                end = this.buf.length();
             }
             this.tokenStart = p;
-            this.tokenEnd = fin;
+            this.tokenEnd = end;
             return true;
         }
     }
 
-    // El proximo token sin consumirlo, o null si no hay.
-    private String espiar() {
-        this.chequearAbierto();
-        if (!this.ubicarToken()) {
+    // The next token without consuming it, or null if there is none.
+    private String peekToken() {
+        this.checkOpen();
+        if (!this.locateToken()) {
             return null;
         }
         return this.buf.substring(this.tokenStart, this.tokenEnd);
     }
 
-    // Deja `lastResult` apuntando al rango dado, para que `match()` tenga algo que devolver.
+    // It leaves `lastResult` pointing at the given range, so `match()` has something to return.
     //
-    // Se arma a mano y no con un Matcher, a proposito. Lo natural seria matchear `[\s\S]*` sobre
-    // la region, pero nuestro motor **rechaza** una clase predefinida negada adentro de otra
-    // clase (`\S` dentro de `[...]`), y lo dice con todas las letras en
-    // `Node.addClassEscape`. Un token ya localizado tampoco necesita ningun motor: sus limites
-    // ya se conocen.
-    private void registrarMatch(int desde, int hasta) {
-        this.lastResult = new ScanMatch(this.buf.substring(desde, hasta), desde, hasta);
+    // It is built by hand and not with a Matcher, on purpose. The natural thing would be to match
+    // `[\s\S]*` over the region, but our engine **rejects** a negated predefined class inside
+    // another class (`\S` inside `[...]`), and says so in as many words in `Node.addClassEscape`. An
+    // already located token needs no engine either: its bounds are already known.
+    private void recordMatch(int from, int to) {
+        this.lastResult = new ScanMatch(this.buf.substring(from, to), from, to);
     }
 
     // ---- tokens -------------------------------------------------------------------------------------
 
     public boolean hasNext() {
-        return this.espiar() != null;
+        return this.peekToken() != null;
     }
 
     public String next() {
-        this.chequearAbierto();
-        if (!this.ubicarToken()) {
+        this.checkOpen();
+        if (!this.locateToken()) {
             throw new NoSuchElementException();
         }
         String t = this.buf.substring(this.tokenStart, this.tokenEnd);
-        this.registrarMatch(this.tokenStart, this.tokenEnd);
+        this.recordMatch(this.tokenStart, this.tokenEnd);
         this.position = this.tokenEnd;
         return t;
     }
@@ -363,9 +359,9 @@ public final class Scanner implements Iterator<String>, Closeable {
         return this.hasNext(Pattern.compile(pattern));
     }
 
-    // El proximo token, pero solo si **entero** matchea el patron.
+    // The next token, but only if it matches the pattern **whole**.
     public boolean hasNext(Pattern pattern) {
-        String t = this.espiar();
+        String t = this.peekToken();
         if (t == null) {
             return false;
         }
@@ -377,7 +373,7 @@ public final class Scanner implements Iterator<String>, Closeable {
     }
 
     public String next(Pattern pattern) {
-        String t = this.espiar();
+        String t = this.peekToken();
         if (t == null) {
             throw new NoSuchElementException();
         }
@@ -387,23 +383,23 @@ public final class Scanner implements Iterator<String>, Closeable {
         return this.next();
     }
 
-    // Iterator lo declara y Scanner lo niega: un Scanner no tiene de donde sacar nada.
+    // Iterator declares it and Scanner refuses it: a Scanner has nothing to take anything out of.
     public void remove() {
         throw new UnsupportedOperationException();
     }
 
-    // ---- lineas ----------------------------------------------------------------------------------
+    // ---- lines  ----------------------------------------------------------------------------------
 
     public boolean hasNextLine() {
-        this.chequearAbierto();
-        return this.buscarFinDeLinea() != null;
+        this.checkOpen();
+        return this.findLineEnding() != null;
     }
 
-    // Devuelve { inicioDelFin, finDelFin } del proximo salto de linea, o { -1, -1 } si la entrada
-    // termina sin salto pero con contenido. null si no queda nada.
-    private int[] buscarFinDeLinea() {
+    // It returns { endStart, endEnd } of the next line break, or { -1, -1 } if the input ends with no
+    // break but with content. null if nothing is left.
+    private int[] findLineEnding() {
         while (true) {
-            Matcher m = FIN_DE_LINEA.matcher(this.buf);
+            Matcher m = LINE_ENDING.matcher(this.buf);
             m.region(this.position, this.buf.length());
             if (m.find()) {
                 int[] out = new int[2];
@@ -411,7 +407,7 @@ public final class Scanner implements Iterator<String>, Closeable {
                 out[1] = m.end();
                 return out;
             }
-            if (!this.sourceClosed && this.leerMas()) {
+            if (!this.sourceClosed && this.readMore()) {
                 continue;
             }
             if (this.position < this.buf.length()) {
@@ -424,33 +420,33 @@ public final class Scanner implements Iterator<String>, Closeable {
         }
     }
 
-    // El resto de la linea actual, **sin** el salto -- que si se consume.
+    // The rest of the current line, **without** the break -- which IS consumed.
     //
-    // Es lo que hace que `nextInt()` seguido de `nextLine()` devuelva vacio: el entero dejo el
-    // salto sin consumir, y esta llamada se lo lleva.
+    // It is what makes `nextInt()` followed by `nextLine()` return empty: the integer left the break
+    // unconsumed, and this call takes it.
     public String nextLine() {
-        this.chequearAbierto();
-        int[] fin = this.buscarFinDeLinea();
-        if (fin == null) {
+        this.checkOpen();
+        int[] end = this.findLineEnding();
+        if (end == null) {
             throw new NoSuchElementException("No line found");
         }
-        String linea;
-        if (fin[0] < 0) {
-            linea = this.buf.substring(this.position, this.buf.length());
-            this.registrarMatch(this.position, this.buf.length());
+        String line;
+        if (end[0] < 0) {
+            line = this.buf.substring(this.position, this.buf.length());
+            this.recordMatch(this.position, this.buf.length());
             this.position = this.buf.length();
         } else {
-            linea = this.buf.substring(this.position, fin[0]);
-            this.registrarMatch(this.position, fin[1]);
-            this.position = fin[1];
+            line = this.buf.substring(this.position, end[0]);
+            this.recordMatch(this.position, end[1]);
+            this.position = end[1];
         }
-        return linea;
+        return line;
     }
 
-    // ---- numeros y booleanos -------------------------------------------------------------------------
+    // ---- numbers and booleans ------------------------------------------------------------------------
 
-    // Saca el separador de miles y normaliza el signo, para que los parsers de java.lang lo acepten.
-    private String limpiarNumero(String s) {
+    // It strips the thousands separator and normalises the sign, so java.lang's parsers accept it.
+    private String cleanNumber(String s) {
         StringBuilder sb = new StringBuilder();
         int i = 0;
         while (i < s.length()) {
@@ -463,14 +459,14 @@ public final class Scanner implements Iterator<String>, Closeable {
         return sb.toString();
     }
 
-    // El comun de los ocho `hasNextX` numericos: se espia el token, se intenta convertir, y **no**
-    // se consume nada. `tipo` elige el parser.
-    private boolean puede(int tipo, int radix) {
-        String t = this.espiar();
+    // What the eight numeric `hasNextX` have in common: the token is peeked at, a conversion is
+    // attempted, and **nothing** is consumed. `kind` chooses the parser.
+    private boolean canParse(int kind, int radix) {
+        String t = this.peekToken();
         if (t == null) {
             return false;
         }
-        return this.convertible(t, tipo, radix);
+        return this.convertible(t, kind, radix);
     }
 
     private static final int T_BYTE = 0;
@@ -482,22 +478,22 @@ public final class Scanner implements Iterator<String>, Closeable {
     private static final int T_BIGINT = 6;
     private static final int T_BIGDEC = 7;
 
-    private boolean convertible(String t, int tipo, int radix) {
-        String s = this.limpiarNumero(t);
+    private boolean convertible(String t, int kind, int radix) {
+        String s = this.cleanNumber(t);
         try {
-            if (tipo == T_BYTE) {
+            if (kind == T_BYTE) {
                 Byte.parseByte(s, radix);
-            } else if (tipo == T_SHORT) {
+            } else if (kind == T_SHORT) {
                 Short.parseShort(s, radix);
-            } else if (tipo == T_INT) {
+            } else if (kind == T_INT) {
                 Integer.parseInt(s, radix);
-            } else if (tipo == T_LONG) {
+            } else if (kind == T_LONG) {
                 Long.parseLong(s, radix);
-            } else if (tipo == T_FLOAT) {
+            } else if (kind == T_FLOAT) {
                 Float.parseFloat(s);
-            } else if (tipo == T_DOUBLE) {
+            } else if (kind == T_DOUBLE) {
                 Double.parseDouble(s);
-            } else if (tipo == T_BIGINT) {
+            } else if (kind == T_BIGINT) {
                 new BigInteger(s, radix);
             } else {
                 new BigDecimal(s);
@@ -508,18 +504,18 @@ public final class Scanner implements Iterator<String>, Closeable {
         return true;
     }
 
-    // Y el comun de los `nextX`: se exige que convierta **antes** de consumir, para que un token
-    // que no es numero siga estando ahi cuando se lo pida por otra via.
-    private String tokenNumerico(int tipo, int radix) {
-        String t = this.espiar();
+    // And what the `nextX` have in common: it is required to convert **before** consuming, so that a
+    // token that is not a number is still there when it is asked for another way.
+    private String numericToken(int kind, int radix) {
+        String t = this.peekToken();
         if (t == null) {
             throw new NoSuchElementException();
         }
-        if (!this.convertible(t, tipo, radix)) {
+        if (!this.convertible(t, kind, radix)) {
             throw new InputMismatchException();
         }
         this.next();
-        return this.limpiarNumero(t);
+        return this.cleanNumber(t);
     }
 
     public boolean hasNextByte() {
@@ -527,7 +523,7 @@ public final class Scanner implements Iterator<String>, Closeable {
     }
 
     public boolean hasNextByte(int radix) {
-        return this.puede(T_BYTE, radix);
+        return this.canParse(T_BYTE, radix);
     }
 
     public byte nextByte() {
@@ -535,7 +531,7 @@ public final class Scanner implements Iterator<String>, Closeable {
     }
 
     public byte nextByte(int radix) {
-        return Byte.parseByte(this.tokenNumerico(T_BYTE, radix), radix);
+        return Byte.parseByte(this.numericToken(T_BYTE, radix), radix);
     }
 
     public boolean hasNextShort() {
@@ -543,7 +539,7 @@ public final class Scanner implements Iterator<String>, Closeable {
     }
 
     public boolean hasNextShort(int radix) {
-        return this.puede(T_SHORT, radix);
+        return this.canParse(T_SHORT, radix);
     }
 
     public short nextShort() {
@@ -551,7 +547,7 @@ public final class Scanner implements Iterator<String>, Closeable {
     }
 
     public short nextShort(int radix) {
-        return Short.parseShort(this.tokenNumerico(T_SHORT, radix), radix);
+        return Short.parseShort(this.numericToken(T_SHORT, radix), radix);
     }
 
     public boolean hasNextInt() {
@@ -559,7 +555,7 @@ public final class Scanner implements Iterator<String>, Closeable {
     }
 
     public boolean hasNextInt(int radix) {
-        return this.puede(T_INT, radix);
+        return this.canParse(T_INT, radix);
     }
 
     public int nextInt() {
@@ -567,7 +563,7 @@ public final class Scanner implements Iterator<String>, Closeable {
     }
 
     public int nextInt(int radix) {
-        return Integer.parseInt(this.tokenNumerico(T_INT, radix), radix);
+        return Integer.parseInt(this.numericToken(T_INT, radix), radix);
     }
 
     public boolean hasNextLong() {
@@ -575,7 +571,7 @@ public final class Scanner implements Iterator<String>, Closeable {
     }
 
     public boolean hasNextLong(int radix) {
-        return this.puede(T_LONG, radix);
+        return this.canParse(T_LONG, radix);
     }
 
     public long nextLong() {
@@ -583,23 +579,23 @@ public final class Scanner implements Iterator<String>, Closeable {
     }
 
     public long nextLong(int radix) {
-        return Long.parseLong(this.tokenNumerico(T_LONG, radix), radix);
+        return Long.parseLong(this.numericToken(T_LONG, radix), radix);
     }
 
     public boolean hasNextFloat() {
-        return this.puede(T_FLOAT, 10);
+        return this.canParse(T_FLOAT, 10);
     }
 
     public float nextFloat() {
-        return Float.parseFloat(this.tokenNumerico(T_FLOAT, 10));
+        return Float.parseFloat(this.numericToken(T_FLOAT, 10));
     }
 
     public boolean hasNextDouble() {
-        return this.puede(T_DOUBLE, 10);
+        return this.canParse(T_DOUBLE, 10);
     }
 
     public double nextDouble() {
-        return Double.parseDouble(this.tokenNumerico(T_DOUBLE, 10));
+        return Double.parseDouble(this.numericToken(T_DOUBLE, 10));
     }
 
     public boolean hasNextBigInteger() {
@@ -607,7 +603,7 @@ public final class Scanner implements Iterator<String>, Closeable {
     }
 
     public boolean hasNextBigInteger(int radix) {
-        return this.puede(T_BIGINT, radix);
+        return this.canParse(T_BIGINT, radix);
     }
 
     public BigInteger nextBigInteger() {
@@ -615,19 +611,19 @@ public final class Scanner implements Iterator<String>, Closeable {
     }
 
     public BigInteger nextBigInteger(int radix) {
-        return new BigInteger(this.tokenNumerico(T_BIGINT, radix), radix);
+        return new BigInteger(this.numericToken(T_BIGINT, radix), radix);
     }
 
     public boolean hasNextBigDecimal() {
-        return this.puede(T_BIGDEC, 10);
+        return this.canParse(T_BIGDEC, 10);
     }
 
     public BigDecimal nextBigDecimal() {
-        return new BigDecimal(this.tokenNumerico(T_BIGDEC, 10));
+        return new BigDecimal(this.numericToken(T_BIGDEC, 10));
     }
 
     public boolean hasNextBoolean() {
-        String t = this.espiar();
+        String t = this.peekToken();
         if (t == null) {
             return false;
         }
@@ -635,7 +631,7 @@ public final class Scanner implements Iterator<String>, Closeable {
     }
 
     public boolean nextBoolean() {
-        String t = this.espiar();
+        String t = this.peekToken();
         if (t == null) {
             throw new NoSuchElementException();
         }
@@ -646,27 +642,27 @@ public final class Scanner implements Iterator<String>, Closeable {
         return t.equalsIgnoreCase("true");
     }
 
-    // ---- busqueda directa, sin pasar por los tokens --------------------------------------------------
+    // ---- direct searching, without going through the tokens ------------------------------------------
 
     public String findInLine(String pattern) {
         return this.findInLine(Pattern.compile(pattern));
     }
 
-    // El patron, buscado **dentro de la linea actual**. No cruza el salto de linea, que es lo que
-    // lo distingue de `findWithinHorizon`.
+    // The pattern, searched for **within the current line**. It does not cross the line break, which
+    // is what distinguishes it from `findWithinHorizon`.
     public String findInLine(Pattern pattern) {
-        this.chequearAbierto();
-        int[] fin = this.buscarFinDeLinea();
-        int limite;
-        if (fin == null) {
-            limite = this.buf.length();
-        } else if (fin[0] < 0) {
-            limite = this.buf.length();
+        this.checkOpen();
+        int[] end = this.findLineEnding();
+        int bound;
+        if (end == null) {
+            bound = this.buf.length();
+        } else if (end[0] < 0) {
+            bound = this.buf.length();
         } else {
-            limite = fin[0];
+            bound = end[0];
         }
         Matcher m = pattern.matcher(this.buf);
-        m.region(this.position, limite);
+        m.region(this.position, bound);
         if (!m.find()) {
             return null;
         }
@@ -679,9 +675,9 @@ public final class Scanner implements Iterator<String>, Closeable {
         return this.findWithinHorizon(Pattern.compile(pattern), horizon);
     }
 
-    // El patron, buscado en los proximos `horizon` caracteres. Con `horizon` en 0 no hay limite.
+    // The pattern, searched for in the next `horizon` characters. With `horizon` at 0 there is no limit.
     public String findWithinHorizon(Pattern pattern, int horizon) {
-        this.chequearAbierto();
+        this.checkOpen();
         if (horizon < 0) {
             throw new IllegalArgumentException("horizon < 0");
         }
@@ -689,16 +685,16 @@ public final class Scanner implements Iterator<String>, Closeable {
             if (horizon > 0 && this.buf.length() - this.position >= horizon) {
                 break;
             }
-            if (!this.leerMas()) {
+            if (!this.readMore()) {
                 break;
             }
         }
-        int limite = this.buf.length();
-        if (horizon > 0 && this.position + horizon < limite) {
-            limite = this.position + horizon;
+        int bound = this.buf.length();
+        if (horizon > 0 && this.position + horizon < bound) {
+            bound = this.position + horizon;
         }
         Matcher m = pattern.matcher(this.buf);
-        m.region(this.position, limite);
+        m.region(this.position, bound);
         if (!m.find()) {
             return null;
         }
@@ -711,12 +707,12 @@ public final class Scanner implements Iterator<String>, Closeable {
         return this.skip(Pattern.compile(pattern));
     }
 
-    // Salta lo que matchee **desde la posicion actual**, sin delimitadores de por medio. A
-    // diferencia de `find*`, el patron tiene que empezar justo aca.
+    // It skips whatever matches **from the current position**, with no delimiters in between. Unlike
+    // `find*`, the pattern has to start right here.
     public Scanner skip(Pattern pattern) {
-        this.chequearAbierto();
-        while (!this.sourceClosed && this.leerMas()) {
-            // se trae todo lo que se pueda: `skip` no tiene horizonte
+        this.checkOpen();
+        while (!this.sourceClosed && this.readMore()) {
+            // everything possible is brought in: `skip` has no horizon
         }
         Matcher m = pattern.matcher(this.buf);
         m.region(this.position, this.buf.length());
@@ -731,7 +727,7 @@ public final class Scanner implements Iterator<String>, Closeable {
     // ---- streams -----------------------------------------------------------------------------------
 
     public Stream<String> tokens() {
-        this.chequearAbierto();
+        this.checkOpen();
         ArrayList<String> out = new ArrayList<String>();
         while (this.hasNext()) {
             out.add(this.next());
@@ -750,9 +746,9 @@ public final class Scanner implements Iterator<String>, Closeable {
     }
 
     public Stream<String> findAll(Pattern pattern) {
-        this.chequearAbierto();
-        while (!this.sourceClosed && this.leerMas()) {
-            // idem: se junta todo antes de buscar
+        this.checkOpen();
+        while (!this.sourceClosed && this.readMore()) {
+            // the same: everything is gathered before searching
         }
         ArrayList<String> out = new ArrayList<String>();
         Matcher m = pattern.matcher(this.buf);
@@ -771,7 +767,7 @@ public final class Scanner implements Iterator<String>, Closeable {
         return Stream.of(a);
     }
 
-    // ---- configuracion -------------------------------------------------------------------------------
+    // ---- configuration --------------------------------------------------------------------------
 
     public Pattern delimiter() {
         return this.delimiter;
@@ -790,7 +786,7 @@ public final class Scanner implements Iterator<String>, Closeable {
         return this.locale;
     }
 
-    // Se guarda y no cambia el analisis: ver la tabla de divergencias.
+    // It is stored and does not change the parsing: see the divergence table.
     public Scanner useLocale(Locale locale) {
         if (locale == null) {
             throw new NullPointerException();
@@ -811,18 +807,18 @@ public final class Scanner implements Iterator<String>, Closeable {
         return this;
     }
 
-    // Vuelve a la configuracion de fabrica -- delimitador, locale y base -- **sin** tocar la
-    // posicion. Reiniciar el estado no es rebobinar la entrada.
+    // It goes back to the factory configuration -- delimiter, locale and radix -- **without**
+    // touching the position. Resetting the state is not rewinding the input.
     public Scanner reset() {
-        this.delimiter = ESPACIOS;
+        this.delimiter = WHITESPACE;
         this.locale = Locale.getDefault();
         this.radix = 10;
         return this;
     }
 
-    // ---- estado --------------------------------------------------------------------------------------
+    // ---- state  --------------------------------------------------------------------------------------
 
-    // El resultado de la ultima operacion que matcheo algo.
+    // The result of the last operation that matched something.
     public MatchResult match() {
         if (this.lastResult == null) {
             throw new IllegalStateException("No match result available");
@@ -830,11 +826,11 @@ public final class Scanner implements Iterator<String>, Closeable {
         return this.lastResult;
     }
 
-    // La ultima IOException que tiro la fuente, o null.
+    // The last IOException the source threw, or null.
     //
-    // Existe porque los metodos de Scanner **no** declaran IOException: se la traga y la deja
-    // disponible aca. Quien lea de un archivo tiene que preguntar, o no se entera de que la lectura
-    // se corto por un error en vez de por fin de entrada.
+    // It exists because Scanner's methods do **not** declare IOException: it swallows it and leaves
+    // it available here. Whoever reads from a file has to ask, or they will not learn that the read
+    // was cut short by an error rather than by end of input.
     public IOException ioException() {
         return this.lastException;
     }
@@ -849,10 +845,10 @@ public final class Scanner implements Iterator<String>, Closeable {
             try {
                 ((Closeable) this.source).close();
             } catch (java.io.IOException e) {
-                // `Scanner.close()` no declara `throws` en el JDK: la falla se anota y se cuenta por
-                // `ioException()`, como la de lectura. Cerrar es lo ultimo que pasa, y obligar a
-                // atrapar ahi seria pedirle al llamador que maneje un error que ya no puede cambiar
-                // nada.
+                // `Scanner.close()` declares no `throws` in the JDK: the failure is noted and
+                // reported through `ioException()`, like the read one. Closing is the last thing that
+                // happens, and forcing a catch there would be asking the caller to handle an error
+                // that can no longer change anything.
                 this.lastException = e;
             }
         }
@@ -870,53 +866,55 @@ public final class Scanner implements Iterator<String>, Closeable {
     }
 }
 
-// El MatchResult de una operacion de Scanner que no paso por un Matcher -- `next()` y `nextLine()`,
-// que ubican su texto contando delimitadores y no matcheando. Package-private.
+// The MatchResult of a Scanner operation that did not go through a Matcher -- `next()` and
+// `nextLine()`, which locate their text by counting delimiters and not by matching.
+// Package-private.
 //
-// Un solo grupo, el cero: no hay subgrupos que reportar porque no hubo patron con parentesis.
+// A single group, zero: there are no subgroups to report because there was no pattern with
+// parentheses.
 final class ScanMatch implements MatchResult {
 
-    private final String texto;
-    private final int desde;
-    private final int hasta;
+    private final String text;
+    private final int from;
+    private final int to;
 
-    ScanMatch(String texto, int desde, int hasta) {
-        this.texto = texto;
-        this.desde = desde;
-        this.hasta = hasta;
+    ScanMatch(String text, int from, int to) {
+        this.text = text;
+        this.from = from;
+        this.to = to;
     }
 
-    private void chequear(int group) {
+    private void checkArg(int group) {
         if (group != 0) {
             throw new IndexOutOfBoundsException("No group " + group);
         }
     }
 
     public int start() {
-        return this.desde;
+        return this.from;
     }
 
     public int start(int group) {
-        this.chequear(group);
-        return this.desde;
+        this.checkArg(group);
+        return this.from;
     }
 
     public int end() {
-        return this.hasta;
+        return this.to;
     }
 
     public int end(int group) {
-        this.chequear(group);
-        return this.hasta;
+        this.checkArg(group);
+        return this.to;
     }
 
     public String group() {
-        return this.texto;
+        return this.text;
     }
 
     public String group(int group) {
-        this.chequear(group);
-        return this.texto;
+        this.checkArg(group);
+        return this.text;
     }
 
     public int groupCount() {

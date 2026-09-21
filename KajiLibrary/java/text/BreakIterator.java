@@ -256,7 +256,7 @@ public abstract class BreakIterator implements Cloneable {
      * @implNote One rule set serves every locale here, so the honest answer is the one locale whose
      *           rules were actually written down.
      */
-    public static Locale[] getAvailableLocales() {
+    public static synchronized Locale[] getAvailableLocales() {
         return new Locale[] {Locale.US};
     }
 }

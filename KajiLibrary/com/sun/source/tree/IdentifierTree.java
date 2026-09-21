@@ -3,7 +3,7 @@ package com.sun.source.tree;
 import javax.lang.model.element.Name;
 
 /**
- * Un nombre suelto.
+ * A loose name.
  */
 public interface IdentifierTree extends ExpressionTree {
 

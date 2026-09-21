@@ -7,30 +7,30 @@ import java.lang.constant.ClassDesc;
 import java.util.List;
 import jdk.internal.classfile.impl.TypedAttributes;
 
-// `Exceptions` (JVMS §4.7.5): las excepciones que el método declara con `throws`. La JVM NO las
-// hace cumplir —el chequeo de excepciones verificadas es del compilador—, así que este atributo es
-// información para quien lea la clase, no una restricción en ejecución.
+// `Exceptions` (JVMS §4.7.5): the exceptions the method declares with `throws`. The JVM does NOT
+// enforce them --checking checked exceptions is the compiler's job--, so this attribute is
+// information for whoever reads the class, not a constraint at run time.
 public interface ExceptionsAttribute extends Attribute<ExceptionsAttribute>, MethodElement {
 
-    /** Las excepciones declaradas. */
+    /** The declared exceptions. */
     List<ClassEntry> exceptions();
 
-    /** El atributo con estas excepciones. */
+    /** The attribute with these exceptions. */
     public static ExceptionsAttribute of(List<ClassEntry> exceptions) {
         return TypedAttributes.exceptions(exceptions);
     }
 
-    /** El atributo con estas excepciones. */
+    /** The attribute with these exceptions. */
     public static ExceptionsAttribute of(ClassEntry... exceptions) {
         return TypedAttributes.exceptions(TypedAttributes.listOfClasses(exceptions));
     }
 
-    /** El atributo con estas excepciones. */
+    /** The attribute with these exceptions. */
     public static ExceptionsAttribute ofSymbols(List<ClassDesc> exceptions) {
         return TypedAttributes.exceptions(TypedAttributes.classEntries(exceptions));
     }
 
-    /** El atributo con estas excepciones. */
+    /** The attribute with these exceptions. */
     public static ExceptionsAttribute ofSymbols(ClassDesc... exceptions) {
         return TypedAttributes.exceptions(TypedAttributes.classEntries(exceptions));
     }

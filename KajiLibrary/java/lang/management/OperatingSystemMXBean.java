@@ -1,33 +1,32 @@
 package java.lang.management;
 
 /**
- * KajiLibrary's java.lang.management.OperatingSystemMXBean -- el sistema donde corre la maquina
- * virtual.
+ * KajiLibrary's java.lang.management.OperatingSystemMXBean -- the system the virtual machine runs on.
  *
- * <p>Cinco datos. Los cuatro primeros son las propiedades del sistema de siempre;
- * {@link #getSystemLoadAverage} es el unico que mide algo.
+ * <p>Five data. The first four are the usual system properties;
+ * {@link #getSystemLoadAverage} is the only one that measures anything.
  *
- * <p>Ese devuelve la carga promedio del <b>ultimo minuto</b>, o un <b>negativo</b> si la plataforma no
- * la publica -- que es el caso de Windows. Es un numero relativo a la cantidad de procesadores: hay
- * que dividirlo por {@link #getAvailableProcessors} para saber si la maquina esta saturada.
+ * <p>That one returns the <b>last minute</b>'s load average, or a <b>negative</b> if the platform
+ * does not publish it -- which is Windows's case. It is a number relative to the processor count: it
+ * has to be divided by {@link #getAvailableProcessors} to tell whether the machine is saturated.
  *
- * <p>{@link #getAvailableProcessors} puede <b>cambiar</b> entre llamadas: en un contenedor con cuota,
- * o en una maquina virtual que se redimensiona, no es constante.
+ * <p>{@link #getAvailableProcessors} can <b>change</b> between calls: in a container with a quota, or
+ * on a virtual machine that resizes, it is not constant.
  */
 public interface OperatingSystemMXBean extends PlatformManagedObject {
 
-    /** El nombre del sistema operativo. */
+    /** The operating system's name. */
     String getName();
 
-    /** La arquitectura. */
+    /** The architecture. */
     String getArch();
 
-    /** La version. */
+    /** The version. */
     String getVersion();
 
-    /** Cuantos procesadores ve la maquina virtual. Ver la nota de la clase: puede cambiar. */
+    /** How many processors the virtual machine sees. See the class's note: it can change. */
     int getAvailableProcessors();
 
-    /** La carga del ultimo minuto, o un negativo si no se publica. Ver la nota de la clase. */
+    /** The last minute's load, or a negative if it is not published. See the class's note. */
     double getSystemLoadAverage();
 }

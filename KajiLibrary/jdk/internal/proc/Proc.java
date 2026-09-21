@@ -1,24 +1,25 @@
 package jdk.internal.proc;
 
 /**
- * KajiLibrary's jdk.internal.proc.Proc — la costura con los procesos del sistema.
+ * KajiLibrary's jdk.internal.proc.Proc -- the seam with the processes of the system.
  *
- * <p>Es lo que faltaba para que {@link java.lang.ProcessBuilder#start()} pudiera existir. Hasta que
- * estos nativos estuvieron, `start()` **no se declaraba**: un `Process` que no representa ningún
- * proceso no es un miembro que se pueda escribir con honestidad.
+ * <p>It is what was missing for {@link java.lang.ProcessBuilder#start()} to be able to exist. Until
+ * these natives were there, `start()` was **not declared**: a `Process` that represents no process
+ * is not a member that can be written honestly.
  *
- * <p>Sigue el mismo criterio que {@link jdk.internal.io.Fs}: el nativo hace lo mínimo y **no sabe
- * nada de las clases de Java**. Toma y devuelve cadenas, arreglos y enteros; quién sea `Process` o
- * `ProcessBuilder` es problema del lado Java, que puede cambiar sin tocar Rust.
+ * <p>It follows the same criterion as {@link jdk.internal.io.Fs}: the native does the minimum and
+ * **knows nothing about the classes of Java**. It takes and returns strings, arrays and integers;
+ * who `Process` or `ProcessBuilder` may be is a problem of the Java side, which can change without
+ * touching Rust.
  *
- * <p>La diferencia con `Fs` es que acá **sí hay handle**. Un archivo se lee entero de una vez, pero un
- * proceso es estado que vive entre llamadas —sus tuberías, su código de salida— y no hay forma de
- * representarlo con operaciones de una sola vez. El handle es un índice en una tabla de la VM, y sus
- * entradas **no se reciclan**: un handle viejo nunca apunta a un proceso nuevo.
+ * <p>The difference with `Fs` is that here there **is** a handle. A file is read whole in one go,
+ * but a process is state that lives between calls --its pipes, its exit code-- and there is no way
+ * of representing it with one-shot operations. The handle is an index into a table of the VM, and
+ * its entries are **not recycled**: an old handle never points at a new process.
  *
- * <p>Los modos de redirección son los cinco que `ProcessBuilder.Redirect` distingue de verdad:
- * <b>0</b> tubería, <b>1</b> heredar, <b>2</b> descartar, <b>3</b> archivo pisando, <b>4</b> archivo
- * agregando.
+ * <p>The modes of redirection are the five `ProcessBuilder.Redirect` really tells apart:
+ * <b>0</b> pipe, <b>1</b> inherit, <b>2</b> discard, <b>3</b> file overwriting, <b>4</b> file
+ * appending.
  */
 public final class Proc {
 
@@ -26,54 +27,57 @@ public final class Proc {
     }
 
     /**
-     * Lanza el proceso.
+     * It launches the process.
      *
-     * @param cmd el comando y sus argumentos; el primero es el ejecutable
-     * @param dir el directorio de trabajo, o `null` para heredar el nuestro
-     * @param envKV el entorno como pares aplanados (clave, valor, clave, valor…), o vacío para
-     *     heredar el nuestro. Si no está vacío **reemplaza** el entorno entero, como
+     * @param cmd the command and its arguments; the first one is the executable
+     * @param dir the working directory, or `null` to inherit ours
+     * @param envKV the environment as flattened pairs (key, value, key, value...), or empty to
+     *     inherit ours. If it is not empty it **replaces** the whole environment, as
      *     `ProcessBuilder.environment()`
-     * @param rutas las tres rutas de redirección (entrada, salida, error), con `null` donde no aplica
-     * @param modos los tres modos
-     * @param unirError si el error va a la misma tubería que la salida
-     * @return el handle, o -1 si no se pudo lanzar
+     * @param paths the three paths of redirection (input, output, error), with `null` where it does
+     *     not apply
+     * @param modes the three modes
+     * @param joinError whether the error goes to the same pipe as the output
+     * @return the handle, or -1 if it could not be launched
      */
-    public static native int spawn(String[] cmd, String dir, String[] envKV, String[] rutas,
-            int[] modos, boolean unirError);
+    public static native int spawn(String[] cmd, String dir, String[] envKV, String[] paths,
+            int[] modes, boolean joinError);
 
-    /** Espera a que termine y devuelve su código de salida. */
+    /** It waits for it to finish and returns its exit code. */
     public static native int waitFor(int handle);
 
     /**
-     * El código de salida si ya terminó, o {@link Integer#MIN_VALUE} si sigue corriendo.
+     * The exit code if it has already finished, or {@link Integer#MIN_VALUE} if it is still
+     * running.
      *
-     * <p>El centinela es lo que le permite a `Process.exitValue()` tirar
-     * `IllegalThreadStateException` --que es lo que el contrato pide-- en vez de bloquearse.
+     * <p>The sentinel is what allows `Process.exitValue()` to throw `IllegalThreadStateException`
+     * --which is what the contract asks for-- instead of blocking.
      */
     public static native int exitValue(int handle);
 
-    /** Si sigue corriendo. */
+    /** Whether it is still running. */
     public static native boolean isAlive(int handle);
 
     /**
-     * Lo mata.
+     * It kills it.
      *
-     * @param forzar se acepta y **no cambia nada en Windows**, donde no hay una señal "amable"
+     * @param force it is accepted and **changes nothing on Windows**, where there is no "kind"
+     *     signal
      */
-    public static native void destroy(int handle, boolean forzar);
+    public static native void destroy(int handle, boolean force);
 
-    /** Su identificador de proceso, o -1. */
+    /** Its process identifier, or -1. */
     public static native long pid(int handle);
 
-    /** Escribe en su entrada estándar. `true` si se pudo. */
+    /** It writes into its standard input. `true` if it could. */
     public static native boolean writeIn(int handle, byte[] b, int off, int len);
 
-    /** Cierra su entrada, que es como se le dice "no viene más". */
+    /** It closes its input, which is how it is told "no more is coming". */
     public static native void closeIn(int handle);
 
-    /** Lee de su salida. Devuelve cuántos bytes puso, o -1 en fin de flujo. */
+    /** It reads from its output. It returns how many bytes it put, or -1 at end of stream. */
     public static native int readOut(int handle, byte[] b);
 
-    /** Lee de su salida de error. */
+    /** It reads from its error output. */
     public static native int readErr(int handle, byte[] b);
 }

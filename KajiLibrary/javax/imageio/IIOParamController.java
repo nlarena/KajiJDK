@@ -1,25 +1,26 @@
 package javax.imageio;
 
 /**
- * KajiLibrary's javax.imageio.IIOParamController -- pide al usuario que complete los parametros.
+ * KajiLibrary's javax.imageio.IIOParamController -- asks the user to fill in the parameters.
  *
- * <p>Un solo metodo. Se asocia a un {@link IIOParam} y, cuando alguien llama
- * {@code activateController()}, este objeto muestra lo que sea --un dialogo, un formulario-- y
- * <b>modifica el propio parametro</b> con lo que el usuario elija.
+ * <p>A single method. It is attached to an {@link IIOParam} and, when someone calls
+ * {@code activateController()}, this object shows whatever it likes --a dialog, a form-- and
+ * <b>modifies the parameter itself</b> with what the user picks.
  *
- * <p>Devolver false significa que el usuario cancelo, y ahi el parametro tiene que quedar <b>como
- * estaba</b>. Es la parte del contrato que se olvida: un controlador que modifica y despues devuelve
- * false deja el parametro a medio cambiar.
+ * <p>Returning false means the user cancelled, and then the parameter should be left <b>as it
+ * was</b>. The JDK's contract only says to return false on cancel; leaving the parameter untouched
+ * is the sensible reading, because a controller that modifies and then returns false leaves the
+ * parameter half changed.
  *
- * <p>La interfaz no menciona interfaz grafica en ningun lado, y eso es a proposito: un controlador
- * puede leer de un archivo de configuracion o de la linea de comandos igual de bien.
+ * <p>The interface does not mention a graphical interface anywhere, and that is on purpose: a
+ * controller can read from a configuration file or from the command line just as well.
  */
 public interface IIOParamController {
 
     /**
-     * Completa ese parametro.
+     * Fills in that parameter.
      *
-     * @return si el usuario acepto; false deja el parametro intacto
+     * @return whether the user accepted; false should leave the parameter untouched
      */
     boolean activate(IIOParam param);
 }

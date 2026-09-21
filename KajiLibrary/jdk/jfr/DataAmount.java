@@ -6,10 +6,10 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * El campo es una <strong>cantidad de datos</strong>, en bytes o en bits.
+ * The field is an <strong>amount of data</strong>, in bytes or in bits.
  *
- * <p>Permite que una herramienta lo muestre como "1,4 GB" en vez de como un numero de diez cifras.
- * La distincion entre bits y bytes importa donde de verdad se miden bits: un ancho de banda de red.
+ * <p>It allows a tool to show it as "1.4 GB" instead of as a ten-figure number. The distinction
+ * between bits and bytes matters where bits are really measured: a network bandwidth.
  *
  * @since 9
  */
@@ -21,16 +21,16 @@ import java.lang.annotation.Target;
 @Description("Amount of data")
 public @interface DataAmount {
 
-    /** El valor esta en bits. */
+    /** The value is in bits. */
     String BITS = "BITS";
 
-    /** El valor esta en bytes. */
+    /** The value is in bytes. */
     String BYTES = "BYTES";
 
     /**
-     * El valor de la anotacion.
+     * The value of the annotation.
      *
-     * @return el valor
+     * @return the value
      */
     String value() default BYTES;
 }

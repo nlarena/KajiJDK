@@ -3,78 +3,81 @@ package javax.swing.event;
 import java.util.EventListener;
 
 /**
- * La lista de oyentes que usa todo Swing, guardada como pares {@code (clase, oyente)}.
+ * The list of listeners all of Swing uses, kept as {@code (class, listener)} pairs.
  *
- * <h2>Por que un arreglo plano y no un mapa</h2>
+ * <h2>Why a flat array and not a map</h2>
  *
- * <p>Un componente escucha muchos tipos de evento y casi nunca tiene oyentes de mas de uno o dos.
- * Un {@code Map<Class, List>} costaria varios objetos por componente para guardar, tipicamente, un
- * elemento. El arreglo plano cuesta uno solo, y con dos oyentes recorrerlo entero es mas rapido que
- * hashear.
+ * <p>A component listens for many kinds of event and almost never has listeners of more than one
+ * or two. A {@code Map<Class, List>} would cost several objects per component to keep, typically,
+ * one element. The flat array costs a single one, and with two listeners walking it whole is
+ * faster than hashing.
  *
- * <p>Es una optimizacion medida del JDK sobre un caso que se repite miles de veces en una interfaz.
+ * <p>It is a measured optimization of the JDK's over a case that repeats thousands of times in an
+ * interface.
  *
- * <h2>Copiar al escribir, que es lo que la hace segura</h2>
+ * <h2>Copying on write, which is what makes it safe</h2>
  *
- * <p>{@link #add} y {@link #remove} crean un arreglo nuevo en vez de modificar el que hay, y
- * {@link #getListenerList} devuelve el arreglo <strong>sin copiar</strong>. Eso permite repartir un
- * evento recorriendolo sin sincronizar y sin miedo a que alguien se de de baja en medio del reparto:
- * quien esta recorriendo tiene una foto.
+ * <p>{@link #add} and {@link #remove} create a new array instead of modifying the one there is,
+ * and {@link #getListenerList} returns the array <strong>without copying</strong>. That allows
+ * handing out an event by walking it without synchronizing and without fear that somebody
+ * unsubscribes in the middle of the round: whoever is walking has a snapshot.
  *
- * <p>Por eso mismo el arreglo devuelto <strong>no se toca</strong>. Es el precio del trato.
+ * <p>For that very reason the returned array <strong>is not touched</strong>. It is the price of
+ * the deal.
  */
 public class EventListenerList implements java.io.Serializable {
 
     private static final long serialVersionUID = -5677132037850737084L;
 
-    private static final Object[] VACIO = new Object[0];
+    private static final Object[] EMPTY = new Object[0];
 
-    /** Los pares. Volatil: se reemplaza entero, y quien lee tiene que ver el reemplazo. */
-    protected transient volatile Object[] listenerList = VACIO;
+    /** The pairs. Volatile: it is replaced whole, and whoever reads has to see the replacement. */
+    protected transient volatile Object[] listenerList = EMPTY;
 
-    /** Una lista vacia. */
+    /** An empty list. */
     public EventListenerList() {
     }
 
     /**
-     * El arreglo crudo de pares, <strong>sin copiar</strong>.
+     * The raw array of pairs, <strong>without copying</strong>.
      *
-     * <p>Se recorre de a dos: en {@code i} la clase, en {@code i+1} el oyente. No se modifica.
+     * <p>It is walked two at a time: at {@code i} the class, at {@code i+1} the listener. It is not
+     * modified.
      */
     public Object[] getListenerList() {
         return this.listenerList;
     }
 
-    /** Los oyentes de {@code t}, en un arreglo nuevo del tipo pedido. */
+    /** The listeners of {@code t}, in a new array of the requested type. */
     public <T extends EventListener> T[] getListeners(Class<T> t) {
-        Object[] lista = this.listenerList;
-        int n = getListenerCount(lista, t);
+        Object[] list = this.listenerList;
+        int n = getListenerCount(list, t);
         @SuppressWarnings("unchecked")
-        T[] resultado = (T[]) java.lang.reflect.Array.newInstance(t, n);
+        T[] result = (T[]) java.lang.reflect.Array.newInstance(t, n);
         int j = 0;
-        for (int i = lista.length - 2; i >= 0; i = i - 2) {
-            if (lista[i] == t) {
-                resultado[j] = (T) lista[i + 1];
+        for (int i = list.length - 2; i >= 0; i = i - 2) {
+            if (list[i] == t) {
+                result[j] = (T) list[i + 1];
                 j = j + 1;
             }
         }
-        return resultado;
+        return result;
     }
 
-    /** Cuantos oyentes hay, de todos los tipos. */
+    /** How many listeners there are, of all types. */
     public int getListenerCount() {
         return this.listenerList.length / 2;
     }
 
-    /** Cuantos oyentes hay de {@code t}. */
+    /** How many listeners of {@code t} there are. */
     public int getListenerCount(Class<?> t) {
         return getListenerCount(this.listenerList, t);
     }
 
-    private int getListenerCount(Object[] lista, Class<?> t) {
+    private int getListenerCount(Object[] list, Class<?> t) {
         int n = 0;
-        for (int i = 0; i < lista.length; i = i + 2) {
-            if (t == lista[i]) {
+        for (int i = 0; i < list.length; i = i + 2) {
+            if (t == list[i]) {
                 n = n + 1;
             }
         }
@@ -82,68 +85,68 @@ public class EventListenerList implements java.io.Serializable {
     }
 
     /**
-     * Agrega un oyente.
+     * Adds a listener.
      *
-     * @throws IllegalArgumentException si {@code l} no es del tipo {@code t}
+     * @throws IllegalArgumentException if {@code l} is not of type {@code t}
      */
     public synchronized <T extends EventListener> void add(Class<T> t, T l) {
         if (l == null) {
             return;
         }
         if (!t.isInstance(l)) {
-            throw new IllegalArgumentException("El oyente no es de " + t.getName());
+            throw new IllegalArgumentException("The listener is not of " + t.getName());
         }
-        Object[] viejo = this.listenerList;
-        Object[] nuevo = new Object[viejo.length + 2];
-        for (int i = 0; i < viejo.length; i++) {
-            nuevo[i] = viejo[i];
+        Object[] old = this.listenerList;
+        Object[] updated = new Object[old.length + 2];
+        for (int i = 0; i < old.length; i++) {
+            updated[i] = old[i];
         }
-        nuevo[viejo.length] = t;
-        nuevo[viejo.length + 1] = l;
-        this.listenerList = nuevo;
+        updated[old.length] = t;
+        updated[old.length + 1] = l;
+        this.listenerList = updated;
     }
 
-    /** Saca un oyente. Si estaba mas de una vez, saca uno solo. */
+    /** Removes a listener. If it was there more than once, it removes only one. */
     public synchronized <T extends EventListener> void remove(Class<T> t, T l) {
         if (l == null) {
             return;
         }
         if (!t.isInstance(l)) {
-            throw new IllegalArgumentException("El oyente no es de " + t.getName());
+            throw new IllegalArgumentException("The listener is not of " + t.getName());
         }
-        Object[] viejo = this.listenerList;
-        int donde = -1;
-        for (int i = viejo.length - 2; i >= 0; i = i - 2) {
-            if (viejo[i] == t && viejo[i + 1].equals(l)) {
-                donde = i;
+        Object[] old = this.listenerList;
+        int at = -1;
+        for (int i = old.length - 2; i >= 0; i = i - 2) {
+            if (old[i] == t && old[i + 1].equals(l)) {
+                at = i;
                 break;
             }
         }
-        if (donde < 0) {
+        if (at < 0) {
             return;
         }
-        Object[] nuevo = new Object[viejo.length - 2];
+        Object[] updated = new Object[old.length - 2];
         int j = 0;
-        for (int i = 0; i < viejo.length; i = i + 2) {
-            if (i != donde) {
-                nuevo[j] = viejo[i];
-                nuevo[j + 1] = viejo[i + 1];
+        for (int i = 0; i < old.length; i = i + 2) {
+            if (i != at) {
+                updated[j] = old[i];
+                updated[j + 1] = old[i + 1];
                 j = j + 2;
             }
         }
-        this.listenerList = nuevo;
+        this.listenerList = updated;
     }
 
     public String toString() {
-        Object[] lista = this.listenerList;
+        Object[] list = this.listenerList;
         StringBuilder sb = new StringBuilder("EventListenerList: ");
-        sb.append(String.valueOf(lista.length / 2));
+        sb.append(String.valueOf(list.length / 2));
         sb.append(" listeners: ");
-        for (int i = 0; i < lista.length; i = i + 2) {
+        for (int i = 0; i < list.length; i = i + 2) {
             sb.append(" type ");
-            sb.append(((Class) lista[i]).getName());
+            sb.append(((Class) list[i]).getName());
             sb.append(" listener ");
-            sb.append(lista[i + 1]);
+            sb.append(list[i + 1]);
         }
         return sb.toString();
     }

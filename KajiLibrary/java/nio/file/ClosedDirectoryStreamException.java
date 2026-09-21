@@ -1,11 +1,11 @@
 package java.nio.file;
 
-// Se uso un `DirectoryStream` que ya estaba cerrado.
+// A `DirectoryStream` that was already closed was used.
 public class ClosedDirectoryStreamException extends IllegalStateException {
 
     private static final long serialVersionUID = 4228386650900895400L;
 
-    /** Sin mensaje: el nombre de la clase ya lo dice todo. */
+    /** With no message: the class's name says everything. */
     public ClosedDirectoryStreamException() {
     }
 }

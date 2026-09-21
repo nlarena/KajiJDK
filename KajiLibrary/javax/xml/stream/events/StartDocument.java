@@ -1,67 +1,67 @@
 package javax.xml.stream.events;
 
 /**
- * KajiLibrary's javax.xml.stream.events.StartDocument -- el comienzo del documento y lo que dice su
- * declaracion XML.
+ * KajiLibrary's javax.xml.stream.events.StartDocument -- the start of the document and what its XML
+ * declaration says.
  *
- * <h2>Los pares {@code xxxSet()} y por que hacen falta</h2>
+ * <h2>The {@code xxxSet()} pairs and why they are needed</h2>
  *
- * <p>La declaracion {@code <?xml version="1.0" encoding="UTF-8" standalone="yes"?>} tiene dos
- * partes opcionales, y para cada una hay dos preguntas distintas: cual es el valor, y si estaba
- * escrito. {@link #getCharacterEncodingScheme()} contra {@link #encodingSet()},
- * {@link #isStandalone()} contra {@link #standaloneSet()}.
+ * <p>The declaration {@code <?xml version="1.0" encoding="UTF-8" standalone="yes"?>} has two
+ * optional parts, and for each there are two different questions: what the value is, and whether it
+ * was written. {@link #getCharacterEncodingScheme()} against {@link #encodingSet()}, {@link
+ * #isStandalone()} against {@link #standaloneSet()}.
  *
- * <p>No es redundancia. Un documento sin {@code encoding} igual tiene una codificacion --la que el
- * parser detecto, UTF-8 por omision-- y {@link #getCharacterEncodingScheme()} la informa; lo que
- * {@link #encodingSet()} agrega es si esa codificacion venia declarada o fue deducida. Quien
- * reescribe el documento necesita la diferencia para no inventar una declaracion que no estaba, y
- * quien diagnostica un problema de codificacion necesita saber si le estan mintiendo o adivinando.
+ * <p>It is not redundancy. A document without {@code encoding} still has an encoding --the one the
+ * parser detected, UTF-8 by default-- and {@link #getCharacterEncodingScheme()} reports it; what
+ * {@link #encodingSet()} adds is whether that encoding was declared or deduced. Whoever rewrites
+ * the document needs the difference so as not to invent a declaration that was not there, and
+ * whoever diagnoses an encoding problem needs to know whether they are being lied to or guessed at.
  *
- * <p>Con {@code standalone} pasa lo mismo y es mas fuerte: el valor por omision es {@code no}, asi
- * que {@link #isStandalone()} devuelve false tanto para un documento que dijo {@code no} como para
- * uno que no dijo nada, y solo {@link #standaloneSet()} los distingue.
+ * <p>With {@code standalone} the same happens, more strongly: the default value is {@code no}, so
+ * {@link #isStandalone()} returns false both for a document that said {@code no} and for one that
+ * said nothing, and only {@link #standaloneSet()} tells them apart.
  */
 public interface StartDocument extends XMLEvent {
 
     /**
-     * De donde salio el documento.
+     * Where the document came from.
      *
-     * @return el identificador de sistema, o la cadena vacia si no se conoce
+     * @return the system identifier, or the empty string if not known
      */
     String getSystemId();
 
     /**
-     * La codificacion del documento: la declarada, o la que se detecto.
+     * The encoding of the document: the declared one, or the one detected.
      *
-     * @return el nombre de la codificacion
+     * @return the name of the encoding
      */
     String getCharacterEncodingScheme();
 
     /**
-     * Si la codificacion venia escrita en la declaracion XML.
+     * Whether the encoding was written in the XML declaration.
      *
-     * @return true si el documento la declaraba
+     * @return true if the document declared it
      */
     boolean encodingSet();
 
     /**
-     * El valor de {@code standalone}, con false por omision.
+     * The value of {@code standalone}, false by default.
      *
-     * @return true solo si el documento declaro {@code standalone="yes"}
+     * @return true only if the document declared {@code standalone="yes"}
      */
     boolean isStandalone();
 
     /**
-     * Si {@code standalone} venia escrito en la declaracion XML.
+     * Whether {@code standalone} was written in the XML declaration.
      *
-     * @return true si el documento lo declaraba
+     * @return true if the document declared it
      */
     boolean standaloneSet();
 
     /**
-     * La version declarada.
+     * The declared version.
      *
-     * @return {@code "1.0"} si no hay declaracion, o lo que la declaracion diga
+     * @return {@code "1.0"} if there is no declaration, or whatever the declaration says
      */
     String getVersion();
 }

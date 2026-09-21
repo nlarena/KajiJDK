@@ -1,30 +1,30 @@
 package com.sun.jdi;
 
 /**
- * Un candado que un hilo tiene tomado.
+ * A lock a thread holds.
  *
  * @since 1.3
  */
 public interface MonitorInfo extends Mirror {
 
     /**
-     * El monitor.
+     * The monitor.
      *
-     * @return el resultado
+     * @return the result
      */
     ObjectReference monitor();
 
     /**
-     * El stack depth.
+     * The stack depth.
      *
-     * @return el resultado
+     * @return the result
      */
     int stackDepth();
 
     /**
-     * El thread.
+     * The thread.
      *
-     * @return el resultado
+     * @return the result
      */
     ThreadReference thread();
 }

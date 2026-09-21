@@ -4,73 +4,78 @@ import java.util.Enumeration;
 import java.util.Hashtable;
 
 /**
- * El punto de entrada a JNDI: un `Context` que no hace nada por si mismo y le delega todo a un
- * proveedor.
+ * The entry point to JNDI: a `Context` that does nothing by itself and delegates everything to a
+ * provider.
  *
- * <h2>Por que existe una clase que solo delega</h2>
+ * <h2>Why there is a class that only delegates</h2>
  *
- * <p>JNDI es una API sin implementacion: quien resuelve nombres de LDAP es un proveedor de LDAP,
- * quien resuelve nombres de DNS es otro, y la biblioteca no trae ninguno. Pero el que escribe
- * `new InitialContext().lookup("jdbc/ventas")` no puede nombrar al proveedor sin atarse a el, que
- * es justo lo que la indireccion viene a evitar. Entonces esta clase resuelve esa pregunta una
- * vez: mira la propiedad `java.naming.factory.initial` del entorno, carga esa fabrica, le pide un
- * contexto, y a partir de ahi cada metodo es una linea que reenvia.
+ * <p>JNDI is an API without an implementation: whoever resolves LDAP names is an LDAP provider,
+ * whoever resolves DNS names is another, and the library ships none. But whoever writes
+ * `new InitialContext().lookup("jdbc/sales")` cannot name the provider without tying themselves
+ * to it, which is exactly what the indirection is there to avoid. So this class answers that
+ * question once: in the JDK it looks at the environment's `java.naming.factory.initial` property,
+ * loads that factory, asks it for a context, and from then on every method is a one-line forward.
  *
- * <p>La carga es **perezosa** --`getDefaultInitCtx` la hace la primera vez que hace falta y
- * `gotDefault` recuerda que ya se hizo--, salvo que el entorno traiga la propiedad, en cuyo caso
- * el constructor la resuelve enseguida para fallar temprano.
+ * <p>The loading is **lazy** --`getDefaultInitCtx` does it the first time it is needed and
+ * `gotDefault` remembers it was done--, unless the environment carries the property, in which case
+ * the constructor resolves it right away in order to fail early.
  *
- * <h2>Que pasa en este JDK</h2>
+ * <h2>What happens in this library</h2>
  *
- * <p>La fabrica es un `javax.naming.spi.InitialContextFactory`, y ese subpaquete no esta en este
- * arbol. Entonces **no puede existir un proveedor**: no hay tipo que implementar. La consecuencia
- * es que `getDefaultInitCtx()` siempre tira `NoInitialContextException`, y con eso fallan todas
- * las operaciones de contexto.
+ * <p>`getDefaultInitCtx()` always throws `NoInitialContextException`, and with it every context
+ * operation fails. An earlier note explained this by saying `javax.naming.spi` was not in this
+ * tree, so no provider could exist. That is no longer true: the subpackage is here, and
+ * `javax.naming.spi.NamingManager.getInitialContext` does load the class named by
+ * `java.naming.factory.initial` (or asks an installed `InitialContextFactoryBuilder`). But this
+ * class never calls it: `getDefaultInitCtx` sets `gotDefault` and throws whenever `defaultInitCtx`
+ * is null, and nothing assigns `defaultInitCtx`. So even with a factory configured and on the
+ * class path, `new InitialContext()` fails here, where the JDK would use that factory. Without a
+ * configured factory the behaviour is the same as the JDK's.
  *
- * <p>Eso no es una implementacion falsa: es **exactamente** lo que hace el JDK real cuando no hay
- * proveedor instalado, esta declarado en la firma de todos los metodos --todos tiran
- * `NamingException`, y esta es una-- y es el comportamiento que el javadoc de `getDefaultInitCtx`
- * promete. La unica diferencia con el JDK real aparece cuando hay un proveedor instalado, y aca
- * eso no puede pasar. Por eso la clase se puede traer entera y honesta.
- *
- * <p>Dos consecuencias del mismo agujero, dichas de frente:
+ * <p>Two more gaps against the JDK:
  *
  * <ul>
- *   <li>`getURLOrDefaultInitCtx` no busca fabricas de contexto por esquema de URL --eso es
- *       `NamingManager.getURLContext`, tambien de `spi`--, asi que siempre cae en el contexto
- *       default. En el JDK real, sin fabricas de URL instaladas, cae igual.
- *   <li>`init` arma el entorno mezclando lo que se le paso con las propiedades de sistema de
- *       JNDI, pero **no** lee archivos `jndi.properties` del classpath, que es la tercera fuente
- *       que usa el JDK real. Como ninguna de las tres puede terminar cargando un proveedor, la
- *       diferencia no es observable mas alla del contenido de `myProps`.
+ *   <li>`getURLOrDefaultInitCtx` does not look up context factories by URL scheme --that is
+ *       `NamingManager.getURLContext`, which in this library always returns null--, so it always
+ *       falls back to the default context. In the JDK, with no URL factories installed, it falls
+ *       back the same way.
+ *   <li>`init` builds the environment by merging what it was given with the JNDI system
+ *       properties, but does **not** read `jndi.properties` files from the class path, which is
+ *       the third source the JDK uses. Since no source can end up loading a provider here, the
+ *       difference is not observable beyond the contents of `myProps`.
  * </ul>
  *
- * <h2>Los nombres son relativos al contexto inicial</h2>
+ * <h2>Names are relative to the initial context</h2>
  *
- * <p>`composeName` devuelve el nombre tal cual: un contexto inicial nunca esta nombrado relativo a
- * otra cosa que a si mismo, asi que el prefijo tiene que ser el nombre vacio y componer no hace
- * nada. No es una simplificacion, es lo que dice el contrato.
+ * <p>`composeName` returns the name as is: an initial context is never named relative to anything
+ * but itself, so the prefix must be the empty name and composing does nothing. It is not a
+ * simplification, it is what the contract says.
  */
 public class InitialContext implements Context {
 
     /**
-     * Las propiedades del entorno, ya mezcladas. `protected` porque las subclases --`InitialDirContext`
-     * y las de los proveedores-- las leen y las completan antes de llamar a `init`.
+     * The environment properties, already merged. `protected` because subclasses
+     * --`InitialDirContext` and the providers' own-- read and complete them before calling `init`.
      */
     protected Hashtable<Object, Object> myProps = null;
 
-    /** El contexto del proveedor, una vez resuelto. */
+    /** The provider's context, once resolved. */
     protected Context defaultInitCtx = null;
 
-    /** Si ya se intento resolverlo. Separado de `defaultInitCtx != null` para no reintentar al pedo. */
+    /**
+     * Whether resolving it was already tried. Kept apart from `defaultInitCtx != null` to not
+     * retry.
+     */
     protected boolean gotDefault = false;
 
     /**
-     * Las propiedades de JNDI que se leen de las propiedades de sistema cuando el entorno no las
-     * trae. Son las que el JDK real considera "estandar"; las de seguridad no estan a proposito,
-     * porque una credencial no tiene por que andar en la linea de comandos.
+     * The JNDI properties read from the system properties when the environment does not carry them.
+     * They are the ones the JDK considers "standard"; the security ones are left out on purpose,
+     * because a credential has no business on the command line. The JDK's list
+     * (`com.sun.naming.internal.VersionHelper.PROPS`) also has `java.naming.factory.control`, which
+     * this one lacks.
      */
-    private static final String[] PROPS_DE_SISTEMA = {
+    private static final String[] SYSTEM_PROPS = {
         Context.INITIAL_CONTEXT_FACTORY,
         Context.OBJECT_FACTORIES,
         Context.URL_PKG_PREFIXES,
@@ -80,11 +85,12 @@ public class InitialContext implements Context {
     };
 
     /**
-     * El constructor de las subclases que necesitan armar el entorno **antes** de inicializar.
+     * The constructor for subclasses that need to build the environment **before** initializing.
      *
-     * <p>Con `lazy` en `true` no llama a `init`: la subclase completa `myProps` a su gusto y llama
-     * a `init` ella. Con `false` es igual al constructor sin argumentos. Sin este atajo, una
-     * subclase no tendria como meterse entre la construccion y la resolucion del proveedor.
+     * <p>With `lazy` set to `true` it does not call `init`: the subclass completes `myProps` as it
+     * likes and calls `init` itself. With `false` it is the same as the no-argument constructor.
+     * Without this shortcut, a subclass would have no way to get between construction and resolving
+     * the provider.
      */
     protected InitialContext(boolean lazy) throws NamingException {
         if (!lazy) {
@@ -101,21 +107,22 @@ public class InitialContext implements Context {
     }
 
     /**
-     * Arma `myProps` y, si el entorno ya dice cual es la fabrica, resuelve el proveedor enseguida.
+     * Builds `myProps` and, if the environment already says which factory it is, resolves the
+     * provider right away.
      *
-     * <p>Lo de resolver enseguida es para fallar temprano: si el que llama se tomo el trabajo de
-     * nombrar una fabrica, que no ande tiene que salir en el constructor y no tres llamadas
-     * despues, cuando ya no se sabe de donde venia.
+     * <p>Resolving right away is to fail early: if the caller took the trouble to name a factory,
+     * it not working has to come out in the constructor and not three calls later, when nobody
+     * knows where it came from.
      */
     protected void init(Hashtable<?, ?> environment) throws NamingException {
-        myProps = entornoInicial(environment);
+        myProps = initialEnvironment(environment);
         if (myProps.get(Context.INITIAL_CONTEXT_FACTORY) != null) {
             getDefaultInitCtx();
         }
     }
 
-    /** Copia el entorno y le superpone las propiedades de sistema que falten; lo dado tiene prioridad. */
-    private static Hashtable<Object, Object> entornoInicial(Hashtable<?, ?> environment) {
+    /** Copies the environment and overlays the missing system properties; what was given wins. */
+    private static Hashtable<Object, Object> initialEnvironment(Hashtable<?, ?> environment) {
         Hashtable<Object, Object> props = new Hashtable<Object, Object>();
         if (environment != null) {
             for (Enumeration<?> e = environment.keys(); e.hasMoreElements(); ) {
@@ -123,12 +130,12 @@ public class InitialContext implements Context {
                 props.put(k, environment.get(k));
             }
         }
-        for (int i = 0; i < PROPS_DE_SISTEMA.length; i++) {
-            String nombre = PROPS_DE_SISTEMA[i];
-            if (props.get(nombre) == null) {
-                String v = System.getProperty(nombre);
+        for (int i = 0; i < SYSTEM_PROPS.length; i++) {
+            String propName = SYSTEM_PROPS[i];
+            if (props.get(propName) == null) {
+                String v = System.getProperty(propName);
                 if (v != null) {
-                    props.put(nombre, v);
+                    props.put(propName, v);
                 }
             }
         }
@@ -136,12 +143,12 @@ public class InitialContext implements Context {
     }
 
     /**
-     * El contexto del proveedor.
+     * The provider's context.
      *
-     * <p>En este arbol siempre falla, porque no hay `javax.naming.spi` y por lo tanto no hay
-     * fabrica posible. Ver la cabecera de la clase.
+     * <p>In this library it always fails, because nothing assigns `defaultInitCtx`: unlike the JDK,
+     * it does not call `NamingManager.getInitialContext`. See the class header.
      *
-     * @throws NoInitialContextException siempre, mientras no haya proveedor
+     * @throws NoInitialContextException always, in this library
      */
     protected Context getDefaultInitCtx() throws NamingException {
         if (!gotDefault) {
@@ -156,10 +163,11 @@ public class InitialContext implements Context {
     }
 
     /**
-     * El contexto que corresponde al esquema de URL del nombre, o el default.
+     * The context for the name's URL scheme, or the default one.
      *
-     * <p>Buscar por esquema es `javax.naming.spi.NamingManager.getURLContext`, que no esta; sin
-     * fabricas de URL instaladas el JDK real tambien cae en el default, asi que esto es lo mismo.
+     * <p>Looking up by scheme is `javax.naming.spi.NamingManager.getURLContext`, which is not
+     * called here (and in this library always returns null); with no URL factories installed the
+     * JDK also falls back to the default, so this is the same.
      */
     protected Context getURLOrDefaultInitCtx(String name) throws NamingException {
         return getDefaultInitCtx();
@@ -170,12 +178,12 @@ public class InitialContext implements Context {
     }
 
     /**
-     * Un `lookup` de una sola vez, sin quedarse con el contexto.
+     * A one-shot `lookup`, without keeping the context.
      *
-     * <p>Es azucar para el caso mas comun --resolver una cosa y olvidarse-- y ademas evita el
-     * casteo en el lugar de la llamada, que es lo que gana el `<T>`. El casteo sigue estando, solo
-     * que adentro y sin chequear: si el objeto no es del tipo esperado, la
-     * `ClassCastException` sale en el que llama igual que antes.
+     * <p>It is sugar for the most common case --resolve one thing and forget-- and it also avoids
+     * the cast at the call site, which is what the `<T>` buys. The cast is still there, only inside
+     * and unchecked: if the object is not of the expected type, the `ClassCastException` comes out
+     * at the caller just as before.
      */
     public static <T> T doLookup(Name name) throws NamingException {
         return (T) (new InitialContext()).lookup(name);
@@ -185,10 +193,10 @@ public class InitialContext implements Context {
         return (T) (new InitialContext()).lookup(name);
     }
 
-    // ---- todo lo que sigue es delegacion pura -------------------------------------------------------
+    // ---- everything that follows is pure delegation ---------------------------------------------
     //
-    // Cada par de metodos --el de `Name` y el de `String`-- pide el contexto que corresponde y le
-    // reenvia la llamada tal cual. No hay logica que valga la pena comentar de a una.
+    // Each pair of methods --the `Name` one and the `String` one-- asks for the right context and
+    // forwards the call as is. There is no logic worth commenting one by one.
 
     @Override
     public Object lookup(String name) throws NamingException {
@@ -230,7 +238,10 @@ public class InitialContext implements Context {
         getURLOrDefaultInitCtx(name).unbind(name);
     }
 
-    /** Los dos nombres se resuelven contra el contexto del **primero**; renombrar no cruza proveedores. */
+    /**
+     * Both names are resolved against the **first** one's context; renaming does not cross
+     * providers.
+     */
     @Override
     public void rename(String oldName, String newName) throws NamingException {
         getURLOrDefaultInitCtx(oldName).rename(oldName, newName);
@@ -302,24 +313,28 @@ public class InitialContext implements Context {
     }
 
     /**
-     * Devuelve `name` sin tocarlo, y no es una simplificacion.
+     * Returns `name` untouched, and it is not a simplification.
      *
-     * <p>Componer un nombre con el nombre del contexto solo tiene sentido si el contexto esta
-     * nombrado relativo a otro. El contexto inicial no lo esta nunca --es el origen del sistema de
-     * coordenadas--, asi que `prefix` tiene que ser el nombre vacio y el resultado es `name`.
+     * <p>Composing a name with the context's name only makes sense if the context is named relative
+     * to another. The initial context never is --it is the origin of the coordinate system--, so
+     * `prefix` must be the empty name and the result is `name`.
      */
     @Override
     public String composeName(String name, String prefix) throws NamingException {
         return name;
     }
 
-    /** Clona porque un `Name` es mutable y el resultado no puede ser el mismo objeto que el argumento. */
+    /**
+     * Clones because a `Name` is mutable and the result cannot be the same object as the argument.
+     */
     @Override
     public Name composeName(Name name, Name prefix) throws NamingException {
         return (Name) name.clone();
     }
 
-    /** Cambia las dos: el entorno propio, que sobrevive, y el del proveedor, que es el que actua. */
+    /**
+     * Changes both: its own environment, which survives, and the provider's, which is what acts.
+     */
     @Override
     public Object addToEnvironment(String propName, Object propVal) throws NamingException {
         myProps.put(propName, propVal);
@@ -332,17 +347,17 @@ public class InitialContext implements Context {
         return getDefaultInitCtx().removeFromEnvironment(propName);
     }
 
-    /** El del proveedor y no `myProps`: el proveedor pudo haberle agregado defaults propios. */
+    /** The provider's and not `myProps`: the provider may have added defaults of its own. */
     @Override
     public Hashtable<?, ?> getEnvironment() throws NamingException {
         return getDefaultInitCtx().getEnvironment();
     }
 
     /**
-     * Suelta el entorno y cierra el contexto del proveedor si llego a haber uno.
+     * Drops the environment and closes the provider's context if there ever was one.
      *
-     * <p>Deja `gotDefault` en `false`: el objeto queda utilizable de nuevo, aunque sin entorno.
-     * Es lo que hace el JDK real y es lo que permite que cerrar dos veces no explote.
+     * <p>Leaves `gotDefault` at `false`: the object is usable again, though without an environment.
+     * It is what the real JDK does, and it is what lets closing twice not blow up.
      */
     @Override
     public void close() throws NamingException {

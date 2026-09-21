@@ -3,22 +3,23 @@ package javax.management.openmbean;
 import javax.management.MBeanParameterInfo;
 
 /**
- * La descripción de un constructor de un MBean abierto.
+ * The description of a constructor of an open MBean.
  *
- * <p>`getSignature` devuelve `MBeanParameterInfo[]` y no `OpenMBeanParameterInfo[]`, que es lo que
- * uno esperaría acá. No es un descuido del JDK: es el tipo que hereda de `MBeanConstructorInfo`, y
- * cambiarlo rompería la compatibilidad. Los elementos **son** `OpenMBeanParameterInfo`, así que el
- * cast es seguro; lo que no hay es forma de decirlo en la firma.
+ * <p>{@code getSignature} returns {@code MBeanParameterInfo[]} and not
+ * {@code OpenMBeanParameterInfo[]}, which is what one would expect here. It is not a JDK oversight:
+ * it is the type inherited from {@code MBeanConstructorInfo}, and changing it would break
+ * compatibility. The elements <b>are</b> {@code OpenMBeanParameterInfo}, so the cast is safe; what
+ * there is no way to do is say so in the signature.
  */
 public interface OpenMBeanConstructorInfo {
 
-    /** La descripción, para una persona. */
+    /** The description, for a person. */
     String getDescription();
 
-    /** El nombre del constructor. */
+    /** The constructor's name. */
     String getName();
 
-    /** Los parámetros. Ver la nota de la clase sobre su tipo. */
+    /** The parameters. See the class note about their type. */
     MBeanParameterInfo[] getSignature();
 
     boolean equals(Object obj);

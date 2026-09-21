@@ -20,13 +20,13 @@ import java.util.concurrent.atomic.AtomicInteger;
 //   ExecutorService pool = Executors.newFixedThreadPool(2);
 //   Future<Integer> f = pool.submit(task);
 //
-// La nota anterior decia que `callable(PrivilegedAction)` y `callable(PrivilegedExceptionAction)`
-// quedaban afuera porque sus tipos de parametro no existian en esta biblioteca, y que sustituirlos
-// habria dado "otro metodo con el nombre correcto". Era cierto y ya no lo es: `java.security` trajo
-// las dos interfaces, asi que los dos metodos van con su firma de verdad.
+// The previous note said `callable(PrivilegedAction)` and `callable(PrivilegedExceptionAction)` were
+// left out because their parameter types did not exist in this library, and that substituting them
+// would have given "another method with the right name". That was true and is not any more:
+// `java.security` brought both interfaces, so both methods are here with their real signatures.
 //
-// Los tres `privileged*` estan porque el JDK 25 ya los vacio: sin Security Manager no establecen
-// ningun contexto de control de acceso, y lo que queda --el class loader de contexto-- esta.
+// The three `privileged*` are here because JDK 25 already emptied them: with no Security Manager
+// they establish no access control context, and what is left --the context class loader-- is here.
 public class Executors {
 
     // Not instantiable — a holder of static factories, like the JDK's.
@@ -221,15 +221,16 @@ public class Executors {
 
     // Adapt a Runnable to a Callable returning null.
     /**
-     * Un {@link Callable} que corre esa accion privilegiada.
+     * A {@link Callable} that runs that privileged action.
      *
-     * <p>El puente entre las dos formas que Java tiene de decir "una operacion sin argumentos que
-     * devuelve algo": `PrivilegedAction` es la de `java.security` y `Callable` la de acá. Existe
-     * porque un `ExecutorService` solo sabe de la segunda.
+     * <p>The bridge between the two ways Java has of saying "an operation with no arguments that
+     * returns something": `PrivilegedAction` is `java.security`'s and `Callable` is this package's.
+     * It exists because an `ExecutorService` only knows the second.
      *
-     * <p>Devuelve `Callable<Object>` y no `Callable<T>`, cosa que parece un descuido y no lo es: la
-     * firma es de 2004, anterior a que la accion fuera generica, y cambiarla ahora rompería a todo el
-     * que la usa. El valor que sale es el que la accion devuelve, sin tocar.
+     * <p>It returns `Callable<Object>` and not `Callable<T>`, which looks like an oversight and is
+     * not: the signature is from 2004, older than the action being generic, and changing it now
+     * would break everyone using it. The value that comes out is the one the action returns,
+     * untouched.
      */
     public static Callable<Object> callable(java.security.PrivilegedAction<?> action) {
         if (action == null) {
@@ -239,11 +240,11 @@ public class Executors {
     }
 
     /**
-     * El de arriba para una accion que **puede fallar**.
+     * The one above for an action that **can fail**.
      *
-     * <p>Son dos metodos y no uno porque las dos interfaces son distintas: la de arriba no puede
-     * lanzar nada chequeado y esta si. `Callable.call` declara `throws Exception`, asi que del lado
-     * de aca las dos entran igual -- la diferencia esta del lado de la accion.
+     * <p>They are two methods and not one because the two interfaces are different: the one above
+     * cannot throw anything checked and this one can. `Callable.call` declares `throws Exception`, so
+     * on this side both fit alike -- the difference is on the action's side.
      */
     public static Callable<Object> callable(java.security.PrivilegedExceptionAction<?> action) {
         if (action == null) {
@@ -252,8 +253,8 @@ public class Executors {
         return new PrivilegedExceptionActionAdapter(action);
     }
 
-    // Los dos adaptadores. Clases con nombre y no lambdas porque el `Callable` que sale de aca puede
-    // terminar en una traza, y un nombre dice de donde vino.
+    // The two adapters. Named classes and not lambdas because the `Callable` that comes out of here
+    // can end up in a stack trace, and a name says where it came from.
 
     private static final class PrivilegedActionAdapter implements Callable<Object> {
         private final java.security.PrivilegedAction<?> action;

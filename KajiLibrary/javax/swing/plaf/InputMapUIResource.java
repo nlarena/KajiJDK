@@ -3,9 +3,9 @@ package javax.swing.plaf;
 import javax.swing.InputMap;
 
 /**
- * Un {@link InputMap} marcado como puesto por el aspecto.
+ * An {@link InputMap} marked as set by the look and feel.
  *
- * <p>Igual que {@link ActionMapUIResource}: la marca es toda la clase.
+ * <p>The same as {@link ActionMapUIResource}: the mark is the whole class.
  */
 public class InputMapUIResource extends InputMap implements UIResource {
 

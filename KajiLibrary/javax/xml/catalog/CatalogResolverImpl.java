@@ -10,20 +10,20 @@ import org.w3c.dom.ls.LSInput;
 import org.xml.sax.InputSource;
 
 /**
- * El resolutor que devuelve {@link CatalogManager}.
+ * The resolver {@link CatalogManager} returns.
  *
- * <p>De acceso de paquete: no es API. Consulta el catalogo y, cuando no hay coincidencia, aplica la
- * {@link CatalogResolver.NotFoundAction} que le toco.
+ * <p>Package access: it is not API. It queries the catalog and, when there is no match, applies the
+ * {@link CatalogResolver.NotFoundAction} it was given.
  *
- * <p>Los cuatro metodos hacen lo mismo en distinto tipo, y las diferencias entre ellos estan en como
- * cada API expresa "no encontre nada" y "aca tenes algo vacio".
+ * <p>The four methods do the same thing in a different type, and the differences between them are
+ * in how each API expresses "I found nothing" and "here is something empty".
  */
 final class CatalogResolverImpl implements CatalogResolver {
 
-    /** Contra que se consulta. */
+    /** What is queried. */
     private final Catalog catalog;
 
-    /** Que hacer cuando no coincide. */
+    /** What to do when it does not match. */
     private final NotFoundAction action;
 
     CatalogResolverImpl(Catalog catalog, NotFoundAction action) {
@@ -32,9 +32,9 @@ final class CatalogResolverImpl implements CatalogResolver {
     }
 
     /**
-     * La resolucion de SAX.
+     * SAX's resolution.
      *
-     * <p>Sin coincidencia: null para continuar, una fuente con un lector vacio para ignorar.
+     * <p>Without a match: null to continue, a source with an empty reader to ignore.
      */
     public InputSource resolveEntity(String publicId, String systemId) {
         String resolved = match(publicId, systemId);
@@ -53,11 +53,11 @@ final class CatalogResolverImpl implements CatalogResolver {
     }
 
     /**
-     * La resolucion de las transformaciones.
+     * The transformations' resolution.
      *
-     * <p>Es la unica que <b>no</b> devuelve null para continuar: la API interpretaria ese null como
-     * "resolvelo vos", y lo que corresponde ahi es entregarle la direccion ya resuelta contra la base.
-     * Es lo que hace el JDK y se comprobo contra el JDK 25.
+     * <p>It is the only one that does <b>not</b> return null to continue: the API would read that
+     * null as "resolve it yourself", and what is due there is to hand it the address already
+     * resolved against the base. It is what the JDK does, checked against JDK 25.
      */
     public Source resolve(String href, String base) {
         if (href == null) {
@@ -77,10 +77,10 @@ final class CatalogResolverImpl implements CatalogResolver {
     }
 
     /**
-     * La resolucion de StAX.
+     * StAX's resolution.
      *
-     * <p>Devuelve null para continuar <b>y</b> para ignorar: no hay forma de entregar un flujo vacio
-     * sin abrir uno, y el contrato de {@code XMLResolver} ya admite null.
+     * <p>It returns null to continue <b>and</b> to ignore: there is no way of handing over an empty
+     * stream without opening one, and the {@code XMLResolver} contract already admits null.
      */
     public InputStream resolveEntity(String publicId, String systemId, String baseURI,
                                      String namespace) {
@@ -92,9 +92,9 @@ final class CatalogResolverImpl implements CatalogResolver {
     }
 
     /**
-     * La resolucion de DOM.
+     * DOM's resolution.
      *
-     * <p>Devuelve null salvo que haya coincidencia; ver {@link #resolveEntity(String, String, String,
+     * <p>It returns null unless there is a match; see {@link #resolveEntity(String, String, String,
      * String)}.
      */
     public LSInput resolveResource(String type, String namespaceURI, String publicId,
@@ -107,10 +107,10 @@ final class CatalogResolverImpl implements CatalogResolver {
     }
 
     /**
-     * La consulta al catalogo, en el orden que corresponde.
+     * The query to the catalog, in the order that corresponds.
      *
-     * <p>El identificador de sistema primero: es el que identifica el recurso concreto. El publico es
-     * un nombre formal y puede ser ambiguo entre versiones.
+     * <p>The system identifier first: it is the one that identifies the concrete resource. The
+     * public one is a formal name and can be ambiguous between versions.
      */
     private String match(String publicId, String systemId) {
         if (systemId != null) {
@@ -125,7 +125,7 @@ final class CatalogResolverImpl implements CatalogResolver {
         return null;
     }
 
-    /** {@code href} resuelto contra {@code base}, o tal cual si no se puede. */
+    /** {@code href} resolved against {@code base}, or as is if that cannot be done. */
     private static String absolutize(String href, String base) {
         if (base == null) {
             return href;

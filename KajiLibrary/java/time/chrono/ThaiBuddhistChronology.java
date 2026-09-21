@@ -12,8 +12,9 @@ import java.util.List;
 // KajiLibrary's java.time.chrono.ThaiBuddhistChronology — the Thai Buddhist calendar system, 543
 // years ahead of ISO. A singleton reachable through INSTANCE. date/dateEpochDay return
 // ThaiBuddhistDate (covariantly over Chronology's ChronoLocalDate) and eraOf returns ThaiBuddhistEra.
-// A KajiLibrary subset of the JDK class (the date(Era,…)/dateYearDay/dateNow/localDateTime/
-// zonedDateTime/eras/range/resolveDate methods are omitted).
+// This note used to list date(Era,…)/dateYearDay/dateNow/localDateTime/zonedDateTime/eras/range/
+// resolveDate as omitted. They are not: all of them answer today -- the first six and the last are
+// declared below, and localDateTime/zonedDateTime come from Chronology as defaults.
 public final class ThaiBuddhistChronology extends AbstractChronology {
 
     public static final ThaiBuddhistChronology INSTANCE = new ThaiBuddhistChronology();
@@ -55,7 +56,7 @@ public final class ThaiBuddhistChronology extends AbstractChronology {
         return 1 - yearOfEra;
     }
 
-    // ---- lo que el calendario tiene que saber contestar ------------------------------------------
+    // ---- what the calendar has to know how to answer ---------------------------------------------
 
     public ThaiBuddhistDate date(TemporalAccessor temporal) {
         if (temporal instanceof ThaiBuddhistDate) {
@@ -81,8 +82,8 @@ public final class ThaiBuddhistChronology extends AbstractChronology {
         if (clock == null) {
             throw new NullPointerException("clock");
         }
-        LocalDate hoy = LocalDate.now(clock);
-        return this.dateEpochDay(hoy.toEpochDay());
+        LocalDate today = LocalDate.now(clock);
+        return this.dateEpochDay(today.toEpochDay());
     }
 
     public ThaiBuddhistDate date(Era era, int yearOfEra, int month, int dayOfMonth) {
@@ -93,13 +94,13 @@ public final class ThaiBuddhistChronology extends AbstractChronology {
         return this.dateYearDay(this.prolepticYear(era, yearOfEra), dayOfYear);
     }
 
-    /** Si: los meses, los dias y los anios bisiestos son exactamente los del ISO. */
+    /** Yes: the months, the days and the leap years are exactly ISO's. */
     public boolean isIsoBased() {
         return true;
     }
 
     public ValueRange range(ChronoField field) {
-        // Igual que el minguo pero al reves: el anio va adelantado, no atrasado.
+        // The same as Minguo but the other way round: the year runs ahead, not behind.
         if (field == ChronoField.PROLEPTIC_MONTH) {
             ValueRange iso = ChronoField.PROLEPTIC_MONTH.range();
             return ValueRange.of(iso.getMinimum() + (long) YEARS_DIFFERENCE * 12L,
@@ -124,8 +125,8 @@ public final class ThaiBuddhistChronology extends AbstractChronology {
 
     public ThaiBuddhistDate resolveDate(java.util.Map<java.time.temporal.TemporalField, Long> fieldValues,
             java.time.format.ResolverStyle resolverStyle) {
-        // Ligado a una local: encadenar por un intermedio de tipo interfaz se pierde (#108).
-        ChronoLocalDate resuelta = super.resolveDate(fieldValues, resolverStyle);
-        return (ThaiBuddhistDate) resuelta;
+        // Bound to a local: chaining through an interface-typed intermediate gets lost (#108).
+        ChronoLocalDate resolvedOne = super.resolveDate(fieldValues, resolverStyle);
+        return (ThaiBuddhistDate) resolvedOne;
     }
 }

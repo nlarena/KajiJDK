@@ -11,21 +11,21 @@ import java.time.temporal.TemporalQuery;
 import java.time.temporal.TemporalUnit;
 import java.time.temporal.ValueRange;
 
-// KajiLibrary's java.time.chrono.ChronoLocalDateTimeImpl -- una fecha y hora locales en un calendario
-// **que no es el ISO**: exactamente una `ChronoLocalDate` mas una `LocalTime`, que es lo que dice la
-// interfaz.
+// KajiLibrary's java.time.chrono.ChronoLocalDateTimeImpl -- a local date and time in a calendar
+// **that is not ISO**: exactly a `ChronoLocalDate` plus a `LocalTime`, which is what the interface
+// says.
 //
-// Existe por una razon concreta: sin ella, `minguoDate.atTime(hora)` devolvia un `LocalDateTime`, y
-// un `LocalDateTime` **es del calendario ISO**. El resultado compilaba, se veia bien, y su
-// `getChronology()` contestaba `ISO` sobre una fecha Minguo. Un miembro que miente.
+// It exists for a concrete reason: without it, `minguoDate.atTime(time)` returned a `LocalDateTime`,
+// and a `LocalDateTime` **belongs to the ISO calendar**. The result compiled, looked right, and its
+// `getChronology()` answered `ISO` over a Minguo date. A member that lies.
 //
-// La division fecha/hora es todo el diseno: la mitad de la hora no depende del calendario --el dia de
-// cualquier calendario tiene las mismas 24 horas-- asi que la aritmetica de tiempo se hace sobre la
-// `LocalTime`, se cuentan los dias que se desbordan, y se los suma a la fecha. La fecha no se entera
-// de que existen las horas y la hora no se entera de que existen los calendarios.
+// The date/time split is the whole design: the time half does not depend on the calendar --a day of
+// any calendar has the same 24 hours-- so the time arithmetic is done over the `LocalTime`, the days
+// that overflow are counted, and they are added to the date. The date never learns that hours exist
+// and the time never learns that calendars do.
 //
-// Es de paquete: nadie la nombra desde afuera, se la obtiene por `atTime` o por
-// `Chronology.localDateTime(...)`, como en el JDK.
+// It is package-private: nobody names it from outside, it is obtained through `atTime` or through
+// `Chronology.localDateTime(...)`, as in the JDK.
 final class ChronoLocalDateTimeImpl implements ChronoLocalDateTime {
 
     private final ChronoLocalDate date;
@@ -43,7 +43,7 @@ final class ChronoLocalDateTimeImpl implements ChronoLocalDateTime {
         if (time == null) {
             throw new NullPointerException("time");
         }
-        // El ISO tiene su propia clase, que es mejor: `LocalDateTime` sabe cosas que esta no.
+        // ISO has a class of its own, and a better one: `LocalDateTime` knows things this does not.
         if (date instanceof java.time.LocalDate) {
             return java.time.LocalDateTime.of((java.time.LocalDate) date, time);
         }
@@ -58,44 +58,44 @@ final class ChronoLocalDateTimeImpl implements ChronoLocalDateTime {
         return this.time;
     }
 
-    // **No pasa por `of`**, y esa es la unica sutileza de la clase. `of` divierte una fecha ISO a
-    // `LocalDateTime`, que es lo correcto para construir desde afuera; pero los `with`/`plus` de aca
-    // prometen devolver un `ChronoLocalDateTimeImpl` --retorno estrechado, como en el JDK-- asi que
-    // tienen que construir uno. No hay contradiccion: un `Impl` **nunca** lleva una fecha ISO, porque
-    // `of` la habria diverido antes de construirlo, y ninguna operacion cambia de calendario.
+    // **It does not go through `of`**, and that is the class's only subtlety. `of` diverts an ISO
+    // date to `LocalDateTime`, which is right for building from outside; but the `with`/`plus` here
+    // promise to return a `ChronoLocalDateTimeImpl` --a narrowed return, as in the JDK-- so they have
+    // to build one. There is no contradiction: an `Impl` **never** carries an ISO date, because `of`
+    // would have diverted it before building one, and no operation changes calendar.
     //
-    // Que no pueda cambiar de calendario es justamente lo que `asegurar` comprueba.
-    private ChronoLocalDateTimeImpl con(ChronoLocalDate nuevaFecha, LocalTime nuevaHora) {
-        if (this.date == nuevaFecha && this.time == nuevaHora) {
+    // That it cannot change calendar is exactly what `ensureSameChronology` checks.
+    private ChronoLocalDateTimeImpl resolveLocal(ChronoLocalDate newDate, LocalTime newTime) {
+        if (this.date == newDate && this.time == newTime) {
             return this;
         }
-        this.mismoCalendario(nuevaFecha);
-        return new ChronoLocalDateTimeImpl(nuevaFecha, nuevaHora);
+        this.sameCalendar(newDate);
+        return new ChronoLocalDateTimeImpl(newDate, newTime);
     }
 
-    // Que la fecha nueva sea del **mismo** calendario que esta. Sin esto, ajustar una fecha Minguo
-    // con un `LocalDate` daria un objeto que dice ser Minguo y lleva adentro una fecha ISO --y el
-    // retorno estrechado, que promete un `Impl`, seria lo de menos--. El JDK tira `ClassCastException`
-    // en este caso, con este mensaje.
-    private void mismoCalendario(ChronoLocalDate otra) {
-        Chronology mia = this.date.getChronology();
-        Chronology suya = otra.getChronology();
-        if (!mia.equals(suya)) {
-            throw new ClassCastException("Chronology mismatch, expected: " + mia.getId()
-                    + ", actual: " + suya.getId());
+    // That the new date belongs to the **same** calendar as this one. Without this, adjusting a
+    // Minguo date with a `LocalDate` would give an object that says it is Minguo and carries an ISO
+    // date inside --and the narrowed return, which promises an `Impl`, would be the least of it--. The
+    // JDK throws `ClassCastException` in this case, with this message.
+    private void sameCalendar(ChronoLocalDate otherOne) {
+        Chronology mine = this.date.getChronology();
+        Chronology theirs = otherOne.getChronology();
+        if (!mine.equals(theirs)) {
+            throw new ClassCastException("Chronology mismatch, expected: " + mine.getId()
+                    + ", actual: " + theirs.getId());
         }
     }
 
-    // El `ensureValid` del JDK: lo que devolvio una operacion generica --`adjustInto`, `addTo`-- tiene
-    // que seguir siendo una fecha y hora de **este** calendario.
-    private ChronoLocalDateTimeImpl asegurar(Temporal resultado) {
-        ChronoLocalDateTime cldt = (ChronoLocalDateTime) resultado;
-        ChronoLocalDate fecha = cldt.toLocalDate();
-        this.mismoCalendario(fecha);
+    // The JDK's `ensureValid`: what a generic operation --`adjustInto`, `addTo`-- returned has to
+    // still be a date and time of **this** calendar.
+    private ChronoLocalDateTimeImpl ensureSameChronology(Temporal result) {
+        ChronoLocalDateTime cldt = (ChronoLocalDateTime) result;
+        ChronoLocalDate date = cldt.toLocalDate();
+        this.sameCalendar(date);
         if (cldt instanceof ChronoLocalDateTimeImpl) {
             return (ChronoLocalDateTimeImpl) cldt;
         }
-        return new ChronoLocalDateTimeImpl(fecha, cldt.toLocalTime());
+        return new ChronoLocalDateTimeImpl(date, cldt.toLocalTime());
     }
 
     public boolean isSupported(TemporalField field) {
@@ -143,82 +143,82 @@ final class ChronoLocalDateTimeImpl implements ChronoLocalDateTime {
         if (field instanceof ChronoField) {
             ChronoField f = (ChronoField) field;
             if (f.isTimeBased()) {
-                return this.con(this.date, this.time.with(field, newValue));
+                return this.resolveLocal(this.date, this.time.with(field, newValue));
             }
-            return this.con(this.date.with(field, newValue), this.time);
+            return this.resolveLocal(this.date.with(field, newValue), this.time);
         }
-        Temporal ajustado = field.adjustInto(this, newValue);
-        return this.asegurar(ajustado);
+        Temporal adjustedOne = field.adjustInto(this, newValue);
+        return this.ensureSameChronology(adjustedOne);
     }
 
     public ChronoLocalDateTimeImpl with(TemporalAdjuster adjuster) {
         if (adjuster instanceof ChronoLocalDate) {
-            return this.con((ChronoLocalDate) adjuster, this.time);
+            return this.resolveLocal((ChronoLocalDate) adjuster, this.time);
         }
         if (adjuster instanceof LocalTime) {
-            return this.con(this.date, (LocalTime) adjuster);
+            return this.resolveLocal(this.date, (LocalTime) adjuster);
         }
         if (adjuster instanceof ChronoLocalDateTime) {
-            return this.asegurar((Temporal) adjuster);
+            return this.ensureSameChronology((Temporal) adjuster);
         }
-        Temporal ajustado = adjuster.adjustInto(this);
-        return this.asegurar(ajustado);
+        Temporal adjustedOne = adjuster.adjustInto(this);
+        return this.ensureSameChronology(adjustedOne);
     }
 
     public ChronoLocalDateTimeImpl plus(long amountToAdd, TemporalUnit unit) {
         if (unit instanceof ChronoUnit) {
             ChronoUnit u = (ChronoUnit) unit;
             if (u == ChronoUnit.DAYS) {
-                return this.con(this.date.plus(amountToAdd, ChronoUnit.DAYS), this.time);
+                return this.resolveLocal(this.date.plus(amountToAdd, ChronoUnit.DAYS), this.time);
             }
             if (u.isDateBased()) {
-                // Meses, anios y demas: son cosa del calendario, la hora no cambia.
-                return this.con(this.date.plus(amountToAdd, unit), this.time);
+                // Months, years and the rest: they are the calendar's business, the time does not change.
+                return this.resolveLocal(this.date.plus(amountToAdd, unit), this.time);
             }
-            return this.masNanos(amountToAdd, u);
+            return this.plusNanosOf(amountToAdd, u);
         }
-        Temporal sumado = unit.addTo(this, amountToAdd);
-        return this.asegurar(sumado);
+        Temporal added = unit.addTo(this, amountToAdd);
+        return this.ensureSameChronology(added);
     }
 
-    // Suma en nanos y **arrastra los dias que se desbordan a la fecha**, que es lo unico que une las
-    // dos mitades. El piso se toma con division hacia abajo: sumarle -1 hora a la medianoche tiene
-    // que caer en el dia anterior, no quedarse en el mismo con una hora negativa.
-    private ChronoLocalDateTimeImpl masNanos(long cantidad, ChronoUnit unidad) {
-        long nanosPorUnidad = nanosDe(unidad);
-        long total = this.time.toNanoOfDay() + cantidad * nanosPorUnidad;
-        long dia = Math.floorDiv(total, 86400000000000L);
-        long resto = Math.floorMod(total, 86400000000000L);
-        ChronoLocalDate nuevaFecha = this.date;
-        if (dia != 0L) {
-            nuevaFecha = this.date.plus(dia, ChronoUnit.DAYS);
+    // It adds in nanos and **carries the overflowing days into the date**, which is the only thing
+    // joining the two halves. The floor is taken with downward division: adding -1 hour to midnight
+    // has to land on the previous day, not stay on the same one with a negative time.
+    private ChronoLocalDateTimeImpl plusNanosOf(long count, ChronoUnit unit) {
+        long nanosPerUnit = nanosOf(unit);
+        long total = this.time.toNanoOfDay() + count * nanosPerUnit;
+        long day = Math.floorDiv(total, 86400000000000L);
+        long remainder = Math.floorMod(total, 86400000000000L);
+        ChronoLocalDate newDate = this.date;
+        if (day != 0L) {
+            newDate = this.date.plus(day, ChronoUnit.DAYS);
         }
-        return this.con(nuevaFecha, LocalTime.ofNanoOfDay(resto));
+        return this.resolveLocal(newDate, LocalTime.ofNanoOfDay(remainder));
     }
 
-    private static long nanosDe(ChronoUnit unidad) {
-        if (unidad == ChronoUnit.NANOS) {
+    private static long nanosOf(ChronoUnit unit) {
+        if (unit == ChronoUnit.NANOS) {
             return 1L;
         }
-        if (unidad == ChronoUnit.MICROS) {
+        if (unit == ChronoUnit.MICROS) {
             return 1000L;
         }
-        if (unidad == ChronoUnit.MILLIS) {
+        if (unit == ChronoUnit.MILLIS) {
             return 1000000L;
         }
-        if (unidad == ChronoUnit.SECONDS) {
+        if (unit == ChronoUnit.SECONDS) {
             return 1000000000L;
         }
-        if (unidad == ChronoUnit.MINUTES) {
+        if (unit == ChronoUnit.MINUTES) {
             return 60000000000L;
         }
-        if (unidad == ChronoUnit.HOURS) {
+        if (unit == ChronoUnit.HOURS) {
             return 3600000000000L;
         }
-        if (unidad == ChronoUnit.HALF_DAYS) {
+        if (unit == ChronoUnit.HALF_DAYS) {
             return 43200000000000L;
         }
-        throw new java.time.temporal.UnsupportedTemporalTypeException("Unsupported unit: " + unidad);
+        throw new java.time.temporal.UnsupportedTemporalTypeException("Unsupported unit: " + unit);
     }
 
     public ChronoZonedDateTime atZone(ZoneId zone) {
@@ -226,24 +226,24 @@ final class ChronoLocalDateTimeImpl implements ChronoLocalDateTime {
     }
 
     public long until(Temporal endExclusive, TemporalUnit unit) {
-        ChronoLocalDateTime fin = (ChronoLocalDateTime) endExclusive;
+        ChronoLocalDateTime end = (ChronoLocalDateTime) endExclusive;
         if (unit instanceof ChronoUnit) {
             ChronoUnit u = (ChronoUnit) unit;
-            LocalTime horaFin = fin.toLocalTime();
-            ChronoLocalDate fechaFin = fin.toLocalDate();
+            LocalTime endTime = end.toLocalTime();
+            ChronoLocalDate endDate = end.toLocalDate();
             if (u.isDateBased()) {
-                // Un dia no esta completo si la hora de llegada es anterior: se descuenta uno.
-                ChronoLocalDate ajustada = fechaFin;
-                if (horaFin.toNanoOfDay() < this.time.toNanoOfDay()) {
-                    ajustada = fechaFin.minus(1L, ChronoUnit.DAYS);
+                // A day is not complete if the arrival time is earlier: one is taken off.
+                ChronoLocalDate adjusted = endDate;
+                if (endTime.toNanoOfDay() < this.time.toNanoOfDay()) {
+                    adjusted = endDate.minus(1L, ChronoUnit.DAYS);
                 }
-                return this.date.until(ajustada, unit);
+                return this.date.until(adjusted, unit);
             }
-            long dias = this.date.until(fechaFin, ChronoUnit.DAYS);
-            long nanos = dias * 86400000000000L + horaFin.toNanoOfDay() - this.time.toNanoOfDay();
-            return nanos / nanosDe(u);
+            long days = this.date.until(endDate, ChronoUnit.DAYS);
+            long nanos = days * 86400000000000L + endTime.toNanoOfDay() - this.time.toNanoOfDay();
+            return nanos / nanosOf(u);
         }
-        return unit.between(this, fin);
+        return unit.between(this, end);
     }
 
     public <R> R query(TemporalQuery<R> query) {
@@ -267,10 +267,10 @@ final class ChronoLocalDateTimeImpl implements ChronoLocalDateTime {
             return true;
         }
         if (obj instanceof ChronoLocalDateTime) {
-            ChronoLocalDateTime otro = (ChronoLocalDateTime) obj;
-            ChronoLocalDate suFecha = otro.toLocalDate();
-            LocalTime suHora = otro.toLocalTime();
-            return this.date.equals(suFecha) && this.time.equals(suHora);
+            ChronoLocalDateTime other = (ChronoLocalDateTime) obj;
+            ChronoLocalDate theirDate = other.toLocalDate();
+            LocalTime theirTime = other.toLocalTime();
+            return this.date.equals(theirDate) && this.time.equals(theirTime);
         }
         return false;
     }

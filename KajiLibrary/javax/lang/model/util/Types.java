@@ -14,146 +14,149 @@ import javax.lang.model.type.TypeMirror;
 import javax.lang.model.type.WildcardType;
 
 /**
- * KajiLibrary's javax.lang.model.util.Types — las preguntas sobre tipos que sólo el compilador puede
- * contestar.
+ * KajiLibrary's javax.lang.model.util.Types — the questions about types only the compiler can
+ * answer.
  *
- * <p>Un procesador de anotaciones ve el programa como un modelo: {@code TypeMirror} describe un tipo,
- * pero **no sabe nada sobre su relación con otros**. Preguntar si `A` es subtipo de `B`, o cuál es el
- * borrado de `List&lt;String&gt;`, exige la tabla de tipos del compilador. Esta interfaz es la puerta
- * a esa tabla, y por eso ninguno de sus métodos se puede contestar mirando el `TypeMirror` solo.
+ * <p>An annotation processor sees the program as a model: {@code TypeMirror} describes a type, but
+ * **knows nothing about its relation to others**. Asking whether `A` is a subtype of `B`, or what
+ * the erasure of `List&lt;String&gt;` is, requires the compiler's type table. This interface is the
+ * door to that table, and that is why none of its methods can be answered by looking at the
+ * `TypeMirror` alone.
  *
- * <p>Es una **declaración pura**: la implementa el compilador y la entrega por
- * {@link javax.annotation.processing.ProcessingEnvironment#getTypeUtils()}. Se puede escribir entera y
- * honesta sin que haya implementación, y de hecho **esta biblioteca no trae ninguna** — lo que se
- * necesita para eso es el modelo de tipos de `javac`, que vive en `src/javac/` y no en Java.
+ * <p>It is a **pure declaration**: the compiler implements it and hands it over through {@link
+ * javax.annotation.processing.ProcessingEnvironment#getTypeUtils()}. It can be written whole and
+ * honest without an implementation, and in fact **this library ships none** — what is needed for
+ * that is `javac`'s type model, which lives in `src/javac/` and not in Java.
  *
- * <p>Las tres distinciones que más se confunden, y que están acá porque son tres preguntas distintas:
+ * <p>The three distinctions most often confused, and that are here because they are three different
+ * questions:
  *
  * <ul>
- * <li>{@link #isSameType} es identidad de tipos. Ojo: dos comodines nunca son el mismo tipo, ni
- *     siquiera comparados consigo mismos, porque cada aparición de `?` denota un tipo desconocido
- *     **distinto**.</li>
- * <li>{@link #isSubtype} es la relación de subtipado del lenguaje (§4.10).</li>
- * <li>{@link #isAssignable} es si una asignación compila, que es más ancho: incluye conversiones de
- *     asignación como el boxing y el ensanchamiento numérico.</li>
+ * <li>{@link #isSameType} is type identity. Careful: two wildcards are never the same type, not
+ *     even compared with themselves, because each occurrence of `?` denotes a **different** unknown
+ *     type.</li>
+ * <li>{@link #isSubtype} is the language's subtyping relation (§4.10).</li>
+ * <li>{@link #isAssignable} is whether an assignment compiles, which is wider: it includes
+ *     assignment conversions such as boxing and numeric widening.</li>
  * </ul>
  */
 public interface Types {
 
     /**
-     * El elemento que declara ese tipo, o `null` si el tipo no declara ninguno.
+     * The element that declares that type, or `null` if the type declares none.
      *
-     * <p>Devuelve `null` --y no tira-- para un tipo primitivo o un array, porque "este tipo no tiene
-     * declaración" es una respuesta y no un error.
+     * <p>It returns `null` --and does not throw-- for a primitive type or an array, because "this
+     * type has no declaration" is an answer and not an error.
      */
     Element asElement(TypeMirror t);
 
-    /** Si los dos son el mismo tipo. */
+    /** Whether the two are the same type. */
     boolean isSameType(TypeMirror t1, TypeMirror t2);
 
-    /** Si `t1` es subtipo de `t2` (§4.10). */
+    /** Whether `t1` is a subtype of `t2` (§4.10). */
     boolean isSubtype(TypeMirror t1, TypeMirror t2);
 
-    /** Si un valor de `t1` se puede asignar a una variable de `t2` (§5.2). */
+    /** Whether a value of `t1` can be assigned to a variable of `t2` (§5.2). */
     boolean isAssignable(TypeMirror t1, TypeMirror t2);
 
-    /** Si `t1` contiene a `t2` (§4.5.1), la relación entre argumentos de tipo. */
+    /** Whether `t1` contains `t2` (§4.5.1), the relation between type arguments. */
     boolean contains(TypeMirror t1, TypeMirror t2);
 
     /**
-     * Si la firma de `m1` es una subfirma de la de `m2` (§8.4.2).
+     * Whether the signature of `m1` is a subsignature of that of `m2` (§8.4.2).
      *
-     * <p>Es la pregunta que decide si un método **redefine** a otro, y no es lo mismo que que las dos
-     * firmas sean iguales: una firma genérica es subfirma de su propio borrado.
+     * <p>It is the question that decides whether a method **overrides** another, and it is not the
+     * same as the two signatures being equal: a generic signature is a subsignature of its own
+     * erasure.
      */
     boolean isSubsignature(ExecutableType m1, ExecutableType m2);
 
-    /** Los supertipos **directos** de ese tipo, la superclase primero si hay. */
+    /** The **direct** supertypes of that type, the superclass first if there is one. */
     List<? extends TypeMirror> directSupertypes(TypeMirror t);
 
-    /** El borrado de ese tipo (§4.6). */
+    /** The erasure of that type (§4.6). */
     TypeMirror erasure(TypeMirror t);
 
-    /** La clase envoltorio de ese primitivo. */
+    /** The wrapper class of that primitive. */
     TypeElement boxedClass(PrimitiveType p);
 
     /**
-     * El primitivo que ese envoltorio envuelve.
+     * The primitive that wrapper wraps.
      *
-     * @throws IllegalArgumentException si el tipo no es un envoltorio
+     * @throws IllegalArgumentException if the type is not a wrapper
      */
     PrimitiveType unboxedType(TypeMirror t);
 
     /**
-     * La captura de ese tipo (§5.1.10).
+     * The capture of that type (§5.1.10).
      *
-     * <p>Capturar es reemplazar cada comodín por una variable de tipo fresca. Es lo que hace que
-     * `lista.get(0)` tenga un tipo con el que se pueda trabajar cuando la lista es `List&lt;?&gt;`.
+     * <p>Capturing is replacing each wildcard with a fresh type variable. It is what gives
+     * `list.get(0)` a type one can work with when the list is `List&lt;?&gt;`.
      */
     TypeMirror capture(TypeMirror t);
 
     /**
-     * Ese tipo primitivo.
+     * That primitive type.
      *
-     * @throws IllegalArgumentException si `kind` no es primitivo
+     * @throws IllegalArgumentException if `kind` is not primitive
      */
     PrimitiveType getPrimitiveType(TypeKind kind);
 
-    /** El tipo nulo, el del literal `null`. */
+    /** The null type, that of the literal `null`. */
     NullType getNullType();
 
     /**
-     * Un pseudotipo: `VOID`, `NONE` o `PACKAGE`.
+     * A pseudo-type: `VOID`, `NONE` or `PACKAGE`.
      *
-     * <p>Son "no tipos" y por eso tienen su propia interfaz: `void` no es un tipo con valores, y
-     * `NONE` es lo que devuelve la superclase de `Object` --que no es `null` sino la ausencia
-     * explícita de superclase--.
+     * <p>They are "non-types" and that is why they have their own interface: `void` is not a type
+     * with values, and `NONE` is what `Object`'s superclass returns --which is not `null` but the
+     * explicit absence of a superclass--.
      *
-     * @throws IllegalArgumentException si `kind` no es uno de esos tres
+     * @throws IllegalArgumentException if `kind` is not one of those three
      */
     NoType getNoType(TypeKind kind);
 
-    /** Un array de ese tipo componente. */
+    /** An array of that component type. */
     ArrayType getArrayType(TypeMirror componentType);
 
     /**
-     * Un comodín con esas cotas.
+     * A wildcard with those bounds.
      *
-     * <p>Los dos parámetros son excluyentes: `? extends X` tiene cota superior, `? super X` inferior,
-     * y `?` no tiene ninguna. Pasar las dos no tiene sentido en el lenguaje.
+     * <p>The two parameters are mutually exclusive: `? extends X` has an upper bound, `? super X` a
+     * lower one, and `?` has none. Passing both makes no sense in the language.
      *
-     * @param extendsBound la cota superior, o `null`
-     * @param superBound la inferior, o `null`
+     * @param extendsBound the upper bound, or `null`
+     * @param superBound the lower one, or `null`
      */
     WildcardType getWildcardType(TypeMirror extendsBound, TypeMirror superBound);
 
-    /** Ese tipo, parametrizado con esos argumentos. */
+    /** That type, parameterised with those arguments. */
     DeclaredType getDeclaredType(TypeElement typeElem, TypeMirror... typeArgs);
 
     /**
-     * Un tipo anidado parametrizado, dentro de un contenedor también parametrizado.
+     * A parameterised nested type, inside a container that is parameterised too.
      *
-     * <p>Existe aparte porque `Outer&lt;String&gt;.Inner&lt;Integer&gt;` tiene **dos** juegos de
-     * argumentos y el de un solo `TypeElement` no puede expresarlo.
+     * <p>It exists separately because `Outer&lt;String&gt;.Inner&lt;Integer&gt;` has **two** sets
+     * of arguments and the one of a single `TypeElement` cannot express that.
      */
     DeclaredType getDeclaredType(DeclaredType containing, TypeElement typeElem,
             TypeMirror... typeArgs);
 
     /**
-     * El tipo de ese elemento **visto como miembro de** ese tipo.
+     * The type of that element **seen as a member of** that type.
      *
-     * <p>Es la sustitución que hace útil a los genéricos: `List.get` declara devolver `E`, y visto
-     * como miembro de `List&lt;String&gt;` devuelve `String`.
+     * <p>It is the substitution that makes generics useful: `List.get` declares it returns `E`, and
+     * seen as a member of `List&lt;String&gt;` it returns `String`.
      */
     TypeMirror asMemberOf(DeclaredType containing, Element element);
 
     /**
-     * El mismo tipo sin sus anotaciones de tipo.
+     * The same type without its type annotations.
      *
-     * <p>El cuerpo por omisión devuelve el argumento tal cual, y conviene decir por qué eso es
-     * correcto y no un atajo: quitar anotaciones de un tipo que no tiene ninguna es la identidad. Una
-     * implementación que sí modele anotaciones de tipo lo redefine; mientras no haya ninguna en el
-     * modelo, no hay nada que quitar.
+     * <p>The default body returns the argument as it is, and it is as well to say why that is right
+     * and not a shortcut: removing annotations from a type that has none is the identity. An
+     * implementation that does model type annotations overrides it; while there are none in the
+     * model, there is nothing to remove.
      */
     default <T extends TypeMirror> T stripAnnotations(T t) {
         return t;

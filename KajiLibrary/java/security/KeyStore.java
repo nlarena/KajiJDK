@@ -12,62 +12,63 @@ import java.util.Enumeration;
 import java.util.HashSet;
 import java.util.Set;
 
-// Un almacen de claves y certificados: alias -> material.
+// A store of keys and certificates: alias -> material.
 //
 // ===============================================================================================
-// LAS DOS COSAS DISTINTAS QUE GUARDA
+// THE TWO DIFFERENT THINGS IT KEEPS
 // ===============================================================================================
 //
-// Un `KeyStore` mezcla dos roles que conviene no confundir, porque tienen implicancias de seguridad
-// opuestas:
+// A `KeyStore` mixes two roles that are better not confused, because they have opposite security
+// implications:
 //
-//   - **claves privadas** con su cadena: material secreto, protegido por contraseña. Se filtra y se
-//     puede suplantar a su dueño.
-//   - **certificados de confianza**: material publico y **sin proteger por contraseña**. No hay nada
-//     secreto adentro, pero lo que entra ahi se vuelve una raiz: una CA de mas en un truststore
-//     puede emitir un certificado valido para cualquier nombre. Agregar una entrada de confianza es
-//     mas peligroso que filtrar una clave, aunque parezca lo contrario.
+//   - **private keys** with their chain: secret material, protected by a password. It leaks and its
+//     owner can be impersonated.
+//   - **trusted certificates**: public material and **not protected by a password**. There is
+//     nothing secret inside, but what goes in there becomes a root: one CA too many in a truststore
+//     can issue a valid certificate for any name. Adding a trusted entry is more dangerous than
+//     leaking a key, although it looks like the opposite.
 //
-// Por eso `setCertificateEntry` no pide contraseña y `setKeyEntry` si: no es una asimetria de
-// comodidad, es que protegen cosas distintas.
+// That is why `setCertificateEntry` does not ask for a password and `setKeyEntry` does: it is not
+// an asymmetry of convenience, it is that they protect different things.
 //
-// `load(stream, null)` es el otro lugar donde se pierde seguridad sin darse cuenta: con contraseña
-// null el almacen se lee **sin verificar su integridad**. Es legitimo cuando solo se quieren mirar
-// certificados; es un agujero si de ahi salen las anclas de confianza, porque cualquiera que pueda
-// escribir el archivo puede agregar una raiz.
+// `load(stream, null)` is the other place where security is lost without noticing: with a null
+// password the store is read **without verifying its integrity**. It is legitimate when one only
+// wants to look at certificates; it is a hole if the trust anchors come from there, because anybody
+// who can write the file can add a root.
 //
 // ===============================================================================================
 // A KajiLibrary subset
 // ===============================================================================================
 //
-// **No hay ningun proveedor de `KeyStore` registrado**, asi que las sobrecargas de `getInstance`
-// tiran siempre `KeyStoreException`. Leer un JKS o un PKCS#12 pide descifrado —PBES2, RC2, 3DES— y
-// verificacion de un MAC, y nada de eso esta implementado; un lector que ignorara el MAC estaria
-// entregando material que nadie autentico. La estructura entera esta: quien traiga un `KeyStoreSpi`
-// obtiene un `KeyStore` que funciona.
+// **There is no registered `KeyStore` provider**, so the overloads of `getInstance` always throw
+// `KeyStoreException`. Reading a JKS or a PKCS#12 asks for decryption —PBES2, RC2, 3DES— and
+// verification of a MAC, and none of that is implemented; a reader that ignored the MAC would be
+// handing over material nobody authenticated. The whole structure is there: whoever brings a
+// `KeyStoreSpi` obtains a `KeyStore` that works.
 //
-// Faltan dos tipos anidados, los dos por dependencias que esta biblioteca no tiene:
+// Two nested types are missing, both for dependencies this library does not have:
 //
-//   - `SecretKeyEntry`, porque `javax.crypto.SecretKey` no existe.
-//   - `PasswordProtection` y `CallbackHandlerProtection`, porque necesitan
-//     `javax.security.auth.Destroyable` y `javax.security.auth.callback.CallbackHandler`.
+//   - `SecretKeyEntry`, because `javax.crypto.SecretKey` does not exist.
+//   - `PasswordProtection` and `CallbackHandlerProtection`, because they need
+//     `javax.security.auth.Destroyable` and `javax.security.auth.callback.CallbackHandler`.
 //
-// La ausencia de `PasswordProtection` arrastra a los tres `Builder.newInstance` que trabajan con
-// archivos: su primer paso es comprobar que la proteccion sea de una de esas dos clases, asi que sin
-// ellas nunca podrian tener exito. Se dejan afuera en vez de declararlos para que siempre fallen.
+// The absence of `PasswordProtection` drags in the three `Builder.newInstance`s that work with
+// files: their first step is to check that the protection is of one of those two classes, so
+// without them they could never succeed. They are left out instead of being declared so that they
+// always fail.
 public class KeyStore {
 
-    // Una entrada del almacen. La interfaz es el modelo moderno —uniforme, tipado— frente a los
-    // metodos sueltos de Java 1.2, que siguen ahi por compatibilidad.
+    // An entry of the store. The interface is the modern model —uniform, typed— against the loose
+    // methods of Java 1.2, which are still there out of compatibility.
     public interface Entry {
 
-        // Los atributos de la entrada. Vacio por default: los atributos son cosa de PKCS#12 y
-        // llegaron en Java 8, mucho despues que esta interfaz.
+        // The attributes of the entry. Empty by default: the attributes are a thing of PKCS#12 and
+        // arrived in Java 8, long after this interface.
         default Set<Attribute> getAttributes() {
             return Collections.<Attribute>emptySet();
         }
 
-        // Un atributo con nombre y valor. En PKCS#12 el nombre es un OID.
+        // An attribute with a name and a value. In PKCS#12 the name is an OID.
         interface Attribute {
 
             String getName();
@@ -76,25 +77,25 @@ public class KeyStore {
         }
     }
 
-    // Como se protege una entrada al leerla o escribirla. Es una interfaz marcadora: cada forma de
-    // proteccion —una contraseña, un dialogo que la pide— es una clase aparte.
+    // How an entry is protected when reading or writing it. It is a marker interface: each form of
+    // protection —a password, a dialogue that asks for it— is a separate class.
     public interface ProtectionParameter {
     }
 
-    // De donde cargar o hacia donde guardar el almacen entero, con su proteccion.
+    // Where to load the whole store from or where to save it to, with its protection.
     public interface LoadStoreParameter {
 
-        // La proteccion de la integridad del almacen, o null si no hay.
+        // The protection of the integrity of the store, or null if there is none.
         ProtectionParameter getProtectionParameter();
     }
 
-    // Una clave privada con su cadena de certificados.
+    // A private key with its chain of certificates.
     //
-    // La cadena no es opcional y el constructor lo hace cumplir: una clave privada sin el
-    // certificado que publica su clave publica no le sirve a nadie, porque no habria forma de
-    // verificar lo que firme. Ademas se comprueba que la clave publica del primer certificado sea
-    // del mismo algoritmo que la privada —no que sean el par, que eso costaria una operacion de
-    // clave publica, pero si que no sean de familias distintas—.
+    // The chain is not optional and the constructor enforces it: a private key without the
+    // certificate that publishes its public key is of no use to anybody, because there would be no
+    // way of verifying what it signs. It is also checked that the public key of the first
+    // certificate is of the same algorithm as the private one —not that they are the pair, because
+    // that would cost a public key operation, but that they are not of different families—.
     public static final class PrivateKeyEntry implements Entry {
 
         private final PrivateKey privKey;
@@ -113,26 +114,26 @@ public class KeyStore {
             if (chain.length == 0) {
                 throw new IllegalArgumentException("invalid zero-length input chain");
             }
-            Certificate[] copia = new Certificate[chain.length];
-            System.arraycopy(chain, 0, copia, 0, chain.length);
-            // Todos los certificados de la cadena tienen que ser del mismo tipo: una cadena que
-            // mezcle formatos no se puede validar de punta a punta.
-            String tipo = copia[0].getType();
+            Certificate[] copy = new Certificate[chain.length];
+            System.arraycopy(chain, 0, copy, 0, chain.length);
+            // Every certificate of the chain has to be of the same type: a chain that mixed formats
+            // could not be validated from end to end.
+            String type = copy[0].getType();
             int i = 1;
-            while (i < copia.length) {
-                if (!tipo.equals(copia[i].getType())) {
+            while (i < copy.length) {
+                if (!type.equals(copy[i].getType())) {
                     throw new IllegalArgumentException(
                         "chain does not contain certificates of the same type");
                 }
                 i = i + 1;
             }
-            if (!privateKey.getAlgorithm().equals(copia[0].getPublicKey().getAlgorithm())) {
+            if (!privateKey.getAlgorithm().equals(copy[0].getPublicKey().getAlgorithm())) {
                 throw new IllegalArgumentException(
                     "private key algorithm does not match algorithm of public key in end entity "
                     + "certificate (at index 0)");
             }
             this.privKey = privateKey;
-            this.chain = copia;
+            this.chain = copy;
             this.attributes = Collections.unmodifiableSet(new HashSet<Attribute>(attributes));
         }
 
@@ -140,14 +141,14 @@ public class KeyStore {
             return this.privKey;
         }
 
-        // Copia de la cadena, del sujeto hacia la raiz.
+        // A copy of the chain, from the subject towards the root.
         public Certificate[] getCertificateChain() {
             Certificate[] c = new Certificate[this.chain.length];
             System.arraycopy(this.chain, 0, c, 0, this.chain.length);
             return c;
         }
 
-        // El certificado de la propia clave: el primero de la cadena.
+        // The certificate of the key itself: the first of the chain.
         public Certificate getCertificate() {
             return this.chain[0];
         }
@@ -172,8 +173,8 @@ public class KeyStore {
         }
     }
 
-    // Un certificado en el que se confia. Sin contraseña, porque no hay nada secreto que proteger
-    // —lo que hay que proteger es la **integridad** del almacen, para que nadie agregue uno—.
+    // A certificate that is trusted. With no password, because there is nothing secret to protect
+    // —what has to be protected is the **integrity** of the store, so that nobody adds one—.
     public static final class TrustedCertificateEntry implements Entry {
 
         private final Certificate cert;
@@ -206,24 +207,23 @@ public class KeyStore {
         }
     }
 
-    // Una fabrica perezosa de almacenes: no abre nada hasta que se lo piden.
+    // A lazy factory of stores: it opens nothing until it is asked.
     //
-    // Existe para el caso en que la contraseña todavia no se conoce cuando se configura el sistema
-    // —hay que preguntarsela a alguien— y para no tener el almacen abierto mas tiempo del necesario.
+    // It exists for the case where the password is not known yet when the system is configured
+    // —somebody has to be asked for it— and so as not to have the store open longer than necessary.
     public abstract static class Builder {
 
         protected Builder() {
         }
 
-        // El almacen, cargado. Cada llamada puede devolver el mismo objeto.
+        // The store, loaded. Each call may return the same object.
         public abstract KeyStore getKeyStore() throws KeyStoreException;
 
-        // Con que proteger la entrada de ese alias.
+        // What to protect the entry of that alias with.
         public abstract ProtectionParameter getProtectionParameter(String alias)
             throws KeyStoreException;
 
-        // Un builder sobre un almacen **ya cargado**: la proteccion es la misma para todos los
-        // alias.
+        // A builder over an **already loaded** store: the protection is the same for every alias.
         public static Builder newInstance(final KeyStore keyStore,
                                           final ProtectionParameter protectionParameter) {
             if (keyStore == null || protectionParameter == null) {
@@ -246,9 +246,8 @@ public class KeyStore {
             };
         }
 
-        // Un builder que crea el almacen recien cuando se lo piden. Sirve para almacenes que no
-        // vienen de un archivo —una tarjeta, un HSM—, donde `load` no lee nada pero puede necesitar
-        // una credencial.
+        // A builder that creates the store only when it is asked. It serves for stores that do not
+        // come from a file —a card, an HSM—, where `load` reads nothing but may need a credential.
         public static Builder newInstance(final String type, final Provider provider,
                                           final ProtectionParameter protection) {
             if (type == null || protection == null) {
@@ -263,19 +262,19 @@ public class KeyStore {
                     if (this.ks != null) {
                         return this.ks;
                     }
-                    KeyStore nuevo;
+                    KeyStore fresh;
                     if (provider == null) {
-                        nuevo = KeyStore.getInstance(type);
+                        fresh = KeyStore.getInstance(type);
                     } else {
-                        nuevo = KeyStore.getInstance(type, provider);
+                        fresh = KeyStore.getInstance(type, provider);
                     }
                     try {
-                        nuevo.load(new ParametrosSimples(protection));
+                        fresh.load(new SimpleParameters(protection));
                     } catch (Exception e) {
                         throw new KeyStoreException("KeyStore instantiation failed", e);
                     }
-                    this.ks = nuevo;
-                    return nuevo;
+                    this.ks = fresh;
+                    return fresh;
                 }
 
                 @Override
@@ -284,8 +283,8 @@ public class KeyStore {
                     if (alias == null) {
                         throw new NullPointerException();
                     }
-                    // Se fuerza la creacion primero para que un error de carga salga aca y no
-                    // despues, con una proteccion ya en la mano y un almacen que nunca se abrio.
+                    // The creation is forced first so that a loading error comes out here and not
+                    // later, with a protection in hand already and a store that was never opened.
                     this.getKeyStore();
                     return protection;
                 }
@@ -293,13 +292,13 @@ public class KeyStore {
         }
     }
 
-    // El `LoadStoreParameter` minimo: solo lleva la proteccion. Package-private porque en el JDK
-    // tambien es interno.
-    static final class ParametrosSimples implements LoadStoreParameter {
+    // The minimal `LoadStoreParameter`: it only carries the protection. Package-private because in
+    // the JDK it is internal too.
+    static final class SimpleParameters implements LoadStoreParameter {
 
         private final ProtectionParameter protection;
 
-        ParametrosSimples(ProtectionParameter protection) {
+        SimpleParameters(ProtectionParameter protection) {
             this.protection = protection;
         }
 
@@ -311,7 +310,8 @@ public class KeyStore {
     private final KeyStoreSpi keyStoreSpi;
     private final Provider provider;
     private final String type;
-    // Un almacen sin cargar no responde nada: es lo que separa "recien creado" de "vacio".
+    // A store that is not loaded answers nothing: it is what separates "just created" from
+    // "empty".
     private boolean initialized = false;
 
     protected KeyStore(KeyStoreSpi keyStoreSpi, Provider provider, String type) {
@@ -329,7 +329,7 @@ public class KeyStore {
         while (i < provs.length) {
             Provider.Service s = provs[i].getService("KeyStore", type);
             if (s != null) {
-                return armar(s, type);
+                return build(s, type);
             }
             i = i + 1;
         }
@@ -360,10 +360,10 @@ public class KeyStore {
             throw new KeyStoreException(
                 "no such type: " + type + " for provider " + provider.getName());
         }
-        return armar(s, type);
+        return build(s, type);
     }
 
-    private static KeyStore armar(Provider.Service s, String type) throws KeyStoreException {
+    private static KeyStore build(Provider.Service s, String type) throws KeyStoreException {
         Object o;
         try {
             o = s.newInstance(null);
@@ -377,11 +377,11 @@ public class KeyStore {
         return new KeyStore((KeyStoreSpi) o, s.getProvider(), type);
     }
 
-    // Abre un almacen adivinando su tipo a partir del contenido del archivo.
+    // It opens a store guessing its type from the contents of the file.
     //
-    // A KajiLibrary subset: la deteccion se hace preguntandole a cada proveedor con `engineProbe`, y
-    // como no hay ninguno registrado, esto siempre termina en `KeyStoreException`. La logica queda
-    // escrita porque es la unica parte no trivial y no depende de saber ningun formato.
+    // A KajiLibrary subset: the detection is done by asking each provider with `engineProbe`, and
+    // since there is none registered, this always ends in `KeyStoreException`. The logic is left
+    // written because it is the only non-trivial part and does not depend on knowing any format.
     public static final KeyStore getInstance(File file, char[] password)
             throws KeyStoreException, IOException, NoSuchAlgorithmException, CertificateException {
         if (file == null) {
@@ -400,7 +400,7 @@ public class KeyStore {
             + "is registered in this library");
     }
 
-    // El tipo por default, de la propiedad de seguridad `keystore.type`. "pkcs12" si no esta puesta.
+    // The default type, from the security property `keystore.type`. "pkcs12" if it is not set.
     public static final String getDefaultType() {
         String t = Security.getProperty("keystore.type");
         if (t == null) {
@@ -417,44 +417,44 @@ public class KeyStore {
         return this.type;
     }
 
-    // Los atributos de esa entrada, o un conjunto vacio.
+    // The attributes of that entry, or an empty set.
     public final Set<Entry.Attribute> getAttributes(String alias) throws KeyStoreException {
-        this.exigirCargado();
+        this.requireLoaded();
         return this.keyStoreSpi.engineGetAttributes(alias);
     }
 
-    // La clave del alias, o null si no hay ninguna con ese nombre.
+    // The key of the alias, or null if there is none with that name.
     public final Key getKey(String alias, char[] password)
             throws KeyStoreException, NoSuchAlgorithmException, UnrecoverableKeyException {
-        this.exigirCargado();
+        this.requireLoaded();
         return this.keyStoreSpi.engineGetKey(alias, password);
     }
 
-    // La cadena de esa clave, o null. Del sujeto hacia la raiz.
+    // The chain of that key, or null. From the subject towards the root.
     public final Certificate[] getCertificateChain(String alias) throws KeyStoreException {
-        this.exigirCargado();
+        this.requireLoaded();
         return this.keyStoreSpi.engineGetCertificateChain(alias);
     }
 
-    // El certificado del alias. Si el alias es de una clave, devuelve el primero de su cadena.
+    // The certificate of the alias. If the alias is of a key, it returns the first of its chain.
     public final Certificate getCertificate(String alias) throws KeyStoreException {
-        this.exigirCargado();
+        this.requireLoaded();
         return this.keyStoreSpi.engineGetCertificate(alias);
     }
 
     public final Date getCreationDate(String alias) throws KeyStoreException {
-        this.exigirCargado();
+        this.requireLoaded();
         return this.keyStoreSpi.engineGetCreationDate(alias);
     }
 
-    // Guarda una clave. Si es privada, la cadena es obligatoria.
+    // It saves a key. If it is private, the chain is compulsory.
     //
-    // La cadena faltante es `IllegalArgumentException` y no `KeyStoreException`, aunque el metodo
-    // declare la segunda: es un error del llamador —le falto un argumento— y no un problema del
-    // almacen. Sorprende, pero es lo que hace el JDK.
+    // The missing chain is `IllegalArgumentException` and not `KeyStoreException`, although the
+    // method declares the second: it is an error of the caller —they left out an argument— and not
+    // a problem of the store. It surprises, but it is what the JDK does.
     public final void setKeyEntry(String alias, Key key, char[] password, Certificate[] chain)
             throws KeyStoreException {
-        this.exigirCargado();
+        this.requireLoaded();
         if (key instanceof PrivateKey && (chain == null || chain.length == 0)) {
             throw new IllegalArgumentException(
                 "Private key must be accompanied by certificate chain");
@@ -462,78 +462,78 @@ public class KeyStore {
         this.keyStoreSpi.engineSetKeyEntry(alias, key, password, chain);
     }
 
-    // Guarda una clave ya protegida en su formato final, sin descifrarla.
+    // It saves a key that is already protected in its final format, without deciphering it.
     public final void setKeyEntry(String alias, byte[] key, Certificate[] chain)
             throws KeyStoreException {
-        this.exigirCargado();
+        this.requireLoaded();
         this.keyStoreSpi.engineSetKeyEntry(alias, key, chain);
     }
 
-    // Marca un certificado como de confianza. Ver la nota de la clase: esto crea una raiz.
+    // It marks a certificate as trusted. See the note of the class: this creates a root.
     //
-    // No valida que el alias ni el certificado sean no nulos: la fachada solo comprueba que el
-    // almacen este cargado y delega. Es lo que hace el JDK, y tiene sentido porque que sea legal
-    // guardar un null depende del formato de abajo, no de esta clase.
+    // It does not validate that the alias and the certificate are non-null: the facade only checks
+    // that the store is loaded and delegates. It is what the JDK does, and it makes sense because
+    // whether it is legal to keep a null depends on the format underneath, not on this class.
     public final void setCertificateEntry(String alias, Certificate cert)
             throws KeyStoreException {
-        this.exigirCargado();
+        this.requireLoaded();
         this.keyStoreSpi.engineSetCertificateEntry(alias, cert);
     }
 
     public final void deleteEntry(String alias) throws KeyStoreException {
-        this.exigirCargado();
+        this.requireLoaded();
         this.keyStoreSpi.engineDeleteEntry(alias);
     }
 
     public final Enumeration<String> aliases() throws KeyStoreException {
-        this.exigirCargado();
+        this.requireLoaded();
         return this.keyStoreSpi.engineAliases();
     }
 
     public final boolean containsAlias(String alias) throws KeyStoreException {
-        this.exigirCargado();
+        this.requireLoaded();
         return this.keyStoreSpi.engineContainsAlias(alias);
     }
 
     public final int size() throws KeyStoreException {
-        this.exigirCargado();
+        this.requireLoaded();
         return this.keyStoreSpi.engineSize();
     }
 
     public final boolean isKeyEntry(String alias) throws KeyStoreException {
-        this.exigirCargado();
+        this.requireLoaded();
         return this.keyStoreSpi.engineIsKeyEntry(alias);
     }
 
     public final boolean isCertificateEntry(String alias) throws KeyStoreException {
-        this.exigirCargado();
+        this.requireLoaded();
         return this.keyStoreSpi.engineIsCertificateEntry(alias);
     }
 
-    // El alias del primer certificado que coincida, o null. La comparacion es por codificacion, no
-    // por identidad.
+    // The alias of the first certificate that matches, or null. The comparison is by encoding, not
+    // by identity.
     public final String getCertificateAlias(Certificate cert) throws KeyStoreException {
-        this.exigirCargado();
+        this.requireLoaded();
         return this.keyStoreSpi.engineGetCertificateAlias(cert);
     }
 
-    // Escribe el almacen y **protege su integridad** con la contraseña.
+    // It writes the store and **protects its integrity** with the password.
     public final void store(OutputStream stream, char[] password)
             throws KeyStoreException, IOException, NoSuchAlgorithmException, CertificateException {
-        this.exigirCargado();
+        this.requireLoaded();
         this.keyStoreSpi.engineStore(stream, password);
     }
 
     public final void store(LoadStoreParameter param)
             throws KeyStoreException, IOException, NoSuchAlgorithmException, CertificateException {
-        this.exigirCargado();
+        this.requireLoaded();
         this.keyStoreSpi.engineStore(param);
     }
 
-    // Carga el almacen. **Hay que llamarlo antes que cualquier otra cosa**, incluso para crear uno
-    // vacio: ahi se pasa un stream null.
+    // It loads the store. **It has to be called before anything else**, even in order to create an
+    // empty one: there a null stream is passed.
     //
-    // Con contraseña null no se verifica la integridad. Ver la nota de la clase.
+    // With a null password the integrity is not verified. See the note of the class.
     public final void load(InputStream stream, char[] password)
             throws IOException, NoSuchAlgorithmException, CertificateException {
         this.keyStoreSpi.engineLoad(stream, password);
@@ -546,13 +546,13 @@ public class KeyStore {
         this.initialized = true;
     }
 
-    // La entrada como objeto tipado, que es el modelo moderno.
+    // The entry as a typed object, which is the modern model.
     public final Entry getEntry(String alias, ProtectionParameter protParam)
             throws NoSuchAlgorithmException, UnrecoverableEntryException, KeyStoreException {
         if (alias == null) {
             throw new NullPointerException("invalid null input");
         }
-        this.exigirCargado();
+        this.requireLoaded();
         return this.keyStoreSpi.engineGetEntry(alias, protParam);
     }
 
@@ -561,25 +561,25 @@ public class KeyStore {
         if (alias == null || entry == null) {
             throw new NullPointerException("invalid null input");
         }
-        this.exigirCargado();
+        this.requireLoaded();
         this.keyStoreSpi.engineSetEntry(alias, entry, protParam);
     }
 
-    // Si la entrada es de ese tipo. Preguntar esto es mas barato que sacarla, porque no hace falta
-    // la contraseña.
+    // Whether the entry is of that type. Asking this is cheaper than taking it out, because the
+    // password is not needed.
     public final boolean entryInstanceOf(String alias, Class<? extends Entry> entryClass)
             throws KeyStoreException {
         if (alias == null || entryClass == null) {
             throw new NullPointerException("invalid null input");
         }
-        this.exigirCargado();
+        this.requireLoaded();
         return this.keyStoreSpi.engineEntryInstanceOf(alias, entryClass);
     }
 
-    // Un almacen sin cargar no puede responder: no es que este vacio, es que no se sabe. Fallar aca
-    // es lo unico correcto —devolver null o cero haria pasar por "no esta" a algo que si podria
-    // estar—.
-    private void exigirCargado() throws KeyStoreException {
+    // A store that is not loaded cannot answer: it is not that it is empty, it is that it is not
+    // known. Failing here is the only right thing —returning null or zero would pass off as "it is
+    // not there" something that might be—.
+    private void requireLoaded() throws KeyStoreException {
         if (!this.initialized) {
             throw new KeyStoreException("Uninitialized keystore");
         }

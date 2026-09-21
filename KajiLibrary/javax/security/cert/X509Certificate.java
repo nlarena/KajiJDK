@@ -10,49 +10,50 @@ import java.security.Security;
 import java.util.Date;
 
 /**
- * KajiLibrary's javax.security.cert.X509Certificate -- un X.509, en el API viejo.
+ * KajiLibrary's javax.security.cert.X509Certificate -- an X.509, in the old API.
  *
- * <p>Es un subconjunto deliberado del X.509 de verdad: solo los campos de la <b>version 1</b>, sin
- * extensiones. Eso lo hace inutil para validar una cadena moderna --sin extensiones no hay
- * {@code basicConstraints}, y sin {@code basicConstraints} no se puede saber si un certificado tiene
- * derecho a firmar otros-- y es exactamente por eso que
- * {@link java.security.cert.X509Certificate} lo reemplazo.
+ * <p>It is a deliberate subset of the real X.509: only the fields of <b>version 1</b>, without
+ * extensions. That makes it useless for validating a modern chain --without extensions there is no
+ * {@code basicConstraints}, and without {@code basicConstraints} there is no knowing whether a
+ * certificate has the right to sign others-- and that is exactly why
+ * {@link java.security.cert.X509Certificate} replaced it.
  *
- * <h2>De donde sale la implementacion</h2>
+ * <h2>Where the implementation comes from</h2>
  *
- * <p>Esta clase es abstracta y los {@code getInstance} tienen que fabricar algo concreto. El nombre
- * de esa clase no esta escrito aca: se lee de la propiedad de seguridad
- * {@code cert.provider.x509v1} y se instancia por reflexion. Es indireccion a proposito --deja
- * cambiar el parser sin recompilar-- y es la misma via que usa el JDK.
+ * <p>This class is abstract and the {@code getInstance}s have to make something concrete. The name
+ * of that class is not written here: it is read from the security property {@code
+ * cert.provider.x509v1} and instantiated by reflection. It is indirection on purpose --it lets the
+ * parser be changed without recompiling-- and it is the same route the JDK uses.
  *
  * <h2>A KajiLibrary subset</h2>
  *
- * <p>KajiLibrary no trae hoy ningun parser X.509 concreto, asi que esa propiedad viene sin valor y
- * los dos {@code getInstance} lanzan {@link CertificateException}. Es una salida <b>declarada</b>
- * del metodo, no una mentira: quien llama ya tiene que manejarla, y el mensaje dice cual es la
- * propiedad que falta. Devolver un certificado a medio armar seria peor, porque los llamadores de
- * este API son justamente los que deciden si confiar en un par remoto.
+ * <p>KajiLibrary comes with no concrete X.509 parser today, so that property has no value and both
+ * {@code getInstance}s throw {@link CertificateException}. It is a <b>declared</b> way out of the
+ * method, not a lie: the caller already has to handle it, and the message says which property is
+ * missing. Returning a half-built certificate would be worse, because the callers of this API are
+ * precisely the ones who decide whether to trust a remote peer.
  *
- * <p>Obsoleta <b>y marcada para remocion</b> desde Java 9. El reemplazo es
- * {@code java.security.cert}, que no es una version mejorada de esto sino otra cosa: soporta la
- * version 3 del formato, con extensiones, que es lo unico que sirve para validar una cadena de hoy.
+ * <p>Deprecated <b>and marked for removal</b> since Java 9. The replacement is {@code
+ * java.security.cert}, which is not an improved version of this but something else: it supports
+ * version 3 of the format, with extensions, which is the only thing that serves to validate a chain
+ * today.
  */
 @Deprecated(since = "9", forRemoval = true)
 public abstract class X509Certificate extends Certificate {
 
-    /** La propiedad de seguridad que nombra la clase concreta. */
+    /** The security property that names the concrete class. */
     private static final String X509_PROVIDER = "cert.provider.x509v1";
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     public X509Certificate() {
     }
 
     /**
-     * Lee un certificado de un flujo.
+     * Reads a certificate from a stream.
      *
-     * <p>Consume el flujo entero y delega en {@link #getInstance(byte[])}.
+     * <p>It consumes the whole stream and delegates to {@link #getInstance(byte[])}.
      *
-     * @throws CertificateException si no hay parser configurado o los bytes no cierran
+     * @throws CertificateException if there is no parser configured or the bytes do not check out
      */
     public static final X509Certificate getInstance(InputStream inStream)
         throws CertificateException {
@@ -69,9 +70,9 @@ public abstract class X509Certificate extends Certificate {
     }
 
     /**
-     * Lee un certificado de sus bytes.
+     * Reads a certificate from its bytes.
      *
-     * @throws CertificateException si no hay parser configurado o los bytes no cierran
+     * @throws CertificateException if there is no parser configured or the bytes do not check out
      */
     public static final X509Certificate getInstance(byte[] certData) throws CertificateException {
         if (certData == null) {
@@ -98,42 +99,46 @@ public abstract class X509Certificate extends Certificate {
     }
 
     /**
-     * Comprueba que el certificado valga <b>ahora</b>.
+     * Checks that the certificate is valid <b>now</b>.
      *
-     * @throws CertificateExpiredException si ya vencio
-     * @throws CertificateNotYetValidException si todavia no empezo
+     * @throws CertificateExpiredException if it already expired
+     * @throws CertificateNotYetValidException if it has not started yet
      */
     public abstract void checkValidity()
         throws CertificateExpiredException, CertificateNotYetValidException;
 
-    /** Idem, contra una fecha dada. */
+    /** Likewise, against a given date. */
     public abstract void checkValidity(Date date)
         throws CertificateExpiredException, CertificateNotYetValidException;
 
-    /** La version del formato; 1 para todo lo que este API sabe describir. */
+    /**
+     * The format version as the ASN.1 encodes it: 0 for v1, 1 for v2, 2 for v3 -- unlike
+     * {@code java.security.cert}, which counts from 1. (The note said 1 for everything this API can
+     * describe; the JDK's specification gives 0, 1 or 2, so a v1 certificate is 0.)
+     */
     public abstract int getVersion();
 
-    /** El numero de serie, unico <b>por emisor</b> y no en general. */
+    /** The serial number, unique <b>per issuer</b> and not in general. */
     public abstract BigInteger getSerialNumber();
 
-    /** Quien lo firmo. */
+    /** Who signed it. */
     public abstract Principal getIssuerDN();
 
-    /** Sobre quien habla. */
+    /** Whom it is about. */
     public abstract Principal getSubjectDN();
 
-    /** Desde cuando vale. */
+    /** From when it is valid. */
     public abstract Date getNotBefore();
 
-    /** Hasta cuando vale. */
+    /** Until when it is valid. */
     public abstract Date getNotAfter();
 
-    /** El nombre del algoritmo de firma, si se conoce; si no, el OID. */
+    /** The name of the signature algorithm, if known; otherwise the OID. */
     public abstract String getSigAlgName();
 
-    /** El OID del algoritmo de firma, que es el dato que de verdad esta en el certificado. */
+    /** The OID of the signature algorithm, which is the datum really in the certificate. */
     public abstract String getSigAlgOID();
 
-    /** Los parametros del algoritmo, en DER, o null si no tiene. */
+    /** The algorithm's parameters, in DER, or null if it has none. */
     public abstract byte[] getSigAlgParams();
 }

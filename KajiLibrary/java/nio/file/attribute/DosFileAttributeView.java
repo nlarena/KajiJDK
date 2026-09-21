@@ -2,31 +2,32 @@ package java.nio.file.attribute;
 
 import java.io.IOException;
 
-// La vista `"dos"`: los `BasicFileAttributes` mas los cuatro bits de DOS.
+// The `"dos"` view: the `BasicFileAttributes` plus DOS's four bits.
 //
-// **Diferencia con el JDK, y es visible en la firma.** Alla `readAttributes()` devuelve
-// `DosFileAttributes` --covariante sobre el de `BasicFileAttributeView`-- y el compilador sintetiza
-// el puente que devuelve `BasicFileAttributes`. Aca se declara igual; si el `javac` propio no emite
-// ese puente, el que falta es un miembro **sintetico**, no uno de la API.
+// **A difference from the JDK, and it is visible in the signature.** There `readAttributes()`
+// returns `DosFileAttributes` --covariant over `BasicFileAttributeView`'s-- and the compiler
+// synthesises the bridge that returns `BasicFileAttributes`. It is declared the same here; if our
+// own `javac` does not emit that bridge, what is missing is a **synthetic** member, not one of the
+// API.
 //
-// Sin implementacion en KajiJDK: no hay nativo que lea ni escriba estos bits.
+// Without an implementation in KajiJDK: there is no native that reads or writes these bits.
 public interface DosFileAttributeView extends BasicFileAttributeView {
 
-    /** Siempre `"dos"`. */
+    /** Always `"dos"`. */
     String name();
 
-    /** Los atributos, leidos de una sola vez. */
+    /** The attributes, read in one go. */
     DosFileAttributes readAttributes() throws IOException;
 
-    /** Marca o desmarca el archivo como de solo lectura. */
+    /** It marks or unmarks the file as read-only. */
     void setReadOnly(boolean value) throws IOException;
 
-    /** Marca o desmarca el archivo como oculto. */
+    /** It marks or unmarks the file as hidden. */
     void setHidden(boolean value) throws IOException;
 
-    /** Marca o desmarca el archivo como de sistema. */
+    /** It marks or unmarks the file as a system file. */
     void setSystem(boolean value) throws IOException;
 
-    /** Marca o desmarca el bit de archivado. */
+    /** It marks or unmarks the archive bit. */
     void setArchive(boolean value) throws IOException;
 }

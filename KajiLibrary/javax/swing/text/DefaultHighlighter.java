@@ -9,28 +9,29 @@ import java.util.Vector;
 import javax.swing.plaf.TextUI;
 
 /**
- * El resaltador de siempre: pinta tramos de texto con un color de fondo.
+ * The usual highlighter: it paints stretches of text with a background colour.
  *
- * <h2>Un resaltado es una marca, no un dibujo</h2>
+ * <h2>A highlight is a mark, not a drawing</h2>
  *
- * <p>Agregar un resaltado devuelve una etiqueta opaca. Esa etiqueta es la que sirve para cambiarlo
- * o sacarlo despues; el resaltador no promete nada sobre que clase es. Aca es un
- * {@link HighlightInfo}, pero quien lo use no deberia saberlo.
+ * <p>Adding a highlight returns an opaque tag. That tag is what serves to change it or remove it
+ * afterwards; the highlighter promises nothing about what class it is. Here it is a
+ * {@link HighlightInfo}, but whoever uses it should not know that.
  *
- * <h2>Los limites se guardan como posiciones</h2>
+ * <h2>The bounds are kept as positions</h2>
  *
- * <p>Cada resaltado guarda dos {@link Position}, no dos enteros: asi sobrevive a las ediciones. Si
- * se guardaran enteros, insertar una letra antes de una seleccion la dejaria corrida.
+ * <p>Each highlight keeps two {@link Position}s, not two integers: that way it survives the
+ * edits. If integers were kept, inserting a letter before a selection would leave it shifted.
  *
- * <h2>Dibujo entero o por capas</h2>
+ * <h2>Whole drawing or by layers</h2>
  *
- * <p>Un pintor comun se dibuja al final, sobre el texto. Un {@link LayeredHighlighter.LayerPainter}
- * se dibuja <em>antes</em> de cada porcion de texto, y por eso puede pintar un fondo sin taparlo.
- * {@link #setDrawsLayeredHighlights} elige cual de los dos caminos se usa.
+ * <p>An ordinary painter draws itself at the end, over the text. A
+ * {@link LayeredHighlighter.LayerPainter} draws itself <em>before</em> each portion of text, and
+ * that is why it can paint a background without covering it.
+ * {@link #setDrawsLayeredHighlights} chooses which of the two paths is used.
  */
 public class DefaultHighlighter extends LayeredHighlighter {
 
-    /** El pintor por omision: fondo con el color de seleccion del componente. */
+    /** The default painter: a background in the component's selection colour. */
     public static final LayeredHighlighter.LayerPainter DefaultPainter =
             new DefaultHighlightPainter(null);
 
@@ -41,12 +42,12 @@ public class DefaultHighlighter extends LayeredHighlighter {
     private boolean drawsLayeredHighlights = true;
     private SafeDamager safeDamager = new SafeDamager(this);
 
-    /** Un resaltador vacio. */
+    /** An empty highlighter. */
     public DefaultHighlighter() {
         drawsLayeredHighlights = true;
     }
 
-    /** Dibuja los resaltados que no son por capas. */
+    /** It draws the highlights that are not layered. */
     public void paint(Graphics g) {
         int len = highlights.size();
         for (int i = 0; i < len; i++) {
@@ -78,7 +79,7 @@ public class DefaultHighlighter extends LayeredHighlighter {
         component = null;
     }
 
-    /** Marca ese tramo y devuelve la etiqueta para cambiarlo despues. */
+    /** It marks that stretch and returns the tag for changing it later. */
     public Object addHighlight(int p0, int p1, Highlighter.HighlightPainter p)
             throws BadLocationException {
         if (p0 < 0) {
@@ -148,7 +149,7 @@ public class DefaultHighlighter extends LayeredHighlighter {
                     try {
                         safeDamageRange(p0, p1);
                     } catch (BadLocationException e) {
-                        // El documento cambio: no queda nada que repintar.
+                        // The document changed: there is nothing left to repaint.
                     }
                 }
                 highlights.removeAllElements();
@@ -166,14 +167,14 @@ public class DefaultHighlighter extends LayeredHighlighter {
                 try {
                     safeDamageRange(p0, p1);
                 } catch (BadLocationException e) {
-                    // Igual que arriba.
+                    // The same as above.
                 }
                 highlights.removeAllElements();
             }
         }
     }
 
-    /** Corre un resaltado ya puesto a otro tramo; no cambia su etiqueta. */
+    /** It shifts an already placed highlight to another stretch; its tag does not change. */
     public void changeHighlight(Object tag, int p0, int p1) throws BadLocationException {
         if (p0 < 0) {
             throw new BadLocationException("Invalid beginning of the range", p0);
@@ -220,9 +221,9 @@ public class DefaultHighlighter extends LayeredHighlighter {
     }
 
     /**
-     * Dibuja los resaltados por capas que caen en ese tramo.
+     * It draws the layered highlights that fall in that stretch.
      *
-     * <p>La llama la vista, antes de pintar el texto de esa porcion.
+     * <p>The view calls it, before painting that portion's text.
      */
     public void paintLayeredHighlights(Graphics g, int p0, int p1, Shape viewBounds,
             JTextComponent editor, View view) {
@@ -239,7 +240,7 @@ public class DefaultHighlighter extends LayeredHighlighter {
         }
     }
 
-    /** Manda repintar ese tramo; lo hace en el hilo de eventos. */
+    /** It asks for a repaint of that stretch; it does so on the event thread. */
     private void safeDamageRange(Position p0, Position p1) {
         safeDamager.damageRange(p0, p1);
     }
@@ -249,7 +250,7 @@ public class DefaultHighlighter extends LayeredHighlighter {
         safeDamageRange(doc.createPosition(a0), doc.createPosition(a1));
     }
 
-    /** Si los pintores por capas se usan como tales; ver la nota de la clase. */
+    /** Whether the layered painters are used as such; see the class note. */
     public void setDrawsLayeredHighlights(boolean newValue) {
         drawsLayeredHighlights = newValue;
     }
@@ -259,16 +260,16 @@ public class DefaultHighlighter extends LayeredHighlighter {
     }
 
     /**
-     * Un pintor que llena el fondo de un tramo con un color.
+     * A painter that fills a stretch's background with a colour.
      *
-     * <p>Con color nulo usa el de seleccion del componente, que es lo que quiere el cursor: si el
-     * color viniera fijo, cambiar el aspecto no cambiaria la seleccion.
+     * <p>With a null colour it uses the component's selection one, which is what the cursor wants:
+     * if the colour came fixed, changing the look and feel would not change the selection.
      */
     public static class DefaultHighlightPainter extends LayeredHighlighter.LayerPainter {
 
         private Color color;
 
-        /** Un pintor de ese color; nulo significa "el de seleccion del componente". */
+        /** A painter of that colour; null means "the component's selection one". */
         public DefaultHighlightPainter(Color c) {
             color = c;
         }
@@ -277,24 +278,24 @@ public class DefaultHighlighter extends LayeredHighlighter {
             return color;
         }
 
-        private Color obtenerColor(JTextComponent c) {
+        private Color getColor(JTextComponent c) {
             Color col = getColor();
             return (col == null) ? c.getSelectionColor() : col;
         }
 
-        /** Dibuja el tramo entero, de una. */
+        /** It draws the whole stretch, in one go. */
         public void paint(Graphics g, int offs0, int offs1, Shape bounds, JTextComponent c) {
             Rectangle alloc = bounds.getBounds();
             try {
                 TextUI mapper = c.getUI();
                 Rectangle p0 = mapper.modelToView(c, offs0);
                 Rectangle p1 = mapper.modelToView(c, offs1);
-                g.setColor(obtenerColor(c));
+                g.setColor(getColor(c));
                 if (p0.y == p1.y) {
                     Rectangle r = p0.union(p1);
                     g.fillRect(r.x, r.y, r.width, r.height);
                 } else {
-                    // Varias lineas: la primera hasta el borde, las del medio enteras.
+                    // Several lines: the first to the edge, those in the middle whole.
                     int p0ToMarginWidth = alloc.x + alloc.width - p0.x;
                     g.fillRect(p0.x, p0.y, p0ToMarginWidth, p0.height);
                     if ((p0.y + p0.height) != p1.y) {
@@ -304,18 +305,19 @@ public class DefaultHighlighter extends LayeredHighlighter {
                     g.fillRect(alloc.x, p1.y, (p1.x - alloc.x), p1.height);
                 }
             } catch (BadLocationException e) {
-                // No se puede ubicar el tramo: no se dibuja.
+                // The stretch cannot be placed: nothing is drawn.
             }
         }
 
         /**
-         * Dibuja la parte del resaltado que cae en esa vista.
+         * It draws the part of the highlight that falls in that view.
          *
-         * <p>Devuelve la region pintada para que el resaltador sepa que repintar despues.
+         * <p>It returns the region painted so that the highlighter knows what to repaint
+         * afterwards.
          */
         public Shape paintLayer(Graphics g, int offs0, int offs1, Shape bounds, JTextComponent c,
                 View view) {
-            g.setColor(obtenerColor(c));
+            g.setColor(getColor(c));
             Rectangle r;
             if (offs0 == view.getStartOffset() && offs1 == view.getEndOffset()) {
                 r = (bounds instanceof Rectangle) ? (Rectangle) bounds : bounds.getBounds();
@@ -336,7 +338,7 @@ public class DefaultHighlighter extends LayeredHighlighter {
         }
     }
 
-    /** Un resaltado comun: dos posiciones y un pintor. */
+    /** An ordinary highlight: two positions and a painter. */
     static class HighlightInfo implements Highlight {
 
         Position p0;
@@ -356,7 +358,7 @@ public class DefaultHighlighter extends LayeredHighlighter {
         }
     }
 
-    /** Un resaltado por capas, que ademas recuerda que region ocupo la ultima vez. */
+    /** A layered highlight, which also remembers which region it took up last time. */
     static class LayeredHighlightInfo extends HighlightInfo {
 
         int x;
@@ -397,29 +399,29 @@ public class DefaultHighlighter extends LayeredHighlighter {
     }
 
     /**
-     * Junta los tramos a repintar y los manda de una.
+     * It gathers the stretches to repaint and sends them in one go.
      *
-     * <p>Sin esto, cada resaltado que cambia pide su propio repintado y el componente se dibuja
-     * muchas veces en el mismo cuadro.
+     * <p>Without this, each highlight that changes asks for its own repaint and the component is
+     * drawn many times in the same frame.
      */
     static class SafeDamager implements Runnable {
 
-        private final DefaultHighlighter duenio;
+        private final DefaultHighlighter owner;
         private Vector<Position> p0 = new Vector<Position>(10);
         private Vector<Position> p1 = new Vector<Position>(10);
         private Document lastDoc = null;
 
-        SafeDamager(DefaultHighlighter duenio) {
-            this.duenio = duenio;
+        SafeDamager(DefaultHighlighter owner) {
+            this.owner = owner;
         }
 
         public synchronized void run() {
-            if (duenio.component != null) {
-                TextUI mapper = duenio.component.getUI();
-                if (mapper != null && lastDoc == duenio.component.getDocument()) {
+            if (owner.component != null) {
+                TextUI mapper = owner.component.getUI();
+                if (mapper != null && lastDoc == owner.component.getDocument()) {
                     int len = p0.size();
                     for (int i = 0; i < len; i++) {
-                        mapper.damageRange(duenio.component, p0.elementAt(i).getOffset(),
+                        mapper.damageRange(owner.component, p0.elementAt(i).getOffset(),
                                 p1.elementAt(i).getOffset());
                     }
                 }
@@ -430,13 +432,13 @@ public class DefaultHighlighter extends LayeredHighlighter {
         }
 
         public synchronized void damageRange(Position pos0, Position pos1) {
-            if (duenio.component == null) {
+            if (owner.component == null) {
                 p0.clear();
                 lastDoc = null;
                 return;
             }
             boolean addToQueue = p0.isEmpty();
-            Document curDoc = duenio.component.getDocument();
+            Document curDoc = owner.component.getDocument();
             if (curDoc != lastDoc) {
                 if (!p0.isEmpty()) {
                     p0.clear();

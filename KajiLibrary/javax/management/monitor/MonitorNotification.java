@@ -4,77 +4,77 @@ import javax.management.Notification;
 import javax.management.ObjectName;
 
 /**
- * KajiLibrary's javax.management.monitor.MonitorNotification -- lo que manda un monitor.
+ * KajiLibrary's javax.management.monitor.MonitorNotification -- what a monitor sends.
  *
- * <p>Los diez tipos se dividen en dos grupos que conviene distinguir de entrada:
+ * <p>The ten types fall into two groups worth telling apart from the start:
  *
  * <ul>
- *   <li>cinco de <b>error</b> --{@code jmx.monitor.error.*}--, que dicen que el monitor no pudo
- *       observar: el MBean no esta, el atributo no existe, el atributo es de otro tipo, el umbral no
- *       sirve, o algo tiro;
- *   <li>cinco de <b>disparo</b>, que son para lo que el monitor existe: el contador paso el umbral,
- *       el medidor se fue para arriba o para abajo, la cadena coincidio o dejo de coincidir.
+ *   <li>five of <b>error</b> --{@code jmx.monitor.error.*}--, which say the monitor could not
+ *       observe: the MBean is not there, the attribute does not exist, the attribute is of another
+ *       type, the threshold is not valid, or something threw;
+ *   <li>five of <b>firing</b>, which are what the monitor exists for: the counter passed the
+ *       threshold, the gauge went up or down, the string started or stopped matching.
  * </ul>
  *
- * <p>Los de error se mandan <b>una sola vez</b> hasta que la condicion cambia. Es lo correcto: un
- * monitor que observa un MBean que no existe, con un periodo de un segundo, mandaria un aviso por
- * segundo para siempre.
+ * <p>The error ones are sent <b>only once</b> until the condition changes. It is the right thing: a
+ * monitor observing an MBean that does not exist, with a one-second period, would send one notice
+ * per second forever.
  *
- * <p>{@link #getDerivedGauge} es el valor que el monitor calculo --que no siempre es el atributo:
- * con modo diferencia es la resta con la lectura anterior-- y {@link #getTrigger} es contra que se
- * comparo. Los dos juntos son lo que explica por que salto.
+ * <p>{@link #getDerivedGauge} is the value the monitor computed --which is not always the
+ * attribute: in difference mode it is the subtraction from the previous reading-- and {@link
+ * #getTrigger} is what it was compared against. The two together are what explains why it fired.
  *
- * <p>No tiene constructor publico: los arma el monitor. Ver la nota equivalente en
- * {@code javax.management.timer.TimerNotification}, que si lo tiene, y por la razon opuesta -- ahi
- * la aplicacion elige el contenido del aviso y aca no.
+ * <p>It has no public constructor: the monitor builds them. See the equivalent note in
+ * {@code javax.management.timer.TimerNotification}, which does have one, and for the opposite
+ * reason -- there the application chooses the notice's content and here it does not.
  */
 public class MonitorNotification extends Notification {
 
     private static final long serialVersionUID = -4608189663661929204L;
 
-    /** El MBean observado no esta registrado. */
+    /** The observed MBean is not registered. */
     public static final String OBSERVED_OBJECT_ERROR = "jmx.monitor.error.mbean";
 
-    /** El atributo observado no existe. */
+    /** The observed attribute does not exist. */
     public static final String OBSERVED_ATTRIBUTE_ERROR = "jmx.monitor.error.attribute";
 
-    /** El atributo es de un tipo que este monitor no sabe mirar. */
+    /** The attribute is of a type this monitor cannot watch. */
     public static final String OBSERVED_ATTRIBUTE_TYPE_ERROR = "jmx.monitor.error.type";
 
-    /** El umbral no sirve para el tipo del atributo. */
+    /** The threshold does not fit the attribute's type. */
     public static final String THRESHOLD_ERROR = "jmx.monitor.error.threshold";
 
-    /** Algo tiro mientras se observaba. */
+    /** Something threw while observing. */
     public static final String RUNTIME_ERROR = "jmx.monitor.error.runtime";
 
-    /** El contador llego al umbral. */
+    /** The counter reached the threshold. */
     public static final String THRESHOLD_VALUE_EXCEEDED = "jmx.monitor.counter.threshold";
 
-    /** El medidor paso el umbral de arriba. */
+    /** The gauge crossed the high threshold. */
     public static final String THRESHOLD_HIGH_VALUE_EXCEEDED = "jmx.monitor.gauge.high";
 
-    /** El medidor paso el umbral de abajo. */
+    /** The gauge crossed the low threshold. */
     public static final String THRESHOLD_LOW_VALUE_EXCEEDED = "jmx.monitor.gauge.low";
 
-    /** La cadena paso a coincidir. */
+    /** The string started matching. */
     public static final String STRING_TO_COMPARE_VALUE_MATCHED = "jmx.monitor.string.matches";
 
-    /** La cadena dejo de coincidir. */
+    /** The string stopped matching. */
     public static final String STRING_TO_COMPARE_VALUE_DIFFERED = "jmx.monitor.string.differs";
 
-    /** Cual de los observados disparo. */
+    /** Which of the observed objects fired. */
     private final ObjectName observedObject;
 
-    /** Que atributo suyo. */
+    /** Which attribute of it. */
     private final String observedAttribute;
 
-    /** El valor que el monitor calculo. */
+    /** The value the monitor computed. */
     private final Object derivedGauge;
 
-    /** Contra que se comparo. */
+    /** What it was compared against. */
     private final Object trigger;
 
-    /** Paquete-privado: los arma el monitor. Ver la nota de la clase. */
+    /** Package-private: the monitor builds them. See the class note. */
     MonitorNotification(String type, Object source, long sequenceNumber, long timeStamp, String msg,
                         ObjectName observedObject, String observedAttribute, Object derivedGauge,
                         Object trigger) {
@@ -85,22 +85,22 @@ public class MonitorNotification extends Notification {
         this.trigger = trigger;
     }
 
-    /** El MBean que disparo el aviso. */
+    /** The MBean that fired the notice. */
     public ObjectName getObservedObject() {
         return this.observedObject;
     }
 
-    /** El atributo que se estaba mirando. */
+    /** The attribute that was being watched. */
     public String getObservedAttribute() {
         return this.observedAttribute;
     }
 
-    /** El valor calculado. Ver la nota de la clase: no siempre es el atributo. */
+    /** The computed value. See the class note: it is not always the attribute. */
     public Object getDerivedGauge() {
         return this.derivedGauge;
     }
 
-    /** Contra que se comparo: el umbral, o la cadena. */
+    /** What it was compared against: the threshold, or the string. */
     public Object getTrigger() {
         return this.trigger;
     }

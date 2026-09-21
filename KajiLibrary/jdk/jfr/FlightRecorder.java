@@ -7,138 +7,141 @@ import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
- * El grabador: el punto de entrada a JFR.
+ * The recorder: the point of entry to JFR.
  *
- * <h2>Por que {@link #getFlightRecorder} puede fallar</h2>
+ * <h2>Why {@link #getFlightRecorder} may fail</h2>
  *
- * <p>Porque JFR puede no estar. No es un supuesto teorico: la VM se puede arrancar con
- * {@code -XX:-FlightRecorder}, y hay implementaciones de Java sin JFR. Por eso el metodo declara
- * {@link IllegalStateException} y por eso existe {@link #isAvailable}, que es lo que hay que
- * preguntar antes.
+ * <p>Because JFR may not be there. It is not a theoretical supposition: the VM can be started with
+ * {@code -XX:-FlightRecorder}, and there are implementations of Java with no JFR. That is why the
+ * method declares {@link IllegalStateException} and that is why {@link #isAvailable} exists, which
+ * is what one has to ask beforehand.
  *
- * <p>Esa es la parte del contrato que hace que esta clase sea utilizable aca: la ausencia de JFR
- * <strong>ya estaba prevista por la API</strong>, y contestarla es cumplir el contrato, no
- * incumplirlo.
+ * <p>That is the part of the contract that makes this class usable here: the absence of JFR
+ * <strong>was already foreseen by the API</strong>, and answering it is fulfilling the contract,
+ * not breaking it.
  *
- * <h2>Inicializacion perezosa</h2>
+ * <h2>Lazy initialisation</h2>
  *
- * <p>{@link #isAvailable} dice si JFR se <strong>puede</strong> usar; {@link #isInitialized} dice
- * si ya arranco. Son distintas porque arrancar cuesta —hay que reservar buffers y leer la
- * configuracion— y no se hace hasta que alguien lo pide. Un monitor que quiera enterarse sin
- * forzarlo pregunta la segunda y se registra con {@link #addListener}.
+ * <p>{@link #isAvailable} says whether JFR <strong>can</strong> be used; {@link #isInitialized}
+ * says whether it has already started. They are different because starting costs --buffers have to
+ * be reserved and the configuration read-- and it is not done until somebody asks for it. A monitor
+ * that wants to find out without forcing it asks the second one and registers itself with {@link
+ * #addListener}.
  *
- * <h2>Estado en esta VM</h2>
+ * <h2>State in this VM</h2>
  *
- * <p>{@link #isAvailable} devuelve {@code false} y {@link #getFlightRecorder} lanza
- * {@link IllegalStateException}, que es exactamente lo que la API define para una VM sin JFR.
+ * <p>{@link #isAvailable} returns {@code false} and {@link #getFlightRecorder} throws
+ * {@link IllegalStateException}, which is exactly what the API defines for a VM with no JFR.
  *
- * <p>Lo que si funciona es el registro de oyentes: {@link #addListener} y {@link #removeListener}
- * guardan y sacan de verdad. Es lo correcto — un oyente registrado antes de que JFR aparezca es
- * justamente el caso de uso de esa interfaz, y descartarlo silenciosamente seria peor que no
- * tenerla.
+ * <p>What does work is the registration of listeners: {@link #addListener} and
+ * {@link #removeListener} really keep and take away. It is the right thing -- a listener registered
+ * before JFR appears is precisely the use case of that interface, and discarding it silently would
+ * be worse than not having it.
  *
  * @since 9
  */
 public final class FlightRecorder {
 
-    private static final String NO_DISPONIBLE =
-            "Flight Recorder no esta disponible en esta VM";
+    private static final String NOT_AVAILABLE =
+            "Flight Recorder is not available in this VM";
 
     /**
-     * Los oyentes registrados.
+     * The registered listeners.
      *
-     * <p>Copia al escribir: se recorren en cada aviso y se modifican casi nunca, que es exactamente
-     * el caso para el que esa estructura existe.
+     * <p>Copy on write: they are walked on each notice and modified almost never, which is exactly
+     * the case that structure exists for.
      */
-    private static final List<FlightRecorderListener> OYENTES =
+    private static final List<FlightRecorderListener> LISTENERS =
             new CopyOnWriteArrayList<FlightRecorderListener>();
 
     private FlightRecorder() {
     }
 
     /**
-     * Las grabaciones que hay ahora.
+     * The recordings there are now.
      *
-     * @return las grabaciones
+     * @return the recordings
      */
     public List<Recording> getRecordings() {
         return Collections.emptyList();
     }
 
     /**
-     * Una grabacion con lo que haya en los buffers en este momento.
+     * A recording with whatever is in the buffers at this moment.
      *
-     * <p>Es la operacion que hace util dejar JFR prendido sin destino: se graba en un buffer
-     * circular y, cuando algo sale mal, esto se lleva lo que quedo de los ultimos minutos.
+     * <p>It is the operation that makes it useful to leave JFR switched on with no destination: it
+     * records into a circular buffer and, when something goes wrong, this takes away what was left
+     * of the last few minutes.
      *
-     * @return la instantanea
-     * @throws IllegalStateException en esta VM, porque no hay buffers de los cuales sacarla
+     * @return the snapshot
+     * @throws IllegalStateException in this VM, because there are no buffers to take it out of
      */
     public Recording takeSnapshot() {
-        throw new IllegalStateException(NO_DISPONIBLE);
+        throw new IllegalStateException(NOT_AVAILABLE);
     }
 
     /**
-     * Registra un tipo de evento.
+     * It registers a type of event.
      *
-     * <p>Solo hace falta para las clases marcadas {@code @Registered(false)}: las demas se
-     * registran solas al cargarse.
+     * <p>It is only needed for the classes marked {@code @Registered(false)}: the others register
+     * themselves when they are loaded.
      *
-     * @param eventClass la clase del evento
-     * @throws NullPointerException si es {@code null}
-     * @throws IllegalStateException en esta VM
+     * @param eventClass the class of the event
+     * @throws NullPointerException if it is {@code null}
+     * @throws IllegalStateException in this VM
      */
     public static void register(final Class<? extends Event> eventClass) {
         Objects.requireNonNull(eventClass, "eventClass");
-        throw new IllegalStateException(NO_DISPONIBLE);
+        throw new IllegalStateException(NOT_AVAILABLE);
     }
 
     /**
-     * Saca un tipo de evento del registro.
+     * It takes a type of event out of the register.
      *
-     * @param eventClass la clase del evento
-     * @throws NullPointerException si es {@code null}
-     * @throws IllegalStateException en esta VM
+     * @param eventClass the class of the event
+     * @throws NullPointerException if it is {@code null}
+     * @throws IllegalStateException in this VM
      */
     public static void unregister(final Class<? extends Event> eventClass) {
         Objects.requireNonNull(eventClass, "eventClass");
-        throw new IllegalStateException(NO_DISPONIBLE);
+        throw new IllegalStateException(NOT_AVAILABLE);
     }
 
     /**
-     * El grabador.
+     * The recorder.
      *
-     * @return el grabador
-     * @throws IllegalStateException si JFR no esta disponible, que es el caso en esta VM
+     * @return the recorder
+     * @throws IllegalStateException if JFR is not available, which is the case in this VM
      */
     public static FlightRecorder getFlightRecorder() throws IllegalStateException {
-        throw new IllegalStateException(NO_DISPONIBLE);
+        throw new IllegalStateException(NOT_AVAILABLE);
     }
 
     /**
-     * Registra una accion que se va a ejecutar periodicamente para emitir un evento.
+     * It registers an action that is going to be run periodically in order to emit an event.
      *
-     * <p>Es como se implementa un evento periodico: JFR llama a la accion cada tanto, y la accion
-     * arma y emite el evento. La frecuencia sale del ajuste {@code period} del tipo.
+     * <p>It is how a periodic event is implemented: JFR calls the action every so often, and the
+     * action puts the event together and emits it. The frequency comes from the {@code period}
+     * setting of the type.
      *
-     * @param eventClass la clase del evento
-     * @param hook la accion
-     * @throws NullPointerException si alguno es {@code null}
-     * @throws IllegalStateException en esta VM
+     * @param eventClass the class of the event
+     * @param hook the action
+     * @throws NullPointerException if either is {@code null}
+     * @throws IllegalStateException in this VM
      */
     public static void addPeriodicEvent(final Class<? extends Event> eventClass,
             final Runnable hook) {
         Objects.requireNonNull(eventClass, "eventClass");
         Objects.requireNonNull(hook, "hook");
-        throw new IllegalStateException(NO_DISPONIBLE);
+        throw new IllegalStateException(NOT_AVAILABLE);
     }
 
     /**
-     * Saca una accion periodica.
+     * It takes a periodic action away.
      *
-     * @param hook la accion
-     * @return {@code false}, porque en esta VM nunca se pudo registrar ninguna
-     * @throws NullPointerException si es {@code null}
+     * @param hook the action
+     * @return {@code false}, because in this VM none could ever be registered
+     * @throws NullPointerException if it is {@code null}
      */
     public static boolean removePeriodicEvent(final Runnable hook) {
         Objects.requireNonNull(hook, "hook");
@@ -146,58 +149,58 @@ public final class FlightRecorder {
     }
 
     /**
-     * Los tipos de evento registrados.
+     * The registered types of event.
      *
-     * @return los tipos
+     * @return the types
      */
     public List<EventType> getEventTypes() {
         return Collections.emptyList();
     }
 
     /**
-     * Registra un oyente.
+     * It registers a listener.
      *
-     * <p>Si el grabador ya estuviera inicializado, el aviso {@code recorderInitialized} llegaria
-     * enseguida. En esta VM no llega nunca, porque el grabador no se inicializa.
+     * <p>If the recorder were already initialised, the {@code recorderInitialized} notice would
+     * arrive at once. In this VM it never arrives, because the recorder is not initialised.
      *
-     * @param changeListener el oyente
-     * @throws NullPointerException si es {@code null}
+     * @param changeListener the listener
+     * @throws NullPointerException if it is {@code null}
      */
     public static void addListener(final FlightRecorderListener changeListener) {
-        OYENTES.add(Objects.requireNonNull(changeListener, "changeListener"));
+        LISTENERS.add(Objects.requireNonNull(changeListener, "changeListener"));
     }
 
     /**
-     * Saca un oyente.
+     * It takes a listener away.
      *
-     * @param changeListener el oyente
-     * @return si estaba registrado
-     * @throws NullPointerException si es {@code null}
+     * @param changeListener the listener
+     * @return whether it was registered
+     * @throws NullPointerException if it is {@code null}
      */
     public static boolean removeListener(final FlightRecorderListener changeListener) {
-        return OYENTES.remove(Objects.requireNonNull(changeListener, "changeListener"));
+        return LISTENERS.remove(Objects.requireNonNull(changeListener, "changeListener"));
     }
 
     /**
-     * Si JFR se puede usar en esta VM.
+     * Whether JFR can be used in this VM.
      *
-     * @return {@code false} en esta biblioteca
+     * @return {@code false} in this library
      */
     public static boolean isAvailable() {
         return false;
     }
 
     /**
-     * Si JFR ya arranco.
+     * Whether JFR has already started.
      *
-     * @return {@code false} en esta biblioteca
+     * @return {@code false} in this library
      */
     public static boolean isInitialized() {
         return false;
     }
 
-    /** Los oyentes registrados; para las clases del paquete que tengan que avisarles. */
-    static List<FlightRecorderListener> oyentes() {
-        return new ArrayList<FlightRecorderListener>(OYENTES);
+    /** The registered listeners; for the classes of the package that have to notify them. */
+    static List<FlightRecorderListener> listeners() {
+        return new ArrayList<FlightRecorderListener>(LISTENERS);
     }
 }

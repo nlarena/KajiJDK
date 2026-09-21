@@ -1,14 +1,14 @@
 package com.sun.source.doctree;
 
 /**
- * La mitad de la jerarquia que agrupa los tags **en linea**: los que van entre
- * llaves, en medio del texto, como `{@link}` o `{@code}`.
+ * The half of the hierarchy that groups the **inline** tags: those that go between
+ * braces, in the middle of the text, such as `{@link}` or `{@code}`.
  *
- * <p>La separacion de {@link BlockTagTree} no es de estilo sino gramatical: un tag de bloque
- * termina donde empieza el siguiente o el comentario, y uno en linea termina en su llave de cierre.
- * Son dos reglas de parseo distintas, y por eso son dos tipos.
+ * <p>The separation from {@link BlockTagTree} is not one of style but grammatical: a block tag
+ * ends where the next one or the comment starts, and an inline one ends at its closing brace.
+ * They are two different parsing rules, and that is why they are two types.
  *
- * <p>{@link ReturnTree} implementa las dos, porque `@return` existe en las dos formas.
+ * <p>{@link ReturnTree} implements both, because `@return` exists in the two forms.
  */
 public interface InlineTagTree extends DocTree {
 

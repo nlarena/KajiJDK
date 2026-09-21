@@ -4,73 +4,74 @@ import java.io.IOException;
 import java.net.URI;
 import java.util.Map;
 
-// La fabrica de sistemas de archivos.
+// The factory of filesystems.
 //
-// **KajiJDK tiene exactamente uno: el del esquema `file`.** No hay carga por servicios --nada que
-// descubra proveedores en el classpath-- asi que no hay forma de instalar un proveedor de ZIP ni de
-// nada. Los metodos que crearian otro sistema **existen y fallan** con la excepcion que la spec ya
-// preve para el caso --`ProviderNotFoundException` cuando no hay quien atienda el esquema,
-// `FileSystemAlreadyExistsException` cuando se pide crear el que ya esta-- en vez de devolver algo.
+// **KajiJDK has exactly one: the `file` scheme's.** There is no service loading --nothing that
+// discovers providers on the class path-- so there is no way of installing a ZIP provider or any
+// other. The methods that would create another filesystem **exist and fail** with the exception the
+// spec already foresees for the case --`ProviderNotFoundException` when there is nobody to serve
+// the scheme, `FileSystemAlreadyExistsException` when creating the one that is already there is
+// asked for-- rather than return something.
 //
-// Que las cinco sobrecargas de `newFileSystem` esten y fallen no es relleno: el codigo que hoy abre
-// un ZIP con `newFileSystem(path)` compila, y falla en el unico lugar donde se puede ver que falta,
-// con un mensaje que lo dice.
+// That `newFileSystem`'s five overloads are here and fail is not filler: code that today opens a
+// ZIP with `newFileSystem(path)` compiles, and fails at the one place where the gap can be seen,
+// with a message that says so.
 public final class FileSystems {
 
-    // Solo fabricas: no hay nada que instanciar.
+    // Factories only: there is nothing to instantiate.
     private FileSystems() {
     }
 
     /**
-     * El sistema de archivos por omision, el que ve los archivos del sistema operativo.
+     * The default filesystem, the one that sees the operating system's files.
      *
-     * <p>Siempre el mismo objeto, y no se puede cerrar: `close()` no hace nada y `isOpen()` es
-     * siempre `true`, igual que en el JDK. Un sistema por omision cerrable seria un pie para dejar
-     * a la VM sin acceso a disco desde cualquier parte del programa.
+     * <p>Always the same object, and it cannot be closed: `close()` does nothing and `isOpen()` is
+     * always `true`, just as in the JDK. A closeable default filesystem would be an invitation to
+     * leave the VM with no disk access from anywhere in the program.
      */
     public static FileSystem getDefault() {
         return KajiFileSystem.INSTANCE;
     }
 
-    private static void soloFile(URI uri) {
+    private static void fileOnly(URI uri) {
         if (uri == null) {
             throw new NullPointerException();
         }
-        String esquema = uri.getScheme();
-        if (esquema == null || !esquema.equalsIgnoreCase("file")) {
-            throw new ProviderNotFoundException("Provider \"" + esquema + "\" not installed");
+        String scheme = uri.getScheme();
+        if (scheme == null || !scheme.equalsIgnoreCase("file")) {
+            throw new ProviderNotFoundException("Provider \"" + scheme + "\" not installed");
         }
     }
 
     /**
-     * El sistema de archivos ya creado para `uri`.
+     * The filesystem already created for `uri`.
      *
-     * @throws ProviderNotFoundException si el esquema no es `file`
+     * @throws ProviderNotFoundException if the scheme is not `file`
      */
     public static FileSystem getFileSystem(URI uri) {
-        soloFile(uri);
+        fileOnly(uri);
         return KajiFileSystem.INSTANCE;
     }
 
     /**
-     * @throws ProviderNotFoundException si el esquema no es `file`
-     * @throws FileSystemAlreadyExistsException si lo es -- el sistema por omision ya existe
+     * @throws ProviderNotFoundException if the scheme is not `file`
+     * @throws FileSystemAlreadyExistsException if it is -- the default filesystem already exists
      */
     public static FileSystem newFileSystem(URI uri, Map<String, ?> env) throws IOException {
-        soloFile(uri);
+        fileOnly(uri);
         throw new FileSystemAlreadyExistsException();
     }
 
-    /** Como el otro; el `ClassLoader` no cambia nada porque no hay proveedores que cargar. */
+    /** Like the other; the `ClassLoader` changes nothing because there are no providers to load. */
     public static FileSystem newFileSystem(URI uri, Map<String, ?> env, ClassLoader loader)
             throws IOException {
         return newFileSystem(uri, env);
     }
 
     /**
-     * Abriria un archivo --tipicamente un ZIP-- como sistema de archivos.
+     * It would open a file --typically a ZIP-- as a filesystem.
      *
-     * @throws ProviderNotFoundException siempre: KajiJDK no tiene ningun proveedor de contenedor
+     * @throws ProviderNotFoundException always: KajiJDK has no container provider
      */
     public static FileSystem newFileSystem(Path path, Map<String, ?> env) throws IOException {
         if (path == null) {
@@ -79,17 +80,17 @@ public final class FileSystems {
         throw new ProviderNotFoundException("no container provider installed for " + path);
     }
 
-    /** Como el otro, sin entorno. */
+    /** Like the other, with no environment. */
     public static FileSystem newFileSystem(Path path) throws IOException {
         return newFileSystem(path, (Map<String, ?>) null);
     }
 
-    /** Como el otro; el `ClassLoader` no cambia nada. */
+    /** Like the other; the `ClassLoader` changes nothing. */
     public static FileSystem newFileSystem(Path path, ClassLoader loader) throws IOException {
         return newFileSystem(path, (Map<String, ?>) null);
     }
 
-    /** Como el otro; el `ClassLoader` no cambia nada. */
+    /** Like the other; the `ClassLoader` changes nothing. */
     public static FileSystem newFileSystem(Path path, Map<String, ?> env, ClassLoader loader)
             throws IOException {
         return newFileSystem(path, env);

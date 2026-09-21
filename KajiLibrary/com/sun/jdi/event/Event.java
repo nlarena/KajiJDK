@@ -4,21 +4,22 @@ import com.sun.jdi.Mirror;
 import com.sun.jdi.request.EventRequest;
 
 /**
- * Algo que paso en la maquina depurada y que alguien pidio que le avisaran.
+ * Something that happened in the debugged machine and that somebody asked to be told about.
  *
- * <p>Un evento no llega solo: llega dentro de un {@link EventSet}. Y no llega porque si, sino
- * porque hay un {@code EventRequest} que lo pidio -- {@link #request} devuelve cual.
+ * <p>An event does not arrive alone: it arrives inside an {@link EventSet}. And it does not
+ * arrive just because: it arrives because there is an {@code EventRequest} that asked for it --
+ * {@link #request} returns which.
  *
- * <p>Esa relacion es el modelo entero de JDI: se pide, y despues llega.
+ * <p>That relation is the whole model of JDI: one asks, and afterwards it arrives.
  *
  * @since 1.3
  */
 public interface Event extends Mirror {
 
     /**
-     * El request.
+     * The request.
      *
-     * @return el resultado
+     * @return the result
      */
     EventRequest request();
 }

@@ -4,14 +4,14 @@ import java.lang.classfile.Attribute;
 import java.util.List;
 import jdk.internal.classfile.impl.TypedAttributes;
 
-// `CharacterRangeTable`: la tabla de rangos de caracteres del fuente. No es del JVMS; la emite
-// `javac -Xjcov` para las herramientas de cobertura.
+// `CharacterRangeTable`: the source's table of character ranges. It is not the JVMS's; `javac -Xjcov`
+// emits it for coverage tools.
 public interface CharacterRangeTableAttribute extends Attribute<CharacterRangeTableAttribute> {
 
-    /** Las filas, en el orden del archivo. */
+    /** The rows, in file order. */
     List<CharacterRangeInfo> characterRangeTable();
 
-    /** El atributo con estas filas. */
+    /** The attribute with these rows. */
     public static CharacterRangeTableAttribute of(List<CharacterRangeInfo> ranges) {
         return TypedAttributes.characterRangeTable(ranges);
     }

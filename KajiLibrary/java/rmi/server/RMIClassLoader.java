@@ -4,19 +4,23 @@ import java.net.MalformedURLException;
 import java.net.URL;
 
 /**
- * De donde salen las clases que llegan por la red.
+ * Where the classes that arrive over the network come from.
  *
- * <h2>El codebase, y por que esto es delicado</h2>
+ * <h2>The codebase, and why this is delicate</h2>
  *
- * <p>Cuando un objeto serializado llega y su clase no esta localmente, RMI puede
- * <strong>bajarla</strong> de la URL que el remitente anuncio. Eso es lo que hace posible mandar una
- * implementacion que el receptor no conocia — y es tambien ejecutar codigo que eligio otro.
+ * <p>When a serialised object arrives and its class is not present locally, RMI can
+ * <strong>download it</strong> from the URL the sender announced. That is what makes it possible to
+ * send an implementation the receiver did not know — and it is also running code somebody else
+ * chose.
  *
- * <p>Por eso la carga remota esta apagada salvo que se la habilite explicitamente, y por eso existe
- * {@link RMIClassLoaderSpi}: la politica es del entorno, no de la biblioteca.
+ * <p>That is why, in RMI, remote loading is off unless it is enabled explicitly, and why
+ * {@link RMIClassLoaderSpi} exists: the policy belongs to the environment, not to the library.
+ * This note used to read as if this VM had such a switch; it has none. Nothing in KajiLibrary reads
+ * a codebase or provider property (a grep for `useCodebaseOnly`, `java.rmi.server.codebase` and
+ * `java.rmi.server.RMIClassLoaderSpi` finds no lookup), so remote loading cannot be enabled here.
  *
- * <p>En esta VM no hay proveedor instalado, asi que los metodos que bajarian codigo declinan hacerlo
- * y los que resuelven localmente funcionan.
+ * <p>In this VM there is no provider installed, so the methods that would download code decline to
+ * do so and the ones that resolve locally work.
  */
 public class RMIClassLoader {
 
@@ -24,7 +28,7 @@ public class RMIClassLoader {
     }
 
     /**
-     * @deprecated usar {@link #loadClass(String, String)}, que dice de donde
+     * @deprecated use {@link #loadClass(String, String)}, which says where from
      */
     @Deprecated(since = "1.2")
     public static Class<?> loadClass(String name)
@@ -32,23 +36,23 @@ public class RMIClassLoader {
         return Class.forName(name, false, ClassLoader.getSystemClassLoader());
     }
 
-    /** @deprecated usar {@link #loadClass(String, String)} */
+    /** @deprecated use {@link #loadClass(String, String)} */
     @Deprecated(since = "1.2")
     public static Class<?> loadClass(URL codebase, String name)
             throws MalformedURLException, ClassNotFoundException {
         return loadClass(codebase == null ? null : codebase.toString(), name, null);
     }
 
-    /** Carga la clase, bajandola del codebase si hace falta y esta permitido. */
+    /** It loads the class, downloading it from the codebase if needed and allowed. */
     public static Class<?> loadClass(String codebase, String name)
             throws MalformedURLException, ClassNotFoundException {
         return loadClass(codebase, name, null);
     }
 
     /**
-     * Igual, probando primero con ese cargador.
+     * The same, trying that loader first.
      *
-     * <p>Sin proveedor instalado se resuelve solo localmente: un codebase remoto no se baja.
+     * <p>With no provider installed it resolves locally only: a remote codebase is not downloaded.
      */
     public static Class<?> loadClass(String codebase, String name, ClassLoader defaultLoader)
             throws MalformedURLException, ClassNotFoundException {
@@ -56,7 +60,7 @@ public class RMIClassLoader {
         return Class.forName(name, false, cl);
     }
 
-    /** Carga un proxy que implementa esas interfaces. */
+    /** It loads a proxy that implements those interfaces. */
     public static Class<?> loadProxyClass(String codebase, String[] interfaces,
             ClassLoader defaultLoader) throws ClassNotFoundException, MalformedURLException {
         ClassLoader cl = defaultLoader == null ? ClassLoader.getSystemClassLoader() : defaultLoader;
@@ -67,33 +71,34 @@ public class RMIClassLoader {
         return java.lang.reflect.Proxy.getProxyClass(cl, ifaces);
     }
 
-    /** El cargador para ese codebase. */
+    /** The loader for that codebase. */
     public static ClassLoader getClassLoader(String codebase)
             throws MalformedURLException, SecurityException {
         return ClassLoader.getSystemClassLoader();
     }
 
     /**
-     * El codebase que se anuncia junto con esa clase al serializarla.
+     * The codebase announced along with that class when it is serialised.
      *
-     * <p>{@code null} significa "no anuncio ninguno", que es lo correcto cuando no hay de donde
-     * bajarla: anunciar una URL que no sirve haria que el receptor la intente y falle mas tarde.
+     * <p>{@code null} means "I announce none", which is the right thing when there is nowhere to
+     * download it from: announcing a URL that does not work would make the receiver try it and fail
+     * later.
      */
     public static String getClassAnnotation(Class<?> cl) {
         return null;
     }
 
     /**
-     * El proveedor por omision.
+     * The default provider.
      *
-     * @throws UnsupportedOperationException en esta VM: no hay proveedor de carga remota
+     * @throws UnsupportedOperationException in this VM: there is no remote loading provider
      */
     public static RMIClassLoaderSpi getDefaultProviderInstance() {
         throw new UnsupportedOperationException(
-                "esta VM no trae proveedor de carga de clases remota");
+                "this VM ships no remote class loading provider");
     }
 
-    /** @deprecated sin reemplazo; era parte del modelo de seguridad viejo */
+    /** @deprecated no replacement; it was part of the old security model */
     @Deprecated(since = "1.2")
     public static Object getSecurityContext(ClassLoader loader) {
         return null;

@@ -4,16 +4,16 @@ import com.sun.jdi.Locatable;
 import com.sun.jdi.ThreadReference;
 
 /**
- * Un evento que ocurrio en un punto conocido del codigo.
+ * An event that happened at a known point of the code.
  *
  * @since 1.3
  */
 public interface LocatableEvent extends Event,Locatable {
 
     /**
-     * El thread.
+     * The thread.
      *
-     * @return el resultado
+     * @return the result
      */
     ThreadReference thread();
 }

@@ -1,21 +1,21 @@
 package com.sun.jdi;
 
 /**
- * VMMismatchException de la maquina depurada.
+ * VMMismatchException of the debugged machine.
  *
  * @since 1.3
  */
 public class VMMismatchException extends RuntimeException {
 
-    /** Sin detalle. */
+    /** With no detail. */
     public VMMismatchException() {
         super();
     }
 
     /**
-     * Con un mensaje.
+     * With a message.
      *
-     * @param s el mensaje
+     * @param s the message
      */
     public VMMismatchException(String s) {
         super(s);

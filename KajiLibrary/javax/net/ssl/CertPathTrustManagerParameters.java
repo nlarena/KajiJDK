@@ -3,29 +3,28 @@ package javax.net.ssl;
 import java.security.cert.CertPathParameters;
 
 /**
- * Envuelve unos {@link CertPathParameters} para pasarselos a una {@link TrustManagerFactory}.
+ * Wraps some {@link CertPathParameters} to hand them to a {@link TrustManagerFactory}.
  *
- * <p>Es un adaptador y nada mas, y esa modestia es el punto: la validacion de una cadena de
- * certificados ya esta especificada en {@code java.security.cert}, con sus revocaciones, sus anclas
- * y sus politicas. Esta clase no repite nada de eso — solo hace que esa configuracion entre por
- * donde {@link TrustManagerFactory#init(ManagerFactoryParameters)} la espera.
+ * <p>It is an adapter and nothing more, and that modesty is the point: validating a certificate
+ * chain is already specified in {@code java.security.cert}, with its revocations, its anchors and
+ * its policies. This class repeats none of that — it only makes that configuration come in where
+ * {@link TrustManagerFactory#init(ManagerFactoryParameters)} expects it.
  */
 public class CertPathTrustManagerParameters implements ManagerFactoryParameters {
 
     private final CertPathParameters parameters;
 
     /**
-     * Se guarda una <strong>copia</strong>, no la referencia: {@link CertPathParameters} es mutable,
-     * y una politica de confianza que alguien puede cambiar despues de haberla entregado no es una
-     * politica.
+     * A <strong>copy</strong> is kept, not the reference: {@link CertPathParameters} is mutable,
+     * and a trust policy somebody can change after having handed it over is not a policy.
      *
-     * @throws NullPointerException si {@code parameters} es {@code null}
+     * @throws NullPointerException if {@code parameters} is {@code null}
      */
     public CertPathTrustManagerParameters(CertPathParameters parameters) {
         this.parameters = (CertPathParameters) parameters.clone();
     }
 
-    /** Una copia de los parametros, por la misma razon. */
+    /** A copy of the parameters, for the same reason. */
     public CertPathParameters getParameters() {
         return (CertPathParameters) this.parameters.clone();
     }

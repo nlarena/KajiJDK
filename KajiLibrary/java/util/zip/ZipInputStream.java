@@ -8,16 +8,17 @@ import java.io.InputStream;
 // trust each entry's local header, and when the local header says "sizes unknown" (flag bit 3)
 // it must find the end of the data by other means.
 //
-// Una entrada escrita con **descriptor de datos** se lee igual: el final de los datos lo marca el
-// propio flujo deflate --el inflater sabe cuando termino-- y el descriptor de 16 bytes que viene
-// despues se saltea, tomando de el el CRC y los tamanios que la cabecera local no traia.
+// An entry written with a **data descriptor** is read just the same: the end of the data is marked
+// by the deflate stream itself --the inflater knows when it finished-- and the 16-byte descriptor
+// that follows is skipped, taking from it the CRC and the sizes the local header did not carry.
 //
-// Lo unico delicado es que el inflater **lee de mas**: cuando termina, los bytes que no consumio ya
-// salieron del flujo de abajo. `Inflater.getRemaining()` dice cuantos son, y se los devuelve a una
-// pequenia cola de relectura para que el descriptor y la cabecera siguiente se lean enteros. Sin
-// eso, todo lo que viene despues arranca corrido.
+// The one delicate part is that the inflater **reads ahead**: when it finishes, the bytes it did not
+// consume have already left the stream below. `Inflater.getRemaining()` says how many they are, and
+// they are handed back to a tiny push-back queue so that the descriptor and the next header are read
+// whole. Without that, everything after starts off by a few bytes.
 //
-// The `throws IOException` clauses are omitted throughout (finding #104).
+// This header used to end by saying the `throws IOException` clauses were omitted throughout because
+// of finding #104. #104 is closed and every method that should declare the clause declares it.
 public class ZipInputStream extends InflaterInputStream {
 
     private static final int LOCAL_SIG = 0x04034b50;
@@ -26,31 +27,31 @@ public class ZipInputStream extends InflaterInputStream {
     private ZipEntry current;
     private long remaining;
     private boolean entryEof;
-    // Si la entrada actual traia sus tamanios en un descriptor **despues** de los datos.
-    private boolean conDescriptor;
-    // Los bytes que el inflater leyo de mas y hay que volver a mirar. Es una cola diminuta --nunca
-    // mas que el buffer de relleno-- y existe porque el inflater consume por bloques.
-    private byte[] relectura = new byte[0];
-    private int relecturaAt;
+    // Whether the current entry carried its sizes in a descriptor **after** the data.
+    private boolean hasDescriptor;
+    // The bytes the inflater read ahead and have to be looked at again. It is a tiny queue --never
+    // larger than the fill buffer-- and it exists because the inflater consumes in blocks.
+    private byte[] pushBack = new byte[0];
+    private int pushBackAt;
 
-    // El charset con el que se decodifican los **nombres de entrada**. UTF-8 por defecto, que es lo
-    // que dice el JDK y lo que produce cualquier herramienta moderna.
+    // The charset the **entry names** are decoded with. UTF-8 by default, which is what the JDK says
+    // and what any modern tool produces.
     private final java.nio.charset.Charset charset;
 
-    /** Lee el archivo, decodificando los nombres en UTF-8. */
+    /** It reads the archive, decoding the names in UTF-8. */
     public ZipInputStream(InputStream in) {
         this(in, java.nio.charset.StandardCharsets.UTF_8);
     }
 
     /**
-     * Lee el archivo, decodificando los nombres con `charset`.
+     * It reads the archive, decoding the names with `charset`.
      *
-     * <p>Existe porque **el formato ZIP no dice en que codificacion estan los nombres**. Hay un bit
-     * de bandera que promete UTF-8, pero mucho archivo viejo no lo enciende y guarda el nombre en la
-     * pagina de codigos del sistema que lo creo. Sin poder elegir, esos nombres se leen mal y no hay
-     * forma de arreglarlo desde afuera.
+     * <p>It exists because **the ZIP format does not say what encoding the names are in**. There is a
+     * flag bit promising UTF-8, but plenty of old archives do not set it and store the name in the
+     * code page of the system that created it. Without being able to choose, those names are read
+     * wrongly and there is no way of fixing it from outside.
      *
-     * @throws NullPointerException si `charset` es `null`
+     * @throws NullPointerException if `charset` is `null`
      */
     public ZipInputStream(InputStream in, java.nio.charset.Charset charset) {
         super(in, new Inflater(true));
@@ -85,16 +86,16 @@ public class ZipInputStream extends InflaterInputStream {
                 entry.setCompressedSize(csize);
                 entry.setSize(size);
                 remaining = csize;
-                conDescriptor = false;
+                hasDescriptor = false;
             } else {
-                // Los tamanios vienen en un descriptor **despues** de los datos. El final se sabe
-                // por el flujo deflate, no por un contador.
+                // The sizes come in a descriptor **after** the data. The end is known from the
+                // deflate stream, not from a counter.
                 remaining = -1;
-                conDescriptor = true;
+                hasDescriptor = true;
             }
             current = entry;
             entryEof = false;
-            // El inflater arranca de cero para cada entrada: cada una es un flujo deflate propio.
+            // The inflater starts from scratch for each entry: each is a deflate stream of its own.
             inf.reset();
         }
         return entry;
@@ -105,22 +106,22 @@ public class ZipInputStream extends InflaterInputStream {
             if (remaining > 0) {
                 skipBytes((int) remaining);
             } else if (remaining < 0) {
-                // Tamanio desconocido: se drena hasta el final del flujo deflate. Es lo unico que
-                // dice donde terminan los datos cuando la cabecera local no lo dijo.
+                // Unknown size: it is drained to the end of the deflate stream. It is the only thing
+                // that says where the data ends when the local header did not.
                 byte[] scratch = new byte[512];
                 int n = read(scratch, 0, scratch.length);
                 while (n > 0) {
                     n = read(scratch, 0, scratch.length);
                 }
             }
-            ZipEntry cerrada = current;
+            ZipEntry justClosed = current;
             current = null;
             remaining = 0;
             entryEof = true;
-            if (conDescriptor) {
-                devolverSobrantes();
-                leerDescriptor(cerrada);
-                conDescriptor = false;
+            if (hasDescriptor) {
+                pushBackLeftovers();
+                readDescriptor(justClosed);
+                hasDescriptor = false;
             }
         }
     }
@@ -199,77 +200,77 @@ public class ZipInputStream extends InflaterInputStream {
         return new ZipEntry(name);
     }
 
-    // ---- lectura de campos, little-endian como todo el formato ----
+    // ---- field reading, little-endian like the whole format ----
 
     /**
-     * El relleno del inflater, **empezando por la cola de relectura**.
+     * The inflater's fill, **starting from the push-back queue**.
      *
-     * <p>Es la otra mitad del arreglo del descriptor. Los bytes que el inflater leyo de mas quedaron
-     * en la cola; si el relleno los ignorara y fuera directo al flujo, la entrada siguiente
-     * arrancaria salteando justo esos bytes. Con dos entradas seguidas se ve enseguida: la segunda
-     * lee cero.
+     * <p>It is the other half of the descriptor fix. The bytes the inflater read ahead were left in
+     * the queue; if the fill ignored them and went straight to the stream, the next entry would start
+     * by skipping exactly those bytes. With two entries in a row it shows at once: the second reads
+     * zero.
      */
     protected void fill() throws java.io.IOException {
-        int pendientes = this.relectura.length - this.relecturaAt;
-        if (pendientes <= 0) {
+        int pendingBytes = this.pushBack.length - this.pushBackAt;
+        if (pendingBytes <= 0) {
             len = in.read(buf, 0, buf.length);
             if (len > 0) {
                 inf.setInput(buf, 0, len);
             }
             return;
         }
-        int cuantos = pendientes;
-        if (cuantos > buf.length) {
-            cuantos = buf.length;
+        int howManyBytes = pendingBytes;
+        if (howManyBytes > buf.length) {
+            howManyBytes = buf.length;
         }
-        System.arraycopy(this.relectura, this.relecturaAt, buf, 0, cuantos);
-        this.relecturaAt = this.relecturaAt + cuantos;
-        int total = cuantos;
-        // Si sobra lugar, se completa desde el flujo: un bloque mas grande le da al inflater mas
-        // para trabajar y evita una vuelta extra.
+        System.arraycopy(this.pushBack, this.pushBackAt, buf, 0, howManyBytes);
+        this.pushBackAt = this.pushBackAt + howManyBytes;
+        int total = howManyBytes;
+        // If there is room left, it is topped up from the stream: a larger block gives the inflater
+        // more to work with and saves a round trip.
         if (total < buf.length) {
-            int mas = in.read(buf, total, buf.length - total);
-            if (mas > 0) {
-                total = total + mas;
+            int more = in.read(buf, total, buf.length - total);
+            if (more > 0) {
+                total = total + more;
             }
         }
         len = total;
         inf.setInput(buf, 0, len);
     }
 
-    // Todas las lecturas de campo pasan por aca: primero lo que el inflater devolvio, despues el
-    // flujo. Sin este unico punto de entrada, la mitad de los campos se leerian del lugar
-    // equivocado justo despues de una entrada comprimida.
-    private int leerByte() throws java.io.IOException {
-        if (this.relecturaAt < this.relectura.length) {
-            int b = this.relectura[this.relecturaAt] & 0xff;
-            this.relecturaAt = this.relecturaAt + 1;
+    // Every field read goes through here: first what the inflater handed back, then the stream.
+    // Without this single entry point, half the fields would be read from the wrong place right
+    // after a compressed entry.
+    private int readByte() throws java.io.IOException {
+        if (this.pushBackAt < this.pushBack.length) {
+            int b = this.pushBack[this.pushBackAt] & 0xff;
+            this.pushBackAt = this.pushBackAt + 1;
             return b;
         }
         return in.read();
     }
 
-    // Los bytes que el inflater tomo del flujo y no consumio vuelven a la cola.
-    private void devolverSobrantes() {
-        int sobran = inf.getRemaining();
-        if (sobran <= 0) {
+    // The bytes the inflater took from the stream and did not consume go back into the queue.
+    private void pushBackLeftovers() {
+        int leftOver = inf.getRemaining();
+        if (leftOver <= 0) {
             return;
         }
-        byte[] nueva = new byte[sobran];
-        System.arraycopy(buf, len - sobran, nueva, 0, sobran);
-        this.relectura = nueva;
-        this.relecturaAt = 0;
+        byte[] fresh = new byte[leftOver];
+        System.arraycopy(buf, len - leftOver, fresh, 0, leftOver);
+        this.pushBack = fresh;
+        this.pushBackAt = 0;
     }
 
-    // El registro de 16 bytes que sigue a los datos cuando la cabecera local no traia los tamanios.
-    // La firma es **opcional** en el formato, asi que se la mira y solo se la consume si esta.
-    private void leerDescriptor(ZipEntry entry) throws java.io.IOException {
-        int primero = this.readInt();
+    // The 16-byte record that follows the data when the local header did not carry the sizes. The
+    // signature is **optional** in the format, so it is looked at and only consumed if it is there.
+    private void readDescriptor(ZipEntry entry) throws java.io.IOException {
+        int firstOne = this.readInt();
         long crc;
-        if (primero == DESCRIPTOR_SIG) {
+        if (firstOne == DESCRIPTOR_SIG) {
             crc = (long) this.readInt() & 0xffffffffL;
         } else {
-            crc = (long) primero & 0xffffffffL;
+            crc = (long) firstOne & 0xffffffffL;
         }
         long csize = (long) this.readInt() & 0xffffffffL;
         long size = (long) this.readInt() & 0xffffffffL;
@@ -281,10 +282,10 @@ public class ZipInputStream extends InflaterInputStream {
     }
 
     private int readInt() throws java.io.IOException {
-        int b0 = leerByte();
-        int b1 = leerByte();
-        int b2 = leerByte();
-        int b3 = leerByte();
+        int b0 = readByte();
+        int b1 = readByte();
+        int b2 = readByte();
+        int b3 = readByte();
         int value = 0;
         if (b3 != -1) {
             value = (b0 & 0xff) | ((b1 & 0xff) << 8) | ((b2 & 0xff) << 16) | ((b3 & 0xff) << 24);
@@ -293,19 +294,19 @@ public class ZipInputStream extends InflaterInputStream {
     }
 
     private int readShort() throws java.io.IOException {
-        int b0 = leerByte();
-        int b1 = leerByte();
+        int b0 = readByte();
+        int b1 = readByte();
         return (b0 & 0xff) | ((b1 & 0xff) << 8);
     }
 
-    // Se leen los **bytes** y recien despues se decodifican. Antes se armaba el String caracter a
-    // caracter con `(char) (b & 0xff)`, que es Latin-1 disfrazado: un nombre en UTF-8 con acentos
-    // volvia partido en dos caracteres por letra.
+    // The **bytes** are read and only then decoded. The String used to be built character by
+    // character with `(char) (b & 0xff)`, which is Latin-1 in disguise: a UTF-8 name with accents
+    // came back split into two characters per letter.
     private String readString(int len) throws java.io.IOException {
         byte[] raw = new byte[len];
         int i = 0;
         while (i < len) {
-            raw[i] = (byte) leerByte();
+            raw[i] = (byte) readByte();
             i = i + 1;
         }
         return new String(raw, this.charset);
@@ -314,7 +315,7 @@ public class ZipInputStream extends InflaterInputStream {
     private void skipBytes(int count) throws java.io.IOException {
         int i = 0;
         while (i < count) {
-            leerByte();
+            readByte();
             i = i + 1;
         }
     }

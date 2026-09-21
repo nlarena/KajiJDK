@@ -1,20 +1,21 @@
 package java.awt.image;
 
 /**
- * La matriz de una convolucion: los pesos con los que cada pixel vecino aporta al resultado.
+ * The matrix of a convolution: the weights with which each neighbouring pixel contributes to the
+ * result.
  *
- * <p>Lo unico que hay que entender de esta clase es **donde esta el centro**, porque de ahi sale
- * todo lo demas. El origen es el pixel que se esta calculando, y se toma en el medio:
- * `(ancho - 1) / 2` y `(alto - 1) / 2`. Para un kernel de 3x3 es (1,1), o sea el del medio; para uno
- * de 4x4 es (1,1) tambien -- con lado par no hay centro exacto y la division entera lo corre hacia
- * arriba y a la izquierda. Eso desplaza la imagen medio pixel, y es la razon por la que los kernels
- * se hacen de lado impar.
+ * <p>The only thing to understand about this class is **where the centre is**, because everything
+ * else follows from it. The origin is the pixel being computed, and it is taken in the middle:
+ * `(width - 1) / 2` and `(height - 1) / 2`. For a 3x3 kernel it is (1,1), that is, the middle one;
+ * for a 4x4 one it is (1,1) as well -- with an even side there is no exact centre and the integer
+ * division moves it up and to the left. That shifts the image half a pixel, and it is the reason
+ * why kernels are made with an odd side.
  *
- * <p>Los datos van **por filas**: `data[y * ancho + x]`.
+ * <p>The data go **by rows**: `data[y * width + x]`.
  *
- * <p>Es inmutable: el arreglo se copia al entrar y {@link #getKernelData} devuelve otra copia. Un
- * kernel que alguien pudiera cambiar despues de configurar el filtro daria un resultado distinto en
- * cada franja de la imagen.
+ * <p>It is immutable: the array is copied on the way in and {@link #getKernelData} returns another
+ * copy. A kernel somebody could change after configuring the filter would give a different result
+ * in each strip of the image.
  */
 public class Kernel implements Cloneable {
 
@@ -25,9 +26,10 @@ public class Kernel implements Cloneable {
     private final float[] data;
 
     /**
-     * Un kernel de `width` por `height` con esos pesos.
+     * A kernel of `width` by `height` with those weights.
      *
-     * @throws IllegalArgumentException si el arreglo tiene menos de `width * height` pesos
+     * @throws IllegalArgumentException if the array has fewer than `width * height` weights, or is
+     *     `null`
      */
     public Kernel(int width, int height, float[] data) {
         this.width = width;
@@ -43,31 +45,31 @@ public class Kernel implements Cloneable {
         System.arraycopy(data, 0, this.data, 0, n);
     }
 
-    /** La columna del origen. Ver la nota de la clase. */
+    /** The column of the origin. See the note of the class. */
     public final int getXOrigin() {
         return this.xOrigin;
     }
 
-    /** La fila del origen. */
+    /** The row of the origin. */
     public final int getYOrigin() {
         return this.yOrigin;
     }
 
-    /** El ancho. */
+    /** The width. */
     public final int getWidth() {
         return this.width;
     }
 
-    /** El alto. */
+    /** The height. */
     public final int getHeight() {
         return this.height;
     }
 
     /**
-     * Los pesos, por filas.
+     * The weights, by rows.
      *
-     * @param data donde dejarlos, o nulo para que se reserve uno
-     * @throws IllegalArgumentException si el arreglo dado es mas chico que el kernel
+     * @param data where to leave them, or null for one to be reserved
+     * @throws IllegalArgumentException if the given array is smaller than the kernel
      */
     public final float[] getKernelData(float[] data) {
         if (data == null) {
@@ -83,7 +85,9 @@ public class Kernel implements Cloneable {
         return data;
     }
 
-    /** Una copia. Superficial alcanza: un kernel es inmutable. */
+    /**
+     * A copy. The constructor copies the weights, so the new kernel shares nothing with this one.
+     */
     public Object clone() {
         return new Kernel(this.width, this.height, this.data);
     }

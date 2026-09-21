@@ -6,22 +6,22 @@ import javax.print.attribute.DateTimeSyntax;
 import javax.print.attribute.PrintJobAttribute;
 
 /*
- * CABECERA DE FAMILIA -- los atributos {@code DateTimeSyntax} de este paquete.
+ * FAMILY HEADER -- this package's {@code DateTimeSyntax} attributes.
  *
- * <p>Un instante. El mecanismo esta en {@link javax.print.attribute.DateTimeSyntax DateTimeSyntax},
- * que copia el {@link java.util.Date} al entrar y al salir para que el atributo sea inmutable
- * aunque {@code Date} no lo sea.
+ * <p>An instant. The mechanism is in {@link javax.print.attribute.DateTimeSyntax DateTimeSyntax},
+ * which copies the {@link java.util.Date} on the way out but keeps the reference it is given: the
+ * attribute is protected from its readers, not from whoever built it. (The note said it copies on
+ * the way in too; see DateTimeSyntax's own note, which is right.)
  *
- * <p>Tres de las cuatro son marcas de tiempo que reporta el trabajo --cuando se creo, cuando
- * empezo, cuando termino-- y solo {@link JobHoldUntil} se pide.
+ * <p>Three of the four are timestamps the job reports --when it was created, when it started, when
+ * it finished-- and only {@link JobHoldUntil} is requested.
  */
 
 /**
- * Cuando el trabajo llego a un estado terminal: {@code COMPLETED}, {@code CANCELED} o {@code
- * ABORTED}.
+ * When the job reached a terminal state: {@code COMPLETED}, {@code CANCELED} or {@code ABORTED}.
  *
- * <p>El atributo no existe hasta que el trabajo termina, y no distingue como termino --eso lo dice
- * {@link JobState}.
+ * <p>The attribute does not exist until the job finishes, and it does not tell how it finished --
+ * {@link JobState} says that.
  */
 public final class DateTimeAtCompleted extends DateTimeSyntax implements PrintJobAttribute {
 

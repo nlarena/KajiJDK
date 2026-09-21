@@ -6,10 +6,10 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * El campo es un <strong>porcentaje</strong>, expresado entre 0 y 1.
+ * The field is a <strong>percentage</strong>, expressed between 0 and 1.
  *
- * <p>Entre 0 y 1 y no entre 0 y 100: es lo que evita tener que adivinar si un 50 es la mitad o la
- * mitad de un uno por ciento. La herramienta multiplica al mostrarlo.
+ * <p>Between 0 and 1 and not between 0 and 100: it is what avoids having to guess whether a 50 is a
+ * half or half of one per cent. The tool multiplies when showing it.
  *
  * @since 9
  */

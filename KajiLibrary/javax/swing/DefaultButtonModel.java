@@ -15,20 +15,20 @@ import javax.swing.event.ChangeListener;
 import javax.swing.event.EventListenerList;
 
 /**
- * El modelo de boton de siempre: cinco bits en un entero y tres listas de escuchas.
+ * The usual button model: five bits in an integer and three lists of listeners.
  *
- * <p>Los bits van en {@link #stateMask} para que el estado entero se lea de un golpe y para que
- * agregar uno no cambie la forma de la clase. Cada cambio de bit dispara
- * {@link #fireStateChanged}, que es lo que hace que el boton se repinte; ademas, soltar estando
- * armado dispara la accion, y seleccionar o deseleccionar dispara el evento de item.
+ * <p>The bits go in {@link #stateMask} so that the whole state is read in one go and so that
+ * adding one does not change the class's shape. Each change of a bit fires
+ * {@link #fireStateChanged}, which is what makes the button repaint itself; besides, releasing
+ * while armed fires the action, and selecting or deselecting fires the item event.
  *
- * <p>Los modificadores del {@code ActionEvent} salen del evento que se esta despachando —el del
- * mouse o del teclado que provoco el click—, por {@link EventQueue#getCurrentEvent}. Un
- * {@code doClick} desde un programa no tiene evento en curso y los modificadores son cero.
+ * <p>The {@code ActionEvent}'s modifiers come from the event that is being dispatched -- the
+ * mouse or keyboard one that caused the click --, through {@link EventQueue#getCurrentEvent}. A
+ * {@code doClick} from a program has no event under way and the modifiers are zero.
  */
 public class DefaultButtonModel implements ButtonModel, Serializable {
 
-    /** Los bits de estado; ver las constantes. */
+    /** The state bits; see the constants. */
     protected int stateMask = 0;
 
     protected String actionCommand = null;
@@ -37,7 +37,7 @@ public class DefaultButtonModel implements ButtonModel, Serializable {
 
     protected int mnemonic = 0;
 
-    /** El evento de cambio, creado una vez: no lleva nada mas que el origen. */
+    /** The change event, created once: it carries nothing but the source. */
     protected transient ChangeEvent changeEvent = null;
 
     protected EventListenerList listenerList = new EventListenerList();
@@ -50,7 +50,7 @@ public class DefaultButtonModel implements ButtonModel, Serializable {
     public static final int ENABLED = 1 << 3;
     public static final int ROLLOVER = 1 << 4;
 
-    /** Un modelo habilitado y en reposo. */
+    /** An enabled model at rest. */
     public DefaultButtonModel() {
         stateMask = 0;
         setEnabled(true);
@@ -85,11 +85,11 @@ public class DefaultButtonModel implements ButtonModel, Serializable {
     }
 
     /**
-     * Arma o desarma; un modelo deshabilitado no se arma.
+     * It arms or disarms; a disabled model does not arm.
      *
-     * <p>El JDK deja armarse a un item de menu deshabilitado cuando el aspecto lo pide
-     * ({@code MenuItem.disabledAreNavigable}), para que el teclado pueda pasar por el. Sin
-     * {@code UIManager} que lo diga, la regla es la misma para todos: deshabilitado no se arma.
+     * <p>The JDK lets a disabled menu item arm itself when the look and feel asks for it
+     * ({@code MenuItem.disabledAreNavigable}), so that the keyboard can pass through it. With no
+     * {@code UIManager} to say so, the rule is the same for all: disabled does not arm.
      */
     public void setArmed(boolean b) {
         if (isArmed() == b || !isEnabled()) {
@@ -103,7 +103,7 @@ public class DefaultButtonModel implements ButtonModel, Serializable {
         fireStateChanged();
     }
 
-    /** Habilita o deshabilita; deshabilitar tambien desarma y suelta. */
+    /** It enables or disables; disabling also disarms and releases. */
     public void setEnabled(boolean b) {
         if (isEnabled() == b) {
             return;
@@ -118,7 +118,7 @@ public class DefaultButtonModel implements ButtonModel, Serializable {
         fireStateChanged();
     }
 
-    /** Selecciona o deselecciona, avisando a los escuchas de item y de cambio. */
+    /** It selects or deselects, giving notice to the item and change listeners. */
     public void setSelected(boolean b) {
         if (isSelected() == b) {
             return;
@@ -134,10 +134,11 @@ public class DefaultButtonModel implements ButtonModel, Serializable {
     }
 
     /**
-     * Aprieta o suelta; soltar estando armado dispara la accion.
+     * It presses or releases; releasing while armed fires the action.
      *
-     * <p>Es el corazon del click: la accion no sale al apretar sino al soltar, y solo si el
-     * modelo sigue armado, que es lo que se pierde al sacar el mouse del boton.
+     * <p>It is the heart of the click: the action does not come out on pressing but on releasing,
+     * and only if the model is still armed, which is what is lost on taking the mouse off the
+     * button.
      */
     public void setPressed(boolean b) {
         if (isPressed() == b || !isEnabled()) {
@@ -149,20 +150,20 @@ public class DefaultButtonModel implements ButtonModel, Serializable {
             stateMask = stateMask & ~PRESSED;
         }
         if (!isPressed() && isArmed()) {
-            int modificadores = 0;
-            AWTEvent actual = EventQueue.getCurrentEvent();
-            if (actual instanceof InputEvent) {
-                modificadores = ((InputEvent) actual).getModifiers();
-            } else if (actual instanceof ActionEvent) {
-                modificadores = ((ActionEvent) actual).getModifiers();
+            int modifiers = 0;
+            AWTEvent current = EventQueue.getCurrentEvent();
+            if (current instanceof InputEvent) {
+                modifiers = ((InputEvent) current).getModifiers();
+            } else if (current instanceof ActionEvent) {
+                modifiers = ((ActionEvent) current).getModifiers();
             }
             fireActionPerformed(new ActionEvent(this, ActionEvent.ACTION_PERFORMED,
-                    getActionCommand(), EventQueue.getMostRecentEventTime(), modificadores));
+                    getActionCommand(), EventQueue.getMostRecentEventTime(), modifiers));
         }
         fireStateChanged();
     }
 
-    /** El cursor entro o salio; un modelo deshabilitado no se entera. */
+    /** The cursor came in or went out; a disabled model does not learn about it. */
     public void setRollover(boolean b) {
         if (isRollover() == b || !isEnabled()) {
             return;
@@ -196,15 +197,15 @@ public class DefaultButtonModel implements ButtonModel, Serializable {
         return listenerList.getListeners(ChangeListener.class);
     }
 
-    /** Avisa que algun bit cambio; el evento se crea la primera vez y se reusa. */
+    /** It gives notice that some bit changed; the event is created the first time and reused. */
     protected void fireStateChanged() {
-        Object[] escuchas = listenerList.getListenerList();
-        for (int i = escuchas.length - 2; i >= 0; i = i - 2) {
-            if (escuchas[i] == ChangeListener.class) {
+        Object[] listeners = listenerList.getListenerList();
+        for (int i = listeners.length - 2; i >= 0; i = i - 2) {
+            if (listeners[i] == ChangeListener.class) {
                 if (changeEvent == null) {
                     changeEvent = new ChangeEvent(this);
                 }
-                ((ChangeListener) escuchas[i + 1]).stateChanged(changeEvent);
+                ((ChangeListener) listeners[i + 1]).stateChanged(changeEvent);
             }
         }
     }
@@ -222,10 +223,10 @@ public class DefaultButtonModel implements ButtonModel, Serializable {
     }
 
     protected void fireActionPerformed(ActionEvent e) {
-        Object[] escuchas = listenerList.getListenerList();
-        for (int i = escuchas.length - 2; i >= 0; i = i - 2) {
-            if (escuchas[i] == ActionListener.class) {
-                ((ActionListener) escuchas[i + 1]).actionPerformed(e);
+        Object[] listeners = listenerList.getListenerList();
+        for (int i = listeners.length - 2; i >= 0; i = i - 2) {
+            if (listeners[i] == ActionListener.class) {
+                ((ActionListener) listeners[i + 1]).actionPerformed(e);
             }
         }
     }
@@ -243,10 +244,10 @@ public class DefaultButtonModel implements ButtonModel, Serializable {
     }
 
     protected void fireItemStateChanged(ItemEvent e) {
-        Object[] escuchas = listenerList.getListenerList();
-        for (int i = escuchas.length - 2; i >= 0; i = i - 2) {
-            if (escuchas[i] == ItemListener.class) {
-                ((ItemListener) escuchas[i + 1]).itemStateChanged(e);
+        Object[] listeners = listenerList.getListenerList();
+        for (int i = listeners.length - 2; i >= 0; i = i - 2) {
+            if (listeners[i] == ItemListener.class) {
+                ((ItemListener) listeners[i + 1]).itemStateChanged(e);
             }
         }
     }
@@ -255,7 +256,7 @@ public class DefaultButtonModel implements ButtonModel, Serializable {
         return listenerList.getListeners(listenerType);
     }
 
-    /** Ninguno: un modelo no sabe que objeto representa; eso lo sabe el boton. */
+    /** None: a model does not know what object it represents; the button knows that. */
     public Object[] getSelectedObjects() {
         return null;
     }
@@ -268,7 +269,7 @@ public class DefaultButtonModel implements ButtonModel, Serializable {
         return group;
     }
 
-    /** Si este modelo es de un item de menu; ver {@link #setArmed}. */
+    /** Whether this model belongs to a menu item; see {@link #setArmed}. */
     public boolean isMenuItem() {
         return menuItem;
     }

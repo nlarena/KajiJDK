@@ -6,10 +6,16 @@ import java.util.concurrent.TimeUnit;
 // A reentrant mutual-exclusion lock — the explicit-lock counterpart of a `synchronized`
 // block. The JDK builds this on the AbstractQueuedSynchronizer; KajiJDK builds it
 // directly on the intrinsic monitor of a private `sync` object plus `Thread.currentThread()`
-// for owner identity. On the single-carrier cooperative scheduler this is faithful: a
-// `wait`/`notify` handshake on `sync` serializes acquisition, the owner field makes it
-// reentrant, and there is no true parallelism to make the coarse guard observably differ
-// from a lock-free one.
+// for owner identity: a `wait`/`notify` handshake on `sync` serializes acquisition and the owner
+// field makes it reentrant.
+//
+// This header used to justify that with "there is no true parallelism to make the coarse guard
+// observably differ from a lock-free one". That reason is gone: `JVM_THREADS=os` is a real
+// OS-thread substrate. The design stands on a better one -- an intrinsic monitor is a real mutex
+// under real parallelism too, only a coarser one -- and on measurement: the five behavioural tests
+// built on this lock (`CountDownLatch`, `CyclicBarrier`, `ArrayBlockingQueue`, `DelayQueue`,
+// `Semaphore`) pass on all three substrates, the parallel one included. What is given up is
+// scalability, which the contract does not promise, not correctness.
 //
 // NOTE on style: every method is written single-exit — no `return` from inside a
 // `synchronized (sync)` block. Finding #105: the frozen javac does not emit the
@@ -24,9 +30,9 @@ public class ReentrantLock implements Lock, Serializable {
     private Thread owner;
     // Reentrant acquisition count (0 when free).
     private int holdCount;
-    // Los hilos bloqueados intentando adquirir. Antes era un contador; hace falta la lista porque
-    // `getQueuedThreads` pide los hilos, y el contador sale de ella.
-    private final java.util.ArrayList<Thread> encolados = new java.util.ArrayList<Thread>();
+    // The threads blocked trying to acquire. It used to be a counter; the list is needed because
+    // `getQueuedThreads` asks for the threads, and the count comes out of it.
+    private final java.util.ArrayList<Thread> queuedThreads = new java.util.ArrayList<Thread>();
     private int queued;
     // Fairness flag. On the cooperative scheduler acquisition is already close to FIFO
     // via the monitor wait-set; the flag is honoured as state but does not change policy.
@@ -42,49 +48,49 @@ public class ReentrantLock implements Lock, Serializable {
 
     public void lock() {
         Thread me = Thread.currentThread();
-        boolean interrumpido = false;
+        boolean wasInterrupted = false;
         synchronized (sync) {
             if (owner == me) {
                 holdCount++;
             } else {
                 if (owner != null) {
                     queued++;
-                    encolados.add(Thread.currentThread());
+                    queuedThreads.add(Thread.currentThread());
                     while (owner != null) {
-                    // No interrumpible (contrato de `Lock.lock()`): se atrapa, se sigue
-                    // esperando, y se remarca el hilo al final. Abortar aca dejaria el
-                    // lock a medio adquirir.
+                    // Non-interruptible (`Lock.lock()`'s contract): it is caught, the wait goes
+                    // on, and the thread is re-marked at the end. Aborting here would leave the
+                    // lock half acquired.
                         try {
                             sync.wait();
                         } catch (InterruptedException e) {
-                            interrumpido = true;
+                            wasInterrupted = true;
                         }
                     }
                     queued--;
-                    encolados.remove(Thread.currentThread());
+                    queuedThreads.remove(Thread.currentThread());
                 }
                 owner = me;
                 holdCount = 1;
             }
         }
-        if (interrumpido) {
+        if (wasInterrupted) {
             Thread.currentThread().interrupt();
         }
     }
 
     /**
-     * Adquiere el lock, **abortando si interrumpen** al hilo.
+     * It acquires the lock, **aborting if the thread is interrupted**.
      *
-     * <p>Es la contraparte de `lock()`, que no aborta. La nota que estaba aca decia que la VM no
-     * tenia interrupcion de hilos y que este metodo era identico a `lock()`; las dos cosas dejaron
-     * de ser ciertas -- `Thread.interrupt()` existe y despierta las esperas, asi que este metodo
-     * puede hacer lo que su nombre promete.
+     * <p>It is the counterpart of `lock()`, which does not abort. The note that used to be here said
+     * the VM had no thread interruption and that this method was identical to `lock()`; both stopped
+     * being true -- `Thread.interrupt()` exists and wakes the waits, so this method can do what its
+     * name promises.
      *
-     * @throws InterruptedException si interrumpen al hilo mientras espera
+     * @throws InterruptedException if the thread is interrupted while waiting
      */
     public void lockInterruptibly() throws InterruptedException {
         Thread me = Thread.currentThread();
-        // Se comprueba **antes** de esperar: un hilo ya interrumpido no debe entrar a la espera.
+        // It is checked **before** waiting: an already interrupted thread must not enter the wait.
         if (Thread.interrupted()) {
             throw new InterruptedException();
         }
@@ -94,17 +100,18 @@ public class ReentrantLock implements Lock, Serializable {
             } else {
                 if (owner != null) {
                     queued++;
-                    encolados.add(me);
+                    queuedThreads.add(me);
                     try {
                         while (owner != null) {
                             sync.wait();
                         }
                     } finally {
-                        // El `finally` importa: si la espera se corta por interrupcion, el hilo tiene
-                        // que salir de la cola igual. Sin esto, un `getQueuedThreads` posterior
-                        // mostraria un hilo que ya no espera nada.
+                        // The `finally` matters: if the wait is cut short by an interruption, the
+                        // thread has to leave the queue all the same. Without this, a later
+                        // `getQueuedThreads` would show a thread that is no longer waiting for
+                        // anything.
                         queued--;
-                        encolados.remove(me);
+                        queuedThreads.remove(me);
                     }
                 }
                 owner = me;
@@ -132,9 +139,9 @@ public class ReentrantLock implements Lock, Serializable {
     }
 
     /**
-     * Adquiere el lock esperando como mucho ese plazo.
+     * It acquires the lock, waiting at most that deadline.
      *
-     * @throws InterruptedException si interrumpen al hilo mientras espera
+     * @throws InterruptedException if the thread is interrupted while waiting
      */
     public boolean tryLock(long time, TimeUnit unit) throws InterruptedException {
         Thread me = Thread.currentThread();
@@ -152,22 +159,22 @@ public class ReentrantLock implements Lock, Serializable {
                 if (ms <= 0L) {
                     acquired = false;
                 } else {
-                    // Con **plazo restante**, no un solo intento. La nota anterior decia que la
-                    // biblioteca no tenia reloj para recalcular; `System.nanoTime()` existe. Sin el
-                    // bucle, una espera que despertaba por otra razon --otro hilo soltando y
-                    // retomando el lock-- devolvia `false` con el plazo entero por delante.
-                    long finNanos = System.nanoTime() + ms * 1000000L;
+                    // With the **remaining deadline**, not a single attempt. The previous note said
+                    // the library had no clock to recompute with; `System.nanoTime()` exists. Without
+                    // the loop, a wait that woke for another reason --another thread releasing and
+                    // retaking the lock-- returned `false` with the whole deadline still ahead.
+                    long endNanos = System.nanoTime() + ms * 1000000L;
                     queued++;
-                    encolados.add(me);
+                    queuedThreads.add(me);
                     try {
-                        long restanNanos = finNanos - System.nanoTime();
-                        while (owner != null && restanNanos > 0L) {
-                            sync.wait(restanNanos / 1000000L, (int) (restanNanos % 1000000L));
-                            restanNanos = finNanos - System.nanoTime();
+                        long remainingNanos = endNanos - System.nanoTime();
+                        while (owner != null && remainingNanos > 0L) {
+                            sync.wait(remainingNanos / 1000000L, (int) (remainingNanos % 1000000L));
+                            remainingNanos = endNanos - System.nanoTime();
                         }
                     } finally {
                         queued--;
-                        encolados.remove(me);
+                        queuedThreads.remove(me);
                     }
                     if (owner == null) {
                         owner = me;
@@ -246,39 +253,39 @@ public class ReentrantLock implements Lock, Serializable {
     }
 
     /**
-     * Si ese hilo esta esperando para adquirir este lock.
+     * Whether that thread is waiting to acquire this lock.
      *
-     * <p>Es una **foto**, y el javadoc del JDK insiste en eso: el hilo puede haber adquirido o
-     * abandonado para cuando la respuesta llegue. Sirve para diagnosticar, no para decidir.
+     * <p>It is a **snapshot**, and the JDK's javadoc insists on it: the thread may have acquired or
+     * given up by the time the answer arrives. It serves for diagnostics, not for deciding.
      *
-     * @throws NullPointerException si `thread` es `null`
+     * @throws NullPointerException if `thread` is `null`
      */
     public final boolean hasQueuedThread(Thread thread) {
         if (thread == null) {
             throw new NullPointerException("thread");
         }
-        boolean esta;
+        boolean present;
         synchronized (sync) {
-            esta = encolados.contains(thread);
+            present = queuedThreads.contains(thread);
         }
-        return esta;
+        return present;
     }
 
-    /** Los hilos que esperan para adquirir. Una copia: la lista interna no sale de aca. */
+    /** The threads waiting to acquire. A copy: the internal list does not leave here. */
     protected java.util.Collection<Thread> getQueuedThreads() {
-        java.util.ArrayList<Thread> copia;
+        java.util.ArrayList<Thread> copy;
         synchronized (sync) {
-            copia = new java.util.ArrayList<Thread>(encolados);
+            copy = new java.util.ArrayList<Thread>(queuedThreads);
         }
-        return copia;
+        return copy;
     }
 
-    // ---- inspeccion de las condiciones -------------------------------------------------------------
+    // ---- condition inspection ----------------------------------------------------------------------
     //
-    // Las tres piden que la condicion sea **de este lock**: preguntarle a un lock por una condicion
-    // ajena no tiene respuesta correcta, y devolver "ninguno" seria peor que fallar.
+    // All three demand that the condition belong to **this lock**: asking a lock about a foreign
+    // condition has no right answer, and returning "none" would be worse than failing.
 
-    private ReentrantCondition mia(Condition condition) {
+    private ReentrantCondition ownCondition(Condition condition) {
         if (condition == null) {
             throw new NullPointerException("condition");
         }
@@ -286,25 +293,25 @@ public class ReentrantLock implements Lock, Serializable {
             throw new IllegalArgumentException("not owner");
         }
         ReentrantCondition c = (ReentrantCondition) condition;
-        if (!c.perteneceA(this)) {
+        if (!c.belongsTo(this)) {
             throw new IllegalArgumentException("not owner");
         }
         return c;
     }
 
-    /** Si alguien espera en esa condicion de este lock. */
+    /** Whether anybody is waiting on that condition of this lock. */
     public boolean hasWaiters(Condition condition) {
-        return this.mia(condition).hayEsperando();
+        return this.ownCondition(condition).anyWaiting();
     }
 
-    /** Cuantos esperan en esa condicion de este lock. */
+    /** How many are waiting on that condition of this lock. */
     public int getWaitQueueLength(Condition condition) {
-        return this.mia(condition).cuantosEsperan();
+        return this.ownCondition(condition).waitingCount();
     }
 
-    /** Los hilos que esperan en esa condicion de este lock. */
+    /** The threads waiting on that condition of this lock. */
     protected java.util.Collection<Thread> getWaitingThreads(Condition condition) {
-        return this.mia(condition).losQueEsperan();
+        return this.ownCondition(condition).theWaiters();
     }
 
     public final int getQueueLength() {
@@ -341,21 +348,21 @@ public class ReentrantLock implements Lock, Serializable {
     // Re-acquire the lock after an await, restoring the saved reentrant count.
     void reacquire(int holds) {
         Thread me = Thread.currentThread();
-        boolean interrumpido = false;
+        boolean wasInterrupted = false;
         synchronized (sync) {
             if (owner != me) {
                 while (owner != null) {
                     try {
                         sync.wait();
                     } catch (InterruptedException e) {
-                        interrumpido = true;
+                        wasInterrupted = true;
                     }
                 }
             }
             owner = me;
             holdCount = holds;
         }
-        if (interrumpido) {
+        if (wasInterrupted) {
             Thread.currentThread().interrupt();
         }
     }

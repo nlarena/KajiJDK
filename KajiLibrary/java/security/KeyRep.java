@@ -6,19 +6,19 @@ import java.io.Serializable;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
 
-// La forma en que una clave viaja por serializacion: tipo, algoritmo, formato y bytes.
+// The way a key travels through serialisation: type, algorithm, format and bytes.
 //
-// Existe por un problema real: una `Key` la implementa el proveedor, y serializar el objeto tal
-// cual ataria el flujo a **esa** implementacion. Del otro lado puede no estar. Entonces
-// `writeReplace` de la clave devuelve un `KeyRep` —cuatro datos estandar, ninguno especifico de un
-// proveedor— y al leer, `readResolve` reconstruye la clave con la `KeyFactory` que haya. Es lo que
-// permite que una clave serializada en una VM se lea en otra con otro proveedor.
+// It exists because of a real problem: a `Key` is implemented by the provider, and serialising the
+// object as it is would tie the stream to **that** implementation. On the other side it may not be
+// there. So the `writeReplace` of the key returns a `KeyRep` —four standard data, none specific to
+// a provider— and on reading, `readResolve` rebuilds the key with whatever `KeyFactory` there is.
+// It is what allows a key serialised in one VM to be read in another with another provider.
 //
-// En KajiLibrary la vuelta **no se puede completar**: no hay ningun proveedor de `KeyFactory`
-// registrado, asi que `readResolve` no encuentra con que reconstruir y tira
-// `NotSerializableException` con la causa adentro. Es la respuesta honesta, y ademas es lo que
-// hace el JDK cuando el algoritmo no esta disponible. El dia que haya una `KeyFactory` esto anda
-// sin cambiar nada.
+// In KajiLibrary the way back **cannot be completed**: there is no registered `KeyFactory`
+// provider, so `readResolve` finds nothing to rebuild with and throws `NotSerializableException`
+// with the cause inside. It is the honest answer, and it is also what the JDK does when the
+// algorithm is not available. The day there is a `KeyFactory` this works without anything being
+// changed.
 public class KeyRep implements Serializable {
 
     private final Type type;
@@ -38,11 +38,11 @@ public class KeyRep implements Serializable {
         this.encoded = c;
     }
 
-    // Reconstruye la clave a partir de los cuatro datos.
+    // It rebuilds the key from the four data.
     //
-    // El formato decide que spec usar, y el tipo decide a que fabrica pedirsela. Un tipo `SECRET`
-    // se rechaza directamente: la fabrica que lo resolveria es
-    // `javax.crypto.SecretKeyFactory`, que no existe en esta biblioteca.
+    // The format decides which spec to use, and the type decides which factory to ask for it. A
+    // `SECRET` type is rejected outright: the factory that would resolve it is
+    // `javax.crypto.SecretKeyFactory`, which does not exist in this library.
     protected Object readResolve() throws ObjectStreamException {
         try {
             if (this.type == Type.PUBLIC && this.format.equals("X.509")) {
@@ -70,9 +70,9 @@ public class KeyRep implements Serializable {
         }
     }
 
-    // De que clase de clave se trata. Es lo que decide a que fabrica pedirle la reconstruccion, y
-    // por eso tiene que viajar junto con los bytes: los mismos bytes significan cosas distintas
-    // segun si son de una privada o de una publica.
+    // Which kind of key it is. It is what decides which factory to ask for the rebuilding, and that
+    // is why it has to travel together with the bytes: the same bytes mean different things
+    // depending on whether they are of a private or of a public one.
     public enum Type {
 
         SECRET,

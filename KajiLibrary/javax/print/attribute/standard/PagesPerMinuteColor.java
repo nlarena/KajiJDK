@@ -5,10 +5,10 @@ import javax.print.attribute.IntegerSyntax;
 import javax.print.attribute.PrintServiceAttribute;
 
 /**
- * Cuantas paginas por minuto tira la impresora en color.
+ * How many pages per minute the printer puts out in colour.
  *
- * <p>Casi siempre menos que {@link PagesPerMinute}. Una impresora que no imprime en color no
- * reporta este atributo --no lo reporta en cero-- y eso lo dice {@link ColorSupported}.
+ * <p>Almost always fewer than {@link PagesPerMinute}. A printer that does not print in colour does
+ * not report this attribute --it does not report it as zero-- and {@link ColorSupported} says so.
  */
 public final class PagesPerMinuteColor extends IntegerSyntax implements PrintServiceAttribute {
 
@@ -18,8 +18,10 @@ public final class PagesPerMinuteColor extends IntegerSyntax implements PrintSer
         super(value, 0, Integer.MAX_VALUE);
     }
 
-    /** El {@code instanceof} es lo que impide que un PagesPerMinuteColor de igual a otro atributo
-     * entero con el mismo numero. */
+    /**
+     * The {@code instanceof} is what keeps a PagesPerMinuteColor from being equal to another
+     * integer attribute with the same number.
+     */
     public boolean equals(Object object) {
         return super.equals(object) && object instanceof PagesPerMinuteColor;
     }

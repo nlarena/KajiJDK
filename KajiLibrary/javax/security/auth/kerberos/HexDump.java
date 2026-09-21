@@ -1,21 +1,21 @@
 package javax.security.auth.kerberos;
 
 /**
- * El volcado hexadecimal clasico, en el formato que usa el JDK para los tickets.
+ * The classic hexadecimal dump, in the format the JDK uses for tickets.
  *
- * <p>Cada linea son dieciseis bytes: el desplazamiento en cuatro digitos, dos grupos de ocho bytes
- * separados por tres espacios, y a la derecha los mismos bytes como texto, con un punto por cada uno
- * que no sea imprimible. La ultima linea se rellena con espacios para que el texto quede alineado.
+ * <p>Each line is sixteen bytes: the offset in four digits, two groups of eight bytes separated by
+ * three spaces, and on the right the same bytes as text, with a dot for each one that is not
+ * printable. The last line is padded with spaces so that the text stays aligned.
  */
 final class HexDump {
 
-    /** Los digitos hexadecimales, en mayusculas como los escribe el JDK. */
+    /** The hexadecimal digits, in upper case as the JDK writes them. */
     private static final char[] DIGITS = "0123456789ABCDEF".toCharArray();
 
     private HexDump() {
     }
 
-    /** El volcado, con un salto de linea al final de cada linea. */
+    /** The dump, with a line break at the end of each line. */
     static String dump(byte[] bytes) {
         StringBuilder text = new StringBuilder();
         int offset = 0;
@@ -51,7 +51,7 @@ final class HexDump {
         return text.toString();
     }
 
-    /** Dos digitos. */
+    /** Two digits. */
     private static void appendHex(StringBuilder text, int value) {
         text.append(DIGITS[(value >> 4) & 0xF]).append(DIGITS[value & 0xF]);
     }

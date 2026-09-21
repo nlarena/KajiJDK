@@ -1,49 +1,49 @@
 package org.w3c.dom.html;
 
 /**
- * Un `<script>`.
+ * A `<script>`.
  */
 public interface HTMLScriptElement extends HTMLElement {
 
-    /** El texto que se muestra. */
+    /** The text that is shown. */
     String getText();
 
-    /** Fija el texto que se muestra. */
+    /** It sets the text that is shown. */
     void setText(String text);
 
-    /** El atributo `htmlFor`. */
+    /** The `htmlFor` attribute. */
     String getHtmlFor();
 
-    /** Fija el atributo `htmlFor`. */
+    /** It sets the `htmlFor` attribute. */
     void setHtmlFor(String htmlFor);
 
-    /** El atributo `event`. */
+    /** The `event` attribute. */
     String getEvent();
 
-    /** Fija el atributo `event`. */
+    /** It sets the `event` attribute. */
     void setEvent(String event);
 
-    /** La codificacion del destino. */
+    /** The encoding of the destination. */
     String getCharset();
 
-    /** Fija la codificacion del destino. */
+    /** It sets the encoding of the destination. */
     void setCharset(String charset);
 
-    /** El atributo `defer`. */
+    /** The `defer` attribute. */
     boolean getDefer();
 
-    /** Fija el atributo `defer`. */
+    /** It sets the `defer` attribute. */
     void setDefer(boolean defer);
 
-    /** El origen. */
+    /** The source. */
     String getSrc();
 
-    /** Fija el origen. */
+    /** It sets the source. */
     void setSrc(String src);
 
-    /** El tipo del control. */
+    /** The type of the control. */
     String getType();
 
-    /** Fija el tipo del control. */
+    /** It sets the type of the control. */
     void setType(String type);
 }

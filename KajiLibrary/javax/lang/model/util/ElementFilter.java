@@ -16,35 +16,35 @@ import javax.lang.model.element.TypeElement;
 import javax.lang.model.element.VariableElement;
 
 /**
- * KajiLibrary's javax.lang.model.util.ElementFilter — quedarse con los miembros de una clase.
+ * KajiLibrary's javax.lang.model.util.ElementFilter — keeping the members of a class.
  *
- * <p>{@link javax.lang.model.element.Element#getEnclosedElements()} devuelve
- * `List&lt;? extends Element&gt;`: los campos, los metodos, los constructores y los tipos anidados
- * mezclados y tipados con el supertipo comun. Casi ningun procesador quiere esa lista. Quiere "los
- * campos", y los quiere como `VariableElement` para poder preguntarles
- * {@link VariableElement#getConstantValue()} sin castear a mano en cada iteracion.
+ * <p>{@link javax.lang.model.element.Element#getEnclosedElements()} returns
+ * `List&lt;? extends Element&gt;`: the fields, the methods, the constructors and the nested types
+ * mixed and typed with the common supertype. Almost no processor wants that list. It wants "the
+ * fields", and wants them as `VariableElement` to be able to ask them
+ * {@link VariableElement#getConstantValue()} without casting by hand in each iteration.
  *
- * <p>Eso es todo lo que hace esta clase, y por eso son veinte metodos que se parecen: cada uno filtra
- * por un juego de {@link ElementKind} y castea al subtipo que ese juego garantiza. El filtro va por
- * **kind y no por `instanceof`** porque el kind es la pregunta correcta: una constante de enum y un
- * campo son los dos `VariableElement`, y `fieldsIn` los quiere a los dos, pero un parametro tambien es
- * `VariableElement` y no es un campo. `instanceof` no sabe distinguirlos; el kind si.
+ * <p>That is all this class does, and that is why there are twenty methods that look alike: each
+ * one filters by a set of {@link ElementKind}s and casts to the subtype that set guarantees. The
+ * filter goes by **kind and not by `instanceof`** because the kind is the right question: an enum
+ * constant and a field are both `VariableElement`s, and `fieldsIn` wants both, but a parameter is
+ * also a `VariableElement` and is not a field. `instanceof` cannot tell them apart; the kind can.
  *
- * <p>Cada filtro viene en dos formas, y la diferencia importa: la que toma `Iterable` devuelve
- * `List` --lo normal, sobre `getEnclosedElements()`--; la que toma `Set` devuelve `Set` y **conserva
- * el orden de iteracion** del conjunto de entrada, para que filtrar un `LinkedHashSet` no lo
- * desordene.
+ * <p>Each filter comes in two forms, and the difference matters: the one taking an `Iterable`
+ * returns a `List` --the normal one, over `getEnclosedElements()`--; the one taking a `Set` returns
+ * a `Set` and **keeps the iteration order** of the input set, so that filtering a `LinkedHashSet`
+ * does not scramble it.
  */
 public class ElementFilter {
 
-    // Constructor privado: son todos metodos estaticos y una instancia no significaria nada.
+    // Private constructor: they are all static methods and an instance would mean nothing.
     private ElementFilter() {
     }
 
     private static final Set<ElementKind> CONSTRUCTOR_KIND =
             Collections.unmodifiableSet(EnumSet.of(ElementKind.CONSTRUCTOR));
 
-    // Una constante de enum es un campo para el lenguaje, asi que `fieldsIn` la incluye.
+    // An enum constant is a field for the language, so `fieldsIn` includes it.
     private static final Set<ElementKind> FIELD_KINDS =
             Collections.unmodifiableSet(EnumSet.of(ElementKind.FIELD, ElementKind.ENUM_CONSTANT));
 
@@ -57,9 +57,9 @@ public class ElementFilter {
     private static final Set<ElementKind> MODULE_KIND =
             Collections.unmodifiableSet(EnumSet.of(ElementKind.MODULE));
 
-    // Los cinco kinds que declaran un tipo. Un `@interface` es ANNOTATION_TYPE y no INTERFACE, y un
-    // registro es RECORD y no CLASS: si no estuvieran los cinco, `typesIn` se saltearia declaraciones
-    // que son tipos.
+    // The five kinds that declare a type. An `@interface` is ANNOTATION_TYPE and not INTERFACE, and
+    // a record is RECORD and not CLASS: if the five were not there, `typesIn` would skip
+    // declarations that are types.
     private static final Set<ElementKind> TYPE_KINDS =
             Collections.unmodifiableSet(EnumSet.of(ElementKind.CLASS, ElementKind.ENUM,
                     ElementKind.INTERFACE, ElementKind.RECORD, ElementKind.ANNOTATION_TYPE));
@@ -67,80 +67,84 @@ public class ElementFilter {
     private static final Set<ElementKind> RECORD_COMPONENT_KIND =
             Collections.unmodifiableSet(EnumSet.of(ElementKind.RECORD_COMPONENT));
 
-    /** Los campos y las constantes de enum. */
+    /** The fields and the enum constants. */
     public static List<VariableElement> fieldsIn(Iterable<? extends Element> elements) {
         return listFilter(elements, FIELD_KINDS, VariableElement.class);
     }
 
-    /** Los campos y las constantes de enum, conservando el orden del conjunto. */
+    /** The fields and the enum constants, keeping the set's order. */
     public static Set<VariableElement> fieldsIn(Set<? extends Element> elements) {
         return setFilter(elements, FIELD_KINDS, VariableElement.class);
     }
 
-    /** Los componentes de registro. */
+    /** The record components. */
     public static List<RecordComponentElement> recordComponentsIn(
             Iterable<? extends Element> elements) {
         return listFilter(elements, RECORD_COMPONENT_KIND, RecordComponentElement.class);
     }
 
-    /** Los componentes de registro, conservando el orden del conjunto. */
+    /** The record components, keeping the set's order. */
     public static Set<RecordComponentElement> recordComponentsIn(Set<? extends Element> elements) {
         return setFilter(elements, RECORD_COMPONENT_KIND, RecordComponentElement.class);
     }
 
-    /** Los constructores. No incluye los inicializadores, que tienen su propio kind. */
+    /** The constructors. It does not include the initializers, which have their own kind. */
     public static List<ExecutableElement> constructorsIn(Iterable<? extends Element> elements) {
         return listFilter(elements, CONSTRUCTOR_KIND, ExecutableElement.class);
     }
 
-    /** Los constructores, conservando el orden del conjunto. */
+    /** The constructors, keeping the set's order. */
     public static Set<ExecutableElement> constructorsIn(Set<? extends Element> elements) {
         return setFilter(elements, CONSTRUCTOR_KIND, ExecutableElement.class);
     }
 
-    /** Los metodos. Ni constructores ni inicializadores, aunque los tres sean `ExecutableElement`. */
+    /**
+     * The methods. Neither constructors nor initializers, although all three are
+     * `ExecutableElement`s.
+     */
     public static List<ExecutableElement> methodsIn(Iterable<? extends Element> elements) {
         return listFilter(elements, METHOD_KIND, ExecutableElement.class);
     }
 
-    /** Los metodos, conservando el orden del conjunto. */
+    /** The methods, keeping the set's order. */
     public static Set<ExecutableElement> methodsIn(Set<? extends Element> elements) {
         return setFilter(elements, METHOD_KIND, ExecutableElement.class);
     }
 
-    /** Las clases, enums, interfaces, registros y tipos de anotacion. */
+    /** The classes, enums, interfaces, records and annotation types. */
     public static List<TypeElement> typesIn(Iterable<? extends Element> elements) {
         return listFilter(elements, TYPE_KINDS, TypeElement.class);
     }
 
-    /** Los tipos, conservando el orden del conjunto. */
+    /** The types, keeping the set's order. */
     public static Set<TypeElement> typesIn(Set<? extends Element> elements) {
         return setFilter(elements, TYPE_KINDS, TypeElement.class);
     }
 
-    /** Los paquetes. */
+    /** The packages. */
     public static List<PackageElement> packagesIn(Iterable<? extends Element> elements) {
         return listFilter(elements, PACKAGE_KIND, PackageElement.class);
     }
 
-    /** Los paquetes, conservando el orden del conjunto. */
+    /** The packages, keeping the set's order. */
     public static Set<PackageElement> packagesIn(Set<? extends Element> elements) {
         return setFilter(elements, PACKAGE_KIND, PackageElement.class);
     }
 
-    /** Los modulos. */
+    /** The modules. */
     public static List<ModuleElement> modulesIn(Iterable<? extends Element> elements) {
         return listFilter(elements, MODULE_KIND, ModuleElement.class);
     }
 
-    /** Los modulos, conservando el orden del conjunto. */
+    /** The modules, keeping the set's order. */
     public static Set<ModuleElement> modulesIn(Set<? extends Element> elements) {
         return setFilter(elements, MODULE_KIND, ModuleElement.class);
     }
 
-    // El cast va por `Class.cast` y no por `(E)`: el borrado haria que un cast escrito no se
-    // comprobara aca sino recien donde el llamador use el elemento, y ahi el ClassCastException
-    // apuntaria al lugar equivocado. `Class.cast` falla en el filtro, que es donde esta el error.
+    // The cast goes through `Class.cast` and not `(E)`: erasure would make a written cast be
+    // checked not here but only where the caller uses the element, and there the ClassCastException
+    // would point at the wrong place. `Class.cast` fails in the filter, which is where the error
+    // is.
     private static <E extends Element> List<E> listFilter(Iterable<? extends Element> elements,
             Set<ElementKind> targetKinds, Class<E> clazz) {
         List<E> list = new ArrayList<E>();
@@ -152,8 +156,8 @@ public class ElementFilter {
         return list;
     }
 
-    // `LinkedHashSet` y no `HashSet`: el contrato promete conservar el orden de iteracion de la
-    // entrada, y eso es justamente lo que un HashSet perderia.
+    // `LinkedHashSet` and not `HashSet`: the contract promises to keep the input's iteration order,
+    // and that is exactly what a HashSet would lose.
     private static <E extends Element> Set<E> setFilter(Set<? extends Element> elements,
             Set<ElementKind> targetKinds, Class<E> clazz) {
         Set<E> set = new LinkedHashSet<E>();
@@ -165,43 +169,43 @@ public class ElementFilter {
         return set;
     }
 
-    /** Las directivas `exports` de un modulo. */
+    /** A module's `exports` directives. */
     public static List<ModuleElement.ExportsDirective> exportsIn(
             Iterable<? extends ModuleElement.Directive> directives) {
         return listFilter(directives, ModuleElement.DirectiveKind.EXPORTS,
                 ModuleElement.ExportsDirective.class);
     }
 
-    /** Las directivas `opens`. */
+    /** The `opens` directives. */
     public static List<ModuleElement.OpensDirective> opensIn(
             Iterable<? extends ModuleElement.Directive> directives) {
         return listFilter(directives, ModuleElement.DirectiveKind.OPENS,
                 ModuleElement.OpensDirective.class);
     }
 
-    /** Las directivas `provides`. */
+    /** The `provides` directives. */
     public static List<ModuleElement.ProvidesDirective> providesIn(
             Iterable<? extends ModuleElement.Directive> directives) {
         return listFilter(directives, ModuleElement.DirectiveKind.PROVIDES,
                 ModuleElement.ProvidesDirective.class);
     }
 
-    /** Las directivas `requires`. */
+    /** The `requires` directives. */
     public static List<ModuleElement.RequiresDirective> requiresIn(
             Iterable<? extends ModuleElement.Directive> directives) {
         return listFilter(directives, ModuleElement.DirectiveKind.REQUIRES,
                 ModuleElement.RequiresDirective.class);
     }
 
-    /** Las directivas `uses`. */
+    /** The `uses` directives. */
     public static List<ModuleElement.UsesDirective> usesIn(
             Iterable<? extends ModuleElement.Directive> directives) {
         return listFilter(directives, ModuleElement.DirectiveKind.USES,
                 ModuleElement.UsesDirective.class);
     }
 
-    // Las directivas se filtran por igualdad de kind y no por un conjunto: cada una de las cinco
-    // tiene exactamente un kind, y un `==` sobre un enum dice lo mismo sin construir nada.
+    // The directives are filtered by kind equality and not by a set: each of the five has exactly
+    // one kind, and an `==` on an enum says the same without building anything.
     private static <D extends ModuleElement.Directive> List<D> listFilter(
             Iterable<? extends ModuleElement.Directive> directives,
             ModuleElement.DirectiveKind directiveKind, Class<D> clazz) {

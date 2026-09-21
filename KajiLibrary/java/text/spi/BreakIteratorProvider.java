@@ -5,40 +5,41 @@ import java.util.Locale;
 import java.util.spi.LocaleServiceProvider;
 
 /**
- * KajiLibrary's java.text.spi.BreakIteratorProvider -- donde se puede cortar un texto.
+ * KajiLibrary's java.text.spi.BreakIteratorProvider -- where a text may be cut.
  *
- * <p>Los cuatro metodos son cuatro preguntas distintas, y la que casi siempre se necesita es la que
- * menos se usa:
+ * <p>The four methods are four different questions, and the one almost always needed is the one
+ * least used:
  *
  * <ul>
- *   <li><b>character</b> -- limites de <b>caracter percibido</b>, que no es lo mismo que un
- *       {@code char} ni que un punto de codigo: una vocal con tilde combinante, o un emoji con
- *       modificador de tono de piel, son varios puntos de codigo y un solo caracter para quien lee.
- *       Es el que hay que usar para mover un cursor o cortar una cadena sin partir un simbolo.
- *   <li><b>word</b> -- limites de palabra. En japones o tailandes no hay espacios, asi que esto es
- *       de verdad dependiente del idioma y no se puede aproximar con un {@code split}.
- *   <li><b>line</b> -- donde se <b>permite</b> cortar una linea. No corta: dice donde se podria.
- *   <li><b>sentence</b> -- limites de oracion, que no es "cortar en el punto": un punto en una
- *       abreviatura no termina nada.
+ *   <li><b>character</b> -- the boundaries of a <b>perceived character</b>, which is neither a
+ *       {@code char} nor a code point: a vowel with a combining accent, or an emoji with a skin-tone
+ *       modifier, are several code points and one single character to whoever reads them. It is the
+ *       one to use for moving a cursor or cutting a string without splitting a symbol.
+ *   <li><b>word</b> -- word boundaries. Japanese and Thai have no spaces, so this is genuinely
+ *       language-dependent and cannot be approximated with a {@code split}.
+ *   <li><b>line</b> -- where a line <b>may</b> be broken. It does not break: it says where one
+ *       could.
+ *   <li><b>sentence</b> -- sentence boundaries, which is not "cut at the full stop": a full stop in
+ *       an abbreviation ends nothing.
  * </ul>
  *
- * <p>Un proveedor que devuelva null para un local que declaro soportar rompe el contrato; para los
- * que no soporta, el runtime ni siquiera lo llama.
+ * <p>A provider returning null for a locale it declared it supports breaks the contract; for the
+ * ones it does not support, the runtime does not even call it.
  */
 public abstract class BreakIteratorProvider extends LocaleServiceProvider {
 
     protected BreakIteratorProvider() {
     }
 
-    /** Limites de palabra. Ver la nota de la clase: en varios idiomas no hay espacios. */
+    /** Word boundaries. See the class's note: several languages have no spaces. */
     public abstract BreakIterator getWordInstance(Locale locale);
 
-    /** Donde se <b>permite</b> cortar una linea. No corta por si mismo. */
+    /** Where a line <b>may</b> be broken. It does not break by itself. */
     public abstract BreakIterator getLineInstance(Locale locale);
 
-    /** Limites de caracter percibido, que no es un {@code char}. Ver la nota de la clase. */
+    /** The boundaries of a perceived character, which is not a {@code char}. See the class's note. */
     public abstract BreakIterator getCharacterInstance(Locale locale);
 
-    /** Limites de oracion, teniendo en cuenta las abreviaturas. */
+    /** Sentence boundaries, taking abbreviations into account. */
     public abstract BreakIterator getSentenceInstance(Locale locale);
 }

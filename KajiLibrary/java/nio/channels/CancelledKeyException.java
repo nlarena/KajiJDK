@@ -1,17 +1,18 @@
 package java.nio.channels;
 
 /**
- * KajiLibrary's java.nio.channels.CancelledKeyException — Se uso una clave de seleccion que ya habia sido cancelada.
+ * KajiLibrary's java.nio.channels.CancelledKeyException — a selection key that had been cancelled
+ * already was used.
  *
- * <p>Una clave cancelada sigue siendo un objeto valido --se la puede tener en la mano-- pero ya
- * no representa un registro vivo. Que tirar sea lo correcto y no devolver un valor neutro: la
- * clave se cancelo porque alguien lo pidio, y seguir usandola es el error.
+ * <p>A cancelled key goes on being a valid object --it can be held in the hand-- but it no longer
+ * represents a live registration. That throwing is right and not returning a neutral value: the key
+ * was cancelled because somebody asked for it, and going on using it is the mistake.
  */
 public class CancelledKeyException extends IllegalStateException {
 
     private static final long serialVersionUID = 1000000004L;
 
-    /** Construye una. Sin mensaje: el nombre de la clase **es** el mensaje. */
+    /** Builds one. With no message: the name of the class **is** the message. */
     public CancelledKeyException() {
         super();
     }

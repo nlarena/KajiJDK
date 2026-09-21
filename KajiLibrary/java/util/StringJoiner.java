@@ -47,7 +47,11 @@ public final class StringJoiner {
             throw new NullPointerException();
         }
         if (other.value != null) {
-            prepare().append(other.value.toString());
+            // `other.value` already carries the other joiner's PREFIX -- `prepare()` writes it in
+            // on the first add. Merging takes the content and not the border: the JDK documents
+            // merge as adding the other's contents "without prefix and suffix", so appending
+            // `other.value` whole put a stray `<` in the middle of this joiner.
+            prepare().append(other.value.toString().substring(other.prefix.length()));
         }
         return this;
     }

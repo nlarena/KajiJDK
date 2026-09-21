@@ -31,41 +31,45 @@ import javax.swing.event.ListSelectionEvent;
 import javax.swing.event.ListSelectionListener;
 
 /**
- * La lista que se despliega de un combo.
+ * The list that drops down from a combo box.
  *
- * <h2>Es un menu desplegable, y eso resuelve el problema dificil</h2>
+ * <h2>It is a popup menu, and that solves the hard problem</h2>
  *
- * <p>Hereda de {@link JPopupMenu} y no de {@code JPanel}, y no es un detalle de herencia: un menu
- * desplegable sabe salirse de los limites de su ventana. Una lista que fuera un panel comun quedaria
- * recortada por el borde del dialogo, que es justo donde suelen estar los combos.
+ * <p>It inherits from {@link JPopupMenu} and not from {@code JPanel}, and it is not a detail of
+ * inheritance: a popup menu knows how to go outside its window's bounds. A list that was an
+ * ordinary panel would end up clipped by the dialog's edge, which is just where combo boxes
+ * usually are.
  *
- * <h2>Ocho pilas de escuchas</h2>
+ * <h2>Eight piles of listeners</h2>
  *
- * <p>Hay dos juegos: los que van en el <em>combo</em> --mouse, movimiento, teclado-- y los que van
- * en la <em>lista</em>. Los primeros existen porque apretar el boton del combo, arrastrar hacia
- * abajo y soltar sobre un item es un solo gesto que empieza afuera de la lista; ver la nota de
- * {@link ComboPopup}.
+ * <p>There are two sets: those that go on the <em>combo box</em> -- mouse, motion, keyboard --
+ * and those that go on the <em>list</em>. The first exist because pressing the combo box's
+ * button, dragging downwards and releasing over an item is a single gesture that starts outside
+ * the list; see {@link ComboPopup}'s note.
  *
- * <h2>El desplazamiento automatico</h2>
+ * <h2>The automatic scrolling</h2>
  *
- * <p>Arrastrar mas alla del borde de la lista la hace correr sola: {@link #startAutoScrolling} pone
- * un reloj que llama a {@link #autoScrollUp} o {@link #autoScrollDown} cada tanto. Sin eso, elegir
- * un item que no se ve requeriria soltar, correr la barra, y volver a empezar.
+ * <p>Dragging beyond the list's edge makes it scroll by itself:
+ * {@link #startAutoScrolling} sets a timer that calls {@link #autoScrollUp} or
+ * {@link #autoScrollDown} every so often. Without that, choosing an item that is not seen would
+ * require releasing, moving the bar, and starting again.
  *
- * <h2>El alto de la lista lo decide la cantidad de filas visibles</h2>
+ * <h2>The list's height is decided by the number of visible rows</h2>
  *
- * <p>{@link #getPopupHeightForRowCount} suma el alto de las primeras {@code maxRowCount} filas. Si
- * hay menos items que eso, el sobrante se completa con el alto de la ultima fila -- de modo que un
- * combo con dos items y un maximo de ocho igual reserva ocho renglones --.
+ * <p>{@link #getPopupHeightForRowCount} adds up the height of the first {@code maxRowCount}
+ * rows. If there are fewer items than that, the remainder is filled in with the last row's
+ * height -- so that a combo box with two items and a maximum of eight reserves eight lines all
+ * the same --.
  *
- * <h2>Lo que queda dicho</h2>
+ * <h2>What is left said</h2>
  *
- * <p>Mostrar la lista de verdad --{@link #show}-- necesita una ventana. El calculo de donde iria
- * ({@link #computePopupBounds}) esta y se puede probar; lo que no se puede es ver la lista abierta.
+ * <p>Really showing the list -- {@link #show} -- needs a window. The computation of where it
+ * would go ({@link #computePopupBounds}) is there and can be tested; what cannot be done is
+ * seeing the list open.
  */
 public class BasicComboPopup extends JPopupMenu implements ComboPopup {
 
-    /** Los dos sentidos del desplazamiento automatico. */
+    /** The two directions of the automatic scrolling. */
     protected static final int SCROLL_UP = 0;
 
     /** Ver {@link #SCROLL_UP}. */
@@ -75,7 +79,7 @@ public class BasicComboPopup extends JPopupMenu implements ComboPopup {
     protected JList list;
     protected JScrollPane scroller;
 
-    /** Si el valor esta a mitad de camino de cambiar; ver {@link #updateListBoxSelectionForEvent}. */
+    /** Whether the value is halfway to changing; see {@link #updateListBoxSelectionForEvent}. */
     protected boolean valueIsAdjusting = false;
 
     protected MouseMotionListener mouseMotionListener;
@@ -93,7 +97,7 @@ public class BasicComboPopup extends JPopupMenu implements ComboPopup {
     protected boolean isAutoScrolling = false;
     protected int scrollDirection = SCROLL_UP;
 
-    /** Para ese combo; arma la lista, la ventana de desplazamiento y todos los escuchas. */
+    /** For that combo box; it builds the list, the scroll viewport and all the listeners. */
     public BasicComboPopup(JComboBox combo) {
         super();
         setName("ComboPopup.popup");
@@ -121,7 +125,7 @@ public class BasicComboPopup extends JPopupMenu implements ComboPopup {
         installKeyboardActions();
     }
 
-    /** Muestra la lista debajo del combo; ver la nota de la clase. */
+    /** It shows the list below the combo box; see the class note. */
     public void show() {
         Dimension popupSize = comboBox.getSize();
         popupSize.setSize(popupSize.width,
@@ -175,7 +179,7 @@ public class BasicComboPopup extends JPopupMenu implements ComboPopup {
         return keyListener;
     }
 
-    /** Suelta todo lo que este objeto engancho en el combo y en su modelo. */
+    /** It lets go of everything this object hooked into the combo box and into its model. */
     public void uninstallingUI() {
         if (propertyChangeListener != null) {
             comboBox.removePropertyChangeListener(propertyChangeListener);
@@ -245,12 +249,12 @@ public class BasicComboPopup extends JPopupMenu implements ComboPopup {
         return new Handler(this);
     }
 
-    /** La lista de adentro; una sola seleccion, y sin foco propio. */
+    /** The list inside; a single selection, and with no focus of its own. */
     protected JList createList() {
-        return new ListaDelCombo(comboBox);
+        return new ComboList(comboBox);
     }
 
-    /** La deja lista: modelo, dibujante, colores y fuente salen del combo. */
+    /** It gets it ready: model, renderer, colours and typeface come from the combo box. */
     protected void configureList() {
         list.setFont(comboBox.getFont());
         list.setForeground(comboBox.getForeground());
@@ -258,10 +262,10 @@ public class BasicComboPopup extends JPopupMenu implements ComboPopup {
         list.setSelectionForeground(new javax.swing.plaf.ColorUIResource(51, 51, 51));
         list.setSelectionBackground(new javax.swing.plaf.ColorUIResource(163, 184, 204));
         list.setBorder(null);
-        // Por una variable suelta: llamar con el resultado de `getRenderer()` directo no compila
-        // en esta VM cuando el tipo trae comodines. Ver el hallazgo #517.
-        javax.swing.ListCellRenderer dibujante = comboBox.getRenderer();
-        list.setCellRenderer(dibujante);
+        // Through a separate variable: calling with the result of `getRenderer()` directly does
+                // not compile on this VM when the type brings wildcards. See finding #517.
+        javax.swing.ListCellRenderer renderer = comboBox.getRenderer();
+        list.setCellRenderer(renderer);
         list.setFocusable(false);
         list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         int selectedIndex = comboBox.getSelectedIndex();
@@ -286,7 +290,7 @@ public class BasicComboPopup extends JPopupMenu implements ComboPopup {
         }
     }
 
-    /** La ventana de desplazamiento que envuelve la lista. */
+    /** The scroll viewport that wraps the list. */
     protected JScrollPane createScroller() {
         JScrollPane sp = new JScrollPane(list,
                 ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED,
@@ -295,14 +299,14 @@ public class BasicComboPopup extends JPopupMenu implements ComboPopup {
         return sp;
     }
 
-    /** Sin foco y sin borde: el borde lo pone la ventana emergente. */
+    /** With no focus and no border: the border is set by the popup window. */
     protected void configureScroller() {
         scroller.setFocusable(false);
         scroller.getVerticalScrollBar().setFocusable(false);
         scroller.setBorder(null);
     }
 
-    /** Deja la ventana emergente lista: borde, acomodador y la lista adentro. */
+    /** It gets the popup window ready: border, layout and the list inside. */
     protected void configurePopup() {
         setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
         setBorderPainted(true);
@@ -313,7 +317,7 @@ public class BasicComboPopup extends JPopupMenu implements ComboPopup {
         setFocusable(false);
     }
 
-    /** Engancha lo que va en el combo, no en la lista. */
+    /** It hooks what goes on the combo box, not on the list. */
     protected void installComboBoxListeners() {
         if (propertyChangeListener != null) {
             comboBox.addPropertyChangeListener(propertyChangeListener);
@@ -337,7 +341,7 @@ public class BasicComboPopup extends JPopupMenu implements ComboPopup {
         return false;
     }
 
-    /** Arranca el desplazamiento automatico; ver la nota de la clase. */
+    /** It starts the automatic scrolling; see the class note. */
     protected void startAutoScrolling(int direction) {
         if (isAutoScrolling) {
             autoscrollTimer.stop();
@@ -345,7 +349,7 @@ public class BasicComboPopup extends JPopupMenu implements ComboPopup {
         isAutoScrolling = true;
         scrollDirection = direction;
         if (autoscrollTimer == null) {
-            autoscrollTimer = new Timer(100, new RelojDeDesplazamiento(this));
+            autoscrollTimer = new Timer(100, new ScrollTimer(this));
         }
         if (direction == SCROLL_UP) {
             autoScrollUp();
@@ -362,7 +366,7 @@ public class BasicComboPopup extends JPopupMenu implements ComboPopup {
         }
     }
 
-    /** Corre la lista una fila para arriba. */
+    /** It scrolls the list one row up. */
     protected void autoScrollUp() {
         int index = list.getSelectedIndex();
         if (index > 0) {
@@ -371,7 +375,7 @@ public class BasicComboPopup extends JPopupMenu implements ComboPopup {
         }
     }
 
-    /** Y para abajo. */
+    /** And down. */
     protected void autoScrollDown() {
         int index = list.getSelectedIndex();
         int lastItem = list.getModel().getSize() - 1;
@@ -381,7 +385,7 @@ public class BasicComboPopup extends JPopupMenu implements ComboPopup {
         }
     }
 
-    /** Abre si esta cerrada y cierra si esta abierta. */
+    /** It opens if it is closed and closes if it is open. */
     protected void togglePopup() {
         if (isVisible()) {
             hide();
@@ -390,7 +394,7 @@ public class BasicComboPopup extends JPopupMenu implements ComboPopup {
         }
     }
 
-    /** Le pasa el foco al combo, o a su editor si es editable. */
+    /** It passes the focus to the combo box, or to its editor if it is editable. */
     protected void delegateFocus(MouseEvent e) {
         if (comboBox.isEditable()) {
             Component editor = comboBox.getEditor().getEditorComponent();
@@ -404,7 +408,7 @@ public class BasicComboPopup extends JPopupMenu implements ComboPopup {
         }
     }
 
-    /** Traduce un evento del combo a las coordenadas de la lista. */
+    /** It translates an event of the combo box into the list's coordinates. */
     protected MouseEvent convertMouseEvent(MouseEvent e) {
         Point convertedPoint = SwingUtilities.convertPoint((Component) e.getSource(),
                 e.getPoint(), list);
@@ -415,10 +419,11 @@ public class BasicComboPopup extends JPopupMenu implements ComboPopup {
     }
 
     /**
-     * Cuanto alto ocupan esas filas; ver la nota de la clase.
+     * How much height those rows take up; see the class note.
      *
-     * <p>Si hay menos items que filas pedidas, el resto se completa con el alto de la ultima: un
-     * combo de dos items y maximo ocho igual reserva ocho renglones.
+     * <p>If there are fewer items than the rows asked for, the rest is filled in with the last
+     * one's height: a combo box of two items and a maximum of eight reserves eight lines all the
+     * same.
      */
     protected int getPopupHeightForRowCount(int maxRowCount) {
         int currentElementCount = comboBox.getModel().getSize();
@@ -437,12 +442,12 @@ public class BasicComboPopup extends JPopupMenu implements ComboPopup {
         return height + insets.top + insets.bottom;
     }
 
-    /** Donde iria la lista; debajo del combo, del mismo ancho. */
+    /** Where the list would go; below the combo box, the same width. */
     protected Rectangle computePopupBounds(int px, int py, int pw, int ph) {
         return new Rectangle(px, py, pw, ph);
     }
 
-    /** Elige en la lista el item que quedo debajo del mouse. */
+    /** It chooses in the list the item that ended up under the mouse. */
     protected void updateListBoxSelectionForEvent(MouseEvent anEvent, boolean shouldScroll) {
         Point location = anEvent.getPoint();
         if (list == null) {
@@ -476,31 +481,33 @@ public class BasicComboPopup extends JPopupMenu implements ComboPopup {
         super.firePopupMenuCanceled();
     }
 
-    /** Sin contexto de accesibilidad: ver la nota general del paquete. */
+    /** With no accessibility context: see the package's general note. */
     public javax.accessibility.AccessibleContext getAccessibleContext() {
         return null;
     }
 
     /**
-     * La lista de adentro.
+     * The list inside.
      *
-     * <p>Lo unico propio es que no se puede enfocar y que su ancho preferido es el del combo: sin
-     * eso, un item largo haria una lista mas ancha que el combo del que cuelga.
+     * <p>The only thing of its own is that it cannot be focused and that its preferred width is
+     * the combo box's: without that, a long item would make a list wider than the combo box it
+     * hangs from.
      */
-    private static class ListaDelCombo extends JList<Object> {
+    private static class ComboList extends JList<Object> {
 
-        ListaDelCombo(JComboBox combo) {
-            // El modelo se pone despues y no en el `super(...)`: pasarle ahi el del combo, que
-            // llega con comodines, no compila en esta VM. Ver el hallazgo #519.
+        ComboList(JComboBox combo) {
+            // The model is set afterwards and not in the `super(...)`: passing it the combo box's
+                        // there, which arrives with wildcards, does not compile on this VM. See
+                        // finding #519.
             super();
-            javax.swing.ListModel modelo = combo.getModel();
-            setModel(modelo);
+            javax.swing.ListModel model = combo.getModel();
+            setModel(model);
             setFocusable(false);
         }
 
         public void processMouseEvent(MouseEvent e) {
             if (e.isControlDown()) {
-                // Control en una lista de una sola seleccion no tiene sentido; se ignora.
+                // Control in a single-selection list makes no sense; it is ignored.
                 e = new MouseEvent((Component) e.getSource(), e.getID(), e.getWhen(),
                         e.getModifiersEx() ^ MouseEvent.CTRL_DOWN_MASK, e.getX(), e.getY(),
                         e.getXOnScreen(), e.getYOnScreen(), e.getClickCount(),
@@ -510,12 +517,12 @@ public class BasicComboPopup extends JPopupMenu implements ComboPopup {
         }
     }
 
-    /** El reloj del desplazamiento automatico. */
-    private static class RelojDeDesplazamiento implements java.awt.event.ActionListener {
+    /** The automatic scrolling's timer. */
+    private static class ScrollTimer implements java.awt.event.ActionListener {
 
         private final BasicComboPopup popup;
 
-        RelojDeDesplazamiento(BasicComboPopup popup) {
+        ScrollTimer(BasicComboPopup popup) {
             this.popup = popup;
         }
 
@@ -529,10 +536,11 @@ public class BasicComboPopup extends JPopupMenu implements ComboPopup {
     }
 
     /**
-     * El que escucha todo: el mouse en el combo, el mouse en la lista, las propiedades y los items.
+     * The one that listens to everything: the mouse on the combo box, the mouse on the list, the
+     * properties and the items.
      *
-     * <p>Uno solo por lo mismo que en los otros UI: todos reaccionan al mismo estado --si la lista
-     * esta abierta y por donde anda el mouse--.
+     * <p>A single one for the same reason as in the other looks and feels: they all react to the
+     * same state -- whether the list is open and where the mouse is --.
      */
     private static class Handler implements MouseListener, MouseMotionListener,
             PropertyChangeListener, ItemListener, ListSelectionListener, ListDataListener {
@@ -630,18 +638,18 @@ public class BasicComboPopup extends JPopupMenu implements ComboPopup {
         public void propertyChange(PropertyChangeEvent e) {
             String propertyName = e.getPropertyName();
             if ("model".equals(propertyName)) {
-                ComboBoxModel viejo = (ComboBoxModel) e.getOldValue();
-                ComboBoxModel nuevo = (ComboBoxModel) e.getNewValue();
-                popup.uninstallComboBoxModelListeners(viejo);
-                popup.installComboBoxModelListeners(nuevo);
-                javax.swing.ListModel modeloNuevo = nuevo;
-                popup.list.setModel(modeloNuevo);
+                ComboBoxModel old = (ComboBoxModel) e.getOldValue();
+                ComboBoxModel newValue = (ComboBoxModel) e.getNewValue();
+                popup.uninstallComboBoxModelListeners(old);
+                popup.installComboBoxModelListeners(newValue);
+                javax.swing.ListModel newModel = newValue;
+                popup.list.setModel(newModel);
                 if (popup.isVisible()) {
                     popup.hide();
                 }
             } else if ("renderer".equals(propertyName)) {
-                javax.swing.ListCellRenderer nuevoDibujante = popup.comboBox.getRenderer();
-                popup.list.setCellRenderer(nuevoDibujante);
+                javax.swing.ListCellRenderer newRenderer = popup.comboBox.getRenderer();
+                popup.list.setCellRenderer(newRenderer);
                 if (popup.isVisible()) {
                     popup.hide();
                 }
@@ -670,7 +678,7 @@ public class BasicComboPopup extends JPopupMenu implements ComboPopup {
         }
     }
 
-    /** Deja la lista mostrando el item elegido en el combo. */
+    /** It leaves the list showing the item chosen in the combo box. */
     private void setListSelection(int selectedIndex) {
         if (selectedIndex == -1) {
             list.clearSelection();

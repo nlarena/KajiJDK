@@ -1,7 +1,8 @@
 package java.sql;
 
 /**
- * KajiLibrary's java.sql.SQLTransientConnectionException -- La conexion fallo por algo momentaneo; volver a conectar puede funcionar.
+ * KajiLibrary's java.sql.SQLTransientConnectionException -- the connection failed for something
+ * momentary; connecting again may work.
  */
 public class SQLTransientConnectionException extends SQLTransientException {
 

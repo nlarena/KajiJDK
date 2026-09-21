@@ -1,18 +1,18 @@
 package java.rmi;
 
 /**
- * KajiLibrary's java.rmi.ServerRuntimeException -- el servidor tiro una excepcion no comprobada.
+ * KajiLibrary's java.rmi.ServerRuntimeException -- the server threw an unchecked exception.
  *
- * <p>Obsoleta desde 1.2. Antes, una {@link RuntimeException} del metodo remoto se envolvia aca; ahora
- * se propaga al cliente <b>tal cual</b>, sin envolver.
+ * <p>Deprecated since 1.2. Before that, a {@link RuntimeException} from the remote method was
+ * wrapped here; now it propagates to the client <b>as is</b>, unwrapped.
  *
- * <p>El cambio fue a mejor y vale entender por que: envolverla obligaba al cliente a desenvolver para
- * poder atrapar lo que le interesaba, y perdia la posibilidad de escribir un {@code catch} del tipo
- * concreto. Como una excepcion no comprobada significa lo mismo de los dos lados --alguien programo
- * mal-- no hay razon para traducirla, a diferencia de un {@link Error}, que si tiene
+ * <p>The change was for the better and it is worth understanding why: wrapping it forced the client
+ * to unwrap in order to catch what it cared about, and it lost the ability to write a {@code catch}
+ * for the concrete type. Since an unchecked exception means the same thing on both sides --someone
+ * programmed badly-- there is no reason to translate it, unlike an {@link Error}, which does have
  * {@link ServerError}.
  *
- * <p>Se mantiene para que el codigo viejo compile.
+ * <p>It is kept so that old code compiles.
  */
 @Deprecated
 public class ServerRuntimeException extends RemoteException {
@@ -20,8 +20,8 @@ public class ServerRuntimeException extends RemoteException {
     private static final long serialVersionUID = 7054464920481467219L;
 
     /**
-     * @param s el mensaje
-     * @param ex la original
+     * @param s the message
+     * @param ex the original
      */
     @Deprecated
     public ServerRuntimeException(String s, Exception ex) {

@@ -13,21 +13,22 @@ import java.lang.classfile.constantpool.NameAndTypeEntry;
 import java.lang.classfile.constantpool.Utf8Entry;
 import java.lang.constant.ClassDesc;
 
-// El pool de las entradas sueltas.
+// The pool of the loose entries.
 //
-// Buena parte de las fábricas públicas de `java.lang.classfile` reciben un `String`, un `int` o un
-// `ClassDesc` en vez de una entrada de pool —`AnnotationValue.ofString("hola")`,
-// `TypeCheckInstruction.of(CHECKCAST, CD_String)`— y tienen que devolver un objeto que YA tenga su
-// entrada. Esa entrada sale de acá. El JDK hace exactamente lo mismo con su `TemporaryConstantPool`.
+// A good part of the public factories of `java.lang.classfile` receive a `String`, an `int` or a
+// `ClassDesc` instead of a pool entry --`AnnotationValue.ofString("hello")`,
+// `TypeCheckInstruction.of(CHECKCAST, CD_String)`-- and have to return an object that ALREADY has
+// its entry. That entry comes from here. The JDK does exactly the same with its
+// `TemporaryConstantPool`.
 //
-// Lo que hay que tener presente, y es la única consecuencia visible: una entrada de este pool
-// pertenece a este pool y no al de la clase que se esté escribiendo, así que `entry.constantPool()`
-// no va a ser el pool destino y el escritor tiene que adoptarla. `ConstantPoolBuilderImpl` ya lo
-// hace con toda entrada ajena, así que no hace falta nada más de parte de quien la usa.
+// What has to be kept in mind, and it is the only visible consequence: an entry of this pool
+// belongs to this pool and not to that of the class being written, so `entry.constantPool()` is not
+// going to be the destination pool and the writer has to adopt it. `ConstantPoolBuilderImpl`
+// already does so with every foreign entry, so nothing more is needed from whoever uses it.
 //
-// El pool dedup lica por valor, así que pedir mil veces `"hola"` no lo hace crecer; pedir un millón
-// de textos distintos sí, y a los 65535 índices tira. Es el mismo techo que tiene cualquier `.class`
-// y nadie llega ahí fabricando constantes sueltas, pero conviene que esté dicho.
+// The pool deduplicates by value, so asking a thousand times for `"hello"` does not make it grow;
+// asking for a million different texts does, and at 65535 indices it throws. It is the same ceiling
+// any `.class` has and nobody gets there making loose constants, but it is as well that it be said.
 public final class TemporaryConstantPool {
 
     private static final ConstantPoolBuilder POOL = ConstantPoolBuilder.of();
@@ -35,12 +36,12 @@ public final class TemporaryConstantPool {
     private TemporaryConstantPool() {
     }
 
-    /** El pool en sí, para quien necesite una entrada que no tenga atajo acá. */
+    /** The pool itself, for whoever needs an entry that has no shortcut here. */
     public static ConstantPoolBuilder pool() {
         return POOL;
     }
 
-    /** Un `CONSTANT_Utf8` suelto. */
+    /** A loose `CONSTANT_Utf8`. */
     public static Utf8Entry utf8(String s) {
         if (s == null) {
             throw new NullPointerException("utf8");
@@ -50,7 +51,7 @@ public final class TemporaryConstantPool {
         }
     }
 
-    /** Un `CONSTANT_Class` suelto. */
+    /** A loose `CONSTANT_Class`. */
     public static ClassEntry classEntry(ClassDesc d) {
         if (d == null) {
             throw new NullPointerException("clase");
@@ -60,63 +61,63 @@ public final class TemporaryConstantPool {
         }
     }
 
-    /** Un `CONSTANT_Class` suelto con este nombre interno. */
+    /** A loose `CONSTANT_Class` with this internal name. */
     public static ClassEntry classEntry(Utf8Entry name) {
         synchronized (POOL) {
             return POOL.classEntry(name);
         }
     }
 
-    /** Un `CONSTANT_NameAndType` suelto. */
+    /** A loose `CONSTANT_NameAndType`. */
     public static NameAndTypeEntry nameAndType(Utf8Entry name, Utf8Entry type) {
         synchronized (POOL) {
             return POOL.nameAndTypeEntry(name, type);
         }
     }
 
-    /** Un `CONSTANT_Fieldref` suelto. */
+    /** A loose `CONSTANT_Fieldref`. */
     public static FieldRefEntry fieldRef(ClassEntry owner, NameAndTypeEntry nat) {
         synchronized (POOL) {
             return POOL.fieldRefEntry(owner, nat);
         }
     }
 
-    /** Un `CONSTANT_Methodref` suelto. */
+    /** A loose `CONSTANT_Methodref`. */
     public static MethodRefEntry methodRef(ClassEntry owner, NameAndTypeEntry nat) {
         synchronized (POOL) {
             return POOL.methodRefEntry(owner, nat);
         }
     }
 
-    /** Un `CONSTANT_InterfaceMethodref` suelto. */
+    /** A loose `CONSTANT_InterfaceMethodref`. */
     public static InterfaceMethodRefEntry interfaceMethodRef(ClassEntry owner, NameAndTypeEntry nat) {
         synchronized (POOL) {
             return POOL.interfaceMethodRefEntry(owner, nat);
         }
     }
 
-    /** Un `CONSTANT_Integer` suelto. */
+    /** A loose `CONSTANT_Integer`. */
     public static IntegerEntry intEntry(int value) {
         synchronized (POOL) {
             return POOL.intEntry(value);
         }
     }
 
-    /** Un `CONSTANT_Long` suelto. */
+    /** A loose `CONSTANT_Long`. */
     public static LongEntry longEntry(long value) {
         synchronized (POOL) {
             return POOL.longEntry(value);
         }
     }
 
-    /** Un `CONSTANT_Float` suelto. */
+    /** A loose `CONSTANT_Float`. */
     public static FloatEntry floatEntry(float value) {
         synchronized (POOL) {
             return POOL.floatEntry(value);
         }
     }
 
-    /** Un `CONSTANT_Double` suelto. */
+    /** A loose `CONSTANT_Double`. */
     public static DoubleEntry doubleEntry(double value) {
         synchronized (POOL) {
             return POOL.doubleEntry(value);

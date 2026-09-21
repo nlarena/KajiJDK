@@ -4,39 +4,40 @@ import java.net.URI;
 import java.util.List;
 
 /**
- * La parte de un {@link HttpExchange} que solo se lee: metodo, URI y encabezados.
+ * The part of an {@link HttpExchange} that is only read: method, URI and headers.
  *
- * <h2>Para que sirve separar esto del intercambio</h2>
+ * <h2>What separating this from the exchange is for</h2>
  *
- * <p>Para poder <strong>reescribir un pedido sin tocar la conexion</strong>. {@link #with} devuelve
- * una vista con un encabezado cambiado, y eso alcanza para que un filtro normalice, agregue o
- * corrija algo antes de que lo vea el manejador — sin que exista forma de escribir la respuesta por
- * accidente desde ahi.
+ * <p>For being able to <strong>rewrite a request without touching the connection</strong>.
+ * {@link #with} returns a view with one header changed, and that is enough for a filter to
+ * normalize, add or correct something before the handler sees it -- with no way of writing the
+ * response by accident from there.
  *
- * <p>Es tambien lo que reciben los predicados de {@link HttpHandlers#handleOrElse}: elegir manejador
- * es una decision que solo mira el pedido, y darle el intercambio entero seria darle de mas.
+ * <p>It is also what the predicates of {@link HttpHandlers#handleOrElse} receive: choosing a
+ * handler is a decision that only looks at the request, and giving it the whole exchange would
+ * be giving it too much.
  */
 public interface Request {
 
-    /** La URI pedida. */
+    /** The requested URI. */
     URI getRequestURI();
 
-    /** El metodo HTTP. */
+    /** The HTTP method. */
     String getRequestMethod();
 
-    /** Los encabezados del pedido. */
+    /** The request's headers. */
     Headers getRequestHeaders();
 
     /**
-     * Una vista de este pedido con {@code headerName} puesto en {@code headerValues}.
+     * A view of this request with {@code headerName} set to {@code headerValues}.
      *
-     * <p>El pedido original no cambia: lo que se devuelve es otra vista. Es lo que hace que un
-     * filtro pueda ajustar lo que ve el manejador sin efectos sobre nada mas.
+     * <p>The original request does not change: what is returned is another view. It is what allows
+     * a filter to adjust what the handler sees with no effect on anything else.
      */
     default Request with(String headerName, List<String> headerValues) {
         Request original = this;
-        Headers combinados = new Headers(original.getRequestHeaders());
-        combinados.put(headerName, headerValues);
-        return new RequestReescrito(original, combinados);
+        Headers combined = new Headers(original.getRequestHeaders());
+        combined.put(headerName, headerValues);
+        return new RewrittenRequest(original, combined);
     }
 }

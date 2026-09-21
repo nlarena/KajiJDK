@@ -3,12 +3,12 @@ package javax.management;
 import java.util.Arrays;
 
 /**
- * Una clase de notificacion que el MBean puede emitir.
+ * A notification class the MBean may emit.
  *
- * <p>Ojo con el orden de los argumentos: {@code name} es el nombre de la <b>clase Java</b> de la
- * notificacion --casi siempre {@code javax.management.Notification}-- y los <b>tipos</b>, que son
- * las cadenas con puntos por las que se filtra, van en el primer argumento. Se confunden todo el
- * tiempo porque el nombre util para un cliente es el tipo, no la clase.
+ * <p>Careful with the order of the arguments: {@code name} is the name of the notification's
+ * <b>Java class</b> --almost always {@code javax.management.Notification}-- and the <b>types</b>,
+ * which are the dotted strings one filters by, go in the first argument. They get mixed up all the
+ * time because the useful name for a client is the type, not the class.
  */
 public class MBeanNotificationInfo extends MBeanFeatureInfo implements Cloneable {
 
@@ -19,13 +19,13 @@ public class MBeanNotificationInfo extends MBeanFeatureInfo implements Cloneable
     static final MBeanNotificationInfo[] NO_NOTIFICATIONS = new MBeanNotificationInfo[0];
 
     /**
-     * @serial los tipos que se pueden emitir
+     * @serial the types that can be emitted
      */
     private String[] types;
 
     /**
-     * @param notifTypes los tipos, con la convencion de puntos
-     * @param name el nombre de la clase Java de la notificacion
+     * @param notifTypes the types, with the dotted convention
+     * @param name the name of the notification's Java class
      */
     public MBeanNotificationInfo(String[] notifTypes, String name, String description) {
         this(notifTypes, name, description, null);
@@ -34,24 +34,25 @@ public class MBeanNotificationInfo extends MBeanFeatureInfo implements Cloneable
     public MBeanNotificationInfo(String[] notifTypes, String name, String description,
                                  Descriptor descriptor) {
         super(name, description, descriptor);
-        this.types = notifTypes == null || notifTypes.length == 0 ? NO_TYPES : copia(notifTypes);
+        this.types = notifTypes == null || notifTypes.length == 0 ? NO_TYPES : copy(notifTypes);
     }
 
-    private static String[] copia(String[] s) {
+    private static String[] copy(String[] s) {
         String[] r = new String[s.length];
         System.arraycopy(s, 0, r, 0, s.length);
         return r;
     }
 
     /**
-     * Copia superficial.
+     * Shallow copy.
      *
-     * <p>No devuelve `this` aunque la clase sea inmutable: se comprobo contra el JDK y ahi la
-     * copia es un objeto <b>distinto</b>. Igual por `equals`, distinto por identidad.
+     * <p>It does not return {@code this} even though the class is immutable: it was checked against
+     * the JDK and there the copy is a <b>different</b> object. Equal by {@code equals}, different
+     * by identity.
      *
-     * <p>Traga la `CloneNotSupportedException` y devuelve `null` en vez de propagarla, como el
-     * JDK: la clase implementa `Cloneable`, asi que no puede ocurrir, y declararla obligaria a
-     * atajarla a todo el que llame.
+     * <p>It swallows the {@code CloneNotSupportedException} and returns {@code null} instead of
+     * propagating it, as the JDK does: the class implements {@code Cloneable}, so it cannot happen,
+     * and declaring it would force every caller to catch it.
      */
     public Object clone() {
         try {
@@ -61,14 +62,14 @@ public class MBeanNotificationInfo extends MBeanFeatureInfo implements Cloneable
         }
     }
 
-    /** Los tipos, copiados. */
+    /** The types, copied. */
     public String[] getNotifTypes() {
-        return copia(types);
+        return copy(types);
     }
 
     public String toString() {
         return getClass().getName() + "[description=" + getDescription() + ", name=" + getName()
-                + ", notifTypes=" + MBeanInfo.aTexto(types)
+                + ", notifTypes=" + MBeanInfo.asText(types)
                 + ", descriptor=" + getDescriptor() + "]";
     }
 
@@ -80,8 +81,8 @@ public class MBeanNotificationInfo extends MBeanFeatureInfo implements Cloneable
             return false;
         }
         MBeanNotificationInfo p = (MBeanNotificationInfo) o;
-        return igual(p.getName(), getName())
-                && igual(p.getDescription(), getDescription())
+        return same(p.getName(), getName())
+                && same(p.getDescription(), getDescription())
                 && p.getDescriptor().equals(getDescriptor())
                 && Arrays.equals(p.types, types);
     }

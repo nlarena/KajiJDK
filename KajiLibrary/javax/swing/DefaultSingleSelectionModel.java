@@ -8,25 +8,25 @@ import javax.swing.event.ChangeListener;
 import javax.swing.event.EventListenerList;
 
 /**
- * Un {@link SingleSelectionModel} guardado en un entero.
+ * A {@link SingleSelectionModel} kept in an integer.
  *
- * <p>Todo el modelo es ese entero y la lista de quienes escuchan. El evento se arma una sola vez y
- * se reusa: no lleva datos -- solo dice "algo cambio" -- asi que reservar uno por aviso seria
- * gastar por nada.
+ * <p>The whole model is that integer and the list of those who listen. The event is built once
+ * and reused: it carries no data -- it only says "something changed" -- so reserving one per
+ * notice would be spending for nothing.
  */
 public class DefaultSingleSelectionModel implements SingleSelectionModel, Serializable {
 
-    private static final int NADA = -1;
+    private static final int NONE = -1;
 
-    /** El unico evento; ver la nota de la clase. */
+    /** The single event; see the class note. */
     protected transient ChangeEvent changeEvent = null;
 
-    /** Quienes escuchan. */
+    /** Those who listen. */
     protected EventListenerList listenerList = new EventListenerList();
 
-    private int index = NADA;
+    private int index = NONE;
 
-    /** Un modelo sin nada elegido. */
+    /** A model with nothing chosen. */
     public DefaultSingleSelectionModel() {
     }
 
@@ -34,7 +34,7 @@ public class DefaultSingleSelectionModel implements SingleSelectionModel, Serial
         return index;
     }
 
-    /** Elige ese indice; solo avisa si de verdad cambio. */
+    /** It chooses that index; it only gives notice if it really changed. */
     public void setSelectedIndex(int index) {
         if (this.index != index) {
             this.index = index;
@@ -43,11 +43,11 @@ public class DefaultSingleSelectionModel implements SingleSelectionModel, Serial
     }
 
     public void clearSelection() {
-        setSelectedIndex(NADA);
+        setSelectedIndex(NONE);
     }
 
     public boolean isSelected() {
-        return getSelectedIndex() != NADA;
+        return getSelectedIndex() != NONE;
     }
 
     public void addChangeListener(ChangeListener l) {

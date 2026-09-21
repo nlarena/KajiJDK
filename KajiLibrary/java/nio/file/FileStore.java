@@ -4,69 +4,66 @@ import java.io.IOException;
 import java.nio.file.attribute.FileAttributeView;
 import java.nio.file.attribute.FileStoreAttributeView;
 
-// El volumen donde viven los archivos: una particion, un disco, un montaje.
+// The volume files live on: a partition, a disk, a mount.
 //
-// **KajiJDK no construye ninguno, y conviene decir por que.** De los once miembros, ocho piden datos
-// que ningun nativo de `jdk.internal.io.Fs` devuelve: el nombre del volumen, su tipo, si esta
-// montado de solo lectura, el espacio total, el usable y el sin asignar. Una implementacion tendria
-// que devolver `""` y `0`, y un `0` en `getUsableSpace()` no es "no se" -- es "no entra nada", que
-// es una respuesta concreta y falsa, del tipo que hace que un programa decida no escribir.
+// This header used to say KajiJDK builds none of these, and that `Files.getFileStore` and
+// `FileSystem.getFileStores()` therefore throw. {@link KajiFileStore} is the subclass, in this same
+// package, and both of those methods answer: `Fs.diskTotal`/`diskUsable`/`diskUnallocated` arrived
+// and the three spaces are real.
 //
-// Por eso `Files.getFileStore` y `FileSystem.getFileStores()` **existen pero levantan
-// `UnsupportedOperationException`**, y esta clase queda abstracta y sin subclase. La clase vale
-// igual: es el tipo que esas firmas nombran, y el dia que haya un nativo de estadisticas de volumen
-// lo unico que falta es la subclase.
+// What is still not known is the volume's type and whether it is mounted read-only -- see
+// `KajiFileStore`, which answers `"unknown"` and `false` and says why neither is a guess.
 public abstract class FileStore {
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected FileStore() {
     }
 
-    /** El nombre del volumen. Su forma depende del sistema; puede no ser unico. */
+    /** The volume's name. Its form is system dependent; it may not be unique. */
     public abstract String name();
 
-    /** El tipo del sistema de archivos: `"ntfs"`, `"ext4"`, `"tmpfs"`. */
+    /** The filesystem's type: `"ntfs"`, `"ext4"`, `"tmpfs"`. */
     public abstract String type();
 
-    /** Si esta montado de solo lectura. */
+    /** Whether it is mounted read-only. */
     public abstract boolean isReadOnly();
 
-    /** El tamaño total, en bytes. */
+    /** The total size, in bytes. */
     public abstract long getTotalSpace() throws IOException;
 
     /**
-     * Los bytes que esta VM puede usar de verdad.
+     * The bytes this VM can really use.
      *
-     * <p>Es distinto de `getUnallocatedSpace()` y la diferencia importa: este descuenta las cuotas y
-     * el espacio reservado para root, aquel no. Sigue siendo una estimacion -- entre que se pregunta
-     * y que se escribe, otro proceso puede haberlo ocupado.
+     * <p>It is different from `getUnallocatedSpace()` and the difference matters: this one
+     * discounts the quotas and the space reserved for root, that one does not. It is still an
+     * estimate -- between the asking and the writing, another process may have taken it.
      */
     public abstract long getUsableSpace() throws IOException;
 
-    /** Los bytes libres sin descontar cuotas ni reservas. */
+    /** The free bytes without discounting quotas or reservations. */
     public abstract long getUnallocatedSpace() throws IOException;
 
     /**
-     * El tamaño del bloque.
+     * The block size.
      *
-     * <p>Concreto y no abstracto: la spec le da un valor por omision --fallar-- para no romper las
-     * implementaciones anteriores a que existiera.
+     * <p>Concrete and not abstract: the spec gives it a default --failing-- so as not to break the
+     * implementations that predate its existence.
      *
-     * @throws UnsupportedOperationException si el volumen no lo sabe
+     * @throws UnsupportedOperationException if the volume does not know it
      */
     public long getBlockSize() throws IOException {
         throw new UnsupportedOperationException();
     }
 
-    /** Si el volumen soporta una vista de atributos de archivo, por tipo. */
+    /** Whether the volume supports a file attribute view, by type. */
     public abstract boolean supportsFileAttributeView(Class<? extends FileAttributeView> type);
 
-    /** Lo mismo, por nombre de vista (`"basic"`, `"posix"`, ...). */
+    /** The same, by view name (`"basic"`, `"posix"`, ...). */
     public abstract boolean supportsFileAttributeView(String name);
 
-    /** Una vista de atributos **del volumen**, o `null` si no la soporta. */
+    /** A view of the **volume's** attributes, or `null` if it does not support it. */
     public abstract <V extends FileStoreAttributeView> V getFileStoreAttributeView(Class<V> type);
 
-    /** Un atributo del volumen por su nombre `"vista:atributo"`. */
+    /** A volume attribute by its `"view:attribute"` name. */
     public abstract Object getAttribute(String attribute) throws IOException;
 }

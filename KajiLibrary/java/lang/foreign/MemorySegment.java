@@ -6,408 +6,408 @@ import java.util.Spliterator;
 import java.util.stream.Stream;
 
 /**
- * KajiLibrary's java.lang.foreign.MemorySegment -- una **region de memoria** con un tamanio conocido,
- * sobre la que se lee y se escribe por offset.
+ * KajiLibrary's java.lang.foreign.MemorySegment -- a **region of memory** with a known size, read and
+ * written by offset.
  *
- * <h2>Que hay y que no</h2>
+ * <h2>What is here and what is not</h2>
  *
- * <p><strong>Los segmentos de esta biblioteca viven sobre arreglos de Java.</strong>
- * {@link #ofArray(byte[])} y sus seis hermanos son reales y hacen exactamente lo que dicen; un
- * {@link Arena} tambien entrega segmentos, respaldados por un arreglo elegido segun el alineamiento
- * que se le pida. Lo que no hay es memoria **fuera** del heap: esta VM no reserva ni libera memoria
- * del sistema, asi que {@link #isNative()} es `false` para todo lo que se pueda usar.
+ * <p><strong>This library's segments live over Java arrays.</strong> {@link #ofArray(byte[])} and its
+ * six siblings are real and do exactly what they say; an {@link Arena} also hands out segments,
+ * backed by an array chosen according to the alignment asked of it. What there is not is memory
+ * **outside** the heap: this VM neither reserves nor frees system memory, so {@link #isNative()} is
+ * `false` for everything usable.
  *
- * <p>La consecuencia visible, y conviene tenerla presente: un `Arena.ofConfined().allocate(16)` en el
- * JDK da un segmento nativo y aca da uno de heap. Todo lo demas --tamanio, cortes, lectura,
- * escritura, cierre del ambito-- se comporta igual.
+ * <p>The visible consequence, and it is worth keeping in mind: an `Arena.ofConfined().allocate(16)`
+ * gives a native segment in the JDK and a heap one here. Everything else --size, slices, reading,
+ * writing, closing the scope-- behaves the same.
  *
- * <h2>El alineamiento, que es de donde vienen las sorpresas</h2>
+ * <h2>Alignment, which is where the surprises come from</h2>
  *
- * <p>Un segmento sobre un `byte[]` tiene {@link #maxByteAlignment()} igual a **1**, porque la JVM no
- * promete donde cae un arreglo de bytes en memoria. Por eso
- * `segmento.get(ValueLayout.JAVA_INT, 0)` sobre un `byte[]` **falla**, y hay que usar
- * `JAVA_INT_UNALIGNED`. No es una limitacion de esta biblioteca: es lo que hace el JDK, y por eso
- * existen las constantes sin alinear.
+ * <p>A segment over a `byte[]` has {@link #maxByteAlignment()} equal to **1**, because the JVM makes
+ * no promise about where an array of bytes falls in memory. That is why
+ * `segment.get(ValueLayout.JAVA_INT, 0)` over a `byte[]` **fails**, and `JAVA_INT_UNALIGNED` has to
+ * be used. It is not a limitation of this library: it is what the JDK does, and it is why the
+ * unaligned constants exist.
  *
- * <p>Un segmento sobre un `long[]` tiene alineamiento 8 y admite `JAVA_LONG` sin mas.
+ * <p>A segment over a `long[]` has alignment 8 and takes `JAVA_LONG` without further ado.
  *
- * <h2>El ambito</h2>
+ * <h2>The scope</h2>
  *
- * <p>Un segmento pertenece a un {@link Scope}, y cuando el ambito se cierra el segmento deja de
- * poder usarse. Eso es lo que convierte un error de memoria en una excepcion: sin ambito, usar un
- * segmento despues de liberarlo seria comportamiento indefinido, y con el es un
- * `IllegalStateException` con la linea exacta.
+ * <p>A segment belongs to a {@link Scope}, and when the scope closes the segment can no longer be
+ * used. That is what turns a memory error into an exception: without a scope, using a segment after
+ * freeing it would be undefined behaviour, and with one it is an `IllegalStateException` with the
+ * exact line.
  */
 public interface MemorySegment {
 
-    /** Cuantos bytes cubre. */
+    /** How many bytes it covers. */
     long byteSize();
 
     /**
-     * La direccion de este segmento.
+     * This segment's address.
      *
-     * <p>Para uno de heap es el **offset dentro del arreglo** que lo respalda, no una direccion de
-     * memoria: un arreglo de Java se mueve cuando el recolector compacta, asi que no tiene una.
+     * <p>For a heap one it is the **offset inside the array** backing it, not a memory address: a
+     * Java array moves when the collector compacts, so it does not have one.
      */
     long address();
 
-    /** El arreglo que lo respalda, si es de heap. */
+    /** The array backing it, if it is a heap one. */
     Optional<Object> heapBase();
 
     /**
-     * Si vive fuera del heap de Java.
+     * Whether it lives outside Java's heap.
      *
-     * <p>Siempre `false` salvo para {@link #NULL} y los de {@link #ofAddress(long)}, que no tienen
-     * respaldo. Ver la nota de la interfaz.
+     * <p>Always `false` except for {@link #NULL} and the ones from {@link #ofAddress(long)}, which
+     * have no backing. See the interface's note.
      */
     boolean isNative();
 
-    /** Si esta mapeado de un archivo. Siempre `false`: esta VM no mapea archivos. */
+    /** Whether it is mapped from a file. Always `false`: this VM maps no files. */
     boolean isMapped();
 
-    /** Si rechaza las escrituras. */
+    /** Whether it refuses writes. */
     boolean isReadOnly();
 
-    /** El alineamiento maximo que este segmento puede garantizar. */
+    /** The maximum alignment this segment can guarantee. */
     long maxByteAlignment();
 
-    /** El ambito al que pertenece. */
+    /** The scope it belongs to. */
     Scope scope();
 
     /**
-     * Si ese hilo puede usarlo.
+     * Whether that thread can use it.
      *
-     * <p>Siempre `true`: los ambitos de esta biblioteca no son confinados a un hilo. En el JDK un
-     * `Arena.ofConfined()` solo deja usar sus segmentos desde el hilo que lo creo, y ahi esto puede
-     * dar `false`.
+     * <p>Always `true`: this library's scopes are not confined to a thread. In the JDK an
+     * `Arena.ofConfined()` only lets its segments be used from the thread that created it, and there
+     * this can give `false`.
      */
     boolean isAccessibleBy(Thread thread);
 
-    /** El mismo segmento, sin permitir escrituras. */
+    /** The same segment, allowing no writes. */
     MemorySegment asReadOnly();
 
-    /** Desde ese offset hasta el final. */
+    /** From that offset to the end. */
     MemorySegment asSlice(long offset);
 
-    /** Desde ese offset, con ese largo. */
+    /** From that offset, with that length. */
     MemorySegment asSlice(long offset, long newSize);
 
-    /** Desde ese offset, con ese largo y ese alineamiento exigido. */
+    /** From that offset, with that length and that alignment demanded. */
     MemorySegment asSlice(long offset, long newSize, long byteAlignment);
 
-    /** El corte que describe ese layout, desde ese offset. */
+    /** The slice that layout describes, from that offset. */
     MemorySegment asSlice(long offset, MemoryLayout layout);
 
     /**
-     * La parte de `other` que se superpone con este, si se superponen.
+     * The part of `other` overlapping with this one, if they overlap.
      *
-     * <p>Solo tiene sentido entre dos segmentos con el **mismo respaldo**: dos arreglos distintos
-     * nunca se superponen, aunque sus offsets coincidan.
+     * <p>It only makes sense between two segments with the **same backing**: two different arrays
+     * never overlap, even if their offsets coincide.
      */
     Optional<MemorySegment> asOverlappingSlice(MemorySegment other);
 
     /**
-     * El mismo segmento visto con otro tamanio.
+     * The same segment seen with another size.
      *
-     * @throws UnsupportedOperationException en esta biblioteca cuando el segmento no tiene respaldo:
-     *     agrandar un segmento sin memoria detras produciria uno que dice cubrir bytes que nadie
-     *     puede leer, que es exactamente la clase de mentira que este proyecto no escribe.
+     * @throws UnsupportedOperationException in this library when the segment has no backing:
+     *     enlarging a segment with no memory behind it would produce one claiming to cover bytes
+     *     nobody can read, which is exactly the kind of lie this project does not write.
      */
     MemorySegment reinterpret(long newSize);
 
-    /** Ver {@link #reinterpret(long)}. */
+    /** See {@link #reinterpret(long)}. */
     MemorySegment reinterpret(Arena arena, java.util.function.Consumer<MemorySegment> cleanup);
 
-    /** Ver {@link #reinterpret(long)}. */
+    /** See {@link #reinterpret(long)}. */
     MemorySegment reinterpret(long newSize, Arena arena,
             java.util.function.Consumer<MemorySegment> cleanup);
 
-    /** Copia el contenido de `src` al principio de este. */
+    /** It copies `src`'s contents to the start of this one. */
     MemorySegment copyFrom(MemorySegment src);
 
-    /** Escribe ese byte en todo el segmento. */
+    /** It writes that byte over the whole segment. */
     MemorySegment fill(byte value);
 
     /**
-     * El offset del primer byte en que este y `other` difieren, o `-1` si son iguales.
+     * The offset of the first byte where this one and `other` differ, or `-1` if they are equal.
      *
-     * <p>Si uno es prefijo del otro, devuelve el largo del mas corto: ahi es donde "difieren", que es
-     * la respuesta util para comparar.
+     * <p>If one is a prefix of the other, it returns the shorter one's length: that is where they
+     * "differ", which is the useful answer for comparing.
      */
     long mismatch(MemorySegment other);
 
 
-    /** Este segmento como {@link ByteBuffer}. */
+    /** This segment as a {@link ByteBuffer}. */
     ByteBuffer asByteBuffer();
 
-    /** Los elementos de ese layout, como flujo. */
+    /** That layout's elements, as a stream. */
     Stream<MemorySegment> elements(MemoryLayout elementLayout);
 
-    /** Los elementos de ese layout, como spliterator. */
+    /** That layout's elements, as a spliterator. */
     Spliterator<MemorySegment> spliterator(MemoryLayout elementLayout);
 
-    /** Una cadena UTF-8 terminada en cero, desde ese offset. */
+    /** A zero-terminated UTF-8 string, from that offset. */
     String getString(long offset);
 
-    /** Lo mismo, con otro charset. */
+    /** The same, with another charset. */
     String getString(long offset, java.nio.charset.Charset charset);
 
-    /** Escribe una cadena UTF-8 terminada en cero en ese offset. */
+    /** It writes a zero-terminated UTF-8 string at that offset. */
     void setString(long offset, String str);
 
-    /** Lo mismo, con otro charset. */
+    /** The same, with another charset. */
     void setString(long offset, String str, java.nio.charset.Charset charset);
 
-    // ---- las cuatro operaciones de los archivos mapeados -------------------------------------------
+    // ---- the four mapped-file operations ----------------------------------------------------------
     //
-    // Los cuatro existen para un segmento mapeado de un archivo, que esta VM no hace. No se niegan
-    // con una excepcion porque el contrato del JDK ya define que hacer para un segmento que **no**
-    // esta mapeado, y es lo que hacen aca.
+    // All four exist for a segment mapped from a file, which this VM does not do. They do not refuse
+    // with an exception because the JDK's contract already defines what to do for a segment that is
+    // **not** mapped, and that is what they do here.
 
-    /** Si esta cargado en memoria. `false`: no hay mapeo. */
+    /** Whether it is loaded in memory. `false`: there is no mapping. */
     boolean isLoaded();
 
-    /** Sugiere cargarlo. No hace nada: no hay mapeo. */
+    /** It suggests loading it. It does nothing: there is no mapping. */
     void load();
 
-    /** Sugiere descargarlo. No hace nada: no hay mapeo. */
+    /** It suggests unloading it. It does nothing: there is no mapping. */
     void unload();
 
-    /** Fuerza la escritura a disco. No hace nada: no hay mapeo. */
+    /** It forces the write to disk. It does nothing: there is no mapping. */
     void force();
 
-    /** Lee un `boolean` en ese offset. */
+    /** It reads a `boolean` at that offset. */
     boolean get(ValueLayout.OfBoolean layout, long offset);
 
-    /** Escribe un `boolean` en ese offset. */
+    /** It writes a `boolean` at that offset. */
     void set(ValueLayout.OfBoolean layout, long offset, boolean value);
 
-    /** Lee el `boolean` numero `index`: el offset es `index * layout.byteSize()`. */
+    /** It reads `boolean` number `index`: the offset is `index * layout.byteSize()`. */
     boolean getAtIndex(ValueLayout.OfBoolean layout, long index);
 
-    /** Escribe el `boolean` numero `index`. */
+    /** It writes `boolean` number `index`. */
     void setAtIndex(ValueLayout.OfBoolean layout, long index, boolean value);
 
-    /** Lee un `byte` en ese offset. */
+    /** It reads a `byte` at that offset. */
     byte get(ValueLayout.OfByte layout, long offset);
 
-    /** Escribe un `byte` en ese offset. */
+    /** It writes a `byte` at that offset. */
     void set(ValueLayout.OfByte layout, long offset, byte value);
 
-    /** Lee el `byte` numero `index`: el offset es `index * layout.byteSize()`. */
+    /** It reads `byte` number `index`: the offset is `index * layout.byteSize()`. */
     byte getAtIndex(ValueLayout.OfByte layout, long index);
 
-    /** Escribe el `byte` numero `index`. */
+    /** It writes `byte` number `index`. */
     void setAtIndex(ValueLayout.OfByte layout, long index, byte value);
 
-    /** Lee un `char` en ese offset. */
+    /** It reads a `char` at that offset. */
     char get(ValueLayout.OfChar layout, long offset);
 
-    /** Escribe un `char` en ese offset. */
+    /** It writes a `char` at that offset. */
     void set(ValueLayout.OfChar layout, long offset, char value);
 
-    /** Lee el `char` numero `index`: el offset es `index * layout.byteSize()`. */
+    /** It reads `char` number `index`: the offset is `index * layout.byteSize()`. */
     char getAtIndex(ValueLayout.OfChar layout, long index);
 
-    /** Escribe el `char` numero `index`. */
+    /** It writes `char` number `index`. */
     void setAtIndex(ValueLayout.OfChar layout, long index, char value);
 
-    /** Lee un `short` en ese offset. */
+    /** It reads a `short` at that offset. */
     short get(ValueLayout.OfShort layout, long offset);
 
-    /** Escribe un `short` en ese offset. */
+    /** It writes a `short` at that offset. */
     void set(ValueLayout.OfShort layout, long offset, short value);
 
-    /** Lee el `short` numero `index`: el offset es `index * layout.byteSize()`. */
+    /** It reads `short` number `index`: the offset is `index * layout.byteSize()`. */
     short getAtIndex(ValueLayout.OfShort layout, long index);
 
-    /** Escribe el `short` numero `index`. */
+    /** It writes `short` number `index`. */
     void setAtIndex(ValueLayout.OfShort layout, long index, short value);
 
-    /** Lee un `int` en ese offset. */
+    /** It reads an `int` at that offset. */
     int get(ValueLayout.OfInt layout, long offset);
 
-    /** Escribe un `int` en ese offset. */
+    /** It writes an `int` at that offset. */
     void set(ValueLayout.OfInt layout, long offset, int value);
 
-    /** Lee el `int` numero `index`: el offset es `index * layout.byteSize()`. */
+    /** It reads `int` number `index`: the offset is `index * layout.byteSize()`. */
     int getAtIndex(ValueLayout.OfInt layout, long index);
 
-    /** Escribe el `int` numero `index`. */
+    /** It writes `int` number `index`. */
     void setAtIndex(ValueLayout.OfInt layout, long index, int value);
 
-    /** Lee un `long` en ese offset. */
+    /** It reads a `long` at that offset. */
     long get(ValueLayout.OfLong layout, long offset);
 
-    /** Escribe un `long` en ese offset. */
+    /** It writes a `long` at that offset. */
     void set(ValueLayout.OfLong layout, long offset, long value);
 
-    /** Lee el `long` numero `index`: el offset es `index * layout.byteSize()`. */
+    /** It reads `long` number `index`: the offset is `index * layout.byteSize()`. */
     long getAtIndex(ValueLayout.OfLong layout, long index);
 
-    /** Escribe el `long` numero `index`. */
+    /** It writes `long` number `index`. */
     void setAtIndex(ValueLayout.OfLong layout, long index, long value);
 
-    /** Lee un `float` en ese offset. */
+    /** It reads a `float` at that offset. */
     float get(ValueLayout.OfFloat layout, long offset);
 
-    /** Escribe un `float` en ese offset. */
+    /** It writes a `float` at that offset. */
     void set(ValueLayout.OfFloat layout, long offset, float value);
 
-    /** Lee el `float` numero `index`: el offset es `index * layout.byteSize()`. */
+    /** It reads `float` number `index`: the offset is `index * layout.byteSize()`. */
     float getAtIndex(ValueLayout.OfFloat layout, long index);
 
-    /** Escribe el `float` numero `index`. */
+    /** It writes `float` number `index`. */
     void setAtIndex(ValueLayout.OfFloat layout, long index, float value);
 
-    /** Lee un `double` en ese offset. */
+    /** It reads a `double` at that offset. */
     double get(ValueLayout.OfDouble layout, long offset);
 
-    /** Escribe un `double` en ese offset. */
+    /** It writes a `double` at that offset. */
     void set(ValueLayout.OfDouble layout, long offset, double value);
 
-    /** Lee el `double` numero `index`: el offset es `index * layout.byteSize()`. */
+    /** It reads `double` number `index`: the offset is `index * layout.byteSize()`. */
     double getAtIndex(ValueLayout.OfDouble layout, long index);
 
-    /** Escribe el `double` numero `index`. */
+    /** It writes `double` number `index`. */
     void setAtIndex(ValueLayout.OfDouble layout, long index, double value);
 
-    /** Lee una direccion en ese offset, como segmento de largo cero. */
+    /** It reads an address at that offset, as a zero-length segment. */
     MemorySegment get(AddressLayout layout, long offset);
 
-    /** Escribe la direccion de `value` en ese offset. */
+    /** It writes `value`'s address at that offset. */
     void set(AddressLayout layout, long offset, MemorySegment value);
 
-    /** Lee la direccion numero `index`. */
+    /** It reads address number `index`. */
     MemorySegment getAtIndex(AddressLayout layout, long index);
 
-    /** Escribe la direccion numero `index`. */
+    /** It writes address number `index`. */
     void setAtIndex(AddressLayout layout, long index, MemorySegment value);
 
-    /** El contenido como `byte[]`, leido con ese layout. */
+    /** The contents as a `byte[]`, read with that layout. */
     byte[] toArray(ValueLayout.OfByte elementLayout);
 
-    /** El contenido como `char[]`, leido con ese layout. */
+    /** The contents as a `char[]`, read with that layout. */
     char[] toArray(ValueLayout.OfChar elementLayout);
 
-    /** El contenido como `short[]`, leido con ese layout. */
+    /** The contents as a `short[]`, read with that layout. */
     short[] toArray(ValueLayout.OfShort elementLayout);
 
-    /** El contenido como `int[]`, leido con ese layout. */
+    /** The contents as a `int[]`, read with that layout. */
     int[] toArray(ValueLayout.OfInt elementLayout);
 
-    /** El contenido como `long[]`, leido con ese layout. */
+    /** The contents as a `long[]`, read with that layout. */
     long[] toArray(ValueLayout.OfLong elementLayout);
 
-    /** El contenido como `float[]`, leido con ese layout. */
+    /** The contents as a `float[]`, read with that layout. */
     float[] toArray(ValueLayout.OfFloat elementLayout);
 
-    /** El contenido como `double[]`, leido con ese layout. */
+    /** The contents as a `double[]`, read with that layout. */
     double[] toArray(ValueLayout.OfDouble elementLayout);
 
     /**
-     * El segmento nulo: direccion cero, largo cero.
+     * The null segment: address zero, length zero.
      *
-     * <p>Largo cero y no "invalido": es lo que un `NULL` de C **es** -- una direccion que no se puede
-     * leer. Cualquier acceso falla por limites, que es la respuesta correcta.
+     * <p>Length zero and not "invalid": it is what a C `NULL` **is** -- an address that cannot be
+     * read. Any access fails on bounds, which is the right answer.
      */
-    MemorySegment NULL = SegmentoHeap.nulo();
+    MemorySegment NULL = HeapSegment.nullSegment();
 
-    /** Un segmento de largo cero en esa direccion. */
+    /** A zero-length segment at that address. */
     static MemorySegment ofAddress(long address) {
-        return SegmentoHeap.enDireccion(address);
+        return HeapSegment.atAddress(address);
     }
 
-    /** Un segmento sobre un {@link ByteBuffer}. */
+    /** A segment over a {@link ByteBuffer}. */
     static MemorySegment ofBuffer(java.nio.Buffer buffer) {
-        return SegmentoHeap.deBuffer(buffer);
+        return HeapSegment.fromBuffer(buffer);
     }
 
-    /** Un segmento sobre ese arreglo. Alineamiento maximo: 1. */
+    /** A segment over that array. Maximum alignment: 1. */
     static MemorySegment ofArray(byte[] arr) {
-        return SegmentoHeap.deArreglo(arr, 1);
+        return HeapSegment.ofArray0(arr, 1);
     }
 
-    /** Un segmento sobre ese arreglo. Alineamiento maximo: 2. */
+    /** A segment over that array. Maximum alignment: 2. */
     static MemorySegment ofArray(char[] arr) {
-        return SegmentoHeap.deArreglo(arr, 2);
+        return HeapSegment.ofArray0(arr, 2);
     }
 
-    /** Un segmento sobre ese arreglo. Alineamiento maximo: 2. */
+    /** A segment over that array. Maximum alignment: 2. */
     static MemorySegment ofArray(short[] arr) {
-        return SegmentoHeap.deArreglo(arr, 2);
+        return HeapSegment.ofArray0(arr, 2);
     }
 
-    /** Un segmento sobre ese arreglo. Alineamiento maximo: 4. */
+    /** A segment over that array. Maximum alignment: 4. */
     static MemorySegment ofArray(int[] arr) {
-        return SegmentoHeap.deArreglo(arr, 4);
+        return HeapSegment.ofArray0(arr, 4);
     }
 
-    /** Un segmento sobre ese arreglo. Alineamiento maximo: 8. */
+    /** A segment over that array. Maximum alignment: 8. */
     static MemorySegment ofArray(long[] arr) {
-        return SegmentoHeap.deArreglo(arr, 8);
+        return HeapSegment.ofArray0(arr, 8);
     }
 
-    /** Un segmento sobre ese arreglo. Alineamiento maximo: 4. */
+    /** A segment over that array. Maximum alignment: 4. */
     static MemorySegment ofArray(float[] arr) {
-        return SegmentoHeap.deArreglo(arr, 4);
+        return HeapSegment.ofArray0(arr, 4);
     }
 
-    /** Un segmento sobre ese arreglo. Alineamiento maximo: 8. */
+    /** A segment over that array. Maximum alignment: 8. */
     static MemorySegment ofArray(double[] arr) {
-        return SegmentoHeap.deArreglo(arr, 8);
+        return HeapSegment.ofArray0(arr, 8);
     }
 
     /**
-     * El primer byte en que difieren esos dos rangos, relativo al arranque de cada uno.
+     * The first byte where those two ranges differ, relative to each one's start.
      *
-     * <p>Es **estatico** y no de instancia, a diferencia de la version de un argumento, y la razon se
-     * lee en la firma: aca los dos segmentos entran en pie de igualdad, cada uno con su rango. Uno de
-     * los dos no es "este".
+     * <p>It is **static** and not an instance method, unlike the one-argument version, and the reason
+     * reads off the signature: here the two segments come in on an equal footing, each with its own
+     * range. Neither of the two is "this".
      */
     static long mismatch(MemorySegment srcSegment, long srcFromOffset, long srcToOffset,
             MemorySegment dstSegment, long dstFromOffset, long dstToOffset) {
-        return SegmentoHeap.diferenciaEntre(srcSegment, srcFromOffset, srcToOffset, dstSegment,
+        return HeapSegment.differenceBetween(srcSegment, srcFromOffset, srcToOffset, dstSegment,
                 dstFromOffset, dstToOffset);
     }
 
-    /** Copia entre dos segmentos. */
+    /** It copies between two segments. */
     static void copy(MemorySegment srcSegment, long srcOffset, MemorySegment dstSegment,
             long dstOffset, long bytes) {
-        SegmentoHeap.copiar(srcSegment, srcOffset, dstSegment, dstOffset, bytes);
+        HeapSegment.copyRange(srcSegment, srcOffset, dstSegment, dstOffset, bytes);
     }
 
-    /** Copia entre dos segmentos, elemento a elemento segun los layouts. */
+    /** It copies between two segments, element by element according to the layouts. */
     static void copy(MemorySegment srcSegment, ValueLayout srcElementLayout, long srcOffset,
             MemorySegment dstSegment, ValueLayout dstElementLayout, long dstOffset,
             long elementCount) {
-        SegmentoHeap.copiarElementos(srcSegment, srcElementLayout, srcOffset, dstSegment,
+        HeapSegment.copyElements(srcSegment, srcElementLayout, srcOffset, dstSegment,
                 dstElementLayout, dstOffset, elementCount);
     }
 
-    /** Copia de un arreglo de Java a un segmento. */
+    /** It copies from a Java array into a segment. */
     static void copy(Object srcArray, int srcIndex, MemorySegment dstSegment,
             ValueLayout dstLayout, long dstOffset, int elementCount) {
-        SegmentoHeap.copiarDesdeArreglo(srcArray, srcIndex, dstSegment, dstLayout, dstOffset,
+        HeapSegment.copyFromArray(srcArray, srcIndex, dstSegment, dstLayout, dstOffset,
                 elementCount);
     }
 
-    /** Copia de un segmento a un arreglo de Java. */
+    /** It copies from a segment into a Java array. */
     static void copy(MemorySegment srcSegment, ValueLayout srcLayout, long srcOffset,
             Object dstArray, int dstIndex, int elementCount) {
-        SegmentoHeap.copiarAArreglo(srcSegment, srcLayout, srcOffset, dstArray, dstIndex,
+        HeapSegment.copyToArray(srcSegment, srcLayout, srcOffset, dstArray, dstIndex,
                 elementCount);
     }
 
     /**
-     * El ambito de vida de un segmento.
+     * A segment's lifetime scope.
      *
-     * <p>Es lo que convierte un error de memoria en una excepcion: un segmento cuyo ambito se cerro
-     * no se puede usar, y el intento falla con la linea exacta en vez de leer basura.
+     * <p>It is what turns a memory error into an exception: a segment whose scope has closed cannot
+     * be used, and the attempt fails with the exact line instead of reading garbage.
      */
     interface Scope {
 
-        /** Si sigue abierto. */
+        /** Whether it is still open. */
         boolean isAlive();
     }
 }

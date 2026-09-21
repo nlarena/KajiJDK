@@ -1,23 +1,28 @@
 package javax.sql;
 
 /**
- * KajiLibrary's javax.sql.ConnectionPoolDataSource -- de donde salen las conexiones **fisicas**.
+ * KajiLibrary's javax.sql.ConnectionPoolDataSource -- where the **physical** connections come from.
  *
- * <p>La implementa el driver; la usa el pool, no la aplicacion. La aplicacion ve un
- * {@link DataSource} que por dentro va a buscar aca. Esa division es la que permite que el pool lo
- * escriba alguien distinto del driver.
+ * <p>The driver implements it; the pool uses it, not the application. The application sees a
+ * {@link DataSource} that goes looking here underneath. That division is what allows the pool to be
+ * written by someone other than the driver.
  */
 public interface ConnectionPoolDataSource extends CommonDataSource {
 
-    /** Una conexion fisica, con las credenciales configuradas. */
+    /** A physical connection, with the configured credentials. */
     PooledConnection getPooledConnection() throws java.sql.SQLException;
 
-    /** Una conexion fisica con esas credenciales. */
+    /** A physical connection with those credentials. */
     PooledConnection getPooledConnection(String user, String password)
             throws java.sql.SQLException;
 
-    /** Un constructor, para pedir una con mas datos que usuario y clave. */
+    /**
+     * A builder, to ask for one with more data than user and password.
+     *
+     * <p>The JDK's default throws {@code SQLFeatureNotSupportedException}; this one throws
+     * {@code UnsupportedOperationException}, which is unchecked and is not a {@code SQLException}.
+     */
     default PooledConnectionBuilder createPooledConnectionBuilder() throws java.sql.SQLException {
-        throw new UnsupportedOperationException("createPooledConnectionBuilder no esta implementado");
+        throw new UnsupportedOperationException("createPooledConnectionBuilder not implemented");
     }
 }

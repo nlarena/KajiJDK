@@ -1,63 +1,64 @@
 package javax.xml.stream;
 
 /**
- * KajiLibrary's javax.xml.stream.FactoryConfigurationError -- cuando no hay implementacion de StAX
- * que darle al llamador.
+ * KajiLibrary's javax.xml.stream.FactoryConfigurationError -- when there is no StAX implementation
+ * to give the caller.
  *
- * <p>Es un {@link Error} y no una excepcion, y la eleccion tiene sentido: que no exista un parser
- * instalado no es un problema del documento ni de los argumentos, es un despliegue incompleto. No
- * hay nada que el llamador pueda hacer en tiempo de ejecucion para arreglarlo, asi que obligarlo a
- * escribir un {@code catch} solo agregaria ruido. Es la misma decision que
- * {@link javax.xml.transform.TransformerFactoryConfigurationError} para XSLT.
+ * <p>It is an {@link Error} and not an exception, and the choice makes sense: that no parser is
+ * installed is not a problem of the document nor of the arguments, it is an incomplete deployment.
+ * There is nothing the caller can do at run time to fix it, so forcing them to write a {@code
+ * catch} would only add noise. It is the same decision as {@link
+ * javax.xml.transform.TransformerFactoryConfigurationError} for XSLT.
  *
- * <p>En esta biblioteca es el camino normal y no el excepcional: no hay parser de StAX --ver el
- * encabezado de {@link XMLInputFactory}-- asi que las fabricas terminan aca.
+ * <p>In this library it is reached when a configured class cannot be used. (The note said it was
+ * the normal path, because there was no StAX parser here; the package now has its own
+ * implementation and the factories return it.)
  *
- * <h2>Los tres metodos sobrescritos</h2>
+ * <h2>The three overridden methods</h2>
  *
- * <p>{@link #getException} y {@link #getCause} devuelven lo mismo. El primero es de 2004 y el
- * segundo apareció con las causas encadenadas de {@code Throwable}; se mantienen los dos porque hay
- * codigo que llama a cada uno.
+ * <p>{@link #getException} and {@link #getCause} return the same. The first is from 2004 and the
+ * second appeared with {@code Throwable}'s chained causes; both are kept because there is code that
+ * calls each.
  *
- * <p>{@link #getMessage} tiene una cascada que vale explicar: si hay mensaje propio lo devuelve; si
- * no, el de la excepcion envuelta; y si la envuelta tampoco tiene, el nombre de su clase. Sin esa
- * ultima rama, envolver una excepcion sin mensaje --que es lo normal en una
- * {@code ClassNotFoundException} de algunas VMs-- daria un error con mensaje null, que es la traza
- * que no dice nada.
+ * <p>{@link #getMessage} has a cascade worth explaining: if there is a message of its own it
+ * returns it; if not, the wrapped exception's; and if the wrapped one has none either, the name of
+ * its class. Without that last branch, wrapping an exception without a message --which is normal
+ * for a {@code ClassNotFoundException} on some VMs-- would give an error with a null message, which
+ * is the trace that says nothing.
  */
 public class FactoryConfigurationError extends Error {
 
     /**
-     * La excepcion que causo esto, si la hubo.
+     * The exception that caused this, if there was one.
      *
-     * <p>Sin modificador, como en el original: no es parte de la API publica, pero {@code getCause}
-     * y {@code getMessage} la leen.
+     * <p>Without a modifier, as in the original: it is not part of the public API, but {@code
+     * getCause} and {@code getMessage} read it.
      */
     Exception nested;
 
-    /** Sin mensaje ni causa. */
+    /** Without message nor cause. */
     public FactoryConfigurationError() {
         super();
     }
 
     /**
-     * Envolviendo la excepcion que impidio construir la fabrica.
+     * Wrapping the exception that prevented building the factory.
      *
-     * @param e la excepcion de mas adentro
+     * @param e the inner exception
      */
     public FactoryConfigurationError(Exception e) {
         nested = e;
     }
 
     /**
-     * Con causa y mensaje, en ese orden.
+     * With cause and message, in that order.
      *
-     * <p>Que existan las dos variantes de orden --esta y
-     * {@link #FactoryConfigurationError(String, Exception)}-- es historia, no diseño: quedaron las
-     * dos por compatibilidad y hacen exactamente lo mismo.
+     * <p>That both orders exist --this one and {@link #FactoryConfigurationError(String,
+     * Exception)}-- is history, not design: both remained for compatibility and do exactly the
+     * same.
      *
-     * @param e la excepcion de mas adentro
-     * @param msg el mensaje
+     * @param e the inner exception
+     * @param msg the message
      */
     public FactoryConfigurationError(Exception e, String msg) {
         super(msg);
@@ -65,10 +66,10 @@ public class FactoryConfigurationError extends Error {
     }
 
     /**
-     * Con mensaje y causa, en ese orden.
+     * With message and cause, in that order.
      *
-     * @param msg el mensaje
-     * @param e la excepcion de mas adentro
+     * @param msg the message
+     * @param e the inner exception
      */
     public FactoryConfigurationError(String msg, Exception e) {
         super(msg);
@@ -76,36 +77,37 @@ public class FactoryConfigurationError extends Error {
     }
 
     /**
-     * Con mensaje solo.
+     * With a message only.
      *
-     * @param msg el mensaje
+     * @param msg the message
      */
     public FactoryConfigurationError(String msg) {
         super(msg);
     }
 
     /**
-     * La excepcion envuelta, o null.
+     * The wrapped exception, or null.
      *
-     * @return la de mas adentro
+     * @return the inner one
      */
     public Exception getException() {
         return nested;
     }
 
     /**
-     * Lo mismo que {@link #getException}, con el nombre que usa {@code Throwable}.
+     * The same as {@link #getException}, with the name {@code Throwable} uses.
      *
-     * @return la de mas adentro
+     * @return the inner one
      */
     public Throwable getCause() {
         return nested;
     }
 
     /**
-     * El mensaje propio; si no hay, el de la envuelta; si tampoco, el nombre de su clase.
+     * Its own message; if there is none, the wrapped one's; if not that either, the name of its
+     * class.
      *
-     * @return el mensaje, que puede ser null solo si no hay ni mensaje ni causa
+     * @return the message, which can be null only if there is neither message nor cause
      */
     public String getMessage() {
         String msg = super.getMessage();

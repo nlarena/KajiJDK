@@ -134,10 +134,12 @@ final class CharsetRegistry {
 /**
  * An immutable {@link SortedMap} from canonical name to {@link Charset}.
  *
- * <p>Written here rather than reusing {@code TreeMap} for one blunt reason: this library's
- * {@code TreeMap} implements {@code Map} and not {@code SortedMap}, and {@link
- * Charset#availableCharsets} is specified to return the latter. Nine entries in two parallel
- * arrays, already in order, is also simply the right shape for a map that never changes.
+ * <p>Written here rather than reusing {@code TreeMap}. This note gave as the reason that this
+ * library's {@code TreeMap} implements {@code Map} and not {@code SortedMap}, while {@link
+ * Charset#availableCharsets} is specified to return the latter. That is not true: {@code TreeMap}
+ * is declared to implement {@code NavigableMap}, which is a {@code SortedMap}. What does hold is
+ * that nine entries in two parallel arrays, already in order, is simply the right shape for a map
+ * that never changes.
  *
  * <p>Every mutator throws, which is the unmodifiability the JDK promises for this map.
  */
@@ -365,9 +367,9 @@ final class CharsetNameMap implements SortedMap<String, Charset> {
     /**
      * The same entries in the opposite order.
      *
-     * <p>El retorno se estrecha a `SortedMap` porque `SortedMap.reversed()` ahora lo declara asi
-     * (§8.4.8.3: un override puede estrechar el retorno, no ensancharlo). Antes decia
-     * `SequencedMap`, que era el retorno del abuelo y dejo de alcanzar.
+     * <p>The return type narrows to `SortedMap` because `SortedMap.reversed()` now declares it that
+     * way (§8.4.8.3: an override may narrow the return type, not widen it). It used to say
+     * `SequencedMap`, which was the grandparent's return type and stopped being enough.
      */
     public SortedMap<String, Charset> reversed() {
         int n = this.names.length;
@@ -383,11 +385,12 @@ final class CharsetNameMap implements SortedMap<String, Charset> {
     }
 
     /**
-     * Los valores de este mapa.
+     * The values of this map.
      *
-     * <p>**Divergencia deliberada**, la misma que ya declara `keySet()`: la del JDK es una *vista*
-     * respaldada por el mapa; esta es una copia sacada en el momento. Y a diferencia de `keySet()`
-     * es una `Collection` y no un `Set`, porque los valores **si** pueden repetirse.
+     * <p>**Divergence**: the JDK's is a *view* backed by the map; this one is a copy taken at the
+     * moment. This javadoc called it the same divergence `keySet()` already declares; `keySet()` is
+     * a copy too, but its javadoc does not say so. And unlike `keySet()` it is a `Collection` and
+     * not a `Set`, because values **can** repeat.
      */
     public java.util.Collection<Charset> values() {
         java.util.ArrayList<Charset> out = new java.util.ArrayList<Charset>();
@@ -399,11 +402,12 @@ final class CharsetNameMap implements SortedMap<String, Charset> {
     }
 
     /**
-     * Los pares de este mapa.
+     * The pairs of this map.
      *
-     * <p>Misma divergencia que `values()`: copia, no vista. Los pares que devuelve son inmutables,
-     * asi que `setValue` sobre uno de ellos lanza en vez de escribir en el mapa — que es lo
-     * coherente con que sea una copia: escribir en un par que nadie mira seria peor que negarse.
+     * <p>The same divergence as `values()`: a copy, not a view. The pairs it returns are immutable,
+     * so `setValue` on one of them throws instead of writing to the map — which is consistent with
+     * its being a copy: writing to a pair nobody looks at would be worse than refusing. It is also
+     * a `HashSet`, so it does not iterate in key order as {@link SortedMap#entrySet} specifies.
      */
     public java.util.Set<java.util.Map.Entry<String, Charset>> entrySet() {
         java.util.HashSet<java.util.Map.Entry<String, Charset>> out =

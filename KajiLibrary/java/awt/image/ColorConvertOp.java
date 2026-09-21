@@ -8,24 +8,24 @@ import java.awt.geom.Point2D;
 import java.awt.geom.Rectangle2D;
 
 /**
- * Convierte los colores de un espacio a otro.
+ * Converts the colours from one space to another.
  *
- * <p>Es la operación que hace que un rojo siga siendo el mismo rojo al pasar de una imagen a otra
- * con distinto espacio de color. No cambia los números por cambiarlos: cambia los números
- * **justamente para que el color no cambie**.
+ * <p>It is the operation that makes to red go on being the same red when it passes from one image
+ * to another with to different colour space. It does not change the numbers for the sake of
+ * changing them: it changes the numbers **precisely so that the colour does not change**.
  *
- * <p>La conversión siempre pasa por CIEXYZ, que es el espacio de referencia donde el color se define
- * sin depender de ningún dispositivo. Encadenar varios perfiles es encadenar esos pasos: de cada uno
- * a XYZ y de XYZ al siguiente.
+ * <p>The conversion always goes through CIEXYZ, which is the reference space where colour is
+ * defined without depending on any device. Chaining several profiles is chaining those steps: from
+ * each one to XYZ and from XYZ to the next.
  *
- * <p>Hay cuatro maneras de armarla y la diferencia está en de dónde salen los dos extremos. Con un
- * solo {@link ColorSpace} el origen lo pone la imagen que se filtre y ése es el destino; con dos,
- * los dos están fijos y sirve también para rásters, que no tienen modelo de color propio; sin
- * ninguno, los dos salen de las imágenes.
+ * <p>There are four ways of building it and the difference is in where the two ends come from. With
+ * to single {@link ColorSpace} the source is put by the image being filtered and that one is the
+ * destination; with two, both are fixed and it serves for rasters as well, which have no colour
+ * model of their own; with neither, both come from the images.
  *
- * <p>Sobre un {@link Raster} hacen falta los dos espacios declarados y con la misma cantidad de
- * componentes que las bandas: un ráster es números sin interpretar, y sin decirle qué son no hay
- * nada que convertir.
+ * <p>Over to {@link Raster} both spaces have to be declared and with the same number of components
+ * as there are bands: to raster is uninterpreted numbers, and without being told what they are
+ * there is nothing to convert.
  */
 public class ColorConvertOp implements BufferedImageOp, RasterOp {
 
@@ -34,9 +34,9 @@ public class ColorConvertOp implements BufferedImageOp, RasterOp {
     private final RenderingHints hints;
 
     /**
-     * Sin espacios declarados: los dos salen de las imágenes que se filtren.
+     * With no declared spaces: both come from the images being filtered.
      *
-     * <p>No sirve para rásters.
+     * <p>It does not serve for rasters.
      */
     public ColorConvertOp(RenderingHints hints) {
         this.spaces = new ColorSpace[0];
@@ -45,9 +45,9 @@ public class ColorConvertOp implements BufferedImageOp, RasterOp {
     }
 
     /**
-     * Con el espacio de destino; el de origen sale de la imagen.
+     * With the destination space; the source one comes from the image.
      *
-     * @throws NullPointerException si el espacio es `null`
+     * @throws NullPointerException if the space is `null`
      */
     public ColorConvertOp(ColorSpace cspace, RenderingHints hints) {
         if (cspace == null) {
@@ -60,9 +60,9 @@ public class ColorConvertOp implements BufferedImageOp, RasterOp {
     }
 
     /**
-     * Con los dos espacios declarados.
+     * With both spaces declared.
      *
-     * @throws NullPointerException si falta alguno de los dos
+     * @throws NullPointerException if either of the two is missing
      */
     public ColorConvertOp(ColorSpace srcCspace, ColorSpace dstCspace, RenderingHints hints) {
         if (srcCspace == null || dstCspace == null) {
@@ -76,10 +76,10 @@ public class ColorConvertOp implements BufferedImageOp, RasterOp {
     }
 
     /**
-     * Con una cadena de perfiles ICC.
+     * With to chain of ICC profiles.
      *
-     * @throws NullPointerException si el arreglo es `null`
-     * @throws IllegalArgumentException si el arreglo está vacío
+     * @throws NullPointerException if the array is `null`
+     * @throws IllegalArgumentException if the array is empty
      */
     public ColorConvertOp(ICC_Profile[] profiles, RenderingHints hints) {
         if (profiles == null) {
@@ -93,7 +93,7 @@ public class ColorConvertOp implements BufferedImageOp, RasterOp {
         this.hints = hints;
     }
 
-    /** Los perfiles con los que se armó, o un arreglo vacío si no se armó con perfiles. */
+    /** The profiles it was built with, or an empty array if it was not built with profiles. */
     public final ICC_Profile[] getICC_Profiles() {
         if (this.profiles == null) {
             return new ICC_Profile[0];
@@ -102,121 +102,121 @@ public class ColorConvertOp implements BufferedImageOp, RasterOp {
     }
 
     /**
-     * Convierte un color de un espacio a otro pasando por CIEXYZ.
+     * Converts to colour from one space to another going through CIEXYZ.
      *
-     * <p>Es donde vive toda la conversión: los dos espacios saben ir y venir de XYZ, y componer esas
-     * dos funciones es la conversión entre ellos.
+     * <p>It is where the whole conversion lives: both spaces know how to come and go from XYZ, and
+     * composing those two functions is the conversion between them.
      */
-    private static float[] convertir(ColorSpace de, ColorSpace a, float[] color) {
-        if (de == a) {
+    private static float[] convertColor(ColorSpace from, ColorSpace to, float[] color) {
+        if (from == to) {
             return color;
         }
-        return a.fromCIEXYZ(de.toCIEXYZ(color));
+        return to.fromCIEXYZ(from.toCIEXYZ(color));
     }
 
-    /** La cadena de espacios que hay que atravesar, de origen a destino. */
-    private ColorSpace[] cadena(ColorSpace desde, ColorSpace hasta) {
+    /** The chain of spaces that has to be crossed, from source to destination. */
+    private ColorSpace[] chain(ColorSpace fromSpace, ColorSpace toSpace) {
         if (this.spaces.length <= 1) {
             ColorSpace[] c = new ColorSpace[2];
-            c[0] = desde;
-            c[1] = this.spaces.length == 1 ? this.spaces[0] : hasta;
+            c[0] = fromSpace;
+            c[1] = this.spaces.length == 1 ? this.spaces[0] : toSpace;
             return c;
         }
         return this.spaces;
     }
 
     /**
-     * Convierte los colores de una imagen.
+     * Converts the colours of an image.
      *
-     * @param dest el destino, o `null` para que se cree
-     * @throws IllegalArgumentException si los tamaños no coinciden, o si no se puede determinar el
-     *     espacio de destino
+     * @param dest the destination, or `null` for it to be created
+     * @throws IllegalArgumentException if the sizes do not match, or if the destination space
+     *     cannot be determined
      */
     public final BufferedImage filter(BufferedImage src, BufferedImage dest) {
-        BufferedImage destino = dest;
-        if (destino == null) {
-            destino = this.createCompatibleDestImage(src, null);
-        } else if (src.getWidth() != destino.getWidth()
-                || src.getHeight() != destino.getHeight()) {
+        BufferedImage target = dest;
+        if (target == null) {
+            target = this.createCompatibleDestImage(src, null);
+        } else if (src.getWidth() != target.getWidth()
+                || src.getHeight() != target.getHeight()) {
             throw new IllegalArgumentException("Width or height of BufferedImages do not match");
         }
-        ColorSpace[] cadena = this.cadena(src.getColorModel().getColorSpace(),
-                destino.getColorModel().getColorSpace());
+        ColorSpace[] chain = this.chain(src.getColorModel().getColorSpace(),
+                target.getColorModel().getColorSpace());
         ColorModel srcCM = src.getColorModel();
-        ColorModel dstCM = destino.getColorModel();
+        ColorModel dstCM = target.getColorModel();
         int w = src.getWidth();
         int h = src.getHeight();
-        int srcColores = srcCM.getNumColorComponents();
-        int dstColores = dstCM.getNumColorComponents();
+        int srcColour = srcCM.getNumColorComponents();
+        int dstColour = dstCM.getNumColorComponents();
         float[] norm = new float[srcCM.getNumComponents()];
-        float[] color = new float[srcColores];
-        float[] salida = new float[dstCM.getNumComponents()];
-        Object crudo = null;
-        Object destinoCrudo = null;
+        float[] color = new float[srcColour];
+        float[] out = new float[dstCM.getNumComponents()];
+        Object raw = null;
+        Object destRaw = null;
         for (int y = 0; y < h; y++) {
             for (int x = 0; x < w; x++) {
-                crudo = src.getRaster().getDataElements(x, y, crudo);
-                norm = srcCM.getNormalizedComponents(crudo, norm, 0);
-                for (int i = 0; i < srcColores; i++) {
-                    float min = cadena[0].getMinValue(i);
-                    float max = cadena[0].getMaxValue(i);
+                raw = src.getRaster().getDataElements(x, y, raw);
+                norm = srcCM.getNormalizedComponents(raw, norm, 0);
+                for (int i = 0; i < srcColour; i++) {
+                    float min = chain[0].getMinValue(i);
+                    float max = chain[0].getMaxValue(i);
                     color[i] = min + norm[i] * (max - min);
                 }
-                float[] convertido = color;
-                for (int i = 1; i < cadena.length; i++) {
-                    convertido = convertir(cadena[i - 1], cadena[i], convertido);
+                float[] converted = color;
+                for (int i = 1; i < chain.length; i++) {
+                    converted = convertColor(chain[i - 1], chain[i], converted);
                 }
-                ColorSpace ultimo = cadena[cadena.length - 1];
-                for (int i = 0; i < dstColores; i++) {
-                    float min = ultimo.getMinValue(i);
-                    float max = ultimo.getMaxValue(i);
-                    float v = (convertido[i] - min) / (max - min);
+                ColorSpace last = chain[chain.length - 1];
+                for (int i = 0; i < dstColour; i++) {
+                    float min = last.getMinValue(i);
+                    float max = last.getMaxValue(i);
+                    float v = (converted[i] - min) / (max - min);
                     if (v < 0.0f) {
                         v = 0.0f;
                     }
                     if (v > 1.0f) {
                         v = 1.0f;
                     }
-                    salida[i] = v;
+                    out[i] = v;
                 }
-                // El alfa no se convierte: es opacidad, no color, y no vive en ningun espacio.
+                // The alpha is not converted: it is opacity, not colour, and it lives in no space.
                 if (dstCM.hasAlpha()) {
-                    salida[dstColores] = srcCM.hasAlpha() ? norm[srcColores] : 1.0f;
+                    out[dstColour] = srcCM.hasAlpha() ? norm[srcColour] : 1.0f;
                 }
-                destinoCrudo = dstCM.getDataElements(salida, 0, destinoCrudo);
-                destino.getRaster().setDataElements(x, y, destinoCrudo);
+                destRaw = dstCM.getDataElements(out, 0, destRaw);
+                target.getRaster().setDataElements(x, y, destRaw);
             }
         }
-        return destino;
+        return target;
     }
 
     /**
-     * Convierte los colores de un ráster.
+     * Converts the colours of to raster.
      *
-     * @param dest el destino, o `null` para que se cree
-     * @throws IllegalArgumentException si no se declararon exactamente dos espacios, si su cantidad
-     *     de componentes no coincide con las bandas, o si los tamaños no coinciden
+     * @param dest the destination, or `null` for it to be created
+     * @throws IllegalArgumentException if exactly two spaces were not declared, if their number of
+     *     components does not match the bands, or if the sizes do not match
      */
     public final WritableRaster filter(Raster src, WritableRaster dest) {
         if (this.spaces.length != 2) {
             throw new IllegalArgumentException(
                     "Destination ColorSpace is undefined");
         }
-        ColorSpace de = this.spaces[0];
-        ColorSpace a = this.spaces[1];
-        if (src.getNumBands() != de.getNumComponents()) {
+        ColorSpace from = this.spaces[0];
+        ColorSpace to = this.spaces[1];
+        if (src.getNumBands() != from.getNumComponents()) {
             throw new IllegalArgumentException(
                     "Numbers of source Raster bands and source color space components do not "
                     + "match");
         }
-        WritableRaster destino = dest;
-        if (destino == null) {
-            destino = this.createCompatibleDestRaster(src);
+        WritableRaster target = dest;
+        if (target == null) {
+            target = this.createCompatibleDestRaster(src);
         } else {
-            if (src.getWidth() != destino.getWidth() || src.getHeight() != destino.getHeight()) {
+            if (src.getWidth() != target.getWidth() || src.getHeight() != target.getHeight()) {
                 throw new IllegalArgumentException("Width or height of Rasters do not match");
             }
-            if (destino.getNumBands() != a.getNumComponents()) {
+            if (target.getNumBands() != to.getNumComponents()) {
                 throw new IllegalArgumentException("Numbers of destination Raster bands and "
                         + "destination color space components do not match");
             }
@@ -224,60 +224,60 @@ public class ColorConvertOp implements BufferedImageOp, RasterOp {
         int w = src.getWidth();
         int h = src.getHeight();
         int sb = src.getNumBands();
-        int db = destino.getNumBands();
-        int[] entrada = new int[sb];
-        int[] salida = new int[db];
+        int db = target.getNumBands();
+        int[] in = new int[sb];
+        int[] out = new int[db];
         float[] color = new float[sb];
         for (int y = 0; y < h; y++) {
             for (int x = 0; x < w; x++) {
-                entrada = src.getPixel(src.getMinX() + x, src.getMinY() + y, entrada);
+                in = src.getPixel(src.getMinX() + x, src.getMinY() + y, in);
                 for (int i = 0; i < sb; i++) {
                     int max = (1 << src.getSampleModel().getSampleSize(i)) - 1;
-                    float min = de.getMinValue(i);
-                    float top = de.getMaxValue(i);
-                    color[i] = min + (((float) entrada[i]) / max) * (top - min);
+                    float min = from.getMinValue(i);
+                    float top = from.getMaxValue(i);
+                    color[i] = min + (((float) in[i]) / max) * (top - min);
                 }
-                float[] convertido = convertir(de, a, color);
+                float[] converted = convertColor(from, to, color);
                 for (int i = 0; i < db; i++) {
-                    int max = (1 << destino.getSampleModel().getSampleSize(i)) - 1;
-                    float min = a.getMinValue(i);
-                    float top = a.getMaxValue(i);
-                    float v = (convertido[i] - min) / (top - min);
+                    int max = (1 << target.getSampleModel().getSampleSize(i)) - 1;
+                    float min = to.getMinValue(i);
+                    float top = to.getMaxValue(i);
+                    float v = (converted[i] - min) / (top - min);
                     if (v < 0.0f) {
                         v = 0.0f;
                     }
                     if (v > 1.0f) {
                         v = 1.0f;
                     }
-                    salida[i] = (int) (v * max + 0.5f);
+                    out[i] = (int) (v * max + 0.5f);
                 }
-                destino.setPixel(destino.getMinX() + x, destino.getMinY() + y, salida);
+                target.setPixel(target.getMinX() + x, target.getMinY() + y, out);
             }
         }
-        return destino;
+        return target;
     }
 
     /**
-     * Una imagen vacía en el espacio de destino.
+     * An empty image in the destination space.
      *
-     * @throws IllegalArgumentException si no se puede determinar el espacio de destino
+     * @throws IllegalArgumentException if the destination space cannot be determined
      */
     public BufferedImage createCompatibleDestImage(BufferedImage src, ColorModel destCM) {
         ColorModel cm = destCM;
         if (cm == null) {
-            ColorSpace destino;
+            ColorSpace target;
             if (this.spaces.length == 0) {
                 throw new IllegalArgumentException("Destination ColorSpace is undefined");
             }
-            destino = this.spaces[this.spaces.length - 1];
-            boolean alfa = src.getColorModel().hasAlpha();
-            int n = destino.getNumComponents() + (alfa ? 1 : 0);
+            target = this.spaces[this.spaces.length - 1];
+            boolean alpha = src.getColorModel().hasAlpha();
+            int n = target.getNumComponents() + (alpha ? 1 : 0);
             int[] bits = new int[n];
             for (int i = 0; i < n; i++) {
                 bits[i] = 8;
             }
-            cm = new ComponentColorModel(destino, bits, alfa, src.isAlphaPremultiplied(),
-                    alfa ? java.awt.Transparency.TRANSLUCENT : java.awt.Transparency.OPAQUE,
+            cm = new ComponentColorModel(target, bits, alpha, src.isAlphaPremultiplied(),
+                    alpha ? java.awt.Transparency.TRANSLUCENT : java.awt.Transparency.OPAQUE,
                     DataBuffer.TYPE_BYTE);
         }
         WritableRaster wr = cm.createCompatibleWritableRaster(src.getWidth(), src.getHeight());
@@ -285,9 +285,9 @@ public class ColorConvertOp implements BufferedImageOp, RasterOp {
     }
 
     /**
-     * Un ráster vacío con tantas bandas como componentes tenga el espacio de destino.
+     * An empty raster with as many bands as the destination space has components.
      *
-     * @throws IllegalArgumentException si no se declararon exactamente dos espacios
+     * @throws IllegalArgumentException if exactly two spaces were not declared
      */
     public WritableRaster createCompatibleDestRaster(Raster src) {
         if (this.spaces.length != 2) {
@@ -298,17 +298,17 @@ public class ColorConvertOp implements BufferedImageOp, RasterOp {
                 src.getHeight(), n, new java.awt.Point(src.getMinX(), src.getMinY()));
     }
 
-    /** El mismo rectángulo: esta operación no mueve nada de lugar. */
+    /** The same rectangle: this operation moves nothing about. */
     public final Rectangle2D getBounds2D(BufferedImage src) {
         return this.getBounds2D(src.getRaster());
     }
 
-    /** El mismo rectángulo. */
+    /** The same rectangle. */
     public final Rectangle2D getBounds2D(Raster src) {
         return src.getBounds();
     }
 
-    /** El mismo punto. */
+    /** The same point. */
     public final Point2D getPoint2D(Point2D srcPt, Point2D dstPt) {
         Point2D out = dstPt;
         if (out == null) {
@@ -318,7 +318,7 @@ public class ColorConvertOp implements BufferedImageOp, RasterOp {
         return out;
     }
 
-    /** Las pistas de dibujo, o `null` si no hay. */
+    /** The rendering hints, or `null` if there are none. */
     public final RenderingHints getRenderingHints() {
         return this.hints;
     }

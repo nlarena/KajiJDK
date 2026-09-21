@@ -1,10 +1,10 @@
 package javax.naming;
 
 /**
- * Se lanza cuando el servicio de nombres rechazo la identidad: credenciales mal, vencidas o
- * ausentes. Reintentar con las mismas no sirve; hay que conseguir otras.
+ * Thrown when the naming service rejected the identity: wrong, expired or missing credentials.
+ * Retrying with the same ones does not help; you need different ones.
  *
- * <p>La jerarquia entera y el estado que arrastra estan explicados en `NamingException`.
+ * <p>The whole hierarchy and the state it carries are explained in `NamingException`.
  */
 public class AuthenticationException extends NamingSecurityException {
 

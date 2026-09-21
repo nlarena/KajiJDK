@@ -1,33 +1,32 @@
 package javax.sound.sampled;
 
 /**
- * KajiLibrary's javax.sound.sampled.CompoundControl -- un grupo de perillas que van juntas.
+ * KajiLibrary's javax.sound.sampled.CompoundControl -- a group of knobs that go together.
  *
- * <p>No tiene valor propio: es un contenedor. Sirve para que una interfaz pueda agrupar lo que en el
- * dispositivo real esta agrupado -- el ecualizador, con sus bandas; el canal de una consola, con su
- * volumen, su balance y su silencio.
+ * <p>It has no value of its own: it is a container. It serves so that an interface can group what
+ * is grouped in the real device -- the equalizer, with its bands; a console channel, with its
+ * volume, its balance and its mute.
  *
- * <p>Los miembros pueden ser a su vez compuestos, asi que esto es un arbol. Un recorrido tiene que
- * contemplarlo.
+ * <p>The members can in turn be compound, so this is a tree. A walk has to account for it.
  *
- * <p>No hay forma de cambiarle los miembros despues de construirlo, y eso es a proposito: la estructura
- * la fija el dispositivo.
+ * <p>There is no way to change its members after building it, and that is on purpose: the structure
+ * is set by the device.
  */
 public abstract class CompoundControl extends Control {
 
-    /** Las perillas que agrupa. */
+    /** The knobs it groups. */
     private final Control[] controls;
 
-    /** @param memberControls las perillas del grupo */
+    /** @param memberControls the knobs of the group */
     protected CompoundControl(Type type, Control[] memberControls) {
         super(type);
         this.controls = memberControls;
     }
 
     /**
-     * Las perillas del grupo.
+     * The knobs of the group.
      *
-     * <p>Devuelve una copia del arreglo, asi que modificar lo que sale no cambia el control.
+     * <p>It returns a copy of the array, so modifying what comes out does not change the control.
      */
     public Control[] getMemberControls() {
         Control[] copy = new Control[this.controls.length];
@@ -35,7 +34,7 @@ public abstract class CompoundControl extends Control {
         return copy;
     }
 
-    /** El del control, mas los tipos de sus miembros entre corchetes. */
+    /** The control's, plus the types of its members in brackets. */
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder("[");
@@ -52,14 +51,14 @@ public abstract class CompoundControl extends Control {
     }
 
     /**
-     * Los tipos de grupo.
+     * The kinds of group.
      *
-     * <p>No trae ninguno predefinido: los grupos que existen dependen enteramente del dispositivo, y
-     * nombrar unos pocos habria sido arbitrario.
+     * <p>It brings none predefined: the groups that exist depend entirely on the device, and naming
+     * a few would have been arbitrary.
      */
     public static class Type extends Control.Type {
 
-        /** Protegido: los tipos los define quien provee el mezclador. */
+        /** Protected: the types are defined by whoever provides the mixer. */
         protected Type(String name) {
             super(name);
         }

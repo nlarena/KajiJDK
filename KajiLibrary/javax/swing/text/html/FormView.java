@@ -18,176 +18,176 @@ import javax.swing.text.ComponentView;
 import javax.swing.text.Element;
 
 /**
- * La vista de un control de formulario: {@code <input>}, {@code <select>} o {@code <textarea>}.
+ * The view of a form control: {@code <input>}, {@code <select>} or {@code <textarea>}.
  *
- * <h2>Un componente de Swing de verdad</h2>
+ * <h2>A real Swing component</h2>
  *
- * <p>No se dibuja un campo de texto: se pone un {@code JTextField}. Es lo que hace que el control
- * se comporte como el resto del programa -- el mismo cursor, las mismas teclas, el mismo aspecto --
- * en lugar de como una imitacion parecida.
+ * <p>A text field is not drawn: a {@code JTextField} is put in. It is what makes the control
+ * behave like the rest of the program -- the same cursor, the same keys, the same look and feel
+ * -- instead of like a similar imitation.
  *
- * <p>El precio es que el estado vive en dos lados: en el componente y en el documento. Al enviar,
- * el que vale es el del componente, que es el que el usuario toco.
+ * <p>The price is that the state lives in two places: in the component and in the document. On
+ * submitting, the one that counts is the component's, which is the one the user touched.
  *
- * <h2>El envio</h2>
+ * <h2>The submission</h2>
  *
- * <p>Apretar un boton de enviar arma los datos y llama a {@link #submitData}. Si el juego de
- * edicion tiene {@link HTMLEditorKit#isAutoFormSubmission} prendido, el mismo carga la respuesta;
- * si no, sale un {@link FormSubmitEvent} y decide quien escucha. Ver la nota de ese metodo.
+ * <p>Pressing a submit button assembles the data and calls {@link #submitData}. If the editor
+ * kit has {@link HTMLEditorKit#isAutoFormSubmission} on, it loads the answer itself; if not, a
+ * {@link FormSubmitEvent} comes out and whoever listens decides. See that method's note.
  */
 public class FormView extends ComponentView implements ActionListener {
 
     /**
-     * El texto del boton de enviar cuando no lo dice el HTML.
+     * The submit button's text when the HTML does not say it.
      *
-     * @deprecated El texto sale del idioma del sistema, no de esta constante.
+     * @deprecated The text comes from the system's language, not from this constant.
      */
     @Deprecated
     public static final String SUBMIT = "Submit Query";
 
     /**
-     * El texto del boton de borrar cuando no lo dice el HTML.
+     * The reset button's text when the HTML does not say it.
      *
-     * @deprecated Igual que {@link #SUBMIT}.
+     * @deprecated The same as {@link #SUBMIT}.
      */
     @Deprecated
     public static final String RESET = "Reset";
 
     private short maxIsPreferred;
 
-    /** Una vista de control sobre ese elemento. */
+    /** A control view on that element. */
     public FormView(Element elem) {
         super(elem);
     }
 
     /**
-     * Arma el componente que corresponde a la etiqueta y a su atributo <code>type</code>.
+     * It builds the component that corresponds to the tag and to its <code>type</code> attribute.
      *
-     * <p>Un {@code <input>} puede ser ocho cosas distintas segun ese atributo. Cuando no se
-     * reconoce, se hace un campo de texto: es lo que dice el HTML que hay que hacer con un tipo
-     * desconocido, y ademas es lo menos sorprendente.
+     * <p>An {@code <input>} may be eight different things according to that attribute. When it is
+     * not recognized, a text field is made: it is what HTML says has to be done with an unknown
+     * type, and besides it is the least surprising.
      */
     protected Component createComponent() {
         AttributeSet attr = getElement().getAttributes();
         HTML.Tag t = (HTML.Tag) attr.getAttribute(
                 javax.swing.text.StyleConstants.NameAttribute);
-        Object modelo = attr.getAttribute(javax.swing.text.StyleConstants.ModelAttribute);
+        Object model = attr.getAttribute(javax.swing.text.StyleConstants.ModelAttribute);
         Component c = null;
 
         if (t == HTML.Tag.INPUT) {
-            c = crearEntrada(attr, modelo);
+            c = createInput(attr, model);
         } else if (t == HTML.Tag.SELECT) {
-            c = crearSeleccion(attr, modelo);
+            c = createSelect(attr, model);
         } else if (t == HTML.Tag.TEXTAREA) {
-            c = crearAreaDeTexto(attr);
+            c = createTextArea(attr);
         }
         if (c instanceof javax.swing.JComponent) {
-            // Alineado abajo: un control se apoya en la linea de base del texto que lo rodea.
+            // Aligned at the bottom: a control rests on the baseline of the text around it.
             ((javax.swing.JComponent) c).setAlignmentY(1.0f);
         }
         return c;
     }
 
-    private Component crearEntrada(AttributeSet attr, Object modelo) {
-        String tipo = (String) attr.getAttribute(HTML.Attribute.TYPE);
-        if (tipo == null) {
-            tipo = "text";
+    private Component createInput(AttributeSet attr, Object model) {
+        String type = (String) attr.getAttribute(HTML.Attribute.TYPE);
+        if (type == null) {
+            type = "text";
         }
-        String valor = (String) attr.getAttribute(HTML.Attribute.VALUE);
+        String value = (String) attr.getAttribute(HTML.Attribute.VALUE);
         int cols = HTML.getIntegerAttributeValue(attr, HTML.Attribute.SIZE, 20);
 
-        if (tipo.equals("submit") || tipo.equals("reset") || tipo.equals("button")) {
-            JButton b = new JButton(valor == null ? textoPorOmision(tipo) : valor);
+        if (type.equals("submit") || type.equals("reset") || type.equals("button")) {
+            JButton b = new JButton(value == null ? defaultText(type) : value);
             b.addActionListener(this);
             maxIsPreferred = 3;
             return b;
         }
-        if (tipo.equals("checkbox")) {
+        if (type.equals("checkbox")) {
             JCheckBox cb = new JCheckBox();
             cb.setSelected(attr.getAttribute(HTML.Attribute.CHECKED) != null);
             maxIsPreferred = 3;
             return cb;
         }
-        if (tipo.equals("radio")) {
+        if (type.equals("radio")) {
             JRadioButton rb = new JRadioButton();
             rb.setSelected(attr.getAttribute(HTML.Attribute.CHECKED) != null);
             maxIsPreferred = 3;
             return rb;
         }
-        if (tipo.equals("password")) {
+        if (type.equals("password")) {
             JPasswordField pf = new JPasswordField(cols);
-            if (valor != null) {
-                pf.setText(valor);
+            if (value != null) {
+                pf.setText(value);
             }
             pf.addActionListener(this);
             maxIsPreferred = 1;
             return pf;
         }
-        if (tipo.equals("hidden")) {
+        if (type.equals("hidden")) {
             return null;
         }
         JTextField tf = new JTextField(cols);
-        if (valor != null) {
-            tf.setText(valor);
+        if (value != null) {
+            tf.setText(value);
         }
         tf.addActionListener(this);
         maxIsPreferred = 1;
         return tf;
     }
 
-    private static String textoPorOmision(String tipo) {
-        if (tipo.equals("submit")) {
+    private static String defaultText(String type) {
+        if (type.equals("submit")) {
             return SUBMIT;
         }
-        if (tipo.equals("reset")) {
+        if (type.equals("reset")) {
             return RESET;
         }
         return "";
     }
 
     /**
-     * Un {@code <select>}: una lista desplegable o una de varios renglones.
+     * A {@code <select>}: a drop-down list or one of several rows.
      *
-     * <p>Lo decide el atributo <code>size</code>: uno significa desplegable, y mas de uno o
-     * <code>multiple</code> significa lista con renglones. Es la regla del HTML y es lo que espera
-     * quien escribio la pagina.
+     * <p>The <code>size</code> attribute decides: one means a drop-down, and more than one or
+     * <code>multiple</code> means a list with rows. It is HTML's rule and it is what whoever wrote
+     * the page expects.
      *
-     * <p>La lista de renglones va adentro de un desplazador; la desplegable no, porque su ventanita
-     * ya se desplaza sola.
+     * <p>The list of rows goes inside a scroller; the drop-down does not, because its little window
+     * already scrolls by itself.
      */
-    private Component crearSeleccion(AttributeSet attr, Object modelo) {
+    private Component createSelect(AttributeSet attr, Object model) {
         int size = HTML.getIntegerAttributeValue(attr, HTML.Attribute.SIZE, 1);
         boolean multiple = attr.getAttribute(HTML.Attribute.MULTIPLE) != null;
         if (size > 1 || multiple) {
-            JList<Object> lista = (modelo instanceof javax.swing.ListModel)
-                    ? new JList<Object>((javax.swing.ListModel<Object>) modelo)
+            JList<Object> list = (model instanceof javax.swing.ListModel)
+                    ? new JList<Object>((javax.swing.ListModel<Object>) model)
                     : new JList<Object>();
-            lista.setVisibleRowCount(size);
-            lista.setSelectionMode(multiple
+            list.setVisibleRowCount(size);
+            list.setSelectionMode(multiple
                     ? javax.swing.ListSelectionModel.MULTIPLE_INTERVAL_SELECTION
                     : javax.swing.ListSelectionModel.SINGLE_SELECTION);
             maxIsPreferred = 3;
-            return new JScrollPane(lista);
+            return new JScrollPane(list);
         }
-        JComboBox<Object> combo = (modelo instanceof javax.swing.ComboBoxModel)
-                ? new JComboBox<Object>((javax.swing.ComboBoxModel<Object>) modelo)
+        JComboBox<Object> combo = (model instanceof javax.swing.ComboBoxModel)
+                ? new JComboBox<Object>((javax.swing.ComboBoxModel<Object>) model)
                 : new JComboBox<Object>();
         maxIsPreferred = 3;
         return combo;
     }
 
     /**
-     * Un {@code <textarea>}.
+     * A {@code <textarea>}.
      *
-     * <p>Comparte el documento con el elemento del HTML, asi lo que el usuario escriba queda en el
-     * documento y sale al enviar el formulario. Va adentro de un desplazador porque el texto puede
-     * pasarse de las filas declaradas.
+     * <p>It shares the document with the HTML element, so whatever the user types stays in the
+     * document and comes out when the form is submitted. It goes inside a scroller because the
+     * text may exceed the declared rows.
      */
-    private Component crearAreaDeTexto(AttributeSet attr) {
+    private Component createTextArea(AttributeSet attr) {
         JTextArea area;
-        Object modelo = attr.getAttribute(javax.swing.text.StyleConstants.ModelAttribute);
-        if (modelo instanceof javax.swing.text.Document) {
-            area = new JTextArea((javax.swing.text.Document) modelo);
+        Object model = attr.getAttribute(javax.swing.text.StyleConstants.ModelAttribute);
+        if (model instanceof javax.swing.text.Document) {
+            area = new JTextArea((javax.swing.text.Document) model);
         } else {
             area = new JTextArea();
         }
@@ -200,10 +200,10 @@ public class FormView extends ComponentView implements ActionListener {
     }
 
     /**
-     * Cuanto se puede estirar.
+     * How much it can stretch.
      *
-     * <p>Un boton no se estira; un campo de texto si a lo ancho. La diferencia esta en
-     * {@code maxIsPreferred}, que se pone al armar el componente.
+     * <p>A button does not stretch; a text field does, widthwise. The difference is in
+     * {@code maxIsPreferred}, which is set when the component is built.
      */
     public float getMaximumSpan(int axis) {
         if (axis == X_AXIS && (maxIsPreferred & 1) == 1) {
@@ -215,37 +215,37 @@ public class FormView extends ComponentView implements ActionListener {
         return super.getMaximumSpan(axis);
     }
 
-    /** Atiende el boton: enviar o borrar. */
+    /** It attends to the button: submit or reset. */
     public void actionPerformed(ActionEvent evt) {
         AttributeSet attr = getElement().getAttributes();
-        String tipo = (String) attr.getAttribute(HTML.Attribute.TYPE);
-        if ("submit".equals(tipo)) {
-            submitData(armarDatos());
-        } else if ("reset".equals(tipo)) {
-            // Volver a los valores del documento: se rearma el componente.
+        String type = (String) attr.getAttribute(HTML.Attribute.TYPE);
+        if ("submit".equals(type)) {
+            submitData(buildData());
+        } else if ("reset".equals(type)) {
+            // Back to the document's values: the component is rebuilt.
             setParent(getParent());
-        } else if (tipo == null || "text".equals(tipo) || "password".equals(tipo)) {
-            // Enter en un campo de texto envia el formulario, como en un navegador.
-            submitData(armarDatos());
+        } else if (type == null || "text".equals(type) || "password".equals(type)) {
+            // Enter in a text field submits the form, as in a browser.
+            submitData(buildData());
         }
     }
 
-    /** Los pares nombre=valor del formulario, ya codificados. */
-    private String armarDatos() {
+    /** The form's name=value pairs, already encoded. */
+    private String buildData() {
         return "";
     }
 
     /**
-     * Manda los datos.
+     * It sends the data.
      *
-     * <p>No arma la peticion aca: dispara un {@link FormSubmitEvent} sobre el panel. Que el envio
-     * pase por el mismo lugar que un enlace es lo que permite que un programa lo controle sin
-     * saber de formularios; ver la nota de esa clase.
+     * <p>It does not build the request here: it fires a {@link FormSubmitEvent} on the pane. That
+     * the submission goes through the same place as a link is what allows a program to control it
+     * without knowing about forms; see that class's note.
      */
     protected void submitData(String data) {
     }
 
-    /** El envio que hace un {@code <input type="image">}, con las coordenadas del clic. */
+    /** The submission an {@code <input type="image">} makes, with the click's coordinates. */
     protected void imageSubmit(String imageData) {
         submitData(imageData);
     }

@@ -1,10 +1,11 @@
 package java.sql;
 
 /**
- * KajiLibrary's java.sql.SQLTimeoutException -- Se agoto el tiempo que {@link Statement#setQueryTimeout} habia fijado.
+ * KajiLibrary's java.sql.SQLTimeoutException -- a time limit ran out: the one
+ * {@link Statement#setQueryTimeout} set, or a login timeout. (This note named only the first.)
 
- * <p>Es transitoria porque el limite es del **llamador**, no de la base: la misma consulta con mas
- * tiempo, o con la base menos cargada, anda.
+ * <p>It is transient because the limit is the **caller's**, not the database's: the same query with
+ * more time, or with the database less loaded, works.
  */
 public class SQLTimeoutException extends SQLTransientException {
 

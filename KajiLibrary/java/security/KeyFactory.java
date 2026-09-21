@@ -3,26 +3,26 @@ package java.security;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.KeySpec;
 
-// Convierte entre las dos formas de una clave: la opaca (`Key`) y la transparente (`KeySpec`).
+// It converts between the two forms of a key: the opaque one (`Key`) and the transparent one
+// (`KeySpec`).
 //
-// Es la pieza que hace que las dos representaciones sirvan de algo. Una `Key` puede vivir en un
-// token y no dejarse mirar; un `KeySpec` es material que el programa puede construir a mano o leer
-// de un archivo. `KeyFactory` es el unico camino entre las dos, y por eso es lo que se usa para
-// cargar una clave desde su codificacion —el caso mas comun de todos.
+// It is the piece that makes the two representations of any use. A `Key` can live in a token and
+// not let itself be looked at; a `KeySpec` is material the program can build by hand or read from a
+// file. `KeyFactory` is the only road between the two, and that is why it is what is used for
+// loading a key from its encoding —the most common case of all.
 //
-// `translateKey` merece una linea aparte: convierte una clave de **otro** proveedor a una de este.
-// Es lo que permite tomar una clave que llego de afuera y usarla con un proveedor que solo sabe
-// trabajar con las suyas, sin exportarla ni volver a construirla desde bytes.
+// `translateKey` deserves a line apart: it converts a key of **another** provider into one of this
+// one. It is what allows a key that arrived from outside to be taken and used with a provider that
+// only knows how to work with its own, without exporting it or building it again from bytes.
 //
 // ===============================================================================================
-// LA FABRICA NO TIENE PROVEEDORES
+// THE FACTORY HAS NO PROVIDERS
 // ===============================================================================================
 //
-// Igual que `AlgorithmParameters`: `KajiProvider` solo ofrece digests, asi que las tres
-// sobrecargas de `getInstance` tiran siempre `NoSuchAlgorithmException`. No se registra ninguna
-// `KeyFactory` porque implementar una honestamente pide un parser de DER y la aritmetica del
-// algoritmo, y ninguna de las dos cosas esta escrita. La estructura queda lista para el dia que la
-// haya.
+// Just like `AlgorithmParameters`: `KajiProvider` only offers digests, so the three overloads of
+// `getInstance` always throw `NoSuchAlgorithmException`. No `KeyFactory` is registered because
+// implementing one honestly asks for a DER parser and the arithmetic of the algorithm, and neither
+// of the two things is written. The structure is left ready for the day there is one.
 public class KeyFactory {
 
     private final KeyFactorySpi spi;
@@ -44,7 +44,7 @@ public class KeyFactory {
         while (i < provs.length) {
             Provider.Service s = provs[i].getService("KeyFactory", algorithm);
             if (s != null) {
-                return armar(s, algorithm);
+                return build(s, algorithm);
             }
             i = i + 1;
         }
@@ -76,10 +76,10 @@ public class KeyFactory {
             throw new NoSuchAlgorithmException(
                 "no such algorithm: " + algorithm + " for provider " + provider.getName());
         }
-        return armar(s, algorithm);
+        return build(s, algorithm);
     }
 
-    private static KeyFactory armar(Provider.Service s, String algorithm)
+    private static KeyFactory build(Provider.Service s, String algorithm)
             throws NoSuchAlgorithmException {
         Object o = s.newInstance(null);
         if (!(o instanceof KeyFactorySpi)) {

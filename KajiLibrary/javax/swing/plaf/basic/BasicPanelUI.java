@@ -14,34 +14,35 @@ import javax.swing.plaf.PanelUI;
 import javax.swing.plaf.UIResource;
 
 /**
- * El aspecto basico de un panel: colores, fuente, y nada mas.
+ * The basic look and feel of a panel: colours, typeface, and nothing else.
  *
- * <p>Un panel no dibuja nada propio -- {@code ComponentUI.update} le rellena el fondo si es opaco y
- * los hijos se pintan solos --, asi que este UI no tiene {@code paint}. Lo unico que hace es poner
- * los valores que en el JDK vienen de {@code UIManager} bajo {@code Panel.*}, medidos en Metal
- * (JDK 25): fondo (238, 238, 238), frente (51, 51, 51), Dialog 12, y el panel opaco.
+ * <p>A panel draws nothing of its own -- {@code ComponentUI.update} fills its background if it
+ * is opaque and the children paint themselves --, so this look and feel has no {@code paint}.
+ * The only thing it does is set the values that in the JDK come from {@code UIManager} under
+ * {@code Panel.*}, measured in Metal (JDK 25): background (238, 238, 238), foreground
+ * (51, 51, 51), Dialog 12, and the panel opaque.
  *
- * <p>Un solo objeto para todos los paneles: {@link #createUI} devuelve siempre el mismo, y puede
- * porque no guarda nada de ninguno.
+ * <p>A single object for every panel: {@link #createUI} always returns the same one, and it can
+ * because it keeps nothing of any of them.
  *
- * <h2>Linea de base</h2>
+ * <h2>Baseline</h2>
  *
- * <p>Un panel no tiene texto, asi que no tiene linea de base: {@link #getBaseline} devuelve -1 y el
- * comportamiento al cambiar de tamano es {@code OTHER}. Igual valida los argumentos --tamano
- * negativo tira, componente nulo revienta--, que es lo que hace {@link ComponentUI}.
+ * <p>A panel has no text, so it has no baseline: {@link #getBaseline} returns -1 and the
+ * behaviour on resizing is {@code OTHER}. It validates the arguments all the same -- a negative
+ * size throws, a null component blows up --, which is what {@link ComponentUI} does.
  */
 public class BasicPanelUI extends PanelUI {
 
     private static PanelUI panelUI = new BasicPanelUI();
 
-    private static final ColorUIResource FONDO_POR_OMISION = new ColorUIResource(238, 238, 238);
-    private static final ColorUIResource FRENTE_POR_OMISION = new ColorUIResource(51, 51, 51);
-    private static final Font FUENTE_POR_OMISION = new FontUIResource("Dialog", Font.PLAIN, 12);
+    private static final ColorUIResource DEFAULT_BACKGROUND = new ColorUIResource(238, 238, 238);
+    private static final ColorUIResource DEFAULT_FOREGROUND = new ColorUIResource(51, 51, 51);
+    private static final Font DEFAULT_FONT = new FontUIResource("Dialog", Font.PLAIN, 12);
 
     public BasicPanelUI() {
     }
 
-    /** El aspecto compartido; ver la nota de la clase. */
+    /** The shared look and feel; see the class note. */
     public static ComponentUI createUI(JComponent c) {
         return panelUI;
     }
@@ -57,33 +58,37 @@ public class BasicPanelUI extends PanelUI {
     }
 
     /**
-     * Colores, fuente y opacidad, solo donde el usuario no puso los suyos; ver {@link UIResource}.
+     * Colours, typeface and opacity, only where the user did not set their own; see
+     * {@link UIResource}.
      */
     protected void installDefaults(JPanel p) {
-        Color fondo = p.getBackground();
-        if (fondo == null || fondo instanceof UIResource) {
-            p.setBackground(FONDO_POR_OMISION);
+        Color background = p.getBackground();
+        if (background == null || background instanceof UIResource) {
+            p.setBackground(DEFAULT_BACKGROUND);
         }
-        Color frente = p.getForeground();
-        if (frente == null || frente instanceof UIResource) {
-            p.setForeground(FRENTE_POR_OMISION);
+        Color foreground = p.getForeground();
+        if (foreground == null || foreground instanceof UIResource) {
+            p.setForeground(DEFAULT_FOREGROUND);
         }
-        Font fuente = p.getFont();
-        if (fuente == null || fuente instanceof UIResource) {
-            p.setFont(FUENTE_POR_OMISION);
+        Font font = p.getFont();
+        if (font == null || font instanceof UIResource) {
+            p.setFont(DEFAULT_FONT);
         }
         LookAndFeel.installProperty(p, "opaque", Boolean.TRUE);
     }
 
-    /** No saca nada: lo instalado es {@link UIResource} y lo pisa el aspecto que venga. */
+    /**
+     * It removes nothing: what was installed is a {@link UIResource} and the next look and feel
+     * overwrites it.
+     */
     protected void uninstallDefaults(JPanel p) {
     }
 
     /**
-     * -1: un panel no tiene texto y por lo tanto no tiene linea de base.
+     * -1: a panel has no text and therefore has no baseline.
      *
-     * @throws NullPointerException si el componente es nulo
-     * @throws IllegalArgumentException si el ancho o el alto son negativos
+     * @throws NullPointerException if the component is null
+     * @throws IllegalArgumentException if the width or the height are negative
      */
     public int getBaseline(JComponent c, int width, int height) {
         super.getBaseline(c, width, height);
@@ -91,9 +96,9 @@ public class BasicPanelUI extends PanelUI {
     }
 
     /**
-     * {@code OTHER}: sin linea de base no hay nada que se mueva con ella.
+     * {@code OTHER}: with no baseline there is nothing that moves with it.
      *
-     * @throws NullPointerException si el componente es nulo
+     * @throws NullPointerException if the component is null
      */
     public Component.BaselineResizeBehavior getBaselineResizeBehavior(JComponent c) {
         super.getBaselineResizeBehavior(c);

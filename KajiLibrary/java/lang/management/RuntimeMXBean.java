@@ -4,89 +4,89 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * KajiLibrary's java.lang.management.RuntimeMXBean -- como se arranco esta maquina virtual.
+ * KajiLibrary's java.lang.management.RuntimeMXBean -- how this virtual machine was started.
  *
- * <p>La foto de arranque: version, rutas de clases, argumentos, propiedades del sistema, y desde
- * cuando esta corriendo.
+ * <p>The start-up snapshot: version, class paths, arguments, system properties, and how long it has
+ * been running.
  *
- * <h2>{@link #getInputArguments} no trae todo</h2>
+ * <h2>{@link #getInputArguments} does not bring everything</h2>
  *
- * <p>Trae lo que se le paso a la maquina virtual, y explicitamente <b>no</b> los argumentos del
- * {@code main}. Tampoco lo que llego por {@code JAVA_TOOL_OPTIONS} o por un archivo de opciones,
- * segun la maquina virtual. Para reproducir una corrida no alcanza con esto.
+ * <p>It brings what was passed to the virtual machine, and explicitly <b>not</b> {@code main}'s
+ * arguments. Nor what came in through {@code JAVA_TOOL_OPTIONS} or an options file, depending on the
+ * virtual machine. This is not enough to reproduce a run.
  *
- * <h2>{@link #getName} no promete nada</h2>
+ * <h2>{@link #getName} promises nothing</h2>
  *
- * <p>La documentacion dice que puede ser cualquier cadena. En la practica los JDK devuelven
- * {@code pid@maquina}, y hay codigo por ahi que lo parsea para sacar el pid. Es fragil, y para eso
- * esta {@link #getPid}, que llego despues justamente por eso.
+ * <p>The documentation says it can be any string at all. In practice the JDKs return
+ * {@code pid@machine}, and there is code out there parsing it to get the pid. That is fragile, and
+ * {@link #getPid} is there for it -- it arrived later for exactly that reason.
  *
- * <h2>{@link #getUptime} y {@link #getStartTime}</h2>
+ * <h2>{@link #getUptime} and {@link #getStartTime}</h2>
  *
- * <p>El primero es un contador de milisegundos desde el arranque y no depende del reloj de pared; el
- * segundo si. Para medir intervalos hay que usar el primero: el reloj del sistema puede saltar.
+ * <p>The first is a millisecond counter since start-up and does not depend on the wall clock; the
+ * second does. Measuring intervals calls for the first: the system clock can jump.
  */
 public interface RuntimeMXBean extends PlatformManagedObject {
 
     /**
-     * El identificador de proceso.
+     * The process identifier.
      *
-     * <p>Por omision lo saca de {@code ProcessHandle.current()}, asi que hereda lo que esa clase
-     * pueda o no hacer en esta plataforma.
+     * <p>By default it takes it from {@code ProcessHandle.current()}, so it inherits whatever that
+     * class can or cannot do on this platform.
      */
     default long getPid() {
         return ProcessHandle.current().pid();
     }
 
-    /** El nombre de esta maquina virtual. Ver la nota de la clase: no promete formato. */
+    /** This virtual machine's name. See the class's note: it promises no format. */
     String getName();
 
-    /** El nombre de la implementacion. */
+    /** The implementation's name. */
     String getVmName();
 
-    /** Quien la hizo. */
+    /** Who made it. */
     String getVmVendor();
 
-    /** Su version. */
+    /** Its version. */
     String getVmVersion();
 
-    /** El nombre de la especificacion que cumple. */
+    /** The name of the specification it meets. */
     String getSpecName();
 
-    /** Quien la escribio. */
+    /** Who wrote it. */
     String getSpecVendor();
 
-    /** Que version de la especificacion. */
+    /** Which version of the specification. */
     String getSpecVersion();
 
-    /** Que version de la especificacion de gestion cumple este MBean. */
+    /** Which version of the management specification this MBean meets. */
     String getManagementSpecVersion();
 
-    /** La ruta de clases. */
+    /** The class path. */
     String getClassPath();
 
-    /** La ruta de bibliotecas nativas. */
+    /** The native library path. */
     String getLibraryPath();
 
-    /** Si esta maquina virtual soporta el concepto de ruta de arranque. */
+    /** Whether this virtual machine supports the boot class path concept. */
     boolean isBootClassPathSupported();
 
     /**
-     * La ruta de arranque.
+     * The boot class path.
      *
-     * @throws UnsupportedOperationException si esta maquina virtual no la soporta
+     * @throws UnsupportedOperationException if this virtual machine does not support it
      */
     String getBootClassPath();
 
-    /** Los argumentos de arranque. Ver la nota de la clase: no estan los del {@code main}. */
+    /** The start-up arguments. See the class's note: {@code main}'s are not among them. */
     List<String> getInputArguments();
 
-    /** Milisegundos corriendo. Ver la nota de la clase. */
+    /** Milliseconds running. See the class's note. */
     long getUptime();
 
-    /** Cuando arranco, en milisegundos desde el epoch. */
+    /** When it started, in milliseconds since the epoch. */
     long getStartTime();
 
-    /** Las propiedades del sistema, como mapa de cadenas. */
+    /** The system properties, as a map of strings. */
     Map<String, String> getSystemProperties();
 }

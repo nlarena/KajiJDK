@@ -1,31 +1,32 @@
 package javax.xml.transform;
 
 /**
- * KajiLibrary's javax.xml.transform.URIResolver -- quien decide que hay del otro lado de un `href`.
+ * KajiLibrary's javax.xml.transform.URIResolver -- who decides what is on the other side of an
+ * `href`.
  *
- * <p>Una hoja de estilo trae referencias a otros documentos: `&lt;xsl:import href="base.xsl"/&gt;`,
- * `&lt;xsl:include&gt;`, y la funcion `document()` de XPath. El procesador no las resuelve solo:
- * se las pasa a este objeto, y usa lo que devuelva. Ese es todo el punto de la interfaz --
- * **interponerse entre una URI y su contenido**.
+ * <p>A stylesheet carries references to other documents: `&lt;xsl:import href="base.xsl"/&gt;`,
+ * `&lt;xsl:include&gt;`, and XPath's `document()` function. The processor does not resolve them by
+ * itself: it passes them to this object, and uses what it returns. That is the whole point of the
+ * interface -- **standing between a URI and its content**.
  *
- * <p>Que se gana con esa indireccion, que es lo que justifica que exista: se puede servir la hoja
- * de estilo desde un catalogo en memoria o desde el jar de la aplicacion en vez de la red; se puede
- * cachear; y sobre todo se puede **negar** el acceso, que es la defensa habitual contra que un
- * documento hostil se traiga archivos del disco o abra conexiones salientes.
+ * <p>What that indirection buys, which is what justifies its existence: the stylesheet can be
+ * served from an in-memory catalog or from the application's jar instead of the network; it can be
+ * cached; and above all access can be **denied**, which is the usual defence against a hostile
+ * document pulling files from disk or opening outgoing connections.
  *
- * <p>El contrato de {@link #resolve} tiene un detalle que se pasa por alto: devolver {@code null}
- * **no es un error**. Significa "resolvelo vos como sabes", y el procesador vuelve a su mecanismo
- * por omision. Para prohibir de verdad hay que lanzar {@link TransformerException}.
+ * <p>The contract of {@link #resolve} has a detail that gets overlooked: returning {@code null}
+ * **is not an error**. It means "resolve it yourself as you know how", and the processor goes back
+ * to its default mechanism. To really forbid, {@link TransformerException} has to be thrown.
  */
 public interface URIResolver {
 
     /**
-     * El documento que corresponde a {@code href} resuelto contra {@code base}.
+     * The document that corresponds to {@code href} resolved against {@code base}.
      *
-     * @param href la URI tal como aparece en el documento, posiblemente relativa
-     * @param base la URI base contra la cual resolverla
-     * @return la fuente a usar, o null para dejar que el procesador resuelva por su cuenta
-     * @throws TransformerException si la referencia no se puede o no se debe seguir
+     * @param href the URI as it appears in the document, possibly relative
+     * @param base the base URI against which to resolve it
+     * @return the source to use, or null to let the processor resolve on its own
+     * @throws TransformerException if the reference cannot or must not be followed
      */
     Source resolve(String href, String base) throws TransformerException;
 }

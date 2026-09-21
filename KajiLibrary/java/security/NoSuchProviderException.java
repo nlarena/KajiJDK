@@ -1,11 +1,11 @@
 package java.security;
 
-// No hay ningun proveedor registrado con ese nombre.
+// There is no provider registered with that name.
 //
-// Es distinta de `NoSuchAlgorithmException`: aca el problema es que el proveedor **no existe**, no
-// que exista y no sepa el algoritmo. Por eso lleva dos constructores y no cuatro — nunca se arma
-// envolviendo otra causa, porque no hay operacion que haya fallado por debajo: es una busqueda en
-// una tabla que no encontro nada.
+// It is different from `NoSuchAlgorithmException`: here the problem is that the provider **does not
+// exist**, not that it exists and does not know the algorithm. That is why it carries two
+// constructors and not four — it is never built wrapping another cause, because there is no
+// operation that failed underneath: it is a search in a table that found nothing.
 public class NoSuchProviderException extends GeneralSecurityException {
 
     public NoSuchProviderException() {

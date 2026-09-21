@@ -4,11 +4,12 @@ import java.lang.classfile.Instruction;
 import java.lang.classfile.Opcode;
 import jdk.internal.classfile.impl.Instructions;
 
-// `monitorenter` o `monitorexit`. Cuál de los dos lo dice `opcode()`, que ya está en
-// {@link Instruction}; por eso esta interfaz no agrega ningún accesor.
+// `monitorenter` or `monitorexit`. Which of the two is said by `opcode()`, which is already in
+// {@link Instruction}; that is why this interface adds no accessor.
 public interface MonitorInstruction extends Instruction {
 
-    /** La instrucción de este opcode. Tira `IllegalArgumentException` si no es de monitor. */
+    /** The instruction for this opcode. It throws `IllegalArgumentException` if it is not a
+     * monitor one. */
     public static MonitorInstruction of(Opcode op) {
         return Instructions.monitor(op);
     }

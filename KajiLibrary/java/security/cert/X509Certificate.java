@@ -8,49 +8,53 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
-// Un certificado X.509 v3 (RFC 5280).
+// An X.509 v3 certificate (RFC 5280).
 //
 // ===============================================================================================
-// POR QUE DECLARARLA ENTERA ES HONESTO
+// WHY DECLARING IT WHOLE IS HONEST
 // ===============================================================================================
 //
-// Esta clase es **abstracta**, y eso cambia todo. No parsea un certificado ni verifica una firma:
-// declara **que se le puede preguntar** a algo que ya es un certificado. Es un contrato, y un
-// contrato completo es exactamente lo que hace falta para que el resto del paquete —los
-// selectores, los validadores, las anclas de confianza— pueda escribirse sin inventar nada.
+// This class is **abstract**, and that changes everything. It does not parse a certificate and does
+// not verify a signature: it declares **what can be asked** of something that is a certificate
+// already. It is a contract, and a complete contract is exactly what is needed for the rest of the
+// package —the selectors, the validators, the trust anchors— to be writable without inventing
+// anything.
 //
-// Esta biblioteca **no trae ninguna subclase**: no hay parser de DER de certificados ni RSA ni
-// ECDSA. Quien quiera un certificado de verdad tiene que traer una implementacion. Lo que esta
-// clase promete es solo la forma.
+// This library brings **no subclass**: there is no DER parser of certificates and no RSA and no
+// ECDSA. Whoever wants a real certificate has to bring an implementation. What this class promises
+// is only the shape.
 //
 // ===============================================================================================
-// LOS NOMBRES X.500
+// THE X.500 NAMES
 // ===============================================================================================
 //
-// `getSubjectX500Principal()` y `getIssuerX500Principal()` estuvieron un tiempo afuera, con el
-// argumento de que comparar nombres X.500 mal es como se falsifica una cadena y que no habia donde
-// hacerlo bien. Ahora `javax.security.auth.x500.X500Principal` existe —con su decodificador de DER,
-// su parser de RFC 2253 y su forma canonica, todos probados contra el JDK—, asi que el argumento se
-// cayo: la parte riesgosa vive en un solo lugar y estos dos metodos solo la usan.
+// `getSubjectX500Principal()` and `getIssuerX500Principal()` were out for a while, with the
+// argument that comparing X.500 names wrongly is how a chain is forged and that there was nowhere
+// to do it properly. Now `javax.security.auth.x500.X500Principal` exists —with its DER decoder, its
+// RFC 2253 parser and its canonical form, all tested against the JDK—, so the argument fell: the
+// risky part lives in a single place and these two methods only use it.
 //
-// Lo que hacen es lo mismo que hace el JDK: parsear los bytes de `getEncoded()` hasta el campo que
-// corresponde y construir un `X500Principal` con ese tramo. **No** se usa `getIssuerDN()`: pasar por
-// el `toString` de un `Principal` cualquiera y re-parsearlo es justamente la confusion de nombres
-// que se queria evitar. Si el DER no se puede leer se lanza `RuntimeException`, que es lo que hace
-// el JDK —el metodo no declara excepciones y no hay forma honesta de devolver un nombre igual—.
+// What they do is the same thing the JDK does: parse the bytes of `getEncoded()` as far as the
+// corresponding field and build an `X500Principal` with that stretch. `getIssuerDN()` is **not**
+// used: going through the `toString` of just any `Principal` and reparsing it is precisely the
+// confusion of names one wanted to avoid. If the DER cannot be read a `RuntimeException` is thrown,
+// which is what the JDK does —the method declares no exceptions and there is no honest way of
+// returning a name all the same—.
 //
-// `getSubjectAlternativeNames()` y `getIssuerAlternativeNames()` estan, pero devolviendo `null`
-// como la clase base del JDK: son metodos concretos cuyo contrato es "las subclases lo saben, yo
-// no". Decodificar `GeneralName` sigue sin estar, y por eso ninguna subclase de aca los sobrescribe.
+// `getSubjectAlternativeNames()` and `getIssuerAlternativeNames()` are there, but returning `null`
+// like the base class of the JDK: they are concrete methods whose contract is "the subclasses know,
+// I do not". Decoding `GeneralName` is still not there, and that is why no subclass here overrides
+// them.
 //
-// `getExtendedKeyUsage()` decodifica de verdad: su extension es un SEQUENCE OF OID y nada mas, sin
-// ninguna decision de confianza adentro. Ver `DerReader` para donde se puso exactamente el limite.
+// `getExtendedKeyUsage()` really decodes: its extension is a SEQUENCE OF OID and nothing else, with
+// no decision of trust inside. See `DerReader` for exactly where the limit was put.
 public abstract class X509Certificate extends Certificate implements X509Extension, DEREncodable {
 
     private static final String OID_EXTENDED_KEY_USAGE = "2.5.29.37";
 
-    // Se recuerdan porque parsear el certificado entero en cada llamada seria caro y porque el JDK
-    // devuelve la misma instancia dos veces seguidas, cosa que hay codigo que compara con `==`.
+    // They are remembered because parsing the whole certificate at every call would be expensive
+    // and because the JDK returns the same instance twice in a row, something there is code that
+    // compares with `==`.
     private javax.security.auth.x500.X500Principal issuerX500;
     private javax.security.auth.x500.X500Principal subjectX500;
 
@@ -58,41 +62,43 @@ public abstract class X509Certificate extends Certificate implements X509Extensi
         super("X.509");
     }
 
-    // Comprueba que el certificado este vigente **ahora**. Sin valor de retorno: si no lanza, esta
-    // vigente. Es el mismo contrato que `verify` y el mismo riesgo de tragarselo con un catch vacio.
+    // It checks that the certificate is current **now**. With no return value: if it does not
+    // throw, it is current. It is the same contract as `verify` and the same risk of swallowing it
+    // with an empty catch.
     public abstract void checkValidity()
         throws CertificateExpiredException, CertificateNotYetValidException;
 
-    // Idem, pero en una fecha dada. Sirve para verificar una firma vieja: la pregunta correcta ahi
-    // no es si el certificado vale hoy sino si valia cuando se firmo.
+    // The same, but at a given date. It serves for verifying an old signature: the right question
+    // there is not whether the certificate is valid today but whether it was valid when it signed.
     public abstract void checkValidity(Date date)
         throws CertificateExpiredException, CertificateNotYetValidException;
 
-    // La version: 1, 2 o 3. Un certificado v1 no tiene extensiones, asi que no tiene ni
-    // BasicConstraints ni KeyUsage; tratarlo como CA porque "no dice que no" es un error clasico.
+    // The version: 1, 2 or 3. A v1 certificate has no extensions, so it has neither
+    // BasicConstraints nor KeyUsage; treating it as a CA because "it does not say it is not" is a
+    // classic mistake.
     public abstract int getVersion();
 
-    // El numero de serie. Unico **por emisor**, no en absoluto: el par (emisor, serie) es lo que
-    // identifica un certificado, y por eso las CRLs y los selectores siempre piden los dos.
+    // The serial number. Unique **per issuer**, not absolutely: the pair (issuer, serial) is what
+    // identifies a certificate, and that is why the CRLs and the selectors always ask for both.
     public abstract BigInteger getSerialNumber();
 
-    // El emisor como `Principal`.
+    // The issuer as a `Principal`.
     //
-    // Este metodo esta desaconsejado en el JDK a favor de `getIssuerX500Principal()`, y con razon:
-    // el `Principal` que devuelve es de una clase interna y comparar dos nombres por su `toString`
-    // no es confiable. Aca es el unico que hay, porque el reemplazo necesita un tipo que esta
-    // biblioteca no tiene; ver el comentario de la clase.
+    // This method is discouraged in the JDK in favour of `getIssuerX500Principal()`, and with
+    // reason: the `Principal` it returns is of an internal class and comparing two names by their
+    // `toString` is not reliable. The replacement is here —see the comment of the class, which
+    // explains that `X500Principal` exists now— and this one stays for the signatures that name it.
     public abstract Principal getIssuerDN();
 
-    // El sujeto como `Principal`. Vale lo mismo que para `getIssuerDN()`.
+    // The subject as a `Principal`. The same holds as for `getIssuerDN()`.
     public abstract Principal getSubjectDN();
 
-    // El emisor como nombre X.500, que es la forma con la que **si** se puede comparar.
+    // The issuer as an X.500 name, which is the form with which comparison **is** possible.
     //
-    // Es el reemplazo de `getIssuerDN()` y la diferencia no es cosmetica: dos nombres X.500 iguales
-    // pueden escribirse distinto —mayusculas, espacios, orden de escape— y solo la forma canonica de
-    // `X500Principal` los da por iguales. Encadenar un certificado con su emisor comparando textos
-    // es exactamente el error que deja pasar un certificado ajeno.
+    // It is the replacement of `getIssuerDN()` and the difference is not cosmetic: two equal X.500
+    // names can be written differently —upper case, spaces, order of escaping— and only the
+    // canonical form of `X500Principal` gives them as equal. Chaining a certificate with its issuer
+    // by comparing texts is exactly the mistake that lets somebody else's certificate through.
     public javax.security.auth.x500.X500Principal getIssuerX500Principal() {
         if (this.issuerX500 == null) {
             this.issuerX500 = name(false);
@@ -100,7 +106,7 @@ public abstract class X509Certificate extends Certificate implements X509Extensi
         return this.issuerX500;
     }
 
-    // El sujeto como nombre X.500. Vale lo mismo que para `getIssuerX500Principal()`.
+    // The subject as an X.500 name. The same holds as for `getIssuerX500Principal()`.
     public javax.security.auth.x500.X500Principal getSubjectX500Principal() {
         if (this.subjectX500 == null) {
             this.subjectX500 = name(true);
@@ -121,78 +127,81 @@ public abstract class X509Certificate extends Certificate implements X509Extensi
         }
     }
 
-    // Los nombres alternativos del sujeto (extension SubjectAltName), o null si no hay.
+    // The alternative names of the subject (SubjectAltName extension), or null if there are none.
     //
-    // Devuelve null y no lanza: es un metodo **concreto** de la clase base cuyo contrato es "la
-    // subclase que sepa decodificar `GeneralName` que lo sobrescriba". El JDK hace exactamente esto
-    // mismo. Devolver una lista vacia estaria mal: vacio y ausente son cosas distintas —vacio
-    // significaria que el certificado no sirve para ningun nombre—.
+    // It returns null and does not throw: it is a **concrete** method of the base class whose
+    // contract is "the subclass that knows how to decode `GeneralName` should override it". The JDK
+    // does exactly this same thing. Returning an empty list would be wrong: empty and absent are
+    // different things —empty would mean that the certificate serves for no name—.
     //
-    // Para un certificado de servidor **este es el metodo que importa**, no el CN del sujeto: desde
-    // el RFC 6125 el nombre del host se busca aca y el CN quedo como respaldo historico.
+    // For a server certificate **this is the method that matters**, not the CN of the subject:
+    // since RFC 6125 the name of the host is looked for here and the CN was left as a historical
+    // fallback.
     public java.util.Collection<List<?>> getSubjectAlternativeNames()
             throws CertificateParsingException {
         return null;
     }
 
-    // Los nombres alternativos del emisor. Mismo contrato que el de arriba.
+    // The alternative names of the issuer. The same contract as the one above.
     public java.util.Collection<List<?>> getIssuerAlternativeNames()
             throws CertificateParsingException {
         return null;
     }
 
-    // Desde cuando vale.
+    // From when it is valid.
     public abstract Date getNotBefore();
 
-    // Hasta cuando vale.
+    // Until when it is valid.
     public abstract Date getNotAfter();
 
-    // La parte firmada del certificado: todo menos la firma misma. Es sobre estos bytes que hay que
-    // verificar, y por eso el metodo existe en vez de dejar que cada quien recorte el DER.
+    // The signed part of the certificate: everything except the signature itself. It is over these
+    // bytes that one has to verify, and that is why the method exists instead of letting everybody
+    // cut the DER themselves.
     public abstract byte[] getTBSCertificate() throws CertificateEncodingException;
 
-    // Los bits de la firma.
+    // The bits of the signature.
     public abstract byte[] getSignature();
 
-    // El nombre del algoritmo de firma: "SHA256withRSA".
+    // The name of the signature algorithm: "SHA256withRSA".
     public abstract String getSigAlgName();
 
-    // El OID del algoritmo de firma. Es el dato **autoritativo**: el nombre depende de que tabla de
-    // OIDs tenga la implementacion y puede ser nulo o raro para algoritmos que no conoce.
+    // The OID of the signature algorithm. It is the **authoritative** datum: the name depends on
+    // which table of OIDs the implementation has and can be null or odd for algorithms it does not
+    // know.
     public abstract String getSigAlgOID();
 
-    // Los parametros del algoritmo de firma en DER, o null si no lleva. Para RSASSA-PSS no es
-    // opcional: ahi es donde vive el hash y el largo de sal.
+    // The parameters of the signature algorithm in DER, or null if it carries none. For RSASSA-PSS
+    // it is not optional: that is where the hash and the length of the salt live.
     public abstract byte[] getSigAlgParams();
 
-    // El identificador unico del emisor (v2+), o null. Practicamente no se usa.
+    // The unique identifier of the issuer (v2+), or null. It is practically not used.
     public abstract boolean[] getIssuerUniqueID();
 
-    // El identificador unico del sujeto (v2+), o null.
+    // The unique identifier of the subject (v2+), or null.
     public abstract boolean[] getSubjectUniqueID();
 
-    // La extension KeyUsage como bits, o null si no esta.
+    // The KeyUsage extension as bits, or null if it is not there.
     //
-    // El orden de los bits es el del RFC: 0 digitalSignature, 1 nonRepudiation, 2 keyEncipherment,
-    // 3 dataEncipherment, 4 keyAgreement, 5 keyCertSign, 6 cRLSign, 7 encipherOnly,
-    // 8 decipherOnly. El que importa para una cadena es el 5: sin el, el certificado no puede
-    // firmar otros certificados aunque BasicConstraints diga que es CA.
+    // The order of the bits is that of the RFC: 0 digitalSignature, 1 nonRepudiation, 2
+    // keyEncipherment, 3 dataEncipherment, 4 keyAgreement, 5 keyCertSign, 6 cRLSign, 7
+    // encipherOnly, 8 decipherOnly. The one that matters for a chain is 5: without it, the
+    // certificate cannot sign other certificates even if BasicConstraints says it is a CA.
     public abstract boolean[] getKeyUsage();
 
-    // La restriccion de largo de cadena de BasicConstraints, o -1 si el certificado **no es una
-    // CA**.
+    // The chain length restriction of BasicConstraints, or -1 if the certificate **is not a CA**.
     //
-    // El valor de retorno mezcla dos cosas y hay que leerlo con cuidado: -1 significa "no es CA";
-    // `Integer.MAX_VALUE` significa "es CA sin limite de largo"; cualquier otro numero es el limite.
-    // Tomar el -1 por "es CA con largo cero" es exactamente al reves de lo que dice.
+    // The return value mixes two things and has to be read carefully: -1 means "it is not a CA";
+    // `Integer.MAX_VALUE` means "it is a CA with no limit of length"; any other number is the
+    // limit. Taking the -1 for "it is a CA with length zero" is exactly the opposite of what it
+    // says.
     public abstract int getBasicConstraints();
 
-    // Los OIDs de ExtendedKeyUsage, o null si la extension no esta.
+    // The OIDs of ExtendedKeyUsage, or null if the extension is not there.
     //
-    // La distincion entre null y lista vacia importa: null es "el certificado no restringe para que
-    // sirve", vacio es "no sirve para nada". Son opuestos.
+    // The distinction between null and an empty list matters: null is "the certificate does not
+    // restrict what it serves for", empty is "it serves for nothing". They are opposites.
     //
-    // Se decodifica de verdad porque la extension es un SEQUENCE OF OBJECT IDENTIFIER y nada mas.
+    // It really decodes because the extension is a SEQUENCE OF OBJECT IDENTIFIER and nothing else.
     public List<String> getExtendedKeyUsage() throws CertificateParsingException {
         byte[] ext = this.getExtensionValue(OID_EXTENDED_KEY_USAGE);
         if (ext == null) {

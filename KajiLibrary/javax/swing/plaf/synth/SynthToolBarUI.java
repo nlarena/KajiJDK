@@ -10,10 +10,10 @@ import javax.swing.JComponent;
 import javax.swing.plaf.ComponentUI;
 
 /**
- * La barra de herramientas de Synth.
+ * Synth's tool bar.
  *
- * <p>Tres regiones: la barra, el contenido y la manija de arrastre. Como en todo el paquete, lo que
- * el basico resuelve con colores y bordes aca es una imagen por estado.
+ * <p>Three regions: the bar, the content and the drag handle. As everywhere in the package,
+ * what the basic one solves with colours and borders is here an image per state.
  */
 public class SynthToolBarUI extends javax.swing.plaf.basic.BasicToolBarUI implements SynthUI, PropertyChangeListener {
 
@@ -24,32 +24,33 @@ public class SynthToolBarUI extends javax.swing.plaf.basic.BasicToolBarUI implem
     }
 
     public SynthContext getContext(JComponent c) {
-        return getContext(c, SynthLookAndFeel.estadoDe(c));
+        return getContext(c, SynthLookAndFeel.stateOf(c));
     }
 
     /**
-     * El contexto con ese estado.
+     * The context with that state.
      *
-     * <p>La region sale del componente y no de una constante fija, y eso importa en las cadenas de
-     * herencia: {@code SynthCheckBoxUI} hereda este metodo de {@code SynthButtonUI} y tiene que
-     * contestar {@code CheckBox}, no {@code Button}. Medido.
+     * <p>The region comes from the component and not from a fixed constant, and that matters in the
+     * chains of inheritance: {@code SynthCheckBoxUI} inherits this method from {@code
+     * SynthButtonUI} and has to answer {@code CheckBox}, not {@code Button}. Measured.
      */
     private SynthContext getContext(JComponent c, int state) {
         Region r = SynthLookAndFeel.getRegion(c);
         return new SynthContext(c, (r != null) ? r : Region.TOOL_BAR, style, state, true);
     }
 
-    /** Le pide el estilo a la fabrica; revienta si no hay, y esta medido. */
+    /** It asks the factory for the style; it blows up if there is none, and it is measured. */
     private void updateStyle(JComponent c) {
-        style = SynthLookAndFeel.actualizar(getContext(c, SynthConstants.ENABLED));
+        style = SynthLookAndFeel.update(getContext(c, SynthConstants.ENABLED));
     }
 
     /**
-     * Dibuja el fondo y despues el contenido.
+     * It draws the background and then the content.
      *
-     * <p>Synth separa las dos cosas: el fondo lo pinta el estilo -- que sabe en que estado esta el
-     * componente -- y el contenido lo pinta el aspecto basico. Por eso {@code update} no es
-     * {@code paint} con un relleno adelante, como en el basico, sino dos pasos distintos.
+     * <p>Synth separates the two things: the background is painted by the style -- which knows what
+     * state the component is in -- and the content is painted by the basic look and feel. That is
+     * why {@code update} is not {@code paint} with a fill in front, as in the basic one, but two
+     * different steps.
      */
     public void update(Graphics g, JComponent c) {
         SynthContext context = getContext(c);
@@ -65,19 +66,19 @@ public class SynthToolBarUI extends javax.swing.plaf.basic.BasicToolBarUI implem
     }
 
     protected void paint(SynthContext context, Graphics g) {
-        // Los botones se dibujan solos; ver la nota de la clase.
+        // The buttons draw themselves; see the class note.
     }
 
     /**
-     * El contenido de la barra, en su region propia.
+     * The bar's content, in its own region.
      *
-     * <p>La barra tiene dos regiones y no una: {@code ToolBar} para el marco entero y
-     * {@code ToolBarContent} para donde van los botones. Estan separadas porque una barra puede
-     * tener manija de arrastre, y la manija va adentro del marco pero afuera del contenido.
+     * <p>The bar has two regions and not one: {@code ToolBar} for the whole frame and
+     * {@code ToolBarContent} for where the buttons go. They are separate because a bar may have a
+     * drag handle, and the handle goes inside the frame but outside the content.
      *
-     * @param context el contexto del contenido
-     * @param g donde dibujar
-     * @param bounds donde va
+     * @param context the context
+     * @param g where to draw
+     * @param bounds where it goes
      */
     protected void paintContent(SynthContext context, Graphics g, Rectangle bounds) {
         if (context != null && context.getStyle() != null) {
@@ -87,12 +88,12 @@ public class SynthToolBarUI extends javax.swing.plaf.basic.BasicToolBarUI implem
         }
     }
 
-    /** La distribucion de la barra; la del basico alcanza. */
+    /** The bar's layout; the basic one's is enough. */
     protected java.awt.LayoutManager createLayout() {
         return null;
     }
 
-    /** El borde lo dibuja el estilo, no un {@code Border}; ver {@link SynthUI}. */
+    /** The border is drawn by the style, not by a {@code Border}; see {@link SynthUI}. */
     public void paintBorder(SynthContext context, Graphics g, int x, int y, int w, int h) {
         if (context != null && context.getStyle() != null) {
             context.getStyle().getPainter(context)
@@ -100,7 +101,7 @@ public class SynthToolBarUI extends javax.swing.plaf.basic.BasicToolBarUI implem
         }
     }
 
-    /** Cualquier cambio puede querer otro estilo; ver {@link SynthLookAndFeel#actualizar}. */
+    /** Any change may want another style; see {@link SynthLookAndFeel#update}. */
     public void propertyChange(PropertyChangeEvent e) {
         Object o = e.getSource();
         if (o instanceof JComponent) {

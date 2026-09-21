@@ -13,48 +13,49 @@ import javax.swing.plaf.FontUIResource;
 import javax.swing.plaf.basic.BasicLookAndFeel;
 
 /**
- * El aspecto grafico Metal, el unico que Java trae y se ve igual en todos lados.
+ * The Metal look and feel, the only one Java ships that looks the same everywhere.
  *
- * <h2>Cuarenta metodos estaticos que no guardan nada</h2>
+ * <h2>Forty static methods that keep nothing</h2>
  *
- * <p>Casi toda esta clase es una fachada del tema: {@link #getControl} llama a
- * {@code getCurrentTheme().getControl()} y no hace nada mas. Estan porque las treinta y pico de
- * clases {@code Metal*UI} preguntan colores todo el tiempo, y escribir
- * {@code MetalLookAndFeel.getControlShadow()} en vez de buscar el tema es la diferencia entre que
- * se lea o no.
+ * <p>Almost all of this class is a facade over the theme: {@link #getControl} calls
+ * {@code getCurrentTheme().getControl()} and does nothing else. They are there because the
+ * thirty-odd {@code Metal*UI} classes ask for colours all the time, and writing
+ * {@code MetalLookAndFeel.getControlShadow()} instead of looking up the theme is the difference
+ * between reading and not reading.
  *
- * <p>El tema es <strong>estatico</strong>: hay uno solo por maquina virtual y
- * {@link #setCurrentTheme} lo cambia para todos. Eso es lo que permite que un programa cambie de
- * paleta con una linea, y tambien la razon de que no se pueda tener dos ventanas con temas
- * distintos.
+ * <p>The theme is <strong>static</strong>: there is one per virtual machine and
+ * {@link #setCurrentTheme} changes it for everybody. That is what allows a program to change
+ * palette with one line, and also the reason two windows with different themes cannot be had.
  *
- * <h2>El aspecto se arma en tres pasos</h2>
+ * <h2>The look and feel is assembled in three steps</h2>
  *
- * <p>{@link #initClassDefaults} dice que clase dibuja cada componente,
- * {@link #initSystemColorDefaults} pone los nombres de color del sistema
- * -- {@code "control"}, {@code "window"}, {@code "menuText"} -- y
- * {@link #initComponentDefaults} pone todo lo demas. Los tres escriben sobre la misma tabla y en
- * ese orden, asi que el ultimo puede pisar al primero.
+ * <p>{@link #initClassDefaults} says which class draws each component,
+ * {@link #initSystemColorDefaults} sets the system colour names
+ * -- {@code "control"}, {@code "window"}, {@code "menuText"} -- and
+ * {@link #initComponentDefaults} sets everything else. The three write over the same table and
+ * in that order, so the last one can overwrite the first.
  *
- * <p>Lo notable de {@code initClassDefaults} es que **veintitres** de las cuarenta y tres entradas
- * apuntan a clases de {@code plaf.basic} y no a clases de Metal. Metal no redefine lo que no
- * necesita cambiar: una lista, una tabla, un menu contextual se ven igual, y escribir un
- * {@code MetalListUI} que no agregue nada seria una clase de mas en cada arranque.
+ * <p>What is notable about {@code initClassDefaults} is that **twenty-three** of the
+ * forty-three entries point at classes of {@code plaf.basic} and not at Metal classes. Metal
+ * does not redefine what it does not need to change: a list, a table, a context menu look the
+ * same, and writing a {@code MetalListUI} that added nothing would be one more class at every
+ * start-up.
  *
- * <h2>Lo que queda dicho y no tapado</h2>
+ * <h2>What is said and not covered up</h2>
  *
- * <p>{@link #initComponentDefaults} pone las entradas que se derivan del tema -- colores, fuentes,
- * margenes, bordes -- pero no las mil y pico del JDK: faltan los atajos de teclado, que necesitan
- * la lista completa de acciones por componente, y las entradas de icono, que son imagenes del jar.
- * La tabla del JDK tiene 642 entradas y esta muchas menos; las que estan son las mismas.
+ * <p>{@link #initComponentDefaults} sets the entries derived from the theme -- colours, fonts,
+ * margins, borders -- but not the JDK's thousand-odd: the keyboard shortcuts are missing, which
+ * need the complete list of actions per component, and the icon entries, which are images from
+ * the jar. The JDK's table has 642 entries and this one many fewer; those that are there are the
+ * same.
  *
- * <p>{@link #getSupportsWindowDecorations} contesta que si -- es lo que contesta el JDK -- aunque
- * decorar una ventana de verdad necesite un escritorio que esta VM no tiene.
+ * <p>{@link #getSupportsWindowDecorations} answers yes -- it is what the JDK answers -- even
+ * though really decorating a window needs a desktop this VM does not have.
  */
 public class MetalLookAndFeel extends BasicLookAndFeel {
 
-    private static MetalTheme temaActual;
-    private static LayoutStyle estilo;
+    private static MetalTheme currentTheme;
+    private static LayoutStyle style;
 
     public MetalLookAndFeel() {
     }
@@ -71,12 +72,12 @@ public class MetalLookAndFeel extends BasicLookAndFeel {
         return "The Java(tm) Look and Feel";
     }
 
-    /** No: Metal no imita a ningun sistema, y ese es el punto. */
+    /** No: Metal imitates no system, and that is the point. */
     public boolean isNativeLookAndFeel() {
         return false;
     }
 
-    /** Siempre; Metal anda donde ande Java. */
+    /** Always; Metal runs wherever Java runs. */
     public boolean isSupportedLookAndFeel() {
         return true;
     }
@@ -87,44 +88,44 @@ public class MetalLookAndFeel extends BasicLookAndFeel {
 
     /** Ocean; ver {@link OceanTheme}. */
     protected void createDefaultTheme() {
-        if (temaActual == null) {
+        if (currentTheme == null) {
             setCurrentTheme(new OceanTheme());
         }
     }
 
     /**
-     * Cambia el tema de toda la maquina virtual.
+     * It changes the theme of the whole virtual machine.
      *
-     * @param theme el tema
-     * @throws NullPointerException si es nulo; el mensaje es el del JDK y esta medido
+     * @param theme the theme
+     * @throws NullPointerException if it is null; the message is the JDK's and is measured
      */
     public static void setCurrentTheme(MetalTheme theme) {
         if (theme == null) {
             throw new NullPointerException("Can't have null theme");
         }
-        temaActual = theme;
+        currentTheme = theme;
     }
 
-    /** El tema; si nadie puso ninguno, Ocean. */
+    /** The theme; if nobody set one, Ocean. */
     public static MetalTheme getCurrentTheme() {
-        if (temaActual == null) {
-            temaActual = new OceanTheme();
+        if (currentTheme == null) {
+            currentTheme = new OceanTheme();
         }
-        return temaActual;
+        return currentTheme;
     }
 
     /**
-     * Si el tema actual es Ocean.
+     * Whether the current theme is Ocean.
      *
-     * <p>Un puñado de clases de Metal se dibujan distinto con Ocean que con Steel, y esta es la
-     * pregunta que hacen. La mas visible es el desplegable: con Steel es un boton entero y con
-     * Ocean es un campo con una flecha al lado.
+     * <p>A handful of Metal classes draw themselves differently with Ocean than with Steel, and
+     * this is the question they ask. The most visible is the combo box: with Steel it is a whole
+     * button and with Ocean it is a field with an arrow beside it.
      */
-    static boolean usandoOcean() {
+    static boolean usingOcean() {
         return getCurrentTheme() instanceof OceanTheme;
     }
 
-    // ---- la fachada del tema ----
+    // ---- the theme's facade ----
 
     public static ColorUIResource getWhite() {
         return getCurrentTheme().getWhite();
@@ -295,45 +296,46 @@ public class MetalLookAndFeel extends BasicLookAndFeel {
     }
 
     /**
-     * Un color de la tabla de Metal, por su clave.
+     * A colour from Metal's table, by its key.
      *
-     * <p>Mira primero el aspecto instalado y, si no hay ninguno, la tabla que este aspecto
-     * generaria. Las clases {@code Metal*UI} la usan para sacar sus colores con el prefijo de su
-     * componente, y de ahi sale una diferencia que sorprende y esta medida: {@code "CheckBox.focus"}
-     * existe y {@code "CheckBox.select"} no, asi que una casilla tiene color de foco y no tiene
-     * color de seleccion. No es un olvido -- una casilla no se rellena al elegirse, se le dibuja
-     * una tilde -- pero solo se ve mirando la tabla.
+     * <p>It looks first at the installed look and feel and, if there is none, at the table this
+     * look and feel would generate. The {@code Metal*UI} classes use it to take their colours with
+     * their component's prefix, and from there comes a difference that is surprising and is
+     * measured: {@code "CheckBox.focus"} exists and {@code "CheckBox.select"} does not, so a
+     * check box has a focus colour and has no selection colour. It is not an oversight -- a check
+     * box is not filled when chosen, a tick is drawn on it -- but it is only seen by looking at the
+     * table.
      *
-     * @param clave la clave, con prefijo
-     * @return el color, o {@code null} si esa clave no esta
+     * @param key the key, with a prefix
+     * @return the colour, or {@code null} if that key is not there
      */
-    static java.awt.Color colorDeLaTabla(String clave) {
-        java.awt.Color c = javax.swing.UIManager.getColor(clave);
+    static java.awt.Color tableColor(String key) {
+        java.awt.Color c = javax.swing.UIManager.getColor(key);
         if (c != null) {
             return c;
         }
-        Object o = tablaPropia().get(clave);
+        Object o = ownTable().get(key);
         return (o instanceof java.awt.Color) ? (java.awt.Color) o : null;
     }
 
-    private static UIDefaults tablaPropia;
-    private static MetalTheme temaDeLaTabla;
+    private static UIDefaults ownTable;
+    private static MetalTheme tableTheme;
 
-    /** La tabla de este aspecto, rearmada si cambio el tema. */
-    private static UIDefaults tablaPropia() {
+    /** This look and feel's table, rebuilt if the theme changed. */
+    private static UIDefaults ownTable() {
         MetalTheme t = getCurrentTheme();
-        if (tablaPropia == null || temaDeLaTabla != t) {
-            UIDefaults tabla = new UIDefaults();
-            new MetalLookAndFeel().initComponentDefaults(tabla);
-            // Y lo que el tema agrega encima, que es de donde salen los colores de las solapas.
-            t.addCustomEntriesToTable(tabla);
-            tablaPropia = tabla;
-            temaDeLaTabla = t;
+        if (ownTable == null || tableTheme != t) {
+            UIDefaults table = new UIDefaults();
+            new MetalLookAndFeel().initComponentDefaults(table);
+            // And what the theme adds on top, which is where the tabs' colours come from.
+            t.addCustomEntriesToTable(table);
+            ownTable = table;
+            tableTheme = t;
         }
-        return tablaPropia;
+        return ownTable;
     }
 
-    // ---- la tabla ----
+    // ---- the table ----
 
     public UIDefaults getDefaults() {
         createDefaultTheme();
@@ -342,12 +344,12 @@ public class MetalLookAndFeel extends BasicLookAndFeel {
         return table;
     }
 
-    /** Veinte de Metal y veintitres del basico; ver la nota de la clase. */
+    /** Twenty of Metal's and twenty-three of the basic one's; see the class note. */
     protected void initClassDefaults(UIDefaults table) {
         super.initClassDefaults(table);
         String metal = "javax.swing.plaf.metal.Metal";
-        String basico = "javax.swing.plaf.basic.Basic";
-        Object[] pares = {
+        String basic = "javax.swing.plaf.basic.Basic";
+        Object[] pairs = {
             "ButtonUI", metal + "ButtonUI",
             "CheckBoxUI", metal + "CheckBoxUI",
             "ComboBoxUI", metal + "ComboBoxUI",
@@ -372,40 +374,40 @@ public class MetalLookAndFeel extends BasicLookAndFeel {
             "ToolTipUI", metal + "ToolTipUI",
             "TreeUI", metal + "TreeUI",
 
-            // Lo que Metal no cambia se dibuja con el basico; ver la nota de la clase.
-            "CheckBoxMenuItemUI", basico + "CheckBoxMenuItemUI",
-            "ColorChooserUI", basico + "ColorChooserUI",
-            "DesktopPaneUI", basico + "DesktopPaneUI",
-            "EditorPaneUI", basico + "EditorPaneUI",
-            "FormattedTextFieldUI", basico + "FormattedTextFieldUI",
-            "ListUI", basico + "ListUI",
-            "MenuItemUI", basico + "MenuItemUI",
-            "MenuUI", basico + "MenuUI",
-            "OptionPaneUI", basico + "OptionPaneUI",
-            "PanelUI", basico + "PanelUI",
-            "PasswordFieldUI", basico + "PasswordFieldUI",
-            "PopupMenuUI", basico + "PopupMenuUI",
-            "RadioButtonMenuItemUI", basico + "RadioButtonMenuItemUI",
-            "SpinnerUI", basico + "SpinnerUI",
-            "TableHeaderUI", basico + "TableHeaderUI",
-            "TableUI", basico + "TableUI",
-            "TextAreaUI", basico + "TextAreaUI",
-            "TextPaneUI", basico + "TextPaneUI",
-            "ToolBarSeparatorUI", basico + "ToolBarSeparatorUI",
-            "ViewportUI", basico + "ViewportUI",
+            // What Metal does not change is drawn with the basic one; see the class note.
+            "CheckBoxMenuItemUI", basic + "CheckBoxMenuItemUI",
+            "ColorChooserUI", basic + "ColorChooserUI",
+            "DesktopPaneUI", basic + "DesktopPaneUI",
+            "EditorPaneUI", basic + "EditorPaneUI",
+            "FormattedTextFieldUI", basic + "FormattedTextFieldUI",
+            "ListUI", basic + "ListUI",
+            "MenuItemUI", basic + "MenuItemUI",
+            "MenuUI", basic + "MenuUI",
+            "OptionPaneUI", basic + "OptionPaneUI",
+            "PanelUI", basic + "PanelUI",
+            "PasswordFieldUI", basic + "PasswordFieldUI",
+            "PopupMenuUI", basic + "PopupMenuUI",
+            "RadioButtonMenuItemUI", basic + "RadioButtonMenuItemUI",
+            "SpinnerUI", basic + "SpinnerUI",
+            "TableHeaderUI", basic + "TableHeaderUI",
+            "TableUI", basic + "TableUI",
+            "TextAreaUI", basic + "TextAreaUI",
+            "TextPaneUI", basic + "TextPaneUI",
+            "ToolBarSeparatorUI", basic + "ToolBarSeparatorUI",
+            "ViewportUI", basic + "ViewportUI",
         };
-        table.putDefaults(pares);
+        table.putDefaults(pairs);
     }
 
     /**
-     * Los nombres de color del sistema, todos sacados del tema.
+     * The system colour names, all taken from the theme.
      *
-     * <p>Un aspecto nativo los pediria al escritorio; Metal no, y por eso se ve igual en todos
-     * lados. Los veintiseis nombres son los de {@code java.awt.SystemColor}.
+     * <p>A native look and feel would ask the desktop for them; Metal does not, and that is why it
+     * looks the same everywhere. The twenty-six names are {@code java.awt.SystemColor}'s.
      */
     protected void initSystemColorDefaults(UIDefaults table) {
         MetalTheme t = getCurrentTheme();
-        Object[] pares = {
+        Object[] pairs = {
             "desktop", t.getDesktopColor(),
             "activeCaption", t.getWindowTitleBackground(),
             "activeCaptionText", t.getWindowTitleForeground(),
@@ -433,103 +435,104 @@ public class MetalLookAndFeel extends BasicLookAndFeel {
             "info", t.getPrimaryControl(),
             "infoText", t.getPrimaryControlInfo(),
         };
-        table.putDefaults(pares);
+        table.putDefaults(pairs);
     }
 
-    /** Los colores, las fuentes y los margenes por componente; ver la nota de la clase. */
+    /** The colours, the fonts and the margins per component; see the class note. */
     protected void initComponentDefaults(UIDefaults table) {
         super.initComponentDefaults(table);
         MetalTheme t = getCurrentTheme();
         ColorUIResource control = t.getControl();
-        ColorUIResource texto = t.getControlTextColor();
-        ColorUIResource apagado = t.getInactiveControlTextColor();
-        ColorUIResource ventana = t.getWindowBackground();
-        ColorUIResource seleccion = t.getTextHighlightColor();
-        ColorUIResource textoElegido = t.getHighlightedTextColor();
-        FontUIResource fControl = t.getControlTextFont();
-        FontUIResource fSistema = t.getSystemTextFont();
-        FontUIResource fUsuario = t.getUserTextFont();
-        FontUIResource fMenu = t.getMenuTextFont();
-        FontUIResource fChica = t.getSubTextFont();
+        ColorUIResource text = t.getControlTextColor();
+        ColorUIResource disabledText = t.getInactiveControlTextColor();
+        ColorUIResource window = t.getWindowBackground();
+        ColorUIResource selection = t.getTextHighlightColor();
+        ColorUIResource chosenText = t.getHighlightedTextColor();
+        FontUIResource controlFont = t.getControlTextFont();
+        FontUIResource systemFont = t.getSystemTextFont();
+        FontUIResource userFont = t.getUserTextFont();
+        FontUIResource menuFont = t.getMenuTextFont();
+        FontUIResource smallFont = t.getSubTextFont();
 
-        Object[] pares = {
+        Object[] pairs = {
             "Button.background", control,
-            "Button.foreground", texto,
-            "Button.disabledText", apagado,
-            "Button.font", fControl,
+            "Button.foreground", text,
+            "Button.disabledText", disabledText,
+            "Button.font", controlFont,
             "Button.focus", t.getFocusColor(),
             "Button.select", t.getControlShadow(),
             "Button.margin", new java.awt.Insets(2, 14, 2, 14),
 
             "ToggleButton.background", control,
-            "ToggleButton.foreground", texto,
-            "ToggleButton.disabledText", apagado,
-            "ToggleButton.font", fControl,
+            "ToggleButton.foreground", text,
+            "ToggleButton.disabledText", disabledText,
+            "ToggleButton.font", controlFont,
             "ToggleButton.focus", t.getFocusColor(),
             "ToggleButton.select", t.getControlShadow(),
 
             "CheckBox.background", control,
-            "CheckBox.foreground", texto,
-            "CheckBox.disabledText", apagado,
-            "CheckBox.font", fControl,
+            "CheckBox.foreground", text,
+            "CheckBox.disabledText", disabledText,
+            "CheckBox.font", controlFont,
             "CheckBox.focus", t.getFocusColor(),
 
             "RadioButton.background", control,
-            "RadioButton.foreground", texto,
-            "RadioButton.disabledText", apagado,
-            "RadioButton.font", fControl,
+            "RadioButton.foreground", text,
+            "RadioButton.disabledText", disabledText,
+            "RadioButton.font", controlFont,
             "RadioButton.focus", t.getFocusColor(),
             "RadioButton.select", t.getPrimaryControl(),
 
-            // "CheckBox.select" no esta, y no es un olvido: una casilla no se rellena al
-            // elegirse, se le dibuja una tilde. Medido contra la tabla del JDK.
+            // "CheckBox.select" is not there, and it is not an oversight: a check box is not
+                        // filled when chosen, a tick is drawn on it. Measured against the JDK's
+                        // table.
 
             "Label.background", control,
             "Label.foreground", t.getSystemTextColor(),
-            "Label.disabledForeground", apagado,
-            "Label.font", fControl,
+            "Label.disabledForeground", disabledText,
+            "Label.font", controlFont,
 
             "Panel.background", control,
             "Panel.foreground", t.getUserTextColor(),
-            "Panel.font", fControl,
+            "Panel.font", controlFont,
 
             "Separator.background", t.getSeparatorBackground(),
             "Separator.foreground", t.getSeparatorForeground(),
 
-            "TextField.background", ventana,
+            "TextField.background", window,
             "TextField.foreground", t.getUserTextColor(),
-            "TextField.inactiveForeground", apagado,
-            "TextField.selectionBackground", seleccion,
-            "TextField.selectionForeground", textoElegido,
+            "TextField.inactiveForeground", disabledText,
+            "TextField.selectionBackground", selection,
+            "TextField.selectionForeground", chosenText,
             "TextField.caretForeground", t.getUserTextColor(),
-            "TextField.font", fUsuario,
+            "TextField.font", userFont,
 
-            "TextArea.background", ventana,
+            "TextArea.background", window,
             "TextArea.foreground", t.getUserTextColor(),
-            "TextArea.selectionBackground", seleccion,
-            "TextArea.selectionForeground", textoElegido,
-            "TextArea.font", fUsuario,
+            "TextArea.selectionBackground", selection,
+            "TextArea.selectionForeground", chosenText,
+            "TextArea.font", userFont,
 
-            "List.background", ventana,
+            "List.background", window,
             "List.foreground", t.getUserTextColor(),
-            "List.selectionBackground", seleccion,
-            "List.selectionForeground", textoElegido,
-            "List.font", fControl,
+            "List.selectionBackground", selection,
+            "List.selectionForeground", chosenText,
+            "List.font", controlFont,
 
-            "Table.background", ventana,
+            "Table.background", window,
             "Table.foreground", t.getUserTextColor(),
-            "Table.selectionBackground", seleccion,
-            "Table.selectionForeground", textoElegido,
-            "Table.font", fUsuario,
+            "Table.selectionBackground", selection,
+            "Table.selectionForeground", chosenText,
+            "Table.font", userFont,
 
-            "Tree.background", ventana,
+            "Tree.background", window,
             "Tree.foreground", t.getUserTextColor(),
-            "Tree.textBackground", ventana,
+            "Tree.textBackground", window,
             "Tree.textForeground", t.getUserTextColor(),
-            "Tree.selectionBackground", seleccion,
-            "Tree.selectionForeground", textoElegido,
+            "Tree.selectionBackground", selection,
+            "Tree.selectionForeground", chosenText,
             "Tree.hash", t.getPrimaryControl(),
-            "Tree.font", fUsuario,
+            "Tree.font", userFont,
             "Tree.rowHeight", Integer.valueOf(0),
 
             "Menu.background", t.getMenuBackground(),
@@ -539,12 +542,12 @@ public class MetalLookAndFeel extends BasicLookAndFeel {
             "Menu.disabledForeground", t.getMenuDisabledForeground(),
             "Menu.acceleratorForeground", t.getAcceleratorForeground(),
             "Menu.acceleratorSelectionForeground", t.getAcceleratorSelectedForeground(),
-            "Menu.font", fMenu,
-            "Menu.acceleratorFont", fChica,
+            "Menu.font", menuFont,
+            "Menu.acceleratorFont", smallFont,
 
             "MenuBar.background", t.getMenuBackground(),
             "MenuBar.foreground", t.getMenuForeground(),
-            "MenuBar.font", fMenu,
+            "MenuBar.font", menuFont,
 
             "MenuItem.background", t.getMenuBackground(),
             "MenuItem.foreground", t.getMenuForeground(),
@@ -552,12 +555,12 @@ public class MetalLookAndFeel extends BasicLookAndFeel {
             "MenuItem.selectionForeground", t.getMenuSelectedForeground(),
             "MenuItem.disabledForeground", t.getMenuDisabledForeground(),
             "MenuItem.acceleratorForeground", t.getAcceleratorForeground(),
-            "MenuItem.font", fMenu,
-            "MenuItem.acceleratorFont", fChica,
+            "MenuItem.font", menuFont,
+            "MenuItem.acceleratorFont", smallFont,
 
             "PopupMenu.background", t.getMenuBackground(),
             "PopupMenu.foreground", t.getMenuForeground(),
-            "PopupMenu.font", fMenu,
+            "PopupMenu.font", menuFont,
 
             "ScrollBar.background", control,
             "ScrollBar.foreground", control,
@@ -568,7 +571,7 @@ public class MetalLookAndFeel extends BasicLookAndFeel {
             "ScrollBar.width", Integer.valueOf(17),
 
             "ScrollPane.background", control,
-            "ScrollPane.foreground", texto,
+            "ScrollPane.foreground", text,
 
             "Slider.background", control,
             "Slider.foreground", t.getPrimaryControlShadow(),
@@ -583,38 +586,38 @@ public class MetalLookAndFeel extends BasicLookAndFeel {
             "SplitPane.dividerSize", Integer.valueOf(10),
 
             "TabbedPane.background", control,
-            "TabbedPane.foreground", texto,
+            "TabbedPane.foreground", text,
             "TabbedPane.highlight", t.getControlHighlight(),
             "TabbedPane.shadow", t.getControlShadow(),
             "TabbedPane.darkShadow", t.getControlDarkShadow(),
             "TabbedPane.focus", t.getPrimaryControlDarkShadow(),
-            "TabbedPane.font", fControl,
+            "TabbedPane.font", controlFont,
 
             "ToolBar.background", t.getMenuBackground(),
             "ToolBar.foreground", t.getMenuForeground(),
-            "ToolBar.font", fMenu,
+            "ToolBar.font", menuFont,
 
             "ToolTip.background", t.getPrimaryControl(),
             "ToolTip.foreground", t.getPrimaryControlInfo(),
             "ToolTip.backgroundInactive", control,
             "ToolTip.foregroundInactive", t.getControlDarkShadow(),
-            "ToolTip.font", fSistema,
+            "ToolTip.font", systemFont,
 
             "ProgressBar.background", control,
             "ProgressBar.foreground", t.getPrimaryControlShadow(),
             "ProgressBar.selectionBackground", t.getPrimaryControlDarkShadow(),
             "ProgressBar.selectionForeground", control,
-            "ProgressBar.font", fControl,
+            "ProgressBar.font", controlFont,
 
             "ComboBox.background", control,
-            "ComboBox.foreground", texto,
+            "ComboBox.foreground", text,
             "ComboBox.buttonBackground", control,
             "ComboBox.buttonShadow", t.getControlShadow(),
             "ComboBox.buttonDarkShadow", t.getControlDarkShadow(),
             "ComboBox.buttonHighlight", t.getControlHighlight(),
             "ComboBox.selectionBackground", t.getPrimaryControlShadow(),
             "ComboBox.selectionForeground", t.getControlTextColor(),
-            "ComboBox.font", fControl,
+            "ComboBox.font", controlFont,
 
             "InternalFrame.activeTitleBackground", t.getWindowTitleBackground(),
             "InternalFrame.activeTitleForeground", t.getWindowTitleForeground(),
@@ -625,17 +628,17 @@ public class MetalLookAndFeel extends BasicLookAndFeel {
             "Desktop.background", t.getDesktopColor(),
 
             "OptionPane.background", control,
-            "OptionPane.foreground", texto,
-            "OptionPane.messageForeground", texto,
-            "OptionPane.font", fControl,
+            "OptionPane.foreground", text,
+            "OptionPane.messageForeground", text,
+            "OptionPane.font", controlFont,
 
             "Viewport.background", control,
             "Viewport.foreground", t.getUserTextColor(),
         };
-        table.putDefaults(pares);
+        table.putDefaults(pairs);
     }
 
-    /** Metal no tiene sonidos propios. */
+    /** Metal has no sounds of its own. */
     public void provideErrorFeedback(Component component) {
         super.provideErrorFeedback(component);
     }
@@ -649,30 +652,30 @@ public class MetalLookAndFeel extends BasicLookAndFeel {
     }
 
     public LayoutStyle getLayoutStyle() {
-        if (estilo == null) {
-            estilo = new MetalLayoutStyle();
+        if (style == null) {
+            style = new MetalLayoutStyle();
         }
-        return estilo;
+        return style;
     }
 
     /**
-     * El espaciado que Metal recomienda.
+     * The spacing Metal recommends.
      *
-     * <p>Son los mismos numeros que usa {@code LayoutStyle} sin aspecto instalado, y esta medido:
-     * seis pixeles entre cosas relacionadas, doce entre cosas que no lo estan, y doce contra el
-     * borde del contenedor.
+     * <p>They are the same numbers {@code LayoutStyle} uses with no look and feel installed, and it
+     * is measured: six pixels between related things, twelve between unrelated ones, and twelve
+     * against the container's edge.
      */
     private static class MetalLayoutStyle extends LayoutStyle {
 
         public int getPreferredGap(JComponent component1, JComponent component2,
                 ComponentPlacement type, int position, Container parent) {
-            // Un componente nulo sale como NullPointerException; ver LayoutStyle.
+            // A null component comes out as NullPointerException; see LayoutStyle.
             component1.getWidth();
             component2.getWidth();
             if (type == null) {
                 throw new NullPointerException("type");
             }
-            comprobarPosicion(position);
+            checkPosition(position);
             if (type == ComponentPlacement.INDENT
                     && (position == SwingConstants.EAST || position == SwingConstants.WEST)) {
                 return 12;
@@ -682,11 +685,11 @@ public class MetalLookAndFeel extends BasicLookAndFeel {
 
         public int getContainerGap(JComponent component, int position, Container parent) {
             component.getWidth();
-            comprobarPosicion(position);
+            checkPosition(position);
             return 12;
         }
 
-        private static void comprobarPosicion(int position) {
+        private static void checkPosition(int position) {
             if (position != SwingConstants.NORTH && position != SwingConstants.SOUTH
                     && position != SwingConstants.EAST && position != SwingConstants.WEST) {
                 throw new IllegalArgumentException("Invalid position");

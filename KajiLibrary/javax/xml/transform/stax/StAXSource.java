@@ -8,56 +8,59 @@ import javax.xml.stream.events.XMLEvent;
 import javax.xml.transform.Source;
 
 /**
- * KajiLibrary's javax.xml.transform.stax.StAXSource -- un lector StAX como fuente de una
- * transformacion.
+ * KajiLibrary's javax.xml.transform.stax.StAXSource -- a StAX reader as the source of a
+ * transformation.
  *
- * <p>Lleva <b>uno</b> de los dos lectores de StAX, el de flujo o el de eventos, y nunca los dos: el
- * getter del que no se paso devuelve null. Es asi porque los dos son la misma lectura vista de dos
- * formas, y convertir uno en el otro consumiria el que se recibio.
+ * <p>It carries <b>one</b> of the two StAX readers, the stream one or the event one, and never
+ * both: the getter of the one that was not passed returns null. It is so because both are the same
+ * reading seen two ways, and converting one into the other would consume the one received.
  *
- * <h2>El lector tiene que estar al principio de algo</h2>
+ * <h2>The reader has to be at the start of something</h2>
  *
- * <p>El constructor exige que el lector este parado en {@code START_DOCUMENT} o
- * {@code START_ELEMENT}, y si no, lanza. La validacion vale la pena: un lector a medio consumir
- * produciria una transformacion de un fragmento arbitrario, y el error recien aparece mucho despues,
- * cuando la salida sale cortada.
+ * <p>The constructor requires the reader to be standing at {@code START_DOCUMENT} or {@code
+ * START_ELEMENT}, and if not, it throws. The validation is worth it: a half-consumed reader would
+ * produce a transformation of an arbitrary fragment, and the error would only appear much later,
+ * when the output comes out cut short.
  *
- * <p>Que acepte {@code START_ELEMENT} y no solo {@code START_DOCUMENT} es a proposito: deja
- * transformar <b>un subarbol</b> de un documento grande sin sacarlo aparte.
+ * <p>That it accepts {@code START_ELEMENT} and not only {@code START_DOCUMENT} is on purpose: it
+ * lets a <b>subtree</b> of a large document be transformed without taking it out separately.
  *
- * <h2>El identificador de sistema es de solo lectura</h2>
+ * <h2>The system identifier is read-only</h2>
  *
- * <p>{@link #setSystemId} lanza {@link UnsupportedOperationException}, que es raro para un setter y
- * es correcto: el identificador sale de la posicion del lector, que es quien sabe de donde vino lo
- * que esta leyendo. Dejarlo cambiar permitiria mentir sobre el origen, y las referencias relativas se
- * resolverian contra una base falsa.
+ * <p>{@link #setSystemId} throws {@link UnsupportedOperationException}, which is odd for a setter
+ * and is right: the identifier comes from the reader's position, which is what knows where what it
+ * is reading came from. Letting it be changed would allow lying about the origin, and relative
+ * references would be resolved against a false base.
  */
 public class StAXSource implements Source {
 
-    /** Con esto se le pregunta a un {@code TransformerFactory} si acepta esta fuente. */
+    /** With this a {@code TransformerFactory} is asked whether it accepts this source. */
     public static final String FEATURE = "http://javax.xml.transform.stax.StAXSource/feature";
 
-    /** Uno de los dos es null; ver la nota de la clase. */
+    /** One of the two is null; see the class note. */
     private XMLStreamReader streamReader;
 
     private XMLEventReader eventReader;
 
-    /** El del lector, cacheado al construir. */
+    /** The reader's, cached when constructing. */
     private String systemId;
 
     /**
-     * Con un lector de eventos.
+     * With an event reader.
      *
-     * @throws IllegalArgumentException si es null
-     * @throws XMLStreamException si no esta al principio de un documento o de un elemento
+     * @throws IllegalArgumentException if it is null
+     * @throws IllegalStateException if it is not at the start of a document or of an element
+     * @throws XMLStreamException if looking at its next event fails. (The note gave this exception
+     *     for a reader not at a start; the code, like the JDK, throws {@code IllegalStateException}
+     *     there.)
      */
     public StAXSource(XMLEventReader reader) throws XMLStreamException {
         if (reader == null) {
             throw new IllegalArgumentException(
                 "StAXSource(XMLEventReader) with XMLEventReader == null");
         }
-        // `peek` y no `nextEvent`: mirar no puede consumir, porque quien lo reciba tiene que poder
-        // leer desde el principio.
+        // `peek` and not `nextEvent`: looking must not consume, because whoever receives it has to
+        // be able to read from the beginning.
         XMLEvent event = reader.peek();
         int type = (event == null) ? -1 : event.getEventType();
         if (type != XMLStreamConstants.START_DOCUMENT
@@ -71,10 +74,10 @@ public class StAXSource implements Source {
     }
 
     /**
-     * Con un lector de flujo.
+     * With a stream reader.
      *
-     * @throws IllegalArgumentException si es null
-     * @throws IllegalStateException si no esta al principio de un documento o de un elemento
+     * @throws IllegalArgumentException if it is null
+     * @throws IllegalStateException if it is not at the start of a document or of an element
      */
     public StAXSource(XMLStreamReader reader) {
         if (reader == null) {
@@ -92,32 +95,32 @@ public class StAXSource implements Source {
         this.systemId = (reader.getLocation() == null) ? null : reader.getLocation().getSystemId();
     }
 
-    /** El lector de eventos, o null si se construyo con el de flujo. */
+    /** The event reader, or null if it was built with the stream one. */
     public XMLEventReader getXMLEventReader() {
         return this.eventReader;
     }
 
-    /** El lector de flujo, o null si se construyo con el de eventos. */
+    /** The stream reader, or null if it was built with the event one. */
     public XMLStreamReader getXMLStreamReader() {
         return this.streamReader;
     }
 
     /**
-     * No se puede cambiar.
+     * Cannot be changed.
      *
-     * @throws UnsupportedOperationException siempre; ver la nota de la clase
+     * @throws UnsupportedOperationException always; see the class note
      */
     public void setSystemId(String systemId) {
         throw new UnsupportedOperationException(
             "StAXSource#setSystemId(systemId) cannot set the system identifier for a StAXSource");
     }
 
-    /** De donde dice el lector que viene lo que esta leyendo, o null. */
+    /** Where the reader says what it is reading comes from, or null. */
     public String getSystemId() {
         return this.systemId;
     }
 
-    /** Nunca: siempre lleva un lector, porque el constructor no acepta null. */
+    /** Never: it always carries a reader, because the constructor does not accept null. */
     public boolean isEmpty() {
         return false;
     }

@@ -5,85 +5,87 @@ import java.nio.channels.spi.AbstractInterruptibleChannel;
 import java.nio.channels.spi.SelectorProvider;
 
 /**
- * KajiLibrary's java.nio.channels.SelectableChannel — un canal que un {@link Selector} puede vigilar.
+ * KajiLibrary's java.nio.channels.SelectableChannel — a channel a {@link Selector} can watch.
  *
- * <p>La idea entera de `java.nio` esta en esta clase: en vez de un hilo por conexion bloqueado en su
- * `read`, un hilo vigila mil canales y solo atiende a los que tienen algo. Para entrar en esa rueda
- * un canal tiene que poder hacer dos cosas: **no bloquear** ({@link #configureBlocking}) y
- * **anotarse** ({@link #register}).
+ * <p>The whole idea of `java.nio` is in this class: instead of one thread per connection blocked in
+ * its `read`, one thread watches a thousand channels and attends only the ones that have something.
+ * To get into that wheel a channel has to be able to do two things: **not block**
+ * ({@link #configureBlocking}) and **sign up** ({@link #register}).
  *
- * <p>Las dos van juntas y el orden importa: registrar un canal en modo bloqueante tira
- * {@link IllegalBlockingModeException}, porque seria pedirle a un selector que avise cuando algo
- * este listo para una lectura que igual se iba a quedar esperando sola.
+ * <p>The two go together and the order matters: registering a channel in blocking mode throws
+ * {@link IllegalBlockingModeException}, because it would be asking a selector to give notice when
+ * something is ready for a read that was going to sit waiting on its own anyway.
  *
- * <p>Una llave ({@link SelectionKey}) por canal **y por selector**: registrar dos veces en el mismo
- * selector no crea una llave nueva, actualiza la que habia. Es lo que hace que
- * `register` sea idempotente y que no se acumulen registros fantasma.
+ * <p>One key ({@link SelectionKey}) per channel **and per selector**: registering twice in the same
+ * selector does not create a new key, it updates the one that was there. It is what makes
+ * `register` idempotent and keeps phantom registrations from piling up.
  *
- * <h2>Estado en esta biblioteca</h2>
+ * <h2>State in this library</h2>
  *
- * <p>La clase esta entera --sus diez miembros publicos-- pero <strong>no hay ningun canal selectable
- * que se pueda fabricar</strong>, porque los unicos que lo son en el JDK son los de red y esta VM no
- * tiene nativos de red. Lo que si esta es toda la maquinaria de abajo:
- * {@link java.nio.channels.spi.AbstractSelectableChannel} implementa de verdad el registro, el modo
- * bloqueante y el manejo de llaves, asi que quien traiga su propio transporte hereda de ahi y le
- * funciona sin escribir nada de esto.
+ * <p>The class is whole --its ten public members-- and there **are** selectable channels to make:
+ * this note used to say there were none, because the only ones that are selectable in the JDK are
+ * the network ones and this VM had no network natives. It has them, and `SocketChannel`,
+ * `ServerSocketChannel` and `DatagramChannel` are selectable. The machinery underneath is here as
+ * well: {@link java.nio.channels.spi.AbstractSelectableChannel} really implements the registration,
+ * the blocking mode and the handling of keys, so whoever brings their own transport inherits from
+ * there and it works for them without writing any of this.
  */
 public abstract class SelectableChannel extends AbstractInterruptibleChannel implements Channel {
 
     protected SelectableChannel() {
     }
 
-    /** El proveedor que lo fabrico. */
+    /** The provider that made it. */
     public abstract SelectorProvider provider();
 
     /**
-     * Las operaciones que este tipo de canal admite, en el juego de bits de {@link SelectionKey}.
+     * The operations this kind of channel admits, in the set of bits of {@link SelectionKey}.
      *
-     * <p>Un canal de escucha admite `OP_ACCEPT` y nada mas; uno conectado, lectura y escritura.
-     * Registrar pidiendo una operacion que no esta aca es {@link IllegalArgumentException}, y es
-     * mejor que el silencio: un `OP_ACCEPT` sobre un socket conectado no se cumple nunca, y sin este
-     * chequeo el sintoma seria un selector que no despierta jamas.
+     * <p>A listening channel admits `OP_ACCEPT` and nothing else; a connected one, reading and
+     * writing. Registering asking for an operation that is not here is {@link
+     * IllegalArgumentException}, and it is better than silence: an `OP_ACCEPT` over a connected
+     * socket is never fulfilled, and without this check the symptom would be a selector that never
+     * wakes up.
      */
     public abstract int validOps();
 
-    /** Si esta registrado en algun selector. */
+    /** Whether it is registered in some selector. */
     public abstract boolean isRegistered();
 
-    /** La llave de este canal en `sel`, o `null` si no esta registrado ahi. */
+    /** The key of this channel in `sel`, or `null` if it is not registered there. */
     public abstract SelectionKey keyFor(Selector sel);
 
     /**
-     * Anota el canal en `sel` para las operaciones `ops`, con `att` colgado de la llave.
+     * Signs the channel up in `sel` for the operations `ops`, with `att` hanging from the key.
      *
-     * @throws ClosedChannelException si el canal esta cerrado
-     * @throws IllegalBlockingModeException si el canal esta en modo bloqueante
-     * @throws IllegalArgumentException si `ops` pide algo fuera de {@link #validOps()}
+     * @throws ClosedChannelException if the channel is closed
+     * @throws IllegalBlockingModeException if the channel is in blocking mode
+     * @throws IllegalArgumentException if `ops` asks for something outside {@link #validOps()}
      */
     public abstract SelectionKey register(Selector sel, int ops, Object att)
             throws ClosedChannelException;
 
-    /** Como el otro, sin nada colgado. */
+    /** Like the other one, with nothing hanging. */
     public final SelectionKey register(Selector sel, int ops) throws ClosedChannelException {
         return this.register(sel, ops, null);
     }
 
     /**
-     * Pone el canal en modo bloqueante o no bloqueante.
+     * Puts the channel into blocking or non-blocking mode.
      *
-     * @throws IllegalBlockingModeException si se pide bloqueante estando registrado en un selector
+     * @throws IllegalBlockingModeException if blocking is asked for while registered in a selector
      */
     public abstract SelectableChannel configureBlocking(boolean block) throws IOException;
 
-    /** Si esta en modo bloqueante. */
+    /** Whether it is in blocking mode. */
     public abstract boolean isBlocking();
 
     /**
-     * El objeto sobre el que sincronizar para que el modo bloqueante no cambie.
+     * The object to synchronise on so that the blocking mode does not change.
      *
-     * <p>Esta expuesto y no escondido porque el que necesita la garantia es el codigo de afuera: sin
-     * un candado publico, "poner en no bloqueante, hacer la operacion, restaurar" es una carrera con
-     * cualquier otro hilo que toque el mismo canal.
+     * <p>It is exposed and not hidden because the one who needs the guarantee is the code outside:
+     * without a public lock, "put into non-blocking, do the operation, restore" is a race with any
+     * other thread that touches the same channel.
      */
     public abstract Object blockingLock();
 }

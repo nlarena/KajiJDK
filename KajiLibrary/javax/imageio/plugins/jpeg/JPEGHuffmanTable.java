@@ -1,61 +1,61 @@
 package javax.imageio.plugins.jpeg;
 
 /**
- * KajiLibrary's javax.imageio.plugins.jpeg.JPEGHuffmanTable -- una tabla de Huffman de JPEG.
+ * KajiLibrary's javax.imageio.plugins.jpeg.JPEGHuffmanTable -- a JPEG Huffman table.
  *
- * <p>La ultima etapa de la compresion JPEG: despues de la transformada y la cuantizacion, los
- * coeficientes se codifican con Huffman. Esta clase es una de esas tablas.
+ * <p>The last stage of JPEG compression: after the transform and quantization, the coefficients
+ * are Huffman-coded. This class is one of those tables.
  *
- * <h2>Las dos mitades</h2>
+ * <h2>The two halves</h2>
  *
- * <p>Una tabla de Huffman de JPEG no se guarda como un arbol sino como dos listas, que es lo que
- * confunde al leerla por primera vez:
+ * <p>A JPEG Huffman table is not stored as a tree but as two lists, which is what confuses on first
+ * reading:
  *
  * <ul>
- *   <li>{@link #getLengths} tiene <b>16</b> entradas: cuantos codigos hay de cada largo, de 1 a 16
- *       bits;
- *   <li>{@link #getValues} tiene tantas entradas como codigos haya en total, en orden de largo
- *       creciente.
+ *   <li>{@link #getLengths} has <b>16</b> entries: how many codes there are of each length, from 1
+ *       to 16 bits;
+ *   <li>{@link #getValues} has as many entries as there are codes in total, in order of increasing
+ *       length.
  * </ul>
  *
- * <p>Con eso alcanza para reconstruir el arbol, porque JPEG usa codigos canonicos: dados los largos,
- * los codigos quedan determinados. Es lo que permite que la tabla ocupe unas decenas de bytes en el
- * archivo en lugar de un arbol entero.
+ * <p>That is enough to rebuild the tree, because JPEG uses canonical codes: given the lengths, the
+ * codes are determined. It is what lets the table take a few dozen bytes in the file instead of a
+ * whole tree.
  *
- * <p>Las cuatro constantes son las del anexo K del estandar, y son las que usa casi todo codificador
- * JPEG del mundo. Estan bien para casi todo: optimizar las tablas para una imagen concreta gana un
- * pocos por ciento y cuesta una pasada mas.
+ * <p>The four constants are the ones from annex K of the standard, and are the ones almost every
+ * JPEG encoder in the world uses. They are fine for almost everything: optimizing the tables for a
+ * specific image gains a few percent and costs one more pass.
  *
- * <p>Es inmutable: los constructores copian y los accesores tambien.
+ * <p>It is immutable: the constructors copy and so do the accessors.
  */
 public class JPEGHuffmanTable {
 
-    /** Los largos de StdDCLuminance. */
+    /** The lengths of StdDCLuminance. */
     private static final short[] STDDCLUMINANCE_LENGTHS = {
         0, 1, 5, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0
     };
 
-    /** Los valores de StdDCLuminance. */
+    /** The values of StdDCLuminance. */
     private static final short[] STDDCLUMINANCE_VALUES = {
         0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11
     };
 
-    /** Los largos de StdDCChrominance. */
+    /** The lengths of StdDCChrominance. */
     private static final short[] STDDCCHROMINANCE_LENGTHS = {
         0, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0
     };
 
-    /** Los valores de StdDCChrominance. */
+    /** The values of StdDCChrominance. */
     private static final short[] STDDCCHROMINANCE_VALUES = {
         0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11
     };
 
-    /** Los largos de StdACLuminance. */
+    /** The lengths of StdACLuminance. */
     private static final short[] STDACLUMINANCE_LENGTHS = {
         0, 2, 1, 3, 3, 2, 4, 3, 5, 5, 4, 4, 0, 0, 1, 125
     };
 
-    /** Los valores de StdACLuminance. */
+    /** The values of StdACLuminance. */
     private static final short[] STDACLUMINANCE_VALUES = {
         1, 2, 3, 0, 4, 17, 5, 18, 33, 49, 65, 6, 19, 81, 97, 7,
         34, 113, 20, 50, 129, 145, 161, 8, 35, 66, 177, 193, 21, 82, 209, 240,
@@ -70,12 +70,12 @@ public class JPEGHuffmanTable {
         249, 250
     };
 
-    /** Los largos de StdACChrominance. */
+    /** The lengths of StdACChrominance. */
     private static final short[] STDACCHROMINANCE_LENGTHS = {
         0, 2, 1, 2, 4, 4, 3, 4, 7, 5, 4, 4, 0, 1, 2, 119
     };
 
-    /** Los valores de StdACChrominance. */
+    /** The values of StdACChrominance. */
     private static final short[] STDACCHROMINANCE_VALUES = {
         0, 1, 2, 3, 17, 4, 5, 33, 49, 6, 18, 65, 81, 7, 97, 113,
         19, 34, 50, 129, 8, 20, 66, 145, 161, 177, 193, 9, 35, 51, 82, 240,
@@ -90,36 +90,36 @@ public class JPEGHuffmanTable {
         249, 250
     };
 
-    /** La estandar de continua para luminancia. */
+    /** The standard DC table for luminance. */
     public static final JPEGHuffmanTable StdDCLuminance =
         new JPEGHuffmanTable(STDDCLUMINANCE_LENGTHS, STDDCLUMINANCE_VALUES, false);
 
-    /** La estandar de continua para crominancia. */
+    /** The standard DC table for chrominance. */
     public static final JPEGHuffmanTable StdDCChrominance =
         new JPEGHuffmanTable(STDDCCHROMINANCE_LENGTHS, STDDCCHROMINANCE_VALUES, false);
 
-    /** La estandar de alterna para luminancia. */
+    /** The standard AC table for luminance. */
     public static final JPEGHuffmanTable StdACLuminance =
         new JPEGHuffmanTable(STDACLUMINANCE_LENGTHS, STDACLUMINANCE_VALUES, false);
 
-    /** La estandar de alterna para crominancia. */
+    /** The standard AC table for chrominance. */
     public static final JPEGHuffmanTable StdACChrominance =
         new JPEGHuffmanTable(STDACCHROMINANCE_LENGTHS, STDACCHROMINANCE_VALUES, false);
 
-    /** Cuantos codigos hay de cada largo, de 1 a 16 bits. */
+    /** How many codes there are of each length, from 1 to 16 bits. */
     private final short[] lengths;
 
-    /** Los valores, en orden de largo creciente. */
+    /** The values, in order of increasing length. */
     private final short[] values;
 
     /**
-     * Una tabla nueva.
+     * A new table.
      *
-     * <p>Los dos arreglos se copian.
+     * <p>Both arrays are copied.
      *
-     * @param lengths cuantos codigos de cada largo; tiene que tener 16 entradas
-     * @param values los valores; tantos como codigos haya en total
-     * @throws IllegalArgumentException si alguno es null o los tamanos no cierran
+     * @param lengths how many codes of each length; it must have 16 entries
+     * @param values the values; as many as there are codes in total
+     * @throws IllegalArgumentException if either is null or the sizes do not add up
      */
     public JPEGHuffmanTable(short[] lengths, short[] values) {
         if (lengths == null || values == null) {
@@ -132,31 +132,32 @@ public class JPEGHuffmanTable {
     }
 
     /**
-     * El de las constantes, que no copia.
+     * The constants' one, which does not copy.
      *
-     * <p>Las tablas del estandar son estaticas y nadie las modifica; copiarlas ocho veces al cargar la
-     * clase seria trabajo perdido. El booleano no significa nada: esta para distinguir la firma.
+     * <p>The standard tables are static and nobody modifies them; copying them eight times when the
+     * class loads would be wasted work. The boolean means nothing: it is there to tell the
+     * signature apart.
      */
     private JPEGHuffmanTable(short[] lengths, short[] values, boolean shared) {
         this.lengths = lengths;
         this.values = values;
     }
 
-    /** Cuantos codigos hay de cada largo; una copia. */
+    /** How many codes there are of each length; a copy. */
     public short[] getLengths() {
         short[] copy = new short[this.lengths.length];
         System.arraycopy(this.lengths, 0, copy, 0, this.lengths.length);
         return copy;
     }
 
-    /** Los valores; una copia. */
+    /** The values; a copy. */
     public short[] getValues() {
         short[] copy = new short[this.values.length];
         System.arraycopy(this.values, 0, copy, 0, this.values.length);
         return copy;
     }
 
-    /** Las dos listas, una por linea. */
+    /** Both lists, one per line. */
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder("JPEGHuffmanTable\n");

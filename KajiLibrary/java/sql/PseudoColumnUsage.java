@@ -1,23 +1,23 @@
 package java.sql;
 
 /**
- * KajiLibrary's java.sql.PseudoColumnUsage -- donde se puede usar una pseudocolumna.
+ * KajiLibrary's java.sql.PseudoColumnUsage -- where a pseudocolumn can be used.
  *
- * <p>Una pseudocolumna es una que la base ofrece sin que este en la tabla --el `ROWID` de Oracle es
- * el ejemplo-- y no todas se pueden usar en cualquier lado: algunas solo salen en el `select`, otras
- * solo sirven para filtrar. Sin esto, una herramienta que arma consultas tendria que probar.
+ * <p>A pseudocolumn is one the database offers without it being in the table --Oracle's `ROWID` is
+ * the example-- and not all can be used everywhere: some only come out in the `select`, others only
+ * serve to filter. Without this, a tool that builds queries would have to try.
  */
 public enum PseudoColumnUsage {
 
-    /** Solo en la lista del `select`. */
+    /** Only in the `select` list. */
     SELECT_LIST_ONLY,
 
-    /** Solo en el `where`. */
+    /** Only in the `where`. */
     WHERE_CLAUSE_ONLY,
 
-    /** En cualquier lado. */
+    /** Anywhere. */
     NO_USAGE_RESTRICTIONS,
 
-    /** No se sabe. */
+    /** It is not known. */
     USAGE_UNKNOWN
 }

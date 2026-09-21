@@ -1,31 +1,33 @@
 package javax.swing;
 
 /**
- * Que hacer cuando el usuario cierra una ventana.
+ * What to do when the user closes a window.
  *
- * <p>Es una interfaz de solo constantes, y esta implementada por {@link JFrame}, `JDialog` e
- * `JInternalFrame` para que las constantes se puedan nombrar sin calificar desde una subclase. Es
- * un patron viejo --hoy se haria con un `enum`-- y sobrevive porque cambiarlo romperia todo lo
- * compilado contra el.
+ * <p>It is a constants-only interface, and it is implemented by {@link JFrame}, `JDialog` and
+ * `JInternalFrame` so that the constants can be named unqualified from a subclass. It is an old
+ * pattern -- today it would be done with an `enum` -- and it survives because changing it would
+ * break everything compiled against it.
  *
- * <p>Las cuatro son excluyentes: la ventana hace una sola de estas cosas.
+ * <p>The four are mutually exclusive: the window does only one of these things.
  */
 public interface WindowConstants {
 
-    /** No hacer nada: el programa decide, escuchando el evento de cierre. */
+    /** Do nothing: the program decides, listening to the closing event. */
     int DO_NOTHING_ON_CLOSE = 0;
 
-    /** Ocultarla. Sigue existiendo y se puede volver a mostrar. */
+    /** Hide it. It goes on existing and can be shown again. */
     int HIDE_ON_CLOSE = 1;
 
-    /** Ocultarla y liberar sus recursos nativos. No se puede volver a mostrar sin recrearlos. */
+    /**
+     * Hide it and release its native resources. It cannot be shown again without recreating them.
+     */
     int DISPOSE_ON_CLOSE = 2;
 
     /**
-     * Terminar el programa.
+     * End the program.
      *
-     * <p>Solo para la ventana principal de una aplicacion: en un applet o en un componente
-     * embebido se lleva puesto al que lo hospeda.
+     * <p>Only for an application's main window: in an applet or in an embedded component it takes
+     * whatever hosts it down with it.
      */
     int EXIT_ON_CLOSE = 3;
 }

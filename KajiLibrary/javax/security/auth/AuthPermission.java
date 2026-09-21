@@ -3,28 +3,30 @@ package javax.security.auth;
 import java.security.BasicPermission;
 
 /**
- * KajiLibrary's javax.security.auth.AuthPermission -- permiso para las operaciones de autenticacion.
+ * KajiLibrary's javax.security.auth.AuthPermission -- permission for the authentication operations.
  *
- * <p>Es un {@link BasicPermission} y por lo tanto no tiene acciones: el nombre <b>es</b> el permiso.
- * Los nombres son {@code "doAs"}, {@code "getSubject"}, {@code "createLoginContext.<name>"} y
- * companía, y como en todo {@code BasicPermission} el {@code *} final abarca un prefijo:
- * {@code "createLoginContext.*"} implica {@code "createLoginContext.Kaji"}.
+ * <p>It is a {@link BasicPermission} and therefore has no actions: the name <b>is</b> the
+ * permission. The names are {@code "doAs"}, {@code "getSubject"}, {@code
+ * "createLoginContext.<name>"} and company, and as in every {@code BasicPermission} the final
+ * {@code *} covers a prefix: {@code "createLoginContext.*"} implies {@code
+ * "createLoginContext.Kaji"}.
  *
- * <p>Hay una traduccion historica que se reproduce a proposito porque es observable: el nombre
- * {@code "createLoginContext"} pelado se guarda como {@code "createLoginContext.*"}. Viene de cuando
- * ese permiso no llevaba el nombre de la configuracion; escribirlo sin el punto hoy pediria un
- * permiso que no existe, asi que el JDK lo interpreta como el comodin en vez de dejarlo inutil.
+ * <p>There is a historical translation reproduced on purpose because it is observable: the bare
+ * name {@code "createLoginContext"} is stored as {@code "createLoginContext.*"}. It comes from when
+ * that permission did not carry the configuration's name; writing it without the dot today would
+ * ask for a permission that does not exist, so the JDK interprets it as the wildcard instead of
+ * leaving it useless.
  *
- * <p>Nota sobre para que sirve hoy: el gestor de seguridad ya no se puede habilitar, asi que ningun
- * chequeo de la biblioteca consulta este permiso. La clase existe igual porque su forma es parte del
- * API -- se guarda en politicas, se compara, se serializa -- y porque quien escriba su propio
- * control de acceso la puede usar como cualquier otro {@code Permission}.
+ * <p>A note on what it serves today: the security manager can no longer be enabled, so no check in
+ * the library consults this permission. The class exists all the same because its form is part of
+ * the API -- it is stored in policies, compared, serialized -- and because whoever writes their own
+ * access control can use it like any other {@code Permission}.
  */
 public final class AuthPermission extends BasicPermission {
 
     private static final long serialVersionUID = 5806031445061587174L;
 
-    // Ver la nota de la clase: sin esto, el nombre viejo no implicaria nada.
+    // See the class note: without this, the old name would imply nothing.
     private static String translated(String name) {
         return "createLoginContext".equals(name) ? "createLoginContext.*" : name;
     }
@@ -34,9 +36,9 @@ public final class AuthPermission extends BasicPermission {
     }
 
     /**
-     * Las acciones se ignoran: un {@code BasicPermission} no tiene. El constructor existe porque el
-     * cargador de politicas construye todos los permisos con dos argumentos y no sabe cuales los
-     * usan.
+     * The actions are ignored: a {@code BasicPermission} has none. The constructor exists because
+     * the policy loader builds every permission with two arguments and does not know which use
+     * them.
      */
     public AuthPermission(String name, String actions) {
         super(translated(name), actions);

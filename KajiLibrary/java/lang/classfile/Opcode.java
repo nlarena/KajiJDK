@@ -1,16 +1,16 @@
 package java.lang.classfile;
 
-// Los opcodes de la JVM (JVMS §6.5), más las formas ensanchadas con `wide` y las tres letras chicas
-// que el formato distingue y el nombre del opcode no: `ALOAD_0` es un opcode distinto de `ALOAD` con
-// operando 0, y `ALOAD_W` es la forma de tres bytes que sólo existe detrás de un `wide`.
+// The JVM's opcodes (JVMS §6.5), plus the forms widened with `wide` and the small distinctions the
+// format makes and the opcode's name does not: `ALOAD_0` is a different opcode from `ALOAD` with
+// operand 0, and `ALOAD_W` is the three-byte form that only exists after a `wide`.
 //
-// Por eso `bytecode()` de las formas ensanchadas NO entra en un byte: es `(0xC4 << 8) | opcode`, el
-// par de bytes que de verdad aparece en el arreglo `code`. Un lector que se olvide de eso lee un
-// `wide iinc` como un `iinc` y se descoloca seis bytes, que es la clase de error que hace que el
-// resto del método se decodifique como basura sin que nada avise.
+// That is why the widened forms' `bytecode()` does NOT fit in one byte: it is `(0xC4 << 8) | opcode`,
+// the pair of bytes that really appears in the `code` array. A reader forgetting that reads a
+// `wide iinc` as an `iinc` and goes six bytes out of place, which is the kind of error that makes the
+// rest of the method decode as garbage with nothing warning about it.
 //
-// `sizeIfFixed()` da -1 en `tableswitch` y `lookupswitch`, los dos únicos cuyo largo depende del
-// contenido (y del relleno de alineación a 4 bytes que los precede).
+// `sizeIfFixed()` gives -1 on `tableswitch` and `lookupswitch`, the only two whose length depends on
+// the contents (and on the 4-byte alignment padding preceding them).
 public enum Opcode {
 
     NOP(0x00, Kind.NOP, 1, false),
@@ -239,29 +239,29 @@ public enum Opcode {
         this.wide = wide;
     }
 
-    /** El byte —o el par de bytes, si es una forma ensanchada— que representa a este opcode. */
+    /** The byte --or the pair of bytes, if it is a widened form-- standing for this opcode. */
     public int bytecode() {
         return this.bytecode;
     }
 
-    /** Si es una forma que va detrás de un . */
+    /** Whether it is a form that goes after a `wide`. */
     public boolean isWide() {
         return this.wide;
     }
 
-    /** Cuántos bytes ocupa la instrucción, o -1 si depende del contenido. */
+    /** How many bytes the instruction takes, or -1 if it depends on the contents. */
     public int sizeIfFixed() {
         return this.sizeIfFixed;
     }
 
-    /** Qué clase de operación es. */
+    /** What kind of operation it is. */
     public Kind kind() {
         return this.kind;
     }
 
     /**
-     * La familia a la que pertenece un opcode. Es lo que agrupa a los que hacen lo mismo con
-     * distinto tipo o distinto operando inmediato: los veinte  son todos .
+     * The family an opcode belongs to. It is what groups the ones doing the same thing with a
+     * different type or a different immediate operand: the thirty `xLOAD` forms are all `LOAD`.
      */
     public enum Kind {
         LOAD,

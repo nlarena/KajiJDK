@@ -1,20 +1,21 @@
 package java.nio.file;
 
-// El archivo esta pero el proceso no tiene permiso para lo que se pidio.
+// The file is there but the process has no permission for what was asked.
 //
-// Se elige sobre `NoSuchFileException` cuando `stat` dice que la ruta **existe** pero no trae la
-// bandera de lectura o de escritura que hacia falta. Sin esa comprobacion previa las dos serian
-// indistinguibles desde los nativos, y adivinar mandaria a buscar el problema al lugar equivocado.
+// It is chosen over `NoSuchFileException` when `stat` says the path **exists** but does not bring
+// the read or write flag that was needed. Without that prior check the two would be
+// indistinguishable from the natives, and guessing would send the reader looking for the problem in
+// the wrong place.
 public class AccessDeniedException extends FileSystemException {
 
     private static final long serialVersionUID = 4943049599949219617L;
 
-    /** @param file el archivo al que no se pudo acceder, o `null` */
+    /** @param file the file that could not be accessed, or `null` */
     public AccessDeniedException(String file) {
         super(file);
     }
 
-    /** @param file el archivo; `other` el otro; `reason` el motivo. Cualquiera puede ser `null`. */
+    /** @param file the file; `other` the other; `reason` the reason. Any may be `null`. */
     public AccessDeniedException(String file, String other, String reason) {
         super(file, other, reason);
     }

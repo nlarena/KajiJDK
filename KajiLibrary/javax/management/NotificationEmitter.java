@@ -1,20 +1,20 @@
 package javax.management;
 
 /**
- * El {@link NotificationBroadcaster} que si sabe sacar un registro puntual.
+ * The {@link NotificationBroadcaster} that can remove one specific registration.
  *
- * <p>La diferencia importa cuando un mismo oyente se registro varias veces con filtros distintos:
- * con el metodo heredado se van todos, con este se va exactamente uno.
+ * <p>The difference matters when the same listener registered several times with different filters:
+ * with the inherited method they all go, with this one exactly one goes.
  */
 public interface NotificationEmitter extends NotificationBroadcaster {
 
     /**
-     * Saca el registro que coincide en los tres: oyente, filtro y handback.
+     * Removes the registration that matches on all three: listener, filter and handback.
      *
-     * <p>La comparacion del filtro y del handback es por identidad de referencia en la practica del
-     * JDK, no por `equals`.
+     * <p>The filter and the handback are compared by reference identity in the JDK's practice, not
+     * by {@code equals}.
      *
-     * @throws ListenerNotFoundException si no hay ninguno asi
+     * @throws ListenerNotFoundException if there is none like that
      */
     void removeNotificationListener(NotificationListener listener, NotificationFilter filter,
                                     Object handback) throws ListenerNotFoundException;

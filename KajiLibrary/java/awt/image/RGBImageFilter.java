@@ -1,55 +1,56 @@
 package java.awt.image;
 
 /**
- * Un filtro que trabaja **color por color**, sin mirar a los vecinos.
+ * A filter that works **colour by colour**, without looking at the neighbours.
  *
- * <p>La subclase sólo escribe {@link #filterRGB}: una función de un color a otro. Todo lo demás
- * —desempaquetar el píxel, convertirlo a ARGB, volver a empaquetarlo— lo pone esta clase.
+ * <p>The subclass only writes {@link #filterRGB}: a function from one colour to another. Everything
+ * else —unpacking the pixel, converting it to ARGB, packing it again— this class puts in.
  *
- * <p>Y hay un atajo que vale la pena entender, porque es la razón de ser de casi toda la clase. Si
- * la imagen viene con paleta y la función no depende de la posición, no hace falta filtrar los
- * píxeles: alcanza con filtrar **la paleta**, que son 256 colores, y dejar los píxeles como están.
- * Una imagen de un millón de píxeles se filtra con 256 llamadas.
+ * <p>And there is a shortcut worth understanding, because it is the reason for almost the whole
+ * class. If the image comes with a palette and the function does not depend on the position, there
+ * is no need to filter the pixels: it is enough to filter **the palette**, which is at most 256
+ * colours, and leave the pixels as they are. An image of a million pixels is filtered with 256
+ * calls.
  *
- * <p>Eso es lo que declara {@link #canFilterIndexColorModel}, y la subclase tiene que ponerlo en
- * `true` sólo si su función ignora de verdad las coordenadas. Si las usa y activa el atajo, todos
- * los píxeles del mismo índice reciben el color que le tocó a las coordenadas con las que se filtró
- * la paleta, y el resultado no se parece a nada.
+ * <p>That is what {@link #canFilterIndexColorModel} declares, and the subclass has to set it to
+ * `true` only if its function really ignores the coordinates. If it uses them and turns the
+ * shortcut on, every pixel of the same index receives the colour that fell to the coordinates the
+ * palette was filtered with, and the result looks like nothing.
  */
 public abstract class RGBImageFilter extends ImageFilter {
 
-    /** El modelo de color que anunció el productor. */
+    /** The colour model the producer announced. */
     protected ColorModel origmodel;
 
-    /** El modelo con el que se lo reemplaza. */
+    /** The model it is replaced with. */
     protected ColorModel newmodel;
 
     /**
-     * Si alcanza con filtrar la paleta en vez de los píxeles.
+     * Whether filtering the palette instead of the pixels is enough.
      *
-     * <p>Sólo puede ser `true` si {@link #filterRGB} ignora las coordenadas.
+     * <p>It can only be `true` if {@link #filterRGB} ignores the coordinates.
      */
     protected boolean canFilterIndexColorModel;
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected RGBImageFilter() {
     }
 
     /**
-     * La función de color, que es todo lo que la subclase tiene que escribir.
+     * The colour function, which is all the subclass has to write.
      *
-     * @param x la coordenada, o -1 si el color viene de una paleta
-     * @param y lo mismo
-     * @param rgb el color de entrada, en ARGB
-     * @return el color de salida, en ARGB
+     * @param x the coordinate, or -1 if the colour comes from a palette
+     * @param y the same
+     * @param rgb the input colour, in ARGB
+     * @return the output colour, in ARGB
      */
     public abstract int filterRGB(int x, int y, int rgb);
 
     /**
-     * Anuncia el modelo de color, aplicando el atajo de la paleta si corresponde.
+     * Announces the colour model, applying the palette shortcut where it fits.
      *
-     * <p>Cuando el atajo se activa, lo que llega al consumidor es una paleta **ya filtrada** y los
-     * píxeles sin tocar.
+     * <p>When the shortcut is on, what reaches the consumer is an **already filtered** palette and
+     * the pixels untouched.
      */
     public void setColorModel(ColorModel model) {
         if (this.canFilterIndexColorModel && model instanceof IndexColorModel) {
@@ -61,17 +62,17 @@ public abstract class RGBImageFilter extends ImageFilter {
         }
     }
 
-    /** Anota que un modelo se reemplaza por otro. */
+    /** Records that one model is replaced by another. */
     public void substituteColorModel(ColorModel oldcm, ColorModel newcm) {
         this.origmodel = oldcm;
         this.newmodel = newcm;
     }
 
     /**
-     * La misma paleta con todos sus colores pasados por {@link #filterRGB}.
+     * The same palette with all of its colours passed through {@link #filterRGB}.
      *
-     * <p>Las coordenadas que se le pasan son -1: un color de paleta no está en ningún lado en
-     * particular, y pasarle un punto cualquiera sería mentirle a la función.
+     * <p>The coordinates passed to it are -1: a palette colour is nowhere in particular, and
+     * passing it any old point would be lying to the function.
      */
     public IndexColorModel filterIndexColorModel(IndexColorModel icm) {
         int mapsize = icm.getMapSize();
@@ -101,7 +102,7 @@ public abstract class RGBImageFilter extends ImageFilter {
         return new IndexColorModel(icm.getPixelSize(), mapsize, r, g, b, trans);
     }
 
-    /** Pasa una tanda de píxeles por la función, uno por uno. */
+    /** Passes a batch of pixels through the function, one by one. */
     public void filterRGBPixels(int x, int y, int w, int h, int[] pixels, int off, int scansize) {
         int index = off;
         for (int cy = 0; cy < h; cy++) {
@@ -115,10 +116,10 @@ public abstract class RGBImageFilter extends ImageFilter {
     }
 
     /**
-     * Reenvía una tanda de píxeles de un byte.
+     * Forwards a batch of pixels of one byte.
      *
-     * <p>Si el modelo es el que se reemplazó, los píxeles pasan **sin tocar**: la paleta ya se
-     * filtró y filtrarlos de nuevo aplicaría la función dos veces.
+     * <p>If the model is the one that was replaced, the pixels go through **untouched**: the
+     * palette was filtered already and filtering them again would apply the function twice.
      */
     public void setPixels(int x, int y, int w, int h, ColorModel model, byte[] pixels, int off,
             int scansize) {
@@ -137,7 +138,7 @@ public abstract class RGBImageFilter extends ImageFilter {
         }
     }
 
-    /** Lo mismo para píxeles de un `int`. */
+    /** The same for pixels of one `int`. */
     public void setPixels(int x, int y, int w, int h, ColorModel model, int[] pixels, int off,
             int scansize) {
         if (model == this.origmodel) {

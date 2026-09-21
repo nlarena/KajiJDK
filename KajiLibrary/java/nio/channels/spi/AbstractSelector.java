@@ -8,61 +8,64 @@ import java.util.HashSet;
 import java.util.Set;
 
 /**
- * KajiLibrary's java.nio.channels.spi.AbstractSelector — la parte de un selector que no depende del
- * sistema.
+ * KajiLibrary's java.nio.channels.spi.AbstractSelector — the part of a selector that does not
+ * depend on the system.
  *
- * <p>Resuelve tres cosas y deja el resto a quien la herede:
+ * <p>It solves three things and leaves the rest to whoever inherits it:
  *
  * <ul>
- *   <li><strong>El cierre ocurre una vez.</strong> {@link #close()} es `final` y lleva la
- *       contabilidad; lo propio va en {@link #implCloseSelector()};
- *   <li><strong>Las canceladas se juntan en un lugar.</strong> {@link #cancelledKeys()} es el buzon
- *       donde {@link AbstractSelectionKey#cancel()} deja las llaves; el que implementa la seleccion
- *       lo vacia al principio de cada `select`, que es el unico momento en que puede tocar sus
- *       estructuras sin carrera;
- *   <li><strong>La baja de una llave es un solo paso.</strong> {@link #deregister} invalida la llave
- *       y la saca del canal a la vez. Separarlo deja llaves validas sobre canales dados de baja, que
- *       es la clase de estado que despues nadie entiende.
+ *   <li><strong>The closing happens once.</strong> {@link #close()} is `final` and keeps the
+ *       bookkeeping; the own part goes in {@link #implCloseSelector()};
+ *   <li><strong>The cancelled ones gather in one place.</strong> {@link #cancelledKeys()} is the
+ *       postbox where {@link AbstractSelectionKey#cancel()} leaves the keys; whoever implements the
+ *       selection empties it at the start of each `select`, which is the only moment when they can
+ *       touch their structures without a race;
+ *   <li><strong>Dropping a key is a single step.</strong> {@link #deregister} invalidates the key
+ *       and takes it out of the channel at the same time. Separating that leaves valid keys over
+ *       dropped channels, which is the kind of state nobody understands afterwards.
  * </ul>
  *
- * <p>{@link #begin()} y {@link #end()} envuelven la espera para que se la pueda interrumpir. Aca
- * valen las mismas salvedades que en {@link AbstractInterruptibleChannel}: esta VM no puede sacar a
- * un hilo de una espera empezada, asi que lo que hay es el par y su contrato, no el desbloqueo.
+ * <p>{@link #begin()} and {@link #end()} wrap the wait so that it can be interrupted. The same
+ * caveats as in {@link AbstractInterruptibleChannel} apply here: this VM cannot get a thread out of
+ * a started wait, so what there is is the pair and its contract, not the unblocking.
  *
- * <p>Sin `Selector.open()` no hay manera de llegar a un selector del sistema; quien implemente uno
- * propio hereda de aca y tiene lo de arriba hecho.
+ * <p>`Selector.open()` reaches the in-house selector, or the installed provider's; whoever
+ * implements one of their own inherits from here and has the above done. This note used to say
+ * there was no `open()` to reach any selector with, and that stopped being true when the VM grew
+ * its network seam.
  */
 public abstract class AbstractSelector extends Selector {
 
-    private final Set<SelectionKey> canceladas = new HashSet<SelectionKey>();
-    private final SelectorProvider proveedor;
-    private boolean abierto = true;
+    private final Set<SelectionKey> cancelled = new HashSet<SelectionKey>();
+    private final SelectorProvider theProvider;
+    private boolean openFlag = true;
 
     protected AbstractSelector(SelectorProvider provider) {
-        this.proveedor = provider;
+        this.theProvider = provider;
     }
 
-    // La llama `AbstractSelectionKey.cancel()`. Package-private: el buzon se llena por ese camino y
-    // no por cualquiera, o dejaria de valer que todo lo que hay adentro fue cancelado de verdad.
+    // It is called by `AbstractSelectionKey.cancel()`. Package-private: the postbox is filled by
+    // that road and not by any other, or it would stop being true that everything inside it was
+    // really cancelled.
     void cancel(SelectionKey k) {
-        synchronized (this.canceladas) {
-            this.canceladas.add(k);
+        synchronized (this.cancelled) {
+            this.cancelled.add(k);
         }
     }
 
     /**
-     * Cierra el selector.
+     * Closes the selector.
      *
-     * <p>Sin `throws IOException` --el JDK la declara-- por la cadena que arranca en
-     * `java.io.Closeable`; lo que {@link #implCloseSelector()} tire sale envuelto en
-     * {@link UncheckedIOException} para no perder el motivo.
+     * <p>Without `throws IOException` --the JDK declares it-- because of the chain that starts in
+     * `java.io.Closeable`; whatever {@link #implCloseSelector()} throws comes out wrapped in
+     * {@link UncheckedIOException} so as not to lose the reason.
      */
     public final void close() {
         synchronized (this) {
-            if (!this.abierto) {
+            if (!this.openFlag) {
                 return;
             }
-            this.abierto = false;
+            this.openFlag = false;
         }
         try {
             this.implCloseSelector();
@@ -71,49 +74,49 @@ public abstract class AbstractSelector extends Selector {
         }
     }
 
-    /** El cierre concreto, llamado una sola vez. */
+    /** The concrete closing, called a single time. */
     protected abstract void implCloseSelector() throws IOException;
 
     public final boolean isOpen() {
-        return this.abierto;
+        return this.openFlag;
     }
 
     public final SelectorProvider provider() {
-        return this.proveedor;
+        return this.theProvider;
     }
 
     /**
-     * El buzon de llaves canceladas.
+     * The postbox of cancelled keys.
      *
-     * <p>Se devuelve el conjunto vivo, no una copia: el que implementa `select` tiene que **vaciarlo**
-     * despues de procesarlo, y sobre una copia no podria.
+     * <p>The live set is returned, not a copy: whoever implements `select` has to **empty it**
+     * after processing it, and over a copy they could not.
      */
     protected final Set<SelectionKey> cancelledKeys() {
-        return this.canceladas;
+        return this.cancelled;
     }
 
     /**
-     * Registra `ch` en este selector.
+     * Registers `ch` in this selector.
      *
-     * <p>Lo llama {@link AbstractSelectableChannel#register} y no el usuario: la validacion de que el
-     * canal este abierto, no bloqueante y admita `ops` ya paso alli.
+     * <p>It is called by {@link AbstractSelectableChannel#register} and not by the user: the
+     * checking that the channel is open, non-blocking and admits `ops` has happened there already.
      */
     protected abstract SelectionKey register(AbstractSelectableChannel ch, int ops, Object att);
 
     /**
-     * Da de baja `key`: la invalida y la saca de su canal.
+     * Drops `key`: it invalidates it and takes it out of its channel.
      *
-     * <p>Las dos cosas juntas a proposito; ver la nota de la clase.
+     * <p>Both things together on purpose; see the note of the class.
      */
     protected final void deregister(AbstractSelectionKey key) {
         ((AbstractSelectableChannel) key.channel()).removeKey(key);
     }
 
-    /** Marca el arranque de una espera interrumpible. Va en pareja con {@link #end()}. */
+    /** Marks the start of an interruptible wait. It goes in a pair with {@link #end()}. */
     protected final void begin() {
     }
 
-    /** Cierra la pareja de {@link #begin()}. */
+    /** Closes the pair of {@link #begin()}. */
     protected final void end() {
     }
 }

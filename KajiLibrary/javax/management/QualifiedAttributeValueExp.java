@@ -1,18 +1,18 @@
 package javax.management;
 
 /**
- * Un atributo que solo se lee si el MBean es de la clase indicada.
+ * An attribute that is read only if the MBean is of the given class.
  *
- * <p>De paquete: se fabrica con {@code Query.attr(clase, atributo)}. Sirve para consultar un
- * dominio mezclado sin que dos MBeans distintos que casualmente tienen un atributo del mismo nombre
- * se confundan entre si.
+ * <p>Package-private: it is made with {@code Query.attr(class, attribute)}. It serves to query a
+ * mixed domain without two different MBeans that happen to have an attribute of the same name
+ * getting confused with each other.
  */
 class QualifiedAttributeValueExp extends AttributeValueExp {
 
     private static final long serialVersionUID = 8832517277410933254L;
 
     /**
-     * @serial la clase que califica
+     * @serial the qualifying class
      */
     private String className;
 
@@ -24,14 +24,14 @@ class QualifiedAttributeValueExp extends AttributeValueExp {
         this.className = className;
     }
 
-    /** La clase que califica al atributo. */
+    /** The class that qualifies the attribute. */
     public String getAttrClassName() {
         return className;
     }
 
     /**
-     * Si el MBean no es de esa clase, se tira {@link InvalidApplicationException}, que es
-     * exactamente lo que esa excepcion significa: la consulta no aplica a este MBean.
+     * If the MBean is not of that class, {@link InvalidApplicationException} is thrown, which is
+     * exactly what that exception means: the query does not apply to this MBean.
      */
     public ValueExp apply(ObjectName name) throws BadStringOperationException,
             BadBinaryOpValueExpException, BadAttributeValueExpException,

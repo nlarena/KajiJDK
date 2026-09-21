@@ -62,7 +62,7 @@ abstract class CharacterData {
 
     abstract byte getDirectionality(int ch);
 
-    // Los cuatro con cuerpo por defecto, idénticos al base del JDK.
+    // The four with a default body, identical to the JDK's base.
 
     int toUpperCaseEx(int ch) {
         return toUpperCase(ch);
@@ -85,6 +85,6 @@ abstract class CharacterData {
      * are not in KajiLibrary, so there is nothing to return.
      */
     static final CharacterData of(int ch) {
-        throw new UnsupportedOperationException("las tablas de CharacterData no están en KajiLibrary");
+        throw new UnsupportedOperationException("CharacterData's tables are not in KajiLibrary");
     }
 }

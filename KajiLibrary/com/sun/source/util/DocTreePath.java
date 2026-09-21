@@ -7,14 +7,16 @@ import com.sun.source.doctree.DocCommentTree;
 import com.sun.source.doctree.DocTree;
 
 /**
- * Un nodo de documentacion y todo lo que lo contiene: hasta el comentario, y de ahi hasta el codigo.
+ * A documentation node and everything that contains it: as far as the comment, and from there
+ * as far as the code.
  *
- * <h2>Los dos arboles encadenados</h2>
+ * <h2>The two chained trees</h2>
  *
- * <p>Es lo que distingue a esta clase de {@link TreePath}: un camino de documentacion termina en un
- * {@link TreePath}, no en una raiz propia. Tiene que ser asi porque la pregunta que se hace sobre un
- * nodo de documentacion casi siempre es sobre el codigo — "a que metodo documenta este
- * {@code @param}" — y esa respuesta esta del otro lado de la frontera entre los dos arboles.
+ * <p>It is what tells this class from {@link TreePath}: a documentation path ends in a
+ * {@link TreePath}, not in a root of its own. It has to be like that because the question that
+ * is asked about a documentation node is almost always about the code -- "which method does
+ * this {@code @param} document" -- and that answer is on the other side of the border between
+ * the two trees.
  */
 public class DocTreePath implements Iterable<DocTree> {
 
@@ -23,23 +25,25 @@ public class DocTreePath implements Iterable<DocTree> {
     private final DocTree leaf;
     private final DocTreePath parent;
 
-    /** El camino hasta {@code target} dentro de ese comentario, o {@code null} si no esta. */
+    /**
+     * The path as far as {@code target} inside that comment, or {@code null} if it is not there.
+     */
     public static DocTreePath getPath(TreePath treePath, DocCommentTree comment, DocTree target) {
         return getPath(new DocTreePath(treePath, comment), target);
     }
 
-    /** Igual, arrancando desde un camino ya armado. */
+    /** The same, starting from a path that is already built. */
     public static DocTreePath getPath(DocTreePath path, DocTree target) {
         if (path == null || target == null) {
-            throw new NullPointerException("path y target no pueden ser null");
+            throw new NullPointerException("path and target may not be null");
         }
-        return new Buscador(target).buscar(path);
+        return new Finder(target).find(path);
     }
 
-    /** El camino que es solo el comentario. */
+    /** The path that is only the comment. */
     public DocTreePath(TreePath treePath, DocCommentTree t) {
         if (treePath == null || t == null) {
-            throw new NullPointerException("treePath y comment no pueden ser null");
+            throw new NullPointerException("treePath and comment may not be null");
         }
         this.treePath = treePath;
         this.docComment = t;
@@ -47,10 +51,10 @@ public class DocTreePath implements Iterable<DocTree> {
         this.parent = null;
     }
 
-    /** El camino de {@code p} extendido con {@code t}. */
+    /** {@code p}'s path extended with {@code t}. */
     public DocTreePath(DocTreePath p, DocTree t) {
         if (t.getKind() == DocTree.Kind.DOC_COMMENT) {
-            throw new IllegalArgumentException("un DocCommentTree es la raiz, no una hoja");
+            throw new IllegalArgumentException("a DocCommentTree is the root, not a leaf");
         }
         this.treePath = p.treePath;
         this.docComment = p.docComment;
@@ -58,88 +62,88 @@ public class DocTreePath implements Iterable<DocTree> {
         this.parent = p;
     }
 
-    /** El camino en el arbol de codigo donde vive este comentario. */
+    /** The path in the code tree where this comment lives. */
     public TreePath getTreePath() {
         return this.treePath;
     }
 
-    /** El comentario entero. */
+    /** The whole comment. */
     public DocCommentTree getDocComment() {
         return this.docComment;
     }
 
-    /** El nodo del extremo. */
+    /** The node at the end. */
     public DocTree getLeaf() {
         return this.leaf;
     }
 
-    /** El camino hasta el padre, o {@code null} si esto es el comentario. */
+    /** The path as far as the parent, or {@code null} if this is the comment. */
     public DocTreePath getParentPath() {
         return this.parent;
     }
 
-    /** Del nodo hacia el comentario. */
+    /** From the node towards the comment. */
     public Iterator<DocTree> iterator() {
-        return new HaciaArriba(this);
+        return new Upwards(this);
     }
 
-    private static final class HaciaArriba implements Iterator<DocTree> {
+    private static final class Upwards implements Iterator<DocTree> {
 
-        private DocTreePath actual;
+        private DocTreePath current;
 
-        HaciaArriba(DocTreePath desde) {
-            this.actual = desde;
+        Upwards(DocTreePath from) {
+            this.current = from;
         }
 
         public boolean hasNext() {
-            return this.actual != null;
+            return this.current != null;
         }
 
         public DocTree next() {
-            if (this.actual == null) {
+            if (this.current == null) {
                 throw new NoSuchElementException();
             }
-            DocTree t = this.actual.leaf;
-            this.actual = this.actual.parent;
+            DocTree t = this.current.leaf;
+            this.current = this.current.parent;
             return t;
         }
     }
 
-    /** Ver la nota del buscador de {@link TreePath}: corta con una excepcion al encontrarlo. */
-    private static final class Buscador extends DocTreePathScanner<DocTreePath, Void> {
+    /** See {@link TreePath}'s finder note: it stops with an exception on finding it. */
+    private static final class Finder extends DocTreePathScanner<DocTreePath, Void> {
 
-        private final DocTree objetivo;
+        private final DocTree target;
 
-        Buscador(DocTree objetivo) {
-            this.objetivo = objetivo;
+        Finder(DocTree target) {
+            this.target = target;
         }
 
-        DocTreePath buscar(DocTreePath desde) {
+        DocTreePath find(DocTreePath from) {
             try {
-                scan(desde, null);
+                scan(from, null);
                 return null;
-            } catch (Encontrado e) {
-                return e.camino;
+            } catch (Found e) {
+                return e.path;
             }
         }
 
         public DocTreePath scan(DocTree node, Void p) {
-            if (node == this.objetivo) {
-                throw new Encontrado(new DocTreePath(getCurrentPath(), node));
+            if (node == this.target) {
+                throw new Found(new DocTreePath(getCurrentPath(), node));
             }
             return super.scan(node, p);
         }
     }
 
-    private static final class Encontrado extends RuntimeException {
+    private static final class Found extends RuntimeException {
 
         private static final long serialVersionUID = 1L;
 
-        final transient DocTreePath camino;
+        final transient DocTreePath path;
 
-        Encontrado(DocTreePath camino) {
+        Found(DocTreePath path) {
             super(null, null, false, false);
-            this.camino = camino;
+            this.path = path;
         }
     }
 }

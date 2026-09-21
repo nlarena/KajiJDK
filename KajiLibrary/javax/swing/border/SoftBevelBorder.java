@@ -6,31 +6,31 @@ import java.awt.Graphics;
 import java.awt.Insets;
 
 /**
- * Un {@link BevelBorder} con las esquinas suavizadas.
+ * A {@link BevelBorder} with softened corners.
  *
- * <p>La unica diferencia es que las esquinas no se cierran: las lineas se cortan un pixel antes, y
- * el relieve queda con las puntas redondeadas en vez de en angulo recto. El efecto es sutil y el
- * motivo es de estilo, no funcional.
+ * <p>The only difference is that the corners do not close: the lines stop one pixel short, and
+ * the relief is left with rounded tips instead of right angles. The effect is subtle and the
+ * reason is one of style, not function.
  *
- * <p>Tiene una consecuencia real igual: <strong>deja de ser opaco</strong>. Los pixeles de las
- * esquinas quedan sin pintar, y prometer lo contrario dejaria basura justo ahi — el mismo argumento
- * que en {@link LineBorder} con las esquinas redondeadas.
+ * <p>It has a real consequence all the same: <strong>it stops being opaque</strong>. The corner
+ * pixels are left unpainted, and promising the opposite would leave rubbish right there -- the
+ * same argument as in {@link LineBorder} with rounded corners.
  */
 public class SoftBevelBorder extends BevelBorder {
 
     private static final long serialVersionUID = 5248789787305979975L;
 
-    /** Con los colores derivados del fondo del componente. */
+    /** With the colours derived from the component's background. */
     public SoftBevelBorder(int bevelType) {
         super(bevelType);
     }
 
-    /** Con un color claro y uno oscuro. */
+    /** With one light colour and one dark one. */
     public SoftBevelBorder(int bevelType, Color highlight, Color shadow) {
         super(bevelType, highlight, shadow);
     }
 
-    /** Con los cuatro tonos explicitos. */
+    /** With the four shades explicit. */
     public SoftBevelBorder(int bevelType, Color highlightOuterColor, Color highlightInnerColor,
             Color shadowOuterColor, Color shadowInnerColor) {
         super(bevelType, highlightOuterColor, highlightInnerColor, shadowOuterColor,
@@ -38,35 +38,35 @@ public class SoftBevelBorder extends BevelBorder {
     }
 
     public void paintBorder(Component c, Graphics g, int x, int y, int width, int height) {
-        Color viejo = g.getColor();
+        Color old = g.getColor();
         g.translate(x, y);
 
-        boolean levantado = getBevelType() == RAISED;
-        Color arribaAfuera = levantado ? getHighlightOuterColor(c) : getShadowInnerColor(c);
-        Color arribaAdentro = levantado ? getHighlightInnerColor(c) : getShadowOuterColor(c);
-        Color abajoAfuera = levantado ? getShadowOuterColor(c) : getHighlightInnerColor(c);
-        Color abajoAdentro = levantado ? getShadowInnerColor(c) : getHighlightOuterColor(c);
+        boolean raised = getBevelType() == RAISED;
+        Color outerHighlight = raised ? getHighlightOuterColor(c) : getShadowInnerColor(c);
+        Color innerHighlight = raised ? getHighlightInnerColor(c) : getShadowOuterColor(c);
+        Color outerShadow = raised ? getShadowOuterColor(c) : getHighlightInnerColor(c);
+        Color innerShadow = raised ? getShadowInnerColor(c) : getHighlightOuterColor(c);
 
-        // Las lineas arrancan y terminan un pixel adentro respecto de `BevelBorder`: eso es todo
-        // el suavizado, y es tambien por que las esquinas quedan sin pintar.
-        g.setColor(arribaAfuera);
+        // The lines start and end one pixel further in than in `BevelBorder`: that is the whole
+        // softening, and it is also why the corners are left unpainted.
+        g.setColor(outerHighlight);
         g.drawLine(0, 0, width - 2, 0);
         g.drawLine(0, 1, 0, height - 2);
 
-        g.setColor(arribaAdentro);
+        g.setColor(innerHighlight);
         g.drawLine(1, 1, width - 3, 1);
         g.drawLine(1, 2, 1, height - 3);
 
-        g.setColor(abajoAfuera);
+        g.setColor(outerShadow);
         g.drawLine(1, height - 1, width - 1, height - 1);
         g.drawLine(width - 1, 1, width - 1, height - 2);
 
-        g.setColor(abajoAdentro);
+        g.setColor(innerShadow);
         g.drawLine(2, height - 2, width - 2, height - 2);
         g.drawLine(width - 2, 2, width - 2, height - 3);
 
         g.translate(-x, -y);
-        g.setColor(viejo);
+        g.setColor(old);
     }
 
     public Insets getBorderInsets(Component c, Insets insets) {
@@ -77,7 +77,7 @@ public class SoftBevelBorder extends BevelBorder {
         return insets;
     }
 
-    /** No es opaco: las esquinas quedan sin pintar. Ver la nota de la clase. */
+    /** It is not opaque: the corners are left unpainted. See the class note. */
     public boolean isBorderOpaque() {
         return false;
     }

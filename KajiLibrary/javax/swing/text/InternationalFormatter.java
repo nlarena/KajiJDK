@@ -12,20 +12,21 @@ import javax.swing.Action;
 import javax.swing.JFormattedTextField;
 
 /**
- * Un formateador que delega en un {@link Format} de {@code java.text}.
+ * A formatter that delegates to a {@code java.text} {@link Format}.
  *
- * <h2>Que agrega sobre {@link DefaultFormatter}</h2>
+ * <h2>What it adds over {@link DefaultFormatter}</h2>
  *
- * <p>Tres cosas. Primero, la conversion la hace el {@code Format}, que sabe de idioma: separadores
- * de miles, nombres de meses, signos de moneda. Segundo, un rango: {@link #setMinimum} y
- * {@link #setMaximum} rechazan valores fuera de el. Tercero, y es lo interesante, sabe <em>que
- * parte</em> del texto es que: {@link #getFields} dice si la posicion 3 cae en el mes o en el ano.
+ * <p>Three things. First, the conversion is done by the {@code Format}, which knows about
+ * language: thousands separators, month names, currency signs. Second, a range:
+ * {@link #setMinimum} and {@link #setMaximum} reject values outside it. Third, and this is the
+ * interesting one, it knows <em>which part</em> of the text is which: {@link #getFields} says
+ * whether position 3 falls in the month or in the year.
  *
- * <h2>Para que sirve saber los campos</h2>
+ * <h2>What knowing the fields is for</h2>
  *
- * <p>Para moverse por campos con las flechas y para subir y bajar el valor de uno solo. Sin eso,
- * un campo de fecha seria una cadena cualquiera y las flechas no podrian hacer nada mejor que
- * mover el cursor una letra.
+ * <p>For moving between fields with the arrows and for increasing and decreasing the value of a
+ * single one. Without that, a date field would be just any string and the arrows could do
+ * nothing better than move the cursor one letter.
  */
 public class InternationalFormatter extends DefaultFormatter {
 
@@ -39,18 +40,18 @@ public class InternationalFormatter extends DefaultFormatter {
     private transient boolean validMask;
     private transient String string;
 
-    /** Un formateador sin formato; se comporta como el de siempre hasta que le pongan uno. */
+    /** A formatter with no format; it behaves like the usual one until one is set on it. */
     public InternationalFormatter() {
         setOverwriteMode(false);
     }
 
-    /** Un formateador que usa ese formato. */
+    /** A formatter that uses that format. */
     public InternationalFormatter(Format format) {
         this();
         setFormat(format);
     }
 
-    /** El formato que convierte entre valor y texto. */
+    /** The format that converts between value and text. */
     public void setFormat(Format format) {
         this.format = format;
     }
@@ -60,10 +61,10 @@ public class InternationalFormatter extends DefaultFormatter {
     }
 
     /**
-     * El valor mas chico aceptable.
+     * The smallest acceptable value.
      *
-     * <p>Si el valor actual es menor, se sube al minimo: dejarlo fuera de rango haria que el campo
-     * mostrara algo que el mismo declara invalido.
+     * <p>If the current value is smaller, it is raised to the minimum: leaving it out of range
+     * would make the field show something it itself declares invalid.
      */
     public void setMinimum(Comparable<?> minimum) {
         if (getValueClass() == null && minimum != null) {
@@ -76,7 +77,7 @@ public class InternationalFormatter extends DefaultFormatter {
         return min;
     }
 
-    /** El valor mas grande aceptable. */
+    /** The largest acceptable value. */
     public void setMaximum(Comparable<?> max) {
         if (getValueClass() == null && max != null) {
             setValueClass(max.getClass());
@@ -93,7 +94,7 @@ public class InternationalFormatter extends DefaultFormatter {
         updateMaskIfNecessary();
     }
 
-    /** El texto del valor, segun el formato. */
+    /** The value's text, according to the format. */
     public String valueToString(Object value) throws ParseException {
         if (value == null) {
             return "";
@@ -106,17 +107,16 @@ public class InternationalFormatter extends DefaultFormatter {
     }
 
     /**
-     * El valor de ese texto, dentro del rango.
+     * That text's value, within the range.
      *
-     * @throws ParseException si el texto no se puede convertir o queda fuera de rango.
+     * @throws ParseException if the text cannot be converted or falls outside the range.
      */
     public Object stringToValue(String text) throws ParseException {
         Object value = stringToValue(text, getFormat());
 
-        // Primero el tipo, despues el rango. Un Format devuelve el tipo que se le antoja (un
-        // NumberFormat siempre da Long o Double), asi que comparar antes de convertir seria
-        // comparar un Integer con un Long y terminar en una conversion invalida, no en un rango
-        // mal.
+        // First the type, then the range. A Format returns whatever type it likes (a NumberFormat
+                // always gives Long or Double), so comparing before converting would be comparing
+                // an Integer with a Long and ending in an invalid conversion, not in a bad range.
         Class<?> vc = getValueClass();
         if (value != null && vc != null && !vc.isInstance(value)) {
             value = super.stringToValue(value.toString());
@@ -138,7 +138,7 @@ public class InternationalFormatter extends DefaultFormatter {
         return f.parseObject(text);
     }
 
-    /** Si el valor cae dentro del rango. */
+    /** Whether the value falls within the range. */
     private boolean isValidValue(Object value, boolean wantsCCE) {
         Comparable<Object> min = (Comparable<Object>) getMinimum();
         try {
@@ -166,14 +166,14 @@ public class InternationalFormatter extends DefaultFormatter {
     }
 
     /**
-     * Los campos del formato que cubren esa posicion del texto.
+     * The format fields that cover that position of the text.
      *
-     * <p>Puede haber mas de uno: los formatos anidados hacen que una posicion pertenezca a un campo
-     * y al que lo contiene.
+     * <p>There may be more than one: nested formats make a position belong to a field and to the
+     * one that contains it.
      */
     public Format$Field[] getFields(int offset) {
         if (getAllowsInvalid()) {
-            // El texto puede no corresponder al formato: se rearma el recorrido.
+            // The text may not correspond to the format: the walk is rebuilt.
             updateMask();
         }
         AttributedCharacterIterator iterator = getIterator();
@@ -204,7 +204,7 @@ public class InternationalFormatter extends DefaultFormatter {
         return formatter;
     }
 
-    /** Las acciones de subir y bajar el campo donde esta el cursor. */
+    /** The actions that increase and decrease the field the cursor is in. */
     protected Action[] getActions() {
         if (getSupportsIncrement()) {
             return new Action[] {
@@ -215,17 +215,17 @@ public class InternationalFormatter extends DefaultFormatter {
         return null;
     }
 
-    /** Si tiene sentido subir y bajar el valor con las flechas. */
+    /** Whether increasing and decreasing the value with the arrows makes sense. */
     boolean getSupportsIncrement() {
         return false;
     }
 
     /**
-     * Reenvia a {@link #getFormattedTextField()} desde las clases anidadas.
+     * It forwards to {@link #getFormattedTextField()} from the nested classes.
      *
-     * <p>Mismo motivo que en {@link DefaultFormatter}: hallazgo #512.
+     * <p>Same reason as in {@link DefaultFormatter}: finding #512.
      */
-    JFormattedTextField campo() {
+    JFormattedTextField field() {
         return getFormattedTextField();
     }
 
@@ -248,7 +248,7 @@ public class InternationalFormatter extends DefaultFormatter {
         }
     }
 
-    /** Rearma el recorrido de campos a partir del texto actual. */
+    /** It rebuilds the walk of fields from the current text. */
     void updateMask() {
         Format f = getFormat();
         validMask = false;
@@ -271,16 +271,16 @@ public class InternationalFormatter extends DefaultFormatter {
             string = text;
             validMask = true;
         } catch (Exception e) {
-            // El texto no corresponde al formato: no hay campos que informar.
+            // The text does not correspond to the format: there are no fields to report.
             iterator = null;
         }
     }
 
     /**
-     * Sube o baja el valor.
+     * It increases or decreases the value.
      *
-     * <p>La accion de las flechas arriba y abajo. Quien sabe como incrementar es la subclase: en
-     * un numero es sumar uno, en una fecha depende del campo donde esta el cursor.
+     * <p>The action of the up and down arrows. Who knows how to increment is the subclass: in a
+     * number it is adding one, in a date it depends on the field the cursor is in.
      */
     static class IncrementAction extends javax.swing.AbstractAction {
 
@@ -294,14 +294,14 @@ public class InternationalFormatter extends DefaultFormatter {
         }
 
         public void actionPerformed(java.awt.event.ActionEvent ae) {
-            JFormattedTextField ftf = fmt.campo();
+            JFormattedTextField ftf = fmt.field();
             if (ftf != null && ftf.isEditable()) {
                 fmt.adjustValue(direction);
             }
         }
     }
 
-    /** Suma esa cantidad al valor; la subclase que sepa hacerlo la sobrescribe. */
+    /** It adds that amount to the value; the subclass that knows how overrides it. */
     void adjustValue(int direction) {
     }
 }

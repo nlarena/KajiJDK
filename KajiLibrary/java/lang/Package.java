@@ -17,8 +17,8 @@ import java.net.URL;
 public final class Package implements AnnotatedElement {
 
     private final String name;
-    // Los atributos que un manifiesto traeria. Son `null` para un paquete que se mintio al vuelo
-    // desde el nombre de una clase, y tienen valor para uno que `ClassLoader.definePackage` creo.
+    // The attributes a manifest would bring. They are `null` for a package minted on the fly from a
+    // class's name, and have a value for one `ClassLoader.definePackage` created.
     private final String specTitle;
     private final String specVersion;
     private final String specVendor;
@@ -33,7 +33,7 @@ public final class Package implements AnnotatedElement {
         this(name, null, null, null, null, null, null, null);
     }
 
-    // El constructor completo, para `ClassLoader.definePackage`.
+    // The full constructor, for `ClassLoader.definePackage`.
     Package(String name, String specTitle, String specVersion, String specVendor,
             String implTitle, String implVersion, String implVendor, URL sealBase) {
         this.name = name;
@@ -53,10 +53,10 @@ public final class Package implements AnnotatedElement {
 
     // ---- manifest attributes ----
     //
-    // Un paquete que se minto desde el nombre de una clase --el camino de `Class.getPackage()`--
-    // los tiene todos en `null`: una clase cargada de un directorio no tiene manifiesto que leer, y
-    // "ausente" es la respuesta correcta. Uno creado con `ClassLoader.definePackage` devuelve lo que
-    // le pasaron, que es de donde el JDK los saca tambien.
+    // A package minted from a class's name --`Class.getPackage()`'s path-- has them all `null`: a
+    // class loaded from a directory has no manifest to read, and "absent" is the right answer. One
+    // created with `ClassLoader.definePackage` returns what it was handed, which is where the JDK
+    // gets them from as well.
 
     public String getSpecificationTitle() {
         return this.specTitle;
@@ -82,25 +82,25 @@ public final class Package implements AnnotatedElement {
         return this.implVendor;
     }
 
-    /** Si este paquete esta sellado, o sea si se lo definio con una base de sellado. */
+    /** Whether this package is sealed, that is, whether it was defined with a sealing base. */
     public boolean isSealed() {
         return this.sealBase != null;
     }
 
     /**
-     * Si este paquete esta sellado **contra esa** URL.
+     * Whether this package is sealed **against that** URL.
      *
-     * <p>Sellar quiere decir "todas las clases de este paquete vienen del mismo lugar", y esta
-     * pregunta es la que lo comprueba: una clase que llega de otra URL no entra.
+     * <p>Sealing means "every class of this package comes from the same place", and this question is
+     * what checks it: a class arriving from another URL does not get in.
      *
-     * @throws SecurityException si el paquete no esta sellado
+     * @throws SecurityException if the package is not sealed
      */
     public boolean isSealed(URL url) {
         if (url == null) {
             throw new NullPointerException("url");
         }
         if (this.sealBase == null) {
-            throw new SecurityException("el paquete " + this.name + " no esta sellado");
+            throw new SecurityException("package " + this.name + " is not sealed");
         }
         return this.sealBase.equals(url);
     }
@@ -164,16 +164,16 @@ public final class Package implements AnnotatedElement {
 
     // ---- deprecated caller-sensitive lookups ----
     //
-    // En el JDK estas dos caminan el loader de **quien llama**. Aca hay un solo loader, asi que la
-    // pregunta "el loader de quien" no tiene mas que una respuesta y se la puede contestar: van al
-    // registro del loader unico, el mismo que `definePackage` puebla.
+    // In the JDK these two walk **the caller's** loader. Here there is one loader, so the question
+    // "whose loader" has only one answer and can be answered: they go to the single loader's
+    // register, the same one `definePackage` populates.
 
-    /** @deprecated una busqueda sensible al llamador; aca va al registro del loader unico. */
+    /** @deprecated a caller-sensitive lookup; here it goes to the single loader's register. */
     public static Package getPackage(String name) {
         return ClassLoader.getSystemClassLoader().getDefinedPackage(name);
     }
 
-    /** Los paquetes definidos en el loader unico. */
+    /** The packages defined in the single loader. */
     public static Package[] getPackages() {
         return ClassLoader.getSystemClassLoader().getDefinedPackages();
     }

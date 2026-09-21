@@ -5,11 +5,11 @@ import javax.print.attribute.EnumSyntax;
 import javax.print.attribute.PrintRequestAttribute;
 
 /**
- * Si el dialogo de impresion que ve el usuario es el del sistema operativo ({@code NATIVE}) o el
- * multiplataforma de Java ({@code COMMON}).
+ * Whether the print dialog the user sees is the operating system's ({@code NATIVE}) or Java's
+ * cross-platform one ({@code COMMON}).
  *
- * <p>El nativo suele exponer opciones del driver que el comun no conoce; el comun se ve igual en
- * todos lados.
+ * <p>The native one usually exposes driver options the common one does not know; the common one
+ * looks the same everywhere.
  */
 public final class DialogTypeSelection extends EnumSyntax implements PrintRequestAttribute {
 

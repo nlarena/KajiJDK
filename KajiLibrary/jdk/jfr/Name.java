@@ -6,13 +6,13 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * El nombre con el que el evento o el campo aparece en la grabacion.
+ * The name under which the event or the field appears in the recording.
  *
- * <p>Por omision es el nombre completo de la clase, y eso ata el formato del archivo al nombre del
- * paquete: renombrar la clase rompe las consultas escritas contra ella. Poniendo un nombre
- * explicito los dos quedan independientes.
+ * <p>By default it is the complete name of the class, and that ties the format of the file to the
+ * name of the package: renaming the class breaks the queries written against it. By putting an
+ * explicit name the two are left independent.
  *
- * <p>La convencion del JDK es un nombre con puntos, como {@code jdk.ObjectAllocationSample}.
+ * <p>The convention of the JDK is a name with dots, such as {@code jdk.ObjectAllocationSample}.
  *
  * @since 9
  */
@@ -22,9 +22,9 @@ import java.lang.annotation.Target;
 public @interface Name {
 
     /**
-     * El valor de la anotacion.
+     * The value of the annotation.
      *
-     * @return el valor
+     * @return the value
      */
     String value();
 }

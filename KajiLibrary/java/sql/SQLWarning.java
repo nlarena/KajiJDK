@@ -1,12 +1,13 @@
 package java.sql;
 
 /**
- * KajiLibrary's java.sql.SQLWarning -- algo que la base quiso decir sin que la operacion fallara.
+ * KajiLibrary's java.sql.SQLWarning -- something the database wanted to say without the operation
+ * failing.
  *
- * <p>Que sea una **excepcion que no se lanza** suena raro y es deliberado: hereda el mensaje, el
- * `SQLState` y el encadenamiento de {@link SQLException}, que es exactamente lo que hace falta para
- * reportar un aviso, y a cambio evita un segundo tipo con la misma forma. Se la recoge preguntando,
- * no atrapando.
+ * <p>That it is an **exception that is not thrown** sounds odd and is deliberate: it inherits the
+ * message, the `SQLState` and the chaining of {@link SQLException}, which is exactly what is needed
+ * to report a warning, and in exchange avoids a second type with the same shape. It is collected by
+ * asking, not by catching.
  */
 public class SQLWarning extends SQLException {
 
@@ -42,19 +43,19 @@ public class SQLWarning extends SQLException {
         super(reason, sqlState, vendorCode, cause);
     }
 
-    /** El siguiente aviso de la cadena, o `null`. */
+    /** The next warning in the chain, or `null`. */
     public SQLWarning getNextWarning() {
-        SQLException siguiente = this.getNextException();
-        if (siguiente == null) {
+        SQLException next = this.getNextException();
+        if (next == null) {
             return null;
         }
-        if (siguiente instanceof SQLWarning) {
-            return (SQLWarning) siguiente;
+        if (next instanceof SQLWarning) {
+            return (SQLWarning) next;
         }
-        throw new Error("la cadena de avisos tiene una excepcion que no es un aviso");
+        throw new Error("SQLWarning chain holds value that is not a SQLWarning");
     }
 
-    /** Agrega `w` al final de la cadena de avisos. */
+    /** Adds `w` at the end of the warning chain. */
     public void setNextWarning(SQLWarning w) {
         this.setNextException(w);
     }

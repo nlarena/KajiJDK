@@ -1,22 +1,22 @@
 package jdk.security.jarsigner;
 
 /**
- * Lo que lanza {@link JarSigner#sign} cuando la firma no se pudo completar.
+ * What {@link JarSigner#sign} throws when the signing could not be completed.
  *
- * <p>Es la excepcion envolvente: la causa --una clave que no sirve, un algoritmo que no esta, un
- * error de E/S sobre el zip-- viaja adentro. Que sea sin comprobar es a proposito: `sign` puede
- * fallar por muchas razones distintas y ninguna se maneja distinto de las otras, asi que obligarlas
- * a declararse una por una no le daria informacion a nadie.
+ * <p>It is the wrapping exception: the cause --a key that does not serve, an algorithm that is not
+ * there, an I/O error over the zip-- travels inside. That it is unchecked is on purpose: `sign` can
+ * fail for many different reasons and none is handled differently from the others, so forcing them
+ * to be declared one by one would give nobody any information.
  */
 public class JarSignerException extends RuntimeException {
 
     private static final long serialVersionUID = -4732217075689309530L;
 
     /**
-     * Una excepcion con ese detalle y esa causa.
+     * An exception with that detail and that cause.
      *
-     * @param msg el detalle
-     * @param cause lo que fallo de verdad
+     * @param msg the detail
+     * @param cause what really failed
      */
     public JarSignerException(String msg, Throwable cause) {
         super(msg, cause);

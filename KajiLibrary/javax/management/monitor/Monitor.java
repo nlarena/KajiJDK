@@ -10,130 +10,131 @@ import javax.management.NotificationBroadcasterSupport;
 import javax.management.ObjectName;
 
 /**
- * KajiLibrary's javax.management.monitor.Monitor -- la base de los tres monitores.
+ * KajiLibrary's javax.management.monitor.Monitor -- the base of the three monitors.
  *
- * <p>Un monitor lee un atributo de uno o varios MBeans cada tanto y avisa cuando pasa algo. Esta
- * clase tiene la parte que no depende de <b>que</b> se mira: la lista de observados, el periodo, el
- * hilo que despierta, y la maquinaria de avisar los errores una sola vez.
+ * <p>A monitor reads an attribute of one or several MBeans every so often and notifies when
+ * something happens. This class holds the part that does not depend on <b>what</b> is watched: the
+ * list of observed objects, the period, the thread that wakes up, and the machinery for reporting
+ * errors only once.
  *
- * <h2>El hilo es demonio</h2>
+ * <h2>The thread is a daemon</h2>
  *
- * <p>Al reves que {@code javax.management.timer.Timer}: un monitor arrancado <b>no</b> impide que la
- * maquina virtual termine. Tiene sentido en los dos casos y por el mismo criterio -- un reloj existe
- * para que algo pase y perderlo es perder trabajo; un monitor existe para observar, y observar
- * mientras el programa se cierra no le sirve a nadie.
+ * <p>The other way round from {@code javax.management.timer.Timer}: a started monitor does
+ * <b>not</b> keep the virtual machine from finishing. It makes sense in both cases and by the same
+ * criterion -- a clock exists so that something happens and losing it is losing work; a monitor
+ * exists to observe, and observing while the program is closing is of no use to anyone.
  *
- * <h2>Los errores se avisan una vez</h2>
+ * <h2>Errors are reported once</h2>
  *
- * <p>Los campos {@code alreadyNotified*} y las cuatro banderas {@code *_NOTIFIED} son eso: un
- * registro, por objeto observado, de que errores ya se avisaron. Sin ellos, un monitor apuntando a un
- * MBean que no existe mandaria un aviso por periodo para siempre.
+ * <p>The {@code alreadyNotified*} fields and the four {@code *_NOTIFIED} flags are exactly that: a
+ * record, per observed object, of which errors have already been reported. Without them, a monitor
+ * pointing at an MBean that does not exist would send one notice per period forever.
  *
- * <p>Las banderas se limpian cuando la condicion se arregla, asi que un MBean que desaparece y
- * vuelve produce exactamente dos avisos y no uno ni mil.
+ * <p>The flags are cleared when the condition is fixed, so an MBean that disappears and comes back
+ * produces exactly two notices and not one or a thousand.
  *
- * <h2>Los campos protegidos</h2>
+ * <h2>The protected fields</h2>
  *
- * <p>Casi todo el estado interno es {@code protected} y no privado. No es una decision de esta
- * biblioteca: la clase es de 1999 y sus subclases del JDK los tocan directo. Se replican tal cual
- * porque una subclase escrita contra el JDK tiene que poder compilar contra esto.
+ * <p>Almost all the internal state is {@code protected} and not private. It is not a decision of
+ * this library: the class predates generics and the JDK's subclasses touch them directly. They are
+ * replicated as they are so that a subclass written against the JDK can compile against this.
  */
 public abstract class Monitor extends NotificationBroadcasterSupport
     implements MonitorMBean, MBeanRegistration {
 
-    /** De cuanto en cuanto crece {@link #alreadyNotifieds}. */
+    /** How much {@link #alreadyNotifieds} grows by. */
     protected static final int capacityIncrement = 16;
 
-    /** Cuantos observados hay. */
+    /** How many observed objects there are. */
     protected int elementCount = 0;
 
-    /** Las banderas del <b>primero</b>, por compatibilidad con la version de un solo observado. */
+    /** The flags of the <b>first</b> one, for compatibility with the single-object version. */
     protected int alreadyNotified = 0;
 
-    /** Las banderas de cada observado, en el mismo orden que la lista. */
+    /** The flags of each observed object, in the same order as the list. */
     protected int[] alreadyNotifieds = new int[capacityIncrement];
 
-    /** El agente donde se registro, o null. */
+    /** The agent it was registered in, or null. */
     protected MBeanServer server;
 
-    /** Limpia todas las banderas. */
+    /** Clears all the flags. */
     protected static final int RESET_FLAGS_ALREADY_NOTIFIED = 0;
 
-    /** Ya se aviso que el MBean no esta. */
+    /** It was already reported that the MBean is not there. */
     protected static final int OBSERVED_OBJECT_ERROR_NOTIFIED = 1;
 
-    /** Ya se aviso que el atributo no existe. */
+    /** It was already reported that the attribute does not exist. */
     protected static final int OBSERVED_ATTRIBUTE_ERROR_NOTIFIED = 2;
 
-    /** Ya se aviso que el atributo es de otro tipo. */
+    /** It was already reported that the attribute is of another type. */
     protected static final int OBSERVED_ATTRIBUTE_TYPE_ERROR_NOTIFIED = 4;
 
-    /** Ya se aviso que algo tiro. */
+    /** It was already reported that something threw. */
     protected static final int RUNTIME_ERROR_NOTIFIED = 8;
 
-    /** Una etiqueta para los mensajes de diagnostico. */
+    /** A label for the diagnostic messages. */
     protected String dbgTag = getClass().getName();
 
-    /** Los observados, en orden de alta. */
+    /** The observed objects, in registration order. */
     private final List<ObjectName> observedObjects = new ArrayList<ObjectName>();
 
-    /** El atributo que se lee de todos. */
+    /** The attribute read from all of them. */
     private String observedAttribute = null;
 
-    /** Cada cuanto, en milisegundos. */
+    /** How often, in milliseconds. */
     private long granularityPeriod = 10000;
 
-    /** Null mientras esta parado. */
+    /** Null while it is stopped. */
     private Timer engine;
 
-    /** El nombre bajo el que se registro, o null. */
+    /** The name it was registered under, or null. */
     private ObjectName objectName;
 
-    /** El numero de secuencia de los avisos. */
+    /** The sequence number of the notices. */
     private long sequence = 1;
 
-    /** Un monitor parado y sin observados. */
+    /** A stopped monitor with no observed objects. */
     public Monitor() {
     }
 
     // ---- MBeanRegistration -----------------------------------------------------------------
 
-    /** Se queda con el agente: es de donde va a leer los atributos. */
+    /** It keeps the agent: it is where the attributes will be read from. */
     public ObjectName preRegister(MBeanServer server, ObjectName name) throws Exception {
         this.server = server;
         this.objectName = name;
         return name;
     }
 
-    /** Nada que hacer. */
+    /** Nothing to do. */
     public void postRegister(Boolean registrationDone) {
     }
 
-    /** Para el monitor: sin agente no puede leer nada. */
+    /** Stops the monitor: without an agent it cannot read anything. */
     public void preDeregister() throws Exception {
         stop();
     }
 
-    /** Suelta el agente. */
+    /** Releases the agent. */
     public void postDeregister() {
         this.server = null;
         this.objectName = null;
     }
 
-    // ---- lo que definen las subclases ------------------------------------------------------
+    // ---- what the subclasses define -------------------------------------------------------
 
-    /** Arranca. Cada monitor concreto valida lo suyo antes de llamar a {@link #startPolling}. */
+    /** Starts. Each concrete monitor validates its own before calling {@link #startPolling}. */
     public abstract void start();
 
-    /** Para. */
+    /** Stops. */
     public abstract void stop();
 
-    // ---- observados ------------------------------------------------------------------------
+    // ---- observed objects ------------------------------------------------------------------
 
     /**
-     * El primero de la lista.
+     * The first of the list.
      *
-     * @deprecated ver {@link MonitorMBean#getObservedObject}
+     * @deprecated see {@link MonitorMBean#getObservedObject}
      */
     @Deprecated
     public synchronized ObjectName getObservedObject() {
@@ -144,10 +145,10 @@ public abstract class Monitor extends NotificationBroadcasterSupport
     }
 
     /**
-     * Reemplaza la lista entera por ese.
+     * Replaces the whole list with that one.
      *
-     * @throws IllegalArgumentException si es null
-     * @deprecated ver {@link MonitorMBean#setObservedObject}
+     * @throws IllegalArgumentException if it is null
+     * @deprecated see {@link MonitorMBean#setObservedObject}
      */
     @Deprecated
     public synchronized void setObservedObject(ObjectName object) throws IllegalArgumentException {
@@ -164,12 +165,12 @@ public abstract class Monitor extends NotificationBroadcasterSupport
     }
 
     /**
-     * Agrega uno.
+     * Adds one.
      *
-     * <p>Agregar el mismo dos veces no hace nada: la lista es un conjunto en la practica, y avisar
-     * dos veces por el mismo MBean no le sirve a nadie.
+     * <p>Adding the same one twice does nothing: the list is a set in practice, and notifying twice
+     * about the same MBean is of no use to anyone.
      *
-     * @throws IllegalArgumentException si es null
+     * @throws IllegalArgumentException if it is null
      */
     public synchronized void addObservedObject(ObjectName object) throws IllegalArgumentException {
         if (object == null) {
@@ -183,7 +184,7 @@ public abstract class Monitor extends NotificationBroadcasterSupport
         resetCounts();
     }
 
-    /** Lo saca. Si no estaba, no hace nada. */
+    /** Removes it. If it was not there, does nothing. */
     public synchronized void removeObservedObject(ObjectName object) {
         if (this.observedObjects.remove(object)) {
             forgetObserved(object);
@@ -191,25 +192,25 @@ public abstract class Monitor extends NotificationBroadcasterSupport
         }
     }
 
-    /** Si ese esta. */
+    /** Whether that one is there. */
     public synchronized boolean containsObservedObject(ObjectName object) {
         return this.observedObjects.contains(object);
     }
 
-    /** Todos, en orden de alta. Copia. */
+    /** All of them, in registration order. A copy. */
     public synchronized ObjectName[] getObservedObjects() {
         return this.observedObjects.toArray(new ObjectName[this.observedObjects.size()]);
     }
 
-    /** El atributo que se lee de todos. */
+    /** The attribute read from all of them. */
     public synchronized String getObservedAttribute() {
         return this.observedAttribute;
     }
 
     /**
-     * Ver {@link #getObservedAttribute}.
+     * See {@link #getObservedAttribute}.
      *
-     * @throws IllegalArgumentException si es null
+     * @throws IllegalArgumentException if it is null
      */
     public void setObservedAttribute(String attribute) throws IllegalArgumentException {
         if (attribute == null) {
@@ -221,15 +222,15 @@ public abstract class Monitor extends NotificationBroadcasterSupport
         }
     }
 
-    /** Cada cuantos milisegundos se lee. */
+    /** Every how many milliseconds it reads. */
     public synchronized long getGranularityPeriod() {
         return this.granularityPeriod;
     }
 
     /**
-     * Ver {@link #getGranularityPeriod}.
+     * See {@link #getGranularityPeriod}.
      *
-     * @throws IllegalArgumentException si no es positivo
+     * @throws IllegalArgumentException if it is not positive
      */
     public synchronized void setGranularityPeriod(long period) throws IllegalArgumentException {
         if (period <= 0) {
@@ -237,52 +238,52 @@ public abstract class Monitor extends NotificationBroadcasterSupport
         }
         this.granularityPeriod = period;
         if (this.engine != null) {
-            // Reprogramar con el periodo nuevo; si no, el cambio no se nota hasta el proximo
-            // arranque, que es justo lo que nadie espera de un setter.
+            // Reschedule with the new period; otherwise the change would not show until the next
+            // start, which is exactly what nobody expects from a setter.
             stopPolling();
             startPolling();
         }
     }
 
-    /** Si esta observando. */
+    /** Whether it is observing. */
     public synchronized boolean isActive() {
         return this.engine != null;
     }
 
-    // ---- para las subclases ----------------------------------------------------------------
+    // ---- for the subclasses ---------------------------------------------------------------
 
     /**
-     * El valor calculado para ese observado, sin comprometerse con un tipo.
+     * The value computed for that observed object, without committing to a type.
      *
-     * <p>Paquete-privado y devolviendo {@code Object} a proposito: cada monitor concreto lo redefine
-     * con <b>su</b> tipo --{@code Number} en los numericos, {@code String} en el de cadenas-- y esa
-     * redefinicion covariante es la que hace que el metodo publico de cada uno sea el tipado.
+     * <p>Package-private and returning {@code Object} on purpose: each concrete monitor redefines
+     * it with <b>its</b> type --{@code Number} in the numeric ones, {@code String} in the string
+     * one-- and that covariant redefinition is what makes each one's public method the typed one.
      *
-     * <p>Sin este de aca, la redefinicion no seria una redefinicion sino un metodo nuevo, y el
-     * puente que el compilador genera --{@code Object getDerivedGauge(ObjectName)} publico en cada
-     * subclase-- no existiria. Ese puente es parte del API que ve la reflexion, asi que la
-     * declaracion tiene que estar.
+     * <p>Without this one, the redefinition would not be a redefinition but a new method, and the
+     * bridge the compiler generates --a public {@code Object getDerivedGauge(ObjectName)} in each
+     * subclass-- would not exist. That bridge is part of the API reflection sees, so the
+     * declaration has to be there.
      */
     synchronized Object getDerivedGauge(ObjectName object) {
         return null;
     }
 
     /**
-     * Arranca el hilo que despierta cada periodo.
+     * Starts the thread that wakes up every period.
      *
-     * <p>Lo llaman los {@code start()} de las subclases despues de validar lo suyo. Si ya estaba
-     * activo no hace nada.
+     * <p>The subclasses' {@code start()} call it after validating their own. If it was already
+     * active it does nothing.
      */
     synchronized void startPolling() {
         if (this.engine != null) {
             return;
         }
-        // Demonio: ver la nota de la clase.
+        // Daemon: see the class note.
         this.engine = new Timer("monitor-mbean", true);
         this.engine.schedule(new Tick(), this.granularityPeriod, this.granularityPeriod);
     }
 
-    /** Para el hilo. Lo llaman los {@code stop()}. */
+    /** Stops the thread. The {@code stop()} methods call it. */
     synchronized void stopPolling() {
         if (this.engine == null) {
             return;
@@ -292,9 +293,9 @@ public abstract class Monitor extends NotificationBroadcasterSupport
     }
 
     /**
-     * Una lectura de todos los observados.
+     * One reading of all the observed objects.
      *
-     * <p>Corre en el hilo del monitor. Cada subclase decide que hacer con el valor.
+     * <p>It runs on the monitor's thread. Each subclass decides what to do with the value.
      */
     synchronized void poll() {
         int i = 0;
@@ -302,7 +303,8 @@ public abstract class Monitor extends NotificationBroadcasterSupport
             ObjectName name = this.observedObjects.get(i);
             try {
                 if (this.server == null) {
-                    // Sin agente no hay de donde leer. No es un error del MBean observado.
+                    // Without an agent there is nowhere to read from. It is not an error of the
+                    // observed MBean.
                     i = i + 1;
                     continue;
                 }
@@ -325,26 +327,26 @@ public abstract class Monitor extends NotificationBroadcasterSupport
         }
     }
 
-    /** Que hacer con el valor leido. La define cada monitor concreto. */
+    /** What to do with the value read. Each concrete monitor defines it. */
     abstract void onValue(ObjectName name, int index, Object value);
 
     /**
-     * Le avisa al monitor concreto que hay un observado nuevo.
+     * Tells the concrete monitor that there is a new observed object.
      *
-     * <p>El estado por observado se crea <b>al darlo de alta</b> y no en la primera lectura. Se nota
-     * de afuera: recien agregado, {@code getDerivedGauge()} ya contesta un valor inicial en vez de
-     * null. Es lo que hace el JDK y tiene sentido -- "todavia no lei nada de este" y "este no
-     * existe" son dos respuestas distintas.
+     * <p>The per-object state is created <b>when it is added</b> and not on the first reading. It
+     * shows from outside: just added, {@code getDerivedGauge()} already answers an initial value
+     * instead of null. It is what the JDK does and it makes sense -- "I have not read anything of
+     * this one yet" and "this one does not exist" are two different answers.
      */
     abstract void createObserved(ObjectName name);
 
-    /** Le avisa que se dio de baja: el estado de ese observado se descarta. */
+    /** Tells it that one was removed: that object's state is discarded. */
     abstract void forgetObserved(ObjectName name);
 
     /**
-     * Manda un aviso si ese error no se aviso todavia para ese observado.
+     * Sends a notice if that error has not been reported yet for that observed object.
      *
-     * <p>Ver la nota de la clase sobre por que una sola vez.
+     * <p>See the class note about why only once.
      */
     void notifyOnce(int index, int flag, String type, ObjectName name, String message) {
         if ((flagsAt(index) & flag) != 0) {
@@ -354,7 +356,7 @@ public abstract class Monitor extends NotificationBroadcasterSupport
         send(type, name, message, null, null);
     }
 
-    /** Manda un aviso de disparo, sin banderas de por medio. */
+    /** Sends a firing notice, with no flags in between. */
     void send(String type, ObjectName name, String message, Object derivedGauge, Object trigger) {
         long seq = this.sequence;
         this.sequence = this.sequence + 1;
@@ -362,7 +364,7 @@ public abstract class Monitor extends NotificationBroadcasterSupport
             message, name, this.observedAttribute, derivedGauge, trigger));
     }
 
-    /** Las banderas de ese observado. */
+    /** The flags of that observed object. */
     int flagsAt(int index) {
         if (index < 0 || index >= this.alreadyNotifieds.length) {
             return 0;
@@ -370,7 +372,7 @@ public abstract class Monitor extends NotificationBroadcasterSupport
         return this.alreadyNotifieds[index];
     }
 
-    /** Prende una bandera. */
+    /** Turns a flag on. */
     void setFlag(int index, int flag) {
         ensureCapacity(index);
         this.alreadyNotifieds[index] = this.alreadyNotifieds[index] | flag;
@@ -379,7 +381,7 @@ public abstract class Monitor extends NotificationBroadcasterSupport
         }
     }
 
-    /** Apaga banderas. */
+    /** Turns flags off. */
     void clearFlag(int index, int flags) {
         ensureCapacity(index);
         this.alreadyNotifieds[index] = this.alreadyNotifieds[index] & ~flags;
@@ -388,7 +390,7 @@ public abstract class Monitor extends NotificationBroadcasterSupport
         }
     }
 
-    /** Deja el registro de banderas al tamano de la lista y lo limpia. */
+    /** Trims the flag record to the size of the list and clears it. */
     private void resetCounts() {
         this.elementCount = this.observedObjects.size();
         ensureCapacity(this.elementCount);
@@ -400,7 +402,7 @@ public abstract class Monitor extends NotificationBroadcasterSupport
         this.alreadyNotified = RESET_FLAGS_ALREADY_NOTIFIED;
     }
 
-    /** Agranda el registro de a {@link #capacityIncrement}. */
+    /** Grows the record by {@link #capacityIncrement}. */
     private void ensureCapacity(int index) {
         if (index < this.alreadyNotifieds.length) {
             return;
@@ -414,7 +416,7 @@ public abstract class Monitor extends NotificationBroadcasterSupport
         this.alreadyNotifieds = bigger;
     }
 
-    /** Lo que corre en el hilo del monitor cada periodo. */
+    /** What runs on the monitor's thread every period. */
     private final class Tick extends TimerTask {
 
         public void run() {

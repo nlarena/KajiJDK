@@ -5,36 +5,36 @@ import java.util.EventObject;
 import javax.swing.table.TableModel;
 
 /**
- * Los datos de una tabla cambiaron.
+ * A table's data changed.
  *
- * <h2>Un evento que se lee por sus constantes</h2>
+ * <h2>An event that is read by its constants</h2>
  *
- * <p>La combinacion de rango, columna y tipo cubre desde "cambio una celda" hasta "cambio todo", y
- * las dos constantes especiales son las que hacen practico el caso general:
- * {@link #HEADER_ROW} como primera fila significa que cambio la <strong>estructura</strong> —hay
- * otras columnas, no otros datos— y {@link #ALL_COLUMNS} que el cambio abarca la fila entera.
+ * <p>The combination of range, column and type covers everything from "one cell changed" to
+ * "everything changed", and the two special constants are what make the general case practical:
+ * {@link #HEADER_ROW} as the first row means the <strong>structure</strong> changed --there are
+ * other columns, not other data-- and {@link #ALL_COLUMNS} that the change spans the whole row.
  *
- * <p>La distincion importa porque un cambio de estructura obliga a la tabla a rehacer sus columnas,
- * y uno de datos solo a repintar. Confundirlos es la diferencia entre una tabla que parpadea y una
- * que muestra columnas viejas.
+ * <p>The distinction matters because a change of structure forces the table to redo its columns,
+ * and one of data only to repaint. Confusing them is the difference between a table that flickers
+ * and one that shows old columns.
  */
 public class TableModelEvent extends EventObject {
 
     private static final long serialVersionUID = 1L;
 
-    /** Se insertaron filas. */
+    /** Rows were inserted. */
     public static final int INSERT = 1;
 
-    /** Cambiaron valores. */
+    /** Values changed. */
     public static final int UPDATE = 0;
 
-    /** Se borraron filas. */
+    /** Rows were deleted. */
     public static final int DELETE = -1;
 
-    /** Como primera fila: cambio la estructura de columnas. */
+    /** As the first row: the column structure changed. */
     public static final int HEADER_ROW = -1;
 
-    /** Como columna: el cambio abarca todas. */
+    /** As the column: the change spans them all. */
     public static final int ALL_COLUMNS = -1;
 
     protected int type;
@@ -42,27 +42,27 @@ public class TableModelEvent extends EventObject {
     protected int lastRow;
     protected int column;
 
-    /** Cambio todo. */
+    /** Everything changed. */
     public TableModelEvent(TableModel source) {
         this(source, 0, Integer.MAX_VALUE, ALL_COLUMNS, UPDATE);
     }
 
-    /** Cambio una fila entera. */
+    /** A whole row changed. */
     public TableModelEvent(TableModel source, int row) {
         this(source, row, row, ALL_COLUMNS, UPDATE);
     }
 
-    /** Cambio un rango de filas. */
+    /** A range of rows changed. */
     public TableModelEvent(TableModel source, int firstRow, int lastRow) {
         this(source, firstRow, lastRow, ALL_COLUMNS, UPDATE);
     }
 
-    /** Cambio una columna de un rango de filas. */
+    /** One column of a range of rows changed. */
     public TableModelEvent(TableModel source, int firstRow, int lastRow, int column) {
         this(source, firstRow, lastRow, column, UPDATE);
     }
 
-    /** Con todo explicito. */
+    /** With everything explicit. */
     public TableModelEvent(TableModel source, int firstRow, int lastRow, int column, int type) {
         super(source);
         this.firstRow = firstRow;
@@ -71,22 +71,22 @@ public class TableModelEvent extends EventObject {
         this.type = type;
     }
 
-    /** La primera fila afectada; {@link #HEADER_ROW} si cambio la estructura. */
+    /** The first row affected; {@link #HEADER_ROW} if the structure changed. */
     public int getFirstRow() {
         return this.firstRow;
     }
 
-    /** La ultima fila afectada, inclusive. */
+    /** The last row affected, inclusive. */
     public int getLastRow() {
         return this.lastRow;
     }
 
-    /** La columna afectada, o {@link #ALL_COLUMNS}. */
+    /** The column affected, or {@link #ALL_COLUMNS}. */
     public int getColumn() {
         return this.column;
     }
 
-    /** {@link #INSERT}, {@link #UPDATE} o {@link #DELETE}. */
+    /** {@link #INSERT}, {@link #UPDATE} or {@link #DELETE}. */
     public int getType() {
         return this.type;
     }

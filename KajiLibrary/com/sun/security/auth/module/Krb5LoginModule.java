@@ -10,62 +10,63 @@ import javax.security.auth.login.LoginException;
 import javax.security.auth.spi.LoginModule;
 
 /**
- * El modulo JAAS que autentica contra Kerberos.
+ * The JAAS module that authenticates against Kerberos.
  *
- * <h2>Que hace distinto a Kerberos</h2>
+ * <h2>What makes Kerberos different</h2>
  *
- * <p>Que la contrasena no viaja. El cliente le pide al centro de distribucion de claves un
- * <strong>ticket</strong> para conceder tickets, y la respuesta viene cifrada con una clave
- * derivada de la contrasena del usuario. Si el cliente puede descifrarla, sabia la contrasena — y
- * el servidor nunca la vio pasar.
+ * <p>That the password does not travel. The client asks the key distribution centre for a
+ * <strong>ticket</strong> with which to grant tickets, and the answer comes encrypted with a
+ * key derived from the user's password. If the client can decrypt it, it knew the password --
+ * and the server never saw it go past.
  *
- * <p>De ahi sale la otra propiedad, la que hace que valga la pena: con ese ticket el usuario obtiene
- * tickets para cada servicio sin volver a escribir nada. Es el inicio de sesion unico, y no es un
- * agregado sino una consecuencia directa del diseno.
+ * <p>From there comes the other property, the one that makes it worth while: with that ticket
+ * the user obtains tickets for each service without writing anything again. It is the single
+ * sign-on, and it is not an addition but a direct consequence of the design.
  *
- * <h2>Que deja en el {@link Subject}</h2>
+ * <h2>What it leaves in the {@link Subject}</h2>
  *
- * <p>Un {@link KerberosPrincipal} con el nombre completo ({@code usuario@REINO}) y, como credencial
- * <strong>privada</strong>, el {@link KerberosTicket}. La division es la de siempre: el principal
- * dice quien es, el ticket es lo que permite actuar.
+ * <p>A {@link KerberosPrincipal} with the full name ({@code user@REALM}) and, as a
+ * <strong>private</strong> credential, the {@link KerberosTicket}. The division is the usual
+ * one: the principal says who it is, the ticket is what allows it to act.
  *
- * <h2>Estado en esta VM</h2>
+ * <h2>State on this VM</h2>
  *
- * <p>Este modulo no esta implementado, y a diferencia de sus companeros de paquete no le falta un
- * paso sino <strong>todo el trabajo</strong>: hablar Kerberos es implementar el protocolo — el
- * intercambio con el centro de distribucion, la codificacion ASN.1 de los mensajes, las funciones
- * de derivacion de clave de cada tipo de cifrado, la cache de credenciales y el analisis del
- * archivo de configuracion del reino. En el JDK eso vive en {@code sun.security.krb5}, que son
- * decenas de clases y no es API publica.
+ * <p>This module is not implemented, and unlike its companions in the package it is not
+ * missing a step but <strong>all the work</strong>: talking Kerberos is implementing the
+ * protocol -- the exchange with the distribution centre, the ASN.1 encoding of the messages,
+ * the key derivation functions of each kind of encryption, the credential cache and the
+ * analysis of the realm's configuration file. In the JDK that lives in
+ * {@code sun.security.krb5}, which is dozens of classes and is not public API.
  *
- * <p>Por eso {@link #login} lanza {@link LoginException} diciendo esto mismo, y los otros tres
- * contestan lo que el contrato pide de un modulo que no autentico. La alternativa —una maquina de
- * estados que devuelva {@code true} sin haber autenticado a nadie— seria un modulo que compila,
- * corre y deja pasar a cualquiera.
+ * <p>That is why {@link #login} throws {@link LoginException} saying this very thing, and the
+ * other three answer what the contract asks of a module that did not authenticate. The
+ * alternative -- a state machine that returns {@code true} without having authenticated
+ * anybody -- would be a module that compiles, runs and lets anybody through.
  *
  * @since 1.4
  */
 public class Krb5LoginModule implements LoginModule {
 
-    private static final String NO_HAY =
-            "Krb5LoginModule necesita una implementacion del protocolo Kerberos (intercambio con "
-            + "el KDC, ASN.1, derivacion de claves y cache de credenciales), que esta biblioteca "
-            + "no tiene";
+    private static final String MISSING =
+            "Krb5LoginModule needs an implementation of the Kerberos protocol (the exchange "
+            + "with the KDC, ASN.1, key derivation and a credential cache), which this library "
+            + "does not have";
 
     private Subject subject;
     private CallbackHandler callbackHandler;
     private Map<String, ?> sharedState;
     private Map<String, ?> options;
 
-    /** Para la configuracion de JAAS, que lo instancia por reflexion. */
+    /** For the JAAS configuration, which instantiates it by reflection. */
     public Krb5LoginModule() {
     }
 
     /**
      * {@inheritDoc}
      *
-     * <p>Guarda lo que recibe. No falla: la firma no permite avisar, y fallar aca impediria que
-     * una configuracion con varios modulos llegara siquiera a inicializar los otros.
+     * <p>It keeps what it receives. It does not fail: the signature does not allow it to say so,
+     * and failing here would keep a configuration with several modules from even getting to
+     * initialize the others.
      */
     public void initialize(final Subject subject, final CallbackHandler callbackHandler,
             final Map<String, ?> sharedState, final Map<String, ?> options) {
@@ -78,19 +79,19 @@ public class Krb5LoginModule implements LoginModule {
     /**
      * {@inheritDoc}
      *
-     * @throws LoginException siempre; ver la nota de la clase
+     * @throws LoginException always; see the class note
      */
     public boolean login() throws LoginException {
-        throw new LoginException(NO_HAY);
+        throw new LoginException(MISSING);
     }
 
     /**
      * {@inheritDoc}
      *
-     * <p>Devuelve {@code false}, que es lo que el contrato de JAAS pide de un modulo cuyo
-     * {@link #login} no tuvo exito. En el flujo normal ni siquiera se llama —un {@code login} que
-     * falla lleva a {@link #abort}— pero un llamador directo tiene que recibir la respuesta del
-     * contrato y no una excepcion.
+     * <p>It returns {@code false}, which is what the JAAS contract asks of a module whose
+     * {@link #login} did not succeed. In the normal flow it is not even called -- a {@code login}
+     * that fails leads to {@link #abort} -- but a direct caller has to receive the contract's
+     * answer and not an exception.
      *
      * @return {@code false}
      */
@@ -101,9 +102,10 @@ public class Krb5LoginModule implements LoginModule {
     /**
      * {@inheritDoc}
      *
-     * <p>Devuelve {@code false} en lugar de fallar: {@link #login} nunca tuvo exito, y el contrato
-     * de JAAS dice que un modulo que no autentico contesta {@code false} al abortar. Hacerlo fallar
-     * romperia el aborto de toda la configuracion por culpa de un modulo que no hizo nada.
+     * <p>It returns {@code false} instead of failing: {@link #login} never succeeded, and the
+     * JAAS contract says that a module that did not authenticate answers {@code false} on
+     * aborting. Making it fail would break the abort of the whole configuration because of a
+     * module that did nothing.
      *
      * @return {@code false}
      */
@@ -114,8 +116,8 @@ public class Krb5LoginModule implements LoginModule {
     /**
      * {@inheritDoc}
      *
-     * <p>Devuelve {@code false} por la misma razon que {@link #abort}: no hay nada que sacar del
-     * {@link Subject} porque este modulo nunca puso nada.
+     * <p>It returns {@code false} for the same reason as {@link #abort}: there is nothing to take
+     * out of the {@link Subject} because this module never put anything in.
      *
      * @return {@code false}
      */

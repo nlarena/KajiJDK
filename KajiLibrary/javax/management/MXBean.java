@@ -7,20 +7,22 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Marca --o desmarca-- una interfaz como MXBean.
+ * Marks --or unmarks-- an interface as an MXBean.
  *
- * <p>Existe porque la convencion del sufijo no alcanza. Sin la anotacion, una interfaz es MXBean
- * solo si su nombre simple termina en `MXBean`; con ella el autor decide explicitamente, y por eso
- * el valor es `boolean` y no un marcador pelado: `@MXBean(false)` sobre `FooMXBean` la vuelve una
- * interfaz comun, que es el unico modo de escapar de la convencion.
+ * <p>It exists because the suffix convention is not enough. Without the annotation, an interface is
+ * an MXBean only if its name ends in {@code MXBean}; with it the author decides explicitly, and
+ * that is why the value is a {@code boolean} and not a bare marker: {@code @MXBean(false)} on
+ * {@code FooMXBean} turns it into an ordinary interface, which is the only way to escape the
+ * convention.
  *
- * <p>Es `RUNTIME` porque quien la lee es el servidor de MBeans al registrar, no el compilador.
+ * <p>It is {@code RUNTIME} because whoever reads it is the MBean server when registering, not the
+ * compiler.
  */
 @Documented
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.TYPE)
 public @interface MXBean {
 
-    /** Si la interfaz anotada es un MXBean. */
+    /** Whether the annotated interface is an MXBean. */
     boolean value() default true;
 }

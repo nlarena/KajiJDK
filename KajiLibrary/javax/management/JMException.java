@@ -1,29 +1,30 @@
 package javax.management;
 
 /**
- * La raiz **verificada** de JMX: todo lo que una operacion de gestion puede fallar y el que llama
- * tiene que atender cuelga de aca.
+ * The <b>checked</b> root of JMX: everything a management operation can fail with and the caller
+ * has to handle hangs from here.
  *
- * <p>JMX parte sus errores en dos arboles que **no** se tocan: este, que hereda de `Exception`, y
- * {@link JMRuntimeException}, que hereda de `RuntimeException`. La division no es de comodidad sino
- * de responsabilidad -- el verificado dice "el pedido no se pudo cumplir" (no existe el MBean, el
- * atributo no esta) y el no verificado dice "el MBean se rompio o lo llamaron mal".
+ * <p>JMX splits its errors into two trees that do <b>not</b> touch: this one, which extends
+ * {@code Exception}, and {@link JMRuntimeException}, which extends {@code RuntimeException}. The
+ * split is not one of convenience but of responsibility -- the checked one says "the request could
+ * not be fulfilled" (the MBean does not exist, the attribute is not there) and the unchecked one
+ * says "the MBean broke or was called wrongly".
  *
- * <p>Sin constructor con causa, y no es olvido: JMX es de 1999 y anterior al encadenado de
- * `Throwable`. Las dos subclases que si envuelven algo --{@link MBeanException} y
- * {@link ReflectionException}-- se lo guardan en un campo propio y lo publican pisando
- * `getCause()`.
+ * <p>No constructor with a cause, and not by oversight: JMX predates {@code Throwable} chaining.
+ * The two subclasses that do wrap something --{@link MBeanException} and
+ * {@link ReflectionException}-- keep it in a field of their own and publish it by overriding
+ * {@code getCause()}.
  */
 public class JMException extends Exception {
 
     private static final long serialVersionUID = 350520924977331825L;
 
-    /** Sin mensaje. */
+    /** Without a message. */
     public JMException() {
         super();
     }
 
-    /** Con el mensaje que explica que fallo. */
+    /** With the message that explains what failed. */
     public JMException(String msg) {
         super(msg);
     }

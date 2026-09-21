@@ -1,40 +1,43 @@
 package org.w3c.dom.events;
 
 /**
- * KajiLibrary's org.w3c.dom.events.EventTarget -- algo que puede recibir eventos.
+ * KajiLibrary's org.w3c.dom.events.EventTarget -- something that can receive events.
  *
- * <p>La implementa {@code Node}, asi que cualquier nodo del documento lo es.
+ * <p>{@code Node} implements it, so any node of the document is one.
  *
- * <h2>useCapture es parte de la identidad del registro</h2>
+ * <h2>useCapture is part of the identity of the registration</h2>
  *
- * <p>Es lo que no es obvio: registrar el mismo escucha para el mismo tipo con {@code useCapture}
- * distinto son <b>dos registros</b>, y quitar uno no quita el otro. {@link #removeEventListener}
- * tiene que recibir el mismo valor con el que se registro, o no encuentra nada y no avisa.
+ * <p>It is what is not obvious: registering the same listener for the same type with a different
+ * {@code useCapture} is <b>two registrations</b>, and removing one does not remove the other.
+ * {@link #removeEventListener} has to receive the same value it was registered with, or it finds
+ * nothing and does not warn.
  *
- * <p>Registrar dos veces con los tres argumentos iguales, en cambio, <b>no</b> duplica: el segundo se
- * descarta y el escucha recibe el evento una sola vez.
+ * <p>Registering twice with the three arguments equal, on the other hand, does <b>not</b>
+ * duplicate: the second is discarded and the listener receives the event only once.
  */
 public interface EventTarget {
 
     /**
-     * Registra un escucha.
+     * It registers a listener.
      *
-     * @param useCapture si escucha en la fase de captura --bajando-- en vez de en objetivo y
-     *     burbujeo. Ver la nota de la clase: es parte de la identidad del registro
+     * @param useCapture whether it listens in the capturing phase --going down-- instead of at
+     *     target and bubbling. See the note of the class: it is part of the identity of the
+     *     registration
      */
     void addEventListener(String type, EventListener listener, boolean useCapture);
 
     /**
-     * Quita un escucha. Si no hay ninguno con esos tres valores, no hace nada y no avisa.
+     * It removes a listener. If there is none with those three values, it does nothing and does not
+     * warn.
      */
     void removeEventListener(String type, EventListener listener, boolean useCapture);
 
     /**
-     * Despacha un evento por este objetivo, con las tres fases completas.
+     * It dispatches an event through this target, with the three phases complete.
      *
-     * @return si <b>no</b> se cancelo la accion por omision. Ojo con el sentido: devuelve true
-     *     cuando nadie llamo a {@code preventDefault()}
-     * @throws EventException {@code UNSPECIFIED_EVENT_TYPE_ERR} si el evento no tiene tipo
+     * @return whether the default action was <b>not</b> cancelled. Careful with the sense: it
+     *     returns true when nobody called {@code preventDefault()}
+     * @throws EventException {@code UNSPECIFIED_EVENT_TYPE_ERR} if the event has no type
      */
     boolean dispatchEvent(Event evt) throws EventException;
 }

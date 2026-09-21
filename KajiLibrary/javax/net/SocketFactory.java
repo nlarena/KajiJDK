@@ -6,37 +6,38 @@ import java.net.Socket;
 import java.net.UnknownHostException;
 
 /**
- * KajiLibrary's javax.net.SocketFactory -- crea sockets de cliente.
+ * KajiLibrary's javax.net.SocketFactory -- creates client sockets.
  *
- * <p>Una capa de indireccion sobre {@code new Socket(...)}, y toda su razon de ser es lo que permite:
- * que el mismo codigo cliente hable en claro o por TLS cambiando <b>solo</b> la fabrica.
- * {@code javax.net.ssl.SSLSocketFactory} es una subclase, y ahi esta el punto.
+ * <p>A layer of indirection over {@code new Socket(...)}, and its whole reason for being is what it
+ * allows: the same client code talking in the clear or over TLS by changing <b>only</b> the
+ * factory. {@code javax.net.ssl.SSLSocketFactory} is a subclass, and that is the point.
  *
- * <p>Tambien sirve para meter un proxy, un socket con instrumentacion, o uno falso para pruebas.
+ * <p>It also serves to slip in a proxy, an instrumented socket, or a fake one for tests.
  *
- * <h2>{@link #createSocket()} sin argumentos</h2>
+ * <h2>{@link #createSocket()} without arguments</h2>
  *
- * <p>Devuelve un socket <b>sin conectar</b>. Es el unico camino para fijar opciones que tienen que
- * estar puestas <b>antes</b> de conectar --el tamano de los buferes, {@code SO_REUSEADDR}-- y por eso
- * no es abstracto: la clase base lo implementa lanzando {@link java.net.SocketException}, y una
- * fabrica que sepa hacerlo lo redefine.
+ * <p>It returns an <b>unconnected</b> socket. It is the only way of setting options that have to be
+ * set <b>before</b> connecting --the buffer sizes, {@code SO_REUSEADDR}-- and that is why it is not
+ * abstract: the base class implements it by throwing {@link java.net.SocketException}, and a
+ * factory that knows how overrides it.
  *
- * <p>Los cuatro con direccion local existen para elegir por que interfaz salir, que importa en una
- * maquina con varias.
+ * <p>The two with a local address exist to choose which interface to go out through, which matters
+ * on a machine with several. (The note said "the four"; two of the four connecting methods take a
+ * local address.)
  */
 public abstract class SocketFactory {
 
-    /** La de siempre; se crea una sola vez. */
+    /** The usual one; it is created only once. */
     private static SocketFactory theFactory;
 
-    /** Para las subclases. */
+    /** For subclasses. */
     protected SocketFactory() {
     }
 
     /**
-     * La fabrica por omision: la que crea sockets normales, sin cifrar.
+     * The default factory: the one that creates ordinary, unencrypted sockets.
      *
-     * <p>Siempre la misma instancia.
+     * <p>Always the same instance.
      */
     public static SocketFactory getDefault() {
         synchronized (SocketFactory.class) {
@@ -48,43 +49,43 @@ public abstract class SocketFactory {
     }
 
     /**
-     * Un socket sin conectar. Ver la nota de la clase.
+     * An unconnected socket. See the class note.
      *
-     * @throws IOException si esta fabrica no sabe crear sockets sin conectar
+     * @throws IOException if this factory cannot create unconnected sockets
      */
     public Socket createSocket() throws IOException {
         throw new java.net.SocketException("Unconnected sockets not implemented");
     }
 
     /**
-     * Conecta a esa maquina y puerto.
+     * Connects to that host and port.
      *
-     * @throws IOException si no se pudo conectar
-     * @throws UnknownHostException si el nombre no resuelve
+     * @throws IOException if it could not connect
+     * @throws UnknownHostException if the name does not resolve
      */
     public abstract Socket createSocket(String host, int port)
         throws IOException, UnknownHostException;
 
     /**
-     * Idem, saliendo por esa direccion y puerto locales. Ver la nota de la clase.
+     * Likewise, going out through that local address and port. See the class note.
      *
-     * @throws IOException si no se pudo conectar
-     * @throws UnknownHostException si el nombre no resuelve
+     * @throws IOException if it could not connect
+     * @throws UnknownHostException if the name does not resolve
      */
     public abstract Socket createSocket(String host, int port, InetAddress localHost,
                                         int localPort) throws IOException, UnknownHostException;
 
     /**
-     * Conecta a esa direccion y puerto.
+     * Connects to that address and port.
      *
-     * @throws IOException si no se pudo conectar
+     * @throws IOException if it could not connect
      */
     public abstract Socket createSocket(InetAddress host, int port) throws IOException;
 
     /**
-     * Idem, saliendo por esa direccion y puerto locales.
+     * Likewise, going out through that local address and port.
      *
-     * @throws IOException si no se pudo conectar
+     * @throws IOException if it could not connect
      */
     public abstract Socket createSocket(InetAddress address, int port, InetAddress localAddress,
                                         int localPort) throws IOException;

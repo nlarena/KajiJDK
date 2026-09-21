@@ -10,29 +10,30 @@ import java.sql.Clob;
 import java.sql.SQLException;
 
 /**
- * KajiLibrary's javax.sql.rowset.serial.SerialClob -- una copia en memoria de un CLOB.
+ * KajiLibrary's javax.sql.rowset.serial.SerialClob -- an in-memory copy of a CLOB.
  *
- * <p>Lo mismo que {@link SerialBlob} pero con caracteres. Valen las mismas dos advertencias: todo el
- * contenido queda en memoria, y las posiciones empiezan en 1.
+ * <p>The same as {@link SerialBlob} but with characters. The same two warnings hold: all the
+ * content stays in memory, and positions start at 1.
  *
- * <p>La diferencia que importa: guarda {@code char[]} y no bytes, asi que la codificacion ya se
- * resolvio al copiarlo. Por eso {@link #getAsciiStream} tiene que volver a codificar, y solo sirve
- * si el contenido es ASCII de verdad -- con un acento adentro, lo que sale no es lo que entro.
+ * <p>The difference that matters: it keeps {@code char[]} and not bytes, so the encoding was
+ * already resolved when copying it. That is why {@link #getAsciiStream} has to encode again, and it
+ * only works if the content really is ASCII -- with an accent inside, what comes out is not what
+ * went in.
  */
 public class SerialClob implements Clob, Serializable, Cloneable {
 
     private static final long serialVersionUID = -1662519690087375313L;
 
-    /** La copia. */
+    /** The copy. */
     private char[] buf;
 
-    /** Cuantos caracteres valen. */
+    /** How many characters count. */
     private long len;
 
-    /** Si ya se libero. */
+    /** Whether it was already freed. */
     private boolean freed = false;
 
-    /** Copia esos caracteres. */
+    /** Copies those characters. */
     public SerialClob(char[] ch) throws SerialException, SQLException {
         if (ch == null) {
             throw new SQLException("Invalid Clob object. The char array is null");
@@ -42,7 +43,7 @@ public class SerialClob implements Clob, Serializable, Cloneable {
         this.len = ch.length;
     }
 
-    /** Copia el contenido de un CLOB del servidor. */
+    /** Copies the content of a server CLOB. */
     public SerialClob(Clob clob) throws SerialException, SQLException {
         if (clob == null) {
             throw new SQLException("Cannot instantiate a SerialClob object with a null Clob object");
@@ -53,22 +54,24 @@ public class SerialClob implements Clob, Serializable, Cloneable {
         this.len = size;
     }
 
-    /** Cuantos caracteres tiene. */
+    /** How many characters it has. */
     public long length() throws SerialException {
         check();
         return this.len;
     }
 
-    /** Un lector sobre la copia. */
+    /** A reader over the copy. */
     public Reader getCharacterStream() throws SerialException {
         check();
         return new CharArrayReader(this.buf, 0, (int) this.len);
     }
 
     /**
-     * Un flujo de bytes, tomando cada caracter como un byte.
+     * A byte stream, taking each character as a byte.
      *
-     * <p>Ver la nota de la clase: solo sirve si el contenido es ASCII.
+     * <p>See the class note: it only works if the content is ASCII. JDK 25 does not do this: unless
+     * it was built from a {@link Clob}, whose {@code getAsciiStream} it delegates to, it throws
+     * {@link SerialException}.
      */
     public InputStream getAsciiStream() throws SerialException, SQLException {
         check();
@@ -82,9 +85,9 @@ public class SerialClob implements Clob, Serializable, Cloneable {
     }
 
     /**
-     * Una porcion, como cadena.
+     * A slice, as a string.
      *
-     * @param pos la primera posicion, empezando en 1
+     * @param pos the first position, starting at 1
      */
     public String getSubString(long pos, int length) throws SerialException {
         check();
@@ -98,9 +101,9 @@ public class SerialClob implements Clob, Serializable, Cloneable {
     }
 
     /**
-     * Busca ese texto a partir de esa posicion.
+     * Looks for that text from that position.
      *
-     * @return la posicion donde empieza, empezando en 1, o -1
+     * @return the position where it starts, starting at 1, or -1
      */
     public long position(String searchStr, long start) throws SerialException, SQLException {
         check();
@@ -112,7 +115,7 @@ public class SerialClob implements Clob, Serializable, Cloneable {
         return (found < 0) ? -1 : found + 1;
     }
 
-    /** Idem, con el texto en otro CLOB. */
+    /** Likewise, with the text in another CLOB. */
     public long position(Clob searchStr, long start) throws SerialException, SQLException {
         check();
         if (searchStr == null) {
@@ -121,15 +124,15 @@ public class SerialClob implements Clob, Serializable, Cloneable {
         return position(searchStr.getSubString(1L, (int) searchStr.length()), start);
     }
 
-    /** Escribe encima, desde esa posicion. */
+    /** Writes over it, from that position. */
     public int setString(long pos, String str) throws SerialException {
         return setString(pos, str, 0, str == null ? 0 : str.length());
     }
 
     /**
-     * Escribe encima una porcion del texto.
+     * Writes a slice of the text over it.
      *
-     * @throws SerialException si no entra en el contenido actual: esta copia no crece
+     * @throws SerialException if it does not fit in the current content: this copy does not grow
      */
     public int setString(long pos, String str, int offset, int length) throws SerialException {
         check();
@@ -151,9 +154,9 @@ public class SerialClob implements Clob, Serializable, Cloneable {
     }
 
     /**
-     * No se puede escribir por flujo.
+     * Cannot be written through a stream.
      *
-     * @throws SerialException siempre; ver {@link SerialBlob#setBinaryStream}
+     * @throws SerialException always; see {@link SerialBlob#setBinaryStream}
      */
     public OutputStream setAsciiStream(long pos) throws SerialException, SQLException {
         throw new SerialException("Unsupported operation. SerialClob cannot return a writable "
@@ -161,16 +164,16 @@ public class SerialClob implements Clob, Serializable, Cloneable {
     }
 
     /**
-     * No se puede escribir por escritor.
+     * Cannot be written through a writer.
      *
-     * @throws SerialException siempre
+     * @throws SerialException always; see {@link SerialBlob#setBinaryStream}
      */
     public Writer setCharacterStream(long pos) throws SerialException, SQLException {
         throw new SerialException("Unsupported operation. SerialClob cannot return a writable "
             + "character stream, unless instantiated with a Clob object.");
     }
 
-    /** Recorta a esa cantidad de caracteres. */
+    /** Truncates to that many characters. */
     public void truncate(long length) throws SerialException {
         check();
         if (length > this.len) {
@@ -187,7 +190,7 @@ public class SerialClob implements Clob, Serializable, Cloneable {
         this.len = length;
     }
 
-    /** Un lector sobre una porcion. */
+    /** A reader over a slice. */
     public Reader getCharacterStream(long pos, long length) throws SQLException {
         check();
         if (pos < 1 || pos > this.len) {
@@ -199,14 +202,14 @@ public class SerialClob implements Clob, Serializable, Cloneable {
         return new CharArrayReader(this.buf, (int) (pos - 1), (int) length);
     }
 
-    /** Suelta la copia; ver {@link SerialBlob#free}. */
+    /** Lets go of the copy; see {@link SerialBlob#free}. */
     public void free() throws SQLException {
         this.buf = null;
         this.len = 0;
         this.freed = true;
     }
 
-    /** Iguales si tienen los mismos caracteres. */
+    /** Equal if they have the same characters. */
     public boolean equals(Object obj) {
         if (this == obj) {
             return true;
@@ -231,7 +234,7 @@ public class SerialClob implements Clob, Serializable, Cloneable {
         return true;
     }
 
-    /** Coherente con {@link #equals}. */
+    /** Consistent with {@link #equals}. */
     public int hashCode() {
         int hash = 31;
         int i = 0;
@@ -242,7 +245,7 @@ public class SerialClob implements Clob, Serializable, Cloneable {
         return hash;
     }
 
-    /** Una copia con sus propios caracteres. */
+    /** A copy with its own characters. */
     public Object clone() {
         try {
             SerialClob copy = new SerialClob(new char[0]);
@@ -260,7 +263,7 @@ public class SerialClob implements Clob, Serializable, Cloneable {
         }
     }
 
-    /** Que no se haya liberado. */
+    /** That it has not been freed. */
     private void check() throws SerialException {
         if (this.freed || this.buf == null) {
             throw new SerialException("Error: You cannot call a method on a SerialClob instance "

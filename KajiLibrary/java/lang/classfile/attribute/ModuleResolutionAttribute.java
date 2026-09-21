@@ -4,15 +4,15 @@ import java.lang.classfile.Attribute;
 import java.lang.classfile.ClassElement;
 import jdk.internal.classfile.impl.TypedAttributes;
 
-// `ModuleResolution`: banderas que le dicen a `jlink` y al sistema de módulos cómo tratar a este
-// módulo (no resolverlo por omisión, avisar que está obsoleto, …). Es del JDK, no del JVMS.
+// `ModuleResolution`: flags telling `jlink` and the module system how to treat this module (do not
+// resolve it by default, warn that it is deprecated, ...). It is the JDK's, not the JVMS's.
 public interface ModuleResolutionAttribute
         extends Attribute<ModuleResolutionAttribute>, ClassElement {
 
-    /** Las banderas, tal cual están en el archivo. */
+    /** The flags, just as they are in the file. */
     int resolutionFlags();
 
-    /** El atributo con estas banderas. */
+    /** The attribute with these flags. */
     public static ModuleResolutionAttribute of(int resolutionFlags) {
         return TypedAttributes.moduleResolution(resolutionFlags);
     }

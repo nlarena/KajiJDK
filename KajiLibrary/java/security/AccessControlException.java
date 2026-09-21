@@ -1,15 +1,15 @@
 package java.security;
 
-// Un acceso fue denegado, y opcionalmente que permiso hubiera hecho falta.
+// An access was denied, and optionally which permission would have been needed.
 //
-// Lo unico que agrega sobre `SecurityException` es `getPermission()`, y ese dato es la diferencia
-// entre un mensaje inutil y uno accionable: quien la atrapa puede decir exactamente que linea de
-// politica falta. En KajiLibrary nada la tira sola —no hay control de acceso activo— pero se
-// puede construir y sigue siendo el tipo que las firmas nombran.
+// The only thing it adds over `SecurityException` is `getPermission()`, and that datum is the
+// difference between a useless message and an actionable one: whoever catches it can say exactly
+// which line of policy is missing. In KajiLibrary nothing throws it by itself —there is no active
+// access control— but it can be built and it goes on being the type the signatures name.
 @Deprecated
 public class AccessControlException extends SecurityException {
 
-    // El permiso que falto, o null si el que la tiro no lo dijo.
+    // The permission that was missing, or null if whoever threw it did not say.
     private final Permission perm;
 
     public AccessControlException(String s) {
@@ -22,7 +22,7 @@ public class AccessControlException extends SecurityException {
         this.perm = p;
     }
 
-    // El permiso que hubiera hecho falta, o null.
+    // The permission that would have been needed, or null.
     public Permission getPermission() {
         return this.perm;
     }

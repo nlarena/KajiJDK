@@ -1,24 +1,24 @@
 package java.security.spec;
 
-// Los parametros de RSASSA-PSS (PKCS#1 v2.1): que hash, que MGF, con que parametros, cuanta sal y
-// que byte de cola.
+// The parameters of RSASSA-PSS (PKCS#1 v2.1): which hash, which MGF, with which parameters, how
+// much salt and which trailer byte.
 //
-// PSS existe porque el padding viejo de PKCS#1 v1.5 es deterministico y su seguridad nunca se pudo
-// demostrar; PSS es probabilistico —de ahi la sal— y tiene una prueba de seguridad. El precio es que
-// hay cinco parametros que **tienen que coincidir exactamente** entre quien firma y quien verifica,
-// y ninguno viaja dentro de la firma. Un desacuerdo en cualquiera de ellos no da un error claro: da
-// una firma valida que no verifica.
+// PSS exists because the old PKCS#1 v1.5 padding is deterministic and its security could never be
+// proven; PSS is probabilistic —hence the salt— and has a security proof. The price is that there
+// are five parameters that **have to match exactly** between signer and verifier, and none of them
+// travels inside the signature. A disagreement in any of them does not give a clear error: it gives
+// a valid signature that does not verify.
 //
-// El largo de la sal es el que mas se equivoca. El default de esta clase es 20 —el tamaño de SHA-1,
-// por herencia— mientras que la practica actual es usar el tamaño del digest elegido. Con SHA-256 y
-// sal de 20 la firma es legal y no verifica contra un verificador que espera 32.
+// The salt length is the one most often wrong. This class's default is 20 —the size of SHA-1, by
+// inheritance— while current practice is to use the size of the chosen digest. With SHA-256 and a
+// salt of 20 the signature is legal and does not verify against a verifier that expects 32.
 public class PSSParameterSpec implements AlgorithmParameterSpec {
 
-    // El unico valor de trailer que PKCS#1 define: el byte 0xBC al final del bloque codificado.
+    // The only trailer value PKCS#1 defines: the byte 0xBC at the end of the encoded block.
     public static final int TRAILER_FIELD_BC = 1;
 
-    // Los valores historicos, todos SHA-1. Se mantiene como estaba porque es el default de
-    // compatibilidad, no porque sea la eleccion recomendada.
+    // The historical values, all SHA-1. Kept as they were because it is the compatibility default,
+    // not because it is the recommended choice.
     public static final PSSParameterSpec DEFAULT =
         new PSSParameterSpec("SHA-1", "MGF1", MGF1ParameterSpec.SHA1, 20, TRAILER_FIELD_BC);
 
@@ -49,7 +49,7 @@ public class PSSParameterSpec implements AlgorithmParameterSpec {
         this.trailerField = trailerField;
     }
 
-    // Solo el largo de sal, con el resto en los valores historicos de SHA-1.
+    // Only the salt length, with the rest at the historical SHA-1 values.
     public PSSParameterSpec(int saltLen) {
         if (saltLen < 0) {
             throw new IllegalArgumentException("negative saltLen value: " + saltLen);
@@ -69,7 +69,7 @@ public class PSSParameterSpec implements AlgorithmParameterSpec {
         return this.mgfName;
     }
 
-    // Los parametros del MGF, o null si no se dieron.
+    // The MGF parameters, or null if none were given.
     public AlgorithmParameterSpec getMGFParameters() {
         return this.mgfSpec;
     }
@@ -82,10 +82,10 @@ public class PSSParameterSpec implements AlgorithmParameterSpec {
         return this.trailerField;
     }
 
-    // El campo "maskGenAlgorithm" imprime la **spec** del MGF y no su nombre —dice
-    // "MGF1ParameterSpec[hashAlgorithm=SHA-1]" y no "MGF1"— y llega a decir "null" si no hay spec.
-    // Es raro y es lo que hace el JDK: se replica tal cual porque `toString` de estas clases termina
-    // en logs que la gente compara entre implementaciones.
+    // The "maskGenAlgorithm" field prints the MGF's **spec** and not its name —it says
+    // "MGF1ParameterSpec[hashAlgorithm=SHA-1]" and not "MGF1"— and even says "null" if there is no
+    // spec. It is odd and it is what the JDK does: replicated as is, because the `toString` of
+    // these classes ends up in logs people compare across implementations.
     @Override
     public String toString() {
         return "PSSParameterSpec[hashAlgorithm=" + this.mdName

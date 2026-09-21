@@ -12,32 +12,33 @@ import javax.swing.text.StyledDocument;
 import javax.swing.text.StyledEditorKit;
 
 /**
- * Un area de texto con estilos, imagenes y componentes adentro.
+ * A text area with styles, images and components inside.
  *
- * <h2>Que la separa de {@link JEditorPane}</h2>
+ * <h2>What separates it from {@link JEditorPane}</h2>
  *
- * <p>La de arriba muestra cualquier formato -- texto plano, HTML, RTF -- eligiendo un
- * {@link EditorKit} segun el tipo de contenido. Esta fija el formato: siempre texto con estilos, y a
- * cambio expone la API para manipularlos sin pasar por el documento. De ahi que
- * {@link #setEditorKit} sea final: cambiarlo dejaria a todos los demas metodos sin sentido.
+ * <p>The one above shows any format -- plain text, HTML, RTF -- by choosing an
+ * {@link EditorKit} according to the content type. This one fixes the format: always text with
+ * styles, and in exchange it exposes the API for manipulating them without going through the
+ * document. Hence {@link #setEditorKit} is final: changing it would leave every other method
+ * meaningless.
  *
- * <h2>Tres niveles de atributos</h2>
+ * <h2>Three levels of attributes</h2>
  *
- * <p>El <em>estilo logico</em> es el de fondo, el que se aplica al parrafo entero por pertenecer a
- * una categoria -- "titulo", "cita" --. Los <em>atributos de parrafo</em> lo pisan para ese parrafo.
- * Los <em>atributos de caracter</em> pisan a los dos para un tramo de texto. Se resuelven en ese
- * orden, y es lo que permite cambiar la letra de todos los titulos a la vez sin tocar las negritas
- * que alguien puso a mano.
+ * <p>The <em>logical style</em> is the background one, the one that is applied to the whole
+ * paragraph for belonging to a category -- "title", "quotation" --. The <em>paragraph
+ * attributes</em> override it for that paragraph. The <em>character attributes</em> override
+ * both for a stretch of text. They are resolved in that order, and it is what allows the letter
+ * of every title to be changed at once without touching the bold somebody set by hand.
  *
- * <h2>Los atributos de entrada</h2>
+ * <h2>The input attributes</h2>
  *
- * <p>{@link #getInputAttributes} es lo que se le va a aplicar a lo <em>proximo</em> que se escriba.
- * Es lo que hace que apretar el boton de negrita sin nada seleccionado ponga en negrita lo que se
- * escriba a continuacion, que es lo que uno espera de un editor.
+ * <p>{@link #getInputAttributes} is what is going to be applied to the <em>next</em> thing that
+ * is typed. It is what makes pressing the bold button with nothing selected put what is typed
+ * next in bold, which is what one expects of an editor.
  */
 public class JTextPane extends JEditorPane {
 
-    /** Un area vacia con un documento con estilos. */
+    /** An empty area with a document with styles. */
     public JTextPane() {
         super();
         EditorKit editorKit = createDefaultEditorKit();
@@ -50,9 +51,9 @@ public class JTextPane extends JEditorPane {
     }
 
     /**
-     * Sobre ese documento.
+     * Over that document.
      *
-     * @throws NullPointerException si el documento es nulo
+     * @throws NullPointerException if the document is null
      */
     public JTextPane(StyledDocument doc) {
         this();
@@ -64,9 +65,9 @@ public class JTextPane extends JEditorPane {
     }
 
     /**
-     * Cambia el documento.
+     * It changes the document.
      *
-     * @throws IllegalArgumentException si no es un {@link StyledDocument}
+     * @throws IllegalArgumentException if it is not a {@link StyledDocument}
      */
     public void setDocument(Document doc) {
         if (doc instanceof StyledDocument) {
@@ -76,7 +77,7 @@ public class JTextPane extends JEditorPane {
         }
     }
 
-    /** Lo mismo, con el tipo justo. */
+    /** The same, with the exact type. */
     public void setStyledDocument(StyledDocument doc) {
         super.setDocument(doc);
     }
@@ -86,9 +87,9 @@ public class JTextPane extends JEditorPane {
     }
 
     /**
-     * Reemplaza lo seleccionado por ese texto.
+     * It replaces what is selected with that text.
      *
-     * <p>El texto nuevo se lleva los atributos de entrada; ver la nota de la clase.
+     * <p>The new text takes the input attributes; see the class note.
      */
     public void replaceSelection(String content) {
         replaceSelection(content, true);
@@ -112,17 +113,18 @@ public class JTextPane extends JEditorPane {
                     doc.insertString(p0, content, getInputAttributes().copyAttributes());
                 }
             } catch (javax.swing.text.BadLocationException e) {
-                // La posicion sale del cursor, que el documento acaba de validar: no puede pasar.
+                // The position comes from the caret, which the document has just validated: it
+                // cannot happen.
                 throw new IllegalStateException(e.getMessage());
             }
         }
     }
 
     /**
-     * Mete un componente adentro del texto, como si fuera una letra.
+     * It puts a component inside the text, as though it were a letter.
      *
-     * <p>Ocupa una sola posicion en el documento y la vista lo dibuja tal cual. Es como se pone un
-     * boton adentro de un parrafo.
+     * <p>It takes up a single position in the document and the view draws it as it is. It is how
+     * a button is put inside a paragraph.
      */
     public void insertComponent(Component c) {
         MutableAttributeSet inputAttributes = getInputAttributes();
@@ -132,7 +134,7 @@ public class JTextPane extends JEditorPane {
         inputAttributes.removeAttributes(inputAttributes);
     }
 
-    /** Mete un icono adentro del texto; ver {@link #insertComponent}. */
+    /** It puts an icon inside the text; see {@link #insertComponent}. */
     public void insertIcon(Icon g) {
         MutableAttributeSet inputAttributes = getInputAttributes();
         inputAttributes.removeAttributes(inputAttributes);
@@ -142,10 +144,10 @@ public class JTextPane extends JEditorPane {
     }
 
     /**
-     * Agrega un estilo con nombre.
+     * It adds a named style.
      *
-     * <p>El padre es de donde hereda lo que no defina: es lo que permite tener un "titulo chico" que
-     * es el "titulo" con otro tamano y nada mas.
+     * <p>The parent is where it inherits from what it does not define: it is what allows there to
+     * be a "small title" that is the "title" with another size and nothing else.
      */
     public Style addStyle(String nm, Style parent) {
         StyledDocument doc = getStyledDocument();
@@ -162,7 +164,7 @@ public class JTextPane extends JEditorPane {
         return doc.getStyle(nm);
     }
 
-    /** El estilo de fondo del parrafo donde esta el cursor; ver la nota de la clase. */
+    /** The background style of the paragraph the caret is in; see the class note. */
     public void setLogicalStyle(Style s) {
         StyledDocument doc = getStyledDocument();
         doc.setLogicalStyle(getCaretPosition(), s);
@@ -173,7 +175,7 @@ public class JTextPane extends JEditorPane {
         return doc.getLogicalStyle(getCaretPosition());
     }
 
-    /** Los atributos del caracter donde esta el cursor. */
+    /** The attributes of the character the caret is at. */
     public AttributeSet getCharacterAttributes() {
         StyledDocument doc = getStyledDocument();
         javax.swing.text.Element run = doc.getCharacterElement(getCaretPosition());
@@ -184,10 +186,10 @@ public class JTextPane extends JEditorPane {
     }
 
     /**
-     * Aplica esos atributos a lo seleccionado.
+     * It applies those attributes to what is selected.
      *
-     * <p>Sin seleccion, quedan como atributos de entrada -- ver la nota de la clase --. Con
-     * {@code replace} en cierto se descarta lo que hubiera; en falso se mezcla.
+     * <p>With no selection, they are left as input attributes -- see the class note --. With
+     * {@code replace} at true whatever was there is discarded; at false it is merged.
      */
     public void setCharacterAttributes(AttributeSet attr, boolean replace) {
         int p0 = getSelectionStart();
@@ -204,7 +206,7 @@ public class JTextPane extends JEditorPane {
         }
     }
 
-    /** Los atributos del parrafo donde esta el cursor. */
+    /** The attributes of the paragraph the caret is in. */
     public AttributeSet getParagraphAttributes() {
         StyledDocument doc = getStyledDocument();
         javax.swing.text.Element paragraph = doc.getParagraphElement(getCaretPosition());
@@ -215,10 +217,10 @@ public class JTextPane extends JEditorPane {
     }
 
     /**
-     * Aplica esos atributos a los parrafos tocados por la seleccion.
+     * It applies those attributes to the paragraphs the selection touches.
      *
-     * <p>Un parrafo se aplica entero aunque la seleccion lo toque en una letra: la alineacion o la
-     * sangria no pueden valer para media linea.
+     * <p>A paragraph is applied whole even though the selection touches it at one letter: the
+     * alignment or the indent cannot hold for half a line.
      */
     public void setParagraphAttributes(AttributeSet attr, boolean replace) {
         int p0 = getSelectionStart();
@@ -227,7 +229,7 @@ public class JTextPane extends JEditorPane {
         doc.setParagraphAttributes(p0, p1 - p0, attr, replace);
     }
 
-    /** Lo que se le va a aplicar a lo proximo que se escriba; ver la nota de la clase. */
+    /** What is going to be applied to the next thing that is typed; see the class note. */
     public MutableAttributeSet getInputAttributes() {
         return getStyledEditorKit().getInputAttributes();
     }
@@ -241,9 +243,9 @@ public class JTextPane extends JEditorPane {
     }
 
     /**
-     * Cambia el motor de edicion.
+     * It changes the editing engine.
      *
-     * @throws IllegalArgumentException si no es un {@link StyledEditorKit}; ver la nota de la clase
+     * @throws IllegalArgumentException if it is not a {@link StyledEditorKit}; see the class note
      */
     public final void setEditorKit(EditorKit kit) {
         if (kit instanceof StyledEditorKit) {

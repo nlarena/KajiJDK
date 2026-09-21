@@ -1,25 +1,26 @@
 package javax.print.attribute;
 
 /**
- * KajiLibrary's javax.print.attribute.DocAttribute -- un atributo que aplica a **un documento**.
+ * KajiLibrary's javax.print.attribute.DocAttribute -- an attribute that applies to **one
+ * document**.
  *
- * <h2>La familia de las cuatro marcadoras, explicada una sola vez</h2>
+ * <h2>The family of the four markers, explained once</h2>
  *
- * <p>{@code DocAttribute}, {@link PrintRequestAttribute}, {@link PrintJobAttribute} y
- * {@link PrintServiceAttribute} no declaran ni un miembro. Lo unico que hacen es decir **a que
- * alcance pertenece** un atributo, y ese alcance se vuelve una restriccion de tipo real en los
- * conjuntos: {@link DocAttributeSet} solo acepta {@code DocAttribute}, {@link PrintJobAttributeSet}
- * solo {@code PrintJobAttribute}, y asi. Un atributo mal puesto no compila --o revienta con
- * {@code ClassCastException} si se lo mete por la interfaz cruda.
+ * <p>{@code DocAttribute}, {@link PrintRequestAttribute}, {@link PrintJobAttribute} and
+ * {@link PrintServiceAttribute} declare not a single member. The only thing they do is say **which
+ * scope** an attribute belongs to, and that scope becomes a real type restriction in the sets:
+ * {@link DocAttributeSet} only accepts {@code DocAttribute}s, {@link PrintJobAttributeSet} only
+ * {@code PrintJobAttribute}s, and so on. A misplaced attribute does not compile --or blows up with
+ * {@code ClassCastException} if it is put in through the raw interface.
  *
- * <p>Un mismo atributo suele pertenecer a varias. {@code Sides} es las tres primeras: se puede pedir
- * por documento, por pedido y se puede reportar en el trabajo ya armado. Lo que **no** existe es un
- * atributo que sea a la vez de pedido y de servicio: uno lo elige quien imprime, el otro lo informa
- * la impresora.
+ * <p>The same attribute usually belongs to several. {@code Sides} is the first three: it can be
+ * asked for per document, per request and it can be reported on the job already put together. What
+ * does **not** exist is an attribute that is both a request one and a service one: the first is
+ * chosen by whoever prints, the second is reported by the printer.
  *
- * <p>Este es el alcance mas chico: vale para **una** pieza a imprimir. En un trabajo de varios
- * documentos cada uno puede traer los suyos --uno en A4 y otro en oficio dentro del mismo trabajo--,
- * que es exactamente lo que un atributo de pedido no puede expresar.
+ * <p>This is the smallest scope: it holds for **one** piece to print. In a job of several documents
+ * each one may bring its own --one in A4 and another in legal within the same job--, which is
+ * exactly what a request attribute cannot express.
  */
 public interface DocAttribute extends Attribute {
 }

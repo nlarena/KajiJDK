@@ -4,187 +4,193 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * KajiLibrary's javax.imageio.plugins.tiff.ExifGPSTagSet -- las etiquetas de posicion de Exif.
+ * KajiLibrary's javax.imageio.plugins.tiff.ExifGPSTagSet -- Exif's position tags.
  *
- * <p>Latitud, longitud, altura, rumbo, hora del satelite. Cuelgan de un directorio propio al que
- * apunta {@code ExifParentTIFFTagSet.TAG_GPS_INFO_IFD_POINTER}.
+ * <p>Latitude, longitude, altitude, bearing, satellite time. They hang from a directory of their
+ * own pointed to by {@code ExifParentTIFFTagSet.TAG_GPS_INFO_IFD_POINTER}.
  *
- * <p>La latitud y la longitud se guardan como <b>tres racionales</b> --grados, minutos, segundos-- y
- * el hemisferio va en una etiqueta aparte, como una letra. Un lector que se olvide de esa letra pone
- * la mitad de las fotos del mundo en el hemisferio equivocado.
+ * <p>Latitude and longitude are stored as <b>three rationals</b> --degrees, minutes, seconds-- and
+ * the hemisphere goes in a separate tag, as a letter. A reader that forgets that letter puts half
+ * the world's photos in the wrong hemisphere.
  *
- * <p>Es un singleton: se pide con {@link #getInstance}. Las etiquetas y sus valores nombrados se
- * transcribieron del JDK 25 y no a mano; un numero cambiado produce un TIFF que otros programas leen
- * distinto.
+ * <p>It is a singleton: it is obtained with {@link #getInstance}. The tags and their named values
+ * were transcribed from the JDK 25 and not by hand; a changed number produces a TIFF that other
+ * programs read differently.
  */
 public final class ExifGPSTagSet extends TIFFTagSet {
 
-    /** El unico, armado la primera vez que se pide. */
+    /** The only one, built the first time it is asked for. */
     private static ExifGPSTagSet theInstance = null;
 
-    /** El numero de la etiqueta gps version id. */
+    /** The number of the gps version id tag. */
     public static final int TAG_GPS_VERSION_ID = 0;
 
-    /** El numero de la etiqueta gps latitude ref. */
+    /** The number of the gps latitude ref tag. */
     public static final int TAG_GPS_LATITUDE_REF = 1;
 
-    /** El numero de la etiqueta gps latitude. */
+    /** The number of the gps latitude tag. */
     public static final int TAG_GPS_LATITUDE = 2;
 
-    /** El numero de la etiqueta gps longitude ref. */
+    /** The number of the gps longitude ref tag. */
     public static final int TAG_GPS_LONGITUDE_REF = 3;
 
-    /** El numero de la etiqueta gps longitude. */
+    /** The number of the gps longitude tag. */
     public static final int TAG_GPS_LONGITUDE = 4;
 
-    /** El numero de la etiqueta gps altitude ref. */
+    /** The number of the gps altitude ref tag. */
     public static final int TAG_GPS_ALTITUDE_REF = 5;
 
-    /** El numero de la etiqueta gps altitude. */
+    /** The number of the gps altitude tag. */
     public static final int TAG_GPS_ALTITUDE = 6;
 
-    /** El numero de la etiqueta gps time stamp. */
+    /** The number of the gps time stamp tag. */
     public static final int TAG_GPS_TIME_STAMP = 7;
 
-    /** El numero de la etiqueta gps satellites. */
+    /** The number of the gps satellites tag. */
     public static final int TAG_GPS_SATELLITES = 8;
 
-    /** El numero de la etiqueta gps status. */
+    /** The number of the gps status tag. */
     public static final int TAG_GPS_STATUS = 9;
 
-    /** El numero de la etiqueta gps measure mode. */
+    /** The number of the gps measure mode tag. */
     public static final int TAG_GPS_MEASURE_MODE = 10;
 
-    /** El numero de la etiqueta gps dop. */
+    /** The number of the gps dop tag. */
     public static final int TAG_GPS_DOP = 11;
 
-    /** El numero de la etiqueta gps speed ref. */
+    /** The number of the gps speed ref tag. */
     public static final int TAG_GPS_SPEED_REF = 12;
 
-    /** El numero de la etiqueta gps speed. */
+    /** The number of the gps speed tag. */
     public static final int TAG_GPS_SPEED = 13;
 
-    /** El numero de la etiqueta gps track ref. */
+    /** The number of the gps track ref tag. */
     public static final int TAG_GPS_TRACK_REF = 14;
 
-    /** El numero de la etiqueta gps track. */
+    /** The number of the gps track tag. */
     public static final int TAG_GPS_TRACK = 15;
 
-    /** El numero de la etiqueta gps img direction ref. */
+    /** The number of the gps img direction ref tag. */
     public static final int TAG_GPS_IMG_DIRECTION_REF = 16;
 
-    /** El numero de la etiqueta gps img direction. */
+    /** The number of the gps img direction tag. */
     public static final int TAG_GPS_IMG_DIRECTION = 17;
 
-    /** El numero de la etiqueta gps map datum. */
+    /** The number of the gps map datum tag. */
     public static final int TAG_GPS_MAP_DATUM = 18;
 
-    /** El numero de la etiqueta gps dest latitude ref. */
+    /** The number of the gps dest latitude ref tag. */
     public static final int TAG_GPS_DEST_LATITUDE_REF = 19;
 
-    /** El numero de la etiqueta gps dest latitude. */
+    /** The number of the gps dest latitude tag. */
     public static final int TAG_GPS_DEST_LATITUDE = 20;
 
-    /** El numero de la etiqueta gps dest longitude ref. */
+    /** The number of the gps dest longitude ref tag. */
     public static final int TAG_GPS_DEST_LONGITUDE_REF = 21;
 
-    /** El numero de la etiqueta gps dest longitude. */
+    /** The number of the gps dest longitude tag. */
     public static final int TAG_GPS_DEST_LONGITUDE = 22;
 
-    /** El numero de la etiqueta gps dest bearing ref. */
+    /** The number of the gps dest bearing ref tag. */
     public static final int TAG_GPS_DEST_BEARING_REF = 23;
 
-    /** El numero de la etiqueta gps dest bearing. */
+    /** The number of the gps dest bearing tag. */
     public static final int TAG_GPS_DEST_BEARING = 24;
 
-    /** El numero de la etiqueta gps dest distance ref. */
+    /** The number of the gps dest distance ref tag. */
     public static final int TAG_GPS_DEST_DISTANCE_REF = 25;
 
-    /** El numero de la etiqueta gps dest distance. */
+    /** The number of the gps dest distance tag. */
     public static final int TAG_GPS_DEST_DISTANCE = 26;
 
-    /** El numero de la etiqueta gps processing method. */
+    /** The number of the gps processing method tag. */
     public static final int TAG_GPS_PROCESSING_METHOD = 27;
 
-    /** El numero de la etiqueta gps area information. */
+    /** The number of the gps area information tag. */
     public static final int TAG_GPS_AREA_INFORMATION = 28;
 
-    /** El numero de la etiqueta gps date stamp. */
+    /** The number of the gps date stamp tag. */
     public static final int TAG_GPS_DATE_STAMP = 29;
 
-    /** El numero de la etiqueta gps differential. */
+    /** The number of the gps differential tag. */
     public static final int TAG_GPS_DIFFERENTIAL = 30;
 
-    /** Un valor de altitude. */
+    /** A value of {@link #TAG_GPS_ALTITUDE_REF}. */
     public static final int ALTITUDE_REF_SEA_LEVEL = 0;
 
-    /** Un valor de altitude. */
+    /** A value of {@link #TAG_GPS_ALTITUDE_REF}. */
     public static final int ALTITUDE_REF_SEA_LEVEL_REFERENCE = 1;
 
-    /** Un valor de differential. */
+    /** A value of {@link #TAG_GPS_DIFFERENTIAL}. */
     public static final int DIFFERENTIAL_CORRECTION_NONE = 0;
 
-    /** Un valor de differential. */
+    /** A value of {@link #TAG_GPS_DIFFERENTIAL}. */
     public static final int DIFFERENTIAL_CORRECTION_APPLIED = 1;
 
-    /** Un valor de gps. */
+    /** A value of {@link #TAG_GPS_VERSION_ID}. */
     public static final String GPS_VERSION_2_2 = "2200";
 
-    /** Un valor de latitude. */
+    /** A value of {@link #TAG_GPS_LATITUDE_REF}. */
     public static final String LATITUDE_REF_NORTH = "N";
 
-    /** Un valor de latitude. */
+    /** A value of {@link #TAG_GPS_LATITUDE_REF}. */
     public static final String LATITUDE_REF_SOUTH = "S";
 
-    /** Un valor de longitude. */
+    /** A value of {@link #TAG_GPS_LONGITUDE_REF}. */
     public static final String LONGITUDE_REF_EAST = "E";
 
-    /** Un valor de longitude. */
+    /** A value of {@link #TAG_GPS_LONGITUDE_REF}. */
     public static final String LONGITUDE_REF_WEST = "W";
 
-    /** Un valor de status. */
+    /** A value of {@link #TAG_GPS_STATUS}. */
     public static final String STATUS_MEASUREMENT_IN_PROGRESS = "A";
 
-    /** Un valor de status. */
+    /** A value of {@link #TAG_GPS_STATUS}. */
     public static final String STATUS_MEASUREMENT_INTEROPERABILITY = "V";
 
-    /** Un valor de measure. */
+    /** A value of {@link #TAG_GPS_MEASURE_MODE}. */
     public static final String MEASURE_MODE_2D = "2";
 
-    /** Un valor de measure. */
+    /** A value of {@link #TAG_GPS_MEASURE_MODE}. */
     public static final String MEASURE_MODE_3D = "3";
 
-    /** Un valor de speed. */
+    /** A value of {@link #TAG_GPS_SPEED_REF}. */
     public static final String SPEED_REF_KILOMETERS_PER_HOUR = "K";
 
-    /** Un valor de speed. */
+    /** A value of {@link #TAG_GPS_SPEED_REF}. */
     public static final String SPEED_REF_MILES_PER_HOUR = "M";
 
-    /** Un valor de speed. */
+    /** A value of {@link #TAG_GPS_SPEED_REF}. */
     public static final String SPEED_REF_KNOTS = "N";
 
-    /** Un valor de direction. */
+    /**
+     * A value of {@link #TAG_GPS_TRACK_REF}, {@link #TAG_GPS_IMG_DIRECTION_REF} and
+     * {@link #TAG_GPS_DEST_BEARING_REF}.
+     */
     public static final String DIRECTION_REF_TRUE = "T";
 
-    /** Un valor de direction. */
+    /**
+     * A value of {@link #TAG_GPS_TRACK_REF}, {@link #TAG_GPS_IMG_DIRECTION_REF} and
+     * {@link #TAG_GPS_DEST_BEARING_REF}.
+     */
     public static final String DIRECTION_REF_MAGNETIC = "M";
 
-    /** Un valor de dest. */
+    /** A value of {@link #TAG_GPS_DEST_DISTANCE_REF}. */
     public static final String DEST_DISTANCE_REF_KILOMETERS = "K";
 
-    /** Un valor de dest. */
+    /** A value of {@link #TAG_GPS_DEST_DISTANCE_REF}. */
     public static final String DEST_DISTANCE_REF_MILES = "M";
 
-    /** Un valor de dest. */
+    /** A value of {@link #TAG_GPS_DEST_DISTANCE_REF}. */
     public static final String DEST_DISTANCE_REF_KNOTS = "N";
 
 
-    /** Se llega por {@link #getInstance}. */
+    /** Reached through {@link #getInstance}. */
     private ExifGPSTagSet() {
         super(tags());
     }
 
-    /** El conjunto. Ver la nota de la clase. */
+    /** The set. See the class note. */
     public static synchronized ExifGPSTagSet getInstance() {
         if (theInstance == null) {
             theInstance = new ExifGPSTagSet();
@@ -192,7 +198,7 @@ public final class ExifGPSTagSet extends TIFFTagSet {
         return theInstance;
     }
 
-    /** Las etiquetas de este conjunto. */
+    /** The tags of this set. */
     private static List<TIFFTag> tags() {
         List<TIFFTag> tags = new ArrayList<TIFFTag>();
         tags.add(new TIFFTag("GPSVersionID", 0, 2, -1));
@@ -229,7 +235,7 @@ public final class ExifGPSTagSet extends TIFFTagSet {
         return tags;
     }
 
-    /** {@code GPSAltitudeRef}, con los nombres de sus valores. */
+    /** {@code GPSAltitudeRef}, with the names of its values. */
     private static final class TagGPSAltitudeRef extends TIFFTag {
 
         TagGPSAltitudeRef() {
@@ -239,7 +245,7 @@ public final class ExifGPSTagSet extends TIFFTagSet {
         }
     }
 
-    /** {@code GPSDifferential}, con los nombres de sus valores. */
+    /** {@code GPSDifferential}, with the names of its values. */
     private static final class TagGPSDifferential extends TIFFTag {
 
         TagGPSDifferential() {

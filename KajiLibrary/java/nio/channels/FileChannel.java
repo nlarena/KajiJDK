@@ -9,50 +9,52 @@ import java.nio.file.attribute.FileAttribute;
 import java.util.Set;
 
 /**
- * KajiLibrary's java.nio.channels.FileChannel — un canal sobre un archivo.
+ * KajiLibrary's java.nio.channels.FileChannel — a channel over a file.
  *
- * <p>Es el unico canal que esta biblioteca sabe **fabricar**, y por eso el unico con
- * {@link #open(Path, OpenOption...)} de verdad: los de red necesitan un socket y esta VM no tiene
- * nativos de red, pero los archivos si se pueden leer y escribir.
+ * <p>It is the channel this library makes with its own hands, and the one whose {@link #open(Path,
+ * OpenOption...)} goes straight to the file natives. The network ones are made too —this note used
+ * to say the VM had no network natives, and it has them— but they go out through a provider; this
+ * one does not.
  *
- * <h2>Como esta hecho, que es lo que hay que saber antes de usarlo</h2>
+ * <h2>How it is made, which is what one has to know before using it</h2>
  *
- * <p>Esta VM no abre descriptores: lo unico que hay abajo es "leer el archivo entero" y "escribirlo
- * entero" (`jdk.internal.io.Fs`). Un canal sobre eso se puede construir de dos maneras, y la
- * eleccion se toma aca a la vista:
+ * <p>This VM does not open descriptors: the only thing underneath is "read the whole file" and
+ * "write it whole" (`jdk.internal.io.Fs`). A channel over that can be built in two ways, and the
+ * choice is made here in plain sight:
  *
  * <ul>
- *   <li><strong>Con cache</strong>: leer una vez al abrir, trabajar en memoria, volcar al cerrar.
- *       Rapido, y **mentiroso**: lo que se escribio no esta en el disco hasta cerrar, y un programa
- *       que se cae sin cerrar no dejo nada. Es el trato que ya hace `java.io.FileOutputStream` en
- *       este arbol, ahi documentado.
- *   <li><strong>Al vuelo</strong>: cada lectura lee el archivo y cada escritura lo reescribe.
- *       <strong>Es lo que hace este canal.</strong>
+ *   <li><strong>With a cache</strong>: read once on opening, work in memory, dump on closing. Fast,
+ *       and **a liar**: what was written is not on the disk until closing, and a program that falls
+ *       over without closing left nothing behind. It is the deal `java.io.FileOutputStream` already
+ *       makes in this tree, documented there.
+ *   <li><strong>On the fly</strong>: each read reads the file and each write rewrites it.
+ *       <strong>It is what this channel does.</strong>
  * </ul>
  *
- * <p>La segunda es O(n) por operacion --escribir un byte al final de un archivo de un mega mueve un
- * mega-- y aun asi es la correcta, porque es la unica en la que el contrato se cumple: cuando
- * {@link #write} vuelve, los bytes **estan en el disco**; lo que otro proceso escriba se ve en la
- * lectura siguiente; y un corte de luz no borra lo que ya se habia escrito. Se paga velocidad por
- * no mentir, que es el cambio correcto. Quien necesite velocidad tiene
- * `java.io.BufferedOutputStream` sobre {@link Channels#newOutputStream}, donde el buffer es una
- * decision suya y no una sorpresa.
+ * <p>The second is O(n) per operation --writing a byte at the end of a one-megabyte file moves a
+ * megabyte-- and even so it is the right one, because it is the only one in which the contract is
+ * fulfilled: when {@link #write} returns, the bytes **are on the disk**; whatever another process
+ * writes is seen in the next read; and a power cut does not erase what had been written already.
+ * Speed is paid for not lying, which is the right trade. Whoever needs speed has
+ * `java.io.BufferedOutputStream` over {@link Channels#newOutputStream}, where the buffer is their
+ * own decision and not a surprise.
  *
- * <p>Consecuencia agradable de lo anterior: {@link #force} no tiene nada que hacer y `SYNC`/`DSYNC`
- * se cumplen solos. No es que se ignoren, es que ya estaban.
+ * <p>A pleasant consequence of the above: {@link #force} has nothing to do and `SYNC`/`DSYNC`
+ * fulfil themselves. It is not that they are ignored, it is that they were there already.
  *
- * <p>Lo que **no** se puede prometer es atomicidad: reescribir el archivo entero no es un solo paso,
- * asi que dos escritores simultaneos sobre el mismo archivo se pisan. El JDK tampoco garantiza nada
- * ahi sin bloqueos, pero su ventana es de bytes y la de aca es del archivo entero.
+ * <p>What **cannot** be promised is atomicity: rewriting the whole file is not a single step, so
+ * two simultaneous writers over the same file step on each other. The JDK does not guarantee
+ * anything there either without locks, but its window is of bytes and the one here is of the whole
+ * file.
  *
- * <h2>Lo que quedo afuera a proposito</h2>
+ * <h2>What was left out on purpose</h2>
  *
  * <p><strong>Locking is in, mapping is not.</strong> This note used to say that both were out
  * because the VM had no native for them, and that the only lock implementable here would exclude
  * the threads of this VM and nobody else -- the same name with the opposite guarantee. That was
- * true of the argument, not of the limit: the VM now has {@code Fs.lock}, which goes to
- * {@code LockFileEx} on Windows and {@code fcntl} on Unix, so the lock excludes **other processes**,
- * which is what a file lock is for.
+ * true of the argument, not of the limit: the VM now has {@code Fs.lock}, which goes to {@code
+ * LockFileEx} on Windows and {@code fcntl} on Unix, so the lock excludes **other processes**, which
+ * is what a file lock is for.
  *
  * <p><strong>And mapping is in too.</strong> The reason it was out is worth keeping: a
  * {@link java.nio.MappedByteBuffer} that was a copy would mean writes to it never reached the file,
@@ -60,9 +62,9 @@ import java.util.Set;
  * {@link java.nio.ByteBuffer} grew storage hooks so that a buffer need not be backed by an array.
  * Before the second one there was nowhere to put a buffer that reads a mapping.
  *
- * <p>{@link MapMode} siempre estuvo, porque es un valor y no una promesa: sus tres constantes se
- * pueden nombrar, comparar y guardar sin que nada mienta. Ahora ademas hay un {@code map()} al que
- * pasarselas.
+ * <p>{@link MapMode} was always here, because it is a value and not a promise: its three constants
+ * can be named, compared and stored without anything lying. Now there is also a {@code map()} to
+ * pass them to.
  */
 public abstract class FileChannel extends AbstractInterruptibleChannel
         implements SeekableByteChannel, GatheringByteChannel, ScatteringByteChannel {
@@ -70,25 +72,26 @@ public abstract class FileChannel extends AbstractInterruptibleChannel
     protected FileChannel() {
     }
 
-    // ---- apertura --------------------------------------------------------------------------------
+    // ---- opening ---------------------------------------------------------------------------------
 
     /**
-     * Abre un canal sobre `path`.
+     * Opens a channel over `path`.
      *
-     * <p>Sin ninguna opcion de escritura, se abre para lectura. `options` acepta lo mismo que
-     * `java.nio.file.Files`: `READ`, `WRITE`, `APPEND`, `TRUNCATE_EXISTING`, `CREATE`, `CREATE_NEW`,
-     * `DELETE_ON_CLOSE`, `SYNC`, `DSYNC` y `NOFOLLOW_LINKS`.
+     * <p>With no writing option, it is opened for reading. `options` accepts the same as
+     * `java.nio.file.Files`: `READ`, `WRITE`, `APPEND`, `TRUNCATE_EXISTING`, `CREATE`,
+     * `CREATE_NEW`, `DELETE_ON_CLOSE`, `SYNC`, `DSYNC` and `NOFOLLOW_LINKS`.
      *
-     * <p>`SYNC` y `DSYNC` se aceptan porque **se cumplen**: este canal escribe al disco en cada
-     * `write`. `SPARSE` se rechaza --no se hacen archivos ralos aca-- igual que en `Files`, en vez
-     * de aceptarse como sugerencia: ignorar en silencio una opcion que el que llama puso por algo
-     * es como se descubre tarde que el archivo ocupa lo que no debia.
+     * <p>`SYNC` and `DSYNC` are accepted because they **are fulfilled**: this channel writes to the
+     * disk on every `write`. `SPARSE` is rejected --no sparse files are made here-- just as in
+     * `Files`, instead of being accepted as a hint: silently ignoring an option the caller set for
+     * a reason is how one finds out too late that the file takes up what it should not have.
      *
-     * @throws IllegalArgumentException si las opciones se contradicen (`READ` con `APPEND`, o
-     *         `APPEND` con `TRUNCATE_EXISTING`)
-     * @throws UnsupportedOperationException si se pide una opcion que esta VM no puede honrar
-     * @throws java.nio.file.NoSuchFileException si no existe y no se pidio crearlo
-     * @throws java.nio.file.FileAlreadyExistsException con `CREATE_NEW` si ya estaba
+     * @throws IllegalArgumentException if the options contradict each other (`READ` with `APPEND`,
+     *         or `APPEND` with `TRUNCATE_EXISTING`)
+     * @throws UnsupportedOperationException if an option this VM cannot honour is asked for
+     * @throws java.nio.file.NoSuchFileException if it does not exist and creating it was not asked
+     *     for
+     * @throws java.nio.file.FileAlreadyExistsException with `CREATE_NEW` if it was there already
      */
     // ---- mapping ---------------------------------------------------------------------------------
 
@@ -128,7 +131,8 @@ public abstract class FileChannel extends AbstractInterruptibleChannel
      * @throws IOException if the region cannot be mapped
      * @throws UnsupportedOperationException always in this library: a segment over a mapping needs
      *     the foreign-memory machinery, and {@code java.lang.foreign} here has no way to name an
-     *     address that is not in the heap. {@link #map(MapMode, long, long)} is the way to a mapping
+     *     address that is not in the heap. {@link #map(MapMode, long, long)} is the way to a
+     *     mapping
      */
     public java.lang.foreign.MemorySegment map(MapMode mode, long offset, long size,
             java.lang.foreign.Arena arena) throws IOException {
@@ -190,23 +194,24 @@ public abstract class FileChannel extends AbstractInterruptibleChannel
      */
     public abstract FileLock tryLock(long position, long size, boolean shared) throws IOException;
 
-    // ---- apertura --------------------------------------------------------------------------------
+    // ---- opening ---------------------------------------------------------------------------------
 
     public static FileChannel open(Path path, OpenOption... options) throws IOException {
         if (options == null) {
             throw new NullPointerException();
         }
-        return KajiFileChannel.abrir(path, options);
+        return KajiFileChannel.openFile(path, options);
     }
 
     /**
-     * Como el otro, con las opciones en un conjunto y atributos iniciales.
+     * Like the other one, with the options in a set and initial attributes.
      *
-     * <p>`attrs` **tiene que venir vacio**: esta VM no sabe fijar permisos ni due&ntilde;o al crear,
-     * y aceptar atributos que despues no se aplican dejaria un archivo con permisos distintos a los
-     * pedidos sin que nadie se entere. Se rechaza en vez de ignorarse.
+     * <p>`attrs` **has to come empty**: this VM does not know how to set permissions or owner on
+     * creating, and accepting attributes that are afterwards not applied would leave a file with
+     * permissions other than the ones asked for without anybody noticing. It is rejected instead of
+     * being ignored.
      *
-     * @throws UnsupportedOperationException si `attrs` trae algo
+     * @throws UnsupportedOperationException if `attrs` brings anything
      */
     public static FileChannel open(Path path, Set<? extends OpenOption> options,
             FileAttribute<?>... attrs) throws IOException {
@@ -214,7 +219,7 @@ public abstract class FileChannel extends AbstractInterruptibleChannel
             throw new NullPointerException();
         }
         if (attrs.length > 0) {
-            throw new UnsupportedOperationException("atributos iniciales no soportados");
+            throw new UnsupportedOperationException("initial attributes not supported");
         }
         OpenOption[] arr = new OpenOption[options.size()];
         int i = 0;
@@ -222,99 +227,100 @@ public abstract class FileChannel extends AbstractInterruptibleChannel
             arr[i] = o;
             i = i + 1;
         }
-        return KajiFileChannel.abrir(path, arr);
+        return KajiFileChannel.openFile(path, arr);
     }
 
-    // ---- lectura y escritura por posicion corriente -----------------------------------------------
+    // ---- reading and writing by current position -------------------------------------------------
 
-    /** Lee desde la posicion corriente y la avanza. */
+    /** Reads from the current position and advances it. */
     public abstract int read(ByteBuffer dst) throws IOException;
 
     /**
-     * Lee repartiendo en varios buffers, en orden.
+     * Reads spreading into several buffers, in order.
      *
-     * <p>Llenar uno antes de empezar el siguiente es el contrato, no un detalle: es lo que permite
-     * leer una cabecera de tama&ntilde;o fijo y su cuerpo en una sola llamada.
+     * <p>Filling one before starting the next is the contract, not a detail: it is what allows a
+     * fixed-size header and its body to be read in a single call.
      */
     public abstract long read(ByteBuffer[] dsts, int offset, int length) throws IOException;
 
-    /** Como el otro, con todos los buffers del arreglo. */
+    /** Like the other one, with every buffer of the array. */
     public final long read(ByteBuffer[] dsts) throws IOException {
         return this.read(dsts, 0, dsts.length);
     }
 
-    /** Escribe en la posicion corriente y la avanza. */
+    /** Writes at the current position and advances it. */
     public abstract int write(ByteBuffer src) throws IOException;
 
-    /** Escribe juntando varios buffers, en orden. */
+    /** Writes gathering several buffers, in order. */
     public abstract long write(ByteBuffer[] srcs, int offset, int length) throws IOException;
 
-    /** Como el otro, con todos los buffers del arreglo. */
+    /** Like the other one, with every buffer of the array. */
     public final long write(ByteBuffer[] srcs) throws IOException {
         return this.write(srcs, 0, srcs.length);
     }
 
-    // ---- posicion y tamanio ----------------------------------------------------------------------
+    // ---- position and size -----------------------------------------------------------------------
 
-    /** La posicion corriente, en bytes desde el principio. */
+    /** The current position, in bytes from the beginning. */
     public abstract long position() throws IOException;
 
     /**
-     * Mueve la posicion.
+     * Moves the position.
      *
-     * <p>Se admite mas alla del final: leer ahi da -1 y escribir ahi deja un hueco de ceros.
+     * <p>Beyond the end is admitted: reading there gives -1 and writing there leaves a hole of
+     * zeroes.
      */
     public abstract FileChannel position(long newPosition) throws IOException;
 
-    /** El tama&ntilde;o del archivo. */
+    /** The size of the file. */
     public abstract long size() throws IOException;
 
     /**
-     * Corta el archivo a `size`.
+     * Cuts the file down to `size`.
      *
-     * <p>Si ya era mas chico no pasa nada --no lo agranda-- y si la posicion quedaba mas alla del
-     * nuevo final, pasa a ser el nuevo final.
+     * <p>If it was smaller already nothing happens --it does not grow it-- and if the position was
+     * left beyond the new end, it becomes the new end.
      */
     public abstract FileChannel truncate(long size) throws IOException;
 
     /**
-     * Fuerza los cambios al disco.
+     * Forces the changes to the disk.
      *
-     * <p>No hace nada, y no es una omision: este canal ya escribe al disco en cada `write`, asi que
-     * cuando se llama a esto no queda nada pendiente. Ver la nota de la clase.
+     * <p>It does nothing, and it is not an omission: this channel writes to the disk on every
+     * `write`, so when this is called nothing is left pending. See the note of the class.
      *
-     * @param metaData si `false`, no hace falta forzar los metadatos
+     * @param metaData if `false`, the metadata need not be forced
      */
     public abstract void force(boolean metaData) throws IOException;
 
-    // ---- transferencias --------------------------------------------------------------------------
+    // ---- transfers -------------------------------------------------------------------------------
 
     /**
-     * Copia hasta `count` bytes desde `position` de este archivo hacia `target`.
+     * Copies up to `count` bytes from `position` of this file towards `target`.
      *
-     * <p>No toca la posicion corriente de este canal --si la de `target`--, que es lo que permite
-     * usarlo desde varios hilos sobre el mismo canal.
+     * <p>It does not touch the current position of this channel --it does touch `target`'s--, which
+     * is what allows using it from several threads over the same channel.
      */
     public abstract long transferTo(long position, long count, WritableByteChannel target)
             throws IOException;
 
-    /** Copia hasta `count` bytes de `src` hacia `position` de este archivo. */
+    /** Copies up to `count` bytes of `src` towards `position` of this file. */
     public abstract long transferFrom(ReadableByteChannel src, long position, long count)
             throws IOException;
 
-    // ---- lectura y escritura por posicion absoluta ------------------------------------------------
+    // ---- reading and writing by absolute position ------------------------------------------------
 
     /**
-     * Lee desde `position` **sin mover** la posicion corriente.
+     * Reads from `position` **without moving** the current position.
      *
-     * @throws IllegalArgumentException si `position` es negativa
+     * @throws IllegalArgumentException if `position` is negative
      */
     public abstract int read(ByteBuffer dst, long position) throws IOException;
 
     /**
-     * Escribe en `position` sin mover la posicion corriente.
+     * Writes at `position` without moving the current position.
      *
-     * @throws IllegalArgumentException si `position` es negativa
+     * @throws IllegalArgumentException if `position` is negative
      */
     public abstract int write(ByteBuffer src, long position) throws IOException;
 

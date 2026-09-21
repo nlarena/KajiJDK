@@ -4,31 +4,31 @@ import java.io.Serializable;
 import javax.management.Notification;
 
 /**
- * KajiLibrary's javax.management.remote.TargetedNotification -- una notificacion con el numero del
- * escucha al que va.
+ * KajiLibrary's javax.management.remote.TargetedNotification -- a notification with the number of
+ * the listener it goes to.
  *
- * <p>Existe por una razon de red. Un cliente remoto registra varios escuchas y el servidor le manda
- * las notificaciones en tandas; sin este numero habria que mandar tambien el filtro y el nombre del
- * MBean para que el cliente supiera a quien entregarle cada una.
+ * <p>It exists for a network reason. A remote client registers several listeners and the server
+ * sends it the notifications in batches; without this number, the filter and the MBean's name
+ * would have to be sent too so that the client knew whom to deliver each one to.
  *
- * <p>El numero lo asigna el servidor cuando el cliente registra el escucha, y solo tiene sentido
- * dentro de esa conexion.
+ * <p>The server assigns the number when the client registers the listener, and it only makes sense
+ * inside that connection.
  *
- * <p>Los dos campos son {@code final} de hecho pero la clase no promete inmutabilidad: es un objeto de
- * transporte, no un valor.
+ * <p>Both fields are {@code final} in fact but the class does not promise immutability: it is a
+ * transport object, not a value.
  */
 public class TargetedNotification implements Serializable {
 
     private static final long serialVersionUID = 7676132089779300926L;
 
-    /** La notificacion. */
+    /** The notification. */
     private final Notification notif;
 
-    /** A que escucha va. */
+    /** Which listener it goes to. */
     private final Integer id;
 
     /**
-     * @throws IllegalArgumentException si alguno de los dos es null
+     * @throws IllegalArgumentException if either of the two is null
      */
     public TargetedNotification(Notification notification, Integer listenerID) {
         if (notification == null) {
@@ -41,17 +41,17 @@ public class TargetedNotification implements Serializable {
         this.id = listenerID;
     }
 
-    /** La notificacion. */
+    /** The notification. */
     public Notification getNotification() {
         return this.notif;
     }
 
-    /** El numero del escucha. */
+    /** The listener's number. */
     public Integer getListenerID() {
         return this.id;
     }
 
-    /** Las dos cosas entre llaves. */
+    /** The two things between braces. */
     @Override
     public String toString() {
         return "{" + this.notif + ", " + this.id + "}";

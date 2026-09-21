@@ -3,19 +3,19 @@ package com.sun.jdi.event;
 import com.sun.jdi.Value;
 
 /**
- * Se escribio un campo vigilado.
+ * A watched field was written.
  *
- * <p>Llega <strong>antes</strong> de que la escritura ocurra: {@code valueCurrent} tiene el viejo y
- * {@link #valueToBe} el nuevo.
+ * <p>It arrives <strong>before</strong> the writing happens: {@code valueCurrent} has the old one
+ * and {@link #valueToBe} the new one.
  *
  * @since 1.3
  */
 public interface ModificationWatchpointEvent extends WatchpointEvent {
 
     /**
-     * El value to be.
+     * The value to be.
      *
-     * @return el resultado
+     * @return the result
      */
     Value valueToBe();
 }

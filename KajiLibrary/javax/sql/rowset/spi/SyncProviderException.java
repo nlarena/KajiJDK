@@ -3,17 +3,17 @@ package javax.sql.rowset.spi;
 import java.sql.SQLException;
 
 /**
- * La sincronizacion fallo, y adentro viene <strong>que</strong> fallo.
+ * The synchronization failed, and inside comes <strong>what</strong> failed.
  *
- * <h2>Por que esta excepcion lleva datos</h2>
+ * <h2>Why this exception carries data</h2>
  *
- * <p>Porque un fallo de sincronizacion casi nunca es total. De doscientas filas modificadas, ciento
- * noventa y ocho se escribieron bien y dos chocaron con cambios de otro. Una excepcion con un
- * mensaje obligaria a rehacer todo; el {@link SyncResolver} que viene adentro permite resolver
- * <strong>solo esas dos</strong> y volver a intentar.
+ * <p>Because a synchronization failure is almost never total. Of two hundred modified rows, one
+ * hundred and ninety-eight were written fine and two clashed with somebody else's changes. An
+ * exception with a message would force redoing everything; the {@link SyncResolver} that comes
+ * inside allows resolving <strong>only those two</strong> and trying again.
  *
- * <p>Es la razon de que {@code acceptChanges} lance esto y no una {@code SQLException} comun: el
- * que llama necesita las filas, no un mensaje.
+ * <p>It is the reason {@code acceptChanges} throws this and not an ordinary {@code SQLException}:
+ * the caller needs the rows, not a message.
  *
  * @since 1.5
  */
@@ -23,52 +23,52 @@ public class SyncProviderException extends SQLException {
 
     private SyncResolver syncResolver;
 
-    /** Sin detalle y sin resolvedor. */
+    /** Without detail and without a resolver. */
     public SyncProviderException() {
         super();
     }
 
     /**
-     * Con un mensaje.
+     * With a message.
      *
-     * @param msg el mensaje
+     * @param msg the message
      */
     public SyncProviderException(String msg) {
         super(msg);
     }
 
     /**
-     * Con el resolvedor que trae las filas en conflicto.
+     * With the resolver that carries the rows in conflict.
      *
-     * @param syncResolver el resolvedor
-     * @throws IllegalArgumentException si es {@code null}
+     * @param syncResolver the resolver
+     * @throws IllegalArgumentException if it is {@code null}
      */
     public SyncProviderException(SyncResolver syncResolver) {
         super();
         if (syncResolver == null) {
-            throw new IllegalArgumentException("el SyncResolver no puede ser null");
+            throw new IllegalArgumentException("the SyncResolver cannot be null");
         }
         this.syncResolver = syncResolver;
     }
 
     /**
-     * El resolvedor con las filas en conflicto.
+     * The resolver with the rows in conflict.
      *
-     * @return el resolvedor, o {@code null} si esta excepcion no trae ninguno
+     * @return the resolver, or {@code null} if this exception carries none
      */
     public SyncResolver getSyncResolver() {
         return syncResolver;
     }
 
     /**
-     * Fija el resolvedor.
+     * Sets the resolver.
      *
-     * @param syncResolver el resolvedor
-     * @throws IllegalArgumentException si es {@code null}
+     * @param syncResolver the resolver
+     * @throws IllegalArgumentException if it is {@code null}
      */
     public void setSyncResolver(SyncResolver syncResolver) {
         if (syncResolver == null) {
-            throw new IllegalArgumentException("el SyncResolver no puede ser null");
+            throw new IllegalArgumentException("the SyncResolver cannot be null");
         }
         this.syncResolver = syncResolver;
     }

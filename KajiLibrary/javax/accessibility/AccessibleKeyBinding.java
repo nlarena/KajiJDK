@@ -1,22 +1,22 @@
 package javax.accessibility;
 
 /**
- * Los atajos de teclado que activan un objeto.
+ * The keyboard shortcuts that activate an object.
  *
- * <p>El atajo se devuelve como {@code Object} y no como un tipo concreto porque no todos son la
- * misma clase de cosa: en AWT es un {@code java.awt.MenuShortcut} y en Swing un {@code KeyStroke}.
- * Es una de esas firmas que se ven flojas y que en realidad están evitando acoplar el paquete a uno
- * de los dos.
+ * <p>The shortcut is returned as {@code Object} and not as a concrete type because not all of them
+ * are the same kind of thing: in AWT it is a {@code java.awt.MenuShortcut} and in Swing a
+ * {@code KeyStroke}. It is one of those signatures that look loose and that are really avoiding
+ * coupling the package to one of the two.
  */
 public interface AccessibleKeyBinding {
 
-    /** Cuántos atajos hay. */
+    /** How many shortcuts there are. */
     int getAccessibleKeyBindingCount();
 
     /**
-     * El `i`-ésimo atajo.
+     * The `i`-th shortcut.
      *
-     * @return el atajo, o `null` si no hay tantos
+     * @return the shortcut, or `null` if there are not that many
      */
     Object getAccessibleKeyBinding(int i);
 }

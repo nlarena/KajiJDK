@@ -9,38 +9,38 @@ import javax.swing.border.Border;
 import javax.swing.border.EmptyBorder;
 
 /**
- * El dibujante de renglones de siempre: una etiqueta con el {@code toString} del elemento.
+ * The usual line renderer: a label with the element's {@code toString}.
  *
- * <h2>Una etiqueta que no es un componente de verdad</h2>
+ * <h2>A label that is not a real component</h2>
  *
- * <p>Hereda de {@link JLabel} y sobrescribe todos los metodos de repintado y de aviso para que no
- * hagan nada. No es una optimizacion menor: este objeto se usa como sello, una vez por renglon
- * visible y muchas veces por segundo. Si cada cambio de texto disparara un aviso de propiedad y una
- * peticion de repintado, dibujar una lista de veinte renglones costaria cuarenta avisos inutiles.
+ * <p>It inherits from {@link JLabel} and overrides every repainting and notice method so that
+ * they do nothing. It is not a minor optimization: this object is used as a stamp, once per
+ * visible line and many times a second. If each change of text fired a property notice and a
+ * repaint request, drawing a list of twenty lines would cost forty useless notices.
  *
- * <p>Es tambien la razon de que no se lo pueda usar como un componente comun: puesto en una
- * ventana, no se repintaria nunca.
+ * <p>It is also the reason it cannot be used as an ordinary component: put into a window, it
+ * would never repaint itself.
  *
- * <h2>El borde del foco</h2>
+ * <h2>The focus's border</h2>
  *
- * <p>El renglon con el foco lleva un borde y los demas uno vacio del mismo tamano. Que el vacio
- * tenga el mismo tamano es lo que evita que el texto se mueva un pixel al pasar el foco de un
- * renglon a otro.
+ * <p>The line with the focus carries a border and the others an empty one of the same size.
+ * That the empty one is the same size is what keeps the text from moving a pixel when the focus
+ * passes from one line to another.
  */
 public class DefaultListCellRenderer extends JLabel implements ListCellRenderer<Object>,
         Serializable {
 
     /**
-     * El borde de los renglones sin foco.
+     * The border of the lines with no focus.
      *
-     * @deprecated Es compartido entre todos los dibujantes; cambiarlo cambia el de todos.
+     * @deprecated It is shared between every renderer; changing it changes everybody's.
      */
     @Deprecated
     protected static Border noFocusBorder = new EmptyBorder(1, 1, 1, 1);
 
-    private static final Border SIN_FOCO = new EmptyBorder(1, 1, 1, 1);
+    private static final Border NO_FOCUS = new EmptyBorder(1, 1, 1, 1);
 
-    /** Un dibujante alineado a la izquierda y opaco. */
+    /** A renderer aligned to the left and opaque. */
     public DefaultListCellRenderer() {
         super();
         setOpaque(true);
@@ -49,10 +49,10 @@ public class DefaultListCellRenderer extends JLabel implements ListCellRenderer<
     }
 
     private Border getNoFocusBorder() {
-        return (noFocusBorder != null) ? noFocusBorder : SIN_FOCO;
+        return (noFocusBorder != null) ? noFocusBorder : NO_FOCUS;
     }
 
-    /** Prepara la etiqueta para ese renglon y la devuelve. */
+    /** It gets the label ready for that line and returns it. */
     public Component getListCellRendererComponent(JList<?> list, Object value, int index,
             boolean isSelected, boolean cellHasFocus) {
         setComponentOrientation(list.getComponentOrientation());
@@ -85,13 +85,13 @@ public class DefaultListCellRenderer extends JLabel implements ListCellRenderer<
         if (p != null) {
             p = p.getParent();
         }
-        // Con el mismo fondo que la lista y sin nada que ocultar, no vale la pena rellenar.
+        // With the same background as the list and nothing to hide, it is not worth filling.
         boolean colorMatch = (back != null) && (p != null) && back.equals(p.getBackground())
                 && p.isOpaque();
         return !colorMatch && super.isOpaque();
     }
 
-    /** No hace nada; ver la nota de la clase. */
+    /** It does nothing; see the class note. */
     public void validate() {
     }
 
@@ -111,14 +111,15 @@ public class DefaultListCellRenderer extends JLabel implements ListCellRenderer<
     }
 
     /**
-     * Solo deja pasar el aviso del texto.
+     * It only lets the text's notice through.
      *
-     * <p>Es el unico que alguien puede necesitar escuchar de un dibujante, y dejar pasar los demas
-     * costaria un aviso por propiedad y por renglon.
+     * <p>It is the only one anybody may need to listen to from a renderer, and letting the others
+     * through would cost one notice per property and per line.
      */
     protected void firePropertyChange(String propertyName, Object oldValue, Object newValue) {
-        // El JDK deja pasar tambien "font" y "foreground" cuando el texto es HTML, para que la
-        // vista de HTML se rearme. Aca no llega ese caso: `BasicHTML` todavia no existe.
+        // The JDK also lets "font" and "foreground" through when the text is HTML, so that the
+                // HTML view is rebuilt. That case does not arrive here: `BasicHTML` does not exist
+                // yet.
         if (propertyName == "text") {
             super.firePropertyChange(propertyName, oldValue, newValue);
         }
@@ -149,10 +150,10 @@ public class DefaultListCellRenderer extends JLabel implements ListCellRenderer<
     }
 
     /**
-     * El mismo dibujante, marcado como puesto por el aspecto.
+     * The same renderer, marked as set by the look and feel.
      *
-     * <p>La marca es lo que permite que cambiar de aspecto reemplace este dibujante y respete uno
-     * que haya puesto el programa; ver {@link javax.swing.plaf.UIResource}.
+     * <p>The mark is what allows changing the look and feel to replace this renderer and to
+     * respect one the program may have set; see {@link javax.swing.plaf.UIResource}.
      */
     public static class UIResource extends DefaultListCellRenderer
             implements javax.swing.plaf.UIResource {

@@ -5,47 +5,48 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 import jdk.internal.classfile.impl.Transforms;
 
-/** Una transformación sobre los elementos de un método. Ver {@link ClassFileTransform}. */
+/** A transformation over a method's elements. See {@link ClassFileTransform}. */
 public interface MethodTransform
         extends ClassFileTransform<MethodTransform, MethodElement, MethodBuilder> {
 
-    /** La que deja pasar todo tal cual. */
+    /** The one letting everything through as it is. */
     public static final MethodTransform ACCEPT_ALL = new AcceptAllMethod();
 
-    /** Ésta y después esa otra. */
+    /** This one and then that other one. */
     default MethodTransform andThen(MethodTransform next) {
         return Transforms.chainMethod(this, next);
     }
 
-    /** La que tira los elementos que cumplen el predicado. */
+    /** The one dropping the elements that satisfy the predicate. */
     public static MethodTransform dropping(Predicate<MethodElement> filter) {
         return Transforms.droppingMethod(filter);
     }
 
-    /** La que deja pasar todo y al final corre eso. */
+    /** The one letting everything through and running that at the end. */
     public static MethodTransform endHandler(Consumer<MethodBuilder> finisher) {
         return Transforms.endHandlerMethod(finisher);
     }
 
-    /** Una transformación con estado, fabricada de nuevo por cada uso. */
+    /** A stateful transformation, made anew for each use. */
     public static MethodTransform ofStateful(Supplier<MethodTransform> supplier) {
         return Transforms.statefulMethod(supplier);
     }
 
     /**
-     * La que transforma el `Code` del método y deja los demás elementos igual.
+     * The one transforming the method's `Code` and leaving the other elements alone.
      *
-     * <p>Distingue el cuerpo del resto porque son cosas distintas: las banderas, las excepciones
-     * declaradas y las anotaciones del método pasan tal cual, y sólo el código entra a la
-     * transformación de código.
+     * <p>It tells the body from the rest because they are different things: the method's flags, its
+     * declared exceptions and its annotations pass through as they are, and only the code enters the
+     * code transformation.
      */
     public static MethodTransform transformingCode(CodeTransform xform) {
         return Transforms.transformingCode(xform);
     }
 }
 
-// La implementacion de `MethodTransform.ACCEPT_ALL`. Con nombre y no anonima: nuestro javac no emite una anonima
-// en el inicializador de un campo de interfaz, y de paso el nombre aparece en los volcados de pila.
+// The implementation of `MethodTransform.ACCEPT_ALL`. Named and not anonymous: our javac emits no
+// anonymous class
+// in an interface field's initialiser, and the name shows up in stack dumps as a bonus.
 final class AcceptAllMethod implements MethodTransform {
 
     public void accept(MethodBuilder builder, MethodElement element) {

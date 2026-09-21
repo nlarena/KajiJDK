@@ -1,10 +1,11 @@
 package javax.management;
 
 /**
- * "El pedido no se pudo cumplir, y no es culpa del MBean."
+ * "The request could not be fulfilled, and it is not the MBean's fault."
  *
- * <p>Junta a las que informan un estado del **agente**: el nombre no existe, el atributo no esta, el
- * oyente no estaba registrado. Todas son condiciones normales de un sistema de gestion, no fallas.
+ * <p>It gathers the ones that report a state of the <b>agent</b>: the name does not exist, the
+ * attribute is not there, the listener was not registered. All of them are normal conditions of a
+ * management system, not failures.
  */
 public class OperationsException extends JMException {
 

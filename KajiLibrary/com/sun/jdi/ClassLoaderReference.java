@@ -3,23 +3,23 @@ package com.sun.jdi;
 import java.util.List;
 
 /**
- * Un cargador de clases de la maquina depurada.
+ * A class loader of the debugged machine.
  *
  * @since 1.3
  */
 public interface ClassLoaderReference extends ObjectReference {
 
     /**
-     * El defined classes.
+     * The defined classes.
      *
-     * @return el resultado
+     * @return the result
      */
     List<ReferenceType> definedClasses();
 
     /**
-     * El visible classes.
+     * The visible classes.
      *
-     * @return el resultado
+     * @return the result
      */
     List<ReferenceType> visibleClasses();
 }

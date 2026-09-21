@@ -4,11 +4,11 @@ import javax.print.attribute.Attribute;
 import javax.print.attribute.EnumSyntax;
 
 /**
- * Un papel nombrado por tamano <em>y</em> material a la vez: carta blanco, A4 transparencia.
+ * A paper named by size <em>and</em> material at once: letter white, A4 transparency.
  *
- * <p>Es una de las tres maneras de decir "que papel", y por eso hereda de {@link Media} el {@code
- * getCategory()} que devuelve {@code Media.class}: elegir por nombre excluye elegir por {@link
- * MediaSizeName tamano} o por {@link MediaTray bandeja}.
+ * <p>It is one of the three ways of saying "which paper", and that is why it inherits from {@link
+ * Media} the {@code getCategory()} that returns {@code Media.class}: choosing by name excludes
+ * choosing by {@link MediaSizeName size} or by {@link MediaTray tray}.
  */
 public class MediaName extends Media implements Attribute {
 

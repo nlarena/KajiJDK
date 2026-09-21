@@ -26,36 +26,38 @@ import javax.swing.plaf.ComponentUI;
 import javax.swing.plaf.FileChooserUI;
 
 /**
- * El aspecto basico de un selector de archivos.
+ * The basic look and feel of a file chooser.
  *
- * <h2>Casi todo lo que hace es texto y acciones</h2>
+ * <h2>Almost everything it does is text and actions</h2>
  *
- * <p>Un selector de archivos no dibuja nada propio: lo que se ve son la lista, los botones y los
- * campos, y esos los pone el aspecto de verdad. Lo que si define el basico son los <em>textos</em>
- * de los botones -- "Open", "Save", "Cancel" --, sus mnemonicos, y las seis acciones que hacen algo:
- * aprobar, cancelar, subir un nivel, ir a la carpeta del usuario, actualizar y crear una carpeta.
+ * <p>A file chooser draws nothing of its own: what is seen are the list, the buttons and the
+ * fields, and those are put in by the real look and feel. What the basic one does define are
+ * the buttons' <em>texts</em> -- "Open", "Save", "Cancel" --, their mnemonics, and the six
+ * actions that do something: approve, cancel, go up one level, go to the user's folder, refresh
+ * and create a folder.
  *
- * <p>Esa separacion es lo que deja que un aspecto reemplace el dibujo entero y siga teniendo los
- * mismos botones haciendo lo mismo.
+ * <p>That separation is what lets a look and feel replace the whole drawing and go on having
+ * the same buttons doing the same thing.
  *
- * <h2>El nombre del archivo no lo guarda el UI</h2>
+ * <h2>The file's name is not kept by the look and feel</h2>
  *
- * <p>{@link #getFileName} y {@link #getDirectoryName} devuelven {@code null} y ponerlos no hace
- * nada. No es un olvido: el nombre vive en el campo de texto que dibuja el aspecto, y el basico no
- * dibuja ninguno. Un aspecto que ponga campos redefine los cuatro metodos. Esta medido.
+ * <p>{@link #getFileName} and {@link #getDirectoryName} return {@code null} and setting them
+ * does nothing. It is not an oversight: the name lives in the text field the look and feel
+ * draws, and the basic one draws none. A look and feel that puts fields in redefines the four
+ * methods. It is measured.
  *
- * <h2>La vista de archivos</h2>
+ * <h2>The file view</h2>
  *
- * <p>{@link BasicFileView} contesta como se ve cada archivo -- su nombre, su icono, si esta
- * escondido -- y guarda los iconos en una tabla, porque preguntarle al sistema por el icono de un
- * archivo es caro y una carpeta tiene cientos.
+ * <p>{@link BasicFileView} answers how each file is seen -- its name, its icon, whether it is
+ * hidden -- and keeps the icons in a table, because asking the system for a file's icon is
+ * expensive and a folder has hundreds.
  *
- * <h2>Lo que queda dicho</h2>
+ * <h2>What is left said</h2>
  *
- * <p>Los once iconos vienen de la tabla del aspecto y aca no hay ninguna: todos quedan en
- * {@code null}. {@link #installComponents} no arma la lista ni los botones -- eso es del aspecto de
- * verdad --, asi que {@link #getApproveButton} y {@link #getDefaultButton} devuelven {@code null},
- * igual que en el JDK.
+ * <p>The eleven icons come from the look and feel's table and here there is none: all of them
+ * are left {@code null}. {@link #installComponents} does not build the list nor the buttons
+ * -- that belongs to the real look and feel --, so {@link #getApproveButton} and
+ * {@link #getDefaultButton} return {@code null}, just as in the JDK.
  */
 public class BasicFileChooserUI extends FileChooserUI {
 
@@ -102,20 +104,20 @@ public class BasicFileChooserUI extends FileChooserUI {
     private boolean directorySelected;
     private File directory;
 
-    private final Action approveSelectionAction = new AccionDelSelector(this, "approveSelection");
-    private final Action cancelSelectionAction = new AccionDelSelector(this, "cancelSelection");
-    private final Action updateAction = new AccionDelSelector(this, "refresh");
-    private final Action newFolderAction = new AccionDelSelector(this, "New Folder");
-    private final Action goHomeAction = new AccionDelSelector(this, "Go Home");
+    private final Action approveSelectionAction = new ChooserAction(this, "approveSelection");
+    private final Action cancelSelectionAction = new ChooserAction(this, "cancelSelection");
+    private final Action updateAction = new ChooserAction(this, "refresh");
+    private final Action newFolderAction = new ChooserAction(this, "New Folder");
+    private final Action goHomeAction = new ChooserAction(this, "Go Home");
     private final Action changeToParentDirectoryAction =
-            new AccionDelSelector(this, "Go Up");
+            new ChooserAction(this, "Go Up");
 
-    /** Para ese selector. */
+    /** For that chooser. */
     public BasicFileChooserUI(JFileChooser b) {
         this.filechooser = b;
     }
 
-    /** Uno nuevo por selector: guarda su modelo de directorio y su vista. */
+    /** A new one per chooser: it keeps its directory model and its view. */
     public static ComponentUI createUI(JComponent c) {
         return new BasicFileChooserUI((JFileChooser) c);
     }
@@ -147,7 +149,7 @@ public class BasicFileChooserUI extends FileChooserUI {
         installStrings(fc);
         createModel();
         fileView = new BasicFileView(this);
-        acceptAllFileFilter = new FiltroDeTodos();
+        acceptAllFileFilter = new AcceptAllFilter();
     }
 
     protected void uninstallDefaults(JFileChooser fc) {
@@ -158,7 +160,7 @@ public class BasicFileChooserUI extends FileChooserUI {
         acceptAllFileFilter = null;
     }
 
-    /** Ninguno; ver la nota de la clase. */
+    /** None; see the class note. */
     protected void installIcons(JFileChooser fc) {
     }
 
@@ -176,7 +178,7 @@ public class BasicFileChooserUI extends FileChooserUI {
         viewMenuIcon = null;
     }
 
-    /** Los textos, los tips y los mnemonicos; los valores son los medidos en el JDK 25. */
+    /** The texts, the tips and the mnemonics; the values are those measured in JDK 25. */
     protected void installStrings(JFileChooser fc) {
         saveButtonText = "Save";
         openButtonText = "Open";
@@ -192,7 +194,7 @@ public class BasicFileChooserUI extends FileChooserUI {
         helpButtonToolTipText = "FileChooser help";
         directoryOpenButtonToolTipText = "Open selected directory";
 
-        // Solo dos tienen letra subrayada; los otros cuatro quedan en cero. Medido.
+        // Only two have an underlined letter; the other four are left at zero. Measured.
         saveButtonMnemonic = 0;
         openButtonMnemonic = 0;
         cancelButtonMnemonic = 0;
@@ -216,7 +218,7 @@ public class BasicFileChooserUI extends FileChooserUI {
         directoryOpenButtonToolTipText = null;
     }
 
-    /** Nada: la lista y los botones son del aspecto de verdad; ver la nota de la clase. */
+    /** Nothing: the list and the buttons belong to the real look and feel; see the class note. */
     public void installComponents(JFileChooser fc) {
     }
 
@@ -243,19 +245,19 @@ public class BasicFileChooserUI extends FileChooserUI {
         propertyChangeListener = null;
     }
 
-    /** Ninguno: el basico no reacciona a nada por su cuenta. */
+    /** None: the basic one does not react to anything on its own. */
     public PropertyChangeListener createPropertyChangeListener(JFileChooser fc) {
         return null;
     }
 
-    /** El que sigue lo elegido en la lista. */
+    /** The one that follows what is chosen in the list. */
     public ListSelectionListener createListSelectionListener(JFileChooser fc) {
-        return new EscuchaDeSeleccion(this);
+        return new SelectionListenerImpl(this);
     }
 
-    /** El que abre una carpeta con dos clicks. */
+    /** The one that opens a folder with two clicks. */
     protected MouseListener createDoubleClickListener(JFileChooser fc, JList list) {
-        return new EscuchaDeDobleClick(this, list);
+        return new DoubleClickListener(this, list);
     }
 
     protected void createModel() {
@@ -277,36 +279,39 @@ public class BasicFileChooserUI extends FileChooserUI {
         return accessoryPanel;
     }
 
-    /** Vuelve a leer la carpeta actual. */
+    /** It reads the current folder again. */
     public void rescanCurrentDirectory(JFileChooser fc) {
         if (model != null) {
             model.validateFileCache();
         }
     }
 
-    /** No hace nada: hacer visible un archivo es cosa de la lista, que aca no esta. */
+    /** It does nothing: making a file visible is the list's business, and it is not here. */
     public void ensureFileIsVisible(JFileChooser fc, File f) {
     }
 
-    /** {@code null}; ver la nota de la clase. */
+    /** {@code null}; see the class note. */
     public String getFileName() {
         return null;
     }
 
-    /** No hace nada; ver la nota de la clase. */
+    /** It does nothing; see the class note. */
     public void setFileName(String filename) {
     }
 
-    /** {@code null}; ver la nota de la clase. */
+    /** {@code null}; see the class note. */
     public String getDirectoryName() {
         return null;
     }
 
-    /** No hace nada; ver la nota de la clase. */
+    /** It does nothing; see the class note. */
     public void setDirectoryName(String dirname) {
     }
 
-    /** Si lo elegido es una carpeta; lo usa el boton de aprobar para decidir si abre o elige. */
+    /**
+     * Whether what is chosen is a folder; the approve button uses it in order to decide whether it
+     * opens or chooses.
+     */
     protected boolean isDirectorySelected() {
         return directorySelected;
     }
@@ -331,7 +336,7 @@ public class BasicFileChooserUI extends FileChooserUI {
         return fileView;
     }
 
-    /** El titulo del dialogo: el que puso el programa, o el del boton de aprobar. */
+    /** The dialog's title: the one the program set, or the approve button's. */
     public String getDialogTitle(JFileChooser fc) {
         String dialogTitle = fc.getDialogTitle();
         if (dialogTitle != null) {
@@ -373,12 +378,12 @@ public class BasicFileChooserUI extends FileChooserUI {
                 ? saveButtonText : openButtonText;
     }
 
-    /** {@code null}; ver la nota de la clase. */
+    /** {@code null}; see the class note. */
     protected JButton getApproveButton(JFileChooser fc) {
         return null;
     }
 
-    /** {@code null}; ver la nota de la clase. */
+    /** {@code null}; see the class note. */
     public JButton getDefaultButton(JFileChooser fc) {
         return null;
     }
@@ -407,7 +412,7 @@ public class BasicFileChooserUI extends FileChooserUI {
         return updateAction;
     }
 
-    /** Tira los iconos guardados; ver la nota de {@link BasicFileView}. */
+    /** It throws away the kept icons; see {@link BasicFileView}'s note. */
     public void clearIconCache() {
         if (fileView instanceof BasicFileView) {
             ((BasicFileView) fileView).clearIconCache();
@@ -415,14 +420,14 @@ public class BasicFileChooserUI extends FileChooserUI {
     }
 
     /**
-     * Como se ve cada archivo; ver la nota de la clase.
+     * How each file is seen; see the class note.
      *
-     * <p>Estatica y con el UI como primer parametro, que es la firma que el JDK genera para una
-     * clase interna; ver el hallazgo #518.
+     * <p>Static and with the look and feel as the first parameter, which is the signature the JDK
+     * generates for an inner class; see finding #518.
      */
     public static class BasicFileView extends FileView {
 
-        /** Los iconos ya preguntados; ver la nota de la clase. */
+        /** The icons already asked for; see the class note. */
         protected Hashtable<File, Icon> iconCache = new Hashtable<File, Icon>();
 
         private final BasicFileChooserUI ui;
@@ -443,12 +448,12 @@ public class BasicFileChooserUI extends FileChooserUI {
             return fileName;
         }
 
-        /** Ninguna: una descripcion larga la da el sistema, y aca no hay. */
+        /** None: a long description is given by the system, and here there is none. */
         public String getDescription(File f) {
             return (f == null) ? null : f.getName();
         }
 
-        /** El tipo, si el sistema lo sabe. */
+        /** The type, if the system knows it. */
         public String getTypeDescription(File f) {
             if (f == null) {
                 return null;
@@ -467,7 +472,7 @@ public class BasicFileChooserUI extends FileChooserUI {
             iconCache.put(f, i);
         }
 
-        /** El de carpeta o el de archivo, guardado para no volver a preguntar. */
+        /** The folder one or the file one, kept so as not to ask again. */
         public Icon getIcon(File f) {
             Icon icon = getCachedIcon(f);
             if (icon != null) {
@@ -492,8 +497,11 @@ public class BasicFileChooserUI extends FileChooserUI {
         }
     }
 
-    /** El filtro que deja pasar todo; su descripcion es la que se ve en el combo de filtros. */
-    private static class FiltroDeTodos extends FileFilter {
+    /**
+     * The filter that lets everything through; its description is the one seen in the filter combo
+     * box.
+     */
+    private static class AcceptAllFilter extends FileFilter {
 
         public boolean accept(File f) {
             return true;
@@ -505,61 +513,62 @@ public class BasicFileChooserUI extends FileChooserUI {
     }
 
     /**
-     * Cada una de las seis acciones.
+     * Each of the six actions.
      *
-     * <p>El nombre es el comando; se compara por nombre, igual que en la barra de titulo de una
-     * ventana interna.
+     * <p>The name is the command; it is compared by name, just as in an internal frame's title
+     * bar.
      */
-    private static class AccionDelSelector extends AbstractAction {
+    private static class ChooserAction extends AbstractAction {
 
         private final BasicFileChooserUI ui;
-        private final String comando;
+        private final String command;
 
-        AccionDelSelector(BasicFileChooserUI ui, String comando) {
-            super(comando);
+        ChooserAction(BasicFileChooserUI ui, String command) {
+            super(command);
             this.ui = ui;
-            this.comando = comando;
+            this.command = command;
         }
 
         public void actionPerformed(ActionEvent e) {
             JFileChooser fc = ui.getFileChooser();
-            if ("approveSelection".equals(comando)) {
+            if ("approveSelection".equals(command)) {
                 fc.approveSelection();
-            } else if ("cancelSelection".equals(comando)) {
+            } else if ("cancelSelection".equals(command)) {
                 fc.cancelSelection();
-            } else if ("refresh".equals(comando)) {
+            } else if ("refresh".equals(command)) {
                 ui.rescanCurrentDirectory(fc);
-            } else if ("Go Home".equals(comando)) {
+            } else if ("Go Home".equals(command)) {
                 fc.setCurrentDirectory(fc.getFileSystemView().getHomeDirectory());
-            } else if ("Go Up".equals(comando)) {
+            } else if ("Go Up".equals(command)) {
                 fc.changeToParentDirectory();
-            } else if ("New Folder".equals(comando)) {
-                crearCarpeta(fc);
+            } else if ("New Folder".equals(command)) {
+                createFolder(fc);
             }
         }
 
-        private void crearCarpeta(JFileChooser fc) {
-            File actual = fc.getCurrentDirectory();
-            if (actual == null) {
+        private void createFolder(JFileChooser fc) {
+            File current = fc.getCurrentDirectory();
+            if (current == null) {
                 return;
             }
             try {
-                File nueva = fc.getFileSystemView().createNewFolder(actual);
-                fc.setSelectedFile(nueva);
-                fc.ensureFileIsVisible(nueva);
+                File created = fc.getFileSystemView().createNewFolder(current);
+                fc.setSelectedFile(created);
+                fc.ensureFileIsVisible(created);
                 ui.rescanCurrentDirectory(fc);
             } catch (java.io.IOException ex) {
-                // No se pudo crear -- permisos, disco lleno --. El selector sigue andando.
+                // It could not be created -- permissions, a full disk --. The chooser goes on
+                // working.
             }
         }
     }
 
-    /** Marca si lo elegido es una carpeta; ver {@link #isDirectorySelected}. */
-    private static class EscuchaDeSeleccion implements ListSelectionListener {
+    /** It marks whether what is chosen is a folder; see {@link #isDirectorySelected}. */
+    private static class SelectionListenerImpl implements ListSelectionListener {
 
         private final BasicFileChooserUI ui;
 
-        EscuchaDeSeleccion(BasicFileChooserUI ui) {
+        SelectionListenerImpl(BasicFileChooserUI ui) {
             this.ui = ui;
         }
 
@@ -568,19 +577,19 @@ public class BasicFileChooserUI extends FileChooserUI {
                 return;
             }
             JFileChooser fc = ui.getFileChooser();
-            File elegido = fc.getSelectedFile();
-            ui.setDirectorySelected(elegido != null && elegido.isDirectory());
-            ui.setDirectory(ui.isDirectorySelected() ? elegido : null);
+            File chosen = fc.getSelectedFile();
+            ui.setDirectorySelected(chosen != null && chosen.isDirectory());
+            ui.setDirectory(ui.isDirectorySelected() ? chosen : null);
         }
     }
 
-    /** Dos clicks sobre una carpeta entran en ella; sobre un archivo, lo aprueban. */
-    private static class EscuchaDeDobleClick extends MouseAdapter implements MouseListener {
+    /** Two clicks on a folder go into it; on a file, they approve it. */
+    private static class DoubleClickListener extends MouseAdapter implements MouseListener {
 
         private final BasicFileChooserUI ui;
         private final JList list;
 
-        EscuchaDeDobleClick(BasicFileChooserUI ui, JList list) {
+        DoubleClickListener(BasicFileChooserUI ui, JList list) {
             this.ui = ui;
             this.list = list;
         }

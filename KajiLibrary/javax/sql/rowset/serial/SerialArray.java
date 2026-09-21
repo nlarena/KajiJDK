@@ -7,46 +7,46 @@ import java.sql.SQLException;
 import java.util.Map;
 
 /**
- * KajiLibrary's javax.sql.rowset.serial.SerialArray -- una copia en memoria de un ARRAY de SQL.
+ * KajiLibrary's javax.sql.rowset.serial.SerialArray -- an in-memory copy of an SQL ARRAY.
  *
- * <p>Copia los elementos y el tipo base. Como las otras copias del paquete, el dato sobrevive a la
- * conexion y se puede serializar.
+ * <p>It copies the elements and the base type. Like the other copies of the package, the datum
+ * survives the connection and can be serialized.
  *
- * <h2>Los elementos se copian recursivamente</h2>
+ * <h2>The elements are copied recursively</h2>
  *
- * <p>Un ARRAY de SQL puede contener BLOB, CLOB, referencias o estructuras, y ninguno de esos
- * sobrevive a la conexion por su cuenta. Por eso el constructor los convierte a su equivalente de
- * este paquete a medida que copia: un {@code Blob} adentro se vuelve un {@link SerialBlob}, y asi.
- * Sin eso, la copia seria un arreglo de punteros muertos.
+ * <p>An SQL ARRAY can contain BLOBs, CLOBs, references or structs, and none of those survives the
+ * connection by itself. That is why the constructor converts them to their equivalent in this
+ * package as it copies: a {@code Blob} inside becomes a {@link SerialBlob}, and so on. Without
+ * that, the copy would be an array of dead pointers.
  *
  * <h2>A KajiLibrary subset</h2>
  *
- * <p>Los cuatro {@code getResultSet} lanzan {@link SerialException}. Devolver un
- * {@link ResultSet} pide una implementacion de conjunto de resultados desconectado --que es
- * justamente lo que vive en {@code javax.sql.rowset}, un paquete que esta biblioteca no tiene-- y
- * fabricar uno a medias seria peor que decir que no. El JDK tampoco los soporta en esta clase: lanza
- * la misma excepcion.
+ * <p>The four {@code getResultSet}s throw {@link SerialException}. Returning a {@link ResultSet}
+ * needs an implementation of a disconnected result set, and making half of one would be worse than
+ * saying no. The JDK does not support them in this class either: it throws the same exception. (The
+ * note said {@code javax.sql.rowset} is a package this library does not have; its interfaces are
+ * here, what is missing is an implementation of them.)
  */
 public class SerialArray implements Array, Serializable, Cloneable {
 
     private static final long serialVersionUID = -8466174297270688520L;
 
-    /** Los elementos, ya convertidos. */
+    /** The elements, already converted. */
     private Object[] elements;
 
-    /** El codigo de tipo de {@code java.sql.Types}. */
+    /** The type code from {@code java.sql.Types}. */
     private final int baseType;
 
-    /** El nombre del tipo base. */
+    /** The name of the base type. */
     private final String baseTypeName;
 
-    /** Si ya se libero con {@link #free}. */
+    /** Whether it was already freed with {@link #free}. */
     private boolean freed = false;
 
     /**
-     * Copia el arreglo, traduciendo los tipos definidos por el usuario con ese mapa.
+     * Copies the array, translating the user-defined types with that map.
      *
-     * @throws SQLException si el arreglo es null o no se puede leer
+     * @throws SQLException if the array is null or cannot be read
      */
     public SerialArray(Array array, Map<String, Class<?>> map)
         throws SerialException, SQLException {
@@ -62,7 +62,7 @@ public class SerialArray implements Array, Serializable, Cloneable {
         this.elements = copyElements(array);
     }
 
-    /** Idem, sin mapa de tipos. */
+    /** Likewise, without a type map. */
     public SerialArray(Array array) throws SerialException, SQLException {
         if (array == null) {
             throw new SQLException("Cannot instantiate a SerialArray object with a null Array "
@@ -74,10 +74,10 @@ public class SerialArray implements Array, Serializable, Cloneable {
     }
 
     /**
-     * Suelta la copia.
+     * Lets go of the copy.
      *
-     * <p>Ademas libera los elementos que a su vez tengan recursos --los BLOB y CLOB copiados--, que
-     * es lo que hace que liberar el arreglo libere de verdad la memoria.
+     * <p>It also frees the elements that in turn hold resources --the copied BLOBs and CLOBs--,
+     * which is what makes freeing the array really free the memory.
      */
     public void free() throws SQLException {
         if (this.elements != null) {
@@ -96,7 +96,7 @@ public class SerialArray implements Array, Serializable, Cloneable {
         this.freed = true;
     }
 
-    /** Los elementos. */
+    /** The elements. */
     public Object getArray() throws SerialException {
         check();
         Object[] copy = new Object[this.elements.length];
@@ -104,15 +104,15 @@ public class SerialArray implements Array, Serializable, Cloneable {
         return copy;
     }
 
-    /** Idem; el mapa se ignora, ver {@link SerialRef#getObject(Map)}. */
+    /** Likewise; the map is ignored, see {@link SerialRef#getObject(Map)}. */
     public Object getArray(Map<String, Class<?>> map) throws SerialException {
         return getArray();
     }
 
     /**
-     * Una porcion.
+     * A slice.
      *
-     * @param index la primera posicion, empezando en 1
+     * @param index the first position, starting at 1
      */
     public Object getArray(long index, int count) throws SerialException {
         check();
@@ -127,50 +127,50 @@ public class SerialArray implements Array, Serializable, Cloneable {
         return copy;
     }
 
-    /** Idem; el mapa se ignora. */
+    /** Likewise; the map is ignored. */
     public Object getArray(long index, int count, Map<String, Class<?>> map)
         throws SerialException {
         return getArray(index, count);
     }
 
-    /** El codigo de tipo de {@code java.sql.Types}. */
+    /** The type code from {@code java.sql.Types}. */
     public int getBaseType() throws SerialException {
         check();
         return this.baseType;
     }
 
-    /** El nombre del tipo base. */
+    /** The name of the base type. */
     public String getBaseTypeName() throws SerialException {
         check();
         return this.baseTypeName;
     }
 
     /**
-     * No hay conjunto de resultados.
+     * There is no result set.
      *
-     * @throws SerialException siempre; ver la nota de la clase
+     * @throws SerialException always; see the class note
      */
     public ResultSet getResultSet(long index, int count) throws SerialException {
         throw new SerialException("Unsupported operation");
     }
 
-    /** Idem. */
+    /** Likewise. */
     public ResultSet getResultSet(Map<String, Class<?>> map) throws SerialException {
         throw new SerialException("Unsupported operation");
     }
 
-    /** Idem. */
+    /** Likewise. */
     public ResultSet getResultSet() throws SerialException {
         throw new SerialException("Unsupported operation");
     }
 
-    /** Idem. */
+    /** Likewise. */
     public ResultSet getResultSet(long index, int count, Map<String, Class<?>> map)
         throws SerialException {
         throw new SerialException("Unsupported operation");
     }
 
-    /** Iguales si coinciden el tipo base y los elementos. */
+    /** Equal if the base type and the elements match. */
     public boolean equals(Object obj) {
         if (this == obj) {
             return true;
@@ -203,7 +203,7 @@ public class SerialArray implements Array, Serializable, Cloneable {
         return true;
     }
 
-    /** Coherente con {@link #equals}. */
+    /** Consistent with {@link #equals}. */
     public int hashCode() {
         int hash = 31 * this.baseType + this.baseTypeName.hashCode();
         if (this.elements != null) {
@@ -217,7 +217,7 @@ public class SerialArray implements Array, Serializable, Cloneable {
         return hash;
     }
 
-    /** Una copia con su propio arreglo. */
+    /** A copy with its own array. */
     public Object clone() {
         try {
             SerialArray copy = (SerialArray) super.clone();
@@ -227,7 +227,7 @@ public class SerialArray implements Array, Serializable, Cloneable {
         }
     }
 
-    /** Copia los elementos, convirtiendo los que no sobreviven a la conexion. */
+    /** Copies the elements, converting the ones that do not survive the connection. */
     private static Object[] copyElements(Array array) throws SerialException, SQLException {
         Object raw = array.getArray();
         if (raw == null) {
@@ -243,7 +243,7 @@ public class SerialArray implements Array, Serializable, Cloneable {
         return out;
     }
 
-    /** Un elemento, convertido si hace falta. Ver la nota de la clase. */
+    /** One element, converted if needed. See the class note. */
     private static Object copyElement(Object e) throws SerialException, SQLException {
         if (e instanceof java.sql.Blob) {
             return new SerialBlob((java.sql.Blob) e);
@@ -257,7 +257,7 @@ public class SerialArray implements Array, Serializable, Cloneable {
         return e;
     }
 
-    /** Que no se haya liberado. */
+    /** That it has not been freed. */
     private void check() throws SerialException {
         if (this.freed || this.elements == null) {
             throw new SerialException("Error: You cannot call a method on a SerialArray instance "

@@ -3,23 +3,23 @@ package javax.naming.directory;
 import javax.naming.NamingException;
 
 /**
- * KajiLibrary's javax.naming.directory.InvalidSearchFilterException -- el filtro de busqueda esta mal escrito.
+ * KajiLibrary's javax.naming.directory.InvalidSearchFilterException -- the search filter is
+ * malformed.
  *
- * <p>El filtro es una cadena con la sintaxis de RFC 2254 --parentesis, operadores, escapes-- y
- * armarla concatenando texto es como armar SQL asi: un valor con un parentesis adentro
- * cambia lo que el filtro selecciona. Para eso existe la version de {@code search} con
- * argumentos numerados.
+ * <p>The filter is a string with RFC 2254 syntax --parentheses, operators, escapes-- and building
+ * it by concatenating text is like building SQL that way: a value with a parenthesis inside changes
+ * what the filter selects. That is what the {@code search} version with numbered arguments is for.
  */
 public class InvalidSearchFilterException extends NamingException {
 
     private static final long serialVersionUID = 2902700940682875441L;
 
-    /** Sin detalle. */
+    /** With no detail. */
     public InvalidSearchFilterException() {
         super();
     }
 
-    /** Con un mensaje que diga cual fue el problema. */
+    /** With a message saying what the problem was. */
     public InvalidSearchFilterException(String explanation) {
         super(explanation);
     }

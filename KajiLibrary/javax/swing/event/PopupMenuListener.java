@@ -3,16 +3,16 @@ package javax.swing.event;
 import java.util.EventListener;
 
 /**
- * Quien quiere enterarse de que un menu emergente aparece o se va.
+ * Whoever wants to hear that a popup menu appears or goes away.
  */
 public interface PopupMenuListener extends EventListener {
 
-    /** Esta por mostrarse. */
+    /** It is about to be shown. */
     void popupMenuWillBecomeVisible(PopupMenuEvent e);
 
-    /** Esta por esconderse. */
+    /** It is about to be hidden. */
     void popupMenuWillBecomeInvisible(PopupMenuEvent e);
 
-    /** Se cancelo. */
+    /** It was cancelled. */
     void popupMenuCanceled(PopupMenuEvent e);
 }

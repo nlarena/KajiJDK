@@ -11,17 +11,17 @@ import javax.swing.Action;
 import javax.swing.JEditorPane;
 
 /**
- * Todo lo que hace falta para editar un tipo de contenido: modelo, vistas, acciones y formato.
+ * Everything needed to edit a kind of content: model, views, actions and format.
  *
- * <h2>La pieza intercambiable</h2>
+ * <h2>The interchangeable piece</h2>
  *
- * <p>Un componente de texto no sabe si muestra texto plano, HTML o RTF: sabe pedirle a su juego de
- * edicion un documento vacio, una fabrica de vistas, la lista de acciones y como leer y escribir
- * el formato. Cambiar el juego cambia las cuatro cosas de una vez y de forma coherente, que es
- * justo lo que no se lograria con cuatro propiedades sueltas.
+ * <p>A text component does not know whether it shows plain text, HTML or RTF: it knows how to
+ * ask its editor kit for an empty document, a view factory, the list of actions and how to read
+ * and write the format. Changing the kit changes the four things at once and consistently,
+ * which is exactly what four loose properties would not achieve.
  *
- * <p>De ahi que {@link #getContentType} sea parte del contrato: el juego dice para que tipo MIME
- * sirve, y un componente puede buscar el que corresponde a lo que le pidieron abrir.
+ * <p>Hence {@link #getContentType} is part of the contract: the kit says which MIME type it
+ * serves, and a component can look for the one that corresponds to what it was asked to open.
  */
 public abstract class EditorKit implements Cloneable, Serializable {
 
@@ -29,10 +29,10 @@ public abstract class EditorKit implements Cloneable, Serializable {
     }
 
     /**
-     * Una copia.
+     * A copy.
      *
-     * <p>Los juegos se comparten entre componentes, y algunos guardan estado —los atributos que se
-     * van a aplicar al escribir—; por eso se clonan en vez de usarse el mismo.
+     * <p>The kits are shared between components, and some keep state --the attributes that will be
+     * applied when typing--; that is why they are cloned instead of the same one being used.
      */
     public Object clone() {
         try {
@@ -42,19 +42,19 @@ public abstract class EditorKit implements Cloneable, Serializable {
         }
     }
 
-    /** Lo instalaron en ese componente; es donde se engancha lo que necesite. */
+    /** It was installed on that component; it is where it hooks up whatever it needs. */
     public void install(JEditorPane c) {
     }
 
     public void deinstall(JEditorPane c) {
     }
 
-    /** El tipo MIME que este juego entiende, como {@code "text/plain"}. */
+    /** The MIME type this kit understands, such as {@code "text/plain"}. */
     public abstract String getContentType();
 
     public abstract ViewFactory getViewFactory();
 
-    /** Las acciones que este juego ofrece; un editor las pone en menus y teclas. */
+    /** The actions this kit offers; an editor puts them in menus and keys. */
     public abstract Action[] getActions();
 
     public abstract Caret createCaret();

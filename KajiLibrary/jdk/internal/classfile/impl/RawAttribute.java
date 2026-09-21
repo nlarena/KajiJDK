@@ -8,12 +8,15 @@ import java.lang.classfile.FieldElement;
 import java.lang.classfile.MethodElement;
 import java.lang.classfile.constantpool.Utf8Entry;
 
-// Un atributo leído sin interpretar: el `Utf8` del nombre, el mapeador que lo reconoció y el cuerpo
-// en bytes. Es lo que KajiLibrary devuelve para TODOS los atributos, incluidos los que el JVMS
-// define — ver la nota de alcance en `java.lang.classfile.Attributes`.
+// An attribute read without interpreting it: the name's `Utf8`, the mapper that recognised it and
+// the body in bytes. It is what `ClassModel` returns for EVERY attribute it reads, including the
+// ones the JVMS defines -- see the scope note in `java.lang.classfile.Attributes`. The note said it
+// is what KajiLibrary returns for all attributes; the typed ones exist too (`TypedAttributes`,
+// read and written through `AttributeMappers`), and they are what the builders write -- it is
+// reading a class that still yields this.
 //
-// Implementa las cuatro interfaces de elemento porque un atributo puede aparecer en los cuatro
-// lugares donde el formato los admite, y el modelo que lo contiene lo emite como una de sus piezas.
+// It implements the four element interfaces because an attribute may appear in the four places
+// where the format admits them, and the model that contains it emits it as one of its pieces.
 public final class RawAttribute
         implements Attribute<RawAttribute>, ClassElement, MethodElement, FieldElement, CodeElement {
 
@@ -35,20 +38,20 @@ public final class RawAttribute
         return this.mapper;
     }
 
-    /** Una copia del cuerpo del atributo, sin el nombre ni el largo. */
+    /** A copy of the attribute's body, without the name or the length. */
     public byte[] payload() {
-        byte[] copia = new byte[this.payload.length];
-        System.arraycopy(this.payload, 0, copia, 0, this.payload.length);
-        return copia;
+        byte[] copy = new byte[this.payload.length];
+        System.arraycopy(this.payload, 0, copy, 0, this.payload.length);
+        return copy;
     }
 
-    /** El largo del cuerpo. */
+    /** The length of the body. */
     public int payloadLength() {
         return this.payload.length;
     }
 
-    // Sin copiar: para quien escribe el atributo de vuelta.
-    byte[] crudo() {
+    // Without copying: for whoever writes the attribute back.
+    byte[] raw() {
         return this.payload;
     }
 

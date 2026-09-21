@@ -3,29 +3,30 @@ package com.sun.java.accessibility.util;
 import java.awt.Component;
 
 /**
- * Escucha eventos de AWT de <strong>cualquier</strong> componente, sin registrarse en ninguno.
+ * It listens to AWT events of <strong>any</strong> component, without registering with any.
  *
- * <h2>Que resuelve</h2>
+ * <h2>What it resolves</h2>
  *
- * <p>El registro normal es por componente: {@code boton.addActionListener(...)}. Una tecnologia de
- * asistencia no puede hacer eso — no conoce los componentes de una aplicacion que no escribio, y
- * recorrerlos para registrarse en cada uno fallaria con los que se creen despues.
+ * <p>The normal registration is per component: {@code button.addActionListener(...)}. An
+ * assistive technology cannot do that -- it does not know the components of an application it
+ * did not write, and walking them in order to register with each one would fail with those that
+ * are created afterwards.
  *
- * <p>Esta clase da la vuelta: se engancha a la cola de eventos del proceso via
- * {@link EventQueueMonitor} y reparte a quien se haya registrado aca. Un oyente puesto una vez
- * recibe los eventos de todos los componentes, presentes y futuros.
+ * <p>This class turns it around: it hooks itself to the process's event queue via
+ * {@link EventQueueMonitor} and hands out to whoever has registered here. A listener put in once
+ * receives the events of all the components, present and future.
  *
- * <h2>El costo, que conviene tener presente</h2>
+ * <h2>The cost, which it is worth keeping in mind</h2>
  *
- * <p>Todo evento del proceso pasa por este reparto. {@code MouseMotion} en particular llega
- * centenares de veces por segundo, y por eso esta separado de {@code Mouse}: registrarse en el
- * cuesta mucho mas que en los demas.
+ * <p>Every event of the process goes through this handing out. {@code MouseMotion} in particular
+ * arrives hundreds of times per second, and that is why it is separated from {@code Mouse}:
+ * registering for it costs much more than for the others.
  *
- * <p>Ver {@link SwingEventMonitor} para los eventos propios de Swing.
+ * <p>See {@link SwingEventMonitor} for the events of Swing's own.
  */
 public class AWTEventMonitor {
 
-    /** Compartida con {@link SwingEventMonitor}, que hereda de esta clase. */
+    /** Shared with {@link SwingEventMonitor}, which inherits from this class. */
     protected static final AccessibilityListenerList listenerList =
             new AccessibilityListenerList();
 
@@ -33,10 +34,10 @@ public class AWTEventMonitor {
     }
 
     /**
-     * El componente que tiene el foco, o {@code null}.
+     * The component that has the focus, or {@code null}.
      *
-     * <p>Sale de la ventana con foco que conoce {@link EventQueueMonitor}: es el dato que responde
-     * "donde esta parado el usuario".
+     * <p>It comes out of the focused window {@link EventQueueMonitor} knows about: it is the datum
+     * that answers "where is the user standing".
      */
     public static Component getComponentWithFocus() {
         EventQueueMonitor.maybeInitialize();
@@ -44,123 +45,123 @@ public class AWTEventMonitor {
         return w == null ? null : w.getFocusOwner();
     }
 
-    /** Escucha los eventos de tipo {@code Component} de cualquier componente. */
+    /** It listens to the {@code Component}-type events of any component. */
     public static void addComponentListener(java.awt.event.ComponentListener l) {
         EventQueueMonitor.maybeInitialize();
         listenerList.add(java.awt.event.ComponentListener.class, l);
     }
 
-    /** Deja de escucharlos. */
+    /** It stops listening to them. */
     public static void removeComponentListener(java.awt.event.ComponentListener l) {
         listenerList.remove(java.awt.event.ComponentListener.class, l);
     }
 
-    /** Escucha los eventos de tipo {@code Container} de cualquier componente. */
+    /** It listens to the {@code Container}-type events of any component. */
     public static void addContainerListener(java.awt.event.ContainerListener l) {
         EventQueueMonitor.maybeInitialize();
         listenerList.add(java.awt.event.ContainerListener.class, l);
     }
 
-    /** Deja de escucharlos. */
+    /** It stops listening to them. */
     public static void removeContainerListener(java.awt.event.ContainerListener l) {
         listenerList.remove(java.awt.event.ContainerListener.class, l);
     }
 
-    /** Escucha los eventos de tipo {@code Focus} de cualquier componente. */
+    /** It listens to the {@code Focus}-type events of any component. */
     public static void addFocusListener(java.awt.event.FocusListener l) {
         EventQueueMonitor.maybeInitialize();
         listenerList.add(java.awt.event.FocusListener.class, l);
     }
 
-    /** Deja de escucharlos. */
+    /** It stops listening to them. */
     public static void removeFocusListener(java.awt.event.FocusListener l) {
         listenerList.remove(java.awt.event.FocusListener.class, l);
     }
 
-    /** Escucha los eventos de tipo {@code Key} de cualquier componente. */
+    /** It listens to the {@code Key}-type events of any component. */
     public static void addKeyListener(java.awt.event.KeyListener l) {
         EventQueueMonitor.maybeInitialize();
         listenerList.add(java.awt.event.KeyListener.class, l);
     }
 
-    /** Deja de escucharlos. */
+    /** It stops listening to them. */
     public static void removeKeyListener(java.awt.event.KeyListener l) {
         listenerList.remove(java.awt.event.KeyListener.class, l);
     }
 
-    /** Escucha los eventos de tipo {@code Mouse} de cualquier componente. */
+    /** It listens to the {@code Mouse}-type events of any component. */
     public static void addMouseListener(java.awt.event.MouseListener l) {
         EventQueueMonitor.maybeInitialize();
         listenerList.add(java.awt.event.MouseListener.class, l);
     }
 
-    /** Deja de escucharlos. */
+    /** It stops listening to them. */
     public static void removeMouseListener(java.awt.event.MouseListener l) {
         listenerList.remove(java.awt.event.MouseListener.class, l);
     }
 
-    /** Escucha los eventos de tipo {@code MouseMotion} de cualquier componente. */
+    /** It listens to the {@code MouseMotion}-type events of any component. */
     public static void addMouseMotionListener(java.awt.event.MouseMotionListener l) {
         EventQueueMonitor.maybeInitialize();
         listenerList.add(java.awt.event.MouseMotionListener.class, l);
     }
 
-    /** Deja de escucharlos. */
+    /** It stops listening to them. */
     public static void removeMouseMotionListener(java.awt.event.MouseMotionListener l) {
         listenerList.remove(java.awt.event.MouseMotionListener.class, l);
     }
 
-    /** Escucha los eventos de tipo {@code Window} de cualquier componente. */
+    /** It listens to the {@code Window}-type events of any component. */
     public static void addWindowListener(java.awt.event.WindowListener l) {
         EventQueueMonitor.maybeInitialize();
         listenerList.add(java.awt.event.WindowListener.class, l);
     }
 
-    /** Deja de escucharlos. */
+    /** It stops listening to them. */
     public static void removeWindowListener(java.awt.event.WindowListener l) {
         listenerList.remove(java.awt.event.WindowListener.class, l);
     }
 
-    /** Escucha los eventos de tipo {@code Action} de cualquier componente. */
+    /** It listens to the {@code Action}-type events of any component. */
     public static void addActionListener(java.awt.event.ActionListener l) {
         EventQueueMonitor.maybeInitialize();
         listenerList.add(java.awt.event.ActionListener.class, l);
     }
 
-    /** Deja de escucharlos. */
+    /** It stops listening to them. */
     public static void removeActionListener(java.awt.event.ActionListener l) {
         listenerList.remove(java.awt.event.ActionListener.class, l);
     }
 
-    /** Escucha los eventos de tipo {@code Adjustment} de cualquier componente. */
+    /** It listens to the {@code Adjustment}-type events of any component. */
     public static void addAdjustmentListener(java.awt.event.AdjustmentListener l) {
         EventQueueMonitor.maybeInitialize();
         listenerList.add(java.awt.event.AdjustmentListener.class, l);
     }
 
-    /** Deja de escucharlos. */
+    /** It stops listening to them. */
     public static void removeAdjustmentListener(java.awt.event.AdjustmentListener l) {
         listenerList.remove(java.awt.event.AdjustmentListener.class, l);
     }
 
-    /** Escucha los eventos de tipo {@code Item} de cualquier componente. */
+    /** It listens to the {@code Item}-type events of any component. */
     public static void addItemListener(java.awt.event.ItemListener l) {
         EventQueueMonitor.maybeInitialize();
         listenerList.add(java.awt.event.ItemListener.class, l);
     }
 
-    /** Deja de escucharlos. */
+    /** It stops listening to them. */
     public static void removeItemListener(java.awt.event.ItemListener l) {
         listenerList.remove(java.awt.event.ItemListener.class, l);
     }
 
-    /** Escucha los eventos de tipo {@code Text} de cualquier componente. */
+    /** It listens to the {@code Text}-type events of any component. */
     public static void addTextListener(java.awt.event.TextListener l) {
         EventQueueMonitor.maybeInitialize();
         listenerList.add(java.awt.event.TextListener.class, l);
     }
 
-    /** Deja de escucharlos. */
+    /** It stops listening to them. */
     public static void removeTextListener(java.awt.event.TextListener l) {
         listenerList.remove(java.awt.event.TextListener.class, l);
     }

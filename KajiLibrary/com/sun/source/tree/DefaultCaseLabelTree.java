@@ -1,7 +1,7 @@
 package com.sun.source.tree;
 
 /**
- * La etiqueta `default`.
+ * The `default` label.
  */
 public interface DefaultCaseLabelTree extends CaseLabelTree {
 }

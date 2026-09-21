@@ -3,28 +3,29 @@ package javax.print;
 import java.net.URI;
 
 /**
- * KajiLibrary's javax.print.URIException -- el fallo fue por un URI.
+ * KajiLibrary's javax.print.URIException -- the failure was because of a URI.
  *
- * <p>Una interfaz; ver la nota de {@link PrintException}. Aparece cuando un atributo lleva un URI
- * --tipicamente {@code Destination}, que dice a que archivo escribir-- y ese URI no sirve.
+ * <p>An interface; see the note of {@link PrintException}. It shows up when an attribute carries a
+ * URI --typically {@code Destination}, which says which file to write to-- and that URI does not
+ * serve.
  *
- * <p>{@link #URIOtherProblem} vale -1 y no 3; las constantes vienen del estandar IPP y ahi el "otro"
- * es un valor aparte.
+ * <p>{@link #URIOtherProblem} is -1 and not 3; the constants come from the IPP standard and there
+ * the "other" one is a separate value.
  */
 public interface URIException {
 
-    /** No se puede llegar. */
+    /** It cannot be reached. */
     int URIInaccessible = 1;
 
-    /** El esquema no esta soportado. */
+    /** The scheme is not supported. */
     int URISchemeNotSupported = 2;
 
-    /** Otra cosa. */
+    /** Something else. */
     int URIOtherProblem = -1;
 
-    /** El URI que fallo. */
+    /** The URI that failed. */
     URI getUnsupportedURI();
 
-    /** Cual de los tres motivos. */
+    /** Which of the three reasons. */
     int getReason();
 }

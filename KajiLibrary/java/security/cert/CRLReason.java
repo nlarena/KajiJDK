@@ -1,48 +1,48 @@
 package java.security.cert;
 
-// Por que se revoco un certificado, segun el codigo `CRLReason` de RFC 5280.
+// Why a certificate was revoked, according to the `CRLReason` code of RFC 5280.
 //
-// El orden **es** el contrato: los valores se codifican en la CRL como su numero ordinal, asi que
-// mover uno de lugar cambia el significado de las CRLs ya emitidas. Por eso `UNUSED` esta en el
-// medio y no se saca: es el codigo 7, que se reservo y nunca se llego a usar.
+// The order **is** the contract: the values are encoded in the CRL as their ordinal number, so
+// moving one changes the meaning of the CRLs already issued. That is why `UNUSED` is in the middle
+// and is not taken out: it is code 7, which was reserved and never came to be used.
 //
-// La distincion que mas importa en la practica es `KEY_COMPROMISE` contra el resto: solo esa dice
-// que la clave privada se filtro, y por lo tanto solo esa invalida hacia atras las firmas hechas
-// antes de la revocacion. Con `SUPERSEDED` o `CESSATION_OF_OPERATION`, lo firmado antes sigue
-// valiendo.
+// The distinction that matters most in practice is `KEY_COMPROMISE` against the rest: only that one
+// says that the private key leaked, and therefore only that one invalidates backwards the
+// signatures made before the revocation. With `SUPERSEDED` or `CESSATION_OF_OPERATION`, what was
+// signed before goes on being worth something.
 public enum CRLReason {
 
-    // Se revoco sin decir por que.
+    // It was revoked without saying why.
     UNSPECIFIED,
 
-    // La clave privada del sujeto se filtro. La unica razon que invalida hacia atras.
+    // The private key of the subject leaked. The only reason that invalidates backwards.
     KEY_COMPROMISE,
 
-    // La clave privada de la CA se filtro: cae todo lo que esa CA emitio.
+    // The private key of the CA leaked: everything that CA issued falls.
     CA_COMPROMISE,
 
-    // Cambio algo del sujeto —nombre, organizacion— sin sospecha sobre la clave.
+    // Something of the subject changed —name, organisation— with no suspicion about the key.
     AFFILIATION_CHANGED,
 
-    // Hay un certificado nuevo que lo reemplaza.
+    // There is a new certificate that replaces it.
     SUPERSEDED,
 
-    // El sujeto dejo de operar.
+    // The subject stopped operating.
     CESSATION_OF_OPERATION,
 
-    // Suspension temporal: puede volver a valer. La unica razon reversible.
+    // A temporary suspension: it can become valid again. The only reversible reason.
     CERTIFICATE_HOLD,
 
-    // El codigo 7, reservado y nunca usado. Esta solo para que los ordinales siguientes caigan
-    // donde el RFC dice que caen.
+    // Code 7, reserved and never used. It is here only so that the following ordinals land
+    // where the RFC says they land.
     UNUSED,
 
-    // Se saca de la CRL: solo aparece en CRLs delta, para levantar un CERTIFICATE_HOLD.
+    // It is taken out of the CRL: it only appears in delta CRLs, to lift a CERTIFICATE_HOLD.
     REMOVE_FROM_CRL,
 
-    // Se le quito un privilegio al sujeto.
+    // A privilege was withdrawn from the subject.
     PRIVILEGE_WITHDRAWN,
 
-    // La clave de una autoridad de atributos se filtro.
+    // The key of an attribute authority leaked.
     AA_COMPROMISE
 }

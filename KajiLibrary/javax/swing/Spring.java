@@ -3,47 +3,51 @@ package javax.swing;
 import java.awt.Component;
 
 /**
- * Una distancia elastica: un minimo, un preferido, un maximo, y el valor de ahora.
+ * An elastic distance: a minimum, a preferred, a maximum, and the current value.
  *
- * <h2>Tres numeros y uno</h2>
+ * <h2>Three numbers and one</h2>
  *
- * <p>Los tres primeros son lo que el resorte <em>puede</em> medir; el cuarto es lo que mide en este
- * momento. Un acomodador reparte el espacio disponible ajustando los valores, y cada resorte cede o
- * se estira dentro de sus tres numeros.
+ * <p>The first three are what the spring <em>may</em> measure; the fourth is what it measures at
+ * this moment. A layout shares the available space out by adjusting the values, and each spring
+ * gives up or stretches within its three numbers.
  *
- * <h2>La tension, que es lo que hace que el reparto sea justo</h2>
+ * <h2>The tension, which is what makes the sharing out fair</h2>
  *
- * <p>La <em>tension</em> de un resorte es cuanto se aparto de su preferido, medido en fracciones de
- * lo que le queda para llegar a su tope. Vale cero en el preferido, uno en el maximo y menos uno en
- * el minimo. Repartir el espacio no es darle a cada uno lo mismo: es ponerlos a todos con la misma
- * tension, y por eso el que tiene mas margen se lleva mas.
+ * <p>A spring's <em>tension</em> is how far it moved from its preferred one, measured in
+ * fractions of what it has left in order to reach its cap. It is zero at the preferred one, one
+ * at the maximum and minus one at the minimum. Sharing the space out is not giving each one the
+ * same: it is putting them all at the same tension, and that is why the one with the most room
+ * takes the most.
  *
- * <p>Un resorte que no puede moverse -- minimo, preferido y maximo iguales -- tiene rango cero, y su
- * tension es una division por cero. Sale infinito o NaN, y esta bien que salga: la pregunta "cuanto
- * te estiraste, en fracciones de lo que podias" no tiene respuesta cuando no podia nada.
+ * <p>A spring that cannot move -- minimum, preferred and maximum equal -- has a range of zero,
+ * and its tension is a division by zero. It comes out infinite or NaN, and it is right that it
+ * should: the question "how far did you stretch, in fractions of what you could" has no answer
+ * when it could not at all.
  *
- * <h2>Se combinan, y el resultado es otro resorte</h2>
+ * <h2>They combine, and the result is another spring</h2>
  *
- * <p>{@link #sum}, {@link #max}, {@link #minus} y {@link #scale} devuelven resortes que <em>miran</em>
- * a los que se les dieron. No copian sus numeros: si el de adentro cambia, el de afuera cambia. Por
- * eso {@link #width} y {@link #height} son utiles -- son un resorte que siempre dice lo que el
- * componente mide ahora --, y por eso ponerle un valor a una suma se lo reparte a sus dos partes.
+ * <p>{@link #sum}, {@link #max}, {@link #minus} and {@link #scale} return springs that
+ * <em>look at</em> those they were given. They do not copy their numbers: if the inner one
+ * changes, the outer one changes. That is why {@link #width} and {@link #height} are useful
+ * -- they are a spring that always says what the component measures now --, and that is why
+ * setting a value on a sum shares it out between its two parts.
  *
- * <p>Ese reparto usa la tension: la suma le pone a la primera parte su misma tension y a la segunda
- * lo que sobra. Es lo que hace que estirar una fila de resortes distintos quede parejo.
+ * <p>That sharing out uses the tension: the sum gives the first part its own tension and the
+ * second what is left over. It is what makes stretching a row of different springs come out
+ * even.
  */
 public abstract class Spring {
 
     /**
-     * "Todavia no se sabe".
+     * "It is not known yet".
      *
-     * <p>Es {@link Integer#MIN_VALUE} y no cero ni menos uno porque un resorte puede medir
-     * legitimamente cualquiera de los dos -- y tambien negativo, que es lo que devuelve
-     * {@link #minus}.
+     * <p>It is {@link Integer#MIN_VALUE} and not zero nor minus one because a spring may
+     * legitimately measure either of the two -- and also negative, which is what {@link #minus}
+     * returns.
      */
     public static final int UNSET = Integer.MIN_VALUE;
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected Spring() {
     }
 
@@ -53,35 +57,35 @@ public abstract class Spring {
 
     public abstract int getMaximumValue();
 
-    /** Lo que mide ahora. */
+    /** What it measures now. */
     public abstract int getValue();
 
-    /** Le pone ese valor; {@link #UNSET} lo devuelve a "todavia no se sabe". */
+    /** It gives it that value; {@link #UNSET} gives it back to "it is not known yet". */
     public abstract void setValue(int value);
 
-    /** Cuanto margen le queda de este lado del preferido. */
+    /** How much room it has left on this side of the preferred one. */
     private double range(boolean contract) {
         return contract ? getPreferredValue() - getMinimumValue()
                 : getMaximumValue() - getPreferredValue();
     }
 
-    /** Ver la nota de la clase. */
+    /** See the class note. */
     double getStrain() {
         double delta = (getValue() - getPreferredValue());
         return delta / range(getValue() < getPreferredValue());
     }
 
-    /** Lo pone en el valor que le corresponde a esa tension. */
+    /** It puts it at the value that corresponds to that tension. */
     void setStrain(double strain) {
         setValue(getPreferredValue() + (int) (strain * range(strain < 0)));
     }
 
-    /** Si depende de si mismo a traves de ese acomodador. */
+    /** Whether it depends on itself through that layout. */
     boolean isCyclic(SpringLayout l) {
         return false;
     }
 
-    /** La parte comun de los resortes que guardan su valor. */
+    /** The part common to the springs that keep their value. */
     abstract static class AbstractSpring extends Spring {
 
         protected int size = UNSET;
@@ -110,7 +114,7 @@ public abstract class Spring {
         }
     }
 
-    /** Tres numeros fijos. */
+        /** Three fixed numbers. */
     private static class StaticSpring extends AbstractSpring {
 
         protected int min;
@@ -145,10 +149,10 @@ public abstract class Spring {
     }
 
     /**
-     * El mismo resorte al reves.
+     * The same spring the other way round.
      *
-     * <p>El minimo pasa a ser menos el maximo, no menos el minimo: al dar vuelta el signo, el que
-     * mas medía pasa a ser el que menos mide.
+     * <p>The minimum becomes minus the maximum, not minus the minimum: on turning the sign round,
+     * the one that measured most becomes the one that measures least.
      */
     private static class NegativeSpring extends Spring {
 
@@ -188,9 +192,9 @@ public abstract class Spring {
     }
 
     /**
-     * El mismo resorte multiplicado.
+     * The same spring multiplied.
      *
-     * <p>Con factor negativo el minimo y el maximo se cruzan, por el mismo motivo que en
+     * <p>With a negative factor the minimum and the maximum cross, for the same reason as in
      * {@link NegativeSpring}.
      */
     private static class ScaleSpring extends Spring {
@@ -233,12 +237,12 @@ public abstract class Spring {
     }
 
     /**
-     * El ancho de un componente, siempre al dia.
+     * A component's width, always up to date.
      *
-     * <p>El maximo se recorta a {@link Short#MAX_VALUE}. Un componente sin tope devuelve
-     * {@link Integer#MAX_VALUE}, y con eso no se puede hacer aritmetica -- una suma de dos se
-     * desborda y da negativo --. Recortar es lo que hace el JDK y es lo que mantiene las cuentas
-     * sanas.
+     * <p>The maximum is clipped to {@link Short#MAX_VALUE}. A component with no cap returns
+     * {@link Integer#MAX_VALUE}, and no arithmetic can be done with that -- a sum of two overflows
+     * and gives a negative --. Clipping is what the JDK does and it is what keeps the arithmetic
+     * sane.
      */
     private static class WidthSpring extends AbstractSpring {
 
@@ -261,7 +265,7 @@ public abstract class Spring {
         }
     }
 
-    /** El alto de un componente; ver {@link WidthSpring}. */
+    /** A component's height; see {@link WidthSpring}. */
     private static class HeightSpring extends AbstractSpring {
 
         private final Component c;
@@ -284,11 +288,12 @@ public abstract class Spring {
     }
 
     /**
-     * La parte comun de los que combinan dos.
+     * The part common to those that combine two.
      *
-     * <p>Hereda de {@link StaticSpring} para reusar sus tres campos como <em>cache</em>: combinar es
-     * caro cuando los de adentro son a su vez combinaciones, y el resultado no cambia hasta que
-     * alguien limpie. De ahi que {@link #clear} tenga que limpiar tambien a los dos de adentro.
+     * <p>It inherits from {@link StaticSpring} in order to reuse its three fields as a
+     * <em>cache</em>: combining is expensive when the inner ones are themselves combinations, and
+     * the result does not change until somebody clears it. Hence {@link #clear} has to clear the
+     * two inner ones too.
      */
     abstract static class CompoundSpring extends StaticSpring {
 
@@ -296,9 +301,9 @@ public abstract class Spring {
         protected Spring s2;
 
         /**
-         * No llama a {@link #clear}: {@code super(UNSET)} ya deja los tres campos en UNSET, y
-         * limpiar desreferenciaria los dos resortes -- que es justamente lo que hace que el JDK
-         * acepte un nulo en {@link Spring#sum} sin quejarse hasta que se lo use.
+         * It does not call {@link #clear}: {@code super(UNSET)} already leaves the three fields at
+         * UNSET, and clearing would dereference the two springs -- which is precisely what makes
+         * the JDK accept a null in {@link Spring#sum} without complaining until it is used.
          */
         CompoundSpring(Spring s1, Spring s2) {
             super(UNSET);
@@ -354,7 +359,7 @@ public abstract class Spring {
         }
     }
 
-    /** Uno detras del otro. */
+    /** One after the other. */
     private static class SumSpring extends CompoundSpring {
 
         SumSpring(Spring s1, Spring s2) {
@@ -362,21 +367,21 @@ public abstract class Spring {
         }
 
         /**
-         * Suma lisa y llana.
+         * Plain and simple addition.
          *
-         * <p>No respeta el centinela {@link Spring#UNSET}: sumarle cinco a "no se sabe" da
-         * "no se sabe mas cinco". Esta medido contra el JDK, que hace lo mismo. Tratarlo aparte
-         * seria mas prolijo y daria otro numero.
+         * <p>It does not respect the {@link Spring#UNSET} sentinel: adding five to "it is not
+         * known" gives "it is not known plus five". It is measured against the JDK, which does the
+         * same. Treating it separately would be neater and would give another number.
          */
         protected int op(int x, int y) {
             return x + y;
         }
 
         /**
-         * Reparte el valor entre los dos con la misma tension; ver la nota de la clase.
+         * It shares the value out between the two at the same tension; see the class note.
          *
-         * <p>Al segundo se le da lo que sobra y no su tension: asi la suma de los dos es
-         * exactamente lo pedido, sin errores de redondeo acumulados.
+         * <p>The second is given what is left over and not its tension: that way the sum of the two
+         * is exactly what was asked for, with no accumulated rounding errors.
          */
         protected void setNonClearValue(int size) {
             super.setNonClearValue(size);
@@ -385,7 +390,7 @@ public abstract class Spring {
         }
     }
 
-    /** El mayor de los dos, en los tres numeros. */
+    /** The greater of the two, in the three numbers. */
     private static class MaxSpring extends CompoundSpring {
 
         MaxSpring(Spring s1, Spring s2) {
@@ -396,7 +401,7 @@ public abstract class Spring {
             return Math.max(x, y);
         }
 
-        /** A los dos el mismo valor: los dos tienen que llegar hasta ahi. */
+        /** The same value to both: both have to reach that far. */
         protected void setNonClearValue(int size) {
             super.setNonClearValue(size);
             s1.setValue(size);
@@ -404,46 +409,46 @@ public abstract class Spring {
         }
     }
 
-    /** Un resorte que no se mueve. */
+    /** A spring that does not move. */
     public static Spring constant(int pref) {
         return new StaticSpring(pref);
     }
 
-    /** Un resorte con esos tres numeros. */
+    /** A spring with those three numbers. */
     public static Spring constant(int min, int pref, int max) {
         return new StaticSpring(min, pref, max);
     }
 
     /**
-     * El mismo, al reves.
+     * The same one, the other way round.
      *
-     * <p><strong>No comprueba el nulo</strong>, y esta medido: el JDK lo acepta y arma el resorte
-     * igual. Lo que pasa despues es que revienta al usarlo. Rechazarlo aca adelantaria el error, que
-     * suena mejor y no es lo mismo.
+     * <p><strong>It does not check for null</strong>, and this is measured: the JDK accepts it and
+     * builds the spring all the same. What happens afterwards is that it blows up on being used.
+     * Rejecting it here would bring the error forward, which sounds better and is not the same.
      */
     public static Spring minus(Spring s) {
         return new NegativeSpring(s);
     }
 
-    /** Uno detras del otro; tampoco comprueba nulos. Ver {@link #minus}. */
+    /** One after the other; it does not check for nulls either. See {@link #minus}. */
     public static Spring sum(Spring s1, Spring s2) {
         return new SumSpring(s1, s2);
     }
 
-    /** El mayor de los dos; tampoco comprueba nulos. Ver {@link #minus}. */
+    /** The greater of the two; it does not check for nulls either. See {@link #minus}. */
     public static Spring max(Spring s1, Spring s2) {
         return new MaxSpring(s1, s2);
     }
 
-    /** La distancia del segundo al primero; es la suma con el segundo dado vuelta. */
+    /** The distance from the second to the first; it is the sum with the second turned round. */
     static Spring difference(Spring s1, Spring s2) {
         return sum(s1, minus(s2));
     }
 
     /**
-     * El mismo, multiplicado.
+     * The same one, multiplied.
      *
-     * @throws NullPointerException si es nulo
+     * @throws NullPointerException if it is null
      */
     public static Spring scale(Spring s, float factor) {
         checkArg(s);
@@ -451,9 +456,9 @@ public abstract class Spring {
     }
 
     /**
-     * El ancho de ese componente, siempre al dia; ver la nota de la clase.
+     * That component's width, always up to date; see the class note.
      *
-     * @throws NullPointerException si es nulo
+     * @throws NullPointerException if it is null
      */
     public static Spring width(Component c) {
         checkArg(c);
@@ -461,9 +466,9 @@ public abstract class Spring {
     }
 
     /**
-     * El alto de ese componente.
+     * That component's height.
      *
-     * @throws NullPointerException si es nulo
+     * @throws NullPointerException if it is null
      */
     public static Spring height(Component c) {
         checkArg(c);

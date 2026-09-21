@@ -7,11 +7,11 @@ import javax.print.attribute.PrintJobAttribute;
 import javax.print.attribute.PrintRequestAttribute;
 
 /**
- * Como se apoya el contenido sobre la hoja.
+ * How the content lies on the sheet.
  *
- * <p>Las variantes {@code REVERSE_} son la misma orientacion girada media vuelta; importan cuando
- * el trabajo es a dos caras o cuando la grapa tiene que quedar de un lado determinado. La
- * numeracion arranca en 3 porque es la de IPP.
+ * <p>The {@code REVERSE_} variants are the same orientation turned half a turn; they matter when
+ * the job is two-sided or when the staple has to end up on a given side. The numbering starts at 3
+ * because it is IPP's.
  */
 public final class OrientationRequested extends EnumSyntax implements DocAttribute, PrintRequestAttribute, PrintJobAttribute {
 
@@ -51,7 +51,7 @@ public final class OrientationRequested extends EnumSyntax implements DocAttribu
         return myEnumValueTable;
     }
 
-    /** IPP numera esta categoria desde 3; la fila 0 de las tablas es ese 3. */
+    /** IPP numbers this category from 3; row 0 of the tables is that 3. */
     protected int getOffset() {
         return 3;
     }

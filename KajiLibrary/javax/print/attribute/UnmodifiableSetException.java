@@ -1,10 +1,10 @@
 package javax.print.attribute;
 
-// La que tiran las vistas de solo lectura de `AttributeSetUtilities.unmodifiableView` cuando les
-// piden modificar. Es un RuntimeException: no se declara, se documenta.
+// The one thrown by `AttributeSetUtilities.unmodifiableView`'s read-only views when they are asked
+// to modify. It is a RuntimeException: it is not declared, it is documented.
 //
-// Existe en vez de reusar `UnsupportedOperationException` porque el paquete se escribio antes de
-// que esa fuera la convencion de las colecciones.
+// It exists instead of reusing `UnsupportedOperationException` because the package was written
+// before that became the collections' convention.
 public class UnmodifiableSetException extends RuntimeException {
 
     private static final long serialVersionUID = 2255250308571511731L;

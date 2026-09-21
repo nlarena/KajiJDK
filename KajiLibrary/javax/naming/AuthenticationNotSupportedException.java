@@ -1,11 +1,11 @@
 package javax.naming;
 
 /**
- * Se lanza cuando el mecanismo de autenticacion pedido no lo soporta el servicio --o no lo
- * soporta para **esta** operacion--. A diferencia de `AuthenticationException`, las credenciales
- * pueden estar perfectas: lo que no se acepta es la forma de presentarlas.
+ * Thrown when the requested authentication mechanism is not supported by the service --or not
+ * supported for **this** operation. Unlike `AuthenticationException`, the credentials may be
+ * perfect: what is not accepted is the way they are presented.
  *
- * <p>La jerarquia entera y el estado que arrastra estan explicados en `NamingException`.
+ * <p>The whole hierarchy and the state it carries are explained in `NamingException`.
  */
 public class AuthenticationNotSupportedException extends NamingSecurityException {
 

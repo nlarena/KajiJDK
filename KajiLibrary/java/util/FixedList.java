@@ -10,6 +10,21 @@ package java.util;
 // wrappers do.
 final class FixedList<E> extends AbstractList<E> implements List<E> {
 
+    // `List.of` rejects a null element (JLS-independent: it is the factory's documented contract).
+    // It lives here and not in `List` because an interface cannot hold a package-private static,
+    // and every `of` overload has to run the same check -- eleven copies of a loop is eleven
+    // chances for one of them to be forgotten, which is exactly what had happened.
+    static Object[] nonNull(Object[] a) {
+        int i = 0;
+        while (i < a.length) {
+            if (a[i] == null) {
+                throw new NullPointerException("List.of does not take a null element");
+            }
+            i = i + 1;
+        }
+        return a;
+    }
+
     // The backing array. Never handed out and never written after construction.
     private final Object[] items;
 

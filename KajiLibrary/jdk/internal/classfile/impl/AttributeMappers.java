@@ -46,29 +46,30 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Function;
 
-// Los mapeadores TIPADOS: los que leen un atributo del JVMS y devuelven el objeto de
-// `java.lang.classfile.attribute` que le corresponde, en vez del `RawAttribute` que devuelven los de
-// `java.lang.classfile.Attributes`.
+// The TYPED mappers: the ones that read a JVMS attribute and return the
+// `java.lang.classfile.attribute` object that corresponds to it, instead of the `RawAttribute` that
+// the ones of `java.lang.classfile.Attributes` return.
 //
-// Están los treinta y cuatro que se pueden leer sueltos, más el genérico de nombre desconocido.
-// `Code` y `BootstrapMethods` NO están, y el motivo es concreto: ninguno de los dos es un valor que
-// se pueda leer por su cuenta. Las etiquetas de un `Code` son offsets dentro del método que lo
-// contiene y adentro lleva sus propios atributos, así que lo arma `ClassModelImpl` mientras recorre
-// el método; `BootstrapMethods` describe al archivo entero y se consulta por índice desde el pool.
-// Los dos se siguen leyendo por ese camino y con el mapeador crudo de `Attributes` -- lo que no hay
-// es un mapeador tipado suelto que finja poder hacerlo sin ese contexto.
+// There are the thirty-four that can be read on their own, plus the generic one for an unknown
+// name. `Code` and `BootstrapMethods` are NOT here, and the reason is concrete: neither of the two
+// is a value that can be read by itself. The labels of a `Code` are offsets within the method that
+// contains it and it carries its own attributes inside, so `ClassModelImpl` builds it while walking
+// the method; `BootstrapMethods` describes the whole file and is consulted by index from the pool.
+// Both are still read that way and with the raw mapper of `Attributes` -- what there is not is a
+// loose typed mapper pretending to be able to do it without that context.
 //
-// Cada mapeador es una CONSTANTE y tiene que serlo: `AttributedElement.findAttribute` compara
-// mapeadores por identidad, así que dos mapeadores distintos del mismo atributo harían que
-// `findAttribute(Attributes.code())` no encontrara el `Code` que se acaba de leer.
+// Each mapper is a CONSTANT and has to be: `AttributedElement.findAttribute` compares mappers by
+// identity, so two different mappers of the same attribute would make
+// `findAttribute(Attributes.code())` not find the `Code` that was just read.
 //
-// El reparto de lectura y escritura va por un `int` y no por herencia —una subclase de mapeador por
-// atributo— porque así los cincuenta atributos comparten una sola clase de mapeador y el código que
-// los arma vive junto en {@link AttributeReader} y {@link AttributeWriter}, que es donde se puede
-// comparar uno con otro.
+// The read and write dispatch goes through an `int` and not through inheritance --one mapper
+// subclass per attribute-- because that way all the attributes share a single mapper class and the
+// code that builds them lives together in {@link AttributeReader} and {@link AttributeWriter},
+// which is where one can be compared with another. (The note said "the fifty attributes"; there are
+// thirty-seven dispatch codes, the thirty-six of the JVMS plus the unknown one.)
 public final class AttributeMappers {
 
-    /** El código de reparto de cada atributo. Sólo tiene sentido dentro de este paquete. */
+    /** The dispatch code of each attribute. It only makes sense within this package. */
     public static final int C_ANNOTATION_DEFAULT = 1;
     public static final int C_BOOTSTRAP_METHODS = 2;
     public static final int C_CHARACTER_RANGE_TABLE = 3;
@@ -248,7 +249,7 @@ public final class AttributeMappers {
         return m;
     }
 
-    /** El mapeador de `name`, o el genérico de nombre desconocido si no es uno de los conocidos. */
+    /** The mapper of `name`, or the generic unknown-name one if it is not one of the known ones. */
     public static AttributeMapper<?> find(String name) {
         AttributeMapper<?> m = KNOWN.get(name);
         if (m != null) {
@@ -266,8 +267,8 @@ public final class AttributeMappers {
     }
 }
 
-// El mapeador de un atributo. Uno solo para los treinta y siete casos: lo que cambia es el nombre y
-// el código de reparto.
+// The mapper of an attribute. A single one for the thirty-seven cases: what changes is the name and
+// the dispatch code.
 final class TypedAttributeMapper<A extends Attribute<A>> implements AttributeMapper<A> {
 
     private final String name;
@@ -287,18 +288,18 @@ final class TypedAttributeMapper<A extends Attribute<A>> implements AttributeMap
         return this.name;
     }
 
-    /** El código de reparto de este atributo. */
+    /** The dispatch code of this attribute. */
     int code() {
         return this.code;
     }
 
-    // `pos` es el offset del primer byte del cuerpo: el largo está en los cuatro bytes anteriores y
-    // el nombre en los dos anteriores a ésos, que es donde el formato los pone (§4.7).
+    // `pos` is the offset of the first byte of the body: the length is in the four bytes before it
+    // and the name in the two before those, which is where the format puts them (§4.7).
     public A readAttribute(AttributedElement enclosing, ClassReader cf, int pos) {
         int length = cf.readInt(pos - 4);
         if (length < 0 || pos + length > cf.classfileLength()) {
             throw new IllegalArgumentException(
-                    "el atributo " + this.name + " dice medir " + length + " y no entra");
+                    "attribute " + this.name + " claims length " + length + " and does not fit");
         }
         Utf8Entry nameEntry = cf.readEntryOrNull(pos - 6, Utf8Entry.class);
         Attribute<?> a = AttributeReader.read(this.code, this, nameEntry, enclosing, cf, pos,
@@ -323,10 +324,10 @@ final class TypedAttributeMapper<A extends Attribute<A>> implements AttributeMap
     }
 }
 
-// La función de mapeadores a medida de un lector que no tiene ninguno registrado. Registrarlos exige
-// `ClassFile.Option`, que KajiLibrary no implementa; devolver siempre `null` es decir eso mismo, y no
-// hay forma de que un atributo a medida se pierda en silencio: sin mapeador propio cae en el
-// mapeador de nombre desconocido, que conserva el nombre y los bytes.
+// The custom-mapper function of a reader that has none registered. Registering them requires the
+// `ClassFile.Option`s, which KajiLibrary does not implement; always returning `null` says exactly
+// that, and there is no way for a custom attribute to be lost silently: without a mapper of its own
+// it falls into the unknown-name mapper, which keeps the name and the bytes.
 final class NoCustomAttributes implements Function<Utf8Entry, AttributeMapper<?>> {
 
     static final NoCustomAttributes INSTANCE = new NoCustomAttributes();

@@ -3,8 +3,9 @@ package jdk.internal.vm;
 /**
  * KajiLibrary's jdk.internal.vm.ContinuationScope -- the name a group of continuations shares.
  *
- * <p>A minimal stub: KajiJDK has no continuations (Project Loom), and this type exists only so the
- * signatures that mention it ({@code StackWalker}/{@code LiveStackFrame}) can name it.
+ * <p>A minimal type. The note said it exists only so the signatures that mention it ({@code
+ * StackWalker}/{@code LiveStackFrame}) can name it; {@link Continuation} uses it as well now, as
+ * the scope a continuation is delimited by.
  */
 public class ContinuationScope {
 
@@ -15,26 +16,26 @@ public class ContinuationScope {
     }
 
     /**
-     * Para una subclase que sea su **propio** alcance.
+     * For a subclass that is its **own** scope.
      *
-     * <p>El JDK lo usa asi: `ContinuationScope` se extiende y la subclase **es** el nombre, con lo
-     * cual el nombre sale de `getClass().getName()` en vez de pasarse. Es `protected` porque solo
-     * tiene sentido desde adentro de una subclase -- un alcance sin nombre creado desde afuera no
-     * se podria distinguir de otro.
+     * <p>The JDK uses it like this: `ContinuationScope` is extended and the subclass **is** the
+     * name, so the name comes from `getClass().getName()` instead of being passed. It is
+     * `protected` because it only makes sense from inside a subclass -- a nameless scope created
+     * from outside could not be told apart from another.
      */
     protected ContinuationScope() {
         this.name = null;
     }
 
-    /** El nombre; para una subclase que uso el constructor sin argumentos, el de su clase. */
-    public String getName() {
+    /** The name; for a subclass that used the no-argument constructor, that of its class. */
+    public final String getName() {
         if (this.name == null) {
             return this.getClass().getName();
         }
         return this.name;
     }
 
-    public String toString() {
+    public final String toString() {
         return this.getName();
     }
 }

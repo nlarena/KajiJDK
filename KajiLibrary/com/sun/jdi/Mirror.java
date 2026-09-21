@@ -1,20 +1,22 @@
 package com.sun.jdi;
 
 /**
- * Un reflejo de algo que vive en la maquina virtual **de enfrente**.
+ * A mirror of something that lives in the virtual machine **on the other side**.
  *
- * <p>Es la raiz de toda JDI, y la palabra "reflejo" no es adorno: un depurador no tiene los objetos
- * del programa depurado, tiene representantes de ellos. Un `ObjectReference` no *es* el objeto: es
- * un identificador que, cada vez que se lo consulta, cruza el cable JDWP y pregunta.
+ * <p>It is the root of all JDI, and the word "mirror" is not decoration: a debugger does not
+ * have the debugged program's objects, it has representatives of them. An `ObjectReference` is
+ * not *the* object: it is an identifier that, every time it is consulted, crosses the JDWP wire
+ * and asks.
  *
- * <p>De ahi sale la unica operacion de esta interfaz: dado cualquier reflejo, saber **de que VM**
- * es. Dos reflejos de VM distintas no se pueden mezclar, y sin esto no habria como comprobarlo.
+ * <p>From there comes this interface's only operation: given any mirror, knowing **which VM**
+ * it belongs to. Two mirrors of different VMs cannot be mixed, and without this there would be
+ * no way of checking it.
  */
 public interface Mirror {
 
-    /** La maquina virtual de la que este reflejo es reflejo. */
+    /** The virtual machine this mirror is a mirror of. */
     VirtualMachine virtualMachine();
 
-    /** Una descripcion legible; la forma exacta depende de la implementacion. */
+    /** A readable description; the exact form depends on the implementation. */
     String toString();
 }

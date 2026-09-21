@@ -1,32 +1,33 @@
 package com.sun.management;
 
 /**
- * Lo que se puede preguntar del sistema operativo <strong>solo</strong> en Unix.
+ * What may be asked of the operating system <strong>only</strong> on Unix.
  *
- * <p>Son los descriptores de archivo, que en Unix son un recurso contado y agotable: cada socket,
- * cada archivo abierto y cada tuberia gasta uno, y al llegar al tope el proceso deja de poder
- * abrir nada. Es una de las causas mas comunes de que un servidor deje de aceptar conexiones sin
- * que la memoria ni la CPU muestren nada raro.
+ * <p>They are the file descriptors, which on Unix are a counted and exhaustible resource: each
+ * socket, each open file and each pipe spends one, and on reaching the top the process stops
+ * being able to open anything. It is one of the commonest causes of a server's stopping
+ * accepting connections without the memory or the CPU showing anything strange.
  *
- * <p>Esta separado en su propia interfaz, y no agregado a {@link OperatingSystemMXBean}, porque en
- * Windows la pregunta no tiene respuesta. Quien quiera el dato tiene que preguntar primero si el
- * bean es de este tipo, y eso es exactamente lo que se pretende.
+ * <p>It is separated into an interface of its own, and not added to
+ * {@link OperatingSystemMXBean}, because in Windows the question has no answer. Whoever wants
+ * the datum has to ask first whether the bean is of this type, and that is exactly what is
+ * intended.
  *
  * @since 1.5
  */
 public interface UnixOperatingSystemMXBean extends OperatingSystemMXBean {
 
     /**
-     * Cuantos descriptores tiene abiertos el proceso ahora.
+     * How many descriptors the process has open now.
      *
-     * @return la cantidad
+     * @return the number
      */
     long getOpenFileDescriptorCount();
 
     /**
-     * Cuantos puede tener abiertos como maximo.
+     * How many it may have open at most.
      *
-     * @return el tope
+     * @return the top
      */
     long getMaxFileDescriptorCount();
 }

@@ -4,11 +4,11 @@ import java.awt.Rectangle;
 import java.util.Hashtable;
 
 /**
- * Un filtro que deja pasar sólo un rectángulo de la imagen.
+ * A filter that lets only a rectangle of the image through.
  *
- * <p>Corre el origen: el ángulo del recorte pasa a ser el (0,0) de lo que sale. Las tandas que caen
- * enteras afuera se descartan y las que caen a medias se recortan, sin copiar nada — se le pasa al
- * consumidor un desplazamiento distinto dentro del mismo arreglo.
+ * <p>It moves the origin: the corner of the crop becomes the (0,0) of what comes out. The batches
+ * that fall entirely outside are discarded and the ones that fall halfway are cropped, without
+ * copying anything — the consumer is handed a different offset into the same array.
  */
 public class CropImageFilter extends ImageFilter {
 
@@ -17,7 +17,7 @@ public class CropImageFilter extends ImageFilter {
     private final int cropW;
     private final int cropH;
 
-    /** Con el rectángulo a recortar. */
+    /** With the rectangle to crop. */
     public CropImageFilter(int x, int y, int w, int h) {
         this.cropX = x;
         this.cropY = y;
@@ -25,20 +25,20 @@ public class CropImageFilter extends ImageFilter {
         this.cropH = h;
     }
 
-    /** Reenvía las propiedades, agregando el rectángulo recortado. */
+    /** Forwards the properties, adding the cropped rectangle. */
     public void setProperties(Hashtable<?, ?> props) {
-        Hashtable<Object, Object> p = copiar(props);
+        Hashtable<Object, Object> p = copyProperties(props);
         p.put("croprect", new Rectangle(this.cropX, this.cropY, this.cropW, this.cropH));
         super.setProperties(p);
     }
 
-    /** Anuncia el tamaño del recorte, no el de la imagen original. */
+    /** Announces the size of the crop, not that of the original image. */
     public void setDimensions(int w, int h) {
         this.consumer.setDimensions(this.cropW, this.cropH);
     }
 
-    /** Una suma que no da la vuelta: se satura en vez de desbordar. */
-    private static int sumaSinDesborde(int x, int w) {
+    /** A sum that does not wrap around: it saturates instead of overflowing. */
+    private static int saturatedSum(int x, int w) {
         int x2 = x + w;
         if (x > 0 && w > 0 && x2 < 0) {
             return Integer.MAX_VALUE;
@@ -46,14 +46,16 @@ public class CropImageFilter extends ImageFilter {
         return x2;
     }
 
-    /** Deja pasar la parte de la tanda que cae en el recorte, con las coordenadas corridas. */
+    /**
+     * Lets the part of the batch that falls inside the crop through, with the coordinates moved.
+     */
     public void setPixels(int x, int y, int w, int h, ColorModel model, byte[] pixels, int off,
             int scansize) {
         int x1 = x;
         if (x1 < this.cropX) {
             x1 = this.cropX;
         }
-        int x2 = sumaSinDesborde(x, w);
+        int x2 = saturatedSum(x, w);
         if (x2 > this.cropX + this.cropW) {
             x2 = this.cropX + this.cropW;
         }
@@ -61,7 +63,7 @@ public class CropImageFilter extends ImageFilter {
         if (y1 < this.cropY) {
             y1 = this.cropY;
         }
-        int y2 = sumaSinDesborde(y, h);
+        int y2 = saturatedSum(y, h);
         if (y2 > this.cropY + this.cropH) {
             y2 = this.cropY + this.cropH;
         }
@@ -72,14 +74,14 @@ public class CropImageFilter extends ImageFilter {
                 off + (y1 - y) * scansize + (x1 - x), scansize);
     }
 
-    /** Lo mismo para píxeles de un `int`. */
+    /** The same for pixels of one `int`. */
     public void setPixels(int x, int y, int w, int h, ColorModel model, int[] pixels, int off,
             int scansize) {
         int x1 = x;
         if (x1 < this.cropX) {
             x1 = this.cropX;
         }
-        int x2 = sumaSinDesborde(x, w);
+        int x2 = saturatedSum(x, w);
         if (x2 > this.cropX + this.cropW) {
             x2 = this.cropX + this.cropW;
         }
@@ -87,7 +89,7 @@ public class CropImageFilter extends ImageFilter {
         if (y1 < this.cropY) {
             y1 = this.cropY;
         }
-        int y2 = sumaSinDesborde(y, h);
+        int y2 = saturatedSum(y, h);
         if (y2 > this.cropY + this.cropH) {
             y2 = this.cropY + this.cropH;
         }

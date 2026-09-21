@@ -1,17 +1,18 @@
 package com.sun.nio.sctp;
 
 /**
- * Lo que un {@link NotificationHandler} le contesta al canal despues de atender una notificacion.
+ * What a {@link NotificationHandler} answers the channel after attending to a notification.
  *
- * <p>El canal esta en medio de un {@code receive} cuando llega una notificacion, asi que despues de
- * manejarla tiene que decidir si sigue esperando el mensaje que le pidieron o vuelve con las manos
- * vacias. Quien decide es el manejador, porque es el unico que sabe si lo que acaba de pasar
- * invalida la espera — un {@code COMM_LOST} la invalida, un cambio de direccion no.
+ * <p>The channel is in the middle of a {@code receive} when a notification arrives, so after
+ * handling it, it has to decide whether it goes on waiting for the message it was asked for or
+ * comes back empty-handed. Who decides is the handler, because it is the only one that knows
+ * whether what has just happened invalidates the wait -- a {@code COMM_LOST} invalidates it, an
+ * address change does not.
  */
 public enum HandlerResult {
 
-    /** Seguir esperando: el {@code receive} continua. */
+    /** To go on waiting: the {@code receive} continues. */
     CONTINUE,
-    /** Volver ya: el {@code receive} termina sin mensaje. */
+    /** To come back now: the {@code receive} finishes with no message. */
     RETURN
 }

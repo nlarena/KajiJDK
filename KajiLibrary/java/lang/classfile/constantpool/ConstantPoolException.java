@@ -1,28 +1,28 @@
 package java.lang.classfile.constantpool;
 
-// Lo que se tira cuando una entrada del pool no cumple lo que se le pidió: un índice fuera de rango,
-// una etiqueta que no corresponde al tipo pedido, o una referencia interna rota. Hereda de
-// `IllegalArgumentException`, igual que en el JDK.
+// What is thrown when a pool entry does not do what was asked of it: an index out of range, a tag
+// that does not match the requested type, or a broken internal reference. It inherits from
+// `IllegalArgumentException`, just as in the JDK.
 public class ConstantPoolException extends IllegalArgumentException {
 
     private static final long serialVersionUID = 1L;
 
-    /** Sin mensaje ni causa. */
+    /** With neither message nor cause. */
     public ConstantPoolException() {
         super();
     }
 
-    /** Con mensaje. */
+    /** With a message. */
     public ConstantPoolException(String message) {
         super(message);
     }
 
-    /** Con mensaje y causa. */
+    /** With a message and a cause. */
     public ConstantPoolException(String message, Throwable cause) {
         super(message, cause);
     }
 
-    /** Con causa. */
+    /** With a cause. */
     public ConstantPoolException(Throwable cause) {
         super(cause);
     }

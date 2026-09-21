@@ -14,29 +14,30 @@ import javax.swing.text.JTextComponent;
 import javax.swing.text.PlainDocument;
 
 /**
- * Un area de texto de varias lineas, sin estilos.
+ * A multi-line text area, with no styles.
  *
- * <h2>Filas y columnas no son un tamano</h2>
+ * <h2>Rows and columns are not a size</h2>
  *
- * <p>{@link #setRows} y {@link #setColumns} no fijan el tamano: fijan el <em>preferido</em>. El
- * area puede terminar mas grande o mas chica segun el acomodador que la contenga. Es la fuente de
- * confusion mas comun con esta clase: pedir veinte columnas y ver diez.
+ * <p>{@link #setRows} and {@link #setColumns} do not fix the size: they fix the
+ * <em>preferred</em> one. The area may end up larger or smaller according to the layout that
+ * contains it. It is the commonest source of confusion with this class: asking for twenty
+ * columns and seeing ten.
  *
- * <p>Una columna es el ancho de la letra <code>m</code> en la tipografia actual. No es una medida
- * exacta salvo con tipografia de ancho fijo, y por eso el area de texto se usa casi siempre con
- * una.
+ * <p>A column is the width of the letter <code>m</code> in the current typeface. It is not an
+ * exact measurement save with a fixed-width typeface, and that is why a text area is almost
+ * always used with one.
  *
- * <h2>El corte de linea es de la vista, no del documento</h2>
+ * <h2>The line wrapping belongs to the view, not to the document</h2>
  *
- * <p>Con {@link #setLineWrap} prendido, una linea larga se ve cortada en varias. El documento no
- * cambia: no hay ningun fin de linea nuevo, y {@link #getLineCount} sigue contando las de verdad.
- * Es lo que se quiere -- guardar el texto tal como se escribio -- y lo que sorprende al contar
- * lineas.
+ * <p>With {@link #setLineWrap} switched on, a long line is seen cut into several. The document
+ * does not change: there is no new line end, and {@link #getLineCount} goes on counting the
+ * real ones. It is what is wanted -- keeping the text just as it was typed -- and what
+ * surprises when counting lines.
  *
- * <h2>Tampoco se desplaza sola</h2>
+ * <h2>Nor does it scroll by itself</h2>
  *
- * <p>Como {@link JList}: hay que meterla en un {@link JScrollPane}. Un area sin desplazador crece
- * con el texto hasta desbordar lo que la contiene.
+ * <p>Like {@link JList}: it has to be put into a {@link JScrollPane}. An area with no scroller
+ * grows with the text until it overflows whatever contains it.
  */
 public class JTextArea extends JTextComponent {
 
@@ -50,35 +51,35 @@ public class JTextArea extends JTextComponent {
     private boolean wrap;
     private AccessibleContext accessibleContext;
 
-    /** Un area vacia. */
+    /** An empty area. */
     public JTextArea() {
         this(null, null, 0, 0);
     }
 
-    /** Un area con ese texto. */
+    /** An area with that text. */
     public JTextArea(String text) {
         this(null, text, 0, 0);
     }
 
-    /** Un area de ese tamano preferido; ver la nota de la clase. */
+    /** An area of that preferred size; see the class note. */
     public JTextArea(int rows, int columns) {
         this(null, null, rows, columns);
     }
 
-    /** Un area con ese texto y ese tamano preferido. */
+    /** An area with that text and that preferred size. */
     public JTextArea(String text, int rows, int columns) {
         this(null, text, rows, columns);
     }
 
-    /** Un area sobre ese documento. */
+    /** An area over that document. */
     public JTextArea(Document doc) {
         this(doc, null, 0, 0);
     }
 
     /**
-     * Un area sobre ese documento, con ese texto y ese tamano.
+     * An area over that document, with that text and that size.
      *
-     * @throws IllegalArgumentException si las filas o las columnas son negativas.
+     * @throws IllegalArgumentException if the rows or the columns are negative.
      */
     public JTextArea(Document doc, String text, int rows, int columns) {
         super();
@@ -104,16 +105,16 @@ public class JTextArea extends JTextComponent {
         return uiClassID;
     }
 
-    /** Un documento de texto plano; es todo lo que un area necesita. */
+    /** A plain text document; it is all an area needs. */
     protected Document createDefaultModel() {
         return new PlainDocument();
     }
 
     /**
-     * Cada cuantas columnas cae una marca de tabulacion.
+     * Every how many columns a tab stop falls.
      *
-     * <p>Se guarda como propiedad del documento, no del area: quien dibuja el texto es la vista, y
-     * la vista mira el documento.
+     * <p>It is kept as a property of the document, not of the area: who draws the text is the
+     * view, and the view looks at the document.
      */
     public void setTabSize(int size) {
         Document doc = getDocument();
@@ -136,7 +137,7 @@ public class JTextArea extends JTextComponent {
         return size;
     }
 
-    /** Si las lineas largas se ven cortadas; ver la nota de la clase. */
+    /** Whether long lines are seen cut; see the class note. */
     public void setLineWrap(boolean wrap) {
         boolean old = this.wrap;
         this.wrap = wrap;
@@ -147,7 +148,7 @@ public class JTextArea extends JTextComponent {
         return wrap;
     }
 
-    /** Si el corte respeta las palabras o parte donde caiga. */
+    /** Whether the cutting respects the words or splits wherever it falls. */
     public void setWrapStyleWord(boolean word) {
         boolean old = this.wordWrap;
         this.wordWrap = word;
@@ -159,9 +160,9 @@ public class JTextArea extends JTextComponent {
     }
 
     /**
-     * En que linea cae esa posicion.
+     * Which line that position falls in.
      *
-     * @throws BadLocationException si la posicion no existe.
+     * @throws BadLocationException if the position does not exist.
      */
     public int getLineOfOffset(int offset) throws BadLocationException {
         Document doc = getDocument();
@@ -176,16 +177,16 @@ public class JTextArea extends JTextComponent {
         return map.getElementIndex(offset);
     }
 
-    /** Cuantas lineas tiene el texto; las de verdad, no las que se ven. */
+    /** How many lines the text has; the real ones, not those that are seen. */
     public int getLineCount() {
         Element map = getDocument().getDefaultRootElement();
         return map.getElementCount();
     }
 
     /**
-     * Donde empieza esa linea.
+     * Where that line starts.
      *
-     * @throws BadLocationException si la linea no existe.
+     * @throws BadLocationException if the line does not exist.
      */
     public int getLineStartOffset(int line) throws BadLocationException {
         int lineCount = getLineCount();
@@ -201,9 +202,9 @@ public class JTextArea extends JTextComponent {
     }
 
     /**
-     * Donde termina esa linea, contando el fin de linea.
+     * Where that line ends, counting the line end.
      *
-     * @throws BadLocationException si la linea no existe.
+     * @throws BadLocationException if the line does not exist.
      */
     public int getLineEndOffset(int line) throws BadLocationException {
         int lineCount = getLineCount();
@@ -216,11 +217,11 @@ public class JTextArea extends JTextComponent {
         Element map = getDocument().getDefaultRootElement();
         Element lineElem = map.getElement(line);
         int endOffset = lineElem.getEndOffset();
-        // La ultima linea no tiene fin de linea que descontar.
+        // The last line has no line end to discount.
         return ((line == lineCount - 1) ? (endOffset - 1) : endOffset);
     }
 
-    /** Mete texto en esa posicion. */
+    /** It puts text in at that position. */
     public void insert(String str, int pos) {
         Document doc = getDocument();
         if (doc != null) {
@@ -232,22 +233,22 @@ public class JTextArea extends JTextComponent {
         }
     }
 
-    /** Agrega texto al final. */
+    /** It adds text at the end. */
     public void append(String str) {
         Document doc = getDocument();
         if (doc != null) {
             try {
                 doc.insertString(doc.getLength(), str, null);
             } catch (BadLocationException e) {
-                // El documento no puede estar mas corto que su propio largo.
+                // The document cannot be shorter than its own length.
             }
         }
     }
 
     /**
-     * Reemplaza el texto entre esas dos posiciones.
+     * It replaces the text between those two positions.
      *
-     * @throws IllegalArgumentException si el fin es anterior al inicio.
+     * @throws IllegalArgumentException if the end is before the start.
      */
     public void replaceRange(String str, int start, int end) {
         if (end < start) {
@@ -276,9 +277,9 @@ public class JTextArea extends JTextComponent {
     }
 
     /**
-     * Cuantas filas se prefieren.
+     * How many rows are preferred.
      *
-     * @throws IllegalArgumentException si es negativo.
+     * @throws IllegalArgumentException if it is negative.
      */
     public void setRows(int rows) {
         int oldVal = this.rows;
@@ -291,7 +292,7 @@ public class JTextArea extends JTextComponent {
         }
     }
 
-    /** El alto de una fila: el de la tipografia. */
+    /** A row's height: the typeface's. */
     protected int getRowHeight() {
         if (rowHeight == 0) {
             FontMetrics metrics = getFontMetrics(getFont());
@@ -305,9 +306,9 @@ public class JTextArea extends JTextComponent {
     }
 
     /**
-     * Cuantas columnas se prefieren.
+     * How many columns are preferred.
      *
-     * @throws IllegalArgumentException si es negativo.
+     * @throws IllegalArgumentException if it is negative.
      */
     public void setColumns(int columns) {
         int oldVal = this.columns;
@@ -320,7 +321,7 @@ public class JTextArea extends JTextComponent {
         }
     }
 
-    /** El ancho de una columna: el de la letra {@code m}; ver la nota de la clase. */
+    /** A column's width: that of the letter {@code m}; see the class note. */
     protected int getColumnWidth() {
         if (columnWidth == 0) {
             FontMetrics metrics = getFontMetrics(getFont());
@@ -330,10 +331,10 @@ public class JTextArea extends JTextComponent {
     }
 
     /**
-     * El tamano preferido.
+     * The preferred size.
      *
-     * <p>Es el que pida el texto, pero nunca menos de las filas y columnas pedidas. De ahi que un
-     * area vacia con veinte columnas ya ocupe lugar.
+     * <p>It is the one the text asks for, but never less than the rows and columns asked for.
+     * Hence an empty area with twenty columns already takes up room.
      */
     public Dimension getPreferredSize() {
         Dimension d = super.getPreferredSize();
@@ -349,7 +350,7 @@ public class JTextArea extends JTextComponent {
         return d;
     }
 
-    /** Cambiar la tipografia invalida el alto y el ancho medidos. */
+    /** Changing the typeface invalidates the measured height and width. */
     public void setFont(Font f) {
         super.setFont(f);
         rowHeight = 0;
@@ -361,16 +362,16 @@ public class JTextArea extends JTextComponent {
     }
 
     /**
-     * Si el area se estira al ancho del desplazador.
+     * Whether the area stretches to the scroller's width.
      *
-     * <p>Con corte de linea si: cortar en el ancho del desplazador es justamente lo que se pidio.
-     * Sin corte no, porque entonces la barra horizontal tiene sentido.
+     * <p>With line wrapping yes: wrapping at the scroller's width is precisely what was asked for.
+     * Without wrapping no, because then the horizontal bar makes sense.
      */
     public boolean getScrollableTracksViewportWidth() {
         return (wrap) ? true : super.getScrollableTracksViewportWidth();
     }
 
-    /** Cuanto pedirle al desplazador: las filas y columnas preferidas. */
+    /** How much to ask the scroller for: the preferred rows and columns. */
     public Dimension getPreferredScrollableViewportSize() {
         Dimension size = super.getPreferredScrollableViewportSize();
         size = (size == null) ? new Dimension(400, 400) : size;
@@ -382,7 +383,7 @@ public class JTextArea extends JTextComponent {
         return size;
     }
 
-    /** De a cuanto avanza la rueda: una fila o una columna. */
+    /** How much the wheel advances by: one row or one column. */
     public int getScrollableUnitIncrement(Rectangle visibleRect, int orientation,
             int direction) {
         if (orientation == SwingConstants.VERTICAL) {

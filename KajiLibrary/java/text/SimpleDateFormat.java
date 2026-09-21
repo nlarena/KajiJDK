@@ -7,39 +7,42 @@ import java.util.Locale;
 import java.util.TimeZone;
 
 /**
- * El formateador de fechas por patrón: {@code "dd/MM/yyyy HH:mm"} y lo que se lea de ahí.
+ * The pattern-driven date formatter: {@code "dd/MM/yyyy HH:mm"} and whatever is read back from it.
  *
- * <p>Misma separación que en {@link DecimalFormat}, un piso más arriba: el PATRÓN dice qué campos
- * salen y en qué orden, y {@link DateFormatSymbols} dice cómo se llaman. {@code MMMM} significa "el
- * mes, entero"; que eso imprima {@code enero} o {@code January} lo decide el otro lado.
+ * <p>The same separation as in {@link DecimalFormat}, one floor up: the PATTERN says which fields
+ * come out and in what order, and {@link DateFormatSymbols} says what they are called. {@code MMMM}
+ * means "the month, in full"; whether that prints {@code enero} or {@code January} is decided by the
+ * other side.
  *
- * <p><b>La cantidad de letras no es decoración.</b> Es el argumento del campo: {@code M} da
- * {@code 1}, {@code MM} da {@code 01}, {@code MMM} da {@code ene} y {@code MMMM} da {@code enero}.
- * Para los campos numéricos el conteo es el ancho mínimo; para los de texto, el umbral entre la
- * forma corta y la larga (cuatro o más). Y {@code yy} es el caso especial de todos: significa
- * "dos dígitos", no "ancho dos", y al parsear se interpreta contra la ventana de cien años que fija
+ * <p><b>The number of letters is not decoration.</b> It is the field's argument: {@code M} gives
+ * {@code 1}, {@code MM} gives {@code 01}, {@code MMM} gives {@code ene} and {@code MMMM} gives
+ * {@code enero}.
+ * For the numeric fields the count is the minimum width; for the text ones, the threshold between
+ * the short form and the long one (four or more). And {@code yy} is the special case of them all: it
+ * means "two digits", not "width two", and when parsing it is interpreted against the hundred-year
+ * window fixed by
  * {@link #set2DigitYearStart}.
  *
- * <p>Al parsear, los campos se van cargando en el {@link Calendar} y es él quien calcula el
- * instante. Esa división de trabajo es la del JDK, y trae una consecuencia que conviene saber:
- * {@code setLenient(false)} no rechaza nada por sí mismo, sólo se lo pide al calendario. Y el
- * {@code java.util.GregorianCalendar} de esta biblioteca <b>no valida los campos en modo
- * estricto</b> —un 32 de enero desborda al 1 de febrero igual que en modo tolerante—, así que hoy
- * las dos modalidades dan lo mismo. El agujero está en {@code java.util}, no acá: cuando el
- * calendario valide, esto empieza a rechazar sin tocar una línea.
+ * <p>When parsing, the fields are loaded into the {@link Calendar} and it is the one that computes
+ * the instant. That division of labour is the JDK's, and it brings a consequence worth knowing:
+ * {@code setLenient(false)} rejects nothing by itself, it only asks the calendar to. And this
+ * library's {@code java.util.GregorianCalendar} <b>does not validate the fields in strict mode</b>
+ * --a 32nd of January overflows into the 1st of February just as in lenient mode-- so today both
+ * modes give the same thing. The hole is in {@code java.util}, not here: when the calendar
+ * validates, this starts rejecting without a line being touched.
  *
- * @implNote Subconjunto declarado: las letras de patrón implementadas son
- *           {@code G y Y M d E u a H k K h m s S D F w W z Z X}. Las que faltan
- *           —{@code L} (mes suelto), {@code c} (día suelto), {@code B} (franja del día)— necesitan
- *           formas "standalone" y nombres de franja horaria que {@code DateFormatSymbols} no tiene
- *           y que son datos del CLDR; en vez de imprimir la forma de contexto haciéndola pasar por
- *           la suelta, el patrón las RECHAZA con {@code IllegalArgumentException}.
+ * @implNote A declared subset: the pattern letters implemented are
+ *           {@code G y Y M d E u a H k K h m s S D F w W z Z X}. The missing ones --{@code L}
+ *           (standalone month), {@code c} (standalone day), {@code B} (day period)-- need
+ *           "standalone" forms and day-period names that {@code DateFormatSymbols} does not have and
+ *           that are CLDR data; instead of printing the contextual form and passing it off as the
+ *           standalone one, the pattern REJECTS them with {@code IllegalArgumentException}.
  */
 public class SimpleDateFormat extends DateFormat {
 
-    // El orden de estas letras ES la codificación: el índice de una letra acá es el "número de
-    // campo" con el que se la nombra en un patrón localizado. Sale de DateFormatSymbols.
-    private static final String LETRAS = "GyMdkHmsSEDFwWahKzZ";
+    // These letters' order IS the encoding: a letter's index here is the "field number" it is named
+    // by in a localised pattern. It comes from DateFormatSymbols.
+    private static final String LETTERS = "GyMdkHmsSEDFwWahKzZ";
 
     private String pattern;
     private DateFormatSymbols formatData;
@@ -47,7 +50,7 @@ public class SimpleDateFormat extends DateFormat {
     private Date defaultCenturyStart;
 
     public SimpleDateFormat() {
-        this(PatronesLocales.fechaHora(DateFormat.SHORT, DateFormat.SHORT, Locale.getDefault()),
+        this(LocalePatterns.dateTime(DateFormat.SHORT, DateFormat.SHORT, Locale.getDefault()),
                 Locale.getDefault());
     }
 
@@ -61,7 +64,7 @@ public class SimpleDateFormat extends DateFormat {
         }
         this.locale = locale;
         this.formatData = new DateFormatSymbols(locale);
-        this.inicializar(pattern);
+        this.init(pattern);
     }
 
     public SimpleDateFormat(String pattern, DateFormatSymbols formatSymbols) {
@@ -70,21 +73,21 @@ public class SimpleDateFormat extends DateFormat {
         }
         this.locale = Locale.getDefault();
         this.formatData = (DateFormatSymbols) formatSymbols.clone();
-        this.inicializar(pattern);
+        this.init(pattern);
     }
 
-    private void inicializar(String pattern) {
+    private void init(String pattern) {
         this.calendar = Calendar.getInstance(TimeZone.getDefault(), this.locale);
         this.numberFormat = NumberFormat.getNumberInstance(this.locale);
         this.numberFormat.setGroupingUsed(false);
         this.numberFormat.setParseIntegerOnly(true);
         this.applyPattern(pattern);
-        this.defaultCenturyStart = this.sigloPorDefecto();
+        this.defaultCenturyStart = this.defaultCentury();
     }
 
-    // La ventana de dos dígitos arranca ochenta años atrás: es lo que hace el JDK, y la asimetría
-    // (80 atrás, 20 adelante) es deliberada — las fechas de dos dígitos suelen ser pasadas.
-    private Date sigloPorDefecto() {
+    // The two-digit window starts eighty years back: it is what the JDK does, and the asymmetry (80
+    // back, 20 forward) is deliberate -- two-digit dates are usually in the past.
+    private Date defaultCentury() {
         Calendar c = Calendar.getInstance(this.calendar.getTimeZone(), this.locale);
         c.setTime(new Date());
         c.set(Calendar.YEAR, c.get(Calendar.YEAR) - 80);
@@ -107,15 +110,15 @@ public class SimpleDateFormat extends DateFormat {
     }
 
     /**
-     * El patrón escrito con las letras del locale.
+     * The pattern written with the locale's letters.
      *
-     * <p>En los seis locales de la biblioteca las letras locales coinciden con las estándar, así
-     * que hoy devuelve lo mismo que {@link #toPattern()}. Se implementa igual porque la traducción
-     * es real —recorre la tabla de {@link DateFormatSymbols#getLocalPatternChars()}— y empieza a
-     * dar distinto en cuanto se agregue una fila con otras letras.
+     * <p>In the library's six locales the local letters matches with the standard ones, so today it
+     * returns the same as {@link #toPattern()}. It is implemented all the same because the
+     * translation is real --it walks {@link DateFormatSymbols#getLocalPatternChars()}'s table-- and
+     * starts giving something different the moment a row with other letters is added.
      */
     public String toLocalizedPattern() {
-        return this.traducir(this.pattern, SimpleDateFormat.LETRAS,
+        return this.translate(this.pattern, SimpleDateFormat.LETTERS,
                 this.formatData.getLocalPatternChars());
     }
 
@@ -123,7 +126,7 @@ public class SimpleDateFormat extends DateFormat {
         if (pattern == null) {
             throw new NullPointerException();
         }
-        this.verificarPatron(pattern);
+        this.checkPattern(pattern);
         this.pattern = pattern;
     }
 
@@ -131,27 +134,27 @@ public class SimpleDateFormat extends DateFormat {
         if (pattern == null) {
             throw new NullPointerException();
         }
-        this.applyPattern(this.traducir(pattern, this.formatData.getLocalPatternChars(),
-                SimpleDateFormat.LETRAS));
+        this.applyPattern(this.translate(pattern, this.formatData.getLocalPatternChars(),
+                SimpleDateFormat.LETTERS));
     }
 
-    private String traducir(String pat, String desde, String hacia) {
+    private String translate(String pat, String from, String towards) {
         StringBuilder sb = new StringBuilder();
-        boolean citado = false;
+        boolean quoted = false;
         for (int i = 0; i < pat.length(); i = i + 1) {
             char c = pat.charAt(i);
             if (c == '\'') {
-                citado = !citado;
+                quoted = !quoted;
                 sb.append(c);
                 continue;
             }
-            if (citado) {
+            if (quoted) {
                 sb.append(c);
                 continue;
             }
-            int k = desde.indexOf(c);
-            if (k >= 0 && k < hacia.length()) {
-                sb.append(hacia.charAt(k));
+            int k = from.indexOf(c);
+            if (k >= 0 && k < towards.length()) {
+                sb.append(towards.charAt(k));
             } else {
                 sb.append(c);
             }
@@ -159,30 +162,30 @@ public class SimpleDateFormat extends DateFormat {
         return sb.toString();
     }
 
-    // Rechaza en la aplicación del patrón, no al formatear: un patrón inválido tiene que fallar
-    // cuando se escribe, no la primera vez que alguien formatea con él en producción.
-    private void verificarPatron(String pat) {
-        boolean citado = false;
+    // It rejects when the pattern is applied, not when formatting: an invalid pattern has to fail
+    // when it is written, not the first time somebody formats with it in production.
+    private void checkPattern(String pat) {
+        boolean quoted = false;
         for (int i = 0; i < pat.length(); i = i + 1) {
             char c = pat.charAt(i);
             if (c == '\'') {
-                citado = !citado;
-            } else if (!citado && SimpleDateFormat.esLetra(c)) {
-                if (!SimpleDateFormat.soportada(c)) {
+                quoted = !quoted;
+            } else if (!quoted && SimpleDateFormat.isLetter(c)) {
+                if (!SimpleDateFormat.supported(c)) {
                     throw new IllegalArgumentException("Illegal pattern character '" + c + "'");
                 }
             }
         }
-        if (citado) {
+        if (quoted) {
             throw new IllegalArgumentException("Unterminated quote");
         }
     }
 
-    private static boolean esLetra(char c) {
+    private static boolean isLetter(char c) {
         return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
     }
 
-    private static boolean soportada(char c) {
+    private static boolean supported(char c) {
         return "GyYMdEuaHkKhmsSDFwWzZX".indexOf(c) >= 0;
     }
 
@@ -197,10 +200,10 @@ public class SimpleDateFormat extends DateFormat {
         this.formatData = (DateFormatSymbols) newFormatSymbols.clone();
     }
 
-    // ---- formateo ----
+    // ---- formatting -----------------------------------------------------------------------------
 
     public StringBuffer format(Date date, StringBuffer toAppendTo, FieldPosition pos) {
-        this.escribir(date, toAppendTo, pos, null);
+        this.write(date, toAppendTo, pos, null);
         return toAppendTo;
     }
 
@@ -216,19 +219,19 @@ public class SimpleDateFormat extends DateFormat {
         } else {
             throw new IllegalArgumentException("Cannot format given Object as a Date");
         }
-        MarcasDeCampo marcas = new MarcasDeCampo();
+        FieldMarks marks = new FieldMarks();
         StringBuffer sb = new StringBuffer();
-        this.escribir(d, sb, null, marcas);
-        return marcas.iterador(sb.toString());
+        this.write(d, sb, null, marks);
+        return marks.iterator(sb.toString());
     }
 
-    private void escribir(Date date, StringBuffer out, FieldPosition pos, MarcasDeCampo marcas) {
+    private void write(Date date, StringBuffer out, FieldPosition pos, FieldMarks marks) {
         if (date == null) {
             throw new NullPointerException();
         }
-        MarcasDeCampo m = marcas;
+        FieldMarks m = marks;
         if (m == null) {
-            m = new MarcasDeCampo();
+            m = new FieldMarks();
         }
         this.calendar.setTime(date);
         int base = out.length();
@@ -251,172 +254,172 @@ public class SimpleDateFormat extends DateFormat {
                 i = i + 1;
                 continue;
             }
-            if (!SimpleDateFormat.esLetra(c)) {
+            if (!SimpleDateFormat.isLetter(c)) {
                 sb.append(c);
                 i = i + 1;
                 continue;
             }
-            int cuenta = 0;
+            int count = 0;
             while (i < n && this.pattern.charAt(i) == c) {
-                cuenta = cuenta + 1;
+                count = count + 1;
                 i = i + 1;
             }
             int d = sb.length();
-            this.escribirCampo(c, cuenta, sb);
-            m.marcar(SimpleDateFormat.campoDe(c), SimpleDateFormat.numeroDe(c),
+            this.writeField(c, count, sb);
+            m.mark(SimpleDateFormat.fieldOf(c), SimpleDateFormat.numberOf(c),
                     base + d, base + sb.length());
         }
         out.append(sb.toString());
-        m.aplicar(pos);
+        m.apply(pos);
     }
 
-    private void escribirCampo(char c, int cuenta, StringBuilder sb) {
+    private void writeField(char c, int count, StringBuilder sb) {
         Calendar cal = this.calendar;
         if (c == 'G') {
             sb.append(this.formatData.getEras()[cal.get(Calendar.ERA)]);
         } else if (c == 'y' || c == 'Y') {
-            int anio = cal.get(Calendar.YEAR);
+            int year = cal.get(Calendar.YEAR);
             if (c == 'Y') {
-                anio = cal.getWeekYear();
+                year = cal.getWeekYear();
             }
-            // `yy` NO es "ancho dos": es "los dos últimos dígitos". Tratarlo como ancho daría
-            // 2026 en vez de 26, que es justo lo que el patrón corto pide evitar.
-            if (cuenta == 2) {
-                this.numero(anio % 100, 2, sb);
+            // `yy` is NOT "width two": it is "the last two digits". Treating it as a width would
+            // give 2026 instead of 26, which is exactly what the short pattern asks to avoid.
+            if (count == 2) {
+                this.number(year % 100, 2, sb);
             } else {
-                this.numero(anio, cuenta, sb);
+                this.number(year, count, sb);
             }
         } else if (c == 'M') {
-            int mes = cal.get(Calendar.MONTH);
-            if (cuenta >= 4) {
-                sb.append(this.formatData.getMonths()[mes]);
-            } else if (cuenta == 3) {
-                sb.append(this.formatData.getShortMonths()[mes]);
+            int month = cal.get(Calendar.MONTH);
+            if (count >= 4) {
+                sb.append(this.formatData.getMonths()[month]);
+            } else if (count == 3) {
+                sb.append(this.formatData.getShortMonths()[month]);
             } else {
-                this.numero(mes + 1, cuenta, sb);
+                this.number(month + 1, count, sb);
             }
         } else if (c == 'E') {
-            int dia = cal.get(Calendar.DAY_OF_WEEK);
-            if (cuenta >= 4) {
-                sb.append(this.formatData.getWeekdays()[dia]);
+            int day = cal.get(Calendar.DAY_OF_WEEK);
+            if (count >= 4) {
+                sb.append(this.formatData.getWeekdays()[day]);
             } else {
-                sb.append(this.formatData.getShortWeekdays()[dia]);
+                sb.append(this.formatData.getShortWeekdays()[day]);
             }
         } else if (c == 'a') {
             sb.append(this.formatData.getAmPmStrings()[cal.get(Calendar.AM_PM)]);
         } else if (c == 'd') {
-            this.numero(cal.get(Calendar.DAY_OF_MONTH), cuenta, sb);
+            this.number(cal.get(Calendar.DAY_OF_MONTH), count, sb);
         } else if (c == 'H') {
-            this.numero(cal.get(Calendar.HOUR_OF_DAY), cuenta, sb);
+            this.number(cal.get(Calendar.HOUR_OF_DAY), count, sb);
         } else if (c == 'k') {
-            // k es 1..24: la medianoche se escribe 24, no 0. La conversión vive acá y no en el
-            // calendario porque es una convención de presentación, no de tiempo.
+            // k is 1..24: midnight is written 24, not 0. The conversion lives here and not in the
+            // calendar because it is a convention of presentation, not of time.
             int h = cal.get(Calendar.HOUR_OF_DAY);
             if (h == 0) {
                 h = 24;
             }
-            this.numero(h, cuenta, sb);
+            this.number(h, count, sb);
         } else if (c == 'K') {
-            this.numero(cal.get(Calendar.HOUR), cuenta, sb);
+            this.number(cal.get(Calendar.HOUR), count, sb);
         } else if (c == 'h') {
             int h = cal.get(Calendar.HOUR);
             if (h == 0) {
                 h = 12;
             }
-            this.numero(h, cuenta, sb);
+            this.number(h, count, sb);
         } else if (c == 'm') {
-            this.numero(cal.get(Calendar.MINUTE), cuenta, sb);
+            this.number(cal.get(Calendar.MINUTE), count, sb);
         } else if (c == 's') {
-            this.numero(cal.get(Calendar.SECOND), cuenta, sb);
+            this.number(cal.get(Calendar.SECOND), count, sb);
         } else if (c == 'S') {
-            this.numero(cal.get(Calendar.MILLISECOND), cuenta, sb);
+            this.number(cal.get(Calendar.MILLISECOND), count, sb);
         } else if (c == 'D') {
-            this.numero(cal.get(Calendar.DAY_OF_YEAR), cuenta, sb);
+            this.number(cal.get(Calendar.DAY_OF_YEAR), count, sb);
         } else if (c == 'F') {
-            this.numero(cal.get(Calendar.DAY_OF_WEEK_IN_MONTH), cuenta, sb);
+            this.number(cal.get(Calendar.DAY_OF_WEEK_IN_MONTH), count, sb);
         } else if (c == 'w') {
-            this.numero(cal.get(Calendar.WEEK_OF_YEAR), cuenta, sb);
+            this.number(cal.get(Calendar.WEEK_OF_YEAR), count, sb);
         } else if (c == 'W') {
-            this.numero(cal.get(Calendar.WEEK_OF_MONTH), cuenta, sb);
+            this.number(cal.get(Calendar.WEEK_OF_MONTH), count, sb);
         } else if (c == 'u') {
-            // u numera de lunes(1) a domingo(7); Calendar numera de domingo(1) a sábado(7).
-            int dia = cal.get(Calendar.DAY_OF_WEEK) - 1;
-            if (dia == 0) {
-                dia = 7;
+            // u numbers Monday(1) to Sunday(7); Calendar numbers Sunday(1) to Saturday(7).
+            int day = cal.get(Calendar.DAY_OF_WEEK) - 1;
+            if (day == 0) {
+                day = 7;
             }
-            this.numero(dia, cuenta, sb);
+            this.number(day, count, sb);
         } else if (c == 'z') {
-            boolean verano = this.calendar.get(Calendar.DST_OFFSET) != 0;
-            boolean largo = cuenta >= 4;
-            // Los nombres puestos con setZoneStrings mandan sobre los de la zona: si no, ese setter
-            // no cambiaría nada de lo que se ve y sería un miembro decorativo.
-            String[] fila = this.formatData.filaDeZona(cal.getTimeZone().getID());
-            if (fila != null) {
+            boolean daylight = this.calendar.get(Calendar.DST_OFFSET) != 0;
+            boolean length = count >= 4;
+            // The names set with setZoneStrings overrule the zone's own: otherwise that setter would
+            // change nothing visible and would be a decorative member.
+            String[] row = this.formatData.zoneRow(cal.getTimeZone().getID());
+            if (row != null) {
                 int col = 2;
-                if (largo) {
+                if (length) {
                     col = 1;
                 }
-                if (verano) {
+                if (daylight) {
                     col = col + 2;
                 }
-                sb.append(fila[col]);
+                sb.append(row[col]);
                 return;
             }
-            int estilo = TimeZone.SHORT;
-            if (largo) {
-                estilo = TimeZone.LONG;
+            int style = TimeZone.SHORT;
+            if (length) {
+                style = TimeZone.LONG;
             }
-            sb.append(cal.getTimeZone().getDisplayName(verano, estilo, this.locale));
+            sb.append(cal.getTimeZone().getDisplayName(daylight, style, this.locale));
         } else if (c == 'Z') {
-            sb.append(this.desfase(false));
+            sb.append(this.offsetOf(false));
         } else if (c == 'X') {
-            sb.append(this.desfase(true));
+            sb.append(this.offsetOf(true));
         } else {
             throw new IllegalArgumentException("Illegal pattern character '" + c + "'");
         }
     }
 
-    // El desplazamiento total incluye el horario de verano: sumar sólo el desfase crudo daría una
-    // hora de menos medio año, que es el error clásico de este campo.
-    private String desfase(boolean conDosPuntos) {
+    // The total offset includes daylight saving: adding only the raw offset would give an hour less
+    // for half the year, which is this field's classic mistake.
+    private String offsetOf(boolean withColon) {
         int ms = this.calendar.get(Calendar.ZONE_OFFSET) + this.calendar.get(Calendar.DST_OFFSET);
-        String signo = "+";
+        String sign = "+";
         int abs = ms;
         if (ms < 0) {
-            signo = "-";
+            sign = "-";
             abs = -ms;
         }
-        int minutos = abs / 60000;
-        int hh = minutos / 60;
-        int mm = minutos % 60;
+        int minutes = abs / 60000;
+        int hh = minutes / 60;
+        int mm = minutes % 60;
         StringBuilder sb = new StringBuilder();
-        sb.append(signo);
-        this.numeroPlano(hh, 2, sb);
-        if (conDosPuntos) {
+        sb.append(sign);
+        this.plainNumber(hh, 2, sb);
+        if (withColon) {
             sb.append(':');
         }
-        this.numeroPlano(mm, 2, sb);
+        this.plainNumber(mm, 2, sb);
         return sb.toString();
     }
 
-    // Los dígitos salen del numberFormat porque el locale puede no usar los arábigos occidentales;
-    // el ancho mínimo se fija en él y se restaura, para no dejarlo tocado entre campos.
-    private void numero(int valor, int ancho, StringBuilder sb) {
-        int previo = this.numberFormat.getMinimumIntegerDigits();
-        this.numberFormat.setMinimumIntegerDigits(ancho);
-        sb.append(this.numberFormat.format((long) valor));
-        this.numberFormat.setMinimumIntegerDigits(previo);
+    // The digits come from the numberFormat because the locale may not use the Western Arabic ones;
+    // the minimum width is set on it and restored, so as not to leave it altered between fields.
+    private void number(int value, int width, StringBuilder sb) {
+        int previousOne = this.numberFormat.getMinimumIntegerDigits();
+        this.numberFormat.setMinimumIntegerDigits(width);
+        sb.append(this.numberFormat.format((long) value));
+        this.numberFormat.setMinimumIntegerDigits(previousOne);
     }
 
-    private void numeroPlano(int valor, int ancho, StringBuilder sb) {
-        String s = Integer.toString(valor);
-        while (s.length() < ancho) {
+    private void plainNumber(int value, int width, StringBuilder sb) {
+        String s = Integer.toString(value);
+        while (s.length() < width) {
             s = "0" + s;
         }
         sb.append(s);
     }
 
-    private static java.text.DateFormat.Field campoDe(char c) {
+    private static java.text.DateFormat.Field fieldOf(char c) {
         if (c == 'G') {
             return java.text.DateFormat.Field.ERA;
         }
@@ -471,7 +474,7 @@ public class SimpleDateFormat extends DateFormat {
         return java.text.DateFormat.Field.TIME_ZONE;
     }
 
-    private static int numeroDe(char c) {
+    private static int numberOf(char c) {
         if (c == 'G') {
             return DateFormat.ERA_FIELD;
         }
@@ -526,21 +529,22 @@ public class SimpleDateFormat extends DateFormat {
         return DateFormat.TIMEZONE_FIELD;
     }
 
-    // ---- parseo ----
+    // ---- parsing --------------------------------------------------------------------------------
 
     /**
-     * Lee una fecha escrita con este patrón.
+     * It reads a date written with this pattern.
      *
-     * <p>Los campos no se combinan acá: se cargan en el {@link Calendar} y él calcula el instante.
-     * Por eso {@code isLenient()} manda de verdad —un 32 de enero es un error o el 1 de febrero
-     * según cómo esté el calendario— y por eso un patrón sin año da el año actual y no el año cero.
+     * <p>The fields are not combined here: they are loaded into the {@link Calendar} and it computes
+     * the instant. That is why {@code isLenient()} genuinely rules --a 32nd of January is an error or
+     * the 1st of February depending on how the calendar stands-- and why a pattern with no year gives
+     * the current year and not year zero.
      */
     public Date parse(String text, ParsePosition pos) {
         if (text == null || pos == null) {
             throw new NullPointerException();
         }
-        int inicio = pos.getIndex();
-        int t = inicio;
+        int start = pos.getIndex();
+        int t = start;
         this.calendar.clear();
         int i = 0;
         int n = this.pattern.length();
@@ -568,7 +572,7 @@ public class SimpleDateFormat extends DateFormat {
                 i = i + 1;
                 continue;
             }
-            if (!SimpleDateFormat.esLetra(c)) {
+            if (!SimpleDateFormat.isLetter(c)) {
                 if (t >= text.length() || text.charAt(t) != c) {
                     pos.setErrorIndex(t);
                     return null;
@@ -577,188 +581,189 @@ public class SimpleDateFormat extends DateFormat {
                 i = i + 1;
                 continue;
             }
-            int cuenta = 0;
+            int count = 0;
             while (i < n && this.pattern.charAt(i) == c) {
-                cuenta = cuenta + 1;
+                count = count + 1;
                 i = i + 1;
             }
-            boolean pegadoANumero = i < n && SimpleDateFormat.esLetra(this.pattern.charAt(i))
-                    && SimpleDateFormat.esNumerico(this.pattern.charAt(i), 1);
-            int siguiente = this.leerCampo(c, cuenta, text, t, pegadoANumero);
-            if (siguiente < 0) {
+            boolean gluedToNumber = i < n && SimpleDateFormat.isLetter(this.pattern.charAt(i))
+                    && SimpleDateFormat.isNumeric(this.pattern.charAt(i), 1);
+            int nextLevel = this.readField(c, count, text, t, gluedToNumber);
+            if (nextLevel < 0) {
                 pos.setErrorIndex(t);
                 return null;
             }
-            t = siguiente;
+            t = nextLevel;
         }
         Date d;
         try {
             d = this.calendar.getTime();
         } catch (IllegalArgumentException e) {
-            // Modo estricto: el calendario rechaza un 32 de enero. Se informa como fallo de parseo
-            // con el cursor SIN avanzar, que es como el contrato distingue "no pude" de "leí null".
-            pos.setErrorIndex(inicio);
+            // Strict mode: the calendar rejects a 32nd of January. It is reported as a parse failure
+            // with the cursor NOT advanced, which is how the contract tells "I could not" from "I
+            // read null".
+            pos.setErrorIndex(start);
             return null;
         }
         pos.setIndex(t);
         return d;
     }
 
-    private static boolean esNumerico(char c, int cuenta) {
+    private static boolean isNumeric(char c, int count) {
         if (c == 'M' || c == 'E') {
-            return cuenta < 3;
+            return count < 3;
         }
         return "yYdHkKhmsSDFwWu".indexOf(c) >= 0;
     }
 
-    // Devuelve el índice después del campo, o -1 si no se pudo leer.
-    private int leerCampo(char c, int cuenta, String text, int desde, boolean pegadoANumero) {
+    // It returns the index after the field, or -1 if it could not be read.
+    private int readField(char c, int count, String text, int from, boolean gluedToNumber) {
         if (c == 'G') {
-            return this.leerTexto(text, desde, this.formatData.getEras(), Calendar.ERA, 0);
+            return this.readText(text, from, this.formatData.getEras(), Calendar.ERA, 0);
         }
-        if (c == 'M' && cuenta >= 3) {
-            int r = this.leerTexto(text, desde, this.formatData.getMonths(), Calendar.MONTH, 0);
+        if (c == 'M' && count >= 3) {
+            int r = this.readText(text, from, this.formatData.getMonths(), Calendar.MONTH, 0);
             if (r < 0) {
-                r = this.leerTexto(text, desde, this.formatData.getShortMonths(), Calendar.MONTH, 0);
+                r = this.readText(text, from, this.formatData.getShortMonths(), Calendar.MONTH, 0);
             }
             return r;
         }
         if (c == 'E') {
-            int r = this.leerTexto(text, desde, this.formatData.getWeekdays(), Calendar.DAY_OF_WEEK, 0);
+            int r = this.readText(text, from, this.formatData.getWeekdays(), Calendar.DAY_OF_WEEK, 0);
             if (r < 0) {
-                r = this.leerTexto(text, desde, this.formatData.getShortWeekdays(),
+                r = this.readText(text, from, this.formatData.getShortWeekdays(),
                         Calendar.DAY_OF_WEEK, 0);
             }
             return r;
         }
         if (c == 'a') {
-            return this.leerTexto(text, desde, this.formatData.getAmPmStrings(), Calendar.AM_PM, 0);
+            return this.readText(text, from, this.formatData.getAmPmStrings(), Calendar.AM_PM, 0);
         }
         if (c == 'z' || c == 'Z' || c == 'X') {
-            return this.leerZona(text, desde);
+            return this.readZone(text, from);
         }
-        // El ancho fijo sólo se impone cuando el campo siguiente también es numérico: si no hay
-        // separador entre dos números, la única forma de saber dónde termina el primero es el
-        // conteo del patrón. Con separador conviene leer todos los dígitos que haya.
+        // The fixed width is only imposed when the next field is numeric too: with no separator
+        // between two numbers, the only way of knowing where the first ends is the pattern's count.
+        // With a separator it is better to read every digit there is.
         int max = 10;
-        if (pegadoANumero || (c == 'y' && cuenta == 2)) {
-            max = cuenta;
+        if (gluedToNumber || (c == 'y' && count == 2)) {
+            max = count;
         }
-        int fin = desde;
-        while (fin < text.length() && fin - desde < max && SimpleDateFormat.esDigito(text.charAt(fin))) {
-            fin = fin + 1;
+        int end = from;
+        while (end < text.length() && end - from < max && SimpleDateFormat.isDigit(text.charAt(end))) {
+            end = end + 1;
         }
-        if (fin == desde) {
+        if (end == from) {
             return -1;
         }
-        int valor = 0;
-        for (int k = desde; k < fin; k = k + 1) {
-            valor = valor * 10 + (text.charAt(k) - '0');
+        int value = 0;
+        for (int k = from; k < end; k = k + 1) {
+            value = value * 10 + (text.charAt(k) - '0');
         }
-        this.cargar(c, cuenta, valor, fin - desde);
-        return fin;
+        this.load(c, count, value, end - from);
+        return end;
     }
 
-    private static boolean esDigito(char c) {
+    private static boolean isDigit(char c) {
         return c >= '0' && c <= '9';
     }
 
-    private void cargar(char c, int cuenta, int valor, int digitos) {
+    private void load(char c, int count, int value, int digits) {
         if (c == 'y') {
-            int anio = valor;
-            // Dos dígitos escritos son dos dígitos leídos: se ubican en la ventana de cien años
-            // que arranca en defaultCenturyStart. Con más dígitos el año es literal, y por eso
-            // "0080" y "80" no significan lo mismo — que es exactamente lo que dice el JDK.
-            if (cuenta == 2 && digitos == 2) {
-                anio = this.enLaVentana(valor);
+            int year = value;
+            // Two digits written are two digits read: they are placed in the hundred-year window
+            // starting at defaultCenturyStart. With more digits the year is literal, and that is why
+            // "0080" and "80" do not mean the same -- which is exactly what the JDK says.
+            if (count == 2 && digits == 2) {
+                year = this.inWindow(value);
             }
-            this.calendar.set(Calendar.YEAR, anio);
+            this.calendar.set(Calendar.YEAR, year);
         } else if (c == 'Y') {
-            this.calendar.set(Calendar.YEAR, valor);
+            this.calendar.set(Calendar.YEAR, value);
         } else if (c == 'M') {
-            this.calendar.set(Calendar.MONTH, valor - 1);
+            this.calendar.set(Calendar.MONTH, value - 1);
         } else if (c == 'd') {
-            this.calendar.set(Calendar.DAY_OF_MONTH, valor);
+            this.calendar.set(Calendar.DAY_OF_MONTH, value);
         } else if (c == 'H') {
-            this.calendar.set(Calendar.HOUR_OF_DAY, valor);
+            this.calendar.set(Calendar.HOUR_OF_DAY, value);
         } else if (c == 'k') {
-            int h = valor;
+            int h = value;
             if (h == 24) {
                 h = 0;
             }
             this.calendar.set(Calendar.HOUR_OF_DAY, h);
         } else if (c == 'K') {
-            this.calendar.set(Calendar.HOUR, valor);
+            this.calendar.set(Calendar.HOUR, value);
         } else if (c == 'h') {
-            int h = valor;
+            int h = value;
             if (h == 12) {
                 h = 0;
             }
             this.calendar.set(Calendar.HOUR, h);
         } else if (c == 'm') {
-            this.calendar.set(Calendar.MINUTE, valor);
+            this.calendar.set(Calendar.MINUTE, value);
         } else if (c == 's') {
-            this.calendar.set(Calendar.SECOND, valor);
+            this.calendar.set(Calendar.SECOND, value);
         } else if (c == 'S') {
-            this.calendar.set(Calendar.MILLISECOND, valor);
+            this.calendar.set(Calendar.MILLISECOND, value);
         } else if (c == 'D') {
-            this.calendar.set(Calendar.DAY_OF_YEAR, valor);
+            this.calendar.set(Calendar.DAY_OF_YEAR, value);
         } else if (c == 'F') {
-            this.calendar.set(Calendar.DAY_OF_WEEK_IN_MONTH, valor);
+            this.calendar.set(Calendar.DAY_OF_WEEK_IN_MONTH, value);
         } else if (c == 'w') {
-            this.calendar.set(Calendar.WEEK_OF_YEAR, valor);
+            this.calendar.set(Calendar.WEEK_OF_YEAR, value);
         } else if (c == 'W') {
-            this.calendar.set(Calendar.WEEK_OF_MONTH, valor);
+            this.calendar.set(Calendar.WEEK_OF_MONTH, value);
         } else if (c == 'u') {
-            int dia = valor + 1;
-            if (dia > 7) {
-                dia = 1;
+            int day = value + 1;
+            if (day > 7) {
+                day = 1;
             }
-            this.calendar.set(Calendar.DAY_OF_WEEK, dia);
+            this.calendar.set(Calendar.DAY_OF_WEEK, day);
         }
     }
 
-    private int enLaVentana(int dosDigitos) {
+    private int inWindow(int twoDigits) {
         Calendar c = Calendar.getInstance(this.calendar.getTimeZone(), this.locale);
         c.setTime(this.defaultCenturyStart);
-        int inicio = c.get(Calendar.YEAR);
-        int candidato = (inicio / 100) * 100 + dosDigitos;
-        if (candidato < inicio) {
-            candidato = candidato + 100;
+        int start = c.get(Calendar.YEAR);
+        int candidate = (start / 100) * 100 + twoDigits;
+        if (candidate < start) {
+            candidate = candidate + 100;
         }
-        return candidato;
+        return candidate;
     }
 
-    // Devuelve el índice tras el nombre más largo que coincida, y carga el campo con su posición.
-    // El más largo y no el primero: "sept" y "sep" pueden convivir en la misma tabla, y quedarse
-    // con el primero dejaría la "t" suelta para el literal siguiente.
-    private int leerTexto(String text, int desde, String[] nombres, int campo, int base) {
-        int mejor = -1;
-        int mejorLargo = 0;
-        for (int i = 0; i < nombres.length; i = i + 1) {
-            String nombre = nombres[i];
-            if (nombre == null || nombre.length() == 0) {
+    // It returns the index after the longest name that matches, and loads the field with its
+    // position. The longest and not the first: "sept" and "sep" can coexist in the same table, and
+    // keeping the first would leave the "t" loose for the following literal.
+    private int readText(String text, int from, String[] names, int field, int base) {
+        int best = -1;
+        int bestLength = 0;
+        for (int i = 0; i < names.length; i = i + 1) {
+            String name = names[i];
+            if (name == null || name.length() == 0) {
                 continue;
             }
-            if (nombre.length() > mejorLargo && this.coincideSinCaso(text, desde, nombre)) {
-                mejor = i;
-                mejorLargo = nombre.length();
+            if (name.length() > bestLength && this.matchesIgnoringCase(text, from, name)) {
+                best = i;
+                bestLength = name.length();
             }
         }
-        if (mejor < 0) {
+        if (best < 0) {
             return -1;
         }
-        this.calendar.set(campo, mejor + base);
-        return desde + mejorLargo;
+        this.calendar.set(field, best + base);
+        return from + bestLength;
     }
 
-    private boolean coincideSinCaso(String text, int desde, String nombre) {
-        if (desde + nombre.length() > text.length()) {
+    private boolean matchesIgnoringCase(String text, int from, String name) {
+        if (from + name.length() > text.length()) {
             return false;
         }
-        for (int i = 0; i < nombre.length(); i = i + 1) {
-            char a = text.charAt(desde + i);
-            char b = nombre.charAt(i);
+        for (int i = 0; i < name.length(); i = i + 1) {
+            char a = text.charAt(from + i);
+            char b = name.charAt(i);
             if (a != b && Character.toLowerCase(a) != Character.toLowerCase(b)) {
                 return false;
             }
@@ -766,11 +771,12 @@ public class SimpleDateFormat extends DateFormat {
         return true;
     }
 
-    // Acepta "+HH:MM", "+HHMM", "GMT+H:MM" y los nombres que la zona actual sepa dar de sí misma.
-    // No busca en la base de zonas por nombre: sin datos del CLDR no hay tabla de "EST -> America/
-    // New_York", y adivinarla elegiría mal en cuanto dos zonas compartan abreviatura.
-    private int leerZona(String text, int desde) {
-        int t = desde;
+    // It accepts "+HH:MM", "+HHMM", "GMT+H:MM" and the names the current zone can give of itself. It
+    // does not search the zone database by name: with no CLDR data there is no "EST -> America/
+    // New_York" table, and guessing one would choose wrongly as soon as two zones shared an
+    // abbreviation.
+    private int readZone(String text, int from) {
+        int t = from;
         if (t + 3 <= text.length() && text.substring(t, t + 3).equals("GMT")) {
             t = t + 3;
             if (t >= text.length() || (text.charAt(t) != '+' && text.charAt(t) != '-')) {
@@ -779,69 +785,69 @@ public class SimpleDateFormat extends DateFormat {
             }
         }
         if (t < text.length() && (text.charAt(t) == '+' || text.charAt(t) == '-')) {
-            int signo = 1;
+            int sign = 1;
             if (text.charAt(t) == '-') {
-                signo = -1;
+                sign = -1;
             }
             t = t + 1;
             int hh = 0;
-            int leidos = 0;
-            while (t < text.length() && leidos < 2 && SimpleDateFormat.esDigito(text.charAt(t))) {
+            int readSoFar = 0;
+            while (t < text.length() && readSoFar < 2 && SimpleDateFormat.isDigit(text.charAt(t))) {
                 hh = hh * 10 + (text.charAt(t) - '0');
                 t = t + 1;
-                leidos = leidos + 1;
+                readSoFar = readSoFar + 1;
             }
-            if (leidos == 0) {
+            if (readSoFar == 0) {
                 return -1;
             }
             if (t < text.length() && text.charAt(t) == ':') {
                 t = t + 1;
             }
             int mm = 0;
-            leidos = 0;
-            while (t < text.length() && leidos < 2 && SimpleDateFormat.esDigito(text.charAt(t))) {
+            readSoFar = 0;
+            while (t < text.length() && readSoFar < 2 && SimpleDateFormat.isDigit(text.charAt(t))) {
                 mm = mm * 10 + (text.charAt(t) - '0');
                 t = t + 1;
-                leidos = leidos + 1;
+                readSoFar = readSoFar + 1;
             }
-            int total = signo * (hh * 3600000 + mm * 60000);
+            int total = sign * (hh * 3600000 + mm * 60000);
             this.calendar.set(Calendar.ZONE_OFFSET, total);
             this.calendar.set(Calendar.DST_OFFSET, 0);
             return t;
         }
-        // Último recurso: el nombre que la zona del propio formateador declara. Alcanza para leer
-        // lo que este mismo formateador escribió, que es el caso de ida y vuelta.
+        // Last resort: the name the formatter's own zone declares. It is enough to read back what
+        // this same formatter wrote, which is the round-trip case.
         TimeZone z = this.calendar.getTimeZone();
-        String[] candidatos = new String[] {
+        String[] candidates = new String[] {
             z.getID(),
             z.getDisplayName(false, TimeZone.LONG, this.locale),
             z.getDisplayName(true, TimeZone.LONG, this.locale),
             z.getDisplayName(false, TimeZone.SHORT, this.locale),
             z.getDisplayName(true, TimeZone.SHORT, this.locale),
         };
-        int mejorLargo = 0;
-        for (int i = 0; i < candidatos.length; i = i + 1) {
-            String s = candidatos[i];
-            if (s != null && s.length() > mejorLargo && this.coincideSinCaso(text, desde, s)) {
-                mejorLargo = s.length();
+        int bestLength = 0;
+        for (int i = 0; i < candidates.length; i = i + 1) {
+            String s = candidates[i];
+            if (s != null && s.length() > bestLength && this.matchesIgnoringCase(text, from, s)) {
+                bestLength = s.length();
             }
         }
-        if (mejorLargo == 0) {
+        if (bestLength == 0) {
             return -1;
         }
-        return desde + mejorLargo;
+        return from + bestLength;
     }
 
-    // ---- identidad ----
+    // ---- identity -------------------------------------------------------------------------------
 
     public Object clone() {
-        SimpleDateFormat copia = new SimpleDateFormat(this.pattern, this.locale);
-        copia.formatData = (DateFormatSymbols) this.formatData.clone();
-        copia.calendar = Calendar.getInstance(this.calendar.getTimeZone(), this.locale);
-        copia.calendar.setLenient(this.calendar.isLenient());
-        copia.numberFormat = this.numberFormat;
-        copia.defaultCenturyStart = new Date(this.defaultCenturyStart.getTime());
-        return copia;
+        SimpleDateFormat copy = new SimpleDateFormat(this.pattern, this.locale);
+        copy.formatData = (DateFormatSymbols) this.formatData.clone();
+        copy.calendar = Calendar.getInstance(this.calendar.getTimeZone(), this.locale);
+        copy.calendar.setLenient(this.calendar.isLenient());
+        copy.numberFormat = this.numberFormat;
+        copy.defaultCenturyStart = new Date(this.defaultCenturyStart.getTime());
+        return copy;
     }
 
     public int hashCode() {

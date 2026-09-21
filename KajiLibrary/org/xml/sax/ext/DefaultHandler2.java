@@ -6,31 +6,32 @@ import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
 
 /**
- * KajiLibrary's org.xml.sax.ext.DefaultHandler2 -- `DefaultHandler` mas las tres interfaces de
- * `ext`, todas con cuerpo vacio.
+ * KajiLibrary's org.xml.sax.ext.DefaultHandler2 -- `DefaultHandler` plus the three interfaces of
+ * `ext`, all with an empty body.
  *
- * <p>Es la misma idea que `DefaultHandler`: un manejador que solo quiere ver los comentarios no
- * deberia tener que escribir los otros veintitantos metodos. Extendiendo esta clase se escribe
- * `comment` y nada mas.
+ * <p>It is the same idea as `DefaultHandler`: a handler that only wants to see the comments should
+ * not have to write the other twenty-odd methods. Extending this class, one writes `comment` and
+ * nothing else.
  *
- * <p>El unico metodo que **no** tiene el cuerpo vacio es el `resolveEntity` de dos argumentos, y
- * ahi esta lo interesante de la clase. `DefaultHandler` lo resolvia devolviendo `null` directo;
- * aca se redirige al de cuatro argumentos de {@link EntityResolver2}, pasandole `null` en nombre y
- * baseURI. La consecuencia practica es que una subclase que solo redefina la version de cuatro
- * argumentos tambien queda bien atendida cuando el parser es viejo y llama a la de dos --que es
- * exactamente lo que uno espera al redefinir "el" resolvedor--. Sin ese puente habria que redefinir
- * los dos y mantenerlos sincronizados.
+ * <p>The only method that does **not** have an empty body is the two-argument `resolveEntity`, and
+ * there lies what is interesting about the class. `DefaultHandler` resolved it by returning `null`
+ * directly; here it is redirected to the four-argument one of {@link EntityResolver2}, passing it
+ * `null` as name and baseURI. The practical consequence is that a subclass that only overrides the
+ * four-argument version is also well served when the parser is old and calls the two-argument one
+ * --which is exactly what one expects when overriding "the" resolver--. Without that bridge both
+ * would have to be overridden and kept in step.
  *
- * <p>Lo mismo al reves no se puede hacer: el de cuatro argumentos no puede delegar en el de dos sin
- * tirar a la basura el nombre y la base, que son justo los datos por los que existe.
+ * <p>The same thing the other way round cannot be done: the four-argument one cannot delegate to
+ * the two-argument one without throwing away the name and the base, which are precisely the data it
+ * exists for.
  *
- * <p>Que `getExternalSubset` y `resolveEntity` devuelvan `null` no es un stub: es la respuesta que
- * el contrato define para "no sustituyo nada, abrilo por el identificador de sistema". Un manejador
- * por omision que inventara una DTD seria el que estaria mintiendo.
+ * <p>That `getExternalSubset` and `resolveEntity` return `null` is not a stub: it is the answer the
+ * contract defines for "I substitute nothing, open it by its system identifier". A default handler
+ * that invented a DTD would be the one lying.
  *
- * <p>Se hereda tambien el `fatalError` de `DefaultHandler`, que relanza en vez de callarse, por la
- * razon que explica alla: un error fatal termina el analisis por definicion y tragarselo dejaria al
- * llamador creyendo que leyo el documento.
+ * <p>The `fatalError` of `DefaultHandler` is inherited as well, which rethrows instead of keeping
+ * quiet, for the reason explained there: a fatal error ends the analysis by definition and
+ * swallowing it would leave the caller believing it read the document.
  */
 public class DefaultHandler2 extends org.xml.sax.helpers.DefaultHandler
         implements LexicalHandler, DeclHandler, EntityResolver2 {
@@ -97,7 +98,7 @@ public class DefaultHandler2 extends org.xml.sax.helpers.DefaultHandler
         return null;
     }
 
-    /** El puente hacia la version de cuatro argumentos que explica el comentario de la clase. */
+    /** The bridge to the four-argument version the comment of the class explains. */
     public InputSource resolveEntity(String publicId, String systemId)
             throws SAXException, IOException {
         return resolveEntity(null, publicId, null, systemId);

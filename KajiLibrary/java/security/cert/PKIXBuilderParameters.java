@@ -4,40 +4,41 @@ import java.security.InvalidAlgorithmParameterException;
 import java.security.InvalidParameterException;
 import java.util.Set;
 
-// Los parametros de una **construccion** de camino PKIX: los mismos de la validacion, mas el largo
-// maximo.
+// The parameters of a **building** of a PKIX path: the same ones as the validation, plus the
+// maximum length.
 //
-// El largo maximo no es una optimizacion, es un corte de seguridad. Construir un camino es una
-// busqueda, y sin techo esa busqueda puede no terminar: un conjunto de certificados cruzados
-// —muy comun entre CAs que se firman mutuamente— produce ciclos, y basta con unos pocos para que
-// el espacio de caminos posibles explote. El default de 5 sale de que en la practica ninguna cadena
-// real pasa de tres o cuatro eslabones.
+// The maximum length is not an optimisation, it is a cut for security. Building a path is a search,
+// and with no ceiling that search may not end: a set of cross certificates —very common between CAs
+// that sign each other— produces cycles, and a few are enough for the space of possible paths to
+// explode. The default of 5 comes from the fact that in practice no real chain goes past three or
+// four links.
 //
-// El -1 significa "sin limite" y hay que leerlo asi y no como "cero": es el unico valor negativo
-// aceptado, y por eso el setter rechaza -2 en vez de tratarlo como otro "sin limite".
+// The -1 means "no limit" and has to be read like that and not as "zero": it is the only negative
+// value accepted, and that is why the setter rejects -2 instead of treating it as another "no
+// limit".
 //
 public class PKIXBuilderParameters extends PKIXParameters {
 
     private int maxPathLength = 5;
 
-    // `targetConstraints` puede ser null, pero conviene no dejarlo: sin un criterio para el
-    // certificado del final, el constructor no sabe hacia donde buscar.
+    // `targetConstraints` may be null, but it is better not to leave it: with no criterion for the
+    // certificate at the end, the builder does not know which way to look.
     public PKIXBuilderParameters(Set<TrustAnchor> trustAnchors, CertSelector targetConstraints)
             throws InvalidAlgorithmParameterException {
         super(trustAnchors);
         super.setTargetCertConstraints(targetConstraints);
     }
 
-    // Idem, con las anclas sacadas de un almacen. Ver `PKIXParameters(KeyStore)` para que entradas
-    // se miran y cuales no.
+    // The same, with the anchors taken from a store. See `PKIXParameters(KeyStore)` for which
+    // entries are looked at and which are not.
     public PKIXBuilderParameters(java.security.KeyStore keystore, CertSelector targetConstraints)
             throws java.security.KeyStoreException, InvalidAlgorithmParameterException {
         super(keystore);
         super.setTargetCertConstraints(targetConstraints);
     }
 
-    // El largo maximo de la cadena, sin contar el ancla. -1 quita el limite; 0 fuerza a que el
-    // ancla haya firmado directamente el certificado buscado.
+    // The maximum length of the chain, not counting the anchor. -1 removes the limit; 0 forces the
+    // anchor to have directly signed the certificate being looked for.
     public void setMaxPathLength(int maxPathLength) {
         if (maxPathLength < -1) {
             throw new InvalidParameterException("the maximum path "

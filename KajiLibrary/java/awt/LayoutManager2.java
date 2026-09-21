@@ -1,38 +1,38 @@
 package java.awt;
 
 /**
- * Una distribución que además acepta **restricciones** por hijo.
+ * A layout that also accepts **constraints** per child.
  *
- * <p>{@link LayoutManager} sólo puede recibir un nombre al agregar un hijo, y eso no alcanza para
- * decir "esto va al norte" o "esto ocupa dos columnas y se estira". Esta interfaz cambia el nombre
- * por un objeto cualquiera, y con eso se puede pasar lo que la distribución necesite: una cadena,
- * un {@link GridBagConstraints}, lo que sea.
+ * <p>{@link LayoutManager} can only receive a name when a child is added, and that is not enough to
+ * say "this goes north" or "this spans two columns and stretches". This interface replaces the name
+ * with any object, and with that whatever the layout needs can be passed: a string, a
+ * {@link GridBagConstraints}, anything.
  *
- * <p>Agrega también la medida **máxima** y la alineación, que la primera no tenía: sin máximo, una
- * distribución que reparte espacio sobrante no sabe cuándo dejar de estirar.
+ * <p>It also adds the **maximum** size and the alignment, which the first one did not have: without
+ * a maximum, a layout that distributes spare space does not know when to stop stretching.
  *
- * <p>{@link #invalidateLayout} existe porque estas distribuciones suelen guardar cuentas caras entre
- * llamadas; es el aviso de que hay que tirarlas.
+ * <p>{@link #invalidateLayout} exists because these layouts usually keep expensive computations
+ * between calls; it is the notice that they have to be thrown away.
  */
 public interface LayoutManager2 extends LayoutManager {
 
     /**
-     * Avisa que se agregó un hijo con esas restricciones.
+     * Tells that a child was added with those constraints.
      *
-     * @throws IllegalArgumentException si las restricciones no son de la clase que esta
-     *     distribución entiende
+     * @throws IllegalArgumentException if the constraints are not of the class this layout
+     *     understands
      */
     void addLayoutComponent(Component comp, Object constraints);
 
-    /** Lo máximo que el contenedor puede aprovechar. */
+    /** The maximum the container can make use of. */
     Dimension maximumLayoutSize(Container target);
 
-    /** Cómo se alinea el contenedor horizontalmente dentro del suyo. */
+    /** How the container aligns horizontally within its own. */
     float getLayoutAlignmentX(Container target);
 
-    /** Cómo se alinea verticalmente. */
+    /** How it aligns vertically. */
     float getLayoutAlignmentY(Container target);
 
-    /** Avisa que hay que tirar las cuentas guardadas. */
+    /** Tells that the stored computations have to be thrown away. */
     void invalidateLayout(Container target);
 }

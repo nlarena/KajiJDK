@@ -4,9 +4,8 @@ import javax.annotation.processing.SupportedSourceVersion;
 import javax.lang.model.SourceVersion;
 
 /**
- * El visitante por kind de elemento de las construcciones en **vista previa**. Ver
- * {@link ElementKindVisitor6} por el mecanismo y {@link AbstractElementVisitorPreview} por que significa
- * "vista previa" aca.
+ * The element-kind visitor for **preview** constructs. See {@link ElementKindVisitor6} for the
+ * mechanism and {@link AbstractElementVisitorPreview} for what "preview" means here.
  */
 @SupportedSourceVersion(SourceVersion.RELEASE_25)
 public class ElementKindVisitorPreview<R, P> extends ElementKindVisitor14<R, P> {

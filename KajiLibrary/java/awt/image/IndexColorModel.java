@@ -5,25 +5,26 @@ import java.awt.color.ColorSpace;
 import java.math.BigInteger;
 
 /**
- * Un modelo de color donde el píxel no es un color sino un **número de paleta**.
+ * A colour model where the pixel is not a colour but a **palette number**.
  *
- * <p>Es la indirección que hace posible un GIF: en vez de guardar tres bytes por píxel se guarda un
- * índice de ocho bits, y los colores de verdad viven en una tabla de 256 entradas. Una imagen así
- * ocupa un tercio, y cambiarle la paleta la recolorea entera sin tocar un solo píxel.
+ * <p>It is the indirection that makes a GIF possible: instead of storing three bytes per pixel an
+ * eight-bit index is stored, and the real colours live in a table of 256 entries. An image like
+ * that takes a third of the room, and changing its palette recolours it whole without touching a
+ * single pixel.
  *
- * <p>La contrapartida es que **convertir a este modelo pierde información**. Un color que no está en
- * la paleta se reemplaza por el más parecido, y eso lo hace {@link #getDataElements(int, Object)}
- * buscando en toda la tabla. Es la única operación cara de la clase, y es cara a propósito: elegir
- * mal el índice se ve.
+ * <p>The price is that **converting to this model loses information**. A colour that is not in the
+ * palette is replaced by the closest one, and that is done by {@link #getDataElements(int, Object)}
+ * searching the whole table. It is the only expensive operation of the class, and it is expensive
+ * on purpose: choosing the index badly shows.
  *
- * <p>La transparencia se **deduce** de la paleta y no se declara. Si ninguna entrada tiene alfa, el
- * modelo es opaco; si alguna tiene alfa cero y ninguna tiene un valor intermedio, es de máscara —el
- * píxel está o no está—; si hay valores intermedios, es translúcido. Eso cambia cuántas componentes
- * dice tener el modelo, y por eso se calcula antes de terminar de construirlo.
+ * <p>The transparency is **deduced** from the palette and not declared. If no entry has alpha, the
+ * model is opaque; if some has alpha zero and none has a value in between, it is by mask —the pixel
+ * is there or it is not—; if there are values in between, it is translucent. That changes how many
+ * components the model says it has, and that is why it is worked out before finishing building it.
  *
- * <p>Una paleta puede tener **huecos**: entradas que no corresponden a ningún color válido, marcadas
- * en el {@link BigInteger} de {@link #getValidPixels}. Un hueco no es lo mismo que un color
- * transparente: el transparente es un color que se puede usar, el hueco no se elige nunca.
+ * <p>A palette can have **holes**: entries that correspond to no valid colour, marked in the {@link
+ * BigInteger} of {@link #getValidPixels}. A hole is not the same as a transparent colour: the
+ * transparent one is a colour that can be used, the hole is never chosen.
  */
 public class IndexColorModel extends ColorModel {
 
@@ -37,11 +38,12 @@ public class IndexColorModel extends ColorModel {
     private BigInteger validBits;
 
     /**
-     * Con tres arreglos de componentes y sin alfa.
+     * With three arrays of components and no alpha.
      *
-     * @throws IllegalArgumentException si `bits` no está entre 1 y 16 o si `size` no es positivo
-     * @throws NullPointerException si falta alguno de los arreglos
-     * @throws ArrayIndexOutOfBoundsException si algún arreglo es más corto que `size`
+     * @throws IllegalArgumentException if `bits` is not between 1 and 16 or if `size` is not
+     *     positive
+     * @throws NullPointerException if any of the arrays is missing
+     * @throws ArrayIndexOutOfBoundsException if some array is shorter than `size`
      */
     public IndexColorModel(int bits, int size, byte[] r, byte[] g, byte[] b) {
         super(bits, opaqueBits, ColorSpace.getInstance(ColorSpace.CS_sRGB), false, false,
@@ -53,9 +55,10 @@ public class IndexColorModel extends ColorModel {
     }
 
     /**
-     * Como el anterior, con una entrada marcada como transparente.
+     * Like the previous one, with one entry marked as transparent.
      *
-     * @throws IllegalArgumentException si `bits` no está entre 1 y 16 o si `size` no es positivo
+     * @throws IllegalArgumentException if `bits` is not between 1 and 16 or if `size` is not
+     *     positive
      */
     public IndexColorModel(int bits, int size, byte[] r, byte[] g, byte[] b, int trans) {
         super(bits, opaqueBits, ColorSpace.getInstance(ColorSpace.CS_sRGB), false, false,
@@ -68,9 +71,10 @@ public class IndexColorModel extends ColorModel {
     }
 
     /**
-     * Con cuatro arreglos de componentes.
+     * With four arrays of components.
      *
-     * @throws IllegalArgumentException si `bits` no está entre 1 y 16 o si `size` no es positivo
+     * @throws IllegalArgumentException if `bits` is not between 1 and 16 or if `size` is not
+     *     positive
      */
     public IndexColorModel(int bits, int size, byte[] r, byte[] g, byte[] b, byte[] a) {
         super(bits, opaqueBits, ColorSpace.getInstance(ColorSpace.CS_sRGB), false, false,
@@ -82,10 +86,10 @@ public class IndexColorModel extends ColorModel {
     }
 
     /**
-     * Con la paleta empaquetada en un arreglo de bytes, tres o cuatro por entrada.
+     * With the palette packed into an array of bytes, three or four per entry.
      *
-     * @throws IllegalArgumentException si `bits` no está entre 1 y 16, si `size` no es positivo, o
-     *     si el arreglo no alcanza
+     * @throws IllegalArgumentException if `bits` is not between 1 and 16, if `size` is not
+     *     positive, or if the array is not long enough
      */
     public IndexColorModel(int bits, int size, byte[] cmap, int start, boolean hasalpha) {
         super(bits, opaqueBits, ColorSpace.getInstance(ColorSpace.CS_sRGB), false, false,
@@ -97,9 +101,10 @@ public class IndexColorModel extends ColorModel {
     }
 
     /**
-     * Como el anterior, con una entrada marcada como transparente.
+     * Like the previous one, with one entry marked as transparent.
      *
-     * @throws IllegalArgumentException si `bits` no está entre 1 y 16 o si `size` no es positivo
+     * @throws IllegalArgumentException if `bits` is not between 1 and 16 or if `size` is not
+     *     positive
      */
     public IndexColorModel(int bits, int size, byte[] cmap, int start, boolean hasalpha,
             int trans) {
@@ -112,10 +117,10 @@ public class IndexColorModel extends ColorModel {
     }
 
     /**
-     * Con la paleta en un arreglo de ARGB y el tipo de transferencia dado.
+     * With the palette in an array of ARGB and the transfer type given.
      *
-     * @throws IllegalArgumentException si `bits` no está entre 1 y 16, si `size` no es positivo, o
-     *     si el tipo no es `byte` ni `ushort`
+     * @throws IllegalArgumentException if `bits` is not between 1 and 16, if `size` is not
+     *     positive, or if the type is neither `byte` nor `ushort`
      */
     public IndexColorModel(int bits, int size, int[] cmap, int start, boolean hasalpha, int trans,
             int transferType) {
@@ -136,10 +141,10 @@ public class IndexColorModel extends ColorModel {
     }
 
     /**
-     * Con la paleta en ARGB y un mapa de qué entradas son válidas.
+     * With the palette in ARGB and a map of which entries are valid.
      *
-     * @throws IllegalArgumentException si `bits` no está entre 1 y 16, si `size` no es positivo, o
-     *     si el tipo no es `byte` ni `ushort`
+     * @throws IllegalArgumentException if `bits` is not between 1 and 16, if `size` is not
+     *     positive, or if the type is neither `byte` nor `ushort`
      */
     public IndexColorModel(int bits, int size, int[] cmap, int start, int transferType,
             BigInteger validBits) {
@@ -156,29 +161,29 @@ public class IndexColorModel extends ColorModel {
                     + "DataBuffer.TYPE_BYTE or DataBuffer.TYPE_USHORT");
         }
         if (validBits != null) {
-            // Una paleta llena de entradas validas es lo mismo que no tener mapa, y no tenerlo
-            // ahorra una consulta de BigInteger por pixel en todo lo que sigue.
-            boolean llena = true;
+            // A palette full of valid entries is the same as having no map, and not having one
+            // saves a BigInteger query per pixel in everything that follows.
+            boolean full = true;
             for (int i = 0; i < size; i++) {
                 if (!validBits.testBit(i)) {
-                    llena = false;
+                    full = false;
                     break;
                 }
             }
-            if (!llena) {
+            if (!full) {
                 this.validBits = validBits;
             }
         }
         this.setRGBs(size, cmap, start, true);
     }
 
-    /** Cuánto hay que reservar para la tabla, con lugar de sobra para índices fuera de rango. */
+    /** How much to reserve for the table, with room to spare for indices out of range. */
     private static int calcRealMapSize(int bits, int size) {
         int newSize = Math.max(1 << bits, size);
         return Math.max(newSize, 256);
     }
 
-    /** Arma la tabla desde tres o cuatro arreglos de componentes. */
+    /** Builds the table from three or four arrays of components. */
     private void setRGBs(int size, byte[] r, byte[] g, byte[] b, byte[] a) {
         if (size < 1) {
             throw new IllegalArgumentException("Map size (" + size + ") must be >= 1");
@@ -217,7 +222,7 @@ public class IndexColorModel extends ColorModel {
         this.setTransparentPixel(transparentIndex);
     }
 
-    /** Arma la tabla desde un arreglo de bytes con tres o cuatro por entrada. */
+    /** Builds the table from an array of bytes with three or four per entry. */
     private void setRGBs(int bits, int size, byte[] cmap, int start, boolean hasalpha, int trans) {
         if (size < 1) {
             throw new IllegalArgumentException("Map size (" + size + ") must be >= 1");
@@ -261,7 +266,7 @@ public class IndexColorModel extends ColorModel {
         this.setTransparentPixel(trans >= 0 ? trans : transparentIndex);
     }
 
-    /** Arma la tabla desde un arreglo de ARGB. */
+    /** Builds the table from an array of ARGB. */
     private void setRGBs(int size, int[] cmap, int start, boolean hasalpha) {
         this.map_size = size;
         this.rgb = new int[calcRealMapSize(this.pixel_bits, size)];
@@ -302,11 +307,11 @@ public class IndexColorModel extends ColorModel {
     }
 
     /**
-     * Fija la transparencia deducida y ajusta cuántas componentes tiene el modelo.
+     * Sets the deduced transparency and adjusts how many components the model has.
      *
-     * <p>Un modelo indexado opaco tiene tres componentes y uno con alfa, cuatro. Eso cambia lo que
-     * devuelven `getNumComponents` y `getComponentSize`, así que hay que ajustarlo acá y no en el
-     * constructor: recién ahora se sabe.
+     * <p>An opaque indexed model has three components and one with alpha, four. That changes what
+     * `getNumComponents` and `getComponentSize` return, so it has to be adjusted here and not in
+     * the constructor: only now is it known.
      */
     private void setTransparency(int transparency) {
         if (this.transparency != transparency) {
@@ -323,7 +328,7 @@ public class IndexColorModel extends ColorModel {
         }
     }
 
-    /** Marca una entrada como transparente, poniéndole alfa cero. */
+    /** Marks an entry as transparent, by setting its alpha to zero. */
     private void setTransparentPixel(int trans) {
         if (trans < 0 || trans >= this.map_size) {
             return;
@@ -336,12 +341,12 @@ public class IndexColorModel extends ColorModel {
         }
     }
 
-    /** `OPAQUE`, `BITMASK` o `TRANSLUCENT`, deducido de la paleta. */
+    /** `OPAQUE`, `BITMASK` or `TRANSLUCENT`, deduced from the palette. */
     public int getTransparency() {
         return this.transparency;
     }
 
-    /** Ocho bits por componente; cuatro componentes si hay alfa. */
+    /** Eight bits per component; four components if there is alpha. */
     public int[] getComponentSize() {
         if (this.nBits == null) {
             return null;
@@ -349,85 +354,85 @@ public class IndexColorModel extends ColorModel {
         return this.nBits.clone();
     }
 
-    /** Cuántas entradas tiene la paleta. */
+    /** How many entries the palette has. */
     public final int getMapSize() {
         return this.map_size;
     }
 
-    /** La entrada marcada como transparente, o -1 si no hay. */
+    /** The entry marked as transparent, or -1 if there is none. */
     public final int getTransparentPixel() {
         return this.transparent_index;
     }
 
-    /** Copia los rojos de la paleta. */
+    /** Copies the reds of the palette. */
     public final void getReds(byte[] r) {
         for (int i = 0; i < this.map_size; i++) {
             r[i] = (byte) (this.rgb[i] >> 16);
         }
     }
 
-    /** Copia los verdes de la paleta. */
+    /** Copies the greens of the palette. */
     public final void getGreens(byte[] g) {
         for (int i = 0; i < this.map_size; i++) {
             g[i] = (byte) (this.rgb[i] >> 8);
         }
     }
 
-    /** Copia los azules de la paleta. */
+    /** Copies the blues of the palette. */
     public final void getBlues(byte[] b) {
         for (int i = 0; i < this.map_size; i++) {
             b[i] = (byte) this.rgb[i];
         }
     }
 
-    /** Copia los alfas de la paleta. */
+    /** Copies the alphas of the palette. */
     public final void getAlphas(byte[] a) {
         for (int i = 0; i < this.map_size; i++) {
             a[i] = (byte) (this.rgb[i] >> 24);
         }
     }
 
-    /** Copia la paleta entera como ARGB. */
+    /** Copies the whole palette as ARGB. */
     public final void getRGBs(int[] rgb) {
         System.arraycopy(this.rgb, 0, rgb, 0, this.map_size);
     }
 
-    /** El rojo de esa entrada de la paleta. */
+    /** The red of that entry of the palette. */
     public final int getRed(int pixel) {
         return (this.rgb[pixel] >> 16) & 0xFF;
     }
 
-    /** El verde de esa entrada de la paleta. */
+    /** The green of that entry of the palette. */
     public final int getGreen(int pixel) {
         return (this.rgb[pixel] >> 8) & 0xFF;
     }
 
-    /** El azul de esa entrada de la paleta. */
+    /** The blue of that entry of the palette. */
     public final int getBlue(int pixel) {
         return this.rgb[pixel] & 0xFF;
     }
 
-    /** El alfa de esa entrada de la paleta. */
+    /** The alpha of that entry of the palette. */
     public final int getAlpha(int pixel) {
         return (this.rgb[pixel] >> 24) & 0xFF;
     }
 
-    /** El ARGB de esa entrada de la paleta. */
+    /** The ARGB of that entry of the palette. */
     public final int getRGB(int pixel) {
         return this.rgb[pixel];
     }
 
     /**
-     * El índice de paleta que mejor representa ese color.
+     * The palette index that best represents that colour.
      *
-     * <p>Primero se busca una coincidencia exacta y, si no la hay, la entrada más cercana por
-     * distancia euclídea al cuadrado en las cuatro componentes. Ante un empate gana el índice más
-     * chico, para que el resultado no dependa del orden en que se recorra.
+     * <p>First an exact match is looked for and, if there is none, the closest entry by squared
+     * Euclidean distance over the four components. On a tie the smaller index wins, so that the
+     * result does not depend on the order things are walked in.
      *
-     * <p>Es la operación cara de la clase, y la que efectivamente pierde información: el color que
-     * entra casi nunca es el que sale.
+     * <p>It is the expensive operation of the class, and the one that actually loses information:
+     * the colour that goes in is almost never the one that comes out.
      *
-     * @throws UnsupportedOperationException si el tipo de transferencia no es `byte` ni `ushort`
+     * @throws UnsupportedOperationException if the transfer type is neither `byte` nor `ushort`
      */
     public synchronized Object getDataElements(int rgb, Object pixel) {
         int red = (rgb >> 16) & 0xFF;
@@ -435,23 +440,23 @@ public class IndexColorModel extends ColorModel {
         int blue = rgb & 0xFF;
         int alpha = rgb >>> 24;
         int pix = 0;
-        boolean encontrado = false;
+        boolean found = false;
         for (int i = 0; i < this.map_size; i++) {
-            if (this.esValido(i) && this.rgb[i] == rgb) {
+            if (this.isValidEntry(i) && this.rgb[i] == rgb) {
                 pix = i;
-                encontrado = true;
+                found = true;
                 break;
             }
         }
-        if (!encontrado) {
-            // Un color del todo transparente va a la entrada transparente si la hay: cualquier otra
-            // le agregaria un color que no se ve pero que reaparece al componer.
+        if (!found) {
+            // A fully transparent colour goes to the transparent entry if there is one: any other
+            // would add a colour that is not seen but that comes back when compositing.
             if (alpha == 0 && this.transparent_index >= 0) {
                 pix = this.transparent_index;
             } else {
-                int mejor = Integer.MAX_VALUE;
+                int best = Integer.MAX_VALUE;
                 for (int i = 0; i < this.map_size; i++) {
-                    if (!this.esValido(i)) {
+                    if (!this.isValidEntry(i)) {
                         continue;
                     }
                     int c = this.rgb[i];
@@ -460,8 +465,8 @@ public class IndexColorModel extends ColorModel {
                     int dg = ((c >> 8) & 0xFF) - green;
                     int db = (c & 0xFF) - blue;
                     int error = da * da + dr * dr + dg * dg + db * db;
-                    if (error < mejor) {
-                        mejor = error;
+                    if (error < best) {
+                        best = error;
                         pix = i;
                     }
                 }
@@ -481,12 +486,12 @@ public class IndexColorModel extends ColorModel {
                 "This method has not been implemented for transferType " + this.transferType);
     }
 
-    /** Si esa entrada de la paleta corresponde a un color de verdad. */
-    private boolean esValido(int pixel) {
+    /** Whether that entry of the palette corresponds to a real colour. */
+    private boolean isValidEntry(int pixel) {
         return this.validBits == null || this.validBits.testBit(pixel);
     }
 
-    /** Las componentes del color de esa entrada. */
+    /** The components of the colour of that entry. */
     public int[] getComponents(int pixel, int[] components, int offset) {
         int[] out = components;
         if (out == null) {
@@ -502,9 +507,9 @@ public class IndexColorModel extends ColorModel {
     }
 
     /**
-     * Las componentes del color de ese píxel crudo.
+     * The components of the colour of that raw pixel.
      *
-     * @throws UnsupportedOperationException si el tipo de transferencia no es `byte` ni `ushort`
+     * @throws UnsupportedOperationException if the transfer type is neither `byte` nor `ushort`
      */
     public int[] getComponents(Object pixel, int[] components, int offset) {
         int pix;
@@ -522,9 +527,9 @@ public class IndexColorModel extends ColorModel {
     }
 
     /**
-     * El índice de paleta más cercano a ese color dado por componentes.
+     * The palette index closest to that colour given by components.
      *
-     * @throws IllegalArgumentException si el arreglo no trae todas las componentes
+     * @throws IllegalArgumentException if the array does not carry every component
      */
     public int getDataElement(int[] components, int offset) {
         int rgb = (components[offset] << 16) | (components[offset + 1] << 8)
@@ -542,9 +547,9 @@ public class IndexColorModel extends ColorModel {
     }
 
     /**
-     * Como el anterior, en un arreglo del tipo de transferencia.
+     * Like the previous one, in an array of the transfer type.
      *
-     * @throws UnsupportedOperationException si el tipo de transferencia no es `byte` ni `ushort`
+     * @throws UnsupportedOperationException if the transfer type is neither `byte` nor `ushort`
      */
     public Object getDataElements(int[] components, int offset, Object pixel) {
         int rgb = (components[offset] << 16) | (components[offset + 1] << 8)
@@ -558,12 +563,12 @@ public class IndexColorModel extends ColorModel {
     }
 
     /**
-     * Un ráster que guarde un índice por píxel.
+     * A raster that stores one index per pixel.
      *
-     * <p>Con paletas chicas sale un ráster empaquetado de varios píxeles por elemento: una imagen de
-     * dos colores ocupa un bit por píxel y no un byte.
+     * <p>With small palettes what comes out is a packed raster of several pixels per element: an
+     * image of two colours takes one bit per pixel and not one byte.
      *
-     * @throws IllegalArgumentException si el tamaño es vacío
+     * @throws IllegalArgumentException if the size is empty
      */
     public WritableRaster createCompatibleWritableRaster(int w, int h) {
         if (w <= 0 || h <= 0) {
@@ -582,7 +587,7 @@ public class IndexColorModel extends ColorModel {
         throw new UnsupportedOperationException("This method is not supported for pixel bits > 16.");
     }
 
-    /** Si ese ráster tiene una sola banda del tipo y ancho que corresponde. */
+    /** Whether that raster has a single band of the type and width that corresponds. */
     public boolean isCompatibleRaster(Raster raster) {
         int size = raster.getSampleModel().getSampleSize(0);
         return raster.getTransferType() == this.transferType && raster.getNumBands() == 1
@@ -590,9 +595,9 @@ public class IndexColorModel extends ColorModel {
     }
 
     /**
-     * Un modelo de muestras de una banda.
+     * A one-band sample model.
      *
-     * @throws IllegalArgumentException si el tamaño es vacío
+     * @throws IllegalArgumentException if the size is empty
      */
     public SampleModel createCompatibleSampleModel(int w, int h) {
         if (w <= 0 || h <= 0) {
@@ -607,7 +612,7 @@ public class IndexColorModel extends ColorModel {
         return new ComponentSampleModel(this.transferType, w, h, 1, w, bandOffsets);
     }
 
-    /** Si ese modelo de muestras guarda un índice por píxel. */
+    /** Whether that sample model stores one index per pixel. */
     public boolean isCompatibleSampleModel(SampleModel sm) {
         if (!(sm instanceof ComponentSampleModel) && !(sm instanceof MultiPixelPackedSampleModel)) {
             return false;
@@ -618,23 +623,23 @@ public class IndexColorModel extends ColorModel {
         return sm.getNumBands() == 1;
     }
 
-    /** Si todas las entradas de la paleta son válidas. */
+    /** Whether every entry of the palette is valid. */
     public boolean isValid() {
         return this.validBits == null;
     }
 
-    /** Si esa entrada de la paleta es válida. */
+    /** Whether that entry of the palette is valid. */
     public boolean isValid(int pixel) {
         if (pixel < 0 || pixel >= this.map_size) {
             return false;
         }
-        return this.esValido(pixel);
+        return this.isValidEntry(pixel);
     }
 
     /**
-     * Qué entradas de la paleta son válidas, o `null` si lo son todas.
+     * Which entries of the palette are valid, or `null` if they all are.
      *
-     * <p>El bit `i` está prendido si la entrada `i` corresponde a un color de verdad.
+     * <p>Bit `i` is on if entry `i` corresponds to a real colour.
      */
     public BigInteger getValidPixels() {
         if (this.validBits == null) {
@@ -643,7 +648,7 @@ public class IndexColorModel extends ColorModel {
         return this.validBits;
     }
 
-    /** Un mapa con todas las entradas prendidas. */
+    /** A map with every entry switched on. */
     private BigInteger getAllValid() {
         int numbytes = (this.map_size + 7) / 8;
         byte[] valid = new byte[numbytes];
@@ -653,12 +658,12 @@ public class IndexColorModel extends ColorModel {
     }
 
     /**
-     * Deshace la indirección: la misma imagen con el color en cada píxel.
+     * Undoes the indirection: the same image with the colour in each pixel.
      *
-     * <p>Es la operación inversa a indexar, y no pierde nada — la paleta ya estaba en el color de
-     * cada índice.
+     * <p>It is the inverse operation of indexing, and it loses nothing — the palette had the colour
+     * of each index already.
      *
-     * @param forceARGB `true` para que el resultado tenga alfa aunque la paleta sea opaca
+     * @param forceARGB `true` for the result to have alpha even if the palette is opaque
      */
     public BufferedImage convertToIntDiscrete(Raster raster, boolean forceARGB) {
         ColorModel cm;
@@ -674,12 +679,12 @@ public class IndexColorModel extends ColorModel {
         WritableRaster discreteRaster = cm.createCompatibleWritableRaster(w, h);
         int rX = raster.getMinX();
         int rY = raster.getMinY();
-        int[] fila = new int[w];
+        int[] row = new int[w];
         for (int y = 0; y < h; y++) {
             for (int x = 0; x < w; x++) {
-                fila[x] = this.rgb[raster.getSample(rX + x, rY + y, 0)];
+                row[x] = this.rgb[raster.getSample(rX + x, rY + y, 0)];
             }
-            discreteRaster.setDataElements(0, y, w, 1, fila);
+            discreteRaster.setDataElements(0, y, w, 1, row);
         }
         return new BufferedImage(cm, discreteRaster, false, null);
     }

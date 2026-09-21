@@ -15,15 +15,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-// KajiLibrary's java.time.chrono.Chronology -- un sistema de calendario: el ISO-8601 y los cuatro que
-// trae el JDK (japones, hijri, minguo, budista tailandes). Ordenado por id, asi que extiende
+// KajiLibrary's java.time.chrono.Chronology -- a calendar system: ISO-8601 and the four the JDK
+// brings (Japanese, Hijrah, Minguo, Thai Buddhist). Ordered by id, so it extends
 // Comparable<Chronology>.
 //
-// La division con `ChronoLocalDate` es la del JDK y conviene tenerla clara: la **fecha** sabe que dia
-// es, el **calendario** sabe como se cuentan los dias. Una `MinguoDate` no sabe cuantos meses tiene
-// un anio; le pregunta a su `MinguoChronology`.
+// The split with `ChronoLocalDate` is the JDK's and is worth having clear: the **date** knows what
+// day it is, the **calendar** knows how days are counted. A `MinguoDate` does not know how many
+// months a year has; it asks its `MinguoChronology`.
 //
-// Sobre `getDisplayName(TextStyle, Locale)`: esta, y devuelve el **id**. Ver su javadoc.
+// On `getDisplayName(TextStyle, Locale)`: it is here, and it returns the **id**. See its javadoc.
 public interface Chronology extends Comparable<Chronology> {
 
     String getId();
@@ -40,88 +40,88 @@ public interface Chronology extends Comparable<Chronology> {
 
     int compareTo(Chronology other);
 
-    // ---- lo que cada calendario tiene que saber contestar -----------------------------------------
+    // ---- what every calendar has to know how to answer --------------------------------------------
 
     /**
-     * El anio **proleptico** que corresponde a ese anio dentro de esa era.
+     * The **proleptic** year corresponding to that year within that era.
      *
-     * <p>Un calendario cuenta los anios por era y vuelve a empezar: el 1 de Showa y el 1 de Heisei
-     * son dos anios distintos. El anio proleptico es la numeracion corrida que no se reinicia, y es
-     * la unica con la que se puede hacer aritmetica.
+     * <p>A calendar counts the years by era and starts over: Showa 1 and Heisei 1 are two different
+     * years. The proleptic year is the running numbering that does not restart, and it is the only
+     * one arithmetic can be done with.
      */
     int prolepticYear(Era era, int yearOfEra);
 
-    /** La fecha que `temporal` tiene, leida en **este** calendario. */
+    /** The date `temporal` holds, read in **this** calendar. */
     ChronoLocalDate date(TemporalAccessor temporal);
 
-    /** La fecha por anio y **dia del anio**, sin pasar por el mes. */
+    /** The date by year and **day of the year**, without going through the month. */
     ChronoLocalDate dateYearDay(int prolepticYear, int dayOfYear);
 
-    /** El rango de valores que ese campo admite **en este calendario**. */
+    /** The range of values that field allows **in this calendar**. */
     ValueRange range(ChronoField field);
 
-    /** Las eras de este calendario, de la mas antigua a la mas reciente. */
+    /** This calendar's eras, from the oldest to the most recent. */
     List<Era> eras();
 
-    // ---- construccion, con la era explicita -------------------------------------------------------
+    // ---- construction, with the era spelled out ---------------------------------------------------
 
-    /** La fecha por era, anio de la era, mes y dia. */
+    /** The date by era, year of the era, month and day. */
     default ChronoLocalDate date(Era era, int yearOfEra, int month, int dayOfMonth) {
         return this.date(this.prolepticYear(era, yearOfEra), month, dayOfMonth);
     }
 
-    /** La fecha por era, anio de la era y dia del anio. */
+    /** The date by era, year of the era and day of the year. */
     default ChronoLocalDate dateYearDay(Era era, int yearOfEra, int dayOfYear) {
         return this.dateYearDay(this.prolepticYear(era, yearOfEra), dayOfYear);
     }
 
-    /** Hoy, en la zona por defecto del sistema. */
+    /** Today, in the system's default zone. */
     default ChronoLocalDate dateNow() {
         return this.dateNow(Clock.systemDefaultZone());
     }
 
-    /** Hoy en esa zona. */
+    /** Today in that zone. */
     default ChronoLocalDate dateNow(ZoneId zone) {
         return this.dateNow(Clock.system(zone));
     }
 
-    /** Hoy **segun ese reloj**, que es la forma que se puede probar con un `Clock.fixed`. */
+    /** Today **according to that clock**, the form that can be tested with a `Clock.fixed`. */
     default ChronoLocalDate dateNow(Clock clock) {
         if (clock == null) {
             throw new NullPointerException("clock");
         }
-        LocalDate hoy = LocalDate.now(clock);
-        return this.dateEpochDay(hoy.toEpochDay());
+        LocalDate today = LocalDate.now(clock);
+        return this.dateEpochDay(today.toEpochDay());
     }
 
-    // ---- los compuestos ---------------------------------------------------------------------------
+    // ---- the composites ---------------------------------------------------------------------------
 
-    /** La fecha y hora que `temporal` tiene, en este calendario. */
+    /** The date and time `temporal` holds, in this calendar. */
     default ChronoLocalDateTime localDateTime(TemporalAccessor temporal) {
         if (temporal == null) {
             throw new NullPointerException("temporal");
         }
-        ChronoLocalDate fecha = this.date(temporal);
-        LocalTime hora = LocalTime.from(temporal);
-        return ChronoLocalDateTimeImpl.of(fecha, hora);
+        ChronoLocalDate date = this.date(temporal);
+        LocalTime time = LocalTime.from(temporal);
+        return ChronoLocalDateTimeImpl.of(date, time);
     }
 
-    /** La fecha, hora y zona que `temporal` tiene, en este calendario. */
+    /** The date, time and zone `temporal` holds, in this calendar. */
     default ChronoZonedDateTime zonedDateTime(TemporalAccessor temporal) {
         if (temporal == null) {
             throw new NullPointerException("temporal");
         }
-        ZoneId zona = ZoneId.from(temporal);
+        ZoneId zone = ZoneId.from(temporal);
         if (temporal.isSupported(ChronoField.INSTANT_SECONDS)) {
-            Instant instante = Instant.ofEpochSecond(temporal.getLong(ChronoField.INSTANT_SECONDS),
+            Instant instant = Instant.ofEpochSecond(temporal.getLong(ChronoField.INSTANT_SECONDS),
                     temporal.getLong(ChronoField.NANO_OF_SECOND));
-            return this.zonedDateTime(instante, zona);
+            return this.zonedDateTime(instant, zone);
         }
         ChronoLocalDateTime local = this.localDateTime(temporal);
-        return ChronoZonedDateTimeImpl.of(local, zona);
+        return ChronoZonedDateTimeImpl.of(local, zone);
     }
 
-    /** Ese instante visto desde esa zona, en este calendario. */
+    /** That instant seen from that zone, in this calendar. */
     default ChronoZonedDateTime zonedDateTime(Instant instant, ZoneId zone) {
         if (instant == null) {
             throw new NullPointerException("instant");
@@ -129,18 +129,18 @@ public interface Chronology extends Comparable<Chronology> {
         return ChronoZonedDateTimeImpl.ofInstant(this, instant, zone);
     }
 
-    /** Un periodo de este calendario. Anios, meses y dias **no** se normalizan entre si. */
+    /** A period of this calendar. Years, months and days are **not** normalised against each other. */
     default ChronoPeriod period(int years, int months, int days) {
         return new ChronoPeriodImpl(this, years, months, days);
     }
 
-    // ---- el segundo epoch, sin construir la fecha -------------------------------------------------
+    // ---- the epoch second, without building the date ----------------------------------------------
 
     /**
-     * Los segundos desde el epoch de esa fecha y hora **de este calendario** con ese desplazamiento.
+     * The seconds since the epoch of that date and time **of this calendar** with that offset.
      *
-     * <p>Existe para no tener que construir el objeto intermedio cuando lo unico que se quiere es el
-     * numero: es el camino que usan las bases de datos y los formatos binarios.
+     * <p>It exists so the intermediate object need not be built when the number is all that is
+     * wanted: it is the path databases and binary formats take.
      */
     default long epochSecond(int prolepticYear, int month, int dayOfMonth, int hour, int minute,
             int second, ZoneOffset zoneOffset) {
@@ -150,13 +150,13 @@ public interface Chronology extends Comparable<Chronology> {
         ChronoField.HOUR_OF_DAY.checkValidValue((long) hour);
         ChronoField.MINUTE_OF_HOUR.checkValidValue((long) minute);
         ChronoField.SECOND_OF_MINUTE.checkValidValue((long) second);
-        ChronoLocalDate fecha = this.date(prolepticYear, month, dayOfMonth);
-        long dia = fecha.toEpochDay();
-        long segundos = dia * 86400L + (long) (hour * 3600 + minute * 60 + second);
-        return segundos - (long) zoneOffset.getTotalSeconds();
+        ChronoLocalDate date = this.date(prolepticYear, month, dayOfMonth);
+        long day = date.toEpochDay();
+        long seconds = day * 86400L + (long) (hour * 3600 + minute * 60 + second);
+        return seconds - (long) zoneOffset.getTotalSeconds();
     }
 
-    /** El mismo, con la era y el anio de la era en vez del anio proleptico. */
+    /** The same, with the era and the year of the era instead of the proleptic year. */
     default long epochSecond(Era era, int yearOfEra, int month, int dayOfMonth, int hour, int minute,
             int second, ZoneOffset zoneOffset) {
         return this.epochSecond(this.prolepticYear(era, yearOfEra), month, dayOfMonth, hour, minute,
@@ -164,37 +164,37 @@ public interface Chronology extends Comparable<Chronology> {
     }
 
     /**
-     * Si este calendario cuenta los dias igual que el ISO.
+     * Whether this calendar counts the days the same way ISO does.
      *
-     * <p>Los cuatro no-ISO de esta biblioteca son todos corrimientos del ISO --el mismo dia con otro
-     * numero de anio-- salvo el hijri, que tiene su propia tabla de meses. Lo que responde no es "es
-     * el ISO" sino "puedo tratar sus anios y meses como los del ISO".
+     * <p>This library's four non-ISO ones are all shifts of ISO --the same day with another year
+     * number-- except Hijrah, which has a month table of its own. What it answers is not "it is ISO"
+     * but "I can treat its years and months as ISO's".
      */
     default boolean isIsoBased() {
         return false;
     }
 
     /**
-     * Reconstruye una fecha a partir de campos sueltos, resolviendo lo que se contradiga segun
+     * It rebuilds a date out of loose fields, resolving what contradicts itself according to
      * `resolverStyle`.
      *
-     * <p>Es lo que usa el parseo: un formateador junta `ERA`, `YEAR_OF_ERA`, `MONTH_OF_YEAR`... y
-     * alguien tiene que decidir que combinacion gana y que hacer con un 31 de febrero.
+     * <p>It is what parsing uses: a formatter gathers `ERA`, `YEAR_OF_ERA`, `MONTH_OF_YEAR`... and
+     * somebody has to decide which combination wins and what to do with a 31st of February.
      */
     ChronoLocalDate resolveDate(Map<TemporalField, Long> fieldValues, java.time.format.ResolverStyle resolverStyle);
 
     /**
-     * El nombre de este calendario para mostrarle a alguien.
+     * This calendar's name to show to somebody.
      *
-     * <p>Devuelve **el id**, que es a lo que el propio JDK recurre cuando no encuentra un nombre
-     * para el estilo y el locale pedidos --su implementacion termina en
+     * <p>It returns **the id**, which is what the JDK itself falls back to when it finds no name for
+     * the style and locale asked for --its implementation ends in
      * `Objects.requireNonNullElseGet(name, () -> chrono.getId())`--.
      *
-     * <p>**Esta biblioteca no trae los datos de texto del CLDR**, asi que esa rama se toma
-     * **siempre**. Para el ISO coincide con el JDK (`"ISO"` en los dos); para los demas se queda
-     * corto de una palabra: `"Minguo"` aca, `"Minguo Calendar"` alla.
+     * <p>**This library does not carry the CLDR's text data**, so that branch is taken **always**.
+     * For ISO it coincides with the JDK (`"ISO"` in both); for the rest it falls a word short:
+     * `"Minguo"` here, `"Minguo Calendar"` there.
      *
-     * @throws NullPointerException si `style` o `locale` son `null`
+     * @throws NullPointerException if `style` or `locale` are `null`
      */
     default String getDisplayName(java.time.format.TextStyle style, java.util.Locale locale) {
         if (style == null) {
@@ -206,9 +206,9 @@ public interface Chronology extends Comparable<Chronology> {
         return this.getId();
     }
 
-    // ---- busqueda ---------------------------------------------------------------------------------
+    // ---- lookup ---------------------------------------------------------------------------------
 
-    /** El calendario que `temporal` declara; el ISO si no declara ninguno. */
+    /** The calendar `temporal` declares; ISO if it declares none. */
     static Chronology from(TemporalAccessor temporal) {
         if (temporal == null) {
             throw new NullPointerException("temporal");
@@ -221,15 +221,16 @@ public interface Chronology extends Comparable<Chronology> {
     }
 
     /**
-     * El calendario de ese id (`"ISO"`, `"Minguo"`...) o de ese tipo CLDR (`"iso8601"`, `"roc"`...).
+     * The calendar of that id (`"ISO"`, `"Minguo"`...) or of that CLDR type (`"iso8601"`,
+     * `"roc"`...).
      *
-     * @throws java.time.DateTimeException si no hay ninguno con ese nombre
+     * @throws java.time.DateTimeException if there is none by that name
      */
     static Chronology of(String id) {
         if (id == null) {
             throw new NullPointerException("id");
         }
-        for (Chronology c : ChronologyTable.TODAS) {
+        for (Chronology c : ChronologyTable.ALL) {
             if (id.equals(c.getId()) || id.equals(c.getCalendarType())) {
                 return c;
             }
@@ -238,12 +239,14 @@ public interface Chronology extends Comparable<Chronology> {
     }
 
     /**
-     * El calendario que pide ese locale por su extension Unicode `ca`, o el ISO si no pide ninguno.
+     * The calendar that locale asks for through its Unicode `ca` extension, or ISO if it asks for
+     * none.
      *
-     * <p>Solo se mira la extension explicita --`th-TH-u-ca-buddhist`--. El JDK ademas tiene un mapa
-     * de "que calendario usa por defecto cada region", que otra vez son datos del CLDR y no codigo;
-     * sin ese mapa, `Locale.forLanguageTag("th-TH")` da ISO aca y budista en el JDK. Se prefiere esa
-     * diferencia, que es visible y esta escrita, a inventar un mapa parcial que acierte a veces.
+     * <p>Only the explicit extension is looked at --`th-TH-u-ca-buddhist`--. The JDK also has a map
+     * of "which calendar each region uses by default", which again is CLDR data and not code;
+     * without that map, `Locale.forLanguageTag("th-TH")` gives ISO here and Buddhist in the JDK. That
+     * difference, which is visible and written down, is preferred to inventing a partial map that is
+     * right some of the time.
      */
     static Chronology ofLocale(java.util.Locale locale) {
         if (locale == null) {
@@ -256,30 +259,30 @@ public interface Chronology extends Comparable<Chronology> {
         return Chronology.of(ca);
     }
 
-    /** Todos los calendarios disponibles. */
+    /** Every available calendar. */
     static Set<Chronology> getAvailableChronologies() {
-        return new java.util.HashSet<Chronology>(ChronologyTable.TODAS);
+        return new java.util.HashSet<Chronology>(ChronologyTable.ALL);
     }
 }
 
-// La lista de calendarios, aparte porque una interfaz no puede tener campos privados y uno `public`
-// seria un miembro que el JDK no tiene.
+// The list of calendars, kept apart because an interface cannot have private fields and a `public`
+// one would be a member the JDK does not have.
 final class ChronologyTable {
 
-    // `List` y no un array: `getAvailableChronologies` devuelve una copia y `of` solo la recorre, asi
-    // que nadie puede modificarla desde afuera.
-    static final List<Chronology> TODAS = crear();
+    // A `List` and not an array: `getAvailableChronologies` returns a copy and `of` only walks it, so
+    // nobody can modify it from outside.
+    static final List<Chronology> ALL = build();
 
     private ChronologyTable() {
     }
 
-    private static List<Chronology> crear() {
-        List<Chronology> todas = new ArrayList<Chronology>();
-        todas.add(IsoChronology.INSTANCE);
-        todas.add(HijrahChronology.INSTANCE);
-        todas.add(JapaneseChronology.INSTANCE);
-        todas.add(MinguoChronology.INSTANCE);
-        todas.add(ThaiBuddhistChronology.INSTANCE);
-        return todas;
+    private static List<Chronology> build() {
+        List<Chronology> all = new ArrayList<Chronology>();
+        all.add(IsoChronology.INSTANCE);
+        all.add(HijrahChronology.INSTANCE);
+        all.add(JapaneseChronology.INSTANCE);
+        all.add(MinguoChronology.INSTANCE);
+        all.add(ThaiBuddhistChronology.INSTANCE);
+        return all;
     }
 }

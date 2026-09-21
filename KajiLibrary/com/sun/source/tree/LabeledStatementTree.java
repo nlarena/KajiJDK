@@ -3,7 +3,7 @@ package com.sun.source.tree;
 import javax.lang.model.element.Name;
 
 /**
- * Una sentencia con etiqueta.
+ * A statement with a label.
  */
 public interface LabeledStatementTree extends StatementTree {
 

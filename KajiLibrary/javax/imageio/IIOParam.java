@@ -4,74 +4,74 @@ import java.awt.Point;
 import java.awt.Rectangle;
 
 /**
- * KajiLibrary's javax.imageio.IIOParam -- que parte de la imagen y como.
+ * KajiLibrary's javax.imageio.IIOParam -- which part of the image, and how.
  *
- * <p>Lo que comparten {@link ImageReadParam} y {@link ImageWriteParam}: recortar, submuestrear, elegir
- * bandas y desplazar el destino.
+ * <p>What {@link ImageReadParam} and {@link ImageWriteParam} share: cropping, subsampling, choosing
+ * bands and offsetting the destination.
  *
- * <h2>El submuestreo tiene desplazamiento, y por eso son cuatro numeros</h2>
+ * <h2>Subsampling has an offset, which is why it is four numbers</h2>
  *
- * <p>{@link #setSourceSubsampling} toma el paso en X e Y <b>y ademas</b> desde que pixel arrancar. Con
- * un paso de 2 y desplazamiento 0 se toman los pixeles pares; con desplazamiento 1, los impares.
+ * <p>{@link #setSourceSubsampling} takes the step in X and Y <b>and also</b> which pixel to start
+ * from. With a step of 2 and offset 0 the even pixels are taken; with offset 1, the odd ones.
  *
- * <p>Eso es lo que permite leer una imagen enorme en cuatro pasadas que juntas la cubren entera, o
- * generar una miniatura sin cargar todo. Los desplazamientos tienen que ser <b>menores</b> que el
- * paso: si no, se saltearia el primer bloque entero.
+ * <p>That is what allows reading a huge image in four passes that together cover it whole, or
+ * making a thumbnail without loading everything. The offsets must be <b>smaller</b> than the step:
+ * otherwise the whole first block would be skipped.
  *
- * <h2>Recortar y submuestrear se combinan en ese orden</h2>
+ * <h2>Cropping and subsampling combine in that order</h2>
  *
- * <p>Primero se recorta a la region, y despues se submuestrea dentro del recorte -- y el
- * desplazamiento del submuestreo se cuenta desde el borde de la region, no de la imagen.
+ * <p>First the image is cropped to the region, and then subsampled within the crop -- and the
+ * subsampling offset counts from the edge of the region, not of the image.
  *
- * <p>{@link #setSourceRegion} con null quita el recorte, igual que {@link #setSourceBands} con null
- * vuelve a todas las bandas. Es el convenio de toda la clase: null significa "lo de siempre".
+ * <p>{@link #setSourceRegion} with null removes the crop, just as {@link #setSourceBands} with null
+ * goes back to all bands. It is the whole class's convention: null means "the usual".
  *
  * <h2>{@link #setDestinationOffset}</h2>
  *
- * <p>Donde poner lo leido dentro de la imagen destino. Es como se arma un mosaico leyendo pedazos de
- * varias imagenes en una sola.
+ * <p>Where to put what was read within the destination image. It is how a mosaic is built by
+ * reading pieces of several images into a single one.
  */
 public abstract class IIOParam {
 
-    /** Que pedazo de la fuente, o null para toda. */
+    /** Which piece of the source, or null for all of it. */
     protected Rectangle sourceRegion = null;
 
-    /** Cada cuantos pixeles en X. */
+    /** Every how many pixels in X. */
     protected int sourceXSubsampling = 1;
 
-    /** Cada cuantos en Y. */
+    /** Every how many in Y. */
     protected int sourceYSubsampling = 1;
 
-    /** Desde que pixel arrancar en X. Ver la nota de la clase. */
+    /** Which pixel to start from in X. See the class note. */
     protected int subsamplingXOffset = 0;
 
-    /** Idem en Y. */
+    /** Same in Y. */
     protected int subsamplingYOffset = 0;
 
-    /** Que bandas, o null para todas. */
+    /** Which bands, or null for all. */
     protected int[] sourceBands = null;
 
-    /** De que tipo tiene que ser el destino, o null. */
+    /** What type the destination has to be, or null. */
     protected ImageTypeSpecifier destinationType = null;
 
-    /** Donde ubicar lo leido en el destino. */
+    /** Where to place what was read in the destination. */
     protected Point destinationOffset = new Point(0, 0);
 
-    /** El controlador de fabrica, o null. */
+    /** The default controller, or null. */
     protected IIOParamController defaultController = null;
 
-    /** El que esta puesto ahora. */
+    /** The one set now. */
     protected IIOParamController controller = null;
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected IIOParam() {
     }
 
     /**
-     * Fija el recorte de la fuente; null lo quita.
+     * Sets the source crop; null removes it.
      *
-     * @throws IllegalArgumentException si el ancho o el alto son cero o negativos, o si la esquina es
-     *     negativa
+     * @throws IllegalArgumentException if the width or height are zero or negative, or if the
+     *     corner is negative
      */
     public void setSourceRegion(Rectangle sourceRegion) {
         if (sourceRegion != null) {
@@ -87,8 +87,8 @@ public abstract class IIOParam {
             if (sourceRegion.height <= 0) {
                 throw new IllegalArgumentException("sourceRegion.height <= 0!");
             }
-            // Un recorte tan chico que el submuestreo no alcanzaria a tomar ni un pixel no es un
-            // recorte valido: el resultado seria una imagen vacia.
+            // A crop so small that subsampling would not take even one pixel is not a valid crop:
+            // the result would be an empty image.
             if (sourceRegion.width <= this.subsamplingXOffset) {
                 throw new IllegalArgumentException("sourceRegion.width <= subsamplingXOffset!");
             }
@@ -101,7 +101,7 @@ public abstract class IIOParam {
         }
     }
 
-    /** El recorte, o null. Es una copia. */
+    /** The crop, or null. It is a copy. */
     public Rectangle getSourceRegion() {
         if (this.sourceRegion == null) {
             return null;
@@ -110,12 +110,12 @@ public abstract class IIOParam {
     }
 
     /**
-     * Fija el submuestreo. Ver la nota de la clase.
+     * Sets the subsampling. See the class note.
      *
-     * @param sourceXSubsampling cada cuantos pixeles en X; al menos 1
-     * @param subsamplingXOffset desde cual arrancar; menor que el paso
-     * @throws IllegalArgumentException si los pasos no son positivos, si los desplazamientos son
-     *     negativos o no menores que su paso, o si el recorte no da para tanto
+     * @param sourceXSubsampling every how many pixels in X; at least 1
+     * @param subsamplingXOffset which one to start from; smaller than the step
+     * @throws IllegalArgumentException if the steps are not positive, if the offsets are negative
+     *     or not smaller than their step, or if the crop is not big enough
      */
     public void setSourceSubsampling(int sourceXSubsampling, int sourceYSubsampling,
                                      int subsamplingXOffset, int subsamplingYOffset) {
@@ -143,35 +143,35 @@ public abstract class IIOParam {
         this.subsamplingYOffset = subsamplingYOffset;
     }
 
-    /** Cada cuantos pixeles en X. */
+    /** Every how many pixels in X. */
     public int getSourceXSubsampling() {
         return this.sourceXSubsampling;
     }
 
-    /** Cada cuantos en Y. */
+    /** Every how many in Y. */
     public int getSourceYSubsampling() {
         return this.sourceYSubsampling;
     }
 
-    /** Desde cual arrancar en X. */
+    /** Which one to start from in X. */
     public int getSubsamplingXOffset() {
         return this.subsamplingXOffset;
     }
 
-    /** Idem en Y. */
+    /** Same in Y. */
     public int getSubsamplingYOffset() {
         return this.subsamplingYOffset;
     }
 
     /**
-     * Que bandas de la fuente usar; null son todas.
+     * Which source bands to use; null means all.
      *
-     * <p>El arreglo se copia, y se comprueba que no tenga repetidos: una banda pedida dos veces no
-     * significa nada y casi siempre es un error de indice.
+     * <p>The array is copied, and checked for repeats: a band asked for twice means nothing and is
+     * almost always an index error.
      *
-     * <p>Un arreglo vacio se acepta, aunque no signifique nada util: es lo que hace el JDK.
+     * <p>An empty array is accepted, even though it means nothing useful: it is what the JDK does.
      *
-     * @throws IllegalArgumentException si tiene negativos o repite alguna
+     * @throws IllegalArgumentException if it has negatives or repeats one
      */
     public void setSourceBands(int[] sourceBands) {
         if (sourceBands == null) {
@@ -198,7 +198,7 @@ public abstract class IIOParam {
         System.arraycopy(sourceBands, 0, this.sourceBands, 0, numBands);
     }
 
-    /** Que bandas, o null. Es una copia. */
+    /** Which bands, or null. It is a copy. */
     public int[] getSourceBands() {
         if (this.sourceBands == null) {
             return null;
@@ -208,23 +208,23 @@ public abstract class IIOParam {
         return copy;
     }
 
-    /** De que tipo tiene que ser el destino; null lo deja a criterio del lector. */
+    /** What type the destination has to be; null leaves it up to the reader. */
     public void setDestinationType(ImageTypeSpecifier destinationType) {
         this.destinationType = destinationType;
     }
 
-    /** De que tipo, o null. */
+    /** What type, or null. */
     public ImageTypeSpecifier getDestinationType() {
         return this.destinationType;
     }
 
     /**
-     * Donde ubicar lo leido en el destino. Ver la nota de la clase.
+     * Where to place what was read in the destination. See the class note.
      *
-     * <p>Las coordenadas negativas se permiten: es como se descarta la parte de arriba o de la
-     * izquierda de lo leido.
+     * <p>Negative coordinates are allowed: that is how the top or left part of what was read is
+     * discarded.
      *
-     * @throws IllegalArgumentException si es null
+     * @throws IllegalArgumentException if it is null
      */
     public void setDestinationOffset(Point destinationOffset) {
         if (destinationOffset == null) {
@@ -233,36 +233,36 @@ public abstract class IIOParam {
         this.destinationOffset = (Point) destinationOffset.clone();
     }
 
-    /** Donde ubicarlo. Es una copia. */
+    /** Where to place it. It is a copy. */
     public Point getDestinationOffset() {
         return (Point) this.destinationOffset.clone();
     }
 
-    /** Quien completa este parametro; null usa el de fabrica. */
+    /** Who fills in this parameter; null uses the default one. */
     public void setController(IIOParamController controller) {
         this.controller = controller;
     }
 
-    /** El que esta puesto. */
+    /** The one that is set. */
     public IIOParamController getController() {
         return this.controller;
     }
 
-    /** El de fabrica, o null. */
+    /** The default one, or null. */
     public IIOParamController getDefaultController() {
         return this.defaultController;
     }
 
-    /** Si hay alguno puesto. */
+    /** Whether one is set. */
     public boolean hasController() {
         return getController() != null;
     }
 
     /**
-     * Le pide al controlador que complete este parametro.
+     * Asks the controller to fill in this parameter.
      *
-     * @return si el usuario acepto
-     * @throws IllegalStateException si no hay controlador
+     * @return whether the user accepted
+     * @throws IllegalStateException if there is no controller
      */
     public boolean activateController() {
         if (!hasController()) {

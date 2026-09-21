@@ -3,158 +3,160 @@ package javax.xml.transform;
 import java.util.Properties;
 
 /**
- * KajiLibrary's javax.xml.transform.Transformer -- aplica una hoja de estilo a un documento.
+ * KajiLibrary's javax.xml.transform.Transformer -- applies a stylesheet to a document.
  *
- * <p>Clase abstracta y no interfaz, y eso no es un accidente historico: define un unico metodo con
- * cuerpo, {@link #reset}, que se agrego en Java 6 con una implementacion por omision que lanza
- * {@link UnsupportedOperationException}. En 2001 no habia metodos `default`, asi que la unica forma
- * de agregar un miembro sin romper a todos los que ya implementaban la API era que fuera una clase.
+ * <p>An abstract class and not an interface, and that is no historical accident: it defines a
+ * single method with a body, {@link #reset}, which was added in Java 5 with a default
+ * implementation that throws {@link UnsupportedOperationException}. In 2001 there were no `default`
+ * methods, so the only way of adding a member without breaking everyone who already implemented the
+ * API was for it to be a class. (The note said Java 6; the JDK marks it {@code @since 1.5}.)
  *
- * <p>Un `Transformer` **tiene estado y no se comparte entre hilos**: los parametros y las
- * propiedades de salida son suyos. Lo que se comparte es el {@link Templates} del que salio. Un
- * mismo transformador si se puede usar en varias transformaciones seguidas en el mismo hilo, y por
- * eso existe {@link #reset}: es mas barato limpiar que volver a pedirlo.
+ * <p>A `Transformer` **has state and is not shared between threads**: the parameters and the output
+ * properties are its own. What is shared is the {@link Templates} it came from. The same
+ * transformer can be used for several consecutive transformations in the same thread, and that is
+ * why {@link #reset} exists: cleaning is cheaper than asking for it again.
  *
- * <h2>Que hay escrito aca y que no</h2>
+ * <h2>What is written here and what is not</h2>
  *
- * <p>Todo lo que declara la clase; de implementacion, lo unico que el JDK tambien implementa. Los
- * trece metodos abstractos los provee un procesador de XSLT, y **esta biblioteca no trae ninguno**
- * -- ver el encabezado de {@link TransformerFactory}. No es que falte una pieza: la clase abstracta
- * es exactamente lo que la API define, y una subclase concreta seria un procesador de XSLT entero.
+ * <p>Everything the class declares; of implementation, only what the JDK also implements. The
+ * twelve abstract methods are provided by an XSLT processor, and **this library comes with none**
+ * -- see the header of {@link TransformerFactory}. It is not that a piece is missing: the abstract
+ * class is exactly what the API defines, and a concrete subclass would be a whole XSLT processor.
+ * (The note said thirteen abstract methods.)
  */
 public abstract class Transformer {
 
-    /** Para las subclases; no hay estado que inicializar. */
+    /** For the subclasses; there is no state to initialize. */
     protected Transformer() {
     }
 
     /**
-     * Deja el transformador como recien salido de {@link Templates#newTransformer}.
+     * Leaves the transformer as it came out of {@link Templates#newTransformer}.
      *
-     * <p>Borra los parametros y las propiedades de salida que se le hayan puesto; **no** toca el
-     * {@link URIResolver} ni el {@link ErrorListener}, que son infraestructura del llamador y no
-     * datos del trabajo. Es una distincion que se olvida y despues aparece como un oyente que dejo
-     * de recibir errores a mitad de un lote.
+     * <p>It clears the parameters and output properties that were set on it; it does **not** touch
+     * the {@link URIResolver} nor the {@link ErrorListener}, which are the caller's infrastructure
+     * and not data of the job. It is a distinction that gets forgotten and later shows up as a
+     * listener that stopped receiving errors halfway through a batch.
      *
-     * <p>La implementacion por omision lanza {@link UnsupportedOperationException}: el metodo llego
-     * despues que la clase, y una subclase escrita antes no lo sabe hacer. Lanzar es lo correcto
-     * --no hacer nada seria mentir sobre un objeto que quedo sucio--.
+     * <p>The default implementation throws {@link UnsupportedOperationException}: the method
+     * arrived after the class, and a subclass written before does not know how to do it. Throwing
+     * is right --doing nothing would be lying about an object that was left dirty--.
      *
-     * @throws UnsupportedOperationException si la implementacion no lo soporta
+     * @throws UnsupportedOperationException if the implementation does not support it
      */
     public void reset() {
-        // El paquete puede ser nulo --una subclase en el paquete por omision-- y un mensaje de error
-        // que tira NullPointerException es peor que no tener mensaje.
+        // The package can be null --a subclass in the default package-- and an error message that
+        // throws NullPointerException is worse than having no message.
         Package p = this.getClass().getPackage();
-        String titulo = (p == null) ? null : p.getSpecificationTitle();
+        String title = (p == null) ? null : p.getSpecificationTitle();
         String version = (p == null) ? null : p.getSpecificationVersion();
         throw new UnsupportedOperationException(
                 "This Transformer, \"" + this.getClass().getName() + "\", does not support the reset functionality."
-                        + "  Specification \"" + titulo + "\""
+                        + "  Specification \"" + title + "\""
                         + " version \"" + version + "\"");
     }
 
     /**
-     * Transforma {@code xmlSource} y escribe en {@code outputTarget}.
+     * Transforms {@code xmlSource} and writes to {@code outputTarget}.
      *
-     * @param xmlSource el documento de entrada
-     * @param outputTarget donde dejar el resultado
-     * @throws TransformerException si la transformacion falla
+     * @param xmlSource the input document
+     * @param outputTarget where to leave the result
+     * @throws TransformerException if the transformation fails
      */
     public abstract void transform(Source xmlSource, Result outputTarget) throws TransformerException;
 
     /**
-     * Fija un parametro de la hoja de estilo.
+     * Sets a parameter of the stylesheet.
      *
-     * <p>El nombre puede venir calificado como {@code "{uri}local"}. Los parametros son del
-     * transformador, no de la transformacion: sobreviven a {@link #transform} y hay que limpiarlos
-     * con {@link #clearParameters} si el proximo trabajo no los quiere.
+     * <p>The name can come qualified as {@code "{uri}local"}. Parameters belong to the transformer,
+     * not to the transformation: they survive {@link #transform} and have to be cleared with {@link
+     * #clearParameters} if the next job does not want them.
      *
-     * @param name el nombre, posiblemente calificado
-     * @param value el valor
+     * @param name the name, possibly qualified
+     * @param value the value
      */
     public abstract void setParameter(String name, Object value);
 
     /**
-     * El valor que se fijo con {@link #setParameter}, o null.
+     * The value set with {@link #setParameter}, or null.
      *
-     * <p>Devuelve lo que se puso desde Java, **no** lo que la hoja de estilo tenga como valor por
-     * omision para ese parametro: son dos cosas distintas y esta API solo ve la primera.
+     * <p>It returns what was set from Java, **not** what the stylesheet has as the default value
+     * for that parameter: they are two different things and this API only sees the first.
      *
-     * @param name el nombre, posiblemente calificado
-     * @return el valor, o null si no se fijo
+     * @param name the name, possibly qualified
+     * @return the value, or null if it was not set
      */
     public abstract Object getParameter(String name);
 
-    /** Borra todos los parametros fijados. */
+    /** Clears all the parameters set. */
     public abstract void clearParameters();
 
     /**
-     * Quien resuelve los `href` de `document()`, `xsl:import` y `xsl:include`.
+     * Who resolves the `href`s of `document()`, `xsl:import` and `xsl:include`.
      *
-     * @param resolver el resolvedor, o null para volver al de por omision
+     * @param resolver the resolver, or null to go back to the default one
      */
     public abstract void setURIResolver(URIResolver resolver);
 
-    /** El resolvedor en uso, o null. */
+    /** The resolver in use, or null. */
     public abstract URIResolver getURIResolver();
 
     /**
-     * Fija de una vez todas las propiedades de serializacion.
+     * Sets all the serialization properties at once.
      *
-     * <p>Pasar {@code null} **restablece** las de la hoja de estilo; no las deja vacias. Y las
-     * propiedades por omision de la tabla (las de {@link Properties#defaults}) no se copian: se
-     * usan como respaldo, igual que en cualquier `Properties`.
+     * <p>Passing {@code null} **resets** the stylesheet's; it does not leave them empty. And the
+     * table's default properties (those of {@link Properties#defaults}) are not copied: they are
+     * used as a fallback, as in any `Properties`.
      *
-     * @param oformat las propiedades, o null para volver a las de la hoja de estilo
-     * @throws IllegalArgumentException si alguna clave no se reconoce
+     * @param oformat the properties, or null to go back to the stylesheet's
+     * @throws IllegalArgumentException if some key is not recognized
      */
     public abstract void setOutputProperties(Properties oformat);
 
     /**
-     * Una copia de las propiedades de salida en efecto.
+     * A copy of the output properties in effect.
      *
-     * <p>Copia: modificarla no cambia nada. Para cambiar hay que volver a llamar a
-     * {@link #setOutputProperties}.
+     * <p>A copy: modifying it changes nothing. To change them one has to call {@link
+     * #setOutputProperties} again.
      *
-     * @return las propiedades, con las por omision abajo
+     * @return the properties, with the defaults underneath
      */
     public abstract Properties getOutputProperties();
 
     /**
-     * Fija una sola propiedad de serializacion.
+     * Sets a single serialization property.
      *
-     * <p>Las claves reconocidas son las de {@link OutputKeys} mas las de extension, que van
-     * calificadas como {@code "{uri}local"}. Una clave desconocida **sin** calificar es un error;
-     * una calificada que el procesador no entienda se ignora, porque puede ser de otro procesador.
+     * <p>The recognized keys are those of {@link OutputKeys} plus extension ones, which go
+     * qualified as {@code "{uri}local"}. An unknown **unqualified** key is an error; a qualified
+     * one the processor does not understand is ignored, because it may belong to another processor.
      *
-     * @param name la clave
-     * @param value el valor
-     * @throws IllegalArgumentException si la clave no se reconoce
+     * @param name the key
+     * @param value the value
+     * @throws IllegalArgumentException if the key is not recognized
      */
     public abstract void setOutputProperty(String name, String value) throws IllegalArgumentException;
 
     /**
-     * El valor de una propiedad de salida.
+     * The value of an output property.
      *
-     * <p>Devuelve lo que se fijo con {@link #setOutputProperty} **o** lo que declaro la hoja de
-     * estilo, no el valor por omision del metodo de salida. Una propiedad que nadie toco da null
-     * aunque el serializador tenga un valor para ella.
+     * <p>It returns what was set with {@link #setOutputProperty} **or** what the stylesheet
+     * declared, not the output method's default value. A property nobody touched gives null even
+     * though the serializer has a value for it.
      *
-     * @param name la clave
-     * @return el valor, o null
-     * @throws IllegalArgumentException si la clave no se reconoce
+     * @param name the key
+     * @return the value, or null
+     * @throws IllegalArgumentException if the key is not recognized
      */
     public abstract String getOutputProperty(String name) throws IllegalArgumentException;
 
     /**
-     * Quien recibe los avisos y errores de la transformacion.
+     * Who receives the warnings and errors of the transformation.
      *
-     * @param listener el oyente; no puede ser null
-     * @throws IllegalArgumentException si es null
+     * @param listener the listener; cannot be null
+     * @throws IllegalArgumentException if it is null
      */
     public abstract void setErrorListener(ErrorListener listener) throws IllegalArgumentException;
 
-    /** El oyente en uso; nunca null. */
+    /** The listener in use; never null. */
     public abstract ErrorListener getErrorListener();
 }

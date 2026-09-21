@@ -9,20 +9,20 @@ import javax.xml.stream.events.StartElement;
 import javax.xml.stream.events.XMLEvent;
 
 /**
- * Lo comun a todos los eventos: el tipo, la ubicacion, los diez {@code isXxx} y los tres
+ * What all events have in common: the type, the location, the ten {@code isXxx} and the three
  * {@code asXxx}.
  *
- * <p>Los {@code isXxx} se contestan mirando {@link #getEventType()} en vez de con
- * {@code instanceof}, que es lo que permite que un mismo tipo Java --{@link Characters}-- conteste
- * distinto segun de donde salio: texto normal, CDATA o espacio ignorable son la misma clase con
- * tres tipos de evento.
+ * <p>The {@code isXxx} are answered by looking at {@link #getEventType()} instead of with {@code
+ * instanceof}, which is what allows the same Java type --{@link Characters}-- to answer differently
+ * depending on where it came from: normal text, CDATA or ignorable space are the same class with
+ * three event types.
  *
- * <p>Los {@code asXxx} hacen el cast y dejan que {@link ClassCastException} salga sola, que es
- * exactamente lo que la interfaz promete.
+ * <p>The {@code asXxx} do the cast and let {@link ClassCastException} come out by itself, which is
+ * exactly what the interface promises.
  *
- * <p>{@link #toString()} devuelve el evento ya escrito como XML. No es parte del contrato --la
- * interfaz no dice nada de {@code toString}-- pero es lo que hace el original y lo que uno espera
- * al mirar un evento en el depurador.
+ * <p>{@link #toString()} returns the event already written as XML. It is not part of the contract
+ * --the interface says nothing about {@code toString}-- but it is what the original does and what
+ * one expects when looking at an event in the debugger.
  */
 abstract class EvtBase implements XMLEvent {
 

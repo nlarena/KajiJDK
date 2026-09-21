@@ -1,68 +1,68 @@
 package com.sun.jdi;
 
 /**
- * Un valor primitivo, con el dato adentro.
+ * A primitive value, with the datum inside.
  *
- * <p>Los metodos de conversion hacen la ampliacion de Java: leer un {@code byte} como {@code int}
- * anda, al reves no.
+ * <p>The conversion methods do Java's widening: reading a {@code byte} as an {@code int}
+ * works, the other way round does not.
  *
  * @since 1.3
  */
 public interface PrimitiveValue extends Value {
 
     /**
-     * El boolean value.
+     * The boolean value.
      *
-     * @return el resultado
+     * @return the result
      */
     boolean booleanValue();
 
     /**
-     * El byte value.
+     * The byte value.
      *
-     * @return el resultado
+     * @return the result
      */
     byte byteValue();
 
     /**
-     * El char value.
+     * The char value.
      *
-     * @return el resultado
+     * @return the result
      */
     char charValue();
 
     /**
-     * El short value.
+     * The short value.
      *
-     * @return el resultado
+     * @return the result
      */
     short shortValue();
 
     /**
-     * El int value.
+     * The int value.
      *
-     * @return el resultado
+     * @return the result
      */
     int intValue();
 
     /**
-     * El long value.
+     * The long value.
      *
-     * @return el resultado
+     * @return the result
      */
     long longValue();
 
     /**
-     * El float value.
+     * The float value.
      *
-     * @return el resultado
+     * @return the result
      */
     float floatValue();
 
     /**
-     * El double value.
+     * The double value.
      *
-     * @return el resultado
+     * @return the result
      */
     double doubleValue();
 }

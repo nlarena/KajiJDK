@@ -4,26 +4,26 @@ import java.util.Map;
 import javax.security.auth.callback.CallbackHandler;
 
 /**
- * KajiLibrary's javax.security.sasl.SaslServerFactory -- de donde salen los {@link SaslServer}.
+ * KajiLibrary's javax.security.sasl.SaslServerFactory -- where the {@link SaslServer}s come from.
  *
- * <p>El espejo de {@link SaslClientFactory}, con una diferencia en la firma que dice mucho: aca se
- * pide <b>un</b> mecanismo y no una lista. Tiene sentido -- el cliente ya eligio y lo anuncio, y el
- * servidor solo tiene que poder atenderlo o no.
+ * <p>The mirror of {@link SaslClientFactory}, with a difference in the signature that says a lot:
+ * here <b>one</b> mechanism is asked for and not a list. It makes sense -- the client already chose
+ * and announced it, and the server only has to be able to handle it or not.
  *
- * <p>{@link #getMechanismNames} tambien depende de la politica, igual que del lado del cliente, y del
- * lado del servidor eso es todavia mas importante: la lista que devuelve es la que se le <b>anuncia
- * al cliente</b>, y anunciar un mecanismo debil es ofrecerselo a quien quiera elegirlo.
+ * <p>{@link #getMechanismNames} also depends on the policy, just as on the client side, and on the
+ * server side that is even more important: the list it returns is the one <b>announced to the
+ * client</b>, and announcing a weak mechanism is offering it to whoever wants to choose it.
  */
 public interface SaslServerFactory {
 
     /**
-     * Un servidor para ese mecanismo.
+     * A server for that mechanism.
      *
-     * @return null si esta fabrica no puede con el
+     * @return null if this factory cannot handle it
      */
     SaslServer createSaslServer(String mechanism, String protocol, String serverName,
                                 Map<String, ?> props, CallbackHandler cbh) throws SaslException;
 
-    /** Los mecanismos que ofrece con esas propiedades. Ver la nota de la clase. */
+    /** The mechanisms it offers with those properties. See the class note. */
     String[] getMechanismNames(Map<String, ?> props);
 }

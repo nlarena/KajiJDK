@@ -1,16 +1,17 @@
 package javax.sound.midi;
 
 /**
- * KajiLibrary's javax.sound.midi.MidiDeviceReceiver -- un receptor que sabe de que dispositivo es.
+ * KajiLibrary's javax.sound.midi.MidiDeviceReceiver -- a receiver that knows which device it
+ * belongs to.
  *
- * <p>Agrega un metodo sobre {@link Receiver}. Existe porque un programa que maneja varios dispositivos
- * termina con una pila de receptores sueltos y sin forma de saber cual es de cual.
+ * <p>It adds one method over {@link Receiver}. It exists because a program that handles several
+ * devices ends up with a pile of loose receivers and no way of knowing which is which.
  *
- * <p>Se consulta con {@code instanceof}: {@code MidiDevice.getReceiver()} declara {@link Receiver} a
- * secas, aunque en la practica todos los del JDK devuelven uno de estos.
+ * <p>It is queried with {@code instanceof}: {@code MidiDevice.getReceiver()} declares a plain
+ * {@link Receiver}, although in practice all the JDK's return one of these.
  */
 public interface MidiDeviceReceiver extends Receiver {
 
-    /** De que dispositivo es. */
+    /** Which device it belongs to. */
     MidiDevice getMidiDevice();
 }

@@ -4,55 +4,55 @@ import java.sql.SQLException;
 import java.util.ServiceLoader;
 
 /**
- * De donde sale la {@link RowSetFactory}.
+ * Where the {@link RowSetFactory} comes from.
  *
- * <h2>Las tres fuentes, en orden</h2>
+ * <h2>The three sources, in order</h2>
  *
  * <ol>
- *   <li>la propiedad de sistema {@code javax.sql.rowset.RowSetFactory};
- *   <li>los servicios declarados que {@link ServiceLoader} encuentre;
- *   <li>la implementacion por omision.
+ *   <li>the system property {@code javax.sql.rowset.RowSetFactory};
+ *   <li>the declared services {@link ServiceLoader} finds;
+ *   <li>the default implementation.
  * </ol>
  *
- * <p>El orden es el que importa: lo que se pone por linea de comandos gana siempre, porque es lo que
- * alguien decidio para <strong>esta</strong> ejecucion. Los servicios declarados son la eleccion de
- * quien armo el classpath. La implementacion por omision es lo ultimo, para que nunca falte una.
+ * <p>The order is what matters: whatever is put on the command line always wins, because it is what
+ * somebody decided for <strong>this</strong> run. The declared services are the choice of whoever
+ * put the classpath together. The default implementation comes last, so that there is never none.
  *
- * <h2>Por que existe esta clase</h2>
+ * <h2>Why this class exists</h2>
  *
- * <p>Para sacar del codigo el nombre de la clase concreta. Antes de que existiera, crear un
- * {@code CachedRowSet} significaba escribir {@code new com.sun.rowset.CachedRowSetImpl()} — un
- * nombre interno de una implementacion particular, repetido en cada punto de creacion.
+ * <p>To take the name of the concrete class out of the code. Before it existed, creating a {@code
+ * CachedRowSet} meant writing {@code new com.sun.rowset.CachedRowSetImpl()} — an internal name of a
+ * particular implementation, repeated at every creation point.
  *
- * <h2>Estado en esta VM</h2>
+ * <h2>State in this VM</h2>
  *
- * <p>La resolucion de las tres fuentes es real y funciona: registrar una fabrica por propiedad de
- * sistema o como servicio declarado anda. Lo que no hay es la <strong>implementacion por
- * omision</strong> ({@code com.sun.rowset.RowSetFactoryImpl}, que no es API publica y son varias
- * clases); si no se configura ninguna, {@link #newFactory()} falla con {@link SQLException}
- * diciendo cual falta, en vez de devolver una fabrica que despues no fabrique nada.
+ * <p>The resolution of the three sources is real and works: registering a factory by system
+ * property or as a declared service works. What is missing is the <strong>default
+ * implementation</strong> ({@code com.sun.rowset.RowSetFactoryImpl}, which is not public API and is
+ * several classes); if none is configured, {@link #newFactory()} fails with {@link SQLException}
+ * saying which one is missing, instead of returning a factory that then makes nothing.
  *
  * @since 1.7
  */
 public class RowSetProvider {
 
-    private static final String PROPIEDAD = "javax.sql.rowset.RowSetFactory";
-    private static final String POR_OMISION = "com.sun.rowset.RowSetFactoryImpl";
+    private static final String PROPERTY = "javax.sql.rowset.RowSetFactory";
+    private static final String DEFAULT_FACTORY = "com.sun.rowset.RowSetFactoryImpl";
 
-    /** Para las subclases; esta clase no tiene estado ni metodos de instancia. */
+    /** For the subclasses; this class has no state nor instance methods. */
     protected RowSetProvider() {
     }
 
     /**
-     * La fabrica que corresponda segun las tres fuentes.
+     * The factory that corresponds according to the three sources.
      *
-     * @return la fabrica
-     * @throws SQLException si ninguna fuente dio una fabrica utilizable
+     * @return the factory
+     * @throws SQLException if no source gave a usable factory
      */
     public static RowSetFactory newFactory() throws SQLException {
-        final String delSistema = System.getProperty(PROPIEDAD);
-        if (delSistema != null && delSistema.length() > 0) {
-            return newFactory(delSistema, null);
+        final String fromSystem = System.getProperty(PROPERTY);
+        if (fromSystem != null && fromSystem.length() > 0) {
+            return newFactory(fromSystem, null);
         }
 
         try {
@@ -60,45 +60,45 @@ public class RowSetProvider {
                 return f;
             }
         } catch (final java.util.ServiceConfigurationError e) {
-            throw excepcion("un RowSetFactory declarado como servicio no se pudo cargar", e);
+            throw sqlException("a RowSetFactory declared as a service could not be loaded", e);
         }
 
-        return newFactory(POR_OMISION, null);
+        return newFactory(DEFAULT_FACTORY, null);
     }
 
     /**
-     * La fabrica de esa clase, cargada con ese cargador.
+     * The factory of that class, loaded with that loader.
      *
-     * @param factoryClassName el nombre completo de la clase
-     * @param cl el cargador a usar; {@code null} para el del contexto del hilo
-     * @return la fabrica
-     * @throws SQLException si el nombre es {@code null}, la clase no esta, no es una
-     *     {@link RowSetFactory}, o no se pudo instanciar
+     * @param factoryClassName the fully qualified name of the class
+     * @param cl the loader to use; {@code null} for the thread's context one
+     * @return the factory
+     * @throws SQLException if the name is {@code null}, the class is not there, it is not a
+     *     {@link RowSetFactory}, or it could not be instantiated
      */
     public static RowSetFactory newFactory(final String factoryClassName, final ClassLoader cl)
             throws SQLException {
         if (factoryClassName == null) {
-            throw new SQLException("el nombre de la clase de fabrica no puede ser null");
+            throw new SQLException("the factory class name cannot be null");
         }
-        final ClassLoader cargador =
+        final ClassLoader loader =
                 cl != null ? cl : Thread.currentThread().getContextClassLoader();
         try {
-            final Class<?> c = Class.forName(factoryClassName, true, cargador);
+            final Class<?> c = Class.forName(factoryClassName, true, loader);
             final Object o = c.getDeclaredConstructor().newInstance();
             if (!(o instanceof RowSetFactory)) {
-                throw new SQLException(factoryClassName + " no es un RowSetFactory");
+                throw new SQLException(factoryClassName + " is not a RowSetFactory");
             }
             return (RowSetFactory) o;
         } catch (final ClassNotFoundException e) {
-            throw excepcion("no se encontro la clase de fabrica " + factoryClassName, e);
+            throw sqlException("factory class not found: " + factoryClassName, e);
         } catch (final ReflectiveOperationException e) {
-            throw excepcion("no se pudo instanciar la fabrica " + factoryClassName, e);
+            throw sqlException("could not instantiate the factory " + factoryClassName, e);
         }
     }
 
-    private static SQLException excepcion(final String mensaje, final Throwable causa) {
-        final SQLException e = new SQLException(mensaje);
-        e.initCause(causa);
+    private static SQLException sqlException(final String message, final Throwable cause) {
+        final SQLException e = new SQLException(message);
+        e.initCause(cause);
         return e;
     }
 }

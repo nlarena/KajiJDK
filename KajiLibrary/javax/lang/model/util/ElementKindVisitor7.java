@@ -5,11 +5,10 @@ import javax.lang.model.SourceVersion;
 import javax.lang.model.element.VariableElement;
 
 /**
- * El visitante por kind de elemento de Java 7. Ver {@link ElementKindVisitor6} por el mecanismo del
- * reparto.
+ * The element-kind visitor for Java 7. See {@link ElementKindVisitor6} for the dispatch mechanism.
  *
- * <p>Con el `try` con recursos ya en el lenguaje, `visitVariableAsResourceVariable` deja de caer en
- * `visitUnknown` y entra al embudo.
+ * <p>With try-with-resources in the language, `visitVariableAsResourceVariable` stops falling into
+ * `visitUnknown` and enters the funnel.
  */
 @SupportedSourceVersion(SourceVersion.RELEASE_7)
 public class ElementKindVisitor7<R, P> extends ElementKindVisitor6<R, P> {

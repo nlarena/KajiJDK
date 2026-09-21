@@ -6,7 +6,7 @@ import javax.swing.JComponent;
 import javax.swing.plaf.ComponentUI;
 
 /**
- * La casilla de Synth, el ultimo eslabon de la cadena que arranca en {@link SynthButtonUI}.
+ * Synth's check box, the last link of the chain that starts at {@link SynthButtonUI}.
  */
 public class SynthCheckBoxUI extends SynthRadioButtonUI {
 

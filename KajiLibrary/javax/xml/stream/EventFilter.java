@@ -3,25 +3,25 @@ package javax.xml.stream;
 import javax.xml.stream.events.XMLEvent;
 
 /**
- * KajiLibrary's javax.xml.stream.EventFilter -- el mismo criterio que {@link StreamFilter}, pero
- * para el modelo de eventos.
+ * KajiLibrary's javax.xml.stream.EventFilter -- the same criterion as {@link StreamFilter}, but for
+ * the event model.
  *
- * <p>La diferencia con {@link StreamFilter} no es cosmetica: aca el filtro recibe un
- * {@link XMLEvent}, que es un objeto completo e inmutable, y no un lector parado en una posicion.
- * Eso significa que **si** se lo puede guardar, comparar con otro y mirar despues, y que no existe
- * la regla de "no avanzar el lector" porque no hay lector que avanzar.
+ * <p>The difference from {@link StreamFilter} is not cosmetic: here the filter receives an {@link
+ * XMLEvent}, which is a complete and immutable object, and not a reader standing at a position.
+ * That means it **can** be kept, compared with another and looked at later, and that the rule of
+ * "do not advance the reader" does not exist because there is no reader to advance.
  *
- * <p>Ese es exactamente el intercambio entre los dos modelos de StAX: el de cursor no aloca un
- * objeto por evento y a cambio te da algo valido solo hasta el proximo {@code next()}; el de
- * eventos aloca y a cambio te da algo que dura.
+ * <p>That is exactly the trade-off between StAX's two models: the cursor one does not allocate an
+ * object per event and in exchange gives you something valid only until the next {@code next()};
+ * the event one allocates and in exchange gives you something that lasts.
  */
 public interface EventFilter {
 
     /**
-     * Decide si el evento se deja pasar.
+     * Decides whether the event is let through.
      *
-     * @param event el evento a juzgar
-     * @return true para que llegue al llamador, false para saltearlo
+     * @param event the event to judge
+     * @return true for it to reach the caller, false to skip it
      */
     boolean accept(XMLEvent event);
 }

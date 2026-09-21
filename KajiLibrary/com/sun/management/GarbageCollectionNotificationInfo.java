@@ -5,36 +5,38 @@ import javax.management.openmbean.CompositeDataView;
 import javax.management.openmbean.CompositeType;
 
 /**
- * El aviso de que hubo una recoleccion de basura, con lo necesario para saber cual y como salio.
+ * The notice that there was a garbage collection, with what is needed in order to know which
+ * and how it came out.
  *
- * <h2>Por que un aviso y no una consulta</h2>
+ * <h2>Why a notice and not a query</h2>
  *
- * <p>Porque las recolecciones ocurren cuando quieren. Un monitor que preguntara periodicamente por
- * {@link GarbageCollectorMXBean#getLastGcInfo} se perderia todas las que pasaron entre dos
- * consultas, que en una carga alta son casi todas. Suscribirse al aviso es la unica forma de verlas
- * todas sin consultar sin parar.
+ * <p>Because the collections happen when they want to. A monitor that asked periodically for
+ * {@link GarbageCollectorMXBean#getLastGcInfo} would miss all those that happened between two
+ * queries, which under a high load are almost all of them. Subscribing to the notice is the
+ * only way of seeing them all without querying without stopping.
  *
- * <h2>La causa y la accion, que es lo que se lee primero</h2>
+ * <h2>The cause and the action, which is what is read first</h2>
  *
- * <p>{@link #getGcCause} dice <strong>por que</strong> arranco: porque se lleno el eden, porque
- * alguien llamo a {@code System.gc()}, porque el metaespacio se quedo corto. Es el campo que separa
- * una recoleccion normal de un sintoma. {@link #getGcAction} dice que hizo — si fue menor o mayor.
+ * <p>{@link #getGcCause} says <strong>why</strong> it started: because the eden filled up,
+ * because somebody called {@code System.gc()}, because the metaspace fell short. It is the
+ * field that separates a normal collection from a symptom. {@link #getGcAction} says what it
+ * did -- whether it was minor or major.
  *
- * <p>Un solo campo de esos vale mas que el tiempo total: mil recolecciones menores por eden lleno
- * son el funcionamiento normal, y tres mayores por {@code System.gc()} son un problema de codigo.
+ * <p>A single one of those fields is worth more than the total time: a thousand minor
+ * collections because of a full eden are the normal working, and three major ones because of
+ * {@code System.gc()} are a problem of the code.
  *
- * <h2>Como llega</h2>
+ * <h2>How it arrives</h2>
  *
- * <p>Dentro de una {@link javax.management.Notification} cuyo tipo es
- * {@link #GARBAGE_COLLECTION_NOTIFICATION}. Lo que viaja en los datos de usuario es un
- * {@link CompositeData}; {@link #from} lo vuelve a convertir en este objeto del lado del que
- * escucha.
+ * <p>Inside a {@link javax.management.Notification} whose type is
+ * {@link #GARBAGE_COLLECTION_NOTIFICATION}. What travels in the user data is a
+ * {@link CompositeData}; {@link #from} turns it back into this object on the listener's side.
  *
  * @since 1.7
  */
 public class GarbageCollectionNotificationInfo implements CompositeDataView {
 
-    /** El tipo de notificacion que lleva uno de estos. */
+    /** The kind of notification that carries one of these. */
     public static final String GARBAGE_COLLECTION_NOTIFICATION =
             "com.sun.management.gc.notification";
 
@@ -44,13 +46,13 @@ public class GarbageCollectionNotificationInfo implements CompositeDataView {
     private final GcInfo gcInfo;
 
     /**
-     * Un aviso.
+     * A notice.
      *
-     * @param gcName el nombre del recolector
-     * @param gcAction que hizo
-     * @param gcCause por que arranco
-     * @param gcInfo los datos de la recoleccion
-     * @throws NullPointerException si alguno es {@code null}
+     * @param gcName the collector's name
+     * @param gcAction what it did
+     * @param gcCause why it started
+     * @param gcInfo the collection's data
+     * @throws NullPointerException if any of them is {@code null}
      */
     public GarbageCollectionNotificationInfo(final String gcName, final String gcAction,
             final String gcCause, final GcInfo gcInfo) {
@@ -73,50 +75,50 @@ public class GarbageCollectionNotificationInfo implements CompositeDataView {
     }
 
     /**
-     * El nombre del recolector, el mismo que da su MXBean.
+     * The collector's name, the same its MXBean gives.
      *
-     * @return el nombre
+     * @return the name
      */
     public String getGcName() {
         return gcName;
     }
 
     /**
-     * Que hizo esta recoleccion, en texto libre.
+     * What this collection did, in free text.
      *
-     * <p>Texto y no un enum porque cada recolector describe sus fases a su manera, y fijar un
-     * conjunto cerrado habria dejado afuera a todos los recolectores futuros.
+     * <p>Text and not an enum because each collector describes its phases in its own way, and
+     * fixing a closed set would have left all the future collectors out.
      *
-     * @return la accion
+     * @return the action
      */
     public String getGcAction() {
         return gcAction;
     }
 
     /**
-     * Por que arranco, en texto libre.
+     * Why it started, in free text.
      *
-     * @return la causa
+     * @return the cause
      */
     public String getGcCause() {
         return gcCause;
     }
 
     /**
-     * Los datos de la recoleccion.
+     * The collection's data.
      *
-     * @return los datos
+     * @return the data
      */
     public GcInfo getGcInfo() {
         return gcInfo;
     }
 
     /**
-     * Reconstruye el aviso desde su forma abierta.
+     * It rebuilds the notice from its open form.
      *
-     * @param cd la forma abierta, o {@code null}
-     * @return el aviso, o {@code null} si {@code cd} era {@code null}
-     * @throws IllegalArgumentException si {@code cd} no tiene la forma de este aviso
+     * @param cd the open form, or {@code null}
+     * @return the notice, or {@code null} if {@code cd} was {@code null}
+     * @throws IllegalArgumentException if {@code cd} does not have this notice's shape
      */
     public static GarbageCollectionNotificationInfo from(final CompositeData cd) {
         if (cd == null) {
@@ -125,7 +127,8 @@ public class GarbageCollectionNotificationInfo implements CompositeDataView {
         if (!cd.containsKey("gcName") || !cd.containsKey("gcAction")
                 || !cd.containsKey("gcCause") || !cd.containsKey("gcInfo")) {
             throw new IllegalArgumentException(
-                    "el CompositeData no tiene la forma de un GarbageCollectionNotificationInfo");
+                    "the CompositeData does not have the shape of a "
+                            + "GarbageCollectionNotificationInfo");
         }
         return new GarbageCollectionNotificationInfo((String) cd.get("gcName"),
                 (String) cd.get("gcAction"), (String) cd.get("gcCause"),
@@ -133,18 +136,19 @@ public class GarbageCollectionNotificationInfo implements CompositeDataView {
     }
 
     /**
-     * La forma abierta de este aviso.
+     * This notice's open form.
      *
-     * @param ct el tipo pedido
-     * @return la forma abierta
-     * @throws UnsupportedOperationException si no hay como armarla
+     * @param ct the asked-for type
+     * @return the open form
+     * @throws UnsupportedOperationException if there is no way of building it
      */
     public CompositeData toCompositeData(final CompositeType ct) {
-        // Armar el valor abierto necesita construir el CompositeType anidado del GcInfo, que a su
-        // vez necesita el TabularType de los dos mapas de MemoryUsage. Eso lo produce la VM cuando
-        // emite el aviso; del lado del que escucha nunca hace falta, porque lo que llega ya viene
-        // en forma abierta y el camino que se usa es `from`.
+        // Building the open value needs the GcInfo's nested CompositeType to be built, which in
+                // its turn needs the TabularType of the two MemoryUsage maps. That is produced by
+                // the VM when it emits the notice; on the listener's side it is never needed,
+                // because what arrives already comes in open form and the path that is used is
+                // `from`.
         throw new UnsupportedOperationException(
-                "la forma abierta de este aviso la construye la VM que lo emite");
+                "the open form of this notice is built by the VM that emits it");
     }
 }

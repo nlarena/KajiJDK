@@ -1,13 +1,13 @@
 package org.w3c.dom.html;
 
 /**
- * Un `<menu>`. Obsoleto en HTML 4.
+ * A `<menu>`. Obsolete in HTML 4.
  */
 public interface HTMLMenuElement extends HTMLElement {
 
-    /** El atributo `compact`. */
+    /** The `compact` attribute. */
     boolean getCompact();
 
-    /** Fija el atributo `compact`. */
+    /** It sets the `compact` attribute. */
     void setCompact(boolean compact);
 }

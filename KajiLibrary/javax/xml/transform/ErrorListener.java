@@ -1,53 +1,53 @@
 package javax.xml.transform;
 
 /**
- * KajiLibrary's javax.xml.transform.ErrorListener -- quien recibe los problemas de una transformacion.
+ * KajiLibrary's javax.xml.transform.ErrorListener -- who receives the problems of a transformation.
  *
- * <p>Existe porque un procesador de XSLT no puede decidir solo que hacer con un error. Una hoja de
- * estilo que referencia una plantilla inexistente es fatal para un servidor que genera facturas y es
- * un aviso ignorable para un editor que muestra una vista previa mientras el usuario escribe. La
- * politica la pone el llamador; el procesador solo **avisa**.
+ * <p>It exists because an XSLT processor cannot decide on its own what to do with an error. A
+ * stylesheet that references a nonexistent template is fatal for a server that generates invoices
+ * and an ignorable warning for an editor that shows a preview while the user types. The policy is
+ * set by the caller; the processor only **reports**.
  *
- * <p>Los tres niveles no se distinguen por gravedad sino por **que puede seguir pasando despues**,
- * que es lo unico que el procesador sabe de verdad:
+ * <p>The three levels are not told apart by severity but by **what can keep happening afterwards**,
+ * which is the only thing the processor really knows:
  *
  * <ul>
- *   <li>{@link #warning} -- el procesamiento continua normalmente;
- *   <li>{@link #error} -- se detecto una violacion recuperable; el procesador va a seguir para
- *       poder reportar mas de un error por corrida, pero el resultado ya no es confiable;
- *   <li>{@link #fatalError} -- no se puede continuar; el resultado, si lo hay, esta incompleto.
+ *   <li>{@link #warning} -- processing continues normally;
+ *   <li>{@link #error} -- a recoverable violation was detected; the processor is going to go on so
+ *       as to report more than one error per run, but the result is no longer reliable;
+ *   <li>{@link #fatalError} -- it cannot continue; the result, if there is one, is incomplete.
  * </ul>
  *
- * <p>Y aca esta la parte que sorprende, porque invierte el control: los tres metodos pueden
- * **lanzar** {@link TransformerException}, y lanzarla es la forma de decirle al procesador "pará".
- * Volver normalmente de {@link #error} es autorizarlo a seguir. De ahi la regla que la spec insiste
- * y que un oyente escrito a las apuradas rompe siempre: **un {@code ErrorListener} nunca debe volver
- * normalmente de {@link #fatalError}**, porque el procesador queda habilitado a continuar sobre un
- * estado que el mismo declaro inutilizable, y lo que salga de ahi no significa nada.
+ * <p>And here is the surprising part, because it inverts control: the three methods can **throw**
+ * {@link TransformerException}, and throwing it is the way of telling the processor "stop".
+ * Returning normally from {@link #error} is authorizing it to go on. Hence the rule the spec
+ * insists on and that a listener written in a hurry always breaks: **an {@code ErrorListener} must
+ * never return normally from {@link #fatalError}**, because the processor is then allowed to
+ * continue on a state it itself declared unusable, and whatever comes out of there means nothing.
  */
 public interface ErrorListener {
 
     /**
-     * Un aviso. El procesamiento sigue igual.
+     * A warning. Processing goes on all the same.
      *
-     * @param exception el aviso, con su ubicacion si se conoce
-     * @throws TransformerException para abortar la transformacion
+     * @param exception the warning, with its location if known
+     * @throws TransformerException to abort the transformation
      */
     void warning(TransformerException exception) throws TransformerException;
 
     /**
-     * Un error recuperable. Volver normalmente autoriza a seguir.
+     * A recoverable error. Returning normally authorizes going on.
      *
-     * @param exception el error, con su ubicacion si se conoce
-     * @throws TransformerException para abortar la transformacion
+     * @param exception the error, with its location if known
+     * @throws TransformerException to abort the transformation
      */
     void error(TransformerException exception) throws TransformerException;
 
     /**
-     * Un error del que no se vuelve. No hay que volver normalmente de aca.
+     * An error there is no coming back from. One must not return normally from here.
      *
-     * @param exception el error, con su ubicacion si se conoce
-     * @throws TransformerException para abortar la transformacion, que es lo que corresponde
+     * @param exception the error, with its location if known
+     * @throws TransformerException to abort the transformation, which is what is due
      */
     void fatalError(TransformerException exception) throws TransformerException;
 }

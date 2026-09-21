@@ -1,232 +1,238 @@
 package jdk.internal.vm;
 
 /**
- * KajiLibrary's jdk.internal.vm.Continuation — una continuación delimitada (Project Loom).
+ * KajiLibrary's jdk.internal.vm.Continuation -- a delimited continuation (Project Loom).
  *
- * <p>Una continuación es una computación que se puede **suspender a la mitad y reanudar después**,
- * quizás en otro hilo. Es el sustrato de los hilos virtuales: suspender uno es guardar su
- * continuación, y reanudarlo es correrla.
+ * <p>A continuation is a computation that can be **suspended halfway and resumed later**, perhaps
+ * on another thread. It is the substrate of virtual threads: suspending one is keeping its
+ * continuation, and resuming it is running it.
  *
- * <h2>Acá es una continuación que nunca se suspende, y eso es un estado legítimo</h2>
+ * <h2>Here it is a continuation that is never suspended, and that is a legitimate state</h2>
  *
- * <p>Suspender exige que la VM levante los cuadros de la pila y los guarde en el montón. Esta VM no
- * sabe hacerlo (ver {@link ContinuationSupport}), así que **toda continuación está permanentemente
- * clavada**. La palabra es del JDK: una continuación *pinned* es una que no se puede suspender ahora.
+ * <p>Suspending demands that the VM lift the frames of the stack and keep them in the heap. This VM
+ * does not know how to do it (see {@link ContinuationSupport}), so **every continuation is
+ * permanently pinned**. The word is the JDK's: a *pinned* continuation is one that cannot be
+ * suspended right now.
  *
- * <p>Lo importante es que el JDK **ya define qué pasa en ese caso**, porque en HotSpot también ocurre
- * —dentro de un bloque sincronizado, o con un cuadro nativo en el medio—. Así que no hay que inventar
- * ningún comportamiento: se usa el que ya está especificado.
+ * <p>The important thing is that the JDK **already defines what happens in that case**, because in
+ * HotSpot it happens too --inside a synchronized block, or with a native frame in the middle--. So
+ * no behaviour has to be invented: the one already specified is used.
  *
  * <ul>
- * <li>{@link #run()} corre el objetivo **hasta el final**. Es exactamente lo que pasa cuando ningún
- *     {@code yield} tiene éxito: la computación no se corta, sigue hasta terminar.</li>
- * <li>{@link #yield} devuelve `false`, que es su forma documentada de decir "no se pudo".</li>
- * <li>{@link #isPinned} devuelve `true`, y {@link #onPinned} recibe {@link Pinned#NATIVE}: el motivo
- *     es que hay un cuadro que no se puede levantar.</li>
- * <li>{@link #tryPreempt} devuelve {@link PreemptStatus#PERM_FAIL_UNSUPPORTED} — la constante que el
- *     JDK tiene justo para esto.</li>
+ * <li>{@link #run()} runs the target **to the end**. It is exactly what happens when no
+ *     {@code yield} succeeds: the computation is not cut, it goes on to the end.</li>
+ * <li>{@link #yield} returns `false`, which is its documented way of saying "it could not".</li>
+ * <li>{@link #isPinned} returns `true`, and {@link #onPinned} receives {@link Pinned#NATIVE}: the
+ *     reason is that there is a frame that cannot be lifted.</li>
+ * <li>{@link #tryPreempt} returns {@link PreemptStatus#PERM_FAIL_UNSUPPORTED} -- the constant the
+ *     JDK has precisely for this.</li>
  * </ul>
  *
- * <p>Un usuario que llame `run()` y no use `yield` obtiene el resultado correcto. Uno que dependa de
- * suspender recibe un `false` que puede mirar, en vez de una suspensión que no ocurrió.
+ * <p>A user who calls `run()` and does not use `yield` gets the right result. One who depends on
+ * suspending receives a `false` they can look at, instead of a suspension that did not happen.
  *
- * <h2>Lo que queda afuera</h2>
+ * <h2>What is left out</h2>
  *
- * <p>{@code getStackTrace()}, los tres {@code stackWalker(...)} y {@code wrapWalk(...)}. Los cinco
- * entregan **los cuadros de la continuación**, que es justamente lo que no existe: sin pila guardada
- * en el montón no hay qué recorrer. Devolver la pila del hilo actual sería peor que no estar — se
- * leería como la de la continuación y apuntaría a otro lado.
+ * <p>{@code getStackTrace()}, the three {@code stackWalker(...)} and {@code wrapWalk(...)}. The
+ * five hand over **the frames of the continuation**, which is precisely what does not exist: with
+ * no stack kept in the heap there is nothing to walk. Returning the stack of the current thread
+ * would be worse than not being there -- it would read as that of the continuation and point
+ * elsewhere.
  */
 public class Continuation {
 
     /**
-     * Por qué una continuación no se pudo suspender.
+     * Why a continuation could not be suspended.
      *
-     * <p>Los cuatro motivos son de la VM y no del programa, y por eso el que llama no puede
-     * "arreglarlos": lo único que puede hacer es no contar con la suspensión.
+     * <p>The four reasons belong to the VM and not to the program, and that is why the caller
+     * cannot "fix them": the only thing they can do is not count on suspension.
      */
     public enum Pinned {
-        /** Hay un cuadro nativo en la pila; no se puede levantar. */
+        /** There is a native frame on the stack; it cannot be lifted. */
         NATIVE,
-        /** Se está adentro de un bloque sincronizado. */
+        /** It is inside a synchronized block. */
         MONITOR,
-        /** Se está en una sección crítica de la VM. */
+        /** It is in a critical section of the VM. */
         CRITICAL_SECTION,
-        /** Se estaba desenrollando una excepción. */
+        /** An exception was being unwound. */
         EXCEPTION
     }
 
-    /** El resultado de intentar desalojar una continuación. */
+    /** The result of trying to preempt a continuation. */
     public enum PreemptStatus {
-        /** Se pudo. */
+        /** It could. */
         SUCCESS(null),
-        /** No se puede, y no va a poder: esta VM no soporta desalojo. */
+        /** It cannot, and it is not going to be able to: this VM does not support preemption. */
         PERM_FAIL_UNSUPPORTED(null),
-        /** No se puede porque ya está suspendiéndose. */
+        /** It cannot because it is already suspending. */
         PERM_FAIL_YIELDING(null),
-        /** No se puede porque no está montada en ningún hilo. */
+        /** It cannot because it is not mounted on any thread. */
         PERM_FAIL_NOT_MOUNTED(null),
-        /** Ahora no: está en una sección crítica. */
+        /** Not now: it is in a critical section. */
         TRANSIENT_FAIL_PINNED_CRITICAL_SECTION(Pinned.CRITICAL_SECTION),
-        /** Ahora no: hay un cuadro nativo. */
+        /** Not now: there is a native frame. */
         TRANSIENT_FAIL_PINNED_NATIVE(Pinned.NATIVE),
-        /** Ahora no: hay un monitor tomado. */
+        /** Not now: there is a monitor held. */
         TRANSIENT_FAIL_PINNED_MONITOR(Pinned.MONITOR);
 
-        private final Pinned motivo;
+        private final Pinned reason;
 
-        PreemptStatus(Pinned motivo) {
-            this.motivo = motivo;
+        PreemptStatus(Pinned reason) {
+            this.reason = reason;
         }
 
         /**
-         * El motivo de clavado, o `null` si el fallo no fue por estar clavada.
+         * The pinning reason, or `null` if the failure was not due to being pinned.
          *
-         * <p>Los `PERM_FAIL_*` devuelven `null` y los `TRANSIENT_FAIL_PINNED_*` el motivo. La
-         * diferencia es la que le importa a quien reintenta: un fallo transitorio puede desaparecer,
-         * uno permanente no.
+         * <p>The `PERM_FAIL_*` return `null` and the `TRANSIENT_FAIL_PINNED_*` the reason. The
+         * difference is the one that matters to whoever retries: a transient failure may go away, a
+         * permanent one does not.
          */
         public Pinned pinned() {
-            return this.motivo;
+            return this.reason;
         }
     }
 
-    // La pila de continuaciones montadas en el hilo actual. Un `ThreadLocal` y no un campo de
-    // `Thread`, por lo mismo que en `StackableScope`: no se puede tocar `Thread` desde este paquete y
-    // la semantica es identica.
-    private static final ThreadLocal<Continuation> MONTADA = new ThreadLocal<Continuation>();
+    // The stack of continuations mounted on the current thread. A `ThreadLocal` and not a field of
+    // `Thread`, for the same reason as in `StackableScope`: `Thread` cannot be touched from this
+    // package and the semantics are identical.
+    private static final ThreadLocal<Continuation> MOUNTED = new ThreadLocal<Continuation>();
 
     private final ContinuationScope scope;
     private final Runnable target;
-    private Continuation padre;
-    private boolean terminada;
+    private Continuation parent;
+    private boolean done;
 
     public Continuation(ContinuationScope scope, Runnable target) {
         this.scope = scope;
         this.target = target;
     }
 
-    /** El ámbito que delimita esta continuación. */
+    /** The scope that delimits this continuation. */
     public ContinuationScope getScope() {
         return this.scope;
     }
 
-    /** La continuación que la encierra en este hilo, o `null`. */
+    /** The continuation that encloses it on this thread, or `null`. */
     public Continuation getParent() {
-        return this.padre;
+        return this.parent;
     }
 
-    /** Si ya terminó. */
+    /** Whether it has already finished. */
     public boolean isDone() {
-        return this.terminada;
+        return this.done;
     }
 
     /**
-     * Si fue desalojada.
+     * Whether it was preempted.
      *
-     * <p>Siempre `false`: el desalojo necesita suspender, y acá no se puede. Es consistente con que
-     * {@link #tryPreempt} nunca devuelva {@link PreemptStatus#SUCCESS}.
+     * <p>Always `false`: preemption needs suspension, and here it cannot be done. It is consistent
+     * with {@link #tryPreempt} never returning {@link PreemptStatus#SUCCESS}.
      */
     public boolean isPreempted() {
         return false;
     }
 
     /**
-     * Corre la continuación hasta que se suspenda o termine — acá, siempre hasta que termine.
+     * It runs the continuation until it is suspended or finishes -- here, always until it finishes.
      *
-     * <p>Es `final` como en el JDK: el ciclo de montar, correr y desmontar no se puede redefinir a
-     * medias sin romper la invariante de qué continuación está montada en el hilo. Lo que sí se
-     * redefine son los ganchos {@link #onContinue} y {@link #onPinned}.
+     * <p>It is `final` as in the JDK: the cycle of mounting, running and unmounting cannot be
+     * redefined halfway without breaking the invariant of which continuation is mounted on the
+     * thread. What is redefined are the hooks {@link #onContinue} and {@link #onPinned}.
      *
-     * <p>El desmontaje va en un `finally`: si el objetivo tira, la continuación tiene que salir de la
-     * pila del hilo igual, o el hilo queda creyendo que sigue adentro de algo que ya explotó.
+     * <p>The unmounting goes in a `finally`: if the target throws, the continuation has to leave
+     * the stack of the thread all the same, or the thread is left believing it is still inside
+     * something that already blew up.
      *
-     * @throws IllegalStateException si ya terminó
+     * @throws IllegalStateException if it has already finished
      */
     public final void run() {
-        if (this.terminada) {
-            throw new IllegalStateException("esta continuacion ya termino");
+        if (this.done) {
+            throw new IllegalStateException("this continuation has already finished");
         }
-        this.padre = Continuation.MONTADA.get();
-        Continuation.MONTADA.set(this);
+        this.parent = Continuation.MOUNTED.get();
+        Continuation.MOUNTED.set(this);
         this.onContinue();
         try {
             if (this.target != null) {
                 this.target.run();
             }
         } finally {
-            Continuation.MONTADA.set(this.padre);
-            this.terminada = true;
+            Continuation.MOUNTED.set(this.parent);
+            this.done = true;
         }
     }
 
-    /** Aviso de que la continuación arranca o se reanuda. Para redefinir. */
+    /** Notice that the continuation starts or resumes. To be overridden. */
     protected void onContinue() {
     }
 
-    /** Aviso de que un {@link #yield} falló por estar clavada. Para redefinir. */
+    /** Notice that a {@link #yield} failed because of being pinned. To be overridden. */
     protected void onPinned(Pinned reason) {
     }
 
     /**
-     * Intenta suspender la continuación del ámbito indicado.
+     * It tries to suspend the continuation of the given scope.
      *
-     * <p>Devuelve `false` **siempre** en esta VM, y avisa por {@link #onPinned} con
-     * {@link Pinned#NATIVE}. El `false` no es un error: es la respuesta que el contrato define para
-     * cuando no se pudo, y la que ocurre en HotSpot cada vez que hay un cuadro nativo en el medio.
+     * <p>It returns `false` **always** in this VM, and notifies through {@link #onPinned} with
+     * {@link Pinned#NATIVE}. The `false` is not an error: it is the answer the contract defines for
+     * when it could not, and the one that happens in HotSpot every time there is a native frame in
+     * the middle.
      */
     public static boolean yield(ContinuationScope scope) {
-        Continuation actual = Continuation.MONTADA.get();
-        if (actual != null) {
-            actual.onPinned(Pinned.NATIVE);
+        Continuation current = Continuation.MOUNTED.get();
+        if (current != null) {
+            current.onPinned(Pinned.NATIVE);
         }
         return false;
     }
 
     /**
-     * Si la continuación de ese ámbito está clavada.
+     * Whether the continuation of that scope is pinned.
      *
-     * <p>Siempre `true`. Preguntarlo antes de intentar suspender es el uso normal, y acá la respuesta
-     * evita el intento.
+     * <p>Always `true`. Asking it before trying to suspend is the normal use, and here the answer
+     * avoids the attempt.
      */
     public static boolean isPinned(ContinuationScope scope) {
         return true;
     }
 
-    /** La continuación montada de ese ámbito en el hilo actual, o `null`. */
+    /** The mounted continuation of that scope on the current thread, or `null`. */
     public static Continuation getCurrentContinuation(ContinuationScope scope) {
-        Continuation c = Continuation.MONTADA.get();
+        Continuation c = Continuation.MOUNTED.get();
         while (c != null) {
             if (scope == null || scope.equals(c.scope)) {
                 return c;
             }
-            c = c.padre;
+            c = c.parent;
         }
         return null;
     }
 
     /**
-     * Intenta desalojar la continuación que corre en ese hilo.
+     * It tries to preempt the continuation running on that thread.
      *
-     * @return siempre {@link PreemptStatus#PERM_FAIL_UNSUPPORTED} en esta VM
+     * @return always {@link PreemptStatus#PERM_FAIL_UNSUPPORTED} in this VM
      */
     public PreemptStatus tryPreempt(Thread thread) {
         return PreemptStatus.PERM_FAIL_UNSUPPORTED;
     }
 
     /**
-     * Impide suspender hasta el {@link #unpin} correspondiente.
+     * It prevents suspending until the matching {@link #unpin}.
      *
-     * <p>No hace nada, y es lo correcto: donde nada se puede suspender, no hay nada que impedir.
+     * <p>It does nothing, and that is the right thing: where nothing can be suspended, there is
+     * nothing to prevent.
      *
-     * <p><strong>Acá no es `native`, y el JDK sí lo declara así.</strong> Un `native` sin
-     * implementación registrada en esta VM no tira una excepción — voltea el proceso. Un método vacío
-     * hace lo mismo que el del JDK haría (nada observable); uno `native` mataría al que lo llame.
+     * <p><strong>Here it is not `native`, and the JDK does declare it so.</strong> A `native` with
+     * no registered implementation on this VM does not throw an exception -- it brings the process
+     * down. An empty method does the same as the JDK's would (nothing observable); a `native` one
+     * would kill whoever calls it.
      */
     public static void pin() {
     }
 
-    /** Lo simétrico de {@link #pin}, y por lo mismo tampoco hace nada. */
+    /** The symmetric of {@link #pin}, and for the same reason it does nothing either. */
     public static void unpin() {
     }
 }

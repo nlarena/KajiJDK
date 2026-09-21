@@ -22,78 +22,81 @@ import javax.imageio.stream.ImageInputStream;
 import javax.imageio.stream.ImageOutputStream;
 
 /**
- * KajiLibrary's javax.imageio.ImageIO -- leer y escribir imagenes en una linea.
+ * KajiLibrary's javax.imageio.ImageIO -- reading and writing images in one line.
  *
- * <p>La fachada de todo el paquete. Debajo consulta el {@link IIORegistry} y arma lo que haga falta;
- * para el caso normal --{@code ImageIO.read(new File("foto.png"))}-- eso queda invisible.
+ * <p>The facade of the whole package. Underneath it consults the {@link IIORegistry} and builds
+ * whatever is needed; for the normal case --{@code ImageIO.read(new File("photo.png"))}-- that
+ * stays invisible.
  *
- * <h2>{@link #read} devuelve null cuando nadie reconoce el formato</h2>
+ * <h2>{@link #read} returns null when nobody recognizes the format</h2>
  *
- * <p>Es lo que mas sorprende de esta clase: no lanza. Un archivo que no es una imagen, o de un formato
- * sin lector registrado, da <b>null</b>; la excepcion queda para los errores de entrada y salida de
- * verdad.
+ * <p>It is what surprises most about this class: it does not throw. A file that is not an image,
+ * or of a format with no registered reader, gives <b>null</b>; the exception is kept for real
+ * input/output errors.
  *
- * <p>Un programa que no comprueba el null termina con un {@code NullPointerException} lejos del sitio
- * que lo causo.
+ * <p>A program that does not check for null ends up with a {@code NullPointerException} far from
+ * the place that caused it.
  *
- * <h2>{@link #write} devuelve false por lo mismo</h2>
+ * <h2>{@link #write} returns false for the same reason</h2>
  *
- * <p>Sin escritor para ese nombre de formato devuelve false y <b>no escribe nada</b>. El archivo de
- * destino igual se creo, y queda vacio -- vale la pena borrarlo.
+ * <p>With no writer for that format name it returns false and <b>writes nothing</b>. Writing to a
+ * {@code File}, this library first deletes the file and creates it again, so it is left there
+ * empty -- worth deleting. The JDK looks for the writer first and, without one, does not touch
+ * the file system. (An earlier note described the empty file as the normal behaviour.)
  *
- * <h2>La cache</h2>
+ * <h2>The cache</h2>
  *
- * <p>{@link #setUseCache} decide si los flujos que se creen sobre {@code InputStream} pueden usar un
- * archivo temporal en lugar de memoria. Por omision <b>si</b>, que es lo correcto para imagenes
- * grandes; apagarlo es lo que se hace en un entorno sin disco escribible.
+ * <p>{@link #setUseCache} decides whether the streams created over an {@code InputStream} may use a
+ * temporary file instead of memory. By default <b>yes</b>, which is right for large images;
+ * turning it off is what you do in an environment without a writable disk.
  *
  * <h2>A KajiLibrary subset</h2>
  *
- * <p>Todo el mecanismo esta implementado: el registro, la busqueda por nombre, extension y tipo MIME,
- * la creacion de flujos, y el emparejamiento entre lectores y escritores. Lo que esta biblioteca no
- * trae son <b>complementos</b>: decodificar PNG o JPEG pide los codecs.
+ * <p>The whole mechanism is implemented: the registry, lookup by name, suffix and MIME type,
+ * stream creation, and the pairing between readers and writers. What this library does not ship
+ * is <b>plug-ins</b>: decoding PNG or JPEG takes the codecs.
  *
- * <p>Con eso, {@link #read} devuelve null y {@link #write} devuelve false -- que es exactamente lo que
- * hace el JDK cuando nadie registro un lector para ese formato. Los flujos si funcionan de verdad:
- * {@link #createImageInputStream} sobre un {@code File} o un {@code InputStream} devuelve un flujo
- * usable, porque esos dos proveedores estan escritos.
+ * <p>With that, {@link #read} returns null and {@link #write} returns false -- which is exactly
+ * what the JDK does when nobody registered a reader for that format (apart from the empty file
+ * above). The streams do really work: {@link #createImageInputStream} over a {@code File} or an
+ * {@code InputStream} returns a usable stream, because those providers are written.
  */
 public final class ImageIO {
 
-    /** Si los flujos pueden usar archivo temporal. Ver la nota de la clase. */
+    /** Whether streams may use a temporary file. See the class note. */
     private static boolean useCache = true;
 
-    /** Donde ponerlo, o null para el del sistema. */
+    /** Where to put it, or null for the system's. */
     private static File cacheDirectory = null;
 
-    /** No se instancia. */
+    /** Not instantiated. */
     private ImageIO() {
     }
 
     /**
-     * Vuelve a buscar complementos en la ruta de clases.
+     * Looks for plug-ins on the class path again.
      *
-     * <p>Hace falta cuando aparecen despues de arrancar; ver
+     * <p>Needed when they appear after startup; see
      * {@link IIORegistry#registerApplicationClasspathSpis}.
      */
     public static void scanForPlugins() {
         IIORegistry.getDefaultInstance().registerApplicationClasspathSpis();
     }
 
-    /** Si los flujos pueden usar archivo temporal. */
+    /** Whether streams may use a temporary file. */
     public static void setUseCache(boolean useCache) {
         ImageIO.useCache = useCache;
     }
 
-    /** Si pueden. */
+    /** Whether they may. */
     public static boolean getUseCache() {
         return useCache;
     }
 
     /**
-     * Donde poner los temporales; null usa el del sistema.
+     * Where to put the temporary files; null uses the system's.
      *
-     * @throws IllegalArgumentException si no es un directorio
+     * @throws IllegalArgumentException if it is not a directory
      */
     public static void setCacheDirectory(File cacheDirectory) {
         if (cacheDirectory != null && !cacheDirectory.isDirectory()) {
@@ -102,17 +105,17 @@ public final class ImageIO {
         ImageIO.cacheDirectory = cacheDirectory;
     }
 
-    /** Donde se ponen, o null. */
+    /** Where they go, or null. */
     public static File getCacheDirectory() {
         return cacheDirectory;
     }
 
     /**
-     * Envuelve eso en un flujo de entrada de imagenes.
+     * Wraps that in an image input stream.
      *
-     * @return el flujo, o null si nadie sabe envolver esa clase de objeto
-     * @throws IllegalArgumentException si es null
-     * @throws IOException si no se pudo crear
+     * @return the stream, or null if nobody knows how to wrap that kind of object
+     * @throws IllegalArgumentException if it is null
+     * @throws IOException if it could not be created
      */
     public static ImageInputStream createImageInputStream(Object input) throws IOException {
         if (input == null) {
@@ -130,11 +133,11 @@ public final class ImageIO {
     }
 
     /**
-     * Idem, de salida.
+     * Same, for output.
      *
-     * @return el flujo, o null si nadie sabe
-     * @throws IllegalArgumentException si es null
-     * @throws IOException si no se pudo crear
+     * @return the stream, or null if nobody knows how
+     * @throws IllegalArgumentException if it is null
+     * @throws IOException if it could not be created
      */
     public static ImageOutputStream createImageOutputStream(Object output) throws IOException {
         if (output == null) {
@@ -151,28 +154,28 @@ public final class ImageIO {
         return null;
     }
 
-    /** Que formatos se pueden leer, sin repetidos. */
+    /** Which formats can be read, without repeats. */
     public static String[] getReaderFormatNames() {
         return collect(ImageReaderSpi.class, NAMES);
     }
 
-    /** Que tipos MIME. */
+    /** Which MIME types. */
     public static String[] getReaderMIMETypes() {
         return collect(ImageReaderSpi.class, MIME);
     }
 
-    /** Que extensiones. */
+    /** Which suffixes. */
     public static String[] getReaderFileSuffixes() {
         return collect(ImageReaderSpi.class, SUFFIXES);
     }
 
     /**
-     * Los lectores que reconocen lo que hay en esa entrada.
+     * The readers that recognize what is in that input.
      *
-     * <p>Le pregunta a cada proveedor con {@code canDecodeInput}; ver la regla de rebobinar en
+     * <p>It asks each provider with {@code canDecodeInput}; see the rewind rule in
      * {@link ImageReaderSpi}.
      *
-     * @throws IllegalArgumentException si es null
+     * @throws IllegalArgumentException if it is null
      */
     public static Iterator<ImageReader> getImageReaders(Object input) {
         if (input == null) {
@@ -188,88 +191,88 @@ public final class ImageIO {
                     readers.add(spi.createReaderInstance());
                 }
             } catch (IOException e) {
-                // Ese proveedor no pudo mirar la entrada; los demas todavia pueden.
+                // That provider could not look at the input; the others still can.
             }
         }
         return readers.iterator();
     }
 
     /**
-     * Los lectores de ese formato.
+     * The readers for that format.
      *
-     * @throws IllegalArgumentException si el nombre es null
+     * @throws IllegalArgumentException if the name is null
      */
     public static Iterator<ImageReader> getImageReadersByFormatName(String formatName) {
         return readersMatching(formatName, NAMES);
     }
 
     /**
-     * Los de esa extension.
+     * The ones for that suffix.
      *
-     * @throws IllegalArgumentException si es null
+     * @throws IllegalArgumentException if it is null
      */
     public static Iterator<ImageReader> getImageReadersBySuffix(String fileSuffix) {
         return readersMatching(fileSuffix, SUFFIXES);
     }
 
     /**
-     * Los de ese tipo MIME.
+     * The ones for that MIME type.
      *
-     * @throws IllegalArgumentException si es null
+     * @throws IllegalArgumentException if it is null
      */
     public static Iterator<ImageReader> getImageReadersByMIMEType(String MIMEType) {
         return readersMatching(MIMEType, MIME);
     }
 
-    /** Que formatos se pueden escribir. */
+    /** Which formats can be written. */
     public static String[] getWriterFormatNames() {
         return collect(ImageWriterSpi.class, NAMES);
     }
 
-    /** Que tipos MIME. */
+    /** Which MIME types. */
     public static String[] getWriterMIMETypes() {
         return collect(ImageWriterSpi.class, MIME);
     }
 
-    /** Que extensiones. */
+    /** Which suffixes. */
     public static String[] getWriterFileSuffixes() {
         return collect(ImageWriterSpi.class, SUFFIXES);
     }
 
     /**
-     * Los escritores de ese formato.
+     * The writers for that format.
      *
-     * @throws IllegalArgumentException si es null
+     * @throws IllegalArgumentException if it is null
      */
     public static Iterator<ImageWriter> getImageWritersByFormatName(String formatName) {
         return writersMatching(formatName, NAMES);
     }
 
     /**
-     * Los de esa extension.
+     * The ones for that suffix.
      *
-     * @throws IllegalArgumentException si es null
+     * @throws IllegalArgumentException if it is null
      */
     public static Iterator<ImageWriter> getImageWritersBySuffix(String fileSuffix) {
         return writersMatching(fileSuffix, SUFFIXES);
     }
 
     /**
-     * Los de ese tipo MIME.
+     * The ones for that MIME type.
      *
-     * @throws IllegalArgumentException si es null
+     * @throws IllegalArgumentException if it is null
      */
     public static Iterator<ImageWriter> getImageWritersByMIMEType(String MIMEType) {
         return writersMatching(MIMEType, MIME);
     }
 
     /**
-     * El escritor del mismo formato que ese lector, o null.
+     * The writer for the same format as that reader, or null.
      *
-     * <p>Es como se reescribe lo que se acaba de leer sin cambiar de formato; ver
+     * <p>It is how you rewrite what you just read without changing format; see
      * {@link ImageReaderSpi#getImageWriterSpiNames}.
      *
-     * @throws IllegalArgumentException si es null
+     * @throws IllegalArgumentException if it is null
      */
     public static ImageWriter getImageWriter(ImageReader reader) {
         if (reader == null) {
@@ -290,7 +293,7 @@ public final class ImageIO {
                 try {
                     return spi.createWriterInstance();
                 } catch (IOException e) {
-                    // Ese no se pudo crear; se prueba con el siguiente hermano.
+                    // That one could not be created; try the next sibling.
                 }
             }
             i = i + 1;
@@ -299,9 +302,9 @@ public final class ImageIO {
     }
 
     /**
-     * El lector del mismo formato que ese escritor, o null.
+     * The reader for the same format as that writer, or null.
      *
-     * @throws IllegalArgumentException si es null
+     * @throws IllegalArgumentException if it is null
      */
     public static ImageReader getImageReader(ImageWriter writer) {
         if (writer == null) {
@@ -322,7 +325,7 @@ public final class ImageIO {
                 try {
                     return spi.createReaderInstance();
                 } catch (IOException e) {
-                    // Ver arriba.
+                    // See above.
                 }
             }
             i = i + 1;
@@ -331,12 +334,12 @@ public final class ImageIO {
     }
 
     /**
-     * Los escritores que puedan escribir ese tipo de imagen en ese formato.
+     * The writers that can write that image type in that format.
      *
-     * <p>Cruza las dos condiciones, que es lo que hace falta antes de escribir: que el formato exista
-     * y que ademas soporte ese tipo de pixel.
+     * <p>It crosses both conditions, which is what is needed before writing: that the format exists
+     * and that it also supports that pixel type.
      *
-     * @throws IllegalArgumentException si el nombre es null
+     * @throws IllegalArgumentException if the name is null
      */
     public static Iterator<ImageWriter> getImageWriters(ImageTypeSpecifier type,
                                                         String formatName) {
@@ -352,7 +355,7 @@ public final class ImageIO {
                 try {
                     writers.add(spi.createWriterInstance());
                 } catch (IOException e) {
-                    // Ver arriba.
+                    // See above.
                 }
             }
         }
@@ -360,9 +363,9 @@ public final class ImageIO {
     }
 
     /**
-     * Los traductores de metadatos entre ese lector y ese escritor.
+     * The metadata transcoders between that reader and that writer.
      *
-     * @throws IllegalArgumentException si alguno es null
+     * @throws IllegalArgumentException if either is null
      */
     public static Iterator<ImageTranscoder> getImageTranscoders(ImageReader reader,
                                                                 ImageWriter writer) {
@@ -393,11 +396,11 @@ public final class ImageIO {
     }
 
     /**
-     * Lee la primera imagen de ese archivo.
+     * Reads the first image of that file.
      *
-     * @return la imagen, o null si nadie reconoce el formato. Ver la nota de la clase
-     * @throws IllegalArgumentException si es null
-     * @throws IOException si fallo la lectura
+     * @return the image, or null if nobody recognizes the format. See the class note
+     * @throws IllegalArgumentException if it is null
+     * @throws IOException if reading failed
      */
     public static BufferedImage read(File input) throws IOException {
         if (input == null) {
@@ -418,10 +421,10 @@ public final class ImageIO {
     }
 
     /**
-     * Idem, desde un flujo. El flujo <b>no</b> se cierra.
+     * Same, from a stream. The stream is <b>not</b> closed.
      *
-     * @return la imagen, o null
-     * @throws IOException si fallo la lectura
+     * @return the image, or null
+     * @throws IOException if reading failed
      */
     public static BufferedImage read(InputStream input) throws IOException {
         if (input == null) {
@@ -436,10 +439,10 @@ public final class ImageIO {
     }
 
     /**
-     * Idem, desde una direccion.
+     * Same, from an address.
      *
-     * @return la imagen, o null
-     * @throws IOException si fallo la lectura
+     * @return the image, or null
+     * @throws IOException if reading failed
      */
     public static BufferedImage read(URL input) throws IOException {
         if (input == null) {
@@ -454,18 +457,18 @@ public final class ImageIO {
                 stream.close();
             }
         } finally {
-            // La conexion la abrio este metodo, asi que la cierra este metodo -- a diferencia del
-            // flujo que recibe la version de InputStream.
+            // This method opened the connection, so this method closes it -- unlike the stream the
+            // InputStream version receives.
             istream.close();
         }
         return bi;
     }
 
     /**
-     * Idem, desde un flujo de imagenes ya armado.
+     * Same, from an already built image stream.
      *
-     * @return la imagen, o null si nadie reconoce el formato
-     * @throws IOException si fallo la lectura
+     * @return the image, or null if nobody recognizes the format
+     * @throws IOException if reading failed
      */
     public static BufferedImage read(ImageInputStream stream) throws IOException {
         if (stream == null) {
@@ -489,11 +492,12 @@ public final class ImageIO {
     }
 
     /**
-     * Escribe esa imagen en ese formato.
+     * Writes that image in that format.
      *
-     * @return si se escribio; false si no hay escritor para ese formato. Ver la nota de la clase
-     * @throws IllegalArgumentException si algun argumento es null
-     * @throws IOException si fallo la escritura
+     * @return whether it was written; false if there is no writer for that format. See the class
+     *     note
+     * @throws IllegalArgumentException if any argument is null
+     * @throws IOException if writing failed
      */
     public static boolean write(RenderedImage im, String formatName, ImageOutputStream output)
         throws IOException {
@@ -521,12 +525,12 @@ public final class ImageIO {
     }
 
     /**
-     * Idem, a un archivo.
+     * Same, to a file.
      *
-     * <p>Si no hay escritor devuelve false y el archivo queda creado y <b>vacio</b>; ver la nota de la
-     * clase.
+     * <p>If there is no writer it returns false and the file is left created and <b>empty</b>,
+     * unlike the JDK; see the class note.
      *
-     * @throws IOException si fallo la escritura
+     * @throws IOException if writing failed
      */
     public static boolean write(RenderedImage im, String formatName, File output)
         throws IOException {
@@ -546,9 +550,9 @@ public final class ImageIO {
     }
 
     /**
-     * Idem, a un flujo. El flujo <b>no</b> se cierra.
+     * Same, to a stream. The stream is <b>not</b> closed.
      *
-     * @throws IOException si fallo la escritura
+     * @throws IOException if writing failed
      */
     public static boolean write(RenderedImage im, String formatName, OutputStream output)
         throws IOException {
@@ -566,21 +570,21 @@ public final class ImageIO {
         }
     }
 
-    /** Los nombres del formato. */
+    /** The format names. */
     private static final int NAMES = 0;
 
-    /** Las extensiones. */
+    /** The suffixes. */
     private static final int SUFFIXES = 1;
 
-    /** Los tipos MIME. */
+    /** The MIME types. */
     private static final int MIME = 2;
 
-    /** El registro que se consulta para todo. */
+    /** The registry consulted for everything. */
     private static IIORegistry registry() {
         return IIORegistry.getDefaultInstance();
     }
 
-    /** Los nombres, extensiones o tipos MIME de todos los proveedores de esa categoria. */
+    /** The names, suffixes or MIME types of all the providers of that category. */
     private static <T extends ImageReaderWriterSpi> String[] collect(Class<T> category, int which) {
         List<String> found = new ArrayList<String>();
         Iterator<T> it = registry().getServiceProviders(category, true);
@@ -597,7 +601,7 @@ public final class ImageIO {
         return found.toArray(new String[found.size()]);
     }
 
-    /** Los lectores cuyo proveedor tenga ese nombre, extension o tipo MIME. */
+    /** The readers whose provider has that name, suffix or MIME type. */
     private static Iterator<ImageReader> readersMatching(String value, int which) {
         if (value == null) {
             throw new IllegalArgumentException("argument == null!");
@@ -611,14 +615,14 @@ public final class ImageIO {
                 try {
                     readers.add(spi.createReaderInstance());
                 } catch (IOException e) {
-                    // Ese no se pudo crear; los demas todavia sirven.
+                    // That one could not be created; the others are still good.
                 }
             }
         }
         return readers.iterator();
     }
 
-    /** Idem, escritores. */
+    /** Same, for writers. */
     private static Iterator<ImageWriter> writersMatching(String value, int which) {
         if (value == null) {
             throw new IllegalArgumentException("argument == null!");
@@ -632,14 +636,14 @@ public final class ImageIO {
                 try {
                     writers.add(spi.createWriterInstance());
                 } catch (IOException e) {
-                    // Ver arriba.
+                    // See above.
                 }
             }
         }
         return writers.iterator();
     }
 
-    /** El primer escritor que sirva para esa imagen y ese formato, o null. */
+    /** The first writer that works for that image and that format, or null. */
     private static ImageWriter firstWriter(RenderedImage im, String formatName) {
         Iterator<ImageWriter> iter = getImageWriters(new ImageTypeSpecifier(im), formatName);
         if (!iter.hasNext()) {
@@ -648,7 +652,7 @@ public final class ImageIO {
         return iter.next();
     }
 
-    /** Si ese proveedor declara ese nombre, extension o tipo MIME. */
+    /** Whether that provider declares that name, suffix or MIME type. */
     private static boolean matches(ImageReaderWriterSpi spi, String value, int which) {
         String[] values = valuesOf(spi, which);
         int i = 0;
@@ -661,7 +665,7 @@ public final class ImageIO {
         return false;
     }
 
-    /** El arreglo que corresponde a esa categoria de nombre. */
+    /** The array that corresponds to that kind of name. */
     private static String[] valuesOf(ImageReaderWriterSpi spi, int which) {
         if (which == SUFFIXES) {
             return spi.getFileSuffixes();
@@ -672,7 +676,7 @@ public final class ImageIO {
         return spi.getFormatNames();
     }
 
-    /** El proveedor de esa clase, o null si no esta registrado o no se pudo cargar. */
+    /** The provider of that class, or null if it is not registered or could not be loaded. */
     private static <T> T spiByName(String className, Class<T> category) {
         try {
             Class<?> cls = Class.forName(className, true,
@@ -682,7 +686,7 @@ public final class ImageIO {
                 return category.cast(spi);
             }
         } catch (Throwable e) {
-            // Esa clase no esta; el hermano declarado no esta instalado.
+            // That class is not there; the declared sibling is not installed.
         }
         return null;
     }

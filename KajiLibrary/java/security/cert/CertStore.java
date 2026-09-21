@@ -7,25 +7,25 @@ import java.security.Provider;
 import java.security.Security;
 import java.util.Collection;
 
-// Un repositorio del que sacar certificados y CRLs.
+// A store to take certificates and CRLs from.
 //
-// Es de donde el constructor de caminos saca los eslabones que le faltan: la cadena que llega en un
-// handshake suele estar incompleta, y hay que ir a buscar los certificados intermedios a algun
-// lado.
+// It is where the path builder takes the links it is missing from: the chain that arrives in a
+// handshake is usually incomplete, and the intermediate certificates have to be fetched from
+// somewhere.
 //
-// Hay una diferencia de contrato con `KeyStore` que vale marcar y que su nombre parecido esconde:
-// **un `CertStore` no implica confianza**. Es una fuente de material, no una lista de anclas. Un
-// certificado que salio de aca todavia tiene que validarse contra un `TrustAnchor`; tratar el
-// contenido de un store como confiable seria darle a cualquiera que pueda escribir en el la
-// capacidad de meter una raiz.
+// There is a difference of contract with `KeyStore` worth marking and that its similar name hides:
+// **a `CertStore` does not imply trust**. It is a source of material, not a list of anchors. A
+// certificate that came out of here still has to be validated against a `TrustAnchor`; treating the
+// contents of a store as trustworthy would give anybody who can write into it the ability to put in
+// a root.
 //
-// Los metodos son thread-safe por contrato —varios hilos pueden consultar el mismo store a la vez—
-// y devuelven colecciones **posiblemente vacias, nunca null**: "no encontre nada" es normal.
+// The methods are thread-safe by contract —several threads can query the same store at a time— and
+// return collections **possibly empty, never null**: "I found nothing" is normal.
 //
-// A KajiLibrary subset: no hay ningun proveedor de `CertStore` registrado, asi que las tres
-// sobrecargas de `getInstance` tiran siempre `NoSuchAlgorithmException`. Los dos tipos estandar
-// —"Collection" y "LDAP"— no estan: el primero es facil pero necesitaria los selectores completos
-// para filtrar, y el segundo pide una conexion de red. La estructura queda lista.
+// A KajiLibrary subset: there is no registered `CertStore` provider, so the three overloads of
+// `getInstance` always throw `NoSuchAlgorithmException`. The two standard types —"Collection" and
+// "LDAP"— are not there: the first is easy but would need the complete selectors in order to
+// filter, and the second asks for a network connection. The structure is left ready.
 public class CertStore {
 
     private final CertStoreSpi storeSpi;
@@ -38,18 +38,18 @@ public class CertStore {
         this.storeSpi = storeSpi;
         this.provider = provider;
         this.type = type;
-        // Se copia porque los parametros son mutables: sin esto, cambiarlos despues de crear el
-        // store cambiaria de donde lee.
+        // It is copied because the parameters are mutable: without this, changing them after
+        // creating the store would change where it reads from.
         this.params = (params == null ? null : (CertStoreParameters) params.clone());
     }
 
-    // Los certificados que cumplen el criterio. Coleccion vacia si no hay ninguno.
+    // The certificates that meet the criterion. An empty collection if there are none.
     public final Collection<? extends Certificate> getCertificates(CertSelector selector)
             throws CertStoreException {
         return this.storeSpi.engineGetCertificates(selector);
     }
 
-    // Las CRLs que cumplen el criterio. Coleccion vacia si no hay ninguna.
+    // The CRLs that meet the criterion. An empty collection if there are none.
     public final Collection<? extends CRL> getCRLs(CRLSelector selector)
             throws CertStoreException {
         return this.storeSpi.engineGetCRLs(selector);
@@ -65,7 +65,7 @@ public class CertStore {
         while (i < provs.length) {
             Provider.Service s = provs[i].getService("CertStore", type);
             if (s != null) {
-                return armar(s, type, params);
+                return build(s, type, params);
             }
             i = i + 1;
         }
@@ -98,10 +98,10 @@ public class CertStore {
             throw new NoSuchAlgorithmException(
                 "no such type: " + type + " for provider " + provider.getName());
         }
-        return armar(s, type, params);
+        return build(s, type, params);
     }
 
-    private static CertStore armar(Provider.Service s, String type, CertStoreParameters params)
+    private static CertStore build(Provider.Service s, String type, CertStoreParameters params)
             throws NoSuchAlgorithmException {
         Object o = s.newInstance(params);
         if (!(o instanceof CertStoreSpi)) {
@@ -111,7 +111,7 @@ public class CertStore {
         return new CertStore((CertStoreSpi) o, s.getProvider(), type, params);
     }
 
-    // Copia de los parametros con los que se creo, o null si no habia.
+    // A copy of the parameters it was created with, or null if there were none.
     public final CertStoreParameters getCertStoreParameters() {
         return (this.params == null ? null : (CertStoreParameters) this.params.clone());
     }
@@ -124,8 +124,8 @@ public class CertStore {
         return this.provider;
     }
 
-    // El tipo por default, de la propiedad de seguridad `certstore.type`. "LDAP" si no esta puesta,
-    // que es un default fosil: nadie publica certificados en LDAP hoy.
+    // The default type, from the security property `certstore.type`. "LDAP" if it is not set, which
+    // is a fossil default: nobody publishes certificates in LDAP today.
     public static final String getDefaultType() {
         String t = Security.getProperty("certstore.type");
         if (t == null) {

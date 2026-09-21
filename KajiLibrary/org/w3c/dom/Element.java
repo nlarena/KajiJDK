@@ -1,156 +1,159 @@
 package org.w3c.dom;
 
 /**
- * KajiLibrary's org.w3c.dom.Element -- una etiqueta del documento.
+ * KajiLibrary's org.w3c.dom.Element -- a tag of the document.
  *
- * <p>Es el unico tipo de nodo con atributos, y de lejos el que mas metodos propios agrega. Casi
- * todos vienen de a pares --{@code getAttribute} / {@code getAttributeNS}-- porque el DOM Level 1
- * se escribio antes de que existieran los espacios de nombres y el Level 2 no pudo cambiar las
- * firmas viejas sin romper todo. Las dos familias conviven sobre el **mismo** conjunto de
- * atributos y verlas como dos colecciones distintas es el error clasico.
+ * <p>It is the only node type with attributes, and by far the one that adds the most methods of its
+ * own. Almost all come in pairs --{@code getAttribute} / {@code getAttributeNS}-- because DOM Level
+ * 1 was written before namespaces existed and Level 2 could not change the old signatures without
+ * breaking everything. The two families live together over the **same** set of attributes and
+ * seeing them as two different collections is the classic mistake.
  *
- * <p>La diferencia real: la version sin {@code NS} indexa por el nombre completo tal cual esta
- * escrito, prefijo incluido, y la version {@code NS} por el par (URI, nombre local). Para un
- * documento sin namespaces son lo mismo; para uno con namespaces, {@code getAttribute("x:id")}
- * encuentra lo que {@code getAttributeNS(uri, "id")} tambien encuentra, pero
- * {@code getAttribute("id")} no encuentra nada.
+ * <p>The real difference: the version without {@code NS} indexes by the complete name as it is
+ * written, prefix included, and the {@code NS} version by the pair (URI, local name). For a
+ * document with no namespaces they are the same; for one with namespaces, {@code
+ * getAttribute("x:id")} finds what {@code getAttributeNS(uri, "id")} also finds, but {@code
+ * getAttribute("id")} finds nothing.
  *
- * <p>Otro par que conviene distinguir: {@link #getAttribute} devuelve el **valor** --y devuelve
- * {@code ""} tanto si el atributo vale vacio como si no existe, de ahi que exista
- * {@link #hasAttribute}-- mientras que {@link #getAttributeNode} devuelve el **nodo**, o
- * {@code null}.
+ * <p>Another pair worth telling apart: {@link #getAttribute} returns the **value** --and returns
+ * {@code ""} both if the attribute is empty and if it does not exist, hence {@link #hasAttribute}
+ * exists-- while {@link #getAttributeNode} returns the **node**, or {@code null}.
  *
- * <p>Los tres {@code setIdAttribute*} son de DOM Level 3 y hacen algo que suena raro: marcan un
- * atributo como de tipo ID **despues** de haber armado el arbol, para que
- * {@link Document#getElementById} lo encuentre sin que haya habido DTD ni esquema.
+ * <p>The three {@code setIdAttribute*} are from DOM Level 3 and do something that sounds odd: they
+ * mark an attribute as of type ID **after** the tree has been built, so that
+ * {@link Document#getElementById} finds it without there having been a DTD or a schema.
  *
- * <p>Interfaz declarada entera.
+ * <p>The interface is declared whole.
  */
 public interface Element extends Node {
 
-    /** El nombre de la etiqueta, igual que {@link Node#getNodeName}. */
+    /** The name of the tag, the same as {@link Node#getNodeName}. */
     public String getTagName();
 
-    /** El valor del atributo, o {@code ""} si no existe --que es indistinguible de un valor vacio. */
+    /**
+     * The value of the attribute, or {@code ""} if it does not exist --which cannot be told from an
+     * empty value.
+     */
     public String getAttribute(String name);
 
     /**
-     * Pone o reemplaza un atributo. El valor se toma literal, sin parsear entidades.
+     * It sets or replaces an attribute. The value is taken literally, without parsing entities.
      *
-     * @throws DOMException {@code INVALID_CHARACTER_ERR} o {@code NO_MODIFICATION_ALLOWED_ERR}
+     * @throws DOMException {@code INVALID_CHARACTER_ERR} or {@code NO_MODIFICATION_ALLOWED_ERR}
      */
     public void setAttribute(String name, String value) throws DOMException;
 
     /**
-     * Saca el atributo. Si el DTD le declaraba un valor por omision, vuelve a aparecer con ese
-     * valor; no falla si el atributo no estaba.
+     * It removes the attribute. If the DTD declared a default value for it, it reappears with that
+     * value; it does not fail if the attribute was not there.
      *
      * @throws DOMException {@code NO_MODIFICATION_ALLOWED_ERR}
      */
     public void removeAttribute(String name) throws DOMException;
 
-    /** El nodo del atributo, o {@code null}. */
+    /** The node of the attribute, or {@code null}. */
     public Attr getAttributeNode(String name);
 
     /**
-     * Agrega el nodo de atributo y devuelve el que reemplazo, o {@code null}.
+     * It adds the attribute node and returns the one it replaced, or {@code null}.
      *
-     * @throws DOMException {@code WRONG_DOCUMENT_ERR}, {@code NO_MODIFICATION_ALLOWED_ERR} o
-     *     {@code INUSE_ATTRIBUTE_ERR} si el atributo ya pertenece a otro elemento
+     * @throws DOMException {@code WRONG_DOCUMENT_ERR}, {@code NO_MODIFICATION_ALLOWED_ERR} or
+     *     {@code INUSE_ATTRIBUTE_ERR} if the attribute already belongs to another element
      */
     public Attr setAttributeNode(Attr newAttr) throws DOMException;
 
     /**
-     * Saca ese nodo de atributo y lo devuelve.
+     * It removes that attribute node and returns it.
      *
-     * @throws DOMException {@code NO_MODIFICATION_ALLOWED_ERR} o {@code NOT_FOUND_ERR}
+     * @throws DOMException {@code NO_MODIFICATION_ALLOWED_ERR} or {@code NOT_FOUND_ERR}
      */
     public Attr removeAttributeNode(Attr oldAttr) throws DOMException;
 
     /**
-     * Los descendientes con esa etiqueta, en orden de documento; {@code "*"} los trae todos. La
-     * lista esta viva.
+     * The descendants with that tag, in document order; {@code "*"} brings them all. The list is
+     * live.
      */
     public NodeList getElementsByTagName(String name);
 
     /**
-     * El valor del atributo con ese espacio de nombres y nombre local, o {@code ""}.
+     * The value of the attribute with that namespace and local name, or {@code ""}.
      *
-     * @throws DOMException {@code NOT_SUPPORTED_ERR} si la implementacion no maneja XML
+     * @throws DOMException {@code NOT_SUPPORTED_ERR} if the implementation does not handle XML
      */
     public String getAttributeNS(String namespaceURI, String localName) throws DOMException;
 
     /**
-     * Pone o reemplaza un atributo con espacio de nombres.
+     * It sets or replaces an attribute with a namespace.
      *
      * @throws DOMException {@code INVALID_CHARACTER_ERR}, {@code NO_MODIFICATION_ALLOWED_ERR},
-     *     {@code NAMESPACE_ERR} o {@code NOT_SUPPORTED_ERR}
+     *     {@code NAMESPACE_ERR} or {@code NOT_SUPPORTED_ERR}
      */
     public void setAttributeNS(String namespaceURI, String qualifiedName, String value)
             throws DOMException;
 
     /**
-     * Saca el atributo con ese espacio de nombres y nombre local.
+     * It removes the attribute with that namespace and local name.
      *
-     * @throws DOMException {@code NO_MODIFICATION_ALLOWED_ERR} o {@code NOT_SUPPORTED_ERR}
+     * @throws DOMException {@code NO_MODIFICATION_ALLOWED_ERR} or {@code NOT_SUPPORTED_ERR}
      */
     public void removeAttributeNS(String namespaceURI, String localName) throws DOMException;
 
     /**
-     * El nodo del atributo con ese espacio de nombres y nombre local, o {@code null}.
+     * The node of the attribute with that namespace and local name, or {@code null}.
      *
      * @throws DOMException {@code NOT_SUPPORTED_ERR}
      */
     public Attr getAttributeNodeNS(String namespaceURI, String localName) throws DOMException;
 
     /**
-     * Agrega el nodo de atributo por (URI, nombre local) y devuelve el que reemplazo, o {@code null}.
+     * It adds the attribute node by (URI, local name) and returns the one it replaced, or {@code
+     * null}.
      *
      * @throws DOMException {@code WRONG_DOCUMENT_ERR}, {@code NO_MODIFICATION_ALLOWED_ERR},
-     *     {@code INUSE_ATTRIBUTE_ERR} o {@code NOT_SUPPORTED_ERR}
+     *     {@code INUSE_ATTRIBUTE_ERR} or {@code NOT_SUPPORTED_ERR}
      */
     public Attr setAttributeNodeNS(Attr newAttr) throws DOMException;
 
     /**
-     * Los descendientes con ese espacio de nombres y nombre local, en orden de documento.
+     * The descendants with that namespace and local name, in document order.
      *
      * @throws DOMException {@code NOT_SUPPORTED_ERR}
      */
     public NodeList getElementsByTagNameNS(String namespaceURI, String localName)
             throws DOMException;
 
-    /** Si el atributo existe, o si el DTD le da un valor por omision. */
+    /** Whether the attribute exists, or whether the DTD gives it a default value. */
     public boolean hasAttribute(String name);
 
     /**
-     * Si existe el atributo con ese espacio de nombres y nombre local.
+     * Whether the attribute with that namespace and local name exists.
      *
      * @throws DOMException {@code NOT_SUPPORTED_ERR}
      */
     public boolean hasAttributeNS(String namespaceURI, String localName) throws DOMException;
 
-    /** La informacion de tipo del esquema para este elemento, o {@code null}. */
+    /** The type information of the schema for this element, or {@code null}. */
     public TypeInfo getSchemaTypeInfo();
 
     /**
-     * Marca --o desmarca-- ese atributo como de tipo ID.
+     * It marks --or unmarks-- that attribute as of type ID.
      *
-     * @throws DOMException {@code NO_MODIFICATION_ALLOWED_ERR} o {@code NOT_FOUND_ERR}
+     * @throws DOMException {@code NO_MODIFICATION_ALLOWED_ERR} or {@code NOT_FOUND_ERR}
      */
     public void setIdAttribute(String name, boolean isId) throws DOMException;
 
     /**
-     * Igual que {@link #setIdAttribute} pero identificando el atributo por (URI, nombre local).
+     * The same as {@link #setIdAttribute} but identifying the attribute by (URI, local name).
      *
-     * @throws DOMException {@code NO_MODIFICATION_ALLOWED_ERR} o {@code NOT_FOUND_ERR}
+     * @throws DOMException {@code NO_MODIFICATION_ALLOWED_ERR} or {@code NOT_FOUND_ERR}
      */
     public void setIdAttributeNS(String namespaceURI, String localName, boolean isId)
             throws DOMException;
 
     /**
-     * Igual que {@link #setIdAttribute} pero pasando el nodo del atributo.
+     * The same as {@link #setIdAttribute} but passing the node of the attribute.
      *
-     * @throws DOMException {@code NO_MODIFICATION_ALLOWED_ERR} o {@code NOT_FOUND_ERR}
+     * @throws DOMException {@code NO_MODIFICATION_ALLOWED_ERR} or {@code NOT_FOUND_ERR}
      */
     public void setIdAttributeNode(Attr idAttr, boolean isId) throws DOMException;
 }

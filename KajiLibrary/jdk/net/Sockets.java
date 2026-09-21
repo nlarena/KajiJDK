@@ -11,25 +11,25 @@ import java.util.HashSet;
 import java.util.Set;
 
 /**
- * Las opciones de socket, alcanzadas desde afuera del socket.
+ * The socket options, reached from outside the socket.
  *
- * <h2>Por que existio esta clase</h2>
+ * <h2>Why this class existed</h2>
  *
- * <p>Hasta Java 9 un {@link Socket} no tenia {@code setOption}: las opciones se manejaban con un
- * getter y un setter por cada una —{@code setTcpNoDelay}, {@code setSoTimeout}— y agregar una nueva
- * significaba agregar dos metodos a una clase publica. Esta clase fue la salida: un lugar fuera de
- * {@code java.net} donde poner opciones sin tocar el socket.
+ * <p>Until Java 9 a {@link Socket} had no {@code setOption}: the options were handled with a getter
+ * and a setter for each one —{@code setTcpNoDelay}, {@code setSoTimeout}— and adding a new one meant
+ * adding two methods to a public class. This class was the way out: a place outside {@code java.net}
+ * where options could be put without touching the socket.
  *
- * <p>Java 9 le dio {@code setOption} y {@code getOption} a los tres sockets, asi que la necesidad
- * desaparecio. Estos metodos quedaron y hoy son literalmente delegacion — que es exactamente lo que
- * hacen mas abajo.
+ * <p>Java 9 gave {@code setOption} and {@code getOption} to the three sockets, so the need
+ * disappeared. These methods stayed and today they are literally delegation — which is exactly what
+ * they do further down.
  *
- * <p>Lo unico que todavia no tiene equivalente directo es {@link #supportedOptions(Class)}, que
- * pregunta por el <strong>tipo</strong> y no por una instancia: sirve para saber que se puede pedir
- * antes de tener un socket abierto.
+ * <p>The only thing that still has no direct equivalent is {@link #supportedOptions(Class)}, which
+ * asks about the <strong>type</strong> and not about an instance: it serves for knowing what can be
+ * asked for before having an open socket.
  *
- * @deprecated desde Java 9 hay que usar los {@code setOption}/{@code getOption} de
- *     {@link Socket}, {@link ServerSocket} y {@link DatagramSocket}.
+ * @deprecated since Java 9 the {@code setOption}/{@code getOption} of {@link Socket},
+ *     {@link ServerSocket} and {@link DatagramSocket} should be used.
  */
 @Deprecated(since = "16")
 public class Sockets {
@@ -37,71 +37,71 @@ public class Sockets {
     private Sockets() {
     }
 
-    /** Fija una opcion. Delega en {@link Socket#setOption}. */
+    /** It sets an option. It delegates to {@link Socket#setOption}. */
     public static <T> void setOption(Socket s, SocketOption<T> name, T value) throws IOException {
         s.setOption(name, value);
     }
 
-    /** El valor de una opcion. Delega en {@link Socket#getOption}. */
+    /** The value of an option. It delegates to {@link Socket#getOption}. */
     public static <T> T getOption(Socket s, SocketOption<T> name) throws IOException {
         return s.getOption(name);
     }
 
-    /** Fija una opcion en un socket servidor. */
+    /** It sets an option on a server socket. */
     public static <T> void setOption(ServerSocket s, SocketOption<T> name, T value)
             throws IOException {
         s.setOption(name, value);
     }
 
-    /** El valor de una opcion de un socket servidor. */
+    /** The value of an option of a server socket. */
     public static <T> T getOption(ServerSocket s, SocketOption<T> name) throws IOException {
         return s.getOption(name);
     }
 
-    /** Fija una opcion en un socket de datagramas. */
+    /** It sets an option on a datagram socket. */
     public static <T> void setOption(DatagramSocket s, SocketOption<T> name, T value)
             throws IOException {
         s.setOption(name, value);
     }
 
-    /** El valor de una opcion de un socket de datagramas. */
+    /** The value of an option of a datagram socket. */
     public static <T> T getOption(DatagramSocket s, SocketOption<T> name) throws IOException {
         return s.getOption(name);
     }
 
     /**
-     * Que opciones admite un tipo de socket, sin necesidad de tener uno.
+     * Which options a type of socket admits, without needing to have one.
      *
-     * <p>Los conjuntos son los mismos que devuelve el {@code supportedOptions()} de instancia de
-     * cada clase, y tienen que serlo: dos respuestas distintas a la misma pregunta segun por donde
-     * se entre serian un bug esperando. Estan escritos aca porque preguntar por el tipo no da
-     * ninguna instancia a la que delegarle.
+     * <p>The sets are the same ones the instance `supportedOptions()` of each class returns, and they
+     * have to be: two different answers to the same question depending on which way one comes in would
+     * be a bug waiting. They are written here because asking about the type gives no instance to
+     * delegate to.
      *
-     * @throws IllegalArgumentException si {@code socketType} no es uno de los tres tipos de socket
+     * @throws IllegalArgumentException if {@code socketType} is not one of the three types of socket
      */
     public static Set<SocketOption<?>> supportedOptions(Class<?> socketType) {
         if (socketType == Socket.class) {
-            return conjunto(StandardSocketOptions.SO_SNDBUF, StandardSocketOptions.SO_RCVBUF,
+            return setOf(StandardSocketOptions.SO_SNDBUF, StandardSocketOptions.SO_RCVBUF,
                     StandardSocketOptions.SO_KEEPALIVE, StandardSocketOptions.SO_REUSEADDR,
                     StandardSocketOptions.SO_LINGER, StandardSocketOptions.TCP_NODELAY,
                     StandardSocketOptions.IP_TOS);
         }
         if (socketType == ServerSocket.class) {
-            return conjunto(StandardSocketOptions.SO_RCVBUF, StandardSocketOptions.SO_REUSEADDR,
+            return setOf(StandardSocketOptions.SO_RCVBUF, StandardSocketOptions.SO_REUSEADDR,
                     StandardSocketOptions.IP_TOS);
         }
         if (socketType == DatagramSocket.class) {
-            return conjunto(StandardSocketOptions.SO_SNDBUF, StandardSocketOptions.SO_RCVBUF,
+            return setOf(StandardSocketOptions.SO_SNDBUF, StandardSocketOptions.SO_RCVBUF,
                     StandardSocketOptions.SO_REUSEADDR, StandardSocketOptions.SO_BROADCAST,
                     StandardSocketOptions.IP_TOS);
         }
-        throw new IllegalArgumentException("no es un tipo de socket: " + String.valueOf(socketType));
+        throw new IllegalArgumentException("not a type of socket: " + String.valueOf(socketType));
     }
 
-    private static Set<SocketOption<?>> conjunto(SocketOption<?>... opciones) {
+    private static Set<SocketOption<?>> setOf(SocketOption<?>... options) {
         Set<SocketOption<?>> s = new HashSet<SocketOption<?>>();
-        for (int i = 0; i < opciones.length; i++) {
-            s.add(opciones[i]);
+        for (int i = 0; i < options.length; i++) {
+            s.add(options[i]);
         }
         return Collections.unmodifiableSet(s);
     }

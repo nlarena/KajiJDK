@@ -5,26 +5,27 @@ import java.io.IOException;
 import java.util.Map;
 
 /**
- * El conector que **arranca** la VM depurada y se conecta a ella.
+ * The connector that **starts** the debugged VM and connects to it.
  *
- * <p>Es el que usa un IDE cuando uno le da a "depurar": lanza el proceso con las opciones de JDWP
- * ya puestas y espera a que la conexion quede armada. La VM arranca **suspendida** --si no, el
- * programa podria terminar antes de que el depurador ponga el primer punto de interrupcion.
+ * <p>It is the one an IDE uses when one hits "debug": it launches the process with the JDWP
+ * options already set and waits for the connection to be established. The VM starts
+ * **suspended** -- otherwise, the program might end before the debugger sets the first
+ * breakpoint.
  *
- * <p>Es el unico de los tres que puede fallar con {@link VMStartException}: es el unico que tiene
- * un proceso propio que puede haber arrancado mal.
+ * <p>It is the only one of the three that may fail with {@link VMStartException}: it is the
+ * only one that has a process of its own that may have started badly.
  */
 public interface LaunchingConnector extends Connector {
 
     /**
-     * Arranca la VM que describan esos argumentos y se conecta.
+     * It starts the VM those arguments describe and connects.
      *
-     * @param arguments el mapa que salio de {@link #defaultArguments()}, con los valores puestos
-     * @return la VM depurada, suspendida
-     * @throws IOException si no se pudo llegar al otro extremo
-     * @throws IllegalConnectorArgumentsException si algun argumento falta o no sirve
-     * @throws VMStartException si la VM arranco pero la conexion no; la excepcion trae el proceso,
-     *     y hay que leerle los flujos y terminarlo
+     * @param arguments the map that came out of {@link #defaultArguments()}, with the values set
+     * @return the debugged VM, suspended
+     * @throws IOException if the other end could not be reached
+     * @throws IllegalConnectorArgumentsException if some argument is missing or does not serve
+     * @throws VMStartException if the VM started but the connection did not; the exception brings
+     *     the process, and its streams have to be read and it has to be ended
      */
     VirtualMachine launch(Map<String, ? extends Connector.Argument> arguments)
             throws IOException, IllegalConnectorArgumentsException, VMStartException;

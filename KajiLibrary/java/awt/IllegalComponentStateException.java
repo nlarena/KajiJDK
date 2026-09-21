@@ -1,11 +1,11 @@
 package java.awt;
 
 /**
- * Se le pidio a un componente algo que en su estado actual no puede contestar --la posicion en
- * pantalla de algo que todavia no esta en pantalla, por ejemplo--.
+ * A component was asked for something it cannot answer in its current state --the on-screen
+ * position of something not on screen yet, for example--.
  *
- * <p>Hereda de {@code IllegalStateException} y no agrega nada: existe solo para que quien atrapa
- * pueda distinguir el caso del AWT del resto.
+ * <p>It inherits from {@code IllegalStateException} and adds nothing: it exists only so that
+ * whoever catches can tell the AWT case from the rest.
  */
 public class IllegalComponentStateException extends IllegalStateException {
 

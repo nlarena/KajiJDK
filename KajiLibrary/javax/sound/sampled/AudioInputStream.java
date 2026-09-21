@@ -4,54 +4,55 @@ import java.io.IOException;
 import java.io.InputStream;
 
 /**
- * KajiLibrary's javax.sound.sampled.AudioInputStream -- un flujo de bytes que sabe que formato tiene.
+ * KajiLibrary's javax.sound.sampled.AudioInputStream -- a stream of bytes that knows its format.
  *
- * <p>Un {@link InputStream} con un {@link AudioFormat} pegado y un largo en cuadros. Eso es todo, y
- * alcanza: cualquier cosa que produzca o consuma audio en este paquete habla este tipo.
+ * <p>An {@link InputStream} with an {@link AudioFormat} attached and a length in frames. That is
+ * all, and it is enough: anything that produces or consumes audio in this package speaks this type.
  *
- * <h2>Lee de a cuadros enteros</h2>
+ * <h2>It reads whole frames</h2>
  *
- * <p>Es la parte que hay que tener presente. {@link #read(byte[], int, int)} <b>redondea hacia abajo</b>
- * al cuadro: pedir 5 bytes de un formato de 4 bytes por cuadro devuelve 4, no 5. Y
- * {@link #read()} lanza {@link IOException} si el cuadro ocupa mas de un byte.
+ * <p>It is the part to keep in mind. {@link #read(byte[], int, int)} <b>rounds down</b> to the
+ * frame: asking for 5 bytes of a format of 4 bytes per frame returns 4, not 5. And {@link #read()}
+ * throws {@link IOException} if the frame takes more than one byte.
  *
- * <p>No es un capricho: medio cuadro no significa nada, y devolverlo dejaria el flujo desalineado y
- * todo lo que siga sonaria a ruido.
+ * <p>It is not a whim: half a frame means nothing, and returning it would leave the stream
+ * misaligned and everything that followed would sound like noise.
  *
- * <h2>{@link #skip} tambien</h2>
+ * <h2>{@link #skip} too</h2>
  *
- * <p>Redondea igual. Saltar una cantidad que no sea multiplo del cuadro salta menos, nunca mas.
+ * <p>It rounds the same way. Skipping an amount that is not a multiple of the frame skips less,
+ * never more.
  */
 public class AudioInputStream extends InputStream {
 
-    /** De donde salen los bytes. */
+    /** Where the bytes come from. */
     private final InputStream stream;
 
-    /** Que formato tienen. */
+    /** Which format they have. */
     protected AudioFormat format;
 
-    /** Cuantos cuadros hay, o {@link AudioSystem#NOT_SPECIFIED}. */
+    /** How many frames there are, or {@link AudioSystem#NOT_SPECIFIED}. */
     protected long frameLength;
 
-    /** Cuantos bytes ocupa un cuadro. */
+    /** How many bytes a frame takes. */
     protected int frameSize;
 
-    /** En que cuadro va la lectura. */
+    /** At which frame the reading is. */
     protected long framePos;
 
-    /** Donde estaba al marcar. */
+    /** Where it was when marked. */
     private long markpos;
 
-    /** Lo que sobro de un cuadro incompleto entre dos lecturas. */
+    /** What was left over from an incomplete frame between two reads. */
     private byte[] pushBackBuffer = null;
 
-    /** Cuantos bytes hay guardados ahi. */
+    /** How many bytes are kept there. */
     private int pushBackLen = 0;
 
     /**
-     * @param stream de donde leer
-     * @param format que formato tienen los bytes
-     * @param length cuantos cuadros, o {@link AudioSystem#NOT_SPECIFIED}
+     * @param stream where to read from
+     * @param format which format the bytes have
+     * @param length how many frames, or {@link AudioSystem#NOT_SPECIFIED}
      */
     public AudioInputStream(InputStream stream, AudioFormat format, long length) {
         this.stream = stream;
@@ -66,29 +67,29 @@ public class AudioInputStream extends InputStream {
     }
 
     /**
-     * Un flujo sobre lo que capture esa linea de entrada.
+     * A stream over whatever that input line captures.
      *
-     * <p>El largo es {@link AudioSystem#NOT_SPECIFIED}: una linea de captura no tiene final.
+     * <p>The length is {@link AudioSystem#NOT_SPECIFIED}: a capture line has no end.
      */
     public AudioInputStream(TargetDataLine line) {
         this(new TargetDataLineInputStream(line), line.getFormat(),
              AudioSystem.NOT_SPECIFIED);
     }
 
-    /** Que formato tienen los bytes. */
+    /** Which format the bytes have. */
     public AudioFormat getFormat() {
         return this.format;
     }
 
-    /** Cuantos cuadros, o {@link AudioSystem#NOT_SPECIFIED}. */
+    /** How many frames, or {@link AudioSystem#NOT_SPECIFIED}. */
     public long getFrameLength() {
         return this.frameLength;
     }
 
     /**
-     * Un byte.
+     * One byte.
      *
-     * @throws IOException si un cuadro ocupa mas de un byte; ver la nota de la clase
+     * @throws IOException if a frame takes more than one byte; see the class note
      */
     @Override
     public int read() throws IOException {
@@ -103,16 +104,16 @@ public class AudioInputStream extends InputStream {
         return one[0] & 0xFF;
     }
 
-    /** Todo lo que entre en el arreglo, redondeado al cuadro. */
+    /** Everything that fits in the array, rounded to the frame. */
     @Override
     public int read(byte[] b) throws IOException {
         return read(b, 0, b.length);
     }
 
     /**
-     * Hasta {@code len} bytes, redondeado hacia abajo al cuadro.
+     * Up to {@code len} bytes, rounded down to the frame.
      *
-     * <p>Ver la nota de la clase sobre por que.
+     * <p>See the class note on why.
      */
     @Override
     public int read(byte[] b, int off, int len) throws IOException {
@@ -135,8 +136,8 @@ public class AudioInputStream extends InputStream {
         if (read < 0) {
             return -1;
         }
-        // Si el flujo de abajo corto a mitad de cuadro, se completa antes de devolver: el contrato de
-        // esta clase es que nunca sale medio cuadro.
+        // If the underlying stream stopped halfway through a frame, it is completed before
+        // returning: the contract of this class is that half a frame never comes out.
         if (this.frameSize != 1 && read % this.frameSize != 0) {
             read = completeFrame(b, off, read);
         }
@@ -144,7 +145,10 @@ public class AudioInputStream extends InputStream {
         return read;
     }
 
-    /** Lee lo que falte para cerrar el ultimo cuadro; si no llega, descarta el resto. */
+    /**
+     * Reads whatever is missing to complete the last frame; if it does not arrive, discards the
+     * rest.
+     */
     private int completeFrame(byte[] b, int off, int read) throws IOException {
         int missing = this.frameSize - (read % this.frameSize);
         int got = 0;
@@ -158,7 +162,7 @@ public class AudioInputStream extends InputStream {
         return read + missing;
     }
 
-    /** Saltea, redondeado hacia abajo al cuadro. */
+    /** Skips, rounded down to the frame. */
     @Override
     public long skip(long n) throws IOException {
         if (this.frameSize != 1) {
@@ -181,7 +185,7 @@ public class AudioInputStream extends InputStream {
         return skipped;
     }
 
-    /** Cuantos bytes se pueden leer sin bloquear, redondeado al cuadro. */
+    /** How many bytes can be read without blocking, rounded to the frame. */
     @Override
     public int available() throws IOException {
         int n = this.stream.available();
@@ -197,13 +201,13 @@ public class AudioInputStream extends InputStream {
         return n;
     }
 
-    /** Cierra el flujo de abajo. */
+    /** Closes the underlying stream. */
     @Override
     public void close() throws IOException {
         this.stream.close();
     }
 
-    /** Marca, si el flujo de abajo sabe. */
+    /** Marks, if the underlying stream knows how. */
     @Override
     public void mark(int readlimit) {
         this.stream.mark(readlimit);
@@ -213,9 +217,9 @@ public class AudioInputStream extends InputStream {
     }
 
     /**
-     * Vuelve a la marca.
+     * Goes back to the mark.
      *
-     * @throws IOException si el flujo de abajo no soporta marcas
+     * @throws IOException if the underlying stream does not support marks
      */
     @Override
     public void reset() throws IOException {
@@ -223,22 +227,22 @@ public class AudioInputStream extends InputStream {
         this.framePos = this.markpos;
     }
 
-    /** Si el flujo de abajo soporta marcas. */
+    /** Whether the underlying stream supports marks. */
     @Override
     public boolean markSupported() {
         return this.stream.markSupported();
     }
 
     /**
-     * El puente entre una linea de captura y un {@link InputStream}.
+     * The bridge between a capture line and an {@link InputStream}.
      *
-     * <p>De acceso de paquete: existe solo para el constructor que toma una {@link TargetDataLine}.
-     * Arranca la linea en la primera lectura, no al construirse, porque una linea arrancada esta
-     * capturando y llenando su bufer aunque nadie lea.
+     * <p>Package access: it exists only for the constructor that takes a {@link TargetDataLine}. It
+     * starts the line on the first read, not when constructed, because a started line is capturing
+     * and filling its buffer even if nobody reads.
      */
     private static final class TargetDataLineInputStream extends InputStream {
 
-        /** De donde se captura. */
+        /** Where it captures from. */
         private final TargetDataLine line;
 
         TargetDataLineInputStream(TargetDataLine line) {

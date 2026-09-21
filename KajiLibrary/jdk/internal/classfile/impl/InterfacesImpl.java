@@ -5,7 +5,7 @@ import java.lang.classfile.constantpool.ClassEntry;
 import java.util.Collections;
 import java.util.List;
 
-// La lista de interfaces, como un solo elemento de clase.
+// The list of interfaces, as a single class element.
 public final class InterfacesImpl implements Interfaces {
 
     private final List<ClassEntry> interfaces;

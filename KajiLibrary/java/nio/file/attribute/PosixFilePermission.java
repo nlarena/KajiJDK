@@ -1,36 +1,36 @@
 package java.nio.file.attribute;
 
-// Los nueve bits de permiso de POSIX, uno por constante.
+// POSIX's nine permission bits, one per constant.
 //
-// **El orden importa** y no es decorativo: `PosixFilePermissions.toString()` recorre `values()` para
-// armar `"rwxr-xr-x"`, asi que las constantes van dueño-grupo-otros y dentro de cada terna
-// lectura-escritura-ejecucion, igual que en el JDK. Cambiar el orden cambiaria la cadena.
+// **The order matters** and is not decorative: `PosixFilePermissions.toString()` walks `values()` to
+// build `"rwxr-xr-x"`, so the constants go owner-group-others and within each triple
+// read-write-execute, just as in the JDK. Changing the order would change the string.
 public enum PosixFilePermission {
 
-    /** El dueño puede leer. */
+    /** The owner can read. */
     OWNER_READ,
 
-    /** El dueño puede escribir. */
+    /** The owner can write. */
     OWNER_WRITE,
 
-    /** El dueño puede ejecutar (o atravesar, si es directorio). */
+    /** The owner can execute (or traverse, if it is a directory). */
     OWNER_EXECUTE,
 
-    /** El grupo puede leer. */
+    /** The group can read. */
     GROUP_READ,
 
-    /** El grupo puede escribir. */
+    /** The group can write. */
     GROUP_WRITE,
 
-    /** El grupo puede ejecutar. */
+    /** The group can execute. */
     GROUP_EXECUTE,
 
-    /** Los demas pueden leer. */
+    /** The others can read. */
     OTHERS_READ,
 
-    /** Los demas pueden escribir. */
+    /** The others can write. */
     OTHERS_WRITE,
 
-    /** Los demas pueden ejecutar. */
+    /** The others can execute. */
     OTHERS_EXECUTE
 }

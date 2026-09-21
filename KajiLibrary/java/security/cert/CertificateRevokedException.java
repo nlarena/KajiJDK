@@ -6,26 +6,27 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 
-// El certificado esta revocado, y ademas: cuando, por que, quien lo dijo y con que extensiones.
+// The certificate is revoked, and besides: when, why, who said so and with which extensions.
 //
 // ===============================================================================================
-// POR QUE ES UNA EXCEPCION CON DATOS Y NO UN MENSAJE
+// WHY IT IS AN EXCEPTION WITH DATA AND NOT A MESSAGE
 // ===============================================================================================
 //
-// El resto de las excepciones de este paquete dicen que fallo. Esta dice **que averiguo la
-// validacion**, y eso tiene consecuencias practicas: quien la atrapa puede querer distinguir un
-// certificado revocado por clave comprometida —que invalida todo lo que esa clave firmo alguna vez—
-// de uno revocado porque el titular cambio de trabajo, que no invalida nada de lo anterior. Un
-// mensaje de texto no sirve para eso; los campos si.
+// The rest of the exceptions of this package say that something failed. This one says **what the
+// validation found out**, and that has practical consequences: whoever catches it may want to tell
+// a certificate revoked for a compromised key —which invalidates everything that key ever signed—
+// apart from one revoked because the holder changed jobs, which invalidates nothing from before. A
+// text message is of no use for that; the fields are.
 //
-// La fecha de invalidez es el dato que mas se olvida y el que mas cambia la respuesta. `getRevocationDate()`
-// dice cuando la CA **publico** la revocacion; `getInvalidityDate()` dice desde cuando se cree que
-// la clave estaba comprometida, que puede ser mucho antes. Una firma hecha entre las dos fechas es
-// sospechosa aunque en su momento la CRL no dijera nada.
+// The invalidity date is the datum that is forgotten most and the one that changes the answer most.
+// `getRevocationDate()` says when the CA **published** the revocation; `getInvalidityDate()` says
+// since when the key is believed to have been compromised, which can be much earlier. A signature
+// made between the two dates is suspicious even though at the time the CRL said nothing.
 //
-// El objeto es **inmutable hacia afuera**: la fecha se copia al entrar y al salir, y el mapa de
-// extensiones se copia al entrar y se devuelve inmutable. Sin eso, quien la atrapa podria cambiarle
-// los datos a la excepcion antes de que la mire el que la relanza.
+// The object is **immutable towards the outside**: the date is copied on the way in and on the way
+// out, and the map of extensions is copied on the way in and returned immutable. Without that,
+// whoever catches it could change the data of the exception before whoever rethrows it looks at
+// them.
 public class CertificateRevokedException extends CertificateException {
 
     private static final long serialVersionUID = 7839996631571608627L;
@@ -37,9 +38,9 @@ public class CertificateRevokedException extends CertificateException {
     private final javax.security.auth.x500.X500Principal authority;
     private transient Map<String, Extension> extensions;
 
-    // Los cuatro argumentos son obligatorios. No hay ninguno con un default razonable: una
-    // revocacion sin fecha, sin motivo o sin autoridad no se puede evaluar, y un mapa nulo se
-    // confundiria con "sin extensiones", que es distinto de "no se".
+    // The four arguments are compulsory. There is none with a reasonable default: a revocation with
+    // no date, no reason or no authority cannot be evaluated, and a null map would be confused with
+    // "no extensions", which is different from "I do not know".
     public CertificateRevokedException(Date revocationDate, CRLReason reason,
             javax.security.auth.x500.X500Principal authority, Map<String, Extension> extensions) {
         if (revocationDate == null || reason == null || authority == null || extensions == null) {
@@ -51,7 +52,7 @@ public class CertificateRevokedException extends CertificateException {
         this.extensions = new HashMap<String, Extension>(extensions);
     }
 
-    // Cuando la CA publico la revocacion. Copia.
+    // When the CA published the revocation. A copy.
     public Date getRevocationDate() {
         return new Date(this.revocationDate.getTime());
     }
@@ -60,17 +61,19 @@ public class CertificateRevokedException extends CertificateException {
         return this.reason;
     }
 
-    // Quien la publico. `X500Principal` es inmutable, asi que se devuelve la misma instancia.
+    // Who published it. `X500Principal` is immutable, so the same instance is returned.
     public javax.security.auth.x500.X500Principal getAuthorityName() {
         return this.authority;
     }
 
-    // Desde cuando se cree que el certificado dejo de ser confiable, o null si no se dijo.
+    // Since when the certificate is believed to have stopped being trustworthy, or null if it was
+    // not said.
     //
-    // Sale de la extension InvalidityDate, que es un GeneralizedTime pelado. Si la extension no esta
-    // —o si esta y no se puede leer— se devuelve null: es "no se dijo", que es lo unico honesto que
-    // se puede afirmar. Es el JDK el que decide devolver null en vez de lanzar, y tiene sentido:
-    // un dato accesorio ilegible no deberia tapar el hecho principal, que es que esta revocado.
+    // It comes from the InvalidityDate extension, which is a bare GeneralizedTime. If the extension
+    // is not there —or if it is and cannot be read— null is returned: it is "it was not said",
+    // which is the only honest thing that can be asserted. It is the JDK that decides to return
+    // null instead of throwing, and it makes sense: an unreadable accessory datum should not cover
+    // the main fact, which is that it is revoked.
     public Date getInvalidityDate() {
         Extension ext = this.getExtensions().get(OID_INVALIDITY_DATE);
         if (ext == null) {
@@ -82,8 +85,8 @@ public class CertificateRevokedException extends CertificateException {
                 return null;
             }
             DerReader d = new DerReader(value, 0, value.length);
-            // 0x18 es GeneralizedTime. El valor de la extension viene **sin** el OCTET STRING de
-            // afuera: eso es lo que promete `Extension.getValue()`.
+            // 0x18 is GeneralizedTime. The value of the extension comes **without** the OCTET
+            // STRING from outside: that is what `Extension.getValue()` promises.
             int len = d.expect(0x18);
             int from = d.skip(len);
             return new Date(DerReader.generalizedTime(value, from, len));
@@ -92,7 +95,7 @@ public class CertificateRevokedException extends CertificateException {
         }
     }
 
-    // Las extensiones de la entrada de CRL, indexadas por OID. Inmutable.
+    // The extensions of the CRL entry, indexed by OID. Immutable.
     public Map<String, Extension> getExtensions() {
         return Collections.unmodifiableMap(this.extensions);
     }

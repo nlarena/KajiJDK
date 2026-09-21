@@ -44,33 +44,33 @@ public abstract class AbstractSet<E> extends AbstractCollection<E> implements Se
         }
         return h;
     }
-    // Quita de este conjunto todo lo que este en `c`.
+    // It removes from this set everything that is in `c`.
     //
-    // Se recorre **el mas chico de los dos**, que es la optimizacion que el JDK hace aca y que
-    // cambia el orden de magnitud cuando uno es mucho menor: quitar diez elementos de un conjunto
-    // de un millon no tiene por que costar un millon de consultas.
+    // **The smaller of the two** is walked, which is the optimisation the JDK makes here and which
+    // changes the order of magnitude when one is much smaller: removing ten elements from a set of a
+    // million has no reason to cost a million lookups.
     public boolean removeAll(Collection<?> c) {
-        boolean cambio = false;
+        boolean changed = false;
         if (this.size() > c.size()) {
             Iterator<?> it = c.iterator();
             while (it.hasNext()) {
                 if (this.remove(it.next())) {
-                    cambio = true;
+                    changed = true;
                 }
             }
-            return cambio;
+            return changed;
         }
-        Object[] foto = this.toArray();
+        Object[] snapshot = this.toArray();
         int i = 0;
-        while (i < foto.length) {
-            if (c.contains(foto[i])) {
-                if (this.remove(foto[i])) {
-                    cambio = true;
+        while (i < snapshot.length) {
+            if (c.contains(snapshot[i])) {
+                if (this.remove(snapshot[i])) {
+                    changed = true;
                 }
             }
             i = i + 1;
         }
-        return cambio;
+        return changed;
     }
 
 }

@@ -10,27 +10,27 @@ import java.io.Flushable;
 public abstract class Writer implements Closeable, Flushable, Appendable {
 
     /**
-     * El objeto sobre el que este flujo **sincroniza**.
+     * The object this stream **synchronizes** on.
      *
-     * <p>Es `protected` y no privado porque una subclase necesita tomarlo: si `Reader` bloqueara
-     * sobre `this` y la subclase sobre otra cosa, dos hilos podrian entrar a la vez por caminos
-     * distintos. Exponerlo es lo que permite que toda la jerarquia coordine sobre **un** candado.
+     * <p>It is `protected` and not private because a subclass needs to take it: if `Reader` locked
+     * on `this` and the subclass on something else, two threads could get in at once by different
+     * routes. Exposing it is what lets the whole hierarchy coordinate on **one** lock.
      *
-     * <p>Por defecto es el propio flujo; el constructor de un argumento lo cambia, que es lo que usa
-     * un decorador para compartir el candado con el flujo que envuelve.
+     * <p>By default it is the stream itself; the one-argument constructor changes it, which is what
+     * a decorator uses in order to share the lock with the stream it wraps.
      */
     protected Object lock;
 
-    /** Sincroniza sobre si mismo. */
+    /** It synchronizes on itself. */
     protected Writer() {
         this.lock = this;
     }
 
     /**
-     * Sincroniza sobre `lock`.
+     * It synchronizes on `lock`.
      *
-     * @throws NullPointerException si `lock` es `null` -- un candado nulo no es
-     *     "sin candado", es un fallo que aparece mucho despues
+     * @throws NullPointerException if `lock` is `null` -- a null lock is not "no lock", it is a
+     *     failure that turns up much later
      */
     protected Writer(Object lock) {
         if (lock == null) {

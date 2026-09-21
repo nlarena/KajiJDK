@@ -1,23 +1,23 @@
 package java.awt.image;
 
 /**
- * Una {@link LookupTable} de bytes.
+ * A {@link LookupTable} of bytes.
  *
- * <p>Los valores se leen **sin signo**, como en {@link DataBufferByte}: una entrada 0xFF vale 255.
- * Sin eso, la mitad clara de la tabla daria valores negativos.
+ * <p>The values are read **unsigned**, as in {@link DataBufferByte}: an entry 0xFF is worth 255.
+ * Without that, the light half of the table would give negative values.
  */
 public class ByteLookupTable extends LookupTable {
 
     private final byte[][] data;
 
     /**
-     * Una tabla por componente.
+     * One table per component.
      *
-     * <p>Los arreglos **no se copian**: la tabla se queda con los que se le dan. Es lo
-     * que hace el JDK y lo que permite compartir una tabla grande entre varios filtros
-     * sin duplicarla.
+     * <p>The arrays **are not copied**: the table keeps the ones it is given, and only the array of
+     * arrays is its own. It is what the JDK does and what allows a big table to be shared between
+     * several filters without duplicating it.
      *
-     * @throws IllegalArgumentException si el desplazamiento es negativo
+     * @throws IllegalArgumentException if the offset is negative
      */
     public ByteLookupTable(int offset, byte[][] data) {
         super(offset, data.length);
@@ -27,26 +27,26 @@ public class ByteLookupTable extends LookupTable {
         }
     }
 
-    /** Una sola tabla, que se aplica a todos los componentes. */
+    /** A single table, which is applied to every component. */
     public ByteLookupTable(int offset, byte[] data) {
         super(offset, 1);
         this.data = new byte[1][];
         this.data[0] = data;
     }
 
-    /** Las tablas, sin copiar. */
+    /** The tables, without copying. */
     public final byte[][] getTable() {
         return this.data;
     }
 
     /**
-     * Aplica la tabla a un pixel.
+     * Applies the table to a pixel.
      *
-     * <p>Con una sola tabla se usa esa para todos los componentes; con varias, la que
-     * corresponde a cada uno.
+     * <p>With a single table that one is used for every component; with several, the one that
+     * corresponds to each.
      *
-     * @throws ArrayIndexOutOfBoundsException si un valor cae fuera de la tabla despues
-     *     de restarle el desplazamiento
+     * @throws ArrayIndexOutOfBoundsException if a value falls outside the table after subtracting
+     *     the offset from it
      */
     public int[] lookupPixel(int[] src, int[] dst) {
         int[] out = dst == null ? new int[src.length] : dst;
@@ -62,7 +62,7 @@ public class ByteLookupTable extends LookupTable {
         return out;
     }
 
-    /** Igual que la otra forma, con el tipo propio de esta tabla. */
+    /** The same as the other form, with the type of this table. */
     public byte[] lookupPixel(byte[] src, byte[] dst) {
         byte[] out = dst == null ? new byte[src.length] : dst;
         if (this.data.length == 1) {

@@ -5,32 +5,33 @@ import java.util.List;
 import java.util.Comparator;
 import java.util.random.RandomGenerator;
 
-// java.util.Collections: los algoritmos y las fabricas que operan sobre las interfaces de
-// coleccion, sin pertenecer a ninguna implementacion. No se instancia.
+// java.util.Collections: the algorithms and the factories that work over the collection
+// interfaces without belonging to any implementation. It is not instantiated.
 //
-// La clase se lee en cuatro partes:
+// The class reads in four parts:
 //
-//   1. **Vacias y de un solo elemento** -- emptyList, singleton, nCopies y compania. Colecciones
-//      inmutables construidas de una vez, mucho mas baratas que un HashSet de un elemento.
-//   2. **Envoltorios** -- unmodifiableX, synchronizedX, checkedX. Los tres devuelven una VISTA de
-//      la coleccion de atras, no una copia: lo que cambie por abajo se ve por arriba. La
-//      maquinaria esta en GuardedCollection y GuardedMap.
-//   3. **Algoritmos** -- sort, binarySearch, min/max, shuffle, rotate, frequency, disjoint.
-//   4. **Puentes** -- enumeration/list entre Enumeration e Iterator, asLifoQueue, newSetFromMap.
+//   1. **Empty and single-element** -- emptyList, singleton, nCopies and company. Immutable
+//      collections built in one go, far cheaper than a HashSet of one element.
+//   2. **Wrappers** -- unmodifiableX, synchronizedX, checkedX. All three return a VIEW of the
+//      collection behind, not a copy: whatever changes underneath is seen from above. The
+//      machinery is in GuardedCollection and GuardedMap.
+//   3. **Algorithms** -- sort, binarySearch, min/max, shuffle, rotate, frequency, disjoint.
+//   4. **Bridges** -- enumeration/list between Enumeration and Iterator, asLifoQueue,
+//      newSetFromMap.
 //
-// Sobre las vistas hay una trampa que conviene tener presente: `unmodifiable*` promete que NADIE
-// puede modificar **a traves de la vista**, no que la coleccion sea inmutable. Quien conserve la
-// referencia original sigue pudiendo escribir, y la vista lo refleja. Para inmutabilidad de
-// verdad estan `List.of`, `Set.of` y `Map.of`, que copian.
+// About the views there is a trap worth keeping in mind: `unmodifiable*` promises that NOBODY can
+// modify **through the view**, not that the collection is immutable. Whoever keeps the original
+// reference can still write, and the view reflects it. For inner immutability there are `List.of`,
+// `Set.of` and `Map.of`, which copy.
 public final class Collections {
 
     private Collections() {}
 
-    // ---- vacias y de un solo elemento -----------------------------------------------------------
+    // ---- empty and single-element ---------------------------------------------------------------
     //
-    // Las tres constantes son crudas -- `List`, no `List<T>` -- porque son anteriores a los
-    // genericos y tiparlas romperia el codigo que las usa. Las fabricas emptyList/emptySet/
-    // emptyMap son la forma tipada de exactamente lo mismo, y son las que hay que usar.
+    // The three constants are raw -- `List`, not `List<T>` -- because they predate generics and
+    // typing them would break the code that uses them. The factories emptyList/emptySet/emptyMap are
+    // the typed form of exactly the same thing, and they are the ones to use.
 
     public static final List EMPTY_LIST = new FixedList(new Object[0]);
 
@@ -75,12 +76,16 @@ public final class Collections {
     }
 
     public static <T> Enumeration<T> emptyEnumeration() {
-        return new EmptyEnumeration<T>();
+        // Qualified on purpose: there is another package-private `EmptyEnumeration` in `java.lang`
+        // (`ClassLoader`'s, which is an `Enumeration<URL>`), and by simple name that one won.
+        // The compiler defect is fixed (finding #493: the own package now beats the implicit
+        // `java.lang.*`), but `bin/javac.exe` is frozen and still has it, so the qualification has
+        // to stay until that binary is refreshed. Drop it then, and regenerate this `.class`.
+        return new java.util.EmptyEnumeration<T>();
     }
 
-    // Un conjunto inmutable de un solo elemento. Existe porque sale mucho mas barato que un
-    // HashSet de uno: sin tabla, sin hash, sin factor de carga. Lo mismo vale para las dos que
-    // siguen.
+    // An immutable set of a single element. It exists because it comes out far cheaper than a
+    // HashSet of one: no table, no hash, no load factor. The same holds for the two that follow.
     public static <T> Set<T> singleton(T o) {
         Object[] a = new Object[1];
         a[0] = o;
@@ -100,11 +105,12 @@ public final class Collections {
         return FixedMap.fromPairs(kv, 2);
     }
 
-    // Una lista inmutable con `o` repetido `n` veces.
+    // An immutable list with `o` repeated `n` times.
     //
-    // **Divergencia deliberada**: la del JDK guarda el elemento UNA vez y finge el largo, asi que
-    // `nCopies(1000000, x)` no ocupa un millon de referencias. Esta materializa el arreglo. Es
-    // correcta y mas cara; el dia que alguien la use con un `n` grande, hay que cambiarla.
+    // **A deliberate divergence**: the JDK's keeps the element ONCE and fakes the length, so
+    // `nCopies(1000000, x)` does not take up a million references. This one materialises the array.
+    // It is correct and more expensive; the day somebody uses it with a large `n`, it has to
+    // change.
     public static <T> List<T> nCopies(int n, T o) {
         if (n < 0) {
             throw new IllegalArgumentException("List length = " + n);
@@ -118,10 +124,10 @@ public final class Collections {
         return new FixedList<T>(a);
     }
 
-    // ---- envoltorios de solo lectura ------------------------------------------------------------
+    // ---- read-only wrappers ---------------------------------------------------------------------
     //
-    // Los tres argumentos de los Guarded* son, en orden: la coleccion de atras, la clase que se le
-    // exige a cada elemento que entra (null = no se valida) y si es de solo lectura.
+    // The Guarded*'s three arguments are, in order: the collection behind, the class each element
+    // coming in is required to be (null = it is not validated) and whether it is read-only.
 
     public static <T> Collection<T> unmodifiableCollection(Collection<? extends T> c) {
         return new GuardedCollection<T>((Collection<T>) c, null, true);
@@ -169,17 +175,17 @@ public final class Collections {
         return new GuardedNavigableMap<K, V>((NavigableMap<K, V>) m, null, null, true);
     }
 
-    // ---- envoltorios sincronizados ---------------------------------------------------------------
+    // ---- synchronized wrappers -------------------------------------------------------------------
     //
-    // Cada operacion suelta queda protegida, pero **una secuencia de operaciones no**. El caso
-    // clasico es la recorrida: entre el `hasNext()` y el `next()` puede meterse otro hilo. Por eso
-    // el JDK documenta que el usuario tiene que tomar el monitor de la coleccion devuelta el mismo:
+    // Each single operation is protected, but **a sequence of operations is not**. The classic case
+    // is the walk: between the `hasNext()` and the `next()` another thread can slip in. That is why
+    // the JDK documents that the user has to take the returned collection's monitor themselves:
     //
     //     List<X> l = Collections.synchronizedList(new ArrayList<X>());
     //     synchronized (l) { for (X x : l) { ... } }
     //
-    // Que sea el monitor de la coleccion devuelta, y no otro, es parte del contrato: los
-    // envoltorios de aca sincronizan sobre si mismos justamente para que esa linea funcione.
+    // That it be the returned collection's monitor, and not another, is part of the contract: the
+    // wrappers here synchronise on themselves precisely so that line works.
 
     public static <T> Collection<T> synchronizedCollection(Collection<T> c) {
         return new GuardedCollection<T>(c, null, false);
@@ -213,14 +219,14 @@ public final class Collections {
         return new GuardedNavigableMap<K, V>(m, null, null, false);
     }
 
-    // ---- envoltorios con chequeo de tipo ---------------------------------------------------------
+    // ---- type-checking wrappers ------------------------------------------------------------------
     //
-    // Tapan el agujero que dejan los genericos borrados: un `List<String>` pasado como `List`
-    // cruda acepta un Integer sin chistar, y la ClassCastException salta mucho despues, en el
-    // `get`, lejos de quien la causo. `checkedList` la adelanta al `add`.
+    // They plug the hole erased generics leave: a `List<String>` passed as a raw `List` accepts an
+    // Integer without complaint, and the ClassCastException jumps out much later, at the `get`, far
+    // from whoever caused it. `checkedList` brings it forward to the `add`.
     //
-    // Es una herramienta de diagnostico: se envuelve mientras se busca quien ensucia la coleccion,
-    // y despues se saca.
+    // It is a diagnostic tool: one wraps while hunting for whoever is dirtying the collection, and
+    // afterwards takes it off.
 
     public static <E> Collection<E> checkedCollection(Collection<E> c, Class<E> type) {
         return new GuardedCollection<E>(c, type, false);
@@ -260,12 +266,12 @@ public final class Collections {
         return new GuardedNavigableMap<K, V>(m, keyType, valueType, false);
     }
 
-    // ---- algoritmos -------------------------------------------------------------------------------
+    // ---- algorithms -------------------------------------------------------------------------------
     //
-    // Los metodos que reciben `List<?>` empiezan casi todos con la misma linea: una vista tipada
-    // `List<Object>` de la misma lista. Es que `List<?>` no deja escribir NADA -- ni siquiera lo
-    // que se acaba de sacar de ella, porque el compilador no puede probar que sean el mismo tipo
-    // capturado. La conversion es segura: solo se reacomodan elementos que ya estaban adentro.
+    // The methods that take a `List<?>` almost all start with the same line: a typed `List<Object>`
+    // view of the same list. The thing is that `List<?>` lets NOTHING be written -- not even what
+    // has just been taken out of it, because the compiler cannot prove they are the same captured
+    // type. The conversion is safe: only elements that were already inside are rearranged.
 
     // Swap the elements at positions `i` and `j`.
     public static <T> void swap(List<T> list, int i, int j) {
@@ -318,15 +324,16 @@ public final class Collections {
         }
     }
 
-    // El indice de `key` en una lista **ya ordenada**, o `-(donde_iria) - 1` si no esta.
+    // The index of `key` in an **already sorted** list, or `-(where_it_would_go) - 1` if it is not
+    // there.
     //
-    // Que la lista tenga que venir ordenada no es un detalle de la documentacion: sobre una
-    // desordenada no da error, da un resultado sin sentido. Es el precio de bajar de O(n) a
-    // O(log n) -- se puede descartar la mitad en cada paso justamente porque se confia en el
-    // orden.
+    // That the list has to come in sorted is not a detail of the documentation: over an unsorted one
+    // it does not give an error, it gives a meaningless result. It is the price of dropping from
+    // O(n) to O(log n) -- half can be discarded at each step precisely because the order is trusted.
     //
-    // El negativo codifica el punto de insercion en vez de ser un simple -1, y ese detalle es lo
-    // que hace util al metodo para mantener una lista ordenada: si no esta, ya se sabe donde va.
+    // The negative encodes the insertion point instead of being a plain -1, and that detail is what
+    // makes the method useful for keeping a list sorted: if it is not there, where it goes is
+    // already known.
     public static <T> int binarySearch(List<? extends Comparable<? super T>> list, T key) {
         return search((List<Object>) list, key, null);
     }
@@ -339,8 +346,8 @@ public final class Collections {
         int low = 0;
         int high = list.size() - 1;
         while (low <= high) {
-            // `>>> 1` y no `/ 2`: con listas grandes `low + high` puede desbordar, y el
-            // desplazamiento sin signo devuelve el promedio correcto igual.
+            // `>>> 1` and not `/ 2`: with large lists `low + high` can overflow, and the unsigned
+            // shift returns the correct average all the same.
             int mid = (low + high) >>> 1;
             Object at = list.get(mid);
             int cmp;
@@ -360,10 +367,10 @@ public final class Collections {
         return -(low + 1);
     }
 
-    // Baraja la lista: recorre de atras para adelante intercambiando cada posicion con una al azar
-    // entre las que quedan (Fisher-Yates). Es el unico barajado que da las n! permutaciones con la
-    // misma probabilidad; el ingenuo -- intercambiar cada posicion con una cualquiera de toda la
-    // lista -- sesga el resultado y no se nota mirandolo.
+    // It shuffles the list: it walks from the back forwards swapping each position with a random one
+    // among those left (Fisher-Yates). It is the only shuffle that gives the n! permutations with the
+    // same probability; the naive one -- swapping each position with any one of the whole list --
+    // skews the result and it does not show by looking at it.
     public static void shuffle(List<?> list) {
         shuffle(list, new Random());
     }
@@ -381,8 +388,8 @@ public final class Collections {
         }
     }
 
-    // Copia `src` sobre el principio de `dest`, que tiene que tener lugar suficiente. No agranda
-    // la destino: `copy` sobreescribe, no inserta.
+    // It copies `src` over the start of `dest`, which has to have room enough. It does not grow the
+    // destination: `copy` overwrites, it does not insert.
     public static <T> void copy(List<? super T> dest, List<? extends T> src) {
         int n = src.size();
         if (dest.size() < n) {
@@ -412,14 +419,14 @@ public final class Collections {
         return (T) extreme(coll, (Comparator<Object>) comp, false);
     }
 
-    // El comun de min y max. Recorre con un iterador y no por indice porque una Collection no
-    // promete acceso indexado -- un HashSet no tiene un "elemento 3".
+    // What min and max have in common. It walks with an iterator and not by index because a
+    // Collection promises no indexed access -- a HashSet has no "element 3".
     //
-    // Se guarda el `>`/`<` estricto a proposito: ante empate gana el primero que aparecio, que es
-    // lo que documenta el JDK.
+    // The strict `>`/`<` is kept on purpose: on a tie the first one that turned up wins, which is
+    // what the JDK documents.
     private static Object extreme(Collection<?> coll, Comparator<Object> comp, boolean wantMin) {
         Iterator<?> it = coll.iterator();
-        // Sobre una coleccion vacia esto tira NoSuchElementException, que es lo especificado.
+        // Over an empty collection this throws NoSuchElementException, which is what is specified.
         Object best = it.next();
         while (it.hasNext()) {
             Object next = it.next();
@@ -442,18 +449,18 @@ public final class Collections {
         return best;
     }
 
-    // Corre los elementos `distance` lugares hacia el final, dando la vuelta.
+    // It moves the elements `distance` places towards the end, wrapping around.
     //
-    // Se hace con tres inversiones -- toda la lista, despues cada una de las dos partes -- que es
-    // el truco que resuelve la rotacion en O(n) y sin memoria extra. Rotar de a un lugar `distance`
-    // veces seria O(n * distance).
+    // It is done with three reversals -- the whole list, then each of the two parts -- which is the
+    // trick that settles the rotation in O(n) and with no extra memory. Rotating one place at a time
+    // `distance` times would be O(n * distance).
     public static void rotate(List<?> list, int distance) {
         int n = list.size();
         if (n == 0) {
             return;
         }
-        // floorMod y no `%`: en Java el resto conserva el signo del dividendo, asi que
-        // `-1 % 5` es -1 y no 4, y una distancia negativa daria indices fuera de rango.
+        // floorMod and not `%`: in Java the remainder keeps the dividend's sign, so `-1 % 5` is -1
+        // and not 4, and a negative distance would give indices out of range.
         int d = Math.floorMod(distance, n);
         if (d == 0) {
             return;
@@ -478,11 +485,11 @@ public final class Collections {
         return changed;
     }
 
-    // El primer indice donde `target` aparece entero dentro de `source`, o -1.
+    // The first index where `target` appears whole inside `source`, or -1.
     //
-    // Es la busqueda ingenua, O(n * m): se prueba cada posicion. Alcanza para lo que se usa esto
-    // -- listas cortas -- y evita el preproceso de un Knuth-Morris-Pratt, que sobre listas
-    // genericas ademas obligaria a comparar con equals mas veces de las que ahorra.
+    // It is the naive search, O(n * m): every position is tried. It is enough for what this is used
+    // for -- short lists -- and it avoids a Knuth-Morris-Pratt's preprocessing, which over generic
+    // lists would on top of that force more equals comparisons than it saves.
     public static int indexOfSubList(List<?> source, List<?> target) {
         int n = source.size();
         int m = target.size();
@@ -521,7 +528,8 @@ public final class Collections {
         return true;
     }
 
-    // Cuantas veces aparece `o`. Cuenta por equals, salvo que `o` sea null, y ahi cuenta los null.
+    // How many times `o` turns up. It counts by equals, unless `o` is null, and then it counts the
+    // nulls.
     public static int frequency(Collection<?> c, Object o) {
         int n = 0;
         Iterator<?> it = c.iterator();
@@ -533,12 +541,12 @@ public final class Collections {
         return n;
     }
 
-    // Si las dos colecciones no comparten ningun elemento.
+    // Whether the two collections share no element.
     //
-    // Se recorre `c1` preguntandole a `c2`, que es lo contrario de lo que parece natural: conviene
-    // que la preguntada sea la de `contains` rapido (un Set) y la recorrida la otra. Quien llame
-    // con dos ArrayList grandes va a pagar O(n * m), y no hay forma de evitarlo sin copiar una a
-    // un conjunto -- cosa que el JDK tampoco hace.
+    // `c1` is walked asking `c2`, which is the opposite of what looks natural: it suits that the one
+    // asked be the one with the fast `contains` (a Set) and the one walked the other. Whoever calls
+    // with two large ArrayLists will pay O(n * m), and there is no way of avoiding it without
+    // copying one into a set -- which the JDK does not do either.
     public static boolean disjoint(Collection<?> c1, Collection<?> c2) {
         Iterator<?> it = c1.iterator();
         while (it.hasNext()) {
@@ -549,9 +557,9 @@ public final class Collections {
         return true;
     }
 
-    // Agrega todos los elementos sueltos a la coleccion. Es la version comoda de un `addAll` con
-    // una lista intermedia, y no es equivalente a `c.addAll(...)`: si uno de los `add` falla a
-    // mitad de camino, los anteriores quedan.
+    // It adds all the loose elements to the collection. It is the convenient version of an `addAll`
+    // with an intermediate list, and it is not equivalent to `c.addAll(...)`: if one of the `add`s
+    // fails half way, the earlier ones stay.
     public static <T> boolean addAll(Collection<? super T> c, T... elements) {
         boolean changed = false;
         int i = 0;
@@ -564,26 +572,27 @@ public final class Collections {
         return changed;
     }
 
-    // El comparador que invierte el orden natural.
+    // The comparator that reverses the natural order.
     public static <T> Comparator<T> reverseOrder() {
         return new ReverseComparator<T>(null);
     }
 
-    // El que invierte otro comparador. Con `null` vuelve al orden natural invertido, que es lo que
-    // hace util a esta forma: permite pasar "el orden de siempre, al reves" sin caso especial.
+    // The one that reverses another comparator. With `null` it falls back to the reversed natural
+    // order, which is what makes this form useful: it allows passing "the usual order, backwards"
+    // with no special case.
     public static <T> Comparator<T> reverseOrder(Comparator<T> cmp) {
         return new ReverseComparator<T>(cmp);
     }
 
-    // ---- puentes entre las APIs viejas y las nuevas ------------------------------------------------
+    // ---- bridges between the old APIs and the new  ------------------------------------------------
 
-    // Una Enumeration sobre la coleccion. El puente hacia lo anterior a `Iterator`, que todavia
-    // pide Enumeration: Properties, ZipFile, ServletRequest.
+    // An Enumeration over the collection. The bridge towards what predates `Iterator` and still asks
+    // for an Enumeration: Properties, ZipFile, ServletRequest.
     public static <T> Enumeration<T> enumeration(Collection<T> c) {
         return new ArrayEnumeration<T>(c.toArray());
     }
 
-    // El puente en la otra direccion: vacia una Enumeration en una lista.
+    // The bridge in the other direction: it empties an Enumeration into a list.
     public static <T> ArrayList<T> list(Enumeration<T> e) {
         ArrayList<T> out = new ArrayList<T>();
         while (e.hasMoreElements()) {
@@ -592,11 +601,11 @@ public final class Collections {
         return out;
     }
 
-    // Un Set respaldado por el Map dado, que tiene que llegar vacio.
+    // A Set backed by the given Map, which has to arrive empty.
     //
-    // Existe para un caso concreto: no hay IdentityHashSet ni ConcurrentHashSet en el JDK, y esta
-    // es la forma de armarlos -- `newSetFromMap(new IdentityHashMap())` da un conjunto que compara
-    // por identidad en vez de por equals.
+    // It exists for a concrete case: there is no IdentityHashSet nor ConcurrentHashSet in the JDK,
+    // and this is the way to build them -- `newSetFromMap(new IdentityHashMap())` gives a set that
+    // compares by identity instead of by equals.
     public static <E> Set<E> newSetFromMap(Map<E, Boolean> map) {
         return new SetFromMap<E>(map);
     }
@@ -605,7 +614,7 @@ public final class Collections {
         return new SequencedSetFromMap<E>(map);
     }
 
-    // Una vista Queue del deque que saca por donde mete: una pila con cara de cola.
+    // A Queue view of the deque that takes out where it puts in: a stack with a queue's face.
     public static <T> Queue<T> asLifoQueue(Deque<T> deque) {
         return new LifoQueue<T>(deque);
     }

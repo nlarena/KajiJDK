@@ -5,51 +5,51 @@ import java.util.Enumeration;
 import java.util.Vector;
 
 /**
- * Un atributo declarado en la DTD, y el siguiente.
+ * An attribute declared in the DTD, and the next one.
  *
- * <h2>Es una lista, no un elemento de una lista</h2>
+ * <h2>It is a list, not an element of a list</h2>
  *
- * <p>Cada instancia lleva un campo {@code next}: la lista de atributos de un elemento es la cadena
- * que arranca en el primero. No hay una clase "lista" aparte. Es la forma de 1997 y se conserva
- * porque los campos son publicos y cambiarla romperia a cualquiera que los recorra.
+ * <p>Each instance carries a {@code next} field: an element's attribute list is the chain that
+ * starts at the first one. There is no separate "list" class. It is the 1997 form and it is
+ * kept because the fields are public and changing it would break anybody who walks them.
  *
- * <h2>Que guarda de cada atributo</h2>
+ * <h2>What it keeps about each attribute</h2>
  *
- * <p>El nombre, el <em>tipo</em> ({@code CDATA}, {@code ID}, {@code NUMBER}...), el
- * <em>modificador</em> ({@code REQUIRED}, {@code IMPLIED}, {@code FIXED}...), el valor por omision
- * si lo tiene, y la lista de valores permitidos si es una enumeracion. Los dos primeros son numeros
- * de {@link DTDConstants} y valen lo mismo aunque signifiquen cosas distintas; ver la nota de esa
- * interfaz.
+ * <p>The name, the <em>type</em> ({@code CDATA}, {@code ID}, {@code NUMBER}...), the
+ * <em>modifier</em> ({@code REQUIRED}, {@code IMPLIED}, {@code FIXED}...), the default value if
+ * it has one, and the list of allowed values if it is an enumeration. The first two are numbers
+ * from {@link DTDConstants} and are worth the same even though they mean different things; see
+ * that interface's note.
  */
 public final class AttributeList implements DTDConstants, Serializable {
 
-    /** El nombre del atributo. */
+    /** The attribute's name. */
     public String name;
 
-    /** El tipo: {@code CDATA}, {@code ID}, {@code NUMBER} y demas. */
+    /** The type: {@code CDATA}, {@code ID}, {@code NUMBER} and so on. */
     public int type;
 
-    /** Los valores permitidos, si es una enumeracion; nulo si no lo es. */
+    /** The allowed values, if it is an enumeration; null if it is not. */
     public Vector<?> values;
 
-    /** El modificador: {@code REQUIRED}, {@code IMPLIED}, {@code FIXED}, {@code CURRENT}. */
+    /** The modifier: {@code REQUIRED}, {@code IMPLIED}, {@code FIXED}, {@code CURRENT}. */
     public int modifier;
 
-    /** El valor por omision, si lo tiene. */
+    /** The default value, if it has one. */
     public String value;
 
-    /** El atributo que sigue; ver la nota de la clase. */
+    /** The attribute that follows; see the class note. */
     public AttributeList next;
 
     AttributeList() {
     }
 
-    /** Un atributo con ese nombre y nada mas. */
+    /** An attribute with that name and nothing else. */
     public AttributeList(String name) {
         this.name = name;
     }
 
-    /** Un atributo completo, con el siguiente colgado. */
+    /** A complete attribute, with the next one hanging from it. */
     public AttributeList(String name, int type, int modifier, String value, Vector<?> values,
             AttributeList next) {
         this.name = name;
@@ -72,7 +72,7 @@ public final class AttributeList implements DTDConstants, Serializable {
         return modifier;
     }
 
-    /** Los valores permitidos, o nulo si el atributo no es una enumeracion. */
+    /** The allowed values, or null if the attribute is not an enumeration. */
     public Enumeration<?> getValues() {
         return (values == null) ? null : values.elements();
     }
@@ -90,10 +90,11 @@ public final class AttributeList implements DTDConstants, Serializable {
     }
 
     /**
-     * El numero de tipo que corresponde a ese nombre.
+     * The type number that corresponds to that name.
      *
-     * <p>Un nombre que no se conoce da {@code CDATA}: en una DTD, un tipo raro se trata como texto
-     * suelto y no como un error, que es lo unico que permite leer una DTD mas nueva que el lector.
+     * <p>A name that is not known gives {@code CDATA}: in a DTD, an odd type is treated as loose
+     * text and not as an error, which is the only thing that allows reading a DTD newer than the
+     * reader.
      */
     public static int name2type(String nm) {
         if ("CDATA".equals(nm)) {
@@ -145,23 +146,23 @@ public final class AttributeList implements DTDConstants, Serializable {
     }
 
     /**
-     * El nombre de ese numero de tipo.
+     * The name of that type number.
      *
-     * <p>Solo los quince tipos de atributo tienen nombre; los demas numeros dan nulo, incluso los
-     * que valen algo en otra de las familias de {@link DTDConstants}.
+     * <p>Only the fifteen attribute types have a name; the other numbers give null, even those
+     * that are worth something in another of {@link DTDConstants}' families.
      */
     public static String type2name(int type) {
-        // Una tabla y no un `switch`: los quince tipos son 1..15 sin huecos, asi que el indice
-        // alcanza. Ademas el `switch` no compila, porque las constantes vienen de un `.class` y
-        // nuestro generador todavia no las pliega en un `case` (hallazgo #503).
-        if (type >= 1 && type <= TIPOS.length) {
-            return TIPOS[type - 1];
+        // A table and not a `switch`: the fifteen types are 1..15 with no gaps, so the index is
+                // enough. Besides, the `switch` does not compile, because the constants come from a
+                // `.class` and our generator does not fold them into a `case` yet (finding #503).
+        if (type >= 1 && type <= TYPES.length) {
+            return TYPES[type - 1];
         }
         return null;
     }
 
-    /** Los quince tipos de atributo, en el orden de sus numeros. */
-    private static final String[] TIPOS = {
+    /** The fifteen attribute types, in the order of their numbers. */
+    private static final String[] TYPES = {
         "CDATA", "ENTITY", "ENTITIES", "ID", "IDREF",
         "IDREFS", "NAME", "NAMES", "NMTOKEN", "NMTOKENS",
         "NOTATION", "NUMBER", "NUMBERS", "NUTOKEN", "NUTOKENS"

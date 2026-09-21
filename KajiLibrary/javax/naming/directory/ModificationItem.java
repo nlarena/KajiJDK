@@ -3,36 +3,37 @@ package javax.naming.directory;
 import java.io.Serializable;
 
 /**
- * KajiLibrary's javax.naming.directory.ModificationItem -- una modificacion sola, para aplicar en
- * lote.
+ * KajiLibrary's javax.naming.directory.ModificationItem -- a single modification, to apply in a
+ * batch.
  *
- * <p>Un par: que hacer --agregar, reemplazar o quitar-- y sobre que atributo. Existe para la version
- * de {@code modifyAttributes} que recibe un arreglo, y esa version es la que hay que usar cuando las
- * modificaciones tienen que aplicarse <b>juntas</b>: la especificacion pide que se apliquen todas o
- * ninguna.
+ * <p>A pair: what to do --add, replace or remove-- and on which attribute. It exists for the
+ * version of {@code modifyAttributes} that takes an array, and that version is the one to use when
+ * the modifications have to be applied <b>together</b>: the specification asks for all or none to
+ * be applied.
  *
- * <p>La otra version --la que recibe un solo codigo y unos {@link Attributes}-- aplica la misma
- * operacion a todos, asi que no sirve para un lote que mezcla agregados y borrados.
+ * <p>The other version --the one taking a single code and some {@link Attributes}-- applies the
+ * same operation to all, so it does not serve a batch mixing additions and removals.
  *
- * <p>Es inmutable: los dos campos se fijan al construir. Tiene sentido para algo que participa de una
- * operacion atomica -- si se pudiera cambiar despues de armar el arreglo, lo que se aplica no seria
- * lo que se reviso.
+ * <p>It is immutable: both fields are fixed at construction. That makes sense for something taking
+ * part in an atomic operation -- if it could change after building the array, what gets applied
+ * would not be what was reviewed.
  */
 public class ModificationItem implements Serializable {
 
     private static final long serialVersionUID = 7573258562534746850L;
 
-    /** Una de las tres constantes de {@link DirContext}. */
+    /** One of the three {@link DirContext} constants. */
     private final int mod_op;
 
-    /** Sobre que atributo. */
+    /** On which attribute. */
     private final Attribute attr;
 
     /**
-     * @param mod_op {@link DirContext#ADD_ATTRIBUTE}, {@link DirContext#REPLACE_ATTRIBUTE} o
+     * @param mod_op {@link DirContext#ADD_ATTRIBUTE}, {@link DirContext#REPLACE_ATTRIBUTE} or
      *     {@link DirContext#REMOVE_ATTRIBUTE}
-     * @param attr el atributo; para quitar, sus valores dicen <b>cuales</b> quitar
-     * @throws IllegalArgumentException si el codigo no es uno de los tres, o si el atributo es null
+     * @param attr the attribute; when removing, its values say <b>which</b> ones to remove
+     * @throws IllegalArgumentException if the code is not one of the three, or if the attribute is
+     *     null
      */
     public ModificationItem(int mod_op, Attribute attr) {
         if (attr == null) {
@@ -47,17 +48,17 @@ public class ModificationItem implements Serializable {
         this.attr = attr;
     }
 
-    /** Que hacer. */
+    /** What to do. */
     public int getModificationOp() {
         return this.mod_op;
     }
 
-    /** Sobre que atributo. */
+    /** On which attribute. */
     public Attribute getAttribute() {
         return this.attr;
     }
 
-    /** La operacion en palabras y el atributo, para un registro. */
+    /** The operation in words and the attribute, for a log. */
     public String toString() {
         switch (this.mod_op) {
             case DirContext.ADD_ATTRIBUTE:

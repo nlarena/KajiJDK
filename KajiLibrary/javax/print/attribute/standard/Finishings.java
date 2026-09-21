@@ -7,12 +7,12 @@ import javax.print.attribute.PrintJobAttribute;
 import javax.print.attribute.PrintRequestAttribute;
 
 /**
- * Que se le hace al papel despues de imprimirlo: grapar, encuadernar, coser el lomo.
+ * What is done to the paper after printing it: stapling, binding, stitching the spine.
  *
- * <p>La numeracion tiene agujeros porque es la de IPP tal cual: el 5 nunca se asigno y del 10 al 19
- * quedaron reservados, asi que la tabla lleva {@code null} en esas filas y arranca en 3. Las
- * constantes con posicion ({@code STAPLE_TOP_LEFT}) valen mas que {@code STAPLE} a secas porque no
- * dejan que la impresora elija la esquina.
+ * <p>The numbering has holes because it is IPP's as it is: 5 was never assigned and 10 to 19 were
+ * left reserved, so the table carries {@code null} in those rows and starts at 3. The constants
+ * with a position ({@code STAPLE_TOP_LEFT}) are worth more than plain {@code STAPLE} because they
+ * do not let the printer choose the corner.
  */
 public class Finishings extends EnumSyntax implements DocAttribute, PrintRequestAttribute, PrintJobAttribute {
 
@@ -130,7 +130,7 @@ public class Finishings extends EnumSyntax implements DocAttribute, PrintRequest
         return myEnumValueTable;
     }
 
-    /** IPP numera esta categoria desde 3; la fila 0 de las tablas es ese 3. */
+    /** IPP numbers this category from 3; row 0 of the tables is that 3. */
     protected int getOffset() {
         return 3;
     }

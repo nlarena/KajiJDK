@@ -3,1363 +3,1363 @@ package org.w3c.dom.css;
 import org.w3c.dom.DOMException;
 
 /**
- * Las 122 propiedades de CSS 2, cada una como un par de accesores.
+ * The 122 properties of CSS 2, each one as a pair of accessors.
  *
- * <p>Es una comodidad, no una capa nueva: `getAzimuth()` es exactamente
- * `getPropertyValue("azimuth")` y `setAzimuth(v)` es `setProperty("azimuth", v, "")`. Lo que se
- * gana es que el compilador comprueba el nombre; lo que se pierde es la prioridad, porque ningun
- * setter de aca puede marcar `!important`.
+ * <p>It is a convenience, not a new layer: `getAzimuth()` is exactly
+ * `getPropertyValue("azimuth")` and `setAzimuth(v)` is `setProperty("azimuth", v, "")`. What is
+ * gained is that the compiler checks the name; what is lost is the priority, because no setter here
+ * can mark `!important`.
  *
- * <p>Los nombres traducen el guion de CSS a mayuscula: `font-size` es `getFontSize`. Las tres
- * excepciones son las que empiezan con guion o chocan con una palabra de Java, y estan escritas
- * como el DOM las define.
+ * <p>The names turn the CSS hyphen into a capital letter: `font-size` is `getFontSize`. There is
+ * one exception, not the three the note used to count: `float` is a Java keyword, so its accessors
+ * are `getCssFloat`/`setCssFloat`, as the DOM defines them.
  *
- * <p>Una implementacion la implementa **junto con** {@link CSSStyleDeclaration}, sobre el mismo
- * objeto: el DOM las declara separadas para que la segunda pueda existir sin la primera en un perfil
- * reducido, no porque sean dos cosas.
+ * <p>An implementation implements it **together with** {@link CSSStyleDeclaration}, on the same
+ * object: the DOM declares them separately so that the second can exist without the first in a
+ * reduced profile, not because they are two things.
  */
 public interface CSS2Properties {
 
 
-    /** La propiedad `azimuth`. */
+    /** The property `azimuth`. */
     String getAzimuth();
 
     /**
-     * Fija la propiedad `azimuth`.
+     * It sets the property `azimuth`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setAzimuth(String azimuth) throws DOMException;
 
-    /** La propiedad `background`. */
+    /** The property `background`. */
     String getBackground();
 
     /**
-     * Fija la propiedad `background`.
+     * It sets the property `background`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setBackground(String background) throws DOMException;
 
-    /** La propiedad `background-attachment`. */
+    /** The property `background-attachment`. */
     String getBackgroundAttachment();
 
     /**
-     * Fija la propiedad `background-attachment`.
+     * It sets the property `background-attachment`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setBackgroundAttachment(String backgroundAttachment) throws DOMException;
 
-    /** La propiedad `background-color`. */
+    /** The property `background-color`. */
     String getBackgroundColor();
 
     /**
-     * Fija la propiedad `background-color`.
+     * It sets the property `background-color`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setBackgroundColor(String backgroundColor) throws DOMException;
 
-    /** La propiedad `background-image`. */
+    /** The property `background-image`. */
     String getBackgroundImage();
 
     /**
-     * Fija la propiedad `background-image`.
+     * It sets the property `background-image`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setBackgroundImage(String backgroundImage) throws DOMException;
 
-    /** La propiedad `background-position`. */
+    /** The property `background-position`. */
     String getBackgroundPosition();
 
     /**
-     * Fija la propiedad `background-position`.
+     * It sets the property `background-position`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setBackgroundPosition(String backgroundPosition) throws DOMException;
 
-    /** La propiedad `background-repeat`. */
+    /** The property `background-repeat`. */
     String getBackgroundRepeat();
 
     /**
-     * Fija la propiedad `background-repeat`.
+     * It sets the property `background-repeat`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setBackgroundRepeat(String backgroundRepeat) throws DOMException;
 
-    /** La propiedad `border`. */
+    /** The property `border`. */
     String getBorder();
 
     /**
-     * Fija la propiedad `border`.
+     * It sets the property `border`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setBorder(String border) throws DOMException;
 
-    /** La propiedad `border-collapse`. */
+    /** The property `border-collapse`. */
     String getBorderCollapse();
 
     /**
-     * Fija la propiedad `border-collapse`.
+     * It sets the property `border-collapse`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setBorderCollapse(String borderCollapse) throws DOMException;
 
-    /** La propiedad `border-color`. */
+    /** The property `border-color`. */
     String getBorderColor();
 
     /**
-     * Fija la propiedad `border-color`.
+     * It sets the property `border-color`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setBorderColor(String borderColor) throws DOMException;
 
-    /** La propiedad `border-spacing`. */
+    /** The property `border-spacing`. */
     String getBorderSpacing();
 
     /**
-     * Fija la propiedad `border-spacing`.
+     * It sets the property `border-spacing`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setBorderSpacing(String borderSpacing) throws DOMException;
 
-    /** La propiedad `border-style`. */
+    /** The property `border-style`. */
     String getBorderStyle();
 
     /**
-     * Fija la propiedad `border-style`.
+     * It sets the property `border-style`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setBorderStyle(String borderStyle) throws DOMException;
 
-    /** La propiedad `border-top`. */
+    /** The property `border-top`. */
     String getBorderTop();
 
     /**
-     * Fija la propiedad `border-top`.
+     * It sets the property `border-top`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setBorderTop(String borderTop) throws DOMException;
 
-    /** La propiedad `border-right`. */
+    /** The property `border-right`. */
     String getBorderRight();
 
     /**
-     * Fija la propiedad `border-right`.
+     * It sets the property `border-right`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setBorderRight(String borderRight) throws DOMException;
 
-    /** La propiedad `border-bottom`. */
+    /** The property `border-bottom`. */
     String getBorderBottom();
 
     /**
-     * Fija la propiedad `border-bottom`.
+     * It sets the property `border-bottom`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setBorderBottom(String borderBottom) throws DOMException;
 
-    /** La propiedad `border-left`. */
+    /** The property `border-left`. */
     String getBorderLeft();
 
     /**
-     * Fija la propiedad `border-left`.
+     * It sets the property `border-left`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setBorderLeft(String borderLeft) throws DOMException;
 
-    /** La propiedad `border-top-color`. */
+    /** The property `border-top-color`. */
     String getBorderTopColor();
 
     /**
-     * Fija la propiedad `border-top-color`.
+     * It sets the property `border-top-color`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setBorderTopColor(String borderTopColor) throws DOMException;
 
-    /** La propiedad `border-right-color`. */
+    /** The property `border-right-color`. */
     String getBorderRightColor();
 
     /**
-     * Fija la propiedad `border-right-color`.
+     * It sets the property `border-right-color`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setBorderRightColor(String borderRightColor) throws DOMException;
 
-    /** La propiedad `border-bottom-color`. */
+    /** The property `border-bottom-color`. */
     String getBorderBottomColor();
 
     /**
-     * Fija la propiedad `border-bottom-color`.
+     * It sets the property `border-bottom-color`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setBorderBottomColor(String borderBottomColor) throws DOMException;
 
-    /** La propiedad `border-left-color`. */
+    /** The property `border-left-color`. */
     String getBorderLeftColor();
 
     /**
-     * Fija la propiedad `border-left-color`.
+     * It sets the property `border-left-color`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setBorderLeftColor(String borderLeftColor) throws DOMException;
 
-    /** La propiedad `border-top-style`. */
+    /** The property `border-top-style`. */
     String getBorderTopStyle();
 
     /**
-     * Fija la propiedad `border-top-style`.
+     * It sets the property `border-top-style`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setBorderTopStyle(String borderTopStyle) throws DOMException;
 
-    /** La propiedad `border-right-style`. */
+    /** The property `border-right-style`. */
     String getBorderRightStyle();
 
     /**
-     * Fija la propiedad `border-right-style`.
+     * It sets the property `border-right-style`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setBorderRightStyle(String borderRightStyle) throws DOMException;
 
-    /** La propiedad `border-bottom-style`. */
+    /** The property `border-bottom-style`. */
     String getBorderBottomStyle();
 
     /**
-     * Fija la propiedad `border-bottom-style`.
+     * It sets the property `border-bottom-style`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setBorderBottomStyle(String borderBottomStyle) throws DOMException;
 
-    /** La propiedad `border-left-style`. */
+    /** The property `border-left-style`. */
     String getBorderLeftStyle();
 
     /**
-     * Fija la propiedad `border-left-style`.
+     * It sets the property `border-left-style`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setBorderLeftStyle(String borderLeftStyle) throws DOMException;
 
-    /** La propiedad `border-top-width`. */
+    /** The property `border-top-width`. */
     String getBorderTopWidth();
 
     /**
-     * Fija la propiedad `border-top-width`.
+     * It sets the property `border-top-width`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setBorderTopWidth(String borderTopWidth) throws DOMException;
 
-    /** La propiedad `border-right-width`. */
+    /** The property `border-right-width`. */
     String getBorderRightWidth();
 
     /**
-     * Fija la propiedad `border-right-width`.
+     * It sets the property `border-right-width`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setBorderRightWidth(String borderRightWidth) throws DOMException;
 
-    /** La propiedad `border-bottom-width`. */
+    /** The property `border-bottom-width`. */
     String getBorderBottomWidth();
 
     /**
-     * Fija la propiedad `border-bottom-width`.
+     * It sets the property `border-bottom-width`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setBorderBottomWidth(String borderBottomWidth) throws DOMException;
 
-    /** La propiedad `border-left-width`. */
+    /** The property `border-left-width`. */
     String getBorderLeftWidth();
 
     /**
-     * Fija la propiedad `border-left-width`.
+     * It sets the property `border-left-width`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setBorderLeftWidth(String borderLeftWidth) throws DOMException;
 
-    /** La propiedad `border-width`. */
+    /** The property `border-width`. */
     String getBorderWidth();
 
     /**
-     * Fija la propiedad `border-width`.
+     * It sets the property `border-width`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setBorderWidth(String borderWidth) throws DOMException;
 
-    /** La propiedad `bottom`. */
+    /** The property `bottom`. */
     String getBottom();
 
     /**
-     * Fija la propiedad `bottom`.
+     * It sets the property `bottom`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setBottom(String bottom) throws DOMException;
 
-    /** La propiedad `caption-side`. */
+    /** The property `caption-side`. */
     String getCaptionSide();
 
     /**
-     * Fija la propiedad `caption-side`.
+     * It sets the property `caption-side`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setCaptionSide(String captionSide) throws DOMException;
 
-    /** La propiedad `clear`. */
+    /** The property `clear`. */
     String getClear();
 
     /**
-     * Fija la propiedad `clear`.
+     * It sets the property `clear`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setClear(String clear) throws DOMException;
 
-    /** La propiedad `clip`. */
+    /** The property `clip`. */
     String getClip();
 
     /**
-     * Fija la propiedad `clip`.
+     * It sets the property `clip`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setClip(String clip) throws DOMException;
 
-    /** La propiedad `color`. */
+    /** The property `color`. */
     String getColor();
 
     /**
-     * Fija la propiedad `color`.
+     * It sets the property `color`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setColor(String color) throws DOMException;
 
-    /** La propiedad `content`. */
+    /** The property `content`. */
     String getContent();
 
     /**
-     * Fija la propiedad `content`.
+     * It sets the property `content`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setContent(String content) throws DOMException;
 
-    /** La propiedad `counter-increment`. */
+    /** The property `counter-increment`. */
     String getCounterIncrement();
 
     /**
-     * Fija la propiedad `counter-increment`.
+     * It sets the property `counter-increment`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setCounterIncrement(String counterIncrement) throws DOMException;
 
-    /** La propiedad `counter-reset`. */
+    /** The property `counter-reset`. */
     String getCounterReset();
 
     /**
-     * Fija la propiedad `counter-reset`.
+     * It sets the property `counter-reset`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setCounterReset(String counterReset) throws DOMException;
 
-    /** La propiedad `cue`. */
+    /** The property `cue`. */
     String getCue();
 
     /**
-     * Fija la propiedad `cue`.
+     * It sets the property `cue`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setCue(String cue) throws DOMException;
 
-    /** La propiedad `cue-after`. */
+    /** The property `cue-after`. */
     String getCueAfter();
 
     /**
-     * Fija la propiedad `cue-after`.
+     * It sets the property `cue-after`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setCueAfter(String cueAfter) throws DOMException;
 
-    /** La propiedad `cue-before`. */
+    /** The property `cue-before`. */
     String getCueBefore();
 
     /**
-     * Fija la propiedad `cue-before`.
+     * It sets the property `cue-before`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setCueBefore(String cueBefore) throws DOMException;
 
-    /** La propiedad `cursor`. */
+    /** The property `cursor`. */
     String getCursor();
 
     /**
-     * Fija la propiedad `cursor`.
+     * It sets the property `cursor`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setCursor(String cursor) throws DOMException;
 
-    /** La propiedad `direction`. */
+    /** The property `direction`. */
     String getDirection();
 
     /**
-     * Fija la propiedad `direction`.
+     * It sets the property `direction`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setDirection(String direction) throws DOMException;
 
-    /** La propiedad `display`. */
+    /** The property `display`. */
     String getDisplay();
 
     /**
-     * Fija la propiedad `display`.
+     * It sets the property `display`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setDisplay(String display) throws DOMException;
 
-    /** La propiedad `elevation`. */
+    /** The property `elevation`. */
     String getElevation();
 
     /**
-     * Fija la propiedad `elevation`.
+     * It sets the property `elevation`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setElevation(String elevation) throws DOMException;
 
-    /** La propiedad `empty-cells`. */
+    /** The property `empty-cells`. */
     String getEmptyCells();
 
     /**
-     * Fija la propiedad `empty-cells`.
+     * It sets the property `empty-cells`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setEmptyCells(String emptyCells) throws DOMException;
 
-    /** La propiedad `css-float`. */
+    /** The property `float` (see the note of the class for the name). */
     String getCssFloat();
 
     /**
-     * Fija la propiedad `css-float`.
+     * It sets the property `float`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setCssFloat(String cssFloat) throws DOMException;
 
-    /** La propiedad `font`. */
+    /** The property `font`. */
     String getFont();
 
     /**
-     * Fija la propiedad `font`.
+     * It sets the property `font`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setFont(String font) throws DOMException;
 
-    /** La propiedad `font-family`. */
+    /** The property `font-family`. */
     String getFontFamily();
 
     /**
-     * Fija la propiedad `font-family`.
+     * It sets the property `font-family`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setFontFamily(String fontFamily) throws DOMException;
 
-    /** La propiedad `font-size`. */
+    /** The property `font-size`. */
     String getFontSize();
 
     /**
-     * Fija la propiedad `font-size`.
+     * It sets the property `font-size`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setFontSize(String fontSize) throws DOMException;
 
-    /** La propiedad `font-size-adjust`. */
+    /** The property `font-size-adjust`. */
     String getFontSizeAdjust();
 
     /**
-     * Fija la propiedad `font-size-adjust`.
+     * It sets the property `font-size-adjust`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setFontSizeAdjust(String fontSizeAdjust) throws DOMException;
 
-    /** La propiedad `font-stretch`. */
+    /** The property `font-stretch`. */
     String getFontStretch();
 
     /**
-     * Fija la propiedad `font-stretch`.
+     * It sets the property `font-stretch`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setFontStretch(String fontStretch) throws DOMException;
 
-    /** La propiedad `font-style`. */
+    /** The property `font-style`. */
     String getFontStyle();
 
     /**
-     * Fija la propiedad `font-style`.
+     * It sets the property `font-style`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setFontStyle(String fontStyle) throws DOMException;
 
-    /** La propiedad `font-variant`. */
+    /** The property `font-variant`. */
     String getFontVariant();
 
     /**
-     * Fija la propiedad `font-variant`.
+     * It sets the property `font-variant`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setFontVariant(String fontVariant) throws DOMException;
 
-    /** La propiedad `font-weight`. */
+    /** The property `font-weight`. */
     String getFontWeight();
 
     /**
-     * Fija la propiedad `font-weight`.
+     * It sets the property `font-weight`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setFontWeight(String fontWeight) throws DOMException;
 
-    /** La propiedad `height`. */
+    /** The property `height`. */
     String getHeight();
 
     /**
-     * Fija la propiedad `height`.
+     * It sets the property `height`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setHeight(String height) throws DOMException;
 
-    /** La propiedad `left`. */
+    /** The property `left`. */
     String getLeft();
 
     /**
-     * Fija la propiedad `left`.
+     * It sets the property `left`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setLeft(String left) throws DOMException;
 
-    /** La propiedad `letter-spacing`. */
+    /** The property `letter-spacing`. */
     String getLetterSpacing();
 
     /**
-     * Fija la propiedad `letter-spacing`.
+     * It sets the property `letter-spacing`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setLetterSpacing(String letterSpacing) throws DOMException;
 
-    /** La propiedad `line-height`. */
+    /** The property `line-height`. */
     String getLineHeight();
 
     /**
-     * Fija la propiedad `line-height`.
+     * It sets the property `line-height`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setLineHeight(String lineHeight) throws DOMException;
 
-    /** La propiedad `list-style`. */
+    /** The property `list-style`. */
     String getListStyle();
 
     /**
-     * Fija la propiedad `list-style`.
+     * It sets the property `list-style`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setListStyle(String listStyle) throws DOMException;
 
-    /** La propiedad `list-style-image`. */
+    /** The property `list-style-image`. */
     String getListStyleImage();
 
     /**
-     * Fija la propiedad `list-style-image`.
+     * It sets the property `list-style-image`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setListStyleImage(String listStyleImage) throws DOMException;
 
-    /** La propiedad `list-style-position`. */
+    /** The property `list-style-position`. */
     String getListStylePosition();
 
     /**
-     * Fija la propiedad `list-style-position`.
+     * It sets the property `list-style-position`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setListStylePosition(String listStylePosition) throws DOMException;
 
-    /** La propiedad `list-style-type`. */
+    /** The property `list-style-type`. */
     String getListStyleType();
 
     /**
-     * Fija la propiedad `list-style-type`.
+     * It sets the property `list-style-type`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setListStyleType(String listStyleType) throws DOMException;
 
-    /** La propiedad `margin`. */
+    /** The property `margin`. */
     String getMargin();
 
     /**
-     * Fija la propiedad `margin`.
+     * It sets the property `margin`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setMargin(String margin) throws DOMException;
 
-    /** La propiedad `margin-top`. */
+    /** The property `margin-top`. */
     String getMarginTop();
 
     /**
-     * Fija la propiedad `margin-top`.
+     * It sets the property `margin-top`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setMarginTop(String marginTop) throws DOMException;
 
-    /** La propiedad `margin-right`. */
+    /** The property `margin-right`. */
     String getMarginRight();
 
     /**
-     * Fija la propiedad `margin-right`.
+     * It sets the property `margin-right`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setMarginRight(String marginRight) throws DOMException;
 
-    /** La propiedad `margin-bottom`. */
+    /** The property `margin-bottom`. */
     String getMarginBottom();
 
     /**
-     * Fija la propiedad `margin-bottom`.
+     * It sets the property `margin-bottom`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setMarginBottom(String marginBottom) throws DOMException;
 
-    /** La propiedad `margin-left`. */
+    /** The property `margin-left`. */
     String getMarginLeft();
 
     /**
-     * Fija la propiedad `margin-left`.
+     * It sets the property `margin-left`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setMarginLeft(String marginLeft) throws DOMException;
 
-    /** La propiedad `marker-offset`. */
+    /** The property `marker-offset`. */
     String getMarkerOffset();
 
     /**
-     * Fija la propiedad `marker-offset`.
+     * It sets the property `marker-offset`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setMarkerOffset(String markerOffset) throws DOMException;
 
-    /** La propiedad `marks`. */
+    /** The property `marks`. */
     String getMarks();
 
     /**
-     * Fija la propiedad `marks`.
+     * It sets the property `marks`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setMarks(String marks) throws DOMException;
 
-    /** La propiedad `max-height`. */
+    /** The property `max-height`. */
     String getMaxHeight();
 
     /**
-     * Fija la propiedad `max-height`.
+     * It sets the property `max-height`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setMaxHeight(String maxHeight) throws DOMException;
 
-    /** La propiedad `max-width`. */
+    /** The property `max-width`. */
     String getMaxWidth();
 
     /**
-     * Fija la propiedad `max-width`.
+     * It sets the property `max-width`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setMaxWidth(String maxWidth) throws DOMException;
 
-    /** La propiedad `min-height`. */
+    /** The property `min-height`. */
     String getMinHeight();
 
     /**
-     * Fija la propiedad `min-height`.
+     * It sets the property `min-height`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setMinHeight(String minHeight) throws DOMException;
 
-    /** La propiedad `min-width`. */
+    /** The property `min-width`. */
     String getMinWidth();
 
     /**
-     * Fija la propiedad `min-width`.
+     * It sets the property `min-width`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setMinWidth(String minWidth) throws DOMException;
 
-    /** La propiedad `orphans`. */
+    /** The property `orphans`. */
     String getOrphans();
 
     /**
-     * Fija la propiedad `orphans`.
+     * It sets the property `orphans`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setOrphans(String orphans) throws DOMException;
 
-    /** La propiedad `outline`. */
+    /** The property `outline`. */
     String getOutline();
 
     /**
-     * Fija la propiedad `outline`.
+     * It sets the property `outline`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setOutline(String outline) throws DOMException;
 
-    /** La propiedad `outline-color`. */
+    /** The property `outline-color`. */
     String getOutlineColor();
 
     /**
-     * Fija la propiedad `outline-color`.
+     * It sets the property `outline-color`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setOutlineColor(String outlineColor) throws DOMException;
 
-    /** La propiedad `outline-style`. */
+    /** The property `outline-style`. */
     String getOutlineStyle();
 
     /**
-     * Fija la propiedad `outline-style`.
+     * It sets the property `outline-style`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setOutlineStyle(String outlineStyle) throws DOMException;
 
-    /** La propiedad `outline-width`. */
+    /** The property `outline-width`. */
     String getOutlineWidth();
 
     /**
-     * Fija la propiedad `outline-width`.
+     * It sets the property `outline-width`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setOutlineWidth(String outlineWidth) throws DOMException;
 
-    /** La propiedad `overflow`. */
+    /** The property `overflow`. */
     String getOverflow();
 
     /**
-     * Fija la propiedad `overflow`.
+     * It sets the property `overflow`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setOverflow(String overflow) throws DOMException;
 
-    /** La propiedad `padding`. */
+    /** The property `padding`. */
     String getPadding();
 
     /**
-     * Fija la propiedad `padding`.
+     * It sets the property `padding`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setPadding(String padding) throws DOMException;
 
-    /** La propiedad `padding-top`. */
+    /** The property `padding-top`. */
     String getPaddingTop();
 
     /**
-     * Fija la propiedad `padding-top`.
+     * It sets the property `padding-top`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setPaddingTop(String paddingTop) throws DOMException;
 
-    /** La propiedad `padding-right`. */
+    /** The property `padding-right`. */
     String getPaddingRight();
 
     /**
-     * Fija la propiedad `padding-right`.
+     * It sets the property `padding-right`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setPaddingRight(String paddingRight) throws DOMException;
 
-    /** La propiedad `padding-bottom`. */
+    /** The property `padding-bottom`. */
     String getPaddingBottom();
 
     /**
-     * Fija la propiedad `padding-bottom`.
+     * It sets the property `padding-bottom`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setPaddingBottom(String paddingBottom) throws DOMException;
 
-    /** La propiedad `padding-left`. */
+    /** The property `padding-left`. */
     String getPaddingLeft();
 
     /**
-     * Fija la propiedad `padding-left`.
+     * It sets the property `padding-left`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setPaddingLeft(String paddingLeft) throws DOMException;
 
-    /** La propiedad `page`. */
+    /** The property `page`. */
     String getPage();
 
     /**
-     * Fija la propiedad `page`.
+     * It sets the property `page`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setPage(String page) throws DOMException;
 
-    /** La propiedad `page-break-after`. */
+    /** The property `page-break-after`. */
     String getPageBreakAfter();
 
     /**
-     * Fija la propiedad `page-break-after`.
+     * It sets the property `page-break-after`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setPageBreakAfter(String pageBreakAfter) throws DOMException;
 
-    /** La propiedad `page-break-before`. */
+    /** The property `page-break-before`. */
     String getPageBreakBefore();
 
     /**
-     * Fija la propiedad `page-break-before`.
+     * It sets the property `page-break-before`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setPageBreakBefore(String pageBreakBefore) throws DOMException;
 
-    /** La propiedad `page-break-inside`. */
+    /** The property `page-break-inside`. */
     String getPageBreakInside();
 
     /**
-     * Fija la propiedad `page-break-inside`.
+     * It sets the property `page-break-inside`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setPageBreakInside(String pageBreakInside) throws DOMException;
 
-    /** La propiedad `pause`. */
+    /** The property `pause`. */
     String getPause();
 
     /**
-     * Fija la propiedad `pause`.
+     * It sets the property `pause`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setPause(String pause) throws DOMException;
 
-    /** La propiedad `pause-after`. */
+    /** The property `pause-after`. */
     String getPauseAfter();
 
     /**
-     * Fija la propiedad `pause-after`.
+     * It sets the property `pause-after`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setPauseAfter(String pauseAfter) throws DOMException;
 
-    /** La propiedad `pause-before`. */
+    /** The property `pause-before`. */
     String getPauseBefore();
 
     /**
-     * Fija la propiedad `pause-before`.
+     * It sets the property `pause-before`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setPauseBefore(String pauseBefore) throws DOMException;
 
-    /** La propiedad `pitch`. */
+    /** The property `pitch`. */
     String getPitch();
 
     /**
-     * Fija la propiedad `pitch`.
+     * It sets the property `pitch`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setPitch(String pitch) throws DOMException;
 
-    /** La propiedad `pitch-range`. */
+    /** The property `pitch-range`. */
     String getPitchRange();
 
     /**
-     * Fija la propiedad `pitch-range`.
+     * It sets the property `pitch-range`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setPitchRange(String pitchRange) throws DOMException;
 
-    /** La propiedad `play-during`. */
+    /** The property `play-during`. */
     String getPlayDuring();
 
     /**
-     * Fija la propiedad `play-during`.
+     * It sets the property `play-during`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setPlayDuring(String playDuring) throws DOMException;
 
-    /** La propiedad `position`. */
+    /** The property `position`. */
     String getPosition();
 
     /**
-     * Fija la propiedad `position`.
+     * It sets the property `position`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setPosition(String position) throws DOMException;
 
-    /** La propiedad `quotes`. */
+    /** The property `quotes`. */
     String getQuotes();
 
     /**
-     * Fija la propiedad `quotes`.
+     * It sets the property `quotes`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setQuotes(String quotes) throws DOMException;
 
-    /** La propiedad `richness`. */
+    /** The property `richness`. */
     String getRichness();
 
     /**
-     * Fija la propiedad `richness`.
+     * It sets the property `richness`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setRichness(String richness) throws DOMException;
 
-    /** La propiedad `right`. */
+    /** The property `right`. */
     String getRight();
 
     /**
-     * Fija la propiedad `right`.
+     * It sets the property `right`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setRight(String right) throws DOMException;
 
-    /** La propiedad `size`. */
+    /** The property `size`. */
     String getSize();
 
     /**
-     * Fija la propiedad `size`.
+     * It sets the property `size`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setSize(String size) throws DOMException;
 
-    /** La propiedad `speak`. */
+    /** The property `speak`. */
     String getSpeak();
 
     /**
-     * Fija la propiedad `speak`.
+     * It sets the property `speak`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setSpeak(String speak) throws DOMException;
 
-    /** La propiedad `speak-header`. */
+    /** The property `speak-header`. */
     String getSpeakHeader();
 
     /**
-     * Fija la propiedad `speak-header`.
+     * It sets the property `speak-header`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setSpeakHeader(String speakHeader) throws DOMException;
 
-    /** La propiedad `speak-numeral`. */
+    /** The property `speak-numeral`. */
     String getSpeakNumeral();
 
     /**
-     * Fija la propiedad `speak-numeral`.
+     * It sets the property `speak-numeral`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setSpeakNumeral(String speakNumeral) throws DOMException;
 
-    /** La propiedad `speak-punctuation`. */
+    /** The property `speak-punctuation`. */
     String getSpeakPunctuation();
 
     /**
-     * Fija la propiedad `speak-punctuation`.
+     * It sets the property `speak-punctuation`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setSpeakPunctuation(String speakPunctuation) throws DOMException;
 
-    /** La propiedad `speech-rate`. */
+    /** The property `speech-rate`. */
     String getSpeechRate();
 
     /**
-     * Fija la propiedad `speech-rate`.
+     * It sets the property `speech-rate`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setSpeechRate(String speechRate) throws DOMException;
 
-    /** La propiedad `stress`. */
+    /** The property `stress`. */
     String getStress();
 
     /**
-     * Fija la propiedad `stress`.
+     * It sets the property `stress`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setStress(String stress) throws DOMException;
 
-    /** La propiedad `table-layout`. */
+    /** The property `table-layout`. */
     String getTableLayout();
 
     /**
-     * Fija la propiedad `table-layout`.
+     * It sets the property `table-layout`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setTableLayout(String tableLayout) throws DOMException;
 
-    /** La propiedad `text-align`. */
+    /** The property `text-align`. */
     String getTextAlign();
 
     /**
-     * Fija la propiedad `text-align`.
+     * It sets the property `text-align`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setTextAlign(String textAlign) throws DOMException;
 
-    /** La propiedad `text-decoration`. */
+    /** The property `text-decoration`. */
     String getTextDecoration();
 
     /**
-     * Fija la propiedad `text-decoration`.
+     * It sets the property `text-decoration`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setTextDecoration(String textDecoration) throws DOMException;
 
-    /** La propiedad `text-indent`. */
+    /** The property `text-indent`. */
     String getTextIndent();
 
     /**
-     * Fija la propiedad `text-indent`.
+     * It sets the property `text-indent`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setTextIndent(String textIndent) throws DOMException;
 
-    /** La propiedad `text-shadow`. */
+    /** The property `text-shadow`. */
     String getTextShadow();
 
     /**
-     * Fija la propiedad `text-shadow`.
+     * It sets the property `text-shadow`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setTextShadow(String textShadow) throws DOMException;
 
-    /** La propiedad `text-transform`. */
+    /** The property `text-transform`. */
     String getTextTransform();
 
     /**
-     * Fija la propiedad `text-transform`.
+     * It sets the property `text-transform`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setTextTransform(String textTransform) throws DOMException;
 
-    /** La propiedad `top`. */
+    /** The property `top`. */
     String getTop();
 
     /**
-     * Fija la propiedad `top`.
+     * It sets the property `top`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setTop(String top) throws DOMException;
 
-    /** La propiedad `unicode-bidi`. */
+    /** The property `unicode-bidi`. */
     String getUnicodeBidi();
 
     /**
-     * Fija la propiedad `unicode-bidi`.
+     * It sets the property `unicode-bidi`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setUnicodeBidi(String unicodeBidi) throws DOMException;
 
-    /** La propiedad `vertical-align`. */
+    /** The property `vertical-align`. */
     String getVerticalAlign();
 
     /**
-     * Fija la propiedad `vertical-align`.
+     * It sets the property `vertical-align`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setVerticalAlign(String verticalAlign) throws DOMException;
 
-    /** La propiedad `visibility`. */
+    /** The property `visibility`. */
     String getVisibility();
 
     /**
-     * Fija la propiedad `visibility`.
+     * It sets the property `visibility`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setVisibility(String visibility) throws DOMException;
 
-    /** La propiedad `voice-family`. */
+    /** The property `voice-family`. */
     String getVoiceFamily();
 
     /**
-     * Fija la propiedad `voice-family`.
+     * It sets the property `voice-family`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setVoiceFamily(String voiceFamily) throws DOMException;
 
-    /** La propiedad `volume`. */
+    /** The property `volume`. */
     String getVolume();
 
     /**
-     * Fija la propiedad `volume`.
+     * It sets the property `volume`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setVolume(String volume) throws DOMException;
 
-    /** La propiedad `white-space`. */
+    /** The property `white-space`. */
     String getWhiteSpace();
 
     /**
-     * Fija la propiedad `white-space`.
+     * It sets the property `white-space`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setWhiteSpace(String whiteSpace) throws DOMException;
 
-    /** La propiedad `widows`. */
+    /** The property `widows`. */
     String getWidows();
 
     /**
-     * Fija la propiedad `widows`.
+     * It sets the property `widows`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setWidows(String widows) throws DOMException;
 
-    /** La propiedad `width`. */
+    /** The property `width`. */
     String getWidth();
 
     /**
-     * Fija la propiedad `width`.
+     * It sets the property `width`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setWidth(String width) throws DOMException;
 
-    /** La propiedad `word-spacing`. */
+    /** The property `word-spacing`. */
     String getWordSpacing();
 
     /**
-     * Fija la propiedad `word-spacing`.
+     * It sets the property `word-spacing`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setWordSpacing(String wordSpacing) throws DOMException;
 
-    /** La propiedad `z-index`. */
+    /** The property `z-index`. */
     String getZIndex();
 
     /**
-     * Fija la propiedad `z-index`.
+     * It sets the property `z-index`.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     void setZIndex(String zIndex) throws DOMException;
 }

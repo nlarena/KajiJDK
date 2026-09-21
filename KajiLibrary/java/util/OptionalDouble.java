@@ -91,8 +91,8 @@ public final class OptionalDouble {
         if (!this.isPresent) {
             return DoubleStream.of(new double[0]);
         }
-        double[] uno = new double[1];
-        uno[0] = this.value;
-        return DoubleStream.of(uno);
+        double[] single = new double[1];
+        single[0] = this.value;
+        return DoubleStream.of(single);
     }
 }

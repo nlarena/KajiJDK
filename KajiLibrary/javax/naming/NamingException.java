@@ -1,71 +1,71 @@
 package javax.naming;
 
 /**
- * La raiz de las veinticinco excepciones de JNDI.
+ * The root of JNDI's twenty-five exceptions.
  *
- * <h2>Por que hay veinticinco y no una</h2>
+ * <h2>Why there are twenty-five and not one</h2>
  *
- * <p>Una operacion de nombres --resolver `ldap://host/cn=juan`, atar un objeto, listar un
- * contexto-- puede fallar por razones que el que llama trata **distinto**: si el nombre no existe
- * se crea, si el servidor no contesta se reintenta, si las credenciales estan mal se le pregunta
- * al usuario, y si el nombre esta mal escrito no se reintenta nunca. Un solo tipo con un codigo
- * adentro obligaria a cada `catch` a mirar el codigo; una jerarquia deja que el `catch` elija el
- * escalon que le sirve. Por eso el paquete tiene una excepcion por causa y **cinco** ramas:
+ * <p>A naming operation --resolving `ldap://host/cn=john`, binding an object, listing a context--
+ * can fail for reasons the caller treats **differently**: if the name does not exist it is created,
+ * if the server does not answer it is retried, if the credentials are wrong the user is asked, and
+ * if the name is misspelled it is never retried. A single type with a code inside would force every
+ * `catch` to look at the code; a hierarchy lets the `catch` pick the level that suits it. That is
+ * why the package has one exception per cause and **five** branches:
  *
  * <ul>
- *   <li>Las hojas directas de esta clase: `NameNotFoundException`, `NameAlreadyBoundException`,
- *       `CommunicationException`, `ConfigurationException`, ... Cada una es una causa distinta y
- *       no agrega ni un miembro; lo unico que aporta es **su tipo**.
- *   <li>`NamingSecurityException`, abstracta, agrupa las tres de seguridad, para que un `catch`
- *       pueda decir "cualquier problema de autenticacion o permisos" de una.
- *   <li>`LimitExceededException` agrupa las dos de limite (tamano y tiempo).
- *   <li>`LinkException` agrupa las de enlaces y **si** agrega estado: el enlace tiene su propio
- *       nombre resuelto y su propio nombre restante, aparte de los del contexto.
- *   <li>`CannotProceedException` y `ReferralException` son las dos que el proveedor usa para
- *       decir "segui vos en otro lado", y las dos llevan el estado necesario para seguir.
+ *   <li>The direct leaves of this class: `NameNotFoundException`, `NameAlreadyBoundException`,
+ *       `CommunicationException`, `ConfigurationException`, ... Each one is a different cause and
+ *       adds not a single member; all it contributes is **its type**.
+ *   <li>`NamingSecurityException`, abstract, groups the three security ones, so that a `catch` can
+ *       say "any authentication or permission problem" at once.
+ *   <li>`LimitExceededException` groups the two limit ones (size and time).
+ *   <li>`LinkException` groups the link ones and **does** add state: the link has its own resolved
+ *       name and its own remaining name, apart from the context's.
+ *   <li>`CannotProceedException` and `ReferralException` are the two the provider uses to say
+ *       "you carry on somewhere else", and both carry the state needed to carry on.
  * </ul>
  *
- * <h2>Lo que esta clase agrega a `Exception`</h2>
+ * <h2>What this class adds to `Exception`</h2>
  *
- * <p>Una excepcion de nombres no dice solamente "fallo": dice **hasta donde** llego. Resolver
- * `a/b/c/d` puede resolver `a/b` y morir en `c`; eso son dos nombres --el resuelto y el que
- * queda-- mas el objeto al que se llego. Esos tres campos son `protected` a proposito: los
- * proveedores los completan de a pedazos mientras la excepcion sube por las capas, y por eso
- * existen `appendRemainingComponent` y `appendRemainingName`, que van **acumulando** el nombre
- * restante en el camino de vuelta.
+ * <p>A naming exception does not just say "it failed": it says **how far** it got. Resolving
+ * `a/b/c/d` may resolve `a/b` and die at `c`; that is two names --the resolved one and the one
+ * left-- plus the object reached. Those three fields are `protected` on purpose: providers fill
+ * them in piece by piece while the exception climbs through the layers, and that is why
+ * `appendRemainingComponent` and `appendRemainingName` exist, which **accumulate** the remaining
+ * name on the way back.
  *
- * <p>La otra particularidad es `rootException`: JNDI trajo el encadenamiento de causas en 1.3,
- * antes de que `Throwable` lo tuviera. Cuando el JDK sumo `getCause`/`initCause`, esta clase
- * quedo con **los dos** nombres para lo mismo, cableados uno al otro: `getCause` devuelve
- * `getRootCause`, e `initCause` tambien setea la causa raiz. Se conserva igual porque la
- * asimetria es observable: `setRootCause` no toca la causa de `Throwable`.
+ * <p>The other peculiarity is `rootException`: JNDI brought cause chaining in 1.3, before
+ * `Throwable` had it. When the JDK added `getCause`/`initCause`, this class was left with **both**
+ * names for the same thing, wired to each other: `getCause` returns `getRootCause`, and `initCause`
+ * also sets the root cause. It is kept that way because the asymmetry is observable: `setRootCause`
+ * does not touch `Throwable`'s cause.
  *
- * <p>Sobre la serializacion: la clase es `Serializable` por herencia, y su forma serial es la
- * default (los cuatro campos). Este arbol no tiene `ObjectOutputStream`, asi que la declaracion
- * es un contrato sin quien lo ejercite; se deja el `serialVersionUID` del JDK real para que el
- * dia que exista un flujo la forma coincida y no haya que cambiar nada.
+ * <p>On serialization: the class is `Serializable` by inheritance, and its serial form is the
+ * default one (the four fields), with the real JDK's `serialVersionUID`. An earlier note said this
+ * tree had no `ObjectOutputStream`; it has one now, and a `NamingException` written and read back
+ * on this VM keeps its explanation.
  */
 public class NamingException extends Exception {
 
     private static final long serialVersionUID = -1299181962103167177L;
 
-    /** Hasta donde se pudo resolver. `null` si no se sabe o no se llego a ningun lado. */
+    /** How far it could be resolved. `null` if unknown or if it got nowhere. */
     protected Name resolvedName;
 
-    /** El objeto al que se llego resolviendo `resolvedName`. */
+    /** The object reached by resolving `resolvedName`. */
     protected Object resolvedObj;
 
-    /** Lo que faltaba resolver cuando se fallo. */
+    /** What was left to resolve when it failed. */
     protected Name remainingName;
 
-    /** La causa de fondo, de cuando JNDI tenia que encadenar causas a mano. */
+    /** The underlying cause, from when JNDI had to chain causes by hand. */
     protected Throwable rootException;
 
     public NamingException(String explanation) {
         super(explanation);
-        // Dos sentencias y no `resolvedName = remainingName = null`: la asignacion
-        // encadenada sobre **campos** dispara el #460 de COMPILER_FINDINGS (falta el
-        // `dup_x1`, y el segundo `putfield` vacia la pila). Separadas es lo mismo.
+        // Two statements and not `resolvedName = remainingName = null`: chained assignment
+        // to **fields** triggers #460 in COMPILER_FINDINGS (the `dup_x1` is missing, and the
+        // second `putfield` empties the stack). Separate, it is the same.
         resolvedName = null;
         remainingName = null;
         resolvedObj = null;
@@ -74,9 +74,9 @@ public class NamingException extends Exception {
 
     public NamingException() {
         super();
-        // Dos sentencias y no `resolvedName = remainingName = null`: la asignacion
-        // encadenada sobre **campos** dispara el #460 de COMPILER_FINDINGS (falta el
-        // `dup_x1`, y el segundo `putfield` vacia la pila). Separadas es lo mismo.
+        // Two statements and not `resolvedName = remainingName = null`: chained assignment
+        // to **fields** triggers #460 in COMPILER_FINDINGS (the `dup_x1` is missing, and the
+        // second `putfield` empties the stack). Separate, it is the same.
         resolvedName = null;
         remainingName = null;
         resolvedObj = null;
@@ -95,14 +95,16 @@ public class NamingException extends Exception {
         return resolvedObj;
     }
 
-    /** Es `getMessage()` con otro nombre; JNDI lo llama "explicacion" desde antes. */
+    /**
+     * It is `getMessage()` under another name; JNDI has called it the "explanation" since before.
+     */
     public String getExplanation() {
         return getMessage();
     }
 
-    // Los dos setters de nombre **clonan**. Un `Name` es mutable, y la excepcion viaja hacia
-    // arriba mientras el proveedor sigue usando su copia: sin clonar, el nombre que el que
-    // atrapa lee podria haber cambiado despues de lanzada.
+    // Both name setters **clone**. A `Name` is mutable, and the exception travels upwards while
+    // the provider keeps using its copy: without cloning, the name the catcher reads could have
+    // changed after it was thrown.
 
     public void setResolvedName(Name name) {
         resolvedName = (name != null) ? (Name) name.clone() : null;
@@ -117,12 +119,12 @@ public class NamingException extends Exception {
     }
 
     /**
-     * Suma un componente al **frente** conceptual del nombre restante.
+     * Adds a component to the conceptual **front** of the remaining name.
      *
-     * <p>Esto es lo que hace la capa de arriba mientras la excepcion sube: cada contexto que la
-     * ve le agrega lo que **el** no llego a resolver, y al final el nombre restante es completo
-     * visto desde el contexto inicial. Si todavia no hay nombre restante arranca uno compuesto,
-     * que es el tipo neutro para nombres que atraviesan espacios de nombres distintos.
+     * <p>This is what the upper layer does while the exception climbs: each context that sees it
+     * adds what **it** did not get to resolve, and in the end the remaining name is complete as
+     * seen from the initial context. If there is no remaining name yet it starts a composite one,
+     * which is the neutral type for names that cross different namespaces.
      */
     public void appendRemainingComponent(String name) {
         if (name != null) {
@@ -132,8 +134,8 @@ public class NamingException extends Exception {
                 }
                 remainingName.add(name);
             } catch (NamingException e) {
-                // `CompositeName.add` solo falla con nombres invalidos, y aca el componente ya
-                // viene partido: si igual pasa, es un error de programacion del proveedor.
+                // `CompositeName.add` only fails with invalid names, and here the component comes
+                // already split: if it happens anyway, it is a programming error of the provider.
                 throw new IllegalArgumentException(e.toString());
             }
         }
@@ -158,7 +160,7 @@ public class NamingException extends Exception {
         return rootException;
     }
 
-    /** El `if` evita el ciclo trivial: una excepcion causada por si misma cuelga cualquier impresor. */
+    /** The `if` avoids the trivial cycle: an exception caused by itself hangs any printer. */
     public void setRootCause(Throwable e) {
         if (e != this) {
             rootException = e;
@@ -170,7 +172,7 @@ public class NamingException extends Exception {
         return getRootCause();
     }
 
-    /** Setea las dos: la de `Throwable` --que solo admite una vez-- y la de JNDI. */
+    /** Sets both: `Throwable`'s --which only allows it once-- and JNDI's. */
     @Override
     public Throwable initCause(Throwable cause) {
         super.initCause(cause);
@@ -191,10 +193,10 @@ public class NamingException extends Exception {
     }
 
     /**
-     * Igual que `toString()`, mas el objeto resuelto si se pide detalle y hay uno.
+     * Same as `toString()`, plus the resolved object if detail is asked for and there is one.
      *
-     * <p>Va aparte porque el objeto resuelto puede ser cualquier cosa --una conexion, un pool--
-     * y su `toString` puede ser enorme o filtrar datos; el default no lo imprime.
+     * <p>It is separate because the resolved object can be anything --a connection, a pool-- and
+     * its `toString` may be huge or leak data; the default does not print it.
      */
     public String toString(boolean detail) {
         if (!detail || resolvedObj == null) {

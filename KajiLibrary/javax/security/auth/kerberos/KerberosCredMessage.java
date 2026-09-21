@@ -5,33 +5,33 @@ import java.util.Objects;
 import javax.security.auth.Destroyable;
 
 /**
- * KajiLibrary's javax.security.auth.kerberos.KerberosCredMessage -- un mensaje KRB_CRED.
+ * KajiLibrary's javax.security.auth.kerberos.KerberosCredMessage -- a KRB_CRED message.
  *
- * <p>Es como un cliente le pasa sus credenciales a un servicio para que actue en su nombre: el
- * mensaje va cifrado y esta clase guarda los bytes tal cual, con quien lo manda y quien lo recibe.
- * No lo descifra.
+ * <p>It is how a client passes its credentials to a service so that it acts on its behalf: the
+ * message goes encrypted and this class keeps the bytes as they are, with who sends it and who
+ * receives it. It does not decrypt it.
  *
- * <p>Se destruye como una clave, porque lleva una: despues de {@link #destroy} todo lanza
+ * <p>It is destroyed like a key, because it carries one: after {@link #destroy} everything throws
  * {@link IllegalStateException}.
  */
 public final class KerberosCredMessage implements Destroyable {
 
-    /** Quien lo manda, o null si se destruyo. */
+    /** Who sends it, or null if it was destroyed. */
     private KerberosPrincipal sender;
 
-    /** Quien lo recibe, o null si se destruyo. */
+    /** Who receives it, or null if it was destroyed. */
     private KerberosPrincipal recipient;
 
-    /** Los bytes, o null si se destruyo. */
+    /** The bytes, or null if it was destroyed. */
     private byte[] message;
 
-    /** Si ya se borro. */
+    /** Whether it was already erased. */
     private boolean destroyed = false;
 
     /**
-     * Con esos tres. El arreglo se copia.
+     * With those three. The array is copied.
      *
-     * @throws NullPointerException si cualquiera es null
+     * @throws NullPointerException if any is null
      */
     public KerberosCredMessage(KerberosPrincipal sender, KerberosPrincipal recipient,
                                byte[] message) {
@@ -41,9 +41,9 @@ public final class KerberosCredMessage implements Destroyable {
     }
 
     /**
-     * Los bytes. Una copia.
+     * The bytes. A copy.
      *
-     * @throws IllegalStateException si esta destruido
+     * @throws IllegalStateException if it is destroyed
      */
     public byte[] getEncoded() {
         checkAlive();
@@ -51,9 +51,9 @@ public final class KerberosCredMessage implements Destroyable {
     }
 
     /**
-     * Quien lo manda.
+     * Who sends it.
      *
-     * @throws IllegalStateException si esta destruido
+     * @throws IllegalStateException if it is destroyed
      */
     public KerberosPrincipal getSender() {
         checkAlive();
@@ -61,16 +61,16 @@ public final class KerberosCredMessage implements Destroyable {
     }
 
     /**
-     * Quien lo recibe.
+     * Who receives it.
      *
-     * @throws IllegalStateException si esta destruido
+     * @throws IllegalStateException if it is destroyed
      */
     public KerberosPrincipal getRecipient() {
         checkAlive();
         return this.recipient;
     }
 
-    /** Borra los bytes. Destruir dos veces no hace nada. */
+    /** Erases the bytes. Destroying twice does nothing. */
     @Override
     public void destroy() {
         if (!this.destroyed) {
@@ -82,13 +82,13 @@ public final class KerberosCredMessage implements Destroyable {
         }
     }
 
-    /** Si ya se borro. */
+    /** Whether it was already erased. */
     @Override
     public boolean isDestroyed() {
         return this.destroyed;
     }
 
-    /** De quien a quien; nunca los bytes. */
+    /** From whom to whom; never the bytes. */
     @Override
     public String toString() {
         if (this.destroyed) {
@@ -97,7 +97,7 @@ public final class KerberosCredMessage implements Destroyable {
         return "KRB_CRED from " + this.sender + " to " + this.recipient;
     }
 
-    /** Uno destruido vale -1. */
+    /** A destroyed one is -1. */
     @Override
     public int hashCode() {
         if (this.destroyed) {
@@ -106,7 +106,7 @@ public final class KerberosCredMessage implements Destroyable {
         return Objects.hash(this.sender, this.recipient, Arrays.hashCode(this.message));
     }
 
-    /** Iguales si coinciden los tres; uno destruido solo es igual a si mismo. */
+    /** Equal if the three match; a destroyed one is only equal to itself. */
     @Override
     public boolean equals(Object other) {
         if (other == this) {
@@ -123,7 +123,7 @@ public final class KerberosCredMessage implements Destroyable {
             && Arrays.equals(this.message, that.message);
     }
 
-    /** Lanza si ya se destruyo. */
+    /** Throws if it was already destroyed. */
     private void checkAlive() {
         if (this.destroyed) {
             throw new IllegalStateException("This object is no longer valid");

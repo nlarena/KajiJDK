@@ -1,37 +1,42 @@
 package javax.sql;
 
 /**
- * KajiLibrary's javax.sql.DataSource -- de donde salen las conexiones.
+ * KajiLibrary's javax.sql.DataSource -- where the connections come from.
  *
- * <p>Es **la** manera de obtener una conexion en cualquier aplicacion que no sea un ejemplo: en vez
- * de que el codigo sepa la URL, el usuario y la clave, sabe pedirle una conexion a un objeto que
- * alguien mas configuro. Eso es lo que permite que la misma aplicacion hable con una base distinta
- * sin recompilarse, y que las conexiones vengan de un pool sin que quien las usa se entere.
+ * <p>It is **the** way of getting a connection in any application that is not an example: instead
+ * of the code knowing the URL, the user and the password, it knows how to ask for a connection from
+ * an object somebody else configured. That is what allows the same application to talk to a
+ * different database without being recompiled, and the connections to come from a pool without
+ * whoever uses them finding out.
  *
- * <p>La nota que estaba aca decia que la interfaz quedaba **vacia** porque `java.sql` no existia, y
- * que "el dia que exista, los metodos vienen con el". Existe -- un nucleo acotado, ver
- * {@link java.sql.Connection} -- y los metodos vinieron.
+ * <p>The note that was here said the interface stayed **empty** because `java.sql` did not exist,
+ * and that "the day it exists, the methods come with it". It exists -- a bounded core, see {@link
+ * java.sql.Connection} -- and the methods came.
  *
- * <p>Que se declare sin que haya ningun driver no es una promesa vacia: una interfaz es un contrato,
- * y el contrato es exacto. Lo que no habria que hacer es dar una implementacion que finja conectarse.
+ * <p>Declaring it without there being any driver is not an empty promise: an interface is a
+ * contract, and the contract is exact. What should not be done is to give an implementation that
+ * pretends to connect.
  */
 public interface DataSource extends CommonDataSource, java.sql.Wrapper {
 
-    /** Una conexion, con las credenciales que la fuente tenga configuradas. */
+    /** A connection, with the credentials the source has configured. */
     java.sql.Connection getConnection() throws java.sql.SQLException;
 
-    /** Una conexion con esas credenciales. */
+    /** A connection with those credentials. */
     java.sql.Connection getConnection(String username, String password)
             throws java.sql.SQLException;
 
     /**
-     * Un constructor de conexion, para pedir una con mas datos que usuario y clave.
+     * A connection builder, to ask for one with more data than user and password.
      *
-     * <p>Se niega por defecto en vez de devolver un constructor que despues no sirva: una fuente que
-     * no sabe de particiones no puede honrar un `shardingKey`, y descubrirlo al final es peor que al
-     * principio.
+     * <p>It refuses by default instead of returning a builder that turns out useless later: a
+     * source that knows nothing of sharding cannot honour a `shardingKey`, and finding out at the
+     * end is worse than at the beginning.
+     *
+     * <p>The JDK's default throws {@code SQLFeatureNotSupportedException}; this one throws
+     * {@code UnsupportedOperationException}, which is unchecked and is not a {@code SQLException}.
      */
     default java.sql.ConnectionBuilder createConnectionBuilder() throws java.sql.SQLException {
-        throw new UnsupportedOperationException("createConnectionBuilder no esta implementado");
+        throw new UnsupportedOperationException("createConnectionBuilder not implemented");
     }
 }

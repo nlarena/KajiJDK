@@ -1,29 +1,29 @@
 package java.sql;
 
 /**
- * KajiLibrary's java.sql.Savepoint -- una marca dentro de una transaccion.
+ * KajiLibrary's java.sql.Savepoint -- a mark inside a transaction.
  *
- * <p>Sirve para deshacer **una parte**: se marca, se sigue, y si algo sale mal se vuelve a la marca
- * sin perder lo anterior. Sin esto la unica granularidad seria la transaccion entera, lo cual obliga
- * a rehacer trabajo que estaba bien.
+ * <p>It serves to undo **a part**: mark, carry on, and if something goes wrong go back to the mark
+ * without losing what came before. Without it the only granularity would be the whole transaction,
+ * which forces redoing work that was fine.
  *
- * <p>Tiene dos accesores y **solo uno es valido** para cada punto: los sin nombre tienen numero, los
- * con nombre tienen nombre, y pedir el otro lanza. La alternativa habria sido dos interfaces, y se
- * eligio una con dos mitades.
+ * <p>It has two accessors and **only one is valid** for each savepoint: unnamed ones have a number,
+ * named ones have a name, and asking for the other throws. The alternative would have been two
+ * interfaces, and one with two halves was chosen.
  */
 public interface Savepoint {
 
     /**
-     * El numero de este punto.
+     * The number of this savepoint.
      *
-     * @throws SQLException si este punto tiene nombre
+     * @throws SQLException if this savepoint has a name
      */
     int getSavepointId() throws SQLException;
 
     /**
-     * El nombre de este punto.
+     * The name of this savepoint.
      *
-     * @throws SQLException si este punto no tiene nombre
+     * @throws SQLException if this savepoint has no name
      */
     String getSavepointName() throws SQLException;
 }

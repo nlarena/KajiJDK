@@ -1,48 +1,48 @@
 package javax.management.relation;
 
 /**
- * Los codigos que dicen <strong>por que</strong> un rol no se pudo leer o escribir.
+ * The codes that say <b>why</b> a role could not be read or written.
  *
- * <h2>Por que codigos y no excepciones</h2>
+ * <h2>Why codes and not exceptions</h2>
  *
- * <p>Porque una operacion sobre varios roles puede fallar en algunos y andar en otros. Con
- * excepciones habria que elegir: cortar en el primer problema —perdiendo los que si funcionaron— o
- * tragarselos. Los codigos permiten devolver las dos listas, que es lo que hace {@link RoleResult}.
+ * <p>Because an operation over several roles may fail on some and work on others. With exceptions
+ * you would have to choose: stop at the first problem --losing the ones that did work-- or swallow
+ * them. The codes allow returning both lists, which is what {@link RoleResult} does.
  *
- * <p>Cada rol que fallo llega en un {@link RoleUnresolved} con uno de estos numeros adentro.
+ * <p>Every role that failed arrives in a {@link RoleUnresolved} with one of these numbers inside.
  */
 public class RoleStatus {
 
-    /** La relacion no tiene un rol con ese nombre. */
+    /** The relation has no role with that name. */
     public static final int NO_ROLE_WITH_NAME = 1;
 
-    /** El rol existe pero su descripcion no lo declara legible. */
+    /** The role exists but its description does not declare it readable. */
     public static final int ROLE_NOT_READABLE = 2;
 
-    /** El rol existe pero su descripcion no lo declara escribible. */
+    /** The role exists but its description does not declare it writable. */
     public static final int ROLE_NOT_WRITABLE = 3;
 
-    /** Menos MBeans que el minimo que exige {@link RoleInfo}. */
+    /** Fewer MBeans than the minimum {@link RoleInfo} requires. */
     public static final int LESS_THAN_MIN_ROLE_DEGREE = 4;
 
-    /** Mas MBeans que el maximo. */
+    /** More MBeans than the maximum. */
     public static final int MORE_THAN_MAX_ROLE_DEGREE = 5;
 
-    /** Un MBean referenciado no es de la clase que el rol exige. */
+    /** A referenced MBean is not of the class the role requires. */
     public static final int REF_MBEAN_OF_INCORRECT_CLASS = 6;
 
     /**
-     * Un MBean referenciado no esta registrado en el servidor.
+     * A referenced MBean is not registered in the server.
      *
-     * <p>Distinto de {@link #REF_MBEAN_OF_INCORRECT_CLASS}: alli el objeto existe y es del tipo
-     * equivocado; aca no existe. Confundirlos manda a revisar el lugar equivocado.
+     * <p>Different from {@link #REF_MBEAN_OF_INCORRECT_CLASS}: there the object exists and is of
+     * the wrong type; here it does not exist. Confusing them sends you to look in the wrong place.
      */
     public static final int REF_MBEAN_NOT_REGISTERED = 7;
 
     public RoleStatus() {
     }
 
-    /** Si {@code status} es uno de los siete codigos definidos. */
+    /** Whether {@code status} is one of the seven defined codes. */
     public static boolean isRoleStatus(int status) {
         return status >= NO_ROLE_WITH_NAME && status <= REF_MBEAN_NOT_REGISTERED;
     }

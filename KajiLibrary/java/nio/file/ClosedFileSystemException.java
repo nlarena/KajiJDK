@@ -1,15 +1,15 @@
 package java.nio.file;
 
-// Se uso un `FileSystem` que ya estaba cerrado.
+// A `FileSystem` that was already closed was used.
 //
-// El de KajiJDK --`FileSystems.getDefault()`-- no se puede cerrar: `close()` no hace nada y
-// `isOpen()` es siempre `true`, igual que el por omision del JDK. Asi que esta excepcion nunca sale
-// de aca; existe para el codigo que la atrapa y para los proveedores que si se cierran.
+// KajiJDK's --`FileSystems.getDefault()`-- cannot be closed: `close()` does nothing and `isOpen()`
+// is always `true`, just like the JDK's default one. So this exception never comes out of here; it
+// exists for the code that catches it and for the providers that do close.
 public class ClosedFileSystemException extends IllegalStateException {
 
     private static final long serialVersionUID = -8158336077256193488L;
 
-    /** Sin mensaje. */
+    /** With no message. */
     public ClosedFileSystemException() {
     }
 }

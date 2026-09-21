@@ -3,38 +3,39 @@ package org.xml.sax.ext;
 import org.xml.sax.Attributes;
 
 /**
- * KajiLibrary's org.xml.sax.ext.Attributes2 -- `Attributes` mas las dos preguntas que la lista
- * plana no puede contestar: ¿este atributo estaba en la DTD? ¿estaba escrito en el elemento, o lo
- * puso el parser?
+ * KajiLibrary's org.xml.sax.ext.Attributes2 -- `Attributes` plus the two questions the flat list
+ * cannot answer: was this attribute in the DTD? was it written on the element, or did the parser
+ * put it there?
  *
- * <p>La segunda importa mas de lo que parece. Un atributo con valor por omision en la DTD aparece
- * en `startElement` exactamente igual que uno escrito a mano, y para leer el documento eso esta
- * bien --el valor efectivo es el mismo--. Pero un serializador que reescriba el documento y
- * emita los dos termina metiendo en el archivo cosas que el autor no escribio, y ademas lo rompe
- * si despues se lo lee sin la DTD. `isSpecified` es la unica forma de distinguirlos.
+ * <p>The second matters more than it seems. An attribute with a default value in the DTD appears in
+ * `startElement` exactly the same as one written by hand, and for reading the document that is fine
+ * --the effective value is the same--. But a serialiser that rewrites the document and emits both
+ * ends up putting into the file things the author did not write, and also breaks it if it is later
+ * read without the DTD. `isSpecified` is the only way of telling them apart.
  *
- * <p>El manejador recibe esto sin pedirlo: el parser pasa un `Attributes` a `startElement` y el
- * codigo hace `instanceof Attributes2` para ver si tiene la informacion extra. No hay una feature
- * que lo prenda. La que sí manda es
- * `http://xml.org/sax/features/use-attributes2`, que un parser reporta como `true` (solo lectura)
- * cuando entrega objetos de este tipo.
+ * <p>The handler receives this without asking for it: the parser passes an `Attributes` to
+ * `startElement` and the code does `instanceof Attributes2` to see whether it has the extra
+ * information. There is no feature that switches it on. The one that does tell is
+ * `http://xml.org/sax/features/use-attributes2`, which a parser reports as `true` (read-only) when
+ * it hands over objects of this type.
  *
- * <p><strong>La asimetria con `Attributes` es del contrato y no un descuido:</strong> alla un
- * nombre que no existe devuelve `null`, aca tira excepcion. La razon es el tipo de retorno: con un
- * `boolean` no hay un tercer valor para decir "no hay tal atributo", y devolver `false` seria
- * mentir --seria afirmar que existe y no fue especificado--. Un indice fuera de rango da
- * `ArrayIndexOutOfBoundsException`; un nombre que no esta, `IllegalArgumentException`.
+ * <p><strong>The asymmetry with `Attributes` belongs to the contract and is not an
+ * oversight:</strong> there a name that does not exist returns `null`, here it throws. The reason
+ * is the return type: with a `boolean` there is no third value to say "there is no such attribute",
+ * and returning `false` would be lying --it would be asserting that it exists and was not
+ * specified--. An index out of range gives `ArrayIndexOutOfBoundsException`; a name that is not
+ * there, `IllegalArgumentException`.
  *
- * <p>Cuando no hay DTD, `isDeclared` es `false` para todo y `isSpecified` es `true` para todo, que
- * es la respuesta correcta y no un valor de relleno: sin DTD nada esta declarado y todo lo que hay
- * fue escrito.
+ * <p>When there is no DTD, `isDeclared` is `false` for everything and `isSpecified` is `true` for
+ * everything, which is the right answer and not a filler value: with no DTD nothing is declared and
+ * everything there is was written.
  */
 public interface Attributes2 extends Attributes {
 
     /**
-     * `true` si el atributo fue declarado en la DTD. Un parser no validante que se saltee el
-     * subconjunto externo va a decir `false` de atributos que sí estaban declarados alla: esta
-     * contestando por lo que leyo, no por lo que el documento tiene.
+     * `true` if the attribute was declared in the DTD. A non-validating parser that skips the
+     * external subset is going to say `false` of attributes that were declared over there: it is
+     * answering for what it read, not for what the document has.
      */
     boolean isDeclared(int index);
 
@@ -43,8 +44,8 @@ public interface Attributes2 extends Attributes {
     boolean isDeclared(String uri, String localName);
 
     /**
-     * `false` solo cuando el valor salio de un `#FIXED` o de un valor por omision de la DTD. Un
-     * atributo escrito en el elemento da `true` aunque coincida con el valor por omision.
+     * `false` only when the value came from a `#FIXED` or from a default value of the DTD. An
+     * attribute written on the element gives `true` even if it matches the default value.
      */
     boolean isSpecified(int index);
 

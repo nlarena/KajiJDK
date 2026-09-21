@@ -4,44 +4,45 @@ import java.util.EventObject;
 import javax.naming.NamingException;
 
 /**
- * KajiLibrary's javax.naming.event.NamingExceptionEvent -- la suscripcion se cayo.
+ * KajiLibrary's javax.naming.event.NamingExceptionEvent -- the subscription went down.
  *
- * <p>Lo que llega a {@link NamingListener#namingExceptionThrown}. Para cuando llega, el proveedor
- * <b>ya cancelo</b> la suscripcion del oyente: no es un aviso de que algo anduvo mal y sigue, es el
- * ultimo evento.
+ * <p>What reaches {@link NamingListener#namingExceptionThrown}. By the time it arrives, the
+ * listener <b>has already been deregistered</b>: it is not a notice that something went wrong and
+ * carries on, it is the last event.
  *
- * <p>{@link #dispatch} existe para que quien reparte eventos no tenga que saber que metodo llamar en
- * cada tipo: el evento se despacha a si mismo. Es el mismo patron que usa {@code java.awt.AWTEvent},
- * y es lo que permite tener una cola de eventos de tipos distintos sin un {@code instanceof} por
- * cada uno.
+ * <p>{@link #dispatch} exists so that whoever hands out events does not have to know which method
+ * to call for each type: the event dispatches itself, which is what allows a queue of events of
+ * different types without an {@code instanceof} for each one. (An earlier note compared this to
+ * {@code java.awt.AWTEvent}; that class has no such method -- AWT picks the listener method in
+ * {@code Component.processEvent}.)
  */
 public class NamingExceptionEvent extends EventObject {
 
     private static final long serialVersionUID = -4877678086134736336L;
 
-    /** Lo que fallo. */
+    /** What failed. */
     private final NamingException exception;
 
     /**
-     * @param source el contexto donde estaba la suscripcion
-     * @param exc lo que fallo
+     * @param source the context where the subscription was
+     * @param exc what failed
      */
     public NamingExceptionEvent(EventContext source, NamingException exc) {
         super(source);
         this.exception = exc;
     }
 
-    /** Lo que fallo. */
+    /** What failed. */
     public NamingException getException() {
         return this.exception;
     }
 
-    /** El contexto donde estaba la suscripcion. */
+    /** The context where the subscription was. */
     public EventContext getEventContext() {
         return (EventContext) getSource();
     }
 
-    /** Se despacha al oyente. Ver la nota de la clase. */
+    /** Dispatched to the listener. See the class note. */
     public void dispatch(NamingListener listener) {
         listener.namingExceptionThrown(this);
     }

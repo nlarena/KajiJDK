@@ -1,28 +1,29 @@
 package com.sun.security.auth;
 
 /**
- * El manejador de token de acceso que Windows le dio al proceso.
+ * The access token handle Windows gave the process.
  *
- * <h2>Por que es una credencial y no un principal</h2>
+ * <h2>Why it is a credential and not a principal</h2>
  *
- * <p>Un principal dice <em>quien sos</em>; una credencial es <em>con que lo probas</em>. Este numero
- * no identifica a nadie por si mismo: es una referencia opaca a una estructura del sistema
- * operativo, que es lo que el proceso presenta para actuar en nombre del usuario.
+ * <p>A principal says <em>who you are</em>; a credential is <em>what you prove it with</em>.
+ * This number does not identify anybody by itself: it is an opaque reference to a structure of
+ * the operating system, which is what the process presents in order to act in the user's name.
  *
- * <p>De ahi que no implemente {@link java.security.Principal} ni sea serializable: un manejador solo
- * significa algo <strong>en la maquina y el proceso donde se creo</strong>. Mandarlo a otro lado
- * daria un numero que alla apunta a otra cosa, o a nada.
+ * <p>Hence it implements neither {@link java.security.Principal} nor is it serializable: a
+ * handle only means something <strong>on the machine and in the process where it was
+ * created</strong>. Sending it somewhere else would give a number that over there points at
+ * something else, or at nothing.
  */
 public class NTNumericCredential {
 
     private final long impersonationToken;
 
-    /** Con el manejador que dio el sistema. */
+    /** With the handle the system gave. */
     public NTNumericCredential(long token) {
         this.impersonationToken = token;
     }
 
-    /** El manejador. */
+    /** The handle. */
     public long getToken() {
         return this.impersonationToken;
     }
@@ -31,7 +32,7 @@ public class NTNumericCredential {
         return "NTNumericCredential: " + String.valueOf(this.impersonationToken);
     }
 
-    /** Por clase exacta y valor. */
+    /** By exact class and value. */
     public boolean equals(Object o) {
         if (o == this) {
             return true;

@@ -5,105 +5,106 @@ import java.util.Iterator;
 import javax.xml.stream.events.XMLEvent;
 
 /**
- * KajiLibrary's javax.xml.stream.XMLEventReader -- el otro modelo de StAX: un iterador de eventos
- * que **si** se pueden guardar.
+ * KajiLibrary's javax.xml.stream.XMLEventReader -- StAX's other model: an iterator of events that
+ * **can** be kept.
  *
- * <p>Hace lo mismo que {@link XMLStreamReader} --tira del documento en vez de recibirlo empujado--
- * pero devuelve un {@link XMLEvent} por vez: un objeto completo, inmutable y con toda su informacion
- * adentro. La diferencia practica es una sola, y decide cual usar:
- *
- * <ul>
- *   <li>con el cursor, {@code getLocalName()} vale hasta el proximo {@code next()};
- *   <li>con los eventos, el objeto se puede guardar en una lista, comparar con otro de mas adelante
- *       y devolver desde un metodo.
- * </ul>
- *
- * <p>El precio es un objeto por evento. Vale la pena cuando hay que mirar hacia atras --emparejar
- * una apertura con su cierre, juntar los hijos de un elemento antes de decidir-- y no vale cuando se
- * procesa cada evento y se lo olvida.
- *
- * <h2>Un iterador con dos caras</h2>
- *
- * <p>Extiende {@link Iterator} de {@code Object} y no de {@code XMLEvent}, que es una herencia de
- * cuando la interfaz se escribio sin genericos. La consecuencia esta a la vista: {@link #next()}
- * devuelve {@code Object} y hay que castear, mientras que {@link #nextEvent()} devuelve el tipo
- * correcto. Son el mismo avance, con dos diferencias:
+ * <p>It does the same as {@link XMLStreamReader} --it pulls the document instead of having it
+ * pushed-- but returns one {@link XMLEvent} at a time: a complete, immutable object with all its
+ * information inside. The practical difference is a single one, and it decides which to use:
  *
  * <ul>
- *   <li>{@code nextEvent()} declara {@link XMLStreamException}, {@code next()} no --tiene que
- *       envolverla en una no chequeada--;
- *   <li>{@code next()} existe para que un {@code for} mejorado funcione, no porque sea mejor.
+ *   <li>with the cursor, {@code getLocalName()} holds until the next {@code next()};
+ *   <li>with events, the object can be kept in a list, compared with another further on and
+ *       returned from a method.
  * </ul>
  *
- * <p>Preferir siempre {@code nextEvent()}: el error de lectura llega como lo que es.
+ * <p>The price is one object per event. It is worth it when one has to look back --matching a start
+ * with its end, gathering an element's children before deciding-- and it is not when each event is
+ * processed and forgotten.
  *
- * <h2>Que hay escrito aca</h2>
+ * <h2>An iterator with two faces</h2>
  *
- * <p>Los siete metodos. Implementacion no hay --esta biblioteca no trae parser de XML-- pero si esta
- * {@link javax.xml.stream.util.EventReaderDelegate}, que es la clase base para envolver a uno ajeno
- * y filtrarlo o transformarlo.
+ * <p>It extends {@link Iterator} of {@code Object} and not of {@code XMLEvent}, which is an
+ * inheritance from when the interface was written without generics. The consequence is plain to
+ * see: {@link #next()} returns {@code Object} and has to be cast, while {@link #nextEvent()}
+ * returns the right type. They are the same advance, with two differences:
+ *
+ * <ul>
+ *   <li>{@code nextEvent()} declares {@link XMLStreamException}, {@code next()} does not --it has
+ *       to wrap it in an unchecked one--;
+ *   <li>{@code next()} exists so that an enhanced {@code for} works, not because it is better.
+ * </ul>
+ *
+ * <p>Always prefer {@code nextEvent()}: the read error arrives as what it is.
+ *
+ * <h2>What is written here</h2>
+ *
+ * <p>The seven methods. This package's implementation is {@code KajiEventReader}, which {@link
+ * XMLInputFactory} returns, and there is also {@link javax.xml.stream.util.EventReaderDelegate},
+ * the base class for wrapping someone else's and filtering or transforming it. (The note said there
+ * is no implementation because this library comes with no XML parser; it has one now.)
  */
 public interface XMLEventReader extends Iterator<Object> {
 
     /**
-     * El proximo evento.
+     * The next event.
      *
-     * @return el evento
-     * @throws XMLStreamException si el documento esta mal formado o falla la lectura
-     * @throws java.util.NoSuchElementException si ya no hay mas
+     * @return the event
+     * @throws XMLStreamException if the document is malformed or reading fails
+     * @throws java.util.NoSuchElementException if there are no more
      */
     XMLEvent nextEvent() throws XMLStreamException;
 
     /**
-     * Si queda al menos un evento.
+     * Whether at least one event remains.
      *
-     * <p>Redeclarado sin {@code throws} porque viene de {@link Iterator}: un error de lectura tiene
-     * que salir por {@link #nextEvent()}, no por aca.
+     * <p>Redeclared without {@code throws} because it comes from {@link Iterator}: a read error has
+     * to come out through {@link #nextEvent()}, not here.
      *
-     * @return true si hay mas
+     * @return true if there are more
      */
     boolean hasNext();
 
     /**
-     * Mira el proximo evento **sin** consumirlo.
+     * Looks at the next event **without** consuming it.
      *
-     * <p>Es lo que el modelo de cursor no puede dar, y la razon mas comun para elegir este modelo:
-     * decidir que hacer segun lo que viene, sin haber avanzado todavia.
+     * <p>It is what the cursor model cannot give, and the commonest reason for choosing this model:
+     * deciding what to do according to what comes, without having advanced yet.
      *
-     * @return el proximo evento, o null si no hay
-     * @throws XMLStreamException si falla la lectura
+     * @return the next event, or null if there is none
+     * @throws XMLStreamException if reading fails
      */
     XMLEvent peek() throws XMLStreamException;
 
     /**
-     * El texto de un elemento de solo texto, dejando el lector despues de su cierre.
+     * The text of a text-only element, leaving the reader after its end.
      *
-     * @return el texto
-     * @throws XMLStreamException si el evento actual no es una apertura o el elemento tiene hijos
+     * @return the text
+     * @throws XMLStreamException if the current event is not a start or the element has children
      */
     String getElementText() throws XMLStreamException;
 
     /**
-     * Saltea espacio, comentarios e instrucciones de proceso hasta la proxima etiqueta.
+     * Skips whitespace, comments and processing instructions up to the next tag.
      *
-     * @return el evento de apertura o de cierre
-     * @throws XMLStreamException si encuentra algo que no sea salteable ni una etiqueta
+     * @return the start or end event
+     * @throws XMLStreamException if it finds something that is neither skippable nor a tag
      */
     XMLEvent nextTag() throws XMLStreamException;
 
     /**
-     * El valor de una propiedad de la implementacion.
+     * The value of an implementation property.
      *
-     * @param name el nombre de la propiedad
-     * @return el valor
-     * @throws IllegalArgumentException si la propiedad no existe
+     * @param name the name of the property
+     * @return the value
+     * @throws IllegalArgumentException if the property does not exist
      */
     Object getProperty(String name) throws IllegalArgumentException;
 
     /**
-     * Libera lo que el lector tenga tomado, sin cerrar el flujo de origen.
+     * Frees whatever the reader holds, without closing the source stream.
      *
-     * @throws XMLStreamException si falla
+     * @throws XMLStreamException if it fails
      */
     void close() throws XMLStreamException;
 }

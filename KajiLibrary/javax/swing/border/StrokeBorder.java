@@ -10,23 +10,24 @@ import java.awt.Shape;
 import java.awt.geom.Rectangle2D$Float;
 
 /**
- * Un borde dibujado con un {@link BasicStroke}, o sea con toda la maquinaria de trazos de Java2D.
+ * A border drawn with a {@link BasicStroke}, that is with all of Java2D's stroking machinery.
  *
- * <h2>Que puede que los otros no</h2>
+ * <h2>What it can do that the others cannot</h2>
  *
- * <p>Los demas bordes de este paquete dibujan lineas de un pixel con {@code drawLine}. Este delega
- * en Java2D, asi que hereda gratis lo que un {@code BasicStroke} sabe hacer: guiones, puntas
- * redondeadas, uniones biseladas, grosores fraccionarios. Es el unico borde <em>configurable</em>
- * del paquete en ese sentido — los otros tienen la forma que tienen.
+ * <p>The other borders in this package draw one-pixel lines with {@code drawLine}. This one
+ * delegates to Java2D, so it inherits for free whatever a {@code BasicStroke} knows how to do:
+ * dashes, round caps, bevelled joins, fractional thicknesses. It is the only
+ * <em>configurable</em> border in the package in that sense -- the others have the shape they
+ * have.
  *
- * <p>El {@link Paint} es opcional, y cuando falta se usa el color del componente. Eso permite que un
- * mismo borde punteado siga el color de texto de cada componente que lo lleve.
+ * <p>The {@link Paint} is optional, and when it is missing the component's colour is used. That
+ * allows one same dotted border to follow the text colour of every component that carries it.
  *
- * <h2>La cuenta de los insets</h2>
+ * <h2>The insets arithmetic</h2>
  *
- * <p>Un trazo de grosor {@code n} se dibuja <strong>centrado</strong> sobre la linea: la mitad para
- * afuera y la mitad para adentro. Por eso los insets son el grosor redondeado hacia arriba y no el
- * grosor a secas — con menos, la mitad interna del trazo taparia el contenido.
+ * <p>A stroke of thickness {@code n} is drawn <strong>centred</strong> over the line: half
+ * outwards and half inwards. That is why the insets are the thickness rounded up and not the
+ * thickness plain -- with less, the inner half of the stroke would cover the content.
  */
 public class StrokeBorder extends AbstractBorder {
 
@@ -34,35 +35,35 @@ public class StrokeBorder extends AbstractBorder {
     private final Paint paint;
 
     /**
-     * Con el trazo dado, pintado con el color del componente.
+     * With the given stroke, painted with the component's colour.
      *
-     * @throws NullPointerException si {@code stroke} es {@code null}
+     * @throws NullPointerException if {@code stroke} is {@code null}
      */
     public StrokeBorder(BasicStroke stroke) {
         this(stroke, null);
     }
 
     /**
-     * Con el trazo y la pintura dados.
+     * With the given stroke and paint.
      *
-     * @throws NullPointerException si {@code stroke} es {@code null}
+     * @throws NullPointerException if {@code stroke} is {@code null}
      */
     public StrokeBorder(BasicStroke stroke, Paint paint) {
         if (stroke == null) {
-            throw new NullPointerException("El trazo no puede ser null");
+            throw new NullPointerException("The stroke cannot be null");
         }
         this.stroke = stroke;
         this.paint = paint;
     }
 
     public void paintBorder(Component c, Graphics g, int x, int y, int width, int height) {
-        float grosor = this.stroke.getLineWidth();
-        if (grosor <= 0.0f) {
+        float thickness = this.stroke.getLineWidth();
+        if (thickness <= 0.0f) {
             return;
         }
         if (!(g instanceof Graphics2D)) {
-            // Sin Java2D no hay trazo que aplicar. Declinar es mejor que dibujar un rectangulo
-            // liso: eso seria un borde distinto del que se pidio, y en silencio.
+            // Without Java2D there is no stroke to apply. Declining is better than drawing a plain
+            // rectangle: that would be a different border from the one asked for, and silently so.
             return;
         }
         Graphics2D g2 = (Graphics2D) g.create();
@@ -72,32 +73,32 @@ public class StrokeBorder extends AbstractBorder {
         } else {
             g2.setPaint(c.getForeground());
         }
-        // El rectangulo se encoge medio grosor de cada lado para que el trazo, que se dibuja
-        // centrado, quede entero adentro del area del borde.
-        float mitad = grosor / 2.0f;
-        // `Rectangle2D$Float` con el nombre binario: el nombre Java de un tipo anidado de otro
-        // archivo no resuelve en nuestro compilador (#101), igual que en `AbstractBorder`.
-        Shape r = new Rectangle2D$Float(x + mitad, y + mitad,
-                (float) width - grosor, (float) height - grosor);
+        // The rectangle shrinks by half a thickness on each side so that the stroke, which is drawn
+        // centred, falls whole inside the border's area.
+        float half = thickness / 2.0f;
+        // `Rectangle2D$Float` with the binary name: the Java name of a nested type from another
+        // file does not resolve in our compiler (#101), the same as in `AbstractBorder`.
+        Shape r = new Rectangle2D$Float(x + half, y + half,
+                (float) width - thickness, (float) height - thickness);
         g2.draw(r);
         g2.dispose();
     }
 
     public Insets getBorderInsets(Component c, Insets insets) {
-        int lado = (int) Math.ceil((double) this.stroke.getLineWidth());
-        insets.top = lado;
-        insets.left = lado;
-        insets.right = lado;
-        insets.bottom = lado;
+        int side = (int) Math.ceil((double) this.stroke.getLineWidth());
+        insets.top = side;
+        insets.left = side;
+        insets.right = side;
+        insets.bottom = side;
         return insets;
     }
 
-    /** El trazo con el que se dibuja. Nunca {@code null}. */
+    /** The stroke it is drawn with. Never {@code null}. */
     public BasicStroke getStroke() {
         return this.stroke;
     }
 
-    /** La pintura, o {@code null} si sigue el color del componente. */
+    /** The paint, or {@code null} if it follows the component's colour. */
     public Paint getPaint() {
         return this.paint;
     }

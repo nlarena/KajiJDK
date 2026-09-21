@@ -1,19 +1,19 @@
 package java.rmi;
 
 /**
- * KajiLibrary's java.rmi.RMISecurityManager -- un {@link SecurityManager} sin nada propio.
+ * KajiLibrary's java.rmi.RMISecurityManager -- a {@link SecurityManager} with nothing of its own.
  *
- * <p>Historia: hasta 1.1 esta clase tenia una politica propia para el codigo que llegaba por RMI.
- * Desde 1.2 no agrega nada sobre {@code SecurityManager}, y desde entonces usar una o la otra es
- * exactamente lo mismo.
+ * <p>History: up to 1.1 this class had a policy of its own for code that arrived over RMI. Since
+ * 1.2 it adds nothing over {@code SecurityManager}, and since then using one or the other is
+ * exactly the same.
  *
- * <p>Marcada para eliminacion junto con todo el mecanismo de {@code SecurityManager}, que ya no hace
- * nada. Se mantiene para que el codigo viejo compile.
+ * <p>Marked for removal along with the whole {@code SecurityManager} mechanism, which no longer
+ * does anything. It is kept so old code compiles.
  */
 @Deprecated(since = "1.8", forRemoval = true)
 public class RMISecurityManager extends SecurityManager {
 
-    /** Igual que el de la clase base. */
+    /** The same as the base class's. */
     public RMISecurityManager() {
     }
 }

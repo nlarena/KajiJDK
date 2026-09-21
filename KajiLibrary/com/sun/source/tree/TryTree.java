@@ -3,7 +3,7 @@ package com.sun.source.tree;
 import java.util.List;
 
 /**
- * `try`, con sus recursos, sus `catch` y su `finally`.
+ * `try`, with its resources, its `catch`es and its `finally`.
  */
 public interface TryTree extends StatementTree {
 

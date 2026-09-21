@@ -3,30 +3,31 @@ package javax.management;
 import java.io.Serializable;
 
 /**
- * Un par nombre-valor: lo que se lee o se escribe de un MBean de una vez.
+ * A name-value pair: what is read from or written to an MBean in one go.
  *
- * <p>Es inmutable y sin tipo declarado: el valor es un `Object` porque el mismo par tiene que poder
- * viajar por {@link MBeanServer#setAttribute} sin que el servidor sepa nada de la clase del MBean.
- * El tipo lo declara aparte {@link MBeanAttributeInfo}; aca solo va el dato.
+ * <p>It is immutable and has no declared type: the value is an {@code Object} because the same pair
+ * has to be able to travel through {@link MBeanServer#setAttribute} without the server knowing
+ * anything about the MBean's class. The type is declared separately by {@link MBeanAttributeInfo};
+ * here only the data goes.
  */
 public class Attribute implements Serializable {
 
     private static final long serialVersionUID = 2484220110589082382L;
 
     /**
-     * @serial el nombre del atributo
+     * @serial the attribute name
      */
     private String name;
 
     /**
-     * @serial el valor
+     * @serial the value
      */
     private Object value;
 
     /**
-     * @throws RuntimeOperationsException envolviendo un `IllegalArgumentException` si `name` es
-     *     `null`. Es no verificada a proposito: un nombre nulo es un error de programa, no una
-     *     condicion que valga la pena atender.
+     * @throws RuntimeOperationsException wrapping an {@code IllegalArgumentException} if {@code
+     *     name} is {@code null}. It is unchecked on purpose: a null name is a program error, not a
+     *     condition worth handling.
      */
     public Attribute(String name, Object value) {
         if (name == null) {
@@ -37,33 +38,33 @@ public class Attribute implements Serializable {
         this.value = value;
     }
 
-    /** El nombre del atributo. */
+    /** The attribute name. */
     public String getName() {
         return name;
     }
 
-    /** El valor, que puede ser `null`. */
+    /** The value, which may be {@code null}. */
     public Object getValue() {
         return value;
     }
 
-    /** Por nombre y valor; un valor `null` solo iguala a otro `null`. */
+    /** By name and value; a {@code null} value only equals another {@code null}. */
     public boolean equals(Object object) {
         if (!(object instanceof Attribute)) {
             return false;
         }
-        Attribute otro = (Attribute) object;
+        Attribute other = (Attribute) object;
         if (value == null) {
-            return otro.getValue() == null && name.equals(otro.getName());
+            return other.getValue() == null && name.equals(other.getName());
         }
-        return name.equals(otro.getName()) && value.equals(otro.getValue());
+        return name.equals(other.getName()) && value.equals(other.getValue());
     }
 
     public int hashCode() {
         return name.hashCode() ^ (value == null ? 0 : value.hashCode());
     }
 
-    /** {@code nombre = valor}. */
+    /** {@code name = value}. */
     public String toString() {
         return getName() + " = " + getValue();
     }

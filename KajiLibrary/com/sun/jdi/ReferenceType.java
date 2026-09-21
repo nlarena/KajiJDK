@@ -4,340 +4,340 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Una clase, interfaz o tipo de arreglo cargado en la maquina depurada.
+ * A class, interface or array type loaded in the debugged machine.
  *
- * <p>Es el tipo mas grande de JDI porque es por donde se pregunta todo lo estatico: los campos, los
- * metodos, el fuente, la tabla de lineas.
+ * <p>It is JDI's largest type because it is where everything static is asked for: the fields,
+ * the methods, the source, the line table.
  *
- * <p>Dos pares de metodos que conviene no confundir. {@code fields} da los campos
- * <strong>declarados</strong> y {@code allFields} agrega los heredados; {@code methods} y
- * {@code allMethods}, lo mismo. El primero de cada par es el que casi siempre se quiere y el
- * segundo el que casi siempre se usa por error.
+ * <p>Two pairs of methods that are best not confused. {@code fields} gives the
+ * <strong>declared</strong> fields and {@code allFields} adds the inherited ones;
+ * {@code methods} and {@code allMethods}, the same. The first of each pair is the one that is
+ * almost always wanted and the second the one that is almost always used by mistake.
  *
- * <p>{@code isPrepared} distingue una clase que la VM ya ligo de una que solo cargo. Antes de
- * prepararla no se le pueden leer los campos estaticos, y ahi sale la mitad de los
- * {@link ClassNotPreparedException}.
+ * <p>{@code isPrepared} tells a class the VM has already linked from one it has only loaded.
+ * Before preparing it its static fields cannot be read, and half the
+ * {@link ClassNotPreparedException} come from there.
  *
  * @since 1.3
  */
 public interface ReferenceType extends Type, Comparable<ReferenceType>, Accessible {
 
     /**
-     * El nombre.
+     * The name.
      *
-     * @return el resultado
+     * @return the result
      */
     String name();
 
     /**
-     * El generic signature.
+     * The generic signature.
      *
-     * @return el resultado
+     * @return the result
      */
     String genericSignature();
 
     /**
-     * El class loader.
+     * The class loader.
      *
-     * @return el resultado
+     * @return the result
      */
     ClassLoaderReference classLoader();
 
     /**
-     * El module.
+     * The module.
      *
-     * @return el resultado
+     * @return the result
      */
     ModuleReference module();
 
     /**
-     * El source name.
+     * The source name.
      *
-     * @return el resultado
-     * @throws AbsentInformationException si corresponde
+     * @return the result
+     * @throws AbsentInformationException if it applies
      */
     String sourceName()
             throws AbsentInformationException;
 
     /**
-     * El source names.
+     * The source names.
      *
-     * @param name el String
-     * @return el resultado
-     * @throws AbsentInformationException si corresponde
+     * @param name the String
+     * @return the result
+     * @throws AbsentInformationException if it applies
      */
     List<String> sourceNames(String name)
             throws AbsentInformationException;
 
     /**
-     * El source paths.
+     * The source paths.
      *
-     * @param name el String
-     * @return el resultado
-     * @throws AbsentInformationException si corresponde
+     * @param name the String
+     * @return the result
+     * @throws AbsentInformationException if it applies
      */
     List<String> sourcePaths(String name)
             throws AbsentInformationException;
 
     /**
-     * El source debug extension.
+     * The source debug extension.
      *
-     * @return el resultado
-     * @throws AbsentInformationException si corresponde
+     * @return the result
+     * @throws AbsentInformationException if it applies
      */
     String sourceDebugExtension()
             throws AbsentInformationException;
 
     /**
-     * Si static.
+     * Whether static.
      *
-     * @return el resultado
+     * @return the result
      */
     boolean isStatic();
 
     /**
-     * Si abstract.
+     * Whether abstract.
      *
-     * @return el resultado
+     * @return the result
      */
     boolean isAbstract();
 
     /**
-     * Si final.
+     * Whether final.
      *
-     * @return el resultado
+     * @return the result
      */
     boolean isFinal();
 
     /**
-     * Si prepared.
+     * Whether prepared.
      *
-     * @return el resultado
+     * @return the result
      */
     boolean isPrepared();
 
     /**
-     * Si verified.
+     * Whether verified.
      *
-     * @return el resultado
+     * @return the result
      */
     boolean isVerified();
 
     /**
-     * Si initialized.
+     * Whether initialized.
      *
-     * @return el resultado
+     * @return the result
      */
     boolean isInitialized();
 
     /**
-     * El failed to initialize.
+     * The failed to initialize.
      *
-     * @return el resultado
+     * @return the result
      */
     boolean failedToInitialize();
 
     /**
-     * El fields.
+     * The fields.
      *
-     * @return el resultado
+     * @return the result
      */
     List<Field> fields();
 
     /**
-     * El visible fields.
+     * The visible fields.
      *
-     * @return el resultado
+     * @return the result
      */
     List<Field> visibleFields();
 
     /**
-     * Todos los fields, heredados incluidos.
+     * Every field, the inherited ones included.
      *
-     * @return el resultado
+     * @return the result
      */
     List<Field> allFields();
 
     /**
-     * El field by name.
+     * The field by name.
      *
-     * @param name el String
-     * @return el resultado
+     * @param name the String
+     * @return the result
      */
     Field fieldByName(String name);
 
     /**
-     * El methods.
+     * The methods.
      *
-     * @return el resultado
+     * @return the result
      */
     List<Method> methods();
 
     /**
-     * El visible methods.
+     * The visible methods.
      *
-     * @return el resultado
+     * @return the result
      */
     List<Method> visibleMethods();
 
     /**
-     * Todos los methods, heredados incluidos.
+     * Every method, the inherited ones included.
      *
-     * @return el resultado
+     * @return the result
      */
     List<Method> allMethods();
 
     /**
-     * El methods by name.
+     * The methods by name.
      *
-     * @param name el String
-     * @return el resultado
+     * @param name the String
+     * @return the result
      */
     List<Method> methodsByName(String name);
 
     /**
-     * El methods by name.
+     * The methods by name.
      *
-     * @param name el String
-     * @param name2 el String
-     * @return el resultado
+     * @param name the String
+     * @param name2 the String
+     * @return the result
      */
     List<Method> methodsByName(String name, String name2);
 
     /**
-     * El nested types.
+     * The nested types.
      *
-     * @return el resultado
+     * @return the result
      */
     List<ReferenceType> nestedTypes();
 
     /**
-     * El value.
+     * The value.
      *
-     * @param field el Field
-     * @return el resultado
+     * @param field the Field
+     * @return the result
      */
     Value getValue(Field field);
 
     /**
-     * El values.
+     * The values.
      *
-     * @param values el List<? extends Field>
-     * @return el resultado
+     * @param values the List<? extends Field>
+     * @return the result
      */
     Map<Field, Value> getValues(List<? extends Field> values);
 
     /**
-     * El class object.
+     * The class object.
      *
-     * @return el resultado
+     * @return the result
      */
     ClassObjectReference classObject();
 
     /**
-     * Todos los line locations, heredados incluidos.
+     * Every line location, the inherited ones included.
      *
-     * @return el resultado
-     * @throws AbsentInformationException si corresponde
+     * @return the result
+     * @throws AbsentInformationException if it applies
      */
     List<Location> allLineLocations()
             throws AbsentInformationException;
 
     /**
-     * Todos los line locations, heredados incluidos.
+     * Every line location, the inherited ones included.
      *
-     * @param name el String
-     * @param name2 el String
-     * @return el resultado
-     * @throws AbsentInformationException si corresponde
+     * @param name the String
+     * @param name2 the String
+     * @return the result
+     * @throws AbsentInformationException if it applies
      */
     List<Location> allLineLocations(String name, String name2)
             throws AbsentInformationException;
 
     /**
-     * El locations of line.
+     * The locations of line.
      *
-     * @param index el int
-     * @return el resultado
-     * @throws AbsentInformationException si corresponde
+     * @param index the int
+     * @return the result
+     * @throws AbsentInformationException if it applies
      */
     List<Location> locationsOfLine(int index)
             throws AbsentInformationException;
 
     /**
-     * El locations of line.
+     * The locations of line.
      *
-     * @param name el String
-     * @param name2 el String
-     * @param index el int
-     * @return el resultado
-     * @throws AbsentInformationException si corresponde
+     * @param name the String
+     * @param name2 the String
+     * @param index the int
+     * @return the result
+     * @throws AbsentInformationException if it applies
      */
     List<Location> locationsOfLine(String name, String name2, int index)
             throws AbsentInformationException;
 
     /**
-     * El available strata.
+     * The available strata.
      *
-     * @return el resultado
+     * @return the result
      */
     List<String> availableStrata();
 
     /**
-     * El default stratum.
+     * The default stratum.
      *
-     * @return el resultado
+     * @return the result
      */
     String defaultStratum();
 
     /**
-     * El instances.
+     * The instances.
      *
-     * @param index el long
-     * @return el resultado
+     * @param index the long
+     * @return the result
      */
     List<ObjectReference> instances(long index);
 
     /**
-     * Dos reflejos son iguales si nombran a lo mismo en la misma VM.
+     * Two mirrors are equal if they name the same thing in the same VM.
      *
-     * @param obj el Object
-     * @return el resultado
+     * @param obj the Object
+     * @return the result
      */
     boolean equals(Object obj);
 
     /**
-     * Coherente con {@link #equals}.
+     * Consistent with {@link #equals}.
      *
-     * @return el resultado
+     * @return the result
      */
     int hashCode();
 
     /**
-     * El major version.
+     * The major version.
      *
-     * @return el resultado
+     * @return the result
      */
     int majorVersion();
 
     /**
-     * El minor version.
+     * The minor version.
      *
-     * @return el resultado
+     * @return the result
      */
     int minorVersion();
 
     /**
-     * El constant pool count.
+     * The constant pool count.
      *
-     * @return el resultado
+     * @return the result
      */
     int constantPoolCount();
 
     /**
-     * El constant pool.
+     * The constant pool.
      *
-     * @return el resultado
+     * @return the result
      */
     byte[] constantPool();
 }

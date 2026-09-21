@@ -12,13 +12,13 @@ import javax.xml.transform.Result;
 import javax.xml.transform.stream.StreamResult;
 
 /**
- * La fabrica de escritura de esta biblioteca.
+ * This library's writing factory.
  *
- * <p>Solo tiene una propiedad, {@link XMLOutputFactory#IS_REPAIRING_NAMESPACES}, y la respeta de
- * verdad: los dos modos estan implementados en {@link KajiStreamWriter}.
+ * <p>It has only one property, {@link XMLOutputFactory#IS_REPAIRING_NAMESPACES}, and it really
+ * honours it: both modes are implemented in {@link KajiStreamWriter}.
  *
- * <p>Un {@link OutputStream} sin codificacion se escribe en UTF-8, que es lo que hace el original y
- * ademas la unica eleccion sensata: es la codificacion por omision de XML.
+ * <p>An {@link OutputStream} without an encoding is written in UTF-8, which is what the original
+ * does and moreover the only sensible choice: it is XML's default encoding.
  */
 final class KajiOutputFactory extends XMLOutputFactory {
 
@@ -29,7 +29,7 @@ final class KajiOutputFactory extends XMLOutputFactory {
 
     public XMLStreamWriter createXMLStreamWriter(Writer stream) throws XMLStreamException {
         if (stream == null) {
-            throw new XMLStreamException("el escritor no puede ser null");
+            throw new XMLStreamException("the writer cannot be null");
         }
         return new KajiStreamWriter(stream, repairing);
     }
@@ -41,7 +41,7 @@ final class KajiOutputFactory extends XMLOutputFactory {
     public XMLStreamWriter createXMLStreamWriter(OutputStream stream, String encoding)
             throws XMLStreamException {
         if (stream == null) {
-            throw new XMLStreamException("el flujo no puede ser null");
+            throw new XMLStreamException("the stream cannot be null");
         }
         String enc = encoding;
         if (enc == null) {
@@ -50,7 +50,7 @@ final class KajiOutputFactory extends XMLOutputFactory {
         try {
             return createXMLStreamWriter(new OutputStreamWriter(stream, enc));
         } catch (UnsupportedEncodingException e) {
-            throw new XMLStreamException("no se conoce la codificacion " + enc, e);
+            throw new XMLStreamException("unknown encoding " + enc, e);
         }
     }
 
@@ -77,7 +77,7 @@ final class KajiOutputFactory extends XMLOutputFactory {
 
     public void setProperty(String name, Object value) throws IllegalArgumentException {
         if (name == null) {
-            throw new IllegalArgumentException("el nombre de la propiedad no puede ser null");
+            throw new IllegalArgumentException("the property name cannot be null");
         }
         if (name.equals(IS_REPAIRING_NAMESPACES)) {
             if (value instanceof Boolean) {
@@ -88,7 +88,7 @@ final class KajiOutputFactory extends XMLOutputFactory {
                 repairing = Boolean.valueOf((String) value).booleanValue();
                 return;
             }
-            throw new IllegalArgumentException(name + " toma un booleano, y le dieron " + value);
+            throw new IllegalArgumentException(name + " takes a boolean, and was given " + value);
         }
         throw new IllegalArgumentException("propiedad desconocida: " + name);
     }
@@ -106,11 +106,11 @@ final class KajiOutputFactory extends XMLOutputFactory {
 
     private static Writer writerOf(Result result) throws XMLStreamException {
         if (result == null) {
-            throw new XMLStreamException("el resultado no puede ser null");
+            throw new XMLStreamException("the result cannot be null");
         }
         if (!(result instanceof StreamResult)) {
             throw new XMLStreamException(
-                    "esta biblioteca solo escribe a un StreamResult, y le dieron un "
+                    "this library only writes to a StreamResult, and was given a "
                             + result.getClass().getName());
         }
         StreamResult r = (StreamResult) result;
@@ -121,12 +121,12 @@ final class KajiOutputFactory extends XMLOutputFactory {
             try {
                 return new OutputStreamWriter(r.getOutputStream(), "UTF-8");
             } catch (UnsupportedEncodingException e) {
-                throw new XMLStreamException("no se conoce UTF-8", e);
+                throw new XMLStreamException("UTF-8 is not known", e);
             }
         }
         String sid = r.getSystemId();
         if (sid == null) {
-            throw new XMLStreamException("el StreamResult esta vacio");
+            throw new XMLStreamException("the StreamResult is empty");
         }
         String path = sid;
         if (path.startsWith("file:///")) {
@@ -139,7 +139,7 @@ final class KajiOutputFactory extends XMLOutputFactory {
         try {
             return new OutputStreamWriter(new FileOutputStream(new File(path)), "UTF-8");
         } catch (IOException e) {
-            throw new XMLStreamException("no se pudo abrir " + sid + " para escribir", e);
+            throw new XMLStreamException("could not open " + sid + " for writing", e);
         }
     }
 }

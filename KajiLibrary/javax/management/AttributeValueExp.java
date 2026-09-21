@@ -1,26 +1,27 @@
 package javax.management;
 
 /**
- * El valor de un atributo del MBean que se esta evaluando.
+ * The value of an attribute of the MBean being evaluated.
  *
- * <p>Es la unica expresion que necesita hablar con el agente, y por eso es donde una consulta pasa
- * de ser texto a ser una pregunta real. {@link #getAttribute} esta separado y es `protected` justo
- * para eso: una subclase puede cambiar de donde sale el valor sin tocar la conversion.
+ * <p>It is the only expression that needs to talk to the agent, and that is why it is where a query
+ * goes from being text to being a real question. {@link #getAttribute} is separate and
+ * {@code protected} precisely for that: a subclass can change where the value comes from without
+ * touching the conversion.
  *
- * <p>La conversion es cerrada: numero, cadena o booleano. Cualquier otra cosa da
- * {@link BadAttributeValueExpException}, porque el algebra de consultas no sabe comparar mas que
- * esos tres.
+ * <p>The conversion is closed: number, string or boolean. Anything else gives
+ * {@link BadAttributeValueExpException}, because the query algebra only knows how to compare those
+ * three.
  */
 public class AttributeValueExp implements ValueExp {
 
     private static final long serialVersionUID = -7768025046539163385L;
 
     /**
-     * @serial el nombre del atributo
+     * @serial the attribute name
      */
     private String attr;
 
-    /** Sin nombre; solo para deserializar. */
+    /** Without a name; only for deserialization. */
     @Deprecated
     public AttributeValueExp() {
     }
@@ -29,15 +30,15 @@ public class AttributeValueExp implements ValueExp {
         this.attr = attr;
     }
 
-    /** El nombre del atributo. */
+    /** The attribute name. */
     public String getAttributeName() {
         return attr;
     }
 
     /**
-     * Lee el atributo y lo envuelve en la constante que corresponda.
+     * Reads the attribute and wraps it in the matching constant.
      *
-     * @throws BadAttributeValueExpException si el valor no es numero, cadena ni booleano
+     * @throws BadAttributeValueExpException if the value is not a number, a string or a boolean
      */
     public ValueExp apply(ObjectName name) throws BadStringOperationException,
             BadBinaryOpValueExpException, BadAttributeValueExpException,
@@ -55,22 +56,22 @@ public class AttributeValueExp implements ValueExp {
         throw new BadAttributeValueExpException(result);
     }
 
-    /** El nombre del atributo, pelado. */
+    /** The attribute name, bare. */
     public String toString() {
         return attr;
     }
 
-    /** No hace nada: el servidor lo lleva {@link QueryEval}. */
+    /** Does nothing: the server is carried by {@link QueryEval}. */
     @Deprecated
     public void setMBeanServer(MBeanServer s) {
     }
 
     /**
-     * De donde sale el valor.
+     * Where the value comes from.
      *
-     * <p>Es `protected` para que una subclase pueda reemplazar la fuente; devuelve `null` ante
-     * cualquier falla porque una consulta que no puede leer un atributo tiene que dar "no coincide",
-     * no romper el barrido entero.
+     * <p>It is {@code protected} so that a subclass can replace the source; it returns {@code null}
+     * on any failure because a query that cannot read an attribute has to give "no match", not
+     * break the whole sweep.
      */
     protected Object getAttribute(ObjectName name) {
         try {

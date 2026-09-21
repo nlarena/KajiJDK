@@ -3,68 +3,72 @@ package javax.naming.ldap;
 import java.io.IOException;
 
 /**
- * Lo que el servidor contesta a un {@link PagedResultsControl}: cuantas entradas hay y por donde iba.
+ * What the server answers to a {@link PagedResultsControl}: how many entries there are and where
+ * it was.
  *
- * <p>{@link #getCookie} es lo que hay que devolver para pedir la pagina siguiente. Una cookie
- * <strong>vacia</strong> significa que no hay mas — es el fin del recorrido, y no un error.
+ * <p>{@link #getCookie} is what has to be sent back to ask for the next page. An
+ * <strong>empty</strong> cookie means there is no more -- it is the end of the walk, not an error.
  *
- * <p>{@link #getResultSize} suele venir en cero: el total estimado es opcional en el RFC 2696 y
- * calcularlo puede costarle al servidor tanto como la busqueda entera. No conviene apoyarse en el.
+ * <p>{@link #getResultSize} often comes as zero: the estimated total is optional in RFC 2696 and
+ * computing it may cost the server as much as the whole search. Better not to rely on it.
  */
 public final class PagedResultsResponseControl extends BasicControl {
 
     private static final long serialVersionUID = -8819778744844514666L;
 
-    /** El OID de este control. */
+    /** The OID of this control. */
     public static final String OID = "1.2.840.113556.1.4.319";
 
     private final int resultSize;
     private final byte[] cookie;
 
     /**
-     * Lo construye el proveedor a partir de lo que llego.
+     * Built by the provider from what arrived.
      *
-     * @throws IOException si el valor no se pudo decodificar
+     * @throws IOException if the value could not be decoded
      */
     public PagedResultsResponseControl(String id, boolean criticality, byte[] value)
             throws IOException {
         super(id == null ? OID : id, criticality, value);
         int[] pos = new int[] { 0 };
-        byte[] datos = value == null ? new byte[0] : value;
-        if (datos.length == 0) {
+        byte[] data = value == null ? new byte[0] : value;
+        if (data.length == 0) {
             this.resultSize = 0;
             this.cookie = new byte[0];
             return;
         }
-        // SEQUENCE { INTEGER size, OCTET STRING cookie } -- la misma forma que arma
-        // `PagedResultsControl`, leida al reves.
-        esperar(datos, pos, 0x30);
-        largo(datos, pos);
-        esperar(datos, pos, 0x02);
-        int nSize = largo(datos, pos);
+        // SEQUENCE { INTEGER size, OCTET STRING cookie } -- the same form
+        // `PagedResultsControl` builds, read the other way.
+        expect(data, pos, 0x30);
+        length(data, pos);
+        expect(data, pos, 0x02);
+        int nSize = length(data, pos);
         int size = 0;
         for (int i = 0; i < nSize; i++) {
-            size = (size << 8) | (datos[pos[0]++] & 0xFF);
+            size = (size << 8) | (data[pos[0]++] & 0xFF);
         }
         this.resultSize = size;
-        esperar(datos, pos, 0x04);
-        int nCookie = largo(datos, pos);
+        expect(data, pos, 0x04);
+        int nCookie = length(data, pos);
         byte[] c = new byte[nCookie];
-        System.arraycopy(datos, pos[0], c, 0, nCookie);
+        System.arraycopy(data, pos[0], c, 0, nCookie);
         this.cookie = c;
     }
 
-    private static void esperar(byte[] b, int[] pos, int etiqueta) throws IOException {
-        if (pos[0] >= b.length || (b[pos[0]] & 0xFF) != etiqueta) {
-            throw new IOException("el control paginado no tiene la forma esperada");
+    private static void expect(byte[] b, int[] pos, int tag) throws IOException {
+        if (pos[0] >= b.length || (b[pos[0]] & 0xFF) != tag) {
+            throw new IOException("the paged results control does not have the expected form");
         }
         pos[0]++;
     }
 
-    /** Un largo BER; solo la forma corta y la larga de un byte, que es lo que este control usa. */
-    private static int largo(byte[] b, int[] pos) throws IOException {
+    /**
+     * A BER length: the short form, or the long form with any number of length bytes (they are not
+     * checked against overflow). An earlier note said only a one-byte long form was read.
+     */
+    private static int length(byte[] b, int[] pos) throws IOException {
         if (pos[0] >= b.length) {
-            throw new IOException("el control paginado esta truncado");
+            throw new IOException("the paged results control is truncated");
         }
         int n = b[pos[0]++] & 0xFF;
         if (n < 0x80) {
@@ -78,12 +82,12 @@ public final class PagedResultsResponseControl extends BasicControl {
         return out;
     }
 
-    /** El total estimado, o {@code 0} si el servidor no lo informo. */
+    /** The estimated total, or {@code 0} if the server did not report it. */
     public int getResultSize() {
         return this.resultSize;
     }
 
-    /** Por donde iba; vacia significa que no hay mas paginas. */
+    /** Where it was; empty means there are no more pages. */
     public byte[] getCookie() {
         return this.cookie.length == 0 ? null : this.cookie.clone();
     }

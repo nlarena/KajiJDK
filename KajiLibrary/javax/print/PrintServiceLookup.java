@@ -6,59 +6,59 @@ import java.util.ServiceLoader;
 import javax.print.attribute.AttributeSet;
 
 /**
- * KajiLibrary's javax.print.PrintServiceLookup -- encuentra impresoras.
+ * KajiLibrary's javax.print.PrintServiceLookup -- finds printers.
  *
- * <p>Tiene dos caras que conviene no confundir. Los metodos <b>estaticos</b> son la API de quien busca
- * una impresora; los <b>abstractos</b> son lo que implementa quien provee impresoras. La misma clase
- * hace de fachada y de contrato de proveedor.
+ * <p>It has two faces that are best not confused. The <b>static</b> methods are the API of whoever
+ * looks for a printer; the <b>abstract</b> ones are what whoever provides printers implements. The
+ * same class is both the facade and the provider contract.
  *
- * <h2>De donde salen los proveedores</h2>
+ * <h2>Where the providers come from</h2>
  *
- * <p>De dos lugares que se suman:
+ * <p>From two places that add up:
  *
  * <ul>
- *   <li>los declarados como servicio {@code javax.print.PrintServiceLookup} y encontrados con
- *       {@link ServiceLoader}. Es como aparecen las impresoras del sistema operativo;
- *   <li>los registrados a mano con {@link #registerServiceProvider}.
+ *   <li>the ones declared as a {@code javax.print.PrintServiceLookup} service and found with
+ *       {@link ServiceLoader}. It is how the operating system's printers show up;
+ *   <li>the ones registered by hand with {@link #registerServiceProvider}.
  * </ul>
  *
- * <p>{@link #registerService} es distinto de los dos: registra <b>una impresora suelta</b>, sin
- * proveedor. Sirve para agregar algo que se armo en el programa.
+ * <p>{@link #registerService} is different from both: it registers <b>a loose printer</b>, without
+ * a provider. It serves to add something put together in the program.
  *
- * <h2>Los filtros</h2>
+ * <h2>The filters</h2>
  *
- * <p>Las busquedas toman un {@link DocFlavor} y un {@link AttributeSet}, y los dos aceptan null para
- * decir "no me importa". El conjunto no filtra por igualdad: filtra por lo que la impresora
- * <b>puede</b> dar, asi que pedir dos copias devuelve las que soportan al menos dos.
+ * <p>The lookups take a {@link DocFlavor} and an {@link AttributeSet}, and both accept null to say
+ * "I do not care". The set does not filter by equality: it filters by what the printer <b>can</b>
+ * give, so asking for two copies returns the ones that support at least two.
  *
  * <h2>A KajiLibrary subset</h2>
  *
- * <p>Esta biblioteca no trae ningun proveedor: hablar con el sistema de impresion del sistema
- * operativo pide codigo nativo, y no hay. Los metodos funcionan --recorren el {@link ServiceLoader} y
- * los registrados a mano-- y devuelven vacio o null porque no hay nada que encontrar, que es
- * exactamente lo que la API define para una maquina sin impresoras. Registrando un proveedor, esto
- * anda sin cambios.
+ * <p>This library ships no provider: talking to the operating system's print system needs native
+ * code, and there is none. The methods work --they walk the {@link ServiceLoader} and the ones
+ * registered by hand-- and return empty or null because there is nothing to find, which is exactly
+ * what the API defines for a machine without printers. Registering a provider, this works without
+ * changes.
  */
 public abstract class PrintServiceLookup {
 
-    /** Los proveedores registrados a mano. */
+    /** The providers registered by hand. */
     private static final ArrayList<PrintServiceLookup> REGISTERED =
         new ArrayList<PrintServiceLookup>();
 
-    /** Las impresoras sueltas registradas a mano. */
+    /** The loose printers registered by hand. */
     private static final ArrayList<PrintService> REGISTERED_SERVICES =
         new ArrayList<PrintService>();
 
-    /** Para las subclases. */
+    /** For subclasses. */
     protected PrintServiceLookup() {
     }
 
     /**
-     * Las impresoras que aceptan ese formato y esos atributos.
+     * The printers that accept that format and those attributes.
      *
-     * @param flavor el formato, o null para no filtrar
-     * @param attributes lo que se piensa pedir, o null
-     * @return las que sirven; nunca null, puede estar vacio
+     * @param flavor the format, or null not to filter
+     * @param attributes what one intends to ask for, or null
+     * @return the ones that serve; never null, may be empty
      */
     public static final PrintService[] lookupPrintServices(DocFlavor flavor,
                                                            AttributeSet attributes) {
@@ -80,11 +80,11 @@ public abstract class PrintServiceLookup {
     }
 
     /**
-     * Las que aceptan trabajos de varios documentos.
+     * The ones that accept jobs of several documents.
      *
-     * <p>El primer argumento es un <b>arreglo</b> de formatos, y hay que leerlo bien: una impresora
-     * califica si soporta <b>todos</b>, no alguno. Es lo que corresponde, porque los documentos de un
-     * trabajo van juntos.
+     * <p>The first argument is an <b>array</b> of formats, and it has to be read right: a printer
+     * qualifies if it supports <b>all</b> of them, not any. It is what corresponds, because the
+     * documents of a job go together.
      */
     public static final MultiDocPrintService[] lookupMultiDocPrintServices(
         DocFlavor[] flavors, AttributeSet attributes) {
@@ -106,7 +106,7 @@ public abstract class PrintServiceLookup {
         return found.toArray(new MultiDocPrintService[found.size()]);
     }
 
-    /** La impresora por omision, o null si no hay ninguna. */
+    /** The default printer, or null if there is none. */
     public static final PrintService lookupDefaultPrintService() {
         Iterator<PrintServiceLookup> providers = allProviders();
         while (providers.hasNext()) {
@@ -119,9 +119,9 @@ public abstract class PrintServiceLookup {
     }
 
     /**
-     * Registra un proveedor.
+     * Registers a provider.
      *
-     * @return si se registro; false si es null o ya estaba
+     * @return whether it was registered; false if it is null or was already there
      */
     public static boolean registerServiceProvider(PrintServiceLookup sp) {
         if (sp == null) {
@@ -141,10 +141,10 @@ public abstract class PrintServiceLookup {
     }
 
     /**
-     * Registra una impresora suelta. Ver la nota de la clase sobre la diferencia con
+     * Registers a loose printer. See the class note on the difference from
      * {@link #registerServiceProvider}.
      *
-     * @return si se registro; false si es null o ya estaba
+     * @return whether it was registered; false if it is null or was already there
      */
     public static boolean registerService(PrintService service) {
         if (service == null || service instanceof StreamPrintService) {
@@ -159,20 +159,20 @@ public abstract class PrintServiceLookup {
         return true;
     }
 
-    /** Las de este proveedor que sirven para ese formato y esos atributos. */
+    /** This provider's ones that serve for that format and those attributes. */
     public abstract PrintService[] getPrintServices(DocFlavor flavor, AttributeSet attributes);
 
-    /** Todas las de este proveedor. */
+    /** All of this provider's. */
     public abstract PrintService[] getPrintServices();
 
-    /** Las de varios documentos. Ver {@link #lookupMultiDocPrintServices}: hacen falta todos. */
+    /** The multi-document ones. See {@link #lookupMultiDocPrintServices}: all are needed. */
     public abstract MultiDocPrintService[] getMultiDocPrintServices(DocFlavor[] flavors,
                                                                     AttributeSet attributes);
 
-    /** La por omision de este proveedor, o null. */
+    /** This provider's default one, or null. */
     public abstract PrintService getDefaultPrintService();
 
-    /** Los del {@link ServiceLoader} y los registrados a mano, en ese orden. */
+    /** The ones from the {@link ServiceLoader} and the ones registered by hand, in that order. */
     private static Iterator<PrintServiceLookup> allProviders() {
         ArrayList<PrintServiceLookup> all = new ArrayList<PrintServiceLookup>();
         try {
@@ -182,7 +182,7 @@ public abstract class PrintServiceLookup {
                 all.add(loaded.next());
             }
         } catch (Throwable e) {
-            // Un proveedor roto no puede tumbar la busqueda entera; los demas siguen.
+            // A broken provider cannot bring the whole lookup down; the rest go on.
         }
         synchronized (REGISTERED) {
             all.addAll(REGISTERED);
@@ -190,7 +190,7 @@ public abstract class PrintServiceLookup {
         return all.iterator();
     }
 
-    /** Agrega los que no esten repetidos. */
+    /** Adds the ones that are not repeated. */
     private static void addAll(ArrayList<PrintService> into, PrintService[] some) {
         if (some == null) {
             return;
@@ -204,7 +204,7 @@ public abstract class PrintServiceLookup {
         }
     }
 
-    /** El filtro que se le aplica a una impresora registrada suelta. */
+    /** The filter applied to a loose registered printer. */
     private static boolean matches(PrintService s, DocFlavor flavor, AttributeSet attributes) {
         if (flavor != null && !s.isDocFlavorSupported(flavor)) {
             return false;

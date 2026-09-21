@@ -1,25 +1,25 @@
 package javax.xml.transform;
 
 /**
- * KajiLibrary's javax.xml.transform.Result -- a donde va un documento XML.
+ * KajiLibrary's javax.xml.transform.Result -- where an XML document goes.
  *
- * <p>El espejo de {@link Source}, con la misma idea: el procesador escribe sin saber si del otro lado
- * hay un archivo, un arbol o un manejador de eventos.
+ * <p>The mirror of {@link Source}, with the same idea: the processor writes without knowing whether
+ * on the other side there is a file, a tree or an event handler.
  *
- * <p>Las dos constantes son instrucciones de procesamiento que se **escriben dentro del documento**
- * para pedirle al serializador que deje de escapar `&lt;` y `&amp;`. Es una via de escape fea y
- * necesaria: sirve para emitir marcado ya armado, y usarla mal produce XML invalido sin que nadie
- * avise.
+ * <p>The two constants are processing instructions that are **written inside the document** to ask
+ * the serializer to stop escaping `&lt;` and `&amp;`. It is an ugly and necessary escape hatch: it
+ * serves to emit already built markup, and using it wrongly produces invalid XML without anybody
+ * warning.
  */
 public interface Result {
 
-    /** Instruccion que apaga el escapado de la salida. */
+    /** Instruction that turns output escaping off. */
     String PI_DISABLE_OUTPUT_ESCAPING = "javax.xml.transform.disable-output-escaping";
 
-    /** Instruccion que lo vuelve a encender. */
+    /** Instruction that turns it back on. */
     String PI_ENABLE_OUTPUT_ESCAPING = "javax.xml.transform.enable-output-escaping";
 
-    /** La URI base del destino. */
+    /** The base URI of the destination. */
     void setSystemId(String systemId);
 
     String getSystemId();

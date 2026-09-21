@@ -5,54 +5,55 @@ import java.sql.SQLException;
 import javax.sql.RowSet;
 
 /**
- * El filtro de un {@link FilteredRowSet}: decide que filas se ven.
+ * The filter of a {@link FilteredRowSet}: it decides which rows are seen.
  *
- * <h2>Por que hay tres metodos</h2>
+ * <h2>Why there are three methods</h2>
  *
- * <p>Porque el filtrado ocurre en dos momentos. {@link #evaluate(RowSet)} se llama con el conjunto
- * posicionado en una fila y decide si esa fila se muestra: es el filtro de <strong>lectura</strong>.
+ * <p>Because filtering happens at two moments. {@link #evaluate(RowSet)} is called with the set
+ * positioned on a row and decides whether that row is shown: it is the <strong>read</strong>
+ * filter.
  *
- * <p>Los otros dos reciben un valor suelto y la columna donde va a escribirse, y son el filtro de
- * <strong>escritura</strong>: contestan si ese valor <em>seguiria</em> perteneciendo al conjunto
- * filtrado. Sirven para rechazar una insercion o una modificacion que haria desaparecer la fila del
- * propio filtro que la contiene — una fila que se escribe y en el acto se vuelve invisible es casi
- * siempre un error de quien la escribe.
+ * <p>The other two receive a loose value and the column where it is going to be written, and they
+ * are the <strong>write</strong> filter: they answer whether that value <em>would still</em> belong
+ * to the filtered set. They serve to reject an insertion or a modification that would make the row
+ * disappear from the very filter that contains it — a row that is written and instantly becomes
+ * invisible is almost always a mistake of whoever writes it.
  *
- * <h2>Un filtro es un corte, no una consulta</h2>
+ * <h2>A filter is a cut, not a query</h2>
  *
- * <p>El conjunto sigue teniendo todas las filas: el filtro solo esconde las que no pasan. Sacarlo
- * las vuelve a mostrar, sin volver a consultar el origen. Es la diferencia con cambiar el
- * {@code WHERE} de la consulta, que obligaria a reconectarse.
+ * <p>The set still has all the rows: the filter only hides the ones that do not pass. Removing it
+ * shows them again, without querying the source again. It is the difference from changing the
+ * query's {@code WHERE}, which would force reconnecting.
  *
  * @since 1.5
  */
 public interface Predicate {
 
     /**
-     * Si la fila actual del conjunto pasa el filtro.
+     * Whether the set's current row passes the filter.
      *
-     * @param rs el conjunto, posicionado en la fila a evaluar
-     * @return {@code true} si la fila se muestra
+     * @param rs the set, positioned on the row to evaluate
+     * @return {@code true} if the row is shown
      */
     boolean evaluate(RowSet rs);
 
     /**
-     * Si ese valor seria aceptable en esa columna.
+     * Whether that value would be acceptable in that column.
      *
-     * @param value el valor
-     * @param column la columna, desde 1
-     * @return {@code true} si el valor pasa el filtro
-     * @throws SQLException si la columna no existe
+     * @param value the value
+     * @param column the column, from 1
+     * @return {@code true} if the value passes the filter
+     * @throws SQLException if the column does not exist
      */
     boolean evaluate(Object value, int column) throws SQLException;
 
     /**
-     * Si ese valor seria aceptable en esa columna.
+     * Whether that value would be acceptable in that column.
      *
-     * @param value el valor
-     * @param columnName el nombre de la columna
-     * @return {@code true} si el valor pasa el filtro
-     * @throws SQLException si la columna no existe
+     * @param value the value
+     * @param columnName the name of the column
+     * @return {@code true} if the value passes the filter
+     * @throws SQLException if the column does not exist
      */
     boolean evaluate(Object value, String columnName) throws SQLException;
 }

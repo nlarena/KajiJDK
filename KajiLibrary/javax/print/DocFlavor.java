@@ -4,47 +4,48 @@ import java.io.Serializable;
 import java.nio.charset.Charset;
 
 /**
- * KajiLibrary's javax.print.DocFlavor -- de que tipo es un documento y en que forma esta el dato.
+ * KajiLibrary's javax.print.DocFlavor -- what type a document is and in what form the data is.
  *
- * <p>Son <b>dos</b> cosas, y ese es todo el diseno de la clase:
+ * <p>They are <b>two</b> things, and that is the whole design of the class:
  *
  * <ul>
- *   <li>el <b>tipo MIME</b>, que dice que es el documento: PDF, PostScript, texto plano en UTF-8;
- *   <li>la <b>clase de representacion</b>, que dice como se le entrega al servicio: un
- *       {@code byte[]}, un {@code InputStream}, una {@code URL}.
+ *   <li>the <b>MIME type</b>, which says what the document is: PDF, PostScript, plain text in
+ *     UTF-8;
+ *   <li>the <b>representation class</b>, which says how it is handed to the service: a
+ *       {@code byte[]}, an {@code InputStream}, a {@code URL}.
  * </ul>
  *
- * <p>Un PDF en un arreglo de bytes y el mismo PDF detras de una URL son dos formatos distintos aunque
- * el documento sea el mismo, y una impresora puede aceptar uno y no el otro. Por eso las constantes
- * estan agrupadas en clases anidadas por representacion y no por tipo.
+ * <p>A PDF in a byte array and the same PDF behind a URL are two different formats even if the
+ * document is the same, and a printer may accept one and not the other. That is why the constants
+ * are grouped in nested classes by representation and not by type.
  *
- * <h2>Las variantes {@code _HOST}</h2>
+ * <h2>The {@code _HOST} variants</h2>
  *
- * <p>{@link #hostEncoding} es la codificacion por omision de <b>esta</b> maquina virtual, y las
- * constantes que la usan heredan su problema: el mismo formato significa una cosa aca y otra en otra
- * maquina. Sirven para imprimir algo que se acaba de leer del sistema local; para cualquier cosa que
- * cruce la red o se guarde, las variantes explicitas.
+ * <p>{@link #hostEncoding} is <b>this</b> virtual machine's default encoding, and the constants
+ * that use it inherit its problem: the same format means one thing here and another on another
+ * machine. They serve to print something just read from the local system; for anything that crosses
+ * the network or is stored, the explicit variants.
  *
- * <h2>La comparacion es sobre la forma canonica</h2>
+ * <h2>The comparison is on the canonical form</h2>
  *
- * <p>{@code "Text/Plain; CharSet=Utf-8"} y {@code "text/plain;charset=utf-8"} son iguales: tipo,
- * subtipo y nombres de parametro se bajan a minusculas y los parametros se ordenan. Los valores se
- * dejan como estan, salvo el de {@code charset}, que es insensible a mayusculas por definicion.
+ * <p>{@code "Text/Plain; CharSet=Utf-8"} and {@code "text/plain;charset=utf-8"} are equal: type,
+ * subtype and parameter names are lowered and the parameters are sorted. The values are left as
+ * they are, except the {@code charset} one, which is case-insensitive by definition.
  *
  * <h2>{@code AUTOSENSE}</h2>
  *
- * <p>Es {@code application/octet-stream}: bytes sin declarar, que la impresora deduzca. Funciona
- * seguido y falla en silencio cuando no -- sale una pagina de basura. Es lo ultimo que hay que probar,
- * no lo primero.
+ * <p>It is {@code application/octet-stream}: undeclared bytes, for the printer to work out. It
+ * works often and fails silently when it does not -- a page of garbage comes out. It is the last
+ * thing to try, not the first.
  */
 public class DocFlavor implements Serializable, Cloneable {
 
     private static final long serialVersionUID = -4512080796965449721L;
 
     /**
-     * La codificacion por omision de esta maquina virtual. Ver la nota de la clase.
+     * This virtual machine's default encoding. See the class note.
      *
-     * <p>No es constante de compilacion: se calcula al cargar la clase.
+     * <p>It is not a compile-time constant: it is computed when the class loads.
      */
     public static final String hostEncoding;
 
@@ -52,17 +53,17 @@ public class DocFlavor implements Serializable, Cloneable {
         hostEncoding = Charset.defaultCharset().name();
     }
 
-    /** El tipo MIME, ya normalizado. */
+    /** The MIME type, already normalised. */
     private transient MimeType myMimeType;
 
-    /** El nombre de la clase de representacion. */
+    /** The name of the representation class. */
     private final String myClassName;
 
     /**
-     * @param mimeType el tipo MIME
-     * @param className el nombre completo de la clase de representacion
-     * @throws NullPointerException si alguno es null
-     * @throws IllegalArgumentException si el tipo MIME no es valido
+     * @param mimeType the MIME type
+     * @param className the full name of the representation class
+     * @throws NullPointerException if either is null
+     * @throws IllegalArgumentException if the MIME type is not valid
      */
     public DocFlavor(String mimeType, String className) {
         if (className == null) {
@@ -72,48 +73,48 @@ public class DocFlavor implements Serializable, Cloneable {
         this.myClassName = className;
     }
 
-    /** El tipo MIME en forma canonica. Ver la nota de la clase. */
+    /** The MIME type in canonical form. See the class note. */
     public String getMimeType() {
         return this.myMimeType.getMimeType();
     }
 
-    /** El tipo, en minusculas. */
+    /** The type, in lower case. */
     public String getMediaType() {
         return this.myMimeType.getMediaType();
     }
 
-    /** El subtipo, en minusculas. */
+    /** The subtype, in lower case. */
     public String getMediaSubtype() {
         return this.myMimeType.getMediaSubtype();
     }
 
     /**
-     * El valor de ese parametro, o null.
+     * The value of that parameter, or null.
      *
-     * <p>El nombre se busca sin distinguir mayusculas, porque ya estan normalizados.
+     * <p>The name is looked up case-insensitively, because they are already normalised.
      */
     public String getParameter(String paramName) {
         return this.myMimeType.getParameterMap().get(paramName.toLowerCase());
     }
 
-    /** El nombre de la clase de representacion. */
+    /** The name of the representation class. */
     public String getRepresentationClassName() {
         return this.myClassName;
     }
 
-    /** El tipo canonico mas {@code class="..."}. */
+    /** The canonical type plus {@code class="..."}. */
     @Override
     public String toString() {
         return getStringValue();
     }
 
-    /** Sobre el tipo canonico y la clase de representacion, los dos. */
+    /** On the canonical type and the representation class, both. */
     @Override
     public int hashCode() {
         return getStringValue().hashCode();
     }
 
-    /** Idem: dos formatos son iguales solo si coinciden en las dos cosas. */
+    /** Likewise: two formats are equal only if they match on both things. */
     @Override
     public boolean equals(Object obj) {
         if (!(obj instanceof DocFlavor)) {
@@ -124,65 +125,64 @@ public class DocFlavor implements Serializable, Cloneable {
             && this.myMimeType.equals(other.myMimeType);
     }
 
-    /** El texto que usan {@code toString}, {@code hashCode} y {@code equals}. */
+    /** The text {@code toString}, {@code hashCode} and {@code equals} use. */
     private String getStringValue() {
         return getMimeType() + "; class=\"" + this.myClassName + "\"";
     }
 
     /**
-     * KajiLibrary's javax.print.DocFlavor.BYTE_ARRAY -- el dato es un {@code byte[]}.
+     * KajiLibrary's javax.print.DocFlavor.BYTE_ARRAY -- the data is a {@code byte[]}.
      *
-     * <p>Aca el juego de caracteres si importa, porque bytes sin declararlo no significan nada. Ver la
-     * nota de {@link DocFlavor} sobre las variantes {@code _HOST}.
-     *
+     * <p>Here the character set does matter, because bytes without declaring it mean nothing. See
+     * the note of {@link DocFlavor} on the {@code _HOST} variants.
      */
     public static class BYTE_ARRAY extends DocFlavor {
 
         private static final long serialVersionUID = -9065578006593857475L;
 
         /**
-         * @param mimeType el tipo MIME
-         * @throws NullPointerException si es null
-         * @throws IllegalArgumentException si no es valido
+         * @param mimeType the MIME type
+         * @throws NullPointerException if it is null
+         * @throws IllegalArgumentException if it is not valid
          */
         public BYTE_ARRAY(String mimeType) {
             super(mimeType, "[B");
         }
 
-        /** Texto plano, codificacion de la plataforma. */
+        /** Plain text, the platform's encoding. */
         public static final BYTE_ARRAY TEXT_PLAIN_HOST = new BYTE_ARRAY("text/plain; charset=" + hostEncoding);
 
-        /** Texto plano en UTF-8. */
+        /** Plain text in UTF-8. */
         public static final BYTE_ARRAY TEXT_PLAIN_UTF_8 = new BYTE_ARRAY("text/plain; charset=utf-8");
 
-        /** Texto plano en UTF-16, con marca de orden. */
+        /** Plain text in UTF-16, with byte order mark. */
         public static final BYTE_ARRAY TEXT_PLAIN_UTF_16 = new BYTE_ARRAY("text/plain; charset=utf-16");
 
-        /** Texto plano en UTF-16 grande primero. */
+        /** Plain text in big-endian UTF-16. */
         public static final BYTE_ARRAY TEXT_PLAIN_UTF_16BE = new BYTE_ARRAY("text/plain; charset=utf-16be");
 
-        /** Texto plano en UTF-16 chico primero. */
+        /** Plain text in little-endian UTF-16. */
         public static final BYTE_ARRAY TEXT_PLAIN_UTF_16LE = new BYTE_ARRAY("text/plain; charset=utf-16le");
 
-        /** Texto plano en ASCII. */
+        /** Plain text in ASCII. */
         public static final BYTE_ARRAY TEXT_PLAIN_US_ASCII = new BYTE_ARRAY("text/plain; charset=us-ascii");
 
-        /** HTML, codificacion de la plataforma. */
+        /** HTML, the platform's encoding. */
         public static final BYTE_ARRAY TEXT_HTML_HOST = new BYTE_ARRAY("text/html; charset=" + hostEncoding);
 
-        /** HTML en UTF-8. */
+        /** HTML in UTF-8. */
         public static final BYTE_ARRAY TEXT_HTML_UTF_8 = new BYTE_ARRAY("text/html; charset=utf-8");
 
-        /** HTML en UTF-16, con marca de orden. */
+        /** HTML in UTF-16, with byte order mark. */
         public static final BYTE_ARRAY TEXT_HTML_UTF_16 = new BYTE_ARRAY("text/html; charset=utf-16");
 
-        /** HTML en UTF-16 grande primero. */
+        /** HTML in big-endian UTF-16. */
         public static final BYTE_ARRAY TEXT_HTML_UTF_16BE = new BYTE_ARRAY("text/html; charset=utf-16be");
 
-        /** HTML en UTF-16 chico primero. */
+        /** HTML in little-endian UTF-16. */
         public static final BYTE_ARRAY TEXT_HTML_UTF_16LE = new BYTE_ARRAY("text/html; charset=utf-16le");
 
-        /** HTML en ASCII. */
+        /** HTML in ASCII. */
         public static final BYTE_ARRAY TEXT_HTML_US_ASCII = new BYTE_ARRAY("text/html; charset=us-ascii");
 
         /** PDF. */
@@ -191,7 +191,7 @@ public class DocFlavor implements Serializable, Cloneable {
         /** PostScript. */
         public static final BYTE_ARRAY POSTSCRIPT = new BYTE_ARRAY("application/postscript");
 
-        /** PCL de HP. */
+        /** HP's PCL. */
         public static final BYTE_ARRAY PCL = new BYTE_ARRAY("application/vnd.hp-pcl");
 
         /** GIF. */
@@ -203,65 +203,67 @@ public class DocFlavor implements Serializable, Cloneable {
         /** PNG. */
         public static final BYTE_ARRAY PNG = new BYTE_ARRAY("image/png");
 
-        /** Bytes sin declarar: que la impresora deduzca que son. Es lo ultimo que hay que probar. */
+        /**
+         * Undeclared bytes: for the printer to work out what they are. It is the last thing to try.
+         */
         public static final BYTE_ARRAY AUTOSENSE = new BYTE_ARRAY("application/octet-stream");
 
     }
 
     /**
-     * KajiLibrary's javax.print.DocFlavor.INPUT_STREAM -- el dato es un {@link java.io.InputStream}.
+     * KajiLibrary's javax.print.DocFlavor.INPUT_STREAM -- the data is a {@link
+     * java.io.InputStream}.
      *
-     * <p>Aca el juego de caracteres si importa, porque bytes sin declararlo no significan nada. Ver la
-     * nota de {@link DocFlavor} sobre las variantes {@code _HOST}.
-     *
+     * <p>Here the character set does matter, because bytes without declaring it mean nothing. See
+     * the note of {@link DocFlavor} on the {@code _HOST} variants.
      */
     public static class INPUT_STREAM extends DocFlavor {
 
         private static final long serialVersionUID = -7045842700749194127L;
 
         /**
-         * @param mimeType el tipo MIME
-         * @throws NullPointerException si es null
-         * @throws IllegalArgumentException si no es valido
+         * @param mimeType the MIME type
+         * @throws NullPointerException if it is null
+         * @throws IllegalArgumentException if it is not valid
          */
         public INPUT_STREAM(String mimeType) {
             super(mimeType, "java.io.InputStream");
         }
 
-        /** Texto plano, codificacion de la plataforma. */
+        /** Plain text, the platform's encoding. */
         public static final INPUT_STREAM TEXT_PLAIN_HOST = new INPUT_STREAM("text/plain; charset=" + hostEncoding);
 
-        /** Texto plano en UTF-8. */
+        /** Plain text in UTF-8. */
         public static final INPUT_STREAM TEXT_PLAIN_UTF_8 = new INPUT_STREAM("text/plain; charset=utf-8");
 
-        /** Texto plano en UTF-16, con marca de orden. */
+        /** Plain text in UTF-16, with byte order mark. */
         public static final INPUT_STREAM TEXT_PLAIN_UTF_16 = new INPUT_STREAM("text/plain; charset=utf-16");
 
-        /** Texto plano en UTF-16 grande primero. */
+        /** Plain text in big-endian UTF-16. */
         public static final INPUT_STREAM TEXT_PLAIN_UTF_16BE = new INPUT_STREAM("text/plain; charset=utf-16be");
 
-        /** Texto plano en UTF-16 chico primero. */
+        /** Plain text in little-endian UTF-16. */
         public static final INPUT_STREAM TEXT_PLAIN_UTF_16LE = new INPUT_STREAM("text/plain; charset=utf-16le");
 
-        /** Texto plano en ASCII. */
+        /** Plain text in ASCII. */
         public static final INPUT_STREAM TEXT_PLAIN_US_ASCII = new INPUT_STREAM("text/plain; charset=us-ascii");
 
-        /** HTML, codificacion de la plataforma. */
+        /** HTML, the platform's encoding. */
         public static final INPUT_STREAM TEXT_HTML_HOST = new INPUT_STREAM("text/html; charset=" + hostEncoding);
 
-        /** HTML en UTF-8. */
+        /** HTML in UTF-8. */
         public static final INPUT_STREAM TEXT_HTML_UTF_8 = new INPUT_STREAM("text/html; charset=utf-8");
 
-        /** HTML en UTF-16, con marca de orden. */
+        /** HTML in UTF-16, with byte order mark. */
         public static final INPUT_STREAM TEXT_HTML_UTF_16 = new INPUT_STREAM("text/html; charset=utf-16");
 
-        /** HTML en UTF-16 grande primero. */
+        /** HTML in big-endian UTF-16. */
         public static final INPUT_STREAM TEXT_HTML_UTF_16BE = new INPUT_STREAM("text/html; charset=utf-16be");
 
-        /** HTML en UTF-16 chico primero. */
+        /** HTML in little-endian UTF-16. */
         public static final INPUT_STREAM TEXT_HTML_UTF_16LE = new INPUT_STREAM("text/html; charset=utf-16le");
 
-        /** HTML en ASCII. */
+        /** HTML in ASCII. */
         public static final INPUT_STREAM TEXT_HTML_US_ASCII = new INPUT_STREAM("text/html; charset=us-ascii");
 
         /** PDF. */
@@ -270,7 +272,7 @@ public class DocFlavor implements Serializable, Cloneable {
         /** PostScript. */
         public static final INPUT_STREAM POSTSCRIPT = new INPUT_STREAM("application/postscript");
 
-        /** PCL de HP. */
+        /** HP's PCL. */
         public static final INPUT_STREAM PCL = new INPUT_STREAM("application/vnd.hp-pcl");
 
         /** GIF. */
@@ -282,69 +284,70 @@ public class DocFlavor implements Serializable, Cloneable {
         /** PNG. */
         public static final INPUT_STREAM PNG = new INPUT_STREAM("image/png");
 
-        /** Bytes sin declarar: que la impresora deduzca que son. Es lo ultimo que hay que probar. */
+        /**
+         * Undeclared bytes: for the printer to work out what they are. It is the last thing to try.
+         */
         public static final INPUT_STREAM AUTOSENSE = new INPUT_STREAM("application/octet-stream");
 
     }
 
     /**
-     * KajiLibrary's javax.print.DocFlavor.URL -- el dato es una {@link java.net.URL}.
+     * KajiLibrary's javax.print.DocFlavor.URL -- the data is a {@link java.net.URL}.
      *
-     * <p>Es la unica representacion donde el dato <b>no</b> viaja: se le pasa la direccion al servicio y
-     * el la busca. Eso significa que la impresora tiene que poder llegar a esa URL, que no es obvio si
-     * esta en otra red.
+     * <p>It is the only representation where the data does <b>not</b> travel: the address is passed
+     * to the service and it fetches it. That means the printer has to be able to reach that URL,
+     * which is not obvious if it is on another network.
      *
-     * <p>Aca el juego de caracteres si importa, porque bytes sin declararlo no significan nada. Ver la
-     * nota de {@link DocFlavor} sobre las variantes {@code _HOST}.
-     *
+     * <p>Here the character set does matter, because bytes without declaring it mean nothing. See
+     * the note of {@link DocFlavor} on the {@code _HOST} variants.
      */
     public static class URL extends DocFlavor {
 
         private static final long serialVersionUID = 2936725788144902062L;
 
         /**
-         * @param mimeType el tipo MIME
-         * @throws NullPointerException si es null
-         * @throws IllegalArgumentException si no es valido
+         * @param mimeType the MIME type
+         * @throws NullPointerException if it is null
+         * @throws IllegalArgumentException if it is not valid
          */
         public URL(String mimeType) {
             super(mimeType, "java.net.URL");
         }
 
-        /** Texto plano, codificacion de la plataforma. */
+        /** Plain text, the platform's encoding. */
         public static final URL TEXT_PLAIN_HOST = new URL("text/plain; charset=" + hostEncoding);
 
-        /** Texto plano en UTF-8. */
+        /** Plain text in UTF-8. */
         public static final URL TEXT_PLAIN_UTF_8 = new URL("text/plain; charset=utf-8");
 
-        /** Texto plano en UTF-16, con marca de orden. */
+        /** Plain text in UTF-16, with byte order mark. */
         public static final URL TEXT_PLAIN_UTF_16 = new URL("text/plain; charset=utf-16");
 
-        /** Texto plano en UTF-16 grande primero. */
+        /** Plain text in big-endian UTF-16. */
         public static final URL TEXT_PLAIN_UTF_16BE = new URL("text/plain; charset=utf-16be");
 
-        /** Texto plano en UTF-16 chico primero. */
+        /** Plain text in little-endian UTF-16. */
         public static final URL TEXT_PLAIN_UTF_16LE = new URL("text/plain; charset=utf-16le");
 
-        /** Texto plano en ASCII. */
+        /** Plain text in ASCII. */
         public static final URL TEXT_PLAIN_US_ASCII = new URL("text/plain; charset=us-ascii");
 
-        /** HTML, codificacion de la plataforma. */
+        /** HTML, the platform's encoding. */
         public static final URL TEXT_HTML_HOST = new URL("text/html; charset=" + hostEncoding);
 
-        /** HTML en UTF-8. */
+        /** HTML in UTF-8. */
         public static final URL TEXT_HTML_UTF_8 = new URL("text/html; charset=utf-8");
 
-        /** HTML en UTF-16, con marca de orden. */
+        /** HTML in UTF-16, with byte order mark. */
         public static final URL TEXT_HTML_UTF_16 = new URL("text/html; charset=utf-16");
 
-        /** HTML en UTF-16 grande primero. */
+        /** HTML in big-endian UTF-16. */
         public static final URL TEXT_HTML_UTF_16BE = new URL("text/html; charset=utf-16be");
 
-        /** HTML en UTF-16 chico primero. */
+        /** HTML in little-endian UTF-16. */
         public static final URL TEXT_HTML_UTF_16LE = new URL("text/html; charset=utf-16le");
 
-        /** HTML en ASCII. */
+        /** HTML in ASCII. */
         public static final URL TEXT_HTML_US_ASCII = new URL("text/html; charset=us-ascii");
 
         /** PDF. */
@@ -353,7 +356,7 @@ public class DocFlavor implements Serializable, Cloneable {
         /** PostScript. */
         public static final URL POSTSCRIPT = new URL("application/postscript");
 
-        /** PCL de HP. */
+        /** HP's PCL. */
         public static final URL PCL = new URL("application/vnd.hp-pcl");
 
         /** GIF. */
@@ -365,33 +368,34 @@ public class DocFlavor implements Serializable, Cloneable {
         /** PNG. */
         public static final URL PNG = new URL("image/png");
 
-        /** Bytes sin declarar: que la impresora deduzca que son. Es lo ultimo que hay que probar. */
+        /**
+         * Undeclared bytes: for the printer to work out what they are. It is the last thing to try.
+         */
         public static final URL AUTOSENSE = new URL("application/octet-stream");
 
     }
 
     /**
-     * KajiLibrary's javax.print.DocFlavor.CHAR_ARRAY -- el dato es un {@code char[]}.
+     * KajiLibrary's javax.print.DocFlavor.CHAR_ARRAY -- the data is a {@code char[]}.
      *
-     * <p>El juego de caracteres siempre es {@code utf-16}, y no se puede cambiar por una razon
-     * concreta: los {@code char} de Java <b>ya son</b> UTF-16. No hay decodificacion que hacer, asi
-     * que declarar otra cosa seria mentir sobre lo que hay en memoria.
-     *
+     * <p>The character set is always {@code utf-16}, and it cannot be changed for a concrete
+     * reason: Java {@code char}s <b>already are</b> UTF-16. There is no decoding to do, so
+     * declaring something else would be lying about what is in memory.
      */
     public static class CHAR_ARRAY extends DocFlavor {
 
         private static final long serialVersionUID = -8720590903724405128L;
 
         /**
-         * @param mimeType el tipo MIME
-         * @throws NullPointerException si es null
-         * @throws IllegalArgumentException si no es valido
+         * @param mimeType the MIME type
+         * @throws NullPointerException if it is null
+         * @throws IllegalArgumentException if it is not valid
          */
         public CHAR_ARRAY(String mimeType) {
             super(mimeType, "[C");
         }
 
-        /** Texto plano. */
+        /** Plain text. */
         public static final CHAR_ARRAY TEXT_PLAIN = new CHAR_ARRAY("text/plain; charset=utf-16");
 
         /** HTML. */
@@ -400,27 +404,26 @@ public class DocFlavor implements Serializable, Cloneable {
     }
 
     /**
-     * KajiLibrary's javax.print.DocFlavor.STRING -- el dato es un {@link String}.
+     * KajiLibrary's javax.print.DocFlavor.STRING -- the data is a {@link String}.
      *
-     * <p>El juego de caracteres siempre es {@code utf-16}, y no se puede cambiar por una razon
-     * concreta: los {@code char} de Java <b>ya son</b> UTF-16. No hay decodificacion que hacer, asi
-     * que declarar otra cosa seria mentir sobre lo que hay en memoria.
-     *
+     * <p>The character set is always {@code utf-16}, and it cannot be changed for a concrete
+     * reason: Java {@code char}s <b>already are</b> UTF-16. There is no decoding to do, so
+     * declaring something else would be lying about what is in memory.
      */
     public static class STRING extends DocFlavor {
 
         private static final long serialVersionUID = 4414407504887034035L;
 
         /**
-         * @param mimeType el tipo MIME
-         * @throws NullPointerException si es null
-         * @throws IllegalArgumentException si no es valido
+         * @param mimeType the MIME type
+         * @throws NullPointerException if it is null
+         * @throws IllegalArgumentException if it is not valid
          */
         public STRING(String mimeType) {
             super(mimeType, "java.lang.String");
         }
 
-        /** Texto plano. */
+        /** Plain text. */
         public static final STRING TEXT_PLAIN = new STRING("text/plain; charset=utf-16");
 
         /** HTML. */
@@ -429,27 +432,26 @@ public class DocFlavor implements Serializable, Cloneable {
     }
 
     /**
-     * KajiLibrary's javax.print.DocFlavor.READER -- el dato es un {@link java.io.Reader}.
+     * KajiLibrary's javax.print.DocFlavor.READER -- the data is a {@link java.io.Reader}.
      *
-     * <p>El juego de caracteres siempre es {@code utf-16}, y no se puede cambiar por una razon
-     * concreta: los {@code char} de Java <b>ya son</b> UTF-16. No hay decodificacion que hacer, asi
-     * que declarar otra cosa seria mentir sobre lo que hay en memoria.
-     *
+     * <p>The character set is always {@code utf-16}, and it cannot be changed for a concrete
+     * reason: Java {@code char}s <b>already are</b> UTF-16. There is no decoding to do, so
+     * declaring something else would be lying about what is in memory.
      */
     public static class READER extends DocFlavor {
 
         private static final long serialVersionUID = 7100295812579351567L;
 
         /**
-         * @param mimeType el tipo MIME
-         * @throws NullPointerException si es null
-         * @throws IllegalArgumentException si no es valido
+         * @param mimeType the MIME type
+         * @throws NullPointerException if it is null
+         * @throws IllegalArgumentException if it is not valid
          */
         public READER(String mimeType) {
             super(mimeType, "java.io.Reader");
         }
 
-        /** Texto plano. */
+        /** Plain text. */
         public static final READER TEXT_PLAIN = new READER("text/plain; charset=utf-16");
 
         /** HTML. */
@@ -458,39 +460,38 @@ public class DocFlavor implements Serializable, Cloneable {
     }
 
     /**
-     * KajiLibrary's javax.print.DocFlavor.SERVICE_FORMATTED -- el dato es un objeto que dibuja.
+     * KajiLibrary's javax.print.DocFlavor.SERVICE_FORMATTED -- the data is an object that draws.
      *
-     * <p>Los tres comparten el mismo tipo MIME --{@code application/x-java-jvm-local-objectref}-- y se
-     * distinguen solo por la clase de representacion. No es un descuido: ese tipo significa
-     * literalmente "una referencia a un objeto de esta maquina virtual", y no hay nada mas que decir
-     * sobre los bytes porque no hay bytes.
+     * <p>The three share the same MIME type --{@code application/x-java-jvm-local-objectref}-- and
+     * are told apart only by the representation class. It is not an oversight: that type literally
+     * means "a reference to an object of this virtual machine", and there is nothing more to say
+     * about the bytes because there are no bytes.
      *
-     * <p>La consecuencia practica es que estos formatos <b>no se pueden mandar por la red</b>. El
-     * servicio de impresion tiene que estar en el mismo proceso, porque lo que recibe es una llamada a
-     * un metodo que dibuja, no un documento.
-     *
+     * <p>The practical consequence is that these formats <b>cannot be sent over the network</b>.
+     * The print service has to be in the same process, because what it receives is a call to a
+     * method that draws, not a document.
      */
     public static class SERVICE_FORMATTED extends DocFlavor {
 
         private static final long serialVersionUID = 6181337766266637256L;
 
         /**
-         * @param className el nombre de la clase de representacion
-         * @throws NullPointerException si es null
+         * @param className the name of the representation class
+         * @throws NullPointerException if it is null
          */
         public SERVICE_FORMATTED(String className) {
             super("application/x-java-jvm-local-objectref", className);
         }
 
-        /** Una imagen que se rinde a la resolucion que la impresora pida. */
+        /** An image rendered at whatever resolution the printer asks for. */
         public static final SERVICE_FORMATTED RENDERABLE_IMAGE =
             new SERVICE_FORMATTED("java.awt.image.renderable.RenderableImage");
 
-        /** Un objeto que dibuja una pagina por vez. */
+        /** An object that draws one page at a time. */
         public static final SERVICE_FORMATTED PRINTABLE =
             new SERVICE_FORMATTED("java.awt.print.Printable");
 
-        /** Un objeto que ademas sabe cuantas paginas hay y con que formato va cada una. */
+        /** An object that also knows how many pages there are and with which format each goes. */
         public static final SERVICE_FORMATTED PAGEABLE =
             new SERVICE_FORMATTED("java.awt.print.Pageable");
 

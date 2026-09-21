@@ -8,20 +8,20 @@ import java.awt.Insets;
 import javax.swing.Icon;
 
 /**
- * Un borde macizo, de un color o embaldosado con un icono.
+ * A solid border, of one colour or tiled with an icon.
  *
- * <h2>Las dos cosas que lo distinguen de {@link LineBorder}</h2>
+ * <h2>The two things that set it apart from {@link LineBorder}</h2>
  *
- * <p>La primera es que los cuatro lados pueden tener <strong>grosores distintos</strong> — de ahi
- * que extienda {@link EmptyBorder}, que ya sabe llevar cuatro margenes. Una linea de tres pixeles
- * solo arriba es un separador, y con {@code LineBorder} no se puede escribir.
+ * <p>The first is that the four sides may have <strong>different thicknesses</strong> -- hence
+ * it extends {@link EmptyBorder}, which already knows how to carry four margins. A three-pixel
+ * line only at the top is a separator, and with {@code LineBorder} it cannot be written.
  *
- * <p>La segunda es el icono: en vez de un color, el borde se rellena repitiendo una imagen. Ahi el
- * dibujo se recorta a cada lado del marco antes de embaldosar, porque si no las baldosas se saldrian
- * por encima del contenido.
+ * <p>The second is the icon: instead of a colour, the border is filled by repeating an image.
+ * There the drawing is clipped to each side of the frame before tiling, because otherwise the
+ * tiles would spill over the content.
  *
- * <p>Con el constructor de un solo {@link Icon} los grosores se toman <strong>del tamano del
- * icono</strong>, que es la unica medida razonable disponible.
+ * <p>With the constructor that takes a single {@link Icon} the thicknesses are taken
+ * <strong>from the icon's size</strong>, which is the only reasonable measure available.
  */
 public class MatteBorder extends EmptyBorder {
 
@@ -30,38 +30,38 @@ public class MatteBorder extends EmptyBorder {
     protected Color color;
     protected Icon tileIcon;
 
-    /** Con los cuatro grosores y un color. */
+    /** With the four thicknesses and a colour. */
     public MatteBorder(int top, int left, int bottom, int right, Color matteColor) {
         super(top, left, bottom, right);
         this.color = matteColor;
     }
 
-    /** Con los grosores de un {@link Insets} y un color. */
+    /** With an {@link Insets}'s thicknesses and a colour. */
     public MatteBorder(Insets borderInsets, Color matteColor) {
         super(borderInsets);
         this.color = matteColor;
     }
 
-    /** Con los cuatro grosores, embaldosando con un icono. */
+    /** With the four thicknesses, tiling with an icon. */
     public MatteBorder(int top, int left, int bottom, int right, Icon tileIcon) {
         super(top, left, bottom, right);
         this.tileIcon = tileIcon;
     }
 
-    /** Con los grosores de un {@link Insets}, embaldosando con un icono. */
+    /** With an {@link Insets}'s thicknesses, tiling with an icon. */
     public MatteBorder(Insets borderInsets, Icon tileIcon) {
         super(borderInsets);
         this.tileIcon = tileIcon;
     }
 
-    /** Solo con el icono: los grosores salen de su tamano. */
+    /** With the icon alone: the thicknesses come from its size. */
     public MatteBorder(Icon tileIcon) {
         this(-1, -1, -1, -1, tileIcon);
     }
 
     public void paintBorder(Component c, Graphics g, int x, int y, int width, int height) {
         Insets i = getBorderInsets(c, new Insets(0, 0, 0, 0));
-        Color viejo = g.getColor();
+        Color old = g.getColor();
         g.translate(x, y);
 
         if (this.color != null) {
@@ -71,61 +71,61 @@ public class MatteBorder extends EmptyBorder {
             g.fillRect(i.left, height - i.bottom, width - i.left, i.bottom);
             g.fillRect(width - i.right, 0, i.right, height - i.bottom);
         } else if (this.tileIcon != null) {
-            int anchoBaldosa = this.tileIcon.getIconWidth();
-            int altoBaldosa = this.tileIcon.getIconHeight();
-            // Los cuatro lados del marco, embaldosados. Se recorta antes de dibujar porque una
-            // baldosa casi nunca entra un numero entero de veces, y la ultima se saldria.
-            embaldosar(c, g, 0, 0, width - i.right, i.top, anchoBaldosa, altoBaldosa);
-            embaldosar(c, g, 0, i.top, i.left, height - i.top, anchoBaldosa, altoBaldosa);
-            embaldosar(c, g, i.left, height - i.bottom, width - i.left, i.bottom,
-                    anchoBaldosa, altoBaldosa);
-            embaldosar(c, g, width - i.right, 0, i.right, height - i.bottom,
-                    anchoBaldosa, altoBaldosa);
+            int tileWidth = this.tileIcon.getIconWidth();
+            int tileHeight = this.tileIcon.getIconHeight();
+            // The four sides of the frame, tiled. It is clipped before drawing because a tile
+            // almost never fits a whole number of times, and the last one would spill.
+            tile(c, g, 0, 0, width - i.right, i.top, tileWidth, tileHeight);
+            tile(c, g, 0, i.top, i.left, height - i.top, tileWidth, tileHeight);
+            tile(c, g, i.left, height - i.bottom, width - i.left, i.bottom,
+                    tileWidth, tileHeight);
+            tile(c, g, width - i.right, 0, i.right, height - i.bottom,
+                    tileWidth, tileHeight);
         }
 
         g.translate(-x, -y);
-        g.setColor(viejo);
+        g.setColor(old);
     }
 
-    private void embaldosar(Component c, Graphics g, int x, int y, int width, int height,
-            int anchoBaldosa, int altoBaldosa) {
-        if (width <= 0 || height <= 0 || anchoBaldosa <= 0 || altoBaldosa <= 0) {
+    private void tile(Component c, Graphics g, int x, int y, int width, int height,
+            int tileWidth, int tileHeight) {
+        if (width <= 0 || height <= 0 || tileWidth <= 0 || tileHeight <= 0) {
             return;
         }
-        java.awt.Shape recorteViejo = g.getClip();
+        java.awt.Shape oldClip = g.getClip();
         g.clipRect(x, y, width, height);
-        for (int fy = y; fy < y + height; fy = fy + altoBaldosa) {
-            for (int fx = x; fx < x + width; fx = fx + anchoBaldosa) {
+        for (int fy = y; fy < y + height; fy = fy + tileHeight) {
+            for (int fx = x; fx < x + width; fx = fx + tileWidth) {
                 this.tileIcon.paintIcon(c, g, fx, fy);
             }
         }
-        g.setClip(recorteViejo);
+        g.setClip(oldClip);
     }
 
     public Insets getBorderInsets(Component c, Insets insets) {
-        return calcularInsets(insets);
+        return computeInsets(insets);
     }
 
-    /** Los grosores, en un {@link Insets} nuevo. */
+    /** The thicknesses, in a new {@link Insets}. */
     public Insets getBorderInsets() {
-        return calcularInsets(new Insets(0, 0, 0, 0));
+        return computeInsets(new Insets(0, 0, 0, 0));
     }
 
     /**
-     * Rellena {@code insets}, resolviendo los negativos con el tamano del icono.
+     * Fills {@code insets}, resolving the negatives with the icon's size.
      *
-     * <p>Un grosor negativo es la marca de "no me lo dijeron": lo pone el constructor de un solo
-     * icono. Resolverlo aca y no ahi es lo que permite que el icono se pueda cambiar despues.
+     * <p>A negative thickness is the mark of "nobody told me": the single-icon constructor sets
+     * it. Resolving it here and not there is what allows the icon to be changed afterwards.
      */
-    private Insets calcularInsets(Insets insets) {
+    private Insets computeInsets(Insets insets) {
         if (this.tileIcon != null) {
             if (this.top == -1 && this.bottom == -1 && this.left == -1 && this.right == -1) {
-                int ancho = this.tileIcon.getIconWidth();
-                int alto = this.tileIcon.getIconHeight();
-                insets.top = alto;
-                insets.bottom = alto;
-                insets.left = ancho;
-                insets.right = ancho;
+                int iconWidth = this.tileIcon.getIconWidth();
+                int iconHeight = this.tileIcon.getIconHeight();
+                insets.top = iconHeight;
+                insets.bottom = iconHeight;
+                insets.left = iconWidth;
+                insets.right = iconWidth;
                 return insets;
             }
         }
@@ -136,21 +136,21 @@ public class MatteBorder extends EmptyBorder {
         return insets;
     }
 
-    /** El color de relleno, o {@code null} si embaldosa con un icono. */
+    /** The fill colour, or {@code null} if it tiles with an icon. */
     public Color getMatteColor() {
         return this.color;
     }
 
-    /** El icono con el que embaldosa, o {@code null} si es de color. */
+    /** The icon it tiles with, or {@code null} if it is of one colour. */
     public Icon getTileIcon() {
         return this.tileIcon;
     }
 
     /**
-     * Opaco solo si es de color.
+     * Opaque only if it is of one colour.
      *
-     * <p>Un icono puede tener transparencias, y esta clase no tiene forma de saberlo: prometer
-     * opacidad ahi seria una apuesta sobre una imagen ajena.
+     * <p>An icon may have transparency, and this class has no way of knowing: promising opacity
+     * there would be a bet on somebody else's image.
      */
     public boolean isBorderOpaque() {
         return this.color != null;

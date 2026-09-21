@@ -4,36 +4,36 @@ import org.w3c.dom.DOMException;
 import org.w3c.dom.stylesheets.StyleSheet;
 
 /**
- * Una hoja de estilos CSS: la parte de {@link StyleSheet} que si sabe de reglas.
+ * A CSS style sheet: the part of {@link StyleSheet} that does know about rules.
  *
- * <p>`getOwnerRule` y `getOwnerNode` --el heredado-- son excluyentes, como en `StyleSheet`: una
- * hoja importada tiene regla dueno y ninguna nodo; una enlazada, al reves.
+ * <p>`getOwnerRule` and `getOwnerNode` --the inherited one-- are mutually exclusive, as in
+ * `StyleSheet`: an imported sheet has an owner rule and no node; a linked one, the other way round.
  *
- * <p>`insertRule` devuelve la posicion donde quedo la regla, que no siempre es el indice que se
- * pidio: las reglas `@charset` e `@import` tienen que ir antes que las demas, y la implementacion
- * puede acomodarlas.
+ * <p>`insertRule` returns the position where the rule ended up, which is not always the index that
+ * was asked for: the `@charset` and `@import` rules have to go before the others, and the
+ * implementation may rearrange them.
  */
 public interface CSSStyleSheet extends StyleSheet {
 
-    /** El `@import` que trajo esta hoja, o nulo si esta enlazada desde el documento. */
+    /** The `@import` that brought this sheet, or null if it is linked from the document. */
     CSSRule getOwnerRule();
 
-    /** Las reglas de la hoja, en una lista viva. */
+    /** The rules of the sheet, in a live list. */
     CSSRuleList getCssRules();
 
     /**
-     * Inserta esa regla en esa posicion y devuelve donde quedo.
+     * It inserts that rule at that position and returns where it ended up.
      *
-     * @throws DOMException `HIERARCHY_REQUEST_ERR` si la regla no puede ir ahi --un `@import`
-     *     despues de una regla de estilo, por ejemplo--; `INDEX_SIZE_ERR` si el indice esta fuera
-     *     de rango; `SYNTAX_ERR` si el texto no parsea
+     * @throws DOMException `HIERARCHY_REQUEST_ERR` if the rule cannot go there --an `@import` after
+     *     a style rule, for example--; `INDEX_SIZE_ERR` if the index is out of range; `SYNTAX_ERR`
+     *     if the text does not parse
      */
     int insertRule(String rule, int index) throws DOMException;
 
     /**
-     * Borra la regla de esa posicion.
+     * It deletes the rule at that position.
      *
-     * @throws DOMException `INDEX_SIZE_ERR` si el indice esta fuera de rango
+     * @throws DOMException `INDEX_SIZE_ERR` if the index is out of range
      */
     void deleteRule(int index) throws DOMException;
 }

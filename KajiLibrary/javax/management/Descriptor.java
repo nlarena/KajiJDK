@@ -3,62 +3,66 @@ package javax.management;
 import java.io.Serializable;
 
 /**
- * Metadatos abiertos que se cuelgan de cualquier pieza de un {@link MBeanInfo}.
+ * Open metadata that hangs from any piece of an {@link MBeanInfo}.
  *
- * <p>Es la valvula de escape del modelo: `MBeanInfo` y compa&ntilde;ia declaran lo que JMX sabe
- * nombrar --tipo, lectura, escritura-- y todo lo demas (unidades, si el valor es acumulativo, si
- * conviene mostrarlo, lo que se le ocurra al que modela) entra por aca como campos con nombre.
+ * <p>It is the model's escape valve: {@code MBeanInfo} and friends declare what JMX knows how to
+ * name --type, readable, writable-- and everything else (units, whether the value is cumulative,
+ * whether it is worth showing, whatever occurs to the modeller) comes in here as named fields.
  *
- * <p><b>Los nombres de campo no distinguen mayusculas.</b> Es la regla que mas se olvida: pedir
- * {@code "units"} y {@code "Units"} da lo mismo, y un descriptor no puede tener los dos.
+ * <p><b>Field names are case-insensitive.</b> It is the rule most often forgotten: asking for
+ * {@code "units"} and {@code "Units"} gives the same, and a descriptor cannot have both.
  */
 public interface Descriptor extends Serializable, Cloneable {
 
     /**
-     * El valor del campo, o `null` si no esta.
+     * The value of the field, or {@code null} if it is not there.
      *
-     * @throws RuntimeOperationsException si el nombre es nulo o vacio
+     * @throws RuntimeOperationsException if the name is null or empty
      */
     Object getFieldValue(String fieldName) throws RuntimeOperationsException;
 
     /**
-     * Fija un campo.
+     * Sets a field.
      *
-     * @throws RuntimeOperationsException si el nombre no sirve, o si el descriptor es inmutable
+     * @throws RuntimeOperationsException if the name is not valid, or if the descriptor is
+     *     immutable
      */
     void setField(String fieldName, Object fieldValue) throws RuntimeOperationsException;
 
-    /** Todos los campos como {@code "nombre=valor"}. */
+    /** All the fields as {@code "name=value"}. */
     String[] getFields();
 
-    /** Solo los nombres. */
+    /** Only the names. */
     String[] getFieldNames();
 
     /**
-     * Los valores de los nombres dados, en el mismo orden.
+     * The values of the given names, in the same order.
      *
-     * <p>Sin argumentos devuelve <b>todos</b> los valores, no ninguno: es la variante que se usa
-     * junto con {@link #getFieldNames()}.
+     * <p>With a {@code null} argument it returns <b>all</b> the values: that is the variant used
+     * together with {@link #getFieldNames()}. Called with no arguments at all, the varargs array is
+     * empty and so is the result. (An earlier note said the no-argument call returns everything; it
+     * does not, here or in the JDK.)
      */
     Object[] getFieldValues(String... fieldNames);
 
-    /** Saca un campo; si no estaba, no hace nada. */
+    /** Removes a field; if it was not there, does nothing. */
     void removeField(String fieldName);
 
     /**
-     * Fija varios campos de una.
+     * Sets several fields at once.
      *
-     * @throws RuntimeOperationsException si los arreglos no miden lo mismo o algun nombre no sirve
+     * @throws RuntimeOperationsException if the arrays do not have the same length or a name is not
+     *     valid
      */
     void setFields(String[] fieldNames, Object[] fieldValues) throws RuntimeOperationsException;
 
-    /** Una copia. Los inmutables se devuelven a si mismos, que es copia suficiente. */
+    /** A copy. The immutable ones return themselves, which is copy enough. */
     Object clone() throws RuntimeOperationsException;
 
-    /** Si los campos que JMX si conoce tienen valores admisibles. */
+    /** Whether the fields JMX does know have admissible values. */
     boolean isValid() throws RuntimeOperationsException;
 
-    /** Por conjunto de campos, con los nombres comparados sin distinguir mayusculas. */
+    /** By set of fields, with the names compared case-insensitively. */
     boolean equals(Object obj);
 
     int hashCode();

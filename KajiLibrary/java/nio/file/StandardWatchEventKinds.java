@@ -1,62 +1,63 @@
 package java.nio.file;
 
-// Las cuatro clases de evento que define la spec para el servicio de vigilancia.
+// The four kinds of event the spec defines for the watch service.
 //
-// Se comparan por **identidad**, no por nombre: son constantes unicas, y un `WatchEvent.Kind` ajeno
-// que se llame `"ENTRY_CREATE"` no es este. Por eso la implementacion privada no define `equals`.
+// They are compared by **identity**, not by name: they are unique constants, and a foreign
+// `WatchEvent.Kind` called `"ENTRY_CREATE"` is not this one. That is why the private implementation
+// defines no `equals`.
 //
-// KajiJDK no tiene servicio de vigilancia --`FileSystem.newWatchService()` levanta
-// `UnsupportedOperationException`-- asi que estas constantes nunca llegan en un evento. Existen
-// porque el codigo que registra un directorio las nombra y tiene que compilar.
+// KajiJDK has no watch service --`FileSystem.newWatchService()` throws
+// `UnsupportedOperationException`-- so these constants never arrive in an event. They exist because
+// the code that registers a directory names them and has to compile.
 public final class StandardWatchEventKinds {
 
-    // Solo constantes: no hay nada que instanciar.
+    // Constants only: there is nothing to instantiate.
     private StandardWatchEventKinds() {
     }
 
-    // La unica implementacion de `Kind`. Privada a proposito: nadie deberia poder fabricar una
-    // clase de evento que se haga pasar por estas.
-    private static class ClaseEstandar<T> implements WatchEvent.Kind<T> {
+    // The only implementation of `Kind`. Private on purpose: nobody should be able to make an event
+    // kind that passes itself off as these.
+    private static class StandardKind<T> implements WatchEvent.Kind<T> {
 
-        private final String nombre;
-        private final Class<T> tipo;
+        private final String name;
+        private final Class<T> kind;
 
-        ClaseEstandar(String nombre, Class<T> tipo) {
-            this.nombre = nombre;
-            this.tipo = tipo;
+        StandardKind(String name, Class<T> kind) {
+            this.name = name;
+            this.kind = kind;
         }
 
         public String name() {
-            return this.nombre;
+            return this.name;
         }
 
         public Class<T> type() {
-            return this.tipo;
+            return this.kind;
         }
 
         public String toString() {
-            return this.nombre;
+            return this.name;
         }
     }
 
     /**
-     * Se perdieron eventos.
+     * Events were lost.
      *
-     * <p>Su contexto es `Object` y no `Path` porque no hay ninguna ruta que informar: lo que dice
-     * es que la cola se desbordo y hay cambios que no se van a ver.
+     * <p>Its context is `Object` and not `Path` because there is no path to report: what it says is
+     * that the queue overflowed and there are changes that will not be seen.
      */
     public static final WatchEvent.Kind<Object> OVERFLOW =
-            new ClaseEstandar<Object>("OVERFLOW", Object.class);
+            new StandardKind<Object>("OVERFLOW", Object.class);
 
-    /** Se creo una entrada en el directorio vigilado. */
+    /** An entry was created in the watched directory. */
     public static final WatchEvent.Kind<Path> ENTRY_CREATE =
-            new ClaseEstandar<Path>("ENTRY_CREATE", Path.class);
+            new StandardKind<Path>("ENTRY_CREATE", Path.class);
 
-    /** Se borro una entrada. */
+    /** An entry was deleted. */
     public static final WatchEvent.Kind<Path> ENTRY_DELETE =
-            new ClaseEstandar<Path>("ENTRY_DELETE", Path.class);
+            new StandardKind<Path>("ENTRY_DELETE", Path.class);
 
-    /** Se modifico una entrada. */
+    /** An entry was modified. */
     public static final WatchEvent.Kind<Path> ENTRY_MODIFY =
-            new ClaseEstandar<Path>("ENTRY_MODIFY", Path.class);
+            new StandardKind<Path>("ENTRY_MODIFY", Path.class);
 }

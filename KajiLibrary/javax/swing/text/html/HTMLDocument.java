@@ -13,67 +13,68 @@ import javax.swing.text.AbstractDocument;
 import javax.swing.text.AttributeSet;
 import javax.swing.text.BadLocationException;
 import javax.swing.text.DefaultStyledDocument;
+import javax.swing.text.Document;
 import javax.swing.text.Element;
 import javax.swing.text.MutableAttributeSet;
 import javax.swing.text.SimpleAttributeSet;
 import javax.swing.text.StyleConstants;
 
 /**
- * Un documento que guarda HTML.
+ * A document that keeps HTML.
  *
- * <h2>El arbol no es el HTML</h2>
+ * <h2>The tree is not the HTML</h2>
  *
- * <p>Un documento de texto es parrafos con tramos de caracteres adentro. El HTML es etiquetas
- * anidadas hasta cualquier profundidad. Este documento acerca las dos formas: usa
- * {@link BlockElement} para las etiquetas que arman bloque y {@link RunElement} para los tramos, y
- * guarda en cada elemento la etiqueta que lo genero.
+ * <p>A text document is paragraphs with stretches of characters inside. HTML is tags nested to
+ * any depth. This document brings the two forms closer: it uses {@link BlockElement} for the
+ * tags that make a block and {@link RunElement} for the stretches, and keeps in each element the
+ * tag that generated it.
  *
- * <p>Lo que <em>no</em> hace es guardar las etiquetas de caracter como elementos. Una negrita no es
- * un elemento: es un atributo del tramo, con la etiqueta {@code HTML.Tag.B} como clave. Por eso el
- * arbol es mucho mas chato que el HTML, y por eso {@link HTMLWriter} tiene que reconstruir el
- * anidamiento al escribir.
+ * <p>What it does <em>not</em> do is keep the character tags as elements. A bold is not an
+ * element: it is an attribute of the stretch, with the {@code HTML.Tag.B} tag as the key. That is
+ * why the tree is much flatter than the HTML, and that is why {@link HTMLWriter} has to rebuild
+ * the nesting when writing.
  *
- * <h2>Como se llena</h2>
+ * <h2>How it is filled</h2>
  *
- * <p>No se llena escribiendo texto: se llena con un {@link HTMLReader}, que es lo que
- * {@link #getReader} devuelve y lo que el analizador alimenta. El lector junta todo en una lista de
- * especificaciones y recien al final arma el arbol de una vez, que es mucho mas barato que ir
- * insertando.
+ * <p>It is not filled by writing text: it is filled with an {@link HTMLReader}, which is what
+ * {@link #getReader} returns and what the parser feeds. The reader gathers everything in a list
+ * of specifications and only at the end builds the tree in one go, which is far cheaper than
+ * inserting as it goes.
  *
- * <h2>Editar el HTML directamente</h2>
+ * <h2>Editing the HTML directly</h2>
  *
- * <p>Los seis metodos {@code setInnerHTML}, {@code setOuterHTML}, {@code insertAfterStart},
- * {@code insertBeforeEnd}, {@code insertBeforeStart} e {@code insertAfterEnd} permiten cambiar el
- * documento hablando en HTML en lugar de en elementos. Se nombran por lo que hacen respecto de un
- * elemento, y esa es toda la diferencia entre ellos.
+ * <p>The six methods {@code setInnerHTML}, {@code setOuterHTML}, {@code insertAfterStart},
+ * {@code insertBeforeEnd}, {@code insertBeforeStart} and {@code insertAfterEnd} allow changing
+ * the document by talking in HTML instead of in elements. They are named after what they do
+ * relative to an element, and that is the whole difference between them.
  */
 public class HTMLDocument extends DefaultStyledDocument {
 
-    /** La clave con la que se guardan los comentarios que quedaron fuera del cuerpo. */
+    /** The key under which the comments left outside the body are kept. */
     public static final String AdditionalComments = "AdditionalComments";
 
     private URL base;
     private boolean preservesUnknownTags = true;
     private int tokenThreshold = Integer.MAX_VALUE;
     private HTMLEditorKit.Parser parser;
-    private Hashtable<String, Element> mapa;
+    private Hashtable<String, Element> map;
 
-    /** Un documento vacio con una hoja de estilos propia. */
+    /** An empty document with a style sheet of its own. */
     public HTMLDocument() {
         this(new javax.swing.text.GapContent(BUFFER_SIZE_DEFAULT), new StyleSheet());
     }
 
-    /** Un documento vacio con esa hoja de estilos. */
+    /** An empty document with that style sheet. */
     public HTMLDocument(StyleSheet styles) {
         this(new javax.swing.text.GapContent(BUFFER_SIZE_DEFAULT), styles);
     }
 
-    /** Un documento sobre ese contenido y esa hoja de estilos. */
+    /** A document over that content and that style sheet. */
     public HTMLDocument(AbstractDocument.Content c, StyleSheet styles) {
         super(c, styles);
     }
 
-    /** Un lector que mete lo que venga a partir de esa posicion. */
+    /** A reader that puts whatever comes in starting at that position. */
     public HTMLEditorKit.ParserCallback getReader(int pos) {
         Object desc = getProperty(Document.StreamDescriptionProperty);
         if (desc instanceof URL) {
@@ -83,9 +84,9 @@ public class HTMLDocument extends DefaultStyledDocument {
     }
 
     /**
-     * Un lector para insertar dentro de una etiqueta.
+     * A reader for inserting inside a tag.
      *
-     * <p>Los dos numeros dicen cuantos elementos cerrar antes y cuantos abrir despues; ver
+     * <p>The two numbers say how many elements to close before and how many to open afterwards; see
      * {@link HTMLEditorKit#insertHTML}.
      */
     public HTMLEditorKit.ParserCallback getReader(int pos, int popDepth, int pushDepth,
@@ -93,7 +94,7 @@ public class HTMLDocument extends DefaultStyledDocument {
         return new HTMLReader(this, pos, popDepth, pushDepth, insertTag);
     }
 
-    /** La direccion contra la que se resuelven las relativas del documento. */
+    /** The address the document's relative ones are resolved against. */
     public URL getBase() {
         return base;
     }
@@ -115,9 +116,9 @@ public class HTMLDocument extends DefaultStyledDocument {
         super.insertUpdate(chng, attr);
     }
 
-    private static final AttributeSet contentAttributeSet = crearAtributosDeContenido();
+    private static final AttributeSet contentAttributeSet = createContentAttributes();
 
-    private static AttributeSet crearAtributosDeContenido() {
+    private static AttributeSet createContentAttributes() {
         SimpleAttributeSet a = new SimpleAttributeSet();
         a.addAttribute(StyleConstants.NameAttribute, HTML.Tag.CONTENT);
         return a;
@@ -131,16 +132,16 @@ public class HTMLDocument extends DefaultStyledDocument {
         super.setParagraphAttributes(offset, length, s, replace);
     }
 
-    /** La hoja de estilos: es el contexto de atributos del documento. */
+    /** The style sheet: it is the document's attribute context. */
     public StyleSheet getStyleSheet() {
         return (StyleSheet) getAttributeContext();
     }
 
     /**
-     * Recorre todos los elementos con esa etiqueta.
+     * It walks every element with that tag.
      *
-     * <p>Es la forma de encontrar, por ejemplo, todos los enlaces de una pagina sin bajar a mano
-     * por el arbol.
+     * <p>It is the way of finding, for instance, all of a page's links without going down the tree
+     * by hand.
      */
     public Iterator getIterator(HTML.Tag t) {
         if (t.isBlock()) {
@@ -161,35 +162,36 @@ public class HTMLDocument extends DefaultStyledDocument {
         writeLock();
         MutableAttributeSet a = new SimpleAttributeSet();
         a.addAttribute(StyleConstants.NameAttribute, HTML.Tag.HTML);
-        BlockElement raiz = new BlockElement(this, null, a.copyAttributes());
+        BlockElement root = new BlockElement(this, null, a.copyAttributes());
         a.removeAttributes(a);
 
         a.addAttribute(StyleConstants.NameAttribute, HTML.Tag.BODY);
-        BlockElement cuerpo = new BlockElement(this, raiz, a.copyAttributes());
+        BlockElement body = new BlockElement(this, root, a.copyAttributes());
         a.removeAttributes(a);
 
         a.addAttribute(StyleConstants.NameAttribute, HTML.Tag.P);
-        BlockElement parrafo = new BlockElement(this, cuerpo, a.copyAttributes());
+        BlockElement paragraph = new BlockElement(this, body, a.copyAttributes());
         a.removeAttributes(a);
 
         a.addAttribute(StyleConstants.NameAttribute, HTML.Tag.CONTENT);
-        RunElement contenido = new RunElement(this, parrafo, a, 0, 1);
-        Element[] hijos = new Element[1];
-        hijos[0] = contenido;
-        parrafo.replace(0, 0, hijos);
-        hijos[0] = parrafo;
-        cuerpo.replace(0, 0, hijos);
-        hijos[0] = cuerpo;
-        raiz.replace(0, 0, hijos);
+        RunElement content = new RunElement(this, paragraph, a, 0, 1);
+        Element[] children = new Element[1];
+        children[0] = content;
+        paragraph.replace(0, 0, children);
+        children[0] = paragraph;
+        body.replace(0, 0, children);
+        children[0] = body;
+        root.replace(0, 0, children);
         writeUnlock();
-        return raiz;
+        return root;
     }
 
     /**
-     * Cuantos elementos se juntan antes de tocar el documento.
+     * How many elements are gathered before touching the document.
      *
-     * <p>Con un numero chico el documento se ve armandose de a poco; con uno grande aparece de una
-     * vez y tarda menos en total. Es el compromiso entre parecer rapido y serlo.
+     * <p>With a small number the document is seen assembling itself bit by bit; with a large one it
+     * appears at once and takes less time in total. It is the trade-off between seeming fast and
+     * being fast.
      */
     public void setTokenThreshold(int n) {
         putProperty(TokenThreshold, Integer.valueOf(n));
@@ -203,11 +205,11 @@ public class HTMLDocument extends DefaultStyledDocument {
     static final String TokenThreshold = "token threshold";
 
     /**
-     * Si las etiquetas que no se conocen se guardan igual.
+     * Whether the tags that are not known are kept all the same.
      *
-     * <p>Guardarlas permite volver a escribir el documento tal como entro, aunque no se sepa
-     * dibujarlas. Es lo que se quiere casi siempre: tirar lo que no se entiende pierde datos del
-     * usuario.
+     * <p>Keeping them allows writing the document back just as it came in, even if they cannot be
+     * drawn. It is what is wanted almost always: throwing away what is not understood loses the
+     * user's data.
      */
     public void setPreservesUnknownTags(boolean preservesTags) {
         preservesUnknownTags = preservesTags;
@@ -217,11 +219,11 @@ public class HTMLDocument extends DefaultStyledDocument {
         return preservesUnknownTags;
     }
 
-    /** Carga el documento del enlace en el marco que indique el evento. */
+    /** It loads the link's document in whatever frame the event indicates. */
     public void processHTMLFrameHyperlinkEvent(HTMLFrameHyperlinkEvent e) {
     }
 
-    /** El analizador que usan los metodos que insertan HTML. */
+    /** The parser the methods that insert HTML use. */
     public void setParser(HTMLEditorKit.Parser parser) {
         this.parser = parser;
         putProperty("__PARSER__", null);
@@ -236,13 +238,13 @@ public class HTMLDocument extends DefaultStyledDocument {
     }
 
     /**
-     * Reemplaza el contenido de un elemento por ese HTML.
+     * It replaces an element's content by that HTML.
      *
-     * @throws IllegalStateException si no hay analizador.
+     * @throws IllegalStateException if there is no parser.
      */
     public void setInnerHTML(Element elem, String htmlText) throws BadLocationException,
             IOException {
-        verificarAnalizador();
+        checkParser();
         if (elem == null || htmlText == null) {
             throw new IllegalArgumentException("null parameter");
         }
@@ -250,29 +252,29 @@ public class HTMLDocument extends DefaultStyledDocument {
             throw new IllegalArgumentException(
                     "Can not set inner HTML of a leaf");
         }
-        int inicio = elem.getStartOffset();
-        int fin = elem.getEndOffset();
-        insertar(inicio, htmlText, 0, 0, null);
-        borrarTramo(inicio + largoInsertado, fin - inicio);
+        int start = elem.getStartOffset();
+        int end = elem.getEndOffset();
+        insert(start, htmlText, 0, 0, null);
+        removeRange(start + insertedLength, end - start);
     }
 
-    /** Reemplaza el elemento entero, incluidas sus etiquetas. */
+    /** It replaces the whole element, including its tags. */
     public void setOuterHTML(Element elem, String htmlText) throws BadLocationException,
             IOException {
-        verificarAnalizador();
+        checkParser();
         if (elem == null || htmlText == null) {
             throw new IllegalArgumentException("null parameter");
         }
-        int inicio = elem.getStartOffset();
-        int fin = elem.getEndOffset();
-        insertar(inicio, htmlText, 0, 0, null);
-        borrarTramo(inicio + largoInsertado, fin - inicio);
+        int start = elem.getStartOffset();
+        int end = elem.getEndOffset();
+        insert(start, htmlText, 0, 0, null);
+        removeRange(start + insertedLength, end - start);
     }
 
-    /** Inserta justo despues de la etiqueta de apertura. */
+    /** It inserts just after the opening tag. */
     public void insertAfterStart(Element elem, String htmlText) throws BadLocationException,
             IOException {
-        verificarAnalizador();
+        checkParser();
         if (elem == null || htmlText == null) {
             throw new IllegalArgumentException("null parameter");
         }
@@ -280,13 +282,13 @@ public class HTMLDocument extends DefaultStyledDocument {
             throw new IllegalArgumentException(
                     "Can not insert HTML after start of a leaf");
         }
-        insertar(elem.getStartOffset(), htmlText, 0, 0, null);
+        insert(elem.getStartOffset(), htmlText, 0, 0, null);
     }
 
-    /** Inserta justo antes de la etiqueta de cierre. */
+    /** It inserts just before the closing tag. */
     public void insertBeforeEnd(Element elem, String htmlText) throws BadLocationException,
             IOException {
-        verificarAnalizador();
+        checkParser();
         if (elem == null || htmlText == null) {
             throw new IllegalArgumentException("null parameter");
         }
@@ -294,64 +296,64 @@ public class HTMLDocument extends DefaultStyledDocument {
             throw new IllegalArgumentException(
                     "Can not set inner HTML before end of leaf");
         }
-        int fin = elem.getEndOffset();
-        if (fin > getLength()) {
-            fin = getLength();
+        int end = elem.getEndOffset();
+        if (end > getLength()) {
+            end = getLength();
         }
-        insertar(fin, htmlText, 0, 0, null);
+        insert(end, htmlText, 0, 0, null);
     }
 
-    /** Inserta antes de la etiqueta de apertura, o sea afuera del elemento. */
+    /** It inserts before the opening tag, that is outside the element. */
     public void insertBeforeStart(Element elem, String htmlText) throws BadLocationException,
             IOException {
-        verificarAnalizador();
+        checkParser();
         if (elem == null || htmlText == null) {
             throw new IllegalArgumentException("null parameter");
         }
-        insertar(elem.getStartOffset(), htmlText, 0, 0, null);
+        insert(elem.getStartOffset(), htmlText, 0, 0, null);
     }
 
-    /** Inserta despues de la etiqueta de cierre. */
+    /** It inserts after the closing tag. */
     public void insertAfterEnd(Element elem, String htmlText) throws BadLocationException,
             IOException {
-        verificarAnalizador();
+        checkParser();
         if (elem == null || htmlText == null) {
             throw new IllegalArgumentException("null parameter");
         }
-        int fin = elem.getEndOffset();
-        if (fin > getLength()) {
-            fin = getLength();
+        int end = elem.getEndOffset();
+        if (end > getLength()) {
+            end = getLength();
         }
-        insertar(fin, htmlText, 0, 0, null);
+        insert(end, htmlText, 0, 0, null);
     }
 
-    private int largoInsertado;
+    private int insertedLength;
 
-    private void verificarAnalizador() {
+    private void checkParser() {
         if (getParser() == null) {
             throw new IllegalStateException("No HTMLEditorKit.Parser");
         }
     }
 
-    private void insertar(int offset, String html, int popDepth, int pushDepth, HTML.Tag insertTag)
+    private void insert(int offset, String html, int popDepth, int pushDepth, HTML.Tag insertTag)
             throws BadLocationException, IOException {
-        int antes = getLength();
+        int before = getLength();
         HTMLEditorKit.ParserCallback r = getReader(offset, popDepth, pushDepth, insertTag);
         getParser().parse(new java.io.StringReader(html), r, true);
         r.flush();
-        largoInsertado = getLength() - antes;
+        insertedLength = getLength() - before;
     }
 
-    private void borrarTramo(int offset, int largo) throws BadLocationException {
-        if (largo > 0 && offset < getLength()) {
-            remove(offset, Math.min(largo, getLength() - offset));
+    private void removeRange(int offset, int length) throws BadLocationException {
+        if (length > 0 && offset < getLength()) {
+            remove(offset, Math.min(length, getLength() - offset));
         }
     }
 
     /**
-     * El elemento cuyo atributo <code>id</code> es ese.
+     * The element whose <code>id</code> attribute is that one.
      *
-     * <p>Es lo que hace que un enlace a <code>#seccion</code> pueda encontrar su destino.
+     * <p>It is what makes a link to <code>#section</code> able to find its target.
      */
     public Element getElement(String id) {
         if (id == null) {
@@ -360,7 +362,7 @@ public class HTMLDocument extends DefaultStyledDocument {
         return getElement(getDefaultRootElement(), HTML.Attribute.ID, id, true);
     }
 
-    /** El primer elemento debajo de ese cuyo atributo tenga ese valor. */
+    /** The first element below that one whose attribute has that value. */
     public Element getElement(Element e, Object attribute, Object value) {
         return getElement(e, attribute, value, true);
     }
@@ -396,45 +398,45 @@ public class HTMLDocument extends DefaultStyledDocument {
     }
 
     /**
-     * Recorre los elementos que tienen una etiqueta.
+     * It walks the elements that have a tag.
      *
-     * <p>Es abstracta y no una interfaz porque tiene que poder crecer sin romper a quien la use;
-     * ver {@link HTMLDocument#getIterator}.
+     * <p>It is abstract and not an interface because it has to be able to grow without breaking
+     * whoever uses it; see {@link HTMLDocument#getIterator}.
      */
     public abstract static class Iterator {
 
         protected Iterator() {
         }
 
-        /** Los atributos del elemento actual. */
+        /** The current element's attributes. */
         public abstract AttributeSet getAttributes();
 
         public abstract int getStartOffset();
 
         public abstract int getEndOffset();
 
-        /** Avanza al siguiente. */
+        /** It advances to the next one. */
         public abstract void next();
 
-        /** Si todavia hay elemento. */
+        /** Whether there is still an element. */
         public abstract boolean isValid();
 
         public abstract HTML.Tag getTag();
     }
 
     /**
-     * Recorre las etiquetas de caracter, que no son elementos sino atributos.
+     * It walks the character tags, which are not elements but attributes.
      *
-     * <p>Una negrita o un enlace viven como atributo de un tramo; ver la nota de la clase que la
-     * contiene. Por eso este recorrido mira los atributos de cada hoja y no los elementos.
+     * <p>A bold or a link lives as an attribute of a stretch; see the note of the class that
+     * contains it. That is why this walk looks at each leaf's attributes and not at the elements.
      */
     static class LeafIterator extends Iterator {
 
         private final HTML.Tag tag;
         private final javax.swing.text.ElementIterator pos;
-        private AttributeSet actual;
-        private int inicio;
-        private int fin;
+        private AttributeSet current;
+        private int start;
+        private int end;
 
         LeafIterator(HTMLDocument doc, HTML.Tag t) {
             tag = t;
@@ -443,15 +445,15 @@ public class HTMLDocument extends DefaultStyledDocument {
         }
 
         public AttributeSet getAttributes() {
-            return actual;
+            return current;
         }
 
         public int getStartOffset() {
-            return inicio;
+            return start;
         }
 
         public int getEndOffset() {
-            return fin;
+            return end;
         }
 
         public HTML.Tag getTag() {
@@ -459,17 +461,17 @@ public class HTMLDocument extends DefaultStyledDocument {
         }
 
         public boolean isValid() {
-            return actual != null;
+            return current != null;
         }
 
         /**
-         * Busca la proxima hoja con la etiqueta y junta las contiguas.
+         * It looks for the next leaf with the tag and joins the adjacent ones.
          *
-         * <p>Juntarlas importa: un enlace partido en dos tramos porque uno tiene negrita adentro
-         * sigue siendo un solo enlace, y quien recorre los enlaces espera verlo una vez.
+         * <p>Joining them matters: a link split into two stretches because one has a bold inside is
+         * still a single link, and whoever walks the links expects to see it once.
          */
         public void next() {
-            actual = null;
+            current = null;
             Element e;
             while ((e = pos.next()) != null) {
                 if (!e.isLeaf()) {
@@ -478,14 +480,14 @@ public class HTMLDocument extends DefaultStyledDocument {
                 AttributeSet a = e.getAttributes();
                 Object v = a.getAttribute(tag);
                 if (v instanceof AttributeSet) {
-                    actual = (AttributeSet) v;
-                    inicio = e.getStartOffset();
-                    fin = e.getEndOffset();
-                    // Se estira mientras el atributo sea el mismo objeto.
+                    current = (AttributeSet) v;
+                    start = e.getStartOffset();
+                    end = e.getEndOffset();
+                    // It is stretched while the attribute is the same object.
                     Element sig;
                     while ((sig = pos.next()) != null) {
                         if (sig.isLeaf() && sig.getAttributes().getAttribute(tag) == v) {
-                            fin = sig.getEndOffset();
+                            end = sig.getEndOffset();
                         } else {
                             pos.previous();
                             break;
@@ -497,12 +499,12 @@ public class HTMLDocument extends DefaultStyledDocument {
         }
     }
 
-    /** Recorre los elementos que arman bloque y tienen esa etiqueta. */
+    /** It walks the elements that make a block and have that tag. */
     static class BlockIterator extends Iterator {
 
         private final HTML.Tag tag;
         private final javax.swing.text.ElementIterator pos;
-        private Element actual;
+        private Element current;
 
         BlockIterator(HTMLDocument doc, HTML.Tag t) {
             tag = t;
@@ -511,15 +513,15 @@ public class HTMLDocument extends DefaultStyledDocument {
         }
 
         public AttributeSet getAttributes() {
-            return (actual == null) ? null : actual.getAttributes();
+            return (current == null) ? null : current.getAttributes();
         }
 
         public int getStartOffset() {
-            return (actual == null) ? -1 : actual.getStartOffset();
+            return (current == null) ? -1 : current.getStartOffset();
         }
 
         public int getEndOffset() {
-            return (actual == null) ? -1 : actual.getEndOffset();
+            return (current == null) ? -1 : current.getEndOffset();
         }
 
         public HTML.Tag getTag() {
@@ -527,15 +529,15 @@ public class HTMLDocument extends DefaultStyledDocument {
         }
 
         public boolean isValid() {
-            return actual != null;
+            return current != null;
         }
 
         public void next() {
-            actual = null;
+            current = null;
             Element e;
             while ((e = pos.next()) != null) {
                 if (e.getAttributes().getAttribute(StyleConstants.NameAttribute) == tag) {
-                    actual = e;
+                    current = e;
                     return;
                 }
             }
@@ -543,19 +545,19 @@ public class HTMLDocument extends DefaultStyledDocument {
     }
 
     /**
-     * Un elemento con hijos que sabe de que etiqueta salio.
+     * An element with children that knows which tag it came from.
      *
-     * <p>En el JDK es una clase interna; aca es estatica y recibe el documento, que es la misma
-     * firma del archivo compilado. Ver la nota de {@link javax.swing.text.TableView.TableRow}.
+     * <p>In the JDK it is an inner class; here it is static and takes the document, which is the
+     * same signature in the compiled file. See {@link javax.swing.text.TableView.TableRow}'s note.
      */
     public static class BlockElement extends AbstractDocument.BranchElement {
 
-        /** Un bloque de ese documento, colgado de ese padre. */
-        public BlockElement(HTMLDocument documento, Element parent, AttributeSet a) {
-            super(documento, parent, a);
+        /** A block of that document, hung from that parent. */
+        public BlockElement(HTMLDocument document, Element parent, AttributeSet a) {
+            super(document, parent, a);
         }
 
-        /** El nombre es el de la etiqueta, no el del tipo de elemento. */
+        /** The name is the tag's, not the element type's. */
         public String getName() {
             Object o = getAttribute(StyleConstants.NameAttribute);
             if (o != null) {
@@ -565,24 +567,24 @@ public class HTMLDocument extends DefaultStyledDocument {
         }
 
         /**
-         * De donde hereda los atributos que no tiene.
+         * Where it inherits the attributes it does not have from.
          *
-         * <p>De la hoja de estilos, no del elemento de arriba. Es la diferencia entre HTML y un
-         * documento comun: quien decide como se ve un parrafo es la regla de CSS que le
-         * corresponde, y esa regla depende de todo el camino desde la raiz.
+         * <p>From the style sheet, not from the element above. It is the difference between HTML
+         * and an ordinary document: who decides how a paragraph looks is the CSS rule that
+         * corresponds to it, and that rule depends on the whole path from the root.
          */
         public AttributeSet getResolveParent() {
             return null;
         }
     }
 
-    /** Un tramo de texto que sabe de que etiqueta salio. */
+    /** A stretch of text that knows which tag it came from. */
     public static class RunElement extends AbstractDocument.LeafElement {
 
-        /** Un tramo de ese documento, colgado de ese padre. */
-        public RunElement(HTMLDocument documento, Element parent, AttributeSet a, int offs0,
+        /** A stretch of that document, hung from that parent. */
+        public RunElement(HTMLDocument document, Element parent, AttributeSet a, int offs0,
                 int offs1) {
-            super(documento, parent, a, offs0, offs1);
+            super(document, parent, a, offs0, offs1);
         }
 
         public String getName() {
@@ -593,124 +595,124 @@ public class HTMLDocument extends DefaultStyledDocument {
             return super.getName();
         }
 
-        /** Igual que en {@link BlockElement}. */
+        /** The same as in {@link BlockElement}. */
         public AttributeSet getResolveParent() {
             return null;
         }
     }
 
     /**
-     * Convierte lo que encuentra el analizador en elementos del documento.
+     * It turns what the parser finds into document elements.
      *
-     * <h2>Junta y despues arma</h2>
+     * <h2>Gather and then build</h2>
      *
-     * <p>No inserta a medida que lee: guarda especificaciones en {@link #parseBuffer} y arma el
-     * arbol cuando junta bastantes o cuando termina. Insertar de a una etiqueta obligaria a
-     * rehacer el arbol en cada paso.
+     * <p>It does not insert as it reads: it keeps specifications in {@link #parseBuffer} and builds
+     * the tree when it has gathered enough or when it finishes. Inserting one tag at a time would
+     * force rebuilding the tree at every step.
      *
-     * <h2>Una accion por etiqueta</h2>
+     * <h2>One action per tag</h2>
      *
-     * <p>Cada etiqueta tiene una {@link TagAction} registrada. Es una tabla y no una cadena de
-     * comparaciones: agregar una etiqueta es registrar una accion, y quien herede puede cambiar el
-     * tratamiento de una sola sin tocar el resto.
+     * <p>Each tag has a {@link TagAction} registered. It is a table and not a chain of comparisons:
+     * adding a tag is registering an action, and whoever inherits can change the treatment of a
+     * single one without touching the rest.
      */
     public static class HTMLReader extends HTMLEditorKit.ParserCallback {
 
-        /** Lo que se junto hasta ahora. */
+        /** What has been gathered so far. */
         protected Vector<DefaultStyledDocument.ElementSpec> parseBuffer =
                 new Vector<DefaultStyledDocument.ElementSpec>();
 
-        /** Los atributos de caracter que valen ahora. */
+        /** The character attributes that hold now. */
         protected MutableAttributeSet charAttr = new SimpleAttributeSet();
 
-        final HTMLDocument documento;
+        final HTMLDocument document;
         private final int offset;
         private int popDepth;
         private int pushDepth;
         private HTML.Tag insertTag;
         private Hashtable<HTML.Tag, TagAction> tagMap = new Hashtable<HTML.Tag, TagAction>();
         private Stack<AttributeSet> charAttrStack = new Stack<AttributeSet>();
-        private MutableAttributeSet atributosBloque = new SimpleAttributeSet();
-        private boolean insertoAlgo = false;
+        private MutableAttributeSet blockAttributes = new SimpleAttributeSet();
+        private boolean insertedSomething = false;
 
-        /** Un lector que mete a partir de esa posicion. */
-        public HTMLReader(HTMLDocument documento, int offset) {
-            this(documento, offset, 0, 0, null);
+        /** A reader that puts things in starting at that position. */
+        public HTMLReader(HTMLDocument document, int offset) {
+            this(document, offset, 0, 0, null);
         }
 
-        /** Un lector para insertar dentro de una etiqueta. */
-        public HTMLReader(HTMLDocument documento, int offset, int popDepth, int pushDepth,
+        /** A reader for inserting inside a tag. */
+        public HTMLReader(HTMLDocument document, int offset, int popDepth, int pushDepth,
                 HTML.Tag insertTag) {
-            this.documento = documento;
+            this.document = document;
             this.offset = offset;
             this.popDepth = popDepth;
             this.pushDepth = pushDepth;
             this.insertTag = insertTag;
-            registrarAcciones();
+            registerActions();
         }
 
-        private void registrarAcciones() {
-            TagAction bloque = new BlockAction(this);
-            TagAction parrafo = new ParagraphAction(this);
-            TagAction caracter = new CharacterAction(this);
+        private void registerActions() {
+            TagAction block = new BlockAction(this);
+            TagAction paragraph = new ParagraphAction(this);
+            TagAction character = new CharacterAction(this);
             TagAction especial = new SpecialAction(this);
-            TagAction oculta = new HiddenAction(this);
+            TagAction hidden = new HiddenAction(this);
             TagAction pre = new PreAction(this);
-            TagAction formulario = new FormAction(this);
+            TagAction form = new FormAction(this);
 
-            registerTag(HTML.Tag.HTML, bloque);
-            registerTag(HTML.Tag.BODY, bloque);
-            registerTag(HTML.Tag.DIV, bloque);
-            registerTag(HTML.Tag.CENTER, bloque);
-            registerTag(HTML.Tag.BLOCKQUOTE, bloque);
-            registerTag(HTML.Tag.UL, bloque);
-            registerTag(HTML.Tag.OL, bloque);
-            registerTag(HTML.Tag.DIR, bloque);
-            registerTag(HTML.Tag.MENU, bloque);
-            registerTag(HTML.Tag.LI, bloque);
-            registerTag(HTML.Tag.DL, bloque);
-            registerTag(HTML.Tag.DD, bloque);
-            registerTag(HTML.Tag.TABLE, bloque);
-            registerTag(HTML.Tag.TR, bloque);
-            registerTag(HTML.Tag.TD, bloque);
-            registerTag(HTML.Tag.TH, bloque);
-            registerTag(HTML.Tag.CAPTION, bloque);
-            registerTag(HTML.Tag.NOFRAMES, bloque);
+            registerTag(HTML.Tag.HTML, block);
+            registerTag(HTML.Tag.BODY, block);
+            registerTag(HTML.Tag.DIV, block);
+            registerTag(HTML.Tag.CENTER, block);
+            registerTag(HTML.Tag.BLOCKQUOTE, block);
+            registerTag(HTML.Tag.UL, block);
+            registerTag(HTML.Tag.OL, block);
+            registerTag(HTML.Tag.DIR, block);
+            registerTag(HTML.Tag.MENU, block);
+            registerTag(HTML.Tag.LI, block);
+            registerTag(HTML.Tag.DL, block);
+            registerTag(HTML.Tag.DD, block);
+            registerTag(HTML.Tag.TABLE, block);
+            registerTag(HTML.Tag.TR, block);
+            registerTag(HTML.Tag.TD, block);
+            registerTag(HTML.Tag.TH, block);
+            registerTag(HTML.Tag.CAPTION, block);
+            registerTag(HTML.Tag.NOFRAMES, block);
 
-            registerTag(HTML.Tag.P, parrafo);
-            registerTag(HTML.Tag.IMPLIED, parrafo);
-            registerTag(HTML.Tag.DT, parrafo);
-            registerTag(HTML.Tag.H1, parrafo);
-            registerTag(HTML.Tag.H2, parrafo);
-            registerTag(HTML.Tag.H3, parrafo);
-            registerTag(HTML.Tag.H4, parrafo);
-            registerTag(HTML.Tag.H5, parrafo);
-            registerTag(HTML.Tag.H6, parrafo);
+            registerTag(HTML.Tag.P, paragraph);
+            registerTag(HTML.Tag.IMPLIED, paragraph);
+            registerTag(HTML.Tag.DT, paragraph);
+            registerTag(HTML.Tag.H1, paragraph);
+            registerTag(HTML.Tag.H2, paragraph);
+            registerTag(HTML.Tag.H3, paragraph);
+            registerTag(HTML.Tag.H4, paragraph);
+            registerTag(HTML.Tag.H5, paragraph);
+            registerTag(HTML.Tag.H6, paragraph);
 
             registerTag(HTML.Tag.PRE, pre);
 
-            registerTag(HTML.Tag.B, caracter);
-            registerTag(HTML.Tag.I, caracter);
-            registerTag(HTML.Tag.U, caracter);
-            registerTag(HTML.Tag.S, caracter);
-            registerTag(HTML.Tag.STRIKE, caracter);
-            registerTag(HTML.Tag.TT, caracter);
-            registerTag(HTML.Tag.CODE, caracter);
-            registerTag(HTML.Tag.KBD, caracter);
-            registerTag(HTML.Tag.SAMP, caracter);
-            registerTag(HTML.Tag.VAR, caracter);
-            registerTag(HTML.Tag.CITE, caracter);
-            registerTag(HTML.Tag.DFN, caracter);
-            registerTag(HTML.Tag.EM, caracter);
-            registerTag(HTML.Tag.STRONG, caracter);
-            registerTag(HTML.Tag.BIG, caracter);
-            registerTag(HTML.Tag.SMALL, caracter);
-            registerTag(HTML.Tag.SUB, caracter);
-            registerTag(HTML.Tag.SUP, caracter);
-            registerTag(HTML.Tag.FONT, caracter);
-            registerTag(HTML.Tag.SPAN, caracter);
-            registerTag(HTML.Tag.A, caracter);
-            registerTag(HTML.Tag.ADDRESS, caracter);
+            registerTag(HTML.Tag.B, character);
+            registerTag(HTML.Tag.I, character);
+            registerTag(HTML.Tag.U, character);
+            registerTag(HTML.Tag.S, character);
+            registerTag(HTML.Tag.STRIKE, character);
+            registerTag(HTML.Tag.TT, character);
+            registerTag(HTML.Tag.CODE, character);
+            registerTag(HTML.Tag.KBD, character);
+            registerTag(HTML.Tag.SAMP, character);
+            registerTag(HTML.Tag.VAR, character);
+            registerTag(HTML.Tag.CITE, character);
+            registerTag(HTML.Tag.DFN, character);
+            registerTag(HTML.Tag.EM, character);
+            registerTag(HTML.Tag.STRONG, character);
+            registerTag(HTML.Tag.BIG, character);
+            registerTag(HTML.Tag.SMALL, character);
+            registerTag(HTML.Tag.SUB, character);
+            registerTag(HTML.Tag.SUP, character);
+            registerTag(HTML.Tag.FONT, character);
+            registerTag(HTML.Tag.SPAN, character);
+            registerTag(HTML.Tag.A, character);
+            registerTag(HTML.Tag.ADDRESS, character);
 
             registerTag(HTML.Tag.IMG, especial);
             registerTag(HTML.Tag.BR, especial);
@@ -719,28 +721,28 @@ public class HTMLDocument extends DefaultStyledDocument {
             registerTag(HTML.Tag.APPLET, especial);
             registerTag(HTML.Tag.PARAM, especial);
 
-            registerTag(HTML.Tag.INPUT, formulario);
-            registerTag(HTML.Tag.SELECT, formulario);
-            registerTag(HTML.Tag.OPTION, formulario);
-            registerTag(HTML.Tag.TEXTAREA, formulario);
-            registerTag(HTML.Tag.FORM, formulario);
+            registerTag(HTML.Tag.INPUT, form);
+            registerTag(HTML.Tag.SELECT, form);
+            registerTag(HTML.Tag.OPTION, form);
+            registerTag(HTML.Tag.TEXTAREA, form);
+            registerTag(HTML.Tag.FORM, form);
 
-            registerTag(HTML.Tag.HEAD, oculta);
-            registerTag(HTML.Tag.TITLE, oculta);
-            registerTag(HTML.Tag.META, oculta);
-            registerTag(HTML.Tag.LINK, oculta);
-            registerTag(HTML.Tag.STYLE, oculta);
-            registerTag(HTML.Tag.SCRIPT, oculta);
-            registerTag(HTML.Tag.AREA, oculta);
-            registerTag(HTML.Tag.MAP, oculta);
-            registerTag(HTML.Tag.BASE, oculta);
-            registerTag(HTML.Tag.BASEFONT, oculta);
+            registerTag(HTML.Tag.HEAD, hidden);
+            registerTag(HTML.Tag.TITLE, hidden);
+            registerTag(HTML.Tag.META, hidden);
+            registerTag(HTML.Tag.LINK, hidden);
+            registerTag(HTML.Tag.STYLE, hidden);
+            registerTag(HTML.Tag.SCRIPT, hidden);
+            registerTag(HTML.Tag.AREA, hidden);
+            registerTag(HTML.Tag.MAP, hidden);
+            registerTag(HTML.Tag.BASE, hidden);
+            registerTag(HTML.Tag.BASEFONT, hidden);
             registerTag(HTML.Tag.ISINDEX, new IsindexAction(this));
-            registerTag(HTML.Tag.FRAMESET, oculta);
-            registerTag(HTML.Tag.FRAME, oculta);
+            registerTag(HTML.Tag.FRAMESET, hidden);
+            registerTag(HTML.Tag.FRAME, hidden);
         }
 
-        /** Vuelca lo que quedo juntado al documento. */
+        /** It flushes whatever was gathered to the document. */
         public void flush() throws BadLocationException {
             if (parseBuffer.size() == 0) {
                 return;
@@ -749,12 +751,12 @@ public class HTMLDocument extends DefaultStyledDocument {
                     new DefaultStyledDocument.ElementSpec[parseBuffer.size()];
             parseBuffer.copyInto(spec);
             parseBuffer.removeAllElements();
-            if (documento.getLength() == 0 && offset == 0 && !insertoAlgo) {
-                documento.create(spec);
+            if (document.getLength() == 0 && offset == 0 && !insertedSomething) {
+                document.create(spec);
             } else {
-                documento.insert(offset, spec);
+                document.insert(offset, spec);
             }
-            insertoAlgo = true;
+            insertedSomething = true;
         }
 
         public void handleText(char[] data, int pos) {
@@ -768,9 +770,9 @@ public class HTMLDocument extends DefaultStyledDocument {
             TagAction action = tagMap.get(t);
             if (action != null) {
                 action.start(t, a);
-            } else if (documento.getPreservesUnknownTags()) {
-                // Una etiqueta que no se conoce se guarda como bloque; ver
-                // HTMLDocument.setPreservesUnknownTags.
+            } else if (document.getPreservesUnknownTags()) {
+                // A tag that is not known is kept as a block; see
+                                // HTMLDocument.setPreservesUnknownTags.
                 blockOpen(t, a);
             }
         }
@@ -786,7 +788,7 @@ public class HTMLDocument extends DefaultStyledDocument {
             TagAction action = tagMap.get(t);
             if (action != null) {
                 action.end(t);
-            } else if (documento.getPreservesUnknownTags()) {
+            } else if (document.getPreservesUnknownTags()) {
                 blockClose(t);
             }
         }
@@ -796,28 +798,28 @@ public class HTMLDocument extends DefaultStyledDocument {
             if (action != null) {
                 action.start(t, a);
                 action.end(t);
-            } else if (documento.getPreservesUnknownTags()) {
+            } else if (document.getPreservesUnknownTags()) {
                 addSpecialElement(t, a);
             }
         }
 
         public void handleEndOfLineString(String eol) {
             if (eol != null) {
-                documento.putProperty(javax.swing.text.DefaultEditorKit.EndOfLineStringProperty,
+                document.putProperty(javax.swing.text.DefaultEditorKit.EndOfLineStringProperty,
                         eol);
             }
         }
 
-        /** Asocia una accion a una etiqueta; ver la nota de la clase. */
+        /** It associates an action with a tag; see the class note. */
         protected void registerTag(HTML.Tag t, TagAction a) {
             tagMap.put(t, a);
         }
 
         /**
-         * Guarda los atributos de caracter que valen ahora.
+         * It keeps the character attributes that hold now.
          *
-         * <p>Van a una pila porque las etiquetas de caracter se anidan: al cerrar una hay que
-         * volver exactamente a lo que habia antes de abrirla, no a nada.
+         * <p>They go on a stack because the character tags nest: on closing one, exactly what there
+         * was before opening it has to come back, not nothing.
          */
         protected void pushCharacterStyle() {
             charAttrStack.push(charAttr.copyAttributes());
@@ -829,27 +831,27 @@ public class HTMLDocument extends DefaultStyledDocument {
             }
         }
 
-        /** El contenido de un {@code <textarea>}: va al modelo del control, no al documento. */
+        /** A {@code <textarea>}'s content: it goes to the control's model, not to the document. */
         protected void textAreaContent(char[] data) {
         }
 
-        /** Texto dentro de un {@code <pre>}: los saltos de linea cuentan. */
+        /** Text inside a {@code <pre>}: the line breaks count. */
         protected void preContent(char[] data) {
-            int inicio = 0;
+            int start = 0;
             for (int i = 0; i < data.length; i++) {
                 if (data[i] == '\n') {
-                    addContent(data, inicio, i - inicio + 1);
+                    addContent(data, start, i - start + 1);
                     blockClose(HTML.Tag.IMPLIED);
                     blockOpen(HTML.Tag.IMPLIED, new SimpleAttributeSet());
-                    inicio = i + 1;
+                    start = i + 1;
                 }
             }
-            if (inicio < data.length) {
-                addContent(data, inicio, data.length - inicio);
+            if (start < data.length) {
+                addContent(data, start, data.length - start);
             }
         }
 
-        /** Abre un bloque. */
+        /** It opens a block. */
         protected void blockOpen(HTML.Tag t, MutableAttributeSet attr) {
             attr.addAttribute(StyleConstants.NameAttribute, t);
             parseBuffer.addElement(new DefaultStyledDocument.ElementSpec(
@@ -866,10 +868,10 @@ public class HTMLDocument extends DefaultStyledDocument {
         }
 
         /**
-         * Agrega texto con los atributos de caracter que valen ahora.
+         * It adds text with the character attributes that hold now.
          *
-         * <p>Si no hay ningun bloque abierto se abre un parrafo implicito: el texto suelto tiene
-         * que vivir adentro de un parrafo, porque el documento no admite texto colgando de la raiz.
+         * <p>If there is no block open an implicit paragraph is opened: loose text has to live
+         * inside a paragraph, because the document does not admit text hanging from the root.
          */
         protected void addContent(char[] data, int offs, int length, boolean generateImpliedPIfNecessary) {
             MutableAttributeSet a = new SimpleAttributeSet(charAttr);
@@ -878,46 +880,46 @@ public class HTMLDocument extends DefaultStyledDocument {
                     a.copyAttributes(), DefaultStyledDocument.ElementSpec.ContentType, data, offs,
                     length);
             parseBuffer.addElement(spec);
-            if (parseBuffer.size() > documento.getTokenThreshold()) {
+            if (parseBuffer.size() > document.getTokenThreshold()) {
                 try {
                     flush();
                 } catch (BadLocationException ble) {
-                    // El documento cambio debajo: se sigue juntando.
+                    // The document changed underneath: it goes on gathering.
                 }
             }
         }
 
         /**
-         * Agrega un elemento que ocupa lugar pero no tiene texto.
+         * It adds an element that takes up room but has no text.
          *
-         * <p>Una imagen, un salto de linea, un comentario. Se guardan como un caracter invisible
-         * con atributos: el documento cuenta en caracteres y algo que ocupa un lugar tiene que
-         * ocupar uno.
+         * <p>An image, a line break, a comment. They are kept as an invisible character with
+         * attributes: the document counts in characters and something that takes up a place has to
+         * take up one.
          */
         protected void addSpecialElement(HTML.Tag t, MutableAttributeSet a) {
-            if (t != HTML.Tag.FRAME && !insertoAlgo) {
-                // Ya se puede.
-                insertoAlgo = false;
+            if (t != HTML.Tag.FRAME && !insertedSomething) {
+                // Now it can.
+                insertedSomething = false;
             }
             a.addAttribute(StyleConstants.NameAttribute, t);
-            char[] uno = {' '};
+            char[] one = {' '};
             parseBuffer.addElement(new DefaultStyledDocument.ElementSpec(a.copyAttributes(),
-                    DefaultStyledDocument.ElementSpec.ContentType, uno, 0, 1));
+                    DefaultStyledDocument.ElementSpec.ContentType, one, 0, 1));
         }
 
         /**
-         * Que hacer con una etiqueta.
+         * What to do with a tag.
          *
-         * <p>La de base no hace nada. Sirve para las etiquetas que se quieren ignorar sin que el
-         * lector tenga que preguntar si hay accion registrada.
+         * <p>The base one does nothing. It serves for the tags that are to be ignored without the
+         * reader having to ask whether there is an action registered.
          */
         public static class TagAction {
 
-            final HTMLReader lector;
+            final HTMLReader reader;
 
-            /** Una accion para ese lector. */
-            public TagAction(HTMLReader lector) {
-                this.lector = lector;
+            /** An action for that reader. */
+            public TagAction(HTMLReader reader) {
+                this.reader = reader;
             }
 
             public void start(HTML.Tag t, MutableAttributeSet a) {
@@ -927,50 +929,49 @@ public class HTMLDocument extends DefaultStyledDocument {
             }
         }
 
-        /** Una etiqueta que arma bloque. */
+        /** A tag that makes a block. */
         public static class BlockAction extends TagAction {
 
-            public BlockAction(HTMLReader lector) {
-                super(lector);
+            public BlockAction(HTMLReader reader) {
+                super(reader);
             }
 
             public void start(HTML.Tag t, MutableAttributeSet a) {
-                lector.blockOpen(t, a);
+                reader.blockOpen(t, a);
             }
 
             public void end(HTML.Tag t) {
-                lector.blockClose(t);
+                reader.blockClose(t);
             }
         }
 
         /**
-         * Una etiqueta de caracter: no arma elemento, cambia los atributos del texto.
+         * A character tag: it makes no element, it changes the text's attributes.
          *
-         * <p>Ver la nota de {@link HTMLDocument}: es lo que hace que el arbol sea mucho mas chato
-         * que el HTML.
+         * <p>See {@link HTMLDocument}'s note: it is what makes the tree much flatter than the HTML.
          */
         public static class CharacterAction extends TagAction {
 
-            public CharacterAction(HTMLReader lector) {
-                super(lector);
+            public CharacterAction(HTMLReader reader) {
+                super(reader);
             }
 
             public void start(HTML.Tag t, MutableAttributeSet a) {
-                lector.pushCharacterStyle();
+                reader.pushCharacterStyle();
                 a.addAttribute(t, a.copyAttributes());
-                lector.charAttr.addAttributes(a);
+                reader.charAttr.addAttributes(a);
             }
 
             public void end(HTML.Tag t) {
-                lector.popCharacterStyle();
+                reader.popCharacterStyle();
             }
         }
 
-        /** Un parrafo: un bloque que ademas cierra el implicito que hubiera abierto. */
+        /** A paragraph: a block that also closes the implicit one it may have opened. */
         public static class ParagraphAction extends BlockAction {
 
-            public ParagraphAction(HTMLReader lector) {
-                super(lector);
+            public ParagraphAction(HTMLReader reader) {
+                super(reader);
             }
 
             public void start(HTML.Tag t, MutableAttributeSet a) {
@@ -982,47 +983,47 @@ public class HTMLDocument extends DefaultStyledDocument {
             }
         }
 
-        /** Un {@code <pre>}: como un bloque, pero el texto de adentro respeta los saltos. */
+        /** A {@code <pre>}: like a block, but the text inside respects the line breaks. */
         public static class PreAction extends BlockAction {
 
-            public PreAction(HTMLReader lector) {
-                super(lector);
+            public PreAction(HTMLReader reader) {
+                super(reader);
             }
 
             public void start(HTML.Tag t, MutableAttributeSet a) {
                 a.addAttribute(CSS.Attribute.WHITE_SPACE, "pre");
                 super.start(t, a);
-                lector.blockOpen(HTML.Tag.IMPLIED, new SimpleAttributeSet());
+                reader.blockOpen(HTML.Tag.IMPLIED, new SimpleAttributeSet());
             }
 
             public void end(HTML.Tag t) {
-                lector.blockClose(HTML.Tag.IMPLIED);
+                reader.blockClose(HTML.Tag.IMPLIED);
                 super.end(t);
             }
         }
 
-        /** Una etiqueta que ocupa un lugar sin texto: imagen, salto, linea. */
+        /** A tag that takes up a place with no text: an image, a break, a rule. */
         public static class SpecialAction extends TagAction {
 
-            public SpecialAction(HTMLReader lector) {
-                super(lector);
+            public SpecialAction(HTMLReader reader) {
+                super(reader);
             }
 
             public void start(HTML.Tag t, MutableAttributeSet a) {
-                lector.addSpecialElement(t, a);
+                reader.addSpecialElement(t, a);
             }
         }
 
-        /** Un control de formulario. */
+        /** A form control. */
         public static class FormAction extends SpecialAction {
 
-            public FormAction(HTMLReader lector) {
-                super(lector);
+            public FormAction(HTMLReader reader) {
+                super(reader);
             }
 
             public void start(HTML.Tag t, MutableAttributeSet a) {
                 if (t == HTML.Tag.FORM) {
-                    lector.blockOpen(t, a);
+                    reader.blockOpen(t, a);
                     return;
                 }
                 super.start(t, a);
@@ -1030,42 +1031,42 @@ public class HTMLDocument extends DefaultStyledDocument {
 
             public void end(HTML.Tag t) {
                 if (t == HTML.Tag.FORM) {
-                    lector.blockClose(t);
+                    reader.blockClose(t);
                 }
             }
         }
 
         /**
-         * Una etiqueta que no se ve pero se guarda.
+         * A tag that is not seen but is kept.
          *
-         * <p>El encabezado, un {@code <script>}, un {@code <meta>}. Se guardan para poder volver a
-         * escribir el documento igual; ver {@link HTMLDocument#setPreservesUnknownTags}.
+         * <p>The head, a {@code <script>}, a {@code <meta>}. They are kept so as to be able to
+         * write the document back the same; see {@link HTMLDocument#setPreservesUnknownTags}.
          */
         public static class HiddenAction extends TagAction {
 
-            public HiddenAction(HTMLReader lector) {
-                super(lector);
+            public HiddenAction(HTMLReader reader) {
+                super(reader);
             }
 
             public void start(HTML.Tag t, MutableAttributeSet a) {
-                lector.addSpecialElement(t, a);
+                reader.addSpecialElement(t, a);
             }
 
             public void end(HTML.Tag t) {
             }
         }
 
-        /** Un {@code <isindex>}: se muestra como un campo de busqueda. */
+        /** An {@code <isindex>}: it is shown as a search field. */
         public static class IsindexAction extends TagAction {
 
-            public IsindexAction(HTMLReader lector) {
-                super(lector);
+            public IsindexAction(HTMLReader reader) {
+                super(reader);
             }
 
             public void start(HTML.Tag t, MutableAttributeSet a) {
-                lector.blockOpen(HTML.Tag.IMPLIED, new SimpleAttributeSet());
-                lector.addSpecialElement(t, a);
-                lector.blockClose(HTML.Tag.IMPLIED);
+                reader.blockOpen(HTML.Tag.IMPLIED, new SimpleAttributeSet());
+                reader.addSpecialElement(t, a);
+                reader.blockClose(HTML.Tag.IMPLIED);
             }
         }
     }

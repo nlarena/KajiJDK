@@ -16,64 +16,66 @@ import javax.swing.plaf.ComponentUI;
 import javax.swing.plaf.FileChooserUI;
 
 /**
- * El selector de archivos.
+ * The file chooser.
  *
- * <h2>Es un componente, no un dialogo</h2>
+ * <h2>It is a component, not a dialog</h2>
  *
- * <p>{@link #showOpenDialog} arma un {@link JDialog} y lo muestra, pero el selector en si es un
- * {@link JComponent}: se lo puede poner adentro de una ventana propia. Es lo que permite un
- * programa con el selector siempre visible en un panel.
+ * <p>{@link #showOpenDialog} builds a {@link JDialog} and shows it, but the chooser itself is a
+ * {@link JComponent}: it can be put inside a window of one's own. It is what allows a program
+ * with the chooser always visible in a pane.
  *
- * <h2>Tres cosas que se confunden</h2>
+ * <h2>Three things that get confused</h2>
  *
- * <p>El <em>modo de seleccion</em> ({@link #setFileSelectionMode}) dice si se eligen archivos,
- * carpetas o los dos. El <em>filtro</em> dice cuales se muestran. La <em>vista del sistema</em>
- * ({@link FileSystemView}) dice como se llama y que icono tiene cada uno. Son independientes: se
- * puede estar eligiendo carpetas y filtrar por extension.
+ * <p>The <em>selection mode</em> ({@link #setFileSelectionMode}) says whether files, folders or
+ * both are chosen. The <em>filter</em> says which are shown. The <em>system view</em>
+ * ({@link FileSystemView}) says what each one is called and what icon it has. They are
+ * independent: one may be choosing folders and filtering by extension.
  *
- * <h2>Lo que devuelve mostrar el dialogo</h2>
+ * <h2>What showing the dialog returns</h2>
  *
- * <p>Un entero, no el archivo. {@link #APPROVE_OPTION} significa que el usuario acepto, y recien
- * entonces {@link #getSelectedFile} tiene sentido. Ignorar el resultado y leer el archivo
- * directamente es el error mas comun con esta clase: al cancelar se lee el que estaba antes.
+ * <p>An integer, not the file. {@link #APPROVE_OPTION} means that the user accepted, and only
+ * then does {@link #getSelectedFile} make sense. Ignoring the result and reading the file
+ * directly is the commonest mistake with this class: on cancelling the one that was there
+ * before is read.
  *
- * <p>Sin pantalla el dialogo no se puede mostrar; el selector se construye y se configura igual.
+ * <p>With no screen the dialog cannot be shown; the chooser is built and configured all the
+ * same.
  */
 public class JFileChooser extends JComponent implements Accessible {
 
     private static final String uiClassID = "FileChooserUI";
 
-    /** Un dialogo de abrir. */
+    /** An open dialog. */
     public static final int OPEN_DIALOG = 0;
 
-    /** Un dialogo de guardar. */
+    /** A save dialog. */
     public static final int SAVE_DIALOG = 1;
 
-    /** Un dialogo con un boton de texto propio. */
+    /** A dialog with a button text of its own. */
     public static final int CUSTOM_DIALOG = 2;
 
-    /** El usuario cancelo. */
+    /** The user cancelled. */
     public static final int CANCEL_OPTION = 1;
 
-    /** El usuario acepto; recien ahi vale el archivo elegido. */
+    /** The user accepted; only then does the chosen file hold. */
     public static final int APPROVE_OPTION = 0;
 
-    /** Algo fallo. */
+    /** Something failed. */
     public static final int ERROR_OPTION = -1;
 
-    /** Solo archivos. */
+    /** Files only. */
     public static final int FILES_ONLY = 0;
 
-    /** Solo carpetas. */
+    /** Folders only. */
     public static final int DIRECTORIES_ONLY = 1;
 
-    /** Archivos y carpetas. */
+    /** Files and folders. */
     public static final int FILES_AND_DIRECTORIES = 2;
 
-    /** El comando del boton de cancelar. */
+    /** The cancel button's command. */
     public static final String CANCEL_SELECTION = "CancelSelection";
 
-    /** El comando del boton de aceptar. */
+    /** The accept button's command. */
     public static final String APPROVE_SELECTION = "ApproveSelection";
 
     public static final String APPROVE_BUTTON_TEXT_CHANGED_PROPERTY = "ApproveButtonTextChangedProperty";
@@ -125,33 +127,33 @@ public class JFileChooser extends JComponent implements Accessible {
     private File selectedFile = null;
     private File[] selectedFiles = null;
 
-    /** Un selector en la carpeta de siempre del usuario. */
+    /** A chooser in the user's usual folder. */
     public JFileChooser() {
         this((File) null, (FileSystemView) null);
     }
 
-    /** Un selector en esa carpeta. */
+    /** A chooser in that folder. */
     public JFileChooser(String currentDirectoryPath) {
         this(currentDirectoryPath, (FileSystemView) null);
     }
 
-    /** Un selector en esa carpeta. */
+    /** A chooser in that folder. */
     public JFileChooser(File currentDirectory) {
         this(currentDirectory, (FileSystemView) null);
     }
 
-    /** Un selector con esa vista del sistema de archivos. */
+    /** A chooser with that file system view. */
     public JFileChooser(FileSystemView fsv) {
         this((File) null, fsv);
     }
 
-    /** Un selector en esa carpeta y con esa vista. */
+    /** A chooser in that folder and with that view. */
     public JFileChooser(File currentDirectory, FileSystemView fsv) {
         setup(fsv);
         setCurrentDirectory(currentDirectory);
     }
 
-    /** Un selector en esa carpeta y con esa vista. */
+    /** A chooser in that folder and with that view. */
     public JFileChooser(String currentDirectoryPath, FileSystemView fsv) {
         setup(fsv);
         if (currentDirectoryPath == null) {
@@ -161,7 +163,7 @@ public class JFileChooser extends JComponent implements Accessible {
         }
     }
 
-    /** Arma la vista del sistema y el aspecto. */
+    /** It builds the system view and the look and feel. */
     protected void setup(FileSystemView view) {
         if (view == null) {
             view = FileSystemView.getFileSystemView();
@@ -182,16 +184,16 @@ public class JFileChooser extends JComponent implements Accessible {
         return dragEnabled;
     }
 
-    /** El archivo elegido; vale despues de {@link #APPROVE_OPTION}. */
+    /** The chosen file; it holds after {@link #APPROVE_OPTION}. */
     public File getSelectedFile() {
         return selectedFile;
     }
 
     /**
-     * Elige ese archivo.
+     * It chooses that file.
      *
-     * <p>Ademas mueve la carpeta actual a la que lo contiene: elegir un archivo de otro lado tiene
-     * que dejar el selector mostrando ese lado.
+     * <p>It also moves the current folder to the one that contains it: choosing a file from
+     * somewhere else has to leave the chooser showing that place.
      */
     public void setSelectedFile(File file) {
         File oldValue = selectedFile;
@@ -210,10 +212,10 @@ public class JFileChooser extends JComponent implements Accessible {
     }
 
     /**
-     * Los elegidos cuando se puede elegir varios; un arreglo vacio si no hay ninguno.
+     * Those chosen when several may be chosen; an empty array if there are none.
      *
-     * <p>Devuelve una copia: el arreglo interno no sale de la clase, asi que tocarlo no cambia la
-     * eleccion por la espalda.
+     * <p>It returns a copy: the internal array does not leave the class, so touching it does not
+     * change the choice behind its back.
      */
     public File[] getSelectedFiles() {
         if (selectedFiles == null) {
@@ -225,11 +227,10 @@ public class JFileChooser extends JComponent implements Accessible {
     }
 
     /**
-     * Elige esos archivos.
+     * It chooses those files.
      *
-     * <p>El primero pasa a ser tambien el archivo elegido, asi que el aviso de
-     * {@code SelectedFile} llega <em>antes</em> que el de {@code SelectedFiles}. Nulo o vacio
-     * dejan la eleccion en nada.
+     * <p>The first also becomes the chosen file, so the {@code SelectedFile} notice arrives
+     * <em>before</em> the {@code SelectedFiles} one. Null or empty leave the choice at nothing.
      */
     public void setSelectedFiles(File[] selectedFiles) {
         File[] oldValue = this.selectedFiles;
@@ -250,10 +251,10 @@ public class JFileChooser extends JComponent implements Accessible {
     }
 
     /**
-     * La carpeta que se esta mostrando.
+     * The folder that is being shown.
      *
-     * <p>Nulo significa la carpeta de siempre del usuario. Un archivo que no es carpeta se toma
-     * como su carpeta padre, que es lo que espera quien pasa una ruta cualquiera.
+     * <p>Null means the user's usual folder. A file that is not a folder is taken as its parent
+     * folder, which is what whoever passes any path expects.
      */
     public void setCurrentDirectory(File dir) {
         File oldValue = currentDirectory;
@@ -281,7 +282,7 @@ public class JFileChooser extends JComponent implements Accessible {
         setCurrentDirectory(getFileSystemView().getParentDirectory(oldValue));
     }
 
-    /** Vuelve a leer la carpeta actual del disco. */
+    /** It reads the current folder from the disk again. */
     public void rescanCurrentDirectory() {
         FileChooserUI ui = getUI();
         if (ui != null) {
@@ -289,7 +290,7 @@ public class JFileChooser extends JComponent implements Accessible {
         }
     }
 
-    /** Desplaza para que ese archivo se vea. */
+    /** It scrolls so that that file is seen. */
     public void ensureFileIsVisible(File f) {
         FileChooserUI ui = getUI();
         if (ui != null) {
@@ -298,10 +299,10 @@ public class JFileChooser extends JComponent implements Accessible {
     }
 
     /**
-     * Muestra el dialogo de abrir.
+     * It shows the open dialog.
      *
-     * @return {@link #APPROVE_OPTION}, {@link #CANCEL_OPTION} o {@link #ERROR_OPTION}.
-     * @throws HeadlessException si no hay pantalla.
+     * @return {@link #APPROVE_OPTION}, {@link #CANCEL_OPTION} or {@link #ERROR_OPTION}.
+     * @throws HeadlessException if there is no screen.
      */
     public int showOpenDialog(Component parent) throws HeadlessException {
         setDialogType(OPEN_DIALOG);
@@ -309,9 +310,9 @@ public class JFileChooser extends JComponent implements Accessible {
     }
 
     /**
-     * Muestra el dialogo de guardar.
+     * It shows the save dialog.
      *
-     * @throws HeadlessException si no hay pantalla.
+     * @throws HeadlessException if there is no screen.
      */
     public int showSaveDialog(Component parent) throws HeadlessException {
         setDialogType(SAVE_DIALOG);
@@ -319,13 +320,13 @@ public class JFileChooser extends JComponent implements Accessible {
     }
 
     /**
-     * Muestra el dialogo con ese texto en el boton de aceptar.
+     * It shows the dialog with that text on the accept button.
      *
-     * @throws HeadlessException si no hay pantalla.
+     * @throws HeadlessException if there is no screen.
      */
     public int showDialog(Component parent, String approveButtonText) throws HeadlessException {
         if (dialog != null) {
-            // Ya esta abierto: mostrarlo dos veces dejaria dos dialogos sobre el mismo selector.
+            // It is already open: showing it twice would leave two dialogs over the same chooser.
             return ERROR_OPTION;
         }
         if (approveButtonText != null) {
@@ -342,9 +343,9 @@ public class JFileChooser extends JComponent implements Accessible {
     }
 
     /**
-     * Arma el dialogo modal que contiene al selector.
+     * It builds the modal dialog that contains the chooser.
      *
-     * @throws HeadlessException si no hay pantalla.
+     * @throws HeadlessException if there is no screen.
      */
     protected JDialog createDialog(Component parent) throws HeadlessException {
         String title = getDialogTitle();
@@ -354,7 +355,9 @@ public class JFileChooser extends JComponent implements Accessible {
         return d;
     }
 
-    /** Si se ven los botones de aceptar y cancelar; se esconden al usarlo dentro de un panel. */
+    /**
+     * Whether the accept and cancel buttons are seen; they are hidden when using it inside a pane.
+     */
     public boolean getControlButtonsAreShown() {
         return controlsShown;
     }
@@ -373,9 +376,9 @@ public class JFileChooser extends JComponent implements Accessible {
     }
 
     /**
-     * Abrir, guardar o propio.
+     * Open, save or custom.
      *
-     * @throws IllegalArgumentException si no es uno de los tres.
+     * @throws IllegalArgumentException if it is not one of the three.
      */
     public void setDialogType(int dialogType) {
         if (this.dialogType == dialogType) {
@@ -402,7 +405,7 @@ public class JFileChooser extends JComponent implements Accessible {
         firePropertyChange(DIALOG_TITLE_CHANGED_PROPERTY, oldValue, dialogTitle);
     }
 
-    /** El titulo; si no se puso, el que proponga el aspecto. */
+    /** The title; if it was not set, the one the look and feel proposes. */
     public String getDialogTitle() {
         String title = dialogTitle;
         if (title == null) {
@@ -459,7 +462,7 @@ public class JFileChooser extends JComponent implements Accessible {
         firePropertyChange(APPROVE_BUTTON_TEXT_CHANGED_PROPERTY, oldValue, approveButtonText);
     }
 
-    /** El texto del boton de aceptar; si no se puso, el que proponga el aspecto. */
+    /** The accept button's text; if it was not set, the one the look and feel proposes. */
     public String getApproveButtonText() {
         String text = approveButtonText;
         if (text == null) {
@@ -471,7 +474,7 @@ public class JFileChooser extends JComponent implements Accessible {
         return text;
     }
 
-    /** Los filtros que el usuario puede elegir. */
+    /** The filters the user may choose. */
     public FileFilter[] getChoosableFileFilters() {
         FileFilter[] filterArray = new FileFilter[filters.size()];
         filters.copyInto(filterArray);
@@ -491,10 +494,10 @@ public class JFileChooser extends JComponent implements Accessible {
     }
 
     /**
-     * Saca un filtro; devuelve si estaba.
+     * It removes a filter; it returns whether it was there.
      *
-     * <p>Si era el que estaba en uso, se pasa al primero que quede: quedarse sin filtro dejaria de
-     * mostrar todo.
+     * <p>If it was the one in use, it goes to the first that is left: being left with no filter
+     * would stop showing everything.
      */
     public boolean removeChoosableFileFilter(FileFilter f) {
         int index = filters.indexOf(f);
@@ -518,7 +521,7 @@ public class JFileChooser extends JComponent implements Accessible {
         return false;
     }
 
-    /** Deja solo el filtro de "todos los archivos". */
+    /** It leaves only the "all files" filter. */
     public void resetChoosableFileFilters() {
         FileFilter[] oldValue = getChoosableFileFilters();
         setFileFilter(null);
@@ -530,7 +533,10 @@ public class JFileChooser extends JComponent implements Accessible {
                 getChoosableFileFilters());
     }
 
-    /** El filtro que acepta todo; lo da el aspecto porque su texto depende del idioma. */
+    /**
+     * The filter that accepts everything; the look and feel gives it because its text depends on
+     * the language.
+     */
     public FileFilter getAcceptAllFileFilter() {
         FileChooserUI ui = getUI();
         if (ui != null) {
@@ -556,7 +562,7 @@ public class JFileChooser extends JComponent implements Accessible {
                 useAcceptAllFileFilter);
     }
 
-    /** Un componente propio que se muestra al costado, para una vista previa. */
+    /** A component of one's own that is shown at the side, for a preview. */
     public JComponent getAccessory() {
         return accessory;
     }
@@ -568,9 +574,9 @@ public class JFileChooser extends JComponent implements Accessible {
     }
 
     /**
-     * Si se eligen archivos, carpetas o los dos.
+     * Whether files, folders or both are chosen.
      *
-     * @throws IllegalArgumentException si no es uno de los tres.
+     * @throws IllegalArgumentException if it is not one of the three.
      */
     public void setFileSelectionMode(int mode) {
         if (fileSelectionMode == mode) {
@@ -600,11 +606,11 @@ public class JFileChooser extends JComponent implements Accessible {
     }
 
     /**
-     * Si se puede elegir mas de un archivo.
+     * Whether more than one file may be chosen.
      *
-     * <p>Cambiar de modo limpia lo que habia elegido, en las dos direcciones: al prender se
-     * descarta el archivo unico y al apagar el arreglo. Arrastrar una eleccion de un modo al otro
-     * dejaria al selector mostrando una eleccion que su modo nuevo no sabe representar.
+     * <p>Changing mode clears what had been chosen, in both directions: on switching it on the
+     * single file is discarded and on switching it off the array. Dragging a choice from one mode
+     * to the other would leave the chooser showing a choice its new mode cannot represent.
      */
     public void setMultiSelectionEnabled(boolean b) {
         if (multiSelectionEnabled == b) {
@@ -625,7 +631,7 @@ public class JFileChooser extends JComponent implements Accessible {
         return multiSelectionEnabled;
     }
 
-    /** Si los archivos ocultos se esconden. */
+    /** Whether the hidden files are hidden. */
     public boolean isFileHidingEnabled() {
         return useFileHiding;
     }
@@ -638,28 +644,28 @@ public class JFileChooser extends JComponent implements Accessible {
     }
 
     /**
-     * El filtro en uso.
+     * The filter in use.
      *
-     * <p>Lo que ya estaba elegido y el filtro nuevo no acepta deja de estar elegido. Sin eso, el
-     * selector devolveria un archivo que el mismo esta escondiendo.
+     * <p>What was already chosen and the new filter does not accept stops being chosen. Without
+     * that, the chooser would return a file it is itself hiding.
      */
     public void setFileFilter(FileFilter filter) {
         FileFilter oldValue = fileFilter;
         fileFilter = filter;
         if (filter != null) {
             if (isMultiSelectionEnabled() && selectedFiles != null && selectedFiles.length > 0) {
-                Vector<File> quedan = new Vector<File>();
-                boolean cambio = false;
+                Vector<File> left = new Vector<File>();
+                boolean change = false;
                 for (int i = 0; i < selectedFiles.length; i++) {
                     if (filter.accept(selectedFiles[i])) {
-                        quedan.addElement(selectedFiles[i]);
+                        left.addElement(selectedFiles[i]);
                     } else {
-                        cambio = true;
+                        change = true;
                     }
                 }
-                if (cambio) {
-                    File[] arr = new File[quedan.size()];
-                    quedan.copyInto(arr);
+                if (change) {
+                    File[] arr = new File[left.size()];
+                    left.copyInto(arr);
                     setSelectedFiles(arr);
                 }
             } else if (selectedFile != null && !filter.accept(selectedFile)) {
@@ -673,7 +679,7 @@ public class JFileChooser extends JComponent implements Accessible {
         return fileFilter;
     }
 
-    /** Quien decide el nombre, el icono y la descripcion de cada archivo. */
+    /** Who decides each file's name, icon and description. */
     public void setFileView(FileView fileView) {
         FileView oldValue = this.fileView;
         this.fileView = fileView;
@@ -685,10 +691,10 @@ public class JFileChooser extends JComponent implements Accessible {
     }
 
     /**
-     * El nombre que se muestra de ese archivo.
+     * The name that is shown of that file.
      *
-     * <p>Primero la vista propia, si la hay, y si no la del aspecto. Ese orden es lo que permite
-     * cambiar solo algunos nombres sin escribir una vista entera.
+     * <p>First the view of one's own, if there is one, and otherwise the look and feel's. That
+     * order is what allows only some names to be changed without writing a whole view.
      */
     public String getName(File f) {
         String filename = null;
@@ -736,7 +742,7 @@ public class JFileChooser extends JComponent implements Accessible {
         return icon;
     }
 
-    /** Si se puede entrar a ese archivo; una carpeta si, un archivo no. */
+    /** Whether that file can be entered; a folder yes, a file no. */
     public boolean isTraversable(File f) {
         Boolean traversable = null;
         if (f != null) {
@@ -751,10 +757,10 @@ public class JFileChooser extends JComponent implements Accessible {
     }
 
     /**
-     * Si el filtro acepta ese archivo.
+     * Whether the filter accepts that file.
      *
-     * <p>Una carpeta se acepta siempre: filtrar carpetas impediria llegar a los archivos que estan
-     * adentro.
+     * <p>A folder is always accepted: filtering folders would make it impossible to reach the
+     * files inside them.
      */
     public boolean accept(File f) {
         boolean shown = true;
@@ -774,7 +780,7 @@ public class JFileChooser extends JComponent implements Accessible {
         return fileSystemView;
     }
 
-    /** El usuario acepto; cierra el dialogo y avisa. */
+    /** The user accepted; it closes the dialog and gives notice. */
     public void approveSelection() {
         returnValue = APPROVE_OPTION;
         if (dialog != null) {

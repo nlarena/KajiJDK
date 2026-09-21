@@ -6,10 +6,10 @@ import javax.print.attribute.PrintJobAttribute;
 import javax.print.attribute.TextSyntax;
 
 /**
- * A que dispositivo fisico le toco el trabajo.
+ * Which physical device the job went to.
  *
- * <p>Tiene sentido cuando un solo servicio de impresion maneja varias maquinas: el nombre del
- * servicio es {@link PrinterName} y este dice cual de sus maquinas lo hizo.
+ * <p>It makes sense when a single print service handles several machines: the service's name is
+ * {@link PrinterName} and this one says which of its machines did it.
  */
 public final class OutputDeviceAssigned extends TextSyntax implements PrintJobAttribute {
 

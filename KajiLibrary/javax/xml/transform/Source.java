@@ -1,30 +1,31 @@
 package javax.xml.transform;
 
 /**
- * KajiLibrary's javax.xml.transform.Source -- de donde sale un documento XML.
+ * KajiLibrary's javax.xml.transform.Source -- where an XML document comes from.
  *
- * <p>Es una interfaz **marcadora con identidad**: no dice como leer el documento, solo que hay uno y
- * de donde vino. Quien la implementa elige la forma --un flujo, un arbol DOM, una secuencia de
- * eventos SAX-- y el procesador acepta la que sepa manejar. Sin esta abstraccion, cada API que recibe
- * XML tendria que ofrecer una sobrecarga por cada representacion.
+ * <p>It is a **marker interface with an identity**: it does not say how to read the document, only
+ * that there is one and where it came from. Whoever implements it chooses the form --a stream, a
+ * DOM tree, a sequence of SAX events-- and the processor accepts the one it knows how to handle.
+ * Without this abstraction, every API that receives XML would have to offer one overload per
+ * representation.
  *
- * <p>El identificador de sistema es lo unico comun a todas: la URI base contra la cual resolver las
- * referencias relativas del documento. Sin ella, un `&lt;xsl:include href="comun.xsl"/&gt;` no se
- * puede seguir.
+ * <p>The system identifier is the only thing common to all of them: the base URI against which to
+ * resolve the document's relative references. Without it, an `&lt;xsl:include
+ * href="common.xsl"/&gt;` cannot be followed.
  */
 public interface Source {
 
-    /** La URI base del documento. */
+    /** The base URI of the document. */
     void setSystemId(String systemId);
 
     String getSystemId();
 
     /**
-     * Si esta fuente no tiene nada.
+     * Whether this source has nothing.
      *
-     * <p>Existe para distinguir "vacia" de "nula": pasar una fuente vacia es valido y significa
-     * "sin documento", que no es lo mismo que un error de programacion. Por omision dice que no,
-     * porque una implementacion que no lo sepa contestar mejor que no invente.
+     * <p>It exists to tell "empty" from "null": passing an empty source is valid and means "no
+     * document", which is not the same as a programming error. By default it says no, because an
+     * implementation that cannot answer had better not make it up.
      */
     default boolean isEmpty() {
         return false;

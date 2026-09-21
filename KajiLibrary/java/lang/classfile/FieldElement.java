@@ -1,5 +1,5 @@
 package java.lang.classfile;
 
-// Una pieza que aparece al nivel de un campo: sus banderas y sus atributos de campo.
+// A piece appearing at the field level: its flags and its field attributes.
 public interface FieldElement extends ClassFileElement {
 }

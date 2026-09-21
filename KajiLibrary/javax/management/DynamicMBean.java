@@ -1,46 +1,47 @@
 package javax.management;
 
 /**
- * El MBean que se describe a si mismo en tiempo de ejecucion.
+ * The MBean that describes itself at run time.
  *
- * <p>Es el contrapunto del MBean estandar. Uno estandar declara su interfaz en metodos Java y el
- * agente la descubre por reflexion sobre los nombres; uno dinamico no tiene interfaz que mirar --
- * devuelve su {@link MBeanInfo} desde {@link #getMBeanInfo()} y atiende los pedidos por nombre.
+ * <p>It is the counterpoint of the standard MBean. A standard one declares its interface in Java
+ * methods and the agent discovers it by reflection over the names; a dynamic one has no interface
+ * to look at -- it returns its {@link MBeanInfo} from {@link #getMBeanInfo()} and serves requests
+ * by name.
  *
- * <p>La consecuencia practica: un MBean dinamico puede cambiar sus atributos entre dos llamadas.
- * Es como se instrumentan cosas cuya forma no se conoce al compilar --una tabla de configuracion,
- * un modelo cargado de un archivo-- sin generar clases.
+ * <p>The practical consequence: a dynamic MBean can change its attributes between two calls. It is
+ * how things whose shape is not known at compile time --a configuration table, a model loaded from
+ * a file-- are instrumented without generating classes.
  */
 public interface DynamicMBean {
 
-    /** Lee un atributo por nombre. */
+    /** Reads an attribute by name. */
     Object getAttribute(String attribute)
             throws AttributeNotFoundException, MBeanException, ReflectionException;
 
-    /** Escribe un atributo. */
+    /** Writes an attribute. */
     void setAttribute(Attribute attribute)
             throws AttributeNotFoundException, InvalidAttributeValueException,
                    MBeanException, ReflectionException;
 
     /**
-     * Lee varios.
+     * Reads several.
      *
-     * <p>No declara excepciones: los atributos que fallan se omiten de la respuesta, y por eso la
-     * lista devuelta puede ser mas corta que el pedido.
+     * <p>It declares no exceptions: the attributes that fail are left out of the answer, which is
+     * why the returned list may be shorter than the request.
      */
     AttributeList getAttributes(String[] attributes);
 
-    /** Escribe varios; devuelve los que efectivamente se escribieron. */
+    /** Writes several; returns the ones actually written. */
     AttributeList setAttributes(AttributeList attributes);
 
     /**
-     * Invoca una operacion.
+     * Invokes an operation.
      *
-     * @param signature los nombres de las clases de los parametros, para desambiguar sobrecargas
+     * @param signature the class names of the parameters, to disambiguate overloads
      */
     Object invoke(String actionName, Object[] params, String[] signature)
             throws MBeanException, ReflectionException;
 
-    /** Que atributos, operaciones, constructores y notificaciones tiene <b>ahora</b>. */
+    /** Which attributes, operations, constructors and notifications it has <b>now</b>. */
     MBeanInfo getMBeanInfo();
 }

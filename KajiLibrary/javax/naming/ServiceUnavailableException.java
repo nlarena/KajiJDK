@@ -1,10 +1,10 @@
 package javax.naming;
 
 /**
- * Se lanza cuando se llego al servicio y el servicio dijo que no esta disponible. Contra
- * `CommunicationException`, aca el canal anduvo: el que no esta es el servicio.
+ * Thrown when the service was reached and the service said it is not available. Compared with
+ * `CommunicationException`, here the channel worked: what is missing is the service.
  *
- * <p>La jerarquia entera y el estado que arrastra estan explicados en `NamingException`.
+ * <p>The whole hierarchy and the state it carries are explained in `NamingException`.
  */
 public class ServiceUnavailableException extends NamingException {
 

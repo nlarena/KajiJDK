@@ -4,30 +4,34 @@ import java.io.PrintStream;
 import java.io.PrintWriter;
 
 /**
- * KajiLibrary's javax.xml.xpath.XPathException -- la raiz de los errores de XPath.
+ * KajiLibrary's javax.xml.xpath.XPathException -- the root of the XPath errors.
  *
- * <p>Dos constructores y ninguno acepta null: uno pide mensaje y el otro pide causa, y el que reciba
- * null tira {@link NullPointerException} en el momento. Es mas estricto que lo habitual y esta bien
- * que lo sea -- una excepcion sin mensaje ni causa no le sirve a nadie, y el costo de descubrirlo es
- * un rastro de pila que no dice nada.
+ * <p>Two constructors and neither accepts null: one takes a message and the other a cause, and the
+ * one that receives null throws {@link NullPointerException} right away. It is stricter than usual,
+ * and rightly so -- an exception with neither message nor cause is of no use to anyone, and the
+ * cost of finding that out is a stack trace that says nothing.
  *
- * <p>El constructor con causa deja el mensaje en el {@code toString} de la causa. Por eso no hay un
- * constructor con los dos: si se tiene la causa, el mensaje sale de ahi, y si se quiere uno propio,
- * la via es el de mensaje mas {@code initCause}.
+ * <p>The cause constructor leaves the message as the cause's {@code toString}. That is why there is
+ * no constructor taking both: if you have the cause, the message comes from there, and if you want
+ * your own, the way is the message one plus {@code initCause}.
  *
- * <p>Redefine {@code getCause} y los tres {@code printStackTrace} porque en el JDK guarda su causa en
- * un campo propio, de cuando {@code Throwable} todavia no las tenia. Aca la causa es la de
- * {@code Throwable} y las redefiniciones delegan: el comportamiento observable es el mismo y no hay
- * dos copias del mismo dato que puedan discrepar.
+ * <p>It redefines {@code getCause} and the three {@code printStackTrace} methods to match the JDK's
+ * declarations. The cause is {@code Throwable}'s, as it is in the JDK 25 sources too (the only
+ * {@code cause} of its own there is a serial field). An earlier note said the redefinitions only
+ * delegate and the observable behaviour is the same; the JDK's {@code printStackTrace(PrintStream)}
+ * prints the cause's trace first, then a {@code "--------------- linked to ------------------"}
+ * line, then its own trace (which again ends with the cause). Here all three just call
+ * {@code super}, so the output is the ordinary {@code Throwable} trace with a {@code Caused by:}
+ * section.
  */
 public class XPathException extends Exception {
 
     private static final long serialVersionUID = -1837080260374986980L;
 
     /**
-     * Con un mensaje.
+     * With a message.
      *
-     * @throws NullPointerException si es null; ver la nota de la clase
+     * @throws NullPointerException if it is null; see the class note
      */
     public XPathException(String message) {
         super(message);
@@ -37,9 +41,9 @@ public class XPathException extends Exception {
     }
 
     /**
-     * Con una causa; el mensaje sale del {@code toString} de ella.
+     * With a cause; the message comes from its {@code toString}.
      *
-     * @throws NullPointerException si es null
+     * @throws NullPointerException if it is null
      */
     public XPathException(Throwable cause) {
         super(cause);
@@ -48,22 +52,22 @@ public class XPathException extends Exception {
         }
     }
 
-    /** La causa, o null si se construyo con mensaje y nadie la fijo. */
+    /** The cause, or null if it was built with a message and nobody set one. */
     public Throwable getCause() {
         return super.getCause();
     }
 
-    /** A la salida de error. */
+    /** To standard error. */
     public void printStackTrace() {
         super.printStackTrace();
     }
 
-    /** A ese flujo. */
+    /** To that stream. */
     public void printStackTrace(PrintStream s) {
         super.printStackTrace(s);
     }
 
-    /** A ese escritor. */
+    /** To that writer. */
     public void printStackTrace(PrintWriter s) {
         super.printStackTrace(s);
     }

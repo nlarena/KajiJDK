@@ -1,11 +1,11 @@
 package javax.net.ssl;
 
 /**
- * Las constantes estandarizadas del protocolo.
+ * The protocol's standardized constants.
  *
- * <p>Hoy tiene una sola: el tipo de nombre de servidor de la extension SNI. Es una clase entera para
- * una constante porque el registro de IANA puede crecer, y el lugar donde iria lo nuevo tiene que
- * existir de antemano.
+ * <p>Today it has only one: the server name type of the SNI extension. It is a whole class for one
+ * constant because the IANA registry may grow, and the place where the new one would go has to
+ * exist beforehand.
  */
 public final class StandardConstants {
 
@@ -13,14 +13,14 @@ public final class StandardConstants {
     }
 
     /**
-     * El tipo "nombre de host" de la extension SNI, que vale {@code 0}.
+     * The "host name" type of the SNI extension, which is {@code 0}.
      *
-     * <p>SNI resuelve un problema concreto: el cliente tiene que decir a que sitio se conecta
-     * <strong>antes</strong> de que el servidor le mande un certificado, porque en una sola direccion
-     * IP puede haber muchos sitios y cada uno con el suyo. Sin SNI, el servidor tendria que elegir a
-     * ciegas.
+     * <p>SNI solves a concrete problem: the client has to say which site it connects to
+     * <strong>before</strong> the server sends it a certificate, because at a single IP address
+     * there may be many sites and each with its own. Without SNI, the server would have to choose
+     * blindly.
      *
-     * <p>Ver {@link SNIHostName}.
+     * <p>See {@link SNIHostName}.
      */
     public static final int SNI_HOST_NAME = 0;
 }

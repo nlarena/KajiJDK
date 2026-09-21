@@ -3,25 +3,25 @@ package javax.management.timer;
 import javax.management.Notification;
 
 /**
- * KajiLibrary's javax.management.timer.TimerNotification -- lo que manda un {@link Timer}.
+ * KajiLibrary's javax.management.timer.TimerNotification -- what a {@link Timer} sends.
  *
- * <p>Agrega un solo campo a {@link Notification}: el identificador de la <b>inscripcion</b> que la
- * produjo. No es el numero de secuencia y no hay que confundirlos: el numero de secuencia cambia en
- * cada envio, el identificador es el mismo en todos los disparos de una notificacion periodica. Es
- * el que sirve para atar lo que llega con lo que se pidio, y para darlo de baja.
+ * <p>It adds a single field to {@link Notification}: the identifier of the <b>registration</b> that
+ * produced it. It is not the sequence number and the two must not be confused: the sequence number
+ * changes on every send, the identifier is the same in every firing of a periodic notification. It
+ * is the one that serves to tie what arrives to what was asked for, and to remove it.
  */
 public class TimerNotification extends Notification {
 
     private static final long serialVersionUID = 1798492029603825750L;
 
-    /** El identificador de la inscripcion; ver la nota de la clase. */
+    /** The registration's identifier; see the class note. */
     private Integer notificationID;
 
     /**
-     * @param type el tipo que eligio quien inscribio la notificacion
-     * @param source el {@link Timer} que la manda
-     * @param sequenceNumber cambia en cada envio
-     * @param id el identificador de la inscripcion, constante entre disparos
+     * @param type the type whoever registered the notification chose
+     * @param source the {@link Timer} that sends it
+     * @param sequenceNumber changes on every send
+     * @param id the registration's identifier, constant between firings
      */
     public TimerNotification(String type, Object source, long sequenceNumber, long timeStamp,
                              String msg, Integer id) {
@@ -29,7 +29,7 @@ public class TimerNotification extends Notification {
         this.notificationID = id;
     }
 
-    /** El identificador de la inscripcion. Ver la nota de la clase. */
+    /** The registration's identifier. See the class note. */
     public Integer getNotificationID() {
         return this.notificationID;
     }

@@ -3,83 +3,83 @@ package javax.management.monitor;
 import javax.management.ObjectName;
 
 /**
- * KajiLibrary's javax.management.monitor.MonitorMBean -- la interfaz de administracion comun a los
- * tres monitores.
+ * KajiLibrary's javax.management.monitor.MonitorMBean -- the management interface common to the
+ * three monitors.
  *
- * <p>Un monitor es un MBean que mira <b>otros</b> MBeans: lee un atributo cada tanto y avisa cuando
- * pasa algo. Esta interfaz es la parte que no depende de que se este mirando: a quien, que atributo,
- * cada cuanto, y arrancar y parar.
+ * <p>A monitor is an MBean that watches <b>other</b> MBeans: it reads an attribute every so often
+ * and notifies when something happens. This interface is the part that does not depend on what is
+ * being watched: whom, which attribute, how often, and starting and stopping.
  *
- * <h2>Los dos {@code ObservedObject} en singular y en plural</h2>
+ * <h2>The two {@code ObservedObject}, singular and plural</h2>
  *
- * <p>{@link #getObservedObject} y {@link #setObservedObject} son de la version 1, cuando un monitor
- * miraba <b>uno</b>. Cuando se agrego mirar varios, se conservaron: el getter devuelve el primero de
- * la lista y el setter reemplaza la lista entera por uno. Estan obsoletos y siguen andando, que es
- * la unica combinacion que no rompe codigo viejo.
+ * <p>{@link #getObservedObject} and {@link #setObservedObject} are from version 1, when a monitor
+ * watched <b>one</b>. When watching several was added, they were kept: the getter returns the first
+ * of the list and the setter replaces the whole list with one. They are deprecated and still work,
+ * which is the only combination that does not break old code.
  *
- * <p>El atributo observado es <b>uno solo</b> para todos los objetos observados. Es una limitacion
- * real y se nota al usarlo: para mirar dos atributos distintos hacen falta dos monitores.
+ * <p>The observed attribute is <b>a single one</b> for all the observed objects. It is a real
+ * limitation and it shows in use: to watch two different attributes you need two monitors.
  */
 public interface MonitorMBean {
 
-    /** Arranca la observacion. */
+    /** Starts observing. */
     void start();
 
-    /** La para. La configuracion queda. */
+    /** Stops it. The configuration stays. */
     void stop();
 
     /**
-     * Agrega un MBean a observar.
+     * Adds an MBean to observe.
      *
-     * @throws IllegalArgumentException si es null
+     * @throws IllegalArgumentException if it is null
      */
     void addObservedObject(ObjectName object) throws IllegalArgumentException;
 
-    /** Lo saca. Si no estaba, no hace nada. */
+    /** Removes it. If it was not there, does nothing. */
     void removeObservedObject(ObjectName object);
 
-    /** Si ese esta en la lista. */
+    /** Whether that one is in the list. */
     boolean containsObservedObject(ObjectName object);
 
-    /** Todos los observados. */
+    /** All the observed objects. */
     ObjectName[] getObservedObjects();
 
     /**
-     * El primero de la lista.
+     * The first of the list.
      *
-     * @deprecated ver la nota de la clase; usar {@link #getObservedObjects}
+     * @deprecated see the class note; use {@link #getObservedObjects}
      */
     @Deprecated
     ObjectName getObservedObject();
 
     /**
-     * Reemplaza la lista entera por ese.
+     * Replaces the whole list with that one.
      *
-     * @deprecated ver la nota de la clase; usar {@link #addObservedObject}
+     * @deprecated see the class note; use {@link #addObservedObject}
      */
     @Deprecated
     void setObservedObject(ObjectName object);
 
-    /** El atributo que se lee. Ver la nota de la clase: es uno solo. */
+    /** The attribute that is read. See the class note: it is a single one. */
     String getObservedAttribute();
 
     /**
-     * Ver {@link #getObservedAttribute}.
+     * See {@link #getObservedAttribute}.
      *
-     * @throws IllegalArgumentException si es null
+     * @throws IllegalArgumentException if it is null
      */
     void setObservedAttribute(String attribute);
 
-    /** Cada cuantos milisegundos se lee. */
+    /** Every how many milliseconds it reads. */
     long getGranularityPeriod();
 
     /**
-     * Ver {@link #getGranularityPeriod}.
+     * See {@link #getGranularityPeriod}.
      *
-     * @throws IllegalArgumentException si no es positivo: un periodo de 0 seria un bucle cerrado
+     * @throws IllegalArgumentException if it is not positive: a period of 0 would be a tight loop
      */
     void setGranularityPeriod(long period) throws IllegalArgumentException;
 
-    /** Si esta observando. */
+    /** Whether it is observing. */
     boolean isActive();
 }

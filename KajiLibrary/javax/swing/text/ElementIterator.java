@@ -3,20 +3,20 @@ package javax.swing.text;
 import java.util.Stack;
 
 /**
- * Recorre un arbol de elementos en profundidad, primero el padre y despues los hijos.
+ * It walks an element tree depth first, the parent first and the children afterwards.
  *
- * <p>Guarda el camino desde la raiz en una pila, no punteros al arbol: por eso {@link #depth}
- * sale gratis y por eso el recorrido se puede clonar y seguir por dos lados.
+ * <p>It keeps the path from the root on a stack, not pointers into the tree: that is why
+ * {@link #depth} comes for free and why the walk can be cloned and continued along two paths.
  *
- * <p>No es a prueba de cambios: si el documento se edita mientras se recorre, lo que sigue no
- * esta definido. Quien recorre y edita a la vez tiene que rehacer el recorrido.
+ * <p>It is not change-proof: if the document is edited while walking, what follows is undefined.
+ * Whoever walks and edits at the same time has to redo the walk.
  */
 public class ElementIterator implements Cloneable {
 
     private Element root;
     private Stack<StackItem> elementStack = null;
 
-    /** Un elemento y por cual de sus hijos vamos. */
+    /** An element and which of its children we are on. */
     private static class StackItem implements Cloneable {
 
         Element item;
@@ -44,17 +44,17 @@ public class ElementIterator implements Cloneable {
         }
     }
 
-    /** Recorre el elemento raiz por omision de ese documento. */
+    /** It walks that document's default root element. */
     public ElementIterator(Document document) {
         root = document.getDefaultRootElement();
     }
 
-    /** Recorre a partir de ese elemento. */
+    /** It walks starting from that element. */
     public ElementIterator(Element root) {
         this.root = root;
     }
 
-    /** Una copia que sigue desde el mismo lugar. */
+    /** A copy that continues from the same place. */
     public synchronized Object clone() {
         try {
             ElementIterator it = new ElementIterator(root);
@@ -72,7 +72,7 @@ public class ElementIterator implements Cloneable {
         }
     }
 
-    /** Vuelve al principio y devuelve la raiz. */
+    /** It goes back to the beginning and returns the root. */
     public Element first() {
         if (root == null) {
             return null;
@@ -84,7 +84,10 @@ public class ElementIterator implements Cloneable {
         return root;
     }
 
-    /** Cuantos niveles hay debajo de la raiz hasta el elemento actual; cero si no arranco. */
+    /**
+     * How many levels there are below the root down to the current element; zero if it has not
+     * started.
+     */
     public int depth() {
         if (elementStack == null) {
             return 0;
@@ -92,7 +95,7 @@ public class ElementIterator implements Cloneable {
         return elementStack.size();
     }
 
-    /** Donde esta parado, o {@code null} si no arranco o ya termino. */
+    /** Where it is standing, or {@code null} if it has not started or has already finished. */
     public Element current() {
         if (elementStack == null) {
             return first();
@@ -110,10 +113,10 @@ public class ElementIterator implements Cloneable {
     }
 
     /**
-     * El siguiente en profundidad.
+     * The next one, depth first.
      *
-     * <p>Baja al primer hijo si lo hay; si no, avanza al hermano; si no queda hermano, sube hasta
-     * encontrar uno. Es el orden en que se lee un documento.
+     * <p>It goes down to the first child if there is one; if not, it moves on to the sibling; if no
+     * sibling is left, it goes up until it finds one. It is the order in which a document is read.
      */
     public Element next() {
         if (elementStack == null) {
@@ -138,7 +141,7 @@ public class ElementIterator implements Cloneable {
             return child;
         }
 
-        // Se acabaron los hijos: subir hasta encontrar a alguien con hermanos.
+        // The children ran out: go up until somebody with siblings is found.
         elementStack.pop();
         while (!elementStack.empty()) {
             StackItem top = elementStack.peek();
@@ -158,10 +161,10 @@ public class ElementIterator implements Cloneable {
     }
 
     /**
-     * El anterior en el recorrido, o {@code null} si estamos en el primero.
+     * The previous one in the walk, or {@code null} if we are on the first.
      *
-     * <p>Anterior en el mismo orden que {@link #next}: el hermano de la izquierda, bajando hasta
-     * su ultimo descendiente, o el padre si no hay hermano.
+     * <p>Previous in the same order as {@link #next}: the sibling on the left, going down to its
+     * last descendant, or the parent if there is no sibling.
      */
     public Element previous() {
         int stackSize;
@@ -174,8 +177,8 @@ public class ElementIterator implements Cloneable {
         int index = item.getIndex();
 
         if (index > 0) {
-            Element hermano = elem.getElement(index - 1);
-            return ultimoDescendiente(hermano);
+            Element sibling = elem.getElement(index - 1);
+            return lastDescendant(sibling);
         }
         if (index == 0) {
             return elem;
@@ -186,12 +189,12 @@ public class ElementIterator implements Cloneable {
         return null;
     }
 
-    /** El ultimo elemento de ese subarbol, bajando siempre por el ultimo hijo. */
-    private Element ultimoDescendiente(Element e) {
-        Element actual = e;
-        while (actual.getElementCount() > 0) {
-            actual = actual.getElement(actual.getElementCount() - 1);
+    /** The last element of that subtree, going always down the last child. */
+    private Element lastDescendant(Element e) {
+        Element current = e;
+        while (current.getElementCount() > 0) {
+            current = current.getElement(current.getElementCount() - 1);
         }
-        return actual;
+        return current;
     }
 }

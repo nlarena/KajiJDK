@@ -5,44 +5,44 @@ import java.awt.geom.Point2D;
 import java.awt.geom.Rectangle2D;
 
 /**
- * Una operación de un {@link Raster} a otro.
+ * An operation from one {@link Raster} to another.
  *
- * <p>Trabaja sobre píxeles **sin interpretar**: no sabe qué color son, sólo qué números tienen. Es
- * la diferencia con {@link BufferedImageOp}, que sí ve el color y por eso puede convertir de un
- * espacio a otro. Las mismas clases suelen implementar las dos interfaces, y hacen cuentas distintas
- * según por cuál se las llame.
+ * <p>It works over **uninterpreted** pixels: it does not know what colour they are, only what
+ * numbers they hold. That is the difference from {@link BufferedImageOp}, which does see the colour
+ * and can therefore convert from one space to another. The same classes usually implement both
+ * interfaces, and do different sums depending on which one they are called through.
  *
- * <p>{@link #getPoint2D} existe porque una operación puede mover los píxeles de lugar: en una
- * transformación afín el punto de destino no es el mismo que el de origen, y hay que poder
- * preguntarlo sin aplicar la operación entera.
+ * <p>{@link #getPoint2D} exists because an operation can move the pixels about: in an affine
+ * transformation the destination point is not the same as the source one, and it has to be possible
+ * to ask without applying the whole operation.
  */
 public interface RasterOp {
 
     /**
-     * Aplica la operación.
+     * Applies the operation.
      *
-     * @param dest el destino, o `null` para que se cree uno
-     * @return el destino
+     * @param dest the destination, or `null` for one to be created
+     * @return the destination
      */
     WritableRaster filter(Raster src, WritableRaster dest);
 
-    /** El rectángulo que va a ocupar el resultado. */
+    /** The rectangle the result is going to take. */
     Rectangle2D getBounds2D(Raster src);
 
     /**
-     * Un destino vacío del tamaño y formato que corresponde.
+     * An empty destination of the size and format that fits.
      *
-     * @throws IllegalArgumentException si el origen no le sirve a esta operación
+     * @throws IllegalArgumentException if the source does not suit this operation
      */
     WritableRaster createCompatibleDestRaster(Raster src);
 
     /**
-     * A dónde va a parar ese punto.
+     * Where that point ends up.
      *
-     * @param dstPt dónde escribir el resultado, o `null` para que se cree uno
+     * @param dstPt where to write the result, or `null` for one to be created
      */
     Point2D getPoint2D(Point2D srcPt, Point2D dstPt);
 
-    /** Las pistas de dibujo, o `null` si no hay. */
+    /** The rendering hints, or `null` if there are none. */
     RenderingHints getRenderingHints();
 }

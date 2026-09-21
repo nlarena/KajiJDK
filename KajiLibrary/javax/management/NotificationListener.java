@@ -3,21 +3,22 @@ package javax.management;
 import java.util.EventListener;
 
 /**
- * El que recibe notificaciones de un MBean.
+ * The one that receives an MBean's notifications.
  *
- * <p>El segundo argumento de {@link #handleNotification} es la clave del dise&ntilde;o y suele
- * pasar desapercibido: es el objeto que el oyente entrego al registrarse, y vuelve tal cual. Con
- * eso un mismo oyente puede atender veinte fuentes distintas y saber cual es cual sin llevar un
- * mapa propio ni registrar veinte objetos.
+ * <p>The second argument of {@link #handleNotification} is the key to the design and usually goes
+ * unnoticed: it is the object the listener handed over when registering, and it comes back as it
+ * was. With that, one listener can serve twenty different sources and know which is which without
+ * keeping a map of its own or registering twenty objects.
  */
 public interface NotificationListener extends EventListener {
 
     /**
-     * Llega una notificacion.
+     * A notification arrives.
      *
-     * <p>Se llama, en general, en un hilo del emisor: bloquear aca frena al MBean que notifica.
+     * <p>It is called, in general, on one of the emitter's threads: blocking here slows down the
+     * MBean that notifies.
      *
-     * @param handback el objeto entregado al registrarse, o `null`
+     * @param handback the object handed over when registering, or {@code null}
      */
     void handleNotification(Notification notification, Object handback);
 }

@@ -8,35 +8,35 @@ import java.util.Map;
 import java.util.Vector;
 
 /**
- * KajiLibrary's javax.sql.rowset.serial.SerialStruct -- una copia de un tipo estructurado de SQL.
+ * KajiLibrary's javax.sql.rowset.serial.SerialStruct -- a copy of an SQL structured type.
  *
- * <p>Un {@link Struct} es una instancia de un tipo definido por el usuario: un nombre de tipo y una
- * lista de atributos. Esta clase copia los dos.
+ * <p>A {@link Struct} is an instance of a user-defined type: a type name and a list of attributes.
+ * This class copies both.
  *
- * <h2>Los dos constructores son dos caminos distintos</h2>
+ * <h2>The two constructors are two different routes</h2>
  *
- * <p>El que recibe un {@link Struct} copia lo que ya viene del driver. El que recibe un
- * {@link SQLData} hace algo mas interesante: le pide al objeto que <b>se escriba</b> en un
- * {@link SQLOutputImpl}, y se queda con lo que salga. Es la via para guardar en una columna un
- * objeto Java que sabe mapearse a SQL.
+ * <p>The one that receives a {@link Struct} copies what already comes from the driver. The one that
+ * receives an {@link SQLData} does something more interesting: it asks the object to <b>write
+ * itself</b> into an {@link SQLOutputImpl}, and keeps what comes out. It is the route for keeping
+ * in a column a Java object that knows how to map itself to SQL.
  *
- * <p>Como en {@link SerialArray}, los atributos que no sobreviven a la conexion se convierten a su
- * equivalente de este paquete a medida que se copian.
+ * <p>As in {@link SerialArray}, the attributes that do not survive the connection are converted to
+ * their equivalent in this package as they are copied.
  */
 public class SerialStruct implements Struct, Serializable, Cloneable {
 
     private static final long serialVersionUID = -8322445504027483372L;
 
-    /** El nombre del tipo. */
+    /** The name of the type. */
     private final String sqlTypeName;
 
-    /** Los atributos, ya convertidos. */
+    /** The attributes, already converted. */
     private Object[] attribs;
 
     /**
-     * Copia un {@link Struct} del driver.
+     * Copies a {@link Struct} from the driver.
      *
-     * @throws SerialException si es null o no se puede leer
+     * @throws SerialException if it is null or cannot be read
      */
     public SerialStruct(Struct in, Map<String, Class<?>> map) throws SerialException {
         if (in == null) {
@@ -52,9 +52,9 @@ public class SerialStruct implements Struct, Serializable, Cloneable {
     }
 
     /**
-     * Le pide al objeto que se escriba.
+     * Asks the object to write itself.
      *
-     * <p>Ver la nota de la clase: este es el camino para guardar un objeto Java propio.
+     * <p>See the class note: this is the route for keeping a Java object of one's own.
      */
     public SerialStruct(SQLData in, Map<String, Class<?>> map) throws SerialException {
         if (in == null) {
@@ -77,24 +77,24 @@ public class SerialStruct implements Struct, Serializable, Cloneable {
         }
     }
 
-    /** El nombre del tipo. */
+    /** The name of the type. */
     public String getSQLTypeName() throws SerialException {
         return this.sqlTypeName;
     }
 
-    /** Los atributos. Copia. */
+    /** The attributes. A copy. */
     public Object[] getAttributes() throws SerialException {
         Object[] copy = new Object[this.attribs.length];
         System.arraycopy(this.attribs, 0, copy, 0, this.attribs.length);
         return copy;
     }
 
-    /** Idem; el mapa se ignora, ver {@link SerialRef#getObject(Map)}. */
+    /** Likewise; the map is ignored, see {@link SerialRef#getObject(Map)}. */
     public Object[] getAttributes(Map<String, Class<?>> map) throws SerialException {
         return getAttributes();
     }
 
-    /** Iguales si coinciden el tipo y los atributos. */
+    /** Equal if the type and the attributes match. */
     public boolean equals(Object obj) {
         if (this == obj) {
             return true;
@@ -121,7 +121,7 @@ public class SerialStruct implements Struct, Serializable, Cloneable {
         return true;
     }
 
-    /** Coherente con {@link #equals}. */
+    /** Consistent with {@link #equals}. */
     public int hashCode() {
         int hash = this.sqlTypeName.hashCode();
         int i = 0;
@@ -133,7 +133,7 @@ public class SerialStruct implements Struct, Serializable, Cloneable {
         return hash;
     }
 
-    /** Una copia con su propio arreglo de atributos. */
+    /** A copy with its own array of attributes. */
     public Object clone() {
         try {
             SerialStruct copy = (SerialStruct) super.clone();
@@ -145,7 +145,7 @@ public class SerialStruct implements Struct, Serializable, Cloneable {
         }
     }
 
-    /** Convierte los atributos que no sobreviven a la conexion. */
+    /** Converts the attributes that do not survive the connection. */
     private static Object[] convert(Object[] raw) throws SerialException, SQLException {
         if (raw == null) {
             return new Object[0];

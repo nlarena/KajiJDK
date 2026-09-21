@@ -1,27 +1,27 @@
 package javax.accessibility;
 
 /**
- * Un tramo de texto con su contenido.
+ * A stretch of text with its contents.
  *
- * <p>Como {@link AccessibleAttributeSequence}, es un registro de campos públicos: se devuelve muchas
- * veces al recorrer un documento y no gana nada con encapsulamiento.
+ * <p>Like {@link AccessibleAttributeSequence}, it is a record of public fields: it is returned many
+ * times when walking a document and gains nothing from encapsulation.
  */
 public class AccessibleTextSequence {
 
-    /** Dónde empieza el tramo. */
+    /** Where the stretch starts. */
     public int startIndex;
 
-    /** Dónde termina. */
+    /** Where it ends. */
     public int endIndex;
 
-    /** El texto del tramo. */
+    /** The text of the stretch. */
     public String text;
 
-    /** Un tramo vacío. */
+    /** An empty stretch. */
     public AccessibleTextSequence() {
     }
 
-    /** Con el tramo y su texto. */
+    /** With the stretch and its text. */
     public AccessibleTextSequence(int start, int end, String txt) {
         this.startIndex = start;
         this.endIndex = end;

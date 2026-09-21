@@ -8,58 +8,60 @@ import javax.swing.event.HyperlinkEvent$EventType;
 import javax.swing.text.Element;
 
 /**
- * Un enlace que hay que abrir en un marco determinado.
+ * A link that has to be opened in a particular frame.
  *
- * <h2>Que agrega</h2>
+ * <h2>What it adds</h2>
  *
- * <p>Un {@link HyperlinkEvent} comun dice a donde ir. Este dice ademas <em>donde</em> mostrarlo: el
- * valor del atributo <code>target</code>, que puede ser el nombre de un marco o una de las palabras
- * reservadas (<code>_self</code>, <code>_parent</code>, <code>_top</code>, <code>_blank</code>).
+ * <p>An ordinary {@link HyperlinkEvent} says where to go. This one also says <em>where</em> to
+ * show it: the value of the <code>target</code> attribute, which may be a frame's name or one of
+ * the reserved words (<code>_self</code>, <code>_parent</code>, <code>_top</code>,
+ * <code>_blank</code>).
  *
- * <p>Quien maneje el evento tiene que mirar ese destino. Si lo ignora y carga el documento en el
- * marco donde se hizo clic, un enlace con <code>target="_top"</code> va a reemplazar el marco en
- * lugar de la ventana entera, que es justo lo contrario de lo que pide la pagina.
+ * <p>Whoever handles the event has to look at that target. If they ignore it and load the
+ * document in the frame where the click happened, a link with <code>target="_top"</code> will
+ * replace the frame instead of the whole window, which is just the opposite of what the page
+ * asks for.
  */
 public class HTMLFrameHyperlinkEvent extends HyperlinkEvent {
 
     private String targetFrame;
 
-    /** Un evento con esa direccion y ese destino. */
+    /** An event with that address and that target. */
     public HTMLFrameHyperlinkEvent(Object source, HyperlinkEvent$EventType type, URL targetURL,
             String targetFrame) {
         super(source, type, targetURL);
         this.targetFrame = targetFrame;
     }
 
-    /** Un evento con direccion, descripcion y destino. */
+    /** An event with an address, a description and a target. */
     public HTMLFrameHyperlinkEvent(Object source, HyperlinkEvent$EventType type, URL targetURL,
             String desc, String targetFrame) {
         super(source, type, targetURL, desc);
         this.targetFrame = targetFrame;
     }
 
-    /** Un evento que ademas sabe de que elemento del documento salio. */
+    /** An event that also knows which document element it came from. */
     public HTMLFrameHyperlinkEvent(Object source, HyperlinkEvent$EventType type, URL targetURL,
             Element sourceElement, String targetFrame) {
         super(source, type, targetURL, null, sourceElement);
         this.targetFrame = targetFrame;
     }
 
-    /** Un evento con descripcion y elemento de origen. */
+    /** An event with a description and a source element. */
     public HTMLFrameHyperlinkEvent(Object source, HyperlinkEvent$EventType type, URL targetURL,
             String desc, Element sourceElement, String targetFrame) {
         super(source, type, targetURL, desc, sourceElement);
         this.targetFrame = targetFrame;
     }
 
-    /** Un evento completo, con el evento de entrada que lo provoco. */
+    /** A complete event, with the input event that caused it. */
     public HTMLFrameHyperlinkEvent(Object source, HyperlinkEvent$EventType type, URL targetURL,
             String desc, Element sourceElement, InputEvent inputEvent, String targetFrame) {
         super(source, type, targetURL, desc, sourceElement, inputEvent);
         this.targetFrame = targetFrame;
     }
 
-    /** El marco donde hay que mostrar el documento; ver la nota de la clase. */
+    /** The frame where the document has to be shown; see the class note. */
     public String getTarget() {
         return targetFrame;
     }

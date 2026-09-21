@@ -13,59 +13,61 @@ import java.util.List;
 import javax.accessibility.Accessible;
 
 /**
- * El observador global de la cola de eventos de AWT: sabe que ventanas hay y donde esta el mouse.
+ * The global observer of AWT's event queue: it knows what windows there are and where the
+ * mouse is.
  *
- * <h2>Como puede saber eso sin que nadie lo registre</h2>
+ * <h2>How it can know that without anybody registering it</h2>
  *
- * <p>Con {@code Toolkit.addAWTEventListener}, que es un enganche a la cola de eventos
- * <strong>de todo el proceso</strong>. Cada evento de AWT pasa por aca antes de llegar a su
- * componente.
+ * <p>With {@code Toolkit.addAWTEventListener}, which is a hook to the event queue <strong>of
+ * the whole process</strong>. Each AWT event goes through here before arriving at its
+ * component.
  *
- * <p>Es un privilegio grande y por eso esta protegido: en el JDK requiere permiso. Lo que compra es
- * lo unico que hace posible una tecnologia de asistencia — enterarse de una aplicacion que no fue
- * escrita para colaborar con ella.
+ * <p>It is a big privilege and that is why it is protected: in the JDK it requires a permission.
+ * What it buys is the only thing that makes an assistive technology possible -- finding out
+ * about an application that was not written in order to collaborate with it.
  *
- * <h2>Todo estatico, y por que</h2>
+ * <h2>All static, and why</h2>
  *
- * <p>Porque hay una sola cola de eventos por proceso. Dos monitores serian dos enganches al mismo
- * flujo, duplicando cada notificacion. La clase se puede instanciar —el JDK deja el constructor
- * publico— pero el estado es uno solo.
+ * <p>Because there is a single event queue per process. Two monitors would be two hooks to the
+ * same flow, duplicating each notification. The class may be instantiated -- the JDK leaves the
+ * constructor public -- but the state is a single one.
  *
- * <h2>En esta VM</h2>
+ * <h2>On this VM</h2>
  *
- * <p>El enganche se instala igual, y las consultas contestan lo que el estado tenga. Como esta VM no
- * corre una interfaz grafica real, ese estado queda vacio: {@link #getTopLevelWindows} devuelve un
- * arreglo sin elementos y {@link #isGUIInitialized} contesta {@code false}. No es un stub — es el
- * mecanismo funcionando sobre un escritorio que no existe.
+ * <p>The hook is installed all the same, and the queries answer what the state has. Since this
+ * VM does not run a real graphical interface, that state is left empty:
+ * {@link #getTopLevelWindows} returns an array with no elements and {@link #isGUIInitialized}
+ * answers {@code false}. It is not a stub -- it is the mechanism working over a desktop that
+ * does not exist.
  */
 public class EventQueueMonitor implements AWTEventListener {
 
-    private static final List<Window> ventanas = new ArrayList<Window>();
-    private static final List<GUIInitializedListener> oyentesGui =
+    private static final List<Window> windows = new ArrayList<Window>();
+    private static final List<GUIInitializedListener> guiListeners =
             new ArrayList<GUIInitializedListener>();
-    private static final List<TopLevelWindowListener> oyentesVentana =
+    private static final List<TopLevelWindowListener> windowListeners =
             new ArrayList<TopLevelWindowListener>();
 
-    private static Window conFoco;
-    private static Point posicionMouse;
-    private static boolean guiInicializada = false;
-    private static boolean enganchado = false;
+    private static Window focused;
+    private static Point mousePosition;
+    private static boolean guiInitialized = false;
+    private static boolean hooked = false;
 
     public EventQueueMonitor() {
     }
 
     /**
-     * Instala el enganche a la cola de eventos, si no estaba.
+     * It installs the hook to the event queue, if it was not there.
      *
-     * <p>Lo llaman todos los metodos que necesitan estado, en vez de hacerlo en un inicializador
-     * estatico: cargar esta clase no deberia enganchar nada por su cuenta.
+     * <p>It is called by every method that needs state, instead of being done in a static
+     * initializer: loading this class should not hook anything on its own.
      */
     public static void maybeInitialize() {
         synchronized (EventQueueMonitor.class) {
-            if (enganchado) {
+            if (hooked) {
                 return;
             }
-            enganchado = true;
+            hooked = true;
         }
         try {
             java.awt.Toolkit.getDefaultToolkit().addAWTEventListener(
@@ -73,97 +75,98 @@ public class EventQueueMonitor implements AWTEventListener {
                     | AWTEvent.MOUSE_EVENT_MASK | AWTEvent.MOUSE_MOTION_EVENT_MASK
                     | AWTEvent.COMPONENT_EVENT_MASK);
         } catch (RuntimeException e) {
-            // Sin escritorio no hay a que engancharse, y eso no es un error: las consultas
-            // simplemente van a contestar vacio. Dejar que la excepcion suba haria que cargar esta
-            // clase reventara en un entorno sin interfaz grafica.
+            // With no desktop there is nothing to hook on to, and that is not an error: the
+                            // queries are simply going to answer empty. Letting the exception go up
+                            // would make loading this class blow up in an environment with no
+                            // graphical interface.
             return;
         }
     }
 
-    /** Recibe cada evento de AWT del proceso. */
+    /** It receives each AWT event of the process. */
     public void eventDispatched(AWTEvent theEvent) {
         if (theEvent instanceof MouseEvent) {
             MouseEvent me = (MouseEvent) theEvent;
             synchronized (EventQueueMonitor.class) {
-                posicionMouse = new Point(me.getX(), me.getY());
+                mousePosition = new Point(me.getX(), me.getY());
             }
         }
         if (theEvent.getSource() instanceof Window) {
             Window w = (Window) theEvent.getSource();
             int id = theEvent.getID();
             if (id == java.awt.event.WindowEvent.WINDOW_OPENED) {
-                agregarVentana(w);
+                addWindow(w);
             } else if (id == java.awt.event.WindowEvent.WINDOW_CLOSED) {
-                sacarVentana(w);
+                removeWindow(w);
             } else if (id == java.awt.event.WindowEvent.WINDOW_ACTIVATED) {
                 synchronized (EventQueueMonitor.class) {
-                    conFoco = w;
+                    focused = w;
                 }
             }
         }
     }
 
-    private static void agregarVentana(Window w) {
-        List<TopLevelWindowListener> avisar;
-        boolean primera = false;
+    private static void addWindow(Window w) {
+        List<TopLevelWindowListener> toNotify;
+        boolean first = false;
         synchronized (EventQueueMonitor.class) {
-            if (ventanas.contains(w)) {
+            if (windows.contains(w)) {
                 return;
             }
-            ventanas.add(w);
-            if (!guiInicializada) {
-                guiInicializada = true;
-                primera = true;
+            windows.add(w);
+            if (!guiInitialized) {
+                guiInitialized = true;
+                first = true;
             }
-            avisar = new ArrayList<TopLevelWindowListener>(oyentesVentana);
+            toNotify = new ArrayList<TopLevelWindowListener>(windowListeners);
         }
-        // Los avisos van FUERA del bloque sincronizado: un oyente que vuelva a llamar a esta clase
-        // desde su propio hilo se trabaria con el candado tomado.
-        if (primera) {
-            avisarGuiInicializada();
+        // The notices go OUTSIDE the synchronized block: a listener that called this class
+                // again from its own thread would jam with the lock taken.
+        if (first) {
+            notifyGuiInitialized();
         }
-        for (int i = 0; i < avisar.size(); i++) {
-            avisar.get(i).topLevelWindowCreated(w);
+        for (int i = 0; i < toNotify.size(); i++) {
+            toNotify.get(i).topLevelWindowCreated(w);
         }
     }
 
-    private static void sacarVentana(Window w) {
-        List<TopLevelWindowListener> avisar;
+    private static void removeWindow(Window w) {
+        List<TopLevelWindowListener> toNotify;
         synchronized (EventQueueMonitor.class) {
-            if (!ventanas.remove(w)) {
+            if (!windows.remove(w)) {
                 return;
             }
-            if (conFoco == w) {
-                conFoco = null;
+            if (focused == w) {
+                focused = null;
             }
-            avisar = new ArrayList<TopLevelWindowListener>(oyentesVentana);
+            toNotify = new ArrayList<TopLevelWindowListener>(windowListeners);
         }
-        for (int i = 0; i < avisar.size(); i++) {
-            avisar.get(i).topLevelWindowDestroyed(w);
+        for (int i = 0; i < toNotify.size(); i++) {
+            toNotify.get(i).topLevelWindowDestroyed(w);
         }
     }
 
-    private static void avisarGuiInicializada() {
-        List<GUIInitializedListener> avisar;
+    private static void notifyGuiInitialized() {
+        List<GUIInitializedListener> toNotify;
         synchronized (EventQueueMonitor.class) {
-            avisar = new ArrayList<GUIInitializedListener>(oyentesGui);
-            oyentesGui.clear();
+            toNotify = new ArrayList<GUIInitializedListener>(guiListeners);
+            guiListeners.clear();
         }
-        for (int i = 0; i < avisar.size(); i++) {
-            avisar.get(i).guiInitialized();
+        for (int i = 0; i < toNotify.size(); i++) {
+            toNotify.get(i).guiInitialized();
         }
     }
 
     /**
-     * El objeto accesible que esta en ese punto de la pantalla, o {@code null}.
+     * The accessible object that is at that point of the screen, or {@code null}.
      *
-     * <p>Es la consulta central de una tecnologia de asistencia: "que hay debajo del cursor".
+     * <p>It is the central query of an assistive technology: "what is there under the cursor".
      */
     public static Accessible getAccessibleAt(Point p) {
         maybeInitialize();
         Window[] ws = getTopLevelWindows();
         for (int i = 0; i < ws.length; i++) {
-            Component c = componenteEn(ws[i], p);
+            Component c = componentAt(ws[i], p);
             if (c instanceof Accessible) {
                 return (Accessible) c;
             }
@@ -171,97 +174,99 @@ public class EventQueueMonitor implements AWTEventListener {
         return null;
     }
 
-    /** El componente visible mas profundo que contiene ese punto. */
-    private static Component componenteEn(Container c, Point p) {
+    /** The deepest visible component that contains that point. */
+    private static Component componentAt(Container c, Point p) {
         if (c == null || !c.isShowing() || !c.getBounds().contains(p)) {
             return null;
         }
-        Component[] hijos = c.getComponents();
-        // De adelante hacia atras: el primero que contiene el punto es el que se ve.
-        for (int i = 0; i < hijos.length; i++) {
-            if (hijos[i] instanceof Container) {
-                Component hallado = componenteEn((Container) hijos[i], p);
-                if (hallado != null) {
-                    return hallado;
+        Component[] children = c.getComponents();
+        // From the front towards the back: the first one that contains the point is the one
+                // that is seen.
+        for (int i = 0; i < children.length; i++) {
+            if (children[i] instanceof Container) {
+                Component found = componentAt((Container) children[i], p);
+                if (found != null) {
+                    return found;
                 }
-            } else if (hijos[i].isShowing() && hijos[i].getBounds().contains(p)) {
-                return hijos[i];
+            } else if (children[i].isShowing() && children[i].getBounds().contains(p)) {
+                return children[i];
             }
         }
         return c;
     }
 
-    /** Si ya aparecio alguna ventana. */
+    /** Whether some window has already appeared. */
     public static boolean isGUIInitialized() {
         maybeInitialize();
         synchronized (EventQueueMonitor.class) {
-            return guiInicializada;
+            return guiInitialized;
         }
     }
 
     /**
-     * Avisa cuando aparezca la interfaz grafica.
+     * It gives notice when the graphical interface appears.
      *
-     * <p>Si ya aparecio, el aviso llega <strong>enseguida</strong> y no se guarda al oyente: es un
-     * evento que pasa una sola vez, y guardarlo para un aviso que no va a repetirse seria una fuga.
+     * <p>If it has already appeared, the notice arrives <strong>at once</strong> and the listener
+     * is not kept: it is an event that happens only once, and keeping it for a notice that is not
+     * going to be repeated would be a leak.
      */
     public static void addGUIInitializedListener(GUIInitializedListener l) {
         maybeInitialize();
-        boolean ya;
+        boolean already;
         synchronized (EventQueueMonitor.class) {
-            ya = guiInicializada;
-            if (!ya) {
-                oyentesGui.add(l);
+            already = guiInitialized;
+            if (!already) {
+                guiListeners.add(l);
             }
         }
-        if (ya) {
+        if (already) {
             l.guiInitialized();
         }
     }
 
-    /** Saca un oyente de inicializacion. */
+    /** It takes an initialization listener out. */
     public static void removeGUIInitializedListener(GUIInitializedListener l) {
         synchronized (EventQueueMonitor.class) {
-            oyentesGui.remove(l);
+            guiListeners.remove(l);
         }
     }
 
-    /** Avisa cuando aparezca o desaparezca una ventana de primer nivel. */
+    /** It gives notice when a top-level window appears or disappears. */
     public static void addTopLevelWindowListener(TopLevelWindowListener l) {
         maybeInitialize();
         synchronized (EventQueueMonitor.class) {
-            oyentesVentana.add(l);
+            windowListeners.add(l);
         }
     }
 
-    /** Saca un oyente de ventanas. */
+    /** It takes a window listener out. */
     public static void removeTopLevelWindowListener(TopLevelWindowListener l) {
         synchronized (EventQueueMonitor.class) {
-            oyentesVentana.remove(l);
+            windowListeners.remove(l);
         }
     }
 
-    /** Donde estaba el mouse la ultima vez que se lo vio, o {@code null}. */
+    /** Where the mouse was the last time it was seen, or {@code null}. */
     public static Point getCurrentMousePosition() {
         maybeInitialize();
         synchronized (EventQueueMonitor.class) {
-            return posicionMouse == null ? null : new Point(posicionMouse);
+            return mousePosition == null ? null : new Point(mousePosition);
         }
     }
 
-    /** Las ventanas de primer nivel que hay ahora. */
+    /** The top-level windows there are now. */
     public static Window[] getTopLevelWindows() {
         maybeInitialize();
         synchronized (EventQueueMonitor.class) {
-            return ventanas.toArray(new Window[ventanas.size()]);
+            return windows.toArray(new Window[windows.size()]);
         }
     }
 
-    /** La que tiene el foco, o {@code null}. */
+    /** The one that has the focus, or {@code null}. */
     public static Window getTopLevelWindowWithFocus() {
         maybeInitialize();
         synchronized (EventQueueMonitor.class) {
-            return conFoco;
+            return focused;
         }
     }
 }

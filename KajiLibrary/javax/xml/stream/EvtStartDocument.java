@@ -6,9 +6,9 @@ import java.io.Writer;
 import javax.xml.stream.events.StartDocument;
 
 /**
- * El comienzo del documento como evento.
+ * The start of the document as an event.
  *
- * <p>Guarda por separado el valor y si estaba declarado, para los dos campos opcionales; ver
+ * <p>It keeps the value and whether it was declared separately, for the two optional fields; see
  * {@link StartDocument}.
  */
 final class EvtStartDocument extends EvtBase implements StartDocument {
@@ -69,7 +69,7 @@ final class EvtStartDocument extends EvtBase implements StartDocument {
 
     public void writeAsEncodedUnicode(Writer writer) throws XMLStreamException {
         if (writer == null) {
-            throw new XMLStreamException("el escritor no puede ser null");
+            throw new XMLStreamException("the writer cannot be null");
         }
         try {
             writer.write("<?xml version=\"");

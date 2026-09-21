@@ -4,159 +4,160 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Un objeto de la maquina depurada, visto desde afuera.
+ * An object of the debugged machine, seen from outside.
  *
- * <p>No es el objeto: es un identificador con el que preguntarle cosas. Leer un campo o llamar un
- * metodo son viajes a la otra VM.
+ * <p>It is not the object: it is an identifier to ask it things with. Reading a field or
+ * calling a method are trips to the other VM.
  *
- * <p>{@code invokeMethod} tiene una condicion que hay que entender antes de usarlo: el hilo que se
- * le pasa <strong>tiene que estar suspendido</strong>, y la llamada se ejecuta en ese hilo. Puede
- * tomar candados y cambiar el estado del programa depurado. No es una consulta: es ejecutar codigo
- * del otro lado.
+ * <p>{@code invokeMethod} has a condition that has to be understood before using it: the thread
+ * it is passed <strong>has to be suspended</strong>, and the call is executed on that thread.
+ * It may take locks and change the debugged program's state. It is not a query: it is executing
+ * code on the other side.
  *
- * <p>{@code disableCollection} existe porque entre que se obtiene una referencia y se la usa, el
- * recolector de la otra VM puede llevarse el objeto.
+ * <p>{@code disableCollection} exists because between obtaining a reference and using it, the
+ * other VM's collector may take the object away.
  *
  * @since 1.3
  */
 public interface ObjectReference extends Value {
 
     /**
-     * Al invocar, dejar suspendidos los demas hilos.
+     * On invoking, leave the other threads suspended.
      *
-     * <p>Suena seguro y casi siempre es lo contrario: si el metodo que se invoca necesita un
-     * candado que tiene otro hilo, ese hilo esta suspendido y la invocacion no vuelve nunca.
+     * <p>It sounds safe and it is almost always the opposite: if the method that is invoked
+     * needs a lock another thread holds, that thread is suspended and the invocation never
+     * returns.
      */
     int INVOKE_SINGLE_THREADED = 1;
 
     /**
-     * Llamar al metodo tal como se lo nombro, sin despacho virtual: el equivalente de
-     * {@code super.metodo()}.
+     * Call the method just as it was named, with no virtual dispatch: the equivalent of
+     * {@code super.method()}.
      */
     int INVOKE_NONVIRTUAL = 2;
 
     /**
-     * El reference type.
+     * The reference type.
      *
-     * @return el resultado
+     * @return the result
      */
     ReferenceType referenceType();
 
     /**
-     * El value.
+     * The value.
      *
-     * @param field el Field
-     * @return el resultado
+     * @param field the Field
+     * @return the result
      */
     Value getValue(Field field);
 
     /**
-     * El values.
+     * The values.
      *
-     * @param values el List<? extends Field>
-     * @return el resultado
+     * @param values the List<? extends Field>
+     * @return the result
      */
     Map<Field, Value> getValues(List<? extends Field> values);
 
     /**
-     * Fija el value.
+     * It fixes the value.
      *
-     * @param field el Field
-     * @param value el Value
-     * @throws InvalidTypeException si corresponde
-     * @throws ClassNotLoadedException si corresponde
+     * @param field the Field
+     * @param value the Value
+     * @throws InvalidTypeException if it applies
+     * @throws ClassNotLoadedException if it applies
      */
     void setValue(Field field, Value value)
             throws InvalidTypeException, ClassNotLoadedException;
 
     /**
-     * El invoke method.
+     * The invoke method.
      *
-     * @param thread el ThreadReference
-     * @param method el Method
-     * @param values el List<? extends Value>
-     * @param index el int
-     * @return el resultado
-     * @throws InvalidTypeException si corresponde
-     * @throws ClassNotLoadedException si corresponde
-     * @throws IncompatibleThreadStateException si corresponde
-     * @throws InvocationException si corresponde
+     * @param thread the ThreadReference
+     * @param method the Method
+     * @param values the List<? extends Value>
+     * @param index the int
+     * @return the result
+     * @throws InvalidTypeException if it applies
+     * @throws ClassNotLoadedException if it applies
+     * @throws IncompatibleThreadStateException if it applies
+     * @throws InvocationException if it applies
      */
     Value invokeMethod(
             ThreadReference thread, Method method, List<? extends Value> values, int index)
             throws InvalidTypeException, ClassNotLoadedException, IncompatibleThreadStateException, InvocationException;
 
     /**
-     * El disable collection.
+     * The disable collection.
      */
     void disableCollection();
 
     /**
-     * El enable collection.
+     * The enable collection.
      */
     void enableCollection();
 
     /**
-     * Si collected.
+     * Whether collected.
      *
-     * @return el resultado
+     * @return the result
      */
     boolean isCollected();
 
     /**
-     * El unique i d.
+     * The unique i d.
      *
-     * @return el resultado
+     * @return the result
      */
     long uniqueID();
 
     /**
-     * El waiting threads.
+     * The waiting threads.
      *
-     * @return el resultado
-     * @throws IncompatibleThreadStateException si corresponde
+     * @return the result
+     * @throws IncompatibleThreadStateException if it applies
      */
     List<ThreadReference> waitingThreads()
             throws IncompatibleThreadStateException;
 
     /**
-     * El owning thread.
+     * The owning thread.
      *
-     * @return el resultado
-     * @throws IncompatibleThreadStateException si corresponde
+     * @return the result
+     * @throws IncompatibleThreadStateException if it applies
      */
     ThreadReference owningThread()
             throws IncompatibleThreadStateException;
 
     /**
-     * El entry count.
+     * The entry count.
      *
-     * @return el resultado
-     * @throws IncompatibleThreadStateException si corresponde
+     * @return the result
+     * @throws IncompatibleThreadStateException if it applies
      */
     int entryCount()
             throws IncompatibleThreadStateException;
 
     /**
-     * El referring objects.
+     * The referring objects.
      *
-     * @param index el long
-     * @return el resultado
+     * @param index the long
+     * @return the result
      */
     List<ObjectReference> referringObjects(long index);
 
     /**
-     * Dos reflejos son iguales si nombran a lo mismo en la misma VM.
+     * Two mirrors are equal if they name the same thing in the same VM.
      *
-     * @param obj el Object
-     * @return el resultado
+     * @param obj the Object
+     * @return the result
      */
     boolean equals(Object obj);
 
     /**
-     * Coherente con {@link #equals}.
+     * Consistent with {@link #equals}.
      *
-     * @return el resultado
+     * @return the result
      */
     int hashCode();
 }

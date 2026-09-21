@@ -3,23 +3,23 @@ package java.awt;
 import java.awt.image.ColorModel;
 
 /**
- * Cómo se mezcla lo que se dibuja con lo que ya estaba.
+ * How what is drawn is blended with what was already there.
  *
- * <p>Sin composición, dibujar es reemplazar. Con composición, dibujar es una operación entre dos
- * imágenes: la que se está pintando y la que ya estaba. De ahí salen la transparencia, el recorte
- * por alfa y todos los modos de mezcla.
+ * <p>Without compositing, drawing is replacing. With compositing, drawing is an operation between
+ * two images: the one being painted and the one already there. From that come transparency, alpha
+ * clipping and all the blend modes.
  *
- * <p>El objeto describe la regla; el trabajo lo hace un {@link CompositeContext}, que se pide una
- * vez por operación de dibujo con los formatos de píxel ya conocidos.
+ * <p>The object describes the rule; the work is done by a {@link CompositeContext}, which is
+ * requested once per drawing operation with the pixel formats already known.
  */
 public interface Composite {
 
     /**
-     * Arma la máquina que va a mezclar.
+     * Builds the machine that will blend.
      *
-     * @param srcColorModel el formato de lo que se dibuja
-     * @param dstColorModel el formato de lo que ya estaba
-     * @param hints las pistas de calidad
+     * @param srcColorModel the format of what is drawn
+     * @param dstColorModel the format of what was already there
+     * @param hints the quality hints
      */
     CompositeContext createContext(ColorModel srcColorModel, ColorModel dstColorModel,
             RenderingHints hints);

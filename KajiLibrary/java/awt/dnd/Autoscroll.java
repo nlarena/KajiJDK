@@ -4,21 +4,22 @@ import java.awt.Insets;
 import java.awt.Point;
 
 /**
- * Lo implementa un componente que quiere desplazarse solo mientras le arrastran algo encima.
+ * It is implemented by a component that wants to scroll by itself while something is dragged over
+ * it.
  *
- * <p>Resuelve un problema real: para soltar algo al final de una lista larga hay que llegar hasta
- * ahí, y con el botón apretado no se puede usar la barra de desplazamiento. La solución es que el
- * componente se desplace solo cuando el puntero se acerca a su borde.
+ * <p>It solves a real problem: to drop something at the end of a long list one has to get there,
+ * and with the button held down the scroll bar cannot be used. The solution is for the component to
+ * scroll by itself when the pointer comes near its edge.
  *
- * <p>Los márgenes de {@link #getAutoscrollInsets} son **desde afuera hacia adentro**: dicen a qué
- * distancia del borde empieza la zona sensible. Márgenes grandes hacen que el desplazamiento arranque
- * enseguida; chicos, que haya que ir casi hasta el borde.
+ * <p>The insets of {@link #getAutoscrollInsets} are **from the outside inwards**: they say at what
+ * distance from the edge the sensitive zone starts. Big insets make the scrolling start straight
+ * away; small ones, that one has to go almost to the edge.
  */
 public interface Autoscroll {
 
-    /** A qué distancia de cada borde empieza la zona que dispara el desplazamiento. */
+    /** At what distance from each edge the zone that sets the scrolling off starts. */
     Insets getAutoscrollInsets();
 
-    /** Desplaza un paso, según dónde esté el puntero. */
+    /** Scrolls one step, according to where the pointer is. */
     void autoscroll(Point cursorLocn);
 }

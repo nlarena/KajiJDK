@@ -3,50 +3,50 @@ package org.w3c.dom.css;
 import org.w3c.dom.DOMException;
 
 /**
- * Una regla de una hoja de estilos: la raiz de las siete formas que CSS 2 define.
+ * A rule of a style sheet: the root of the seven forms CSS 2 defines.
  *
- * <p>Cual de las siete es se pregunta con {@link #getType} y **no** con `instanceof`. Los dos
- * funcionan, pero el tipo numerico es el que sobrevive a una implementacion que no use la jerarquia
- * de clases que uno espera, y es lo que la especificacion define.
+ * <p>Which of the seven it is is asked with {@link #getType} and **not** with `instanceof`. Both
+ * work, but the numeric type is the one that survives an implementation that does not use the class
+ * hierarchy one expects, and it is what the specification defines.
  *
- * <p>`getCssText` devuelve la regla entera como texto, incluido su selector y sus llaves.
- * Asignarlo reemplaza la regla completa, no le agrega: una regla es indivisible desde afuera.
+ * <p>`getCssText` returns the whole rule as text, including its selector and its braces. Assigning
+ * it replaces the complete rule, it does not add to it: a rule is indivisible from outside.
  */
 public interface CSSRule {
 
-    /** Una regla que esta implementacion no reconoce. */
+    /** A rule this implementation does not recognise. */
     public static final short UNKNOWN_RULE = 0;
-    /** Una regla de estilo: un selector y sus declaraciones. */
+    /** A style rule: a selector and its declarations. */
     public static final short STYLE_RULE = 1;
-    /** Un `@charset`. */
+    /** A `@charset`. */
     public static final short CHARSET_RULE = 2;
-    /** Un `@import`. */
+    /** An `@import`. */
     public static final short IMPORT_RULE = 3;
-    /** Un `@media`. */
+    /** A `@media`. */
     public static final short MEDIA_RULE = 4;
-    /** Un `@font-face`. */
+    /** A `@font-face`. */
     public static final short FONT_FACE_RULE = 5;
-    /** Un `@page`. */
+    /** A `@page`. */
     public static final short PAGE_RULE = 6;
 
-    /** Cual de las siete formas es esta regla. */
+    /** Which of the seven forms this rule is. */
     short getType();
 
-    /** La regla entera como texto. */
+    /** The whole rule as text. */
     String getCssText();
 
     /**
-     * Reemplaza la regla entera con ese texto.
+     * It replaces the whole rule with that text.
      *
-     * @throws DOMException `SYNTAX_ERR` si el texto no parsea; `INVALID_MODIFICATION_ERR` si
-     *     describe una regla de otro tipo que la actual; `NO_MODIFICATION_ALLOWED_ERR` si la regla
-     *     es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the text does not parse; `INVALID_MODIFICATION_ERR` if
+     *     it describes a rule of a type other than the current one; `NO_MODIFICATION_ALLOWED_ERR`
+     *     if the rule is read-only
      */
     void setCssText(String cssText) throws DOMException;
 
-    /** La hoja que la contiene, o nulo. */
+    /** The sheet that contains it, or null. */
     CSSStyleSheet getParentStyleSheet();
 
-    /** La regla que la contiene --solo un `@media` contiene otras--, o nulo. */
+    /** The rule that contains it --only a `@media` contains others--, or null. */
     CSSRule getParentRule();
 }

@@ -1,32 +1,33 @@
 package org.w3c.dom;
 
 /**
- * KajiLibrary's org.w3c.dom.NameList -- una lista ordenada de pares (espacio de nombres, nombre).
+ * KajiLibrary's org.w3c.dom.NameList -- an ordered list of (namespace, name) pairs.
  *
- * <p>Es {@link DOMStringList} con namespaces: cada posicion tiene dos cadenas en vez de una, y se
- * accede a cada mitad por separado con {@link #getName} y {@link #getNamespaceURI} sobre el mismo
- * indice. No hay un tipo "nombre calificado" en el DOM, de ahi el par de accesores paralelos en vez
- * de un objeto.
+ * <p>It is {@link DOMStringList} with namespaces: each position has two strings instead of one, and
+ * each half is accessed separately with {@link #getName} and {@link #getNamespaceURI} on the same
+ * index. There is no "qualified name" type in the DOM, hence the pair of parallel accessors instead
+ * of an object.
  *
- * <p>La declara la norma para las APIs de validacion --que preguntan que nombres son legales en un
- * lugar-- y el nucleo no la devuelve en ningun lado. Esta igual porque es API publica del paquete.
+ * <p>The standard declares it for the validation APIs --which ask which names are legal in a
+ * place-- and the core does not return it anywhere. It is here all the same because it is public
+ * API of the package.
  *
- * <p>Interfaz declarada entera.
+ * <p>The interface is declared whole.
  */
 public interface NameList {
 
-    /** El nombre en esa posicion, o {@code null} si el indice se fue de rango. */
+    /** The name at that position, or {@code null} if the index went out of range. */
     public String getName(int index);
 
-    /** La URI del espacio de nombres en esa posicion, o {@code null}. */
+    /** The namespace URI at that position, or {@code null}. */
     public String getNamespaceURI(int index);
 
-    /** Cuantos pares hay. */
+    /** How many pairs there are. */
     public int getLength();
 
-    /** Si ese nombre esta, mirando solo los nombres. */
+    /** Whether that name is there, looking only at the names. */
     public boolean contains(String str);
 
-    /** Si ese par (URI, nombre) esta. */
+    /** Whether that (URI, name) pair is there. */
     public boolean containsNS(String namespaceURI, String name);
 }

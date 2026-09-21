@@ -3,30 +3,31 @@ package javax.swing.event;
 import java.util.EventListener;
 
 /**
- * Quien quiere enterarse del ciclo de vida de una ventana interna.
+ * Whoever wants to hear about an internal frame's life cycle.
  *
- * <p>Siete metodos, y quien atienda uno solo va a querer {@link InternalFrameAdapter}.
+ * <p>Seven methods, and whoever attends to a single one will want
+ * {@link InternalFrameAdapter}.
  */
 public interface InternalFrameListener extends EventListener {
 
-    /** Se abrio. */
+    /** It opened. */
     void internalFrameOpened(InternalFrameEvent e);
 
-    /** Se esta por cerrar; todavia se puede cancelar. */
+    /** It is about to close; it can still be cancelled. */
     void internalFrameClosing(InternalFrameEvent e);
 
-    /** Se cerro. */
+    /** It closed. */
     void internalFrameClosed(InternalFrameEvent e);
 
-    /** Se minimizo. */
+    /** It was iconified. */
     void internalFrameIconified(InternalFrameEvent e);
 
-    /** Se restauro. */
+    /** It was restored. */
     void internalFrameDeiconified(InternalFrameEvent e);
 
-    /** Tomo el foco. */
+    /** It took the focus. */
     void internalFrameActivated(InternalFrameEvent e);
 
-    /** Perdio el foco. */
+    /** It lost the focus. */
     void internalFrameDeactivated(InternalFrameEvent e);
 }

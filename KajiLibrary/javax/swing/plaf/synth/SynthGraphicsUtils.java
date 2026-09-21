@@ -11,42 +11,44 @@ import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 
 /**
- * Las cuentas de dibujo que un aspecto grafico puede querer hacer distinto.
+ * The drawing computations a look and feel may want to do differently.
  *
- * <h2>Por que es un objeto y no metodos estaticos</h2>
+ * <h2>Why it is an object and not static methods</h2>
  *
- * <p>Porque medir y dibujar texto es justamente donde un aspecto se distingue: donde pone la
- * elipsis cuando no entra, como subraya el atajo de teclado, cuanto espacio deja entre el icono y la
- * palabra. Un aspecto que quiere cambiarlo hereda de esta clase y lo devuelve desde su estilo.
+ * <p>Because measuring and drawing text is exactly where a look and feel distinguishes itself:
+ * where it puts the ellipsis when something does not fit, how it underlines the keyboard
+ * shortcut, how much room it leaves between the icon and the word. A look and feel that wants to
+ * change it inherits from this class and returns it from its style.
  *
- * <p>Los tres metodos estaticos del final son la excepcion, y por una razon: dibujar un icono que
- * puede ser sensible al contexto --uno que se ve distinto si el componente esta deshabilitado-- es
- * la misma operacion para todos los aspectos.
+ * <p>The three static methods at the end are the exception, and for a reason: drawing an icon
+ * that may be context-sensitive --one that looks different if the component is disabled-- is the
+ * same operation for every look and feel.
  *
- * <h2>Estado en esta biblioteca</h2>
+ * <h2>State in this library</h2>
  *
- * <p>Lo que es cuenta esta hecho: medir un texto, medir un icono, calcular el tamano preferido.
- * Dibujar necesita el motor grafico, y lo que esta biblioteca tiene de {@code java.awt} alcanza para
- * las medidas pero no para pintar; los {@code paint} delegan en lo que haya y no inventan nada.
+ * <p>What is computation is done: measuring a text, measuring an icon, computing the preferred
+ * size. Drawing needs the graphics engine, and what this library has of {@code java.awt} is
+ * enough for the measurements but not for painting; the {@code paint} methods delegate to
+ * whatever is there and invent nothing.
  *
  * @since 1.5
  */
 public class SynthGraphicsUtils {
 
-    /** Uno. */
+    /** One. */
     public SynthGraphicsUtils() {
     }
 
     /**
-     * Dibuja una linea.
+     * It draws a line.
      *
-     * @param context que se esta dibujando
-     * @param paintKey para que es la linea, o {@code null}
-     * @param g donde dibujar
-     * @param x1 desde
-     * @param y1 desde
-     * @param x2 hasta
-     * @param y2 hasta
+     * @param context what is being drawn
+     * @param paintKey what the line is for, or {@code null}
+     * @param g where to draw
+     * @param x1 from
+     * @param y1 from
+     * @param x2 to
+     * @param y2 to
      */
     public void drawLine(SynthContext context, Object paintKey, Graphics g, int x1, int y1,
             int x2, int y2) {
@@ -54,19 +56,19 @@ public class SynthGraphicsUtils {
     }
 
     /**
-     * Dibuja una linea con un estilo.
+     * It draws a line with a style.
      *
-     * <p>El estilo --punteada, por ejemplo-- lo interpreta cada aspecto. Esta version no lo mira, que
-     * es lo que hace la de base del JDK: dibuja la linea entera.
+     * <p>The style --dotted, for instance-- is interpreted by each look and feel. This version does
+     * not look at it, which is what the JDK's base one does: it draws the whole line.
      *
-     * @param context que se esta dibujando
-     * @param paintKey para que es la linea, o {@code null}
-     * @param g donde dibujar
-     * @param x1 desde
-     * @param y1 desde
-     * @param x2 hasta
-     * @param y2 hasta
-     * @param styleKey el estilo, o {@code null}
+     * @param context what is being drawn
+     * @param paintKey what the line is for, or {@code null}
+     * @param g where to draw
+     * @param x1 from
+     * @param y1 from
+     * @param x2 to
+     * @param y2 to
+     * @param styleKey the style, or {@code null}
      */
     public void drawLine(SynthContext context, Object paintKey, Graphics g, int x1, int y1,
             int x2, int y2, Object styleKey) {
@@ -74,21 +76,21 @@ public class SynthGraphicsUtils {
     }
 
     /**
-     * Reparte el texto y el icono dentro del rectangulo disponible.
+     * It shares the text and the icon out inside the available rectangle.
      *
-     * @param ss que se esta dibujando
-     * @param fm las medidas de la tipografia
-     * @param text el texto, o {@code null}
-     * @param icon el icono, o {@code null}
-     * @param hAlign la alineacion horizontal
-     * @param vAlign la alineacion vertical
-     * @param hTextPosition donde va el texto respecto del icono, horizontalmente
-     * @param vTextPosition donde va el texto respecto del icono, verticalmente
-     * @param viewR el rectangulo disponible
-     * @param iconR se llena con donde va el icono
-     * @param textR se llena con donde va el texto
-     * @param iconTextGap cuanto espacio dejar entre los dos
-     * @return el texto tal como se va a dibujar, acortado si no entraba
+     * @param ss what is being drawn
+     * @param fm the typeface's metrics
+     * @param text the text, or {@code null}
+     * @param icon the icon, or {@code null}
+     * @param hAlign the horizontal alignment
+     * @param vAlign the vertical alignment
+     * @param hTextPosition where the text goes relative to the icon, horizontally
+     * @param vTextPosition where the text goes relative to the icon, vertically
+     * @param viewR the available rectangle
+     * @param iconR it is filled with where the icon goes
+     * @param textR it is filled with where the text goes
+     * @param iconTextGap how much room to leave between the two
+     * @return the text just as it is going to be drawn, shortened if it did not fit
      */
     public String layoutText(SynthContext ss, FontMetrics fm, String text, Icon icon, int hAlign,
             int vAlign, int hTextPosition, int vTextPosition, Rectangle viewR, Rectangle iconR,
@@ -98,32 +100,32 @@ public class SynthGraphicsUtils {
     }
 
     /**
-     * Cuanto mide ese texto.
+     * How much that text measures.
      *
-     * @param ss que se esta dibujando
-     * @param font la tipografia
-     * @param metrics sus medidas
-     * @param text el texto, o {@code null}
-     * @return el ancho en pixeles
+     * @param ss what is being drawn
+     * @param font the typeface
+     * @param metrics its measurements
+     * @param text the text, or {@code null}
+     * @return the width in pixels
      */
     public int computeStringWidth(SynthContext ss, Font font, FontMetrics metrics, String text) {
         return text == null ? 0 : metrics.stringWidth(text);
     }
 
     /**
-     * El tamano mas chico con el que entra el texto y el icono.
+     * The smallest size the text and the icon fit in.
      *
-     * @param ss que se esta dibujando
-     * @param font la tipografia
-     * @param text el texto, o {@code null}
-     * @param icon el icono, o {@code null}
-     * @param hAlign la alineacion horizontal
-     * @param vAlign la alineacion vertical
-     * @param hTextPosition donde va el texto respecto del icono, horizontalmente
-     * @param vTextPosition donde va el texto respecto del icono, verticalmente
-     * @param iconTextGap cuanto espacio dejar entre los dos
-     * @param mnemonicIndex la letra del atajo, o -1
-     * @return el tamano
+     * @param ss what is being drawn
+     * @param font the typeface
+     * @param text the text, or {@code null}
+     * @param icon the icon, or {@code null}
+     * @param hAlign the horizontal alignment
+     * @param vAlign the vertical alignment
+     * @param hTextPosition where the text goes relative to the icon, horizontally
+     * @param vTextPosition where the text goes relative to the icon, vertically
+     * @param iconTextGap how much room to leave between the two
+     * @param mnemonicIndex the shortcut letter, or -1
+     * @return the size
      */
     public Dimension getMinimumSize(SynthContext ss, Font font, String text, Icon icon,
             int hAlign, int vAlign, int hTextPosition, int vTextPosition, int iconTextGap,
@@ -133,19 +135,19 @@ public class SynthGraphicsUtils {
     }
 
     /**
-     * El tamano mas grande que acepta.
+     * The largest size it accepts.
      *
-     * @param ss que se esta dibujando
-     * @param font la tipografia
-     * @param text el texto, o {@code null}
-     * @param icon el icono, o {@code null}
-     * @param hAlign la alineacion horizontal
-     * @param vAlign la alineacion vertical
-     * @param hTextPosition donde va el texto respecto del icono, horizontalmente
-     * @param vTextPosition donde va el texto respecto del icono, verticalmente
-     * @param iconTextGap cuanto espacio dejar entre los dos
-     * @param mnemonicIndex la letra del atajo, o -1
-     * @return el tamano
+     * @param ss what is being drawn
+     * @param font the typeface
+     * @param text the text, or {@code null}
+     * @param icon the icon, or {@code null}
+     * @param hAlign the horizontal alignment
+     * @param vAlign the vertical alignment
+     * @param hTextPosition where the text goes relative to the icon, horizontally
+     * @param vTextPosition where the text goes relative to the icon, vertically
+     * @param iconTextGap how much room to leave between the two
+     * @param mnemonicIndex the shortcut letter, or -1
+     * @return the size
      */
     public Dimension getMaximumSize(SynthContext ss, Font font, String text, Icon icon,
             int hAlign, int vAlign, int hTextPosition, int vTextPosition, int iconTextGap,
@@ -155,10 +157,10 @@ public class SynthGraphicsUtils {
     }
 
     /**
-     * Cuanto ocupa de alto la letra mas alta.
+     * How much height the tallest letter takes up.
      *
-     * @param context que se esta dibujando
-     * @return el alto en pixeles
+     * @param context what is being drawn
+     * @return the height in pixels
      */
     public int getMaximumCharHeight(SynthContext context) {
         final Font f = context.getStyle().getFont(context);
@@ -167,52 +169,52 @@ public class SynthGraphicsUtils {
     }
 
     /**
-     * El tamano que preferiria tener.
+     * The size it would prefer to have.
      *
-     * @param ss que se esta dibujando
-     * @param font la tipografia
-     * @param text el texto, o {@code null}
-     * @param icon el icono, o {@code null}
-     * @param hAlign la alineacion horizontal
-     * @param vAlign la alineacion vertical
-     * @param hTextPosition donde va el texto respecto del icono, horizontalmente
-     * @param vTextPosition donde va el texto respecto del icono, verticalmente
-     * @param iconTextGap cuanto espacio dejar entre los dos
-     * @param mnemonicIndex la letra del atajo, o -1
-     * @return el tamano
+     * @param ss what is being drawn
+     * @param font the typeface
+     * @param text the text, or {@code null}
+     * @param icon the icon, or {@code null}
+     * @param hAlign the horizontal alignment
+     * @param vAlign the vertical alignment
+     * @param hTextPosition where the text goes relative to the icon, horizontally
+     * @param vTextPosition where the text goes relative to the icon, vertically
+     * @param iconTextGap how much room to leave between the two
+     * @param mnemonicIndex the shortcut letter, or -1
+     * @return the size
      */
     public Dimension getPreferredSize(SynthContext ss, Font font, String text, Icon icon,
             int hAlign, int vAlign, int hTextPosition, int vTextPosition, int iconTextGap,
             int mnemonicIndex) {
         final FontMetrics fm = ss.getComponent().getFontMetrics(font);
-        final int anchoTexto = text == null || fm == null ? 0 : fm.stringWidth(text);
-        final int altoTexto = text == null || fm == null ? 0 : fm.getHeight();
-        final int anchoIcono = icon == null ? 0 : icon.getIconWidth();
-        final int altoIcono = icon == null ? 0 : icon.getIconHeight();
+        final int textWidth = text == null || fm == null ? 0 : fm.stringWidth(text);
+        final int textHeight = text == null || fm == null ? 0 : fm.getHeight();
+        final int iconWidth = icon == null ? 0 : icon.getIconWidth();
+        final int iconHeight = icon == null ? 0 : icon.getIconHeight();
         if (icon == null) {
-            return new Dimension(anchoTexto, altoTexto);
+            return new Dimension(textWidth, textHeight);
         }
         if (text == null) {
-            return new Dimension(anchoIcono, altoIcono);
+            return new Dimension(iconWidth, iconHeight);
         }
-        // Uno al lado del otro o uno encima del otro, segun donde vaya el texto. El hueco solo
-        // cuenta en la direccion en que estan separados.
+        // Side by side or one on top of the other, according to where the text goes. The gap only
+                // counts in the direction they are separated in.
         if (hTextPosition == SwingConstants.CENTER) {
-            return new Dimension(Math.max(anchoTexto, anchoIcono),
-                    altoTexto + altoIcono + iconTextGap);
+            return new Dimension(Math.max(textWidth, iconWidth),
+                    textHeight + iconHeight + iconTextGap);
         }
-        return new Dimension(anchoTexto + anchoIcono + iconTextGap,
-                Math.max(altoTexto, altoIcono));
+        return new Dimension(textWidth + iconWidth + iconTextGap,
+                Math.max(textHeight, iconHeight));
     }
 
     /**
-     * Dibuja el texto dentro de ese rectangulo.
+     * It draws the text inside that rectangle.
      *
-     * @param ss que se esta dibujando
-     * @param g donde dibujar
-     * @param text el texto, o {@code null}
-     * @param bounds el rectangulo
-     * @param mnemonicIndex la letra del atajo, o -1
+     * @param ss what is being drawn
+     * @param g where to draw
+     * @param text the text, or {@code null}
+     * @param bounds the rectangle
+     * @param mnemonicIndex the shortcut letter, or -1
      */
     public void paintText(SynthContext ss, Graphics g, String text, Rectangle bounds,
             int mnemonicIndex) {
@@ -222,14 +224,14 @@ public class SynthGraphicsUtils {
     }
 
     /**
-     * Dibuja el texto en esa posicion.
+     * It draws the text at that position.
      *
-     * @param ss que se esta dibujando
-     * @param g donde dibujar
-     * @param text el texto, o {@code null}
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param mnemonicIndex la letra del atajo, o -1
+     * @param ss what is being drawn
+     * @param g where to draw
+     * @param text the text, or {@code null}
+     * @param x the left corner
+     * @param y the top corner
+     * @param mnemonicIndex the shortcut letter, or -1
      */
     public void paintText(SynthContext ss, Graphics g, String text, int x, int y,
             int mnemonicIndex) {
@@ -237,74 +239,74 @@ public class SynthGraphicsUtils {
             return;
         }
         final FontMetrics fm = g.getFontMetrics();
-        // La `y` que llega es la de arriba del rectangulo y `drawString` quiere la de la linea de
-        // base: sin sumar el ascenso, el texto sale por encima de donde tiene que ir.
+        // The `y` that arrives is the rectangle's top one and `drawString` wants the baseline's:
+                // without adding the ascent, the text comes out above where it has to go.
         g.drawString(text, x, y + (fm == null ? 0 : fm.getAscent()));
     }
 
     /**
-     * Dibuja el texto y el icono juntos.
+     * It draws the text and the icon together.
      *
-     * @param ss que se esta dibujando
-     * @param g donde dibujar
-     * @param text el texto, o {@code null}
-     * @param icon el icono, o {@code null}
-     * @param hAlign la alineacion horizontal
-     * @param vAlign la alineacion vertical
-     * @param hTextPosition donde va el texto respecto del icono, horizontalmente
-     * @param vTextPosition donde va el texto respecto del icono, verticalmente
-     * @param iconTextGap cuanto espacio dejar entre los dos
-     * @param mnemonicIndex la letra del atajo, o -1
-     * @param textOffset cuanto correr el texto, para el efecto de apretado
+     * @param ss what is being drawn
+     * @param g where to draw
+     * @param text the text, or {@code null}
+     * @param icon the icon, or {@code null}
+     * @param hAlign the horizontal alignment
+     * @param vAlign the vertical alignment
+     * @param hTextPosition where the text goes relative to the icon, horizontally
+     * @param vTextPosition where the text goes relative to the icon, vertically
+     * @param iconTextGap how much room to leave between the two
+     * @param mnemonicIndex the shortcut letter, or -1
+     * @param textOffset how much to shift the text, for the pressed effect
      */
     public void paintText(SynthContext ss, Graphics g, String text, Icon icon, int hAlign,
             int vAlign, int hTextPosition, int vTextPosition, int iconTextGap, int mnemonicIndex,
             int textOffset) {
-        final Rectangle disponible = new Rectangle(ss.getComponent().getSize());
-        final Rectangle rIcono = new Rectangle();
-        final Rectangle rTexto = new Rectangle();
+        final Rectangle available = new Rectangle(ss.getComponent().getSize());
+        final Rectangle iconRect = new Rectangle();
+        final Rectangle textRect = new Rectangle();
         final FontMetrics fm = g.getFontMetrics();
-        final String recortado = layoutText(ss, fm, text, icon, hAlign, vAlign, hTextPosition,
-                vTextPosition, disponible, rIcono, rTexto, iconTextGap);
+        final String clipped = layoutText(ss, fm, text, icon, hAlign, vAlign, hTextPosition,
+                vTextPosition, available, iconRect, textRect, iconTextGap);
         if (icon != null) {
-            paintIcon(icon, ss, g, rIcono.x + textOffset, rIcono.y + textOffset,
-                    rIcono.width, rIcono.height);
+            paintIcon(icon, ss, g, iconRect.x + textOffset, iconRect.y + textOffset,
+                    iconRect.width, iconRect.height);
         }
-        paintText(ss, g, recortado, rTexto.x + textOffset, rTexto.y + textOffset, mnemonicIndex);
+        paintText(ss, g, clipped, textRect.x + textOffset, textRect.y + textOffset, mnemonicIndex);
     }
 
     /**
-     * El ancho de un icono, que puede depender del contexto.
+     * An icon's width, which may depend on the context.
      *
-     * @param icon el icono, o {@code null}
-     * @param context que se esta dibujando
-     * @return el ancho, o cero
+     * @param icon the icon, or {@code null}
+     * @param context what is being drawn
+     * @return the width, or zero
      */
     public static int getIconWidth(Icon icon, SynthContext context) {
         return icon == null ? 0 : icon.getIconWidth();
     }
 
     /**
-     * El alto de un icono, que puede depender del contexto.
+     * An icon's height, which may depend on the context.
      *
-     * @param icon el icono, o {@code null}
-     * @param context que se esta dibujando
-     * @return el alto, o cero
+     * @param icon the icon, or {@code null}
+     * @param context what is being drawn
+     * @return the height, or zero
      */
     public static int getIconHeight(Icon icon, SynthContext context) {
         return icon == null ? 0 : icon.getIconHeight();
     }
 
     /**
-     * Dibuja un icono, que puede depender del contexto.
+     * It draws an icon, which may depend on the context.
      *
-     * @param icon el icono, o {@code null}
-     * @param context que se esta dibujando
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param icon the icon, or {@code null}
+     * @param context what is being drawn
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public static void paintIcon(Icon icon, SynthContext context, Graphics g, int x, int y,
             int w, int h) {

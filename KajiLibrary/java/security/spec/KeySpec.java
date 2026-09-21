@@ -1,10 +1,11 @@
 package java.security.spec;
 
-// Marca la representacion **transparente** de una clave.
+// Marks the **transparent** representation of a key.
 //
-// La distincion con `java.security.Key` es la que ordena todo `KeyFactory`: una `Key` es opaca —el
-// proveedor decide que hay adentro y puede tenerla en hardware— mientras que un `KeySpec` es
-// material que el programa puede mirar y construir. Convertir de uno al otro es exactamente lo que
-// hace `KeyFactory`, y por eso el par de tipos tiene que existir aunque ninguno declare nada.
+// The distinction from `java.security.Key` is what orders all of `KeyFactory`: a `Key` is opaque
+// —the provider decides what is inside and may keep it in hardware— while a `KeySpec` is material
+// the program can look at and build. Converting from one to the other is exactly what `KeyFactory`
+// does, and that is why this type has to exist even though it declares nothing. (This note said
+// neither type declares anything; `Key` declares three methods.)
 public interface KeySpec {
 }

@@ -3,16 +3,16 @@ package com.sun.source.tree;
 import java.util.List;
 
 /**
- * Una lambda.
+ * A lambda.
  *
- * <p>{@link #getBody} devuelve {@link Tree} y no algo mas preciso porque una lambda tiene dos
- * formas —una expresion o un bloque— y no comparten supertipo: {@link ExpressionTree} y
- * {@link StatementTree} son las dos mitades del arbol. {@link #getBodyKind} es como se sabe cual de
- * las dos vino, sin castear a ciegas.
+ * <p>{@link #getBody} returns {@link Tree} and not something more precise because a lambda has
+ * two forms -- an expression or a block -- and they share no supertype: {@link ExpressionTree}
+ * and {@link StatementTree} are the two halves of the tree. {@link #getBodyKind} is how which
+ * of the two came is known, without casting blindly.
  */
 public interface LambdaExpressionTree extends ExpressionTree {
 
-    /** Cual de las dos formas de cuerpo tiene la lambda. */
+    /** Which of the two forms of body the lambda has. */
     enum BodyKind {
 
         /** `x -> x + 1`. */
@@ -21,12 +21,12 @@ public interface LambdaExpressionTree extends ExpressionTree {
         STATEMENT
     }
 
-    /** Los parametros. Vacia en `() -> ...`. */
+    /** The parameters. Empty in `() -> ...`. */
     List<? extends VariableTree> getParameters();
 
-    /** El cuerpo; ver {@link #getBodyKind} para saber que es. */
+    /** The body; see {@link #getBodyKind} in order to know what it is. */
     Tree getBody();
 
-    /** Si el cuerpo es una expresion o un bloque. */
+    /** Whether the body is an expression or a block. */
     BodyKind getBodyKind();
 }

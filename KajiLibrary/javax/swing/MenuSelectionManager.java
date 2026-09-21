@@ -10,144 +10,146 @@ import javax.swing.event.ChangeListener;
 import javax.swing.event.EventListenerList;
 
 /**
- * Quien lleva la cuenta de que menu esta abierto.
+ * Who keeps track of which menu is open.
  *
- * <h2>Por que hace falta un administrador y no alcanza con cada menu</h2>
+ * <h2>Why a manager is needed and each menu is not enough</h2>
  *
- * <p>Porque un menu abierto <strong>captura</strong> el mouse y el teclado de toda la aplicacion:
- * hacer clic en cualquier lado tiene que cerrarlo, y mover el mouse de un submenu al de al lado
- * tiene que cerrar el primero y abrir el segundo. Ninguno de los dos menus puede decidir eso solo —
- * cada uno ve nada mas que sus propios eventos.
+ * <p>Because an open menu <strong>captures</strong> the whole application's mouse and keyboard:
+ * clicking anywhere has to close it, and moving the mouse from one submenu to the one beside it
+ * has to close the first and open the second. Neither of the two menus can decide that alone --
+ * each one sees nothing but its own events.
  *
- * <p>El estado que resuelve todo eso es <em>uno</em>: el camino seleccionado, de la barra hasta el
- * item mas profundo. Abrir, cerrar y navegar son cambios de ese camino, y por eso el administrador
- * es un singleton por aplicacion.
+ * <p>The state that resolves all that is <em>one</em>: the selected path, from the bar down to
+ * the deepest item. Opening, closing and navigating are changes of that path, and that is why
+ * the manager is a singleton per application.
  *
- * <h2>Lo que esta VM no hace</h2>
+ * <h2>What this VM does not do</h2>
  *
- * <p>{@link #processMouseEvent} y {@link #processKeyEvent} reparten al camino, que es su trabajo
- * completo. {@link #componentForPoint} necesita saber donde esta cada componente en pantalla y
- * eso pide un sistema de ventanas que esta VM no tiene: devuelve {@code null}, y lo dice.
+ * <p>{@link #processMouseEvent} and {@link #processKeyEvent} hand out to the path, which is
+ * their whole job. {@link #componentForPoint} needs to know where each component is on the
+ * screen and that asks for a windowing system this VM does not have: it returns {@code null},
+ * and it says so.
  */
 public class MenuSelectionManager {
 
-    private static MenuSelectionManager elUnico;
+    private static MenuSelectionManager shared;
 
-    /** El evento que se reusa; ver {@link #fireStateChanged}. */
+    /** The event that is reused; see {@link #fireStateChanged}. */
     protected transient ChangeEvent changeEvent = null;
 
-    /** Los oyentes. */
+    /** The listeners. */
     protected EventListenerList listenerList = new EventListenerList();
 
     private MenuElement[] selection = new MenuElement[0];
 
-    /** Un administrador nuevo. Lo normal es pedir el de {@link #defaultManager}. */
+    /** A new manager. The usual thing is to ask for {@link #defaultManager}'s. */
     public MenuSelectionManager() {
     }
 
-    /** El administrador de la aplicacion. */
+    /** The application's manager. */
     public static MenuSelectionManager defaultManager() {
-        if (elUnico == null) {
-            elUnico = new MenuSelectionManager();
+        if (shared == null) {
+            shared = new MenuSelectionManager();
         }
-        return elUnico;
+        return shared;
     }
 
     /**
-     * Cambia el camino seleccionado.
+     * It changes the selected path.
      *
-     * <p>Avisa a los elementos que <strong>entraron</strong> y a los que <strong>salieron</strong>,
-     * y para eso compara con el camino anterior desde la raiz hasta donde los dos coinciden. Avisar
-     * a todos en cada cambio haria que un submenu se cierre y se reabra al mover el mouse un pixel.
+     * <p>It gives notice to the elements that <strong>came in</strong> and to those that
+     * <strong>went out</strong>, and for that it compares with the previous path from the root down
+     * to where the two agree. Giving notice to everybody on each change would make a submenu close
+     * and reopen when the mouse moves a pixel.
      */
     public void setSelectedPath(MenuElement[] path) {
-        MenuElement[] nuevo = path == null ? new MenuElement[0] : path;
+        MenuElement[] newValue = path == null ? new MenuElement[0] : path;
         int comun = 0;
-        while (comun < this.selection.length && comun < nuevo.length
-                && this.selection[comun] == nuevo[comun]) {
+        while (comun < this.selection.length && comun < newValue.length
+                && this.selection[comun] == newValue[comun]) {
             comun = comun + 1;
         }
         for (int i = this.selection.length - 1; i >= comun; i--) {
             this.selection[i].menuSelectionChanged(false);
         }
-        MenuElement[] copia = new MenuElement[nuevo.length];
-        for (int i = 0; i < nuevo.length; i++) {
-            copia[i] = nuevo[i];
+        MenuElement[] copy = new MenuElement[newValue.length];
+        for (int i = 0; i < newValue.length; i++) {
+            copy[i] = newValue[i];
         }
-        this.selection = copia;
+        this.selection = copy;
         for (int i = comun; i < this.selection.length; i++) {
             this.selection[i].menuSelectionChanged(true);
         }
         fireStateChanged();
     }
 
-    /** El camino seleccionado, en un arreglo nuevo. */
+    /** The selected path, in a new array. */
     public MenuElement[] getSelectedPath() {
-        MenuElement[] copia = new MenuElement[this.selection.length];
+        MenuElement[] copy = new MenuElement[this.selection.length];
         for (int i = 0; i < this.selection.length; i++) {
-            copia[i] = this.selection[i];
+            copy[i] = this.selection[i];
         }
-        return copia;
+        return copy;
     }
 
-    /** Cierra todo. */
+    /** It closes everything. */
     public void clearSelectedPath() {
         if (this.selection.length > 0) {
             setSelectedPath(null);
         }
     }
 
-    /** Agrega un oyente de cambios del camino. */
+    /** It adds a listener for changes of the path. */
     public void addChangeListener(ChangeListener l) {
         this.listenerList.add(ChangeListener.class, l);
     }
 
-    /** Saca un oyente. */
+    /** It removes a listener. */
     public void removeChangeListener(ChangeListener l) {
         this.listenerList.remove(ChangeListener.class, l);
     }
 
-    /** Los oyentes de cambio. */
+    /** The change listeners. */
     public ChangeListener[] getChangeListeners() {
         return this.listenerList.getListeners(ChangeListener.class);
     }
 
     /**
-     * Avisa que el camino cambio.
+     * It gives notice that the path changed.
      *
-     * <p>El {@link ChangeEvent} se crea una sola vez y se reusa: no lleva ningun dato mas que su
-     * origen, que siempre es este objeto, asi que alocar uno nuevo por aviso seria basura pura. Es
-     * la convencion de todo Swing.
+     * <p>The {@link ChangeEvent} is created once and reused: it carries no datum but its source,
+     * which is always this object, so allocating a new one per notice would be pure rubbish. It is
+     * the convention of the whole of Swing.
      */
     protected void fireStateChanged() {
-        Object[] oyentes = this.listenerList.getListenerList();
-        for (int i = oyentes.length - 2; i >= 0; i = i - 2) {
-            if (oyentes[i] == ChangeListener.class) {
+        Object[] listeners = this.listenerList.getListenerList();
+        for (int i = listeners.length - 2; i >= 0; i = i - 2) {
+            if (listeners[i] == ChangeListener.class) {
                 if (this.changeEvent == null) {
                     this.changeEvent = new ChangeEvent(this);
                 }
-                ChangeListener l = (ChangeListener) oyentes[i + 1];
+                ChangeListener l = (ChangeListener) listeners[i + 1];
                 l.stateChanged(this.changeEvent);
             }
         }
     }
 
-    /** Reparte un evento de mouse a todo el camino, del mas profundo al mas superficial. */
+    /** It hands a mouse event out to the whole path, from the deepest to the shallowest. */
     public void processMouseEvent(MouseEvent event) {
-        MenuElement[] camino = getSelectedPath();
-        for (int i = camino.length - 1; i >= 0; i--) {
-            camino[i].processMouseEvent(event, camino, this);
+        MenuElement[] path = getSelectedPath();
+        for (int i = path.length - 1; i >= 0; i--) {
+            path[i].processMouseEvent(event, path, this);
             if (event.isConsumed()) {
                 return;
             }
         }
     }
 
-    /** Reparte un evento de teclado a todo el camino. */
+    /** It hands a keyboard event out to the whole path. */
     public void processKeyEvent(KeyEvent event) {
-        MenuElement[] camino = getSelectedPath();
-        for (int i = camino.length - 1; i >= 0; i--) {
-            camino[i].processKeyEvent(event, camino, this);
+        MenuElement[] path = getSelectedPath();
+        for (int i = path.length - 1; i >= 0; i--) {
+            path[i].processKeyEvent(event, path, this);
             if (event.isConsumed()) {
                 return;
             }
@@ -155,33 +157,33 @@ public class MenuSelectionManager {
     }
 
     /**
-     * Que componente del menu esta bajo ese punto.
+     * Which component of the menu is under that point.
      *
-     * @return {@code null} siempre en esta VM: hace falta la posicion de cada componente en
-     *     pantalla, que la da el sistema de ventanas. Ver la nota de la clase.
+     * @return {@code null} always on this VM: the position of each component on the screen is
+     *     needed, which the windowing system gives. See the class note.
      */
     public Component componentForPoint(Component source, Point sourcePoint) {
         return null;
     }
 
-    /** Si {@code c} es parte del menu abierto. */
+    /** Whether {@code c} is part of the open menu. */
     public boolean isComponentPartOfCurrentMenu(Component c) {
         if (this.selection.length == 0) {
             return false;
         }
-        return esParte(this.selection[0], c);
+        return isPart(this.selection[0], c);
     }
 
-    private boolean esParte(MenuElement raiz, Component c) {
-        if (raiz == null) {
+    private boolean isPart(MenuElement root, Component c) {
+        if (root == null) {
             return false;
         }
-        if (raiz.getComponent() == c) {
+        if (root.getComponent() == c) {
             return true;
         }
-        MenuElement[] hijos = raiz.getSubElements();
-        for (int i = 0; i < hijos.length; i++) {
-            if (esParte(hijos[i], c)) {
+        MenuElement[] children = root.getSubElements();
+        for (int i = 0; i < children.length; i++) {
+            if (isPart(children[i], c)) {
                 return true;
             }
         }

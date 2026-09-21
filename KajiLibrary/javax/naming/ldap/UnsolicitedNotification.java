@@ -3,25 +3,25 @@ package javax.naming.ldap;
 import javax.naming.NamingException;
 
 /**
- * Un mensaje que el servidor manda sin que nadie se lo haya pedido.
+ * A message the server sends without anybody having asked for it.
  *
- * <h2>Por que existe</h2>
+ * <h2>Why it exists</h2>
  *
- * <p>Porque el servidor a veces tiene algo que decir que no es respuesta de nada: que va a cerrar la
- * conexion, que la sesion cambio de estado, que hubo un aviso. Sin este mecanismo tendria que
- * esperar a la proxima operacion para contarlo, o simplemente cortar.
+ * <p>Because the server sometimes has something to say that is not a response to anything: that it
+ * is going to close the connection, that the session changed state, that there was a warning.
+ * Without this mechanism it would have to wait for the next operation to tell, or simply cut off.
  *
- * <p>Extiende {@link ExtendedResponse} —es una respuesta con OID y datos— y {@link HasControls},
- * porque puede traer controles.
+ * <p>It extends {@link ExtendedResponse} --it is a response with an OID and data-- and
+ * {@link HasControls}, because it may carry controls.
  *
- * <p>El caso mas conocido es el <em>Notice of Disconnection</em>: el servidor avisa por que va a
- * cerrar, y sin esto la conexion simplemente se caeria sin explicacion.
+ * <p>The best-known case is the <em>Notice of Disconnection</em>: the server says why it is going
+ * to close, and without this the connection would simply drop without explanation.
  */
 public interface UnsolicitedNotification extends ExtendedResponse, HasControls {
 
-    /** Las URLs a las que redirige, o {@code null} si no redirige. */
+    /** The URLs it redirects to, or {@code null} if it does not redirect. */
     String[] getReferrals();
 
-    /** El error que reporta, o {@code null} si no es un error. */
+    /** The error it reports, or {@code null} if it is not an error. */
     NamingException getException();
 }

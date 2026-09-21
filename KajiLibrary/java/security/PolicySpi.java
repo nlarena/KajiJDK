@@ -1,16 +1,16 @@
 package java.security;
 
-// La cara del proveedor para una `Policy`.
+// The provider's face for a `Policy`.
 //
-// Solo `engineImplies` es abstracto, y eso dice que es lo minimo que hace falta para ser una
-// politica: contestar si un dominio tiene un permiso. Las otras dos —enumerar los permisos de un
-// origen o de un dominio— tienen implementacion base que devuelve
-// `Policy.UNSUPPORTED_EMPTY_COLLECTION`, porque hay politicas que saben decidir sin saber
-// enumerar: una regla como "todo lo firmado por X puede leer /var/datos" contesta `implies` al
-// instante y no tiene una lista finita que devolver.
+// Only `engineImplies` is abstract, and that says it is the minimum needed in order to be a policy:
+// answering whether a domain has a permission. The other two —enumerating the permissions of a
+// source or of a domain— have a base implementation that returns
+// `Policy.UNSUPPORTED_EMPTY_COLLECTION`, because there are policies that know how to decide without
+// knowing how to enumerate: a rule such as "everything signed by X can read /var/data" answers
+// `implies` instantly and has no finite list to return.
 //
-// KajiLibrary no trae ninguna implementacion. Ver `Policy`: el JDK 25 ya no deja instalar una
-// politica global.
+// KajiLibrary brings no implementation. See `Policy`: JDK 25 no longer lets a global policy be
+// installed.
 public abstract class PolicySpi {
 
     public PolicySpi() {
@@ -18,7 +18,7 @@ public abstract class PolicySpi {
 
     protected abstract boolean engineImplies(ProtectionDomain domain, Permission permission);
 
-    // Relee la politica. La base no tiene de donde.
+    // It rereads the policy. The base one has nowhere to read it from.
     protected void engineRefresh() {
     }
 

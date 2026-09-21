@@ -1,27 +1,28 @@
 package com.sun.source.doctree;
 
 /**
- * Un visitante del arbol de un comentario de documentacion.
+ * A visitor of the tree of a documentation comment.
  *
- * <h2>Para que sirve, y por que no un {@code switch}</h2>
+ * <h2>What it is for, and why not a {@code switch}</h2>
  *
- * <p>{@link DocTree#getKind} alcanza para preguntar por un nodo suelto. Este visitante es para
- * cuando hay que atender a <strong>todos</strong>, y lo que aporta es que el compilador cuente: si
- * el JDK agrega un tipo de nodo y falta el metodo, una implementacion de esta interfaz deja de
- * compilar. Un {@code switch} sobre el {@code Kind} se queda callado y devuelve mal en silencio.
+ * <p>{@link DocTree#getKind} is enough in order to ask about a loose node. This visitor is for
+ * when <strong>all</strong> of them have to be attended to, and what it contributes is that the
+ * compiler should count: if the JDK adds a kind of node and the method is missing, an
+ * implementation of this interface stops compiling. A {@code switch} over the {@code Kind} keeps
+ * quiet and returns wrongly in silence.
  *
- * <h2>Cuales son {@code default} y por que</h2>
+ * <h2>Which are {@code default} and why</h2>
  *
- * <p>Los que se agregaron despues de que la interfaz ya existia. Volverlos abstractos habria roto a
- * todo el que la implementaba, asi que llegan con un cuerpo que delega en {@link #visitOther}: un
- * visitante viejo sigue compilando y trata al nodo nuevo como desconocido, que es exactamente lo
- * correcto — no lo entiende.
+ * <p>Those that were added after the interface already existed. Making them abstract would have
+ * broken everybody who was implementing it, so they arrive with a body that delegates to
+ * {@link #visitOther}: an old visitor goes on compiling and treats the new node as unknown, which
+ * is exactly what is right -- it does not understand it.
  *
- * <p>Es la razon de que {@link #visitOther} exista y de que sea el unico que recibe un
- * {@link DocTree} pelado en vez de un tipo preciso.
+ * <p>It is the reason {@link #visitOther} exists and is the only one that receives a bare
+ * {@link DocTree} instead of a precise type.
  *
- * @param <R> lo que devuelve cada visita
- * @param <P> el dato que se arrastra por el recorrido
+ * @param <R> what each visit returns
+ * @param <P> the datum that is carried along the walk
  */
 public interface DocTreeVisitor<R, P> {
 
@@ -37,7 +38,7 @@ public interface DocTreeVisitor<R, P> {
 
     R visitDocRoot(DocRootTree node, P p);
 
-    /** Agregado despues; por defecto delega en {@link #visitOther}. */
+    /** Added later; by default it delegates to {@link #visitOther}. */
     default R visitDocType(DocTypeTree node, P p) {
         return visitOther(node, p);
     }
@@ -48,19 +49,19 @@ public interface DocTreeVisitor<R, P> {
 
     R visitErroneous(ErroneousTree node, P p);
 
-    /** Agregado despues; por defecto delega en {@link #visitOther}. */
+    /** Added later; by default it delegates to {@link #visitOther}. */
     default R visitEscape(EscapeTree node, P p) {
         return visitOther(node, p);
     }
 
-    /** Agregado despues; por defecto delega en {@link #visitOther}. */
+    /** Added later; by default it delegates to {@link #visitOther}. */
     default R visitHidden(HiddenTree node, P p) {
         return visitOther(node, p);
     }
 
     R visitIdentifier(IdentifierTree node, P p);
 
-    /** Agregado despues; por defecto delega en {@link #visitOther}. */
+    /** Added later; by default it delegates to {@link #visitOther}. */
     default R visitIndex(IndexTree node, P p) {
         return visitOther(node, p);
     }
@@ -73,12 +74,12 @@ public interface DocTreeVisitor<R, P> {
 
     R visitParam(ParamTree node, P p);
 
-    /** Agregado despues; por defecto delega en {@link #visitOther}. */
+    /** Added later; by default it delegates to {@link #visitOther}. */
     default R visitProvides(ProvidesTree node, P p) {
         return visitOther(node, p);
     }
 
-    /** Agregado despues; por defecto delega en {@link #visitOther}. */
+    /** Added later; by default it delegates to {@link #visitOther}. */
     default R visitRawText(RawTextTree node, P p) {
         return visitOther(node, p);
     }
@@ -97,24 +98,24 @@ public interface DocTreeVisitor<R, P> {
 
     R visitSince(SinceTree node, P p);
 
-    /** Agregado despues; por defecto delega en {@link #visitOther}. */
+    /** Added later; by default it delegates to {@link #visitOther}. */
     default R visitSnippet(SnippetTree node, P p) {
         return visitOther(node, p);
     }
 
-    /** Agregado despues; por defecto delega en {@link #visitOther}. */
+    /** Added later; by default it delegates to {@link #visitOther}. */
     default R visitSpec(SpecTree node, P p) {
         return visitOther(node, p);
     }
 
     R visitStartElement(StartElementTree node, P p);
 
-    /** Agregado despues; por defecto delega en {@link #visitOther}. */
+    /** Added later; by default it delegates to {@link #visitOther}. */
     default R visitSummary(SummaryTree node, P p) {
         return visitOther(node, p);
     }
 
-    /** Agregado despues; por defecto delega en {@link #visitOther}. */
+    /** Added later; by default it delegates to {@link #visitOther}. */
     default R visitSystemProperty(SystemPropertyTree node, P p) {
         return visitOther(node, p);
     }
@@ -127,7 +128,7 @@ public interface DocTreeVisitor<R, P> {
 
     R visitUnknownInlineTag(UnknownInlineTagTree node, P p);
 
-    /** Agregado despues; por defecto delega en {@link #visitOther}. */
+    /** Added later; by default it delegates to {@link #visitOther}. */
     default R visitUses(UsesTree node, P p) {
         return visitOther(node, p);
     }
@@ -137,8 +138,8 @@ public interface DocTreeVisitor<R, P> {
     R visitVersion(VersionTree node, P p);
 
     /**
-     * Un nodo que este visitante no conoce: una implementacion propia, o un tipo que el JDK
-     * agrego despues de que se escribiera esta implementacion.
+     * A node this visitor does not know: an implementation of one's own, or a type the JDK
+     * added after this implementation was written.
      */
     R visitOther(DocTree node, P p);
 }

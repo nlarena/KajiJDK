@@ -1,21 +1,21 @@
 package java.beans.beancontext;
 
 /**
- * Un servicio deja de estar disponible.
+ * A service stops being available.
  *
- * <p>{@link #isCurrentServiceInvalidNow} es la parte que importa y la que se lee mal: distingue
- * *"no pidas más"* de *"lo que tenés en la mano ya no sirve"*. En el primer caso el usuario puede
- * seguir usando su instancia hasta terminar; en el segundo tiene que soltarla ya. Tratar los dos
- * igual significa o bien perder trabajo a medio hacer, o bien usar un objeto muerto.
+ * <p>{@link #isCurrentServiceInvalidNow} is the part that matters and the one that gets misread: it
+ * separates *"do not ask for more"* from *"what you are holding no longer works"*. In the first
+ * case the user can keep using its instance until done; in the second it has to let go at once.
+ * Treating both alike means either losing half-done work or using a dead object.
  */
 public class BeanContextServiceRevokedEvent extends BeanContextEvent {
 
-    /** La clase del servicio revocado. */
+    /** The class of the revoked service. */
     protected Class serviceClass;
 
     private final boolean invalidateRefs;
 
-    /** El evento de revocación de esa clase de servicio. */
+    /** The revocation event for that service class. */
     public BeanContextServiceRevokedEvent(BeanContextServices bcs, Class sc,
             boolean invalidate) {
         super((BeanContext) bcs);
@@ -23,22 +23,22 @@ public class BeanContextServiceRevokedEvent extends BeanContextEvent {
         this.invalidateRefs = invalidate;
     }
 
-    /** El contexto que lo revoca. */
+    /** The context revoking it. */
     public BeanContextServices getSourceAsBeanContextServices() {
         return (BeanContextServices) this.getBeanContext();
     }
 
-    /** La clase del servicio. */
+    /** The service class. */
     public Class getServiceClass() {
         return this.serviceClass;
     }
 
-    /** Si esa clase es la del servicio revocado. */
+    /** Whether that class is the revoked service's. */
     public boolean isServiceClass(Class service) {
         return this.serviceClass.equals(service);
     }
 
-    /** Si las instancias ya entregadas dejan de valer en este momento. */
+    /** Whether the instances already handed out stop being valid right now. */
     public boolean isCurrentServiceInvalidNow() {
         return this.invalidateRefs;
     }

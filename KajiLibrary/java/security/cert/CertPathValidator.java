@@ -6,19 +6,19 @@ import java.security.NoSuchProviderException;
 import java.security.Provider;
 import java.security.Security;
 
-// Valida un camino de certificacion ya armado contra un conjunto de anclas.
+// It validates an already assembled certification path against a set of anchors.
 //
-// Es la operacion en la que se apoya toda la confianza de TLS y de las firmas de codigo, y su
-// contrato es el que hay que tener claro: **`validate` no devuelve un boolean**. Si el camino no
-// vale, lanza `CertPathValidatorException`, que ademas dice en que eslabon y por que. Si vuelve,
-// devuelve datos utiles. Escribir `try { v.validate(p, ps); } catch (Exception e) {}` no es manejar
-// un error: es aceptar cualquier cadena.
+// It is the operation all the trust of TLS and of code signatures rests on, and its contract is the
+// one to be clear about: **`validate` does not return a boolean**. If the path is not valid, it
+// throws `CertPathValidatorException`, which also says in which link and why. If it returns, it
+// returns useful data. Writing `try { v.validate(p, ps); } catch (Exception e) {}` is not handling
+// an error: it is accepting any chain.
 //
-// A KajiLibrary subset: **no hay ningun proveedor registrado**, asi que las tres sobrecargas de
-// `getInstance` tiran siempre `NoSuchAlgorithmException`. El motivo es el mismo que en
-// `CertPathBuilder`: validar PKIX pide verificar firmas y comparar nombres X.500, y ninguna de las
-// dos cosas esta implementada. Un validador que dijera que si sin verificar es el peor agujero
-// posible en esta biblioteca, asi que no se registra ninguno.
+// A KajiLibrary subset: **there is no registered provider**, so the three overloads of
+// `getInstance` always throw `NoSuchAlgorithmException`. The reason is the same as in
+// `CertPathBuilder`: validating PKIX asks for verifying signatures and comparing X.500 names, and
+// neither of the two things is implemented. A validator that said yes without verifying is the
+// worst possible hole in this library, so none is registered.
 public class CertPathValidator {
 
     private final CertPathValidatorSpi validatorSpi;
@@ -41,7 +41,7 @@ public class CertPathValidator {
         while (i < provs.length) {
             Provider.Service s = provs[i].getService("CertPathValidator", algorithm);
             if (s != null) {
-                return armar(s, algorithm);
+                return build(s, algorithm);
             }
             i = i + 1;
         }
@@ -73,10 +73,10 @@ public class CertPathValidator {
             throw new NoSuchAlgorithmException(
                 "no such algorithm: " + algorithm + " for provider " + provider.getName());
         }
-        return armar(s, algorithm);
+        return build(s, algorithm);
     }
 
-    private static CertPathValidator armar(Provider.Service s, String algorithm)
+    private static CertPathValidator build(Provider.Service s, String algorithm)
             throws NoSuchAlgorithmException {
         Object o = s.newInstance(null);
         if (!(o instanceof CertPathValidatorSpi)) {
@@ -95,13 +95,14 @@ public class CertPathValidator {
         return this.algorithm;
     }
 
-    // Valida el camino. **Si vuelve, valio; si no, lanza.** Ver la nota de la clase.
+    // It validates the path. **If it returns, it was valid; if not, it throws.** See the note of
+    // the class.
     public final CertPathValidatorResult validate(CertPath certPath, CertPathParameters params)
             throws CertPathValidatorException, InvalidAlgorithmParameterException {
         return this.validatorSpi.engineValidate(certPath, params);
     }
 
-    // El algoritmo por default, de la propiedad `certpathvalidator.type`. "PKIX" si no esta puesta.
+    // The default algorithm, from the property `certpathvalidator.type`. "PKIX" if it is not set.
     public static final String getDefaultType() {
         String t = Security.getProperty("certpathvalidator.type");
         if (t == null) {

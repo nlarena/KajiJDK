@@ -3,7 +3,7 @@ package com.sun.source.tree;
 import java.util.List;
 
 /**
- * `new T(...)`, con su clase anonima opcional en {@link #getClassBody}.
+ * `new T(...)`, with its optional anonymous class in {@link #getClassBody}.
  */
 public interface NewClassTree extends ExpressionTree {
 

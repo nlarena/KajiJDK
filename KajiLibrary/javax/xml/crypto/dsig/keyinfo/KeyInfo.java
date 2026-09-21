@@ -6,32 +6,32 @@ import javax.xml.crypto.XMLCryptoContext;
 import javax.xml.crypto.XMLStructure;
 
 /**
- * KajiLibrary's javax.xml.crypto.dsig.keyinfo.KeyInfo -- lo que la firma dice sobre su clave.
+ * KajiLibrary's javax.xml.crypto.dsig.keyinfo.KeyInfo -- what the signature says about its key.
  *
- * <p>Un contenedor de estructuras heterogeneas: puede traer un nombre de clave, la clave publica en
- * limpio, una cadena de certificados, un puntero a donde buscarla, o nada. Por eso
- * {@link #getContent} devuelve {@code XMLStructure} y no algo mas preciso.
+ * <p>A container of heterogeneous structures: it can bring a key name, the public key in the clear,
+ * a certificate chain, a pointer to where to fetch it, or nothing. That is why {@link #getContent}
+ * returns {@code XMLStructure} and not something more precise.
  *
- * <p><b>Es informacion, no autoridad.</b> Lo escribio quien firmo, asi que una firma falsificada trae
- * su propia clave y valida perfecto contra ella. Sirve para <b>elegir</b> entre claves que uno ya
- * conoce, nunca como fuente de la clave. Ver la nota de {@code KeySelector}, que es donde esa
- * decision se toma.
+ * <p><b>It is information, not authority.</b> Whoever signed wrote it, so a forged signature brings
+ * its own key and validates perfectly against it. It serves to <b>choose</b> among keys one already
+ * knows, never as the source of the key. See the note of {@code KeySelector}, which is where that
+ * decision is made.
  *
- * <p>Es opcional: una firma sin {@code KeyInfo} es perfectamente valida y significa que quien valida
- * ya sabe cual es la clave. Es, de hecho, la forma mas segura de firmar.
+ * <p>It is optional: a signature without {@code KeyInfo} is perfectly valid and means that whoever
+ * validates already knows which key it is. It is, in fact, the safest way to sign.
  */
 public interface KeyInfo extends XMLStructure {
 
-    /** Lo que trae adentro. No modificable. */
+    /** What it carries inside. Unmodifiable. */
     List<XMLStructure> getContent();
 
-    /** El identificador del elemento, o null. */
+    /** The element's identifier, or null. */
     String getId();
 
     /**
-     * Lo escribe adentro de esa estructura.
+     * Writes it inside that structure.
      *
-     * @throws MarshalException si no se puede escribir ahi
+     * @throws MarshalException if it cannot be written there
      */
     void marshal(XMLStructure parent, XMLCryptoContext context) throws MarshalException;
 }

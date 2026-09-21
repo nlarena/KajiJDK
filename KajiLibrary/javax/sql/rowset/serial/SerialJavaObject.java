@@ -5,31 +5,35 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 
 /**
- * KajiLibrary's javax.sql.rowset.serial.SerialJavaObject -- un objeto Java guardado en una columna.
+ * KajiLibrary's javax.sql.rowset.serial.SerialJavaObject -- a Java object kept in a column.
  *
- * <p>Envuelve un objeto cualquiera para poder ponerlo en una columna de tipo {@code JAVA_OBJECT}.
+ * <p>It wraps any object so that it can be put in a column of type {@code JAVA_OBJECT}.
  *
- * <h2>La validacion del constructor</h2>
+ * <h2>The constructor's validation</h2>
  *
- * <p>Exige que el objeto sea serializable, y ademas revisa sus <b>campos</b>: si alguno no es
- * estatico y su tipo no es serializable, se rechaza. Esa segunda parte parece de mas y no lo es --
- * un objeto marcado {@code Serializable} con un campo que no lo es falla recien al serializar, que
- * es cuando ya se perdio el contexto de donde vino.
+ * <p>It requires the object to be serializable, and it also checks its public <b>fields</b>: if one
+ * is not static and its type is not serializable, it is rejected. That second part looks
+ * superfluous and is not -- an object marked {@code Serializable} with a field that is not fails
+ * only when serializing, which is when the context it came from has already been lost.
  *
- * <p>{@link #getFields} devuelve los campos del objeto envuelto. Es una puerta de reflexion sobre
- * algo que llego de una base de datos, y por eso conviene mirarla dos veces antes de usarla.
+ * <p>JDK 25 does neither: it accepts a plain {@code Object}, and a class with public static fields,
+ * without complaint.
+ *
+ * <p>{@link #getFields} returns the fields of the wrapped object. It is a reflection door onto
+ * something that arrived from a database, and that is why it is worth looking at twice before using
+ * it.
  */
 public class SerialJavaObject implements Serializable, Cloneable {
 
     private static final long serialVersionUID = -1465795139032831023L;
 
-    /** El objeto envuelto. */
+    /** The wrapped object. */
     private final Object obj;
 
     /**
-     * @param obj el objeto a guardar
-     * @throws SerialException si es null, si no es serializable, o si tiene un campo de instancia
-     *     que no lo es
+     * @param obj the object to keep
+     * @throws SerialException if it is null, if it is not serializable, or if it has an instance
+     *     field that is not
      */
     public SerialJavaObject(Object obj) throws SerialException {
         if (obj == null) {
@@ -54,12 +58,12 @@ public class SerialJavaObject implements Serializable, Cloneable {
         this.obj = obj;
     }
 
-    /** El objeto envuelto. */
+    /** The wrapped object. */
     public Object getObject() throws SerialException {
         return this.obj;
     }
 
-    /** Los campos publicos del objeto envuelto. Ver la nota de la clase. */
+    /** The public fields of the wrapped object. See the class note. */
     public Field[] getFields() throws SerialException {
         if (this.obj == null) {
             throw new SerialException("SerialJavaObject does not contain an object");
@@ -67,7 +71,7 @@ public class SerialJavaObject implements Serializable, Cloneable {
         return this.obj.getClass().getFields();
     }
 
-    /** Iguales si los objetos envueltos lo son. */
+    /** Equal if the wrapped objects are. */
     public boolean equals(Object o) {
         if (this == o) {
             return true;
@@ -79,16 +83,16 @@ public class SerialJavaObject implements Serializable, Cloneable {
         return this.obj == null ? that.obj == null : this.obj.equals(that.obj);
     }
 
-    /** Coherente con {@link #equals}. */
+    /** Consistent with {@link #equals}. */
     public int hashCode() {
         return 31 + (this.obj == null ? 0 : this.obj.hashCode());
     }
 
     /**
-     * Una copia.
+     * A copy.
      *
-     * <p>Comparte el objeto envuelto: copiarlo pediria serializarlo y volver a leerlo, que es caro y
-     * puede fallar. Es lo que hace el JDK.
+     * <p>It shares the wrapped object: copying it would need serializing it and reading it back,
+     * which is expensive and can fail. It is what the JDK does.
      */
     public Object clone() {
         try {

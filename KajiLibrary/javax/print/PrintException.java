@@ -1,39 +1,40 @@
 package javax.print;
 
 /**
- * KajiLibrary's javax.print.PrintException -- algo salio mal al imprimir.
+ * KajiLibrary's javax.print.PrintException -- something went wrong when printing.
  *
- * <p>La base de los errores del sistema de impresion. Las tres interfaces del paquete que empiezan con
- * mayuscula y terminan en {@code Exception} --{@link AttributeException}, {@link FlavorException} y
- * {@link URIException}-- <b>no</b> heredan de esta: son interfaces que una subclase de esta implementa
- * para explicar por que fallo.
+ * <p>The base of the print system's errors. The package's three interfaces that end in {@code
+ * Exception} --{@link AttributeException}, {@link FlavorException} and {@link URIException}-- do
+ * <b>not</b> inherit from this one: they are interfaces a subclass of this one implements to
+ * explain why it failed.
  *
- * <p>Es un diseno raro y tiene razon: el motivo del fallo puede ser mas de uno a la vez --un atributo
- * no soportado <i>y</i> un formato no soportado-- y con herencia simple no se podria decir. Asi que
- * quien atrapa esto pregunta con {@code instanceof} por cada interfaz.
+ * <p>It is an odd design and it has a reason: the cause of the failure may be more than one at a
+ * time --an unsupported attribute <i>and</i> an unsupported format-- and single inheritance could
+ * not say that. So whoever catches this asks with {@code instanceof} about each interface.
  *
- * <p>Los constructores toman {@link Exception} y no {@link Throwable}; es de 2001 y quedo asi.
+ * <p>The constructors take {@link Exception} and not {@link Throwable}; it is from 2001 and stayed
+ * that way.
  */
 public class PrintException extends Exception {
 
     private static final long serialVersionUID = -5932531546705242471L;
 
-    /** Sin detalle. */
+    /** Without detail. */
     public PrintException() {
         super();
     }
 
-    /** Con mensaje. */
+    /** With a message. */
     public PrintException(String s) {
         super(s);
     }
 
-    /** Envolviendo otra. */
+    /** Wrapping another. */
     public PrintException(Exception e) {
         super(e);
     }
 
-    /** Con mensaje, envolviendo otra. */
+    /** With a message, wrapping another. */
     public PrintException(String s, Exception e) {
         super(s, e);
     }

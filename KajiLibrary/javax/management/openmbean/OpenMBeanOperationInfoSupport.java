@@ -5,12 +5,12 @@ import javax.management.Descriptor;
 import javax.management.MBeanOperationInfo;
 
 /**
- * La implementacion de {@link OpenMBeanOperationInfo}.
+ * The implementation of {@link OpenMBeanOperationInfo}.
  *
- * <p>Guarda el tipo abierto de retorno aparte de lo que hereda: a `super` le pasa el `className` de
- * ese tipo como `type`, que es lo unico que `MBeanOperationInfo` sabe representar. Los dos quedan
- * consistentes por construccion, y por eso `getReturnType` y `getReturnOpenType` no pueden
- * contradecirse.
+ * <p>It keeps the open return type apart from what it inherits: to {@code super} it passes that
+ * type's {@code className} as {@code type}, which is the only thing {@code MBeanOperationInfo} can
+ * represent. The two stay consistent by construction, which is why {@code getReturnType} and
+ * {@code getReturnOpenType} cannot contradict each other.
  */
 public class OpenMBeanOperationInfoSupport extends MBeanOperationInfo
         implements OpenMBeanOperationInfo {
@@ -19,13 +19,13 @@ public class OpenMBeanOperationInfoSupport extends MBeanOperationInfo
 
     private final OpenType<?> returnOpenType;
 
-    /** Una operacion con esos parametros, ese retorno y ese impacto. */
+    /** An operation with those parameters, that return and that impact. */
     public OpenMBeanOperationInfoSupport(String name, String description,
             OpenMBeanParameterInfo[] signature, OpenType<?> returnOpenType, int impact) {
         this(name, description, signature, returnOpenType, impact, null);
     }
 
-    /** Lo mismo, con ese descriptor. */
+    /** The same, with that descriptor. */
     public OpenMBeanOperationInfoSupport(String name, String description,
             OpenMBeanParameterInfo[] signature, OpenType<?> returnOpenType, int impact,
             Descriptor descriptor) {
@@ -37,13 +37,13 @@ public class OpenMBeanOperationInfoSupport extends MBeanOperationInfo
 
     private static String requireReturnType(OpenType<?> returnOpenType) {
         if (returnOpenType == null) {
-            throw new IllegalArgumentException("el tipo de retorno no puede ser nulo");
+            throw new IllegalArgumentException("the return type cannot be null");
         }
         return returnOpenType.getClassName();
     }
 
-    // Los cuatro valores que `MBeanOperationInfo` define. Uno fuera de ese conjunto no describe
-    // nada, y aceptarlo dejaria una operacion cuyo impacto nadie puede interpretar.
+    // The four values `MBeanOperationInfo` defines. One outside that set describes nothing, and
+    // accepting it would leave an operation whose impact nobody can interpret.
     private static int requireImpact(int impact) {
         if (impact != MBeanOperationInfo.INFO && impact != MBeanOperationInfo.ACTION
                 && impact != MBeanOperationInfo.ACTION_INFO
@@ -57,7 +57,7 @@ public class OpenMBeanOperationInfoSupport extends MBeanOperationInfo
         return this.returnOpenType;
     }
 
-    /** Igualdad contra cualquier {@link OpenMBeanOperationInfo}. */
+    /** Equality against any {@link OpenMBeanOperationInfo}. */
     public boolean equals(Object obj) {
         if (this == obj) {
             return true;

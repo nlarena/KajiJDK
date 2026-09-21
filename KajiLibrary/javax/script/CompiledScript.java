@@ -1,42 +1,42 @@
 package javax.script;
 
 /**
- * KajiLibrary's javax.script.CompiledScript -- un script ya analizado, listo para reejecutar.
+ * KajiLibrary's javax.script.CompiledScript -- a script already parsed, ready to run again.
  *
- * <p>Lo devuelve {@link Compilable#compile(String)} y no guarda ningun mundo: guarda la forma
- * compilada y nada mas. El mundo se lo pasa quien evalua, cada vez, lo que permite compilar una
- * vez y correr el mismo script contra contextos distintos.
+ * <p>{@link Compilable#compile(String)} returns it and it keeps no world: it keeps the compiled
+ * form and nothing more. The world is passed by whoever evaluates, each time, which allows
+ * compiling once and running the same script against different contexts.
  *
- * <p>De los cuatro metodos, dos son abstractos ({@link #eval(ScriptContext)} y
- * {@link #getEngine()}) y los otros dos se escriben con ellos. El interesante es
- * {@link #eval(Bindings)}: **no** evalua contra el contexto del motor con los `Bindings` metidos
- * adentro -- arma un contexto temporal con esos `Bindings` de ambito de motor y todo lo demas
- * (global, entrada, salida, error) copiado del contexto del motor. El motor queda como estaba.
+ * <p>Of the four methods, two are abstract ({@link #eval(ScriptContext)} and {@link #getEngine()})
+ * and the other two are written with them. The interesting one is {@link #eval(Bindings)}: it does
+ * **not** evaluate against the engine's context with the `Bindings` put inside -- it builds a
+ * temporary context with those `Bindings` as engine scope and everything else (global, input,
+ * output, error) copied from the engine's context. The engine stays as it was.
  *
- * <p>Un detalle facil de pasar por alto: si `bindings` es nulo, {@link #eval(Bindings)} evalua
- * directamente contra el contexto del motor -- no arma nada temporal, y ahi si lo que el script
- * defina queda en el motor.
+ * <p>A detail easy to overlook: if `bindings` is null, {@link #eval(Bindings)} evaluates directly
+ * against the engine's context -- it builds nothing temporary, and then what the script defines
+ * does stay in the engine.
  */
 public abstract class CompiledScript {
 
-    /** Para las subclases. */
+    /** For subclasses. */
     public CompiledScript() {
     }
 
     /**
-     * Evalua contra `context`.
+     * Evaluates against `context`.
      *
-     * @throws ScriptException si el script explota
-     * @throws NullPointerException si `context` es nulo
+     * @throws ScriptException if the script blows up
+     * @throws NullPointerException if `context` is null
      */
     public abstract Object eval(ScriptContext context) throws ScriptException;
 
     /**
-     * Evalua con `bindings` de ambito de motor y el resto del mundo copiado del motor.
+     * Evaluates with `bindings` as engine scope and the rest of the world copied from the engine.
      *
-     * <p>Con `bindings` nulo evalua contra el contexto del motor tal cual.
+     * <p>With a null `bindings` it evaluates against the engine's context as it is.
      *
-     * @throws ScriptException si el script explota
+     * @throws ScriptException if the script blows up
      */
     public Object eval(Bindings bindings) throws ScriptException {
         ScriptContext ctxt = getEngine().getContext();
@@ -56,14 +56,14 @@ public abstract class CompiledScript {
     }
 
     /**
-     * Evalua contra el contexto del motor.
+     * Evaluates against the engine's context.
      *
-     * @throws ScriptException si el script explota
+     * @throws ScriptException if the script blows up
      */
     public Object eval() throws ScriptException {
         return eval(getEngine().getContext());
     }
 
-    /** El motor del que salio, y contra cuyo contexto se evalua por defecto. */
+    /** The engine it came from, against whose context it evaluates by default. */
     public abstract ScriptEngine getEngine();
 }

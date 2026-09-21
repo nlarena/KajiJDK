@@ -20,34 +20,33 @@ import java.util.Map;
 import java.util.Properties;
 
 /**
- * El puente entre AWT y la plataforma.
+ * The bridge between AWT and the platform.
  *
- * <p>Todo lo que depende del sistema operativo pasa por acá: el tamaño de la pantalla, el
- * portapapeles, las fuentes instaladas, la cola de eventos, el pitido. Es la clase que hace que el
- * resto de AWT no tenga que saber en qué sistema corre.
+ * <p>Everything that depends on the operating system goes through here: the size of the screen, the
+ * clipboard, the installed fonts, the event queue, the beep. It is the class that keeps the rest of
+ * AWT from having to know which system it runs on.
  *
- * <p>Es abstracta y hay **una** instancia, la que devuelve {@link #getDefaultToolkit}. El JDK carga
- * la de la plataforma por propiedad del sistema.
+ * <p>It is abstract and there is **one** instance, the one {@link #getDefaultToolkit} returns. The
+ * JDK loads the platform's one through a system property.
  *
- * <p><strong>Acá la instancia es un juego de herramientas sin pantalla.</strong> Es lo mismo que hace
- * el modo sin cabeza del JDK real, y la regla es la misma: lo que se puede contestar sin pantalla se
- * contesta, y lo que necesita una pantalla tira {@link HeadlessException}. No hay valores inventados
- * — un tamaño de pantalla que no existe no se puede aproximar.
+ * <p><strong>Here the instance is a toolkit without a screen.</strong> It is the same thing the
+ * headless mode of the real JDK does, and the rule is the same: what can be answered without a
+ * screen is answered, and what needs a screen throws {@link HeadlessException}. There are no
+ * invented values — a screen size that does not exist cannot be approximated.
  *
- * <p>Lo que **sí** funciona resulta ser bastante: el modelo de color, la cola de eventos con su hilo
- * de despacho, {@code createImage} a partir de un productor de píxeles, {@code prepareImage} y
- * {@code checkImage}, las propiedades del escritorio, los oyentes globales de eventos y el
- * portapapeles del sistema — que acá es uno privado, porque no hay uno del sistema con el que
- * compartir.
+ * <p>What **does** work turns out to be quite a lot: the colour model, the event queue with its
+ * dispatch thread, {@code createImage} from a producer of pixels, {@code prepareImage} and
+ * {@code checkImage}, the desktop properties, the global event listeners and the system clipboard —
+ * which here is a private one, because there is no system one to share with.
  */
 public abstract class Toolkit {
 
     private static Toolkit toolkit;
 
-    /** A quién avisarle de los cambios en las propiedades del escritorio. */
+    /** Who to tell about the changes in the desktop properties. */
     protected final PropertyChangeSupport desktopPropsSupport = new PropertyChangeSupport(this);
 
-    /** Las propiedades del escritorio, por nombre. */
+    /** The desktop properties, by name. */
     protected final Map<String, Object> desktopProperties = new HashMap<String, Object>();
 
     private final List<AWTEventListenerProxy> eventListeners =
@@ -55,14 +54,14 @@ public abstract class Toolkit {
 
     private boolean dynamicLayout = true;
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected Toolkit() {
     }
 
     /**
-     * La instancia de la plataforma.
+     * The platform's instance.
      *
-     * <p>Acá siempre es la misma: un juego de herramientas sin pantalla.
+     * <p>Here it is always the same one: a toolkit without a screen.
      */
     public static synchronized Toolkit getDefaultToolkit() {
         if (toolkit == null) {
@@ -71,16 +70,17 @@ public abstract class Toolkit {
         return toolkit;
     }
 
-    /** El tamaño de la pantalla. */
+    /** The size of the screen. */
     public abstract Dimension getScreenSize() throws HeadlessException;
 
-    /** Cuántos puntos por pulgada tiene la pantalla. */
+    /** How many dots per inch the screen has. */
     public abstract int getScreenResolution() throws HeadlessException;
 
     /**
-     * Qué parte de la pantalla está tapada por barras del escritorio.
+     * What part of the screen is covered by bars of the desktop.
      *
-     * @throws HeadlessException si no hay pantalla
+     * @throws NullPointerException if the configuration is `null`
+     * @throws HeadlessException if there is no screen
      */
     public Insets getScreenInsets(GraphicsConfiguration gc) throws HeadlessException {
         if (gc == null) {
@@ -89,76 +89,77 @@ public abstract class Toolkit {
         throw new HeadlessException();
     }
 
-    /** El formato de píxel de la pantalla. */
+    /** The pixel format of the screen. */
     public abstract ColorModel getColorModel() throws HeadlessException;
 
     /**
-     * Los nombres de las fuentes instaladas.
+     * The names of the installed fonts.
      *
-     * @deprecated devuelve sólo las familias lógicas. Usar
+     * @deprecated it returns only the logical families. Use
      *     {@code GraphicsEnvironment.getAvailableFontFamilyNames}.
      */
     @Deprecated
     public abstract String[] getFontList();
 
     /**
-     * Las medidas de esa fuente.
+     * The measures of that font.
      *
-     * @deprecated depende de la pantalla en la que se dibuje. Usar
+     * @deprecated it depends on the screen things are drawn on. Use
      *     {@code Font.getLineMetrics(String, FontRenderContext)}.
      */
     @Deprecated
     public abstract FontMetrics getFontMetrics(Font font);
 
-    /** Manda a la pantalla todo lo que estuviera pendiente de dibujar. */
+    /** Sends to the screen everything that was waiting to be drawn. */
     public abstract void sync();
 
-    /** Una imagen leída de ese archivo. */
+    /** An image read from that file. */
     public abstract Image getImage(String filename);
 
-    /** Una imagen leída de esa dirección. */
+    /** An image read from that address. */
     public abstract Image getImage(URL url);
 
-    /** Una imagen leída de ese archivo, sin usar la caché. */
+    /** An image read from that file, without using the cache. */
     public abstract Image createImage(String filename);
 
-    /** Una imagen leída de esa dirección, sin usar la caché. */
+    /** An image read from that address, without using the cache. */
     public abstract Image createImage(URL url);
 
-    /** Una imagen a partir de un productor de píxeles. */
+    /** An image from a producer of pixels. */
     public abstract Image createImage(ImageProducer producer);
 
-    /** Una imagen decodificada de esos bytes. */
+    /** An image decoded from those bytes. */
     public abstract Image createImage(byte[] imagedata, int imageoffset, int imagelength);
 
-    /** Lo mismo, con el arreglo entero. */
+    /** The same, with the whole array. */
     public Image createImage(byte[] imagedata) {
         return this.createImage(imagedata, 0, imagedata.length);
     }
 
     /**
-     * Empieza a preparar una imagen para ese tamaño.
+     * Starts preparing an image for that size.
      *
-     * @return si ya está lista
+     * @return whether it is ready already
      */
     public abstract boolean prepareImage(Image image, int width, int height,
             ImageObserver observer);
 
-    /** Cuánto se preparó, como banderas de {@link ImageObserver}. */
+    /** How much was prepared, as {@link ImageObserver} flags. */
     public abstract int checkImage(Image image, int width, int height, ImageObserver observer);
 
     /**
-     * Un trabajo de impresión.
+     * A print job.
      *
-     * @return el trabajo, o `null` si el usuario lo canceló
+     * @return the job, or `null` if the user cancelled it
      */
     public abstract PrintJob getPrintJob(Frame frame, String jobtitle, Properties props);
 
     /**
-     * Un trabajo de impresión con atributos.
+     * A print job with attributes.
      *
-     * @return el trabajo, o `null` si el usuario lo canceló
-     * @throws NullPointerException si el marco es `null` y no se dan atributos de trabajo
+     * @return the job, or `null` if the user cancelled it
+     * @throws NullPointerException if the frame is `null` and the job either gives no attributes or
+     *     asks for the native dialog
      */
     public PrintJob getPrintJob(Frame frame, String jobtitle, JobAttributes jobAttributes,
             PageAttributes pageAttributes) {
@@ -169,28 +170,28 @@ public abstract class Toolkit {
         return this.getPrintJob(frame, jobtitle, null);
     }
 
-    /** Hace sonar el pitido del sistema. */
+    /** Sounds the system beep. */
     public abstract void beep();
 
-    /** El portapapeles del sistema. */
+    /** The system clipboard. */
     public abstract Clipboard getSystemClipboard() throws HeadlessException;
 
     /**
-     * El portapapeles de selección, el que en X11 se llena al seleccionar texto.
+     * The selection clipboard, the one that on X11 fills up when text is selected.
      *
-     * @return `null` si la plataforma no tiene uno
-     * @throws HeadlessException si no hay pantalla
+     * @return `null` if the platform has none
+     * @throws HeadlessException if there is no screen
      */
     public Clipboard getSystemSelection() throws HeadlessException {
         return null;
     }
 
     /**
-     * Qué tecla es el modificador de menú de la plataforma.
+     * Which key is the platform's menu modifier.
      *
-     * @deprecated devuelve una máscara de la codificación vieja. Usar
-     *     {@link #getMenuShortcutKeyMaskEx}.
-     * @throws HeadlessException si no hay pantalla
+     * <p>Here it answers Ctrl and never throws; the JDK throws when there is no screen.
+     *
+     * @deprecated it returns a mask of the old encoding. Use {@link #getMenuShortcutKeyMaskEx}.
      */
     @Deprecated
     public int getMenuShortcutKeyMask() throws HeadlessException {
@@ -198,22 +199,21 @@ public abstract class Toolkit {
     }
 
     /**
-     * Qué tecla es el modificador de menú, en la codificación nueva.
+     * Which key is the menu modifier, in the new encoding.
      *
-     * <p>Control en casi todos lados, Meta en macOS. Preguntarlo es lo que evita escribir esa
-     * diferencia en cada aplicación.
-     *
-     * @throws HeadlessException si no hay pantalla
+     * <p>Control almost everywhere, Meta on macOS. Asking about it is what saves writing that
+     * difference into every application. Here it answers Ctrl and never throws; the JDK throws when
+     * there is no screen.
      */
     public int getMenuShortcutKeyMaskEx() throws HeadlessException {
         return java.awt.event.InputEvent.CTRL_DOWN_MASK;
     }
 
     /**
-     * Si esa tecla de bloqueo está activada.
+     * Whether that locking key is switched on.
      *
-     * @throws IllegalArgumentException si la tecla no es una de bloqueo
-     * @throws UnsupportedOperationException si la plataforma no lo puede decir
+     * @throws IllegalArgumentException if the key is not a locking one
+     * @throws UnsupportedOperationException if the platform cannot say
      */
     public boolean getLockingKeyState(int keyCode) throws UnsupportedOperationException {
         if (keyCode != java.awt.event.KeyEvent.VK_CAPS_LOCK
@@ -222,14 +222,14 @@ public abstract class Toolkit {
                 && keyCode != java.awt.event.KeyEvent.VK_KANA_LOCK) {
             throw new IllegalArgumentException("invalid key for Toolkit.getLockingKeyState");
         }
-        throw new UnsupportedOperationException("no hay teclado del sistema al que preguntarle");
+        throw new UnsupportedOperationException("there is no system keyboard to ask");
     }
 
     /**
-     * Activa o desactiva una tecla de bloqueo.
+     * Switches a locking key on or off.
      *
-     * @throws IllegalArgumentException si la tecla no es una de bloqueo
-     * @throws UnsupportedOperationException si la plataforma no lo admite
+     * @throws IllegalArgumentException if the key is not a locking one
+     * @throws UnsupportedOperationException if the platform does not support it
      */
     public void setLockingKeyState(int keyCode, boolean on) throws UnsupportedOperationException {
         if (keyCode != java.awt.event.KeyEvent.VK_CAPS_LOCK
@@ -238,14 +238,14 @@ public abstract class Toolkit {
                 && keyCode != java.awt.event.KeyEvent.VK_KANA_LOCK) {
             throw new IllegalArgumentException("invalid key for Toolkit.setLockingKeyState");
         }
-        throw new UnsupportedOperationException("no hay teclado del sistema al que pedírselo");
+        throw new UnsupportedOperationException("there is no system keyboard to ask it of");
     }
 
     /**
-     * Un cursor hecho a partir de una imagen.
+     * A cursor made out of an image.
      *
-     * @throws IndexOutOfBoundsException si el punto caliente cae fuera de la imagen
-     * @throws HeadlessException si no hay pantalla
+     * @throws IndexOutOfBoundsException if the hot spot falls outside the image
+     * @throws HeadlessException if there is no screen
      */
     public Cursor createCustomCursor(Image cursor, Point hotSpot, String name)
             throws IndexOutOfBoundsException, HeadlessException {
@@ -253,10 +253,10 @@ public abstract class Toolkit {
     }
 
     /**
-     * El tamaño de cursor que la plataforma admite más cercano al pedido.
+     * The cursor size the platform supports closest to the one asked for.
      *
-     * @return el tamaño, o (0,0) si no admite cursores propios
-     * @throws HeadlessException si no hay pantalla
+     * @return the size, or (0,0) if it supports no custom cursors
+     * @throws HeadlessException if there is no screen
      */
     public Dimension getBestCursorSize(int preferredWidth, int preferredHeight)
             throws HeadlessException {
@@ -264,94 +264,95 @@ public abstract class Toolkit {
     }
 
     /**
-     * Cuántos colores admite un cursor propio.
+     * How many colours a custom cursor supports.
      *
-     * @throws HeadlessException si no hay pantalla
+     * @throws HeadlessException if there is no screen
      */
     public int getMaximumCursorColors() throws HeadlessException {
         throw new HeadlessException();
     }
 
     /**
-     * Si la plataforma admite ese estado de ventana.
+     * Whether the platform supports that window state.
      *
-     * @return `false`: no hay gestor de ventanas que los aplique
-     * @throws HeadlessException si no hay pantalla
+     * @return `true` only for {@link Frame#NORMAL}: there is no window manager to apply any other
+     *     state
+     * @throws HeadlessException if there is no screen
      */
     public boolean isFrameStateSupported(int state) throws HeadlessException {
         return state == Frame.NORMAL;
     }
 
     /**
-     * Si la plataforma admite ventanas siempre arriba.
+     * Whether the platform supports always-on-top windows.
      *
-     * @return `false`: no hay gestor de ventanas
+     * @return `false`: there is no window manager
      */
     public boolean isAlwaysOnTopSupported() {
         return false;
     }
 
-    /** Si admite ese alcance de modalidad. */
+    /** Whether it supports that modality scope. */
     public abstract boolean isModalityTypeSupported(Dialog.ModalityType modalityType);
 
-    /** Si admite ese tipo de exclusión de modalidad. */
+    /** Whether it supports that kind of modality exclusion. */
     public abstract boolean isModalExclusionTypeSupported(
             Dialog.ModalExclusionType modalExclusionType);
 
     /**
-     * Declara si las ventanas se remaquetan mientras se las arrastra.
+     * Declares whether windows are laid out again while they are dragged.
      *
-     * @throws HeadlessException si no hay pantalla
+     * @throws HeadlessException if there is no screen
      */
     public void setDynamicLayout(boolean dynamic) throws HeadlessException {
         this.dynamicLayout = dynamic;
     }
 
-    /** Si se pidió el remaquetado continuo. */
+    /** Whether the continuous layout was asked for. */
     protected boolean isDynamicLayoutSet() throws HeadlessException {
         return this.dynamicLayout;
     }
 
     /**
-     * Si el remaquetado continuo está efectivamente activo.
+     * Whether the continuous layout is actually active.
      *
-     * @return `false`: no hay gestor de ventanas que arrastre nada
-     * @throws HeadlessException si no hay pantalla
+     * @return `false`: there is no window manager dragging anything
+     * @throws HeadlessException if there is no screen
      */
     public boolean isDynamicLayoutActive() throws HeadlessException {
         return false;
     }
 
     /**
-     * Si se distinguen los botones del ratón más allá del tercero.
+     * Whether the mouse buttons beyond the third one are told apart.
      *
-     * @throws HeadlessException si no hay pantalla
+     * @throws HeadlessException if there is no screen
      */
     public boolean areExtraMouseButtonsEnabled() throws HeadlessException {
         return true;
     }
 
-    /** La cola de eventos del sistema. */
+    /** The system event queue. */
     public final EventQueue getSystemEventQueue() {
         return this.getSystemEventQueueImpl();
     }
 
-    /** De dónde sale la cola; lo escribe cada juego de herramientas. */
+    /** Where the queue comes from; each toolkit writes it. */
     protected abstract EventQueue getSystemEventQueueImpl();
 
     /**
-     * Cómo se dibuja un tramo de texto que el método de entrada está componiendo.
+     * How a stretch of text the input method is composing is drawn.
      *
-     * @return el estilo, o `null` para que lo decida el componente
-     * @throws HeadlessException si no hay pantalla
+     * @return the style, or `null` to let the component decide
+     * @throws HeadlessException if there is no screen
      */
     public abstract Map<java.awt.font.TextAttribute, ?> mapInputMethodHighlight(
             InputMethodHighlight highlight) throws HeadlessException;
 
     /**
-     * Una propiedad del escritorio.
+     * A desktop property.
      *
-     * @return el valor, o `null` si no está definida
+     * @return the value, or `null` if it is not defined
      */
     public final synchronized Object getDesktopProperty(String propertyName) {
         if (this.desktopProperties.isEmpty()) {
@@ -367,54 +368,54 @@ public abstract class Toolkit {
         return v;
     }
 
-    /** Guarda una propiedad del escritorio y avisa del cambio. */
+    /** Stores a desktop property and reports the change. */
     protected final void setDesktopProperty(String name, Object newValue) {
-        Object viejo;
+        Object old;
         synchronized (this) {
-            viejo = this.desktopProperties.get(name);
+            old = this.desktopProperties.get(name);
             this.desktopProperties.put(name, newValue);
         }
-        this.desktopPropsSupport.firePropertyChange(name, viejo, newValue);
+        this.desktopPropsSupport.firePropertyChange(name, old, newValue);
     }
 
     /**
-     * Carga una propiedad recién cuando se la pide.
+     * Loads a property only when it is asked for.
      *
-     * @return el valor, o `null` si no existe
+     * @return the value, or `null` if it does not exist
      */
     protected Object lazilyLoadDesktopProperty(String name) {
         return null;
     }
 
-    /** Llena las propiedades del escritorio; sin escritorio no hay ninguna. */
+    /** Fills in the desktop properties; with no desktop there are none. */
     protected void initializeDesktopProperties() {
     }
 
-    /** Suma alguien a quien avisarle de los cambios de esa propiedad. */
+    /** Adds someone to tell about the changes of that property. */
     public void addPropertyChangeListener(String name, PropertyChangeListener pcl) {
         this.desktopPropsSupport.addPropertyChangeListener(name, pcl);
     }
 
-    /** Saca a ese oyente. */
+    /** Removes that listener. */
     public void removePropertyChangeListener(String name, PropertyChangeListener pcl) {
         this.desktopPropsSupport.removePropertyChangeListener(name, pcl);
     }
 
-    /** Todos los oyentes de propiedades. */
+    /** Every property listener. */
     public PropertyChangeListener[] getPropertyChangeListeners() {
         return this.desktopPropsSupport.getPropertyChangeListeners();
     }
 
-    /** Los oyentes de esa propiedad. */
+    /** The listeners of that property. */
     public PropertyChangeListener[] getPropertyChangeListeners(String propertyName) {
         return this.desktopPropsSupport.getPropertyChangeListeners(propertyName);
     }
 
     /**
-     * Suma un oyente que ve **todos** los eventos de esas familias.
+     * Adds a listener that sees **every** event of those families.
      *
-     * <p>Es la puerta de atrás del despacho: se registra en el juego de herramientas y no en un
-     * componente. Un `null` se ignora.
+     * <p>It is the back door of the dispatching: it registers with the toolkit and not with a
+     * component. A `null` is ignored.
      */
     public void addAWTEventListener(AWTEventListener listener, long eventMask) {
         if (listener == null) {
@@ -425,7 +426,7 @@ public abstract class Toolkit {
         }
     }
 
-    /** Saca a ese oyente global. */
+    /** Removes that global listener. */
     public void removeAWTEventListener(AWTEventListener listener) {
         if (listener == null) {
             return;
@@ -439,14 +440,14 @@ public abstract class Toolkit {
         }
     }
 
-    /** Todos los oyentes globales, cada uno con su máscara. */
+    /** Every global listener, each one with its mask. */
     public AWTEventListener[] getAWTEventListeners() {
         synchronized (this) {
             return this.eventListeners.toArray(new AWTEventListener[this.eventListeners.size()]);
         }
     }
 
-    /** Los oyentes globales que cubren todas esas familias. */
+    /** The global listeners that cover all of those families. */
     public AWTEventListener[] getAWTEventListeners(long eventMask) {
         synchronized (this) {
             List<AWTEventListener> out = new ArrayList<AWTEventListener>();
@@ -461,9 +462,9 @@ public abstract class Toolkit {
     }
 
     /**
-     * Un reconocedor de gesto de arrastre de la clase pedida.
+     * A drag gesture recogniser of the class asked for.
      *
-     * @return `null`: el reconocedor concreto lo aporta el sistema de ventanas
+     * @return `null`: the concrete recogniser is supplied by the windowing system
      */
     public <T extends DragGestureRecognizer> T createDragGestureRecognizer(
             Class<T> abstractRecognizerClass, DragSource ds, Component c, int srcActions,
@@ -472,9 +473,9 @@ public abstract class Toolkit {
     }
 
     /**
-     * Una propiedad del sistema, con valor por omisión.
+     * A system property, with a default value.
      *
-     * @deprecated es un envoltorio de {@code System.getProperty} que no agrega nada.
+     * @deprecated it is a wrapper of {@code System.getProperty} that adds nothing.
      */
     @Deprecated
     public static String getProperty(String key, String defaultValue) {
@@ -483,9 +484,9 @@ public abstract class Toolkit {
     }
 
     /**
-     * El contenedor nativo de un componente.
+     * The native container of a component.
      *
-     * @return el ancestro pesado más cercano, o `null` si no hay
+     * @return the nearest heavyweight ancestor, or `null` if there is none
      */
     protected static Container getNativeContainer(Component c) {
         Container p = c == null ? null : c.getParent();
@@ -496,10 +497,10 @@ public abstract class Toolkit {
     }
 
     /**
-     * Llena ese arreglo con los colores del sistema.
+     * Fills that array with the system colours.
      *
-     * <p>No hace nada: sin escritorio no hay paleta que leer, y {@link SystemColor} ya trae valores
-     * razonables por omisión.
+     * <p>It does nothing: with no desktop there is no palette to read, and {@link SystemColor}
+     * already carries reasonable default values.
      */
     protected void loadSystemColors(int[] systemColors) throws HeadlessException {
     }

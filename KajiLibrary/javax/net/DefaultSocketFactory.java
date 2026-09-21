@@ -5,15 +5,15 @@ import java.net.InetAddress;
 import java.net.Socket;
 
 /**
- * La fabrica que devuelve {@code SocketFactory.getDefault()}.
+ * The factory {@code SocketFactory.getDefault()} returns.
  *
- * <p>De acceso de paquete: no es API. Cada metodo es literalmente el constructor de {@link Socket} que
- * le corresponde -- que es lo correcto, porque el sentido de {@link SocketFactory} es que la fabrica
- * por omision no agregue nada.
+ * <p>Package-private: it is not API. Each method is literally the {@link Socket} constructor that
+ * corresponds to it -- which is right, because the point of {@link SocketFactory} is that the
+ * default factory adds nothing.
  */
 final class DefaultSocketFactory extends SocketFactory {
 
-    /** Un socket sin conectar; esta fabrica si sabe. */
+    /** An unconnected socket; this factory does know how. */
     @Override
     public Socket createSocket() {
         return new Socket();

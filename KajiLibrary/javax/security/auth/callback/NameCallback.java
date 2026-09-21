@@ -1,11 +1,12 @@
 package javax.security.auth.callback;
 
 /**
- * KajiLibrary's javax.security.auth.callback.NameCallback -- pide un nombre de usuario.
+ * KajiLibrary's javax.security.auth.callback.NameCallback -- asks for a user name.
  *
- * <p>El nombre por omision, cuando lo hay, es una <b>sugerencia</b> y no una respuesta: quien
- * contesta decide si la usa. Por eso {@link #getName()} devuelve null hasta que alguien llame a
- * {@link #setName} aunque haya default -- confundir los dos es leer un nombre que nadie confirmo.
+ * <p>The default name, when there is one, is a <b>suggestion</b> and not an answer: whoever answers
+ * decides whether to use it. That is why {@link #getName()} returns null until somebody calls
+ * {@link #setName} even if there is a default -- confusing the two is reading a name nobody
+ * confirmed.
  */
 public class NameCallback implements Callback, java.io.Serializable {
 
@@ -16,8 +17,8 @@ public class NameCallback implements Callback, java.io.Serializable {
     private String inputName;
 
     /**
-     * @throws IllegalArgumentException si el prompt es null o vacio: un prompt vacio deja al usuario
-     *     sin saber que se le esta pidiendo
+     * @throws IllegalArgumentException if the prompt is null or empty: an empty prompt leaves the
+     *     user not knowing what is being asked of them
      */
     public NameCallback(String prompt) {
         if (prompt == null || prompt.length() == 0) {
@@ -28,7 +29,7 @@ public class NameCallback implements Callback, java.io.Serializable {
     }
 
     /**
-     * @throws IllegalArgumentException si el prompt o el nombre por omision son null o vacios
+     * @throws IllegalArgumentException if the prompt or the default name is null or empty
      */
     public NameCallback(String prompt, String defaultName) {
         if (prompt == null || prompt.length() == 0
@@ -43,7 +44,7 @@ public class NameCallback implements Callback, java.io.Serializable {
         return this.prompt;
     }
 
-    /** La sugerencia, o null si no hay. No es la respuesta; ver la nota de la clase. */
+    /** The suggestion, or null if there is none. It is not the answer; see the class note. */
     public String getDefaultName() {
         return this.defaultName;
     }
@@ -52,7 +53,7 @@ public class NameCallback implements Callback, java.io.Serializable {
         this.inputName = name;
     }
 
-    /** El nombre que contestaron, o null si todavia nadie contesto. */
+    /** The name that was answered, or null if nobody answered yet. */
     public String getName() {
         return this.inputName;
     }

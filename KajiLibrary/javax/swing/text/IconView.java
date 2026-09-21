@@ -7,17 +7,18 @@ import java.awt.Shape;
 import javax.swing.Icon;
 
 /**
- * Un icono incrustado en el texto.
+ * An icon embedded in the text.
  *
- * <p>Es la vista mas simple que hay: no se puede partir, no tiene texto adentro y ocupa lo que
- * ocupa el icono. Se alinea por abajo ({@code getAlignment} devuelve 1 en el eje vertical), que es
- * lo que hace que un icono en medio de una linea se apoye sobre la linea de base en vez de flotar.
+ * <p>It is the simplest view there is: it cannot be split, it has no text inside and it takes up
+ * what the icon takes up. It is aligned at the bottom ({@code getAlignment} returns 1 on the
+ * vertical axis), which is what makes an icon in the middle of a line rest on the baseline
+ * instead of floating.
  */
 public class IconView extends View {
 
     private Icon c;
 
-    /** Una vista del icono que ese elemento tiene como atributo. */
+    /** A view of the icon that element has as an attribute. */
     public IconView(Element elem) {
         super(elem);
         AttributeSet attr = elem.getAttributes();
@@ -39,7 +40,7 @@ public class IconView extends View {
         throw new IllegalArgumentException("Invalid axis: " + axis);
     }
 
-    /** Se apoya sobre la linea de base; ver la nota de la clase. */
+    /** It rests on the baseline; see the class note. */
     public float getAlignment(int axis) {
         if (axis == View.Y_AXIS) {
             return 1;
@@ -61,7 +62,7 @@ public class IconView extends View {
         throw new BadLocationException(pos + " not in range " + p0 + "," + p1, pos);
     }
 
-    /** La mitad izquierda es "antes del icono", la derecha "despues". */
+    /** The left half is "before the icon", the right one "after". */
     public int viewToModel(float x, float y, Shape a, Position.Bias[] bias) {
         Rectangle alloc = (Rectangle) a;
         if (x < alloc.x + (alloc.width / 2)) {

@@ -17,54 +17,54 @@ import java.awt.image.SinglePixelPackedSampleModel;
 import java.awt.image.WritableRaster;
 
 /**
- * KajiLibrary's javax.imageio.ImageTypeSpecifier -- de que tipo es o va a ser una imagen.
+ * KajiLibrary's javax.imageio.ImageTypeSpecifier -- what type an image is or will be.
  *
- * <p>Un {@link ColorModel} mas un {@link SampleModel}, <b>sin tamano</b>. Esa ausencia es todo el
- * punto de la clase: describe el <i>formato</i> de los pixeles y no una imagen concreta.
+ * <p>A {@link ColorModel} plus a {@link SampleModel}, <b>without a size</b>. That absence is the
+ * whole point of the class: it describes the <i>format</i> of the pixels and not a concrete
+ * image.
  *
- * <p>Por eso sirve para lo que un {@code BufferedImage} no puede: preguntarle a un lector "en que
- * formatos podes darme esta imagen" antes de decodificar nada, o decirle a un escritor "escribila en
- * este formato". Alocar una imagen entera para responder eso seria absurdo.
+ * <p>That is why it serves for what a {@code BufferedImage} cannot: asking a reader "which formats
+ * can you give me this image in" before decoding anything, or telling a writer "write it in this
+ * format". Allocating a whole image to answer that would be absurd.
  *
- * <h2>Las siete fabricas</h2>
+ * <h2>The seven factories</h2>
  *
- * <p>Armar el par a mano es facil de hacer mal, y de ahi que haya una fabrica por cada organizacion de
- * pixel usual:
+ * <p>Building the pair by hand is easy to get wrong, hence a factory for each usual pixel layout:
  *
  * <ul>
- *   <li>{@link #createInterleaved}: las bandas intercaladas en un mismo arreglo, {@code RGBRGBRGB};
- *   <li>{@link #createBanded}: una banda por arreglo, {@code RRR GGG BBB};
- *   <li>{@link #createPacked}: varias bandas empaquetadas en un entero por pixel, con mascaras;
- *   <li>{@link #createGrayscale}: una sola banda de gris;
- *   <li>{@link #createIndexed}: una tabla de colores y un indice por pixel;
- *   <li>{@link #createFromBufferedImageType} y {@link #createFromRenderedImage}: copiar el tipo de
- *       algo que ya existe.
+ *   <li>{@link #createInterleaved}: the bands interleaved in one array, {@code RGBRGBRGB};
+ *   <li>{@link #createBanded}: one band per array, {@code RRR GGG BBB};
+ *   <li>{@link #createPacked}: several bands packed into one integer per pixel, with masks;
+ *   <li>{@link #createGrayscale}: a single grey band;
+ *   <li>{@link #createIndexed}: a colour table and one index per pixel;
+ *   <li>{@link #createFromBufferedImageType} and {@link #createFromRenderedImage}: copying the type
+ *       of something that already exists.
  * </ul>
  *
- * <p>La diferencia entre intercalado y por bandas parece cosmetica y no lo es: leer un canal completo
- * es una pasada contigua en el segundo y saltos en el primero.
+ * <p>The difference between interleaved and banded looks cosmetic and is not: reading a whole
+ * channel is one contiguous pass in the second and jumps in the first.
  *
  * <h2>{@link #getBufferedImageType}</h2>
  *
- * <p>Devuelve una de las constantes {@code TYPE_} de {@link BufferedImage}, o
- * {@link BufferedImage#TYPE_CUSTOM} si el par no corresponde a ninguna.
+ * <p>It returns one of the {@code TYPE_} constants of {@link BufferedImage}, or
+ * {@link BufferedImage#TYPE_CUSTOM} if the pair matches none.
  *
- * <p>Y {@code TYPE_CUSTOM} es lo normal, no una falla: los tipos con nombre son un punado de casos
- * frecuentes, y cualquier cosa un poco distinta --sRGB intercalado en orden RGB, por ejemplo-- cae en
- * personalizado.
+ * <p>And {@code TYPE_CUSTOM} is normal, not a failure: the named types are a handful of frequent
+ * cases, and anything slightly different --sRGB interleaved in RGB order, for example-- falls into
+ * custom.
  */
 public class ImageTypeSpecifier {
 
-    /** Como se interpretan los pixeles. */
+    /** How the pixels are interpreted. */
     protected ColorModel colorModel;
 
-    /** Como estan organizados. */
+    /** How they are laid out. */
     protected SampleModel sampleModel;
 
     /**
-     * El par, directo.
+     * The pair, directly.
      *
-     * @throws IllegalArgumentException si alguno es null, o si no son compatibles
+     * @throws IllegalArgumentException if either is null, or if they are not compatible
      */
     public ImageTypeSpecifier(ColorModel colorModel, SampleModel sampleModel) {
         if (colorModel == null) {
@@ -81,9 +81,9 @@ public class ImageTypeSpecifier {
     }
 
     /**
-     * El tipo de esa imagen.
+     * The type of that image.
      *
-     * @throws IllegalArgumentException si es null
+     * @throws IllegalArgumentException if it is null
      */
     public ImageTypeSpecifier(RenderedImage image) {
         if (image == null) {
@@ -94,14 +94,14 @@ public class ImageTypeSpecifier {
     }
 
     /**
-     * Bandas empaquetadas en un entero por pixel. Ver la nota de la clase.
+     * Bands packed into one integer per pixel. See the class note.
      *
-     * @param redMask que bits son el rojo
-     * @param alphaMask que bits son el alfa, o 0 si no hay
-     * @param transferType {@link DataBuffer#TYPE_BYTE}, {@code TYPE_USHORT} o {@code TYPE_INT}
-     * @param isAlphaPremultiplied si el color ya viene multiplicado por el alfa
-     * @throws IllegalArgumentException si el espacio de color no es de tres componentes, si las
-     *     mascaras estan mal, o si el tipo de transferencia no sirve
+     * @param redMask which bits are red
+     * @param alphaMask which bits are alpha, or 0 if there is none
+     * @param transferType {@link DataBuffer#TYPE_BYTE}, {@code TYPE_USHORT} or {@code TYPE_INT}
+     * @param isAlphaPremultiplied whether the colour already comes multiplied by the alpha
+     * @throws IllegalArgumentException if the colour space does not have three components, if the
+     *     masks are wrong, or if the transfer type does not work
      */
     public static ImageTypeSpecifier createPacked(ColorSpace colorSpace, int redMask,
                                                   int greenMask, int blueMask, int alphaMask,
@@ -129,11 +129,11 @@ public class ImageTypeSpecifier {
     }
 
     /**
-     * Bandas intercaladas en un mismo arreglo. Ver la nota de la clase.
+     * Bands interleaved in one array. See the class note.
      *
-     * @param bandOffsets en que orden salen las bandas
-     * @param hasAlpha si la ultima banda es alfa
-     * @throws IllegalArgumentException si algo no cierra
+     * @param bandOffsets in which order the bands come
+     * @param hasAlpha whether the last band is alpha
+     * @throws IllegalArgumentException if something does not add up
      */
     public static ImageTypeSpecifier createInterleaved(ColorSpace colorSpace, int[] bandOffsets,
                                                        int dataType, boolean hasAlpha,
@@ -189,9 +189,9 @@ public class ImageTypeSpecifier {
     }
 
     /**
-     * Una banda por arreglo. Ver la nota de la clase.
+     * One band per array. See the class note.
      *
-     * @throws IllegalArgumentException si algo no cierra
+     * @throws IllegalArgumentException if something does not add up
      */
     public static ImageTypeSpecifier createBanded(ColorSpace colorSpace, int[] bankIndices,
                                                   int[] bandOffsets, int dataType,
@@ -239,18 +239,19 @@ public class ImageTypeSpecifier {
         return new ImageTypeSpecifier(colorModel, sampleModel);
     }
 
-    /** Una sola banda de gris, sin alfa. */
+    /** A single grey band, without alpha. */
     public static ImageTypeSpecifier createGrayscale(int bits, int dataType, boolean isSigned) {
         return createGrayscale(bits, dataType, isSigned, false);
     }
 
     /**
-     * Una sola banda de gris.
+     * A single grey band.
      *
-     * <p>Con 1, 2 o 4 bits y sin alfa usa un {@link MultiPixelPackedSampleModel}: varios pixeles por
-     * byte, que es como se guardan las imagenes de un bit.
+     * <p>With 1, 2 or 4 bits and no alpha it uses a {@link MultiPixelPackedSampleModel}: several
+     * pixels per byte, which is how one-bit images are stored.
      *
-     * @throws IllegalArgumentException si los bits no son 1, 2, 4, 8, 16 o 32, o no entran en el tipo
+     * @throws IllegalArgumentException if the bits are not 1, 2, 4, 8, 16 or 32, or do not fit in
+     *     the type (the JDK does not accept 32)
      */
     public static ImageTypeSpecifier createGrayscale(int bits, int dataType, boolean isSigned,
                                                      boolean isAlphaPremultiplied) {
@@ -273,7 +274,7 @@ public class ImageTypeSpecifier {
                                                         transparency, dataType);
         SampleModel sampleModel;
         if (bits < 8 && numBands == 1) {
-            // Varios pixeles por byte: es lo que hace que una imagen de un bit ocupe un octavo.
+            // Several pixels per byte: it is what makes a one-bit image take an eighth.
             sampleModel = new MultiPixelPackedSampleModel(dataType, 1, 1, bits);
         } else {
             sampleModel = new PixelInterleavedSampleModel(dataType, 1, 1, numBands, numBands,
@@ -283,13 +284,13 @@ public class ImageTypeSpecifier {
     }
 
     /**
-     * Una tabla de colores y un indice por pixel.
+     * A colour table and one index per pixel.
      *
-     * @param redLUT la componente roja de cada entrada
-     * @param alphaLUT el alfa de cada entrada, o null para opaco
-     * @param bits cuantos bits por indice: 1, 2, 4, 8 o 16
-     * @throws IllegalArgumentException si las tablas no tienen el mismo largo, si los bits no sirven,
-     *     o si la tabla es mas grande de lo que los bits permiten
+     * @param redLUT the red component of each entry
+     * @param alphaLUT the alpha of each entry, or null for opaque
+     * @param bits how many bits per index: 1, 2, 4, 8 or 16
+     * @throws IllegalArgumentException if the tables do not have the same length, if the bits do
+     *     not work, or if the table is bigger than the bits allow
      */
     public static ImageTypeSpecifier createIndexed(byte[] redLUT, byte[] greenLUT, byte[] blueLUT,
                                                    byte[] alphaLUT, int bits, int dataType) {
@@ -329,9 +330,9 @@ public class ImageTypeSpecifier {
     }
 
     /**
-     * El tipo de una de las constantes {@code TYPE_} de {@link BufferedImage}.
+     * The type of one of {@link BufferedImage}'s {@code TYPE_} constants.
      *
-     * @throws IllegalArgumentException si es {@link BufferedImage#TYPE_CUSTOM} o no es una constante
+     * @throws IllegalArgumentException if it is {@link BufferedImage#TYPE_CUSTOM} or not a constant
      */
     public static ImageTypeSpecifier createFromBufferedImageType(int bufferedImageType) {
         if (bufferedImageType == BufferedImage.TYPE_CUSTOM) {
@@ -341,16 +342,16 @@ public class ImageTypeSpecifier {
             || bufferedImageType > BufferedImage.TYPE_BYTE_INDEXED) {
             throw new IllegalArgumentException("Invalid BufferedImage type!");
         }
-        // Se arma una imagen de un pixel y se le toma el par: replicar a mano las trece
-        // combinaciones seria duplicar lo que BufferedImage ya sabe, y desincronizarse con ella.
+        // Build a one-pixel image and take its pair: replicating the thirteen combinations by
+        // hand would duplicate what BufferedImage already knows, and drift out of sync with it.
         BufferedImage bi = new BufferedImage(1, 1, bufferedImageType);
         return new ImageTypeSpecifier(bi);
     }
 
     /**
-     * El tipo de esa imagen.
+     * The type of that image.
      *
-     * @throws IllegalArgumentException si es null
+     * @throws IllegalArgumentException if it is null
      */
     public static ImageTypeSpecifier createFromRenderedImage(RenderedImage image) {
         if (image == null) {
@@ -360,29 +361,29 @@ public class ImageTypeSpecifier {
     }
 
     /**
-     * Cual de las constantes {@code TYPE_}, o {@link BufferedImage#TYPE_CUSTOM}.
+     * Which of the {@code TYPE_} constants, or {@link BufferedImage#TYPE_CUSTOM}.
      *
-     * <p>Ver la nota de la clase: personalizado es lo normal.
+     * <p>See the class note: custom is normal.
      */
     public int getBufferedImageType() {
         BufferedImage bi = createBufferedImage(1, 1);
         return bi.getType();
     }
 
-    /** Cuantas componentes tiene el modelo de color. */
+    /** How many components the colour model has. */
     public int getNumComponents() {
         return this.colorModel.getNumComponents();
     }
 
-    /** Cuantas bandas tiene el modelo de muestras. */
+    /** How many bands the sample model has. */
     public int getNumBands() {
         return this.sampleModel.getNumBands();
     }
 
     /**
-     * Cuantos bits tiene esa banda.
+     * How many bits that band has.
      *
-     * @throws IllegalArgumentException si la banda no existe
+     * @throws IllegalArgumentException if the band does not exist
      */
     public int getBitsPerBand(int band) {
         if (band < 0 || band >= getNumBands()) {
@@ -391,16 +392,16 @@ public class ImageTypeSpecifier {
         return this.sampleModel.getSampleSize(band);
     }
 
-    /** El modelo de muestras, de un pixel. */
+    /** The sample model, of one pixel. */
     public SampleModel getSampleModel() {
         return this.sampleModel;
     }
 
     /**
-     * El modelo de muestras a ese tamano.
+     * The sample model at that size.
      *
-     * @throws IllegalArgumentException si el ancho o el alto no son positivos
-     * @throws IllegalArgumentException si el producto se desborda
+     * @throws IllegalArgumentException if the width or height are not positive
+     * @throws IllegalArgumentException if the product overflows
      */
     public SampleModel getSampleModel(int width, int height) {
         if (width <= 0 || height <= 0) {
@@ -412,16 +413,16 @@ public class ImageTypeSpecifier {
         return this.sampleModel.createCompatibleSampleModel(width, height);
     }
 
-    /** El modelo de color. */
+    /** The colour model. */
     public ColorModel getColorModel() {
         return this.colorModel;
     }
 
     /**
-     * Una imagen vacia de ese tamano y este tipo.
+     * An empty image of that size and this type.
      *
-     * @throws IllegalArgumentException si el ancho o el alto no son positivos, o si el producto se
-     *     desborda
+     * @throws IllegalArgumentException if the width or height are not positive, or if the product
+     *     overflows
      */
     public BufferedImage createBufferedImage(int width, int height) {
         if (width <= 0 || height <= 0) {
@@ -437,10 +438,10 @@ public class ImageTypeSpecifier {
     }
 
     /**
-     * Igual si el modelo de color y el de muestras son iguales.
+     * Equal if the colour model and the sample model are equal.
      *
-     * <p>El tamano del modelo de muestras no entra: dos tipos con el mismo formato son el mismo tipo,
-     * aunque sus modelos de muestras se hayan armado para tamanos distintos.
+     * <p>The size of the sample model does not count: two types with the same format are the same
+     * type, even if their sample models were built for different sizes.
      */
     @Override
     public boolean equals(Object o) {
@@ -452,7 +453,7 @@ public class ImageTypeSpecifier {
             && this.sampleModel.equals(that.sampleModel);
     }
 
-    /** Coherente con {@link #equals}. */
+    /** Consistent with {@link #equals}. */
     @Override
     public int hashCode() {
         return 9 * this.colorModel.hashCode() + 14 * this.sampleModel.hashCode();

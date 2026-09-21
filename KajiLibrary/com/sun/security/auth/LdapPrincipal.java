@@ -7,18 +7,19 @@ import javax.naming.InvalidNameException;
 import javax.naming.ldap.LdapName;
 
 /**
- * Una identidad nombrada por su nombre distinguido de LDAP.
+ * An identity named by its LDAP distinguished name.
  *
- * <h2>Por que compara por {@link LdapName} y no por texto</h2>
+ * <h2>Why it compares by {@link LdapName} and not by text</h2>
  *
- * <p>Porque el mismo DN se escribe de muchas maneras. {@code CN=Juan, DC=com} y
- * {@code cn=Juan,dc=com} son <strong>la misma identidad</strong> —los tipos no distinguen
- * mayusculas, los espacios alrededor de la coma no cuentan— y compararlas como cadenas diria que no.
+ * <p>Because the same DN is written in many ways. {@code CN=John, DC=com} and
+ * {@code cn=John,dc=com} are <strong>the same identity</strong> -- the types do not tell case
+ * apart, the spaces around the comma do not count -- and comparing them as strings would say
+ * they are not.
  *
- * <p>Un principal que responde "no sos vos" a la misma persona escrita distinto rompe cualquier
- * politica de acceso, y por eso esta clase parsea en el constructor. El nombre que devuelve
- * {@link #getName} es el original, sin normalizar: la normalizacion es para comparar, no para
- * mostrar.
+ * <p>A principal that answers "you are not you" to the same person written differently breaks
+ * any access policy, and that is why this class parses in the constructor. The name
+ * {@link #getName} returns is the original one, unnormalized: the normalization is for
+ * comparing, not for showing.
  */
 public final class LdapPrincipal implements Principal, Serializable {
 
@@ -28,18 +29,18 @@ public final class LdapPrincipal implements Principal, Serializable {
     private final transient LdapName name;
 
     /**
-     * @throws InvalidNameException si no es un nombre distinguido valido
-     * @throws NullPointerException si es {@code null}
+     * @throws InvalidNameException if it is not a valid distinguished name
+     * @throws NullPointerException if it is {@code null}
      */
     public LdapPrincipal(String name) throws InvalidNameException {
         if (name == null) {
-            throw new NullPointerException("el nombre no puede ser null");
+            throw new NullPointerException("the name cannot be null");
         }
         this.name = new LdapName(name);
         this.nameString = name;
     }
 
-    /** El nombre tal como se escribio. */
+    /** The name just as it was written. */
     public String getName() {
         return this.nameString;
     }
@@ -48,7 +49,7 @@ public final class LdapPrincipal implements Principal, Serializable {
         return this.nameString;
     }
 
-    /** Por nombre distinguido, no por texto; ver la nota de la clase. */
+    /** By distinguished name, not by text; see the class note. */
     public boolean equals(Object object) {
         if (object == this) {
             return true;
@@ -59,7 +60,7 @@ public final class LdapPrincipal implements Principal, Serializable {
         return this.name.equals(((LdapPrincipal) object).name);
     }
 
-    /** Sobre el nombre normalizado, coherente con {@link #equals}. */
+    /** Over the normalized name, coherent with {@link #equals}. */
     public int hashCode() {
         return this.name.hashCode();
     }

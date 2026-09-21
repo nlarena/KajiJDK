@@ -1,16 +1,17 @@
 package java.nio.channels;
 
 /**
- * KajiLibrary's java.nio.channels.FileLockInterruptionException — El hilo fue interrumpido mientras esperaba adquirir un candado de archivo.
+ * KajiLibrary's java.nio.channels.FileLockInterruptionException — the thread was interrupted while
+ * it waited to acquire a file lock.
  *
- * <p>A diferencia de `ClosedByInterruptException`, el canal **no** se cierra: esperar un candado
- * no deja nada a medias, asi que alcanza con abandonar la espera.
+ * <p>Unlike `ClosedByInterruptException`, the channel is **not** closed: waiting for a lock leaves
+ * nothing half done, so abandoning the wait is enough.
  */
 public class FileLockInterruptionException extends java.io.IOException {
 
     private static final long serialVersionUID = 1000000009L;
 
-    /** Construye una. Sin mensaje: el nombre de la clase **es** el mensaje. */
+    /** Builds one. With no message: the name of the class **is** the message. */
     public FileLockInterruptionException() {
         super();
     }

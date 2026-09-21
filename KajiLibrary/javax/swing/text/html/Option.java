@@ -6,23 +6,23 @@ import javax.swing.text.AttributeSet;
 import javax.swing.text.SimpleAttributeSet;
 
 /**
- * Una opcion de un {@code <select>}.
+ * An option of a {@code <select>}.
  *
- * <h2>Por que hay una clase para esto</h2>
+ * <h2>Why there is a class for this</h2>
  *
- * <p>El resto del HTML se muestra con vistas sobre el documento. Una lista desplegable no: se
- * muestra con un {@code JComboBox} o un {@code JList} de Swing de verdad, y esos componentes
- * necesitan objetos comunes en su modelo, no elementos del documento.
+ * <p>The rest of the HTML is shown with views over the document. A drop-down list is not: it is
+ * shown with a real Swing {@code JComboBox} or {@code JList}, and those components need ordinary
+ * objects in their model, not document elements.
  *
- * <p>Esta clase es ese objeto. Guarda los atributos de la etiqueta y el texto que va entre
- * <code>&lt;option&gt;</code> y su cierre, y su {@link #toString} es lo que la lista dibuja.
+ * <p>This class is that object. It keeps the tag's attributes and the text that goes between
+ * <code>&lt;option&gt;</code> and its closing, and its {@link #toString} is what the list draws.
  *
- * <h2>El valor no es la etiqueta</h2>
+ * <h2>The value is not the label</h2>
  *
- * <p>{@link #getValue} devuelve el atributo <code>value</code> y, si no esta, el texto visible.
- * Esa regla es del HTML, no una comodidad: un formulario que envia
- * <code>&lt;option value="ar"&gt;Argentina&lt;/option&gt;</code> tiene que mandar
- * <code>ar</code>, y si la etiqueta no trae <code>value</code>, entonces si manda el texto.
+ * <p>{@link #getValue} returns the <code>value</code> attribute and, if it is not there, the
+ * visible text. That rule is HTML's, not a convenience: a form that submits
+ * <code>&lt;option value="ar"&gt;Argentina&lt;/option&gt;</code> has to send <code>ar</code>,
+ * and if the tag does not carry <code>value</code>, then it does send the text.
  */
 public class Option implements Serializable {
 
@@ -31,17 +31,17 @@ public class Option implements Serializable {
     private AttributeSet attr;
 
     /**
-     * Una opcion con esos atributos.
+     * An option with those attributes.
      *
-     * <p>Los atributos se copian: el documento puede cambiar los suyos, y la opcion que ya esta en
-     * una lista no deberia cambiar sola.
+     * <p>The attributes are copied: the document may change its own, and the option that is already
+     * in a list should not change by itself.
      */
     public Option(AttributeSet attr) {
         this.attr = attr.copyAttributes();
         selected = (attr.getAttribute(HTML.Attribute.SELECTED) != null);
     }
 
-    /** El texto que se ve. */
+    /** The text that is seen. */
     public void setLabel(String label) {
         this.label = label;
     }
@@ -50,27 +50,27 @@ public class Option implements Serializable {
         return label;
     }
 
-    /** Los atributos de la etiqueta, ya copiados. */
+    /** The tag's attributes, already copied. */
     public AttributeSet getAttributes() {
         return attr;
     }
 
-    /** Lo que dibuja la lista: el texto visible. */
+    /** What the list draws: the visible text. */
     public String toString() {
         return label;
     }
 
-    /** Lo pone el documento al leer el HTML; ver {@link #isSelected}. */
+    /** The document sets it when reading the HTML; see {@link #isSelected}. */
     protected void setSelection(boolean state) {
         selected = state;
     }
 
-    /** Si la opcion viene marcada. */
+    /** Whether the option comes marked. */
     public boolean isSelected() {
         return selected;
     }
 
-    /** El valor que se envia; ver la nota de la clase. */
+    /** The value that is submitted; see the class note. */
     public String getValue() {
         String value = (String) attr.getAttribute(HTML.Attribute.VALUE);
         if (value == null) {

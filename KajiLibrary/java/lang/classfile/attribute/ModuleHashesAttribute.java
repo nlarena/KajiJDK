@@ -6,32 +6,33 @@ import java.lang.classfile.constantpool.Utf8Entry;
 import java.util.List;
 import jdk.internal.classfile.impl.TypedAttributes;
 
-// `ModuleHashes`: el algoritmo y los hashes de los módulos dependientes. Ver {@link ModuleHashInfo}.
+// `ModuleHashes`: the algorithm and the hashes of the dependent modules. See
+// {@link ModuleHashInfo}.
 public interface ModuleHashesAttribute extends Attribute<ModuleHashesAttribute>, ClassElement {
 
-    /** El nombre del algoritmo de hash. */
+    /** The hash algorithm's name. */
     Utf8Entry algorithm();
 
-    /** Las filas. */
+    /** The rows. */
     List<ModuleHashInfo> hashes();
 
-    /** El atributo con estos valores. */
+    /** The attribute with these values. */
     public static ModuleHashesAttribute of(String algorithm, List<ModuleHashInfo> hashes) {
         return TypedAttributes.moduleHashes(TypedAttributes.utf8(algorithm), hashes);
     }
 
-    /** El atributo con estos valores. */
+    /** The attribute with these values. */
     public static ModuleHashesAttribute of(String algorithm, ModuleHashInfo... hashes) {
         return TypedAttributes.moduleHashes(TypedAttributes.utf8(algorithm),
                 TypedAttributes.listOf(hashes));
     }
 
-    /** El atributo con estos valores. */
+    /** The attribute with these values. */
     public static ModuleHashesAttribute of(Utf8Entry algorithm, List<ModuleHashInfo> hashes) {
         return TypedAttributes.moduleHashes(algorithm, hashes);
     }
 
-    /** El atributo con estos valores. */
+    /** The attribute with these values. */
     public static ModuleHashesAttribute of(Utf8Entry algorithm, ModuleHashInfo... hashes) {
         return TypedAttributes.moduleHashes(algorithm, TypedAttributes.listOf(hashes));
     }

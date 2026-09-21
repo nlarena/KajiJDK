@@ -6,10 +6,10 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * El campo es un <strong>momento</strong>, no una duracion.
+ * The field is a <strong>moment</strong>, not a duration.
  *
- * <p>La diferencia con {@link Timespan} es la que hay entre "a las tres" y "tres horas", y se
- * muestran distinto: uno como fecha, el otro como cantidad.
+ * <p>The difference with {@link Timespan} is the one there is between "at three" and "three hours",
+ * and they are shown differently: one as a date, the other as a quantity.
  *
  * @since 9
  */
@@ -21,16 +21,16 @@ import java.lang.annotation.Target;
 @Description("A point in time")
 public @interface Timestamp {
 
-    /** Milisegundos desde el 1 de enero de 1970 UTC. */
+    /** Milliseconds since the 1st of January 1970 UTC. */
     String MILLISECONDS_SINCE_EPOCH = "MILLISECONDS_SINCE_EPOCH";
 
-    /** Pulsos del reloj de la maquina. */
+    /** Ticks of the clock of the machine. */
     String TICKS = "TICKS";
 
     /**
-     * El valor de la anotacion.
+     * The value of the annotation.
      *
-     * @return el valor
+     * @return the value
      */
     String value() default MILLISECONDS_SINCE_EPOCH;
 }

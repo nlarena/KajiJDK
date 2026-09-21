@@ -1,25 +1,25 @@
 package java.awt.print;
 
 /**
- * KajiLibrary's java.awt.print.PrinterException -- algo salio mal al imprimir.
+ * KajiLibrary's java.awt.print.PrinterException -- something went wrong while printing.
  *
- * <p>La base de las excepciones de este paquete. Es comprobada, y con razon: que una impresora falle
- * es una condicion normal del entorno, no un error de programa.
+ * <p>The base of this package's exceptions. It is checked, and rightly so: a printer failing is a
+ * normal condition of the environment, not a program error.
  *
- * <p>No confundirla con {@code javax.print.PrintException}, que es la del otro sistema de impresion.
- * Los dos paquetes conviven --este es el viejo, orientado a dibujar; el otro es el nuevo, orientado a
- * documentos-- y sus excepciones no tienen relacion de herencia.
+ * <p>Not to be confused with {@code javax.print.PrintException}, which belongs to the other
+ * printing system. The two packages coexist --this one is the old one, oriented to drawing; the
+ * other is the new one, oriented to documents-- and their exceptions have no inheritance relation.
  */
 public class PrinterException extends Exception {
 
     private static final long serialVersionUID = -3757589981158265819L;
 
-    /** Sin detalle. */
+    /** No detail. */
     public PrinterException() {
         super();
     }
 
-    /** Con mensaje. */
+    /** With a message. */
     public PrinterException(String msg) {
         super(msg);
     }

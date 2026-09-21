@@ -7,22 +7,22 @@ import javax.swing.plaf.ComponentUI;
 import javax.swing.plaf.basic.BasicInternalFrameUI;
 
 /**
- * La ventana interna de Metal.
+ * Metal's internal frame.
  *
- * <p>Lo unico propio es el modo paleta. {@link #setPalette} le pasa el aviso a la barra de titulo
- * -- ver {@link MetalInternalFrameTitlePane} -- y le cambia el borde a la ventana, porque una
- * paleta tampoco lleva el marco grueso de cuatro pixeles.
+ * <p>The only thing of its own is palette mode. {@link #setPalette} passes the notice on to the
+ * title bar -- see {@link MetalInternalFrameTitlePane} -- and changes the window's border,
+ * because a palette does not carry the thick four-pixel frame either.
  *
- * <p>La propiedad de cliente {@value #IS_PALETTE} hace lo mismo desde afuera: un programa la pone y
- * el escucha de la barra de titulo se entera. Es la manera de convertir una ventana en paleta sin
- * tener el UI a mano.
+ * <p>The client property {@value #IS_PALETTE} does the same from outside: a program sets it and
+ * the title bar's listener hears about it. It is the way of turning a window into a palette
+ * without having the UI at hand.
  *
- * <p>{@link #IS_PALETTE} es {@code protected static} y <strong>no</strong> {@code final}, que es
- * raro y esta asi en el JDK.
+ * <p>{@link #IS_PALETTE} is {@code protected static} and <strong>not</strong> {@code final},
+ * which is odd and is so in the JDK.
  */
 public class MetalInternalFrameUI extends BasicInternalFrameUI {
 
-    /** La propiedad de cliente que convierte la ventana en paleta. */
+    /** The client property that turns the window into a palette. */
     protected static String IS_PALETTE = "JInternalFrame.isPalette";
 
     public MetalInternalFrameUI(JInternalFrame b) {
@@ -73,7 +73,7 @@ public class MetalInternalFrameUI extends BasicInternalFrameUI {
         return super.createBorderListener(w);
     }
 
-    /** Cambia la ventana entre normal y paleta; ver la nota de la clase. */
+    /** It switches the window between normal and palette; see the class note. */
     public void setPalette(boolean isPalette) {
         if (titlePane instanceof MetalInternalFrameTitlePane) {
             ((MetalInternalFrameTitlePane) titlePane).setPalette(isPalette);

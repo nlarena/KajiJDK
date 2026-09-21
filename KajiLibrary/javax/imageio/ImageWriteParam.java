@@ -4,142 +4,142 @@ import java.awt.Dimension;
 import java.util.Locale;
 
 /**
- * KajiLibrary's javax.imageio.ImageWriteParam -- como escribir una imagen.
+ * KajiLibrary's javax.imageio.ImageWriteParam -- how to write an image.
  *
- * <p>Agrega sobre {@link IIOParam} lo que solo tiene sentido al escribir: mosaico, progresividad y
- * compresion. Los tres funcionan igual y ese patron es la clase entera.
+ * <p>It adds to {@link IIOParam} what only makes sense when writing: tiling, progressiveness and
+ * compression. All three work the same way, and that pattern is the whole class.
  *
- * <h2>Los cuatro modos, y por que hay cuatro</h2>
+ * <h2>The four modes, and why there are four</h2>
  *
- * <p>Cada una de las tres caracteristicas se controla con un <b>modo</b>:
- *
- * <ul>
- *   <li>{@link #MODE_DISABLED}: no hacerlo. Sin mosaico, sin progresividad, sin compresion;
- *   <li>{@link #MODE_DEFAULT}: hacerlo como el escritor prefiera. No se puede consultar con que
- *       parametros -- preguntar el ancho de tesela en este modo lanza {@link IllegalStateException};
- *   <li>{@link #MODE_EXPLICIT}: hacerlo con los parametros que se den. Es el unico donde los
- *       {@code setXxx} y los {@code getXxx} concretos valen;
- *   <li>{@link #MODE_COPY_FROM_METADATA}: tomarlos de los metadatos de la imagen. Es el modo <b>por
- *       omision</b>, y es el correcto al reescribir algo que se leyo.
- * </ul>
- *
- * <p>Que el modo por omision sea el ultimo sorprende. Tiene sentido: la operacion mas comun es leer y
- * volver a escribir, y ahi lo que se quiere es conservar lo que el archivo original decia.
- *
- * <h2>Dos excepciones distintas</h2>
- *
- * <p>Es lo que mas confunde de esta clase:
+ * <p>Each of the three features is controlled with a <b>mode</b>:
  *
  * <ul>
- *   <li>{@link UnsupportedOperationException} significa "<b>este escritor</b> no sabe hacer eso". Se
- *       pregunta antes con {@link #canWriteTiles} y companeros;
- *   <li>{@link IllegalStateException} significa "sabe, pero el modo no es
- *       {@link #MODE_EXPLICIT}", o "todavia no se fijaron los parametros".
+ *   <li>{@link #MODE_DISABLED}: do not do it. No tiling, no progressiveness, no compression;
+ *   <li>{@link #MODE_DEFAULT}: do it the way the writer prefers. You cannot query with which
+ *       parameters -- asking for the tile width in this mode throws {@link IllegalStateException};
+ *   <li>{@link #MODE_EXPLICIT}: do it with the parameters given. It is the only one where the
+ *       concrete {@code setXxx} and {@code getXxx} are valid;
+ *   <li>{@link #MODE_COPY_FROM_METADATA}: take them from the image's metadata. It is the
+ *       <b>default</b> mode, and the right one when rewriting something that was read.
  * </ul>
  *
- * <p>La primera es un problema de eleccion de escritor; la segunda, del orden de las llamadas.
+ * <p>That the default mode is the last one is surprising. It makes sense: the most common operation
+ * is reading and writing back, and there what you want is to keep what the original file said.
  *
- * <h2>La calidad va al reves de lo que parece</h2>
+ * <h2>Two different exceptions</h2>
  *
- * <p>{@link #setCompressionQuality} toma un valor de 0 a 1 donde <b>1 es la mejor calidad</b> --y el
- * archivo mas grande--. Es lo contrario de "nivel de compresion", que en otras APIs va de menos a
- * mas. El de omision es 1.
+ * <p>It is what confuses most in this class:
+ *
+ * <ul>
+ *   <li>{@link UnsupportedOperationException} means "<b>this writer</b> cannot do that". You ask
+ *       beforehand with {@link #canWriteTiles} and friends;
+ *   <li>{@link IllegalStateException} means "it can, but the mode is not
+ *       {@link #MODE_EXPLICIT}", or "the parameters have not been set yet".
+ * </ul>
+ *
+ * <p>The first is a problem of choosing the writer; the second, of the order of the calls.
+ *
+ * <h2>Quality goes the opposite way to what it seems</h2>
+ *
+ * <p>{@link #setCompressionQuality} takes a value from 0 to 1 where <b>1 is the best quality</b>
+ * --and the largest file. It is the opposite of a "compression level", which in other APIs goes
+ * from less to more. The default is 1.
  */
 public class ImageWriteParam extends IIOParam {
 
-    /** No hacerlo. */
+    /** Do not do it. */
     public static final int MODE_DISABLED = 0;
 
-    /** Hacerlo como el escritor prefiera. Ver la nota de la clase. */
+    /** Do it the way the writer prefers. See the class note. */
     public static final int MODE_DEFAULT = 1;
 
-    /** Hacerlo con los parametros dados. */
+    /** Do it with the given parameters. */
     public static final int MODE_EXPLICIT = 2;
 
-    /** Tomarlos de los metadatos. Es el de omision. */
+    /** Take them from the metadata. It is the default. */
     public static final int MODE_COPY_FROM_METADATA = 3;
 
-    /** Si este escritor sabe hacer mosaico. */
+    /** Whether this writer can tile. */
     protected boolean canWriteTiles = false;
 
-    /** En que modo esta el mosaico. */
+    /** Which mode tiling is in. */
     protected int tilingMode = MODE_COPY_FROM_METADATA;
 
-    /** Los tamanos de tesela que prefiere, o null. */
+    /** The tile sizes it prefers, or null. */
     protected Dimension[] preferredTileSizes = null;
 
-    /** Si ya se fijaron los parametros de mosaico. */
+    /** Whether the tiling parameters have been set. */
     protected boolean tilingSet = false;
 
-    /** Ancho de tesela. */
+    /** Tile width. */
     protected int tileWidth = 0;
 
-    /** Alto de tesela. */
+    /** Tile height. */
     protected int tileHeight = 0;
 
-    /** Si sabe desplazar la rejilla de teselas. */
+    /** Whether it can offset the tile grid. */
     protected boolean canOffsetTiles = false;
 
-    /** Desplazamiento de la rejilla en X. */
+    /** Grid offset in X. */
     protected int tileGridXOffset = 0;
 
-    /** Idem en Y. */
+    /** Same in Y. */
     protected int tileGridYOffset = 0;
 
-    /** Si sabe escribir progresivo. */
+    /** Whether it can write progressively. */
     protected boolean canWriteProgressive = false;
 
-    /** En que modo esta la progresividad. */
+    /** Which mode progressiveness is in. */
     protected int progressiveMode = MODE_COPY_FROM_METADATA;
 
-    /** Si sabe comprimir. */
+    /** Whether it can compress. */
     protected boolean canWriteCompressed = false;
 
-    /** En que modo esta la compresion. */
+    /** Which mode compression is in. */
     protected int compressionMode = MODE_COPY_FROM_METADATA;
 
-    /** Los tipos de compresion que soporta, o null. */
+    /** The compression types it supports, or null. */
     protected String[] compressionTypes = null;
 
-    /** El elegido, o null. */
+    /** The chosen one, or null. */
     protected String compressionType = null;
 
-    /** La calidad, de 0 a 1. Ver la nota de la clase. */
+    /** The quality, from 0 to 1. See the class note. */
     protected float compressionQuality = 1.0F;
 
-    /** En que idioma dar los textos, o null. */
+    /** Which locale to give the texts in, or null. */
     protected Locale locale = null;
 
-    /** Para las subclases, que fijan las capacidades. */
+    /** For the subclasses, which set the capabilities. */
     protected ImageWriteParam() {
     }
 
-    /** @param locale en que idioma dar los textos, o null */
+    /** @param locale which locale to give the texts in, or null */
     public ImageWriteParam(Locale locale) {
         this.locale = locale;
     }
 
-    /** En que idioma, o null. */
+    /** Which locale, or null. */
     public Locale getLocale() {
         return this.locale;
     }
 
-    /** Si este escritor sabe hacer mosaico. */
+    /** Whether this writer can tile. */
     public boolean canWriteTiles() {
         return this.canWriteTiles;
     }
 
-    /** Si sabe desplazar la rejilla. */
+    /** Whether it can offset the grid. */
     public boolean canOffsetTiles() {
         return this.canOffsetTiles;
     }
 
     /**
-     * Fija el modo del mosaico.
+     * Sets the tiling mode.
      *
-     * @throws UnsupportedOperationException si este escritor no sabe hacer mosaico
-     * @throws IllegalArgumentException si el modo no es uno de los cuatro, o si se pide
-     *     {@link #MODE_EXPLICIT} sin poder desplazar y con desplazamiento pedido
+     * @throws UnsupportedOperationException if it cannot tile
+     * @throws IllegalArgumentException if the mode is not one of the four (an earlier note added a
+     *     clause about offsets; this method takes none and does not check any)
      */
     public void setTilingMode(int mode) {
         if (!canWriteTiles()) {
@@ -155,9 +155,9 @@ public class ImageWriteParam extends IIOParam {
     }
 
     /**
-     * En que modo esta.
+     * Which mode it is in.
      *
-     * @throws UnsupportedOperationException si no sabe hacer mosaico
+     * @throws UnsupportedOperationException if it cannot tile
      */
     public int getTilingMode() {
         if (!canWriteTiles()) {
@@ -167,9 +167,9 @@ public class ImageWriteParam extends IIOParam {
     }
 
     /**
-     * Los tamanos de tesela que prefiere, de a pares minimo y maximo; null si no opina.
+     * The tile sizes it prefers, in min/max pairs; null if it has no opinion.
      *
-     * @throws UnsupportedOperationException si no sabe hacer mosaico
+     * @throws UnsupportedOperationException if it cannot tile
      */
     public Dimension[] getPreferredTileSizes() {
         if (!canWriteTiles()) {
@@ -188,13 +188,13 @@ public class ImageWriteParam extends IIOParam {
     }
 
     /**
-     * Fija el tamano y el desplazamiento de las teselas.
+     * Sets the size and the offset of the tiles.
      *
-     * @throws UnsupportedOperationException si no sabe hacer mosaico, o si se pide desplazamiento y
-     *     no sabe desplazar
-     * @throws IllegalStateException si el modo no es {@link #MODE_EXPLICIT}
-     * @throws IllegalArgumentException si el ancho o el alto no son positivos, o si no estan entre los
-     *     tamanos preferidos
+     * @throws UnsupportedOperationException if it cannot tile, or if an offset is asked for and it
+     *     cannot offset
+     * @throws IllegalStateException if the mode is not {@link #MODE_EXPLICIT}
+     * @throws IllegalArgumentException if the width or height are not positive, or if they are not
+     *     among the preferred sizes
      */
     public void setTiling(int tileWidth, int tileHeight, int tileGridXOffset,
                           int tileGridYOffset) {
@@ -212,7 +212,7 @@ public class ImageWriteParam extends IIOParam {
             throw new UnsupportedOperationException("Can't offset tiles!");
         }
         if (this.preferredTileSizes != null) {
-            // Los tamanos preferidos vienen de a pares: minimo y maximo de cada rango aceptable.
+            // The preferred sizes come in pairs: min and max of each acceptable range.
             boolean ok = false;
             int i = 0;
             while (i < this.preferredTileSizes.length && !ok) {
@@ -236,10 +236,10 @@ public class ImageWriteParam extends IIOParam {
     }
 
     /**
-     * Olvida los parametros de mosaico.
+     * Forgets the tiling parameters.
      *
-     * @throws UnsupportedOperationException si no sabe hacer mosaico
-     * @throws IllegalStateException si el modo no es {@link #MODE_EXPLICIT}
+     * @throws UnsupportedOperationException if it cannot tile
+     * @throws IllegalStateException if the mode is not {@link #MODE_EXPLICIT}
      */
     public void unsetTiling() {
         if (!canWriteTiles()) {
@@ -256,10 +256,10 @@ public class ImageWriteParam extends IIOParam {
     }
 
     /**
-     * El ancho de tesela.
+     * The tile width.
      *
-     * @throws UnsupportedOperationException si no sabe hacer mosaico
-     * @throws IllegalStateException si el modo no es explicito o no se fijaron los parametros
+     * @throws UnsupportedOperationException if it cannot tile
+     * @throws IllegalStateException if the mode is not explicit or the parameters were not set
      */
     public int getTileWidth() {
         if (!canWriteTiles()) {
@@ -274,7 +274,7 @@ public class ImageWriteParam extends IIOParam {
         return this.tileWidth;
     }
 
-    /** El alto. Mismas condiciones que {@link #getTileWidth}. */
+    /** The height. Same conditions as {@link #getTileWidth}. */
     public int getTileHeight() {
         if (!canWriteTiles()) {
             throw new UnsupportedOperationException("Tiling not supported!");
@@ -289,10 +289,10 @@ public class ImageWriteParam extends IIOParam {
     }
 
     /**
-     * El desplazamiento de la rejilla en X.
+     * The grid offset in X.
      *
-     * @throws UnsupportedOperationException si no sabe desplazar teselas
-     * @throws IllegalStateException si el modo no es explicito o no se fijaron los parametros
+     * @throws UnsupportedOperationException if it cannot offset tiles
+     * @throws IllegalStateException if the mode is not explicit or the parameters were not set
      */
     public int getTileGridXOffset() {
         if (!canOffsetTiles()) {
@@ -307,7 +307,7 @@ public class ImageWriteParam extends IIOParam {
         return this.tileGridXOffset;
     }
 
-    /** Idem en Y. */
+    /** Same in Y. */
     public int getTileGridYOffset() {
         if (!canOffsetTiles()) {
             throw new UnsupportedOperationException("Tile offsets not supported!");
@@ -321,19 +321,19 @@ public class ImageWriteParam extends IIOParam {
         return this.tileGridYOffset;
     }
 
-    /** Si este escritor sabe escribir progresivo. */
+    /** Whether this writer can write progressively. */
     public boolean canWriteProgressive() {
         return this.canWriteProgressive;
     }
 
     /**
-     * Fija el modo de progresividad.
+     * Sets the progressive mode.
      *
-     * <p>{@link #MODE_EXPLICIT} <b>no</b> se admite aca: no hay parametros que dar, un archivo es
-     * progresivo o no lo es.
+     * <p>{@link #MODE_EXPLICIT} is <b>not</b> accepted here: there are no parameters to give, a
+     * file is progressive or it is not.
      *
-     * @throws UnsupportedOperationException si no sabe
-     * @throws IllegalArgumentException si el modo es {@link #MODE_EXPLICIT} o no es uno de los cuatro
+     * @throws UnsupportedOperationException if it cannot
+     * @throws IllegalArgumentException if the mode is {@link #MODE_EXPLICIT} or not one of the four
      */
     public void setProgressiveMode(int mode) {
         if (!canWriteProgressive()) {
@@ -350,9 +350,9 @@ public class ImageWriteParam extends IIOParam {
     }
 
     /**
-     * En que modo esta.
+     * Which mode it is in.
      *
-     * @throws UnsupportedOperationException si no sabe
+     * @throws UnsupportedOperationException if it cannot
      */
     public int getProgressiveMode() {
         if (!canWriteProgressive()) {
@@ -361,16 +361,16 @@ public class ImageWriteParam extends IIOParam {
         return this.progressiveMode;
     }
 
-    /** Si este escritor sabe comprimir. */
+    /** Whether this writer can compress. */
     public boolean canWriteCompressed() {
         return this.canWriteCompressed;
     }
 
     /**
-     * Fija el modo de compresion.
+     * Sets the compression mode.
      *
-     * @throws UnsupportedOperationException si no sabe comprimir
-     * @throws IllegalArgumentException si el modo no es uno de los cuatro
+     * @throws UnsupportedOperationException if it cannot compress
+     * @throws IllegalArgumentException if the mode is not one of the four
      */
     public void setCompressionMode(int mode) {
         if (!canWriteCompressed()) {
@@ -386,9 +386,9 @@ public class ImageWriteParam extends IIOParam {
     }
 
     /**
-     * En que modo esta.
+     * Which mode it is in.
      *
-     * @throws UnsupportedOperationException si no sabe comprimir
+     * @throws UnsupportedOperationException if it cannot compress
      */
     public int getCompressionMode() {
         if (!canWriteCompressed()) {
@@ -398,9 +398,9 @@ public class ImageWriteParam extends IIOParam {
     }
 
     /**
-     * Los tipos de compresion que soporta, o null si no hay varios.
+     * The compression types it supports, or null if there are not several.
      *
-     * @throws UnsupportedOperationException si no sabe comprimir
+     * @throws UnsupportedOperationException if it cannot compress
      */
     public String[] getCompressionTypes() {
         if (!canWriteCompressed()) {
@@ -415,12 +415,12 @@ public class ImageWriteParam extends IIOParam {
     }
 
     /**
-     * Elige el tipo de compresion.
+     * Chooses the compression type.
      *
-     * @param compressionType uno de {@link #getCompressionTypes}; null lo desetea
-     * @throws UnsupportedOperationException si no sabe comprimir
-     * @throws IllegalStateException si el modo no es {@link #MODE_EXPLICIT}
-     * @throws IllegalArgumentException si no es uno de los soportados
+     * @param compressionType one of {@link #getCompressionTypes}; null unsets it
+     * @throws UnsupportedOperationException if it cannot compress
+     * @throws IllegalStateException if the mode is not {@link #MODE_EXPLICIT}
+     * @throws IllegalArgumentException if it is not one of the supported ones
      */
     public void setCompressionType(String compressionType) {
         if (!canWriteCompressed()) {
@@ -452,10 +452,10 @@ public class ImageWriteParam extends IIOParam {
     }
 
     /**
-     * El elegido, o null.
+     * The chosen one, or null.
      *
-     * @throws UnsupportedOperationException si no sabe comprimir
-     * @throws IllegalStateException si el modo no es {@link #MODE_EXPLICIT}
+     * @throws UnsupportedOperationException if it cannot compress
+     * @throws IllegalStateException if the mode is not {@link #MODE_EXPLICIT}
      */
     public String getCompressionType() {
         if (!canWriteCompressed()) {
@@ -468,10 +468,10 @@ public class ImageWriteParam extends IIOParam {
     }
 
     /**
-     * Olvida el tipo y la calidad.
+     * Forgets the type and the quality.
      *
-     * @throws UnsupportedOperationException si no sabe comprimir
-     * @throws IllegalStateException si el modo no es {@link #MODE_EXPLICIT}
+     * @throws UnsupportedOperationException if it cannot compress
+     * @throws IllegalStateException if the mode is not {@link #MODE_EXPLICIT}
      */
     public void unsetCompression() {
         if (!canWriteCompressed()) {
@@ -485,13 +485,13 @@ public class ImageWriteParam extends IIOParam {
     }
 
     /**
-     * El nombre del tipo elegido, en el idioma que se pidio.
+     * The chosen type's name, in the requested locale.
      *
-     * <p>Esta implementacion devuelve el nombre tal cual: traducirlo pide un catalogo de textos que
-     * solo el escritor concreto tiene.
+     * <p>This implementation returns the name as is: translating it takes a text catalogue only the
+     * concrete writer has.
      *
-     * @throws UnsupportedOperationException si no sabe comprimir
-     * @throws IllegalStateException si el modo no es explicito o no hay tipo elegido
+     * @throws UnsupportedOperationException if it cannot compress
+     * @throws IllegalStateException if the mode is not explicit or no type is chosen
      */
     public String getLocalizedCompressionTypeName() {
         if (!canWriteCompressed()) {
@@ -508,14 +508,15 @@ public class ImageWriteParam extends IIOParam {
     }
 
     /**
-     * Si la compresion elegida conserva todo.
+     * Whether the chosen compression keeps everything.
      *
-     * <p>Devuelve true por omision: una implementacion que sepa comprimir con perdida <b>tiene</b> que
-     * redefinirlo. Es el valor conservador -- decir "sin perdida" cuando hay perdida enganaria, y al
-     * reves solo hace que alguien recomprima sin necesidad.
+     * <p>Returns true by default: an implementation that can compress lossily <b>has</b> to
+     * redefine it. (Saying "lossless" when there is loss would mislead; the other way round would
+     * only make someone recompress needlessly -- which is why a lossy writer must not inherit
+     * this.)
      *
-     * @throws UnsupportedOperationException si no sabe comprimir
-     * @throws IllegalStateException si el modo no es explicito
+     * @throws UnsupportedOperationException if it cannot compress
+     * @throws IllegalStateException if the mode is not explicit
      */
     public boolean isCompressionLossless() {
         if (!canWriteCompressed()) {
@@ -528,11 +529,11 @@ public class ImageWriteParam extends IIOParam {
     }
 
     /**
-     * Fija la calidad, de 0 a 1. Ver la nota de la clase: 1 es la mejor.
+     * Sets the quality, from 0 to 1. See the class note: 1 is the best.
      *
-     * @throws UnsupportedOperationException si no sabe comprimir
-     * @throws IllegalStateException si el modo no es explicito
-     * @throws IllegalArgumentException si esta fuera de rango
+     * @throws UnsupportedOperationException if it cannot compress
+     * @throws IllegalStateException if the mode is not explicit
+     * @throws IllegalArgumentException if it is out of range
      */
     public void setCompressionQuality(float quality) {
         if (!canWriteCompressed()) {
@@ -548,10 +549,10 @@ public class ImageWriteParam extends IIOParam {
     }
 
     /**
-     * La calidad.
+     * The quality.
      *
-     * @throws UnsupportedOperationException si no sabe comprimir
-     * @throws IllegalStateException si el modo no es explicito
+     * @throws UnsupportedOperationException if it cannot compress
+     * @throws IllegalStateException if the mode is not explicit
      */
     public float getCompressionQuality() {
         if (!canWriteCompressed()) {
@@ -564,14 +565,14 @@ public class ImageWriteParam extends IIOParam {
     }
 
     /**
-     * Cuantos bits por pixel daria esa calidad, o -1 si no se sabe.
+     * How many bits per pixel that quality would give, or -1 if unknown.
      *
-     * <p>Esta implementacion devuelve -1 siempre: estimarlo depende del codificador concreto. -1 es
-     * el valor que la documentacion define para "no lo se".
+     * <p>This implementation always returns -1: estimating it depends on the concrete encoder. -1
+     * is the value the documentation defines for "I do not know".
      *
-     * @throws UnsupportedOperationException si no sabe comprimir
-     * @throws IllegalStateException si el modo no es explicito
-     * @throws IllegalArgumentException si la calidad esta fuera de rango
+     * @throws UnsupportedOperationException if it cannot compress
+     * @throws IllegalStateException if the mode is not explicit
+     * @throws IllegalArgumentException if the quality is out of range
      */
     public float getBitRate(float quality) {
         if (!canWriteCompressed()) {
@@ -587,10 +588,10 @@ public class ImageWriteParam extends IIOParam {
     }
 
     /**
-     * Como describir los tramos de calidad, o null si no hay descripciones.
+     * How to describe the quality ranges, or null if there are no descriptions.
      *
-     * @throws UnsupportedOperationException si no sabe comprimir
-     * @throws IllegalStateException si el modo no es explicito
+     * @throws UnsupportedOperationException if it cannot compress
+     * @throws IllegalStateException if the mode is not explicit
      */
     public String[] getCompressionQualityDescriptions() {
         if (!canWriteCompressed()) {
@@ -603,13 +604,13 @@ public class ImageWriteParam extends IIOParam {
     }
 
     /**
-     * Los limites de esos tramos, o null.
+     * The limits of those ranges, or null.
      *
-     * <p>Si hay {@code n} descripciones, hay {@code n + 1} limites: van de a pares con los tramos que
-     * separan.
+     * <p>If there are {@code n} descriptions, there are {@code n + 1} limits: they pair up with the
+     * ranges they separate.
      *
-     * @throws UnsupportedOperationException si no sabe comprimir
-     * @throws IllegalStateException si el modo no es explicito
+     * @throws UnsupportedOperationException if it cannot compress
+     * @throws IllegalStateException if the mode is not explicit
      */
     public float[] getCompressionQualityValues() {
         if (!canWriteCompressed()) {

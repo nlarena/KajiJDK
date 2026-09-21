@@ -1,16 +1,16 @@
 package org.w3c.dom.html;
 
 /**
- * Un `<map>`.
+ * A `<map>`.
  */
 public interface HTMLMapElement extends HTMLElement {
 
-    /** Las `<area>` del mapa, en una coleccion viva. */
+    /** The `<area>`s of the map, in a live collection. */
     HTMLCollection getAreas();
 
-    /** El atributo `name`. */
+    /** The `name` attribute. */
     String getName();
 
-    /** Fija el atributo `name`. */
+    /** It sets the `name` attribute. */
     void setName(String name);
 }

@@ -13,61 +13,62 @@ import javax.swing.plaf.ColorUIResource;
 import javax.swing.plaf.UIResource;
 
 /**
- * El tema Ocean: el Metal por omision desde Java 5.
+ * The Ocean theme: Metal's default since Java 5.
  *
- * <h2>Que cambio, y por que</h2>
+ * <h2>What changed, and why</h2>
  *
- * <p>Steel se diseno para monitores de 256 colores y se nota: seis tonos de la paleta segura, todos
- * multiplos de {@code 0x33}. Ocean da por sentado color verdadero y elige lo que se ve mejor y no
- * lo que sobrevive a una pantalla pobre: celestes en vez de azul violaceo, gris {@code 238} en vez
- * de {@code 204}, y texto {@code (51,51,51)} en vez de negro puro, que a esa altura ya se sabia que
- * cansa menos.
+ * <p>Steel was designed for 256-colour monitors and it shows: six shades of the safe palette,
+ * all multiples of {@code 0x33}. Ocean takes true colour for granted and chooses what looks
+ * better and not what survives a poor screen: light blues instead of violet blue, grey
+ * {@code 238} instead of {@code 204}, and text {@code (51,51,51)} instead of pure black, which
+ * by then was known to tire less.
  *
- * <p>Lo interesante es cuanto de eso entra en seis colores. Casi todo: Ocean redefine los seis y
- * hereda el resto de {@link MetalTheme}. Redefine ademas cinco derivados, y cada uno tiene su
- * motivo:
+ * <p>What is interesting is how much of that fits in six colours. Almost everything: Ocean
+ * redefines the six and inherits the rest from {@link MetalTheme}. It also redefines five
+ * derived ones, and each has its reason:
  *
  * <ul>
- *   <li>{@link #getBlack} pasa a {@code (51,51,51)}, y con eso se corre todo el texto de golpe.
- *   <li>{@link #getDesktopColor} pasa a blanco: el {@code primary2} de Ocean es un celeste claro y
- *       un escritorio de ese color no dejaria ver nada apoyado encima.
- *   <li>{@link #getInactiveControlTextColor} y {@link #getMenuDisabledForeground} vuelven al gris
- *       {@code 153}: derivarlos del {@code secondary2} de Ocean daria celeste, y un texto apagado
- *       tiene que verse apagado, no de otro color.
- *   <li>{@link #getControlTextColor} queda fijo en {@code (51,51,51)}.
+ *   <li>{@link #getBlack} becomes {@code (51,51,51)}, and with that all the text shifts at once.
+ *   <li>{@link #getDesktopColor} becomes white: Ocean's {@code primary2} is a light blue and a
+ *       desktop of that colour would not let anything resting on it be seen.
+ *   <li>{@link #getInactiveControlTextColor} and {@link #getMenuDisabledForeground} go back to
+ *       grey {@code 153}: deriving them from Ocean's {@code secondary2} would give light blue,
+ *       and disabled text has to look disabled, not of another colour.
+ *   <li>{@link #getControlTextColor} stays fixed at {@code (51,51,51)}.
  * </ul>
  *
- * <h2>Los degradados</h2>
+ * <h2>The gradients</h2>
  *
- * <p>Ocean es el primer tema que pinta botones con degradado, y lo hace con una lista de cinco
- * cosas: dos fracciones y tres colores. Las fracciones dicen donde estan los cortes -- el
- * {@code 0.3} es donde termina el primer tramo y el {@code 0.0} cuanto mide el tramo plano del
- * medio -- y los tres colores son el de arriba, el del medio y el de abajo. La lista es de
- * {@code Object} y en ese orden porque asi la lee {@code MetalUtils}, y el formato quedo publico
- * de hecho: un tema propio que quiera degradados tiene que armarla igual.
+ * <p>Ocean is the first theme that paints buttons with a gradient, and it does it with a list of
+ * five things: two fractions and three colours. The fractions say where the cuts are -- the
+ * {@code 0.3} is where the first stretch ends and the {@code 0.0} how long the flat stretch in
+ * the middle is -- and the three colours are the top one, the middle one and the bottom one. The
+ * list is of {@code Object} and in that order because that is how {@code MetalUtils} reads it,
+ * and the format became public in fact: a theme of one's own that wants gradients has to build
+ * it the same.
  *
- * <h2>Lo que queda dicho y no tapado</h2>
+ * <h2>What is said and not covered up</h2>
  *
- * <p>De las 67 entradas que el tema del JDK agrega, esta escribe 52. Las quince que faltan son
- * <strong>imagenes GIF</strong> que el JDK carga del jar -- los cuatro iconos de dialogo, los de
- * carpeta y archivo, los del arbol, las manijas --. No hay de donde sacarlas y una figura dibujada
- * a mano no seria la misma imagen; quedan sin poner, que es lo mismo que le pasa a un aspecto al
- * que le falta un recurso. Los cinco iconos de la barra de titulo si estan: esos el JDK tambien los
- * dibuja.
+ * <p>Of the 67 entries the JDK's theme adds, this one writes 52. The fifteen missing are
+ * <strong>GIF images</strong> the JDK loads from the jar -- the four dialog icons, those of
+ * folder and file, those of the tree, the handles --. There is nowhere to get them from and a
+ * figure drawn by hand would not be the same image; they are left unset, which is the same thing
+ * that happens to a look and feel that is missing a resource. The five title bar icons are there:
+ * those the JDK draws too.
  */
 public class OceanTheme extends DefaultMetalTheme {
 
-    private static final ColorUIResource PRIMARIO_1 = new ColorUIResource(99, 130, 191);
-    private static final ColorUIResource PRIMARIO_2 = new ColorUIResource(163, 184, 204);
-    private static final ColorUIResource PRIMARIO_3 = new ColorUIResource(184, 207, 229);
+    private static final ColorUIResource PRIMARY_1 = new ColorUIResource(99, 130, 191);
+    private static final ColorUIResource PRIMARY_2 = new ColorUIResource(163, 184, 204);
+    private static final ColorUIResource PRIMARY_3 = new ColorUIResource(184, 207, 229);
 
-    private static final ColorUIResource SECUNDARIO_1 = new ColorUIResource(122, 138, 153);
-    private static final ColorUIResource SECUNDARIO_2 = new ColorUIResource(184, 207, 229);
-    private static final ColorUIResource SECUNDARIO_3 = new ColorUIResource(238, 238, 238);
+    private static final ColorUIResource SECONDARY_1 = new ColorUIResource(122, 138, 153);
+    private static final ColorUIResource SECONDARY_2 = new ColorUIResource(184, 207, 229);
+    private static final ColorUIResource SECONDARY_3 = new ColorUIResource(238, 238, 238);
 
-    private static final ColorUIResource NEGRO = new ColorUIResource(51, 51, 51);
-    private static final ColorUIResource BLANCO = new ColorUIResource(255, 255, 255);
-    private static final ColorUIResource GRIS_APAGADO = new ColorUIResource(153, 153, 153);
+    private static final ColorUIResource BLACK = new ColorUIResource(51, 51, 51);
+    private static final ColorUIResource WHITE = new ColorUIResource(255, 255, 255);
+    private static final ColorUIResource DIM_GRAY = new ColorUIResource(153, 153, 153);
 
     public OceanTheme() {
     }
@@ -77,215 +78,215 @@ public class OceanTheme extends DefaultMetalTheme {
     }
 
     protected ColorUIResource getPrimary1() {
-        return PRIMARIO_1;
+        return PRIMARY_1;
     }
 
     protected ColorUIResource getPrimary2() {
-        return PRIMARIO_2;
+        return PRIMARY_2;
     }
 
     protected ColorUIResource getPrimary3() {
-        return PRIMARIO_3;
+        return PRIMARY_3;
     }
 
     protected ColorUIResource getSecondary1() {
-        return SECUNDARIO_1;
+        return SECONDARY_1;
     }
 
     protected ColorUIResource getSecondary2() {
-        return SECUNDARIO_2;
+        return SECONDARY_2;
     }
 
     protected ColorUIResource getSecondary3() {
-        return SECUNDARIO_3;
+        return SECONDARY_3;
     }
 
-    /** Gris muy oscuro, no negro; ver la nota de la clase. */
+    /** Very dark grey, not black; see the class note. */
     protected ColorUIResource getBlack() {
-        return NEGRO;
+        return BLACK;
     }
 
-    /** Blanco: el celeste del tema no serviria de fondo de escritorio. */
+    /** White: the theme's light blue would not serve as a desktop background. */
     public ColorUIResource getDesktopColor() {
-        return BLANCO;
+        return WHITE;
     }
 
     public ColorUIResource getControlTextColor() {
-        return NEGRO;
+        return BLACK;
     }
 
-    /** Gris, no celeste: lo apagado tiene que verse apagado. */
+    /** Grey, not light blue: what is disabled has to look disabled. */
     public ColorUIResource getInactiveControlTextColor() {
-        return GRIS_APAGADO;
+        return DIM_GRAY;
     }
 
     public ColorUIResource getMenuDisabledForeground() {
-        return GRIS_APAGADO;
+        return DIM_GRAY;
     }
 
-    /** El degradado de casi todos los controles. */
-    private static java.util.List<Object> degradadoDeControl() {
+    /** The gradient of almost every control. */
+    private static java.util.List<Object> controlGradient() {
         return Arrays.asList(new Object[] {
                 Float.valueOf(0.3f), Float.valueOf(0.0f),
                 new ColorUIResource(221, 232, 243),
-                BLANCO,
+                WHITE,
                 new ColorUIResource(184, 207, 229) });
     }
 
-    /** El del deslizador, que tiene un tramo plano en el medio. */
-    private static java.util.List<Object> degradadoDeDeslizador() {
+    /** The slider's, which has a flat stretch in the middle. */
+    private static java.util.List<Object> sliderGradient() {
         return Arrays.asList(new Object[] {
                 Float.valueOf(0.3f), Float.valueOf(0.2f),
                 new ColorUIResource(200, 221, 242),
-                BLANCO,
+                WHITE,
                 new ColorUIResource(184, 207, 229) });
     }
 
-    /** El de la barra de menu, que va de blanco a gris de una sola vez. */
-    private static java.util.List<Object> degradadoDeMenu() {
+    /** The menu bar's, which goes from white to grey in one go. */
+    private static java.util.List<Object> menuGradient() {
         return Arrays.asList(new Object[] {
                 Float.valueOf(1.0f), Float.valueOf(0.0f),
-                BLANCO,
+                WHITE,
                 new ColorUIResource(218, 218, 218),
                 new ColorUIResource(218, 218, 218) });
     }
 
-    /** Los cincuenta y dos valores propios de Ocean; ver la nota de la clase. */
+    /** Ocean's fifty-two own values; see the class note. */
     public void addCustomEntriesToTable(UIDefaults table) {
         if (table == null) {
             return;
         }
-        ColorUIResource azul = PRIMARIO_1;
-        ColorUIResource celesteClaro = new ColorUIResource(200, 221, 242);
-        ColorUIResource fondoDeSuelta = new ColorUIResource(210, 233, 255);
-        ColorUIResource gris204 = new ColorUIResource(204, 204, 204);
-        ColorUIResource gris218 = new ColorUIResource(218, 218, 218);
-        Object bordeDeFoco = new BorderUIResource.LineBorderUIResource(azul);
+        ColorUIResource blue = PRIMARY_1;
+        ColorUIResource lightBlue = new ColorUIResource(200, 221, 242);
+        ColorUIResource dropBackground = new ColorUIResource(210, 233, 255);
+        ColorUIResource gray204 = new ColorUIResource(204, 204, 204);
+        ColorUIResource gray218 = new ColorUIResource(218, 218, 218);
+        Object focusBorder = new BorderUIResource.LineBorderUIResource(blue);
 
-        Object[] pares = {
-            "Button.gradient", degradadoDeControl(),
+        Object[] pairs = {
+            "Button.gradient", controlGradient(),
             "Button.rollover", Boolean.TRUE,
             "Button.rolloverIconType", "ocean",
-            "Button.toolBarBorderBackground", GRIS_APAGADO,
-            "Button.disabledToolBarBorderBackground", gris204,
+            "Button.toolBarBorderBackground", DIM_GRAY,
+            "Button.disabledToolBarBorderBackground", gray204,
 
-            "CheckBox.gradient", degradadoDeControl(),
+            "CheckBox.gradient", controlGradient(),
             "CheckBox.rollover", Boolean.TRUE,
-            "CheckBoxMenuItem.gradient", degradadoDeControl(),
-            "RadioButton.gradient", degradadoDeControl(),
+            "CheckBoxMenuItem.gradient", controlGradient(),
+            "RadioButton.gradient", controlGradient(),
             "RadioButton.rollover", Boolean.TRUE,
-            "RadioButtonMenuItem.gradient", degradadoDeControl(),
-            "ToggleButton.gradient", degradadoDeControl(),
-            "ScrollBar.gradient", degradadoDeControl(),
+            "RadioButtonMenuItem.gradient", controlGradient(),
+            "ToggleButton.gradient", controlGradient(),
+            "ScrollBar.gradient", controlGradient(),
 
-            "InternalFrame.activeTitleGradient", degradadoDeControl(),
-            "InternalFrame.closeIcon", new IconoDeTitulo(16, IconoDeTitulo.CERRAR),
-            "InternalFrame.iconifyIcon", new IconoDeTitulo(16, IconoDeTitulo.ACHICAR),
-            "InternalFrame.maximizeIcon", new IconoDeTitulo(16, IconoDeTitulo.AGRANDAR),
-            "InternalFrame.minimizeIcon", new IconoDeTitulo(16, IconoDeTitulo.RESTAURAR),
-            "InternalFrame.paletteCloseIcon", new IconoDeTitulo(7, IconoDeTitulo.CERRAR),
+            "InternalFrame.activeTitleGradient", controlGradient(),
+            "InternalFrame.closeIcon", new TitleIcon(16, TitleIcon.CLOSE),
+            "InternalFrame.iconifyIcon", new TitleIcon(16, TitleIcon.ICONIFY),
+            "InternalFrame.maximizeIcon", new TitleIcon(16, TitleIcon.MAXIMIZE),
+            "InternalFrame.minimizeIcon", new TitleIcon(16, TitleIcon.RESTORE),
+            "InternalFrame.paletteCloseIcon", new TitleIcon(7, TitleIcon.CLOSE),
 
-            "Label.disabledForeground", GRIS_APAGADO,
+            "Label.disabledForeground", DIM_GRAY,
 
-            "List.focusCellHighlightBorder", bordeDeFoco,
-            "List.dropLineColor", azul,
-            "List.dropCellBackground", fondoDeSuelta,
+            "List.focusCellHighlightBorder", focusBorder,
+            "List.dropLineColor", blue,
+            "List.dropCellBackground", dropBackground,
 
             "Menu.opaque", Boolean.FALSE,
-            "MenuBar.gradient", degradadoDeMenu(),
-            "MenuBar.borderColor", gris204,
+            "MenuBar.gradient", menuGradient(),
+            "MenuBar.borderColor", gray204,
 
             "Slider.altTrackColor", new ColorUIResource(210, 226, 239),
-            "Slider.gradient", degradadoDeDeslizador(),
-            "Slider.focusGradient", degradadoDeDeslizador(),
+            "Slider.gradient", sliderGradient(),
+            "Slider.focusGradient", sliderGradient(),
 
             "SplitPane.oneTouchButtonsOpaque", Boolean.FALSE,
-            "SplitPane.dividerFocusColor", celesteClaro,
+            "SplitPane.dividerFocusColor", lightBlue,
 
-            "TabbedPane.borderHightlightColor", azul,
-            "TabbedPane.contentAreaColor", celesteClaro,
+            "TabbedPane.borderHightlightColor", blue,
+            "TabbedPane.contentAreaColor", lightBlue,
             "TabbedPane.contentBorderInsets", new Insets(4, 2, 3, 3),
-            "TabbedPane.selected", celesteClaro,
-            "TabbedPane.tabAreaBackground", gris218,
+            "TabbedPane.selected", lightBlue,
+            "TabbedPane.tabAreaBackground", gray218,
             "TabbedPane.tabAreaInsets", new Insets(2, 2, 0, 6),
-            "TabbedPane.unselectedBackground", SECUNDARIO_3,
+            "TabbedPane.unselectedBackground", SECONDARY_3,
 
-            "Table.focusCellHighlightBorder", bordeDeFoco,
-            "Table.gridColor", SECUNDARIO_1,
-            "Table.dropLineColor", azul,
-            "Table.dropLineShortColor", NEGRO,
-            "Table.dropCellBackground", fondoDeSuelta,
-            "TableHeader.focusCellBackground", celesteClaro,
+            "Table.focusCellHighlightBorder", focusBorder,
+            "Table.gridColor", SECONDARY_1,
+            "Table.dropLineColor", blue,
+            "Table.dropLineShortColor", BLACK,
+            "Table.dropCellBackground", dropBackground,
+            "TableHeader.focusCellBackground", lightBlue,
 
-            "ToolBar.borderColor", gris204,
+            "ToolBar.borderColor", gray204,
             "ToolBar.isRollover", Boolean.TRUE,
 
-            "Tree.dropLineColor", azul,
-            "Tree.dropCellBackground", fondoDeSuelta,
-            "Tree.selectionBorderColor", azul,
+            "Tree.dropLineColor", blue,
+            "Tree.dropCellBackground", dropBackground,
+            "Tree.selectionBorderColor", blue,
         };
-        table.putDefaults(pares);
+        table.putDefaults(pairs);
     }
 
     /**
-     * Los botones de la barra de titulo de un marco interno.
+     * The buttons of an internal frame's title bar.
      *
-     * <p>El JDK los dibuja en vez de cargarlos, y por eso estos si estan. Son cuadrados de
-     * dieciseis -- salvo el de cerrar de una paleta, que es de siete -- y cada uno dibuja su figura
-     * en el color del texto del tema.
+     * <p>The JDK draws them instead of loading them, and that is why these are there. They are
+     * sixteen-pixel squares -- except a palette's close one, which is seven -- and each draws its
+     * figure in the theme's text colour.
      */
-    private static class IconoDeTitulo implements Icon, UIResource {
+    private static class TitleIcon implements Icon, UIResource {
 
-        static final int CERRAR = 0;
-        static final int ACHICAR = 1;
-        static final int AGRANDAR = 2;
-        static final int RESTAURAR = 3;
+        static final int CLOSE = 0;
+        static final int ICONIFY = 1;
+        static final int MAXIMIZE = 2;
+        static final int RESTORE = 3;
 
-        private final int lado;
-        private final int cual;
+        private final int side;
+        private final int which;
 
-        IconoDeTitulo(int lado, int cual) {
-            this.lado = lado;
-            this.cual = cual;
+        TitleIcon(int side, int which) {
+            this.side = side;
+            this.which = which;
         }
 
         public int getIconWidth() {
-            return lado;
+            return side;
         }
 
         public int getIconHeight() {
-            return lado;
+            return side;
         }
 
         public void paintIcon(Component c, Graphics g, int x, int y) {
-            Color antes = g.getColor();
-            g.setColor(NEGRO);
-            int m = lado / 4;
-            int f = lado - 1 - m;
-            switch (cual) {
-                case CERRAR:
+            Color before = g.getColor();
+            g.setColor(BLACK);
+            int m = side / 4;
+            int f = side - 1 - m;
+            switch (which) {
+                case CLOSE:
                     g.drawLine(x + m, y + m, x + f, y + f);
                     g.drawLine(x + m + 1, y + m, x + f, y + f - 1);
                     g.drawLine(x + f, y + m, x + m, y + f);
                     g.drawLine(x + f - 1, y + m, x + m, y + f - 1);
                     break;
-                case ACHICAR:
-                    // Una raya abajo, que es lo que queda de una ventana achicada.
+                case ICONIFY:
+                    // A line at the bottom, which is what is left of an iconified window.
                     g.fillRect(x + m, y + f - 1, f - m + 1, 2);
                     break;
-                case AGRANDAR:
+                case MAXIMIZE:
                     g.drawRect(x + m, y + m, f - m, f - m);
                     g.drawLine(x + m, y + m + 1, x + f, y + m + 1);
                     break;
-                case RESTAURAR:
-                    // Dos marcos corridos: la ventana vuelve a su tamano anterior.
+                case RESTORE:
+                    // Two shifted frames: the window goes back to its previous size.
                     g.drawRect(x + m, y + m + 2, f - m - 2, f - m - 2);
                     g.drawRect(x + m + 2, y + m, f - m - 2, f - m - 2);
                     break;
                 default:
                     break;
             }
-            g.setColor(antes);
+            g.setColor(before);
         }
     }
 }

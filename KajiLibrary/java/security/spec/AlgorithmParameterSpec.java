@@ -1,11 +1,13 @@
 package java.security.spec;
 
-// Marca los parametros **transparentes** de un algoritmo criptografico.
+// Marks the **transparent** parameters of a cryptographic algorithm.
 //
-// No declara ni un metodo, y esa es toda la idea: la contraparte opaca es
-// `java.security.AlgorithmParameters`, que guarda los parametros codificados y solo sabe
-// devolverlos como bytes. Un `AlgorithmParameterSpec` es la version que el programa puede leer
-// campo por campo — el modulo y el exponente de RSA, la curva de EC — y la interfaz existe para
-// poder pasar cualquiera de esas por un parametro comun sin que el receptor sepa cual es.
+// It declares not a single method, and that is the whole idea: the opaque counterpart is
+// `java.security.AlgorithmParameters`, which keeps the parameters encoded. An
+// `AlgorithmParameterSpec` is the version the program can read field by field — the RSA modulus and
+// exponent, the EC curve — and the interface exists so any of those can be passed through one
+// common parameter without the receiver knowing which one it is. (This note said
+// `AlgorithmParameters` only knows how to return them as bytes; its `getParameterSpec` also hands
+// them back as a spec.)
 public interface AlgorithmParameterSpec {
 }

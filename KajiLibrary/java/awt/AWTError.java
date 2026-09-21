@@ -1,8 +1,9 @@
 package java.awt;
 
 /**
- * El AWT quedo en un estado del que no se vuelve --el toolkit no se pudo cargar, por ejemplo--.
- * Hereda de Error y no de Exception justamente porque no hay nada sensato que hacer al atraparlo.
+ * The AWT is in a state there is no coming back from --the toolkit could not be loaded, for
+ * example--. It inherits from Error and not from Exception precisely because there is nothing
+ * sensible to do on catching it.
  */
 public class AWTError extends Error {
 

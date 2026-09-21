@@ -3,18 +3,19 @@ package com.sun.tools.attach;
 import java.io.IOException;
 
 /**
- * La VM destino recibio la operacion, la ejecuto y contesto que fallo.
+ * The target VM received the operation, executed it and answered that it failed.
  *
- * <p>Es una {@link IOException} y ahi esta el matiz que vale: hereda de la misma clase que las
- * fallas de comunicacion, pero significa lo contrario. Una {@code IOException} comun quiere decir
- * que el canal se rompio y no se sabe que paso del otro lado; esta quiere decir que el canal
- * funciono perfecto y la respuesta fue "no". El mensaje viene de la VM destino, no de esta.
+ * <p>It is an {@link IOException} and there is the shade of meaning that is worth it: it
+ * inherits from the same class as the communication failures, but it means the opposite. A
+ * common {@code IOException} means that the channel broke and what happened on the other side
+ * is not known; this one means that the channel worked perfectly and the answer was "no". The
+ * message comes from the target VM, not from this one.
  */
 public class AttachOperationFailedException extends IOException {
 
     private static final long serialVersionUID = 2140308168167478043L;
 
-    /** Con el mensaje que mando la VM destino. */
+    /** With the message the target VM sent. */
     public AttachOperationFailedException(String message) {
         super(message);
     }

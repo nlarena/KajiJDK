@@ -1,13 +1,13 @@
 package org.w3c.dom.html;
 
 /**
- * Un `<br>`.
+ * A `<br>`.
  */
 public interface HTMLBRElement extends HTMLElement {
 
-    /** El atributo `clear`. */
+    /** The `clear` attribute. */
     String getClear();
 
-    /** Fija el atributo `clear`. */
+    /** It sets the `clear` attribute. */
     void setClear(String clear);
 }

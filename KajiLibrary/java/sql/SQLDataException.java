@@ -1,7 +1,8 @@
 package java.sql;
 
 /**
- * KajiLibrary's java.sql.SQLDataException -- Un dato no sirve: fuera de rango, con el tipo equivocado, o que no se puede convertir.
+ * KajiLibrary's java.sql.SQLDataException -- a value is not valid: out of range, of the wrong type,
+ * or not convertible.
  */
 public class SQLDataException extends SQLNonTransientException {
 

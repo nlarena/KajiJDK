@@ -3,17 +3,18 @@ package java.security.interfaces;
 import java.math.BigInteger;
 import java.security.spec.AlgorithmParameterSpec;
 
-// Lo que toda clave RSA tiene: el modulo.
+// What every RSA key has: the modulus.
 //
-// El modulo es publico en los dos lados del par —esta tanto en la clave publica como en la privada—
-// y es lo unico que se puede pedir sin saber de cual de las dos se trata. Tambien es lo que fija el
-// "tamaño" de la clave: `getModulus().bitLength()` es lo que la gente llama RSA-2048.
+// The modulus is public on both sides of the pair —it is in the public key as well as in the
+// private one— and it is the only thing that can be asked for without knowing which of the two it
+// is. It is also what fixes the "size" of the key: `getModulus().bitLength()` is what people call
+// RSA-2048.
 public interface RSAKey {
 
     BigInteger getModulus();
 
-    // Los parametros del algoritmo, para RSASSA-PSS. Null por default: la mayoria de las claves RSA
-    // no llevan ninguno, y las implementaciones anteriores a este metodo no lo escriben.
+    // The algorithm parameters, for RSASSA-PSS. Null by default: most RSA keys carry none, and
+    // implementations older than this method do not write it.
     default AlgorithmParameterSpec getParams() {
         return null;
     }

@@ -3,67 +3,69 @@ package javax.management.monitor;
 import javax.management.ObjectName;
 
 /**
- * KajiLibrary's javax.management.monitor.GaugeMonitorMBean -- la administracion del monitor de
- * medidores.
+ * KajiLibrary's javax.management.monitor.GaugeMonitorMBean -- the management of the gauge
+ * monitor.
  *
- * <p>Un medidor sube y baja --uso de memoria, cantidad de conexiones-- y por eso tiene <b>dos</b>
- * umbrales en vez de uno. Los dos juntos son una banda de histeresis, y esa es toda la idea:
+ * <p>A gauge goes up and down --memory use, number of connections-- and that is why it has
+ * <b>two</b> thresholds instead of one. The two together are a hysteresis band, and that is the
+ * whole idea:
  *
  * <ul>
- *   <li>al pasar el umbral de arriba se avisa, y <b>no se vuelve a avisar</b> hasta que el valor
- *       baje del umbral de abajo;
- *   <li>al bajar del de abajo se avisa, y no se vuelve a avisar hasta que suba del de arriba.
+ *   <li>on crossing the high threshold it notifies, and it does <b>not notify again</b> until the
+ *       value drops below the low threshold;
+ *   <li>on dropping below the low one it notifies, and it does not notify again until it rises
+ *       above the high one.
  * </ul>
  *
- * <p>Sin esa banda, un valor oscilando alrededor de un solo umbral produciria un aviso por lectura.
- * Con ella, un valor que tiembla en el borde produce exactamente uno. Es la diferencia entre una
- * alarma util y una que se ignora.
+ * <p>Without that band, a value oscillating around a single threshold would produce one notice per
+ * reading. With it, a value trembling at the edge produces exactly one. It is the difference
+ * between a useful alarm and one that gets ignored.
  *
- * <p>Por eso {@link #setThresholds} pone los dos juntos y no hay un setter para cada uno: con
- * setters separados habria un instante en que el de arriba esta por debajo del de abajo, y en ese
- * instante la banda no significa nada.
+ * <p>That is why {@link #setThresholds} sets both together and there is no setter for each: with
+ * separate setters there would be an instant in which the high one is below the low one, and in
+ * that instant the band means nothing.
  */
 public interface GaugeMonitorMBean extends MonitorMBean {
 
-    /** El valor calculado para el primer observado. */
+    /** The value computed for the first observed object. */
     Number getDerivedGauge();
 
-    /** Cuando se calculo. */
+    /** When it was computed. */
     long getDerivedGaugeTimeStamp();
 
-    /** El valor calculado para ese observado. */
+    /** The value computed for that observed object. */
     Number getDerivedGauge(ObjectName object);
 
-    /** Cuando se calculo, para ese observado. */
+    /** When it was computed, for that observed object. */
     long getDerivedGaugeTimeStamp(ObjectName object);
 
-    /** El umbral de arriba. */
+    /** The high threshold. */
     Number getHighThreshold();
 
-    /** El de abajo. */
+    /** The low one. */
     Number getLowThreshold();
 
     /**
-     * Pone los dos. Ver la nota de la clase sobre por que van juntos.
+     * Sets both. See the class note about why they go together.
      *
-     * @throws IllegalArgumentException si alguno es null, si son de tipos distintos, o si el de
-     *     arriba es menor que el de abajo
+     * @throws IllegalArgumentException if either is null, if they are of different types, or if the
+     *     high one is lower than the low one
      */
     void setThresholds(Number highValue, Number lowValue) throws IllegalArgumentException;
 
-    /** Si se avisa al pasar el de arriba. */
+    /** Whether it notifies on crossing the high one. */
     boolean getNotifyHigh();
 
     /** Ver {@link #getNotifyHigh}. */
     void setNotifyHigh(boolean value);
 
-    /** Si se avisa al bajar del de abajo. */
+    /** Whether it notifies on dropping below the low one. */
     boolean getNotifyLow();
 
     /** Ver {@link #getNotifyLow}. */
     void setNotifyLow(boolean value);
 
-    /** Si se compara la diferencia con la lectura anterior. */
+    /** Whether the difference with the previous reading is compared. */
     boolean getDifferenceMode();
 
     /** Ver {@link #getDifferenceMode}. */

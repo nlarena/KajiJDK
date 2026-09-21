@@ -6,10 +6,11 @@ import javax.print.attribute.PrintJobAttribute;
 import javax.print.attribute.PrintRequestAttribute;
 
 /**
- * El tamano del trabajo en unidades de 1024 octetos, redondeado para arriba.
+ * The job's size in units of 1024 octets, rounded up.
  *
- * <p>Mide los datos del documento, no lo que ocupa impreso, y se cuenta <em>una sola vez</em>
- * aunque {@link Copies} pida varias: son los bytes que hay que mandar, no los que hay que imprimir.
+ * <p>It measures the document's data, not what it takes printed, and it is counted <em>only
+ * once</em> even if {@link Copies} asks for several: it is the bytes that have to be sent, not the
+ * ones that have to be printed.
  */
 public final class JobKOctets extends IntegerSyntax implements PrintRequestAttribute, PrintJobAttribute {
 
@@ -19,8 +20,10 @@ public final class JobKOctets extends IntegerSyntax implements PrintRequestAttri
         super(value, 0, Integer.MAX_VALUE);
     }
 
-    /** El {@code instanceof} es lo que impide que un JobKOctets de igual a otro atributo
-     * entero con el mismo numero. */
+    /**
+     * The {@code instanceof} is what keeps a JobKOctets from being equal to another
+     * integer attribute with the same number.
+     */
     public boolean equals(Object object) {
         return super.equals(object) && object instanceof JobKOctets;
     }

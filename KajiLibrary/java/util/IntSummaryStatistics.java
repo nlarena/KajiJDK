@@ -2,15 +2,15 @@ package java.util;
 
 import java.util.function.IntConsumer;
 
-// Cuenta, suma, minimo, maximo y promedio de una corriente de `int`, en una sola pasada.
+// Count, sum, minimum, maximum and average of a stream of `int`s, in a single pass.
 //
-// Es un `IntConsumer`, y eso es todo su diseño: se le van dando valores con `accept` y el estado
-// va quedando, sin guardar los elementos. Por eso `Collectors.summarizingInt` puede resumir una
-// coleccion de cualquier tamaño con memoria constante.
+// It is an `IntConsumer`, and that is its whole design: values are handed to it with `accept` and the
+// state is what is left, with no elements stored. That is why `Collectors.summarizingInt` can
+// summarise a collection of any size in constant memory.
 //
-// La suma es `long` aunque los elementos sean `int`: sumar dos mil millones de enteros medianos
-// desborda un `int` mucho antes de agotar la corriente, y un resumen que se pasa de largo en
-// silencio no sirve para nada.
+// The sum is a `long` even though the elements are `int`s: adding two billion middling integers
+// overflows an `int` long before the stream runs out, and a summary that overshoots in silence is of
+// no use at all.
 public class IntSummaryStatistics implements IntConsumer {
 
     private long count;
@@ -18,15 +18,15 @@ public class IntSummaryStatistics implements IntConsumer {
     private int min = 2147483647;   // Integer.MAX_VALUE
     private int max = -2147483648;  // Integer.MIN_VALUE
 
-    // Un resumen vacio: cuenta y suma en cero, minimo en MAX_VALUE y maximo en MIN_VALUE.
+    // An empty summary: count and sum at zero, minimum at MAX_VALUE and maximum at MIN_VALUE.
     //
-    // Los extremos arrancan invertidos a proposito, para que el primer `accept` los fije sin
-    // necesitar un caso aparte. La consecuencia es que un resumen vacio devuelve MAX_VALUE por
-    // `getMin()`, que es lo que hace el JDK y lo que hay que saber al leerlo.
+    // The extremes start inverted on purpose, so the first `accept` sets them with no special case
+    // needed. The consequence is that an empty summary returns MAX_VALUE from `getMin()`, which is
+    // what the JDK does and what has to be known when reading it.
     public IntSummaryStatistics() {
     }
 
-    // Un resumen con valores ya calculados, para reconstruir uno guardado.
+    // A summary with values already computed, for rebuilding a stored one.
     public IntSummaryStatistics(long count, int min, int max, long sum) {
         if (count < 0) {
             throw new IllegalArgumentException("Negative count value");
@@ -35,8 +35,8 @@ public class IntSummaryStatistics implements IntConsumer {
             if (min > max) {
                 throw new IllegalArgumentException("Minimum greater than maximum");
             }
-            long promedio = sum / count;
-            if (promedio < min || promedio > max) {
+            long average = sum / count;
+            if (average < min || average > max) {
                 throw new IllegalArgumentException("Average is out of range");
             }
         }
@@ -46,7 +46,7 @@ public class IntSummaryStatistics implements IntConsumer {
         this.max = max;
     }
 
-    // Suma un valor al resumen.
+    // It adds a value to the summary.
     public void accept(int value) {
         this.count = this.count + 1;
         this.sum = this.sum + value;
@@ -54,7 +54,7 @@ public class IntSummaryStatistics implements IntConsumer {
         this.max = Math.max(this.max, value);
     }
 
-    // Absorbe otro resumen. Sirve para juntar los parciales de una corriente dividida.
+    // It absorbs another summary. It serves to join the partials of a split stream.
     public void combine(IntSummaryStatistics other) {
         this.count = this.count + other.count;
         this.sum = this.sum + other.sum;
@@ -70,17 +70,17 @@ public class IntSummaryStatistics implements IntConsumer {
         return this.sum;
     }
 
-    // El minimo, o Integer.MAX_VALUE si no se acepto nada.
+    // The minimum, or Integer.MAX_VALUE if nothing was accepted.
     public final int getMin() {
         return this.min;
     }
 
-    // El maximo, o Integer.MIN_VALUE si no se acepto nada.
+    // The maximum, or Integer.MIN_VALUE if nothing was accepted.
     public final int getMax() {
         return this.max;
     }
 
-    // El promedio, o 0.0 si no se acepto nada.
+    // The average, or 0.0 if nothing was accepted.
     public final double getAverage() {
         if (this.count > 0) {
             return (double) this.sum / this.count;

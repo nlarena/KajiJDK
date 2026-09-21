@@ -12,41 +12,41 @@ import java.security.SignatureException;
 import java.util.Date;
 import java.util.Set;
 
-// Una lista de revocacion X.509 (RFC 5280): que certificados de este emisor dejaron de valer.
+// An X.509 revocation list (RFC 5280): which certificates of this issuer stopped being valid.
 //
-// Una CRL es **un objeto firmado**, igual que un certificado, y por eso tiene `verify`. Eso no es
-// un detalle: una CRL sin verificar es una lista que cualquiera pudo escribir, y aceptarla tiene el
-// efecto opuesto al que se busca —un atacante que puede inyectar CRLs falsas puede revocar
-// certificados legitimos, o entregar una CRL vieja que todavia no lista el certificado que le
-// robaron—. El contrato de `verify` es el mismo que en `Certificate`: **no devuelve nada, lanza si
-// falla**.
+// A CRL is **a signed object**, just like a certificate, and that is why it has `verify`. That is
+// not a detail: an unverified CRL is a list anybody could have written, and accepting it has the
+// opposite effect to the one sought —an attacker who can inject false CRLs can revoke legitimate
+// certificates, or hand over an old CRL that does not yet list the certificate they stole—. The
+// contract of `verify` is the same as in `Certificate`: **it returns nothing, it throws if it
+// fails**.
 //
-// Las dos fechas son el otro punto sensible. `thisUpdate` dice de cuando es la foto y `nextUpdate`
-// cuando se promete la siguiente; una CRL cuyo `nextUpdate` ya paso es una CRL vencida y usarla es
-// como no chequear nada. Que `getNextUpdate()` pueda devolver null —el campo es opcional— hace que
-// ese chequeo sea facil de olvidar.
+// The two dates are the other sensitive point. `thisUpdate` says when the photograph is from and
+// `nextUpdate` when the next one is promised; a CRL whose `nextUpdate` has passed is an expired CRL
+// and using it is like checking nothing. That `getNextUpdate()` can return null —the field is
+// optional— makes that check easy to forget.
 //
-// `getRevokedCertificate(X509Certificate)` es el que hay que usar, y no el que toma solo la serie:
-// **compara los emisores primero**. Dos CAs distintas pueden emitir la misma serie, asi que buscar
-// una serie en la CRL equivocada es mas rapido y esta mal. El que toma un `BigInteger` sigue
-// existiendo porque el JDK lo tiene, pero ahi el llamador es quien se hace cargo de haber
-// comprobado el emisor.
+// `getRevokedCertificate(X509Certificate)` is the one to use, and not the one that takes only the
+// serial: **it compares the issuers first**. Two different CAs can issue the same serial, so
+// looking for a serial in the wrong CRL is faster and wrong. The one that takes a `BigInteger` goes
+// on existing because the JDK has it, but there the caller takes responsibility for having checked
+// the issuer.
 public abstract class X509CRL extends CRL implements X509Extension, DEREncodable {
 
-    // Se recuerda por lo mismo que en `X509Certificate`: parsear en cada llamada seria caro y el
-    // JDK devuelve la misma instancia dos veces seguidas.
+    // It is remembered for the same reason as in `X509Certificate`: parsing at every call would be
+    // expensive and the JDK returns the same instance twice in a row.
     private javax.security.auth.x500.X500Principal issuerX500;
 
     protected X509CRL() {
         super("X.509");
     }
 
-    // El emisor de la CRL como nombre X.500.
+    // The issuer of the CRL as an X.500 name.
     //
-    // Se lee del DER —`TBSCertList.issuer`— y no de `getIssuerDN()`, por lo mismo que en
-    // `X509Certificate`: pasar por el texto de un `Principal` cualquiera y re-parsearlo es la
-    // confusion de nombres que este metodo existe para evitar. `RuntimeException` si el DER no se
-    // puede leer, igual que el JDK.
+    // It is read from the DER —`TBSCertList.issuer`— and not from `getIssuerDN()`, for the same
+    // reason as in `X509Certificate`: going through the text of just any `Principal` and reparsing
+    // it is the confusion of names this method exists to avoid. `RuntimeException` if the DER
+    // cannot be read, just as in the JDK.
     public javax.security.auth.x500.X500Principal getIssuerX500Principal() {
         if (this.issuerX500 == null) {
             try {
@@ -63,22 +63,23 @@ public abstract class X509CRL extends CRL implements X509Extension, DEREncodable
         return this.issuerX500;
     }
 
-    // La entrada de este certificado, o null si esta CRL no lo revoca.
+    // The entry of this certificate, or null if this CRL does not revoke it.
     //
-    // El chequeo de emisor va **antes** de mirar la serie, y si no coincide se devuelve null sin
-    // llegar a buscar: no es una optimizacion, es que la respuesta correcta ahi es "esta CRL no
-    // habla de este certificado". Una CRL indirecta —que revoca certificados de varias CAs— no se
-    // contempla, igual que en el JDK: para eso habria que mirar el `certificateIssuer` de cada
-    // entrada, y ese campo es una extension que esta clase no decodifica.
+    // The issuer check goes **before** looking at the serial, and if it does not match null is
+    // returned without getting as far as searching: it is not an optimisation, it is that the right
+    // answer there is "this CRL does not talk about this certificate". An indirect CRL —one that
+    // revokes certificates of several CAs— is not contemplated, just as in the JDK: for that one
+    // would have to look at the `certificateIssuer` of each entry, and that field is an extension
+    // this class does not decode.
     public X509CRLEntry getRevokedCertificate(X509Certificate certificate) {
-        javax.security.auth.x500.X500Principal delCert = certificate.getIssuerX500Principal();
-        if (!delCert.equals(this.getIssuerX500Principal())) {
+        javax.security.auth.x500.X500Principal certIssuer = certificate.getIssuerX500Principal();
+        if (!certIssuer.equals(this.getIssuerX500Principal())) {
             return null;
         }
         return this.getRevokedCertificate(certificate.getSerialNumber());
     }
 
-    // Igualdad por codificacion, igual que en `Certificate`.
+    // Equality by encoding, just as in `Certificate`.
     @Override
     public boolean equals(Object other) {
         if (this == other) {
@@ -124,7 +125,7 @@ public abstract class X509CRL extends CRL implements X509Extension, DEREncodable
 
     public abstract byte[] getEncoded() throws CRLException;
 
-    // Verifica la firma de la CRL. Si no lanza, la firma vale.
+    // It verifies the signature of the CRL. If it does not throw, the signature is valid.
     public abstract void verify(PublicKey key)
         throws CRLException, NoSuchAlgorithmException, InvalidKeyException,
                NoSuchProviderException, SignatureException;
@@ -133,37 +134,38 @@ public abstract class X509CRL extends CRL implements X509Extension, DEREncodable
         throws CRLException, NoSuchAlgorithmException, InvalidKeyException,
                NoSuchProviderException, SignatureException;
 
-    // Igual que en `Certificate`: la variante con `Provider` llego despues y su implementacion base
-    // lanza para no obligar a las subclases que ya existian. Inventar aca una verificacion seria el
-    // agujero.
+    // Just as in `Certificate`: the variant with a `Provider` arrived afterwards and its base
+    // implementation throws so as not to force the subclasses that already existed. Inventing a
+    // verification here would be the hole.
     public void verify(PublicKey key, Provider sigProvider)
             throws CRLException, NoSuchAlgorithmException, InvalidKeyException,
                    SignatureException {
         throw new UnsupportedOperationException();
     }
 
-    // La version: 1 o 2. Solo las v2 tienen extensiones, y por lo tanto solo ellas pueden ser
-    // delta o indirectas.
+    // The version: 1 or 2. Only the v2 ones have extensions, and therefore only they can be delta
+    // or indirect.
     public abstract int getVersion();
 
-    // Quien firmo la CRL. Ver la nota de la clase sobre por que no esta la variante moderna.
+    // Who signed the CRL. See the note of the class about why the modern variant is not there.
     public abstract Principal getIssuerDN();
 
-    // De cuando es esta foto.
+    // When this photograph is from.
     public abstract Date getThisUpdate();
 
-    // Cuando se promete la proxima, o null si no lo dice. Si ya paso, la CRL esta vencida.
+    // When the next one is promised, or null if it does not say. If it has passed, the CRL is
+    // expired.
     public abstract Date getNextUpdate();
 
-    // La entrada de esa serie, o null si no esta revocada. El llamador tiene que haber comprobado
-    // que el emisor de la CRL sea el del certificado: esta clase no puede hacerlo por el.
+    // The entry of that serial, or null if it is not revoked. The caller has to have checked that
+    // the issuer of the CRL is that of the certificate: this class cannot do it for them.
     public abstract X509CRLEntry getRevokedCertificate(BigInteger serialNumber);
 
-    // Todas las entradas, o null si la CRL esta vacia. **Null y no un conjunto vacio**: es lo que
-    // hace el JDK y confundirlos es un NPE esperando.
+    // Every entry, or null if the CRL is empty. **Null and not an empty set**: it is what the JDK
+    // does and confusing them is an NPE waiting.
     public abstract Set<? extends X509CRLEntry> getRevokedCertificates();
 
-    // La parte firmada de la CRL.
+    // The signed part of the CRL.
     public abstract byte[] getTBSCertList() throws CRLException;
 
     public abstract byte[] getSignature();

@@ -1,20 +1,21 @@
 package java.awt.image;
 
 /**
- * Un píxel entero en **un solo** elemento del buffer, con sus bandas en campos de bits.
+ * One whole pixel in **a single** element of the buffer, with its bands in bit fields.
 
- * <p>Es el modelo de una imagen de pantalla: un `int` por píxel con el alfa, el rojo, el verde y el
- * azul en sus ocho bits cada uno. Las bandas se declaran por sus **máscaras**, y de la máscara sale
- * todo lo demás — cuántos bits usa la banda y cuánto hay que correrla.
- *
- * <p>Que la máscara sea el parámetro, y no el par (desplazamiento, ancho), es lo que hace que
- * formatos irregulares se declaren igual de fácil: un 5-6-5 de 16 bits son las máscaras
- * `0xF800, 0x07E0, 0x001F` y no hace falta decir nada más.
- *
- * <p><strong>Las máscaras no se pueden solapar</strong> y el constructor no lo comprueba, igual que
- * el JDK: dos bandas sobre los mismos bits producirían una imagen donde escribir una cambia la
- * otra, y detectarlo costaría comparar todos los pares en un constructor que se llama por imagen.
- */
+  * <p>It is the model of a screen image: one `int` per pixel with the alpha, the red, the green and
+  * the blue in their eight bits each. The bands are declared by their **masks**, and out of the
+  * mask comes everything else — how many bits the band uses and how far it has to be shifted.
+  *
+  * <p>That the mask is the parameter, and not the pair (offset, width), is what makes irregular
+  * formats just as easy to declare: a 5-6-5 of 16 bits is the masks `0xF800, 0x07E0, 0x001F` and
+  * nothing else needs saying.
+  *
+  * <p><strong>The masks cannot overlap</strong> and the constructor does not check it, just like
+  * the JDK: two bands over the same bits would produce an image where writing one changes the
+  * other, and detecting it would cost comparing every pair in a constructor that is called once per
+  * image.
+  */
 public class SinglePixelPackedSampleModel extends SampleModel {
 
     private final int[] bitMasks;
@@ -22,16 +23,16 @@ public class SinglePixelPackedSampleModel extends SampleModel {
     private final int[] bitSizes;
     private final int scanlineStride;
 
-    /** Un píxel por elemento, sin relleno de fila. */
+    /** One pixel per element, with no row padding. */
     public SinglePixelPackedSampleModel(int dataType, int w, int h, int[] bitMasks) {
         this(dataType, w, h, w, bitMasks);
     }
 
     /**
-     * Con el paso de fila dado.
+     * With the row stride given.
      *
-     * @throws IllegalArgumentException si el tipo no admite empaquetado --sólo `byte`, `ushort` e
-     *     `int` lo hacen-- o si el paso de fila es negativo
+     * @throws IllegalArgumentException if the type does not admit packing --only `byte`, `ushort`
+     *     and `int` do-- or if the row stride is negative
      */
     public SinglePixelPackedSampleModel(int dataType, int w, int h, int scanlineStride,
             int[] bitMasks) {
@@ -48,12 +49,12 @@ public class SinglePixelPackedSampleModel extends SampleModel {
         this.bitOffsets = new int[bitMasks.length];
         this.bitSizes = new int[bitMasks.length];
         for (int i = 0; i < bitMasks.length; i++) {
-            int mascara = bitMasks[i];
-            this.bitMasks[i] = mascara;
-            // El desplazamiento es cuántos ceros hay a la derecha de la máscara, y el tamaño
-            // cuántos unos tiene una vez corrida. Los dos salen de la misma pasada.
+            int mask = bitMasks[i];
+            this.bitMasks[i] = mask;
+            // The shift is how many zeros there are to the right of the mask, and the size how many
+            // ones it has once shifted. Both come out of the same pass.
             int off = 0;
-            int m = mascara;
+            int m = mask;
             if (m != 0) {
                 while ((m & 1) == 0) {
                     m = m >>> 1;
@@ -70,20 +71,20 @@ public class SinglePixelPackedSampleModel extends SampleModel {
         }
     }
 
-    /** Siempre 1: el píxel entero entra en un elemento. */
+    /** Always 1: the whole pixel fits in one element. */
     public int getNumDataElements() {
         return 1;
     }
 
-    /** Otro igual del tamaño pedido. */
+    /** Another one just like it of the size asked for. */
     public SampleModel createCompatibleSampleModel(int w, int h) {
         return new SinglePixelPackedSampleModel(this.dataType, w, h, w, this.getBitMasks());
     }
 
     /**
-     * Un buffer del tamaño necesario.
+     * A buffer of the size needed.
      *
-     * @throws IllegalArgumentException si el tipo no es `byte`, `ushort` ni `int`
+     * @throws IllegalArgumentException if the type is neither `byte`, `ushort` nor `int`
      */
     public DataBuffer createDataBuffer() {
         int size = (this.height - 1) * this.scanlineStride + this.width;
@@ -99,63 +100,63 @@ public class SinglePixelPackedSampleModel extends SampleModel {
         throw new IllegalArgumentException("Unsupported data type " + this.dataType);
     }
 
-    /** Cuántos bits usa cada banda, según su máscara. */
+    /** How many bits each band uses, according to its mask. */
     public int[] getSampleSize() {
         int[] out = new int[this.bitSizes.length];
         System.arraycopy(this.bitSizes, 0, out, 0, this.bitSizes.length);
         return out;
     }
 
-    /** Cuántos bits usa esa banda. */
+    /** How many bits that band uses. */
     public int getSampleSize(int band) {
         return this.bitSizes[band];
     }
 
-    /** El elemento del buffer donde está ese píxel. */
+    /** The element of the buffer where that pixel is. */
     public int getOffset(int x, int y) {
         return y * this.scanlineStride + x;
     }
 
-    /** Cuántos bits hay que correr cada banda para llevarla a la derecha. */
+    /** How many bits each band has to be shifted to bring it to the right. */
     public int[] getBitOffsets() {
         int[] out = new int[this.bitOffsets.length];
         System.arraycopy(this.bitOffsets, 0, out, 0, this.bitOffsets.length);
         return out;
     }
 
-    /** Las máscaras de cada banda. */
+    /** The masks of each band. */
     public int[] getBitMasks() {
         int[] out = new int[this.bitMasks.length];
         System.arraycopy(this.bitMasks, 0, out, 0, this.bitMasks.length);
         return out;
     }
 
-    /** El paso de fila. */
+    /** The row stride. */
     public int getScanlineStride() {
         return this.scanlineStride;
     }
 
     /**
-     * Uno con sólo esas bandas, sobre los mismos datos.
+     * One with only those bands, over the same data.
      *
-     * @throws RasterFormatException si alguna banda no existe
+     * @throws RasterFormatException if some band does not exist
      */
     public SampleModel createSubsetSampleModel(int[] bands) {
-        int[] mascaras = new int[bands.length];
+        int[] masks = new int[bands.length];
         for (int i = 0; i < bands.length; i++) {
             if (bands[i] < 0 || bands[i] >= this.numBands) {
                 throw new RasterFormatException("Band " + bands[i] + " does not exist");
             }
-            mascaras[i] = this.bitMasks[bands[i]];
+            masks[i] = this.bitMasks[bands[i]];
         }
         return new SinglePixelPackedSampleModel(this.dataType, this.width, this.height,
-                this.scanlineStride, mascaras);
+                this.scanlineStride, masks);
     }
 
     /**
-     * El elemento crudo del píxel: **un** valor con todas las bandas empaquetadas.
+     * The raw element of the pixel: **one** value with every band packed in.
      *
-     * @throws IllegalArgumentException si el tipo no es `byte`, `ushort` ni `int`
+     * @throws IllegalArgumentException if the type is neither `byte`, `ushort` nor `int`
      */
     public Object getDataElements(int x, int y, Object obj, DataBuffer data) {
         int v = data.getElem(this.getOffset(x, y));
@@ -177,7 +178,7 @@ public class SinglePixelPackedSampleModel extends SampleModel {
         throw new IllegalArgumentException("Unsupported data type " + this.dataType);
     }
 
-    /** Escribe el elemento crudo del píxel. */
+    /** Writes the raw element of the pixel. */
     public void setDataElements(int x, int y, Object obj, DataBuffer data) {
         if (this.dataType == DataBuffer.TYPE_BYTE) {
             data.setElem(this.getOffset(x, y), ((byte[]) obj)[0] & 0xFF);
@@ -195,10 +196,10 @@ public class SinglePixelPackedSampleModel extends SampleModel {
     }
 
     /**
-     * Las bandas de un píxel, desempaquetadas.
+     * The bands of a pixel, unpacked.
      *
-     * <p>Se redefine porque acá el píxel entero se lee de **una sola** vez y después se desarma;
-     * la versión heredada leería el mismo elemento del buffer una vez por banda.
+     * <p>It is overridden because here the whole pixel is read **once** and taken apart afterwards;
+     * the inherited version would read the same element of the buffer once per band.
      */
     public int[] getPixel(int x, int y, int[] iArray, DataBuffer data) {
         int[] out = iArray == null ? new int[this.numBands] : iArray;
@@ -209,7 +210,7 @@ public class SinglePixelPackedSampleModel extends SampleModel {
         return out;
     }
 
-    /** Como el anterior, para un rectángulo. */
+    /** Like the previous one, for a rectangle. */
     public int[] getPixels(int x, int y, int w, int h, int[] iArray, DataBuffer data) {
         int[] out = iArray == null ? new int[w * h * this.numBands] : iArray;
         int k = 0;
@@ -229,7 +230,7 @@ public class SinglePixelPackedSampleModel extends SampleModel {
         return (data.getElem(this.getOffset(x, y)) & this.bitMasks[b]) >>> this.bitOffsets[b];
     }
 
-    /** Los valores de una banda en un rectángulo. */
+    /** The values of one band over a rectangle. */
     public int[] getSamples(int x, int y, int w, int h, int b, int[] iArray, DataBuffer data) {
         int[] out = iArray == null ? new int[w * h] : iArray;
         int k = 0;
@@ -243,11 +244,11 @@ public class SinglePixelPackedSampleModel extends SampleModel {
     }
 
     /**
-     * Escribe todas las bandas de un píxel.
+     * Writes every band of a pixel.
      *
-     * <p>Se arma el valor entero y se escribe una vez. Cada banda se enmascara con la suya antes de
-     * juntarla: un valor que se pase de su campo se recorta en vez de pisar la banda de al lado,
-     * que es lo que pasaría sin el `&`.
+     * <p>The whole value is assembled and written once. Each band is masked with its own before
+     * being joined in: a value that goes past its field is trimmed instead of stepping on the band
+     * beside it, which is what would happen without the `&`.
      */
     public void setPixel(int x, int y, int[] iArray, DataBuffer data) {
         int off = this.getOffset(x, y);
@@ -259,17 +260,17 @@ public class SinglePixelPackedSampleModel extends SampleModel {
         data.setElem(off, v);
     }
 
-    /** Como el anterior, para un rectángulo. */
+    /** Like the previous one, for a rectangle. */
     public void setPixels(int x, int y, int w, int h, int[] iArray, DataBuffer data) {
         int k = 0;
         for (int j = y; j < y + h; j++) {
             for (int i = x; i < x + w; i++) {
-                int[] uno = new int[this.numBands];
+                int[] one = new int[this.numBands];
                 for (int b = 0; b < this.numBands; b++) {
-                    uno[b] = iArray[k];
+                    one[b] = iArray[k];
                     k = k + 1;
                 }
-                this.setPixel(i, j, uno, data);
+                this.setPixel(i, j, one, data);
             }
         }
     }
@@ -282,7 +283,7 @@ public class SinglePixelPackedSampleModel extends SampleModel {
         data.setElem(off, v);
     }
 
-    /** Escribe los valores de una banda en un rectángulo. */
+    /** Writes the values of one band over a rectangle. */
     public void setSamples(int x, int y, int w, int h, int b, int[] iArray, DataBuffer data) {
         int k = 0;
         for (int j = y; j < y + h; j++) {
@@ -293,7 +294,7 @@ public class SinglePixelPackedSampleModel extends SampleModel {
         }
     }
 
-    /** Igualdad por tamaño, tipo, paso de fila y máscaras. */
+    /** Equality by size, type, row stride and masks. */
     public boolean equals(Object o) {
         if (o == null || o.getClass() != this.getClass()) {
             return false;

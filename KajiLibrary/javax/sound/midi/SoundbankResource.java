@@ -1,54 +1,54 @@
 package javax.sound.midi;
 
 /**
- * KajiLibrary's javax.sound.midi.SoundbankResource -- algo que hay adentro de un banco de sonidos.
+ * KajiLibrary's javax.sound.midi.SoundbankResource -- something inside a sound bank.
  *
- * <p>Un instrumento, o una muestra de audio que los instrumentos usan. Es abstracta y solo la
- * implementa quien lee un formato de banco concreto.
+ * <p>An instrument, or an audio sample the instruments use. It is abstract and is only implemented
+ * by whoever reads a concrete bank format.
  *
- * <h2>{@link #getDataClass} y {@link #getData}</h2>
+ * <h2>{@link #getDataClass} and {@link #getData}</h2>
  *
- * <p>El dato es {@link Object} porque depende del recurso: puede ser un {@code byte[]} de muestras, un
- * {@code AudioInputStream}, o algo propio del proveedor. {@code getDataClass} dice de que clase es,
- * para poder decidir antes de cargarlo.
+ * <p>The datum is an {@link Object} because it depends on the resource: it can be a {@code byte[]}
+ * of samples, an {@code AudioInputStream}, or something of the provider's own. {@code getDataClass}
+ * says which class it is, so that one can decide before loading it.
  *
- * <p>Los dos pueden devolver null, y significan cosas distintas: {@code getDataClass} null es "no lo
- * digo"; {@code getData} null es "no esta cargado". El segundo es normal en un banco grande que carga
- * las muestras a demanda.
+ * <p>Both can return null, and they mean different things: {@code getDataClass} null is "I am not
+ * saying"; {@code getData} null is "it is not loaded". The second is normal in a large bank that
+ * loads the samples on demand.
  */
 public abstract class SoundbankResource {
 
-    /** De que banco salio. */
+    /** Which bank it came from. */
     private final Soundbank soundBank;
 
-    /** Como se llama. */
+    /** What it is called. */
     private final String name;
 
-    /** De que clase es su dato. */
+    /** Which class its datum is. */
     private final Class<?> dataClass;
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected SoundbankResource(Soundbank soundBank, String name, Class<?> dataClass) {
         this.soundBank = soundBank;
         this.name = name;
         this.dataClass = dataClass;
     }
 
-    /** De que banco salio. */
+    /** Which bank it came from. */
     public Soundbank getSoundbank() {
         return this.soundBank;
     }
 
-    /** Como se llama. */
+    /** What it is called. */
     public String getName() {
         return this.name;
     }
 
-    /** De que clase es su dato, o null. Ver la nota de la clase. */
+    /** Which class its datum is, or null. See the class note. */
     public Class<?> getDataClass() {
         return this.dataClass;
     }
 
-    /** El dato, o null si no esta cargado. Ver la nota de la clase. */
+    /** The datum, or null if it is not loaded. See the class note. */
     public abstract Object getData();
 }

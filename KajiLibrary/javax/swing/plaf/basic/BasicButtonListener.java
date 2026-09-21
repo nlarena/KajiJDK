@@ -17,56 +17,61 @@ import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
 
 /**
- * El escucha que convierte mouse, foco y cambios de propiedad en cambios del modelo del boton.
+ * The listener that turns mouse, focus and property changes into changes of the button's
+ * model.
  *
- * <p>Es la mitad "entrada" del aspecto basico: {@code BasicButtonUI} pinta lo que el modelo dice,
- * y este objeto escribe en el modelo lo que el mouse hace. Nunca pinta ni decide que se ve; solo
- * arma, aprieta, suelta y desarma, y el modelo hace el resto, incluida la accion.
+ * <p>It is the "input" half of the basic look and feel: {@code BasicButtonUI} paints what the
+ * model says, and this object writes into the model what the mouse does. It never paints nor
+ * decides what is seen; it only arms, presses, releases and disarms, and the model does the
+ * rest, the action included.
  *
- * <h2>Lo que no esta</h2>
+ * <h2>What is not there</h2>
  *
- * <p>Las acciones por teclado —espacio aprieta, el mnemonico con Alt— viven en
- * {@code InputMap}/{@code ActionMap}, que no estan; {@link #installKeyboardActions},
- * {@link #uninstallKeyboardActions} y {@link #updateMnemonicBinding} no tienen donde
- * registrarlas, y {@code getInputMap} no esta porque no hay que devolver. El foco tampoco toca al
- * boton por omision del dialogo, porque no hay {@code JRootPane}.
+ * <p>The keyboard actions -- space presses, the mnemonic with Alt -- live in
+ * {@code InputMap}/{@code ActionMap}, which are not there; {@link #installKeyboardActions},
+ * {@link #uninstallKeyboardActions} and {@link #updateMnemonicBinding} have nowhere to register
+ * them, and {@code getInputMap} is not there because there is nothing to return. Nor does the
+ * focus touch the dialog's default button, because there is no {@code JRootPane}.
  */
 public class BasicButtonListener implements MouseListener, MouseMotionListener, FocusListener,
         ChangeListener, PropertyChangeListener {
 
-    private long ultimaPresion = -1;
-    private boolean descartarSoltado = false;
+    private long lastPress = -1;
+    private boolean discardDrop = false;
 
     public BasicButtonListener(AbstractButton b) {
     }
 
-    /** Cambio una propiedad del boton: solo importa si dejo de rellenar su area. */
+    /** A property of the button changed: it only matters if it stopped filling its area. */
     public void propertyChange(PropertyChangeEvent e) {
-        String propiedad = e.getPropertyName();
-        if (AbstractButton.CONTENT_AREA_FILLED_CHANGED_PROPERTY.equals(propiedad)) {
+        String property = e.getPropertyName();
+        if (AbstractButton.CONTENT_AREA_FILLED_CHANGED_PROPERTY.equals(property)) {
             checkOpacity((AbstractButton) e.getSource());
-        } else if (AbstractButton.MNEMONIC_CHANGED_PROPERTY.equals(propiedad)) {
+        } else if (AbstractButton.MNEMONIC_CHANGED_PROPERTY.equals(property)) {
             updateMnemonicBinding((AbstractButton) e.getSource());
         }
     }
 
-    /** Un boton que rellena su area es opaco, y uno que no, no: las dos propiedades van juntas. */
+    /**
+     * A button that fills its area is opaque, and one that does not, is not: the two properties go
+     * together.
+     */
     protected void checkOpacity(AbstractButton b) {
         b.setOpaque(b.isContentAreaFilled());
     }
 
-    /** Nada que instalar; ver la nota de la clase. */
+    /** Nothing to install; see the class note. */
     public void installKeyboardActions(JComponent c) {
     }
 
     public void uninstallKeyboardActions(JComponent c) {
     }
 
-    /** Nada que renovar; ver la nota de la clase. */
+    /** Nothing to renew; see the class note. */
     public void updateMnemonicBinding(AbstractButton b) {
     }
 
-    /** Cambio el modelo: el boton se repinta. */
+    /** The model changed: the button repaints itself. */
     public void stateChanged(ChangeEvent e) {
         AbstractButton b = (AbstractButton) e.getSource();
         b.repaint();
@@ -77,12 +82,12 @@ public class BasicButtonListener implements MouseListener, MouseMotionListener, 
         b.repaint();
     }
 
-    /** Perder el foco suelta y desarma: un boton sin foco no puede quedar a medio apretar. */
+    /** Losing the focus releases and disarms: a button with no focus cannot stay half pressed. */
     public void focusLost(FocusEvent e) {
         AbstractButton b = (AbstractButton) e.getSource();
-        ButtonModel modelo = b.getModel();
-        modelo.setPressed(false);
-        modelo.setArmed(false);
+        ButtonModel model = b.getModel();
+        model.setPressed(false);
+        model.setArmed(false);
         b.repaint();
     }
 
@@ -96,32 +101,32 @@ public class BasicButtonListener implements MouseListener, MouseMotionListener, 
     }
 
     /**
-     * Bajo el boton izquierdo: arma y aprieta, y pide el foco.
+     * The left button went down: it arms and presses, and asks for the focus.
      *
-     * <p>Dos presiones mas cercanas que el umbral del boton cuentan como una: la segunda se ignora,
-     * y tambien el soltado que le sigue. Es la defensa contra el doble click accidental en un boton
-     * que hace algo irreversible.
+     * <p>Two presses closer together than the button's threshold count as one: the second is
+     * ignored, and so is the release that follows it. It is the defence against an accidental
+     * double click on a button that does something irreversible.
      */
     public void mousePressed(MouseEvent e) {
         if (SwingUtilities.isLeftMouseButton(e)) {
             AbstractButton b = (AbstractButton) e.getSource();
             if (b.contains(e.getX(), e.getY())) {
-                long umbral = b.getMultiClickThreshhold();
-                long anterior = ultimaPresion;
-                long ahora = e.getWhen();
-                ultimaPresion = ahora;
-                if (anterior != -1 && ahora - anterior < umbral) {
-                    descartarSoltado = true;
+                long threshold = b.getMultiClickThreshhold();
+                long previous = lastPress;
+                long now = e.getWhen();
+                lastPress = now;
+                if (previous != -1 && now - previous < threshold) {
+                    discardDrop = true;
                     return;
                 }
-                ButtonModel modelo = b.getModel();
-                if (!modelo.isEnabled()) {
+                ButtonModel model = b.getModel();
+                if (!model.isEnabled()) {
                     return;
                 }
-                if (!modelo.isArmed()) {
-                    modelo.setArmed(true);
+                if (!model.isArmed()) {
+                    model.setArmed(true);
                 }
-                modelo.setPressed(true);
+                model.setPressed(true);
                 if (!b.hasFocus() && b.isRequestFocusEnabled()) {
                     b.requestFocus();
                 }
@@ -129,39 +134,42 @@ public class BasicButtonListener implements MouseListener, MouseMotionListener, 
         }
     }
 
-    /** Solto el boton izquierdo: suelta y desarma; si seguia armado, el modelo dispara la accion. */
+    /**
+     * The left button was released: it releases and disarms; if it was still armed, the model fires
+     * the action.
+     */
     public void mouseReleased(MouseEvent e) {
         if (SwingUtilities.isLeftMouseButton(e)) {
-            if (descartarSoltado) {
-                descartarSoltado = false;
+            if (discardDrop) {
+                discardDrop = false;
                 return;
             }
             AbstractButton b = (AbstractButton) e.getSource();
-            ButtonModel modelo = b.getModel();
-            modelo.setPressed(false);
-            modelo.setArmed(false);
+            ButtonModel model = b.getModel();
+            model.setPressed(false);
+            model.setArmed(false);
         }
     }
 
-    /** Entro el cursor: rollover si el boton lo muestra, y rearmar si venia apretado. */
+    /** The cursor came in: rollover if the button shows it, and rearm if it came in pressed. */
     public void mouseEntered(MouseEvent e) {
         AbstractButton b = (AbstractButton) e.getSource();
-        ButtonModel modelo = b.getModel();
+        ButtonModel model = b.getModel();
         if (b.isRolloverEnabled() && !SwingUtilities.isLeftMouseButton(e)) {
-            modelo.setRollover(true);
+            model.setRollover(true);
         }
-        if (modelo.isPressed()) {
-            modelo.setArmed(true);
+        if (model.isPressed()) {
+            model.setArmed(true);
         }
     }
 
-    /** Salio el cursor: se desarma; soltar afuera ya no dispara nada. */
+    /** The cursor left: it disarms; releasing outside no longer fires anything. */
     public void mouseExited(MouseEvent e) {
         AbstractButton b = (AbstractButton) e.getSource();
-        ButtonModel modelo = b.getModel();
+        ButtonModel model = b.getModel();
         if (b.isRolloverEnabled()) {
-            modelo.setRollover(false);
+            model.setRollover(false);
         }
-        modelo.setArmed(false);
+        model.setArmed(false);
     }
 }

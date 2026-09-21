@@ -1,18 +1,19 @@
 package javax.script;
 
 /**
- * KajiLibrary's javax.script.ScriptException -- lo que tira un motor cuando el script no anda.
+ * KajiLibrary's javax.script.ScriptException -- what an engine throws when the script does not
+ * work.
  *
- * <p>Cubre las dos cosas que le pueden salir mal a un motor: que el script no compile y que
- * explote corriendo. Es `checked` a proposito -- quien evalua texto ajeno tiene que decidir que
- * hace cuando el texto esta mal, y el compilador se lo recuerda.
+ * <p>It covers the two things that can go wrong for an engine: the script not compiling and it
+ * blowing up while running. It is `checked` on purpose -- whoever evaluates somebody else's text
+ * has to decide what to do when the text is wrong, and the compiler reminds them.
  *
- * <p>Lo unico con logica propia es {@link #getMessage()}. La excepcion guarda opcionalmente donde
- * paso la cosa (archivo, linea, columna) y arma el mensaje pegando esos datos al final, saltando
- * los que no tiene. Con archivo y linea, `"boom"` se convierte en
- * `"boom in a.js at line number 5"`; sin archivo, la posicion entera se ignora aunque haya linea,
- * porque una linea sin archivo no ubica nada. El valor que significa "no lo se" es `-1`, y es lo
- * que ponen los dos constructores que no lo reciben.
+ * <p>The only thing with logic of its own is {@link #getMessage()}. The exception optionally keeps
+ * where the thing happened (file, line, column) and builds the message by appending those data at
+ * the end, skipping the ones it does not have. With file and line, `"boom"` becomes
+ * `"boom in a.js at line number 5"`; without a file, the whole position is ignored even if there is
+ * a line, because a line without a file locates nothing. The value that means "I do not know" is
+ * `-1`, and it is what the two constructors that do not receive it put.
  */
 public class ScriptException extends Exception {
 
@@ -22,7 +23,7 @@ public class ScriptException extends Exception {
     private final int lineNumber;
     private final int columnNumber;
 
-    /** Con un mensaje y nada de posicion. */
+    /** With a message and no position. */
     public ScriptException(String s) {
         super(s);
         this.fileName = null;
@@ -31,10 +32,10 @@ public class ScriptException extends Exception {
     }
 
     /**
-     * Envolviendo otra excepcion, que queda como causa.
+     * Wrapping another exception, which stays as the cause.
      *
-     * <p>El mensaje pasa a ser el `toString()` de `e`, que es lo que hace {@link Throwable} cuando
-     * se lo construye con una causa y sin texto.
+     * <p>The message becomes `e`'s `toString()`, which is what {@link Throwable} does when it is
+     * built with a cause and no text.
      */
     public ScriptException(Exception e) {
         super(e);
@@ -43,7 +44,7 @@ public class ScriptException extends Exception {
         this.columnNumber = -1;
     }
 
-    /** Con mensaje, archivo y linea; la columna queda en -1. */
+    /** With message, file and line; the column is left at -1. */
     public ScriptException(String message, String fileName, int lineNumber) {
         super(message);
         this.fileName = fileName;
@@ -51,7 +52,7 @@ public class ScriptException extends Exception {
         this.columnNumber = -1;
     }
 
-    /** Con mensaje y la posicion completa. */
+    /** With message and the complete position. */
     public ScriptException(String message, String fileName, int lineNumber, int columnNumber) {
         super(message);
         this.fileName = fileName;
@@ -60,10 +61,10 @@ public class ScriptException extends Exception {
     }
 
     /**
-     * El mensaje con la posicion pegada atras.
+     * The message with the position appended at the end.
      *
-     * <p>Sin archivo no se agrega nada: la linea y la columna solas no ubican. Con archivo se
-     * agrega el archivo, y despues la linea y la columna que no sean -1, en ese orden.
+     * <p>Without a file nothing is added: the line and the column alone do not locate. With a file
+     * the file is added, and then the line and the column that are not -1, in that order.
      */
     @Override
     public String getMessage() {
@@ -80,17 +81,17 @@ public class ScriptException extends Exception {
         return ret;
     }
 
-    /** La linea donde paso, o -1. */
+    /** The line where it happened, or -1. */
     public int getLineNumber() {
         return lineNumber;
     }
 
-    /** La columna donde paso, o -1. */
+    /** The column where it happened, or -1. */
     public int getColumnNumber() {
         return columnNumber;
     }
 
-    /** El archivo donde paso, o nulo. */
+    /** The file where it happened, or null. */
     public String getFileName() {
         return fileName;
     }

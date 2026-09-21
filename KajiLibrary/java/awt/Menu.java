@@ -10,14 +10,17 @@ import javax.accessibility.AccessibleContext;
 import javax.accessibility.AccessibleRole;
 
 /**
- * Un menú: una opción que, al elegirse, despliega otras.
+ * A menu: an option that, when chosen, unfolds others.
  *
- * <p>Hereda de {@link MenuItem} y eso es lo que hace que los submenús salgan gratis: un menú **es**
- * una opción, así que meterlo adentro de otro menú funciona sin ningún caso especial. Es la misma
- * idea de composición que hace que un contenedor sea un componente.
+ * <p>It inherits from {@link MenuItem} and that is what makes submenus come for free: a menu **is**
+ * an option, so putting it inside another menu works with no special case at all. It is the same
+ * composition idea that makes a container be a component.
  *
- * <p>Un menú **desprendible** se puede arrancar de la barra y dejar flotando como una ventanita.
- * Casi ningún escritorio moderno lo hace, pero la bandera sigue en la API y se conserva.
+ * <p>A **tear-off** menu can be pulled off the bar and left floating as a little window. Almost no
+ * modern desktop does it, but the flag is still in the API and is kept.
+ *
+ * <p>Its constructors declare {@link HeadlessException} like the JDK's and never throw it; see
+ * {@link MenuComponent}.
  */
 public class Menu extends MenuItem implements MenuContainer, Accessible {
 
@@ -26,35 +29,23 @@ public class Menu extends MenuItem implements MenuContainer, Accessible {
     private final List<MenuItem> items = new ArrayList<MenuItem>();
     private final boolean tearOff;
 
-    /**
-     * Un menú sin etiqueta.
-     *
-     * @throws HeadlessException si no hay pantalla
-     */
+    /** A menu without a label. */
     public Menu() throws HeadlessException {
         this("", false);
     }
 
-    /**
-     * Con esa etiqueta.
-     *
-     * @throws HeadlessException si no hay pantalla
-     */
+    /** With that label. */
     public Menu(String label) throws HeadlessException {
         this(label, false);
     }
 
-    /**
-     * Con etiqueta y desprendible o no.
-     *
-     * @throws HeadlessException si no hay pantalla
-     */
+    /** With a label, and tear-off or not. */
     public Menu(String label, boolean tearOff) throws HeadlessException {
         super(label);
         this.tearOff = tearOff;
     }
 
-    /** Avisa que puede mostrarse, y se lo avisa a sus hijos. */
+    /** Notifies that it can be shown, and tells its children. */
     public void addNotify() {
         synchronized (this.getTreeLock()) {
             for (int i = 0; i < this.items.size(); i++) {
@@ -63,7 +54,7 @@ public class Menu extends MenuItem implements MenuContainer, Accessible {
         }
     }
 
-    /** Avisa que dejó de poder mostrarse, y se lo avisa a sus hijos. */
+    /** Notifies that it can no longer be shown, and tells its children. */
     public void removeNotify() {
         synchronized (this.getTreeLock()) {
             for (int i = 0; i < this.items.size(); i++) {
@@ -73,20 +64,20 @@ public class Menu extends MenuItem implements MenuContainer, Accessible {
         super.removeNotify();
     }
 
-    /** Si se puede arrancar de la barra. */
+    /** Whether it can be pulled off the bar. */
     public boolean isTearOff() {
         return this.tearOff;
     }
 
-    /** Cuántas opciones tiene. */
+    /** How many options it has. */
     public int getItemCount() {
         return this.items.size();
     }
 
     /**
-     * Cuántas opciones tiene.
+     * How many options it has.
      *
-     * @deprecated es del modelo de 1.0. Usar {@link #getItemCount}.
+     * @deprecated it is from the 1.0 model. Use {@link #getItemCount}.
      */
     @Deprecated
     public int countItems() {
@@ -94,20 +85,21 @@ public class Menu extends MenuItem implements MenuContainer, Accessible {
     }
 
     /**
-     * La opción de esa posición.
+     * The option at that position.
      *
-     * @throws ArrayIndexOutOfBoundsException si no existe
+     * @throws ArrayIndexOutOfBoundsException if there is no such option
      */
     public MenuItem getItem(int index) {
         return this.items.get(index);
     }
 
     /**
-     * Agrega una opción al final.
+     * Adds an option at the end.
      *
-     * <p>Si ya estaba en otro menú se la saca de ahí primero: una opción cuelga de un solo padre.
+     * <p>If it was already in another menu it is taken out of there first: an option hangs from a
+     * single parent.
      *
-     * @return la misma opción, para poder encadenar
+     * @return the same option, so calls can be chained
      */
     public MenuItem add(MenuItem mi) {
         synchronized (this.getTreeLock()) {
@@ -120,15 +112,15 @@ public class Menu extends MenuItem implements MenuContainer, Accessible {
         }
     }
 
-    /** Agrega una opción con esa etiqueta. */
+    /** Adds an option with that label. */
     public void add(String label) {
         this.add(new MenuItem(label));
     }
 
     /**
-     * Inserta una opción en esa posición.
+     * Inserts an option at that position.
      *
-     * @throws IllegalArgumentException si la posición es negativa
+     * @throws IllegalArgumentException if the position is negative
      */
     public void insert(MenuItem menuitem, int index) {
         synchronized (this.getTreeLock()) {
@@ -145,37 +137,37 @@ public class Menu extends MenuItem implements MenuContainer, Accessible {
     }
 
     /**
-     * Inserta una opción con esa etiqueta.
+     * Inserts an option with that label.
      *
-     * @throws IllegalArgumentException si la posición es negativa
+     * @throws IllegalArgumentException if the position is negative
      */
     public void insert(String label, int index) {
         this.insert(new MenuItem(label), index);
     }
 
     /**
-     * Agrega una línea separadora.
+     * Adds a separating line.
      *
-     * <p>Un separador es una opción con la etiqueta `"-"`: no es un tipo aparte, y por eso se puede
-     * sacar con {@link #remove(int)} como cualquier otra.
+     * <p>A separator is an option with the label `"-"`: it is not a type apart, and that is why it
+     * can be taken out with {@link #remove(int)} like any other.
      */
     public void addSeparator() {
         this.add("-");
     }
 
     /**
-     * Inserta una línea separadora.
+     * Inserts a separating line.
      *
-     * @throws IllegalArgumentException si la posición es negativa
+     * @throws IllegalArgumentException if the position is negative
      */
     public void insertSeparator(int index) {
         this.insert("-", index);
     }
 
     /**
-     * Saca la opción de esa posición.
+     * Takes out the option at that position.
      *
-     * @throws ArrayIndexOutOfBoundsException si no existe
+     * @throws ArrayIndexOutOfBoundsException if there is no such option
      */
     public void remove(int index) {
         synchronized (this.getTreeLock()) {
@@ -184,7 +176,7 @@ public class Menu extends MenuItem implements MenuContainer, Accessible {
         }
     }
 
-    /** Saca esa opción; si no estaba, no pasa nada. */
+    /** Takes that option out; if it was not there, nothing happens. */
     public void remove(MenuComponent item) {
         synchronized (this.getTreeLock()) {
             int i = this.items.indexOf(item);
@@ -194,7 +186,7 @@ public class Menu extends MenuItem implements MenuContainer, Accessible {
         }
     }
 
-    /** Saca todas. */
+    /** Takes them all out. */
     public void removeAll() {
         synchronized (this.getTreeLock()) {
             for (int i = this.items.size() - 1; i >= 0; i--) {
@@ -207,7 +199,7 @@ public class Menu extends MenuItem implements MenuContainer, Accessible {
         return super.paramString() + ",tearOff=" + this.tearOff + ",isHelpMenu=false";
     }
 
-    /** La información de accesibilidad de este menú. */
+    /** The accessibility information of this menu. */
     public AccessibleContext getAccessibleContext() {
         if (this.accessibleContext == null) {
             this.accessibleContext = new AccessibleAWTMenu();
@@ -215,27 +207,27 @@ public class Menu extends MenuItem implements MenuContainer, Accessible {
         return this.accessibleContext;
     }
 
-    /** La accesibilidad de un menú. */
+    /** The accessibility of a menu. */
     protected class AccessibleAWTMenu extends AccessibleAWTMenuItem {
 
-        /** Para las subclases. */
+        /** For the subclasses. */
         protected AccessibleAWTMenu() {
         }
 
-        /** Es un menú. */
+        /** It is a menu. */
         public AccessibleRole getAccessibleRole() {
             return AccessibleRole.MENU;
         }
 
-        /** Cuántas opciones tiene. */
+        /** How many options it has. */
         public int getAccessibleChildrenCount() {
             return Menu.this.getItemCount();
         }
 
         /**
-         * La opción de esa posición, si es accesible.
+         * The option at that position, if it is accessible.
          *
-         * @return la opción, o `null` si no existe
+         * @return the option, or `null` if there is no such one
          */
         public Accessible getAccessibleChild(int i) {
             if (i < 0 || i >= Menu.this.getItemCount()) {

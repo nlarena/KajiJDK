@@ -4,52 +4,52 @@ import java.awt.event.AdjustmentListener;
 import java.io.Serializable;
 
 /**
- * La barra de desplazamiento de un {@link ScrollPane}.
+ * The scrollbar of a {@link ScrollPane}.
  *
- * <p>Es un {@link Adjustable} y no un {@link Scrollbar}, y la diferencia importa: el rango no lo
- * decide quien la usa sino el panel, a partir del tamaño del hijo y del suyo. Por eso
- * {@link #setMinimum}, {@link #setMaximum} y {@link #setVisibleAmount} **tiran** en vez de hacer
- * algo. Fingir que aceptan el pedido y después pisarlo en el siguiente ajuste sería peor: el
- * programa creería que mandó él.
+ * <p>It is an {@link Adjustable} and not a {@link Scrollbar}, and the difference matters: the range
+ * is not decided by whoever uses it but by the pane, from the size of the child and its own. That
+ * is why {@link #setMinimum}, {@link #setMaximum} and {@link #setVisibleAmount} **throw** instead
+ * of doing something. Pretending to accept the request and then overwriting it at the next
+ * adjustment would be worse: the program would believe it was in charge.
  *
- * <p>Lo que sí se puede cambiar es el valor y los dos incrementos, que son decisiones de quien
- * desplaza, no del panel.
+ * <p>What can be changed is the value and the two increments, which are decisions of whoever
+ * scrolls, not of the pane.
  */
 public final class ScrollPaneAdjustable implements Adjustable, Serializable {
 
     private static final long serialVersionUID = -3359745691033257079L;
 
-    /** El panel que la manda. */
+    /** The pane that is in charge of it. */
     private final ScrollPane sp;
 
-    /** Acostada o parada. */
+    /** Lying down or standing up. */
     private final int orientation;
 
-    /** El valor actual. */
+    /** The current value. */
     private int value;
 
-    /** El piso. */
+    /** The floor. */
     private int minimum;
 
-    /** El tope. */
+    /** The ceiling. */
     private int maximum;
 
-    /** Cuánto se ve de una. */
+    /** How much is seen at once. */
     private int visibleAmount;
 
-    /** Cuánto salta con las flechas. */
+    /** How much it jumps with the arrows. */
     private int unitIncrement = 1;
 
-    /** Cuánto salta al apretar el canal. */
+    /** How much it jumps when the channel is pressed. */
     private int blockIncrement = 1;
 
-    /** Si el usuario la tiene agarrada. */
+    /** Whether the user is holding it. */
     private transient boolean isAdjusting;
 
-    /** Los oyentes, encadenados. */
+    /** The listeners, chained. */
     private AdjustmentListener adjustmentListener;
 
-    /** La arma para ese panel, con ese oyente interno y esa orientación. */
+    /** Builds it for that pane, with that internal listener and that orientation. */
     ScrollPaneAdjustable(ScrollPane sp, AdjustmentListener l, int orientation) {
         this.sp = sp;
         this.orientation = orientation;
@@ -57,9 +57,9 @@ public final class ScrollPaneAdjustable implements Adjustable, Serializable {
     }
 
     /**
-     * Fija el rango; lo llama el panel cuando cambia de tamaño el hijo o él.
+     * Sets the range; the pane calls it when the child or the pane itself changes size.
      *
-     * <p>El valor se recorta al rango nuevo, porque el hijo puede haber achicado.
+     * <p>The value is clamped to the new range, because the child may have shrunk.
      */
     void setSpan(int min, int max, int visible) {
         this.minimum = min;
@@ -69,122 +69,122 @@ public final class ScrollPaneAdjustable implements Adjustable, Serializable {
                 Math.min(this.value, this.maximum - this.visibleAmount));
     }
 
-    /** Acostada o parada. */
+    /** Lying down or standing up. */
     public int getOrientation() {
         return this.orientation;
     }
 
     /**
-     * No se puede.
+     * Not possible.
      *
-     * @throws AWTError siempre: el rango lo fija el panel
+     * @throws AWTError always: the range is set by the pane
      */
     public void setMinimum(int min) {
         throw new AWTError("Can not set the minimum of this scrollbar");
     }
 
-    /** El piso. */
+    /** The floor. */
     public int getMinimum() {
         return this.minimum;
     }
 
     /**
-     * No se puede.
+     * Not possible.
      *
-     * @throws AWTError siempre: el rango lo fija el panel
+     * @throws AWTError always: the range is set by the pane
      */
     public void setMaximum(int max) {
         throw new AWTError("Can not set the maximum of this scrollbar");
     }
 
-    /** El tope. */
+    /** The ceiling. */
     public int getMaximum() {
         return this.maximum;
     }
 
-    /** Cuánto salta con las flechas; nunca menos de 1. */
+    /** How much it jumps with the arrows; never less than 1. */
     public synchronized void setUnitIncrement(int u) {
         if (u != this.unitIncrement) {
             this.unitIncrement = Math.max(1, u);
         }
     }
 
-    /** Cuánto salta con las flechas. */
+    /** How much it jumps with the arrows. */
     public int getUnitIncrement() {
         return this.unitIncrement;
     }
 
-    /** Cuánto salta al apretar el canal; nunca menos de 1. */
+    /** How much it jumps when the channel is pressed; never less than 1. */
     public synchronized void setBlockIncrement(int b) {
         if (b != this.blockIncrement) {
             this.blockIncrement = Math.max(1, b);
         }
     }
 
-    /** Cuánto salta al apretar el canal. */
+    /** How much it jumps when the channel is pressed. */
     public int getBlockIncrement() {
         return this.blockIncrement;
     }
 
     /**
-     * No se puede.
+     * Not possible.
      *
-     * @throws AWTError siempre: lo que se ve de una es el tamaño del panel
+     * @throws AWTError always: what is seen at once is the size of the pane
      */
     public void setVisibleAmount(int v) {
         throw new AWTError("Can not set the visible amount of this scrollbar");
     }
 
-    /** Cuánto se ve de una. */
+    /** How much is seen at once. */
     public int getVisibleAmount() {
         return this.visibleAmount;
     }
 
-    /** Dice si el usuario la tiene agarrada. */
+    /** Says whether the user is holding it. */
     public void setValueIsAdjusting(boolean b) {
         if (this.isAdjusting != b) {
             this.isAdjusting = b;
         }
     }
 
-    /** Si el usuario la tiene agarrada. */
+    /** Whether the user is holding it. */
     public boolean getValueIsAdjusting() {
         return this.isAdjusting;
     }
 
     /**
-     * Desplaza a ese valor.
+     * Scrolls to that value.
      *
-     * <p>Se recorta al rango, y además **mueve el hijo del panel**: la barra y la posición de lo que
-     * se ve son la misma cosa vista de dos lados.
+     * <p>It is clamped to the range, and it also **moves the pane's child**: the bar and the
+     * position of what is seen are the same thing looked at from two sides.
      */
     public void setValue(int v) {
         this.setTypedValue(v);
     }
 
-    /** Recorta y mueve. */
+    /** Clamps and moves. */
     private void setTypedValue(int v) {
-        int nuevo = Math.max(this.minimum, Math.min(v, this.maximum - this.visibleAmount));
-        if (nuevo == this.value) {
+        int newValue = Math.max(this.minimum, Math.min(v, this.maximum - this.visibleAmount));
+        if (newValue == this.value) {
             return;
         }
-        this.value = nuevo;
+        this.value = newValue;
         if (this.sp != null) {
             Point p = this.sp.getScrollPosition();
             if (this.orientation == Adjustable.HORIZONTAL) {
-                this.sp.setScrollPosition(nuevo, p.y);
+                this.sp.setScrollPosition(newValue, p.y);
             } else {
-                this.sp.setScrollPosition(p.x, nuevo);
+                this.sp.setScrollPosition(p.x, newValue);
             }
         }
     }
 
-    /** El valor actual. */
+    /** The current value. */
     public int getValue() {
         return this.value;
     }
 
-    /** Agrega un oyente; `null` no hace nada. */
+    /** Adds a listener; `null` does nothing. */
     public synchronized void addAdjustmentListener(AdjustmentListener l) {
         if (l == null) {
             return;
@@ -192,7 +192,7 @@ public final class ScrollPaneAdjustable implements Adjustable, Serializable {
         this.adjustmentListener = AWTEventMulticaster.add(this.adjustmentListener, l);
     }
 
-    /** Saca un oyente. */
+    /** Removes a listener. */
     public synchronized void removeAdjustmentListener(AdjustmentListener l) {
         if (l == null) {
             return;
@@ -200,7 +200,7 @@ public final class ScrollPaneAdjustable implements Adjustable, Serializable {
         this.adjustmentListener = AWTEventMulticaster.remove(this.adjustmentListener, l);
     }
 
-    /** Los oyentes puestos. */
+    /** The listeners that are set. */
     public synchronized AdjustmentListener[] getAdjustmentListeners() {
         return AWTEventMulticaster.getListeners(this.adjustmentListener,
                 AdjustmentListener.class);
@@ -210,7 +210,7 @@ public final class ScrollPaneAdjustable implements Adjustable, Serializable {
         return this.getClass().getName() + "[" + this.paramString() + "]";
     }
 
-    /** Lo que la distingue de otra barra, para depurar. */
+    /** What tells it apart from another bar, for debugging. */
     public String paramString() {
         return (this.orientation == Adjustable.VERTICAL ? "vertical," : "horizontal,")
                 + "[0.." + this.maximum + "]" + ",val=" + this.value + ",vis=" + this.visibleAmount

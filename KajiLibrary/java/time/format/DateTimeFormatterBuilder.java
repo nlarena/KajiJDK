@@ -28,7 +28,7 @@ import java.util.Map;
 //
 //   - `appendLocalized(FormatStyle, FormatStyle)`, `getLocalizedDateTimePattern` in its style form
 //     and the four `ofLocalized*` of `DateTimeFormatter`: the pattern of a short date --`M/d/yy`
-//     here, `dd.MM.yy` there-- turned up in `java.text.PatronesLocales`. See `LocalizedPart`, which
+//     here, `dd.MM.yy` there-- turned up in `java.text.LocalePatterns`. See `LocalizedPart`, which
 //     holds the measurement showing that the two routes give the same pattern.
 //   - `ofLocalizedPattern(String)`, `getLocalizedDateTimePattern(String, ...)` and
 //     `appendLocalized(String)`: the list of formats available in each locale now lives in

@@ -4,47 +4,49 @@ import java.io.IOException;
 import java.util.ConcurrentModificationException;
 import java.util.NoSuchElementException;
 
-// Una `IOException` que aparecio en medio de un `for` sobre un `DirectoryStream`.
+// An `IOException` that turned up in the middle of a `for` over a `DirectoryStream`.
 //
-// **Por que hereda de `ConcurrentModificationException` y no de algo de I/O.** El iterador de
-// `DirectoryStream` implementa `Iterator`, cuyos metodos no declaran `IOException`; la unica salida
-// es una excepcion no chequeada. `ConcurrentModificationException` es la que ya significa "el
-// recorrido se interrumpio por algo de afuera", que es exactamente el caso.
+// **Why it inherits from `ConcurrentModificationException` and not from something of I/O.**
+// `DirectoryStream`'s iterator implements `Iterator`, whose methods declare no `IOException`; the
+// only way out is an unchecked exception. `ConcurrentModificationException` is the one that already
+// means "the walk was interrupted by something outside", which is exactly the case.
 //
-// **La causa esta acotada a `IOException`**, y el constructor la exige: envolver un
-// `RuntimeException` en esto no diria nada, porque ese ya se propaga solo.
+// **The cause is narrowed to `IOException`**, and the constructor requires it: wrapping a
+// `RuntimeException` in this would say nothing, because that one propagates on its own already.
 //
-// KajiJDK nunca la levanta -- no hay `DirectoryStream` que funcione, ver `Files.newDirectoryStream`.
+// This note used to say KajiJDK never raises it because there is no working `DirectoryStream`;
+// there is one now (`KajiDirectoryStream`), so a failure while walking arrives here.
 public final class DirectoryIteratorException extends ConcurrentModificationException {
 
     private static final long serialVersionUID = -6012699886086212874L;
 
-    // La causa, guardada aparte de la que ya lleva `Throwable`. Es redundante en el JDK --alla
-    // `getCause()` es `super.getCause()` con un cast-- pero esta VM tiene un bug con
-    // `invokespecial` sobre un metodo que la superclase nombrada *hereda* en vez de declarar
-    // (`getCause()` se declara en `Throwable`, no en `ConcurrentModificationException`): revienta
-    // con `getfield: bad FieldRef`. Un campo propio da el mismo resultado sin depender de eso.
-    private final IOException causa;
+    // The cause, kept apart from the one `Throwable` already carries. It is redundant in the JDK
+    // --there `getCause()` is `super.getCause()` with a cast-- but this VM has a bug with
+    // `invokespecial` on a method the named superclass *inherits* rather than declares
+    // (`getCause()` is declared in `Throwable`, not in `ConcurrentModificationException`): it blows
+    // up with `getfield: bad FieldRef`. A field of its own gives the same result without depending
+    // on it.
+    private final IOException ioCause;
 
     /**
-     * @param cause la `IOException` que corto el recorrido
-     * @throws NullPointerException si `cause` es `null`
+     * @param cause the `IOException` that cut the walk
+     * @throws NullPointerException if `cause` is `null`
      */
     public DirectoryIteratorException(IOException cause) {
         super(cause);
         if (cause == null) {
             throw new NullPointerException();
         }
-        this.causa = cause;
+        this.ioCause = cause;
     }
 
     /**
-     * La causa, ya con el tipo estrecho.
+     * The cause, already at the narrow type.
      *
-     * <p>Devolver `IOException` y no `Throwable` es el punto de la clase: quien la atrapa quiere
-     * relanzar la de I/O original sin castear.
+     * <p>Returning `IOException` and not `Throwable` is the point of the class: whoever catches it
+     * wants to rethrow the original I/O one without casting.
      */
     public IOException getCause() {
-        return this.causa;
+        return this.ioCause;
     }
 }

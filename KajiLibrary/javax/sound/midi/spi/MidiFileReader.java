@@ -9,74 +9,75 @@ import javax.sound.midi.MidiFileFormat;
 import javax.sound.midi.Sequence;
 
 /**
- * KajiLibrary's javax.sound.midi.spi.MidiFileReader -- lee archivos MIDI de un formato.
+ * KajiLibrary's javax.sound.midi.spi.MidiFileReader -- reads MIDI files of a format.
  *
- * <p>Se registra como servicio y {@code MidiSystem} lo encuentra solo.
+ * <p>It is registered as a service and {@code MidiSystem} finds it by itself.
  *
- * <p>Igual que con el audio muestreado, {@code MidiSystem} prueba los lectores de a uno sobre el mismo
- * flujo: hay que marcar antes de mirar y <b>rebobinar</b> si el formato no se reconoce. No reconocerlo
- * se avisa con {@link InvalidMidiDataException}, que {@code MidiSystem} ataja para seguir.
+ * <p>As with sampled audio, {@code MidiSystem} tries the readers one at a time on the same stream:
+ * it has to be marked before looking and <b>rewound</b> if the format is not recognized. Not
+ * recognizing it is signalled with {@link InvalidMidiDataException}, which {@code MidiSystem}
+ * catches to go on.
  *
- * <p>Los seis metodos son dos por tres: el encabezado o la obra entera, desde flujo, direccion o
- * archivo.
+ * <p>The six methods are two times three: the header or the whole piece, from a stream, a URL or a
+ * file.
  */
 public abstract class MidiFileReader {
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected MidiFileReader() {
     }
 
     /**
-     * Que hay en ese flujo, sin leer la obra.
+     * What there is in that stream, without reading the piece.
      *
-     * <p>Tiene que dejarlo como lo encontro; ver la nota de la clase.
+     * <p>It has to leave it as it found it; see the class note.
      *
-     * @throws InvalidMidiDataException si este lector no lo reconoce
-     * @throws IOException si no se pudo leer
+     * @throws InvalidMidiDataException if this reader does not recognize it
+     * @throws IOException if it could not be read
      */
     public abstract MidiFileFormat getMidiFileFormat(InputStream stream)
         throws InvalidMidiDataException, IOException;
 
     /**
-     * Idem, desde una direccion.
+     * Likewise, from a URL.
      *
-     * @throws InvalidMidiDataException si este lector no lo reconoce
-     * @throws IOException si no se pudo leer
+     * @throws InvalidMidiDataException if this reader does not recognize it
+     * @throws IOException if it could not be read
      */
     public abstract MidiFileFormat getMidiFileFormat(URL url)
         throws InvalidMidiDataException, IOException;
 
     /**
-     * Idem, desde un archivo.
+     * Likewise, from a file.
      *
-     * @throws InvalidMidiDataException si este lector no lo reconoce
-     * @throws IOException si no se pudo leer
+     * @throws InvalidMidiDataException if this reader does not recognize it
+     * @throws IOException if it could not be read
      */
     public abstract MidiFileFormat getMidiFileFormat(File file)
         throws InvalidMidiDataException, IOException;
 
     /**
-     * La obra entera.
+     * The whole piece.
      *
-     * @throws InvalidMidiDataException si este lector no lo reconoce
-     * @throws IOException si no se pudo leer
+     * @throws InvalidMidiDataException if this reader does not recognize it
+     * @throws IOException if it could not be read
      */
     public abstract Sequence getSequence(InputStream stream)
         throws InvalidMidiDataException, IOException;
 
     /**
-     * Idem, desde una direccion.
+     * Likewise, from a URL.
      *
-     * @throws InvalidMidiDataException si este lector no lo reconoce
-     * @throws IOException si no se pudo leer
+     * @throws InvalidMidiDataException if this reader does not recognize it
+     * @throws IOException if it could not be read
      */
     public abstract Sequence getSequence(URL url) throws InvalidMidiDataException, IOException;
 
     /**
-     * Idem, desde un archivo.
+     * Likewise, from a file.
      *
-     * @throws InvalidMidiDataException si este lector no lo reconoce
-     * @throws IOException si no se pudo leer
+     * @throws InvalidMidiDataException if this reader does not recognize it
+     * @throws IOException if it could not be read
      */
     public abstract Sequence getSequence(File file) throws InvalidMidiDataException, IOException;
 }

@@ -4,14 +4,15 @@ import java.lang.classfile.Instruction;
 import java.lang.classfile.TypeKind;
 import jdk.internal.classfile.impl.Instructions;
 
-// `newarray`. El tipo del componente va en un byte `atype` propio del opcode y no en el pool, que es
-// lo que la separa de `anewarray`.
+// `newarray`. The component's type goes in an `atype` byte of the opcode's own and not in the pool,
+// which is what sets it apart from `anewarray`.
 public interface NewPrimitiveArrayInstruction extends Instruction {
 
-    /** El tipo del componente. */
+    /** The component's type. */
     TypeKind typeKind();
 
-    /** El `newarray` de este tipo. Tira `IllegalArgumentException` si no es primitivo. */
+    /** The `newarray` of this type. It throws `IllegalArgumentException` if it is not
+     * primitive. */
     public static NewPrimitiveArrayInstruction of(TypeKind typeKind) {
         return Instructions.newPrimitiveArray(typeKind);
     }

@@ -49,10 +49,10 @@ public class GZIPOutputStream extends DeflaterOutputStream {
         out.write(255);         // operating system: unknown
     }
 
-    public void write(byte[] b, int off, int len) throws java.io.IOException {
-        // El cuerpo de `DeflaterOutputStream.write` inlineado en vez de `super.write(...)`, que el
-        // emisor todavia no soporta (finding #125). Son dos lineas, asi que copiarlas cuesta menos
-        // que el rodeo de renombrar el metodo del padre.
+    public synchronized void write(byte[] b, int off, int len) throws java.io.IOException {
+        // `DeflaterOutputStream.write`'s body inlined instead of `super.write(...)`, which this
+        // note said the emitter did not support yet (finding #125). That finding is closed; the
+        // inlining stays because it is two lines and works, but it is no longer a workaround.
         def.setInput(b, off, len);
         deflate();
         // The trailer checksums the UNCOMPRESSED bytes, so they are counted on the way in.
@@ -61,7 +61,7 @@ public class GZIPOutputStream extends DeflaterOutputStream {
 
     public void finish() throws java.io.IOException {
         if (!def.finished()) {
-            // Idem: el cuerpo de `DeflaterOutputStream.finish` inlineado (finding #125).
+            // The same: `DeflaterOutputStream.finish`'s body inlined. See the note above on #125.
             def.finish();
             deflate();
             writeTrailer();

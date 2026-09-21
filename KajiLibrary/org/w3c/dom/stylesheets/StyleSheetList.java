@@ -1,16 +1,16 @@
 package org.w3c.dom.stylesheets;
 
 /**
- * Las hojas de estilo de un documento, en el orden en que estan declaradas.
+ * The style sheets of a document, in the order in which they are declared.
  *
- * <p>Es **viva**: agregar un `<link>` al documento cambia lo que `getLength` contesta sin volver a
- * pedir la lista.
+ * <p>It is **live**: adding a `<link>` to the document changes what `getLength` answers without
+ * asking for the list again.
  */
 public interface StyleSheetList {
 
-    /** Cuantas hojas hay. */
+    /** How many sheets there are. */
     int getLength();
 
-    /** La hoja en esa posicion, o nulo si el indice esta fuera de rango. */
+    /** The sheet at that position, or null if the index is out of range. */
     StyleSheet item(int index);
 }

@@ -19,90 +19,90 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
- * Las implementaciones de {@link ClassHierarchyResolver}.
+ * The implementations of {@link ClassHierarchyResolver}.
  *
- * <p>Cinco formas de contestar la misma pregunta --de qué hereda esta clase-- más dos combinadores.
- * Lo único que conviene tener presente al leerlas: **`null` significa "no sé", no "no hereda de
- * nada"**. Es la diferencia que hace que {@link ClassHierarchyResolver#orElse} pueda encadenar: si
- * un resolvedor contestara `ofClass(null)` para lo que no conoce, el siguiente de la cadena nunca se
- * consultaría, y `java.lang.Object` --que sí tiene superclase `null`-- sería indistinguible de un
- * tipo desconocido.
+ * <p>Five ways of answering the same question --what this class inherits from-- plus two
+ * combinators. The one thing worth keeping in mind when reading them: **`null` means "I do not
+ * know", not "it inherits from nothing"**. It is the difference that lets {@link
+ * ClassHierarchyResolver#orElse} chain: if a resolver answered `ofClass(null)` for what it does not
+ * know, the next one in the chain would never be consulted, and `java.lang.Object` --which does
+ * have a `null` superclass-- would be indistinguishable from an unknown type.
  */
 public final class ClassHierarchyImpl {
 
     private ClassHierarchyImpl() {
     }
 
-    /** La información de una clase con esa superclase. */
+    /** The information of a class with that superclass. */
     public static ClassHierarchyInfo infoOfClass(ClassDesc superClass) {
         return new Info(superClass, false);
     }
 
-    /** La información de una interfaz. */
+    /** The information of an interface. */
     public static ClassHierarchyInfo infoOfInterface() {
         return Info.INTERFACE;
     }
 
-    /** El primero, y lo que no sepa se lo pregunta al segundo. */
+    /** The first one, and what it does not know it asks the second. */
     public static ClassHierarchyResolver orElse(ClassHierarchyResolver first,
             ClassHierarchyResolver second) {
         return new OrElse(first, second);
     }
 
-    /** Ése, con memoria en el mapa que dé el proveedor. */
+    /** That one, with memory in the map the supplier gives. */
     public static ClassHierarchyResolver cached(ClassHierarchyResolver base,
             Supplier<Map<ClassDesc, ClassHierarchyInfo>> cache) {
         return new Cached(base, cache.get());
     }
 
-    /** El de la plataforma. Ver la nota de {@link ClassHierarchyResolver#defaultResolver}. */
+    /** The platform's one. See the note of {@link ClassHierarchyResolver#defaultResolver}. */
     public static ClassHierarchyResolver defaultResolver() {
         return DEFAULT;
     }
 
-    /** El que contesta con esa tabla. */
+    /** The one that answers with that table. */
     public static ClassHierarchyResolver ofTable(Collection<ClassDesc> interfaces,
             Map<ClassDesc, ClassDesc> classToSuperClass) {
         return new Table(interfaces, classToSuperClass);
     }
 
-    /** El que carga las clases con ese cargador. */
+    /** The one that loads the classes with that loader. */
     public static ClassHierarchyResolver ofClassLoading(ClassLoader loader) {
         return new Loading(loader);
     }
 
-    /** El que carga las clases con ese `Lookup`. */
+    /** The one that loads the classes with that `Lookup`. */
     public static ClassHierarchyResolver ofLookup(MethodHandles.Lookup lookup) {
         return new Loading(lookup.lookupClass().getClassLoader());
     }
 
-    /** El que lee los `.class` como recursos de ese cargador. */
+    /** The one that reads the `.class` files as resources of that loader. */
     public static ClassHierarchyResolver ofResourceParsing(ClassLoader loader) {
         return new Parsing(new LoaderStreams(loader));
     }
 
-    /** El que lee los `.class` del flujo que dé esa función. */
+    /** The one that reads the `.class` files from the stream that function gives. */
     public static ClassHierarchyResolver ofStreams(Function<ClassDesc, InputStream> streams) {
         return new Parsing(streams);
     }
 
-    // El de omisión es `ofResourceParsing` de la plataforma, con memoria. Ver por qué no es
-    // `ofClassLoading` en el javadoc de `ClassHierarchyResolver.defaultResolver`.
+    // The default is the platform's `ofResourceParsing`, with memory. See why it is not
+    // `ofClassLoading` in the javadoc of `ClassHierarchyResolver.defaultResolver`.
     private static final ClassHierarchyResolver DEFAULT =
             new Cached(new Parsing(new LoaderStreams(ClassLoader.getPlatformClassLoader())),
                     new HashMap<ClassDesc, ClassHierarchyInfo>());
 
-    /** El nombre binario (`java.lang.String`) de ese descriptor. */
+    /** The binary name (`java.lang.String`) of that descriptor. */
     static String binaryName(ClassDesc d) {
         String s = d.descriptorString();
         if (s.length() > 2 && s.charAt(0) == 'L' && s.charAt(s.length() - 1) == ';') {
             return s.substring(1, s.length() - 1).replace('/', '.');
         }
-        // Un arreglo o un primitivo: `Class.forName` los nombra con el descriptor tal cual.
+        // An array or a primitive: `Class.forName` names them with the descriptor as it stands.
         return s.replace('/', '.');
     }
 
-    /** El nombre interno (`java/lang/String`) de ese descriptor. */
+    /** The internal name (`java/lang/String`) of that descriptor. */
     static String internalName(ClassDesc d) {
         String s = d.descriptorString();
         if (s.length() > 2 && s.charAt(0) == 'L' && s.charAt(s.length() - 1) == ';') {
@@ -152,10 +152,11 @@ public final class ClassHierarchyImpl {
         }
     }
 
-    // La memoria guarda también los "no sé", y tiene que hacerlo: sin eso, un tipo que no está
-    // vuelve a costar una lectura de `.class` cada vez que se pregunta por él, que es justo el caso
-    // en que la respuesta es más cara y menos útil. `Info.INTERFACE` no puede usarse de centinela
-    // --es una respuesta válida-- así que el mapa guarda `null` y se distingue con `containsKey`.
+    // The memory also keeps the "I do not know"s, and has to: without that, a type that is not
+    // there costs a `.class` read again every time it is asked about, which is exactly the case in
+    // which the answer is most expensive and least useful. `Info.INTERFACE` cannot be used as a
+    // sentinel --it is a valid answer-- so the map keeps `null` and it is told apart with
+    // `containsKey`.
     private static final class Cached implements ClassHierarchyResolver {
 
         private final ClassHierarchyResolver base;
@@ -186,9 +187,9 @@ public final class ClassHierarchyImpl {
             while (it.hasNext()) {
                 this.table.put(it.next(), Info.INTERFACE);
             }
-            Iterator<Map.Entry<ClassDesc, ClassDesc>> es = classToSuperClass.entrySet().iterator();
-            while (es.hasNext()) {
-                Map.Entry<ClassDesc, ClassDesc> e = es.next();
+            Iterator<Map.Entry<ClassDesc, ClassDesc>> it = classToSuperClass.entrySet().iterator();
+            while (it.hasNext()) {
+                Map.Entry<ClassDesc, ClassDesc> e = it.next();
                 this.table.put(e.getKey(), new Info(e.getValue(), false));
             }
         }
@@ -198,9 +199,9 @@ public final class ClassHierarchyImpl {
         }
     }
 
-    // Carga la clase para preguntarle. `initialize` en `false`: hace falta la jerarquía, no el
-    // estado estático, y correr un inicializador ajeno por calcular un stack map sería un efecto de
-    // lado que nadie pidió.
+    // It loads the class to ask it. `initialize` as `false`: the hierarchy is needed, not the
+    // static state, and running someone else's initialiser in order to compute a stack map would be
+    // a side effect nobody asked for.
     private static final class Loading implements ClassHierarchyResolver {
 
         private final ClassLoader loader;
@@ -221,16 +222,16 @@ public final class ClassHierarchyImpl {
             } catch (ClassNotFoundException e) {
                 return null;
             } catch (LinkageError e) {
-                // Una clase que está pero no enlaza --le falta un supertipo, o su formato es de otra
-                // versión-- es tan desconocida para este propósito como una que no está.
+                // A class that is there but does not link --it lacks a supertype, or its format is
+                // of another version-- is as unknown for this purpose as one that is not there.
                 return null;
             }
         }
     }
 
-    // Lee el `.class` y mira su encabezado. No carga nada, así que no corre inicializadores ni
-    // resuelve supertipos: para lo que hace falta acá --el nombre de la superclase y si es
-    // interfaz-- alcanza con los primeros bytes del archivo.
+    // It reads the `.class` and looks at its header. It loads nothing, so it runs no initialisers
+    // and resolves no supertypes: for what is needed here --the name of the superclass and whether
+    // it is an interface-- the first bytes of the file are enough.
     private static final class Parsing implements ClassHierarchyResolver {
 
         private final Function<ClassDesc, InputStream> streams;
@@ -255,13 +256,13 @@ public final class ClassHierarchyImpl {
             } catch (IOException e) {
                 return null;
             } catch (IllegalArgumentException e) {
-                // Un `.class` que no se puede parsear no es una respuesta: es un "no sé".
+                // A `.class` that cannot be parsed is not an answer: it is an "I do not know".
                 return null;
             } finally {
                 try {
                     in.close();
                 } catch (IOException e) {
-                    // Cerrar el flujo del que ya se leyó no puede cambiar la respuesta.
+                    // Closing the stream already read from cannot change the answer.
                 }
             }
         }

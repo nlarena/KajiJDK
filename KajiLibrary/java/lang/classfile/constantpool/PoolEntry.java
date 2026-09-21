@@ -1,64 +1,64 @@
 package java.lang.classfile.constantpool;
 
-// La raíz de las entradas del pool de constantes (JVMS §4.4). Una entrada es una tupla etiquetada
-// que vive en un índice del pool de una clase concreta: `tag()` dice de qué estructura se trata,
-// `index()` en qué posición está, y `constantPool()` a qué pool pertenece — dos entradas iguales de
-// pools distintos NO son la misma entrada, y por eso la identidad del pool es parte del contrato.
+// The root of the constant pool's entries (JVMS §4.4). An entry is a tagged tuple living at an index
+// of a concrete class's pool: `tag()` says which structure it is, `index()` what position it is at,
+// and `constantPool()` which pool it belongs to -- two equal entries from different pools are NOT the
+// same entry, and that is why the pool's identity is part of the contract.
 //
-// `width()` es 2 para `CONSTANT_Long` y `CONSTANT_Double` y 1 para todas las demás: es la rareza
-// histórica de §4.4.5, donde esas dos ocupan dos ranuras del pool y la siguiente se declara
-// inutilizable. Quien recorra el pool por índice tiene que sumar `width()`, no 1.
+// `width()` is 2 for `CONSTANT_Long` and `CONSTANT_Double` and 1 for all the rest: it is §4.4.5's
+// historical oddity, where those two take two slots of the pool and the following one is declared
+// unusable. Whoever walks the pool by index has to add `width()`, not 1.
 //
-// En KajiJDK esta jerarquía es exactamente la del JDK, con una sola diferencia deliberada: las
-// interfaces NO se declaran `sealed`. El JDK las sella hacia `jdk.internal.classfile.impl`; sellarlas
-// acá obligaría a nombrar las implementaciones internas desde el paquete público, y un sellado que se
-// relaja es un permiso de más, no un contrato que se incumple.
+// In KajiJDK this hierarchy is exactly the JDK's, with a single deliberate difference: the interfaces
+// are NOT declared `sealed`. The JDK seals them towards `jdk.internal.classfile.impl`; sealing them
+// here would force naming the internal implementations from the public package, and a seal that is
+// relaxed is a permission too many, not a contract that is broken.
 public interface PoolEntry {
 
-    /** Etiqueta de `CONSTANT_Utf8_info` (JVMS §4.4.7). */
+    /** `CONSTANT_Utf8_info`'s tag (JVMS §4.4.7). */
     public static final int TAG_UTF8 = 1;
-    /** Etiqueta de `CONSTANT_Integer_info` (§4.4.4). */
+    /** `CONSTANT_Integer_info`'s tag (§4.4.4). */
     public static final int TAG_INTEGER = 3;
-    /** Etiqueta de `CONSTANT_Float_info` (§4.4.4). */
+    /** `CONSTANT_Float_info`'s tag (§4.4.4). */
     public static final int TAG_FLOAT = 4;
-    /** Etiqueta de `CONSTANT_Long_info` (§4.4.5). */
+    /** `CONSTANT_Long_info`'s tag (§4.4.5). */
     public static final int TAG_LONG = 5;
-    /** Etiqueta de `CONSTANT_Double_info` (§4.4.5). */
+    /** `CONSTANT_Double_info`'s tag (§4.4.5). */
     public static final int TAG_DOUBLE = 6;
-    /** Etiqueta de `CONSTANT_Class_info` (§4.4.1). */
+    /** `CONSTANT_Class_info`'s tag (§4.4.1). */
     public static final int TAG_CLASS = 7;
-    /** Etiqueta de `CONSTANT_String_info` (§4.4.3). */
+    /** `CONSTANT_String_info`'s tag (§4.4.3). */
     public static final int TAG_STRING = 8;
-    /** Etiqueta de `CONSTANT_Fieldref_info` (§4.4.2). */
+    /** `CONSTANT_Fieldref_info`'s tag (§4.4.2). */
     public static final int TAG_FIELDREF = 9;
-    /** Etiqueta de `CONSTANT_Methodref_info` (§4.4.2). */
+    /** `CONSTANT_Methodref_info`'s tag (§4.4.2). */
     public static final int TAG_METHODREF = 10;
-    /** Etiqueta de `CONSTANT_InterfaceMethodref_info` (§4.4.2). */
+    /** `CONSTANT_InterfaceMethodref_info`'s tag (§4.4.2). */
     public static final int TAG_INTERFACE_METHODREF = 11;
-    /** Etiqueta de `CONSTANT_NameAndType_info` (§4.4.6). */
+    /** `CONSTANT_NameAndType_info`'s tag (§4.4.6). */
     public static final int TAG_NAME_AND_TYPE = 12;
-    /** Etiqueta de `CONSTANT_MethodHandle_info` (§4.4.8). */
+    /** `CONSTANT_MethodHandle_info`'s tag (§4.4.8). */
     public static final int TAG_METHOD_HANDLE = 15;
-    /** Etiqueta de `CONSTANT_MethodType_info` (§4.4.9). */
+    /** `CONSTANT_MethodType_info`'s tag (§4.4.9). */
     public static final int TAG_METHOD_TYPE = 16;
-    /** Etiqueta de `CONSTANT_Dynamic_info` (§4.4.10). */
+    /** `CONSTANT_Dynamic_info`'s tag (§4.4.10). */
     public static final int TAG_DYNAMIC = 17;
-    /** Etiqueta de `CONSTANT_InvokeDynamic_info` (§4.4.10). */
+    /** `CONSTANT_InvokeDynamic_info`'s tag (§4.4.10). */
     public static final int TAG_INVOKE_DYNAMIC = 18;
-    /** Etiqueta de `CONSTANT_Module_info` (§4.4.11). */
+    /** `CONSTANT_Module_info`'s tag (§4.4.11). */
     public static final int TAG_MODULE = 19;
-    /** Etiqueta de `CONSTANT_Package_info` (§4.4.12). */
+    /** `CONSTANT_Package_info`'s tag (§4.4.12). */
     public static final int TAG_PACKAGE = 20;
 
-    /** El pool al que pertenece esta entrada. */
+    /** The pool this entry belongs to. */
     ConstantPool constantPool();
 
-    /** La etiqueta `tag` de la estructura, uno de los `TAG_*`. */
+    /** The structure's `tag`, one of the `TAG_*`. */
     int tag();
 
-    /** El índice de esta entrada dentro de su pool; siempre &ge; 1. */
+    /** This entry's index within its pool; always &ge; 1. */
     int index();
 
-    /** Cuántas ranuras del pool ocupa: 2 para `long` y `double`, 1 para el resto. */
+    /** How many pool slots it takes: 2 for `long` and `double`, 1 for the rest. */
     int width();
 }

@@ -4,1393 +4,1396 @@ import java.lang.foreign.MemorySegment;
 import java.nio.ByteOrder;
 
 /**
- * Un vector de posiciones {@code short}.
+ * A vector of {@code short} lanes.
  *
- * <p>Es una de las seis clases donde el API se vuelve concreto. {@link Vector} habla de posiciones
- * sin decir de que son y por eso sus metodos toman y devuelven {@code Object} o el tipo envuelto;
- * aca las posiciones son {@code short} de verdad, asi que se puede cargar desde un {@code short[]},
- * leer una posicion como {@code short} y operar sin envolver nada.
+ * <p>It is one of the six classes where the API becomes concrete. {@link Vector} talks about lanes
+ * without saying what they are, and that is why its methods take and return {@code Object} or the
+ * boxed type; here the lanes really are {@code short}, so one can load from a {@code short[]}, read
+ * a lane as a {@code short} and operate without boxing anything.
  *
- * <h2>Las constantes {@code SPECIES_}</h2>
+ * <h2>The {@code SPECIES_} constants</h2>
  *
- * <p>Cada una es esta clase con una forma ya elegida, y son objetos de verdad: contestan cuantas
- * posiciones tienen, cuanto ocupan y donde termina un bucle que avanza de a un vector. Lo que no
- * pueden es fabricar el vector.
+ * <p>Each one is this class with a shape already chosen, and they are real objects: they answer how
+ * many lanes they have, how much they take and where a loop that advances one vector at a time
+ * ends. What they cannot do is make the vector.
  *
- * <p>{@link #SPECIES_MAX} y {@link #SPECIES_PREFERRED} dependen de la maquina. Aca las dos dan 64
- * bits, que es el minimo del API: el maximo real sale de los intrinsecos y no hay a quien
- * preguntarle.
+ * <p>{@link #SPECIES_MAX} and {@link #SPECIES_PREFERRED} depend on the machine. Here both give 64
+ * bits, which is the API's minimum: the real maximum comes from the intrinsics and there is nobody
+ * to ask.
  *
- * <h2>Estado en esta VM</h2>
+ * <h2>State on this VM</h2>
  *
- * <p>Las firmas estan todas y son las del JDK 25, asi que el codigo que use este API compila.
- * Ninguna operacion puede ejecutar: crear u operar un vector se apoya en intrinsecos de la VM
- * --cada operacion se reemplaza por una instruccion vectorial de la maquina-- y esta VM no los
- * tiene. Cada metodo concreto tira {@link UnsupportedOperationException} en vez de devolver un
- * vector inventado, que es lo unico honesto que se puede hacer -- un vector de ceros compilaria
- * igual y daria resultados equivocados sin avisar.
+ * <p>The signatures are all here and they are JDK 25's, so code that uses this API compiles. No
+ * operation can run: creating or operating on a vector relies on VM intrinsics --each operation is
+ * replaced by a vector instruction of the machine-- and this VM does not have them. Each concrete
+ * method throws {@link UnsupportedOperationException} instead of returning a made-up vector, which
+ * is the only honest thing to do -- a vector of zeros would compile all the same and give wrong
+ * results without warning.
  *
  * @since 16
  */
 public abstract class ShortVector extends AbstractVector<Short> {
 
     /**
-     * Con esa carga util.
+     * With that payload.
      *
-     * <p>En el JDK este constructor es de paquete, asi que no aparece en los volcados. Va escrito
-     * igual porque la superclase no tiene uno sin argumentos: sin el, javac genera uno que llama a
-     * un {@code super()} que no existe, y el archivo compilado queda invalido (hallazgo #515).
+     * <p>In the JDK this constructor is package-private, so it does not show up in the dumps. It is
+     * written anyway because the superclass has no no-argument one: without it, the implicit
+     * default constructor would call a {@code super()} that does not exist. The note said javac
+     * then emits an invalid class file (finding #515); that finding is closed in the source javac,
+     * which now rejects the class instead, but the frozen {@code bin/javac.exe} predates the fix.
+     * The constructor is needed either way.
      *
-     * @param payload el arreglo de posiciones
+     * @param payload the array of lanes
      */
     ShortVector(Object payload) {
         super(payload);
     }
 
-    /** La especie de {@code short} de 64 bits. */
+    /** The {@code short} species of 64 bits. */
     public static final VectorSpecies<Short> SPECIES_64 =
-            Especie.de(short.class, VectorShape.S_64_BIT);
+            SpeciesImpl.create(short.class, VectorShape.S_64_BIT);
 
-    /** La especie de {@code short} de 128 bits. */
+    /** The {@code short} species of 128 bits. */
     public static final VectorSpecies<Short> SPECIES_128 =
-            Especie.de(short.class, VectorShape.S_128_BIT);
+            SpeciesImpl.create(short.class, VectorShape.S_128_BIT);
 
-    /** La especie de {@code short} de 256 bits. */
+    /** The {@code short} species of 256 bits. */
     public static final VectorSpecies<Short> SPECIES_256 =
-            Especie.de(short.class, VectorShape.S_256_BIT);
+            SpeciesImpl.create(short.class, VectorShape.S_256_BIT);
 
-    /** La especie de {@code short} de 512 bits. */
+    /** The {@code short} species of 512 bits. */
     public static final VectorSpecies<Short> SPECIES_512 =
-            Especie.de(short.class, VectorShape.S_512_BIT);
+            SpeciesImpl.create(short.class, VectorShape.S_512_BIT);
 
-    /** La especie de {@code short} de la forma mas grande de esta maquina. */
+    /** The {@code short} species of this machine\'s largest shape. */
     public static final VectorSpecies<Short> SPECIES_MAX =
-            Especie.de(short.class, VectorShape.S_Max_BIT);
+            SpeciesImpl.create(short.class, VectorShape.S_Max_BIT);
 
-    /** La especie de {@code short} de la forma que conviene en esta maquina. */
+    /** The {@code short} species of this machine\'s preferred shape. */
     public static final VectorSpecies<Short> SPECIES_PREFERRED =
-            Especie.de(short.class, VectorShape.preferredShape());
+            SpeciesImpl.create(short.class, VectorShape.preferredShape());
 
     /**
-     * Un vector con todas las posiciones en cero.
+     * A vector with every lane at zero.
      *
-     * @param vectorSpecies el {@code VectorSpecies<Short>}
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vectorSpecies the {@code VectorSpecies<Short>}
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public static ShortVector zero(VectorSpecies<Short> vectorSpecies) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Un vector con el mismo valor en todas las posiciones.
+     * A vector with the same value in every lane.
      *
-     * @param s el {@code short}
-     * @return el {@code ShortVector}
+     * @param s the {@code short}
+     * @return the {@code ShortVector}
      */
     public abstract ShortVector broadcast(short s);
 
     /**
-     * Un vector con el mismo valor en todas las posiciones.
+     * A vector with the same value in every lane.
      *
-     * @param vectorSpecies el {@code VectorSpecies<Short>}
-     * @param s el {@code short}
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vectorSpecies the {@code VectorSpecies<Short>}
+     * @param s the {@code short}
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public static ShortVector broadcast(VectorSpecies<Short> vectorSpecies, short s) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Un vector con el mismo valor en todas las posiciones.
+     * A vector with the same value in every lane.
      *
-     * @param l el {@code long}
-     * @return el {@code ShortVector}
+     * @param l the {@code long}
+     * @return the {@code ShortVector}
      */
     public abstract ShortVector broadcast(long l);
 
     /**
-     * Un vector con el mismo valor en todas las posiciones.
+     * A vector with the same value in every lane.
      *
-     * @param vectorSpecies el {@code VectorSpecies<Short>}
-     * @param l el {@code long}
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vectorSpecies the {@code VectorSpecies<Short>}
+     * @param l the {@code long}
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public static ShortVector broadcast(VectorSpecies<Short> vectorSpecies, long l) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Aplica ese operador a cada posicion.
+     * Applies that operator to each lane.
      *
-     * @param unary el {@code VectorOperators.Unary}
-     * @return el {@code ShortVector}
+     * @param unary the {@code VectorOperators.Unary}
+     * @return the {@code ShortVector}
      */
     public abstract ShortVector lanewise(VectorOperators.Unary unary);
 
     /**
-     * Aplica ese operador a cada posicion.
+     * Applies that operator to each lane.
      *
-     * @param unary el {@code VectorOperators.Unary}
-     * @param vectorMask el {@code VectorMask<Short>}
-     * @return el {@code ShortVector}
+     * @param unary the {@code VectorOperators.Unary}
+     * @param vectorMask the {@code VectorMask<Short>}
+     * @return the {@code ShortVector}
      */
     public abstract ShortVector lanewise(VectorOperators.Unary unary, VectorMask<Short> vectorMask);
 
     /**
-     * Aplica ese operador a cada posicion.
+     * Applies that operator to each lane.
      *
-     * @param binary el {@code VectorOperators.Binary}
-     * @param vector el {@code Vector<Short>}
-     * @return el {@code ShortVector}
+     * @param binary the {@code VectorOperators.Binary}
+     * @param vector the {@code Vector<Short>}
+     * @return the {@code ShortVector}
      */
     public abstract ShortVector lanewise(VectorOperators.Binary binary, Vector<Short> vector);
 
     /**
-     * Aplica ese operador a cada posicion.
+     * Applies that operator to each lane.
      *
-     * @param binary el {@code VectorOperators.Binary}
-     * @param vector el {@code Vector<Short>}
-     * @param vectorMask el {@code VectorMask<Short>}
-     * @return el {@code ShortVector}
+     * @param binary the {@code VectorOperators.Binary}
+     * @param vector the {@code Vector<Short>}
+     * @param vectorMask the {@code VectorMask<Short>}
+     * @return the {@code ShortVector}
      */
     public abstract ShortVector lanewise(VectorOperators.Binary binary, Vector<Short> vector,
             VectorMask<Short> vectorMask);
 
     /**
-     * Aplica ese operador a cada posicion.
+     * Applies that operator to each lane.
      *
-     * @param binary el {@code VectorOperators.Binary}
-     * @param s el {@code short}
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param binary the {@code VectorOperators.Binary}
+     * @param s the {@code short}
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ShortVector lanewise(VectorOperators.Binary binary, short s) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Aplica ese operador a cada posicion.
+     * Applies that operator to each lane.
      *
-     * @param binary el {@code VectorOperators.Binary}
-     * @param s el {@code short}
-     * @param vectorMask el {@code VectorMask<Short>}
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param binary the {@code VectorOperators.Binary}
+     * @param s the {@code short}
+     * @param vectorMask the {@code VectorMask<Short>}
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ShortVector lanewise(VectorOperators.Binary binary, short s,
             VectorMask<Short> vectorMask) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Aplica ese operador a cada posicion.
+     * Applies that operator to each lane.
      *
-     * @param binary el {@code VectorOperators.Binary}
-     * @param l el {@code long}
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param binary the {@code VectorOperators.Binary}
+     * @param l the {@code long}
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ShortVector lanewise(VectorOperators.Binary binary, long l) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Aplica ese operador a cada posicion.
+     * Applies that operator to each lane.
      *
-     * @param binary el {@code VectorOperators.Binary}
-     * @param l el {@code long}
-     * @param vectorMask el {@code VectorMask<Short>}
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param binary the {@code VectorOperators.Binary}
+     * @param l the {@code long}
+     * @param vectorMask the {@code VectorMask<Short>}
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ShortVector lanewise(VectorOperators.Binary binary, long l,
             VectorMask<Short> vectorMask) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Aplica ese operador a cada posicion.
+     * Applies that operator to each lane.
      *
-     * @param ternary el {@code VectorOperators.Ternary}
-     * @param vector el {@code Vector<Short>}
-     * @param vector2 el {@code Vector<Short>}
-     * @return el {@code ShortVector}
+     * @param ternary the {@code VectorOperators.Ternary}
+     * @param vector the {@code Vector<Short>}
+     * @param vector2 the {@code Vector<Short>}
+     * @return the {@code ShortVector}
      */
     public abstract ShortVector lanewise(VectorOperators.Ternary ternary, Vector<Short> vector,
             Vector<Short> vector2);
 
     /**
-     * Aplica ese operador a cada posicion.
+     * Applies that operator to each lane.
      *
-     * @param ternary el {@code VectorOperators.Ternary}
-     * @param vector el {@code Vector<Short>}
-     * @param vector2 el {@code Vector<Short>}
-     * @param vectorMask el {@code VectorMask<Short>}
-     * @return el {@code ShortVector}
+     * @param ternary the {@code VectorOperators.Ternary}
+     * @param vector the {@code Vector<Short>}
+     * @param vector2 the {@code Vector<Short>}
+     * @param vectorMask the {@code VectorMask<Short>}
+     * @return the {@code ShortVector}
      */
     public abstract ShortVector lanewise(VectorOperators.Ternary ternary, Vector<Short> vector,
             Vector<Short> vector2, VectorMask<Short> vectorMask);
 
     /**
-     * Aplica ese operador a cada posicion.
+     * Applies that operator to each lane.
      *
-     * @param ternary el {@code VectorOperators.Ternary}
-     * @param s el {@code short}
-     * @param s2 el {@code short}
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param ternary the {@code VectorOperators.Ternary}
+     * @param s the {@code short}
+     * @param s2 the {@code short}
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ShortVector lanewise(VectorOperators.Ternary ternary, short s, short s2) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Aplica ese operador a cada posicion.
+     * Applies that operator to each lane.
      *
-     * @param ternary el {@code VectorOperators.Ternary}
-     * @param s el {@code short}
-     * @param s2 el {@code short}
-     * @param vectorMask el {@code VectorMask<Short>}
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param ternary the {@code VectorOperators.Ternary}
+     * @param s the {@code short}
+     * @param s2 the {@code short}
+     * @param vectorMask the {@code VectorMask<Short>}
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ShortVector lanewise(VectorOperators.Ternary ternary, short s, short s2,
             VectorMask<Short> vectorMask) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Aplica ese operador a cada posicion.
+     * Applies that operator to each lane.
      *
-     * @param ternary el {@code VectorOperators.Ternary}
-     * @param vector el {@code Vector<Short>}
-     * @param s el {@code short}
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param ternary the {@code VectorOperators.Ternary}
+     * @param vector the {@code Vector<Short>}
+     * @param s the {@code short}
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ShortVector lanewise(VectorOperators.Ternary ternary, Vector<Short> vector, short s
             ) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Aplica ese operador a cada posicion.
+     * Applies that operator to each lane.
      *
-     * @param ternary el {@code VectorOperators.Ternary}
-     * @param vector el {@code Vector<Short>}
-     * @param s el {@code short}
-     * @param vectorMask el {@code VectorMask<Short>}
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param ternary the {@code VectorOperators.Ternary}
+     * @param vector the {@code Vector<Short>}
+     * @param s the {@code short}
+     * @param vectorMask the {@code VectorMask<Short>}
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ShortVector lanewise(VectorOperators.Ternary ternary, Vector<Short> vector,
             short s, VectorMask<Short> vectorMask) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Aplica ese operador a cada posicion.
+     * Applies that operator to each lane.
      *
-     * @param ternary el {@code VectorOperators.Ternary}
-     * @param s el {@code short}
-     * @param vector el {@code Vector<Short>}
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param ternary the {@code VectorOperators.Ternary}
+     * @param s the {@code short}
+     * @param vector the {@code Vector<Short>}
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ShortVector lanewise(VectorOperators.Ternary ternary, short s, Vector<Short> vector
             ) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Aplica ese operador a cada posicion.
+     * Applies that operator to each lane.
      *
-     * @param ternary el {@code VectorOperators.Ternary}
-     * @param s el {@code short}
-     * @param vector el {@code Vector<Short>}
-     * @param vectorMask el {@code VectorMask<Short>}
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param ternary the {@code VectorOperators.Ternary}
+     * @param s the {@code short}
+     * @param vector the {@code Vector<Short>}
+     * @param vectorMask the {@code VectorMask<Short>}
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ShortVector lanewise(VectorOperators.Ternary ternary, short s,
             Vector<Short> vector, VectorMask<Short> vectorMask) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Suma posicion a posicion.
+     * Adds lane by lane.
      *
-     * @param vector el {@code Vector<Short>}
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vector the {@code Vector<Short>}
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ShortVector add(Vector<Short> vector) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Suma posicion a posicion.
+     * Adds lane by lane.
      *
-     * @param s el {@code short}
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param s the {@code short}
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ShortVector add(short s) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Suma posicion a posicion.
+     * Adds lane by lane.
      *
-     * @param vector el {@code Vector<Short>}
-     * @param vectorMask el {@code VectorMask<Short>}
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vector the {@code Vector<Short>}
+     * @param vectorMask the {@code VectorMask<Short>}
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ShortVector add(Vector<Short> vector, VectorMask<Short> vectorMask) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Suma posicion a posicion.
+     * Adds lane by lane.
      *
-     * @param s el {@code short}
-     * @param vectorMask el {@code VectorMask<Short>}
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param s the {@code short}
+     * @param vectorMask the {@code VectorMask<Short>}
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ShortVector add(short s, VectorMask<Short> vectorMask) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Resta posicion a posicion.
+     * Subtracts lane by lane.
      *
-     * @param vector el {@code Vector<Short>}
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vector the {@code Vector<Short>}
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ShortVector sub(Vector<Short> vector) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Resta posicion a posicion.
+     * Subtracts lane by lane.
      *
-     * @param s el {@code short}
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param s the {@code short}
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ShortVector sub(short s) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Resta posicion a posicion.
+     * Subtracts lane by lane.
      *
-     * @param vector el {@code Vector<Short>}
-     * @param vectorMask el {@code VectorMask<Short>}
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vector the {@code Vector<Short>}
+     * @param vectorMask the {@code VectorMask<Short>}
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ShortVector sub(Vector<Short> vector, VectorMask<Short> vectorMask) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Resta posicion a posicion.
+     * Subtracts lane by lane.
      *
-     * @param s el {@code short}
-     * @param vectorMask el {@code VectorMask<Short>}
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param s the {@code short}
+     * @param vectorMask the {@code VectorMask<Short>}
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ShortVector sub(short s, VectorMask<Short> vectorMask) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Multiplica posicion a posicion.
+     * Multiplies lane by lane.
      *
-     * @param vector el {@code Vector<Short>}
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vector the {@code Vector<Short>}
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ShortVector mul(Vector<Short> vector) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Multiplica posicion a posicion.
+     * Multiplies lane by lane.
      *
-     * @param s el {@code short}
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param s the {@code short}
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ShortVector mul(short s) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Multiplica posicion a posicion.
+     * Multiplies lane by lane.
      *
-     * @param vector el {@code Vector<Short>}
-     * @param vectorMask el {@code VectorMask<Short>}
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vector the {@code Vector<Short>}
+     * @param vectorMask the {@code VectorMask<Short>}
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ShortVector mul(Vector<Short> vector, VectorMask<Short> vectorMask) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Multiplica posicion a posicion.
+     * Multiplies lane by lane.
      *
-     * @param s el {@code short}
-     * @param vectorMask el {@code VectorMask<Short>}
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param s the {@code short}
+     * @param vectorMask the {@code VectorMask<Short>}
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ShortVector mul(short s, VectorMask<Short> vectorMask) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Divide posicion a posicion.
+     * Divides lane by lane.
      *
-     * @param vector el {@code Vector<Short>}
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vector the {@code Vector<Short>}
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ShortVector div(Vector<Short> vector) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Divide posicion a posicion.
+     * Divides lane by lane.
      *
-     * @param s el {@code short}
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param s the {@code short}
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ShortVector div(short s) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Divide posicion a posicion.
+     * Divides lane by lane.
      *
-     * @param vector el {@code Vector<Short>}
-     * @param vectorMask el {@code VectorMask<Short>}
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vector the {@code Vector<Short>}
+     * @param vectorMask the {@code VectorMask<Short>}
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ShortVector div(Vector<Short> vector, VectorMask<Short> vectorMask) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Divide posicion a posicion.
+     * Divides lane by lane.
      *
-     * @param s el {@code short}
-     * @param vectorMask el {@code VectorMask<Short>}
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param s the {@code short}
+     * @param vectorMask the {@code VectorMask<Short>}
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ShortVector div(short s, VectorMask<Short> vectorMask) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * El menor de cada par de posiciones.
+     * The smaller of each pair of lanes.
      *
-     * @param vector el {@code Vector<Short>}
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vector the {@code Vector<Short>}
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ShortVector min(Vector<Short> vector) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * El menor de cada par de posiciones.
+     * The smaller of each pair of lanes.
      *
-     * @param s el {@code short}
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param s the {@code short}
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ShortVector min(short s) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * El mayor de cada par de posiciones.
+     * The larger of each pair of lanes.
      *
-     * @param vector el {@code Vector<Short>}
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vector the {@code Vector<Short>}
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ShortVector max(Vector<Short> vector) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * El mayor de cada par de posiciones.
+     * The larger of each pair of lanes.
      *
-     * @param s el {@code short}
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param s the {@code short}
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ShortVector max(short s) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * La conjuncion bit a bit.
+     * The bitwise conjunction.
      *
-     * @param vector el {@code Vector<Short>}
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vector the {@code Vector<Short>}
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ShortVector and(Vector<Short> vector) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * La conjuncion bit a bit.
+     * The bitwise conjunction.
      *
-     * @param s el {@code short}
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param s the {@code short}
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ShortVector and(short s) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * La disyuncion bit a bit.
+     * The bitwise disjunction.
      *
-     * @param vector el {@code Vector<Short>}
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vector the {@code Vector<Short>}
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ShortVector or(Vector<Short> vector) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * La disyuncion bit a bit.
+     * The bitwise disjunction.
      *
-     * @param s el {@code short}
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param s the {@code short}
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ShortVector or(short s) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * El opuesto de cada posicion.
+     * The negation of each lane.
      *
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ShortVector neg() {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * El valor absoluto de cada posicion.
+     * The absolute value of each lane.
      *
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ShortVector abs() {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Invierte cada posicion.
+     * Inverts each lane.
      *
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ShortVector not() {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * La mascara de las posiciones iguales.
+     * The mask of the equal lanes.
      *
-     * @param vector el {@code Vector<Short>}
-     * @return el {@code VectorMask<Short>}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vector the {@code Vector<Short>}
+     * @return the {@code VectorMask<Short>}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final VectorMask<Short> eq(Vector<Short> vector) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * La mascara de las posiciones iguales.
+     * The mask of the equal lanes.
      *
-     * @param s el {@code short}
-     * @return el {@code VectorMask<Short>}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param s the {@code short}
+     * @return the {@code VectorMask<Short>}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final VectorMask<Short> eq(short s) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * La mascara de las posiciones menores.
+     * The mask of the lanes that are less.
      *
-     * @param vector el {@code Vector<Short>}
-     * @return el {@code VectorMask<Short>}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vector the {@code Vector<Short>}
+     * @return the {@code VectorMask<Short>}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final VectorMask<Short> lt(Vector<Short> vector) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * La mascara de las posiciones menores.
+     * The mask of the lanes that are less.
      *
-     * @param s el {@code short}
-     * @return el {@code VectorMask<Short>}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param s the {@code short}
+     * @return the {@code VectorMask<Short>}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final VectorMask<Short> lt(short s) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * La mascara de las posiciones que cumplen esa prueba.
+     * The mask of the lanes that pass that test.
      *
-     * @param test el {@code VectorOperators.Test}
-     * @return el {@code VectorMask<Short>}
+     * @param test the {@code VectorOperators.Test}
+     * @return the {@code VectorMask<Short>}
      */
     public abstract VectorMask<Short> test(VectorOperators.Test test);
 
     /**
-     * La mascara de las posiciones que cumplen esa prueba.
+     * The mask of the lanes that pass that test.
      *
-     * @param test el {@code VectorOperators.Test}
-     * @param vectorMask el {@code VectorMask<Short>}
-     * @return el {@code VectorMask<Short>}
+     * @param test the {@code VectorOperators.Test}
+     * @param vectorMask the {@code VectorMask<Short>}
+     * @return the {@code VectorMask<Short>}
      */
     public abstract VectorMask<Short> test(VectorOperators.Test test, VectorMask<Short> vectorMask);
 
     /**
-     * Compara posicion a posicion y devuelve la mascara del resultado.
+     * Compares lane by lane and returns the mask of the result.
      *
-     * @param comparison el {@code VectorOperators.Comparison}
-     * @param vector el {@code Vector<Short>}
-     * @return el {@code VectorMask<Short>}
+     * @param comparison the {@code VectorOperators.Comparison}
+     * @param vector the {@code Vector<Short>}
+     * @return the {@code VectorMask<Short>}
      */
     public abstract VectorMask<Short> compare(VectorOperators.Comparison comparison,
             Vector<Short> vector);
 
     /**
-     * Compara posicion a posicion y devuelve la mascara del resultado.
+     * Compares lane by lane and returns the mask of the result.
      *
-     * @param comparison el {@code VectorOperators.Comparison}
-     * @param s el {@code short}
-     * @return el {@code VectorMask<Short>}
+     * @param comparison the {@code VectorOperators.Comparison}
+     * @param s the {@code short}
+     * @return the {@code VectorMask<Short>}
      */
     public abstract VectorMask<Short> compare(VectorOperators.Comparison comparison, short s);
 
     /**
-     * Compara posicion a posicion y devuelve la mascara del resultado.
+     * Compares lane by lane and returns the mask of the result.
      *
-     * @param comparison el {@code VectorOperators.Comparison}
-     * @param s el {@code short}
-     * @param vectorMask el {@code VectorMask<Short>}
-     * @return el {@code VectorMask<Short>}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param comparison the {@code VectorOperators.Comparison}
+     * @param s the {@code short}
+     * @param vectorMask the {@code VectorMask<Short>}
+     * @return the {@code VectorMask<Short>}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final VectorMask<Short> compare(VectorOperators.Comparison comparison, short s,
             VectorMask<Short> vectorMask) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Compara posicion a posicion y devuelve la mascara del resultado.
+     * Compares lane by lane and returns the mask of the result.
      *
-     * @param comparison el {@code VectorOperators.Comparison}
-     * @param l el {@code long}
-     * @return el {@code VectorMask<Short>}
+     * @param comparison the {@code VectorOperators.Comparison}
+     * @param l the {@code long}
+     * @return the {@code VectorMask<Short>}
      */
     public abstract VectorMask<Short> compare(VectorOperators.Comparison comparison, long l);
 
     /**
-     * Compara posicion a posicion y devuelve la mascara del resultado.
+     * Compares lane by lane and returns the mask of the result.
      *
-     * @param comparison el {@code VectorOperators.Comparison}
-     * @param l el {@code long}
-     * @param vectorMask el {@code VectorMask<Short>}
-     * @return el {@code VectorMask<Short>}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param comparison the {@code VectorOperators.Comparison}
+     * @param l the {@code long}
+     * @param vectorMask the {@code VectorMask<Short>}
+     * @return the {@code VectorMask<Short>}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final VectorMask<Short> compare(VectorOperators.Comparison comparison, long l,
             VectorMask<Short> vectorMask) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Mezcla dos vectores tomando de uno o del otro segun la mascara.
+     * Blends two vectors, taking from one or the other according to the mask.
      *
-     * @param vector el {@code Vector<Short>}
-     * @param vectorMask el {@code VectorMask<Short>}
-     * @return el {@code ShortVector}
+     * @param vector the {@code Vector<Short>}
+     * @param vectorMask the {@code VectorMask<Short>}
+     * @return the {@code ShortVector}
      */
     public abstract ShortVector blend(Vector<Short> vector, VectorMask<Short> vectorMask);
 
     /**
-     * Le suma a cada posicion su propio indice multiplicado por ese paso.
+     * Adds to each lane its own index multiplied by that step.
      *
-     * @param i el {@code int}
-     * @return el {@code ShortVector}
+     * @param i the {@code int}
+     * @return the {@code ShortVector}
      */
     public abstract ShortVector addIndex(int i);
 
     /**
-     * Mezcla dos vectores tomando de uno o del otro segun la mascara.
+     * Blends two vectors, taking from one or the other according to the mask.
      *
-     * @param s el {@code short}
-     * @param vectorMask el {@code VectorMask<Short>}
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param s the {@code short}
+     * @param vectorMask the {@code VectorMask<Short>}
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ShortVector blend(short s, VectorMask<Short> vectorMask) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Mezcla dos vectores tomando de uno o del otro segun la mascara.
+     * Blends two vectors, taking from one or the other according to the mask.
      *
-     * @param l el {@code long}
-     * @param vectorMask el {@code VectorMask<Short>}
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param l the {@code long}
+     * @param vectorMask the {@code VectorMask<Short>}
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ShortVector blend(long l, VectorMask<Short> vectorMask) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Un vector que arranca en esa posicion.
+     * A vector starting at that lane.
      *
-     * @param i el {@code int}
-     * @param vector el {@code Vector<Short>}
-     * @return el {@code ShortVector}
+     * @param i the {@code int}
+     * @param vector the {@code Vector<Short>}
+     * @return the {@code ShortVector}
      */
     public abstract ShortVector slice(int i, Vector<Short> vector);
 
     /**
-     * Un vector que arranca en esa posicion.
+     * A vector starting at that lane.
      *
-     * @param i el {@code int}
-     * @param vector el {@code Vector<Short>}
-     * @param vectorMask el {@code VectorMask<Short>}
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param i the {@code int}
+     * @param vector the {@code Vector<Short>}
+     * @param vectorMask the {@code VectorMask<Short>}
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ShortVector slice(int i, Vector<Short> vector, VectorMask<Short> vectorMask) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Un vector que arranca en esa posicion.
+     * A vector starting at that lane.
      *
-     * @param i el {@code int}
-     * @return el {@code ShortVector}
+     * @param i the {@code int}
+     * @return the {@code ShortVector}
      */
     public abstract ShortVector slice(int i);
 
     /**
-     * La operacion inversa de {@code slice}: devuelve las posiciones a su lugar.
+     * The inverse of {@code slice}: puts the lanes back in their place.
      *
-     * @param i el {@code int}
-     * @param vector el {@code Vector<Short>}
-     * @param i2 el {@code int}
-     * @return el {@code ShortVector}
+     * @param i the {@code int}
+     * @param vector the {@code Vector<Short>}
+     * @param i2 the {@code int}
+     * @return the {@code ShortVector}
      */
     public abstract ShortVector unslice(int i, Vector<Short> vector, int i2);
 
     /**
-     * La operacion inversa de {@code slice}: devuelve las posiciones a su lugar.
+     * The inverse of {@code slice}: puts the lanes back in their place.
      *
-     * @param i el {@code int}
-     * @param vector el {@code Vector<Short>}
-     * @param i2 el {@code int}
-     * @param vectorMask el {@code VectorMask<Short>}
-     * @return el {@code ShortVector}
+     * @param i the {@code int}
+     * @param vector the {@code Vector<Short>}
+     * @param i2 the {@code int}
+     * @param vectorMask the {@code VectorMask<Short>}
+     * @return the {@code ShortVector}
      */
     public abstract ShortVector unslice(int i, Vector<Short> vector, int i2,
             VectorMask<Short> vectorMask);
 
     /**
-     * La operacion inversa de {@code slice}: devuelve las posiciones a su lugar.
+     * The inverse of {@code slice}: puts the lanes back in their place.
      *
-     * @param i el {@code int}
-     * @return el {@code ShortVector}
+     * @param i the {@code int}
+     * @return the {@code ShortVector}
      */
     public abstract ShortVector unslice(int i);
 
     /**
-     * Reordena las posiciones segun ese barajado.
+     * Rearranges the lanes according to that shuffle.
      *
-     * @param vectorShuffle el {@code VectorShuffle<Short>}
-     * @return el {@code ShortVector}
+     * @param vectorShuffle the {@code VectorShuffle<Short>}
+     * @return the {@code ShortVector}
      */
     public abstract ShortVector rearrange(VectorShuffle<Short> vectorShuffle);
 
     /**
-     * Reordena las posiciones segun ese barajado.
+     * Rearranges the lanes according to that shuffle.
      *
-     * @param vectorShuffle el {@code VectorShuffle<Short>}
-     * @param vectorMask el {@code VectorMask<Short>}
-     * @return el {@code ShortVector}
+     * @param vectorShuffle the {@code VectorShuffle<Short>}
+     * @param vectorMask the {@code VectorMask<Short>}
+     * @return the {@code ShortVector}
      */
     public abstract ShortVector rearrange(VectorShuffle<Short> vectorShuffle,
             VectorMask<Short> vectorMask);
 
     /**
-     * Reordena las posiciones segun ese barajado.
+     * Rearranges the lanes according to that shuffle.
      *
-     * @param vectorShuffle el {@code VectorShuffle<Short>}
-     * @param vector el {@code Vector<Short>}
-     * @return el {@code ShortVector}
+     * @param vectorShuffle the {@code VectorShuffle<Short>}
+     * @param vector the {@code Vector<Short>}
+     * @return the {@code ShortVector}
      */
     public abstract ShortVector rearrange(VectorShuffle<Short> vectorShuffle, Vector<Short> vector);
 
     /**
-     * Junta las posiciones prendidas al principio.
+     * Gathers the set lanes at the start.
      *
-     * @param vectorMask el {@code VectorMask<Short>}
-     * @return el {@code ShortVector}
+     * @param vectorMask the {@code VectorMask<Short>}
+     * @return the {@code ShortVector}
      */
     public abstract ShortVector compress(VectorMask<Short> vectorMask);
 
     /**
-     * Reparte las posiciones del principio en los lugares que la mascara marca.
+     * Spreads the lanes from the start into the places the mask marks.
      *
-     * @param vectorMask el {@code VectorMask<Short>}
-     * @return el {@code ShortVector}
+     * @param vectorMask the {@code VectorMask<Short>}
+     * @return the {@code ShortVector}
      */
     public abstract ShortVector expand(VectorMask<Short> vectorMask);
 
     /**
-     * Toma de otro vector las posiciones que este indica.
+     * Takes from another vector the lanes this one indicates.
      *
-     * @param vector el {@code Vector<Short>}
-     * @return el {@code ShortVector}
+     * @param vector the {@code Vector<Short>}
+     * @return the {@code ShortVector}
      */
     public abstract ShortVector selectFrom(Vector<Short> vector);
 
     /**
-     * Toma de otro vector las posiciones que este indica.
+     * Takes from another vector the lanes this one indicates.
      *
-     * @param vector el {@code Vector<Short>}
-     * @param vectorMask el {@code VectorMask<Short>}
-     * @return el {@code ShortVector}
+     * @param vector the {@code Vector<Short>}
+     * @param vectorMask the {@code VectorMask<Short>}
+     * @return the {@code ShortVector}
      */
     public abstract ShortVector selectFrom(Vector<Short> vector, VectorMask<Short> vectorMask);
 
     /**
-     * Toma de otro vector las posiciones que este indica.
+     * Takes from another vector the lanes this one indicates.
      *
-     * @param vector el {@code Vector<Short>}
-     * @param vector2 el {@code Vector<Short>}
-     * @return el {@code ShortVector}
+     * @param vector the {@code Vector<Short>}
+     * @param vector2 the {@code Vector<Short>}
+     * @return the {@code ShortVector}
      */
     public abstract ShortVector selectFrom(Vector<Short> vector, Vector<Short> vector2);
 
     /**
-     * Elige bit a bit entre dos vectores segun un tercero.
+     * Chooses bit by bit between two vectors according to a third.
      *
-     * @param vector el {@code Vector<Short>}
-     * @param vector2 el {@code Vector<Short>}
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vector the {@code Vector<Short>}
+     * @param vector2 the {@code Vector<Short>}
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ShortVector bitwiseBlend(Vector<Short> vector, Vector<Short> vector2) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Elige bit a bit entre dos vectores segun un tercero.
+     * Chooses bit by bit between two vectors according to a third.
      *
-     * @param s el {@code short}
-     * @param s2 el {@code short}
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param s the {@code short}
+     * @param s2 the {@code short}
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ShortVector bitwiseBlend(short s, short s2) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Elige bit a bit entre dos vectores segun un tercero.
+     * Chooses bit by bit between two vectors according to a third.
      *
-     * @param s el {@code short}
-     * @param vector el {@code Vector<Short>}
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param s the {@code short}
+     * @param vector the {@code Vector<Short>}
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ShortVector bitwiseBlend(short s, Vector<Short> vector) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Elige bit a bit entre dos vectores segun un tercero.
+     * Chooses bit by bit between two vectors according to a third.
      *
-     * @param vector el {@code Vector<Short>}
-     * @param s el {@code short}
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vector the {@code Vector<Short>}
+     * @param s the {@code short}
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ShortVector bitwiseBlend(Vector<Short> vector, short s) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Combina todas las posiciones en un solo valor con ese operador.
+     * Combines all the lanes into a single value with that operator.
      *
-     * @param associative el {@code VectorOperators.Associative}
-     * @return el {@code short}
+     * @param associative the {@code VectorOperators.Associative}
+     * @return the {@code short}
      */
     public abstract short reduceLanes(VectorOperators.Associative associative);
 
     /**
-     * Combina todas las posiciones en un solo valor con ese operador.
+     * Combines all the lanes into a single value with that operator.
      *
-     * @param associative el {@code VectorOperators.Associative}
-     * @param vectorMask el {@code VectorMask<Short>}
-     * @return el {@code short}
+     * @param associative the {@code VectorOperators.Associative}
+     * @param vectorMask the {@code VectorMask<Short>}
+     * @return the {@code short}
      */
     public abstract short reduceLanes(VectorOperators.Associative associative,
             VectorMask<Short> vectorMask);
 
     /**
-     * Como {@code reduceLanes}, pero el resultado se devuelve como {@code long}.
+     * Like {@code reduceLanes}, but the result is returned as a {@code long}.
      *
-     * @param associative el {@code VectorOperators.Associative}
-     * @return el numero
+     * @param associative the {@code VectorOperators.Associative}
+     * @return the number
      */
     public abstract long reduceLanesToLong(VectorOperators.Associative associative);
 
     /**
-     * Como {@code reduceLanes}, pero el resultado se devuelve como {@code long}.
+     * Like {@code reduceLanes}, but the result is returned as a {@code long}.
      *
-     * @param associative el {@code VectorOperators.Associative}
-     * @param vectorMask el {@code VectorMask<Short>}
-     * @return el numero
+     * @param associative the {@code VectorOperators.Associative}
+     * @param vectorMask the {@code VectorMask<Short>}
+     * @return the number
      */
     public abstract long reduceLanesToLong(VectorOperators.Associative associative,
             VectorMask<Short> vectorMask);
 
     /**
-     * El valor de esa posicion.
+     * The value of that lane.
      *
-     * @param i el {@code int}
-     * @return el {@code short}
+     * @param i the {@code int}
+     * @return the {@code short}
      */
     public abstract short lane(int i);
 
     /**
-     * El mismo vector con esa posicion cambiada.
+     * The same vector with that lane changed.
      *
-     * @param i el {@code int}
-     * @param s el {@code short}
-     * @return el {@code ShortVector}
+     * @param i the {@code int}
+     * @param s the {@code short}
+     * @return the {@code ShortVector}
      */
     public abstract ShortVector withLane(int i, short s);
 
     /**
-     * Las posiciones en un arreglo nuevo.
+     * The lanes in a new array.
      *
-     * @return el {@code short[]}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @return the {@code short[]}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final short[] toArray() {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Las posiciones en un arreglo de {@code int} nuevo.
+     * The lanes in a new {@code int} array.
      *
-     * @return el {@code int[]}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @return the {@code int[]}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final int[] toIntArray() {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Las posiciones en un arreglo de {@code long} nuevo.
+     * The lanes in a new {@code long} array.
      *
-     * @return el {@code long[]}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @return the {@code long[]}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final long[] toLongArray() {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Las posiciones en un arreglo de {@code double} nuevo.
+     * The lanes in a new {@code double} array.
      *
-     * @return el {@code double[]}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @return the {@code double[]}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final double[] toDoubleArray() {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Un vector leido de ese arreglo.
+     * A vector read from that array.
      *
-     * @param vectorSpecies el {@code VectorSpecies<Short>}
-     * @param ss el {@code short[]}
-     * @param i el {@code int}
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vectorSpecies the {@code VectorSpecies<Short>}
+     * @param ss the {@code short[]}
+     * @param i the {@code int}
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public static ShortVector fromArray(VectorSpecies<Short> vectorSpecies, short[] ss, int i) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Un vector leido de ese arreglo.
+     * A vector read from that array.
      *
-     * @param vectorSpecies el {@code VectorSpecies<Short>}
-     * @param ss el {@code short[]}
-     * @param i el {@code int}
-     * @param vectorMask el {@code VectorMask<Short>}
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vectorSpecies the {@code VectorSpecies<Short>}
+     * @param ss the {@code short[]}
+     * @param i the {@code int}
+     * @param vectorMask the {@code VectorMask<Short>}
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public static ShortVector fromArray(VectorSpecies<Short> vectorSpecies, short[] ss, int i,
             VectorMask<Short> vectorMask) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Un vector leido de ese arreglo.
+     * A vector read from that array.
      *
-     * @param vectorSpecies el {@code VectorSpecies<Short>}
-     * @param ss el {@code short[]}
-     * @param i el {@code int}
-     * @param is el {@code int[]}
-     * @param i2 el {@code int}
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vectorSpecies the {@code VectorSpecies<Short>}
+     * @param ss the {@code short[]}
+     * @param i the {@code int}
+     * @param is the {@code int[]}
+     * @param i2 the {@code int}
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public static ShortVector fromArray(VectorSpecies<Short> vectorSpecies, short[] ss, int i,
             int[] is, int i2) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Un vector leido de ese arreglo.
+     * A vector read from that array.
      *
-     * @param vectorSpecies el {@code VectorSpecies<Short>}
-     * @param ss el {@code short[]}
-     * @param i el {@code int}
-     * @param is el {@code int[]}
-     * @param i2 el {@code int}
-     * @param vectorMask el {@code VectorMask<Short>}
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vectorSpecies the {@code VectorSpecies<Short>}
+     * @param ss the {@code short[]}
+     * @param i the {@code int}
+     * @param is the {@code int[]}
+     * @param i2 the {@code int}
+     * @param vectorMask the {@code VectorMask<Short>}
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public static ShortVector fromArray(VectorSpecies<Short> vectorSpecies, short[] ss, int i,
             int[] is, int i2, VectorMask<Short> vectorMask) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Un vector leido de ese arreglo de caracteres.
+     * A vector read from that array of characters.
      *
-     * @param vectorSpecies el {@code VectorSpecies<Short>}
-     * @param chars el {@code char[]}
-     * @param i el {@code int}
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vectorSpecies the {@code VectorSpecies<Short>}
+     * @param chars the {@code char[]}
+     * @param i the {@code int}
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public static ShortVector fromCharArray(VectorSpecies<Short> vectorSpecies, char[] chars, int i
             ) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Un vector leido de ese arreglo de caracteres.
+     * A vector read from that array of characters.
      *
-     * @param vectorSpecies el {@code VectorSpecies<Short>}
-     * @param chars el {@code char[]}
-     * @param i el {@code int}
-     * @param vectorMask el {@code VectorMask<Short>}
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vectorSpecies the {@code VectorSpecies<Short>}
+     * @param chars the {@code char[]}
+     * @param i the {@code int}
+     * @param vectorMask the {@code VectorMask<Short>}
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public static ShortVector fromCharArray(VectorSpecies<Short> vectorSpecies, char[] chars, int i,
             VectorMask<Short> vectorMask) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Un vector leido de ese arreglo de caracteres.
+     * A vector read from that array of characters.
      *
-     * @param vectorSpecies el {@code VectorSpecies<Short>}
-     * @param chars el {@code char[]}
-     * @param i el {@code int}
-     * @param is el {@code int[]}
-     * @param i2 el {@code int}
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vectorSpecies the {@code VectorSpecies<Short>}
+     * @param chars the {@code char[]}
+     * @param i the {@code int}
+     * @param is the {@code int[]}
+     * @param i2 the {@code int}
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public static ShortVector fromCharArray(VectorSpecies<Short> vectorSpecies, char[] chars, int i,
             int[] is, int i2) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Un vector leido de ese arreglo de caracteres.
+     * A vector read from that array of characters.
      *
-     * @param vectorSpecies el {@code VectorSpecies<Short>}
-     * @param chars el {@code char[]}
-     * @param i el {@code int}
-     * @param is el {@code int[]}
-     * @param i2 el {@code int}
-     * @param vectorMask el {@code VectorMask<Short>}
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vectorSpecies the {@code VectorSpecies<Short>}
+     * @param chars the {@code char[]}
+     * @param i the {@code int}
+     * @param is the {@code int[]}
+     * @param i2 the {@code int}
+     * @param vectorMask the {@code VectorMask<Short>}
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public static ShortVector fromCharArray(VectorSpecies<Short> vectorSpecies, char[] chars, int i,
             int[] is, int i2, VectorMask<Short> vectorMask) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Un vector leido de esa zona de memoria.
+     * A vector read from that memory segment.
      *
-     * @param vectorSpecies el {@code VectorSpecies<Short>}
-     * @param memorySegment el {@code java.lang.foreign.MemorySegment}
-     * @param l el {@code long}
-     * @param byteOrder el {@code java.nio.ByteOrder}
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vectorSpecies the {@code VectorSpecies<Short>}
+     * @param memorySegment the {@code java.lang.foreign.MemorySegment}
+     * @param l the {@code long}
+     * @param byteOrder the {@code java.nio.ByteOrder}
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public static ShortVector fromMemorySegment(VectorSpecies<Short> vectorSpecies,
             java.lang.foreign.MemorySegment memorySegment, long l, java.nio.ByteOrder byteOrder) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Un vector leido de esa zona de memoria.
+     * A vector read from that memory segment.
      *
-     * @param vectorSpecies el {@code VectorSpecies<Short>}
-     * @param memorySegment el {@code java.lang.foreign.MemorySegment}
-     * @param l el {@code long}
-     * @param byteOrder el {@code java.nio.ByteOrder}
-     * @param vectorMask el {@code VectorMask<Short>}
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vectorSpecies the {@code VectorSpecies<Short>}
+     * @param memorySegment the {@code java.lang.foreign.MemorySegment}
+     * @param l the {@code long}
+     * @param byteOrder the {@code java.nio.ByteOrder}
+     * @param vectorMask the {@code VectorMask<Short>}
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public static ShortVector fromMemorySegment(VectorSpecies<Short> vectorSpecies,
             java.lang.foreign.MemorySegment memorySegment, long l, java.nio.ByteOrder byteOrder,
             VectorMask<Short> vectorMask) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Escribe el vector en ese arreglo.
+     * Writes the vector into that array.
      *
-     * @param ss el {@code short[]}
-     * @param i el {@code int}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param ss the {@code short[]}
+     * @param i the {@code int}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final void intoArray(short[] ss, int i) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Escribe el vector en ese arreglo.
+     * Writes the vector into that array.
      *
-     * @param ss el {@code short[]}
-     * @param i el {@code int}
-     * @param vectorMask el {@code VectorMask<Short>}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param ss the {@code short[]}
+     * @param i the {@code int}
+     * @param vectorMask the {@code VectorMask<Short>}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final void intoArray(short[] ss, int i, VectorMask<Short> vectorMask) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Escribe el vector en ese arreglo.
+     * Writes the vector into that array.
      *
-     * @param ss el {@code short[]}
-     * @param i el {@code int}
-     * @param is el {@code int[]}
-     * @param i2 el {@code int}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param ss the {@code short[]}
+     * @param i the {@code int}
+     * @param is the {@code int[]}
+     * @param i2 the {@code int}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final void intoArray(short[] ss, int i, int[] is, int i2) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Escribe el vector en ese arreglo.
+     * Writes the vector into that array.
      *
-     * @param ss el {@code short[]}
-     * @param i el {@code int}
-     * @param is el {@code int[]}
-     * @param i2 el {@code int}
-     * @param vectorMask el {@code VectorMask<Short>}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param ss the {@code short[]}
+     * @param i the {@code int}
+     * @param is the {@code int[]}
+     * @param i2 the {@code int}
+     * @param vectorMask the {@code VectorMask<Short>}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final void intoArray(short[] ss, int i, int[] is, int i2, VectorMask<Short> vectorMask) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Escribe el vector en ese arreglo de caracteres.
+     * Writes the vector into that array of characters.
      *
-     * @param chars el {@code char[]}
-     * @param i el {@code int}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param chars the {@code char[]}
+     * @param i the {@code int}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final void intoCharArray(char[] chars, int i) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Escribe el vector en ese arreglo de caracteres.
+     * Writes the vector into that array of characters.
      *
-     * @param chars el {@code char[]}
-     * @param i el {@code int}
-     * @param vectorMask el {@code VectorMask<Short>}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param chars the {@code char[]}
+     * @param i the {@code int}
+     * @param vectorMask the {@code VectorMask<Short>}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final void intoCharArray(char[] chars, int i, VectorMask<Short> vectorMask) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Escribe el vector en ese arreglo de caracteres.
+     * Writes the vector into that array of characters.
      *
-     * @param chars el {@code char[]}
-     * @param i el {@code int}
-     * @param is el {@code int[]}
-     * @param i2 el {@code int}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param chars the {@code char[]}
+     * @param i the {@code int}
+     * @param is the {@code int[]}
+     * @param i2 the {@code int}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final void intoCharArray(char[] chars, int i, int[] is, int i2) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Escribe el vector en ese arreglo de caracteres.
+     * Writes the vector into that array of characters.
      *
-     * @param chars el {@code char[]}
-     * @param i el {@code int}
-     * @param is el {@code int[]}
-     * @param i2 el {@code int}
-     * @param vectorMask el {@code VectorMask<Short>}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param chars the {@code char[]}
+     * @param i the {@code int}
+     * @param is the {@code int[]}
+     * @param i2 the {@code int}
+     * @param vectorMask the {@code VectorMask<Short>}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final void intoCharArray(char[] chars, int i, int[] is, int i2,
             VectorMask<Short> vectorMask) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Escribe el vector en esa zona de memoria.
+     * Writes the vector into that memory segment.
      *
-     * @param memorySegment el {@code java.lang.foreign.MemorySegment}
-     * @param l el {@code long}
-     * @param byteOrder el {@code java.nio.ByteOrder}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param memorySegment the {@code java.lang.foreign.MemorySegment}
+     * @param l the {@code long}
+     * @param byteOrder the {@code java.nio.ByteOrder}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final void intoMemorySegment(java.lang.foreign.MemorySegment memorySegment, long l,
             java.nio.ByteOrder byteOrder) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Escribe el vector en esa zona de memoria.
+     * Writes the vector into that memory segment.
      *
-     * @param memorySegment el {@code java.lang.foreign.MemorySegment}
-     * @param l el {@code long}
-     * @param byteOrder el {@code java.nio.ByteOrder}
-     * @param vectorMask el {@code VectorMask<Short>}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param memorySegment the {@code java.lang.foreign.MemorySegment}
+     * @param l the {@code long}
+     * @param byteOrder the {@code java.nio.ByteOrder}
+     * @param vectorMask the {@code VectorMask<Short>}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final void intoMemorySegment(java.lang.foreign.MemorySegment memorySegment, long l,
             java.nio.ByteOrder byteOrder, VectorMask<Short> vectorMask) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Los mismos bits leidos como {@code byte}.
+     * The same bits read as {@code byte}.
      *
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ByteVector reinterpretAsBytes() {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Los mismos bits vistos como el entero del mismo tamano.
+     * The same bits seen as the integral type of the same size.
      *
-     * @return el {@code ShortVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @return the {@code ShortVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ShortVector viewAsIntegralLanes() {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Los mismos bits vistos como el flotante del mismo tamano.
+     * The same bits seen as the floating-point type of the same size.
      *
-     * @return el {@code Vector<?>}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @return the {@code Vector<?>}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final Vector<?> viewAsFloatingLanes() {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Una representacion legible.
+     * A readable representation.
      *
-     * @return el texto
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @return the text
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final String toString() {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Si el otro es igual a este.
+     * Whether the other one is equal to this one.
      *
-     * @param obj el {@code Object}
-     * @return cierto o falso, segun corresponda
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param obj the {@code Object}
+     * @return true or false, as the case may be
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final boolean equals(Object obj) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * El codigo de dispersion.
+     * The hash code.
      *
-     * @return el numero
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @return the number
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final int hashCode() {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 }

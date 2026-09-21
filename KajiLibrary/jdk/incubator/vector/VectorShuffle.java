@@ -7,281 +7,284 @@ import java.util.function.IntUnaryOperator;
 import jdk.internal.vm.vector.VectorSupport;
 
 /**
- * Una permutacion de carriles: de donde sale cada posicion del resultado.
+ * A permutation of lanes: where each lane of the result comes from.
  *
- * <p>Es la operacion que no tiene equivalente escalar barato. Reordenar, intercalar, dar vuelta o
- * repetir carriles cuesta una instruccion, y hacerlo con indices en un bucle cuesta un acceso a
- * memoria por elemento.
+ * <p>It is the operation that has no cheap scalar equivalent. Reordering, interleaving, reversing
+ * or repeating lanes costs one instruction, and doing it with indices in a loop costs one memory
+ * access per element.
  *
  * @since 16
  */
 public abstract class VectorShuffle<E extends Object> extends VectorSupport.VectorShuffle<E> {
 
     /**
-     * Con esa carga util.
+     * With that payload.
      *
-     * <p>En el JDK este constructor es de paquete, asi que no aparece en los volcados. Va escrito
-     * igual porque la superclase no tiene uno sin argumentos: sin el, javac genera uno que llama a
-     * un {@code super()} que no existe, y el archivo compilado queda invalido (hallazgo #515).
+     * <p>In the JDK this constructor is package-private, so it does not show up in the dumps. It is
+     * written anyway because the superclass has no no-argument one: without it, the implicit
+     * default constructor would call a {@code super()} that does not exist. The note said javac
+     * then emits an invalid class file (finding #515); that finding is closed in the source javac,
+     * which now rejects the class instead, but the frozen {@code bin/javac.exe} predates the fix.
+     * The constructor is needed either way.
      *
-     * @param payload el arreglo de posiciones
+     * @param payload the array of lanes
      */
     VectorShuffle(Object payload) {
         super(payload);
     }
 
     /**
-     * La especie de los vectores que este barajado sabe reordenar.
+     * The species of the vectors this shuffle knows how to rearrange.
      *
-     * @return el {@code VectorSpecies<E>}
+     * @return the {@code VectorSpecies<E>}
      */
     public abstract VectorSpecies<E> vectorSpecies();
 
     /**
-     * Cuantas posiciones tiene el barajado.
+     * How many lanes the shuffle has.
      *
-     * @return el numero
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @return the number
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final int length() {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * El mismo barajado para otra especie del mismo largo.
+     * The same shuffle for another species of the same length.
      *
-     * @param <F> el tipo, en su version envuelta
-     * @param vectorSpecies el {@code VectorSpecies<F>}
-     * @return el {@code VectorShuffle<F>}
+     * @param <F> the type, in its boxed form
+     * @param vectorSpecies the {@code VectorSpecies<F>}
+     * @return the {@code VectorShuffle<F>}
      */
     public abstract <F extends Object> VectorShuffle<F> cast(VectorSpecies<F> vectorSpecies);
 
     /**
-     * Comprueba que el barajado sea de esa especie y devuelve lo mismo, ya tipado.
+     * Checks that the shuffle is of that species and returns the same, already typed.
      *
-     * @param <F> el tipo, en su version envuelta
-     * @param vectorSpecies el {@code VectorSpecies<F>}
-     * @return el {@code VectorShuffle<F>}
+     * @param <F> the type, in its boxed form
+     * @param vectorSpecies the {@code VectorSpecies<F>}
+     * @return the {@code VectorShuffle<F>}
      */
     public abstract <F extends Object> VectorShuffle<F> check(VectorSpecies<F> vectorSpecies);
 
     /**
-     * Comprueba que ese indice caiga dentro.
+     * Checks that that index falls inside.
      *
-     * @param i el {@code int}
-     * @return el numero
+     * @param i the {@code int}
+     * @return the number
      */
     public abstract int checkIndex(int i);
 
     /**
-     * Ese indice llevado al rango dando la vuelta.
+     * That index brought into range by wrapping around.
      *
-     * @param i el {@code int}
-     * @return el numero
+     * @param i the {@code int}
+     * @return the number
      */
     public abstract int wrapIndex(int i);
 
     /**
-     * Comprueba que todos los indices caigan dentro.
+     * Checks that all the indices fall inside.
      *
-     * @return el {@code VectorShuffle<E>}
+     * @return the {@code VectorShuffle<E>}
      */
     public abstract VectorShuffle<E> checkIndexes();
 
     /**
-     * El barajado con todos sus indices llevados al rango.
+     * The shuffle with all its indices brought into range.
      *
-     * @return el {@code VectorShuffle<E>}
+     * @return the {@code VectorShuffle<E>}
      */
     public abstract VectorShuffle<E> wrapIndexes();
 
     /**
-     * La mascara de los indices que caen dentro del vector.
+     * The mask of the indices that fall inside the vector.
      *
-     * @return el {@code VectorMask<E>}
+     * @return the {@code VectorMask<E>}
      */
     public abstract VectorMask<E> laneIsValid();
 
     /**
-     * Un barajado con esos indices.
+     * A shuffle with those indices.
      *
-     * @param <E> el tipo, en su version envuelta
-     * @param vectorSpecies el {@code VectorSpecies<E>}
-     * @param i el {@code int...}
-     * @return el {@code VectorShuffle<E>}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param <E> the type, in its boxed form
+     * @param vectorSpecies the {@code VectorSpecies<E>}
+     * @param i the {@code int...}
+     * @return the {@code VectorShuffle<E>}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public static <E extends Object> VectorShuffle<E> fromValues(VectorSpecies<E> vectorSpecies,
             int... i) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Un barajado leido de ese arreglo de indices.
+     * A shuffle read from that array of indices.
      *
-     * @param <E> el tipo, en su version envuelta
-     * @param vectorSpecies el {@code VectorSpecies<E>}
-     * @param is el {@code int[]}
-     * @param i el {@code int}
-     * @return el {@code VectorShuffle<E>}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param <E> the type, in its boxed form
+     * @param vectorSpecies the {@code VectorSpecies<E>}
+     * @param is the {@code int[]}
+     * @param i the {@code int}
+     * @return the {@code VectorShuffle<E>}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public static <E extends Object> VectorShuffle<E> fromArray(VectorSpecies<E> vectorSpecies,
             int[] is, int i) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Un barajado leido de esa zona de memoria.
+     * A shuffle read from that memory segment.
      *
-     * @param <E> el tipo, en su version envuelta
-     * @param vectorSpecies el {@code VectorSpecies<E>}
-     * @param memorySegment el {@code java.lang.foreign.MemorySegment}
-     * @param l el {@code long}
-     * @param byteOrder el {@code java.nio.ByteOrder}
-     * @return el {@code VectorShuffle<E>}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param <E> the type, in its boxed form
+     * @param vectorSpecies the {@code VectorSpecies<E>}
+     * @param memorySegment the {@code java.lang.foreign.MemorySegment}
+     * @param l the {@code long}
+     * @param byteOrder the {@code java.nio.ByteOrder}
+     * @return the {@code VectorShuffle<E>}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public static <E extends Object> VectorShuffle<E> fromMemorySegment(
             VectorSpecies<E> vectorSpecies, java.lang.foreign.MemorySegment memorySegment, long l,
             java.nio.ByteOrder byteOrder) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Un barajado cuyos indices los calcula esa funcion a partir de la posicion.
+     * A shuffle whose indices that function computes from the lane.
      *
-     * @param <E> el tipo, en su version envuelta
-     * @param vectorSpecies el {@code VectorSpecies<E>}
-     * @param intUnaryOperator el {@code java.util.function.IntUnaryOperator}
-     * @return el {@code VectorShuffle<E>}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param <E> the type, in its boxed form
+     * @param vectorSpecies the {@code VectorSpecies<E>}
+     * @param intUnaryOperator the {@code java.util.function.IntUnaryOperator}
+     * @return the {@code VectorShuffle<E>}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public static <E extends Object> VectorShuffle<E> fromOp(VectorSpecies<E> vectorSpecies,
             java.util.function.IntUnaryOperator intUnaryOperator) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Un barajado que cuenta: arranca en un valor y avanza de a un paso.
+     * A shuffle that counts: it starts at a value and advances one step at a time.
      *
-     * @param <E> el tipo, en su version envuelta
-     * @param vectorSpecies el {@code VectorSpecies<E>}
-     * @param i el {@code int}
-     * @param i2 el {@code int}
-     * @param flag el {@code boolean}
-     * @return el {@code VectorShuffle<E>}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param <E> the type, in its boxed form
+     * @param vectorSpecies the {@code VectorSpecies<E>}
+     * @param i the {@code int}
+     * @param i2 the {@code int}
+     * @param flag the {@code boolean}
+     * @return the {@code VectorShuffle<E>}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public static <E extends Object> VectorShuffle<E> iota(VectorSpecies<E> vectorSpecies, int i,
             int i2, boolean flag) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * El barajado que entrelaza dos vectores.
+     * The shuffle that interleaves two vectors.
      *
-     * @param <E> el tipo, en su version envuelta
-     * @param vectorSpecies el {@code VectorSpecies<E>}
-     * @param i el {@code int}
-     * @return el {@code VectorShuffle<E>}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param <E> the type, in its boxed form
+     * @param vectorSpecies the {@code VectorSpecies<E>}
+     * @param i the {@code int}
+     * @return the {@code VectorShuffle<E>}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public static <E extends Object> VectorShuffle<E> makeZip(VectorSpecies<E> vectorSpecies, int i
             ) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * El barajado que deshace el entrelazado.
+     * The shuffle that undoes the interleaving.
      *
-     * @param <E> el tipo, en su version envuelta
-     * @param vectorSpecies el {@code VectorSpecies<E>}
-     * @param i el {@code int}
-     * @return el {@code VectorShuffle<E>}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param <E> the type, in its boxed form
+     * @param vectorSpecies the {@code VectorSpecies<E>}
+     * @param i the {@code int}
+     * @return the {@code VectorShuffle<E>}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public static <E extends Object> VectorShuffle<E> makeUnzip(VectorSpecies<E> vectorSpecies,
             int i) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Los indices en un arreglo nuevo.
+     * The indices in a new array.
      *
-     * @return el {@code int[]}
+     * @return the {@code int[]}
      */
     public abstract int[] toArray();
 
     /**
-     * Escribe los indices en ese arreglo.
+     * Writes the indices into that array.
      *
-     * @param is el {@code int[]}
-     * @param i el {@code int}
+     * @param is the {@code int[]}
+     * @param i the {@code int}
      */
     public abstract void intoArray(int[] is, int i);
 
     /**
-     * Escribe los indices en esa zona de memoria.
+     * Writes the indices into that memory segment.
      *
-     * @param memorySegment el {@code java.lang.foreign.MemorySegment}
-     * @param l el {@code long}
-     * @param byteOrder el {@code java.nio.ByteOrder}
+     * @param memorySegment the {@code java.lang.foreign.MemorySegment}
+     * @param l the {@code long}
+     * @param byteOrder the {@code java.nio.ByteOrder}
      */
     public abstract void intoMemorySegment(java.lang.foreign.MemorySegment memorySegment, long l,
             java.nio.ByteOrder byteOrder);
 
     /**
-     * Los indices vistos como un vector.
+     * The indices seen as a vector.
      *
-     * @return el {@code Vector<E>}
+     * @return the {@code Vector<E>}
      */
     public abstract Vector<E> toVector();
 
     /**
-     * De que posicion del origen sale esa posicion.
+     * Which source lane that lane comes from.
      *
-     * @param i el {@code int}
-     * @return el numero
+     * @param i the {@code int}
+     * @return the number
      */
     public abstract int laneSource(int i);
 
     /**
-     * Compone este barajado con el otro.
+     * Composes this shuffle with the other.
      *
-     * @param vectorShuffle el {@code VectorShuffle<E>}
-     * @return el {@code VectorShuffle<E>}
+     * @param vectorShuffle the {@code VectorShuffle<E>}
+     * @return the {@code VectorShuffle<E>}
      */
     public abstract VectorShuffle<E> rearrange(VectorShuffle<E> vectorShuffle);
 
     /**
-     * Los indices escritos como una lista.
+     * The indices written as a list.
      *
-     * @return el texto
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @return the text
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final String toString() {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Si el otro barajado tiene los mismos indices.
+     * Whether the other shuffle has the same indices.
      *
-     * @param obj el {@code Object}
-     * @return cierto o falso, segun corresponda
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param obj the {@code Object}
+     * @return true or false, as the case may be
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final boolean equals(Object obj) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * El codigo de dispersion.
+     * The hash code.
      *
-     * @return el numero
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @return the number
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final int hashCode() {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 }

@@ -1,18 +1,18 @@
 package javax.management;
 
 /**
- * Envuelve un `RuntimeException` que tiró el MBean.
+ * Wraps a {@code RuntimeException} thrown by the MBean.
  *
- * <p>Es el gemelo no verificado de {@link MBeanException}: mismo significado --"tu MBean fallo"--
- * pero para lo que el MBean no declara. Envolverlo en vez de dejarlo pasar es lo que permite al
- * cliente saber de que lado de la frontera ocurrio.
+ * <p>It is the unchecked twin of {@link MBeanException}: same meaning --"your MBean failed"-- but
+ * for what the MBean does not declare. Wrapping it instead of letting it through is what lets the
+ * client know on which side of the boundary it happened.
  */
 public class RuntimeMBeanException extends JMRuntimeException {
 
     private static final long serialVersionUID = 5274912751982730171L;
 
     /**
-     * @serial el RuntimeException envuelto
+     * @serial the wrapped RuntimeException
      */
     private java.lang.RuntimeException runtimeException;
 
@@ -26,12 +26,12 @@ public class RuntimeMBeanException extends JMRuntimeException {
         runtimeException = e;
     }
 
-    /** El `RuntimeException` envuelto. */
+    /** The wrapped {@code RuntimeException}. */
     public java.lang.RuntimeException getTargetException() {
         return runtimeException;
     }
 
-    /** Lo mismo que {@link #getTargetException()}, por la via moderna. */
+    /** The same as {@link #getTargetException()}, the modern way. */
     public Throwable getCause() {
         return runtimeException;
     }

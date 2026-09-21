@@ -26,23 +26,23 @@ interface LiveStackFrame extends StackWalker.StackFrame {
 
     /** A walker that yields {@code LiveStackFrame}s. */
     static StackWalker getStackWalker() {
-        throw new UnsupportedOperationException("la introspección profunda de pila no está soportada");
+        throw new UnsupportedOperationException("deep stack introspection is not supported");
     }
 
     static StackWalker getStackWalker(Set<StackWalker.Option> options) {
-        throw new UnsupportedOperationException("la introspección profunda de pila no está soportada");
+        throw new UnsupportedOperationException("deep stack introspection is not supported");
     }
 
     static StackWalker getStackWalker(Set<StackWalker.Option> options, ContinuationScope scope) {
-        throw new UnsupportedOperationException("la introspección profunda de pila no está soportada");
+        throw new UnsupportedOperationException("deep stack introspection is not supported");
     }
 
     static StackWalker getStackWalker(Continuation continuation) {
-        throw new UnsupportedOperationException("la introspección profunda de pila no está soportada");
+        throw new UnsupportedOperationException("deep stack introspection is not supported");
     }
 
     static StackWalker getStackWalker(
             Set<StackWalker.Option> options, ContinuationScope scope, Continuation continuation) {
-        throw new UnsupportedOperationException("la introspección profunda de pila no está soportada");
+        throw new UnsupportedOperationException("deep stack introspection is not supported");
     }
 }

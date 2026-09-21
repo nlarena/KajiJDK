@@ -14,149 +14,151 @@ import java.util.function.Function;
 // (`combiner`), and finish (`finisher`). `characteristics` flags optimisations the pipeline
 // may exploit.
 //
-// Ya no falta nada: la interfaz esta completa. Los dos motivos que la pasada anterior anoto para
-// dejar afuera `characteristics()` y las dos `of(...)` estaban vivos entonces y ya no lo estan:
+// Nothing is missing any more: the interface is complete. The two reasons the previous pass noted
+// for leaving `characteristics()` and the two `of(...)` out were alive then and are not now:
 //
-//   - la *identidad* de un tipo anidado sobrevive hoy a cruzar unidades de compilacion. Con el
-//     `enum Characteristics` declarado aca y `CollectorImpl` (en Collectors.java) implementando
-//     `Set<Collector.Characteristics> characteristics()`, el chequeo de sobreescritura pasa —
-//     compilando los dos archivos juntos y compilando cada uno contra el `.class` del otro, que
-//     es como los compila tools/apidiff/recompile.py;
-//   - `ACC_VARARGS` se emite (#200), asi que el descriptor de `of(..., Characteristics...)` es el
-//     mismo que el del JDK y el `javap` real imprime los puntos suspensivos.
+//   - a nested type's *identity* survives crossing compilation units today. With the
+//     `enum Characteristics` declared here and `CollectorImpl` (in Collectors.java) implementing
+//     `Set<Collector.Characteristics> characteristics()`, the override check passes -- compiling
+//     the two files together and compiling each against the other's `.class`, which is how
+//     tools/apidiff/recompile.py compiles them;
+//   - `ACC_VARARGS` is emitted (#200), so `of(..., Characteristics...)`'s descriptor is the JDK's
+//     and the real `javap` prints the ellipsis.
 //
-// Lo que si se copia del JDK es la LECTURA de las caracteristicas: son PERMISOS, no promesas. Un
-// conjunto vacio siempre es correcto — significa "no habilito ninguna optimizacion" — y por eso
-// es lo que devuelven, por omision, los colectores de Collectors.java que no pueden justificar
-// una. Declarar IDENTITY_FINISH sin serlo, en cambio, seria mentir: quien lo lea puede saltearse
-// el finalizador y quedarse con el acumulador.
+// What IS copied from the JDK is how the characteristics are READ: they are PERMISSIONS, not
+// promises. An empty set is always correct -- it means "I enable no optimisation" -- and that is
+// why it is what the collectors in Collectors.java that cannot justify one return by default.
+// Declaring IDENTITY_FINISH without being it, on the other hand, would be lying: whoever reads it
+// may skip the finisher and keep the accumulator.
 public interface Collector<T, A, R> {
 
     /**
-     * Los permisos que un colector le da a quien lo ejecuta.
+     * The permissions a collector grants whoever runs it.
      *
-     * <p>Cada constante habilita una optimizacion. Ninguna es obligatoria de honrar, y ninguna se
-     * verifica: un colector que declara `IDENTITY_FINISH` sin que su finalizador sea la identidad
-     * produce resultados equivocados y nada lo va a atrapar.
+     * <p>Each constant enables an optimisation. None of them is obligatory to honour, and none is
+     * checked: a collector declaring `IDENTITY_FINISH` without its finisher being the identity
+     * produces wrong results and nothing will catch it.
      *
-     * <p>Nuestro `collect` es secuencial, ansioso y siempre llama al finalizador, asi que no lee
-     * ninguna de las tres. Estan igual porque describen al colector, no al motor: un colector
-     * nuestro pasado a codigo escrito contra el JDK real tiene que decir la verdad sobre si mismo.
+     * <p>Our `collect` is sequential, eager and always calls the finisher, so it reads none of the
+     * three. They are here all the same because they describe the collector, not the engine: a
+     * collector of ours handed to code written against the real JDK has to tell the truth about
+     * itself.
      */
     enum Characteristics {
 
-        /** El acumulador soporta que varios hilos lo alimenten a la vez. */
+        /** The accumulator supports several threads feeding it at once. */
         CONCURRENT,
 
-        /** El resultado no depende del orden en que lleguen los elementos. */
+        /** The result does not depend on the order the elements arrive in. */
         UNORDERED,
 
         /**
-         * El finalizador es la identidad: el acumulador ya <em>es</em> el resultado.
+         * The finisher is the identity: the accumulator already <em>is</em> the result.
          *
-         * <p>Habilita saltearse la llamada a `finisher()`, y por eso solo se puede declarar
-         * cuando `A` y `R` son el mismo tipo.
+         * <p>It enables skipping the call to `finisher()`, and that is why it can only be declared
+         * when `A` and `R` are the same type.
          */
         IDENTITY_FINISH
     }
 
     /**
-     * Como crear un acumulador vacio.
+     * How to create an empty accumulator.
      *
-     * @return el proveedor
+     * @return the supplier
      */
     Supplier<A> supplier();
 
     /**
-     * Como meter un elemento en el acumulador.
+     * How to fold an element into the accumulator.
      *
-     * @return el acumulador
+     * @return the accumulator
      */
     BiConsumer<A, T> accumulator();
 
     /**
-     * Como fusionar dos acumuladores parciales.
+     * How to merge two partial accumulators.
      *
-     * @return el combinador
+     * @return the combiner
      */
     BinaryOperator<A> combiner();
 
     /**
-     * Como pasar del acumulador al resultado.
+     * How to go from the accumulator to the result.
      *
-     * @return el finalizador
+     * @return the finisher
      */
     Function<A, R> finisher();
 
     /**
-     * Los permisos de este colector. Puede ser vacio, y vacio siempre es correcto.
+     * This collector's permissions. It may be empty, and empty is always correct.
      *
-     * @return el conjunto, que no se puede modificar
+     * @return the set, which cannot be modified
      */
     Set<Characteristics> characteristics();
 
     /**
-     * Un colector cuyo acumulador ya es el resultado.
+     * A collector whose accumulator already is the result.
      *
-     * <p>Se le agrega `IDENTITY_FINISH` a lo que pida quien llama, porque el finalizador que se
-     * arma aca es la identidad de verdad. Es lo mismo que hace el JDK.
+     * <p>`IDENTITY_FINISH` is added to whatever the caller asks for, because the finisher that is
+     * built here really is the identity. It is the same thing the JDK does.
      *
-     * @param supplier como crear el acumulador
-     * @param accumulator como meter un elemento
-     * @param combiner como fusionar dos parciales
-     * @param characteristics los permisos extra
-     * @param <T> el tipo de los elementos
-     * @param <R> el tipo del acumulador, que es tambien el del resultado
-     * @return el colector
-     * @throws NullPointerException si alguna pieza es null
+     * @param supplier how to create the accumulator
+     * @param accumulator how to fold an element in
+     * @param combiner how to merge two partials
+     * @param characteristics the extra permissions
+     * @param <T> the elements' type
+     * @param <R> the accumulator's type, which is the result's as well
+     * @return the collector
+     * @throws NullPointerException if any of the pieces is null
      */
     static <T, R> Collector<T, R, R> of(Supplier<R> supplier, BiConsumer<R, T> accumulator,
                                         BinaryOperator<R> combiner, Characteristics... characteristics) {
         Function<R, R> finisher = new SelfFinisher<R>();
-        Set<Characteristics> permisos = CharacteristicSet.of(characteristics, true);
-        return new CollectorOf<T, R, R>(supplier, accumulator, combiner, finisher, permisos);
+        Set<Characteristics> permissions = CharacteristicSet.of(characteristics, true);
+        return new CollectorOf<T, R, R>(supplier, accumulator, combiner, finisher, permissions);
     }
 
     /**
-     * Un colector con las cinco piezas dadas.
+     * A collector with the five pieces given.
      *
-     * @param supplier como crear el acumulador
-     * @param accumulator como meter un elemento
-     * @param combiner como fusionar dos parciales
-     * @param finisher como pasar del acumulador al resultado
-     * @param characteristics los permisos
-     * @param <T> el tipo de los elementos
-     * @param <A> el tipo del acumulador
-     * @param <R> el tipo del resultado
-     * @return el colector
-     * @throws NullPointerException si alguna pieza es null
+     * @param supplier how to create the accumulator
+     * @param accumulator how to fold an element in
+     * @param combiner how to merge two partials
+     * @param finisher how to go from the accumulator to the result
+     * @param characteristics the permissions
+     * @param <T> the elements' type
+     * @param <A> the accumulator's type
+     * @param <R> the result's type
+     * @return the collector
+     * @throws NullPointerException if any piece is null
      */
     static <T, A, R> Collector<T, A, R> of(Supplier<A> supplier, BiConsumer<A, T> accumulator,
                                            BinaryOperator<A> combiner, Function<A, R> finisher,
                                            Characteristics... characteristics) {
-        Set<Characteristics> permisos = CharacteristicSet.of(characteristics, false);
-        return new CollectorOf<T, A, R>(supplier, accumulator, combiner, finisher, permisos);
+        Set<Characteristics> permissions = CharacteristicSet.of(characteristics, false);
+        return new CollectorOf<T, A, R>(supplier, accumulator, combiner, finisher, permissions);
     }
 }
 
-// ---- las piezas de las dos fabricas -----------------------------------------------------------
+// ---- the two factories' pieces -----------------------------------------------------------------
 //
-// Viven en ESTE archivo y no en Collectors.java, aunque alla ya haya un `CollectorImpl` casi
-// igual, para no crear un ciclo entre las dos unidades de compilacion: hoy Collectors.java
-// depende de Collector.java y no al reves, y tools/apidiff/recompile.py compila de a un archivo
-// por vez. Cuatro campos duplicados cuestan menos que un ciclo.
+// They live in THIS file and not in Collectors.java, even though there is an almost identical
+// `CollectorImpl` over there, so as not to create a cycle between the two compilation units: today
+// Collectors.java depends on Collector.java and not the other way round, and
+// tools/apidiff/recompile.py compiles one file at a time. Four duplicated fields cost less than a
+// cycle.
 
-// El conjunto de permisos: una copia inmodificable, para que nadie lo cambie despues.
+// The permission set: an unmodifiable copy, so that nobody changes it afterwards.
 final class CharacteristicSet {
 
     private CharacteristicSet() {
     }
 
-    static Set<Collector.Characteristics> of(Collector.Characteristics[] pedidos, boolean identityFinish) {
+    static Set<Collector.Characteristics> of(Collector.Characteristics[] requested, boolean identityFinish) {
         HashSet<Collector.Characteristics> s = new HashSet<Collector.Characteristics>();
-        if (pedidos != null) {
-            for (int i = 0; i < pedidos.length; i++) {
-                s.add(pedidos[i]);
+        if (requested != null) {
+            for (int i = 0; i < requested.length; i++) {
+                s.add(requested[i]);
             }
         }
         if (identityFinish) {
@@ -166,10 +168,10 @@ final class CharacteristicSet {
     }
 }
 
-// El finalizador identidad de `Collector.of(supplier, accumulator, combiner, ...)`.
+// The identity finisher of `Collector.of(supplier, accumulator, combiner, ...)`.
 final class SelfFinisher<R> implements Function<R, R> {
-    public R apply(R acumulador) {
-        return acumulador;
+    public R apply(R acc) {
+        return acc;
     }
 }
 
@@ -184,9 +186,9 @@ final class CollectorOf<T, A, R> implements Collector<T, A, R> {
     CollectorOf(Supplier<A> supplier, BiConsumer<A, T> accumulator, BinaryOperator<A> combiner,
                 Function<A, R> finisher, Set<Collector.Characteristics> characteristics) {
         if (supplier == null || accumulator == null || combiner == null || finisher == null) {
-            // Mensaje constante: la concatenacion de String en tiempo de ejecucion no esta
-            // disponible en nuestra VM (#226).
-            throw new NullPointerException("una pieza del colector es null");
+            // A constant message: String concatenation at run time is not
+            // available in our VM (#226).
+            throw new NullPointerException("a piece of the collector is null");
         }
         this.supplier = supplier;
         this.accumulator = accumulator;

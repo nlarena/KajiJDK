@@ -8,7 +8,7 @@ package java.util.concurrent;
 // exception is rejected as "wider" than the interface allows. Making it unchecked lets the
 // override compile while callers may still catch it by name. The gate compares members, so
 // the hierarchy difference is invisible there; revert once #104 is fixed.
-public class TimeoutException extends RuntimeException {
+public class TimeoutException extends Exception {
 
     public TimeoutException() {
         super();

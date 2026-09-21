@@ -3,16 +3,16 @@ package java.security.spec;
 import java.math.BigInteger;
 import java.security.interfaces.DSAParams;
 
-// Los parametros de dominio de DSA como spec: p, q y g.
+// The DSA domain parameters as a spec: p, q and g.
 //
-// Implementa `AlgorithmParameterSpec` y `DSAParams` a la vez, y eso no es redundancia: la primera la
-// hace pasable a `AlgorithmParameters` y a los generadores, la segunda la hace pasable donde se
-// espera los parametros de una clave DSA concreta. Es el punto donde el mundo "esto es una
-// descripcion" y el mundo "esto son los parametros de esa clave" se tocan.
+// It implements `AlgorithmParameterSpec` and `DSAParams` at once, and that is not redundancy: the
+// first makes it passable to `AlgorithmParameters` and to generators, the second makes it passable
+// where the parameters of a concrete DSA key are expected. It is the point where the world of "this
+// is a description" and the world of "these are that key's parameters" meet.
 //
-// No valida que q divida a p-1 ni que g genere el subgrupo correcto. Igual que en el resto del
-// paquete: es un contenedor, y las comprobaciones que importan cuestan exponenciaciones modulares
-// que un constructor no deberia hacer.
+// It does not validate that q divides p-1 nor that g generates the right subgroup. As in the rest
+// of the package: it is a container, and the checks that matter cost modular exponentiations that a
+// constructor should not do.
 public class DSAParameterSpec implements AlgorithmParameterSpec, DSAParams {
 
     private final BigInteger p;

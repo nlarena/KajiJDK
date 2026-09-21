@@ -1,18 +1,17 @@
 package java.awt;
 
 /**
- * Se pidio algo que necesita teclado, mouse o pantalla en un entorno que no los tiene.
+ * Something that needs a keyboard, mouse or screen was asked for in an environment that has none.
  *
- * <p>Es la excepcion que le da sentido a todo lo demas de este paquete en KajiLibrary: aca no hay
- * sistema de ventanas, asi que cualquier clase de {@code java.awt} que dependa de uno tendria que
- * tirar esto siempre. Por eso lo que se escribe de {@code java.awt} son las clases de datos --
- * geometria, colores, constantes de disposicion-- que no la necesitan nunca.
+ * <p>In KajiLibrary there is no window system, so any {@code java.awt} class that needs one throws
+ * this where it would. (This note said that for that reason only the data classes of {@code
+ * java.awt} --geometry, colours, layout constants-- are written; components, windows and the
+ * toolkit are written too.)
  *
- * <p>El {@code getMessage()} del JDK le pega al mensaje propio un sufijo que describe por que el
- * entorno es headless, y ese sufijo lo arma {@code GraphicsEnvironment}, que no existe aca. Sin
- * el, {@code getMessage()} devuelve el mensaje tal cual --que es tambien lo que devuelve el JDK
- * real cuando corre con pantalla--. Inventar un sufijo seria peor: el texto no esta especificado y
- * describiria una razon que nadie averiguo.
+ * <p>The JDK's {@code getMessage()} appends to the message a suffix describing why the environment
+ * is headless, built by {@code GraphicsEnvironment.getHeadlessMessage()}. This note said that class
+ * does not exist here; it does, and so does the method, but this {@code getMessage()} does not call
+ * it and returns the message as is.
  */
 public class HeadlessException extends UnsupportedOperationException {
 

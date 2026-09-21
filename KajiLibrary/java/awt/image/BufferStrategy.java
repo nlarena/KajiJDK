@@ -4,47 +4,47 @@ import java.awt.BufferCapabilities;
 import java.awt.Graphics;
 
 /**
- * Cómo se manejan los buffers de dibujo de una superficie.
+ * How the drawing buffers of a surface are handled.
  *
- * <p>Resuelve el parpadeo. Dibujar directo sobre lo que se está mostrando deja ver la construcción
- * del cuadro; con varios buffers se dibuja en uno oculto y se lo muestra entero de una vez, con
+ * <p>It solves the flicker. Drawing straight over what is being shown lets the building of the
+ * frame be seen; with several buffers one draws into a hidden one and shows it whole at once, with
  * {@link #show}.
  *
- * <p>Los dos métodos de "contenido" distinguen dos desgracias distintas. {@link #contentsLost} dice
- * que lo que se dibujó **no llegó** a mostrarse; {@link #contentsRestored} dice que el buffer se
- * recuperó pero quedó vacío y hay que rehacer el cuadro. Como en {@link VolatileImage}, el bucle
- * correcto los consulta después de mostrar y no antes.
+ * <p>The two "contents" methods tell two different misfortunes apart. {@link #contentsLost} says
+ * that what was drawn **did not get** to be shown; {@link #contentsRestored} says that the buffer
+ * was recovered but was left empty and the frame has to be redone. As in {@link VolatileImage}, the
+ * right loop consults them after showing and not before.
  */
 public abstract class BufferStrategy {
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected BufferStrategy() {
     }
 
-    /** Qué buffers hay y qué se puede hacer con ellos. */
+    /** Which buffers there are and what can be done with them. */
     public abstract BufferCapabilities getCapabilities();
 
     /**
-     * Un contexto para dibujar en el buffer oculto.
+     * A context to draw into the hidden buffer.
      *
-     * <p>Hay que pedir uno nuevo por cuadro y soltarlo al terminar: el buffer que estaba oculto pasa
-     * a estar a la vista en cada {@link #show}.
+     * <p>A new one has to be asked for per frame and released when finishing: the buffer that was
+     * hidden comes into view at every {@link #show}.
      */
     public abstract Graphics getDrawGraphics();
 
-    /** Si lo que se dibujó desde la última llamada se perdió sin llegar a mostrarse. */
+    /** Whether what was drawn since the last call was lost without getting to be shown. */
     public abstract boolean contentsLost();
 
-    /** Si el buffer se recuperó vacío y hay que volver a dibujar el cuadro. */
+    /** Whether the buffer was recovered empty and the frame has to be drawn again. */
     public abstract boolean contentsRestored();
 
-    /** Muestra el buffer oculto. */
+    /** Shows the hidden buffer. */
     public abstract void show();
 
     /**
-     * Suelta los recursos.
+     * Releases the resources.
      *
-     * <p>No hace nada acá: una estrategia sin recursos propios no tiene qué soltar.
+     * <p>It does nothing here: a strategy with no resources of its own has nothing to release.
      */
     public void dispose() {
     }

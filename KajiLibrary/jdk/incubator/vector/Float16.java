@@ -5,44 +5,42 @@ import java.math.MathContext;
 import java.math.RoundingMode;
 
 /**
- * Un flotante de <strong>16 bits</strong>: el formato binary16 de IEEE 754.
+ * A <strong>16-bit</strong> floating-point value: the IEEE 754 binary16 format.
  *
- * <h2>Para que sirve un flotante tan chico</h2>
+ * <h2>What such a small float is for</h2>
  *
- * <p>Para mover el doble de datos por el mismo ancho de banda. En aprendizaje automatico y en
- * graficos, la precision de un {@code float} sobra y lo que falta es memoria y ancho de banda: la
- * mitad de bits significa el doble de valores por instruccion vectorial y por linea de cache.
+ * <p>To move twice the data through the same bandwidth. In machine learning and in graphics, the
+ * precision of a {@code float} is more than enough and what is short is memory and bandwidth: half
+ * the bits means twice the values per vector instruction and per cache line.
  *
- * <h2>Once bits de precision, y lo que eso implica</h2>
+ * <h2>Eleven bits of precision, and what that implies</h2>
  *
- * <p>El significando tiene 11 bits contando el implicito, o sea unas <strong>tres cifras decimales
- * y media</strong>. {@code 0.1} no se representa: lo mas cercano se imprime {@code 0.1} porque es lo
- * mas corto que redondea de vuelta, pero el valor real es otro.
+ * <p>The significand has 11 bits counting the implicit one, that is about <strong>three and a half
+ * decimal digits</strong>. {@code 0.1} is not representable: the nearest value prints as {@code
+ * 0.1} because that is the shortest text that rounds back to it, but the real value is another.
  *
- * <p>El rango tambien es chico: {@link #MAX_VALUE} es 65504. Sumar 100000 da infinito. Es la
- * limitacion que sorprende a quien viene de {@code float}, donde el rango nunca es el problema.
+ * <p>The range is small too: {@link #MAX_VALUE} is 65504. Adding 100000 gives infinity. It is the
+ * limitation that surprises whoever comes from {@code float}, where the range is never the problem.
  *
- * <h2>Por que es una clase y no un primitivo</h2>
+ * <h2>Why it is a class and not a primitive</h2>
  *
- * <p>Porque Java no tiene un tipo de 16 bits en punto flotante. Cada operacion crea un objeto, asi
- * que en un bucle escalar esta clase es <strong>mas lenta</strong> que {@code float}, no mas rapida.
- * La ganancia esta en los vectores, donde el valor vive en un registro y esta clase solo aparece en
- * los bordes.
+ * <p>Because Java has no 16-bit floating-point type. Each operation creates an object, so in a
+ * scalar loop this class is <strong>slower</strong> than {@code float}, not faster. The gain is in
+ * the vectors, where the value lives in a register and this class only appears at the edges.
  *
- * <h2>Como se calcula, y por que eso da el resultado exacto</h2>
+ * <h2>How it is computed, and why that gives the exact result</h2>
  *
- * <p>Cada operacion se hace en {@code float} y se redondea a binary16 al final, que es lo que hace
- * el JDK. Parece que deberia redondear dos veces y perder exactitud, y no pasa: un {@code float}
- * tiene 24 bits de significando, mas del doble de los 11 de binary16, y con ese margen el doble
- * redondeo da siempre el mismo resultado que redondear una sola vez. Es el mismo argumento por el
- * que se puede calcular en {@code double} y redondear a {@code float}.
+ * <p>Each operation is done in {@code float} and rounded to binary16 at the end, which is what the
+ * JDK does. It looks as if it should round twice and lose exactness, and it does not: a {@code
+ * float} has 24 bits of significand, more than twice binary16's 11, and with that margin the double
+ * rounding always gives the same result as rounding once. It is the same argument by which one can
+ * compute in {@code double} and round to {@code float}.
  *
- * <h2>Estado en esta VM</h2>
+ * <h2>State on this VM</h2>
  *
- * <p>Esta clase esta <strong>completa y verificada</strong>: la aritmetica, las conversiones, el
- * formato decimal y el hexadecimal se comprobaron contra el JDK 25 sobre los 65536 valores que un
- * binary16 puede tomar, y sobre los pares de operandos de una muestra que cubre todos los casos de
- * borde.
+ * <p>This class is <strong>complete and verified</strong>: the arithmetic, the conversions, the
+ * decimal and the hexadecimal formats were checked against JDK 25 over the 65536 values a binary16
+ * can take, and over the operand pairs of a sample that covers every edge case.
  *
  * @since 21
  */
@@ -50,121 +48,121 @@ public final class Float16 extends Number implements Comparable<Float16> {
 
     private static final long serialVersionUID = 16L;
 
-    /** Cuantos bits ocupa. */
+    /** How many bits it takes. */
     public static final int SIZE = 16;
 
-    /** Cuantos bytes ocupa. */
+    /** How many bytes it takes. */
     public static final int BYTES = 2;
 
-    /** Bits de significando, contando el implicito. */
+    /** Bits of significand, counting the implicit one. */
     public static final int PRECISION = 11;
 
-    /** El exponente mas grande de un valor normal. */
+    /** The largest exponent of a normal value. */
     public static final int MAX_EXPONENT = 15;
 
-    /** El exponente mas chico de un valor normal. */
+    /** The smallest exponent of a normal value. */
     public static final int MIN_EXPONENT = -14;
 
-    private static final int MASCARA_SIGNO = 0x8000;
-    private static final int MASCARA_EXP = 0x7C00;
-    private static final int MASCARA_SIG = 0x03FF;
-    private static final int SESGO = 15;
+    private static final int SIGN_MASK = 0x8000;
+    private static final int EXP_MASK = 0x7C00;
+    private static final int SIGNIFICAND_MASK = 0x03FF;
+    private static final int BIAS = 15;
 
-    /** El infinito positivo. */
+    /** Positive infinity. */
     public static final Float16 POSITIVE_INFINITY = new Float16((short) 0x7C00);
 
-    /** El infinito negativo. */
+    /** Negative infinity. */
     public static final Float16 NEGATIVE_INFINITY = new Float16((short) 0xFC00);
 
-    /** El no-numero canonico. */
+    /** The canonical not-a-number. */
     public static final Float16 NaN = new Float16((short) 0x7E00);
 
-    /** El valor finito mas grande: 65504. */
+    /** The largest finite value: 65504. */
     public static final Float16 MAX_VALUE = new Float16((short) 0x7BFF);
 
-    /** El valor normal mas chico que es positivo. */
+    /** The smallest positive normal value. */
     public static final Float16 MIN_NORMAL = new Float16((short) 0x0400);
 
-    /** El valor positivo mas chico, subnormal. */
+    /** The smallest positive value, subnormal. */
     public static final Float16 MIN_VALUE = new Float16((short) 0x0001);
 
-    /** Los bits, tal cual. */
+    /** The bits, as they are. */
     private final short bits;
 
     private Float16(final short bits) {
         this.bits = bits;
     }
 
-    // ---- construccion ----
+    // ---- construction ----
 
     /**
-     * El binary16 mas cercano a ese {@code float}.
+     * The binary16 nearest to that {@code float}.
      *
-     * @param f el valor
-     * @return el binary16
+     * @param f the value
+     * @return the binary16
      */
     public static Float16 valueOf(final float f) {
         return new Float16(Float.floatToFloat16(f));
     }
 
     /**
-     * El binary16 mas cercano a ese {@code double}.
+     * The binary16 nearest to that {@code double}.
      *
-     * @param d el valor
-     * @return el binary16
+     * @param d the value
+     * @return the binary16
      */
     public static Float16 valueOf(final double d) {
         return valueOf((float) d);
     }
 
     /**
-     * El binary16 mas cercano a ese {@code int}.
+     * The binary16 nearest to that {@code int}.
      *
-     * @param i el valor
-     * @return el binary16
+     * @param i the value
+     * @return the binary16
      */
     public static Float16 valueOf(final int i) {
         return valueOf((float) i);
     }
 
     /**
-     * El binary16 mas cercano a ese {@code long}.
+     * The binary16 nearest to that {@code long}.
      *
-     * @param l el valor
-     * @return el binary16
+     * @param l the value
+     * @return the binary16
      */
     public static Float16 valueOf(final long l) {
         return valueOf((float) l);
     }
 
     /**
-     * El binary16 mas cercano al numero escrito en ese texto.
+     * The binary16 nearest to the number written in that text.
      *
-     * @param s el texto, en cualquiera de las formas que acepta {@code Float.parseFloat}
-     * @return el binary16
-     * @throws NumberFormatException si el texto no es un numero
-     * @throws NullPointerException si es {@code null}
+     * @param s the text, in any of the forms {@code Float.parseFloat} accepts
+     * @return the binary16
+     * @throws NumberFormatException if the text is not a number
+     * @throws NullPointerException if it is {@code null}
      */
     public static Float16 valueOf(final String s) throws NumberFormatException {
         return valueOf(Float.parseFloat(s));
     }
 
     /**
-     * El binary16 mas cercano a ese decimal.
+     * The binary16 nearest to that decimal.
      *
-     * @param bd el valor
-     * @return el binary16
-     * @throws NullPointerException si es {@code null}
+     * @param bd the value
+     * @return the binary16
+     * @throws NullPointerException if it is {@code null}
      */
     public static Float16 valueOf(final BigDecimal bd) {
         return valueOf(bd.floatValue());
     }
 
     /**
-     * El binary16 con esos bits, tal cual.
+     * The binary16 with those bits, as they are.
      *
-     * @param bits los dieciseis bits
-     * @return el binary16
+     * @param bits the sixteen bits
+     * @return the binary16
      */
     public static Float16 shortBitsToFloat16(final short bits) {
         return new Float16(bits);
@@ -173,36 +171,36 @@ public final class Float16 extends Number implements Comparable<Float16> {
     // ---- clasificacion ----
 
     /**
-     * Si es un no-numero.
+     * Whether it is a not-a-number.
      *
-     * @param f el valor
-     * @return si es NaN
+     * @param f the value
+     * @return whether it is NaN
      */
     public static boolean isNaN(final Float16 f) {
-        return (f.bits & MASCARA_EXP) == MASCARA_EXP && (f.bits & MASCARA_SIG) != 0;
+        return (f.bits & EXP_MASK) == EXP_MASK && (f.bits & SIGNIFICAND_MASK) != 0;
     }
 
     /**
-     * Si es uno de los dos infinitos.
+     * Whether it is one of the two infinities.
      *
-     * @param f el valor
-     * @return si es infinito
+     * @param f the value
+     * @return whether it is infinite
      */
     public static boolean isInfinite(final Float16 f) {
-        return (f.bits & MASCARA_EXP) == MASCARA_EXP && (f.bits & MASCARA_SIG) == 0;
+        return (f.bits & EXP_MASK) == EXP_MASK && (f.bits & SIGNIFICAND_MASK) == 0;
     }
 
     /**
-     * Si es finito: ni infinito ni NaN.
+     * Whether it is finite: neither infinite nor NaN.
      *
-     * @param f el valor
-     * @return si es finito
+     * @param f the value
+     * @return whether it is finite
      */
     public static boolean isFinite(final Float16 f) {
-        return (f.bits & MASCARA_EXP) != MASCARA_EXP;
+        return (f.bits & EXP_MASK) != EXP_MASK;
     }
 
-    // ---- conversion a los tipos de Java ----
+    // ---- conversion to the Java types ----
 
     /** {@inheritDoc} */
     public byte byteValue() {
@@ -237,41 +235,41 @@ public final class Float16 extends Number implements Comparable<Float16> {
     // ---- bits ----
 
     /**
-     * Los bits, sin canonizar el NaN.
+     * The bits, without canonicalising the NaN.
      *
-     * @param f el valor
-     * @return los dieciseis bits tal cual
+     * @param f the value
+     * @return the sixteen bits as they are
      */
     public static short float16ToRawShortBits(final Float16 f) {
         return f.bits;
     }
 
     /**
-     * Los bits, con todos los NaN colapsados en uno solo.
+     * The bits, with every NaN collapsed into a single one.
      *
-     * <p>Hay muchos patrones de bits que son NaN --cualquier significando distinto de cero con el
-     * exponente lleno-- y esta version devuelve siempre el canonico. Es lo que hace falta para que
-     * dos NaN se puedan comparar por bits; {@link #float16ToRawShortBits} conserva el patron
-     * original, que a veces lleva informacion de diagnostico.
+     * <p>There are many bit patterns that are NaN --any non-zero significand with the exponent
+     * full-- and this version always returns the canonical one. It is what is needed for two NaNs
+     * to be comparable by bits; {@link #float16ToRawShortBits} keeps the original pattern, which
+     * sometimes carries diagnostic information.
      *
-     * @param f el valor
-     * @return los bits, canonicos si es NaN
+     * @param f the value
+     * @return the bits, canonical if it is NaN
      */
     public static short float16ToShortBits(final Float16 f) {
         return isNaN(f) ? (short) 0x7E00 : f.bits;
     }
 
-    // ---- igualdad y orden ----
+    // ---- equality and order ----
 
     /**
-     * Igualdad por bits canonicos.
+     * Equality by canonical bits.
      *
-     * <p>Por eso {@code NaN.equals(NaN)} da {@code true} y {@code 0.0.equals(-0.0)} da
-     * {@code false}, al reves de lo que hace {@code ==} sobre primitivos. Es la misma decision que
-     * toma {@code Float.equals}, y existe para que estos objetos se puedan meter en una tabla hash.
+     * <p>That is why {@code NaN.equals(NaN)} gives {@code true} and {@code 0.0.equals(-0.0)} gives
+     * {@code false}, the opposite of what {@code ==} does on primitives. It is the same decision
+     * {@code Float.equals} takes, and it exists so that these objects can go into a hash table.
      *
-     * @param o el otro
-     * @return si son el mismo valor
+     * @param o the other
+     * @return whether they are the same value
      */
     public boolean equals(final Object o) {
         return o instanceof Float16
@@ -284,187 +282,187 @@ public final class Float16 extends Number implements Comparable<Float16> {
     }
 
     /**
-     * El codigo hash de ese valor.
+     * The hash code of that value.
      *
-     * @param f el valor
-     * @return el codigo
+     * @param f the value
+     * @return the code
      */
     public static int hashCode(final Float16 f) {
         return float16ToShortBits(f);
     }
 
     /**
-     * Orden total, con {@code -0.0} antes que {@code 0.0} y {@code NaN} al final.
+     * Total order, with {@code -0.0} before {@code 0.0} and {@code NaN} at the end.
      *
-     * @param o el otro
-     * @return negativo, cero o positivo
+     * @param o the other
+     * @return negative, zero or positive
      */
     public int compareTo(final Float16 o) {
         return compare(this, o);
     }
 
     /**
-     * Orden total entre dos valores.
+     * Total order between two values.
      *
-     * @param a el primero
-     * @param b el segundo
-     * @return negativo, cero o positivo
+     * @param a the first
+     * @param b the second
+     * @return negative, zero or positive
      */
     public static int compare(final Float16 a, final Float16 b) {
         return Float.compare(a.floatValue(), b.floatValue());
     }
 
-    // ---- aritmetica ----
+    // ---- arithmetic ----
 
     /**
-     * El mayor de los dos.
+     * The larger of the two.
      *
-     * @param a el primero
-     * @param b el segundo
-     * @return el mayor
+     * @param a the first
+     * @param b the second
+     * @return the larger
      */
     public static Float16 max(final Float16 a, final Float16 b) {
         return valueOf(Math.max(a.floatValue(), b.floatValue()));
     }
 
     /**
-     * El menor de los dos.
+     * The smaller of the two.
      *
-     * @param a el primero
-     * @param b el segundo
-     * @return el menor
+     * @param a the first
+     * @param b the second
+     * @return the smaller
      */
     public static Float16 min(final Float16 a, final Float16 b) {
         return valueOf(Math.min(a.floatValue(), b.floatValue()));
     }
 
     /**
-     * La suma, redondeada a binary16.
+     * The sum, rounded to binary16.
      *
-     * @param a el primero
-     * @param b el segundo
-     * @return la suma
+     * @param a the first
+     * @param b the second
+     * @return the sum
      */
     public static Float16 add(final Float16 a, final Float16 b) {
         return valueOf(a.floatValue() + b.floatValue());
     }
 
     /**
-     * La resta, redondeada a binary16.
+     * The difference, rounded to binary16.
      *
-     * @param a el minuendo
-     * @param b el sustraendo
-     * @return la resta
+     * @param a the minuend
+     * @param b the subtrahend
+     * @return the difference
      */
     public static Float16 subtract(final Float16 a, final Float16 b) {
         return valueOf(a.floatValue() - b.floatValue());
     }
 
     /**
-     * El producto, redondeado a binary16.
+     * The product, rounded to binary16.
      *
-     * @param a el primero
-     * @param b el segundo
-     * @return el producto
+     * @param a the first
+     * @param b the second
+     * @return the product
      */
     public static Float16 multiply(final Float16 a, final Float16 b) {
         return valueOf(a.floatValue() * b.floatValue());
     }
 
     /**
-     * El cociente, redondeado a binary16.
+     * The quotient, rounded to binary16.
      *
-     * @param a el dividendo
-     * @param b el divisor
-     * @return el cociente
+     * @param a the dividend
+     * @param b the divisor
+     * @return the quotient
      */
     public static Float16 divide(final Float16 a, final Float16 b) {
         return valueOf(a.floatValue() / b.floatValue());
     }
 
     /**
-     * La raiz cuadrada, redondeada a binary16.
+     * The square root, rounded to binary16.
      *
-     * @param f el valor
-     * @return la raiz
+     * @param f the value
+     * @return the root
      */
     public static Float16 sqrt(final Float16 f) {
         return valueOf(Math.sqrt(f.doubleValue()));
     }
 
     /**
-     * {@code a * b + c} con <strong>un solo redondeo</strong> al final.
+     * {@code a * b + c} with <strong>a single rounding</strong> at the end.
      *
-     * <p>Se calcula en {@code double}, donde el producto de dos binary16 entra exacto --once bits
-     * por once bits dan veintidos, y un {@code double} tiene cincuenta y tres-- asi que el unico
-     * redondeo es el de vuelta a binary16. Eso es exactamente lo que la operacion promete y lo que
-     * la hace distinta de multiplicar y despues sumar.
+     * <p>It is computed in {@code double}, where the product of two binary16 values fits exactly
+     * --eleven bits by eleven bits give twenty-two, and a {@code double} has fifty-three-- so the
+     * only rounding is the one back to binary16. That is exactly what the operation promises and
+     * what makes it different from multiplying and then adding.
      *
-     * @param a el primer factor
-     * @param b el segundo factor
-     * @param c el sumando
-     * @return el resultado
+     * @param a the first factor
+     * @param b the second factor
+     * @param c the addend
+     * @return the result
      */
     public static Float16 fma(final Float16 a, final Float16 b, final Float16 c) {
         return valueOf(Math.fma(a.doubleValue(), b.doubleValue(), c.doubleValue()));
     }
 
     /**
-     * El mismo valor con el signo cambiado.
+     * The same value with the sign changed.
      *
-     * <p>Da vuelta el bit de signo y nada mas, asi que anda con NaN y con los ceros.
+     * <p>It flips the sign bit and nothing else, so it works with NaN and with the zeros.
      *
-     * @param f el valor
-     * @return el negado
+     * @param f the value
+     * @return the negation
      */
     public static Float16 negate(final Float16 f) {
-        return new Float16((short) (f.bits ^ MASCARA_SIGNO));
+        return new Float16((short) (f.bits ^ SIGN_MASK));
     }
 
     /**
-     * El valor absoluto.
+     * The absolute value.
      *
-     * @param f el valor
-     * @return el absoluto
+     * @param f the value
+     * @return the absolute value
      */
     public static Float16 abs(final Float16 f) {
-        return new Float16((short) (f.bits & ~MASCARA_SIGNO));
+        return new Float16((short) (f.bits & ~SIGN_MASK));
     }
 
     /**
-     * El signo como {@code 1.0}, {@code -1.0}, un cero con su signo, o NaN.
+     * The sign as {@code 1.0}, {@code -1.0}, a zero with its sign, or NaN.
      *
-     * @param f el valor
-     * @return el signo
+     * @param f the value
+     * @return the sign
      */
     public static Float16 signum(final Float16 f) {
-        if (isNaN(f) || (f.bits & ~MASCARA_SIGNO) == 0) {
+        if (isNaN(f) || (f.bits & ~SIGN_MASK) == 0) {
             return f;
         }
         return f.bits < 0 ? valueOf(-1.0f) : valueOf(1.0f);
     }
 
-    // ---- exponente y vecinos ----
+    // ---- exponent and neighbours ----
 
     /**
-     * El exponente binario sin sesgo.
+     * The unbiased binary exponent.
      *
-     * <p>Para un cero o un subnormal devuelve {@code MIN_EXPONENT - 1}, y para un infinito o un NaN
-     * {@code MAX_EXPONENT + 1}. Los dos son valores fuera del rango de los normales, que es como se
-     * distinguen sin tener que preguntar aparte.
+     * <p>For a zero or a subnormal it returns {@code MIN_EXPONENT - 1}, and for an infinity or a
+     * NaN {@code MAX_EXPONENT + 1}. Both are values outside the range of the normals, which is how
+     * they are told apart without having to ask separately.
      *
-     * @param f el valor
-     * @return el exponente
+     * @param f the value
+     * @return the exponent
      */
     public static int getExponent(final Float16 f) {
-        return ((f.bits & MASCARA_EXP) >> 10) - SESGO;
+        return ((f.bits & EXP_MASK) >> 10) - BIAS;
     }
 
     /**
-     * La distancia hasta el proximo valor representable.
+     * The distance to the next representable value.
      *
-     * @param f el valor
-     * @return el ulp
+     * @param f the value
+     * @return the ulp
      */
     public static Float16 ulp(final Float16 f) {
         final int exp = getExponent(f);
@@ -478,71 +476,71 @@ public final class Float16 extends Number implements Comparable<Float16> {
         if (e >= MIN_EXPONENT) {
             return scalb(valueOf(1.0f), e);
         }
-        // Por debajo del rango normal el ulp es siempre el subnormal minimo desplazado.
+        // Below the normal range the ulp is always the minimum subnormal, shifted.
         return new Float16((short) (1 << (e - (MIN_EXPONENT - (PRECISION - 1)))));
     }
 
     /**
-     * El valor representable inmediatamente mayor.
+     * The representable value immediately above.
      *
-     * @param f el valor
-     * @return el siguiente
+     * @param f the value
+     * @return the next one
      */
     public static Float16 nextUp(final Float16 f) {
         if (isNaN(f) || f.bits == (short) 0x7C00) {
             return f;
         }
-        // El cero negativo se trata como positivo: el siguiente es el subnormal minimo positivo.
-        if ((f.bits & ~MASCARA_SIGNO) == 0) {
+        // Negative zero is treated as positive: the next one is the minimum positive subnormal.
+        if ((f.bits & ~SIGN_MASK) == 0) {
             return MIN_VALUE;
         }
         return new Float16((short) (f.bits > 0 ? f.bits + 1 : f.bits - 1));
     }
 
     /**
-     * El valor representable inmediatamente menor.
+     * The representable value immediately below.
      *
-     * @param f el valor
-     * @return el anterior
+     * @param f the value
+     * @return the previous one
      */
     public static Float16 nextDown(final Float16 f) {
         if (isNaN(f) || f.bits == (short) 0xFC00) {
             return f;
         }
-        if ((f.bits & ~MASCARA_SIGNO) == 0) {
+        if ((f.bits & ~SIGN_MASK) == 0) {
             return new Float16((short) 0x8001);
         }
         return new Float16((short) (f.bits > 0 ? f.bits - 1 : f.bits + 1));
     }
 
     /**
-     * El valor multiplicado por dos elevado a {@code n}, con un solo redondeo.
+     * The value multiplied by two to the power {@code n}, with a single rounding.
      *
-     * @param f el valor
-     * @param n el exponente de la escala
-     * @return el escalado
+     * @param f the value
+     * @param n the exponent of the scale
+     * @return the scaled value
      */
     public static Float16 scalb(final Float16 f, final int n) {
-        // Se acota antes de escalar: el rango de binary16 entra de sobra en 2^+-50, y sin acotar un
-        // n grande desbordaria el double intermedio en vez de dar el infinito o el cero que
-        // corresponde.
+        // It is clamped before scaling: binary16's range fits comfortably in 2^+-50, and without
+        // clamping a large n would overflow the intermediate double instead of giving the infinity
+        // or the zero that corresponds.
         final int k = Math.min(Math.max(n, -50), 50);
         return valueOf(f.doubleValue() * Math.scalb(1.0, k));
     }
 
     /**
-     * La magnitud del primero con el signo del segundo.
+     * The magnitude of the first with the sign of the second.
      *
-     * @param magnitude de donde sale el valor
-     * @param sign de donde sale el signo
-     * @return el resultado
+     * @param magnitude where the value comes from
+     * @param sign where the sign comes from
+     * @return the result
      */
     public static Float16 copySign(final Float16 magnitude, final Float16 sign) {
-        return new Float16((short) ((magnitude.bits & ~MASCARA_SIGNO)
-                | (sign.bits & MASCARA_SIGNO)));
+        return new Float16((short) ((magnitude.bits & ~SIGN_MASK)
+                | (sign.bits & SIGN_MASK)));
     }
 
-    // ---- texto ----
+    // ---- text ----
 
     /** {@inheritDoc} */
     public String toString() {
@@ -550,17 +548,17 @@ public final class Float16 extends Number implements Comparable<Float16> {
     }
 
     /**
-     * El decimal <strong>mas corto que vuelve a dar este mismo valor</strong> al leerlo.
+     * The <strong>shortest decimal that gives back this same value</strong> when read.
      *
-     * <p>Es la misma regla que {@code Float.toString} y la que hace que imprimir y volver a leer no
-     * pierda nada. Se busca probando con una cifra significativa, dos, y asi hasta cinco, que es lo
-     * maximo que un binary16 necesita.
+     * <p>It is the same rule as {@code Float.toString}'s and the one that makes printing and
+     * reading back lose nothing. It is found by trying one significant digit, two, and so on up to
+     * five, which is the most a binary16 needs.
      *
-     * <p>La forma tambien es la de Java: decimal comun mientras el valor este entre 10^-3 y 10^7, y
-     * notacion cientifica fuera de esa franja.
+     * <p>The form is Java's too: plain decimal while the value is between 10^-3 and 10^7, and
+     * scientific notation outside that band.
      *
-     * @param f el valor
-     * @return el texto
+     * @param f the value
+     * @return the text
      */
     public static String toString(final Float16 f) {
         if (isNaN(f)) {
@@ -569,80 +567,80 @@ public final class Float16 extends Number implements Comparable<Float16> {
         if (isInfinite(f)) {
             return f.bits < 0 ? "-Infinity" : "Infinity";
         }
-        if ((f.bits & ~MASCARA_SIGNO) == 0) {
+        if ((f.bits & ~SIGN_MASK) == 0) {
             return f.bits < 0 ? "-0.0" : "0.0";
         }
 
-        final boolean negativo = f.bits < 0;
-        final BigDecimal exacto = new BigDecimal(abs(f).doubleValue());
-        BigDecimal elegido = null;
+        final boolean negative = f.bits < 0;
+        final BigDecimal exact = new BigDecimal(abs(f).doubleValue());
+        BigDecimal chosen = null;
         for (int p = 1; p <= 5; p++) {
-            final BigDecimal r = exacto.round(new MathContext(p, RoundingMode.HALF_EVEN));
+            final BigDecimal r = exact.round(new MathContext(p, RoundingMode.HALF_EVEN));
             if (Float.floatToFloat16(r.floatValue()) == abs(f).bits) {
-                elegido = r;
+                chosen = r;
                 break;
             }
         }
-        if (elegido == null) {
-            elegido = exacto;
+        if (chosen == null) {
+            chosen = exact;
         }
-        return (negativo ? "-" : "") + formatear(elegido.stripTrailingZeros());
+        return (negative ? "-" : "") + formatDecimal(chosen.stripTrailingZeros());
     }
 
     /**
-     * Le da a un decimal positivo la forma que usa {@code Float.toString}.
+     * Gives a positive decimal the form {@code Float.toString} uses.
      *
-     * <p>Decimal comun entre 10^-3 y 10^7, cientifica fuera; siempre con al menos una cifra despues
-     * del punto, que es lo que distingue {@code "1.0"} de {@code "1"} y hace que el texto se lea
-     * como un flotante y no como un entero.
+     * <p>Plain decimal between 10^-3 and 10^7, scientific outside; always with at least one digit
+     * after the point, which is what tells {@code "1.0"} from {@code "1"} and makes the text read
+     * as a float and not as an integer.
      */
-    private static String formatear(final BigDecimal v) {
-        final String digitos = v.unscaledValue().toString();
-        // exponente decimal: el valor es 0.<digitos> * 10^exp10
-        final int exp10 = digitos.length() - v.scale();
+    private static String formatDecimal(final BigDecimal v) {
+        final String digits = v.unscaledValue().toString();
+        // decimal exponent: the value is 0.<digits> * 10^exp10
+        final int exp10 = digits.length() - v.scale();
         if (exp10 > -3 && exp10 <= 7) {
             if (exp10 <= 0) {
                 final StringBuilder sb = new StringBuilder("0.");
                 for (int i = 0; i < -exp10; i++) {
                     sb.append('0');
                 }
-                return sb.append(digitos).toString();
+                return sb.append(digits).toString();
             }
-            if (exp10 >= digitos.length()) {
-                final StringBuilder sb = new StringBuilder(digitos);
-                for (int i = digitos.length(); i < exp10; i++) {
+            if (exp10 >= digits.length()) {
+                final StringBuilder sb = new StringBuilder(digits);
+                for (int i = digits.length(); i < exp10; i++) {
                     sb.append('0');
                 }
                 return sb.append(".0").toString();
             }
-            return digitos.substring(0, exp10) + "." + digitos.substring(exp10);
+            return digits.substring(0, exp10) + "." + digits.substring(exp10);
         }
-        final String resto = digitos.length() > 1 ? digitos.substring(1) : "0";
-        return digitos.charAt(0) + "." + resto + "E" + (exp10 - 1);
+        final String rest = digits.length() > 1 ? digits.substring(1) : "0";
+        return digits.charAt(0) + "." + rest + "E" + (exp10 - 1);
     }
 
     /**
-     * El valor en hexadecimal, con el significando exacto.
+     * The value in hexadecimal, with the exact significand.
      *
-     * <p>Es la unica forma de escribir un flotante sin perder nada y sin depender del redondeo
-     * decimal: {@code 0x1.554p-2} dice exactamente que bits hay. Los normales llevan el
-     * {@code 0x1.} del bit implicito y los subnormales {@code 0x0.} con exponente {@code p-14}.
+     * <p>It is the only way of writing a float without losing anything and without depending on
+     * decimal rounding: {@code 0x1.554p-2} says exactly which bits there are. The normals carry the
+     * {@code 0x1.} of the implicit bit and the subnormals {@code 0x0.} with exponent {@code p-14}.
      *
-     * @param f el valor
-     * @return el texto
+     * @param f the value
+     * @return the text
      */
     public static String toHexString(final Float16 f) {
         if (!isFinite(f)) {
             return toString(f);
         }
-        final String signo = f.bits < 0 ? "-" : "";
-        final int exp = (f.bits & MASCARA_EXP) >> 10;
-        final int sig = f.bits & MASCARA_SIG;
+        final String sign = f.bits < 0 ? "-" : "";
+        final int exp = (f.bits & EXP_MASK) >> 10;
+        final int sig = f.bits & SIGNIFICAND_MASK;
         if (exp == 0 && sig == 0) {
-            return signo + "0x0.0p0";
+            return sign + "0x0.0p0";
         }
-        // Los diez bits del significando se escriben como tres digitos hexadecimales, o sea doce
-        // bits: por eso el desplazamiento de dos.
+        // The ten bits of the significand are written as three hexadecimal digits, that is twelve
+        // bits: hence the shift by two.
         String mant = Integer.toHexString(sig << 2);
         while (mant.length() < 3) {
             mant = "0" + mant;
@@ -651,8 +649,8 @@ public final class Float16 extends Number implements Comparable<Float16> {
             mant = mant.substring(0, mant.length() - 1);
         }
         if (exp == 0) {
-            return signo + "0x0." + mant + "p-14";
+            return sign + "0x0." + mant + "p-14";
         }
-        return signo + "0x1." + mant + "p" + (exp - SESGO);
+        return sign + "0x1." + mant + "p" + (exp - BIAS);
     }
 }

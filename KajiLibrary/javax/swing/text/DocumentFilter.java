@@ -1,23 +1,23 @@
 package javax.swing.text;
 
 /**
- * Un filtro que ve cada edicion antes de que ocurra y decide que hacer con ella.
+ * A filter that sees each edit before it happens and decides what to do with it.
  *
- * <p>Es como se hace un campo que solo acepta numeros, uno que pasa todo a mayusculas o uno de
- * largo limitado: el filtro recibe lo que se quiere insertar y escribe otra cosa, o no escribe
- * nada. La version de esta clase deja pasar todo, para que una subclase redefina solo lo que le
- * interesa.
+ * <p>It is how a field that only accepts numbers is made, or one that turns everything into
+ * upper case, or one of limited length: the filter receives what is to be inserted and writes
+ * something else, or writes nothing. This class's version lets everything through, so that a
+ * subclass redefines only what interests it.
  *
- * <p>El filtro <strong>no</strong> escribe llamando al documento: llama al {@link FilterBypass}
- * que le pasan. Si llamara al documento, la escritura volveria a pasar por el filtro y no
- * terminaria nunca.
+ * <p>The filter does <strong>not</strong> write by calling the document: it calls the
+ * {@link FilterBypass} it is passed. If it called the document, the write would go through the
+ * filter again and would never end.
  */
 public class DocumentFilter {
 
     public DocumentFilter() {
     }
 
-    /** Deja borrar; una subclase puede no llamar al atajo y asi vetar el borrado. */
+    /** It lets the removal happen; a subclass may not call the bypass and so veto the removal. */
     public void remove(FilterBypass fb, int offset, int length) throws BadLocationException {
         fb.remove(offset, length);
     }
@@ -33,10 +33,10 @@ public class DocumentFilter {
     }
 
     /**
-     * El atajo para escribir sin volver a pasar por el filtro; ver la nota de la clase.
+     * The bypass for writing without going through the filter again; see the class note.
      *
-     * <p>Lo implementa el documento, no el filtro: solo el documento puede saltearse su propio
-     * filtro sin romper nada.
+     * <p>The document implements it, not the filter: only the document can skip its own filter
+     * without breaking anything.
      */
     public abstract static class FilterBypass {
 

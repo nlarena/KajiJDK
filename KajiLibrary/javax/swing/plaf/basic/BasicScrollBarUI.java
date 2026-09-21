@@ -31,41 +31,41 @@ import javax.swing.plaf.DimensionUIResource;
 import javax.swing.plaf.ScrollBarUI;
 
 /**
- * El aspecto basico de una barra de desplazamiento: dos botones, una pista y un pulgar.
+ * The basic look and feel of a scroll bar: two buttons, a track and a thumb.
  *
- * <h2>El UI es tambien la distribucion</h2>
+ * <h2>The look and feel is also the layout</h2>
  *
- * <p>Implementa {@link LayoutManager} y se instala como distribucion de la barra. Tiene sentido:
- * donde va cada pieza depende del modelo —el pulgar se ubica y se dimensiona por valor y
- * extension—, y eso lo sabe el aspecto, no un layout generico. De ahi que
- * {@link #layoutVScrollbar} sea el metodo mas largo de la clase.
+ * <p>It implements {@link LayoutManager} and is installed as the bar's layout. It makes sense:
+ * where each piece goes depends on the model -- the thumb is placed and sized by value and
+ * extent --, and that is known by the look and feel, not by a generic layout. Hence
+ * {@link #layoutVScrollbar} is the longest method in the class.
  *
- * <h2>Como se ubica el pulgar</h2>
+ * <h2>How the thumb is placed</h2>
  *
- * <p>Dos cuentas. El <em>largo</em> es la parte de la pista que corresponde a lo que se ve:
- * {@code pista * extension / rango}, nunca menos que el minimo ni mas que el maximo. La
- * <em>posicion</em> reparte el sobrante de la pista segun cuanto del recorrido util se lleva
- * andado: {@code (pista - pulgar) * (valor - minimo) / (rango - extension)}. El caso de estar al
- * final se trata aparte, pegando el pulgar contra el boton de abajo, para que no quede un pixel de
- * pista por un redondeo.
+ * <p>Two pieces of arithmetic. The <em>length</em> is the part of the track that corresponds to
+ * what is seen: {@code track * extent / range}, never less than the minimum nor more than the
+ * maximum. The <em>position</em> hands out the track's leftover according to how much of the
+ * useful travel has been covered: {@code (track - thumb) * (value - minimum) /
+ * (range - extent)}. The case of being at the end is treated separately, sticking the thumb
+ * against the bottom button, so that a pixel of track is not left over by a rounding.
  *
- * <p>Si el pulgar no entra en la pista se le da tamano cero, que es como esta familia de aspectos
- * dice "no hay nada que desplazar".
+ * <p>If the thumb does not fit in the track it is given a size of zero, which is how this
+ * family of looks and feels says "there is nothing to scroll".
  *
- * <h2>Lo que no esta</h2>
+ * <h2>What is not there</h2>
  *
- * <p>No estan las acciones por teclado: para atarlas hace falta la tabla del aspecto, que esta
- * biblioteca todavia no tiene, asi que no habria de donde sacar que tecla hace que.
+ * <p>The keyboard actions are not there: tying them needs the look and feel's table, which this
+ * library does not have yet, so there would be nowhere to get which key does what from.
  */
 public class BasicScrollBarUI extends ScrollBarUI implements LayoutManager, SwingConstants {
 
-    /** Ni resaltado. */
+    /** Not highlighted either. */
     protected static final int NO_HIGHLIGHT = 0;
 
-    /** La parte de pista de antes del pulgar, resaltada. */
+    /** The part of the track before the thumb, highlighted. */
     protected static final int DECREASE_HIGHLIGHT = 1;
 
-    /** La parte de pista de despues del pulgar, resaltada. */
+    /** The part of the track after the thumb, highlighted. */
     protected static final int INCREASE_HIGHLIGHT = 2;
 
     protected Dimension minimumThumbSize;
@@ -86,10 +86,10 @@ public class BasicScrollBarUI extends ScrollBarUI implements LayoutManager, Swin
     protected TrackListener trackListener;
     protected ArrowButtonListener buttonListener;
 
-    /** El que repite mientras el boton sigue apretado; ver {@link ScrollListener}. */
+    /** The one that repeats while the button stays pressed; see {@link ScrollListener}. */
     protected ScrollListener scrollListener;
 
-    /** El reloj que lo llama: 300 ms hasta el primer repique y 60 entre repiques. */
+    /** The timer that calls it: 300 ms until the first beat and 60 between beats. */
     protected Timer scrollTimer;
     protected ModelListener modelListener;
 
@@ -100,13 +100,13 @@ public class BasicScrollBarUI extends ScrollBarUI implements LayoutManager, Swin
 
     protected PropertyChangeListener propertyChangeListener;
 
-    /** El ancho de la barra a lo angosto; 17 en Metal. */
+    /** The bar's width across; 17 in Metal. */
     protected int scrollBarWidth;
 
-    /** El hueco entre el pulgar y el boton de abajo o de la derecha; cero en Metal. */
+    /** The gap between the thumb and the bottom or right button; zero in Metal. */
     protected int incrGap;
 
-    /** El hueco entre el pulgar y el boton de arriba o de la izquierda; cero en Metal. */
+    /** The gap between the thumb and the top or left button; zero in Metal. */
     protected int decrGap;
 
     private boolean supportsAbsolutePositioning;
@@ -115,17 +115,17 @@ public class BasicScrollBarUI extends ScrollBarUI implements LayoutManager, Swin
     public BasicScrollBarUI() {
     }
 
-    /** Un aspecto por barra: guarda la barra, sus botones y los rectangulos. */
+    /** One look and feel per bar: it keeps the bar, its buttons and the rectangles. */
     public static ComponentUI createUI(JComponent c) {
         return new BasicScrollBarUI();
     }
 
     /**
-     * Los seis colores de la barra.
+     * The bar's six colours.
      *
-     * <p>Son los de {@code ScrollBar.*} medidos en Metal (JDK 25): pulgar (163, 184, 204), su
-     * brillo (184, 207, 229), su sombra (99, 130, 191) y su sombra oscura (122, 138, 153); pista
-     * (238, 238, 238) y su resaltado (122, 138, 153).
+     * <p>They are those of {@code ScrollBar.*} measured in Metal (JDK 25): thumb
+     * (163, 184, 204), its highlight (184, 207, 229), its shadow (99, 130, 191) and its dark
+     * shadow (122, 138, 153); track (238, 238, 238) and its highlight (122, 138, 153).
      */
     protected void configureScrollBarColors() {
         if (scrollbar.getBackground() == null
@@ -166,7 +166,7 @@ public class BasicScrollBarUI extends ScrollBarUI implements LayoutManager, Swin
         decrButton = null;
     }
 
-    /** Ver la nota de {@link #configureScrollBarColors} para de donde salen los numeros. */
+    /** See {@link #configureScrollBarColors}'s note for where the numbers come from. */
     protected void installDefaults() {
         scrollBarWidth = 17;
         minimumThumbSize = new DimensionUIResource(8, 8);
@@ -229,7 +229,7 @@ public class BasicScrollBarUI extends ScrollBarUI implements LayoutManager, Swin
         }
     }
 
-    /** Nada: sin {@code InputMap} no hay donde registrar teclas; ver la nota de la clase. */
+    /** Nothing: with no {@code InputMap} there is nowhere to register keys; see the class note. */
     protected void installKeyboardActions() {
     }
 
@@ -253,7 +253,7 @@ public class BasicScrollBarUI extends ScrollBarUI implements LayoutManager, Swin
         }
     }
 
-    /** Deja los colores puestos, como el JDK; solo suelta la distribucion. */
+    /** It leaves the colours set, like the JDK; it only lets go of the layout. */
     protected void uninstallDefaults() {
         if (scrollbar.getLayout() == this) {
             scrollbar.setLayout(null);
@@ -264,14 +264,14 @@ public class BasicScrollBarUI extends ScrollBarUI implements LayoutManager, Swin
         return new TrackListener();
     }
 
-    /** Prepara al escucha y larga el reloj desde cero. */
-    private void arrancarReloj(int direction, boolean porBloques) {
+    /** It gets the listener ready and starts the timer from zero. */
+    private void startTimer(int direction, boolean byBlocks) {
         if (scrollTimer == null || scrollListener == null) {
             return;
         }
         scrollTimer.stop();
         scrollListener.setDirection(direction);
-        scrollListener.setScrollByBlock(porBloques);
+        scrollListener.setScrollByBlock(byBlocks);
         scrollTimer.start();
     }
 
@@ -291,7 +291,7 @@ public class BasicScrollBarUI extends ScrollBarUI implements LayoutManager, Swin
         return new PropertyChangeHandler();
     }
 
-    /** Si el cursor esta sobre el pulgar; algunos aspectos lo pintan distinto. */
+    /** Whether the cursor is over the thumb; some looks and feels paint it differently. */
     protected void setThumbRollover(boolean active) {
         if (thumbActive != active) {
             thumbActive = active;
@@ -303,7 +303,7 @@ public class BasicScrollBarUI extends ScrollBarUI implements LayoutManager, Swin
         return thumbActive;
     }
 
-    /** Pista y pulgar, en ese orden: el pulgar va encima. */
+    /** Track and thumb, in that order: the thumb goes on top. */
     public void paint(Graphics g, JComponent c) {
         paintTrack(g, c, getTrackBounds());
         Rectangle thumbBounds = getThumbBounds();
@@ -313,7 +313,7 @@ public class BasicScrollBarUI extends ScrollBarUI implements LayoutManager, Swin
         }
     }
 
-    /** Cuarenta y ocho de largo por el ancho de la barra: dos botones y algo de pista. */
+    /** Forty-eight long by the bar's width: two buttons and a bit of track. */
     public Dimension getPreferredSize(JComponent c) {
         if (scrollbar.getOrientation() == JScrollBar.VERTICAL) {
             return new Dimension(scrollBarWidth, 48);
@@ -321,7 +321,7 @@ public class BasicScrollBarUI extends ScrollBarUI implements LayoutManager, Swin
         return new Dimension(48, scrollBarWidth);
     }
 
-    /** Sin tope: una barra se estira todo lo que su contenedor le de. */
+    /** No cap: a bar stretches as far as its container gives it. */
     public Dimension getMaximumSize(JComponent c) {
         return new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE);
     }
@@ -336,7 +336,7 @@ public class BasicScrollBarUI extends ScrollBarUI implements LayoutManager, Swin
                 thumbDarkShadowColor, thumbHighlightColor);
     }
 
-    /** Pinta de resaltado la pista de antes del pulgar; es el clic sostenido en esa mitad. */
+    /** It paints the track before the thumb as highlighted; it is the held click on that half. */
     protected void paintDecreaseHighlight(Graphics g) {
         Insets insets = scrollbar.getInsets();
         Rectangle thumbR = getThumbBounds();
@@ -357,7 +357,7 @@ public class BasicScrollBarUI extends ScrollBarUI implements LayoutManager, Swin
         }
     }
 
-    /** Lo mismo del otro lado del pulgar. */
+    /** The same on the other side of the thumb. */
     protected void paintIncreaseHighlight(Graphics g) {
         Insets insets = scrollbar.getInsets();
         Rectangle thumbR = getThumbBounds();
@@ -390,11 +390,11 @@ public class BasicScrollBarUI extends ScrollBarUI implements LayoutManager, Swin
     }
 
     /**
-     * El pulgar: un marco oscuro, el relleno, y dos lineas de relieve.
+     * The thumb: a dark frame, the fill, and two relief lines.
      *
-     * <p>El marco se dibuja antes del relleno y el relleno lo tapa por arriba y por la izquierda:
-     * queda oscuro solo el borde derecho y el de abajo. Es la misma secuencia que
-     * {@link BasicArrowButton}, y por eso las tres piezas de la barra se ven de la misma familia.
+     * <p>The frame is drawn before the fill and the fill covers it at the top and on the left:
+     * only the right edge and the bottom one stay dark. It is the same sequence as
+     * {@link BasicArrowButton}, and that is why the bar's three pieces look of the same family.
      */
     protected void paintThumb(Graphics g, JComponent c, Rectangle thumbBounds) {
         if (thumbBounds.isEmpty() || !scrollbar.isEnabled()) {
@@ -415,9 +415,10 @@ public class BasicScrollBarUI extends ScrollBarUI implements LayoutManager, Swin
         g.drawLine(1, 1, 1, h - 2);
         g.drawLine(2, 1, w - 3, 1);
 
-        // La linea de abajo arranca en x=2 y no en x=1: el pixel de la esquina queda para el
-        // brillo, y por eso el relieve del pulgar se ve continuo en esa esquina. El boton de
-        // flecha, que dibuja casi lo mismo, si la arranca en x=1; las dos formas estan medidas.
+        // The bottom line starts at x=2 and not at x=1: the corner's pixel is left for the
+                // highlight, and that is why the thumb's relief looks continuous at that corner.
+                // The arrow button, which draws almost the same, does start it at x=1; both ways
+                // are measured.
         g.setColor(thumbLightShadowColor);
         g.drawLine(2, h - 2, w - 2, h - 2);
         g.drawLine(w - 2, 1, w - 2, h - 2);
@@ -447,7 +448,7 @@ public class BasicScrollBarUI extends ScrollBarUI implements LayoutManager, Swin
         return getMinimumSize((JComponent) scrollbarContainer);
     }
 
-    /** Ver la nota de la clase sobre las dos cuentas del pulgar. */
+    /** See the class note about the thumb's two pieces of arithmetic. */
     protected void layoutVScrollbar(JScrollBar sb) {
         Dimension sbSize = sb.getSize();
         Insets sbInsets = sb.getInsets();
@@ -486,7 +487,7 @@ public class BasicScrollBarUI extends ScrollBarUI implements LayoutManager, Swin
             thumbY = thumbY + decrButtonY + decrButtonH + decrGap;
         }
 
-        // Si los dos botones no entran, se reparten en partes iguales lo que hay.
+        // If the two buttons do not fit, they share out what there is in equal parts.
         int sbAvailButtonH = (sbSize.height - sbInsetsH);
         if (sbAvailButtonH < sbButtonsH) {
             incrButtonH = sbAvailButtonH / 2;
@@ -513,7 +514,7 @@ public class BasicScrollBarUI extends ScrollBarUI implements LayoutManager, Swin
         }
     }
 
-    /** Lo mismo de {@link #layoutVScrollbar}, con los ejes cambiados. */
+    /** The same as {@link #layoutVScrollbar}, with the axes swapped. */
     protected void layoutHScrollbar(JScrollBar sb) {
         Dimension sbSize = sb.getSize();
         Insets sbInsets = sb.getInsets();
@@ -589,7 +590,7 @@ public class BasicScrollBarUI extends ScrollBarUI implements LayoutManager, Swin
     }
 
     public void layoutContainer(Container scrollbarContainer) {
-        // Puede llegar mientras el aspecto se esta cambiando: el contenedor manda.
+        // It may arrive while the look and feel is being changed: the container rules.
         JScrollBar scrollbar = (JScrollBar) scrollbarContainer;
         if (scrollbar.getOrientation() == JScrollBar.VERTICAL) {
             layoutVScrollbar(scrollbar);
@@ -598,7 +599,7 @@ public class BasicScrollBarUI extends ScrollBarUI implements LayoutManager, Swin
         }
     }
 
-    /** Cambia el rectangulo del pulgar y repinta lo viejo y lo nuevo. */
+    /** It changes the thumb's rectangle and repaints the old and the new one. */
     protected void setThumbBounds(int x, int y, int width, int height) {
         if (thumbRect.x == x && thumbRect.y == y && thumbRect.width == width
                 && thumbRect.height == height) {
@@ -615,7 +616,7 @@ public class BasicScrollBarUI extends ScrollBarUI implements LayoutManager, Swin
         setThumbRollover(false);
     }
 
-    /** Una copia: quien la reciba puede modificarla sin mover el pulgar. */
+    /** A copy: whoever receives it may modify it without moving the thumb. */
     protected Rectangle getThumbBounds() {
         return thumbRect.getBounds();
     }
@@ -624,7 +625,7 @@ public class BasicScrollBarUI extends ScrollBarUI implements LayoutManager, Swin
         return trackRect.getBounds();
     }
 
-    /** Avanza una pantalla en esa direccion; el valor se acomoda solo contra los topes. */
+    /** It advances one screenful in that direction; the value settles itself against the caps. */
     protected void scrollByBlock(int direction) {
         scrollbar.setValueIsAdjusting(true);
         int oldValue = scrollbar.getValue();
@@ -635,7 +636,7 @@ public class BasicScrollBarUI extends ScrollBarUI implements LayoutManager, Swin
         int delta = blockIncrement * ((direction > 0) ? +1 : -1);
         int newValue = oldValue + delta;
 
-        // Un desborde deja el valor en el tope de ese lado.
+        // An overflow leaves the value at that side's cap.
         if (delta > 0 && newValue < oldValue) {
             newValue = scrollbar.getMaximum();
         } else if (delta < 0 && newValue > oldValue) {
@@ -645,7 +646,7 @@ public class BasicScrollBarUI extends ScrollBarUI implements LayoutManager, Swin
         scrollbar.setValueIsAdjusting(false);
     }
 
-    /** Avanza un paso chico en esa direccion. */
+    /** It advances one small step in that direction. */
     protected void scrollByUnit(int direction) {
         int delta;
         if (direction > 0) {
@@ -666,17 +667,17 @@ public class BasicScrollBarUI extends ScrollBarUI implements LayoutManager, Swin
         }
     }
 
-    /** Si un clic con el modificador del sistema salta directo a esa posicion. */
+    /** Whether a click with the system's modifier jumps straight to that position. */
     public boolean getSupportsAbsolutePositioning() {
         return supportsAbsolutePositioning;
     }
 
     /**
-     * Escucha el arrastre del pulgar y los clics en la pista.
+     * It listens to the thumb's dragging and to the clicks on the track.
      *
-     * <p>Arrastrar traduce pixeles a valores con la regla de tres inversa a la que ubica al
-     * pulgar; el {@code offset} es donde dentro del pulgar se lo agarro, y es lo que hace que el
-     * pulgar no salte bajo el cursor al empezar a arrastrar.
+     * <p>Dragging translates pixels into values with the rule of three inverse to the one that
+     * places the thumb; the {@code offset} is where inside the thumb it was grabbed, and it is
+     * what keeps the thumb from jumping under the cursor on starting to drag.
      */
     protected class TrackListener extends MouseAdapter implements MouseMotionListener {
 
@@ -721,7 +722,7 @@ public class BasicScrollBarUI extends ScrollBarUI implements LayoutManager, Swin
             }
             isDragging = false;
 
-            // Un clic en la pista avanza una pantalla hacia el lado del clic.
+            // A click on the track advances one screenful towards the click's side.
             int direction;
             if (scrollbar.getOrientation() == JScrollBar.VERTICAL) {
                 direction = (currentMouseY < thumbR.y) ? -1 : +1;
@@ -732,7 +733,7 @@ public class BasicScrollBarUI extends ScrollBarUI implements LayoutManager, Swin
             }
             trackHighlight = (direction > 0) ? INCREASE_HIGHLIGHT : DECREASE_HIGHLIGHT;
             scrollByBlock(direction);
-            arrancarReloj(direction, true);
+            startTimer(direction, true);
         }
 
         public void mouseDragged(MouseEvent e) {
@@ -742,18 +743,18 @@ public class BasicScrollBarUI extends ScrollBarUI implements LayoutManager, Swin
             currentMouseX = e.getX();
             currentMouseY = e.getY();
             if (scrollbar.getOrientation() == JScrollBar.VERTICAL) {
-                arrastreVertical(e.getY());
+                verticalDrag(e.getY());
             } else {
-                arrastreHorizontal(e.getX());
+                horizontalDrag(e.getX());
             }
         }
 
-        /** Traduce una posicion de pixel a un valor del modelo, en vertical. */
-        private void arrastreVertical(int y) {
+        /** It translates a pixel position into a model value, vertically. */
+        private void verticalDrag(int y) {
             Rectangle thumbR = getThumbBounds();
-            Rectangle trackR = getTrackBounds();
-            int thumbMin = trackR.y;
-            int thumbMax = trackR.y + trackR.height - thumbR.height;
+            Rectangle trackRect = getTrackBounds();
+            int thumbMin = trackRect.y;
+            int thumbMax = trackRect.y + trackRect.height - thumbR.height;
             int thumbTop = Math.max(thumbMin, Math.min(thumbMax, y - offset));
 
             setThumbBounds(thumbR.x, thumbTop, thumbR.width, thumbR.height);
@@ -762,24 +763,24 @@ public class BasicScrollBarUI extends ScrollBarUI implements LayoutManager, Swin
             int valueMax = model.getMaximum() - model.getExtent();
             int valueRange = valueMax - model.getMinimum();
             int thumbRange = thumbMax - thumbMin;
-            int valor;
+            int value;
             if (thumbRange <= 0) {
-                valor = model.getMinimum();
+                value = model.getMinimum();
             } else if (thumbTop == thumbMax) {
-                valor = valueMax;
+                value = valueMax;
             } else {
-                valor = model.getMinimum()
+                value = model.getMinimum()
                         + (int) (0.5f + ((float) (thumbTop - thumbMin) * valueRange) / thumbRange);
             }
-            scrollbar.setValue(valor);
+            scrollbar.setValue(value);
         }
 
-        /** Lo mismo en horizontal; el sentido del idioma da vuelta la regla de tres. */
-        private void arrastreHorizontal(int x) {
+        /** The same horizontally; the language's direction turns the rule of three around. */
+        private void horizontalDrag(int x) {
             Rectangle thumbR = getThumbBounds();
-            Rectangle trackR = getTrackBounds();
-            int thumbMin = trackR.x;
-            int thumbMax = trackR.x + trackR.width - thumbR.width;
+            Rectangle trackRect = getTrackBounds();
+            int thumbMin = trackRect.x;
+            int thumbMax = trackRect.x + trackRect.width - thumbR.width;
             int thumbLeft = Math.max(thumbMin, Math.min(thumbMax, x - offset));
 
             setThumbBounds(thumbLeft, thumbR.y, thumbR.width, thumbR.height);
@@ -789,19 +790,19 @@ public class BasicScrollBarUI extends ScrollBarUI implements LayoutManager, Swin
             int valueRange = valueMax - model.getMinimum();
             int thumbRange = thumbMax - thumbMin;
             boolean ltr = scrollbar.getComponentOrientation().isLeftToRight();
-            int valor;
+            int value;
             if (thumbRange <= 0) {
-                valor = model.getMinimum();
+                value = model.getMinimum();
             } else if (ltr && thumbLeft == thumbMax) {
-                valor = valueMax;
+                value = valueMax;
             } else if (!ltr && thumbLeft == thumbMin) {
-                valor = valueMax;
+                value = valueMax;
             } else {
-                int corrido = ltr ? (thumbLeft - thumbMin) : (thumbMax - thumbLeft);
-                valor = model.getMinimum()
-                        + (int) (0.5f + ((float) corrido * valueRange) / thumbRange);
+                int shifted = ltr ? (thumbLeft - thumbMin) : (thumbMax - thumbLeft);
+                value = model.getMinimum()
+                        + (int) (0.5f + ((float) shifted * valueRange) / thumbRange);
             }
-            scrollbar.setValue(valor);
+            scrollbar.setValue(value);
         }
 
         public void mouseMoved(MouseEvent e) {
@@ -822,7 +823,9 @@ public class BasicScrollBarUI extends ScrollBarUI implements LayoutManager, Swin
         setThumbRollover(rect.contains(x, y));
     }
 
-    /** Escucha las dos flechas: cada clic mueve un paso y, si se mantiene apretada, sigue. */
+    /**
+     * It listens to the two arrows: each click moves one step and, if it is held down, it goes on.
+     */
     protected class ArrowButtonListener extends MouseAdapter {
 
         public ArrowButtonListener() {
@@ -834,7 +837,7 @@ public class BasicScrollBarUI extends ScrollBarUI implements LayoutManager, Swin
             }
             int direction = (e.getSource() == incrButton) ? 1 : -1;
             scrollByUnit(direction);
-            arrancarReloj(direction, false);
+            startTimer(direction, false);
             if (!scrollbar.hasFocus() && scrollbar.isRequestFocusEnabled()) {
                 scrollbar.requestFocus();
             }
@@ -848,24 +851,26 @@ public class BasicScrollBarUI extends ScrollBarUI implements LayoutManager, Swin
     }
 
     /**
-     * El repique del desplazamiento continuo.
+     * The beat of the continuous scrolling.
      *
-     * <p>Es el escucha del reloj: cada vez que suena mueve un paso -- o una pantalla, si se apreto
-     * la pista -- en la direccion guardada. Se para solo en dos casos, y los dos importan.
+     * <p>It is the timer's listener: every time it rings it moves one step -- or one screenful, if
+     * the track was pressed -- in the direction it kept. It stops by itself in two cases, and both
+     * matter.
      *
-     * <p>El primero es llegar al tope: seguir repicando ahi no hace nada y gasta.
+     * <p>The first is reaching the cap: going on beating there does nothing and costs.
      *
-     * <p>El segundo es que el pulgar alcance al cursor. Al apretar la pista el pulgar viene hacia
-     * el cursor de a una pantalla; si no se parara, lo pasaria de largo y el contenido seguiria
-     * corriendo bajo un dedo quieto. Por eso mira {@code currentMouseX}/{@code currentMouseY} del
-     * escucha de la pista y no el evento: lo que interesa es donde esta el cursor ahora.
+     * <p>The second is the thumb catching up with the cursor. On pressing the track the thumb
+     * comes towards the cursor one screenful at a time; if it did not stop, it would go past it
+     * and the content would go on running under a still finger. That is why it looks at the track
+     * listener's {@code currentMouseX}/{@code currentMouseY} and not at the event: what matters is
+     * where the cursor is now.
      */
     protected class ScrollListener implements ActionListener {
 
         private int direction = +1;
         private boolean useBlockIncrement;
 
-        /** Hacia adelante y de a un paso. */
+        /** Forwards and one step at a time. */
         public ScrollListener() {
         }
 
@@ -885,8 +890,8 @@ public class BasicScrollBarUI extends ScrollBarUI implements LayoutManager, Swin
         public void actionPerformed(ActionEvent e) {
             if (useBlockIncrement) {
                 scrollByBlock(direction);
-                if (alcanzoAlCursor()) {
-                    pararReloj(e);
+                if (reachedCursor()) {
+                    stopTimer(e);
                     return;
                 }
             } else {
@@ -895,14 +900,14 @@ public class BasicScrollBarUI extends ScrollBarUI implements LayoutManager, Swin
             if (direction > 0
                     && scrollbar.getValue() + scrollbar.getVisibleAmount()
                             >= scrollbar.getMaximum()) {
-                pararReloj(e);
+                stopTimer(e);
             } else if (direction < 0 && scrollbar.getValue() <= scrollbar.getMinimum()) {
-                pararReloj(e);
+                stopTimer(e);
             }
         }
 
-        /** Si el pulgar ya llego a donde esta el cursor. */
-        private boolean alcanzoAlCursor() {
+        /** Whether the thumb has already reached where the cursor is. */
+        private boolean reachedCursor() {
             Rectangle thumbR = getThumbBounds();
             if (scrollbar.getOrientation() == JScrollBar.VERTICAL) {
                 if (direction > 0) {
@@ -916,8 +921,8 @@ public class BasicScrollBarUI extends ScrollBarUI implements LayoutManager, Swin
             return thumbR.x <= trackListener.currentMouseX;
         }
 
-        /** El reloj es la fuente del evento; asi funciona tambien si lo llamo otro. */
-        private void pararReloj(ActionEvent e) {
+        /** The timer is the event's source; that way it works too if somebody else called it. */
+        private void stopTimer(ActionEvent e) {
             if (e.getSource() instanceof Timer) {
                 ((Timer) e.getSource()).stop();
             } else if (scrollTimer != null) {
@@ -926,7 +931,7 @@ public class BasicScrollBarUI extends ScrollBarUI implements LayoutManager, Swin
         }
     }
 
-    /** Cambio el modelo: hay que volver a ubicar el pulgar. */
+    /** The model changed: the thumb has to be placed again. */
     protected class ModelListener implements ChangeListener {
 
         public ModelListener() {
@@ -939,12 +944,15 @@ public class BasicScrollBarUI extends ScrollBarUI implements LayoutManager, Swin
         }
     }
 
-    /** Siempre {@code false}: el JDK cachea el valor durante un arrastre, aca no hace falta. */
+    /** Always {@code false}: the JDK caches the value during a drag, here it is not needed. */
     private boolean useCachedValue() {
         return false;
     }
 
-    /** Cambio una propiedad de la barra: si fue el modelo o la orientacion, hay que reacomodar. */
+    /**
+     * A property of the bar changed: if it was the model or the orientation, it has to be laid out
+     * again.
+     */
     public class PropertyChangeHandler implements PropertyChangeListener {
 
         public PropertyChangeHandler() {
@@ -972,7 +980,7 @@ public class BasicScrollBarUI extends ScrollBarUI implements LayoutManager, Swin
         }
     }
 
-    /** Da vuelta las flechas cuando cambia la orientacion de la barra o del idioma. */
+    /** It turns the arrows around when the bar's or the language's orientation changes. */
     private void updateButtonDirections() {
         int orient = scrollbar.getOrientation();
         if (scrollbar.getComponentOrientation().isLeftToRight()) {

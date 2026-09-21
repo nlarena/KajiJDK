@@ -3,23 +3,23 @@ package java.util.spi;
 import java.util.Locale;
 
 /**
- * KajiLibrary's java.util.spi.LocaleServiceProvider -- la raiz de los proveedores de datos locales.
+ * KajiLibrary's java.util.spi.LocaleServiceProvider -- the root of the locale data providers.
  *
- * <p>Es lo que permite que una aplicacion agregue soporte para un idioma que el runtime no trae, o
- * que corrija el que trae. Todo lo dependiente de idioma que hay en {@code java.util} y
- * {@code java.text} --nombres de meses, simbolos de moneda, reglas de ordenamiento-- se puede
- * reemplazar por esta via, y ninguna de las clases que los usan tiene que enterarse.
+ * <p>It is what lets an application add support for a language the runtime does not ship, or correct
+ * the one it does. Everything language-dependent in {@code java.util} and {@code java.text} --month
+ * names, currency symbols, collation rules-- can be replaced by this route, and none of the classes
+ * that use them has to find out.
  *
- * <h2>Por que existe isSupportedLocale ademas de getAvailableLocales</h2>
+ * <h2>Why isSupportedLocale exists besides getAvailableLocales</h2>
  *
- * <p>Parece redundante y no lo es. {@code getAvailableLocales()} devuelve una lista <b>finita</b>, y
- * hay locales que no se pueden enumerar: los que llevan extensiones Unicode
- * ({@code es-AR-u-ca-buddhist}) forman un conjunto infinito. El default de
- * {@link #isSupportedLocale} compara contra la lista despues de sacar las extensiones, que es lo
- * correcto para casi todos; un proveedor que sepa contestar por extension lo sobrescribe.
+ * <p>It looks redundant and it is not. {@code getAvailableLocales()} returns a <b>finite</b> list,
+ * and there are locales that cannot be enumerated: the ones carrying Unicode extensions
+ * ({@code es-AR-u-ca-buddhist}) form an infinite set. {@link #isSupportedLocale}'s default compares
+ * against the list after stripping the extensions, which is right for almost everybody; a provider
+ * that can answer by extension overrides it.
  *
- * <p><b>Esta biblioteca no registra ningun proveedor.</b> Las clases estan para que uno que se
- * escriba encaje.
+ * <p><b>This library registers no provider.</b> The classes are here so that one somebody writes
+ * fits.
  */
 public abstract class LocaleServiceProvider {
 
@@ -27,20 +27,20 @@ public abstract class LocaleServiceProvider {
     }
 
     /**
-     * Los locales para los que este proveedor tiene datos.
+     * The locales this provider has data for.
      *
-     * <p>Tiene que incluir {@code Locale.ROOT} o no; lo que no puede es devolver null.
+     * <p>It may or may not include {@code Locale.ROOT}; what it cannot do is return null.
      */
     public abstract Locale[] getAvailableLocales();
 
     /**
-     * Si este proveedor sirve para ese local.
+     * Whether this provider serves that locale.
      *
-     * <p>El default busca en {@link #getAvailableLocales()} el local <b>sin sus extensiones</b>. Ver
-     * la nota de la clase para por que no alcanza con la lista sola.
+     * <p>The default looks the locale up in {@link #getAvailableLocales()} <b>without its
+     * extensions</b>. See the class's note for why the list alone is not enough.
      */
     public boolean isSupportedLocale(Locale locale) {
-        // Sin extensiones: `es-AR-u-ca-buddhist` lo atiende el mismo proveedor que `es-AR`.
+        // Without extensions: `es-AR-u-ca-buddhist` is served by the same provider as `es-AR`.
         locale = locale.stripExtensions();
         Locale[] available = getAvailableLocales();
         int i = 0;

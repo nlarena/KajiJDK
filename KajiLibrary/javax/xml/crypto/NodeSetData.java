@@ -3,17 +3,18 @@ package javax.xml.crypto;
 import java.util.Iterator;
 
 /**
- * KajiLibrary's javax.xml.crypto.NodeSetData -- un conjunto de nodos, como dato a firmar.
+ * KajiLibrary's javax.xml.crypto.NodeSetData -- a set of nodes, as data to sign.
  *
- * <p>Es {@code Iterable}, asi que entra en un {@code for} mejorado. El parametro de tipo dice de que
- * son los nodos: la implementacion de DOM lo instancia con {@code org.w3c.dom.Node}, pero nada obliga
- * a que sea DOM -- una implementacion sobre otro modelo usa el suyo.
+ * <p>It is {@code Iterable}, so it goes into an enhanced {@code for}. The type parameter says what
+ * the nodes are: the DOM implementation instantiates it with {@code org.w3c.dom.Node}, but nothing
+ * forces it to be DOM -- an implementation over another model uses its own.
  *
- * <p>Ese parametro llego en Java 9. Antes era una lista sin tipo y habia que castear cada nodo, que
- * sobre datos que vienen de un documento firmado por otro es exactamente donde no conviene adivinar.
+ * <p>That parameter arrived in Java 9. Before, it was an untyped list and each node had to be cast,
+ * which over data coming from a document signed by somebody else is exactly where guessing is
+ * unwise.
  */
 public interface NodeSetData<T> extends Data, Iterable<T> {
 
-    /** Los nodos, en orden de documento. */
+    /** The nodes, in document order. */
     Iterator<T> iterator();
 }

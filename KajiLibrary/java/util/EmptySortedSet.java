@@ -1,20 +1,21 @@
 package java.util;
 
-// El conjunto ordenado vacio e inmutable que devuelven Collections.emptySortedSet() y
-// emptyNavigableSet(). Package-private.
+// The empty immutable sorted set Collections.emptySortedSet() and emptyNavigableSet() return.
+// Package-private.
 //
-// Para List, Set y Map alcanzaba con las colecciones fijas que ya estaban (`FixedList`,
-// `FixedSet`, `FixedMap`) construidas sobre un arreglo de largo cero. Para las variantes
-// ordenadas no alcanza, porque `SortedSet` y `NavigableSet` piden veinte metodos mas que un Set
-// no tiene: comparator, los tres cortes, first/last, y toda la navegacion.
+// For List, Set and Map the fixed collections already there (`FixedList`, `FixedSet`, `FixedMap`)
+// built over a zero-length array were enough. For the sorted variants they are not, because
+// `SortedSet` and `NavigableSet` ask for twenty methods more than a Set has: comparator, the three
+// slices, first/last, and all the navigation.
 //
-// Al ser vacio, todos tienen una respuesta trivial, y esa trivialidad es justamente lo que hace
-// que valga la pena tenerlo aparte: no hay estado, no hay comparaciones, y una sola instancia
-// alcanzaria para todos los usos. Se crea una por llamada igual, que es mas barato que el mapa de
-// instancias que haria falta para compartirla con seguridad entre parametrizaciones.
+// Being empty, all of them have a trivial answer, and that triviality is precisely what makes it
+// worth having separately: there is no state, there are no comparisons, and a single instance would
+// be enough for every use. One is created per call all the same, which is cheaper than the map of
+// instances that would be needed to share it safely across parameterisations.
 //
-// Los cortes (subSet/headSet/tailSet) devuelven `this`: un corte de lo vacio es lo vacio. No se
-// valida que `from <= to`, cosa que el JDK si hace y tira IllegalArgumentException. Queda dicho.
+// The slices (subSet/headSet/tailSet) return `this`: a slice of the empty is the empty. It is not
+// validated that `from <= to`, which the JDK does do, throwing IllegalArgumentException. Said
+// plainly.
 final class EmptySortedSet<E> implements NavigableSet<E> {
 
     EmptySortedSet() {
@@ -83,7 +84,7 @@ final class EmptySortedSet<E> implements NavigableSet<E> {
         return this;
     }
 
-    // Sin comparador: lo vacio no ordena nada, y `null` es como se dice "orden natural".
+    // No comparator: the empty orders nothing, and `null` is how "natural order" is said.
     public Comparator<? super E> comparator() {
         return null;
     }
@@ -116,9 +117,9 @@ final class EmptySortedSet<E> implements NavigableSet<E> {
         return this;
     }
 
-    // first/last se niegan; lower/floor/ceiling/higher devuelven null. No es una inconsistencia:
-    // los primeros prometen un elemento y no lo hay, los segundos ya usan null para "no hay
-    // ninguno que cumpla".
+    // first/last refuse; lower/floor/ceiling/higher return null. It is not an inconsistency: the
+    // first two promise an element and there is none, the others already use null for "there is none
+    // that satisfies it".
     public E first() {
         throw new NoSuchElementException();
     }
@@ -170,7 +171,7 @@ final class EmptySortedSet<E> implements NavigableSet<E> {
     }
 }
 
-// El mapa ordenado vacio e inmutable, por la misma razon y con la misma forma.
+// The empty immutable sorted map, for the same reason and in the same shape.
 final class EmptySortedMap<K, V> implements NavigableMap<K, V> {
 
     EmptySortedMap() {

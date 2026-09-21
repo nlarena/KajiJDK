@@ -3,14 +3,15 @@ package java.awt.dnd;
 import java.util.EventListener;
 
 /**
- * Quien se entera de que el usuario **quiso empezar** a arrastrar.
+ * Whoever hears that the user **wanted to start** dragging.
  *
- * <p>Es el disparador de todo el mecanismo. Reconocer el gesto —cuántos píxeles hay que mover con el
- * botón apretado para que sea un arrastre y no un clic torpe— lo hace un
- * {@link DragGestureRecognizer}, que es lo que evita que cada aplicación invente su propio umbral.
+ * <p>It is the trigger of the whole mechanism. Recognising the gesture —how many pixels have to be
+ * moved with the button held down for it to be a drag and not a clumsy click— is done by a
+ * {@link DragGestureRecognizer}, which is what keeps each application from inventing its own
+ * threshold.
  */
 public interface DragGestureListener extends EventListener {
 
-    /** El gesto de arrastre se reconoció; acá se decide si arrancar y con qué datos. */
+    /** The drag gesture was recognised; here it is decided whether to start and with what data. */
     void dragGestureRecognized(DragGestureEvent dge);
 }

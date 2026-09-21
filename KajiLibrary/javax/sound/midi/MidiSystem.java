@@ -15,49 +15,50 @@ import javax.sound.midi.spi.MidiFileWriter;
 import javax.sound.midi.spi.SoundbankReader;
 
 /**
- * KajiLibrary's javax.sound.midi.MidiSystem -- el punto de entrada del MIDI.
+ * KajiLibrary's javax.sound.midi.MidiSystem -- the entry point to MIDI.
  *
- * <p>Solo metodos estaticos, y el mismo esquema que {@code javax.sound.sampled.AudioSystem}:
- * pregunta a los proveedores registrados y se queda con el primero que sepa. La clase no sabe MIDI.
+ * <p>Only static methods, and the same scheme as {@code javax.sound.sampled.AudioSystem}: it asks
+ * the registered providers and keeps the first one that knows how. The class knows no MIDI.
  *
- * <p>Los cuatro tipos de proveedor son {@link MidiDeviceProvider}, {@link MidiFileReader},
- * {@link MidiFileWriter} y {@link SoundbankReader}. Se encuentran con {@link ServiceLoader}, y uno
- * roto no tumba la busqueda.
+ * <p>The four kinds of provider are {@link MidiDeviceProvider}, {@link MidiFileReader}, {@link
+ * MidiFileWriter} and {@link SoundbankReader}. They are found with {@link ServiceLoader}, and a
+ * broken one does not bring the search down.
  *
- * <h2>{@link #getReceiver} no es de cualquier dispositivo</h2>
+ * <h2>{@link #getReceiver} is not from just any device</h2>
  *
- * <p>Devuelve el del dispositivo <b>por omision</b>, que normalmente es el sintetizador. Es el atajo
- * para "quiero que suene algo" sin elegir dispositivo.
+ * <p>It returns the one of the <b>default</b> device, which is normally the synthesizer. It is the
+ * shortcut for "I want something to sound" without choosing a device.
  *
  * <h2>{@link #getSequencer(boolean)}</h2>
  *
- * <p>El booleano decide si el secuenciador viene <b>ya conectado</b> al sintetizador por omision.
+ * <p>The boolean decides whether the sequencer comes <b>already connected</b> to the default
+ * synthesizer.
  *
- * <p>Con {@code false} no suena nada hasta que uno conecte su transmisor a algo, y eso es
- * justamente lo que se quiere cuando el destino es un puerto MIDI externo: si viniera conectado,
- * todo sonaria dos veces.
+ * <p>With {@code false} nothing sounds until one connects its transmitter to something, and that is
+ * precisely what is wanted when the destination is an external MIDI port: if it came connected,
+ * everything would sound twice.
  *
- * <h2>Los tipos de archivo son numeros</h2>
+ * <h2>File types are numbers</h2>
  *
- * <p>{@link #getMidiFileTypes} devuelve {@code int[]} con 0, 1 o 2. Ver {@link MidiFileFormat} sobre
- * que significa cada uno.
+ * <p>{@link #getMidiFileTypes} returns {@code int[]} with 0, 1 or 2. See {@link MidiFileFormat} on
+ * what each one means.
  *
  * <h2>A KajiLibrary subset</h2>
  *
- * <p>Esta biblioteca no trae proveedores: un puerto MIDI pide codigo nativo y un sintetizador pide un
- * motor de sintesis. La busqueda esta implementada de verdad y todo funciona sobre el conjunto vacio
- * -- arreglos vacios donde corresponde, y {@link MidiUnavailableException} o
- * {@link InvalidMidiDataException} donde el JDK las lanza en una maquina sin dispositivos.
+ * <p>This library comes with no providers: a MIDI port needs native code and a synthesizer needs a
+ * synthesis engine. The search is really implemented and everything works over the empty set --
+ * empty arrays where they belong, and {@link MidiUnavailableException} or
+ * {@link InvalidMidiDataException} where the JDK throws them on a machine without devices.
  *
- * <p>Registrando proveedores como servicios, esto anda sin cambios.
+ * <p>Registering providers as services, this works unchanged.
  */
 public class MidiSystem {
 
-    /** No tiene estado; el constructor publico es el que el JDK dejo. */
+    /** It has no state; the public constructor is the one the JDK left. */
     public MidiSystem() {
     }
 
-    /** Los dispositivos que hay. */
+    /** The devices there are. */
     public static MidiDevice.Info[] getMidiDeviceInfo() {
         List<MidiDevice.Info> found = new ArrayList<MidiDevice.Info>();
         Iterator<MidiDeviceProvider> it = providers(MidiDeviceProvider.class);
@@ -70,16 +71,16 @@ public class MidiSystem {
                     i = i + 1;
                 }
             } catch (Throwable e) {
-                // Un proveedor roto no tumba la busqueda; ver la nota de la clase.
+                // A broken provider does not bring the search down; see the class note.
             }
         }
         return found.toArray(new MidiDevice.Info[found.size()]);
     }
 
     /**
-     * Ese dispositivo.
+     * That device.
      *
-     * @throws MidiUnavailableException si nadie lo provee
+     * @throws MidiUnavailableException if nobody provides it
      */
     public static MidiDevice getMidiDevice(MidiDevice.Info info) throws MidiUnavailableException {
         if (info == null) {
@@ -93,16 +94,16 @@ public class MidiSystem {
                     return p.getDevice(info);
                 }
             } catch (Throwable e) {
-                // Ver la nota de la clase.
+                // See the class note.
             }
         }
         throw new IllegalArgumentException("Requested device not installed: " + info);
     }
 
     /**
-     * Un receptor del dispositivo por omision. Ver la nota de la clase.
+     * A receiver of the default device. See the class note.
      *
-     * @throws MidiUnavailableException si no hay ninguno
+     * @throws MidiUnavailableException if there is none
      */
     public static Receiver getReceiver() throws MidiUnavailableException {
         MidiDevice device = firstDeviceWith(true);
@@ -113,9 +114,9 @@ public class MidiSystem {
     }
 
     /**
-     * Un transmisor del dispositivo por omision.
+     * A transmitter of the default device.
      *
-     * @throws MidiUnavailableException si no hay ninguno
+     * @throws MidiUnavailableException if there is none
      */
     public static Transmitter getTransmitter() throws MidiUnavailableException {
         MidiDevice device = firstDeviceWith(false);
@@ -126,9 +127,9 @@ public class MidiSystem {
     }
 
     /**
-     * El sintetizador por omision.
+     * The default synthesizer.
      *
-     * @throws MidiUnavailableException si no hay ninguno
+     * @throws MidiUnavailableException if there is none
      */
     public static Synthesizer getSynthesizer() throws MidiUnavailableException {
         MidiDevice device = firstDeviceOfType(Synthesizer.class);
@@ -139,18 +140,18 @@ public class MidiSystem {
     }
 
     /**
-     * El secuenciador por omision, conectado al sintetizador.
+     * The default sequencer, connected to the synthesizer.
      *
-     * @throws MidiUnavailableException si no hay ninguno
+     * @throws MidiUnavailableException if there is none
      */
     public static Sequencer getSequencer() throws MidiUnavailableException {
         return getSequencer(true);
     }
 
     /**
-     * Idem, decidiendo si viene conectado. Ver la nota de la clase.
+     * Likewise, deciding whether it comes connected. See the class note.
      *
-     * @throws MidiUnavailableException si no hay ninguno
+     * @throws MidiUnavailableException if there is none
      */
     public static Sequencer getSequencer(boolean connected) throws MidiUnavailableException {
         MidiDevice device = firstDeviceOfType(Sequencer.class);
@@ -168,10 +169,10 @@ public class MidiSystem {
     }
 
     /**
-     * Lee un banco de sonidos de un flujo.
+     * Reads a sound bank from a stream.
      *
-     * @throws InvalidMidiDataException si nadie lo reconoce
-     * @throws IOException si no se pudo leer
+     * @throws InvalidMidiDataException if nobody recognizes it
+     * @throws IOException if it could not be read
      */
     public static Soundbank getSoundbank(InputStream stream)
         throws InvalidMidiDataException, IOException {
@@ -186,10 +187,10 @@ public class MidiSystem {
     }
 
     /**
-     * Idem, desde una direccion.
+     * Likewise, from a URL.
      *
-     * @throws InvalidMidiDataException si nadie lo reconoce
-     * @throws IOException si no se pudo leer
+     * @throws InvalidMidiDataException if nobody recognizes it
+     * @throws IOException if it could not be read
      */
     public static Soundbank getSoundbank(URL url) throws InvalidMidiDataException, IOException {
         Iterator<SoundbankReader> it = providers(SoundbankReader.class);
@@ -203,10 +204,10 @@ public class MidiSystem {
     }
 
     /**
-     * Idem, desde un archivo.
+     * Likewise, from a file.
      *
-     * @throws InvalidMidiDataException si nadie lo reconoce
-     * @throws IOException si no se pudo leer
+     * @throws InvalidMidiDataException if nobody recognizes it
+     * @throws IOException if it could not be read
      */
     public static Soundbank getSoundbank(File file) throws InvalidMidiDataException, IOException {
         Iterator<SoundbankReader> it = providers(SoundbankReader.class);
@@ -220,10 +221,10 @@ public class MidiSystem {
     }
 
     /**
-     * Que hay en ese flujo.
+     * What there is in that stream.
      *
-     * @throws InvalidMidiDataException si nadie lo reconoce
-     * @throws IOException si no se pudo leer
+     * @throws InvalidMidiDataException if nobody recognizes it
+     * @throws IOException if it could not be read
      */
     public static MidiFileFormat getMidiFileFormat(InputStream stream)
         throws InvalidMidiDataException, IOException {
@@ -232,17 +233,17 @@ public class MidiSystem {
             try {
                 return it.next().getMidiFileFormat(stream);
             } catch (InvalidMidiDataException e) {
-                // Ese lector no lo reconoce; se prueba con el siguiente.
+                // That reader does not recognize it; try the next one.
             }
         }
         throw new InvalidMidiDataException("input stream is not a supported file type");
     }
 
     /**
-     * Idem, desde una direccion.
+     * Likewise, from a URL.
      *
-     * @throws InvalidMidiDataException si nadie lo reconoce
-     * @throws IOException si no se pudo leer
+     * @throws InvalidMidiDataException if nobody recognizes it
+     * @throws IOException if it could not be read
      */
     public static MidiFileFormat getMidiFileFormat(URL url)
         throws InvalidMidiDataException, IOException {
@@ -251,17 +252,17 @@ public class MidiSystem {
             try {
                 return it.next().getMidiFileFormat(url);
             } catch (InvalidMidiDataException e) {
-                // Ver arriba.
+                // See above.
             }
         }
         throw new InvalidMidiDataException("url is not a supported file type");
     }
 
     /**
-     * Idem, desde un archivo.
+     * Likewise, from a file.
      *
-     * @throws InvalidMidiDataException si nadie lo reconoce
-     * @throws IOException si no se pudo leer
+     * @throws InvalidMidiDataException if nobody recognizes it
+     * @throws IOException if it could not be read
      */
     public static MidiFileFormat getMidiFileFormat(File file)
         throws InvalidMidiDataException, IOException {
@@ -270,17 +271,17 @@ public class MidiSystem {
             try {
                 return it.next().getMidiFileFormat(file);
             } catch (InvalidMidiDataException e) {
-                // Ver arriba.
+                // See above.
             }
         }
         throw new InvalidMidiDataException("file is not a supported file type");
     }
 
     /**
-     * La obra que hay en ese flujo.
+     * The piece there is in that stream.
      *
-     * @throws InvalidMidiDataException si nadie lo reconoce
-     * @throws IOException si no se pudo leer
+     * @throws InvalidMidiDataException if nobody recognizes it
+     * @throws IOException if it could not be read
      */
     public static Sequence getSequence(InputStream stream)
         throws InvalidMidiDataException, IOException {
@@ -289,17 +290,17 @@ public class MidiSystem {
             try {
                 return it.next().getSequence(stream);
             } catch (InvalidMidiDataException e) {
-                // Ver arriba.
+                // See above.
             }
         }
         throw new InvalidMidiDataException("could not get sequence from input stream");
     }
 
     /**
-     * Idem, desde una direccion.
+     * Likewise, from a URL.
      *
-     * @throws InvalidMidiDataException si nadie lo reconoce
-     * @throws IOException si no se pudo leer
+     * @throws InvalidMidiDataException if nobody recognizes it
+     * @throws IOException if it could not be read
      */
     public static Sequence getSequence(URL url) throws InvalidMidiDataException, IOException {
         Iterator<MidiFileReader> it = providers(MidiFileReader.class);
@@ -307,17 +308,17 @@ public class MidiSystem {
             try {
                 return it.next().getSequence(url);
             } catch (InvalidMidiDataException e) {
-                // Ver arriba.
+                // See above.
             }
         }
         throw new InvalidMidiDataException("could not get sequence from URL");
     }
 
     /**
-     * Idem, desde un archivo.
+     * Likewise, from a file.
      *
-     * @throws InvalidMidiDataException si nadie lo reconoce
-     * @throws IOException si no se pudo leer
+     * @throws InvalidMidiDataException if nobody recognizes it
+     * @throws IOException if it could not be read
      */
     public static Sequence getSequence(File file) throws InvalidMidiDataException, IOException {
         Iterator<MidiFileReader> it = providers(MidiFileReader.class);
@@ -325,13 +326,13 @@ public class MidiSystem {
             try {
                 return it.next().getSequence(file);
             } catch (InvalidMidiDataException e) {
-                // Ver arriba.
+                // See above.
             }
         }
         throw new InvalidMidiDataException("could not get sequence from file");
     }
 
-    /** Que tipos de archivo se pueden escribir. Ver la nota de la clase. */
+    /** Which file types can be written. See the class note. */
     public static int[] getMidiFileTypes() {
         List<Integer> found = new ArrayList<Integer>();
         Iterator<MidiFileWriter> it = providers(MidiFileWriter.class);
@@ -339,18 +340,18 @@ public class MidiSystem {
             try {
                 collect(found, it.next().getMidiFileTypes());
             } catch (Throwable e) {
-                // Ver la nota de la clase.
+                // See the class note.
             }
         }
         return toIntArray(found);
     }
 
-    /** Si ese tipo se puede escribir. */
+    /** Whether that type can be written. */
     public static boolean isFileTypeSupported(int fileType) {
         return contains(getMidiFileTypes(), fileType);
     }
 
-    /** Que tipos se pueden escribir con esa obra. */
+    /** Which types can be written with that piece. */
     public static int[] getMidiFileTypes(Sequence sequence) {
         List<Integer> found = new ArrayList<Integer>();
         Iterator<MidiFileWriter> it = providers(MidiFileWriter.class);
@@ -358,23 +359,23 @@ public class MidiSystem {
             try {
                 collect(found, it.next().getMidiFileTypes(sequence));
             } catch (Throwable e) {
-                // Ver la nota de la clase.
+                // See the class note.
             }
         }
         return toIntArray(found);
     }
 
-    /** Si ese tipo se puede escribir con esa obra. */
+    /** Whether that type can be written with that piece. */
     public static boolean isFileTypeSupported(int fileType, Sequence sequence) {
         return contains(getMidiFileTypes(sequence), fileType);
     }
 
     /**
-     * Escribe la obra.
+     * Writes the piece.
      *
-     * @return cuantos bytes se escribieron
-     * @throws IOException si no se pudo escribir
-     * @throws IllegalArgumentException si nadie sabe escribir ese tipo
+     * @return how many bytes were written
+     * @throws IOException if it could not be written
+     * @throws IllegalArgumentException if nobody knows how to write that type
      */
     public static int write(Sequence in, int fileType, OutputStream out) throws IOException {
         Iterator<MidiFileWriter> it = providers(MidiFileWriter.class);
@@ -388,11 +389,11 @@ public class MidiSystem {
     }
 
     /**
-     * Idem, a un archivo.
+     * Likewise, to a file.
      *
-     * @return cuantos bytes se escribieron
-     * @throws IOException si no se pudo escribir
-     * @throws IllegalArgumentException si nadie sabe escribir ese tipo
+     * @return how many bytes were written
+     * @throws IOException if it could not be written
+     * @throws IllegalArgumentException if nobody knows how to write that type
      */
     public static int write(Sequence in, int fileType, File out) throws IOException {
         Iterator<MidiFileWriter> it = providers(MidiFileWriter.class);
@@ -405,7 +406,7 @@ public class MidiSystem {
         throw new IllegalArgumentException("MIDI file type is not supported");
     }
 
-    /** El primer dispositivo que pueda dar receptores, o transmisores. */
+    /** The first device that can give receivers, or transmitters. */
     private static MidiDevice firstDeviceWith(boolean wantReceiver) {
         MidiDevice.Info[] infos = getMidiDeviceInfo();
         int i = 0;
@@ -418,7 +419,7 @@ public class MidiSystem {
                 } else {
                     max = device.getMaxTransmitters();
                 }
-                // -1 es "sin limite", no "ninguno"; ver MidiDevice.
+                // -1 is "no limit", not "none"; see MidiDevice.
                 if (max != 0) {
                     return device;
                 }
@@ -428,7 +429,7 @@ public class MidiSystem {
         return null;
     }
 
-    /** El primer dispositivo de esa clase. */
+    /** The first device of that class. */
     private static MidiDevice firstDeviceOfType(Class<?> type) {
         MidiDevice.Info[] infos = getMidiDeviceInfo();
         int i = 0;
@@ -442,7 +443,7 @@ public class MidiSystem {
         return null;
     }
 
-    /** Ese dispositivo, o null si no se pudo. */
+    /** That device, or null if it could not be had. */
     private static MidiDevice quietDevice(MidiDevice.Info info) {
         try {
             return getMidiDevice(info);
@@ -451,7 +452,7 @@ public class MidiSystem {
         }
     }
 
-    /** Los proveedores de ese tipo, saltandose los que no cargan. */
+    /** The providers of that kind, skipping the ones that do not load. */
     private static <T> Iterator<T> providers(Class<T> type) {
         List<T> all = new ArrayList<T>();
         try {
@@ -460,16 +461,16 @@ public class MidiSystem {
                 try {
                     all.add(it.next());
                 } catch (Throwable e) {
-                    // Ese proveedor no carga; se sigue con los demas.
+                    // That provider does not load; carry on with the others.
                 }
             }
         } catch (Throwable e) {
-            // Ni siquiera se pudo abrir el cargador de servicios.
+            // Not even the service loader could be opened.
         }
         return all.iterator();
     }
 
-    /** Agrega los que no esten repetidos. */
+    /** Adds the ones that are not repeated. */
     private static void collect(List<Integer> into, int[] some) {
         int i = 0;
         while (some != null && i < some.length) {
@@ -481,7 +482,7 @@ public class MidiSystem {
         }
     }
 
-    /** La lista como arreglo de enteros. */
+    /** The list as an array of ints. */
     private static int[] toIntArray(List<Integer> list) {
         int[] out = new int[list.size()];
         int i = 0;
@@ -492,7 +493,7 @@ public class MidiSystem {
         return out;
     }
 
-    /** Si ese valor esta en el arreglo. */
+    /** Whether that value is in the array. */
     private static boolean contains(int[] all, int one) {
         int i = 0;
         while (i < all.length) {

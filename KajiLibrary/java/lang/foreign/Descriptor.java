@@ -6,33 +6,34 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
-// La implementacion de `FunctionDescriptor`. De paquete: se llega por `FunctionDescriptor.of`.
+// The implementation of `FunctionDescriptor`. Package-private: it is reached through
+// `FunctionDescriptor.of`.
 //
-// Inmutable, como los layouts y por la misma razon: un descriptor se comparte, y un `append` que
-// mutara le cambiaria la firma a todo el que lo tenga.
+// Immutable, like the layouts and for the same reason: a descriptor is shared, and an `append` that
+// mutated would change the signature for everyone holding it.
 final class Descriptor implements FunctionDescriptor {
 
-    private final MemoryLayout retorno;
-    private final List<MemoryLayout> argumentos;
+    private final MemoryLayout returnLayout0;
+    private final List<MemoryLayout> arguments;
 
-    private Descriptor(MemoryLayout retorno, List<MemoryLayout> argumentos) {
-        this.retorno = retorno;
-        this.argumentos = argumentos;
+    private Descriptor(MemoryLayout returnLayout0, List<MemoryLayout> arguments) {
+        this.returnLayout0 = returnLayout0;
+        this.arguments = arguments;
     }
 
-    static FunctionDescriptor crear(MemoryLayout retorno, MemoryLayout[] argumentos) {
-        return new Descriptor(retorno, enLista(argumentos));
+    static FunctionDescriptor create(MemoryLayout returnLayout0, MemoryLayout[] arguments) {
+        return new Descriptor(returnLayout0, asList(arguments));
     }
 
-    private static List<MemoryLayout> enLista(MemoryLayout[] ls) {
+    private static List<MemoryLayout> asList(MemoryLayout[] ls) {
         if (ls == null) {
-            throw new IllegalArgumentException("los argumentos no pueden ser null");
+            throw new IllegalArgumentException("the arguments cannot be null");
         }
         List<MemoryLayout> out = new ArrayList<MemoryLayout>();
         int i = 0;
         while (i < ls.length) {
             if (ls[i] == null) {
-                throw new IllegalArgumentException("un argumento es null");
+                throw new IllegalArgumentException("an argument is null");
             }
             out.add(ls[i]);
             i = i + 1;
@@ -41,55 +42,55 @@ final class Descriptor implements FunctionDescriptor {
     }
 
     public Optional<MemoryLayout> returnLayout() {
-        return Optional.ofNullable(this.retorno);
+        return Optional.ofNullable(this.returnLayout0);
     }
 
     public List<MemoryLayout> argumentLayouts() {
-        return Collections.unmodifiableList(this.argumentos);
+        return Collections.unmodifiableList(this.arguments);
     }
 
     public FunctionDescriptor changeReturnLayout(MemoryLayout newReturn) {
         if (newReturn == null) {
-            throw new IllegalArgumentException("el retorno no puede ser null; use dropReturnLayout");
+            throw new IllegalArgumentException("the return cannot be null; use dropReturnLayout");
         }
-        return new Descriptor(newReturn, this.argumentos);
+        return new Descriptor(newReturn, this.arguments);
     }
 
     public FunctionDescriptor dropReturnLayout() {
-        return new Descriptor(null, this.argumentos);
+        return new Descriptor(null, this.arguments);
     }
 
     public FunctionDescriptor appendArgumentLayouts(MemoryLayout... addedLayouts) {
-        return this.insertArgumentLayouts(this.argumentos.size(), addedLayouts);
+        return this.insertArgumentLayouts(this.arguments.size(), addedLayouts);
     }
 
     public FunctionDescriptor insertArgumentLayouts(int index, MemoryLayout... addedLayouts) {
-        if (index < 0 || index > this.argumentos.size()) {
-            throw new IllegalArgumentException("posicion fuera de rango: " + index);
+        if (index < 0 || index > this.arguments.size()) {
+            throw new IllegalArgumentException("position out of range: " + index);
         }
-        List<MemoryLayout> nuevos = new ArrayList<MemoryLayout>(this.argumentos);
-        nuevos.addAll(index, enLista(addedLayouts));
-        return new Descriptor(this.retorno, nuevos);
+        List<MemoryLayout> updated = new ArrayList<MemoryLayout>(this.arguments);
+        updated.addAll(index, asList(addedLayouts));
+        return new Descriptor(this.returnLayout0, updated);
     }
 
     public MethodType toMethodType() {
-        Class<?> ret = this.retorno == null ? Void.TYPE : portador(this.retorno);
-        Class<?>[] params = new Class<?>[this.argumentos.size()];
+        Class<?> ret = this.returnLayout0 == null ? Void.TYPE : carrierOf(this.returnLayout0);
+        Class<?>[] params = new Class<?>[this.arguments.size()];
         int i = 0;
-        while (i < this.argumentos.size()) {
-            params[i] = portador(this.argumentos.get(i));
+        while (i < this.arguments.size()) {
+            params[i] = carrierOf(this.arguments.get(i));
             i = i + 1;
         }
         return MethodType.methodType(ret, params);
     }
 
-    // Un layout compuesto no tiene tipo Java propio: un struct no "es" un `int` ni un `MemorySegment`
-    // en la firma del metodo -- el enlazador decide como pasarlo segun la convencion de llamada, y
-    // esa decision no vive aca. Se rechaza en vez de elegir una.
-    private static Class<?> portador(MemoryLayout l) {
+    // A composite layout has no Java type of its own: a struct "is" neither an `int` nor a
+    // `MemorySegment` in the method's signature -- the linker decides how to pass it according to the
+    // calling convention, and that decision does not live here. Rejected instead of picking one.
+    private static Class<?> carrierOf(MemoryLayout l) {
         if (!(l instanceof ValueLayout)) {
             throw new UnsupportedOperationException(
-                    "solo un layout de valor tiene un tipo Java que lo transporte: " + l);
+                    "only a value layout has a Java type carrying it: " + l);
         }
         return ((ValueLayout) l).carrier();
     }
@@ -101,32 +102,32 @@ final class Descriptor implements FunctionDescriptor {
         if (!(obj instanceof Descriptor)) {
             return false;
         }
-        Descriptor otro = (Descriptor) obj;
-        boolean mismoRetorno = this.retorno == null ? otro.retorno == null
-                : this.retorno.equals(otro.retorno);
-        return mismoRetorno && this.argumentos.equals(otro.argumentos);
+        Descriptor other = (Descriptor) obj;
+        boolean sameReturn = this.returnLayout0 == null ? other.returnLayout0 == null
+                : this.returnLayout0.equals(other.returnLayout0);
+        return sameReturn && this.arguments.equals(other.arguments);
     }
 
     public int hashCode() {
-        return this.argumentos.hashCode() * 31
-                + (this.retorno == null ? 0 : this.retorno.hashCode());
+        return this.arguments.hashCode() * 31
+                + (this.returnLayout0 == null ? 0 : this.returnLayout0.hashCode());
     }
 
-    // `(j8)i4` con retorno, `(i4)v` sin el. La `v` de `void` no es un layout: es la marca de que no
-    // hay ninguno, y por eso se imprime aparte.
+    // `(j8)i4` with a return, `(i4)v` without one. `void`'s `v` is not a layout: it is the mark that
+    // there is none, and that is why it is printed separately.
     public String toString() {
         StringBuilder sb = new StringBuilder();
         sb.append('(');
         int i = 0;
-        while (i < this.argumentos.size()) {
-            sb.append(this.argumentos.get(i).toString());
+        while (i < this.arguments.size()) {
+            sb.append(this.arguments.get(i).toString());
             i = i + 1;
         }
         sb.append(')');
-        if (this.retorno == null) {
+        if (this.returnLayout0 == null) {
             sb.append('v');
         } else {
-            sb.append(this.retorno.toString());
+            sb.append(this.returnLayout0.toString());
         }
         return sb.toString();
     }

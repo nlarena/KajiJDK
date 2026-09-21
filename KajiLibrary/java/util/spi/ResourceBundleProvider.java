@@ -4,22 +4,22 @@ import java.util.Locale;
 import java.util.ResourceBundle;
 
 /**
- * KajiLibrary's java.util.spi.ResourceBundleProvider -- de donde salen los textos traducidos.
+ * KajiLibrary's java.util.spi.ResourceBundleProvider -- where the translated texts come from.
  *
- * <p>Es la via moderna para empaquetar traducciones: en vez de que
- * {@code ResourceBundle.getBundle} busque archivos en el classpath por convencion de nombre, un
- * modulo declara que provee los textos de tal paquete y este metodo se los entrega.
+ * <p>It is the modern route for packaging translations: instead of {@code ResourceBundle.getBundle}
+ * looking for files on the classpath by name convention, a module declares that it provides such a
+ * package's texts and this method hands them over.
  *
- * <p>La diferencia practica es que el buscador por convencion tiene que <b>adivinar</b> -- probar
- * {@code Msg_es_AR}, despues {@code Msg_es}, despues {@code Msg} -- mientras que un proveedor sabe
- * lo que tiene. Por eso puede devolver null sin costo: es "no lo tengo", no "no lo encontre".
+ * <p>The practical difference is that the by-convention search has to <b>guess</b> -- try
+ * {@code Msg_es_AR}, then {@code Msg_es}, then {@code Msg} -- whereas a provider knows what it has.
+ * That is why it can return null at no cost: it is "I do not have it", not "I did not find it".
  */
 public interface ResourceBundleProvider {
 
     /**
-     * El bundle de ese nombre para ese local, o null si este proveedor no lo tiene.
+     * The bundle by that name for that locale, or null if this provider does not have it.
      *
-     * @param baseName el nombre <b>completo</b> del bundle, con paquete
+     * @param baseName the bundle's <b>full</b> name, with the package
      */
     ResourceBundle getBundle(String baseName, Locale locale);
 }

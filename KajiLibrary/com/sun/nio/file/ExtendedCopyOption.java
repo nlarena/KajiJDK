@@ -3,17 +3,17 @@ package com.sun.nio.file;
 import java.nio.file.CopyOption;
 
 /**
- * Opciones de copia fuera del conjunto estandar.
+ * Copy options outside the standard set.
  */
 public enum ExtendedCopyOption implements CopyOption {
 
     /**
-     * La copia se puede interrumpir.
+     * The copy may be interrupted.
      *
-     * <p>Copiar un archivo grande es una operacion larga y, por omision, sorda: interrumpir el hilo
-     * no la detiene. Con esta opcion la copia atiende la interrupcion, aborta y tira
-     * {@link java.nio.file.FileSystemException}. El precio es que hay que chequear el estado del
-     * hilo cada tanto, y por eso no es el comportamiento por defecto.
+     * <p>Copying a big file is a long operation and, by default, a deaf one: interrupting the
+     * thread does not stop it. With this option the copy attends to the interruption, aborts and
+     * throws {@link java.nio.file.FileSystemException}. The price is that the thread's state has to
+     * be checked every so often, and that is why it is not the default behaviour.
      */
     INTERRUPTIBLE
 }

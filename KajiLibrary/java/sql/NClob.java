@@ -1,12 +1,12 @@
 package java.sql;
 
 /**
- * KajiLibrary's java.sql.NClob -- un {@link Clob} en el juego de caracteres **nacional**.
+ * KajiLibrary's java.sql.NClob -- a {@link Clob} in the **national** character set.
  *
- * <p>No agrega ni un miembro, y esa es toda su funcion: existe para que el tipo diga cual de los dos
- * juegos de caracteres usa la columna. En bases donde el juego normal no es Unicode, `NCHAR` es el
- * que si lo es, y meter uno donde va el otro corrompe el texto en silencio. La distincion vive en el
- * sistema de tipos justamente porque en tiempo de ejecucion no se nota.
+ * <p>It adds not a single member, and that is its whole function: it exists so the type says which
+ * of the two character sets the column uses. In databases whose normal set is not Unicode, `NCHAR`
+ * is the one that is, and putting one where the other goes corrupts the text silently. The
+ * distinction lives in the type system precisely because at run time it does not show.
  */
 public interface NClob extends Clob {
 }

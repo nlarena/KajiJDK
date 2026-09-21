@@ -14,20 +14,20 @@ import javax.accessibility.AccessibleState;
 import javax.accessibility.AccessibleStateSet;
 
 /**
- * Una lista de renglones donde se puede elegir uno o varios.
+ * A list of lines where one or several can be chosen.
  *
- * <p>A diferencia de {@link Choice}, la lista muestra varios renglones a la vez, puede no tener nada
- * seleccionado, y en modo múltiple admite cualquier cantidad. Genera dos eventos distintos y hay que
- * no confundirlos: un {@link ItemEvent} cuando cambia la selección, y un {@link ActionEvent} sólo
- * cuando el usuario hace **doble clic** o aprieta Enter, o sea cuando confirma.
+ * <p>Unlike {@link Choice}, the list shows several lines at once, may have nothing selected, and in
+ * multiple mode takes any number. It generates two different events and they are not to be
+ * confused: an {@link ItemEvent} when the selection changes, and an {@link ActionEvent} only when
+ * the user **double-clicks** or presses Enter, that is, when they confirm.
  *
- * <p><strong>Dos divergencias deliberadas con el JDK</strong>, las dos por lo mismo: allá el widget
- * nativo lleva la selección, y acá no hay widget nativo. El JDK, sin uno, deja la selección
- * apuntando a los renglones **viejos** después de insertar o sacar en el medio, y deja varios
- * seleccionados después de pasar a modo simple. Son dos estados que la propia clase dice que no
- * existen, y que allá nunca se ven porque el widget del sistema los arregla. Acá los arregla la
- * clase: {@link #add(String, int)} y {@link #delItems} corren la selección con los renglones, y
- * {@link #setMultipleMode setMultipleMode(false)} la recorta a uno.
+ * <p><strong>Two deliberate divergences from the JDK</strong>, both for the same reason: there the
+ * native widget carries the selection, and here there is no native widget. The JDK, without one,
+ * leaves the selection pointing at the **old** lines after inserting or removing in the middle, and
+ * leaves several selected after switching to single mode. Those are two states the class itself
+ * says do not exist, and that are never seen there because the system widget fixes them. Here the
+ * class fixes them: {@link #add(String, int)} and {@link #delItems} shift the selection along with
+ * the lines, and {@link #setMultipleMode setMultipleMode(false)} trims it to one.
  */
 public class List extends Component implements ItemSelectable, Accessible {
 
@@ -35,41 +35,41 @@ public class List extends Component implements ItemSelectable, Accessible {
 
     private static int listCounter = 0;
 
-    /** Cuántos renglones muestra una lista que no dijo cuántos. */
+    /** How many lines a list that did not say how many shows. */
     static final int DEFAULT_VISIBLE_ROWS = 4;
 
-    /** Los renglones. */
+    /** The lines. */
     Vector<String> items = new Vector<String>();
 
-    /** Cuántos renglones se ven de una. */
+    /** How many lines are seen at once. */
     int rows = 0;
 
-    /** Si admite más de uno seleccionado. */
+    /** Whether it takes more than one selected. */
     boolean multipleMode = false;
 
-    /** Las posiciones seleccionadas, ordenadas. */
+    /** The selected positions, in order. */
     int[] selected = new int[0];
 
-    /** El renglón que se pidió dejar a la vista, o -1. */
+    /** The line that was asked to be kept in view, or -1. */
     int visibleIndex = -1;
 
-    /** Los oyentes de acción, encadenados. */
+    /** The action listeners, chained. */
     transient ActionListener actionListener;
 
-    /** Los de selección. */
+    /** The selection ones. */
     transient ItemListener itemListener;
 
-    /** Una lista de cuatro renglones, de selección simple. */
+    /** A list of four lines, single selection. */
     public List() throws HeadlessException {
         this(0, false);
     }
 
-    /** Una lista de esa cantidad de renglones, de selección simple. */
+    /** A list of that many lines, single selection. */
     public List(int rows) throws HeadlessException {
         this(rows, false);
     }
 
-    /** Una lista de esa cantidad de renglones, del modo que se pida. */
+    /** A list of that many lines, in whichever mode is asked for. */
     public List(int rows, boolean multipleMode) throws HeadlessException {
         this.rows = rows != 0 ? rows : DEFAULT_VISIBLE_ROWS;
         this.multipleMode = multipleMode;
@@ -83,25 +83,25 @@ public class List extends Component implements ItemSelectable, Accessible {
         }
     }
 
-    /** La declara mostrable. */
+    /** Declares it showable. */
     public void addNotify() {
         super.addNotify();
     }
 
-    /** La declara no mostrable. */
+    /** Declares it no longer showable. */
     public void removeNotify() {
         super.removeNotify();
     }
 
-    /** Cuántos renglones tiene. */
+    /** How many lines it has. */
     public int getItemCount() {
         return this.items.size();
     }
 
     /**
-     * Cuántos renglones tiene.
+     * How many lines it has.
      *
-     * @deprecated es del nombrado de 1.0. Usar {@link #getItemCount}.
+     * @deprecated it is from the 1.0 naming. Use {@link #getItemCount}.
      */
     @Deprecated
     public int countItems() {
@@ -109,9 +109,9 @@ public class List extends Component implements ItemSelectable, Accessible {
     }
 
     /**
-     * El renglón de esa posición.
+     * The line at that position.
      *
-     * @throws ArrayIndexOutOfBoundsException si la posición no existe
+     * @throws ArrayIndexOutOfBoundsException if there is no such position
      */
     public String getItem(int index) {
         return this.getItemImpl(index);
@@ -121,22 +121,22 @@ public class List extends Component implements ItemSelectable, Accessible {
         return this.items.elementAt(index);
     }
 
-    /** Todos los renglones. */
+    /** Every line. */
     public synchronized String[] getItems() {
         String[] r = new String[this.items.size()];
         this.items.copyInto(r);
         return r;
     }
 
-    /** Agrega un renglón al final. */
+    /** Adds a line at the end. */
     public void add(String item) {
         this.add(item, -1);
     }
 
     /**
-     * Agrega un renglón al final.
+     * Adds a line at the end.
      *
-     * @deprecated es del nombrado de 1.0. Usar {@link #add(String)}.
+     * @deprecated it is from the 1.0 naming. Use {@link #add(String)}.
      */
     @Deprecated
     public void addItem(String item) {
@@ -144,18 +144,18 @@ public class List extends Component implements ItemSelectable, Accessible {
     }
 
     /**
-     * Inserta un renglón en esa posición.
+     * Inserts a line at that position.
      *
-     * @param index dónde meterlo; una posición negativa o pasada del final lo pone al final
+     * @param index where to put it; a negative position or one past the end puts it at the end
      */
     public void add(String item, int index) {
         this.addItem(item, index);
     }
 
     /**
-     * Inserta un renglón en esa posición.
+     * Inserts a line at that position.
      *
-     * @deprecated es del nombrado de 1.0. Usar {@link #add(String, int)}.
+     * @deprecated it is from the 1.0 naming. Use {@link #add(String, int)}.
      */
     @Deprecated
     public synchronized void addItem(String item, int index) {
@@ -169,23 +169,24 @@ public class List extends Component implements ItemSelectable, Accessible {
             this.items.addElement(item);
         } else {
             this.items.insertElementAt(item, index);
-            this.correrSeleccion(index, 1);
+            this.shiftSelection(index, 1);
         }
     }
 
     /**
-     * Cambia lo que dice el renglón de esa posición.
+     * Changes what the line at that position says.
      *
-     * <p>Sacar y volver a poner **pierde la selección** de ese renglón, y es lo que hace el JDK.
+     * <p>Removing it and putting it back **loses the selection** of that line, and it is what the
+     * JDK does.
      *
-     * @throws ArrayIndexOutOfBoundsException si la posición no existe
+     * @throws ArrayIndexOutOfBoundsException if there is no such position
      */
     public synchronized void replaceItem(String newValue, int index) {
         this.remove(index);
         this.add(newValue, index);
     }
 
-    /** Vacía la lista. */
+    /** Empties the list. */
     public void removeAll() {
         synchronized (this) {
             this.items.removeAllElements();
@@ -194,9 +195,9 @@ public class List extends Component implements ItemSelectable, Accessible {
     }
 
     /**
-     * Vacía la lista.
+     * Empties the list.
      *
-     * @deprecated es del nombrado de 1.0. Usar {@link #removeAll}.
+     * @deprecated it is from the 1.0 naming. Use {@link #removeAll}.
      */
     @Deprecated
     public synchronized void clear() {
@@ -204,9 +205,9 @@ public class List extends Component implements ItemSelectable, Accessible {
     }
 
     /**
-     * Saca el primer renglón que diga eso.
+     * Removes the first line that says that.
      *
-     * @throws IllegalArgumentException si no hay ninguno que diga eso
+     * @throws IllegalArgumentException if there is none that says that
      */
     public synchronized void remove(String item) {
         int i = this.items.indexOf(item);
@@ -217,18 +218,18 @@ public class List extends Component implements ItemSelectable, Accessible {
     }
 
     /**
-     * Saca el renglón de esa posición.
+     * Removes the line at that position.
      *
-     * @throws ArrayIndexOutOfBoundsException si la posición no existe
+     * @throws ArrayIndexOutOfBoundsException if there is no such position
      */
     public void remove(int position) {
         this.delItem(position);
     }
 
     /**
-     * Saca el renglón de esa posición.
+     * Removes the line at that position.
      *
-     * @deprecated es del nombrado de 1.0. Usar {@link #remove(int)}.
+     * @deprecated it is from the 1.0 naming. Use {@link #remove(int)}.
      */
     @Deprecated
     public void delItem(int position) {
@@ -236,9 +237,9 @@ public class List extends Component implements ItemSelectable, Accessible {
     }
 
     /**
-     * Qué renglón está seleccionado.
+     * Which line is selected.
      *
-     * @return la posición, o -1 si no hay ninguno o hay más de uno
+     * @return the position, or -1 if there is none or there is more than one
      */
     public synchronized int getSelectedIndex() {
         if (this.selected.length != 1) {
@@ -247,7 +248,7 @@ public class List extends Component implements ItemSelectable, Accessible {
         return this.selected[0];
     }
 
-    /** Qué renglones están seleccionados. */
+    /** Which lines are selected. */
     public synchronized int[] getSelectedIndexes() {
         int[] r = new int[this.selected.length];
         System.arraycopy(this.selected, 0, r, 0, this.selected.length);
@@ -255,16 +256,16 @@ public class List extends Component implements ItemSelectable, Accessible {
     }
 
     /**
-     * Lo que dice el renglón seleccionado.
+     * What the selected line says.
      *
-     * @return el texto, o `null` si no hay ninguno o hay más de uno
+     * @return the text, or `null` if there is none or there is more than one
      */
     public synchronized String getSelectedItem() {
         int i = this.getSelectedIndex();
         return i < 0 ? null : this.getItem(i);
     }
 
-    /** Lo que dicen los renglones seleccionados. */
+    /** What the selected lines say. */
     public synchronized String[] getSelectedItems() {
         String[] r = new String[this.selected.length];
         for (int i = 0; i < this.selected.length; i++) {
@@ -273,17 +274,17 @@ public class List extends Component implements ItemSelectable, Accessible {
         return r;
     }
 
-    /** Lo mismo que {@link #getSelectedItems}, como pide {@link ItemSelectable}. */
+    /** The same as {@link #getSelectedItems}, as {@link ItemSelectable} asks for. */
     public Object[] getSelectedObjects() {
         return this.getSelectedItems();
     }
 
     /**
-     * Selecciona ese renglón.
+     * Selects that line.
      *
-     * <p>En modo simple **reemplaza** la selección; en múltiple la agrega. Una posición que no existe
-     * se ignora: es lo que hace el JDK, porque la lista puede haber cambiado entre que se calculó la
-     * posición y se la usó.
+     * <p>In single mode it **replaces** the selection; in multiple mode it adds to it. A position
+     * that does not exist is ignored: it is what the JDK does, because the list may have changed
+     * between the position being worked out and being used.
      */
     public void select(int index) {
         synchronized (this) {
@@ -298,42 +299,42 @@ public class List extends Component implements ItemSelectable, Accessible {
                 this.selected[0] = index;
                 return;
             }
-            int[] nuevos = new int[this.selected.length + 1];
+            int[] fresh = new int[this.selected.length + 1];
             int j = 0;
-            boolean puesto = false;
+            boolean placed = false;
             for (int i = 0; i < this.selected.length; i++) {
-                if (!puesto && this.selected[i] > index) {
-                    nuevos[j] = index;
+                if (!placed && this.selected[i] > index) {
+                    fresh[j] = index;
                     j = j + 1;
-                    puesto = true;
+                    placed = true;
                 }
-                nuevos[j] = this.selected[i];
+                fresh[j] = this.selected[i];
                 j = j + 1;
             }
-            if (!puesto) {
-                nuevos[j] = index;
+            if (!placed) {
+                fresh[j] = index;
             }
-            this.selected = nuevos;
+            this.selected = fresh;
         }
     }
 
-    /** Deselecciona ese renglón; si no estaba seleccionado no pasa nada. */
+    /** Deselects that line; if it was not selected nothing happens. */
     public synchronized void deselect(int index) {
         if (!this.isIndexSelected(index)) {
             return;
         }
-        int[] nuevos = new int[this.selected.length - 1];
+        int[] fresh = new int[this.selected.length - 1];
         int j = 0;
         for (int i = 0; i < this.selected.length; i++) {
             if (this.selected[i] != index) {
-                nuevos[j] = this.selected[i];
+                fresh[j] = this.selected[i];
                 j = j + 1;
             }
         }
-        this.selected = nuevos;
+        this.selected = fresh;
     }
 
-    /** Si ese renglón está seleccionado. */
+    /** Whether that line is selected. */
     public boolean isIndexSelected(int index) {
         int[] sel = this.selected;
         for (int i = 0; i < sel.length; i++) {
@@ -345,29 +346,29 @@ public class List extends Component implements ItemSelectable, Accessible {
     }
 
     /**
-     * Si ese renglón está seleccionado.
+     * Whether that line is selected.
      *
-     * @deprecated es del nombrado de 1.0. Usar {@link #isIndexSelected}.
+     * @deprecated it is from the 1.0 naming. Use {@link #isIndexSelected}.
      */
     @Deprecated
     public boolean isSelected(int index) {
         return this.isIndexSelected(index);
     }
 
-    /** Cuántos renglones muestra de una. */
+    /** How many lines it shows at once. */
     public int getRows() {
         return this.rows;
     }
 
-    /** Si admite más de uno seleccionado. */
+    /** Whether it takes more than one selected. */
     public boolean isMultipleMode() {
         return this.multipleMode;
     }
 
     /**
-     * Si admite más de uno seleccionado.
+     * Whether it takes more than one selected.
      *
-     * @deprecated es del nombrado de 1.0. Usar {@link #isMultipleMode}.
+     * @deprecated it is from the 1.0 naming. Use {@link #isMultipleMode}.
      */
     @Deprecated
     public boolean allowsMultipleSelections() {
@@ -375,19 +376,19 @@ public class List extends Component implements ItemSelectable, Accessible {
     }
 
     /**
-     * Cambia el modo de selección.
+     * Changes the selection mode.
      *
-     * <p>Al pasar a simple con varios seleccionados, se queda con el **último**, que es el que estaba
-     * marcado como el actual en la interfaz.
+     * <p>On switching to single with several selected, it keeps the **last** one, which is the one
+     * that was marked as the current one in the interface.
      */
     public void setMultipleMode(boolean b) {
         this.setMultipleSelections(b);
     }
 
     /**
-     * Cambia el modo de selección.
+     * Changes the selection mode.
      *
-     * @deprecated es del nombrado de 1.0. Usar {@link #setMultipleMode}.
+     * @deprecated it is from the 1.0 naming. Use {@link #setMultipleMode}.
      */
     @Deprecated
     public synchronized void setMultipleSelections(boolean b) {
@@ -396,40 +397,40 @@ public class List extends Component implements ItemSelectable, Accessible {
         }
         this.multipleMode = b;
         if (!b && this.selected.length > 1) {
-            int ultimo = this.selected[this.selected.length - 1];
+            int last = this.selected[this.selected.length - 1];
             this.selected = new int[1];
-            this.selected[0] = ultimo;
+            this.selected[0] = last;
         }
     }
 
     /**
-     * Qué renglón se pidió dejar a la vista.
+     * Which line was asked to be kept in view.
      *
-     * @return la posición, o -1 si nadie lo pidió
+     * @return the position, or -1 if nobody asked
      */
     public int getVisibleIndex() {
         return this.visibleIndex;
     }
 
     /**
-     * Pide que ese renglón quede a la vista.
+     * Asks for that line to be kept in view.
      *
-     * <p>Sin pantalla no hay nada que desplazar, pero el pedido queda anotado y
-     * {@link #getVisibleIndex} lo informa, que es lo único observable de este método.
+     * <p>Without a screen there is nothing to scroll, but the request is noted and
+     * {@link #getVisibleIndex} reports it, which is the only observable thing about this method.
      */
     public synchronized void makeVisible(int index) {
         this.visibleIndex = index;
     }
 
-    /** Lo que necesitaría una lista de esa cantidad de renglones. */
+    /** What a list of that many lines would need. */
     public Dimension getPreferredSize(int rows) {
-        return this.medir(rows);
+        return this.measure(rows);
     }
 
     /**
-     * Lo que necesitaría una lista de esa cantidad de renglones.
+     * What a list of that many lines would need.
      *
-     * @deprecated es del nombrado de 1.0. Usar {@link #getPreferredSize(int)}.
+     * @deprecated it is from the 1.0 naming. Use {@link #getPreferredSize(int)}.
      */
     @Deprecated
     public Dimension preferredSize(int rows) {
@@ -441,24 +442,24 @@ public class List extends Component implements ItemSelectable, Accessible {
     }
 
     /**
-     * Lo que necesita.
+     * What it needs.
      *
-     * @deprecated es del nombrado de 1.0. Usar {@link #getPreferredSize()}.
+     * @deprecated it is from the 1.0 naming. Use {@link #getPreferredSize()}.
      */
     @Deprecated
     public Dimension preferredSize() {
         return this.getPreferredSize();
     }
 
-    /** Lo mínimo que necesitaría una lista de esa cantidad de renglones. */
+    /** The minimum a list of that many lines would need. */
     public Dimension getMinimumSize(int rows) {
-        return this.medir(rows);
+        return this.measure(rows);
     }
 
     /**
-     * Lo mínimo para esa cantidad de renglones.
+     * The minimum for that many lines.
      *
-     * @deprecated es del nombrado de 1.0. Usar {@link #getMinimumSize(int)}.
+     * @deprecated it is from the 1.0 naming. Use {@link #getMinimumSize(int)}.
      */
     @Deprecated
     public Dimension minimumSize(int rows) {
@@ -470,9 +471,9 @@ public class List extends Component implements ItemSelectable, Accessible {
     }
 
     /**
-     * Lo mínimo que necesita.
+     * The minimum it needs.
      *
-     * @deprecated es del nombrado de 1.0. Usar {@link #getMinimumSize()}.
+     * @deprecated it is from the 1.0 naming. Use {@link #getMinimumSize()}.
      */
     @Deprecated
     public Dimension minimumSize() {
@@ -480,17 +481,17 @@ public class List extends Component implements ItemSelectable, Accessible {
     }
 
     /**
-     * Cuánto ocupan esos renglones.
+     * How much room those lines take.
      *
-     * <p>Sin pantalla no hay tipografía medida, así que la medida sale del tamaño ya fijado. Es lo
-     * mismo que hace {@link Component#getPreferredSize} y por el mismo motivo: inventar un alto de
-     * renglón sería inventar una métrica que no existe.
+     * <p>Without a screen there is no measured typography, so the measure comes from the size
+     * already set. It is the same thing {@link Component#getPreferredSize} does and for the same
+     * reason: inventing a line height would be inventing a metric that does not exist.
      */
-    private Dimension medir(int rows) {
+    private Dimension measure(int rows) {
         return this.getSize();
     }
 
-    /** Agrega un oyente de selección; `null` no hace nada. */
+    /** Adds a selection listener; `null` does nothing. */
     public synchronized void addItemListener(ItemListener l) {
         if (l == null) {
             return;
@@ -499,7 +500,7 @@ public class List extends Component implements ItemSelectable, Accessible {
         this.enableEvents(AWTEvent.ITEM_EVENT_MASK);
     }
 
-    /** Saca un oyente de selección. */
+    /** Removes a selection listener. */
     public synchronized void removeItemListener(ItemListener l) {
         if (l == null) {
             return;
@@ -507,12 +508,12 @@ public class List extends Component implements ItemSelectable, Accessible {
         this.itemListener = AWTEventMulticaster.remove(this.itemListener, l);
     }
 
-    /** Los oyentes de selección. */
+    /** The selection listeners. */
     public synchronized ItemListener[] getItemListeners() {
         return AWTEventMulticaster.getListeners(this.itemListener, ItemListener.class);
     }
 
-    /** Agrega un oyente de acción; `null` no hace nada. */
+    /** Adds an action listener; `null` does nothing. */
     public synchronized void addActionListener(ActionListener l) {
         if (l == null) {
             return;
@@ -521,7 +522,7 @@ public class List extends Component implements ItemSelectable, Accessible {
         this.enableEvents(AWTEvent.ACTION_EVENT_MASK);
     }
 
-    /** Saca un oyente de acción. */
+    /** Removes an action listener. */
     public synchronized void removeActionListener(ActionListener l) {
         if (l == null) {
             return;
@@ -529,7 +530,7 @@ public class List extends Component implements ItemSelectable, Accessible {
         this.actionListener = AWTEventMulticaster.remove(this.actionListener, l);
     }
 
-    /** Los oyentes de acción. */
+    /** The action listeners. */
     public synchronized ActionListener[] getActionListeners() {
         return AWTEventMulticaster.getListeners(this.actionListener, ActionListener.class);
     }
@@ -556,7 +557,7 @@ public class List extends Component implements ItemSelectable, Accessible {
         super.processEvent(e);
     }
 
-    /** Les avisa a los oyentes de selección. */
+    /** Tells the selection listeners. */
     protected void processItemEvent(ItemEvent e) {
         ItemListener l = this.itemListener;
         if (l != null) {
@@ -564,7 +565,7 @@ public class List extends Component implements ItemSelectable, Accessible {
         }
     }
 
-    /** Les avisa a los oyentes de acción. */
+    /** Tells the action listeners. */
     protected void processActionEvent(ActionEvent e) {
         ActionListener l = this.actionListener;
         if (l != null) {
@@ -577,47 +578,47 @@ public class List extends Component implements ItemSelectable, Accessible {
     }
 
     /**
-     * Saca un tramo de renglones, de punta a punta inclusive.
+     * Removes a stretch of lines, from end to end inclusive.
      *
-     * @deprecated es de uso interno del sistema de ventanas. Usar {@link #remove(int)}.
+     * @deprecated it is for the internal use of the windowing system. Use {@link #remove(int)}.
      */
     @Deprecated
     public synchronized void delItems(int start, int end) {
         for (int i = end; i >= start; i--) {
             this.items.removeElementAt(i);
         }
-        this.correrSeleccion(start, -(end - start + 1));
+        this.shiftSelection(start, -(end - start + 1));
     }
 
     /**
-     * Corre las posiciones seleccionadas cuando se mete o se saca en el medio.
+     * Shifts the selected positions when something is put in or taken out in the middle.
      *
-     * <p>Las que caen adentro del tramo sacado se pierden; las de después se corren. Sin esto la
-     * selección quedaría apuntando a renglones distintos de los que el usuario eligió, que es peor
-     * que perderla.
+     * <p>The ones that fall inside the removed stretch are lost; the ones after it are shifted.
+     * Without this the selection would be left pointing at lines other than the ones the user
+     * chose, which is worse than losing it.
      */
-    private void correrSeleccion(int desde, int cuanto) {
+    private void shiftSelection(int from, int delta) {
         int[] sel = this.selected;
         int[] tmp = new int[sel.length];
         int j = 0;
         for (int i = 0; i < sel.length; i++) {
-            if (sel[i] < desde) {
+            if (sel[i] < from) {
                 tmp[j] = sel[i];
                 j = j + 1;
-            } else if (cuanto > 0) {
-                tmp[j] = sel[i] + cuanto;
+            } else if (delta > 0) {
+                tmp[j] = sel[i] + delta;
                 j = j + 1;
-            } else if (sel[i] >= desde - cuanto) {
-                tmp[j] = sel[i] + cuanto;
+            } else if (sel[i] >= from - delta) {
+                tmp[j] = sel[i] + delta;
                 j = j + 1;
             }
         }
-        int[] nuevos = new int[j];
-        System.arraycopy(tmp, 0, nuevos, 0, j);
-        this.selected = nuevos;
+        int[] fresh = new int[j];
+        System.arraycopy(tmp, 0, fresh, 0, j);
+        this.selected = fresh;
     }
 
-    /** La accesibilidad de la lista. */
+    /** The accessibility information of this list. */
     public AccessibleContext getAccessibleContext() {
         if (this.accessibleContext == null) {
             this.accessibleContext = new AccessibleAWTList();
@@ -626,16 +627,16 @@ public class List extends Component implements ItemSelectable, Accessible {
     }
 
     /**
-     * La accesibilidad de una lista.
+     * The accessibility of a list.
      *
-     * <p>Informa `MULTISELECTABLE` cuando corresponde y sabe operar la selección. Los renglones no
-     * son componentes, así que {@link #getAccessibleSelection(int)} devuelve `null`: mentir con un
-     * objeto envolvente sería peor que decir que no hay.
+     * <p>It reports `MULTISELECTABLE` when that applies and knows how to operate the selection. The
+     * lines are not components, so {@link #getAccessibleSelection(int)} returns `null`: lying with
+     * a wrapper object would be worse than saying there is none.
      */
     protected class AccessibleAWTList extends AccessibleAWTComponent
             implements AccessibleSelection {
 
-        /** Para las subclases. */
+        /** For the subclasses. */
         protected AccessibleAWTList() {
         }
 
@@ -655,50 +656,50 @@ public class List extends Component implements ItemSelectable, Accessible {
             return s;
         }
 
-        /** Cuántos renglones tiene. */
+        /** How many lines it has. */
         public int getAccessibleChildrenCount() {
             return List.this.getItemCount();
         }
 
         /**
-         * El renglón de esa posición.
+         * The line at that position.
          *
-         * @return `null` siempre: los renglones son cadenas, no componentes
+         * @return `null` always: the lines are strings, not components
          */
         public Accessible getAccessibleChild(int i) {
             return null;
         }
 
-        /** Cuántos están seleccionados. */
+        /** How many are selected. */
         public int getAccessibleSelectionCount() {
             return List.this.getSelectedIndexes().length;
         }
 
         /**
-         * Lo seleccionado.
+         * What is selected.
          *
-         * @return `null` siempre, por lo mismo que {@link #getAccessibleChild}
+         * @return `null` always, for the same reason as {@link #getAccessibleChild}
          */
         public Accessible getAccessibleSelection(int i) {
             return null;
         }
 
-        /** Si ese renglón está seleccionado. */
+        /** Whether that line is selected. */
         public boolean isAccessibleChildSelected(int i) {
             return List.this.isIndexSelected(i);
         }
 
-        /** Selecciona ese renglón. */
+        /** Selects that line. */
         public void addAccessibleSelection(int i) {
             List.this.select(i);
         }
 
-        /** Lo deselecciona. */
+        /** Deselects it. */
         public void removeAccessibleSelection(int i) {
             List.this.deselect(i);
         }
 
-        /** Deselecciona todo. */
+        /** Deselects everything. */
         public void clearAccessibleSelection() {
             int[] sel = List.this.getSelectedIndexes();
             for (int i = 0; i < sel.length; i++) {
@@ -706,7 +707,7 @@ public class List extends Component implements ItemSelectable, Accessible {
             }
         }
 
-        /** Selecciona todo, si la lista lo admite; en modo simple no hace nada. */
+        /** Selects everything, if the list takes it; in single mode it does nothing. */
         public void selectAllAccessibleSelection() {
             if (!List.this.isMultipleMode()) {
                 return;

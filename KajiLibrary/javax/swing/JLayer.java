@@ -17,27 +17,27 @@ import javax.swing.plaf.ComponentUI;
 import javax.swing.plaf.LayerUI;
 
 /**
- * Envuelve un componente para decorarlo o para espiar sus eventos.
+ * It wraps a component in order to decorate it or to spy on its events.
  *
- * <h2>Envolver en lugar de heredar</h2>
+ * <h2>Wrapping instead of inheriting</h2>
  *
- * <p>Todo lo interesante esta en el {@link LayerUI}; ver su nota. Esta clase es el envase: contiene
- * al componente, le da el tamano, y le pasa al aspecto lo que hay que dibujar y los eventos que se
- * hayan pedido.
+ * <p>Everything interesting is in the {@link LayerUI}; see its note. This class is the
+ * container: it holds the component, gives it its size, and passes the look and feel what has
+ * to be drawn and the events that were asked for.
  *
- * <h2>Es final, y no lo puede evitar</h2>
+ * <h2>It is final, and it cannot avoid it</h2>
  *
- * <p>La clase es final a proposito. Heredar de ella seria volver justo a lo que viene a evitar: si
- * se pudiera, la forma natural de usarla seria una subclase por decoracion, y no se podrian apilar
- * dos. Apilar se hace envolviendo dos veces.
+ * <p>The class is final on purpose. Inheriting from it would be going back to just what it
+ * comes to avoid: if it were possible, the natural way of using it would be a subclass per
+ * decoration, and two could not be stacked. Stacking is done by wrapping twice.
  *
- * <h2>El vidrio de arriba</h2>
+ * <h2>The glass on top</h2>
  *
- * <p>Ademas del componente hay un {@link JPanel} transparente encima. Sirve para atrapar el mouse
- * sin que llegue a lo de abajo -- lo que hace un velo de "cargando" -- y para dibujar sin
- * interferir. Es un panel de verdad, asi que se le pueden poner componentes.
+ * <p>Besides the component there is a transparent {@link JPanel} on top. It serves to catch the
+ * mouse without its reaching what is below -- which is what a "loading" veil does -- and to
+ * draw without interfering. It is a real panel, so components can be put into it.
  *
- * @param <V> el tipo del componente que se envuelve.
+ * @param <V> the type of the component that is wrapped.
  */
 public final class JLayer<V extends Component> extends JComponent implements Scrollable,
         PropertyChangeListener, Accessible {
@@ -48,33 +48,33 @@ public final class JLayer<V extends Component> extends JComponent implements Scr
     private transient boolean isPainting;
     private AccessibleContext accessibleContext;
 
-    /** Una capa vacia. */
+    /** An empty layer. */
     public JLayer() {
         this(null);
     }
 
-    /** Una capa alrededor de ese componente. */
+    /** A layer around that component. */
     public JLayer(V view) {
         this(view, new LayerUI<V>());
     }
 
-    /** Una capa alrededor de ese componente, con ese aspecto. */
+    /** A layer around that component, with that look and feel. */
     public JLayer(V view, LayerUI<V> ui) {
         setGlassPane(createGlassPane());
         setView(view);
         setUI(ui);
     }
 
-    /** El componente envuelto. */
+    /** The wrapped component. */
     public V getView() {
         return view;
     }
 
     /**
-     * Cambia el componente envuelto.
+     * It changes the wrapped component.
      *
-     * <p>Se saca el anterior y se agrega el nuevo en el mismo lugar. El vidrio se queda: pertenece
-     * a la capa, no al componente.
+     * <p>The previous one is taken out and the new one added in the same place. The glass stays: it
+     * belongs to the layer, not to the component.
      */
     public void setView(V view) {
         Component oldView = getView();
@@ -91,9 +91,9 @@ public final class JLayer<V extends Component> extends JComponent implements Scr
     }
 
     /**
-     * Cambia el aspecto.
+     * It changes the look and feel.
      *
-     * <p>Es donde vive la decoracion, asi que cambiarlo cambia lo que la capa hace.
+     * <p>It is where the decoration lives, so changing it changes what the layer does.
      */
     public void setUI(LayerUI<? super V> ui) {
         super.setUI(ui);
@@ -103,7 +103,7 @@ public final class JLayer<V extends Component> extends JComponent implements Scr
         return (LayerUI<? super V>) ui;
     }
 
-    /** El panel transparente que va encima; ver la nota de la clase. */
+    /** The transparent panel that goes on top; see the class note. */
     public JPanel getGlassPane() {
         return glassPane;
     }
@@ -125,7 +125,7 @@ public final class JLayer<V extends Component> extends JComponent implements Scr
         repaint();
     }
 
-    /** El vidrio de siempre: transparente y visible. */
+    /** The usual glass: transparent and visible. */
     public JPanel createGlassPane() {
         JPanel p = new JPanel();
         p.setOpaque(false);
@@ -135,13 +135,13 @@ public final class JLayer<V extends Component> extends JComponent implements Scr
     }
 
     /**
-     * No se puede poner acomodador.
+     * No layout can be set.
      *
-     * <p>La capa acomoda sus dos hijos ella misma: el componente ocupa todo menos los margenes y el
-     * vidrio ocupa todo. Un acomodador cualquiera romperia esa relacion, que es de lo que depende
-     * que el vidrio quede justo encima.
+     * <p>The layer lays its two children out itself: the component takes up everything but the
+     * margins and the glass takes up everything. Any layout would break that relation, which is
+     * what the glass being right on top depends on.
      *
-     * @throws IllegalArgumentException si el acomodador no es nulo.
+     * @throws IllegalArgumentException if the layout is not null.
      */
     public void setLayout(LayoutManager mgr) {
         if (mgr != null) {
@@ -150,11 +150,11 @@ public final class JLayer<V extends Component> extends JComponent implements Scr
     }
 
     /**
-     * No se puede poner borde.
+     * No border can be set.
      *
-     * <p>El borde va en el componente envuelto, que es a quien pertenece.
+     * <p>The border goes on the wrapped component, which is who it belongs to.
      *
-     * @throws IllegalArgumentException si el borde no es nulo.
+     * @throws IllegalArgumentException if the border is not null.
      */
     public void setBorder(Border border) {
         if (border != null) {
@@ -167,12 +167,12 @@ public final class JLayer<V extends Component> extends JComponent implements Scr
     }
 
     /**
-     * No se pueden agregar hijos.
+     * No children can be added.
      *
-     * <p>Los dos hijos que tiene los pone ella. Agregar un tercero dejaria un componente sin lugar
-     * asignado, porque la capa no acomoda por lista.
+     * <p>The two children it has are set by it. Adding a third would leave a component with no
+     * place assigned, because the layer does not lay out by list.
      *
-     * @throws UnsupportedOperationException siempre.
+     * @throws UnsupportedOperationException always.
      */
     protected void addImpl(Component comp, Object constraints, int index) {
         throw new UnsupportedOperationException(
@@ -180,9 +180,9 @@ public final class JLayer<V extends Component> extends JComponent implements Scr
     }
 
     /**
-     * No se pueden sacar hijos.
+     * No children can be removed.
      *
-     * @throws IllegalArgumentException si no es el componente ni el vidrio.
+     * @throws IllegalArgumentException if it is neither the component nor the glass.
      */
     public void remove(Component comp) {
         if (comp == null) {
@@ -206,10 +206,10 @@ public final class JLayer<V extends Component> extends JComponent implements Scr
     }
 
     /**
-     * Si la capa dibuja fuera de sus limites.
+     * Whether the layer draws outside its bounds.
      *
-     * <p>Siempre cierto. Una decoracion puede pintar donde quiera -- un resaltado alrededor, una
-     * sombra --, asi que el sistema de repintado tiene que preguntarle a la capa y no adivinar.
+     * <p>Always true. A decoration may paint wherever it likes -- a highlight around, a shadow --,
+     * so the repainting system has to ask the layer and not guess.
      */
     protected boolean isPaintingOrigin() {
         return true;
@@ -237,10 +237,11 @@ public final class JLayer<V extends Component> extends JComponent implements Scr
     }
 
     /**
-     * Dibuja la capa.
+     * It draws the layer.
      *
-     * <p>Todo el dibujo pasa por el aspecto. La bandera evita volver a entrar: el aspecto llama a
-     * {@code c.paint(g)} para dibujar lo de abajo, y sin ella eso volveria aca.
+     * <p>All the drawing goes through the look and feel. The flag keeps it from coming back in:
+     * the look and feel calls {@code c.paint(g)} in order to draw what is below, and without it
+     * that would come back here.
      */
     public void paint(Graphics g) {
         if (!isPainting) {
@@ -259,16 +260,16 @@ public final class JLayer<V extends Component> extends JComponent implements Scr
     }
 
     /**
-     * Si los hijos no se pisan.
+     * Whether the children do not overlap.
      *
-     * <p>Siempre falso: el vidrio esta justo encima del componente, por definicion se pisan.
-     * Contestar que si haria que el sistema dibujara solo uno de los dos.
+     * <p>Always false: the glass is right on top of the component, by definition they overlap.
+     * Answering yes would make the system draw only one of the two.
      */
     public boolean isOptimizedDrawingEnabled() {
         return false;
     }
 
-    /** Le pasa al aspecto los cambios de propiedad de la capa y de el mismo. */
+    /** It passes the layer's and its own property changes on to the look and feel. */
     public void propertyChange(PropertyChangeEvent evt) {
         LayerUI<? super V> ui = getUI();
         if (ui != null) {
@@ -277,9 +278,9 @@ public final class JLayer<V extends Component> extends JComponent implements Scr
     }
 
     /**
-     * Que eventos quiere ver el aspecto.
+     * Which events the look and feel wants to see.
      *
-     * <p>Cero, que es lo de fabrica, significa ninguno. Ver la nota de {@link LayerUI}.
+     * <p>Zero, which is the factory setting, means none. See {@link LayerUI}'s note.
      */
     public void setLayerEventMask(long layerEventMask) {
         long oldEventMask = getLayerEventMask();
@@ -298,7 +299,7 @@ public final class JLayer<V extends Component> extends JComponent implements Scr
         }
     }
 
-    /** Lo que pida el componente envuelto, si es desplazable. */
+    /** Whatever the wrapped component asks for, if it is scrollable. */
     public Dimension getPreferredScrollableViewportSize() {
         if (getView() instanceof Scrollable) {
             return ((Scrollable) getView()).getPreferredScrollableViewportSize();
@@ -347,7 +348,7 @@ public final class JLayer<V extends Component> extends JComponent implements Scr
         super.removeNotify();
     }
 
-    /** Acomoda el componente y el vidrio; lo hace el aspecto. */
+    /** It lays the component and the glass out; the look and feel does it. */
     public void doLayout() {
         LayerUI<? super V> ui = getUI();
         if (ui != null) {

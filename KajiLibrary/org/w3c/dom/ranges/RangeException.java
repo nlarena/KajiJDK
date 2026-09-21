@@ -1,30 +1,30 @@
 package org.w3c.dom.ranges;
 
 /**
- * KajiLibrary's org.w3c.dom.ranges.RangeException -- una operacion de rango imposible.
+ * KajiLibrary's org.w3c.dom.ranges.RangeException -- an impossible range operation.
  *
- * <p>Es <b>no chequeada</b>, igual que {@code DOMException}, y por el mismo motivo: los dos errores
- * que reporta son de programa y no de datos. Obligar a atrapar lo que no puede pasar en codigo
- * correcto ensuciaria cada llamada.
+ * <p>It is <b>unchecked</b>, just like {@code DOMException}, and for the same reason: the two
+ * errors it reports are program errors and not data errors. Forcing one to catch what cannot happen
+ * in correct code would dirty every call.
  *
- * <p>El codigo va en un campo publico y no en un accesor. Es la convencion del DOM -- las interfaces
- * se definen en IDL, que no tiene propiedades -- y se reproduce tal cual aunque hoy no se escribiria
- * asi.
+ * <p>The code goes in a public field and not in an accessor. It is the DOM convention -- the
+ * interfaces are defined in IDL, which has no properties -- and it is reproduced as it is even
+ * though today it would not be written like that.
  */
 public class RangeException extends RuntimeException {
 
     private static final long serialVersionUID = 2427623564573316628L;
 
     /**
-     * Los dos extremos no delimitan un rango: estan en arboles distintos, o el final va antes que el
-     * principio.
+     * The two ends do not delimit a range: they are in different trees, or the end comes before the
+     * start.
      */
     public static final short BAD_BOUNDARYPOINTS_ERR = 1;
 
-    /** Ese tipo de nodo no puede ser el contenedor de un extremo, o no se puede seleccionar. */
+    /** That type of node cannot be the container of an end, or cannot be selected. */
     public static final short INVALID_NODE_TYPE_ERR = 2;
 
-    /** Cual de los dos. Publico por la convencion del DOM; ver la nota de la clase. */
+    /** Which of the two. Public by the DOM convention; see the note of the class. */
     public short code;
 
     public RangeException(short code, String message) {

@@ -21,48 +21,51 @@ import javax.swing.plaf.UIResource;
 import javax.swing.text.View;
 
 /**
- * El aspecto basico de un cartel de ayuda: el texto sobre un rectangulo con borde de una linea.
+ * The basic look and feel of a tool tip: the text over a rectangle with a one-line border.
  *
- * <h2>Los seis pixeles</h2>
+ * <h2>The six pixels</h2>
  *
- * <p>El ancho preferido es los margenes mas el ancho del texto <em>mas seis</em>, y el texto se
- * dibuja tres pixeles a la derecha del margen izquierdo. Ese seis no sale de ninguna propiedad: es
- * una constante del JDK, y es lo que hace que el texto no quede pegado al borde. Esta medido: un
- * cartel con "hola" en Dialog 12 mide 32 x 18, y uno sin texto mide 2 x 2 --solo el borde--.
+ * <p>The preferred width is the margins plus the text's width <em>plus six</em>, and the text
+ * is drawn three pixels to the right of the left margin. That six does not come from any
+ * property: it is a constant of the JDK, and it is what keeps the text from being stuck to the
+ * border. It is measured: a tip with {@code "hola"} in Dialog 12 measures 32 x 18, and one with no
+ * text measures 2 x 2 -- only the border --.
  *
- * <p>Un cartel sin texto no reserva alto de linea: {@link #getPreferredSize} solo suma la altura de
- * la fuente cuando hay algo que escribir.
+ * <p>A tip with no text reserves no line height: {@link #getPreferredSize} only adds the
+ * typeface's height when there is something to write.
  *
- * <h2>Los tres tamanos son el mismo</h2>
+ * <h2>The three sizes are the same</h2>
  *
- * <p>Minimo, preferido y maximo dan lo mismo. Un cartel de ayuda no se estira ni se achica: lo
- * pone la ventana emergente del tamano que pida y listo.
+ * <p>Minimum, preferred and maximum give the same. A tool tip neither stretches nor shrinks:
+ * the popup window puts it at whatever size it asks for and that is that.
  *
- * <h2>Lo que instala</h2>
+ * <h2>What it installs</h2>
  *
- * <p>Los valores de {@code ToolTip.*} medidos en Metal (JDK 25): fondo (184, 207, 229), frente
- * (51, 51, 51), Dialog 12 y un borde de linea de un pixel en (99, 130, 191). El cartel queda opaco.
+ * <p>The values of {@code ToolTip.*} measured in Metal (JDK 25): background (184, 207, 229),
+ * foreground (51, 51, 51), Dialog 12 and a one-pixel line border in (99, 130, 191). The tip is
+ * left opaque.
  *
- * <h2>Texto con etiquetas</h2>
+ * <h2>Text with tags</h2>
  *
- * <p>Si el texto es HTML --ver {@link BasicHTML#isHTMLString}-- el cartel guarda una vista armada y
- * es esa la que mide y pinta. {@link #installUI} y el cambio de texto la actualizan.
+ * <p>If the text is HTML -- see {@link BasicHTML#isHTMLString} -- the tip keeps a built view
+ * and it is that one that measures and paints. {@link #installUI} and the change of text update
+ * it.
  */
 public class BasicToolTipUI extends ToolTipUI {
 
     private static BasicToolTipUI sharedInstance = new BasicToolTipUI();
 
-    private static final ColorUIResource FONDO_POR_OMISION = new ColorUIResource(184, 207, 229);
-    private static final ColorUIResource FRENTE_POR_OMISION = new ColorUIResource(51, 51, 51);
-    private static final Font FUENTE_POR_OMISION = new FontUIResource("Dialog", Font.PLAIN, 12);
-    private static final Border BORDE_POR_OMISION =
+    private static final ColorUIResource DEFAULT_BACKGROUND = new ColorUIResource(184, 207, 229);
+    private static final ColorUIResource DEFAULT_FOREGROUND = new ColorUIResource(51, 51, 51);
+    private static final Font DEFAULT_FONT = new FontUIResource("Dialog", Font.PLAIN, 12);
+    private static final Border DEFAULT_BORDER =
             new BorderUIResource.LineBorderUIResource(new ColorUIResource(99, 130, 191), 1);
 
     public BasicToolTipUI() {
         super();
     }
 
-    /** El aspecto compartido: no guarda nada del cartel. */
+    /** The shared look and feel: it keeps nothing of the tip. */
     public static ComponentUI createUI(JComponent c) {
         return sharedInstance;
     }
@@ -79,32 +82,32 @@ public class BasicToolTipUI extends ToolTipUI {
         uninstallListeners(c);
     }
 
-    /** Colores, fuente, borde y opacidad; ver la nota de la clase. */
+    /** Colours, typeface, border and opacity; see the class note. */
     protected void installDefaults(JComponent c) {
-        Color fondo = c.getBackground();
-        if (fondo == null || fondo instanceof UIResource) {
-            c.setBackground(FONDO_POR_OMISION);
+        Color background = c.getBackground();
+        if (background == null || background instanceof UIResource) {
+            c.setBackground(DEFAULT_BACKGROUND);
         }
-        Color frente = c.getForeground();
-        if (frente == null || frente instanceof UIResource) {
-            c.setForeground(FRENTE_POR_OMISION);
+        Color foreground = c.getForeground();
+        if (foreground == null || foreground instanceof UIResource) {
+            c.setForeground(DEFAULT_FOREGROUND);
         }
-        Font fuente = c.getFont();
-        if (fuente == null || fuente instanceof UIResource) {
-            c.setFont(FUENTE_POR_OMISION);
+        Font font = c.getFont();
+        if (font == null || font instanceof UIResource) {
+            c.setFont(DEFAULT_FONT);
         }
-        Border borde = c.getBorder();
-        if (borde == null || borde instanceof UIResource) {
-            c.setBorder(BORDE_POR_OMISION);
+        Border border = c.getBorder();
+        if (border == null || border instanceof UIResource) {
+            c.setBorder(DEFAULT_BORDER);
         }
         LookAndFeel.installProperty(c, "opaque", Boolean.TRUE);
     }
 
-    /** No saca nada; ver {@link BasicPanelUI#uninstallDefaults}. */
+    /** It removes nothing; see {@link BasicPanelUI#uninstallDefaults}. */
     protected void uninstallDefaults(JComponent c) {
     }
 
-    /** Arma la vista si el texto es HTML; ver la nota de la clase. */
+    /** It builds the view if the text is HTML; see the class note. */
     private void installComponents(JComponent c) {
         BasicHTML.updateRenderer(c, ((JToolTip) c).getTipText());
     }
@@ -113,15 +116,15 @@ public class BasicToolTipUI extends ToolTipUI {
         BasicHTML.updateRenderer(c, "");
     }
 
-    /** No escucha nada: el cartel lo maneja {@code ToolTipManager}. */
+    /** It listens to nothing: the tip is handled by {@code ToolTipManager}. */
     protected void installListeners(JComponent c) {
     }
 
-    /** Idem. */
+    /** The same. */
     protected void uninstallListeners(JComponent c) {
     }
 
-    /** El texto, tres pixeles a la derecha del margen; ver la nota de la clase. */
+    /** The text, three pixels to the right of the margin; see the class note. */
     public void paint(Graphics g, JComponent c) {
         Font font = c.getFont();
         FontMetrics metrics = c.getFontMetrics(font);
@@ -148,7 +151,7 @@ public class BasicToolTipUI extends ToolTipUI {
         }
     }
 
-    /** Margenes mas el texto mas seis; ver la nota de la clase. */
+    /** Margins plus the text plus six; see the class note. */
     public Dimension getPreferredSize(JComponent c) {
         Font font = c.getFont();
         FontMetrics fm = c.getFontMetrics(font);
@@ -171,7 +174,7 @@ public class BasicToolTipUI extends ToolTipUI {
         return prefSize;
     }
 
-    /** El mismo que el preferido; ver la nota de la clase. */
+    /** The same as the preferred one; see the class note. */
     public Dimension getMinimumSize(JComponent c) {
         Dimension d = getPreferredSize(c);
         View v = (View) c.getClientProperty(BasicHTML.propertyKey);
@@ -181,7 +184,7 @@ public class BasicToolTipUI extends ToolTipUI {
         return d;
     }
 
-    /** El mismo que el preferido; ver la nota de la clase. */
+    /** The same as the preferred one; see the class note. */
     public Dimension getMaximumSize(JComponent c) {
         Dimension d = getPreferredSize(c);
         View v = (View) c.getClientProperty(BasicHTML.propertyKey);

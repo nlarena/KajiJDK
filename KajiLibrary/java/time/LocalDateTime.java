@@ -27,13 +27,13 @@ public final class LocalDateTime implements Temporal, TemporalAdjuster,
         this.time = time;
     }
 
-    /** La fecha y hora mas temprana representable. */
+    /** The earliest representable date and time. */
     public static final LocalDateTime MIN = LocalDateTime.of(LocalDate.MIN, LocalTime.MIN);
 
-    /** La mas tardia. */
+    /** The latest. */
     public static final LocalDateTime MAX = LocalDateTime.of(LocalDate.MAX, LocalTime.MAX);
 
-    /** La fecha y hora que `temporal` tiene. */
+    /** The date and time `temporal` holds. */
     public static LocalDateTime from(java.time.temporal.TemporalAccessor temporal) {
         if (temporal == null) {
             throw new NullPointerException("temporal");
@@ -44,7 +44,7 @@ public final class LocalDateTime implements Temporal, TemporalAdjuster,
         return LocalDateTime.of(LocalDate.from(temporal), LocalTime.from(temporal));
     }
 
-    /** La que marca `clock`. La forma testeable de `now()`. */
+    /** The one `clock` reads. The testable form of `now()`. */
     public static LocalDateTime now(java.time.Clock clock) {
         if (clock == null) {
             throw new NullPointerException("clock");
@@ -52,7 +52,7 @@ public final class LocalDateTime implements Temporal, TemporalAdjuster,
         return LocalDateTime.ofInstant(clock.instant(), clock.getZone());
     }
 
-    /** La de esa zona, ahora. */
+    /** That zone's, right now. */
     public static LocalDateTime now(ZoneId zone) {
         if (zone == null) {
             throw new NullPointerException("zone");
@@ -61,11 +61,11 @@ public final class LocalDateTime implements Temporal, TemporalAdjuster,
     }
 
     /**
-     * La fecha y hora local de ese instante en esa zona.
+     * That instant's local date and time in that zone.
      *
-     * <p>Pierde el desplazamiento a proposito: un `LocalDateTime` es "las 15:30 del martes" sin
-     * decir dónde, y por eso dos instantes distintos pueden dar el mismo -- uno de cada lado del
-     * cambio de horario de verano.
+     * <p>It loses the offset on purpose: a `LocalDateTime` is "15:30 on Tuesday" without saying
+     * where, and that is why two different instants can give the same one -- one on each side of the
+     * daylight-saving change.
      */
     public static LocalDateTime ofInstant(Instant instant, ZoneId zone) {
         if (instant == null || zone == null) {
@@ -76,24 +76,24 @@ public final class LocalDateTime implements Temporal, TemporalAdjuster,
     }
 
     /**
-     * La fecha y hora local de ese segundo de epoca con ese desplazamiento.
+     * That epoch second's local date and time with that offset.
      *
-     * @throws java.time.DateTimeException si `nanoOfSecond` cae fuera de [0, 999999999]
+     * @throws java.time.DateTimeException if `nanoOfSecond` falls outside [0, 999999999]
      */
     public static LocalDateTime ofEpochSecond(long epochSecond, int nanoOfSecond, ZoneOffset offset) {
         if (offset == null) {
             throw new NullPointerException("offset");
         }
         ChronoField.NANO_OF_SECOND.checkValidValue((long) nanoOfSecond);
-        long segsLocales = epochSecond + offset.getTotalSeconds();
-        long dia = Math.floorDiv(segsLocales, 86400L);
-        int segsDelDia = (int) Math.floorMod(segsLocales, 86400L);
-        return LocalDateTime.of(LocalDate.ofEpochDay(dia),
-                LocalTime.of(segsDelDia / 3600, (segsDelDia / 60) % 60, segsDelDia % 60,
+        long localSecs = epochSecond + offset.getTotalSeconds();
+        long day = Math.floorDiv(localSecs, 86400L);
+        int secsOfDay = (int) Math.floorMod(localSecs, 86400L);
+        return LocalDateTime.of(LocalDate.ofEpochDay(day),
+                LocalTime.of(secsOfDay / 3600, (secsOfDay / 60) % 60, secsOfDay % 60,
                         nanoOfSecond));
     }
 
-    /** Con el mes como enum. */
+    /** With the month as an enum. */
     public static LocalDateTime of(int year, Month month, int dayOfMonth, int hour, int minute) {
         if (month == null) {
             throw new NullPointerException("month");
@@ -193,15 +193,15 @@ public final class LocalDateTime implements Temporal, TemporalAdjuster,
 
     // --- date arithmetic (delegates to the date, keeps the time) ---
 
-    /** El dia del año, de 1 a 365 o 366. */
+    /** The day of the year, 1 to 365 or 366. */
     public int getDayOfYear() {
         return this.date.getDayOfYear();
     }
 
-    // ---- los `with*`, campo a campo -------------------------------------------------------------
+    // ---- the `with*`, field by field ------------------------------------------------------------
     //
-    // Los siete delegan en la mitad que corresponde y rearman el par. Un `LocalDateTime` es
-    // exactamente una fecha mas una hora, y esa separacion es lo que hace que no haya nada mas.
+    // All seven delegate to the half they belong to and rebuild the pair. A `LocalDateTime` is
+    // exactly a date plus a time, and that separation is what makes there be nothing else.
 
     public LocalDateTime withYear(int year) {
         return LocalDateTime.of(this.date.withYear(year), this.time);
@@ -236,9 +236,10 @@ public final class LocalDateTime implements Temporal, TemporalAdjuster,
     }
 
     /**
-     * Truncada a un multiplo de `unit`, contando desde la medianoche.
+     * Truncated to a multiple of `unit`, counting from midnight.
      *
-     * <p>La fecha no se toca: truncar a horas deja el mismo dia con la hora redondeada hacia abajo.
+     * <p>The date is not touched: truncating to hours leaves the same day with the time rounded
+     * down.
      */
     public LocalDateTime truncatedTo(java.time.temporal.TemporalUnit unit) {
         return LocalDateTime.of(this.date, this.time.truncatedTo(unit));
@@ -252,7 +253,7 @@ public final class LocalDateTime implements Temporal, TemporalAdjuster,
         return this.plusWeeks(-weeks);
     }
 
-    /** Esta fecha y hora con ese desplazamiento. */
+    /** This date and time with that offset. */
     public java.time.OffsetDateTime atOffset(ZoneOffset offset) {
         if (offset == null) {
             throw new NullPointerException("offset");
@@ -260,7 +261,7 @@ public final class LocalDateTime implements Temporal, TemporalAdjuster,
         return java.time.OffsetDateTime.of(this, offset);
     }
 
-    /** Esta fecha y hora en esa zona. */
+    /** This date and time in that zone. */
     public ZonedDateTime atZone(ZoneId zone) {
         if (zone == null) {
             throw new NullPointerException("zone");
@@ -269,10 +270,10 @@ public final class LocalDateTime implements Temporal, TemporalAdjuster,
     }
 
     /**
-     * Esta fecha y hora mas `amountToAdd` unidades.
+     * This date and time plus `amountToAdd` units.
      *
-     * <p>Las unidades de tiempo van a la hora --y arrastran el dia si desbordan-- y las de fecha a
-     * la fecha. Es la separacion que la clase tiene por dentro, expuesta.
+     * <p>The time units go to the time --carrying into the day if they overflow-- and the date ones
+     * to the date. It is the separation the class has inside, exposed.
      */
     public LocalDateTime plus(long amountToAdd, java.time.temporal.TemporalUnit unit) {
         if (unit == null) {
@@ -327,7 +328,7 @@ public final class LocalDateTime implements Temporal, TemporalAdjuster,
         return this.plus(-amountToSubtract, unit);
     }
 
-    /** Con `field` puesto en `newValue`: los de hora van a la hora, los de fecha a la fecha. */
+    /** With `field` set to `newValue`: the time ones go to the time, the date ones to the date. */
     public LocalDateTime with(java.time.temporal.TemporalField field, long newValue) {
         if (field == null) {
             throw new NullPointerException("field");
@@ -574,21 +575,21 @@ public final class LocalDateTime implements Temporal, TemporalAdjuster,
     }
 
     /**
-     * Lee `text` con ese formateador.
+     * It reads `text` with that formatter.
      *
-     * <p>El que decide que campos hay es el formateador; esta clase solo dice **cual de ellos
-     * quiere**, pasando su propio `from`. Por eso un patron que no traiga fecha y hora
-     * falla aca y no al usar el resultado.
+     * <p>The one that decides which fields are there is the formatter; this class only says
+     * **which of them it wants**, by passing its own `from`. That is why a pattern that brings no date and time
+     * fails here and not when the result is used.
      *
-     * @throws java.time.format.DateTimeParseException si el texto no encaja con el patron, o si lo
-     *     que encaja no alcanza para una fecha y hora
+     * @throws java.time.format.DateTimeParseException if the text does not fit the pattern, or what
+     *     fits is not enough for a date and time
      */
     public static LocalDateTime parse(CharSequence text, java.time.format.DateTimeFormatter formatter) {
         if (formatter == null) {
             throw new NullPointerException("formatter");
         }
-        // Ligado a una local: encadenar por un intermedio de tipo interfaz se pierde (#108).
-        java.time.temporal.TemporalQuery<LocalDateTime> consulta = LocalDateTime::from;
-        return formatter.parse(text, consulta);
+        // Bound to a local: chaining through an interface-typed intermediate gets lost (#108).
+        java.time.temporal.TemporalQuery<LocalDateTime> queryOf = LocalDateTime::from;
+        return formatter.parse(text, queryOf);
     }
 }

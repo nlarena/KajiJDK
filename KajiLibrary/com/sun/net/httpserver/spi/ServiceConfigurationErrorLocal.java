@@ -1,17 +1,18 @@
 package com.sun.net.httpserver.spi;
 
 /**
- * El error de un proveedor nombrado por propiedad del sistema que no se pudo instanciar.
+ * The error of a provider named by a system property that could not be instantiated.
  *
- * <p>De paquete: es un detalle de {@link HttpServerProvider#provider()}. Existe para que el fallo
- * lleve <strong>el nombre que se pidio</strong> ademas de la causa — sin eso, un typo en la
- * propiedad produce un {@code ClassNotFoundException} pelado que no dice de donde salio el nombre.
+ * <p>Package-private: it is a detail of {@link HttpServerProvider#provider()}. It exists so
+ * that the failure carries <strong>the name that was asked for</strong> as well as the cause --
+ * without that, a typo in the property produces a bare {@code ClassNotFoundException} that does
+ * not say where the name came from.
  */
 final class ServiceConfigurationErrorLocal extends Error {
 
     private static final long serialVersionUID = 8712374126493827162L;
 
-    ServiceConfigurationErrorLocal(String nombre, Throwable causa) {
-        super("no se pudo instanciar el HttpServerProvider '" + nombre + "'", causa);
+    ServiceConfigurationErrorLocal(String name, Throwable cause) {
+        super("the HttpServerProvider could not be instantiated '" + name + "'", cause);
     }
 }

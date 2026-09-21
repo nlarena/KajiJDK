@@ -7,19 +7,20 @@ import java.util.Map;
 import javax.management.openmbean.CompositeData;
 
 /**
- * Una {@link jdk.jfr.Configuration} vista desde el otro lado de una conexion JMX.
+ * A {@link jdk.jfr.Configuration} seen from the other side of a JMX connection.
  *
- * <h2>Por que no se usa la clase original</h2>
+ * <h2>Why the original class is not used</h2>
  *
- * <p>Porque {@code Configuration} no viaja: JMX transporta {@code CompositeData}, que es una
- * estructura generica de nombre a valor, y no objetos arbitrarios. Una consola que se conecta a una
- * VM remota recibe eso.
+ * <p>Because {@code Configuration} does not travel: JMX transports {@code CompositeData}, which is
+ * a generic structure of name to value, and not arbitrary objects. A console that connects to a
+ * remote VM receives that.
  *
- * <p>Esta clase es el mismo dato del lado del cliente, con accesores tipados. {@link #from} es como
- * se reconstruye.
+ * <p>This class is the same datum on the client's side, with typed accessors. {@link #from} is how
+ * it is rebuilt.
  *
- * <p>Es <strong>solo lectura</strong>, y tiene que serlo: describe el estado de otra VM en un
- * momento dado. Un setter haria creer que cambiarlo cambia algo del otro lado.
+ * <p>It is <strong>read-only</strong>, and it has to be: it describes the state of another VM at a
+ * given moment. A setter would make one believe that changing it changes something on the other
+ * side.
  *
  * @since 9
  */
@@ -43,76 +44,76 @@ public final class ConfigurationInfo {
     }
 
     /**
-     * El nombre de la configuracion.
+     * The name of the configuration.
      *
-     * @return el valor
+     * @return the value
      */
     public String getName() {
         return name;
     }
 
     /**
-     * El nombre legible.
+     * The readable name.
      *
-     * @return el valor
+     * @return the value
      */
     public String getLabel() {
         return label;
     }
 
     /**
-     * Para que sirve esta configuracion.
+     * What this configuration is for.
      *
-     * @return el valor
+     * @return the value
      */
     public String getDescription() {
         return description;
     }
 
     /**
-     * Quien la escribio.
+     * Who wrote it.
      *
-     * @return el valor
+     * @return the value
      */
     public String getProvider() {
         return provider;
     }
 
     /**
-     * El texto del archivo {@code .jfc}.
+     * The text of the {@code .jfc} file.
      *
-     * @return el valor
+     * @return the value
      */
     public String getContents() {
         return contents;
     }
 
     /**
-     * Los ajustes, con la clave {@code "evento#ajuste"}.
+     * The settings, with the key {@code "event#setting"}.
      *
-     * @return el valor
+     * @return the value
      */
     public Map<String, String> getSettings() {
         return settings;
     }
 
     /**
-     * Reconstruye el objeto desde su forma abierta.
+     * It rebuilds the object from its open form.
      *
-     * <p>Es el camino por el que este dato llega de una VM remota: lo que viaja por JMX es un
-     * {@link CompositeData} generico y esto lo vuelve a convertir.
+     * <p>It is the road by which this datum arrives from a remote VM: what travels over JMX is a
+     * generic {@link CompositeData} and this turns it back.
      *
-     * @param cd la forma abierta, o {@code null}
-     * @return el objeto, o {@code null} si {@code cd} era {@code null}
-     * @throws IllegalArgumentException si no tiene la forma esperada
+     * @param cd the open form, or {@code null}
+     * @return the object, or {@code null} if {@code cd} was {@code null}
+     * @throws IllegalArgumentException if it does not have the expected shape
      */
     public static ConfigurationInfo from(final CompositeData cd) {
         if (cd == null) {
             return null;
         }
         throw new IllegalArgumentException(
-                "reconstruir un ConfigurationInfo necesita el soporte de tipos abiertos de JFR, que"
-                + " esta biblioteca no implementa");
+                "rebuilding a ConfigurationInfo needs the support of open types of JFR, which"
+                + " this library does not implement");
     }
 
     /** {@inheritDoc} */

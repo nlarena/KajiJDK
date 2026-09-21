@@ -16,91 +16,92 @@ import javax.imageio.spi.ImageWriterSpi;
 import javax.imageio.stream.ImageOutputStream;
 
 /**
- * KajiLibrary's javax.imageio.ImageWriter -- codifica imagenes a un formato.
+ * KajiLibrary's javax.imageio.ImageWriter -- encodes images into one format.
  *
- * <p>El espejo de {@link ImageReader}. Una subclase concreta tiene que dar cinco metodos --los cuatro
- * de metadatos y {@link #write(IIOMetadata, IIOImage, ImageWriteParam)}-- y hereda todo lo demas.
+ * <p>The mirror of {@link ImageReader}. A concrete subclass has to supply five methods --the four
+ * metadata ones and {@link #write(IIOMetadata, IIOImage, ImageWriteParam)}-- and inherits
+ * everything else.
  *
- * <h2>Casi todo es opcional, y hay que preguntar</h2>
+ * <h2>Almost everything is optional, and you have to ask</h2>
  *
- * <p>Es lo que define esta clase. Diecisiete de sus metodos vienen de a pares {@code canXxx} /
- * {@code xxx}, y el {@code can} devuelve false por omision mientras el otro lanza
- * {@link UnsupportedOperationException}.
+ * <p>It is what defines this class. It has nine {@code canXxx} methods, each guarding one or more
+ * operations: the {@code can} returns false by default while the operations throw
+ * {@link UnsupportedOperationException}. (An earlier note counted seventeen methods in pairs.)
  *
- * <p>La razon es que los formatos son muy distintos entre si: TIFF puede insertar una imagen en el
- * medio de un archivo y reemplazar pixeles en el lugar; PNG no puede hacer ninguna de las dos. Un
- * escritor generico tiene que preguntar antes de cada cosa.
+ * <p>The reason is that formats are very different from each other: TIFF can insert an image in
+ * the middle of a file and replace pixels in place; PNG can do neither. A generic writer has to
+ * ask before each thing.
  *
- * <h2>Las tres formas de escribir varias imagenes</h2>
+ * <h2>The three ways to write several images</h2>
  *
  * <ul>
- *   <li><b>secuencia</b> ({@link #canWriteSequence}): {@code prepareWriteSequence}, varios
- *       {@code writeToSequence}, {@code endWriteSequence}. Es la normal;
- *   <li><b>insercion</b> ({@link #canInsertImage}): meter una imagen en una posicion de un archivo que
- *       ya existe;
- *   <li><b>vacia</b> ({@link #canWriteEmpty}): reservar el espacio primero y llenar los pixeles
- *       despues con {@link #replacePixels}. Es como se escribe una imagen enorme que no entra en
- *       memoria.
+ *   <li><b>sequence</b> ({@link #canWriteSequence}): {@code prepareWriteSequence}, several
+ *       {@code writeToSequence}, {@code endWriteSequence}. It is the normal one;
+ *   <li><b>insertion</b> ({@link #canInsertImage}): putting an image at a position of a file that
+ *       already exists;
+ *   <li><b>empty</b> ({@link #canWriteEmpty}): reserving the space first and filling in the pixels
+ *       later with {@link #replacePixels}. It is how an enormous image that does not fit in memory
+ *       is written.
  * </ul>
  *
- * <h2>{@link #getOutput} suele necesitar un {@link ImageOutputStream}</h2>
+ * <h2>{@link #getOutput} usually needs an {@link ImageOutputStream}</h2>
  *
- * <p>Igual que en la lectura: acepta {@link Object} para dejar lugar a escritores especializados, pero
- * lo normal es que solo acepte {@code ImageOutputStream}. {@code ImageIO.createImageOutputStream} es
- * el que envuelve.
+ * <p>As when reading: it accepts {@link Object} to leave room for specialized writers, but normally
+ * it only accepts {@code ImageOutputStream}. {@code ImageIO.createImageOutputStream} is what wraps
+ * it.
  *
- * <h2>Implementa {@link ImageTranscoder}</h2>
+ * <h2>It implements {@link ImageTranscoder}</h2>
  *
- * <p>Por eso {@link #convertStreamMetadata} y {@link #convertImageMetadata} son abstractos: un
- * escritor <b>tiene</b> que saber traducir metadatos de otro formato al suyo, porque es lo que pasa
- * cada vez que alguien convierte una imagen y quiere conservar lo que tenia.
+ * <p>That is why {@link #convertStreamMetadata} and {@link #convertImageMetadata} are abstract: a
+ * writer <b>has</b> to know how to translate metadata from another format into its own, because
+ * that is what happens every time someone converts an image and wants to keep what it had.
  *
  * <h2>A KajiLibrary subset</h2>
  *
- * <p>La clase esta entera; lo que falta son <b>subclases</b>. Codificar PNG o JPEG pide los
- * codificadores. Registrando un escritor como servicio, todo esto funciona sin cambios.
+ * <p>The class is complete; what is missing is <b>subclasses</b>. Encoding PNG or JPEG takes the
+ * encoders. With a writer registered as a service, all of this works unchanged.
  */
 public abstract class ImageWriter implements ImageTranscoder {
 
-    /** Quien lo creo, o null. */
+    /** Who created it, or null. */
     protected ImageWriterSpi originatingProvider;
 
-    /** A donde escribe, o null. */
+    /** Where it writes to, or null. */
     protected Object output = null;
 
-    /** En que idiomas sabe dar sus mensajes, o null. */
+    /** Which locales it can give its messages in, or null. */
     protected Locale[] availableLocales = null;
 
-    /** En cual los da, o null. */
+    /** Which one it gives them in, or null. */
     protected Locale locale = null;
 
-    /** Los escuchas de advertencia, o null. */
+    /** The warning listeners, or null. */
     protected List<IIOWriteWarningListener> warningListeners = null;
 
-    /** El idioma de cada uno cuando se registro. */
+    /** Each one's locale when it was registered. */
     protected List<Locale> warningLocales = null;
 
-    /** Los escuchas de avance, o null. */
+    /** The progress listeners, or null. */
     protected List<IIOWriteProgressListener> progressListeners = null;
 
-    /** Si alguien pidio cancelar. */
+    /** Whether someone asked to cancel. */
     private boolean abortFlag = false;
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected ImageWriter(ImageWriterSpi originatingProvider) {
         this.originatingProvider = originatingProvider;
     }
 
-    /** Quien lo creo, o null. */
+    /** Who created it, or null. */
     public ImageWriterSpi getOriginatingProvider() {
         return this.originatingProvider;
     }
 
     /**
-     * A donde escribir.
+     * Where to write.
      *
-     * @param output tipicamente un {@link ImageOutputStream}; null lo desconecta
-     * @throws IllegalArgumentException si ese tipo de salida no se soporta
+     * @param output typically an {@link ImageOutputStream}; null disconnects it
+     * @throws IllegalArgumentException if that type of output is not supported
      */
     public void setOutput(Object output) {
         if (output != null) {
@@ -124,12 +125,12 @@ public abstract class ImageWriter implements ImageTranscoder {
         this.output = output;
     }
 
-    /** A donde escribe, o null. */
+    /** Where it writes to, or null. */
     public Object getOutput() {
         return this.output;
     }
 
-    /** En que idiomas sabe dar sus mensajes; una copia, o null. */
+    /** Which locales it can give its messages in; a copy, or null. */
     public Locale[] getAvailableLocales() {
         if (this.availableLocales == null) {
             return null;
@@ -140,9 +141,9 @@ public abstract class ImageWriter implements ImageTranscoder {
     }
 
     /**
-     * En cual darlos; null vuelve al del sistema.
+     * Which one to give them in; null goes back to the system's.
      *
-     * @throws IllegalArgumentException si no es uno de los disponibles
+     * @throws IllegalArgumentException if it is not one of the available ones
      */
     public void setLocale(Locale locale) {
         if (locale != null) {
@@ -164,40 +165,40 @@ public abstract class ImageWriter implements ImageTranscoder {
         this.locale = locale;
     }
 
-    /** En cual los da, o null. */
+    /** Which one it gives them in, or null. */
     public Locale getLocale() {
         return this.locale;
     }
 
     /**
-     * Un objeto de parametros vacio, del tipo que este escritor entiende.
+     * An empty parameter object, of the type this writer understands.
      *
-     * <p>Una subclase con parametros propios lo redefine.
+     * <p>A subclass with parameters of its own redefines it.
      */
     public ImageWriteParam getDefaultWriteParam() {
         return new ImageWriteParam(getLocale());
     }
 
-    /** Los metadatos de flujo por omision para esos parametros, o null si no lleva. */
+    /** The default stream metadata for those parameters, or null if it carries none. */
     public abstract IIOMetadata getDefaultStreamMetadata(ImageWriteParam param);
 
-    /** Los de una imagen de ese tipo. */
+    /** Those of an image of that type. */
     public abstract IIOMetadata getDefaultImageMetadata(ImageTypeSpecifier imageType,
                                                         ImageWriteParam param);
 
-    /** Traduce metadatos de flujo de otro formato. Ver la nota de la clase. */
+    /** Translates stream metadata from another format. See the class note. */
     public abstract IIOMetadata convertStreamMetadata(IIOMetadata inData, ImageWriteParam param);
 
-    /** Idem, de una imagen. */
+    /** Same, for an image. */
     public abstract IIOMetadata convertImageMetadata(IIOMetadata inData,
                                                      ImageTypeSpecifier imageType,
                                                      ImageWriteParam param);
 
     /**
-     * Cuantas miniaturas puede incrustar; 0 si ninguna, -1 si no se sabe todavia.
+     * How many thumbnails it can embed; 0 if none, -1 if not known yet.
      *
-     * <p>Los cuatro argumentos existen porque la respuesta puede depender de todo: hay formatos que
-     * solo admiten miniatura en ciertos modos de compresion.
+     * <p>The four arguments exist because the answer may depend on all of them: some formats only
+     * allow a thumbnail in certain compression modes.
      */
     public int getNumThumbnailsSupported(ImageTypeSpecifier imageType, ImageWriteParam param,
                                          IIOMetadata streamMetadata, IIOMetadata imageMetadata) {
@@ -205,9 +206,10 @@ public abstract class ImageWriter implements ImageTranscoder {
     }
 
     /**
-     * Que tamanos de miniatura prefiere, de a pares minimo y maximo; null si no opina.
+     * Which thumbnail sizes it prefers, in min/max pairs; null if it has no opinion.
      *
-     * @throws IllegalArgumentException si se piden miniaturas y no soporta ninguna
+     * <p>This implementation always returns null. (An earlier note documented an
+     * {@code IllegalArgumentException}; nothing here throws it.)
      */
     public Dimension[] getPreferredThumbnailSizes(ImageTypeSpecifier imageType,
                                                   ImageWriteParam param,
@@ -216,81 +218,84 @@ public abstract class ImageWriter implements ImageTranscoder {
         return null;
     }
 
-    /** Si sabe escribir pixeles crudos sin modelo de color. Ver {@link ImageReader#canReadRaster}. */
+    /**
+     * Whether it can write raw pixels without a colour model. See {@link
+     * ImageReader#canReadRaster}.
+     */
     public boolean canWriteRasters() {
         return false;
     }
 
     /**
-     * Escribe una imagen con sus metadatos.
+     * Writes an image with its metadata.
      *
-     * <p>Es el metodo que hace el trabajo, y el unico que una subclase <b>tiene</b> que escribir para
-     * codificar.
+     * <p>It is the method that does the work, and the only one a subclass <b>has</b> to write to
+     * encode.
      *
-     * @throws IllegalStateException si no hay salida
-     * @throws UnsupportedOperationException si la imagen trae un raster y no sabe escribirlos
-     * @throws IOException si fallo la escritura
+     * @throws IllegalStateException if there is no output
+     * @throws UnsupportedOperationException if the image carries a raster and it cannot write them
+     * @throws IOException if writing failed
      */
     public abstract void write(IIOMetadata streamMetadata, IIOImage image, ImageWriteParam param)
         throws IOException;
 
     /**
-     * Idem, sin metadatos de flujo ni parametros.
+     * Same, without stream metadata or parameters.
      *
-     * @throws IOException si fallo la escritura
+     * @throws IOException if writing failed
      */
     public void write(IIOImage image) throws IOException {
         write(null, image, null);
     }
 
     /**
-     * Idem, desde una imagen pelada.
+     * Same, from a bare image.
      *
-     * @throws IOException si fallo la escritura
+     * @throws IOException if writing failed
      */
     public void write(RenderedImage image) throws IOException {
         write(null, new IIOImage(image, null, null), null);
     }
 
-    /** Si sabe escribir varias imagenes en secuencia. Ver la nota de la clase. */
+    /** Whether it can write several images in sequence. See the class note. */
     public boolean canWriteSequence() {
         return false;
     }
 
     /**
-     * Abre una secuencia.
+     * Opens a sequence.
      *
-     * @throws UnsupportedOperationException si no sabe
-     * @throws IOException si fallo la escritura
+     * @throws UnsupportedOperationException if it cannot
+     * @throws IOException if writing failed
      */
     public void prepareWriteSequence(IIOMetadata streamMetadata) throws IOException {
         throw new UnsupportedOperationException("Unsupported write variant!");
     }
 
     /**
-     * Agrega una imagen a la secuencia abierta.
+     * Adds an image to the open sequence.
      *
-     * @throws IllegalStateException si no hay secuencia abierta
-     * @throws IOException si fallo la escritura
+     * @throws IllegalStateException if there is no open sequence
+     * @throws IOException if writing failed
      */
     public void writeToSequence(IIOImage image, ImageWriteParam param) throws IOException {
         throw new UnsupportedOperationException("Unsupported write variant!");
     }
 
     /**
-     * La cierra.
+     * Closes it.
      *
-     * @throws IllegalStateException si no hay secuencia abierta
-     * @throws IOException si fallo la escritura
+     * @throws IllegalStateException if there is no open sequence
+     * @throws IOException if writing failed
      */
     public void endWriteSequence() throws IOException {
         throw new UnsupportedOperationException("Unsupported write variant!");
     }
 
     /**
-     * Si sabe reemplazar los metadatos de flujo de un archivo ya escrito.
+     * Whether it can replace the stream metadata of an already written file.
      *
-     * @throws IOException si fallo la lectura de la salida
+     * @throws IOException if reading the output failed
      */
     public boolean canReplaceStreamMetadata() throws IOException {
         if (getOutput() == null) {
@@ -300,19 +305,19 @@ public abstract class ImageWriter implements ImageTranscoder {
     }
 
     /**
-     * Los reemplaza.
+     * Replaces it.
      *
-     * @throws UnsupportedOperationException si no sabe
-     * @throws IOException si fallo la escritura
+     * @throws UnsupportedOperationException if it cannot
+     * @throws IOException if writing failed
      */
     public void replaceStreamMetadata(IIOMetadata streamMetadata) throws IOException {
         throw new UnsupportedOperationException("Unsupported write variant!");
     }
 
     /**
-     * Si sabe reemplazar los metadatos de esa imagen.
+     * Whether it can replace that image's metadata.
      *
-     * @throws IOException si fallo la lectura de la salida
+     * @throws IOException if reading the output failed
      */
     public boolean canReplaceImageMetadata(int imageIndex) throws IOException {
         if (getOutput() == null) {
@@ -322,10 +327,10 @@ public abstract class ImageWriter implements ImageTranscoder {
     }
 
     /**
-     * Los reemplaza.
+     * Replaces it.
      *
-     * @throws UnsupportedOperationException si no sabe
-     * @throws IOException si fallo la escritura
+     * @throws UnsupportedOperationException if it cannot
+     * @throws IOException if writing failed
      */
     public void replaceImageMetadata(int imageIndex, IIOMetadata imageMetadata)
         throws IOException {
@@ -333,10 +338,10 @@ public abstract class ImageWriter implements ImageTranscoder {
     }
 
     /**
-     * Si sabe insertar una imagen en esa posicion. Ver la nota de la clase.
+     * Whether it can insert an image at that position. See the class note.
      *
-     * @param imageIndex donde; -1 significa al final
-     * @throws IOException si fallo la lectura de la salida
+     * @param imageIndex where; -1 means at the end
+     * @throws IOException if reading the output failed
      */
     public boolean canInsertImage(int imageIndex) throws IOException {
         if (getOutput() == null) {
@@ -346,10 +351,10 @@ public abstract class ImageWriter implements ImageTranscoder {
     }
 
     /**
-     * La inserta.
+     * Inserts it.
      *
-     * @throws UnsupportedOperationException si no sabe
-     * @throws IOException si fallo la escritura
+     * @throws UnsupportedOperationException if it cannot
+     * @throws IOException if writing failed
      */
     public void writeInsert(int imageIndex, IIOImage image, ImageWriteParam param)
         throws IOException {
@@ -357,9 +362,9 @@ public abstract class ImageWriter implements ImageTranscoder {
     }
 
     /**
-     * Si sabe borrar una imagen del archivo.
+     * Whether it can remove an image from the file.
      *
-     * @throws IOException si fallo la lectura de la salida
+     * @throws IOException if reading the output failed
      */
     public boolean canRemoveImage(int imageIndex) throws IOException {
         if (getOutput() == null) {
@@ -369,19 +374,19 @@ public abstract class ImageWriter implements ImageTranscoder {
     }
 
     /**
-     * La borra.
+     * Removes it.
      *
-     * @throws UnsupportedOperationException si no sabe
-     * @throws IOException si fallo la escritura
+     * @throws UnsupportedOperationException if it cannot
+     * @throws IOException if writing failed
      */
     public void removeImage(int imageIndex) throws IOException {
         throw new UnsupportedOperationException("Unsupported write variant!");
     }
 
     /**
-     * Si sabe reservar una imagen vacia para llenarla despues. Ver la nota de la clase.
+     * Whether it can reserve an empty image to fill in later. See the class note.
      *
-     * @throws IOException si fallo la lectura de la salida
+     * @throws IOException if reading the output failed
      */
     public boolean canWriteEmpty() throws IOException {
         if (getOutput() == null) {
@@ -391,10 +396,10 @@ public abstract class ImageWriter implements ImageTranscoder {
     }
 
     /**
-     * La reserva.
+     * Reserves it.
      *
-     * @throws UnsupportedOperationException si no sabe
-     * @throws IOException si fallo la escritura
+     * @throws UnsupportedOperationException if it cannot
+     * @throws IOException if writing failed
      */
     public void prepareWriteEmpty(IIOMetadata streamMetadata, ImageTypeSpecifier imageType,
                                   int width, int height, IIOMetadata imageMetadata,
@@ -404,19 +409,19 @@ public abstract class ImageWriter implements ImageTranscoder {
     }
 
     /**
-     * Cierra la imagen vacia.
+     * Closes the empty image.
      *
-     * @throws IllegalStateException si no hay ninguna abierta
-     * @throws IOException si fallo la escritura
+     * @throws IllegalStateException if none is open
+     * @throws IOException if writing failed
      */
     public void endWriteEmpty() throws IOException {
         throw new UnsupportedOperationException("Unsupported write variant!");
     }
 
     /**
-     * Si sabe insertar una imagen vacia en esa posicion.
+     * Whether it can insert an empty image at that position.
      *
-     * @throws IOException si fallo la lectura de la salida
+     * @throws IOException if reading the output failed
      */
     public boolean canInsertEmpty(int imageIndex) throws IOException {
         if (getOutput() == null) {
@@ -426,10 +431,10 @@ public abstract class ImageWriter implements ImageTranscoder {
     }
 
     /**
-     * La inserta.
+     * Inserts it.
      *
-     * @throws UnsupportedOperationException si no sabe
-     * @throws IOException si fallo la escritura
+     * @throws UnsupportedOperationException if it cannot
+     * @throws IOException if writing failed
      */
     public void prepareInsertEmpty(int imageIndex, ImageTypeSpecifier imageType, int width,
                                    int height, IIOMetadata imageMetadata,
@@ -439,19 +444,19 @@ public abstract class ImageWriter implements ImageTranscoder {
     }
 
     /**
-     * La cierra.
+     * Closes it.
      *
-     * @throws IllegalStateException si no hay ninguna abierta
-     * @throws IOException si fallo la escritura
+     * @throws IllegalStateException if none is open
+     * @throws IOException if writing failed
      */
     public void endInsertEmpty() throws IOException {
         throw new UnsupportedOperationException("Unsupported write variant!");
     }
 
     /**
-     * Si sabe reescribir pixeles de una imagen ya escrita.
+     * Whether it can rewrite pixels of an already written image.
      *
-     * @throws IOException si fallo la lectura de la salida
+     * @throws IOException if reading the output failed
      */
     public boolean canReplacePixels(int imageIndex) throws IOException {
         if (getOutput() == null) {
@@ -461,61 +466,61 @@ public abstract class ImageWriter implements ImageTranscoder {
     }
 
     /**
-     * Abre una region para reescribir.
+     * Opens a region for rewriting.
      *
-     * @param region que rectangulo, o null para toda la imagen
-     * @throws UnsupportedOperationException si no sabe
-     * @throws IOException si fallo la escritura
+     * @param region which rectangle, or null for the whole image
+     * @throws UnsupportedOperationException if it cannot
+     * @throws IOException if writing failed
      */
     public void prepareReplacePixels(int imageIndex, Rectangle region) throws IOException {
         throw new UnsupportedOperationException("Unsupported write variant!");
     }
 
     /**
-     * Reescribe esos pixeles.
+     * Rewrites those pixels.
      *
-     * @throws IllegalStateException si no hay region abierta
-     * @throws IOException si fallo la escritura
+     * @throws IllegalStateException if there is no open region
+     * @throws IOException if writing failed
      */
     public void replacePixels(RenderedImage image, ImageWriteParam param) throws IOException {
         throw new UnsupportedOperationException("Unsupported write variant!");
     }
 
     /**
-     * Idem, desde pixeles crudos.
+     * Same, from raw pixels.
      *
-     * @throws IOException si fallo la escritura
+     * @throws IOException if writing failed
      */
     public void replacePixels(Raster raster, ImageWriteParam param) throws IOException {
         throw new UnsupportedOperationException("Unsupported write variant!");
     }
 
     /**
-     * Cierra la region.
+     * Closes the region.
      *
-     * @throws IllegalStateException si no hay ninguna abierta
-     * @throws IOException si fallo la escritura
+     * @throws IllegalStateException if none is open
+     * @throws IOException if writing failed
      */
     public void endReplacePixels() throws IOException {
         throw new UnsupportedOperationException("Unsupported write variant!");
     }
 
-    /** Pide cancelar. Se llama desde otro hilo; ver {@link ImageReader#abort}. */
+    /** Asks to cancel. Called from another thread; see {@link ImageReader#abort}. */
     public synchronized void abort() {
         this.abortFlag = true;
     }
 
-    /** Si alguien pidio cancelar. */
+    /** Whether someone asked to cancel. */
     protected synchronized boolean abortRequested() {
         return this.abortFlag;
     }
 
-    /** Limpia el pedido. La subclase lo llama al empezar cada operacion. */
+    /** Clears the request. The subclass calls it when starting each operation. */
     protected synchronized void clearAbortRequest() {
         this.abortFlag = false;
     }
 
-    /** Registra un escucha de advertencias; null no hace nada. */
+    /** Registers a warning listener; null does nothing. */
     public void addIIOWriteWarningListener(IIOWriteWarningListener listener) {
         if (listener == null) {
             return;
@@ -525,11 +530,11 @@ public abstract class ImageWriter implements ImageTranscoder {
             this.warningLocales = new ArrayList<Locale>();
         }
         this.warningListeners.add(listener);
-        // El idioma se guarda al registrar; ver ImageReader.
+        // The locale is saved at registration; see ImageReader.
         this.warningLocales.add(getLocale());
     }
 
-    /** Lo da de baja. */
+    /** Unregisters it. */
     public void removeIIOWriteWarningListener(IIOWriteWarningListener listener) {
         if (listener == null || this.warningListeners == null) {
             return;
@@ -545,13 +550,13 @@ public abstract class ImageWriter implements ImageTranscoder {
         }
     }
 
-    /** Los da de baja a todos. */
+    /** Unregisters them all. */
     public void removeAllIIOWriteWarningListeners() {
         this.warningListeners = null;
         this.warningLocales = null;
     }
 
-    /** Registra un escucha de avance. */
+    /** Registers a progress listener. */
     public void addIIOWriteProgressListener(IIOWriteProgressListener listener) {
         if (listener == null) {
             return;
@@ -562,7 +567,7 @@ public abstract class ImageWriter implements ImageTranscoder {
         this.progressListeners.add(listener);
     }
 
-    /** Lo da de baja. */
+    /** Unregisters it. */
     public void removeIIOWriteProgressListener(IIOWriteProgressListener listener) {
         if (listener == null || this.progressListeners == null) {
             return;
@@ -573,12 +578,12 @@ public abstract class ImageWriter implements ImageTranscoder {
         }
     }
 
-    /** Los da de baja a todos. */
+    /** Unregisters them all. */
     public void removeAllIIOWriteProgressListeners() {
         this.progressListeners = null;
     }
 
-    /** Avisa que empieza una imagen. */
+    /** Reports that an image begins. */
     protected void processImageStarted(int imageIndex) {
         if (this.progressListeners == null) {
             return;
@@ -590,7 +595,7 @@ public abstract class ImageWriter implements ImageTranscoder {
         }
     }
 
-    /** Avisa del avance. */
+    /** Reports the progress. */
     protected void processImageProgress(float percentageDone) {
         if (this.progressListeners == null) {
             return;
@@ -602,7 +607,7 @@ public abstract class ImageWriter implements ImageTranscoder {
         }
     }
 
-    /** Avisa que termino. */
+    /** Reports that it finished. */
     protected void processImageComplete() {
         if (this.progressListeners == null) {
             return;
@@ -614,7 +619,7 @@ public abstract class ImageWriter implements ImageTranscoder {
         }
     }
 
-    /** Avisa que empieza una miniatura. */
+    /** Reports that a thumbnail begins. */
     protected void processThumbnailStarted(int imageIndex, int thumbnailIndex) {
         if (this.progressListeners == null) {
             return;
@@ -626,7 +631,7 @@ public abstract class ImageWriter implements ImageTranscoder {
         }
     }
 
-    /** Avisa del avance de la miniatura. */
+    /** Reports the thumbnail's progress. */
     protected void processThumbnailProgress(float percentageDone) {
         if (this.progressListeners == null) {
             return;
@@ -638,7 +643,7 @@ public abstract class ImageWriter implements ImageTranscoder {
         }
     }
 
-    /** Avisa que termino. */
+    /** Reports that it finished. */
     protected void processThumbnailComplete() {
         if (this.progressListeners == null) {
             return;
@@ -650,7 +655,10 @@ public abstract class ImageWriter implements ImageTranscoder {
         }
     }
 
-    /** Avisa que se corto. Ver {@link javax.imageio.event.IIOWriteProgressListener#writeAborted}. */
+    /**
+     * Reports that it was cut short. See {@link
+     * javax.imageio.event.IIOWriteProgressListener#writeAborted}.
+     */
     protected void processWriteAborted() {
         if (this.progressListeners == null) {
             return;
@@ -662,7 +670,7 @@ public abstract class ImageWriter implements ImageTranscoder {
         }
     }
 
-    /** Avisa de una advertencia. */
+    /** Reports a warning. */
     protected void processWarningOccurred(int imageIndex, String warning) {
         if (this.warningListeners == null) {
             return;
@@ -678,11 +686,12 @@ public abstract class ImageWriter implements ImageTranscoder {
     }
 
     /**
-     * Idem, con el texto sacado de un paquete de recursos.
+     * Same, with the text taken from a resource bundle.
      *
-     * <p>Cada escucha recibe el mensaje en el idioma con el que se registro; ver {@link ImageReader}.
+     * <p>Each listener gets the message in the locale it was registered with; see
+     * {@link ImageReader}.
      *
-     * @throws IllegalArgumentException si el paquete o la clave son null, o si la clave no esta
+     * @throws IllegalArgumentException if the bundle or the key are null, or if the key is missing
      */
     protected void processWarningOccurred(int imageIndex, String baseName, String keyword) {
         if (this.warningListeners == null) {
@@ -715,7 +724,7 @@ public abstract class ImageWriter implements ImageTranscoder {
         }
     }
 
-    /** Vuelve al estado inicial. Ver {@link ImageReader#reset}. */
+    /** Back to the initial state. See {@link ImageReader#reset}. */
     public void reset() {
         setOutput(null);
         setLocale(null);
@@ -724,7 +733,7 @@ public abstract class ImageWriter implements ImageTranscoder {
         clearAbortRequest();
     }
 
-    /** Libera lo que tenga tomado. Despues de esto no se puede usar mas. */
+    /** Releases whatever it holds. After this it can no longer be used. */
     public void dispose() {
     }
 }

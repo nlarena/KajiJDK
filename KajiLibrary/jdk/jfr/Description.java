@@ -6,10 +6,10 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * La explicacion larga de un evento o de un campo.
+ * The long explanation of an event or of a field.
  *
- * <p>Es lo que {@link Label} no puede decir en dos palabras. Va en el archivo de grabacion, asi que
- * una herramienta puede mostrar la ayuda de un evento que no conocia.
+ * <p>It is what {@link Label} cannot say in two words. It goes in the recording file, so a tool can
+ * show the help of an event it did not know.
  *
  * @since 9
  */
@@ -19,9 +19,9 @@ import java.lang.annotation.Target;
 public @interface Description {
 
     /**
-     * El valor de la anotacion.
+     * The value of the annotation.
      *
-     * @return el valor
+     * @return the value
      */
     String value();
 }

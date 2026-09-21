@@ -3,27 +3,27 @@ package javax.accessibility;
 import javax.swing.text.AttributeSet;
 
 /**
- * Un tramo de texto que comparte los mismos atributos.
+ * A stretch of text that shares the same attributes.
  *
- * <p>Es un registro de tres campos y por eso los tiene **públicos**: agregarle métodos de acceso a
- * algo que se devuelve por decenas al recorrer un documento sería ceremonia sin contenido.
+ * <p>It is a three-field record and that is why it has them **public**: adding accessor methods to
+ * something returned by the dozen when walking a document would be ceremony without content.
  */
 public class AccessibleAttributeSequence {
 
-    /** Dónde empieza el tramo. */
+    /** Where the stretch starts. */
     public int startIndex;
 
-    /** Dónde termina. */
+    /** Where it ends. */
     public int endIndex;
 
-    /** Los atributos que comparte. */
+    /** The attributes it shares. */
     public AttributeSet attributes;
 
-    /** Un tramo vacío. */
+    /** An empty stretch. */
     public AccessibleAttributeSequence() {
     }
 
-    /** Con el tramo y sus atributos. */
+    /** With the stretch and its attributes. */
     public AccessibleAttributeSequence(int start, int end, AttributeSet a) {
         this.startIndex = start;
         this.endIndex = end;

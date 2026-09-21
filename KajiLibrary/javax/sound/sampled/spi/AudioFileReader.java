@@ -9,80 +9,80 @@ import javax.sound.sampled.AudioInputStream;
 import javax.sound.sampled.UnsupportedAudioFileException;
 
 /**
- * KajiLibrary's javax.sound.sampled.spi.AudioFileReader -- lee archivos de audio de un formato.
+ * KajiLibrary's javax.sound.sampled.spi.AudioFileReader -- reads audio files of a format.
  *
- * <p>Lo que implementa quien agrega soporte para leer un formato nuevo. Se registra como servicio y
- * {@code AudioSystem} lo encuentra solo.
+ * <p>What is implemented by whoever adds support for reading a new format. It is registered as a
+ * service and {@code AudioSystem} finds it by itself.
  *
- * <h2>La regla de las marcas</h2>
+ * <h2>The rule of marks</h2>
  *
- * <p>{@code AudioSystem} prueba los lectores <b>de a uno</b> sobre el mismo flujo. Por eso un lector
- * tiene que marcar antes de mirar los bytes y <b>rebobinar</b> si no reconoce el formato: si no, el
- * siguiente lector recibe un flujo ya consumido y ninguno funciona.
+ * <p>{@code AudioSystem} tries the readers <b>one at a time</b> on the same stream. That is why a
+ * reader has to mark before looking at the bytes and <b>rewind</b> if it does not recognize the
+ * format: otherwise the next reader receives an already consumed stream and none works.
  *
- * <p>No reconocer un formato se avisa con {@link UnsupportedAudioFileException}, que
- * {@code AudioSystem} ataja para seguir con el proximo. Devolver null no esta permitido.
+ * <p>Not recognizing a format is signalled with {@link UnsupportedAudioFileException}, which
+ * {@code AudioSystem} catches to go on with the next one. Returning null is not allowed.
  *
- * <p>Las seis operaciones son tres por dos: formato o flujo, desde archivo, direccion o flujo.
+ * <p>The six operations are three times two: format or stream, from a file, a URL or a stream.
  */
 public abstract class AudioFileReader {
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected AudioFileReader() {
     }
 
     /**
-     * Que hay en ese flujo.
+     * What there is in that stream.
      *
-     * <p>Tiene que dejarlo como lo encontro; ver la nota de la clase.
+     * <p>It has to leave it as it found it; see the class note.
      *
-     * @throws UnsupportedAudioFileException si este lector no reconoce el formato
-     * @throws IOException si no se pudo leer
+     * @throws UnsupportedAudioFileException if this reader does not recognize the format
+     * @throws IOException if it could not be read
      */
     public abstract AudioFileFormat getAudioFileFormat(InputStream stream)
         throws UnsupportedAudioFileException, IOException;
 
     /**
-     * Idem, desde una direccion.
+     * Likewise, from a URL.
      *
-     * @throws UnsupportedAudioFileException si este lector no reconoce el formato
-     * @throws IOException si no se pudo leer
+     * @throws UnsupportedAudioFileException if this reader does not recognize the format
+     * @throws IOException if it could not be read
      */
     public abstract AudioFileFormat getAudioFileFormat(URL url)
         throws UnsupportedAudioFileException, IOException;
 
     /**
-     * Idem, desde un archivo.
+     * Likewise, from a file.
      *
-     * @throws UnsupportedAudioFileException si este lector no reconoce el formato
-     * @throws IOException si no se pudo leer
+     * @throws UnsupportedAudioFileException if this reader does not recognize the format
+     * @throws IOException if it could not be read
      */
     public abstract AudioFileFormat getAudioFileFormat(File file)
         throws UnsupportedAudioFileException, IOException;
 
     /**
-     * Un flujo de audio desde ese flujo de bytes.
+     * An audio stream from that byte stream.
      *
-     * @throws UnsupportedAudioFileException si este lector no reconoce el formato
-     * @throws IOException si no se pudo leer
+     * @throws UnsupportedAudioFileException if this reader does not recognize the format
+     * @throws IOException if it could not be read
      */
     public abstract AudioInputStream getAudioInputStream(InputStream stream)
         throws UnsupportedAudioFileException, IOException;
 
     /**
-     * Idem, desde una direccion.
+     * Likewise, from a URL.
      *
-     * @throws UnsupportedAudioFileException si este lector no reconoce el formato
-     * @throws IOException si no se pudo leer
+     * @throws UnsupportedAudioFileException if this reader does not recognize the format
+     * @throws IOException if it could not be read
      */
     public abstract AudioInputStream getAudioInputStream(URL url)
         throws UnsupportedAudioFileException, IOException;
 
     /**
-     * Idem, desde un archivo.
+     * Likewise, from a file.
      *
-     * @throws UnsupportedAudioFileException si este lector no reconoce el formato
-     * @throws IOException si no se pudo leer
+     * @throws UnsupportedAudioFileException if this reader does not recognize the format
+     * @throws IOException if it could not be read
      */
     public abstract AudioInputStream getAudioInputStream(File file)
         throws UnsupportedAudioFileException, IOException;

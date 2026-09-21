@@ -5,51 +5,52 @@ import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.events.XMLEvent;
 
 /**
- * KajiLibrary's javax.xml.stream.util.EventReaderDelegate -- un lector de eventos que reenvia todo a
- * otro.
+ * KajiLibrary's javax.xml.stream.util.EventReaderDelegate -- an event reader that forwards
+ * everything to another.
  *
- * <p>El equivalente de {@link StreamReaderDelegate} para el otro modelo, y por el mismo motivo: la
- * subclase redefine el metodo que le importa y hereda los demas. Aca son siete en vez de cuarenta,
- * asi que el ahorro es menor, pero la simetria entre los dos modelos vale por si sola.
+ * <p>The equivalent of {@link StreamReaderDelegate} for the other model, and for the same reason:
+ * the subclass overrides the method it cares about and inherits the rest. Here there are seven
+ * instead of forty, so the saving is smaller, but the symmetry between the two models is worth it
+ * on its own.
  *
- * <p>Como el original, sin lector puesto cualquier llamada revienta con
- * {@link NullPointerException}; ver el encabezado de {@link StreamReaderDelegate}.
+ * <p>As in the original, without a reader set any call blows up with {@link NullPointerException};
+ * see the header of {@link StreamReaderDelegate}.
  */
 public class EventReaderDelegate implements XMLEventReader {
 
-    /** A quien se le reenvia todo. */
+    /** Whom everything is forwarded to. */
     private XMLEventReader reader;
 
     /**
-     * Un decorador sin lector todavia.
+     * A decorator without a reader yet.
      *
-     * <p>Hay que llamar a {@link #setParent} antes de usarlo.
+     * <p>{@link #setParent} has to be called before using it.
      */
     public EventReaderDelegate() {
     }
 
     /**
-     * Un decorador sobre el lector dado.
+     * A decorator over the given reader.
      *
-     * @param reader el lector de abajo
+     * @param reader the underlying reader
      */
     public EventReaderDelegate(XMLEventReader reader) {
         this.reader = reader;
     }
 
     /**
-     * Cambia el lector de abajo.
+     * Changes the underlying reader.
      *
-     * @param reader el lector nuevo
+     * @param reader the new reader
      */
     public void setParent(XMLEventReader reader) {
         this.reader = reader;
     }
 
     /**
-     * El lector de abajo.
+     * The underlying reader.
      *
-     * @return el lector, o null si todavia no se puso
+     * @return the reader, or null if it has not been set yet
      */
     public XMLEventReader getParent() {
         return reader;

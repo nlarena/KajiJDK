@@ -1,33 +1,33 @@
 package java.sql;
 
 /**
- * KajiLibrary's java.sql.DatabaseMetaData -- todo lo que se puede preguntar **sobre** una base.
+ * KajiLibrary's java.sql.DatabaseMetaData -- everything that can be asked **about** a database.
  *
- * <p>Es la interfaz mas grande de JDBC, y el tamano tiene una explicacion: es el precio de que el
- * resto de la API sea chica. SQL esta estandarizado en el papel y no en la practica, asi que una
- * herramienta que quiera funcionar contra cualquier base necesita poder preguntar cada diferencia
- * --si soporta transacciones, cuanto mide un nombre de tabla, con que caracter se citan los
- * identificadores-- en vez de suponerla. Cada pregunta que no estuviera aca seria una suposicion
- * cableada en el llamador.
+ * <p>It is JDBC's largest interface, and the size has an explanation: it is the price of the rest
+ * of the API being small. SQL is standardized on paper and not in practice, so a tool that wants to
+ * work against any database needs to be able to ask about each difference --whether it supports
+ * transactions, how long a table name can be, which character quotes identifiers-- instead of
+ * assuming it. Every question not here would be an assumption wired into the caller.
  *
- * <p>Se lee en tres partes. Los `supports*` y los `get*` de limites describen **capacidades**; los
- * que devuelven un {@link ResultSet} --`getTables`, `getColumns`, `getIndexInfo`-- describen el
- * **catalogo**, y cada uno tiene un formato de columnas fijado por el estandar; y unos pocos, como
- * {@link #getConnection}, apuntan de vuelta al objeto del que salieron.
+ * <p>It reads in three parts. The `supports*` and the limit `get*`s describe **capabilities**; the
+ * ones that return a {@link ResultSet} --`getTables`, `getColumns`, `getIndexInfo`-- describe the
+ * **catalogue**, and each has a column layout fixed by the standard; and a few, like
+ * {@link #getConnection}, point back to the object they came from.
  *
- * <p>Casi todas las preguntas admiten patrones con `%` y `_`, y ahi hay una trampa que vale conocer:
- * un `null` significa "no filtres por esto", que no es lo mismo que el patron `"%"` cuando el valor
- * de la columna puede ser nulo.
+ * <p>Almost all questions accept patterns with `%` and `_`, and there is a trap worth knowing: a
+ * `null` means "do not filter by this", which is not the same as the pattern `"%"` when the
+ * column's value can be null.
  */
 public interface DatabaseMetaData extends Wrapper {
 
-    // ---- las constantes ------------------------------------------------------------------------------
+    // ---- the constants --------------------------------------------------------------------------
     //
-    // Son los codigos que aparecen **dentro** de los conjuntos que devuelven los `get*`: la columna
-    // `NULLABLE` de `getColumns` trae un `columnNullable`, la de `getProcedureColumns` un
-    // `procedureNullable`. Que haya tres familias casi iguales --`column*`, `procedure*`,
-    // `function*`, `attribute*`-- es historia acumulada: cada una llego con su parte del estandar y
-    // ninguna se pudo unificar despues sin romper a alguien.
+    // They are the codes that appear **inside** the result sets the `get*`s return: the `NULLABLE`
+    // column of `getColumns` holds a `columnNullable`, that of `getProcedureColumns` a
+    // `procedureNullable`. That there are four almost identical families --`column*`, `procedure*`,
+    // `function*`, `attribute*`-- is accumulated history: each arrived with its part of the
+    // standard and none could be unified later without breaking someone. (This comment said three
+    // while listing four.)
 
     int procedureColumnUnknown = 0;
 
@@ -300,7 +300,7 @@ public interface DatabaseMetaData extends Wrapper {
     boolean supportsPositionedUpdate() throws java.sql.SQLException;
 
     default boolean supportsRefCursors() throws java.sql.SQLException {
-        throw new java.sql.SQLFeatureNotSupportedException("supportsRefCursors no esta implementado");
+        throw new java.sql.SQLFeatureNotSupportedException("supportsRefCursors not implemented");
     }
 
     boolean supportsResultSetConcurrency(int type, int concurrency) throws java.sql.SQLException;
@@ -324,7 +324,7 @@ public interface DatabaseMetaData extends Wrapper {
     boolean supportsSelectForUpdate() throws java.sql.SQLException;
 
     default boolean supportsSharding() throws java.sql.SQLException {
-        throw new java.sql.SQLFeatureNotSupportedException("supportsSharding no esta implementado");
+        throw new java.sql.SQLFeatureNotSupportedException("supportsSharding not implemented");
     }
 
     boolean supportsStatementPooling() throws java.sql.SQLException;
@@ -508,6 +508,6 @@ public interface DatabaseMetaData extends Wrapper {
     java.sql.RowIdLifetime getRowIdLifetime() throws java.sql.SQLException;
 
     default long getMaxLogicalLobSize() throws java.sql.SQLException {
-        throw new java.sql.SQLFeatureNotSupportedException("getMaxLogicalLobSize no esta implementado");
+        throw new java.sql.SQLFeatureNotSupportedException("getMaxLogicalLobSize not implemented");
     }
 }

@@ -3,33 +3,33 @@ package javax.security.auth.callback;
 import java.io.IOException;
 
 /**
- * KajiLibrary's javax.security.auth.callback.CallbackHandler -- quien contesta las peticiones.
+ * KajiLibrary's javax.security.auth.callback.CallbackHandler -- whoever answers the requests.
  *
- * <p>Lo escribe la <b>aplicacion</b>, no el modulo de login: es la mitad que sabe si hay una
- * terminal, una ventana o un archivo de configuracion. Ver {@link Callback} para por que la division
- * esta donde esta.
+ * <p>The <b>application</b> writes it, not the login module: it is the half that knows whether
+ * there is a terminal, a window or a configuration file. See {@link Callback} for why the division
+ * is where it is.
  *
- * <h2>Las dos formas de decir que no</h2>
+ * <h2>The two ways of saying no</h2>
  *
- * <p>El unico metodo declara dos excepciones y la diferencia entre ellas decide que hace el modulo
- * que lo llamo:
+ * <p>The only method declares two exceptions and the difference between them decides what the
+ * module that called it does:
  *
  * <ul>
- *   <li>{@link UnsupportedCallbackException} -- "no se contestar <b>este</b> callback". El modulo
- *       puede probar con otro, o seguir sin ese dato.
- *   <li>{@link IOException} -- el medio fallo. No hay nada que reintentar.
+ *   <li>{@link UnsupportedCallbackException} -- "I do not know how to answer <b>this</b> callback".
+ *       The module may try another one, or go on without that datum.
+ *   <li>{@link IOException} -- the medium failed. There is nothing to retry.
  * </ul>
  */
 public interface CallbackHandler {
 
     /**
-     * Contesta cada callback del arreglo, escribiendo la respuesta <b>en el propio callback</b>.
+     * Answers each callback of the array, writing the answer <b>into the callback itself</b>.
      *
-     * <p>No devuelve nada: cada uno tiene su propio setter, y es ahi donde el que pregunto va a
-     * mirar.
+     * <p>It returns nothing: each one has its own setter, and that is where whoever asked is going
+     * to look.
      *
-     * @throws IOException si el medio de entrada o salida fallo
-     * @throws UnsupportedCallbackException si alguno de los callbacks no se sabe contestar
+     * @throws IOException if the input or output medium failed
+     * @throws UnsupportedCallbackException if one of the callbacks cannot be answered
      */
     void handle(Callback[] callbacks) throws IOException, UnsupportedCallbackException;
 }

@@ -4,31 +4,32 @@ import javax.xml.transform.Result;
 import org.w3c.dom.Node;
 
 /**
- * KajiLibrary's javax.xml.transform.dom.DOMResult -- un arbol DOM como destino de una transformacion.
+ * KajiLibrary's javax.xml.transform.dom.DOMResult -- a DOM tree as the destination of a
+ * transformation.
  *
- * <p>Se puede usar de dos formas. Sin nodo, el transformador crea un documento nuevo y lo deja en
- * {@link #getNode}. Con nodo, la salida se <b>agrega</b> a ese nodo, que es lo que permite armar un
- * documento a pedazos con varias transformaciones.
+ * <p>It can be used in two ways. Without a node, the transformer creates a new document and leaves
+ * it in {@link #getNode}. With a node, the output is <b>appended</b> to that node, which is what
+ * allows building a document piece by piece with several transformations.
  *
- * <h2>Donde se inserta</h2>
+ * <h2>Where it is inserted</h2>
  *
- * <p>{@link #setNextSibling} decide el lugar exacto: sin el, la salida va al final de los hijos; con
- * el, justo antes de ese hermano. Es la unica forma de insertar en el medio, porque el
- * transformador no sabe nada del documento salvo lo que dice este objeto.
+ * <p>{@link #setNextSibling} decides the exact place: without it, the output goes at the end of the
+ * children; with it, right before that sibling. It is the only way of inserting in the middle,
+ * because the transformer knows nothing of the document except what this object says.
  *
- * <p>De ahi sale la validacion que sorprende: el hermano tiene que ser <b>hijo del nodo</b>, y si no
- * lo es, se rechaza. Tiene que ser asi -- un hermano que vive en otra parte del arbol describiria un
- * lugar que no existe dentro del nodo destino--, y la validacion pasa al construir en vez de al
- * transformar, que es cuando ya seria tarde para arreglarlo.
+ * <p>From there comes the validation that surprises: the sibling has to be a <b>child of the
+ * node</b>, and if it is not, it is rejected. It has to be so -- a sibling living elsewhere in the
+ * tree would describe a place that does not exist within the target node--, and the validation
+ * happens when building instead of when transforming, which is when it would be too late to fix it.
  *
- * <p>Las dos vias contestan con excepciones distintas y no es un descuido: en el constructor es
- * {@link IllegalArgumentException} porque son argumentos incoherentes entre si, y en
- * {@link #setNextSibling} es {@link IllegalStateException} porque el argumento se contradice con el
- * nodo que el objeto <b>ya tenia</b>.
+ * <p>The two routes answer with different exceptions and it is not an oversight: in the constructor
+ * it is {@link IllegalArgumentException} because they are arguments inconsistent with each other,
+ * and in {@link #setNextSibling} it is {@link IllegalStateException} because the argument
+ * contradicts the node the object <b>already had</b>.
  */
 public class DOMResult implements Result {
 
-    /** Con esto se le pregunta a un {@code TransformerFactory} si acepta este destino. */
+    /** With this a {@code TransformerFactory} is asked whether it accepts this destination. */
     public static final String FEATURE = "http://javax.xml.transform.dom.DOMResult/feature";
 
     private Node node;
@@ -37,21 +38,21 @@ public class DOMResult implements Result {
 
     private String systemId;
 
-    /** Vacio: el transformador crea el documento. */
+    /** Empty: the transformer creates the document. */
     public DOMResult() {
         setNode(null);
         setNextSibling(null);
         setSystemId(null);
     }
 
-    /** La salida se agrega al final de los hijos de ese nodo. */
+    /** The output is appended at the end of that node's children. */
     public DOMResult(Node node) {
         setNode(node);
         setNextSibling(null);
         setSystemId(null);
     }
 
-    /** Idem, diciendo de donde sale el resultado. */
+    /** Likewise, saying where the result comes from. */
     public DOMResult(Node node, String systemId) {
         setNode(node);
         setNextSibling(null);
@@ -59,9 +60,10 @@ public class DOMResult implements Result {
     }
 
     /**
-     * La salida se inserta antes de ese hermano.
+     * The output is inserted before that sibling.
      *
-     * @throws IllegalArgumentException si el hermano no es hijo del nodo; ver la nota de la clase
+     * @throws IllegalArgumentException if the sibling is not a child of the node; see the class
+     *     note
      */
     public DOMResult(Node node, Node nextSibling) {
         if (nextSibling != null) {
@@ -81,16 +83,16 @@ public class DOMResult implements Result {
     }
 
     /**
-     * Las dos cosas.
+     * Both things.
      *
-     * @throws IllegalArgumentException si el hermano no es hijo del nodo
+     * @throws IllegalArgumentException if the sibling is not a child of the node
      */
     public DOMResult(Node node, Node nextSibling, String systemId) {
         this(node, nextSibling);
         setSystemId(systemId);
     }
 
-    /** El nodo al que se le agrega la salida; null para que el transformador cree uno. */
+    /** The node the output is appended to; null for the transformer to create one. */
     public void setNode(Node node) {
         this.node = node;
     }
@@ -101,9 +103,9 @@ public class DOMResult implements Result {
     }
 
     /**
-     * Antes de que hermano se inserta la salida; null para agregar al final.
+     * Before which sibling the output is inserted; null to append at the end.
      *
-     * @throws IllegalStateException si no es hijo del nodo que ya tiene este objeto
+     * @throws IllegalStateException if it is not a child of the node this object already has
      */
     public void setNextSibling(Node nextSibling) {
         if (nextSibling != null) {
@@ -125,7 +127,7 @@ public class DOMResult implements Result {
         return this.nextSibling;
     }
 
-    /** De donde sale el resultado; informativo, no se escribe nada ahi. */
+    /** Where the result comes from; informative, nothing is written there. */
     public void setSystemId(String systemId) {
         this.systemId = systemId;
     }

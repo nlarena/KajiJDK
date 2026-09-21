@@ -1,25 +1,26 @@
 package java.awt;
 
 /**
- * Algo que puede contener elementos de menú.
+ * Something that can contain menu elements.
  *
- * <p>Lo implementan {@link Menu}, {@link MenuBar} y {@link Frame} — los tres lugares donde un menú
- * puede colgar. Que la interfaz sea tan chica no es pobreza: es todo lo que un hijo necesita saber
- * de su contenedor, y mantenerla así permite que un marco y un menú, que no se parecen en nada más,
- * sirvan igual de padres.
+ * <p>{@link Menu}, {@link MenuBar} and {@link Frame} implement it — the places a menu can hang from
+ * — and so does every {@link Component}. (This note said those three were the only ones.) That the
+ * interface is so small is not poverty: it is all a child needs to know about its container, and
+ * keeping it so lets a frame and a menu, which resemble each other in nothing else, serve alike as
+ * parents.
  */
 public interface MenuContainer {
 
-    /** La fuente con la que se dibujan los hijos. */
+    /** The font the children are drawn with. */
     Font getFont();
 
-    /** Saca ese hijo. */
+    /** Takes that child out. */
     void remove(MenuComponent comp);
 
     /**
-     * Le manda un evento del modelo viejo.
+     * Sends it an event of the old model.
      *
-     * @deprecated es del modelo de eventos de 1.0. Se mantiene porque está en la interfaz.
+     * @deprecated it is from the 1.0 event model. It stays because it is in the interface.
      */
     @Deprecated
     boolean postEvent(Event e);

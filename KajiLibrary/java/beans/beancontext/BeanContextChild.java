@@ -5,39 +5,39 @@ import java.beans.PropertyVetoException;
 import java.beans.VetoableChangeListener;
 
 /**
- * Un bean que sabe en qué contexto vive.
+ * A bean that knows which context it lives in.
  *
- * <p>La otra mitad de {@link BeanContext}: el contenedor guarda a sus hijos y el hijo guarda a su
- * contenedor. Que la relación sea de dos vías no es redundancia — es lo que le permite a un hijo
- * pedirle servicios y recursos a su entorno sin que nadie se los pase por parámetro.
+ * <p>The other half of {@link BeanContext}: the container keeps its children and the child keeps
+ * its container. The two-way relation is not redundancy — it is what lets a child ask its
+ * environment for services and resources without anyone passing them in as parameters.
  *
- * <p><strong>Un hijo puede rechazar el cambio de contexto</strong>, y ése es el motivo de que
- * {@code setBeanContext} declare {@link PropertyVetoException}: el hijo registra oyentes de veto
- * sobre la propiedad `"beanContext"` y, si alguno se opone, la mudanza no ocurre. Es la única
- * propiedad de esta API que se define vetable, y por eso las dos familias de oyentes —cambio y
- * veto— están las dos acá.
+ * <p><strong>A child can refuse a change of context</strong>, and that is why
+ * {@code setBeanContext} declares {@link PropertyVetoException}: the child registers veto listeners
+ * on the `"beanContext"` property and, if any objects, the move does not happen. That is why both
+ * listener families —change and veto— are here. This note called it the only property of this API
+ * defined as vetoable; {@link BeanContextSupport#setLocale} asks for vetoes on `"locale"` too.
  */
 public interface BeanContextChild {
 
     /**
-     * Muda este hijo a ese contexto.
+     * Moves this child to that context.
      *
-     * @throws PropertyVetoException si un oyente de veto se opone; el contexto no cambia
+     * @throws PropertyVetoException if a veto listener objects; the context does not change
      */
     void setBeanContext(BeanContext bc) throws PropertyVetoException;
 
-    /** El contexto en el que vive, o `null` si todavía no está en ninguno. */
+    /** The context it lives in, or `null` if it is not in one yet. */
     BeanContext getBeanContext();
 
-    /** Registra un oyente para los cambios de esa propiedad. */
+    /** Registers a listener for changes to that property. */
     void addPropertyChangeListener(String name, PropertyChangeListener pcl);
 
-    /** Lo quita. */
+    /** Removes it. */
     void removePropertyChangeListener(String name, PropertyChangeListener pcl);
 
-    /** Registra un oyente que puede **vetar** los cambios de esa propiedad. */
+    /** Registers a listener that can **veto** changes to that property. */
     void addVetoableChangeListener(String name, VetoableChangeListener vcl);
 
-    /** Lo quita. */
+    /** Removes it. */
     void removeVetoableChangeListener(String name, VetoableChangeListener vcl);
 }

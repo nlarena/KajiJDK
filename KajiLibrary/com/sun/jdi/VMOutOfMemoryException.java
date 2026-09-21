@@ -1,21 +1,21 @@
 package com.sun.jdi;
 
 /**
- * VMOutOfMemoryException de la maquina depurada.
+ * VMOutOfMemoryException of the debugged machine.
  *
  * @since 1.3
  */
 public class VMOutOfMemoryException extends RuntimeException {
 
-    /** Sin detalle. */
+    /** With no detail. */
     public VMOutOfMemoryException() {
         super();
     }
 
     /**
-     * Con un mensaje.
+     * With a message.
      *
-     * @param s el mensaje
+     * @param s the message
      */
     public VMOutOfMemoryException(String s) {
         super(s);

@@ -1,53 +1,53 @@
 package java.awt.image;
 
 /**
- * El modelo donde **cada banda es un número entero del buffer**, sin empaquetar.
+ * The model where **each band is one whole number of the buffer**, unpacked.
  *
- * <p>Es el más general de los cinco y el que cubre casi todo lo que no es un píxel empaquetado. Su
- * idea completa cabe en una fórmula: el elemento de la banda `b` del píxel `(x,y)` está en
+ * <p>It is the most general of the five and the one that covers almost everything that is not a
+ * packed pixel. Its whole idea fits in one formula: the element of band `b` of pixel `(x,y)` is at
  *
  * <pre>y * scanlineStride + x * pixelStride + bandOffsets[b]</pre>
  *
- * <p>dentro del banco `bankIndices[b]`. Los cuatro parámetros de esa cuenta son lo que hace que la
- * misma clase describa formatos muy distintos:
+ * <p>inside bank `bankIndices[b]`. The four parameters of that sum are what makes the same class
+ * describe very different formats:
  *
  * <ul>
- * <li><b>Intercalado</b> (RGBRGBRGB…): un banco, `pixelStride` 3, `bandOffsets` {0,1,2}.</li>
- * <li><b>Por planos</b> (RRR…GGG…BBB…): tres bancos, `pixelStride` 1, `bandOffsets` {0,0,0}.</li>
- * <li><b>Con relleno de fila</b>: `scanlineStride` mayor que `ancho * pixelStride`, que es lo que
- *     pasa cuando cada fila se alinea a una frontera.</li>
- * <li><b>Un recorte</b>: los mismos datos con `bandOffsets` corridos, sin copiar nada.</li>
- * <li><b>Con las bandas dadas vuelta</b> (BGR): `bandOffsets` {2,1,0}.</li>
+ * <li><b>Interleaved</b> (RGBRGBRGB…): one bank, `pixelStride` 3, `bandOffsets` {0,1,2}.</li>
+ * <li><b>By planes</b> (RRR…GGG…BBB…): three banks, `pixelStride` 1, `bandOffsets` {0,0,0}.</li>
+ * <li><b>With row padding</b>: `scanlineStride` greater than `width * pixelStride`, which is what
+ *     happens when each row is aligned to a boundary.</li>
+ * <li><b>A crop</b>: the same data with `bandOffsets` shifted, copying nothing.</li>
+ * <li><b>With the bands turned round</b> (BGR): `bandOffsets` {2,1,0}.</li>
  * </ul>
  *
- * <p>Que todo eso salga de una sola fórmula es la razón de que esta clase exista, y también la
- * razón de que sus cinco campos protegidos sean parte del contrato: una subclase los necesita para
- * hacer la misma cuenta más rápido.
+ * <p>That all of it comes out of a single formula is the reason this class exists, and also the
+ * reason its five protected fields are part of the contract: a subclass needs them to do the same
+ * sum faster.
  */
 public class ComponentSampleModel extends SampleModel {
 
-    /** Dónde empieza cada banda dentro de su banco. */
+    /** Where each band starts inside its bank. */
     protected int[] bandOffsets;
 
-    /** En qué banco está cada banda. */
+    /** Which bank each band is in. */
     protected int[] bankIndices;
 
-    /** Cuántas bandas hay. */
+    /** How many bands there are. */
     protected int numBands;
 
-    /** Cuántos bancos usa. */
+    /** How many banks it uses. */
     protected int numBanks;
 
-    /** Cuántos elementos hay entre el comienzo de una fila y el de la siguiente. */
+    /** How many elements there are between the start of one row and that of the next. */
     protected int scanlineStride;
 
-    /** Cuántos elementos hay entre un píxel y el de al lado. */
+    /** How many elements there are between one pixel and the one beside it. */
     protected int pixelStride;
 
     /**
-     * Todas las bandas en el banco 0.
+     * Every band in bank 0.
      *
-     * @throws IllegalArgumentException si los pasos son negativos o no hay desplazamientos
+     * @throws IllegalArgumentException if the strides are negative or there are no offsets
      */
     public ComponentSampleModel(int dataType, int w, int h, int pixelStride, int scanlineStride,
             int[] bandOffsets) {
@@ -60,7 +60,7 @@ public class ComponentSampleModel extends SampleModel {
         }
         this.pixelStride = pixelStride;
         this.scanlineStride = scanlineStride;
-        this.bandOffsets = copiar(bandOffsets);
+        this.bandOffsets = copyOf(bandOffsets);
         this.numBands = bandOffsets.length;
         this.numBanks = 1;
         this.bankIndices = new int[this.numBands];
@@ -70,10 +70,10 @@ public class ComponentSampleModel extends SampleModel {
     }
 
     /**
-     * Cada banda en el banco que se indique.
+     * Each band in whichever bank is given.
      *
-     * @throws IllegalArgumentException si los pasos son negativos, o si hay distinta cantidad de
-     *     bancos que de desplazamientos
+     * @throws IllegalArgumentException if the strides are negative, or if there is a different
+     *     number of banks than of offsets
      */
     public ComponentSampleModel(int dataType, int w, int h, int pixelStride, int scanlineStride,
             int[] bankIndices, int[] bandOffsets) {
@@ -90,8 +90,8 @@ public class ComponentSampleModel extends SampleModel {
         }
         this.pixelStride = pixelStride;
         this.scanlineStride = scanlineStride;
-        this.bandOffsets = copiar(bandOffsets);
-        this.bankIndices = copiar(bankIndices);
+        this.bandOffsets = copyOf(bandOffsets);
+        this.bankIndices = copyOf(bankIndices);
         this.numBands = bandOffsets.length;
         int max = 0;
         for (int i = 0; i < bankIndices.length; i++) {
@@ -105,23 +105,26 @@ public class ComponentSampleModel extends SampleModel {
         this.numBanks = max + 1;
     }
 
-    private static int[] copiar(int[] src) {
+    private static int[] copyOf(int[] src) {
         int[] out = new int[src.length];
         System.arraycopy(src, 0, out, 0, src.length);
         return out;
     }
 
-    /** Un modelo igual pero de otro tamaño. El paso de fila se recalcula al ancho nuevo. */
+    /**
+     * A model just like it but of another size. The row stride is worked out again for the new
+     * width.
+     */
     public SampleModel createCompatibleSampleModel(int w, int h) {
-        int[] offsets = copiar(this.bandOffsets);
+        int[] offsets = copyOf(this.bandOffsets);
         return new ComponentSampleModel(this.dataType, w, h, this.pixelStride,
                 this.pixelStride * w, this.bankIndices, offsets);
     }
 
     /**
-     * Un modelo con sólo esas bandas, **sobre los mismos datos**.
+     * A model with only those bands, **over the same data**.
      *
-     * @throws RasterFormatException si alguna banda no existe
+     * @throws RasterFormatException if some band does not exist
      */
     public SampleModel createSubsetSampleModel(int[] bands) {
         int[] indices = new int[bands.length];
@@ -138,13 +141,13 @@ public class ComponentSampleModel extends SampleModel {
     }
 
     /**
-     * Un buffer del tamaño que este modelo necesita.
+     * A buffer of the size this model needs.
      *
-     * <p>El tamaño no es `ancho * alto * bandas`: es lo que ocupa la última fila **más** el
-     * desplazamiento más grande, porque con relleno de fila o con desplazamientos corridos hay
-     * elementos que el modelo nunca toca y que igual tienen que existir.
+     * <p>The size is not `width * height * bands`: it is what the last row takes **plus** the
+     * biggest offset, because with row padding or with shifted offsets there are elements the model
+     * never touches and that have to exist all the same.
      *
-     * @throws IllegalArgumentException si el tipo de datos no es uno de los seis
+     * @throws IllegalArgumentException if the data type is not one of the six
      */
     public DataBuffer createDataBuffer() {
         int max = 0;
@@ -176,17 +179,17 @@ public class ComponentSampleModel extends SampleModel {
         throw new IllegalArgumentException("Unsupported dataType: " + this.dataType);
     }
 
-    /** El desplazamiento de la banda 0 de ese píxel. Ver la fórmula de la clase. */
+    /** The offset of band 0 of that pixel. See the formula of the class. */
     public int getOffset(int x, int y) {
         return y * this.scanlineStride + x * this.pixelStride + this.bandOffsets[0];
     }
 
-    /** El desplazamiento de esa banda de ese píxel. */
+    /** The offset of that band of that pixel. */
     public int getOffset(int x, int y, int b) {
         return y * this.scanlineStride + x * this.pixelStride + this.bandOffsets[b];
     }
 
-    /** Los bits de cada banda: los del tipo del buffer, porque acá nada se empaqueta. */
+    /** The bits of each band: those of the buffer's type, because nothing is packed here. */
     public final int[] getSampleSize() {
         int bits = DataBuffer.getDataTypeSize(this.dataType);
         int[] out = new int[this.numBands];
@@ -196,124 +199,124 @@ public class ComponentSampleModel extends SampleModel {
         return out;
     }
 
-    /** Los bits de esa banda. */
+    /** The bits of that band. */
     public final int getSampleSize(int band) {
         return DataBuffer.getDataTypeSize(this.dataType);
     }
 
-    /** En qué banco está cada banda. */
+    /** Which bank each band is in. */
     public final int[] getBankIndices() {
-        return copiar(this.bankIndices);
+        return copyOf(this.bankIndices);
     }
 
-    /** Dónde empieza cada banda. */
+    /** Where each band starts. */
     public final int[] getBandOffsets() {
-        return copiar(this.bandOffsets);
+        return copyOf(this.bandOffsets);
     }
 
-    /** El paso de fila. */
+    /** The row stride. */
     public final int getScanlineStride() {
         return this.scanlineStride;
     }
 
-    /** El paso de píxel. */
+    /** The pixel stride. */
     public final int getPixelStride() {
         return this.pixelStride;
     }
 
-    /** Un elemento por banda: acá no hay empaquetado. */
+    /** One element per band: there is no packing here. */
     public final int getNumDataElements() {
         return this.numBands;
     }
 
     /**
-     * La representación cruda de un píxel: un elemento por banda, en el tipo del buffer.
+     * The raw representation of a pixel: one element per band, in the buffer's type.
      *
-     * @throws IllegalArgumentException si el tipo de datos no es uno de los seis
+     * @throws IllegalArgumentException if the data type is not one of the six
      */
     public Object getDataElements(int x, int y, Object obj, DataBuffer data) {
-        int tipo = this.getTransferType();
-        if (tipo == DataBuffer.TYPE_BYTE) {
+        int type = this.getTransferType();
+        if (type == DataBuffer.TYPE_BYTE) {
             byte[] out = obj == null ? new byte[this.numBands] : (byte[]) obj;
             for (int i = 0; i < this.numBands; i++) {
                 out[i] = (byte) data.getElem(this.bankIndices[i], this.getOffset(x, y, i));
             }
             return out;
         }
-        if (tipo == DataBuffer.TYPE_USHORT || tipo == DataBuffer.TYPE_SHORT) {
+        if (type == DataBuffer.TYPE_USHORT || type == DataBuffer.TYPE_SHORT) {
             short[] out = obj == null ? new short[this.numBands] : (short[]) obj;
             for (int i = 0; i < this.numBands; i++) {
                 out[i] = (short) data.getElem(this.bankIndices[i], this.getOffset(x, y, i));
             }
             return out;
         }
-        if (tipo == DataBuffer.TYPE_INT) {
+        if (type == DataBuffer.TYPE_INT) {
             int[] out = obj == null ? new int[this.numBands] : (int[]) obj;
             for (int i = 0; i < this.numBands; i++) {
                 out[i] = data.getElem(this.bankIndices[i], this.getOffset(x, y, i));
             }
             return out;
         }
-        if (tipo == DataBuffer.TYPE_FLOAT) {
+        if (type == DataBuffer.TYPE_FLOAT) {
             float[] out = obj == null ? new float[this.numBands] : (float[]) obj;
             for (int i = 0; i < this.numBands; i++) {
                 out[i] = data.getElemFloat(this.bankIndices[i], this.getOffset(x, y, i));
             }
             return out;
         }
-        if (tipo == DataBuffer.TYPE_DOUBLE) {
+        if (type == DataBuffer.TYPE_DOUBLE) {
             double[] out = obj == null ? new double[this.numBands] : (double[]) obj;
             for (int i = 0; i < this.numBands; i++) {
                 out[i] = data.getElemDouble(this.bankIndices[i], this.getOffset(x, y, i));
             }
             return out;
         }
-        throw new IllegalArgumentException("Unsupported type: " + tipo);
+        throw new IllegalArgumentException("Unsupported type: " + type);
     }
 
     /**
-     * Escribe la representación cruda de un píxel.
+     * Writes the raw representation of a pixel.
      *
-     * @throws IllegalArgumentException si el tipo de datos no es uno de los seis
+     * @throws IllegalArgumentException if the data type is not one of the six
      */
     public void setDataElements(int x, int y, Object obj, DataBuffer data) {
-        int tipo = this.getTransferType();
-        if (tipo == DataBuffer.TYPE_BYTE) {
+        int type = this.getTransferType();
+        if (type == DataBuffer.TYPE_BYTE) {
             byte[] src = (byte[]) obj;
             for (int i = 0; i < this.numBands; i++) {
                 data.setElem(this.bankIndices[i], this.getOffset(x, y, i), src[i] & 0xFF);
             }
             return;
         }
-        if (tipo == DataBuffer.TYPE_USHORT || tipo == DataBuffer.TYPE_SHORT) {
+        if (type == DataBuffer.TYPE_USHORT || type == DataBuffer.TYPE_SHORT) {
             short[] src = (short[]) obj;
             for (int i = 0; i < this.numBands; i++) {
                 data.setElem(this.bankIndices[i], this.getOffset(x, y, i), src[i] & 0xFFFF);
             }
             return;
         }
-        if (tipo == DataBuffer.TYPE_INT) {
+        if (type == DataBuffer.TYPE_INT) {
             int[] src = (int[]) obj;
             for (int i = 0; i < this.numBands; i++) {
                 data.setElem(this.bankIndices[i], this.getOffset(x, y, i), src[i]);
             }
             return;
         }
-        if (tipo == DataBuffer.TYPE_FLOAT) {
+        if (type == DataBuffer.TYPE_FLOAT) {
             float[] src = (float[]) obj;
             for (int i = 0; i < this.numBands; i++) {
                 data.setElemFloat(this.bankIndices[i], this.getOffset(x, y, i), src[i]);
             }
             return;
         }
-        if (tipo == DataBuffer.TYPE_DOUBLE) {
+        if (type == DataBuffer.TYPE_DOUBLE) {
             double[] src = (double[]) obj;
             for (int i = 0; i < this.numBands; i++) {
                 data.setElemDouble(this.bankIndices[i], this.getOffset(x, y, i), src[i]);
             }
             return;
         }
-        throw new IllegalArgumentException("Unsupported type: " + tipo);
+        throw new IllegalArgumentException("Unsupported type: " + type);
     }
 
     public int getSample(int x, int y, int b, DataBuffer data) {
@@ -328,7 +331,7 @@ public class ComponentSampleModel extends SampleModel {
         return data.getElemDouble(this.bankIndices[b], this.getOffset(x, y, b));
     }
 
-    /** Escribe todas las bandas de un píxel. */
+    /** Writes every band of a pixel. */
     public void setPixel(int x, int y, int[] iArray, DataBuffer data) {
         for (int i = 0; i < this.numBands; i++) {
             data.setElem(this.bankIndices[i], this.getOffset(x, y, i), iArray[i]);
@@ -348,12 +351,12 @@ public class ComponentSampleModel extends SampleModel {
     }
 
     /**
-     * Igualdad por **todo** lo que define el modelo, la clase incluida.
+     * Equality by **everything** that defines the model, the class included.
      *
-     * <p>La comprobación de clase exacta no es pereza: un {@link BandedSampleModel} y un
-     * `ComponentSampleModel` con los mismos números describen el mismo formato pero se comportan
-     * distinto en `createCompatibleSampleModel`, así que tratarlos como iguales haría que una copia
-     * saliera con otro formato.
+     * <p>The exact-class check is not laziness: a {@link BandedSampleModel} and a
+     * `ComponentSampleModel` with the same numbers describe the same format but behave differently
+     * in `createCompatibleSampleModel`, so treating them as equal would make a copy come out with
+     * another format.
      */
     public boolean equals(Object o) {
         if (o == null || o.getClass() != this.getClass()) {

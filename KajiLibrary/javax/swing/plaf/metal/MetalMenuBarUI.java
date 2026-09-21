@@ -8,15 +8,16 @@ import javax.swing.plaf.ComponentUI;
 import javax.swing.plaf.basic.BasicMenuBarUI;
 
 /**
- * La barra de menu de Metal.
+ * Metal's menu bar.
  *
- * <p>Cambia una sola cosa: como se rellena el fondo. El basico pinta un rectangulo del color de
- * fondo; Metal, si el tema trae un degradado bajo la clave {@code "MenuBar.gradient"}, lo usa. El
- * de Ocean va de blanco a gris {@code 218} y es lo que le da a la barra el aire de estar iluminada
- * desde arriba.
+ * <p>It changes a single thing: how the background is filled. The basic one paints a rectangle
+ * of the background colour; Metal, if the theme brings a gradient under the key
+ * {@code "MenuBar.gradient"}, uses it. Ocean's goes from white to grey {@code 218} and is what
+ * gives the bar the air of being lit from above.
  *
- * <p>Sin degradado en la tabla -- que es lo que pasa sin tabla instalada -- cae al relleno plano
- * del basico, que es exactamente lo que hace el JDK con un tema que no lo defina.
+ * <p>With no gradient in the table -- which is what happens with no table installed -- it falls
+ * back on the basic one's flat fill, which is exactly what the JDK does with a theme that does
+ * not define it.
  */
 public class MetalMenuBarUI extends BasicMenuBarUI {
 

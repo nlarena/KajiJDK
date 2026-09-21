@@ -1,8 +1,8 @@
 package com.sun.source.tree;
 
 /**
- * `a = b`. Es una **expresion**, no una sentencia: en Java una asignacion tiene
- * valor, que es lo que permite `a = b = c`.
+ * `a = b`. It is an **expression**, not a statement: in Java an assignment has a
+ * value, which is what allows `a = b = c`.
  */
 public interface AssignmentTree extends ExpressionTree {
 

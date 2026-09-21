@@ -8,46 +8,49 @@ import java.awt.Insets;
 import java.awt.Rectangle;
 
 /**
- * La base de todos los bordes: implementa los tres metodos de {@link Border} sin dibujar nada.
+ * The base of every border: it implements {@link Border}'s three methods without drawing
+ * anything.
  *
- * <h2>Por que un borde que no hace nada es util</h2>
+ * <h2>Why a border that does nothing is useful</h2>
  *
- * <p>Porque casi ningun borde concreto necesita los tres metodos. Uno que solo reserva espacio
- * ({@link EmptyBorder}) no pinta; uno que solo pinta una linea no necesita reescribir el calculo de
- * la caja interior. Extender esta clase deja escribir unicamente lo que el borde realmente hace.
+ * <p>Because almost no concrete border needs the three methods. One that only reserves space
+ * ({@link EmptyBorder}) does not paint; one that only paints a line does not need to rewrite the
+ * computation of the inner box. Extending this class lets one write only what the border really
+ * does.
  *
- * <p>Los valores por omision son los <em>neutros</em>: no pinta, no ocupa espacio, no es opaco. Los
- * tres son seguros — un borde a medio escribir se ve como si no estuviera, en vez de romper el
- * layout o dejar basura en pantalla.
+ * <p>The default values are the <em>neutral</em> ones: it does not paint, does not take up
+ * space, is not opaque. All three are safe -- a half-written border looks as if it were not
+ * there, instead of breaking the layout or leaving rubbish on the screen.
  *
- * <h2>Las dos formas de {@link #getBorderInsets}</h2>
+ * <h2>The two forms of {@link #getBorderInsets}</h2>
  *
- * <p>La de un argumento crea un {@link Insets} nuevo; la de dos <strong>reusa</strong> el que se le
- * pasa. La segunda existe porque el layout de Swing pregunta los insets muchas veces por segundo y
- * alocar un objeto en cada consulta se nota. Las subclases sobrescriben la de dos, y la de uno la
- * llama con un {@code Insets} fresco: asi hay un solo lugar con la logica.
+ * <p>The one-argument one creates a new {@link Insets}; the two-argument one
+ * <strong>reuses</strong> the one it is given. The second exists because Swing's layout asks for
+ * the insets many times per second and allocating an object on every query shows. Subclasses
+ * override the two-argument one, and the one-argument one calls it with a fresh {@code Insets}:
+ * that way there is a single place with the logic.
  */
 public abstract class AbstractBorder implements Border, java.io.Serializable {
 
     private static final long serialVersionUID = -511181274974418195L;
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected AbstractBorder() {
     }
 
-    /** No dibuja nada. */
+    /** It draws nothing. */
     public void paintBorder(Component c, Graphics g, int x, int y, int width, int height) {
     }
 
-    /** No reserva espacio. */
+    /** It reserves no space. */
     public Insets getBorderInsets(Component c) {
         return getBorderInsets(c, new Insets(0, 0, 0, 0));
     }
 
     /**
-     * No reserva espacio, reusando {@code insets}.
+     * It reserves no space, reusing {@code insets}.
      *
-     * <p>Es la forma que las subclases sobrescriben; ver la nota de la clase.
+     * <p>It is the form subclasses override; see the class note.
      */
     public Insets getBorderInsets(Component c, Insets insets) {
         insets.left = 0;
@@ -57,22 +60,22 @@ public abstract class AbstractBorder implements Border, java.io.Serializable {
         return insets;
     }
 
-    /** No es opaco. */
+    /** It is not opaque. */
     public boolean isBorderOpaque() {
         return false;
     }
 
-    /** El rectangulo que queda adentro del borde, o sea el dado menos los insets. */
+    /** The rectangle left inside the border, that is the given one minus the insets. */
     public Rectangle getInteriorRectangle(Component c, int x, int y, int width, int height) {
         return getInteriorRectangle(c, this, x, y, width, height);
     }
 
     /**
-     * Lo mismo, para un borde cualquiera.
+     * The same, for any border.
      *
-     * <p>Estatica porque {@link CompoundBorder} la necesita sobre su borde <em>externo</em>, que no
-     * es {@code this}. Un borde {@code null} no reserva nada, que es lo que permite escribir
-     * "el borde de este componente, si tiene" sin un {@code if}.
+     * <p>Static because {@link CompoundBorder} needs it over its <em>outer</em> border, which is
+     * not {@code this}. A {@code null} border reserves nothing, which is what allows writing "this
+     * component's border, if it has one" without an {@code if}.
      */
     public static Rectangle getInteriorRectangle(Component c, Border b, int x, int y, int width,
             int height) {
@@ -87,39 +90,40 @@ public abstract class AbstractBorder implements Border, java.io.Serializable {
     }
 
     /**
-     * La linea de base del texto de este borde, o {@code -1} si no tiene.
+     * This border's text baseline, or {@code -1} if it has none.
      *
-     * <p>Existe para que un borde con texto —{@link TitledBorder}— pueda alinearse con el de al
-     * lado. Los demas no tienen nada que alinear.
+     * <p>It exists so that a border with text --{@link TitledBorder}-- can line up with the one
+     * next to it. The rest have nothing to line up.
      *
-     * @throws IllegalArgumentException si {@code width} o {@code height} son negativos
+     * @throws IllegalArgumentException if {@code width} or {@code height} are negative
      */
     public int getBaseline(Component c, int width, int height) {
         if (width < 0 || height < 0) {
-            throw new IllegalArgumentException("El ancho y el alto no pueden ser negativos");
+            throw new IllegalArgumentException("Width and height cannot be negative");
         }
         return -1;
     }
 
     /**
-     * Como se mueve la linea de base cuando el componente cambia de tamano.
+     * How the baseline moves when the component changes size.
      *
-     * <p>El tipo va con el nombre <strong>binario</strong> {@code Component$BaselineResizeBehavior}:
-     * el nombre Java de un tipo anidado de otro archivo no resuelve en nuestro compilador (#101), y
-     * el rodeo por {@code import} emite un descriptor de una clase que no existe (#208).
+     * <p>The type goes with the <strong>binary</strong> name {@code
+     * Component$BaselineResizeBehavior}: the Java name of a nested type from another file does not
+     * resolve in our compiler (#101), and the detour through {@code import} emits a descriptor of a
+     * class that does not exist (#208).
      */
     public Component$BaselineResizeBehavior getBaselineResizeBehavior(Component c) {
         if (c == null) {
-            throw new NullPointerException("El componente no puede ser null");
+            throw new NullPointerException("The component cannot be null");
         }
         return Component$BaselineResizeBehavior.OTHER;
     }
 
     /**
-     * Si {@code c} se lee de izquierda a derecha.
+     * Whether {@code c} reads from left to right.
      *
-     * <p>De paquete y no publica: la usan los bordes que dibujan algo asimetrico —el titulo de un
-     * {@link TitledBorder}— y no es parte del contrato de nadie mas.
+     * <p>Package access and not public: the borders that draw something asymmetric --a
+     * {@link TitledBorder}'s title-- use it, and it is not part of anybody else's contract.
      */
     static boolean isLeftToRight(Component c) {
         ComponentOrientation o = c.getComponentOrientation();

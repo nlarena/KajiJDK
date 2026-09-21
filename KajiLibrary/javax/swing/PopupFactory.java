@@ -3,59 +3,59 @@ package javax.swing;
 import java.awt.Component;
 
 /**
- * Quien arma las ventanitas de los desplegables.
+ * Who builds the little windows of the drop-downs.
  *
- * <h2>Por que hay una fabrica y no un constructor</h2>
+ * <h2>Why there is a factory and not a constructor</h2>
  *
- * <p>Hay dos formas de mostrar un desplegable y la eleccion depende del caso; ver la nota de
- * {@link Popup}. Concentrarla en una fabrica permite ademas dos cosas que un constructor no daria:
- * reusar las ventanitas en lugar de armar una por cada apertura, y que un programa reemplace la
- * fabrica entera para cambiar como se ven todos los desplegables.
+ * <p>There are two ways of showing a drop-down and the choice depends on the case; see
+ * {@link Popup}'s note. Concentrating it in a factory also allows two things a constructor would
+ * not give: reusing the little windows instead of building one for each opening, and a program
+ * replacing the whole factory in order to change how every drop-down looks.
  *
- * <h2>La compartida</h2>
+ * <h2>The shared one</h2>
  *
- * <p>{@link #getSharedInstance} devuelve una sola para todo el programa. Que sea compartida es lo
- * que hace que el reuso sirva: una fabrica por menu no tendria nada que reusar.
+ * <p>{@link #getSharedInstance} returns a single one for the whole program. That it is shared is
+ * what makes the reuse worthwhile: one factory per menu would have nothing to reuse.
  */
 public class PopupFactory {
 
-    private static PopupFactory compartida = new PopupFactory();
+    private static PopupFactory shared = new PopupFactory();
 
-    /** Una fabrica nueva; lo normal es usar la compartida. */
+    /** A new factory; the usual thing is to use the shared one. */
     public PopupFactory() {
     }
 
     /**
-     * Cambia la fabrica de todo el programa.
+     * It changes the whole program's factory.
      *
-     * @throws IllegalArgumentException si es nula.
+     * @throws IllegalArgumentException if it is null.
      */
     public static void setSharedInstance(PopupFactory factory) {
         if (factory == null) {
             throw new IllegalArgumentException("PopupFactory can not be null");
         }
-        compartida = factory;
+        shared = factory;
     }
 
     public static PopupFactory getSharedInstance() {
-        return compartida;
+        return shared;
     }
 
     /**
-     * Una ventanita con ese contenido, en ese punto de la pantalla.
+     * A little window with that content, at that point of the screen.
      *
-     * @throws IllegalArgumentException si el contenido es nulo.
+     * @throws IllegalArgumentException if the content is null.
      */
     public Popup getPopup(Component owner, Component contents, int x, int y) {
         return getPopup(owner, contents, x, y, false);
     }
 
     /**
-     * Igual, diciendo si conviene la forma liviana.
+     * The same, saying whether the lightweight form is advisable.
      *
-     * <p>La bandera es un pedido, no una orden: si el contenido no entra en la ventana, se usa la
-     * pesada igual. Al reves seria peor -- un menu recortado --, y por eso la decision no se le
-     * deja del todo a quien llama.
+     * <p>The flag is a request, not an order: if the content does not fit in the window, the heavy
+     * one is used all the same. The other way round would be worse -- a clipped menu --, and that
+     * is why the decision is not left entirely to the caller.
      */
     protected Popup getPopup(Component owner, Component contents, int x, int y,
             boolean isHeavyWeightPopup) {

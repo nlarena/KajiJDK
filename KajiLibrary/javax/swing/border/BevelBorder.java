@@ -6,27 +6,28 @@ import java.awt.Graphics;
 import java.awt.Insets;
 
 /**
- * El borde de dos pixeles que simula relieve: como si el componente estuviera levantado o hundido.
+ * The two-pixel border that fakes relief: as if the component were raised or sunk.
  *
- * <h2>Como se finge relieve con cuatro colores</h2>
+ * <h2>How relief is faked with four colours</h2>
  *
- * <p>La ilusion es vieja y sencilla: si la luz viene de arriba a la izquierda, los bordes que miran
- * hacia esa luz se ven mas claros y los opuestos mas oscuros. Levantado y hundido son
- * <strong>el mismo dibujo con los colores intercambiados</strong> — de ahi que
- * {@link #paintRaisedBevel} y {@link #paintLoweredBevel} sean casi el mismo codigo.
+ * <p>The illusion is old and simple: if the light comes from the top left, the edges facing that
+ * light look lighter and the opposite ones darker. Raised and lowered are <strong>the same
+ * drawing with the colours swapped</strong> -- hence {@link #paintRaisedBevel} and
+ * {@link #paintLoweredBevel} are almost the same code.
  *
- * <p>Los cuatro colores son dos por lado porque el borde tiene dos pixeles de grosor y cada uno
- * lleva su tono: el de afuera mas extremo, el de adentro mas suave. Todos son opcionales, y cuando
- * faltan se derivan del fondo del componente con {@link Color#brighter} y {@link Color#darker} —
- * asi el mismo borde funciona sobre cualquier color sin configurarlo.
+ * <p>The four colours are two per side because the border is two pixels thick and each one
+ * carries its own shade: the outer one more extreme, the inner one softer. All are optional, and
+ * when they are missing they are derived from the component's background with
+ * {@link Color#brighter} and {@link Color#darker} -- that way the same border works over any
+ * colour without configuring it.
  */
 public class BevelBorder extends AbstractBorder {
 
     private static final long serialVersionUID = -1034942243356299676L;
 
-    /** El componente se ve levantado. */
+    /** The component looks raised. */
     public static final int RAISED = 0;
-    /** El componente se ve hundido. */
+    /** The component looks sunk. */
     public static final int LOWERED = 1;
 
     protected int bevelType;
@@ -35,21 +36,22 @@ public class BevelBorder extends AbstractBorder {
     protected Color shadowInner;
     protected Color shadowOuter;
 
-    /** Con los colores derivados del fondo del componente. */
+    /** With the colours derived from the component's background. */
     public BevelBorder(int bevelType) {
         this.bevelType = bevelType;
     }
 
     /**
-     * Con un color claro y uno oscuro.
+     * With one light colour and one dark one.
      *
-     * <p>Los cuatro tonos salen de esos dos: el par de afuera se aclara u oscurece un paso mas.
+     * <p>The four shades come from those two: the outer pair is brightened or darkened one step
+     * more.
      */
     public BevelBorder(int bevelType, Color highlight, Color shadow) {
         this(bevelType, highlight.brighter(), highlight, shadow, shadow.brighter());
     }
 
-    /** Con los cuatro tonos explicitos. */
+    /** With the four shades explicit. */
     public BevelBorder(int bevelType, Color highlightOuterColor, Color highlightInnerColor,
             Color shadowOuterColor, Color shadowInnerColor) {
         this(bevelType);
@@ -75,122 +77,122 @@ public class BevelBorder extends AbstractBorder {
         return insets;
     }
 
-    /** El tono claro de afuera; derivado del fondo de {@code c} si no se fijo uno. */
+    /** The outer light shade; derived from {@code c}'s background if none was set. */
     public Color getHighlightOuterColor(Component c) {
-        Color propio = getHighlightOuterColor();
-        if (propio != null) {
-            return propio;
+        Color own = getHighlightOuterColor();
+        if (own != null) {
+            return own;
         }
         return c.getBackground().brighter().brighter();
     }
 
-    /** El tono claro de adentro. */
+    /** The inner light shade. */
     public Color getHighlightInnerColor(Component c) {
-        Color propio = getHighlightInnerColor();
-        if (propio != null) {
-            return propio;
+        Color own = getHighlightInnerColor();
+        if (own != null) {
+            return own;
         }
         return c.getBackground().brighter();
     }
 
-    /** El tono oscuro de adentro. */
+    /** The inner dark shade. */
     public Color getShadowInnerColor(Component c) {
-        Color propio = getShadowInnerColor();
-        if (propio != null) {
-            return propio;
+        Color own = getShadowInnerColor();
+        if (own != null) {
+            return own;
         }
         return c.getBackground().darker();
     }
 
-    /** El tono oscuro de afuera. */
+    /** The outer dark shade. */
     public Color getShadowOuterColor(Component c) {
-        Color propio = getShadowOuterColor();
-        if (propio != null) {
-            return propio;
+        Color own = getShadowOuterColor();
+        if (own != null) {
+            return own;
         }
         return c.getBackground().darker().darker();
     }
 
-    /** El tono claro de afuera que se fijo, o {@code null}. */
+    /** The outer light shade that was set, or {@code null}. */
     public Color getHighlightOuterColor() {
         return this.highlightOuter;
     }
 
-    /** El tono claro de adentro que se fijo, o {@code null}. */
+    /** The inner light shade that was set, or {@code null}. */
     public Color getHighlightInnerColor() {
         return this.highlightInner;
     }
 
-    /** El tono oscuro de adentro que se fijo, o {@code null}. */
+    /** The inner dark shade that was set, or {@code null}. */
     public Color getShadowInnerColor() {
         return this.shadowInner;
     }
 
-    /** El tono oscuro de afuera que se fijo, o {@code null}. */
+    /** The outer dark shade that was set, or {@code null}. */
     public Color getShadowOuterColor() {
         return this.shadowOuter;
     }
 
-    /** {@link #RAISED} o {@link #LOWERED}. */
+    /** {@link #RAISED} or {@link #LOWERED}. */
     public int getBevelType() {
         return this.bevelType;
     }
 
-    /** Opaco: los dos pixeles de cada lado se pintan enteros. */
+    /** Opaque: the two pixels on each side are painted whole. */
     public boolean isBorderOpaque() {
         return true;
     }
 
-    /** Dibuja el relieve levantado: claro arriba y a la izquierda. */
+    /** Draws the raised relief: light at the top and on the left. */
     protected void paintRaisedBevel(Component c, Graphics g, int x, int y, int width, int height) {
-        pintar(g, x, y, width, height,
+        paintBevel(g, x, y, width, height,
                 getHighlightOuterColor(c), getHighlightInnerColor(c),
                 getShadowOuterColor(c), getShadowInnerColor(c));
     }
 
     /**
-     * Dibuja el relieve hundido.
+     * Draws the lowered relief.
      *
-     * <p>Es el mismo dibujo que {@link #paintRaisedBevel} con los pares intercambiados: lo oscuro
-     * pasa arriba y a la izquierda. Toda la ilusion esta en ese cambio.
+     * <p>It is the same drawing as {@link #paintRaisedBevel} with the pairs swapped: the dark goes
+     * to the top and to the left. The whole illusion is in that swap.
      */
     protected void paintLoweredBevel(Component c, Graphics g, int x, int y, int width, int height) {
-        pintar(g, x, y, width, height,
+        paintBevel(g, x, y, width, height,
                 getShadowInnerColor(c), getShadowOuterColor(c),
                 getHighlightInnerColor(c), getHighlightOuterColor(c));
     }
 
     /**
-     * El dibujo, parametrizado por los cuatro tonos.
+     * The drawing, parameterized by the four shades.
      *
-     * <p>Existe para que las dos formas de relieve no sean dos copias del mismo trazado: una copia
-     * es donde se corrige un bug una sola vez de dos.
+     * <p>It exists so that the two forms of relief are not two copies of the same path: a copy is
+     * where a bug gets fixed once out of twice.
      */
-    private void pintar(Graphics g, int x, int y, int width, int height,
-            Color arribaAfuera, Color arribaAdentro, Color abajoAfuera, Color abajoAdentro) {
-        Color viejoColor = g.getColor();
+    private void paintBevel(Graphics g, int x, int y, int width, int height,
+            Color outerHighlight, Color innerHighlight, Color outerShadow, Color innerShadow) {
+        Color oldColor = g.getColor();
         int h = height;
         int w = width;
 
         g.translate(x, y);
 
-        g.setColor(arribaAfuera);
+        g.setColor(outerHighlight);
         g.drawLine(0, 0, 0, h - 2);
         g.drawLine(1, 0, w - 2, 0);
 
-        g.setColor(arribaAdentro);
+        g.setColor(innerHighlight);
         g.drawLine(1, 1, 1, h - 3);
         g.drawLine(2, 1, w - 3, 1);
 
-        g.setColor(abajoAfuera);
+        g.setColor(outerShadow);
         g.drawLine(0, h - 1, w - 1, h - 1);
         g.drawLine(w - 1, 0, w - 1, h - 2);
 
-        g.setColor(abajoAdentro);
+        g.setColor(innerShadow);
         g.drawLine(1, h - 2, w - 2, h - 2);
         g.drawLine(w - 2, 1, w - 2, h - 3);
 
         g.translate(-x, -y);
-        g.setColor(viejoColor);
+        g.setColor(oldColor);
     }
 }

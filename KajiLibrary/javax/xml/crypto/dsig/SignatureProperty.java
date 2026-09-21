@@ -4,27 +4,26 @@ import java.util.List;
 import javax.xml.crypto.XMLStructure;
 
 /**
- * KajiLibrary's javax.xml.crypto.dsig.SignatureProperty -- un dato <b>sobre</b> la firma.
+ * KajiLibrary's javax.xml.crypto.dsig.SignatureProperty -- a datum <b>about</b> the signature.
  *
- * <p>No sobre lo firmado: sobre el acto de firmar. El caso tipico es el momento en que se firmo, o
- * con que dispositivo.
+ * <p>Not about what was signed: about the act of signing. The typical case is the moment it was
+ * signed, or with which device.
  *
- * <p>{@link #getTarget} es obligatorio y dice a que firma se refiere la propiedad, apuntando por URI
- * al elemento de la firma. Hace falta porque las propiedades viven adentro de un {@code Object}, y un
- * {@code Object} puede estar en un documento con varias firmas.
+ * <p>{@link #getTarget} is mandatory and says which signature the property refers to, pointing by
+ * URI to the signature element. It is needed because properties live inside an {@code Object}, and
+ * an {@code Object} can be in a document with several signatures.
  *
- * <p>Para que la propiedad este protegida hay que apuntarle una {@link Reference}. Una marca de
- * tiempo no firmada la puede cambiar cualquiera, que es justamente lo contrario de para lo que se la
- * pone.
+ * <p>For the property to be protected a {@link Reference} has to point to it. An unsigned timestamp
+ * can be changed by anyone, which is precisely the opposite of what it is put there for.
  */
 public interface SignatureProperty extends XMLStructure {
 
-    /** A que firma se refiere. Obligatorio. */
+    /** Which signature it refers to. Mandatory. */
     String getTarget();
 
-    /** El identificador del elemento, o null. */
+    /** The element's identifier, or null. */
     String getId();
 
-    /** El contenido de la propiedad. No modificable y nunca vacio. */
+    /** The content of the property. Unmodifiable and never empty. */
     List<XMLStructure> getContent();
 }

@@ -5,114 +5,114 @@ import java.util.Collection;
 import java.util.List;
 
 /**
- * Una lista de {@link RoleUnresolved}.
+ * A list of {@link RoleUnresolved}.
  *
- * <h2>Por que extiende {@code ArrayList<Object>} y no {@code ArrayList<RoleUnresolved>}</h2>
+ * <h2>Why it extends {@code ArrayList<Object>} and not {@code ArrayList<RoleUnresolved>}</h2>
  *
- * <p>Por compatibilidad, y la historia se le nota. Nacio antes de los genericos como una lista sin
- * tipo; cuando llegaron, cambiarla a {@code ArrayList<RoleUnresolved>} habria roto todo el codigo que ya
- * la usaba. La salida fue dejarla sobre {@code Object} y agregar sobrecargas tipadas.
+ * <p>For compatibility, and the history shows. It was born before generics as an untyped list; when
+ * they arrived, changing it to {@code ArrayList<RoleUnresolved>} would have broken all the code
+ * already using it. The way out was to leave it over {@code Object} and add typed overloads.
  *
- * <h2>El modo "tipado" y el modo "crudo"</h2>
+ * <h2>The "typed" mode and the "raw" mode</h2>
  *
- * <p>De ahi el detalle que hay que conocer: una lista construida con el constructor de
- * {@code List<RoleUnresolved>} queda en modo <strong>tipado</strong> y rechaza cualquier cosa que no sea un
- * {@link RoleUnresolved}; una construida vacia acepta lo que sea hasta que alguien llame a
- * {@link #asList}, que es el metodo que la convierte.
+ * <p>Hence the detail worth knowing: a list built with the {@code List<RoleUnresolved>} constructor
+ * is in <b>typed</b> mode and rejects anything that is not a {@link RoleUnresolved}; one built
+ * empty accepts anything until someone calls {@link #asList}, which is the method that converts it.
  *
- * <p>Mezclar los dos modos es como se consigue una {@code ClassCastException} desde un lugar que no
- * la menciona.
+ * <p>Mixing the two modes is how you get a {@code ClassCastException} from a place that does
+ * not mention it.
  */
 public class RoleUnresolvedList extends ArrayList<Object> {
 
     private static final long serialVersionUID = 4054902803091360389L;
 
-    private transient boolean tipada = false;
+    private transient boolean typed = false;
 
-    /** Vacia, en modo crudo. */
+    /** Empty, in raw mode. */
     public RoleUnresolvedList() {
         super();
     }
 
     /**
-     * Vacia con esa capacidad, en modo crudo.
+     * Empty with that capacity, in raw mode.
      *
-     * @throws IllegalArgumentException si la capacidad es negativa
+     * @throws IllegalArgumentException if the capacity is negative
      */
     public RoleUnresolvedList(int initialCapacity) throws IllegalArgumentException {
         super(initialCapacity);
     }
 
     /**
-     * Con esos elementos, en modo tipado.
+     * With those elements, in typed mode.
      *
-     * @throws IllegalArgumentException si la lista es {@code null}
+     * @throws IllegalArgumentException if the list is {@code null}
      */
     public RoleUnresolvedList(List<RoleUnresolved> list) throws IllegalArgumentException {
-        super(revisar(list));
-        this.tipada = true;
+        super(check(list));
+        this.typed = true;
     }
 
-    private static List<RoleUnresolved> revisar(List<RoleUnresolved> list) {
+    private static List<RoleUnresolved> check(List<RoleUnresolved> list) {
         if (list == null) {
-            throw new IllegalArgumentException("la lista no puede ser null");
+            throw new IllegalArgumentException("the list cannot be null");
         }
         for (int i = 0; i < list.size(); i++) {
             if (list.get(i) == null) {
-                throw new IllegalArgumentException("un elemento es null");
+                throw new IllegalArgumentException("an element is null");
             }
         }
         return list;
     }
 
     /**
-     * Esta misma lista, vista como {@code List<RoleUnresolved>}, y la pasa a modo tipado.
+     * This same list, seen as {@code List<RoleUnresolved>}, and it switches to typed mode.
      *
-     * <p>Es una <strong>vista</strong>, no una copia: cambiarla cambia esta.
+     * <p>It is a <b>view</b>, not a copy: changing it changes this one.
      *
-     * @throws IllegalArgumentException si ya tiene algo que no es un {@link RoleUnresolved}
+     * @throws IllegalArgumentException if it already holds something that is not a {@link
+     *     RoleUnresolved}
      */
     @SuppressWarnings("unchecked")
     public List<RoleUnresolved> asList() {
-        if (!this.tipada) {
+        if (!this.typed) {
             for (int i = 0; i < size(); i++) {
                 if (!(get(i) instanceof RoleUnresolved)) {
                     throw new IllegalArgumentException(
-                            "la lista tiene un elemento que no es un RoleUnresolved");
+                            "the list has an element that is not a RoleUnresolved");
                 }
             }
-            this.tipada = true;
+            this.typed = true;
         }
         return (List<RoleUnresolved>) (List<?>) this;
     }
 
-    /** Agrega al final. */
+    /** Appends at the end. */
     public void add(RoleUnresolved element) throws IllegalArgumentException {
         if (element == null) {
-            throw new IllegalArgumentException("el elemento no puede ser null");
+            throw new IllegalArgumentException("the element cannot be null");
         }
         super.add(element);
     }
 
-    /** Inserta en esa posicion. */
+    /** Inserts at that position. */
     public void add(int index, RoleUnresolved element)
             throws IllegalArgumentException, IndexOutOfBoundsException {
         if (element == null) {
-            throw new IllegalArgumentException("el elemento no puede ser null");
+            throw new IllegalArgumentException("the element cannot be null");
         }
         super.add(index, element);
     }
 
-    /** Reemplaza el de esa posicion. */
+    /** Replaces the one at that position. */
     public void set(int index, RoleUnresolved element)
             throws IllegalArgumentException, IndexOutOfBoundsException {
         if (element == null) {
-            throw new IllegalArgumentException("el elemento no puede ser null");
+            throw new IllegalArgumentException("the element cannot be null");
         }
         super.set(index, element);
     }
 
-    /** Agrega todos al final. */
+    /** Appends all at the end. */
     public boolean addAll(RoleUnresolvedList list) throws IndexOutOfBoundsException {
         if (list == null) {
             return true;
@@ -120,63 +120,63 @@ public class RoleUnresolvedList extends ArrayList<Object> {
         return super.addAll(list);
     }
 
-    /** Los inserta en esa posicion. */
+    /** Inserts them at that position. */
     public boolean addAll(int index, RoleUnresolvedList list)
             throws IllegalArgumentException, IndexOutOfBoundsException {
         if (list == null) {
-            throw new IllegalArgumentException("la lista no puede ser null");
+            throw new IllegalArgumentException("the list cannot be null");
         }
         return super.addAll(index, list);
     }
 
     /**
-     * Agrega, rechazando lo que no sea un {@link RoleUnresolved} si la lista es tipada.
+     * Adds, rejecting anything that is not a {@link RoleUnresolved} if the list is typed.
      *
-     * @throws IllegalArgumentException si es tipada y el elemento no corresponde
+     * @throws IllegalArgumentException if it is typed and the element does not fit
      */
     public boolean add(Object o) {
-        revisarTipo(o);
+        checkType(o);
         return super.add(o);
     }
 
-    /** Inserta, con la misma comprobacion. */
+    /** Inserts, with the same check. */
     public void add(int index, Object o) {
-        revisarTipo(o);
+        checkType(o);
         super.add(index, o);
     }
 
-    /** Agrega todos, con la misma comprobacion. */
+    /** Adds all, with the same check. */
     public boolean addAll(Collection<?> c) {
         for (Object o : c) {
-            revisarTipo(o);
+            checkType(o);
         }
         return super.addAll(c);
     }
 
-    /** Los inserta, con la misma comprobacion. */
+    /** Inserts them, with the same check. */
     public boolean addAll(int index, Collection<?> c) {
         for (Object o : c) {
-            revisarTipo(o);
+            checkType(o);
         }
         return super.addAll(index, c);
     }
 
-    /** Reemplaza, con la misma comprobacion. */
+    /** Replaces, with the same check. */
     public Object set(int index, Object o) {
-        revisarTipo(o);
+        checkType(o);
         return super.set(index, o);
     }
 
     /**
-     * La comprobacion que separa los dos modos.
+     * The check that separates the two modes.
      *
-     * <p>Solo mira cuando la lista es tipada: en modo crudo se acepta cualquier cosa, que es lo que
-     * hacia antes de los genericos y lo que el codigo viejo espera.
+     * <p>It only looks when the list is typed: in raw mode anything is accepted, which is what
+     * it did before generics and what old code expects.
      */
-    private void revisarTipo(Object o) {
-        if (this.tipada && !(o instanceof RoleUnresolved)) {
+    private void checkType(Object o) {
+        if (this.typed && !(o instanceof RoleUnresolved)) {
             throw new IllegalArgumentException(
-                    "esta lista es de RoleUnresolved y el elemento no lo es");
+                    "this list holds RoleUnresolved and the element is not one");
         }
     }
 }

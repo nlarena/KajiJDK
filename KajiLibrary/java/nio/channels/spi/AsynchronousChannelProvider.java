@@ -11,109 +11,109 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ThreadFactory;
 
 /**
- * KajiLibrary's java.nio.channels.spi.AsynchronousChannelProvider — la fabrica de los canales
- * asincronicos.
+ * KajiLibrary's java.nio.channels.spi.AsynchronousChannelProvider — the factory of the asynchronous
+ * channels.
  *
- * <p>Es a los `Asynchronous*Channel` lo que {@link SelectorProvider} es a los selectables, con una
- * diferencia: aca el proveedor tambien fabrica el **grupo**, que es donde viven los hilos que
- * ejecutan los `CompletionHandler`. Por eso las dos formas de armar un grupo son metodos suyos y no
- * constructores del grupo.
+ * <p>It is to the `Asynchronous*Channel`s what {@link SelectorProvider} is to the selectable ones,
+ * with one difference: here the provider also makes the **group**, which is where the threads that
+ * run the `CompletionHandler`s live. That is why the two ways of building a group are methods of its
+ * and not constructors of the group.
  *
- * <h2>{@link #provider()}, que es el mismo mecanismo que el de {@link SelectorProvider}</h2>
+ * <h2>{@link #provider()}, which is the same mechanism as {@link SelectorProvider}'s</h2>
  *
- * <p>Busca en tres escalones y se queda con el primero: la propiedad de sistema
- * {@code java.nio.channels.spi.AsynchronousChannelProvider}, despues los proveedores declarados en
- * {@code META-INF/services} via {@link ServiceLoader}, y por ultimo la implementacion por omision de
- * la plataforma. <strong>El tercero no existe aca</strong> --esta VM no tiene nativos de red, asi
- * que no hay grupo del sistema que fabricar-- y en ese caso se lanza
- * {@link ServiceConfigurationError}, que es el error que el JDK usa cuando la busqueda no se puede
- * resolver. Los dos primeros escalones estan enteros y son lo que hace instalable un proveedor
- * propio; el segundo hoy no encuentra nada porque nuestro `ServiceLoader` no puede enumerar
- * recursos, y eso esta dicho en su propio encabezado.
+ * <p>It searches in three tiers and keeps the first: the system property {@code
+ * java.nio.channels.spi.AsynchronousChannelProvider}, then the providers declared in {@code
+ * META-INF/services} through {@link ServiceLoader}, and last the platform's default implementation.
+ * <strong>The third one is here</strong>, and this note used to say it was not, for want of network
+ * natives in this VM: it has them, so there are blocking channels and a thread pool to build
+ * asynchronous channels over --see {@code KajiAsyncChannelProvider}--. When none of the three gives
+ * anything, {@link ServiceConfigurationError} is thrown, which is the error the JDK uses when the
+ * search cannot be resolved. The first two tiers are whole and are what makes a provider of one's
+ * own installable; the second finds nothing today because our `ServiceLoader` cannot enumerate
+ * resources, and that is said in its own header.
  *
- * <p>El exito se cachea --`provider()` devuelve siempre el mismo objeto, como manda el contrato-- y
- * el fallo no, para que poner la propiedad despues siga sirviendo.
+ * <p>Success is cached --`provider()` always returns the same object, as the contract requires-- and
+ * failure is not, so that setting the property afterwards goes on serving.
  */
 public abstract class AsynchronousChannelProvider {
 
-    /** La clave, que es a la vez el nombre del servicio y el de la propiedad de sistema. */
-    private static final String CLAVE = "java.nio.channels.spi.AsynchronousChannelProvider";
+    /** The key, which is at once the name of the service and that of the system property. */
+    private static final String PROPERTY = "java.nio.channels.spi.AsynchronousChannelProvider";
 
-    // Cerrojo propio y no la clase; ver la nota de SelectorProvider.
+    // A latch of its own and not the class; see the note of SelectorProvider.
     private static final Object CERROJO = new Object();
 
-    private static AsynchronousChannelProvider encontrado;
+    private static AsynchronousChannelProvider found;
 
     protected AsynchronousChannelProvider() {
     }
 
     /**
-     * El proveedor del sistema, buscado en los tres escalones del encabezado.
+     * The system provider, looked for in the three tiers of the header.
      *
-     * <p>La primera llamada busca; las siguientes devuelven el mismo objeto.
+     * <p>The first call searches; the following ones return the same object.
      *
-     * @return el proveedor del sistema
-     * @throws ServiceConfigurationError si ninguno de los escalones da uno, o si el que nombra la
-     *         propiedad no se puede cargar, instanciar, o no es un `AsynchronousChannelProvider`
+     * @return the system provider
+     * @throws ServiceConfigurationError if none of the tiers gives one, or if the one the property names
+     *         cannot be loaded or instantiated, or is not an `AsynchronousChannelProvider`
      */
     public static AsynchronousChannelProvider provider() {
         synchronized (CERROJO) {
-            if (encontrado != null) {
-                return encontrado;
+            if (found != null) {
+                return found;
             }
-            AsynchronousChannelProvider p = deLaPropiedad();
+            AsynchronousChannelProvider p = fromTheProperty();
             if (p == null) {
                 p = deServiceLoader();
             }
             if (p == null) {
-                // El escalon 3: el proveedor de fabrica. La version anterior tiraba aca, con el
-                // argumento de que esta VM no tenia nativos de red. Los tiene --`jdk.internal.net.Net`--
-                // y con ellos `SocketChannel` y `ServerSocketChannel` funcionan, asi que hay sobre
-                // que armar canales asincronicos: un pool de hilos y esos canales bloqueantes. Ver
-                // `KajiAsyncChannelProvider`.
+                // Tier 3: the stock provider. The previous version threw here, on the grounds that this VM
+                // had no network natives. It has them --`jdk.internal.net.Net`-- and with them `SocketChannel`
+                // and `ServerSocketChannel` work, so there is something to build asynchronous channels over: a
+                // thread pool and those blocking channels. See `KajiAsyncChannelProvider`.
                 p = new KajiAsyncChannelProvider();
             }
-            encontrado = p;
+            found = p;
             return p;
         }
     }
 
     /**
-     * El proveedor que nombre la propiedad de sistema, o null si no esta puesta.
+     * The provider the system property names, or null if it is not set.
      *
-     * <p>`getConstructor()` y no `getDeclaredConstructor()`: el constructor tiene que ser publico,
-     * como exige el JDK. Ver la nota del metodo homologo de {@link SelectorProvider}.
+     * <p>`getConstructor()` and not `getDeclaredConstructor()`: the constructor has to be public, as the
+     * JDK demands. See the note of the matching method of {@link SelectorProvider}.
      */
-    private static AsynchronousChannelProvider deLaPropiedad() {
-        String nombre;
+    private static AsynchronousChannelProvider fromTheProperty() {
+        String name;
         try {
-            nombre = System.getProperty(CLAVE);
+            name = System.getProperty(PROPERTY);
         } catch (SecurityException ignorada) {
             return null;
         }
-        if (nombre == null || nombre.length() == 0) {
+        if (name == null || name.length() == 0) {
             return null;
         }
-        Class<?> clase;
+        Class<?> cls;
         try {
-            clase = Class.forName(nombre, false, ClassLoader.getSystemClassLoader());
+            cls = Class.forName(name, false, ClassLoader.getSystemClassLoader());
         } catch (ClassNotFoundException e) {
-            throw new ServiceConfigurationError(CLAVE + ": provider " + nombre + " not found", e);
+            throw new ServiceConfigurationError(PROPERTY + ": provider " + name + " not found", e);
         }
-        Object objeto;
+        Object object;
         try {
-            objeto = clase.getConstructor().newInstance();
+            object = cls.getConstructor().newInstance();
         } catch (Exception e) {
             throw new ServiceConfigurationError(
-                    CLAVE + ": provider " + nombre + " could not be instantiated", e);
+                    PROPERTY + ": provider " + name + " could not be instantiated", e);
         }
-        if (!(objeto instanceof AsynchronousChannelProvider)) {
-            throw new ServiceConfigurationError(CLAVE + ": provider " + nombre + " not a subtype");
+        if (!(object instanceof AsynchronousChannelProvider)) {
+            throw new ServiceConfigurationError(PROPERTY + ": provider " + name + " not a subtype");
         }
-        return (AsynchronousChannelProvider) objeto;
+        return (AsynchronousChannelProvider) object;
     }
 
-    /** El primer proveedor declarado en el classpath, o null si no hay ninguno. */
+    /** The first provider declared in the classpath, or null if there is none. */
     private static AsynchronousChannelProvider deServiceLoader() {
         try {
             ServiceLoader<AsynchronousChannelProvider> sl =
@@ -123,33 +123,33 @@ public abstract class AsynchronousChannelProvider {
                 return it.next();
             }
         } catch (Throwable ignorada) {
-            // Un proveedor roto no puede impedir que se pruebe el escalon siguiente.
+            // A broken provider cannot stop the next tier from being tried.
         }
         return null;
     }
 
     /**
-     * Un grupo con una cantidad fija de hilos.
+     * A group with a fixed number of threads.
      *
-     * @param nThreads cuantos hilos; fijo significa que un `CompletionHandler` que se bloquea deja
-     *        sin atender a los demas, que es el modo de fallar clasico de esta configuracion
+     * @param nThreads how many threads; fixed means that a `CompletionHandler` that blocks leaves the
+     *        others unattended, which is the classic way of failing with this configuration
      */
     public abstract AsynchronousChannelGroup openAsynchronousChannelGroup(int nThreads,
             ThreadFactory threadFactory) throws IOException;
 
     /**
-     * Un grupo sobre un pool que crece.
+     * A group over a pool that grows.
      *
-     * @param initialSize una pista sobre cuantos hilos hay ya esperando, no un limite
+     * @param initialSize a hint about how many threads are waiting already, not a limit
      */
     public abstract AsynchronousChannelGroup openAsynchronousChannelGroup(ExecutorService executor,
             int initialSize) throws IOException;
 
-    /** Un canal de escucha asincronico en `group`. */
+    /** An asynchronous listening channel in `group`. */
     public abstract AsynchronousServerSocketChannel openAsynchronousServerSocketChannel(
             AsynchronousChannelGroup group) throws IOException;
 
-    /** Un canal de socket asincronico en `group`. */
+    /** An asynchronous socket channel in `group`. */
     public abstract AsynchronousSocketChannel openAsynchronousSocketChannel(
             AsynchronousChannelGroup group) throws IOException;
 }

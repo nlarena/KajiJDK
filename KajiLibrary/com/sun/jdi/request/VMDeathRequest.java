@@ -1,7 +1,7 @@
 package com.sun.jdi.request;
 
 /**
- * Pedir aviso cuando la maquina depurada este por terminar.
+ * Ask to be told when the debugged machine is about to end.
  *
  * @since 1.3
  */

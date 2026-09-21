@@ -35,8 +35,9 @@ public abstract class Process {
     /** The pipe read from the process's standard error. */
     public abstract InputStream getErrorStream();
 
-    // Los lectores/escritores envuelven los streams en un `InputStreamReader`/`OutputStreamWriter`,
-    // que KajiLibrary todavía no tiene, así que no se pueden armar. Se declaran igual (superficie).
+    // The readers/writers wrap the streams in an `InputStreamReader`/`OutputStreamWriter`, which
+    // KajiLibrary does not have yet, so they cannot be built. They are declared all the same
+    // (surface).
     public final BufferedReader inputReader() {
         throw new UnsupportedOperationException("inputReader necesita java.io.InputStreamReader");
     }
@@ -126,9 +127,9 @@ public abstract class Process {
     /**
      * A future that completes with this process when it exits.
      *
-     * <p>Como el base del JDK: un hilo del pool espera al proceso y completa el futuro. La espera no
-     * propaga la interrupción del hilo del pool (el futuro sólo debe completar cuando el proceso
-     * salió de verdad); el estado de interrupción se reafirma al final.
+     * <p>Like the JDK's base: a thread from the pool waits for the process and completes the future.
+     * The wait does not propagate the pool thread's interruption (the future must only complete when
+     * the process genuinely exited); the interrupted state is reasserted at the end.
      */
     public CompletableFuture<Process> onExit() {
         return CompletableFuture.supplyAsync(() -> this.waitUninterruptibly());

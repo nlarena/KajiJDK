@@ -18,14 +18,14 @@ public class HashSet<E> extends AbstractSet<E> implements Set<E>, Serializable, 
     private int size;
 
     /**
-     * El elemento null vive aparte de la tabla.
+     * The null element lives apart from the table.
      *
-     * <p>Por lo mismo que en {@link HashMap}: la tabla es de direccionamiento abierto y usa null como
-     * marca de slot vacio, asi que un null adentro seria a la vez "ocupado" y "libre". Y aceptarlo
-     * hace falta: un `HashSet` permite <b>un</b> elemento null, y sin eso `keySet()` de un mapa con
-     * clave null no podria devolverla.
+     * <p>For the same reason as in {@link HashMap}: the table is open-addressed and uses null as the
+     * empty-slot mark, so a null inside would be at once "taken" and "free". And accepting it is
+     * needed: a `HashSet` allows <b>one</b> null element, and without that a map with a null key
+     * could not return it from `keySet()`.
      *
-     * <p>Paquete-privado porque el iterador tiene que verlo para emitirlo.
+     * <p>Package-private because the iterator has to see it in order to emit it.
      */
     boolean hasNull = false;
 
@@ -35,12 +35,12 @@ public class HashSet<E> extends AbstractSet<E> implements Set<E>, Serializable, 
     }
 
     /**
-     * Con capacidad inicial.
+     * With an initial capacity.
      *
-     * <p>La tabla se dimensiona al **doble** de lo pedido, y eso no es un margen arbitrario: esta
-     * implementacion es de direccionamiento abierto con sondeo lineal, y a partir de la mitad de
-     * ocupacion los grupos de colisiones empiezan a fundirse entre si. Pedir capacidad para `n`
-     * quiere decir "quiero meter `n` sin que se agrande", y para eso hacen falta `2n` casilleros.
+     * <p>The table is sized at **twice** what was asked for, and that is no arbitrary margin: this
+     * implementation is open-addressed with linear probing, and past half occupancy the collision
+     * clusters start merging into each other. Asking for capacity for `n` means "I want to put `n` in
+     * without it growing", and for that `2n` slots are needed.
      */
     public HashSet(int initialCapacity) {
         if (initialCapacity < 0) {
@@ -54,8 +54,8 @@ public class HashSet<E> extends AbstractSet<E> implements Set<E>, Serializable, 
         this.size = 0;
     }
 
-    // El factor de carga se acepta y se **ignora**: esta tabla no lo usa (ver arriba). El JDK lo
-    // toma para decidir cuando agrandar; aca ese umbral esta fijo en la mitad.
+    // The load factor is accepted and **ignored**: this table does not use it (see above). The JDK
+    // takes it to decide when to grow; here that threshold is fixed at half.
     public HashSet(int initialCapacity, float loadFactor) {
         this(initialCapacity);
         if (loadFactor <= 0) {
@@ -64,12 +64,12 @@ public class HashSet<E> extends AbstractSet<E> implements Set<E>, Serializable, 
     }
 
     /**
-     * Un conjunto dimensionado para `numElements` sin que se agrande.
+     * A set sized for `numElements` without it growing.
      *
-     * <p>Existe porque `new HashSet<>(n)` **no** quiere decir eso: ese `n` es la capacidad de la
-     * tabla, no la cantidad de elementos, y con el factor de carga del JDK un `new HashSet<>(100)`
-     * se agranda a los 75. Es una de las trampas mas viejas de la API, y por eso Java 19 agrego
-     * esta fabrica con un nombre que si dice lo que hace.
+     * <p>It exists because `new HashSet<>(n)` does **not** mean that: that `n` is the table's
+     * capacity, not the number of elements, and with the JDK's load factor a `new HashSet<>(100)`
+     * grows at 75. It is one of the oldest traps in the API, and that is why Java 19 added this
+     * factory with a name that does say what it does.
      */
     public static <T> HashSet<T> newHashSet(int numElements) {
         if (numElements < 0) {
@@ -78,12 +78,12 @@ public class HashSet<E> extends AbstractSet<E> implements Set<E>, Serializable, 
         return new HashSet<T>(numElements);
     }
 
-    // Copia los elementos de otra coleccion, descartando los repetidos.
+    // It copies another collection's elements, dropping the repeats.
     //
-    // No es un lujo: es el idioma con el que se congela un argumento que el llamador podria seguir
-    // modificando (`this.violaciones = new HashSet<>(violaciones)`), y no habia forma de escribirlo.
-    // Hasta #293 se podia escribir igual y compilaba **mal** en silencio -- el argumento se evaluaba,
-    // se llamaba al constructor sin argumentos y el conjunto nacia vacio.
+    // It is not a luxury: it is the idiom for freezing an argument the caller could go on modifying
+    // (`this.violations = new HashSet<>(violations)`), and there was no way of writing it. Until #293
+    // it could be written all the same and compiled **wrong** in silence -- the argument was
+    // evaluated, the no-argument constructor was called and the set was born empty.
     public HashSet(Collection<? extends E> c) {
         this.table = new Object[16];
         this.size = 0;
@@ -183,7 +183,7 @@ public class HashSet<E> extends AbstractSet<E> implements Set<E>, Serializable, 
         Object[] old = this.table;
         int newCap = old.length * 2;
         this.table = new Object[newCap];
-        // El null no esta en la tabla: su +1 hay que conservarlo a mano.
+        // The null is not in the table: its +1 has to be kept by hand.
         this.size = this.hasNull ? 1 : 0;
         for (int i = 0; i < old.length; i++) {
             if (old[i] != null) {

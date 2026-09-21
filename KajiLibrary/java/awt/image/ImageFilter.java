@@ -3,31 +3,32 @@ package java.awt.image;
 import java.util.Hashtable;
 
 /**
- * Un consumidor que le pasa los píxeles a otro consumidor, cambiándolos en el camino.
+ * A consumer that passes the pixels on to another consumer, changing them on the way.
  *
- * <p>Es a la vez el extremo receptor de una tubería y el emisor de la siguiente, y por eso los
- * filtros se encadenan. Tal como está no cambia nada: todos sus métodos reenvían. Sirve como base y
- * como filtro nulo.
+ * <p>It is at once the receiving end of a pipe and the sender of the next one, and that is why
+ * filters chain. As it stands it changes no pixel: every method forwards, and the only thing it
+ * adds is its own name to the `filters` property in {@link #setProperties}. It serves as a base and
+ * as a null filter.
  *
- * <p>{@link #getFilterInstance} es la pieza que hace que un filtro se pueda reusar. Un filtro
- * describe una transformación, pero al aplicarse guarda estado —la imagen que va llegando— y ese
- * estado no se puede compartir entre dos consumidores. Así que el filtro que uno arma es un
- * **molde**: cada vez que se conecta a alguien se clona, y el clon es el que trabaja.
+ * <p>{@link #getFilterInstance} is the piece that makes a filter reusable. A filter describes a
+ * transformation, but on being applied it keeps state —the image as it arrives— and that state
+ * cannot be shared between two consumers. So the filter one builds is a **mould**: every time it is
+ * connected to somebody it is cloned, and the clone is the one that works.
  */
 public class ImageFilter implements ImageConsumer, Cloneable {
 
-    /** A quién se le pasan los píxeles ya filtrados. */
+    /** Who the already filtered pixels are passed to. */
     protected ImageConsumer consumer;
 
-    /** Un filtro nulo. */
+    /** A null filter. */
     public ImageFilter() {
     }
 
     /**
-     * Una copia de este filtro conectada a ese consumidor.
+     * A copy of this filter connected to that consumer.
      *
-     * <p>Es lo que hay que llamar para usar un filtro: el original queda como molde y el clon lleva
-     * el estado de una entrega concreta.
+     * <p>It is what has to be called to use a filter: the original stays as a mould and the clone
+     * carries the state of one concrete delivery.
      */
     public ImageFilter getFilterInstance(ImageConsumer ic) {
         ImageFilter instance = (ImageFilter) this.clone();
@@ -35,19 +36,19 @@ public class ImageFilter implements ImageConsumer, Cloneable {
         return instance;
     }
 
-    /** Reenvía el tamaño. */
+    /** Forwards the size. */
     public void setDimensions(int width, int height) {
         this.consumer.setDimensions(width, height);
     }
 
     /**
-     * Reenvía las propiedades, agregando este filtro a la lista de los que pasó la imagen.
+     * Forwards the properties, adding this filter to the list of the ones the image went through.
      *
-     * <p>La propiedad `filters` deja constancia de por dónde pasó, que es lo único que queda de la
-     * cadena una vez que la imagen llegó.
+     * <p>The `filters` property leaves a record of where it went, which is the only thing left of
+     * the chain once the image has arrived.
      */
     public void setProperties(Hashtable<?, ?> props) {
-        Hashtable<Object, Object> p = copiar(props);
+        Hashtable<Object, Object> p = copyProperties(props);
         Object o = p.get("filters");
         if (o == null) {
             p.put("filters", this.toString());
@@ -58,13 +59,13 @@ public class ImageFilter implements ImageConsumer, Cloneable {
     }
 
     /**
-     * Una copia de la tabla, con las claves y los valores como `Object`.
+     * A copy of the table, with the keys and the values as `Object`.
      *
-     * <p>Se copia entrada por entrada en vez de clonar porque hay que ensanchar los tipos: la que
-     * entra puede ser de cualquier par de tipos y la que sale tiene que aceptar las claves que los
-     * filtros agregan.
+     * <p>It is copied entry by entry instead of cloned because the types have to be widened: the
+     * one coming in can be of any pair of types and the one going out has to accept the keys the
+     * filters add.
      */
-    static Hashtable<Object, Object> copiar(Hashtable<?, ?> props) {
+    static Hashtable<Object, Object> copyProperties(Hashtable<?, ?> props) {
         Hashtable<Object, Object> p = new Hashtable<Object, Object>();
         java.util.Enumeration<?> e = props.keys();
         while (e.hasMoreElements()) {
@@ -74,49 +75,49 @@ public class ImageFilter implements ImageConsumer, Cloneable {
         return p;
     }
 
-    /** Reenvía el modelo de color. */
+    /** Forwards the colour model. */
     public void setColorModel(ColorModel model) {
         this.consumer.setColorModel(model);
     }
 
-    /** Reenvía las pistas. */
+    /** Forwards the hints. */
     public void setHints(int hints) {
         this.consumer.setHints(hints);
     }
 
-    /** Reenvía los píxeles de un byte. */
+    /** Forwards the pixels of one byte. */
     public void setPixels(int x, int y, int w, int h, ColorModel model, byte[] pixels, int off,
             int scansize) {
         this.consumer.setPixels(x, y, w, h, model, pixels, off, scansize);
     }
 
-    /** Reenvía los píxeles de un `int`. */
+    /** Forwards the pixels of one `int`. */
     public void setPixels(int x, int y, int w, int h, ColorModel model, int[] pixels, int off,
             int scansize) {
         this.consumer.setPixels(x, y, w, h, model, pixels, off, scansize);
     }
 
-    /** Reenvía el fin de la entrega. */
+    /** Forwards the end of the delivery. */
     public void imageComplete(int status) {
         this.consumer.imageComplete(status);
     }
 
     /**
-     * Le pide al productor que vuelva a mandar todo de arriba abajo.
+     * Asks the producer to send everything again from top to bottom.
      *
-     * <p>Un filtro que pueda entregar en ese orden aunque lo reciba salteado tiene que redefinir
-     * esto y hacer la reentrega él mismo en vez de pasarle el pedido al productor.
+     * <p>A filter that can deliver in that order even when it receives them out of order has to
+     * redefine this and do the redelivery itself instead of passing the request on to the producer.
      */
     public void resendTopDownLeftRight(ImageProducer ip) {
         ip.requestTopDownLeftRightResend(this);
     }
 
-    /** Una copia superficial. */
+    /** A shallow copy. */
     public Object clone() {
         try {
             return super.clone();
         } catch (CloneNotSupportedException e) {
-            // No puede pasar: esta clase declara Cloneable.
+            // It cannot happen: this class declares Cloneable.
             throw new InternalError(e.toString());
         }
     }

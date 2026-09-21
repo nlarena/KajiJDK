@@ -1,13 +1,13 @@
 package org.w3c.dom.stylesheets;
 
 /**
- * Un nodo que enlaza o contiene una hoja de estilos: un `<link>` o un `<style>`.
+ * A node that links or contains a style sheet: a `<link>` or a `<style>`.
  *
- * <p>Lo implementan los elementos, no el documento. De ahi que sea la contraparte de
- * {@link StyleSheet#getOwnerNode}: uno va del nodo a la hoja y el otro al reves.
+ * <p>The elements implement it, not the document. Hence it is the counterpart of
+ * {@link StyleSheet#getOwnerNode}: one goes from the node to the sheet and the other the other way.
  */
 public interface LinkStyle {
 
-    /** La hoja que este nodo aporta, o nulo si todavia no se cargo o no es valida. */
+    /** The sheet this node contributes, or null if it has not loaded yet or is not valid. */
     StyleSheet getSheet();
 }

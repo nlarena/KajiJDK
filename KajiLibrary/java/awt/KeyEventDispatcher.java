@@ -3,18 +3,18 @@ package java.awt;
 import java.awt.event.KeyEvent;
 
 /**
- * Alguien que se mete a repartir los eventos de teclado **antes** que el gestor del foco.
+ * Something that steps in to dispatch key events **before** the focus manager.
  *
- * <p>Se registra con {@link KeyboardFocusManager#addKeyEventDispatcher}. Devolver `true` quiere decir
- * "yo me lo llevo": el evento no sigue viajando y ningún otro lo ve, ni siquiera el componente que
- * tiene el foco. Es la forma de implementar un atajo global.
+ * <p>It is registered with {@link KeyboardFocusManager#addKeyEventDispatcher}. Returning `true`
+ * means "I take it": the event travels no further and nobody else sees it, not even the component
+ * with the focus. It is the way to implement a global shortcut.
  */
 public interface KeyEventDispatcher {
 
     /**
-     * Reparte ese evento de teclado.
+     * Dispatches that key event.
      *
-     * @return `true` si lo consumió y nadie más tiene que verlo
+     * @return `true` if it consumed it and nobody else has to see it
      */
     boolean dispatchKeyEvent(KeyEvent e);
 }

@@ -12,108 +12,109 @@ import java.util.HashSet;
 import java.util.Set;
 
 /**
- * Quién tiene el foco del teclado y cómo se mueve.
+ * Who has the keyboard focus and how it moves.
  *
- * <p>El foco es de a uno en todo el programa: hay **un** componente que recibe las teclas, y saberlo
- * es responsabilidad de esta clase y no de los componentes. Por eso lo que guarda son cinco cosas
- * globales —el dueño del foco, el dueño permanente, la ventana con foco, la ventana activa y la raíz
- * del ciclo actual— y por eso los métodos que las escriben son `protected`: cambiarlas es cosa del
- * gestor, no de quien lo usa.
+ * <p>The focus is one at a time in the whole program: there is **one** component that receives the
+ * keys, and knowing which one is the job of this class and not of the components. That is why what
+ * it keeps is five global things —the focus owner, the permanent owner, the focused window, the
+ * active window and the current cycle root— and why the methods that write them are `protected`:
+ * changing them is the manager's business, not that of whoever uses it. All but one:
+ * {@link #setGlobalCurrentFocusCycleRoot} is public, for the reason explained there.
  *
- * <p>La diferencia entre el dueño **del foco** y el **permanente** confunde y es real: al abrir un
- * menú, el foco pasa al menú de forma temporal, pero el dueño permanente sigue siendo el campo de
- * texto que estaba escribiendo. Al cerrarse el menú, el foco vuelve solo. Lo mismo entre la ventana
- * **con foco** —la que recibe las teclas— y la **activa** —la que se ve resaltada, que puede ser la
- * dueña de un diálogo—.
+ * <p>The difference between the **focus** owner and the **permanent** one is confusing and real:
+ * when a menu opens, the focus passes to the menu temporarily, but the permanent owner is still the
+ * text field that was being typed into. When the menu closes, the focus comes back by itself. The
+ * same goes between the **focused** window —the one that receives the keys— and the **active** one
+ * —the one that looks highlighted, which may be the owner of a dialog—.
  *
- * <p><strong>Sin sistema de ventanas nadie le avisa a este gestor que el foco se movió.</strong>
- * Todo lo que es estado y cálculo funciona: las teclas de recorrido, la política por omisión, los
- * oyentes de propiedad y de veto, la cadena de repartidores y posprocesadores, y las cinco
- * propiedades globales, que arrancan en `null` y se pueden fijar desde una subclase. Lo que no pasa
- * solo es que el foco se mueva, porque moverlo lo pide {@link Component#requestFocus} y eso, sin
- * pantalla, no hace nada —ni acá ni en el JDK—.
+ * <p><strong>Without a windowing system nobody tells this manager that the focus moved.</strong>
+ * Everything that is state and computation works: the traversal keys, the default policy, the
+ * property and veto listeners, the chain of dispatchers and post-processors, and the five global
+ * properties, which start at `null` and can be set from a subclass. What does not happen by itself
+ * is the focus moving, because moving it is asked for by {@link Component#requestFocus} and that,
+ * without a screen, does nothing —neither here nor in the JDK—.
  */
 public abstract class KeyboardFocusManager implements KeyEventDispatcher, KeyEventPostProcessor {
 
-    /** Hacia adelante: Tab. */
+    /** Forwards: Tab. */
     public static final int FORWARD_TRAVERSAL_KEYS = 0;
 
-    /** Hacia atrás: Shift+Tab. */
+    /** Backwards: Shift+Tab. */
     public static final int BACKWARD_TRAVERSAL_KEYS = 1;
 
-    /** Un nivel de ciclo hacia arriba. */
+    /** One cycle level up. */
     public static final int UP_CYCLE_TRAVERSAL_KEYS = 2;
 
-    /** Un nivel de ciclo hacia abajo. */
+    /** One cycle level down. */
     public static final int DOWN_CYCLE_TRAVERSAL_KEYS = 3;
 
-    /** Cuántos sentidos de recorrido hay. */
+    /** How many traversal directions there are. */
     static final int TRAVERSAL_KEY_LENGTH = 4;
 
-    /** El gestor en uso. */
-    private static KeyboardFocusManager actual;
+    /** The manager in use. */
+    private static KeyboardFocusManager current;
 
-    /** El componente con el foco. */
+    /** The component with the focus. */
     private Component focusOwner;
 
-    /** El dueño permanente, que no cambia con un foco temporal. */
+    /** The permanent owner, which does not change with a temporary focus. */
     private Component permanentFocusOwner;
 
-    /** La ventana que recibe las teclas. */
+    /** The window that receives the keys. */
     private Window focusedWindow;
 
-    /** La ventana que se ve activa. */
+    /** The window that looks active. */
     private Window activeWindow;
 
-    /** La raíz del ciclo de foco que se está recorriendo. */
+    /** The root of the focus cycle being traversed. */
     private Container currentFocusCycleRoot;
 
-    /** La política que usa un contenedor que no fijó la suya. */
+    /** The policy used by a container that did not set its own. */
     private FocusTraversalPolicy defaultPolicy = new DefaultFocusTraversalPolicy();
 
-    /** Las teclas de recorrido de fábrica, por sentido. */
-    private final Set<AWTKeyStroke>[] defaultKeys = crearTeclas();
+    /** The default traversal keys, by direction. */
+    private final Set<AWTKeyStroke>[] defaultKeys = createDefaultKeys();
 
     /**
-     * Los repartidores, en orden, o `null` si nunca se registró ninguno.
+     * The dispatchers, in order, or `null` if none was ever registered.
      *
-     * <p>La distinción entre `null` y lista vacía es visible desde afuera y es a propósito:
-     * {@link #getKeyEventDispatchers} devuelve `null` mientras nadie haya registrado nunca nada, y
-     * una lista vacía después de registrar y sacar. O sea que informa **si alguna vez hubo**
-     * repartidores, no sólo si los hay ahora.
+     * <p>The distinction between `null` and an empty list is visible from outside and deliberate:
+     * {@link #getKeyEventDispatchers} returns `null` while nobody has ever registered anything, and
+     * an empty list after registering and removing. That is, it reports **whether there ever were**
+     * dispatchers, not only whether there are any now.
      */
     private ArrayList<KeyEventDispatcher> dispatchers;
 
-    /** Los posprocesadores, con la misma distinción. */
+    /** The post-processors, with the same distinction. */
     private ArrayList<KeyEventPostProcessor> postProcessors;
 
-    /** Los oyentes de cambio de propiedad. */
-    private final PropertyChangeSupport cambios = new PropertyChangeSupport(this);
+    /** The property change listeners. */
+    private final PropertyChangeSupport changeSupport = new PropertyChangeSupport(this);
 
-    /** Los oyentes con derecho a vetar. */
-    private final VetoableChangeSupport vetos = new VetoableChangeSupport(this);
+    /** The listeners entitled to veto. */
+    private final VetoableChangeSupport vetoSupport = new VetoableChangeSupport(this);
 
-    /** Un gestor con las teclas y la política de fábrica. */
+    /** A manager with the keys and the default policy. */
     public KeyboardFocusManager() {
     }
 
-    /** Las cuatro tablas de teclas de fábrica. */
+    /** The four tables of default keys. */
     @SuppressWarnings("unchecked")
-    private static Set<AWTKeyStroke>[] crearTeclas() {
+    private static Set<AWTKeyStroke>[] createDefaultKeys() {
         Set<AWTKeyStroke>[] t = new Set[TRAVERSAL_KEY_LENGTH];
         for (int i = 0; i < TRAVERSAL_KEY_LENGTH; i++) {
-            t[i] = porOmision(i);
+            t[i] = defaultKeysFor(i);
         }
         return t;
     }
 
     /**
-     * Las teclas de fábrica de ese sentido.
+     * The default keys of that direction.
      *
-     * <p>Los dos ciclos —arriba y abajo— **no tienen ninguna** en AWT, y es a propósito: subir o
-     * bajar de ciclo es cosa de Swing, que sí les pone Ctrl+Arriba y Ctrl+Abajo.
+     * <p>The two cycle directions —up and down— have **none** in AWT, and that is deliberate: going
+     * up or down a cycle is Swing's business, and Swing does give them Ctrl+Up and Ctrl+Down.
      */
-    private static Set<AWTKeyStroke> porOmision(int id) {
+    private static Set<AWTKeyStroke> defaultKeysFor(int id) {
         Set<AWTKeyStroke> s = new HashSet<AWTKeyStroke>();
         if (id == FORWARD_TRAVERSAL_KEYS) {
             s.add(AWTKeyStroke.getAWTKeyStroke(KeyEvent.VK_TAB, 0));
@@ -130,40 +131,40 @@ public abstract class KeyboardFocusManager implements KeyEventDispatcher, KeyEve
     }
 
     /**
-     * El gestor en uso, armando uno si es el primer pedido.
+     * The manager in use, building one if this is the first request.
      *
-     * <p>Es único para todo el programa: dos gestores creerían cada uno tener el foco.
+     * <p>It is unique for the whole program: two managers would each believe they have the focus.
      */
     public static KeyboardFocusManager getCurrentKeyboardFocusManager() {
         synchronized (KeyboardFocusManager.class) {
-            if (actual == null) {
-                actual = new DefaultKeyboardFocusManager();
+            if (current == null) {
+                current = new DefaultKeyboardFocusManager();
             }
-            return actual;
+            return current;
         }
     }
 
     /**
-     * Cambia el gestor.
+     * Changes the manager.
      *
-     * @param newManager el gestor, o `null` para volver al de fábrica en el próximo pedido
+     * @param newManager the manager, or `null` to go back to the default one on the next request
      */
     public static void setCurrentKeyboardFocusManager(KeyboardFocusManager newManager) {
         synchronized (KeyboardFocusManager.class) {
-            actual = newManager;
+            current = newManager;
         }
     }
 
     /**
-     * El componente con el foco.
+     * The component with the focus.
      *
-     * @return el componente, o `null` si el foco no está en este programa
+     * @return the component, or `null` if the focus is not in this program
      */
     public Component getFocusOwner() {
         return this.getGlobalFocusOwner();
     }
 
-    /** El dueño del foco, para las subclases. */
+    /** The focus owner, for the subclasses. */
     protected Component getGlobalFocusOwner() {
         synchronized (this) {
             return this.focusOwner;
@@ -171,25 +172,25 @@ public abstract class KeyboardFocusManager implements KeyEventDispatcher, KeyEve
     }
 
     /**
-     * Fija el dueño del foco.
+     * Sets the focus owner.
      *
-     * <p>Un componente que no puede recibir el foco se ignora en silencio, que es lo que hace el
-     * JDK: el pedido llega del sistema de ventanas y rechazarlo con una excepción cortaría el
-     * reparto de eventos.
+     * <p>A component that cannot receive the focus is ignored silently, which is what the JDK does:
+     * the request comes from the windowing system and rejecting it with an exception would cut off
+     * the event dispatching.
      */
     protected void setGlobalFocusOwner(Component focusOwner) {
         if (focusOwner != null && !focusOwner.isFocusable()) {
             return;
         }
-        Component viejo;
+        Component old;
         synchronized (this) {
-            viejo = this.focusOwner;
+            old = this.focusOwner;
             this.focusOwner = focusOwner;
         }
-        this.firePropertyChange("focusOwner", viejo, focusOwner);
+        this.firePropertyChange("focusOwner", old, focusOwner);
     }
 
-    /** Suelta el foco si lo tiene este programa. */
+    /** Releases the focus if this program has it. */
     public void clearFocusOwner() {
         if (this.getFocusOwner() != null) {
             this.clearGlobalFocusOwner();
@@ -197,9 +198,9 @@ public abstract class KeyboardFocusManager implements KeyEventDispatcher, KeyEve
     }
 
     /**
-     * Suelta el foco.
+     * Releases the focus.
      *
-     * <p>Después de esto ningún componente lo tiene, hasta que el sistema de ventanas diga otra cosa.
+     * <p>After this no component has it, until the windowing system says otherwise.
      */
     public void clearGlobalFocusOwner() {
         this.setGlobalFocusOwner(null);
@@ -207,127 +208,127 @@ public abstract class KeyboardFocusManager implements KeyEventDispatcher, KeyEve
     }
 
     /**
-     * El dueño **permanente** del foco.
+     * The **permanent** focus owner.
      *
-     * @return el componente, o `null`
+     * @return the component, or `null`
      */
     public Component getPermanentFocusOwner() {
         return this.getGlobalPermanentFocusOwner();
     }
 
-    /** El dueño permanente, para las subclases. */
+    /** The permanent owner, for the subclasses. */
     protected Component getGlobalPermanentFocusOwner() {
         synchronized (this) {
             return this.permanentFocusOwner;
         }
     }
 
-    /** Fija el dueño permanente; también pasa a ser el dueño del foco. */
+    /** Sets the permanent owner; it also becomes the focus owner. */
     protected void setGlobalPermanentFocusOwner(Component permanentFocusOwner) {
         if (permanentFocusOwner != null && !permanentFocusOwner.isFocusable()) {
             return;
         }
-        Component viejo;
+        Component old;
         synchronized (this) {
-            viejo = this.permanentFocusOwner;
+            old = this.permanentFocusOwner;
             this.permanentFocusOwner = permanentFocusOwner;
         }
-        this.firePropertyChange("permanentFocusOwner", viejo, permanentFocusOwner);
+        this.firePropertyChange("permanentFocusOwner", old, permanentFocusOwner);
         if (permanentFocusOwner != null) {
             this.setGlobalFocusOwner(permanentFocusOwner);
         }
     }
 
     /**
-     * La ventana que recibe las teclas.
+     * The window that receives the keys.
      *
-     * @return la ventana, o `null`
+     * @return the window, or `null`
      */
     public Window getFocusedWindow() {
         return this.getGlobalFocusedWindow();
     }
 
-    /** La ventana con foco, para las subclases. */
+    /** The focused window, for the subclasses. */
     protected Window getGlobalFocusedWindow() {
         synchronized (this) {
             return this.focusedWindow;
         }
     }
 
-    /** Fija la ventana con foco; una que no lo admite se ignora. */
+    /** Sets the focused window; one that does not admit the focus is ignored. */
     protected void setGlobalFocusedWindow(Window focusedWindow) {
         if (focusedWindow != null && !focusedWindow.isFocusableWindow()) {
             return;
         }
-        Window vieja;
+        Window old;
         synchronized (this) {
-            vieja = this.focusedWindow;
+            old = this.focusedWindow;
             this.focusedWindow = focusedWindow;
         }
-        this.firePropertyChange("focusedWindow", vieja, focusedWindow);
+        this.firePropertyChange("focusedWindow", old, focusedWindow);
     }
 
     /**
-     * La ventana activa.
+     * The active window.
      *
-     * @return la ventana, o `null`
+     * @return the window, or `null`
      */
     public Window getActiveWindow() {
         return this.getGlobalActiveWindow();
     }
 
-    /** La ventana activa, para las subclases. */
+    /** The active window, for the subclasses. */
     protected Window getGlobalActiveWindow() {
         synchronized (this) {
             return this.activeWindow;
         }
     }
 
-    /** Fija la ventana activa. */
+    /** Sets the active window. */
     protected void setGlobalActiveWindow(Window activeWindow) {
-        Window vieja;
+        Window old;
         synchronized (this) {
-            vieja = this.activeWindow;
+            old = this.activeWindow;
             this.activeWindow = activeWindow;
         }
-        this.firePropertyChange("activeWindow", vieja, activeWindow);
+        this.firePropertyChange("activeWindow", old, activeWindow);
     }
 
-    /** La política que usa un contenedor que no fijó la suya. */
+    /** The policy used by a container that did not set its own. */
     public synchronized FocusTraversalPolicy getDefaultFocusTraversalPolicy() {
         return this.defaultPolicy;
     }
 
     /**
-     * Cambia la política por omisión.
+     * Changes the default policy.
      *
-     * <p>No toca a los contenedores que ya tienen la suya: la de omisión es la que se usa cuando no
-     * hay ninguna, no una que pise a las demás.
+     * <p>It does not touch the containers that already have their own: the default one is the one
+     * used when there is none, not one that overrides the rest.
      *
-     * @throws IllegalArgumentException si la política es `null`
+     * @throws IllegalArgumentException if the policy is `null`
      */
     public void setDefaultFocusTraversalPolicy(FocusTraversalPolicy defaultPolicy) {
         if (defaultPolicy == null) {
             throw new IllegalArgumentException("default focus traversal policy cannot be null");
         }
-        FocusTraversalPolicy vieja;
+        FocusTraversalPolicy old;
         synchronized (this) {
-            vieja = this.defaultPolicy;
+            old = this.defaultPolicy;
             this.defaultPolicy = defaultPolicy;
         }
-        this.firePropertyChange("defaultFocusTraversalPolicy", vieja, defaultPolicy);
+        this.firePropertyChange("defaultFocusTraversalPolicy", old, defaultPolicy);
     }
 
     /**
-     * Cambia las teclas de recorrido de fábrica de ese sentido.
+     * Changes the default traversal keys of that direction.
      *
-     * <p>El conjunto se copia y queda inmodificable: si se guardara el que pasaron, cambiarlo después
-     * cambiaría el recorrido de todo el programa sin que nadie lo pida.
+     * <p>The set is copied and left unmodifiable: if the one passed in were kept, changing it
+     * afterwards would change the traversal of the whole program without anyone asking for it.
      *
-     * @throws IllegalArgumentException si el sentido no es uno de los cuatro, si el conjunto es
-     *     `null`, si trae un `null` adentro, si trae una tecla de tipo `KEY_TYPED` —que no distingue
-     *     modificadores y haría el recorrido impredecible— o si una de sus teclas ya está en otro
-     *     sentido
+     * @throws IllegalArgumentException if the direction is not one of the four, if the set is
+     *     `null`, if it carries a `null` inside, if it carries a keystroke of type `KEY_TYPED`
+     *     —which does not tell modifiers apart and would make the traversal unpredictable— or if
+     *     one of its keystrokes is already in another direction
      */
     public void setDefaultFocusTraversalKeys(int id, Set<? extends AWTKeyStroke> keystrokes) {
         if (id < 0 || id >= TRAVERSAL_KEY_LENGTH) {
@@ -336,7 +337,7 @@ public abstract class KeyboardFocusManager implements KeyEventDispatcher, KeyEve
         if (keystrokes == null) {
             throw new IllegalArgumentException("cannot set null Set of default focus traversal keys");
         }
-        Set<AWTKeyStroke> copia = new HashSet<AWTKeyStroke>();
+        Set<AWTKeyStroke> copy = new HashSet<AWTKeyStroke>();
         java.util.Iterator<? extends AWTKeyStroke> it = keystrokes.iterator();
         while (it.hasNext()) {
             AWTKeyStroke k = it.next();
@@ -351,18 +352,18 @@ public abstract class KeyboardFocusManager implements KeyEventDispatcher, KeyEve
                     throw new IllegalArgumentException("focus traversal keys must be unique for a Component");
                 }
             }
-            copia.add(k);
+            copy.add(k);
         }
-        Set<AWTKeyStroke> vieja;
+        Set<AWTKeyStroke> old;
         synchronized (this) {
-            vieja = this.defaultKeys[id];
-            this.defaultKeys[id] = Collections.unmodifiableSet(copia);
+            old = this.defaultKeys[id];
+            this.defaultKeys[id] = Collections.unmodifiableSet(copy);
         }
-        this.firePropertyChange(nombreDeSentido(id), vieja, this.defaultKeys[id]);
+        this.firePropertyChange(keysPropertyName(id), old, this.defaultKeys[id]);
     }
 
-    /** Cómo se llama la propiedad de ese sentido. */
-    private static String nombreDeSentido(int id) {
+    /** What the property of that direction is called. */
+    private static String keysPropertyName(int id) {
         if (id == FORWARD_TRAVERSAL_KEYS) {
             return "forwardDefaultFocusTraversalKeys";
         }
@@ -376,9 +377,9 @@ public abstract class KeyboardFocusManager implements KeyEventDispatcher, KeyEve
     }
 
     /**
-     * Las teclas de recorrido de fábrica de ese sentido.
+     * The default traversal keys of that direction.
      *
-     * @throws IllegalArgumentException si el sentido no es uno de los cuatro
+     * @throws IllegalArgumentException if the direction is not one of the four
      */
     public Set<AWTKeyStroke> getDefaultFocusTraversalKeys(int id) {
         if (id < 0 || id >= TRAVERSAL_KEY_LENGTH) {
@@ -390,15 +391,15 @@ public abstract class KeyboardFocusManager implements KeyEventDispatcher, KeyEve
     }
 
     /**
-     * La raíz del ciclo de foco que se está recorriendo.
+     * The root of the focus cycle being traversed.
      *
-     * @return el contenedor, o `null` si no se está recorriendo ninguno
+     * @return the container, or `null` if none is being traversed
      */
     public Container getCurrentFocusCycleRoot() {
         return this.getGlobalCurrentFocusCycleRoot();
     }
 
-    /** La raíz del ciclo, para las subclases. */
+    /** The cycle root, for the subclasses. */
     protected Container getGlobalCurrentFocusCycleRoot() {
         synchronized (this) {
             return this.currentFocusCycleRoot;
@@ -406,124 +407,124 @@ public abstract class KeyboardFocusManager implements KeyEventDispatcher, KeyEve
     }
 
     /**
-     * Fija la raíz del ciclo.
+     * Sets the cycle root.
      *
-     * <p>Es el único de los cinco escritores globales que es **público**, y la razón es concreta: el
-     * recorrido hacia arriba y hacia abajo de ciclo lo hace quien recorre, no el gestor, así que
-     * tiene que poder decir dónde quedó parado.
+     * <p>It is the only one of the five global writers that is **public**, and the reason is
+     * concrete: traversing up and down a cycle is done by whoever traverses, not by the manager, so
+     * they have to be able to say where they stopped.
      */
     public void setGlobalCurrentFocusCycleRoot(Container newFocusCycleRoot) {
-        Container vieja;
+        Container old;
         synchronized (this) {
-            vieja = this.currentFocusCycleRoot;
+            old = this.currentFocusCycleRoot;
             this.currentFocusCycleRoot = newFocusCycleRoot;
         }
-        this.firePropertyChange("currentFocusCycleRoot", vieja, newFocusCycleRoot);
+        this.firePropertyChange("currentFocusCycleRoot", old, newFocusCycleRoot);
     }
 
-    /** Agrega un oyente de cambios; `null` no hace nada. */
+    /** Adds a change listener; `null` does nothing. */
     public void addPropertyChangeListener(PropertyChangeListener listener) {
         if (listener != null) {
-            this.cambios.addPropertyChangeListener(listener);
+            this.changeSupport.addPropertyChangeListener(listener);
         }
     }
 
-    /** Saca un oyente de cambios. */
+    /** Removes a change listener. */
     public void removePropertyChangeListener(PropertyChangeListener listener) {
         if (listener != null) {
-            this.cambios.removePropertyChangeListener(listener);
+            this.changeSupport.removePropertyChangeListener(listener);
         }
     }
 
-    /** Los oyentes de cambios. */
+    /** The change listeners. */
     public synchronized PropertyChangeListener[] getPropertyChangeListeners() {
-        return this.cambios.getPropertyChangeListeners();
+        return this.changeSupport.getPropertyChangeListeners();
     }
 
-    /** Agrega un oyente para una sola propiedad. */
+    /** Adds a listener for a single property. */
     public void addPropertyChangeListener(String propertyName, PropertyChangeListener listener) {
         if (listener != null) {
-            this.cambios.addPropertyChangeListener(propertyName, listener);
+            this.changeSupport.addPropertyChangeListener(propertyName, listener);
         }
     }
 
-    /** Saca un oyente de una sola propiedad. */
+    /** Removes a listener of a single property. */
     public void removePropertyChangeListener(String propertyName,
             PropertyChangeListener listener) {
         if (listener != null) {
-            this.cambios.removePropertyChangeListener(propertyName, listener);
+            this.changeSupport.removePropertyChangeListener(propertyName, listener);
         }
     }
 
-    /** Los oyentes de esa propiedad. */
+    /** The listeners of that property. */
     public synchronized PropertyChangeListener[] getPropertyChangeListeners(String propertyName) {
-        return this.cambios.getPropertyChangeListeners(propertyName);
+        return this.changeSupport.getPropertyChangeListeners(propertyName);
     }
 
-    /** Les avisa a los oyentes; si el valor no cambió no avisa nada. */
+    /** Tells the listeners; if the value did not change it tells nobody. */
     protected void firePropertyChange(String propertyName, Object oldValue, Object newValue) {
         if (oldValue == newValue) {
             return;
         }
-        this.cambios.firePropertyChange(propertyName, oldValue, newValue);
+        this.changeSupport.firePropertyChange(propertyName, oldValue, newValue);
     }
 
-    /** Agrega un oyente con derecho a vetar. */
+    /** Adds a listener entitled to veto. */
     public void addVetoableChangeListener(VetoableChangeListener listener) {
         if (listener != null) {
-            this.vetos.addVetoableChangeListener(listener);
+            this.vetoSupport.addVetoableChangeListener(listener);
         }
     }
 
-    /** Saca un oyente con derecho a vetar. */
+    /** Removes a listener entitled to veto. */
     public void removeVetoableChangeListener(VetoableChangeListener listener) {
         if (listener != null) {
-            this.vetos.removeVetoableChangeListener(listener);
+            this.vetoSupport.removeVetoableChangeListener(listener);
         }
     }
 
-    /** Los oyentes con derecho a vetar. */
+    /** The listeners entitled to veto. */
     public synchronized VetoableChangeListener[] getVetoableChangeListeners() {
-        return this.vetos.getVetoableChangeListeners();
+        return this.vetoSupport.getVetoableChangeListeners();
     }
 
-    /** Agrega un oyente con derecho a vetar una sola propiedad. */
+    /** Adds a listener entitled to veto a single property. */
     public void addVetoableChangeListener(String propertyName, VetoableChangeListener listener) {
         if (listener != null) {
-            this.vetos.addVetoableChangeListener(propertyName, listener);
+            this.vetoSupport.addVetoableChangeListener(propertyName, listener);
         }
     }
 
-    /** Saca uno. */
+    /** Removes a listener entitled to veto a single property. */
     public void removeVetoableChangeListener(String propertyName,
             VetoableChangeListener listener) {
         if (listener != null) {
-            this.vetos.removeVetoableChangeListener(propertyName, listener);
+            this.vetoSupport.removeVetoableChangeListener(propertyName, listener);
         }
     }
 
-    /** Los oyentes con derecho a vetar esa propiedad. */
+    /** The listeners entitled to veto that property. */
     public synchronized VetoableChangeListener[] getVetoableChangeListeners(String propertyName) {
-        return this.vetos.getVetoableChangeListeners(propertyName);
+        return this.vetoSupport.getVetoableChangeListeners(propertyName);
     }
 
     /**
-     * Les propone el cambio a los que pueden vetar.
+     * Proposes the change to those who can veto it.
      *
-     * @throws PropertyVetoException si alguno lo veta; el cambio no se hace
+     * @throws PropertyVetoException if any of them vetoes it; the change is not made
      */
     protected void fireVetoableChange(String propertyName, Object oldValue, Object newValue)
             throws PropertyVetoException {
         if (oldValue == newValue) {
             return;
         }
-        this.vetos.fireVetoableChange(propertyName, oldValue, newValue);
+        this.vetoSupport.fireVetoableChange(propertyName, oldValue, newValue);
     }
 
     /**
-     * Agrega un repartidor al final de la cadena.
+     * Adds a dispatcher at the end of the chain.
      *
-     * <p>El orden importa: el primero que devuelva `true` se queda el evento. `null` no hace nada.
+     * <p>The order matters: the first one to return `true` keeps the event. `null` does nothing.
      */
     public void addKeyEventDispatcher(KeyEventDispatcher dispatcher) {
         if (dispatcher == null) {
@@ -538,10 +539,10 @@ public abstract class KeyboardFocusManager implements KeyEventDispatcher, KeyEve
     }
 
     /**
-     * Saca un repartidor.
+     * Removes a dispatcher.
      *
-     * <p>El gestor mismo es el último de la cadena y **no** se puede sacar así: para eso hay que
-     * cambiar el gestor.
+     * <p>The manager itself is the last one in the chain and **cannot** be removed this way: for
+     * that the manager has to be changed.
      */
     public void removeKeyEventDispatcher(KeyEventDispatcher dispatcher) {
         if (dispatcher == null) {
@@ -555,10 +556,11 @@ public abstract class KeyboardFocusManager implements KeyEventDispatcher, KeyEve
     }
 
     /**
-     * Los repartidores registrados.
+     * The registered dispatchers.
      *
-     * @return una copia, o `null` si **nunca** se registró ninguno. Sacar el último deja una lista
-     *     vacía, no un `null`: lo que se contesta es si la cadena existe, no si tiene elementos.
+     * @return a copy, or `null` if **none** was ever registered. Removing the last one leaves an
+     *     empty list, not a `null`: what is answered is whether the chain exists, not whether it
+     *     has elements.
      */
     protected synchronized java.util.List<KeyEventDispatcher> getKeyEventDispatchers() {
         if (this.dispatchers == null) {
@@ -567,7 +569,7 @@ public abstract class KeyboardFocusManager implements KeyEventDispatcher, KeyEve
         return new ArrayList<KeyEventDispatcher>(this.dispatchers);
     }
 
-    /** Agrega un posprocesador al final de la cadena; `null` no hace nada. */
+    /** Adds a post-processor at the end of the chain; `null` does nothing. */
     public void addKeyEventPostProcessor(KeyEventPostProcessor processor) {
         if (processor == null) {
             return;
@@ -580,7 +582,7 @@ public abstract class KeyboardFocusManager implements KeyEventDispatcher, KeyEve
         }
     }
 
-    /** Saca un posprocesador; el gestor mismo no se puede sacar así. */
+    /** Removes a post-processor; the manager itself cannot be removed this way. */
     public void removeKeyEventPostProcessor(KeyEventPostProcessor processor) {
         if (processor == null) {
             return;
@@ -593,9 +595,9 @@ public abstract class KeyboardFocusManager implements KeyEventDispatcher, KeyEve
     }
 
     /**
-     * Los posprocesadores registrados.
+     * The registered post-processors.
      *
-     * @return una copia, o `null` si nunca se registró ninguno, con la misma distinción que
+     * @return a copy, or `null` if none was ever registered, with the same distinction as
      *     {@link #getKeyEventDispatchers}
      */
     protected java.util.List<KeyEventPostProcessor> getKeyEventPostProcessors() {
@@ -607,55 +609,54 @@ public abstract class KeyboardFocusManager implements KeyEventDispatcher, KeyEve
         }
     }
 
-    /** Reparte ese evento. */
+    /** Dispatches that event. */
     public abstract boolean dispatchEvent(AWTEvent e);
 
     /**
-     * Le manda el evento al componente **sin** volver a pasar por la cadena de repartidores.
+     * Sends the event to the component **without** going through the chain of dispatchers again.
      *
-     * <p>Es `final` y existe para que un {@link KeyEventDispatcher} pueda entregar el evento sin
-     * armar un ciclo: si llamara a `dispatchEvent`, la cadena volvería a pasar por él.
+     * <p>It is `final` and exists so that a {@link KeyEventDispatcher} can deliver the event
+     * without building a cycle: if it called `dispatchEvent`, the chain would go through it again.
      */
     public final void redispatchEvent(Component target, AWTEvent e) {
         target.dispatchEvent(e);
     }
 
-    /** Reparte un evento de teclado. */
+    /** Dispatches a keyboard event. */
     public abstract boolean dispatchKeyEvent(KeyEvent e);
 
-    /** Mira un evento de teclado que nadie consumió. */
+    /** Looks at a keyboard event nobody consumed. */
     public abstract boolean postProcessKeyEvent(KeyEvent e);
 
-    /** Atiende las teclas de recorrido de ese componente. */
+    /** Handles the traversal keys of that component. */
     public abstract void processKeyEvent(Component focusedComponent, KeyEvent e);
 
     /**
-     * Guarda los eventos de teclado que lleguen mientras el foco está en tránsito.
+     * Holds the keyboard events that arrive while the focus is in transit.
      *
-     * <p>Sin esto, una tecla apretada justo cuando el foco cambia de componente le llegaría al
-     * equivocado.
+     * <p>Without this, a key pressed just as the focus changes component would reach the wrong one.
      */
     protected abstract void enqueueKeyEvents(long after, Component untilFocused);
 
-    /** Suelta los eventos guardados: el foco ya llegó. */
+    /** Releases the held events: the focus has arrived. */
     protected abstract void dequeueKeyEvents(long after, Component untilFocused);
 
-    /** Tira los eventos guardados para ese componente: el foco ya no va a llegarle. */
+    /** Throws away the held events for that component: the focus is not going to reach it. */
     protected abstract void discardKeyEvents(Component comp);
 
-    /** Le pasa el foco al siguiente del recorrido. */
+    /** Passes the focus to the next one in the traversal. */
     public abstract void focusNextComponent(Component aComponent);
 
-    /** Se lo pasa al anterior. */
+    /** Passes it to the previous one. */
     public abstract void focusPreviousComponent(Component aComponent);
 
-    /** Sube un nivel de ciclo de foco. */
+    /** Goes up one focus cycle level. */
     public abstract void upFocusCycle(Component aComponent);
 
-    /** Baja un nivel, entrando en ese contenedor. */
+    /** Goes down one level, entering that container. */
     public abstract void downFocusCycle(Container aContainer);
 
-    /** Le pasa el foco al siguiente del que lo tiene ahora. */
+    /** Passes the focus to the one after the one that has it now. */
     public final void focusNextComponent() {
         Component c = this.getFocusOwner();
         if (c != null) {
@@ -663,7 +664,7 @@ public abstract class KeyboardFocusManager implements KeyEventDispatcher, KeyEve
         }
     }
 
-    /** Se lo pasa al anterior del que lo tiene ahora. */
+    /** Passes it to the one before the one that has it now. */
     public final void focusPreviousComponent() {
         Component c = this.getFocusOwner();
         if (c != null) {
@@ -671,7 +672,7 @@ public abstract class KeyboardFocusManager implements KeyEventDispatcher, KeyEve
         }
     }
 
-    /** Sube un nivel desde el que tiene el foco. */
+    /** Goes up one level from the one that has the focus. */
     public final void upFocusCycle() {
         Component c = this.getFocusOwner();
         if (c != null) {
@@ -680,9 +681,10 @@ public abstract class KeyboardFocusManager implements KeyEventDispatcher, KeyEve
     }
 
     /**
-     * Baja un nivel desde el que tiene el foco.
+     * Goes down one level from the one that has the focus.
      *
-     * <p>Sólo hace algo si el que tiene el foco es un contenedor: bajar de ciclo es entrar en uno.
+     * <p>It only does something if the one with the focus is a container: going down a cycle is
+     * entering one.
      */
     public final void downFocusCycle() {
         Component c = this.getFocusOwner();

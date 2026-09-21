@@ -7,78 +7,81 @@ import java.nio.ByteOrder;
 import java.util.ArrayList;
 
 /**
- * KajiLibrary's javax.imageio.stream.ImageInputStreamImpl -- todo {@link ImageInputStream} menos el
- * acceso al dato.
+ * KajiLibrary's javax.imageio.stream.ImageInputStreamImpl -- all of {@link ImageInputStream} except
+ * access to the data.
  *
- * <p>Una subclase solo tiene que dar {@link #read()} y {@link #read(byte[], int, int)}; el resto
- * --los veinte {@code readX}, el orden de bytes, los bits, las marcas-- sale de aca.
+ * <p>A subclass only has to supply {@link #read()} and {@link #read(byte[], int, int)}; the rest
+ * --the two dozen {@code readX}, the byte order, the bits, the marks-- comes from here. (An earlier
+ * note said twenty.)
  *
- * <h2>La subclase tiene que mantener {@link #streamPos}</h2>
+ * <h2>The subclass has to maintain {@link #streamPos}</h2>
  *
- * <p>Es el contrato que se olvida. Los dos {@code read} abstractos tienen que <b>sumar</b> a
- * {@code streamPos} lo que leyeron: esta clase no lo hace por ellos, porque no sabe cuanto avanzaron.
+ * <p>It is the contract that gets forgotten. The two abstract {@code read} have to <b>add</b> to
+ * {@code streamPos} what they read: this class does not do it for them, because it does not know
+ * how far they advanced.
  *
- * <p>Y tienen que llamar a {@link #checkClosed} antes de tocar nada.
+ * <p>And they have to call {@link #checkClosed} before touching anything.
  *
- * <h2>El desplazamiento de bit</h2>
+ * <h2>The bit offset</h2>
  *
- * <p>{@link #bitOffset} es lo que hace posible leer campos que no caen en limites de byte. La regla la
- * aplica esta clase: cada lectura de un byte o mas lo pone en cero, asi que alternar entre bits y
- * bytes funciona sin llevar la cuenta.
+ * <p>{@link #bitOffset} is what makes it possible to read fields that do not fall on byte
+ * boundaries. This class applies the rule: every read of one byte or more sets it to zero, so
+ * alternating between bits and bytes works without keeping count.
  *
- * <p>{@link #readBits} lee de a un bit por vuelta. Es la version simple y correcta; una que junte
- * bytes enteros seria mas rapida y bastante mas facil de romper en los bordes.
+ * <p>{@link #readBits} reads one bit per iteration. It is the simple and correct version; one that
+ * gathered whole bytes would be faster and quite a bit easier to break at the edges.
  *
- * <h2>Las marcas y el descarte</h2>
+ * <h2>Marks and flushing</h2>
  *
- * <p>{@link #mark} apila posiciones y {@link #reset} las desapila; ver {@link ImageInputStream}. Y
- * {@link #flushedPos} es la barrera: nada anterior se puede volver a leer, y {@link #seek} hacia atras
- * de ahi lanza {@link IndexOutOfBoundsException}.
+ * <p>{@link #mark} pushes positions and {@link #reset} pops them; see {@link ImageInputStream}. And
+ * {@link #flushedPos} is the barrier: nothing before it can be read again, and {@link #seek}
+ * backwards past it throws {@link IndexOutOfBoundsException}.
  *
- * <p>{@link #close} <b>no</b> cierra el flujo de abajo; ver {@link ImageInputStream#close}.
+ * <p>{@link #close} does <b>not</b> close the underlying stream; see {@link
+ * ImageInputStream#close}.
  */
 public abstract class ImageInputStreamImpl implements ImageInputStream {
 
     /**
-     * Ocho bytes de andamio para los {@code readX}.
+     * Eight bytes of scaffolding for the {@code readX}.
      *
-     * <p>De acceso de paquete y compartido entre llamadas: evita alocar un arreglo por cada
-     * {@code readInt}, y un lector de imagenes hace millones. No es seguro entre hilos, y el JDK
-     * tampoco lo promete.
+     * <p>Package-private and shared between calls: it avoids allocating an array for each {@code
+     * readInt}, and an image reader does millions. It is not thread-safe, and the JDK does not
+     * promise that either.
      */
     byte[] byteBuf = new byte[8];
 
-    /** Con que orden leer lo de mas de un byte. */
+    /** Which order to read multi-byte values in. */
     protected ByteOrder byteOrder = ByteOrder.BIG_ENDIAN;
 
-    /** En que byte va la lectura. La subclase la mantiene; ver la nota de la clase. */
+    /** At which byte reading is. The subclass maintains it; see the class note. */
     protected long streamPos;
 
-    /** En que bit dentro de ese byte. */
+    /** At which bit within that byte. */
     protected int bitOffset;
 
-    /** Hasta donde se descarto. */
+    /** How far it was flushed. */
     protected long flushedPos;
 
-    /** Si ya se cerro. */
+    /** Whether it was already closed. */
     private boolean isClosed = false;
 
-    /** Las marcas, apiladas. */
+    /** The marks, stacked. */
     private final ArrayList<Long> markByteStack = new ArrayList<Long>();
 
-    /** Los desplazamientos de bit de cada marca. */
+    /** The bit offsets of each mark. */
     private final ArrayList<Integer> markBitStack = new ArrayList<Integer>();
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     public ImageInputStreamImpl() {
     }
 
     /**
-     * Falla si el flujo esta cerrado.
+     * Fails if the stream is closed.
      *
-     * <p>Toda subclase tiene que llamarlo al principio de sus {@code read}.
+     * <p>Every subclass has to call it at the start of its {@code read}.
      *
-     * @throws IOException si ya se cerro
+     * @throws IOException if it was already closed
      */
     protected final void checkClosed() throws IOException {
         if (this.isClosed) {
@@ -86,36 +89,36 @@ public abstract class ImageInputStreamImpl implements ImageInputStream {
         }
     }
 
-    /** Con que orden leer. */
+    /** Which order to read in. */
     public void setByteOrder(ByteOrder byteOrder) {
         this.byteOrder = byteOrder;
     }
 
-    /** Cual esta puesto. */
+    /** Which one is set. */
     public ByteOrder getByteOrder() {
         return this.byteOrder;
     }
 
-    /** Lo tiene que dar la subclase. Ver la nota de la clase. */
+    /** The subclass has to supply it. See the class note. */
     public abstract int read() throws IOException;
 
-    /** Hasta llenar el arreglo. */
+    /** Until the array is full. */
     public int read(byte[] b) throws IOException {
         return read(b, 0, b.length);
     }
 
-    /** Lo tiene que dar la subclase. */
+    /** The subclass has to supply it. */
     public abstract int read(byte[] b, int off, int len) throws IOException;
 
     /**
-     * Hasta {@code len} bytes, sin copiar.
+     * Up to {@code len} bytes, without copying.
      *
-     * <p>Esta implementacion <b>si</b> copia: aloca un arreglo del tamano pedido y lo entrega. La
-     * ganancia de no copiar depende de que la subclase tenga un bufer propio del que prestar, y esta
-     * clase no lo tiene. Es lo que hace el JDK en esta misma clase.
+     * <p>This implementation <b>does</b> copy: it allocates an array of the requested size and
+     * hands it over. The gain of not copying depends on the subclass having a buffer of its own to
+     * lend from, and this class has none. It is what the JDK does in this same class.
      *
-     * @throws IndexOutOfBoundsException si el largo es negativo
-     * @throws NullPointerException si el bufer es null
+     * @throws IndexOutOfBoundsException if the length is negative
+     * @throws NullPointerException if the buffer is null
      */
     public void readBytes(IIOByteBuffer buf, int len) throws IOException {
         if (buf == null) {
@@ -131,7 +134,7 @@ public abstract class ImageInputStreamImpl implements ImageInputStream {
         buf.setLength(len);
     }
 
-    /** Un byte como booleano. */
+    /** One byte as a boolean. */
     public boolean readBoolean() throws IOException {
         int ch = read();
         if (ch < 0) {
@@ -140,7 +143,7 @@ public abstract class ImageInputStreamImpl implements ImageInputStream {
         return ch != 0;
     }
 
-    /** Un byte con signo. */
+    /** One signed byte. */
     public byte readByte() throws IOException {
         int ch = read();
         if (ch < 0) {
@@ -149,7 +152,7 @@ public abstract class ImageInputStreamImpl implements ImageInputStream {
         return (byte) ch;
     }
 
-    /** Un byte sin signo. */
+    /** One unsigned byte. */
     public int readUnsignedByte() throws IOException {
         int ch = read();
         if (ch < 0) {
@@ -158,7 +161,7 @@ public abstract class ImageInputStreamImpl implements ImageInputStream {
         return ch;
     }
 
-    /** Dos bytes con signo, en el orden configurado. */
+    /** Two signed bytes, in the configured order. */
     public short readShort() throws IOException {
         readFullyInternal(2);
         int hi = this.byteBuf[0] & 0xFF;
@@ -169,17 +172,17 @@ public abstract class ImageInputStreamImpl implements ImageInputStream {
         return (short) ((lo << 8) | hi);
     }
 
-    /** Dos bytes sin signo. */
+    /** Two unsigned bytes. */
     public int readUnsignedShort() throws IOException {
         return readShort() & 0xFFFF;
     }
 
-    /** Dos bytes como caracter. */
+    /** Two bytes as a char. */
     public char readChar() throws IOException {
         return (char) readShort();
     }
 
-    /** Cuatro bytes con signo. */
+    /** Four signed bytes. */
     public int readInt() throws IOException {
         readFullyInternal(4);
         int b0 = this.byteBuf[0] & 0xFF;
@@ -192,15 +195,15 @@ public abstract class ImageInputStreamImpl implements ImageInputStream {
         return (b3 << 24) | (b2 << 16) | (b1 << 8) | b0;
     }
 
-    /** Cuatro bytes sin signo. Ver {@link ImageInputStream#readUnsignedInt}. */
+    /** Four unsigned bytes. See {@link ImageInputStream#readUnsignedInt}. */
     public long readUnsignedInt() throws IOException {
         return readInt() & 0xFFFFFFFFL;
     }
 
-    /** Ocho bytes. */
+    /** Eight bytes. */
     public long readLong() throws IOException {
-        // Se arma con dos enteros de cuatro y no de a ocho bytes: asi el orden de bytes se aplica una
-        // sola vez, en readInt, en lugar de repetir la logica.
+        // Built from two four-byte ints and not byte by byte: that way the byte order is applied
+        // once, in readInt, instead of repeating the logic.
         int i1 = readInt();
         int i2 = readInt();
         if (this.byteOrder == ByteOrder.BIG_ENDIAN) {
@@ -209,17 +212,17 @@ public abstract class ImageInputStreamImpl implements ImageInputStream {
         return ((long) i2 << 32) + (i1 & 0xFFFFFFFFL);
     }
 
-    /** Cuatro bytes como coma flotante. */
+    /** Four bytes as floating point. */
     public float readFloat() throws IOException {
         return Float.intBitsToFloat(readInt());
     }
 
-    /** Ocho bytes como coma flotante. */
+    /** Eight bytes as floating point. */
     public double readDouble() throws IOException {
         return Double.longBitsToDouble(readLong());
     }
 
-    /** Una linea, un byte por caracter. Ver {@link ImageInputStream#readLine}. */
+    /** A line, one byte per character. See {@link ImageInputStream#readLine}. */
     public String readLine() throws IOException {
         StringBuilder input = new StringBuilder();
         int c = -1;
@@ -230,7 +233,8 @@ public abstract class ImageInputStreamImpl implements ImageInputStream {
                 eol = true;
             } else if (c == '\r') {
                 eol = true;
-                // Un \r\n cuenta como un solo fin de linea, y el \n no se consume si no viene.
+                // A \r\n counts as a single line end, and the \n is not consumed if it does not
+                // come.
                 long cur = getStreamPosition();
                 if (read() != '\n') {
                     seek(cur);
@@ -246,10 +250,10 @@ public abstract class ImageInputStreamImpl implements ImageInputStream {
     }
 
     /**
-     * Una cadena en UTF modificado.
+     * A string in modified UTF-8.
      *
-     * <p>Siempre en orden de red: se cambia el orden, se lee, y se restaura -- incluso si la lectura
-     * falla. Ver {@link ImageInputStream#readUTF}.
+     * <p>Always in network order: the order is switched, the string read, and the order restored --
+     * even if the read fails. See {@link ImageInputStream#readUTF}.
      */
     public String readUTF() throws IOException {
         checkClosed();
@@ -267,7 +271,7 @@ public abstract class ImageInputStreamImpl implements ImageInputStream {
         return ret;
     }
 
-    /** Llena esa parte del arreglo. */
+    /** Fills that part of the array. */
     public void readFully(byte[] b, int off, int len) throws IOException {
         if (off < 0 || len < 0 || off + len > b.length || off + len < 0) {
             throw new IndexOutOfBoundsException();
@@ -282,12 +286,12 @@ public abstract class ImageInputStreamImpl implements ImageInputStream {
         }
     }
 
-    /** Llena el arreglo. */
+    /** Fills the array. */
     public void readFully(byte[] b) throws IOException {
         readFully(b, 0, b.length);
     }
 
-    /** Llena esa parte, dos bytes por elemento. */
+    /** Fills that part, two bytes per element. */
     public void readFully(short[] s, int off, int len) throws IOException {
         checkBounds(off, len, s.length);
         int i = 0;
@@ -297,7 +301,7 @@ public abstract class ImageInputStreamImpl implements ImageInputStream {
         }
     }
 
-    /** Idem, con caracteres. */
+    /** Same, with chars. */
     public void readFully(char[] c, int off, int len) throws IOException {
         checkBounds(off, len, c.length);
         int i = 0;
@@ -307,7 +311,7 @@ public abstract class ImageInputStreamImpl implements ImageInputStream {
         }
     }
 
-    /** Idem, cuatro bytes por elemento. */
+    /** Same, four bytes per element. */
     public void readFully(int[] i, int off, int len) throws IOException {
         checkBounds(off, len, i.length);
         int k = 0;
@@ -317,7 +321,7 @@ public abstract class ImageInputStreamImpl implements ImageInputStream {
         }
     }
 
-    /** Idem, ocho bytes. */
+    /** Same, eight bytes. */
     public void readFully(long[] l, int off, int len) throws IOException {
         checkBounds(off, len, l.length);
         int i = 0;
@@ -327,7 +331,7 @@ public abstract class ImageInputStreamImpl implements ImageInputStream {
         }
     }
 
-    /** Idem, coma flotante de cuatro bytes. */
+    /** Same, four-byte floating point. */
     public void readFully(float[] f, int off, int len) throws IOException {
         checkBounds(off, len, f.length);
         int i = 0;
@@ -337,7 +341,7 @@ public abstract class ImageInputStreamImpl implements ImageInputStream {
         }
     }
 
-    /** Idem, de ocho bytes. */
+    /** Same, eight-byte. */
     public void readFully(double[] d, int off, int len) throws IOException {
         checkBounds(off, len, d.length);
         int i = 0;
@@ -347,22 +351,22 @@ public abstract class ImageInputStreamImpl implements ImageInputStream {
         }
     }
 
-    /** En que byte va. */
+    /** At which byte it is. */
     public long getStreamPosition() throws IOException {
         checkClosed();
         return this.streamPos;
     }
 
-    /** En que bit dentro de ese byte. */
+    /** At which bit within that byte. */
     public int getBitOffset() throws IOException {
         checkClosed();
         return this.bitOffset;
     }
 
     /**
-     * Lo fija.
+     * Sets it.
      *
-     * @throws IllegalArgumentException si no esta entre 0 y 7
+     * @throws IllegalArgumentException if it is not between 0 and 7
      */
     public void setBitOffset(int bitOffset) throws IOException {
         checkClosed();
@@ -373,11 +377,11 @@ public abstract class ImageInputStreamImpl implements ImageInputStream {
     }
 
     /**
-     * Un bit.
+     * One bit.
      *
-     * <p>Lee el byte, saca el bit que toca, y si no era el ultimo del byte <b>vuelve atras</b> para
-     * que la proxima lectura encuentre el mismo byte. Es lo que hace que leer ocho bits seguidos
-     * consuma un byte y no ocho.
+     * <p>It reads the byte, takes out the bit that is due, and if it was not the last one of the
+     * byte it <b>goes back</b> so that the next read finds the same byte. It is what makes reading
+     * eight bits in a row consume one byte and not eight.
      */
     public int readBit() throws IOException {
         checkClosed();
@@ -397,11 +401,12 @@ public abstract class ImageInputStreamImpl implements ImageInputStream {
     }
 
     /**
-     * Hasta 64 bits.
+     * Up to 64 bits.
      *
-     * <p>De a un bit: es la version simple, y la que no se equivoca en los bordes.
+     * <p>One bit at a time: it is the simple version, and the one that does not get the edges
+     * wrong.
      *
-     * @throws IllegalArgumentException si se piden mas de 64
+     * @throws IllegalArgumentException if more than 64 are asked for
      */
     public long readBits(int numBits) throws IOException {
         checkClosed();
@@ -420,19 +425,19 @@ public abstract class ImageInputStreamImpl implements ImageInputStream {
         return accum;
     }
 
-    /** No se sabe; una subclase que pueda saberlo lo redefine. */
+    /** Unknown; a subclass that can know redefines it. */
     public long length() {
         return -1L;
     }
 
-    /** Saltea bytes. */
+    /** Skips bytes. */
     public int skipBytes(int n) throws IOException {
         long pos = getStreamPosition();
         seek(pos + n);
         return (int) (getStreamPosition() - pos);
     }
 
-    /** Idem, con un salto grande. */
+    /** Same, with a large skip. */
     public long skipBytes(long n) throws IOException {
         long pos = getStreamPosition();
         seek(pos + n);
@@ -440,11 +445,11 @@ public abstract class ImageInputStreamImpl implements ImageInputStream {
     }
 
     /**
-     * Se posiciona en ese byte.
+     * Seeks to that byte.
      *
-     * <p>Limpia el desplazamiento de bit, como toda operacion de byte.
+     * <p>It clears the bit offset, like every byte operation.
      *
-     * @throws IndexOutOfBoundsException si es anterior a la posicion de descarte
+     * @throws IndexOutOfBoundsException if it is before the flushed position
      */
     public void seek(long pos) throws IOException {
         checkClosed();
@@ -455,22 +460,22 @@ public abstract class ImageInputStreamImpl implements ImageInputStream {
         this.streamPos = pos;
     }
 
-    /** Apila la posicion y el desplazamiento de bit. */
+    /** Pushes the position and the bit offset. */
     public void mark() {
         try {
             this.markByteStack.add(Long.valueOf(getStreamPosition()));
             this.markBitStack.add(Integer.valueOf(getBitOffset()));
         } catch (IOException e) {
-            // El flujo esta cerrado. `mark` no declara IOException, asi que no hay donde avisar; el
-            // `reset` correspondiente va a fallar, que es donde el error si se puede reportar.
+            // The stream is closed. `mark` declares no IOException, so there is nowhere to report
+            // it; the matching `reset` will fail, which is where the error can be reported.
         }
     }
 
     /**
-     * Desapila la ultima marca.
+     * Pops the last mark.
      *
-     * <p>Sin marcas no hace nada: es lo que hace el JDK, y no lanzar aca permite un {@code reset}
-     * defensivo.
+     * <p>Without marks it does nothing: it is what the JDK does, and not throwing here allows a
+     * defensive {@code reset}.
      */
     public void reset() throws IOException {
         if (this.markByteStack.isEmpty()) {
@@ -486,9 +491,10 @@ public abstract class ImageInputStreamImpl implements ImageInputStream {
     }
 
     /**
-     * Promete no volver antes de esa posicion.
+     * Promises not to go back before that position.
      *
-     * @throws IndexOutOfBoundsException si es anterior al descarte actual o posterior a la posicion
+     * @throws IndexOutOfBoundsException if it is before the current flushed position or after the
+     *     position
      */
     public void flushBefore(long pos) throws IOException {
         checkClosed();
@@ -501,17 +507,17 @@ public abstract class ImageInputStreamImpl implements ImageInputStream {
         this.flushedPos = pos;
     }
 
-    /** Descarta todo lo anterior a la posicion actual. */
+    /** Discards everything before the current position. */
     public void flush() throws IOException {
         flushBefore(getStreamPosition());
     }
 
-    /** Hasta donde se descarto. */
+    /** How far it was flushed. */
     public long getFlushedPosition() {
         return this.flushedPos;
     }
 
-    /** No; una subclase que guarde lo redefine. */
+    /** No; a subclass that keeps things redefines it. */
     public boolean isCached() {
         return false;
     }
@@ -527,11 +533,11 @@ public abstract class ImageInputStreamImpl implements ImageInputStream {
     }
 
     /**
-     * Cierra.
+     * Closes.
      *
-     * <p>No cierra el flujo de abajo; ver {@link ImageInputStream#close}.
+     * <p>It does not close the underlying stream; see {@link ImageInputStream#close}.
      *
-     * @throws IOException si ya estaba cerrado
+     * @throws IOException if it was already closed
      */
     public void close() throws IOException {
         checkClosed();
@@ -539,11 +545,11 @@ public abstract class ImageInputStreamImpl implements ImageInputStream {
     }
 
     /**
-     * Cierra si nadie lo hizo.
+     * Closes it if nobody did.
      *
-     * <p>Sobrevive porque la clase base del JDK lo declara y una subclase puede estar llamando a
-     * {@code super.finalize()}. La finalizacion quedo obsoleta y no hay que apoyarse en esto: un
-     * {@code ImageInputStream} se cierra a mano.
+     * <p>It survives because the JDK base class declares it and a subclass may be calling
+     * {@code super.finalize()}. Finalization is obsolete and nothing should rely on this: an
+     * {@code ImageInputStream} is closed by hand.
      */
     @Override
     protected void finalize() throws Throwable {
@@ -551,18 +557,18 @@ public abstract class ImageInputStreamImpl implements ImageInputStream {
             try {
                 close();
             } catch (IOException e) {
-                // Ya se estaba finalizando; no hay a quien reportarle.
+                // It was already being finalized; there is nobody to report to.
             }
         }
         super.finalize();
     }
 
-    /** Llena los primeros {@code n} bytes del andamio. */
+    /** Fills the first {@code n} bytes of the scaffolding. */
     private void readFullyInternal(int n) throws IOException {
         readFully(this.byteBuf, 0, n);
     }
 
-    /** El control de rango que comparten los {@code readFully} de arreglos. */
+    /** The range check the array {@code readFully} share. */
     private static void checkBounds(int off, int len, int length) {
         if (off < 0 || len < 0 || off + len > length || off + len < 0) {
             throw new IndexOutOfBoundsException();

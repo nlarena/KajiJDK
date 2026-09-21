@@ -7,39 +7,42 @@ import java.security.PublicKey;
 import java.security.SignatureException;
 
 /**
- * KajiLibrary's javax.security.cert.Certificate -- un certificado, en el API viejo.
+ * KajiLibrary's javax.security.cert.Certificate -- a certificate, in the old API.
  *
- * <p>Este paquete entero existe por una sola razon: {@code javax.net.ssl.SSLSession} declara
- * {@code getPeerCertificateChain()} devolviendo estos, y esa firma no se puede cambiar sin romper
- * todo lo compilado contra ella. Para cualquier cosa nueva va
- * {@link java.security.cert.Certificate}, que es mas completa y la que el resto de la plataforma
- * usa.
+ * <p>This whole package exists for one reason only: {@code javax.net.ssl.SSLSession} declares
+ * {@code getPeerCertificateChain()} returning these, and that signature cannot be changed without
+ * breaking everything compiled against it. For anything new there is
+ * {@link java.security.cert.Certificate}, which is more complete and the one the rest of the
+ * platform uses.
  *
- * <h2>La identidad son los bytes</h2>
+ * <h2>The identity is the bytes</h2>
  *
- * <p>{@link #equals} y {@link #hashCode} miran la codificacion, no los campos. Es lo correcto para
- * algo firmado: dos certificados con el mismo emisor, el mismo sujeto y la misma clave pero
- * distintos bytes son <b>documentos distintos</b>, y solo uno de los dos tiene una firma que cierre.
- * Comparar campo por campo diria que son iguales y eso es justamente lo que un atacante querria.
+ * <p>{@link #equals} and {@link #hashCode} look at the encoding, not the fields. It is the right
+ * thing for something signed: two certificates with the same issuer, the same subject and the same
+ * key but different bytes are <b>different documents</b>, and only one of the two has a signature
+ * that checks out. Comparing field by field would say they are equal and that is precisely what an
+ * attacker would want.
  *
- * <p>Si {@code getEncoded} tira, {@link #equals} devuelve false en vez de propagar: el contrato de
- * {@code equals} no permite lanzar, y un certificado que no se puede codificar no es igual a nada.
+ * <p>If {@code getEncoded} throws, {@link #equals} returns false instead of propagating: the
+ * contract of {@code equals} does not allow throwing, and a certificate that cannot be encoded is
+ * equal to nothing.
  *
- * <p>Obsoleta <b>y marcada para remocion</b> desde Java 9. El reemplazo es
- * {@code java.security.cert}, que no es una version mejorada de esto sino otra cosa: soporta la
- * version 3 del formato, con extensiones, que es lo unico que sirve para validar una cadena de hoy.
+ * <p>Deprecated <b>and marked for removal</b> since Java 9. The replacement is {@code
+ * java.security.cert}, which is not an improved version of this but something else: it supports
+ * version 3 of the format, with extensions, which is the only thing that serves to validate a chain
+ * today.
  */
 @Deprecated(since = "9", forRemoval = true)
 public abstract class Certificate {
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     public Certificate() {
     }
 
     /**
-     * Igualdad por bytes codificados. Ver la nota de la clase.
+     * Equality by encoded bytes. See the class note.
      *
-     * @return false si alguno de los dos no se puede codificar
+     * @return false if either of the two cannot be encoded
      */
     public boolean equals(Object other) {
         if (this == other) {
@@ -67,7 +70,14 @@ public abstract class Certificate {
         }
     }
 
-    /** Suma de los bytes codificados; 0 si no se pueden obtener, para no lanzar. */
+    /**
+     * The sum of the encoded bytes, each (unsigned) multiplied by its position; 0 if they cannot be
+     * obtained, so as not to throw.
+     *
+     * <p>The note said "sum of the bytes". It is weighted, and it is not what JDK 25 computes:
+     * there it is {@code Arrays.hashCode} of the encoding, so {@code {0xff, 0x80, 5}} hashes to
+     * 24867 in the JDK and to 138 here.
+     */
     public int hashCode() {
         int result = 0;
         try {
@@ -87,33 +97,33 @@ public abstract class Certificate {
     }
 
     /**
-     * La forma codificada, que es la que se firmo.
+     * The encoded form, which is the one that was signed.
      *
-     * @throws CertificateEncodingException si no se puede producir
+     * @throws CertificateEncodingException if it cannot be produced
      */
     public abstract byte[] getEncoded() throws CertificateEncodingException;
 
     /**
-     * Verifica la firma con esa clave, usando el proveedor por omision.
+     * Verifies the signature with that key, using the default provider.
      *
-     * @throws SignatureException si la firma no cierra
+     * @throws SignatureException if the signature does not check out
      */
     public abstract void verify(PublicKey key)
         throws CertificateException, NoSuchAlgorithmException, InvalidKeyException,
                NoSuchProviderException, SignatureException;
 
     /**
-     * Idem, pidiendole el algoritmo a un proveedor con nombre.
+     * Likewise, asking a named provider for the algorithm.
      *
-     * @param sigProvider el nombre del proveedor
+     * @param sigProvider the provider's name
      */
     public abstract void verify(PublicKey key, String sigProvider)
         throws CertificateException, NoSuchAlgorithmException, InvalidKeyException,
                NoSuchProviderException, SignatureException;
 
-    /** Una descripcion legible. Las subclases la deben. */
+    /** A readable description. The subclasses owe it. */
     public abstract String toString();
 
-    /** La clave publica que el certificado ata a su sujeto. */
+    /** The public key the certificate binds to its subject. */
     public abstract PublicKey getPublicKey();
 }

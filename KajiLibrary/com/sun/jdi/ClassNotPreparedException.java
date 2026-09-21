@@ -1,24 +1,24 @@
 package com.sun.jdi;
 
 /**
- * La clase esta cargada pero todavia no preparada.
+ * The class is loaded but not prepared yet.
  *
- * <p>Entre cargar y preparar hay un paso: la VM tiene que ligar la clase y darles valor a sus
- * campos estaticos. Antes de eso no hay estado que leer.
+ * <p>Between loading and preparing there is a step: the VM has to link the class and give its
+ * static fields a value. Before that there is no state to read.
  *
  * @since 1.3
  */
 public class ClassNotPreparedException extends RuntimeException {
 
-    /** Sin detalle. */
+    /** With no detail. */
     public ClassNotPreparedException() {
         super();
     }
 
     /**
-     * Con un mensaje.
+     * With a message.
      *
-     * @param s el mensaje
+     * @param s the message
      */
     public ClassNotPreparedException(String s) {
         super(s);

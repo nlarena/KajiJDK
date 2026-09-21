@@ -9,9 +9,9 @@ import javax.imageio.stream.ImageOutputStream;
 import javax.imageio.stream.MemoryCacheImageOutputStream;
 
 /**
- * Envuelve un {@link OutputStream} en un flujo de salida de imagenes.
+ * Wraps an {@link OutputStream} in an image output stream.
  *
- * <p>De acceso de paquete: no es API. Ver {@link InputStreamImageInputStreamSpi}.
+ * <p>Package-private: it is not API. See {@link InputStreamImageInputStreamSpi}.
  */
 final class OutputStreamImageOutputStreamSpi extends ImageOutputStreamSpi {
 
@@ -24,7 +24,7 @@ final class OutputStreamImageOutputStreamSpi extends ImageOutputStreamSpi {
         return "Service provider that instantiates an ImageOutputStream from an OutputStream";
     }
 
-    /** Si. */
+    /** Yes. */
     @Override
     public boolean canUseCacheFile() {
         return true;

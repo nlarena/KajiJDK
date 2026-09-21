@@ -3,40 +3,40 @@ package java.awt.print;
 import java.io.IOException;
 
 /**
- * KajiLibrary's java.awt.print.PrinterIOException -- el trabajo fallo por un problema de
- * entrada/salida.
+ * KajiLibrary's java.awt.print.PrinterIOException -- the job failed because of an input/output
+ * problem.
  *
- * <p>Envuelve la {@link IOException} original para que pueda salir por una firma que solo declara
- * {@link PrinterException}.
+ * <p>It wraps the original {@link IOException} so it can go out through a signature that only
+ * declares {@link PrinterException}.
  *
- * <h2>Dos formas de sacar la misma excepcion</h2>
+ * <h2>Two ways to get the same exception</h2>
  *
- * <p>{@link #getIOException} y {@link #getCause} devuelven <b>lo mismo</b>. La primera es de 1998; la
- * segunda aparecio en 1.4 con el mecanismo general de causas encadenadas, y se redefinio para que las
- * herramientas que imprimen trazas encontraran la causa por el camino estandar.
+ * <p>{@link #getIOException} and {@link #getCause} return <b>the same thing</b>. The first is from
+ * 1998; the second appeared in 1.4 with the general chained-cause mechanism, and was overridden so
+ * that tools that print stack traces would find the cause the standard way.
  *
- * <p>La consecuencia es que {@code getMessage()} devuelve null: el constructor no toma mensaje, y no
- * hereda el de la causa.
+ * <p>{@code getMessage()} returns null: the constructor takes no message, and it does not inherit
+ * the cause's.
  */
 public class PrinterIOException extends PrinterException {
 
     private static final long serialVersionUID = 5850870712125932846L;
 
-    /** La original. */
+    /** The original. */
     private final IOException mException;
 
-    /** @param exception la que hay que envolver */
+    /** @param exception the one to wrap */
     public PrinterIOException(IOException exception) {
         initCause(null);
         this.mException = exception;
     }
 
-    /** La original. Lo mismo que {@link #getCause}. */
+    /** The original. The same as {@link #getCause}. */
     public IOException getIOException() {
         return this.mException;
     }
 
-    /** La original. Ver la nota de la clase. */
+    /** The original. See the class note. */
     @Override
     public Throwable getCause() {
         return this.mException;

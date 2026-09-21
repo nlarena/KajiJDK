@@ -4,15 +4,16 @@ import java.lang.classfile.Attribute;
 import java.util.List;
 import jdk.internal.classfile.impl.TypedAttributes;
 
-// `LocalVariableTypeTable` (JVMS §4.7.14): las firmas genéricas de las variables locales cuyo tipo
-// no se puede escribir como descriptor. Convive con `LocalVariableTable` y no la reemplaza.
+// `LocalVariableTypeTable` (JVMS §4.7.14): the generic signatures of the local variables whose type
+// cannot be written as a descriptor. It coexists with `LocalVariableTable` and does not replace
+// it.
 public interface LocalVariableTypeTableAttribute
         extends Attribute<LocalVariableTypeTableAttribute> {
 
-    /** Las filas, en el orden del archivo. */
+    /** The rows, in file order. */
     List<LocalVariableTypeInfo> localVariableTypes();
 
-    /** El atributo con estas filas. */
+    /** The attribute with these rows. */
     public static LocalVariableTypeTableAttribute of(List<LocalVariableTypeInfo> localVariableTypes) {
         return TypedAttributes.localVariableTypeTable(localVariableTypes);
     }

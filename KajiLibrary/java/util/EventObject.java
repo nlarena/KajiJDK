@@ -2,18 +2,18 @@ package java.util;
 
 import java.io.Serializable;
 
-// La raiz de todo evento: lleva el objeto que lo origino y nada mas.
+// The root of every event: it carries the object that gave rise to it and nothing more.
 //
-// `source` es `transient` y aun asi el objeto es `Serializable`: es deliberado en el JDK y vale
-// la pena entenderlo. Serializar un evento no debe arrastrar consigo al componente que lo
-// disparo —una ventana, una conexion— que casi nunca es serializable y casi nunca tiene sentido
-// mandar. Un EventObject deserializado tiene `source` en null.
+// `source` is `transient` and the object is `Serializable` all the same: it is deliberate in the JDK
+// and worth understanding. Serialising an event must not drag along the component that fired it —a
+// window, a connection— which is almost never serialisable and almost never makes sense to send. A
+// deserialised EventObject has `source` at null.
 public class EventObject implements Serializable {
 
-    // El objeto sobre el que ocurrio el evento.
+    // The object the event happened on.
     protected transient Object source;
 
-    // Un evento originado en `source`.
+    // An event that arose from `source`.
     public EventObject(Object source) {
         if (source == null) {
             throw new IllegalArgumentException("null source");
@@ -21,7 +21,7 @@ public class EventObject implements Serializable {
         this.source = source;
     }
 
-    // El objeto que origino el evento.
+    // The object the event arose from.
     public Object getSource() {
         return this.source;
     }

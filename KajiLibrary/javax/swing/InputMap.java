@@ -5,24 +5,24 @@ import java.util.HashMap;
 import java.util.Set;
 
 /**
- * Una tabla de tecla a nombre de accion, encadenada con otra.
+ * A table from key to action name, chained with another.
  *
- * <h2>Para que sirve la cadena</h2>
+ * <h2>What the chain is for</h2>
  *
- * <p>Igual que en {@link ActionMap}: hay una capa del programa, una del aspecto y una de la clase.
- * Encadenarlas permite tapar un atajo sin copiar los otros y cambiar el aspecto sin perder los que
- * puso el programa.
+ * <p>The same as in {@link ActionMap}: there is a layer of the program's, one of the look and
+ * feel's and one of the class's. Chaining them allows a shortcut to be covered without copying
+ * the others and the look and feel to be changed without losing the ones the program set.
  *
- * <p>Lo que guarda no es la accion sino su <em>nombre</em>. Esa indireccion es la que permite que
- * cambiar el atajo de una accion y cambiar lo que la accion hace sean dos cosas separadas.
+ * <p>What it keeps is not the action but its <em>name</em>. That indirection is what allows
+ * changing an action's shortcut and changing what the action does to be two separate things.
  *
- * <p>{@link #keys} devuelve solo las de esta tabla y {@link #allKeys} las de toda la cadena. La
- * diferencia importa: para guardar la configuracion se quieren las propias, y para saber que teclas
- * responden hay que mirar todas.
+ * <p>{@link #keys} returns only this table's and {@link #allKeys} the whole chain's. The
+ * difference matters: for saving the configuration one wants one's own, and for knowing which
+ * keys answer one has to look at them all.
  *
- * <h2>Poner nulo borra</h2>
+ * <h2>Putting null erases</h2>
  *
- * <p>{@code put(tecla, null)} saca la entrada en lugar de guardar un nulo, igual que en
+ * <p>{@code put(key, null)} removes the entry instead of keeping a null, just as in
  * {@link ActionMap}.
  */
 public class InputMap implements Serializable {
@@ -30,11 +30,11 @@ public class InputMap implements Serializable {
     private transient HashMap<KeyStroke, Object> arrayTable;
     private InputMap parent;
 
-    /** Una tabla vacia, sin padre. */
+    /** An empty table, with no parent. */
     public InputMap() {
     }
 
-    /** La tabla que se consulta cuando esta no tiene la clave. */
+    /** The table that is consulted when this one does not have the key. */
     public void setParent(InputMap map) {
         this.parent = map;
     }
@@ -43,7 +43,7 @@ public class InputMap implements Serializable {
         return parent;
     }
 
-    /** Guarda el nombre de la accion de esa tecla; con {@code null} la saca. */
+    /** It keeps that key's action name; with {@code null} it removes it. */
     public void put(KeyStroke key, Object actionMapKey) {
         if (key == null) {
             return;
@@ -58,7 +58,7 @@ public class InputMap implements Serializable {
         arrayTable.put(key, actionMapKey);
     }
 
-    /** El nombre de accion de esa tecla, buscando en la cadena. */
+    /** That key's action name, looking through the chain. */
     public Object get(KeyStroke key) {
         Object value = (arrayTable == null) ? null : arrayTable.get(key);
         if (value == null) {
@@ -76,18 +76,19 @@ public class InputMap implements Serializable {
         }
     }
 
-    /** Vacia esta tabla; el padre no se toca. */
+    /** It empties this table; the parent is not touched. */
     public void clear() {
         if (arrayTable != null) {
             arrayTable.clear();
         }
     }
 
-    /** Las teclas de esta tabla, sin las del padre. */
+    /** This table's keys, without the parent's. */
     public KeyStroke[] keys() {
         if (arrayTable == null || arrayTable.isEmpty()) {
-            // Vacia devuelve nulo, no un arreglo de cero. Es lo que hace el JDK y hay codigo que
-            // distingue "no hay tabla" de "hay tabla sin nada"; aca los dos dan lo mismo.
+            // Empty it returns null, not an array of zero. It is what the JDK does and there is
+                        // code that tells "there is no table" from "there is a table with nothing";
+                        // here the two give the same.
             return null;
         }
         Set<KeyStroke> ks = arrayTable.keySet();
@@ -105,10 +106,10 @@ public class InputMap implements Serializable {
     }
 
     /**
-     * Las teclas de toda la cadena, sin repetir.
+     * The keys of the whole chain, without repeating.
      *
-     * <p>Devuelve nulo si no hay ninguna, no un arreglo vacio. Es lo que hace el JDK y hay codigo
-     * que distingue los dos casos.
+     * <p>It returns null if there is none, not an empty array. It is what the JDK does and
+     * there is code that tells the two cases apart.
      */
     public KeyStroke[] allKeys() {
         int count = size();
@@ -124,16 +125,16 @@ public class InputMap implements Serializable {
         if (mk == null) {
             return pk;
         }
-        HashMap<KeyStroke, KeyStroke> junta = new HashMap<KeyStroke, KeyStroke>();
+        HashMap<KeyStroke, KeyStroke> merge = new HashMap<KeyStroke, KeyStroke>();
         for (int i = 0; i < pk.length; i++) {
-            junta.put(pk[i], pk[i]);
+            merge.put(pk[i], pk[i]);
         }
         for (int i = 0; i < mk.length; i++) {
-            junta.put(mk[i], mk[i]);
+            merge.put(mk[i], mk[i]);
         }
-        KeyStroke[] out = new KeyStroke[junta.size()];
+        KeyStroke[] out = new KeyStroke[merge.size()];
         int i = 0;
-        for (KeyStroke k : junta.keySet()) {
+        for (KeyStroke k : merge.keySet()) {
             out[i] = k;
             i++;
         }

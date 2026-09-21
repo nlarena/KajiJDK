@@ -4,63 +4,64 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * Una {@link SSLSession} que ademas informa lo que TLS moderno negocia y la interfaz original no
- * preveia.
+ * An {@link SSLSession} that also reports what modern TLS negotiates and the original interface did
+ * not foresee.
  *
- * <p>Es una clase abstracta y no metodos nuevos en la interfaz por la razon de siempre: agregarlos
- * a {@code SSLSession} habria roto a quien la implementara. Los que tienen cuerpo aca devuelven lo
- * vacio o tiran {@link UnsupportedOperationException} segun si "nada" es una respuesta sensata.
+ * <p>It is an abstract class and not new methods on the interface for the usual reason: adding them
+ * to {@code SSLSession} would have broken whoever implemented it. The ones with a body here return
+ * the empty value or throw {@link UnsupportedOperationException} depending on whether "nothing" is
+ * a sensible answer.
  */
 public abstract class ExtendedSSLSession implements SSLSession {
 
     public ExtendedSSLSession() {
     }
 
-    /** Los algoritmos de firma que esta punta acepta, en orden de preferencia. */
+    /** The signature algorithms this end accepts, in order of preference. */
     public abstract String[] getLocalSupportedSignatureAlgorithms();
 
-    /** Los que declaro el par, o {@code null} si no los declaro. */
+    /** The ones the peer declared, or {@code null} if it declared none. */
     public abstract String[] getPeerSupportedSignatureAlgorithms();
 
     /**
-     * Los nombres SNI que pidio el cliente.
+     * The SNI names the client asked for.
      *
-     * <p>Vacia por omision, que es lo correcto: no haber pedido ninguno es normal y no un error.
+     * <p>Empty by default, which is right: having asked for none is normal and not an error.
      *
-     * @throws UnsupportedOperationException si la implementacion no lo soporta
+     * @throws UnsupportedOperationException if the implementation does not support it
      */
     public List<SNIServerName> getRequestedServerNames() {
-        throw new UnsupportedOperationException("esta sesion no informa los nombres SNI pedidos");
+        throw new UnsupportedOperationException("this session does not report requested SNI names");
     }
 
     /**
-     * Las respuestas OCSP grapadas al handshake.
+     * The OCSP responses stapled to the handshake.
      *
-     * <p>Vacia por omision. Grapar la respuesta de revocacion al handshake evita que el cliente
-     * tenga que consultarla por su cuenta — otra conexion, otro punto de falla, y una filtracion de
-     * a quien se conecta.
+     * <p>Empty by default. Stapling the revocation response to the handshake saves the client from
+     * having to look it up on its own — another connection, another point of failure, and a leak of
+     * whom it is connecting to.
      */
     public List<byte[]> getStatusResponses() {
         return Collections.<byte[]>emptyList();
     }
 
     /**
-     * Deriva una clave a partir del secreto de la sesion.
+     * Derives a key from the session's secret.
      *
-     * @throws UnsupportedOperationException si la implementacion no lo soporta
+     * @throws UnsupportedOperationException if the implementation does not support it
      */
     public javax.crypto.SecretKey exportKeyingMaterialKey(String keyAlg, String label,
             byte[] context, int length) throws SSLKeyException {
-        throw new UnsupportedOperationException("esta sesion no exporta material de claves");
+        throw new UnsupportedOperationException("this session does not export keying material");
     }
 
     /**
-     * Lo mismo, como bytes crudos.
+     * The same, as raw bytes.
      *
-     * @throws UnsupportedOperationException si la implementacion no lo soporta
+     * @throws UnsupportedOperationException if the implementation does not support it
      */
     public byte[] exportKeyingMaterialData(String label, byte[] context, int length)
             throws SSLKeyException {
-        throw new UnsupportedOperationException("esta sesion no exporta material de claves");
+        throw new UnsupportedOperationException("this session does not export keying material");
     }
 }

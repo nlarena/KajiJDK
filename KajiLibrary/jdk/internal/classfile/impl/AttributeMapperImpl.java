@@ -6,9 +6,9 @@ import java.lang.classfile.AttributedElement;
 import java.lang.classfile.BufWriter;
 import java.lang.classfile.ClassReader;
 
-// El mapeador de un atributo conocido por su nombre, que lo lee y lo escribe sin interpretarlo.
-// Lee: copia el cuerpo. Escribe: nombre, largo y el mismo cuerpo. Esa simetría es lo que permite
-// copiar un atributo de un archivo a otro aunque no se sepa qué dice.
+// The mapper of an attribute known by its name, which reads and writes it without interpreting it.
+// Read: it copies the body. Write: name, length and the same body. That symmetry is what allows
+// copying an attribute from one file to another even without knowing what it says.
 public final class AttributeMapperImpl implements AttributeMapper<RawAttribute> {
 
     private final String name;
@@ -25,16 +25,18 @@ public final class AttributeMapperImpl implements AttributeMapper<RawAttribute> 
         return this.name;
     }
 
-    // `pos` es el offset del primer byte del cuerpo. El largo se lee de los cuatro bytes que están
-    // justo antes, que es donde el formato lo pone (§4.7).
+    // `pos` is the offset of the first byte of the body. The length is read from the four bytes
+    // right before it, which is where the format puts it (§4.7).
     public RawAttribute readAttribute(AttributedElement enclosing, ClassReader cf, int pos) {
         int len = cf.readInt(pos - 4);
         if (len < 0 || pos + len > cf.classfileLength()) {
             throw new IllegalArgumentException(
-                    "atributo " + this.name + " con largo " + len + " que no entra en el archivo");
+                    "attribute " + this.name + " with length " + len + " past the end of the file");
         }
-        // El local intermedio no es estilo: pasar la llamada genérica directo como argumento hace
-        // que el compilador borre `T` a su cota y no encuentre el constructor (ver el informe).
+        // The local in between was needed because the compiler used to erase `T` to its bound when
+        // the generic call went straight in as an argument, and then did not find the constructor.
+        // The frozen javac compiles the direct form now (checked 2026-09-18); the local is
+        // harmless.
         java.lang.classfile.constantpool.Utf8Entry name =
                 cf.readEntryOrNull(pos - 6, java.lang.classfile.constantpool.Utf8Entry.class);
         return new RawAttribute(name, this, cf.readBytes(pos, len));
@@ -42,9 +44,9 @@ public final class AttributeMapperImpl implements AttributeMapper<RawAttribute> 
 
     public void writeAttribute(BufWriter buf, RawAttribute attr) {
         buf.writeIndex(attr.attributeName());
-        byte[] cuerpo = attr.crudo();
-        buf.writeInt(cuerpo.length);
-        buf.writeBytes(cuerpo);
+        byte[] body = attr.raw();
+        buf.writeInt(body.length);
+        buf.writeBytes(body);
     }
 
     public boolean allowMultiple() {

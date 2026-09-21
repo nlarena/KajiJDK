@@ -5,14 +5,15 @@ import java.lang.classfile.Opcode;
 import java.lang.classfile.TypeKind;
 import jdk.internal.classfile.impl.Instructions;
 
-// Una de las ocho escrituras de arreglo (`iastore`, `bastore`, …). Como en la lectura, el tipo del
-// componente sale del opcode y no de un operando.
+// One of the eight array stores (`iastore`, `bastore`, ...). As with the load, the component's type
+// comes from the opcode and not from an operand.
 public interface ArrayStoreInstruction extends Instruction {
 
-    /** El tipo del componente que se escribe. */
+    /** The type of the component being written. */
     TypeKind typeKind();
 
-    /** La instrucción de este opcode. Tira `IllegalArgumentException` si no es un `xastore`. */
+    /** The instruction for this opcode. It throws `IllegalArgumentException` if it is not an
+     * `xastore`. */
     public static ArrayStoreInstruction of(Opcode op) {
         return Instructions.arrayStore(op);
     }

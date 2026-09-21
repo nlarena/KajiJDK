@@ -1,16 +1,18 @@
 package java.nio.channels;
 
 /**
- * KajiLibrary's java.nio.channels.IllegalChannelGroupException — Se combinaron un canal y un grupo que no pertenecen al mismo proveedor.
+ * KajiLibrary's java.nio.channels.IllegalChannelGroupException — a channel and a group that do not
+ * belong to the same provider were combined.
  *
- * <p>Es `IllegalArgumentException` y no de estado porque el error esta en **el argumento**: el
- * grupo que se paso no sirve para este canal, y no hay momento en que sirviera.
+ * <p>It is an `IllegalArgumentException` and not one of state because the error is in **the
+ * argument**: the group that was passed does not serve for this channel, and there is no moment when
+ * it would.
  */
 public class IllegalChannelGroupException extends IllegalArgumentException {
 
     private static final long serialVersionUID = 1000000011L;
 
-    /** Construye una. Sin mensaje: el nombre de la clase **es** el mensaje. */
+    /** Builds one. With no message: the name of the class **is** the message. */
     public IllegalChannelGroupException() {
         super();
     }

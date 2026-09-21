@@ -10,78 +10,80 @@ import org.xml.sax.SAXNotRecognizedException;
 import org.xml.sax.SAXNotSupportedException;
 
 /**
- * KajiLibrary's javax.xml.validation.Validator -- valida un documento contra un esquema.
+ * KajiLibrary's javax.xml.validation.Validator -- validates a document against a schema.
  *
- * <p>Se obtiene de {@link Schema#newValidator} y <b>no</b> es seguro entre hilos. Ver la nota de
- * {@link Schema} sobre que conviene guardar y que conviene fabricar.
+ * <p>It is obtained from {@link Schema#newValidator} and is <b>not</b> thread-safe. See the note of
+ * {@link Schema} on what is worth keeping and what is worth making.
  *
- * <h2>El segundo argumento no es la salida del error</h2>
+ * <h2>The second argument is not the error output</h2>
  *
- * <p>{@link #validate(Source, Result)} confunde la primera vez: el {@code Result} no es adonde van
- * los errores --eso es el {@link ErrorHandler}-- sino <b>el mismo documento, aumentado</b>. Validar
- * con XML Schema agrega informacion que no estaba en el original: los valores por omision de los
- * atributos que faltaban, y el tipo de cada elemento. Ese resultado es lo que se llama el conjunto
- * de informacion post-validacion, y sin este parametro se perderia.
+ * <p>{@link #validate(Source, Result)} confuses the first time: the {@code Result} is not where the
+ * errors go --that is the {@link ErrorHandler}-- but <b>the same document, augmented</b>.
+ * Validating with XML Schema adds information that was not in the original: the default values of
+ * the missing attributes, and the type of each element. That result is what is called the
+ * post-schema-validation infoset, and without this parameter it would be lost.
  *
- * <h2>Sin manejador de errores no se entera nadie</h2>
+ * <h2>Without an error handler nobody finds out</h2>
  *
- * <p>Sin un {@link ErrorHandler}, un error de validacion se lanza como {@link SAXException} y corta
- * ahi. Con uno, se reportan todos y el que decide si seguir es el manejador. Para revisar un
- * documento eso es la diferencia entre saber cual es el primer problema y saber cuales son todos.
+ * <p>Without an {@link ErrorHandler}, a validation error is thrown as {@link SAXException} and
+ * stops there. With one, they are all reported and the handler decides whether to go on. For
+ * reviewing a document that is the difference between knowing the first problem and knowing all of
+ * them.
  *
- * <p>La otra mitad es que un {@code warning} sin manejador se <b>descarta en silencio</b>. Poner uno
- * que al menos registre es lo minimo razonable.
+ * <p>The other half is that a {@code warning} without a handler is <b>silently discarded</b>.
+ * Setting one that at least logs is the reasonable minimum.
  */
 public abstract class Validator {
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected Validator() {
     }
 
     /**
-     * Deja el validador como recien fabricado.
+     * Leaves the validator as freshly made.
      *
-     * <p>Es abstracto y no tiene default, al reves que en {@code DocumentBuilder}: aca reusar es lo
-     * normal y una implementacion tiene que poder limpiarse.
+     * <p>It is abstract and has no default, unlike in {@code DocumentBuilder}: here reuse is the
+     * normal thing and an implementation has to be able to clean itself.
      */
     public abstract void reset();
 
     /**
-     * Valida y descarta el resultado aumentado.
+     * Validates and discards the augmented result.
      *
-     * @throws SAXException si el documento no valida y no hay manejador de errores que lo absorba
+     * @throws SAXException if the document does not validate and there is no error handler to
+     *     absorb it
      */
     public void validate(Source source) throws SAXException, IOException {
         validate(source, null);
     }
 
     /**
-     * Valida y deja el resultado aumentado en {@code result}.
+     * Validates and leaves the augmented result in {@code result}.
      *
-     * @param result adonde va el documento con los valores por omision y los tipos; null para
-     *     descartarlo. Ver la nota de la clase: no es adonde van los errores
+     * @param result where the document with the default values and the types goes; null to discard
+     *     it. See the class note: it is not where the errors go
      */
     public abstract void validate(Source source, Result result) throws SAXException, IOException;
 
-    /** Quien recibe los errores y advertencias. Ver la nota de la clase. */
+    /** Who receives the errors and warnings. See the class note. */
     public abstract void setErrorHandler(ErrorHandler errorHandler);
 
     /** Ver {@link #setErrorHandler}. */
     public abstract ErrorHandler getErrorHandler();
 
-    /** Quien resuelve los recursos externos que el esquema o el documento nombren. */
+    /** Who resolves the external resources the schema or the document name. */
     public abstract void setResourceResolver(LSResourceResolver resourceResolver);
 
     /** Ver {@link #setResourceResolver}. */
     public abstract LSResourceResolver getResourceResolver();
 
     /**
-     * El valor de una bandera.
+     * The value of a flag.
      *
-     * <p>Por omision no conoce ninguna. La que toda implementacion tiene que reconocer es
+     * <p>By default it knows none. The one every implementation has to recognize is
      * {@code javax.xml.XMLConstants.FEATURE_SECURE_PROCESSING}.
      *
-     * @throws SAXNotRecognizedException si no conoce ese nombre
+     * @throws SAXNotRecognizedException if it does not know that name
      */
     public boolean getFeature(String name)
         throws SAXNotRecognizedException, SAXNotSupportedException {
@@ -92,9 +94,9 @@ public abstract class Validator {
     }
 
     /**
-     * Cambia una bandera.
+     * Changes a flag.
      *
-     * @throws SAXNotRecognizedException si no conoce ese nombre
+     * @throws SAXNotRecognizedException if it does not know that name
      */
     public void setFeature(String name, boolean value)
         throws SAXNotRecognizedException, SAXNotSupportedException {
@@ -105,9 +107,9 @@ public abstract class Validator {
     }
 
     /**
-     * Cambia una propiedad.
+     * Changes a property.
      *
-     * @throws SAXNotRecognizedException si no conoce ese nombre
+     * @throws SAXNotRecognizedException if it does not know that name
      */
     public void setProperty(String name, Object object)
         throws SAXNotRecognizedException, SAXNotSupportedException {
@@ -118,9 +120,9 @@ public abstract class Validator {
     }
 
     /**
-     * El valor de una propiedad.
+     * The value of a property.
      *
-     * @throws SAXNotRecognizedException si no conoce ese nombre
+     * @throws SAXNotRecognizedException if it does not know that name
      */
     public Object getProperty(String name)
         throws SAXNotRecognizedException, SAXNotSupportedException {

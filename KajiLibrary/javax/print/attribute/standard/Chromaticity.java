@@ -7,40 +7,39 @@ import javax.print.attribute.PrintJobAttribute;
 import javax.print.attribute.PrintRequestAttribute;
 
 /*
- * CABECERA DE FAMILIA -- los atributos {@code EnumSyntax} de este paquete.
+ * FAMILY HEADER -- this package's {@code EnumSyntax} attributes.
  *
- * <p>Dos tercios de {@code javax.print.attribute.standard} son la misma clase escrita muchas
- * veces: un entero con nombre. El mecanismo esta entero en
- * {@link javax.print.attribute.EnumSyntax EnumSyntax} y cada subclase solo lo parametriza con tres
- * cosas.
+ * <p>Two thirds of {@code javax.print.attribute.standard} are the same class written many times: a
+ * named integer. The whole mechanism is in {@link javax.print.attribute.EnumSyntax EnumSyntax} and
+ * each subclass only parameterises it with three things.
  *
  * <ul>
- * <li>{@code getStringTable()} -- el nombre IPP de cada valor. Es lo que imprime
- *     {@code toString()}, y el JDK lo especifica al caracter: {@code "two-sided-long-edge"}, no
- *     {@code "TWO_SIDED_LONG_EDGE"}. Una entrada puede ser {@code null} cuando IPP reservo un
- *     numero que Java no expone; ahi {@code toString()} cae al entero pelado.</li>
- * <li>{@code getEnumValueTable()} -- las constantes en el mismo orden, para que
- *     {@code readResolve()} pueda convertir un entero de vuelta en <em>la</em> constante y que
- *     {@code ==} siga funcionando despues de un viaje por un stream.</li>
- * <li>{@code getOffset()} -- el entero de la primera fila. Vale cero salvo donde IPP arranco la
- *     numeracion en 3 ({@code Finishings}, {@code OrientationRequested}, {@code PrintQuality}).</li>
+ * <li>{@code getStringTable()} -- each value's IPP name. It is what {@code toString()} prints, and
+ *     the JDK specifies it to the character: {@code "two-sided-long-edge"}, not {@code
+ *     "TWO_SIDED_LONG_EDGE"}. An entry may be {@code null} when IPP reserved a number Java does not
+ *     expose; there {@code toString()} falls back to the bare integer.</li>
+ * <li>{@code getEnumValueTable()} -- the constants in the same order, so that {@code readResolve()}
+ *     can turn an integer back into <em>the</em> constant and {@code ==} keeps working after a trip
+ *     through a stream.</li>
+ * <li>{@code getOffset()} -- the integer of the first row. It is zero except where IPP started the
+ *     numbering at 3 ({@code Finishings}, {@code OrientationRequested}, {@code PrintQuality}).</li>
  * </ul>
  *
- * <p>Los valores son <b>singletons</b>: el constructor es {@code protected} para que una impresora
- * pueda declarar valores propios, pero nadie fabrica los estandar dos veces. Por eso
- * {@code equals()} se hereda de {@code Object} --identidad-- salvo en {@link Media}, donde hace
- * falta comparar tambien la clase concreta.
+ * <p>The values are <b>singletons</b>: the constructor is {@code protected} so that a printer can
+ * declare values of its own, but nobody makes the standard ones twice. That is why {@code equals()}
+ * is inherited from {@code Object} --identity-- except in {@link Media}, where the concrete class
+ * has to be compared too.
  *
- * <p>Las tablas de nombres son <b>datos de norma</b> (RFC 2911 / IPP), no de locale: no dependen
- * del CLDR ni de ninguna impresora, asi que van completas.
+ * <p>The name tables are <b>standards data</b> (RFC 2911 / IPP), not locale data: they depend
+ * neither on CLDR nor on any printer, so they go in complete.
  */
 
 /**
- * Si el trabajo se imprime en color o en blanco y negro.
+ * Whether the job is printed in colour or in black and white.
  *
- * <p>Es una peticion sobre el <em>documento</em>, no sobre la impresora: {@code MONOCHROME} sobre
- * una impresora color le pide que no use tinta de color, y no dice nada sobre lo que la impresora
- * puede hacer --eso lo contesta {@link ColorSupported}.
+ * <p>It is a request about the <em>document</em>, not about the printer: {@code MONOCHROME} on a
+ * colour printer asks it not to use colour ink, and says nothing about what the printer can do --
+ * {@link ColorSupported} answers that.
  */
 public final class Chromaticity extends EnumSyntax implements DocAttribute, PrintRequestAttribute, PrintJobAttribute {
 

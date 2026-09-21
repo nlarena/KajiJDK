@@ -35,24 +35,25 @@ import java.util.Spliterators;
 // parallel/unordered/onClose/close. The four `S`-returning ops are redeclared below with
 // Stream<T> as the return type — a covariant override, matching the JDK exactly.
 //
-// Still a KajiLibrary subset. Sobre lo que cambio desde la pasada anterior, y por que:
+// Still a KajiLibrary subset. On what changed since the previous pass, and why:
 //
-//   * `generate(Supplier)` y el `iterate(T, UnaryOperator)` de dos argumentos construyen flujos
-//     INFINITOS. Ya no estan ausentes: estan DECLARADOS y se NIEGAN, con el mismo criterio que
-//     `RandomGenerator.ints()`/`longs()`/`doubles()` — un metodo que se niega y dice con que
-//     reemplazarlo es peor de usar y mejor de confiar que uno que no existe, porque el que no
-//     existe manda al que llama a buscar el error en su propio codigo. Ver cada uno abajo.
-//     El `iterate(seed, hasNext, next)` de tres argumentos (Java 9+) SI es finito y esta hecho.
-//   * `of(T)` (la sobrecarga de un elemento) ya esta, pero el defecto que la bloqueaba SIGUE
-//     VIVO y lo que cambio es el rodeo: este javac no elige la sobrecarga mas especifica sino la
-//     ULTIMA declarada, asi que alcanza con escribir `of(T)` antes que `of(T...)`. Ver la nota
-//     completa en la declaracion; hay prueba en java/StreamGatherTest.java.
-//   * `gather(Gatherer)` ya esta, y con el java.util.stream.Gatherer. Un `Gatherer` empuja hacia
-//     su `Downstream` en vez de que le tiren, asi que se ejecuta perfectamente sobre un modelo
-//     ansioso; ver el encabezado de Gatherer.java.
-//   * `toArray(IntFunction)` ya esta: el defecto que la bloqueaba —una llamada cuyo tipo de
-//     retorno estatico es un arreglo de variable de tipo (`A[]`) no llegaba al `apply` del
-//     generador y devolvia un arreglo vacio en silencio— tampoco se reproduce hoy.
+//   * `generate(Supplier)` and the two-argument `iterate(T, UnaryOperator)` build INFINITE streams.
+//     They are no longer absent: they are DECLARED and they REFUSE, on the same criterion as
+//     `RandomGenerator.ints()`/`longs()`/`doubles()` -- a method that refuses and says what to
+//     replace it with is worse to use and better to trust than one that does not exist, because the
+//     one that does not exist sends the caller looking for the mistake in their own code. See each
+//     of them below. The three-argument `iterate(seed, hasNext, next)` (Java 9+) IS finite and is
+//     implemented.
+//   * `of(T)` (the one-element overload) is here, but the defect that blocked it is STILL ALIVE
+//     and what changed is the way round it: this javac does not choose the most specific overload
+//     but the LAST declared, so writing `of(T)` before `of(T...)` is enough. See the full note at
+//     the declaration; there is a test in java/StreamGatherTest.java.
+//   * `gather(Gatherer)` is here, and with it java.util.stream.Gatherer. A `Gatherer` pushes
+//     towards its `Downstream` instead of being pulled from, so it runs perfectly well over an
+//     eager model; see Gatherer.java's header.
+//   * `toArray(IntFunction)` is here: the defect that blocked it --a call whose static return type
+//     is an array of a type variable (`A[]`) did not reach the generator's `apply` and
+//     returned an empty array in silence-- does not reproduce today either.
 //
 // Two things ARE declared here but cannot be *used* yet, and the reason is the compiler, not the
 // implementation. Both are documented at their declaration and have a repro in the defect notes:
@@ -172,42 +173,42 @@ public interface Stream<T> extends BaseStream<T, Stream<T>> {
     }
 
     /**
-     * Aplica un `Gatherer`: una operacion intermedia escrita por quien llama.
+     * It applies a `Gatherer`: an intermediate operation written by the caller.
      *
-     * <p>`default`, como en el JDK: el cuerpo solo necesita `toArray()`.
+     * <p>`default`, as in the JDK: the body only needs `toArray()`.
      *
-     * <p>El recorrido es el que describe el contrato del `Gatherer`, con el <b>corte</b> incluido:
-     * cuando `integrate` devuelve `false` se abandona el resto de la entrada sin visitarla. Es lo
-     * unico del modelo perezoso que un `Gatherer` necesita, y por eso este metodo si se puede
-     * escribir honestamente sobre flujos ansiosos --a diferencia de `generate`/`iterate`.
+     * <p>The traversal is the one the `Gatherer`'s contract describes, <b>short-circuit</b>
+     * included: when `integrate` returns `false` the rest of the input is abandoned unvisited. It
+     * is the only thing of the lazy model a `Gatherer` needs, and that is why this method CAN be
+     * written honestly over eager streams -- unlike `generate`/`iterate`.
      *
-     * <p>El finalizador corre <b>siempre</b>, tambien despues de un corte: un `Gatherer` que
-     * acumula (una ventana a medio llenar, por ejemplo) tiene que poder emitir lo que junto.
+     * <p>The finisher runs <b>always</b>, after a short-circuit too: a `Gatherer` that accumulates
+     * (a half-filled window, say) has to be able to emit what it gathered.
      *
-     * @param gatherer la operacion a aplicar
-     * @param <R> el tipo de los elementos que salen
-     * @return el flujo resultante
+     * @param gatherer the operation to apply
+     * @param <R> the type of the elements that come out
+     * @return the resulting stream
      */
     default <R> Stream<R> gather(Gatherer<? super T, ?, R> gatherer) {
         Object[] src = this.toArray();
-        // El estado es opaco para el que ejecuta: solo se crea, se pasa y se descarta. Verlo como
-        // `Object` evita arrastrar la variable de tipo `?` por todo el cuerpo.
+        // The state is opaque to whoever runs it: it is only created, passed and dropped. Seeing it
+        // as an `Object` avoids dragging the `?` type variable through the whole body.
         Object g = gatherer;
-        Gatherer<T, Object, R> paso = (Gatherer<T, Object, R>) g;
-        Supplier<Object> init = paso.initializer();
-        Object estado = init.get();
-        GatherBuffer<R> salida = new GatherBuffer<R>();
-        Gatherer.Integrator<Object, T, R> integrador = paso.integrator();
+        Gatherer<T, Object, R> step = (Gatherer<T, Object, R>) g;
+        Supplier<Object> init = step.initializer();
+        Object state = init.get();
+        GatherBuffer<R> gatherBuf = new GatherBuffer<R>();
+        Gatherer.Integrator<Object, T, R> integrator = step.integrator();
         for (int i = 0; i < src.length; i++) {
-            boolean sigue = integrador.integrate(estado, (T) src[i], salida);
-            if (!sigue) {
+            boolean goOn = integrator.integrate(state, (T) src[i], gatherBuf);
+            if (!goOn) {
                 break;
             }
         }
-        BiConsumer<Object, Gatherer.Downstream<? super R>> fin = paso.finisher();
-        Gatherer.Downstream<? super R> destino = salida;
-        fin.accept(estado, destino);
-        Object[] out = salida.toArray();
+        BiConsumer<Object, Gatherer.Downstream<? super R>> end = step.finisher();
+        Gatherer.Downstream<? super R> target = gatherBuf;
+        end.accept(state, target);
+        Object[] out = gatherBuf.toArray();
         return new StreamImpl<R>(out, out.length);
     }
 
@@ -268,12 +269,12 @@ public interface Stream<T> extends BaseStream<T, Stream<T>> {
     Object[] toArray();
 
     /**
-     * Los elementos en un arreglo del tipo que fabrique `generator`.
+     * The elements in an array of the type `generator` builds.
      *
-     * @param generator fabrica el arreglo destino, del largo que se le pida
-     * @param <A> el tipo de componente del arreglo
-     * @return el arreglo
-     * @throws ArrayStoreException si algun elemento no entra en el arreglo pedido
+     * @param generator builds the target array, of whatever length it is asked for
+     * @param <A> the array's component type
+     * @return the array
+     * @throws ArrayStoreException if some element does not fit the array asked for
      */
     <A> A[] toArray(IntFunction<A[]> generator);
 
@@ -320,21 +321,21 @@ public interface Stream<T> extends BaseStream<T, Stream<T>> {
     }
 
     /**
-     * Un flujo de un solo elemento.
+     * A stream of a single element.
      *
-     * <p><b>El orden de las dos sobrecargas de `of` importa, y por eso esta escrita antes que la
-     * variarg.</b> Este javac no elige la mas especifica entre dos metodos aplicables: elige el
-     * ultimo declarado (repro: java/OvLib3.java + java/OvUse3.java, y java/OvLib5.java con
-     * las dos declaraciones al reves). Con `of(T)` primero,
-     * `Stream.of(unArreglo)` liga a `of(T...)` --que es lo correcto y lo que hace el javac real--
-     * y `Stream.of("x")` liga tambien a la variarg, que para un solo argumento da exactamente el
-     * mismo flujo de un elemento. Con el orden al reves, `Stream.of(unArreglo)` daria en silencio
-     * un flujo de UN elemento que es el arreglo entero: por eso la pasada anterior prefirio no
-     * declarar este metodo. Hay una prueba que fija las dos formas de llamada.
+     * <p><b>The order of `of`'s two overloads matters, and that is why this one is written before
+     * the varargs.</b> This javac does not choose the most specific of two applicable methods: it
+     * chooses the last declared (repro: java/OvLib3.java + java/OvUse3.java, and java/OvLib5.java
+     * with the two declarations the other way round). With `of(T)` first, `Stream.of(anArray)`
+     * binds to `of(T...)` --which is correct and what the real javac does-- and `Stream.of("x")`
+     * binds to the varargs too, which for a single argument gives exactly the same one-element
+     * stream. With the order reversed, `Stream.of(anArray)` would silently give a stream of ONE
+     * element that is the whole array: that is why the previous pass preferred not to declare this
+     * method. There is a test pinning both call shapes.
      *
-     * @param t el elemento
-     * @param <T> su tipo
-     * @return el flujo de un elemento
+     * @param t the element
+     * @param <T> its type
+     * @return the one-element stream
      */
     static <T> Stream<T> of(T t) {
         Object[] one = new Object[1];
@@ -391,42 +392,42 @@ public interface Stream<T> extends BaseStream<T, Stream<T>> {
     }
 
     /**
-     * <b>Se niega.</b> El JDK devuelve aca un flujo infinito, y este no puede.
+     * <b>It refuses.</b> The JDK returns an infinite stream here, and this cannot.
      *
-     * <p>Es la misma divergencia deliberada que en `RandomGenerator.ints()`: un flujo infinito
-     * pide pereza --los valores se generan cuando alguien los pide y `limit(n)` corta antes de
-     * generar el resto--, y los flujos de esta biblioteca estan respaldados por un arreglo que se
-     * materializa entero al crearse. De las dos salidas posibles se elige la ruidosa: devolver un
-     * prefijo largo y llamarlo infinito andaria para `generate(f).limit(10)` y daria en silencio
-     * menos elementos de los pedidos para `limit(un_millon)`.
+     * <p>It is the same deliberate divergence as in `RandomGenerator.ints()`: an infinite stream
+     * asks for laziness --the values are generated when somebody asks for them and `limit(n)` cuts
+     * before generating the rest-- and this library's streams are backed by an array materialised
+     * whole on creation. Of the two ways out the noisy one is chosen: returning a long prefix and
+     * calling it infinite would work for `generate(f).limit(10)` and would silently give fewer
+     * elements than asked for at `limit(a_million)`.
      *
-     * @param s el proveedor de elementos
-     * @param <T> el tipo de los elementos
-     * @return no devuelve
-     * @throws UnsupportedOperationException siempre
+     * @param s the supplier of elements
+     * @param <T> the elements' type
+     * @return it does not return
+     * @throws UnsupportedOperationException always
      */
     static <T> Stream<T> generate(Supplier<? extends T> s) {
-        // Mensaje constante: la concatenacion de String en tiempo de ejecucion no esta
-        // disponible en nuestra VM (#226).
+        // A constant message: String concatenation at run time is not
+        // available in our VM (#226).
         throw new UnsupportedOperationException(
-                "los flujos de esta biblioteca son ansiosos: use IntStream.range(0, n).mapToObj(...)");
+                "this library's streams are eager: use IntStream.range(0, n).mapToObj(...)");
     }
 
     /**
-     * <b>Se niega.</b> El JDK devuelve aca un flujo infinito, y este no puede.
+     * <b>It refuses.</b> The JDK returns an infinite stream here, and this cannot.
      *
-     * <p>Misma razon que `generate`. El reemplazo esta al lado y es exacto: el `iterate` de tres
-     * argumentos genera la misma sucesion y ademas dice donde termina.
+     * <p>The same reason as `generate`. The replacement is right next to it and it is exact: the
+     * three-argument `iterate` generates the same sequence and says where it ends as well.
      *
-     * @param seed el primer elemento
-     * @param f como pasar de un elemento al siguiente
-     * @param <T> el tipo de los elementos
-     * @return no devuelve
-     * @throws UnsupportedOperationException siempre
+     * @param seed the first element
+     * @param f how to go from one element to the next
+     * @param <T> the elements' type
+     * @return it does not return
+     * @throws UnsupportedOperationException always
      */
     static <T> Stream<T> iterate(T seed, UnaryOperator<T> f) {
         throw new UnsupportedOperationException(
-                "los flujos de esta biblioteca son ansiosos: use iterate(seed, hasNext, next)");
+                "this library's streams are eager: use iterate(seed, hasNext, next)");
     }
 
     // Concatenation: every element of `a`, then every element of `b`.
@@ -761,9 +762,9 @@ final class StreamImpl<T> implements Stream<T> {
         return this.slice(0, this.size);
     }
 
-    // El arreglo lo fabrica el que llama, para que tenga el tipo de componente que el quiera; el
-    // `ArrayStoreException` de un elemento que no entra sale del propio `aastore`, que es donde
-    // el JDK tambien lo produce.
+    // The array is built by the caller, so that it has whatever component type they want; the
+    // `ArrayStoreException` of an element that does not fit comes out of the `aastore` itself, which
+    // is where the JDK produces it too.
     public <A> A[] toArray(IntFunction<A[]> generator) {
         A[] out = generator.apply(this.size);
         for (int i = 0; i < this.size; i++) {
@@ -1009,8 +1010,8 @@ final class StreamImpl<T> implements Stream<T> {
         for (int i = 0; i < this.size; i++) {
             acc.accept(container, (T) this.data[i]);
         }
-        Function<A, R> fin = collector.finisher();
-        return fin.apply(container);
+        Function<A, R> end = collector.finisher();
+        return end.apply(container);
     }
 
     // ---- BaseStream ----------------------------------------------------------------------

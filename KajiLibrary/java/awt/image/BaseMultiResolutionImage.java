@@ -6,16 +6,16 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * Una imagen de varias resoluciones dada como una lista fija de versiones.
+ * An image of several resolutions given as a fixed list of versions.
  *
- * <p>Es la implementación directa: se le pasan las versiones ya hechas y elige entre ellas. La
- * elección es la más chica que **alcance** para el tamaño pedido, y sólo si ninguna alcanza se usa
- * la más grande. Agrandar una imagen se nota mucho más que achicarla, así que ante la duda conviene
- * la que sobra.
+ * <p>It is the direct implementation: the already made versions are passed to it and it chooses
+ * among them. The choice is the smallest one that is **enough** for the size asked for, and only if
+ * none is enough is the largest used. Enlarging an image shows much more than shrinking it, so when
+ * in doubt the one with some to spare is preferable.
  *
- * <p>Las versiones tienen que venir ordenadas de menor a mayor; no se comprueba, porque comprobarlo
- * obligaría a pedirles el ancho a todas y eso puede disparar la carga de imágenes que nunca se van a
- * usar.
+ * <p>The versions have to come ordered from smallest to largest; it is not checked, because
+ * checking it would force asking all of them for the width and that can set off the loading of
+ * images that are never going to be used.
  */
 public class BaseMultiResolutionImage extends AbstractMultiResolutionImage {
 
@@ -23,19 +23,19 @@ public class BaseMultiResolutionImage extends AbstractMultiResolutionImage {
     private final Image[] resolutionVariants;
 
     /**
-     * Con la primera versión como base.
+     * With the first version as the base one.
      *
-     * @throws IllegalArgumentException si no se pasa ninguna versión o alguna es `null`
+     * @throws IllegalArgumentException if no version is passed or one of them is `null`
      */
     public BaseMultiResolutionImage(Image... resolutionVariants) {
         this(0, resolutionVariants);
     }
 
     /**
-     * Con la versión base indicada por su posición.
+     * With the base version given by its position.
      *
-     * @throws IllegalArgumentException si no se pasa ninguna versión, si alguna es `null`, o si el
-     *     índice de la base no existe
+     * @throws IllegalArgumentException if no version is passed, if one of them is `null`, or if the
+     *     index of the base one does not exist
      */
     public BaseMultiResolutionImage(int baseImageIndex, Image... resolutionVariants) {
         if (resolutionVariants == null || resolutionVariants.length == 0) {
@@ -53,17 +53,17 @@ public class BaseMultiResolutionImage extends AbstractMultiResolutionImage {
         this.resolutionVariants = Arrays.copyOf(resolutionVariants, resolutionVariants.length);
     }
 
-    /** La versión que define el tamaño lógico. */
+    /** The version that defines the logical size. */
     protected Image getBaseImage() {
         return this.resolutionVariants[this.baseImageIndex];
     }
 
     /**
-     * La versión más chica que alcance para ese tamaño.
+     * The smallest version that is enough for that size.
      *
-     * <p>Si ninguna alcanza se devuelve la más grande, que es lo mejor que hay.
+     * <p>If none is enough the largest is returned, which is the best there is.
      *
-     * @throws IllegalArgumentException si alguna de las dos medidas no es positiva
+     * @throws IllegalArgumentException if either of the two measures is not positive
      */
     public Image getResolutionVariant(double destImageWidth, double destImageHeight) {
         if (destImageWidth <= 0 || destImageHeight <= 0) {
@@ -78,7 +78,7 @@ public class BaseMultiResolutionImage extends AbstractMultiResolutionImage {
         return this.resolutionVariants[this.resolutionVariants.length - 1];
     }
 
-    /** Todas las versiones, de menor a mayor. */
+    /** Every version, from smallest to largest. */
     public List<Image> getResolutionVariants() {
         List<Image> out = new ArrayList<Image>();
         for (int i = 0; i < this.resolutionVariants.length; i++) {

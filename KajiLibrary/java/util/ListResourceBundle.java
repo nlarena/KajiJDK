@@ -69,7 +69,7 @@ public abstract class ListResourceBundle extends ResourceBundle {
 // The enumeration ListResourceBundle.getKeys() hands back: this bundle's own keys, then whatever
 // the parent adds that this bundle did not already define.
 //
-// The de-duplication is the whole job. Without it a key overridden in a child bundle would be
+// The what-duplication is the whole job. Without it a key overridden in a child bundle would be
 // enumerated twice, once per level of the chain, which is visible to anyone building a list of
 // keys from it.
 final class BundleKeyEnumeration implements Enumeration<String> {

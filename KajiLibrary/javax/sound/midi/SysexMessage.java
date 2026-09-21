@@ -1,42 +1,43 @@
 package javax.sound.midi;
 
 /**
- * KajiLibrary's javax.sound.midi.SysexMessage -- un mensaje exclusivo del fabricante.
+ * KajiLibrary's javax.sound.midi.SysexMessage -- a manufacturer-exclusive message.
  *
- * <p>La valvula de escape del estandar: lo que MIDI no define, cada fabricante lo manda por aca.
- * Cargar un sonido en un sintetizador, volcar su configuracion, actualizar su firmware.
+ * <p>The standard's escape valve: whatever MIDI does not define, each manufacturer sends through
+ * here. Loading a sound into a synthesizer, dumping its configuration, updating its firmware.
  *
- * <p>Arranca con {@link #SYSTEM_EXCLUSIVE} (0xF0), sigue con el identificador del fabricante y lo que
- * el quiera, y termina con 0xF7. Es el unico mensaje de largo arbitrario.
+ * <p>It starts with {@link #SYSTEM_EXCLUSIVE} (0xF0), goes on with the manufacturer's identifier
+ * and whatever it wants, and ends with 0xF7. It is the only message of arbitrary length.
  *
- * <h2>Las dos constantes de estado</h2>
+ * <h2>The two status constants</h2>
  *
- * <p>{@link #SPECIAL_SYSTEM_EXCLUSIVE} vale 0xF7 y no es "el final": es el estado de una
- * <b>continuacion</b>. Un exclusivo muy largo puede mandarse partido, y los pedazos que no son el
- * primero llevan ese estado.
+ * <p>{@link #SPECIAL_SYSTEM_EXCLUSIVE} is 0xF7 and it is not "the end": it is the status of a
+ * <b>continuation</b>. A very long exclusive can be sent split, and the pieces that are not the
+ * first carry that status.
  *
- * <p>Es la parte que se malinterpreta: recibir un mensaje con estado 0xF7 no significa que termino
- * uno, significa que llego un pedazo del medio o del final.
+ * <p>It is the part that gets misread: receiving a message with status 0xF7 does not mean one
+ * ended, it means a piece from the middle or the end arrived.
  *
- * <p>{@link #getData} devuelve todo menos el byte de estado, asi que el 0xF7 de cierre <b>si</b> entra.
+ * <p>{@link #getData} returns everything but the status byte, so the closing 0xF7 <b>does</b> go
+ * in.
  */
 public class SysexMessage extends MidiMessage {
 
-    /** El comienzo de un exclusivo. */
+    /** The start of an exclusive. */
     public static final int SYSTEM_EXCLUSIVE = 0xF0;
 
-    /** La continuacion de uno partido. Ver la nota de la clase. */
+    /** The continuation of a split one. See the class note. */
     public static final int SPECIAL_SYSTEM_EXCLUSIVE = 0xF7;
 
-    /** Un exclusivo vacio: {@code 0xF0 0xF7}. */
+    /** An empty exclusive: {@code 0xF0 0xF7}. */
     public SysexMessage() {
         this(new byte[] { (byte) SYSTEM_EXCLUSIVE, (byte) SPECIAL_SYSTEM_EXCLUSIVE });
     }
 
     /**
-     * Un exclusivo con esos bytes, incluido el de estado.
+     * An exclusive with those bytes, the status one included.
      *
-     * @throws InvalidMidiDataException si el primer byte no es 0xF0 ni 0xF7
+     * @throws InvalidMidiDataException if the first byte is neither 0xF0 nor 0xF7
      */
     public SysexMessage(byte[] data, int length) throws InvalidMidiDataException {
         super(null);
@@ -44,24 +45,24 @@ public class SysexMessage extends MidiMessage {
     }
 
     /**
-     * Idem, con el estado aparte.
+     * Likewise, with the status separate.
      *
-     * @throws InvalidMidiDataException si el estado no es 0xF0 ni 0xF7
+     * @throws InvalidMidiDataException if the status is neither 0xF0 nor 0xF7
      */
     public SysexMessage(int status, byte[] data, int length) throws InvalidMidiDataException {
         super(null);
         setMessage(status, data, length);
     }
 
-    /** Para las subclases y los lectores. */
+    /** For the subclasses and the readers. */
     protected SysexMessage(byte[] data) {
         super(data);
     }
 
     /**
-     * Reemplaza los bytes; el primero tiene que ser el estado.
+     * Replaces the bytes; the first has to be the status.
      *
-     * @throws InvalidMidiDataException si el primer byte no es 0xF0 ni 0xF7
+     * @throws InvalidMidiDataException if the first byte is neither 0xF0 nor 0xF7
      */
     @Override
     public void setMessage(byte[] data, int length) throws InvalidMidiDataException {
@@ -77,9 +78,9 @@ public class SysexMessage extends MidiMessage {
     }
 
     /**
-     * Reemplaza los bytes, con el estado aparte.
+     * Replaces the bytes, with the status separate.
      *
-     * @throws InvalidMidiDataException si el estado no es 0xF0 ni 0xF7
+     * @throws InvalidMidiDataException if the status is neither 0xF0 nor 0xF7
      */
     public void setMessage(int status, byte[] data, int length) throws InvalidMidiDataException {
         if (status != SYSTEM_EXCLUSIVE && status != SPECIAL_SYSTEM_EXCLUSIVE) {
@@ -97,7 +98,7 @@ public class SysexMessage extends MidiMessage {
         }
     }
 
-    /** Una copia de todo menos el byte de estado. Ver la nota de la clase. */
+    /** A copy of everything but the status byte. See the class note. */
     public byte[] getData() {
         int n = this.length - 1;
         if (n < 0) {
@@ -108,7 +109,7 @@ public class SysexMessage extends MidiMessage {
         return copy;
     }
 
-    /** Una copia independiente. */
+    /** An independent copy. */
     @Override
     public Object clone() {
         byte[] copy = new byte[this.length];

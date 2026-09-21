@@ -1,131 +1,140 @@
 package org.w3c.dom;
 
 /**
- * KajiLibrary's org.w3c.dom.Node -- el tipo base de todo lo que vive en un arbol DOM.
+ * KajiLibrary's org.w3c.dom.Node -- the base type of everything that lives in a DOM tree.
  *
- * <p><strong>El modelo, una vez.</strong> El DOM representa un documento XML como un arbol de
- * **nodos**. Un elemento es un nodo, un atributo es un nodo, el texto suelto es un nodo, un
- * comentario es un nodo, y el documento entero tambien. Por eso `Node` esta arriba de casi todo el
- * paquete: es el minimo comun denominador que permite escribir un recorrido generico --bajar por
- * `getFirstChild()`, avanzar por `getNextSibling()`-- sin saber que hay en cada escalon. El precio de
- * ese minimo comun es que la interfaz **declara mas de lo que cualquier nodo concreto cumple**, y esa
- * es la clave para leer todo el resto de este paquete.
+ * <p><strong>The model, once.</strong> The DOM represents an XML document as a tree of **nodes**.
+ * An element is a node, an attribute is a node, loose text is a node, a comment is a node, and the
+ * whole document as well. That is why `Node` is above almost all of the package: it is the lowest
+ * common denominator that allows writing a generic walk --going down through `getFirstChild()`,
+ * moving on through `getNextSibling()`-- without knowing what there is on each step. The price of
+ * that common minimum is that the interface **declares more than any concrete node fulfils**, and
+ * that is the key for reading the whole rest of this package.
  *
- * <p><strong>Por que el DOM esta lleno de metodos que devuelven `null`.</strong> `getAttributes()`
- * solo tiene sentido en un `Element`; en un `Text` devuelve `null`. `getOwnerDocument()` devuelve
- * `null` justo en el `Document`. `getNamespaceURI()`, `getPrefix()` y `getLocalName()` devuelven
- * `null` en todo nodo creado con la API del DOM nivel 1, que no conocia espacios de nombres. No son
- * huecos de la especificacion: son la consecuencia de haber elegido **una** interfaz para doce tipos
- * de nodo en vez de doce interfaces sin ancestro comun. Quien recorre un arbol DOM comprueba
- * `getNodeType()` antes de creerle a un getter.
+ * <p><strong>Why the DOM is full of methods that return `null`.</strong> `getAttributes()` only
+ * makes sense on an `Element`; on a `Text` it returns `null`. `getOwnerDocument()` returns `null`
+ * precisely on the `Document`. `getNamespaceURI()`, `getPrefix()` and `getLocalName()` return
+ * `null` on every node created with the DOM Level 1 API, which did not know namespaces. They are
+ * not holes in the specification: they are the consequence of having chosen **one** interface for
+ * twelve node types instead of twelve interfaces with no common ancestor. Whoever walks a DOM tree
+ * checks `getNodeType()` before believing a getter.
  *
- * <p><strong>Los doce tipos.</strong> Las constantes `*_NODE` son el discriminador: `getNodeType()`
- * devuelve una de ellas y de ahi sale a que interfaz hija se puede castear. La tabla de la norma
- * tambien fija que devuelven `getNodeName()` y `getNodeValue()` para cada uno --`#text` y el
- * contenido para un `Text`, el nombre de la etiqueta y `null` para un `Element`-- y esa tabla es
- * parte del contrato aunque no se pueda escribir en Java.
+ * <p><strong>The twelve types.</strong> The `*_NODE` constants are the discriminator:
+ * `getNodeType()` returns one of them and from there follows which child interface one can cast to.
+ * The table of the standard also fixes what `getNodeName()` and `getNodeValue()` return for each
+ * one --`#text` and the contents for a `Text`, the name of the tag and `null` for an `Element`--
+ * and that table is part of the contract even though it cannot be written in Java.
  *
- * <p><strong>Las constantes `DOCUMENT_POSITION_*` son una mascara de bits</strong>, no un enum:
- * `compareDocumentPosition` devuelve la **or** de todas las que apliquen. Por eso valen 1, 2, 4, 8,
- * 16 y 32 y no 1..6. Un nodo que contiene a otro devuelve `CONTAINS | PRECEDING`.
+ * <p><strong>The `DOCUMENT_POSITION_*` constants are a bit mask</strong>, not an enum:
+ * `compareDocumentPosition` returns the **or** of all that apply. That is why they are worth 1, 2,
+ * 4, 8, 16 and 32 and not 1..6. A node compared with one of its ancestors gets `CONTAINS |
+ * PRECEDING` --the other node contains it and comes before it--; the note said that "a node that
+ * contains another returns" it, which is the other way round (the ancestor gets `CONTAINED_BY |
+ * FOLLOWING`).
  *
- * <p><strong>Esto es una interfaz y no hay implementacion en KajiLibrary.</strong> Declarar el
- * contrato es honesto justamente porque es un contrato: no promete que alguien lo cumpla. Lo que no
- * se podria hacer es dar un `Document` de mentira que finja parsear XML. Los metodos que fabrican o
- * modifican arboles --`appendChild`, `cloneNode`, `normalize`-- estan declarados porque son parte de
- * la interfaz que un implementador tiene que cumplir, no porque aca haya un arbol que modificar.
+ * <p><strong>This is an interface.</strong> Declaring the contract is honest precisely because it
+ * is a contract: it does not promise that anybody fulfils it. The note said there is no
+ * implementation in KajiLibrary; there is a partial one, as in the JDK: {@code
+ * javax.imageio.metadata.IIOMetadataNode} implements {@link Element} for image metadata trees. What
+ * there is not, and could not honestly be given, is a fake {@code Document} that pretends to parse
+ * XML. The methods that build or modify trees --`appendChild`, `cloneNode`, `normalize`-- are
+ * declared because they are part of the interface an implementer has to fulfil.
  */
 public interface Node {
 
-    // ---- los doce tipos de nodo ----------------------------------------------------------------
+    // ---- the twelve node types ------------------------------------------------------------------
     //
-    // El orden y los valores son los de la norma y son API observable: hay codigo que los guarda en
-    // tablas indexadas por el numero. `getNodeType()` devuelve uno de estos.
+    // The order and the values are those of the standard and are observable API: there is code that
+    // keeps them in tables indexed by the number. `getNodeType()` returns one of these.
 
-    /** Un `Element`: una etiqueta con atributos e hijos. */
+    /** An `Element`: a tag with attributes and children. */
     short ELEMENT_NODE = 1;
 
-    /** Un `Attr`. Cuelga de su elemento, pero **no** es hijo suyo: `getParentNode()` da `null`. */
+    /**
+     * An `Attr`. It hangs from its element, but it is **not** its child: `getParentNode()` gives
+     * `null`.
+     */
     short ATTRIBUTE_NODE = 2;
 
-    /** Un `Text`: caracteres sueltos entre etiquetas. */
+    /** A `Text`: loose characters between tags. */
     short TEXT_NODE = 3;
 
-    /** Una `CDATASection`: texto que el parser no interpreta. */
+    /** A `CDATASection`: text the parser does not interpret. */
     short CDATA_SECTION_NODE = 4;
 
-    /** Una `EntityReference`: un `&amp;nombre;` sin expandir. */
+    /** An `EntityReference`: an unexpanded `&amp;name;`. */
     short ENTITY_REFERENCE_NODE = 5;
 
-    /** Una `Entity` declarada en la DTD. */
+    /** An `Entity` declared in the DTD. */
     short ENTITY_NODE = 6;
 
-    /** Una `ProcessingInstruction`: `&lt;?destino datos?&gt;`. */
+    /** A `ProcessingInstruction`: `&lt;?target data?&gt;`. */
     short PROCESSING_INSTRUCTION_NODE = 7;
 
-    /** Un `Comment`. */
+    /** A `Comment`. */
     short COMMENT_NODE = 8;
 
-    /** El `Document`: la raiz del arbol, que no es el elemento raiz. */
+    /** The `Document`: the root of the tree, which is not the root element. */
     short DOCUMENT_NODE = 9;
 
-    /** El `DocumentType`: el `&lt;!DOCTYPE ...&gt;`. */
+    /** The `DocumentType`: the `&lt;!DOCTYPE ...&gt;`. */
     short DOCUMENT_TYPE_NODE = 10;
 
-    /** Un `DocumentFragment`: un contenedor liviano para mover varios nodos de una. */
+    /** A `DocumentFragment`: a lightweight container for moving several nodes at once. */
     short DOCUMENT_FRAGMENT_NODE = 11;
 
-    /** Una `Notation` declarada en la DTD. */
+    /** A `Notation` declared in the DTD. */
     short NOTATION_NODE = 12;
 
-    // ---- posicion relativa: mascara de bits, no valores exclusivos -------------------------------
+    // ---- relative position: a bit mask, not exclusive values -----------------------------------
 
-    /** Los dos nodos no estan en el mismo arbol. */
+    /** The two nodes are not in the same tree. */
     short DOCUMENT_POSITION_DISCONNECTED = 0x01;
 
-    /** El otro nodo va **antes** que este. */
+    /** The other node comes **before** this one. */
     short DOCUMENT_POSITION_PRECEDING = 0x02;
 
-    /** El otro nodo va **despues** que este. */
+    /** The other node comes **after** this one. */
     short DOCUMENT_POSITION_FOLLOWING = 0x04;
 
-    /** El otro nodo es antepasado de este. */
+    /** The other node is an ancestor of this one. */
     short DOCUMENT_POSITION_CONTAINS = 0x08;
 
-    /** El otro nodo es descendiente de este. */
+    /** The other node is a descendant of this one. */
     short DOCUMENT_POSITION_CONTAINED_BY = 0x10;
 
-    /** El orden entre los dos lo elige la implementacion y puede cambiar entre corridas. */
+    /** The order between the two is chosen by the implementation and may change between runs. */
     short DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC = 0x20;
 
-    // ---- identidad del nodo ----------------------------------------------------------------------
+    // ---- identity of the node --------------------------------------------------------------------
 
     String getNodeName();
 
     /**
-     * El valor, para los nodos que tienen uno; `null` para `Element`, `Document` y compania.
+     * The value, for the nodes that have one; `null` for `Element`, `Document` and company.
      *
-     * @throws DOMException con `DOMSTRING_SIZE_ERR` si el valor no entra en un `String`. Es el resto
-     *         de una epoca en que `DOMString` podia ser mas grande que lo direccionable.
+     * @throws DOMException with `DOMSTRING_SIZE_ERR` if the value does not fit in a `String`. It is
+     *         the leftover of an era in which a `DOMString` could be larger than what was
+     *         addressable.
      */
     String getNodeValue() throws DOMException;
 
     /**
-     * @throws DOMException con `NO_MODIFICATION_ALLOWED_ERR` si el nodo es de solo lectura, cosa que
-     *         pasa con todo lo que cuelga de una `Entity` o de un `EntityReference`.
+     * @throws DOMException with `NO_MODIFICATION_ALLOWED_ERR` if the node is read-only, which
+     *         happens with everything that hangs from an `Entity` or from an `EntityReference`.
      */
     void setNodeValue(String nodeValue) throws DOMException;
 
     short getNodeType();
 
-    // ---- navegacion ------------------------------------------------------------------------------
+    // ---- navigation ------------------------------------------------------------------------------
     //
-    // Los cinco getters de abajo devuelven `null` cuando no hay a donde ir. Es el criterio del DOM
-    // entero: nunca una excepcion para "no hay", siempre `null`.
+    // The five getters below return `null` when there is nowhere to go. It is the criterion of the
+    // whole DOM: never an exception for "there is none", always `null`.
 
     Node getParentNode();
 
-    /** Nunca `null`: un nodo sin hijos devuelve una lista vacia, no `null`. */
+    /** Never `null`: a node with no children returns an empty list, not `null`. */
     NodeList getChildNodes();
 
     Node getFirstChild();
@@ -136,26 +145,27 @@ public interface Node {
 
     Node getNextSibling();
 
-    /** Solo un `Element` devuelve algo; el resto, `null`. */
+    /** Only an `Element` returns something; the rest, `null`. */
     NamedNodeMap getAttributes();
 
-    /** El documento que **creo** este nodo. `null` en el propio `Document`. */
+    /** The document that **created** this node. `null` on the `Document` itself. */
     Document getOwnerDocument();
 
-    // ---- modificar el arbol ----------------------------------------------------------------------
+    // ---- modifying the tree ----------------------------------------------------------------------
     //
-    // Los cuatro **mueven**, no copian: insertar un nodo que ya tiene padre lo saca de donde estaba.
-    // Y si lo que se inserta es un `DocumentFragment`, lo que entra son sus hijos y no el fragmento.
+    // The insertions **move**, they do not copy: inserting a node that already has a parent takes
+    // it out of where it was. And if what is inserted is a `DocumentFragment`, what goes in are its
+    // children and not the fragment.
 
     /**
-     * @param refChild si es `null`, equivale a `appendChild`.
-     * @throws DOMException con `HIERARCHY_REQUEST_ERR` si el tipo de hijo no va ahi o si crearia un
-     *         ciclo; `WRONG_DOCUMENT_ERR` si viene de otro documento; `NOT_FOUND_ERR` si `refChild`
-     *         no es hijo de este nodo.
+     * @param refChild if it is `null`, it is equivalent to `appendChild`.
+     * @throws DOMException with `HIERARCHY_REQUEST_ERR` if the type of child does not go there or
+     *         if it would create a cycle; `WRONG_DOCUMENT_ERR` if it comes from another document;
+     *         `NOT_FOUND_ERR` if `refChild` is not a child of this node.
      */
     Node insertBefore(Node newChild, Node refChild) throws DOMException;
 
-    /** Devuelve el nodo **sacado**, no el puesto. */
+    /** It returns the node **removed**, not the one put in. */
     Node replaceChild(Node newChild, Node oldChild) throws DOMException;
 
     Node removeChild(Node oldChild) throws DOMException;
@@ -165,37 +175,40 @@ public interface Node {
     boolean hasChildNodes();
 
     /**
-     * @param deep si es `false`, el clon no tiene hijos. Un `Element` clona igual sus atributos:
-     *        `deep` habla de los hijos, no de los atributos.
+     * @param deep if it is `false`, the clone has no children. An `Element` clones its attributes
+     *        all the same: `deep` speaks of the children, not of the attributes.
      */
     Node cloneNode(boolean deep);
 
     /**
-     * Junta los `Text` adyacentes en uno y tira los vacios.
+     * It joins adjacent `Text`s into one and throws away the empty ones.
      *
-     * <p>Importa porque un arbol recien parseado puede tener el mismo parrafo partido en varios
-     * `Text` --por ejemplo si en el medio hubo una referencia a entidad-- y eso rompe cualquier
-     * comparacion ingenua. Despues de `normalize()` la forma del arbol es la que se obtendria de
-     * serializar y volver a parsear.
+     * <p>It matters because a freshly parsed tree may have the same paragraph split into several
+     * `Text`s --for example if there was an entity reference in the middle-- and that breaks any
+     * naive comparison. After `normalize()` the shape of the tree is the one that would be obtained
+     * by serialising and parsing again.
      */
     void normalize();
 
-    /** Lo reemplazo `getFeature` en el nivel 3, que ademas de decir si esta devuelve el objeto. */
+    /**
+     * `getFeature` replaced it in Level 3, which besides saying whether it is there returns the
+     * object.
+     */
     boolean isSupported(String feature, String version);
 
-    // ---- espacios de nombres ---------------------------------------------------------------------
+    // ---- namespaces ------------------------------------------------------------------------------
     //
-    // Los tres devuelven `null` en todo nodo creado con la API nivel 1 (`createElement` en vez de
-    // `createElementNS`). No es que el nodo este sin espacio de nombres: es que **no participa** del
-    // modelo de espacios de nombres, que es distinto.
+    // The three return `null` on every node created with the Level 1 API (`createElement` instead
+    // of `createElementNS`). It is not that the node has no namespace: it is that it **takes no
+    // part** in the namespace model, which is different.
 
     String getNamespaceURI();
 
     String getPrefix();
 
     /**
-     * @throws DOMException con `NAMESPACE_ERR` si el prefijo es malformado, o si se intenta atar
-     *         `xml` o `xmlns` a un URI que no es el suyo.
+     * @throws DOMException with `NAMESPACE_ERR` if the prefix is malformed, or if an attempt is
+     *         made to bind `xml` or `xmlns` to a URI that is not their own.
      */
     void setPrefix(String prefix) throws DOMException;
 
@@ -203,23 +216,23 @@ public interface Node {
 
     boolean hasAttributes();
 
-    // ---- agregados del nivel 3 -------------------------------------------------------------------
+    // ---- additions of Level 3 --------------------------------------------------------------------
 
-    /** El URI base para resolver referencias relativas, siguiendo `xml:base`. */
+    /** The base URI for resolving relative references, following `xml:base`. */
     String getBaseURI();
 
-    /** Una **or** de las constantes `DOCUMENT_POSITION_*`. */
+    /** An **or** of the `DOCUMENT_POSITION_*` constants. */
     short compareDocumentPosition(Node other) throws DOMException;
 
-    /** Todo el texto de abajo concatenado, sin marcado. */
+    /** All the text below concatenated, with no markup. */
     String getTextContent() throws DOMException;
 
-    /** Reemplaza todos los hijos por un unico `Text`; con `null` o `""` los borra a todos. */
+    /** It replaces all the children by a single `Text`; with `null` or `""` it deletes them all. */
     void setTextContent(String textContent) throws DOMException;
 
     /**
-     * Identidad, no igualdad. Existe porque una implementacion puede entregar mas de un objeto Java
-     * para el mismo nodo del documento, y entonces `==` no alcanza.
+     * Identity, not equality. It exists because an implementation may hand over more than one Java
+     * object for the same node of the document, and then `==` is not enough.
      */
     boolean isSameNode(Node other);
 
@@ -229,19 +242,19 @@ public interface Node {
 
     String lookupNamespaceURI(String prefix);
 
-    /** Igualdad estructural: mismo tipo, mismo nombre, mismos atributos, mismos hijos en orden. */
+    /** Structural equality: same type, same name, same attributes, same children in order. */
     boolean isEqualNode(Node arg);
 
     /**
-     * El objeto que implementa `feature` para este nodo, o `null`.
+     * The object that implements `feature` for this node, or `null`.
      *
-     * <p>Devuelve `Object` y no algo mas preciso porque el que sale de aca suele ser de **otro**
-     * paquete --`org.w3c.dom.events.EventTarget`, `org.w3c.dom.ls.LSSerializer`-- y el nucleo del
-     * DOM no depende de sus modulos opcionales.
+     * <p>It returns `Object` and not something more precise because what comes out of here is
+     * usually from **another** package --`org.w3c.dom.events.EventTarget`,
+     * `org.w3c.dom.ls.LSSerializer`-- and the DOM core does not depend on its optional modules.
      */
     Object getFeature(String feature, String version);
 
-    /** Devuelve lo que hubiera antes con esa clave. */
+    /** It returns whatever there was before with that key. */
     Object setUserData(String key, Object data, UserDataHandler handler);
 
     Object getUserData(String key);

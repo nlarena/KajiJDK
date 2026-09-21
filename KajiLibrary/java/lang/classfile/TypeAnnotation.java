@@ -3,242 +3,243 @@ package java.lang.classfile;
 import java.util.List;
 import jdk.internal.classfile.impl.Annotations;
 
-// Una anotación de tipo (JVMS §4.7.20, `type_annotation`). Es una {@link Annotation} más dos datos
-// que dicen a qué tipo del programa se pega: el `target_info`, que nombra el sitio (el tercer
-// parámetro formal, la segunda cota del primer parámetro de tipo, el `instanceof` del bci 27), y el
-// `target_path`, que baja por dentro de ese tipo (el argumento de tipo del componente del arreglo).
+// A type annotation (JVMS §4.7.20, `type_annotation`). It is an {@link Annotation} plus two pieces of
+// data saying which type of the program it sticks to: the `target_info`, naming the site (the third
+// formal parameter, the second bound of the first type parameter, the `instanceof` at bci 27), and
+// the `target_path`, which goes down inside that type (the array component's type argument).
 //
-// La parte incómoda del formato, y la razón de que `TargetInfo` sea una jerarquía y no una tupla, es
-// que `target_info` es una unión discriminada por `target_type`: cada valor de la etiqueta cambia el
-// tamaño y el significado de lo que sigue. Leerlo como si fuera fijo descoloca el resto del atributo.
+// The format's awkward part, and the reason `TargetInfo` is a hierarchy and not a tuple, is that
+// `target_info` is a union discriminated by `target_type`: each value of the tag changes the size and
+// the meaning of what follows. Reading it as though it were fixed throws the rest of the attribute out
+// of place.
 public interface TypeAnnotation {
 
-    /** Dónde se pega la anotación. */
+    /** Where the annotation sticks. */
     TargetInfo targetInfo();
 
-    /** El camino por dentro del tipo, en el orden del archivo; vacío si se pega al tipo entero. */
+    /** The path inside the type, in file order; empty if it sticks to the whole type. */
     List<TypePathComponent> targetPath();
 
-    /** La anotación en sí. */
+    /** The annotation itself. */
     Annotation annotation();
 
-    /** Una anotación de tipo con estas tres partes. */
+    /** A type annotation with these three parts. */
     public static TypeAnnotation of(TargetInfo targetInfo, List<TypePathComponent> targetPath,
             Annotation annotation) {
         return Annotations.typeAnnotationOf(targetInfo, targetPath, annotation);
     }
 
     /**
-     * El `target_info`: qué sitio del programa está anotado. Cada subtipo corresponde a una de las
-     * diez formas que el formato define, y `targetType()` dice cuál de las veintidós etiquetas la
-     * eligió — dos etiquetas distintas pueden compartir forma (`CLASS_TYPE_PARAMETER` y
-     * `METHOD_TYPE_PARAMETER` son las dos un `TypeParameterTarget`).
+     * The `target_info`: which site of the program is annotated. Each subtype corresponds to one of
+     * the ten forms the format defines, and `targetType()` says which of the twenty-two tags chose it
+     * -- two different tags can share a form (`CLASS_TYPE_PARAMETER` and `METHOD_TYPE_PARAMETER` are
+     * both a `TypeParameterTarget`).
      */
     public interface TargetInfo {
 
-        /** `type_parameter_target` de una clase (§4.7.20.1). */
+        /** A class's `type_parameter_target` (§4.7.20.1). */
         public static final int TARGET_CLASS_TYPE_PARAMETER = 0x00;
-        /** `type_parameter_target` de un método. */
+        /** A method's `type_parameter_target`. */
         public static final int TARGET_METHOD_TYPE_PARAMETER = 0x01;
         /** `supertype_target`. */
         public static final int TARGET_CLASS_EXTENDS = 0x10;
-        /** `type_parameter_bound_target` de una clase. */
+        /** A class's `type_parameter_bound_target`. */
         public static final int TARGET_CLASS_TYPE_PARAMETER_BOUND = 0x11;
-        /** `type_parameter_bound_target` de un método. */
+        /** A method's `type_parameter_bound_target`. */
         public static final int TARGET_METHOD_TYPE_PARAMETER_BOUND = 0x12;
-        /** `empty_target` en el tipo de un campo. */
+        /** `empty_target` on a field's type. */
         public static final int TARGET_FIELD = 0x13;
-        /** `empty_target` en el tipo de retorno. */
+        /** `empty_target` on the return type. */
         public static final int TARGET_METHOD_RETURN = 0x14;
-        /** `empty_target` en el receptor. */
+        /** `empty_target` on the receiver. */
         public static final int TARGET_METHOD_RECEIVER = 0x15;
         /** `formal_parameter_target`. */
         public static final int TARGET_METHOD_FORMAL_PARAMETER = 0x16;
         /** `throws_target`. */
         public static final int TARGET_THROWS = 0x17;
-        /** `localvar_target` de una variable local. */
+        /** A local variable's `localvar_target`. */
         public static final int TARGET_LOCAL_VARIABLE = 0x40;
-        /** `localvar_target` de un recurso de `try`. */
+        /** A `try` resource's `localvar_target`. */
         public static final int TARGET_RESOURCE_VARIABLE = 0x41;
         /** `catch_target`. */
         public static final int TARGET_EXCEPTION_PARAMETER = 0x42;
-        /** `offset_target` de un `instanceof`. */
+        /** An `instanceof`'s `offset_target`. */
         public static final int TARGET_INSTANCEOF = 0x43;
-        /** `offset_target` de un `new`. */
+        /** A `new`'s `offset_target`. */
         public static final int TARGET_NEW = 0x44;
-        /** `offset_target` de una referencia a constructor. */
+        /** A constructor reference's `offset_target`. */
         public static final int TARGET_CONSTRUCTOR_REFERENCE = 0x45;
-        /** `offset_target` de una referencia a método. */
+        /** A method reference's `offset_target`. */
         public static final int TARGET_METHOD_REFERENCE = 0x46;
-        /** `type_argument_target` de un cast. */
+        /** A cast's `type_argument_target`. */
         public static final int TARGET_CAST = 0x47;
-        /** `type_argument_target` de una invocación de constructor. */
+        /** A constructor invocation's `type_argument_target`. */
         public static final int TARGET_CONSTRUCTOR_INVOCATION_TYPE_ARGUMENT = 0x48;
-        /** `type_argument_target` de una invocación de método. */
+        /** A method invocation's `type_argument_target`. */
         public static final int TARGET_METHOD_INVOCATION_TYPE_ARGUMENT = 0x49;
-        /** `type_argument_target` de una referencia a constructor. */
+        /** A constructor reference's `type_argument_target`. */
         public static final int TARGET_CONSTRUCTOR_REFERENCE_TYPE_ARGUMENT = 0x4A;
-        /** `type_argument_target` de una referencia a método. */
+        /** A method reference's `type_argument_target`. */
         public static final int TARGET_METHOD_REFERENCE_TYPE_ARGUMENT = 0x4B;
 
-        /** La etiqueta que eligió esta forma. */
+        /** The tag that chose this form. */
         TargetType targetType();
 
-        /** Cuántos bytes ocupa, contando el byte de `target_type`. */
+        /** How many bytes it takes, counting the `target_type` byte. */
         default int size() {
             return targetType().sizeIfFixed() + 1;
         }
 
-        /** Un `type_parameter_target` con esta etiqueta. */
+        /** A `type_parameter_target` with this tag. */
         public static TypeParameterTarget ofTypeParameter(TargetType targetType,
                 int typeParameterIndex) {
             return Annotations.typeParameterTarget(targetType, typeParameterIndex);
         }
 
-        /** El parámetro de tipo número `typeParameterIndex` de la clase. */
+        /** The class's type parameter number `typeParameterIndex`. */
         public static TypeParameterTarget ofClassTypeParameter(int typeParameterIndex) {
             return ofTypeParameter(TargetType.CLASS_TYPE_PARAMETER, typeParameterIndex);
         }
 
-        /** El parámetro de tipo número `typeParameterIndex` del método. */
+        /** The method's type parameter number `typeParameterIndex`. */
         public static TypeParameterTarget ofMethodTypeParameter(int typeParameterIndex) {
             return ofTypeParameter(TargetType.METHOD_TYPE_PARAMETER, typeParameterIndex);
         }
 
-        /** El supertipo número `supertypeIndex`; 65535 es la superclase. */
+        /** Supertype number `supertypeIndex`; 65535 is the superclass. */
         public static SupertypeTarget ofClassExtends(int supertypeIndex) {
             return Annotations.supertypeTarget(supertypeIndex);
         }
 
-        /** Un `type_parameter_bound_target` con esta etiqueta. */
+        /** A `type_parameter_bound_target` with this tag. */
         public static TypeParameterBoundTarget ofTypeParameterBound(TargetType targetType,
                 int typeParameterIndex, int boundIndex) {
             return Annotations.typeParameterBoundTarget(targetType, typeParameterIndex, boundIndex);
         }
 
-        /** La cota `boundIndex` del parámetro `typeParameterIndex` de la clase. */
+        /** Bound `boundIndex` of the class's parameter `typeParameterIndex`. */
         public static TypeParameterBoundTarget ofClassTypeParameterBound(int typeParameterIndex,
                 int boundIndex) {
             return ofTypeParameterBound(TargetType.CLASS_TYPE_PARAMETER_BOUND, typeParameterIndex,
                     boundIndex);
         }
 
-        /** La cota `boundIndex` del parámetro `typeParameterIndex` del método. */
+        /** Bound `boundIndex` of the method's parameter `typeParameterIndex`. */
         public static TypeParameterBoundTarget ofMethodTypeParameterBound(int typeParameterIndex,
                 int boundIndex) {
             return ofTypeParameterBound(TargetType.METHOD_TYPE_PARAMETER_BOUND, typeParameterIndex,
                     boundIndex);
         }
 
-        /** Un `empty_target` con esta etiqueta. */
+        /** An `empty_target` with this tag. */
         public static EmptyTarget of(TargetType targetType) {
             return Annotations.emptyTarget(targetType);
         }
 
-        /** El tipo de un campo. */
+        /** A field's type. */
         public static EmptyTarget ofField() {
             return of(TargetType.FIELD);
         }
 
-        /** El tipo de retorno de un método. */
+        /** A method's return type. */
         public static EmptyTarget ofMethodReturn() {
             return of(TargetType.METHOD_RETURN);
         }
 
-        /** El receptor de un método. */
+        /** A method's receiver. */
         public static EmptyTarget ofMethodReceiver() {
             return of(TargetType.METHOD_RECEIVER);
         }
 
-        /** El parámetro formal número `formalParameterIndex`. */
+        /** Formal parameter number `formalParameterIndex`. */
         public static FormalParameterTarget ofMethodFormalParameter(int formalParameterIndex) {
             return Annotations.formalParameterTarget(formalParameterIndex);
         }
 
-        /** La excepción número `throwsTargetIndex` de la cláusula `throws`. */
+        /** Exception number `throwsTargetIndex` of the `throws` clause. */
         public static ThrowsTarget ofThrows(int throwsTargetIndex) {
             return Annotations.throwsTarget(throwsTargetIndex);
         }
 
-        /** Un `localvar_target` con esta etiqueta. */
+        /** A `localvar_target` with this tag. */
         public static LocalVarTarget ofVariable(TargetType targetType,
                 List<LocalVarTargetInfo> table) {
             return Annotations.localVarTarget(targetType, table);
         }
 
-        /** Una variable local con este rango de vida. */
+        /** A local variable with this live range. */
         public static LocalVarTarget ofLocalVariable(List<LocalVarTargetInfo> table) {
             return ofVariable(TargetType.LOCAL_VARIABLE, table);
         }
 
-        /** Un recurso de `try` con este rango de vida. */
+        /** A `try` resource with this live range. */
         public static LocalVarTarget ofResourceVariable(List<LocalVarTargetInfo> table) {
             return ofVariable(TargetType.RESOURCE_VARIABLE, table);
         }
 
-        /** El manejador número `exceptionTableIndex` de la `exception_table`. */
+        /** Handler number `exceptionTableIndex` of the `exception_table`. */
         public static CatchTarget ofExceptionParameter(int exceptionTableIndex) {
             return Annotations.catchTarget(exceptionTableIndex);
         }
 
-        /** Un `offset_target` con esta etiqueta. */
+        /** An `offset_target` with this tag. */
         public static OffsetTarget ofOffset(TargetType targetType, Label target) {
             return Annotations.offsetTarget(targetType, target);
         }
 
-        /** El `instanceof` que está en `target`. */
+        /** The `instanceof` sitting at `target`. */
         public static OffsetTarget ofInstanceofExpr(Label target) {
             return ofOffset(TargetType.INSTANCEOF, target);
         }
 
-        /** El `new` que está en `target`. */
+        /** The `new` sitting at `target`. */
         public static OffsetTarget ofNewExpr(Label target) {
             return ofOffset(TargetType.NEW, target);
         }
 
-        /** La referencia a constructor que está en `target`. */
+        /** The constructor reference sitting at `target`. */
         public static OffsetTarget ofConstructorReference(Label target) {
             return ofOffset(TargetType.CONSTRUCTOR_REFERENCE, target);
         }
 
-        /** La referencia a método que está en `target`. */
+        /** The method reference sitting at `target`. */
         public static OffsetTarget ofMethodReference(Label target) {
             return ofOffset(TargetType.METHOD_REFERENCE, target);
         }
 
-        /** Un `type_argument_target` con esta etiqueta. */
+        /** A `type_argument_target` with this tag. */
         public static TypeArgumentTarget ofTypeArgument(TargetType targetType, Label target,
                 int typeArgumentIndex) {
             return Annotations.typeArgumentTarget(targetType, target, typeArgumentIndex);
         }
 
-        /** El argumento de tipo `typeArgumentIndex` del cast que está en `target`. */
+        /** Type argument `typeArgumentIndex` of the cast sitting at `target`. */
         public static TypeArgumentTarget ofCastExpr(Label target, int typeArgumentIndex) {
             return ofTypeArgument(TargetType.CAST, target, typeArgumentIndex);
         }
 
-        /** El argumento de tipo de la invocación de constructor que está en `target`. */
+        /** The type argument of the constructor invocation sitting at `target`. */
         public static TypeArgumentTarget ofConstructorInvocationTypeArgument(Label target,
                 int typeArgumentIndex) {
             return ofTypeArgument(TargetType.CONSTRUCTOR_INVOCATION_TYPE_ARGUMENT, target,
                     typeArgumentIndex);
         }
 
-        /** El argumento de tipo de la invocación de método que está en `target`. */
+        /** The type argument of the method invocation sitting at `target`. */
         public static TypeArgumentTarget ofMethodInvocationTypeArgument(Label target,
                 int typeArgumentIndex) {
             return ofTypeArgument(TargetType.METHOD_INVOCATION_TYPE_ARGUMENT, target,
                     typeArgumentIndex);
         }
 
-        /** El argumento de tipo de la referencia a constructor que está en `target`. */
+        /** The type argument of the constructor reference sitting at `target`. */
         public static TypeArgumentTarget ofConstructorReferenceTypeArgument(Label target,
                 int typeArgumentIndex) {
             return ofTypeArgument(TargetType.CONSTRUCTOR_REFERENCE_TYPE_ARGUMENT, target,
                     typeArgumentIndex);
         }
 
-        /** El argumento de tipo de la referencia a método que está en `target`. */
+        /** The type argument of the method reference sitting at `target`. */
         public static TypeArgumentTarget ofMethodReferenceTypeArgument(Label target,
                 int typeArgumentIndex) {
             return ofTypeArgument(TargetType.METHOD_REFERENCE_TYPE_ARGUMENT, target,
@@ -247,8 +248,8 @@ public interface TypeAnnotation {
     }
 
     /**
-     * Las veintidós etiquetas de `target_type`. `sizeIfFixed()` NO cuenta el byte de la etiqueta y
-     * vale -1 en las dos formas de variable local, cuyo largo depende de la cantidad de rangos.
+     * `target_type`'s twenty-two tags. `sizeIfFixed()` does NOT count the tag's byte and is -1 on the
+     * two local variable forms, whose length depends on the number of ranges.
      */
     public enum TargetType {
 
@@ -275,146 +276,146 @@ public interface TypeAnnotation {
         CONSTRUCTOR_REFERENCE_TYPE_ARGUMENT(0x4A, 3),
         METHOD_REFERENCE_TYPE_ARGUMENT(0x4B, 3);
 
-        private final int valor;
-        private final int tamanio;
+        private final int value;
+        private final int size;
 
-        private TargetType(int valor, int tamanio) {
-            this.valor = valor;
-            this.tamanio = tamanio;
+        private TargetType(int value, int size) {
+            this.value = value;
+            this.size = size;
         }
 
-        /** El byte `target_type`. */
+        /** The `target_type` byte. */
         public int targetTypeValue() {
-            return this.valor;
+            return this.value;
         }
 
-        /** El largo del `target_info` sin la etiqueta, o -1 si depende del contenido. */
+        /** The `target_info`'s length without the tag, or -1 if it depends on the contents. */
         public int sizeIfFixed() {
-            return this.tamanio;
+            return this.size;
         }
     }
 
-    /** Un `type_parameter_target`. */
+    /** A `type_parameter_target`. */
     public interface TypeParameterTarget extends TargetInfo {
 
-        /** El índice del parámetro de tipo. */
+        /** The type parameter's index. */
         int typeParameterIndex();
     }
 
-    /** Un `supertype_target`: 65535 nombra a la superclase, y el resto a una interfaz. */
+    /** A `supertype_target`: 65535 names the superclass, and the rest name an interface. */
     public interface SupertypeTarget extends TargetInfo {
 
-        /** El índice del supertipo. */
+        /** The supertype's index. */
         int supertypeIndex();
     }
 
-    /** Un `type_parameter_bound_target`. */
+    /** A `type_parameter_bound_target`. */
     public interface TypeParameterBoundTarget extends TargetInfo {
 
-        /** El índice del parámetro de tipo. */
+        /** The type parameter's index. */
         int typeParameterIndex();
 
-        /** El índice de la cota dentro de ese parámetro. */
+        /** The bound's index within that parameter. */
         int boundIndex();
     }
 
-    /** Un `empty_target`: la etiqueta ya dice todo y no hay más bytes. */
+    /** An `empty_target`: the tag says it all and there are no more bytes. */
     public interface EmptyTarget extends TargetInfo {
     }
 
-    /** Un `formal_parameter_target`. */
+    /** A `formal_parameter_target`. */
     public interface FormalParameterTarget extends TargetInfo {
 
-        /** El índice del parámetro formal, contando desde 0 y sin el receptor. */
+        /** The formal parameter's index, counting from 0 and leaving out the receiver. */
         int formalParameterIndex();
     }
 
-    /** Un `throws_target`. */
+    /** A `throws_target`. */
     public interface ThrowsTarget extends TargetInfo {
 
-        /** El índice dentro de la tabla del atributo `Exceptions`. */
+        /** The index within the `Exceptions` attribute's table. */
         int throwsTargetIndex();
     }
 
-    /** Un `localvar_target`: una variable puede tener varios rangos de vida disjuntos. */
+    /** A `localvar_target`: a variable can have several disjoint live ranges. */
     public interface LocalVarTarget extends TargetInfo {
 
-        /** Los rangos, en el orden del archivo. */
+        /** The ranges, in file order. */
         List<LocalVarTargetInfo> table();
 
-        /** Tres bytes de cabecera y seis por rango. */
+        /** Three header bytes and six per range. */
         default int size() {
             return 3 + table().size() * 6;
         }
     }
 
-    /** Una fila de la tabla de un `localvar_target`. */
+    /** A row of a `localvar_target`'s table. */
     public interface LocalVarTargetInfo {
 
-        /** Dónde empieza el rango de vida. */
+        /** Where the live range starts. */
         Label startLabel();
 
-        /** Dónde termina, sin incluirlo. */
+        /** Where it ends, exclusive. */
         Label endLabel();
 
-        /** La ranura de variable local. */
+        /** The local variable slot. */
         int index();
 
-        /** Una fila con estos valores. */
+        /** A row with these values. */
         public static LocalVarTargetInfo of(Label startLabel, Label endLabel, int index) {
             return Annotations.localVarTargetInfo(startLabel, endLabel, index);
         }
     }
 
-    /** Un `catch_target`. */
+    /** A `catch_target`. */
     public interface CatchTarget extends TargetInfo {
 
-        /** El índice dentro de la `exception_table` del atributo `Code`. */
+        /** The index within the `Code` attribute's `exception_table`. */
         int exceptionTableIndex();
     }
 
-    /** Un `offset_target`: apunta a un bci del arreglo `code`. */
+    /** An `offset_target`: it points at a bci of the `code` array. */
     public interface OffsetTarget extends TargetInfo {
 
-        /** El bci de la instrucción anotada. */
+        /** The annotated instruction's bci. */
         Label target();
     }
 
-    /** Un `type_argument_target`. */
+    /** A `type_argument_target`. */
     public interface TypeArgumentTarget extends TargetInfo {
 
-        /** El bci de la instrucción anotada. */
+        /** The annotated instruction's bci. */
         Label target();
 
-        /** Cuál de los argumentos de tipo de esa expresión. */
+        /** Which of that expression's type arguments. */
         int typeArgumentIndex();
     }
 
     /**
-     * Un paso del `target_path` (§4.7.20.2). Cada paso baja un nivel dentro del tipo: al componente
-     * de un arreglo, al tipo interno, a la cota de un comodín, o a un argumento de tipo.
+     * A step of the `target_path` (§4.7.20.2). Each step goes down one level inside the type: to an
+     * array's component, to the inner type, to a wildcard's bound, or to a type argument.
      */
     public interface TypePathComponent {
 
-        /** Bajar al componente de un arreglo. */
+        /** Going down to an array's component. */
         public static final TypePathComponent ARRAY = of(Kind.ARRAY, 0);
-        /** Bajar al tipo anidado. */
+        /** Going down to the nested type. */
         public static final TypePathComponent INNER_TYPE = of(Kind.INNER_TYPE, 0);
-        /** Bajar a la cota de un comodín. */
+        /** Going down to a wildcard's bound. */
         public static final TypePathComponent WILDCARD = of(Kind.WILDCARD, 0);
 
-        /** Qué clase de paso es. */
+        /** What kind of step it is. */
         Kind typePathKind();
 
-        /** Cuál argumento de tipo, si el paso es `TYPE_ARGUMENT`; 0 en los otros tres. */
+        /** Which type argument, if the step is `TYPE_ARGUMENT`; 0 on the other three. */
         int typeArgumentIndex();
 
-        /** Un paso con esta clase y este índice. */
+        /** A step with this kind and this index. */
         public static TypePathComponent of(Kind typePathKind, int typeArgumentIndex) {
             return Annotations.typePathComponent(typePathKind, typeArgumentIndex);
         }
 
-        /** Las cuatro clases de paso, con el `type_path_kind` que el formato les da. */
+        /** The four kinds of step, with the `type_path_kind` the format gives them. */
         public enum Kind {
 
             ARRAY(0),
@@ -428,7 +429,7 @@ public interface TypeAnnotation {
                 this.tag = tag;
             }
 
-            /** El `type_path_kind`. */
+            /** The `type_path_kind`. */
             public int tag() {
                 return this.tag;
             }

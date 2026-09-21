@@ -1,15 +1,15 @@
 package java.lang.foreign;
 
 /**
- * KajiLibrary's java.lang.foreign.PaddingLayout -- lugar ocupado que no lleva nada.
+ * KajiLibrary's java.lang.foreign.PaddingLayout -- space taken up that carries nothing.
  *
- * <p>Existe para escribir a mano los huecos que un compilador de C insertaria solo entre los campos
- * de un `struct`. Que haya que escribirlos es la decision de diseno del paquete: un layout que se
- * acomoda solo describiria una cosa distinta en cada plataforma, y todo esto existe para describir
- * memoria de forma exacta.
+ * <p>It exists so the gaps a C compiler would insert by itself between a `struct`'s fields can be
+ * written by hand. That they have to be written is the package's design decision: a layout that
+ * arranges itself would describe a different thing on each platform, and all of this exists to
+ * describe memory exactly.
  *
- * <p>Su alineamiento es 1 y no se puede cambiar a algo mayor con sentido: una restriccion sobre
- * donde puede empezar la nada no restringe nada.
+ * <p>Its alignment is 1 and cannot meaningfully be changed to anything greater: a constraint on
+ * where nothing may start constrains nothing.
  */
 public interface PaddingLayout extends MemoryLayout {
 

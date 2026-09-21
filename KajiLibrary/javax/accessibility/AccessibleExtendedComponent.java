@@ -1,20 +1,21 @@
 package javax.accessibility;
 
 /**
- * Lo que un componente accesible puede contar de más allá de su geometría.
+ * What an accessible component can tell beyond its geometry.
  *
- * <p>Las tres cosas que agrega tienen algo en común: son texto que el usuario **ve pero que no es el
- * contenido** del control. La ayudita que aparece al pasar el puntero, el título del recuadro que lo
- * rodea, la tecla que lo activa. Para quien no ve la pantalla, eso es información que se perdería.
+ * <p>The three things it adds have something in common: they are text the user **sees but that is
+ * not the content** of the control. The tip that appears when the pointer passes, the title of the
+ * box around it, the key that activates it. For whoever does not see the screen, that is
+ * information that would be lost.
  */
 public interface AccessibleExtendedComponent extends AccessibleComponent {
 
-    /** La ayudita emergente, o `null` si no tiene. */
+    /** The pop-up tip, or `null` if it has none. */
     String getToolTipText();
 
-    /** El título del recuadro que lo rodea, o `null` si no tiene. */
+    /** The title of the box around it, or `null` if it has none. */
     String getTitledBorderText();
 
-    /** Los atajos de teclado que lo activan, o `null` si no tiene. */
+    /** The keyboard shortcuts that activate it, or `null` if it has none. */
     AccessibleKeyBinding getAccessibleKeyBinding();
 }

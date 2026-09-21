@@ -2,17 +2,18 @@ package java.security.cert;
 
 import java.security.InvalidAlgorithmParameterException;
 
-// Lo que un proveedor tiene que escribir para ofrecer un constructor de caminos.
+// What a provider has to write in order to offer a path builder.
 //
-// `engineGetRevocationChecker()` tira `UnsupportedOperationException` por default y **asi es en el
-// JDK**: se agrego en Java 8 y darle una implementacion base que no hace nada habria roto a los
-// proveedores que ya existian. Un proveedor que sepa chequear revocacion lo sobreescribe.
+// `engineGetRevocationChecker()` throws `UnsupportedOperationException` by default and **it is like
+// that in the JDK**: it was added in Java 8 and giving it a base implementation that does nothing
+// would have broken the providers that already existed. A provider that knows how to check
+// revocation overrides it.
 public abstract class CertPathBuilderSpi {
 
     public CertPathBuilderSpi() {
     }
 
-    // Construye un camino con estos parametros.
+    // Builds a path with these parameters.
     public abstract CertPathBuilderResult engineBuild(CertPathParameters params)
         throws CertPathBuilderException, InvalidAlgorithmParameterException;
 

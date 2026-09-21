@@ -3,14 +3,14 @@ package javax.print.attribute.standard;
 import javax.print.attribute.EnumSyntax;
 
 /**
- * El <em>nombre</em> de un tamano de papel. No lleva las medidas: para eso hay que pasar por {@link
- * MediaSize#getMediaSizeForName}, que es donde esta la tabla.
+ * The <em>name</em> of a paper size. It does not carry the measures: for that one has to go through
+ * {@link MediaSize#getMediaSizeForName}, which is where the table is.
  *
- * <p>Dos rarezas de los nombres, heredadas del JDK y observables desde {@code toString()}: {@code
- * JAPANESE_DOUBLE_POSTCARD} se imprime {@code "oufuko-postcard"} e {@code ITALY_ENVELOPE} se
- * imprime {@code "italian-envelope"}. Y {@code ISO_C0}, {@code ISO_C1} e {@code ISO_C2} existen
- * como nombre pero no tienen tamano registrado: {@code getMediaSizeForName} devuelve {@code null}
- * para los tres.
+ * <p>Two oddities of the names, inherited from the JDK and observable from {@code toString()}:
+ * {@code JAPANESE_DOUBLE_POSTCARD} prints as {@code "oufuko-postcard"} and {@code ITALY_ENVELOPE}
+ * prints as {@code "italian-envelope"}. And {@code ISO_C0}, {@code ISO_C1} and {@code ISO_C2} exist
+ * as names but have no registered size: {@code getMediaSizeForName} returns {@code null} for the
+ * three.
  */
 public class MediaSizeName extends Media {
 

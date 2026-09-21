@@ -5,38 +5,38 @@ import java.awt.Component;
 import java.util.Locale;
 
 /**
- * El estado de la escritura para una ventana: qué método de entrada está activo y qué está
- * componiendo.
+ * The state of writing for a window: which input method is active and what it is composing.
  *
- * <p>Hay **uno por ventana**, no uno por campo de texto, y esa decisión se nota: al pasar el foco de
- * un campo a otro dentro de la misma ventana, el método de entrada conserva su estado. Es lo que uno
- * espera — el diccionario de conversión no se reinicia por moverse de campo.
+ * <p>There is **one per window**, not one per text field, and that choice shows: when focus moves
+ * from one field to another in the same window, the input method keeps its state. It is what one
+ * expects — the conversion dictionary does not reset for moving between fields.
  *
- * <p><strong>Esta implementación no tiene ningún método de entrada detrás.</strong> Sin sistema de
- * ventanas no hay ninguno que activar: {@link #selectInputMethod} contesta `false`, la composición
- * queda apagada y {@link #getLocale} devuelve `null`. Todas son respuestas verdaderas sobre este
- * contexto, no rellenos: no hay método de entrada, no se pudo elegir, no hay idioma activo. Los
- * métodos que sólo tienen sentido con uno activo —{@link #reconvert}, {@link #endComposition}— no
- * hacen nada, que es exactamente lo que corresponde cuando no hay composición en curso.
+ * <p><strong>This implementation has no input method behind it.</strong> Without a window system
+ * there is none to activate: {@link #selectInputMethod} answers `false`, composition stays off and
+ * {@link #getLocale} returns `null`. They are all true answers about this context, not filler:
+ * there is no input method, none could be chosen, there is no active locale. {@link
+ * #endComposition} does nothing, which is exactly right when no composition is in progress. This
+ * note also put {@link #reconvert} among the methods that do nothing; it throws {@link
+ * UnsupportedOperationException}, as its javadoc says and as the JDK's base class does.
  */
 public class InputContext {
 
     private boolean compositionEnabled;
 
-    /** Para las subclases. */
+    /** For subclasses. */
     protected InputContext() {
     }
 
-    /** Un contexto nuevo. */
+    /** A new context. */
     public static InputContext getInstance() {
         return new InputContext();
     }
 
     /**
-     * Elige un método de entrada para ese idioma.
+     * Selects an input method for that locale.
      *
-     * @return `false` siempre: no hay ninguno instalado para elegir
-     * @throws NullPointerException si el idioma es `null`
+     * @return `false` always: there is none installed to choose
+     * @throws NullPointerException if the locale is `null`
      */
     public boolean selectInputMethod(Locale locale) {
         if (locale == null) {
@@ -46,69 +46,71 @@ public class InputContext {
     }
 
     /**
-     * El idioma del método de entrada activo.
+     * The locale of the active input method.
      *
-     * @return `null` siempre: no hay ninguno activo
+     * @return `null` always: there is none active
      */
     public Locale getLocale() {
         return null;
     }
 
-    /** Acota qué caracteres se pueden escribir; sin método de entrada no hay nada que acotar. */
+    /** Narrows which characters can be typed; with no input method there is nothing to narrow. */
     public void setCharacterSubsets(Character.Subset[] subsets) {
     }
 
     /**
-     * Prende o apaga la composición.
+     * Turns composition on or off.
      *
-     * @throws UnsupportedOperationException si se pide prenderla: no hay método de entrada que
-     *     pueda componer, y decir que quedó prendida sería mentir sobre el estado
+     * @throws UnsupportedOperationException if asked to turn it on: there is no input method that
+     *     can compose, and saying it was turned on would lie about the state
      */
     public void setCompositionEnabled(boolean enable) {
         if (enable) {
-            throw new UnsupportedOperationException("no hay método de entrada instalado");
+            throw new UnsupportedOperationException("no input method is installed");
         }
         this.compositionEnabled = false;
     }
 
     /**
-     * Si la composición está prendida.
+     * Whether composition is on.
      *
-     * @return `false` siempre
+     * @return `false` always
      */
     public boolean isCompositionEnabled() {
         return this.compositionEnabled;
     }
 
     /**
-     * Pide volver a convertir el texto ya confirmado.
+     * Asks for the already committed text to be converted again.
      *
-     * @throws UnsupportedOperationException siempre: no hay método de entrada que reconvierta
+     * @throws UnsupportedOperationException always: there is no input method to reconvert
      */
     public void reconvert() {
-        throw new UnsupportedOperationException("no hay método de entrada instalado");
+        throw new UnsupportedOperationException("no input method is installed");
     }
 
-    /** Le pasa un evento al método de entrada; sin ninguno, no hace nada. */
+    /** Passes an event to the input method; with none, it does nothing. */
     public void dispatchEvent(AWTEvent event) {
     }
 
-    /** Avisa que el componente dejó de existir; sin método de entrada, no hay estado que soltar. */
+    /**
+     * Tells that the component stopped existing; with no input method, there is no state to drop.
+     */
     public void removeNotify(Component client) {
     }
 
-    /** Da por terminada la composición en curso; no hay ninguna. */
+    /** Ends the composition in progress; there is none. */
     public void endComposition() {
     }
 
-    /** Suelta los recursos; no hay ninguno. */
+    /** Releases the resources; there are none. */
     public void dispose() {
     }
 
     /**
-     * El objeto de control del método de entrada.
+     * The input method's control object.
      *
-     * @return `null` siempre: no hay método de entrada que controlar
+     * @return `null` always: there is no input method to control
      */
     public Object getInputMethodControlObject() {
         return null;

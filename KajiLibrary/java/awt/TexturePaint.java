@@ -7,15 +7,15 @@ import java.awt.image.BufferedImage;
 import java.awt.image.ColorModel;
 
 /**
- * Rellena con una imagen repetida como baldosa.
+ * Fills with an image repeated as a tile.
  *
- * <p>El rectángulo de anclaje dice **dónde y de qué tamaño** va una copia de la imagen; a partir de
- * ahí se repite en las dos direcciones hasta cubrir lo que haga falta. La imagen se estira al
- * rectángulo, así que el mismo dibujo sirve para baldosas de cualquier tamaño.
+ * <p>The anchor rectangle says **where and how big** one copy of the image goes; from there it is
+ * repeated in both directions until it covers what is needed. The image is stretched to the
+ * rectangle, so the same drawing serves for tiles of any size.
  *
- * <p>Que el anclaje esté en coordenadas de usuario y no de la figura es lo que hace que dos figuras
- * distintas pintadas con la misma textura queden **alineadas entre sí**: el patrón pertenece al
- * plano, no a lo que se está rellenando.
+ * <p>That the anchor is in user coordinates and not the shape's is what makes two different shapes
+ * painted with the same texture **line up with each other**: the pattern belongs to the plane, not
+ * to what is being filled.
  */
 public class TexturePaint implements Paint {
 
@@ -26,9 +26,9 @@ public class TexturePaint implements Paint {
     private final double sy;
 
     /**
-     * Con la imagen y el rectángulo donde va una copia.
+     * With the image and the rectangle where one copy goes.
      *
-     * @throws NullPointerException si falta la imagen o el rectángulo
+     * @throws NullPointerException if the image or the rectangle is missing
      */
     public TexturePaint(BufferedImage txtr, Rectangle2D anchor) {
         this.bufImg = txtr;
@@ -38,55 +38,56 @@ public class TexturePaint implements Paint {
         this.sy = anchor.getHeight() / this.bufImg.getHeight();
     }
 
-    /** La imagen que se repite. */
+    /** The image that is repeated. */
     public BufferedImage getImage() {
         return this.bufImg;
     }
 
-    /** Dónde va una copia de la imagen. */
+    /** Where one copy of the image goes. */
     public Rectangle2D getAnchorRect() {
         return new Rectangle2D.Double(this.tx, this.ty, this.sx * this.bufImg.getWidth(),
                 this.sy * this.bufImg.getHeight());
     }
 
     /**
-     * `OPAQUE` si la imagen no tiene transparencia, `TRANSLUCENT` si la tiene.
+     * The transparency of the image's colour model: `OPAQUE`, `BITMASK` or `TRANSLUCENT`.
      *
-     * <p>Se pregunta al modelo de color de la imagen: una imagen sin canal alfa cubre lo de abajo, y
-     * saberlo le permite al dibujado saltearse la composición.
+     * <p>The image's colour model is asked: an image without an alpha channel covers what is below,
+     * and knowing that lets drawing skip compositing.
      */
     public int getTransparency() {
         return this.bufImg.getColorModel().getTransparency();
     }
 
     /**
-     * Arma la máquina que genera los píxeles.
+     * Builds the machine that generates the pixels.
      *
-     * <p>Si la transformación no se puede invertir, la textura se degrada a un color plano
-     * transparente: sin geometría no hay baldosa que ubicar, y pintar de un color inventado sería
-     * peor que no pintar.
+     * <p>If the transformation cannot be inverted, the texture degrades to a transparent flat
+     * colour: with no geometry there is no tile to place, and painting an invented colour would be
+     * worse than not painting.
      */
     public PaintContext createContext(ColorModel cm, Rectangle deviceBounds,
             Rectangle2D userBounds, AffineTransform xform, RenderingHints hints) {
         try {
-            return new Contexto(xform);
+            return new TextureContext(xform);
         } catch (NoninvertibleTransformException e) {
             return new Color(0, 0, 0, 0).createContext(cm, deviceBounds, userBounds, xform, hints);
         }
     }
 
-    /** El contexto que ubica cada punto dentro de la baldosa. */
-    private final class Contexto extends RasterPaintContext {
+    /** The context that places each point inside the tile. */
+    private final class TextureContext extends RasterPaintContext {
 
-        Contexto(AffineTransform xform) throws NoninvertibleTransformException {
+        TextureContext(AffineTransform xform) throws NoninvertibleTransformException {
             super(xform);
         }
 
-        int colorDe(double ux, double uy) {
+        int colorAt(double ux, double uy) {
             TexturePaint p = TexturePaint.this;
-            // El resto de la division ubica el punto dentro de una baldosa. Se le suma el ancho y se
-            // vuelve a tomar el resto porque el resto de Java conserva el signo, y sin eso las
-            // coordenadas negativas caerian fuera de la imagen.
+            // The remainder of the division places the point inside a tile. If it comes out
+            // negative the width is added, because Java's remainder keeps the sign, and without
+            // that negative coordinates would fall outside the image. (This comment said the
+            // remainder is taken again.)
             double ax = (ux - p.tx) / p.sx;
             double ay = (uy - p.ty) / p.sy;
             int w = p.bufImg.getWidth();

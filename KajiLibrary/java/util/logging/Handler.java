@@ -1,14 +1,15 @@
 package java.util.logging;
 
 /**
- * KajiLibrary's java.util.logging.Handler -- a donde va un mensaje.
+ * KajiLibrary's java.util.logging.Handler -- where a message goes.
  *
- * <p>La separacion entre {@link Logger} y esto es lo que hace util a la biblioteca: el logger dice
- * **que** se registra y el manejador **donde** termina, y cambiar uno no toca al otro. Un mismo
- * logger puede tener varios, con niveles distintos -- todo a un archivo y solo lo grave a la consola.
+ * <p>The separation between {@link Logger} and this is what makes the library useful: the logger
+ * says **what** is recorded and the handler **where** it ends up, and changing one does not touch
+ * the other. One logger can have several, at different levels -- everything to a file and only the
+ * serious to the console.
  *
- * <p>Su nivel es un segundo filtro **despues** del nivel del logger, no en vez de el: un mensaje que
- * el logger descarto no llega nunca.
+ * <p>Its level is a second filter **after** the logger's level, not instead of it: a message the
+ * logger discarded never arrives.
  */
 public abstract class Handler {
 
@@ -21,13 +22,13 @@ public abstract class Handler {
     protected Handler() {
     }
 
-    /** Escribe ese registro. */
+    /** It writes that record. */
     public abstract void publish(LogRecord record);
 
-    /** Vacia lo que este pendiente. */
+    /** It flushes whatever is pending. */
     public abstract void flush();
 
-    /** Cierra y suelta los recursos. */
+    /** It closes and releases the resources. */
     public abstract void close() throws SecurityException;
 
     public synchronized void setFormatter(Formatter newFormatter) throws SecurityException {
@@ -80,12 +81,12 @@ public abstract class Handler {
         return this.errorManager;
     }
 
-    /** Le pasa el fallo al {@link ErrorManager}. */
+    /** It hands the failure to the {@link ErrorManager}. */
     protected void reportError(String msg, Exception ex, int code) {
         this.errorManager.error(msg, ex, code);
     }
 
-    /** Si este manejador acepta ese registro: por nivel y despues por filtro. */
+    /** Whether this handler accepts that record: by level and then by filter. */
     public boolean isLoggable(LogRecord record) {
         if (record == null) {
             return false;

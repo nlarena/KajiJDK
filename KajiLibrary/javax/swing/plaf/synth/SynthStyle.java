@@ -7,107 +7,107 @@ import java.awt.Insets;
 import javax.swing.Icon;
 
 /**
- * Como se ve una region: sus colores, su tipografia, sus margenes y quien la dibuja.
+ * How a region looks: its colours, its typeface, its margins and who draws it.
  *
- * <h2>Un estilo por region, no por componente</h2>
+ * <h2>One style per region, not per component</h2>
  *
- * <p>El pulgar de una barra de desplazamiento tiene su propio estilo, distinto del de la pista y del
- * de la barra entera. Eso es lo que permite escribir un aspecto grafico como una tabla de partes en
- * vez de como una clase por componente.
+ * <p>A scroll bar's thumb has its own style, different from the track's and from the whole bar's.
+ * That is what allows writing a look and feel as a table of parts instead of as one class per
+ * component.
  *
- * <h2>Por que casi todo recibe un {@link SynthContext}</h2>
+ * <h2>Why almost everything takes a {@link SynthContext}</h2>
  *
- * <p>Porque la respuesta depende del estado: el color de un boton apretado no es el mismo que el de
- * uno deshabilitado. El contexto lleva el componente, la region y el estado, y sin los tres no hay
- * respuesta posible.
+ * <p>Because the answer depends on the state: a pressed button's colour is not the same as a
+ * disabled one's. The context carries the component, the region and the state, and without all
+ * three there is no possible answer.
  *
- * <h2>Los dos abstractos</h2>
+ * <h2>The two abstract ones</h2>
  *
- * <p>{@link #getColorForState} y {@link #getFontForState} son lo unico que una subclase esta
- * obligada a escribir. El resto tiene una respuesta razonable por omision, y esa asimetria es
- * deliberada: un estilo tiene que decir de que color es, y puede no tener opinion sobre lo demas.
+ * <p>{@link #getColorForState} and {@link #getFontForState} are the only thing a subclass is
+ * forced to write. The rest has a reasonable default answer, and that asymmetry is deliberate: a
+ * style has to say what colour it is, and may have no opinion about the rest.
  *
- * <p>{@link #getColor} envuelve al primero y agrega lo que no depende de la subclase: si el
- * componente esta deshabilitado y no hay color propio para ese estado, se usa el del estado normal.
- * Por eso lo publico no es abstracto y lo abstracto no es publico.
+ * <p>{@link #getColor} wraps the first one and adds what does not depend on the subclass: if the
+ * component is disabled and there is no colour of its own for that state, the normal state's is
+ * used. That is why what is public is not abstract and what is abstract is not public.
  *
  * @since 1.5
  */
 public abstract class SynthStyle {
 
     /**
-     * El pintor que no dibuja nada.
+     * The painter that draws nothing.
      *
-     * <p>Tiene nombre y no es anonima porque va en un inicializador estatico, y ahi nuestro javac
-     * todavia no genera la clase sintetica que una anonima necesita.
+     * <p>It has a name and is not anonymous because it goes in a static initializer, and there our
+     * javac does not yet generate the synthetic class an anonymous one needs.
      */
-    private static final class PintorVacio extends SynthPainter {
+    private static final class EmptyPainter extends SynthPainter {
     }
 
-    private static final SynthGraphicsUtils UTILES = new SynthGraphicsUtils();
-    private static final SynthPainter PINTOR = new PintorVacio();
+    private static final SynthGraphicsUtils UTILS = new SynthGraphicsUtils();
+    private static final SynthPainter PAINTER = new EmptyPainter();
 
-    /** Uno. */
+    /** One. */
     public SynthStyle() {
     }
 
     /**
-     * Quien hace las cuentas de dibujo.
+     * Who does the drawing computations.
      *
-     * @param context que se esta dibujando
-     * @return las utilidades; nunca {@code null}
+     * @param context what is being drawn
+     * @return the utilities; never {@code null}
      */
     public SynthGraphicsUtils getGraphicsUtils(SynthContext context) {
-        return UTILES;
+        return UTILS;
     }
 
     /**
-     * El color que le toca.
+     * The colour it gets.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param type que color se pide
-     * @return el color, o {@code null}
+     * @param context what is being drawn and in what state
+     * @param type which colour is asked for
+     * @return the colour, or {@code null}
      */
     public Color getColor(SynthContext context, ColorType type) {
         return getColorForState(context, type);
     }
 
     /**
-     * El color que le toca en ese estado.
+     * The colour it gets in that state.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param type que color se pide
-     * @return el color, o {@code null}
+     * @param context what is being drawn and in what state
+     * @param type which colour is asked for
+     * @return the colour, or {@code null}
      */
     protected abstract Color getColorForState(SynthContext context, ColorType type);
 
     /**
-     * La tipografia que le toca.
+     * The typeface it gets.
      *
-     * @param context que se esta dibujando y en que estado
-     * @return la tipografia, o {@code null}
+     * @param context what is being drawn and in what state
+     * @return the typeface, or {@code null}
      */
     public Font getFont(SynthContext context) {
         return getFontForState(context);
     }
 
     /**
-     * La tipografia que le toca en ese estado.
+     * The typeface it gets in that state.
      *
-     * @param context que se esta dibujando y en que estado
-     * @return la tipografia, o {@code null}
+     * @param context what is being drawn and in what state
+     * @return the typeface, or {@code null}
      */
     protected abstract Font getFontForState(SynthContext context);
 
     /**
-     * Los margenes de la region.
+     * The region's margins.
      *
-     * <p>El objeto que se pasa se reusa si no es {@code null}. Es la forma de no crear un objeto por
-     * cada consulta en algo que se consulta en cada repintado.
+     * <p>The object passed in is reused if it is not {@code null}. It is the way of not creating an
+     * object per query in something that is queried on every repaint.
      *
-     * @param context que se esta dibujando
-     * @param insets donde escribirlos, o {@code null} para uno nuevo
-     * @return los margenes
+     * @param context what is being drawn
+     * @param insets where to write them, or {@code null} for a new one
+     * @return the margins
      */
     public Insets getInsets(SynthContext context, Insets insets) {
         if (insets == null) {
@@ -121,59 +121,60 @@ public abstract class SynthStyle {
     }
 
     /**
-     * Quien dibuja esta region.
+     * Who draws this region.
      *
-     * @param context que se esta dibujando
-     * @return el pintor; nunca {@code null}
+     * @param context what is being drawn
+     * @return the painter; never {@code null}
      */
     public SynthPainter getPainter(SynthContext context) {
-        return PINTOR;
+        return PAINTER;
     }
 
     /**
-     * Si la region tapa todo su rectangulo.
+     * Whether the region covers its whole rectangle.
      *
-     * <p>Decir que si y no hacerlo deja basura en pantalla, porque nadie se molesta en borrar
-     * debajo. Por eso lo razonable por omision es que si: una region que no tapa todo lo dice.
+     * <p>Saying yes and not doing it leaves rubbish on the screen, because nobody bothers to clear
+     * underneath. That is why the reasonable default is yes: a region that does not cover
+     * everything says so.
      *
-     * @param context que se esta dibujando
-     * @return cierto si tapa todo
+     * @param context what is being drawn
+     * @return true if it covers everything
      */
     public boolean isOpaque(SynthContext context) {
         return true;
     }
 
     /**
-     * Un valor cualquiera del estilo, por nombre.
+     * Any value of the style, by name.
      *
-     * <p>Es la puerta de atras: lo que un aspecto quiera guardar y que no encaje en color,
-     * tipografia o margen.
+     * <p>It is the back door: whatever a look and feel wants to keep and does not fit in a colour,
+     * a typeface or a margin.
      *
-     * @param context que se esta dibujando
-     * @param key el nombre
-     * @return el valor, o {@code null}
+     * @param context what is being drawn
+     * @param key the name
+     * @return the value, or {@code null}
      */
     public Object get(SynthContext context, Object key) {
         return null;
     }
 
     /**
-     * Aplica el estilo al componente.
+     * It applies the style to the component.
      *
-     * <p>Pone el color, el fondo, la tipografia y la opacidad. Solo lo que el estilo tenga: un valor
-     * nulo no se instala, para no pisar lo que el programa haya puesto a mano.
+     * <p>It sets the colour, the background, the typeface and the opacity. Only what the style has:
+     * a null value is not installed, so as not to overwrite what the program set by hand.
      *
-     * @param context que se esta instalando
+     * @param context what is being installed
      */
     public void installDefaults(SynthContext context) {
         final javax.swing.JComponent c = context.getComponent();
-        final Color frente = getColor(context, ColorType.FOREGROUND);
-        if (frente != null) {
-            c.setForeground(frente);
+        final Color foreground = getColor(context, ColorType.FOREGROUND);
+        if (foreground != null) {
+            c.setForeground(foreground);
         }
-        final Color fondo = getColor(context, ColorType.BACKGROUND);
-        if (fondo != null) {
-            c.setBackground(fondo);
+        final Color background = getColor(context, ColorType.BACKGROUND);
+        if (background != null) {
+            c.setBackground(background);
         }
         final Font f = getFont(context);
         if (f != null) {
@@ -183,24 +184,24 @@ public abstract class SynthStyle {
     }
 
     /**
-     * Deshace lo que instalo.
+     * It undoes what it installed.
      *
-     * <p>No hace nada por omision, y no es un olvido: lo que se instalo con
-     * {@link #installDefaults} son valores del aspecto, y el proximo aspecto los va a pisar. Una
-     * subclase que reserve algo mas --un oyente, un temporizador-- lo suelta aca.
+     * <p>It does nothing by default, and it is not an oversight: what was installed with
+     * {@link #installDefaults} are look and feel values, and the next look and feel will overwrite
+     * them. A subclass that reserves something more --a listener, a timer-- releases it here.
      *
-     * @param context que se esta desinstalando
+     * @param context what is being uninstalled
      */
     public void uninstallDefaults(SynthContext context) {
     }
 
     /**
-     * Un valor entero del estilo.
+     * An integer value of the style.
      *
-     * @param context que se esta dibujando
-     * @param key el nombre
-     * @param defaultValue que devolver si no esta
-     * @return el valor
+     * @param context what is being drawn
+     * @param key the name
+     * @param defaultValue what to return if it is not there
+     * @return the value
      */
     public int getInt(SynthContext context, Object key, int defaultValue) {
         final Object v = get(context, key);
@@ -208,12 +209,12 @@ public abstract class SynthStyle {
     }
 
     /**
-     * Un valor de verdad del estilo.
+     * A truth value of the style.
      *
-     * @param context que se esta dibujando
-     * @param key el nombre
-     * @param defaultValue que devolver si no esta
-     * @return el valor
+     * @param context what is being drawn
+     * @param key the name
+     * @param defaultValue what to return if it is not there
+     * @return the value
      */
     public boolean getBoolean(SynthContext context, Object key, boolean defaultValue) {
         final Object v = get(context, key);
@@ -221,11 +222,11 @@ public abstract class SynthStyle {
     }
 
     /**
-     * Un icono del estilo.
+     * An icon of the style.
      *
-     * @param context que se esta dibujando
-     * @param key el nombre
-     * @return el icono, o {@code null}
+     * @param context what is being drawn
+     * @param key the name
+     * @return the icon, or {@code null}
      */
     public Icon getIcon(SynthContext context, Object key) {
         final Object v = get(context, key);
@@ -233,12 +234,12 @@ public abstract class SynthStyle {
     }
 
     /**
-     * Un texto del estilo.
+     * A text of the style.
      *
-     * @param context que se esta dibujando
-     * @param key el nombre
-     * @param defaultValue que devolver si no esta
-     * @return el texto
+     * @param context what is being drawn
+     * @param key the name
+     * @param defaultValue what to return if it is not there
+     * @return the text
      */
     public String getString(SynthContext context, Object key, String defaultValue) {
         final Object v = get(context, key);

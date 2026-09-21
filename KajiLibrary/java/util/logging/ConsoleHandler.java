@@ -1,20 +1,20 @@
 package java.util.logging;
 
 /**
- * KajiLibrary's java.util.logging.ConsoleHandler -- escribe al **error** estandar.
+ * KajiLibrary's java.util.logging.ConsoleHandler -- it writes to standard **error**.
  *
- * <p>A `System.err` y no a `System.out`, a proposito: la traza no es la salida del programa, y
- * mezclarlas arruina el uso del programa en una tuberia.
+ * <p>To `System.err` and not to `System.out`, on purpose: the log is not the program's output, and
+ * mixing them ruins the program's use in a pipeline.
  *
- * <p>Y vacia despues de cada mensaje. Es mas lento y es lo correcto para una consola: una traza que
- * se queda en el buffer cuando el programa se cae no sirve para nada, y el ultimo mensaje antes de
- * caerse suele ser el que importa.
+ * <p>And it flushes after each message. It is slower and it is right for a console: a log that sits
+ * in the buffer when the program crashes is no use at all, and the last message before crashing is
+ * usually the one that matters.
  */
 public class ConsoleHandler extends StreamHandler {
 
     public ConsoleHandler() {
-        // Las propiedades propias pisan a las de `StreamHandler`, que el `super()` ya aplico.
-        this.configurar("java.util.logging.ConsoleHandler");
+        // Its own properties override `StreamHandler`'s, which the `super()` already applied.
+        this.configure("java.util.logging.ConsoleHandler");
         this.setOutputStream(System.err);
     }
 
@@ -23,7 +23,7 @@ public class ConsoleHandler extends StreamHandler {
         this.flush();
     }
 
-    /** Vacia pero **no** cierra: `System.err` no es suyo. */
+    /** It flushes but does **not** close: `System.err` is not its own. */
     public void close() {
         this.flush();
     }

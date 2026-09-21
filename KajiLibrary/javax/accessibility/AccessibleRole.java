@@ -1,211 +1,211 @@
 package javax.accessibility;
 
 /**
- * Qué **es** un objeto: un botón, una lista, una ventana, una celda de tabla.
+ * What an object **is**: a button, a list, a window, a table cell.
  *
- * <p>Es la pregunta más importante que una ayuda técnica le hace a un objeto, porque de la respuesta
- * depende todo lo demás: cómo anunciarlo, qué se puede hacer con él, qué teclas tienen sentido.
+ * <p>It is the most important question an assistive technology asks an object, because everything
+ * else depends on the answer: how to announce it, what can be done with it, which keys make sense.
  *
- * <p>La lista es larga y aun así abierta: heredando de {@link AccessibleBundle} cualquiera puede
- * agregar el rol que le falte. Eso es a propósito — las interfaces inventan controles nuevos más
- * rápido de lo que una enumeración cerrada podría seguirlos.
+ * <p>The list is long and still open: by inheriting from {@link AccessibleBundle} anybody can add
+ * the role that is missing. That is on purpose -- interfaces invent new controls faster than a
+ * closed enumeration could keep up with them.
  */
 public class AccessibleRole extends AccessibleBundle {
 
-    /** La categoría <b>alert</b>. */
+    /** The <b>alert</b> category. */
     public static final AccessibleRole ALERT = new AccessibleRole("alert");
 
-    /** La categoría <b>AWT component</b>. */
+    /** The <b>AWT component</b> category. */
     public static final AccessibleRole AWT_COMPONENT = new AccessibleRole("AWT component");
 
-    /** La categoría <b>canvas</b>. */
+    /** The <b>canvas</b> category. */
     public static final AccessibleRole CANVAS = new AccessibleRole("canvas");
 
-    /** Una casilla que se marca. */
+    /** A box that gets checked. */
     public static final AccessibleRole CHECK_BOX = new AccessibleRole("check box");
 
-    /** La categoría <b>color chooser</b>. */
+    /** The <b>color chooser</b> category. */
     public static final AccessibleRole COLOR_CHOOSER = new AccessibleRole("color chooser");
 
-    /** La categoría <b>column header</b>. */
+    /** The <b>column header</b> category. */
     public static final AccessibleRole COLUMN_HEADER = new AccessibleRole("column header");
 
-    /** La categoría <b>combo box</b>. */
+    /** The <b>combo box</b> category. */
     public static final AccessibleRole COMBO_BOX = new AccessibleRole("combo box");
 
-    /** La categoría <b>dateeditor</b>. */
+    /** The <b>dateeditor</b> category. */
     public static final AccessibleRole DATE_EDITOR = new AccessibleRole("dateeditor");
 
-    /** La categoría <b>desktop icon</b>. */
+    /** The <b>desktop icon</b> category. */
     public static final AccessibleRole DESKTOP_ICON = new AccessibleRole("desktop icon");
 
-    /** La categoría <b>desktop pane</b>. */
+    /** The <b>desktop pane</b> category. */
     public static final AccessibleRole DESKTOP_PANE = new AccessibleRole("desktop pane");
 
-    /** Un diálogo. */
+    /** A dialog. */
     public static final AccessibleRole DIALOG = new AccessibleRole("dialog");
 
-    /** La categoría <b>directory pane</b>. */
+    /** The <b>directory pane</b> category. */
     public static final AccessibleRole DIRECTORY_PANE = new AccessibleRole("directory pane");
 
-    /** La categoría <b>editbar</b>. */
+    /** The <b>editbar</b> category. */
     public static final AccessibleRole EDITBAR = new AccessibleRole("editbar");
 
-    /** La categoría <b>file chooser</b>. */
+    /** The <b>file chooser</b> category. */
     public static final AccessibleRole FILE_CHOOSER = new AccessibleRole("file chooser");
 
-    /** La categoría <b>filler</b>. */
+    /** The <b>filler</b> category. */
     public static final AccessibleRole FILLER = new AccessibleRole("filler");
 
-    /** La categoría <b>fontchooser</b>. */
+    /** The <b>fontchooser</b> category. */
     public static final AccessibleRole FONT_CHOOSER = new AccessibleRole("fontchooser");
 
-    /** La categoría <b>footer</b>. */
+    /** The <b>footer</b> category. */
     public static final AccessibleRole FOOTER = new AccessibleRole("footer");
 
-    /** Una ventana principal, con marco. */
+    /** A main window, with a frame. */
     public static final AccessibleRole FRAME = new AccessibleRole("frame");
 
-    /** La categoría <b>glass pane</b>. */
+    /** The <b>glass pane</b> category. */
     public static final AccessibleRole GLASS_PANE = new AccessibleRole("glass pane");
 
-    /** La categoría <b>groupbox</b>. */
+    /** The <b>groupbox</b> category. */
     public static final AccessibleRole GROUP_BOX = new AccessibleRole("groupbox");
 
-    /** La categoría <b>header</b>. */
+    /** The <b>header</b> category. */
     public static final AccessibleRole HEADER = new AccessibleRole("header");
 
-    /** La categoría <b>HTML container</b>. */
+    /** The <b>HTML container</b> category. */
     public static final AccessibleRole HTML_CONTAINER = new AccessibleRole("HTML container");
 
-    /** La categoría <b>hyperlink</b>. */
+    /** The <b>hyperlink</b> category. */
     public static final AccessibleRole HYPERLINK = new AccessibleRole("hyperlink");
 
-    /** La categoría <b>icon</b>. */
+    /** The <b>icon</b> category. */
     public static final AccessibleRole ICON = new AccessibleRole("icon");
 
-    /** La categoría <b>internal frame</b>. */
+    /** The <b>internal frame</b> category. */
     public static final AccessibleRole INTERNAL_FRAME = new AccessibleRole("internal frame");
 
-    /** Una etiqueta. */
+    /** A label. */
     public static final AccessibleRole LABEL = new AccessibleRole("label");
 
-    /** La categoría <b>layered pane</b>. */
+    /** The <b>layered pane</b> category. */
     public static final AccessibleRole LAYERED_PANE = new AccessibleRole("layered pane");
 
-    /** Una lista de elementos. */
+    /** A list of items. */
     public static final AccessibleRole LIST = new AccessibleRole("list");
 
-    /** La categoría <b>list item</b>. */
+    /** The <b>list item</b> category. */
     public static final AccessibleRole LIST_ITEM = new AccessibleRole("list item");
 
-    /** Un menú. */
+    /** A menu. */
     public static final AccessibleRole MENU = new AccessibleRole("menu");
 
-    /** La categoría <b>menu bar</b>. */
+    /** The <b>menu bar</b> category. */
     public static final AccessibleRole MENU_BAR = new AccessibleRole("menu bar");
 
-    /** Una opción de menú. */
+    /** A menu item. */
     public static final AccessibleRole MENU_ITEM = new AccessibleRole("menu item");
 
-    /** La categoría <b>option pane</b>. */
+    /** The <b>option pane</b> category. */
     public static final AccessibleRole OPTION_PANE = new AccessibleRole("option pane");
 
-    /** La categoría <b>page tab</b>. */
+    /** The <b>page tab</b> category. */
     public static final AccessibleRole PAGE_TAB = new AccessibleRole("page tab");
 
-    /** La categoría <b>page tab list</b>. */
+    /** The <b>page tab list</b> category. */
     public static final AccessibleRole PAGE_TAB_LIST = new AccessibleRole("page tab list");
 
-    /** La categoría <b>panel</b>. */
+    /** The <b>panel</b> category. */
     public static final AccessibleRole PANEL = new AccessibleRole("panel");
 
-    /** La categoría <b>paragraph</b>. */
+    /** The <b>paragraph</b> category. */
     public static final AccessibleRole PARAGRAPH = new AccessibleRole("paragraph");
 
-    /** La categoría <b>password text</b>. */
+    /** The <b>password text</b> category. */
     public static final AccessibleRole PASSWORD_TEXT = new AccessibleRole("password text");
 
-    /** La categoría <b>popup menu</b>. */
+    /** The <b>popup menu</b> category. */
     public static final AccessibleRole POPUP_MENU = new AccessibleRole("popup menu");
 
-    /** Una barra de progreso. */
+    /** A progress bar. */
     public static final AccessibleRole PROGRESS_BAR = new AccessibleRole("progress bar");
 
-    /** La categoría <b>progress monitor</b>. */
+    /** The <b>progress monitor</b> category. */
     public static final AccessibleRole PROGRESS_MONITOR = new AccessibleRole("progress monitor");
 
-    /** Un botón que se aprieta. */
+    /** A button that gets pressed. */
     public static final AccessibleRole PUSH_BUTTON = new AccessibleRole("push button");
 
-    /** Una opción excluyente dentro de un grupo. */
+    /** An exclusive option within a group. */
     public static final AccessibleRole RADIO_BUTTON = new AccessibleRole("radio button");
 
-    /** La categoría <b>root pane</b>. */
+    /** The <b>root pane</b> category. */
     public static final AccessibleRole ROOT_PANE = new AccessibleRole("root pane");
 
-    /** La categoría <b>row header</b>. */
+    /** The <b>row header</b> category. */
     public static final AccessibleRole ROW_HEADER = new AccessibleRole("row header");
 
-    /** La categoría <b>ruler</b>. */
+    /** The <b>ruler</b> category. */
     public static final AccessibleRole RULER = new AccessibleRole("ruler");
 
-    /** Una barra de desplazamiento. */
+    /** A scroll bar. */
     public static final AccessibleRole SCROLL_BAR = new AccessibleRole("scroll bar");
 
-    /** La categoría <b>scroll pane</b>. */
+    /** The <b>scroll pane</b> category. */
     public static final AccessibleRole SCROLL_PANE = new AccessibleRole("scroll pane");
 
-    /** La categoría <b>separator</b>. */
+    /** The <b>separator</b> category. */
     public static final AccessibleRole SEPARATOR = new AccessibleRole("separator");
 
-    /** Un deslizador. */
+    /** A slider. */
     public static final AccessibleRole SLIDER = new AccessibleRole("slider");
 
-    /** La categoría <b>spinbox</b>. */
+    /** The <b>spinbox</b> category. */
     public static final AccessibleRole SPIN_BOX = new AccessibleRole("spinbox");
 
-    /** La categoría <b>split pane</b>. */
+    /** The <b>split pane</b> category. */
     public static final AccessibleRole SPLIT_PANE = new AccessibleRole("split pane");
 
-    /** La categoría <b>statusbar</b>. */
+    /** The <b>statusbar</b> category. */
     public static final AccessibleRole STATUS_BAR = new AccessibleRole("statusbar");
 
-    /** La categoría <b>swing component</b>. */
+    /** The <b>swing component</b> category. */
     public static final AccessibleRole SWING_COMPONENT = new AccessibleRole("swing component");
 
-    /** Una tabla. */
+    /** A table. */
     public static final AccessibleRole TABLE = new AccessibleRole("table");
 
-    /** Un campo de texto. */
+    /** A text field. */
     public static final AccessibleRole TEXT = new AccessibleRole("text");
 
-    /** La categoría <b>toggle button</b>. */
+    /** The <b>toggle button</b> category. */
     public static final AccessibleRole TOGGLE_BUTTON = new AccessibleRole("toggle button");
 
-    /** La categoría <b>tool bar</b>. */
+    /** The <b>tool bar</b> category. */
     public static final AccessibleRole TOOL_BAR = new AccessibleRole("tool bar");
 
-    /** La categoría <b>tool tip</b>. */
+    /** The <b>tool tip</b> category. */
     public static final AccessibleRole TOOL_TIP = new AccessibleRole("tool tip");
 
-    /** Un árbol. */
+    /** A tree. */
     public static final AccessibleRole TREE = new AccessibleRole("tree");
 
-    /** No se sabe qué es. Es una respuesta, no un error: hay objetos que no encajan. */
+    /** It is not known what it is. It is an answer, not an error: some objects do not fit. */
     public static final AccessibleRole UNKNOWN = new AccessibleRole("unknown");
 
-    /** La categoría <b>viewport</b>. */
+    /** The <b>viewport</b> category. */
     public static final AccessibleRole VIEWPORT = new AccessibleRole("viewport");
 
-    /** La categoría <b>window</b>. */
+    /** The <b>window</b> category. */
     public static final AccessibleRole WINDOW = new AccessibleRole("window");
 
     /**
-     * Con la clave dada.
+     * With the given key.
      *
-     * <p>Es protegido porque los roles de fábrica son los de arriba; una subclase puede agregar los
-     * suyos, pero nadie debería fabricar roles sueltos que después no se puedan comparar.
+     * <p>It is protected because the built-in roles are the ones above; a subclass can add its own,
+     * but nobody should make loose roles that then cannot be compared.
      */
     protected AccessibleRole(String key) {
         this.key = key;

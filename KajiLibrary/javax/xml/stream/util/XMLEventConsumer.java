@@ -4,23 +4,25 @@ import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.events.XMLEvent;
 
 /**
- * KajiLibrary's javax.xml.stream.util.XMLEventConsumer -- todo lo que sabe recibir un evento.
+ * KajiLibrary's javax.xml.stream.util.XMLEventConsumer -- anything that knows how to receive an
+ * event.
  *
- * <p>Una interfaz de un solo metodo, y esa es toda la idea: separar "algo a lo que se le pueden dar
- * eventos" de "algo que escribe XML". {@link javax.xml.stream.XMLEventWriter} la extiende y es la
- * implementacion obvia, pero un buffer que junta eventos en una lista, un filtro que reenvia
- * algunos, o un validador que los mira al pasar tambien son consumidores y no escriben nada.
+ * <p>A single-method interface, and that is the whole idea: separating "something events can be
+ * given to" from "something that writes XML". {@link javax.xml.stream.XMLEventWriter} extends it
+ * and is the obvious implementation, but a buffer that gathers events in a list, a filter that
+ * forwards some, or a validator that looks at them as they go by are also consumers and write
+ * nothing.
  *
- * <p>Es lo que le permite a {@link XMLEventAllocator#allocate(javax.xml.stream.XMLStreamReader,
- * XMLEventConsumer)} entregar el evento sin saber a donde va.
+ * <p>It is what lets {@link XMLEventAllocator#allocate(javax.xml.stream.XMLStreamReader,
+ * XMLEventConsumer)} deliver the event without knowing where it goes.
  */
 public interface XMLEventConsumer {
 
     /**
-     * Recibe un evento.
+     * Receives an event.
      *
-     * @param event el evento; que se acepte o no un null depende de la implementacion
-     * @throws XMLStreamException si el consumidor no lo puede aceptar
+     * @param event the event; whether a null is accepted depends on the implementation
+     * @throws XMLStreamException if the consumer cannot accept it
      */
     void add(XMLEvent event) throws XMLStreamException;
 }

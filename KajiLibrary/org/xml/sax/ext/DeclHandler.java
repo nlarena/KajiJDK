@@ -3,55 +3,57 @@ package org.xml.sax.ext;
 import org.xml.sax.SAXException;
 
 /**
- * KajiLibrary's org.xml.sax.ext.DeclHandler -- lo que la DTD *declara*, no lo que el documento
- * dice.
+ * KajiLibrary's org.xml.sax.ext.DeclHandler -- what the DTD *declares*, not what the document
+ * says.
  *
- * <p>El `DTDHandler` del nucleo reporta dos cosas y nada mas: notaciones y entidades sin analizar.
- * Eso alcanza para resolver referencias a datos binarios y para nada mas. Quien quiera saber el
- * modelo de contenido de un elemento, o el valor por omision de un atributo, o el texto de una
- * entidad interna --es decir, quien quiera **copiar la DTD**-- necesita esta interfaz.
+ * <p>The `DTDHandler` of the core reports two things and nothing else: notations and unparsed
+ * entities. That is enough for resolving references to binary data and for nothing else. Whoever
+ * wants to know the content model of an element, or the default value of an attribute, or the text
+ * of an internal entity --that is, whoever wants to **copy the DTD**-- needs this interface.
  *
- * <p>Se instala con la propiedad `http://xml.org/sax/properties/declaration-handler` del
- * `XMLReader`, y como toda extension el parser puede no reconocerla.
+ * <p>It is installed with the `http://xml.org/sax/properties/declaration-handler` property of the
+ * `XMLReader`, and like every extension the parser may not recognise it.
  *
- * <p>Los eventos caen entre `startDTD` y `endDTD` del {@link LexicalHandler}, cuando hay uno
- * instalado. Un parser **no validante** puede saltearse el subconjunto externo entero, y entonces
- * de aca no sale nada aunque la DTD exista: no es un incumplimiento, es que leer la DTD externa es
- * opcional. La forma de saberlo es la feature `http://xml.org/sax/features/external-parameter-entities`.
+ * <p>The events fall between `startDTD` and `endDTD` of the {@link LexicalHandler}, when one is
+ * installed. A **non-validating** parser may skip the whole external subset, and then nothing comes
+ * out of here even though the DTD exists: it is not a breach, it is that reading the external DTD
+ * is optional. The way of knowing is the feature
+ * `http://xml.org/sax/features/external-parameter-entities`.
  *
- * <p>Sobre lo que **no** esta: las entidades sin analizar y las notaciones siguen yendo por
- * `org.xml.sax.DTDHandler`. Estan repartidas asi desde SAX1 y duplicarlas aca seria inventar
- * miembros que el contrato no tiene.
+ * <p>About what is **not** here: the unparsed entities and the notations still go through
+ * `org.xml.sax.DTDHandler`. They have been split like that since SAX1 and duplicating them here
+ * would be inventing members the contract does not have.
  *
- * <p><strong>En KajiLibrary nadie produce estos eventos todavia</strong>: el arbol no trae un parser
- * XML, asi que la interfaz esta completa pero sin emisor propio.
+ * <p><strong>In KajiLibrary nobody produces these events yet</strong>: the tree brings no XML
+ * parser, so the interface is complete but has no emitter of its own.
  */
 public interface DeclHandler {
 
     /**
-     * El modelo de contenido llega **como texto**, ya normalizado a la forma de la norma:
-     * `EMPTY`, `ANY`, o una expresion con parentesis como `(#PCDATA|a|b)*`. No viene analizado, y
-     * eso es a proposito: analizarlo es trabajo de quien lo necesite, y devolverlo crudo no pierde
-     * informacion.
+     * The content model arrives **as text**, already normalised to the form of the standard:
+     * `EMPTY`, `ANY`, or an expression with parentheses such as `(#PCDATA|a|b)*`. It does not come
+     * parsed, and that is on purpose: parsing it is the job of whoever needs it, and returning it
+     * raw loses no information.
      */
     void elementDecl(String name, String model) throws SAXException;
 
     /**
-     * `type` es el tipo declarado --`CDATA`, `ID`, una lista `NOTATION (a|b)` o una enumeracion
-     * `(a|b)`--. `valueDefault` es `#IMPLIED`, `#REQUIRED`, `#FIXED` o `null` cuando hay un valor
-     * por omision comun; `value` es ese valor, o `null` si no hay. Los dos ultimos se leen juntos:
-     * `#FIXED` con `value` es un valor fijo, `null` con `value` es un valor por omision comun.
+     * `type` is the declared type --`CDATA`, `ID`, a `NOTATION (a|b)` list or an `(a|b)`
+     * enumeration--. `valueDefault` is `#IMPLIED`, `#REQUIRED`, `#FIXED` or `null` when there is an
+     * ordinary default value; `value` is that value, or `null` if there is none. The last two are
+     * read together: `#FIXED` with `value` is a fixed value, `null` with `value` is an ordinary
+     * default value.
      */
     void attributeDecl(String eName, String aName, String type,
                        String valueDefault, String value) throws SAXException;
 
     /**
-     * El valor viene con las referencias a caracter y a entidad de parametro ya expandidas, pero
-     * **sin** expandir las referencias a entidad general: expandirlas aca daria el texto final en
-     * vez de la declaracion, que es justo lo que se esta reportando.
+     * The value comes with the character references and the parameter entity references already
+     * expanded, but **without** expanding the general entity references: expanding them here would
+     * give the final text instead of the declaration, which is precisely what is being reported.
      */
     void internalEntityDecl(String name, String value) throws SAXException;
 
-    /** Las entidades de parametro llegan con `%` adelante, igual que en `startEntity`. */
+    /** Parameter entities arrive with a `%` in front, just as in `startEntity`. */
     void externalEntityDecl(String name, String publicId, String systemId) throws SAXException;
 }

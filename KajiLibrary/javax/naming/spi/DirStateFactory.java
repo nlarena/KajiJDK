@@ -7,57 +7,56 @@ import javax.naming.NamingException;
 import javax.naming.directory.Attributes;
 
 /**
- * KajiLibrary's javax.naming.spi.DirStateFactory -- una {@link StateFactory} que ademas produce
- * atributos.
+ * KajiLibrary's javax.naming.spi.DirStateFactory -- a {@link StateFactory} that also produces
+ * attributes.
  *
- * <p>La contracara de {@link DirObjectFactory}. Lo que devuelve no es un objeto sino un
- * {@link Result}: el valor a guardar <b>y</b> los atributos con los que hay que guardarlo.
+ * <p>The flip side of {@link DirObjectFactory}. What it returns is not an object but a
+ * {@link Result}: the value to store <b>and</b> the attributes to store it with.
  *
- * <p>Hace falta que sean dos cosas porque en un directorio las dos se escriben juntas y de forma
- * atomica. Devolver solo el objeto obligaria a un segundo {@code modifyAttributes}, y entre las dos
- * llamadas la entrada existiria sin su clase de objeto -- que es justamente lo que el esquema
- * prohibe.
+ * <p>They have to be two things because in a directory both are written together and atomically.
+ * Returning only the object would force a second {@code modifyAttributes}, and between the two
+ * calls the entry would exist without its object class -- which is exactly what the schema forbids.
  */
 public interface DirStateFactory extends StateFactory {
 
     /**
-     * Lo que hay que guardar y con que atributos.
+     * What to store and with which attributes.
      *
-     * @param inAttrs los que ya se pensaba escribir, o null
-     * @return null si esta fabrica no reconoce el objeto
+     * @param inAttrs the ones that were going to be written, or null
+     * @return null if this factory does not recognize the object
      */
     Result getStateToBind(Object obj, Name name, Context nameCtx, Hashtable<?, ?> environment,
                           Attributes inAttrs) throws NamingException;
 
     /**
-     * El par que devuelve {@link DirStateFactory#getStateToBind}.
+     * The pair {@link DirStateFactory#getStateToBind} returns.
      *
-     * <p>Inmutable y sin logica: existe solo porque Java no tiene tuplas. Cualquiera de los dos
-     * campos puede ser null, y eso significa "usa lo que ya tenias".
+     * <p>Immutable and logic-free: it exists only because Java has no tuples. Either field may be
+     * null, and that means "use what you already had".
      */
     public static class Result {
 
-        /** Lo que hay que guardar. */
+        /** What to store. */
         private final Object obj;
 
-        /** Con que atributos. */
+        /** With which attributes. */
         private final Attributes attrs;
 
         /**
-         * @param obj el valor a guardar, o null para dejar el original
-         * @param outAttrs los atributos, o null para dejar los que habia
+         * @param obj the value to store, or null to keep the original
+         * @param outAttrs the attributes, or null to keep the ones there were
          */
         public Result(Object obj, Attributes outAttrs) {
             this.obj = obj;
             this.attrs = outAttrs;
         }
 
-        /** El valor a guardar. */
+        /** The value to store. */
         public Object getObject() {
             return this.obj;
         }
 
-        /** Los atributos. */
+        /** The attributes. */
         public Attributes getAttributes() {
             return this.attrs;
         }

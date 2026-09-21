@@ -8,16 +8,17 @@ import java.awt.Rectangle;
 import java.awt.Shape;
 
 /**
- * La vista de un campo de contrasena: dibuja un caracter de eco en lugar de cada letra.
+ * The view of a password field: it draws an echo character instead of each letter.
  *
- * <h2>El texto sigue estando</h2>
+ * <h2>The text is still there</h2>
  *
- * <p>Lo que cambia es el dibujado, no el documento: el texto real esta entero en el modelo y se
- * puede leer con {@code getText}. Esta vista no es una medida de seguridad contra el programa, es
- * una contra quien mira la pantalla.
+ * <p>What changes is the drawing, not the document: the real text is whole in the model and can
+ * be read with {@code getText}. This view is not a security measure against the program, it is
+ * one against whoever looks at the screen.
  *
- * <p>Todas las cuentas de posicion se hacen con el ancho del caracter de eco, no con el de la
- * letra real: por eso el cursor cae donde debe aunque las letras midan distinto.
+ * <p>Every position computation is done with the echo character's width, not with the real
+ * letter's: that is why the cursor falls where it should even though the letters measure
+ * differently.
  */
 public class PasswordView extends FieldView {
 
@@ -27,7 +28,7 @@ public class PasswordView extends FieldView {
         super(elem);
     }
 
-    /** Dibuja el tramo sin seleccionar como ecos. */
+    /** It draws the unselected stretch as echoes. */
     protected int drawUnselectedText(Graphics g, int x, int y, int p0, int p1)
             throws BadLocationException {
         Container c = getContainer();
@@ -78,7 +79,7 @@ public class PasswordView extends FieldView {
         return drawSelectedText((Graphics) g, (int) x, (int) y, p0, p1);
     }
 
-    /** Dibuja un eco y devuelve donde termino. */
+    /** It draws an echo and returns where it ended. */
     protected int drawEchoCharacter(Graphics g, int x, int y, char c) {
         ONE[0] = c;
         g.drawChars(ONE, 0, 1, x, y);
@@ -89,7 +90,7 @@ public class PasswordView extends FieldView {
         return drawEchoCharacter((Graphics) g, (int) x, (int) y, c);
     }
 
-    /** La posicion se cuenta en anchos de eco; ver la nota de la clase. */
+    /** The position is counted in echo widths; see the class note. */
     public Shape modelToView(int pos, Shape a, Position.Bias b) throws BadLocationException {
         Container c = getContainer();
         if (c instanceof javax.swing.JPasswordField) {
@@ -136,7 +137,7 @@ public class PasswordView extends FieldView {
         return getStartOffset() + n;
     }
 
-    /** El ancho es el de los ecos, no el del texto. */
+    /** The width is that of the echoes, not that of the text. */
     public float getPreferredSpan(int axis) {
         Container c = getContainer();
         if (c instanceof javax.swing.JPasswordField) {

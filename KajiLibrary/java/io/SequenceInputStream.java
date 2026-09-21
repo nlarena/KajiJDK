@@ -25,12 +25,12 @@ public class SequenceInputStream extends InputStream {
     private InputStream in;
 
     /**
-     * @param e los flujos, en orden
+     * @param e the streams, in order
      *
-     * <p>El constructor **no** declara `throws IOException` --el JDK tampoco-- y sin embargo
-     * `nextStream()` la puede tirar: abrir el primer flujo es E/S. Se envuelve en
-     * {@link UncheckedIOException}, que es la unica salida cuando el contrato del constructor dice
-     * que no falla.
+     * <p>The constructor does **not** declare `throws IOException` --nor does the JDK-- and yet
+     * `nextStream()` may throw it: opening the first stream is I/O. It is wrapped in an {@link
+     * UncheckedIOException}, which is the only way out when the constructor's contract says it does
+     * not fail.
      */
     public SequenceInputStream(Enumeration<? extends InputStream> e) {
         this.e = e;

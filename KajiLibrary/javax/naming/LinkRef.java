@@ -1,30 +1,31 @@
 package javax.naming;
 
 /**
- * El enlace simbolico de JNDI: una atadura cuyo contenido es **otro nombre**.
+ * JNDI's symbolic link: a binding whose content is **another name**.
  *
- * <p>Es un `Reference` con una sola direccion, de tipo `"LinkAddress"`, cuyo contenido es el nombre
- * apuntado. Que sea un `Reference` y no un tipo aparte no es casualidad: asi cualquier proveedor
- * que ya sabe guardar referencias sabe guardar enlaces sin cambiar nada, y el enlace sobrevive a
- * ida y vuelta por la red igual que el resto.
+ * <p>It is a `Reference` with a single address, of type `"LinkAddress"`, whose content is the
+ * target name. Being a `Reference` and not a separate type is no accident: that way any provider
+ * that already knows how to store references knows how to store links without changing anything,
+ * and the link survives a round trip over the network like the rest.
  *
- * <p>Lo que lo hace especial esta del lado del que resuelve, no aca: `Context.lookup()` **sigue**
- * los enlaces --devuelve el objeto del otro lado-- y `Context.lookupLink()` no --devuelve este
- * objeto--. Ese par de metodos es toda la diferencia entre "seguime el enlace" y "mostrame el
- * enlace", y es la razon por la que `lookupLink` existe.
+ * <p>What makes it special is on the resolver's side, not here: `Context.lookup()` **follows**
+ * links --it returns the object on the other side-- and `Context.lookupLink()` does not --it
+ * returns this object. That pair of methods is the whole difference between "follow the link for
+ * me" and "show me the link", and it is the reason `lookupLink` exists.
  *
- * <p>Un enlace apunta a un nombre relativo al **contexto inicial**, no al contexto donde esta
- * atado. Es lo contrario de lo que uno espera de un enlace de sistema de archivos y es del
- * contrato: un enlace no cambia de destino cuando se lo mira desde otro lado.
+ * <p>The link name is a URL, or a name resolved relative to the **initial context**, or --when its
+ * first character is `.`-- a name relative to the context where the link is bound. (An earlier
+ * note said a link always points relative to the initial context; the JDK's `LinkRef` javadoc
+ * gives the `.` case too.)
  */
 public class LinkRef extends Reference {
 
     private static final long serialVersionUID = -5386290613498931298L;
 
-    /** La clase que se declara en la referencia; el `getLinkName` verifica contra esto. */
+    /** The class declared in the reference; `getLinkName` checks against it. */
     static final String linkClassName = LinkRef.class.getName();
 
-    /** El tipo de direccion bajo el que va el nombre apuntado. */
+    /** The address type under which the target name goes. */
     static final String linkAddrType = "LinkAddress";
 
     public LinkRef(Name linkName) {
@@ -36,12 +37,12 @@ public class LinkRef extends Reference {
     }
 
     /**
-     * El nombre apuntado.
+     * The target name.
      *
-     * <p>Verifica en vez de confiar porque los campos de `Reference` son `protected` y mutables:
-     * nada impide que a un `LinkRef` le cambien la clase o le saquen la direccion, y ahi no hay un
-     * nombre que devolver. Por eso tira `MalformedLinkException` --que es lo que significa "esto
-     * dice ser un enlace y no lo es"-- en vez de `null` o una `NullPointerException`.
+     * <p>It checks instead of trusting because `Reference`'s fields are `protected` and mutable:
+     * nothing prevents a `LinkRef` from having its class changed or its address removed, and then
+     * there is no name to return. That is why it throws `MalformedLinkException` --which is what
+     * "this claims to be a link and is not" means-- instead of `null` or a `NullPointerException`.
      */
     public String getLinkName() throws NamingException {
         if (className != null && className.equals(linkClassName)) {

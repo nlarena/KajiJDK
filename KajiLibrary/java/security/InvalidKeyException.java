@@ -1,7 +1,7 @@
 package java.security;
 
-// La clave no sirve para lo que se le pidio: mala codificacion, largo equivocado, algoritmo que no
-// corresponde.
+// The key does not serve for what it was asked for: bad encoding, wrong length, an algorithm that
+// does not correspond.
 public class InvalidKeyException extends KeyException {
 
     public InvalidKeyException() {

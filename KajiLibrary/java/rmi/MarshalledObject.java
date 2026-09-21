@@ -8,54 +8,57 @@ import java.io.ObjectOutputStream;
 import java.io.Serializable;
 
 /**
- * KajiLibrary's java.rmi.MarshalledObject -- un objeto guardado como bytes serializados.
+ * KajiLibrary's java.rmi.MarshalledObject -- an object kept as serialised bytes.
  *
- * <p>Serializa en el momento de construirse y guarda los bytes; {@link #get} deserializa una copia
- * <b>nueva</b> cada vez. Es un objeto congelado en el tiempo: cambiar el original despues de meterlo
- * aca no cambia lo que sale.
+ * <p>It serialises at construction time and keeps the bytes; {@link #get} deserialises a
+ * <b>new</b> copy every time. It is an object frozen in time: changing the original after putting
+ * it in here does not change what comes out.
  *
- * <h2>Para que sirve de verdad</h2>
+ * <h2>What it is really for</h2>
  *
- * <p>Para <b>postergar</b> la deserializacion. Un objeto remoto puede recibir uno de estos y pasarlo
- * de mano en mano sin necesitar la clase adentro; solo quien llama {@code get} tiene que poder
- * cargarla. Sin esto, un servidor intermediario necesitaria en su ruta de clases todo lo que pasa por
- * el.
+ * <p>For <b>deferring</b> the deserialisation. A remote object can receive one of these and pass
+ * it from hand to hand without needing the class inside; only whoever calls {@code get} has to be
+ * able to load it. Without this, an intermediary server would need on its class path everything
+ * that passes through it.
  *
- * <h2>{@link #equals} compara los bytes</h2>
+ * <h2>{@link #equals} compares the bytes</h2>
  *
- * <p>Y no llama al {@code equals} del objeto guardado, lo cual tiene dos consecuencias:
+ * <p>And it does not call the stored object's {@code equals}, which has two consequences:
  *
  * <ul>
- *   <li>funciona con objetos que no redefinen {@code equals}, comparando su contenido;
- *   <li>dos objetos <b>iguales</b> pueden dar false si se serializan distinto -- por ejemplo dos
- *       tablas hash con el mismo contenido en distinto orden.
+ *   <li>it works with objects that do not override {@code equals}, comparing their content;
+ *   <li>two <b>equal</b> objects can give false if they serialise differently -- for example two
+ *       hash tables with the same content in a different order.
  * </ul>
  *
- * <p>{@link #hashCode} arranca en 13 y va mezclando los bytes; por eso el de un objeto null es
- * exactamente 13.
+ * <p>{@link #hashCode} starts at 13 and mixes the bytes in; that is why a null object's is
+ * exactly 13.
  */
 public final class MarshalledObject<T> implements Serializable {
 
     private static final long serialVersionUID = 8988374069173025854L;
 
-    /** Los bytes del objeto, o null si el objeto era null. */
+    /** The object's bytes, or null if the object was null. */
     private byte[] objBytes = null;
 
     /**
-     * Los de las anotaciones de ubicacion de las clases.
+     * The ones for the classes' location annotations.
      *
-     * <p>Van aparte y <b>no</b> entran en {@link #equals}: dos objetos iguales que vinieron de
-     * lugares distintos siguen siendo iguales.
+     * <p>This note used to say they go separately from the object's bytes. Nothing fills them in:
+     * the field is private, nothing in this class assigns it, and the constructor writes through a
+     * plain {@code ObjectOutputStream} that records no class locations, so it is always null. It
+     * does <b>not</b> enter {@link #equals} either, which is the intent: two equal objects that
+     * came from different places are still equal.
      */
     private byte[] locBytes = null;
 
-    /** El hash, calculado una sola vez sobre los bytes. */
+    /** The hash, computed once over the bytes. */
     private int hash;
 
     /**
-     * Serializa ese objeto.
+     * It serialises that object.
      *
-     * @throws IOException si no se pudo serializar
+     * @throws IOException if it could not be serialised
      */
     public MarshalledObject(T obj) throws IOException {
         if (obj == null) {
@@ -77,13 +80,13 @@ public final class MarshalledObject<T> implements Serializable {
     }
 
     /**
-     * Una copia nueva del objeto guardado.
+     * A new copy of the stored object.
      *
-     * <p>Cada llamada deserializa de vuelta, asi que devuelve objetos distintos.
+     * <p>Every call deserialises again, so it returns distinct objects.
      *
-     * @return el objeto, o null si se guardo null
-     * @throws IOException si no se pudo leer
-     * @throws ClassNotFoundException si falta alguna clase
+     * @return the object, or null if null was stored
+     * @throws IOException if it could not be read
+     * @throws ClassNotFoundException if some class is missing
      */
     public T get() throws IOException, ClassNotFoundException {
         if (this.objBytes == null) {
@@ -95,13 +98,13 @@ public final class MarshalledObject<T> implements Serializable {
         return result;
     }
 
-    /** Sobre los bytes. Ver la nota de la clase: null da 13. */
+    /** Over the bytes. See the class note: null gives 13. */
     @Override
     public int hashCode() {
         return this.hash;
     }
 
-    /** Compara los bytes, no los objetos. Ver la nota de la clase. */
+    /** It compares the bytes, not the objects. See the class note. */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {

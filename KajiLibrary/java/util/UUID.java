@@ -26,9 +26,8 @@ import java.io.Serializable;
 // That is fine for identifiers, and NOT fine for anything that must be unguessable (a session
 // token, a password-reset link): our stream is a 48-bit LCG and is invertible from two outputs.
 //
-// `nameUUIDFromBytes` (the version-3, MD5-based constructor) is omitted: it needs a real MD5,
-// and a stand-in that hashed differently would produce ids that disagree with every other
-// implementation — worse than not having the method.
+// This note used to say `nameUUIDFromBytes` (the version-3, MD5-based constructor) was omitted for
+// want of a inner MD5. It is declared below, and the MD5 is written out under it.
 public final class UUID implements Comparable<UUID>, Serializable {
 
     private final long mostSigBits;
@@ -67,22 +66,22 @@ public final class UUID implements Comparable<UUID>, Serializable {
     // five dash-separated hex fields and takes the low bits of each, so "1-2-3-4-5" parses to
     // 00000001-0002-0003-0004-000000000005 — but it is strict about there being exactly five.
     /**
-     * El UUID de version 3 para un nombre: el MD5 de los bytes, con la version y la variante
-     * estampadas encima.
+     * The version-3 UUID for a name: the MD5 of the bytes, with the version and variant stamped over
+     * it.
      *
-     * <p>Lo que lo hace util es que es **determinista**: el mismo nombre da siempre el mismo id, en
-     * cualquier maquina y sin coordinacion. Es lo contrario de `randomUUID()`, y sirve para lo
-     * contrario -- darle una identidad estable a algo que ya tiene un nombre unico (una URL, un
-     * DN, una ruta) sin tener que guardar la correspondencia en ningun lado.
+     * <p>What makes it useful is that it is **deterministic**: the same name always gives the same
+     * id, on any machine and with no coordination. It is the opposite of `randomUUID()`, and it
+     * serves the opposite purpose -- giving a stable identity to something that already has a unique
+     * name (a URL, a DN, a path) without having to store the correspondence anywhere.
      *
-     * <p>MD5 esta roto para criptografia desde 2004 y aca no importa: no se lo usa para autenticar
-     * nada, solo para repartir nombres en el espacio de 128 bits. Es lo que la RFC 4122 fija para
-     * la version 3, y cambiarlo cambiaria los ids.
+     * <p>MD5 has been broken for cryptography since 2004 and here that does not matter: it is not
+     * used to authenticate anything, only to spread names across the 128-bit space. It is what RFC
+     * 4122 fixes for version 3, and changing it would change the ids.
      */
     public static UUID nameUUIDFromBytes(byte[] name) {
         byte[] h = md5(name);
-        // Los seis bits que la RFC reserva: cuatro para la version (3) y dos para la variante
-        // (IETF). El resto del hash queda intacto.
+        // The six bits the RFC reserves: four for the version (3) and two for the variant (IETF).
+        // The rest of the hash is left intact.
         h[6] = (byte) ((h[6] & 0x0f) | 0x30);
         h[8] = (byte) ((h[8] & 0x3f) | 0x80);
         long msb = 0;
@@ -98,10 +97,12 @@ public final class UUID implements Comparable<UUID>, Serializable {
 
     // ---- MD5 (RFC 1321) --------------------------------------------------------------------
     //
-    // Va escrito aca y no contra `java.security.MessageDigest` porque esa clase no existe en la
-    // biblioteca. Es la unica razon; el dia que exista, esto se reemplaza por tres lineas.
+    // Written out here rather than against `java.security.MessageDigest`. This note used to say that
+    // class does not exist in the library; it does. What is left is that this file would rather not
+    // depend on `java.security` for four dozen lines of arithmetic, so the replacement is available
+    // and has not been taken.
 
-    // Los desplazamientos de cada una de las 64 vueltas, cuatro patrones de a dieciseis.
+    // The shifts of each of the 64 rounds, four patterns of sixteen.
     private static final int[] MD5_S = {
         7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22,
         5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20,
@@ -109,12 +110,13 @@ public final class UUID implements Comparable<UUID>, Serializable {
         6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21,
     };
 
-    // La tabla de constantes: `T[i] = floor(2^32 * abs(sin(i + 1)))`, con el angulo en radianes.
+    // The constants table: `T[i] = floor(2^32 * abs(sin(i + 1)))`, with the angle in radians.
     //
-    // Va literal y no calculada porque `Math.sin` no esta en esta biblioteca. Una tabla escrita a
-    // mano es justo donde se cuela un digito cambiado, asi que la prueba de comportamiento compara
-    // el UUID resultante contra el de `java` real -- un solo bit distinto en cualquiera de las 64
-    // constantes cambia los 128 bits de la salida.
+    // Literal and not computed. This note used to say `Math.sin` is not in this library; it is, so
+    // the table could be built at class initialisation. It stays literal because that would not make
+    // it any more trustworthy -- a hand-written table is exactly where a changed digit slips in, so
+    // the behavioural test compares the resulting UUID against the inner `java`'s, and a single bit
+    // wrong in any of the 64 constants changes all 128 bits of the output.
     private static final int[] MD5_K = {
         0xd76aa478, 0xe8c7b756, 0x242070db, 0xc1bdceee,
         0xf57c0faf, 0x4787c62a, 0xa8304613, 0xfd469501,
@@ -135,9 +137,9 @@ public final class UUID implements Comparable<UUID>, Serializable {
     };
 
     private static byte[] md5(byte[] msg) {
-        // Relleno: un 0x80, ceros hasta dejar 8 bytes libres en el ultimo bloque, y el largo en
-        // **bits** como entero de 64, little-endian. Ese largo al final es lo que impide que dos
-        // mensajes distintos con el mismo relleno colisionen por construccion.
+        // Padding: one 0x80, zeros until 8 bytes are left free in the last block, and the length in
+        // **bits** as a 64-bit integer, little-endian. That length at the end is what stops two
+        // different messages with the same padding from colliding by construction.
         long bits = ((long) msg.length) * 8L;
         int total = msg.length + 1;
         while (total % 64 != 56) {
@@ -157,11 +159,11 @@ public final class UUID implements Comparable<UUID>, Serializable {
         int d0 = 0x10325476;
 
         int[] w = new int[16];
-        int bloque = 0;
-        while (bloque < total) {
-            // Las palabras del bloque, little-endian.
+        int block = 0;
+        while (block < total) {
+            // The block's words, little-endian.
             for (int i = 0; i < 16; i++) {
-                int o = bloque + i * 4;
+                int o = block + i * 4;
                 w[i] = (m[o] & 0xff) | ((m[o + 1] & 0xff) << 8)
                         | ((m[o + 2] & 0xff) << 16) | ((m[o + 3] & 0xff) << 24);
             }
@@ -195,18 +197,18 @@ public final class UUID implements Comparable<UUID>, Serializable {
             b0 = b0 + b;
             c0 = c0 + c;
             d0 = d0 + d;
-            bloque = bloque + 64;
+            block = block + 64;
         }
 
         byte[] out = new byte[16];
-        escribirLE(out, 0, a0);
-        escribirLE(out, 4, b0);
-        escribirLE(out, 8, c0);
-        escribirLE(out, 12, d0);
+        writeLE(out, 0, a0);
+        writeLE(out, 4, b0);
+        writeLE(out, 8, c0);
+        writeLE(out, 12, d0);
         return out;
     }
 
-    private static void escribirLE(byte[] out, int off, int v) {
+    private static void writeLE(byte[] out, int off, int v) {
         for (int i = 0; i < 4; i++) {
             out[off + i] = (byte) (v >>> (8 * i));
         }
@@ -376,8 +378,8 @@ public final class UUID implements Comparable<UUID>, Serializable {
     // 128 bits folded down to 32: xor the halves together, then xor that long's own halves.
     // Every input bit reaches the result, which is the most a fold this cheap can promise.
     public int hashCode() {
-        long hilo = this.mostSigBits ^ this.leastSigBits;
-        return ((int) (hilo >> 32)) ^ ((int) hilo);
+        long worker = this.mostSigBits ^ this.leastSigBits;
+        return ((int) (worker >> 32)) ^ ((int) worker);
     }
 
     public boolean equals(Object obj) {

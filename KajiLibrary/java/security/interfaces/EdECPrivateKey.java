@@ -4,12 +4,12 @@ import java.security.PrivateKey;
 import java.security.spec.NamedParameterSpec;
 import java.util.Optional;
 
-// Una clave privada Edwards: la semilla de la que se derivan el escalar y el nonce.
+// An Edwards private key: the seed from which the scalar and the nonce are derived.
 public interface EdECPrivateKey extends EdECKey, PrivateKey {
 
-    // La semilla, o vacio si la clave no la deja salir. `Optional` y no null porque aca "no puedo
-    // darte esto" es una respuesta legitima y frecuente —una clave en hardware— y merece decirse sin
-    // que el llamador tenga que acordarse de chequear.
+    // The seed, or empty if the key does not let it out. `Optional` and not null because here "I
+    // cannot give you this" is a legitimate and frequent answer —a key in hardware— and deserves to
+    // be said without the caller having to remember to check.
     Optional<byte[]> getBytes();
 
     // Ver `ECPublicKey.getParams()`.

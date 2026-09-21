@@ -6,22 +6,23 @@ import java.security.NoSuchProviderException;
 import java.security.Provider;
 import java.security.Security;
 
-// Construye un camino de certificacion: dado un certificado y un conjunto de anclas, busca la
-// cadena que los une.
+// It builds a certification path: given a certificate and a set of anchors, it looks for the chain
+// that joins them.
 //
-// Es la pieza que hace falta cuando la cadena **no** viene completa, que es lo normal: un servidor
-// TLS suele mandar su certificado y algunos intermedios, pero no todos, y el resto hay que ir a
-// buscarlo a los `CertStore` configurados. Construir es una busqueda con vuelta atras, y por eso
-// `PKIXBuilderParameters` tiene un largo maximo.
+// It is the piece that is needed when the chain does **not** come complete, which is the normal
+// thing: a TLS server usually sends its certificate and some intermediates, but not all of them,
+// and the rest has to be fetched from the configured `CertStore`s. Building is a search with
+// backtracking, and that is why `PKIXBuilderParameters` has a maximum length.
 //
-// El camino que devuelve ya esta validado. No es un atajo del API: buscar una cadena implica
-// verificar cada eslabon para saber si sirve, asi que separarlo en dos pasos duplicaria el trabajo.
+// The path it returns is validated already. It is not a shortcut of the API: looking for a chain
+// implies verifying each link in order to know whether it serves, so separating it into two steps
+// would duplicate the work.
 //
-// A KajiLibrary subset: **no hay ningun proveedor registrado**, asi que las tres sobrecargas de
-// `getInstance` tiran siempre `NoSuchAlgorithmException`. Implementar PKIX honestamente pide
-// verificar firmas —RSA, ECDSA— y comparar nombres X.500, y ninguna de las dos cosas esta escrita
-// en esta biblioteca. Un constructor que devolviera cadenas sin verificar seria exactamente el
-// agujero que este paquete tiene que evitar.
+// A KajiLibrary subset: **there is no registered provider**, so the three overloads of
+// `getInstance` always throw `NoSuchAlgorithmException`. Implementing PKIX honestly asks for
+// verifying signatures —RSA, ECDSA— and comparing X.500 names, and neither of the two things is
+// written in this library. A builder that returned unverified chains would be exactly the hole this
+// package has to avoid.
 public class CertPathBuilder {
 
     private final CertPathBuilderSpi builderSpi;
@@ -43,7 +44,7 @@ public class CertPathBuilder {
         while (i < provs.length) {
             Provider.Service s = provs[i].getService("CertPathBuilder", algorithm);
             if (s != null) {
-                return armar(s, algorithm);
+                return build(s, algorithm);
             }
             i = i + 1;
         }
@@ -75,10 +76,10 @@ public class CertPathBuilder {
             throw new NoSuchAlgorithmException(
                 "no such algorithm: " + algorithm + " for provider " + provider.getName());
         }
-        return armar(s, algorithm);
+        return build(s, algorithm);
     }
 
-    private static CertPathBuilder armar(Provider.Service s, String algorithm)
+    private static CertPathBuilder build(Provider.Service s, String algorithm)
             throws NoSuchAlgorithmException {
         Object o = s.newInstance(null);
         if (!(o instanceof CertPathBuilderSpi)) {
@@ -97,14 +98,14 @@ public class CertPathBuilder {
         return this.algorithm;
     }
 
-    // Busca y valida un camino. Si no hay ninguno, lanza: la ausencia de camino no se devuelve como
-    // null.
+    // It looks for and validates a path. If there is none, it throws: the absence of a path is not
+    // returned as null.
     public final CertPathBuilderResult build(CertPathParameters params)
             throws CertPathBuilderException, InvalidAlgorithmParameterException {
         return this.builderSpi.engineBuild(params);
     }
 
-    // El algoritmo por default, de la propiedad `certpathbuilder.type`. "PKIX" si no esta puesta.
+    // The default algorithm, from the property `certpathbuilder.type`. "PKIX" if it is not set.
     public static final String getDefaultType() {
         String t = Security.getProperty("certpathbuilder.type");
         if (t == null) {
@@ -113,8 +114,8 @@ public class CertPathBuilder {
         return t;
     }
 
-    // El chequeador de revocacion de este proveedor, para configurarlo antes de construir. Tira
-    // `UnsupportedOperationException` si el proveedor no lo ofrece.
+    // The revocation checker of this provider, to configure it before building. It throws
+    // `UnsupportedOperationException` if the provider does not offer it.
     public final CertPathChecker getRevocationChecker() {
         return this.builderSpi.engineGetRevocationChecker();
     }

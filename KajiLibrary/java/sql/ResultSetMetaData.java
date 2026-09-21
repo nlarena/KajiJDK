@@ -1,82 +1,82 @@
 package java.sql;
 
 /**
- * KajiLibrary's java.sql.ResultSetMetaData -- que columnas trajo una consulta.
+ * KajiLibrary's java.sql.ResultSetMetaData -- which columns a query brought.
  *
- * <p>Existe porque una consulta se puede escribir sin saber su forma: un `select *`, o una que llega
- * como texto. Sin esto no habria manera de recorrer un resultado generico -- ni de saber cuantas
- * columnas hay ni como leer cada una.
+ * <p>It exists because a query can be written without knowing its shape: a `select *`, or one that
+ * arrives as text. Without this there would be no way to walk a generic result -- neither to know
+ * how many columns there are nor how to read each one.
  *
- * <p>Las columnas se numeran **desde uno**, no desde cero, en toda la API JDBC. Es la convencion de
- * SQL y no un descuido.
+ * <p>Columns are numbered **from one**, not from zero, throughout the JDBC API. It is SQL's
+ * convention and not an oversight.
  */
 public interface ResultSetMetaData extends Wrapper {
 
-    /** La columna no admite nulos. */
+    /** The column does not allow nulls. */
     int columnNoNulls = 0;
 
-    /** La columna admite nulos. */
+    /** The column allows nulls. */
     int columnNullable = 1;
 
-    /** No se sabe si los admite. */
+    /** It is not known whether it allows them. */
     int columnNullableUnknown = 2;
 
-    /** Cuantas columnas hay. */
+    /** How many columns there are. */
     int getColumnCount() throws SQLException;
 
-    /** Si la columna se numera sola. */
+    /** Whether the column numbers itself. */
     boolean isAutoIncrement(int column) throws SQLException;
 
-    /** Si distingue mayusculas de minusculas. */
+    /** Whether it is case sensitive. */
     boolean isCaseSensitive(int column) throws SQLException;
 
-    /** Si se puede usar en un `where`. */
+    /** Whether it can be used in a `where`. */
     boolean isSearchable(int column) throws SQLException;
 
-    /** Si es un valor monetario. */
+    /** Whether it is a monetary value. */
     boolean isCurrency(int column) throws SQLException;
 
-    /** Si admite nulos: uno de los tres `columnNullable*`. */
+    /** Whether it allows nulls: one of the three `column*` nullability constants. */
     int isNullable(int column) throws SQLException;
 
-    /** Si es un numero con signo. */
+    /** Whether it is a signed number. */
     boolean isSigned(int column) throws SQLException;
 
-    /** El ancho normal en caracteres, para mostrarla. */
+    /** The normal width in characters, for displaying it. */
     int getColumnDisplaySize(int column) throws SQLException;
 
-    /** El titulo sugerido -- el `as` de la consulta, si lo hubo. */
+    /** The suggested title -- the query's `as`, if there was one. */
     String getColumnLabel(int column) throws SQLException;
 
-    /** El nombre real de la columna. */
+    /** The real name of the column. */
     String getColumnName(int column) throws SQLException;
 
     String getSchemaName(int column) throws SQLException;
 
-    /** Los digitos totales de un numero, o los caracteres de un texto. */
+    /** The total digits of a number, or the characters of a text. */
     int getPrecision(int column) throws SQLException;
 
-    /** Los digitos a la derecha del punto. */
+    /** The digits to the right of the point. */
     int getScale(int column) throws SQLException;
 
     String getTableName(int column) throws SQLException;
 
     String getCatalogName(int column) throws SQLException;
 
-    /** El tipo SQL, como codigo. */
+    /** The SQL type, as a code. */
     int getColumnType(int column) throws SQLException;
 
-    /** El tipo SQL, como lo llama el proveedor. */
+    /** The SQL type, as the vendor calls it. */
     String getColumnTypeName(int column) throws SQLException;
 
     boolean isReadOnly(int column) throws SQLException;
 
-    /** Si **podria** escribirse. */
+    /** Whether it **could** be written. */
     boolean isWritable(int column) throws SQLException;
 
-    /** Si escribirla **va** a funcionar; mas fuerte que {@link #isWritable}. */
+    /** Whether writing it **will** work; stronger than {@link #isWritable}. */
     boolean isDefinitelyWritable(int column) throws SQLException;
 
-    /** La clase Java que devuelve `ResultSet.getObject` para esta columna. */
+    /** The Java class `ResultSet.getObject` returns for this column. */
     String getColumnClassName(int column) throws SQLException;
 }

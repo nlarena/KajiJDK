@@ -7,30 +7,30 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Dice si una clase de componente es un contenedor, para las herramientas visuales.
+ * It says whether a component class is a container, for the visual tools.
  *
- * <h2>Contenedor de Java no es contenedor de la herramienta</h2>
+ * <h2>Java's container is not the tool's container</h2>
  *
- * <p>Casi todo componente de Swing hereda de {@code Container}, pero muy pocos aceptan que uno les
- * suelte cosas adentro: un {@link JButton} <em>es</em> un contenedor de Java y no tiene ningun
- * sentido soltarle un campo de texto. Esta anotacion es como una clase le dice a un armador de
- * pantallas cual de las dos cosas es.
+ * <p>Almost every Swing component inherits from {@code Container}, but very few accept one
+ * dropping things inside them: a {@link JButton} <em>is</em> a Java container and it makes no
+ * sense at all to drop a text field into it. This annotation is how a class tells a screen
+ * builder which of the two things it is.
  *
- * <p>{@link #delegate} existe para los que si aceptan, pero no directamente: en un
- * {@link JScrollPane} lo que se agrega va a su vista, no a el. El nombre que se pone ahi es el del
- * metodo que devuelve el contenedor de verdad.
+ * <p>{@link #delegate} exists for those that do accept, but not directly: in a
+ * {@link JScrollPane} what is added goes to its view, not to it. The name put there is that of
+ * the method that returns the real container.
  *
- * <p>Se conserva en tiempo de ejecucion porque quien la lee -- la herramienta -- ve la clase ya
- * compilada, no su fuente.
+ * <p>It is kept at run time because whoever reads it -- the tool -- sees the class already
+ * compiled, not its source.
  */
 @Documented
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
 public @interface SwingContainer {
 
-    /** Si acepta que le agreguen cosas. */
+    /** Whether it accepts things being added to it. */
     boolean value() default true;
 
-    /** El metodo que devuelve el contenedor de verdad; ver la nota de la anotacion. */
+    /** The method that returns the real container; see the annotation's note. */
     String delegate() default "";
 }

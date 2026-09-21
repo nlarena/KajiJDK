@@ -4,10 +4,10 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
-// La extension NameConstraints (RFC 5280 §4.2.1.10): en que espacio de nombres puede emitir una CA.
+// The NameConstraints extension (RFC 5280 §4.2.1.10): in which name space a CA can issue.
 //
 // ===============================================================================================
-// QUE DECIDE Y POR QUE ES DELICADA
+// WHAT IT DECIDES AND WHY IT IS DELICATE
 // ===============================================================================================
 //
 //   NameConstraints ::= SEQUENCE {
@@ -18,50 +18,50 @@ import java.util.List;
 //                                  minimum [0] BaseDistance DEFAULT 0,
 //                                  maximum [1] BaseDistance OPTIONAL }
 //
-// Es la unica forma de acotar una CA. Sin ella, cualquier CA en la que se confie puede emitir un
-// certificado para **cualquier** nombre; con ella, una CA de una empresa queda encerrada en sus
-// propios dominios aunque este en el almacen de confianza de todo el mundo. Equivocarse aca en el
-// lado permisivo es dejar pasar un certificado que la CA no tenia derecho a emitir.
+// It is the only way of bounding a CA. Without it, any CA that is trusted can issue a certificate
+// for **any** name; with it, the CA of a company is shut inside its own domains even though it is
+// in everybody's trust store. Getting it wrong here on the permissive side is letting through a
+// certificate the CA had no right to issue.
 //
-// Por eso cada regla de `GeneralNameValue.contains` esta escrita con su motivo, y por eso las tres
-// formas de `GeneralName` que este paquete no entiende se comparan solo por igualdad exacta en vez
-// de inventarles una contencion.
-//
-// ===============================================================================================
-// LAS DOS REGLAS QUE NO ESTAN EN EL RFC
-// ===============================================================================================
-//
-// Salieron de preguntarle al JDK 25, no de leer el RFC, y sin ellas el resultado difiere:
-//
-//  1. **El CN se comprueba tambien como nombre DNS**, pero solo si el certificado **no** trae
-//     ningun dNSName en su SubjectAltName. Viene de cuando el nombre del host se ponia en el CN;
-//     la condicion es la misma que usa un cliente TLS al elegir contra que comparar. Un CN que no
-//     tiene forma de nombre DNS --`CN=Juan Perez`, con un espacio-- se saltea.
-//  2. **El EMAILADDRESS del sujeto se comprueba como rfc822Name**, y tambien solo si no hay ningun
-//     rfc822Name en el SubjectAltName.
-//
-// Sin la primera, un certificado con `CN=www.otro.com` emitido por una CA acotada a `acme.com`
-// pasaria. Con ella no pasa. Es exactamente el agujero que la extension existe para tapar.
+// That is why each rule of `GeneralNameValue.contains` is written with its reason, and that is why
+// the three forms of `GeneralName` this package does not understand are compared only by exact
+// equality instead of having a containment invented for them.
 //
 // ===============================================================================================
-// LA REGLA DE "MISMO TIPO"
+// THE TWO RULES THAT ARE NOT IN THE RFC
 // ===============================================================================================
 //
-// Un nombre cuyo tipo **no** aparece en ningun subarbol permitido pasa sin mirarlo. Un nombre cuyo
-// tipo **si** aparece tiene que caer adentro de alguno de los subarboles de su tipo, y si hay
-// varios nombres de ese tipo tienen que caer **todos**. Es lo que hace el JDK y es lo unico que
-// cierra: si un tipo sin subarbol se rechazara, una restriccion sobre dominios prohibiria de paso
-// todos los correos.
+// They came out of asking JDK 25, not out of reading the RFC, and without them the result differs:
+//
+//  1. **The CN is also checked as a DNS name**, but only if the certificate does **not** bring any
+//     dNSName in its SubjectAltName. It comes from when the name of the host was put in the CN;
+//     the condition is the same a TLS client uses when choosing what to compare against. A CN that
+//     has no form of a DNS name --`CN=Juan Perez`, with a space-- is skipped.
+//  2. **The EMAILADDRESS of the subject is checked as an rfc822Name**, and also only if there is no
+//     rfc822Name in the SubjectAltName.
+//
+// Without the first, a certificate with `CN=www.other.com` issued by a CA bounded to `acme.com`
+// would pass. With it, it does not. It is exactly the hole the extension exists to plug.
 //
 // ===============================================================================================
-// UNA DIFERENCIA CON EL JDK, ANOTADA
+// THE RULE OF "THE SAME TYPE"
 // ===============================================================================================
 //
-// El JDK trabaja sobre el certificado **codificado**: reparsea `getEncoded()` con su propia
-// implementacion. Aca se usa el API publico -- `getSubjectX500Principal()` y
-// `getExtensionValue("2.5.29.17")` --. Para cualquier certificado que cumpla su propio contrato el
-// resultado es el mismo, y tiene la ventaja de que funciona con subclases que no traen codificacion
-// pero si saben contestar sus campos.
+// A name whose type does **not** appear in any permitted subtree passes without being looked at. A
+// name whose type **does** appear has to fall inside one of the subtrees of its type, and if there
+// are several names of that type they all have to fall inside. It is what the JDK does and it is
+// the only thing that closes: if a type with no subtree were rejected, a constraint over domains
+// would forbid every mail address in passing.
+//
+// ===============================================================================================
+// A DIFFERENCE WITH THE JDK, NOTED
+// ===============================================================================================
+//
+// The JDK works over the **encoded** certificate: it reparses `getEncoded()` with its own
+// implementation. Here the public API is used -- `getSubjectX500Principal()` and
+// `getExtensionValue("2.5.29.17")` --. For any certificate that fulfils its own contract the result
+// is the same, and it has the advantage of working with subclasses that bring no encoding but do
+// know how to answer their fields.
 final class NameConstraints {
 
     private static final String OID_SUBJECT_ALT_NAME = "2.5.29.17";
@@ -70,9 +70,9 @@ final class NameConstraints {
     private final List<GeneralNameValue> excluded = new ArrayList<GeneralNameValue>();
 
     /**
-     * Lee la extension a partir del DER de su valor.
+     * It reads the extension from the DER of its value.
      *
-     * @throws IOException si el DER no es una extension NameConstraints bien formada
+     * @throws IOException if the DER is not a well formed NameConstraints extension
      */
     static NameConstraints of(byte[] der) throws IOException {
         NameConstraints nc = new NameConstraints();
@@ -91,9 +91,9 @@ final class NameConstraints {
             }
         }
         if (nc.permitted.isEmpty() && nc.excluded.isEmpty()) {
-            // Una extension sin ningun subarbol no restringe nada, y el RFC la prohibe
-            // (`SIZE (1..MAX)`). Se rechaza en vez de tratarla como "todo permitido".
-            throw new IOException("NameConstraints sin subarboles");
+            // An extension with no subtree at all restricts nothing, and the RFC forbids it
+            // (`SIZE (1..MAX)`). It is rejected instead of being treated as "everything permitted".
+            throw new IOException("NameConstraints with no subtrees");
         }
         return nc;
     }
@@ -108,7 +108,7 @@ final class NameConstraints {
             int treeAt = trees.position();
             int[] tree = trees.nextTlv();
             if (tree[2] != DerReader.TAG_SEQUENCE) {
-                throw new IOException("DER: se esperaba un GeneralSubtree");
+                throw new IOException("DER: a GeneralSubtree was expected");
             }
             DerReader one = new DerReader(der, treeAt, tree[1]);
             one.readTag();
@@ -117,9 +117,10 @@ final class NameConstraints {
             int baseAt = inner.position();
             int[] base = inner.nextTlv();
             out.add(GeneralNameValue.ofTagged(der, baseAt, base[1]));
-            // `minimum` y `maximum` se saltean. El JDK **rechaza** un certificado cuya extension
-            // los traiga distintos del default, y con razon: nadie los implementa y tratarlos como
-            // si no estuvieran cambiaria el alcance del subarbol.
+            // `minimum` and `maximum` are skipped. The JDK **rejects** a certificate whose
+            // extension brings them different from the default, and with reason: nobody implements
+            // them and treating them as if they were not there would change the reach of the
+            // subtree.
             while (inner.hasMore()) {
                 int[] extra = inner.nextTlv();
                 if (extra[2] == 0xa0 || extra[2] == 0xa1) {
@@ -131,17 +132,17 @@ final class NameConstraints {
         }
     }
 
-    /** Si ese certificado cae adentro de lo que estas restricciones permiten. */
+    /** Whether that certificate falls inside what these constraints permit. */
     boolean verify(X509Certificate cert) {
         try {
             return verify(namesOf(cert));
         } catch (IOException e) {
-            // Un certificado cuyos nombres no se pueden leer no se puede afirmar que este adentro.
+            // A certificate whose names cannot be read cannot be asserted to be inside.
             return false;
         }
     }
 
-    /** Si todos esos nombres caen adentro. Es lo que usa el criterio `pathToNames`. */
+    /** Whether all those names fall inside. It is what the `pathToNames` criterion uses. */
     boolean verify(List<GeneralNameValue> names) {
         int i = 0;
         while (i < names.size()) {
@@ -173,13 +174,13 @@ final class NameConstraints {
             }
             i = i + 1;
         }
-        // Ver la nota de la clase: sin subarbol de su tipo, el nombre no esta restringido.
+        // See the note of the class: with no subtree of its type, the name is not restricted.
         return !sameTypeSeen;
     }
 
     /**
-     * Todos los nombres de un certificado que una restriccion tiene que mirar: el sujeto, sus
-     * nombres alternativos, y los dos heredados del sujeto -- ver la nota de la clase.
+     * Every name of a certificate a constraint has to look at: the subject, its alternative names,
+     * and the two inherited from the subject -- see the note of the class.
      */
     static List<GeneralNameValue> namesOf(X509Certificate cert) throws IOException {
         List<GeneralNameValue> out = new ArrayList<GeneralNameValue>();
@@ -188,8 +189,8 @@ final class NameConstraints {
         if (subject.getName().length() > 0) {
             out.add(GeneralNameValue.ofDirectory(subjectDer));
         }
-        boolean hayDns = false;
-        boolean hayCorreo = false;
+        boolean hasDns = false;
+        boolean hasEmail = false;
         byte[] ext = cert.getExtensionValue(OID_SUBJECT_ALT_NAME);
         if (ext != null) {
             byte[] value = DerReader.unwrapOctetString(ext);
@@ -201,25 +202,25 @@ final class NameConstraints {
                 int[] one = list.nextTlv();
                 GeneralNameValue n = GeneralNameValue.ofTagged(value, at, one[1]);
                 if (n.type() == GeneralNameValue.DNS) {
-                    hayDns = true;
+                    hasDns = true;
                 }
                 if (n.type() == GeneralNameValue.RFC822) {
-                    hayCorreo = true;
+                    hasEmail = true;
                 }
                 out.add(n);
             }
         }
-        if (!hayDns || !hayCorreo) {
+        if (!hasDns || !hasEmail) {
             List<String[]> avas = DerReader.attributesOf(subjectDer);
             int i = 0;
             while (i < avas.size()) {
                 String oid = avas.get(i)[0];
                 String value = avas.get(i)[1];
-                if (!hayDns && GeneralNameValue.commonNameOid().equals(oid)
+                if (!hasDns && GeneralNameValue.commonNameOid().equals(oid)
                         && GeneralNameValue.looksLikeDns(value)) {
                     out.add(GeneralNameValue.ofString(GeneralNameValue.DNS, value));
                 }
-                if (!hayCorreo && GeneralNameValue.emailAddressOid().equals(oid)
+                if (!hasEmail && GeneralNameValue.emailAddressOid().equals(oid)
                         && value.length() > 0) {
                     out.add(GeneralNameValue.ofString(GeneralNameValue.RFC822, value));
                 }

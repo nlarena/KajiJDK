@@ -5,12 +5,13 @@ import javax.management.Descriptor;
 import javax.management.MBeanAttributeInfo;
 
 /**
- * La implementación de {@link OpenMBeanAttributeInfo}: un {@link OpenMBeanParameterInfoSupport} con
- * `isReadable`/`isWritable`/`isIs` encima.
+ * The implementation of {@link OpenMBeanAttributeInfo}: an {@link OpenMBeanParameterInfoSupport}
+ * with {@code isReadable}/{@code isWritable}/{@code isIs} on top.
  *
- * <p>Repite la delegación en {@link Constraints} en vez de heredar de
- * `OpenMBeanParameterInfoSupport`, y no puede ser de otra forma: hereda de `MBeanAttributeInfo`,
- * que no es un `MBeanParameterInfo`. Es el mismo motivo por el que `Constraints` existe.
+ * <p>It repeats the delegation to {@link Constraints} instead of extending
+ * {@code OpenMBeanParameterInfoSupport}, and it cannot be otherwise: it extends
+ * {@code MBeanAttributeInfo}, which is not an {@code MBeanParameterInfo}. It is the same reason
+ * {@code Constraints} exists.
  */
 public class OpenMBeanAttributeInfoSupport extends MBeanAttributeInfo
         implements OpenMBeanAttributeInfo {
@@ -19,13 +20,13 @@ public class OpenMBeanAttributeInfoSupport extends MBeanAttributeInfo
 
     private final Constraints constraints;
 
-    /** Un atributo sin restricciones. */
+    /** An attribute without constraints. */
     public OpenMBeanAttributeInfoSupport(String name, String description, OpenType<?> openType,
             boolean isReadable, boolean isWritable, boolean isIs) {
         this(name, description, openType, isReadable, isWritable, isIs, (Descriptor) null);
     }
 
-    /** Un atributo sin restricciones, con ese descriptor. */
+    /** An attribute without constraints, with that descriptor. */
     public OpenMBeanAttributeInfoSupport(String name, String description, OpenType<?> openType,
             boolean isReadable, boolean isWritable, boolean isIs, Descriptor descriptor) {
         super(requireName(name), requireOpenType(openType), requireDescription(description),
@@ -33,16 +34,16 @@ public class OpenMBeanAttributeInfoSupport extends MBeanAttributeInfo
         try {
             this.constraints = new Constraints(openType, null, null, null, null);
         } catch (OpenDataException e) {
-            // Inalcanzable sin restricciones; ver la nota igual en
+            // Unreachable without constraints; see the same note in
             // `OpenMBeanParameterInfoSupport`.
             throw new IllegalArgumentException(e.getMessage(), e);
         }
     }
 
     /**
-     * Un atributo con valor por omisión.
+     * An attribute with a default value.
      *
-     * @throws OpenDataException si el valor no es del tipo, o si el tipo no admite omisión
+     * @throws OpenDataException if the value is not of the type, or if the type admits no default
      */
     public <T> OpenMBeanAttributeInfoSupport(String name, String description, OpenType<T> openType,
             boolean isReadable, boolean isWritable, boolean isIs, T defaultValue)
@@ -51,10 +52,10 @@ public class OpenMBeanAttributeInfoSupport extends MBeanAttributeInfo
     }
 
     /**
-     * Un atributo con valor por omisión y valores legales.
+     * An attribute with a default value and legal values.
      *
-     * @throws OpenDataException si alguno no es del tipo, si el valor por omisión no está entre los
-     *     legales, o si el tipo no admite restricciones
+     * @throws OpenDataException if one is not of the type, if the default value is not among the
+     *     legal ones, or if the type admits no constraints
      */
     public <T> OpenMBeanAttributeInfoSupport(String name, String description, OpenType<T> openType,
             boolean isReadable, boolean isWritable, boolean isIs, T defaultValue, T[] legalValues)
@@ -65,10 +66,10 @@ public class OpenMBeanAttributeInfoSupport extends MBeanAttributeInfo
     }
 
     /**
-     * Un atributo con valor por omisión y rango.
+     * An attribute with a default value and a range.
      *
-     * @throws OpenDataException si alguno no es del tipo, si el mínimo supera al máximo, si el
-     *     valor por omisión queda fuera del rango, o si el tipo no admite restricciones
+     * @throws OpenDataException if one is not of the type, if the minimum exceeds the maximum, if
+     *     the default value falls outside the range, or if the type admits no constraints
      */
     public <T> OpenMBeanAttributeInfoSupport(String name, String description, OpenType<T> openType,
             boolean isReadable, boolean isWritable, boolean isIs, T defaultValue,
@@ -80,21 +81,21 @@ public class OpenMBeanAttributeInfoSupport extends MBeanAttributeInfo
 
     private static String requireName(String name) {
         if (name == null || name.trim().length() == 0) {
-            throw new IllegalArgumentException("el nombre no puede estar en blanco");
+            throw new IllegalArgumentException("the name cannot be blank");
         }
         return name;
     }
 
     private static String requireDescription(String description) {
         if (description == null || description.trim().length() == 0) {
-            throw new IllegalArgumentException("la descripción no puede estar en blanco");
+            throw new IllegalArgumentException("the description cannot be blank");
         }
         return description;
     }
 
     private static String requireOpenType(OpenType<?> openType) {
         if (openType == null) {
-            throw new IllegalArgumentException("el tipo abierto no puede ser nulo");
+            throw new IllegalArgumentException("the open type cannot be null");
         }
         return openType.getClassName();
     }
@@ -139,7 +140,7 @@ public class OpenMBeanAttributeInfoSupport extends MBeanAttributeInfo
         return this.constraints.isValue(obj);
     }
 
-    /** Igualdad contra cualquier {@link OpenMBeanAttributeInfo}, incluidos los tres accesos. */
+    /** Equality against any {@link OpenMBeanAttributeInfo}, including the three accesses. */
     public boolean equals(Object obj) {
         if (this == obj) {
             return true;

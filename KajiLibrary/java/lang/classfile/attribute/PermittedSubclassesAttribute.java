@@ -7,31 +7,31 @@ import java.lang.constant.ClassDesc;
 import java.util.List;
 import jdk.internal.classfile.impl.TypedAttributes;
 
-// `PermittedSubclasses` (JVMS §4.7.31): las clases que pueden extender a una clase sellada. Que la
-// lista esté en el `.class` y no sólo en el fuente es lo que hace que el sellado lo verifique la
-// JVM al cargar y no el compilador de buena fe.
+// `PermittedSubclasses` (JVMS §4.7.31): the classes that may extend a sealed class. That the list is
+// in the `.class` and not only in the source is what makes the sealing checked by the JVM at load time
+// and not by the compiler in good faith.
 public interface PermittedSubclassesAttribute
         extends Attribute<PermittedSubclassesAttribute>, ClassElement {
 
-    /** Las subclases permitidas. */
+    /** The permitted subclasses. */
     List<ClassEntry> permittedSubclasses();
 
-    /** El atributo con estas subclases. */
+    /** The attribute with these subclasses. */
     public static PermittedSubclassesAttribute of(List<ClassEntry> permittedSubclasses) {
         return TypedAttributes.permittedSubclasses(permittedSubclasses);
     }
 
-    /** El atributo con estas subclases. */
+    /** The attribute with these subclasses. */
     public static PermittedSubclassesAttribute of(ClassEntry... permittedSubclasses) {
         return TypedAttributes.permittedSubclasses(TypedAttributes.listOfClasses(permittedSubclasses));
     }
 
-    /** El atributo con estas subclases. */
+    /** The attribute with these subclasses. */
     public static PermittedSubclassesAttribute ofSymbols(List<ClassDesc> permittedSubclasses) {
         return TypedAttributes.permittedSubclasses(TypedAttributes.classEntries(permittedSubclasses));
     }
 
-    /** El atributo con estas subclases. */
+    /** The attribute with these subclasses. */
     public static PermittedSubclassesAttribute ofSymbols(ClassDesc... permittedSubclasses) {
         return TypedAttributes.permittedSubclasses(TypedAttributes.classEntries(permittedSubclasses));
     }

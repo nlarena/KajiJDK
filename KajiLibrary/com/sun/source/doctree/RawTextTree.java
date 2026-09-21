@@ -1,7 +1,7 @@
 package com.sun.source.doctree;
 
 /**
- * Texto en un formato que este arbol no interpreta — hoy, Markdown.
+ * Text in a format this tree does not interpret -- today, Markdown.
  */
 public interface RawTextTree extends DocTree {
 

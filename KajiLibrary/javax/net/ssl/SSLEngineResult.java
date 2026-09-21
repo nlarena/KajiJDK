@@ -1,65 +1,72 @@
 package javax.net.ssl;
 
 /**
- * Lo que devolvio un {@code wrap} o un {@code unwrap} de {@link SSLEngine}.
+ * What a {@code wrap} or an {@code unwrap} of {@link SSLEngine} returned.
  *
- * <h2>Por que hacen falta dos estados y no uno</h2>
+ * <h2>Why two statuses are needed and not one</h2>
  *
- * <p>Porque un {@link SSLEngine} contesta dos preguntas a la vez, y son independientes.
- * {@link Status} dice <strong>que paso con esta llamada</strong> —si consumio, si le falto lugar, si
- * el motor esta cerrado—. {@link HandshakeStatus} dice <strong>que hay que hacer despues</strong>,
- * que es lo que gobierna el bucle de quien lo usa.
+ * <p>Because an {@link SSLEngine} answers two questions at once, and they are independent. {@link
+ * Status} says <strong>what happened with this call</strong> --whether it consumed, whether it
+ * lacked room, whether the engine is closed--. {@link HandshakeStatus} says <strong>what has to be
+ * done next</strong>, which is what governs the loop of whoever uses it.
  *
- * <p>Mezclarlos seria el error clasico: una llamada puede terminar {@code OK} y aun asi necesitar
- * otro {@code wrap} antes de que pase nada util, porque el handshake sigue en curso. Son dos ejes.
+ * <p>Mixing them would be the classic error: a call may end {@code OK} and still need another
+ * {@code wrap} before anything useful happens, because the handshake is still in progress. They are
+ * two axes.
  */
 public class SSLEngineResult {
 
     /**
-     * Como termino la llamada.
+     * How the call ended.
      *
-     * <p>Los dos primeros no son errores sino <strong>pedidos</strong>: el motor no puede seguir con
-     * los buffers que le dieron y hay que agrandarlos o vaciarlos y reintentar. Tratarlos como
-     * fallas es la manera mas comun de escribir mal un bucle de {@code SSLEngine}.
+     * <p>The first two are not errors but <strong>requests</strong>: the engine cannot go on with
+     * the buffers it was given and they have to be enlarged or emptied and the call retried.
+     * Treating them as failures is the most common way of writing an {@code SSLEngine} loop
+     * wrongly.
      */
     public enum Status {
 
-        /** Falta entrada: llego un registro incompleto. Hay que leer mas de la red y reintentar. */
+        /**
+         * Input is missing: an incomplete record arrived. More has to be read from the network and
+         * retried.
+         */
         BUFFER_UNDERFLOW,
-        /** Falta lugar en la salida. Hay que vaciar el buffer destino y reintentar. */
+        /** Room is missing in the output. The destination buffer has to be emptied and retried. */
         BUFFER_OVERFLOW,
-        /** Anduvo. */
+        /** It went fine. */
         OK,
-        /** El motor esta cerrado en ese sentido. */
+        /** The engine is closed in that direction. */
         CLOSED
     }
 
     /**
-     * Que hace falta hacer a continuacion.
+     * What has to be done next.
      *
-     * <p>Es el estado que maneja el bucle. {@link #NEED_TASK} es el mas facil de pasar por alto:
-     * significa que el motor tiene trabajo pesado pendiente —criptografia asimetrica— que
-     * deliberadamente <em>no</em> hace en el hilo que llamo, para no bloquearlo. Hay que sacarlo con
-     * {@link SSLEngine#getDelegatedTask} y correrlo, si no el handshake no avanza nunca.
+     * <p>It is the status that drives the loop. {@link #NEED_TASK} is the easiest to overlook: it
+     * means the engine has heavy work pending --asymmetric cryptography-- that it deliberately does
+     * <em>not</em> do in the calling thread, so as not to block it. It has to be taken with {@link
+     * SSLEngine#getDelegatedTask} and run, otherwise the handshake never advances.
      */
     public enum HandshakeStatus {
 
-        /** No hay handshake en curso. */
+        /** There is no handshake in progress. */
         NOT_HANDSHAKING,
-        /** El handshake acaba de terminar. Se reporta una sola vez. */
+        /** The handshake just finished. It is reported only once. */
         FINISHED,
-        /** Hay tareas pendientes; sacarlas con {@link SSLEngine#getDelegatedTask} y correrlas. */
+        /**
+         * There are pending tasks; take them with {@link SSLEngine#getDelegatedTask} and run them.
+         */
         NEED_TASK,
-        /** El motor necesita producir datos: llamar a {@code wrap}. */
+        /** The engine needs to produce data: call {@code wrap}. */
         NEED_WRAP,
-        /** El motor necesita consumir datos: llamar a {@code unwrap}. */
+        /** The engine needs to consume data: call {@code unwrap}. */
         NEED_UNWRAP,
         /**
-         * Como {@link #NEED_UNWRAP}, pero sin leer nada nuevo de la red.
+         * Like {@link #NEED_UNWRAP}, but without reading anything new from the network.
          *
-         * <p>Existe por DTLS, que corre sobre datagramas: el motor puede tener adentro un mensaje
-         * que llego desordenado y que ahora si puede procesar. Leer de la red aca bloquearia
-         * esperando algo que ya se tiene.
+         * <p>It exists because of DTLS, which runs over datagrams: the engine may hold inside a
+         * message that arrived out of order and that it can now process. Reading from the network
+         * here would block waiting for something already at hand.
          */
         NEED_UNWRAP_AGAIN
     }
@@ -71,7 +78,7 @@ public class SSLEngineResult {
     private final long sequenceNumber;
 
     /**
-     * @throws IllegalArgumentException si algun estado es {@code null} o si algun conteo es negativo
+     * @throws IllegalArgumentException if a status is {@code null} or a count is negative
      */
     public SSLEngineResult(Status status, HandshakeStatus handshakeStatus, int bytesConsumed,
             int bytesProduced) {
@@ -79,20 +86,20 @@ public class SSLEngineResult {
     }
 
     /**
-     * Igual, con el numero de secuencia del registro — solo tiene sentido en DTLS.
+     * The same, with the record's sequence number — only meaningful in DTLS.
      *
-     * @throws IllegalArgumentException si algun estado es {@code null} o si algun conteo es negativo
+     * @throws IllegalArgumentException if a status is {@code null} or a count is negative
      */
     public SSLEngineResult(Status status, HandshakeStatus handshakeStatus, int bytesConsumed,
             int bytesProduced, long sequenceNumber) {
         if (status == null) {
-            throw new IllegalArgumentException("falta el estado");
+            throw new IllegalArgumentException("the status is missing");
         }
         if (handshakeStatus == null) {
-            throw new IllegalArgumentException("falta el estado de handshake");
+            throw new IllegalArgumentException("the handshake status is missing");
         }
         if (bytesConsumed < 0 || bytesProduced < 0) {
-            throw new IllegalArgumentException("los conteos de bytes no pueden ser negativos");
+            throw new IllegalArgumentException("the byte counts cannot be negative");
         }
         this.status = status;
         this.handshakeStatus = handshakeStatus;
@@ -101,32 +108,33 @@ public class SSLEngineResult {
         this.sequenceNumber = sequenceNumber;
     }
 
-    /** Como termino la llamada. */
+    /** How the call ended. */
     public final Status getStatus() {
         return this.status;
     }
 
-    /** Que hace falta hacer despues. */
+    /** What has to be done next. */
     public final HandshakeStatus getHandshakeStatus() {
         return this.handshakeStatus;
     }
 
-    /** Cuantos bytes se leyeron de la entrada. */
+    /** How many bytes were read from the input. */
     public final int bytesConsumed() {
         return this.bytesConsumed;
     }
 
-    /** Cuantos bytes se escribieron en la salida. */
+    /** How many bytes were written to the output. */
     public final int bytesProduced() {
         return this.bytesProduced;
     }
 
     /**
-     * El numero de secuencia del registro, sin signo.
+     * The record's sequence number, unsigned.
      *
-     * <p>{@code -1} cuando no aplica: en TLS sobre TCP el transporte ya garantiza el orden y no hay
-     * nada que numerar. Es un {@code long} leido como <strong>sin signo</strong>, asi que compararlo
-     * con {@code <} da mal para valores altos — hay que usar {@link Long#compareUnsigned}.
+     * <p>{@code -1} when it does not apply: in TLS over TCP the transport already guarantees order
+     * and there is nothing to number. It is a {@code long} read as <strong>unsigned</strong>, so
+     * comparing it with {@code <} goes wrong for high values — {@link Long#compareUnsigned} has to
+     * be used.
      */
     public final long sequenceNumber() {
         return this.sequenceNumber;

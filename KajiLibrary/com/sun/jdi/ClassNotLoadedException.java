@@ -1,7 +1,7 @@
 package com.sun.jdi;
 
 /**
- * ClassNotLoadedException de la maquina depurada.
+ * ClassNotLoadedException of the debugged machine.
  *
  * @since 1.3
  */
@@ -10,12 +10,12 @@ public class ClassNotLoadedException extends Exception {
     private final String className;
 
     /**
-     * Con el nombre de la clase que falta.
+     * With the name of the class that is missing.
      *
-     * <p>El nombre NO va al mensaje: el JDK lo guarda aparte y deja el mensaje vacio. Se reproduce
-     * porque un programa que formatea el mensaje veria otra cosa.
+     * <p>The name does NOT go into the message: the JDK keeps it separately and leaves the message
+     * empty. It is reproduced because a program that formats the message would see something
+     * else.
      *
-     * @param className el nombre de la clase
      */
     public ClassNotLoadedException(String className) {
         super();
@@ -23,10 +23,9 @@ public class ClassNotLoadedException extends Exception {
     }
 
     /**
-     * Con el nombre de la clase y un mensaje.
+     * With the class's name and a message.
      *
-     * @param className el nombre de la clase
-     * @param message el mensaje
+     *
      */
     public ClassNotLoadedException(String className, String message) {
         super(message);
@@ -34,9 +33,9 @@ public class ClassNotLoadedException extends Exception {
     }
 
     /**
-     * El nombre de la clase que falta.
+     * The name of the class that is missing.
      *
-     * @return el nombre
+     * @return the name
      */
     public String className() {
         return className;

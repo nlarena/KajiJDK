@@ -6,27 +6,27 @@ import javax.naming.Name;
 import javax.naming.directory.Attributes;
 
 /**
- * KajiLibrary's javax.naming.spi.DirObjectFactory -- una {@link ObjectFactory} que ademas ve los
- * atributos.
+ * KajiLibrary's javax.naming.spi.DirObjectFactory -- an {@link ObjectFactory} that also sees the
+ * attributes.
  *
- * <p>Agrega una sobrecarga con {@link Attributes}, y no es comodidad: en un directorio, <b>lo que
- * distingue</b> a una entrada suele estar en sus atributos --su clase de objeto, sus campos-- y no en
- * lo que el {@code lookup} devuelve como valor. Sin los atributos, la fabrica no tiene con que
- * decidir si le corresponde.
+ * <p>It adds an overload with {@link Attributes}, and it is not a convenience: in a directory,
+ * <b>what distinguishes</b> an entry is usually in its attributes --its object class, its fields--
+ * and not in what {@code lookup} returns as the value. Without the attributes, the factory has
+ * nothing to decide with whether the entry is its business.
  *
- * <p>Ademas ahorra una vuelta al servidor: la plataforma ya los leyo para resolver el nombre, y
- * pasarlos evita que la fabrica los pida de nuevo.
+ * <p>It also saves a round trip to the server: the platform already read them to resolve the name,
+ * and passing them spares the factory asking for them again.
  *
- * <p>El metodo heredado de {@link ObjectFactory} sigue existiendo y se llama cuando no hay atributos
- * que pasar.
+ * <p>The method inherited from {@link ObjectFactory} still exists and is called when there are no
+ * attributes to pass.
  */
 public interface DirObjectFactory extends ObjectFactory {
 
     /**
-     * El objeto que corresponde a esos datos y esos atributos.
+     * The object that corresponds to that data and those attributes.
      *
-     * @param attrs los de la entrada, o null si no se leyeron
-     * @return null si esta fabrica no los reconoce
+     * @param attrs the entry's, or null if they were not read
+     * @return null if this factory does not recognize them
      */
     Object getObjectInstance(Object obj, Name name, Context nameCtx, Hashtable<?, ?> environment,
                              Attributes attrs) throws Exception;

@@ -24,68 +24,70 @@ import javax.swing.plaf.DesktopPaneUI;
 import javax.swing.plaf.UIResource;
 
 /**
- * El aspecto basico de un escritorio de ventanas internas.
+ * The basic look and feel of a desktop of internal frames.
  *
- * <h2>No dibuja nada, y no es poco lo que hace</h2>
+ * <h2>It draws nothing, and what it does is not little</h2>
  *
- * <p>Lo que se ve de un escritorio son sus ventanas internas; el escritorio mismo es un fondo liso.
- * Lo que este UI aporta son dos cosas que no se ven: el {@link DesktopManager} --quien decide que
- * pasa al mover, maximizar, iconizar o cerrar una ventana-- y la tabla de acciones de teclado, que
- * son diecinueve.
+ * <p>What is seen of a desktop are its internal frames; the desktop itself is a plain
+ * background. What this look and feel contributes are two things that are not seen: the
+ * {@link DesktopManager} -- who decides what happens on moving, maximizing, iconifying or
+ * closing a frame -- and the table of keyboard actions, which are nineteen.
  *
- * <h2>Diecinueve acciones y ninguna tecla</h2>
+ * <h2>Nineteen actions and not one key</h2>
  *
- * <p>Las acciones estan todas --moverse entre ventanas, mover y redimensionar con las flechas,
- * cerrar, minimizar, maximizar, restaurar-- y el mapa de teclas esta <em>vacio</em>. No es un
- * olvido: que tecla dispara cual accion lo decide la tabla del aspecto, y sin tabla no hay ninguna
- * atada. Esta medido: el JDK tampoco tiene ninguna clave en el mapa del escritorio.
+ * <p>The actions are all there -- moving between frames, moving and resizing with the arrows,
+ * closing, minimizing, maximizing, restoring -- and the key map is <em>empty</em>. It is not an
+ * oversight: which key fires which action is decided by the look and feel's table, and with no
+ * table there is none tied. It is measured: the JDK does not have a single key in the desktop's
+ * map either.
  *
- * <h2>Los cinco campos de tecla que quedaron en nulo</h2>
+ * <h2>The five key fields that were left null</h2>
  *
- * <p>{@link #closeKey}, {@link #navigateKey}, {@link #navigateKey2}, {@link #minimizeKey} y
- * {@link #maximizeKey} son protegidos, existen, y nadie los escribe. Vienen de cuando el UI ataba
- * las teclas a mano; ahora las ata la tabla y quedaron por compatibilidad, igual que
- * {@code shadow} y {@code highlight} en {@link BasicSeparatorUI}. Medido: nulos los cinco.
+ * <p>{@link #closeKey}, {@link #navigateKey}, {@link #navigateKey2}, {@link #minimizeKey} and
+ * {@link #maximizeKey} are protected, they exist, and nobody writes them. They come from when
+ * the look and feel tied the keys by hand; now they are tied by the table and they stayed for
+ * compatibility, just like {@code shadow} and {@code highlight} in {@link BasicSeparatorUI}.
+ * Measured: all five null.
  *
- * <h2>Sin tamano preferido</h2>
+ * <h2>No preferred size</h2>
  *
- * <p>{@link #getPreferredSize} devuelve {@code null}. Un escritorio ocupa lo que le den: no hay un
- * tamano que "prefiera", y contestar la union de sus ventanas seria peor -- el escritorio crece
- * cada vez que alguien arrastra una ventana hacia el borde.
+ * <p>{@link #getPreferredSize} returns {@code null}. A desktop takes up whatever it is given:
+ * there is no size it "prefers", and answering the union of its frames would be worse -- the
+ * desktop grows every time somebody drags a frame towards the edge.
  */
 public class BasicDesktopPaneUI extends DesktopPaneUI {
 
     protected JDesktopPane desktop;
     protected DesktopManager desktopManager;
 
-    /** Sin uso; ver la nota de la clase. */
+    /** Unused; see the class note. */
     @Deprecated
     protected KeyStroke minimizeKey;
 
-    /** Sin uso; ver la nota de la clase. */
+    /** Unused; see the class note. */
     @Deprecated
     protected KeyStroke maximizeKey;
 
-    /** Sin uso; ver la nota de la clase. */
+    /** Unused; see the class note. */
     @Deprecated
     protected KeyStroke closeKey;
 
-    /** Sin uso; ver la nota de la clase. */
+    /** Unused; see the class note. */
     @Deprecated
     protected KeyStroke navigateKey;
 
-    /** Sin uso; ver la nota de la clase. */
+    /** Unused; see the class note. */
     @Deprecated
     protected KeyStroke navigateKey2;
 
     private PropertyChangeListener pcl;
 
-    private static final ColorUIResource FONDO = new ColorUIResource(255, 255, 255);
+    private static final ColorUIResource BACKGROUND = new ColorUIResource(255, 255, 255);
 
     public BasicDesktopPaneUI() {
     }
 
-    /** Uno nuevo por escritorio: guarda el componente y su administrador. */
+    /** A new one per desktop: it keeps the component and its manager. */
     public static ComponentUI createUI(JComponent c) {
         return new BasicDesktopPaneUI();
     }
@@ -106,20 +108,20 @@ public class BasicDesktopPaneUI extends DesktopPaneUI {
         desktop = null;
     }
 
-    /** Fondo y opacidad; el valor es el de {@code Desktop.background} en Metal. */
+    /** Background and opacity; the value is that of {@code Desktop.background} in Metal. */
     protected void installDefaults() {
-        Color fondo = desktop.getBackground();
-        if (fondo == null || fondo instanceof UIResource) {
-            desktop.setBackground(FONDO);
+        Color background = desktop.getBackground();
+        if (background == null || background instanceof UIResource) {
+            desktop.setBackground(BACKGROUND);
         }
         LookAndFeel.installProperty(desktop, "opaque", Boolean.TRUE);
     }
 
-    /** No saca nada; ver {@link BasicPanelUI#uninstallDefaults}. */
+    /** It removes nothing; see {@link BasicPanelUI#uninstallDefaults}. */
     protected void uninstallDefaults() {
     }
 
-    /** Pone el administrador, salvo que el programa haya puesto el suyo. */
+    /** It sets the manager, unless the program has set its own. */
     protected void installDesktopManager() {
         desktopManager = desktop.getDesktopManager();
         if (desktopManager == null) {
@@ -128,7 +130,7 @@ public class BasicDesktopPaneUI extends DesktopPaneUI {
         }
     }
 
-    /** Y lo saca solo si es el que puso este UI. */
+    /** And it removes it only if it is the one this look and feel set. */
     protected void uninstallDesktopManager() {
         if (desktop.getDesktopManager() instanceof UIResource) {
             desktop.setDesktopManager(null);
@@ -150,10 +152,10 @@ public class BasicDesktopPaneUI extends DesktopPaneUI {
         return new Handler();
     }
 
-    /** Las diecinueve acciones; ver la nota de la clase. */
+    /** The nineteen actions; see the class note. */
     protected void installKeyboardActions() {
         registerKeyboardActions();
-        SwingUtilities.replaceUIActionMap(desktop, crearMapaDeAcciones());
+        SwingUtilities.replaceUIActionMap(desktop, createActionMap());
     }
 
     protected void uninstallKeyboardActions() {
@@ -161,16 +163,16 @@ public class BasicDesktopPaneUI extends DesktopPaneUI {
         SwingUtilities.replaceUIActionMap(desktop, null);
     }
 
-    /** El gancho para que una subclase ate teclas propias; el basico no ata ninguna. */
+    /** The hook for a subclass to tie keys of its own; the basic one ties none. */
     protected void registerKeyboardActions() {
     }
 
     protected void unregisterKeyboardActions() {
     }
 
-    private ActionMap crearMapaDeAcciones() {
+    private ActionMap createActionMap() {
         ActionMap map = new ActionMapUIResource();
-        String[] nombres = {
+        String[] names = {
             "restore", "close", "move", "resize",
             "right", "shrinkRight", "left", "shrinkLeft",
             "up", "shrinkUp", "down", "shrinkDown",
@@ -178,119 +180,124 @@ public class BasicDesktopPaneUI extends DesktopPaneUI {
             "selectNextFrame", "selectPreviousFrame",
             "navigateNext", "navigatePrevious",
         };
-        for (int i = 0; i < nombres.length; i++) {
-            map.put(nombres[i], new AccionDeEscritorio(nombres[i]));
+        for (int i = 0; i < names.length; i++) {
+            map.put(names[i], new DesktopAction(names[i]));
         }
         return map;
     }
 
-    /** Nada: el fondo lo rellena {@code ComponentUI.update} y las ventanas se pintan solas. */
+    /**
+     * Nothing: the background is filled by {@code ComponentUI.update} and the frames paint
+     * themselves.
+     */
     public void paint(Graphics g, JComponent c) {
     }
 
-    /** {@code null}; ver la nota de la clase. */
+    /** {@code null}; see the class note. */
     public Dimension getPreferredSize(JComponent c) {
         return null;
     }
 
-    /** Cero: un escritorio se puede achicar hasta desaparecer. */
+    /** Zero: a desktop can be shrunk until it disappears. */
     public Dimension getMinimumSize(JComponent c) {
         return new Dimension(0, 0);
     }
 
-    /** Sin tope. */
+    /** No cap. */
     public Dimension getMaximumSize(JComponent c) {
         return new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE);
     }
 
     /**
-     * El administrador que pone este UI.
+     * The manager this look and feel sets.
      *
-     * <p>Es un {@link DefaultDesktopManager} marcado como del aspecto; la marca es lo unico que
-     * agrega, y es lo que deja que {@link #uninstallDesktopManager} sepa si lo puso el o el
-     * programa.
+     * <p>It is a {@link DefaultDesktopManager} marked as the look and feel's; the mark is the only
+     * thing it adds, and it is what lets {@link #uninstallDesktopManager} know whether it was set
+     * by it or by the program.
      */
     private static class BasicDesktopManager extends DefaultDesktopManager implements UIResource {
     }
 
-    /** Cada accion del teclado; el nombre dice cual. */
-    private class AccionDeEscritorio extends AbstractAction {
+    /** Each keyboard action; the name says which. */
+    private class DesktopAction extends AbstractAction {
 
-        private final String que;
+        private final String what;
 
-        AccionDeEscritorio(String que) {
-            super(que);
-            this.que = que;
+        DesktopAction(String what) {
+            super(what);
+            this.what = what;
         }
 
         public void actionPerformed(ActionEvent e) {
             JInternalFrame f = desktop.getSelectedFrame();
-            if ("selectNextFrame".equals(que) || "navigateNext".equals(que)) {
-                mover(1);
-            } else if ("selectPreviousFrame".equals(que) || "navigatePrevious".equals(que)) {
-                mover(-1);
+            if ("selectNextFrame".equals(what) || "navigateNext".equals(what)) {
+                move(1);
+            } else if ("selectPreviousFrame".equals(what) || "navigatePrevious".equals(what)) {
+                move(-1);
             } else if (f == null) {
                 return;
-            } else if ("close".equals(que)) {
+            } else if ("close".equals(what)) {
                 if (f.isClosable()) {
                     f.doDefaultCloseAction();
                 }
-            } else if ("minimize".equals(que)) {
+            } else if ("minimize".equals(what)) {
                 if (f.isIconifiable() && !f.isIcon()) {
-                    intentar(f, "icon", true);
+                    attempt(f, "icon", true);
                 }
-            } else if ("maximize".equals(que)) {
+            } else if ("maximize".equals(what)) {
                 if (f.isMaximizable() && !f.isMaximum()) {
-                    intentar(f, "maximum", true);
+                    attempt(f, "maximum", true);
                 }
-            } else if ("restore".equals(que)) {
+            } else if ("restore".equals(what)) {
                 if (f.isIcon()) {
-                    intentar(f, "icon", false);
+                    attempt(f, "icon", false);
                 } else if (f.isMaximum()) {
-                    intentar(f, "maximum", false);
+                    attempt(f, "maximum", false);
                 }
             } else {
-                // move, resize, escape y las eeis de flecha son gestos que necesitan teclado y
-                // pantalla: sin ninguno de los dos no hay nada que hacer. Ver la nota de la clase.
+                // move, resize, escape and the six arrow ones are gestures that need a keyboard and
+                // a
+                                // screen: with neither of the two there is nothing to do. See the
+                                // class note.
                 return;
             }
         }
 
-        /** Pasa a la ventana siguiente o a la anterior, en el orden en que estan. */
-        private void mover(int paso) {
-            JInternalFrame[] marcos = desktop.getAllFrames();
-            if (marcos.length == 0) {
+        /** It goes to the next frame or to the previous one, in the order they are in. */
+        private void move(int paso) {
+            JInternalFrame[] frames = desktop.getAllFrames();
+            if (frames.length == 0) {
                 return;
             }
-            JInternalFrame actual = desktop.getSelectedFrame();
+            JInternalFrame current = desktop.getSelectedFrame();
             int i = 0;
-            for (int k = 0; k < marcos.length; k++) {
-                if (marcos[k] == actual) {
+            for (int k = 0; k < frames.length; k++) {
+                if (frames[k] == current) {
                     i = k;
                     break;
                 }
             }
-            int siguiente = ((i + paso) % marcos.length + marcos.length) % marcos.length;
-            intentar(marcos[siguiente], "selected", true);
+            int next = ((i + paso) % frames.length + frames.length) % frames.length;
+            attempt(frames[next], "selected", true);
         }
 
-        /** Los cambios de estado de una ventana interna pueden ser vetados. */
-        private void intentar(JInternalFrame f, String propiedad, boolean valor) {
+        /** An internal frame's changes of state may be vetoed. */
+        private void attempt(JInternalFrame f, String property, boolean value) {
             try {
-                if ("icon".equals(propiedad)) {
-                    f.setIcon(valor);
-                } else if ("maximum".equals(propiedad)) {
-                    f.setMaximum(valor);
+                if ("icon".equals(property)) {
+                    f.setIcon(value);
+                } else if ("maximum".equals(property)) {
+                    f.setMaximum(value);
                 } else {
-                    f.setSelected(valor);
+                    f.setSelected(value);
                 }
             } catch (java.beans.PropertyVetoException ex) {
-                // Alguien dijo que no. Es una respuesta valida, no un error.
+                // Somebody said no. It is a valid answer, not an error.
             }
         }
     }
 
-    /** Rearma el administrador cuando el escritorio cambia de aspecto. */
+    /** It rebuilds the manager when the desktop changes look and feel. */
     private class Handler implements PropertyChangeListener {
 
         public void propertyChange(PropertyChangeEvent e) {

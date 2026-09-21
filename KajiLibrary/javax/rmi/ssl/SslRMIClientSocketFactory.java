@@ -10,25 +10,25 @@ import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
 
 /**
- * La fabrica que hace que el lado cliente de una llamada RMI viaje por SSL.
+ * The factory that makes the client side of an RMI call travel over SSL.
  *
- * <p>Un talon RMI lleva adentro la fabrica de sockets con la que se lo tiene que contactar, y la
- * fabrica viaja **serializada** desde el servidor hasta el cliente. De ahi las dos rarezas de esta
- * clase, que de otro modo no se entienden:
+ * <p>An RMI stub carries inside it the socket factory it has to be contacted with, and the factory
+ * travels **serialised** from the server to the client. Hence the two oddities of this class, which
+ * otherwise make no sense:
  *
  * <ul>
- *   <li>No tiene estado. Todo lo que configura --las suites y los protocolos habilitados-- sale de
- *       propiedades de sistema que se leen **en el cliente**, no de campos que viajarian con el
- *       objeto. Es deliberado: la configuracion SSL del cliente la elige el cliente.
- *   <li>{@link #equals} compara la **clase** y no el contenido. Dos instancias sin estado son
- *       intercambiables, y RMI usa esa igualdad para reutilizar una sola conexion con varios
- *       talones del mismo servidor; si comparara por identidad, cada talon abriria la suya.
+ *   <li>It has no state. Everything it configures --the enabled suites and protocols-- comes from
+ *       system properties that are read **on the client**, not from fields that would travel with
+ *       the object. It is deliberate: the client's SSL configuration is chosen by the client.
+ *   <li>{@link #equals} compares the **class** and not the contents. Two instances with no state
+ *       are interchangeable, and RMI uses that equality to reuse a single connection with several
+ *       stubs of the same server; if it compared by identity, each stub would open its own.
  * </ul>
  *
- * <p>Las dos propiedades que lee, separadas por comas:
- * {@code javax.rmi.ssl.client.enabledCipherSuites} y
- * {@code javax.rmi.ssl.client.enabledProtocols}. Si no estan, el socket queda como lo dejo su
- * fabrica.
+ * <p>The two properties it reads, separated by commas:
+ * {@code javax.rmi.ssl.client.enabledCipherSuites} and
+ * {@code javax.rmi.ssl.client.enabledProtocols}. If they are not there, the socket is left as its
+ * factory left it.
  */
 public class SslRMIClientSocketFactory implements RMIClientSocketFactory, Serializable {
 
@@ -36,21 +36,21 @@ public class SslRMIClientSocketFactory implements RMIClientSocketFactory, Serial
 
     private static final long serialVersionUID = -8310631444933958385L;
 
-    /** Una fabrica nueva. */
+    /** A new factory. */
     public SslRMIClientSocketFactory() {
     }
 
     /**
-     * Un socket SSL conectado a esa maquina y puerto.
+     * An SSL socket connected to that machine and port.
      *
-     * @throws IOException si no se puede conectar, o si alguna de las dos propiedades nombra una
-     *     suite o un protocolo que el socket no soporta
+     * @throws IOException if it cannot connect, or if either of the two properties names a suite or
+     *     a protocol the socket does not support
      */
     public Socket createSocket(String host, int port) throws IOException {
-        SocketFactory fabrica = getDefaultClientSocketFactory();
-        SSLSocket socket = (SSLSocket) fabrica.createSocket(host, port);
+        SocketFactory factory = getDefaultClientSocketFactory();
+        SSLSocket socket = (SSLSocket) factory.createSocket(host, port);
 
-        String[] suites = leerLista("javax.rmi.ssl.client.enabledCipherSuites");
+        String[] suites = readList("javax.rmi.ssl.client.enabledCipherSuites");
         if (suites != null) {
             try {
                 socket.setEnabledCipherSuites(suites);
@@ -59,10 +59,10 @@ public class SslRMIClientSocketFactory implements RMIClientSocketFactory, Serial
             }
         }
 
-        String[] protocolos = leerLista("javax.rmi.ssl.client.enabledProtocols");
-        if (protocolos != null) {
+        String[] protocols = readList("javax.rmi.ssl.client.enabledProtocols");
+        if (protocols != null) {
             try {
-                socket.setEnabledProtocols(protocolos);
+                socket.setEnabledProtocols(protocols);
             } catch (IllegalArgumentException e) {
                 throw new IOException(e.getMessage(), e);
             }
@@ -70,13 +70,13 @@ public class SslRMIClientSocketFactory implements RMIClientSocketFactory, Serial
         return socket;
     }
 
-    /** La propiedad, partida por comas, o `null` si no esta. */
-    private static String[] leerLista(String propiedad) {
-        String valor = System.getProperty(propiedad);
-        if (valor == null) {
+    /** The property, split by commas, or `null` if it is not there. */
+    private static String[] readList(String property) {
+        String value = System.getProperty(property);
+        if (value == null) {
             return null;
         }
-        StringTokenizer st = new StringTokenizer(valor, ",");
+        StringTokenizer st = new StringTokenizer(value, ",");
         int n = st.countTokens();
         String[] out = new String[n];
         for (int i = 0; i < n; i++) {
@@ -86,10 +86,10 @@ public class SslRMIClientSocketFactory implements RMIClientSocketFactory, Serial
     }
 
     /**
-     * Dos fabricas de esta clase son iguales.
+     * Two factories of this class are equal.
      *
-     * <p>Compara la clase exacta y no `instanceof`, para que una subclase que si tenga estado no
-     * salga igual a su base.
+     * <p>It compares the exact class and not `instanceof`, so that a subclass that does have state
+     * does not come out equal to its base.
      */
     public boolean equals(Object obj) {
         if (obj == null) {
@@ -101,16 +101,16 @@ public class SslRMIClientSocketFactory implements RMIClientSocketFactory, Serial
         return obj.getClass().equals(this.getClass());
     }
 
-    /** Coherente con {@link #equals}: depende solo de la clase. */
+    /** Coherent with {@link #equals}: it depends only on the class. */
     public int hashCode() {
         return this.getClass().hashCode();
     }
 
     /**
-     * La fabrica SSL de siempre, memorizada.
+     * The usual SSL factory, memoised.
      *
-     * <p>Se memoriza porque `SSLSocketFactory.getDefault()` puede tener que armar un contexto
-     * entero, y esto se llama una vez por conexion.
+     * <p>It is memoised because `SSLSocketFactory.getDefault()` may have to build a whole context,
+     * and this is called once per connection.
      */
     private static synchronized SocketFactory getDefaultClientSocketFactory() {
         if (defaultSocketFactory == null) {

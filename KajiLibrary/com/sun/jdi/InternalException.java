@@ -1,7 +1,7 @@
 package com.sun.jdi;
 
 /**
- * InternalException de la maquina depurada.
+ * InternalException of the debugged machine.
  *
  * @since 1.3
  */
@@ -9,16 +9,16 @@ public class InternalException extends RuntimeException {
 
     private final int errorCode;
 
-    /** Sin detalle. */
+    /** With no detail. */
     public InternalException() {
         super();
         this.errorCode = 0;
     }
 
     /**
-     * Con un mensaje.
+     * With a message.
      *
-     * @param s el mensaje
+     * @param s the message
      */
     public InternalException(String s) {
         super(s);
@@ -26,9 +26,9 @@ public class InternalException extends RuntimeException {
     }
 
     /**
-     * Con el codigo de error de la capa de transporte.
+     * With the transport layer's error code.
      *
-     * @param errorCode el codigo
+     * @param errorCode the code
      */
     public InternalException(int errorCode) {
         super();
@@ -36,10 +36,10 @@ public class InternalException extends RuntimeException {
     }
 
     /**
-     * Con un mensaje y el codigo de error.
+     * With a message and the error code.
      *
-     * @param s el mensaje
-     * @param errorCode el codigo
+     * @param s the message
+     * @param errorCode the code
      */
     public InternalException(String s, int errorCode) {
         super(s);
@@ -47,9 +47,9 @@ public class InternalException extends RuntimeException {
     }
 
     /**
-     * El codigo de error de la capa de transporte, o cero si no habia.
+     * The transport layer's error code, or zero if there was none.
      *
-     * @return el codigo
+     * @return the code
      */
     public int errorCode() {
         return errorCode;

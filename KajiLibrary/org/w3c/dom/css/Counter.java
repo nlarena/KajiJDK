@@ -1,20 +1,20 @@
 package org.w3c.dom.css;
 
 /**
- * Un `counter()` o `counters()` de la propiedad `content`.
+ * A `counter()` or `counters()` of the `content` property.
  *
- * <p>`getSeparator` es lo que distingue las dos formas: `counter()` no tiene separador y devuelve
- * nulo; `counters()` si lo tiene, y es lo que se intercala entre los niveles de un contador
- * anidado.
+ * <p>`getSeparator` is what tells the two forms apart: `counter()` has no separator and returns
+ * null; `counters()` does have one, and it is what is interleaved between the levels of a nested
+ * counter.
  */
 public interface Counter {
 
-    /** El nombre del contador. */
+    /** The name of the counter. */
     String getIdentifier();
 
-    /** El estilo de numeracion --`decimal`, `lower-roman`--. */
+    /** The numbering style --`decimal`, `lower-roman`--. */
     String getListStyle();
 
-    /** El separador de `counters()`, o nulo si es un `counter()` simple. */
+    /** The separator of `counters()`, or null if it is a plain `counter()`. */
     String getSeparator();
 }

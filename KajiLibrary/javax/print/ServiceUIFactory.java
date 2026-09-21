@@ -1,59 +1,60 @@
 package javax.print;
 
 /**
- * KajiLibrary's javax.print.ServiceUIFactory -- la interfaz grafica propia de una impresora.
+ * KajiLibrary's javax.print.ServiceUIFactory -- a printer's own graphical interface.
  *
- * <p>Un fabricante puede tener opciones que el modelo de atributos estandar no cubre, y esta fabrica es
- * como las expone: devuelve componentes ya armados por el driver.
+ * <p>A manufacturer may have options the standard attribute model does not cover, and this factory
+ * is how it exposes them: it returns components already put together by the driver.
  *
- * <p>Se pide por <b>rol</b> --para que sirve la pantalla-- y por <b>tipo</b> --de que clase se quiere
- * el componente--, y ese cruce es el punto: el mismo panel de administracion se puede pedir como
- * {@link #JCOMPONENT_UI} para meterlo en una ventana propia, o como {@link #DIALOG_UI} para mostrarlo
- * suelto.
+ * <p>It is asked for by <b>role</b> --what the screen is for-- and by <b>type</b> --which class the
+ * component is wanted as--, and that crossing is the point: the same administration panel can be
+ * asked for as {@link #JCOMPONENT_UI} to put it in a window of one's own, or as {@link #DIALOG_UI}
+ * to show it loose.
  *
- * <p>{@link #getUI} devuelve null si esa combinacion no existe, que es lo normal. {@link
- * #getUIClassNamesForRole} sirve para preguntar antes.
+ * <p>{@link #getUI} returns null if that combination does not exist, which is normal.
+ * {@link #getUIClassNamesForRole} serves to ask beforehand.
  *
- * <p>Los tipos son cadenas y no clases para que pedir uno de Swing no obligue a cargar Swing.
+ * <p>The types are strings and not classes so that asking for a Swing one does not force loading
+ * Swing.
  */
 public abstract class ServiceUIFactory {
 
-    /** Un {@code javax.swing.JComponent}. */
+    /** A {@code javax.swing.JComponent}. */
     public static final String JCOMPONENT_UI = "javax.swing.JComponent";
 
-    /** Un {@code java.awt.Panel}. */
+    /** A {@code java.awt.Panel}. */
     public static final String PANEL_UI = "java.awt.Panel";
 
-    /** Un {@code java.awt.Dialog}. */
+    /** A {@code java.awt.Dialog}. */
     public static final String DIALOG_UI = "java.awt.Dialog";
 
-    /** Un {@code javax.swing.JDialog}. */
+    /** A {@code javax.swing.JDialog}. */
     public static final String JDIALOG_UI = "javax.swing.JDialog";
 
-    /** Pantalla de "acerca de". */
+    /** "About" screen. */
     public static final int ABOUT_UIROLE = 1;
 
-    /** Pantalla de administracion. */
+    /** Administration screen. */
     public static final int ADMIN_UIROLE = 2;
 
-    /** La pantalla principal. */
+    /** The main screen. */
     public static final int MAIN_UIROLE = 3;
 
-    /** El primer rol libre para roles propios; los menores estan reservados. */
+    /** The first free role for roles of one's own; the lower ones are reserved. */
     public static final int RESERVED_UIROLE = 99;
 
-    /** Para las subclases. */
+    /** For subclasses. */
     protected ServiceUIFactory() {
     }
 
     /**
-     * El componente de ese rol y ese tipo, o null si no hay.
+     * The component of that role and that type, or null if there is none.
      *
-     * @param role uno de los roles, o uno propio mayor que {@link #RESERVED_UIROLE}
-     * @param ui uno de los cuatro tipos
+     * @param role one of the roles, or one of one's own greater than {@link #RESERVED_UIROLE}
+     * @param ui one of the four types
      */
     public abstract Object getUI(int role, String ui);
 
-    /** Que tipos hay para ese rol, o null si no hay ninguno. */
+    /** Which types there are for that role, or null if there are none. */
     public abstract String[] getUIClassNamesForRole(int role);
 }

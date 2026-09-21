@@ -92,21 +92,21 @@ public interface ExecutorService extends Executor, AutoCloseable {
     default void close() {
         this.shutdown();
         int rounds = 0;
-        boolean interrumpido = false;
+        boolean interrupted = false;
         while (!this.isTerminated() && rounds < 100) {
-            // `close()` viene de `AutoCloseable` y **no** puede declarar `InterruptedException`: un
-            // try-with-resources no podria cerrarla. El JDK hace lo mismo -- atrapa, corta la espera
-            // y remarca el hilo, que es lo unico honesto: el pool queda pidiendo apagarse aunque no
-            // se lo haya esperado hasta el final.
+            // `close()` comes from `AutoCloseable` and **cannot** declare `InterruptedException`: a
+            // try-with-resources could not close it. The JDK does the same -- it catches, cuts the
+            // wait short and re-marks the thread, which is the only honest thing: the pool is left
+            // asking to shut down even though it was not waited on to the end.
             try {
                 this.awaitTermination(100L, TimeUnit.MILLISECONDS);
             } catch (InterruptedException e) {
-                interrumpido = true;
+                interrupted = true;
                 rounds = 100;
             }
             rounds = rounds + 1;
         }
-        if (interrumpido) {
+        if (interrupted) {
             Thread.currentThread().interrupt();
         }
     }

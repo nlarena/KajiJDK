@@ -5,35 +5,37 @@ import java.math.BigInteger;
 import java.util.Date;
 import java.util.HashSet;
 
-// Un criterio para elegir CRLs de un `CertStore`.
+// A criterion for choosing CRLs of a `CertStore`.
 //
-// Igual que `X509CertSelector`: los criterios se acumulan y `match` exige todos. Un selector recien
-// creado acepta cualquier CRL X.509.
+// Just like `X509CertSelector`: the criteria accumulate and `match` demands all of them. A newly
+// created selector accepts any X.509 CRL.
 //
-// El criterio que mas se usa —y el que mas se olvida— es la fecha. Sin el, el store puede devolver
-// una CRL vencida, y una CRL vencida no dice nada: es una foto de antes de la revocacion que se
-// esta buscando. `setDateAndTime` es lo que exige que la CRL cubra el momento que interesa.
+// The criterion that is used most —and the one that is forgotten most— is the date. Without it, the
+// store can return an expired CRL, and an expired CRL says nothing: it is a photograph from before
+// the revocation that is being looked for. `setDateAndTime` is what demands that the CRL cover the
+// moment of interest.
 //
-// Los numeros de CRL sirven para lo mismo desde otro angulo: cada CRL de un emisor lleva un numero
-// que crece, asi que pedir un minimo es pedir "una mas nueva que la que ya tengo". Es la defensa
-// contra que un atacante que controla la red sirva una CRL vieja pero todavia valida.
+// The CRL numbers serve for the same thing from another angle: each CRL of an issuer carries a
+// number that grows, so asking for a minimum is asking for "a newer one than the one I have
+// already". It is the defence against an attacker who controls the network serving an old but still
+// valid CRL.
 //
 // ===============================================================================================
-// LOS DOS CONJUNTOS DE EMISORES
+// THE TWO SETS OF ISSUERS
 // ===============================================================================================
 //
-// El criterio de emisor se guarda **dos veces**, y no es redundancia: es la forma del JDK y hay que
-// reproducirla porque los dos accesores devuelven cosas distintas.
+// The issuer criterion is kept **twice**, and it is not redundancy: it is the JDK's shape and it
+// has to be reproduced because the two accessors return different things.
 //
-//   - `issuerX500Principals` es lo que usa `match`: nombres X.500 con forma canonica, que es la
-//     unica manera de comparar dos DN sin equivocarse.
-//   - `issuerNames` guarda lo que el llamador **puso**, tal cual: un `String` sigue siendo el mismo
-//     `String`, y un `X500Principal` o un `byte[]` se guardan como bytes. `getIssuerNames()`
-//     devuelve eso, con lo cual una coleccion puede tener `String` y `byte[]` mezclados.
+//   - `issuerX500Principals` is what `match` uses: X.500 names in canonical form, which is the only
+//     way of comparing two DNs without getting it wrong.
+//   - `issuerNames` keeps what the caller **set**, as it is: a `String` goes on being the same
+//     `String`, and an `X500Principal` or a `byte[]` are kept as bytes. `getIssuerNames()` returns
+//     that, with which a collection can have `String`s and `byte[]`s mixed.
 //
-// Los dos se ponen y se sacan juntos, siempre: un selector con uno y sin el otro filtraria mal.
-// `setIssuerNames(null)` y `setIssuerNames(list vacia)` hacen lo mismo —dejan los dos en null, o
-// sea sin criterio— y eso tambien es del JDK.
+// Both are set and removed together, always: a selector with one and without the other would filter
+// wrongly. `setIssuerNames(null)` and `setIssuerNames(empty list)` do the same thing —they leave
+// both at null, that is, with no criterion— and that is of the JDK too.
 public class X509CRLSelector implements CRLSelector {
 
     private static final String OID_CRL_NUMBER = "2.5.29.20";
@@ -45,11 +47,11 @@ public class X509CRLSelector implements CRLSelector {
     private HashSet<Object> issuerNames;
     private HashSet<javax.security.auth.x500.X500Principal> issuerX500Principals;
 
-    // Un selector sin criterios: acepta cualquier CRL X.509.
+    // A selector with no criteria: it accepts any X.509 CRL.
     public X509CRLSelector() {
     }
 
-    // Exige que la CRL sea de alguno de estos emisores. null o vacio quita el criterio.
+    // It demands that the CRL be of one of these issuers. null or empty removes the criterion.
     public void setIssuers(java.util.Collection<javax.security.auth.x500.X500Principal> issuers) {
         if (issuers == null || issuers.isEmpty()) {
             this.issuerNames = null;
@@ -66,11 +68,11 @@ public class X509CRLSelector implements CRLSelector {
         }
     }
 
-    // Idem, con los nombres como `String` en RFC 2253 o como `byte[]` con el DER del `Name`.
+    // The same, with the names as `String`s in RFC 2253 or as `byte[]`s with the DER of the `Name`.
     //
-    // Los dos conjuntos se arman **completos antes** de asignar ninguno: si un elemento de la mitad
-    // esta mal formado, el selector queda como estaba y no a mitad de camino con un criterio que
-    // filtra de menos.
+    // Both sets are built **complete before** either is assigned: if an element in the middle is
+    // badly formed, the selector is left as it was and not halfway with a criterion that filters
+    // too little.
     public void setIssuerNames(java.util.Collection<?> names) throws IOException {
         if (names == null || names.isEmpty()) {
             this.issuerNames = null;
@@ -100,21 +102,22 @@ public class X509CRLSelector implements CRLSelector {
         this.issuerX500Principals = parsed;
     }
 
-    // Agrega un emisor al criterio.
+    // It adds an issuer to the criterion.
     public void addIssuer(javax.security.auth.x500.X500Principal issuer) {
         add(issuer.getEncoded(), issuer);
     }
 
-    // Agrega un emisor escrito en RFC 2253.
+    // It adds an issuer written in RFC 2253.
     //
-    // Desaconsejado en el JDK a favor de `addIssuer`, y con razon: el texto se guarda tal cual y es
-    // `getIssuerNames()` quien despues lo devuelve sin canonizar. El criterio en si **si** se
-    // canoniza —lo que se compara es el `X500Principal`—, asi que el filtrado es correcto igual.
+    // Discouraged in the JDK in favour of `addIssuer`, and with reason: the text is kept as it is
+    // and it is `getIssuerNames()` that afterwards returns it without canonicalising. The criterion
+    // itself **is** canonicalised —what is compared is the `X500Principal`—, so the filtering is
+    // right all the same.
     public void addIssuerName(String name) throws IOException {
         add(name, principalOf(name));
     }
 
-    // Agrega un emisor a partir del DER de su `Name`.
+    // It adds an issuer from the DER of its `Name`.
     public void addIssuerName(byte[] name) throws IOException {
         byte[] copyOf = new byte[name.length];
         System.arraycopy(name, 0, copyOf, 0, name.length);
@@ -130,9 +133,9 @@ public class X509CRLSelector implements CRLSelector {
         this.issuerX500Principals.add(name);
     }
 
-    // El constructor de `X500Principal` rechaza con `IllegalArgumentException`, pero estos metodos
-    // prometen `IOException`. Se traduce en vez de dejar escapar la otra: quien llama a
-    // `addIssuerName` espera que un nombre mal escrito sea un error declarado.
+    // The constructor of `X500Principal` rejects with `IllegalArgumentException`, but these methods
+    // promise `IOException`. It is translated instead of letting the other escape: whoever calls
+    // `addIssuerName` expects a badly written name to be a declared error.
     private static javax.security.auth.x500.X500Principal principalOf(String name)
             throws IOException {
         try {
@@ -151,7 +154,8 @@ public class X509CRLSelector implements CRLSelector {
         }
     }
 
-    // Los emisores del criterio, o null si no hay. Inmutable: el criterio se cambia por los setters.
+    // The issuers of the criterion, or null if there are none. Immutable: the criterion is changed
+    // through the setters.
     public java.util.Collection<javax.security.auth.x500.X500Principal> getIssuers() {
         if (this.issuerX500Principals == null) {
             return null;
@@ -159,10 +163,10 @@ public class X509CRLSelector implements CRLSelector {
         return java.util.Collections.unmodifiableCollection(this.issuerX500Principals);
     }
 
-    // Los emisores **como se pusieron**, o null si no hay: `String` y `byte[]` mezclados.
+    // The issuers **as they were set**, or null if there are none: `String`s and `byte[]`s mixed.
     //
-    // Es una copia y los `byte[]` van clonados, asi que tocar lo que sale de aca no cambia el
-    // criterio. A diferencia de `getIssuers()`, la coleccion en si es modificable —tambien del JDK—.
+    // It is a copy and the `byte[]`s go cloned, so touching what comes out of here does not change
+    // the criterion. Unlike `getIssuers()`, the collection itself is modifiable —also of the JDK—.
     public java.util.Collection<Object> getIssuerNames() {
         if (this.issuerNames == null) {
             return null;
@@ -183,7 +187,7 @@ public class X509CRLSelector implements CRLSelector {
         return copyOf;
     }
 
-    // El numero de CRL minimo. Es como se pide "una mas nueva que esta".
+    // The minimum CRL number. It is how "a newer one than this" is asked for.
     public void setMinCRLNumber(BigInteger minCRL) {
         this.minCRL = minCRL;
     }
@@ -192,7 +196,7 @@ public class X509CRLSelector implements CRLSelector {
         return this.minCRL;
     }
 
-    // El numero de CRL maximo. Sirve para reconstruir el estado en un momento pasado.
+    // The maximum CRL number. It serves for reconstructing the state at a moment in the past.
     public void setMaxCRLNumber(BigInteger maxCRL) {
         this.maxCRL = maxCRL;
     }
@@ -201,8 +205,8 @@ public class X509CRLSelector implements CRLSelector {
         return this.maxCRL;
     }
 
-    // Exige que la CRL cubra este instante: que su `thisUpdate` no sea posterior y su `nextUpdate`
-    // no sea anterior. Los dos extremos **entran**.
+    // It demands that the CRL cover this instant: that its `thisUpdate` not be later and its
+    // `nextUpdate` not be earlier. Both ends **count**.
     public void setDateAndTime(Date dateAndTime) {
         if (dateAndTime == null) {
             this.dateAndTime = null;
@@ -218,11 +222,11 @@ public class X509CRLSelector implements CRLSelector {
         return new Date(this.dateAndTime.getTime());
     }
 
-    // El certificado cuyo estado se esta averiguando.
+    // The certificate whose state is being found out.
     //
-    // No es un criterio: `match` **no lo mira**, y eso es del JDK. Esta para que un proveedor de
-    // `CertStore` sepa a que apuntar la busqueda —por ejemplo, seguir la extension de puntos de
-    // distribucion de CRL del certificado— sin tener que adivinarlo.
+    // It is not a criterion: `match` **does not look at it**, and that is of the JDK. It is there
+    // so that a `CertStore` provider knows what to point the search at —for example, following the
+    // CRL distribution points extension of the certificate— without having to guess it.
     public void setCertificateChecking(X509Certificate cert) {
         this.certChecking = cert;
     }
@@ -231,7 +235,7 @@ public class X509CRLSelector implements CRLSelector {
         return this.certChecking;
     }
 
-    // Si la CRL cumple todos los criterios puestos.
+    // Whether the CRL meets all the criteria that were set.
     @Override
     public boolean match(CRL crl) {
         if (!(crl instanceof X509CRL)) {
@@ -239,8 +243,9 @@ public class X509CRLSelector implements CRLSelector {
         }
         X509CRL xcrl = (X509CRL) crl;
 
-        // El emisor va primero: es el criterio que decide si esta CRL siquiera habla de los
-        // certificados que interesan. Se compara por `X500Principal`, o sea por forma canonica.
+        // The issuer goes first: it is the criterion that decides whether this CRL even talks about
+        // the certificates of interest. It is compared by `X500Principal`, that is, by canonical
+        // form.
         if (this.issuerX500Principals != null) {
             if (!this.issuerX500Principals.contains(xcrl.getIssuerX500Principal())) {
                 return false;
@@ -249,9 +254,9 @@ public class X509CRLSelector implements CRLSelector {
 
         if (this.minCRL != null || this.maxCRL != null) {
             byte[] ext = xcrl.getExtensionValue(OID_CRL_NUMBER);
-            // Una CRL sin numero no puede satisfacer un criterio sobre el numero. Decir que no es
-            // el lado seguro: aceptarla dejaria pasar justamente la CRL vieja que el criterio
-            // queria descartar.
+            // A CRL with no number cannot satisfy a criterion about the number. Saying no is the
+            // safe side: accepting it would let through precisely the old CRL the criterion wanted
+            // to discard.
             if (ext == null) {
                 return false;
             }
@@ -276,8 +281,8 @@ public class X509CRLSelector implements CRLSelector {
         if (this.dateAndTime != null) {
             Date thisUpdate = xcrl.getThisUpdate();
             Date nextUpdate = xcrl.getNextUpdate();
-            // Sin `nextUpdate` la CRL no dice hasta cuando vale, asi que no se puede afirmar que
-            // cubra el instante pedido.
+            // Without `nextUpdate` the CRL does not say until when it is valid, so it cannot be
+            // asserted that it covers the instant asked for.
             if (nextUpdate == null) {
                 return false;
             }
@@ -288,9 +293,9 @@ public class X509CRLSelector implements CRLSelector {
         return true;
     }
 
-    // Copia con la que el store se puede quedar. La fecha y los dos conjuntos se copian; el resto es
-    // inmutable. Compartir los conjuntos seria el bug clasico: el store se queda con la copia y un
-    // `addIssuer` posterior le cambiaria el criterio a mitad de una busqueda.
+    // A copy the store can keep. The date and the two sets are copied; the rest is immutable.
+    // Sharing the sets would be the classic bug: the store keeps the copy and a later `add` over
+    // the original would change its criterion.
     @Override
     public Object clone() {
         try {
@@ -307,7 +312,7 @@ public class X509CRLSelector implements CRLSelector {
         }
     }
 
-    // El formato no esta especificado; los nombres de los campos son los del JDK.
+    // The format is not specified; the names of the fields are the JDK's.
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();

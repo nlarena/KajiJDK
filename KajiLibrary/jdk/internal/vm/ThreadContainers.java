@@ -5,129 +5,136 @@ import java.util.List;
 import java.util.stream.Stream;
 
 /**
- * KajiLibrary's jdk.internal.vm.ThreadContainers — el registro de {@link ThreadContainer}s vivos.
+ * KajiLibrary's jdk.internal.vm.ThreadContainers -- the registry of live {@link ThreadContainer}s.
  *
- * <p>Un contenedor sabe qué hilos tiene, pero nadie sabe qué contenedores hay: hacen falta las dos
- * cosas para que una herramienta de diagnóstico pueda recorrer el árbol entero de un proceso. Este
- * registro es la segunda mitad.
+ * <p>A container knows which threads it has, but nobody knows which containers there are: both
+ * things are needed for a diagnostic tool to be able to walk the whole tree of a process. This
+ * registry is the second half.
  *
- * <p>El registro es **débil por diseño en el JDK** --guarda referencias débiles, así que un contenedor
- * que nadie usa se recolecta y desaparece solo--. Acá se usa una lista con sincronización y
- * {@link #deregisterContainer} explícito, porque esta biblioteca no tiene referencias débiles con
- * cola. La diferencia visible: un contenedor que se abandona sin cerrar **queda en el registro**.
- * `SharedThreadContainer.close()` lo da de baja, que es el camino normal.
+ * <p>The registry is **weak by design in the JDK** --it keeps weak references, so a container
+ * nobody uses is collected and disappears by itself--. Here a synchronised list with an explicit
+ * {@link #deregisterContainer} is used. The note gave as the reason that this library has no weak
+ * references with a queue; it does now (`java.lang.ref.WeakReference` and `ReferenceQueue`, with
+ * the GC enqueuing cleared referents), so that reason no longer holds and the JDK's weak registry
+ * could be written. The visible difference remains while it is not: a container that is abandoned
+ * without being closed **stays in the registry**. `SharedThreadContainer.close()` deregisters it,
+ * which is the normal road.
  *
- * <p>{@link #root()} no es un contenedor real registrado, sino el que representa "todo lo que no está
- * adentro de ninguno": los hilos de la plataforma que arrancaron por su cuenta.
+ * <p>{@link #root()} is not a real registered container, but the one that represents "everything
+ * that is not inside any": the platform threads that started on their own.
  */
 public class ThreadContainers {
 
-    private static final List<ThreadContainer> REGISTRADOS = new ArrayList<ThreadContainer>();
-    private static final Object CANDADO = new Object();
-    private static final ThreadContainer RAIZ = new ContenedorRaiz();
+    private static final List<ThreadContainer> REGISTERED = new ArrayList<ThreadContainer>();
+    private static final Object LOCK = new Object();
+    private static final ThreadContainer ROOT = new RootContainer();
 
     private ThreadContainers() {
     }
 
     /**
-     * Si se pueden encontrar **todos** los hilos o sólo los que están dentro de un contenedor.
+     * Whether **all** the threads can be found or only the ones that are inside a container.
      *
-     * <p>Acá es `false`, y llegar a esa respuesta costó una prueba. La primera versión devolvía
-     * `true` con el argumento de que {@link #root()} enumera la plataforma entera recorriendo el
-     * `ThreadGroup` raíz. **Ese argumento es falso en esta VM**: `ThreadGroup` no lleva registro de
-     * sus miembros, `activeCount()` da 0 y `enumerate()` no devuelve nada, aun con hilos corriendo.
+     * <p>Here it is `false`, and reaching that answer took a test. The first version returned
+     * `true` on the argument that {@link #root()} enumerates the whole platform by walking the root
+     * `ThreadGroup`. **That argument is false on this VM**: `ThreadGroup` keeps no record of its
+     * members --it has an `addThread` seam, but nothing calls it--, so `activeCount()` gives 0 and
+     * `enumerate()` returns nothing, even with threads running.
      *
-     * <p>Así que un hilo que arrancó por su cuenta, fuera de todo contenedor, no se puede encontrar.
-     * Decir `false` es lo que permite que quien pregunte sepa que el recorrido va a estar incompleto,
-     * en vez de creer que vio todo.
+     * <p>So a thread that started on its own, outside every container, cannot be found. Saying
+     * `false` is what allows whoever asks to know that the walk is going to be incomplete, instead
+     * of believing they saw everything.
      */
     public static boolean trackAllThreads() {
         return false;
     }
 
     /**
-     * Registra un contenedor y devuelve la **llave** para darlo de baja.
+     * It registers a container and returns the **key** for deregistering it.
      *
-     * <p>Devuelve un `Object` opaco en vez del contenedor mismo: quien registra es el único que puede
-     * desregistrar, y con una llave el registro no depende de que el que llama conserve --y compare
-     * bien-- una referencia al contenedor.
+     * <p>The key is typed as an opaque `Object` so that the caller treats it as a key and hands it
+     * back to {@link #deregisterContainer} instead of relying on what it is. The note here said it
+     * was returned "instead of the container itself"; it **is** the container itself. The JDK's key
+     * is a weak reference to the container, and the `Object` type is what would let this one become
+     * that without touching any caller.
      */
     public static Object registerContainer(ThreadContainer container) {
         if (container == null) {
             throw new NullPointerException("container");
         }
-        synchronized (ThreadContainers.CANDADO) {
-            ThreadContainers.REGISTRADOS.add(container);
+        synchronized (ThreadContainers.LOCK) {
+            ThreadContainers.REGISTERED.add(container);
         }
         return container;
     }
 
-    /** Da de baja lo que {@link #registerContainer} devolvió. */
+    /** It deregisters what {@link #registerContainer} returned. */
     public static void deregisterContainer(Object key) {
-        synchronized (ThreadContainers.CANDADO) {
-            ThreadContainers.REGISTRADOS.remove(key);
+        synchronized (ThreadContainers.LOCK) {
+            ThreadContainers.REGISTERED.remove(key);
         }
     }
 
-    /** El contenedor raíz: los hilos que no están dentro de ninguno. */
+    /** The root container: the threads that are not inside any. */
     public static ThreadContainer root() {
-        return ThreadContainers.RAIZ;
+        return ThreadContainers.ROOT;
     }
 
-    /** El contenedor que encierra a `container`, deducido de la pila de ámbitos. */
+    /** The container that encloses `container`, deduced from the stack of scopes. */
     static ThreadContainer parent(ThreadContainer container) {
-        ThreadContainer arriba = container.enclosingScope(ThreadContainer.class);
-        if (arriba != null) {
-            return arriba;
+        ThreadContainer enclosing = container.enclosingScope(ThreadContainer.class);
+        if (enclosing != null) {
+            return enclosing;
         }
-        return container == ThreadContainers.RAIZ ? null : ThreadContainers.RAIZ;
+        return container == ThreadContainers.ROOT ? null : ThreadContainers.ROOT;
     }
 
-    /** Los contenedores registrados cuyo padre es `container`. */
+    /** The registered containers whose parent is `container`. */
     static Stream<ThreadContainer> children(ThreadContainer container) {
-        List<ThreadContainer> hijos = new ArrayList<ThreadContainer>();
-        synchronized (ThreadContainers.CANDADO) {
-            for (ThreadContainer c : ThreadContainers.REGISTRADOS) {
+        List<ThreadContainer> children = new ArrayList<ThreadContainer>();
+        synchronized (ThreadContainers.LOCK) {
+            for (ThreadContainer c : ThreadContainers.REGISTERED) {
                 if (ThreadContainers.parent(c) == container) {
-                    hijos.add(c);
+                    children.add(c);
                 }
             }
         }
-        return hijos.stream();
+        return children.stream();
     }
 
     /**
-     * El contenedor donde está `thread`, o el raíz si no está en ninguno.
+     * The container where `thread` is, or the root one if it is in none.
      *
-     * <p>Se busca preguntándole a cada contenedor registrado si tiene ese hilo. El JDK lo lee de un
-     * campo del propio `Thread`, que es O(1); acá no se puede tocar `Thread` desde este paquete, y la
-     * respuesta es la misma.
+     * <p>It is found by asking each registered container whether it has that thread. The JDK reads
+     * it from a field of the `Thread` itself, which is O(1); here `Thread` cannot be touched from
+     * this package, and the answer is the same.
      */
     public static ThreadContainer container(Thread thread) {
         if (thread == null) {
             throw new NullPointerException("thread");
         }
-        synchronized (ThreadContainers.CANDADO) {
-            for (ThreadContainer c : ThreadContainers.REGISTRADOS) {
+        synchronized (ThreadContainers.LOCK) {
+            for (ThreadContainer c : ThreadContainers.REGISTERED) {
                 if (c.threads().anyMatch(t -> t == thread)) {
                     return c;
                 }
             }
         }
-        return ThreadContainers.RAIZ;
+        return ThreadContainers.ROOT;
     }
 
-    // El contenedor raiz: representa "los hilos que no estan dentro de ningun contenedor".
+    // The root container: it represents "the threads that are not inside any container".
     //
-    // Los busca recorriendo el grupo de hilos raiz, y **en esta VM eso encuentra poco**: `ThreadGroup`
-    // no lleva registro de sus miembros (`enumerate` devuelve 0 aun con hilos vivos), asi que en la
-    // practica el recorrido da el hilo que pregunta y nada mas. Se deja el recorrido igual --el dia
-    // que `ThreadGroup` lleve registro, esto empieza a dar la respuesta completa sin tocar nada-- y
-    // se garantiza al menos el hilo actual, porque un contenedor que dice tener cero hilos mientras
-    // uno lo esta llamando estaria mintiendo. `trackAllThreads()` devuelve `false` por esto mismo.
-    private static final class ContenedorRaiz extends ThreadContainer {
+    // It finds them by walking the root thread group, and **on this VM that finds little**:
+    // `ThreadGroup` keeps no record of its members (`enumerate` returns 0 even with live threads),
+    // so in practice the walk gives the asking thread and nothing else. The walk is left all the
+    // same --the day `ThreadGroup` keeps a record, this starts giving the complete answer without
+    // touching anything-- and at least the current thread is guaranteed, because a container that
+    // says it has zero threads while one is calling it would be lying. `trackAllThreads()` returns
+    // `false` for this very reason.
+    private static final class RootContainer extends ThreadContainer {
 
-        ContenedorRaiz() {
+        RootContainer() {
             super(true);
         }
 
@@ -149,17 +156,17 @@ public class ThreadContainers {
             }
             Thread[] buf = new Thread[g.activeCount() + 8];
             int n = g.enumerate(buf, true);
-            List<Thread> vivos = new ArrayList<Thread>();
+            List<Thread> live = new ArrayList<Thread>();
             for (int i = 0; i < n; i++) {
                 if (buf[i] != null) {
-                    vivos.add(buf[i]);
+                    live.add(buf[i]);
                 }
             }
-            Thread yo = Thread.currentThread();
-            if (!vivos.contains(yo)) {
-                vivos.add(yo);
+            Thread self = Thread.currentThread();
+            if (!live.contains(self)) {
+                live.add(self);
             }
-            return vivos.stream();
+            return live.stream();
         }
     }
 }

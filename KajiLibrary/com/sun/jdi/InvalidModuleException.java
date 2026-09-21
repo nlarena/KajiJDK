@@ -1,21 +1,21 @@
 package com.sun.jdi;
 
 /**
- * InvalidModuleException de la maquina depurada.
+ * InvalidModuleException of the debugged machine.
  *
  * @since 1.3
  */
 public class InvalidModuleException extends RuntimeException {
 
-    /** Sin detalle. */
+    /** With no detail. */
     public InvalidModuleException() {
         super();
     }
 
     /**
-     * Con un mensaje.
+     * With a message.
      *
-     * @param s el mensaje
+     * @param s the message
      */
     public InvalidModuleException(String s) {
         super(s);

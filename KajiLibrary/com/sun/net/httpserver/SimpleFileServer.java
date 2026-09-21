@@ -5,20 +5,21 @@ import java.net.InetSocketAddress;
 import java.nio.file.Path;
 
 /**
- * El servidor de archivos que respalda al comando {@code jwebserver}.
+ * The file server that backs the {@code jwebserver} command.
  *
- * <h2>Que es y que no</h2>
+ * <h2>What it is and what it is not</h2>
  *
- * <p>Es para servir un directorio en una prueba o una demo, y su documentacion lo dice de frente:
- * <strong>no esta pensado para produccion</strong>. Solo atiende {@code GET} y {@code HEAD}, no
- * tiene autenticacion ni cifrado, y no interpreta nada — sirve bytes.
+ * <p>It is for serving a directory in a test or a demo, and its documentation says so plainly:
+ * <strong>it is not meant for production</strong>. It only attends {@code GET} and
+ * {@code HEAD}, it has neither authentication nor encryption, and it interprets nothing -- it
+ * serves bytes.
  *
- * <p>La ruta que recibe tiene que ser <strong>absoluta</strong>, y eso no es formalismo: es lo que
- * fija la raiz contra la que se resuelve cada pedido, o sea lo unico que impide que un
- * {@code ../../} se lleve el resto del disco.
+ * <p>The path it receives has to be <strong>absolute</strong>, and that is not formalism: it is
+ * what fixes the root each request is resolved against, that is, the only thing that keeps a
+ * {@code ../../} from taking the rest of the disk away.
  *
- * <p>Sin proveedor de servidor instalado, {@link #createFileServer} tira
- * {@link UnsupportedOperationException} — ver {@link HttpServer}.
+ * <p>With no server provider installed, {@link #createFileServer} throws
+ * {@link UnsupportedOperationException} -- see {@link HttpServer}.
  */
 public final class SimpleFileServer {
 
@@ -26,50 +27,50 @@ public final class SimpleFileServer {
     }
 
     /**
-     * Cuanto registra el filtro de salida.
+     * How much the output filter records.
      *
-     * <p>{@link #NONE} no es lo mismo que no poner filtro: sigue existiendo en la cadena, y la
-     * diferencia se nota si alguien la recorre.
+     * <p>{@link #NONE} is not the same as setting no filter: it goes on existing in the chain, and
+     * the difference shows if somebody walks it.
      */
     public enum OutputLevel {
 
-        /** Nada. */
+        /** Nothing. */
         NONE,
-        /** Una linea por pedido: metodo, URI, codigo. */
+        /** One line per request: method, URI, code. */
         INFO,
-        /** Ademas, todos los encabezados del pedido y de la respuesta. */
+        /** Besides, every header of the request and of the response. */
         VERBOSE
     }
 
     /**
-     * Un servidor que sirve {@code rootDirectory}.
+     * A server that serves {@code rootDirectory}.
      *
-     * @throws IllegalArgumentException si la ruta no es absoluta o no es un directorio
-     * @throws UnsupportedOperationException si no hay proveedor de servidor
+     * @throws IllegalArgumentException if the path is not absolute or is not a directory
+     * @throws UnsupportedOperationException if there is no server provider
      */
     public static HttpServer createFileServer(InetSocketAddress addr, Path rootDirectory,
             OutputLevel outputLevel) {
         throw new UnsupportedOperationException(
-                "esta VM no trae proveedor de HttpServer; ver com.sun.net.httpserver.spi");
+                "this VM brings no HttpServer provider; see com.sun.net.httpserver.spi");
     }
 
     /**
-     * Solo el manejador, para montarlo en una ruta de un servidor propio.
+     * Only the handler, in order to mount it on a path of a server of one's own.
      *
-     * @throws IllegalArgumentException si la ruta no es absoluta o no es un directorio
+     * @throws IllegalArgumentException if the path is not absolute or is not a directory
      */
     public static HttpHandler createFileHandler(Path rootDirectory) {
         throw new UnsupportedOperationException(
-                "esta VM no implementa el manejador de archivos de jwebserver");
+                "this VM does not implement jwebserver's file handler");
     }
 
     /**
-     * Solo el filtro de registro, que sirve para cualquier manejador y no solo para este.
+     * Only the logging filter, which serves for any handler and not only for this one.
      *
-     * @throws NullPointerException si falta la salida o el nivel
+     * @throws NullPointerException if the output or the level are missing
      */
     public static Filter createOutputFilter(OutputStream out, OutputLevel outputLevel) {
         throw new UnsupportedOperationException(
-                "esta VM no implementa el filtro de registro de jwebserver");
+                "this VM does not implement jwebserver's logging filter");
     }
 }

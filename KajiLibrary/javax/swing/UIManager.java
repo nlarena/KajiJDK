@@ -15,37 +15,40 @@ import javax.swing.border.Border;
 import javax.swing.plaf.ComponentUI;
 
 /**
- * El registro global del aspecto grafico: quien manda y con que valores.
+ * The graphical look and feel's global registry: who rules and with what values.
  *
- * <h2>Que guarda</h2>
+ * <h2>What it keeps</h2>
  *
- * <p>Tres cosas. El aspecto grafico actual, su tabla de valores, y la lista de aspectos auxiliares
- * --los que no dibujan pero quieren enterarse de todo, como un lector de pantalla--.
+ * <p>Three things. The current graphical look and feel, its table of values, and the list of
+ * auxiliary looks and feels -- those that do not draw but want to learn about everything, such
+ * as a screen reader --.
  *
- * <p>Todo es estatico porque un proceso tiene un aspecto grafico y no varios: dos ventanas de la
- * misma aplicacion con botones de distinto aspecto seria un error, no una funcionalidad.
+ * <p>Everything is static because a process has one graphical look and feel and not several:
+ * two windows of the same application with buttons of a different look would be a mistake, not
+ * a feature.
  *
- * <h2>Por que casi todos los metodos son atajos</h2>
+ * <h2>Why almost every method is a shortcut</h2>
  *
- * <p>{@link #getColor}, {@link #getFont} y compania son lo mismo que preguntarle a
- * {@link #getDefaults}. Estan porque el codigo que los usa los usa mucho, y
- * {@code UIManager.getColor("Button.background")} se lee mejor que la version larga.
+ * <p>{@link #getColor}, {@link #getFont} and company are the same as asking
+ * {@link #getDefaults}. They are there because the code that uses them uses them a lot, and
+ * {@code UIManager.getColor("Button.background")} reads better than the long version.
  *
- * <h2>Los aspectos auxiliares</h2>
+ * <h2>The auxiliary looks and feels</h2>
  *
- * <p>Se agregan con {@link #addAuxiliaryLookAndFeel} y a partir de ahi cada componente recibe una
- * interfaz grafica que reparte entre el principal y ellos; ver {@code javax.swing.plaf.multi}. La
- * lista arranca en {@code null} y no en vacia, y {@link #getAuxiliaryLookAndFeels} devuelve
- * {@code null} mientras no haya ninguno: es lo que le permite a quien pregunta saltearse el trabajo
- * de multiplexar en el caso normal, que es que no haya.
+ * <p>They are added with {@link #addAuxiliaryLookAndFeel} and from then on each component
+ * receives a graphical interface that hands out between the main one and them; see
+ * {@code javax.swing.plaf.multi}. The list starts at {@code null} and not empty, and
+ * {@link #getAuxiliaryLookAndFeels} returns {@code null} while there is none: it is what allows
+ * whoever asks to skip the work of multiplexing in the normal case, which is that there is
+ * none.
  *
- * <h2>Estado en esta biblioteca</h2>
+ * <h2>State in this library</h2>
  *
- * <p>El registro funciona: se puede fijar un aspecto, leer sus valores, agregar auxiliares y
- * escuchar los cambios. Lo que no hay es ningun aspecto grafico implementado, asi que
- * {@link #setLookAndFeel(String)} con cualquiera de los nombres que devuelve
- * {@link #getInstalledLookAndFeels} falla al cargar la clase. Esos nombres son los del JDK y son
- * correctos como nombres; lo que falta son las clases.
+ * <p>The registry works: a look and feel can be fixed, its values read, auxiliary ones added
+ * and the changes listened to. What there is not is any graphical look and feel implemented, so
+ * {@link #setLookAndFeel(String)} with any of the names {@link #getInstalledLookAndFeels}
+ * returns fails on loading the class. Those names are the JDK's and are correct as names; what
+ * is missing are the classes.
  *
  * @since 1.2
  */
@@ -53,9 +56,9 @@ public class UIManager implements Serializable {
 
     private static final long serialVersionUID = -5547977484831201933L;
 
-    private static final PropertyChangeSupport CAMBIOS = new PropertyChangeSupport(UIManager.class);
+    private static final PropertyChangeSupport CHANGES = new PropertyChangeSupport(UIManager.class);
 
-    private static LookAndFeelInfo[] instalados = {
+    private static LookAndFeelInfo[] installed = {
         new LookAndFeelInfo("Metal", "javax.swing.plaf.metal.MetalLookAndFeel"),
         new LookAndFeelInfo("Nimbus", "javax.swing.plaf.nimbus.NimbusLookAndFeel"),
         new LookAndFeelInfo("CDE/Motif", "com.sun.java.swing.plaf.motif.MotifLookAndFeel"),
@@ -64,28 +67,28 @@ public class UIManager implements Serializable {
                 "com.sun.java.swing.plaf.windows.WindowsClassicLookAndFeel"),
     };
 
-    private static LookAndFeel actual;
-    private static UIDefaults valores = new UIDefaults();
-    private static List<LookAndFeel> auxiliares;
+    private static LookAndFeel current;
+    private static UIDefaults values = new UIDefaults();
+    private static List<LookAndFeel> auxiliary;
 
-    /** Un registro; todo lo util es estatico. */
+    /** A registry; everything useful is static. */
     public UIManager() {
     }
 
     /**
-     * Los aspectos graficos que se pueden elegir.
+     * The graphical looks and feels that can be chosen.
      *
-     * @return un arreglo nuevo con los que hay
+     * @return a new array with those there are
      */
     public static LookAndFeelInfo[] getInstalledLookAndFeels() {
-        return instalados.clone();
+        return installed.clone();
     }
 
     /**
-     * Reemplaza la lista de aspectos disponibles.
+     * It replaces the list of available looks and feels.
      *
-     * @param infos los aspectos
-     * @throws NullPointerException si el arreglo o alguno de sus elementos es {@code null}
+     * @param infos the looks and feels
+     * @throws NullPointerException if the array or any of its elements is {@code null}
      */
     public static void setInstalledLookAndFeels(LookAndFeelInfo[] infos) {
         if (infos == null) {
@@ -96,46 +99,46 @@ public class UIManager implements Serializable {
                 throw new NullPointerException("infos[" + i + "]");
             }
         }
-        instalados = infos.clone();
+        installed = infos.clone();
     }
 
     /**
-     * Agrega un aspecto a la lista de disponibles.
+     * It adds a look and feel to the list of available ones.
      *
-     * @param info el aspecto
+     * @param info the look and feel
      */
     public static void installLookAndFeel(LookAndFeelInfo info) {
-        final LookAndFeelInfo[] nuevos = new LookAndFeelInfo[instalados.length + 1];
-        System.arraycopy(instalados, 0, nuevos, 0, instalados.length);
-        nuevos[instalados.length] = info;
-        instalados = nuevos;
+        final LookAndFeelInfo[] added = new LookAndFeelInfo[installed.length + 1];
+        System.arraycopy(installed, 0, added, 0, installed.length);
+        added[installed.length] = info;
+        installed = added;
     }
 
     /**
-     * Agrega un aspecto a la lista de disponibles.
+     * It adds a look and feel to the list of available ones.
      *
-     * @param name el nombre para mostrar
-     * @param className la clase que lo implementa
+     * @param name the name to show
+     * @param className the class that implements it
      */
     public static void installLookAndFeel(String name, String className) {
         installLookAndFeel(new LookAndFeelInfo(name, className));
     }
 
     /**
-     * El aspecto grafico actual.
+     * The current graphical look and feel.
      *
-     * @return el aspecto, o {@code null} si no se fijo ninguno
+     * @return the look and feel, or {@code null} if none was fixed
      */
     public static LookAndFeel getLookAndFeel() {
-        return actual;
+        return current;
     }
 
     /**
-     * Construye el aspecto grafico de esa clase.
+     * It builds that class's graphical look and feel.
      *
-     * @param className la clase
-     * @return el aspecto
-     * @throws UnsupportedLookAndFeelException si no se pudo construir
+     * @param className the class
+     * @return the look and feel
+     * @throws UnsupportedLookAndFeelException if it could not be built
      */
     public static LookAndFeel createLookAndFeel(String className)
             throws UnsupportedLookAndFeelException {
@@ -147,42 +150,44 @@ public class UIManager implements Serializable {
     }
 
     /**
-     * Fija el aspecto grafico.
+     * It fixes the graphical look and feel.
      *
-     * <p>El orden es el que importa: primero se desinstala el anterior, despues se instala el nuevo,
-     * despues se toma su tabla de valores, y recien al final se avisa. Avisar antes haria que quien
-     * escucha redibujara con la tabla vieja.
+     * <p>The order is what matters: first the previous one is uninstalled, then the new one is
+     * installed, then its table of values is taken, and only at the end is notice given. Giving
+     * notice earlier would make whoever listens redraw with the old table.
      *
-     * @param newLookAndFeel el aspecto, o {@code null} para dejar de tener uno
-     * @throws UnsupportedLookAndFeelException si ese aspecto no sirve en esta plataforma
+     * @param newLookAndFeel the look and feel, or {@code null} to stop having one
+     * @throws UnsupportedLookAndFeelException if that look and feel does not serve on this
+     *     platform
      */
     public static void setLookAndFeel(LookAndFeel newLookAndFeel)
             throws UnsupportedLookAndFeelException {
         if (newLookAndFeel != null && !newLookAndFeel.isSupportedLookAndFeel()) {
-            throw new UnsupportedLookAndFeelException(newLookAndFeel + " no esta soportado");
+            throw new UnsupportedLookAndFeelException(newLookAndFeel + " is not supported");
         }
-        final LookAndFeel anterior = actual;
-        if (anterior != null) {
-            anterior.uninitialize();
+        final LookAndFeel previous = current;
+        if (previous != null) {
+            previous.uninitialize();
         }
-        actual = newLookAndFeel;
+        current = newLookAndFeel;
         if (newLookAndFeel != null) {
             newLookAndFeel.initialize();
-            valores = newLookAndFeel.getDefaults();
+            values = newLookAndFeel.getDefaults();
         } else {
-            valores = new UIDefaults();
+            values = new UIDefaults();
         }
-        CAMBIOS.firePropertyChange("lookAndFeel", anterior, newLookAndFeel);
+        CHANGES.firePropertyChange("lookAndFeel", previous, newLookAndFeel);
     }
 
     /**
-     * Fija el aspecto grafico por el nombre de su clase.
+     * It fixes the graphical look and feel by its class name.
      *
-     * @param className la clase
-     * @throws ClassNotFoundException si no esta la clase
-     * @throws InstantiationException si no se pudo construir
-     * @throws IllegalAccessException si no se pudo acceder al constructor
-     * @throws UnsupportedLookAndFeelException si ese aspecto no sirve en esta plataforma
+     * @param className the class
+     * @throws ClassNotFoundException if the class is not there
+     * @throws InstantiationException if it could not be built
+     * @throws IllegalAccessException if the constructor could not be accessed
+     * @throws UnsupportedLookAndFeelException if that look and feel does not serve on this
+     *     platform
      */
     public static void setLookAndFeel(String className) throws ClassNotFoundException,
             InstantiationException, IllegalAccessException, UnsupportedLookAndFeelException {
@@ -201,9 +206,9 @@ public class UIManager implements Serializable {
     }
 
     /**
-     * El aspecto grafico propio de esta plataforma.
+     * This platform's own graphical look and feel.
      *
-     * @return el nombre de la clase
+     * @return the class's name
      */
     public static String getSystemLookAndFeelClassName() {
         final String so = System.getProperty("os.name");
@@ -214,270 +219,270 @@ public class UIManager implements Serializable {
     }
 
     /**
-     * El aspecto grafico que se ve igual en todas las plataformas.
+     * The graphical look and feel that looks the same on every platform.
      *
-     * @return el nombre de la clase
+     * @return the class's name
      */
     public static String getCrossPlatformLookAndFeelClassName() {
         return "javax.swing.plaf.metal.MetalLookAndFeel";
     }
 
     /**
-     * La tabla de valores en uso.
+     * The table of values in use.
      *
-     * @return la tabla
+     * @return the table
      */
     public static UIDefaults getDefaults() {
-        return valores;
+        return values;
     }
 
     /**
-     * La tabla de valores del aspecto grafico actual.
+     * The current graphical look and feel's table of values.
      *
-     * @return la tabla
+     * @return the table
      */
     public static UIDefaults getLookAndFeelDefaults() {
-        return valores;
+        return values;
     }
 
     /**
-     * La tipografia de esa clave.
+     * That key's typeface.
      *
-     * @param key la clave
-     * @return la tipografia, o {@code null}
+     * @param key the key
+     * @return the typeface, or {@code null}
      */
     public static Font getFont(Object key) {
         return getDefaults().getFont(key);
     }
 
     /**
-     * La tipografia de esa clave en ese idioma.
+     * That key's typeface in that language.
      *
-     * @param key la clave
-     * @param l el idioma
-     * @return la tipografia, o {@code null}
+     * @param key the key
+     * @param l the language
+     * @return the typeface, or {@code null}
      */
     public static Font getFont(Object key, Locale l) {
         return getDefaults().getFont(key, l);
     }
 
     /**
-     * El color de esa clave.
+     * That key's colour.
      *
-     * @param key la clave
-     * @return el color, o {@code null}
+     * @param key the key
+     * @return the colour, or {@code null}
      */
     public static Color getColor(Object key) {
         return getDefaults().getColor(key);
     }
 
     /**
-     * El color de esa clave en ese idioma.
+     * That key's colour in that language.
      *
-     * @param key la clave
-     * @param l el idioma
-     * @return el color, o {@code null}
+     * @param key the key
+     * @param l the language
+     * @return the colour, or {@code null}
      */
     public static Color getColor(Object key, Locale l) {
         return getDefaults().getColor(key, l);
     }
 
     /**
-     * El icono de esa clave.
+     * That key's icon.
      *
-     * @param key la clave
-     * @return el icono, o {@code null}
+     * @param key the key
+     * @return the icon, or {@code null}
      */
     public static Icon getIcon(Object key) {
         return getDefaults().getIcon(key);
     }
 
     /**
-     * El icono de esa clave en ese idioma.
+     * That key's icon in that language.
      *
-     * @param key la clave
-     * @param l el idioma
-     * @return el icono, o {@code null}
+     * @param key the key
+     * @param l the language
+     * @return the icon, or {@code null}
      */
     public static Icon getIcon(Object key, Locale l) {
         return getDefaults().getIcon(key, l);
     }
 
     /**
-     * El borde de esa clave.
+     * That key's border.
      *
-     * @param key la clave
-     * @return el borde, o {@code null}
+     * @param key the key
+     * @return the border, or {@code null}
      */
     public static Border getBorder(Object key) {
         return getDefaults().getBorder(key);
     }
 
     /**
-     * El borde de esa clave en ese idioma.
+     * That key's border in that language.
      *
-     * @param key la clave
-     * @param l el idioma
-     * @return el borde, o {@code null}
+     * @param key the key
+     * @param l the language
+     * @return the border, or {@code null}
      */
     public static Border getBorder(Object key, Locale l) {
         return getDefaults().getBorder(key, l);
     }
 
     /**
-     * El texto de esa clave.
+     * That key's text.
      *
-     * @param key la clave
-     * @return el texto, o {@code null}
+     * @param key the key
+     * @return the text, or {@code null}
      */
     public static String getString(Object key) {
         return getDefaults().getString(key);
     }
 
     /**
-     * El texto de esa clave en ese idioma.
+     * That key's text in that language.
      *
-     * @param key la clave
-     * @param l el idioma
-     * @return el texto, o {@code null}
+     * @param key the key
+     * @param l the language
+     * @return the text, or {@code null}
      */
     public static String getString(Object key, Locale l) {
         return getDefaults().getString(key, l);
     }
 
     /**
-     * El numero entero de esa clave.
+     * That key's integer number.
      *
-     * @param key la clave
-     * @return el numero, o cero
+     * @param key the key
+     * @return the number, or zero
      */
     public static int getInt(Object key) {
         return getDefaults().getInt(key);
     }
 
     /**
-     * El numero entero de esa clave en ese idioma.
+     * That key's integer number in that language.
      *
-     * @param key la clave
-     * @param l el idioma
-     * @return el numero, o cero
+     * @param key the key
+     * @param l the language
+     * @return the number, or zero
      */
     public static int getInt(Object key, Locale l) {
         return getDefaults().getInt(key, l);
     }
 
     /**
-     * El valor de verdad de esa clave.
+     * That key's truth value.
      *
-     * @param key la clave
-     * @return el valor, o falso
+     * @param key the key
+     * @return the value, or false
      */
     public static boolean getBoolean(Object key) {
         return getDefaults().getBoolean(key);
     }
 
     /**
-     * El valor de verdad de esa clave en ese idioma.
+     * That key's truth value in that language.
      *
-     * @param key la clave
-     * @param l el idioma
-     * @return el valor, o falso
+     * @param key the key
+     * @param l the language
+     * @return the value, or false
      */
     public static boolean getBoolean(Object key, Locale l) {
         return getDefaults().getBoolean(key, l);
     }
 
     /**
-     * Los margenes de esa clave.
+     * That key's margins.
      *
-     * @param key la clave
-     * @return los margenes, o {@code null}
+     * @param key the key
+     * @return the margins, or {@code null}
      */
     public static Insets getInsets(Object key) {
         return getDefaults().getInsets(key);
     }
 
     /**
-     * Los margenes de esa clave en ese idioma.
+     * That key's margins in that language.
      *
-     * @param key la clave
-     * @param l el idioma
-     * @return los margenes, o {@code null}
+     * @param key the key
+     * @param l the language
+     * @return the margins, or {@code null}
      */
     public static Insets getInsets(Object key, Locale l) {
         return getDefaults().getInsets(key, l);
     }
 
     /**
-     * El tamano de esa clave.
+     * That key's size.
      *
-     * @param key la clave
-     * @return el tamano, o {@code null}
+     * @param key the key
+     * @return the size, or {@code null}
      */
     public static Dimension getDimension(Object key) {
         return getDefaults().getDimension(key);
     }
 
     /**
-     * El tamano de esa clave en ese idioma.
+     * That key's size in that language.
      *
-     * @param key la clave
-     * @param l el idioma
-     * @return el tamano, o {@code null}
+     * @param key the key
+     * @param l the language
+     * @return the size, or {@code null}
      */
     public static Dimension getDimension(Object key, Locale l) {
         return getDefaults().getDimension(key, l);
     }
 
     /**
-     * El valor de esa clave.
+     * That key's value.
      *
-     * @param key la clave
-     * @return el valor, o {@code null}
+     * @param key the key
+     * @return the value, or {@code null}
      */
     public static Object get(Object key) {
         return getDefaults().get(key);
     }
 
     /**
-     * El valor de esa clave en ese idioma.
+     * That key's value in that language.
      *
-     * @param key la clave
-     * @param l el idioma
-     * @return el valor, o {@code null}
+     * @param key the key
+     * @param l the language
+     * @return the value, or {@code null}
      */
     public static Object get(Object key, Locale l) {
         return getDefaults().get(key, l);
     }
 
     /**
-     * Guarda un valor.
+     * It keeps a value.
      *
-     * @param key la clave
-     * @param value el valor
-     * @return el valor anterior, o {@code null}
+     * @param key the key
+     * @param value the value
+     * @return the previous value, or {@code null}
      */
     public static Object put(Object key, Object value) {
         return getDefaults().put(key, value);
     }
 
     /**
-     * La interfaz grafica que le toca a ese componente.
+     * The graphical interface that falls to that component.
      *
-     * @param target el componente
-     * @return la interfaz grafica, o {@code null}
+     * @param target the component
+     * @return the graphical interface, or {@code null}
      */
     public static ComponentUI getUI(JComponent target) {
         return getDefaults().getUI(target);
     }
 
     /**
-     * Agrega un aspecto auxiliar.
+     * It adds an auxiliary look and feel.
      *
-     * <p>Un auxiliar no dibuja: recibe las mismas llamadas que el principal para poder enterarse.
-     * De eso viven los lectores de pantalla y las ayudas contextuales.
+     * <p>An auxiliary one does not draw: it receives the same calls as the main one so as to be
+     * able to learn about things. Screen readers and contextual helps live on that.
      *
-     * @param laf el aspecto auxiliar
+     * @param laf the auxiliary look and feel
      */
     public static void addAuxiliaryLookAndFeel(LookAndFeel laf) {
         if (laf == null) {
@@ -487,85 +492,86 @@ public class UIManager implements Serializable {
             return;
         }
         synchronized (UIManager.class) {
-            if (auxiliares == null) {
-                auxiliares = new ArrayList<LookAndFeel>();
+            if (auxiliary == null) {
+                auxiliary = new ArrayList<LookAndFeel>();
             }
-            if (!auxiliares.contains(laf)) {
-                auxiliares.add(laf);
+            if (!auxiliary.contains(laf)) {
+                auxiliary.add(laf);
                 laf.initialize();
             }
         }
     }
 
     /**
-     * Saca un aspecto auxiliar.
+     * It removes an auxiliary look and feel.
      *
-     * @param laf el aspecto auxiliar
-     * @return cierto si estaba
+     * @param laf the auxiliary look and feel
+     * @return true if it was there
      */
     public static boolean removeAuxiliaryLookAndFeel(LookAndFeel laf) {
         synchronized (UIManager.class) {
-            if (auxiliares == null || !auxiliares.remove(laf)) {
+            if (auxiliary == null || !auxiliary.remove(laf)) {
                 return false;
             }
             laf.uninitialize();
-            if (auxiliares.isEmpty()) {
-                // Vuelve a null y no queda vacia: `getAuxiliaryLookAndFeels` promete null cuando no
-                // hay ninguno, y eso es lo que le permite a quien pregunta saltearse el
-                // multiplexado en el caso normal.
-                auxiliares = null;
+            if (auxiliary.isEmpty()) {
+                // It goes back to null and is not left empty: `getAuxiliaryLookAndFeels` promises
+                // null
+                                // when there is none, and that is what allows whoever asks to skip
+                                // the multiplexing in the normal case.
+                auxiliary = null;
             }
             return true;
         }
     }
 
     /**
-     * Los aspectos auxiliares.
+     * The auxiliary looks and feels.
      *
-     * @return un arreglo nuevo, o {@code null} si no hay ninguno
+     * @return a new array, or {@code null} if there is none
      */
     public static LookAndFeel[] getAuxiliaryLookAndFeels() {
         synchronized (UIManager.class) {
-            if (auxiliares == null || auxiliares.isEmpty()) {
+            if (auxiliary == null || auxiliary.isEmpty()) {
                 return null;
             }
-            return auxiliares.toArray(new LookAndFeel[auxiliares.size()]);
+            return auxiliary.toArray(new LookAndFeel[auxiliary.size()]);
         }
     }
 
     /**
-     * Registra un oyente de los cambios del registro.
+     * It registers a listener of the registry's changes.
      *
-     * @param listener el oyente
+     * @param listener the listener
      */
     public static void addPropertyChangeListener(PropertyChangeListener listener) {
-        CAMBIOS.addPropertyChangeListener(listener);
+        CHANGES.addPropertyChangeListener(listener);
     }
 
     /**
-     * Saca un oyente.
+     * It removes a listener.
      *
-     * @param listener el oyente
+     * @param listener the listener
      */
     public static void removePropertyChangeListener(PropertyChangeListener listener) {
-        CAMBIOS.removePropertyChangeListener(listener);
+        CHANGES.removePropertyChangeListener(listener);
     }
 
     /**
-     * Los oyentes registrados.
+     * The registered listeners.
      *
-     * @return los oyentes
+     * @return the listeners
      */
     public static PropertyChangeListener[] getPropertyChangeListeners() {
-        return CAMBIOS.getPropertyChangeListeners();
+        return CHANGES.getPropertyChangeListeners();
     }
 
     /**
-     * El nombre y la clase de un aspecto grafico disponible.
+     * An available graphical look and feel's name and class.
      *
-     * <p>Guarda el <strong>nombre de la clase</strong> y no la clase: la lista se arma al arrancar y
-     * cargar todos los aspectos para poder ofrecerlos costaria mucho mas de lo que vale ofrecer los
-     * que nadie va a elegir.
+     * <p>It keeps the <strong>class's name</strong> and not the class: the list is built at
+     * start-up and loading every look and feel in order to be able to offer them would cost much
+     * more than offering those nobody is going to choose is worth.
      *
      * @since 1.2
      */
@@ -575,10 +581,10 @@ public class UIManager implements Serializable {
         private final String className;
 
         /**
-         * Con ese nombre y esa clase.
+         * With that name and that class.
          *
-         * @param name el nombre para mostrar
-         * @param className la clase que lo implementa
+         * @param name the name to show
+         * @param className the class that implements it
          */
         public LookAndFeelInfo(String name, String className) {
             this.name = name;
@@ -586,27 +592,27 @@ public class UIManager implements Serializable {
         }
 
         /**
-         * El nombre para mostrar.
+         * The name to show.
          *
-         * @return el nombre
+         * @return the name
          */
         public String getName() {
             return name;
         }
 
         /**
-         * La clase que lo implementa.
+         * The class that implements it.
          *
-         * @return el nombre de la clase
+         * @return the class's name
          */
         public String getClassName() {
             return className;
         }
 
         /**
-         * Una descripcion, para el registro.
+         * A description, for the record.
          *
-         * @return el nombre y la clase
+         * @return the name and the class
          */
         @Override
         public String toString() {

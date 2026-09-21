@@ -18,25 +18,27 @@ import javax.swing.plaf.ComponentUI;
 import javax.swing.plaf.PopupMenuUI;
 
 /**
- * Un menu que aparece flotando: el contextual o el que despliega un {@link JMenu}.
+ * A menu that appears floating: the context one or the one a {@link JMenu} drops down.
  *
- * <h2>No es un contenedor mas</h2>
+ * <h2>It is not just another container</h2>
  *
- * <p>Un menu desplegable no vive donde esta puesto: aparece encima de todo y puede salirse de la
- * ventana. Por eso {@link #setVisible} no hace lo que en otro componente -- pide una
- * {@link Popup} al aspecto y la muestra --, y por eso tiene un <em>invocador</em>: el componente
- * desde el que se abrio, que es contra quien se miden las coordenadas.
+ * <p>A popup menu does not live where it is set: it appears on top of everything and may go
+ * outside the window. That is why {@link #setVisible} does not do what it does in another
+ * component -- it asks the look and feel for a {@link Popup} and shows it --, and that is why
+ * it has an <em>invoker</em>: the component it was opened from, which is what the coordinates
+ * are measured against.
  *
- * <h2>Es un elemento de menu</h2>
+ * <h2>It is a menu element</h2>
  *
- * <p>Implementa {@link MenuElement}, asi que participa del recorrido con el teclado y el mouse
- * junto con sus opciones. Es lo que hace que moverse con las flechas entre un menu y su submenu
- * funcione sin que ninguno de los dos sepa del otro.
+ * <p>It implements {@link MenuElement}, so it takes part in the walk with the keyboard and the
+ * mouse along with its options. It is what makes moving with the arrows between a menu and its
+ * submenu work without either of the two knowing about the other.
  *
- * <h2>Liviano o pesado</h2>
+ * <h2>Lightweight or heavyweight</h2>
  *
- * <p>{@link #setLightWeightPopupEnabled} pide dibujarlo adentro de la ventana. Es un pedido, no una
- * orden: si no entra, se usa una ventana propia igual. Ver la nota de {@link PopupFactory}.
+ * <p>{@link #setLightWeightPopupEnabled} asks for it to be drawn inside the window. It is a
+ * request, not an order: if it does not fit, a window of its own is used all the same. See
+ * {@link PopupFactory}'s note.
  */
 public class JPopupMenu extends JComponent implements Accessible, MenuElement {
 
@@ -57,7 +59,7 @@ public class JPopupMenu extends JComponent implements Accessible, MenuElement {
     private Dimension popupSize;
     private AccessibleContext accessibleContext;
 
-    /** Si los desplegables nuevos arrancan pidiendo la forma liviana. */
+    /** Whether new drop-downs start by asking for the lightweight form. */
     public static void setDefaultLightWeightPopupEnabled(boolean aFlag) {
         defaultLWPopupEnabled = aFlag;
     }
@@ -66,12 +68,12 @@ public class JPopupMenu extends JComponent implements Accessible, MenuElement {
         return defaultLWPopupEnabled;
     }
 
-    /** Un menu desplegable vacio. */
+    /** An empty popup menu. */
     public JPopupMenu() {
         this(null);
     }
 
-    /** Un menu desplegable con ese titulo. */
+    /** A popup menu with that title. */
     public JPopupMenu(String label) {
         this.label = label;
         lightWeightPopup = getDefaultLightWeightPopupEnabled();
@@ -100,11 +102,11 @@ public class JPopupMenu extends JComponent implements Accessible, MenuElement {
     }
 
     /**
-     * Atiende las teclas del menu.
+     * It attends the menu's keys.
      *
-     * <p>Con el menu abierto, las flechas y el Escape no van al componente que tenga el foco sino
-     * al recorrido del menu. Si no, abrir un menu sobre un campo de texto haria que las flechas
-     * movieran el cursor en lugar de recorrer las opciones.
+     * <p>With the menu open, the arrows and Escape do not go to the component that has the focus
+     * but to the menu's walk. Otherwise, opening a menu over a text field would make the arrows
+     * move the caret instead of walking the options.
      */
     protected void processKeyEvent(KeyEvent evt) {
         MenuSelectionManager.defaultManager().processKeyEvent(evt);
@@ -127,12 +129,12 @@ public class JPopupMenu extends JComponent implements Accessible, MenuElement {
         return menuItem;
     }
 
-    /** Agrega una opcion con ese texto. */
+    /** It adds an option with that text. */
     public JMenuItem add(String s) {
         return add(new JMenuItem(s));
     }
 
-    /** Agrega una opcion que dispara esa accion. */
+    /** It adds an option that fires that action. */
     public JMenuItem add(Action a) {
         JMenuItem mi = createActionComponent(a);
         mi.setAction(a);
@@ -148,11 +150,11 @@ public class JPopupMenu extends JComponent implements Accessible, MenuElement {
     }
 
     /**
-     * El puente entre una accion y la opcion que la muestra.
+     * The bridge between an action and the option that shows it.
      *
-     * <p>Devuelve nulo: la opcion escucha a la accion ella misma desde
-     * {@link JMenuItem#setAction}. El metodo queda porque es protegido y alguien puede
-     * sobrescribirlo.
+     * <p>It returns null: the option listens to the action itself from
+     * {@link JMenuItem#setAction}. The method stays because it is protected and somebody may
+     * override it.
      */
     protected PropertyChangeListener createActionChangeListener(JMenuItem b) {
         return null;
@@ -162,7 +164,7 @@ public class JPopupMenu extends JComponent implements Accessible, MenuElement {
         super.remove(pos);
     }
 
-    /** Si se pide la forma liviana; ver la nota de la clase. */
+    /** Whether the lightweight form is asked for; see the class note. */
     public void setLightWeightPopupEnabled(boolean aFlag) {
         lightWeightPopup = aFlag;
     }
@@ -171,7 +173,7 @@ public class JPopupMenu extends JComponent implements Accessible, MenuElement {
         return lightWeightPopup;
     }
 
-    /** El titulo que algunos aspectos dibujan arriba del menu. */
+    /** The title some looks and feels draw above the menu. */
     public String getLabel() {
         return label;
     }
@@ -184,12 +186,12 @@ public class JPopupMenu extends JComponent implements Accessible, MenuElement {
         repaint();
     }
 
-    /** Agrega una raya separadora. */
+    /** It adds a separating line. */
     public void addSeparator() {
         add(new Separator());
     }
 
-    /** Inserta una opcion que dispara esa accion, en esa posicion. */
+    /** It inserts an option that fires that action, at that position. */
     public void insert(Action a, int index) {
         JMenuItem mi = createActionComponent(a);
         mi.setAction(a);
@@ -228,10 +230,11 @@ public class JPopupMenu extends JComponent implements Accessible, MenuElement {
     }
 
     /**
-     * Avisa que el menu esta por abrirse.
+     * It gives notice that the menu is about to open.
      *
-     * <p>Llega <em>antes</em> de mostrarlo, que es lo que permite armar las opciones segun donde se
-     * hizo clic. Un menu contextual que se arma despues de aparecer se veria cambiar.
+     * <p>It arrives <em>before</em> showing it, which is what allows the options to be built
+     * according to where the click was made. A context menu that is built after appearing would be
+     * seen changing.
      */
     protected void firePopupMenuWillBecomeVisible() {
         Object[] listeners = listenerList.getListenerList();
@@ -259,7 +262,7 @@ public class JPopupMenu extends JComponent implements Accessible, MenuElement {
         }
     }
 
-    /** Avisa que el menu se cerro sin que se eligiera nada. */
+    /** It gives notice that the menu closed without anything being chosen. */
     protected void firePopupMenuCanceled() {
         Object[] listeners = listenerList.getListenerList();
         PopupMenuEvent e = null;
@@ -273,7 +276,7 @@ public class JPopupMenu extends JComponent implements Accessible, MenuElement {
         }
     }
 
-    /** Le da al menu el tamano que piden sus opciones. */
+    /** It gives the menu the size its options ask for. */
     public void pack() {
         if (popupSize == null) {
             setSize(getPreferredSize());
@@ -283,10 +286,10 @@ public class JPopupMenu extends JComponent implements Accessible, MenuElement {
     }
 
     /**
-     * Muestra o esconde el menu.
+     * It shows or hides the menu.
      *
-     * <p>Mostrarlo no es hacerlo visible: hay que pedirle una {@link Popup} al aspecto. Ver la nota
-     * de la clase.
+     * <p>Showing it is not making it visible: a {@link Popup} has to be asked of the look and
+     * feel. See the class note.
      */
     public void setVisible(boolean b) {
         if (b == isVisible()) {
@@ -317,14 +320,14 @@ public class JPopupMenu extends JComponent implements Accessible, MenuElement {
         return visible;
     }
 
-    /** Donde aparecera, en coordenadas de pantalla. */
+    /** Where it will appear, in screen coordinates. */
     public void setLocation(int x, int y) {
         desiredLocationX = x;
         desiredLocationY = y;
         super.setLocation(x, y);
     }
 
-    /** El componente desde el que se abrio; ver la nota de la clase. */
+    /** The component it was opened from; see the class note. */
     public Component getInvoker() {
         return this.invoker;
     }
@@ -337,10 +340,11 @@ public class JPopupMenu extends JComponent implements Accessible, MenuElement {
     }
 
     /**
-     * Abre el menu en ese punto, relativo al invocador.
+     * It opens the menu at that point, relative to the invoker.
      *
-     * <p>Las coordenadas son del invocador y no de la pantalla: un menu contextual se pide donde se
-     * hizo clic, y ese punto viene en coordenadas del componente que recibio el clic.
+     * <p>The coordinates are the invoker's and not the screen's: a context menu is asked for where
+     * the click was made, and that point comes in the coordinates of the component that received
+     * the click.
      */
     public void show(Component invoker, int x, int y) {
         setInvoker(invoker);
@@ -354,9 +358,9 @@ public class JPopupMenu extends JComponent implements Accessible, MenuElement {
     }
 
     /**
-     * El componente numero tal.
+     * Component number such-and-such.
      *
-     * @deprecated Usar {@link java.awt.Container#getComponent(int)}.
+     * @deprecated Use {@link java.awt.Container#getComponent(int)}.
      */
     @Deprecated
     public Component getComponentAtIndex(int i) {
@@ -374,7 +378,7 @@ public class JPopupMenu extends JComponent implements Accessible, MenuElement {
         return -1;
     }
 
-    /** Fija el tamano del menu en lugar de dejar que lo pidan las opciones. */
+    /** It fixes the menu's size instead of letting the options ask for it. */
     public void setPopupSize(Dimension d) {
         popupSize = d;
         if (popup != null) {
@@ -386,7 +390,7 @@ public class JPopupMenu extends JComponent implements Accessible, MenuElement {
         setPopupSize(new Dimension(width, height));
     }
 
-    /** Marca ese componente como el elegido del recorrido. */
+    /** It marks that component as the walk's chosen one. */
     public void setSelected(Component sel) {
         SingleSelectionModel model = getSelectionModel();
         int index = getComponentIndex(sel);
@@ -431,17 +435,17 @@ public class JPopupMenu extends JComponent implements Accessible, MenuElement {
             MenuSelectionManager manager) {
     }
 
-    /** El recorrido del menu paso por aca, o dejo de pasar. */
+    /** The menu's walk passed through here, or stopped passing. */
     public void menuSelectionChanged(boolean isIncluded) {
         if (invoker instanceof JMenu) {
-            // Un submenu se abre y se cierra siguiendo al recorrido; no lo decide el mouse.
+            // A submenu opens and closes following the walk; the mouse does not decide it.
             setVisible(isIncluded);
         } else if (!isIncluded) {
             setVisible(false);
         }
     }
 
-    /** Las opciones de adentro que participan del recorrido. */
+    /** The options inside that take part in the walk. */
     public MenuElement[] getSubElements() {
         java.util.Vector<MenuElement> tmp = new java.util.Vector<MenuElement>();
         for (int i = 0; i < getComponentCount(); i++) {
@@ -459,18 +463,18 @@ public class JPopupMenu extends JComponent implements Accessible, MenuElement {
         return this;
     }
 
-    /** Si ese evento es el gesto que abre el menu; lo contesta el aspecto. */
+    /** Whether that event is the gesture that opens the menu; the look and feel answers it. */
     public boolean isPopupTrigger(MouseEvent e) {
         PopupMenuUI ui = getUI();
         return (ui != null) && ui.isPopupTrigger(e);
     }
 
     /**
-     * La raya que separa grupos de opciones.
+     * The line that separates groups of options.
      *
-     * <p>Es un {@link JSeparator} con otro nombre de aspecto: la raya de un menu se dibuja distinto
-     * de una suelta -- con los margenes del menu -- y el nombre es lo que permite que el aspecto
-     * las distinga.
+     * <p>It is a {@link JSeparator} with another look and feel name: a menu's line is drawn
+     * differently from a loose one -- with the menu's margins -- and the name is what allows the
+     * look and feel to tell them apart.
      */
     public static class Separator extends JSeparator {
 

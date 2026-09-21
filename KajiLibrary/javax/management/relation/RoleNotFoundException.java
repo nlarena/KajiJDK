@@ -1,21 +1,21 @@
 package javax.management.relation;
 
 /**
- * La relacion no tiene ningun rol con ese nombre, o lo tiene y no se lo puede leer o escribir.
+ * The relation has no role with that name, or it has one and it cannot be read or written.
  *
- * <p>Los tres casos comparten excepcion porque desde afuera son el mismo: el rol no esta
- * disponible. Cual de los tres fue lo dice el mensaje.
+ * <p>The three cases share an exception because from outside they are the same: the role is not
+ * available. Which of the three it was is said by the message.
  */
 public class RoleNotFoundException extends RelationException {
 
     private static final long serialVersionUID = -1806664006012932146L;
 
-    /** Sin detalle. */
+    /** Without detail. */
     public RoleNotFoundException() {
         super();
     }
 
-    /** Con un mensaje. */
+    /** With a message. */
     public RoleNotFoundException(String message) {
         super(message);
     }

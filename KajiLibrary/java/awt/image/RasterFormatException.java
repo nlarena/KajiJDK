@@ -1,17 +1,17 @@
 package java.awt.image;
 
 /**
- * Un {@link Raster} con parametros invalidos: un rectangulo que no cae dentro, bandas que no
- * existen, un tamano negativo.
+ * A {@link Raster} with invalid parameters: a rectangle that does not fall inside, bands that do
+ * not exist, a negative size.
  *
- * <p>Es de ejecucion y no verificada, y tiene sentido que lo sea: casi siempre viene de un calculo
- * de coordenadas equivocado en el llamador, no de datos que hayan llegado de afuera.
+ * <p>It is a runtime exception and unchecked, and it makes sense that it is: it almost always comes
+ * from a mistaken coordinate calculation in the caller, not from data that arrived from outside.
  */
 public class RasterFormatException extends RuntimeException {
 
     private static final long serialVersionUID = 96598996116164315L;
 
-    /** Con ese mensaje. */
+    /** With that message. */
     public RasterFormatException(String s) {
         super(s);
     }

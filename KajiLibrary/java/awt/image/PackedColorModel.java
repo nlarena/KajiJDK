@@ -4,20 +4,20 @@ import java.awt.Transparency;
 import java.awt.color.ColorSpace;
 
 /**
- * Un modelo de color cuyas componentes son **campos de bits** dentro de un solo píxel.
+ * A colour model whose components are **bit fields** inside a single pixel.
  *
- * <p>Es la mitad de color de lo que {@link SinglePixelPackedSampleModel} es de disposición, y las
- * dos clases se declaran igual: por máscaras. De cada máscara salen el corrimiento y el ancho de su
- * componente, y de ahí todo lo demás.
+ * <p>It is the colour half of what {@link SinglePixelPackedSampleModel} is of layout, and the two
+ * classes are declared the same way: by masks. Out of each mask come the shift and the width of its
+ * component, and out of those everything else.
  *
- * <p>Una máscara tiene que ser **contigua** —un solo tramo de unos— y no puede pasarse de los bits
- * del píxel. Lo primero es lo que permite que la componente se lea con un corrimiento y una `y`
- * lógica en vez de tener que juntar pedazos sueltos.
+ * <p>A mask has to be **contiguous** —a single run of ones— and cannot go past the bits of the
+ * pixel. The first part is what lets the component be read with a shift and a logical `and` instead
+ * of having to join loose pieces.
  *
- * <p>El constructor puede terminar bajando la transparencia declarada a `BITMASK`: si el alfa quedó
- * con un solo bit, el píxel sólo puede estar del todo opaco o del todo transparente, y decir
- * `TRANSLUCENT` sería prometer algo que el formato no puede dar. Eso recién se sabe después de
- * descomponer las máscaras, que es por qué se corrige después y no en la lista de argumentos.
+ * <p>The constructor may end up lowering the declared transparency to `BITMASK`: if the alpha was
+ * left with a single bit, the pixel can only be fully opaque or fully transparent, and saying
+ * `TRANSLUCENT` would be promising something the format cannot give. That is only known after
+ * taking the masks apart, which is why it is corrected afterwards and not in the argument list.
  */
 public abstract class PackedColorModel extends ColorModel {
 
@@ -26,14 +26,14 @@ public abstract class PackedColorModel extends ColorModel {
     float[] scaleFactors;
 
     /**
-     * Con las máscaras de color en un arreglo y la de alfa aparte.
+     * With the colour masks in an array and the alpha one apart.
      *
-     * <p>Sirve para espacios de color de cualquier cantidad de componentes; el otro constructor es
-     * el atajo para RGB.
+     * <p>It serves for colour spaces of any number of components; the other constructor is the
+     * shortcut for RGB.
      *
-     * @throws IllegalArgumentException si `bits` no está entre 1 y 32, si alguna máscara no es
-     *     contigua, o si alguna se pasa de los bits del píxel
-     * @throws NullPointerException si falta el espacio de color
+     * @throws IllegalArgumentException if `bits` is not between 1 and 32, if some mask is not
+     *     contiguous, or if some mask goes past the bits of the pixel
+     * @throws NullPointerException if the colour space is missing
      */
     public PackedColorModel(ColorSpace space, int bits, int[] colorMaskArray, int alphaMask,
             boolean isAlphaPremultiplied, int trans, int transferType) {
@@ -57,11 +57,11 @@ public abstract class PackedColorModel extends ColorModel {
     }
 
     /**
-     * El atajo para RGB: las tres máscaras de color y la de alfa por separado.
+     * The shortcut for RGB: the three colour masks and the alpha one separately.
      *
-     * @throws IllegalArgumentException si el espacio no es de tipo RGB, si `bits` no está entre 1 y
-     *     32, si alguna máscara no es contigua, o si alguna se pasa de los bits del píxel
-     * @throws NullPointerException si falta el espacio de color
+     * @throws IllegalArgumentException if the space is not of RGB type, if `bits` is not between 1
+     *     and 32, if some mask is not contiguous, or if some mask goes past the bits of the pixel
+     * @throws NullPointerException if the colour space is missing
      */
     public PackedColorModel(ColorSpace space, int bits, int rmask, int gmask, int bmask, int amask,
             boolean isAlphaPremultiplied, int trans, int transferType) {
@@ -88,10 +88,10 @@ public abstract class PackedColorModel extends ColorModel {
     }
 
     /**
-     * Cuántos bits tiene la máscara, o -1 si no es contigua.
+     * How many bits the mask has, or -1 if it is not contiguous.
      *
-     * <p>Se corren los ceros de abajo, después los unos, y si queda algo prendido es que había un
-     * hueco: la máscara tenía dos tramos.
+     * <p>The zeros at the bottom are shifted out, then the ones, and if anything is left on there
+     * was a hole: the mask had two runs.
      */
     private static int countBits(int mask) {
         int m = mask;
@@ -112,9 +112,9 @@ public abstract class PackedColorModel extends ColorModel {
     }
 
     /**
-     * Los anchos de componente que salen de las máscaras.
+     * The component widths that come out of the masks.
      *
-     * @throws IllegalArgumentException si alguna no es contigua
+     * @throws IllegalArgumentException if some mask is not contiguous
      */
     private static int[] createBitsArray(int[] colorMaskArray, int alphaMask) {
         int numColors = colorMaskArray.length;
@@ -138,9 +138,9 @@ public abstract class PackedColorModel extends ColorModel {
     }
 
     /**
-     * Lo mismo para el atajo RGB.
+     * The same for the RGB shortcut.
      *
-     * @throws IllegalArgumentException si alguna no es contigua
+     * @throws IllegalArgumentException if some mask is not contiguous
      */
     private static int[] createBitsArray(int rmask, int gmask, int bmask, int amask) {
         int[] arr = new int[3 + (amask == 0 ? 0 : 1)];
@@ -170,12 +170,12 @@ public abstract class PackedColorModel extends ColorModel {
     }
 
     /**
-     * Guarda la máscara y calcula su corrimiento y su factor de escala.
+     * Stores the mask and works out its shift and its scale factor.
      *
-     * <p>El factor lleva la componente a 0..255, que es la escala en la que se pide un color. Con
-     * ocho bits vale exactamente 1 y la conversión no hace nada.
+     * <p>The factor brings the component to 0..255, which is the scale a colour is asked for in.
+     * With eight bits it is exactly 1 and the conversion does nothing.
      *
-     * @throws IllegalArgumentException si la máscara se pasa de los bits del píxel
+     * @throws IllegalArgumentException if the mask goes past the bits of the pixel
      */
     private void decomposeMask(int mask, int idx, String componentName) {
         int off = 0;
@@ -202,29 +202,29 @@ public abstract class PackedColorModel extends ColorModel {
     }
 
     /**
-     * La máscara de esa componente.
+     * The mask of that component.
      *
-     * @throws ArrayIndexOutOfBoundsException si la componente no existe
+     * @throws ArrayIndexOutOfBoundsException if the component does not exist
      */
     public final int getMask(int index) {
         return this.maskArray[index];
     }
 
-    /** Las máscaras de todas las componentes. */
+    /** The masks of every component. */
     public final int[] getMasks() {
         return this.maskArray.clone();
     }
 
-    /** Un {@link SinglePixelPackedSampleModel} con estas mismas máscaras. */
+    /** A {@link SinglePixelPackedSampleModel} with these same masks. */
     public SampleModel createCompatibleSampleModel(int w, int h) {
         return new SinglePixelPackedSampleModel(this.transferType, w, h, this.maskArray);
     }
 
     /**
-     * Si ese modelo de muestras usa exactamente estas máscaras.
+     * Whether that sample model uses exactly these masks.
      *
-     * <p>Las máscaras se comparan **recortadas al tipo de transferencia**: los bits que el tipo no
-     * puede guardar no distinguen a dos modelos que se comportan igual.
+     * <p>The masks are compared **trimmed to the transfer type**: the bits the type cannot store do
+     * not tell apart two models that behave the same way.
      */
     public boolean isCompatibleSampleModel(SampleModel sm) {
         if (!(sm instanceof SinglePixelPackedSampleModel)) {
@@ -251,10 +251,10 @@ public abstract class PackedColorModel extends ColorModel {
     }
 
     /**
-     * El canal alfa como un ráster de una banda **sobre los mismos datos**.
+     * The alpha channel as a one-band raster **over the same data**.
      *
-     * <p>Devuelve `null` si el modelo no tiene alfa. En este formato el alfa siempre es la última
-     * banda, así que la vista se arma con un hijo de una sola banda.
+     * <p>It returns `null` if the model has no alpha. In this format the alpha is always the last
+     * band, so the view is built with a one-band child.
      */
     public WritableRaster getAlphaRaster(WritableRaster raster) {
         if (!this.hasAlpha()) {
@@ -267,7 +267,7 @@ public abstract class PackedColorModel extends ColorModel {
         return raster.createWritableChild(x, y, raster.getWidth(), raster.getHeight(), x, y, band);
     }
 
-    /** Igualdad de {@link ColorModel} más las máscaras. */
+    /** The equality of {@link ColorModel} plus the masks. */
     public boolean equals(Object obj) {
         if (!super.equals(obj)) {
             return false;

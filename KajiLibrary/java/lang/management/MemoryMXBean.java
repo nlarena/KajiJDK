@@ -1,42 +1,42 @@
 package java.lang.management;
 
 /**
- * KajiLibrary's java.lang.management.MemoryMXBean -- la memoria de la maquina virtual, en dos numeros.
+ * KajiLibrary's java.lang.management.MemoryMXBean -- the virtual machine's memory, in two numbers.
  *
- * <p>El resumen de todas las areas: monton por un lado, no monton por el otro. Para el detalle por
- * area estan los {@link MemoryPoolMXBean}.
+ * <p>The summary of every pool: heap on one side, non-heap on the other. The {@link MemoryPoolMXBean}
+ * are there for the per-pool detail.
  *
- * <p>Es ademas un emisor de notificaciones --hay que consultarlo como
- * {@code javax.management.NotificationEmitter}--: por ahi llegan los
- * {@link MemoryNotificationInfo} cuando un area cruza un umbral.
+ * <p>It is also a notification emitter --it has to be asked for as a
+ * {@code javax.management.NotificationEmitter}--: that is how the {@link MemoryNotificationInfo}
+ * arrive when a pool crosses a threshold.
  *
- * <h2>{@link #gc} no obliga a nada</h2>
+ * <h2>{@link #gc} compels nothing</h2>
  *
- * <p>Es exactamente {@code System.gc()}: una sugerencia. La maquina virtual puede ignorarla, y las
- * modernas seguido lo hacen. Un programa que dependa de que esto libere memoria esta apoyado en algo
- * que no promete nada.
+ * <p>It is exactly {@code System.gc()}: a suggestion. The virtual machine may ignore it, and modern
+ * ones often do. A program depending on this to free memory is leaning on something that promises
+ * nothing.
  *
- * <p>{@link #getObjectPendingFinalizationCount} es una <b>aproximacion</b>, y ademas mide algo que ya
- * casi no existe: la finalizacion quedo obsoleta. Que crezca significa que la cola de finalizacion no
- * da abasto, que es una forma clasica de agotar la memoria sin que haya fuga.
+ * <p>{@link #getObjectPendingFinalizationCount} is an <b>approximation</b>, and it measures something
+ * that hardly exists any more: finalisation is deprecated. Its growing means the finalisation queue
+ * cannot keep up, which is a classic way of exhausting memory with no leak involved.
  */
 public interface MemoryMXBean extends PlatformManagedObject {
 
-    /** Cuantos objetos esperan finalizacion, aproximadamente. Ver la nota de la clase. */
+    /** How many objects await finalisation, approximately. See the class's note. */
     int getObjectPendingFinalizationCount();
 
-    /** El monton entero. */
+    /** The whole heap. */
     MemoryUsage getHeapMemoryUsage();
 
-    /** Todo lo demas que la maquina virtual reserva. */
+    /** Everything else the virtual machine reserves. */
     MemoryUsage getNonHeapMemoryUsage();
 
-    /** Si esta rastreando la memoria. */
+    /** Whether it is tracking memory. */
     boolean isVerbose();
 
-    /** Prende o apaga el rastreo, como {@code -verbose:gc}. */
+    /** It switches tracking on or off, like {@code -verbose:gc}. */
     void setVerbose(boolean value);
 
-    /** Sugiere recolectar. Ver la nota de la clase: no obliga. */
+    /** It suggests collecting. See the class's note: it compels nothing. */
     void gc();
 }

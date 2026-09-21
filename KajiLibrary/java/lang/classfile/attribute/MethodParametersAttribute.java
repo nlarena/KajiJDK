@@ -5,20 +5,20 @@ import java.lang.classfile.MethodElement;
 import java.util.List;
 import jdk.internal.classfile.impl.TypedAttributes;
 
-// `MethodParameters` (JVMS §4.7.24): los nombres de los parámetros formales, que `javac` sólo emite
-// con `-parameters`. Es lo que hace que `Parameter.getName()` devuelva `cantidad` en vez de `arg0`.
+// `MethodParameters` (JVMS §4.7.24): the names of the formal parameters, which `javac` only emits
+// with `-parameters`. It is what makes `Parameter.getName()` return `count` instead of `arg0`.
 public interface MethodParametersAttribute
         extends Attribute<MethodParametersAttribute>, MethodElement {
 
-    /** Los parámetros, en el orden de la declaración. */
+    /** The parameters, in declaration order. */
     List<MethodParameterInfo> parameters();
 
-    /** El atributo con estos parámetros. */
+    /** The attribute with these parameters. */
     public static MethodParametersAttribute of(List<MethodParameterInfo> parameters) {
         return TypedAttributes.methodParameters(parameters);
     }
 
-    /** El atributo con estos parámetros. */
+    /** The attribute with these parameters. */
     public static MethodParametersAttribute of(MethodParameterInfo... parameters) {
         return TypedAttributes.methodParameters(TypedAttributes.listOf(parameters));
     }

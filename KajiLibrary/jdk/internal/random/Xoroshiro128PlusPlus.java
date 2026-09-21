@@ -76,24 +76,24 @@ public final class Xoroshiro128PlusPlus implements RandomGenerator.LeapableGener
         return result;
     }
 
-    // ---- las entradas que faltaban ---------------------------------------------------------------
+    // ---- the entry points that were missing -----------------------------------------------------
 
-    // La semilla de los generadores sin argumentos: un contador compartido que avanza de a
-    // GOLDEN_RATIO_64, para que dos generadores seguidos no arranquen en estados vecinos.
+    // The seed of the generators with no arguments: a shared counter that advances by
+    // GOLDEN_RATIO_64, so that two generators in a row do not start at neighbouring states.
     private static final java.util.concurrent.atomic.AtomicLong SEMILLERO =
             new java.util.concurrent.atomic.AtomicLong(RandomSupport.initialSeed());
 
-    /** Un generador con una semilla elegida sola, distinta en cada llamada. */
+    /** A generator with a seed chosen by itself, different on each call. */
     public Xoroshiro128PlusPlus() {
         this(SEMILLERO.getAndAdd(RandomSupport.GOLDEN_RATIO_64));
     }
 
     /**
-     * Un generador sembrado desde bytes.
+     * A generator seeded from bytes.
      *
-     * <p>Los 2 valores que salen de la semilla **no pueden ser todos cero**: para un xor-shift el
-     * cero es un punto fijo, y el generador se quedaria ahi. Lo garantiza
-     * `RandomSupport.convertSeedBytesToLongs`, con los mismos parametros que usa el JDK.
+     * <p>The 2 values that come out of the seed **cannot be all zero**: for a xor-shift zero is a
+     * fixed point, and the generator would stay there. `RandomSupport.convertSeedBytesToLongs`
+     * guarantees it, with the same parameters the JDK uses.
      */
     public Xoroshiro128PlusPlus(byte[] seed) {
         long[] data = RandomSupport.convertSeedBytesToLongs(seed, 2, 2);
@@ -101,55 +101,56 @@ public final class Xoroshiro128PlusPlus implements RandomGenerator.LeapableGener
         this.x1 = data[1];
     }
 
-    // ---- salto y salto largo ----------------------------------------------------------------------
+    // ---- jump and long jump ---------------------------------------------------------------------
     //
-    // Las dos tablas son los **polinomios de salto** del algoritmo: cada bit en uno dice que hay que
-    // acumular el estado en ese paso. Recorrerlas equivale a avanzar `jumpDistance()` valores, y esa
-    // equivalencia es la que hace que dos hilos que arrancan a un salto de distancia recorran tramos
-    // que **no se solapan** -- no es una garantia estadistica sino aritmetica.
+    // The two tables are the **jump polynomials** of the algorithm: each bit at one says that the
+    // state has to be accumulated at that step. Walking them is equivalent to advancing
+    // `jumpDistance()` values, and that equivalence is what makes two threads that start a jump
+    // apart walk stretches that **do not overlap** -- it is not a statistical guarantee but an
+    // arithmetic one.
     //
-    // Los numeros no son ajustables: son los publicados para este generador.
+    // The numbers are not tunable: they are the published ones for this generator.
 
-    private static final long[] TABLA_SALTO = { 0x2bd7a6a6e99c2ddcL, 0x0992ccaf6a6fca05L };
+    private static final long[] JUMP_TABLE = { 0x2bd7a6a6e99c2ddcL, 0x0992ccaf6a6fca05L };
 
-    private static final long[] TABLA_SALTO_LARGO = { 0x360fd5f2cf8d5d99L, 0x9c6e6877736c46e3L };
+    private static final long[] LONG_JUMP_TABLE = { 0x360fd5f2cf8d5d99L, 0x9c6e6877736c46e3L };
 
-    /** Una copia de este generador, en el mismo estado. */
+    /** A copy of this generator, in the same state. */
     public Xoroshiro128PlusPlus copy() {
         return new Xoroshiro128PlusPlus(this.x0, this.x1);
     }
 
-    /** Avanza este generador dos a la 64 valores. */
+    /** It advances this generator two to the 64 values. */
     public void jump() {
-        this.saltar(TABLA_SALTO);
+        this.jumpUsing(JUMP_TABLE);
     }
 
-    /** Avanza este generador dos a la 96 valores. */
+    /** It advances this generator two to the 96 values. */
     public void leap() {
-        this.saltar(TABLA_SALTO_LARGO);
+        this.jumpUsing(LONG_JUMP_TABLE);
     }
 
-    /** Cuantos valores avanza {@link #jump()}. */
+    /** How many values {@link #jump()} advances. */
     public double jumpDistance() {
         return Math.scalb(1.0d, 64);
     }
 
-    /** Cuantos valores avanza {@link #leap()}. */
+    /** How many values {@link #leap()} advances. */
     public double leapDistance() {
         return Math.scalb(1.0d, 96);
     }
 
-    // El algoritmo de salto: se avanza el generador 64 veces por palabra de la tabla, acumulando el
-    // estado en los pasos que la tabla marca. Al final el acumulador **es** el estado que el
-    // generador habria tenido despues de la distancia de salto.
-    private void saltar(long[] tabla) {
+    // The jump algorithm: the generator is advanced 64 times per word of the table, accumulating
+    // the state at the steps the table marks. At the end the accumulator **is** the state the
+    // generator would have had after the jump distance.
+    private void jumpUsing(long[] table) {
         long s0 = 0L;
         long s1 = 0L;
         int i = 0;
-        while (i < tabla.length) {
+        while (i < table.length) {
             int b = 0;
             while (b < 64) {
-                if ((tabla[i] & (1L << b)) != 0L) {
+                if ((table[i] & (1L << b)) != 0L) {
                     s0 ^= this.x0;
                     s1 ^= this.x1;
                 }

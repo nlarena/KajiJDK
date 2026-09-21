@@ -2,11 +2,11 @@ package java.nio.file.attribute;
 
 import java.security.Principal;
 
-// La identidad de un usuario tal como la nombra el sistema de archivos.
+// A user's identity as the filesystem names it.
 //
-// Es `java.security.Principal` sin agregar nada: el subtipo existe solo para que las firmas de
-// `FileOwnerAttributeView` no acepten cualquier `Principal`. KajiJDK no tiene con que producir uno
-// --no hay nativo que consulte usuarios-- y por eso `UserPrincipalLookupService` queda abstracta y
-// sin implementacion.
+// It is `java.security.Principal` with nothing added: the subtype exists only so
+// `FileOwnerAttributeView`'s signatures do not accept any old `Principal`. KajiJDK has nothing with
+// which to produce one --there is no native that queries users-- and that is why
+// `UserPrincipalLookupService` is left abstract and without an implementation.
 public interface UserPrincipal extends Principal {
 }

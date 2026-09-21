@@ -1,10 +1,10 @@
 package javax.swing.plaf;
 
 /**
- * El aspecto de un panel con barras de desplazamiento.
+ * A pane with scroll bars' look and feel.
  *
- * <p>No agrega nada a {@link ComponentUI}. Lo unico que un aspecto de panel pinta es el borde de
- * la ventana, si hay; todo lo demas son componentes de verdad que se pintan solos.
+ * <p>It adds nothing to {@link ComponentUI}. The only thing a pane's look and feel paints is the
+ * viewport's border, if there is one; everything else is real components that paint themselves.
  */
 public abstract class ScrollPaneUI extends ComponentUI {
 

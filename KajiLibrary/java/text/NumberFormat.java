@@ -15,53 +15,55 @@ import java.util.Map;
 // through a double. So NumberFormat declares two abstract seams, one per primitive, and routes
 // Object to whichever one preserves the value.
 //
-// La otra mitad de esta clase es ESTADO, no comportamiento: cuántos dígitos como mínimo, cuántos
-// como máximo, si se agrupa, si al parsear se corta en el punto. Vive acá y no en DecimalFormat
-// porque es la parte del contrato que un llamador puede ajustar sin saber qué implementación tiene
-// enfrente.
+// The other half of this class is STATE, not behaviour: how many digits at least, how many at most,
+// whether it groups, whether parsing stops at the point. It lives here and not in DecimalFormat
+// because it is the part of the contract a caller can adjust without knowing which implementation
+// they have in front of them.
 //
-// Sobre `getCompactNumberInstance()` y `getCompactNumberInstance(Locale, Style)`: esta nota decía
-// que quedaban afuera porque la tabla de patrones compactos del CLDR —"0 mil", "0 millones", "0万",
-// "0億"— es texto traducido por locale y por regla de plural, y rellenarla con "K/M/B" para todos
-// daría un resultado plausible y falso en la mayoría. Lo segundo sigue siendo cierto; lo que cambió
-// es que los datos ya no se inventan.
+// On `getCompactNumberInstance()` and `getCompactNumberInstance(Locale, Style)`: this note used to
+// say they were left out because the CLDR's table of compact patterns --"0 thousand", "0 million",
+// "0万", "0億"-- is text translated per locale and per plural rule, and filling it with "K/M/B" for
+// everyone would give a plausible and false result for most. The second half is still true; what
+// changed is that the data is no longer invented.
 //
-// La tabla de abajo trae los patrones **exactos** de los mismos seis locales que cubre
-// `DecimalFormatSymbols`, y no están transcriptos a mano: se leyeron del JDK 25 por reflexión sobre
-// el campo `compactPatterns` de su propio `CompactNumberFormat`. Un locale desconocido cae en ROOT,
-// que es lo que hace el JDK con un locale del que no tiene datos.
+// The table below carries the **exact** patterns of the same six locales `DecimalFormatSymbols`
+// covers, and they are not transcribed by hand: they were read out of JDK 25 by reflection over its
+// own `CompactNumberFormat`'s `compactPatterns` field. An unknown locale falls back to ROOT, which
+// is what the JDK does with a locale it has no data for.
 //
-// `CompactNumberFormat` ya sabía leerlos: evalúa las variantes `{one:... other:...}` contra las
-// reglas de plural del locale. Lo único que le faltaba era de dónde sacarlas.
+// `CompactNumberFormat` already knew how to read them: it evaluates the `{one:... other:...}`
+// variants against the locale's plural rules. The only thing it lacked was where to get them
+// from.
 public abstract class NumberFormat extends Format {
 
     /**
-     * Marca el campo entero para {@link FieldPosition}. Convive con {@link java.text.NumberFormat.Field#INTEGER},
-     * que es la forma nueva de nombrar lo mismo; ninguna de las dos reemplaza a la otra en una API
-     * ya publicada.
+     * It marks the integer field for {@link FieldPosition}. It coexists with
+     * {@link java.text.NumberFormat.Field#INTEGER}, which is the new way of naming the same thing;
+     * neither replaces the other in an API already published.
      */
     public static final int INTEGER_FIELD = 0;
 
-    /** Marca el campo fraccionario para {@link FieldPosition}. */
+    /** It marks the fraction field for {@link FieldPosition}. */
     public static final int FRACTION_FIELD = 1;
 
     /**
-     * La clave con la que un formateador numérico marca cada pedazo del texto que produjo.
+     * The key a numeric formatter marks each piece of the text it produced with.
      *
-     * <p>Es lo que permite preguntar "¿dónde quedó el separador de miles?" sin reparsear la salida,
-     * y lo que un renderer usa para, por ejemplo, poner el signo de moneda en otra tipografía.
+     * <p>It is what allows asking "where did the thousands separator end up?" without reparsing the
+     * output, and what a renderer uses to, for instance, set the currency sign in another
+     * typeface.
      */
     public static class Field extends java.text.Format.Field {
 
-        // Mismo registro por nombre que Attribute, y por el mismo motivo: sólo se puebla con
-        // instancias de ESTA clase exacta, para que una subclase no le pise las constantes.
-        private static final Map<String, java.text.NumberFormat.Field> INSTANCIAS =
+        // The same register by name as Attribute, and for the same reason: it is only populated with
+        // instances of THIS exact class, so a subclass cannot overwrite its constants.
+        private static final Map<String, java.text.NumberFormat.Field> INSTANCES =
                 new HashMap<String, java.text.NumberFormat.Field>();
 
         protected Field(String name) {
             super(name);
             if (this.getClass() == java.text.NumberFormat.Field.class) {
-                INSTANCIAS.put(name, this);
+                INSTANCES.put(name, this);
             }
         }
 
@@ -69,7 +71,7 @@ public abstract class NumberFormat extends Format {
             if (this.getClass() != java.text.NumberFormat.Field.class) {
                 throw new InvalidObjectException("subclass didn't correctly implement readResolve");
             }
-            java.text.NumberFormat.Field f = INSTANCIAS.get(this.getName());
+            java.text.NumberFormat.Field f = INSTANCES.get(this.getName());
             if (f != null) {
                 return f;
             }
@@ -95,7 +97,7 @@ public abstract class NumberFormat extends Format {
     }
 
     /**
-     * Qué tan largo escribe sus sufijos un formateador compacto: {@code 1K} contra {@code 1 mil}.
+     * How long a compact formatter writes its suffixes: {@code 1K} against {@code 1 thousand}.
      */
     public static enum Style {
         SHORT,
@@ -149,10 +151,10 @@ public abstract class NumberFormat extends Format {
     public abstract Number parse(String source, ParsePosition parsePosition);
 
     /**
-     * Parsea desde el principio y falla con excepción.
+     * It parses from the start and fails with an exception.
      *
-     * <p>Como en {@link Format#parseObject(String)}, el fracaso se detecta por el cursor sin
-     * avanzar y no por un null.
+     * <p>As in {@link Format#parseObject(String)}, failure is detected by the cursor not advancing
+     * and not by a null.
      */
     public Number parse(String source) throws ParseException {
         ParsePosition pos = new ParsePosition(0);
@@ -163,8 +165,8 @@ public abstract class NumberFormat extends Format {
         return result;
     }
 
-    // Final: un formateador numérico parsea números, y dejar que una subclase devuelva otra cosa
-    // por esta puerta rompería la equivalencia con parse().
+    // Final: a numeric formatter parses numbers, and letting a subclass return something else
+    // through this door would break the equivalence with parse().
     public final Object parseObject(String source, ParsePosition pos) {
         return this.parse(source, pos);
     }
@@ -189,9 +191,9 @@ public abstract class NumberFormat extends Format {
         return this.maximumIntegerDigits;
     }
 
-    // Los cuatro setters se pisan entre sí a propósito: un máximo por debajo del mínimo no es un
-    // estado representable, así que el que se acaba de fijar gana y el otro lo sigue. Rechazarlo con
-    // una excepción obligaría al llamador a conocer el orden en que hay que llamarlos.
+    // The four setters overwrite each other on purpose: a maximum below the minimum is not a
+    // representable state, so the one just set wins and the other follows it. Rejecting it with an
+    // exception would force the caller to know the order they have to be called in.
     public void setMaximumIntegerDigits(int newValue) {
         this.maximumIntegerDigits = Math.max(0, newValue);
         if (this.minimumIntegerDigits > this.maximumIntegerDigits) {
@@ -233,55 +235,56 @@ public abstract class NumberFormat extends Format {
     }
 
     /**
-     * @throws UnsupportedOperationException siempre, salvo que la subclase lo redefina
-     * @implSpec La base NO tiene moneda: no sabe qué símbolo usaría ni dónde lo pondría. Lanzar es
-     *           el comportamiento que define el contrato para ese caso — devolver {@code null}
-     *           haría pasar por "sin moneda" a lo que en realidad es "esta clase no sabe".
+     * @throws UnsupportedOperationException always, unless the subclass overrides it
+     * @implSpec The base has NO currency: it does not know which symbol it would use nor where it
+     *           would put it. Throwing is the behaviour the contract defines for that case --
+     *           returning {@code null} would pass off as "no currency" what is really "this class
+     *           does not know".
      */
     public Currency getCurrency() {
         throw new UnsupportedOperationException();
     }
 
     /**
-     * @throws UnsupportedOperationException siempre, salvo que la subclase lo redefina
+     * @throws UnsupportedOperationException always, unless the subclass overrides it
      */
     public void setCurrency(Currency currency) {
         throw new UnsupportedOperationException();
     }
 
     /**
-     * @throws UnsupportedOperationException siempre, salvo que la subclase lo redefina
+     * @throws UnsupportedOperationException always, unless the subclass overrides it
      */
     public RoundingMode getRoundingMode() {
         throw new UnsupportedOperationException();
     }
 
     /**
-     * @throws UnsupportedOperationException siempre, salvo que la subclase lo redefina
+     * @throws UnsupportedOperationException always, unless the subclass overrides it
      */
     public void setRoundingMode(RoundingMode roundingMode) {
         throw new UnsupportedOperationException();
     }
 
     /**
-     * @throws UnsupportedOperationException siempre, salvo que la subclase lo redefina
+     * @throws UnsupportedOperationException always, unless the subclass overrides it
      */
     public boolean isStrict() {
         throw new UnsupportedOperationException();
     }
 
     /**
-     * @throws UnsupportedOperationException siempre, salvo que la subclase lo redefina
+     * @throws UnsupportedOperationException always, unless the subclass overrides it
      */
     public void setStrict(boolean strict) {
         throw new UnsupportedOperationException();
     }
 
-    // ---- fábricas por locale ----
+    // ---- factories by locale ----
     //
-    // Todas terminan en un DecimalFormat armado con dos cosas separadas: el PATRÓN, que dice el
-    // orden y sale de PatronesLocales, y los SÍMBOLOS, que dicen los caracteres y salen de
-    // DecimalFormatSymbols. Esa separación es la que hace que no haga falta una clase por locale.
+    // They all end in a DecimalFormat built out of two separate things: the PATTERN, which says the
+    // order and comes from LocalePatterns, and the SYMBOLS, which say the characters and come from
+    // DecimalFormatSymbols. That separation is what makes a class per locale unnecessary.
 
     public static final NumberFormat getInstance() {
         return NumberFormat.getNumberInstance(Locale.getDefault());
@@ -296,7 +299,7 @@ public abstract class NumberFormat extends Format {
     }
 
     public static NumberFormat getNumberInstance(Locale inLocale) {
-        return new DecimalFormat(PatronesLocales.numero(inLocale),
+        return new DecimalFormat(LocalePatterns.number(inLocale),
                 new DecimalFormatSymbols(inLocale));
     }
 
@@ -304,10 +307,11 @@ public abstract class NumberFormat extends Format {
         return NumberFormat.getIntegerInstance(Locale.getDefault());
     }
 
-    // parseIntegerOnly va en true, que es lo que distingue a esta fábrica de un getNumberInstance
-    // con cero decimales: además de no imprimirlos, al parsear se detiene en el separador decimal.
+    // parseIntegerOnly goes in true, which is what tells this factory apart from a getNumberInstance
+    // with zero decimals: besides not printing them, when parsing it stops at the decimal
+    // separator.
     public static NumberFormat getIntegerInstance(Locale inLocale) {
-        DecimalFormat f = new DecimalFormat(PatronesLocales.entero(inLocale),
+        DecimalFormat f = new DecimalFormat(LocalePatterns.integerPart(inLocale),
                 new DecimalFormatSymbols(inLocale));
         f.setParseIntegerOnly(true);
         return f;
@@ -318,7 +322,7 @@ public abstract class NumberFormat extends Format {
     }
 
     public static NumberFormat getCurrencyInstance(Locale inLocale) {
-        return new DecimalFormat(PatronesLocales.moneda(inLocale),
+        return new DecimalFormat(LocalePatterns.currency(inLocale),
                 new DecimalFormatSymbols(inLocale));
     }
 
@@ -326,19 +330,20 @@ public abstract class NumberFormat extends Format {
         return NumberFormat.getPercentInstance(Locale.getDefault());
     }
 
-    // Sin parseIntegerOnly, a diferencia del entero: el patrón de porcentaje no tiene decimales,
-    // pero al PARSEAR "12.5%" el 12.5 es un valor legítimo y cortarlo en el punto lo perdería.
+    // Without parseIntegerOnly, unlike the integer one: the percentage pattern has no decimals, but
+    // when PARSING "12.5%" the 12.5 is a legitimate value and cutting it at the point would lose
+    // it.
     public static NumberFormat getPercentInstance(Locale inLocale) {
-        return new DecimalFormat(PatronesLocales.porciento(inLocale),
+        return new DecimalFormat(LocalePatterns.percentSign(inLocale),
                 new DecimalFormatSymbols(inLocale));
     }
 
     /**
-     * Los locales para los que hay datos de verdad.
+     * The locales there is genuine data for.
      *
-     * <p>Son seis, no cientos, y la lista dice la verdad sobre eso: un locale que no esté acá
-     * igual funciona, pero cae en ROOT. Devolver una lista larga fingiendo cobertura sería
-     * exactamente la clase de mentira que este paquete evita.
+     * <p>There are six, not hundreds, and the list tells the truth about that: a locale that is not
+     * here still works, but falls back to ROOT. Returning a long list feigning coverage would be
+     * exactly the kind of lie this package avoids.
      */
     public static Locale[] getAvailableLocales() {
         return DecimalFormatSymbols.getAvailableLocales();
@@ -372,15 +377,15 @@ public abstract class NumberFormat extends Format {
                 && this.parseIntegerOnly == other.parseIntegerOnly;
     }
 
-    // ---- los formateadores compactos ---------------------------------------------------------
+    // ---- the compact formatters --------------------------------------------------------------
 
     /**
-     * El formateador compacto del locale por omisión, en estilo corto.
+     * The default locale's compact formatter, in the short style.
      *
-     * <p>Es {@code getCompactNumberInstance(Locale.getDefault(FORMAT), Style.SHORT)}, que es lo
-     * que el contrato define. La categoría es {@code FORMAT} y no el default a secas: en una máquina
-     * donde el locale de presentación y el de formato difieren son dos respuestas distintas, y la
-     * que este método promete es la de formato. Se vio contra el JDK 25.
+     * <p>It is {@code getCompactNumberInstance(Locale.getDefault(FORMAT), Style.SHORT)}, which is
+     * what the contract defines. The category is {@code FORMAT} and not the plain default: on a
+     * machine where the display locale and the format locale differ they are two different answers,
+     * and the one this method promises is the format one. Checked against JDK 25.
      */
     public static NumberFormat getCompactNumberInstance() {
         return NumberFormat.getCompactNumberInstance(Locale.getDefault(Locale.Category.FORMAT),
@@ -388,12 +393,12 @@ public abstract class NumberFormat extends Format {
     }
 
     /**
-     * El formateador compacto de ese locale y estilo.
+     * That locale and style's compact formatter.
      *
-     * <p>Un locale sin datos propios cae en ROOT. Ver la nota de la cabecera sobre de dónde salen
-     * los patrones.
+     * <p>A locale with no data of its own falls back to ROOT. See the header's note on where the
+     * patterns come from.
      *
-     * @throws NullPointerException si alguno de los dos es null
+     * @throws NullPointerException if either of the two is null
      */
     public static NumberFormat getCompactNumberInstance(Locale locale,
                                                         NumberFormat.Style formatStyle) {
@@ -401,26 +406,26 @@ public abstract class NumberFormat extends Format {
             throw new NullPointerException();
         }
         int i = DecimalFormatSymbols.indexOf(locale);
-        String[] fila = formatStyle == NumberFormat.Style.SHORT
-                ? NumberFormat.compactosCortos()[i]
-                : NumberFormat.compactosLargos()[i];
-        String[] copia = new String[fila.length];
-        for (int k = 0; k < fila.length; k = k + 1) {
-            copia[k] = fila[k];
+        String[] row = formatStyle == NumberFormat.Style.SHORT
+                ? NumberFormat.shortCompacts()[i]
+                : NumberFormat.longCompacts()[i];
+        String[] copy = new String[row.length];
+        for (int k = 0; k < row.length; k = k + 1) {
+            copy[k] = row[k];
         }
-        return new CompactNumberFormat(NumberFormat.PATRON_DECIMAL,
-                                       new DecimalFormatSymbols(locale), copia,
-                                       NumberFormat.reglasDePlural()[i]);
+        return new CompactNumberFormat(NumberFormat.DECIMAL_PATTERN,
+                                       new DecimalFormatSymbols(locale), copy,
+                                       NumberFormat.pluralRules()[i]);
     }
 
-    // El patrón decimal de base es el mismo en los seis locales; lo que cambia entre ellos son los
-    // símbolos, y esos los trae `DecimalFormatSymbols`.
-    private static final String PATRON_DECIMAL = "#,##0.###";
+    // The base decimal pattern is the same in all six locales; what changes between them is the
+    // symbols, and `DecimalFormatSymbols` brings those.
+    private static final String DECIMAL_PATTERN = "#,##0.###";
 
-    // Las reglas de plural del locale, en la sintaxis del CLDR. Vacías donde el idioma no distingue
-    // --japonés no tiene plural gramatical-- y ahí `CompactNumberFormat` usa `other`, que es la
-    // categoría que el CLDR garantiza en todos.
-    private static String[] reglasDePlural() {
+    // The locale's plural rules, in the CLDR's syntax. Empty where the language does not
+    // distinguish --Japanese has no grammatical plural-- and there `CompactNumberFormat` uses
+    // `other`, which is the category the CLDR guarantees in every locale.
+    private static String[] pluralRules() {
         return new String[] {
             "",
             "one:i = 1 and v = 0",
@@ -431,13 +436,13 @@ public abstract class NumberFormat extends Format {
         };
     }
 
-    // Una fila por locale, en el mismo orden que la tabla de `DecimalFormatSymbols`: und, en-US,
-    // es-AR, de-DE, fr-FR, ja-JP. Cada entrada es la potencia de diez de su índice, y las primeras
-    // tres están vacías porque abajo de mil no se compacta nada.
+    // One row per locale, in the same order as `DecimalFormatSymbols`'s table: und, en-US, es-AR,
+    // de-DE, fr-FR, ja-JP. Each entry is the power of ten of its index, and the first three are
+    // empty because nothing below a thousand gets compacted.
     //
-    // La fila japonesa es más larga que las demás: su sistema de miradas agrupa de a diez mil
-    // (万, 億, 兆, 京) y el CLDR le da entradas hasta 10^18. No es un descuido de las otras.
-    private static String[][] compactosCortos() {
+    // The Japanese row is longer than the rest: its numeral system groups by ten thousand (万, 億,
+    // 兆, 京) and the CLDR gives it entries up to 10^18. It is not an oversight in the others.
+    private static String[][] shortCompacts() {
         return new String[][] {
             {"", "", "", "{other:0K}", "{other:00K}", "{other:000K}", "{other:0M}", "{other:00M}",
              "{other:000M}", "{other:0G}", "{other:00G}", "{other:000G}", "{other:0T}",
@@ -478,7 +483,7 @@ public abstract class NumberFormat extends Format {
         };
     }
 
-    private static String[][] compactosLargos() {
+    private static String[][] longCompacts() {
         return new String[][] {
             {"", "", "", "{other:0K}", "{other:00K}", "{other:000K}", "{other:0M}", "{other:00M}",
              "{other:000M}", "{other:0G}", "{other:00G}", "{other:000G}", "{other:0T}",

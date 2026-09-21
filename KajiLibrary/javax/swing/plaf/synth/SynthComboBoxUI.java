@@ -14,11 +14,11 @@ import javax.swing.ListCellRenderer;
 import javax.swing.plaf.basic.ComboPopup;
 
 /**
- * El desplegable de Synth.
+ * Synth's combo box.
  *
- * <p>{@link #getDefaultSize} existe para un problema concreto: un desplegable vacio no tiene de
- * donde sacar su alto. El basico lo resuelve midiendo un item de mentira; Synth lo saca del
- * estilo, que es donde corresponde que este.
+ * <p>{@link #getDefaultSize} exists for a concrete problem: an empty combo box has nowhere to
+ * get its height from. The basic one solves it by measuring a fake item; Synth takes it from the
+ * style, which is where it belongs.
  */
 public class SynthComboBoxUI extends javax.swing.plaf.basic.BasicComboBoxUI implements SynthUI, PropertyChangeListener {
 
@@ -29,32 +29,33 @@ public class SynthComboBoxUI extends javax.swing.plaf.basic.BasicComboBoxUI impl
     }
 
     public SynthContext getContext(JComponent c) {
-        return getContext(c, SynthLookAndFeel.estadoDe(c));
+        return getContext(c, SynthLookAndFeel.stateOf(c));
     }
 
     /**
-     * El contexto con ese estado.
+     * The context with that state.
      *
-     * <p>La region sale del componente y no de una constante fija, y eso importa en las cadenas de
-     * herencia: {@code SynthCheckBoxUI} hereda este metodo de {@code SynthButtonUI} y tiene que
-     * contestar {@code CheckBox}, no {@code Button}. Medido.
+     * <p>The region comes from the component and not from a fixed constant, and that matters in the
+     * chains of inheritance: {@code SynthCheckBoxUI} inherits this method from {@code
+     * SynthButtonUI} and has to answer {@code CheckBox}, not {@code Button}. Measured.
      */
     private SynthContext getContext(JComponent c, int state) {
         Region r = SynthLookAndFeel.getRegion(c);
         return new SynthContext(c, (r != null) ? r : Region.COMBO_BOX, style, state, true);
     }
 
-    /** Le pide el estilo a la fabrica; revienta si no hay, y esta medido. */
+    /** It asks the factory for the style; it blows up if there is none, and it is measured. */
     private void updateStyle(JComponent c) {
-        style = SynthLookAndFeel.actualizar(getContext(c, SynthConstants.ENABLED));
+        style = SynthLookAndFeel.update(getContext(c, SynthConstants.ENABLED));
     }
 
     /**
-     * Dibuja el fondo y despues el contenido.
+     * It draws the background and then the content.
      *
-     * <p>Synth separa las dos cosas: el fondo lo pinta el estilo -- que sabe en que estado esta el
-     * componente -- y el contenido lo pinta el aspecto basico. Por eso {@code update} no es
-     * {@code paint} con un relleno adelante, como en el basico, sino dos pasos distintos.
+     * <p>Synth separates the two things: the background is painted by the style -- which knows what
+     * state the component is in -- and the content is painted by the basic look and feel. That is
+     * why {@code update} is not {@code paint} with a fill in front, as in the basic one, but two
+     * different steps.
      */
     public void update(Graphics g, JComponent c) {
         SynthContext context = getContext(c);
@@ -70,10 +71,10 @@ public class SynthComboBoxUI extends javax.swing.plaf.basic.BasicComboBoxUI impl
     }
 
     protected void paint(SynthContext context, Graphics g) {
-        // El valor y la flecha se dibujan solos.
+        // The value and the arrow draw themselves.
     }
 
-    /** El borde lo dibuja el estilo, no un {@code Border}; ver {@link SynthUI}. */
+    /** The border is drawn by the style, not by a {@code Border}; see {@link SynthUI}. */
     public void paintBorder(SynthContext context, Graphics g, int x, int y, int w, int h) {
         if (context != null && context.getStyle() != null) {
             context.getStyle().getPainter(context)
@@ -81,7 +82,7 @@ public class SynthComboBoxUI extends javax.swing.plaf.basic.BasicComboBoxUI impl
         }
     }
 
-    /** Cualquier cambio puede querer otro estilo; ver {@link SynthLookAndFeel#actualizar}. */
+    /** Any change may want another style; see {@link SynthLookAndFeel#update}. */
     public void propertyChange(PropertyChangeEvent e) {
         Object o = e.getSource();
         if (o instanceof JComponent) {
@@ -124,7 +125,7 @@ public class SynthComboBoxUI extends javax.swing.plaf.basic.BasicComboBoxUI impl
         return super.createRenderer();
     }
 
-    /** El alto de un desplegable vacio; ver la nota de la clase. */
+    /** An empty combo box's height; see the class note. */
     protected Dimension getDefaultSize() {
         return new Dimension(0, 0);
     }

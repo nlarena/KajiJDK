@@ -36,40 +36,42 @@ import javax.swing.plaf.UIResource;
 import javax.swing.text.View;
 
 /**
- * El aspecto basico de un panel de solapas.
+ * The basic look and feel of a tabbed pane.
  *
- * <h2>Las solapas van en corridas, no en una fila</h2>
+ * <h2>The tabs go in runs, not in a row</h2>
  *
- * <p>Cuando las solapas no entran en el ancho del panel, no se achican ni aparece una barra: se
- * apilan en varias filas -- "corridas" --. {@link #tabRuns} guarda en que indice arranca cada una y
- * {@link #runCount} cuantas hay. Toda la aritmetica de la clase gira alrededor de eso: cual es la
- * solapa siguiente ({@link #getNextTabIndex}), cual es la siguiente <em>dentro de la corrida</em>
- * ({@link #getNextTabIndexInRun}), y cual corrida sigue ({@link #getNextTabRun}).
+ * <p>When the tabs do not fit in the pane's width, they neither shrink nor does a bar appear:
+ * they are stacked in several rows -- "runs" --. {@link #tabRuns} keeps at which index each
+ * one starts and {@link #runCount} how many there are. All the class's arithmetic turns around
+ * that: which is the next tab ({@link #getNextTabIndex}), which is the next one <em>within the
+ * run</em> ({@link #getNextTabIndexInRun}), and which run comes next
+ * ({@link #getNextTabRun}).
  *
- * <p>Y las corridas se <em>rotan</em>: la corrida de la solapa elegida se lleva siempre al frente,
- * pegada al contenido. Sin eso, elegir una solapa de la fila de arriba dejaria dos filas entre ella
- * y su contenido, y la linea que las une se veria cortada.
+ * <p>And the runs are <em>rotated</em>: the chosen tab's run is always brought to the front,
+ * stuck to the content. Without that, choosing a tab from the top row would leave two rows
+ * between it and its content, and the line that joins them would look broken.
  *
- * <h2>El estado se calcula tarde</h2>
+ * <h2>The state is computed late</h2>
  *
- * <p>Despues de instalar, {@link #runCount} vale cero y {@link #maxTabHeight} tambien: las cuentas
- * las hace el acomodador, y no corre hasta que alguien pregunta. Por eso
- * {@link #getTabRunCount} devuelve 2 en un panel de dos solapas aunque el campo diga cero -- fuerza
- * el calculo antes de contestar --. Esta medido, y es facil de confundir con un bug.
+ * <p>After installing, {@link #runCount} holds zero and so does {@link #maxTabHeight}: the
+ * arithmetic is done by the layout, and it does not run until somebody asks. That is why
+ * {@link #getTabRunCount} returns 2 in a pane of two tabs even though the field says zero
+ * -- it forces the computation before answering --. It is measured, and it is easy to mistake
+ * for a bug.
  *
- * <h2>Un panel de solapas no es opaco</h2>
+ * <h2>A tabbed pane is not opaque</h2>
  *
- * <p>Y su color de fondo es el de la sombra de las solapas, no un gris de panel. Los dos estan
- * medidos y los dos sorprenden; el motivo es que lo que se ve detras de las solapas es el borde del
- * contenido, no un fondo.
+ * <p>And its background colour is the tabs' shadow one, not a panel grey. Both are measured and
+ * both are surprising; the reason is that what is seen behind the tabs is the content's border,
+ * not a background.
  *
- * <h2>Lo que queda dicho</h2>
+ * <h2>What is left said</h2>
  *
- * <p>El modo de una sola fila con botones de desplazamiento --{@code SCROLL_TAB_LAYOUT}-- necesita
- * botones y un viewport; aca todas las solapas se acomodan en corridas. Un panel puesto en ese modo
- * se ve como uno envuelto.
+ * <p>The single-row mode with scroll buttons -- {@code SCROLL_TAB_LAYOUT} -- needs buttons and
+ * a viewport; here every tab is laid out in runs. A pane put into that mode looks like a
+ * wrapped one.
  *
- * <p>Las cuatro teclas protegidas quedan en nulo, como en el resto del paquete.
+ * <p>The four protected keys are left null, as in the rest of the package.
  */
 public class BasicTabbedPaneUI extends TabbedPaneUI implements SwingConstants {
 
@@ -89,19 +91,19 @@ public class BasicTabbedPaneUI extends TabbedPaneUI implements SwingConstants {
     protected Insets tabAreaInsets;
     protected Insets contentBorderInsets;
 
-    /** Sin uso; ver la nota de la clase. */
+    /** Unused; see the class note. */
     protected KeyStroke upKey;
 
-    /** Sin uso; ver la nota de la clase. */
+    /** Unused; see the class note. */
     protected KeyStroke downKey;
 
-    /** Sin uso; ver la nota de la clase. */
+    /** Unused; see the class note. */
     protected KeyStroke leftKey;
 
-    /** Sin uso; ver la nota de la clase. */
+    /** Unused; see the class note. */
     protected KeyStroke rightKey;
 
-    /** Donde arranca cada corrida; ver la nota de la clase. */
+    /** Where each run starts; see the class note. */
     protected int[] tabRuns = new int[10];
 
     protected int runCount = 0;
@@ -115,25 +117,25 @@ public class BasicTabbedPaneUI extends TabbedPaneUI implements SwingConstants {
     protected MouseListener mouseListener;
     protected FocusListener focusListener;
 
-    /** Un rectangulo de trabajo; se reusa para no crear uno por cada cuenta. */
+    /** A working rectangle; it is reused so as not to create one for each piece of arithmetic. */
     protected transient Rectangle calcRect = new Rectangle();
 
     private Component visibleComponent;
     private int rolloverTabIndex = -1;
-    private boolean layoutCalculado;
+    private boolean layoutComputed;
 
-    private static final ColorUIResource SOMBRA = new ColorUIResource(184, 207, 229);
-    private static final ColorUIResource SOMBRA_OSCURA = new ColorUIResource(122, 138, 153);
-    private static final ColorUIResource BRILLO = new ColorUIResource(238, 238, 238);
-    private static final ColorUIResource BRILLO_CLARO = new ColorUIResource(255, 255, 255);
-    private static final ColorUIResource FOCO = new ColorUIResource(99, 130, 191);
-    private static final ColorUIResource FRENTE = new ColorUIResource(51, 51, 51);
-    private static final FontUIResource FUENTE = new FontUIResource("Dialog", Font.BOLD, 12);
+    private static final ColorUIResource SHADOW = new ColorUIResource(184, 207, 229);
+    private static final ColorUIResource DARK_SHADOW = new ColorUIResource(122, 138, 153);
+    private static final ColorUIResource HIGHLIGHT = new ColorUIResource(238, 238, 238);
+    private static final ColorUIResource LIGHT_HIGHLIGHT = new ColorUIResource(255, 255, 255);
+    private static final ColorUIResource FOCUS = new ColorUIResource(99, 130, 191);
+    private static final ColorUIResource FOREGROUND = new ColorUIResource(51, 51, 51);
+    private static final FontUIResource FONT = new FontUIResource("Dialog", Font.BOLD, 12);
 
     public BasicTabbedPaneUI() {
     }
 
-    /** Uno nuevo por panel: guarda las corridas y los rectangulos de las solapas. */
+    /** A new one per pane: it keeps the runs and the tabs' rectangles. */
     public static ComponentUI createUI(JComponent c) {
         return new BasicTabbedPaneUI();
     }
@@ -156,25 +158,25 @@ public class BasicTabbedPaneUI extends TabbedPaneUI implements SwingConstants {
         tabPane = null;
     }
 
-    /** Colores, insets y fuente; los valores son los de {@code TabbedPane.*} en Metal. */
+    /** Colours, insets and typeface; the values are those of {@code TabbedPane.*} in Metal. */
     protected void installDefaults() {
-        Color fondo = tabPane.getBackground();
-        if (fondo == null || fondo instanceof UIResource) {
-            tabPane.setBackground(SOMBRA);
+        Color background = tabPane.getBackground();
+        if (background == null || background instanceof UIResource) {
+            tabPane.setBackground(SHADOW);
         }
-        Color frente = tabPane.getForeground();
-        if (frente == null || frente instanceof UIResource) {
-            tabPane.setForeground(FRENTE);
+        Color foreground = tabPane.getForeground();
+        if (foreground == null || foreground instanceof UIResource) {
+            tabPane.setForeground(FOREGROUND);
         }
-        Font fuente = tabPane.getFont();
-        if (fuente == null || fuente instanceof UIResource) {
-            tabPane.setFont(FUENTE);
+        Font font = tabPane.getFont();
+        if (font == null || font instanceof UIResource) {
+            tabPane.setFont(FONT);
         }
-        highlight = BRILLO;
-        lightHighlight = BRILLO_CLARO;
-        shadow = SOMBRA;
-        darkShadow = SOMBRA_OSCURA;
-        focus = FOCO;
+        highlight = HIGHLIGHT;
+        lightHighlight = LIGHT_HIGHLIGHT;
+        shadow = SHADOW;
+        darkShadow = DARK_SHADOW;
+        focus = FOCUS;
 
         textIconGap = 4;
         tabRunOverlay = 2;
@@ -186,7 +188,7 @@ public class BasicTabbedPaneUI extends TabbedPaneUI implements SwingConstants {
         LookAndFeel.installProperty(tabPane, "opaque", Boolean.FALSE);
     }
 
-    /** No saca nada; ver {@link BasicPanelUI#uninstallDefaults}. */
+    /** It removes nothing; see {@link BasicPanelUI#uninstallDefaults}. */
     protected void uninstallDefaults() {
         highlight = null;
         lightHighlight = null;
@@ -199,7 +201,7 @@ public class BasicTabbedPaneUI extends TabbedPaneUI implements SwingConstants {
         contentBorderInsets = null;
     }
 
-    /** Pone el acomodador de corridas. */
+    /** It sets the runs' layout. */
     protected void installComponents() {
         tabPane.setLayout(createLayoutManager());
     }
@@ -234,7 +236,7 @@ public class BasicTabbedPaneUI extends TabbedPaneUI implements SwingConstants {
         focusListener = null;
     }
 
-    /** Sin atajos propios; ver la nota de la clase. */
+    /** With no shortcuts of its own; see the class note. */
     protected void installKeyboardActions() {
     }
 
@@ -267,7 +269,7 @@ public class BasicTabbedPaneUI extends TabbedPaneUI implements SwingConstants {
                 ? tabPane.getDisabledIconAt(tabIndex) : tabPane.getIconAt(tabIndex);
     }
 
-    /** La vista de HTML del titulo, si lo es; ver {@link BasicHTML}. */
+    /** The title's HTML view, if it is one; see {@link BasicHTML}. */
     protected View getTextViewForTab(int tabIndex) {
         return null;
     }
@@ -294,11 +296,11 @@ public class BasicTabbedPaneUI extends TabbedPaneUI implements SwingConstants {
     }
 
     /**
-     * Gira unos insets segun de que lado van las solapas.
+     * It turns some insets around according to which side the tabs go on.
      *
-     * <p>Los numeros estan escritos para solapas arriba; con las solapas a la izquierda, el "arriba"
-     * de esos insets pasa a ser el "izquierda". Girarlos es mas barato -- y mucho menos propenso a
-     * error -- que tener cuatro juegos de numeros.
+     * <p>The numbers are written for tabs on top; with the tabs on the left, those insets' "top"
+     * becomes the "left". Turning them around is cheaper -- and much less error-prone -- than
+     * having four sets of numbers.
      */
     protected static void rotateInsets(Insets topInsets, Insets targetInsets, int targetPlacement) {
         if (targetPlacement == LEFT) {
@@ -332,17 +334,17 @@ public class BasicTabbedPaneUI extends TabbedPaneUI implements SwingConstants {
         return 0;
     }
 
-    /** Si la corrida se estira para llenar el ancho; la ultima no. */
+    /** Whether the run stretches to fill the width; the last one does not. */
     protected boolean shouldPadTabRun(int tabPlacement, int run) {
         return runCount > 1;
     }
 
-    /** Si la corrida elegida se lleva al frente; ver la nota de la clase. */
+    /** Whether the chosen run is brought to the front; see the class note. */
     protected boolean shouldRotateTabRuns(int tabPlacement) {
         return true;
     }
 
-    /** Alto de una solapa: el del texto mas sus insets mas dos. */
+    /** A tab's height: the text's plus its insets plus two. */
     protected int calculateTabHeight(int tabPlacement, int tabIndex, int fontHeight) {
         int height = 0;
         Component c = tabPane.getTabComponentAt(tabIndex);
@@ -376,7 +378,7 @@ public class BasicTabbedPaneUI extends TabbedPaneUI implements SwingConstants {
         return result;
     }
 
-    /** Ancho de una solapa: el del texto mas sus insets mas tres. */
+    /** A tab's width: the text's plus its insets plus three. */
     protected int calculateTabWidth(int tabPlacement, int tabIndex, FontMetrics metrics) {
         Insets insets = getTabInsets(tabPlacement, tabIndex);
         int width = insets.left + insets.right + 3;
@@ -409,7 +411,7 @@ public class BasicTabbedPaneUI extends TabbedPaneUI implements SwingConstants {
         return result;
     }
 
-    /** Alto del area de solapas: las corridas menos el solape, mas los insets. */
+    /** The tab area's height: the runs minus the overlap, plus the insets. */
     protected int calculateTabAreaHeight(int tabPlacement, int horizRunCount, int maxTabHeight) {
         Insets insets = getTabAreaInsets(tabPlacement);
         int overlay = getTabRunOverlay(tabPlacement);
@@ -428,38 +430,38 @@ public class BasicTabbedPaneUI extends TabbedPaneUI implements SwingConstants {
                 : 0;
     }
 
-    /** Agranda la tabla de corridas cuando no entran mas. */
+    /** It enlarges the table of runs when no more fit. */
     protected void expandTabRunsArray() {
         int[] mas = new int[tabRuns.length * 2];
         System.arraycopy(tabRuns, 0, mas, 0, tabRuns.length);
         tabRuns = mas;
     }
 
-    /** Se asegura de que haya un rectangulo por solapa. */
+    /** It makes sure there is a rectangle per tab. */
     protected void assureRectsCreated(int tabCount) {
         if (rects == null || rects.length < tabCount) {
-            Rectangle[] nuevos = new Rectangle[tabCount];
-            int viejos = (rects == null) ? 0 : rects.length;
-            for (int i = 0; i < viejos && i < tabCount; i++) {
-                nuevos[i] = rects[i];
+            Rectangle[] added = new Rectangle[tabCount];
+            int old = (rects == null) ? 0 : rects.length;
+            for (int i = 0; i < old && i < tabCount; i++) {
+                added[i] = rects[i];
             }
-            for (int i = viejos; i < tabCount; i++) {
-                nuevos[i] = new Rectangle();
+            for (int i = old; i < tabCount; i++) {
+                added[i] = new Rectangle();
             }
-            rects = nuevos;
+            rects = added;
         }
     }
 
-    /** Cual solapa tiene el foco; la elegida. */
+    /** Which tab has the focus; the chosen one. */
     protected int getFocusIndex() {
         return tabPane.getSelectedIndex();
     }
 
     /**
-     * Un boton de desplazamiento del area de solapas.
+     * A scroll button of the tab area.
      *
-     * <p>Solo lo usa el modo de una sola fila, que esta biblioteca no acomoda; ver la nota de la
-     * clase. El boton se arma igual, para que una subclase que lo quiera lo tenga.
+     * <p>Only the single-row mode uses it, which this library does not lay out; see the class
+     * note. The button is built all the same, so that a subclass that wants it has it.
      */
     protected javax.swing.JButton createScrollButton(int direction) {
         if (direction != SOUTH && direction != NORTH && direction != EAST
@@ -470,9 +472,9 @@ public class BasicTabbedPaneUI extends TabbedPaneUI implements SwingConstants {
         return new BasicArrowButton(direction);
     }
 
-    /** Fuerza el calculo si quedo viejo; ver la nota de la clase. */
+    /** It forces the computation if it went stale; see the class note. */
     private void ensureCurrentLayout() {
-        if (!layoutCalculado) {
+        if (!layoutComputed) {
             LayoutManager lm = tabPane.getLayout();
             if (lm instanceof TabbedPaneLayout) {
                 ((TabbedPaneLayout) lm).calculateLayoutInfo();
@@ -485,7 +487,7 @@ public class BasicTabbedPaneUI extends TabbedPaneUI implements SwingConstants {
         return runCount;
     }
 
-    /** El rectangulo de esa solapa; ver la nota de la clase sobre el calculo tardio. */
+    /** That tab's rectangle; see the class note about the late computation. */
     public Rectangle getTabBounds(JTabbedPane pane, int i) {
         ensureCurrentLayout();
         return getTabBounds(i, new Rectangle());
@@ -501,8 +503,8 @@ public class BasicTabbedPaneUI extends TabbedPaneUI implements SwingConstants {
         return dest;
     }
 
-    /** La corrida en la que esta esa solapa. */
-    private int getRunForTab(int tabCount, int tabIndex) {
+    /** The run that tab is in. */
+    protected int getRunForTab(int tabCount, int tabIndex) {
         for (int i = 0; i < runCount; i++) {
             int first = tabRuns[i];
             int last = lastTabInRun(tabCount, i);
@@ -513,7 +515,7 @@ public class BasicTabbedPaneUI extends TabbedPaneUI implements SwingConstants {
         return 0;
     }
 
-    /** La ultima solapa de esa corrida. */
+    /** That run's last tab. */
     protected int lastTabInRun(int tabCount, int run) {
         if (runCount == 1) {
             return tabCount - 1;
@@ -566,13 +568,13 @@ public class BasicTabbedPaneUI extends TabbedPaneUI implements SwingConstants {
         return getPreviousTabIndex(base);
     }
 
-    /** Cuanto se corre esa corrida; el basico no corre ninguna. */
+    /** How much that run shifts; the basic one shifts none. */
     protected int getTabRunOffset(int tabPlacement, int tabCount, int tabIndex,
             boolean forward) {
         return 0;
     }
 
-    /** Cuanto se corre el texto de la solapa elegida; el basico no lo corre. */
+    /** How much the chosen tab's text shifts; the basic one does not shift it. */
     protected int getTabLabelShiftX(int tabPlacement, int tabIndex, boolean isSelected) {
         return 0;
     }
@@ -585,7 +587,7 @@ public class BasicTabbedPaneUI extends TabbedPaneUI implements SwingConstants {
         return visibleComponent;
     }
 
-    /** Muestra el contenido de la solapa elegida y esconde el anterior. */
+    /** It shows the chosen tab's content and hides the previous one. */
     protected void setVisibleComponent(Component component) {
         if (visibleComponent != null && visibleComponent != component
                 && visibleComponent.getParent() == tabPane
@@ -598,7 +600,7 @@ public class BasicTabbedPaneUI extends TabbedPaneUI implements SwingConstants {
         visibleComponent = component;
     }
 
-    /** La solapa que tiene el mouse encima; un aspecto puede dibujarla distinto. */
+    /** The tab with the mouse over it; a look and feel may draw it differently. */
     protected void setRolloverTab(int index) {
         rolloverTabIndex = index;
     }
@@ -607,7 +609,7 @@ public class BasicTabbedPaneUI extends TabbedPaneUI implements SwingConstants {
         return rolloverTabIndex;
     }
 
-    /** Elige la solapa siguiente, la anterior, o la de la corrida de al lado. */
+    /** It chooses the next tab, the previous one, or the one in the run beside it. */
     protected void navigateSelectedTab(int direction) {
         int tabCount = tabPane.getTabCount();
         if (tabCount <= 0) {
@@ -655,7 +657,7 @@ public class BasicTabbedPaneUI extends TabbedPaneUI implements SwingConstants {
         tabPane.setSelectedIndex(tabIndex);
     }
 
-    /** Elige la solapa mas parecida de la corrida de al lado. */
+    /** It chooses the most similar tab of the run beside it. */
     protected void selectAdjacentRunTab(int tabPlacement, int tabIndex, int offset) {
         if (runCount < 2) {
             return;
@@ -671,10 +673,10 @@ public class BasicTabbedPaneUI extends TabbedPaneUI implements SwingConstants {
     }
 
     /**
-     * Donde apoya el texto de esa solapa.
+     * Where that tab's text rests.
      *
-     * <p>Se mide con la solapa, no con el panel: dos solapas de distinta altura tienen lineas de
-     * base distintas, y quien pregunta quiere la de la que se ve.
+     * <p>It is measured with the tab, not with the pane: two tabs of different heights have
+     * different baselines, and whoever asks wants the one of the tab that is seen.
      */
     protected int getBaseline(int tab) {
         if (tabPane.getTabComponentAt(tab) != null) {
@@ -693,16 +695,17 @@ public class BasicTabbedPaneUI extends TabbedPaneUI implements SwingConstants {
             return -1;
         }
         FontMetrics metrics = getFontMetrics();
-        int alto = calculateTabHeight(tabPane.getTabPlacement(), tab, metrics.getHeight());
-        return (alto - metrics.getHeight()) / 2 + metrics.getAscent() + getBaselineOffset();
+        int height = calculateTabHeight(tabPane.getTabPlacement(), tab, metrics.getHeight());
+        return (height - metrics.getHeight()) / 2 + metrics.getAscent() + getBaselineOffset();
     }
 
     /**
-     * Cuanto se corre la linea de base de una solapa.
+     * How much a tab's baseline shifts.
      *
-     * <p>Un pixel, y de signo distinto segun el lado y segun haya una solapa o varias. Es un ajuste
-     * a ojo del JDK -- con una sola solapa el dibujo queda un pixel corrido respecto de con dos --,
-     * y esta medido: sin el, la linea de base de un panel de dos solapas arriba da 14 en vez de 15.
+     * <p>One pixel, and of a different sign according to the side and to whether there is one tab
+     * or several. It is an adjustment by eye of the JDK's -- with a single tab the drawing ends up
+     * one pixel off with respect to two -- and it is measured: without it, the baseline of a pane
+     * of two tabs on top gives 14 instead of 15.
      */
     protected int getBaselineOffset() {
         int tabPlacement = tabPane.getTabPlacement();
@@ -717,10 +720,10 @@ public class BasicTabbedPaneUI extends TabbedPaneUI implements SwingConstants {
     }
 
     /**
-     * La del panel: la de la primera solapa mas donde empieza el area.
+     * The pane's: the first tab's plus where the area starts.
      *
-     * @throws NullPointerException si el componente es nulo
-     * @throws IllegalArgumentException si el ancho o el alto son negativos
+     * @throws NullPointerException if the component is null
+     * @throws IllegalArgumentException if the width or the height are negative
      */
     public int getBaseline(JComponent c, int width, int height) {
         super.getBaseline(c, width, height);
@@ -737,21 +740,21 @@ public class BasicTabbedPaneUI extends TabbedPaneUI implements SwingConstants {
     }
 
     /**
-     * {@code CONSTANT_ASCENT}: las solapas estan siempre arriba de todo.
+     * {@code CONSTANT_ASCENT}: the tabs are always at the very top.
      *
-     * @throws NullPointerException si el componente es nulo
+     * @throws NullPointerException if the component is null
      */
     public Component.BaselineResizeBehavior getBaselineResizeBehavior(JComponent c) {
         super.getBaselineResizeBehavior(c);
         return Component.BaselineResizeBehavior.CONSTANT_ASCENT;
     }
 
-    /** {@code null}; contesta el acomodador. */
+    /** {@code null}; the layout answers. */
     public Dimension getMinimumSize(JComponent c) {
         return null;
     }
 
-    /** {@code null}; contesta el acomodador. */
+    /** {@code null}; the layout answers. */
     public Dimension getMaximumSize(JComponent c) {
         return null;
     }
@@ -764,7 +767,7 @@ public class BasicTabbedPaneUI extends TabbedPaneUI implements SwingConstants {
         paintContentBorder(g, tabPlacement, selectedIndex);
     }
 
-    /** Todas las solapas, corrida por corrida, dejando la elegida para el final. */
+    /** Every tab, run by run, leaving the chosen one for the end. */
     protected void paintTabArea(Graphics g, int tabPlacement, int selectedIndex) {
         int tabCount = tabPane.getTabCount();
         Rectangle iconRect = new Rectangle();
@@ -784,7 +787,7 @@ public class BasicTabbedPaneUI extends TabbedPaneUI implements SwingConstants {
         }
     }
 
-    /** Una solapa: fondo, borde, icono, texto y marca de foco. */
+    /** One tab: background, border, icon, text and focus mark. */
     protected void paintTab(Graphics g, int tabPlacement, Rectangle[] rects, int tabIndex,
             Rectangle iconRect, Rectangle textRect) {
         if (rects == null || tabIndex >= rects.length || rects[tabIndex] == null) {
@@ -810,7 +813,7 @@ public class BasicTabbedPaneUI extends TabbedPaneUI implements SwingConstants {
         paintFocusIndicator(g, tabPlacement, rects, tabIndex, iconRect, textRect, isSelected);
     }
 
-    /** Ubica el icono y el texto dentro de la solapa. */
+    /** It places the icon and the text inside the tab. */
     protected void layoutLabel(int tabPlacement, FontMetrics metrics, int tabIndex, String title,
             Icon icon, Rectangle tabRect, Rectangle iconRect, Rectangle textRect,
             boolean isSelected) {
@@ -858,7 +861,7 @@ public class BasicTabbedPaneUI extends TabbedPaneUI implements SwingConstants {
         g.drawString(title, textRect.x, textRect.y + metrics.getAscent());
     }
 
-    /** El fondo de una solapa: el color que tenga puesto, o el de la sombra. */
+    /** A tab's background: whatever colour it has set, or the shadow's. */
     protected void paintTabBackground(Graphics g, int tabPlacement, int tabIndex, int x, int y,
             int w, int h, boolean isSelected) {
         g.setColor(!isSelected || tabPane.getBackgroundAt(tabIndex) != null
@@ -866,7 +869,7 @@ public class BasicTabbedPaneUI extends TabbedPaneUI implements SwingConstants {
         g.fillRect(x, y, w, h);
     }
 
-    /** El borde de una solapa: dos lineas que la unen al contenido. */
+    /** A tab's border: two lines that join it to the content. */
     protected void paintTabBorder(Graphics g, int tabPlacement, int tabIndex, int x, int y,
             int w, int h, boolean isSelected) {
         g.setColor(lightHighlight);
@@ -879,7 +882,7 @@ public class BasicTabbedPaneUI extends TabbedPaneUI implements SwingConstants {
         g.drawLine(x + w - 1, y + 2, x + w - 1, y + h - 1);
     }
 
-    /** La marca de que la solapa tiene el foco: un rectangulo punteado. */
+    /** The mark that the tab has the focus: a dotted rectangle. */
     protected void paintFocusIndicator(Graphics g, int tabPlacement, Rectangle[] rects,
             int tabIndex, Rectangle iconRect, Rectangle textRect, boolean isSelected) {
         if (!tabPane.hasFocus() || !isSelected) {
@@ -889,12 +892,12 @@ public class BasicTabbedPaneUI extends TabbedPaneUI implements SwingConstants {
         g.drawRect(textRect.x - 1, textRect.y, textRect.width + 1, textRect.height - 1);
     }
 
-    /** El marco alrededor del contenido, con el hueco de la solapa elegida. */
+    /** The frame around the content, with the chosen tab's gap. */
     protected void paintContentBorder(Graphics g, int tabPlacement, int selectedIndex) {
         int width = tabPane.getWidth();
         int height = tabPane.getHeight();
         Insets insets = tabPane.getInsets();
-        Insets bordeInsets = getContentBorderInsets(tabPlacement);
+        Insets borderInsets = getContentBorderInsets(tabPlacement);
 
         int x = insets.left;
         int y = insets.top;
@@ -902,15 +905,15 @@ public class BasicTabbedPaneUI extends TabbedPaneUI implements SwingConstants {
         int h = height - insets.top - insets.bottom;
 
         if (tabPlacement == TOP) {
-            int alto = calculateTabAreaHeight(tabPlacement, runCount, maxTabHeight);
-            y += alto;
-            h -= alto;
+            int tabAreaHeight = calculateTabAreaHeight(tabPlacement, runCount, maxTabHeight);
+            y += tabAreaHeight;
+            h -= tabAreaHeight;
         } else if (tabPlacement == BOTTOM) {
             h -= calculateTabAreaHeight(tabPlacement, runCount, maxTabHeight);
         } else if (tabPlacement == LEFT) {
-            int ancho = calculateTabAreaWidth(tabPlacement, runCount, maxTabWidth);
-            x += ancho;
-            w -= ancho;
+            int tabAreaWidth = calculateTabAreaWidth(tabPlacement, runCount, maxTabWidth);
+            x += tabAreaWidth;
+            w -= tabAreaWidth;
         } else {
             w -= calculateTabAreaWidth(tabPlacement, runCount, maxTabWidth);
         }
@@ -918,8 +921,8 @@ public class BasicTabbedPaneUI extends TabbedPaneUI implements SwingConstants {
         paintContentBorderLeftEdge(g, tabPlacement, selectedIndex, x, y, w, h);
         paintContentBorderBottomEdge(g, tabPlacement, selectedIndex, x, y, w, h);
         paintContentBorderRightEdge(g, tabPlacement, selectedIndex, x, y, w, h);
-        // `bordeInsets` queda para las subclases que dibujen mas grueso.
-        if (bordeInsets == null) {
+        // `borderInsets` is left for the subclasses that draw thicker.
+        if (borderInsets == null) {
             return;
         }
     }
@@ -948,7 +951,7 @@ public class BasicTabbedPaneUI extends TabbedPaneUI implements SwingConstants {
         g.drawLine(x + w - 1, y, x + w - 1, y + h - 1);
     }
 
-    /** Que solapa cae en ese punto; -1 si ninguna. */
+    /** Which tab falls at that point; -1 if none. */
     public int tabForCoordinate(JTabbedPane pane, int x, int y) {
         ensureCurrentLayout();
         for (int i = 0; i < rects.length; i++) {
@@ -960,10 +963,10 @@ public class BasicTabbedPaneUI extends TabbedPaneUI implements SwingConstants {
     }
 
     /**
-     * El acomodador de corridas; ver la nota de la clase.
+     * The runs' layout; see the class note.
      *
-     * <p>Estatico y con el UI como primer parametro, que es la firma que el JDK genera para una
-     * clase interna; ver el hallazgo #518.
+     * <p>Static and with the look and feel as the first parameter, which is the signature the JDK
+     * generates for an inner class; see finding #518.
      */
     public static class TabbedPaneLayout implements LayoutManager {
 
@@ -987,7 +990,7 @@ public class BasicTabbedPaneUI extends TabbedPaneUI implements SwingConstants {
             return calculateSize(true);
         }
 
-        /** El del contenido mas el area de solapas. */
+        /** The content's plus the tab area. */
         protected Dimension calculateSize(boolean minimum) {
             JTabbedPane tabPane = ui.tabPane;
             int tabPlacement = tabPane.getTabPlacement();
@@ -1065,16 +1068,16 @@ public class BasicTabbedPaneUI extends TabbedPaneUI implements SwingConstants {
             return total;
         }
 
-        /** Rehace corridas, rectangulos y maximos. */
+        /** It rebuilds runs, rectangles and maximums. */
         public void calculateLayoutInfo() {
             JTabbedPane tabPane = ui.tabPane;
             int tabCount = tabPane.getTabCount();
             ui.assureRectsCreated(tabCount);
             calculateTabRects(tabPane.getTabPlacement(), tabCount);
-            ui.layoutCalculado = true;
+            ui.layoutComputed = true;
         }
 
-        /** Reparte las solapas en corridas; ver la nota de la clase. */
+        /** It shares the tabs out into runs; see the class note. */
         protected void calculateTabRects(int tabPlacement, int tabCount) {
             JTabbedPane tabPane = ui.tabPane;
             FontMetrics metrics = ui.getFontMetrics();
@@ -1093,7 +1096,7 @@ public class BasicTabbedPaneUI extends TabbedPaneUI implements SwingConstants {
             }
 
             boolean vertical = (tabPlacement == LEFT || tabPlacement == RIGHT);
-            int disponible = vertical
+            int available = vertical
                     ? size.height - insets.top - insets.bottom
                             - tabAreaInsets.top - tabAreaInsets.bottom
                     : size.width - insets.left - insets.right
@@ -1102,7 +1105,7 @@ public class BasicTabbedPaneUI extends TabbedPaneUI implements SwingConstants {
                     : insets.left + tabAreaInsets.left;
             int y = vertical ? insets.top + tabAreaInsets.top
                     : insets.top + tabAreaInsets.top;
-            int corrida = 0;
+            int shifted = 0;
             ui.tabRuns[0] = 0;
             ui.runCount = 1;
             int pos = 0;
@@ -1110,40 +1113,40 @@ public class BasicTabbedPaneUI extends TabbedPaneUI implements SwingConstants {
             for (int i = 0; i < tabCount; i++) {
                 Rectangle rect = ui.rects[i];
                 if (vertical) {
-                    int alto = ui.calculateTabHeight(tabPlacement, i, fontHeight);
-                    if (pos != 0 && pos + alto > disponible) {
-                        corrida++;
-                        if (corrida >= ui.tabRuns.length) {
+                    int height = ui.calculateTabHeight(tabPlacement, i, fontHeight);
+                    if (pos != 0 && pos + height > available) {
+                        shifted++;
+                        if (shifted >= ui.tabRuns.length) {
                             ui.expandTabRunsArray();
                         }
-                        ui.tabRuns[corrida] = i;
-                        ui.runCount = corrida + 1;
+                        ui.tabRuns[shifted] = i;
+                        ui.runCount = shifted + 1;
                         pos = 0;
                     }
-                    rect.x = x + corrida * (ui.maxTabWidth - ui.getTabRunOverlay(tabPlacement));
+                    rect.x = x + shifted * (ui.maxTabWidth - ui.getTabRunOverlay(tabPlacement));
                     rect.y = y + pos;
                     rect.width = ui.maxTabWidth;
-                    rect.height = alto;
-                    pos += alto;
+                    rect.height = height;
+                    pos += height;
                 } else {
-                    int ancho = ui.calculateTabWidth(tabPlacement, i, metrics);
-                    if (pos != 0 && pos + ancho > disponible) {
-                        corrida++;
-                        if (corrida >= ui.tabRuns.length) {
+                    int width = ui.calculateTabWidth(tabPlacement, i, metrics);
+                    if (pos != 0 && pos + width > available) {
+                        shifted++;
+                        if (shifted >= ui.tabRuns.length) {
                             ui.expandTabRunsArray();
                         }
-                        ui.tabRuns[corrida] = i;
-                        ui.runCount = corrida + 1;
+                        ui.tabRuns[shifted] = i;
+                        ui.runCount = shifted + 1;
                         pos = 0;
                     }
                     rect.x = x + pos;
-                    rect.y = y + corrida * (ui.maxTabHeight - ui.getTabRunOverlay(tabPlacement));
-                    rect.width = ancho;
+                    rect.y = y + shifted * (ui.maxTabHeight - ui.getTabRunOverlay(tabPlacement));
+                    rect.width = width;
                     rect.height = ui.maxTabHeight;
-                    pos += ancho;
+                    pos += width;
                 }
                 if (i == selectedIndex) {
-                    ui.selectedRun = corrida;
+                    ui.selectedRun = shifted;
                 }
             }
             if (ui.shouldRotateTabRuns(tabPlacement)) {
@@ -1151,25 +1154,25 @@ public class BasicTabbedPaneUI extends TabbedPaneUI implements SwingConstants {
             }
         }
 
-        /** Lleva la corrida elegida al frente; ver la nota de la clase. */
+        /** It brings the chosen run to the front; see the class note. */
         protected void rotateTabRuns(int tabPlacement, int selectedRun) {
             if (selectedRun < 1 || ui.runCount < 2) {
                 return;
             }
             for (int i = 0; i < selectedRun; i++) {
-                int primera = ui.tabRuns[0];
+                int first = ui.tabRuns[0];
                 for (int j = 1; j < ui.runCount; j++) {
                     ui.tabRuns[j - 1] = ui.tabRuns[j];
                 }
-                ui.tabRuns[ui.runCount - 1] = primera;
+                ui.tabRuns[ui.runCount - 1] = first;
             }
         }
 
-        /** Estira las solapas de una corrida para que llenen el ancho. */
+        /** It stretches a run's tabs so that they fill the width. */
         protected void padTabRun(int tabPlacement, int start, int end, int max) {
         }
 
-        /** Agranda un poco la solapa elegida, para que se vea al frente. */
+        /** It enlarges the chosen tab a little, so that it is seen at the front. */
         protected void padSelectedTab(int tabPlacement, int selectedIndex) {
             if (selectedIndex < 0 || ui.rects == null || selectedIndex >= ui.rects.length) {
                 return;
@@ -1182,7 +1185,7 @@ public class BasicTabbedPaneUI extends TabbedPaneUI implements SwingConstants {
             selRect.height += (padInsets.top + padInsets.bottom);
         }
 
-        /** Reparte el sobrante entre las corridas para que queden parejas. */
+        /** It hands the leftover out between the runs so that they come out even. */
         protected void normalizeTabRuns(int tabPlacement, int tabCount, int start, int max) {
         }
 
@@ -1203,17 +1206,17 @@ public class BasicTabbedPaneUI extends TabbedPaneUI implements SwingConstants {
             int cw = tabPane.getWidth() - insets.left - insets.right;
             int ch = tabPane.getHeight() - insets.top - insets.bottom;
             if (tabPlacement == LEFT || tabPlacement == RIGHT) {
-                int ancho = ui.calculateTabAreaWidth(tabPlacement, ui.runCount, ui.maxTabWidth);
+                int width = ui.calculateTabAreaWidth(tabPlacement, ui.runCount, ui.maxTabWidth);
                 if (tabPlacement == LEFT) {
-                    cx += ancho;
+                    cx += width;
                 }
-                cw -= ancho;
+                cw -= width;
             } else {
-                int alto = ui.calculateTabAreaHeight(tabPlacement, ui.runCount, ui.maxTabHeight);
+                int height = ui.calculateTabAreaHeight(tabPlacement, ui.runCount, ui.maxTabHeight);
                 if (tabPlacement == TOP) {
-                    cy += alto;
+                    cy += height;
                 }
-                ch -= alto;
+                ch -= height;
             }
             Insets contentInsets = ui.getContentBorderInsets(tabPlacement);
             visible.setBounds(cx + contentInsets.left, cy + contentInsets.top,
@@ -1223,9 +1226,10 @@ public class BasicTabbedPaneUI extends TabbedPaneUI implements SwingConstants {
     }
 
     /**
-     * El que escucha el mouse, el foco, el modelo y las propiedades.
+     * The one that listens to the mouse, the focus, the model and the properties.
      *
-     * <p>Estatico y con el UI como campo, por lo mismo que en todo el paquete.
+     * <p>Static and with the look and feel as a field, for the same reason as everywhere in the
+     * package.
      */
     private static class Handler extends MouseAdapter implements MouseListener, FocusListener,
             ChangeListener, PropertyChangeListener {
@@ -1276,7 +1280,7 @@ public class BasicTabbedPaneUI extends TabbedPaneUI implements SwingConstants {
             String name = e.getPropertyName();
             if ("tabPlacement".equals(name) || "font".equals(name)
                     || "indexForTabComponent".equals(name) || "tabLayoutPolicy".equals(name)) {
-                ui.layoutCalculado = false;
+                ui.layoutComputed = false;
                 pane.revalidate();
                 pane.repaint();
             }

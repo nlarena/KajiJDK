@@ -52,9 +52,9 @@ public class InflaterInputStream extends FilterInputStream {
         return readInflated(b, off, length);
     }
 
-    // El cuerpo vive aca, con otro nombre, para que una subclase pueda ampliarlo sin escribir
-    // `super.read(...)` — que el emisor todavia no soporta (finding #125). Llamarlo HEREDADO y sin
-    // calificar es lo que funciona.
+    // The body lives here, under another name, so a subclass can extend it without writing
+    // `super.read(...)` -- which this note said the emitter did not support yet (finding #125). That
+    // finding is closed; calling it INHERITED and unqualified still works and is left as it is.
     int readInflated(byte[] b, int off, int length) throws java.io.IOException {
         int produced = 0;
         boolean done = false;

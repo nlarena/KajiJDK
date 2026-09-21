@@ -5,36 +5,37 @@ import java.awt.Graphics;
 import javax.swing.JSplitPane;
 
 /**
- * El aspecto de un {@link JSplitPane}.
+ * A {@link JSplitPane}'s look and feel.
  *
- * <h2>La division es del aspecto</h2>
+ * <h2>The divider belongs to the look and feel</h2>
  *
- * <p>Los seis metodos son sobre la division: donde esta, hasta donde puede ir, y como se dibuja. El
- * panel no lo sabe porque la division es un componente que arma el aspecto -- con o sin flechitas,
- * de un ancho o de otro --, y sus limites dependen de los tamanos minimos de los dos lados.
+ * <p>The six methods are about the divider: where it is, how far it can go, and how it is drawn.
+ * The pane does not know because the divider is a component the look and feel assembles -- with
+ * or without little arrows, of one width or another --, and its limits depend on the minimum
+ * sizes of the two sides.
  */
 public abstract class SplitPaneUI extends ComponentUI {
 
     protected SplitPaneUI() {
     }
 
-    /** Pone la division donde los dos lados tengan su tamano preferido. */
+    /** Puts the divider where both sides have their preferred size. */
     public abstract void resetToPreferredSizes(JSplitPane jc);
 
     public abstract void setDividerLocation(JSplitPane jc, int location);
 
     public abstract int getDividerLocation(JSplitPane jc);
 
-    /** Lo mas a la izquierda que la division puede ir. */
+    /** The furthest left the divider can go. */
     public abstract int getMinimumDividerLocation(JSplitPane jc);
 
     public abstract int getMaximumDividerLocation(JSplitPane jc);
 
     /**
-     * Se llama despues de dibujar los hijos.
+     * It is called after drawing the children.
      *
-     * <p>Es el gancho para dibujar encima de ellos: la sombra de la division al arrastrarla se
-     * tiene que ver sobre los dos lados, no debajo.
+     * <p>It is the hook for drawing on top of them: the divider's shadow while it is dragged has to
+     * be seen over both sides, not underneath.
      */
     public abstract void finishedPaintingChildren(JSplitPane jc, Graphics g);
 }

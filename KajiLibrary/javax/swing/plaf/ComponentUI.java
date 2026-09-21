@@ -8,51 +8,54 @@ import javax.accessibility.Accessible;
 import javax.swing.JComponent;
 
 /**
- * La mitad "aspecto" de un componente: quien lo dibuja y lo mide, separado de quien lo modela.
+ * A component's "look and feel" half: whoever draws and measures it, separate from whoever
+ * models it.
  *
- * <h2>La idea que sostiene a todo Swing</h2>
+ * <h2>The idea that holds all of Swing up</h2>
  *
- * <p>Un {@link JComponent} sabe que es —un boton, una tabla— pero no como se ve. Eso lo sabe su
- * {@code ComponentUI}, que se puede cambiar en caliente: es lo que permite que la misma aplicacion se
- * vea como Windows, como Metal o como lo que un aspecto nuevo decida, sin tocar el modelo. De ahi
- * que todos los metodos reciban el componente como parametro: <strong>un UI no guarda al
- * componente</strong>, y un mismo UI puede atender a varios.
+ * <p>A {@link JComponent} knows what it is --a button, a table-- but not how it looks. That is
+ * known by its {@code ComponentUI}, which can be changed on the fly: it is what allows the same
+ * application to look like Windows, like Metal or like whatever a new look and feel decides,
+ * without touching the model. Hence every method takes the component as a parameter: <strong>a
+ * UI does not keep the component</strong>, and one same UI may serve several.
  *
- * <h2>{@link #update} contra {@link #paint}</h2>
+ * <h2>{@link #update} against {@link #paint}</h2>
  *
- * <p>Son dos metodos porque son dos responsabilidades. {@code update} borra el fondo si el
- * componente es opaco y despues llama a {@code paint}; {@code paint} dibuja el contenido y no
- * sabe nada del fondo. Un aspecto que redefine solo {@code paint} conserva el borrado; uno que
- * redefine {@code update} elige no borrar — que es lo que hace un componente translucido.
+ * <p>They are two methods because they are two responsibilities. {@code update} clears the
+ * background if the component is opaque and then calls {@code paint}; {@code paint} draws the
+ * content and knows nothing about the background. A look and feel that overrides only
+ * {@code paint} keeps the clearing; one that overrides {@code update} chooses not to clear --
+ * which is what a translucent component does.
  *
- * <h2>Todo devuelve "no se"</h2>
+ * <h2>Everything returns "I do not know"</h2>
  *
- * <p>Las medidas devuelven {@code null} y {@link #getBaseline} devuelve {@code -1}: es la senal de
- * que el UI no tiene opinion y el componente cae a su propio calculo. Un UI vacio es entonces valido
- * y no rompe nada, que es la razon de que esta clase sea concreta y no una interfaz.
+ * <p>The measurements return {@code null} and {@link #getBaseline} returns {@code -1}: it is the
+ * signal that the UI has no opinion and the component falls back on its own computation. An
+ * empty UI is therefore valid and breaks nothing, which is the reason this class is concrete and
+ * not an interface.
  *
- * <p>{@link #createUI} tira: cada subclase la sombrea con un metodo estatico propio, y llamar a
- * esta directamente es un error de programa. Es lo que hace el JDK.
+ * <p>{@link #createUI} throws: each subclass shadows it with a static method of its own, and
+ * calling this one directly is a program error. It is what the JDK does.
  */
 public abstract class ComponentUI {
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     public ComponentUI() {
     }
 
-    /** Este UI pasa a atender a {@code c}: instala colores, fuente, borde, oyentes. */
+    /** This UI starts serving {@code c}: it installs colours, font, border, listeners. */
     public void installUI(JComponent c) {
     }
 
-    /** Deshace exactamente lo que hizo {@link #installUI}. */
+    /** It undoes exactly what {@link #installUI} did. */
     public void uninstallUI(JComponent c) {
     }
 
-    /** Dibuja el contenido. Sin fondo: eso es de {@link #update}. */
+    /** Draws the content. Without the background: that belongs to {@link #update}. */
     public void paint(Graphics g, JComponent c) {
     }
 
-    /** Borra el fondo si el componente es opaco, y despues dibuja. */
+    /** Clears the background if the component is opaque, and then draws. */
     public void update(Graphics g, JComponent c) {
         if (c.isOpaque()) {
             g.setColor(c.getBackground());
@@ -61,79 +64,79 @@ public abstract class ComponentUI {
         paint(g, c);
     }
 
-    /** El tamano preferido, o {@code null} si este UI no tiene opinion. */
+    /** The preferred size, or {@code null} if this UI has no opinion. */
     public Dimension getPreferredSize(JComponent c) {
         return null;
     }
 
-    /** El tamano minimo; por omision, el preferido. */
+    /** The minimum size; by default, the preferred one. */
     public Dimension getMinimumSize(JComponent c) {
         return getPreferredSize(c);
     }
 
-    /** El tamano maximo; por omision, el preferido. */
+    /** The maximum size; by default, the preferred one. */
     public Dimension getMaximumSize(JComponent c) {
         return getPreferredSize(c);
     }
 
     /**
-     * Si el punto cae dentro del componente.
+     * Whether the point falls inside the component.
      *
-     * <p>Existe para que un aspecto pueda darle a un componente una forma que no sea su rectangulo
-     * —un boton redondo— y que los clics fuera de esa forma pasen de largo.
+     * <p>It exists so that a look and feel can give a component a shape that is not its rectangle
+     * --a round button-- and so that clicks outside that shape go straight through.
      */
     public boolean contains(JComponent c, int x, int y) {
         return c.inside(x, y);
     }
 
     /**
-     * @throws Error siempre: cada subclase provee la suya, estatica y con el mismo nombre
+     * @throws Error always: each subclass provides its own, static and with the same name
      */
     public static ComponentUI createUI(JComponent c) {
-        throw new Error("ComponentUI.createUI no esta implementado; la sombrea cada subclase");
+        throw new Error("ComponentUI.createUI is not implemented; every subclass shadows it");
     }
 
     /**
-     * La linea de base del componente, o {@code -1} si no tiene.
+     * The component's baseline, or {@code -1} if it has none.
      *
-     * @throws IllegalArgumentException si el ancho o el alto son negativos
+     * @throws IllegalArgumentException if the width or the height are negative
      */
     public int getBaseline(JComponent c, int width, int height) {
         if (c == null) {
-            throw new NullPointerException("El componente no puede ser null");
+            throw new NullPointerException("The component cannot be null");
         }
         if (width < 0 || height < 0) {
-            throw new IllegalArgumentException("El ancho y el alto no pueden ser negativos");
+            throw new IllegalArgumentException("Width and height cannot be negative");
         }
         return -1;
     }
 
     /**
-     * Como se mueve la linea de base al cambiar el tamano.
+     * How the baseline moves when the size changes.
      *
-     * <p>Con el nombre binario {@code Component$BaselineResizeBehavior}: un tipo anidado de otro
-     * archivo no resuelve por su nombre Java en nuestro compilador (#101).
+     * <p>With the binary name {@code Component$BaselineResizeBehavior}: a nested type from another
+     * file does not resolve by its Java name in our compiler (#101).
      */
     public Component$BaselineResizeBehavior getBaselineResizeBehavior(JComponent c) {
         if (c == null) {
-            throw new NullPointerException("El componente no puede ser null");
+            throw new NullPointerException("The component cannot be null");
         }
         return Component$BaselineResizeBehavior.OTHER;
     }
 
-    /** Cuantos hijos accesibles tiene; por omision, los hijos del contenedor. */
+    /** How many accessible children it has; by default, the container's children. */
     public int getAccessibleChildrenCount(JComponent c) {
         return c.getComponentCount();
     }
 
-    /** El hijo accesible numero {@code i}, o {@code null} si no es {@link Accessible}. */
+    /** Accessible child number {@code i}, or {@code null} if it is not {@link Accessible}. */
     public Accessible getAccessibleChild(JComponent c, int i) {
         if (i < 0 || i >= c.getComponentCount()) {
             return null;
         }
-        java.awt.Component hijo = c.getComponent(i);
-        if (hijo instanceof Accessible) {
-            return (Accessible) hijo;
+        java.awt.Component child = c.getComponent(i);
+        if (child instanceof Accessible) {
+            return (Accessible) child;
         }
         return null;
     }

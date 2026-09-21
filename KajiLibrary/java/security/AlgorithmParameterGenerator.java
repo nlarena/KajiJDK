@@ -1,18 +1,19 @@
 package java.security;
 
-// Genera parametros de algoritmo: los primos de DSA, una curva a medida.
+// It generates algorithm parameters: the primes of DSA, a curve made to measure.
 //
-// A diferencia de `AlgorithmParameters`, que decodifica parametros que ya existen, este los produce.
-// En la practica casi no se usa: los parametros de dominio serios vienen de estandares, y generar
-// los propios es una forma cara de terminar con parametros peores que los publicados.
+// Unlike `AlgorithmParameters`, which decodes parameters that exist already, this one produces
+// them. In practice it is hardly used: serious domain parameters come from standards, and
+// generating one's own is an expensive way of ending up with parameters worse than the published
+// ones.
 //
-// A KajiLibrary subset: **ningun proveedor registra este servicio**, asi que las tres sobrecargas
-// de `getInstance` tiran siempre `NoSuchAlgorithmException`. La clase esta entera igual, porque su
-// forma es la que tiene que cumplir cualquier proveedor que se agregue despues.
+// A KajiLibrary subset: **no provider registers this service**, so the three overloads of
+// `getInstance` always throw `NoSuchAlgorithmException`. The class is whole all the same, because
+// its shape is the one any provider added later has to fulfil.
 //
-// Los cuatro `init` vienen en pares: uno con fuente de azar explicita y otro sin ella. El que no la
-// recibe **no genera sin azar** -- usa el generador por omision, que es el del sistema operativo.
-// Ver `SecureRandom`.
+// The four `init`s come in pairs: one with an explicit source of randomness and another without it.
+// The one that does not receive it **does not generate without randomness** -- it uses the default
+// generator, which is the operating system's. See `SecureRandom`.
 public class AlgorithmParameterGenerator {
 
     private final AlgorithmParameterGeneratorSpi paramGenSpi;
@@ -40,7 +41,7 @@ public class AlgorithmParameterGenerator {
         while (i < provs.length) {
             Provider.Service s = provs[i].getService("AlgorithmParameterGenerator", algorithm);
             if (s != null) {
-                return armar(s, algorithm);
+                return build(s, algorithm);
             }
             i = i + 1;
         }
@@ -73,10 +74,10 @@ public class AlgorithmParameterGenerator {
             throw new NoSuchAlgorithmException(
                 "no such algorithm: " + algorithm + " for provider " + provider.getName());
         }
-        return armar(s, algorithm);
+        return build(s, algorithm);
     }
 
-    private static AlgorithmParameterGenerator armar(Provider.Service s, String algorithm)
+    private static AlgorithmParameterGenerator build(Provider.Service s, String algorithm)
             throws NoSuchAlgorithmException {
         Object o = s.newInstance(null);
         if (!(o instanceof AlgorithmParameterGeneratorSpi)) {
@@ -92,38 +93,38 @@ public class AlgorithmParameterGenerator {
         return this.provider;
     }
 
-    // Los parametros generados.
     /**
-     * Inicializa por tamaño, con el generador de azar por omision.
+     * Initialises by size, with the default generator of randomness.
      *
-     * <p>"Por omision" no quiere decir "sin azar": es el del sistema operativo. Ver
+     * <p>"Default" does not mean "without randomness": it is the operating system's. See
      * {@link SecureRandom}.
      */
     public final void init(int size) {
         this.paramGenSpi.engineInit(size, new SecureRandom());
     }
 
-    /** Idem, diciendo de donde sale el azar. */
+    /** The same, saying where the randomness comes from. */
     public final void init(int size, SecureRandom random) {
         this.paramGenSpi.engineInit(size, random);
     }
 
     /**
-     * Inicializa con parametros concretos y el generador por omision.
+     * Initialises with concrete parameters and the default generator.
      *
-     * @throws InvalidAlgorithmParameterException si los parametros no le sirven a este generador
+     * @throws InvalidAlgorithmParameterException if the parameters do not serve this generator
      */
     public final void init(java.security.spec.AlgorithmParameterSpec genParamSpec)
             throws InvalidAlgorithmParameterException {
         this.paramGenSpi.engineInit(genParamSpec, new SecureRandom());
     }
 
-    /** Idem, diciendo de donde sale el azar. */
+    /** The same, saying where the randomness comes from. */
     public final void init(java.security.spec.AlgorithmParameterSpec genParamSpec,
             SecureRandom random) throws InvalidAlgorithmParameterException {
         this.paramGenSpi.engineInit(genParamSpec, random);
     }
 
+    // The generated parameters.
     public final AlgorithmParameters generateParameters() {
         return this.paramGenSpi.engineGenerateParameters();
     }

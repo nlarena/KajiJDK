@@ -4,103 +4,103 @@ import java.io.IOException;
 import java.net.Socket;
 
 /**
- * KajiLibrary's java.util.logging.SocketHandler -- manda la traza por una conexion TCP.
+ * KajiLibrary's java.util.logging.SocketHandler -- it sends the log over a TCP connection.
  *
- * <p>Es un {@link StreamHandler} sobre la salida de un socket, y casi todo su comportamiento viene
- * de ahi. Lo propio son tres cosas, y las tres tienen un motivo que conviene tener a mano.
+ * <p>It is a {@link StreamHandler} over a socket's output, and almost all of its behaviour comes
+ * from there. What is its own is three things, and all three have a reason worth having at hand.
  *
- * <h2>Vacia el buffer en CADA registro</h2>
+ * <h2>It flushes on EVERY record</h2>
  *
- * <p>{@link #publish} llama a `flush()` despues de cada uno, cosa que {@link StreamHandler} no hace.
- * No es prolijidad: un manejador de red existe para que alguien del otro lado vea lo que pasa
- * **mientras** pasa. Un registro que se queda en el buffer del emisor hasta que se llene no le sirve
- * a nadie, y si el programa se cae --que es cuando la traza importa-- no llega nunca.
+ * <p>{@link #publish} calls `flush()` after each one, which {@link StreamHandler} does not. It is not
+ * tidiness: a network handler exists so that somebody on the other side sees what happens **while**
+ * it happens. A record that sits in the sender's buffer until it fills is no use to anybody, and if
+ * the program crashes --which is when the log matters-- it never arrives.
  *
- * <h2>El destino se puede configurar, y si falta es un error</h2>
+ * <h2>The target is configurable, and if it is missing that is an error</h2>
  *
- * <p>El constructor sin argumentos toma `java.util.logging.SocketHandler.host` y `.port` de la
- * configuracion. Si no estan, **tira**: un manejador de red sin destino no tiene ningun
- * comportamiento razonable por omision. Escribir a `localhost` seria adivinar, y quedarse callado
- * seria peor -- la traza se perderia sin que nadie se entere, que es justo lo que un manejador no
- * puede hacer.
+ * <p>The no-argument constructor takes `java.util.logging.SocketHandler.host` and `.port` from the
+ * configuration. If they are not there, it **throws**: a network handler with no target has no
+ * reasonable default behaviour. Writing to `localhost` would be guessing, and staying quiet would be
+ * worse -- the log would be lost without anybody finding out, which is exactly what a handler cannot
+ * do.
  *
- * <h2>Cerrar cierra el socket</h2>
+ * <h2>Closing closes the socket</h2>
  *
- * <p>{@link #close} cierra el flujo por {@link StreamHandler} --lo que escribe la cola del
- * formateador-- y despues el socket. En ese orden: al reves, la cola no llegaria a salir.
+ * <p>{@link #close} closes the stream through {@link StreamHandler} --which writes the formatter's
+ * tail-- and then the socket. In that order: the other way round, the tail would never get out.
  */
 public class SocketHandler extends StreamHandler {
 
     private Socket socket;
 
     /**
-     * Un manejador al host y puerto de la configuracion.
+     * A handler to the configuration's host and port.
      *
-     * @throws IllegalArgumentException si la configuracion no dice a donde conectarse
-     * @throws IOException si no se pudo conectar
+     * @throws IllegalArgumentException if the configuration does not say where to connect
+     * @throws IOException if it could not connect
      */
     public SocketHandler() throws IOException {
-        this.configurar("java.util.logging.SocketHandler");
+        this.configure("java.util.logging.SocketHandler");
         LogManager m = LogManager.getLogManager();
         String host = m.getStringProperty("java.util.logging.SocketHandler.host", null);
         String port = m.getStringProperty("java.util.logging.SocketHandler.port", null);
-        int puerto = SocketHandler.puertoDe(port);
-        if (host == null || host.length() == 0 || puerto <= 0) {
+        int portNum = SocketHandler.portFrom(port);
+        if (host == null || host.length() == 0 || portNum <= 0) {
             throw new IllegalArgumentException(
-                    "SocketHandler necesita java.util.logging.SocketHandler.host y .port");
+                    "SocketHandler needs java.util.logging.SocketHandler.host and .port");
         }
-        this.conectar(host, puerto);
+        this.connect(host, portNum);
     }
 
     /**
-     * Un manejador a ese host y puerto.
+     * A handler to that host and port.
      *
-     * @throws IllegalArgumentException si el puerto no es valido
-     * @throws IOException si no se pudo conectar
+     * @throws IllegalArgumentException if the port is not valid
+     * @throws IOException if it could not connect
      */
     public SocketHandler(String host, int port) throws IOException {
-        this.configurar("java.util.logging.SocketHandler");
+        this.configure("java.util.logging.SocketHandler");
         if (port <= 0 || port > 65535) {
-            throw new IllegalArgumentException("puerto fuera de rango: " + port);
+            throw new IllegalArgumentException("port out of range: " + port);
         }
-        this.conectar(host, port);
+        this.connect(host, port);
     }
 
-    private static int puertoDe(String s) {
+    private static int portFrom(String s) {
         if (s == null) {
             return -1;
         }
         try {
             return Integer.parseInt(s.trim());
         } catch (NumberFormatException e) {
-            // Un puerto que no es un numero es lo mismo que no haberlo puesto: el constructor tira
-            // con el mensaje que nombra las dos propiedades, que dice mas que un error de formato.
+            // A port that is not a number is the same as not having set one: the constructor throws
+            // with the message that names both properties, which says more than a format error.
             return -1;
         }
     }
 
-    private void conectar(String host, int port) throws IOException {
+    private void connect(String host, int port) throws IOException {
         this.socket = new Socket(host, port);
         this.setOutputStream(this.socket.getOutputStream());
     }
 
     /**
-     * Escribe el registro y lo manda en el acto. Ver la nota de la clase sobre el `flush`.
+     * It writes the record and sends it at once. See the class's note on the `flush`.
      */
     public void publish(LogRecord record) {
         super.publish(record);
         this.flush();
     }
 
-    /** Cierra el flujo y despues el socket. Ver la nota de la clase sobre el orden. */
+    /** It closes the stream and then the socket. See the class's note on the order. */
     public synchronized void close() {
         super.close();
         if (this.socket != null) {
             try {
                 this.socket.close();
             } catch (IOException e) {
-                // Cerrar es lo ultimo que hace este manejador: si el socket ya estaba caido, la
-                // traza igual salio o igual se perdio, y tirar aca no cambiaria ninguna de las dos.
+                // Closing is the last thing this handler does: if the socket was already down, the
+                // log either got out or was lost anyway, and throwing here would change neither.
                 this.reportError(null, e, ErrorManager.CLOSE_FAILURE);
             }
             this.socket = null;

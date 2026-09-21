@@ -7,189 +7,189 @@ import java.time.Instant;
 import java.util.function.Consumer;
 
 /**
- * Un flujo de eventos, para consumirlos <strong>mientras ocurren</strong> en vez de leer un archivo
- * al final.
+ * A stream of events, in order to consume them <strong>while they happen</strong> instead of
+ * reading a file at the end.
  *
- * <h2>Que cambia respecto de grabar y volcar</h2>
+ * <h2>What changes with respect to recording and dumping</h2>
  *
- * <p>Que no hace falta saber de antemano cuando algo interesante va a pasar. Un programa que
- * reacciona a sus propios eventos —que sube una metrica, que loguea una pausa larga— no puede
- * esperar a que alguien vuelque un archivo.
+ * <p>That there is no need to know beforehand when something interesting is going to happen. A
+ * program that reacts to its own events --that raises a metric, that logs a long pause-- cannot
+ * wait for somebody to dump a file.
  *
- * <p>Es tambien lo que permite consumir eventos de <strong>otro</strong> proceso, con
- * {@link #openRepository()}: JFR escribe su repositorio en disco y este flujo lo sigue.
+ * <p>It is also what allows one to consume events of <strong>another</strong> process, with
+ * {@link #openRepository()}: JFR writes its repository on disk and this stream follows it.
  *
- * <h2>Los dos ajustes que hay que entender antes de usarlo</h2>
+ * <h2>The two settings one has to understand before using it</h2>
  *
- * <p>{@link #setReuse} decide si el mismo objeto {@link RecordedEvent} se reutiliza para cada
- * evento. Con {@code true} —el valor por omision— no se puede guardar el evento para despues: el
- * objeto que se recibio va a estar pisado en la proxima vuelta. Es rapidisimo y es la fuente de
- * error mas comun de esta API.
+ * <p>{@link #setReuse} decides whether the same {@link RecordedEvent} object is reused for each
+ * event. With {@code true} --the default value-- the event cannot be kept for later: the object one
+ * received is going to be overwritten on the next turn. It is extremely fast and it is the most
+ * common source of error of this API.
  *
- * <p>{@link #setOrdered} decide si los eventos llegan en orden de tiempo. Ordenarlos obliga a
- * esperar y a acumular, porque distintos hilos escriben en buffers distintos. Con {@code false}
- * llegan antes y desordenados.
+ * <p>{@link #setOrdered} decides whether the events arrive in order of time. Ordering them forces
+ * one to wait and to accumulate, because different threads write into different buffers. With
+ * {@code false} they arrive sooner and out of order.
  *
- * <h2>Los dos modos de arranque</h2>
+ * <h2>The two modes of starting</h2>
  *
- * <p>{@link #start} bloquea el hilo que llama hasta que el flujo termina; {@link #startAsync}
- * vuelve enseguida y el flujo corre en otro hilo. Con el segundo hace falta
- * {@link #awaitTermination()} para saber cuando termino.
+ * <p>{@link #start} blocks the calling thread until the stream finishes; {@link #startAsync}
+ * returns at once and the stream runs in another thread. With the second one {@link
+ * #awaitTermination()} is needed in order to know when it finished.
  *
- * <h2>Estado en esta VM</h2>
+ * <h2>State in this VM</h2>
  *
- * <p>Las tres fabricas estaticas fallan con {@link IOException} diciendo que no hay repositorio ni
- * lector del formato binario. La interfaz esta entera: una implementacion que lea el formato encaja
- * aca sin tocarla.
+ * <p>The three static factories fail with {@link IOException} saying that there is neither a
+ * repository nor a reader of the binary format. The interface is whole: an implementation that
+ * reads the format fits in here without touching it.
  *
  * @since 14
  */
 public interface EventStream extends AutoCloseable {
 
     /**
-     * Un flujo sobre el repositorio de la VM actual.
+     * A stream over the repository of the current VM.
      *
-     * @return el flujo
-     * @throws IOException si no hay repositorio, que es el caso en esta VM
+     * @return the stream
+     * @throws IOException if there is no repository, which is the case in this VM
      */
     static EventStream openRepository() throws IOException {
         throw new IOException(
-                "no hay repositorio de JFR en esta VM: el grabador no esta disponible");
+                "there is no JFR repository in this VM: the recorder is not available");
     }
 
     /**
-     * Un flujo sobre el repositorio que hay en ese directorio.
+     * A stream over the repository there is in that directory.
      *
-     * @param directory el directorio del repositorio
-     * @return el flujo
-     * @throws IOException si no se puede leer, que es el caso en esta VM
+     * @param directory the directory of the repository
+     * @return the stream
+     * @throws IOException if it cannot be read, which is the case in this VM
      */
     static EventStream openRepository(final Path directory) throws IOException {
         throw new IOException(
-                "leer un repositorio de JFR necesita el lector del formato binario, que esta "
-                + "biblioteca no implementa");
+                "reading a JFR repository needs the reader of the binary format, which this "
+                + "library does not implement");
     }
 
     /**
-     * Un flujo sobre un archivo de grabacion.
+     * A stream over a recording file.
      *
-     * @param file el archivo
-     * @return el flujo
-     * @throws IOException si no se puede leer, que es el caso en esta VM
+     * @param file the file
+     * @return the stream
+     * @throws IOException if it cannot be read, which is the case in this VM
      */
     static EventStream openFile(final Path file) throws IOException {
         throw new IOException(
-                "leer un archivo de grabacion necesita el lector del formato binario, que esta "
-                + "biblioteca no implementa");
+                "reading a recording file needs the reader of the binary format, which this "
+                + "library does not implement");
     }
 
     /**
-     * Que hacer cuando cambian los metadatos.
+     * What to do when the metadata change.
      *
-     * <p>Por omision no hace nada: casi ningun consumidor necesita enterarse, y obligarlo a
-     * escribir un metodo vacio seria ruido.
+     * <p>By default it does nothing: almost no consumer needs to find out, and forcing it to write
+     * an empty method would be noise.
      *
-     * @param action la accion
+     * @param action the action
      */
     default void onMetadata(Consumer<MetadataEvent> action) {
     }
 
     /**
-     * Que hacer con cada evento.
+     * What to do with each event.
      *
-     * @param action la accion
+     * @param action the action
      */
     void onEvent(Consumer<RecordedEvent> action);
 
     /**
-     * Que hacer con cada evento de ese tipo.
+     * What to do with each event of that type.
      *
-     * @param eventName el nombre del tipo
-     * @param action la accion
+     * @param eventName the name of the type
+     * @param action the action
      */
     void onEvent(String eventName, Consumer<RecordedEvent> action);
 
     /**
-     * Que hacer cuando el flujo vacia sus buffers.
+     * What to do when the stream empties its buffers.
      *
-     * <p>Es el punto donde se sabe que todo lo emitido hasta ese momento ya se entrego, y por lo
-     * tanto el unico lugar donde tiene sentido cerrar una ventana de agregacion.
+     * <p>It is the point where one knows that everything emitted up to that moment has already been
+     * delivered, and therefore the only place where closing a window of aggregation makes sense.
      *
-     * @param action la accion
+     * @param action the action
      */
     void onFlush(Runnable action);
 
     /**
-     * Que hacer con un error del flujo.
+     * What to do with an error of the stream.
      *
-     * @param action la accion
+     * @param action the action
      */
     void onError(Consumer<Throwable> action);
 
     /**
-     * Que hacer cuando el flujo se cierra.
+     * What to do when the stream closes.
      *
-     * @param action la accion
+     * @param action the action
      */
     void onClose(Runnable action);
 
-    /** Cierra el flujo. */
+    /** It closes the stream. */
     void close();
 
     /**
-     * Saca una accion registrada.
+     * It takes a registered action away.
      *
-     * @param action la accion
-     * @return si estaba registrada
+     * @param action the action
+     * @return whether it was registered
      */
     boolean remove(Object action);
 
     /**
-     * Si el mismo objeto de evento se reutiliza para cada entrega.
+     * Whether the same event object is reused for each delivery.
      *
-     * @param reuse si reutilizar
+     * @param reuse whether to reuse
      */
     void setReuse(boolean reuse);
 
     /**
-     * Si los eventos se entregan en orden de tiempo.
+     * Whether the events are delivered in order of time.
      *
-     * @param ordered si ordenar
+     * @param ordered whether to order
      */
     void setOrdered(boolean ordered);
 
     /**
-     * Desde cuando entregar eventos.
+     * From when to deliver events.
      *
-     * @param startTime el momento
+     * @param startTime the moment
      */
     void setStartTime(Instant startTime);
 
     /**
-     * Hasta cuando entregar eventos.
+     * Up to when to deliver events.
      *
-     * @param endTime el momento
+     * @param endTime the moment
      */
     void setEndTime(Instant endTime);
 
-    /** Arranca el flujo en este hilo y no vuelve hasta que termine. */
+    /** It starts the stream in this thread and does not return until it finishes. */
     void start();
 
-    /** Arranca el flujo en otro hilo y vuelve enseguida. */
+    /** It starts the stream in another thread and returns at once. */
     void startAsync();
 
     /**
-     * Espera a que el flujo termine, hasta ese tiempo.
+     * It waits for the stream to finish, up to that time.
      *
-     * @param timeout cuanto esperar
-     * @throws InterruptedException si el hilo se interrumpe
+     * @param timeout how long to wait
+     * @throws InterruptedException if the thread is interrupted
      */
     void awaitTermination(Duration timeout) throws InterruptedException;
 
     /**
-     * Espera a que el flujo termine.
+     * It waits for the stream to finish.
      *
-     * @throws InterruptedException si el hilo se interrumpe
+     * @throws InterruptedException if the thread is interrupted
      */
     void awaitTermination() throws InterruptedException;
 }

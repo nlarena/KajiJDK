@@ -16,35 +16,36 @@ import javax.swing.undo.CannotRedoException;
 import javax.swing.undo.CannotUndoException;
 
 /**
- * Un documento con estilos: seccion, parrafos y tramos de texto con atributos.
+ * A document with styles: a section, paragraphs and stretches of text with attributes.
  *
- * <h2>Tres niveles</h2>
+ * <h2>Three levels</h2>
  *
- * <p>La raiz es una <em>seccion</em>; sus hijos son <em>parrafos</em>, uno por fin de linea; los
- * hijos de un parrafo son los tramos con los mismos atributos. Insertar texto con atributos
- * distintos a los de al lado parte un tramo en dos; escribir un fin de linea parte un parrafo.
+ * <p>The root is a <em>section</em>; its children are <em>paragraphs</em>, one per line ending;
+ * a paragraph's children are the runs with the same attributes. Inserting text with attributes
+ * different from those beside it splits a run in two; typing a line ending splits a paragraph.
  *
- * <h2>Como se aplica una edicion</h2>
+ * <h2>How an edit is applied</h2>
  *
- * <p>{@link #insertUpdate} traduce la insercion a una lista de {@link ElementSpec} —"cerra este
- * parrafo", "abri otro", "meti este texto con estos atributos"— y {@link ElementBuffer} la aplica
- * sobre el arbol. Esa vuelta parece de mas y no lo es: la misma lista puede venir de otro lado
- * —de un lector de HTML, por ejemplo— y construir un arbol entero de una vez.
+ * <p>{@link #insertUpdate} translates the insertion into a list of {@link ElementSpec}s --"close
+ * this paragraph", "open another", "put this text with these attributes"-- and
+ * {@link ElementBuffer} applies it over the tree. That detour looks unnecessary and is not: the
+ * same list may come from somewhere else --from an HTML reader, for instance-- and build a whole
+ * tree at once.
  *
- * <h2>Los limites de este ElementBuffer</h2>
+ * <h2>This ElementBuffer's limits</h2>
  *
- * <p>El del JDK sabe <em>fracturar</em>: partir un parrafo en dos por el medio de una estructura
- * anidada, con las direcciones {@code JoinFractureDirection}. Ese caso lo produce el lector de
- * HTML, que no esta en esta biblioteca. Aca las direcciones de fractura se tratan como
- * {@code JoinNextDirection}, que es lo correcto para la estructura de tres niveles que este
- * documento arma, y esta dicho aca porque un dia puede no alcanzar.
+ * <p>The JDK's knows how to <em>fracture</em>: split a paragraph in two through the middle of a
+ * nested structure, with the {@code JoinFractureDirection} directions. That case is produced by
+ * the HTML reader, which is not in this library. Here the fracture directions are treated as
+ * {@code JoinNextDirection}, which is right for the three-level structure this document builds,
+ * and it is said here because one day it may not be enough.
  */
 public class DefaultStyledDocument extends AbstractDocument implements StyledDocument {
 
-    /** El tamano inicial del contenido de un documento con estilo. */
+    /** The initial size of a styled document's content. */
     public static final int BUFFER_SIZE_DEFAULT = 4096;
 
-    /** Quien aplica las listas de {@link ElementSpec} sobre el arbol. */
+    /** Who applies the lists of {@link ElementSpec}s over the tree. */
     protected ElementBuffer buffer;
 
     private transient Vector<Style> listeningStyles = new Vector<Style>();
@@ -52,7 +53,7 @@ public class DefaultStyledDocument extends AbstractDocument implements StyledDoc
     private transient ChangeListener styleContextChangeListener;
     private transient ChangeListener styleListener;
 
-    /** Un documento sobre ese contenido y ese contexto de estilos. */
+    /** A document over that content and that style context. */
     public DefaultStyledDocument(Content c, StyleContext styles) {
         super(c, styles);
         listenerList = listenerList;
@@ -65,7 +66,7 @@ public class DefaultStyledDocument extends AbstractDocument implements StyledDoc
         this(new GapContent(BUFFER_SIZE_DEFAULT), styles);
     }
 
-    /** Un documento vacio con el contexto de estilos compartido. */
+    /** An empty document with the shared style context. */
     public DefaultStyledDocument() {
         this(new GapContent(BUFFER_SIZE_DEFAULT), new StyleContext());
     }
@@ -75,16 +76,16 @@ public class DefaultStyledDocument extends AbstractDocument implements StyledDoc
     }
 
     /**
-     * Arma el documento entero desde una lista de especificaciones.
+     * It builds the whole document from a list of specifications.
      *
-     * <p>Borra lo que hubiera. Es como un lector construye un documento de una vez, sin pasar por
-     * insercion tras insercion.
+     * <p>It erases whatever there was. It is how a reader builds a document at once, without going
+     * through insertion after insertion.
      */
     protected void create(ElementSpec[] data) {
         try {
             writeLock();
 
-            // Sacar lo que hay.
+            // Take out what is there.
             Element root = buffer.getRootElement();
             Element[] removed = new Element[root.getElementCount()];
             for (int i = 0; i < removed.length; i++) {
@@ -113,13 +114,13 @@ public class DefaultStyledDocument extends AbstractDocument implements StyledDoc
             fireInsertUpdate(evnt);
             fireChangedUpdate(evnt);
         } catch (BadLocationException ble) {
-            throw new StateInvariantError("problema creando el documento");
+            throw new StateInvariantError("problem creating the document");
         } finally {
             writeUnlock();
         }
     }
 
-    /** Inserta una lista de especificaciones en esa posicion. */
+    /** It inserts a list of specifications at that position. */
     protected void insert(int offset, ElementSpec[] data) throws BadLocationException {
         if (data == null || data.length == 0) {
             return;
@@ -148,7 +149,7 @@ public class DefaultStyledDocument extends AbstractDocument implements StyledDoc
         }
     }
 
-    /** Saca ese elemento del arbol, y con el su texto. */
+    /** It takes that element out of the tree, and its text with it. */
     public void removeElement(Element elem) {
         try {
             removeElementImpl(elem);
@@ -189,7 +190,7 @@ public class DefaultStyledDocument extends AbstractDocument implements StyledDoc
         return ((StyleContext) getAttributeContext()).getStyleNames();
     }
 
-    /** Cuelga ese parrafo de ese estilo; ver {@link StyledDocument}. */
+    /** It hangs that paragraph from that style; see {@link StyledDocument}. */
     public void setLogicalStyle(int pos, Style s) {
         Element paragraph = getParagraphElement(pos);
         if ((paragraph != null) && (paragraph instanceof AbstractElement)) {
@@ -226,10 +227,10 @@ public class DefaultStyledDocument extends AbstractDocument implements StyledDoc
     }
 
     /**
-     * Aplica atributos de caracter a ese tramo.
+     * It applies character attributes to that stretch.
      *
-     * <p>Parte los tramos que el rango corta por el medio: despues de esto, cada hoja tiene
-     * atributos uniformes, que es la invariante de este documento.
+     * <p>It splits the runs the range cuts through the middle: after this, every leaf has uniform
+     * attributes, which is this document's invariant.
      */
     public void setCharacterAttributes(int offset, int length, AttributeSet s, boolean replace) {
         if (length == 0) {
@@ -265,7 +266,7 @@ public class DefaultStyledDocument extends AbstractDocument implements StyledDoc
         }
     }
 
-    /** Aplica atributos a los parrafos que toca ese tramo, enteros. */
+    /** It applies attributes to the paragraphs that stretch touches, whole. */
     public void setParagraphAttributes(int offset, int length, AttributeSet s, boolean replace) {
         try {
             writeLock();
@@ -315,10 +316,10 @@ public class DefaultStyledDocument extends AbstractDocument implements StyledDoc
     }
 
     /**
-     * Acomoda el arbol despues de una insercion.
+     * It fixes up the tree after an insertion.
      *
-     * <p>Arma la lista de especificaciones: el texto va como contenido, y cada fin de linea se
-     * traduce en cerrar el parrafo y abrir otro.
+     * <p>It builds the list of specifications: the text goes as content, and each line ending is
+     * translated into closing the paragraph and opening another.
      */
     protected void insertUpdate(DefaultDocumentEvent chng, AttributeSet attr) {
         int offset = chng.getOffset();
@@ -342,9 +343,9 @@ public class DefaultStyledDocument extends AbstractDocument implements StyledDoc
         for (int i = 0; i < length; i++) {
             char c = s.array[s.offset + i];
             if (c == '\n') {
-                int tramo = i - lastOffset + 1;
+                int run = i - lastOffset + 1;
                 parseBuffer.addElement(new ElementSpec(attr, ElementSpec.ContentType,
-                        s.array, s.offset + lastOffset, tramo));
+                        s.array, s.offset + lastOffset, run));
                 parseBuffer.addElement(new ElementSpec(null, ElementSpec.EndTagType));
                 parseBuffer.addElement(new ElementSpec(pattr, ElementSpec.StartTagType));
                 lastOffset = i + 1;
@@ -368,10 +369,10 @@ public class DefaultStyledDocument extends AbstractDocument implements StyledDoc
     }
 
     /**
-     * Arma las especificaciones de una insercion despues de un fin de linea.
+     * It builds the specifications of an insertion after a line ending.
      *
-     * <p>Devuelve la direccion que le corresponde al primer trozo. Es lo que decide si el texto
-     * nuevo se pega al parrafo de arriba o abre uno propio.
+     * <p>It returns the direction that corresponds to the first chunk. It is what decides whether
+     * the new text sticks to the paragraph above or opens one of its own.
      */
     short createSpecsForInsertAfterNewline(Element paragraph, Element pParagraph,
             AttributeSet pattr, Vector<ElementSpec> parseBuffer, int offset, int endOffset) {
@@ -382,10 +383,10 @@ public class DefaultStyledDocument extends AbstractDocument implements StyledDoc
     }
 
     /**
-     * Junta los parrafos que el borrado dejo a medias.
+     * It joins the paragraphs the removal left half-done.
      *
-     * <p>Corre <em>antes</em> de que el texto se vaya, que es cuando todavia se puede saber
-     * cuantos parrafos tocaba el tramo: una vez borrado, los dos extremos caen en el mismo lugar.
+     * <p>It runs <em>before</em> the text goes, which is when it can still be known how many
+     * paragraphs the stretch touched: once removed, the two ends fall in the same place.
      */
     protected void removeUpdate(DefaultDocumentEvent chng) {
         super.removeUpdate(chng);
@@ -393,17 +394,17 @@ public class DefaultStyledDocument extends AbstractDocument implements StyledDoc
     }
 
     /**
-     * Saca las hojas que el borrado dejo vacias.
+     * It removes the leaves the removal left empty.
      *
-     * <p>Corre <em>despues</em>, que es cuando las hojas de lo borrado ya colapsaron a largo
-     * cero. Antes no habria nada que sacar.
+     * <p>It runs <em>afterwards</em>, which is when the leaves of what was removed have already
+     * collapsed to zero length. Before there would be nothing to remove.
      */
     protected void postRemoveUpdate(DefaultDocumentEvent chng) {
         super.postRemoveUpdate(chng);
-        buffer.limpiar(chng.getOffset(), chng);
+        buffer.clear(chng.getOffset(), chng);
     }
 
-    /** La seccion raiz, con un parrafo con un tramo vacio adentro. */
+    /** The root section, with a paragraph with an empty run inside. */
     protected AbstractElement createDefaultRoot() {
         writeLock();
         BranchElement section = new SectionElement(this);
@@ -436,11 +437,11 @@ public class DefaultStyledDocument extends AbstractDocument implements StyledDoc
     }
 
     /**
-     * Avisa que un estilo cambio: todo lo que cuelga de el se tiene que repintar.
+     * It reports that a style changed: everything hanging from it has to be repainted.
      *
-     * <p>El evento cubre el documento entero porque el estilo puede estar usado en cualquier
-     * lado. Es caro y es lo que hace el JDK: buscar exactamente donde se usa costaria mas que
-     * repintar.
+     * <p>The event covers the whole document because the style may be used anywhere. It is
+     * expensive and it is what the JDK does: finding exactly where it is used would cost more than
+     * repainting.
      */
     protected void styleChanged(Style style) {
         DefaultDocumentEvent dde = new DefaultDocumentEvent(this, 0, getLength(),
@@ -449,7 +450,7 @@ public class DefaultStyledDocument extends AbstractDocument implements StyledDoc
         fireChangedUpdate(dde);
     }
 
-    /** Al primer escucha, este documento empieza a escuchar a los estilos. */
+    /** On the first listener, this document starts listening to the styles. */
     public void addDocumentListener(DocumentListener listener) {
         synchronized (listeningStyles) {
             int oldDLCount = listenerList.getListenerCount(DocumentListener.class);
@@ -467,7 +468,7 @@ public class DefaultStyledDocument extends AbstractDocument implements StyledDoc
         }
     }
 
-    /** Sin escuchas, deja de escuchar a los estilos: nadie se enteraria. */
+    /** With no listeners, it stops listening to the styles: nobody would hear about it. */
     public void removeDocumentListener(DocumentListener listener) {
         synchronized (listeningStyles) {
             super.removeDocumentListener(listener);
@@ -492,7 +493,7 @@ public class DefaultStyledDocument extends AbstractDocument implements StyledDoc
         return new StyleContextChangeHandler(this);
     }
 
-    /** Vuelve a mirar de que estilos cuelgan los parrafos, y escucha a esos. */
+    /** It looks again at which styles the paragraphs hang from, and listens to those. */
     void updateStylesListeningTo() {
         synchronized (listeningStyles) {
             StyleContext styles = (StyleContext) getAttributeContext();
@@ -501,26 +502,26 @@ public class DefaultStyledDocument extends AbstractDocument implements StyledDoc
             }
             if (styleChangeListener != null && styles != null) {
                 Element root = getDefaultRootElement();
-                Vector<Style> vistos = new Vector<Style>();
+                Vector<Style> seen = new Vector<Style>();
                 for (int i = 0; i < root.getElementCount(); i++) {
                     Element p = root.getElement(i);
                     AttributeSet parent = p.getAttributes().getResolveParent();
                     if (parent instanceof Style) {
                         Style s = (Style) parent;
-                        if (!vistos.contains(s)) {
-                            vistos.addElement(s);
+                        if (!seen.contains(s)) {
+                            seen.addElement(s);
                         }
                     }
                 }
                 for (int i = listeningStyles.size() - 1; i >= 0; i--) {
                     Style s = listeningStyles.elementAt(i);
-                    if (!vistos.contains(s)) {
+                    if (!seen.contains(s)) {
                         s.removeChangeListener(styleChangeListener);
                         listeningStyles.removeElementAt(i);
                     }
                 }
-                for (int i = 0; i < vistos.size(); i++) {
-                    Style s = vistos.elementAt(i);
+                for (int i = 0; i < seen.size(); i++) {
+                    Style s = seen.elementAt(i);
                     if (!listeningStyles.contains(s)) {
                         s.addChangeListener(styleChangeListener);
                         listeningStyles.addElement(s);
@@ -531,33 +532,33 @@ public class DefaultStyledDocument extends AbstractDocument implements StyledDoc
     }
 
     /**
-     * Una instruccion de estructura: abrir, cerrar o poner contenido.
+     * A structure instruction: open, close or put content.
      *
-     * <p>Es el idioma en el que se le habla al {@link ElementBuffer}. Un documento se puede armar
-     * entero con una lista de estas, y por eso un lector de un formato ajeno no necesita saber
-     * nada del arbol: solo emitir esta secuencia.
+     * <p>It is the language the {@link ElementBuffer} is spoken to in. A document can be built
+     * whole with a list of these, and that is why a reader of a foreign format needs to know
+     * nothing about the tree: only to emit this sequence.
      */
     public static class ElementSpec {
 
-        /** Abre un elemento. */
+        /** It opens an element. */
         public static final short StartTagType = 1;
 
-        /** Cierra el elemento abierto. */
+        /** It closes the open element. */
         public static final short EndTagType = 2;
 
-        /** Pone texto. */
+        /** It puts text. */
         public static final short ContentType = 3;
 
-        /** Se pega a lo que habia antes. */
+        /** It sticks to what was there before. */
         public static final short JoinPreviousDirection = 4;
 
-        /** Se pega a lo que viene despues. */
+        /** It sticks to what comes afterwards. */
         public static final short JoinNextDirection = 5;
 
-        /** Empieza algo propio. */
+        /** It starts something of its own. */
         public static final short OriginateDirection = 6;
 
-        /** Se pega a lo que quedo de una fractura; ver la nota de {@link DefaultStyledDocument}. */
+        /** It sticks to what was left of a fracture; see {@link DefaultStyledDocument}'s note. */
         public static final short JoinFractureDirection = 7;
 
         private AttributeSet attr;
@@ -567,12 +568,12 @@ public class DefaultStyledDocument extends AbstractDocument implements StyledDoc
         private int offs;
         private char[] data;
 
-        /** Una instruccion sin contenido: abrir o cerrar. */
+        /** An instruction with no content: open or close. */
         public ElementSpec(AttributeSet a, short type) {
             this(a, type, 0);
         }
 
-        /** Una instruccion de contenido de ese largo, sin texto asociado todavia. */
+        /** A content instruction of that length, with no text associated yet. */
         public ElementSpec(AttributeSet a, short type, int len) {
             attr = a;
             this.type = type;
@@ -580,7 +581,7 @@ public class DefaultStyledDocument extends AbstractDocument implements StyledDoc
             this.direction = OriginateDirection;
         }
 
-        /** Una instruccion de contenido con su texto. */
+        /** A content instruction with its text. */
         public ElementSpec(AttributeSet a, short type, char[] txt, int offs, int len) {
             attr = a;
             this.type = type;
@@ -623,13 +624,13 @@ public class DefaultStyledDocument extends AbstractDocument implements StyledDoc
         }
 
         public String toString() {
-            String tipo = "??";
+            String kind = "??";
             if (type == StartTagType) {
-                tipo = "StartTag";
+                kind = "StartTag";
             } else if (type == ContentType) {
-                tipo = "Content";
+                kind = "Content";
             } else if (type == EndTagType) {
-                tipo = "EndTag";
+                kind = "EndTag";
             }
             String dir = "??";
             if (direction == JoinPreviousDirection) {
@@ -641,24 +642,24 @@ public class DefaultStyledDocument extends AbstractDocument implements StyledDoc
             } else if (direction == JoinFractureDirection) {
                 dir = "Fracture";
             }
-            return tipo + ":" + dir + ":" + getLength();
+            return kind + ":" + dir + ":" + getLength();
         }
     }
 
     /**
-     * Aplica listas de {@link ElementSpec} sobre el arbol.
+     * It applies lists of {@link ElementSpec}s over the tree.
      *
-     * <p>Lleva la cuenta de que elementos se fueron y cuales llegaron, y los anota en el evento:
-     * de ahi salen los {@code ElementChange} que un editor usa para repintar solo lo que cambio.
+     * <p>It keeps track of which elements left and which arrived, and notes them in the event: from
+     * there come the {@code ElementChange}s an editor uses to repaint only what changed.
      *
-     * <p>Ver la nota de {@link DefaultStyledDocument} sobre lo que este buffer no sabe hacer.
+     * <p>See {@link DefaultStyledDocument}'s note about what this buffer does not know how to do.
      */
     public static class ElementBuffer implements Serializable {
 
-        /** La raiz sobre la que trabaja. */
+        /** The root it works over. */
         Element root;
 
-        private final DefaultStyledDocument documento;
+        private final DefaultStyledDocument document;
 
         transient int pos;
         transient int offset;
@@ -666,9 +667,9 @@ public class DefaultStyledDocument extends AbstractDocument implements StyledDoc
         transient int endOffset;
         transient boolean insertOp;
 
-        /** Un buffer sobre esa raiz. */
-        public ElementBuffer(DefaultStyledDocument documento, Element root) {
-            this.documento = documento;
+        /** A buffer over that root. */
+        public ElementBuffer(DefaultStyledDocument document, Element root) {
+            this.document = document;
             this.root = root;
         }
 
@@ -676,7 +677,7 @@ public class DefaultStyledDocument extends AbstractDocument implements StyledDoc
             return root;
         }
 
-        /** Aplica una insercion; ver {@link #insertUpdate}. */
+        /** It applies an insertion; see {@link #insertUpdate}. */
         public void insert(int offset, int length, ElementSpec[] data,
                 DefaultDocumentEvent de) {
             if (length == 0) {
@@ -686,372 +687,374 @@ public class DefaultStyledDocument extends AbstractDocument implements StyledDoc
             this.pos = offset;
             this.endOffset = offset + length;
             this.length = length;
-            this.evento = de;
+            this.event = de;
             insertOp = true;
             insertUpdate(data);
             insertOp = false;
-            this.evento = null;
+            this.event = null;
         }
 
-        /** Arma el arbol entero desde la lista. */
+        /** It builds the whole tree from the list. */
         public void create(int length, ElementSpec[] data, DefaultDocumentEvent de) {
             this.offset = 0;
             this.pos = 0;
             this.length = length;
             this.endOffset = length;
-            this.evento = de;
+            this.event = de;
 
-            BranchElement seccion = (BranchElement) root;
-            Element[] viejos = new Element[seccion.getElementCount()];
-            for (int i = 0; i < viejos.length; i++) {
-                viejos[i] = seccion.getElement(i);
+            BranchElement section = (BranchElement) root;
+            Element[] oldElements = new Element[section.getElementCount()];
+            for (int i = 0; i < oldElements.length; i++) {
+                oldElements[i] = section.getElement(i);
             }
 
-            Vector<Element> parrafos = new Vector<Element>();
-            BranchElement actual = null;
+            Vector<Element> paragraphs = new Vector<Element>();
+            BranchElement current = null;
             int p = 0;
             for (int i = 0; i < data.length; i++) {
                 ElementSpec spec = data[i];
                 if (spec.getType() == ElementSpec.StartTagType) {
-                    actual = new BranchElement(documento, seccion, spec.getAttributes());
-                    parrafos.addElement(actual);
+                    current = new BranchElement(document, section, spec.getAttributes());
+                    paragraphs.addElement(current);
                 } else if (spec.getType() == ElementSpec.ContentType) {
-                    if (actual == null) {
-                        actual = new BranchElement(documento, seccion, null);
-                        parrafos.addElement(actual);
+                    if (current == null) {
+                        current = new BranchElement(document, section, null);
+                        paragraphs.addElement(current);
                     }
-                    Element hoja = new LeafElement(documento, actual, spec.getAttributes(), p,
+                    Element leaf = new LeafElement(document, current, spec.getAttributes(), p,
                             p + spec.getLength());
-                    agregar(actual, hoja);
+                    add(current, leaf);
                     p = p + spec.getLength();
                 }
             }
-            if (parrafos.size() == 0) {
-                actual = new BranchElement(documento, seccion, null);
-                agregar(actual, new LeafElement(documento, actual, null, 0, length));
-                parrafos.addElement(actual);
+            if (paragraphs.size() == 0) {
+                current = new BranchElement(document, section, null);
+                add(current, new LeafElement(document, current, null, 0, length));
+                paragraphs.addElement(current);
             }
-            Element[] nuevos = new Element[parrafos.size()];
-            parrafos.copyInto(nuevos);
-            seccion.replace(0, viejos.length, nuevos);
-            de.addEdit(new ElementEdit(seccion, 0, viejos, nuevos));
-            this.evento = null;
+            Element[] newElements = new Element[paragraphs.size()];
+            paragraphs.copyInto(newElements);
+            section.replace(0, oldElements.length, newElements);
+            de.addEdit(new ElementEdit(section, 0, oldElements, newElements));
+            this.event = null;
         }
 
-        /** Aplica un borrado; ver {@link #removeUpdate}. */
+        /** It applies a removal; see {@link #removeUpdate}. */
         public void remove(int offset, int length, DefaultDocumentEvent de) {
             this.offset = offset;
             this.length = length;
             this.endOffset = offset + length;
-            this.evento = de;
+            this.event = de;
             insertOp = false;
             removeUpdate();
-            this.evento = null;
+            this.event = null;
         }
 
-        /** Saca del parrafo de esa posicion las hojas que quedaron vacias. */
-        void limpiar(int offset, DefaultDocumentEvent de) {
-            this.evento = de;
-            BranchElement seccion = (BranchElement) root;
-            int i = seccion.getElementIndex(offset);
-            Element p = seccion.getElement(i);
+        /** It removes from that position's paragraph the leaves that were left empty. */
+        void clear(int offset, DefaultDocumentEvent de) {
+            this.event = de;
+            BranchElement section = (BranchElement) root;
+            int i = section.getElementIndex(offset);
+            Element p = section.getElement(i);
             if (p instanceof BranchElement) {
-                limpiarVacias((BranchElement) p);
+                clearEmpty((BranchElement) p);
             }
-            this.evento = null;
+            this.event = null;
         }
 
-        /** Marca un tramo como cambiado, partiendo las hojas que el rango corta. */
+        /** It marks a stretch as changed, splitting the leaves the range cuts. */
         public void change(int offset, int length, DefaultDocumentEvent de) {
             this.offset = offset;
             this.length = length;
             this.endOffset = offset + length;
-            this.evento = de;
+            this.event = de;
             changeUpdate();
-            this.evento = null;
+            this.event = null;
         }
 
-        private transient DefaultDocumentEvent evento;
+        private transient DefaultDocumentEvent event;
 
         /**
-         * Aplica la lista sobre el arbol, en tres pasos.
+         * It applies the list over the tree, in three steps.
          *
-         * <p>Primero le pone a cada tramo insertado sus atributos, partiendo las hojas que
-         * queden a medias; despues corta el parrafo en cada fin de linea.
+         * <p>First it gives each inserted run its attributes, splitting the leaves that are left
+         * half-done; then it cuts the paragraph at each line ending.
          *
-         * <p>Dos hojas pegadas con los mismos atributos <strong>no</strong> se juntan, y es a
-         * proposito: el JDK tampoco las junta, y de ahi que un documento recien escrito tenga un
-         * tramo aparte para el fin de linea del final. Juntarlas cambiaria la cuenta de hijos que
-         * ve cualquiera que recorra el arbol.
+         * <p>Two adjacent leaves with the same attributes are <strong>not</strong> joined, and it
+         * is on purpose: the JDK does not join them either, and hence a freshly written document
+         * has a separate run for the line ending at the end. Joining them would change the count of
+         * children anybody walking the tree sees.
          */
         protected void insertUpdate(ElementSpec[] data) {
-            BranchElement seccion = (BranchElement) root;
-            int indiceParrafo = seccion.getElementIndex(offset);
-            BranchElement parrafo = (BranchElement) seccion.getElement(indiceParrafo);
+            BranchElement section = (BranchElement) root;
+            int paragraphIndex = section.getElementIndex(offset);
+            BranchElement paragraph = (BranchElement) section.getElement(paragraphIndex);
 
             int p = offset;
-            Vector<Integer> cortes = new Vector<Integer>();
+            Vector<Integer> splits = new Vector<Integer>();
             for (int i = 0; i < data.length; i++) {
                 ElementSpec spec = data[i];
-                short tipo = spec.getType();
-                if (tipo == ElementSpec.ContentType) {
-                    aplicarAtributos(parrafo, p, p + spec.getLength(), spec.getAttributes());
+                short kind = spec.getType();
+                if (kind == ElementSpec.ContentType) {
+                    applyAttributes(paragraph, p, p + spec.getLength(), spec.getAttributes());
                     p = p + spec.getLength();
-                } else if (tipo == ElementSpec.EndTagType) {
-                    cortes.addElement(Integer.valueOf(p));
+                } else if (kind == ElementSpec.EndTagType) {
+                    splits.addElement(Integer.valueOf(p));
                 }
             }
 
-            BranchElement actual = parrafo;
-            int indiceActual = indiceParrafo;
-            for (int i = 0; i < cortes.size(); i++) {
-                int corte = cortes.elementAt(i).intValue();
-                actual = cortarParrafo(seccion, indiceActual, actual, corte);
-                indiceActual = indiceActual + 1;
+            BranchElement current = paragraph;
+            int currentIndex = paragraphIndex;
+            for (int i = 0; i < splits.size(); i++) {
+                int split = splits.elementAt(i).intValue();
+                current = splitParagraph(section, currentIndex, current, split);
+                currentIndex = currentIndex + 1;
             }
         }
 
-        /** Le pone esos atributos al tramo, partiendo las hojas que queden a medias. */
-        private void aplicarAtributos(BranchElement parrafo, int desde, int hasta,
+        /** It gives the run those attributes, splitting the leaves that are left half-done. */
+        private void applyAttributes(BranchElement paragraph, int from, int to,
                 AttributeSet attr) {
-            if (hasta <= desde) {
+            if (to <= from) {
                 return;
             }
-            AttributeSet nuevos = (attr == null) ? SimpleAttributeSet.EMPTY : attr;
-            int p = desde;
-            while (p < hasta) {
-                int indice = parrafo.getElementIndex(p);
-                Element hoja = parrafo.getElement(indice);
-                if (hoja == null) {
+            AttributeSet newElements = (attr == null) ? SimpleAttributeSet.EMPTY : attr;
+            int p = from;
+            while (p < to) {
+                int index = paragraph.getElementIndex(p);
+                Element leaf = paragraph.getElement(index);
+                if (leaf == null) {
                     return;
                 }
-                int hd = hoja.getStartOffset();
-                int hh = hoja.getEndOffset();
+                int hd = leaf.getStartOffset();
+                int hh = leaf.getEndOffset();
                 if (hh <= p) {
                     return;
                 }
-                int corte = Math.min(hh, hasta);
-                // Ya tiene esos atributos: no hay nada que cambiar y no se parte. Es lo que hace
-                // que insertar texto sin estilo dentro de un tramo sin estilo no deje un corte.
-                if (hoja.getAttributes().isEqual(nuevos)) {
-                    p = corte;
+                int split = Math.min(hh, to);
+                // It already has those attributes: there is nothing to change and it is not split.
+                // It is
+                                // what keeps inserting unstyled text inside an unstyled run from
+                                // leaving a cut.
+                if (leaf.getAttributes().isEqual(newElements)) {
+                    p = split;
                     continue;
                 }
-                Vector<Element> nuevas = new Vector<Element>();
+                Vector<Element> newLeaves = new Vector<Element>();
                 if (hd < p) {
-                    nuevas.addElement(new LeafElement(documento, parrafo, hoja.getAttributes(),
+                    newLeaves.addElement(new LeafElement(document, paragraph, leaf.getAttributes(),
                             hd, p));
                 }
-                nuevas.addElement(new LeafElement(documento, parrafo, nuevos, p, corte));
-                if (hh > corte) {
-                    nuevas.addElement(new LeafElement(documento, parrafo, hoja.getAttributes(),
-                            corte, hh));
+                newLeaves.addElement(new LeafElement(document, paragraph, newElements, p, split));
+                if (hh > split) {
+                    newLeaves.addElement(new LeafElement(document, paragraph, leaf.getAttributes(),
+                            split, hh));
                 }
-                Element[] agregadas = new Element[nuevas.size()];
-                nuevas.copyInto(agregadas);
-                Element[] viejas = new Element[] {hoja};
-                parrafo.replace(indice, 1, agregadas);
-                anotar(parrafo, indice, viejas, agregadas);
-                p = corte;
+                Element[] addedLeaves = new Element[newLeaves.size()];
+                newLeaves.copyInto(addedLeaves);
+                Element[] oldLeaves = new Element[] {leaf};
+                paragraph.replace(index, 1, addedLeaves);
+                note(paragraph, index, oldLeaves, addedLeaves);
+                p = split;
             }
         }
 
         /**
-         * Corta el parrafo en esa posicion y devuelve el de la derecha.
+         * It cuts the paragraph at that position and returns the right-hand one.
          *
-         * <p>El de la izquierda se queda con el mismo objeto —asi las vistas que lo tenian siguen
-         * valiendo— y el de la derecha es nuevo, con los mismos atributos.
+         * <p>The left-hand one keeps the same object --so the views that had it go on holding-- and
+         * the right-hand one is new, with the same attributes.
          */
-        private BranchElement cortarParrafo(BranchElement seccion, int indiceParrafo,
-                BranchElement parrafo, int corte) {
-            int fin = parrafo.getEndOffset();
-            if (corte >= fin) {
-                return parrafo;
+        private BranchElement splitParagraph(BranchElement section, int paragraphIndex,
+                BranchElement paragraph, int split) {
+            int end = paragraph.getEndOffset();
+            if (split >= end) {
+                return paragraph;
             }
-            Vector<Element> izquierda = new Vector<Element>();
-            Vector<Element> derecha = new Vector<Element>();
-            int n = parrafo.getElementCount();
-            Element[] viejas = new Element[n];
+            Vector<Element> left = new Vector<Element>();
+            Vector<Element> right = new Vector<Element>();
+            int n = paragraph.getElementCount();
+            Element[] oldLeaves = new Element[n];
             for (int i = 0; i < n; i++) {
-                Element h = parrafo.getElement(i);
-                viejas[i] = h;
+                Element h = paragraph.getElement(i);
+                oldLeaves[i] = h;
                 int hd = h.getStartOffset();
                 int hh = h.getEndOffset();
-                if (hh <= corte) {
-                    izquierda.addElement(h);
-                } else if (hd >= corte) {
-                    derecha.addElement(h);
+                if (hh <= split) {
+                    left.addElement(h);
+                } else if (hd >= split) {
+                    right.addElement(h);
                 } else {
-                    izquierda.addElement(new LeafElement(documento, parrafo, h.getAttributes(),
-                            hd, corte));
-                    derecha.addElement(new LeafElement(documento, parrafo, h.getAttributes(),
-                            corte, hh));
+                    left.addElement(new LeafElement(document, paragraph, h.getAttributes(),
+                            hd, split));
+                    right.addElement(new LeafElement(document, paragraph, h.getAttributes(),
+                            split, hh));
                 }
             }
 
-            BranchElement resto = new BranchElement(documento, seccion, parrafo.getAttributes());
-            Element[] izq = new Element[izquierda.size()];
-            izquierda.copyInto(izq);
-            if (izq.length == 0) {
-                izq = new Element[] {new LeafElement(documento, parrafo, null,
-                        parrafo.getStartOffset(), corte)};
+            BranchElement rest = new BranchElement(document, section, paragraph.getAttributes());
+            Element[] leftElements = new Element[left.size()];
+            left.copyInto(leftElements);
+            if (leftElements.length == 0) {
+                leftElements = new Element[] {new LeafElement(document, paragraph, null,
+                        paragraph.getStartOffset(), split)};
             }
-            parrafo.replace(0, n, izq);
-            anotar(parrafo, 0, viejas, izq);
+            paragraph.replace(0, n, leftElements);
+            note(paragraph, 0, oldLeaves, leftElements);
 
-            Element[] der = new Element[derecha.size()];
-            derecha.copyInto(der);
-            if (der.length == 0) {
-                der = new Element[] {new LeafElement(documento, resto, null, corte, fin)};
+            Element[] rightElements = new Element[right.size()];
+            right.copyInto(rightElements);
+            if (rightElements.length == 0) {
+                rightElements = new Element[] {new LeafElement(document, rest, null, split, end)};
             }
-            resto.replace(0, 0, der);
+            rest.replace(0, 0, rightElements);
 
-            Element[] agregados = new Element[] {resto};
-            seccion.replace(indiceParrafo + 1, 0, agregados);
-            anotar(seccion, indiceParrafo + 1, new Element[0], agregados);
-            return resto;
+            Element[] addedElements = new Element[] {rest};
+            section.replace(paragraphIndex + 1, 0, addedElements);
+            note(section, paragraphIndex + 1, new Element[0], addedElements);
+            return rest;
         }
 
-        /** Anota un cambio de hijos en el evento en curso, si hay. */
-        private void anotar(Element padre, int indice, Element[] viejos, Element[] nuevos) {
-            if (evento != null) {
-                evento.addEdit(new ElementEdit(padre, indice, viejos, nuevos));
+        /** It notes a change of children in the event in progress, if there is one. */
+        private void note(Element parent, int index, Element[] oldElements, Element[] newElements) {
+            if (event != null) {
+                event.addEdit(new ElementEdit(parent, index, oldElements, newElements));
             }
         }
 
-        /** Junta los parrafos que el borrado dejo a medias. */
+        /** It joins the paragraphs the removal left half-done. */
         protected void removeUpdate() {
-            BranchElement seccion = (BranchElement) root;
-            int i0 = seccion.getElementIndex(offset);
-            int i1 = seccion.getElementIndex(endOffset);
+            BranchElement section = (BranchElement) root;
+            int i0 = section.getElementIndex(offset);
+            int i1 = section.getElementIndex(endOffset);
             if (i0 == i1) {
-                limpiarVacias((BranchElement) seccion.getElement(i0));
-                anotarCambio(seccion.getElement(i0));
+                clearEmpty((BranchElement) section.getElement(i0));
+                noteChange(section.getElement(i0));
                 return;
             }
 
-            Element[] viejos = new Element[i1 - i0 + 1];
+            Element[] oldElements = new Element[i1 - i0 + 1];
             for (int i = i0; i <= i1; i++) {
-                viejos[i - i0] = seccion.getElement(i);
+                oldElements[i - i0] = section.getElement(i);
             }
 
-            BranchElement primero = (BranchElement) seccion.getElement(i0);
-            Vector<Element> hojas = new Vector<Element>();
+            BranchElement first = (BranchElement) section.getElement(i0);
+            Vector<Element> leaves = new Vector<Element>();
             for (int i = i0; i <= i1; i++) {
-                Element p = seccion.getElement(i);
+                Element p = section.getElement(i);
                 for (int j = 0; j < p.getElementCount(); j++) {
                     Element h = p.getElement(j);
                     if (h.getEndOffset() > h.getStartOffset()) {
-                        hojas.addElement(new LeafElement(documento, primero, h.getAttributes(),
+                        leaves.addElement(new LeafElement(document, first, h.getAttributes(),
                                 h.getStartOffset(), h.getEndOffset()));
                     }
                 }
             }
-            Element[] nuevasHojas = new Element[hojas.size()];
-            hojas.copyInto(nuevasHojas);
-            if (nuevasHojas.length == 0) {
-                nuevasHojas = new Element[] {new LeafElement(documento, primero, null,
-                        primero.getStartOffset(), primero.getStartOffset() + 1)};
+            Element[] newLeaves = new Element[leaves.size()];
+            leaves.copyInto(newLeaves);
+            if (newLeaves.length == 0) {
+                newLeaves = new Element[] {new LeafElement(document, first, null,
+                        first.getStartOffset(), first.getStartOffset() + 1)};
             }
-            primero.replace(0, primero.getElementCount(), nuevasHojas);
+            first.replace(0, first.getElementCount(), newLeaves);
 
-            Element[] nuevos = new Element[] {primero};
-            seccion.replace(i0, viejos.length, nuevos);
-            anotar(seccion, i0, viejos, nuevos);
-            limpiarVacias(primero);
+            Element[] newElements = new Element[] {first};
+            section.replace(i0, oldElements.length, newElements);
+            note(section, i0, oldElements, newElements);
+            clearEmpty(first);
         }
 
-        /** Parte las hojas que el rango corta, para que los atributos queden uniformes. */
+        /** It splits the leaves the range cuts, so that the attributes are left uniform. */
         protected void changeUpdate() {
-            BranchElement seccion = (BranchElement) root;
+            BranchElement section = (BranchElement) root;
             int p = offset;
             while (p < endOffset) {
-                Element parrafo = documento.getParagraphElement(p);
-                BranchElement br = (BranchElement) parrafo;
-                int indice = br.getElementIndex(p);
-                Element hoja = br.getElement(indice);
-                int hd = hoja.getStartOffset();
-                int hh = hoja.getEndOffset();
-                int corte = Math.min(hh, endOffset);
-                if (hd < p || hh > corte) {
-                    Vector<Element> nuevas = new Vector<Element>();
+                Element paragraph = document.getParagraphElement(p);
+                BranchElement br = (BranchElement) paragraph;
+                int index = br.getElementIndex(p);
+                Element leaf = br.getElement(index);
+                int hd = leaf.getStartOffset();
+                int hh = leaf.getEndOffset();
+                int split = Math.min(hh, endOffset);
+                if (hd < p || hh > split) {
+                    Vector<Element> newLeaves = new Vector<Element>();
                     if (hd < p) {
-                        nuevas.addElement(new LeafElement(documento, br, hoja.getAttributes(),
+                        newLeaves.addElement(new LeafElement(document, br, leaf.getAttributes(),
                                 hd, p));
                     }
-                    nuevas.addElement(new LeafElement(documento, br, hoja.getAttributes(), p,
-                            corte));
-                    if (hh > corte) {
-                        nuevas.addElement(new LeafElement(documento, br, hoja.getAttributes(),
-                                corte, hh));
+                    newLeaves.addElement(new LeafElement(document, br, leaf.getAttributes(), p,
+                            split));
+                    if (hh > split) {
+                        newLeaves.addElement(new LeafElement(document, br, leaf.getAttributes(),
+                                split, hh));
                     }
-                    Element[] agregadas = new Element[nuevas.size()];
-                    nuevas.copyInto(agregadas);
-                    Element[] viejas = new Element[] {hoja};
-                    br.replace(indice, 1, agregadas);
-                    anotar(br, indice, viejas, agregadas);
+                    Element[] addedLeaves = new Element[newLeaves.size()];
+                    newLeaves.copyInto(addedLeaves);
+                    Element[] oldLeaves = new Element[] {leaf};
+                    br.replace(index, 1, addedLeaves);
+                    note(br, index, oldLeaves, addedLeaves);
                 }
-                p = corte;
-                if (corte <= hd) {
+                p = split;
+                if (split <= hd) {
                     break;
                 }
             }
         }
 
         /**
-         * Saca las hojas que quedaron de largo cero.
+         * It removes the leaves that were left with zero length.
          *
-         * <p>Un borrado que se come un tramo entero deja su hoja con principio y fin en el mismo
-         * lugar. No molesta al texto, pero si a todo lo que recorre el arbol: una hoja vacia no
-         * representa nada. Si se van todas, queda una que cubre el parrafo.
+         * <p>A removal that eats a whole run leaves its leaf with beginning and end in the same
+         * place. It does not bother the text, but it does bother everything that walks the tree: an
+         * empty leaf represents nothing. If they all go, one is left covering the paragraph.
          */
-        private void limpiarVacias(BranchElement parrafo) {
-            int n = parrafo.getElementCount();
-            Vector<Element> vivas = new Vector<Element>();
+        private void clearEmpty(BranchElement paragraph) {
+            int n = paragraph.getElementCount();
+            Vector<Element> alive = new Vector<Element>();
             for (int i = 0; i < n; i++) {
-                Element h = parrafo.getElement(i);
+                Element h = paragraph.getElement(i);
                 if (h.getEndOffset() > h.getStartOffset()) {
-                    vivas.addElement(h);
+                    alive.addElement(h);
                 }
             }
-            if (vivas.size() == n) {
+            if (alive.size() == n) {
                 return;
             }
-            Element[] viejas = new Element[n];
+            Element[] oldLeaves = new Element[n];
             for (int i = 0; i < n; i++) {
-                viejas[i] = parrafo.getElement(i);
+                oldLeaves[i] = paragraph.getElement(i);
             }
-            Element[] nuevas;
-            if (vivas.size() == 0) {
-                nuevas = new Element[] {new LeafElement(documento, parrafo, null,
-                        parrafo.getStartOffset(), parrafo.getEndOffset())};
+            Element[] newLeaves;
+            if (alive.size() == 0) {
+                newLeaves = new Element[] {new LeafElement(document, paragraph, null,
+                        paragraph.getStartOffset(), paragraph.getEndOffset())};
             } else {
-                nuevas = new Element[vivas.size()];
-                vivas.copyInto(nuevas);
+                newLeaves = new Element[alive.size()];
+                alive.copyInto(newLeaves);
             }
-            parrafo.replace(0, n, nuevas);
-            anotar(parrafo, 0, viejas, nuevas);
+            paragraph.replace(0, n, newLeaves);
+            note(paragraph, 0, oldLeaves, newLeaves);
         }
 
-        /** Anota que ese elemento cambio sin cambiar de hijos. */
-        private void anotarCambio(Element e) {
+        /** It notes that that element changed without changing children. */
+        private void noteChange(Element e) {
             if (e != null) {
-                anotar(e, 0, new Element[0], new Element[0]);
+                note(e, 0, new Element[0], new Element[0]);
             }
         }
 
-        /** Agrega una hoja al final de un parrafo. */
-        private void agregar(BranchElement parrafo, Element hoja) {
-            Element[] uno = new Element[] {hoja};
-            parrafo.replace(parrafo.getElementCount(), 0, uno);
+        /** It adds a leaf at the end of a paragraph. */
+        private void add(BranchElement paragraph, Element leaf) {
+            Element[] one = new Element[] {leaf};
+            paragraph.replace(paragraph.getElementCount(), 0, one);
         }
     }
 
-    /** La raiz de un documento con estilo; su nombre la distingue de un parrafo. */
+    /** The root of a styled document; its name tells it apart from a paragraph. */
     protected class SectionElement extends BranchElement {
 
-        public SectionElement(DefaultStyledDocument documento) {
-            super(documento, null, null);
+        public SectionElement(DefaultStyledDocument document) {
+            super(document, null, null);
         }
 
         public String getName() {
@@ -1059,7 +1062,7 @@ public class DefaultStyledDocument extends AbstractDocument implements StyledDoc
         }
     }
 
-    /** Deshacer un cambio de atributos: se guarda la copia de como estaban. */
+    /** Undoing a change of attributes: the copy of how they were is kept. */
     public static class AttributeUndoableEdit extends AbstractUndoableEdit {
 
         protected AttributeSet newAttributes;
@@ -1093,7 +1096,7 @@ public class DefaultStyledDocument extends AbstractDocument implements StyledDoc
         }
     }
 
-    /** Deshacer un cambio de estilo logico. */
+    /** Undoing a change of logical style. */
     static class StyleChangeUndoableEdit extends AbstractUndoableEdit {
 
         StyleChangeUndoableEdit(AbstractElement element, Style newStyle) {
@@ -1118,36 +1121,36 @@ public class DefaultStyledDocument extends AbstractDocument implements StyledDoc
         protected AttributeSet oldStyle;
     }
 
-    /** Un estilo cambio: el documento avisa que hay que repintar. */
+    /** A style changed: the document reports that a repaint is needed. */
     static class StyleChangeHandler implements ChangeListener, Serializable {
 
-        private final DefaultStyledDocument documento;
+        private final DefaultStyledDocument document;
 
-        StyleChangeHandler(DefaultStyledDocument documento) {
-            this.documento = documento;
+        StyleChangeHandler(DefaultStyledDocument document) {
+            this.document = document;
         }
 
         public void stateChanged(ChangeEvent e) {
             Object source = e.getSource();
             if (source instanceof Style) {
-                documento.styleChanged((Style) source);
+                document.styleChanged((Style) source);
             } else {
-                documento.styleChanged(null);
+                document.styleChanged(null);
             }
         }
     }
 
-    /** Cambio el juego de estilos: hay que volver a mirar de cuales cuelgan los parrafos. */
+    /** The style set changed: which ones the paragraphs hang from has to be looked at again. */
     static class StyleContextChangeHandler implements ChangeListener, Serializable {
 
-        private final DefaultStyledDocument documento;
+        private final DefaultStyledDocument document;
 
-        StyleContextChangeHandler(DefaultStyledDocument documento) {
-            this.documento = documento;
+        StyleContextChangeHandler(DefaultStyledDocument document) {
+            this.document = document;
         }
 
         public void stateChanged(ChangeEvent e) {
-            documento.updateStylesListeningTo();
+            document.updateStylesListeningTo();
         }
     }
 }

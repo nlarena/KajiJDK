@@ -3,7 +3,7 @@ package com.sun.source.tree;
 import java.util.List;
 
 /**
- * El uso de una anotacion, con sus argumentos.
+ * The use of an annotation, with its arguments.
  */
 public interface AnnotationTree extends ExpressionTree {
 

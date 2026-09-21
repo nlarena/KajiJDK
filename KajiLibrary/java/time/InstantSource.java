@@ -12,10 +12,10 @@ public interface InstantSource {
     }
 
     /**
-     * Un `Clock` con esta fuente y esa zona.
+     * A `Clock` with this source and that zone.
      *
-     * <p>Es el puente de `InstantSource` a `Clock`: aquella solo sabe **cuando**, y un `Clock` sabe
-     * ademas **donde**, que es lo que hace falta para `LocalDate.now()`.
+     * <p>It is the bridge from `InstantSource` to `Clock`: the former only knows **when**, and a
+     * `Clock` knows **where** as well, which is what `LocalDate.now()` needs.
      */
     default java.time.Clock withZone(ZoneId zone) {
         if (zone == null) {
@@ -24,16 +24,16 @@ public interface InstantSource {
         return new SourceClock(this, zone);
     }
 
-    /** El reloj del sistema. */
+    /** The system clock. */
     static InstantSource system() {
         return java.time.Clock.systemUTC();
     }
 
     /**
-     * Una fuente **detenida** en ese instante.
+     * A source **stopped** at that instant.
      *
-     * <p>Es la que hace testeable el codigo que mira la hora: con una fuente fija, "ahora" es un
-     * valor que la prueba elige, y el resultado deja de depender de cuando se corra.
+     * <p>It is what makes code that looks at the time testable: with a fixed source, "now" is a value
+     * the test chooses, and the result stops depending on when it is run.
      */
     static InstantSource fixed(Instant fixedInstant) {
         if (fixedInstant == null) {
@@ -42,7 +42,7 @@ public interface InstantSource {
         return new FixedSource(fixedInstant);
     }
 
-    /** La misma fuente, corrida `offsetDuration`. */
+    /** The same source, shifted by `offsetDuration`. */
     static InstantSource offset(InstantSource baseSource, Duration offsetDuration) {
         if (baseSource == null || offsetDuration == null) {
             throw new NullPointerException();
@@ -54,12 +54,12 @@ public interface InstantSource {
     }
 
     /**
-     * La misma fuente, **truncada** a multiplos de `tickDuration`.
+     * The same source, **truncated** to multiples of `tickDuration`.
      *
-     * <p>Un reloj que avanza a saltos: con un tick de un segundo, los nanos salen siempre en cero.
-     * Sirve para que dos lecturas cercanas den el mismo valor a proposito.
+     * <p>A clock that advances in jumps: with a one-second tick, the nanos always come out zero. It
+     * serves to make two nearby readings give the same value on purpose.
      *
-     * @throws IllegalArgumentException si `tickDuration` es negativa o no divide un dia
+     * @throws IllegalArgumentException if `tickDuration` is negative or does not divide a day
      */
     static InstantSource tick(InstantSource baseSource, Duration tickDuration) {
         if (baseSource == null || tickDuration == null) {
@@ -79,34 +79,35 @@ public interface InstantSource {
     }
 }
 
-// Las tres fuentes derivadas y el reloj que las envuelve. Van como clases de paquete y no anidadas
-// porque una clase anidada dentro de una interfaz generica no resuelve bien todavia.
+// The three derived sources and the clock that wraps them. They go as package-private classes and
+// not as nested ones because a class nested inside a generic interface does not resolve properly
+// yet.
 
 final class FixedSource implements InstantSource {
 
-    private final Instant fijo;
+    private final Instant fixed;
 
-    FixedSource(Instant fijo) {
-        this.fijo = fijo;
+    FixedSource(Instant fixed) {
+        this.fixed = fixed;
     }
 
     public Instant instant() {
-        return this.fijo;
+        return this.fixed;
     }
 }
 
 final class OffsetSource implements InstantSource {
 
     private final InstantSource base;
-    private final Duration corrimiento;
+    private final Duration shift;
 
-    OffsetSource(InstantSource base, Duration corrimiento) {
+    OffsetSource(InstantSource base, Duration shift) {
         this.base = base;
-        this.corrimiento = corrimiento;
+        this.shift = shift;
     }
 
     public Instant instant() {
-        return this.base.instant().plus(this.corrimiento);
+        return this.base.instant().plus(this.shift);
     }
 }
 
@@ -123,36 +124,36 @@ final class TickSource implements InstantSource {
     public Instant instant() {
         Instant i = this.base.instant();
         long nanos = i.getNano();
-        // Se trunca **hacia abajo** dentro del segundo, que es lo que hace que el reloj no retroceda
-        // nunca: cada lectura cae en el mismo tick o en uno posterior.
-        long sobra = nanos % this.tickNanos;
-        return i.minusNanos(sobra);
+        // It truncates **downwards** within the second, which is what keeps the clock from ever going
+        // backwards: every reading lands on the same tick or on a later one.
+        long leftOver = nanos % this.tickNanos;
+        return i.minusNanos(leftOver);
     }
 }
 
-// El `Clock` que devuelve `InstantSource.withZone`: la fuente pone el instante y la zona el lugar.
+// The `Clock` `InstantSource.withZone` returns: the source supplies the instant and the zone the place.
 final class SourceClock extends java.time.Clock {
 
-    private final InstantSource fuente;
-    private final ZoneId zona;
+    private final InstantSource source;
+    private final ZoneId zone;
 
-    SourceClock(InstantSource fuente, ZoneId zona) {
-        this.fuente = fuente;
-        this.zona = zona;
+    SourceClock(InstantSource source, ZoneId zone) {
+        this.source = source;
+        this.zone = zone;
     }
 
     public Instant instant() {
-        return this.fuente.instant();
+        return this.source.instant();
     }
 
     public ZoneId getZone() {
-        return this.zona;
+        return this.zone;
     }
 
     public java.time.Clock withZone(ZoneId zone) {
         if (zone == null) {
             throw new NullPointerException("zone");
         }
-        return zone.equals(this.zona) ? this : new SourceClock(this.fuente, zone);
+        return zone.equals(this.zone) ? this : new SourceClock(this.source, zone);
     }
 }

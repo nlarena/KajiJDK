@@ -58,7 +58,7 @@ final class KajiPath implements Path {
         return this.path.charAt(0) == SEP ? 1 : 0;
     }
 
-    private List<String> segs() {
+    private List<String> secs() {
         List<String> out = new ArrayList<String>();
         StringBuilder cur = new StringBuilder();
         int i = this.rootLen();
@@ -94,12 +94,12 @@ final class KajiPath implements Path {
     }
 
     public Path getFileName() {
-        List<String> s = this.segs();
+        List<String> s = this.secs();
         return s.isEmpty() ? null : new KajiPath(s.get(s.size() - 1));
     }
 
     public Path getParent() {
-        List<String> s = this.segs();
+        List<String> s = this.secs();
         int r = this.rootLen();
         if (s.isEmpty()) {
             return null;
@@ -120,11 +120,11 @@ final class KajiPath implements Path {
     }
 
     public int getNameCount() {
-        return this.segs().size();
+        return this.secs().size();
     }
 
     public Path getName(int index) {
-        List<String> s = this.segs();
+        List<String> s = this.secs();
         if (index < 0 || index >= s.size()) {
             throw new IllegalArgumentException("index: " + index);
         }
@@ -132,7 +132,7 @@ final class KajiPath implements Path {
     }
 
     public Path subpath(int beginIndex, int endIndex) {
-        List<String> s = this.segs();
+        List<String> s = this.secs();
         if (beginIndex < 0 || beginIndex >= endIndex || endIndex > s.size()) {
             throw new IllegalArgumentException();
         }
@@ -157,8 +157,8 @@ final class KajiPath implements Path {
                 && !this.path.substring(0, this.rootLen()).equals(o.path.substring(0, o.rootLen()))) {
             return false;
         }
-        List<String> a = this.segs();
-        List<String> b = o.segs();
+        List<String> a = this.secs();
+        List<String> b = o.secs();
         if (b.size() > a.size()) {
             return false;
         }
@@ -177,8 +177,8 @@ final class KajiPath implements Path {
         if (o.isAbsolute()) {
             return this.equals(o);
         }
-        List<String> a = this.segs();
-        List<String> b = o.segs();
+        List<String> a = this.secs();
+        List<String> b = o.secs();
         if (b.size() > a.size()) {
             return false;
         }
@@ -196,11 +196,11 @@ final class KajiPath implements Path {
     public Path normalize() {
         List<String> out = new ArrayList<String>();
         boolean abs = this.isAbsolute();
-        for (String seg : this.segs()) {
-            if (seg.equals(".")) {
+        for (String sec : this.secs()) {
+            if (sec.equals(".")) {
                 continue;
             }
-            if (seg.equals("..")) {
+            if (sec.equals("..")) {
                 if (!out.isEmpty() && !out.get(out.size() - 1).equals("..")) {
                     out.remove(out.size() - 1);
                 } else if (!abs) {
@@ -208,7 +208,7 @@ final class KajiPath implements Path {
                 }
                 continue;
             }
-            out.add(seg);
+            out.add(sec);
         }
         StringBuilder sb = new StringBuilder(this.path.substring(0, this.rootLen()));
         int i = 0;
@@ -244,8 +244,8 @@ final class KajiPath implements Path {
         if (this.isAbsolute() != o.isAbsolute()) {
             throw new IllegalArgumentException("'other' is a different type of Path");
         }
-        List<String> a = this.segs();
-        List<String> b = o.segs();
+        List<String> a = this.secs();
+        List<String> b = o.secs();
         int common = 0;
         while (common < a.size() && common < b.size() && a.get(common).equals(b.get(common))) {
             common = common + 1;

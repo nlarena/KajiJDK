@@ -4,16 +4,16 @@ import java.io.FilterOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 
-// El espejo de `DigestInputStream`: hashea todo lo que se escribe mientras se escribe.
+// The mirror of `DigestInputStream`: it hashes everything that is written as it is written.
 //
-// Ojo con un detalle que se hereda de `FilterOutputStream` y que aca importa mas que alla: la
-// version de tres argumentos de `write` **si** esta sobreescrita, asi que un `write(byte[])`
-// —que `FilterOutputStream` implementa escribiendo byte por byte en algunas versiones— no
-// duplica ni saltea nada. Los dos caminos alimentan el digest exactamente una vez por byte.
+// Careful with a detail inherited from `FilterOutputStream` that matters here more than there: the
+// three-argument version of `write` **is** overridden, so a `write(byte[])` —which
+// `FilterOutputStream` implements by writing byte by byte in some versions— neither duplicates nor
+// skips anything. Both roads feed the digest exactly once per byte.
 //
-// Los dos `write` declaran `throws IOException`, igual que en el JDK y por el mismo motivo que se
-// explica en `DigestInputStream`: la restriccion que lo impedia era de `java.io.FilterOutputStream`
-// y ya no esta.
+// Both `write`s declare `throws IOException`, just as in the JDK and for the same reason explained
+// in `DigestInputStream`: the restriction that prevented it was of `java.io.FilterOutputStream` and
+// is no longer there.
 public class DigestOutputStream extends FilterOutputStream {
 
     protected MessageDigest digest;
@@ -41,8 +41,8 @@ public class DigestOutputStream extends FilterOutputStream {
         }
     }
 
-    // Se escribe primero y se hashea despues: si la escritura falla, lo que no llego al destino
-    // tampoco entra al digest.
+    // It is written first and hashed afterwards: if the writing fails, what did not reach the
+    // destination does not enter the digest either.
     @Override
     public void write(byte[] b, int off, int len) throws IOException {
         this.out.write(b, off, len);

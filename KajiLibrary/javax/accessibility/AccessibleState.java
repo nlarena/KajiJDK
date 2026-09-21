@@ -1,106 +1,106 @@
 package javax.accessibility;
 
 /**
- * En qué **condición** está un objeto: habilitado, elegido, con foco, expandido.
+ * What **condition** an object is in: enabled, chosen, focused, expanded.
  *
- * <p>A diferencia del rol, que no cambia, los estados van y vienen todo el tiempo. Por eso no se
- * consultan de a uno sino como un {@link AccessibleStateSet}: preguntar diez veces por diez estados
- * dejaría ver un objeto a medio cambiar.
+ * <p>Unlike the role, which does not change, states come and go all the time. That is why they are
+ * not queried one by one but as an {@link AccessibleStateSet}: asking ten times about ten states
+ * would show an object halfway through changing.
  */
 public class AccessibleState extends AccessibleBundle {
 
-    /** La categoría <b>active</b>. */
+    /** The <b>active</b> category. */
     public static final AccessibleState ACTIVE = new AccessibleState("active");
 
-    /** La categoría <b>armed</b>. */
+    /** The <b>armed</b> category. */
     public static final AccessibleState ARMED = new AccessibleState("armed");
 
-    /** Está ocupado y puede no responder. */
+    /** It is busy and may not respond. */
     public static final AccessibleState BUSY = new AccessibleState("busy");
 
-    /** Está marcado. */
+    /** It is checked. */
     public static final AccessibleState CHECKED = new AccessibleState("checked");
 
-    /** Está plegado. */
+    /** It is collapsed. */
     public static final AccessibleState COLLAPSED = new AccessibleState("collapsed");
 
-    /** Se puede editar. */
+    /** It can be edited. */
     public static final AccessibleState EDITABLE = new AccessibleState("editable");
 
-    /** Responde a la entrada del usuario. */
+    /** It responds to user input. */
     public static final AccessibleState ENABLED = new AccessibleState("enabled");
 
-    /** La categoría <b>expandable</b>. */
+    /** The <b>expandable</b> category. */
     public static final AccessibleState EXPANDABLE = new AccessibleState("expandable");
 
-    /** Está desplegado. */
+    /** It is expanded. */
     public static final AccessibleState EXPANDED = new AccessibleState("expanded");
 
-    /** La categoría <b>focusable</b>. */
+    /** The <b>focusable</b> category. */
     public static final AccessibleState FOCUSABLE = new AccessibleState("focusable");
 
-    /** Tiene el foco del teclado. */
+    /** It has the keyboard focus. */
     public static final AccessibleState FOCUSED = new AccessibleState("focused");
 
-    /** La categoría <b>horizontal</b>. */
+    /** The <b>horizontal</b> category. */
     public static final AccessibleState HORIZONTAL = new AccessibleState("horizontal");
 
-    /** La categoría <b>iconified</b>. */
+    /** The <b>iconified</b> category. */
     public static final AccessibleState ICONIFIED = new AccessibleState("iconified");
 
-    /** La categoría <b>indeterminate</b>. */
+    /** The <b>indeterminate</b> category. */
     public static final AccessibleState INDETERMINATE = new AccessibleState("indeterminate");
 
-    /** La categoría <b>manages descendants</b>. */
+    /** The <b>manages descendants</b> category. */
     public static final AccessibleState MANAGES_DESCENDANTS = new AccessibleState("manages descendants");
 
-    /** Bloquea al resto de la aplicación. */
+    /** It blocks the rest of the application. */
     public static final AccessibleState MODAL = new AccessibleState("modal");
 
-    /** La categoría <b>multiselectable</b>. */
+    /** The <b>multiselectable</b> category. */
     public static final AccessibleState MULTISELECTABLE = new AccessibleState("multiselectable");
 
-    /** La categoría <b>multiple line</b>. */
+    /** The <b>multiple line</b> category. */
     public static final AccessibleState MULTI_LINE = new AccessibleState("multiple line");
 
-    /** Pinta todos sus píxeles. */
+    /** It paints all its pixels. */
     public static final AccessibleState OPAQUE = new AccessibleState("opaque");
 
-    /** Está apretado en este momento. */
+    /** It is pressed at this moment. */
     public static final AccessibleState PRESSED = new AccessibleState("pressed");
 
-    /** La categoría <b>resizable</b>. */
+    /** The <b>resizable</b> category. */
     public static final AccessibleState RESIZABLE = new AccessibleState("resizable");
 
-    /** La categoría <b>selectable</b>. */
+    /** The <b>selectable</b> category. */
     public static final AccessibleState SELECTABLE = new AccessibleState("selectable");
 
-    /** Está elegido. */
+    /** It is chosen. */
     public static final AccessibleState SELECTED = new AccessibleState("selected");
 
-    /** Se ve de verdad, contando a sus ancestros. */
+    /** It is really seen, counting its ancestors. */
     public static final AccessibleState SHOWING = new AccessibleState("showing");
 
-    /** La categoría <b>single line</b>. */
+    /** The <b>single line</b> category. */
     public static final AccessibleState SINGLE_LINE = new AccessibleState("single line");
 
-    /** La categoría <b>transient</b>. */
+    /** The <b>transient</b> category. */
     public static final AccessibleState TRANSIENT = new AccessibleState("transient");
 
-    /** La categoría <b>truncated</b>. */
+    /** The <b>truncated</b> category. */
     public static final AccessibleState TRUNCATED = new AccessibleState("truncated");
 
-    /** La categoría <b>vertical</b>. */
+    /** The <b>vertical</b> category. */
     public static final AccessibleState VERTICAL = new AccessibleState("vertical");
 
-    /** Está declarado visible. */
+    /** It is declared visible. */
     public static final AccessibleState VISIBLE = new AccessibleState("visible");
 
     /**
-     * Con la clave dada.
+     * With the given key.
      *
-     * <p>Protegido por el mismo motivo que en {@link AccessibleRole}: los estados se comparan por
-     * identidad, así que fabricar uno suelto lo vuelve incomparable.
+     * <p>Protected for the same reason as in {@link AccessibleRole}: states are compared by
+     * identity, so making a loose one makes it incomparable.
      */
     protected AccessibleState(String key) {
         this.key = key;

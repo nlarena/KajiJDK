@@ -20,13 +20,13 @@ public final class MonthDay implements TemporalAccessor, TemporalAdjuster, Compa
         this.day = day;
     }
 
-    /** El dia y mes de hoy, en la zona por defecto. */
+    /** Today's month-and-day, in the default zone. */
     public static MonthDay now() {
         LocalDate d = LocalDate.now();
         return MonthDay.of(d.getMonthValue(), d.getDayOfMonth());
     }
 
-    /** El que marca `clock`. La forma testeable de `now()`. */
+    /** The one `clock` reads. The testable form of `now()`. */
     public static MonthDay now(java.time.Clock clock) {
         if (clock == null) {
             throw new NullPointerException("clock");
@@ -35,7 +35,7 @@ public final class MonthDay implements TemporalAccessor, TemporalAdjuster, Compa
         return MonthDay.of(d.getMonthValue(), d.getDayOfMonth());
     }
 
-    /** El de esa zona, ahora. */
+    /** That zone's, right now. */
     public static MonthDay now(ZoneId zone) {
         if (zone == null) {
             throw new NullPointerException("zone");
@@ -44,7 +44,7 @@ public final class MonthDay implements TemporalAccessor, TemporalAdjuster, Compa
         return MonthDay.of(d.getMonthValue(), d.getDayOfMonth());
     }
 
-    /** El dia y mes que `temporal` tiene. */
+    /** The month-and-day `temporal` holds. */
     public static MonthDay from(java.time.temporal.TemporalAccessor temporal) {
         if (temporal == null) {
             throw new NullPointerException("temporal");
@@ -56,7 +56,7 @@ public final class MonthDay implements TemporalAccessor, TemporalAdjuster, Compa
                 temporal.get(ChronoField.DAY_OF_MONTH));
     }
 
-    /** Con el mes como enum. */
+    /** With the month as an enum. */
     public static MonthDay of(Month month, int dayOfMonth) {
         if (month == null) {
             throw new NullPointerException("month");
@@ -81,18 +81,18 @@ public final class MonthDay implements TemporalAccessor, TemporalAdjuster, Compa
     }
 
     /**
-     * Si este dia-y-mes existe en ese año.
+     * Whether this month-and-day exists in that year.
      *
-     * <p>Solo el 29 de febrero puede no existir, y es justamente el caso por el que `MonthDay`
-     * guarda 1..29 para febrero y no 1..28: un 29 de febrero es un dia-y-mes valido, y en que años
-     * cae es otra pregunta.
+     * <p>Only the 29th of February can fail to exist, and it is precisely the case for which
+     * `MonthDay` keeps 1..29 for February and not 1..28: a 29th of February is a valid
+     * month-and-day, and which years it falls in is another question.
      */
     public boolean isValidYear(int year) {
         return !(this.getDayOfMonth() == 29 && this.getMonthValue() == 2
                 && !Year.isLeap((long) year));
     }
 
-    /** Este dia-y-mes con otro mes; si el dia no existe en el nuevo mes, se recorta al ultimo. */
+    /** This month-and-day with another month; if the day does not exist there, it is clipped to the last. */
     public MonthDay withMonth(int month) {
         return this.with(Month.of(month));
     }
@@ -104,14 +104,14 @@ public final class MonthDay implements TemporalAccessor, TemporalAdjuster, Compa
         if (month.getValue() == this.getMonthValue()) {
             return this;
         }
-        // Se recorta, no se rechaza: el 31 de enero con el mes puesto en abril es el 30 de abril.
-        // Es lo que hace el JDK, y la alternativa --tirar-- volveria inusable `with` sobre cualquier
-        // dia mayor a 28.
-        int dia = Math.min(this.getDayOfMonth(), month.maxLength());
-        return MonthDay.of(month.getValue(), dia);
+        // It is clipped, not rejected: the 31st of January with the month set to April is the 30th of
+        // April. It is what the JDK does, and the alternative --throwing-- would make `with` unusable
+        // over any day past the 28th.
+        int day = Math.min(this.getDayOfMonth(), month.maxLength());
+        return MonthDay.of(month.getValue(), day);
     }
 
-    /** Con otro dia del mes. */
+    /** With another day of the month. */
     public MonthDay withDayOfMonth(int dayOfMonth) {
         if (dayOfMonth == this.getDayOfMonth()) {
             return this;
@@ -214,21 +214,21 @@ public final class MonthDay implements TemporalAccessor, TemporalAdjuster, Compa
     }
 
     /**
-     * Lee `text` con ese formateador.
+     * It reads `text` with that formatter.
      *
-     * <p>El que decide que campos hay es el formateador; esta clase solo dice **cual de ellos
-     * quiere**, pasando su propio `from`. Por eso un patron que no traiga mes y dia
-     * falla aca y no al usar el resultado.
+     * <p>The one that decides which fields are there is the formatter; this class only says
+     * **which of them it wants**, by passing its own `from`. That is why a pattern that brings no month and day
+     * fails here and not when the result is used.
      *
-     * @throws java.time.format.DateTimeParseException si el texto no encaja con el patron, o si lo
-     *     que encaja no alcanza para un mes y dia
+     * @throws java.time.format.DateTimeParseException if the text does not fit the pattern, or what
+     *     fits is not enough for a month and day
      */
     public static MonthDay parse(CharSequence text, java.time.format.DateTimeFormatter formatter) {
         if (formatter == null) {
             throw new NullPointerException("formatter");
         }
-        // Ligado a una local: encadenar por un intermedio de tipo interfaz se pierde (#108).
-        java.time.temporal.TemporalQuery<MonthDay> consulta = MonthDay::from;
-        return formatter.parse(text, consulta);
+        // Bound to a local: chaining through an interface-typed intermediate gets lost (#108).
+        java.time.temporal.TemporalQuery<MonthDay> queryOf = MonthDay::from;
+        return formatter.parse(text, queryOf);
     }
 }

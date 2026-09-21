@@ -10,9 +10,10 @@ package java.util.concurrent;
 // CompletionService the total latency is bounded by the *slowest* task, but the *first*
 // result is available as soon as any task finishes.
 //
-// Las esperas declaran `throws InterruptedException`, como en el JDK. La nota que estaba aca decia
-// que se omitia "en todo el paquete"; esa omision era un error que el finding #316 destapo -- una
-// espera que no puede ser interrumpida deja al que llama sin forma de sacar a un hilo de ella.
+// The waits declare `throws InterruptedException`, as in the JDK. The note that used to be here
+// said it was omitted "throughout the package"; that omission was a mistake finding #316 uncovered
+// -- a wait that cannot be interrupted leaves the caller with no way of getting a thread out of
+// it.
 public interface CompletionService<V> {
 
     // Submit a value-returning task; its future will appear in the completion queue.

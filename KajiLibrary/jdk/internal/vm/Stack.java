@@ -1,28 +1,30 @@
 package jdk.internal.vm;
 
 /**
- * KajiLibrary's jdk.internal.vm.Stack — los cuadros de la pila de llamadas.
+ * KajiLibrary's jdk.internal.vm.Stack -- the frames of the call stack.
  *
- * <p>Es la costura que le faltaba a todo lo que necesita saber **quién llamó**:
- * {@link SecurityManager#getClassContext()}, `StackWalker`, y las trazas de `Throwable`. Hasta que
- * existió, ninguno de esos tenía de dónde sacar la respuesta, y por eso estaban afuera o vacíos.
+ * <p>It is the seam that everything that needs to know **who called** was missing:
+ * {@link SecurityManager#getClassContext()}, `StackWalker`, and the traces of `Throwable`. Until it
+ * existed, none of those had anywhere to get the answer from, and that is why they were left out or
+ * empty.
  *
- * <p>No es un `native` del puente sino un **intrínseco del intérprete**, y la razón es estructural:
- * el puente de nativos recibe el metaspace y el montón, y **no la pila de frames**. El único lugar
- * donde los cuadros están a la vista es adentro del intérprete.
+ * <p>It is not a `native` of the bridge but an **intrinsic of the interpreter**, and the reason is
+ * structural: the bridge of natives receives the metaspace and the heap, and **not the stack of
+ * frames**. The only place where the frames are in view is inside the interpreter.
  *
- * <p>Cada entrada es `"clase|método"`, con la clase en forma binaria (`java/lang/String`). El orden
- * es de arriba hacia abajo: el primero es quien llamó a {@link #frames()}.
+ * <p>Each entry is `"class|method"`, with the class in binary form (`java/lang/String`). The order
+ * is from the top down: the first is whoever called {@link #frames()}.
  *
- * <p><strong>No se recorta nada.</strong> Se devuelve la pila tal como está, incluido el cuadro del
- * que llamó, y quien la use decide cuántos niveles suyos descartar. Recortar acá obligaría a adivinar
- * cuántos cuadros de envoltorio puso el llamador, y ese número la VM no lo sabe.
+ * <p><strong>Nothing is trimmed.</strong> The stack is returned as it is, including the frame of
+ * the caller, and whoever uses it decides how many levels of their own to discard. Trimming here
+ * would force guessing how many wrapper frames the caller put in, and the VM does not know that
+ * number.
  */
 public final class Stack {
 
     private Stack() {
     }
 
-    /** Los cuadros de la pila, de arriba hacia abajo, como `"clase|método"`. */
+    /** The frames of the stack, from the top down, as `"class|method"`. */
     public static native String[] frames();
 }

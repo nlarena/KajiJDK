@@ -15,24 +15,30 @@ import java.util.Set;
 
 import jdk.internal.io.Fs;
 
-// El unico proveedor de KajiJDK: el del esquema `file`, sobre los seis nativos de
-// `jdk.internal.io.Fs`.
+// KajiJDK's only provider: the `file` scheme's, over `jdk.internal.io.Fs`'s natives.
 //
-// **Es una fachada sobre `Files`, no al reves.** En el JDK la logica vive en el proveedor y `Files`
-// delega; aca se hizo al reves porque no hay mas que un proveedor y porque `Files` es donde alguien
-// va a buscar el codigo. La consecuencia es que esta clase es casi toda una linea por metodo, que es
-// exactamente lo que se quiere de una fachada.
+// **It is a facade over `Files`, not the other way round.** In the JDK the logic lives in the
+// provider and `Files` delegates; here it was done the other way because there is no more than one
+// provider and because `Files` is where somebody will go looking for the code. The consequence is
+// that this class is almost all one line per method, which is exactly what one wants of a facade.
 //
-// **Que no puede hacer, y como lo dice.** Los metodos que la spec declara `abstract` hay que
-// implementarlos si o si; los que necesitan algo que esta VM no tiene levantan
-// `UnsupportedOperationException` con el motivo escrito. Un `UnsupportedOperationException` no es un
-// hueco tapado: dice "esto no existe aca" y no se lo puede confundir con un resultado.
+// **What it cannot do, and how it says so.** The methods the spec declares `abstract` have to be
+// implemented whatever happens; the ones that need something this VM does not have throw
+// `UnsupportedOperationException` with the reason written out. An `UnsupportedOperationException`
+// is not a hole papered over: it says "this does not exist here" and cannot be mistaken for a
+// result.
 //
-// Excepcion notable: `getFileAttributeView` devuelve `null`, que **es** la respuesta que manda la
-// spec cuando la vista pedida no esta disponible -- y aca no hay ninguna disponible.
+// **Two of them are now behind the facade, and that is worth naming.** `newDirectoryStream` and
+// `getFileStore` still throw, but their natives arrived --`Fs.list` and the three `disk*`-- and
+// `Files` uses them, so `Files.newDirectoryStream(dir)` works while
+// `provider.newDirectoryStream(dir, filter)` does not. It is the facade that has not been wired,
+// not the VM that cannot.
+//
+// A notable exception: `getFileAttributeView` returns `null`, which **is** the answer the spec
+// requires when the view asked for is not available -- and here none is available.
 final class KajiFileSystemProvider extends FileSystemProvider {
 
-    static final KajiFileSystemProvider INSTANCIA = new KajiFileSystemProvider();
+    static final KajiFileSystemProvider INSTANCE = new KajiFileSystemProvider();
 
     private KajiFileSystemProvider() {
     }
@@ -41,32 +47,32 @@ final class KajiFileSystemProvider extends FileSystemProvider {
         return "file";
     }
 
-    private static void comprobarUri(URI uri) {
+    private static void checkUri(URI uri) {
         if (uri == null) {
             throw new NullPointerException();
         }
-        String esquema = uri.getScheme();
-        if (esquema == null || !esquema.equalsIgnoreCase("file")) {
+        String scheme = uri.getScheme();
+        if (scheme == null || !scheme.equalsIgnoreCase("file")) {
             throw new IllegalArgumentException("URI scheme is not \"file\"");
         }
     }
 
     /**
-     * Siempre falla: el sistema de archivos por omision se crea con la VM y no se puede volver a
-     * crear. Es lo mismo que hace el JDK.
+     * It always fails: the default filesystem is created with the VM and cannot be created again.
+     * It is the same thing the JDK does.
      */
     public FileSystem newFileSystem(URI uri, Map<String, ?> env) throws IOException {
-        comprobarUri(uri);
+        checkUri(uri);
         throw new FileSystemAlreadyExistsException();
     }
 
     public FileSystem getFileSystem(URI uri) {
-        comprobarUri(uri);
+        checkUri(uri);
         return KajiFileSystem.INSTANCE;
     }
 
     public Path getPath(URI uri) {
-        comprobarUri(uri);
+        checkUri(uri);
         return Path.of(uri);
     }
 
@@ -79,24 +85,27 @@ final class KajiFileSystemProvider extends FileSystemProvider {
     }
 
     /**
-     * Un canal sobre el archivo. Lo devuelve `FileChannel.open`, que es lo que esta VM sabe abrir.
+     * A channel over the file. `FileChannel.open` returns it, which is what this VM knows how to
+     * open.
      *
-     * <p>Devolver directamente el `FileChannel` --y no envolverlo para esconder que lo es-- es lo
-     * que hace el JDK: el tipo declarado es lo que se promete, el de mas es lo que se da.
+     * <p>Returning the `FileChannel` directly --and not wrapping it to hide that it is one-- is
+     * what the JDK does: the declared type is what is promised, the extra is what is given.
      */
     public SeekableByteChannel newByteChannel(Path path, Set<? extends OpenOption> options,
             FileAttribute<?>... attrs) throws IOException {
         return FileChannel.open(path, options, attrs);
     }
 
-    /** El mismo canal, con el tipo que promete mas. Ver `newByteChannel`. */
+    /** The same channel, with the type that promises more. See `newByteChannel`. */
     public FileChannel newFileChannel(Path path, Set<? extends OpenOption> options,
             FileAttribute<?>... attrs) throws IOException {
         return FileChannel.open(path, options, attrs);
     }
 
     /**
-     * No se puede: no hay nativo que enumere un directorio. Ver la nota de `DirectoryStream`.
+     * It fails. This javadoc used to blame a missing native; `Fs.list` exists and
+     * `Files.newDirectoryStream` uses it. What is missing is the wiring from here to there, so this
+     * facade and `Files` disagree on the same question.
      */
     public DirectoryStream<Path> newDirectoryStream(Path dir,
             DirectoryStream.Filter<? super Path> filter) throws IOException {
@@ -120,21 +129,17 @@ final class KajiFileSystemProvider extends FileSystemProvider {
     }
 
     /**
-     * Contesta `true` cuando las dos rutas son la misma escrita de dos formas, y falla en el resto.
+     * It answers `true` when the two paths are the same one written two ways, and fails otherwise.
      *
-     * <p>Dos rutas iguales son el mismo archivo, y eso la spec lo dice sin mirar el disco. Lo mismo
-     * vale despues de `normalize()` --`a/./b` y `a/b` son la misma ruta-- **siempre que las dos sean
-     * absolutas o las dos relativas**: mezclarlas obligaria a llevar la relativa a absoluta, y con
-     * `user.dir` valiendo `null` en esta VM eso no resuelve nada, inventa un prefijo. Comparar
-     * contra un prefijo inventado puede dar un `true` falso, que es peor que no contestar.
+     * <p>Two equal paths are the same file, and the spec says that without looking at the disk. The
+     * same holds after `normalize()` --`a/./b` and `a/b` are the same path-- **provided both are
+     * absolute or both relative**: mixing them would force taking the relative one to absolute, and
+     * with `user.dir` being `null` in this VM that settles nothing, it invents a prefix. Comparing
+     * against an invented prefix can give a false `true`, which is worse than not answering.
      *
-     * <p>Para dos rutas que **no** normalizan igual hay que comparar la identidad del archivo --el
-     * inodo, el file key-- y no hay nativo que la devuelva: contestar `false` seria afirmar que son
-     * archivos distintos cuando podrian ser dos nombres del mismo (sobre Windows alcanza con cambiar
-     * mayusculas). Por eso falla en vez de adivinar.
-     *
-     * <p>Este metodo es `abstract` en la spec, asi que hay que darle un cuerpo: no existe la opcion
-     * de omitirlo, como si la hay en `Files.isSameFile`, que por eso no esta.
+     * <p>For two paths that do **not** normalise the same, the file's identity has to be compared
+     * --the inode, the file key. `Fs.canonical` gives it and `Files.isSameFile` uses it; this
+     * facade has not been wired to it, so it fails here rather than guess.
      */
     public boolean isSameFile(Path path, Path path2) throws IOException {
         if (path.equals(path2)) {
@@ -148,37 +153,39 @@ final class KajiFileSystemProvider extends FileSystemProvider {
                 "KajiJDK has no file key: two different paths cannot be compared");
     }
 
-    /** El nombre empieza con un punto. La definicion y el porque estan en `Files.isHidden`. */
+    /** The name starts with a dot. The definition and the why are in `Files.isHidden`. */
     public boolean isHidden(Path path) throws IOException {
         return Files.isHidden(path);
     }
 
-    /** No se puede: no hay estadisticas de volumen. Ver `FileStore`. */
+    /** It fails. This javadoc used to blame missing volume statistics; the three `disk*` natives
+     *  exist and `Files.getFileStore` builds a {@link KajiFileStore} out of them. What is missing
+     *  is the wiring from here to there. */
     public FileStore getFileStore(Path path) throws IOException {
         throw new UnsupportedOperationException("KajiJDK models no file store");
     }
 
     /**
-     * Comprueba existencia y, si se piden, lectura y escritura.
+     * It checks existence and, if they are asked for, read and write.
      *
-     * <p>`EXECUTE` falla: `stat` no trae bit de ejecucion, y aceptarlo en silencio diria que se
-     * puede ejecutar sin haberlo comprobado.
+     * <p>`EXECUTE` fails: `stat` brings no execute bit, and accepting it in silence would say it
+     * can be executed without having checked.
      */
     public void checkAccess(Path path, AccessMode... modes) throws IOException {
         String p = path.toString();
         int st = Fs.stat(p);
-        if ((st & Fs.EXISTE) == 0) {
+        if ((st & Fs.EXISTS) == 0) {
             throw new NoSuchFileException(p);
         }
         int i = 0;
         while (i < modes.length) {
             AccessMode m = modes[i];
             if (m == AccessMode.READ) {
-                if ((st & Fs.SE_LEE) == 0) {
+                if ((st & Fs.CAN_READ) == 0) {
                     throw new AccessDeniedException(p);
                 }
             } else if (m == AccessMode.WRITE) {
-                if ((st & Fs.SE_ESCRIBE) == 0) {
+                if ((st & Fs.CAN_WRITE) == 0) {
                     throw new AccessDeniedException(p);
                 }
             } else {
@@ -189,39 +196,40 @@ final class KajiFileSystemProvider extends FileSystemProvider {
     }
 
     /**
-     * Siempre `null`: no hay ninguna vista disponible. Es la respuesta que manda la spec.
+     * Always `null`: no view is available. It is the answer the spec requires.
      *
-     * <p>Que no haya **vista** y si haya `readAttributes` no es una contradiccion: una vista lee y
-     * escribe, y escribir metadatos no se puede. El detalle esta en `Files.getFileAttributeView`.
+     * <p>That there is no **view** and there is a `readAttributes` is not a contradiction: a view
+     * reads and writes, and writing all three timestamps at once cannot be done. The detail is in
+     * `Files.getFileAttributeView`.
      */
     public <V extends FileAttributeView> V getFileAttributeView(Path path, Class<V> type,
             LinkOption... options) {
         return Files.getFileAttributeView(path, type, options);
     }
 
-    /** La vista `basic`, sacada de `stat` y `size`. Ver `Files.readAttributes`. */
+    /** The `basic` view, taken from `stat`, `size` and `mtime`. See `Files.readAttributes`. */
     public <A extends BasicFileAttributes> A readAttributes(Path path, Class<A> type,
             LinkOption... options) throws IOException {
         return Files.readAttributes(path, type, options);
     }
 
-    /** Idem, por nombre de atributo. */
+    /** The same, by attribute name. */
     public Map<String, Object> readAttributes(Path path, String attributes, LinkOption... options)
             throws IOException {
         return Files.readAttributes(path, attributes, options);
     }
 
-    /** No se puede: no hay nativo que escriba metadatos. */
+    /** It fails: there is no native that writes an attribute by name. */
     public void setAttribute(Path path, String attribute, Object value, LinkOption... options)
             throws IOException {
         throw new UnsupportedOperationException("KajiJDK cannot write file attributes");
     }
 
     /**
-     * Un `stat` y listo.
+     * A `stat` and that is it.
      *
-     * <p>Se sobreescribe el de la clase base --que arma un `checkAccess` y atrapa-- porque aca hay
-     * una respuesta directa y mas barata.
+     * <p>The base class's --which builds a `checkAccess` and catches-- is overridden because here
+     * there is a direct and cheaper answer.
      */
     public boolean exists(Path path, LinkOption... options) {
         return Files.exists(path, options);

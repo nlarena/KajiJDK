@@ -7,30 +7,30 @@ import java.lang.constant.PackageDesc;
 import java.util.List;
 import jdk.internal.classfile.impl.TypedAttributes;
 
-// `ModulePackages` (JVMS §4.7.26): TODOS los paquetes del módulo, exportados o no. Es distinto de
-// los `exports` del atributo `Module`: esto es el inventario completo, y sirve para que el sistema
-// de módulos sepa qué paquete pertenece a quién sin abrir el jar entero.
+// `ModulePackages` (JVMS §4.7.26): ALL of the module's packages, exported or not. It differs from the
+// `Module` attribute's `exports`: this is the complete inventory, and it is what lets the module
+// system know which package belongs to whom without opening the whole jar.
 public interface ModulePackagesAttribute extends Attribute<ModulePackagesAttribute>, ClassElement {
 
-    /** Los paquetes. */
+    /** The packages. */
     List<PackageEntry> packages();
 
-    /** El atributo con estos paquetes. */
+    /** The attribute with these packages. */
     public static ModulePackagesAttribute of(List<PackageEntry> packages) {
         return TypedAttributes.modulePackages(packages);
     }
 
-    /** El atributo con estos paquetes. */
+    /** The attribute with these packages. */
     public static ModulePackagesAttribute of(PackageEntry... packages) {
         return TypedAttributes.modulePackages(TypedAttributes.listOf(packages));
     }
 
-    /** El atributo con estos paquetes. */
+    /** The attribute with these packages. */
     public static ModulePackagesAttribute ofNames(List<PackageDesc> packages) {
         return TypedAttributes.modulePackages(TypedAttributes.packageEntries(packages));
     }
 
-    /** El atributo con estos paquetes. */
+    /** The attribute with these packages. */
     public static ModulePackagesAttribute ofNames(PackageDesc... packages) {
         return TypedAttributes.modulePackages(TypedAttributes.packageEntries(packages));
     }

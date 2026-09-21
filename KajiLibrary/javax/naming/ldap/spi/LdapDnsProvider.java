@@ -5,36 +5,37 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * KajiLibrary's javax.naming.ldap.spi.LdapDnsProvider -- decide a que servidor LDAP conectarse.
+ * KajiLibrary's javax.naming.ldap.spi.LdapDnsProvider -- decides which LDAP server to connect to.
  *
- * <p>Se registra como servicio y JNDI lo consulta antes de conectar. Existe para poder reemplazar la
- * resolucion por omision --que consulta registros SRV del DNS-- por otra cosa: una tabla de
- * configuracion, un descubrimiento de servicios, un balanceador propio.
+ * <p>It is registered as a service and, in the JDK, JNDI consults it before connecting. It exists
+ * to replace the default resolution --which queries DNS SRV records-- with something else: a
+ * configuration table, service discovery, a balancer of your own. This library ships no LDAP
+ * provider, so nothing here consults it.
  *
- * <h2>{@link Optional} vacio no es un error</h2>
+ * <h2>An empty {@link Optional} is not an error</h2>
  *
- * <p>Es la parte que hay que entender. Devolver {@code Optional.empty()} significa "yo no se resolver
- * esta URL", y JNDI sigue con el proximo proveedor. Lanzar {@link NamingException} significa "se de
- * que se trata y algo salio mal", y corta la busqueda.
+ * <p>It is the part to understand. Returning {@code Optional.empty()} means "I cannot resolve this
+ * URL", and JNDI carries on with the next provider. Throwing {@link NamingException} means "I know
+ * what this is about and something went wrong", and it cuts the lookup short.
  *
- * <p>Confundirlos hace que un proveedor especializado en un dominio bloquee a todos los demas.
+ * <p>Mixing them up makes a provider specialized in one domain block all the others.
  *
- * <p>El mapa de entorno es el de JNDI --las mismas claves que {@code InitialContext}-- y llega tal
- * cual. Un proveedor puede mirar ahi el usuario o el nivel de seguridad para decidir a donde mandar.
+ * <p>The environment map is JNDI's --the same keys as {@code InitialContext}-- and arrives as is. A
+ * provider can look there at the user or the security level to decide where to send the client.
  */
 public abstract class LdapDnsProvider {
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected LdapDnsProvider() {
     }
 
     /**
-     * A que servidores ir para esa URL.
+     * Which servers to go to for that URL.
      *
-     * @param url la URL LDAP que se quiere resolver
-     * @param env el entorno de JNDI
-     * @return los servidores, o vacio si este proveedor no sabe resolverla
-     * @throws NamingException si sabe de que se trata y fallo; ver la nota de la clase
+     * @param url the LDAP URL to resolve
+     * @param env the JNDI environment
+     * @return the servers, or empty if this provider cannot resolve it
+     * @throws NamingException if it knows what this is about and failed; see the class note
      */
     public abstract Optional<LdapDnsProviderResult> lookupEndpoints(String url, Map<?, ?> env)
         throws NamingException;

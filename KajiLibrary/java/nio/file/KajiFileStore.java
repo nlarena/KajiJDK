@@ -6,126 +6,124 @@ import java.nio.file.attribute.FileAttributeView;
 import java.nio.file.attribute.FileStoreAttributeView;
 
 /**
- * El {@link FileStore} de un volumen del sistema de archivos por omision.
+ * The {@link FileStore} of a volume of the default filesystem.
  *
- * <p>Existe desde que `jdk.internal.io.Fs` sabe preguntar por el espacio de un volumen. Antes no:
- * los ocho miembros que piden datos del volumen habrian tenido que devolver `""` y `0`, y un cero en
- * `getUsableSpace()` no es "no se" sino "no entra nada" -- una respuesta concreta y falsa, del tipo
- * que hace que un programa decida no escribir. Por eso esta clase no estaba y `getFileStore`
- * levantaba.
+ * <p>It exists now that `jdk.internal.io.Fs` knows how to ask about a volume's space. Before it did
+ * not: the eight members that ask for the volume's data would have had to return `""` and `0`, and
+ * a zero in `getUsableSpace()` is not "I do not know" but "nothing fits" -- a concrete and false
+ * answer, of the kind that makes a program decide not to write.
  *
- * <h2>Que se sabe y que no</h2>
+ * <h2>What is known and what is not</h2>
  *
- * <p>Los tres espacios son reales, y son **tres** y no dos: lo utilizable es lo que este usuario
- * puede escribir y lo sin asignar es lo que le queda al volumen. Con una cuota puesta difieren.
+ * <p>The three spaces are real, and there are **three** and not two: usable is what this user can
+ * write and unallocated is what the volume has left. With a quota in place they differ.
  *
- * <p>{@link #type} devuelve `"unknown"`. **No es un relleno**: el nativo pregunta por espacio, no por
- * el tipo del sistema de archivos, y devolver `"ntfs"` porque estamos en Windows seria adivinar --
- * un volumen montado por red o una unidad FAT contestarian lo mismo y estarian mal. La cadena
- * `"unknown"` es la que el propio JDK usa cuando no lo puede determinar, asi que no inventa un
- * formato nuevo.
+ * <p>{@link #type} returns `"unknown"`. **It is not a filler**: the native asks about space, not
+ * about the filesystem's type, and returning `"ntfs"` because we are on Windows would be guessing
+ * -- a network-mounted volume or a FAT drive would answer the same and would be wrong. The string
+ * `"unknown"` is the one the JDK itself uses when it cannot determine one, so it invents no new
+ * format.
  *
- * <p>{@link #isReadOnly} devuelve `false`. Es una **cota inferior honesta**: no hay con que
- * preguntarlo, y decir `true` haria que un programa se niegue a escribir donde si puede. Un intento
- * de escritura sobre un volumen de solo lectura falla igual, con su `IOException`, que es donde la
- * verdad aparece de todas formas.
+ * <p>{@link #isReadOnly} returns `false`. It is an **honest lower bound**: there is nothing to ask
+ * it with, and saying `true` would make a program refuse to write where it can. An attempt to write
+ * on a read-only volume fails all the same, with its `IOException`, which is where the truth turns
+ * up anyway.
  */
 final class KajiFileStore extends FileStore {
 
-    private final String ruta;
-    private final String nombre;
+    private final String pathOf;
+    private final String storeName;
 
-    KajiFileStore(String ruta, String nombre) {
-        this.ruta = ruta;
-        this.nombre = nombre;
+    KajiFileStore(String pathOf, String storeName) {
+        this.pathOf = pathOf;
+        this.storeName = storeName;
     }
 
     public String name() {
-        return this.nombre;
+        return this.storeName;
     }
 
     /**
-     * El nombre del volumen que contiene a esa ruta absoluta.
+     * The name of the volume that contains that absolute path.
      *
-     * <p>En Windows es la letra con sus dos puntos (`C:`); en cualquier otro sistema, la raiz (`/`).
-     * No es el nombre que el usuario le puso al volumen --eso no se puede preguntar-- sino el que lo
-     * identifica, que es lo que `name()` promete: "su forma depende del sistema; puede no ser
-     * unico".
+     * <p>On Windows it is the letter with its colon (`C:`); on any other system, the root (`/`). It
+     * is not the name the user gave the volume --that cannot be asked-- but the one that identifies
+     * it, which is what `name()` promises: "its form is system dependent; it may not be unique".
      */
-    static String nombreDeVolumen(String ruta) {
-        if (ruta.length() >= 2 && ruta.charAt(1) == ':') {
-            return ruta.substring(0, 2);
+    static String volumeName(String pathOf) {
+        if (pathOf.length() >= 2 && pathOf.charAt(1) == ':') {
+            return pathOf.substring(0, 2);
         }
         return "/";
     }
 
-    /** Siempre `"unknown"`. Ver la nota de la clase sobre por que no se adivina. */
+    /** Always `"unknown"`. See the class's note on why nothing is guessed. */
     public String type() {
         return "unknown";
     }
 
-    /** Siempre `false`. Ver la nota de la clase. */
+    /** Always `false`. See the class's note. */
     public boolean isReadOnly() {
         return false;
     }
 
     /**
-     * El tamano total del volumen.
+     * The volume's total size.
      *
-     * @throws IOException si no se pudo averiguar
+     * @throws IOException if it could not be found out
      */
     public long getTotalSpace() throws IOException {
-        return KajiFileStore.exigir(jdk.internal.io.Fs.diskTotal(this.ruta), "total");
+        return KajiFileStore.require(jdk.internal.io.Fs.diskTotal(this.pathOf), "total");
     }
 
     /**
-     * Lo que este usuario puede escribir.
+     * What this user can write.
      *
-     * @throws IOException si no se pudo averiguar
+     * @throws IOException if it could not be found out
      */
     public long getUsableSpace() throws IOException {
-        return KajiFileStore.exigir(jdk.internal.io.Fs.diskUsable(this.ruta), "utilizable");
+        return KajiFileStore.require(jdk.internal.io.Fs.diskUsable(this.pathOf), "utilizable");
     }
 
     /**
-     * Los bytes sin asignar del volumen.
+     * The volume's unallocated bytes.
      *
-     * @throws IOException si no se pudo averiguar
+     * @throws IOException if it could not be found out
      */
     public long getUnallocatedSpace() throws IOException {
-        return KajiFileStore.exigir(jdk.internal.io.Fs.diskUnallocated(this.ruta), "sin asignar");
+        return KajiFileStore.require(jdk.internal.io.Fs.diskUnallocated(this.pathOf), "unallocated");
     }
 
-    // El -1 del nativo significa "no se pudo", no un tamano. Traducirlo a la excepcion que la firma
-    // declara es lo unico que deja al llamador distinguir las dos cosas.
-    private static long exigir(long v, String cual) throws IOException {
+    // The native's -1 means "could not", not a size. Turning it into the exception the signature
+    // declares is the only thing that lets the caller tell the two apart.
+    private static long require(long v, String which) throws IOException {
         if (v < 0L) {
-            throw new IOException("no se pudo leer el espacio " + cual + " del volumen");
+            throw new IOException("could not read the " + which + " space of the volume");
         }
         return v;
     }
 
     /**
-     * Solo {@link BasicFileAttributeView}.
+     * Only {@link BasicFileAttributeView}.
      *
-     * <p>Es la unica vista que este sistema de archivos implementa, y contestar por las otras seria
-     * prometer atributos que despues no se pueden leer.
+     * <p>It is the only view this filesystem implements, and answering for the others would be
+     * promising attributes that afterwards cannot be read.
      */
     public boolean supportsFileAttributeView(Class<? extends FileAttributeView> type) {
         return type == BasicFileAttributeView.class;
     }
 
-    /** Solo `"basic"`. Ver la otra forma. */
+    /** Only `"basic"`. See the other form. */
     public boolean supportsFileAttributeView(String name) {
         return "basic".equals(name);
     }
 
     /**
-     * Siempre `null`.
+     * Always `null`.
      *
-     * <p>Una vista de atributos **del volumen** --no de un archivo-- es lo que este metodo devuelve,
-     * y no hay ninguna: `Fs` sabe del espacio y nada mas. `null` es lo que el contrato define para
-     * "no soportada", asi que decirlo asi no pierde nada.
+     * <p>A view of the **volume's** attributes --not a file's-- is what this method returns, and
+     * there is none: `Fs` knows about space and nothing else. `null` is what the contract defines
+     * for "not supported", so saying it that way loses nothing.
      */
     public <V extends FileStoreAttributeView> V getFileStoreAttributeView(Class<V> type) {
         if (type == null) {
@@ -135,18 +133,20 @@ final class KajiFileStore extends FileStore {
     }
 
     /**
-     * Los tres espacios, por su nombre.
+     * The three spaces, by name.
      *
-     * <p>Los nombres son los que el JDK define (`totalSpace`, `usableSpace`, `unallocatedSpace`), y
-     * cualquier otro es `UnsupportedOperationException` -- no `null`. La diferencia importa: `null`
-     * seria "ese atributo vale nada" y lo que pasa es que ese atributo no existe.
+     * <p>The names are the ones the JDK defines (`totalSpace`, `usableSpace`, `unallocatedSpace`),
+     * and any other is `UnsupportedOperationException` -- not `null`. The difference matters:
+     * `null` would be "that attribute is worth nothing" and what happens is that that attribute
+     * does not exist.
      *
-     * <p>La excepcion es `UnsupportedOperationException` y no `IllegalArgumentException` porque es
-     * lo que contesta el JDK: se comprobo corriendo el mismo caso con `java` de verdad, que tira
-     * `UnsupportedOperationException: 'x' not recognized`. La expectativa equivocada era la mia.
+     * <p>The exception is `UnsupportedOperationException` and not `IllegalArgumentException`
+     * because it is what the JDK answers: checked by running the same case with the real `java`,
+     * which throws `UnsupportedOperationException: 'x' not recognized`. The wrong expectation was
+     * mine.
      *
-     * @throws IOException si no se pudo averiguar
-     * @throws UnsupportedOperationException si el atributo no es uno de los tres
+     * @throws IOException if it could not be found out
+     * @throws UnsupportedOperationException if the attribute is not one of the three
      */
     public Object getAttribute(String attribute) throws IOException {
         if ("totalSpace".equals(attribute)) {
@@ -162,6 +162,6 @@ final class KajiFileStore extends FileStore {
     }
 
     public String toString() {
-        return this.nombre;
+        return this.storeName;
     }
 }

@@ -1,15 +1,16 @@
 package org.w3c.dom.css;
 
 /**
- * Las reglas de una hoja o de un `@media`, en el orden del documento.
+ * The rules of a sheet or of a `@media`, in the order of the document.
  *
- * <p>Es **viva**: insertar una regla cambia lo que `getLength` contesta sin volver a pedir la lista.
+ * <p>It is **live**: inserting a rule changes what `getLength` answers without asking for the list
+ * again.
  */
 public interface CSSRuleList {
 
-    /** Cuantas reglas hay. */
+    /** How many rules there are. */
     int getLength();
 
-    /** La regla en esa posicion, o nulo si el indice esta fuera de rango. */
+    /** The rule at that position, or null if the index is out of range. */
     CSSRule item(int index);
 }

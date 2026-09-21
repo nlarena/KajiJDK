@@ -1,110 +1,117 @@
 package javax.sound.sampled;
 
 /**
- * KajiLibrary's javax.sound.sampled.DataLine -- una linea por la que pasan datos de audio.
+ * KajiLibrary's javax.sound.sampled.DataLine -- a line audio data goes through.
  *
- * <p>Agrega sobre {@link Line} lo que hace falta para mover audio: arrancar, parar, saber donde va, y
- * un bufer.
+ * <p>It adds over {@link Line} what is needed to move audio: starting, stopping, knowing where it
+ * is, and a buffer.
  *
- * <h2>{@link #isRunning} y {@link #isActive} no son lo mismo</h2>
+ * <h2>{@link #isRunning} and {@link #isActive}</h2>
  *
- * <p>Es la confusion clasica de esta interfaz:
+ * <p>The specification defines them like this:
  *
  * <ul>
- *   <li>{@code isRunning} dice si <b>hay audio moviendose ahora mismo</b>;
- *   <li>{@code isActive} dice si la linea <b>esta arrancada</b>, aunque en este instante este esperando
- *       datos.
+ *   <li>{@code isActive} says whether the line is <b>engaging in active I/O</b> --playing or
+ *       capturing--; becoming active and inactive is what sends the {@code START} and {@code STOP}
+ *       events;
+ *   <li>{@code isRunning} says whether it is <b>running</b>: from the first data presented after
+ *       {@code start()} until presentation ceases, because of {@code stop()} or because playback
+ *       completes.
  * </ul>
  *
- * <p>Una linea de salida a la que no se le escribe esta activa y no corriendo. Para saber si un clip
- * termino hay que mirar {@code isActive}, o mejor escuchar el {@link LineEvent}.
+ * <p>To know whether a clip finished, the most reliable thing is to listen for the
+ * {@link LineEvent} {@code STOP}.
  *
- * <h2>{@link #drain} y {@link #flush} son opuestos</h2>
+ * <p>(The note had it the other way round: {@code isRunning} as "audio moving right now" and
+ * {@code isActive} as "started, even if waiting for data", with an output line nobody writes to
+ * being active and not running. The specification says none of that.)
  *
- * <p>{@code drain} espera a que suene todo lo que hay en el bufer; {@code flush} lo tira. Confundirlos
- * corta el final del audio o cuelga el programa esperando.
+ * <h2>{@link #drain} and {@link #flush} are opposites</h2>
  *
- * <h2>Las dos posiciones</h2>
+ * <p>{@code drain} waits until everything in the buffer has sounded; {@code flush} throws it away.
+ * Confusing them cuts off the end of the audio or hangs the program waiting.
  *
- * <p>{@link #getFramePosition} devuelve un {@code int} y se desborda: a 44100 Hz, a las trece horas y
- * media de audio. {@link #getLongFramePosition} es la version que no tiene ese problema, y es la que
- * hay que usar.
+ * <h2>The two positions</h2>
+ *
+ * <p>{@link #getFramePosition} returns an {@code int} and overflows: at 44100 Hz, after thirteen
+ * and a half hours of audio. {@link #getLongFramePosition} is the version without that problem, and
+ * it is the one to use.
  */
 public interface DataLine extends Line {
 
-    /** Espera a que suene todo lo que hay en el bufer. Ver la nota de la clase. */
+    /** Waits until everything in the buffer has sounded. See the class note. */
     void drain();
 
-    /** Tira lo que hay en el bufer. Ver la nota de la clase. */
+    /** Throws away what is in the buffer. See the class note. */
     void flush();
 
-    /** Empieza a mover audio. */
+    /** Starts moving audio. */
     void start();
 
-    /** Deja de moverlo, sin tirar el bufer. */
+    /** Stops moving it, without throwing away the buffer. */
     void stop();
 
-    /** Si hay audio moviendose ahora. Ver la nota de la clase. */
+    /** Whether it is running. See the class note. */
     boolean isRunning();
 
-    /** Si la linea esta arrancada. Ver la nota de la clase. */
+    /** Whether it is engaging in active I/O. See the class note. */
     boolean isActive();
 
-    /** Con que formato. */
+    /** With which format. */
     AudioFormat getFormat();
 
-    /** El tamano del bufer, en bytes. */
+    /** The size of the buffer, in bytes. */
     int getBufferSize();
 
-    /** Cuantos bytes se pueden leer o escribir sin bloquear. */
+    /** How many bytes can be read or written without blocking. */
     int available();
 
     /**
-     * En que cuadro va.
+     * At which frame it is.
      *
-     * <p>No esta marcado como obsoleto, y deberia: se desborda. Ver la nota de la clase y usar
+     * <p>It is not marked deprecated, and it should be: it overflows. See the class note and use
      * {@link #getLongFramePosition}.
      */
     int getFramePosition();
 
-    /** En que cuadro va, sin desbordarse. */
+    /** At which frame it is, without overflowing. */
     long getLongFramePosition();
 
-    /** Cuantos microsegundos de audio pasaron. */
+    /** How many microseconds of audio went by. */
     long getMicrosecondPosition();
 
     /**
-     * El nivel de la senal, de 0 a 1, o {@link AudioSystem#NOT_SPECIFIED}.
+     * The level of the signal, from 0 to 1, or {@link AudioSystem#NOT_SPECIFIED}.
      *
-     * <p>Casi ninguna implementacion lo calcula: pedirlo cuesta recorrer las muestras. Lo normal es que
-     * devuelva -1.
+     * <p>Almost no implementation computes it: asking for it costs walking the samples. The normal
+     * thing is for it to return -1.
      */
     float getLevel();
 
     /**
-     * Que clase de linea de datos es, con que formatos y que tamanos de bufer.
+     * What kind of data line it is, with which formats and which buffer sizes.
      *
-     * <p>Es el {@link Line.Info} que se usa para pedir una linea concreta: se arma con la interfaz que
-     * hace falta y el formato que se quiere reproducir o capturar.
+     * <p>It is the {@link Line.Info} used to ask for a concrete line: it is built with the
+     * interface that is needed and the format one wants to play or capture.
      *
-     * <p>{@link #matches} agrega a la de la clase base dos condiciones: que <b>todos</b> los formatos
-     * del argumento esten soportados por este, y que los rangos de bufer se superpongan.
+     * <p>{@link #matches} adds two conditions to the base class's: that <b>all</b> the formats of
+     * the argument are supported by this one, and that the buffer ranges overlap.
      */
     class Info extends Line.Info {
 
-        /** Los formatos que acepta. */
+        /** The formats it accepts. */
         private final AudioFormat[] formats;
 
-        /** El bufer mas chico, en bytes. */
+        /** The smallest buffer, in bytes. */
         private final int minBufferSize;
 
-        /** El mas grande. */
+        /** The largest. */
         private final int maxBufferSize;
 
         /**
-         * El completo.
+         * The full one.
          *
-         * @param formats los formatos aceptados; null se toma como ninguno
+         * @param formats the accepted formats; null is taken as none
          */
         public Info(Class<?> lineClass, AudioFormat[] formats, int minBufferSize,
                     int maxBufferSize) {
@@ -118,26 +125,28 @@ public interface DataLine extends Line {
             this.maxBufferSize = maxBufferSize;
         }
 
-        /** Un solo formato y un tamano de bufer exacto. */
+        /** A single format and an exact buffer size. */
         public Info(Class<?> lineClass, AudioFormat format, int bufferSize) {
             this(lineClass, format == null ? null : new AudioFormat[] { format },
                  bufferSize, bufferSize);
         }
 
-        /** Un solo formato, cualquier bufer. */
+        /** A single format, any buffer. */
         public Info(Class<?> lineClass, AudioFormat format) {
             this(lineClass, format == null ? null : new AudioFormat[] { format },
                  AudioSystem.NOT_SPECIFIED, AudioSystem.NOT_SPECIFIED);
         }
 
-        /** Los formatos aceptados; una copia del arreglo. */
+        /** The accepted formats; a copy of the array. */
         public AudioFormat[] getFormats() {
             AudioFormat[] copy = new AudioFormat[this.formats.length];
             System.arraycopy(this.formats, 0, copy, 0, this.formats.length);
             return copy;
         }
 
-        /** Si acepta ese formato. Usa {@link AudioFormat#matches}, con sus comodines. */
+        /**
+         * Whether it accepts that format. It uses {@link AudioFormat#matches}, with its wildcards.
+         */
         public boolean isFormatSupported(AudioFormat format) {
             int i = 0;
             while (i < this.formats.length) {
@@ -149,17 +158,17 @@ public interface DataLine extends Line {
             return false;
         }
 
-        /** El bufer mas chico. */
+        /** The smallest buffer. */
         public int getMinBufferSize() {
             return this.minBufferSize;
         }
 
-        /** El mas grande. */
+        /** The largest. */
         public int getMaxBufferSize() {
             return this.maxBufferSize;
         }
 
-        /** La de la clase base, mas los formatos y los buferes. Ver la nota de la clase. */
+        /** The base class's, plus the formats and the buffers. See the class note. */
         @Override
         public boolean matches(Line.Info info) {
             if (!super.matches(info)) {
@@ -190,7 +199,7 @@ public interface DataLine extends Line {
             return true;
         }
 
-        /** La clase, los formatos, y el rango de bufer si se conoce. */
+        /** The class, the formats, and the buffer range if known. */
         @Override
         public String toString() {
             StringBuilder sb = new StringBuilder(super.toString());

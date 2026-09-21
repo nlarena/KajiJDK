@@ -1,25 +1,24 @@
 package java.util.prefs;
 
-// El documento que se le paso a {@link Preferences#importPreferences} no es un arbol de
-// preferencias valido.
+// The document handed to {@link Preferences#importPreferences} is not a valid preferences tree.
 //
-// Se distingue de un `IOException`: aca los bytes llegaron bien y lo que esta mal es lo que dicen.
-// Por eso la causa suele ser un error del analizador de XML y no del flujo.
+// It is distinct from an `IOException`: here the bytes arrived fine and what is wrong is what they
+// say. That is why the cause is usually an error from the XML parser and not from the stream.
 public class InvalidPreferencesFormatException extends Exception {
 
     private static final long serialVersionUID = -791715184232119669L;
 
-    // Un documento invalido, con la causa que lo detecto.
+    // An invalid document, with the cause that detected it.
     public InvalidPreferencesFormatException(Throwable cause) {
         super(cause);
     }
 
-    // Un documento invalido, descrito por `message`.
+    // An invalid document, described by `message`.
     public InvalidPreferencesFormatException(String message) {
         super(message);
     }
 
-    // Un documento invalido, con mensaje y causa.
+    // An invalid document, with a message and a cause.
     public InvalidPreferencesFormatException(String message, Throwable cause) {
         super(message, cause);
     }

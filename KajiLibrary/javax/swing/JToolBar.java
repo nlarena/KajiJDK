@@ -16,25 +16,28 @@ import javax.swing.plaf.ComponentUI;
 import javax.swing.plaf.ToolBarUI;
 
 /**
- * La fila de botones que va debajo del menu.
+ * The row of buttons that goes below the menu.
  *
- * <h2>Es un panel con una regla</h2>
+ * <h2>It is a panel with a rule</h2>
  *
- * <p>Adentro va cualquier componente: botones, listas desplegables, campos. Lo unico que agrega
- * sobre un panel comun es que sabe acomodarse en fila o en columna y, si se lo deja, que se puede
- * arrancar de su lugar y dejar flotando en una ventanita ({@link #setFloatable}).
+ * <p>Any component goes inside: buttons, combo boxes, fields. The only thing it adds over an
+ * ordinary panel is that it knows how to lay itself out in a row or in a column and, if it is
+ * allowed, that it can be torn from its place and left floating in a little window
+ * ({@link #setFloatable}).
  *
- * <h2>Agregar una accion crea el boton</h2>
+ * <h2>Adding an action creates the button</h2>
  *
- * <p>{@link #add(Action)} no agrega la accion: arma un {@link JButton} configurado desde ella y lo
- * agrega. Devuelve el boton justamente para poder retocarlo. El boton que arma no muestra el texto
- * de la accion si tiene icono -- una barra de herramientas con texto en cada boton ocupa el doble --
- * y eso lo decide {@link #createActionComponent}, que una subclase puede cambiar.
+ * <p>{@link #add(Action)} does not add the action: it builds a {@link JButton} configured from
+ * it and adds that. It returns the button precisely so that it can be touched up. The button it
+ * builds does not show the action's text if it has an icon -- a tool bar with text on each
+ * button takes up twice the room -- and that is decided by {@link #createActionComponent},
+ * which a subclass may change.
  *
- * <h2>El separador no es el de los menus</h2>
+ * <h2>The separator is not the menus'</h2>
  *
- * <p>{@link Separator} hereda de {@link JSeparator} pero se comporta al reves en un punto: su tamano
- * es fijo y no se estira. Un separador que se estirara dejaria a los botones amontonados de un lado.
+ * <p>{@link Separator} inherits from {@link JSeparator} but behaves the other way round in one
+ * point: its size is fixed and it does not stretch. A separator that stretched would leave the
+ * buttons bunched up on one side.
  */
 public class JToolBar extends JComponent implements SwingConstants, Accessible {
 
@@ -45,29 +48,29 @@ public class JToolBar extends JComponent implements SwingConstants, Accessible {
     private boolean floatable = true;
     private int orientation = HORIZONTAL;
 
-    /** Horizontal y sin nombre. */
+    /** Horizontal and with no name. */
     public JToolBar() {
         this(HORIZONTAL);
     }
 
     /**
-     * Con esa orientacion.
+     * With that orientation.
      *
-     * @throws IllegalArgumentException si no es horizontal ni vertical.
+     * @throws IllegalArgumentException if it is neither horizontal nor vertical.
      */
     public JToolBar(int orientation) {
         this(null, orientation);
     }
 
-    /** Con ese nombre, horizontal; el nombre es el titulo de la ventanita al flotar. */
+    /** With that name, horizontal; the name is the little window's title when floating. */
     public JToolBar(String name) {
         this(name, HORIZONTAL);
     }
 
     /**
-     * Con nombre y orientacion.
+     * With name and orientation.
      *
-     * @throws IllegalArgumentException si la orientacion no es horizontal ni vertical.
+     * @throws IllegalArgumentException if the orientation is neither horizontal nor vertical.
      */
     public JToolBar(String name, int orientation) {
         setName(name);
@@ -94,7 +97,7 @@ public class JToolBar extends JComponent implements SwingConstants, Accessible {
         return uiClassID;
     }
 
-    /** En que posicion esta ese componente, o -1 si no esta. */
+    /** At what position that component is, or -1 if it is not there. */
     public int getComponentIndex(Component c) {
         int ncomponents = this.getComponentCount();
         Component[] component = this.getComponents();
@@ -107,7 +110,7 @@ public class JToolBar extends JComponent implements SwingConstants, Accessible {
         return -1;
     }
 
-    /** El componente de esa posicion, o nulo si esta fuera de rango. */
+    /** The component at that position, or null if it is out of range. */
     public Component getComponentAtIndex(int i) {
         int ncomponents = this.getComponentCount();
         if (i >= 0 && i < ncomponents) {
@@ -117,7 +120,7 @@ public class JToolBar extends JComponent implements SwingConstants, Accessible {
         return null;
     }
 
-    /** Los margenes de la barra; nulo deja los que ponga el aspecto. */
+    /** The bar's margins; null leaves those the look and feel sets. */
     public void setMargin(Insets m) {
         Insets old = margin;
         margin = m;
@@ -147,14 +150,14 @@ public class JToolBar extends JComponent implements SwingConstants, Accessible {
         }
     }
 
-    /** Dibuja el borde solo si esta prendido. */
+    /** It draws the border only if it is switched on. */
     protected void paintBorder(Graphics g) {
         if (isBorderPainted()) {
             super.paintBorder(g);
         }
     }
 
-    /** Si se puede arrancar de su lugar; ver la nota de la clase. */
+    /** Whether it can be torn from its place; see the class note. */
     public boolean isFloatable() {
         return floatable;
     }
@@ -174,9 +177,9 @@ public class JToolBar extends JComponent implements SwingConstants, Accessible {
     }
 
     /**
-     * En fila o en columna.
+     * In a row or in a column.
      *
-     * @throws IllegalArgumentException si no es horizontal ni vertical.
+     * @throws IllegalArgumentException if it is neither horizontal nor vertical.
      */
     public void setOrientation(int o) {
         checkOrientation(o);
@@ -195,7 +198,7 @@ public class JToolBar extends JComponent implements SwingConstants, Accessible {
         }
     }
 
-    /** Si los botones se dibujan planos hasta que el puntero pasa por encima. */
+    /** Whether the buttons are drawn flat until the pointer passes over them. */
     public void setRollover(boolean rollover) {
         putClientProperty("JToolBar.isRollover", rollover ? Boolean.TRUE : Boolean.FALSE);
     }
@@ -208,22 +211,22 @@ public class JToolBar extends JComponent implements SwingConstants, Accessible {
         return false;
     }
 
-    /** Un separador del tamano que decida el aspecto. */
+    /** A separator of the size the look and feel decides. */
     public void addSeparator() {
         JToolBar.Separator s = new JToolBar.Separator();
         add(s);
     }
 
-    /** Un separador de ese tamano. */
+    /** A separator of that size. */
     public void addSeparator(Dimension size) {
         JToolBar.Separator s = new JToolBar.Separator(size);
         add(s);
     }
 
     /**
-     * Arma un boton desde esa accion y lo agrega.
+     * It builds a button from that action and adds it.
      *
-     * @return el boton, para poder retocarlo.
+     * @return the button, so that it can be touched up.
      */
     public JButton add(Action a) {
         JButton b = createActionComponent(a);
@@ -233,9 +236,9 @@ public class JToolBar extends JComponent implements SwingConstants, Accessible {
     }
 
     /**
-     * El boton que representa a esa accion.
+     * The button that represents that action.
      *
-     * <p>Sin texto si la accion trae icono: ver la nota de la clase.
+     * <p>With no text if the action brings an icon: see the class note.
      */
     protected JButton createActionComponent(Action a) {
         String text = a != null ? (String) a.getValue(Action.NAME) : null;
@@ -261,7 +264,7 @@ public class JToolBar extends JComponent implements SwingConstants, Accessible {
         return b;
     }
 
-    /** Nulo: el boton usa el oyente que arma {@code AbstractButton} por su cuenta. */
+    /** Null: the button uses the listener {@code AbstractButton} builds on its own. */
     protected PropertyChangeListener createActionChangeListener(JButton b) {
         return null;
     }
@@ -290,21 +293,21 @@ public class JToolBar extends JComponent implements SwingConstants, Accessible {
     }
 
     /**
-     * El separador de una barra de herramientas.
+     * A tool bar's separator.
      *
-     * <p>Su tamano es el mismo para el minimo, el preferido y el maximo: no se estira. Ver la nota
-     * de {@link JToolBar}.
+     * <p>Its size is the same for the minimum, the preferred and the maximum: it does not
+     * stretch. See {@link JToolBar}'s note.
      */
     public static class Separator extends JSeparator {
 
         private Dimension separatorSize;
 
-        /** Del tamano que decida el aspecto. */
+        /** Of the size the look and feel decides. */
         public Separator() {
             this(null);
         }
 
-        /** De ese tamano. */
+        /** Of that size. */
         public Separator(Dimension size) {
             super(JSeparator.HORIZONTAL);
             setSeparatorSize(size);
@@ -314,7 +317,7 @@ public class JToolBar extends JComponent implements SwingConstants, Accessible {
             return "ToolBarSeparatorUI";
         }
 
-        /** Nulo devuelve la decision al aspecto. */
+        /** Null gives the decision back to the look and feel. */
         public void setSeparatorSize(Dimension size) {
             if (size != null) {
                 separatorSize = size;
@@ -345,29 +348,29 @@ public class JToolBar extends JComponent implements SwingConstants, Accessible {
     }
 
     /**
-     * Acomoda en fila o en columna, siguiendo la orientacion de la barra.
+     * It lays out in a row or in a column, following the bar's orientation.
      *
-     * <p>No hereda de {@link BoxLayout}: **lo envuelve**. Un {@code BoxLayout} se ata al contenedor
-     * que le pasan en el constructor y se niega a acomodar otro, asi que girar la barra obliga a
-     * armar uno nuevo. Envolviendolo se puede reemplazar el de adentro sin cambiar el acomodador que
-     * la barra tiene puesto.
+     * <p>It does not inherit from {@link BoxLayout}: **it wraps it**. A {@code BoxLayout} ties
+     * itself to the container it is passed in the constructor and refuses to lay another one out,
+     * so turning the bar forces a new one to be built. By wrapping it the inner one can be
+     * replaced without changing the layout the bar has set.
      */
     private static class DefaultToolBarLayout implements LayoutManager2, PropertyChangeListener,
             java.io.Serializable {
 
-        private final JToolBar barra;
+        private final JToolBar bar;
         private BoxLayout lm;
 
-        DefaultToolBarLayout(JToolBar barra, int orientation) {
-            this.barra = barra;
-            this.lm = armar(barra, orientation);
+        DefaultToolBarLayout(JToolBar bar, int orientation) {
+            this.bar = bar;
+            this.lm = build(bar, orientation);
         }
 
-        private static BoxLayout armar(JToolBar barra, int orientation) {
+        private static BoxLayout build(JToolBar bar, int orientation) {
             if (orientation == JToolBar.VERTICAL) {
-                return new BoxLayout(barra, BoxLayout.PAGE_AXIS);
+                return new BoxLayout(bar, BoxLayout.PAGE_AXIS);
             }
-            return new BoxLayout(barra, BoxLayout.LINE_AXIS);
+            return new BoxLayout(bar, BoxLayout.LINE_AXIS);
         }
 
         public void addLayoutComponent(String name, Component comp) {
@@ -410,12 +413,12 @@ public class JToolBar extends JComponent implements SwingConstants, Accessible {
             lm.invalidateLayout(target);
         }
 
-        /** Girar la barra cambia el eje; ver la nota de la clase. */
+        /** Turning the bar changes the axis; see the class note. */
         public void propertyChange(PropertyChangeEvent e) {
             String name = e.getPropertyName();
             if (name.equals("orientation")) {
                 int o = ((Integer) e.getNewValue()).intValue();
-                lm = armar(barra, o);
+                lm = build(bar, o);
             }
         }
     }

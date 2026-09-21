@@ -1,15 +1,15 @@
 package java.rmi.server;
 
 /**
- * Decide que hacer cuando el runtime no pudo crear un socket.
+ * It decides what to do when the runtime could not create a socket.
  *
- * <p>Existe porque quedarse sin sockets suele ser <strong>transitorio</strong>: un pico de
- * conexiones agota los descriptores y un segundo despues hay lugar. Sin este enganche, RMI tendria
- * que elegir de antemano entre rendirse —perdiendo un servidor por un pico— o reintentar para
- * siempre. Devolver {@code true} es pedir un reintento.
+ * <p>It exists because running out of sockets is usually <strong>transient</strong>: a spike of
+ * connections exhausts the descriptors and a second later there is room. Without this hook, RMI
+ * would have to choose up front between giving up —losing a server to a spike— or retrying forever.
+ * Returning {@code true} is asking for a retry.
  */
 public interface RMIFailureHandler {
 
-    /** @return {@code true} para reintentar, {@code false} para abandonar */
+    /** @return {@code true} to retry, {@code false} to give up */
     boolean failure(Exception ex);
 }

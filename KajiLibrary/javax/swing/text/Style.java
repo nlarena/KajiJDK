@@ -3,14 +3,14 @@ package javax.swing.text;
 import javax.swing.event.ChangeListener;
 
 /**
- * Un conjunto de atributos con nombre, que avisa cuando cambia.
+ * A named set of attributes, which reports when it changes.
  *
- * <p>Es lo que hace que cambiar un estilo cambie de golpe todo lo que lo usa: los parrafos no
- * copian sus atributos, se cuelgan del estilo como padre de resolucion, y cuando el estilo cambia
- * avisa y todos se repintan.
+ * <p>It is what makes changing a style change at once everything that uses it: the paragraphs do
+ * not copy their attributes, they hang from the style as their resolving parent, and when the
+ * style changes it reports and they all repaint.
  *
- * <p>El nombre puede ser {@code null}: un estilo anonimo sirve igual para colgarse de el, solo que
- * no se puede pedir por nombre.
+ * <p>The name may be {@code null}: an anonymous style serves just as well to hang from, only it
+ * cannot be asked for by name.
  */
 public interface Style extends MutableAttributeSet {
 

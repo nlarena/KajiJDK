@@ -1,23 +1,24 @@
 package javax.xml.parsers;
 
 /**
- * KajiLibrary's javax.xml.parsers.ParserConfigurationException -- no se pudo armar el analizador.
+ * KajiLibrary's javax.xml.parsers.ParserConfigurationException -- the parser could not be put
+ * together.
  *
- * <p>Es de <b>configuracion</b>, no de contenido: se pidio algo que la implementacion no sabe hacer
- * --validar, o entender espacios de nombres, o una propiedad que no conoce-- y por eso no hay
- * analizador. La distincion con {@code SAXException} importa: aca todavia no se leyo un solo byte
- * del documento, asi que reintentar con el mismo pedido no puede andar.
+ * <p>It is about <b>configuration</b>, not content: something was asked that the implementation
+ * cannot do --validate, or understand namespaces, or a property it does not know-- and that is why
+ * there is no parser. The distinction from {@code SAXException} matters: here not a single byte of
+ * the document has been read yet, so retrying with the same request cannot work.
  */
 public class ParserConfigurationException extends Exception {
 
     private static final long serialVersionUID = -3688849216575373917L;
 
-    /** Sin detalle. */
+    /** Without detail. */
     public ParserConfigurationException() {
         super();
     }
 
-    /** Con un mensaje que diga que se pidio y no se pudo dar. */
+    /** With a message that says what was asked and could not be provided. */
     public ParserConfigurationException(String msg) {
         super(msg);
     }

@@ -1,18 +1,18 @@
 package java.nio.file;
 
-// No hay ningun proveedor instalado para el esquema que se pidio.
+// There is no provider installed for the scheme asked for.
 //
-// KajiJDK tiene exactamente uno --el de `file`-- y no hay mecanismo de servicios que instale otros,
-// asi que cualquier otro esquema termina aca.
+// KajiJDK has exactly one --`file`'s-- and there is no service mechanism that installs others, so
+// any other scheme ends up here.
 public class ProviderNotFoundException extends RuntimeException {
 
     private static final long serialVersionUID = -1880012509822920354L;
 
-    /** Sin mensaje. */
+    /** With no message. */
     public ProviderNotFoundException() {
     }
 
-    /** @param msg el detalle */
+    /** @param msg the detail */
     public ProviderNotFoundException(String msg) {
         super(msg);
     }

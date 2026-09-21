@@ -69,9 +69,10 @@ public class CopyOnWriteArrayList<E> implements List<E>, Serializable {
     }
 
     // Null-safe equality. Written as a helper with an explicit if/else because a
-    // **boolean-valued** ternary (`o == null ? e == null : o.equals(e)`) is rejected by our
-    // javac with "operando no numérico" — finding #109. Int- and reference-valued ternaries
-    // are fine, so only this shape needs the rewrite.
+    // **boolean-valued** ternary (`o == null ? e == null : o.equals(e)`). This note said our javac
+    // rejected that shape with "operando no numérico" -- finding #109, which is fixed. The helper
+    // stays because it reads well and is used from several places, but it is no longer a
+    // workaround.
     private static boolean eq(Object a, Object b) {
         boolean same;
         if (a == null) {
@@ -281,15 +282,15 @@ public class CopyOnWriteArrayList<E> implements List<E>, Serializable {
                         Spliterator.IMMUTABLE);
     }
 
-    // ---- las operaciones en bloque, escritas ------------------------------------------------
+    // ---- the bulk operations, written out -----------------------------------------------------
     //
-    // Escritas y no heredadas porque en el JDK esta clase no extiende ningun esqueleto: es
-    // `implements List` a secas. Los cuerpos son los mismos de `AbstractCollection`, sobre una
-    // foto y no sobre el iterador vivo.
+    // Written out and not inherited because in the JDK this class extends no skeleton: it is a bare
+    // `implements List`. The bodies are `AbstractCollection`'s, over a snapshot and not over the
+    // live iterator.
     //
-    // El costo real aca es otro: cada `remove` de esta clase copia el arreglo entero, asi que un
-    // `removeAll` cuesta una copia por elemento quitado. Es la contrapartida conocida del
-    // copy-on-write, no un descuido — quien usa esta lista escribe poco y lee mucho.
+    // The real cost here is another: every `remove` of this class copies the whole array, so a
+    // `removeAll` costs one copy per element removed. It is copy-on-write's known counterpart, not
+    // an oversight -- whoever uses this list writes little and reads a lot.
 
     public boolean containsAll(java.util.Collection<?> c) {
         java.util.Iterator<?> it = c.iterator();
@@ -302,44 +303,44 @@ public class CopyOnWriteArrayList<E> implements List<E>, Serializable {
     }
 
     public boolean addAll(java.util.Collection<? extends E> c) {
-        boolean cambio = false;
+        boolean changed = false;
         java.util.Iterator<? extends E> it = c.iterator();
         while (it.hasNext()) {
             if (this.add(it.next())) {
-                cambio = true;
+                changed = true;
             }
         }
-        return cambio;
+        return changed;
     }
 
     public boolean removeAll(java.util.Collection<?> c) {
-        boolean cambio = false;
-        Object[] foto = this.toArray();
+        boolean changed = false;
+        Object[] snapshot = this.toArray();
         int i = 0;
-        while (i < foto.length) {
-            if (c.contains(foto[i])) {
-                while (this.remove(foto[i])) {
-                    cambio = true;
+        while (i < snapshot.length) {
+            if (c.contains(snapshot[i])) {
+                while (this.remove(snapshot[i])) {
+                    changed = true;
                 }
             }
             i = i + 1;
         }
-        return cambio;
+        return changed;
     }
 
     public boolean retainAll(java.util.Collection<?> c) {
-        boolean cambio = false;
-        Object[] foto = this.toArray();
+        boolean changed = false;
+        Object[] snapshot = this.toArray();
         int i = 0;
-        while (i < foto.length) {
-            if (!c.contains(foto[i])) {
-                while (this.remove(foto[i])) {
-                    cambio = true;
+        while (i < snapshot.length) {
+            if (!c.contains(snapshot[i])) {
+                while (this.remove(snapshot[i])) {
+                    changed = true;
                 }
             }
             i = i + 1;
         }
-        return cambio;
+        return changed;
     }
 
     public Object[] toArray() {
@@ -371,13 +372,13 @@ public class CopyOnWriteArrayList<E> implements List<E>, Serializable {
         return (T[]) dest;
     }
 
-    // ---- lo que List agrega sobre Collection -------------------------------------------------
+    // ---- what List adds over Collection --------------------------------------------------------
     //
-    // Escritos y no heredados por lo mismo que las operaciones en bloque: en el JDK esta clase no
-    // extiende ningun esqueleto. `AbstractListLitr` y `SubList`, que son los que usa
-    // `AbstractList`, son package-private de `java.util` y desde aca no se ven.
+    // Written out and not inherited for the same reason as the bulk operations: in the JDK this
+    // class extends no skeleton. `AbstractListLitr` and `SubList`, which are what `AbstractList`
+    // uses, are package-private to `java.util` and cannot be seen from here.
 
-    // El indice de la ULTIMA aparicion de `o`, o -1.
+    // The index of the LAST occurrence of `o`, or -1.
     public int lastIndexOf(Object o) {
         int i = this.size() - 1;
         while (i >= 0) {
@@ -394,35 +395,35 @@ public class CopyOnWriteArrayList<E> implements List<E>, Serializable {
         return -1;
     }
 
-    // Un cursor bidireccional desde el principio.
+    // A bidirectional cursor from the start.
     public java.util.ListIterator<E> listIterator() {
         return new CowLitr<E>(this, 0);
     }
 
-    // Un cursor bidireccional desde `index`.
+    // A bidirectional cursor from `index`.
     public java.util.ListIterator<E> listIterator(int index) {
         return new CowLitr<E>(this, index);
     }
 
-    // Una vista de [fromIndex, toIndex).
+    // A view of [fromIndex, toIndex).
     public java.util.List<E> subList(int fromIndex, int toIndex) {
         return new CowSubList<E>(this, fromIndex, toIndex);
     }
 
-    // Inserta todos los de `c` a partir de `index`, en el orden de su iterador.
+    // It inserts all of `c` from `index` on, in its iterator's order.
     public boolean addAll(int index, java.util.Collection<? extends E> c) {
         if (index < 0 || index > this.size()) {
             throw new IndexOutOfBoundsException();
         }
-        boolean cambio = false;
+        boolean changed = false;
         int at = index;
         java.util.Iterator<? extends E> it = c.iterator();
         while (it.hasNext()) {
             this.add(at, it.next());
             at = at + 1;
-            cambio = true;
+            changed = true;
         }
-        return cambio;
+        return changed;
     }
 }
 
@@ -450,16 +451,16 @@ final class CowItr<E> implements Iterator<E> {
 }
 
 
-// El ListIterator de CopyOnWriteArrayList. Gemelo de `java.util.AbstractListLitr`, que no se ve
-// desde este paquete.
+// CopyOnWriteArrayList's ListIterator. A twin of `java.util.AbstractListLitr`, which cannot be seen
+// from this package.
 //
-// El cursor va entre elementos; `ultimo` recuerda cual devolvio la ultima llamada, porque `set` y
-// `remove` operan sobre ese y no sobre el hueco.
+// The cursor sits between elements; `last` remembers which one the last call returned, because
+// `set` and `remove` act on that one and not on the gap.
 final class CowLitr<E> implements java.util.ListIterator<E> {
 
     private final java.util.List<E> list;
     private int cursor;
-    private int ultimo;
+    private int last;
 
     CowLitr(java.util.List<E> list, int index) {
         if (index < 0 || index > list.size()) {
@@ -467,7 +468,7 @@ final class CowLitr<E> implements java.util.ListIterator<E> {
         }
         this.list = list;
         this.cursor = index;
-        this.ultimo = -1;
+        this.last = -1;
     }
 
     public boolean hasNext() {
@@ -479,7 +480,7 @@ final class CowLitr<E> implements java.util.ListIterator<E> {
             throw new java.util.NoSuchElementException();
         }
         E e = this.list.get(this.cursor);
-        this.ultimo = this.cursor;
+        this.last = this.cursor;
         this.cursor = this.cursor + 1;
         return e;
     }
@@ -493,7 +494,7 @@ final class CowLitr<E> implements java.util.ListIterator<E> {
             throw new java.util.NoSuchElementException();
         }
         this.cursor = this.cursor - 1;
-        this.ultimo = this.cursor;
+        this.last = this.cursor;
         return this.list.get(this.cursor);
     }
 
@@ -506,33 +507,33 @@ final class CowLitr<E> implements java.util.ListIterator<E> {
     }
 
     public void remove() {
-        if (this.ultimo < 0) {
+        if (this.last < 0) {
             throw new IllegalStateException();
         }
-        this.list.remove(this.ultimo);
-        if (this.ultimo < this.cursor) {
+        this.list.remove(this.last);
+        if (this.last < this.cursor) {
             this.cursor = this.cursor - 1;
         }
-        this.ultimo = -1;
+        this.last = -1;
     }
 
     public void set(E e) {
-        if (this.ultimo < 0) {
+        if (this.last < 0) {
             throw new IllegalStateException();
         }
-        this.list.set(this.ultimo, e);
+        this.list.set(this.last, e);
     }
 
     public void add(E e) {
         this.list.add(this.cursor, e);
         this.cursor = this.cursor + 1;
-        this.ultimo = -1;
+        this.last = -1;
     }
 }
 
-// La vista que devuelve CopyOnWriteArrayList.subList. Cuelga de `java.util.AbstractList`, que si
-// es publica, y de ahi hereda iterator/listIterator/subList/lastIndexOf y las operaciones en
-// bloque. Vista y no copia: escribir en ella escribe en la lista de atras.
+// The view CopyOnWriteArrayList.subList returns. It hangs off `java.util.AbstractList`, which IS
+// public, and inherits iterator/listIterator/subList/lastIndexOf and the bulk operations from there.
+// A view and not a copy: writing into it writes into the list behind.
 final class CowSubList<E> extends java.util.AbstractList<E> {
 
     private final java.util.List<E> base;
@@ -578,9 +579,9 @@ final class CowSubList<E> extends java.util.AbstractList<E> {
         if (index < 0 || index >= this.length) {
             throw new IndexOutOfBoundsException();
         }
-        E viejo = this.base.remove(this.offset + index);
+        E old = this.base.remove(this.offset + index);
         this.length = this.length - 1;
-        return viejo;
+        return old;
     }
 
     public boolean add(E e) {

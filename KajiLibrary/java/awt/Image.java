@@ -10,90 +10,92 @@ import java.awt.image.PixelGrabber;
 import java.awt.image.ReplicateScaleFilter;
 
 /**
- * Una imagen, que puede no estar entera todavía.
+ * An image, which may not be whole yet.
  *
- * <p>Esa última parte es lo que explica la forma rara de la clase. Cuando se diseñó, una imagen venía
- * por la red mientras la página ya se estaba mostrando, así que preguntarle el ancho tenía que poder
- * contestar "todavía no sé". De ahí que {@link #getWidth} tome un {@link ImageObserver}: devuelve -1
- * si no lo sabe, y le avisa al observador cuando se entera.
+ * <p>That last part is what explains the odd shape of the class. When it was designed, an image
+ * came over the network while the page was already being shown, so asking it for its width had to
+ * be able to answer "I do not know yet". Hence {@link #getWidth} taking an {@link ImageObserver}:
+ * it returns -1 if it does not know, and tells the observer when it finds out.
  *
- * <p>Una {@link BufferedImage} es el caso en el que esa asincronía no existe: los píxeles ya están
- * en memoria, el observador nunca se usa y el ancho se sabe siempre. Sigue siendo una `Image` porque
- * todo lo que dibuja imágenes está escrito contra esta clase.
+ * <p>A {@link BufferedImage} is the case where that asynchrony does not exist: the pixels are
+ * already in memory, the observer is never used and the width is always known. It is still an
+ * `Image` because everything that draws images is written against this class.
  */
 public abstract class Image {
 
-    /** Lo que devuelve {@link #getProperty} cuando la propiedad no está definida. */
+    /** What {@link #getProperty} returns when the property is not defined. */
     public static final Object UndefinedProperty = new Object();
 
-    /** Que el escalado elija el algoritmo. */
+    /** Let the scaling choose the algorithm. */
     public static final int SCALE_DEFAULT = 1;
 
-    /** Que priorice la velocidad. */
+    /** Let it favour speed. */
     public static final int SCALE_FAST = 2;
 
-    /** Que priorice la calidad. */
+    /** Let it favour quality. */
     public static final int SCALE_SMOOTH = 4;
 
-    /** Repetir o saltear píxeles: el más rápido y el más feo. */
+    /** Repeating or skipping pixels: the fastest and the ugliest. */
     public static final int SCALE_REPLICATE = 8;
 
-    /** Promediar el área que cae en cada píxel: más lento y mucho mejor al achicar. */
+    /** Averaging the area falling on each pixel: slower and much better when shrinking. */
     public static final int SCALE_AREA_AVERAGING = 16;
 
     private static final ImageCapabilities defaultImageCaps = new ImageCapabilities(false);
 
     /**
-     * Cuánto conviene acelerar esta imagen, de 0 a 1.
+     * How much it is worth accelerating this image, from 0 to 1.
      *
-     * <p>Es una sugerencia sobre memoria escasa: una imagen que se dibuja en cada cuadro merece
-     * quedarse en la memoria rápida y una que se dibuja una vez, no.
+     * <p>It is a hint about scarce memory: an image drawn on every frame deserves to stay in the
+     * fast memory and one drawn once does not.
      */
     protected float accelerationPriority = 0.5f;
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected Image() {
     }
 
     /**
-     * El ancho, o -1 si todavía no se sabe.
+     * The width, or -1 if it is not known yet.
      *
-     * <p>El -1 no es un error: es "preguntá de nuevo cuando te avise".
+     * <p>The -1 is not an error: it is "ask again when I tell you".
      */
     public abstract int getWidth(ImageObserver observer);
 
-    /** El alto, o -1 si todavía no se sabe. */
+    /** The height, or -1 if it is not known yet. */
     public abstract int getHeight(ImageObserver observer);
 
-    /** De dónde salen los píxeles. */
+    /** Where the pixels come from. */
     public abstract ImageProducer getSource();
 
     /**
-     * Un contexto para dibujar **sobre** esta imagen.
+     * A context to draw **onto** this image.
      *
-     * @throws UnsupportedOperationException si la imagen no se puede dibujar encima
+     * @throws UnsupportedOperationException if the image cannot be drawn onto
      */
     public abstract Graphics getGraphics();
 
     /**
-     * Una propiedad de la imagen.
+     * A property of the image.
      *
-     * @return el valor, `null` si todavía no se sabe, o {@link #UndefinedProperty} si no existe
+     * @return the value, `null` if it is not known yet, or {@link #UndefinedProperty} if it does
+     *     not exist
      */
     public abstract Object getProperty(String name, ImageObserver observer);
 
     /**
-     * La misma imagen a otro tamaño.
+     * The same image at another size.
      *
-     * <p>Con una de las dos medidas negativa se calcula a partir de la otra manteniendo la
-     * proporción.
+     * <p>With either of the two measures negative it is worked out from the other one, keeping the
+     * proportion.
      *
-     * <p>A diferencia del JDK, que devuelve una imagen perezosa que se calcula cuando se la dibuja,
-     * acá el escalado se hace en el momento y sale una {@link BufferedImage} ya lista. El motivo es
-     * que la versión perezosa necesita el sistema de ventanas para armar la imagen, y esta
-     * biblioteca no lo tiene; el resultado es el mismo y la diferencia es cuándo se hace el trabajo.
+     * <p>Unlike the JDK, which returns a lazy image that is computed when it gets drawn, here the
+     * scaling is done on the spot and what comes out is a {@link BufferedImage} already finished.
+     * The reason is that the lazy version needs the windowing system to build the image, and this
+     * library does not have it; the result is the same and the difference is when the work is done.
      *
-     * @throws IllegalArgumentException si las dos medidas son cero
+     * @return the scaled image, or `null` if the pixels could not be grabbed
+     * @throws IllegalArgumentException if both measures are zero
      */
     public Image getScaledInstance(int width, int height, int hints) {
         ImageFilter filter;
@@ -103,8 +105,9 @@ public abstract class Image {
             filter = new ReplicateScaleFilter(width, height);
         }
         ImageProducer prod = new FilteredImageSource(this.getSource(), filter);
-        // Con el arreglo en null y las medidas en -1, el recolector reserva el suyo cuando el
-        // filtro le anuncia el tamano final, que es lo unico que sabe cuanto mide el resultado.
+        // With the array at null and the measures at -1, the grabber reserves its own when the
+        // filter announces the final size, which is the only thing that knows how big the result
+        // is.
         PixelGrabber pg = new PixelGrabber(prod, 0, 0, -1, -1, null, 0, 0);
         try {
             pg.grabPixels();
@@ -124,27 +127,27 @@ public abstract class Image {
     }
 
     /**
-     * Suelta los recursos y obliga a volver a calcular la imagen si se la vuelve a usar.
+     * Releases the resources and forces the image to be worked out again if it is used again.
      *
-     * <p>La implementación de acá no hace nada, que es lo correcto para una imagen que ya está
-     * entera en memoria.
+     * <p>The implementation here does nothing, which is what is right for an image that is already
+     * whole in memory.
      */
     public void flush() {
     }
 
     /**
-     * Qué se puede acelerar de esta imagen en esa configuración.
+     * What can be accelerated about this image on that configuration.
      *
-     * @param gc la configuración, o `null` para la del dispositivo por omisión
+     * @param gc the configuration, or `null` for the default device's
      */
     public ImageCapabilities getCapabilities(GraphicsConfiguration gc) {
         return defaultImageCaps;
     }
 
     /**
-     * Cambia cuánto conviene acelerar esta imagen.
+     * Changes how much it is worth accelerating this image.
      *
-     * @throws IllegalArgumentException si el valor no está entre 0 y 1
+     * @throws IllegalArgumentException if the value is not between 0 and 1
      */
     public void setAccelerationPriority(float priority) {
         if (priority < 0 || priority > 1) {
@@ -154,7 +157,7 @@ public abstract class Image {
         this.accelerationPriority = priority;
     }
 
-    /** Cuánto conviene acelerar esta imagen. */
+    /** How much it is worth accelerating this image. */
     public float getAccelerationPriority() {
         return this.accelerationPriority;
     }

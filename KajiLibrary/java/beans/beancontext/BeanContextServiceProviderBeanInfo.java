@@ -3,13 +3,13 @@ package java.beans.beancontext;
 import java.beans.BeanInfo;
 
 /**
- * El `BeanInfo` de un proveedor que además describe a los servicios que ofrece.
+ * The `BeanInfo` of a provider that also describes the services it offers.
  *
- * <p>Sirve para una herramienta de diseño: sin esto, lo único que se puede mostrar del proveedor es
- * el proveedor mismo, y lo que al usuario le interesa son los servicios.
+ * <p>It is for a design tool: without it, all that can be shown of the provider is the provider
+ * itself, and what the user cares about is the services.
  */
 public interface BeanContextServiceProviderBeanInfo extends BeanInfo {
 
-    /** Un `BeanInfo` por servicio ofrecido. */
+    /** One `BeanInfo` per service offered. */
     BeanInfo[] getServicesBeanInfo();
 }

@@ -1,11 +1,12 @@
 package java.sql;
 
 /**
- * KajiLibrary's java.sql.SQLClientInfoException -- fallo al fijar propiedades del cliente.
+ * KajiLibrary's java.sql.SQLClientInfoException -- a failure setting client properties.
  *
- * <p>Es la unica excepcion de JDBC que lleva un **mapa** en vez de un solo motivo, y por una razon
- * concreta: `setClientInfo` recibe varias propiedades juntas y puede fallar en algunas. Un motivo
- * suelto obligaria a lanzar en la primera que falla y a no decir nada de las demas.
+ * <p>It is the only JDBC exception that carries a **map** instead of a single reason, and for a
+ * concrete reason: `setClientInfo` receives several properties together and can fail on some of
+ * them. A single reason would force throwing at the first one that fails and saying nothing about
+ * the rest.
  */
 public class SQLClientInfoException extends SQLException {
 
@@ -63,7 +64,7 @@ public class SQLClientInfoException extends SQLException {
         this.failedProperties = failedProperties;
     }
 
-    /** Que propiedad fallo y por que. */
+    /** Which property failed and why. */
     public java.util.Map<String, ClientInfoStatus> getFailedProperties() {
         return this.failedProperties;
     }

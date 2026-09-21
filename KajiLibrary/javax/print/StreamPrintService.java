@@ -3,54 +3,55 @@ package javax.print;
 import java.io.OutputStream;
 
 /**
- * KajiLibrary's javax.print.StreamPrintService -- una "impresora" que escribe a un flujo.
+ * KajiLibrary's javax.print.StreamPrintService -- a "printer" that writes to a stream.
  *
- * <p>Convierte en lugar de imprimir: se le da un documento en un formato y escribe otro en el flujo.
- * Asi se genera un PDF o un PostScript desde el mismo codigo que imprimiria en papel.
+ * <p>It converts instead of printing: it is given a document in one format and writes another to
+ * the stream. That is how a PDF or a PostScript is generated from the same code that would print on
+ * paper.
  *
- * <p>Es un {@link PrintService} completo --acepta trabajos, tiene atributos, se le pregunta que
- * soporta-- con dos diferencias:
+ * <p>It is a complete {@link PrintService} --it accepts jobs, has attributes, can be asked what it
+ * supports-- with two differences:
  *
  * <ul>
- *   <li>tiene {@link #getOutputFormat}, que dice que escribe;
- *   <li>sirve <b>una sola vez</b>. {@link #dispose} cierra el trabajo; despues de eso no se le puede
- *       mandar nada mas, aunque el flujo siga abierto.
+ *   <li>it has {@link #getOutputFormat}, which says what it writes;
+ *   <li>it serves <b>only once</b>. {@link #dispose} closes the job; after that nothing more can be
+ *       sent to it, even if the stream is still open.
  * </ul>
  *
- * <p>{@link #dispose} <b>no cierra el flujo</b>: lo abrio quien lo paso, y cerrarlo es de el. Eso es
- * lo que permite escribir varios documentos seguidos en el mismo archivo, con un servicio nuevo por
- * cada uno.
+ * <p>{@link #dispose} <b>does not close the stream</b>: whoever passed it opened it, and closing it
+ * is their business. That is what allows writing several documents one after the other into the
+ * same file, with a new service for each one.
  *
- * <p>Por lo mismo, {@code PrintServiceLookup.registerService} rechaza estos: no son impresoras que
- * alguien deba encontrar por casualidad.
+ * <p>For the same reason, {@code PrintServiceLookup.registerService} rejects these: they are not
+ * printers somebody should find by chance.
  */
 public abstract class StreamPrintService implements PrintService {
 
-    /** Donde escribe. */
+    /** Where it writes. */
     private final OutputStream outStream;
 
-    /** Si ya se cerro el trabajo. */
+    /** Whether the job was already closed. */
     private boolean disposed = false;
 
-    /** No se construye sin flujo; el constructor sin argumentos no existe a proposito. */
+    /** It is not built without a stream; the no-argument constructor does not exist on purpose. */
     protected StreamPrintService(OutputStream out) {
         this.outStream = out;
     }
 
-    /** Donde escribe. */
+    /** Where it writes. */
     public OutputStream getOutputStream() {
         return this.outStream;
     }
 
-    /** Que formato escribe, como tipo MIME. */
+    /** Which format it writes, as a MIME type. */
     public abstract String getOutputFormat();
 
-    /** Cierra el trabajo. No cierra el flujo; ver la nota de la clase. */
+    /** Closes the job. It does not close the stream; see the class note. */
     public void dispose() {
         this.disposed = true;
     }
 
-    /** Si ya se cerro. */
+    /** Whether it was already closed. */
     public boolean isDisposed() {
         return this.disposed;
     }

@@ -11,8 +11,8 @@ import jdk.internal.util.random.RandomSupport;
  * <p>Mix       mixLea64(s + x0)                  — two xor-shift/multiply rounds
  * StarStar  rotl((s + x0) * 5, 7) * 9         — multiply, rotate, multiply
  *
- * <p>The pair is worth keeping side by side because it isolates what a scrambler does. Both take the
- * same combined state and both produce a well-distributed 64 bits; "**" is cheaper (three
+ * <p>The pair is worth keeping side by side because it isolates what a scrambler does. Both take
+ * the same combined state and both produce a well-distributed 64 bits; "**" is cheaper (three
  * arithmetic ops against six) while the Lea mixer avalanches harder. The generator's PERIOD and its
  * equidistribution come from the state transition, which is the same here — the scrambler only
  * decides how well the output hides that structure.
@@ -20,7 +20,8 @@ import jdk.internal.util.random.RandomSupport;
  * <p>The constants 5, 7 and 9 are not arbitrary either: multiplying by small odd numbers before and
  * after a rotation is the standard "**" construction from the xoshiro family.
  *
- * @implNote An INTERNAL class, same subset caveat as its sibling (nested SplittableGenerator, finding #101).
+ * @implNote An INTERNAL class, same subset caveat as its sibling (nested SplittableGenerator,
+ *     finding #101).
  */
 public final class L64X128StarStarRandom implements RandomGenerator.SplittableGenerator {
 
@@ -97,27 +98,27 @@ public final class L64X128StarStarRandom implements RandomGenerator.SplittableGe
         return result;
     }
 
-    // ---- las tres entradas que faltaban ----------------------------------------------------------
+    // ---- the three entry points that were missing -----------------------------------------------
 
-    // La semilla de los generadores sin argumentos. Es un contador compartido que avanza de a
-    // GOLDEN_RATIO_64: dos generadores creados uno detras del otro no arrancan en estados vecinos,
-    // que es lo unico que se le pide.
+    // The seed of the generators with no arguments. It is a shared counter that advances by
+    // GOLDEN_RATIO_64: two generators created one after the other do not start at neighbouring
+    // states, which is the only thing asked of it.
     private static final java.util.concurrent.atomic.AtomicLong SEMILLERO =
             new java.util.concurrent.atomic.AtomicLong(RandomSupport.initialSeed());
 
-    /** Un generador con una semilla elegida sola, distinta en cada llamada. */
+    /** A generator with a seed chosen by itself, different on each call. */
     public L64X128StarStarRandom() {
         this(SEMILLERO.getAndAdd(RandomSupport.GOLDEN_RATIO_64));
     }
 
     /**
-     * Un generador sembrado desde bytes.
+     * A generator seeded from bytes.
      *
-     * <p>Los bytes se reparten en las palabras del estado y, si no alcanzan, el resto se rellena con
-     * un generador auxiliar -- una semilla corta dejaria el estado casi en cero, que para un
-     * xor-shift es un punto fijo. Lo hace {@link RandomSupport#convertSeedBytesToLongs}, con los
-     * mismos 4 y 2 que usa el JDK para este algoritmo, asi que la misma semilla da el mismo
-     * generador.
+     * <p>The bytes are spread over the words of the state and, if they are not enough, the rest is
+     * filled in with an auxiliary generator -- a short seed would leave the state almost at zero,
+     * which for a xor-shift is a fixed point. {@link RandomSupport#convertSeedBytesToLongs} does
+     * it, with the same 4 and 2 the JDK uses for this algorithm, so the same seed gives the same
+     * generator.
      */
     public L64X128StarStarRandom(byte[] seed) {
         long[] data = RandomSupport.convertSeedBytesToLongs(seed, 4, 2);
@@ -127,37 +128,38 @@ public final class L64X128StarStarRandom implements RandomGenerator.SplittableGe
         this.x1 = data[3];
     }
 
-    // ---- particion ---------------------------------------------------------------------------------
+    // ---- splitting ------------------------------------------------------------------------------
     //
-    // Partir no es "sembrar otro al azar": dos semillas cercanas pueden dar secuencias que se pisan.
-    // La garantia sale de que el **addend** del LCG --la `a`-- del hijo se toma de la salmuera
-    // (`brine`) y no del azar, con lo cual cada hijo recorre una orbita distinta del mismo espacio.
+    // Splitting is not "seeding another one at random": two nearby seeds may give sequences that
+    // overlap. The guarantee comes from the **addend** of the LCG --the `a`-- of the child being
+    // taken from the brine and not from chance, with which each child walks a different orbit of
+    // the same space.
     //
-    // El corrimiento `brine << 1` deja el bit bajo libre, que es donde el constructor fuerza el
-    // impar. Sin eso, la mitad de las salmueras darian el mismo addend.
+    // The shift `brine << 1` leaves the low bit free, which is where the constructor forces it odd.
+    // Without that, half the brines would give the same addend.
 
-    /** Un generador independiente de este, con la entropia de este. */
+    /** A generator independent of this one, with the entropy of this one. */
     public SplittableGenerator split() {
         return this.split(this);
     }
 
-    /** Un generador independiente de este, con la entropia de `source`. */
+    /** A generator independent of this one, with the entropy of `source`. */
     public SplittableGenerator split(SplittableGenerator source) {
         return this.split(source, source.nextLong());
     }
 
-    /** El de arriba con la salmuera explicita: es el que hace el trabajo. */
+    /** The one above with the brine made explicit: it is the one that does the work. */
     public SplittableGenerator split(SplittableGenerator source, long brine) {
         return new L64X128StarStarRandom(brine << 1, source.nextLong(),
                 source.nextLong(), source.nextLong());
     }
 
-    /** `streamSize` generadores independientes, con la entropia de este. */
+    /** `streamSize` independent generators, with the entropy of this one. */
     public java.util.stream.Stream<SplittableGenerator> splits(long streamSize) {
         return this.splits(streamSize, this);
     }
 
-    /** `streamSize` generadores independientes, con la entropia de `source`. */
+    /** `streamSize` independent generators, with the entropy of `source`. */
     public java.util.stream.Stream<SplittableGenerator> splits(long streamSize,
             SplittableGenerator source) {
         return Splits.de(this, streamSize, source);

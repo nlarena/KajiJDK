@@ -3,30 +3,30 @@ package java.security;
 import java.util.Enumeration;
 import java.util.NoSuchElementException;
 
-// El permiso que implica a todos los demas.
+// The permission that implies all the others.
 //
-// Es el equivalente de root, y su `implies` devuelve `true` sin mirar el argumento. Vale la pena
-// tenerlo presente al leer una politica: un solo `AllPermission` vuelve irrelevante todo lo que
-// haya alrededor.
+// It is the equivalent of root, and its `implies` returns `true` without looking at the argument.
+// It is worth keeping in mind when reading a policy: a single `AllPermission` makes everything
+// around it irrelevant.
 public final class AllPermission extends Permission {
 
-    // El permiso universal.
+    // The universal permission.
     public AllPermission() {
         super("<all permissions>");
     }
 
-    // Igual que el sin argumentos; los dos parametros se ignoran. Existe para que el cargador de
-    // politicas pueda construirlo por reflexion con la misma firma que cualquier otro permiso.
+    // The same as the one with no arguments; both parameters are ignored. It exists so that the
+    // policy loader can build it by reflection with the same signature as any other permission.
     public AllPermission(String name, String actions) {
         this();
     }
 
-    // Siempre true. Ese es el punto.
+    // Always true. That is the point.
     public boolean implies(Permission p) {
         return true;
     }
 
-    // Todos los AllPermission son iguales entre si: no tienen estado que los distinga.
+    // Every AllPermission is equal to every other: they have no state that tells them apart.
     public boolean equals(Object obj) {
         return obj instanceof AllPermission;
     }
@@ -35,7 +35,7 @@ public final class AllPermission extends Permission {
         return 1;
     }
 
-    // "<all actions>", que es lo que devuelve el JDK.
+    // "<all actions>", which is what the JDK returns.
     public String getActions() {
         return "<all actions>";
     }
@@ -45,10 +45,11 @@ public final class AllPermission extends Permission {
     }
 }
 
-// La coleccion de AllPermission. Guarda solo si hay alguno: uno o mil dan lo mismo.
+// The collection of AllPermission. It keeps only whether there is one: one or a thousand are the
+// same.
 final class AllPermissionCollection extends PermissionCollection {
 
-    private boolean tieneAlguno;
+    private boolean hasAny;
 
     public void add(Permission permission) {
         if (!(permission instanceof AllPermission)) {
@@ -58,36 +59,36 @@ final class AllPermissionCollection extends PermissionCollection {
             throw new SecurityException(
                 "attempt to add a Permission to a readonly PermissionCollection");
         }
-        this.tieneAlguno = true;
+        this.hasAny = true;
     }
 
     public boolean implies(Permission permission) {
-        return this.tieneAlguno;
+        return this.hasAny;
     }
 
     public Enumeration<Permission> elements() {
-        return new AllPermEnum(this.tieneAlguno);
+        return new AllPermEnum(this.hasAny);
     }
 }
 
-// Enumeracion de cero o un AllPermission.
+// An enumeration of zero or one AllPermission.
 final class AllPermEnum implements Enumeration<Permission> {
 
-    private boolean pendiente;
+    private boolean pending;
 
-    AllPermEnum(boolean pendiente) {
-        this.pendiente = pendiente;
+    AllPermEnum(boolean pending) {
+        this.pending = pending;
     }
 
     public boolean hasMoreElements() {
-        return this.pendiente;
+        return this.pending;
     }
 
     public Permission nextElement() {
-        if (!this.pendiente) {
+        if (!this.pending) {
             throw new NoSuchElementException();
         }
-        this.pendiente = false;
+        this.pending = false;
         return new AllPermission();
     }
 }

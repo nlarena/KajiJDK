@@ -10,26 +10,28 @@ import java.util.TreeMap;
 import java.util.function.BiPredicate;
 
 /**
- * Los encabezados de un pedido o una respuesta, <strong>inmutables</strong>.
+ * The headers of a request or a response, <strong>immutable</strong>.
  *
- * <h2>En que se diferencia de {@code com.sun.net.httpserver.Headers}</h2>
+ * <h2>How it differs from {@code com.sun.net.httpserver.Headers}</h2>
  *
- * <p>Aquella implementa {@link Map} y se muta; esta no implementa nada y no se puede cambiar. La
- * diferencia no es de gusto: un {@link HttpResponse} se puede compartir entre hilos —el cliente es
- * asincronico— y unos encabezados mutables serian estado compartido sin sincronizar.
+ * <p>That one implements {@link Map} and is mutated; this one implements nothing and cannot be
+ * changed. The difference is not taste: an {@link HttpResponse} can be shared between threads —the
+ * client is asynchronous— and mutable headers would be unsynchronized shared state.
  *
- * <p>Por eso {@link #map} devuelve un mapa inmodificable y las listas de adentro tambien lo son:
- * hacerlo a medias dejaria una puerta abierta que nadie esperaria encontrar.
+ * <p>That is why {@link #map} returns an unmodifiable map and the lists inside are unmodifiable
+ * too: doing it halfway would leave a door open that nobody would expect to find.
  *
- * <h2>El filtro de {@link #of}</h2>
+ * <h2>The filter in {@link #of}</h2>
  *
- * <p>La unica fabrica recibe un predicado que decide que encabezados entran. Existe porque los
- * encabezados vienen de la red: los del salto anterior, los que un proxy agrego, los que no
- * corresponde reenviar. Filtrar al construir es lo que evita que alguien tenga que acordarse de
- * hacerlo despues.
+ * <p>The only factory takes a predicate that decides which headers get in. It exists because
+ * headers come from the network: those of the previous hop, those a proxy added, those that should
+ * not be forwarded. Filtering on construction is what spares anyone from having to remember to do
+ * it later.
  *
- * <p>Las claves no distinguen mayusculas, como manda HTTP, pero se <strong>conserva</strong> como
- * venian escritas: {@link #map} las devuelve tal cual llegaron.
+ * <p>Keys are case-insensitive, as HTTP requires, but <strong>kept</strong> as they were written:
+ * {@link #map} returns them as they arrived. Two keys that differ only in case are not rejected as
+ * in the JDK: the spelling met first while iterating the given map stays, and the later key's
+ * values replace its values.
  *
  * @since 11
  */
@@ -41,20 +43,21 @@ public final class HttpHeaders {
         this.headers = headers;
     }
 
-    /** El primer valor de ese encabezado, si esta. */
+    /** The first value of that header, if present. */
     public Optional<String> firstValue(String name) {
         List<String> l = this.headers.get(name);
         return l == null || l.isEmpty() ? Optional.<String>empty() : Optional.of(l.get(0));
     }
 
     /**
-     * El primer valor como {@code long}, si esta y es un numero.
+     * The first value as a {@code long}, if present and a number.
      *
-     * <p>Un {@link OptionalLong} y no un {@code Optional<Long>}: es el acceso para
-     * {@code Content-Length}, que se mira en cada respuesta, y evita crear un objeto por consulta.
+     * <p>An {@link OptionalLong} and not an {@code Optional<Long>}: it is the accessor for {@code
+     * Content-Length}, which is looked at on every response, and it saves boxing a {@code Long} per
+     * query.
      *
-     * @throws NumberFormatException si esta pero no es un numero — un encabezado mal formado es un
-     *     error del otro lado, no un "no esta"
+     * @throws NumberFormatException if present but not a number — a malformed header is an error on
+     *     the other side, not an "absent"
      */
     public OptionalLong firstValueAsLong(String name) {
         List<String> l = this.headers.get(name);
@@ -64,18 +67,18 @@ public final class HttpHeaders {
         return OptionalLong.of(Long.parseLong(l.get(0)));
     }
 
-    /** Todos los valores de ese encabezado; vacia si no esta. */
+    /** All the values of that header; empty if absent. */
     public List<String> allValues(String name) {
         List<String> l = this.headers.get(name);
         return l == null ? Collections.<String>emptyList() : l;
     }
 
-    /** Todos los encabezados, inmodificables. */
+    /** All the headers, unmodifiable. */
     public Map<String, List<String>> map() {
         return this.headers;
     }
 
-    /** Sobre el mapa entero, sin distinguir mayusculas en las claves. */
+    /** Over the whole map, case-insensitive in the keys. */
     public final boolean equals(Object obj) {
         if (obj == this) {
             return true;
@@ -87,7 +90,8 @@ public final class HttpHeaders {
     }
 
     public final int hashCode() {
-        // Sobre las claves en minuscula, para ser coherente con un `equals` que no las distingue.
+        // Over the lowercased keys, to stay consistent with an `equals` that does not distinguish
+        // case.
         int h = 0;
         for (Map.Entry<String, List<String>> e : this.headers.entrySet()) {
             h = h + e.getKey().toLowerCase(java.util.Locale.ROOT).hashCode()
@@ -101,46 +105,48 @@ public final class HttpHeaders {
     }
 
     /**
-     * Los encabezados que pasen el filtro.
+     * The headers that pass the filter.
      *
-     * @param headerMap de donde salen
-     * @param filter recibe nombre y valor, y decide si entra
-     * @throws NullPointerException si algo es {@code null}
-     * @throws IllegalArgumentException si un nombre esta vacio, o si un nombre queda sin valores
-     *     despues de filtrar — un encabezado sin valor no es un encabezado
+     * @param headerMap where they come from
+     * @param filter receives name and value, and decides whether it gets in
+     * @throws NullPointerException if anything is {@code null}
+     * @throws IllegalArgumentException if a name is empty. This javadoc also said a name left with
+     *     no values after filtering is an error; such a name is left out, as in the JDK. Unlike the
+     *     JDK, a name that is blank only after trimming, or two names equal ignoring case, are not
+     *     rejected.
      */
     public static HttpHeaders of(Map<String, List<String>> headerMap,
             BiPredicate<String, String> filter) {
         if (headerMap == null || filter == null) {
-            throw new NullPointerException("headerMap y filter no pueden ser null");
+            throw new NullPointerException("headerMap and filter must not be null");
         }
-        // TreeMap con comparador que ignora mayusculas: es como se consigue la busqueda
-        // insensible sin perder la escritura original de la clave.
+        // TreeMap with a case-ignoring comparator: it is how the case-insensitive lookup is had
+        // without losing the original spelling of the key.
         TreeMap<String, List<String>> out =
                 new TreeMap<String, List<String>>(String.CASE_INSENSITIVE_ORDER);
         for (Map.Entry<String, List<String>> e : headerMap.entrySet()) {
-            String nombre = e.getKey();
-            if (nombre == null) {
-                throw new NullPointerException("un nombre de encabezado es null");
+            String name = e.getKey();
+            if (name == null) {
+                throw new NullPointerException("a header name is null");
             }
-            if (nombre.isEmpty()) {
-                throw new IllegalArgumentException("un nombre de encabezado esta vacio");
+            if (name.isEmpty()) {
+                throw new IllegalArgumentException("a header name is empty");
             }
-            List<String> valores = e.getValue();
-            if (valores == null) {
-                throw new NullPointerException("los valores de " + nombre + " son null");
+            List<String> values = e.getValue();
+            if (values == null) {
+                throw new NullPointerException("the values of " + name + " are null");
             }
-            List<String> quedan = new ArrayList<String>();
-            for (String v : valores) {
+            List<String> kept = new ArrayList<String>();
+            for (String v : values) {
                 if (v == null) {
-                    throw new NullPointerException("un valor de " + nombre + " es null");
+                    throw new NullPointerException("a value of " + name + " is null");
                 }
-                if (filter.test(nombre, v)) {
-                    quedan.add(v);
+                if (filter.test(name, v)) {
+                    kept.add(v);
                 }
             }
-            if (!quedan.isEmpty()) {
-                out.put(nombre, Collections.unmodifiableList(quedan));
+            if (!kept.isEmpty()) {
+                out.put(name, Collections.unmodifiableList(kept));
             }
         }
         return new HttpHeaders(Collections.unmodifiableMap(out));

@@ -1,38 +1,37 @@
 package org.w3c.dom;
 
 /**
- * KajiLibrary's org.w3c.dom.DOMLocator -- donde ocurrio algo, dicho de cuatro maneras a la vez.
+ * KajiLibrary's org.w3c.dom.DOMLocator -- where something happened, said in four ways at once.
  *
- * <p>Lo devuelve {@link DOMError#getLocation}. Que haya cuatro coordenadas no es redundancia: cada
- * una sirve para un consumidor distinto y **no todas estan siempre disponibles**. Linea y columna
- * son para mostrarle el problema a una persona; el desplazamiento en bytes le sirve a quien tenga el
- * archivo original abierto; el desplazamiento en unidades UTF-16 le sirve a quien tenga el texto ya
- * decodificado en memoria, que es otra cosa. Y {@link #getRelatedNode} es la unica util cuando el
- * documento no vino de ningun texto sino que se armo nodo por nodo, caso en el que las tres
- * anteriores devuelven {@code -1}.
+ * <p>{@link DOMError#getLocation} returns it. That there are four coordinates is not redundancy:
+ * each one serves a different consumer and **not all are always available**. Line and column are
+ * for showing the problem to a person; the byte offset serves whoever has the original file open;
+ * the offset in UTF-16 units serves whoever has the text already decoded in memory, which is
+ * something else. And {@link #getRelatedNode} is the only useful one when the document did not come
+ * from any text but was built node by node, a case in which the previous three return {@code -1}.
  *
- * <p>Ese {@code -1} es el convenio para "no se sabe" en las cuatro numericas. La numeracion de linea
- * y columna arranca en 1.
+ * <p>That {@code -1} is the convention for "not known" in the four numeric ones. The numbering of
+ * line and column starts at 1.
  *
- * <p>Interfaz declarada entera.
+ * <p>The interface is declared whole.
  */
 public interface DOMLocator {
 
-    /** La linea, contando desde 1, o {@code -1} si no se sabe. */
+    /** The line, counting from 1, or {@code -1} if it is not known. */
     public int getLineNumber();
 
-    /** La columna, contando desde 1, o {@code -1} si no se sabe. */
+    /** The column, counting from 1, or {@code -1} if it is not known. */
     public int getColumnNumber();
 
-    /** El desplazamiento en bytes dentro de la entrada, o {@code -1}. */
+    /** The offset in bytes inside the input, or {@code -1}. */
     public int getByteOffset();
 
-    /** El desplazamiento en unidades de codigo UTF-16, o {@code -1}. */
+    /** The offset in UTF-16 code units, or {@code -1}. */
     public int getUtf16Offset();
 
-    /** El nodo al que apunta, o {@code null}. */
+    /** The node it points at, or {@code null}. */
     public Node getRelatedNode();
 
-    /** La URI de donde salio, o {@code null}. */
+    /** The URI it came from, or {@code null}. */
     public String getUri();
 }

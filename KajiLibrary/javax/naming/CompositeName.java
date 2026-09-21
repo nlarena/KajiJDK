@@ -3,31 +3,31 @@ package javax.naming;
 import java.util.Enumeration;
 
 /**
- * El nombre que **atraviesa** espacios de nombres, con sintaxis fija.
+ * The name that **crosses** namespaces, with a fixed syntax.
  *
- * <h2>Que es un nombre compuesto</h2>
+ * <h2>What a composite name is</h2>
  *
- * <p>`"jdbc/pool/ventas"` no vive en un solo espacio de nombres: `jdbc` puede resolverlo un
- * contexto y `pool/ventas` otro, de un proveedor distinto y con su propia sintaxis. Un nombre
- * compuesto es la secuencia de esos tramos. Cada componente es un nombre **para otro sistema**, y
- * esta clase no sabe --ni tiene por que-- que significa adentro.
+ * <p>`"jdbc/pool/sales"` does not live in a single namespace: `jdbc` may be resolved by one
+ * context and `pool/sales` by another, from a different provider and with its own syntax. A
+ * composite name is the sequence of those stretches. Each component is a name **for another
+ * system**, and this class does not know --and has no reason to-- what it means inside.
  *
- * <p>Por eso la sintaxis es fija y no configurable, que es la unica diferencia real con
- * `CompoundName`: si dependiera del proveedor no habria manera de escribir un nombre que cruce
- * dos. Es siempre: separador `/`, escape `\`, comillas `"` y `'`, de izquierda a derecha, sin
- * ignorar mayusculas ni recortar blancos. Esos son literalmente los valores por default de
- * `NameImpl`, y por eso esta clase le pasa `null` como sintaxis.
+ * <p>That is why the syntax is fixed and not configurable, which is the only real difference from
+ * `CompoundName`: if it depended on the provider there would be no way to write a name that crosses
+ * two. It is always: separator `/`, escape `\`, quotes `"` and `'`, left to right, without
+ * ignoring case or trimming blanks. Those are literally `NameImpl`'s default values, and that is
+ * why this class passes it `null` as the syntax.
  *
- * <h2>Componentes vacios, que es donde todos se equivocan</h2>
+ * <h2>Empty components, which is where everybody gets it wrong</h2>
  *
- * <p>Un separador al final agrega un componente vacio: `"a/"` tiene **dos** componentes, `"a"` y
- * `""`. Pero `"/"` tiene **uno** --el vacio-- y no dos, y `""` tiene **cero**. La regla que hace
- * consistentes a los tres es que un nombre cuyos componentes son todos vacios se imprime con un
- * separador de mas, para que `""` y `{""}` no colapsen en la misma cadena. Toda esa aritmetica esta
- * en `NameImpl`; lo que importa aca es que un componente vacio es un componente de verdad y no un
- * artefacto del parseo.
+ * <p>A trailing separator adds an empty component: `"a/"` has **two** components, `"a"` and
+ * `""`. But `"/"` has **one** --the empty one-- and not two, and `""` has **zero**. The rule
+ * that makes the three consistent is that a name whose components are all empty is printed with
+ * an extra separator, so that `""` and `{""}` do not collapse into the same string. All that
+ * arithmetic is in `NameImpl`; what matters here is that an empty component is a real component
+ * and not a parsing artifact.
  *
- * <p>Como todos los `Name`, es **mutable**: `add`, `addAll` y `remove` cambian esto y devuelven
+ * <p>Like every `Name`, it is **mutable**: `add`, `addAll` and `remove` change this and return
  * `this`.
  */
 public class CompositeName implements Name {
@@ -35,42 +35,45 @@ public class CompositeName implements Name {
     private static final long serialVersionUID = 1667768148915813118L;
 
     /**
-     * `transient` porque la forma serial de esta clase es propia --cantidad de componentes y
-     * despues cada uno-- y no el volcado del `NameImpl`. Este arbol no tiene `ObjectOutputStream`,
-     * asi que esa forma no esta escrita; lo que se sostiene es que el campo no entre en la forma
-     * default, que es lo que el JDK real declara.
+     * `transient` because this class's serial form is its own --the number of components and then
+     * each one-- and not a dump of the `NameImpl`. That form is not written: the class declares no
+     * `writeObject`/`readObject`. An earlier note said this tree had no `ObjectOutputStream`; it
+     * has one now, and a `CompositeName` written and read back on this VM comes out with a null
+     * `impl`, so its first `size()` throws `NullPointerException`.
      */
     private transient NameImpl impl;
 
     /**
-     * Construye desde componentes ya partidos, sin parsear.
+     * Builds from already split components, without parsing.
      *
-     * <p>Es `protected` porque es el constructor que usan las subclases y los metodos de esta
-     * misma clase que devuelven nombres nuevos --`getPrefix`, `getSuffix`, `clone`--: ahi los
-     * componentes ya estan separados y volver a parsear su forma de cadena seria, ademas de
-     * caro, un ida y vuelta que puede perder informacion.
+     * <p>It is `protected` because it is the constructor used by subclasses and by this class's own
+     * methods that return new names --`getPrefix`, `getSuffix`, `clone`--: there the components are
+     * already separated, and parsing their string form again would be, besides expensive, a round
+     * trip that may lose information.
      */
     protected CompositeName(Enumeration<String> comps) {
         impl = new NameImpl(null, comps);
     }
 
-    /** Parsea la cadena con la sintaxis fija del nombre compuesto. */
+    /** Parses the string with the composite name's fixed syntax. */
     public CompositeName(String n) throws InvalidNameException {
         impl = new NameImpl(null, n);
     }
 
-    /** El nombre vacio: cero componentes. */
+    /** The empty name: zero components. */
     public CompositeName() {
         impl = new NameImpl(null);
     }
 
-    /** Vuelve a parsearse: `new CompositeName(x.toString())` es igual a `x`. */
+    /** Parses back: `new CompositeName(x.toString())` equals `x`. */
     @Override
     public String toString() {
         return impl.toString();
     }
 
-    /** Solo contra otro `CompositeName`: un `CompoundName` con los mismos componentes no es igual. */
+    /**
+     * Only against another `CompositeName`: a `CompoundName` with the same components is not equal.
+     */
     @Override
     public boolean equals(Object obj) {
         return (obj instanceof CompositeName)
@@ -82,7 +85,10 @@ public class CompositeName implements Name {
         return impl.hashCode();
     }
 
-    /** Toma `Object` por la edad de la interfaz; tira `ClassCastException` si no es uno de estos. */
+    /**
+     * Takes `Object` because of the interface's age; throws `ClassCastException` if not one of
+     * these.
+     */
     @Override
     public int compareTo(Object obj) {
         if (!(obj instanceof CompositeName)) {
@@ -91,7 +97,7 @@ public class CompositeName implements Name {
         return impl.compareTo(((CompositeName) obj).impl);
     }
 
-    /** Copia con lista de componentes propia; los componentes son `String` y no hace falta copiarlos. */
+    /** A copy with its own component list; the components are `String`s and need no copying. */
     @Override
     public Object clone() {
         return new CompositeName(getAll());
@@ -127,9 +133,9 @@ public class CompositeName implements Name {
         return new CompositeName(impl.getSuffix(posn));
     }
 
-    // Los cuatro que comparan con otro nombre devuelven `false` --o tiran-- si el otro no es
-    // compuesto. Un `CompoundName` con los mismos componentes significa otra cosa: sus
-    // componentes son de un solo espacio de nombres y estos de varios.
+    // The four that compare with another name return `false` --or throw-- if the other is not
+    // composite. A `CompoundName` with the same components means something else: its components
+    // belong to a single namespace and these to several.
 
     @Override
     public boolean startsWith(Name n) {

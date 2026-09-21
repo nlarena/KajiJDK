@@ -1,10 +1,10 @@
 package javax.naming;
 
 /**
- * Se lanza cuando el hilo fue interrumpido mientras esperaba a que la operacion terminara. La
- * operacion queda en estado indefinido: puede haberse hecho o no.
+ * Thrown when the thread was interrupted while waiting for the operation to finish. The operation
+ * is left in an undefined state: it may or may not have been done.
  *
- * <p>La jerarquia entera y el estado que arrastra estan explicados en `NamingException`.
+ * <p>The whole hierarchy and the state it carries are explained in `NamingException`.
  */
 public class InterruptedNamingException extends NamingException {
 

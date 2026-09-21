@@ -1,8 +1,8 @@
 package java.awt;
 
 /**
- * Algo del AWT salio mal de una forma que quien llama tiene que atender: es una excepcion
- * verificada, no un error de programacion.
+ * Something in the AWT went wrong in a way the caller has to deal with: it is a checked exception,
+ * not a programming error.
  */
 public class AWTException extends Exception {
 

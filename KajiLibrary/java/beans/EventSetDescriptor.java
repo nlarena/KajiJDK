@@ -195,9 +195,9 @@ public class EventSetDescriptor extends FeatureDescriptor {
     // `com.x.Outer$FooListener`.
     static String simpleName(Class<?> c) {
         String n = c.getName();
-        int punto = n.lastIndexOf('.');
-        if (punto >= 0) {
-            n = n.substring(punto + 1);
+        int dot = n.lastIndexOf('.');
+        if (dot >= 0) {
+            n = n.substring(dot + 1);
         }
         int peso = n.lastIndexOf('$');
         if (peso >= 0) {

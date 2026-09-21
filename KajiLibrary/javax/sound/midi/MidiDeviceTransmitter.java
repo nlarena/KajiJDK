@@ -1,13 +1,14 @@
 package javax.sound.midi;
 
 /**
- * KajiLibrary's javax.sound.midi.MidiDeviceTransmitter -- un transmisor que sabe de que dispositivo
- * es.
+ * KajiLibrary's javax.sound.midi.MidiDeviceTransmitter -- a transmitter that knows which device it
+ * belongs to.
  *
- * <p>El espejo de {@link MidiDeviceReceiver}, con las mismas razones y la misma forma de consultarlo.
+ * <p>The mirror of {@link MidiDeviceReceiver}, with the same reasons and the same way of querying
+ * it.
  */
 public interface MidiDeviceTransmitter extends Transmitter {
 
-    /** De que dispositivo es. */
+    /** Which device it belongs to. */
     MidiDevice getMidiDevice();
 }

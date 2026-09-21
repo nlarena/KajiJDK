@@ -13,14 +13,15 @@ import java.time.temporal.TemporalQuery;
 import java.time.temporal.TemporalUnit;
 import java.time.temporal.ValueRange;
 
-// KajiLibrary's java.time.chrono.ChronoZonedDateTimeImpl -- una fecha y hora **con zona** en un
-// calendario que no es el ISO: una `ChronoLocalDateTime` mas la zona y el desplazamiento resuelto.
+// KajiLibrary's java.time.chrono.ChronoZonedDateTimeImpl -- a date and time **with a zone** in a
+// calendar that is not ISO: a `ChronoLocalDateTime` plus the zone and the resolved offset.
 //
-// Vale la misma limitacion que en `java.time.ZonedDateTime`: **solo zonas de desplazamiento fijo**.
-// Las de region necesitan las reglas de la base IANA, y `ZoneId.of` ya las rechaza. La consecuencia
-// es que no hay huecos ni solapamientos, y los dos `*OffsetAtOverlap` devuelven `this`.
+// The same limitation as in `java.time.ZonedDateTime` holds: **fixed-offset zones only**. The
+// regional ones need the IANA database's rules, and `ZoneId.of` already rejects them. The
+// consequence is that there are no gaps and no overlaps, and both `*OffsetAtOverlap` return `this`.
 //
-// Es de paquete, como en el JDK: se llega por `atZone` o por `Chronology.zonedDateTime(...)`.
+// It is package-private, as in the JDK: one gets in through `atZone` or through
+// `Chronology.zonedDateTime(...)`.
 final class ChronoZonedDateTimeImpl implements ChronoZonedDateTime {
 
     private final ChronoLocalDateTime dateTime;
@@ -33,9 +34,9 @@ final class ChronoZonedDateTimeImpl implements ChronoZonedDateTime {
         this.zone = zone;
     }
 
-    // Una zona sin reglas no tiene con que dar un desplazamiento: se rechaza aca y no mas adelante,
-    // donde el error ya no diria de donde vino.
-    private static ZoneOffset resolver(ZoneId zone) {
+    // A zone with no rules has nothing to give an offset with: it is rejected here and not further
+    // on, where the error would no longer say where it came from.
+    private static ZoneOffset resolveWith(ZoneId zone) {
         if (zone == null) {
             throw new NullPointerException("zone");
         }
@@ -51,23 +52,23 @@ final class ChronoZonedDateTimeImpl implements ChronoZonedDateTime {
         if (dateTime == null) {
             throw new NullPointerException("dateTime");
         }
-        ZoneOffset offset = resolver(zone);
+        ZoneOffset offset = resolveWith(zone);
         if (dateTime instanceof java.time.LocalDateTime) {
-            // El ISO tiene su propia clase, que sabe mas que esta.
+            // ISO has a class of its own, which knows more than this one.
             return java.time.ZonedDateTime.of((java.time.LocalDateTime) dateTime, zone);
         }
         return new ChronoZonedDateTimeImpl(dateTime, offset, zone);
     }
 
-    /** El instante `instant` visto desde `zone`, en el calendario de `chrono`. */
+    /** The instant `instant` seen from `zone`, in `chrono`'s calendar. */
     static ChronoZonedDateTime ofInstant(Chronology chrono, Instant instant, ZoneId zone) {
-        ZoneOffset offset = resolver(zone);
-        long segundoLocal = instant.getEpochSecond() + (long) offset.getTotalSeconds();
-        long diaEpoch = Math.floorDiv(segundoLocal, 86400L);
-        int segundoDelDia = (int) Math.floorMod(segundoLocal, 86400L);
-        ChronoLocalDate fecha = chrono.dateEpochDay(diaEpoch);
-        LocalTime hora = LocalTime.ofNanoOfDay(segundoDelDia * 1000000000L + (long) instant.getNano());
-        return of(ChronoLocalDateTimeImpl.of(fecha, hora), zone);
+        ZoneOffset offset = resolveWith(zone);
+        long localSecond = instant.getEpochSecond() + (long) offset.getTotalSeconds();
+        long epochDay = Math.floorDiv(localSecond, 86400L);
+        int secondOfDay = (int) Math.floorMod(localSecond, 86400L);
+        ChronoLocalDate date = chrono.dateEpochDay(epochDay);
+        LocalTime time = LocalTime.ofNanoOfDay(secondOfDay * 1000000000L + (long) instant.getNano());
+        return of(ChronoLocalDateTimeImpl.of(date, time), zone);
     }
 
     public ChronoLocalDateTime toLocalDateTime() {
@@ -90,11 +91,11 @@ final class ChronoZonedDateTimeImpl implements ChronoZonedDateTime {
         return this.dateTime.toEpochSecond(this.offset);
     }
 
-    private ChronoZonedDateTime con(ChronoLocalDateTime nuevo) {
-        if (nuevo == this.dateTime) {
+    private ChronoZonedDateTime resolveLocal(ChronoLocalDateTime newOne) {
+        if (newOne == this.dateTime) {
             return this;
         }
-        return of(nuevo, this.zone);
+        return of(newOne, this.zone);
     }
 
     public ChronoZonedDateTime withEarlierOffsetAtOverlap() {
@@ -105,18 +106,18 @@ final class ChronoZonedDateTimeImpl implements ChronoZonedDateTime {
         return this;
     }
 
-    /** Otra zona, la misma fecha y hora escritas. Es otro instante. */
+    /** Another zone, the same date and time as written. It is another instant. */
     public ChronoZonedDateTime withZoneSameLocal(ZoneId zone) {
         return of(this.dateTime, zone);
     }
 
-    /** Otra zona, el mismo instante: la fecha y la hora se corrigen. */
+    /** Another zone, the same instant: the date and the time are corrected. */
     public ChronoZonedDateTime withZoneSameInstant(ZoneId zone) {
         if (zone.equals(this.zone)) {
             return this;
         }
-        ChronoLocalDate fecha = this.dateTime.toLocalDate();
-        Chronology chrono = fecha.getChronology();
+        ChronoLocalDate date = this.dateTime.toLocalDate();
+        Chronology chrono = date.getChronology();
         return ofInstant(chrono, this.toInstant(), zone);
     }
 
@@ -157,35 +158,35 @@ final class ChronoZonedDateTimeImpl implements ChronoZonedDateTime {
 
     public ChronoZonedDateTime with(TemporalField field, long newValue) {
         if (field == ChronoField.INSTANT_SECONDS) {
-            ChronoLocalDate fecha = this.dateTime.toLocalDate();
-            Chronology chrono = fecha.getChronology();
-            LocalTime hora = this.dateTime.toLocalTime();
-            return ofInstant(chrono, Instant.ofEpochSecond(newValue, (long) hora.getNano()), this.zone);
+            ChronoLocalDate date = this.dateTime.toLocalDate();
+            Chronology chrono = date.getChronology();
+            LocalTime time = this.dateTime.toLocalTime();
+            return ofInstant(chrono, Instant.ofEpochSecond(newValue, (long) time.getNano()), this.zone);
         }
         if (field == ChronoField.OFFSET_SECONDS) {
-            // Con zonas de desplazamiento fijo, cambiar el desplazamiento es cambiar la zona.
-            long valido = ChronoField.OFFSET_SECONDS.checkValidValue(newValue);
-            return of(this.dateTime, ZoneOffset.ofTotalSeconds((int) valido));
+            // With fixed-offset zones, changing the offset is changing the zone.
+            long valid = ChronoField.OFFSET_SECONDS.checkValidValue(newValue);
+            return of(this.dateTime, ZoneOffset.ofTotalSeconds((int) valid));
         }
-        return this.con(this.dateTime.with(field, newValue));
+        return this.resolveLocal(this.dateTime.with(field, newValue));
     }
 
     public ChronoZonedDateTime plus(long amountToAdd, TemporalUnit unit) {
-        return this.con(this.dateTime.plus(amountToAdd, unit));
+        return this.resolveLocal(this.dateTime.plus(amountToAdd, unit));
     }
 
     public ChronoZonedDateTime with(TemporalAdjuster adjuster) {
         if (adjuster instanceof ChronoZonedDateTime) {
             return (ChronoZonedDateTime) adjuster;
         }
-        return this.con(this.dateTime.with(adjuster));
+        return this.resolveLocal(this.dateTime.with(adjuster));
     }
 
-    /** Cuantas `unit` hay hasta `endExclusive`, llevandolo antes a **esta** zona. */
+    /** How many `unit` there are to `endExclusive`, bringing it into **this** zone first. */
     public long until(Temporal endExclusive, TemporalUnit unit) {
-        ChronoZonedDateTime fin = (ChronoZonedDateTime) endExclusive;
-        ChronoZonedDateTime enMiZona = fin.withZoneSameInstant(this.zone);
-        ChronoLocalDateTime local = enMiZona.toLocalDateTime();
+        ChronoZonedDateTime end = (ChronoZonedDateTime) endExclusive;
+        ChronoZonedDateTime inMyZone = end.withZoneSameInstant(this.zone);
+        ChronoLocalDateTime local = inMyZone.toLocalDateTime();
         return this.dateTime.until(local, unit);
     }
 
@@ -208,8 +209,8 @@ final class ChronoZonedDateTimeImpl implements ChronoZonedDateTime {
             return (R) this.dateTime.toLocalTime();
         }
         if (query == java.time.temporal.TemporalQueries.chronology()) {
-            ChronoLocalDate fecha = this.dateTime.toLocalDate();
-            return (R) fecha.getChronology();
+            ChronoLocalDate date = this.dateTime.toLocalDate();
+            return (R) date.getChronology();
         }
         if (query == java.time.temporal.TemporalQueries.precision()) {
             return (R) ChronoUnit.NANOS;
@@ -222,10 +223,10 @@ final class ChronoZonedDateTimeImpl implements ChronoZonedDateTime {
             return true;
         }
         if (obj instanceof ChronoZonedDateTime) {
-            ChronoZonedDateTime otro = (ChronoZonedDateTime) obj;
-            ChronoLocalDateTime suLocal = otro.toLocalDateTime();
-            ZoneId suZona = otro.getZone();
-            return this.dateTime.equals(suLocal) && this.zone.equals(suZona);
+            ChronoZonedDateTime other = (ChronoZonedDateTime) obj;
+            ChronoLocalDateTime theirLocal = other.toLocalDateTime();
+            ZoneId theirZone = other.getZone();
+            return this.dateTime.equals(theirLocal) && this.zone.equals(theirZone);
         }
         return false;
     }

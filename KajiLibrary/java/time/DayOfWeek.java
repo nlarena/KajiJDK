@@ -1,8 +1,8 @@
 package java.time;
 
-// KajiLibrary's java.time.DayOfWeek — the seven days, MONDAY (1) … SUNDAY (7) (ISO order). A
-// Implementa TemporalAccessor y TemporalAdjuster, como el del JDK; un enum simple
-// with the value and rotation helpers.
+// KajiLibrary's java.time.DayOfWeek — the seven days, MONDAY (1) … SUNDAY (7) (ISO order). It
+// implements TemporalAccessor and TemporalAdjuster, as the JDK's does; a plain enum with the value
+// and rotation helpers.
 public enum DayOfWeek implements java.time.temporal.TemporalAccessor,
         java.time.temporal.TemporalAdjuster {
 
@@ -21,9 +21,9 @@ public enum DayOfWeek implements java.time.temporal.TemporalAccessor,
     }
 
     /**
-     * El dia de la semana que `temporal` tiene.
+     * The weekday `temporal` holds.
      *
-     * @throws java.time.DateTimeException si no lo tiene
+     * @throws java.time.DateTimeException if it holds none
      */
     public static DayOfWeek from(java.time.temporal.TemporalAccessor temporal) {
         if (temporal == null) {
@@ -37,9 +37,9 @@ public enum DayOfWeek implements java.time.temporal.TemporalAccessor,
 
     // ---- TemporalAccessor -----------------------------------------------------------------------
     //
-    // Un `DayOfWeek` sabe **un solo** campo, el suyo. Los demas no los tiene, y decir que si los
-    // tiene --devolviendo cero, por ejemplo-- convertiria un error del que llama en un dato
-    // equivocado que sigue viaje.
+    // A `DayOfWeek` knows **one single** field, its own. It does not have the others, and saying it
+    // does --by returning zero, say-- would turn a caller's mistake into a wrong datum that travels
+    // on.
 
     public boolean isSupported(java.time.temporal.TemporalField field) {
         return field == java.time.temporal.ChronoField.DAY_OF_WEEK;
@@ -80,37 +80,37 @@ public enum DayOfWeek implements java.time.temporal.TemporalAccessor,
     }
 
     /**
-     * Devuelve `temporal` movido a este dia de la semana.
+     * It returns `temporal` moved to this weekday.
      *
-     * <p>Es la mitad `TemporalAdjuster` del enum, la que hace andar
-     * `fecha.with(DayOfWeek.MONDAY)`.
+     * <p>It is the enum's `TemporalAdjuster` half, the one that makes
+     * `date.with(DayOfWeek.MONDAY)` work.
      */
     public java.time.temporal.Temporal adjustInto(java.time.temporal.Temporal temporal) {
         return temporal.with(java.time.temporal.ChronoField.DAY_OF_WEEK, this.getValue());
     }
 
     /**
-     * El nombre del dia en esa region.
+     * The day's name in that region.
      *
-     * <p>Devuelve el nombre en ingles, que es el del `Locale.ROOT`, para cualquier region: esta
-     * biblioteca no trae los datos de localizacion de fechas. Se documenta en vez de fingir --
-     * devolver el nombre equivocado en silencio seria peor que decir cual se devuelve--, y el
-     * `TextStyle` si se respeta, porque eso no depende de la region.
+     * <p>It returns the English name, which is `Locale.ROOT`'s, for any region: this library does not
+     * carry the date localisation data. It is documented instead of faked -- returning the wrong name
+     * in silence would be worse than saying which one is returned -- and the `TextStyle` **is**
+     * honoured, because that does not depend on the region.
      */
     public String getDisplayName(java.time.format.TextStyle style, java.util.Locale locale) {
         if (style == null || locale == null) {
             throw new NullPointerException();
         }
-        String largo = this.name().charAt(0) + this.name().substring(1).toLowerCase();
+        String length = this.name().charAt(0) + this.name().substring(1).toLowerCase();
         if (style == java.time.format.TextStyle.NARROW
                 || style == java.time.format.TextStyle.NARROW_STANDALONE) {
-            return largo.substring(0, 1);
+            return length.substring(0, 1);
         }
         if (style == java.time.format.TextStyle.SHORT
                 || style == java.time.format.TextStyle.SHORT_STANDALONE) {
-            return largo.substring(0, 3);
+            return length.substring(0, 3);
         }
-        return largo;
+        return length;
     }
 
     public DayOfWeek plus(long days) {

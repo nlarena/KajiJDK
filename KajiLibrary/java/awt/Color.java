@@ -1,32 +1,33 @@
 package java.awt;
 
 /**
- * Un color en sRGB con alfa, empaquetado en un solo entero.
+ * A colour in sRGB with alpha, packed into a single integer.
  *
- * <p>Todo el estado son 32 bits: {@code 0xAARRGGBB}. Que sea un entero y no cuatro campos no es un
- * detalle de implementacion sino API: {@code getRGB()} devuelve exactamente ese entero,
- * {@code hashCode()} tambien, y el orden de los canales es el que espera cualquier buffer de video.
+ * <p>The packed state is 32 bits: {@code 0xAARRGGBB}. That it is an integer and not four fields is
+ * not an implementation detail but API: {@code getRGB()} returns exactly that integer,
+ * {@code hashCode()} too, and the channel order is the one any video buffer expects. (This note
+ * called those 32 bits the whole state; the transient floats and colour space described below are
+ * state too.)
  *
- * <h2>Los flotantes se guardan aparte, y hay una razon</h2>
+ * <h2>The floats are kept separately, and there is a reason</h2>
  *
- * <p>Un color construido con flotantes --{@code new Color(0.1f, 0.2f, 0.3f)}-- guarda ademas los
- * tres flotantes originales. Parece redundante y no lo es: pasar por enteros pierde precision, y
- * si {@code getRGBColorComponents()} devolviera {@code getRed()/255f} el valor que sale no seria el
- * que entro. Con los flotantes guardados, el que construyo con flotantes los recupera intactos y el
- * que construyo con enteros recibe la division; las dos respuestas son exactas para su origen.
+ * <p>A colour built with floats --{@code new Color(0.1f, 0.2f, 0.3f)}-- also keeps the three
+ * original floats. It looks redundant and is not: going through integers loses precision, and if
+ * {@code getRGBColorComponents()} returned {@code getRed()/255f} the value coming out would not be
+ * the one that went in. With the floats kept, whoever built with floats gets them back intact and
+ * whoever built with integers gets the division; both answers are exact for their origin.
  *
- * <h2>El espacio de color</h2>
+ * <h2>The colour space</h2>
  *
- * <p>Un Color construido por cualquiera de los constructores de enteros o flotantes es sRGB. El
- * constructor {@code Color(ColorSpace, float[], float)} permite otro, y ahi los componentes que se
- * guardan son los del espacio dado --no los de sRGB--: {@code getColorComponents(null)} devuelve lo
- * que se paso, y {@code getRed()} devuelve la conversion a sRGB. Esa asimetria es del contrato y es
- * lo que hace que un color en escala de grises conserve su unico componente en vez de degradarse a
- * tres.
+ * <p>A Color built by any of the integer or float constructors is sRGB. The constructor {@code
+ * Color(ColorSpace, float[], float)} allows another, and there the components kept are those of the
+ * given space --not sRGB's--: {@code getColorComponents(null)} returns what was passed, and {@code
+ * getRed()} returns the conversion to sRGB. That asymmetry is part of the contract, and it is what
+ * makes a greyscale colour keep its single component instead of degrading to three.
  *
- * <p>Como {@link Paint}, es el caso degenerado: {@code createContext} devuelve un contexto que
- * contesta el mismo color en todos los puntos. Eso es lo que hace que dibujar con un color y dibujar
- * con un degrade sean la misma operacion para quien dibuja.
+ * <p>As a {@link Paint}, it is the degenerate case: {@code createContext} returns a context that
+ * answers the same colour at every point. That is what makes drawing with a colour and drawing with
+ * a gradient the same operation for whoever draws.
  */
 public class Color implements Paint, java.io.Serializable {
 
@@ -56,12 +57,14 @@ public class Color implements Paint, java.io.Serializable {
 
     public static final Color RED = red;
 
-    /** No es rojo claro: 255,175,175. El azul acompania al verde para que no vire a naranja. */
+    /**
+     * Not light red: 255,175,175. The blue goes along with the green so it does not turn orange.
+     */
     public static final Color pink = new Color(255, 175, 175);
 
     public static final Color PINK = pink;
 
-    /** 255,200,0 y no 255,165,0: el naranja del AWT es mas amarillo que el "orange" de la web. */
+    /** 255,200,0 and not 255,165,0: AWT's orange is yellower than the web's "orange". */
     public static final Color orange = new Color(255, 200, 0);
 
     public static final Color ORANGE = orange;
@@ -86,35 +89,35 @@ public class Color implements Paint, java.io.Serializable {
 
     public static final Color BLUE = blue;
 
-    /** 0xAARRGGBB. Es el estado entero de la clase. */
+    /** 0xAARRGGBB. The packed state of the class. */
     int value;
 
     /**
-     * Los tres flotantes con los que se construyo, o null si se construyo con enteros. Es
-     * transitorio a proposito: al deserializar solo llega {@code value}, y volver a fabricarlos
-     * dividiendo daria numeros que nunca fueron los originales.
+     * The three floats it was built with, or null if it was built with integers. It is transient on
+     * purpose: on deserialization only {@code value} arrives, and making them again by dividing
+     * would give numbers that were never the originals.
      */
     private transient float[] frgbvalue;
 
     private transient float falpha;
 
     /**
-     * Los componentes en el espacio propio, o null si este color es sRGB.
+     * The components in the colour's own space, or null if this colour is sRGB.
      *
-     * <p>Es distinto de {@code frgbvalue}: aquel son siempre tres numeros en sRGB y este tiene
-     * tantos como el espacio diga. Un gris tiene uno solo, y guardarlo convertido a tres lo
-     * volveria irrecuperable.
+     * <p>It differs from {@code frgbvalue}: that one is always three numbers in sRGB and this one
+     * has as many as the space says. A grey has a single one, and keeping it converted to three
+     * would make it unrecoverable.
      */
     private transient float[] fvalue;
 
-    /** El espacio de este color, o null mientras nadie lo haya pedido y sea sRGB. */
+    /** This colour's space, or null while nobody has asked for it and it is sRGB. */
     private transient java.awt.color.ColorSpace cs;
 
     /**
-     * Al aclarar, los canales en cero no se mueven --dividir cero por 0.7 sigue dando cero-- asi
-     * que un negro puro nunca se aclararia. Por eso hay un piso: un canal entre 1 y 2 se sube a 3
-     * antes de dividir, y el negro entero se convierte en (3,3,3). Sin ese piso,
-     * {@code brighter()} aplicado muchas veces sobre un gris muy oscuro se quedaria quieto.
+     * When brightening, channels at zero do not move --dividing zero by 0.7 still gives zero-- so a
+     * pure black would never brighten. That is why there is a floor: a channel between 1 and 2 is
+     * raised to 3 before dividing, and all-black becomes (3,3,3). Without that floor, {@code
+     * brighter()} applied many times to a very dark grey would stay put.
      */
     private static final double FACTOR = 0.7;
 
@@ -130,7 +133,7 @@ public class Color implements Paint, java.io.Serializable {
         testColorValueRange(r, g, b, a);
     }
 
-    /** Los 8 bits de arriba se ignoran: este constructor siempre da un color opaco. */
+    /** The top 8 bits are ignored: this constructor always gives an opaque colour. */
     public Color(int rgb) {
         value = 0xff000000 | rgb;
     }
@@ -164,9 +167,9 @@ public class Color implements Paint, java.io.Serializable {
     }
 
     /**
-     * El mensaje enumera <b>todos</b> los canales fuera de rango, no el primero: quien pasa mal el
-     * rojo y el azul suele haberse equivocado en la conversion entera, y ver los dos ahorra un
-     * segundo viaje.
+     * The message lists <b>all</b> the channels out of range, not the first: whoever passes red and
+     * blue wrong has usually made a mistake in the integer conversion, and seeing both saves a
+     * second trip.
      */
     private static void testColorValueRange(int r, int g, int b, int a) {
         boolean rangeError = false;
@@ -265,7 +268,10 @@ public class Color implements Paint, java.io.Serializable {
                 alpha);
     }
 
-    /** Oscurecer no necesita piso: multiplicar por 0.7 siempre baja, y el cero ya es el fondo. */
+    /**
+     * Darkening needs no floor: multiplying by 0.7 always goes down, and zero is already the
+     * bottom.
+     */
     public Color darker() {
         return new Color(Math.max((int) (getRed() * FACTOR), 0),
                 Math.max((int) (getGreen() * FACTOR), 0),
@@ -277,20 +283,23 @@ public class Color implements Paint, java.io.Serializable {
         return value;
     }
 
-    /** El alfa cuenta: {@code getRGB()} lo incluye, asi que dos colores con distinto alfa difieren. */
+    /** Alpha counts: {@code getRGB()} includes it, so two colours with different alpha differ. */
     public boolean equals(Object obj) {
         return obj instanceof Color && ((Color) obj).getRGB() == this.getRGB();
     }
 
-    /** El alfa no se imprime, ni siquiera cuando no es 255. Es asi desde 1.1 y no se puede cambiar. */
+    /**
+     * Alpha is not printed, not even when it is not 255. It has been so since 1.1 and cannot
+     * change.
+     */
     public String toString() {
         return getClass().getName() + "[r=" + getRed() + ",g=" + getGreen() + ",b=" + getBlue()
                 + "]";
     }
 
     /**
-     * Acepta lo mismo que {@code Integer.decode}: "#RRGGBB", "0xRRGGBB", "0RRGGBB" en octal y un
-     * decimal pelado. El alfa que venga en los 8 bits de arriba se descarta.
+     * Accepts what {@code Integer.decode} does: "#RRGGBB", "0xRRGGBB", "0RRGGBB" in octal and a
+     * plain decimal. Any alpha in the top 8 bits is discarded.
      */
     public static Color decode(String nm) throws NumberFormatException {
         Integer intval = Integer.decode(nm);
@@ -318,10 +327,10 @@ public class Color implements Paint, java.io.Serializable {
     }
 
     /**
-     * Tono, saturacion y brillo a RGB.
+     * Hue, saturation and brightness to RGB.
      *
-     * <p>El tono se toma modulo 1 --{@code hue - floor(hue)}-- asi que 1.25 y 0.25 dan el mismo
-     * color y un tono negativo tambien funciona: es un angulo, no una fraccion acotada.
+     * <p>The hue is taken modulo 1 --{@code hue - floor(hue)}-- so 1.25 and 0.25 give the same
+     * colour and a negative hue works too: it is an angle, not a bounded fraction.
      */
     public static int HSBtoRGB(float hue, float saturation, float brightness) {
         int r = 0;
@@ -376,10 +385,10 @@ public class Color implements Paint, java.io.Serializable {
     }
 
     /**
-     * RGB a tono, saturacion y brillo.
+     * RGB to hue, saturation and brightness.
      *
-     * <p>Cuando la saturacion es cero el tono queda en 0 por convencion: un gris no tiene tono, y
-     * cualquier otro valor seria inventado.
+     * <p>When the saturation is zero the hue stays at 0 by convention: a grey has no hue, and any
+     * other value would be invented.
      */
     public static float[] RGBtoHSB(int r, int g, int b, float[] hsbvals) {
         float hue;
@@ -472,11 +481,11 @@ public class Color implements Paint, java.io.Serializable {
     }
 
     /**
-     * Los componentes del espacio de este color, mas el alfa al final.
+     * The components in this colour's space, plus the alpha at the end.
      *
-     * <p>Para un color sRGB --la mayoria-- es exactamente {@code getRGBComponents}. Para uno
-     * construido con otro espacio son los de **ese** espacio, y pueden no ser tres: un color en
-     * escala de grises devuelve dos numeros, el gris y el alfa.
+     * <p>For an sRGB colour --most of them-- it is exactly {@code getRGBComponents}. For one built
+     * with another space they are those of **that** space, and they need not be three: a greyscale
+     * colour returns two numbers, the grey and the alpha.
      */
     public float[] getComponents(float[] compArray) {
         if (this.fvalue == null) {
@@ -495,7 +504,7 @@ public class Color implements Paint, java.io.Serializable {
         return f;
     }
 
-    /** Los componentes del espacio de este color, sin el alfa. Ver {@link #getComponents}. */
+    /** The components in this colour's space, without the alpha. See {@link #getComponents}. */
     public float[] getColorComponents(float[] compArray) {
         if (this.fvalue == null) {
             return this.getRGBColorComponents(compArray);
@@ -513,8 +522,8 @@ public class Color implements Paint, java.io.Serializable {
     }
 
     /**
-     * Un alfa de 0 da BITMASK y no TRANSLUCENT: el color es completamente invisible, asi que quien
-     * compone puede saltearse la mezcla en vez de multiplicar por cero pixel por pixel.
+     * An alpha of 0 gives BITMASK and not TRANSLUCENT: the colour is completely invisible, so
+     * whoever composites can skip blending instead of multiplying by zero pixel by pixel.
      */
     public int getTransparency() {
         int alpha = getAlpha();
@@ -528,29 +537,32 @@ public class Color implements Paint, java.io.Serializable {
     }
 
     /**
-     * Un color en el espacio dado.
+     * A colour in the given space.
      *
-     * <p>Los componentes se guardan **en ese espacio**, no convertidos a sRGB: eso es lo que hace
-     * que {@code getColorComponents(null)} los devuelva intactos. Lo que si se convierte, y una
-     * sola vez aca, es el valor sRGB empaquetado que devuelven {@code getRed()} y compania -- de
-     * otro modo cada llamada pagaria la conversion.
+     * <p>The components are kept **in that space**, not converted to sRGB: that is what makes
+     * {@code getColorComponents(null)} return them intact. What is converted, and only once here,
+     * is the packed sRGB value that {@code getRed()} and company return -- otherwise every call
+     * would pay for the conversion.
      *
-     * @throws NullPointerException si el espacio o los componentes son nulos
-     * @throws IllegalArgumentException si sobran o faltan componentes para ese espacio, si alguno
-     *     cae fuera del rango que el espacio declara, o si el alfa no esta entre 0 y 1
+     * @throws NullPointerException if the space or the components are null
+     * @throws IllegalArgumentException if a component falls outside the range the space declares,
+     *     or if the alpha is not between 0 and 1. This javadoc also said it throws for too many or
+     *     too few components; see the comment in the body: too few gives an {@code
+     *     ArrayIndexOutOfBoundsException} and too many are accepted
      */
     public Color(java.awt.color.ColorSpace cspace, float[] components, float alpha) {
         if (cspace == null) {
-            throw new NullPointerException("el espacio de color no puede ser nulo");
+            throw new NullPointerException("color space cannot be null");
         }
         if (components == null) {
-            throw new NullPointerException("los componentes no pueden ser nulos");
+            throw new NullPointerException("components cannot be null");
         }
         int n = cspace.getNumComponents();
-        // Un arreglo mas corto de lo que el espacio pide **no** se comprueba: se recorre y salta
-        // `ArrayIndexOutOfBoundsException` sola. Es lo que hace el JDK 25 --comprobado-- y aunque
-        // un `IllegalArgumentException` seria mas informativo, cambiarlo rompe a quien atrape la
-        // que el contrato produce. Uno mas largo se acepta y sobra lo de mas.
+        // An array shorter than the space asks for is **not** checked: it is walked and
+        // `ArrayIndexOutOfBoundsException` comes out by itself. That is what JDK 25 does
+        // --checked-- and although an `IllegalArgumentException` would be more informative,
+        // changing it breaks whoever catches the one the contract produces. A longer one is
+        // accepted and the extra is left over.
         boolean rangeError = false;
         StringBuilder badComponentString = new StringBuilder();
         for (int i = 0; i < n; i++) {
@@ -573,8 +585,8 @@ public class Color implements Paint, java.io.Serializable {
         }
         this.falpha = alpha;
         this.cs = cspace;
-        // El sRGB empaquetado sale de la conversion del espacio; el redondeo es el mismo `+0.5`
-        // que usan los constructores de flotantes.
+        // The packed sRGB comes out of the space's conversion; the rounding is the same `+0.5` the
+        // float constructors use.
         float[] rgb = cspace.toRGB(this.fvalue);
         this.frgbvalue = new float[] { rgb[0], rgb[1], rgb[2] };
         this.value = ((((int) (alpha * 255 + 0.5)) & 0xFF) << 24)
@@ -583,7 +595,7 @@ public class Color implements Paint, java.io.Serializable {
                 | (((int) (rgb[2] * 255 + 0.5)) & 0xFF);
     }
 
-    /** El espacio de este color; sRGB salvo que se haya construido con otro. */
+    /** This colour's space; sRGB unless it was built with another. */
     public java.awt.color.ColorSpace getColorSpace() {
         if (this.cs == null) {
             this.cs = java.awt.color.ColorSpace.getInstance(
@@ -593,13 +605,13 @@ public class Color implements Paint, java.io.Serializable {
     }
 
     /**
-     * Los componentes de este color **en el espacio pedido**, mas el alfa al final.
+     * The components of this colour **in the requested space**, plus the alpha at the end.
      *
-     * @throws NullPointerException si el espacio es nulo
+     * @throws NullPointerException if the space is null
      */
     public float[] getComponents(java.awt.color.ColorSpace cspace, float[] compArray) {
         if (cspace == null) {
-            throw new NullPointerException("el espacio de color no puede ser nulo");
+            throw new NullPointerException("color space cannot be null");
         }
         float[] color = this.getColorComponents(cspace, null);
         float[] f;
@@ -619,43 +631,43 @@ public class Color implements Paint, java.io.Serializable {
     }
 
     /**
-     * Los componentes de este color en el espacio pedido, **sin** el alfa.
+     * The components of this colour in the requested space, **without** the alpha.
      *
-     * <p>La conversion pasa por CIEXYZ, que es como se convierte entre dos espacios cualesquiera:
-     * de este espacio a XYZ y de XYZ al pedido. Si el pedido es el propio, se devuelven los
-     * componentes tal cual y no se convierte nada -- ida y vuelta por XYZ perderia precision sin
-     * ganar nada.
+     * <p>The conversion goes through CIEXYZ, which is how any two spaces are converted: from this
+     * space to XYZ and from XYZ to the requested one. If the requested one is its own, the
+     * components are returned as they are and nothing is converted -- a round trip through XYZ
+     * would lose precision for nothing.
      *
-     * @throws NullPointerException si el espacio es nulo
+     * @throws NullPointerException if the space is null
      */
     public float[] getColorComponents(java.awt.color.ColorSpace cspace, float[] compArray) {
         if (cspace == null) {
-            throw new NullPointerException("el espacio de color no puede ser nulo");
+            throw new NullPointerException("color space cannot be null");
         }
-        float[] propios = this.getColorComponents(null);
-        float[] convertidos;
+        float[] own = this.getColorComponents(null);
+        float[] converted;
         if (cspace == this.getColorSpace()) {
-            convertidos = propios;
+            converted = own;
         } else {
-            convertidos = cspace.fromCIEXYZ(this.getColorSpace().toCIEXYZ(propios));
+            converted = cspace.fromCIEXYZ(this.getColorSpace().toCIEXYZ(own));
         }
         float[] f;
         if (compArray == null) {
-            f = new float[convertidos.length];
+            f = new float[converted.length];
         } else {
             f = compArray;
         }
-        for (int i = 0; i < convertidos.length; i++) {
-            f[i] = convertidos[i];
+        for (int i = 0; i < converted.length; i++) {
+            f[i] = converted[i];
         }
         return f;
     }
 
     /**
-     * Arma la maquina que genera los pixeles: la mas simple de todas.
+     * Builds the machine that generates the pixels: the simplest of all.
      *
-     * <p>Un color plano contesta lo mismo en todos los puntos, asi que el contexto no necesita ni
-     * invertir la transformacion ni mirar las coordenadas.
+     * <p>A flat colour answers the same at every point, so the context needs neither to invert the
+     * transformation nor to look at the coordinates.
      */
     public java.awt.PaintContext createContext(java.awt.image.ColorModel cm,
             java.awt.Rectangle r, java.awt.geom.Rectangle2D r2d,

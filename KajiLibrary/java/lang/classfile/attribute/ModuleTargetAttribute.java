@@ -5,19 +5,19 @@ import java.lang.classfile.ClassElement;
 import java.lang.classfile.constantpool.Utf8Entry;
 import jdk.internal.classfile.impl.TypedAttributes;
 
-// `ModuleTarget`: la plataforma para la que se construyó un módulo nativo (`linux-amd64`). Es del
-// JDK y no del JVMS, y sólo aparece en un `module-info.class`.
+// `ModuleTarget`: the platform a native module was built for (`linux-amd64`). It is the JDK's and not
+// the JVMS's, and it only shows up in a `module-info.class`.
 public interface ModuleTargetAttribute extends Attribute<ModuleTargetAttribute>, ClassElement {
 
-    /** La plataforma. */
+    /** The platform. */
     Utf8Entry targetPlatform();
 
-    /** El atributo con esta plataforma. */
+    /** The attribute with this platform. */
     public static ModuleTargetAttribute of(String targetPlatform) {
         return TypedAttributes.moduleTarget(TypedAttributes.utf8(targetPlatform));
     }
 
-    /** El atributo con esta plataforma. */
+    /** The attribute with this platform. */
     public static ModuleTargetAttribute of(Utf8Entry targetPlatform) {
         return TypedAttributes.moduleTarget(targetPlatform);
     }

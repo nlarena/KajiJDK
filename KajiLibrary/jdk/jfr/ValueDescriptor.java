@@ -7,98 +7,99 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * La descripcion de un campo de un evento: su nombre, su tipo y sus anotaciones.
+ * The description of a field of an event: its name, its type and its annotations.
  *
- * <h2>Que agrega sobre un {@code Field} de reflexion</h2>
+ * <h2>What it adds over a reflection {@code Field}</h2>
  *
- * <p>Que no necesita que el campo exista. Un evento fabricado con {@link EventFactory} no tiene
- * clase Java, y sus campos son exactamente estos descriptores y nada mas.
+ * <p>That it does not need the field to exist. An event manufactured with {@link EventFactory} has
+ * no Java class, and its fields are exactly these descriptors and nothing else.
  *
- * <p>Y que del otro lado, leyendo una grabacion, es la unica descripcion que hay: el proceso que
- * lee no tiene las clases del que grabo.
+ * <p>And that on the other side, reading a recording, it is the only description there is: the
+ * process that reads does not have the classes of the one that recorded.
  *
- * <h2>Los accesores que parecen redundantes</h2>
+ * <h2>The accessors that look redundant</h2>
  *
- * <p>{@link #getLabel}, {@link #getDescription} y {@link #getContentType} salen de las anotaciones
- * y podrian pedirse con {@link #getAnnotation}. Estan aparte porque son las tres que una
- * herramienta consulta para <strong>cada</strong> campo al mostrar una tabla, y hacerlo por el
- * camino generico seria una busqueda por tipo en cada celda.
+ * <p>{@link #getLabel}, {@link #getDescription} and {@link #getContentType} come from the
+ * annotations and could be asked for with {@link #getAnnotation}. They are apart because they are
+ * the three a tool consults for <strong>each</strong> field when showing a table, and doing it by
+ * the generic road would be a search by type in every cell.
  *
- * <p>{@link #getContentType} tiene ademas una vuelta de tuerca: no devuelve una anotacion sino el
- * nombre de la anotacion que a su vez esta marcada con {@link ContentType}. Es decir, mira las
- * meta-anotaciones. Por eso no se puede resolver con un {@code getAnnotation} directo.
+ * <p>{@link #getContentType} has a further twist: it does not return an annotation but the name of
+ * the annotation that is in turn marked with {@link ContentType}. That is, it looks at the
+ * meta-annotations. That is why it cannot be resolved with a direct {@code getAnnotation}.
  *
- * <h2>Los arreglos</h2>
+ * <h2>The arrays</h2>
  *
- * <p>{@link #getTypeName} de un {@code String[]} devuelve {@code "java.lang.String"} y
- * {@link #isArray} devuelve {@code true}. La condicion de arreglo va aparte del nombre y no pegada
- * a el, que es lo que permite que el que lee use el mismo tipo para el campo suelto y para el
- * arreglo.
+ * <p>{@link #getTypeName} of a {@code String[]} returns {@code "java.lang.String"} and
+ * {@link #isArray} returns {@code true}. The condition of being an array goes apart from the name
+ * and not stuck to it, which is what allows the one who reads to use the same type for the loose
+ * field and for the array.
  *
  * @since 9
  */
 public final class ValueDescriptor {
 
-    private final String tipoNombre;
-    private final long tipoId;
-    private final boolean arreglo;
-    private final String nombre;
-    private final List<AnnotationElement> anotaciones;
+    private final String typeName;
+    private final long typeId;
+    private final boolean array;
+    private final String name;
+    private final List<AnnotationElement> annotations;
 
     /**
-     * Un campo cuyo tipo <strong>no tiene clase Java</strong>.
+     * A field whose type <strong>has no Java class</strong>.
      *
-     * <p>No es API. Hace falta para el campo {@code stackTrace} que todo evento lleva, que es de
-     * tipo {@code jdk.types.StackTrace} — un tipo del formato de la grabacion y no una clase.
+     * <p>It is not API. It is needed for the {@code stackTrace} field every event carries, which is
+     * of type {@code jdk.types.StackTrace} -- a type of the format of the recording and not a
+     * class.
      */
     ValueDescriptor(final String typeName, final String name,
             final List<AnnotationElement> annotations) {
-        this.tipoNombre = typeName;
-        this.tipoId = Tipos.idDeNombre(typeName);
-        this.arreglo = false;
-        this.nombre = name;
-        this.anotaciones = Collections.unmodifiableList(
+        this.typeName = typeName;
+        this.typeId = Types.idOfName(typeName);
+        this.array = false;
+        this.name = name;
+        this.annotations = Collections.unmodifiableList(
                 new ArrayList<AnnotationElement>(annotations));
     }
 
     /**
-     * Un campo con ese tipo y ese nombre, sin anotaciones.
+     * A field with that type and that name, with no annotations.
      *
-     * @param type el tipo
-     * @param name el nombre
-     * @throws NullPointerException si alguno es {@code null}
-     * @throws IllegalArgumentException si el nombre no es un identificador Java valido
+     * @param type the type
+     * @param name the name
+     * @throws NullPointerException if either is {@code null}
+     * @throws IllegalArgumentException if the name is not a valid Java identifier
      */
     public ValueDescriptor(final Class<?> type, final String name) {
         this(type, name, Collections.<AnnotationElement>emptyList());
     }
 
     /**
-     * Un campo con ese tipo, ese nombre y esas anotaciones.
+     * A field with that type, that name and those annotations.
      *
-     * @param type el tipo
-     * @param name el nombre
-     * @param annotations las anotaciones
-     * @throws NullPointerException si alguno es {@code null}
-     * @throws IllegalArgumentException si el nombre no es un identificador Java valido
+     * @param type the type
+     * @param name the name
+     * @param annotations the annotations
+     * @throws NullPointerException if any is {@code null}
+     * @throws IllegalArgumentException if the name is not a valid Java identifier
      */
     public ValueDescriptor(final Class<?> type, final String name,
             final List<AnnotationElement> annotations) {
         Objects.requireNonNull(type, "type");
-        this.nombre = Objects.requireNonNull(name, "name");
+        this.name = Objects.requireNonNull(name, "name");
         Objects.requireNonNull(annotations, "annotations");
-        if (!esIdentificador(name)) {
+        if (!isIdentifier(name)) {
             throw new IllegalArgumentException(
-                    "el nombre de un campo tiene que ser un identificador Java valido: " + name);
+                    "the name of a field has to be a valid Java identifier: " + name);
         }
-        this.tipoNombre = Tipos.nombre(type);
-        this.tipoId = Tipos.id(type);
-        this.arreglo = type.isArray();
-        this.anotaciones = Collections.unmodifiableList(
+        this.typeName = Types.name(type);
+        this.typeId = Types.id(type);
+        this.array = type.isArray();
+        this.annotations = Collections.unmodifiableList(
                 new ArrayList<AnnotationElement>(annotations));
     }
 
-    private static boolean esIdentificador(final String s) {
+    private static boolean isIdentifier(final String s) {
         if (s.length() == 0 || !Character.isJavaIdentifierStart(s.charAt(0))) {
             return false;
         }
@@ -111,42 +112,42 @@ public final class ValueDescriptor {
     }
 
     /**
-     * El nombre legible del campo, de su {@link Label}.
+     * The readable name of the field, from its {@link Label}.
      *
-     * @return la etiqueta, o {@code null} si no tiene
+     * @return the label, or {@code null} if it has none
      */
     public String getLabel() {
-        return texto(Label.class);
+        return text(Label.class);
     }
 
     /**
-     * El nombre del campo.
+     * The name of the field.
      *
-     * @return el nombre
+     * @return the name
      */
     public String getName() {
-        return nombre;
+        return name;
     }
 
     /**
-     * La explicacion del campo, de su {@link Description}.
+     * The explanation of the field, from its {@link Description}.
      *
-     * @return la descripcion, o {@code null} si no tiene
+     * @return the description, or {@code null} if it has none
      */
     public String getDescription() {
-        return texto(Description.class);
+        return text(Description.class);
     }
 
     /**
-     * El nombre de la anotacion que le da significado al valor, si tiene una.
+     * The name of the annotation that gives the value its meaning, if it has one.
      *
-     * <p>Devuelve, por ejemplo, {@code "jdk.jfr.Timespan"}: no la anotacion sino su nombre, y no
-     * cualquiera sino la que a su vez esta marcada con {@link ContentType}.
+     * <p>It returns, for example, {@code "jdk.jfr.Timespan"}: not the annotation but its name, and
+     * not any one but the one that is in turn marked with {@link ContentType}.
      *
-     * @return el nombre del tipo de contenido, o {@code null} si el campo no tiene ninguno
+     * @return the name of the content type, or {@code null} if the field has none
      */
     public String getContentType() {
-        for (final AnnotationElement a : anotaciones) {
+        for (final AnnotationElement a : annotations) {
             for (final AnnotationElement meta : a.getAnnotationElements()) {
                 if (ContentType.class.getName().equals(meta.getTypeName())) {
                     return a.getTypeName();
@@ -157,42 +158,42 @@ public final class ValueDescriptor {
     }
 
     /**
-     * El nombre del tipo del campo; para un arreglo, el de su componente.
+     * The name of the type of the field; for an array, that of its component.
      *
-     * @return el nombre del tipo
+     * @return the name of the type
      */
     public String getTypeName() {
-        return tipoNombre;
+        return typeName;
     }
 
     /**
-     * El identificador numerico del tipo del campo.
+     * The numeric identifier of the type of the field.
      *
-     * @return el identificador
+     * @return the identifier
      */
     public long getTypeId() {
-        return tipoId;
+        return typeId;
     }
 
     /**
-     * Si el campo es un arreglo.
+     * Whether the field is an array.
      *
-     * @return si lo es
+     * @return whether it is
      */
     public boolean isArray() {
-        return arreglo;
+        return array;
     }
 
     /**
-     * La anotacion de ese tipo que lleva el campo, si la lleva.
+     * The annotation of that type the field carries, if it carries it.
      *
-     * @param <A> el tipo de la anotacion
-     * @param annotationType el tipo de la anotacion
-     * @return la anotacion, o {@code null}
+     * @param <A> the type of the annotation
+     * @param annotationType the type of the annotation
+     * @return the annotation, or {@code null}
      */
     public <A extends Annotation> A getAnnotation(final Class<A> annotationType) {
         Objects.requireNonNull(annotationType, "annotationType");
-        for (final AnnotationElement a : anotaciones) {
+        for (final AnnotationElement a : annotations) {
             if (a.getTypeName().equals(annotationType.getName())) {
                 return a.<A>getAnnotation(annotationType);
             }
@@ -201,30 +202,30 @@ public final class ValueDescriptor {
     }
 
     /**
-     * Las anotaciones del campo.
+     * The annotations of the field.
      *
-     * @return las anotaciones
+     * @return the annotations
      */
     public List<AnnotationElement> getAnnotationElements() {
-        return anotaciones;
+        return annotations;
     }
 
     /**
-     * Los campos que tiene el tipo de este campo, si es compuesto.
+     * The fields the type of this field has, if it is composite.
      *
-     * <p>Vacio para los tipos simples, que son la enorme mayoria de los campos de un evento. El
-     * formato admite tipos compuestos —una direccion de red con su host y su puerto— y esto es como
-     * se recorren.
+     * <p>Empty for the simple types, which are the enormous majority of the fields of an event. The
+     * format admits composite types --a network address with its host and its port-- and this is
+     * how they are walked.
      *
-     * @return los campos, o una lista vacia
+     * @return the fields, or an empty list
      */
     public List<ValueDescriptor> getFields() {
         return Collections.emptyList();
     }
 
-    /** El valor de una anotacion de un solo miembro {@code value} de tipo texto. */
-    private String texto(final Class<? extends Annotation> t) {
-        for (final AnnotationElement a : anotaciones) {
+    /** The value of an annotation with a single {@code value} member of type text. */
+    private String text(final Class<? extends Annotation> t) {
+        for (final AnnotationElement a : annotations) {
             if (a.getTypeName().equals(t.getName()) && a.hasValue("value")) {
                 final Object v = a.getValue("value");
                 return v == null ? null : v.toString();

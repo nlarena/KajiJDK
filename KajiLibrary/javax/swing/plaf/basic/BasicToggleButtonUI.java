@@ -17,12 +17,13 @@ import javax.swing.plaf.ComponentUI;
 import javax.swing.plaf.metal.MetalBorders;
 
 /**
- * El aspecto basico de un boton con estado.
+ * The basic look and feel of a button with state.
  *
- * <p>Difiere de {@link BasicButtonUI} en tres cosas: "apretado" incluye "seleccionado" al elegir
- * si pintar el fondo apretado, el icono seleccionado se elige antes que el de rollover, y el texto
- * nunca se corre. Los valores por omision son los de {@code ToggleButton.*} en Metal: margen
- * (2, 14, 2, 14), el borde de {@link MetalBorders#getToggleButtonBorder}, y sin rollover.
+ * <p>It differs from {@link BasicButtonUI} in three things: "pressed" includes "selected" when
+ * choosing whether to paint the pressed background, the selected icon is chosen before the
+ * rollover one, and the text never shifts. The default values are those of {@code ToggleButton.*}
+ * in Metal: margin (2, 14, 2, 14), the border from
+ * {@link MetalBorders#getToggleButtonBorder}, and no rollover.
  */
 public class BasicToggleButtonUI extends BasicButtonUI {
 
@@ -33,7 +34,7 @@ public class BasicToggleButtonUI extends BasicButtonUI {
     public BasicToggleButtonUI() {
     }
 
-    /** El aspecto compartido. */
+    /** The shared look and feel. */
     public static ComponentUI createUI(JComponent b) {
         return toggleButtonUI;
     }
@@ -42,90 +43,90 @@ public class BasicToggleButtonUI extends BasicButtonUI {
         return propertyPrefix;
     }
 
-    Border bordePorOmision() {
+    Border defaultBorder() {
         return MetalBorders.getToggleButtonBorder();
     }
 
-    /** {@code ToggleButton.rollover} no esta definido en Metal: no se instala nada. */
-    Boolean rolloverPorOmision() {
+    /** {@code ToggleButton.rollover} is not defined in Metal: nothing is installed. */
+    Boolean defaultRollover() {
         return null;
     }
 
     public void paint(Graphics g, JComponent c) {
         AbstractButton b = (AbstractButton) c;
-        ButtonModel modelo = b.getModel();
-        Dimension tamano = b.getSize();
+        ButtonModel model = b.getModel();
+        Dimension size = b.getSize();
         Insets i = c.getInsets();
-        Rectangle vistaR = new Rectangle(tamano);
-        vistaR.x = vistaR.x + i.left;
-        vistaR.y = vistaR.y + i.top;
-        vistaR.width = vistaR.width - (i.right + vistaR.x);
-        vistaR.height = vistaR.height - (i.bottom + vistaR.y);
-        Rectangle iconoR = new Rectangle();
-        Rectangle textoR = new Rectangle();
+        Rectangle viewRect = new Rectangle(size);
+        viewRect.x = viewRect.x + i.left;
+        viewRect.y = viewRect.y + i.top;
+        viewRect.width = viewRect.width - (i.right + viewRect.x);
+        viewRect.height = viewRect.height - (i.bottom + viewRect.y);
+        Rectangle iconRect = new Rectangle();
+        Rectangle textRect = new Rectangle();
 
         Font f = c.getFont();
         g.setFont(f);
         FontMetrics fm = b.getFontMetrics(f);
 
-        String texto = SwingUtilities.layoutCompoundLabel(c, fm, b.getText(), b.getIcon(),
+        String text = SwingUtilities.layoutCompoundLabel(c, fm, b.getText(), b.getIcon(),
                 b.getVerticalAlignment(), b.getHorizontalAlignment(),
-                b.getVerticalTextPosition(), b.getHorizontalTextPosition(), vistaR, iconoR,
-                textoR, b.getText() == null ? 0 : b.getIconTextGap());
+                b.getVerticalTextPosition(), b.getHorizontalTextPosition(), viewRect, iconRect,
+                textRect, b.getText() == null ? 0 : b.getIconTextGap());
 
         g.setColor(b.getBackground());
 
-        if ((modelo.isArmed() && modelo.isPressed()) || modelo.isSelected()) {
+        if ((model.isArmed() && model.isPressed()) || model.isSelected()) {
             paintButtonPressed(g, b);
         }
         if (b.getIcon() != null) {
-            paintIcon(g, b, iconoR);
+            paintIcon(g, b, iconRect);
         }
-        if (texto != null && !texto.isEmpty()) {
-            paintText(g, b, textoR, texto);
+        if (text != null && !text.isEmpty()) {
+            paintText(g, b, textRect, text);
         }
         if (b.isFocusPainted() && b.hasFocus()) {
-            paintFocus(g, b, vistaR, textoR, iconoR);
+            paintFocus(g, b, viewRect, textRect, iconRect);
         }
     }
 
     /**
-     * Pinta el icono del estado: deshabilitado, apretado, seleccionado (con o sin rollover),
-     * rollover, y el comun si el del estado no esta.
+     * It paints the state's icon: disabled, pressed, selected (with or without rollover),
+     * rollover, and the ordinary one if the state's is not there.
      */
     protected void paintIcon(Graphics g, AbstractButton b, Rectangle iconRect) {
-        ButtonModel modelo = b.getModel();
-        Icon icono = null;
-        if (!modelo.isEnabled()) {
-            if (modelo.isSelected()) {
-                icono = b.getDisabledSelectedIcon();
+        ButtonModel model = b.getModel();
+        Icon icon = null;
+        if (!model.isEnabled()) {
+            if (model.isSelected()) {
+                icon = b.getDisabledSelectedIcon();
             } else {
-                icono = b.getDisabledIcon();
+                icon = b.getDisabledIcon();
             }
-        } else if (modelo.isPressed() && modelo.isArmed()) {
-            icono = b.getPressedIcon();
-            if (icono == null) {
-                icono = b.getSelectedIcon();
+        } else if (model.isPressed() && model.isArmed()) {
+            icon = b.getPressedIcon();
+            if (icon == null) {
+                icon = b.getSelectedIcon();
             }
-        } else if (modelo.isSelected()) {
-            if (b.isRolloverEnabled() && modelo.isRollover()) {
-                icono = b.getRolloverSelectedIcon();
-                if (icono == null) {
-                    icono = b.getSelectedIcon();
+        } else if (model.isSelected()) {
+            if (b.isRolloverEnabled() && model.isRollover()) {
+                icon = b.getRolloverSelectedIcon();
+                if (icon == null) {
+                    icon = b.getSelectedIcon();
                 }
             } else {
-                icono = b.getSelectedIcon();
+                icon = b.getSelectedIcon();
             }
-        } else if (b.isRolloverEnabled() && modelo.isRollover()) {
-            icono = b.getRolloverIcon();
+        } else if (b.isRolloverEnabled() && model.isRollover()) {
+            icon = b.getRolloverIcon();
         }
-        if (icono == null) {
-            icono = b.getIcon();
+        if (icon == null) {
+            icon = b.getIcon();
         }
-        icono.paintIcon(b, g, iconRect.x, iconRect.y);
+        icon.paintIcon(b, g, iconRect.x, iconRect.y);
     }
 
-    /** Cero: un boton con estado no corre el texto al apretarse. */
+    /** Zero: a button with state does not shift the text when pressed. */
     protected int getTextShiftOffset() {
         return 0;
     }

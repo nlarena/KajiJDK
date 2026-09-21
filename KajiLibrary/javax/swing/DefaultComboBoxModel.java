@@ -5,19 +5,19 @@ import java.util.Collection;
 import java.util.Vector;
 
 /**
- * Un modelo de lista desplegable sobre un {@link Vector}.
+ * A combo box model over a {@link Vector}.
  *
- * <h2>Que hace ademas de guardar</h2>
+ * <h2>What it does besides keeping</h2>
  *
- * <p>Lleva el elemento elegido y lo mantiene coherente con la lista. Eso es todo lo que agrega
- * sobre {@link DefaultListModel}, y es mas trabajo del que parece: sacar el elegido tiene que
- * elegir otro, porque una lista desplegable no puede quedar sin nada mostrado.
+ * <p>It carries the chosen element and keeps it consistent with the list. That is all it adds
+ * over {@link DefaultListModel}, and it is more work than it seems: removing the chosen one has
+ * to choose another, because a combo box cannot be left with nothing shown.
  *
- * <p>La regla al sacar es elegir el que quedo en su lugar; si era el ultimo, el anterior; si no
- * queda ninguno, nada. Es lo que hace el JDK y es lo que menos sorprende: el desplegable sigue
- * mostrando algo que esta al lado de lo que habia.
+ * <p>The rule on removing is to choose the one that ended up in its place; if it was the last,
+ * the previous one; if none is left, nothing. It is what the JDK does and it is what surprises
+ * least: the drop-down goes on showing something that is beside what was there.
  *
- * @param <E> el tipo de los elementos.
+ * @param <E> the elements' type.
  */
 public class DefaultComboBoxModel<E> extends AbstractListModel<E>
         implements MutableComboBoxModel<E>, Serializable {
@@ -25,12 +25,12 @@ public class DefaultComboBoxModel<E> extends AbstractListModel<E>
     private Vector<E> objects;
     private Object selectedObject;
 
-    /** Un modelo vacio. */
+    /** An empty model. */
     public DefaultComboBoxModel() {
         objects = new Vector<E>();
     }
 
-    /** Un modelo con esos elementos; el primero queda elegido. */
+    /** A model with those elements; the first is left chosen. */
     public DefaultComboBoxModel(E[] items) {
         objects = new Vector<E>(items.length);
         for (int i = 0; i < items.length; i++) {
@@ -42,10 +42,11 @@ public class DefaultComboBoxModel<E> extends AbstractListModel<E>
     }
 
     /**
-     * Un modelo sobre ese vector.
+     * A model over that vector.
      *
-     * <p>El vector no se copia: cambiarlo por afuera cambia el modelo, y el modelo no se entera.
-     * Es lo que hace el JDK, y conviene saberlo antes de compartir un vector.
+     * <p>The vector is not copied: changing it from outside changes the model, and the model does
+     * not learn about it. It is what the JDK does, and it is worth knowing before sharing a
+     * vector.
      */
     public DefaultComboBoxModel(Vector<E> v) {
         objects = v;
@@ -54,12 +55,12 @@ public class DefaultComboBoxModel<E> extends AbstractListModel<E>
         }
     }
 
-    /** Elige ese elemento, aunque no este en la lista. */
+    /** It chooses that element, even though it is not in the list. */
     public void setSelectedItem(Object anObject) {
         if ((selectedObject != null && !selectedObject.equals(anObject))
                 || selectedObject == null && anObject != null) {
             selectedObject = anObject;
-            // El aviso con (-1, -1) significa "cambio el elegido", no "cambio un renglon".
+            // The notice with (-1, -1) means "the chosen one changed", not "a line changed".
             fireContentsChanged(this, -1, -1);
         }
     }
@@ -79,12 +80,12 @@ public class DefaultComboBoxModel<E> extends AbstractListModel<E>
         return null;
     }
 
-    /** En que posicion esta ese elemento, o -1. */
+    /** At what position that element is, or -1. */
     public int getIndexOf(Object anObject) {
         return objects.indexOf(anObject);
     }
 
-    /** Agrega al final; si era el primero, queda elegido. */
+    /** It adds at the end; if it was the first, it is left chosen. */
     public void addElement(E anObject) {
         objects.addElement(anObject);
         fireIntervalAdded(this, objects.size() - 1, objects.size() - 1);
@@ -98,7 +99,7 @@ public class DefaultComboBoxModel<E> extends AbstractListModel<E>
         fireIntervalAdded(this, index, index);
     }
 
-    /** Saca el de esa posicion y elige otro; ver la nota de la clase. */
+    /** It removes the one at that position and chooses another; see the class note. */
     public void removeElementAt(int index) {
         if (getElementAt(index) == selectedObject) {
             if (index == 0) {
@@ -118,7 +119,7 @@ public class DefaultComboBoxModel<E> extends AbstractListModel<E>
         }
     }
 
-    /** Vacia el modelo; no queda nada elegido. */
+    /** It empties the model; nothing is left chosen. */
     public void removeAllElements() {
         if (objects.size() > 0) {
             int firstIndex = 0;
@@ -131,7 +132,7 @@ public class DefaultComboBoxModel<E> extends AbstractListModel<E>
         }
     }
 
-    /** Agrega todos al final, con un solo aviso. */
+    /** It adds them all at the end, with a single notice. */
     public void addAll(Collection<? extends E> c) {
         if (c.isEmpty()) {
             return;
@@ -142,9 +143,9 @@ public class DefaultComboBoxModel<E> extends AbstractListModel<E>
     }
 
     /**
-     * Los inserta a partir de ese indice, con un solo aviso.
+     * It inserts them from that index on, with a single notice.
      *
-     * @throws ArrayIndexOutOfBoundsException si el indice no existe.
+     * @throws ArrayIndexOutOfBoundsException if the index does not exist.
      */
     public void addAll(int index, Collection<? extends E> c) {
         if (index < 0 || index > getSize()) {

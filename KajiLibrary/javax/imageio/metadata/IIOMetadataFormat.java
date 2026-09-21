@@ -4,291 +4,293 @@ import java.util.Locale;
 import javax.imageio.ImageTypeSpecifier;
 
 /**
- * KajiLibrary's javax.imageio.metadata.IIOMetadataFormat -- el esquema de un arbol de metadatos.
+ * KajiLibrary's javax.imageio.metadata.IIOMetadataFormat -- the schema of a metadata tree.
  *
- * <p>Un DTD o un esquema XML, expresado como llamadas a metodos en lugar de como documento. Dice que
- * elementos existen, que hijos puede tener cada uno, y que atributos con que tipos y que rangos.
+ * <p>A DTD or an XML schema, expressed as method calls instead of as a document. It says which
+ * elements exist, which children each can have, and which attributes with which types and
+ * ranges.
  *
- * <p>Existe porque un arbol de metadatos <b>se puede editar</b>: un programa lo lee, lo modifica y lo
- * vuelve a escribir. Sin un esquema, la unica forma de saber si lo que quedo es valido seria intentar
- * escribir el archivo y ver si el codificador se queja.
+ * <p>It exists because a metadata tree <b>can be edited</b>: a program reads it, modifies it and
+ * writes it back. Without a schema, the only way to know whether what is left is valid would be to
+ * try writing the file and see whether the encoder complains.
  *
- * <h2>Las seis politicas de hijos</h2>
+ * <h2>The six child policies</h2>
  *
- * <p>Es la parte con mas contenido, y las tres del medio se confunden:
+ * <p>It is the part with most content, and the three in the middle get confused:
  *
  * <ul>
- *   <li>{@link #CHILD_POLICY_EMPTY}: sin hijos;
- *   <li>{@link #CHILD_POLICY_ALL}: <b>todos</b> los hijos declarados, en ese orden, obligatorios;
- *   <li>{@link #CHILD_POLICY_SOME}: <b>algunos</b> de los declarados, en ese orden. Es
- *       {@code ALL} pero opcionales;
- *   <li>{@link #CHILD_POLICY_CHOICE}: <b>uno</b> de los declarados;
- *   <li>{@link #CHILD_POLICY_SEQUENCE}: cualquier cantidad, en cualquier orden, de los declarados;
- *   <li>{@link #CHILD_POLICY_REPEAT}: cualquier cantidad de <b>un solo</b> tipo de hijo, con minimo y
- *       maximo. Es la unica donde {@link #getElementMinChildren} significa algo.
+ *   <li>{@link #CHILD_POLICY_EMPTY}: no children;
+ *   <li>{@link #CHILD_POLICY_ALL}: <b>all</b> the declared children, in that order, mandatory;
+ *   <li>{@link #CHILD_POLICY_SOME}: <b>some</b> of the declared ones, in that order. It is
+ *       {@code ALL} but optional;
+ *   <li>{@link #CHILD_POLICY_CHOICE}: <b>one</b> of the declared ones;
+ *   <li>{@link #CHILD_POLICY_SEQUENCE}: any number, in any order, of the declared ones;
+ *   <li>{@link #CHILD_POLICY_REPEAT}: any number of <b>a single</b> kind of child, with a minimum
+ *       and a maximum. It is the only one where {@link #getElementMinChildren} means something.
  * </ul>
  *
- * <h2>Los tipos de valor son una mascara</h2>
+ * <h2>The value types are a mask</h2>
  *
- * <p>{@link #VALUE_RANGE_MIN_INCLUSIVE} vale 6, que es {@code VALUE_RANGE | 4}. Las constantes de
- * rango se arman combinando {@link #VALUE_RANGE} con los dos bits de inclusividad, y por eso hay que
- * compararlas con mascaras y no con igualdad.
+ * <p>{@link #VALUE_RANGE_MIN_INCLUSIVE} is 6, which is {@code VALUE_RANGE | 4}. The range constants
+ * are built by combining {@link #VALUE_RANGE} with the two inclusiveness bits, which is why they
+ * have to be compared with masks and not with equality.
  *
- * <p>{@link #VALUE_LIST} es aparte: significa que el atributo es una lista de valores separados por
- * espacios, y ahi valen {@link #getAttributeListMinLength} y su par.
+ * <p>{@link #VALUE_LIST} is separate: it means the attribute is a list of space-separated values,
+ * and there {@link #getAttributeListMinLength} and its pair apply.
  *
- * <h2>{@link #canNodeAppear} depende del tipo de imagen</h2>
+ * <h2>{@link #canNodeAppear} depends on the image type</h2>
  *
- * <p>Es lo que hace este esquema mas expresivo que un DTD. Un nodo de paleta solo tiene sentido en una
- * imagen indexada, y este metodo lo puede decir mirando el {@link ImageTypeSpecifier} concreto.
+ * <p>It is what makes this schema more expressive than a DTD. A palette node only makes sense in an
+ * indexed image, and this method can say so by looking at the concrete
+ * {@link ImageTypeSpecifier}.
  */
 public interface IIOMetadataFormat {
 
-    /** Sin hijos. */
+    /** No children. */
     int CHILD_POLICY_EMPTY = 0;
 
-    /** Todos los declarados, en orden. Ver la nota de la clase. */
+    /** All the declared ones, in order. See the class note. */
     int CHILD_POLICY_ALL = 1;
 
-    /** Algunos de los declarados, en orden. */
+    /** Some of the declared ones, in order. */
     int CHILD_POLICY_SOME = 2;
 
-    /** Uno de los declarados. */
+    /** One of the declared ones. */
     int CHILD_POLICY_CHOICE = 3;
 
-    /** Cualquier cantidad y orden de los declarados. */
+    /** Any number and order of the declared ones. */
     int CHILD_POLICY_SEQUENCE = 4;
 
-    /** Cualquier cantidad de un solo tipo. */
+    /** Any number of a single kind. */
     int CHILD_POLICY_REPEAT = 5;
 
-    /** La ultima politica; sirve para validar un valor. */
+    /** The last policy; it serves to validate a value. */
     int CHILD_POLICY_MAX = 5;
 
-    /** El atributo no lleva valor. */
+    /** The attribute carries no value. */
     int VALUE_NONE = 0;
 
-    /** Cualquier valor del tipo declarado. */
+    /** Any value of the declared type. */
     int VALUE_ARBITRARY = 1;
 
-    /** Un valor entre un minimo y un maximo. Ver la nota de la clase. */
+    /** A value between a minimum and a maximum. See the class note. */
     int VALUE_RANGE = 2;
 
-    /** El bit que dice que el minimo esta incluido. */
+    /** The bit that says the minimum is included. */
     int VALUE_RANGE_MIN_INCLUSIVE_MASK = 4;
 
-    /** El que dice que el maximo esta incluido. */
+    /** The one that says the maximum is included. */
     int VALUE_RANGE_MAX_INCLUSIVE_MASK = 8;
 
-    /** Rango con el minimo incluido. */
+    /** Range with the minimum included. */
     int VALUE_RANGE_MIN_INCLUSIVE = VALUE_RANGE | VALUE_RANGE_MIN_INCLUSIVE_MASK;
 
-    /** Rango con el maximo incluido. */
+    /** Range with the maximum included. */
     int VALUE_RANGE_MAX_INCLUSIVE = VALUE_RANGE | VALUE_RANGE_MAX_INCLUSIVE_MASK;
 
-    /** Rango cerrado por los dos lados. */
+    /** Range closed on both sides. */
     int VALUE_RANGE_MIN_MAX_INCLUSIVE =
         VALUE_RANGE | VALUE_RANGE_MIN_INCLUSIVE_MASK | VALUE_RANGE_MAX_INCLUSIVE_MASK;
 
-    /** Uno de una lista cerrada. */
+    /** One of a closed list. */
     int VALUE_ENUMERATION = 16;
 
-    /** Una lista de valores separados por espacios. Ver la nota de la clase. */
+    /** A list of space-separated values. See the class note. */
     int VALUE_LIST = 32;
 
-    /** El valor es texto. */
+    /** The value is text. */
     int DATATYPE_STRING = 0;
 
-    /** Es {@code true} o {@code false}. */
+    /** It is {@code true} or {@code false}. */
     int DATATYPE_BOOLEAN = 1;
 
-    /** Es un entero. */
+    /** It is an integer. */
     int DATATYPE_INTEGER = 2;
 
-    /** Es coma flotante de cuatro bytes. */
+    /** It is a four-byte floating point number. */
     int DATATYPE_FLOAT = 3;
 
-    /** De ocho. */
+    /** An eight-byte one. */
     int DATATYPE_DOUBLE = 4;
 
-    /** Como se llama la raiz del arbol. */
+    /** What the root of the tree is called. */
     String getRootName();
 
     /**
-     * Si ese elemento puede aparecer en el arbol de una imagen de ese tipo.
+     * Whether that element may appear in the tree of an image of that type.
      *
-     * <p>Ver la nota de la clase: es lo que un DTD no puede expresar.
+     * <p>See the class note: it is what a DTD cannot express.
      */
     boolean canNodeAppear(String elementName, ImageTypeSpecifier imageType);
 
     /**
-     * Cuantos hijos como minimo.
+     * How many children at least.
      *
-     * <p>Solo significa algo con {@link #CHILD_POLICY_REPEAT}.
+     * <p>It only means something with {@link #CHILD_POLICY_REPEAT}.
      *
-     * @throws IllegalArgumentException si el elemento no existe
+     * @throws IllegalArgumentException if the element does not exist
      */
     int getElementMinChildren(String elementName);
 
     /**
-     * Cuantos como maximo.
+     * How many at most.
      *
-     * @throws IllegalArgumentException si el elemento no existe
+     * @throws IllegalArgumentException if the element does not exist
      */
     int getElementMaxChildren(String elementName);
 
     /**
-     * Que es ese elemento, en palabras.
+     * What that element is, in words.
      *
-     * @param locale en que idioma, o null para el del sistema
+     * @param locale in which locale, or null for the system's
      */
     String getElementDescription(String elementName, Locale locale);
 
     /**
-     * Cual de las seis politicas de hijos. Ver la nota de la clase.
+     * Which of the six child policies. See the class note.
      *
-     * @throws IllegalArgumentException si el elemento no existe
+     * @throws IllegalArgumentException if the element does not exist
      */
     int getChildPolicy(String elementName);
 
     /**
-     * Que hijos puede tener.
+     * Which children it can have.
      *
-     * @return null si la politica es {@link #CHILD_POLICY_EMPTY}
-     * @throws IllegalArgumentException si el elemento no existe
+     * @return null if the policy is {@link #CHILD_POLICY_EMPTY}
+     * @throws IllegalArgumentException if the element does not exist
      */
     String[] getChildNames(String elementName);
 
     /**
-     * Que atributos puede tener.
+     * Which attributes it can have.
      *
-     * @throws IllegalArgumentException si el elemento no existe
+     * @throws IllegalArgumentException if the element does not exist
      */
     String[] getAttributeNames(String elementName);
 
     /**
-     * Que forma tiene el valor de ese atributo. Ver la nota de la clase sobre las mascaras.
+     * What shape the value of that attribute has. See the class note about the masks.
      *
-     * @throws IllegalArgumentException si el elemento o el atributo no existen
+     * @throws IllegalArgumentException if the element or the attribute does not exist
      */
     int getAttributeValueType(String elementName, String attrName);
 
     /**
-     * De que tipo es.
+     * What type it is.
      *
-     * @throws IllegalArgumentException si el elemento o el atributo no existen
+     * @throws IllegalArgumentException if the element or the attribute does not exist
      */
     int getAttributeDataType(String elementName, String attrName);
 
     /**
-     * Si tiene que estar.
+     * Whether it has to be present.
      *
-     * @throws IllegalArgumentException si el elemento o el atributo no existen
+     * @throws IllegalArgumentException if the element or the attribute does not exist
      */
     boolean isAttributeRequired(String elementName, String attrName);
 
     /**
-     * Que vale si no se pone, o null si no hay omision.
+     * What it is worth if not set, or null if there is no default.
      *
-     * @throws IllegalArgumentException si el elemento o el atributo no existen
+     * @throws IllegalArgumentException if the element or the attribute does not exist
      */
     String getAttributeDefaultValue(String elementName, String attrName);
 
     /**
-     * Los valores permitidos.
+     * The allowed values.
      *
-     * @throws IllegalArgumentException si el atributo no es de tipo enumeracion
+     * @throws IllegalArgumentException if the attribute is not of enumeration type
      */
     String[] getAttributeEnumerations(String elementName, String attrName);
 
     /**
-     * El minimo del rango, o null si no hay minimo.
+     * The minimum of the range, or null if there is no minimum.
      *
-     * @throws IllegalArgumentException si el atributo no es de tipo rango
+     * @throws IllegalArgumentException if the attribute is not of range type
      */
     String getAttributeMinValue(String elementName, String attrName);
 
     /**
-     * El maximo, o null.
+     * The maximum, or null.
      *
-     * @throws IllegalArgumentException si el atributo no es de tipo rango
+     * @throws IllegalArgumentException if the attribute is not of range type
      */
     String getAttributeMaxValue(String elementName, String attrName);
 
     /**
-     * Cuantos valores como minimo en la lista.
+     * How many values at least in the list.
      *
-     * @throws IllegalArgumentException si el atributo no es de tipo lista
+     * @throws IllegalArgumentException if the attribute is not of list type
      */
     int getAttributeListMinLength(String elementName, String attrName);
 
     /**
-     * Cuantos como maximo.
+     * How many at most.
      *
-     * @throws IllegalArgumentException si el atributo no es de tipo lista
+     * @throws IllegalArgumentException if the attribute is not of list type
      */
     int getAttributeListMaxLength(String elementName, String attrName);
 
-    /** Que es ese atributo, en palabras. */
+    /** What that attribute is, in words. */
     String getAttributeDescription(String elementName, String attrName, Locale locale);
 
     /**
-     * Que forma tiene el objeto de usuario de ese elemento.
+     * What shape that element's user object has.
      *
-     * <p>Los elementos que llevan un dato que no es texto --ver
-     * {@link IIOMetadataNode#getUserObject}-- lo declaran aca.
+     * <p>Elements that carry a piece of data that is not text --see
+     * {@link IIOMetadataNode#getUserObject}-- declare it here.
      *
-     * @return {@link #VALUE_NONE} si ese elemento no lleva objeto
-     * @throws IllegalArgumentException si el elemento no existe
+     * @return {@link #VALUE_NONE} if that element carries no object
+     * @throws IllegalArgumentException if the element does not exist
      */
     int getObjectValueType(String elementName);
 
     /**
-     * De que clase es ese objeto.
+     * What class that object is.
      *
-     * @throws IllegalArgumentException si el elemento no lleva objeto
+     * @throws IllegalArgumentException if the element carries no object
      */
     Class<?> getObjectClass(String elementName);
 
     /**
-     * Que objeto va si no se pone ninguno, o null.
+     * What object goes if none is set, or null.
      *
-     * @throws IllegalArgumentException si el elemento no lleva objeto
+     * @throws IllegalArgumentException if the element carries no object
      */
     Object getObjectDefaultValue(String elementName);
 
     /**
-     * Los objetos permitidos.
+     * The allowed objects.
      *
-     * @throws IllegalArgumentException si el objeto no es de tipo enumeracion
+     * @throws IllegalArgumentException if the object is not of enumeration type
      */
     Object[] getObjectEnumerations(String elementName);
 
     /**
-     * El minimo, si el objeto es un rango.
+     * The minimum, if the object is a range.
      *
-     * @throws IllegalArgumentException si no es de tipo rango
+     * @throws IllegalArgumentException if it is not of range type
      */
     Comparable<?> getObjectMinValue(String elementName);
 
     /**
-     * El maximo.
+     * The maximum.
      *
-     * @throws IllegalArgumentException si no es de tipo rango
+     * @throws IllegalArgumentException if it is not of range type
      */
     Comparable<?> getObjectMaxValue(String elementName);
 
     /**
-     * Cuantos elementos como minimo, si el objeto es un arreglo.
+     * How many elements at least, if the object is an array.
      *
-     * @throws IllegalArgumentException si no es un arreglo
+     * @throws IllegalArgumentException if it is not an array
      */
     int getObjectArrayMinLength(String elementName);
 
     /**
-     * Cuantos como maximo.
+     * How many at most.
      *
-     * @throws IllegalArgumentException si no es un arreglo
+     * @throws IllegalArgumentException if it is not an array
      */
     int getObjectArrayMaxLength(String elementName);
 }

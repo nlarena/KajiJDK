@@ -1,19 +1,17 @@
 package java.awt;
 
 /**
- * Los cuatro margenes de un contenedor: cuanto hay que dejar libre arriba, a la izquierda, abajo y a
- * la derecha.
+ * The four insets of a container: how much has to be left free at the top, left, bottom and right.
  *
- * <p>No sabe nada de ventanas --son cuatro enteros publicos-- y por eso se puede escribir entera.
- * Esta aca porque {@code GridBagConstraints} la tiene como campo publico y porque es el tipo de
- * retorno de {@code Container.getInsets()}.
+ * <p>It knows nothing about windows --four public integers-- and that is why it could be written
+ * whole. It is here because {@code GridBagConstraints} has it as a public field and because it is
+ * the return type of {@code Container.getInsets()}.
  *
- * <p>El {@code hashCode()} no es el obvio. El JDK usa el emparejamiento de Cantor dos veces --una
- * para (izquierda, abajo) y otra para (derecha, arriba)-- y despues una tercera sobre los dos
- * resultados. La razon es que los margenes tipicos son numeros chicos y muy repetidos: con un
- * {@code top*31+left*31...} el par (1,2) y el par (2,1) colisionarian todo el tiempo. El
- * emparejamiento de Cantor es inyectivo sobre los naturales, asi que en el rango en que se usan de
- * verdad los margenes no hay colisiones en absoluto.
+ * <p>The {@code hashCode()} is not the obvious one. The JDK uses the Cantor pairing twice --once
+ * for (left, bottom) and once for (right, top)-- and then a third time over the two results. The
+ * reason is that typical insets are small, often repeated numbers: with a plain weighted sum,
+ * swapped values would collide all the time. The Cantor pairing is injective over the naturals, so
+ * in the range insets are really used in there are no collisions at all.
  */
 public class Insets implements Cloneable, java.io.Serializable {
 
@@ -68,7 +66,7 @@ public class Insets implements Cloneable, java.io.Serializable {
         try {
             return super.clone();
         } catch (CloneNotSupportedException e) {
-            // Insets implementa Cloneable, asi que esto no puede pasar.
+            // Insets implements Cloneable, so this cannot happen.
             throw new InternalError(e);
         }
     }

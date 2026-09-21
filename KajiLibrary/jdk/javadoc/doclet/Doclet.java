@@ -7,132 +7,134 @@ import java.util.Set;
 import javax.lang.model.SourceVersion;
 
 /**
- * Lo que javadoc ejecuta: recibe un modelo del codigo ya analizado y produce lo que quiera.
+ * What javadoc runs: it receives a model of the already analysed code and produces whatever it
+ * wants.
  *
- * <h2>Por que la documentacion es un complemento y no parte de la herramienta</h2>
+ * <h2>Why the documentation is a plug-in and not part of the tool</h2>
  *
- * <p>Porque analizar el codigo y generar HTML son dos trabajos que no tienen por que ir juntos. El
- * primero es caro y dificil —hay que compilar de verdad para saber que tipo tiene cada cosa— y el
- * segundo es una decision de formato. Separandolos, cualquiera puede aprovechar el analisis para
- * generar otra cosa: un indice, un JSON, una comparacion de API entre dos versiones.
+ * <p>Because analysing the code and generating HTML are two jobs that do not have to go together.
+ * The first one is expensive and difficult --one has to compile for real in order to know what type
+ * each thing has-- and the second one is a decision of format. By separating them, anybody can make
+ * use of the analysis to generate something else: an index, a JSON, a comparison of API between two
+ * versions.
  *
- * <p>El HTML que genera javadoc por omision es, en esta arquitectura, un complemento mas
- * ({@link StandardDoclet}) y no un privilegio de la herramienta.
+ * <p>The HTML javadoc generates by default is, in this architecture, one more plug-in
+ * ({@link StandardDoclet}) and not a privilege of the tool.
  *
- * <h2>El orden de las llamadas</h2>
+ * <h2>The order of the calls</h2>
  *
- * <p>Primero {@link #init}, con el idioma y por donde informar. Despues
- * {@link #getSupportedOptions} y {@link #getSupportedSourceVersion}, que javadoc consulta
- * <strong>antes</strong> de procesar la linea de comandos —tiene que saber que opciones aceptar—.
- * Recien entonces {@link #run}, una sola vez, con el modelo entero.
+ * <p>First {@link #init}, with the language and where to report. Then
+ * {@link #getSupportedOptions} and {@link #getSupportedSourceVersion}, which javadoc consults
+ * <strong>before</strong> processing the command line --it has to know which options to accept--.
+ * Only then {@link #run}, a single time, with the whole model.
  *
  * @since 9
  */
 public interface Doclet {
 
     /**
-     * El primer aviso: con que idioma y por donde informar.
+     * The first notice: with which language and where to report.
      *
-     * @param locale el idioma para los mensajes, o {@code null} si no hay preferencia
-     * @param reporter por donde emitir diagnosticos
+     * @param locale the language for the messages, or {@code null} if there is no preference
+     * @param reporter where to emit diagnostics
      */
     void init(Locale locale, Reporter reporter);
 
     /**
-     * El nombre para los mensajes de la herramienta.
+     * The name for the messages of the tool.
      *
-     * @return el nombre
+     * @return the name
      */
     String getName();
 
     /**
-     * Las opciones de linea de comandos que este complemento entiende.
+     * The command line options this plug-in understands.
      *
-     * <p>Se consulta antes de procesar los argumentos: javadoc no puede decidir si {@code -foo} es
-     * un error sin preguntar primero.
+     * <p>It is consulted before processing the arguments: javadoc cannot decide whether {@code
+     * -foo} is an error without asking first.
      *
-     * @return las opciones, posiblemente vacio
+     * @return the options, possibly empty
      */
     Set<? extends Option> getSupportedOptions();
 
     /**
-     * La version del lenguaje que este complemento soporta.
+     * The version of the language this plug-in supports.
      *
-     * @return la version
+     * @return the version
      */
     SourceVersion getSupportedSourceVersion();
 
     /**
-     * Hace el trabajo, una sola vez, con el modelo completo.
+     * It does the work, a single time, with the complete model.
      *
-     * @param environment el modelo del codigo analizado
-     * @return si termino bien
+     * @param environment the model of the analysed code
+     * @return whether it ended well
      */
     boolean run(DocletEnvironment environment);
 
     /**
-     * Una opcion de linea de comandos que el complemento agrega.
+     * A command line option the plug-in adds.
      *
-     * <p>Cada opcion se describe a si misma —cuantos argumentos toma, como se llama, que hace— y
-     * ademas sabe procesarse. Es lo que le permite a javadoc validar opciones que no conoce y
-     * mostrarlas en la ayuda sin saber nada de ellas.
+     * <p>Each option describes itself --how many arguments it takes, what it is called, what it
+     * does-- and it also knows how to process itself. It is what allows javadoc to validate options
+     * it does not know and show them in the help without knowing anything about them.
      */
     interface Option {
 
         /**
-         * Cuantos argumentos toma despues del nombre.
+         * How many arguments it takes after the name.
          *
-         * @return la cantidad, cero si es una bandera
+         * @return the number, zero if it is a flag
          */
         int getArgumentCount();
 
         /**
-         * Que hace, para la ayuda.
+         * What it does, for the help.
          *
-         * @return la descripcion
+         * @return the description
          */
         String getDescription();
 
         /**
-         * Cuan visible es en la ayuda.
+         * How visible it is in the help.
          *
-         * @return la clase de opcion
+         * @return the kind of option
          */
         Kind getKind();
 
         /**
-         * Todas las formas de escribirla, la preferida primero.
+         * Every way of writing it, the preferred one first.
          *
-         * <p>Es una lista y no un nombre porque una misma opcion suele tener forma larga y corta, y
-         * porque javadoc necesita reconocerlas todas.
+         * <p>It is a list and not a name because one same option usually has a long form and a
+         * short one, and because javadoc needs to recognise them all.
          *
-         * @return los nombres
+         * @return the names
          */
         List<String> getNames();
 
         /**
-         * Como se escriben los argumentos en la ayuda, por ejemplo {@code "<directorio>"}.
+         * How the arguments are written in the help, for example {@code "<directory>"}.
          *
-         * @return la plantilla de argumentos
+         * @return the template of arguments
          */
         String getParameters();
 
         /**
-         * Procesa una aparicion de la opcion.
+         * It processes one appearance of the option.
          *
-         * @param option el nombre tal como aparecio
-         * @param arguments los argumentos, tantos como dijo {@link #getArgumentCount}
-         * @return si la opcion se acepto
+         * @param option the name as it appeared
+         * @param arguments the arguments, as many as {@link #getArgumentCount} said
+         * @return whether the option was accepted
          */
         boolean process(String option, List<String> arguments);
 
-        /** Cuan visible es una opcion en la ayuda. */
+        /** How visible an option is in the help. */
         enum Kind {
-            /** Se muestra solo con la ayuda extendida. */
+            /** It is shown only with the extended help. */
             EXTENDED,
-            /** Se muestra en la ayuda comun. */
+            /** It is shown in the common help. */
             STANDARD,
-            /** No se muestra. */
+            /** It is not shown. */
             OTHER
         }
     }

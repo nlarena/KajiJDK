@@ -5,23 +5,24 @@ import java.lang.reflect.AccessFlag.Location;
 import jdk.internal.classfile.impl.AccessFlagsImpl;
 
 /**
- * Donde se escribe un campo.
+ * Where a field gets written.
  *
- * <p>Tiene poco propio: un campo es su nombre, su descriptor, sus banderas y sus atributos, y los
- * dos primeros los fija quien lo crea ({@link ClassBuilder#withField}). Lo que queda es esto.
+ * <p>It has little of its own: a field is its name, its descriptor, its flags and its attributes, and
+ * the first two are fixed by whoever creates it ({@link ClassBuilder#withField}). What is left is
+ * this.
  */
 public interface FieldBuilder extends ClassFileBuilder<FieldElement, FieldBuilder> {
 
-    /** Las banderas del campo, como máscara de bits. */
+    /** The field's flags, as a bit mask. */
     default FieldBuilder withFlags(int flags) {
         return this.with(new AccessFlagsImpl(flags, Location.FIELD));
     }
 
     /**
-     * Las banderas del campo.
+     * The field's flags.
      *
-     * <p>Se arma la mascara aca en vez de guardar el conjunto: `AccessFlags` expone las dos vistas y
-     * la mascara es la que va al archivo, asi que es la que conviene tener de primera mano.
+     * <p>The mask is built here instead of keeping the set: `AccessFlags` exposes both views and the
+     * mask is the one that goes into the file, so it is the one worth having first hand.
      */
     default FieldBuilder withFlags(AccessFlag... flags) {
         int m = 0;

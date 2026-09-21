@@ -4,59 +4,60 @@ import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.util.regex.Pattern;
 
-// Un atributo de PKCS#12: un OID y un conjunto de valores, guardados en su forma DER.
+// An attribute of PKCS#12: an OID and a set of values, kept in their DER form.
 //
 // ===============================================================================================
-// POR QUE ESTA CLASE SI SE PUEDE ESCRIBIR Y CASI NINGUNA OTRA DE ESTE PAQUETE
+// WHY THIS CLASS CAN BE WRITTEN AND HARDLY ANY OTHER OF THIS PACKAGE CAN
 // ===============================================================================================
 //
-// El resto de `java.security` que falta esta trabado por dos cosas que esta VM no tiene: entropia
-// del sistema operativo (`SecureRandom`, y con el las quince firmas que lo nombran) y algun
-// proveedor que sepa RSA o ECDSA. Este atributo no necesita ninguna de las dos: es **solo
-// codificacion**. Un OID, un SET de valores, DER. Se puede implementar entero y de verdad, asi que
-// se implementa entero.
+// The rest of `java.security` that is missing is blocked by two things this VM does not have:
+// entropy of the operating system (`SecureRandom`, and with it the fifteen signatures that name it)
+// and some provider that knows RSA or ECDSA. This attribute needs neither of the two: it is **only
+// encoding**. An OID, a SET of values, DER. It can be implemented whole and for real, so it is
+// implemented whole.
 //
 // ===============================================================================================
-// LA FORMA
+// THE SHAPE
 // ===============================================================================================
 //
 //     SEQUENCE { OBJECT IDENTIFIER, SET OF ANY }
 //
-// El objeto es **inmutable y esta definido por sus bytes**: `equals` y `hashCode` comparan el DER,
-// no el par nombre/valor. Es la unica definicion que se sostiene, porque dos codificaciones
-// distintas del mismo texto son atributos distintos para quien despues los firme.
+// The object is **immutable and is defined by its bytes**: `equals` and `hashCode` compare the DER,
+// not the name/value pair. It is the only definition that holds up, because two different encodings
+// of the same text are different attributes for whoever signs them afterwards.
 //
-// El constructor de texto decide el tipo de cada valor por su forma: si es una tira de pares
-// hexadecimales separados por dos puntos --y hacen falta **al menos dos** pares, un "01" suelto no
-// cuenta-- va como OCTET STRING; si no, como UTF8String. Un valor entre corchetes y separado por
-// ", " es una lista de varios.
+// The text constructor decides the type of each value by its shape: if it is a string of
+// hexadecimal pairs separated by colons --and **at least two** pairs are needed, a loose "01" does
+// not count-- it goes as an OCTET STRING; if not, as a UTF8String. A value between square brackets
+// and separated by ", " is a list of several.
 //
-// Ojo con una rareza heredada del JDK que se copio a proposito: los pares hexadecimales pasan por
-// un {@link BigInteger}, asi que **los ceros de la izquierda se pierden**. "00:01" se codifica como
-// el unico byte 01 y al releerlo vuelve como "01". Es sorprendente, pero cambiarlo daria bytes
-// distintos a los del JDK para la misma entrada, y estos bytes terminan dentro de cosas firmadas.
+// Careful with an oddity inherited from the JDK that was copied on purpose: the hexadecimal pairs
+// go through a {@link BigInteger}, so **the leading zeroes are lost**. "00:01" is encoded as the
+// single byte 01 and on rereading it comes back as "01". It is surprising, but changing it would
+// give bytes different from the JDK's for the same input, and these bytes end up inside signed
+// things.
 //
 // ===============================================================================================
-// LO QUE NO DECODIFICA, Y POR QUE ES UNA EXCEPCION Y NO UNA RESPUESTA
+// WHAT IT DOES NOT DECODE, AND WHY IT IS AN EXCEPTION AND NOT AN ANSWER
 // ===============================================================================================
 //
-// {@link #PKCS12Attribute(byte[])} **rechaza** un atributo cuyo valor sea UTCTime o
-// GeneralizedTime. No es que no sepamos leer la fecha: el JDK convierte esos valores a
-// {@code java.util.Date} y devuelve su {@code toString()}, y el {@code Date.toString()} de esta
-// biblioteca es distinto a proposito (imprime los milisegundos, porque aca no hay zona horaria con
-// la cual armar un reloj de pared honesto; ver java/util/Date.java).
+// {@link #PKCS12Attribute(byte[])} **rejects** an attribute whose value is a UTCTime or a
+// GeneralizedTime. It is not that we do not know how to read the date: the JDK converts those
+// values to {@code java.util.Date} and returns its {@code toString()}, and the {@code
+// Date.toString()} of this library is different on purpose (it prints the milliseconds, because
+// here there is no time zone with which to build an honest wall clock; see java/util/Date.java).
 //
-// O sea que los mismos bytes darian un {@code getValue()} distinto aca que en cualquier otra JVM.
-// Entre devolver en silencio un valor que no coincide con el de nadie y fallar fuerte en el
-// constructor, falla. Quien se lo cruza se entera en el momento; el otro camino no se nota hasta
-// que algo se compara contra el valor de una JVM real. Todo el resto de los tipos --las cadenas,
-// los OID, los enteros, los booleanos, los OCTET STRING y el hexadecimal de reserva para las
-// etiquetas raras-- se decodifica igual que en el JDK.
+// That is, the same bytes would give a different {@code getValue()} here than in any other JVM.
+// Between silently returning a value that matches nobody's and failing loudly in the constructor,
+// it fails. Whoever runs into it finds out at the moment; the other road does not show until
+// something is compared against the value of a real JVM. All the rest of the types --the strings,
+// the OIDs, the integers, the booleans, the OCTET STRINGs and the fallback hexadecimal for the odd
+// tags-- is decoded just as in the JDK.
 public final class PKCS12Attribute implements KeyStore.Entry.Attribute {
 
-    // Al menos dos pares: es lo que dice el `+` del grupo en el JDK, y es lo que separa un valor
-    // hexadecimal de un texto de dos caracteres que casualmente sean digitos hex.
-    private static final String PARES_HEX = "^[0-9a-fA-F]{2}(:[0-9a-fA-F]{2})+$";
+    // At least two pairs: it is what the `+` of the group in the JDK says, and it is what separates
+    // a hexadecimal value from a text of two characters that happen to be hex digits.
+    private static final String HEX_PAIRS = "^[0-9a-fA-F]{2}(:[0-9a-fA-F]{2})+$";
 
     private static final int TAG_BOOLEAN = 0x01;
     private static final int TAG_INTEGER = 0x02;
@@ -81,8 +82,8 @@ public final class PKCS12Attribute implements KeyStore.Entry.Attribute {
 
     private final byte[] encoded;
 
-    // -1 marca "todavia no calculado". Un atributo real puede tener hash 0 y no pasa nada: se
-    // recalcularia una vez de mas, que es barato, y nunca da una respuesta incorrecta.
+    // -1 marks "not computed yet". A real attribute can have hash 0 and nothing happens: it would
+    // be recomputed one time too many, which is cheap, and it never gives an incorrect answer.
     private int hashValue = -1;
 
     public PKCS12Attribute(String name, String value) {
@@ -92,33 +93,33 @@ public final class PKCS12Attribute implements KeyStore.Entry.Attribute {
 
         byte[] oid;
         try {
-            oid = oidADer(name);
+            oid = oidToDer(name);
         } catch (IllegalArgumentException e) {
             throw new IllegalArgumentException("Incorrect format: name", e);
         }
         this.name = name;
 
-        // Los corchetes marcan una lista. Se mira el largo antes de indexar porque "[" solo mide 1
-        // y seria a la vez primer y ultimo caracter.
-        int largo = value.length();
-        String[] valores;
-        if (largo > 1 && value.charAt(0) == '[' && value.charAt(largo - 1) == ']') {
-            valores = value.substring(1, largo - 1).split(", ");
+        // The square brackets mark a list. The length is looked at before indexing because "["
+        // alone measures 1 and would be the first and the last character at once.
+        int len = value.length();
+        String[] values;
+        if (len > 1 && value.charAt(0) == '[' && value.charAt(len - 1) == ']') {
+            values = value.substring(1, len - 1).split(", ");
         } else {
-            valores = new String[] { value };
+            values = new String[] { value };
         }
         this.value = value;
 
         try {
-            this.encoded = codificar(oid, valores);
+            this.encoded = encode(oid, values);
         } catch (RuntimeException e) {
             throw new IllegalArgumentException("Incorrect format: value", e);
         }
     }
 
     /**
-     * Se clona al entrar y al salir: el atributo es inmutable y un `byte[]` compartido con quien lo
-     * construyo no lo seria.
+     * It is cloned on the way in and on the way out: the attribute is immutable and a `byte[]`
+     * shared with whoever built it would not be.
      */
     public PKCS12Attribute(byte[] encoded) {
         if (encoded == null) {
@@ -126,7 +127,7 @@ public final class PKCS12Attribute implements KeyStore.Entry.Attribute {
         }
         this.encoded = encoded.clone();
         try {
-            interpretar(this.encoded);
+            parseDer(this.encoded);
         } catch (RuntimeException e) {
             throw new IllegalArgumentException("Incorrect format: encoded", e);
         }
@@ -145,8 +146,8 @@ public final class PKCS12Attribute implements KeyStore.Entry.Attribute {
     }
 
     /**
-     * La identidad son los bytes, no el par nombre/valor: dos DER distintos que se lean igual como
-     * texto siguen siendo atributos distintos para quien los vaya a firmar.
+     * The identity is the bytes, not the name/value pair: two different DERs that read the same as
+     * text are still different attributes for whoever is going to sign them.
      */
     @Override
     public boolean equals(Object obj) {
@@ -173,68 +174,68 @@ public final class PKCS12Attribute implements KeyStore.Entry.Attribute {
         return name + "=" + value;
     }
 
-    // ---- codificacion -------------------------------------------------------------------------
+    // ---- encoding -------------------------------------------------------------------------
 
-    private static byte[] codificar(byte[] oid, String[] valores) {
-        Buf contenido = new Buf();
-        for (int i = 0; i < valores.length; i++) {
-            String v = valores[i];
-            if (Pattern.matches(PARES_HEX, v)) {
-                // Por BigInteger, igual que el JDK: es lo que hace que "00:01" pierda el cero.
+    private static byte[] encode(byte[] oid, String[] values) {
+        Buf content = new Buf();
+        for (int i = 0; i < values.length; i++) {
+            String v = values[i];
+            if (Pattern.matches(HEX_PAIRS, v)) {
+                // Through BigInteger, just like the JDK: it is what makes "00:01" lose the zero.
                 byte[] bytes = new BigInteger(v.replace(":", ""), 16).toByteArray();
                 if (bytes.length > 0 && bytes[0] == 0) {
-                    byte[] recorte = new byte[bytes.length - 1];
-                    System.arraycopy(bytes, 1, recorte, 0, recorte.length);
-                    bytes = recorte;
+                    byte[] slice = new byte[bytes.length - 1];
+                    System.arraycopy(bytes, 1, slice, 0, slice.length);
+                    bytes = slice;
                 }
-                contenido.tlv(TAG_OCTET_STRING, bytes);
+                content.tlv(TAG_OCTET_STRING, bytes);
             } else {
-                contenido.tlv(TAG_UTF8, v.getBytes(StandardCharsets.UTF_8));
+                content.tlv(TAG_UTF8, v.getBytes(StandardCharsets.UTF_8));
             }
         }
 
-        Buf atributo = new Buf();
-        atributo.tlv(TAG_OID, oid);
-        atributo.tlv(TAG_SET, contenido.bytes());
+        Buf attr = new Buf();
+        attr.tlv(TAG_OID, oid);
+        attr.tlv(TAG_SET, content.bytes());
 
-        Buf afuera = new Buf();
-        afuera.tlv(TAG_SEQUENCE, atributo.bytes());
-        return afuera.bytes();
+        Buf outside = new Buf();
+        outside.tlv(TAG_SEQUENCE, attr.bytes());
+        return outside.bytes();
     }
 
     /**
-     * Un OID en texto punteado a su contenido DER (sin etiqueta ni largo).
+     * An OID in dotted text to its DER content (with no tag and no length).
      *
-     * <p>Los dos primeros arcos van juntos en un solo numero, {@code 40*a + b}. No es una
-     * compresion caprichosa: como el primer arco solo puede valer 0, 1 o 2, y con 0 o 1 el segundo
-     * no pasa de 39, la suma se puede deshacer sin ambiguedad. Con arco 2 el segundo no tiene tope,
-     * y por eso el numero combinado puede necesitar varios bytes.
+     * <p>The first two arcs go together in a single number, {@code 40*a + b}. It is not a
+     * capricious compression: since the first arc can only be worth 0, 1 or 2, and with 0 or 1 the
+     * second does not go past 39, the sum can be undone without ambiguity. With arc 2 the second
+     * has no ceiling, and that is why the combined number can need several bytes.
      */
-    private static byte[] oidADer(String oid) {
-        String[] partes = oid.split("\\.");
-        if (partes.length < 2) {
-            throw new IllegalArgumentException("OID con menos de dos arcos: " + oid);
+    private static byte[] oidToDer(String oid) {
+        String[] parts = oid.split("\\.");
+        if (parts.length < 2) {
+            throw new IllegalArgumentException("OID with fewer than two arcs: " + oid);
         }
-        long[] arcos = new long[partes.length];
-        for (int i = 0; i < partes.length; i++) {
-            arcos[i] = arco(partes[i]);
+        long[] arcs = new long[parts.length];
+        for (int i = 0; i < parts.length; i++) {
+            arcs[i] = arc(parts[i]);
         }
-        if (arcos[0] > 2) {
-            throw new IllegalArgumentException("primer arco fuera de 0..2: " + oid);
+        if (arcs[0] > 2) {
+            throw new IllegalArgumentException("first arc outside 0..2: " + oid);
         }
-        if (arcos[0] < 2 && arcos[1] > 39) {
-            throw new IllegalArgumentException("segundo arco fuera de 0..39: " + oid);
+        if (arcs[0] < 2 && arcs[1] > 39) {
+            throw new IllegalArgumentException("second arc outside 0..39: " + oid);
         }
 
         Buf b = new Buf();
-        b.base128(arcos[0] * 40 + arcos[1]);
-        for (int i = 2; i < arcos.length; i++) {
-            b.base128(arcos[i]);
+        b.base128(arcs[0] * 40 + arcs[1]);
+        for (int i = 2; i < arcs.length; i++) {
+            b.base128(arcs[i]);
         }
         return b.bytes();
     }
 
-    private static long arco(String s) {
+    private static long arc(String s) {
         if (s.isEmpty()) {
             throw new IllegalArgumentException("arco vacio");
         }
@@ -242,11 +243,11 @@ public final class PKCS12Attribute implements KeyStore.Entry.Attribute {
         for (int i = 0; i < s.length(); i++) {
             char c = s.charAt(i);
             if (c < '0' || c > '9') {
-                throw new IllegalArgumentException("arco no numerico: " + s);
+                throw new IllegalArgumentException("non-numeric arc: " + s);
             }
             v = v * 10 + (c - '0');
-            // El tope es artificial pero honesto: con `long` no se puede representar mas, y un
-            // desborde silencioso daria un OID distinto al pedido.
+            // The ceiling is artificial but honest: with a `long` no more can be represented, and a
+            // silent overflow would give an OID different from the one asked for.
             if (v > (1L << 56)) {
                 throw new IllegalArgumentException("arco demasiado grande: " + s);
             }
@@ -254,95 +255,97 @@ public final class PKCS12Attribute implements KeyStore.Entry.Attribute {
         return v;
     }
 
-    // ---- lectura ------------------------------------------------------------------------------
+    // ---- reading ------------------------------------------------------------------------------
 
-    private void interpretar(byte[] der) {
-        Lec fuera = new Lec(der, 0, der.length);
-        Lec sec = fuera.tlv(TAG_SEQUENCE);
-        // A proposito NO se exige que el SEQUENCE agote el arreglo: el JDK acepta bytes de sobra
-        // despues del atributo y se los queda dentro de `encoded`, asi que un `getEncoded()` los
-        // devuelve. Comprobado contra el JDK 25; ser mas estrictos aca haria que un atributo que la
-        // JVM real lee sin quejarse fuera rechazado por la nuestra.
-        byte[] oid = sec.tlv(TAG_OID).resto();
-        Lec conjunto = sec.tlv(TAG_SET);
-        // Adentro del SEQUENCE si se exige: tiene que haber exactamente el OID y el SET. Un tercer
-        // elemento lo rechaza tambien el JDK.
-        sec.exigirFin();
+    private void parseDer(byte[] der) {
+        Lec outer = new Lec(der, 0, der.length);
+        Lec seq = outer.tlv(TAG_SEQUENCE);
+        // On purpose it is NOT demanded that the SEQUENCE exhaust the array: the JDK accepts bytes
+        // left over after the attribute and keeps them inside `encoded`, so a `getEncoded()`
+        // returns them. Checked against JDK 25; being stricter here would make an attribute the
+        // real JVM reads without complaining be rejected by ours.
+        byte[] oid = seq.tlv(TAG_OID).rest();
+        Lec set = seq.tlv(TAG_SET);
+        // Inside the SEQUENCE it is demanded: there has to be exactly the OID and the SET. A third
+        // element is rejected by the JDK too.
+        seq.requireEnd();
 
-        // Se cuenta primero para poder dimensionar el arreglo sin una lista de por medio.
+        // It is counted first so that the array can be sized without a list in between.
         int n = 0;
-        Lec cuenta = conjunto.copia();
-        while (!cuenta.fin()) {
-            cuenta.saltarTlv();
+        Lec count = set.copy();
+        while (!count.end()) {
+            count.skipTlv();
             n++;
         }
-        // Un SET vacio es valido: el JDK lo acepta y el valor queda en "[]", que es lo que da
-        // `Arrays.toString` de un arreglo sin elementos. Rechazarlo seria inventar una regla.
-        String[] valores = new String[n];
+        // An empty SET is valid: the JDK accepts it and the value is left as "[]", which is what
+        // `Arrays.toString` of an array with no elements gives. Rejecting it would be inventing a
+        // rule.
+        String[] values = new String[n];
         for (int i = 0; i < n; i++) {
-            valores[i] = valorDe(conjunto);
+            values[i] = valueOf(set);
         }
 
-        this.name = derAOid(oid);
-        this.value = n == 1 ? valores[0] : listaDe(valores);
+        this.name = derToOid(oid);
+        this.value = n == 1 ? values[0] : listOf(values);
     }
 
-    private static String valorDe(Lec l) {
-        int etiqueta = l.etiquetaActual();
-        Lec cuerpo = l.tlv(etiqueta);
-        byte[] datos = cuerpo.resto();
+    private static String valueOf(Lec l) {
+        int tag = l.currentTag();
+        Lec body = l.tlv(tag);
+        byte[] data = body.rest();
 
-        switch (etiqueta) {
+        switch (tag) {
             case TAG_OCTET_STRING:
-                return hexConDosPuntos(datos);
+                return hexWithColons(data);
             case TAG_UTF8:
-                return new String(datos, StandardCharsets.UTF_8);
+                return new String(data, StandardCharsets.UTF_8);
             case TAG_NUMERIC:
             case TAG_PRINTABLE:
             case TAG_T61:
             case TAG_IA5:
             case TAG_VISIBLE:
             case TAG_GENERAL:
-                return new String(datos, StandardCharsets.ISO_8859_1);
+                return new String(data, StandardCharsets.ISO_8859_1);
             case TAG_BMP:
-                return new String(datos, StandardCharsets.UTF_16BE);
+                return new String(data, StandardCharsets.UTF_16BE);
             case TAG_OID:
-                return derAOid(datos);
+                return derToOid(data);
             case TAG_INTEGER:
-                if (datos.length == 0) {
+                if (data.length == 0) {
                     throw new IllegalArgumentException("INTEGER vacio");
                 }
-                return new BigInteger(datos).toString();
+                return new BigInteger(data).toString();
             case TAG_BOOLEAN:
-                if (datos.length != 1) {
-                    throw new IllegalArgumentException("BOOLEAN de largo " + datos.length);
+                if (data.length != 1) {
+                    throw new IllegalArgumentException("BOOLEAN of length " + data.length);
                 }
-                return String.valueOf(datos[0] != 0);
+                return String.valueOf(data[0] != 0);
             case TAG_UTC_TIME:
             case TAG_GENERALIZED_TIME:
-                // Ver el comentario de la clase: se rechaza en vez de contestar un texto que no
-                // coincidiria con el de ninguna otra JVM.
+                // See the comment of the class: it is rejected instead of answering a text that
+                // would not match that of any other JVM.
                 throw new IllegalArgumentException(
-                        "valor de tipo tiempo (etiqueta 0x" + Integer.toHexString(etiqueta)
-                                + "): esta biblioteca no lo convierte a texto, ver PKCS12Attribute");
+                        "value of a time type (tag 0x" + Integer.toHexString(tag)
+                                + "): this library gives it no text form, see PKCS12Attribute");
             default:
-                // Igual que el JDK: lo que no se reconoce sale como el hexadecimal de su contenido.
-                return hexConDosPuntos(datos);
+                // Just like the JDK: what is not recognised comes out as the hexadecimal of its
+                // content.
+                return hexWithColons(data);
         }
     }
 
-    private static String listaDe(String[] valores) {
+    private static String listOf(String[] values) {
         StringBuilder s = new StringBuilder("[");
-        for (int i = 0; i < valores.length; i++) {
+        for (int i = 0; i < values.length; i++) {
             if (i > 0) {
                 s.append(", ");
             }
-            s.append(valores[i]);
+            s.append(values[i]);
         }
         return s.append(']').toString();
     }
 
-    private static String hexConDosPuntos(byte[] b) {
+    private static String hexWithColons(byte[] b) {
         StringBuilder s = new StringBuilder(b.length * 3);
         for (int i = 0; i < b.length; i++) {
             if (i > 0) {
@@ -354,29 +357,29 @@ public final class PKCS12Attribute implements KeyStore.Entry.Attribute {
         return s.toString();
     }
 
-    private static String derAOid(byte[] c) {
+    private static String derToOid(byte[] c) {
         if (c.length == 0) {
             throw new IllegalArgumentException("OID vacio");
         }
         StringBuilder s = new StringBuilder();
         int i = 0;
-        long primero = leerBase128(c, i);
-        i = finBase128(c, i);
-        if (primero < 40) {
-            s.append('0').append('.').append(primero);
-        } else if (primero < 80) {
-            s.append('1').append('.').append(primero - 40);
+        long first = readBase128(c, i);
+        i = endBase128(c, i);
+        if (first < 40) {
+            s.append('0').append('.').append(first);
+        } else if (first < 80) {
+            s.append('1').append('.').append(first - 40);
         } else {
-            s.append('2').append('.').append(primero - 80);
+            s.append('2').append('.').append(first - 80);
         }
         while (i < c.length) {
-            s.append('.').append(leerBase128(c, i));
-            i = finBase128(c, i);
+            s.append('.').append(readBase128(c, i));
+            i = endBase128(c, i);
         }
         return s.toString();
     }
 
-    private static long leerBase128(byte[] c, int i) {
+    private static long readBase128(byte[] c, int i) {
         long v = 0;
         while (true) {
             if (i >= c.length) {
@@ -385,7 +388,7 @@ public final class PKCS12Attribute implements KeyStore.Entry.Attribute {
             int b = c[i] & 0xff;
             v = (v << 7) | (b & 0x7f);
             if (v > (1L << 56)) {
-                throw new IllegalArgumentException("arco demasiado grande en el OID");
+                throw new IllegalArgumentException("arc too big in the OID");
             }
             if ((b & 0x80) == 0) {
                 return v;
@@ -394,7 +397,7 @@ public final class PKCS12Attribute implements KeyStore.Entry.Attribute {
         }
     }
 
-    private static int finBase128(byte[] c, int i) {
+    private static int endBase128(byte[] c, int i) {
         while ((c[i] & 0x80) != 0) {
             i++;
             if (i >= c.length) {
@@ -404,64 +407,64 @@ public final class PKCS12Attribute implements KeyStore.Entry.Attribute {
         return i + 1;
     }
 
-    // ---- dos ayudantes minimos de DER ---------------------------------------------------------
+    // ---- two minimal DER helpers -------------------------------------------------------------
 
-    /** Un `byte[]` que crece, con lo justo para escribir DER. */
+    /** A `byte[]` that grows, with just enough for writing DER. */
     private static final class Buf {
 
         private byte[] a = new byte[64];
 
         private int n;
 
-        void byt(int b) {
+        void b2(int b) {
             if (n == a.length) {
-                byte[] mas = new byte[a.length * 2];
-                System.arraycopy(a, 0, mas, 0, n);
-                a = mas;
+                byte[] more = new byte[a.length * 2];
+                System.arraycopy(a, 0, more, 0, n);
+                a = more;
             }
             a[n++] = (byte) b;
         }
 
-        void todos(byte[] b) {
+        void all(byte[] b) {
             for (int i = 0; i < b.length; i++) {
-                byt(b[i]);
+                b2(b[i]);
             }
         }
 
         /**
-         * Etiqueta, largo y contenido.
+         * Tag, length and content.
          *
-         * <p>El largo va en forma corta hasta 127 y en forma larga a partir de ahi. DER no deja
-         * elegir: para un mismo largo hay una sola codificacion valida, y por eso el que escribe usa
-         * siempre la mas corta que alcance.
+         * <p>The length goes in short form up to 127 and in long form from there on. DER does not
+         * allow a choice: for a given length there is a single valid encoding, and that is why the
+         * writer always uses the shortest that is enough.
          */
-        void tlv(int etiqueta, byte[] contenido) {
-            byt(etiqueta);
-            int largo = contenido.length;
-            if (largo < 128) {
-                byt(largo);
+        void tlv(int tag, byte[] content) {
+            b2(tag);
+            int len = content.length;
+            if (len < 128) {
+                b2(len);
             } else {
-                int octetos = 0;
-                for (int v = largo; v != 0; v >>>= 8) {
-                    octetos++;
+                int octets = 0;
+                for (int v = len; v != 0; v >>>= 8) {
+                    octets++;
                 }
-                byt(0x80 | octetos);
-                for (int i = octetos - 1; i >= 0; i--) {
-                    byt((largo >>> (i * 8)) & 0xff);
+                b2(0x80 | octets);
+                for (int i = octets - 1; i >= 0; i--) {
+                    b2((len >>> (i * 8)) & 0xff);
                 }
             }
-            todos(contenido);
+            all(content);
         }
 
-        /** Un entero en base 128, siete bits por byte, con el bit alto encendido salvo en el ultimo. */
+        /** An integer in base 128, seven bits per byte, with the high bit on except in the last. */
         void base128(long v) {
-            int octetos = 1;
+            int octets = 1;
             for (long t = v >>> 7; t != 0; t >>>= 7) {
-                octetos++;
+                octets++;
             }
-            for (int i = octetos - 1; i >= 0; i--) {
-                int siete = (int) ((v >>> (i * 7)) & 0x7f);
-                byt(i == 0 ? siete : (siete | 0x80));
+            for (int i = octets - 1; i >= 0; i--) {
+                int seven = (int) ((v >>> (i * 7)) & 0x7f);
+                b2(i == 0 ? seven : (seven | 0x80));
             }
         }
 
@@ -472,80 +475,80 @@ public final class PKCS12Attribute implements KeyStore.Entry.Attribute {
         }
     }
 
-    /** Una ventana sobre el `byte[]` que se va consumiendo. No copia nada hasta que hace falta. */
+    /** A window over the `byte[]` that is consumed. It copies nothing until it has to. */
     private static final class Lec {
 
         private final byte[] a;
 
         private int i;
 
-        private final int fin;
+        private final int end;
 
-        Lec(byte[] a, int i, int fin) {
+        Lec(byte[] a, int i, int end) {
             this.a = a;
             this.i = i;
-            this.fin = fin;
+            this.end = end;
         }
 
-        Lec copia() {
-            return new Lec(a, i, fin);
+        Lec copy() {
+            return new Lec(a, i, end);
         }
 
-        boolean fin() {
-            return i >= fin;
+        boolean end() {
+            return i >= end;
         }
 
-        int etiquetaActual() {
-            if (i >= fin) {
-                throw new IllegalArgumentException("se esperaba una etiqueta y no habia mas bytes");
+        int currentTag() {
+            if (i >= end) {
+                throw new IllegalArgumentException("a tag was expected and no bytes were left");
             }
             return a[i] & 0xff;
         }
 
-        /** Consume un TLV de la etiqueta pedida y devuelve una ventana sobre su contenido. */
-        Lec tlv(int esperada) {
-            if (etiquetaActual() != esperada) {
-                throw new IllegalArgumentException("se esperaba la etiqueta 0x"
-                        + Integer.toHexString(esperada) + " y vino 0x"
-                        + Integer.toHexString(etiquetaActual()));
+        /** It consumes a TLV of the tag asked for and returns a window over its content. */
+        Lec tlv(int expected) {
+            if (currentTag() != expected) {
+                throw new IllegalArgumentException("the tag expected was 0x"
+                        + Integer.toHexString(expected) + " and what came was 0x"
+                        + Integer.toHexString(currentTag()));
             }
             i++;
-            int largo = largo();
-            if (largo > fin - i) {
-                throw new IllegalArgumentException("largo " + largo + " mas alla del final");
+            int len = len();
+            if (len > end - i) {
+                throw new IllegalArgumentException("largo " + len + " beyond the end");
             }
-            Lec dentro = new Lec(a, i, i + largo);
-            i += largo;
-            return dentro;
+            Lec inside = new Lec(a, i, i + len);
+            i += len;
+            return inside;
         }
 
-        void saltarTlv() {
-            etiquetaActual();
+        void skipTlv() {
+            currentTag();
             i++;
-            int largo = largo();
-            if (largo > fin - i) {
-                throw new IllegalArgumentException("largo " + largo + " mas alla del final");
+            int len = len();
+            if (len > end - i) {
+                throw new IllegalArgumentException("largo " + len + " beyond the end");
             }
-            i += largo;
+            i += len;
         }
 
-        private int largo() {
-            if (i >= fin) {
+        private int len() {
+            if (i >= end) {
                 throw new IllegalArgumentException("largo truncado");
             }
             int b = a[i++] & 0xff;
             if (b < 128) {
                 return b;
             }
-            int octetos = b & 0x7f;
-            // La forma indefinida (0x80) no existe en DER, y mas de cuatro octetos no entra en un
-            // int: las dos son entradas invalidas, no casos que sepamos manejar.
-            if (octetos == 0 || octetos > 4) {
+            int octets = b & 0x7f;
+            // The indefinite form (0x80) does not exist in DER, and more than four octets does not
+            // fit in an int: both are invalid inputs, not cases we know how to handle.
+            if (octets == 0 || octets > 4) {
                 throw new IllegalArgumentException("largo mal formado");
             }
             int v = 0;
-            for (int k = 0; k < octetos; k++) {
-                if (i >= fin) {
+            for (int k = 0; k < octets; k++) {
+                if (i >= end) {
                     throw new IllegalArgumentException("largo truncado");
                 }
                 v = (v << 8) | (a[i++] & 0xff);
@@ -556,16 +559,16 @@ public final class PKCS12Attribute implements KeyStore.Entry.Attribute {
             return v;
         }
 
-        void exigirFin() {
-            if (i != fin) {
-                throw new IllegalArgumentException("sobran " + (fin - i) + " bytes");
+        void requireEnd() {
+            if (i != end) {
+                throw new IllegalArgumentException("sobran " + (end - i) + " bytes");
             }
         }
 
-        byte[] resto() {
-            byte[] r = new byte[fin - i];
+        byte[] rest() {
+            byte[] r = new byte[end - i];
             System.arraycopy(a, i, r, 0, r.length);
-            i = fin;
+            i = end;
             return r;
         }
     }

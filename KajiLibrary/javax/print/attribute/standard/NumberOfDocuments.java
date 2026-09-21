@@ -5,10 +5,10 @@ import javax.print.attribute.IntegerSyntax;
 import javax.print.attribute.PrintJobAttribute;
 
 /**
- * Cuantos documentos tiene el trabajo.
+ * How many documents the job has.
  *
- * <p>Un trabajo puede llevar varios documentos; como se acomodan entre si lo decide {@link
- * MultipleDocumentHandling}.
+ * <p>A job may carry several documents; how they are laid out among themselves is decided by
+ * {@link MultipleDocumentHandling}.
  */
 public final class NumberOfDocuments extends IntegerSyntax implements PrintJobAttribute {
 
@@ -18,8 +18,10 @@ public final class NumberOfDocuments extends IntegerSyntax implements PrintJobAt
         super(value, 0, Integer.MAX_VALUE);
     }
 
-    /** El {@code instanceof} es lo que impide que un NumberOfDocuments de igual a otro atributo
-     * entero con el mismo numero. */
+    /**
+     * The {@code instanceof} is what keeps a NumberOfDocuments from being equal to another
+     * integer attribute with the same number.
+     */
     public boolean equals(Object object) {
         return super.equals(object) && object instanceof NumberOfDocuments;
     }

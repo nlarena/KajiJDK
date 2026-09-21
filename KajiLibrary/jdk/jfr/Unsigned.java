@@ -6,11 +6,11 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * El campo es un entero <strong>sin signo</strong>, aunque su tipo Java tenga signo.
+ * The field is an <strong>unsigned</strong> integer, even though its Java type has a sign.
  *
- * <p>Java no tiene enteros sin signo, asi que un valor grande guardado en un {@code long} sale
- * negativo. Esta anotacion le dice al que lee que lo interprete al reves, y es la unica forma de
- * mostrar bien un valor que vino de codigo nativo.
+ * <p>Java has no unsigned integers, so a large value kept in a {@code long} comes out negative.
+ * This annotation tells the one who reads to interpret it the other way round, and it is the only
+ * way of showing properly a value that came from native code.
  *
  * @since 9
  */

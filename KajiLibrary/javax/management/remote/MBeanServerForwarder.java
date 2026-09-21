@@ -3,24 +3,25 @@ package javax.management.remote;
 import javax.management.MBeanServer;
 
 /**
- * KajiLibrary's javax.management.remote.MBeanServerForwarder -- un {@link MBeanServer} que envuelve a
- * otro.
+ * KajiLibrary's javax.management.remote.MBeanServerForwarder -- an {@link MBeanServer} that wraps
+ * another.
  *
- * <p>Es un {@code MBeanServer} completo mas dos metodos para encadenarlo. Se pone entre el conector y
- * el servidor real, y ahi puede registrar cada operacion, filtrar por permisos, o cachear.
+ * <p>It is a complete {@code MBeanServer} plus two methods to chain it. It is put between the
+ * connector and the real server, and there it can log every operation, filter by permissions, or
+ * cache.
  *
- * <p>Se encadenan varios: cada uno apunta al siguiente y el ultimo al servidor de verdad. Se arma con
- * {@code JMXConnectorServer.setMBeanServerForwarder}, que va poniendo cada nuevo delante de lo que ya
- * habia.
+ * <p>Several are chained: each one points at the next and the last at the real server. It is built
+ * with {@code JMXConnectorServer.setMBeanServerForwarder}, which puts each new one in front of
+ * what was already there.
  *
- * <p>El orden importa y es al reves de lo que parece: el <b>ultimo</b> que se agrega es el
- * <b>primero</b> que ve las llamadas.
+ * <p>The order matters and is the reverse of what it looks like: the <b>last</b> one added is the
+ * <b>first</b> to see the calls.
  */
 public interface MBeanServerForwarder extends MBeanServer {
 
-    /** A quien le delega. */
+    /** Who it delegates to. */
     MBeanServer getMBeanServer();
 
-    /** Cambia a quien le delega. */
+    /** Changes who it delegates to. */
     void setMBeanServer(MBeanServer mbs);
 }

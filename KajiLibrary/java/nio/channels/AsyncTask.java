@@ -15,9 +15,10 @@ import java.util.concurrent.TimeUnit;
 // WHY ONE PLACE
 // ===============================================================================================
 //
-// Because the two shapes are one operation seen differently, and writing them apart in every channel
-// would be writing the same decision fourteen times: what to do when the operation throws, what to
-// do when the group is already shut down, and who runs the handler. Here it is decided once.
+// Because the two shapes are one operation seen differently, and writing them apart in every
+// channel would be writing the same decision fourteen times: what to do when the operation throws,
+// what to do when the group is already shut down, and who runs the handler. Here it is decided
+// once.
 //
 // **The handler runs on the pool, never on the thread that asked for the operation.** That is what
 // the API promises and what makes asking for a read not block: if the handler ran here, an
@@ -51,8 +52,8 @@ final class AsyncTask {
      * Runs that on the pool and tells the handler when it is done.
      *
      * <p>The handler is called exactly once: `completed` when the work returned, `failed` when it
-     * threw. Whatever the handler itself throws does not propagate -- nobody could catch it, it runs
-     * on a pool thread -- but it does not take the thread down either.
+     * threw. Whatever the handler itself throws does not propagate -- nobody could catch it, it
+     * runs on a pool thread -- but it does not take the thread down either.
      *
      * @param <V> what the work produces
      * @param <A> the type of the attachment

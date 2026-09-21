@@ -1,45 +1,46 @@
 package java.io;
 
-// KajiLibrary's java.io.ObjectStreamField -- la descripcion de **un** campo serializable.
+// KajiLibrary's java.io.ObjectStreamField -- the description of **one** serializable field.
 //
-// Es un valor, no una operacion: nombre, tipo, y si va compartido. Vale por si solo -- quien declara
-// un `serialPersistentFields` esta describiendo la forma de su clase, y esa descripcion es correcta
-// se serialice o no despues -- y ademas es la moneda con la que los dos flujos se entienden: el que
-// escribe saca de aca el orden y el codigo de tipo de cada campo, y el que lee arma uno por cada
-// campo que viene del otro lado, con **la firma del flujo** y no con la de un tipo local.
+// It is a value, not an operation: a name, a type, and whether it goes shared. It is worth having
+// on its own -- whoever declares a `serialPersistentFields` is describing their class's shape, and
+// that description is right whether it is serialized afterwards or not -- and it is also the
+// currency the two streams understand each other in: the one writing takes each field's order and
+// type code from here, and the one reading builds one per field coming from the other side, with
+// **the stream's signature** and not with a local type's.
 //
-// **El orden es parte del formato, no una comodidad.** `compareTo` pone los primitivos antes que
-// las referencias, y dentro de cada grupo ordena por nombre. La separacion existe porque el flujo
-// escribe primero todos los valores primitivos --de tamanio conocido, uno pegado al otro-- y despues
-// las referencias, que llevan cada una su propia estructura. Mezclarlos obligaria a intercalar dos
-// formas de decodificar en el mismo bloque.
+// **The order is part of the format, not a convenience.** `compareTo` puts the primitives before
+// the references, and within each group sorts by name. The separation exists because the stream
+// first writes every primitive value --of known size, one right after another-- and then the
+// references, which each carry a structure of their own. Mixing them would force two ways of
+// decoding to be interleaved in the same block.
 public class ObjectStreamField implements Comparable<Object> {
 
     private final String name;
     private final Class<?> type;
     private final boolean unshared;
 
-    // El descriptor JVM del tipo: `I`, `Ljava/lang/String;`, `[[D`. Se calcula una vez porque
-    // `toString` y `getTypeString` lo piden y armarlo recorre el nombre del tipo.
+    // The type's JVM descriptor: `I`, `Ljava/lang/String;`, `[[D`. It is worked out once because
+    // `toString` and `getTypeString` ask for it and building it walks the type's name.
     private final String signature;
 
     private int offset = 0;
 
-    /** Un campo compartido (`unshared` en falso), que es lo normal. */
+    /** A shared field (`unshared` false), which is the normal thing. */
     public ObjectStreamField(String name, Class<?> type) {
         this(name, type, false);
     }
 
     /**
-     * Un campo del tipo dado.
+     * A field of the given type.
      *
-     * <p>`unshared` en verdadero pide que el valor se escriba y se lea **sin** pasar por la tabla de
-     * referencias compartidas del flujo. Sirve cuando el objeto tiene que ser exclusivo de este
-     * campo: con la tabla, dos campos que apuntaban al mismo objeto lo siguen compartiendo despues
-     * de deserializar, y una clase que dependa de tener el suyo propio se rompe en silencio.
+     * <p>`unshared` set to true asks for the value to be written and read **without** going through
+     * the stream's table of shared references. It serves when the object has to be exclusive to
+     * this field: with the table, two fields that pointed at the same object go on sharing it after
+     * deserializing, and a class depending on having one of its own breaks silently.
      *
-     * @throws NullPointerException si `name` o `type` son `null` -- un campo sin nombre o sin tipo
-     *     no describe nada
+     * @throws NullPointerException if `name` or `type` is `null` -- a field with no name or no type
+     *     describes nothing
      */
     public ObjectStreamField(String name, Class<?> type, boolean unshared) {
         if (name == null || type == null) {
@@ -52,26 +53,28 @@ public class ObjectStreamField implements Comparable<Object> {
     }
 
     /**
-     * El campo tal como vino de un flujo: nombre y **firma del flujo**, no de un tipo local.
+     * The field as it came from a stream: a name and **the stream's signature**, not a local
+     * type's.
      *
-     * <p>La firma se toma cruda en vez de derivarla de una `Class` porque el flujo puede nombrar un
-     * tipo que de este lado no existe -- y esa firma es justamente lo que hay que comparar contra el
-     * campo local para decidir si son el mismo campo. Derivarla de un tipo local obligaria a
-     * resolver la clase antes de poder comparar, que es al reves de como se lee.
+     * <p>The signature is taken raw instead of derived from a `Class` because the stream may name a
+     * type that does not exist on this side -- and that signature is precisely what has to be
+     * compared against the local field in order to decide whether they are the same field. Deriving
+     * it from a local type would force the class to be resolved before being able to compare, which
+     * is the reverse of how reading goes.
      *
-     * <p>`type` queda en {@code Object.class} para los campos de referencia, como en el JDK: el tipo
-     * de verdad puede no estar cargado, y `Object` es lo unico cierto que se puede afirmar sin
-     * cargarlo.
+     * <p>`type` is left at {@code Object.class} for the reference fields, as in the JDK: the real
+     * type may not be loaded, and `Object` is the only certain thing that can be asserted without
+     * loading it.
      */
-    ObjectStreamField(String name, String firma) {
+    ObjectStreamField(String name, String signature) {
         this.name = name;
-        this.signature = firma;
+        this.signature = signature;
         this.unshared = false;
-        this.type = tipoDeFirma(firma);
+        this.type = typeFromSignature(signature);
     }
 
-    private static Class<?> tipoDeFirma(String firma) {
-        char c = firma.charAt(0);
+    private static Class<?> typeFromSignature(String signature) {
+        char c = signature.charAt(0);
         if (c == 'I') {
             return Integer.TYPE;
         }
@@ -108,38 +111,37 @@ public class ObjectStreamField implements Comparable<Object> {
     }
 
     /**
-     * La letra del tipo: `B C D F I J S Z` para los primitivos, `[` para arreglos, `L` para el
-     * resto.
+     * The type's letter: `B C D F I J S Z` for the primitives, `[` for arrays, `L` for the rest.
      *
-     * <p>Es la primera letra del descriptor, y por eso sale de ahi en vez de repetir la tabla: dos
-     * copias de la misma correspondencia terminan discrepando.
+     * <p>It is the descriptor's first letter, and that is why it comes from there instead of
+     * repeating the table: two copies of the same correspondence end up disagreeing.
      */
     public char getTypeCode() {
         return this.signature.charAt(0);
     }
 
     /**
-     * El descriptor completo, o `null` si el campo es primitivo.
+     * The whole descriptor, or `null` if the field is primitive.
      *
-     * <p>`null` y no la letra suelta, que es lo que uno esperaria: para un primitivo el codigo de
-     * tipo ya dice todo lo que hay que saber, y devolver algo aca haria que el que llama tuviera dos
-     * fuentes para el mismo dato. El contrato usa la ausencia para decir "primitivo".
+     * <p>`null` and not the lone letter, which is what one would expect: for a primitive the type
+     * code already says everything there is to know, and returning something here would give the
+     * caller two sources for the same datum. The contract uses the absence to say "primitive".
      */
     public String getTypeString() {
         return this.isPrimitive() ? null : this.signature;
     }
 
-    /** Donde cae este campo dentro del bloque de datos del flujo. */
+    /** Where this field falls inside the stream's data block. */
     public int getOffset() {
         return this.offset;
     }
 
     /**
-     * Fija el desplazamiento.
+     * It sets the offset.
      *
-     * <p>Es `protected` porque lo decide quien arma el bloque --el descriptor de la clase-- y no
-     * quien describe el campo: un `serialPersistentFields` escrito a mano que se pusiera a mover
-     * offsets desacomodaria el formato para todos los demas campos.
+     * <p>It is `protected` because it is decided by whoever builds the block --the class's
+     * descriptor-- and not by whoever describes the field: a hand-written `serialPersistentFields`
+     * that started moving offsets would put the format out of joint for every other field.
      */
     protected void setOffset(int offset) {
         this.offset = offset;
@@ -155,27 +157,28 @@ public class ObjectStreamField implements Comparable<Object> {
     }
 
     /**
-     * Primitivos antes que referencias; a igual categoria, por nombre.
+     * Primitives before references; within the same category, by name.
      *
-     * <p>Recibe `Object` y no `ObjectStreamField` porque asi lo declara el JDK --la clase es
-     * `Comparable<Object>`-- y estrecharlo aca haria que un `Comparable` crudo dejara de compilar.
+     * <p>It receives `Object` and not `ObjectStreamField` because that is how the JDK declares it
+     * --the class is `Comparable<Object>`-- and narrowing it here would stop a raw `Comparable`
+     * from compiling.
      */
     public int compareTo(Object obj) {
-        ObjectStreamField otro = (ObjectStreamField) obj;
-        boolean mio = this.isPrimitive();
-        if (mio != otro.isPrimitive()) {
-            return mio ? -1 : 1;
+        ObjectStreamField other = (ObjectStreamField) obj;
+        boolean mine = this.isPrimitive();
+        if (mine != other.isPrimitive()) {
+            return mine ? -1 : 1;
         }
-        return this.name.compareTo(otro.name);
+        return this.name.compareTo(other.name);
     }
 
-    /** El descriptor y el nombre, que es como se lee un campo en un volcado de clase. */
+    /** The descriptor and the name, which is how a field reads in a class dump. */
     public String toString() {
         return this.signature + " " + this.name;
     }
 
-    // El descriptor JVM de un tipo. Los arreglos se piden a `Class.getName()`, que ya devuelve la
-    // forma con corchetes (`[[D`) y solo hay que cambiarle los puntos por barras.
+    // A type's JVM descriptor. The arrays are asked of `Class.getName()`, which already returns the
+    // bracketed form (`[[D`) and only needs its dots turned into slashes.
     private static String descriptor(Class<?> t) {
         if (t == Integer.TYPE) {
             return "I";

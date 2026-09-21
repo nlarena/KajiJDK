@@ -1,23 +1,23 @@
 package javax.management.openmbean;
 
 /**
- * Una fila cuyo índice ya está en la tabla.
+ * A row whose index is already in the table.
  *
- * <p>La tira {@link TabularData#put}, y es la razón por la que `put` **no** es un reemplazo como el
- * de un `Map`: una tabla abierta tiene claves derivadas del contenido de la fila, así que dos filas
- * con el mismo índice son un error del que las armó, no una intención de pisar la primera. Para
- * reemplazar hay que borrar y volver a poner.
+ * <p>{@link TabularData#put} throws it, and it is the reason {@code put} is <b>not</b> a
+ * replacement like a {@code Map}'s: an open table has keys derived from the row's content, so two
+ * rows with the same index are an error of whoever built them, not an intention to overwrite the
+ * first. To replace, you have to remove and put again.
  */
 public class KeyAlreadyExistsException extends IllegalArgumentException {
 
     private static final long serialVersionUID = 1845183636745282866L;
 
-    /** Sin mensaje. */
+    /** Without a message. */
     public KeyAlreadyExistsException() {
         super();
     }
 
-    /** Con ese mensaje. */
+    /** With that message. */
     public KeyAlreadyExistsException(String msg) {
         super(msg);
     }

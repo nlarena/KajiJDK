@@ -3,38 +3,40 @@ package java.security.cert;
 import java.io.IOException;
 import java.security.PublicKey;
 
-// Una clave publica leida de su `SubjectPublicKeyInfo`, sin proveedor de criptografia.
+// A public key read from its `SubjectPublicKeyInfo`, with no cryptography provider.
 //
 //   SubjectPublicKeyInfo ::= SEQUENCE {
 //       algorithm        AlgorithmIdentifier,
 //       subjectPublicKey BIT STRING }
 //
 // ===============================================================================================
-// QUE PROMETE Y QUE NO
+// WHAT IT PROMISES AND WHAT IT DOES NOT
 // ===============================================================================================
 //
-// `PublicKey` promete exactamente tres cosas -- `getAlgorithm()`, `getFormat()` y `getEncoded()` --
-// y esta clase las cumple las tres leyendolas del DER. No promete nada mas, y por eso se puede
-// escribir sin `KeyFactory`: **una clave publica no es una operacion criptografica**, es un dato
-// con un nombre de algoritmo. Quien quiera verificar una firma necesita un `Signature`, que esta
-// biblioteca no tiene, y para eso no le alcanzaria ninguna implementacion de `PublicKey`.
+// `PublicKey` promises exactly three things -- `getAlgorithm()`, `getFormat()` and `getEncoded()`
+// -- and this class fulfils all three by reading them from the DER. It promises nothing more, and
+// that is why it can be written without `KeyFactory`: **a public key is not a cryptographic
+// operation**, it is a datum with the name of an algorithm. Whoever wants to verify a signature
+// needs a `Signature`, which this library does not have, and for that no implementation of
+// `PublicKey` would be enough for them.
 //
-// **Diferencia anotada con el JDK**: alla `X509CertSelector.getSubjectPublicKey()` devuelve un
-// `sun.security.rsa.RSAPublicKeyImpl`, que ademas implementa `java.security.interfaces.RSAPublicKey`
-// y contesta `getModulus()`. Aca devuelve esta clase, que **no** implementa esa interfaz. Un
-// llamador que castee a `RSAPublicKey` recibe `ClassCastException` en vez de la clave. Se eligio asi
-// porque la alternativa era peor: descomponer el modulo y el exponente para contestar `getModulus()`
-// dejaria una clave que parece usable para cifrar y no lo es.
+// **Noted difference with the JDK**: there `X509CertSelector.getSubjectPublicKey()` returns a
+// `sun.security.rsa.RSAPublicKeyImpl`, which also implements
+// `java.security.interfaces.RSAPublicKey` and answers `getModulus()`. Here it returns this class,
+// which does **not** implement that interface. A caller that casts to `RSAPublicKey` receives
+// `ClassCastException` instead of the key. It was chosen this way because the alternative was
+// worse: breaking out the modulus and the exponent to answer `getModulus()` would leave a key that
+// looks usable for encrypting and is not.
 //
-// Para lo que la usa este paquete alcanza y sobra: `X509CertSelector.match` compara la codificacion
-// de la clave del certificado contra la del criterio, byte a byte.
+// For what this package uses it for it is more than enough: `X509CertSelector.match` compares the
+// encoding of the key of the certificate against that of the criterion, byte by byte.
 final class EncodedPublicKey implements PublicKey {
 
     private static final long serialVersionUID = 4718264291549890431L;
 
-    // Los algoritmos que se saben nombrar. Un OID que no este en la tabla no es un error: se
-    // devuelve el OID como nombre, que es lo que hace el JDK con un algoritmo que no conoce y es
-    // mas util que un null.
+    // The algorithms it knows how to name. An OID that is not in the table is not an error: the OID
+    // is returned as the name, which is what the JDK does with an algorithm it does not know and is
+    // more useful than a null.
     private static final String[][] NAMES = {
         {"1.2.840.113549.1.1.1", "RSA"},
         {"1.2.840.113549.1.1.10", "RSASSA-PSS"},
@@ -57,12 +59,12 @@ final class EncodedPublicKey implements PublicKey {
     }
 
     /**
-     * Lee la clave de su `SubjectPublicKeyInfo`.
+     * It reads the key from its `SubjectPublicKeyInfo`.
      *
-     * <p>Se camina la estructura entera --no solo hasta el OID-- para que un DER truncado se
-     * rechace aca y no mas adelante, cuando ya no se sabria de donde salio.
+     * <p>The whole structure is walked --not only as far as the OID-- so that a truncated DER is
+     * rejected here and not later, when there would be no knowing where it came from.
      *
-     * @throws IOException si el DER no es un SubjectPublicKeyInfo bien formado
+     * @throws IOException if the DER is not a well formed SubjectPublicKeyInfo
      */
     static EncodedPublicKey of(byte[] der) throws IOException {
         DerReader outer = new DerReader(der, 0, der.length);
@@ -74,11 +76,12 @@ final class EncodedPublicKey implements PublicKey {
         int oidLen = alg.expect(DerReader.TAG_OID);
         int oidAt = alg.skip(oidLen);
         String oid = alg.readOid(oidAt, oidLen);
-        // El BIT STRING de la clave: se comprueba que este y que cierre, aunque no se mire adentro.
+        // The BIT STRING of the key: it is checked that it is there and that it closes, although it
+        // is not looked at inside.
         int bitsLen = info.expect(0x03);
         info.skip(bitsLen);
         if (info.hasMore()) {
-            throw new IOException("DER: datos de mas despues del SubjectPublicKeyInfo");
+            throw new IOException("DER: extra data after the SubjectPublicKeyInfo");
         }
         byte[] copy = new byte[der.length];
         System.arraycopy(der, 0, copy, 0, der.length);
@@ -101,7 +104,7 @@ final class EncodedPublicKey implements PublicKey {
         return this.algorithm;
     }
 
-    /** Siempre {@code "X.509"}: es el nombre del formato SubjectPublicKeyInfo. */
+    /** Always {@code "X.509"}: it is the name of the SubjectPublicKeyInfo format. */
     @Override
     public String getFormat() {
         return "X.509";

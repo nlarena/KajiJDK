@@ -4,9 +4,9 @@ import javax.annotation.processing.SupportedSourceVersion;
 import javax.lang.model.SourceVersion;
 
 /**
- * El visitante por kind de tipo de Java 14 en adelante. Ver {@link TypeKindVisitor6} por el mecanismo.
+ * The type-kind visitor for Java 14 onwards. See {@link TypeKindVisitor6} for the mechanism.
  *
- * <p>No agrega nada: ni los registros ni nada posterior trajeron un `TypeKind` nuevo.
+ * <p>It adds nothing: neither records nor anything later brought a new `TypeKind`.
  */
 @SupportedSourceVersion(SourceVersion.RELEASE_25)
 public class TypeKindVisitor14<R, P> extends TypeKindVisitor9<R, P> {

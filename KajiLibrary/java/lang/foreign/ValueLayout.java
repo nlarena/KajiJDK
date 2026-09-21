@@ -3,61 +3,60 @@ package java.lang.foreign;
 import java.nio.ByteOrder;
 
 /**
- * KajiLibrary's java.lang.foreign.ValueLayout -- el layout de un valor que se puede leer y escribir
- * de una: los ocho primitivos de Java, mas la direccion.
+ * KajiLibrary's java.lang.foreign.ValueLayout -- the layout of a value that can be read and written
+ * in one go: Java's eight primitives, plus the address.
  *
- * <p>Es la hoja del arbol de layouts. Todo lo demas --secuencias, structs, uniones-- se compone de
- * estos, y son los unicos que un {@link MemorySegment} sabe leer directamente.
+ * <p>It is the leaf of the layout tree. Everything else --sequences, structs, unions-- is composed
+ * of these, and they are the only ones a {@link MemorySegment} knows how to read directly.
  *
- * <p>Lleva tres cosas que un layout compuesto no tiene: el **tipo Java** que transporta
- * ({@link #carrier()}), el **orden de bytes** ({@link #order()}), y --por lo tanto-- una lectura
- * bien definida. Los ocho subtipos anidados (`OfInt`, `OfLong`, ...) existen para que el compilador
- * pueda distinguirlos: `segmento.get(JAVA_INT, 0)` devuelve un `int` y no un `Object` porque la
- * sobrecarga se elige por el tipo del layout.
+ * <p>It carries three things a composite layout does not have: the **Java type** it travels in
+ * ({@link #carrier()}), the **byte order** ({@link #order()}), and --therefore-- a well-defined
+ * reading. The eight nested subtypes (`OfInt`, `OfLong`, ...) exist so the compiler can tell them
+ * apart: `segment.get(JAVA_INT, 0)` returns an `int` and not an `Object` because the overload is
+ * chosen by the layout's type.
  *
- * <h2>Las constantes, y por que hay dos de cada una</h2>
+ * <h2>The constants, and why there are two of each</h2>
  *
- * <p>`JAVA_INT` se alinea a 4; `JAVA_INT_UNALIGNED` a 1. La diferencia importa mas de lo que parece:
- * un segmento sobre un `byte[]` tiene alineamiento maximo **1**, asi que
- * `segmento.get(JAVA_INT, 0)` sobre un arreglo de bytes **falla**, y hay que usar la version sin
- * alinear. No es un capricho de la biblioteca: es lo que hace el JDK, y el motivo es que la JVM no
- * garantiza donde cae un `byte[]` en memoria.
+ * <p>`JAVA_INT` aligns to 4; `JAVA_INT_UNALIGNED` to 1. The difference matters more than it looks: a
+ * segment over a `byte[]` has a maximum alignment of **1**, so `segment.get(JAVA_INT, 0)` over an
+ * array of bytes **fails**, and the unaligned version has to be used. It is no whim of the library's:
+ * it is what the JDK does, and the reason is that the JVM does not guarantee where a `byte[]` falls
+ * in memory.
  *
- * <p>`JAVA_BYTE` y `JAVA_BOOLEAN` no tienen gemelo sin alinear porque ocupan un byte: ya estan
- * alineados a 1.
+ * <p>`JAVA_BYTE` and `JAVA_BOOLEAN` have no unaligned twin because they take one byte: they are
+ * already aligned to 1.
  *
- * <h2>Lo que falta: `varHandle()`</h2>
+ * <h2>`varHandle()`</h2>
  *
- * <p>Queda afuera `varHandle()`, el atajo de `JAVA_INT.varHandle()` para el `VarHandle` de
- * coordenadas `(MemorySegment, long)` que en el JDK lee y escribe un `int` a un offset. Es el mismo
- * bloqueo que deja afuera los cinco de {@link MemoryLayout}, y esta explicado en detalle en el
- * encabezado de esa interfaz: nuestra VM no intercepta `VarHandle`, un `native` sin implementacion
- * voltea el proceso en vez de tirar, y nuestro javac no compila un sitio de llamada polimorfico en
- * la firma. Devolver algo aca seria devolver un objeto que mata la VM al primer acceso.
+ * <p>{@link #varHandle()} --the `JAVA_INT.varHandle()` shortcut for the `VarHandle` with coordinates
+ * `(MemorySegment, long)`-- is here and it works. It used to be absent for the same tool-chain
+ * reason as {@link MemoryLayout}'s five; see that interface's note for what changed. `VhTest` covers
+ * it.
  *
- * <p>El reemplazo directo es {@link MemorySegment#get(ValueLayout.OfInt, long)} y su familia, que
- * hacen exactamente la misma lectura tomando el layout como argumento en vez de horneado en un
- * handle.
+ * <p>{@link MemorySegment#get(ValueLayout.OfInt, long)} and its family do exactly the same reading
+ * taking the layout as an argument instead of baked into a handle, and stay the shorter way for a
+ * one-off access.
  */
 public interface ValueLayout extends MemoryLayout {
 
     /**
-     * El atajo de `JAVA_INT.varHandle()`: el {@link java.lang.invoke.VarHandle} de **este** valor,
-     * sin camino.
+     * The `JAVA_INT.varHandle()` shortcut: **this** value's {@link java.lang.invoke.VarHandle}, with
+     * no path.
      *
-     * <p>Sus coordenadas son el segmento y el desplazamiento, y nada mas -- no hay pasos que abrir.
+     * <p>Its coordinates are the segment and the displacement, and nothing else -- there are no
+     * steps to open.
      */
     default java.lang.invoke.VarHandle varHandle() {
-        return java.lang.invoke.VarHandles.deSegmento(this, 0L, new long[0]);
+        return java.lang.invoke.VarHandles.ofSegment(this, 0L, new long[0]);
     }
 
-    /** El tipo Java que este layout transporta: `int.class`, `long.class`... */
+    /** The Java type this layout travels in: `int.class`, `long.class`... */
     Class<?> carrier();
 
-    /** El orden de bytes con el que se lee y escribe. */
+    /** The byte order it is read and written with. */
     ByteOrder order();
 
-    /** El mismo layout con otro orden de bytes. */
+    /** The same layout with another byte order. */
     ValueLayout withOrder(ByteOrder order);
 
     ValueLayout withName(String name);
@@ -66,13 +65,13 @@ public interface ValueLayout extends MemoryLayout {
 
     ValueLayout withByteAlignment(long byteAlignment);
 
-    // ---- los ocho subtipos ------------------------------------------------------------------------
+    // ---- the eight subtypes -----------------------------------------------------------------------
     //
-    // Cada uno estrecha los tres `with*` a si mismo. Eso no es adorno: es lo que permite escribir
-    // `JAVA_INT.withName("x").withOrder(BIG_ENDIAN)` sin castear, y --mas importante-- lo que hace
-    // que `get(JAVA_INT.withName("x"), 0)` siga eligiendo la sobrecarga que devuelve `int`.
+    // Each one narrows the three `with*` to itself. That is not decoration: it is what allows writing
+    // `JAVA_INT.withName("x").withOrder(BIG_ENDIAN)` without casting, and --more importantly-- what
+    // makes `get(JAVA_INT.withName("x"), 0)` keep choosing the overload that returns `int`.
 
-    /** El layout de un `boolean`. */
+    /** A `boolean`'s layout. */
     interface OfBoolean extends ValueLayout {
         OfBoolean withName(String name);
 
@@ -83,7 +82,7 @@ public interface ValueLayout extends MemoryLayout {
         OfBoolean withOrder(ByteOrder order);
     }
 
-    /** El layout de un `byte`. */
+    /** A `byte`'s layout. */
     interface OfByte extends ValueLayout {
         OfByte withName(String name);
 
@@ -94,7 +93,7 @@ public interface ValueLayout extends MemoryLayout {
         OfByte withOrder(ByteOrder order);
     }
 
-    /** El layout de un `char`. */
+    /** A `char`'s layout. */
     interface OfChar extends ValueLayout {
         OfChar withName(String name);
 
@@ -105,7 +104,7 @@ public interface ValueLayout extends MemoryLayout {
         OfChar withOrder(ByteOrder order);
     }
 
-    /** El layout de un `short`. */
+    /** A `short`'s layout. */
     interface OfShort extends ValueLayout {
         OfShort withName(String name);
 
@@ -116,7 +115,7 @@ public interface ValueLayout extends MemoryLayout {
         OfShort withOrder(ByteOrder order);
     }
 
-    /** El layout de un `int`. */
+    /** An `int`'s layout. */
     interface OfInt extends ValueLayout {
         OfInt withName(String name);
 
@@ -127,7 +126,7 @@ public interface ValueLayout extends MemoryLayout {
         OfInt withOrder(ByteOrder order);
     }
 
-    /** El layout de un `long`. */
+    /** A `long`'s layout. */
     interface OfLong extends ValueLayout {
         OfLong withName(String name);
 
@@ -138,7 +137,7 @@ public interface ValueLayout extends MemoryLayout {
         OfLong withOrder(ByteOrder order);
     }
 
-    /** El layout de un `float`. */
+    /** A `float`'s layout. */
     interface OfFloat extends ValueLayout {
         OfFloat withName(String name);
 
@@ -149,7 +148,7 @@ public interface ValueLayout extends MemoryLayout {
         OfFloat withOrder(ByteOrder order);
     }
 
-    /** El layout de un `double`. */
+    /** A `double`'s layout. */
     interface OfDouble extends ValueLayout {
         OfDouble withName(String name);
 
@@ -160,59 +159,58 @@ public interface ValueLayout extends MemoryLayout {
         OfDouble withOrder(ByteOrder order);
     }
 
-    // ---- las constantes ---------------------------------------------------------------------------
+    // ---- the constants ----------------------------------------------------------------------------
 
-    /** `boolean`, un byte. */
-    ValueLayout.OfBoolean JAVA_BOOLEAN = Layouts.booleano();
+    /** `boolean`, one byte. */
+    ValueLayout.OfBoolean JAVA_BOOLEAN = Layouts.ofBoolean();
 
-    /** `byte`, un byte. */
-    ValueLayout.OfByte JAVA_BYTE = Layouts.deByte();
+    /** `byte`, one byte. */
+    ValueLayout.OfByte JAVA_BYTE = Layouts.ofByte();
 
-    /** `char`, dos bytes, alineado a 2. */
-    ValueLayout.OfChar JAVA_CHAR = Layouts.deChar(2L);
+    /** `char`, two bytes, aligned to 2. */
+    ValueLayout.OfChar JAVA_CHAR = Layouts.ofChar(2L);
 
-    /** `char` sin restriccion de alineamiento. */
-    ValueLayout.OfChar JAVA_CHAR_UNALIGNED = Layouts.deChar(1L);
+    /** `char` with no alignment constraint. */
+    ValueLayout.OfChar JAVA_CHAR_UNALIGNED = Layouts.ofChar(1L);
 
-    /** `short`, dos bytes, alineado a 2. */
-    ValueLayout.OfShort JAVA_SHORT = Layouts.deShort(2L);
+    /** `short`, two bytes, aligned to 2. */
+    ValueLayout.OfShort JAVA_SHORT = Layouts.ofShort(2L);
 
-    /** `short` sin restriccion de alineamiento. */
-    ValueLayout.OfShort JAVA_SHORT_UNALIGNED = Layouts.deShort(1L);
+    /** `short` with no alignment constraint. */
+    ValueLayout.OfShort JAVA_SHORT_UNALIGNED = Layouts.ofShort(1L);
 
-    /** `int`, cuatro bytes, alineado a 4. */
-    ValueLayout.OfInt JAVA_INT = Layouts.deInt(4L);
+    /** `int`, four bytes, aligned to 4. */
+    ValueLayout.OfInt JAVA_INT = Layouts.ofInt(4L);
 
-    /** `int` sin restriccion de alineamiento -- el que hace falta sobre un `byte[]`. */
-    ValueLayout.OfInt JAVA_INT_UNALIGNED = Layouts.deInt(1L);
+    /** `int` with no alignment constraint -- the one needed over a `byte[]`. */
+    ValueLayout.OfInt JAVA_INT_UNALIGNED = Layouts.ofInt(1L);
 
-    /** `long`, ocho bytes, alineado a 8. */
-    ValueLayout.OfLong JAVA_LONG = Layouts.deLong(8L);
+    /** `long`, eight bytes, aligned to 8. */
+    ValueLayout.OfLong JAVA_LONG = Layouts.ofLong(8L);
 
-    /** `long` sin restriccion de alineamiento. */
-    ValueLayout.OfLong JAVA_LONG_UNALIGNED = Layouts.deLong(1L);
+    /** `long` with no alignment constraint. */
+    ValueLayout.OfLong JAVA_LONG_UNALIGNED = Layouts.ofLong(1L);
 
-    /** `float`, cuatro bytes, alineado a 4. */
-    ValueLayout.OfFloat JAVA_FLOAT = Layouts.deFloat(4L);
+    /** `float`, four bytes, aligned to 4. */
+    ValueLayout.OfFloat JAVA_FLOAT = Layouts.ofFloat(4L);
 
-    /** `float` sin restriccion de alineamiento. */
-    ValueLayout.OfFloat JAVA_FLOAT_UNALIGNED = Layouts.deFloat(1L);
+    /** `float` with no alignment constraint. */
+    ValueLayout.OfFloat JAVA_FLOAT_UNALIGNED = Layouts.ofFloat(1L);
 
-    /** `double`, ocho bytes, alineado a 8. */
-    ValueLayout.OfDouble JAVA_DOUBLE = Layouts.deDouble(8L);
+    /** `double`, eight bytes, aligned to 8. */
+    ValueLayout.OfDouble JAVA_DOUBLE = Layouts.ofDouble(8L);
 
-    /** `double` sin restriccion de alineamiento. */
-    ValueLayout.OfDouble JAVA_DOUBLE_UNALIGNED = Layouts.deDouble(1L);
+    /** `double` with no alignment constraint. */
+    ValueLayout.OfDouble JAVA_DOUBLE_UNALIGNED = Layouts.ofDouble(1L);
 
     /**
-     * Una direccion, ocho bytes.
+     * An address, eight bytes.
      *
-     * <p>Ocho y no cuatro porque este es un modelo de 64 bits. El JDK la ajusta a la plataforma; aca
-     * es fija, y esa es una diferencia que se nota si alguien describe una estructura nativa de 32
-     * bits.
+     * <p>Eight and not four because this is a 64-bit model. The JDK fits it to the platform; here it
+     * is fixed, and that is a difference that shows if somebody describes a 32-bit native structure.
      */
-    AddressLayout ADDRESS = Layouts.direccion(8L);
+    AddressLayout ADDRESS = Layouts.address(8L);
 
-    /** Una direccion sin restriccion de alineamiento. */
-    AddressLayout ADDRESS_UNALIGNED = Layouts.direccion(1L);
+    /** An address with no alignment constraint. */
+    AddressLayout ADDRESS_UNALIGNED = Layouts.address(1L);
 }

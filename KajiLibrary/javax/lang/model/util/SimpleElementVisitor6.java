@@ -11,37 +11,38 @@ import javax.lang.model.element.TypeParameterElement;
 import javax.lang.model.element.VariableElement;
 
 /**
- * KajiLibrary's javax.lang.model.util.SimpleElementVisitor6 — el visitante de elementos para el que casi
- * todos los casos dan lo mismo.
+ * KajiLibrary's javax.lang.model.util.SimpleElementVisitor6 — the element visitor for which almost
+ * every case gives the same.
  *
- * <h2>Que agrega sobre el abstracto</h2>
+ * <h2>What it adds over the abstract one</h2>
  *
- * <p>{@link AbstractElementVisitor6} obliga a escribir los cinco `visitXxx`. Pero el visitante tipico no
- * quiere cinco: quiere uno. "Devolveme el nombre de cualquier elemento", "contame todo lo que sea
- * publico". Escribir cinco metodos con el mismo cuerpo es ruido.
+ * <p>{@link AbstractElementVisitor6} forces writing the five `visitXxx`. But the typical visitor
+ * does not want five: it wants one. "Give me the name of any element", "count everything that is
+ * public". Writing five methods with the same body is noise.
  *
- * <p>Esta clase mete un embudo: cada `visitXxx` llama a {@link #defaultAction}, y el que extiende
- * redefine **una sola cosa** — `defaultAction` para el caso general, y ademas el `visitXxx` puntual que
- * quiera tratar distinto. La `defaultAction` de aca devuelve `DEFAULT_VALUE`, el valor que se le paso al
- * constructor, para el caso mas comun de todos: un visitante que solo se interesa por un tipo de
- * elemento y quiere un valor fijo para el resto.
+ * <p>This class puts in a funnel: each `visitXxx` calls {@link #defaultAction}, and whoever extends
+ * overrides **a single thing** — `defaultAction` for the general case, and also the particular
+ * `visitXxx` they want to treat differently. The `defaultAction` here returns `DEFAULT_VALUE`, the
+ * value passed to the constructor, for the most common case of all: a visitor that is only
+ * interested in one kind of element and wants a fixed value for the rest.
  *
- * <h2>Por que `visitVariable` no siempre llama a `defaultAction`</h2>
+ * <h2>Why `visitVariable` does not always call `defaultAction`</h2>
  *
- * <p>Este es el unico lugar donde el "todo cae en el mismo embudo" tiene una excepcion, y no es un
- * capricho. Java 7 agrego `RESOURCE_VARIABLE` para el `try` con recursos. Es un `VariableElement`, asi
- * que le llega a `visitVariable` **sin que la firma cambie** — y un visitante escrito para Java 6 jamas
- * decidio que hacer con una variable de recurso, porque no existian.
+ * <p>This is the only place where "everything falls into the same funnel" has an exception, and it
+ * is not a whim. Java 7 added `RESOURCE_VARIABLE` for try-with-resources. It is a
+ * `VariableElement`, so it reaches `visitVariable` **without the signature changing** — and a
+ * visitor written for Java 6 never decided what to do with a resource variable, because they did
+ * not exist.
  *
- * <p>Mandarla a `defaultAction` seria devolver en silencio la respuesta de un caso que nunca se
- * considero. Por eso va a `visitUnknown`, que tira: un kind que el visitante no puede haber previsto es
- * exactamente lo que `visitUnknown` significa. {@link SimpleElementVisitor7} lo saca, porque ahi si
- * existia.
+ * <p>Sending it to `defaultAction` would silently return the answer for a case that was never
+ * considered. That is why it goes to `visitUnknown`, which throws: a kind the visitor cannot have
+ * foreseen is exactly what `visitUnknown` means. {@link SimpleElementVisitor7} removes it, because
+ * there it did exist.
  */
 @SupportedSourceVersion(SourceVersion.RELEASE_6)
 public class SimpleElementVisitor6<R, P> extends AbstractElementVisitor6<R, P> {
 
-    /** Lo que devuelve `defaultAction` mientras no la redefinan. */
+    /** What `defaultAction` returns until it is overridden. */
     protected final R DEFAULT_VALUE;
 
     @Deprecated(since = "9")
@@ -54,7 +55,7 @@ public class SimpleElementVisitor6<R, P> extends AbstractElementVisitor6<R, P> {
         this.DEFAULT_VALUE = defaultValue;
     }
 
-    /** El embudo. Redefinirla es la manera de tratar todos los elementos igual. */
+    /** The funnel. Overriding it is the way to treat all elements alike. */
     protected R defaultAction(Element e, P p) {
         return this.DEFAULT_VALUE;
     }
@@ -68,7 +69,7 @@ public class SimpleElementVisitor6<R, P> extends AbstractElementVisitor6<R, P> {
     }
 
     public R visitVariable(VariableElement e, P p) {
-        // Ver el encabezado: una variable de recurso es de Java 7 y este visitante es de Java 6.
+        // See the header: a resource variable is from Java 7 and this visitor is from Java 6.
         if (e.getKind() != ElementKind.RESOURCE_VARIABLE) {
             return this.defaultAction(e, p);
         }

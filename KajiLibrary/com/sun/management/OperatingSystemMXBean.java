@@ -1,68 +1,69 @@
 package com.sun.management;
 
 /**
- * El sistema operativo, con lo que la interfaz estandar no se anima a prometer.
+ * The operating system, with what the standard interface does not dare to promise.
  *
- * <h2>Por que hay una version ampliada</h2>
+ * <h2>Why there is an extended version</h2>
  *
- * <p>Porque {@link java.lang.management.OperatingSystemMXBean} solo declara lo que existe en
- * <strong>todo</strong> sistema donde corra una JVM: el nombre, la arquitectura, la cantidad de
- * procesadores. La memoria fisica, el intercambio y el tiempo de CPU del proceso no estan ahi
- * porque no en todos lados se pueden medir.
+ * <p>Because {@link java.lang.management.OperatingSystemMXBean} only declares what exists on
+ * <strong>every</strong> system where a JVM runs: the name, the architecture, the number of
+ * processors. The physical memory, the swap and the process's CPU time are not there because
+ * they cannot be measured everywhere.
  *
- * <p>Esta interfaz los agrega. El precio es que ya no es portable: quien la use tiene que
- * comprobar con {@code instanceof} que el bean de la plataforma sea de este tipo.
+ * <p>This interface adds them. The price is that it is no longer portable: whoever uses it has
+ * to check with {@code instanceof} that the platform's bean should be of this type.
  *
- * <h2>Los pares de metodos que parecen repetidos</h2>
+ * <h2>The pairs of methods that seem repeated</h2>
  *
- * <p>{@link #getFreePhysicalMemorySize} y {@link #getFreeMemorySize} devuelven lo mismo, y lo mismo
- * pasa con los otros dos pares. El primero de cada par es el nombre viejo, que quedo como
- * {@code default} delegando en el nuevo; el segundo es el que hay que implementar.
+ * <p>{@link #getFreePhysicalMemorySize} and {@link #getFreeMemorySize} return the same, and the
+ * same happens with the other two pairs. The first of each pair is the old name, which was left
+ * as a {@code default} delegating to the new one; the second is the one that has to be
+ * implemented.
  *
- * <p>El renombre no fue cosmetico: dentro de un contenedor, "memoria fisica" es una mentira —lo que
- * el proceso puede usar es el limite del contenedor, no lo que tiene la maquina—. Los nombres
- * nuevos dicen "memoria" a secas justamente para no prometer de donde sale.
+ * <p>The renaming was not cosmetic: inside a container, "physical memory" is a lie -- what the
+ * process may use is the container's limit, not what the machine has. The new names say
+ * "memory" plainly precisely so as not to promise where it comes from.
  *
  * @since 1.5
  */
 public interface OperatingSystemMXBean extends java.lang.management.OperatingSystemMXBean {
 
     /**
-     * La memoria virtual que el proceso tiene reservada, en bytes.
+     * The virtual memory the process has reserved, in bytes.
      *
-     * @return los bytes, o {@code -1} si no se puede medir
+     * @return the bytes, or {@code -1} if it cannot be measured
      */
     long getCommittedVirtualMemorySize();
 
     /**
-     * El tamano total del area de intercambio, en bytes.
+     * The total size of the swap area, in bytes.
      *
-     * @return los bytes
+     * @return the bytes
      */
     long getTotalSwapSpaceSize();
 
     /**
-     * Cuanto queda libre del area de intercambio, en bytes.
+     * How much is left free of the swap area, in bytes.
      *
-     * @return los bytes
+     * @return the bytes
      */
     long getFreeSwapSpaceSize();
 
     /**
-     * El tiempo de CPU consumido por el proceso, en nanosegundos.
+     * The CPU time consumed by the process, in nanoseconds.
      *
-     * <p>La precision puede ser mucho peor que un nanosegundo; la unidad solo fija la escala.
+     * <p>The precision may be much worse than a nanosecond; the unit only fixes the scale.
      *
-     * @return los nanosegundos, o {@code -1} si no se puede medir
+     * @return the nanoseconds, or {@code -1} if it cannot be measured
      */
     long getProcessCpuTime();
 
     /**
-     * La memoria libre, en bytes.
+     * The free memory, in bytes.
      *
-     * @return los bytes
-     * @deprecated El nombre promete memoria fisica de la maquina, que dentro de un contenedor no
-     *     es lo que el proceso puede usar. Usar {@link #getFreeMemorySize}.
+     * @return the bytes
+     * @deprecated The name promises the machine's physical memory, which inside a container is not
+     *     what the process may use. Use {@link #getFreeMemorySize}.
      */
     @Deprecated(since = "14")
     default long getFreePhysicalMemorySize() {
@@ -70,17 +71,17 @@ public interface OperatingSystemMXBean extends java.lang.management.OperatingSys
     }
 
     /**
-     * La memoria libre, en bytes.
+     * The free memory, in bytes.
      *
-     * @return los bytes
+     * @return the bytes
      */
     long getFreeMemorySize();
 
     /**
-     * La memoria total, en bytes.
+     * The total memory, in bytes.
      *
-     * @return los bytes
-     * @deprecated Por la misma razon que {@link #getFreePhysicalMemorySize}. Usar
+     * @return the bytes
+     * @deprecated For the same reason as {@link #getFreePhysicalMemorySize}. Use
      *     {@link #getTotalMemorySize}.
      */
     @Deprecated(since = "14")
@@ -89,18 +90,18 @@ public interface OperatingSystemMXBean extends java.lang.management.OperatingSys
     }
 
     /**
-     * La memoria total, en bytes.
+     * The total memory, in bytes.
      *
-     * @return los bytes
+     * @return the bytes
      */
     long getTotalMemorySize();
 
     /**
-     * La carga de CPU de todo el sistema, entre 0.0 y 1.0.
+     * The CPU load of the whole system, between 0.0 and 1.0.
      *
-     * @return la carga, o un valor negativo si no se pudo medir
-     * @deprecated Usar {@link #getCpuLoad}, que es el mismo valor con un nombre que no sugiere que
-     *     sea distinto de la carga del proceso por decir "system".
+     * @return the load, or a negative value if it could not be measured
+     * @deprecated Use {@link #getCpuLoad}, which is the same value with a name that does not
+     *     suggest that it should be different from the process's load by saying "system".
      */
     @Deprecated(since = "14")
     default double getSystemCpuLoad() {
@@ -108,22 +109,22 @@ public interface OperatingSystemMXBean extends java.lang.management.OperatingSys
     }
 
     /**
-     * La carga de CPU de todo el sistema, entre 0.0 y 1.0.
+     * The CPU load of the whole system, between 0.0 and 1.0.
      *
-     * <p>El valor es un promedio sobre el intervalo desde la consulta anterior. La primera consulta
-     * no tiene intervalo del cual promediar y por eso devuelve un valor negativo.
+     * <p>The value is an average over the interval since the previous query. The first query has
+     * no interval to average over and that is why it returns a negative value.
      *
-     * @return la carga, o un valor negativo si no se pudo medir
+     * @return the load, or a negative value if it could not be measured
      */
     double getCpuLoad();
 
     /**
-     * La carga de CPU que causa este proceso, entre 0.0 y 1.0.
+     * The CPU load this process causes, between 0.0 and 1.0.
      *
-     * <p>Es fraccion de <strong>toda</strong> la CPU disponible: en una maquina de ocho nucleos, un
-     * proceso que satura un nucleo da alrededor de 0.125 y no 1.0.
+     * <p>It is a fraction of <strong>all</strong> the available CPU: on a machine of eight cores,
+     * a process that saturates one core gives around 0.125 and not 1.0.
      *
-     * @return la carga, o un valor negativo si no se pudo medir
+     * @return the load, or a negative value if it could not be measured
      */
     double getProcessCpuLoad();
 }

@@ -5,62 +5,64 @@ import java.io.Serializable;
 import java.util.Vector;
 
 /**
- * KajiLibrary's java.awt.image.renderable.ParameterBlock -- los argumentos de una operacion, sin
- * tipos.
+ * KajiLibrary's java.awt.image.renderable.ParameterBlock -- an operation's arguments, untyped.
  *
- * <p>Dos listas: las <b>fuentes</b> --las imagenes de entrada-- y los <b>parametros</b> --todo lo
- * demas--. Estan separadas porque el sistema tiene que poder recorrer las fuentes para armar el
- * arbol de operaciones sin entender nada de los parametros.
+ * <p>Two lists: the <b>sources</b> --the input images-- and the <b>parameters</b> --everything
+ * else--. They are separate because the system has to be able to walk the sources to build the
+ * operation tree without understanding anything about the parameters.
  *
- * <p>Es una bolsa de {@code Object} sin verificacion, y hay que decirlo: nadie chequea que una
- * operacion que espera un radio y un color reciba eso. El error aparece al renderizar, con un
- * {@code ClassCastException} lejos de donde se armo el bloque. A cambio, una operacion nueva no
- * necesita ninguna clase nueva para sus argumentos.
+ * <p>It is a bag of {@code Object} without checking, and it should be said: nobody checks that an
+ * operation expecting a radius and a colour receives that. The error shows up when rendering, with
+ * a {@code ClassCastException} far from where the block was built. In exchange, a new operation
+ * needs no new class for its arguments.
  *
- * <h2>Los {@code add} y {@code set} primitivos, y el encadenado</h2>
+ * <h2>The primitive {@code add} and {@code set}, and chaining</h2>
  *
- * <p>Hay una sobrecarga por primitivo, y todas envuelven. Existen para que quien llama no tenga que
- * escribir el envoltorio, y para que el tipo del envoltorio sea siempre el que la operacion espera:
- * {@code add(1)} guarda un {@code Integer} y {@code add(1.0f)} un {@code Float}, que es la unica
- * forma de distinguirlos despues.
+ * <p>There is one overload per primitive, and all of them wrap. They exist so the caller does not
+ * have to write the wrapper, and so the wrapper's type is always the one the operation expects:
+ * {@code add(1)} stores an {@code Integer} and {@code add(1.0f)} a {@code Float}, which is the only
+ * way to tell them apart later.
  *
- * <p>Los {@code add} devuelven el mismo bloque para poder encadenar. Los {@code get} tipados
- * --{@link #getIntParameter} y companía-- hacen el cast por uno, asi que fallan con
- * {@code ClassCastException} si el que se guardo era de otro tipo. Es a proposito: es preferible que
- * falle ahi a que convierta en silencio y la operacion haga otra cosa.
+ * <p>The {@code add}s return the same block so that calls can be chained. The typed {@code get}s
+ * --{@link #getIntParameter} and company-- do the cast for you, so they fail with
+ * {@code ClassCastException} if what was stored was of another type. That is on purpose: it is
+ * better to fail there than to convert silently and have the operation do something else.
  *
- * <h2>Dos formas de copiar</h2>
+ * <h2>Two ways to copy</h2>
  *
- * <p>{@link #clone} copia las dos listas, y {@link #shallowClone} las comparte. La segunda es lo que
- * se quiere al derivar un bloque de otro para una variante de la misma operacion: las fuentes son
- * las mismas imagenes y copiar la lista solo gastaria memoria.
+ * <p>{@link #clone} copies both lists, and {@link #shallowClone} shares them. The second is what is
+ * wanted when deriving one block from another for a variant of the same operation: the sources are
+ * the same images, and copying the list would only spend memory.
  */
 public class ParameterBlock implements Cloneable, Serializable {
 
     private static final long serialVersionUID = -7577115551785240750L;
 
-    /** Las imagenes de entrada. Protegido porque las subclases del JDK lo tocan directo. */
+    /**
+     * The input images. Protected, as in the JDK. (This comment said JDK subclasses touch it
+     * directly; nothing in the JDK extends this class.)
+     */
     protected Vector<Object> sources = new Vector<Object>();
 
-    /** Todo lo que no es una imagen de entrada. */
+    /** Everything that is not an input image. */
     protected Vector<Object> parameters = new Vector<Object>();
 
-    /** Vacio. */
+    /** Empty. */
     public ParameterBlock() {
     }
 
-    /** Con fuentes y sin parametros. */
+    /** With sources and no parameters. */
     public ParameterBlock(Vector<Object> sources) {
         setSources(sources);
     }
 
-    /** Con las dos listas. */
+    /** With both lists. */
     public ParameterBlock(Vector<Object> sources, Vector<Object> parameters) {
         setSources(sources);
         setParameters(parameters);
     }
 
-    /** Una copia que <b>comparte</b> las dos listas. Ver la nota de la clase. */
+    /** A copy that <b>shares</b> both lists. See the class note. */
     public Object shallowClone() {
         ParameterBlock copy = new ParameterBlock();
         copy.sources = this.sources;
@@ -69,11 +71,11 @@ public class ParameterBlock implements Cloneable, Serializable {
     }
 
     /**
-     * Una copia con listas propias.
+     * A copy with lists of its own.
      *
-     * <p>Copia las listas, no lo que hay adentro: las imagenes y los parametros son los mismos
-     * objetos. Es lo correcto -- una imagen es grande y compartirla es justamente el punto-- y hay
-     * que saberlo si alguien guarda ahi algo mutable.
+     * <p>It copies the lists, not what is inside: the images and the parameters are the same
+     * objects. That is right -- an image is large, and sharing it is precisely the point -- and it
+     * has to be known if someone stores something mutable there.
      */
     public Object clone() {
         ParameterBlock copy = new ParameterBlock();
@@ -82,21 +84,21 @@ public class ParameterBlock implements Cloneable, Serializable {
         return copy;
     }
 
-    /** Agrega una fuente al final. */
+    /** Adds a source at the end. */
     public ParameterBlock addSource(Object source) {
         this.sources.addElement(source);
         return this;
     }
 
-    /** La fuente en esa posicion. */
+    /** The source at that position. */
     public Object getSource(int index) {
         return this.sources.elementAt(index);
     }
 
     /**
-     * Pone una fuente en esa posicion, agrandando la lista si hace falta.
+     * Puts a source at that position, growing the list if needed.
      *
-     * <p>Los huecos quedan en null: es lo que permite armar un bloque en cualquier orden.
+     * <p>The gaps stay null: that is what allows building a block in any order.
      */
     public ParameterBlock setSource(Object source, int index) {
         if (this.sources.size() < index + 1) {
@@ -106,98 +108,98 @@ public class ParameterBlock implements Cloneable, Serializable {
         return this;
     }
 
-    /** La fuente en esa posicion, ya casteada. */
+    /** The source at that position, already cast. */
     public RenderedImage getRenderedSource(int index) {
         return (RenderedImage) this.sources.elementAt(index);
     }
 
-    /** Idem, como imagen renderizable. */
+    /** The same, as a renderable image. */
     public RenderableImage getRenderableSource(int index) {
         return (RenderableImage) this.sources.elementAt(index);
     }
 
-    /** Cuantas fuentes hay. */
+    /** How many sources there are. */
     public int getNumSources() {
         return this.sources.size();
     }
 
-    /** La lista de fuentes, en vivo. */
+    /** The list of sources, live. */
     public Vector<Object> getSources() {
         return this.sources;
     }
 
-    /** Reemplaza la lista de fuentes. */
+    /** Replaces the list of sources. */
     public void setSources(Vector<Object> sources) {
         this.sources = sources;
     }
 
-    /** Las vacia. */
+    /** Replaces them with an empty list. */
     public void removeSources() {
         this.sources = new Vector<Object>();
     }
 
-    /** Cuantos parametros hay. */
+    /** How many parameters there are. */
     public int getNumParameters() {
         return this.parameters.size();
     }
 
-    /** La lista de parametros, en vivo. */
+    /** The list of parameters, live. */
     public Vector<Object> getParameters() {
         return this.parameters;
     }
 
-    /** Reemplaza la lista de parametros. */
+    /** Replaces the list of parameters. */
     public void setParameters(Vector<Object> parameters) {
         this.parameters = parameters;
     }
 
-    /** Los vacia. */
+    /** Replaces them with an empty list. */
     public void removeParameters() {
         this.parameters = new Vector<Object>();
     }
 
-    /** Agrega un parametro al final. */
+    /** Adds a parameter at the end. */
     public ParameterBlock add(Object obj) {
         this.parameters.addElement(obj);
         return this;
     }
 
-    /** Idem, envolviendo. Ver la nota de la clase sobre por que hay una por primitivo. */
+    /** The same, wrapping. See the class note on why there is one per primitive. */
     public ParameterBlock add(byte b) {
         return add(Byte.valueOf(b));
     }
 
-    /** Idem. */
+    /** The same. */
     public ParameterBlock add(char c) {
         return add(Character.valueOf(c));
     }
 
-    /** Idem. */
+    /** The same. */
     public ParameterBlock add(short s) {
         return add(Short.valueOf(s));
     }
 
-    /** Idem. */
+    /** The same. */
     public ParameterBlock add(int i) {
         return add(Integer.valueOf(i));
     }
 
-    /** Idem. */
+    /** The same. */
     public ParameterBlock add(long l) {
         return add(Long.valueOf(l));
     }
 
-    /** Idem. */
+    /** The same. */
     public ParameterBlock add(float f) {
         return add(Float.valueOf(f));
     }
 
-    /** Idem. */
+    /** The same. */
     public ParameterBlock add(double d) {
         return add(Double.valueOf(d));
     }
 
-    /** Pone un parametro en esa posicion, agrandando la lista si hace falta. */
+    /** Puts a parameter at that position, growing the list if needed. */
     public ParameterBlock set(Object obj, int index) {
         if (this.parameters.size() < index + 1) {
             this.parameters.setSize(index + 1);
@@ -206,95 +208,95 @@ public class ParameterBlock implements Cloneable, Serializable {
         return this;
     }
 
-    /** Idem, envolviendo. */
+    /** The same, wrapping. */
     public ParameterBlock set(byte b, int index) {
         return set(Byte.valueOf(b), index);
     }
 
-    /** Idem. */
+    /** The same. */
     public ParameterBlock set(char c, int index) {
         return set(Character.valueOf(c), index);
     }
 
-    /** Idem. */
+    /** The same. */
     public ParameterBlock set(short s, int index) {
         return set(Short.valueOf(s), index);
     }
 
-    /** Idem. */
+    /** The same. */
     public ParameterBlock set(int i, int index) {
         return set(Integer.valueOf(i), index);
     }
 
-    /** Idem. */
+    /** The same. */
     public ParameterBlock set(long l, int index) {
         return set(Long.valueOf(l), index);
     }
 
-    /** Idem. */
+    /** The same. */
     public ParameterBlock set(float f, int index) {
         return set(Float.valueOf(f), index);
     }
 
-    /** Idem. */
+    /** The same. */
     public ParameterBlock set(double d, int index) {
         return set(Double.valueOf(d), index);
     }
 
-    /** El parametro en esa posicion, sin castear. */
+    /** The parameter at that position, uncast. */
     public Object getObjectParameter(int index) {
         return this.parameters.elementAt(index);
     }
 
     /**
-     * El parametro en esa posicion como {@code byte}.
+     * The parameter at that position as a {@code byte}.
      *
-     * @throws ClassCastException si el que se guardo era de otro tipo; ver la nota de la clase
+     * @throws ClassCastException if what was stored was of another type; see the class note
      */
     public byte getByteParameter(int index) {
         return ((Byte) this.parameters.elementAt(index)).byteValue();
     }
 
-    /** Idem, como {@code char}. */
+    /** The same, as a {@code char}. */
     public char getCharParameter(int index) {
         return ((Character) this.parameters.elementAt(index)).charValue();
     }
 
-    /** Idem, como {@code short}. */
+    /** The same, as a {@code short}. */
     public short getShortParameter(int index) {
         return ((Short) this.parameters.elementAt(index)).shortValue();
     }
 
-    /** Idem, como {@code int}. */
+    /** The same, as an {@code int}. */
     public int getIntParameter(int index) {
         return ((Integer) this.parameters.elementAt(index)).intValue();
     }
 
-    /** Idem, como {@code long}. */
+    /** The same, as a {@code long}. */
     public long getLongParameter(int index) {
         return ((Long) this.parameters.elementAt(index)).longValue();
     }
 
-    /** Idem, como {@code float}. */
+    /** The same, as a {@code float}. */
     public float getFloatParameter(int index) {
         return ((Float) this.parameters.elementAt(index)).floatValue();
     }
 
-    /** Idem, como {@code double}. */
+    /** The same, as a {@code double}. */
     public double getDoubleParameter(int index) {
         return ((Double) this.parameters.elementAt(index)).doubleValue();
     }
 
     /**
-     * Las clases de los parametros, en orden.
+     * The classes of the parameters, in order.
      *
-     * <p>Para los envueltos devuelve la clase <b>primitiva</b> --{@code int.class} y no
-     * {@code Integer.class}--, que es lo que hace falta para buscar por reflexion el metodo de la
-     * operacion que los recibe.
+     * <p>For the wrapped ones it returns the <b>primitive</b> class --{@code int.class} and not
+     * {@code Integer.class}--, which is what is needed to find by reflection the operation's method
+     * that receives them.
      *
-     * @throws NullPointerException si algun parametro es null. Es lo que hace el JDK y no una
-     *     comprobacion nuestra: un null no tiene clase, y el hueco que deja un {@code set} mas alla
-     *     del final es justamente un null
+     * @throws NullPointerException if some parameter is null. It is what the JDK does and not a
+     *     check of ours: a null has no class, and the gap a {@code set} past the end leaves is
+     *     precisely a null
      */
     public Class<?>[] getParamClasses() {
         int count = this.parameters.size();

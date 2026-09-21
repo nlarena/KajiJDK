@@ -8,44 +8,38 @@ import java.nio.channels.spi.SelectorProvider;
 import java.util.ServiceConfigurationError;
 
 /**
- * El proveedor con el que esta biblioteca fabrica sus canales de red.
+ * The provider this library makes its network channels with.
  *
- * <p>Existe desde que la VM tiene costura de red; antes no habia con que fabricar ninguno.
+ * <p>It has existed since the VM had a network seam; before that there was nothing to make any of
+ * them with.
  *
- * <h2>Como se elige entre este y uno instalado</h2>
+ * <h2>How the choice between this one and an installed one is made</h2>
  *
- * <p>Los {@code open()} de {@link SocketChannel}, {@link ServerSocketChannel} y
- * {@link DatagramChannel} preguntan primero por {@link SelectorProvider#provider()}: si alguien
- * instalo el suyo --por la propiedad de sistema o por {@code META-INF/services}-- ese gana, que es lo
- * que el contrato de `spi` promete y la unica razon por la que ese mecanismo existe. Solo cuando no
- * hay ninguno se usa este.
+ * <p>The {@code open()}s of {@link SocketChannel}, {@link ServerSocketChannel} and {@link
+ * DatagramChannel} ask {@link SelectorProvider#provider()} first: if somebody installed their own
+ * --through the system property or through {@code META-INF/services}-- that one wins, which is what
+ * the contract of `spi` promises and the only reason that mechanism exists. Only when there is none
+ * is this one used.
  *
- * <p>El orden importa y no es simetrico a proposito: un proveedor instalado reemplaza al de la casa,
- * nunca al reves.
+ * <p>The order matters and is not symmetric on purpose: an installed provider replaces the in-house
+ * one, never the other way round.
  *
- * <h2>Lo que este proveedor no puede dar, y por que lo dice en vez de fingirlo</h2>
+ * <h2>The selector and the pipe</h2>
  *
- * <p>{@link #openSelector()} y {@link #openPipe()} ya funcionan: ver `KajiSelector`.
+ * <p>{@link #openSelector()} and {@link #openPipe()} work: see `KajiSelector`.
  *
- * <p>Un selector multiplexa: espera sobre **muchos** canales a la vez y despierta con los que estan
- * listos. Los canales de esta biblioteca saben decir "todavia no" --de ahi que el modo no bloqueante
- * ande-- pero no hay forma de **esperar por varios sin quemar el procesador**: eso necesita un
- * `select`/`poll` del sistema, y la costura no lo expone. Un selector escrito sobre sondeos cumpliria
- * la firma y gastaria un nucleo entero, y quien lo use para atender mil conexiones --que es para lo
- * que existe-- quedaria peor que con un hilo por conexion.
- *
- * <p>Un pipe, en esta API, son dos canales seleccionables unidos; sin selector no tiene sentido
- * ofrecerlo, y ademas necesitaria una tuberia anonima que la VM tampoco expone.
- *
- * <p>Que estos dos tiren no es lo mismo que faltar: son metodos **abstractos** que esta clase esta
- * obligada a tener, y el contrato de `SelectorProvider` ya prevé un proveedor que no sostenga todo.
- * Los que un programa llamaria --`Selector.open()` y `Pipe.open()`-- **no estan declarados** en esta
- * biblioteca, justamente para que ese programa no compile en vez de fallar corriendo.
+ * <p>This section used to explain why they could not. The argument was that a selector multiplexes
+ * --it waits over **many** channels at a time and wakes up with the ones that are ready-- and that
+ * although the channels of this library know how to say "not yet" --hence the non-blocking mode
+ * working-- there was no way of **waiting for several without burning the processor**: that needs a
+ * `select`/`poll` of the system, and the seam did not expose it. A selector written over polling
+ * would have fulfilled the signature and spent a whole core. The seam exposes `poll` now, so the
+ * selector is the real thing and the pipe --two joined selectable channels-- has a purpose again.
  */
 final class KajiSelectorProvider extends SelectorProvider {
 
-    /** El de la casa. Uno solo: un proveedor no tiene estado. */
-    private static final KajiSelectorProvider PROPIO = new KajiSelectorProvider();
+    /** The in-house one. A single one: a provider has no state. */
+    private static final KajiSelectorProvider BUILT_IN = new KajiSelectorProvider();
 
     private KajiSelectorProvider() {
     }
@@ -58,7 +52,7 @@ final class KajiSelectorProvider extends SelectorProvider {
      * class was the answer to that absence; now it *is* the last tier of that method, so the error
      * cannot happen and catching it would be catching nothing.
      */
-    static SelectorProvider actual() {
+    static SelectorProvider current() {
         return SelectorProvider.provider();
     }
 
@@ -71,13 +65,14 @@ final class KajiSelectorProvider extends SelectorProvider {
      * @return the built-in provider
      */
     static SelectorProvider builtin() {
-        return PROPIO;
+        return BUILT_IN;
     }
 
-    // Las familias que la costura sabe abrir. `INET6` no queda afuera por capricho: el nativo ata y
-    // conecta por nombre, y quien elige la familia de esa direccion es el resolutor del sistema, no
-    // esta clase. Pedir IPv6 explicitamente seria prometer algo que no se puede garantizar.
-    private static void exigirFamiliaConocida(ProtocolFamily family) {
+    // The families the seam knows how to open. `INET6` is not left out on a whim: the native ties
+    // and connects by name, and the one that chooses the family of that address is the system's
+    // resolver, not this class. Asking for IPv6 explicitly would be promising something that cannot
+    // be guaranteed.
+    private static void requireKnownFamily(ProtocolFamily family) {
         if (family == null) {
             throw new NullPointerException("family");
         }
@@ -91,7 +86,7 @@ final class KajiSelectorProvider extends SelectorProvider {
     }
 
     public DatagramChannel openDatagramChannel(ProtocolFamily family) throws IOException {
-        KajiSelectorProvider.exigirFamiliaConocida(family);
+        KajiSelectorProvider.requireKnownFamily(family);
         return new KajiDatagramChannel(this);
     }
 
@@ -100,7 +95,7 @@ final class KajiSelectorProvider extends SelectorProvider {
     }
 
     public ServerSocketChannel openServerSocketChannel(ProtocolFamily family) throws IOException {
-        KajiSelectorProvider.exigirFamiliaConocida(family);
+        KajiSelectorProvider.requireKnownFamily(family);
         return new KajiServerSocketChannel(this);
     }
 
@@ -109,7 +104,7 @@ final class KajiSelectorProvider extends SelectorProvider {
     }
 
     public SocketChannel openSocketChannel(ProtocolFamily family) throws IOException {
-        KajiSelectorProvider.exigirFamiliaConocida(family);
+        KajiSelectorProvider.requireKnownFamily(family);
         return new KajiSocketChannel(this);
     }
 

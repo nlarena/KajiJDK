@@ -10,28 +10,35 @@ import javax.naming.directory.Attributes;
 import javax.naming.directory.DirContext;
 
 /**
- * KajiLibrary's javax.naming.spi.DirectoryManager -- lo mismo que {@link NamingManager}, con
- * atributos.
+ * KajiLibrary's javax.naming.spi.DirectoryManager -- the same as {@link NamingManager}, with
+ * attributes.
  *
- * <p>Extiende {@link NamingManager} y agrega las tres operaciones que necesitan ver los atributos de
- * una entrada. La herencia es de conveniencia --se hereda para tener los metodos estaticos a mano
- * bajo un solo nombre-- y no significa nada mas: todo lo de las dos clases es estatico.
+ * <p>It extends {@link NamingManager} and adds the three operations that need to see an entry's
+ * attributes. The inheritance is for convenience --it is inherited to have the static methods at
+ * hand under a single name-- and means nothing more: everything in both classes is static.
  *
- * <p>Las sobrecargas con {@link Attributes} prefieren las fabricas que los entienden --
- * {@link DirObjectFactory} y {@link DirStateFactory}-- y caen en las comunes cuando no las hay. Ese
- * orden importa: una fabrica que ignora los atributos puede aceptar una entrada que no le
- * corresponde, y en un directorio los atributos son lo que la identifica.
+ * <p>The overloads with {@link Attributes} prefer the factories that understand them --
+ * {@link DirObjectFactory} and {@link DirStateFactory}-- and fall back to the common ones when
+ * there are none. That order matters: a factory that ignores the attributes may accept an entry
+ * that is not its business, and in a directory the attributes are what identifies it.
  */
 public class DirectoryManager extends NamingManager {
 
-    /** Publico por compatibilidad; la clase es solo metodos estaticos. */
+    /**
+     * Package-private, as in the JDK: the class is static methods only. (An earlier note said
+     * public for compatibility.)
+     */
     DirectoryManager() {
     }
 
     /**
-     * El contexto de directorio donde seguir una operacion que se corto.
+     * The directory context where an interrupted operation carries on.
      *
-     * @throws NotContextException si lo que se resuelve no es un {@link DirContext}
+     * <p>Unlike the JDK, which wraps the exception in a {@code DirContext} that resolves the
+     * continuation lazily (and never throws {@code NotContextException} here), this asks
+     * {@link #getContinuationContext} right away and checks the result.
+     *
+     * @throws NotContextException if what it resolves to is not a {@link DirContext}
      */
     public static DirContext getContinuationDirContext(CannotProceedException cpe)
         throws NamingException {
@@ -44,11 +51,11 @@ public class DirectoryManager extends NamingManager {
     }
 
     /**
-     * El objeto que corresponde a esos datos y esos atributos.
+     * The object that corresponds to that data and those attributes.
      *
-     * <p>Ver el orden de preferencia en la nota de la clase.
+     * <p>See the order of preference in the class note.
      *
-     * @return el objeto, o {@code refInfo} tal cual si ninguna fabrica lo reconocio
+     * @return the object, or {@code refInfo} as is if no factory recognized it
      */
     public static Object getObjectInstance(Object refInfo, Name name, Context nameCtx,
                                            Hashtable<?, ?> environment, Attributes attrs)
@@ -75,15 +82,15 @@ public class DirectoryManager extends NamingManager {
                 i = i + 1;
             }
         }
-        // Sin fabricas de directorio, vale el camino comun: incluye el de la propia referencia.
+        // Without directory factories, the common path applies: it includes the reference's own.
         return NamingManager.getObjectInstance(refInfo, name, nameCtx, environment);
     }
 
     /**
-     * Lo que hay que guardar y con que atributos.
+     * What to store and with which attributes.
      *
-     * @param inAttrs los que ya se pensaba escribir, o null
-     * @return nunca null: si ninguna fabrica reconoce el objeto, se devuelve lo que entro
+     * @param inAttrs the ones that were going to be written, or null
+     * @return never null: if no factory recognizes the object, what came in is returned
      */
     public static DirStateFactory.Result getStateToBind(Object obj, Name name, Context nameCtx,
                                                         Hashtable<?, ?> environment,
@@ -115,10 +122,12 @@ public class DirectoryManager extends NamingManager {
     }
 
     /**
-     * Instancia esa clase, o null.
+     * Instantiates that class, or null.
      *
-     * <p>Duplica el helper privado de {@link NamingManager} porque alla es privado, y el JDK tampoco
-     * lo comparte. Se traga la falla por lo mismo: una fabrica que no carga es una fabrica menos.
+     * <p>It duplicates {@link NamingManager}'s private helper because that one is private. (An
+     * earlier note said the JDK does not share it either; the JDK 25 does, through
+     * {@code com.sun.naming.internal.NamingManagerHelper}.) It swallows the failure for the same
+     * reason: a factory that does not load is one factory fewer.
      */
     private static Object instantiate(String className) {
         try {

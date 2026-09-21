@@ -5,27 +5,27 @@ import java.awt.geom.Rectangle2D;
 import java.awt.image.ColorModel;
 
 /**
- * Con qué se rellena una figura: un color plano, un degradé o una textura.
+ * What a shape is filled with: a flat colour, a gradient or a texture.
  *
- * <p>Es la generalización de "el color con el que se dibuja". Un {@link Color} es un `Paint` que
- * contesta lo mismo en todos los puntos; un degradé contesta distinto según dónde esté el punto. Al
- * dibujado le da igual: le pide al `Paint` un {@link PaintContext} y le pide píxeles.
+ * <p>It is the generalization of "the colour to draw with". A {@link Color} is a `Paint` that
+ * answers the same at every point; a gradient answers differently depending on where the point is.
+ * Drawing does not care: it asks the `Paint` for a {@link PaintContext} and asks that for pixels.
  *
- * <p>Extiende {@link Transparency} porque quien dibuja necesita saber, **antes** de empezar, si lo
- * que va a pintar puede dejar ver lo de abajo: eso decide si puede escribir directo o tiene que
- * componer.
+ * <p>It extends {@link Transparency} because whoever draws needs to know, **before** starting,
+ * whether what it will paint can let what is below show through: that decides whether it can write
+ * directly or has to composite.
  */
 public interface Paint extends Transparency {
 
     /**
-     * Arma la máquina que va a generar los píxeles.
+     * Builds the machine that will generate the pixels.
      *
-     * @param cm el formato en el que el destino preferiría recibirlos, o `null` si le da igual;
-     *     es una sugerencia y el contexto puede devolver otro
-     * @param deviceBounds el rectángulo del dispositivo que se va a pintar
-     * @param userBounds el mismo rectángulo en coordenadas de usuario
-     * @param xform de coordenadas de usuario a coordenadas de dispositivo
-     * @param hints las pistas de calidad
+     * @param cm the format in which the destination would prefer to receive them, or `null` if it
+     *     does not care; it is a suggestion and the context may return another
+     * @param deviceBounds the device rectangle that will be painted
+     * @param userBounds the same rectangle in user coordinates
+     * @param xform from user coordinates to device coordinates
+     * @param hints the quality hints
      */
     PaintContext createContext(ColorModel cm, Rectangle deviceBounds, Rectangle2D userBounds,
             AffineTransform xform, RenderingHints hints);

@@ -6,34 +6,34 @@ import javax.accessibility.Accessible;
 import javax.accessibility.AccessibleContext;
 
 /**
- * Un cartel de progreso que aparece solo si la tarea resulta ser larga.
+ * A progress notice that appears only if the task turns out to be a long one.
  *
- * <h2>Las dos demoras, que son toda la clase</h2>
+ * <h2>The two delays, which are the whole class</h2>
  *
- * <p>La mayoria de las tareas que uno teme que sean lentas terminan en un parpadeo. Mostrar un
- * cartel para cada una llena la pantalla de ventanas que aparecen y desaparecen.
+ * <p>Most of the tasks one fears will be slow end in a blink. Showing a notice for each one
+ * fills the screen with windows that appear and disappear.
  *
- * <p>Esta clase espera dos veces. Primero {@link #setMillisToDecideToPopup} -- medio segundo por
- * omision -- sin hacer nada: si la tarea termina ahi, nunca hubo cartel. Cumplido ese plazo,
- * <em>estima</em> cuanto falta a partir de lo que se avanzo hasta ahora, y solo si la estimacion
- * supera {@link #setMillisToPopup} muestra el cartel. Una tarea que en medio segundo ya va por el
- * 90% no lo merece.
+ * <p>This class waits twice. First {@link #setMillisToDecideToPopup} -- half a second by default
+ * -- doing nothing: if the task finishes there, there never was a notice. Once that term is up,
+ * it <em>estimates</em> how much is left from what has been advanced so far, and only if the
+ * estimate goes over {@link #setMillisToPopup} does it show the notice. A task that in half a
+ * second is already at 90% does not deserve it.
  *
- * <p>Esa estimacion es la razon de que {@link #setProgress} haya que llamarlo seguido: sin avances
- * no hay de donde estimar.
+ * <p>That estimate is the reason {@link #setProgress} has to be called often: with no advances
+ * there is nothing to estimate from.
  *
- * <h2>Cancelar es una pregunta, no una orden</h2>
+ * <h2>Cancelling is a question, not an order</h2>
  *
- * <p>{@link #isCanceled} dice que el usuario apreto Cancelar. No detiene nada: la tarea tiene que
- * mirarlo y decidir. Es lo correcto -- solo la tarea sabe como abandonar sin dejar las cosas por la
- * mitad -- y es lo que hay que recordar, porque una tarea que no lo consulta muestra un boton de
- * cancelar que no cancela.
+ * <p>{@link #isCanceled} says that the user pressed Cancel. It stops nothing: the task has to
+ * look at it and decide. It is right -- only the task knows how to give up without leaving
+ * things half done -- and it is what has to be remembered, because a task that does not consult
+ * it shows a cancel button that does not cancel.
  *
- * <h2>Sin pantalla</h2>
+ * <h2>With no screen</h2>
  *
- * <p>Toda la cuenta -- los limites, el avance, las dos demoras, la estimacion -- ocurre igual. Lo
- * que no aparece es el cartel, y por lo tanto {@link #isCanceled} siempre da falso: no hay boton que
- * apretar.
+ * <p>The whole arithmetic -- the bounds, the progress, the two delays, the estimate -- happens
+ * all the same. What does not appear is the notice, and therefore {@link #isCanceled} always
+ * gives false: there is no button to press.
  */
 public class ProgressMonitor implements Accessible {
 
@@ -49,15 +49,15 @@ public class ProgressMonitor implements Accessible {
     private int millisToPopup = 2000;
     private long T0;
     private boolean canceled;
-    private boolean cerrado;
+    private boolean closed;
     private JDialog dialog;
     private JProgressBar myBar;
     private JLabel noteLabel;
 
     /**
-     * Un monitor para una tarea que va de {@code min} a {@code max}.
+     * A monitor for a task that goes from {@code min} to {@code max}.
      *
-     * <p>Todavia no muestra nada; ver la nota de la clase.
+     * <p>It shows nothing yet; see the class note.
      */
     public ProgressMonitor(Component parentComponent, Object message, String note, int min,
             int max) {
@@ -71,9 +71,9 @@ public class ProgressMonitor implements Accessible {
     }
 
     /**
-     * Anota cuanto se avanzo, y decide si toca mostrar el cartel.
+     * It notes how much was advanced, and decides whether it is time to show the notice.
      *
-     * <p>Llegar al maximo lo cierra: la tarea termino.
+     * <p>Reaching the maximum closes it: the task finished.
      */
     public void setProgress(int nv) {
         v = nv;
@@ -81,32 +81,32 @@ public class ProgressMonitor implements Accessible {
             close();
             return;
         }
-        if (cerrado) {
+        if (closed) {
             return;
         }
         if (dialog != null) {
-            actualizar();
+            update();
             return;
         }
         long dur = System.currentTimeMillis() - T0;
         if (dur < millisToDecideToPopup) {
             return;
         }
-        // Se estima el total a partir de lo que se avanzo, y se muestra solo si lo que falta lo
-        // justifica. Ver la nota de la clase.
-        int avance = nv - min;
-        if (avance <= 0) {
+        // The total is estimated from what was advanced, and it is shown only if what is left
+                    // justifies it. See the class note.
+        int progress = nv - min;
+        if (progress <= 0) {
             return;
         }
-        long estimado = dur * (max - min) / avance;
-        if (estimado - dur < millisToPopup) {
+        long estimated = dur * (max - min) / progress;
+        if (estimated - dur < millisToPopup) {
             return;
         }
-        mostrar();
+        show();
     }
 
-    /** Arma y muestra el cartel; sin pantalla no llega a mostrarse. */
-    private void mostrar() {
+    /** It builds and shows the notice; with no screen it does not get as far as being shown. */
+    private void show() {
         myBar = new JProgressBar();
         myBar.setMinimum(min);
         myBar.setMaximum(max);
@@ -125,24 +125,26 @@ public class ProgressMonitor implements Accessible {
                             ? UIManager.getString("ProgressMonitor.progressText") : "Progress...");
             dialog.setVisible(true);
         } catch (java.awt.HeadlessException e) {
-            // Sin pantalla no hay cartel; la cuenta sigue igual. Ver la nota de la clase.
+            // With no screen there is no notice; the arithmetic goes on the same. See the class
+            // note.
             dialog = null;
         }
     }
 
-    private void actualizar() {
+    private void update() {
         if (myBar != null) {
             myBar.setValue(v);
         }
     }
 
     /**
-     * Cierra el cartel si estaba puesto.
+     * It closes the notice if it was up.
      *
-     * <p>Se puede llamar aunque nunca haya aparecido; es lo normal cuando la tarea fue rapida.
+     * <p>It can be called even though it never appeared; that is the usual thing when the task was
+     * fast.
      */
     public void close() {
-        cerrado = true;
+        closed = true;
         if (dialog != null) {
             dialog.setVisible(false);
             dialog.dispose();
@@ -174,12 +176,12 @@ public class ProgressMonitor implements Accessible {
         }
     }
 
-    /** Si el usuario apreto Cancelar; ver la nota de la clase. */
+    /** Whether the user pressed Cancel; see the class note. */
     public boolean isCanceled() {
         return canceled;
     }
 
-    /** Cuanto se espera antes de siquiera pensar en mostrar el cartel. */
+    /** How long it waits before even thinking of showing the notice. */
     public void setMillisToDecideToPopup(int millisToDecideToPopup) {
         this.millisToDecideToPopup = millisToDecideToPopup;
     }
@@ -188,7 +190,7 @@ public class ProgressMonitor implements Accessible {
         return millisToDecideToPopup;
     }
 
-    /** Cuanto tiene que faltar, estimado, para que valga la pena mostrarlo. */
+    /** How much has to be left, estimated, for it to be worth showing. */
     public void setMillisToPopup(int millisToPopup) {
         this.millisToPopup = millisToPopup;
     }
@@ -198,10 +200,10 @@ public class ProgressMonitor implements Accessible {
     }
 
     /**
-     * El texto que cambia mientras la tarea avanza.
+     * The text that changes as the task advances.
      *
-     * <p>Nulo al construir el monitor significa que no va a haber ninguno, y ponerlo despues no lo
-     * agrega: el cartel se arma una vez y no cambia de forma.
+     * <p>Null when the monitor is built means there is not going to be one, and setting it
+     * afterwards does not add it: the notice is built once and does not change shape.
      */
     public void setNote(String note) {
         this.note = note;

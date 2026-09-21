@@ -66,21 +66,22 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * La escritura de los atributos tipados: del objeto de `java.lang.classfile.attribute` a los bytes.
+ * The writing of the typed attributes: from the `java.lang.classfile.attribute` object to the
+ * bytes.
  *
- * <p>El inverso exacto de {@link AttributeReader}, y conviene leerlos de a pares.
+ * <p>The exact inverse of {@link AttributeReader}, and they are best read in pairs.
  *
- * <p>El largo no se puede escribir de una: se sabe recién cuando el cuerpo está escrito. Por eso
- * {@link #write} escribe el nombre, deja cuatro bytes reservados, escribe el cuerpo y después
- * parcha el largo con lo que se escribió. Es el mismo baile que hace cualquier escritor de `.class`
- * y está acá una sola vez, en vez de en cada atributo.
+ * <p>The length cannot be written in one go: it is known only when the body is written. That is why
+ * {@link #write} writes the name, leaves four bytes reserved, writes the body and then patches the
+ * length with what was written. It is the same dance any `.class` writer does and it is here once,
+ * instead of in each attribute.
  */
 final class AttributeWriter {
 
     private AttributeWriter() {
     }
 
-    /** El atributo entero: nombre, largo y cuerpo. */
+    /** The whole attribute: name, length and body. */
     static void write(BufWriter buf, Attribute<?> attr) {
         buf.writeIndex(attr.attributeName());
         int lenPos = buf.size();
@@ -89,9 +90,9 @@ final class AttributeWriter {
         buf.patchInt(lenPos, 4, buf.size() - lenPos - 4);
     }
 
-    // El reparto va por el tipo del atributo y no por su código porque acá lo que hay es el objeto,
-    // no el mapeador: el `instanceof` es la misma pregunta que el código, hecha del lado en que se
-    // puede hacer.
+    // The dispatch goes by the attribute's type and not by its code because what there is here is
+    // the object, not the mapper: the `instanceof` is the same question as the code, asked from the
+    // side on which it can be asked.
     private static void writeBody(BufWriter buf, Attribute<?> attr) {
         if (attr instanceof SourceFileAttribute) {
             buf.writeIndex(((SourceFileAttribute) attr).sourceFile());
@@ -215,7 +216,7 @@ final class AttributeWriter {
             return;
         }
         if (attr instanceof MethodParametersAttribute) {
-            // La cantidad va en UN byte, no en dos. Ver la nota del lector.
+            // The count goes in ONE byte, not in two. See the reader's note.
             List<MethodParameterInfo> ps = ((MethodParametersAttribute) attr).parameters();
             buf.writeU1(ps.size());
             for (int i = 0; i < ps.size(); i++) {
@@ -284,25 +285,25 @@ final class AttributeWriter {
             writeStackMapTable(buf, (StackMapTableAttribute) attr);
             return;
         }
-        // `Deprecated` y `Synthetic` no tienen cuerpo: existir es todo lo que dicen. Caer acá sin
-        // haber escrito nada es correcto para ellos y sólo para ellos, y por eso se comprueba en vez
-        // de dejar que cualquier atributo desconocido se escriba vacío en silencio.
+        // `Deprecated` and `Synthetic` have no body: existing is all they say. Falling through here
+        // without having written anything is right for them and only for them, and that is why it
+        // is checked instead of letting any unknown attribute be written empty in silence.
         if (attr instanceof java.lang.classfile.attribute.DeprecatedAttribute
                 || attr instanceof java.lang.classfile.attribute.SyntheticAttribute) {
             return;
         }
         throw new IllegalArgumentException(
-                "no hay escritor para " + attr.attributeName().stringValue());
+                "there is no writer for " + attr.attributeName().stringValue());
     }
 
-    // El bci de una etiqueta que salió de leer un archivo. Una etiqueta de un `CodeBuilder` es una
-    // incógnita que se resuelve al cerrar el método, y acá no hay método que cerrar: decirlo es
-    // mejor que escribir un cero que produciría un `.class` inverificable.
+    // The bci of a label that came out of reading a file. A label of a `CodeBuilder` is an unknown
+    // that is resolved when the method is closed, and here there is no method to close: saying so
+    // is better than writing a zero that would produce an unverifiable `.class`.
     private static int bci(Label label) {
         if (label instanceof LabelImpl) {
             return ((LabelImpl) label).bci();
         }
-        throw new IllegalArgumentException("esta etiqueta todavía no tiene posición: " + label);
+        throw new IllegalArgumentException("this label has no position yet: " + label);
     }
 
     private static void writeClasses(BufWriter buf, List<ClassEntry> classes) {
@@ -392,17 +393,17 @@ final class AttributeWriter {
         }
     }
 
-    // Un atributo anidado se escribe con SU propio mapeador, que puede ser el crudo si el componente
-    // trae un atributo que esta biblioteca no interpreta. El `unchecked` es inevitable y está
-    // acotado a estas dos líneas: `Attribute<A>` y `AttributeMapper<A>` comparten el parámetro por
-    // construcción —lo dice `Attribute<A extends Attribute<A>>`— pero el comodín ya perdió el nombre
-    // de ese tipo y no hay forma de recuperarlo.
+    // A nested attribute is written with ITS own mapper, which may be the raw one if the component
+    // brings an attribute this library does not interpret. The `unchecked` is unavoidable and
+    // confined to these two lines: `Attribute<A>` and `AttributeMapper<A>` share the parameter by
+    // construction --`Attribute<A extends Attribute<A>>` says so-- but the wildcard has already
+    // lost the name of that type and there is no way of recovering it.
     private static void writeNested(BufWriter buf, Attribute<?> attr) {
         java.lang.classfile.AttributeMapper m = attr.attributeMapper();
         m.writeAttribute(buf, attr);
     }
 
-    // ---- las anotaciones ----------------------------------------------------------------------
+    // ---- the annotations -----------------------------------------------------------------------
 
     private static void writeAnnotations(BufWriter buf, List<Annotation> annotations) {
         buf.writeU2(annotations.size());
@@ -420,11 +421,11 @@ final class AttributeWriter {
 
     private static void writeAnnotation(BufWriter buf, Annotation a) {
         buf.writeIndex(a.className());
-        List<AnnotationElement> es = a.elements();
-        buf.writeU2(es.size());
-        for (int i = 0; i < es.size(); i++) {
-            buf.writeIndex(es.get(i).name());
-            writeElementValue(buf, es.get(i).value());
+        List<AnnotationElement> elems = a.elements();
+        buf.writeU2(elems.size());
+        for (int i = 0; i < elems.size(); i++) {
+            buf.writeIndex(elems.get(i).name());
+            writeElementValue(buf, elems.get(i).value());
         }
     }
 
@@ -452,8 +453,8 @@ final class AttributeWriter {
             buf.writeIndex(((AnnotationValue.OfClass) v).className());
             return;
         }
-        // Los diez restantes son una sola entrada de pool, y `OfConstant` es justamente lo que
-        // tienen en común.
+        // The ten remaining ones are a single pool entry, and `OfConstant` is exactly what they
+        // have in common.
         buf.writeIndex(((AnnotationValue.OfConstant) v).constant());
     }
 
@@ -530,9 +531,9 @@ final class AttributeWriter {
 
     // ---- `StackMapTable` ----------------------------------------------------------------------
 
-    // Se escriben todos como `full_frame`. Es válido —§4.10.1 acepta cualquier codificación que
-    // describa el estado correcto— y es la única forma posible sin reconstruir la cadena de deltas
-    // que el modelo ya descomprimió al leer. El archivo queda más grande, no más flojo.
+    // They are all written as `full_frame`. It is valid --§4.10.1 accepts any encoding that
+    // describes the right state-- and it is the only possible form without rebuilding the chain of
+    // deltas the model already decompressed on reading. The file comes out bigger, not looser.
     private static void writeStackMapTable(BufWriter buf, StackMapTableAttribute attr) {
         List<StackMapFrameInfo> fs = attr.entries();
         buf.writeU2(fs.size());

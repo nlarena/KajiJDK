@@ -1,89 +1,94 @@
 package javax.xml.stream;
 
 /**
- * KajiLibrary's javax.xml.stream.XMLStreamConstants -- los quince tipos de evento que puede
- * devolver un lector de StAX.
+ * KajiLibrary's javax.xml.stream.XMLStreamConstants -- the fifteen event types a StAX reader can
+ * return.
  *
- * <p>Es una interfaz sin metodos, y esa forma tiene un motivo historico que conviene saber:
- * {@link XMLStreamReader} la **extiende**, asi que quien programa contra el lector escribe
- * {@code reader.next() == START_ELEMENT} sin importar nada. Hoy se escribiria como una clase de
- * constantes o un enum; en 2004 la herencia de constantes era la forma normal de conseguir eso.
+ * <p>It is an interface without methods, and that form has a historical reason worth knowing:
+ * {@link XMLStreamReader} <b>extends</b> it, so whoever programs against the reader writes
+ * {@code reader.next() == START_ELEMENT} without importing anything. Today it would be written as a
+ * constants class or an enum; in 2004 inheriting constants was the normal way of getting that.
  *
- * <p>Los valores son los del contrato --1 a 15, en el orden en que estan declarados-- y hay codigo
- * que los persiste, asi que no son un detalle interno.
+ * <p>The values are the contract's --1 to 15, in the order they are declared-- and there is code
+ * that persists them, so they are not an internal detail.
  *
- * <h2>Los que un lector devuelve y los que no</h2>
+ * <h2>The ones a reader returns and the ones it does not</h2>
  *
- * <p>La lista es mas larga que los estados por los que pasa un recorrido normal, y la diferencia
- * importa:
+ * <p>The list is longer than the states a normal walk goes through, and the difference matters:
  *
  * <ul>
  *   <li>{@link #START_DOCUMENT}, {@link #START_ELEMENT}, {@link #END_ELEMENT}, {@link #CHARACTERS},
  *       {@link #CDATA}, {@link #SPACE}, {@link #COMMENT}, {@link #PROCESSING_INSTRUCTION},
- *       {@link #ENTITY_REFERENCE}, {@link #DTD} y {@link #END_DOCUMENT} salen de
+ *       {@link #ENTITY_REFERENCE}, {@link #DTD} and {@link #END_DOCUMENT} come out of
  *       {@link XMLStreamReader#next()};
- *   <li>{@link #ATTRIBUTE}, {@link #NAMESPACE}, {@link #NOTATION_DECLARATION} y
- *       {@link #ENTITY_DECLARATION} **no**: son tipos de {@link javax.xml.stream.events.XMLEvent}
- *       que existen porque el modelo de eventos necesita nombrar esas cosas, pero el lector de
- *       cursor las expone como propiedades del elemento o del DTD, no como pasos del recorrido.
+ *   <li>{@link #ATTRIBUTE}, {@link #NAMESPACE}, {@link #NOTATION_DECLARATION} and {@link
+ *       #ENTITY_DECLARATION} do <b>not</b>: they are {@link javax.xml.stream.events.XMLEvent} types
+ *       that exist because the event model needs to name those things, but the cursor reader
+ *       exposes them as properties of the element or of the DTD, not as steps of the walk.
  * </ul>
  */
 public interface XMLStreamConstants {
 
-    /** La apertura de un elemento: {@code <a>}. */
+    /** The start of an element: {@code <a>}. */
     int START_ELEMENT = 1;
 
-    /** El cierre de un elemento: {@code </a>}. Un {@code <a/>} produce los dos, apertura y cierre. */
+    /** The end of an element: {@code </a>}. An {@code <a/>} produces both, start and end. */
     int END_ELEMENT = 2;
 
-    /** Una instruccion de proceso: {@code <?destino datos?>}. */
+    /** A processing instruction: {@code <?target data?>}. */
     int PROCESSING_INSTRUCTION = 3;
 
     /**
-     * Texto.
+     * Text.
      *
-     * <p>Un mismo pedazo de texto puede llegar partido en varios eventos si la fabrica no tiene
-     * puesto {@code isCoalescing}; eso no es un capricho sino la consecuencia de que el parser lea
-     * por bloques.
+     * <p>The same piece of text can arrive split into several events if the factory does not have
+     * {@code isCoalescing} set; that is not a whim but the consequence of the parser reading in
+     * blocks.
      */
     int CHARACTERS = 4;
 
-    /** Un comentario: {@code <!-- ... -->}. */
+    /** A comment: {@code <!-- ... -->}. */
     int COMMENT = 5;
 
     /**
-     * Espacio en blanco ignorable.
+     * Ignorable whitespace.
      *
-     * <p>Solo se puede distinguir del texto comun cuando hay un DTD o un esquema que diga que ese
-     * elemento no lleva contenido mixto; sin validacion, el mismo espacio llega como
-     * {@link #CHARACTERS}.
+     * <p>It can only be told apart from ordinary text when there is a DTD or a schema saying that
+     * element does not carry mixed content; without validation, the same space arrives as {@link
+     * #CHARACTERS}.
      */
     int SPACE = 6;
 
-    /** El comienzo del documento, antes de la raiz; lleva la version, la codificacion y standalone. */
+    /**
+     * The start of the document, before the root; it carries the version, the encoding and
+     * standalone.
+     */
     int START_DOCUMENT = 7;
 
-    /** El fin del documento; despues de esto {@code hasNext()} da false. */
+    /** The end of the document; after this {@code hasNext()} gives false. */
     int END_DOCUMENT = 8;
 
-    /** Una referencia a entidad que no se reemplazo: {@code &nombre;}. */
+    /** An entity reference that was not replaced: {@code &name;}. */
     int ENTITY_REFERENCE = 9;
 
-    /** Un atributo, como evento. El lector de cursor no lo devuelve; ver el encabezado. */
+    /** An attribute, as an event. The cursor reader does not return it; see the header. */
     int ATTRIBUTE = 10;
 
-    /** La declaracion de tipo de documento: {@code <!DOCTYPE ...>}. */
+    /** The document type declaration: {@code <!DOCTYPE ...>}. */
     int DTD = 11;
 
-    /** Una seccion {@code <![CDATA[...]]>}, cuando la fabrica no la funde con el texto de al lado. */
+    /**
+     * A {@code <![CDATA[...]]>} section, when the factory does not merge it with the text next to
+     * it.
+     */
     int CDATA = 12;
 
-    /** Una declaracion de espacio de nombres, como evento. Tampoco sale del lector de cursor. */
+    /** A namespace declaration, as an event. It does not come out of the cursor reader either. */
     int NAMESPACE = 13;
 
-    /** Una {@code <!NOTATION ...>} del DTD. */
+    /** A {@code <!NOTATION ...>} of the DTD. */
     int NOTATION_DECLARATION = 14;
 
-    /** Una {@code <!ENTITY ...>} del DTD. */
+    /** An {@code <!ENTITY ...>} of the DTD. */
     int ENTITY_DECLARATION = 15;
 }

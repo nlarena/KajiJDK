@@ -1,7 +1,7 @@
 package com.sun.source.doctree;
 
 /**
- * Texto plano. La hoja mas comun del arbol.
+ * Plain text. The commonest leaf of the tree.
  */
 public interface TextTree extends DocTree {
 

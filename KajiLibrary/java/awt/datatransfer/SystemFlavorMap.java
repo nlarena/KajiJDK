@@ -38,40 +38,40 @@ public final class SystemFlavorMap implements FlavorMap, FlavorTable {
 
     /** With the out-of-the-box correspondences. */
     private SystemFlavorMap() {
-        this.registrar(DataFlavor.stringFlavor, "UNICODE TEXT");
-        this.registrar(DataFlavor.stringFlavor, "TEXT");
-        this.registrar(DataFlavor.imageFlavor, "IMAGE");
-        this.registrar(DataFlavor.javaFileListFlavor, "FILE_NAME");
-        this.registrar(DataFlavor.allHtmlFlavor, "HTML");
+        this.register(DataFlavor.stringFlavor, "UNICODE TEXT");
+        this.register(DataFlavor.stringFlavor, "TEXT");
+        this.register(DataFlavor.imageFlavor, "IMAGE");
+        this.register(DataFlavor.javaFileListFlavor, "FILE_NAME");
+        this.register(DataFlavor.allHtmlFlavor, "HTML");
     }
 
     /** Binds a format to a native name, in both directions. */
-    private void registrar(DataFlavor flavor, String nat) {
+    private void register(DataFlavor flavor, String nat) {
         this.addNative(flavor, nat);
         this.addFlavor(nat, flavor);
     }
 
     /** Adds a native name at the end of that format's list. */
     private void addNative(DataFlavor flavor, String nat) {
-        List<String> lista = this.flavorToNative.get(flavor);
-        if (lista == null) {
-            lista = new ArrayList<String>();
-            this.flavorToNative.put(flavor, lista);
+        List<String> list = this.flavorToNative.get(flavor);
+        if (list == null) {
+            list = new ArrayList<String>();
+            this.flavorToNative.put(flavor, list);
         }
-        if (!lista.contains(nat)) {
-            lista.add(nat);
+        if (!list.contains(nat)) {
+            list.add(nat);
         }
     }
 
     /** Adds a format at the end of that native name's list. */
     private void addFlavor(String nat, DataFlavor flavor) {
-        List<DataFlavor> lista = this.nativeToFlavor.get(nat);
-        if (lista == null) {
-            lista = new ArrayList<DataFlavor>();
-            this.nativeToFlavor.put(nat, lista);
+        List<DataFlavor> list = this.nativeToFlavor.get(nat);
+        if (list == null) {
+            list = new ArrayList<DataFlavor>();
+            this.nativeToFlavor.put(nat, list);
         }
-        if (!lista.contains(flavor)) {
-            lista.add(flavor);
+        if (!list.contains(flavor)) {
+            list.add(flavor);
         }
     }
 
@@ -98,9 +98,9 @@ public final class SystemFlavorMap implements FlavorMap, FlavorTable {
         if (flav == null) {
             throw new NullPointerException("flav");
         }
-        List<String> lista = this.flavorToNative.get(flav);
-        if (lista != null && !lista.isEmpty()) {
-            return new ArrayList<String>(lista);
+        List<String> list = this.flavorToNative.get(flav);
+        if (list != null && !list.isEmpty()) {
+            return new ArrayList<String>(list);
         }
         List<String> out = new ArrayList<String>();
         out.add(encodeDataFlavor(flav));
@@ -119,9 +119,9 @@ public final class SystemFlavorMap implements FlavorMap, FlavorTable {
         if (nat == null) {
             throw new NullPointerException("nat");
         }
-        List<DataFlavor> lista = this.nativeToFlavor.get(nat);
-        if (lista != null && !lista.isEmpty()) {
-            return new ArrayList<DataFlavor>(lista);
+        List<DataFlavor> list = this.nativeToFlavor.get(nat);
+        if (list != null && !list.isEmpty()) {
+            return new ArrayList<DataFlavor>(list);
         }
         List<DataFlavor> out = new ArrayList<DataFlavor>();
         if (isJavaMIMEType(nat)) {
@@ -141,14 +141,14 @@ public final class SystemFlavorMap implements FlavorMap, FlavorTable {
      */
     public synchronized Map<DataFlavor, String> getNativesForFlavors(DataFlavor[] flavors) {
         Map<DataFlavor, String> out = new HashMap<DataFlavor, String>();
-        DataFlavor[] cuales = flavors;
-        if (cuales == null) {
-            cuales = this.flavorToNative.keySet().toArray(new DataFlavor[0]);
+        DataFlavor[] which = flavors;
+        if (which == null) {
+            which = this.flavorToNative.keySet().toArray(new DataFlavor[0]);
         }
-        for (int i = 0; i < cuales.length; i++) {
-            List<String> lista = this.getNativesForFlavor(cuales[i]);
-            if (!lista.isEmpty()) {
-                out.put(cuales[i], lista.get(0));
+        for (int i = 0; i < which.length; i++) {
+            List<String> list = this.getNativesForFlavor(which[i]);
+            if (!list.isEmpty()) {
+                out.put(which[i], list.get(0));
             }
         }
         return out;
@@ -161,14 +161,14 @@ public final class SystemFlavorMap implements FlavorMap, FlavorTable {
      */
     public synchronized Map<String, DataFlavor> getFlavorsForNatives(String[] natives) {
         Map<String, DataFlavor> out = new HashMap<String, DataFlavor>();
-        String[] cuales = natives;
-        if (cuales == null) {
-            cuales = this.nativeToFlavor.keySet().toArray(new String[0]);
+        String[] which = natives;
+        if (which == null) {
+            which = this.nativeToFlavor.keySet().toArray(new String[0]);
         }
-        for (int i = 0; i < cuales.length; i++) {
-            List<DataFlavor> lista = this.getFlavorsForNative(cuales[i]);
-            if (!lista.isEmpty()) {
-                out.put(cuales[i], lista.get(0));
+        for (int i = 0; i < which.length; i++) {
+            List<DataFlavor> list = this.getFlavorsForNative(which[i]);
+            if (!list.isEmpty()) {
+                out.put(which[i], list.get(0));
             }
         }
         return out;
@@ -198,16 +198,16 @@ public final class SystemFlavorMap implements FlavorMap, FlavorTable {
         if (flav == null || natives == null) {
             throw new NullPointerException("null arguments not permitted");
         }
-        List<String> lista = new ArrayList<String>();
+        List<String> list = new ArrayList<String>();
         for (int i = 0; i < natives.length; i++) {
             if (natives[i] == null) {
                 throw new NullPointerException("null arguments not permitted");
             }
-            if (!lista.contains(natives[i])) {
-                lista.add(natives[i]);
+            if (!list.contains(natives[i])) {
+                list.add(natives[i]);
             }
         }
-        this.flavorToNative.put(flav, lista);
+        this.flavorToNative.put(flav, list);
     }
 
     /**
@@ -231,16 +231,16 @@ public final class SystemFlavorMap implements FlavorMap, FlavorTable {
         if (nat == null || flavors == null) {
             throw new NullPointerException("null arguments not permitted");
         }
-        List<DataFlavor> lista = new ArrayList<DataFlavor>();
+        List<DataFlavor> list = new ArrayList<DataFlavor>();
         for (int i = 0; i < flavors.length; i++) {
             if (flavors[i] == null) {
                 throw new NullPointerException("null arguments not permitted");
             }
-            if (!lista.contains(flavors[i])) {
-                lista.add(flavors[i]);
+            if (!list.contains(flavors[i])) {
+                list.add(flavors[i]);
             }
         }
-        this.nativeToFlavor.put(nat, lista);
+        this.nativeToFlavor.put(nat, list);
     }
 
     /**

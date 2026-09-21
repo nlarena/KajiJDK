@@ -3,39 +3,40 @@ package java.awt;
 import java.io.Serializable;
 
 /**
- * Convierte un grupo de {@link Checkbox} en botones de radio: exactamente uno marcado a la vez.
+ * Turns a group of {@link Checkbox} into radio buttons: exactly one ticked at a time.
  *
- * <p>AWT no tiene una clase de botón de radio. Tiene esto: la misma casilla de siempre, con un grupo
- * que se encarga de que marcar una desmarque a la anterior. Es una decisión de diseño discutible
- * —el widget cambia de forma según si tiene grupo o no— pero es la que hay.
+ * <p>AWT has no radio button class. It has this: the same box as always, with a group that takes
+ * care that ticking one unticks the previous one. It is an arguable design decision —the widget
+ * changes shape depending on whether it has a group— but it is the one there is.
  *
- * <p>Una vez que hay algo marcado, el grupo **no se puede vaciar** desde la interfaz: apretar la
- * casilla marcada no la desmarca. Por programa sí, pasando `null` a {@link #setSelectedCheckbox}.
+ * <p>Once something is ticked, the group **cannot be emptied** from the interface: pressing the
+ * ticked box does not untick it. From a program it can, by passing `null` to
+ * {@link #setSelectedCheckbox}.
  */
 public class CheckboxGroup implements Serializable {
 
     private static final long serialVersionUID = 3729780091441768983L;
 
-    /** La casilla marcada, o `null` si no hay ninguna. */
+    /** The ticked box, or `null` if there is none. */
     Checkbox selectedCheckbox;
 
-    /** Un grupo vacío. */
+    /** An empty group. */
     public CheckboxGroup() {
     }
 
     /**
-     * La casilla marcada.
+     * The ticked box.
      *
-     * @return la casilla, o `null` si no hay ninguna
+     * @return the box, or `null` if there is none
      */
     public Checkbox getSelectedCheckbox() {
         return this.selectedCheckbox;
     }
 
     /**
-     * La casilla marcada.
+     * The ticked box.
      *
-     * @deprecated es del nombrado de 1.0. Usar {@link #getSelectedCheckbox}.
+     * @deprecated it is from the 1.0 naming. Use {@link #getSelectedCheckbox}.
      */
     @Deprecated
     public Checkbox getCurrent() {
@@ -43,21 +44,21 @@ public class CheckboxGroup implements Serializable {
     }
 
     /**
-     * Marca esa casilla y desmarca la que estuviera.
+     * Ticks that box and unticks whichever one was ticked.
      *
-     * <p>Una casilla que pertenece a **otro** grupo se ignora: aceptarla dejaría a dos grupos
-     * creyendo que la mandan ellos.
+     * <p>A box that belongs to **another** group is ignored: accepting it would leave two groups
+     * believing they are in charge of it.
      *
-     * @param box la casilla a marcar, o `null` para dejar el grupo sin nada marcado
+     * @param box the box to tick, or `null` to leave the group with nothing ticked
      */
     public synchronized void setSelectedCheckbox(Checkbox box) {
         if (box != null && box.group != this) {
             return;
         }
-        Checkbox anterior = this.selectedCheckbox;
+        Checkbox previous = this.selectedCheckbox;
         this.selectedCheckbox = box;
-        if (anterior != null && anterior != box) {
-            anterior.setStateInternal(false);
+        if (previous != null && previous != box) {
+            previous.setStateInternal(false);
         }
         if (box != null) {
             box.setStateInternal(true);
@@ -65,9 +66,9 @@ public class CheckboxGroup implements Serializable {
     }
 
     /**
-     * Marca esa casilla.
+     * Ticks that box.
      *
-     * @deprecated es del nombrado de 1.0. Usar {@link #setSelectedCheckbox}.
+     * @deprecated it is from the 1.0 naming. Use {@link #setSelectedCheckbox}.
      */
     @Deprecated
     public synchronized void setCurrent(Checkbox box) {

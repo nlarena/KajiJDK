@@ -16,12 +16,12 @@ public interface Queue<E> extends Collection<E> {
     E peek();
 
     /**
-     * Saca la cabeza, o **lanza** si la cola esta vacia.
+     * It takes out the head, or **throws** if the queue is empty.
      *
-     * <p>Es el par de `poll()`, y la diferencia es toda la razon de que existan los dos: `poll`
-     * devuelve null porque el vacio es un resultado esperado --se lo usa en un bucle que consume
-     * hasta agotar--, y `remove` lanza porque el vacio ahi es un error --se lo usa cuando el que
-     * llama ya sabe que hay algo--. Elegir el equivocado convierte un bug en un `null` que viaja.
+     * <p>It is `poll()`'s partner, and the difference is the whole reason both exist: `poll` returns
+     * null because empty is an expected result --it is used in a loop that consumes until exhausted--
+     * and `remove` throws because empty there is an error --it is used when the caller already knows
+     * there is something. Choosing the wrong one turns a bug into a `null` that travels.
      */
     default E remove() {
         E e = this.poll();
@@ -31,7 +31,7 @@ public interface Queue<E> extends Collection<E> {
         return e;
     }
 
-    // El par de `peek()`, con la misma distincion.
+    // `peek()`'s partner, with the same distinction.
     default E element() {
         E e = this.peek();
         if (e == null) {

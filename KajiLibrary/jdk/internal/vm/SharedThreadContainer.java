@@ -5,82 +5,85 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
 
 /**
- * KajiLibrary's jdk.internal.vm.SharedThreadContainer — un contenedor **sin dueño**.
+ * KajiLibrary's jdk.internal.vm.SharedThreadContainer -- a container **with no owner**.
  *
- * <p>La diferencia con un {@link ThreadContainer} común está en el nombre: éste no pertenece al hilo
- * que lo creó. Es lo que necesita un pool de hilos, donde el que abre el contenedor y los que corren
- * adentro no tienen nada que ver, y donde cerrarlo lo puede hacer cualquiera.
+ * <p>The difference with an ordinary {@link ThreadContainer} is in the name: this one does not
+ * belong to the thread that created it. It is what a thread pool needs, where the one that opens
+ * the container and the ones that run inside have nothing to do with each other, and where anybody
+ * may close it.
  *
- * <p>Por eso {@link #owner()} da `null` y por eso es {@link AutoCloseable}: su tiempo de vida no está
- * atado a una llamada que empieza y termina, así que hay que cerrarlo a mano —o con
- * `try`-con-recursos, que es la forma de no olvidarse—.
+ * <p>That is why {@link #owner()} gives `null` and why it is {@link AutoCloseable}: its lifetime is
+ * not tied to a call that starts and ends, so it has to be closed by hand --or with
+ * `try`-with-resources, which is the way of not forgetting--.
  *
- * <p>El conjunto de hilos es un {@link ConcurrentHashMap} de sólo claves, y tiene que ser concurrente
- * de verdad: los hilos entran y salen desde ellos mismos, en paralelo, sin nada que los serialice.
+ * <p>The set of threads is a keys-only {@link ConcurrentHashMap}, and it has to be really
+ * concurrent: the threads come in and go out by themselves, in parallel, with nothing serialising
+ * them.
  */
 public class SharedThreadContainer extends ThreadContainer implements AutoCloseable {
 
-    private final String nombre;
-    private final Set<Thread> hilos = ConcurrentHashMap.newKeySet();
-    private volatile Object llave;
-    private volatile boolean cerrado;
+    private final String name;
+    private final Set<Thread> threads = ConcurrentHashMap.newKeySet();
+    private volatile Object key;
+    private volatile boolean closed;
 
     private SharedThreadContainer(String name) {
         super(true);
-        this.nombre = name;
+        this.name = name;
     }
 
     /**
-     * Crea uno anidado en `parent`.
+     * It creates one nested in `parent`.
      *
-     * <p>El `parent` se acepta y **no se guarda**, y conviene decir por qué no se pierde nada: el
-     * padre de un contenedor sale de la pila de ámbitos donde se creó ({@link ThreadContainers}), no
-     * de un campo. Guardarlo además abriría la posibilidad de que los dos digan cosas distintas.
+     * <p>The `parent` is accepted and **not kept**, and it is as well to say why nothing is lost:
+     * the parent of a container comes from the stack of scopes where it was created ({@link
+     * ThreadContainers}), not from a field. Keeping it as well would open the possibility of the
+     * two saying different things.
      */
     public static SharedThreadContainer create(ThreadContainer parent, String name) {
         return SharedThreadContainer.create(name);
     }
 
-    /** Crea uno y lo registra. */
+    /** It creates one and registers it. */
     public static SharedThreadContainer create(String name) {
         SharedThreadContainer c = new SharedThreadContainer(name);
-        c.llave = ThreadContainers.registerContainer(c);
+        c.key = ThreadContainers.registerContainer(c);
         return c;
     }
 
     public String name() {
-        return this.nombre;
+        return this.name;
     }
 
-    /** Siempre `null`: es compartido, no tiene dueño. */
+    /** Always `null`: it is shared, it has no owner. */
     public Thread owner() {
         return null;
     }
 
     public void onStart(Thread thread) {
-        this.hilos.add(thread);
+        this.threads.add(thread);
     }
 
     public void onExit(Thread thread) {
-        this.hilos.remove(thread);
+        this.threads.remove(thread);
     }
 
     public Stream<Thread> threads() {
-        return this.hilos.stream();
+        return this.threads.stream();
     }
 
     /**
-     * Arranca un hilo dentro de este contenedor.
+     * It starts a thread inside this container.
      *
-     * <p>Se anota **antes** de arrancarlo y se lo saca si el arranque falla. El orden importa: al
-     * revés habría una ventana en la que el hilo ya corre y el contenedor todavía no lo conoce, y en
-     * esa ventana `threadCount()` mentiría.
+     * <p>It is noted **before** starting it and taken out if the start fails. The order matters:
+     * the other way round there would be a window in which the thread is already running and the
+     * container does not know it yet, and in that window `threadCount()` would lie.
      *
-     * @throws IllegalStateException si el contenedor ya se cerró
+     * @throws IllegalStateException if the container has already been closed
      */
     public void start(Thread thread) {
-        if (this.cerrado) {
-            throw new IllegalStateException("este contenedor ya se cerro");
+        if (this.closed) {
+            throw new IllegalStateException("this container has already been closed");
         }
         this.onStart(thread);
         try {
@@ -92,21 +95,22 @@ public class SharedThreadContainer extends ThreadContainer implements AutoClosea
     }
 
     /**
-     * Cierra el contenedor y lo saca del registro.
+     * It closes the container and takes it out of the registry.
      *
-     * <p>**No espera a los hilos ni los interrumpe**, igual que el JDK: cerrar es decir "no entra
-     * nadie más", no "terminen". Esperar es responsabilidad de quien abrió el ámbito, que es el único
-     * que sabe qué significa que hayan terminado. Cerrar dos veces no hace nada.
+     * <p>**It neither waits for the threads nor interrupts them**, just like the JDK: closing is
+     * saying "nobody else comes in", not "finish". Waiting is the responsibility of whoever opened
+     * the scope, which is the only one that knows what their having finished means. Closing twice
+     * does nothing.
      */
     public void close() {
-        if (this.cerrado) {
+        if (this.closed) {
             return;
         }
-        this.cerrado = true;
-        ThreadContainers.deregisterContainer(this.llave);
+        this.closed = true;
+        ThreadContainers.deregisterContainer(this.key);
     }
 
-    /** Cerrar un contenedor compartido no puede fallar, así que el gancho dice que sí. */
+    /** Closing a shared container cannot fail, so the hook says yes. */
     protected boolean tryClose() {
         this.close();
         return true;

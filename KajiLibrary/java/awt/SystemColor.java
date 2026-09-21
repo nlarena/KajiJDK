@@ -1,120 +1,122 @@
 package java.awt;
 
 /**
- * KajiLibrary's java.awt.SystemColor -- los colores del escritorio, por nombre en vez de por valor.
+ * KajiLibrary's java.awt.SystemColor -- the desktop's colours, by name instead of by value.
  *
- * <p>Las veintiseis constantes no son colores fijos sino <b>papeles</b>: {@code window} es "el fondo
- * de una ventana", no "blanco". Un programa que dibuja con {@code SystemColor.window} y
- * {@code SystemColor.windowText} se ve bien en un tema claro y en uno oscuro sin cambiar una linea;
- * uno que escribe blanco y negro a mano se rompe en el segundo.
+ * <p>The twenty-six constants are not fixed colours but <b>roles</b>: {@code window} is "the
+ * background of a window", not "white". A program that draws with {@code SystemColor.window} and
+ * {@code SystemColor.windowText} looks right in a light theme and in a dark one without changing a
+ * line; one that writes white and black by hand breaks in the second.
  *
- * <h2>Los valores son vivos, y por eso la clase es rara</h2>
+ * <h2>The values are live, and that is why the class is odd</h2>
  *
- * <p>Cada constante es un objeto <b>unico y mutable por dentro</b>: cuando el usuario cambia el tema,
- * el mismo objeto empieza a devolver otro color. Por eso {@code SystemColor.window} se puede guardar
- * en un campo y seguir siendo correcto, y por eso {@link #toString()} imprime el indice y no el
- * valor -- el valor de hoy no dice nada sobre el de manana.
+ * <p>Each constant is a <b>unique object, mutable inside</b>: when the user changes the theme, the
+ * same object starts returning another colour. That is why {@code SystemColor.window} can be kept
+ * in a field and stay correct, and why {@link #toString()} prints the index and not the value --
+ * today's value says nothing about tomorrow's.
  *
- * <p>De ahi sale tambien la firma que sorprende: el constructor es privado y las constantes se
- * comparan por identidad, no por RGB. Dos papeles distintos pueden tener hoy el mismo color.
+ * <p>From that also comes the surprising signature: the constructor is private. This note added
+ * that the constants are compared by identity, not by RGB; {@code equals} is inherited from {@link
+ * Color} and compares {@code getRGB()}, so two different roles that have the same colour today are
+ * equal.
  *
- * <h2>Que devuelve aca</h2>
+ * <h2>What it returns here</h2>
  *
- * <p><b>Los valores por omision</b>: los mismos que el JDK entrega cuando corre sin escritorio
- * ({@code java.awt.headless}). No es una eleccion de esta biblioteca sino la unica posible -- no hay
- * ningun sistema de ventanas al que preguntarle --, y es exactamente lo que hace el JDK en esa
- * situacion. Cuando haya un toolkit, la tabla se actualiza y los mismos objetos empiezan a contestar
- * los colores del tema, sin que nada de lo que ya se escribio tenga que cambiar.
+ * <p><b>The default values</b>: the same ones the JDK hands out when it runs with no desktop
+ * ({@code java.awt.headless}). It is not a choice of this library but the only possible one --
+ * there is no window system to ask --, and it is exactly what the JDK does in that situation. When
+ * there is a toolkit, the table would be updated and the same objects would start answering the
+ * theme's colours, without anything already written having to change.
  */
 public final class SystemColor extends Color implements java.io.Serializable {
 
     private static final long serialVersionUID = 4503142729533789064L;
 
-    /** El fondo del escritorio. */
+    /** The background of the desktop. */
     public static final int DESKTOP = 0;
 
-    /** El fondo de la barra de titulo de la ventana activa. */
+    /** The background of the active window's title bar. */
     public static final int ACTIVE_CAPTION = 1;
 
-    /** El texto de la barra de titulo de la ventana activa. */
+    /** The text of the active window's title bar. */
     public static final int ACTIVE_CAPTION_TEXT = 2;
 
-    /** El borde de la barra de titulo de la ventana activa. */
+    /** The border of the active window's title bar. */
     public static final int ACTIVE_CAPTION_BORDER = 3;
 
-    /** El fondo de la barra de titulo de una ventana inactiva. */
+    /** The background of an inactive window's title bar. */
     public static final int INACTIVE_CAPTION = 4;
 
-    /** El texto de la barra de titulo de una ventana inactiva. */
+    /** The text of an inactive window's title bar. */
     public static final int INACTIVE_CAPTION_TEXT = 5;
 
-    /** El borde de la barra de titulo de una ventana inactiva. */
+    /** The border of an inactive window's title bar. */
     public static final int INACTIVE_CAPTION_BORDER = 6;
 
-    /** El fondo de una ventana. */
+    /** The background of a window. */
     public static final int WINDOW = 7;
 
-    /** El borde de una ventana. */
+    /** The border of a window. */
     public static final int WINDOW_BORDER = 8;
 
-    /** El texto de una ventana. */
+    /** The text of a window. */
     public static final int WINDOW_TEXT = 9;
 
-    /** El fondo de un menu. */
+    /** The background of a menu. */
     public static final int MENU = 10;
 
-    /** El texto de un menu. */
+    /** The text of a menu. */
     public static final int MENU_TEXT = 11;
 
-    /** El fondo de un campo de texto. */
+    /** The background of a text field. */
     public static final int TEXT = 12;
 
-    /** El texto de un campo de texto. */
+    /** The text of a text field. */
     public static final int TEXT_TEXT = 13;
 
-    /** El fondo del texto seleccionado. */
+    /** The background of selected text. */
     public static final int TEXT_HIGHLIGHT = 14;
 
-    /** El texto seleccionado. */
+    /** Selected text. */
     public static final int TEXT_HIGHLIGHT_TEXT = 15;
 
-    /** El texto deshabilitado. */
+    /** Disabled text. */
     public static final int TEXT_INACTIVE_TEXT = 16;
 
-    /** El fondo de un control. */
+    /** The background of a control. */
     public static final int CONTROL = 17;
 
-    /** El texto de un control. */
+    /** The text of a control. */
     public static final int CONTROL_TEXT = 18;
 
-    /** El realce de un control, del lado iluminado. */
+    /** A control's highlight, on the lit side. */
     public static final int CONTROL_HIGHLIGHT = 19;
 
-    /** El realce claro de un control. */
+    /** A control's light highlight. */
     public static final int CONTROL_LT_HIGHLIGHT = 20;
 
-    /** La sombra de un control. */
+    /** A control's shadow. */
     public static final int CONTROL_SHADOW = 21;
 
-    /** La sombra oscura de un control. */
+    /** A control's dark shadow. */
     public static final int CONTROL_DK_SHADOW = 22;
 
-    /** El fondo del canal de una barra de desplazamiento. */
+    /** The background of a scroll bar's track. */
     public static final int SCROLLBAR = 23;
 
-    /** El fondo de una ayuda emergente. */
+    /** The background of a tooltip. */
     public static final int INFO = 24;
 
-    /** El texto de una ayuda emergente. */
+    /** The text of a tooltip. */
     public static final int INFO_TEXT = 25;
 
-    /** Cuantos papeles hay. Es el largo de la tabla, no un color. */
+    /** How many roles there are. It is the length of the table, not a colour. */
     public static final int NUM_COLORS = 26;
 
-    // La tabla viva. Es `static` y mutable a proposito: cuando haya un toolkit y el tema cambie, se
-    // actualiza aca y las veintiseis constantes empiezan a contestar los colores nuevos sin que
-    // nadie tenga que volver a pedirlas. Los valores de arranque son los que usa el JDK sin
-    // escritorio; ver la nota de la clase.
+    // The live table. It is `static` and mutable on purpose: when there is a toolkit and the theme
+    // changes, it would be updated here and the twenty-six constants would start answering the new
+    // colours without anyone having to ask for them again. The start-up values are the ones the JDK
+    // uses with no desktop; see the class note.
     private static int[] systemColors = {
         0xFF005C5C,  // desktop
         0xFF000080,  // activeCaption
@@ -144,104 +146,104 @@ public final class SystemColor extends Color implements java.io.Serializable {
         0xFF000000,  // infoText
     };
 
-    /** El fondo del escritorio. */
+    /** The background of the desktop. */
     public static final SystemColor desktop = new SystemColor((byte) DESKTOP);
 
-    /** El fondo de la barra de titulo de la ventana activa. */
+    /** The background of the active window's title bar. */
     public static final SystemColor activeCaption = new SystemColor((byte) ACTIVE_CAPTION);
 
-    /** El texto de la barra de titulo de la ventana activa. */
+    /** The text of the active window's title bar. */
     public static final SystemColor activeCaptionText = new SystemColor((byte) ACTIVE_CAPTION_TEXT);
 
-    /** El borde de la barra de titulo de la ventana activa. */
+    /** The border of the active window's title bar. */
     public static final SystemColor activeCaptionBorder =
         new SystemColor((byte) ACTIVE_CAPTION_BORDER);
 
-    /** El fondo de la barra de titulo de una ventana inactiva. */
+    /** The background of an inactive window's title bar. */
     public static final SystemColor inactiveCaption = new SystemColor((byte) INACTIVE_CAPTION);
 
-    /** El texto de la barra de titulo de una ventana inactiva. */
+    /** The text of an inactive window's title bar. */
     public static final SystemColor inactiveCaptionText =
         new SystemColor((byte) INACTIVE_CAPTION_TEXT);
 
-    /** El borde de la barra de titulo de una ventana inactiva. */
+    /** The border of an inactive window's title bar. */
     public static final SystemColor inactiveCaptionBorder =
         new SystemColor((byte) INACTIVE_CAPTION_BORDER);
 
-    /** El fondo de una ventana. */
+    /** The background of a window. */
     public static final SystemColor window = new SystemColor((byte) WINDOW);
 
-    /** El borde de una ventana. */
+    /** The border of a window. */
     public static final SystemColor windowBorder = new SystemColor((byte) WINDOW_BORDER);
 
-    /** El texto de una ventana. */
+    /** The text of a window. */
     public static final SystemColor windowText = new SystemColor((byte) WINDOW_TEXT);
 
-    /** El fondo de un menu. */
+    /** The background of a menu. */
     public static final SystemColor menu = new SystemColor((byte) MENU);
 
-    /** El texto de un menu. */
+    /** The text of a menu. */
     public static final SystemColor menuText = new SystemColor((byte) MENU_TEXT);
 
-    /** El fondo de un campo de texto. */
+    /** The background of a text field. */
     public static final SystemColor text = new SystemColor((byte) TEXT);
 
-    /** El texto de un campo de texto. */
+    /** The text of a text field. */
     public static final SystemColor textText = new SystemColor((byte) TEXT_TEXT);
 
-    /** El fondo del texto seleccionado. */
+    /** The background of selected text. */
     public static final SystemColor textHighlight = new SystemColor((byte) TEXT_HIGHLIGHT);
 
-    /** El texto seleccionado. */
+    /** Selected text. */
     public static final SystemColor textHighlightText = new SystemColor((byte) TEXT_HIGHLIGHT_TEXT);
 
-    /** El texto deshabilitado. */
+    /** Disabled text. */
     public static final SystemColor textInactiveText = new SystemColor((byte) TEXT_INACTIVE_TEXT);
 
-    /** El fondo de un control. */
+    /** The background of a control. */
     public static final SystemColor control = new SystemColor((byte) CONTROL);
 
-    /** El texto de un control. */
+    /** The text of a control. */
     public static final SystemColor controlText = new SystemColor((byte) CONTROL_TEXT);
 
-    /** El realce de un control. */
+    /** A control's highlight, on the lit side. */
     public static final SystemColor controlHighlight = new SystemColor((byte) CONTROL_HIGHLIGHT);
 
-    /** El realce claro de un control. */
+    /** A control's light highlight. */
     public static final SystemColor controlLtHighlight =
         new SystemColor((byte) CONTROL_LT_HIGHLIGHT);
 
-    /** La sombra de un control. */
+    /** A control's shadow. */
     public static final SystemColor controlShadow = new SystemColor((byte) CONTROL_SHADOW);
 
-    /** La sombra oscura de un control. */
+    /** A control's dark shadow. */
     public static final SystemColor controlDkShadow = new SystemColor((byte) CONTROL_DK_SHADOW);
 
-    /** El fondo del canal de una barra de desplazamiento. */
+    /** The background of a scroll bar's track. */
     public static final SystemColor scrollbar = new SystemColor((byte) SCROLLBAR);
 
-    /** El fondo de una ayuda emergente. */
+    /** The background of a tooltip. */
     public static final SystemColor info = new SystemColor((byte) INFO);
 
-    /** El texto de una ayuda emergente. */
+    /** The text of a tooltip. */
     public static final SystemColor infoText = new SystemColor((byte) INFO_TEXT);
 
-    // Cual de los veintiseis papeles es. Es lo unico que el objeto guarda: el color se busca en la
-    // tabla cada vez, que es lo que lo hace vivo.
+    // Which of the twenty-six roles it is. It is the only thing the object keeps: the colour is
+    // looked up in the table every time, which is what makes it live.
     private final transient int index;
 
     private SystemColor(byte index) {
-        // El super se construye con el valor de arranque; `getRGB` lo vuelve a leer de la tabla, asi
-        // que este numero es solo el estado inicial del Color heredado.
+        // The super is built with the start-up value; `getRGB` reads it again from the table, so
+        // this number is only the initial state of the inherited Color.
         super(systemColors[index]);
         this.index = index;
     }
 
     /**
-     * El color de hoy para este papel.
+     * Today's colour for this role.
      *
-     * <p>Se lee de la tabla en cada llamada, no del estado heredado de {@link Color}: eso es lo que
-     * hace que el mismo objeto siga siendo correcto despues de un cambio de tema.
+     * <p>It is read from the table on every call, not from the state inherited from {@link Color}:
+     * that is what keeps the same object correct after a theme change.
      */
     @Override
     public int getRGB() {
@@ -249,10 +251,10 @@ public final class SystemColor extends Color implements java.io.Serializable {
     }
 
     /**
-     * El indice del papel, no el color.
+     * The index of the role, not the colour.
      *
-     * <p>Imprimir el valor seria enganoso: cambia con el tema, y quien lea el texto pensaria que ese
-     * numero identifica al objeto. El indice si lo identifica.
+     * <p>Printing the value would be misleading: it changes with the theme, and whoever reads the
+     * text would think that number identifies the object. The index does identify it.
      */
     @Override
     public String toString() {

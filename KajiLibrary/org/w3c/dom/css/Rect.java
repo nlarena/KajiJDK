@@ -1,22 +1,22 @@
 package org.w3c.dom.css;
 
 /**
- * Un `rect()`, que es lo que lleva la propiedad `clip`.
+ * A `rect()`, which is what the `clip` property carries.
  *
- * <p>Los cuatro lados son valores primitivos y no numeros porque cada uno puede ser `auto`, que no
- * es una longitud: seria imposible representarlo con un `float`.
+ * <p>The four sides are primitive values and not numbers because each one may be `auto`, which is
+ * not a length: it would be impossible to represent it with a `float`.
  */
 public interface Rect {
 
-    /** El lado de arriba. */
+    /** The top side. */
     CSSPrimitiveValue getTop();
 
-    /** El lado derecho. */
+    /** The right side. */
     CSSPrimitiveValue getRight();
 
-    /** El lado de abajo. */
+    /** The bottom side. */
     CSSPrimitiveValue getBottom();
 
-    /** El lado izquierdo. */
+    /** The left side. */
     CSSPrimitiveValue getLeft();
 }

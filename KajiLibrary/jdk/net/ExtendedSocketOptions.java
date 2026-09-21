@@ -3,18 +3,18 @@ package jdk.net;
 import java.net.SocketOption;
 
 /**
- * Opciones de socket que el JDK ofrece fuera del conjunto estandar.
+ * Socket options the JDK offers outside the standard set.
  *
- * <h2>Que las separa de {@link java.net.StandardSocketOptions}</h2>
+ * <h2>What separates them from {@link java.net.StandardSocketOptions}</h2>
  *
- * <p>Que <strong>ninguna esta garantizada</strong>. Cada una depende de que el sistema operativo la
- * tenga: {@link #TCP_QUICKACK} es de Linux, {@link #SO_PEERCRED} solo tiene sentido en un socket de
- * dominio Unix, y las tres {@code TCP_KEEP*} existen en casi todos lados pero no en todos. Pedir una
- * que la plataforma no soporta tira {@link UnsupportedOperationException}.
+ * <p>That <strong>none is guaranteed</strong>. Each one depends on the operating system having it:
+ * {@link #TCP_QUICKACK} is of Linux, {@link #SO_PEERCRED} only makes sense on a Unix domain socket,
+ * and the three {@code TCP_KEEP*} exist almost everywhere but not everywhere. Asking for one the
+ * platform does not support throws {@link UnsupportedOperationException}.
  *
- * <p>Por eso son un conjunto aparte y no constantes mas en la clase estandar: el conjunto estandar
- * es un contrato que toda implementacion de Java cumple, y estas no lo son. Antes de usarlas
- * conviene consultar el {@code supportedOptions()} del socket.
+ * <p>That is why they are a set apart and not more constants in the standard class: the standard set
+ * is a contract every implementation of Java fulfils, and these are not. Before using them it is
+ * advisable to consult the socket's {@code supportedOptions()}.
  */
 public final class ExtendedSocketOptions {
 
@@ -22,80 +22,79 @@ public final class ExtendedSocketOptions {
     }
 
     /**
-     * Confirmar enseguida en vez de esperar a ver si hay datos que mandar de vuelta.
+     * Acknowledge straight away instead of waiting to see whether there is data to send back.
      *
-     * <p>TCP retrasa los ACK a proposito, para poder viajar pegados a la respuesta y ahorrar un
-     * paquete. En un protocolo de pedido y respuesta esa espera es latencia pura, y esto la apaga.
-     * Solo Linux.
+     * <p>TCP delays the ACKs on purpose, so that they can travel stuck to the answer and save a packet.
+     * In a request and response protocol that wait is pure latency, and this turns it off. Linux only.
      */
     public static final SocketOption<Boolean> TCP_QUICKACK =
-            new Opcion<Boolean>("TCP_QUICKACK", Boolean.class);
+            new Option<Boolean>("TCP_QUICKACK", Boolean.class);
 
-    /** Cuantos segundos de silencio antes de mandar la primera sonda de keep-alive. */
+    /** How many seconds of silence before sending the first keep-alive probe. */
     public static final SocketOption<Integer> TCP_KEEPIDLE =
-            new Opcion<Integer>("TCP_KEEPIDLE", Integer.class);
+            new Option<Integer>("TCP_KEEPIDLE", Integer.class);
 
-    /** Cuantos segundos entre sondas. */
+    /** How many seconds between probes. */
     public static final SocketOption<Integer> TCP_KEEPINTERVAL =
-            new Opcion<Integer>("TCP_KEEPINTERVAL", Integer.class);
+            new Option<Integer>("TCP_KEEPINTERVAL", Integer.class);
 
-    /** Cuantas sondas sin respuesta antes de dar la conexion por muerta. */
+    /** How many probes with no answer before giving the connection up for dead. */
     public static final SocketOption<Integer> TCP_KEEPCOUNT =
-            new Opcion<Integer>("TCP_KEEPCOUNT", Integer.class);
+            new Option<Integer>("TCP_KEEPCOUNT", Integer.class);
 
     /**
-     * El identificador NAPI de la interfaz por la que entran los paquetes.
+     * The NAPI identifier of the interface the packets come in through.
      *
-     * <p>Es de solo lectura y sirve para una cosa: acomodar los hilos que atienden una conexion
-     * cerca de la cola de red que la recibe. Fuera de ese uso no dice nada.
+     * <p>It is read-only and serves for one thing: placing the threads that attend a connection near the
+     * network queue that receives it. Outside that use it says nothing.
      */
     public static final SocketOption<Integer> SO_INCOMING_NAPI_ID =
-            new Opcion<Integer>("SO_INCOMING_NAPI_ID", Integer.class);
+            new Option<Integer>("SO_INCOMING_NAPI_ID", Integer.class);
 
     /**
-     * Quien esta del otro lado, en un socket de dominio Unix.
+     * Who is on the other side, on a Unix domain socket.
      *
-     * <p>Solo lectura, y la unica opcion de esta clase que devuelve una identidad en vez de un
-     * numero. Ver {@link UnixDomainPrincipal} para por que esto es posible aca y no sobre TCP.
+     * <p>Read-only, and the only option of this class that returns an identity instead of a number. See
+     * {@link UnixDomainPrincipal} for why this is possible here and not over TCP.
      */
     public static final SocketOption<UnixDomainPrincipal> SO_PEERCRED =
-            new Opcion<UnixDomainPrincipal>("SO_PEERCRED", UnixDomainPrincipal.class);
+            new Option<UnixDomainPrincipal>("SO_PEERCRED", UnixDomainPrincipal.class);
 
     /**
-     * No fragmentar: un datagrama mas grande que el MTU falla en vez de partirse.
+     * Do not fragment: a datagram bigger than the MTU fails instead of being split.
      *
-     * <p>Es como se descubre el MTU del camino, y como un protocolo que ya trae su propia
-     * fragmentacion evita que IP le agregue otra encima.
+     * <p>It is how the MTU of the path is discovered, and how a protocol that brings its own
+     * fragmentation keeps IP from adding another on top.
      */
     public static final SocketOption<Boolean> IP_DONTFRAGMENT =
-            new Opcion<Boolean>("IP_DONTFRAGMENT", Boolean.class);
+            new Option<Boolean>("IP_DONTFRAGMENT", Boolean.class);
 
     /**
-     * Una opcion: un nombre y un tipo.
+     * An option: a name and a type.
      *
-     * <p>Privada porque el conjunto es cerrado — son las siete constantes de arriba. Fabricar una
-     * mas daria un objeto que ningun socket sabe atender.
+     * <p>Private because the set is closed — they are the seven constants above. Making one more would
+     * give an object no socket knows how to attend.
      */
-    private static class Opcion<T> implements SocketOption<T> {
+    private static class Option<T> implements SocketOption<T> {
 
-        private final String nombre;
-        private final Class<T> tipo;
+        private final String name;
+        private final Class<T> type;
 
-        Opcion(String nombre, Class<T> tipo) {
-            this.nombre = nombre;
-            this.tipo = tipo;
+        Option(String name, Class<T> type) {
+            this.name = name;
+            this.type = type;
         }
 
         public String name() {
-            return this.nombre;
+            return this.name;
         }
 
         public Class<T> type() {
-            return this.tipo;
+            return this.type;
         }
 
         public String toString() {
-            return this.nombre;
+            return this.name;
         }
     }
 }

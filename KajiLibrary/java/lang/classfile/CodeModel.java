@@ -4,12 +4,12 @@ import java.lang.classfile.instruction.ExceptionCatch;
 import java.util.List;
 import java.util.Optional;
 
-// El cuerpo de un método: el atributo `Code` (JVMS §4.7.3) visto como una secuencia de piezas.
+// A method's body: the `Code` attribute (JVMS §4.7.3) seen as a sequence of pieces.
 public interface CodeModel extends CompoundElement<CodeElement>, AttributedElement, MethodElement {
 
-    /** El método que lo contiene, si este modelo salió de leer uno. */
+    /** The method containing it, if this model came out of reading one. */
     Optional<MethodModel> parent();
 
-    /** La tabla de manejadores de excepción, en el orden del archivo. */
+    /** The exception handler table, in file order. */
     List<ExceptionCatch> exceptionHandlers();
 }

@@ -1,20 +1,21 @@
 package java.awt.image;
 
 /**
- * Coma flotante de 32 bits.
+ * 32-bit floating point.
  *
- * <p>Redefine la familia `Float`/`Double` en vez de la de `int`, que es al reves de las subclases
- * enteras. `getElem` sigue funcionando y **trunca**, que es lo que dice el contrato.
+ * <p>It overrides the `Float`/`Double` family instead of the `int` one, which is the other way
+ * round from the integer subclasses. `getElem` still works and **truncates**, which is what the
+ * contract says.
  */
 public final class DataBufferFloat extends DataBuffer {
 
-    // Los datos de cada banco. `data` es un atajo al banco 0: se usa en cada lectura
-    // y bajar por `bankdata[0]` cada vez seria una indireccion de mas en el camino
-    // mas caliente de todo el paquete.
+    // The data of each bank. `data` is a shortcut to bank 0: it is used on every read
+    // and going down through `bankdata[0]` every time would be one indirection too many
+    // on the hottest path of the whole package.
     private float[] data;
     private float[][] bankdata;
 
-    /** Un banco de `size` elementos, en cero. */
+    /** One bank of `size` elements, at zero. */
     public DataBufferFloat(int size) {
         super(DataBuffer.TYPE_FLOAT, size);
         this.data = new float[size];
@@ -22,7 +23,7 @@ public final class DataBufferFloat extends DataBuffer {
         this.bankdata[0] = this.data;
     }
 
-    /** `numBanks` bancos de `size` elementos, en cero. */
+    /** `numBanks` banks of `size` elements, at zero. */
     public DataBufferFloat(int size, int numBanks) {
         super(DataBuffer.TYPE_FLOAT, size, numBanks);
         this.bankdata = new float[numBanks][];
@@ -33,11 +34,11 @@ public final class DataBufferFloat extends DataBuffer {
     }
 
     /**
-     * Un banco sobre ese arreglo, **sin copiarlo**.
+     * One bank over that array, **without copying it**.
      *
-     * <p>El buffer se queda con el arreglo que se le da: escribirle por afuera cambia la
-     * imagen. Es a proposito y es lo que permite armar una imagen sobre memoria que ya
-     * existe sin duplicarla.
+     * <p>The buffer keeps the array it is given: writing to it from outside changes the
+     * image. It is on purpose and it is what makes it possible to build an image over
+     * memory that already exists without duplicating it.
      */
     public DataBufferFloat(float[] dataArray, int size) {
         super(DataBuffer.TYPE_FLOAT, size);
@@ -46,7 +47,7 @@ public final class DataBufferFloat extends DataBuffer {
         this.bankdata[0] = this.data;
     }
 
-    /** Como el anterior, empezando en `offset`. */
+    /** Like the previous one, starting at `offset`. */
     public DataBufferFloat(float[] dataArray, int size, int offset) {
         super(DataBuffer.TYPE_FLOAT, size, 1, offset);
         this.data = dataArray;
@@ -54,37 +55,37 @@ public final class DataBufferFloat extends DataBuffer {
         this.bankdata[0] = this.data;
     }
 
-    /** Varios bancos sobre esos arreglos, sin copiarlos. */
+    /** Several banks over those arrays, without copying them. */
     public DataBufferFloat(float[][] dataArray, int size) {
         super(DataBuffer.TYPE_FLOAT, size, dataArray.length);
         this.bankdata = dataArray;
         this.data = this.bankdata[0];
     }
 
-    /** Varios bancos, cada uno con su desplazamiento. */
+    /** Several banks, each one with its own offset. */
     public DataBufferFloat(float[][] dataArray, int size, int[] offsets) {
         super(DataBuffer.TYPE_FLOAT, size, dataArray.length, offsets);
         this.bankdata = dataArray;
         this.data = this.bankdata[0];
     }
 
-    /** El arreglo del banco 0, sin copiar. */
+    /** The array of bank 0, without copying. */
     public float[] getData() {
         return this.data;
     }
 
-    /** El arreglo de ese banco, sin copiar. */
+    /** The array of that bank, without copying. */
     public float[] getData(int bank) {
         return this.bankdata[bank];
     }
 
     /**
-     * Los bancos.
+     * The banks.
      *
-     * <p>El arreglo de afuera es una **copia**; los de adentro no. O sea que agregar o
-     * quitar bancos en lo que devuelve no toca al buffer, pero escribir en un banco si.
-     * Es asimetrico y es lo que hace el JDK -- comprobado, porque la primera version de
-     * esta clase devolvia el arreglo de afuera sin clonar.
+     * <p>The outer array is a **copy**; the inner ones are not. That is, adding or
+     * removing banks in what it returns does not touch the buffer, but writing into a bank
+     * does. It is asymmetric and it is what the JDK does -- checked, because the first
+     * version of this class returned the outer array without cloning it.
      */
     public float[][] getBankData() {
         float[][] out = new float[this.bankdata.length][];
@@ -92,12 +93,12 @@ public final class DataBufferFloat extends DataBuffer {
         return out;
     }
 
-    /** Trunca: ver la nota de la clase. */
+    /** It truncates: see the note of the class. */
     public int getElem(int i) {
         return (int) this.data[i + this.offset];
     }
 
-    /** Trunca: ver la nota de la clase. */
+    /** It truncates: see the note of the class. */
     public int getElem(int bank, int i) {
         return (int) this.bankdata[bank][i + this.offsets[bank]];
     }

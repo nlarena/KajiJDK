@@ -1,65 +1,64 @@
 package java.awt;
 
 /**
- * Una pantalla, una impresora o un buffer en memoria: algo sobre lo que se puede dibujar.
+ * A screen, a printer or a buffer in memory: something that can be drawn on.
  *
- * <p>Un dispositivo tiene una o varias {@link GraphicsConfiguration}, que son las combinaciones de
- * profundidad de color y capacidades con las que se lo puede usar. La misma pantalla puede ofrecer
- * varias, y ahí es donde se elige.
+ * <p>A device has one or several {@link GraphicsConfiguration}, which are the combinations of
+ * colour depth and capabilities it can be used with. The same screen may offer several, and that is
+ * where one picks.
  *
- * <p><strong>Falta el modo de pantalla completa.</strong> `setFullScreenWindow` y
- * `getFullScreenWindow` toman y devuelven un `java.awt.Window`, que arrastra el árbol entero de
- * componentes de AWT —ventanas, contenedores, distribución, eventos— y queda fuera del alcance de lo
- * que necesita el dibujado de imágenes. Un miembro que falta es un subconjunto legal; uno que
- * miente, no, así que {@link #isFullScreenSupported} contesta `false`, que es la verdad de este
- * dispositivo y no una excusa.
+ * <p><strong>The exclusive full-screen mode is not supported.</strong> This note used to say that
+ * `setFullScreenWindow` and `getFullScreenWindow` were missing, because they take and return a
+ * `java.awt.Window` that dragged in a tree of components the library did not have. Both are written
+ * now. What is still true is that no device gets taken over: {@link #isFullScreenSupported} answers
+ * `false`, which is the truth about this device and not an excuse, and the window is only recorded.
  */
 public abstract class GraphicsDevice {
 
-    /** Una pantalla. */
+    /** A screen. */
     public static final int TYPE_RASTER_SCREEN = 0;
 
-    /** Una impresora. */
+    /** A printer. */
     public static final int TYPE_PRINTER = 1;
 
-    /** Un buffer en memoria. */
+    /** A buffer in memory. */
     public static final int TYPE_IMAGE_BUFFER = 2;
 
-    private DisplayMode modoOriginal;
+    private DisplayMode originalMode;
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected GraphicsDevice() {
     }
 
-    /** Los tipos de transparencia que un dispositivo puede o no admitir en sus ventanas. */
+    /** The kinds of translucency a device may or may not support in its windows. */
     public static enum WindowTranslucency {
 
-        /** Cada píxel es del todo opaco o del todo transparente. */
+        /** Each pixel is either fully opaque or fully transparent. */
         PERPIXEL_TRANSPARENT,
 
-        /** La ventana entera tiene una opacidad uniforme. */
+        /** The whole window has one uniform opacity. */
         TRANSLUCENT,
 
-        /** Cada píxel tiene su propia opacidad. */
+        /** Each pixel has an opacity of its own. */
         PERPIXEL_TRANSLUCENT
     }
 
-    /** `TYPE_RASTER_SCREEN`, `TYPE_PRINTER` o `TYPE_IMAGE_BUFFER`. */
+    /** `TYPE_RASTER_SCREEN`, `TYPE_PRINTER` or `TYPE_IMAGE_BUFFER`. */
     public abstract int getType();
 
-    /** Un identificador del dispositivo. */
+    /** An identifier of the device. */
     public abstract String getIDstring();
 
-    /** Todas sus configuraciones. */
+    /** All of its configurations. */
     public abstract GraphicsConfiguration[] getConfigurations();
 
-    /** La configuración que usa por omisión. */
+    /** The configuration it uses by default. */
     public abstract GraphicsConfiguration getDefaultConfiguration();
 
     /**
-     * La configuración que mejor cumple con esos requisitos.
+     * The configuration that best meets those requirements.
      *
-     * @throws NullPointerException si la plantilla es `null`
+     * @throws NullPointerException if the template is `null`
      */
     public GraphicsConfiguration getBestConfiguration(GraphicsConfigTemplate gct) {
         GraphicsConfiguration[] configs = this.getConfigurations();
@@ -67,26 +66,26 @@ public abstract class GraphicsDevice {
     }
 
     /**
-     * Si admite el modo de pantalla completa exclusivo.
+     * Whether it supports the exclusive full-screen mode.
      *
-     * <p>Contesta `false` porque el modo exclusivo se maneja con ventanas, y esta biblioteca no trae
-     * el árbol de componentes de AWT.
+     * <p>It answers `false` because the exclusive mode means taking a device over, and there is no
+     * device here to take over.
      */
     public boolean isFullScreenSupported() {
         return false;
     }
 
-    /** Si se le puede cambiar el modo de pantalla. */
+    /** Whether its display mode can be changed. */
     public boolean isDisplayChangeSupported() {
         return false;
     }
 
     /**
-     * Cambia el modo de pantalla.
+     * Changes the display mode.
      *
-     * @throws UnsupportedOperationException si el dispositivo no admite el cambio
-     * @throws IllegalArgumentException si el modo no es uno de los que devuelve
-     *     {@link #getDisplayModes}
+     * @throws UnsupportedOperationException if the device does not support the change
+     * @throws IllegalArgumentException if the mode is not one of those {@link #getDisplayModes}
+     *     returns
      */
     public void setDisplayMode(DisplayMode dm) {
         if (!this.isDisplayChangeSupported()) {
@@ -95,11 +94,11 @@ public abstract class GraphicsDevice {
         if (dm == null) {
             throw new IllegalArgumentException("Invalid display mode");
         }
-        DisplayMode[] modos = this.getDisplayModes();
-        for (int i = 0; i < modos.length; i++) {
-            if (dm.equals(modos[i])) {
-                if (this.modoOriginal == null) {
-                    this.modoOriginal = this.getDisplayMode();
+        DisplayMode[] modes = this.getDisplayModes();
+        for (int i = 0; i < modes.length; i++) {
+            if (dm.equals(modes[i])) {
+                if (this.originalMode == null) {
+                    this.originalMode = this.getDisplayMode();
                 }
                 return;
             }
@@ -107,35 +106,35 @@ public abstract class GraphicsDevice {
         throw new IllegalArgumentException("Invalid display mode");
     }
 
-    /** El modo de pantalla actual, o `null` si no se sabe. */
+    /** The current display mode, or `null` if it is not known. */
     public DisplayMode getDisplayMode() {
         return null;
     }
 
-    /** Los modos de pantalla disponibles. */
+    /** The available display modes. */
     public DisplayMode[] getDisplayModes() {
-        DisplayMode[] uno = new DisplayMode[1];
-        uno[0] = this.getDisplayMode();
-        if (uno[0] == null) {
+        DisplayMode[] single = new DisplayMode[1];
+        single[0] = this.getDisplayMode();
+        if (single[0] == null) {
             return new DisplayMode[0];
         }
-        return uno;
+        return single;
     }
 
     /**
-     * Cuánta memoria acelerada queda, o -1 si no se sabe.
+     * How much accelerated memory is left, or -1 if it is not known.
      *
-     * <p>El -1 es una respuesta: significa que no hay forma de averiguarlo, que es distinto de que
-     * no quede nada.
+     * <p>The -1 is an answer: it means there is no way to find out, which is different from none
+     * being left.
      */
     public int getAvailableAcceleratedMemory() {
         return -1;
     }
 
     /**
-     * Si admite ese tipo de transparencia en las ventanas.
+     * Whether it supports that kind of translucency in windows.
      *
-     * @throws NullPointerException si el tipo es `null`
+     * @throws NullPointerException if the kind is `null`
      */
     public boolean isWindowTranslucencySupported(WindowTranslucency translucencyKind) {
         if (translucencyKind == null) {
@@ -145,33 +144,36 @@ public abstract class GraphicsDevice {
     }
 
     /**
-     * La ventana que está en modo de pantalla completa exclusivo.
+     * The window that is in exclusive full-screen mode.
      *
-     * @return `null` siempre: {@link #isFullScreenSupported} dice que no se admite, así que nunca
-     *     hay ninguna
+     * @return the window handed to {@link #setFullScreenWindow}, or `null` if there is none
      */
     public Window getFullScreenWindow() {
-        return this.ventanaCompleta;
+        return this.fullScreenWindow;
     }
 
     /**
-     * Pone una ventana en pantalla completa exclusiva, o saca la que estuviera pasando `null`.
+     * Puts a window into exclusive full screen, or takes out whichever one was there by passing
+     * `null`.
      *
-     * <p>Como {@link #isFullScreenSupported} contesta `false`, esto hace lo que hace el JDK cuando el
-     * modo exclusivo no está: **simula**. La ventana se agranda al tamaño de la pantalla y se
-     * muestra, sin apoderarse del dispositivo. Acá ni siquiera hay pantalla que medir, así que lo
-     * único observable es que la ventana queda anotada y {@link #getFullScreenWindow} la devuelve.
+     * <p>Since {@link #isFullScreenSupported} answers `false`, this does what the JDK does when the
+     * exclusive mode is not available: it **simulates** it, growing the window to the size of the
+     * screen and showing it, without taking the device over. Here there is not even a screen to
+     * measure, so the only observable effect is that the window is recorded and {@link
+     * #getFullScreenWindow} gives it back.
      *
-     * <p>Pasar `null` restituye el modo de pantalla original, si es que se lo había cambiado.
+     * <p>When the window is replaced or cleared, the original display mode is restored if it had
+     * been changed —which cannot happen here, because {@link #isDisplayChangeSupported} is `false`
+     * and {@link #setDisplayMode} throws before changing anything.
      */
     public void setFullScreenWindow(Window w) {
-        if (this.ventanaCompleta != null && this.modoOriginal != null) {
-            this.setDisplayMode(this.modoOriginal);
-            this.modoOriginal = null;
+        if (this.fullScreenWindow != null && this.originalMode != null) {
+            this.setDisplayMode(this.originalMode);
+            this.originalMode = null;
         }
-        this.ventanaCompleta = w;
+        this.fullScreenWindow = w;
     }
 
-    /** La ventana en pantalla completa, o `null`. */
-    private Window ventanaCompleta;
+    /** The full-screen window, or `null`. */
+    private Window fullScreenWindow;
 }

@@ -1,68 +1,68 @@
 package java.awt;
 
 /**
- * En qué orden el tabulador recorre los componentes de un contenedor.
+ * In what order the tab key traverses the components of a container.
  *
- * <p>El orden por omisión —el visual, de arriba abajo y de izquierda a derecha— casi siempre está
- * bien, pero no siempre: un formulario en dos columnas suele quererse recorrido por columna y no por
- * fila. Esta clase es donde se cambia.
+ * <p>The default order —the visual one, top to bottom and left to right— is almost always right,
+ * but not always: a form in two columns is usually meant to be traversed by column and not by row.
+ * This class is where that is changed.
  *
- * <p>Los cinco métodos abstractos no son redundantes. {@link #getDefaultComponent} es a quién le
- * toca el foco cuando el contenedor lo recibe **por primera vez**, y {@link #getFirstComponent} es
- * el primero del recorrido: en un diálogo, el primero suele ser un campo de texto y el
- * predeterminado el botón Aceptar.
+ * <p>The five abstract methods are not redundant. {@link #getDefaultComponent} is whose turn the
+ * focus is when the container receives it **for the first time**, and {@link #getFirstComponent} is
+ * the first one of the traversal: in a dialog, the first one is usually a text field and the
+ * default one the OK button.
  */
 public abstract class FocusTraversalPolicy {
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected FocusTraversalPolicy() {
     }
 
     /**
-     * A quién le toca el foco después de ese componente.
+     * Whose turn the focus is after that component.
      *
-     * @throws IllegalArgumentException si falta alguno de los dos, o si el componente no está en
-     *     ese contenedor
+     * @throws IllegalArgumentException if either of the two is missing, or if the component is not
+     *     in that container
      */
     public abstract Component getComponentAfter(Container aContainer, Component aComponent);
 
     /**
-     * A quién le tocaba antes.
+     * Whose turn it was before.
      *
-     * @throws IllegalArgumentException si falta alguno de los dos, o si el componente no está en
-     *     ese contenedor
+     * @throws IllegalArgumentException if either of the two is missing, or if the component is not
+     *     in that container
      */
     public abstract Component getComponentBefore(Container aContainer, Component aComponent);
 
     /**
-     * El primero del recorrido.
+     * The first one of the traversal.
      *
-     * @throws IllegalArgumentException si el contenedor es `null`
+     * @throws IllegalArgumentException if the container is `null`
      */
     public abstract Component getFirstComponent(Container aContainer);
 
     /**
-     * El último del recorrido.
+     * The last one of the traversal.
      *
-     * @throws IllegalArgumentException si el contenedor es `null`
+     * @throws IllegalArgumentException if the container is `null`
      */
     public abstract Component getLastComponent(Container aContainer);
 
     /**
-     * A quién le toca cuando el contenedor recibe el foco.
+     * Whose turn it is when the container receives the focus.
      *
-     * @throws IllegalArgumentException si el contenedor es `null`
+     * @throws IllegalArgumentException if the container is `null`
      */
     public abstract Component getDefaultComponent(Container aContainer);
 
     /**
-     * A quién le toca la primera vez que se muestra la ventana.
+     * Whose turn it is the first time the window is shown.
      *
-     * <p>Por omisión, el mismo que {@link #getDefaultComponent}. Se separa para que una política
-     * pueda distinguir la primera vez de las siguientes, que es lo que hace falta cuando el diálogo
-     * tiene que arrancar con el foco en un campo pero volver al botón después.
+     * <p>By default, the same as {@link #getDefaultComponent}. It is kept apart so that a policy
+     * can tell the first time from the following ones, which is what is needed when the dialog has
+     * to start with the focus on a field but go back to the button afterwards.
      *
-     * @throws IllegalArgumentException si la ventana es `null`
+     * @throws IllegalArgumentException if the window is `null`
      */
     public Component getInitialComponent(Window window) {
         if (window == null) {

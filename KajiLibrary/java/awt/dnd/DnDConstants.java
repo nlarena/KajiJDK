@@ -1,35 +1,36 @@
 package java.awt.dnd;
 
 /**
- * Qué se puede hacer con lo que se arrastra: copiarlo, moverlo o enlazarlo.
+ * What can be done with what is dragged: copy it, move it or link it.
  *
- * <p>Son **bits**, no valores excluyentes, y ahí está la gracia: el origen declara todo lo que
- * acepta —normalmente copiar o mover— y el destino elige uno. La tecla que el usuario tenga apretada
- * inclina la elección, y por eso arrastrar con Control copia donde arrastrar sin nada movería.
+ * <p>They are **bits**, not exclusive values, and that is the point of them: the source declares
+ * everything it accepts —usually copy or move— and the destination chooses one. The key the user
+ * has held down tilts the choice, and that is why dragging with Control copies where dragging with
+ * nothing would move.
  *
- * <p>La clase no se puede instanciar y es final: son constantes y nada más.
+ * <p>The class cannot be instantiated and is final: they are constants and nothing else.
  */
 public final class DnDConstants {
 
-    /** Nada; el arrastre no se acepta. */
+    /** Nothing; the drag is not accepted. */
     public static final int ACTION_NONE = 0x0;
 
-    /** Copiar: el original queda donde estaba. */
+    /** Copy: the original stays where it was. */
     public static final int ACTION_COPY = 0x1;
 
-    /** Mover: el original se saca del origen. */
+    /** Move: the original is taken out of the source. */
     public static final int ACTION_MOVE = 0x2;
 
-    /** Cualquiera de las dos; el destino elige. */
+    /** Either of the two; the destination chooses. */
     public static final int ACTION_COPY_OR_MOVE = ACTION_COPY | ACTION_MOVE;
 
-    /** Enlazar: se crea una referencia al original. */
+    /** Link: a reference to the original is created. */
     public static final int ACTION_LINK = 0x40000000;
 
-    /** El otro nombre de {@link #ACTION_LINK}. */
+    /** The other name of {@link #ACTION_LINK}. */
     public static final int ACTION_REFERENCE = ACTION_LINK;
 
-    /** No se instancia. */
+    /** It is not instantiated. */
     private DnDConstants() {
     }
 }

@@ -13,19 +13,21 @@ import javax.swing.JList;
 import javax.swing.ListCellRenderer;
 
 /**
- * El boton que ocupa todo un desplegable de Metal.
+ * The button that takes up a whole Metal combo box.
  *
- * <p>La sorpresa de esta clase es que <strong>no</strong> es la flechita: es el desplegable entero.
- * Un {@code JComboBox} no editable de Metal es un solo boton del ancho completo que dibuja adentro
- * el valor elegido y, a la derecha, la flecha. Por eso hereda de {@link JButton} y por eso tiene
- * una {@link CellRendererPane} y una {@link JList}: necesita el dibujante de la lista para pintar
- * el valor actual con el mismo aspecto que va a tener cuando se despliegue.
+ * <p>This class's surprise is that it is <strong>not</strong> the little arrow: it is the whole
+ * combo box. A non-editable Metal {@code JComboBox} is a single full-width button that draws the
+ * chosen value inside and, on the right, the arrow. That is why it inherits from
+ * {@link JButton} and why it has a {@link CellRendererPane} and a {@link JList}: it needs the
+ * list's renderer to paint the current value with the same look it will have when it drops
+ * down.
  *
- * <p>{@link #isIconOnly} distingue los dos modos. En {@code false} el boton es todo el desplegable;
- * en {@code true} es solo la flechita, que es lo que hace falta cuando el desplegable <em>es</em>
- * editable y el campo de texto ocupa el resto.
+ * <p>{@link #isIconOnly} tells the two modes apart. At {@code false} the button is the whole
+ * combo box; at {@code true} it is only the little arrow, which is what is needed when the combo
+ * box <em>is</em> editable and the text field takes up the rest.
  *
- * <p>No toma el foco: lo toma el desplegable, que es el componente que el programa conoce.
+ * <p>It does not take the focus: the combo box takes it, which is the component the program
+ * knows.
  */
 public class MetalComboBoxButton extends JButton {
 
@@ -75,7 +77,7 @@ public class MetalComboBoxButton extends JButton {
         iconOnly = isIconOnly;
     }
 
-    /** No; ver la nota de la clase. */
+    /** No; see the class note. */
     public boolean isFocusTraversable() {
         return false;
     }
@@ -88,44 +90,44 @@ public class MetalComboBoxButton extends JButton {
         }
     }
 
-    /** Lo que mide la flecha mas su aire; el ancho del valor lo pone el desplegable. */
+    /** What the arrow plus its air measures; the value's width is set by the combo box. */
     public Dimension getMinimumSize() {
         Insets i = getInsets();
-        int ancho = (comboIcon == null) ? 0 : comboIcon.getIconWidth();
-        int alto = (comboIcon == null) ? 0 : comboIcon.getIconHeight();
-        return new Dimension(ancho + i.left + i.right, alto + i.top + i.bottom);
+        int width = (comboIcon == null) ? 0 : comboIcon.getIconWidth();
+        int height = (comboIcon == null) ? 0 : comboIcon.getIconHeight();
+        return new Dimension(width + i.left + i.right, height + i.top + i.bottom);
     }
 
-    /** El valor elegido, dibujado por el dibujante de la lista, y despues la flecha. */
+    /** The chosen value, drawn by the list's renderer, and then the arrow. */
     public void paintComponent(Graphics g) {
         super.paintComponent(g);
         Insets i = getInsets();
-        int ancho = getWidth() - i.left - i.right;
-        int alto = getHeight() - i.top - i.bottom;
-        if (ancho <= 0 || alto <= 0) {
+        int width = getWidth() - i.left - i.right;
+        int height = getHeight() - i.top - i.bottom;
+        if (width <= 0 || height <= 0) {
             return;
         }
-        int anchoIcono = (comboIcon == null) ? 0 : comboIcon.getIconWidth();
+        int iconWidth = (comboIcon == null) ? 0 : comboIcon.getIconWidth();
         if (comboIcon != null) {
-            int ix = i.left + ancho - anchoIcono;
-            int iy = i.top + (alto - comboIcon.getIconHeight()) / 2;
+            int ix = i.left + width - iconWidth;
+            int iy = i.top + (height - comboIcon.getIconHeight()) / 2;
             comboIcon.paintIcon(this, g, ix, iy);
         }
         if (iconOnly || comboBox == null || rendererPane == null || listBox == null) {
             return;
         }
-        dibujarValor(g, new Rectangle(i.left, i.top, ancho - anchoIcono, alto));
+        paintValue(g, new Rectangle(i.left, i.top, width - iconWidth, height));
     }
 
-    /** El valor actual, con el dibujante de la lista; ver la nota de la clase. */
-    private void dibujarValor(Graphics g, Rectangle caja) {
-        ListCellRenderer dibujante = comboBox.getRenderer();
-        if (dibujante == null) {
+    /** The current value, with the list's renderer; see the class note. */
+    private void paintValue(Graphics g, Rectangle box) {
+        ListCellRenderer renderer = comboBox.getRenderer();
+        if (renderer == null) {
             return;
         }
-        Object valor = comboBox.getSelectedItem();
-        java.awt.Component c = dibujante.getListCellRendererComponent(
-                listBox, valor, -1, false, false);
+        Object value = comboBox.getSelectedItem();
+        java.awt.Component c = renderer.getListCellRendererComponent(
+                listBox, value, -1, false, false);
         if (c == null) {
             return;
         }
@@ -134,6 +136,6 @@ public class MetalComboBoxButton extends JButton {
                 ? comboBox.getForeground()
                 : MetalLookAndFeel.getInactiveControlTextColor());
         c.setBackground(comboBox.getBackground());
-        rendererPane.paintComponent(g, c, this, caja.x, caja.y, caja.width, caja.height, true);
+        rendererPane.paintComponent(g, c, this, box.x, box.y, box.width, box.height, true);
     }
 }

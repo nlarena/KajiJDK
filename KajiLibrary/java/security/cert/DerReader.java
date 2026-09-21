@@ -2,40 +2,41 @@ package java.security.cert;
 
 import java.io.IOException;
 
-// Un lector de DER minimo, solo para las tres estructuras que este paquete necesita leer de verdad.
+// A minimal DER reader, only for the three structures this package really needs to read.
 //
 // ===============================================================================================
-// POR QUE ESTO EXISTE Y HASTA DONDE LLEGA
+// WHY THIS EXISTS AND HOW FAR IT GOES
 // ===============================================================================================
 //
-// Casi todo `java.security.cert` puede ser honesto sin parsear nada: `X509Certificate` es abstracta,
-// los selectores comparan lo que el certificado ya devuelve, y las fabricas delegan en un
-// proveedor. Pero quedan tres metodos **concretos** del API cuyo contrato es literalmente "leer un
-// pedacito de DER":
+// Almost all of `java.security.cert` can be honest without parsing anything: `X509Certificate` is
+// abstract, the selectors compare what the certificate returns already, and the factories delegate
+// to a provider. But three **concrete** methods of the API are left whose contract is literally
+// "read a little bit of DER":
 //
-//   - `PolicyQualifierInfo`, que decodifica un SEQUENCE con un OID adelante.
-//   - `X509Certificate.getExtendedKeyUsage()`, que decodifica un SEQUENCE OF OID.
-//   - `X509CRLEntry.getRevocationReason()`, que decodifica un ENUMERATED.
+//   - `PolicyQualifierInfo`, which decodes a SEQUENCE with an OID in front.
+//   - `X509Certificate.getExtendedKeyUsage()`, which decodes a SEQUENCE OF OID.
+//   - `X509CRLEntry.getRevocationReason()`, which decodes an ENUMERATED.
 //
-// Los tres son **codificacion, no criptografia**: no hay ninguna decision de confianza aca. Un bug
-// en este archivo produce un OID mal leido o una excepcion, nunca una firma que se acepta sin
-// verificar. Por eso se puede escribir sin violar la regla de la casa, a diferencia de lo que
-// pasaria con un parser de certificados completo o con un comparador de nombres X.500 —donde
-// equivocarse **si** es un agujero, y por eso no estan.
+// All three are **encoding, not cryptography**: there is no decision of trust here. A bug in this
+// file produces a badly read OID or an exception, never a signature that is accepted without being
+// verified. That is why it can be written without breaking the rule of the house, unlike what would
+// happen with a complete certificate parser or with a comparator of X.500 names —where getting it
+// wrong **is** a hole, and that is why they are not there.
 //
-// Desde que `javax.security.auth.x500.X500Principal` existe en esta biblioteca se agrego un cuarto
-// caso: **caminar** hasta el campo `issuer` o `subject` y recortar sus bytes. Vale la pena decir por
-// que eso no cruza el limite de arriba. Este archivo no interpreta el nombre —no lo parsea, no lo
-// compara, no lo canoniza—: cuenta campos de un SEQUENCE y devuelve un tramo. Quien entiende ese
-// tramo es `X500Principal`, que trae su propio decodificador y su propia forma canonica. Separarlo
-// asi es lo que hace que la parte riesgosa —comparar dos nombres— este en un solo lugar y probada.
+// Since `javax.security.auth.x500.X500Principal` exists in this library a fourth case was added:
+// **walking** to the `issuer` or `subject` field and cutting out its bytes. It is worth saying why
+// that does not cross the limit above. This file does not interpret the name —it does not parse it,
+// it does not compare it, it does not canonicalise it—: it counts fields of a SEQUENCE and returns
+// a stretch. The one that understands that stretch is `X500Principal`, which brings its own decoder
+// and its own canonical form. Separating it like that is what makes the risky part —comparing two
+// names— be in a single place and tested.
 //
-// Lo que este lector sigue sin hacer, y por lo tanto lo que no se declara en el paquete:
-// `GeneralName` —y con el, las listas de nombres alternativos y las restricciones de nombres— y
-// cualquier cosa con largo indefinido.
+// What this reader still does not do, and therefore what is not declared in the package:
+// `GeneralName` —and with it, the lists of alternative names and the name constraints— and anything
+// with an indefinite length.
 //
-// Se validan las reglas de DER que importan para no aceptar codificaciones ambiguas: largo
-// indefinido prohibido, largos en forma minima, componentes de OID sin ceros a la izquierda.
+// The rules of DER that matter for not accepting ambiguous encodings are checked: indefinite length
+// forbidden, lengths in minimal form, OID components with no leading zeroes.
 final class DerReader {
 
     private final byte[] buf;
@@ -60,38 +61,38 @@ final class DerReader {
         return this.end;
     }
 
-    // Lee el byte de etiqueta.
+    // It reads the tag byte.
     int readTag() throws IOException {
         if (this.pos >= this.end) {
-            throw new IOException("DER truncado: falta la etiqueta");
+            throw new IOException("truncated DER: the tag is missing");
         }
         int t = this.buf[this.pos] & 0xff;
         this.pos = this.pos + 1;
-        // Las etiquetas de forma larga (los cinco bits bajos en 1) no aparecen en nada de lo que
-        // este paquete lee, y aceptarlas sin saber decodificarlas seria peor que rechazarlas.
+        // The long-form tags (the low five bits at 1) do not appear in anything this package reads,
+        // and accepting them without knowing how to decode them would be worse than rejecting them.
         if ((t & 0x1f) == 0x1f) {
-            throw new IOException("DER: etiqueta de forma larga no soportada");
+            throw new IOException("DER: long-form tag not supported");
         }
         return t;
     }
 
-    // Lee el campo de largo y devuelve cuantos bytes de contenido siguen.
+    // It reads the length field and returns how many bytes of content follow.
     int readLength() throws IOException {
         if (this.pos >= this.end) {
-            throw new IOException("DER truncado: falta el largo");
+            throw new IOException("truncated DER: the length is missing");
         }
         int b0 = this.buf[this.pos] & 0xff;
         this.pos = this.pos + 1;
         if (b0 < 0x80) {
             return b0;
         }
-        // 0x80 es el largo indefinido de BER. DER lo prohibe, y aceptarlo abriria la puerta a que
-        // el mismo valor tenga dos codificaciones.
+        // 0x80 is the indefinite length of BER. DER forbids it, and accepting it would open the
+        // door to the same value having two encodings.
         if (b0 == 0x80) {
-            throw new IOException("DER: largo indefinido no permitido");
+            throw new IOException("DER: indefinite length not allowed");
         }
         int n = b0 & 0x7f;
-        // Mas de cuatro bytes de largo no entra en un int, y nada de lo que se lee aca se acerca.
+        // More than four bytes of length does not fit in an int, and nothing read here comes close.
         if (n > 4) {
             throw new IOException("DER: largo demasiado grande");
         }
@@ -111,7 +112,7 @@ final class DerReader {
         return v;
     }
 
-    // Consume el contenido de un valor y devuelve donde empieza.
+    // It consumes the content of a value and returns where it starts.
     int skip(int len) throws IOException {
         int from = this.pos;
         if (len < 0 || this.pos + len > this.end) {
@@ -121,34 +122,34 @@ final class DerReader {
         return from;
     }
 
-    // Consume el siguiente valor completo y devuelve {inicioDelTlv, largoTotal, etiqueta}.
+    // It consumes the next complete value and returns {startOfTheTlv, totalLength, tag}.
     //
-    // Es lo que hace falta para recortar un campo **con su cabecera**: un `Name` en DER solo se
-    // puede volver a decodificar si viene entero, con su SEQUENCE adelante.
+    // It is what is needed for cutting out a field **with its header**: a `Name` in DER can only be
+    // decoded again if it comes whole, with its SEQUENCE in front.
     int[] nextTlv() throws IOException {
-        int inicio = this.pos;
+        int start = this.pos;
         int tag = readTag();
         int len = readLength();
         skip(len);
-        return new int[] {inicio, this.pos - inicio, tag};
+        return new int[] {start, this.pos - start, tag};
     }
 
-    // Comprueba que la etiqueta sea la esperada y devuelve el largo del contenido.
+    // It checks that the tag is the expected one and returns the length of the content.
     int expect(int tag) throws IOException {
         int t = readTag();
         if (t != tag) {
-            throw new IOException("DER: se esperaba la etiqueta 0x"
-                + Integer.toHexString(tag) + " y vino 0x" + Integer.toHexString(t));
+            throw new IOException("DER: the tag expected was 0x"
+                + Integer.toHexString(tag) + " and what came was 0x" + Integer.toHexString(t));
         }
         return readLength();
     }
 
-    // Decodifica un OBJECT IDENTIFIER a su notacion de puntos.
+    // It decodes an OBJECT IDENTIFIER into its dotted notation.
     //
-    // El primer sub-identificador codifica **dos** arcos juntos como 40*a1 + a2. El truco existe
-    // porque a1 solo puede valer 0, 1 o 2, asi que hay lugar de sobra; el precio es que para a1 = 2
-    // el segundo arco no tiene techo, y por eso el corte de a1 no se puede hacer dividiendo por 40
-    // sin mirar el rango.
+    // The first sub-identifier encodes **two** arcs together as 40*a1 + a2. The trick exists
+    // because a1 can only be worth 0, 1 or 2, so there is room to spare; the price is that for a1 =
+    // 2 the second arc has no ceiling, and that is why the cut of a1 cannot be made by dividing by
+    // 40 without looking at the range.
     String readOid(int from, int len) throws IOException {
         if (len <= 0) {
             throw new IOException("DER: OID vacio");
@@ -160,10 +161,10 @@ final class DerReader {
         while (i < to) {
             long v = 0;
             int bytes = 0;
-            // Un componente que arranca con 0x80 tendria un cero a la izquierda: DER exige la
-            // codificacion mas corta, asi que eso es invalido y no simplemente redundante.
+            // A component that starts with 0x80 would have a leading zero: DER demands the shortest
+            // encoding, so that is invalid and not simply redundant.
             if ((this.buf[i] & 0xff) == 0x80) {
-                throw new IOException("DER: componente de OID con codificacion no minima");
+                throw new IOException("DER: OID component with non-minimal encoding");
             }
             while (true) {
                 if (i >= to) {
@@ -172,9 +173,9 @@ final class DerReader {
                 int x = this.buf[i] & 0xff;
                 i = i + 1;
                 bytes = bytes + 1;
-                // Nueve grupos de siete bits ya se pasan de un long: cortamos antes de desbordar.
+                // Nine groups of seven bits already overshoot a long: we cut before overflowing.
                 if (bytes > 9) {
-                    throw new IOException("DER: componente de OID demasiado grande");
+                    throw new IOException("DER: OID component too big");
                 }
                 v = (v << 7) | (x & 0x7f);
                 if ((x & 0x80) == 0) {
@@ -206,14 +207,14 @@ final class DerReader {
         return sb.toString();
     }
 
-    // Copia un tramo del buffer.
+    // It copies a stretch of the buffer.
     byte[] copy(int from, int len) {
         byte[] c = new byte[len];
         System.arraycopy(this.buf, from, c, 0, len);
         return c;
     }
 
-    // Lee un INTEGER con signo, en complemento a dos y big-endian, como lo codifica DER.
+    // It reads a signed INTEGER, in two's complement and big-endian, as DER encodes it.
     java.math.BigInteger readInteger(int from, int len) throws IOException {
         if (len <= 0) {
             throw new IOException("DER: INTEGER vacio");
@@ -221,23 +222,23 @@ final class DerReader {
         return new java.math.BigInteger(copy(from, len));
     }
 
-    // Un GeneralizedTime en milisegundos desde la epoca.
+    // A GeneralizedTime in milliseconds since the epoch.
     //
-    // Se acepta **solo** la forma que DER obliga: `YYYYMMDDHHMMSSZ`, con la fraccion de segundo
-    // opcional y siempre en UTC. BER permite ademas omitir los segundos y escribir un desfasaje
-    // horario; eso se rechaza a proposito, porque aceptar dos codificaciones del mismo instante es
-    // justo lo que DER existe para evitar y porque un certificado conforme nunca las usa.
+    // **Only** the form DER forces is accepted: `YYYYMMDDHHMMSSZ`, with the fraction of a second
+    // optional and always in UTC. BER also allows the seconds to be omitted and a time offset to be
+    // written; that is rejected on purpose, because accepting two encodings of the same instant is
+    // just what DER exists to avoid and because a conforming certificate never uses them.
     //
-    // La cuenta de dias es la de Howard Hinnant, con el año corrido para que febrero quede al final:
-    // asi el dia bisiesto es el ultimo del ciclo y no hay que tratarlo aparte. Todo en enteros, sin
-    // pasar por ninguna clase de fecha.
+    // The counting of days is Howard Hinnant's, with the year shifted so that February is left at
+    // the end: that way the leap day is the last of the cycle and does not have to be treated
+    // apart. Everything in integers, without going through any date class.
     static long generalizedTime(byte[] buf, int from, int len) throws IOException {
         if (len < 15) {
             throw new IOException("DER: GeneralizedTime demasiado corto");
         }
         String s = new String(buf, from, len, java.nio.charset.StandardCharsets.US_ASCII);
         if (s.charAt(s.length() - 1) != 'Z') {
-            throw new IOException("DER: GeneralizedTime sin Z");
+            throw new IOException("DER: GeneralizedTime with no Z");
         }
         int year = digitsAt(s, 0, 4);
         int month = digitsAt(s, 4, 2);
@@ -247,25 +248,25 @@ final class DerReader {
         int second = digitsAt(s, 12, 2);
         if (month < 1 || month > 12 || day < 1 || day > 31 || hour > 23 || minute > 59
                 || second > 60) {
-            throw new IOException("DER: GeneralizedTime fuera de rango: " + s);
+            throw new IOException("DER: GeneralizedTime out of range: " + s);
         }
-        long milis = 0;
-        // La fraccion, si esta, va entre los segundos y la Z. Se leen hasta tres digitos: mas
-        // precision que un milisegundo no entra en lo que devuelve este metodo.
+        long millis = 0;
+        // The fraction, if it is there, goes between the seconds and the Z. Up to three digits are
+        // read: more precision than a millisecond does not fit in what this method returns.
         if (s.length() > 15) {
             if (s.charAt(14) != '.' && s.charAt(14) != ',') {
-                throw new IOException("DER: GeneralizedTime con sobrante: " + s);
+                throw new IOException("DER: GeneralizedTime with data left over: " + s);
             }
             int i = 15;
-            int escala = 100;
+            int scale = 100;
             while (i < s.length() - 1) {
                 char c = s.charAt(i);
                 if (c < '0' || c > '9') {
-                    throw new IOException("DER: fraccion no numerica: " + s);
+                    throw new IOException("DER: non-numeric fraction: " + s);
                 }
-                if (escala > 0) {
-                    milis = milis + (c - '0') * escala;
-                    escala = escala / 10;
+                if (scale > 0) {
+                    millis = millis + (c - '0') * scale;
+                    scale = scale / 10;
                 }
                 i = i + 1;
             }
@@ -279,7 +280,7 @@ final class DerReader {
         long doy = (153 * (month + (month > 2 ? -3 : 9)) + 2) / 5 + day - 1;
         long doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
         long days = era * 146097 + doe - 719468;
-        return ((days * 24 + hour) * 60 + minute) * 60000L + second * 1000L + milis;
+        return ((days * 24 + hour) * 60 + minute) * 60000L + second * 1000L + millis;
     }
 
     private static int digitsAt(String s, int from, int count) throws IOException {
@@ -288,7 +289,7 @@ final class DerReader {
         while (i < count) {
             char c = s.charAt(from + i);
             if (c < '0' || c > '9') {
-                throw new IOException("DER: se esperaba un digito en \"" + s + "\"");
+                throw new IOException("DER: a digit was expected in \"" + s + "\"");
             }
             v = v * 10 + (c - '0');
             i = i + 1;
@@ -296,63 +297,63 @@ final class DerReader {
         return v;
     }
 
-    // Etiquetas universales que se usan en este paquete.
+    // Universal tags that are used in this package.
     static final int TAG_INTEGER = 0x02;
     static final int TAG_ENUMERATED = 0x0a;
     static final int TAG_OID = 0x06;
     static final int TAG_OCTET_STRING = 0x04;
     static final int TAG_SEQUENCE = 0x30;
 
-    // Comprueba que un string sea un OID valido en notacion de puntos, con las mismas reglas que
-    // usa el JDK al construir uno.
+    // It checks that a string is a valid OID in dotted notation, with the same rules the JDK uses
+    // when building one.
     //
-    // Las tres reglas no son arbitrarias y salen de como se codifica un OID en DER: el primer
-    // sub-identificador guarda los dos primeros arcos juntos como 40*a1 + a2, y eso solo cierra si
-    // a1 vale 0, 1 o 2 —y, cuando vale 0 o 1, si a2 se queda abajo de 40—. Un OID de un solo arco
-    // directamente no se puede codificar.
+    // The three rules are not arbitrary and come from how an OID is encoded in DER: the first
+    // sub-identifier keeps the first two arcs together as 40*a1 + a2, and that only closes if a1 is
+    // worth 0, 1 or 2 —and, when it is worth 0 or 1, if a2 stays below 40—. An OID of a single arc
+    // simply cannot be encoded.
     static void validateOid(String oid) throws IOException {
         if (oid == null) {
             throw new NullPointerException("oid is null");
         }
-        int partes = 0;
+        int parts = 0;
         int i = 0;
         int len = oid.length();
         long first = -1;
         long second = -1;
         while (i <= len) {
-            int corte = oid.indexOf('.', i);
-            if (corte < 0) {
-                corte = len;
+            int cut = oid.indexOf('.', i);
+            if (cut < 0) {
+                cut = len;
             }
-            if (corte == i) {
+            if (cut == i) {
                 throw new IOException(
                     "ObjectIdentifier() -- Invalid format: componente vacio en \"" + oid + "\"");
             }
             long v = 0;
             int j = i;
-            while (j < corte) {
+            while (j < cut) {
                 char c = oid.charAt(j);
                 if (c < '0' || c > '9') {
                     throw new IOException(
                         "ObjectIdentifier() -- Invalid format: \"" + oid + "\"");
                 }
                 v = v * 10 + (c - '0');
-                // Se corta antes de desbordar; ningun OID real se acerca a este orden.
+                // It cuts before overflowing; no real OID comes close to this order.
                 if (v > 0x7fffffffL) {
                     throw new IOException(
                         "ObjectIdentifier() -- componente demasiado grande en \"" + oid + "\"");
                 }
                 j = j + 1;
             }
-            if (partes == 0) {
+            if (parts == 0) {
                 first = v;
-            } else if (partes == 1) {
+            } else if (parts == 1) {
                 second = v;
             }
-            partes = partes + 1;
-            i = corte + 1;
+            parts = parts + 1;
+            i = cut + 1;
         }
-        if (partes < 2) {
+        if (parts < 2) {
             throw new IOException("ObjectIdentifier() -- Must be at least two oid components ");
         }
         if (first > 2) {
@@ -363,80 +364,81 @@ final class DerReader {
         }
     }
 
-    // Desenvuelve el OCTET STRING con el que viaja el valor de una extension X.509 y devuelve su
-    // contenido. `getExtensionValue` entrega siempre esa envoltura, nunca el valor pelado.
+    // It unwraps the OCTET STRING the value of an X.509 extension travels in and returns its
+    // content. `getExtensionValue` always hands over that wrapping, never the bare value.
     static byte[] unwrapOctetString(byte[] ext) throws IOException {
         DerReader d = new DerReader(ext, 0, ext.length);
         int len = d.expect(TAG_OCTET_STRING);
         int from = d.skip(len);
         if (d.hasMore()) {
-            throw new IOException("DER: datos de mas despues del OCTET STRING");
+            throw new IOException("DER: extra data after the OCTET STRING");
         }
         return d.copy(from, len);
     }
 
-    // Los bytes del `issuer` o del `subject` de un certificado X.509, con su cabecera.
+    // The bytes of the `issuer` or of the `subject` of an X.509 certificate, with their header.
     //
     //   Certificate     ::= SEQUENCE { tbsCertificate, signatureAlgorithm, signatureValue }
     //   TBSCertificate  ::= SEQUENCE { [0] version DEFAULT v1, serialNumber, signature,
     //                                  issuer, validity, subject, ... }
     //
-    // El unico campo opcional que hay antes del emisor es la version, y viene con etiqueta
-    // explicita `[0]` (0xa0), asi que se distingue de un INTEGER sin ambiguedad. De ahi en adelante
-    // las posiciones son fijas y alcanza con contar.
+    // The only optional field there is before the issuer is the version, and it comes with an
+    // explicit tag `[0]` (0xa0), so it is told apart from an INTEGER without ambiguity. From there
+    // on the positions are fixed and counting is enough.
     static byte[] certificateName(byte[] der, boolean subject) throws IOException {
         if (der == null) {
-            throw new IOException("el certificado no tiene codificacion");
+            throw new IOException("the certificate has no encoding");
         }
         DerReader outer = new DerReader(der, 0, der.length);
         int certLen = outer.expect(TAG_SEQUENCE);
-        int inicioCert = outer.position();
-        DerReader cert = new DerReader(der, inicioCert, certLen);
+        int certStart = outer.position();
+        DerReader cert = new DerReader(der, certStart, certLen);
         int tbsLen = cert.expect(TAG_SEQUENCE);
         DerReader tbs = new DerReader(der, cert.position(), tbsLen);
 
         int[] field = tbs.nextTlv();
-        // La version es opcional: si el primer campo no es el `[0]`, ya estabamos parados en la
-        // serie y no hay que consumir nada de mas.
+        // The version is optional: if the first field is not the `[0]`, we were standing on the
+        // serial already and nothing extra has to be consumed.
         if (field[2] == 0xa0) {
             field = tbs.nextTlv();
         }
         if (field[2] != TAG_INTEGER) {
-            throw new IOException("DER: se esperaba el numero de serie");
+            throw new IOException("DER: the serial number was expected");
         }
         field = tbs.nextTlv();
         if (field[2] != TAG_SEQUENCE) {
-            throw new IOException("DER: se esperaba el algoritmo de firma");
+            throw new IOException("DER: the signature algorithm was expected");
         }
         int[] issuer = tbs.nextTlv();
         if (issuer[2] != TAG_SEQUENCE) {
-            throw new IOException("DER: se esperaba el nombre del emisor");
+            throw new IOException("DER: the name of the issuer was expected");
         }
         if (!subject) {
             return tbs.copy(issuer[0], issuer[1]);
         }
         field = tbs.nextTlv();
         if (field[2] != TAG_SEQUENCE) {
-            throw new IOException("DER: se esperaba el periodo de validez");
+            throw new IOException("DER: the validity period was expected");
         }
-        int[] suj = tbs.nextTlv();
-        if (suj[2] != TAG_SEQUENCE) {
-            throw new IOException("DER: se esperaba el nombre del sujeto");
+        int[] subj = tbs.nextTlv();
+        if (subj[2] != TAG_SEQUENCE) {
+            throw new IOException("DER: the name of the subject was expected");
         }
-        return tbs.copy(suj[0], suj[1]);
+        return tbs.copy(subj[0], subj[1]);
     }
 
-    // Los bytes del `issuer` de una CRL, con su cabecera.
+    // The bytes of the `issuer` of a CRL, with their header.
     //
     //   CertificateList ::= SEQUENCE { tbsCertList, signatureAlgorithm, signatureValue }
     //   TBSCertList     ::= SEQUENCE { version OPTIONAL, signature, issuer, thisUpdate, ... }
     //
-    // A diferencia del certificado, aca la version opcional **no** lleva etiqueta explicita: es un
-    // INTEGER pelado. Por eso se decide mirando la etiqueta y no contando: si el primer campo es un
-    // INTEGER es la version, y si es un SEQUENCE ya es el algoritmo de firma.
+    // Unlike the certificate, here the optional version does **not** carry an explicit tag: it is a
+    // bare INTEGER. That is why it is decided by looking at the tag and not by counting: if the
+    // first field is an INTEGER it is the version, and if it is a SEQUENCE it is the signature
+    // algorithm already.
     static byte[] crlName(byte[] der) throws IOException {
         if (der == null) {
-            throw new IOException("la CRL no tiene codificacion");
+            throw new IOException("the CRL has no encoding");
         }
         DerReader outer = new DerReader(der, 0, der.length);
         int listLen = outer.expect(TAG_SEQUENCE);
@@ -449,27 +451,27 @@ final class DerReader {
             field = tbs.nextTlv();
         }
         if (field[2] != TAG_SEQUENCE) {
-            throw new IOException("DER: se esperaba el algoritmo de firma");
+            throw new IOException("DER: the signature algorithm was expected");
         }
         int[] issuer = tbs.nextTlv();
         if (issuer[2] != TAG_SEQUENCE) {
-            throw new IOException("DER: se esperaba el nombre del emisor");
+            throw new IOException("DER: the name of the issuer was expected");
         }
         return tbs.copy(issuer[0], issuer[1]);
     }
 
-    // Los pares (OID, valor) de un `Name` X.500, en el orden del DER.
+    // The pairs (OID, value) of an X.500 `Name`, in the order of the DER.
     //
     //   Name ::= SEQUENCE OF RelativeDistinguishedName
     //   RelativeDistinguishedName ::= SET OF AttributeTypeAndValue
     //   AttributeTypeAndValue ::= SEQUENCE { type OBJECT IDENTIFIER, value ANY }
     //
-    // Existe para las dos reglas heredadas de NameConstraints: el CN se comprueba tambien como
-    // nombre DNS y el EMAILADDRESS como direccion de correo. Las dos necesitan mirar adentro del
-    // nombre, y `X500Principal` no lo deja -- solo entrega el texto entero.
+    // It exists for the two rules inherited from NameConstraints: the CN is also checked as a DNS
+    // name and the EMAILADDRESS as a mail address. Both need to look inside the name, and
+    // `X500Principal` does not allow it -- it only hands over the whole text.
     //
-    // Un valor que no sea de un tipo de cadena se saltea en vez de romper: un atributo raro no
-    // deberia impedir leer los que si se entienden.
+    // A value that is not of a string type is skipped instead of breaking: an odd attribute should
+    // not stop the ones that are understood from being read.
     static java.util.List<String[]> attributesOf(byte[] nameDer) throws IOException {
         java.util.List<String[]> out = new java.util.ArrayList<String[]>();
         DerReader outer = new DerReader(nameDer, 0, nameDer.length);
@@ -498,10 +500,11 @@ final class DerReader {
         return out;
     }
 
-    // El texto de un valor de atributo, o null si su etiqueta no es de una cadena.
+    // The text of an attribute value, or null if its tag is not that of a string.
     //
-    // UTF8String va en UTF-8 y los demas en ASCII. BMPString y UniversalString --UTF-16 y UTF-32--
-    // se saltean: aparecen casi solo en certificados viejos y leerlos mal daria un nombre que no es.
+    // UTF8String goes in UTF-8 and the others in ASCII. BMPString and UniversalString --UTF-16 and
+    // UTF-32-- are skipped: they appear almost only in old certificates and reading them wrongly
+    // would give a name that is not the right one.
     private static String stringValue(byte[] buf, int tag, int at, int len) {
         if (tag == 0x0c) {
             return new String(buf, at, len, java.nio.charset.StandardCharsets.UTF_8);

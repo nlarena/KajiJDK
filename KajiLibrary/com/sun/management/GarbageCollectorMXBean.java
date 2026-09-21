@@ -1,24 +1,26 @@
 package com.sun.management;
 
 /**
- * Un recolector de basura, con el agregado de poder mirar la <strong>ultima</strong> recoleccion.
+ * A garbage collector, with the addition of being able to look at the <strong>last</strong>
+ * collection.
  *
- * <p>La interfaz estandar {@link java.lang.management.GarbageCollectorMXBean} solo da acumulados:
- * cuantas recolecciones hubo y cuanto tiempo sumaron. Sirve para una tendencia y no sirve para
- * diagnosticar, porque un promedio esconde justamente la pausa que interesa.
+ * <p>The standard interface {@link java.lang.management.GarbageCollectorMXBean} only gives
+ * totals: how many collections there were and how much time they added up to. It serves for a
+ * trend and does not serve for diagnosing, because an average hides precisely the pause that is
+ * of interest.
  *
- * <p>{@link #getLastGcInfo} es lo que falta: de la ultima recoleccion da cuando empezo, cuando
- * termino y como quedo cada region de memoria antes y despues. Con eso se puede decir si una pausa
- * concreta recupero algo o fue en vano.
+ * <p>{@link #getLastGcInfo} is what is missing: of the last collection it gives when it began,
+ * when it finished and how each region of memory was left before and after. With that it may be
+ * said whether a concrete pause recovered something or was in vain.
  *
  * @since 1.5
  */
 public interface GarbageCollectorMXBean extends java.lang.management.GarbageCollectorMXBean {
 
     /**
-     * Los datos de la ultima recoleccion de este recolector.
+     * The data of this collector's last collection.
      *
-     * @return los datos, o {@code null} si todavia no hubo ninguna
+     * @return the data, or {@code null} if there has not been one yet
      */
     GcInfo getLastGcInfo();
 }

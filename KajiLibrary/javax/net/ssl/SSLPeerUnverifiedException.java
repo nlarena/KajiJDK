@@ -1,23 +1,23 @@
 package javax.net.ssl;
 
 /**
- * No se pudo verificar quien esta del otro lado.
+ * Whoever is on the other side could not be verified.
  *
- * <p>La sesion puede existir igual: SSL admite suites anonimas, y con esas hay cifrado pero no
- * identidad. Por eso pedirle a una {@link SSLSession} el certificado del par puede fallar aunque
- * todo lo demas funcione — cifrar y autenticar son dos cosas distintas, y esta excepcion es el lugar
- * donde esa distincion se vuelve visible.
+ * <p>The session may exist all the same: SSL admits anonymous suites, and with those there is
+ * encryption but no identity. That is why asking an {@link SSLSession} for the peer's certificate
+ * may fail even though everything else works — encrypting and authenticating are two different
+ * things, and this exception is the place where that distinction becomes visible.
  */
 public class SSLPeerUnverifiedException extends SSLException {
 
     private static final long serialVersionUID = -8919512675153181392L;
 
-    /** Con un mensaje. */
+    /** With a message. */
     public SSLPeerUnverifiedException(String reason) {
         super(reason);
     }
 
-    /** Con un mensaje y la causa de fondo. */
+    /** With a message and the underlying cause. */
     public SSLPeerUnverifiedException(String message, Throwable cause) {
         super(message, cause);
     }

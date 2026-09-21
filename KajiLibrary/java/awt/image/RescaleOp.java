@@ -5,20 +5,21 @@ import java.awt.geom.Point2D;
 import java.awt.geom.Rectangle2D;
 
 /**
- * Multiplica y suma: `destino = origen * escala + corrimiento`, banda por banda.
+ * Multiplies and adds: `dest = source * scale + offset`, band by band.
  *
- * <p>Es la operación de brillo y contraste. La escala abre o cierra el rango —contraste— y el
- * corrimiento lo mueve entero —brillo—. Con una sola constante se aplica a todas las bandas; con
- * varias, una por banda.
+ * <p>It is the brightness and contrast operation. The scale opens or closes the range —contrast—
+ * and the offset moves it whole —brightness—. With a single constant it is applied to every band;
+ * with several, one per band.
  *
- * <p>Trabaja sobre los valores **tal como están guardados**, no sobre 0..1, así que una escala de 2
- * sobre una banda de ocho bits lleva 100 a 200 y 200 a 255 recortado. Ese recorte es la parte que se
- * ve: subir el brillo aplasta las luces contra el techo y esa información no vuelve.
+ * <p>It works over the values **just as they are stored**, not over 0..1, so a scale of 2 over an
+ * eight-bit band takes 100 to 200 and 200 to 255 clamped. That clamping is the part that shows:
+ * raising the brightness squashes the highlights against the ceiling and that information does not
+ * come back.
  *
- * <p>Sobre una {@link BufferedImage} el **alfa no se toca** salvo que se den tantas constantes como
- * componentes tenga el modelo, contando el alfa. Es lo razonable: subirle el brillo a una imagen no
- * debería volverla opaca. Sobre un {@link Raster} no hay modelo de color que consultar y todas las
- * bandas son iguales, así que se escalan todas.
+ * <p>Over a {@link BufferedImage} the **alpha is not touched** unless as many constants are given
+ * as the model has components, counting the alpha. It is the reasonable thing: raising the
+ * brightness of an image should not make it opaque. Over a {@link Raster} there is no colour model
+ * to consult and every band is the same, so all of them are scaled.
  */
 public class RescaleOp implements BufferedImageOp, RasterOp {
 
@@ -28,9 +29,9 @@ public class RescaleOp implements BufferedImageOp, RasterOp {
     private final RenderingHints hints;
 
     /**
-     * Con una constante por banda.
+     * With one constant per band.
      *
-     * @throws IllegalArgumentException si los dos arreglos no miden lo mismo
+     * @throws IllegalArgumentException if the two arrays do not measure the same
      */
     public RescaleOp(float[] scaleFactors, float[] offsets, RenderingHints hints) {
         this.length = scaleFactors.length;
@@ -47,7 +48,7 @@ public class RescaleOp implements BufferedImageOp, RasterOp {
         this.hints = hints;
     }
 
-    /** Con la misma constante para todas las bandas. */
+    /** With the same constant for every band. */
     public RescaleOp(float scaleFactor, float offset, RenderingHints hints) {
         this.length = 1;
         this.scaleFactors = new float[1];
@@ -58,10 +59,10 @@ public class RescaleOp implements BufferedImageOp, RasterOp {
     }
 
     /**
-     * Las escalas.
+     * The scales.
      *
-     * @param scaleFactors dónde escribirlas, o `null` para que se cree el arreglo
-     * @throws IllegalArgumentException si el arreglo dado es más corto
+     * @param scaleFactors where to write them, or `null` for the array to be created
+     * @throws IllegalArgumentException if the given array is shorter
      */
     public final float[] getScaleFactors(float[] scaleFactors) {
         float[] out = scaleFactors;
@@ -73,9 +74,9 @@ public class RescaleOp implements BufferedImageOp, RasterOp {
     }
 
     /**
-     * Los corrimientos.
+     * The offsets.
      *
-     * @param offsets dónde escribirlos, o `null` para que se cree el arreglo
+     * @param offsets where to write them, or `null` for the array to be created
      */
     public final float[] getOffsets(float[] offsets) {
         float[] out = offsets;
@@ -86,31 +87,31 @@ public class RescaleOp implements BufferedImageOp, RasterOp {
         return out;
     }
 
-    /** Cuántas constantes hay. */
+    /** How many constants there are. */
     public final int getNumFactors() {
         return this.length;
     }
 
-    /** La constante que le toca a esa banda. */
-    private float escala(int b) {
+    /** The constant that falls to that band. */
+    private float scaleOf(int b) {
         return this.length == 1 ? this.scaleFactors[0] : this.scaleFactors[b];
     }
 
-    /** El corrimiento que le toca a esa banda. */
-    private float corrimiento(int b) {
+    /** The offset that falls to that band. */
+    private float offsetOf(int b) {
         return this.length == 1 ? this.offsets[0] : this.offsets[b];
     }
 
     /**
-     * Aplica la operación a una imagen.
+     * Applies the operation to an image.
      *
-     * <p>Con alfa premultiplicado el origen se lleva primero a no premultiplicado: escalar un color
-     * que ya está multiplicado por su alfa daría un resultado que depende de la transparencia, que
-     * no es lo que se pide.
+     * <p>With premultiplied alpha the source is first taken to non-premultiplied: scaling a colour
+     * that is already multiplied by its alpha would give a result that depends on the transparency,
+     * which is not what is asked for.
      *
-     * @param dst el destino, o `null` para que se cree
-     * @throws IllegalArgumentException si el origen tiene paleta, si los tamaños no coinciden, o si
-     *     la cantidad de constantes no es 1 ni la cantidad de componentes
+     * @param dst the destination, or `null` for it to be created
+     * @throws IllegalArgumentException if the source has a palette, if the sizes do not match, or
+     *     if the number of constants is neither 1 nor the number of components
      */
     public final BufferedImage filter(BufferedImage src, BufferedImage dst) {
         ColorModel srcCM = src.getColorModel();
@@ -118,65 +119,65 @@ public class RescaleOp implements BufferedImageOp, RasterOp {
             throw new IllegalArgumentException(
                     "Rescaling cannot be performed on an indexed image");
         }
-        int numColores = srcCM.getNumColorComponents();
-        int numTodas = srcCM.getNumComponents();
-        if (this.length != 1 && this.length != numColores && this.length != numTodas) {
+        int numColour = srcCM.getNumColorComponents();
+        int numAll = srcCM.getNumComponents();
+        if (this.length != 1 && this.length != numColour && this.length != numAll) {
             throw new IllegalArgumentException("Number of scaling constants does not equal the "
                     + "number of of color or color/alpha components");
         }
-        BufferedImage destino = dst;
-        if (destino == null) {
-            destino = this.createCompatibleDestImage(src, null);
-        } else if (src.getWidth() != destino.getWidth()
-                || src.getHeight() != destino.getHeight()) {
+        BufferedImage dest = dst;
+        if (dest == null) {
+            dest = this.createCompatibleDestImage(src, null);
+        } else if (src.getWidth() != dest.getWidth()
+                || src.getHeight() != dest.getHeight()) {
             throw new IllegalArgumentException("Width or height of BufferedImages do not match");
         }
-        // Se trabaja siempre sin premultiplicar y se vuelve a premultiplicar al final si el destino
-        // lo pide: son dos conversiones de mas en el peor caso, y la unica forma de que la cuenta
-        // signifique lo mismo en las cuatro combinaciones de origen y destino.
-        BufferedImage origen = src;
+        // It always works without premultiplying and premultiplies again at the end if the
+        // destination asks for it: they are two conversions too many in the worst case, and the
+        // only way for the sum to mean the same in the four combinations of source and destination.
+        BufferedImage source = src;
         if (srcCM.isAlphaPremultiplied()) {
-            origen = this.copiaSinPremultiplicar(src);
+            source = this.copyUnpremultiplied(src);
         }
-        boolean tocarAlfa = this.length == numTodas && srcCM.hasAlpha();
-        int bandas = tocarAlfa ? numTodas : numColores;
-        this.escalarRaster(origen.getRaster(), destino.getRaster(), bandas);
-        if (!tocarAlfa && srcCM.hasAlpha() && destino.getColorModel().hasAlpha()) {
-            this.copiarAlfa(origen.getRaster(), destino.getRaster(), numColores);
+        boolean touchAlpha = this.length == numAll && srcCM.hasAlpha();
+        int bands = touchAlpha ? numAll : numColour;
+        this.rescaleRaster(source.getRaster(), dest.getRaster(), bands);
+        if (!touchAlpha && srcCM.hasAlpha() && dest.getColorModel().hasAlpha()) {
+            this.copyAlpha(source.getRaster(), dest.getRaster(), numColour);
         }
-        if (destino.getColorModel().isAlphaPremultiplied()) {
-            destino.coerceData(true);
+        if (dest.getColorModel().isAlphaPremultiplied()) {
+            dest.coerceData(true);
         }
-        return destino;
+        return dest;
     }
 
-    /** Una copia de la imagen con el color sin premultiplicar. */
-    private BufferedImage copiaSinPremultiplicar(BufferedImage src) {
+    /** A copy of the image with the colour not premultiplied. */
+    private BufferedImage copyUnpremultiplied(BufferedImage src) {
         ColorModel cm = src.getColorModel();
         WritableRaster wr = cm.createCompatibleWritableRaster(src.getWidth(), src.getHeight());
-        BufferedImage copia = new BufferedImage(cm, wr, cm.isAlphaPremultiplied(), null);
-        copia.setData(src.getRaster());
-        copia.coerceData(false);
-        return copia;
+        BufferedImage copy = new BufferedImage(cm, wr, cm.isAlphaPremultiplied(), null);
+        copy.setData(src.getRaster());
+        copy.coerceData(false);
+        return copy;
     }
 
-    /** Copia la banda de alfa sin tocarla. */
-    private void copiarAlfa(Raster src, WritableRaster dst, int aIdx) {
+    /** Copies the alpha band without touching it. */
+    private void copyAlpha(Raster src, WritableRaster dst, int aIdx) {
         int w = Math.min(src.getWidth(), dst.getWidth());
         int h = Math.min(src.getHeight(), dst.getHeight());
-        int[] fila = new int[w];
+        int[] row = new int[w];
         for (int y = 0; y < h; y++) {
-            fila = src.getSamples(src.getMinX(), src.getMinY() + y, w, 1, aIdx, fila);
-            dst.setSamples(dst.getMinX(), dst.getMinY() + y, w, 1, aIdx, fila);
+            row = src.getSamples(src.getMinX(), src.getMinY() + y, w, 1, aIdx, row);
+            dst.setSamples(dst.getMinX(), dst.getMinY() + y, w, 1, aIdx, row);
         }
     }
 
     /**
-     * Aplica la operación a un ráster.
+     * Applies the operation to a raster.
      *
-     * @param dst el destino, o `null` para que se cree
-     * @throws IllegalArgumentException si los tamaños o la cantidad de bandas no coinciden, o si la
-     *     cantidad de constantes no es 1 ni la cantidad de bandas
+     * @param dst the destination, or `null` for it to be created
+     * @throws IllegalArgumentException if the sizes or the number of bands do not match, or if the
+     *     number of constants is neither 1 nor the number of bands
      */
     public final WritableRaster filter(Raster src, WritableRaster dst) {
         int numBands = src.getNumBands();
@@ -184,78 +185,79 @@ public class RescaleOp implements BufferedImageOp, RasterOp {
             throw new IllegalArgumentException("Number of rasterBands (" + numBands
                     + ") does not match number of scale factors (" + this.length + ")");
         }
-        WritableRaster destino = dst;
-        if (destino == null) {
-            destino = this.createCompatibleDestRaster(src);
+        WritableRaster dest = dst;
+        if (dest == null) {
+            dest = this.createCompatibleDestRaster(src);
         } else {
-            if (src.getNumBands() != destino.getNumBands()) {
+            if (src.getNumBands() != dest.getNumBands()) {
                 throw new IllegalArgumentException("Number of src bands (" + src.getNumBands()
-                        + ") does not match number of dst bands (" + destino.getNumBands() + ")");
+                        + ") does not match number of dst bands (" + dest.getNumBands() + ")");
             }
-            if (src.getWidth() != destino.getWidth() || src.getHeight() != destino.getHeight()) {
+            if (src.getWidth() != dest.getWidth() || src.getHeight() != dest.getHeight()) {
                 throw new IllegalArgumentException(
                         "Width or height of Rasters do not match");
             }
         }
-        this.escalarRaster(src, destino, numBands);
-        return destino;
+        this.rescaleRaster(src, dest, numBands);
+        return dest;
     }
 
-    /** El mayor valor que admite esa banda del ráster. */
-    private static int maximo(Raster r, int b) {
+    /** The largest value that band of the raster admits. */
+    private static int maxOfBand(Raster r, int b) {
         return (1 << r.getSampleModel().getSampleSize(b)) - 1;
     }
 
-    /** Aplica la cuenta a las primeras `bandas` bandas. */
-    private void escalarRaster(Raster src, WritableRaster dst, int bandas) {
+    /** Applies the sum to the first `bands` bands. */
+    private void rescaleRaster(Raster src, WritableRaster dst, int bands) {
         int w = src.getWidth();
         int h = src.getHeight();
         int sx = src.getMinX();
         int sy = src.getMinY();
         int dx = dst.getMinX();
         int dy = dst.getMinY();
-        int tipo = src.getSampleModel().getDataType();
-        boolean flotante = tipo == DataBuffer.TYPE_FLOAT || tipo == DataBuffer.TYPE_DOUBLE;
-        if (flotante) {
-            double[] fila = new double[w];
-            for (int b = 0; b < bandas; b++) {
-                double esc = this.escala(b);
-                double corr = this.corrimiento(b);
+        int type = src.getSampleModel().getDataType();
+        boolean floating = type == DataBuffer.TYPE_FLOAT || type == DataBuffer.TYPE_DOUBLE;
+        if (floating) {
+            double[] row = new double[w];
+            for (int b = 0; b < bands; b++) {
+                double sc = this.scaleOf(b);
+                double off = this.offsetOf(b);
                 for (int y = 0; y < h; y++) {
-                    fila = src.getSamples(sx, sy + y, w, 1, b, fila);
+                    row = src.getSamples(sx, sy + y, w, 1, b, row);
                     for (int i = 0; i < w; i++) {
-                        fila[i] = fila[i] * esc + corr;
+                        row[i] = row[i] * sc + off;
                     }
-                    dst.setSamples(dx, dy + y, w, 1, b, fila);
+                    dst.setSamples(dx, dy + y, w, 1, b, row);
                 }
             }
             return;
         }
-        int[] fila = new int[w];
-        for (int b = 0; b < bandas; b++) {
-            float esc = this.escala(b);
-            float corr = this.corrimiento(b);
-            int max = maximo(dst, b);
+        int[] row = new int[w];
+        for (int b = 0; b < bands; b++) {
+            float sc = this.scaleOf(b);
+            float off = this.offsetOf(b);
+            int max = maxOfBand(dst, b);
             for (int y = 0; y < h; y++) {
-                fila = src.getSamples(sx, sy + y, w, 1, b, fila);
+                row = src.getSamples(sx, sy + y, w, 1, b, row);
                 for (int i = 0; i < w; i++) {
-                    int v = (int) (fila[i] * esc + corr + 0.5f);
+                    int v = (int) (row[i] * sc + off + 0.5f);
                     if (v < 0) {
                         v = 0;
                     } else if (v > max) {
                         v = max;
                     }
-                    fila[i] = v;
+                    row[i] = v;
                 }
-                dst.setSamples(dx, dy + y, w, 1, b, fila);
+                dst.setSamples(dx, dy + y, w, 1, b, row);
             }
         }
     }
 
     /**
-     * Una imagen vacía del tamaño y formato que corresponde.
+     * An empty image of the size and format that fits.
      *
-     * @throws IllegalArgumentException si el origen tiene paleta y no se da otro modelo de color
+     * @throws IllegalArgumentException if the source has a palette and no other colour model is
+     *     given
      */
     public BufferedImage createCompatibleDestImage(BufferedImage src, ColorModel destCM) {
         ColorModel cm = destCM;
@@ -272,22 +274,22 @@ public class RescaleOp implements BufferedImageOp, RasterOp {
         return new BufferedImage(cm, wr, cm.isAlphaPremultiplied(), null);
     }
 
-    /** Un ráster vacío del mismo tamaño y disposición. */
+    /** An empty raster of the same size and layout. */
     public WritableRaster createCompatibleDestRaster(Raster src) {
         return src.createCompatibleWritableRaster(src.getWidth(), src.getHeight());
     }
 
-    /** El mismo rectángulo: esta operación no mueve nada de lugar. */
+    /** The same rectangle: this operation moves nothing about. */
     public final Rectangle2D getBounds2D(BufferedImage src) {
         return this.getBounds2D(src.getRaster());
     }
 
-    /** El mismo rectángulo. */
+    /** The same rectangle. */
     public final Rectangle2D getBounds2D(Raster src) {
         return src.getBounds();
     }
 
-    /** El mismo punto. */
+    /** The same point. */
     public final Point2D getPoint2D(Point2D srcPt, Point2D dstPt) {
         Point2D out = dstPt;
         if (out == null) {
@@ -297,7 +299,7 @@ public class RescaleOp implements BufferedImageOp, RasterOp {
         return out;
     }
 
-    /** Las pistas de dibujo, o `null` si no hay. */
+    /** The rendering hints, or `null` if there are none. */
     public final RenderingHints getRenderingHints() {
         return this.hints;
     }

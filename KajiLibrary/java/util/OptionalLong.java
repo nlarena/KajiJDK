@@ -91,8 +91,8 @@ public final class OptionalLong {
         if (!this.isPresent) {
             return LongStream.of(new long[0]);
         }
-        long[] uno = new long[1];
-        uno[0] = this.value;
-        return LongStream.of(uno);
+        long[] single = new long[1];
+        single[0] = this.value;
+        return LongStream.of(single);
     }
 }

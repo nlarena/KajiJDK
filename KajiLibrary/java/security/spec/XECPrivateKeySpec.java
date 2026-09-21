@@ -1,12 +1,12 @@
 package java.security.spec;
 
-// Una clave privada de curva de Montgomery: el escalar, como bytes.
+// A Montgomery-curve private key: the scalar, as bytes.
 //
-// Bytes y no `BigInteger` porque el escalar de X25519 no se usa tal cual: antes de multiplicar se le
-// "podan" bits fijos —se limpian los tres de abajo y se fuerza el de arriba— para que siempre sea
-// multiplo del cofactor y tenga largo constante. Eso es lo que neutraliza los ataques de subgrupo
-// chico y lo que hace que la escalera corra en tiempo constante. Un entero no tiene donde guardar
-// esa forma; un arreglo de bytes de largo fijo si.
+// Bytes and not a `BigInteger` because the X25519 scalar is not used as is: before multiplying,
+// fixed bits are "clamped" —the three low ones are cleared and the top ones fixed— so that it is
+// always a multiple of the cofactor and has a constant length. That is what neutralizes
+// small-subgroup attacks and what lets the ladder run in constant time. An integer has nowhere to
+// keep that shape; a fixed-length byte array does.
 public class XECPrivateKeySpec implements KeySpec {
 
     private final AlgorithmParameterSpec params;
@@ -20,10 +20,10 @@ public class XECPrivateKeySpec implements KeySpec {
             throw new NullPointerException("scalar must not be null");
         }
         this.params = params;
-        this.scalar = copiar(scalar);
+        this.scalar = copyOf(scalar);
     }
 
-    private static byte[] copiar(byte[] b) {
+    private static byte[] copyOf(byte[] b) {
         byte[] c = new byte[b.length];
         System.arraycopy(b, 0, c, 0, b.length);
         return c;
@@ -33,8 +33,8 @@ public class XECPrivateKeySpec implements KeySpec {
         return this.params;
     }
 
-    // Copia del escalar privado.
+    // A copy of the private scalar.
     public byte[] getScalar() {
-        return copiar(this.scalar);
+        return copyOf(this.scalar);
     }
 }

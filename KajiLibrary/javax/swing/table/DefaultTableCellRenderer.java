@@ -11,39 +11,40 @@ import javax.swing.border.Border;
 import javax.swing.border.EmptyBorder;
 
 /**
- * Dibuja una celda de tabla como una etiqueta.
+ * Draws a table cell as a label.
  *
- * <h2>Un solo componente para todas las celdas</h2>
+ * <h2>One single component for every cell</h2>
  *
- * <p>Igual que en el arbol: la tabla no tiene un componente por celda, tiene <em>este</em>, y lo
- * configura y lo dibuja una vez por celda. De ahi que {@link #revalidate}, {@link #repaint},
- * {@link #invalidate} y casi todos los {@code firePropertyChange} esten <strong>vaciados a
- * proposito</strong>: un dibujante que pide repintarse mientras lo estan dibujando dejaria la tabla
- * en bucle.
+ * <p>The same as in the tree: the table does not have one component per cell, it has
+ * <em>this</em> one, and it configures it and draws it once per cell. Hence {@link #revalidate},
+ * {@link #repaint}, {@link #invalidate} and almost every {@code firePropertyChange} are
+ * <strong>emptied on purpose</strong>: a renderer that asks to be repainted while it is being
+ * drawn would leave the table in a loop.
  *
- * <h2>Los colores no se guardan, se turnan</h2>
+ * <h2>The colours are not kept, they take turns</h2>
  *
- * <p>Cada celda pide su color a la tabla -- de seleccion o normal -- y el dibujante lo aplica. Pero
- * si alguien le puso un color <em>a mano</em> al dibujante, ese gana: por eso los colores que vienen
- * del aspecto se marcan y se distinguen de los que puso el programa.
+ * <p>Each cell asks the table for its colour -- selection's or normal -- and the renderer applies
+ * it. But if somebody set a colour on the renderer <em>by hand</em>, that one wins: that is why
+ * the colours that come from the look and feel are marked and told apart from those the program
+ * set.
  *
- * <h2>La celda con el foco lleva borde</h2>
+ * <h2>The cell with the focus carries a border</h2>
  *
- * <p>Y las demas llevan un borde vacio del mismo tamano, no ninguno. Si no, la celda enfocada
- * mediria distinto que las otras y el texto saltaria un pixel al moverse el foco.
+ * <p>And the others carry an empty border of the same size, not none. Otherwise the focused cell
+ * would measure differently from the others and the text would jump a pixel as the focus moved.
  */
 public class DefaultTableCellRenderer extends JLabel implements TableCellRenderer,
         java.io.Serializable {
 
-    /** El borde sin foco: vacio, pero del mismo tamano que el otro. Ver la nota de la clase. */
+    /** The border without focus: empty, but the same size as the other. See the class note. */
     protected static Border noFocusBorder = new EmptyBorder(1, 1, 1, 1);
 
-    private static final Border SIN_FOCO = new EmptyBorder(1, 1, 1, 1);
+    private static final Border NO_FOCUS = new EmptyBorder(1, 1, 1, 1);
 
     private Color unselectedForeground;
     private Color unselectedBackground;
 
-    /** Un dibujante alineado a la izquierda y opaco. */
+    /** A renderer aligned to the left and opaque. */
     public DefaultTableCellRenderer() {
         super();
         setOpaque(true);
@@ -56,26 +57,26 @@ public class DefaultTableCellRenderer extends JLabel implements TableCellRendere
         if (border != null) {
             return border;
         }
-        return SIN_FOCO;
+        return NO_FOCUS;
     }
 
     /**
-     * El color del texto cuando la celda no esta elegida.
+     * The text's colour when the cell is not chosen.
      *
-     * <p>Nulo devuelve la decision a la tabla; ver la nota de la clase.
+     * <p>Null gives the decision back to the table; see the class note.
      */
     public void setForeground(Color c) {
         super.setForeground(c);
         unselectedForeground = c;
     }
 
-    /** El fondo cuando la celda no esta elegida; nulo se lo devuelve a la tabla. */
+    /** The background when the cell is not chosen; null gives it back to the table. */
     public void setBackground(Color c) {
         super.setBackground(c);
         unselectedBackground = c;
     }
 
-    /** Vuelve a pedirle los colores al aspecto y olvida los puestos a mano. */
+    /** It asks the look and feel for the colours again and forgets those set by hand. */
     public void updateUI() {
         super.updateUI();
         setForeground(null);
@@ -83,10 +84,10 @@ public class DefaultTableCellRenderer extends JLabel implements TableCellRendere
     }
 
     /**
-     * Se configura para dibujar esa celda y se devuelve a si mismo.
+     * It configures itself to draw that cell and returns itself.
      *
-     * <p>El texto sale de {@link #setValue}, que una subclase puede cambiar para formatear numeros
-     * o fechas sin tocar nada mas.
+     * <p>The text comes from {@link #setValue}, which a subclass can change to format numbers or
+     * dates without touching anything else.
      */
     public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
             boolean hasFocus, int row, int column) {
@@ -107,7 +108,7 @@ public class DefaultTableCellRenderer extends JLabel implements TableCellRendere
         if (hasFocus) {
             Border border = UIManager.getBorder("Table.focusCellHighlightBorder");
             if (border == null) {
-                border = SIN_FOCO;
+                border = NO_FOCUS;
             }
             setBorder(border);
             if (!isSelected && table.isCellEditable(row, column)) {
@@ -128,44 +129,44 @@ public class DefaultTableCellRenderer extends JLabel implements TableCellRendere
     }
 
     /**
-     * Pone el valor como texto.
+     * Puts the value in as text.
      *
-     * <p>Es el punto de extension de esta clase: una subclase que quiera mostrar un importe con dos
-     * decimales cambia esto y nada mas.
+     * <p>It is this class's extension point: a subclass that wants to show an amount with two
+     * decimals changes this and nothing else.
      */
     protected void setValue(Object value) {
         setText((value == null) ? "" : value.toString());
     }
 
-    /** No hace nada; ver la nota de la clase. */
+    /** It does nothing; see the class note. */
     public void invalidate() {
     }
 
-    /** No hace nada; ver la nota de la clase. */
+    /** It does nothing; see the class note. */
     public void validate() {
     }
 
-    /** No hace nada; ver la nota de la clase. */
+    /** It does nothing; see the class note. */
     public void revalidate() {
     }
 
-    /** No hace nada; ver la nota de la clase. */
+    /** It does nothing; see the class note. */
     public void repaint(long tm, int x, int y, int width, int height) {
     }
 
-    /** No hace nada; ver la nota de la clase. */
+    /** It does nothing; see the class note. */
     public void repaint(Rectangle r) {
     }
 
-    /** No hace nada; ver la nota de la clase. */
+    /** It does nothing; see the class note. */
     public void repaint() {
     }
 
     /**
-     * Solo deja pasar el aviso de que cambio el texto.
+     * It only lets through the notice that the text changed.
      *
-     * <p>El JDK deja pasar tambien la tipografia y el color cuando el texto es HTML; esa rama pide
-     * {@code BasicHTML}, que esta biblioteca no trae.
+     * <p>The JDK also lets through the typeface and the colour when the text is HTML; that branch
+     * asks for {@code BasicHTML}, which this library does not ship.
      */
     protected void firePropertyChange(String propertyName, Object oldValue, Object newValue) {
         if (propertyName == "text") {
@@ -173,20 +174,20 @@ public class DefaultTableCellRenderer extends JLabel implements TableCellRendere
         }
     }
 
-    /** No hace nada; ver la nota de la clase. */
+    /** It does nothing; see the class note. */
     public void firePropertyChange(String propertyName, boolean oldValue, boolean newValue) {
     }
 
     /**
-     * Un dibujante que ademas es un recurso del aspecto.
+     * A renderer that is also a look and feel resource.
      *
-     * <p>Marcarlo asi es como el aspecto dice "este lo puse yo": al cambiar de aspecto se lo
-     * reemplaza, y uno puesto por el programa se conserva.
+     * <p>Marking it like that is how the look and feel says "I set this one": on changing look
+     * and feel it is replaced, and one set by the program is kept.
      */
     public static class UIResource extends DefaultTableCellRenderer
             implements javax.swing.plaf.UIResource {
 
-        /** Un dibujante de base marcado como del aspecto. */
+        /** A base renderer marked as the look and feel's. */
         public UIResource() {
             super();
         }

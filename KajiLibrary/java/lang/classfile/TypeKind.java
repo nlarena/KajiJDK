@@ -4,10 +4,11 @@ import java.lang.constant.ClassDesc;
 import java.lang.constant.ConstantDescs;
 import java.lang.invoke.TypeDescriptor.OfField;
 
-// Los tipos que la JVM distingue en el bytecode. NO son los tipos del lenguaje: el conjunto de
-// operaciones de la máquina no separa `boolean`, `byte`, `char` ni `short` de `int` —los carga y los
-// opera como `int`— pero sí los separa en los arreglos (`baload` vs `saload`) y en los descriptores.
-// De ahí que `asLoadable()` colapse los cuatro a `INT` y que `newarrayCode()` los distinga.
+// The types the JVM tells apart in the bytecode. They are NOT the language's types: the machine's set
+// of operations does not separate `boolean`, `byte`, `char` or `short` from `int` --it loads them and
+// operates on them as `int`-- but it does separate them in arrays (`baload` vs `saload`) and in
+// descriptors. Hence `asLoadable()` collapsing all four to `INT` and `newarrayCode()` telling them
+// apart.
 public enum TypeKind {
 
     BOOLEAN(4, 1),
@@ -21,9 +22,9 @@ public enum TypeKind {
     REFERENCE(0, 1),
     VOID(0, 0);
 
-    // El código de `newarray` (JVMS §6.5, tabla de `atype`); 0 para los dos que no son primitivos.
+    // The `newarray` code (JVMS §6.5, `atype` table); 0 for the two that are not primitive.
     private final int newarrayCode;
-    // Cuántas ranuras de variable local u operando ocupa: 2 para `long` y `double`, 0 para `void`.
+    // How many local variable or operand slots it takes: 2 for `long` and `double`, 0 for `void`.
     private final int slotSize;
 
     private TypeKind(int newarrayCode, int slotSize) {
@@ -31,7 +32,7 @@ public enum TypeKind {
         this.slotSize = slotSize;
     }
 
-    /** El tipo nominal más específico que representa: `int`, `long`, …, `Object` para `REFERENCE`. */
+    /** The most specific nominal type it stands for: `int`, `long`, ..., `Object` for `REFERENCE`. */
     public ClassDesc upperBound() {
         switch (this) {
             case BOOLEAN: return ConstantDescs.CD_boolean;
@@ -47,7 +48,7 @@ public enum TypeKind {
         }
     }
 
-    /** El `atype` de `newarray`. Tira `UnsupportedOperationException` en `REFERENCE` y `VOID`. */
+    /** `newarray`'s `atype`. It throws `UnsupportedOperationException` on `REFERENCE` and `VOID`. */
     public int newarrayCode() {
         if (this.newarrayCode == 0) {
             throw new UnsupportedOperationException("newarray no aplica a " + name());
@@ -55,12 +56,12 @@ public enum TypeKind {
         return this.newarrayCode;
     }
 
-    /** Cuántas ranuras ocupa. */
+    /** How many slots it takes. */
     public int slotSize() {
         return this.slotSize;
     }
 
-    /** El tipo con el que la JVM lo carga: los cuatro angostos se cargan como `int`. */
+    /** The type the JVM loads it as: the four narrow ones are loaded as `int`. */
     public TypeKind asLoadable() {
         if (this == BOOLEAN || this == BYTE || this == CHAR || this == SHORT) {
             return INT;
@@ -68,7 +69,7 @@ public enum TypeKind {
         return this;
     }
 
-    /** El tipo del `atype` de un `newarray`. */
+    /** The type of a `newarray`'s `atype`. */
     public static TypeKind fromNewarrayCode(int newarrayCode) {
         switch (newarrayCode) {
             case 4: return BOOLEAN;
@@ -80,14 +81,14 @@ public enum TypeKind {
             case 10: return INT;
             case 11: return LONG;
             default:
-                throw new IllegalArgumentException("atype de newarray fuera de rango: " + newarrayCode);
+                throw new IllegalArgumentException("newarray atype out of range: " + newarrayCode);
         }
     }
 
-    /** El tipo que describe este descriptor de campo. Sólo mira el primer carácter. */
+    /** The type this field descriptor describes. It only looks at the first character. */
     public static TypeKind fromDescriptor(CharSequence s) {
         if (s.length() == 0) {
-            throw new IllegalArgumentException("descriptor vacío");
+            throw new IllegalArgumentException("empty descriptor");
         }
         switch (s.charAt(0)) {
             case 'Z': return BOOLEAN;
@@ -102,11 +103,11 @@ public enum TypeKind {
             case 'L':
             case '[': return REFERENCE;
             default:
-                throw new IllegalArgumentException("no es un descriptor de campo: " + s);
+                throw new IllegalArgumentException("not a field descriptor: " + s);
         }
     }
 
-    /** El tipo de un descriptor nominal de campo. */
+    /** The type of a nominal field descriptor. */
     public static TypeKind from(OfField<?> descriptor) {
         return fromDescriptor(descriptor.descriptorString());
     }

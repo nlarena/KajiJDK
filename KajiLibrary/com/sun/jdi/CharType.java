@@ -1,7 +1,7 @@
 package com.sun.jdi;
 
 /**
- * CharType de la maquina depurada.
+ * CharType of the debugged machine.
  *
  * @since 1.3
  */

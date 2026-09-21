@@ -1,31 +1,28 @@
 package java.awt;
 
 /**
- * El atajo de teclado de un item de menu: una tecla y si ademas hace falta Shift.
+ * The keyboard shortcut of a menu item: a key and whether Shift is needed as well.
  *
- * <p>La tecla se guarda como codigo de {@code KeyEvent}, no como caracter. La diferencia importa:
- * un atajo se dispara con la tecla fisica, asi que la 'A' de un teclado y la de otro son el mismo
- * atajo aunque el caracter que produzcan cambie con el layout.
+ * <p>The key is kept as a {@code KeyEvent} code, not as a character. The difference matters: a
+ * shortcut fires with the physical key, so the 'A' of one keyboard and that of another are the same
+ * shortcut even if the character they produce changes with the layout.
  *
- * <p>El {@code hashCode()} es el codigo de tecla, o su complemento a uno si usa Shift. Es una
- * biyeccion --{@code ~k} nunca coincide con un codigo de tecla valido, que es positivo-- asi que
- * Ctrl+A y Ctrl+Shift+A no colisionan nunca, que es exactamente lo que hace falta en el mapa de
- * atajos de una barra de menu.
+ * <p>The {@code hashCode()} is the key code, or its one's complement if it uses Shift. It is a
+ * bijection --{@code ~k} never matches a valid key code, which is positive-- so Ctrl+A and
+ * Ctrl+Shift+A never collide, which is exactly what the shortcut map of a menu bar needs.
  *
- * <h2>Lo que falta y por que</h2>
+ * <h2>What is missing and why</h2>
  *
- * <p>{@code paramString()} si esta: contra lo que decia esta nota, no usa {@code KeyEvent} --arma
- * la cadena con el codigo de tecla crudo-- y se puede escribir entero.
+ * <p>{@code paramString()} is here: against what this note used to say, it does not use
+ * {@code KeyEvent} --it builds the string with the raw key code-- and can be written whole.
  *
- * <p>{@code toString()} <b>no esta</b>. El JDK lo arma con
- * {@code KeyEvent.getKeyModifiersText()} y {@code KeyEvent.getKeyText()} --que traducen un codigo
- * de tecla al nombre que le pone el sistema-- y ademas le preguntan al {@code Toolkit} cual es la
- * tecla modificadora de menu de la plataforma, que en macOS no es Ctrl. Ni {@code java.awt.event}
- * ni {@code Toolkit} existen en KajiLibrary.
- *
- * <p>Devolver algo como {@code "Ctrl+65"} compilaria y seria mentira: diria que el modificador es
- * Ctrl sin haberlo averiguado y llamaria "65" a una tecla que se llama "A". Sin toString propio se
- * hereda el de {@code Object}, que no afirma nada.
+ * <p>{@code toString()} <b>is not here</b>. The JDK builds it with
+ * {@code KeyEvent.getKeyModifiersText()} and {@code KeyEvent.getKeyText()} --which turn a key code
+ * into the name the system gives it-- and it also asks the {@code Toolkit} which is the platform's
+ * menu modifier key, which on macOS is not Ctrl. This note used to say that neither
+ * {@code java.awt.event} nor {@code Toolkit} existed in KajiLibrary: both do, and so do those three
+ * methods, so nothing is stopping it from being written. It simply is not written, and while it is
+ * not, {@code Object}'s is inherited, which asserts nothing.
  */
 public class MenuShortcut implements java.io.Serializable {
 
@@ -52,7 +49,10 @@ public class MenuShortcut implements java.io.Serializable {
         return usesShift;
     }
 
-    /** Sobrecarga tipada: la que usa la barra de menu, que ya sabe que compara con otro atajo. */
+    /**
+     * Typed overload: the one the menu bar uses, which already knows it compares against another
+     * shortcut.
+     */
     public boolean equals(MenuShortcut s) {
         return (s != null && (s.getKey() == key)
                 && (s.usesShiftModifier() == usesShift));
@@ -70,17 +70,17 @@ public class MenuShortcut implements java.io.Serializable {
     }
 
     /**
-     * La descripcion del atajo, sin el nombre de la clase.
+     * The description of the shortcut, without the class name.
      *
-     * <p>Usa el **codigo** de la tecla y no su nombre, que es justamente lo que lo hace escribible
-     * sin {@code KeyEvent} ni {@code Toolkit}: el nombre legible lo pone {@code toString}, que es el
-     * que si los necesita.
+     * <p>It uses the **code** of the key and not its name, which is exactly what makes it writable
+     * without {@code KeyEvent} or {@code Toolkit}: the readable name is put by {@code toString},
+     * which is the one that does need them.
      */
     protected String paramString() {
-        String salida = "key=" + this.getKey();
+        String out = "key=" + this.getKey();
         if (this.usesShiftModifier()) {
-            salida = salida + ",usesShiftModifier";
+            out = out + ",usesShiftModifier";
         }
-        return salida;
+        return out;
     }
 }

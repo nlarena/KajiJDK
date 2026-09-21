@@ -1,20 +1,21 @@
 package javax.management.openmbean;
 
 /**
- * La descripción de un atributo de un MBean abierto: un parámetro más cómo se accede.
+ * The description of an attribute of an open MBean: a parameter plus how it is accessed.
  *
- * <p>`isIs` distingue un getter llamado `isFoo()` de uno llamado `getFoo()`. Sólo puede ser `true`
- * si el tipo es `SimpleType.BOOLEAN`, que es la única forma en que Java permite el prefijo `is`.
+ * <p>{@code isIs} tells a getter called {@code isFoo()} from one called {@code getFoo()}. It can
+ * only be {@code true} if the type is {@code SimpleType.BOOLEAN}, which is the only way Java allows
+ * the {@code is} prefix.
  */
 public interface OpenMBeanAttributeInfo extends OpenMBeanParameterInfo {
 
-    /** Si se puede leer. */
+    /** Whether it can be read. */
     boolean isReadable();
 
-    /** Si se puede escribir. */
+    /** Whether it can be written. */
     boolean isWritable();
 
-    /** Si su getter se llama `isXxx` en vez de `getXxx`. */
+    /** Whether its getter is called {@code isXxx} instead of {@code getXxx}. */
     boolean isIs();
 
     boolean equals(Object obj);

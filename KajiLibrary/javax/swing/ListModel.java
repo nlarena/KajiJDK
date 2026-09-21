@@ -3,27 +3,28 @@ package javax.swing;
 import javax.swing.event.ListDataListener;
 
 /**
- * Lo que una lista necesita saber de sus datos.
+ * What a list needs to know about its data.
  *
- * <h2>Dos metodos y dos avisos</h2>
+ * <h2>Two methods and two notices</h2>
  *
- * <p>Cuantos hay y cual es el numero tal. Con eso alcanza para dibujar una lista de un millon de
- * renglones sin tener el millon en memoria: la lista pregunta solo por los que se ven.
+ * <p>How many there are and which is number such-and-such. With that it is enough to draw a list
+ * of a million lines without having the million in memory: the list asks only about those that
+ * are seen.
  *
- * <p>Los otros dos metodos son para avisar. Sin ellos el modelo podria cambiar y la lista seguiria
- * mostrando lo viejo, porque no tiene forma de darse cuenta sola.
+ * <p>The other two methods are for giving notice. Without them the model could change and the
+ * list would go on showing the old thing, because it has no way of noticing on its own.
  *
- * @param <E> el tipo de los elementos.
+ * @param <E> the elements' type.
  */
 public interface ListModel<E> {
 
-    /** Cuantos elementos hay. */
+    /** How many elements there are. */
     int getSize();
 
-    /** El elemento numero tal, contando desde cero. */
+    /** Element number such-and-such, counting from zero. */
     E getElementAt(int index);
 
-    /** Agrega quien quiera enterarse de los cambios. */
+    /** It adds whoever wants to learn about the changes. */
     void addListDataListener(ListDataListener l);
 
     void removeListDataListener(ListDataListener l);

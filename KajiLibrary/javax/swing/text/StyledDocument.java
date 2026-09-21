@@ -4,18 +4,18 @@ import java.awt.Color;
 import java.awt.Font;
 
 /**
- * Un documento con estilos: texto que ademas tiene forma.
+ * A styled document: text that also has form.
  *
- * <p>Agrega tres cosas sobre {@link Document}: un juego de {@link Style} con nombre, la capacidad
- * de aplicar atributos a un tramo —de caracter o de parrafo—, y la de preguntar como se ve un
- * conjunto de atributos ({@link #getFont}, {@link #getForeground}).
+ * <p>It adds three things over {@link Document}: a set of named {@link Style}s, the ability to
+ * apply attributes to a stretch --character or paragraph ones--, and that of asking how an
+ * attribute set looks ({@link #getFont}, {@link #getForeground}).
  *
- * <p>La distincion entre atributos de caracter y de parrafo no es un detalle: los de caracter
- * valen para un tramo cualquiera, y los de parrafo valen para el parrafo entero aunque el tramo
- * marcado sea una palabra. Pedir "centrado" sobre tres letras centra el parrafo.
+ * <p>The distinction between character and paragraph attributes is not a detail: the character
+ * ones hold for any stretch, and the paragraph ones hold for the whole paragraph even if the
+ * marked stretch is a word. Asking for "centred" over three letters centres the paragraph.
  *
- * <p>Un <em>estilo logico</em> es el estilo que un parrafo tiene asignado como padre de todos sus
- * atributos: cambiarlo cambia el parrafo entero de golpe.
+ * <p>A <em>logical style</em> is the style a paragraph has assigned as the parent of all its
+ * attributes: changing it changes the whole paragraph at once.
  */
 public interface StyledDocument extends Document {
 
@@ -25,20 +25,20 @@ public interface StyledDocument extends Document {
 
     Style getStyle(String nm);
 
-    /** Aplica atributos de caracter a ese tramo; {@code replace} borra los que habia. */
+    /** It applies character attributes to that stretch; {@code replace} erases those there were. */
     void setCharacterAttributes(int offset, int length, AttributeSet s, boolean replace);
 
-    /** Aplica atributos de parrafo a los parrafos que toca ese tramo. */
+    /** It applies paragraph attributes to the paragraphs that stretch touches. */
     void setParagraphAttributes(int offset, int length, AttributeSet s, boolean replace);
 
-    /** El estilo del que cuelga ese parrafo; ver la nota de la interfaz. */
+    /** The style that paragraph hangs from; see the interface note. */
     void setLogicalStyle(int pos, Style s);
 
     Style getLogicalStyle(int p);
 
     Element getParagraphElement(int pos);
 
-    /** El elemento hoja que contiene esa posicion: el tramo con los mismos atributos. */
+    /** The leaf element that contains that position: the run with the same attributes. */
     Element getCharacterElement(int pos);
 
     Color getForeground(AttributeSet attr);

@@ -5,52 +5,52 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * KajiLibrary's javax.sound.midi.MidiFileFormat -- que hay en un archivo MIDI.
+ * KajiLibrary's javax.sound.midi.MidiFileFormat -- what there is in a MIDI file.
  *
- * <p>Lo que se puede saber sin cargar la obra entera: el tipo de archivo, como se cuenta el tiempo,
- * cuanto ocupa y cuanto dura.
+ * <p>What can be known without loading the whole piece: the file type, how time is counted, how
+ * much it takes and how long it lasts.
  *
- * <h2>Los tres tipos de archivo</h2>
+ * <h2>The three file types</h2>
  *
  * <ul>
- *   <li><b>0</b>: una sola pista con todo mezclado;
- *   <li><b>1</b>: varias pistas que suenan <b>a la vez</b>. Es el normal;
- *   <li><b>2</b>: varias pistas <b>independientes</b>, que no comparten linea de tiempo. Casi no se
- *       usa y muchos programas ni lo abren.
+ *   <li><b>0</b>: a single track with everything mixed;
+ *   <li><b>1</b>: several tracks that sound <b>at the same time</b>. It is the normal one;
+ *   <li><b>2</b>: several <b>independent</b> tracks, which do not share a timeline. It is hardly
+ *       used and many programs will not even open it.
  * </ul>
  *
- * <p>La confusion clasica es entre el 1 y el 2: los dos tienen varias pistas, y solo en el 1 esas
- * pistas son simultaneas.
+ * <p>The classic confusion is between 1 and 2: both have several tracks, and only in 1 are those
+ * tracks simultaneous.
  *
- * <p>{@link #getByteLength} y {@link #getMicrosecondLength} pueden valer {@link #UNKNOWN_LENGTH}
- * --que es -1-- cuando el archivo llega por un flujo sin final conocido.
+ * <p>{@link #getByteLength} and {@link #getMicrosecondLength} can be {@link #UNKNOWN_LENGTH}
+ * --which is -1-- when the file arrives through a stream with no known end.
  *
- * <p>Ver {@link Sequence} sobre {@link #getDivisionType} y {@link #getResolution}.
+ * <p>See {@link Sequence} on {@link #getDivisionType} and {@link #getResolution}.
  */
 public class MidiFileFormat {
 
-    /** No se sabe. */
+    /** Not known. */
     public static final int UNKNOWN_LENGTH = -1;
 
-    /** 0, 1 o 2. Ver la nota de la clase. */
+    /** 0, 1 or 2. See the class note. */
     protected int type;
 
-    /** Como se cuenta el tiempo; ver {@link Sequence}. */
+    /** How time is counted; see {@link Sequence}. */
     protected float divisionType;
 
-    /** Pulsos por negra, o por cuadro. */
+    /** Ticks per quarter note, or per frame. */
     protected int resolution;
 
-    /** Cuantos bytes ocupa, o {@link #UNKNOWN_LENGTH}. */
+    /** How many bytes it takes, or {@link #UNKNOWN_LENGTH}. */
     protected int byteLength;
 
-    /** Cuanto dura, o {@link #UNKNOWN_LENGTH}. */
+    /** How long it lasts, or {@link #UNKNOWN_LENGTH}. */
     protected long microsecondLength;
 
-    /** Lo que no entra en los campos fijos. */
+    /** What does not fit in the fixed fields. */
     private HashMap<String, Object> properties;
 
-    /** El habitual. */
+    /** The usual one. */
     public MidiFileFormat(int type, float divisionType, int resolution, int bytes,
                           long microseconds) {
         this.type = type;
@@ -62,9 +62,9 @@ public class MidiFileFormat {
     }
 
     /**
-     * Idem, con propiedades.
+     * Likewise, with properties.
      *
-     * @throws NullPointerException si el mapa es null
+     * @throws NullPointerException if the map is null
      */
     public MidiFileFormat(int type, float divisionType, int resolution, int bytes,
                           long microseconds, Map<String, Object> properties) {
@@ -72,32 +72,32 @@ public class MidiFileFormat {
         this.properties = new HashMap<String, Object>(properties);
     }
 
-    /** 0, 1 o 2. Ver la nota de la clase. */
+    /** 0, 1 or 2. See the class note. */
     public int getType() {
         return this.type;
     }
 
-    /** Como se cuenta el tiempo. */
+    /** How time is counted. */
     public float getDivisionType() {
         return this.divisionType;
     }
 
-    /** Pulsos por negra, o por cuadro. */
+    /** Ticks per quarter note, or per frame. */
     public int getResolution() {
         return this.resolution;
     }
 
-    /** Cuantos bytes, o {@link #UNKNOWN_LENGTH}. */
+    /** How many bytes, or {@link #UNKNOWN_LENGTH}. */
     public int getByteLength() {
         return this.byteLength;
     }
 
-    /** Cuanto dura, o {@link #UNKNOWN_LENGTH}. */
+    /** How long it lasts, or {@link #UNKNOWN_LENGTH}. */
     public long getMicrosecondLength() {
         return this.microsecondLength;
     }
 
-    /** Las propiedades, de solo lectura. */
+    /** The properties, read-only. */
     public Map<String, Object> properties() {
         Map<String, Object> ret;
         if (this.properties == null) {
@@ -108,7 +108,7 @@ public class MidiFileFormat {
         return Collections.unmodifiableMap(ret);
     }
 
-    /** Una propiedad, o null. */
+    /** A property, or null. */
     public Object getProperty(String key) {
         if (this.properties == null) {
             return null;

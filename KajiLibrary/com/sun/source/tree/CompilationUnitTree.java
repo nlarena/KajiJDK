@@ -4,11 +4,11 @@ import java.util.List;
 import javax.tools.JavaFileObject;
 
 /**
- * Un archivo fuente entero, y la raiz de todo arbol de este paquete.
+ * A whole source file, and the root of every tree of this package.
  */
 public interface CompilationUnitTree extends Tree {
 
-    /** La declaracion de modulo si este archivo es un `module-info.java`, si no `null`. */
+    /** The module declaration if this file is a `module-info.java`, otherwise `null`. */
     default ModuleTree getModule() {
         return null;
     }
@@ -25,6 +25,6 @@ public interface CompilationUnitTree extends Tree {
 
     JavaFileObject getSourceFile();
 
-    /** El traductor de posiciones a linea y columna; ver {@link LineMap}. */
+    /** The translator of positions into line and column; see {@link LineMap}. */
     LineMap getLineMap();
 }

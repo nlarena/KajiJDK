@@ -1,21 +1,21 @@
 package java.nio.file;
 
-// El archivo no existe.
+// The file does not exist.
 //
-// Es la que corresponde cuando `stat` dice que la ruta no esta. Notar que el nativo **no distingue**
-// "no existe" de "no tengo permiso" --devuelve cero banderas en los dos casos-- asi que quien la
-// levanta tiene que haber comprobado la existencia por separado antes de elegir entre esta y
+// It is the one that fits when `stat` says the path is not there. Note that the native does **not
+// tell** "does not exist" from "I have no permission" --it returns zero flags in both cases-- so
+// whoever throws it has to have checked existence separately before choosing between this and
 // `AccessDeniedException`.
 public class NoSuchFileException extends FileSystemException {
 
     private static final long serialVersionUID = -1390291775875351931L;
 
-    /** @param file el archivo que no esta, o `null` */
+    /** @param file the file that is not there, or `null` */
     public NoSuchFileException(String file) {
         super(file);
     }
 
-    /** @param file el archivo; `other` el otro; `reason` el motivo. Cualquiera puede ser `null`. */
+    /** @param file the file; `other` the other; `reason` the reason. Any may be `null`. */
     public NoSuchFileException(String file, String other, String reason) {
         super(file, other, reason);
     }

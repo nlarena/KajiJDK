@@ -3,84 +3,88 @@ package java.awt;
 import java.io.Serializable;
 
 /**
- * Recorre el foco en el **orden en que se agregaron** los hijos, entrando en cada contenedor.
+ * Traverses the focus in the **order the children were added**, entering each container.
  *
- * <p>Es la política más simple que sirve para algo: un recorrido en profundidad del árbol, de
- * izquierda a derecha, que es exactamente el orden de los `add`. Si ese orden coincide con el orden
- * visual —y suele coincidir, porque los componentes se agregan según se leen— el Tab hace lo que el
- * usuario espera sin que nadie configure nada.
+ * <p>It is the simplest policy that is good for anything: a depth-first walk of the tree, from left
+ * to right, which is exactly the order of the `add` calls. If that order matches the visual order
+ * —and it usually does, because components get added as they are read— the Tab does what the user
+ * expects without anyone configuring anything.
  *
- * <p>Lo que la hace interesante es {@link #setImplicitDownCycleTraversal}: con `true`, que es lo de
- * fábrica, al llegar a una **raíz de ciclo** el recorrido **entra** en ella en vez de saltearla. Con
- * `false`, la raíz se visita como un componente más y hay que entrar a mano. Es la diferencia entre
- * un Tab que atraviesa todo el árbol y uno que se queda en el nivel actual.
+ * <p>What makes it interesting is {@link #setImplicitDownCycleTraversal}: with `true`, which is the
+ * default, on reaching a **cycle root** the traversal **enters** it instead of skipping it. With
+ * `false`, the root is visited as one more component and one has to enter by hand. It is the
+ * difference between a Tab that goes through the whole tree and one that stays at the current
+ * level.
  *
- * <p><strong>Los cinco métodos tienen precondiciones que conviene tener presentes</strong>, porque
- * fallan de dos maneras distintas y por motivos distintos. El contenedor que se pasa tiene que ser
- * una **raíz de ciclo** o un **proveedor de política** —si no, la pregunta no tiene sentido: no se
- * recorre un contenedor cualquiera sino un ciclo— y eso se rechaza con `IllegalArgumentException`.
- * En cambio, si el contenedor no está **visible y mostrable**, la respuesta es `null`: no es un
- * error preguntar por un ciclo que todavía no se ve, simplemente no hay a quién darle el foco. Sin
- * pantalla nada es mostrable, así que sin pantalla estos métodos devuelven `null` siempre.
+ * <p><strong>The five methods have preconditions worth keeping in mind</strong>, because they fail
+ * in two different ways and for different reasons. The container passed in has to be a **cycle
+ * root** or a **policy provider** —if not, the question makes no sense: what is traversed is not
+ * any container but a cycle— and that is rejected with `IllegalArgumentException`. On the other
+ * hand, if the container is not **visible and displayable**, the answer is `null`: it is not an
+ * error to ask about a cycle that cannot be seen yet, there is simply nobody to give the focus to.
+ * Without a screen nothing is displayable, so without a screen these methods always return `null`.
  */
 public class ContainerOrderFocusTraversalPolicy extends FocusTraversalPolicy
         implements Serializable {
 
     private static final long serialVersionUID = 486933713763926351L;
 
-    /** Si al llegar a una raíz de ciclo se entra en ella. */
+    /** Whether reaching a cycle root means entering it. */
     private boolean implicitDownCycleTraversal = true;
 
-    /** Una política de orden de contenedor, que entra en los ciclos. */
+    /** A container-order policy, one that enters the cycles. */
     public ContainerOrderFocusTraversalPolicy() {
     }
 
     /**
-     * El siguiente de `aComponent` dentro de `aContainer`.
+     * The one after `aComponent` within `aContainer`.
      *
-     * @return el siguiente, o el primero si `aComponent` era el último —el recorrido es un ciclo—, o
-     *     `null` si no hay ninguno que acepte el foco
-     * @throws IllegalArgumentException si alguno es `null` o si `aComponent` no está en `aContainer`
+     * @return the next one, or the first one if `aComponent` was the last —the traversal is a
+     *     cycle—, or `null` if there is none that accepts the focus
+     * @throws IllegalArgumentException if either is `null` or if `aComponent` is not in
+     *     `aContainer`
      */
     public Component getComponentAfter(Container aContainer, Component aComponent) {
-        this.comprobar(aContainer, aComponent);
-        if (!this.recorrible(aContainer)) {
+        this.checkArgs(aContainer, aComponent);
+        if (!this.traversable(aContainer)) {
             return null;
         }
-        java.util.ArrayList<Component> orden = new java.util.ArrayList<Component>();
-        this.recorrer(aContainer, orden, aComponent);
-        int i = orden.indexOf(aComponent);
+        java.util.ArrayList<Component> order = new java.util.ArrayList<Component>();
+        this.collect(aContainer, order, aComponent);
+        int i = order.indexOf(aComponent);
         if (i < 0) {
             return this.getFirstComponent(aContainer);
         }
-        for (int j = i + 1; j < orden.size(); j++) {
-            Component c = orden.get(j);
+        for (int j = i + 1; j < order.size(); j++) {
+            Component c = order.get(j);
             if (this.accept(c)) {
-                return this.bajarSiCorresponde(c);
+                return this.downCycleIfEnabled(c);
             }
         }
         return this.getFirstComponent(aContainer);
     }
 
     /**
-     * El anterior de `aComponent` dentro de `aContainer`.
+     * The one before `aComponent` within `aContainer`.
      *
-     * @return el anterior, o el último si `aComponent` era el primero, o `null` si no hay ninguno
-     * @throws IllegalArgumentException si alguno es `null` o si `aComponent` no está en `aContainer`
+     * @return the previous one, or the last one if `aComponent` was the first, or `null` if there
+     *     is none
+     * @throws IllegalArgumentException if either is `null` or if `aComponent` is not in
+     *     `aContainer`
      */
     public Component getComponentBefore(Container aContainer, Component aComponent) {
-        this.comprobar(aContainer, aComponent);
-        if (!this.recorrible(aContainer)) {
+        this.checkArgs(aContainer, aComponent);
+        if (!this.traversable(aContainer)) {
             return null;
         }
-        java.util.ArrayList<Component> orden = new java.util.ArrayList<Component>();
-        this.recorrer(aContainer, orden, aComponent);
-        int i = orden.indexOf(aComponent);
+        java.util.ArrayList<Component> order = new java.util.ArrayList<Component>();
+        this.collect(aContainer, order, aComponent);
+        int i = order.indexOf(aComponent);
         if (i < 0) {
             return this.getLastComponent(aContainer);
         }
         for (int j = i - 1; j >= 0; j--) {
-            Component c = orden.get(j);
+            Component c = order.get(j);
             if (this.accept(c)) {
                 return c;
             }
@@ -89,73 +93,75 @@ public class ContainerOrderFocusTraversalPolicy extends FocusTraversalPolicy
     }
 
     /**
-     * El primero del recorrido.
+     * The first one of the traversal.
      *
-     * @return el primero, o `null` si ninguno acepta el foco
-     * @throws IllegalArgumentException si el contenedor es `null`
+     * @return the first one, or `null` if none accepts the focus
+     * @throws IllegalArgumentException if the container is `null`
      */
     public Component getFirstComponent(Container aContainer) {
         if (aContainer == null) {
             throw new IllegalArgumentException("aContainer cannot be null");
         }
-        if (!this.recorrible(aContainer)) {
+        if (!this.traversable(aContainer)) {
             return null;
         }
-        java.util.ArrayList<Component> orden = new java.util.ArrayList<Component>();
-        this.recorrer(aContainer, orden, null);
-        for (int i = 0; i < orden.size(); i++) {
-            if (this.accept(orden.get(i))) {
-                return this.bajarSiCorresponde(orden.get(i));
+        java.util.ArrayList<Component> order = new java.util.ArrayList<Component>();
+        this.collect(aContainer, order, null);
+        for (int i = 0; i < order.size(); i++) {
+            if (this.accept(order.get(i))) {
+                return this.downCycleIfEnabled(order.get(i));
             }
         }
         return null;
     }
 
     /**
-     * El último del recorrido.
+     * The last one of the traversal.
      *
-     * @return el último, o `null` si ninguno acepta el foco
-     * @throws IllegalArgumentException si el contenedor es `null`
+     * @return the last one, or `null` if none accepts the focus
+     * @throws IllegalArgumentException if the container is `null`
      */
     public Component getLastComponent(Container aContainer) {
         if (aContainer == null) {
             throw new IllegalArgumentException("aContainer cannot be null");
         }
-        if (!this.recorrible(aContainer)) {
+        if (!this.traversable(aContainer)) {
             return null;
         }
-        java.util.ArrayList<Component> orden = new java.util.ArrayList<Component>();
-        this.recorrer(aContainer, orden, null);
-        for (int i = orden.size() - 1; i >= 0; i--) {
-            if (this.accept(orden.get(i))) {
-                return orden.get(i);
+        java.util.ArrayList<Component> order = new java.util.ArrayList<Component>();
+        this.collect(aContainer, order, null);
+        for (int i = order.size() - 1; i >= 0; i--) {
+            if (this.accept(order.get(i))) {
+                return order.get(i);
             }
         }
         return null;
     }
 
     /**
-     * A quién le toca el foco cuando el ciclo se hace visible.
+     * Whose turn the focus is when the cycle becomes visible.
      *
-     * <p>Es el primero: esta política no distingue "el primero" de "el de arranque", que es
-     * justamente lo que una política más elaborada sí hace.
+     * <p>It is the first one: this policy does not tell "the first one" from "the starting one",
+     * which is exactly what a more elaborate policy does.
      */
     public Component getDefaultComponent(Container aContainer) {
         return this.getFirstComponent(aContainer);
     }
 
     /**
-     * Junta a los hijos en orden, entrando en los contenedores.
+     * Gathers the children in order, entering the containers.
      *
-     * <p>Un contenedor invisible o deshabilitado no se recorre: sus hijos tampoco podrían recibir el
-     * foco, y bajar a mirarlos uno por uno sería recorrer un subárbol entero para descartarlo.
+     * <p>An invisible or disabled container is not walked: its children could not receive the focus
+     * either, and going down to look at them one by one would be walking a whole subtree to discard
+     * it.
      *
-     * @param parar si aparece, se deja de bajar en él —es la raíz de ciclo desde la que se pregunta—
+     * @param stopAt if it shows up, the descent stops at it —it is the cycle root the question is
+     *     asked from—
      */
-    private void recorrer(Container cont, java.util.ArrayList<Component> out, Component parar) {
-        Component[] hijos = cont.getComponents();
-        for (int i = 0; i < hijos.length; i++) {
-            Component c = hijos[i];
+    private void collect(Container cont, java.util.ArrayList<Component> out, Component stopAt) {
+        Component[] children = cont.getComponents();
+        for (int i = 0; i < children.length; i++) {
+            Component c = children[i];
             out.add(c);
             if (!(c instanceof Container)) {
                 continue;
@@ -164,20 +170,21 @@ public class ContainerOrderFocusTraversalPolicy extends FocusTraversalPolicy
             if (!k.isVisible() || !k.isEnabled()) {
                 continue;
             }
-            // Una raíz de ciclo no se abre acá: sus hijos son de **su** recorrido, no de éste. Con
-            // el descenso implícito prendido, entrar en ella es cosa de `bajarSiCorresponde`.
-            if (k.isFocusCycleRoot() && k != parar) {
+            // A cycle root is not opened here: its children belong to **its** traversal, not to
+            // this one. With the implicit descent on, entering it is `downCycleIfEnabled`'s
+            // business.
+            if (k.isFocusCycleRoot() && k != stopAt) {
                 continue;
             }
-            this.recorrer(k, out, parar);
+            this.collect(k, out, stopAt);
         }
     }
 
     /**
-     * Si el componente es una raíz de ciclo y el descenso implícito está prendido, devuelve a **quién
-     * le toca adentro** en vez de a la raíz misma.
+     * If the component is a cycle root and the implicit descent is on, returns **whose turn it is
+     * inside** instead of the root itself.
      */
-    private Component bajarSiCorresponde(Component c) {
+    private Component downCycleIfEnabled(Component c) {
         if (!this.implicitDownCycleTraversal || !(c instanceof Container)) {
             return c;
         }
@@ -186,19 +193,19 @@ public class ContainerOrderFocusTraversalPolicy extends FocusTraversalPolicy
             return c;
         }
         FocusTraversalPolicy p = k.getFocusTraversalPolicy();
-        Component dentro = p == null ? null : p.getDefaultComponent(k);
-        return dentro != null ? dentro : c;
+        Component inside = p == null ? null : p.getDefaultComponent(k);
+        return inside != null ? inside : c;
     }
 
     /**
-     * Comprueba los argumentos de los métodos que toman un componente.
+     * Checks the arguments of the methods that take a component.
      *
-     * <p>Las dos condiciones que exige son las del JDK: que el contenedor sea una raíz de ciclo o un
-     * proveedor de política, y —si es raíz— que el componente pertenezca a **ese** ciclo. Preguntar
-     * "quién va después de éste" sobre un ciclo del que el componente no forma parte no tiene
-     * respuesta, y contestar algo sería peor que rechazar la pregunta.
+     * <p>The two conditions it demands are the JDK's: that the container be a cycle root or a
+     * policy provider, and —if it is a root— that the component belong to **that** cycle. Asking
+     * "who comes after this one" about a cycle the component is not part of has no answer, and
+     * answering something would be worse than rejecting the question.
      */
-    private void comprobar(Container aContainer, Component aComponent) {
+    private void checkArgs(Container aContainer, Component aComponent) {
         if (aContainer == null || aComponent == null) {
             throw new IllegalArgumentException("aContainer and aComponent cannot be null");
         }
@@ -212,36 +219,37 @@ public class ContainerOrderFocusTraversalPolicy extends FocusTraversalPolicy
     }
 
     /**
-     * Si el contenedor se puede recorrer ahora.
+     * Whether the container can be traversed now.
      *
-     * <p>Un ciclo que no se ve no tiene a quién darle el foco. Es una respuesta, no un error, y por
-     * eso los cinco métodos devuelven `null` en vez de tirar.
+     * <p>A cycle that cannot be seen has nobody to give the focus to. It is an answer, not an
+     * error, and that is why the five methods return `null` instead of throwing.
      */
-    private boolean recorrible(Container aContainer) {
+    private boolean traversable(Container aContainer) {
         synchronized (aContainer.getTreeLock()) {
             return aContainer.isVisible() && aContainer.isDisplayable();
         }
     }
 
     /**
-     * Si al llegar a una raíz de ciclo el recorrido entra en ella.
+     * Whether reaching a cycle root means the traversal enters it.
      *
-     * <p>Con `false`, la raíz se devuelve como un componente más y quien recorre decide si entra.
+     * <p>With `false`, the root is returned as one more component and whoever traverses decides
+     * whether to enter.
      */
     public void setImplicitDownCycleTraversal(boolean implicitDownCycleTraversal) {
         this.implicitDownCycleTraversal = implicitDownCycleTraversal;
     }
 
-    /** Si entra en las raíces de ciclo; de fábrica, `true`. */
+    /** Whether it enters the cycle roots; by default, `true`. */
     public boolean getImplicitDownCycleTraversal() {
         return this.implicitDownCycleTraversal;
     }
 
     /**
-     * Si ese componente entra en el recorrido.
+     * Whether that component takes part in the traversal.
      *
-     * <p>Tiene que estar visible, mostrable, habilitado y admitir el foco. Una subclase que quiera
-     * saltear componentes redefine esto y nada más.
+     * <p>It has to be visible, displayable, enabled and accept the focus. A subclass that wants to
+     * skip components overrides this and nothing else.
      */
     protected boolean accept(Component aComponent) {
         if (!aComponent.isVisible() || !aComponent.isDisplayable() || !aComponent.isEnabled()

@@ -1,17 +1,17 @@
 package java.awt.image;
 
 /**
- * El adaptador entre las dos formas de filtrar imágenes que tiene AWT.
+ * The adapter between the two ways of filtering images that AWT has.
  *
- * <p>{@link ImageFilter} trabaja de a tandas, sobre una imagen que va llegando;
- * {@link BufferedImageOp} trabaja sobre la imagen entera de una vez. Esta clase junta las dos: se
- * comporta como un filtro de tubería, guarda la imagen completa mientras llega, y recién al final
- * aplica la operación y entrega el resultado.
+ * <p>{@link ImageFilter} works in batches, over an image as it arrives;
+ * {@link BufferedImageOp} works over the whole image at once. This class joins the two: it behaves
+ * like a pipe filter, keeps the complete image while it arrives, and only at the end applies the
+ * operation and delivers the result.
  *
- * <p>Ese "recién al final" es la parte que hay que tener presente. Una operación como una
- * convolución **necesita** los vecinos de cada píxel, así que no puede empezar hasta tener todo, y
- * por eso este filtro guarda la imagen entera en memoria: es lo que pide la operación que envuelve,
- * no un descuido.
+ * <p>That "only at the end" is the part to keep in mind. An operation such as a convolution
+ * **needs** the neighbours of each pixel, so it cannot start before having everything, and that is
+ * why this filter keeps the whole image in memory: it is what the operation it wraps asks for, not
+ * an oversight.
  */
 public class BufferedImageFilter extends ImageFilter implements Cloneable {
 
@@ -23,9 +23,9 @@ public class BufferedImageFilter extends ImageFilter implements Cloneable {
     private int[] intPixels;
 
     /**
-     * Con la operación que va a aplicar.
+     * With the operation it is going to apply.
      *
-     * @throws NullPointerException si la operación es `null`
+     * @throws NullPointerException if the operation is `null`
      */
     public BufferedImageFilter(BufferedImageOp op) {
         if (op == null) {
@@ -34,15 +34,15 @@ public class BufferedImageFilter extends ImageFilter implements Cloneable {
         this.bufferedImageOp = op;
     }
 
-    /** La operación que aplica. */
+    /** The operation it applies. */
     public BufferedImageOp getBufferedImageOp() {
         return this.bufferedImageOp;
     }
 
     /**
-     * Anota el tamaño y reserva la imagen.
+     * Records the size and reserves the image.
      *
-     * @throws IllegalArgumentException si el tamaño es vacío
+     * @throws IllegalArgumentException if the size is empty
      */
     public void setDimensions(int width, int height) {
         if (width <= 0 || height <= 0) {
@@ -55,12 +55,12 @@ public class BufferedImageFilter extends ImageFilter implements Cloneable {
         this.height = height;
     }
 
-    /** Anota el modelo de color con el que van a venir los píxeles. */
+    /** Records the colour model the pixels are going to come with. */
     public void setColorModel(ColorModel model) {
         this.model = model;
     }
 
-    /** Guarda una tanda de píxeles de un byte. */
+    /** Stores a batch of pixels of one byte. */
     public void setPixels(int x, int y, int w, int h, ColorModel model, byte[] pixels, int off,
             int scansize) {
         if (this.width == 0 || this.height == 0) {
@@ -77,8 +77,8 @@ public class BufferedImageFilter extends ImageFilter implements Cloneable {
             }
             return;
         }
-        // Llego una tanda con otro modelo: no hay uno solo que describa a las dos, asi que se pasa
-        // todo a ARGB, que es el unico comun.
+        // A batch arrived with another model: there is no single one that describes both, so
+        // everything is taken to ARGB, which is the only common one.
         this.aRGB();
         for (int cy = 0; cy < h; cy++) {
             for (int cx = 0; cx < w; cx++) {
@@ -88,7 +88,7 @@ public class BufferedImageFilter extends ImageFilter implements Cloneable {
         }
     }
 
-    /** Guarda una tanda de píxeles de un `int`. */
+    /** Stores a batch of pixels of one `int`. */
     public void setPixels(int x, int y, int w, int h, ColorModel model, int[] pixels, int off,
             int scansize) {
         if (this.width == 0 || this.height == 0) {
@@ -105,24 +105,24 @@ public class BufferedImageFilter extends ImageFilter implements Cloneable {
         }
     }
 
-    /** Pasa lo que se haya juntado a ARGB. */
+    /** Takes whatever has been gathered to ARGB. */
     private void aRGB() {
-        int[] nuevo = new int[this.width * this.height];
+        int[] fresh = new int[this.width * this.height];
         if (this.bytePixels != null && this.model != null) {
-            for (int i = 0; i < nuevo.length; i++) {
-                nuevo[i] = this.model.getRGB(this.bytePixels[i] & 0xFF);
+            for (int i = 0; i < fresh.length; i++) {
+                fresh[i] = this.model.getRGB(this.bytePixels[i] & 0xFF);
             }
         }
         this.bytePixels = null;
-        this.intPixels = nuevo;
+        this.intPixels = fresh;
         this.model = ColorModel.getRGBdefault();
     }
 
     /**
-     * Arma la imagen, le aplica la operación y entrega el resultado.
+     * Builds the image, applies the operation to it and delivers the result.
      *
-     * <p>Con un estado de error o de aborto no se aplica nada: la imagen está incompleta y filtrar
-     * una imagen a medias daría un resultado que no es el de nadie.
+     * <p>With an error or abort status nothing is applied: the image is incomplete and filtering a
+     * half-finished image would give a result that is nobody's.
      */
     public void imageComplete(int status) {
         if (status == ImageConsumer.IMAGEERROR || status == ImageConsumer.IMAGEABORTED) {
@@ -133,19 +133,19 @@ public class BufferedImageFilter extends ImageFilter implements Cloneable {
             this.consumer.imageComplete(ImageConsumer.STATICIMAGEDONE);
             return;
         }
-        BufferedImage entrada;
+        BufferedImage in;
         if (this.intPixels != null) {
-            entrada = new BufferedImage(this.width, this.height, BufferedImage.TYPE_INT_ARGB);
-            entrada.setRGB(0, 0, this.width, this.height, this.intPixels, 0, this.width);
+            in = new BufferedImage(this.width, this.height, BufferedImage.TYPE_INT_ARGB);
+            in.setRGB(0, 0, this.width, this.height, this.intPixels, 0, this.width);
         } else {
             this.aRGB();
-            entrada = new BufferedImage(this.width, this.height, BufferedImage.TYPE_INT_ARGB);
-            entrada.setRGB(0, 0, this.width, this.height, this.intPixels, 0, this.width);
+            in = new BufferedImage(this.width, this.height, BufferedImage.TYPE_INT_ARGB);
+            in.setRGB(0, 0, this.width, this.height, this.intPixels, 0, this.width);
         }
-        BufferedImage salida = this.bufferedImageOp.filter(entrada, null);
-        int w = salida.getWidth();
-        int h = salida.getHeight();
-        int[] fila = new int[w];
+        BufferedImage out = this.bufferedImageOp.filter(in, null);
+        int w = out.getWidth();
+        int h = out.getHeight();
+        int[] row = new int[w];
         ColorModel rgb = ColorModel.getRGBdefault();
         this.consumer.setDimensions(w, h);
         this.consumer.setColorModel(rgb);
@@ -153,8 +153,8 @@ public class BufferedImageFilter extends ImageFilter implements Cloneable {
                 | ImageConsumer.COMPLETESCANLINES | ImageConsumer.SINGLEPASS
                 | ImageConsumer.SINGLEFRAME);
         for (int y = 0; y < h; y++) {
-            salida.getRGB(0, y, w, 1, fila, 0, w);
-            this.consumer.setPixels(0, y, w, 1, rgb, fila, 0, w);
+            out.getRGB(0, y, w, 1, row, 0, w);
+            this.consumer.setPixels(0, y, w, 1, rgb, row, 0, w);
         }
         this.consumer.imageComplete(status);
     }

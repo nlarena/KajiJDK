@@ -3,80 +3,80 @@ package java.awt;
 import java.io.Serializable;
 
 /**
- * Cinco lugares: los cuatro bordes y el centro.
+ * Five places: the four edges and the centre.
  *
- * <p>Es la distribución más usada de AWT y la que mejor reparte el espacio sobrante: **el centro se
- * queda con todo lo que quede**. Los bordes reciben su medida preferida en la dirección que los
- * limita —el norte su alto, el oeste su ancho— y se estiran en la otra.
+ * <p>It is AWT's most used layout and the one that best distributes spare space: **the centre keeps
+ * whatever is left**. The edges get their preferred size in the direction that bounds them —north
+ * its height, west its width— and stretch in the other.
  *
- * <p>El orden importa: primero se reservan norte y sur a lo ancho de todo, después este y oeste con
- * lo que queda de alto, y el centro se lleva el resto. Por eso una barra de herramientas al norte
- * llega de punta a punta y una barra lateral al oeste no.
+ * <p>Order matters: north and south are reserved first across the whole width, then east and west
+ * with the height that is left, and the centre takes the rest. That is why a toolbar in the north
+ * runs from end to end and a sidebar in the west does not.
  *
- * <p>Las constantes vienen en **dos juegos** y es la parte que más confunde. `NORTH` y compañía son
- * absolutas; {@link #PAGE_START} y {@link #LINE_START} son relativas a cómo se lee el texto, así que
- * en árabe `LINE_START` es la derecha. Poner un componente en las dos formas a la vez es un error, y
- * la posición relativa gana.
+ * <p>The constants come in **two sets**, and that is the most confusing part. `NORTH` and company
+ * are absolute; {@link #PAGE_START} and {@link #LINE_START} are relative to how the text reads, so
+ * in Arabic `LINE_START` is the right. Placing components with both forms at once is a mistake, and
+ * the relative position wins.
  */
 public class BorderLayout implements LayoutManager2, Serializable {
 
     private static final long serialVersionUID = -8658291919501921765L;
 
-    /** Arriba, de punta a punta. */
+    /** At the top, from end to end. */
     public static final String NORTH = "North";
 
-    /** Abajo, de punta a punta. */
+    /** At the bottom, from end to end. */
     public static final String SOUTH = "South";
 
-    /** A la derecha, entre el norte y el sur. */
+    /** On the right, between north and south. */
     public static final String EAST = "East";
 
-    /** A la izquierda, entre el norte y el sur. */
+    /** On the left, between north and south. */
     public static final String WEST = "West";
 
-    /** El resto del espacio. */
+    /** The rest of the space. */
     public static final String CENTER = "Center";
 
-    /** Donde empieza la página: arriba en las escrituras horizontales. */
+    /** Where the page starts: the top in horizontal scripts. */
     public static final String PAGE_START = "First";
 
-    /** Donde termina la página. */
+    /** Where the page ends. */
     public static final String PAGE_END = "Last";
 
-    /** Donde empieza el renglón: la izquierda, o la derecha en árabe y hebreo. */
+    /** Where the line starts: the left, or the right in Arabic and Hebrew. */
     public static final String LINE_START = "Before";
 
-    /** Donde termina el renglón. */
+    /** Where the line ends. */
     public static final String LINE_END = "After";
 
     /**
-     * El nombre viejo de {@link #PAGE_START}.
+     * The old name of {@link #PAGE_START}.
      *
-     * @deprecated se renombró en 1.4 para que el juego relativo fuera coherente.
+     * @deprecated renamed in 1.4 so that the relative set would be consistent.
      */
     @Deprecated
     public static final String BEFORE_FIRST_LINE = PAGE_START;
 
     /**
-     * El nombre viejo de {@link #PAGE_END}.
+     * The old name of {@link #PAGE_END}.
      *
-     * @deprecated se renombró en 1.4.
+     * @deprecated renamed in 1.4.
      */
     @Deprecated
     public static final String AFTER_LAST_LINE = PAGE_END;
 
     /**
-     * El nombre viejo de {@link #LINE_START}.
+     * The old name of {@link #LINE_START}.
      *
-     * @deprecated se renombró en 1.4.
+     * @deprecated renamed in 1.4.
      */
     @Deprecated
     public static final String BEFORE_LINE_BEGINS = LINE_START;
 
     /**
-     * El nombre viejo de {@link #LINE_END}.
+     * The old name of {@link #LINE_END}.
      *
-     * @deprecated se renombró en 1.4.
+     * @deprecated renamed in 1.4.
      */
     @Deprecated
     public static final String AFTER_LINE_ENDS = LINE_END;
@@ -95,42 +95,42 @@ public class BorderLayout implements LayoutManager2, Serializable {
     private Component firstItem;
     private Component lastItem;
 
-    /** Sin separación entre los cinco lugares. */
+    /** With no gap between the five places. */
     public BorderLayout() {
         this(0, 0);
     }
 
-    /** Con las separaciones dadas. */
+    /** With the given gaps. */
     public BorderLayout(int hgap, int vgap) {
         this.hgap = hgap;
         this.vgap = vgap;
     }
 
-    /** Cuánto separa horizontalmente. */
+    /** The horizontal gap. */
     public int getHgap() {
         return this.hgap;
     }
 
-    /** Cambia la separación horizontal. */
+    /** Changes the horizontal gap. */
     public void setHgap(int hgap) {
         this.hgap = hgap;
     }
 
-    /** Cuánto separa verticalmente. */
+    /** The vertical gap. */
     public int getVgap() {
         return this.vgap;
     }
 
-    /** Cambia la separación vertical. */
+    /** Changes the vertical gap. */
     public void setVgap(int vgap) {
         this.vgap = vgap;
     }
 
     /**
-     * Anota en qué lugar va un hijo.
+     * Records which place a child goes in.
      *
-     * @param constraints una de las nueve constantes, o `null` para el centro
-     * @throws IllegalArgumentException si no es ninguna de ellas
+     * @param constraints one of the nine constants, or `null` for the centre
+     * @throws IllegalArgumentException if it is none of them
      */
     public void addLayoutComponent(Component comp, Object constraints) {
         synchronized (comp.getTreeLock()) {
@@ -139,12 +139,12 @@ public class BorderLayout implements LayoutManager2, Serializable {
                 throw new IllegalArgumentException(
                         "cannot add to layout: constraint must be a string (or null)");
             }
-            this.ubicar(comp, (String) c);
+            this.place(comp, (String) c);
         }
     }
 
-    /** Guarda el hijo en la ranura que le toca. */
-    private void ubicar(Component comp, String name) {
+    /** Stores the child in the slot it belongs to. */
+    private void place(Component comp, String name) {
         if (CENTER.equals(name)) {
             this.center = comp;
         } else if (NORTH.equals(name)) {
@@ -169,19 +169,19 @@ public class BorderLayout implements LayoutManager2, Serializable {
     }
 
     /**
-     * Anota en qué lugar va un hijo, por nombre.
+     * Records which place a child goes in, by name.
      *
-     * @deprecated es del modelo de 1.0. Usar {@link #addLayoutComponent(Component, Object)}.
-     * @throws IllegalArgumentException si el nombre no es uno de los nueve
+     * @deprecated it is from the 1.0 model. Use {@link #addLayoutComponent(Component, Object)}.
+     * @throws IllegalArgumentException if the name is not one of the nine
      */
     @Deprecated
     public void addLayoutComponent(String name, Component comp) {
         synchronized (comp.getTreeLock()) {
-            this.ubicar(comp, name == null ? CENTER : name);
+            this.place(comp, name == null ? CENTER : name);
         }
     }
 
-    /** Saca ese hijo de la ranura en la que esté. */
+    /** Removes that child from whichever slot it is in. */
     public void removeLayoutComponent(Component comp) {
         synchronized (comp.getTreeLock()) {
             if (comp == this.center) {
@@ -207,10 +207,10 @@ public class BorderLayout implements LayoutManager2, Serializable {
     }
 
     /**
-     * Qué hijo está en ese lugar.
+     * Which child is in that place.
      *
-     * @return el hijo, o `null` si el lugar está vacío
-     * @throws IllegalArgumentException si la posición no es una de las nueve
+     * @return the child, or `null` if the place is empty
+     * @throws IllegalArgumentException if the position is not one of the nine
      */
     public Component getLayoutComponent(Object constraints) {
         if (CENTER.equals(constraints)) {
@@ -245,13 +245,13 @@ public class BorderLayout implements LayoutManager2, Serializable {
     }
 
     /**
-     * Qué hijo está en ese lugar, resolviendo las posiciones relativas para ese contenedor.
+     * Which child is in that place, resolving the relative positions for that container.
      *
-     * <p>Preguntar por `NORTH` acá devuelve el que esté en `PAGE_START` si no hay ninguno en
-     * `NORTH`: es la consulta que hace falta cuando lo que importa es dónde va a quedar dibujado y
-     * no con qué constante se lo agregó.
+     * <p>Asking for `NORTH` here returns the one in `PAGE_START` if there is one, and the one in
+     * `NORTH` otherwise: it is the query needed when what matters is where it will be drawn and not
+     * which constant it was added with. (This javadoc had that precedence the other way round.)
      *
-     * @throws IllegalArgumentException si la posición no es una de las nueve
+     * @throws IllegalArgumentException if the position is not one of the nine
      */
     public Component getLayoutComponent(Container target, Object constraints) {
         boolean ltr = target.getComponentOrientation().isLeftToRight();
@@ -291,9 +291,9 @@ public class BorderLayout implements LayoutManager2, Serializable {
     }
 
     /**
-     * En qué lugar está ese hijo.
+     * Which place that child is in.
      *
-     * @return la constante con la que se lo agregó, o `null` si no está en esta distribución
+     * @return the constant it was added with, or `null` if it is not in this layout
      */
     public Object getConstraints(Component comp) {
         if (comp == null) {
@@ -329,48 +329,48 @@ public class BorderLayout implements LayoutManager2, Serializable {
         return null;
     }
 
-    /** El ancho de la fila más ancha y el alto de todo lo apilado. */
+    /** The width of the widest row and the height of everything stacked. */
     public Dimension minimumLayoutSize(Container target) {
-        return this.medir(target, false);
+        return this.measure(target, false);
     }
 
-    /** Lo mismo, con las medidas preferidas. */
+    /** The same, with the preferred sizes. */
     public Dimension preferredLayoutSize(Container target) {
-        return this.medir(target, true);
+        return this.measure(target, true);
     }
 
-    /** Norte y sur suman alto; este, oeste y centro suman ancho. */
-    private Dimension medir(Container target, boolean preferida) {
+    /** North and south add up height; east, west and centre add up width. */
+    private Dimension measure(Container target, boolean preferred) {
         synchronized (target.getTreeLock()) {
             Dimension dim = new Dimension(0, 0);
             boolean ltr = target.getComponentOrientation().isLeftToRight();
             Component c = this.getChild(EAST, ltr);
             if (c != null) {
-                Dimension d = preferida ? c.getPreferredSize() : c.getMinimumSize();
+                Dimension d = preferred ? c.getPreferredSize() : c.getMinimumSize();
                 dim.width = dim.width + d.width + this.hgap;
                 dim.height = Math.max(d.height, dim.height);
             }
             c = this.getChild(WEST, ltr);
             if (c != null) {
-                Dimension d = preferida ? c.getPreferredSize() : c.getMinimumSize();
+                Dimension d = preferred ? c.getPreferredSize() : c.getMinimumSize();
                 dim.width = dim.width + d.width + this.hgap;
                 dim.height = Math.max(d.height, dim.height);
             }
             c = this.getChild(CENTER, ltr);
             if (c != null) {
-                Dimension d = preferida ? c.getPreferredSize() : c.getMinimumSize();
+                Dimension d = preferred ? c.getPreferredSize() : c.getMinimumSize();
                 dim.width = dim.width + d.width;
                 dim.height = Math.max(d.height, dim.height);
             }
             c = this.getChild(NORTH, ltr);
             if (c != null) {
-                Dimension d = preferida ? c.getPreferredSize() : c.getMinimumSize();
+                Dimension d = preferred ? c.getPreferredSize() : c.getMinimumSize();
                 dim.width = Math.max(d.width, dim.width);
                 dim.height = dim.height + d.height + this.vgap;
             }
             c = this.getChild(SOUTH, ltr);
             if (c != null) {
-                Dimension d = preferida ? c.getPreferredSize() : c.getMinimumSize();
+                Dimension d = preferred ? c.getPreferredSize() : c.getMinimumSize();
                 dim.width = Math.max(d.width, dim.width);
                 dim.height = dim.height + d.height + this.vgap;
             }
@@ -381,7 +381,10 @@ public class BorderLayout implements LayoutManager2, Serializable {
         }
     }
 
-    /** El hijo de ese lugar, resolviendo la posición relativa contra la absoluta. */
+    /**
+     * The child in that place, the relative position taking precedence; invisible ones count as
+     * absent.
+     */
     private Component getChild(String key, boolean ltr) {
         Component result = null;
         if (NORTH.equals(key)) {
@@ -407,31 +410,31 @@ public class BorderLayout implements LayoutManager2, Serializable {
         return result;
     }
 
-    /** Sin tope: el centro aprovecha todo lo que le den. */
+    /** No limit: the centre makes use of everything it is given. */
     public Dimension maximumLayoutSize(Container target) {
         return new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE);
     }
 
-    /** Centrado. */
+    /** Centred. */
     public float getLayoutAlignmentX(Container parent) {
         return 0.5f;
     }
 
-    /** Centrado. */
+    /** Centred. */
     public float getLayoutAlignmentY(Container parent) {
         return 0.5f;
     }
 
-    /** No guarda cuentas entre llamadas, así que no hay nada que tirar. */
+    /** It keeps no computations between calls, so there is nothing to throw away. */
     public void invalidateLayout(Container target) {
     }
 
     /**
-     * Ubica los cinco lugares.
+     * Lays out the five places.
      *
-     * <p>El orden es el que define la distribución: norte y sur se llevan el ancho completo, este y
-     * oeste el alto que sobra, y el centro lo que queda. Cambiar ese orden cambiaría qué componente
-     * llega a las esquinas.
+     * <p>The order is what defines the layout: north and south take the full width, east and west
+     * the height left over, and the centre what remains. Changing that order would change which
+     * component reaches the corners.
      */
     public void layoutContainer(Container target) {
         synchronized (target.getTreeLock()) {

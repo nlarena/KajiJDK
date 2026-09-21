@@ -3,23 +3,23 @@ package java.rmi.server;
 import java.rmi.RemoteException;
 
 /**
- * No se pudo exportar el objeto remoto.
+ * The remote object could not be exported.
  *
- * <p>Exportar es hacerlo alcanzable desde afuera, y falla por razones locales: el puerto ya esta
- * tomado, no hay descriptores, la fabrica de sockets rechazo. Es una {@link RemoteException} aunque
- * nada remoto haya ocurrido todavia — la jerarquia agrupa por donde aparece el error, no por donde
- * se origina.
+ * <p>Exporting is making it reachable from outside, and it fails for local reasons: the port is
+ * already taken, there are no descriptors, the socket factory refused. It is a
+ * {@link RemoteException} even though nothing remote has happened yet — the hierarchy groups by
+ * where the error turns up, not by where it originates.
  */
 public class ExportException extends RemoteException {
 
     private static final long serialVersionUID = -9155485338494060170L;
 
-    /** Con un mensaje. */
+    /** With a message. */
     public ExportException(String s) {
         super(s);
     }
 
-    /** Con un mensaje y la causa. */
+    /** With a message and the cause. */
     public ExportException(String s, Exception ex) {
         super(s, ex);
     }

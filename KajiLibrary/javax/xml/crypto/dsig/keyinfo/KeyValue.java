@@ -5,36 +5,37 @@ import java.security.PublicKey;
 import javax.xml.crypto.XMLStructure;
 
 /**
- * KajiLibrary's javax.xml.crypto.dsig.keyinfo.KeyValue -- la clave publica, en limpio.
+ * KajiLibrary's javax.xml.crypto.dsig.keyinfo.KeyValue -- the public key, in the clear.
  *
- * <p>Los numeros de la clave publica escritos en el documento: el modulo y el exponente de una RSA,
- * los parametros de una DSA, el punto de una EC.
+ * <p>The numbers of the public key written into the document: the modulus and exponent of an RSA
+ * one, the parameters of a DSA one, the point of an EC one.
  *
- * <p>Es lo <b>opuesto</b> a {@link KeyName} en cuanto a confianza. Validar una firma con la clave que
- * la propia firma trae no prueba nada: quien la falsifique pone la suya. Usarlo asi es el error mas
- * comun de XML-DSig, y es facil de cometer porque hace que todo "funcione".
+ * <p>It is the <b>opposite</b> of {@link KeyName} as far as trust goes. Validating a signature with
+ * the key the signature itself brings proves nothing: whoever forges it puts in their own. Using it
+ * that way is the commonest mistake of XML-DSig, and it is easy to make because it makes everything
+ * "work".
  *
- * <p>Sirve para dos cosas legitimas: comparar la clave del documento contra una que uno conoce, y
- * transportar una clave por un canal donde la confianza ya se establecio de otra forma.
+ * <p>It serves two legitimate purposes: comparing the document's key against one known, and
+ * carrying a key over a channel where trust was already established some other way.
  *
- * <p>Los tres URI de tipo nombran las tres familias que el estandar define.
+ * <p>The three type URIs name the three families the standard defines.
  */
 public interface KeyValue extends XMLStructure {
 
-    /** Una clave DSA. */
+    /** A DSA key. */
     static final String DSA_TYPE = "http://www.w3.org/2000/09/xmldsig#DSAKeyValue";
 
-    /** Una clave RSA. */
+    /** An RSA key. */
     static final String RSA_TYPE = "http://www.w3.org/2000/09/xmldsig#RSAKeyValue";
 
-    /** Una clave de curva eliptica. */
+    /** An elliptic curve key. */
     static final String EC_TYPE = "http://www.w3.org/2009/xmldsig11#ECKeyValue";
 
     /**
-     * La clave publica.
+     * The public key.
      *
-     * @throws KeyException si los numeros del documento no forman una clave, o si su algoritmo no
-     *     esta soportado
+     * @throws KeyException if the document's numbers do not make a key, or if its algorithm is not
+     *     supported
      */
     PublicKey getPublicKey() throws KeyException;
 }

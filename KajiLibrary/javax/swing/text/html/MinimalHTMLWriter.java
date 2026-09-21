@@ -15,22 +15,22 @@ import javax.swing.text.StyleConstants;
 import javax.swing.text.StyledDocument;
 
 /**
- * Escribe como HTML un documento con estilos que no es de HTML.
+ * It writes as HTML a styled document that is not an HTML one.
  *
- * <h2>Para que sirve</h2>
+ * <h2>What it is for</h2>
  *
- * <p>Un {@link javax.swing.text.DefaultStyledDocument} no tiene etiquetas: tiene atributos de
- * Swing. Este escritor los traduce a HTML para poder guardar o mandar lo que hay en un
+ * <p>A {@link javax.swing.text.DefaultStyledDocument} has no tags: it has Swing attributes. This
+ * writer translates them to HTML so as to be able to save or send what is in a
  * {@code JTextPane}.
  *
- * <p>Es "minimo" porque no intenta reconstruir estructura. Escribe un {@code <p>} por parrafo y las
- * etiquetas de caracter que hagan falta, y todo lo que los atributos de Swing no puedan decir en
- * HTML lo pone como estilo en el encabezado.
+ * <p>It is "minimal" because it does not try to rebuild structure. It writes a {@code <p>} per
+ * paragraph and whatever character tags are needed, and everything the Swing attributes cannot
+ * say in HTML it puts as a style in the head.
  *
- * <h2>Lo que no se puede escribir</h2>
+ * <h2>What cannot be written</h2>
  *
- * <p>Un componente o un icono incrustado no tienen equivalente: se escribe un comentario que dice
- * que estaban. Es mejor que perderlos en silencio, aunque no se puedan volver a leer.
+ * <p>An embedded component or icon has no equivalent: a comment is written saying they were
+ * there. It is better than losing them silently, even though they cannot be read back.
  */
 public class MinimalHTMLWriter extends AbstractWriter {
 
@@ -45,17 +45,17 @@ public class MinimalHTMLWriter extends AbstractWriter {
     private boolean fontAttrSet = false;
     private AttributeSet fontAttributes;
 
-    /** Escribe el documento entero. */
+    /** It writes the whole document. */
     public MinimalHTMLWriter(Writer w, StyledDocument doc) {
         super(w, doc);
     }
 
-    /** Escribe ese tramo del documento. */
+    /** It writes that stretch of the document. */
     public MinimalHTMLWriter(Writer w, StyledDocument doc, int pos, int len) {
         super(w, doc, pos, len);
     }
 
-    /** Escribe el documento: encabezado con los estilos, y despues el cuerpo. */
+    /** It writes the document: a head with the styles, and then the body. */
     public void write() throws IOException, BadLocationException {
         styleNameMapping = new java.util.Hashtable<String, String>();
         writeStartTag("<html>");
@@ -66,7 +66,7 @@ public class MinimalHTMLWriter extends AbstractWriter {
 
     private java.util.Hashtable<String, String> styleNameMapping;
 
-    /** Los atributos que no tienen etiqueta propia, escritos como CSS. */
+    /** The attributes that have no tag of their own, written as CSS. */
     protected void writeAttributes(AttributeSet attr) throws IOException {
         Enumeration<?> names = attr.getAttributeNames();
         while (names.hasMoreElements()) {
@@ -76,7 +76,7 @@ public class MinimalHTMLWriter extends AbstractWriter {
         }
     }
 
-    /** El texto de un elemento hoja, con las entidades escapadas. */
+    /** A leaf element's text, with the entities escaped. */
     protected void text(Element elem) throws IOException, BadLocationException {
         String contentStr = getText(elem);
         if (contentStr.length() > 0 && contentStr.charAt(contentStr.length() - 1) == '\n') {
@@ -87,7 +87,7 @@ public class MinimalHTMLWriter extends AbstractWriter {
         }
     }
 
-    /** Escribe una etiqueta de apertura en su propia linea y sangra lo que viene. */
+    /** It writes an opening tag on its own line and indents what follows. */
     protected void writeStartTag(String tag) throws IOException {
         indent();
         write(tag);
@@ -102,7 +102,7 @@ public class MinimalHTMLWriter extends AbstractWriter {
         writeLineSeparator();
     }
 
-    /** El encabezado, con los estilos del documento adentro. */
+    /** The head, with the document's styles inside. */
     protected void writeHeader() throws IOException {
         writeStartTag("<head>");
         writeStartTag("<style>");
@@ -114,28 +114,28 @@ public class MinimalHTMLWriter extends AbstractWriter {
     }
 
     /**
-     * Los estilos con nombre del documento, como reglas de CSS.
+     * The document's named styles, as CSS rules.
      *
-     * <p>El estilo por omision no se escribe: no tiene nombre que ponerle a la regla, y sus valores
-     * son los que ya valen sin decir nada.
+     * <p>The default style is not written: it has no name to give the rule, and its values are the
+     * ones that already hold without saying anything.
      */
     protected void writeStyles() throws IOException {
         javax.swing.text.StyleContext ctx = null;
         javax.swing.text.Document doc = getDocument();
         if (doc instanceof javax.swing.text.DefaultStyledDocument) {
-            Enumeration<?> nombres =
+            Enumeration<?> names =
                     ((javax.swing.text.DefaultStyledDocument) doc).getStyleNames();
-            while (nombres != null && nombres.hasMoreElements()) {
-                String nombre = (String) nombres.nextElement();
-                if (javax.swing.text.StyleContext.DEFAULT_STYLE.equals(nombre)) {
+            while (names != null && names.hasMoreElements()) {
+                String name = (String) names.nextElement();
+                if (javax.swing.text.StyleContext.DEFAULT_STYLE.equals(name)) {
                     continue;
                 }
-                Style s = ((javax.swing.text.DefaultStyledDocument) doc).getStyle(nombre);
+                Style s = ((javax.swing.text.DefaultStyledDocument) doc).getStyle(name);
                 if (s == null || s.getAttributeCount() == 0) {
                     continue;
                 }
                 indent();
-                write("p." + addStyleName(nombre) + " {");
+                write("p." + addStyleName(name) + " {");
                 writeLineSeparator();
                 incrIndent();
                 writeAttributes(s);
@@ -147,14 +147,14 @@ public class MinimalHTMLWriter extends AbstractWriter {
         }
     }
 
-    /** Un nombre de estilo que se pueda escribir en una regla; los espacios molestan. */
-    private String addStyleName(String nombre) {
-        String limpio = nombre.replace(' ', '-');
-        styleNameMapping.put(nombre, limpio);
-        return limpio;
+    /** A style name that can be written in a rule; the spaces get in the way. */
+    private String addStyleName(String name) {
+        String clean = name.replace(' ', '-');
+        styleNameMapping.put(name, clean);
+        return clean;
     }
 
-    /** El cuerpo: un parrafo por parrafo del documento. */
+    /** The body: one paragraph per paragraph of the document. */
     protected void writeBody() throws IOException, BadLocationException {
         ElementIterator it = getElementIterator();
         writeStartTag("<body>");
@@ -170,20 +170,20 @@ public class MinimalHTMLWriter extends AbstractWriter {
             } else {
                 writeLeaf(next);
             }
-            if (esUltimoDelParrafo(it, next)) {
+            if (isLastOfParagraph(it, next)) {
                 writeEndParagraph();
             }
         }
         writeEndTag("</body>");
     }
 
-    private boolean esUltimoDelParrafo(ElementIterator it, Element e) {
-        Element padre = e.getParentElement();
-        return (padre != null
-                && padre.getElement(padre.getElementCount() - 1) == e);
+    private boolean isLastOfParagraph(ElementIterator it, Element e) {
+        Element parent = e.getParentElement();
+        return (parent != null
+                && parent.getElement(parent.getElementCount() - 1) == e);
     }
 
-    /** Cierra el parrafo y las etiquetas de caracter que quedaron abiertas. */
+    /** It closes the paragraph and the character tags that were left open. */
     protected void writeEndParagraph() throws IOException {
         writeEndMask();
         if (inFontTag()) {
@@ -193,21 +193,21 @@ public class MinimalHTMLWriter extends AbstractWriter {
         writeLineSeparator();
     }
 
-    /** Abre el parrafo, con su clase si el elemento tiene un estilo con nombre. */
+    /** It opens the paragraph, with its class if the element has a named style. */
     protected void writeStartParagraph(Element elem) throws IOException {
         AttributeSet attr = elem.getAttributes();
         Object resolveAttr = attr.getAttribute(StyleConstants.ResolveAttribute);
         if (resolveAttr instanceof Style) {
-            String nombre = ((Style) resolveAttr).getName();
-            String limpio = styleNameMapping.get(nombre);
-            write("<p class=" + (limpio == null ? nombre : limpio) + ">");
+            String name = ((Style) resolveAttr).getName();
+            String clean = styleNameMapping.get(name);
+            write("<p class=" + (clean == null ? name : clean) + ">");
         } else {
             write("<p>");
         }
         writeLineSeparator();
     }
 
-    /** Una hoja que no es texto: un icono o un componente. */
+    /** A leaf that is not text: an icon or a component. */
     protected void writeLeaf(Element elem) throws IOException {
         indent();
         if (elem.getName().equals(StyleConstants.IconElementName)) {
@@ -217,22 +217,22 @@ public class MinimalHTMLWriter extends AbstractWriter {
         }
     }
 
-    /** Un icono; ver la nota de la clase sobre lo que no se puede escribir. */
+    /** An icon; see the class note on what cannot be written. */
     protected void writeImage(Element elem) throws IOException {
         write("<!-- icono -->");
     }
 
-    /** Un componente incrustado. */
+    /** An embedded component. */
     protected void writeComponent(Element elem) throws IOException {
         write("<!-- componente -->");
     }
 
-    /** Si el elemento es texto comun. */
+    /** Whether the element is ordinary text. */
     protected boolean isText(Element elem) {
         return (elem.getName().equals(javax.swing.text.AbstractDocument.ContentElementName));
     }
 
-    /** Escribe un tramo de texto con sus etiquetas de caracter alrededor. */
+    /** It writes a stretch of text with its character tags around it. */
     protected void writeContent(Element elem, boolean needsIndenting) throws IOException,
             BadLocationException {
         AttributeSet attr = elem.getAttributes();
@@ -245,11 +245,11 @@ public class MinimalHTMLWriter extends AbstractWriter {
     }
 
     /**
-     * Abre y cierra negrita, cursiva y subrayado segun cambien.
+     * It opens and closes bold, italic and underline as they change.
      *
-     * <p>Se lleva una mascara de tres bits con lo que esta abierto. Comparar la mascara nueva con
-     * la vieja dice exactamente que abrir y que cerrar, sin repetir etiquetas ni dejar ninguna sin
-     * cerrar.
+     * <p>It carries a three-bit mask with what is open. Comparing the new mask with the old one
+     * says exactly what to open and what to close, without repeating tags or leaving any
+     * unclosed.
      */
     protected void writeHTMLTags(AttributeSet attr) throws IOException {
         int oldMask = fontMask;
@@ -307,7 +307,7 @@ public class MinimalHTMLWriter extends AbstractWriter {
     }
 
     private void writeEndMask(int mask) throws IOException {
-        // Al reves de como se abrieron: el HTML no permite cruzarlas.
+        // The reverse of how they were opened: HTML does not allow crossing them.
         if ((mask & BOLD) != 0) {
             write("</b>");
         }
@@ -325,10 +325,10 @@ public class MinimalHTMLWriter extends AbstractWriter {
     }
 
     /**
-     * Lo que no tiene etiqueta de HTML, escrito como un {@code <span>} con estilo.
+     * What has no HTML tag, written as a {@code <span>} with a style.
      *
-     * <p>El tamano y el color si tienen etiqueta vieja ({@code <font>}) y van por ahi; lo demas
-     * -- un espaciado, una sangria -- solo se puede decir en CSS.
+     * <p>The size and the colour do have an old tag ({@code <font>}) and go through it; the rest
+     * -- a spacing, an indent -- can only be said in CSS.
      */
     protected void writeNonHTMLAttributes(AttributeSet attr) throws IOException {
         String color = null;
@@ -351,7 +351,7 @@ public class MinimalHTMLWriter extends AbstractWriter {
         return (s.length() == 1) ? "0" + s : s;
     }
 
-    /** Si hay una etiqueta {@code <font>} abierta. */
+    /** Whether there is a {@code <font>} tag open. */
     protected boolean inFontTag() {
         return inFontTag;
     }

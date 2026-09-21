@@ -2,37 +2,37 @@ package java.util;
 
 import java.util.function.DoubleConsumer;
 
-// Cuenta, suma, minimo, maximo y promedio de una corriente de `double`, en una sola pasada.
+// Count, sum, minimum, maximum and average of a stream of `double`s, in a single pass.
 //
-// La suma NO es un `sum += value` a secas: usa **suma compensada de Kahan**, y esa es la unica
-// parte de esta clase que no es obvia. Al sumar muchos valores de magnitudes distintas, cada
-// suma en punto flotante pierde los bits bajos del sumando mas chico; sobre un millon de
-// elementos ese error se acumula y el resultado puede estar mal en las primeras cifras. Kahan
-// lleva aparte lo que se perdio en cada paso y lo devuelve al siguiente.
+// The sum is NOT a plain `sum += value`: it uses **Kahan compensated summation**, and that is the
+// only part of this class that is not obvious. Adding many values of different magnitudes, each
+// floating-point addition loses the low bits of the smaller addend; over a million elements that
+// error piles up and the result can be wrong in its leading digits. Kahan keeps what was lost at each
+// step off to the side and gives it back to the next one.
 //
-// El JDK lleva ademas `simpleSum`, la suma ingenua, **solo** para un caso de borde: si la
-// compensada da NaN (puede pasar sumando infinitos de signos opuestos) pero la ingenua dio un
-// infinito, el infinito es la respuesta correcta y es la que se devuelve.
+// The JDK also keeps `simpleSum`, the naive sum, **only** for an edge case: if the compensated one
+// gives NaN (which can happen adding infinities of opposite signs) but the naive one gave an
+// infinity, the infinity is the correct answer and it is the one returned.
 public class DoubleSummaryStatistics implements DoubleConsumer {
 
     private long count;
 
-    // La suma compensada, y lo que quedo pendiente de compensar.
+    // The compensated sum, and what is left pending compensation.
     private double sum;
     private double sumCompensation;
 
-    // La suma ingenua, solo para desempatar el caso NaN/infinito de `getSum`.
+    // The naive sum, only to break the NaN/infinity tie in `getSum`.
     private double simpleSum;
 
     private double min = Double.POSITIVE_INFINITY;
     private double max = Double.NEGATIVE_INFINITY;
 
-    // Un resumen vacio. Los extremos arrancan en los infinitos opuestos, por lo mismo que en las
-    // versiones enteras: para que el primer `accept` los fije sin un caso aparte.
+    // An empty summary. The extremes start at the opposite infinities, for the same reason as in the
+    // integer versions: so the first `accept` sets them with no special case.
     public DoubleSummaryStatistics() {
     }
 
-    // Un resumen con valores ya calculados, para reconstruir uno guardado.
+    // A summary with values already computed, for rebuilding a stored one.
     public DoubleSummaryStatistics(long count, double min, double max, double sum) {
         if (count < 0) {
             throw new IllegalArgumentException("Negative count value");
@@ -42,8 +42,8 @@ public class DoubleSummaryStatistics implements DoubleConsumer {
                 throw new IllegalArgumentException("Minimum greater than maximum");
             }
             if (!Double.isNaN(min) && !Double.isNaN(max) && !Double.isNaN(sum)) {
-                double promedio = sum / count;
-                if (promedio < min || promedio > max) {
+                double average = sum / count;
+                if (average < min || average > max) {
                     throw new IllegalArgumentException("Average is out of range");
                 }
             }
@@ -56,33 +56,33 @@ public class DoubleSummaryStatistics implements DoubleConsumer {
         this.max = max;
     }
 
-    // Suma un valor al resumen.
+    // It adds a value to the summary.
     public void accept(double value) {
         this.count = this.count + 1;
         this.simpleSum = this.simpleSum + value;
-        this.sumaCompensada(value);
+        this.compensatedSum(value);
         this.min = Math.min(this.min, value);
         this.max = Math.max(this.max, value);
     }
 
-    // Un paso de Kahan: `sumCompensation` guarda lo que la suma anterior no pudo representar, se
-    // lo descuenta al sumando nuevo, y despues se recalcula cuanto quedo pendiente esta vez.
-    private void sumaCompensada(double value) {
-        double ajustado = value - this.sumCompensation;
-        double nueva = this.sum + ajustado;
-        this.sumCompensation = (nueva - this.sum) - ajustado;
-        this.sum = nueva;
+    // One Kahan step: `sumCompensation` holds what the previous addition could not represent, it is
+    // discounted from the new addend, and then how much is left pending this time is recomputed.
+    private void compensatedSum(double value) {
+        double adjusted = value - this.sumCompensation;
+        double fresh = this.sum + adjusted;
+        this.sumCompensation = (fresh - this.sum) - adjusted;
+        this.sum = fresh;
     }
 
-    // Absorbe otro resumen.
+    // It absorbs another summary.
     //
-    // Se suman las dos partes de Kahan del otro por separado —la suma y, con signo cambiado, su
-    // pendiente— para no perder la compensacion que el otro venia acarreando.
+    // The other's two Kahan parts are added separately —the sum and, with the sign changed, its
+    // pending part— so as not to lose the compensation the other was carrying.
     public void combine(DoubleSummaryStatistics other) {
         this.count = this.count + other.count;
         this.simpleSum = this.simpleSum + other.simpleSum;
-        this.sumaCompensada(other.sum);
-        this.sumaCompensada(-other.sumCompensation);
+        this.compensatedSum(other.sum);
+        this.compensatedSum(-other.sumCompensation);
         this.min = Math.min(this.min, other.min);
         this.max = Math.max(this.max, other.max);
     }
@@ -91,30 +91,30 @@ public class DoubleSummaryStatistics implements DoubleConsumer {
         return this.count;
     }
 
-    // La suma, compensada.
+    // The sum, compensated.
     //
-    // El desempate: si la compensada dio NaN pero la ingenua dio infinito, gana la ingenua. Es el
-    // caso de sumar infinitos de signos opuestos, donde la correccion de Kahan produce un NaN que
-    // no describe el resultado.
+    // The tie-break: if the compensated one gave NaN but the naive one gave infinity, the naive one
+    // wins. It is the case of adding infinities of opposite signs, where Kahan's correction produces
+    // a NaN that does not describe the result.
     public final double getSum() {
-        double compensada = this.sum - this.sumCompensation;
-        if (Double.isNaN(compensada) && Double.isInfinite(this.simpleSum)) {
+        double compensated = this.sum - this.sumCompensation;
+        if (Double.isNaN(compensated) && Double.isInfinite(this.simpleSum)) {
             return this.simpleSum;
         }
-        return compensada;
+        return compensated;
     }
 
-    // El minimo, o POSITIVE_INFINITY si no se acepto nada. NaN si algun valor lo era.
+    // The minimum, or POSITIVE_INFINITY if nothing was accepted. NaN if any value was.
     public final double getMin() {
         return this.min;
     }
 
-    // El maximo, o NEGATIVE_INFINITY si no se acepto nada. NaN si algun valor lo era.
+    // The maximum, or NEGATIVE_INFINITY if nothing was accepted. NaN if any value was.
     public final double getMax() {
         return this.max;
     }
 
-    // El promedio, o 0.0 si no se acepto nada.
+    // The average, or 0.0 if nothing was accepted.
     public final double getAverage() {
         if (this.count > 0) {
             return this.getSum() / this.count;

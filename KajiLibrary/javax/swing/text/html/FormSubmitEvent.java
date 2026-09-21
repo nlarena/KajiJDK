@@ -6,23 +6,24 @@ import javax.swing.event.HyperlinkEvent$EventType;
 import javax.swing.text.Element;
 
 /**
- * El envio de un formulario, contado como si fuera un enlace.
+ * A form submission, reported as if it were a link.
  *
- * <h2>Por que es un evento de enlace</h2>
+ * <h2>Why it is a link event</h2>
  *
- * <p>Enviar un formulario y seguir un enlace terminan igual: hay que cargar un documento de una
- * direccion. Hacer que el envio llegue por el mismo camino permite que un programa que ya sabe
- * atender enlaces atienda tambien los formularios sin cambiar nada.
+ * <p>Submitting a form and following a link end up the same: a document from an address has to be
+ * loaded. Making the submission arrive by the same path allows a program that already knows how
+ * to attend to links to attend to forms too without changing anything.
  *
- * <p>Lo que agrega es lo unico que el enlace no puede llevar: el metodo ({@code GET} o
- * {@code POST}) y los datos ya armados. En un {@code GET} los datos ademas van pegados a la
- * direccion; en un {@code POST} solo estan aca, y quien no mire {@link #getData} los pierde.
+ * <p>What it adds is the only thing the link cannot carry: the method ({@code GET} or
+ * {@code POST}) and the data already assembled. In a {@code GET} the data also goes stuck to the
+ * address; in a {@code POST} it is only here, and whoever does not look at {@link #getData} loses
+ * it.
  *
- * <h2>No se construye desde afuera</h2>
+ * <h2>It is not built from outside</h2>
  *
- * <p>La clase es final y su constructor no es publico: los crea el {@link FormView} al enviar. Que
- * un programa fabricara uno no tendria sentido, porque no habria formulario del que salieran los
- * datos.
+ * <p>The class is final and its constructor is not public: the {@link FormView} creates them on
+ * submitting. For a program to build one would make no sense, because there would be no form for
+ * the data to come from.
  */
 public final class FormSubmitEvent extends HTMLFrameHyperlinkEvent {
 
@@ -36,17 +37,17 @@ public final class FormSubmitEvent extends HTMLFrameHyperlinkEvent {
         this.data = data;
     }
 
-    /** {@code GET} o {@code POST}. */
+    /** {@code GET} or {@code POST}. */
     public MethodType getMethod() {
         return method;
     }
 
-    /** Los datos del formulario, ya codificados. */
+    /** The form's data, already encoded. */
     public String getData() {
         return data;
     }
 
-    /** Los dos metodos que un formulario de HTML puede usar. */
+    /** The two methods an HTML form may use. */
     public enum MethodType {
         GET, POST
     }

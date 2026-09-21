@@ -3,55 +3,57 @@ package java.security.cert;
 import java.io.Serializable;
 import java.security.GeneralSecurityException;
 
-// La validacion de un camino de certificacion fallo, y **donde** y **por que**.
+// The validation of a certification path failed, and **where** and **why**.
 //
-// Es la excepcion mas informativa del paquete y con razon: cuando una cadena TLS no valida, saber
-// que fallo no alcanza —hay que saber en que eslabon y si fue por fecha, por firma o por
-// revocacion. Por eso lleva el camino, el indice del certificado que la provoco y una razon.
+// It is the most informative exception of the package and with reason: when a TLS chain does not
+// validate, knowing that it failed is not enough —one has to know in which link and whether it was
+// because of the date, the signature or the revocation. That is why it carries the path, the index
+// of the certificate that caused it and a reason.
 //
-// La razon es una **interfaz** y no un enum cerrado, y esa es la decision de diseño que importa:
-// `BasicReason` cubre lo que vale para cualquier PKI, `PKIXReason` agrega lo especifico de PKIX, y
-// un validador de otro tipo puede aportar las suyas sin que haya que tocar esta clase. Un enum
-// habria congelado la lista en el JDK 1.5.
+// The reason is an **interface** and not a closed enum, and that is the design decision that
+// matters: `BasicReason` covers what holds for any PKI, `PKIXReason` adds what is specific to PKIX,
+// and a validator of another type can contribute its own without this class having to be touched.
+// An enum would have frozen the list in JDK 1.5.
 //
-// El indice es -1 cuando no se sabe cual fue el certificado culpable, y esa es la unica forma legal
-// de decirlo: los indices reales son posiciones dentro del camino, y el constructor lo verifica.
+// The index is -1 when it is not known which certificate was the guilty one, and that is the only
+// legal way of saying it: the real indices are positions inside the path, and the constructor
+// checks it.
 public class CertPathValidatorException extends GeneralSecurityException {
 
     private static final long serialVersionUID = -3083180014971893139L;
 
-    // La razon por la que fallo. Es `Serializable` porque viaja dentro de la excepcion, que
-    // tambien lo es; no declara ningun metodo porque su unico proposito es ser una constante
-    // identificable.
+    // The reason it failed. It is `Serializable` because it travels inside the exception, which is
+    // too; it declares no method because its only purpose is to be an identifiable constant.
     public interface Reason extends Serializable {
     }
 
-    // Las razones que valen para cualquier PKI, no solo PKIX.
+    // The reasons that hold for any PKI, not only PKIX.
     public enum BasicReason implements Reason {
 
-        // Fallo, pero no se sabe por que. Es el default de todos los constructores que no reciben
-        // razon: decir "no se" es correcto, inventar una razon no.
+        // It failed, but it is not known why. It is the default of every constructor that does not
+        // receive a reason: saying "I do not know" is right, inventing a reason is not.
         UNSPECIFIED,
 
-        // El certificado vencio.
+        // The certificate expired.
         EXPIRED,
 
-        // El certificado todavia no entro en vigencia.
+        // The certificate has not come into force yet.
         NOT_YET_VALID,
 
-        // El emisor lo revoco.
+        // The issuer revoked it.
         REVOKED,
 
-        // No se pudo averiguar si esta revocado. Es **distinto** de "no esta revocado" y confundir
-        // los dos es el error clasico: aceptar un certificado cuyo estado no se pudo consultar es
-        // exactamente lo que un atacante que bloquea el OCSP quiere que pase.
+        // It could not be found out whether it is revoked. It is **different** from "it is not
+        // revoked" and confusing the two is the classic mistake: accepting a certificate whose
+        // state could not be consulted is exactly what an attacker who blocks the OCSP wants to
+        // happen.
         UNDETERMINED_REVOCATION_STATUS,
 
-        // La firma no valida.
+        // The signature does not validate.
         INVALID_SIGNATURE,
 
-        // El algoritmo esta prohibido por politica: no es que la firma este mal, es que ese
-        // algoritmo ya no se acepta.
+        // The algorithm is forbidden by policy: it is not that the signature is wrong, it is that
+        // that algorithm is no longer accepted.
         ALGORITHM_CONSTRAINED
     }
 
@@ -67,7 +69,7 @@ public class CertPathValidatorException extends GeneralSecurityException {
         this(msg, null);
     }
 
-    // Toma el mensaje de la causa, igual que el resto de la jerarquia.
+    // It takes the message from the cause, just like the rest of the hierarchy.
     public CertPathValidatorException(Throwable cause) {
         this((cause == null ? null : cause.toString()), cause);
     }
@@ -83,7 +85,7 @@ public class CertPathValidatorException extends GeneralSecurityException {
     public CertPathValidatorException(String msg, Throwable cause, CertPath certPath, int index,
                                       Reason reason) {
         super(msg, cause);
-        // Un indice sin camino no señala nada: si no hay camino el indice tiene que ser -1.
+        // An index with no path points at nothing: if there is no path the index has to be -1.
         if (certPath == null && index != -1) {
             throw new IllegalArgumentException();
         }
@@ -98,17 +100,17 @@ public class CertPathValidatorException extends GeneralSecurityException {
         this.reason = reason;
     }
 
-    // El camino que fallo, o null si no se dio.
+    // The path that failed, or null if it was not given.
     public CertPath getCertPath() {
         return this.certPath;
     }
 
-    // La posicion del certificado culpable dentro del camino, o -1 si no se sabe.
+    // The position of the guilty certificate inside the path, or -1 if it is not known.
     public int getIndex() {
         return this.index;
     }
 
-    // Nunca null: en el peor caso es `BasicReason.UNSPECIFIED`.
+    // Never null: in the worst case it is `BasicReason.UNSPECIFIED`.
     public Reason getReason() {
         return this.reason;
     }

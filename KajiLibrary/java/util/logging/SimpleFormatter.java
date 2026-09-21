@@ -1,11 +1,12 @@
 package java.util.logging;
 
 /**
- * KajiLibrary's java.util.logging.SimpleFormatter -- dos lineas por mensaje.
+ * KajiLibrary's java.util.logging.SimpleFormatter -- two lines per message.
  *
- * <p>La primera lleva el instante, el origen y el logger; la segunda el nivel y el mensaje. Es lo que
- * se ve por omision en la consola, y la razon de que sean **dos** lineas es que la primera es larga y
- * casi siempre la misma: poner el mensaje aparte lo deja alineado y legible.
+ * <p>The first carries the instant, the source and the logger; the second the level and the message.
+ * It is what is seen by default on the console, and the reason there are **two** lines is that the
+ * first is long and almost always the same: putting the message on its own leaves it aligned and
+ * legible.
  */
 public class SimpleFormatter extends Formatter {
 

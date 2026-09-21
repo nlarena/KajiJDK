@@ -5,40 +5,41 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * Une una lista de textos como los une un idioma: {@code "a, b y c"}, no {@code "[a, b, c]"}.
+ * It joins a list of texts the way a language joins them: {@code "a, b and c"}, not
+ * {@code "[a, b, c]"}.
  *
- * <p>Parece trivial y no lo es. La conjunción no va entre todos los elementos sino sólo antes del
- * último; el separador de los del medio puede no ser el mismo que el del primer par; y hay idiomas
- * donde una lista de dos se escribe distinto que las dos primeras de una lista de tres. Por eso los
- * patrones son CINCO y no uno: {@code start}, {@code middle}, {@code end}, {@code two} y
- * {@code three}.
+ * <p>It looks trivial and it is not. The conjunction does not go between every element but only
+ * before the last; the separator of the middle ones may not be the same as the first pair's; and
+ * there are languages where a list of two is written differently from the first two of a list of
+ * three. That is why the patterns are FIVE and not one: {@code start}, {@code middle},
+ * {@code end}, {@code two} and {@code three}.
  *
- * <p>Una lista larga se arma componiendo: {@code start} junta los dos primeros, {@code middle} va
- * agregando, y {@code end} pega el último. Las de dos y de tres tienen patrón propio porque en
- * varios idiomas no son un caso particular de la fórmula general.
+ * <p>A long list is built by composing: {@code start} joins the first two, {@code middle} keeps
+ * adding, and {@code end} attaches the last. Those of two and of three have a pattern of their own
+ * because in several languages they are not a particular case of the general formula.
  *
- * @implNote Las tres fábricas están. Esta nota decía que las dos localizadas quedaban afuera porque
- *           los patrones por locale son datos del CLDR —la "y", la "o", la coma que en japonés es
- *           {@code U+3001}— y poner "and"/"or" para todos daría un resultado plausible y falso en la
- *           mayoría. Sigue siendo cierto lo segundo; lo que cambió es que los datos ya no se
- *           inventan: la tabla trae los patrones <b>exactos</b> de los mismos seis locales que cubre
- *           {@link DecimalFormatSymbols}, extraídos del JDK 25 y no transcriptos a mano, y un locale
- *           desconocido cae en ROOT — que es lo que hace el JDK con un locale del que no tiene
- *           datos.
+ * @implNote All three factories are here. This note used to say the two localised ones were left
+ *           out because the per-locale patterns are CLDR data --the "and", the "or", the comma that
+ *           in Japanese is {@code U+3001}-- and putting "and"/"or" for everyone would give a
+ *           plausible and false result for most. The second half is still true; what changed is that
+ *           the data is no longer invented: the table carries the <b>exact</b> patterns of the same
+ *           six locales {@link DecimalFormatSymbols} covers, extracted from JDK 25 and not
+ *           transcribed by hand, and an unknown locale falls back to ROOT -- which is what the JDK
+ *           does with a locale it has no data for.
  *
- * @implNote Lo que sigue siendo un subconjunto son los DATOS, no la superficie: seis locales y no
- *           los cientos del JDK. Ampliarlo es agregar filas a la tabla, no escribir código.
+ * @implNote What remains a subset is the DATA, not the surface: six locales and not the JDK's
+ *           hundreds. Widening it is adding rows to the table, not writing code.
  */
 public final class ListFormat extends Format {
 
-    /** Qué relación tiene la lista: enumeración, alternativa o unidades compuestas. */
+    /** What relation the list has: enumeration, alternative, or compound units. */
     public static enum Type {
         STANDARD,
         OR,
         UNIT
     }
 
-    /** Qué tan larga es la forma de la conjunción. */
+    /** How long the conjunction's form is. */
     public static enum Style {
         FULL,
         SHORT,
@@ -60,23 +61,24 @@ public final class ListFormat extends Format {
     }
 
     /**
-     * Los locales con datos propios.
+     * The locales with data of their own.
      *
-     * <p>Son <b>los mismos</b> que los de {@link DecimalFormatSymbols}, y no por casualidad: esta
-     * clase lee su tabla con el mismo índice, así que las dos cubren exactamente el mismo conjunto.
-     * Atarlas es lo que evita el estado incómodo de tener símbolos de un locale y patrones de otro.
+     * <p>They are <b>the same</b> as {@link DecimalFormatSymbols}'s, and not by chance: this class
+     * reads its table with the same index, so both cover exactly the same set. Tying them together
+     * is what avoids the awkward state of having one locale's symbols and another's patterns.
      */
     public static Locale[] getAvailableLocales() {
         return DecimalFormatSymbols.getAvailableLocales();
     }
 
     /**
-     * El formateador de listas del locale por omisión, en la forma estándar y larga.
+     * The default locale's list formatter, in the standard, full form.
      *
-     * <p>Es {@code getInstance(Locale.getDefault(FORMAT), Type.STANDARD, Style.FULL)}, que es lo
-     * que el contrato define. La categoría es {@code FORMAT} y no el default a secas: en una máquina
-     * donde el locale de presentación y el de formato difieren --pasa, y se vio contra el JDK 25--
-     * son dos respuestas distintas, y la que este método promete es la de formato.
+     * <p>It is {@code getInstance(Locale.getDefault(FORMAT), Type.STANDARD, Style.FULL)}, which is
+     * what the contract defines. The category is {@code FORMAT} and not the plain default: on a
+     * machine where the display locale and the format locale differ --it happens, and it was checked
+     * against JDK 25-- they are two different answers, and the one this method promises is the format
+     * one.
      */
     public static ListFormat getInstance() {
         return ListFormat.getInstance(Locale.getDefault(Locale.Category.FORMAT), Type.STANDARD,
@@ -84,39 +86,38 @@ public final class ListFormat extends Format {
     }
 
     /**
-     * El formateador de listas de ese locale, tipo y estilo.
+     * That locale, type and style's list formatter.
      *
-     * <p>Un locale sin datos propios cae en ROOT, que es lo mismo que hace el JDK con un locale del
-     * que no tiene datos — no una aproximación de esta biblioteca.
+     * <p>A locale with no data of its own falls back to ROOT, which is the same as what the JDK does
+     * with a locale it has no data for -- not an approximation of this library's.
      *
-     * @throws NullPointerException si alguno de los tres es null
+     * @throws NullPointerException if any of the three is null
      */
     public static ListFormat getInstance(Locale locale, Type type, Style style) {
         if (locale == null || type == null || style == null) {
             throw new NullPointerException();
         }
-        String[] fila = ListFormat.tabla(type, style)[DecimalFormatSymbols.indexOf(locale)];
-        String[] copia = new String[5];
+        String[] row = ListFormat.table(type, style)[DecimalFormatSymbols.indexOf(locale)];
+        String[] copy = new String[5];
         for (int i = 0; i < 5; i = i + 1) {
-            copia[i] = fila[i];
+            copy[i] = row[i];
         }
-        return new ListFormat(locale, copia);
+        return new ListFormat(locale, copy);
     }
 
-    // Los patrones del CLDR, en el orden [start, middle, end, two, three] y con una fila por locale,
-    // en el mismo orden que la tabla de `DecimalFormatSymbols`: und, en-US, es-AR, de-DE, fr-FR,
-    // ja-JP. Index 0 es ROOT, que además es la caída.
+    // The CLDR's patterns, in the order [start, middle, end, two, three] and with one row per
+    // locale, in the same order as `DecimalFormatSymbols`'s table: und, en-US, es-AR, de-DE, fr-FR,
+    // ja-JP. Index 0 is ROOT, which is also the fallback.
     //
-    // **No están transcriptos a mano.** Se extrajeron del JDK 25 formateando listas con marcadores
-    // únicos y mirando qué quedó entre ellos: un patrón de lista del CLDR siempre tiene la forma
-    // `{0}<literal>{1}`, así que el literal es exactamente el texto que separa dos marcadores. Se
-    // hizo así porque estos datos son texto traducido y una coma de más en el locale equivocado no
-    // la ve nadie hasta que la ve un usuario.
+    // **They are not transcribed by hand.** They were extracted from JDK 25 by formatting lists with
+    // unique markers and looking at what was left between them: a CLDR list pattern always has the
+    // shape `{0}<literal>{1}`, so the literal is exactly the text separating two markers. It was done
+    // this way because this data is translated text and one comma too many in the wrong locale is
+    // seen by nobody until a user sees it.
     //
-    // Todo carácter no ASCII va como escape `\uXXXX`, por la misma razón que en
-    // `DecimalFormatSymbols`: la fuente queda ASCII y no la puede corromper un percance de
-    // codificación.
-    private static String[][] tabla(Type type, Style style) {
+    // Every non-ASCII character goes in as a `\uXXXX` escape, for the same reason as in
+    // `DecimalFormatSymbols`: the source stays ASCII and no encoding mishap can corrupt it.
+    private static String[][] table(Type type, Style style) {
         if (type == Type.STANDARD) {
             if (style == Style.FULL) {
                 return new String[][] {
@@ -152,8 +153,8 @@ public final class ListFormat extends Format {
             };
         }
         if (type == Type.OR) {
-            // Las tres formas de OR coinciden en los cinco locales latinos; la japonesa usa
-            // "\u307e\u305f\u306f" (mataha) en las tres.
+            // The three OR forms matches in the five Latin locales; the Japanese one uses
+            // "\u307e\u305f\u306f" (mataha) in all three.
             return new String[][] {
                 {"{0}, {1}", "{0}, {1}", "{0}, or {1}", "{0} or {1}", "{0}, {1}, or {2}"},
                 {"{0}, {1}", "{0}, {1}", "{0}, or {1}", "{0} or {1}", "{0}, {1}, or {2}"},
@@ -196,12 +197,12 @@ public final class ListFormat extends Format {
     }
 
     /**
-     * Arma un formateador con los cinco patrones dados, en el orden
+     * It builds a formatter with the five patterns given, in the order
      * {@code [start, middle, end, two, three]}.
      *
-     * @throws IllegalArgumentException si el arreglo no tiene cinco entradas, o si alguna no
-     *         referencia los argumentos que le corresponden. La validación es lo que impide que un
-     *         patrón mal escrito se descubra recién al formatear, con una lista en la mano.
+     * @throws IllegalArgumentException if the array does not have five entries, or if one of them
+     *         does not reference the arguments it should. The validation is what stops a badly
+     *         written pattern being discovered only when formatting, with a list in hand.
      */
     public static ListFormat getInstance(String[] patterns) {
         if (patterns == null) {
@@ -210,33 +211,33 @@ public final class ListFormat extends Format {
         if (patterns.length != 5) {
             throw new IllegalArgumentException("Pattern array length should be 5");
         }
-        String[] copia = new String[5];
+        String[] copy = new String[5];
         for (int i = 0; i < 5; i = i + 1) {
-            copia[i] = patterns[i];
+            copy[i] = patterns[i];
         }
-        ListFormat.verificar(copia[ListFormat.START], 2, "start");
-        ListFormat.verificar(copia[ListFormat.MIDDLE], 2, "middle");
-        ListFormat.verificar(copia[ListFormat.END], 2, "end");
-        ListFormat.verificar(copia[ListFormat.TWO], 2, "two");
-        ListFormat.verificar(copia[ListFormat.THREE], 3, "three");
-        return new ListFormat(Locale.ROOT, copia);
+        ListFormat.check(copy[ListFormat.START], 2, "start");
+        ListFormat.check(copy[ListFormat.MIDDLE], 2, "middle");
+        ListFormat.check(copy[ListFormat.END], 2, "end");
+        ListFormat.check(copy[ListFormat.TWO], 2, "two");
+        ListFormat.check(copy[ListFormat.THREE], 3, "three");
+        return new ListFormat(Locale.ROOT, copy);
     }
 
-    private static void verificar(String patron, int cuantos, String nombre) {
-        if (patron == null) {
+    private static void check(String pattern, int count, String name) {
+        if (pattern == null) {
             throw new NullPointerException();
         }
-        for (int i = 0; i < cuantos; i = i + 1) {
-            if (patron.indexOf("{" + Integer.toString(i) + "}") < 0) {
-                throw new IllegalArgumentException("pattern for " + nombre + " is incorrect: "
-                        + patron);
+        for (int i = 0; i < count; i = i + 1) {
+            if (pattern.indexOf("{" + Integer.toString(i) + "}") < 0) {
+                throw new IllegalArgumentException("pattern for " + name + " is incorrect: "
+                        + pattern);
             }
         }
     }
 
     /**
-     * El locale de este formateador. Para uno armado con patrones explícitos es {@code ROOT}: los
-     * patrones no vinieron de ningún locale y decir otra cosa sería atribuirles un origen.
+     * This formatter's locale. For one built with explicit patterns it is {@code ROOT}: the patterns
+     * came from no locale and saying otherwise would attribute an origin to them.
      */
     public Locale getLocale() {
         return this.locale;
@@ -255,18 +256,18 @@ public final class ListFormat extends Format {
     }
 
     public StringBuffer format(Object obj, StringBuffer toAppendTo, FieldPosition pos) {
-        List<String> lista = ListFormat.aLista(obj);
-        MessageFormat mf = new MessageFormat(this.patronPara(lista.size()), this.locale);
-        return mf.format(lista.toArray(), toAppendTo, pos);
+        List<String> list = ListFormat.toList(obj);
+        MessageFormat mf = new MessageFormat(this.patternFor(list.size()), this.locale);
+        return mf.format(list.toArray(), toAppendTo, pos);
     }
 
     public AttributedCharacterIterator formatToCharacterIterator(Object obj) {
-        List<String> lista = ListFormat.aLista(obj);
-        MessageFormat mf = new MessageFormat(this.patronPara(lista.size()), this.locale);
-        return mf.formatToCharacterIterator(lista.toArray());
+        List<String> list = ListFormat.toList(obj);
+        MessageFormat mf = new MessageFormat(this.patternFor(list.size()), this.locale);
+        return mf.formatToCharacterIterator(list.toArray());
     }
 
-    private static List<String> aLista(Object obj) {
+    private static List<String> toList(Object obj) {
         if (obj == null) {
             throw new NullPointerException();
         }
@@ -297,9 +298,9 @@ public final class ListFormat extends Format {
         return out;
     }
 
-    // El patrón de MessageFormat que corresponde a N elementos. Uno solo no se junta con nada; dos
-    // y tres tienen patrón propio; de cuatro en adelante se compone start + middle... + end.
-    private String patronPara(int n) {
+    // The MessageFormat pattern that corresponds to N elements. One alone joins with nothing; two
+    // and three have a pattern of their own; from four on it composes start + middle... + end.
+    private String patternFor(int n) {
         if (n == 1) {
             return "{0}";
         }
@@ -319,43 +320,43 @@ public final class ListFormat extends Format {
             } else {
                 p = this.patterns[ListFormat.MIDDLE];
             }
-            acc = ListFormat.sustituir(p, acc, "{" + Integer.toString(i) + "}");
+            acc = ListFormat.substitute(p, acc, "{" + Integer.toString(i) + "}");
         }
         return acc;
     }
 
-    // Sustitución textual de {0} y {1}, hecha en UNA pasada: reemplazar {0} y después {1} sobre el
-    // resultado volvería a tocar las llaves que acaba de insertar el primer reemplazo.
-    private static String sustituir(String patron, String cero, String uno) {
+    // Textual substitution of {0} and {1}, done in ONE pass: replacing {0} and then {1} over the
+    // result would touch again the braces the first replacement had just inserted.
+    private static String substitute(String pattern, String zero, String one) {
         StringBuilder sb = new StringBuilder();
         int i = 0;
-        while (i < patron.length()) {
-            if (i + 2 < patron.length() && patron.charAt(i) == '{' && patron.charAt(i + 2) == '}') {
-                char d = patron.charAt(i + 1);
+        while (i < pattern.length()) {
+            if (i + 2 < pattern.length() && pattern.charAt(i) == '{' && pattern.charAt(i + 2) == '}') {
+                char d = pattern.charAt(i + 1);
                 if (d == '0') {
-                    sb.append(cero);
+                    sb.append(zero);
                     i = i + 3;
                     continue;
                 }
                 if (d == '1') {
-                    sb.append(uno);
+                    sb.append(one);
                     i = i + 3;
                     continue;
                 }
             }
-            sb.append(patron.charAt(i));
+            sb.append(pattern.charAt(i));
             i = i + 1;
         }
         return sb.toString();
     }
 
     /**
-     * Recupera la lista de un texto que este formateador podría haber producido.
+     * It recovers the list out of a text this formatter could have produced.
      *
-     * <p>Se prueba con una cantidad de elementos y otra hasta que una encaje entera, empezando por
-     * la más grande posible. De la más grande a la más chica y no al revés: con patrones donde el
-     * separador del medio aparece también dentro del último par, la lectura corta encajaría igual y
-     * se comería elementos.
+     * <p>One element count after another is tried until one fits whole, starting from the largest
+     * possible. Largest to smallest and not the other way round: with patterns where the middle
+     * separator also appears inside the last pair, the short reading would fit just as well and would
+     * swallow elements.
      */
     public List<String> parse(String source) throws ParseException {
         ParsePosition pos = new ParsePosition(0);
@@ -370,11 +371,11 @@ public final class ListFormat extends Format {
         if (source == null) {
             throw new NullPointerException();
         }
-        int inicio = parsePos.getIndex();
-        int maximo = source.length() + 1;
-        for (int n = maximo; n >= 1; n = n - 1) {
-            MessageFormat mf = new MessageFormat(this.patronPara(n), this.locale);
-            ParsePosition p = new ParsePosition(inicio);
+        int start = parsePos.getIndex();
+        int max = source.length() + 1;
+        for (int n = max; n >= 1; n = n - 1) {
+            MessageFormat mf = new MessageFormat(this.patternFor(n), this.locale);
+            ParsePosition p = new ParsePosition(start);
             Object[] got = mf.parse(source, p);
             if (got != null && p.getIndex() == source.length() && got.length == n) {
                 List<String> out = new ArrayList<String>();
@@ -392,7 +393,7 @@ public final class ListFormat extends Format {
                 }
             }
         }
-        parsePos.setErrorIndex(inicio);
+        parsePos.setErrorIndex(start);
         return null;
     }
 

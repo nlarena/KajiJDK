@@ -1,43 +1,44 @@
 package javax.sound.sampled;
 
 /**
- * KajiLibrary's javax.sound.sampled.ReverbType -- un ambiente de reverberacion.
+ * KajiLibrary's javax.sound.sampled.ReverbType -- a reverb environment.
  *
- * <p>Describe como suena un espacio, con cinco numeros: cuando llegan los primeros rebotes, con que
- * fuerza, cuando llegan los tardios, con que fuerza, y cuanto tarda todo en apagarse.
+ * <p>It describes how a space sounds, with five numbers: when the first reflections arrive, how
+ * strong, when the late ones arrive, how strong, and how long everything takes to die away.
  *
- * <p>Los dos grupos de rebotes son lo que distingue un ambiente de otro. Los <b>tempranos</b> son los
- * pocos rebotes que llegan por separado y le dicen al oido el tamano del cuarto; los <b>tardios</b>
- * son la nube de rebotes ya indistinguibles, y dan la sensacion de material y de amplitud.
+ * <p>The two groups of reflections are what tells one environment from another. The <b>early</b>
+ * ones are the few reflections that arrive separately and tell the ear the size of the room; the
+ * <b>late</b> ones are the cloud of reflections no longer distinguishable, and they give the sense
+ * of material and of spaciousness.
  *
- * <p>El constructor es protegido: los ambientes los define quien provee el mezclador, y se consiguen
- * por un {@link EnumControl} de tipo {@link EnumControl.Type#REVERB}.
+ * <p>The constructor is protected: the environments are defined by whoever provides the mixer, and
+ * they are obtained through an {@link EnumControl} of type {@link EnumControl.Type#REVERB}.
  *
- * <p>La igualdad es por identidad --{@code this == obj}--, no por los cinco numeros. Dos ambientes con
- * los mismos valores pero de mezcladores distintos son distintos, que es lo que corresponde: no son
- * intercambiables.
+ * <p>Equality is by identity --{@code this == obj}--, not by the five numbers. Two environments
+ * with the same values but from different mixers are different, which is right: they are not
+ * interchangeable.
  */
 public class ReverbType {
 
-    /** Como se llama. */
+    /** What it is called. */
     private final String name;
 
-    /** Microsegundos hasta los primeros rebotes. */
+    /** Microseconds until the first reflections. */
     private final int earlyReflectionDelay;
 
-    /** Su fuerza, en decibeles. */
+    /** Their strength, in decibels. */
     private final float earlyReflectionIntensity;
 
-    /** Microsegundos hasta los rebotes tardios. */
+    /** Microseconds until the late reflections. */
     private final int lateReflectionDelay;
 
-    /** Su fuerza, en decibeles. */
+    /** Their strength, in decibels. */
     private final float lateReflectionIntensity;
 
-    /** Microsegundos hasta que se apaga. */
+    /** Microseconds until it dies away. */
     private final int decayTime;
 
-    /** Protegido: los ambientes los define el proveedor del mezclador. */
+    /** Protected: the environments are defined by the mixer's provider. */
     protected ReverbType(String name, int earlyReflectionDelay, float earlyReflectionIntensity,
                          int lateReflectionDelay, float lateReflectionIntensity, int decayTime) {
         this.name = name;
@@ -48,53 +49,53 @@ public class ReverbType {
         this.decayTime = decayTime;
     }
 
-    /** Como se llama. */
+    /** What it is called. */
     public String getName() {
         return this.name;
     }
 
-    /** Microsegundos hasta los primeros rebotes. */
+    /** Microseconds until the first reflections. */
     public final int getEarlyReflectionDelay() {
         return this.earlyReflectionDelay;
     }
 
-    /** Su fuerza, en decibeles. */
+    /** Their strength, in decibels. */
     public final float getEarlyReflectionIntensity() {
         return this.earlyReflectionIntensity;
     }
 
-    /** Microsegundos hasta los rebotes tardios. */
+    /** Microseconds until the late reflections. */
     public final int getLateReflectionDelay() {
         return this.lateReflectionDelay;
     }
 
-    /** Su fuerza, en decibeles. */
+    /** Their strength, in decibels. */
     public final float getLateReflectionIntensity() {
         return this.lateReflectionIntensity;
     }
 
-    /** Microsegundos hasta que se apaga. */
+    /** Microseconds until it dies away. */
     public final int getDecayTime() {
         return this.decayTime;
     }
 
-    /** Por identidad. Ver la nota de la clase. */
+    /** By identity. See the class note. */
     @Override
     public final boolean equals(Object obj) {
         return super.equals(obj);
     }
 
-    /** El de identidad. */
+    /** The identity one. */
     @Override
     public final int hashCode() {
         return super.hashCode();
     }
 
     /**
-     * El nombre y los cinco numeros.
+     * The name and the five numbers.
      *
-     * <p>Dice {@code "late deflection delay"} donde deberia decir {@code "reflection"}. Es una errata
-     * del JDK que esta ahi desde 1999 y se conserva: hay pruebas que comparan este texto.
+     * <p>It says {@code "late deflection delay"} where it should say {@code "reflection"}. It is a
+     * JDK typo that has been there since 1999 and is kept: there are tests that compare this text.
      */
     @Override
     public final String toString() {

@@ -5,69 +5,70 @@ import java.net.ServerSocket;
 import java.net.Socket;
 
 /**
- * La fabrica de sockets que RMI usa cuando un objeto no trae la suya.
+ * The socket factory RMI uses when an object does not bring its own.
  *
- * <p>Implementa las dos interfaces, y esa union tiene sentido justo aca: es la configuracion
- * <strong>global</strong> del proceso, donde los dos lados se fijan juntos. Las fabricas por objeto
- * van por separado, porque la del cliente viaja y la del servidor no — ver
+ * <p>It implements both interfaces, and that union makes sense right here: this is the
+ * <strong>global</strong> configuration of the process, where the two sides are set together. The
+ * per-object factories go separately, because the client's travels and the server's does not — see
  * {@link RMIClientSocketFactory}.
  *
- * <p>{@link #setSocketFactory} se puede llamar <strong>una sola vez</strong>. No es capricho:
- * cambiarla con conexiones abiertas dejaria sockets creados por una fabrica y cerrados por otra.
+ * <p>{@link #setSocketFactory} can be called <strong>only once</strong>. That is not a whim:
+ * changing it with open connections would leave sockets created by one factory and closed by
+ * another.
  */
 public abstract class RMISocketFactory implements RMIClientSocketFactory, RMIServerSocketFactory {
 
-    private static RMISocketFactory laElegida;
-    private static RMISocketFactory laDefault;
-    private static RMIFailureHandler manejador;
+    private static RMISocketFactory chosen;
+    private static RMISocketFactory defaultFactory;
+    private static RMIFailureHandler failureHandler;
 
-    /** Para las implementaciones. */
+    /** For the implementations. */
     public RMISocketFactory() {
     }
 
-    /** Abre una conexion al servidor. */
+    /** It opens a connection to the server. */
     public abstract Socket createSocket(String host, int port) throws IOException;
 
-    /** Abre un socket de escucha. */
+    /** It opens a listening socket. */
     public abstract ServerSocket createServerSocket(int port) throws IOException;
 
     /**
-     * Fija la fabrica global.
+     * It sets the global factory.
      *
-     * @throws IOException si ya se habia fijado una
+     * @throws IOException if one had already been set
      */
     public static synchronized void setSocketFactory(RMISocketFactory fac) throws IOException {
-        if (laElegida != null) {
-            throw new IOException("la fabrica de sockets ya estaba fijada");
+        if (chosen != null) {
+            throw new IOException("the socket factory was already set");
         }
-        laElegida = fac;
+        chosen = fac;
     }
 
-    /** La fabrica global, o {@code null} si no se fijo ninguna. */
+    /** The global factory, or {@code null} if none was set. */
     public static synchronized RMISocketFactory getSocketFactory() {
-        return laElegida;
+        return chosen;
     }
 
     /**
-     * La fabrica por omision: sockets comunes.
+     * The default factory: plain sockets.
      *
-     * <p>Nunca es {@code null}, a diferencia de {@link #getSocketFactory}. La distincion importa:
-     * una dice que se configuro y la otra que se usa cuando no se configuro nada.
+     * <p>It is never {@code null}, unlike {@link #getSocketFactory}. The distinction matters: one
+     * says what was configured and the other what is used when nothing was configured.
      */
     public static synchronized RMISocketFactory getDefaultSocketFactory() {
-        if (laDefault == null) {
-            laDefault = new FabricaComun();
+        if (defaultFactory == null) {
+            defaultFactory = new CommonFactory();
         }
-        return laDefault;
+        return defaultFactory;
     }
 
-    /** Fija que hacer cuando no se puede crear un socket; ver {@link RMIFailureHandler}. */
+    /** It sets what to do when a socket cannot be created; see {@link RMIFailureHandler}. */
     public static synchronized void setFailureHandler(RMIFailureHandler fh) {
-        manejador = fh;
+        failureHandler = fh;
     }
 
-    /** El manejador de fallas, o {@code null}. */
+    /** The failure handler, or {@code null}. */
     public static synchronized RMIFailureHandler getFailureHandler() {
-        return manejador;
+        return failureHandler;
     }
 }

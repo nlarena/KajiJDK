@@ -4,148 +4,148 @@ import java.util.SortedMap;
 import java.util.TreeMap;
 
 /**
- * KajiLibrary's javax.imageio.plugins.tiff.TIFFTag -- una etiqueta de metadato TIFF.
+ * KajiLibrary's javax.imageio.plugins.tiff.TIFFTag -- a TIFF metadata tag.
  *
- * <p>Un archivo TIFF es una lista de etiquetas numeradas. Esta clase describe <b>una</b> de ellas: que
- * numero tiene, como se llama, que tipos de dato admite y cuantos valores lleva.
+ * <p>A TIFF file is a list of numbered tags. This class describes <b>one</b> of them: what number
+ * it has, what it is called, which data types it accepts and how many values it carries.
  *
- * <h2>Los tipos van en una mascara de bits</h2>
+ * <h2>The types go in a bit mask</h2>
  *
- * <p>{@link #getDataTypes} no devuelve un tipo sino un {@code int} donde el bit {@code n} indica que
- * el tipo {@code n} esta permitido. Se arma con {@code 1 << TIFF_SHORT}, y se consulta con
+ * <p>{@link #getDataTypes} does not return a type but an {@code int} where bit {@code n} means type
+ * {@code n} is allowed. It is built with {@code 1 << TIFF_SHORT}, and checked with
  * {@link #isDataTypeOK}.
  *
- * <p>La razon es que TIFF permite que la misma etiqueta venga en varios tipos: la altura de una imagen
- * puede ser {@code SHORT} o {@code LONG} segun el tamano. Un lector tiene que aceptar los dos.
+ * <p>The reason is that TIFF allows the same tag to come in several types: an image's height may be
+ * {@code SHORT} or {@code LONG} depending on the size. A reader has to accept both.
  *
- * <h2>{@link #getCount} devuelve -1 seguido</h2>
+ * <h2>{@link #getCount} often returns -1</h2>
  *
- * <p>Significa "cualquier cantidad", no "ninguno". Es lo normal en las etiquetas de texto y en las
- * tablas de color, donde la cantidad depende de la imagen.
+ * <p>It means "any number", not "none". It is normal for text tags and colour tables, where the
+ * count depends on the image.
  *
- * <h2>Las etiquetas que apuntan a otro directorio</h2>
+ * <h2>Tags that point to another directory</h2>
  *
- * <p>El constructor de tres argumentos que toma un {@link TIFFTagSet} arma una etiqueta <b>puntero</b>:
- * su valor no es un dato sino la posicion de otro directorio de etiquetas. Es como TIFF anida
- * metadatos --Exif, GPS-- adentro de un archivo.
+ * <p>The three-argument constructor that takes a {@link TIFFTagSet} builds a <b>pointer</b> tag:
+ * its value is not data but the position of another tag directory. It is how TIFF nests metadata
+ * --Exif, GPS-- inside a file.
  *
- * <p>Una etiqueta asi se reconoce con {@link #isIFDPointer}, y su conjunto asociado dice que etiquetas
- * esperar del otro lado.
+ * <p>A tag like that is recognized with {@link #isIFDPointer}, and its associated set says which
+ * tags to expect on the other side.
  *
- * <h2>Los nombres de valor</h2>
+ * <h2>Value names</h2>
  *
- * <p>Muchas etiquetas guardan un numero que significa algo --1 es "sin comprimir", 5 es "LZW"--.
- * {@link #addValueName} deja registrar esa traduccion, y es una operacion <b>protegida</b>: solo una
- * subclase puede llamarla, tipicamente desde su constructor.
+ * <p>Many tags store a number that means something --1 is "uncompressed", 5 is "LZW".
+ * {@link #addValueName} lets that translation be registered, and it is a <b>protected</b>
+ * operation: only a subclass can call it, typically from its constructor.
  *
- * <p>Es a proposito: los nombres son parte de la definicion de la etiqueta, no algo que se le agregue
- * despues.
+ * <p>That is on purpose: the names are part of the tag's definition, not something added to it
+ * later.
  */
 public class TIFFTag {
 
-    /** Entero de 8 bits sin signo. */
+    /** 8-bit unsigned integer. */
     public static final int TIFF_BYTE = 1;
 
-    /** Texto terminado en cero. */
+    /** Zero-terminated text. */
     public static final int TIFF_ASCII = 2;
 
-    /** Entero de 16 bits sin signo. */
+    /** 16-bit unsigned integer. */
     public static final int TIFF_SHORT = 3;
 
-    /** Entero de 32 bits sin signo. */
+    /** 32-bit unsigned integer. */
     public static final int TIFF_LONG = 4;
 
-    /** Dos enteros largos: numerador y denominador. */
+    /** Two unsigned 32-bit integers: numerator and denominator. */
     public static final int TIFF_RATIONAL = 5;
 
-    /** Entero de 8 bits con signo. */
+    /** 8-bit signed integer. */
     public static final int TIFF_SBYTE = 6;
 
-    /** Bytes sin interpretar. */
+    /** Uninterpreted bytes. */
     public static final int TIFF_UNDEFINED = 7;
 
-    /** Entero de 16 bits con signo. */
+    /** 16-bit signed integer. */
     public static final int TIFF_SSHORT = 8;
 
-    /** Entero de 32 bits con signo. */
+    /** 32-bit signed integer. */
     public static final int TIFF_SLONG = 9;
 
-    /** Dos enteros con signo: numerador y denominador. */
+    /** Two signed integers: numerator and denominator. */
     public static final int TIFF_SRATIONAL = 10;
 
-    /** Coma flotante de 32 bits. */
+    /** 32-bit floating point. */
     public static final int TIFF_FLOAT = 11;
 
-    /** Coma flotante de 64 bits. */
+    /** 64-bit floating point. */
     public static final int TIFF_DOUBLE = 12;
 
-    /** Puntero a otro directorio. Ver la nota de la clase. */
+    /** Pointer to another directory. See the class note. */
     public static final int TIFF_IFD_POINTER = 13;
 
-    /** El tipo mas chico. */
+    /** The smallest type. */
     public static final int MIN_DATATYPE = 1;
 
-    /** El tipo mas grande. */
+    /** The largest type. */
     public static final int MAX_DATATYPE = 13;
 
-    /** El nombre que se le pone a una etiqueta que no esta en ningun conjunto conocido. */
+    /** The name given to a tag that is in no known set. */
     public static final String UNKNOWN_TAG_NAME = "UnknownTag";
 
-    /** Cuantos bytes ocupa un valor de cada tipo; la posicion 0 no se usa. */
+    /** How many bytes a value of each type takes; position 0 is not used. */
     private static final int[] SIZE_OF_TYPE = {
         0, 1, 1, 2, 4, 8, 1, 1, 2, 4, 8, 4, 8, 4,
     };
 
-    /** Como se llama. */
+    /** What it is called. */
     private final String name;
 
-    /** Que numero tiene. */
+    /** What number it has. */
     private final int number;
 
-    /** La mascara de tipos permitidos. Ver la nota de la clase. */
+    /** The mask of allowed types. See the class note. */
     private final int dataTypes;
 
-    /** Cuantos valores, o -1. */
+    /** How many values, or -1. */
     private final int count;
 
-    /** A que conjunto apunta, si es un puntero. */
+    /** Which set it points to, if it is a pointer. */
     private final TIFFTagSet tagSet;
 
-    /** La traduccion de valores a nombres, si la hay. */
+    /** The translation from values to names, if there is one. */
     private SortedMap<Integer, String> valueNames = null;
 
     /**
-     * Una etiqueta completa.
+     * A complete tag.
      *
-     * @param dataTypes la mascara de tipos; ver la nota de la clase
-     * @param count cuantos valores, o -1 para cualquiera
-     * @throws NullPointerException si el nombre es null
-     * @throws IllegalArgumentException si el numero es negativo, la mascara tiene bits fuera de
-     *     rango, o la cantidad es negativa sin ser -1
+     * @param dataTypes the type mask; see the class note
+     * @param count how many values, or -1 for any
+     * @throws NullPointerException if the name is null
+     * @throws IllegalArgumentException if the number is negative, the mask has bits out of range,
+     *     or the count is negative without being -1
      */
     public TIFFTag(String name, int number, int dataTypes, int count) {
         this(name, number, dataTypes, count, null);
     }
 
     /**
-     * Una etiqueta puntero a otro directorio. Ver la nota de la clase.
+     * A tag that points to another directory. See the class note.
      *
-     * @throws NullPointerException si el nombre o el conjunto son null
+     * @throws NullPointerException if the name or the set are null
      */
     public TIFFTag(String name, int number, TIFFTagSet tagSet) {
         this(name, number, 1 << TIFF_LONG | 1 << TIFF_IFD_POINTER, 1, checkSet(tagSet));
     }
 
     /**
-     * Una etiqueta sin cantidad fija.
+     * A tag without a fixed count.
      *
-     * @throws NullPointerException si el nombre es null
+     * @throws NullPointerException if the name is null
      */
     public TIFFTag(String name, int number, int dataTypes) {
         this(name, number, dataTypes, -1, null);
     }
 
-    /** El unico constructor de verdad; los tres publicos delegan aca. */
+    /** The only real constructor; the three public ones delegate here. */
     private TIFFTag(String name, int number, int dataTypes, int count, TIFFTagSet tagSet) {
         if (name == null) {
             throw new NullPointerException("name == null");
@@ -167,9 +167,9 @@ public class TIFFTag {
     }
 
     /**
-     * Cuantos bytes ocupa un valor de ese tipo.
+     * How many bytes a value of that type takes.
      *
-     * @throws IllegalArgumentException si no es un tipo valido
+     * @throws IllegalArgumentException if it is not a valid type
      */
     public static int getSizeOfType(int dataType) {
         if (dataType < MIN_DATATYPE || dataType > MAX_DATATYPE) {
@@ -178,27 +178,27 @@ public class TIFFTag {
         return SIZE_OF_TYPE[dataType];
     }
 
-    /** Como se llama. */
+    /** What it is called. */
     public String getName() {
         return this.name;
     }
 
-    /** Que numero tiene. */
+    /** What number it has. */
     public int getNumber() {
         return this.number;
     }
 
-    /** La mascara de tipos permitidos. Ver la nota de la clase. */
+    /** The mask of allowed types. See the class note. */
     public int getDataTypes() {
         return this.dataTypes;
     }
 
-    /** Cuantos valores, o -1 para cualquiera. Ver la nota de la clase. */
+    /** How many values, or -1 for any. See the class note. */
     public int getCount() {
         return this.count;
     }
 
-    /** Si ese tipo esta permitido. */
+    /** Whether that type is allowed. */
     public boolean isDataTypeOK(int dataType) {
         if (dataType < MIN_DATATYPE || dataType > MAX_DATATYPE) {
             return false;
@@ -206,26 +206,26 @@ public class TIFFTag {
         return (this.dataTypes & (1 << dataType)) != 0;
     }
 
-    /** A que conjunto apunta, o null si no es un puntero. */
+    /** Which set it points to, or null if it is not a pointer. */
     public TIFFTagSet getTagSet() {
         return this.tagSet;
     }
 
-    /** Si su valor es la posicion de otro directorio. Ver la nota de la clase. */
+    /** Whether its value is the position of another directory. See the class note. */
     public boolean isIFDPointer() {
         return this.tagSet != null;
     }
 
-    /** Si tiene nombres para sus valores. */
+    /** Whether it has names for its values. */
     public boolean hasValueNames() {
         return this.valueNames != null;
     }
 
     /**
-     * Le da nombre a un valor. Protegido; ver la nota de la clase.
+     * Gives a value a name. Protected; see the class note.
      *
-     * @param value el numero que aparece en el archivo
-     * @param name que significa
+     * @param value the number that appears in the file
+     * @param name what it means
      */
     protected void addValueName(int value, String name) {
         if (this.valueNames == null) {
@@ -234,7 +234,7 @@ public class TIFFTag {
         this.valueNames.put(Integer.valueOf(value), name);
     }
 
-    /** Que significa ese valor, o null si no tiene nombre. */
+    /** What that value means, or null if it has no name. */
     public String getValueName(int value) {
         if (this.valueNames == null) {
             return null;
@@ -242,7 +242,7 @@ public class TIFFTag {
         return this.valueNames.get(Integer.valueOf(value));
     }
 
-    /** Los valores que tienen nombre, ordenados; null si no hay ninguno. */
+    /** The values that have names, sorted; null if there are none. */
     public int[] getNamedValues() {
         if (this.valueNames == null) {
             return null;
@@ -257,7 +257,7 @@ public class TIFFTag {
         return out;
     }
 
-    /** El control que el constructor de puntero necesita hacer antes de delegar. */
+    /** The check the pointer constructor has to do before delegating. */
     private static TIFFTagSet checkSet(TIFFTagSet tagSet) {
         if (tagSet == null) {
             throw new NullPointerException("tagSet == null");

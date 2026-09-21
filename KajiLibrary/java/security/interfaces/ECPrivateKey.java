@@ -4,15 +4,15 @@ import java.math.BigInteger;
 import java.security.PrivateKey;
 import java.security.spec.ECParameterSpec;
 
-// Una clave privada de curva eliptica: el escalar s.
+// An elliptic-curve private key: the scalar s.
 public interface ECPrivateKey extends PrivateKey, ECKey {
 
     long serialVersionUID = -7896394956925609184L;
 
-    // El escalar privado.
+    // The private scalar.
     BigInteger getS();
 
-    // Ver `ECPublicKey.getParams()`: mismo choque, misma resolucion.
+    // See `ECPublicKey.getParams()`: same clash, same resolution.
     @Override
     default ECParameterSpec getParams() {
         return null;

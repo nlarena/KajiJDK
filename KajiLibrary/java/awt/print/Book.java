@@ -3,63 +3,63 @@ package java.awt.print;
 import java.util.Vector;
 
 /**
- * KajiLibrary's java.awt.print.Book -- un {@link Pageable} armado a mano.
+ * KajiLibrary's java.awt.print.Book -- a {@link Pageable} put together by hand.
  *
- * <p>Una lista de paginas, cada una con su {@link Printable} y su {@link PageFormat}. Es la forma de
- * juntar en un documento cosas que se dibujan distinto: una portada vertical, una tabla apaisada, un
- * anexo de otro origen.
+ * <p>A list of pages, each with its {@link Printable} and its {@link PageFormat}. It is the way to
+ * put together in one document things drawn differently: a portrait cover, a landscape table, an
+ * appendix from another source.
  *
- * <h2>{@code append} con cantidad no agrega paginas distintas</h2>
+ * <h2>{@code append} with a count does not add different pages</h2>
  *
- * <p>{@link #append(Printable, PageFormat, int)} agrega {@code numPages} entradas que <b>comparten</b>
- * el mismo dibujante y el mismo formato. No es un atajo para repetir la misma pagina: el dibujante
- * recibe indices consecutivos y decide que poner en cada uno. Es asi como un {@code Printable} que
- * sabe dibujar N paginas se mete entero en un {@code Book}.
+ * <p>{@link #append(Printable, PageFormat, int)} adds {@code numPages} entries that <b>share</b>
+ * the same painter and the same format. It is not a shortcut for repeating the same page: the
+ * painter receives consecutive indices and decides what to put in each. That is how a {@code
+ * Printable} that knows how to draw N pages fits whole into a {@code Book}.
  *
- * <h2>Los indices fuera de rango</h2>
+ * <h2>Out-of-range indices</h2>
  *
- * <p>{@link Pageable} declara {@link IndexOutOfBoundsException}, y lo que sale es un
- * {@link ArrayIndexOutOfBoundsException}, que es subclase. Viene de que adentro hay un {@code Vector};
- * lo mantenemos porque un programa que dependa del tipo exacto seguiria andando.
+ * <p>{@link Pageable} declares {@link IndexOutOfBoundsException}, and what comes out is an
+ * {@link ArrayIndexOutOfBoundsException}, which is a subclass. It comes from the {@code Vector}
+ * inside; we keep it because a program that depends on the exact type keeps working.
  */
 public class Book implements Pageable {
 
-    /** Las paginas. */
+    /** The pages. */
     private final Vector<BookPage> mPages;
 
-    /** Un libro vacio. */
+    /** An empty book. */
     public Book() {
         this.mPages = new Vector<BookPage>();
     }
 
-    /** Cuantas paginas. Nunca {@link Pageable#UNKNOWN_NUMBER_OF_PAGES}. */
+    /** How many pages. Never {@link Pageable#UNKNOWN_NUMBER_OF_PAGES}. */
     public int getNumberOfPages() {
         return this.mPages.size();
     }
 
     /**
-     * El formato de esa pagina.
+     * The format of that page.
      *
-     * @throws IndexOutOfBoundsException si no existe
+     * @throws IndexOutOfBoundsException if it does not exist
      */
     public PageFormat getPageFormat(int pageIndex) throws IndexOutOfBoundsException {
         return getPage(pageIndex).getPageFormat();
     }
 
     /**
-     * Quien dibuja esa pagina.
+     * Who draws that page.
      *
-     * @throws IndexOutOfBoundsException si no existe
+     * @throws IndexOutOfBoundsException if it does not exist
      */
     public Printable getPrintable(int pageIndex) throws IndexOutOfBoundsException {
         return getPage(pageIndex).getPrintable();
     }
 
     /**
-     * Reemplaza una pagina que ya existe.
+     * Replaces a page that already exists.
      *
-     * @throws IndexOutOfBoundsException si no existe
-     * @throws NullPointerException si alguno de los dos es null
+     * @throws IndexOutOfBoundsException if it does not exist
+     * @throws NullPointerException if either of the two is null
      */
     public void setPage(int pageIndex, Printable painter, PageFormat page)
         throws IndexOutOfBoundsException {
@@ -73,20 +73,20 @@ public class Book implements Pageable {
     }
 
     /**
-     * Agrega una pagina al final.
+     * Adds a page at the end.
      *
-     * @throws NullPointerException si alguno de los dos es null
+     * @throws NullPointerException if either of the two is null
      */
     public void append(Printable painter, PageFormat page) {
         this.mPages.addElement(new BookPage(painter, page));
     }
 
     /**
-     * Agrega {@code numPages} paginas que comparten dibujante y formato.
+     * Adds {@code numPages} pages that share painter and format.
      *
-     * <p>Ver la nota de la clase: no son copias de la misma pagina.
+     * <p>See the class note: they are not copies of the same page.
      *
-     * @throws NullPointerException si alguno de los dos es null
+     * @throws NullPointerException if either of the two is null
      */
     public void append(Printable painter, PageFormat page, int numPages) {
         BookPage bookPage = new BookPage(painter, page);
@@ -97,18 +97,18 @@ public class Book implements Pageable {
         }
     }
 
-    /** El acceso con control de rango que comparten los dos accesores. */
+    /** The range-checked access both accessors share. */
     private BookPage getPage(int pageNumber) throws ArrayIndexOutOfBoundsException {
         return this.mPages.elementAt(pageNumber);
     }
 
-    /** Una pagina: quien la dibuja y con que formato. Inmutable. */
+    /** A page: who draws it and with which format. Immutable. */
     private static final class BookPage {
 
-        /** El formato. */
+        /** The format. */
         private final PageFormat mFormat;
 
-        /** El dibujante. */
+        /** The painter. */
         private final Printable mPainter;
 
         BookPage(Printable painter, PageFormat format) {

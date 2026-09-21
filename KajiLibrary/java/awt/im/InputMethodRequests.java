@@ -5,52 +5,52 @@ import java.awt.font.TextHitInfo;
 import java.text.AttributedCharacterIterator;
 
 /**
- * Lo que un componente de texto tiene que saber contestar para trabajar con un método de entrada.
+ * What a text component has to be able to answer to work with an input method.
  *
- * <p>Al escribir en japonés o en chino, el método de entrada necesita **preguntarle cosas al
- * componente**: dónde poner su ventana de candidatos, qué texto hay confirmado alrededor, qué está
- * seleccionado. Un componente que no implemente esto sólo puede recibir texto ya terminado.
+ * <p>When writing in Japanese or Chinese, the input method needs to **ask the component things**:
+ * where to put its candidate window, what committed text there is around, what is selected. A
+ * component that does not implement this can only receive finished text.
  *
- * <p>{@link #cancelLatestCommittedText} es la más rara y la que explica el resto: permite
- * **deshacer** la última confirmación, porque en algunos métodos de entrada el usuario puede volver
- * atrás sobre una palabra que ya había aceptado y volver a elegir entre los candidatos.
+ * <p>{@link #cancelLatestCommittedText} is the oddest one and the one that explains the rest: it
+ * allows **undoing** the latest commit, because in some input methods the user can go back over a
+ * word already accepted and choose among the candidates again.
  */
 public interface InputMethodRequests {
 
     /**
-     * Dónde está en pantalla esa posición del texto en composición.
+     * Where on screen that position of the composed text is.
      *
-     * <p>Es lo que le permite al método de entrada poner su ventana de candidatos debajo del texto y
-     * no en cualquier lado.
+     * <p>It is what lets the input method put its candidate window below the text and not just
+     * anywhere.
      */
     Rectangle getTextLocation(TextHitInfo offset);
 
-    /** Qué posición del texto cae en ese punto de la pantalla, o `null` si ninguna. */
+    /** Which position of the text falls at that point on the screen, or `null` if none. */
     TextHitInfo getLocationOffset(int x, int y);
 
-    /** Dónde empezaría a insertarse el texto en composición. */
+    /** Where the composed text would start being inserted. */
     int getInsertPositionOffset();
 
     /**
-     * Un tramo del texto ya confirmado.
+     * A stretch of the already committed text.
      *
-     * @param attributes qué atributos interesan, o `null` si ninguno
+     * @param attributes which attributes are of interest, or `null` if none
      */
     AttributedCharacterIterator getCommittedText(int beginIndex, int endIndex,
             AttributedCharacterIterator.Attribute[] attributes);
 
-    /** Cuánto texto confirmado hay. */
+    /** How much committed text there is. */
     int getCommittedTextLength();
 
     /**
-     * Deshace la última confirmación y devuelve lo que se sacó.
+     * Undoes the latest commit and returns what was removed.
      *
-     * @return lo que se deshizo, o `null` si el componente no lo admite
+     * @return what was undone, or `null` if the component does not support it
      */
     AttributedCharacterIterator cancelLatestCommittedText(
             AttributedCharacterIterator.Attribute[] attributes);
 
-    /** El texto seleccionado, o `null` si no hay. */
+    /** The selected text, or `null` if there is none. */
     AttributedCharacterIterator getSelectedText(
             AttributedCharacterIterator.Attribute[] attributes);
 }

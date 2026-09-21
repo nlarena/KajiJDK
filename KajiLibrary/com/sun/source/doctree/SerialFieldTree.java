@@ -3,7 +3,7 @@ package com.sun.source.doctree;
 import java.util.List;
 
 /**
- * El nodo de `@serialField`, que documenta un campo de la forma serializada.
+ * The node of `@serialField`, which documents a field of the serialized form.
  */
 public interface SerialFieldTree extends BlockTagTree {
 

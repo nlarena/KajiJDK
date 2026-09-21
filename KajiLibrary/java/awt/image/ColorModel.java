@@ -4,54 +4,56 @@ import java.awt.Transparency;
 import java.awt.color.ColorSpace;
 
 /**
- * Qué **color** es un píxel.
+ * What **colour** a pixel is.
  *
- * <p>Es la tercera y última pieza de una imagen, y la única que habla de color. El
- * {@link DataBuffer} tiene números; el {@link SampleModel} sabe cuáles de esos números forman un
- * píxel; el modelo de color sabe qué color es. Sin él, `(255, 0, 0)` no es rojo: son tres números.
+ * <p>It is the third and last piece of an image, and the only one that talks about colour. The
+ * {@link DataBuffer} has numbers; the {@link SampleModel} knows which of those numbers make up a
+ * pixel; the colour model knows what colour it is. Without it, `(255, 0, 0)` is not red: it is
+ * three numbers.
  *
- * <p>La traducción va y viene entre tres representaciones del mismo píxel, y casi toda la clase es
- * pasar de una a otra:
+ * <p>The translation goes back and forth between three representations of the same pixel, and
+ * almost the whole class is going from one to another:
  *
  * <ul>
- *   <li><strong>el píxel</strong> — un `int`, o un arreglo si no entra en uno, tal como está
- *       guardado;
- *   <li><strong>las componentes</strong> — un valor entero por banda, ya separadas pero todavía en
- *       la escala de la imagen, que puede tener bandas de distinta cantidad de bits;
- *   <li><strong>las componentes normalizadas</strong> — un `float` por banda en el rango del
- *       {@link ColorSpace}, que es donde el color existe de verdad y donde dos imágenes de formatos
- *       distintos se pueden comparar.
+ *   <li><strong>the pixel</strong> — an `int`, or an array if it does not fit in one, just as it is
+ *       stored;
+ *   <li><strong>the components</strong> — one integer value per band, separated already but still
+ *       in the scale of the image, which may have bands of different bit counts;
+ *   <li><strong>the normalised components</strong> — one `float` per band in the range of the
+ *       {@link ColorSpace}, which is where the colour really exists and where two images of
+ *       different formats can be compared.
  * </ul>
  *
- * <p>Las subclases redefinen las conversiones que su formato hace rápido; lo que no redefinen cae en
- * los métodos generales de acá, que pasan siempre por las componentes normalizadas. Los que **no**
- * tienen una versión general honesta —los que dependen de cómo está armado el píxel, como
- * {@link #getDataElements(int, Object)} o {@link #createCompatibleSampleModel}— tiran
- * `UnsupportedOperationException` en vez de inventar una respuesta.
+ * <p>The subclasses override the conversions their format does fast; what they do not override
+ * falls into the general methods here, which always go through the normalised components. The ones
+ * that do **not** have an honest general version —the ones that depend on how the pixel is
+ * assembled, such as {@link #getDataElements(int, Object)} or {@link #createCompatibleSampleModel}—
+ * throw `UnsupportedOperationException` instead of inventing an answer.
  *
- * <p>El alfa premultiplicado merece una nota, porque no es una convención sino una cuenta que ya se
- * hizo. Con `isAlphaPremultiplied`, las componentes de color guardadas **ya están multiplicadas** por
- * el alfa: un rojo a media transparencia se guarda como 127 y no como 255. Eso vuelve trivial la
- * composición —sumar es superponer— y hace que recuperar el color original tenga que dividir, con la
- * división por cero cuando el alfa es cero. Esa rama aparece en cada conversión de esta clase.
+ * <p>The premultiplied alpha deserves a note, because it is not a convention but a sum that has
+ * been done already. With `isAlphaPremultiplied`, the stored colour components **are already
+ * multiplied** by the alpha: a red at half transparency is stored as 127 and not as 255. That makes
+ * compositing trivial —adding is superimposing— and makes recovering the original colour have to
+ * divide, with the division by zero when the alpha is zero. That branch shows up in every
+ * conversion of this class.
  */
 public abstract class ColorModel implements Transparency {
 
-    /** Cuántos bits ocupa un píxel. */
+    /** How many bits a pixel takes. */
     protected int pixel_bits;
 
-    /** El tipo con el que se transfiere un píxel crudo. */
+    /** The type a raw pixel is transferred with. */
     protected int transferType;
 
-    /** Cuántos bits usa cada componente, o `null` si no se declararon. */
+    /** How many bits each component uses, or `null` if they were not declared. */
     int[] nBits;
 
-    /** El mayor de `nBits`. */
+    /** The greatest of `nBits`. */
     int maxBits;
 
-    // Estos campos son de paquete y no privados, igual que en el JDK: las subclases de acá adentro
-    // los ajustan. PackedColorModel, por ejemplo, baja la transparencia a BITMASK cuando descubre
-    // que el alfa tiene un solo bit, y eso recién se sabe después de descomponer las máscaras.
+    // These fields are package-private and not private, just as in the JDK: the subclasses in here
+    // adjust them. PackedColorModel, for instance, lowers the transparency to BITMASK when it finds
+    // out that the alpha has a single bit, and that is only known after taking the masks apart.
     ColorSpace colorSpace;
     int colorSpaceType;
     int numComponents;
@@ -64,11 +66,11 @@ public abstract class ColorModel implements Transparency {
     private static ColorModel rgbDefault;
 
     /**
-     * El modelo ARGB de siempre: 32 bits, alfa translúcido y sRGB.
+     * The usual ARGB model: 32 bits, translucent alpha and sRGB.
      *
-     * <p>Es el formato en el que se habla de color en toda la API cuando no se dice otra cosa: el
-     * `int` que devuelve {@link #getRGB(int)} y el que toma {@link #getDataElements(int, Object)}
-     * están en este modelo, sin importar cómo esté guardada la imagen.
+     * <p>It is the format colour is spoken of in throughout the API when nothing else is said: the
+     * `int` that {@link #getRGB(int)} returns and the one {@link #getDataElements(int, Object)}
+     * takes are in this model, no matter how the image is stored.
      */
     public static ColorModel getRGBdefault() {
         synchronized (ColorModel.class) {
@@ -80,7 +82,7 @@ public abstract class ColorModel implements Transparency {
         }
     }
 
-    /** El tipo más chico en el que entra un píxel de tantos bits. */
+    /** The smallest type a pixel of that many bits fits in. */
     static int getDefaultTransferType(int pixelBits) {
         if (pixelBits <= 8) {
             return DataBuffer.TYPE_BYTE;
@@ -95,13 +97,13 @@ public abstract class ColorModel implements Transparency {
     }
 
     /**
-     * Un modelo ARGB translúcido en sRGB, de tantos bits por píxel.
+     * A translucent ARGB model in sRGB, of that many bits per pixel.
      *
-     * <p>Es el constructor cómodo, y el que deja el modelo a medio declarar: no dice cuántos bits
-     * usa cada componente, así que las conversiones que necesitan esa cuenta —las normalizadas—
-     * tiran en vez de responder.
+     * <p>It is the convenient constructor, and the one that leaves the model half declared: it does
+     * not say how many bits each component uses, so the conversions that need that count —the
+     * normalised ones— throw instead of answering.
      *
-     * @throws IllegalArgumentException si `bits` no es positivo
+     * @throws IllegalArgumentException if `bits` is not positive
      */
     public ColorModel(int bits) {
         if (bits < 1) {
@@ -122,16 +124,16 @@ public abstract class ColorModel implements Transparency {
     }
 
     /**
-     * El constructor general.
+     * The general constructor.
      *
-     * <p>Sin alfa, `isAlphaPremultiplied` y `transparency` se ignoran y quedan en `false` y
-     * `OPAQUE`: sin canal alfa no hay nada que premultiplicar ni transparencia que declarar, y
-     * dejarlos como los pasaron sería guardar una contradicción.
+     * <p>Without alpha, `isAlphaPremultiplied` and `transparency` are ignored and stay at `false`
+     * and `OPAQUE`: with no alpha channel there is nothing to premultiply and no transparency to
+     * declare, and leaving them as they were passed would be storing a contradiction.
      *
-     * @throws IllegalArgumentException si `bits` no alcanza para todas las componentes, si la
-     *     transparencia no es una de las tres, si algún ancho es negativo, si todos son cero, o si
-     *     los bits por píxel no son positivos
-     * @throws NullPointerException si falta el espacio de color
+     * @throws IllegalArgumentException if `bits` is not enough for every component, if the
+     *     transparency is not one of the three, if some width is negative, if they are all zero, or
+     *     if the bits per pixel are not positive
+     * @throws NullPointerException if the colour space is missing
      */
     protected ColorModel(int pixel_bits, int[] bits, ColorSpace cspace, boolean hasAlpha,
             boolean isAlphaPremultiplied, int transparency, int transferType) {
@@ -176,31 +178,31 @@ public abstract class ColorModel implements Transparency {
         this.transferType = transferType;
     }
 
-    /** Si tiene canal alfa. */
+    /** Whether it has an alpha channel. */
     public final boolean hasAlpha() {
         return this.supportsAlpha;
     }
 
-    /** Si las componentes de color ya vienen multiplicadas por el alfa. */
+    /** Whether the colour components come multiplied by the alpha already. */
     public final boolean isAlphaPremultiplied() {
         return this.isAlphaPremultiplied;
     }
 
-    /** El tipo con el que se transfiere un píxel crudo. */
+    /** The type a raw pixel is transferred with. */
     public final int getTransferType() {
         return this.transferType;
     }
 
-    /** Cuántos bits ocupa un píxel. */
+    /** How many bits a pixel takes. */
     public int getPixelSize() {
         return this.pixel_bits;
     }
 
     /**
-     * Cuántos bits usa esa componente.
+     * How many bits that component uses.
      *
-     * @throws NullPointerException si el modelo no declaró los anchos
-     * @throws ArrayIndexOutOfBoundsException si la componente no existe
+     * @throws NullPointerException if the model did not declare the widths
+     * @throws ArrayIndexOutOfBoundsException if the component does not exist
      */
     public int getComponentSize(int componentIdx) {
         if (this.nBits == null) {
@@ -209,7 +211,7 @@ public abstract class ColorModel implements Transparency {
         return this.nBits[componentIdx];
     }
 
-    /** Cuántos bits usa cada componente, o `null` si no se declararon. */
+    /** How many bits each component uses, or `null` if they were not declared. */
     public int[] getComponentSize() {
         if (this.nBits == null) {
             return null;
@@ -217,63 +219,63 @@ public abstract class ColorModel implements Transparency {
         return this.nBits.clone();
     }
 
-    /** `OPAQUE`, `BITMASK` o `TRANSLUCENT`. */
+    /** `OPAQUE`, `BITMASK` or `TRANSLUCENT`. */
     public int getTransparency() {
         return this.transparency;
     }
 
-    /** Cuántas componentes tiene un píxel, contando el alfa. */
+    /** How many components a pixel has, counting the alpha. */
     public int getNumComponents() {
         return this.numComponents;
     }
 
-    /** Cuántas componentes tiene un píxel sin contar el alfa. */
+    /** How many components a pixel has without counting the alpha. */
     public int getNumColorComponents() {
         return this.numColorComponents;
     }
 
-    /** El espacio de color. */
+    /** The colour space. */
     public final ColorSpace getColorSpace() {
         return this.colorSpace;
     }
 
-    /** Si el espacio de color es el sRGB de fábrica. */
+    /** Whether the colour space is the default sRGB. */
     final boolean isSrgb() {
         return this.isSrgb;
     }
 
-    /** El tipo del espacio de color, sin tener que pedirlo. */
+    /** The type of the colour space, without having to ask it for it. */
     final int getColorSpaceType() {
         return this.colorSpaceType;
     }
 
-    /** El rojo del píxel, de 0 a 255 y en sRGB. */
+    /** The red of the pixel, from 0 to 255 and in sRGB. */
     public abstract int getRed(int pixel);
 
-    /** El verde del píxel, de 0 a 255 y en sRGB. */
+    /** The green of the pixel, from 0 to 255 and in sRGB. */
     public abstract int getGreen(int pixel);
 
-    /** El azul del píxel, de 0 a 255 y en sRGB. */
+    /** The blue of the pixel, from 0 to 255 and in sRGB. */
     public abstract int getBlue(int pixel);
 
-    /** El alfa del píxel, de 0 a 255. */
+    /** The alpha of the pixel, from 0 to 255. */
     public abstract int getAlpha(int pixel);
 
-    /** El píxel entero como ARGB de ocho bits por canal. */
+    /** The whole pixel as ARGB with eight bits per channel. */
     public int getRGB(int pixel) {
         return (this.getAlpha(pixel) << 24) | (this.getRed(pixel) << 16)
                 | (this.getGreen(pixel) << 8) | this.getBlue(pixel);
     }
 
     /**
-     * Un píxel crudo llevado a un `int`.
+     * A raw pixel brought into an `int`.
      *
-     * <p>Sólo funciona si el píxel entra en un elemento; si son varios, esta clase no sabe cómo
-     * juntarlos y hay que redefinirlo.
+     * <p>It only works if the pixel fits in one element; if it is several, this class does not know
+     * how to join them and it has to be overridden.
      *
-     * @throws UnsupportedOperationException si el tipo no entra en un `int` o el píxel ocupa más de
-     *     un elemento
-     * @throws ClassCastException si el arreglo no es del tipo de transferencia
+     * @throws UnsupportedOperationException if the type does not fit in an `int` or the pixel takes
+     *     more than one element
+     * @throws ClassCastException if the array is not of the transfer type
      */
     private int unPixel(Object inData) {
         int pixel;
@@ -302,45 +304,45 @@ public abstract class ColorModel implements Transparency {
     }
 
     /**
-     * El rojo de un píxel crudo.
+     * The red of a raw pixel.
      *
-     * @throws UnsupportedOperationException si el píxel no entra en un `int`
+     * @throws UnsupportedOperationException if the pixel does not fit in an `int`
      */
     public int getRed(Object inData) {
         return this.getRed(this.unPixel(inData));
     }
 
     /**
-     * El verde de un píxel crudo.
+     * The green of a raw pixel.
      *
-     * @throws UnsupportedOperationException si el píxel no entra en un `int`
+     * @throws UnsupportedOperationException if the pixel does not fit in an `int`
      */
     public int getGreen(Object inData) {
         return this.getGreen(this.unPixel(inData));
     }
 
     /**
-     * El azul de un píxel crudo.
+     * The blue of a raw pixel.
      *
-     * @throws UnsupportedOperationException si el píxel no entra en un `int`
+     * @throws UnsupportedOperationException if the pixel does not fit in an `int`
      */
     public int getBlue(Object inData) {
         return this.getBlue(this.unPixel(inData));
     }
 
     /**
-     * El alfa de un píxel crudo.
+     * The alpha of a raw pixel.
      *
-     * @throws UnsupportedOperationException si el píxel no entra en un `int`
+     * @throws UnsupportedOperationException if the pixel does not fit in an `int`
      */
     public int getAlpha(Object inData) {
         return this.getAlpha(this.unPixel(inData));
     }
 
     /**
-     * Un píxel crudo como ARGB de ocho bits por canal.
+     * A raw pixel as ARGB with eight bits per channel.
      *
-     * @throws UnsupportedOperationException si el píxel no entra en un `int`
+     * @throws UnsupportedOperationException if the pixel does not fit in an `int`
      */
     public int getRGB(Object inData) {
         return (this.getAlpha(inData) << 24) | (this.getRed(inData) << 16)
@@ -348,42 +350,43 @@ public abstract class ColorModel implements Transparency {
     }
 
     /**
-     * Un ARGB llevado a un píxel de este modelo.
+     * An ARGB brought into a pixel of this model.
      *
-     * <p>No hay versión general: armar el píxel depende enteramente de cómo lo guarde la subclase.
+     * <p>There is no general version: assembling the pixel depends entirely on how the subclass
+     * stores it.
      *
-     * @throws UnsupportedOperationException siempre, salvo que la subclase lo redefina
+     * @throws UnsupportedOperationException always, unless the subclass overrides it
      */
     public Object getDataElements(int rgb, Object pixel) {
         throw new UnsupportedOperationException("This method is not supported by this color model.");
     }
 
     /**
-     * Las componentes de un píxel.
+     * The components of a pixel.
      *
-     * @throws UnsupportedOperationException siempre, salvo que la subclase lo redefina
+     * @throws UnsupportedOperationException always, unless the subclass overrides it
      */
     public int[] getComponents(int pixel, int[] components, int offset) {
         throw new UnsupportedOperationException("This method is not supported by this color model.");
     }
 
     /**
-     * Las componentes de un píxel crudo.
+     * The components of a raw pixel.
      *
-     * @throws UnsupportedOperationException siempre, salvo que la subclase lo redefina
+     * @throws UnsupportedOperationException always, unless the subclass overrides it
      */
     public int[] getComponents(Object pixel, int[] components, int offset) {
         throw new UnsupportedOperationException("This method is not supported by this color model.");
     }
 
     /**
-     * Componentes normalizadas llevadas a la escala de la imagen.
+     * Normalised components brought into the scale of the image.
      *
-     * <p>Con alfa premultiplicado cada componente de color se multiplica por el alfa antes de
-     * escalarla, que es justamente lo que significa premultiplicar.
+     * <p>With premultiplied alpha each colour component is multiplied by the alpha before being
+     * scaled, which is exactly what premultiplying means.
      *
-     * @throws UnsupportedOperationException si el modelo no declaró los anchos de componente
-     * @throws IllegalArgumentException si el arreglo de entrada no trae todas las componentes
+     * @throws UnsupportedOperationException if the model did not declare the component widths
+     * @throws IllegalArgumentException if the input array does not carry every component
      */
     public int[] getUnnormalizedComponents(float[] normComponents, int normOffset,
             int[] components, int offset) {
@@ -421,14 +424,15 @@ public abstract class ColorModel implements Transparency {
     }
 
     /**
-     * Componentes de la imagen llevadas a la escala del espacio de color.
+     * Components of the image brought into the scale of the colour space.
      *
-     * <p>Es la inversa de {@link #getUnnormalizedComponents}. Con alfa premultiplicado hay que
-     * **dividir** por el alfa para recuperar el color, y con alfa cero no hay color que recuperar:
-     * el píxel es invisible y sus componentes salen en cero, que es lo único que se puede decir.
+     * <p>It is the inverse of {@link #getUnnormalizedComponents}. With premultiplied alpha one has
+     * to **divide** by the alpha to recover the colour, and with alpha zero there is no colour to
+     * recover: the pixel is invisible and its components come out at zero, which is all that can be
+     * said.
      *
-     * @throws UnsupportedOperationException si el modelo no declaró los anchos de componente
-     * @throws IllegalArgumentException si el arreglo de entrada no trae todas las componentes
+     * @throws UnsupportedOperationException if the model did not declare the component widths
+     * @throws IllegalArgumentException if the input array does not carry every component
      */
     public float[] getNormalizedComponents(int[] components, int offset, float[] normComponents,
             int normOffset) {
@@ -472,29 +476,30 @@ public abstract class ColorModel implements Transparency {
     }
 
     /**
-     * Componentes llevadas a un píxel de un `int`.
+     * Components brought into a pixel in an `int`.
      *
-     * @throws UnsupportedOperationException siempre, salvo que la subclase lo redefina
+     * @throws UnsupportedOperationException always, unless the subclass overrides it
      */
     public int getDataElement(int[] components, int offset) {
         throw new UnsupportedOperationException("This method is not supported by this color model.");
     }
 
     /**
-     * Componentes llevadas a un píxel crudo.
+     * Components brought into a raw pixel.
      *
-     * @throws UnsupportedOperationException siempre, salvo que la subclase lo redefina
+     * @throws UnsupportedOperationException always, unless the subclass overrides it
      */
     public Object getDataElements(int[] components, int offset, Object obj) {
         throw new UnsupportedOperationException("This method is not supported by this color model.");
     }
 
     /**
-     * Componentes normalizadas llevadas a un píxel de un `int`.
+     * Normalised components brought into a pixel in an `int`.
      *
-     * <p>Pasa por las componentes sin normalizar; una subclase que sepa hacerlo derecho lo redefine.
+     * <p>It goes through the unnormalised components; a subclass that knows how to do it directly
+     * overrides it.
      *
-     * @throws UnsupportedOperationException si el modelo no puede armar el píxel
+     * @throws UnsupportedOperationException if the model cannot assemble the pixel
      */
     public int getDataElement(float[] normComponents, int normOffset) {
         int[] components = this.getUnnormalizedComponents(normComponents, normOffset, null, 0);
@@ -502,9 +507,9 @@ public abstract class ColorModel implements Transparency {
     }
 
     /**
-     * Componentes normalizadas llevadas a un píxel crudo.
+     * Normalised components brought into a raw pixel.
      *
-     * @throws UnsupportedOperationException si el modelo no puede armar el píxel
+     * @throws UnsupportedOperationException if the model cannot assemble the pixel
      */
     public Object getDataElements(float[] normComponents, int normOffset, Object obj) {
         int[] components = this.getUnnormalizedComponents(normComponents, normOffset, null, 0);
@@ -512,9 +517,10 @@ public abstract class ColorModel implements Transparency {
     }
 
     /**
-     * Las componentes normalizadas de un píxel crudo.
+     * The normalised components of a raw pixel.
      *
-     * @throws UnsupportedOperationException si el modelo no sabe separar las componentes
+     * @throws UnsupportedOperationException if the model does not know how to separate the
+     *     components
      */
     public float[] getNormalizedComponents(Object pixel, float[] normComponents, int normOffset) {
         int[] components = this.getComponents(pixel, null, 0);
@@ -522,36 +528,36 @@ public abstract class ColorModel implements Transparency {
     }
 
     /**
-     * Un modelo de muestras que le sirva a este modelo de color.
+     * A sample model that suits this colour model.
      *
-     * @throws UnsupportedOperationException siempre, salvo que la subclase lo redefina
+     * @throws UnsupportedOperationException always, unless the subclass overrides it
      */
     public SampleModel createCompatibleSampleModel(int w, int h) {
         throw new UnsupportedOperationException("This method is not supported by this color model");
     }
 
     /**
-     * Un ráster que le sirva a este modelo de color.
+     * A raster that suits this colour model.
      *
-     * @throws UnsupportedOperationException siempre, salvo que la subclase lo redefina
+     * @throws UnsupportedOperationException always, unless the subclass overrides it
      */
     public WritableRaster createCompatibleWritableRaster(int w, int h) {
         throw new UnsupportedOperationException("This method is not supported by this color model");
     }
 
     /**
-     * Si ese modelo de muestras le sirve a éste.
+     * Whether that sample model suits this one.
      *
-     * @throws UnsupportedOperationException siempre, salvo que la subclase lo redefina
+     * @throws UnsupportedOperationException always, unless the subclass overrides it
      */
     public boolean isCompatibleSampleModel(SampleModel sm) {
         throw new UnsupportedOperationException("This method is not supported by this color model");
     }
 
     /**
-     * Si ese ráster le sirve a éste.
+     * Whether that raster suits this one.
      *
-     * @throws UnsupportedOperationException siempre, salvo que la subclase lo redefina
+     * @throws UnsupportedOperationException always, unless the subclass overrides it
      */
     public boolean isCompatibleRaster(Raster raster) {
         throw new UnsupportedOperationException(
@@ -559,28 +565,28 @@ public abstract class ColorModel implements Transparency {
     }
 
     /**
-     * El canal alfa del ráster, como un ráster de una banda **sobre los mismos datos**.
+     * The alpha channel of the raster, as a one-band raster **over the same data**.
      *
-     * <p>Devuelve `null` cuando el modelo no tiene alfa o cuando el alfa no vive en una banda
-     * separada que se pueda ver por sí sola. Es la respuesta honesta y no un error: hay formatos en
-     * los que el alfa existe pero no como banda.
+     * <p>It returns `null` when the model has no alpha or when the alpha does not live in a
+     * separate band that can be seen on its own. It is the honest answer and not an error: there
+     * are formats where the alpha exists but not as a band.
      */
     public WritableRaster getAlphaRaster(WritableRaster raster) {
         return null;
     }
 
     /**
-     * Cambia el ráster a alfa premultiplicado, o de vuelta, y devuelve el modelo que corresponde.
+     * Changes the raster to premultiplied alpha, or back, and returns the model that corresponds.
      *
-     * <p>Modifica el ráster **en el lugar**.
+     * <p>It modifies the raster **in place**.
      *
-     * @throws UnsupportedOperationException siempre, salvo que la subclase lo redefina
+     * @throws UnsupportedOperationException always, unless the subclass overrides it
      */
     public ColorModel coerceData(WritableRaster raster, boolean isAlphaPremultiplied) {
         throw new UnsupportedOperationException("This method is not supported by this color model");
     }
 
-    /** Igualdad por clase, tamaño, espacio de color y bandera de alfa. */
+    /** Equality by class, size, colour space and alpha flag. */
     public boolean equals(Object obj) {
         if (obj == null || obj.getClass() != this.getClass()) {
             return false;

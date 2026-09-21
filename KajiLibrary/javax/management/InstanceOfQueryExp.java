@@ -1,17 +1,17 @@
 package javax.management;
 
 /**
- * "El MBean es de esta clase o de una subclase."
+ * "The MBean is of this class or of a subclass."
  *
- * <p>De paquete: se fabrica con {@link Query#isInstanceOf}. Es la unica consulta que le pregunta al
- * agente por el <b>tipo</b> y no por un atributo.
+ * <p>Package-private: it is made with {@link Query#isInstanceOf}. It is the only query that asks
+ * the agent about the <b>type</b> and not about an attribute.
  */
 class InstanceOfQueryExp extends QueryEval implements QueryExp {
 
     private static final long serialVersionUID = -1081892073854801359L;
 
     /**
-     * @serial el nombre de la clase
+     * @serial the class name
      */
     private StringValueExp classNameValue;
 
@@ -26,7 +26,7 @@ class InstanceOfQueryExp extends QueryEval implements QueryExp {
         return classNameValue;
     }
 
-    /** Sin servidor en el hilo no hay tipo que consultar, y la respuesta es "no coincide". */
+    /** Without a server on the thread there is no type to query, and the answer is "no match". */
     public boolean apply(ObjectName name) throws BadStringOperationException,
             BadBinaryOpValueExpException, BadAttributeValueExpException,
             InvalidApplicationException {

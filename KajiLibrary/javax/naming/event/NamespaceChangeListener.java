@@ -1,27 +1,27 @@
 package javax.naming.event;
 
 /**
- * KajiLibrary's javax.naming.event.NamespaceChangeListener -- cambios en el <b>espacio de nombres</b>.
+ * KajiLibrary's javax.naming.event.NamespaceChangeListener -- changes in the <b>namespace</b>.
  *
- * <p>Los tres eventos son sobre la existencia y la ubicacion de las entradas: aparecio una,
- * desaparecio una, cambio de nombre. Lo que <b>no</b> cubre es que el contenido de una entrada cambie
- * -- eso es {@link ObjectChangeListener}.
+ * <p>The three events are about the existence and location of entries: one appeared, one
+ * disappeared, one was renamed. What it does <b>not</b> cover is an entry's content changing --
+ * that is {@link ObjectChangeListener}.
  *
- * <p>La division importa al escuchar: implementar solo esta interfaz sobre un directorio muy activo
- * evita recibir un evento por cada modificacion de atributo, que suelen ser la mayoria.
+ * <p>The split matters when listening: implementing only this interface on a very busy directory
+ * avoids getting an event for every attribute modification, which are usually the majority.
  *
- * <p>En {@link #objectRenamed} el evento trae las dos asociaciones --la vieja y la nueva-- y una de
- * las dos puede ser null: renombrar hacia adentro o hacia afuera del alcance suscrito se ve como una
- * aparicion o una desaparicion parcial.
+ * <p>In {@link #objectRenamed} the event carries both bindings --the old and the new-- and one of
+ * them may be null: renaming into or out of the subscribed scope looks like a partial appearance
+ * or disappearance.
  */
 public interface NamespaceChangeListener extends NamingListener {
 
-    /** Aparecio una entrada nueva. */
+    /** A new entry appeared. */
     void objectAdded(NamingEvent evt);
 
-    /** Desaparecio una. */
+    /** One disappeared. */
     void objectRemoved(NamingEvent evt);
 
-    /** Una cambio de nombre. Ver la nota de la clase sobre los nulls. */
+    /** One was renamed. See the class note about the nulls. */
     void objectRenamed(NamingEvent evt);
 }

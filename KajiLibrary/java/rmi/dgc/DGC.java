@@ -5,50 +5,51 @@ import java.rmi.RemoteException;
 import java.rmi.server.ObjID;
 
 /**
- * El recolector distribuido, visto desde el cliente.
+ * The distributed collector, as seen from the client.
  *
- * <p>Cada VM que exporta objetos remotos exporta tambien un `DGC` bajo el identificador fijo
- * {@code ObjID.DGC_ID}. El protocolo son dos llamadas y una idea: **contar referencias con
- * vencimiento**.
+ * <p>Every VM that exports remote objects also exports a `DGC` under the fixed identifier
+ * {@code ObjID.DGC_ID}. The protocol is two calls and one idea: **reference counting with
+ * expiry**.
  *
  * <ul>
- *   <li>{@link #dirty} lo llama el cliente cuando recibe una referencia a un objeto de este
- *       servidor. El servidor anota que esa VM lo tiene y devuelve un {@link Lease}: el permiso
- *       vence, asi que un cliente que se cuelgue o se muera no deja la referencia viva para
- *       siempre. El cliente que quiera seguir teniendola tiene que renovar antes del vencimiento.
- *   <li>{@link #clean} lo llama el cliente cuando suelta la referencia. Es la via rapida: sin ella
- *       el servidor igual libera al vencer el plazo, pero tarde.
+ *   <li>{@link #dirty} is what the client calls when it receives a reference to an object of this
+ *       server. The server records that that VM holds it and returns a {@link Lease}: the lease
+ *       expires, so a client that hangs or dies does not leave the reference alive forever. A
+ *       client that wants to keep holding it has to renew before the expiry.
+ *   <li>{@link #clean} is what the client calls when it drops the reference. It is the fast path:
+ *       without it the server frees the object all the same when the term expires, but late.
  * </ul>
  *
- * <p>Cuando no queda ninguna referencia --ni local ni remota-- el objeto queda a merced del
- * recolector de siempre.
+ * <p>When no reference is left --neither local nor remote-- the object is left at the mercy of
+ * the usual collector.
  *
- * <p>El contador de referencias no ve ciclos entre VM: dos objetos en dos servidores que se
- * apuntan mutuamente no se liberan nunca. Es una limitacion conocida del diseño, no un descuido.
+ * <p>The reference count does not see cycles across VMs: two objects on two servers that point at
+ * each other are never freed. It is a known limitation of the design, not an oversight.
  */
 public interface DGC extends Remote {
 
     /**
-     * Pide, o renueva, el permiso para retener las referencias dadas.
+     * It asks for, or renews, the lease to retain the given references.
      *
-     * @param ids los objetos que el cliente quiere retener
-     * @param sequenceNum el numero de secuencia de la llamada, para que el servidor descarte las
-     *     que le lleguen fuera de orden --con `dirty` y `clean` cruzados, el orden importa
-     * @param lease el permiso que pide: solo la duracion es una peticion, el servidor decide
-     * @return el permiso concedido, con la duracion que el servidor haya decidido
-     * @throws RemoteException si falla la llamada
+     * @param ids the objects the client wants to retain
+     * @param sequenceNum the sequence number of the call, so that the server discards the ones
+     *     that reach it out of order --with `dirty` and `clean` crossing each other, the order
+     *     matters
+     * @param lease the lease it asks for: only the duration is a request, the server decides
+     * @return the lease granted, with the duration the server has decided on
+     * @throws RemoteException if the call fails
      */
     Lease dirty(ObjID[] ids, long sequenceNum, Lease lease) throws RemoteException;
 
     /**
-     * Avisa que el cliente solto las referencias dadas.
+     * It reports that the client has dropped the given references.
      *
-     * @param ids los objetos que el cliente ya no retiene
-     * @param sequenceNum el numero de secuencia de la llamada
-     * @param vmid la VM que las suelta
-     * @param strong si la llamada tiene que ganarle a un `dirty` anterior aunque llegue con un
-     *     numero de secuencia menor
-     * @throws RemoteException si falla la llamada
+     * @param ids the objects the client no longer retains
+     * @param sequenceNum the sequence number of the call
+     * @param vmid the VM that drops them
+     * @param strong whether the call has to win over an earlier `dirty` even if that one arrives
+     *     with a lower sequence number
+     * @throws RemoteException if the call fails
      */
     void clean(ObjID[] ids, long sequenceNum, VMID vmid, boolean strong) throws RemoteException;
 }

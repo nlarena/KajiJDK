@@ -5,18 +5,18 @@ import java.awt.Component;
 import javax.swing.JTree;
 
 /**
- * Quien convierte un nodo del modelo en algo que se pueda dibujar.
+ * Whoever turns a model node into something that can be drawn.
  *
- * <p>La misma idea que {@link javax.swing.ListCellRenderer}: devuelve un componente que se usa de
- * sello, uno por fila visible. Ver esa nota.
+ * <p>The same idea as {@link javax.swing.ListCellRenderer}: it returns a component used as a
+ * stamp, one per visible row. See that note.
  *
- * <p>Lo que agrega son los datos que solo un arbol tiene: si el nodo esta desplegado, si es hoja, y
- * en que fila cae. Con eso el dibujante puede elegir el icono de carpeta abierta, el de carpeta
- * cerrada o el de archivo sin preguntarle nada al modelo.
+ * <p>What it adds are the data only a tree has: whether the node is expanded, whether it is a
+ * leaf, and which row it falls in. With that the renderer can pick the open folder icon, the
+ * closed folder one or the file one without asking the model anything.
  */
 public interface TreeCellRenderer {
 
-    /** El componente que dibuja ese nodo. */
+    /** The component that draws that node. */
     Component getTreeCellRendererComponent(JTree tree, Object value, boolean selected,
             boolean expanded, boolean leaf, int row, boolean hasFocus);
 }

@@ -14,70 +14,72 @@ import javax.swing.plaf.ComponentUI;
 import javax.swing.plaf.TabbedPaneUI;
 
 /**
- * Un grupo de paneles con solapas, del que se ve uno a la vez.
+ * A group of panes with tabs, of which one is seen at a time.
  *
- * <h2>Los datos de una solapa no estan en su componente</h2>
+ * <h2>A tab's data are not in its component</h2>
  *
- * <p>El titulo, el icono, el color y si esta habilitada viven en la solapa, no en el componente que
- * muestra. Es lo que permite poner el mismo componente en dos solapas con nombres distintos, y lo
- * que explica que exista un metodo {@code ...At(int)} por cada cosa.
+ * <p>The title, the icon, the colour and whether it is enabled live in the tab, not in the
+ * component it shows. It is what allows the same component to be put in two tabs with
+ * different names, and what explains why there is a {@code ...At(int)} method for each
+ * thing.
  *
- * <h2>Todos los componentes son hijos, aunque no se vean</h2>
+ * <h2>Every component is a child, even though they are not seen</h2>
  *
- * <p>Agregar una solapa agrega su componente como hijo del panel; el aspecto muestra el de la
- * solapa elegida y esconde los demas. No se arman al elegirlos: estan desde el principio.
+ * <p>Adding a tab adds its component as a child of the pane; the look and feel shows the chosen
+ * tab's and hides the others. They are not built on being chosen: they are there from the
+ * start.
  *
- * <p>Eso importa al medir. Un panel con solapas pide el tamano del mas grande de todos, no el del
- * que se ve, porque cambiar de solapa no deberia cambiar el tamano de la ventana.
+ * <p>That matters when measuring. A tabbed pane asks for the size of the largest of them all,
+ * not that of the one that is seen, because changing tab should not change the window's size.
  *
- * <h2>Que pasa cuando las solapas no entran</h2>
+ * <h2>What happens when the tabs do not fit</h2>
  *
- * <p>Con {@link #WRAP_TAB_LAYOUT} se acomodan en varias filas; con {@link #SCROLL_TAB_LAYOUT} se
- * quedan en una y aparecen flechas. La primera muestra todas y mueve el contenido hacia abajo cada
- * vez que se agrega una fila; la segunda deja el contenido quieto y esconde solapas. No hay una
- * buena: hay que elegir cual molesta menos.
+ * <p>With {@link #WRAP_TAB_LAYOUT} they are laid out in several rows; with
+ * {@link #SCROLL_TAB_LAYOUT} they stay in one and arrows appear. The first shows them all and
+ * moves the content downwards every time a row is added; the second leaves the content still
+ * and hides tabs. There is no good one: one has to choose which is less of a nuisance.
  */
 public class JTabbedPane extends JComponent implements Serializable,
         javax.accessibility.Accessible, SwingConstants {
 
     private static final String uiClassID = "TabbedPaneUI";
 
-    /** Las solapas que no entran pasan a otra fila. */
+    /** The tabs that do not fit go to another row. */
     public static final int WRAP_TAB_LAYOUT = 0;
 
-    /** Las solapas se quedan en una fila y se desplazan. */
+    /** The tabs stay in one row and are scrolled. */
     public static final int SCROLL_TAB_LAYOUT = 1;
 
-    /** De que lado van las solapas. */
+    /** Which side the tabs go on. */
     protected int tabPlacement = TOP;
 
-    /** Cual esta elegida. */
+    /** Which one is chosen. */
     protected SingleSelectionModel model;
 
-    /** El puente entre el modelo y quien escucha al panel. */
+    /** The bridge between the model and whoever listens to the pane. */
     protected ChangeListener changeListener = null;
 
-    /** El unico evento de cambio; no lleva datos, asi que se reusa. */
+    /** The single change event; it carries no data, so it is reused. */
     protected transient ChangeEvent changeEvent = null;
 
     private int tabLayoutPolicy;
-    private Vector<Solapa> pages = new Vector<Solapa>();
+    private Vector<Tab> pages = new Vector<Tab>();
     private AccessibleContext accessibleContext;
 
-    /** Un panel con las solapas arriba. */
+    /** A pane with the tabs on top. */
     public JTabbedPane() {
         this(TOP, WRAP_TAB_LAYOUT);
     }
 
-    /** Un panel con las solapas de ese lado. */
+    /** A pane with the tabs on that side. */
     public JTabbedPane(int tabPlacement) {
         this(tabPlacement, WRAP_TAB_LAYOUT);
     }
 
     /**
-     * Un panel con las solapas de ese lado y esa politica.
+     * A pane with the tabs on that side and that policy.
      *
-     * @throws IllegalArgumentException si el lado o la politica no existen.
+     * @throws IllegalArgumentException if the side or the policy do not exist.
      */
     public JTabbedPane(int tabPlacement, int tabLayoutPolicy) {
         setTabPlacement(tabPlacement);
@@ -104,15 +106,15 @@ public class JTabbedPane extends JComponent implements Serializable,
     }
 
     protected ChangeListener createChangeListener() {
-        return new PuenteDeCambio(this);
+        return new ChangeBridge(this);
     }
 
-    /** Reenvia el aviso del modelo a quien escucha al panel. */
-    static class PuenteDeCambio implements ChangeListener, Serializable {
+    /** It forwards the model's notice to whoever listens to the pane. */
+    static class ChangeBridge implements ChangeListener, Serializable {
 
         private final JTabbedPane panel;
 
-        PuenteDeCambio(JTabbedPane panel) {
+        ChangeBridge(JTabbedPane panel) {
             this.panel = panel;
         }
 
@@ -149,7 +151,7 @@ public class JTabbedPane extends JComponent implements Serializable,
         return model;
     }
 
-    /** Cambia el modelo, llevandose el puente al nuevo. */
+    /** It changes the model, taking the bridge along to the new one. */
     public void setModel(SingleSelectionModel newModel) {
         SingleSelectionModel oldModel = getModel();
         if (oldModel != null) {
@@ -170,9 +172,9 @@ public class JTabbedPane extends JComponent implements Serializable,
     }
 
     /**
-     * De que lado van las solapas.
+     * Which side the tabs go on.
      *
-     * @throws IllegalArgumentException si no es uno de los cuatro lados.
+     * @throws IllegalArgumentException if it is not one of the four sides.
      */
     public void setTabPlacement(int tabPlacement) {
         if (tabPlacement != TOP && tabPlacement != LEFT && tabPlacement != BOTTOM
@@ -194,9 +196,9 @@ public class JTabbedPane extends JComponent implements Serializable,
     }
 
     /**
-     * Que hacer cuando las solapas no entran; ver la nota de la clase.
+     * What to do when the tabs do not fit; see the class note.
      *
-     * @throws IllegalArgumentException si no es una de las dos.
+     * @throws IllegalArgumentException if it is not one of the two.
      */
     public void setTabLayoutPolicy(int tabLayoutPolicy) {
         if (tabLayoutPolicy != WRAP_TAB_LAYOUT && tabLayoutPolicy != SCROLL_TAB_LAYOUT) {
@@ -217,9 +219,9 @@ public class JTabbedPane extends JComponent implements Serializable,
     }
 
     /**
-     * Elige la solapa numero tal.
+     * It chooses tab number such-and-such.
      *
-     * @throws IndexOutOfBoundsException si no existe.
+     * @throws IndexOutOfBoundsException if it does not exist.
      */
     public void setSelectedIndex(int index) {
         if (index >= getTabCount() || index < -1) {
@@ -229,7 +231,7 @@ public class JTabbedPane extends JComponent implements Serializable,
         model.setSelectedIndex(index);
     }
 
-    /** El componente de la solapa elegida, o nulo. */
+    /** The chosen tab's component, or null. */
     public Component getSelectedComponent() {
         int index = getSelectedIndex();
         if (index == -1) {
@@ -239,9 +241,9 @@ public class JTabbedPane extends JComponent implements Serializable,
     }
 
     /**
-     * Elige la solapa de ese componente.
+     * It chooses that component's tab.
      *
-     * @throws IllegalArgumentException si el componente no esta en ninguna solapa.
+     * @throws IllegalArgumentException if the component is in no tab.
      */
     public void setSelectedComponent(Component c) {
         int index = indexOfComponent(c);
@@ -253,17 +255,17 @@ public class JTabbedPane extends JComponent implements Serializable,
     }
 
     /**
-     * Agrega una solapa en esa posicion.
+     * It adds a tab at that position.
      *
-     * <p>Si era la primera queda elegida: un panel con solapas y ninguna elegida no mostraria
-     * nada.
+     * <p>If it was the first it is left chosen: a tabbed pane with no tab chosen would show
+     * nothing.
      */
     public void insertTab(String title, Icon icon, Component component, String tip, int index) {
         int newIndex = index;
         if (newIndex > pages.size()) {
             newIndex = pages.size();
         }
-        Solapa p = new Solapa(this, title != null ? title : "", icon, null, component, tip);
+        Tab p = new Tab(this, title != null ? title : "", icon, null, component, tip);
         pages.insertElementAt(p, newIndex);
         if (component != null) {
             addImpl(component, null, -1);
@@ -272,8 +274,9 @@ public class JTabbedPane extends JComponent implements Serializable,
         if (pages.size() == 1) {
             setSelectedIndex(0);
         } else if (newIndex <= getSelectedIndex()) {
-            // Insertar antes de la elegida la corre un lugar. Sin esto, agregar una solapa al
-            // principio cambiaria en silencio cual esta abierta.
+            // Inserting before the chosen one shifts it one place. Without this, adding a tab at
+            // the
+                        // beginning would silently change which one is open.
             setSelectedIndex(getSelectedIndex() + 1);
         }
         revalidate();
@@ -292,7 +295,7 @@ public class JTabbedPane extends JComponent implements Serializable,
         insertTab(title, null, component, null, pages.size());
     }
 
-    /** Agrega una solapa cuyo titulo es el nombre del componente. */
+    /** It adds a tab whose title is the component's name. */
     public Component add(Component component) {
         if (!(component instanceof javax.swing.JComponent)
                 || ((javax.swing.JComponent) component).getClientProperty(
@@ -313,7 +316,7 @@ public class JTabbedPane extends JComponent implements Serializable,
         return component;
     }
 
-    /** Agrega una solapa; si la restriccion es texto o icono, es el titulo. */
+    /** It adds a tab; if the constraint is text or an icon, it is the title. */
     public void add(Component component, Object constraints) {
         if (constraints instanceof String) {
             addTab((String) constraints, component);
@@ -331,26 +334,27 @@ public class JTabbedPane extends JComponent implements Serializable,
     }
 
     /**
-     * Saca la solapa numero tal.
+     * It removes tab number such-and-such.
      *
-     * <p>Si era la elegida, queda elegida la anterior; si era la primera, la que quedo primera. Un
-     * panel con solapas nunca queda sin elegida mientras le quede alguna.
+     * <p>If it was the chosen one, the previous one is left chosen; if it was the first, the one
+     * that ended up first. A tabbed pane is never left with none chosen while it has any left.
      */
     public void removeTabAt(int index) {
         checkIndex(index);
         Component component = getComponentAt(index);
         int selected = getSelectedIndex();
         pages.removeElementAt(index);
-        sacarHijo(component);
-        int nuevas = getTabCount();
-        if (nuevas == 0) {
+        removeChild(component);
+        int added = getTabCount();
+        if (added == 0) {
             model.setSelectedIndex(-1);
         } else if (index < selected) {
-            // Se fue una de las de antes: la elegida sigue siendo la misma, un lugar mas atras.
+            // One of the earlier ones left: the chosen one is still the same, one place back.
             setSelectedIndex(selected - 1);
         } else if (index == selected) {
-            // Se fue la elegida: queda la que ocupo su lugar, o la ultima si era la ultima.
-            setSelectedIndex(Math.min(selected, nuevas - 1));
+            // The chosen one left: the one that took its place is left, or the last if it was the
+            // last.
+            setSelectedIndex(Math.min(selected, added - 1));
         }
         revalidate();
         repaint();
@@ -361,7 +365,7 @@ public class JTabbedPane extends JComponent implements Serializable,
         if (index != -1) {
             removeTabAt(index);
         } else {
-            sacarHijo(component);
+            removeChild(component);
         }
     }
 
@@ -381,7 +385,7 @@ public class JTabbedPane extends JComponent implements Serializable,
         return pages.size();
     }
 
-    /** En cuantas filas quedaron las solapas; lo contesta el aspecto. */
+    /** How many rows the tabs ended up in; the look and feel answers it. */
     public int getTabRunCount() {
         if (ui != null) {
             return getUI().getTabRunCount(this);
@@ -390,51 +394,51 @@ public class JTabbedPane extends JComponent implements Serializable,
     }
 
     public String getTitleAt(int index) {
-        return solapa(index).titulo;
+        return tab(index).title;
     }
 
     public Icon getIconAt(int index) {
-        return solapa(index).icono;
+        return tab(index).icon;
     }
 
-    /** El icono que se ve cuando la solapa esta deshabilitada. */
+    /** The icon that is seen when the tab is disabled. */
     public Icon getDisabledIconAt(int index) {
-        return solapa(index).iconoApagado;
+        return tab(index).disabledIcon;
     }
 
     public String getToolTipTextAt(int index) {
-        return solapa(index).ayuda;
+        return tab(index).tip;
     }
 
     public Color getBackgroundAt(int index) {
-        Color c = solapa(index).fondo;
+        Color c = tab(index).background;
         return (c == null) ? getBackground() : c;
     }
 
     public Color getForegroundAt(int index) {
-        Color c = solapa(index).frente;
+        Color c = tab(index).foreground;
         return (c == null) ? getForeground() : c;
     }
 
     public boolean isEnabledAt(int index) {
-        return solapa(index).habilitada;
+        return tab(index).enabled;
     }
 
     public Component getComponentAt(int index) {
-        return solapa(index).componente;
+        return tab(index).component;
     }
 
-    /** La letra con la que se salta a esta solapa desde el teclado. */
+    /** The letter this tab is jumped to with from the keyboard. */
     public int getMnemonicAt(int index) {
-        return solapa(index).mnemonico;
+        return tab(index).mnemonic;
     }
 
-    /** Que letra del titulo va subrayada. */
+    /** Which letter of the title goes underlined. */
     public int getDisplayedMnemonicIndexAt(int index) {
-        return solapa(index).indiceMnemonico;
+        return tab(index).mnemonicIndex;
     }
 
-    /** El rectangulo de la solapa; lo contesta el aspecto. */
+    /** The tab's rectangle; the look and feel answers it. */
     public Rectangle getBoundsAt(int index) {
         checkIndex(index);
         if (ui != null) {
@@ -444,8 +448,8 @@ public class JTabbedPane extends JComponent implements Serializable,
     }
 
     public void setTitleAt(int index, String title) {
-        String oldTitle = solapa(index).titulo;
-        solapa(index).titulo = title;
+        String oldTitle = tab(index).title;
+        tab(index).title = title;
         if (oldTitle != title) {
             revalidate();
             repaint();
@@ -453,41 +457,41 @@ public class JTabbedPane extends JComponent implements Serializable,
     }
 
     public void setIconAt(int index, Icon icon) {
-        solapa(index).icono = icon;
+        tab(index).icon = icon;
         revalidate();
         repaint();
     }
 
     public void setDisabledIconAt(int index, Icon disabledIcon) {
-        solapa(index).iconoApagado = disabledIcon;
+        tab(index).disabledIcon = disabledIcon;
         repaint();
     }
 
     public void setToolTipTextAt(int index, String toolTipText) {
-        solapa(index).ayuda = toolTipText;
+        tab(index).tip = toolTipText;
     }
 
     public void setBackgroundAt(int index, Color background) {
-        solapa(index).fondo = background;
+        tab(index).background = background;
         repaint();
     }
 
     public void setForegroundAt(int index, Color foreground) {
-        solapa(index).frente = foreground;
+        tab(index).foreground = foreground;
         repaint();
     }
 
     public void setEnabledAt(int index, boolean enabled) {
-        solapa(index).habilitada = enabled;
+        tab(index).enabled = enabled;
         repaint();
     }
 
-    /** Cambia el componente de una solapa sin tocar su titulo ni su icono. */
+    /** It changes a tab's component without touching its title or its icon. */
     public void setComponentAt(int index, Component component) {
-        Solapa p = solapa(index);
-        if (component != p.componente) {
-            sacarHijo(p.componente);
-            p.componente = component;
+        Tab p = tab(index);
+        if (component != p.component) {
+            removeChild(p.component);
+            p.component = component;
             if (component != null) {
                 component.setVisible(index == getSelectedIndex());
                 addImpl(component, null, -1);
@@ -498,36 +502,36 @@ public class JTabbedPane extends JComponent implements Serializable,
     }
 
     public void setDisplayedMnemonicIndexAt(int tabIndex, int mnemonicIndex) {
-        Solapa p = solapa(tabIndex);
+        Tab p = tab(tabIndex);
         if (mnemonicIndex != -1) {
-            String title = p.titulo;
+            String title = p.title;
             if (title == null || mnemonicIndex < 0 || mnemonicIndex >= title.length()) {
                 throw new IllegalArgumentException("Invalid mnemonic index: " + mnemonicIndex);
             }
         }
-        p.indiceMnemonico = mnemonicIndex;
+        p.mnemonicIndex = mnemonicIndex;
         repaint();
     }
 
     /**
-     * La letra que salta a esta solapa.
+     * The letter that jumps to this tab.
      *
-     * <p>Ademas busca esa letra en el titulo para subrayarla. Si no esta, no se subraya nada: el
-     * atajo sigue andando, solo que no se ve.
+     * <p>It also looks that letter up in the title in order to underline it. If it is not there,
+     * nothing is underlined: the shortcut goes on working, only it is not seen.
      */
     public void setMnemonicAt(int tabIndex, int mnemonic) {
-        Solapa p = solapa(tabIndex);
-        p.mnemonico = mnemonic;
-        String title = p.titulo;
+        Tab p = tab(tabIndex);
+        p.mnemonic = mnemonic;
+        String title = p.title;
         if (title != null && mnemonic != 0) {
             int i = title.toUpperCase(java.util.Locale.ROOT)
                     .indexOf(Character.toUpperCase((char) mnemonic));
-            p.indiceMnemonico = i;
+            p.mnemonicIndex = i;
         }
         repaint();
     }
 
-    /** La primera solapa con ese titulo, o -1. */
+    /** The first tab with that title, or -1. */
     public int indexOfTab(String title) {
         for (int i = 0; i < getTabCount(); i++) {
             String t = getTitleAt(i);
@@ -558,7 +562,7 @@ public class JTabbedPane extends JComponent implements Serializable,
         return -1;
     }
 
-    /** Que solapa cae en ese punto, o -1; lo contesta el aspecto. */
+    /** Which tab falls at that point, or -1; the look and feel answers it. */
     public int indexAtLocation(int x, int y) {
         if (ui != null) {
             return getUI().tabForCoordinate(this, x, y);
@@ -566,12 +570,12 @@ public class JTabbedPane extends JComponent implements Serializable,
         return -1;
     }
 
-    /** El texto de ayuda de la solapa que esta bajo el mouse. */
+    /** The tool tip text of the tab that is under the mouse. */
     public String getToolTipText(MouseEvent event) {
         if (ui != null) {
             int index = getUI().tabForCoordinate(this, event.getX(), event.getY());
             if (index != -1) {
-                return solapa(index).ayuda;
+                return tab(index).tip;
             }
         }
         return super.getToolTipText(event);
@@ -586,16 +590,16 @@ public class JTabbedPane extends JComponent implements Serializable,
     }
 
     /**
-     * Un componente que reemplaza al titulo de la solapa.
+     * A component that replaces the tab's title.
      *
-     * <p>Es lo que permite una solapa con un boton de cerrar, o con dos lineas de texto: en lugar
-     * de un titulo y un icono, se dibuja el componente que se le ponga.
+     * <p>It is what allows a tab with a close button, or with two lines of text: instead of a
+     * title and an icon, the component that is set is drawn.
      */
     public void setTabComponentAt(int index, Component component) {
-        Solapa p = solapa(index);
-        Component vieja = p.componenteSolapa;
-        p.componenteSolapa = component;
-        sacarHijo(vieja);
+        Tab p = tab(index);
+        Component old = p.tabComponent;
+        p.tabComponent = component;
+        removeChild(old);
         if (component != null) {
             addImpl(component, null, -1);
         }
@@ -604,7 +608,7 @@ public class JTabbedPane extends JComponent implements Serializable,
     }
 
     public Component getTabComponentAt(int index) {
-        return solapa(index).componenteSolapa;
+        return tab(index).tabComponent;
     }
 
     public int indexOfTabComponent(Component tabComponent) {
@@ -617,17 +621,18 @@ public class JTabbedPane extends JComponent implements Serializable,
     }
 
     /**
-     * Saca un componente de la lista de hijos sin pasar por {@link #removeTabAt}.
+     * It removes a component from the list of children without going through
+     * {@link #removeTabAt}.
      *
-     * <p>Parece un rodeo y es necesario: {@code Container.remove(Component)} busca el indice del
-     * hijo y llama a {@code remove(int)}, que en esta clase saca una <em>solapa</em>. Sacar el
-     * hijo numero tres cuando hay cuatro hijos y dos solapas termina en un indice invalido, o peor,
-     * en sacar la solapa equivocada.
+     * <p>It looks like a detour and it is necessary: {@code Container.remove(Component)} looks the
+     * child's index up and calls {@code remove(int)}, which in this class removes a <em>tab</em>.
+     * Removing child number three when there are four children and two tabs ends in an invalid
+     * index, or worse, in removing the wrong tab.
      *
-     * <p>Los indices de hijo y de solapa no son el mismo numero: un panel con solapas tiene ademas
-     * los componentes que el aspecto agregue.
+     * <p>The child and tab indices are not the same number: a tabbed pane also has the components
+     * the look and feel adds.
      */
-    private void sacarHijo(Component comp) {
+    private void removeChild(Component comp) {
         if (comp == null) {
             return;
         }
@@ -640,7 +645,7 @@ public class JTabbedPane extends JComponent implements Serializable,
         }
     }
 
-    private Solapa solapa(int index) {
+    private Tab tab(int index) {
         checkIndex(index);
         return pages.elementAt(index);
     }
@@ -653,32 +658,32 @@ public class JTabbedPane extends JComponent implements Serializable,
     }
 
     /**
-     * Todo lo que se sabe de una solapa.
+     * Everything that is known about a tab.
      *
-     * <p>Es privada en el JDK y aca tambien: quien use el panel habla por indice, y esta clase es
-     * lo que hace que el titulo y el componente puedan cambiar por separado.
+     * <p>It is private in the JDK and here too: whoever uses the pane talks by index, and this
+     * class is what allows the title and the component to change separately.
      */
-    static class Solapa implements Serializable {
+    static class Tab implements Serializable {
 
-        String titulo;
-        Icon icono;
-        Icon iconoApagado;
-        Component componente;
-        String ayuda;
-        Color fondo;
-        Color frente;
-        boolean habilitada = true;
-        int mnemonico = -1;
-        int indiceMnemonico = -1;
-        Component componenteSolapa;
+        String title;
+        Icon icon;
+        Icon disabledIcon;
+        Component component;
+        String tip;
+        Color background;
+        Color foreground;
+        boolean enabled = true;
+        int mnemonic = -1;
+        int mnemonicIndex = -1;
+        Component tabComponent;
 
-        Solapa(JTabbedPane panel, String titulo, Icon icono, Icon iconoApagado,
-                Component componente, String ayuda) {
-            this.titulo = titulo;
-            this.icono = icono;
-            this.iconoApagado = iconoApagado;
-            this.componente = componente;
-            this.ayuda = ayuda;
+        Tab(JTabbedPane panel, String title, Icon icon, Icon disabledIcon,
+                Component component, String tip) {
+            this.title = title;
+            this.icon = icon;
+            this.disabledIcon = disabledIcon;
+            this.component = component;
+            this.tip = tip;
         }
     }
 }

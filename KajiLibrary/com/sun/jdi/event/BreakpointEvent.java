@@ -1,7 +1,7 @@
 package com.sun.jdi.event;
 
 /**
- * Se llego a un punto de interrupcion.
+ * A breakpoint was reached.
  *
  * @since 1.3
  */

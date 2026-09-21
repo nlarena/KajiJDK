@@ -1,109 +1,109 @@
 package javax.xml;
 
 /**
- * KajiLibrary's javax.xml.XMLConstants -- el vocabulario compartido de todas las APIs de XML.
+ * KajiLibrary's javax.xml.XMLConstants -- the shared vocabulary of all the XML APIs.
  *
- * <p>Dieciseis cadenas, constructor privado, cero estado: es un espacio de nombres, no un objeto.
- * Existe porque estas mismas URIs las tienen que escribir SAX, DOM, XSLT, XPath y la validacion, y
- * una constante mal tipeada en cualquiera de ellas produce un fallo mudo -- un espacio de nombres
- * que no coincide no da error, simplemente no matchea nada.
+ * <p>Sixteen strings, private constructor, zero state: it is a namespace, not an object. It exists
+ * because these same URIs have to be written by SAX, DOM, XSLT, XPath and validation, and a
+ * mistyped constant in any of them produces a silent failure -- a namespace that does not match
+ * gives no error, it simply matches nothing.
  *
- * <p>Las constantes se agrupan en tres familias que conviene distinguir porque se usan distinto:
+ * <p>The constants are grouped in three families worth telling apart because they are used
+ * differently:
  *
  * <ul>
- *   <li>los <b>espacios de nombres reservados</b> por la spec de XML Namespaces, que no se pueden
- *       redeclarar (`xml`, `xmlns`);
- *   <li>las <b>URIs de lenguajes de esquema</b>, que sirven para pedirle a una fabrica un validador
- *       de esa clase;
- *   <li>los <b>nombres de caracteristicas y propiedades de seguridad</b>, que son lo unico de aca
- *       que se le pasa a un `setFeature`/`setProperty` en vez de compararse.
+ *   <li>the <b>namespaces reserved</b> by the XML Namespaces spec, which cannot be redeclared
+ *       (`xml`, `xmlns`);
+ *   <li>the <b>schema language URIs</b>, which serve to ask a factory for a validator of that kind;
+ *   <li>the <b>names of security features and properties</b>, which are the only thing here that is
+ *       passed to a `setFeature`/`setProperty` instead of being compared.
  * </ul>
  */
 public final class XMLConstants {
 
-    /** Nadie instancia esto. */
+    /** Nobody instantiates this. */
     private XMLConstants() {
     }
 
-    // ---- lo reservado por XML Namespaces -----------------------------------------------------
+    // ---- reserved by XML Namespaces -------------------------------------------------------------
 
     /**
-     * El espacio de nombres de lo que **no tiene** espacio de nombres: la cadena vacia.
+     * The namespace of what **has no** namespace: the empty string.
      *
-     * <p>Que sea la cadena vacia y no null es deliberado y ahorra un chequeo en cada comparacion:
-     * un elemento sin calificar tiene URI de espacio de nombres, y es esta.
+     * <p>That it is the empty string and not null is deliberate and saves a check in every
+     * comparison: an unqualified element has a namespace URI, and it is this one.
      */
     public static final String NULL_NS_URI = "";
 
-    /** El prefijo por omision, que tambien es la cadena vacia: un nombre sin dos puntos. */
+    /** The default prefix, which is also the empty string: a name without a colon. */
     public static final String DEFAULT_NS_PREFIX = "";
 
-    /** El espacio de nombres del prefijo `xml`, fijado por la spec y no declarable. */
+    /** The namespace of the `xml` prefix, fixed by the spec and not declarable. */
     public static final String XML_NS_URI = "http://www.w3.org/XML/1998/namespace";
 
-    /** El prefijo `xml`, ligado por definicion a {@link #XML_NS_URI} y a ningun otro. */
+    /** The `xml` prefix, bound by definition to {@link #XML_NS_URI} and to no other. */
     public static final String XML_NS_PREFIX = "xml";
 
-    /** El espacio de nombres de los atributos `xmlns`, que son declaraciones y no atributos. */
+    /** The namespace of the `xmlns` attributes, which are declarations and not attributes. */
     public static final String XMLNS_ATTRIBUTE_NS_URI = "http://www.w3.org/2000/xmlns/";
 
-    /** El nombre local del atributo de declaracion: `xmlns`. */
+    /** The local name of the declaration attribute: `xmlns`. */
     public static final String XMLNS_ATTRIBUTE = "xmlns";
 
-    // ---- lenguajes de esquema ----------------------------------------------------------------
+    // ---- schema languages -----------------------------------------------------------------------
 
     /** W3C XML Schema 1.0. */
     public static final String W3C_XML_SCHEMA_NS_URI = "http://www.w3.org/2001/XMLSchema";
 
-    /** Los atributos de instancia de W3C XML Schema (`xsi:type`, `xsi:nil`...). */
+    /** The instance attributes of W3C XML Schema (`xsi:type`, `xsi:nil`...). */
     public static final String W3C_XML_SCHEMA_INSTANCE_NS_URI = "http://www.w3.org/2001/XMLSchema-instance";
 
-    /** Los tipos de datos de XPath 2.0. */
+    /** The data types of XPath 2.0. */
     public static final String W3C_XPATH_DATATYPE_NS_URI = "http://www.w3.org/2003/11/xpath-datatypes";
 
-    /** La DTD de XML, para pedir validacion por DTD donde se espera una URI de esquema. */
+    /** The XML DTD, to ask for DTD validation where a schema URI is expected. */
     public static final String XML_DTD_NS_URI = "http://www.w3.org/TR/REC-xml";
 
     /** RELAX NG 1.0. */
     public static final String RELAXNG_NS_URI = "http://relaxng.org/ns/structure/1.0";
 
-    // ---- seguridad ---------------------------------------------------------------------------
+    // ---- security -------------------------------------------------------------------------------
 
     /**
-     * La caracteristica de **procesamiento seguro**, la unica que toda la plataforma XML soporta.
+     * The **secure processing** feature, the only one the whole XML platform supports.
      *
-     * <p>Prenderla le pone limites a lo que un documento hostil puede hacerle al procesador: acota
-     * la expansion de entidades --la "bomba XML", que son diez lineas que se expanden a gigabytes--
-     * y la profundidad de las estructuras. No es una opcion de rendimiento, es la diferencia entre
-     * parsear entrada ajena y no poder hacerlo.
+     * <p>Turning it on puts limits on what a hostile document can do to the processor: it bounds
+     * entity expansion --the "XML bomb", ten lines that expand to gigabytes-- and the depth of
+     * structures. It is not a performance option, it is the difference between parsing someone
+     * else's input and not being able to.
      *
-     * <p>Y tiene una asimetria que conviene saber: una implementacion que la tenga prendida **no
-     * esta obligada a dejar apagarla**. El modo seguro puede venir impuesto por el entorno.
+     * <p>And it has an asymmetry worth knowing: an implementation that has it on <b>is not obliged
+     * to let it be turned off</b>. Secure mode can be imposed by the environment.
      */
     public static final String FEATURE_SECURE_PROCESSING = "http://javax.xml.XMLConstants/feature/secure-processing";
 
     /**
-     * Que protocolos se admiten para traer una DTD externa.
+     * Which protocols are admitted for fetching an external DTD.
      *
-     * <p>El valor es una lista de protocolos separados por comas; la cadena vacia prohibe todo, y
-     * {@code "all"} permite todo. Los tres `ACCESS_EXTERNAL_*` son la defensa contra XXE: un
-     * documento que declara una entidad apuntando a `file:///etc/passwd` --o a una URL interna--
-     * usa al parser de proxy para leer lo que el atacante no alcanza.
+     * <p>The value is a comma-separated list of protocols; the empty string forbids everything, and
+     * {@code "all"} allows everything. The three `ACCESS_EXTERNAL_*` are the defence against XXE: a
+     * document that declares an entity pointing to `file:///etc/passwd` --or to an internal URL--
+     * uses the parser as a proxy to read what the attacker cannot reach.
      */
     public static final String ACCESS_EXTERNAL_DTD = "http://javax.xml.XMLConstants/property/accessExternalDTD";
 
-    /** Idem para los esquemas externos (`xsi:schemaLocation`, `xsd:import`). */
+    /** Likewise for external schemas (`xsi:schemaLocation`, `xsd:import`). */
     public static final String ACCESS_EXTERNAL_SCHEMA = "http://javax.xml.XMLConstants/property/accessExternalSchema";
 
-    /** Idem para las hojas de estilo externas (`xsl:import`, `xsl:include`, `document()`). */
+    /** Likewise for external stylesheets (`xsl:import`, `xsl:include`, `document()`). */
     public static final String ACCESS_EXTERNAL_STYLESHEET = "http://javax.xml.XMLConstants/property/accessExternalStylesheet";
 
     /**
-     * Si se usa el catalogo de XML para resolver referencias externas.
+     * Whether the XML catalog is used to resolve external references.
      *
-     * <p>Un catalogo mapea identificadores publicos a copias locales, asi que prenderlo es a la vez
-     * mas rapido y mas seguro que salir a la red. Es la alternativa constructiva a los
-     * `ACCESS_EXTERNAL_*`: en vez de prohibir, redirigir.
+     * <p>A catalog maps public identifiers to local copies, so turning it on is both faster and
+     * safer than going out to the network. It is the constructive alternative to the
+     * `ACCESS_EXTERNAL_*`: instead of forbidding, redirecting.
      */
     public static final String USE_CATALOG = "http://javax.xml.XMLConstants/feature/useCatalog";
 }

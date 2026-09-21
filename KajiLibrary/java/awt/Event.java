@@ -1,31 +1,32 @@
 package java.awt;
 
 /**
- * El evento del AWT de 1.0: una sola clase con campos publicos para todo, anterior al modelo de
- * escuchas.
+ * The event of AWT 1.0: one single class with public fields for everything, older than the listener
+ * model.
  *
- * <p>Esta obsoleta desde 1.1 y sin embargo se puede escribir entera, que es exactamente por lo que
- * esta aca: no menciona ni un solo tipo del sistema de ventanas. El objetivo del evento es un
- * {@code Object} --no un {@code Component}-- porque en 1.0 el objetivo se comparaba con
- * {@code ==} y nadie se molesto en tiparlo. Toda la clase son sesenta constantes, diez campos y
- * cuatro metodos de aritmetica de bits.
+ * <p>It has been obsolete since 1.1 and can nevertheless be written whole, which is exactly why it
+ * is here: it does not mention a single type of the windowing system. The target of the event is an
+ * {@code Object} --not a {@code Component}-- because in 1.0 the target was compared with {@code ==}
+ * and nobody bothered to type it. The whole class is sixty-four public constants, ten fields and
+ * three methods of bit arithmetic.
  *
- * <p>Los codigos de tecla mezclan dos convenciones y conviene no "ordenarlos": ENTER, BACK_SPACE,
- * TAB, ESCAPE y DELETE son el valor ASCII del caracter (10, 8, 9, 27, 127), mientras que las teclas
- * que no producen caracter --las flechas, las de funcion, PAUSE-- se numeran desde 1000. Por eso
- * HOME vale 1000 y no 1; el que las de accion arranquen tan arriba es lo que permite que un mismo
- * campo {@code key} sirva para las dos clases de tecla sin ambiguedad.
+ * <p>The key codes mix two conventions and it is better not to "tidy them up": ENTER, BACK_SPACE,
+ * TAB, ESCAPE and DELETE are the ASCII value of the character (10, 8, 9, 27, 127), while the keys
+ * that produce no character --the arrows, the function ones, PAUSE-- are numbered from 1000 up.
+ * That is why HOME is 1000 and not 1; that the action keys start so high is what lets one same
+ * {@code key} field serve both kinds of key without ambiguity.
  *
- * <p>Los identificadores de evento tambien se agrupan por centenas --2xx ventana, 4xx teclado, 5xx
- * mouse, 6xx scroll, 7xx lista, 1xxx varios-- y ahi si hay una colision heredada que no se puede
- * arreglar: {@code ACTION_EVENT} vale 1001, igual que {@code PGUP}. No se pisan porque uno va en
- * {@code id} y el otro en {@code key}, pero explica por que las dos tablas no se pueden unificar.
+ * <p>The event identifiers are also grouped by hundreds --2xx window, 4xx keyboard, 5xx mouse, 6xx
+ * scroll, 7xx list, 1xxx miscellaneous-- and there there is an inherited collision that cannot be
+ * fixed: {@code ACTION_EVENT} is 1001, the same as {@code END}. They do not step on each other
+ * because one goes in {@code id} and the other in {@code key}, but it explains why the two tables
+ * cannot be unified.
  */
 public class Event implements java.io.Serializable {
 
     private static final long serialVersionUID = 5488922509400504703L;
 
-    // --- modificadores: mascara de bits, se combinan con OR ---
+    // --- modifiers: a bit mask, they combine with OR ---
 
     public static final int SHIFT_MASK = 1 << 0;
 
@@ -35,7 +36,7 @@ public class Event implements java.io.Serializable {
 
     public static final int ALT_MASK = 1 << 3;
 
-    // --- teclas de accion: no producen caracter, se numeran desde 1000 ---
+    // --- action keys: they produce no character, numbered from 1000 up ---
 
     public static final int HOME = 1000;
 
@@ -89,7 +90,7 @@ public class Event implements java.io.Serializable {
 
     public static final int INSERT = 1025;
 
-    // --- teclas con caracter: el valor es el ASCII, no un codigo inventado ---
+    // --- keys with a character: the value is the ASCII one, not an invented code ---
 
     public static final int ENTER = '\n';
 
@@ -101,7 +102,7 @@ public class Event implements java.io.Serializable {
 
     public static final int DELETE = 127;
 
-    // --- identificadores de evento, agrupados por centenas ---
+    // --- event identifiers, grouped by hundreds ---
 
     private static final int WINDOW_EVENT = 200;
 
@@ -173,7 +174,10 @@ public class Event implements java.io.Serializable {
 
     public static final int LOST_FOCUS = 5 + MISC_EVENT;
 
-    /** A quien le paso. Es Object y no Component porque en 1.0 solo se comparaba con {@code ==}. */
+    /**
+     * Who it happened to. It is Object and not Component because in 1.0 it was only compared with
+     * {@code ==}.
+     */
     public Object target;
 
     public long when;
@@ -192,7 +196,7 @@ public class Event implements java.io.Serializable {
 
     public Object arg;
 
-    /** El siguiente de la cola. En 1.0 los eventos se encadenaban a mano. */
+    /** The next one in the queue. In 1.0 events were chained by hand. */
     public Event evt;
 
     private boolean consumed;
@@ -223,8 +227,9 @@ public class Event implements java.io.Serializable {
             case SCROLL_END:
             case LIST_SELECT:
             case LIST_DESELECT:
-                // Estos ya son la conclusion de otro evento --el click que ya se proceso-- asi que
-                // nacen consumidos: reenviarlos al peer los duplicaria.
+                // These are already the conclusion of another event --the click that was processed
+                // already-- so they are born consumed: sending them back to the peer would
+                // duplicate them.
                 consumed = true;
                 break;
             default:
@@ -266,7 +271,7 @@ public class Event implements java.io.Serializable {
                 consumed = true;
                 break;
             default:
-                // Los demas no se pueden consumir.
+                // The rest cannot be consumed.
                 break;
         }
     }
@@ -276,9 +281,9 @@ public class Event implements java.io.Serializable {
     }
 
     /**
-     * Los campos que valen cero o null no se imprimen. No es solo por brevedad: en 1.0 un evento se
-     * reutilizaba para todo, asi que la mitad de los campos siempre estaban en cero y listarlos
-     * enterraba los dos o tres que importaban.
+     * The fields that are zero or null are not printed. It is not only for brevity: in 1.0 one
+     * event was reused for everything, so half the fields were always at zero and listing them
+     * buried the two or three that mattered.
      */
     protected String paramString() {
         String str = "id=" + id + ",x=" + x + ",y=" + y;

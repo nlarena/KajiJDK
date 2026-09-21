@@ -4,57 +4,57 @@ import java.security.KeyManagementException;
 import java.security.SecureRandom;
 
 /**
- * Lo que un proveedor implementa para que exista un {@link SSLContext}.
+ * What a provider implements for an {@link SSLContext} to exist.
  *
- * <p>Los dos ultimos metodos tienen cuerpo y los demas no, y la diferencia dice algo: un proveedor
- * viejo no conocia {@link SSLParameters}, asi que volverlos abstractos lo habria roto. Llegan
- * tirando {@link UnsupportedOperationException}, que es honesto — el proveedor no sabe contestar esa
- * pregunta— y no un valor inventado.
+ * <p>The last two methods have a body and the rest do not, and the difference says something: an
+ * old provider did not know {@link SSLParameters}, so making them abstract would have broken it.
+ * They arrive throwing {@link UnsupportedOperationException}, which is honest — the provider cannot
+ * answer that question— and not a made-up value.
  */
 public abstract class SSLContextSpi {
 
     public SSLContextSpi() {
     }
 
-    /** Inicializa con las fuentes de credenciales, de confianza y de aleatoriedad. */
+    /** Initializes with the sources of credentials, of trust and of randomness. */
     protected abstract void engineInit(KeyManager[] km, TrustManager[] tm, SecureRandom sr)
             throws KeyManagementException;
 
-    /** La fabrica de sockets cliente de este contexto. */
+    /** This context's client socket factory. */
     protected abstract SSLSocketFactory engineGetSocketFactory();
 
-    /** La fabrica de sockets servidor. */
+    /** The server socket factory. */
     protected abstract SSLServerSocketFactory engineGetServerSocketFactory();
 
-    /** Un motor sin datos del par. */
+    /** An engine without peer data. */
     protected abstract SSLEngine engineCreateSSLEngine();
 
-    /** Un motor con el par sugerido, que habilita reanudar sesiones y mandar SNI. */
+    /** An engine with the suggested peer, which enables resuming sessions and sending SNI. */
     protected abstract SSLEngine engineCreateSSLEngine(String host, int port);
 
-    /** El contexto de sesiones del lado servidor. */
+    /** The server-side session context. */
     protected abstract SSLSessionContext engineGetServerSessionContext();
 
-    /** El contexto de sesiones del lado cliente. */
+    /** The client-side session context. */
     protected abstract SSLSessionContext engineGetClientSessionContext();
 
     /**
-     * Los parametros por omision.
+     * The default parameters.
      *
-     * @throws UnsupportedOperationException si el proveedor no los sabe informar
+     * @throws UnsupportedOperationException if the provider cannot report them
      */
     protected SSLParameters engineGetDefaultSSLParameters() {
         throw new UnsupportedOperationException(
-                "este proveedor no informa sus parametros por omision");
+                "this provider does not report its default parameters");
     }
 
     /**
-     * Los parametros que soporta.
+     * The parameters it supports.
      *
-     * @throws UnsupportedOperationException si el proveedor no los sabe informar
+     * @throws UnsupportedOperationException if the provider cannot report them
      */
     protected SSLParameters engineGetSupportedSSLParameters() {
         throw new UnsupportedOperationException(
-                "este proveedor no informa los parametros que soporta");
+                "this provider does not report the parameters it supports");
     }
 }

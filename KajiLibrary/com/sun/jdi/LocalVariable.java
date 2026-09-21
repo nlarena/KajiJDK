@@ -1,76 +1,76 @@
 package com.sun.jdi;
 
 /**
- * Una variable local de un metodo.
+ * A local variable of a method.
  *
  * @since 1.3
  */
 public interface LocalVariable extends Mirror, Comparable<LocalVariable> {
 
     /**
-     * El nombre.
+     * The name.
      *
-     * @return el resultado
+     * @return the result
      */
     String name();
 
     /**
-     * El type name.
+     * The type name.
      *
-     * @return el resultado
+     * @return the result
      */
     String typeName();
 
     /**
-     * El tipo.
+     * The type.
      *
-     * @return el resultado
-     * @throws ClassNotLoadedException si corresponde
+     * @return the result
+     * @throws ClassNotLoadedException if it applies
      */
     Type type()
             throws ClassNotLoadedException;
 
     /**
-     * El signature.
+     * The signature.
      *
-     * @return el resultado
+     * @return the result
      */
     String signature();
 
     /**
-     * El generic signature.
+     * The generic signature.
      *
-     * @return el resultado
+     * @return the result
      */
     String genericSignature();
 
     /**
-     * Si visible.
+     * Whether visible.
      *
-     * @param frame el StackFrame
-     * @return el resultado
+     * @param frame the StackFrame
+     * @return the result
      */
     boolean isVisible(StackFrame frame);
 
     /**
-     * Si argument.
+     * Whether argument.
      *
-     * @return el resultado
+     * @return the result
      */
     boolean isArgument();
 
     /**
-     * Dos reflejos son iguales si nombran a lo mismo en la misma VM.
+     * Two mirrors are equal if they name the same thing in the same VM.
      *
-     * @param obj el Object
-     * @return el resultado
+     * @param obj the Object
+     * @return the result
      */
     boolean equals(Object obj);
 
     /**
-     * Coherente con {@link #equals}.
+     * Consistent with {@link #equals}.
      *
-     * @return el resultado
+     * @return the result
      */
     int hashCode();
 }

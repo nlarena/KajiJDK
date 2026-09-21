@@ -6,58 +6,60 @@ import java.nio.charset.Charset;
 import java.util.Locale;
 
 /**
- * KajiLibrary's jdk.internal.io.JdkConsole — la interfaz que hay **detrás** de {@link java.io.Console}.
+ * KajiLibrary's jdk.internal.io.JdkConsole -- the interface that is **behind**
+ * {@link java.io.Console}.
  *
- * <p>La separación existe en el JDK por una razón concreta: la consola de verdad necesita cosas que
- * la biblioteca no puede hacer sola --leer una contraseña sin que se vea en la pantalla, saber si hay
- * una terminal conectada-- así que `java.io.Console` delega en una implementación que provee el
- * runtime. Esta interfaz es ese contrato.
+ * <p>The separation exists in the JDK for a concrete reason: the real console needs things the
+ * library cannot do on its own --reading a password without it being seen on the screen, knowing
+ * whether there is a terminal connected-- so `java.io.Console` delegates to an implementation the
+ * runtime provides. This interface is that contract.
  *
- * <p>Es una **declaración pura**: no promete comportamiento, lo describe. Por eso se puede escribir
- * entera y honesta aunque esta VM no tenga terminal. Quien la implemente decide qué puede cumplir;
- * {@link JdkConsoleImpl} lo dice explícitamente en su encabezado.
+ * <p>It is a **pure declaration**: it does not promise behaviour, it describes it. That is why it
+ * can be written whole and honestly even though this VM has no terminal. Whoever implements it
+ * decides what they can fulfil; {@link JdkConsoleImpl} says so explicitly in its header.
  *
- * <p>Los pares de métodos con y sin {@link Locale} no son azúcar: el que lleva locale formatea el
- * mensaje que se muestra antes de leer, y el que no lo lleva es la lectura pelada.
+ * <p>The pairs of methods with and without {@link Locale} are not sugar: the one that carries a
+ * locale formats the message that is shown before reading, and the one that does not carry it is
+ * the bare reading.
  */
 public interface JdkConsole {
 
-    /** El escritor de esta consola. */
+    /** The writer of this console. */
     PrintWriter writer();
 
-    /** El lector de esta consola. */
+    /** The reader of this console. */
     Reader reader();
 
-    /** Escribe el objeto y un salto de línea. */
+    /** It writes the object and a line break. */
     JdkConsole println(Object obj);
 
-    /** Escribe el objeto, sin salto. */
+    /** It writes the object, with no break. */
     JdkConsole print(Object obj);
 
-    /** Escribe una cadena formateada. */
+    /** It writes a formatted string. */
     JdkConsole format(Locale locale, String format, Object... args);
 
-    /** Muestra el mensaje formateado y lee una línea. */
+    /** It shows the formatted message and reads a line. */
     String readLine(Locale locale, String format, Object... args);
 
-    /** Lee una línea. */
+    /** It reads a line. */
     String readLine();
 
     /**
-     * Muestra el mensaje formateado y lee una contraseña **sin eco**.
+     * It shows the formatted message and reads a password **with no echo**.
      *
-     * <p>Devuelve `char[]` y no `String` a propósito, y es la única parte de esta interfaz donde el
-     * tipo lleva una intención: un arreglo se puede sobreescribir en cuanto se usó, y una cadena
-     * queda en el pool hasta que el recolector la levante.
+     * <p>It returns `char[]` and not `String` on purpose, and it is the only part of this interface
+     * where the type carries an intention: an array can be overwritten as soon as it has been used,
+     * and a string stays in the pool until the collector picks it up.
      */
     char[] readPassword(Locale locale, String format, Object... args);
 
-    /** Lee una contraseña sin eco. */
+    /** It reads a password with no echo. */
     char[] readPassword();
 
-    /** Vacía lo pendiente de escribir. */
+    /** It flushes what is pending to be written. */
     void flush();
 
-    /** El juego de caracteres de esta consola. */
+    /** The character set of this console. */
     Charset charset();
 }

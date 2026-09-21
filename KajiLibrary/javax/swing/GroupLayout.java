@@ -11,55 +11,56 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Acomoda describiendo los dos ejes por separado.
+ * It lays out by describing the two axes separately.
  *
- * <h2>Cada componente se declara dos veces</h2>
+ * <h2>Each component is declared twice</h2>
  *
- * <p>Es lo que hay que entender antes que nada, y lo que sorprende al principio: se arma un grupo
- * para el eje horizontal y otro para el vertical, y <strong>cada componente tiene que aparecer en
- * los dos</strong>. Uno dice donde cae a lo ancho, el otro donde cae a lo alto.
+ * <p>It is what has to be understood before anything else, and what surprises at first: a group
+ * is built for the horizontal axis and another for the vertical one, and <strong>each component
+ * has to appear in both</strong>. One says where it falls across, the other where it falls
+ * down.
  *
- * <p>Suena redundante y no lo es: es lo que permite que una etiqueta este alineada a la izquierda
- * con otras dos en horizontal, y al mismo tiempo en la misma fila que su campo en vertical. Con un
- * solo arbol de posiciones eso no se puede decir sin una grilla, y una grilla no sabe de filas de
- * distinto alto.
+ * <p>It sounds redundant and it is not: it is what allows a label to be aligned to the left
+ * with two others horizontally, and at the same time in the same row as its field vertically.
+ * With a single tree of positions that cannot be said without a grid, and a grid does not know
+ * about rows of different heights.
  *
- * <h2>Dos clases de grupo</h2>
+ * <h2>Two kinds of group</h2>
  *
- * <p>Un {@link SequentialGroup} pone sus miembros <em>uno detras de otro</em> a lo largo del eje; un
- * {@link ParallelGroup} los pone <em>en el mismo lugar</em>, alineados entre si. Anidando los dos se
- * describe cualquier formulario.
+ * <p>A {@link SequentialGroup} puts its members <em>one after another</em> along the axis; a
+ * {@link ParallelGroup} puts them <em>in the same place</em>, aligned with one another. By
+ * nesting the two any form is described.
  *
- * <h2>Los huecos, que es lo que casi nadie quiere calcular</h2>
+ * <h2>The gaps, which is what almost nobody wants to compute</h2>
  *
- * <p>{@link #setAutoCreateGaps} y {@link #setAutoCreateContainerGaps} ponen solos el espacio que
- * corresponde entre componentes y contra el borde, preguntandole a {@link LayoutStyle} -- que sabe
- * lo que dice la guia de estilo del sistema. Es la razon por la que un formulario armado con esta
- * clase se ve bien en Windows y en Linux sin tocar un numero.
+ * <p>{@link #setAutoCreateGaps} and {@link #setAutoCreateContainerGaps} set by themselves the
+ * space that applies between components and against the edge, by asking {@link LayoutStyle} --
+ * which knows what the system's style guide says. It is the reason a form built with this class
+ * looks right on Windows and on Linux without touching a number.
  *
- * <h2>Los dos tamanos magicos</h2>
+ * <h2>The two magic sizes</h2>
  *
- * <p>{@link #DEFAULT_SIZE} significa "el que el componente diga" y {@link #PREFERRED_SIZE} "el
- * preferido, y que no cambie". Se los usa en los tres huecos de {@code addComponent}, y la
- * combinacion tipica -- {@code addComponent(c, PREFERRED_SIZE, PREFERRED_SIZE, PREFERRED_SIZE)} --
- * es como se dice "este no se estira".
+ * <p>{@link #DEFAULT_SIZE} means "whatever the component says" and {@link #PREFERRED_SIZE}
+ * "the preferred one, and let it not change". They are used in {@code addComponent}'s three
+ * gaps, and the typical combination -- {@code addComponent(c, PREFERRED_SIZE, PREFERRED_SIZE,
+ * PREFERRED_SIZE)} -- is how one says "this one does not stretch".
  */
 public class GroupLayout implements LayoutManager2 {
 
-    /** "El tamano que el componente diga." */
+    /** "The size the component says." */
     public static final int DEFAULT_SIZE = -1;
 
-    /** "El preferido del componente." */
+    /** "The component's preferred one." */
     public static final int PREFERRED_SIZE = -2;
 
     private static final int MIN = 0;
     private static final int PREF = 1;
     private static final int MAX = 2;
 
-    /** El eje horizontal. */
+    /** The horizontal axis. */
     static final int HORIZONTAL = 0;
 
-    /** El eje vertical. */
+    /** The vertical axis. */
     static final int VERTICAL = 1;
 
     private final Container host;
@@ -75,27 +76,28 @@ public class GroupLayout implements LayoutManager2 {
     private final List<Component[]> linkedV = new ArrayList<Component[]>();
 
     /**
-     * Para ese contenedor.
+     * For that container.
      *
-     * @throws IllegalArgumentException si es nulo
+     * @throws IllegalArgumentException if it is null
      */
     public GroupLayout(Container host) {
         if (host == null) {
             throw new IllegalArgumentException("Container must be non-null");
         }
         this.host = host;
-        // Los dos ejes arrancan descriptos con un grupo paralelo vacio. Es lo que hace que medir
-        // un acomodador recien creado de cero en vez de reventar: no hay estado "sin describir".
+        // The two axes start described with an empty parallel group. It is what makes measuring a
+                // newly created layout give zero instead of blowing up: there is no "undescribed"
+                // state.
         setHorizontalGroup(createParallelGroup(Alignment.LEADING));
         setVerticalGroup(createParallelGroup(Alignment.LEADING));
     }
 
     /**
-     * Si un componente escondido deja de ocupar lugar.
+     * Whether a hidden component stops taking up room.
      *
-     * <p>Prendido -- que es lo de omision -- un componente invisible mide cero y los demas se
-     * corren. Apagado, sigue ocupando su lugar. Las dos formas se usan: la primera para lo que
-     * aparece y desaparece, la segunda para que la pantalla no salte.
+     * <p>Switched on -- which is the default -- an invisible component measures zero and the others
+     * shift. Switched off, it goes on taking up its place. Both ways are used: the first for what
+     * appears and disappears, the second so that the screen does not jump.
      */
     public void setHonorsVisibility(boolean honorsVisibility) {
         if (this.honorsVisibility != honorsVisibility) {
@@ -109,11 +111,11 @@ public class GroupLayout implements LayoutManager2 {
     }
 
     /**
-     * Lo mismo, para un componente en particular.
+     * The same, for a particular component.
      *
-     * <p>Nulo lo devuelve a lo que diga el contenedor.
+     * <p>Null gives it back to whatever the container says.
      *
-     * @throws IllegalArgumentException si el componente es nulo
+     * @throws IllegalArgumentException if the component is null
      */
     public void setHonorsVisibility(Component component, Boolean honorsVisibility) {
         if (component == null) {
@@ -127,7 +129,7 @@ public class GroupLayout implements LayoutManager2 {
         invalidateHost();
     }
 
-    /** Si los huecos entre componentes se ponen solos; ver la nota de la clase. */
+    /** Whether the gaps between components are set by themselves; see the class note. */
     public void setAutoCreateGaps(boolean autoCreatePadding) {
         if (this.autocreatePadding != autoCreatePadding) {
             this.autocreatePadding = autoCreatePadding;
@@ -139,7 +141,7 @@ public class GroupLayout implements LayoutManager2 {
         return autocreatePadding;
     }
 
-    /** Si el hueco contra el borde del contenedor se pone solo. */
+    /** Whether the gap against the container's edge is set by itself. */
     public void setAutoCreateContainerGaps(boolean autoCreateContainerPadding) {
         if (this.autocreateContainerPadding != autoCreateContainerPadding) {
             this.autocreateContainerPadding = autoCreateContainerPadding;
@@ -152,9 +154,9 @@ public class GroupLayout implements LayoutManager2 {
     }
 
     /**
-     * El grupo que describe el eje horizontal.
+     * The group that describes the horizontal axis.
      *
-     * @throws IllegalArgumentException si es nulo
+     * @throws IllegalArgumentException if it is null
      */
     public void setHorizontalGroup(Group group) {
         if (group == null) {
@@ -165,9 +167,9 @@ public class GroupLayout implements LayoutManager2 {
     }
 
     /**
-     * El grupo que describe el eje vertical.
+     * The group that describes the vertical axis.
      *
-     * @throws IllegalArgumentException si es nulo
+     * @throws IllegalArgumentException if it is null
      */
     public void setVerticalGroup(Group group) {
         if (group == null) {
@@ -177,29 +179,29 @@ public class GroupLayout implements LayoutManager2 {
         invalidateHost();
     }
 
-    /** Un grupo que pone sus miembros uno detras de otro. */
+    /** A group that puts its members one after another. */
     public SequentialGroup createSequentialGroup() {
         return new SequentialGroup(this);
     }
 
-    /** Un grupo que los pone en el mismo lugar, alineados al principio. */
+    /** A group that puts them in the same place, aligned to the start. */
     public ParallelGroup createParallelGroup() {
         return createParallelGroup(Alignment.LEADING);
     }
 
     /**
-     * Idem, con esa alineacion.
+     * The same, with that alignment.
      *
-     * @throws IllegalArgumentException si la alineacion es nula
+     * @throws IllegalArgumentException if the alignment is null
      */
     public ParallelGroup createParallelGroup(Alignment alignment) {
         return createParallelGroup(alignment, true);
     }
 
     /**
-     * Idem, pudiendo pedir que el grupo no se estire.
+     * The same, being able to ask for the group not to stretch.
      *
-     * @throws IllegalArgumentException si la alineacion es nula
+     * @throws IllegalArgumentException if the alignment is null
      */
     public ParallelGroup createParallelGroup(Alignment alignment, boolean resizable) {
         if (alignment == null) {
@@ -211,18 +213,18 @@ public class GroupLayout implements LayoutManager2 {
         return new ParallelGroup(this, alignment, resizable);
     }
 
-    /** Un grupo alineado por la linea de base del texto. */
+    /** A group aligned by the text's baseline. */
     public ParallelGroup createBaselineGroup(boolean resizable, boolean anchorBaselineToTop) {
         return new ParallelGroup(this, Alignment.BASELINE, resizable);
     }
 
     /**
-     * Hace que esos componentes midan todos lo mismo, en los dos ejes.
+     * It makes those components all measure the same, on both axes.
      *
-     * <p>Toman el tamano del mas grande. Es como se consigue que tres botones con textos de
-     * distinto largo queden del mismo ancho, que es lo que se espera de una fila de botones.
+     * <p>They take the size of the largest. It is how three buttons with texts of different
+     * lengths are made the same width, which is what is expected of a row of buttons.
      *
-     * @throws IllegalArgumentException si alguno es nulo
+     * @throws IllegalArgumentException if any of them is null
      */
     public void linkSize(Component... components) {
         linkSize(SwingConstants.HORIZONTAL, components);
@@ -230,9 +232,9 @@ public class GroupLayout implements LayoutManager2 {
     }
 
     /**
-     * Lo mismo, en un solo eje.
+     * The same, on a single axis.
      *
-     * @throws IllegalArgumentException si alguno es nulo o el eje no es uno de los dos
+     * @throws IllegalArgumentException if any of them is null or the axis is not one of the two
      */
     public void linkSize(int axis, Component... components) {
         if (components == null) {
@@ -255,28 +257,28 @@ public class GroupLayout implements LayoutManager2 {
     }
 
     /**
-     * Cambia un componente por otro sin rearmar los grupos.
+     * It swaps one component for another without rebuilding the groups.
      *
-     * <p>Es lo que permite reemplazar un campo por otro en un formulario ya descrito.
+     * <p>It is what allows a field in an already described form to be replaced by another.
      *
-     * @throws IllegalArgumentException si alguno es nulo
+     * @throws IllegalArgumentException if any of them is null
      */
     public void replace(Component existingComponent, Component newComponent) {
         if (existingComponent == null || newComponent == null) {
             throw new IllegalArgumentException("Components must be non-null");
         }
         if (horizontalGroup != null) {
-            horizontalGroup.reemplazar(existingComponent, newComponent);
+            horizontalGroup.replace(existingComponent, newComponent);
         }
         if (verticalGroup != null) {
-            verticalGroup.reemplazar(existingComponent, newComponent);
+            verticalGroup.replace(existingComponent, newComponent);
         }
         host.remove(existingComponent);
         host.add(newComponent);
         invalidateHost();
     }
 
-    /** Quien sabe cuanto espacio va entre dos cosas; nulo usa el del aspecto. */
+    /** Who knows how much space goes between two things; null uses the look and feel's. */
     public void setLayoutStyle(LayoutStyle layoutStyle) {
         this.layoutStyle = layoutStyle;
         invalidateHost();
@@ -286,53 +288,53 @@ public class GroupLayout implements LayoutManager2 {
         return layoutStyle;
     }
 
-    LayoutStyle estilo() {
+    LayoutStyle style() {
         if (layoutStyle != null) {
             return layoutStyle;
         }
         return LayoutStyle.getInstance();
     }
 
-    /** No hace nada: los componentes se declaran en los grupos, no aca. */
+    /** It does nothing: the components are declared in the groups, not here. */
     public void addLayoutComponent(String name, Component component) {
     }
 
-    /** No hace nada: sacar un componente de los grupos es cosa de {@link #replace}. */
+    /** It does nothing: removing a component from the groups is {@link #replace}'s business. */
     public void removeLayoutComponent(Component component) {
         componentHonorsVisibility.remove(component);
     }
 
     /**
-     * @throws IllegalArgumentException si no es el contenedor de este acomodador
+     * @throws IllegalArgumentException if it is not this layout's container
      */
     public Dimension preferredLayoutSize(Container parent) {
         checkParent(parent);
-        prepararGrupos();
-        return medir(PREF);
+        prepareGroups();
+        return measure(PREF);
     }
 
     /**
-     * @throws IllegalArgumentException si no es el contenedor de este acomodador
+     * @throws IllegalArgumentException if it is not this layout's container
      */
     public Dimension minimumLayoutSize(Container parent) {
         checkParent(parent);
-        prepararGrupos();
-        return medir(MIN);
+        prepareGroups();
+        return measure(MIN);
     }
 
     /**
-     * @throws IllegalArgumentException si no es el contenedor de este acomodador
+     * @throws IllegalArgumentException if it is not this layout's container
      */
     public Dimension maximumLayoutSize(Container parent) {
         checkParent(parent);
-        prepararGrupos();
-        return medir(MAX);
+        prepareGroups();
+        return measure(MAX);
     }
 
-    private Dimension medir(int cual) {
+    private Dimension measure(int which) {
         Insets insets = host.getInsets();
-        int w = horizontalGroup.tamano(HORIZONTAL, cual);
-        int h = verticalGroup.tamano(VERTICAL, cual);
+        int w = horizontalGroup.size(HORIZONTAL, which);
+        int h = verticalGroup.size(VERTICAL, which);
         long tw = (long) w + insets.left + insets.right;
         long th = (long) h + insets.top + insets.bottom;
         return new Dimension((int) Math.min(tw, Integer.MAX_VALUE),
@@ -340,14 +342,14 @@ public class GroupLayout implements LayoutManager2 {
     }
 
     /**
-     * Coloca a cada componente.
+     * It places each component.
      *
-     * <p>Es el unico de los metodos de {@link java.awt.LayoutManager2} que <em>no</em> exige que el
-     * contenedor sea el suyo: acomoda el propio igual, mire quien mire. La asimetria es del JDK y
-     * esta medida.
+     * <p>It is the only one of {@link java.awt.LayoutManager2}'s methods that does <em>not</em>
+     * require the container to be its own: it lays its own out all the same, whoever is looking.
+     * The asymmetry is the JDK's and it is measured.
      */
     public void layoutContainer(Container parent) {
-        prepararGrupos();
+        prepareGroups();
         Insets insets = host.getInsets();
         int width = host.getWidth() - insets.left - insets.right;
         int height = host.getHeight() - insets.top - insets.bottom;
@@ -356,22 +358,22 @@ public class GroupLayout implements LayoutManager2 {
         for (int i = 0; i < host.getComponentCount(); i++) {
             Component c = host.getComponent(i);
             Rect r = new Rect();
-            horizontalGroup.ubicar(HORIZONTAL, c, r);
-            verticalGroup.ubicar(VERTICAL, c, r);
-            if (r.puestoH && r.puestoV) {
+            horizontalGroup.place(HORIZONTAL, c, r);
+            verticalGroup.place(VERTICAL, c, r);
+            if (r.setH && r.setV) {
                 c.setBounds(insets.left + r.x, insets.top + r.y, r.w, r.h);
             }
         }
     }
 
-    /** Donde va a quedar un componente; se llena de a un eje por vez. */
+    /** Where a component is going to end up; it is filled in one axis at a time. */
     static class Rect {
         int x;
         int y;
         int w;
         int h;
-        boolean puestoH;
-        boolean puestoV;
+        boolean setH;
+        boolean setV;
     }
 
     public void addLayoutComponent(Component component, Object constraints) {
@@ -399,7 +401,7 @@ public class GroupLayout implements LayoutManager2 {
     }
 
     /**
-     * @throws IllegalArgumentException si no es el contenedor de este acomodador
+     * @throws IllegalArgumentException if it is not this layout's container
      */
     private void checkParent(Container parent) {
         if (parent != host) {
@@ -408,33 +410,33 @@ public class GroupLayout implements LayoutManager2 {
         }
     }
 
-    /** Deja los dos grupos listos para medir o colocar. */
-    private void prepararGrupos() {
-        horizontalGroup.prepararHuecos(HORIZONTAL, this);
-        verticalGroup.prepararHuecos(VERTICAL, this);
-        aplicarEnlaces();
+    /** It leaves the two groups ready to measure or to place. */
+    private void prepareGroups() {
+        horizontalGroup.prepareGaps(HORIZONTAL, this);
+        verticalGroup.prepareGaps(VERTICAL, this);
+        applyLinks();
     }
 
-    /** Le da a los componentes enlazados el tamano del mas grande; ver {@link #linkSize}. */
-    private void aplicarEnlaces() {
-        aplicarEnlaces(linkedH, HORIZONTAL);
-        aplicarEnlaces(linkedV, VERTICAL);
+    /** It gives the linked components the size of the largest; see {@link #linkSize}. */
+    private void applyLinks() {
+        applyLinks(linkedH, HORIZONTAL);
+        applyLinks(linkedV, VERTICAL);
     }
 
-    private void aplicarEnlaces(List<Component[]> lista, int eje) {
-        for (int i = 0; i < lista.size(); i++) {
-            Component[] grupo = lista.get(i);
+    private void applyLinks(List<Component[]> list, int axis) {
+        for (int i = 0; i < list.size(); i++) {
+            Component[] group = list.get(i);
             int max = 0;
-            for (int j = 0; j < grupo.length; j++) {
-                Dimension d = grupo[j].getPreferredSize();
-                int v = (eje == HORIZONTAL) ? d.width : d.height;
+            for (int j = 0; j < group.length; j++) {
+                Dimension d = group[j].getPreferredSize();
+                int v = (axis == HORIZONTAL) ? d.width : d.height;
                 if (v > max) {
                     max = v;
                 }
             }
-            for (int j = 0; j < grupo.length; j++) {
-                Group g = (eje == HORIZONTAL) ? horizontalGroup : verticalGroup;
-                g.fijarEnlace(grupo[j], max);
+            for (int j = 0; j < group.length; j++) {
+                Group g = (axis == HORIZONTAL) ? horizontalGroup : verticalGroup;
+                g.setLink(group[j], max);
             }
         }
     }
@@ -448,124 +450,125 @@ public class GroupLayout implements LayoutManager2 {
         host.repaint();
     }
 
-    /** Si ese componente cuenta como visible para las medidas. */
-    boolean cuenta(Component c) {
-        Boolean propio = componentHonorsVisibility.get(c);
-        boolean honra = (propio != null) ? propio.booleanValue() : honorsVisibility;
-        return !honra || c.isVisible();
+    /** Whether that component counts as visible for the measurements. */
+    boolean count(Component c) {
+        Boolean own = componentHonorsVisibility.get(c);
+        boolean honours = (own != null) ? own.booleanValue() : honorsVisibility;
+        return !honours || c.isVisible();
     }
 
-    /** Como se alinean los miembros de un {@link ParallelGroup}. */
+    /** How a {@link ParallelGroup}'s members are aligned. */
     public enum Alignment {
 
-        /** Al principio del eje: arriba o a la izquierda. */
+        /** At the start of the axis: at the top or on the left. */
         LEADING,
 
-        /** Al final: abajo o a la derecha. */
+        /** At the end: at the bottom or on the right. */
         TRAILING,
 
-        /** Al medio. */
+        /** In the middle. */
         CENTER,
 
-        /** Por la linea de base del texto; solo tiene sentido en vertical. */
+        /** By the text's baseline; it only makes sense vertically. */
         BASELINE;
     }
 
     /**
-     * Una distancia con minimo, preferido y maximo.
+     * A distance with a minimum, a preferred and a maximum.
      *
-     * <p>No es publica -- en el JDK tampoco --: lo que se ve desde afuera son los grupos. Todo lo
-     * que entra en un grupo -- un componente, un hueco, otro grupo -- es uno de estos.
+     * <p>It is not public -- not in the JDK either --: what is seen from outside are the groups.
+     * Everything that goes into a group -- a component, a gap, another group -- is one of
+     * these.
      */
     abstract static class Spring {
 
-        int origen;
-        int tamano;
+        int origin;
+        int size;
 
-        abstract int calcular(int eje, int cual);
+        abstract int compute(int axis, int which);
 
-        /** Le da posicion y tamano; las subclases que contienen a otros lo reparten. */
-        void setSize(int eje, int origen, int tamano) {
-            this.origen = origen;
-            this.tamano = tamano;
+        /** It gives it position and size; the subclasses that hold others share it out. */
+        void setSize(int axis, int origin, int size) {
+            this.origin = origin;
+            this.size = size;
         }
 
-        int tamano(int eje, int cual) {
-            return calcular(eje, cual);
+        int size(int axis, int which) {
+            return compute(axis, which);
         }
 
-        /** Busca ese componente y lo ubica; ver {@link GroupLayout#layoutContainer}. */
-        void ubicar(int eje, Component c, Rect r) {
+        /** It looks that component up and places it; see {@link GroupLayout#layoutContainer}. */
+        void place(int axis, Component c, Rect r) {
         }
 
-        void reemplazar(Component viejo, Component nuevo) {
+        void replace(Component old, Component newValue) {
         }
 
-        void fijarEnlace(Component c, int tam) {
+        void setLink(Component c, int tam) {
         }
 
-        void prepararHuecos(int eje, GroupLayout l) {
+        void prepareGaps(int axis, GroupLayout l) {
         }
     }
 
     /**
-     * Un grupo: varios resortes tratados como uno.
+     * A group: several springs treated as one.
      *
-     * <p>Lo que cambia entre las dos subclases es una sola cosa -- si los tamanos se suman o se toma
-     * el mayor -- y de ahi sale todo lo demas.
+     * <p>What changes between the two subclasses is a single thing -- whether the sizes are added
+     * up or the largest is taken -- and everything else comes from that.
      */
     public abstract static class Group extends Spring {
 
         final List<Spring> springs = new ArrayList<Spring>();
-        final GroupLayout duenio;
+        final GroupLayout owner;
 
-        Group(GroupLayout duenio) {
-            this.duenio = duenio;
+        Group(GroupLayout owner) {
+            this.owner = owner;
         }
 
         /**
-         * Agrega otro grupo adentro.
+         * It adds another group inside.
          *
-         * @throws IllegalArgumentException si es nulo
+         * @throws IllegalArgumentException if it is null
          */
         public Group addGroup(Group group) {
             return addSpring(group);
         }
 
         /**
-         * Agrega un componente con su tamano natural.
+         * It adds a component with its natural size.
          *
-         * @throws IllegalArgumentException si es nulo
+         * @throws IllegalArgumentException if it is null
          */
         public Group addComponent(Component component) {
             return addComponent(component, DEFAULT_SIZE, DEFAULT_SIZE, DEFAULT_SIZE);
         }
 
         /**
-         * Agrega un componente con esos tres tamanos.
+         * It adds a component with those three sizes.
          *
-         * <p>Ver la nota de {@link GroupLayout} sobre {@link GroupLayout#DEFAULT_SIZE} y
+         * <p>See {@link GroupLayout}'s note about {@link GroupLayout#DEFAULT_SIZE} and
          * {@link GroupLayout#PREFERRED_SIZE}.
          *
-         * @throws IllegalArgumentException si es nulo o los tamanos son incoherentes
+         * @throws IllegalArgumentException if it is null or the sizes are inconsistent
          */
         public Group addComponent(Component component, int min, int pref, int max) {
-            return addSpring(new ComponentSpring(duenio, component, min, pref, max));
+            return addSpring(new ComponentSpring(owner, component, min, pref, max));
         }
 
         /**
-         * Agrega un hueco fijo.
+         * It adds a fixed gap.
          *
-         * @throws IllegalArgumentException si es negativo
+         * @throws IllegalArgumentException if it is negative
          */
         public Group addGap(int size) {
             return addGap(size, size, size);
         }
 
         /**
-         * Agrega un hueco elastico.
+         * It adds an elastic gap.
          *
-         * @throws IllegalArgumentException si los tamanos son incoherentes
+         * @throws IllegalArgumentException if the sizes are inconsistent
          */
         public Group addGap(int min, int pref, int max) {
             return addSpring(new GapSpring(min, pref, max));
@@ -580,7 +583,7 @@ public class GroupLayout implements LayoutManager2 {
         }
 
         /**
-         * @throws IllegalArgumentException si es nulo
+         * @throws IllegalArgumentException if it is null
          */
         Group addSpring(Spring spring) {
             if (spring == null) {
@@ -592,43 +595,43 @@ public class GroupLayout implements LayoutManager2 {
 
         abstract int operator(int a, int b);
 
-        int calcular(int eje, int cual) {
-            int resultado = 0;
-            boolean primero = true;
+        int compute(int axis, int which) {
+            int result = 0;
+            boolean first = true;
             for (int i = 0; i < springs.size(); i++) {
                 Spring s = springs.get(i);
-                int v = s.tamano(eje, cual);
-                if (primero) {
-                    resultado = v;
-                    primero = false;
+                int v = s.size(axis, which);
+                if (first) {
+                    result = v;
+                    first = false;
                 } else {
-                    resultado = operator(resultado, v);
+                    result = operator(result, v);
                 }
             }
-            return Math.max(0, resultado);
+            return Math.max(0, result);
         }
 
-        void ubicar(int eje, Component c, Rect r) {
+        void place(int axis, Component c, Rect r) {
             for (int i = 0; i < springs.size(); i++) {
-                springs.get(i).ubicar(eje, c, r);
+                springs.get(i).place(axis, c, r);
             }
         }
 
-        void reemplazar(Component viejo, Component nuevo) {
+        void replace(Component old, Component newValue) {
             for (int i = 0; i < springs.size(); i++) {
-                springs.get(i).reemplazar(viejo, nuevo);
+                springs.get(i).replace(old, newValue);
             }
         }
 
-        void fijarEnlace(Component c, int tam) {
+        void setLink(Component c, int tam) {
             for (int i = 0; i < springs.size(); i++) {
-                springs.get(i).fijarEnlace(c, tam);
+                springs.get(i).setLink(c, tam);
             }
         }
 
-        void prepararHuecos(int eje, GroupLayout l) {
+        void prepareGaps(int axis, GroupLayout l) {
             for (int i = 0; i < springs.size(); i++) {
-                springs.get(i).prepararHuecos(eje, l);
+                springs.get(i).prepareGaps(axis, l);
             }
         }
 
@@ -638,23 +641,23 @@ public class GroupLayout implements LayoutManager2 {
     }
 
     /**
-     * Pone sus miembros uno detras de otro.
+     * It puts its members one after another.
      *
-     * <p>El tamano del grupo es la suma. Al repartir un tamano distinto del preferido, el sobrante
-     * se distribuye entre los que pueden estirarse, en proporcion a cuanto pueden: es lo que hace
-     * que un campo elastico se lleve todo el espacio y una etiqueta no se mueva.
+     * <p>The group's size is the sum. On sharing out a size other than the preferred one, the
+     * leftover is distributed among those that can stretch, in proportion to how much they can: it
+     * is what makes an elastic field take all the space and a label not move.
      */
     public static final class SequentialGroup extends Group {
 
-        SequentialGroup(GroupLayout duenio) {
-            super(duenio);
+        SequentialGroup(GroupLayout owner) {
+            super(owner);
         }
 
         public SequentialGroup addGroup(Group group) {
             return (SequentialGroup) super.addGroup(group);
         }
 
-        /** Idem, pudiendo excluir al grupo del calculo de la linea de base. */
+        /** The same, being able to exclude the group from the baseline computation. */
         public SequentialGroup addGroup(boolean useAsBaseline, Group group) {
             return addGroup(group);
         }
@@ -663,7 +666,7 @@ public class GroupLayout implements LayoutManager2 {
             return (SequentialGroup) super.addComponent(component);
         }
 
-        /** Idem, pudiendo excluir al componente del calculo de la linea de base. */
+        /** The same, being able to exclude the component from the baseline computation. */
         public SequentialGroup addComponent(boolean useAsBaseline, Component component) {
             return addComponent(component);
         }
@@ -672,7 +675,7 @@ public class GroupLayout implements LayoutManager2 {
             return (SequentialGroup) super.addComponent(component, min, pref, max);
         }
 
-        /** Idem; ver {@link #addComponent(boolean, Component)}. */
+        /** The same; see {@link #addComponent(boolean, Component)}. */
         public SequentialGroup addComponent(boolean useAsBaseline, Component component, int min,
                 int pref, int max) {
             return addComponent(component, min, pref, max);
@@ -687,11 +690,11 @@ public class GroupLayout implements LayoutManager2 {
         }
 
         /**
-         * Un hueco del tamano que corresponda entre esos dos componentes.
+         * A gap of the size that applies between those two components.
          *
-         * <p>Lo decide {@link LayoutStyle}; ver la nota de {@link GroupLayout}.
+         * <p>{@link LayoutStyle} decides it; see {@link GroupLayout}'s note.
          *
-         * @throws IllegalArgumentException si algo es nulo
+         * @throws IllegalArgumentException if something is null
          */
         public SequentialGroup addPreferredGap(JComponent comp1, JComponent comp2,
                 LayoutStyle.ComponentPlacement type) {
@@ -699,9 +702,9 @@ public class GroupLayout implements LayoutManager2 {
         }
 
         /**
-         * Idem, pudiendo estirarse.
+         * The same, being able to stretch.
          *
-         * @throws IllegalArgumentException si algo es nulo
+         * @throws IllegalArgumentException if something is null
          */
         public SequentialGroup addPreferredGap(JComponent comp1, JComponent comp2,
                 LayoutStyle.ComponentPlacement type, int pref, int max) {
@@ -709,22 +712,22 @@ public class GroupLayout implements LayoutManager2 {
                 throw new IllegalArgumentException("Components and type must be non-null");
             }
             return (SequentialGroup) addSpring(
-                    new AutoGapSpring(duenio, comp1, comp2, type, pref, max));
+                    new AutoGapSpring(owner, comp1, comp2, type, pref, max));
         }
 
         /**
-         * Un hueco entre lo que venga antes y lo que venga despues.
+         * A gap between whatever comes before and whatever comes afterwards.
          *
-         * @throws IllegalArgumentException si el tipo es nulo o es {@code INDENT}
+         * @throws IllegalArgumentException if the type is null or is {@code INDENT}
          */
         public SequentialGroup addPreferredGap(LayoutStyle.ComponentPlacement type) {
             return addPreferredGap(type, DEFAULT_SIZE, PREFERRED_SIZE);
         }
 
         /**
-         * Idem, pudiendo estirarse.
+         * The same, being able to stretch.
          *
-         * @throws IllegalArgumentException si el tipo es nulo o es {@code INDENT}
+         * @throws IllegalArgumentException if the type is null or is {@code INDENT}
          */
         public SequentialGroup addPreferredGap(LayoutStyle.ComponentPlacement type, int pref,
                 int max) {
@@ -735,21 +738,21 @@ public class GroupLayout implements LayoutManager2 {
                 throw new IllegalArgumentException("Unsupported type");
             }
             return (SequentialGroup) addSpring(
-                    new AutoGapSpring(duenio, null, null, type, pref, max));
+                    new AutoGapSpring(owner, null, null, type, pref, max));
         }
 
-        /** El hueco que corresponde contra el borde del contenedor. */
+        /** The gap that applies against the container's edge. */
         public SequentialGroup addContainerGap() {
             return addContainerGap(DEFAULT_SIZE, PREFERRED_SIZE);
         }
 
         /**
-         * Idem, pudiendo estirarse.
+         * The same, being able to stretch.
          *
-         * @throws IllegalArgumentException si los tamanos son incoherentes
+         * @throws IllegalArgumentException if the sizes are inconsistent
          */
         public SequentialGroup addContainerGap(int pref, int max) {
-            return (SequentialGroup) addSpring(new ContainerGapSpring(duenio, pref, max));
+            return (SequentialGroup) addSpring(new ContainerGapSpring(owner, pref, max));
         }
 
         int operator(int a, int b) {
@@ -758,77 +761,78 @@ public class GroupLayout implements LayoutManager2 {
         }
 
         /**
-         * Reparte el tamano entre los miembros.
+         * It shares the size out among the members.
          *
-         * <p>Cada uno arranca en su preferido; el sobrante -- o el faltante -- se reparte entre los
-         * que pueden moverse, en proporcion a cuanto margen tiene cada uno. Ver la nota de la clase.
+         * <p>Each one starts at its preferred one; the leftover -- or the shortfall -- is shared
+         * out among those that can move, in proportion to how much room each one has. See the class
+         * note.
          */
-        void setSize(int eje, int origen, int tamano) {
-            super.setSize(eje, origen, tamano);
+        void setSize(int axis, int origin, int size) {
+            super.setSize(axis, origin, size);
             int n = springs.size();
             if (n == 0) {
                 return;
             }
             int[] pref = new int[n];
-            int[] margen = new int[n];
+            int[] margin = new int[n];
             long totalPref = 0;
-            long totalMargen = 0;
-            boolean agrandar = true;
+            long totalMargin = 0;
+            boolean grow = true;
             for (int i = 0; i < n; i++) {
-                pref[i] = springs.get(i).tamano(eje, PREF);
+                pref[i] = springs.get(i).size(axis, PREF);
                 totalPref = totalPref + pref[i];
             }
-            long delta = tamano - totalPref;
-            agrandar = (delta >= 0);
+            long delta = size - totalPref;
+            grow = (delta >= 0);
             for (int i = 0; i < n; i++) {
                 Spring s = springs.get(i);
-                if (agrandar) {
-                    margen[i] = s.tamano(eje, MAX) - pref[i];
+                if (grow) {
+                    margin[i] = s.size(axis, MAX) - pref[i];
                 } else {
-                    margen[i] = pref[i] - s.tamano(eje, MIN);
+                    margin[i] = pref[i] - s.size(axis, MIN);
                 }
-                if (margen[i] < 0) {
-                    margen[i] = 0;
+                if (margin[i] < 0) {
+                    margin[i] = 0;
                 }
-                totalMargen = totalMargen + margen[i];
+                totalMargin = totalMargin + margin[i];
             }
-            int pos = origen;
+            int pos = origin;
             long restante = (delta < 0) ? -delta : delta;
-            long repartido = 0;
+            long shared = 0;
             for (int i = 0; i < n; i++) {
                 int extra = 0;
-                if (totalMargen > 0 && restante > 0) {
+                if (totalMargin > 0 && restante > 0) {
                     if (i == n - 1) {
-                        extra = (int) Math.min(restante - repartido, margen[i]);
+                        extra = (int) Math.min(restante - shared, margin[i]);
                     } else {
-                        extra = (int) (restante * margen[i] / totalMargen);
-                        if (extra > margen[i]) {
-                            extra = margen[i];
+                        extra = (int) (restante * margin[i] / totalMargin);
+                        if (extra > margin[i]) {
+                            extra = margin[i];
                         }
                     }
-                    repartido = repartido + extra;
+                    shared = shared + extra;
                 }
-                int t = agrandar ? pref[i] + extra : pref[i] - extra;
-                springs.get(i).setSize(eje, pos, t);
+                int t = grow ? pref[i] + extra : pref[i] - extra;
+                springs.get(i).setSize(axis, pos, t);
                 pos = pos + t;
             }
         }
     }
 
     /**
-     * Pone sus miembros en el mismo lugar, alineados entre si.
+     * It puts its members in the same place, aligned with one another.
      *
-     * <p>El tamano del grupo es el del mayor. Cada miembro recibe el tamano del grupo si puede
-     * estirarse, y si no queda de su tamano preferido, colocado segun la alineacion.
+     * <p>The group's size is the largest one's. Each member receives the group's size if it can
+     * stretch, and if not it stays its preferred size, placed according to the alignment.
      */
     public static class ParallelGroup extends Group {
 
         private final Alignment childAlignment;
         private final boolean resizable;
-        private final Map<Spring, Alignment> alineaciones = new HashMap<Spring, Alignment>();
+        private final Map<Spring, Alignment> alignments = new HashMap<Spring, Alignment>();
 
-        ParallelGroup(GroupLayout duenio, Alignment childAlignment, boolean resizable) {
-            super(duenio);
+        ParallelGroup(GroupLayout owner, Alignment childAlignment, boolean resizable) {
+            super(owner);
             this.childAlignment = childAlignment;
             this.resizable = resizable;
         }
@@ -854,45 +858,48 @@ public class GroupLayout implements LayoutManager2 {
         }
 
         /**
-         * Agrega un grupo con su propia alineacion.
+         * It adds a group with an alignment of its own.
          *
-         * @throws IllegalArgumentException si la alineacion es nula
+         * @throws IllegalArgumentException if the alignment is null
          */
         public ParallelGroup addGroup(Alignment alignment, Group group) {
             if (alignment == null) {
                 throw new IllegalArgumentException("Alignment must be non-null");
             }
             addSpring(group);
-            alineaciones.put(group, alignment);
+            alignments.put(group, alignment);
             return this;
         }
 
         /**
-         * Agrega un componente con su propia alineacion.
+         * It adds a component with an alignment of its own.
          *
-         * @throws IllegalArgumentException si la alineacion es nula
+         * @throws IllegalArgumentException if the alignment is null
          */
         public ParallelGroup addComponent(Component component, Alignment alignment) {
             return addComponent(component, alignment, DEFAULT_SIZE, DEFAULT_SIZE, DEFAULT_SIZE);
         }
 
         /**
-         * Idem, con los tres tamanos.
+         * The same, with the three sizes.
          *
-         * @throws IllegalArgumentException si la alineacion es nula
+         * @throws IllegalArgumentException if the alignment is null
          */
         public ParallelGroup addComponent(Component component, Alignment alignment, int min,
                 int pref, int max) {
             if (alignment == null) {
                 throw new IllegalArgumentException("Alignment must be non-null");
             }
-            Spring s = new ComponentSpring(duenio, component, min, pref, max);
+            Spring s = new ComponentSpring(owner, component, min, pref, max);
             addSpring(s);
-            alineaciones.put(s, alignment);
+            alignments.put(s, alignment);
             return this;
         }
 
-        /** Si el grupo se estira; ver {@link GroupLayout#createParallelGroup(Alignment, boolean)}. */
+        /**
+         * Whether the group stretches; see {@link GroupLayout#createParallelGroup(Alignment,
+         * boolean)}.
+         */
         boolean isResizable() {
             return resizable;
         }
@@ -901,113 +908,113 @@ public class GroupLayout implements LayoutManager2 {
             return Math.max(a, b);
         }
 
-        int calcular(int eje, int cual) {
-            if (!resizable && cual != PREF) {
-                return calcular(eje, PREF);
+        int compute(int axis, int which) {
+            if (!resizable && which != PREF) {
+                return compute(axis, PREF);
             }
-            return super.calcular(eje, cual);
+            return super.compute(axis, which);
         }
 
-        /** A cada uno el tamano del grupo si puede; si no, el suyo, alineado. */
-        void setSize(int eje, int origen, int tamano) {
-            super.setSize(eje, origen, tamano);
+        /** The group's size to each one if it can; if not, its own, aligned. */
+        void setSize(int axis, int origin, int size) {
+            super.setSize(axis, origin, size);
             for (int i = 0; i < springs.size(); i++) {
                 Spring s = springs.get(i);
-                int max = s.tamano(eje, MAX);
-                int min = s.tamano(eje, MIN);
-                int t = Math.max(min, Math.min(tamano, max));
-                Alignment a = alineaciones.get(s);
+                int max = s.size(axis, MAX);
+                int min = s.size(axis, MIN);
+                int t = Math.max(min, Math.min(size, max));
+                Alignment a = alignments.get(s);
                 if (a == null) {
                     a = childAlignment;
                 }
                 int off = 0;
-                if (t < tamano) {
+                if (t < size) {
                     if (a == Alignment.TRAILING) {
-                        off = tamano - t;
+                        off = size - t;
                     } else if (a == Alignment.CENTER) {
-                        off = (tamano - t) / 2;
+                        off = (size - t) / 2;
                     }
                 }
-                s.setSize(eje, origen + off, t);
+                s.setSize(axis, origin + off, t);
             }
         }
     }
 
-    /** Un componente adentro de un grupo. */
+    /** A component inside a group. */
     private static class ComponentSpring extends Spring {
 
-        private final GroupLayout duenio;
+        private final GroupLayout owner;
         private Component component;
         private final int min;
         private final int pref;
         private final int max;
-        private int enlazado = -1;
+        private int linked = -1;
 
-        ComponentSpring(GroupLayout duenio, Component component, int min, int pref, int max) {
+        ComponentSpring(GroupLayout owner, Component component, int min, int pref, int max) {
             if (component == null) {
                 throw new IllegalArgumentException("Component must be non-null");
             }
             checkSize(min, pref, max, true);
-            this.duenio = duenio;
+            this.owner = owner;
             this.component = component;
             this.min = min;
             this.pref = pref;
             this.max = max;
         }
 
-        int calcular(int eje, int cual) {
-            if (!duenio.cuenta(component)) {
+        int compute(int axis, int which) {
+            if (!owner.count(component)) {
                 return 0;
             }
-            if (enlazado >= 0) {
-                return enlazado;
+            if (linked >= 0) {
+                return linked;
             }
-            int pedido = (cual == MIN) ? min : ((cual == PREF) ? pref : max);
-            if (pedido >= 0) {
-                return pedido;
+            int requested = (which == MIN) ? min : ((which == PREF) ? pref : max);
+            if (requested >= 0) {
+                return requested;
             }
-            if (pedido == PREFERRED_SIZE) {
-                return natural(eje, PREF);
+            if (requested == PREFERRED_SIZE) {
+                return natural(axis, PREF);
             }
-            return natural(eje, cual);
+            return natural(axis, which);
         }
 
-        private int natural(int eje, int cual) {
+        private int natural(int axis, int which) {
             Dimension d;
-            if (cual == MIN) {
+            if (which == MIN) {
                 d = component.getMinimumSize();
-            } else if (cual == PREF) {
+            } else if (which == PREF) {
                 d = component.getPreferredSize();
             } else {
                 d = component.getMaximumSize();
             }
-            return (eje == HORIZONTAL) ? d.width : d.height;
+            return (axis == HORIZONTAL) ? d.width : d.height;
         }
 
-        void ubicar(int eje, Component c, Rect r) {
+        void place(int axis, Component c, Rect r) {
             if (c != component) {
                 return;
             }
-            if (eje == HORIZONTAL) {
-                r.x = origen;
-                r.w = tamano;
-                r.puestoH = true;
+            if (axis == HORIZONTAL) {
+                r.x = origin;
+                r.w = size;
+                r.setH = true;
             } else {
-                r.y = origen;
-                r.h = tamano;
-                r.puestoV = true;
+                r.y = origin;
+                r.h = size;
+                r.setV = true;
             }
         }
 
-        void reemplazar(Component viejo, Component nuevo) {
-            if (component == viejo) {
-                component = nuevo;
+        void replace(Component old, Component newValue) {
+            if (component == old) {
+                component = newValue;
             }
         }
 
-        void fijarEnlace(Component c, int tam) {
+        void setLink(Component c, int tam) {
             if (component == c) {
-                enlazado = tam;
+                linked = tam;
             }
         }
 
@@ -1016,7 +1023,7 @@ public class GroupLayout implements LayoutManager2 {
         }
     }
 
-    /** Un hueco de tamano dado. */
+    /** A gap of a given size. */
     private static class GapSpring extends Spring {
 
         private final int min;
@@ -1030,8 +1037,8 @@ public class GroupLayout implements LayoutManager2 {
             this.max = max;
         }
 
-        int calcular(int eje, int cual) {
-            int v = (cual == MIN) ? min : ((cual == PREF) ? pref : max);
+        int compute(int axis, int which) {
+            int v = (which == MIN) ? min : ((which == PREF) ? pref : max);
             return (v < 0) ? 0 : v;
         }
 
@@ -1040,19 +1047,19 @@ public class GroupLayout implements LayoutManager2 {
         }
     }
 
-    /** Un hueco cuyo tamano lo decide {@link LayoutStyle}. */
+    /** A gap whose size is decided by {@link LayoutStyle}. */
     private static class AutoGapSpring extends Spring {
 
-        private final GroupLayout duenio;
+        private final GroupLayout owner;
         private JComponent c1;
         private JComponent c2;
         private final LayoutStyle.ComponentPlacement type;
         private final int pref;
         private final int max;
 
-        AutoGapSpring(GroupLayout duenio, JComponent c1, JComponent c2,
+        AutoGapSpring(GroupLayout owner, JComponent c1, JComponent c2,
                 LayoutStyle.ComponentPlacement type, int pref, int max) {
-            this.duenio = duenio;
+            this.owner = owner;
             this.c1 = c1;
             this.c2 = c2;
             this.type = type;
@@ -1060,22 +1067,23 @@ public class GroupLayout implements LayoutManager2 {
             this.max = max;
         }
 
-        private int base(int eje) {
+        private int base(int axis) {
             if (c1 == null || c2 == null) {
-                // Sin componentes concretos no hay a quien medirle el vecino: se usa el hueco de
-                // "relacionados" contra el mismo contenedor, que es lo que se ve en la practica.
+                // With no concrete components there is nobody to measure the neighbour on: the
+                                // "related" gap against the container itself is used, which is what
+                                // is seen in practice.
                 return (type == LayoutStyle.ComponentPlacement.UNRELATED) ? 12 : 6;
             }
-            int position = (eje == HORIZONTAL) ? SwingConstants.EAST : SwingConstants.SOUTH;
-            return duenio.estilo().getPreferredGap(c1, c2, type, position, null);
+            int position = (axis == HORIZONTAL) ? SwingConstants.EAST : SwingConstants.SOUTH;
+            return owner.style().getPreferredGap(c1, c2, type, position, null);
         }
 
-        int calcular(int eje, int cual) {
-            int b = base(eje);
-            if (cual == MIN) {
+        int compute(int axis, int which) {
+            int b = base(axis);
+            if (which == MIN) {
                 return b;
             }
-            if (cual == PREF) {
+            if (which == PREF) {
                 return (pref >= 0) ? pref : b;
             }
             if (max == PREFERRED_SIZE) {
@@ -1084,12 +1092,12 @@ public class GroupLayout implements LayoutManager2 {
             return (max >= 0) ? max : Integer.MAX_VALUE;
         }
 
-        void reemplazar(Component viejo, Component nuevo) {
-            if (c1 == viejo && nuevo instanceof JComponent) {
-                c1 = (JComponent) nuevo;
+        void replace(Component old, Component newValue) {
+            if (c1 == old && newValue instanceof JComponent) {
+                c1 = (JComponent) newValue;
             }
-            if (c2 == viejo && nuevo instanceof JComponent) {
-                c2 = (JComponent) nuevo;
+            if (c2 == old && newValue instanceof JComponent) {
+                c2 = (JComponent) newValue;
             }
         }
 
@@ -1098,25 +1106,25 @@ public class GroupLayout implements LayoutManager2 {
         }
     }
 
-    /** El hueco contra el borde del contenedor. */
+    /** The gap against the container's edge. */
     private static class ContainerGapSpring extends Spring {
 
-        private final GroupLayout duenio;
+        private final GroupLayout owner;
         private final int pref;
         private final int max;
 
-        ContainerGapSpring(GroupLayout duenio, int pref, int max) {
-            this.duenio = duenio;
+        ContainerGapSpring(GroupLayout owner, int pref, int max) {
+            this.owner = owner;
             this.pref = pref;
             this.max = max;
         }
 
-        int calcular(int eje, int cual) {
+        int compute(int axis, int which) {
             int b = 6;
-            if (cual == MIN) {
+            if (which == MIN) {
                 return b;
             }
-            if (cual == PREF) {
+            if (which == PREF) {
                 return (pref >= 0) ? pref : b;
             }
             if (max == PREFERRED_SIZE) {
@@ -1131,22 +1139,22 @@ public class GroupLayout implements LayoutManager2 {
     }
 
     /**
-     * Que los tres tamanos sean coherentes.
+     * That the three sizes be consistent.
      *
-     * <p>Un componente admite {@link #DEFAULT_SIZE} y {@link #PREFERRED_SIZE} en el minimo y en el
-     * maximo -- "el que tenga" y "el preferido" son respuestas validas cuando hay a quien
-     * preguntarle --; un hueco no tiene a quien preguntarle su tamano de omision, y por eso solo
-     * admite {@link #PREFERRED_SIZE}, que ahi significa "no te estires".
+     * <p>A component admits {@link #DEFAULT_SIZE} and {@link #PREFERRED_SIZE} in the minimum and
+     * in the maximum -- "whatever it has" and "the preferred one" are valid answers when there
+     * is somebody to ask --; a gap has nobody to ask its default size, and that is why it only
+     * admits {@link #PREFERRED_SIZE}, which there means "do not stretch".
      *
-     * @throws IllegalArgumentException si los tres tamanos no son coherentes
+     * @throws IllegalArgumentException if the three sizes are not consistent
      */
-    private static void checkSize(int min, int pref, int max, boolean componente) {
-        checkResizeType(min, componente);
-        if (!componente && pref < 0) {
+    private static void checkSize(int min, int pref, int max, boolean isComponent) {
+        checkResizeType(min, isComponent);
+        if (!isComponent && pref < 0) {
             throw new IllegalArgumentException("Pref must be positive, DEFAULT_SIZE "
                     + "or PREFERRED_SIZE");
         }
-        checkResizeType(max, componente);
+        checkResizeType(max, isComponent);
         if (min >= 0 && pref >= 0 && min > pref) {
             throw new IllegalArgumentException("Following is not met: min<=pref<=max");
         }
@@ -1158,9 +1166,9 @@ public class GroupLayout implements LayoutManager2 {
         }
     }
 
-    private static void checkResizeType(int type, boolean componente) {
-        if (type < 0 && ((componente && type != DEFAULT_SIZE && type != PREFERRED_SIZE)
-                || (!componente && type != PREFERRED_SIZE))) {
+    private static void checkResizeType(int type, boolean isComponent) {
+        if (type < 0 && ((isComponent && type != DEFAULT_SIZE && type != PREFERRED_SIZE)
+                || (!isComponent && type != PREFERRED_SIZE))) {
             throw new IllegalArgumentException("Invalid size");
         }
     }

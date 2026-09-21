@@ -5,46 +5,48 @@ import javax.management.loading.ClassLoaderRepository;
 import java.util.Set;
 
 /**
- * El agente local: el registro donde viven los MBeans de esta maquina virtual.
+ * The local agent: the registry where this virtual machine's MBeans live.
  *
- * <p>Redeclara <b>todos</b> los metodos de {@link MBeanServerConnection} sin `IOException`. La
- * repeticion parece gratuita y no lo es: es la unica forma que da Java de restringir el `throws` de
- * una interfaz heredada, y es lo que hace que el codigo local no tenga que atajar una falla de red
- * imposible.
+ * <p>It redeclares <b>all</b> the methods of {@link MBeanServerConnection} without
+ * {@code IOException}. The repetition looks gratuitous and is not: it is the only way Java gives to
+ * narrow the {@code throws} of an inherited interface, and it is what spares local code from
+ * catching an impossible network failure.
  *
- * <p>Agrega ademas lo que solo tiene sentido en el mismo proceso: {@link #registerMBean}, que
- * registra un objeto <b>ya construido</b> --imposible de mandar por la red--, los cuatro
- * {@link #instantiate} y el acceso a los cargadores de clases.
+ * <p>It also adds what only makes sense in the same process: {@link #registerMBean}, which
+ * registers an <b>already built</b> object --impossible to send over the network--, the four {@link
+ * #instantiate} and access to the class loaders.
  *
- * <h2>Que falta y por que</h2>
+ * <h2>What is missing and why</h2>
  *
- * <p>Los tres {@code deserialize} estan, y tiran {@link UnsupportedOperationException} -- que es
- * <b>literalmente el cuerpo que tienen en el JDK</b>. Desde que se volvieron metodos por omision no
- * son un contrato que la interfaz prometa cumplir: son un lugar donde una implementacion concreta
- * puede poner algo si quiere, y la interfaz avisa que ella no lo hace. Estan obsoletos desde 1.5.
+ * <p>The three {@code deserialize} are there, and throw {@link UnsupportedOperationException} --
+ * which is <b>literally the body they have in the JDK</b>. Since they became default methods they
+ * are not a contract the interface promises to fulfil: they are a place where a concrete
+ * implementation can put something if it wants, and the interface warns that it does not. They
+ * have been deprecated since 1.5.
  *
- * <p>Antes faltaban porque `java.io.ObjectInputStream` no estaba en esta biblioteca; ya esta.
+ * <p>They used to be missing because {@code java.io.ObjectInputStream} was not in this library; it
+ * is now.
  */
 public interface MBeanServer extends MBeanServerConnection {
 
-    /** Instancia y registra un MBean de la clase dada. */
+    /** Instantiates and registers an MBean of the given class. */
     ObjectInstance createMBean(String className, ObjectName name)
             throws ReflectionException, InstanceAlreadyExistsException,
                    MBeanRegistrationException, MBeanException, NotCompliantMBeanException;
 
-    /** Igual, cargando la clase con el cargador registrado bajo `loaderName`. */
+    /** The same, loading the class with the loader registered under {@code loaderName}. */
     ObjectInstance createMBean(String className, ObjectName name, ObjectName loaderName)
             throws ReflectionException, InstanceAlreadyExistsException,
                    MBeanRegistrationException, MBeanException, NotCompliantMBeanException,
                    InstanceNotFoundException;
 
-    /** Igual, eligiendo constructor por la firma. */
+    /** The same, choosing the constructor by signature. */
     ObjectInstance createMBean(String className, ObjectName name, Object[] params,
                                String[] signature)
             throws ReflectionException, InstanceAlreadyExistsException,
                    MBeanRegistrationException, MBeanException, NotCompliantMBeanException;
 
-    /** Con cargador y constructor elegidos. */
+    /** With loader and constructor chosen. */
     ObjectInstance createMBean(String className, ObjectName name, ObjectName loaderName,
                                Object[] params, String[] signature)
             throws ReflectionException, InstanceAlreadyExistsException,
@@ -52,139 +54,139 @@ public interface MBeanServer extends MBeanServerConnection {
                    InstanceNotFoundException;
 
     /**
-     * Registra un objeto que ya existe.
+     * Registers an object that already exists.
      *
-     * <p>Es lo que un agente remoto no puede ofrecer, y por eso no esta en
-     * {@link MBeanServerConnection}. El `name` puede ser `null` si el MBean implementa
-     * {@link MBeanRegistration} y se nombra solo.
+     * <p>It is what a remote agent cannot offer, which is why it is not in
+     * {@link MBeanServerConnection}. The {@code name} may be {@code null} if the MBean implements
+     * {@link MBeanRegistration} and names itself.
      */
     ObjectInstance registerMBean(Object object, ObjectName name)
             throws InstanceAlreadyExistsException, MBeanRegistrationException,
                    NotCompliantMBeanException;
 
-    /** Da de baja un MBean. */
+    /** Unregisters an MBean. */
     void unregisterMBean(ObjectName name)
             throws InstanceNotFoundException, MBeanRegistrationException;
 
-    /** Nombre y clase de un MBean registrado. */
+    /** Name and class of a registered MBean. */
     ObjectInstance getObjectInstance(ObjectName name) throws InstanceNotFoundException;
 
-    /** Los MBeans que coinciden, con su clase. */
+    /** The MBeans that match, with their class. */
     Set<ObjectInstance> queryMBeans(ObjectName name, QueryExp query);
 
-    /** Lo mismo, solo los nombres. */
+    /** The same, only the names. */
     Set<ObjectName> queryNames(ObjectName name, QueryExp query);
 
-    /** Si hay un MBean con ese nombre. */
+    /** Whether there is an MBean with that name. */
     boolean isRegistered(ObjectName name);
 
-    /** Cuantos MBeans hay. */
+    /** How many MBeans there are. */
     Integer getMBeanCount();
 
-    /** Lee un atributo. */
+    /** Reads an attribute. */
     Object getAttribute(ObjectName name, String attribute)
             throws MBeanException, AttributeNotFoundException, InstanceNotFoundException,
                    ReflectionException;
 
-    /** Lee varios; los que fallan no aparecen en la respuesta. */
+    /** Reads several; the ones that fail do not appear in the answer. */
     AttributeList getAttributes(ObjectName name, String[] attributes)
             throws InstanceNotFoundException, ReflectionException;
 
-    /** Escribe un atributo. */
+    /** Writes an attribute. */
     void setAttribute(ObjectName name, Attribute attribute)
             throws InstanceNotFoundException, AttributeNotFoundException,
                    InvalidAttributeValueException, MBeanException, ReflectionException;
 
-    /** Escribe varios; devuelve los que se pudieron escribir. */
+    /** Writes several; returns the ones that could be written. */
     AttributeList setAttributes(ObjectName name, AttributeList attributes)
             throws InstanceNotFoundException, ReflectionException;
 
-    /** Invoca una operacion. */
+    /** Invokes an operation. */
     Object invoke(ObjectName name, String operationName, Object[] params, String[] signature)
             throws InstanceNotFoundException, MBeanException, ReflectionException;
 
-    /** El dominio que se usa cuando un nombre no trae ninguno. */
+    /** The domain used when a name does not bring one. */
     String getDefaultDomain();
 
-    /** Los dominios en los que hay algun MBean registrado. */
+    /** The domains in which some MBean is registered. */
     String[] getDomains();
 
-    /** Registra un oyente contra un MBean. */
+    /** Registers a listener against an MBean. */
     void addNotificationListener(ObjectName name, NotificationListener listener,
                                  NotificationFilter filter, Object handback)
             throws InstanceNotFoundException;
 
-    /** Registra como oyente a otro MBean. */
+    /** Registers another MBean as a listener. */
     void addNotificationListener(ObjectName name, ObjectName listener,
                                  NotificationFilter filter, Object handback)
             throws InstanceNotFoundException;
 
-    /** Saca todos los registros de ese MBean oyente. */
+    /** Removes all the registrations of that listener MBean. */
     void removeNotificationListener(ObjectName name, ObjectName listener)
             throws InstanceNotFoundException, ListenerNotFoundException;
 
-    /** Saca el registro exacto de ese MBean oyente. */
+    /** Removes the exact registration of that listener MBean. */
     void removeNotificationListener(ObjectName name, ObjectName listener,
                                     NotificationFilter filter, Object handback)
             throws InstanceNotFoundException, ListenerNotFoundException;
 
-    /** Saca todos los registros de ese oyente. */
+    /** Removes all the registrations of that listener. */
     void removeNotificationListener(ObjectName name, NotificationListener listener)
             throws InstanceNotFoundException, ListenerNotFoundException;
 
-    /** Saca el registro exacto. */
+    /** Removes the exact registration. */
     void removeNotificationListener(ObjectName name, NotificationListener listener,
                                     NotificationFilter filter, Object handback)
             throws InstanceNotFoundException, ListenerNotFoundException;
 
-    /** Los metadatos del MBean. */
+    /** The MBean's metadata. */
     MBeanInfo getMBeanInfo(ObjectName name)
             throws InstanceNotFoundException, IntrospectionException, ReflectionException;
 
-    /** Si el MBean es de esa clase o de una subclase. */
+    /** Whether the MBean is of that class or of a subclass. */
     boolean isInstanceOf(ObjectName name, String className) throws InstanceNotFoundException;
 
     /**
-     * Construye un objeto <b>sin</b> registrarlo.
+     * Builds an object <b>without</b> registering it.
      *
-     * <p>Sirve para fabricar los argumentos de otra llamada usando los cargadores del agente.
+     * <p>It serves to make the arguments of another call using the agent's loaders.
      */
     Object instantiate(String className) throws ReflectionException, MBeanException;
 
-    /** Igual, con el cargador registrado bajo `loaderName`. */
+    /** The same, with the loader registered under {@code loaderName}. */
     Object instantiate(String className, ObjectName loaderName)
             throws ReflectionException, MBeanException, InstanceNotFoundException;
 
-    /** Igual, eligiendo constructor. */
+    /** The same, choosing the constructor. */
     Object instantiate(String className, Object[] params, String[] signature)
             throws ReflectionException, MBeanException;
 
-    /** Con cargador y constructor elegidos. */
+    /** With loader and constructor chosen. */
     Object instantiate(String className, ObjectName loaderName, Object[] params,
                        String[] signature)
             throws ReflectionException, MBeanException, InstanceNotFoundException;
 
-    /** El cargador de clases con el que se cargo ese MBean. */
+    /** The class loader that MBean was loaded with. */
     ClassLoader getClassLoaderFor(ObjectName name) throws InstanceNotFoundException;
 
-    /** El cargador de clases que esta registrado <b>como</b> MBean bajo ese nombre. */
+    /** The class loader that is registered <b>as</b> an MBean under that name. */
     ClassLoader getClassLoader(ObjectName name) throws InstanceNotFoundException;
 
     /**
-     * Los cargadores que este agente conoce, para buscar una clase por nombre.
+     * The loaders this agent knows, to look for a class by name.
      *
-     * <p>Es lo que permite cargar una clase que llego nombrada desde afuera y que no esta en el
-     * classpath del agente.
+     * <p>It is what allows loading a class that arrived named from outside and is not on the
+     * agent's class path.
      */
     ClassLoaderRepository getClassLoaderRepository();
 
     /**
-     * Deserializa un arreglo de bytes con el cargador del MBean nombrado.
+     * Deserializes a byte array with the named MBean's loader.
      *
-     * <p>Esta interfaz no lo hace: tira {@link UnsupportedOperationException}, que es el mismo
-     * cuerpo que tiene en el JDK. Una implementacion concreta puede redefinirlo.
+     * <p>This interface does not do it: it throws {@link UnsupportedOperationException}, which is
+     * the same body it has in the JDK. A concrete implementation can redefine it.
      *
-     * @deprecated como en el JDK desde 1.5: usar {@link #getClassLoaderFor} y deserializar afuera
+     * @deprecated as in the JDK since 1.5: use {@link #getClassLoaderFor} and deserialize outside
      */
     @Deprecated
     default java.io.ObjectInputStream deserialize(ObjectName name, byte[] data)
@@ -193,11 +195,12 @@ public interface MBeanServer extends MBeanServerConnection {
     }
 
     /**
-     * Deserializa un arreglo de bytes con el cargador de la clase nombrada.
+     * Deserializes a byte array with the named class's loader.
      *
-     * <p>Ver {@link #deserialize(ObjectName, byte[])}: tira {@link UnsupportedOperationException}.
+     * <p>See {@link #deserialize(ObjectName, byte[])}: it throws {@link
+     * UnsupportedOperationException}.
      *
-     * @deprecated como en el JDK desde 1.5: usar {@link #getClassLoaderRepository}
+     * @deprecated as in the JDK since 1.5: use {@link #getClassLoaderRepository}
      */
     @Deprecated
     default java.io.ObjectInputStream deserialize(String className, byte[] data)
@@ -206,11 +209,12 @@ public interface MBeanServer extends MBeanServerConnection {
     }
 
     /**
-     * Deserializa un arreglo de bytes con el cargador nombrado.
+     * Deserializes a byte array with the named loader.
      *
-     * <p>Ver {@link #deserialize(ObjectName, byte[])}: tira {@link UnsupportedOperationException}.
+     * <p>See {@link #deserialize(ObjectName, byte[])}: it throws {@link
+     * UnsupportedOperationException}.
      *
-     * @deprecated como en el JDK desde 1.5: usar {@link #getClassLoader} y deserializar afuera
+     * @deprecated as in the JDK since 1.5: use {@link #getClassLoader} and deserialize outside
      */
     @Deprecated
     default java.io.ObjectInputStream deserialize(String className, ObjectName loaderName,

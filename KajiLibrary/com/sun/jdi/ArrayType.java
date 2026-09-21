@@ -1,39 +1,39 @@
 package com.sun.jdi;
 
 /**
- * El tipo de un arreglo.
+The type of an array.
  *
  * @since 1.3
  */
 public interface ArrayType extends ReferenceType {
 
     /**
-     * El new instance.
+     * The new instance.
      *
-     * @param index el int
-     * @return el resultado
+     * @param index the int
+     * @return the result
      */
     ArrayReference newInstance(int index);
 
     /**
-     * El component signature.
+     * The component signature.
      *
-     * @return el resultado
+     * @return the result
      */
     String componentSignature();
 
     /**
-     * El component type name.
+     * The component type name.
      *
-     * @return el resultado
+     * @return the result
      */
     String componentTypeName();
 
     /**
-     * El component type.
+     * The component type.
      *
-     * @return el resultado
-     * @throws ClassNotLoadedException si corresponde
+     * @return the result
+     * @throws ClassNotLoadedException if it applies
      */
     Type componentType()
             throws ClassNotLoadedException;

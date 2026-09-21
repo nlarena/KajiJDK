@@ -2,8 +2,8 @@ package jdk.internal.classfile.impl;
 
 import java.lang.classfile.Label;
 
-// Una etiqueta que ya sabe su posición: sale de leer un `.class`, donde los destinos son offsets y
-// no incógnitas. Se compara por identidad, como manda el contrato de `Label`.
+// A label that already knows its position: it comes from reading a `.class`, where the targets are
+// offsets and not unknowns. It is compared by identity, as the contract of `Label` demands.
 public final class LabelImpl implements Label {
 
     private final int bci;
@@ -12,7 +12,7 @@ public final class LabelImpl implements Label {
         this.bci = bci;
     }
 
-    /** El offset dentro del arreglo `code`. */
+    /** The offset within the `code` array. */
     public int bci() {
         return this.bci;
     }

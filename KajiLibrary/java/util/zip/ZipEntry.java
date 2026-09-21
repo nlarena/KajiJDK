@@ -27,10 +27,10 @@ public class ZipEntry implements Cloneable {
     private int method;
     private byte[] extra;
     private String comment;
-    // Creacion y ultimo acceso: `null` mientras nadie las fije. La de modificacion no esta aca
-    // porque ya vive en `time`, que es el campo que la cabecera guarda de verdad.
-    private java.nio.file.attribute.FileTime creacion;
-    private java.nio.file.attribute.FileTime ultimoAcceso;
+    // Creation and last access: `null` while nobody sets them. The modification one is not here
+    // because it already lives in `time`, which is the field the header really stores.
+    private java.nio.file.attribute.FileTime creationStamp;
+    private java.nio.file.attribute.FileTime lastAccessStamp;
 
     public ZipEntry(String name) {
         this.name = name;
@@ -64,23 +64,23 @@ public class ZipEntry implements Cloneable {
         return time;
     }
 
-    // ---- las tres marcas como `FileTime` -----------------------------------------------------------
+    // ---- the three timestamps as `FileTime` ---------------------------------------------------------
     //
-    // Son la cara moderna de lo mismo: un `FileTime` lleva la precision que tenga y no obliga a
-    // pasar por un `long` de milisegundos. Los tres `set*` devuelven `this` para poder encadenar,
-    // que es la unica razon de que no sean `void`.
+    // They are the modern face of the same thing: a `FileTime` carries whatever precision it has and
+    // does not force going through a `long` of milliseconds. All three `set*` return `this` so they
+    // can be chained, which is the only reason they are not `void`.
 
     /**
-     * La marca de modificacion.
+     * The modification timestamp.
      *
-     * <p>Nunca es `null`: el formato **siempre** guarda esta, aunque sea con la precision de dos
-     * segundos de MS-DOS.
+     * <p>It is never `null`: the format **always** stores this one, even if only at MS-DOS's
+     * two-second precision.
      */
     public java.nio.file.attribute.FileTime getLastModifiedTime() {
         return java.nio.file.attribute.FileTime.fromMillis(this.getTime());
     }
 
-    /** Fija la marca de modificacion. */
+    /** It sets the modification timestamp. */
     public ZipEntry setLastModifiedTime(java.nio.file.attribute.FileTime time) {
         if (time == null) {
             throw new NullPointerException("time");
@@ -90,29 +90,29 @@ public class ZipEntry implements Cloneable {
     }
 
     /**
-     * La marca de ultimo acceso, o `null` si la entrada no la trae.
+     * The last-access timestamp, or `null` if the entry does not carry it.
      *
-     * <p>`null` es la respuesta correcta y comun: esta marca vive en un campo *extra* opcional que
-     * la mayoria de los escritores no pone.
+     * <p>`null` is the right and common answer: this timestamp lives in an optional *extra* field
+     * most writers do not set.
      */
     public java.nio.file.attribute.FileTime getLastAccessTime() {
-        return this.ultimoAcceso;
+        return this.lastAccessStamp;
     }
 
-    /** Fija la marca de ultimo acceso. */
+    /** It sets the last-access timestamp. */
     public ZipEntry setLastAccessTime(java.nio.file.attribute.FileTime time) {
-        this.ultimoAcceso = time;
+        this.lastAccessStamp = time;
         return this;
     }
 
-    /** La marca de creacion, o `null` si la entrada no la trae. Ver la nota de arriba. */
+    /** The creation timestamp, or `null` if the entry does not carry it. See the note above. */
     public java.nio.file.attribute.FileTime getCreationTime() {
-        return this.creacion;
+        return this.creationStamp;
     }
 
-    /** Fija la marca de creacion. */
+    /** It sets the creation timestamp. */
     public ZipEntry setCreationTime(java.nio.file.attribute.FileTime time) {
-        this.creacion = time;
+        this.creationStamp = time;
         return this;
     }
 
@@ -137,9 +137,9 @@ public class ZipEntry implements Cloneable {
         return (dosDate << 16) | dosTime;
     }
 
-    static LocalDateTime fromDosTime(long dos) {
-        int date = (int) ((dos >> 16) & 0xffff);
-        int time = (int) (dos & 0xffff);
+    static LocalDateTime fromDosTime(long dosStamp) {
+        int date = (int) ((dosStamp >> 16) & 0xffff);
+        int time = (int) (dosStamp & 0xffff);
         int year = ((date >> 9) & 0x7f) + 1980;
         int month = (date >> 5) & 0x0f;
         int day = date & 0x1f;

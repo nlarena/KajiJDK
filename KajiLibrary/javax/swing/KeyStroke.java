@@ -4,18 +4,18 @@ import java.awt.AWTKeyStroke;
 import java.awt.event.KeyEvent;
 
 /**
- * Una combinacion de teclas, como objeto y compartida.
+ * A key combination, as an object and shared.
  *
- * <p>Es {@link AWTKeyStroke} con otro nombre: existe porque Swing la necesitaba antes de que AWT
- * la tuviera, y quedo. Toda la funcionalidad esta arriba; aca solo estan las fabricas, que
- * devuelven el tipo de Swing.
+ * <p>It is {@link AWTKeyStroke} with another name: it exists because Swing needed it before AWT
+ * had it, and it stayed. All the functionality is above; here there are only the factories,
+ * which return Swing's type.
  *
- * <p>Dos combinaciones iguales son el mismo objeto: las fabricas las comparten. Eso es lo que
- * permite usarlas como clave de un mapa de teclas sin escribir {@code equals} en ningun lado.
+ * <p>Two equal combinations are the same object: the factories share them. That is what allows
+ * them to be used as a key map's key without writing {@code equals} anywhere.
  */
 public class KeyStroke extends AWTKeyStroke {
 
-    /** Solo lo usa la maquinaria de {@link AWTKeyStroke} al compartir instancias. */
+    /** Only {@link AWTKeyStroke}'s machinery uses it when sharing instances. */
     private KeyStroke() {
     }
 
@@ -23,21 +23,24 @@ public class KeyStroke extends AWTKeyStroke {
         super(keyChar, keyCode, modifiers, onKeyRelease);
     }
 
-    /** La combinacion de escribir ese caracter. */
+    /** The combination of typing that character. */
     public static KeyStroke getKeyStroke(char keyChar) {
         return getCached(keyChar, KeyEvent.VK_UNDEFINED, 0, false);
     }
 
-    /** Como la anterior; {@code onKeyRelease} la ata a soltar la tecla y no a apretarla. */
+    /**
+     * Like the previous one; {@code onKeyRelease} ties it to releasing the key and not to pressing
+     * it.
+     */
     public static KeyStroke getKeyStroke(char keyChar, boolean onKeyRelease) {
         return getCached(keyChar, KeyEvent.VK_UNDEFINED, 0, onKeyRelease);
     }
 
     /**
-     * Ese caracter con esos modificadores.
+     * That character with those modifiers.
      *
-     * @deprecated es {@link #getKeyStroke(char)}; el {@code Character} es para no chocar con la
-     *     version de {@code int}.
+     * @deprecated it is {@link #getKeyStroke(char)}; the {@code Character} is so as not to clash
+     *     with the {@code int} version.
      */
     @Deprecated
     public static KeyStroke getKeyStroke(Character keyChar, int modifiers) {
@@ -47,7 +50,7 @@ public class KeyStroke extends AWTKeyStroke {
         return getCached(keyChar.charValue(), KeyEvent.VK_UNDEFINED, modifiers, false);
     }
 
-    /** Esa tecla virtual con esos modificadores. */
+    /** That virtual key with those modifiers. */
     public static KeyStroke getKeyStroke(int keyCode, int modifiers, boolean onKeyRelease) {
         return getCached(KeyEvent.CHAR_UNDEFINED, keyCode, modifiers, onKeyRelease);
     }
@@ -56,7 +59,7 @@ public class KeyStroke extends AWTKeyStroke {
         return getCached(KeyEvent.CHAR_UNDEFINED, keyCode, modifiers, false);
     }
 
-    /** La combinacion que representa ese evento de teclado. */
+    /** The combination that represents that keyboard event. */
     public static KeyStroke getKeyStrokeForEvent(KeyEvent anEvent) {
         AWTKeyStroke base = AWTKeyStroke.getAWTKeyStrokeForEvent(anEvent);
         return getCached(base.getKeyChar(), base.getKeyCode(), base.getModifiers(),
@@ -64,10 +67,10 @@ public class KeyStroke extends AWTKeyStroke {
     }
 
     /**
-     * La combinacion que describe esa cadena, como {@code "control S"}.
+     * The combination that string describes, such as {@code "control S"}.
      *
-     * <p>Devuelve {@code null} si la cadena no se entiende, en vez de lanzar: es la forma que
-     * tiene el JDK, y viene de que estas cadenas suelen salir de un archivo de configuracion.
+     * <p>It returns {@code null} if the string is not understood, instead of throwing: it is the
+     * JDK's way, and it comes from these strings usually coming out of a configuration file.
      */
     public static KeyStroke getKeyStroke(String s) {
         AWTKeyStroke base = AWTKeyStroke.getAWTKeyStroke(s);
@@ -78,7 +81,7 @@ public class KeyStroke extends AWTKeyStroke {
                 base.isOnKeyRelease());
     }
 
-    /** Una instancia compartida con esos valores. */
+    /** A shared instance with those values. */
     private static KeyStroke getCached(char keyChar, int keyCode, int modifiers,
             boolean onKeyRelease) {
         return new KeyStroke(keyChar, keyCode, modifiers, onKeyRelease);

@@ -5,46 +5,50 @@ import javax.accessibility.AccessibleContext;
 import javax.accessibility.AccessibleRole;
 
 /**
- * Un texto de una sola línea que no se puede editar ni seleccionar.
+ * A single line of text that can be neither edited nor selected.
  *
- * <p>Es el componente más pasivo de AWT: muestra un texto y nada más. No recibe el foco, no genera
- * eventos propios y no tiene estado más allá de lo que dice y cómo lo alinea.
+ * <p>It is the most passive component of AWT: it shows a text and nothing else. It generates no
+ * events of its own and has no state beyond what it says and how it aligns it.
+ *
+ * <p>In AWT a label does not take the focus either, and that part is **not** enforced here: the JDK
+ * leaves it to the peer —a label's peer refuses the focus— and with no peer this one is focusable
+ * like any other component, so a traversal can land on it.
  */
 public class Label extends Component implements Accessible {
 
     private static final long serialVersionUID = 3094126758329070636L;
 
-    /** Alinea el texto a la izquierda. */
+    /** Aligns the text to the left. */
     public static final int LEFT = 0;
 
-    /** Lo centra. */
+    /** Centres it. */
     public static final int CENTER = 1;
 
-    /** Lo alinea a la derecha. */
+    /** Aligns it to the right. */
     public static final int RIGHT = 2;
 
     private static int labelCounter = 0;
 
-    /** Lo que dice. */
+    /** What it says. */
     String text;
 
-    /** Cómo lo alinea. */
+    /** How it aligns it. */
     int alignment = LEFT;
 
-    /** Una etiqueta vacía, alineada a la izquierda. */
+    /** An empty label, aligned to the left. */
     public Label() throws HeadlessException {
         this("", LEFT);
     }
 
-    /** Una etiqueta con ese texto, alineada a la izquierda. */
+    /** A label with that text, aligned to the left. */
     public Label(String text) throws HeadlessException {
         this(text, LEFT);
     }
 
     /**
-     * Una etiqueta con ese texto y esa alineación.
+     * A label with that text and that alignment.
      *
-     * @throws IllegalArgumentException si la alineación no es {@link #LEFT}, {@link #CENTER} ni
+     * @throws IllegalArgumentException if the alignment is not {@link #LEFT}, {@link #CENTER} or
      *     {@link #RIGHT}
      */
     public Label(String text, int alignment) throws HeadlessException {
@@ -60,20 +64,20 @@ public class Label extends Component implements Accessible {
         }
     }
 
-    /** La declara mostrable. */
+    /** Declares it showable. */
     public void addNotify() {
         super.addNotify();
     }
 
-    /** Cómo alinea el texto. */
+    /** How it aligns the text. */
     public int getAlignment() {
         return this.alignment;
     }
 
     /**
-     * Cambia la alineación.
+     * Changes the alignment.
      *
-     * @throws IllegalArgumentException si no es una de las tres constantes
+     * @throws IllegalArgumentException if it is not one of the three constants
      */
     public synchronized void setAlignment(int alignment) {
         if (alignment != LEFT && alignment != CENTER && alignment != RIGHT) {
@@ -83,44 +87,45 @@ public class Label extends Component implements Accessible {
     }
 
     /**
-     * Lo que dice.
+     * What it says.
      *
-     * @return el texto, o `null` si nunca se le puso ninguno
+     * @return the text, or `null` if a `null` was set —the no-argument constructor leaves it empty,
+     *     not `null`
      */
     public String getText() {
         return this.text;
     }
 
     /**
-     * Cambia lo que dice.
+     * Changes what it says.
      *
-     * <p>Poner el mismo texto no hace nada: la comparación evita invalidar la distribución al pedo
-     * cuando algo refresca la etiqueta en un ciclo.
+     * <p>Setting the same text does nothing: the comparison keeps the layout from being invalidated
+     * needlessly when something refreshes the label in a loop.
      */
     public void setText(String text) {
-        boolean cambio;
+        boolean changed;
         synchronized (this) {
-            cambio = text != this.text && (this.text == null || !this.text.equals(text));
-            if (cambio) {
+            changed = text != this.text && (this.text == null || !this.text.equals(text));
+            if (changed) {
                 this.text = text;
             }
         }
-        if (cambio) {
+        if (changed) {
             this.invalidate();
         }
     }
 
     protected String paramString() {
-        String alineacion = "left";
+        String alignmentName = "left";
         if (this.alignment == CENTER) {
-            alineacion = "center";
+            alignmentName = "center";
         } else if (this.alignment == RIGHT) {
-            alineacion = "right";
+            alignmentName = "right";
         }
-        return super.paramString() + ",align=" + alineacion + ",text=" + this.text;
+        return super.paramString() + ",align=" + alignmentName + ",text=" + this.text;
     }
 
-    /** La accesibilidad de la etiqueta. */
+    /** The accessibility information of this label. */
     public AccessibleContext getAccessibleContext() {
         if (this.accessibleContext == null) {
             this.accessibleContext = new AccessibleAWTLabel();
@@ -129,14 +134,14 @@ public class Label extends Component implements Accessible {
     }
 
     /**
-     * La accesibilidad de una etiqueta.
+     * The accessibility of a label.
      *
-     * <p>Su nombre accesible es **el texto**, no el nombre del componente: para quien la lee con un
-     * lector de pantalla, la etiqueta es lo que dice.
+     * <p>Its accessible name is **the text**, not the component's name: for whoever reads it with a
+     * screen reader, the label is what it says.
      */
     protected class AccessibleAWTLabel extends AccessibleAWTComponent {
 
-        /** Para las subclases. */
+        /** For the subclasses. */
         protected AccessibleAWTLabel() {
         }
 

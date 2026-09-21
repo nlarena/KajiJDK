@@ -34,9 +34,9 @@ final class BuiltinProfiles {
 
     // The sRGB-to-XYZ matrix with a D50 white, by COLUMNS: each one is what a primary contributes.
     // It is the same one `ColorSpace` uses, transposed, because ICC stores one column per tag.
-    private static final float[] COL_ROJO = { 0.4360747f, 0.2225045f, 0.0139322f };
-    private static final float[] COL_VERDE = { 0.3850649f, 0.7168786f, 0.0971045f };
-    private static final float[] COL_AZUL = { 0.1430804f, 0.0606169f, 0.7141733f };
+    private static final float[] COL_RED = { 0.4360747f, 0.2225045f, 0.0139322f };
+    private static final float[] COL_GREEN = { 0.3850649f, 0.7168786f, 0.0971045f };
+    private static final float[] COL_BLUE = { 0.1430804f, 0.0606169f, 0.7141733f };
 
     /** D50, the illuminant ICC fixes for the connection space. */
     private static final float[] D50 = { 0.9642f, 1.0f, 0.8249f };
@@ -53,9 +53,9 @@ final class BuiltinProfiles {
      */
     private static float[] matrixWhite() {
         return new float[] {
-            COL_ROJO[0] + COL_VERDE[0] + COL_AZUL[0],
-            COL_ROJO[1] + COL_VERDE[1] + COL_AZUL[1],
-            COL_ROJO[2] + COL_VERDE[2] + COL_AZUL[2] };
+            COL_RED[0] + COL_GREEN[0] + COL_BLUE[0],
+            COL_RED[1] + COL_GREEN[1] + COL_BLUE[1],
+            COL_RED[2] + COL_GREEN[2] + COL_BLUE[2] };
     }
 
     private static ICC_Profile srgb;
@@ -68,11 +68,11 @@ final class BuiltinProfiles {
             // The curve goes as a 1024-point TABLE, just as in the JDK: sRGB's is piecewise --a
             // straight stretch near zero and a power afterwards-- and a lone gamma does not describe
             // it. That is why this profile's `getGamma` throws and `getTRC` answers.
-            byte[][] cuerpos = {
-                xyzTag(COL_ROJO), xyzTag(COL_VERDE), xyzTag(COL_AZUL),
+            byte[][] bodies = {
+                xyzTag(COL_RED), xyzTag(COL_GREEN), xyzTag(COL_BLUE),
                 tableCurve(1024), tableCurve(1024), tableCurve(1024),
                 xyzTag(D65), textTag("KajiJDK sRGB"), descTag("sRGB integrado") };
-            int[] firmas = {
+            int[] signatures = {
                 ICC_Profile.icSigRedColorantTag, ICC_Profile.icSigGreenColorantTag,
                 ICC_Profile.icSigBlueColorantTag, ICC_Profile.icSigRedTRCTag,
                 ICC_Profile.icSigGreenTRCTag, ICC_Profile.icSigBlueTRCTag,
@@ -80,7 +80,7 @@ final class BuiltinProfiles {
                 ICC_Profile.icSigProfileDescriptionTag };
             srgb = ICC_Profile.getInstance(ICC_Profile.assemble(
                     header(ICC_Profile.icSigDisplayClass, ICC_Profile.icSigRgbData),
-                    firmas, cuerpos, firmas.length));
+                    signatures, bodies, signatures.length));
         }
         return srgb;
     }
@@ -89,11 +89,11 @@ final class BuiltinProfiles {
         if (linear == null) {
             // Gamma 1.0 as a single value, not as a table: here `getGamma` answers and `getTRC`
             // throws. It is the reverse split from sRGB's and it is the one the JDK has.
-            byte[][] cuerpos = {
-                xyzTag(COL_ROJO), xyzTag(COL_VERDE), xyzTag(COL_AZUL),
+            byte[][] bodies = {
+                xyzTag(COL_RED), xyzTag(COL_GREEN), xyzTag(COL_BLUE),
                 gammaCurve(1.0f), gammaCurve(1.0f), gammaCurve(1.0f),
                 xyzTag(D65), textTag("KajiJDK Linear RGB"), descTag("RGB linear integrado") };
-            int[] firmas = {
+            int[] signatures = {
                 ICC_Profile.icSigRedColorantTag, ICC_Profile.icSigGreenColorantTag,
                 ICC_Profile.icSigBlueColorantTag, ICC_Profile.icSigRedTRCTag,
                 ICC_Profile.icSigGreenTRCTag, ICC_Profile.icSigBlueTRCTag,
@@ -101,7 +101,7 @@ final class BuiltinProfiles {
                 ICC_Profile.icSigProfileDescriptionTag };
             linear = ICC_Profile.getInstance(ICC_Profile.assemble(
                     header(ICC_Profile.icSigDisplayClass, ICC_Profile.icSigRgbData),
-                    firmas, cuerpos, firmas.length));
+                    signatures, bodies, signatures.length));
         }
         return linear;
     }
@@ -114,15 +114,15 @@ final class BuiltinProfiles {
             // converted to sRGB by way of XYZ came out with the blue one step below the red and the
             // green, that is, a grey with a tint. By making the two built-in profiles share the same
             // white, the round trip is exact and a grey stays grey.
-            byte[][] cuerpos = {
+            byte[][] bodies = {
                 gammaCurve(1.0f), xyzTag(matrixWhite()),
                 textTag("KajiJDK Gray"), descTag("gris integrado") };
-            int[] firmas = {
+            int[] signatures = {
                 ICC_Profile.icSigGrayTRCTag, ICC_Profile.icSigMediaWhitePointTag,
                 ICC_Profile.icSigCopyrightTag, ICC_Profile.icSigProfileDescriptionTag };
             gray = ICC_Profile.getInstance(ICC_Profile.assemble(
                     header(ICC_Profile.icSigDisplayClass, ICC_Profile.icSigGrayData),
-                    firmas, cuerpos, firmas.length));
+                    signatures, bodies, signatures.length));
         }
         return gray;
     }
@@ -131,14 +131,14 @@ final class BuiltinProfiles {
         if (xyz == null) {
             // An abstract profile: its device space IS the connection space, so it carries neither
             // matrix nor curves -- there is nothing to convert.
-            byte[][] cuerpos = {
+            byte[][] bodies = {
                 xyzTag(D50), textTag("KajiJDK CIEXYZ"), descTag("CIEXYZ integrado") };
-            int[] firmas = {
+            int[] signatures = {
                 ICC_Profile.icSigMediaWhitePointTag, ICC_Profile.icSigCopyrightTag,
                 ICC_Profile.icSigProfileDescriptionTag };
             xyz = ICC_Profile.getInstance(ICC_Profile.assemble(
                     header(ICC_Profile.icSigAbstractClass, ICC_Profile.icSigXYZData),
-                    firmas, cuerpos, firmas.length));
+                    signatures, bodies, signatures.length));
         }
         return xyz;
     }
@@ -149,37 +149,37 @@ final class BuiltinProfiles {
      * <p>The total size is left at zero: {@link ICC_Profile#assemble} writes it once it knows how much
      * the tags take up.
      */
-    private static byte[] header(int claseDePerfil, int espacio) {
+    private static byte[] header(int profileClass, int space) {
         byte[] h = new byte[128];
-        escribirInt(h, ICC_Profile.icHdrCmmId, signature("Kaji"));
+        writeInt(h, ICC_Profile.icHdrCmmId, signature("Kaji"));
         // Version 2.4.0, which is the one the JDK's profiles declare.
-        escribirInt(h, ICC_Profile.icHdrVersion, 0x02400000);
-        escribirInt(h, ICC_Profile.icHdrDeviceClass, claseDePerfil);
-        escribirInt(h, ICC_Profile.icHdrColorSpace, espacio);
+        writeInt(h, ICC_Profile.icHdrVersion, 0x02400000);
+        writeInt(h, ICC_Profile.icHdrDeviceClass, profileClass);
+        writeInt(h, ICC_Profile.icHdrColorSpace, space);
         // The connection space is always XYZ here: it is the one the conversions use as their axis.
-        escribirInt(h, ICC_Profile.icHdrPcs, SIG_XYZ_TYPE);
-        escribirInt(h, ICC_Profile.icHdrMagic, signature("acsp"));
-        escribirInt(h, ICC_Profile.icHdrPlatform, 0);
-        escribirInt(h, ICC_Profile.icHdrRenderingIntent, ICC_Profile.icPerceptual);
+        writeInt(h, ICC_Profile.icHdrPcs, SIG_XYZ_TYPE);
+        writeInt(h, ICC_Profile.icHdrMagic, signature("acsp"));
+        writeInt(h, ICC_Profile.icHdrPlatform, 0);
+        writeInt(h, ICC_Profile.icHdrRenderingIntent, ICC_Profile.icPerceptual);
         // The header's illuminant is fixed by the standard at D50, not at the medium's white.
-        escribirXyz(h, ICC_Profile.icHdrIlluminant, D50);
+        writeXyz(h, ICC_Profile.icHdrIlluminant, D50);
         return h;
     }
 
     /** An `XYZType` tag: signature, reserved and three s15Fixed16. */
     private static byte[] xyzTag(float[] v) {
         byte[] t = new byte[20];
-        escribirInt(t, 0, SIG_XYZ_TYPE);
-        escribirXyz(t, 8, v);
+        writeInt(t, 0, SIG_XYZ_TYPE);
+        writeXyz(t, 8, v);
         return t;
     }
 
     /** A single-valued `curveType`: the gamma, in u8Fixed8. */
     private static byte[] gammaCurve(float gamma) {
         byte[] t = new byte[14];
-        escribirInt(t, 0, SIG_CURVE_TYPE);
-        escribirInt(t, ICC_Profile.icCurveCount, 1);
-        escribirShort(t, ICC_Profile.icCurveData, (int) (gamma * 256.0f + 0.5f));
+        writeInt(t, 0, SIG_CURVE_TYPE);
+        writeInt(t, ICC_Profile.icCurveCount, 1);
+        writeShort(t, ICC_Profile.icCurveData, (int) (gamma * 256.0f + 0.5f));
         return t;
     }
 
@@ -191,8 +191,8 @@ final class BuiltinProfiles {
      */
     private static byte[] tableCurve(int n) {
         byte[] t = new byte[ICC_Profile.icCurveData + n * 2];
-        escribirInt(t, 0, SIG_CURVE_TYPE);
-        escribirInt(t, ICC_Profile.icCurveCount, n);
+        writeInt(t, 0, SIG_CURVE_TYPE);
+        writeInt(t, ICC_Profile.icCurveCount, n);
         for (int i = 0; i < n; i++) {
             float linear = ((float) i) / (n - 1);
             float withGamma = ColorSpace.toGamma(linear);
@@ -203,14 +203,14 @@ final class BuiltinProfiles {
             if (v > 65535) {
                 v = 65535;
             }
-            escribirShort(t, ICC_Profile.icCurveData + i * 2, v);
+            writeShort(t, ICC_Profile.icCurveData + i * 2, v);
         }
         return t;
     }
 
     private static byte[] textTag(String s) {
         byte[] t = new byte[8 + s.length() + 1];
-        escribirInt(t, 0, SIG_TEXT_TYPE);
+        writeInt(t, 0, SIG_TEXT_TYPE);
         for (int i = 0; i < s.length(); i++) {
             t[8 + i] = (byte) s.charAt(i);
         }
@@ -220,28 +220,28 @@ final class BuiltinProfiles {
     /** A `descType`: signature, reserved, length including the null, and the text. */
     private static byte[] descTag(String s) {
         byte[] t = new byte[12 + s.length() + 1 + 78];
-        escribirInt(t, 0, SIG_DESC_TYPE);
-        escribirInt(t, 8, s.length() + 1);
+        writeInt(t, 0, SIG_DESC_TYPE);
+        writeInt(t, 8, s.length() + 1);
         for (int i = 0; i < s.length(); i++) {
             t[12 + i] = (byte) s.charAt(i);
         }
         return t;
     }
 
-    private static void escribirXyz(byte[] b, int off, float[] v) {
+    private static void writeXyz(byte[] b, int off, float[] v) {
         for (int i = 0; i < 3; i++) {
-            escribirInt(b, off + i * 4, (int) (v[i] * 65536.0f + 0.5f));
+            writeInt(b, off + i * 4, (int) (v[i] * 65536.0f + 0.5f));
         }
     }
 
-    private static void escribirInt(byte[] b, int off, int v) {
+    private static void writeInt(byte[] b, int off, int v) {
         b[off] = (byte) (v >> 24);
         b[off + 1] = (byte) (v >> 16);
         b[off + 2] = (byte) (v >> 8);
         b[off + 3] = (byte) v;
     }
 
-    private static void escribirShort(byte[] b, int off, int v) {
+    private static void writeShort(byte[] b, int off, int v) {
         b[off] = (byte) (v >> 8);
         b[off + 1] = (byte) v;
     }

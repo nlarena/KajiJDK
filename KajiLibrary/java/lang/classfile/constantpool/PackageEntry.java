@@ -2,16 +2,16 @@ package java.lang.classfile.constantpool;
 
 import java.lang.constant.PackageDesc;
 
-// `CONSTANT_Package_info` (JVMS §4.4.12): sólo puede aparecer en un `module-info.class`, dentro del
-// atributo `Module`. El `Utf8` que apunta lleva el nombre interno del paquete (`java/lang`).
+// `CONSTANT_Package_info` (JVMS §4.4.12): it may only appear in a `module-info.class`, inside the
+// `Module` attribute. The `Utf8` it points at carries the package's internal name (`java/lang`).
 public interface PackageEntry extends PoolEntry {
 
-    /** La entrada `Utf8` con el nombre interno del paquete. */
+    /** The `Utf8` entry holding the package's internal name. */
     Utf8Entry name();
 
-    /** El descriptor nominal del paquete. */
+    /** The package's nominal descriptor. */
     PackageDesc asSymbol();
 
-    /** Si esta entrada nombra exactamente a `desc`. */
+    /** Whether this entry names exactly `desc`. */
     boolean matches(PackageDesc desc);
 }

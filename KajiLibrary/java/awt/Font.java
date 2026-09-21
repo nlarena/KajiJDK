@@ -17,115 +17,116 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * Una tipografía: qué familia, qué estilo, qué cuerpo.
+ * A font: which family, which style, which size.
  *
- * <p>Un objeto de esta clase es una **descripción**, no un archivo de fuente. Dice "Serif, negrita,
- * 12 puntos"; los contornos de las letras están en otro lado. Esa distinción, que en el JDK es
- * invisible porque siempre hay un motor tipográfico detrás, acá es la línea que divide la clase en
- * dos mitades.
+ * <p>An object of this class is a **description**, not a font file. It says "Serif, bold, 12
+ * points"; the outlines of the letters are somewhere else. That distinction, which in the JDK is
+ * invisible because there is always a font engine behind it, is here the line that splits the class
+ * in two halves.
  *
- * <p><strong>Lo que sale de la descripción funciona.</strong> El nombre, la familia, el estilo, el
- * cuerpo, la transformación, los atributos, todos los {@code deriveFont}, {@link #decode}, la
- * igualdad, y {@link #textRequiresLayout}, que depende del texto y no de la fuente.
+ * <p><strong>What comes out of the description works.</strong> The name, the family, the style, the
+ * size, the transform, the attributes, all the {@code deriveFont} methods, {@link #decode},
+ * equality, and {@link #textRequiresLayout}, which depends on the text and not on the font.
  *
- * <p><strong>Lo que necesita los contornos, no.</strong> {@link #getStringBounds}, los
- * {@code createGlyphVector}, {@link #canDisplay}, {@link #getNumGlyphs}, {@link #getItalicAngle},
- * {@link #getLineMetrics} y {@link #createFont} tiran `UnsupportedOperationException`: sin un motor
- * tipográfico que lea archivos de fuente no hay glifos que medir. Contestar cualquier otra cosa
- * —cero, un rectángulo vacío, un ancho estimado— sería inventar un número que después alguien usa
- * para maquetar. Un miembro que falta es un subconjunto legal; uno que miente, no.
+ * <p><strong>What needs the outlines does not.</strong> {@link #getStringBounds}, the {@code
+ * createGlyphVector} methods, {@link #canDisplay}, {@link #getNumGlyphs}, {@link #getItalicAngle},
+ * {@link #getLineMetrics} and {@link #createFont} throw `UnsupportedOperationException`: without a
+ * font engine that reads font files there are no glyphs to measure. Answering anything else —zero,
+ * an empty rectangle, an estimated width— would be inventing a number that somebody later uses to
+ * lay out a page. A member that is missing is a legal subset; one that lies is not.
  *
- * <p>El cuerpo está dos veces, como `int` y como `float`. No es redundancia: {@link #getSize}
- * redondea y existe desde 1.0, {@link #getSize2D} es el valor real. Una fuente de 11,5 puntos dice
- * 12 y 11.5, y son las dos respuestas correctas a preguntas distintas.
+ * <p>The size is there twice, as `int` and as `float`. It is not redundancy: {@link #getSize}
+ * rounds and has existed since 1.0, {@link #getSize2D} is the real value. A font of 11.5 points
+ * says 12 and 11.5, and they are both the right answer to different questions.
  */
 public class Font implements Serializable {
 
     private static final long serialVersionUID = -4206021311591459213L;
 
-    /** La familia lógica del diálogo del sistema. */
+    /** The logical family of the system dialog. */
     public static final String DIALOG = "Dialog";
 
-    /** La familia lógica de la entrada de texto. */
+    /** The logical family of text input. */
     public static final String DIALOG_INPUT = "DialogInput";
 
-    /** La familia lógica sin remates. */
+    /** The logical family without serifs. */
     public static final String SANS_SERIF = "SansSerif";
 
-    /** La familia lógica con remates. */
+    /** The logical family with serifs. */
     public static final String SERIF = "Serif";
 
-    /** La familia lógica de ancho fijo. */
+    /** The logical family of fixed width. */
     public static final String MONOSPACED = "Monospaced";
 
-    /** Ni negrita ni cursiva. */
+    /** Neither bold nor italic. */
     public static final int PLAIN = 0;
 
-    /** Negrita. */
+    /** Bold. */
     public static final int BOLD = 1;
 
     /** Cursiva. */
     public static final int ITALIC = 2;
 
-    /** La línea de base sobre la que se apoyan las escrituras latina, cirílica y griega. */
+    /** The baseline the Latin, Cyrillic and Greek scripts sit on. */
     public static final int ROMAN_BASELINE = 0;
 
-    /** La línea de base sobre la que se centran las escrituras ideográficas. */
+    /** The baseline the ideographic scripts are centred on. */
     public static final int CENTER_BASELINE = 1;
 
-    /** La línea de base de la que cuelgan las escrituras índicas. */
+    /** The baseline the Indic scripts hang from. */
     public static final int HANGING_BASELINE = 2;
 
-    /** Formato de fuente TrueType u OpenType. */
+    /** TrueType or OpenType font format. */
     public static final int TRUETYPE_FONT = 0;
 
-    /** Formato de fuente Type 1. */
+    /** Type 1 font format. */
     public static final int TYPE1_FONT = 1;
 
-    /** El texto se arma de izquierda a derecha. */
+    /** The text is laid out from left to right. */
     public static final int LAYOUT_LEFT_TO_RIGHT = 0;
 
-    /** El texto se arma de derecha a izquierda. */
+    /** The text is laid out from right to left. */
     public static final int LAYOUT_RIGHT_TO_LEFT = 1;
 
-    /** Lo que está antes del tramo no cuenta como contexto. */
+    /** What is before the stretch does not count as context. */
     public static final int LAYOUT_NO_START_CONTEXT = 2;
 
-    /** Lo que está después del tramo no cuenta como contexto. */
+    /** What is after the stretch does not count as context. */
     public static final int LAYOUT_NO_LIMIT_CONTEXT = 4;
 
-    /** El nombre lógico de la fuente. */
+    /** The logical name of the font. */
     protected String name;
 
-    /** La combinación de {@link #BOLD} e {@link #ITALIC}. */
+    /** The combination of {@link #BOLD} and {@link #ITALIC}. */
     protected int style;
 
-    /** El cuerpo redondeado a entero. */
+    /** The size rounded to an integer. */
     protected int size;
 
-    /** El cuerpo real. */
+    /** The real size. */
     protected float pointSize;
 
-    /** El hash, calculado una sola vez. */
+    /** The hash, worked out only once. */
     transient int hash;
 
-    /** La transformación propia, o `null` si es la identidad. */
+    /** The transform of its own, or `null` if it is the identity. */
     private transient AffineTransform transform;
 
-    /** Los atributos con los que se armó, o `null` si se armó por nombre y estilo. */
+    /** The attributes it was built with, or `null` if it was built by name and style. */
     private transient Map<TextAttribute, Object> attributes;
 
-    /** El primer punto de código a partir del cual puede hacer falta armar el texto. */
+    /** The first code point from which laying the text out may be needed. */
     private static final int MIN_LAYOUT_CHARCODE = 0x0300;
 
-    /** El último. */
+    /** The last one. */
     private static final int MAX_LAYOUT_CHARCODE = 0x206F;
 
     /**
-     * Con nombre, estilo y cuerpo.
+     * With a name, a style and a size.
      *
-     * <p>Un nombre `null` da la familia del diálogo; un estilo que no sea una combinación de
-     * {@link #BOLD} e {@link #ITALIC} se toma como {@link #PLAIN}, sin tirar, igual que en el JDK.
+     * <p>A `null` name gives the name `"Default"` —not the dialog family, against what this note
+     * used to say— which is what the JDK does; a style that is not a combination of {@link #BOLD}
+     * and {@link #ITALIC} is taken as {@link #PLAIN}, without throwing, also as in the JDK.
      */
     public Font(String name, int style, int size) {
         this.name = name == null ? "Default" : name;
@@ -139,9 +140,10 @@ public class Font implements Serializable {
     }
 
     /**
-     * A partir de un mapa de atributos.
+     * From a map of attributes.
      *
-     * @throws NullPointerException si el mapa es `null`
+     * <p>A `null` map is accepted and gives the default font —Dialog, plain, 12— instead of
+     * throwing, which is what this note used to promise.
      */
     public Font(Map<? extends AttributedCharacterIterator.Attribute, ?> attributes) {
         this.name = "Dialog";
@@ -149,11 +151,11 @@ public class Font implements Serializable {
         this.size = 12;
         this.pointSize = 12;
         if (attributes != null) {
-            this.aplicar(attributes);
+            this.applyAttributes(attributes);
         }
     }
 
-    /** Copia; para las subclases. */
+    /** Copy; for the subclasses. */
     protected Font(Font font) {
         this.name = font.name;
         this.style = font.style;
@@ -165,36 +167,36 @@ public class Font implements Serializable {
         }
     }
 
-    /** Lee los atributos que esta clase entiende y deja el resto guardado tal cual. */
-    private void aplicar(Map<? extends AttributedCharacterIterator.Attribute, ?> attrs) {
+    /** Reads the attributes this class understands and keeps the rest stored as they came. */
+    private void applyAttributes(Map<? extends AttributedCharacterIterator.Attribute, ?> attrs) {
         this.attributes = new HashMap<TextAttribute, Object>();
         java.util.Iterator<? extends AttributedCharacterIterator.Attribute> it =
                 attrs.keySet().iterator();
         while (it.hasNext()) {
-            AttributedCharacterIterator.Attribute clave = it.next();
-            Object valor = attrs.get(clave);
-            if (!(clave instanceof TextAttribute)) {
+            AttributedCharacterIterator.Attribute key = it.next();
+            Object value = attrs.get(key);
+            if (!(key instanceof TextAttribute)) {
                 continue;
             }
-            TextAttribute ta = (TextAttribute) clave;
-            this.attributes.put(ta, valor);
-            if (ta == TextAttribute.FAMILY && valor instanceof String) {
-                this.name = (String) valor;
-            } else if (ta == TextAttribute.SIZE && valor instanceof Number) {
-                this.pointSize = ((Number) valor).floatValue();
+            TextAttribute ta = (TextAttribute) key;
+            this.attributes.put(ta, value);
+            if (ta == TextAttribute.FAMILY && value instanceof String) {
+                this.name = (String) value;
+            } else if (ta == TextAttribute.SIZE && value instanceof Number) {
+                this.pointSize = ((Number) value).floatValue();
                 this.size = (int) (this.pointSize + 0.5f);
-            } else if (ta == TextAttribute.WEIGHT && valor instanceof Number) {
-                // El umbral es el del JDK: de 2.0 para arriba es negrita. Un valor intermedio no
-                // tiene forma de expresarse en el estilo de un int, que sólo tiene un bit.
-                if (((Number) valor).floatValue() >= 2.0f) {
+            } else if (ta == TextAttribute.WEIGHT && value instanceof Number) {
+                // The threshold is the JDK's: from 2.0 up it is bold. A value in between has no way
+                // of being expressed in an int style, which has only one bit for it.
+                if (((Number) value).floatValue() >= 2.0f) {
                     this.style = this.style | BOLD;
                 }
-            } else if (ta == TextAttribute.POSTURE && valor instanceof Number) {
-                if (((Number) valor).floatValue() >= 0.2f) {
+            } else if (ta == TextAttribute.POSTURE && value instanceof Number) {
+                if (((Number) value).floatValue() >= 0.2f) {
                     this.style = this.style | ITALIC;
                 }
-            } else if (ta == TextAttribute.TRANSFORM && valor instanceof AffineTransform) {
-                AffineTransform at = (AffineTransform) valor;
+            } else if (ta == TextAttribute.TRANSFORM && value instanceof AffineTransform) {
+                AffineTransform at = (AffineTransform) value;
                 if (!at.isIdentity()) {
                     this.transform = new AffineTransform(at);
                 }
@@ -203,31 +205,31 @@ public class Font implements Serializable {
     }
 
     /**
-     * Una fuente a partir de un mapa de atributos.
+     * A font from a map of attributes.
      *
-     * @throws NullPointerException si el mapa es `null`
+     * @throws NullPointerException if the map is `null`
      */
     public static Font getFont(Map<? extends AttributedCharacterIterator.Attribute, ?> attributes) {
-        Object valor = attributes.get(TextAttribute.FONT);
-        if (valor instanceof Font) {
-            return (Font) valor;
+        Object value = attributes.get(TextAttribute.FONT);
+        if (value instanceof Font) {
+            return (Font) value;
         }
         return new Font(attributes);
     }
 
     /**
-     * La fuente que nombra esa propiedad del sistema.
+     * The font that system property names.
      *
-     * @throws NullPointerException si el nombre es `null`
+     * @throws NullPointerException if the name is `null`
      */
     public static Font getFont(String nm) {
         return getFont(nm, null);
     }
 
     /**
-     * La fuente que nombra esa propiedad del sistema, o `font` si la propiedad no está.
+     * The font that system property names, or `font` if the property is not there.
      *
-     * @throws NullPointerException si el nombre es `null`
+     * @throws NullPointerException if the name is `null`
      */
     public static Font getFont(String nm, Font font) {
         String str = System.getProperty(nm);
@@ -238,12 +240,11 @@ public class Font implements Serializable {
     }
 
     /**
-     * Lee una descripción de fuente en texto.
+     * Reads a font description written as text.
      *
-     * <p>El formato es `familia-ESTILO-cuerpo`, y también se admite con espacios. Lo que no se
-     * entienda se toma como parte del nombre de la familia y no como un error: `decode` no falla
-     * nunca, para que una propiedad mal escrita degrade en una fuente razonable en vez de romper el
-     * arranque.
+     * <p>The format is `family-STYLE-size`, and it is also accepted with spaces. Whatever is not
+     * understood is taken as part of the family name and not as an error: `decode` never fails, so
+     * that a misspelled property degrades into a reasonable font instead of breaking the start-up.
      */
     public static Font decode(String str) {
         String fontName = str;
@@ -266,7 +267,7 @@ public class Font implements Serializable {
                     fontSize = 12;
                 }
             } catch (NumberFormatException e) {
-                // No era un cuerpo. Si todavia no se habia encontrado el estilo, esto era el estilo.
+                // It was not a size. If the style had not been found yet, this was the style.
                 styleIndex = sizeIndex;
                 sizeIndex = strlen;
                 if (str.charAt(sizeIndex - 1) == sepChar) {
@@ -286,7 +287,7 @@ public class Font implements Serializable {
             } else if (styleName.equals("plain")) {
                 fontStyle = Font.PLAIN;
             } else {
-                // No era ninguno de los estilos conocidos: es parte del nombre.
+                // It was none of the known styles: it is part of the name.
                 styleIndex = sizeIndex;
                 if (str.charAt(styleIndex - 1) == sepChar) {
                     styleIndex = styleIndex - 1;
@@ -309,27 +310,27 @@ public class Font implements Serializable {
     }
 
     /**
-     * Si ese texto necesita armado tipográfico y no se puede dibujar carácter por carácter.
+     * Whether that text needs typographic layout and cannot be drawn character by character.
      *
-     * <p>Es una propiedad **del texto**, no de la fuente: depende de qué escrituras aparecen. Los
-     * diacríticos combinantes, el hebreo, el árabe, las escrituras índicas, el tailandés, el
-     * tibetano, el birmano, el jemer, los controles de dirección y los sustitutos necesitan armado;
-     * el latín, el griego, el cirílico y el armenio, no.
+     * <p>It is a property **of the text**, not of the font: it depends on which scripts show up.
+     * The combining diacritics, Hebrew, Arabic, the Indic scripts, Thai, Tibetan, Burmese, Khmer,
+     * the direction controls and the surrogates need layout; Latin, Greek, Cyrillic and Armenian do
+     * not.
      */
     public static boolean textRequiresLayout(char[] chars, int start, int limit) {
         for (int i = start; i < limit; i++) {
             if (chars[i] < MIN_LAYOUT_CHARCODE) {
                 continue;
             }
-            if (esComplejo(chars[i]) || (chars[i] >= '\uD800' && chars[i] <= '\uDFFF')) {
+            if (isComplex(chars[i]) || (chars[i] >= '\uD800' && chars[i] <= '\uDFFF')) {
                 return true;
             }
         }
         return false;
     }
 
-    /** Si ese punto de código pertenece a una escritura que necesita armado. */
-    private static boolean esComplejo(int code) {
+    /** Whether that code point belongs to a script that needs layout. */
+    private static boolean isComplex(int code) {
         if (code < MIN_LAYOUT_CHARCODE || code > MAX_LAYOUT_CHARCODE) {
             return false;
         }
@@ -375,7 +376,7 @@ public class Font implements Serializable {
         return code >= 0x206A && code <= 0x206F;
     }
 
-    /** La transformación propia; la identidad si no tiene. */
+    /** The transform of its own; the identity if it has none. */
     public AffineTransform getTransform() {
         if (this.transform == null) {
             return new AffineTransform();
@@ -383,12 +384,12 @@ public class Font implements Serializable {
         return new AffineTransform(this.transform);
     }
 
-    /** La familia. */
+    /** The family. */
     public String getFamily() {
         return this.name;
     }
 
-    /** La familia, en el idioma dado. */
+    /** The family, in the given locale. */
     public String getFamily(Locale l) {
         if (l == null) {
             throw new NullPointerException("null locale doesn't mean default");
@@ -397,27 +398,27 @@ public class Font implements Serializable {
     }
 
     /**
-     * El nombre PostScript de la fuente.
+     * The PostScript name of the font.
      *
-     * @throws UnsupportedOperationException siempre: el nombre PostScript está adentro del archivo
-     *     de la fuente y esta biblioteca no trae un motor tipográfico que lo lea
+     * @throws UnsupportedOperationException always: the PostScript name is inside the font file and
+     *     this library has no font engine to read it
      */
     public String getPSName() {
-        throw new UnsupportedOperationException("getPSName requiere leer el archivo de la fuente; "
-                + "esta biblioteca no trae motor tipográfico");
+        throw new UnsupportedOperationException("getPSName needs to read the font file; "
+                + "this library has no font engine");
     }
 
-    /** El nombre lógico con el que se pidió. */
+    /** The logical name it was asked for with. */
     public String getName() {
         return this.name;
     }
 
-    /** El nombre de la cara concreta. */
+    /** The name of the concrete face. */
     public String getFontName() {
         return this.name;
     }
 
-    /** El nombre de la cara concreta, en el idioma dado. */
+    /** The name of the concrete face, in the given locale. */
     public String getFontName(Locale l) {
         if (l == null) {
             throw new NullPointerException("null locale doesn't mean default");
@@ -425,46 +426,48 @@ public class Font implements Serializable {
         return this.name;
     }
 
-    /** La combinación de {@link #BOLD} e {@link #ITALIC}. */
+    /** The combination of {@link #BOLD} and {@link #ITALIC}. */
     public int getStyle() {
         return this.style;
     }
 
-    /** El cuerpo, redondeado a entero. */
+    /** The size, rounded to an integer. */
     public int getSize() {
         return this.size;
     }
 
-    /** El cuerpo real. */
+    /** The real size. */
     public float getSize2D() {
         return this.pointSize;
     }
 
-    /** Si no es ni negrita ni cursiva. */
+    /** Whether it is neither bold nor italic. */
     public boolean isPlain() {
         return this.style == 0;
     }
 
-    /** Si es negrita. */
+    /** Whether it is bold. */
     public boolean isBold() {
         return (this.style & BOLD) != 0;
     }
 
-    /** Si es cursiva. */
+    /** Whether it is italic. */
     public boolean isItalic() {
         return (this.style & ITALIC) != 0;
     }
 
-    /** Si tiene una transformación que no sea la identidad. */
+    /** Whether it has a transform other than the identity. */
     public boolean isTransformed() {
         return this.transform != null;
     }
 
     /**
-     * Si tiene atributos que obligan a armar el texto en vez de dibujarlo carácter por carácter.
+     * Whether it has attributes that force laying the text out instead of drawing it character by
+     * character.
      *
-     * <p>Son los que cambian la posición o el dibujo de los glifos entre sí: el volado, el
-     * subrayado, el tachado, el intercambio de colores, el reemplazo de carácter y el espaciado.
+     * <p>They are the ones that change the position or the drawing of the glyphs relative to each
+     * other: superscript, underline, strikethrough, colour swapping, character replacement and
+     * tracking.
      */
     public boolean hasLayoutAttributes() {
         if (this.attributes == null) {
@@ -489,7 +492,7 @@ public class Font implements Serializable {
         return this.hash;
     }
 
-    /** Igualdad por nombre, estilo, cuerpo y transformación. */
+    /** Equality by name, style, size and transform. */
     public boolean equals(Object obj) {
         if (obj == this) {
             return true;
@@ -512,57 +515,56 @@ public class Font implements Serializable {
     }
 
     public String toString() {
-        String estilo;
+        String styleName;
         if (this.isBold() && this.isItalic()) {
-            estilo = "bolditalic";
+            styleName = "bolditalic";
         } else if (this.isBold()) {
-            estilo = "bold";
+            styleName = "bold";
         } else if (this.isItalic()) {
-            estilo = "italic";
+            styleName = "italic";
         } else {
-            estilo = "plain";
+            styleName = "plain";
         }
         return this.getClass().getName() + "[family=" + this.getFamily() + ",name=" + this.name
-                + ",style=" + estilo + ",size=" + this.size + "]";
+                + ",style=" + styleName + ",size=" + this.size + "]";
     }
 
     /**
-     * Cuántos glifos tiene la fuente.
+     * How many glyphs the font has.
      *
-     * @throws UnsupportedOperationException siempre: la cuenta está adentro del archivo de la
-     *     fuente y esta biblioteca no trae un motor tipográfico que lo lea
+     * @throws UnsupportedOperationException always: the count is inside the font file and this
+     *     library has no font engine to read it
      */
     public int getNumGlyphs() {
-        throw new UnsupportedOperationException("getNumGlyphs requiere leer el archivo de la "
-                + "fuente; esta biblioteca no trae motor tipográfico");
+        throw new UnsupportedOperationException("getNumGlyphs needs to read the font "
+                + "file; this library has no font engine");
     }
 
     /**
-     * El código del glifo que se dibuja cuando un carácter no está.
+     * The code of the glyph drawn when a character is not there.
      *
-     * @throws UnsupportedOperationException siempre, por el mismo motivo que {@link #getNumGlyphs}
+     * @throws UnsupportedOperationException always, for the same reason as {@link #getNumGlyphs}
      */
     public int getMissingGlyphCode() {
-        throw new UnsupportedOperationException("getMissingGlyphCode requiere leer el archivo de "
-                + "la fuente; esta biblioteca no trae motor tipográfico");
+        throw new UnsupportedOperationException("getMissingGlyphCode needs to read "
+                + "the font file; this library has no font engine");
     }
 
     /**
-     * Sobre qué línea de base se apoya ese carácter.
+     * Which baseline that character sits on.
      *
-     * <p>Ésta sí se puede contestar sin la fuente: la línea de base es una propiedad de la
-     * **escritura** y no de la tipografía. Las escrituras ideográficas se centran, las índicas
-     * cuelgan de una barra superior, y el resto se apoya en la romana.
+     * <p>This one can be answered without the font: the baseline is a property of the **script**
+     * and not of the typeface. The ideographic scripts are centred, the Indic ones hang from a top
+     * bar, and the rest sit on the Roman one.
      *
-     * <p>Las conversiones a `byte` son explícitas porque nuestro javac todavía no pliega una
-     * constante `static final` en contexto de asignación (hallazgo #489); el javac real las acepta
-     * sin conversión.
+     * <p>The casts to `byte` are explicit because our javac does not yet fold a `static final`
+     * constant in assignment context (finding #489); the real javac accepts them without a cast.
      */
     public byte getBaselineFor(char c) {
         if (c < 0x0900) {
             return (byte) ROMAN_BASELINE;
         }
-        // Devanagari, bengalí, gurmukhi, guyaratí, oriya, tamil, telugu, canarés, malayalam.
+        // Devanagari, Bengali, Gurmukhi, Gujarati, Oriya, Tamil, Telugu, Kannada, Malayalam.
         if (c <= 0x0D7F) {
             return (byte) HANGING_BASELINE;
         }
@@ -570,7 +572,7 @@ public class Font implements Serializable {
         if (c >= 0x0F00 && c <= 0x0FFF) {
             return (byte) HANGING_BASELINE;
         }
-        // Han, hiragana, katakana, hangul y la puntuación de ancho completo.
+        // Han, hiragana, katakana, hangul and the full-width punctuation.
         if (c >= 0x2E80 && c <= 0xD7AF) {
             return (byte) CENTER_BASELINE;
         }
@@ -584,10 +586,10 @@ public class Font implements Serializable {
     }
 
     /**
-     * Los atributos de esta fuente.
+     * The attributes of this font.
      *
-     * <p>Si se armó a partir de un mapa, se devuelve ése; si se armó por nombre y estilo, se arma
-     * uno con lo que la descripción dice.
+     * <p>If it was built from a map, that one is returned; if it was built by name and style, one
+     * is built with what the description says.
      */
     public Map<TextAttribute, ?> getAttributes() {
         Map<TextAttribute, Object> out = new HashMap<TextAttribute, Object>();
@@ -613,7 +615,7 @@ public class Font implements Serializable {
         return out;
     }
 
-    /** Los atributos que una fuente puede tener. */
+    /** The attributes a font can have. */
     public AttributedCharacterIterator.Attribute[] getAvailableAttributes() {
         AttributedCharacterIterator.Attribute[] attributes = {
             TextAttribute.FAMILY,
@@ -628,7 +630,7 @@ public class Font implements Serializable {
         return attributes;
     }
 
-    /** La misma con otro estilo y otro cuerpo. */
+    /** The same one with another style and another size. */
     public Font deriveFont(int style, float size) {
         Font f = new Font(this);
         if ((style & ~0x03) == 0) {
@@ -642,7 +644,7 @@ public class Font implements Serializable {
         return f;
     }
 
-    /** La misma con otro estilo y otra transformación. */
+    /** The same one with another style and another transform. */
     public Font deriveFont(int style, AffineTransform trans) {
         if (trans == null) {
             throw new IllegalArgumentException("transform must not be null");
@@ -662,7 +664,7 @@ public class Font implements Serializable {
         return f;
     }
 
-    /** La misma con otro cuerpo. */
+    /** The same one with another size. */
     public Font deriveFont(float size) {
         Font f = new Font(this);
         f.pointSize = size;
@@ -672,9 +674,9 @@ public class Font implements Serializable {
     }
 
     /**
-     * La misma con otra transformación.
+     * The same one with another transform.
      *
-     * @throws IllegalArgumentException si la transformación es `null`
+     * @throws IllegalArgumentException if the transform is `null`
      */
     public Font deriveFont(AffineTransform trans) {
         if (trans == null) {
@@ -690,7 +692,7 @@ public class Font implements Serializable {
         return f;
     }
 
-    /** La misma con otro estilo. */
+    /** The same one with another style. */
     public Font deriveFont(int style) {
         Font f = new Font(this);
         if ((style & ~0x03) == 0) {
@@ -703,296 +705,295 @@ public class Font implements Serializable {
     }
 
     /**
-     * La misma con esos atributos encima.
+     * The same one with those attributes on top.
      *
-     * @throws NullPointerException si el mapa es `null`
+     * <p>A `null` map is accepted and changes nothing, against what this note used to promise.
      */
     public Font deriveFont(Map<? extends AttributedCharacterIterator.Attribute, ?> attributes) {
         Font f = new Font(this);
         if (attributes != null) {
-            Map<TextAttribute, Object> juntos = new HashMap<TextAttribute, Object>();
+            Map<TextAttribute, Object> merged = new HashMap<TextAttribute, Object>();
             if (f.attributes != null) {
-                juntos.putAll(f.attributes);
+                merged.putAll(f.attributes);
             }
-            f.attributes = juntos;
-            f.aplicarEncima(attributes);
+            f.attributes = merged;
+            f.applyOver(attributes);
         }
         f.hash = 0;
         return f;
     }
 
-    /** Aplica atributos sobre los que ya hay, sin borrar los que no se mencionan. */
-    private void aplicarEncima(Map<? extends AttributedCharacterIterator.Attribute, ?> attrs) {
-        Map<TextAttribute, Object> previos = this.attributes;
-        this.aplicar(attrs);
-        Map<TextAttribute, Object> nuevos = this.attributes;
-        if (previos != null) {
-            Map<TextAttribute, Object> juntos = new HashMap<TextAttribute, Object>(previos);
-            juntos.putAll(nuevos);
-            this.attributes = juntos;
+    /** Applies attributes over the ones already there, without erasing those not mentioned. */
+    private void applyOver(Map<? extends AttributedCharacterIterator.Attribute, ?> attrs) {
+        Map<TextAttribute, Object> previous = this.attributes;
+        this.applyAttributes(attrs);
+        Map<TextAttribute, Object> fresh = this.attributes;
+        if (previous != null) {
+            Map<TextAttribute, Object> merged = new HashMap<TextAttribute, Object>(previous);
+            merged.putAll(fresh);
+            this.attributes = merged;
         }
     }
 
     /**
-     * Si la fuente puede dibujar ese carácter.
+     * Whether the font can draw that character.
      *
-     * @throws UnsupportedOperationException siempre: qué caracteres cubre una fuente está en su
-     *     tabla de correspondencias, adentro del archivo
+     * @throws UnsupportedOperationException always: which characters a font covers is in its
+     *     character map, inside the file
      */
     public boolean canDisplay(char c) {
-        throw new UnsupportedOperationException("canDisplay requiere la tabla de caracteres de la "
-                + "fuente; esta biblioteca no trae motor tipográfico");
+        throw new UnsupportedOperationException("canDisplay needs the character table of the font "
+                + "file; this library has no font engine");
     }
 
     /**
-     * Si la fuente puede dibujar ese punto de código.
+     * Whether the font can draw that code point.
      *
-     * @throws UnsupportedOperationException siempre, por el mismo motivo que {@link #canDisplay}
+     * @throws UnsupportedOperationException always, for the same reason as {@link #canDisplay}
      */
     public boolean canDisplay(int codePoint) {
-        throw new UnsupportedOperationException("canDisplay requiere la tabla de caracteres de la "
-                + "fuente; esta biblioteca no trae motor tipográfico");
+        throw new UnsupportedOperationException("canDisplay needs the character table of the font "
+                + "file; this library has no font engine");
     }
 
     /**
-     * Hasta dónde de esa cadena puede dibujar la fuente.
+     * How far into that string the font can draw.
      *
-     * @throws UnsupportedOperationException siempre, por el mismo motivo que {@link #canDisplay}
+     * @throws UnsupportedOperationException always, for the same reason as {@link #canDisplay}
      */
     public int canDisplayUpTo(String str) {
-        throw new UnsupportedOperationException("canDisplayUpTo requiere la tabla de caracteres de "
-                + "la fuente; esta biblioteca no trae motor tipográfico");
+        throw new UnsupportedOperationException("canDisplayUpTo needs the character table of "
+                + "the font file; this library has no font engine");
     }
 
     /**
-     * Hasta dónde de ese tramo puede dibujar la fuente.
+     * How far into that stretch the font can draw.
      *
-     * @throws UnsupportedOperationException siempre, por el mismo motivo que {@link #canDisplay}
+     * @throws UnsupportedOperationException always, for the same reason as {@link #canDisplay}
      */
     public int canDisplayUpTo(char[] text, int start, int limit) {
-        throw new UnsupportedOperationException("canDisplayUpTo requiere la tabla de caracteres de "
-                + "la fuente; esta biblioteca no trae motor tipográfico");
+        throw new UnsupportedOperationException("canDisplayUpTo needs the character table of "
+                + "the font file; this library has no font engine");
     }
 
     /**
-     * Hasta dónde de ese iterador puede dibujar la fuente.
+     * How far into that iterator the font can draw.
      *
-     * @throws UnsupportedOperationException siempre, por el mismo motivo que {@link #canDisplay}
+     * @throws UnsupportedOperationException always, for the same reason as {@link #canDisplay}
      */
     public int canDisplayUpTo(CharacterIterator iter, int start, int limit) {
-        throw new UnsupportedOperationException("canDisplayUpTo requiere la tabla de caracteres de "
-                + "la fuente; esta biblioteca no trae motor tipográfico");
+        throw new UnsupportedOperationException("canDisplayUpTo needs the character table of "
+                + "the font file; this library has no font engine");
     }
 
     /**
-     * El ángulo de inclinación de la cursiva.
+     * The slant angle of the italic.
      *
-     * @throws UnsupportedOperationException siempre: el ángulo está declarado adentro del archivo de
-     *     la fuente
+     * @throws UnsupportedOperationException always: the angle is declared inside the font file
      */
     public float getItalicAngle() {
-        throw new UnsupportedOperationException("getItalicAngle requiere leer el archivo de la "
-                + "fuente; esta biblioteca no trae motor tipográfico");
+        throw new UnsupportedOperationException("getItalicAngle needs to read the font "
+                + "file; this library has no font engine");
     }
 
     /**
-     * Si todos los caracteres comparten las mismas medidas de renglón.
+     * Whether all the characters share the same line measures.
      *
-     * @throws UnsupportedOperationException siempre: depende de las métricas de la fuente
+     * @throws UnsupportedOperationException always: it depends on the metrics of the font
      */
     public boolean hasUniformLineMetrics() {
-        throw new UnsupportedOperationException("hasUniformLineMetrics requiere las métricas de la "
-                + "fuente; esta biblioteca no trae motor tipográfico");
+        throw new UnsupportedOperationException("hasUniformLineMetrics needs the metrics of "
+                + "the font file; this library has no font engine");
     }
 
-    /** El mensaje de las medidas que necesitan los glifos. */
-    private static UnsupportedOperationException sinMetrica(String metodo) {
-        return new UnsupportedOperationException(metodo + " requiere medir los glifos de la "
-                + "fuente; esta biblioteca no trae motor tipográfico");
+    /** The message of the measures that need the glyphs. */
+    private static UnsupportedOperationException noMetrics(String method) {
+        return new UnsupportedOperationException(method + " needs to measure the glyphs of "
+                + "the font file; this library has no font engine");
     }
 
     /**
-     * Las medidas verticales de esa cadena.
+     * The vertical measures of that string.
      *
-     * @throws UnsupportedOperationException siempre: hace falta medir los glifos
+     * @throws UnsupportedOperationException always: the glyphs have to be measured
      */
     public LineMetrics getLineMetrics(String str, FontRenderContext frc) {
-        throw sinMetrica("getLineMetrics");
+        throw noMetrics("getLineMetrics");
     }
 
     /**
-     * Las medidas verticales de un tramo de esa cadena.
+     * The vertical measures of a stretch of that string.
      *
-     * @throws UnsupportedOperationException siempre: hace falta medir los glifos
+     * @throws UnsupportedOperationException always: the glyphs have to be measured
      */
     public LineMetrics getLineMetrics(String str, int beginIndex, int limit,
             FontRenderContext frc) {
-        throw sinMetrica("getLineMetrics");
+        throw noMetrics("getLineMetrics");
     }
 
     /**
-     * Las medidas verticales de un tramo de caracteres.
+     * The vertical measures of a stretch of characters.
      *
-     * @throws UnsupportedOperationException siempre: hace falta medir los glifos
+     * @throws UnsupportedOperationException always: the glyphs have to be measured
      */
     public LineMetrics getLineMetrics(char[] chars, int beginIndex, int limit,
             FontRenderContext frc) {
-        throw sinMetrica("getLineMetrics");
+        throw noMetrics("getLineMetrics");
     }
 
     /**
-     * Las medidas verticales de un tramo de un iterador.
+     * The vertical measures of a stretch of an iterator.
      *
-     * @throws UnsupportedOperationException siempre: hace falta medir los glifos
+     * @throws UnsupportedOperationException always: the glyphs have to be measured
      */
     public LineMetrics getLineMetrics(CharacterIterator ci, int beginIndex, int limit,
             FontRenderContext frc) {
-        throw sinMetrica("getLineMetrics");
+        throw noMetrics("getLineMetrics");
     }
 
     /**
-     * El rectángulo que ocupa esa cadena.
+     * The rectangle that string takes up.
      *
-     * @throws UnsupportedOperationException siempre: hace falta medir los glifos
+     * @throws UnsupportedOperationException always: the glyphs have to be measured
      */
     public Rectangle2D getStringBounds(String str, FontRenderContext frc) {
-        throw sinMetrica("getStringBounds");
+        throw noMetrics("getStringBounds");
     }
 
     /**
-     * El rectángulo que ocupa un tramo de esa cadena.
+     * The rectangle a stretch of that string takes up.
      *
-     * @throws UnsupportedOperationException siempre: hace falta medir los glifos
+     * @throws UnsupportedOperationException always: the glyphs have to be measured
      */
     public Rectangle2D getStringBounds(String str, int beginIndex, int limit,
             FontRenderContext frc) {
-        throw sinMetrica("getStringBounds");
+        throw noMetrics("getStringBounds");
     }
 
     /**
-     * El rectángulo que ocupa un tramo de caracteres.
+     * The rectangle a stretch of characters takes up.
      *
-     * @throws UnsupportedOperationException siempre: hace falta medir los glifos
+     * @throws UnsupportedOperationException always: the glyphs have to be measured
      */
     public Rectangle2D getStringBounds(char[] chars, int beginIndex, int limit,
             FontRenderContext frc) {
-        throw sinMetrica("getStringBounds");
+        throw noMetrics("getStringBounds");
     }
 
     /**
-     * El rectángulo que ocupa un tramo de un iterador.
+     * The rectangle a stretch of an iterator takes up.
      *
-     * @throws UnsupportedOperationException siempre: hace falta medir los glifos
+     * @throws UnsupportedOperationException always: the glyphs have to be measured
      */
     public Rectangle2D getStringBounds(CharacterIterator ci, int beginIndex, int limit,
             FontRenderContext frc) {
-        throw sinMetrica("getStringBounds");
+        throw noMetrics("getStringBounds");
     }
 
     /**
-     * El rectángulo del carácter más grande de la fuente.
+     * The rectangle of the biggest character of the font.
      *
-     * @throws UnsupportedOperationException siempre: hace falta medir los glifos
+     * @throws UnsupportedOperationException always: the glyphs have to be measured
      */
     public Rectangle2D getMaxCharBounds(FontRenderContext frc) {
-        throw sinMetrica("getMaxCharBounds");
+        throw noMetrics("getMaxCharBounds");
     }
 
-    /** El mensaje de las operaciones que necesitan los contornos de los glifos. */
-    private static UnsupportedOperationException sinGlifos(String metodo) {
-        return new UnsupportedOperationException(metodo + " requiere los contornos de los glifos; "
-                + "esta biblioteca no trae motor tipográfico");
+    /** The message of the operations that need the outlines of the glyphs. */
+    private static UnsupportedOperationException noGlyphs(String method) {
+        return new UnsupportedOperationException(method + " needs the glyph outlines; "
+                + "this library has no font engine");
     }
 
     /**
-     * Los glifos de esa cadena, uno por carácter.
+     * The glyphs of that string, one per character.
      *
-     * @throws UnsupportedOperationException siempre: hacen falta los contornos
+     * @throws UnsupportedOperationException always: the outlines are needed
      */
     public GlyphVector createGlyphVector(FontRenderContext frc, String str) {
-        throw sinGlifos("createGlyphVector");
+        throw noGlyphs("createGlyphVector");
     }
 
     /**
-     * Los glifos de esos caracteres.
+     * The glyphs of those characters.
      *
-     * @throws UnsupportedOperationException siempre: hacen falta los contornos
+     * @throws UnsupportedOperationException always: the outlines are needed
      */
     public GlyphVector createGlyphVector(FontRenderContext frc, char[] chars) {
-        throw sinGlifos("createGlyphVector");
+        throw noGlyphs("createGlyphVector");
     }
 
     /**
-     * Los glifos de ese iterador.
+     * The glyphs of that iterator.
      *
-     * @throws UnsupportedOperationException siempre: hacen falta los contornos
+     * @throws UnsupportedOperationException always: the outlines are needed
      */
     public GlyphVector createGlyphVector(FontRenderContext frc, CharacterIterator ci) {
-        throw sinGlifos("createGlyphVector");
+        throw noGlyphs("createGlyphVector");
     }
 
     /**
-     * Los glifos de esos códigos.
+     * The glyphs of those codes.
      *
-     * @throws UnsupportedOperationException siempre: hacen falta los contornos
+     * @throws UnsupportedOperationException always: the outlines are needed
      */
     public GlyphVector createGlyphVector(FontRenderContext frc, int[] glyphCodes) {
-        throw sinGlifos("createGlyphVector");
+        throw noGlyphs("createGlyphVector");
     }
 
     /**
-     * Los glifos de ese texto, armados con reordenamiento y ligaduras.
+     * The glyphs of that text, laid out with reordering and ligatures.
      *
-     * @throws UnsupportedOperationException siempre: hacen falta los contornos y las tablas de
-     *     armado de la fuente
+     * @throws UnsupportedOperationException always: the outlines and the layout tables of the font
+     *     are needed
      */
     public GlyphVector layoutGlyphVector(FontRenderContext frc, char[] text, int start, int limit,
             int flags) {
-        throw sinGlifos("layoutGlyphVector");
+        throw noGlyphs("layoutGlyphVector");
     }
 
-    /** El mensaje de la lectura de archivos de fuente. */
-    private static UnsupportedOperationException sinLector() {
-        return new UnsupportedOperationException("crear una fuente desde un archivo requiere un "
-                + "lector de TrueType y Type 1; esta biblioteca no trae motor tipográfico");
+    /** The message of the reading of font files. */
+    private static UnsupportedOperationException noReader() {
+        return new UnsupportedOperationException("creating a font from a file needs a "
+                + "TrueType and Type 1 reader; this library has no font engine");
     }
 
     /**
-     * Lee una fuente de un flujo.
+     * Reads a font from a stream.
      *
-     * @throws UnsupportedOperationException siempre: hace falta un lector de archivos de fuente
+     * @throws UnsupportedOperationException always: a reader of font files is needed
      */
     public static Font createFont(int fontFormat, InputStream fontStream)
             throws FontFormatException, IOException {
-        throw sinLector();
+        throw noReader();
     }
 
     /**
-     * Lee una fuente de un archivo.
+     * Reads a font from a file.
      *
-     * @throws UnsupportedOperationException siempre: hace falta un lector de archivos de fuente
+     * @throws UnsupportedOperationException always: a reader of font files is needed
      */
     public static Font createFont(int fontFormat, File fontFile)
             throws FontFormatException, IOException {
-        throw sinLector();
+        throw noReader();
     }
 
     /**
-     * Lee todas las fuentes de un flujo.
+     * Reads every font in a stream.
      *
-     * @throws UnsupportedOperationException siempre: hace falta un lector de archivos de fuente
+     * @throws UnsupportedOperationException always: a reader of font files is needed
      */
     public static Font[] createFonts(InputStream fontStream)
             throws FontFormatException, IOException {
-        throw sinLector();
+        throw noReader();
     }
 
     /**
-     * Lee todas las fuentes de un archivo.
+     * Reads every font in a file.
      *
-     * @throws UnsupportedOperationException siempre: hace falta un lector de archivos de fuente
+     * @throws UnsupportedOperationException always: a reader of font files is needed
      */
     public static Font[] createFonts(File fontFile) throws FontFormatException, IOException {
-        throw sinLector();
+        throw noReader();
     }
 }

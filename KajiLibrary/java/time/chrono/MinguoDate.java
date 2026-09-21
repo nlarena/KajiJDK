@@ -11,8 +11,9 @@ import java.time.temporal.ChronoField;
 // KajiLibrary's java.time.chrono.MinguoDate — a date in the Minguo (Republic of China) calendar, which
 // runs 1911 years behind the ISO calendar and is otherwise identical. Stored as the equivalent ISO
 // LocalDate; only the year (and era) are reinterpreted. Implements ChronoLocalDate, inheriting
-// isLeapYear/lengthOfYear/isSupported/adjustInto as defaults. A KajiLibrary subset (same omissions as
-// ThaiBuddhistDate).
+// isLeapYear/lengthOfYear/isSupported/adjustInto as defaults. The same surface as ThaiBuddhistDate,
+// including its one gap: range(ChronoField) is not overridden, so it gives ChronoField's generic
+// range rather than one refined by this calendar.
 public final class MinguoDate implements ChronoLocalDate {
 
     private static final int YEARS_DIFFERENCE = 1911;
@@ -82,20 +83,20 @@ public final class MinguoDate implements ChronoLocalDate {
     }
 
     /**
-     * El periodo entre esta fecha y `endDateExclusive`, en **este** calendario.
+     * The period between this date and `endDateExclusive`, in **this** calendar.
      *
-     * <p>Se calcula sobre las fechas ISO equivalentes y se devuelve como `ChronoPeriod` de este
-     * calendario. La cuenta es la misma --los tres calendarios de esta biblioteca solo renumeran los
-     * años, no cambian la longitud de los meses--, y por eso alcanza con delegar; un calendario con
-     * meses de otra longitud necesitaria su propia cuenta.
+     * <p>It is computed over the equivalent ISO dates and returned as a `ChronoPeriod` of this
+     * calendar. The sum is the same --this library's three calendars only renumber the years, they
+     * do not change the months' lengths-- and that is why delegating is enough; a calendar with
+     * months of another length would need a sum of its own.
      */
     public ChronoPeriod until(ChronoLocalDate endDateExclusive) {
         if (endDateExclusive == null) {
             throw new NullPointerException("endDateExclusive");
         }
-        java.time.LocalDate fin = java.time.LocalDate.ofEpochDay(endDateExclusive.toEpochDay());
+        java.time.LocalDate end = java.time.LocalDate.ofEpochDay(endDateExclusive.toEpochDay());
         java.time.Period p = java.time.Period.between(
-                java.time.LocalDate.ofEpochDay(this.toEpochDay()), fin);
+                java.time.LocalDate.ofEpochDay(this.toEpochDay()), end);
         return new ChronoPeriodImpl(this.getChronology(), p.getYears(), p.getMonths(), p.getDays());
     }
 
@@ -151,32 +152,32 @@ public final class MinguoDate implements ChronoLocalDate {
         return buf.toString();
     }
 
-    // ---- las cuatro entradas que faltaban --------------------------------------------------------
+    // ---- the four entry points that were missing -------------------------------------------------
     //
-    // `now()` y `from(...)` son las dos formas de conseguir una fecha sin escribir sus numeros: una
-    // la saca del reloj, la otra la traduce de otro temporal. Sin ellas, la unica manera de tener
-    // una MinguoDate de hoy era calcular a mano el anio minguo, que es justo lo que la clase existe
-    // para no tener que hacer.
+    // `now()` and `from(...)` are the two ways of getting a date without writing its numbers: one
+    // takes it from the clock, the other translates it from another temporal. Without them, the only
+    // way of having today's MinguoDate was to work out the Minguo year by hand, which is exactly what
+    // the class exists to save.
 
-    /** Hoy, en la zona por defecto del sistema. */
+    /** Today, in the system's default zone. */
     public static MinguoDate now() {
-        return MinguoDate.deIso(LocalDate.now());
+        return MinguoDate.fromIso(LocalDate.now());
     }
 
-    /** Hoy en esa zona. */
+    /** Today in that zone. */
     public static MinguoDate now(java.time.ZoneId zone) {
-        return MinguoDate.deIso(LocalDate.now(zone));
+        return MinguoDate.fromIso(LocalDate.now(zone));
     }
 
-    /** Hoy **segun ese reloj**, que es la forma que se puede probar con un `Clock.fixed`. */
+    /** Today **according to that clock**, the form that can be tested with a `Clock.fixed`. */
     public static MinguoDate now(java.time.Clock clock) {
-        return MinguoDate.deIso(LocalDate.now(clock));
+        return MinguoDate.fromIso(LocalDate.now(clock));
     }
 
     /**
-     * La fecha que `temporal` tiene, leida en este calendario.
+     * The date `temporal` holds, read in this calendar.
      *
-     * @throws java.time.DateTimeException si `temporal` no lleva una fecha
+     * @throws java.time.DateTimeException if `temporal` carries no date
      */
     public static MinguoDate from(java.time.temporal.TemporalAccessor temporal) {
         if (temporal == null) {
@@ -185,11 +186,11 @@ public final class MinguoDate implements ChronoLocalDate {
         if (temporal instanceof MinguoDate) {
             return (MinguoDate) temporal;
         }
-        return MinguoDate.deIso(LocalDate.from(temporal));
+        return MinguoDate.fromIso(LocalDate.from(temporal));
     }
 
-    // El puente desde el ISO, que es como esta clase esta guardada por dentro.
-    private static MinguoDate deIso(LocalDate iso) {
+    // The bridge from ISO, which is how this class is stored inside.
+    private static MinguoDate fromIso(LocalDate iso) {
         return MinguoDate.of(iso.getYear() - YEARS_DIFFERENCE, iso.getMonthValue(), iso.getDayOfMonth());
     }
 }

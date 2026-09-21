@@ -3,16 +3,16 @@ package javax.swing.event;
 import java.util.EventListener;
 
 /**
- * Quien quiere enterarse de que un menu se abrio o se cerro.
+ * Whoever wants to hear that a menu opened or closed.
  */
 public interface MenuListener extends EventListener {
 
-    /** El menu se selecciono. */
+    /** The menu was selected. */
     void menuSelected(MenuEvent e);
 
-    /** El menu se deselecciono. */
+    /** The menu was deselected. */
     void menuDeselected(MenuEvent e);
 
-    /** El menu se cancelo. */
+    /** The menu was cancelled. */
     void menuCanceled(MenuEvent e);
 }

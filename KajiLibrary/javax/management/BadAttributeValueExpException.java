@@ -1,31 +1,31 @@
 package javax.management;
 
 /**
- * Al evaluar una consulta, el atributo tenia un valor de un tipo que la expresion no sabe comparar.
+ * While evaluating a query, the attribute had a value of a type the expression cannot compare.
  *
- * <p>El valor se guarda ya convertido a `String` en el constructor y no como el objeto original.
- * Esa conversion temprana es deliberada en el JDK: la excepcion es serializable y guardar el objeto
- * arbitrario del usuario obligaria a deserializarlo del otro lado.
+ * <p>The value is stored already converted to {@code String} in the constructor and not as the
+ * original object. That early conversion is deliberate in the JDK: the exception is serializable,
+ * and keeping the user's arbitrary object would force deserializing it on the other side.
  *
- * <p>Ojo con {@link #toString()}: dice {@code "BadAttributeValueException"}, sin el {@code Exp} que
- * si lleva el nombre de la clase. Es una rareza del JDK que se conserva porque hay codigo que la
- * compara.
+ * <p>Careful with {@link #toString()}: it says {@code "BadAttributeValueException"}, without the
+ * {@code Exp} the class name does have. It is a JDK oddity kept because there is code that compares
+ * it.
  */
 public class BadAttributeValueExpException extends Exception {
 
     private static final long serialVersionUID = -3105272988410493376L;
 
     /**
-     * @serial el valor ofensivo, ya como cadena
+     * @serial the offending value, already as a string
      */
     private String val;
 
-    /** @param val el valor que no se pudo usar; se guarda su `toString()` */
+    /** @param val the value that could not be used; its {@code toString()} is kept */
     public BadAttributeValueExpException(Object val) {
         this.val = val == null ? null : val.toString();
     }
 
-    /** Ver la nota de la clase: dice {@code BadAttributeValueException}, sin {@code Exp}. */
+    /** See the class note: it says {@code BadAttributeValueException}, without {@code Exp}. */
     public String toString() {
         return "BadAttributeValueException: " + val;
     }

@@ -17,18 +17,18 @@ public interface ChronoLocalDate extends Temporal, TemporalAdjuster, Comparable<
     Chronology getChronology();
 
     /**
-     * El periodo entre esta fecha y `endDateExclusive`, en el calendario de **esta**.
+     * The period between this date and `endDateExclusive`, in **this** one's calendar.
      *
-     * <p>Abstracto y no `default` porque la respuesta depende del calendario: "un mes" no significa
-     * lo mismo en el ISO que en el Hijri, y no hay una cuenta generica que sirva para los dos.
+     * <p>Abstract and not `default` because the answer depends on the calendar: "a month" does not
+     * mean the same in ISO as in Hijrah, and there is no generic sum that serves both.
      */
     ChronoPeriod until(ChronoLocalDate endDateExclusive);
 
-    // ---- las comparaciones entre calendarios ----------------------------------------------------
+    // ---- the comparisons across calendars -------------------------------------------------------
     //
-    // Las tres comparan por **dia epoch**, no por año/mes/dia, y es la unica forma de que la
-    // comparacion entre calendarios distintos signifique algo: un 1 de enero japones y uno ISO son
-    // el mismo dia si caen en el mismo punto de la linea, sin importar como cada uno lo numere.
+    // All three compare by **epoch day**, not by year/month/day, and that is the only way for a
+    // comparison across calendars to mean anything: a Japanese 1st of January and an ISO one are the
+    // same day if they fall at the same point on the line, however each of them numbers it.
 
     default boolean isAfter(ChronoLocalDate other) {
         return this.toEpochDay() > other.toEpochDay();
@@ -39,26 +39,26 @@ public interface ChronoLocalDate extends Temporal, TemporalAdjuster, Comparable<
     }
 
     /**
-     * Si designan el **mismo dia**, aunque sean de calendarios distintos.
+     * Whether they name the **same day**, even if they belong to different calendars.
      *
-     * <p>Distinto de `equals`, que exige ademas el mismo calendario. Es la diferencia entre "es el
-     * mismo dia" y "es la misma fecha", y por eso las dos existen.
+     * <p>Unlike `equals`, which also demands the same calendar. It is the difference between "it is
+     * the same day" and "it is the same date", and that is why both exist.
      */
     default boolean isEqual(ChronoLocalDate other) {
         return this.toEpochDay() == other.toEpochDay();
     }
 
     /**
-     * Responde las consultas estandar.
+     * It answers the standard queries.
      *
-     * <p>La que importa es `chronology()`: una fecha es lo unico que sabe de que calendario es, y sin
-     * este metodo `Chronology.from(minguoDate)` contestaba **ISO**. El motivo es el mismo del bug de
-     * `TemporalQueries`: las consultas marcadoras se reconocen **por identidad**, y si nadie las
-     * reconoce el `queryFrom` generico devuelve `null` -- que aca terminaba en el ISO por defecto.
+     * <p>The one that matters is `chronology()`: a date is the only thing that knows which calendar
+     * it belongs to, and without this method `Chronology.from(minguoDate)` answered **ISO**. The
+     * reason is the same as `TemporalQueries`' bug: the marker queries are recognised **by
+     * identity**, and if nobody recognises them the generic `queryFrom` returns `null` -- which here
+     * ended up at ISO by default.
      *
-     * <p>Las tres que devuelven `null` a proposito tambien hacen falta: una fecha **no** tiene zona,
-     * ni desplazamiento, ni hora, y decir `null` es distinto de dejar que el `queryFrom` generico
-     * adivine.
+     * <p>The three that return `null` on purpose are needed too: a date has **no** zone, no offset
+     * and no time, and saying `null` is different from letting the generic `queryFrom` guess.
      */
     default <R> R query(java.time.temporal.TemporalQuery<R> query) {
         if (query == java.time.temporal.TemporalQueries.zoneId()
@@ -76,18 +76,19 @@ public interface ChronoLocalDate extends Temporal, TemporalAdjuster, Comparable<
         return query.queryFrom(this);
     }
 
-    /** La era de esta fecha, segun su calendario. */
+    /** This date's era, according to its calendar. */
     default Era getEra() {
         return this.getChronology().eraOf(this.get(ChronoField.ERA));
     }
 
     /**
-     * Esta fecha con esa hora, **en este calendario**.
+     * This date with that time, **in this calendar**.
      *
-     * <p>Antes esto devolvia un `LocalDateTime` armado desde el dia epoch, y un `LocalDateTime` es
-     * del calendario ISO: `minguoDate.atTime(hora).getChronology()` contestaba `ISO` sobre una fecha
-     * Minguo. El dia epoch es correcto y todo lo demas mentia. Ahora el ISO sigue dando
-     * `LocalDateTime` --que sabe mas-- y los otros calendarios dan la implementacion que los conserva.
+     * <p>This used to return a `LocalDateTime` built from the epoch day, and a `LocalDateTime`
+     * belongs to the ISO calendar: `minguoDate.atTime(time).getChronology()` answered `ISO` over a
+     * Minguo date. The epoch day was right and everything else lied. Now ISO still gives a
+     * `LocalDateTime` --which knows more-- and the other calendars give the implementation that
+     * keeps them.
      */
     default ChronoLocalDateTime atTime(java.time.LocalTime localTime) {
         if (localTime == null) {
@@ -97,9 +98,9 @@ public interface ChronoLocalDate extends Temporal, TemporalAdjuster, Comparable<
     }
 
     /**
-     * Esta fecha formateada con ese formateador.
+     * This date formatted with that formatter.
      *
-     * @throws java.time.DateTimeException si no se puede formatear
+     * @throws java.time.DateTimeException if it cannot be formatted
      */
     default String format(java.time.format.DateTimeFormatter formatter) {
         if (formatter == null) {
@@ -108,28 +109,28 @@ public interface ChronoLocalDate extends Temporal, TemporalAdjuster, Comparable<
         return formatter.format(this);
     }
 
-    // ---- los retornos estrechados ---------------------------------------------------------------
+    // ---- the narrowed returns -------------------------------------------------------------------
     //
-    // Los seis repiten los de `Temporal` con el retorno estrechado a `ChronoLocalDate`. No son
-    // adorno: sin ellos, `fecha.plus(1, DAYS)` sobre una referencia `ChronoLocalDate` devuelve
-    // `Temporal` y hay que castear. Y son lo que hace que el compilador emita los **metodos puente**
-    // en cada implementacion concreta -- sin los puentes, una llamada por el supertipo termina en
+    // The six repeat `Temporal`'s with the return narrowed to `ChronoLocalDate`. They are not
+    // ornament: without them, `date.plus(1, DAYS)` over a `ChronoLocalDate` reference returns a
+    // `Temporal` and has to be cast. And they are what makes the compiler emit the **bridge methods**
+    // in every concrete implementation -- without the bridges, a call through the supertype ends in
     // `NoSuchMethodError`.
 
-    // Los tres que `Temporal` declara **abstractos** se re-declaran estrechados, sin cuerpo: cada
-    // calendario concreto ya los implementa, y esto solo cambia el tipo que el llamador ve.
+    // The three `Temporal` declares **abstract** are re-declared narrowed, with no body: every
+    // concrete calendar already implements them, and this only changes the type the caller sees.
     ChronoLocalDate plus(long amountToAdd, TemporalUnit unit);
 
     ChronoLocalDate minus(long amountToSubtract, TemporalUnit unit);
 
     ChronoLocalDate with(TemporalField field, long newValue);
 
-    // Y los tres que `Temporal` declara `default` repiten **su mismo cuerpo**, no una llamada a el.
+    // And the three `Temporal` declares `default` repeat **its very body**, not a call to it.
     //
-    // El JDK escribe `Temporal.super.plus(amount)`, que es la forma cualificada de llamar al default
-    // de una superinterfaz (§15.12.1). Nuestro parser todavia no la acepta, y llamar `plus(amount)`
-    // a secas seria recursion infinita -- este metodo **es** el mas especifico. Repetir el cuerpo es
-    // una linea y hace exactamente lo mismo; queda anotado por si algun dia se puede escribir asi.
+    // The JDK writes `Temporal.super.plus(amount)`, the qualified form of calling a superinterface's
+    // default (§15.12.1). Our parser does not accept it yet, and calling a plain `plus(amount)` would
+    // be infinite recursion -- this method **is** the most specific one. Repeating the body is one
+    // line and does exactly the same; it is noted here in case one day it can be written that way.
     default ChronoLocalDate plus(java.time.temporal.TemporalAmount amount) {
         return (ChronoLocalDate) amount.addTo(this);
     }
@@ -142,7 +143,7 @@ public interface ChronoLocalDate extends Temporal, TemporalAdjuster, Comparable<
         return (ChronoLocalDate) adjuster.adjustInto(this);
     }
 
-    /** La fecha que `temporal` tiene, en el calendario que el mismo indique. */
+    /** The date `temporal` holds, in whatever calendar it names itself. */
     static ChronoLocalDate from(java.time.temporal.TemporalAccessor temporal) {
         if (temporal == null) {
             throw new NullPointerException("temporal");
@@ -154,16 +155,16 @@ public interface ChronoLocalDate extends Temporal, TemporalAdjuster, Comparable<
     }
 
     /**
-     * El orden **solo por linea de tiempo**, ignorando el calendario.
+     * The order **by timeline alone**, ignoring the calendar.
      *
-     * <p>Es el complemento de `compareTo`, que desempata por calendario. Este dice "el mismo dia es
-     * el mismo dia", y sirve para ordenar fechas de calendarios mezclados por cuando ocurrieron.
+     * <p>It is the complement of `compareTo`, which breaks ties by calendar. This one says "the same
+     * day is the same day", and serves to order dates from mixed calendars by when they happened.
      *
-     * <p>Ojo con usarlo en un `TreeSet`: al no desempatar, dos fechas del mismo dia y distinto
-     * calendario comparan 0 y el conjunto se queda con una sola.
+     * <p>Beware of using it in a `TreeSet`: breaking no ties, two dates of the same day and different
+     * calendar compare 0 and the set keeps only one.
      */
     static java.util.Comparator<ChronoLocalDate> timeLineOrder() {
-        return new LineaDeTiempo();
+        return new TimeLine();
     }
 
     int lengthOfMonth();
@@ -223,8 +224,8 @@ public interface ChronoLocalDate extends Temporal, TemporalAdjuster, Comparable<
     }
 }
 
-// El comparador que devuelve `timeLineOrder()`: solo el dia epoch, sin desempatar por calendario.
-final class LineaDeTiempo implements java.util.Comparator<ChronoLocalDate> {
+// The comparator `timeLineOrder()` returns: the epoch day alone, with no calendar tie-break.
+final class TimeLine implements java.util.Comparator<ChronoLocalDate> {
 
     public int compare(ChronoLocalDate a, ChronoLocalDate b) {
         return Long.compare(a.toEpochDay(), b.toEpochDay());

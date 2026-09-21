@@ -7,241 +7,243 @@ import com.sun.jdi.event.EventQueue;
 import com.sun.jdi.request.EventRequestManager;
 
 /**
- * La maquina virtual que se esta depurando, vista desde el depurador.
+ * The virtual machine that is being debugged, seen from the debugger.
  *
- * <p>Es el objeto raiz de JDI: lo devuelve un conector de {@link com.sun.jdi.connect}, y de el
- * cuelga todo lo demas --las clases cargadas, los hilos, la cola de eventos, el gestor de
- * peticiones.
+ * <p>It is JDI's root object: a connector from {@link com.sun.jdi.connect} returns it, and
+ * everything else hangs from it -- the loaded classes, the threads, the event queue, the request
+ * manager.
  *
- * <h2>Las consultas de capacidad</h2>
+ * <h2>The capability queries</h2>
  *
- * <p>La mitad de esta interfaz son metodos {@code canXxx()}. No es redundancia: JDWP es un
- * protocolo negociado, y una VM del otro lado puede no soportar --o tener apagado-- casi cualquier
- * servicio. Un depurador serio pregunta antes de ofrecer la funcion en su interfaz, porque la
- * alternativa es enterarse con una excepcion en el medio de una sesion.
+ * <p>Half this interface are {@code canXxx()} methods. It is not redundancy: JDWP is a
+ * negotiated protocol, and a VM on the other side may not support -- or may have switched off --
+ * almost any service. A serious debugger asks before offering the feature in its interface,
+ * because the alternative is to find out with an exception in the middle of a session.
  *
- * <h2>La familia {@code mirrorOf}</h2>
+ * <h2>The {@code mirrorOf} family</h2>
  *
- * <p>Fabrica un valor <strong>en la maquina depurada</strong> a partir de uno de aca. Hace falta
- * para pasarle argumentos a {@code ObjectReference.invokeMethod}: un {@code int} de este proceso no
- * sirve, hay que crear el equivalente del otro lado.
+ * <p>It makes a value <strong>in the debugged machine</strong> from one of this side's. It is
+ * needed in order to pass arguments to {@code ObjectReference.invokeMethod}: an {@code int} of
+ * this process does not serve, the equivalent has to be created on the other side.
  *
- * <p>{@link #mirrorOf(String)} es el caso que mas sorprende: crea un objeto {@code String} nuevo en
- * la otra VM, con lo que eso implica --ocupa memoria alla y el recolector puede llevarselo--.
+ * <p>{@link #mirrorOf(String)} is the case that surprises most: it creates a new {@code String}
+ * object in the other VM, with what that implies -- it takes up memory there and the collector
+ * may take it away --.
  *
- * <h2>Sobre esta interfaz en esta biblioteca</h2>
+ * <h2>About this interface in this library</h2>
  *
- * <p>Estaba a medias con una nota que decia que los metodos que devuelven otros reflejos se
- * agregarian cuando existieran {@code com.sun.jdi}, {@code com.sun.jdi.event} y
- * {@code com.sun.jdi.request}. Ya existen, asi que estan.
+ * <p>It was half done with a note saying that the methods that return other mirrors would be
+ * added when {@code com.sun.jdi}, {@code com.sun.jdi.event} and {@code com.sun.jdi.request}
+ * existed. They exist now, so they are there.
  */
 public interface VirtualMachine extends Mirror {
 
-    /** No trazar nada del trafico JDWP. */
+    /** Trace nothing of the JDWP traffic. */
     int TRACE_NONE = 0;
 
-    /** Trazar los paquetes que salen hacia la VM depurada. */
+    /** Trace the packets that go out to the debugged VM. */
     int TRACE_SENDS = 0x01;
 
-    /** Trazar los paquetes que llegan de la VM depurada. */
+    /** Trace the packets that come from the debugged VM. */
     int TRACE_RECEIVES = 0x02;
 
-    /** Trazar los eventos que llegan. */
+    /** Trace the events that arrive. */
     int TRACE_EVENTS = 0x04;
 
-    /** Trazar la creacion de reflejos de tipo. */
+    /** Trace the creation of type mirrors. */
     int TRACE_REFTYPES = 0x08;
 
-    /** Trazar la creacion de reflejos de objeto. */
+    /** Trace the creation of object mirrors. */
     int TRACE_OBJREFS = 0x10;
 
-    /** Trazar todo. */
+    /** Trace everything. */
     int TRACE_ALL = 0x00ffffff;
 
     /**
-     * Suspende todos los hilos de la VM depurada.
+     * It suspends every thread of the debugged VM.
      *
-     * <p>Las suspensiones se **cuentan**: dos `suspend()` piden dos `resume()`. Es lo que permite
-     * que dos partes del depurador suspendan sin pisarse.
+     * <p>The suspensions are **counted**: two `suspend()` ask for two `resume()`. It is what
+     * allows two parts of the debugger to suspend without getting in each other's way.
      */
     void suspend();
 
-    /** Levanta una suspension. Ver el conteo en {@link #suspend}. */
+    /** It lifts one suspension. See the counting in {@link #suspend}. */
     void resume();
 
     /**
-     * El proceso de la VM depurada, o `null` si el depurador no la lanzo.
+     * The debugged VM's process, or `null` if the debugger did not launch it.
      *
-     * <p>Solo hay proceso cuando se llego por un {@link com.sun.jdi.connect.LaunchingConnector}: si
-     * el depurador se **adjunto** a una VM que ya corria, no tiene su `Process`.
+     * <p>There is only a process when it was reached through a
+     * {@link com.sun.jdi.connect.LaunchingConnector}: if the debugger **attached** to a VM that
+     * was already running, it does not have its `Process`.
      */
     Process process();
 
     /**
-     * Corta la sesion de depuracion y libera todo.
+     * It cuts the debugging session off and releases everything.
      *
-     * <p>La VM depurada **sigue corriendo**: se le levantan las suspensiones y se le sacan las
-     * peticiones de evento. Es lo contrario de {@link #exit}.
+     * <p>The debugged VM **goes on running**: its suspensions are lifted and its event requests
+     * are removed. It is the opposite of {@link #exit}.
      */
     void dispose();
 
     /**
-     * Termina la VM depurada con ese codigo de salida.
+     * It ends the debugged VM with that exit code.
      *
-     * <p>Despues de esto no se le puede preguntar nada mas.
+     * <p>After this it cannot be asked anything else.
      */
     void exit(int exitCode);
 
-    /** Si se pueden pedir eventos por modificacion de un campo. */
+    /** Whether events on modifying a field can be asked for. */
     boolean canWatchFieldModification();
 
-    /** Si se pueden pedir eventos por lectura de un campo. */
+    /** Whether events on reading a field can be asked for. */
     boolean canWatchFieldAccess();
 
-    /** Si se puede leer el bytecode de un metodo. */
+    /** Whether a method's bytecode can be read. */
     boolean canGetBytecodes();
 
-    /** Si se puede saber si un miembro es sintetico. */
+    /** Whether it can be known whether a member is synthetic. */
     boolean canGetSyntheticAttribute();
 
-    /** Si se pueden listar los monitores que un hilo tiene tomados. */
+    /** Whether the monitors a thread holds can be listed. */
     boolean canGetOwnedMonitorInfo();
 
-    /** Si se puede saber por que monitor esta esperando un hilo. */
+    /** Whether it can be known which monitor a thread is waiting for. */
     boolean canGetCurrentContendedMonitor();
 
-    /** Si se puede saber que hilos esperan por un monitor. */
+    /** Whether it can be known which threads are waiting for a monitor. */
     boolean canGetMonitorInfo();
 
-    /** Si una peticion de evento se puede filtrar por instancia. */
+    /** Whether an event request can be filtered by instance. */
     boolean canUseInstanceFilters();
 
-    /** Si se pueden redefinir clases ya cargadas. */
+    /** Whether already loaded classes can be redefined. */
     boolean canRedefineClasses();
 
     /**
-     * Si una redefinicion puede agregar metodos.
+     * Whether a redefinition may add methods.
      *
-     * @deprecated Ninguna VM lo soporta desde hace mucho, y la especificacion de JDWP lo dejo de
-     * lado. Da `false` siempre.
+     * @deprecated No VM has supported it for a long time, and the JDWP specification set it
+     * aside. It always gives `false`.
      */
     @Deprecated
     boolean canAddMethod();
 
     /**
-     * Si una redefinicion puede cambiar la forma de la clase sin restricciones.
+     * Whether a redefinition may change the class's shape without restrictions.
      *
-     * @deprecated Igual que {@link #canAddMethod}: quedo sin soporte.
+     * @deprecated The same as {@link #canAddMethod}: it was left without support.
      */
     @Deprecated
     boolean canUnrestrictedlyRedefineClasses();
 
-    /** Si se pueden descartar marcos de la pila de un hilo. */
+    /** Whether frames can be popped from a thread's stack. */
     boolean canPopFrames();
 
-    /** Si se puede leer el atributo `SourceDebugExtension` de una clase. */
+    /** Whether a class's `SourceDebugExtension` attribute can be read. */
     boolean canGetSourceDebugExtension();
 
-    /** Si se puede pedir el evento de muerte de la VM. */
+    /** Whether the VM death event can be asked for. */
     boolean canRequestVMDeathEvent();
 
-    /** Si un evento de salida de metodo puede traer el valor devuelto. */
+    /** Whether a method exit event may bring the returned value. */
     boolean canGetMethodReturnValues();
 
-    /** Si se pueden contar y listar las instancias de un tipo. */
+    /** Whether a type's instances can be counted and listed. */
     boolean canGetInstanceInfo();
 
-    /** Si una peticion de evento se puede filtrar por nombre de archivo fuente. */
+    /** Whether an event request can be filtered by source file name. */
     boolean canUseSourceNameFilters();
 
-    /** Si se puede forzar el retorno anticipado de un metodo. */
+    /** Whether an early return from a method can be forced. */
     boolean canForceEarlyReturn();
 
     /**
-     * Si la VM depurada se puede modificar.
+     * Whether the debugged VM can be modified.
      *
-     * <p>Con `false` la sesion es de solo lectura: se puede mirar, no tocar. Es el caso de un
-     * volcado de memoria abierto como si fuera una VM.
+     * <p>With `false` the session is read-only: one may look, not touch. It is the case of a
+     * memory dump opened as though it were a VM.
      */
     boolean canBeModified();
 
-    /** Si se pueden pedir eventos de monitor. */
+    /** Whether monitor events can be asked for. */
     boolean canRequestMonitorEvents();
 
-    /** Si un evento de monitor puede decir en que marco ocurrio. */
+    /** Whether a monitor event may say in which frame it happened. */
     boolean canGetMonitorFrameInfo();
 
-    /** Si se puede leer la version del formato de archivo de clase. */
+    /** Whether a class file format's version can be read. */
     boolean canGetClassFileVersion();
 
-    /** Si se puede leer el pool de constantes de una clase. */
+    /** Whether a class's constant pool can be read. */
     boolean canGetConstantPool();
 
     /**
-     * Si se puede consultar informacion de modulos.
+     * Whether module information can be consulted.
      *
-     * <p>Es `default` --y no abstracto-- porque llego con Java 9, y una implementacion de JDI
-     * escrita antes tiene que seguir compilando. Por omision dice que no, que es la respuesta
-     * correcta para cualquiera de esas.
+     * <p>It is `default` -- and not abstract -- because it arrived with Java 9, and a JDI
+     * implementation written earlier has to go on compiling. By default it says no, which is the
+     * right answer for any of those.
      */
     default boolean canGetModuleInfo() {
         return false;
     }
 
     /**
-     * Fija el estrato por omision para el codigo con varios lenguajes fuente.
+     * It fixes the default stratum for code with several source languages.
      *
-     * <p>Un `.class` generado desde JSP lleva mapas de linea para dos "estratos" --el bytecode y el
-     * JSP-- y esto elige cual usar cuando nadie pide uno.
+     * <p>A `.class` generated from JSP carries line maps for two "strata" -- the bytecode and the
+     * JSP -- and this chooses which to use when nobody asks for one.
      *
-     * @param stratum el nombre del estrato, o `null` para el que la clase declare como suyo
+     * @param stratum the stratum's name, or `null` for the one the class declares as its own
      */
     void setDefaultStratum(String stratum);
 
-    /** El estrato por omision, o `null` si es el que cada clase declare. */
+    /** The default stratum, or `null` if it is the one each class declares. */
     String getDefaultStratum();
 
-    /** Una descripcion legible de la VM depurada. */
+    /** A readable description of the debugged VM. */
     String description();
 
-    /** La version de la VM depurada, como la reporta ella. */
+    /** The debugged VM's version, as it reports it. */
     String version();
 
-    /** El nombre de la VM depurada, como lo reporta ella. */
+    /** The debugged VM's name, as it reports it. */
     String name();
 
     /**
-     * Fija que trafico JDWP se traza.
+     * It fixes which JDWP traffic is traced.
      *
-     * @param traceFlags una combinacion `or` de las constantes `TRACE_*`
+     * @param traceFlags an `or` combination of the `TRACE_*` constants
      */
     void setDebugTraceMode(int traceFlags);
 
     /**
-     * Todas las clases cargadas en la maquina depurada.
+     * Every class loaded in the debugged machine.
      *
-     * <p>En un programa real son miles, y cada una es un viaje. Casi siempre se quiere
-     * {@link #classesByName} en su lugar.
+     * <p>In a real program they are thousands, and each one is a trip. Almost always
+     * {@link #classesByName} is wanted instead.
      *
-     * @return las clases
+     * @return the classes
      */
     List<ReferenceType> allClasses();
 
     /**
-     * Las clases con ese nombre.
+     * The classes with that name.
      *
-     * <p>Devuelve una lista y no una sola: dos cargadores distintos pueden haber cargado clases del
-     * mismo nombre, y en un servidor de aplicaciones eso es lo normal, no la excepcion.
+     * <p>It returns a list and not a single one: two different loaders may have loaded classes of
+     * the same name, and in an application server that is the normal thing, not the exception.
      *
-     * @param className el nombre completo
-     * @return las clases con ese nombre, o una lista vacia
+     * @param className the full name
+     * @return the classes with that name, or an empty list
      */
     List<ReferenceType> classesByName(String className);
 
     /**
-     * Todos los modulos de la maquina depurada.
+     * Every module of the debugged machine.
      *
-     * @return los modulos
+     * @return the modules
      * @since 9
      */
     default List<ModuleReference> allModules() {
@@ -249,139 +251,140 @@ public interface VirtualMachine extends Mirror {
     }
 
     /**
-     * Reemplaza el codigo de unas clases sin reiniciar la VM.
+     * It replaces the code of some classes without restarting the VM.
      *
-     * <p>Es lo que hace posible "recargar en caliente". Tiene un limite duro: se puede cambiar el
-     * cuerpo de un metodo y no la <strong>forma</strong> de la clase --agregar un campo, cambiar
-     * una firma, tocar la jerarquia--. Los marcos que ya estaban en la pila siguen ejecutando el
-     * codigo viejo, y por eso {@code Method.isObsolete} existe.
+     * <p>It is what makes "hot reloading" possible. It has a hard limit: a method's body may be
+     * changed and the class's <strong>shape</strong> may not -- adding a field, changing a
+     * signature, touching the hierarchy --. The frames that were already on the stack go on
+     * executing the old code, and that is why {@code Method.isObsolete} exists.
      *
-     * @param classToBytes las clases y su bytecode nuevo
+     * @param classToBytes the classes and their new bytecode
      */
     void redefineClasses(Map<? extends ReferenceType, byte[]> classToBytes);
 
     /**
-     * Todos los hilos de la maquina depurada.
+     * Every thread of the debugged machine.
      *
-     * @return los hilos
+     * @return the threads
      */
     List<ThreadReference> allThreads();
 
     /**
-     * Los grupos de hilos que no tienen padre.
+     * The thread groups that have no parent.
      *
-     * @return los grupos raiz
+     * @return the root groups
      */
     List<ThreadGroupReference> topLevelThreadGroups();
 
     /**
-     * La cola por donde llegan los eventos.
+     * The queue the events arrive through.
      *
-     * @return la cola
+     * @return the queue
      */
     EventQueue eventQueue();
 
     /**
-     * El gestor con el que se piden los eventos.
+     * The manager the events are asked for with.
      *
-     * @return el gestor
+     * @return the manager
      */
     EventRequestManager eventRequestManager();
 
     /**
-     * Cuantas instancias vivas hay de cada uno de esos tipos.
+     * How many live instances there are of each of those types.
      *
-     * <p>Contarlas obliga a recorrer el monton de la otra VM, asi que es caro y puede pausarla. El
-     * arreglo devuelto se corresponde posicion a posicion con la lista que se paso.
+     * <p>Counting them forces the other VM's heap to be walked, so it is expensive and may pause
+     * it. The returned array corresponds position by position with the list that was passed.
      *
-     * @param types los tipos a contar
-     * @return la cantidad de instancias de cada uno
+     * @param types the types to count
+     * @return the number of instances of each one
      */
     long[] instanceCounts(List<? extends ReferenceType> types);
 
     /**
-     * Un {@code boolean} de la maquina depurada con ese valor.
+     * A {@code boolean} of the debugged machine with that value.
      *
-     * @param value el valor
-     * @return el reflejo
+     * @param value the value
+     * @return the mirror
      */
     BooleanValue mirrorOf(boolean value);
 
     /**
-     * Un {@code byte} de la maquina depurada con ese valor.
+     * A {@code byte} of the debugged machine with that value.
      *
-     * @param value el valor
-     * @return el reflejo
+     * @param value the value
+     * @return the mirror
      */
     ByteValue mirrorOf(byte value);
 
     /**
-     * Un {@code char} de la maquina depurada con ese valor.
+     * A {@code char} of the debugged machine with that value.
      *
-     * @param value el valor
-     * @return el reflejo
+     * @param value the value
+     * @return the mirror
      */
     CharValue mirrorOf(char value);
 
     /**
-     * Un {@code short} de la maquina depurada con ese valor.
+     * A {@code short} of the debugged machine with that value.
      *
-     * @param value el valor
-     * @return el reflejo
+     * @param value the value
+     * @return the mirror
      */
     ShortValue mirrorOf(short value);
 
     /**
-     * Un {@code int} de la maquina depurada con ese valor.
+     * A {@code int} of the debugged machine with that value.
      *
-     * @param value el valor
-     * @return el reflejo
+     * @param value the value
+     * @return the mirror
      */
     IntegerValue mirrorOf(int value);
 
     /**
-     * Un {@code long} de la maquina depurada con ese valor.
+     * A {@code long} of the debugged machine with that value.
      *
-     * @param value el valor
-     * @return el reflejo
+     * @param value the value
+     * @return the mirror
      */
     LongValue mirrorOf(long value);
 
     /**
-     * Un {@code float} de la maquina depurada con ese valor.
+     * A {@code float} of the debugged machine with that value.
      *
-     * @param value el valor
-     * @return el reflejo
+     * @param value the value
+     * @return the mirror
      */
     FloatValue mirrorOf(float value);
 
     /**
-     * Un {@code double} de la maquina depurada con ese valor.
+     * A {@code double} of the debugged machine with that value.
      *
-     * @param value el valor
-     * @return el reflejo
+     * @param value the value
+     * @return the mirror
      */
     DoubleValue mirrorOf(double value);
 
     /**
-     * Un {@code String} <strong>nuevo</strong> en la maquina depurada.
+     * A <strong>new</strong> {@code String} in the debugged machine.
      *
-     * <p>Crea un objeto alla, no un valor: ocupa memoria en la otra VM y su recolector puede
-     * llevarselo mientras se lo esta usando. Para eso esta
-     * {@code ObjectReference.disableCollection}.
+     * <p>It creates an object there, not a value: it takes up memory in the other VM and its
+     * collector may take it away while it is being used. That is what
+     * {@code ObjectReference.disableCollection} is for.
      *
-     * @param value el texto
-     * @return el reflejo
+     * @param value the text
+     * @return the mirror
      */
     StringReference mirrorOf(String value);
 
     /**
-     * El valor {@code void} de la maquina depurada.
+     * The debugged machine's {@code void} value.
      *
-     * <p>Existe porque un metodo que no devuelve nada igual tiene que poder informar
-     * <strong>algo</strong> como resultado de {@code invokeMethod}, y ese algo es este.
+     * <p>It exists because a method that returns nothing still has to be able to report
+     * <strong>something</strong> as the result of {@code invokeMethod}, and that something is
+     * this.
      *
-     * @return el reflejo de void
+     * @return void's mirror
      */
     VoidValue mirrorOfVoid();
 }

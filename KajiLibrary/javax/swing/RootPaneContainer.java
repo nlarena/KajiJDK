@@ -4,26 +4,26 @@ import java.awt.Component;
 import java.awt.Container;
 
 /**
- * Lo implementa lo que contiene un {@link JRootPane}: ventanas, dialogos y applets.
+ * It is implemented by whatever contains a {@link JRootPane}: frames, dialogs and applets.
  *
- * <h2>Para que sirve tenerla</h2>
+ * <h2>What having it is for</h2>
  *
- * <p>Los seis metodos son atajos a los del panel raiz. Existen para que se pueda escribir
- * {@code ventana.getContentPane()} en lugar de {@code ventana.getRootPane().getContentPane()}, y
- * sobre todo para que un metodo pueda recibir "algo que tiene contenido" sin saber si es una
- * ventana, un dialogo o un applet.
+ * <p>The six methods are shortcuts to the root pane's. They exist so that
+ * {@code window.getContentPane()} can be written instead of
+ * {@code window.getRootPane().getContentPane()}, and above all so that a method can receive
+ * "something that has content" without knowing whether it is a frame, a dialog or an applet.
  *
- * <p>Es tambien lo que recuerda que a estos contenedores no se les agregan componentes
- * directamente; ver la nota de {@link JRootPane}.
+ * <p>It is also what reminds one that components are not added to these containers directly;
+ * see {@link JRootPane}'s note.
  */
 public interface RootPaneContainer {
 
-    /** El panel raiz. */
+    /** The root pane. */
     JRootPane getRootPane();
 
     void setContentPane(Container contentPane);
 
-    /** Donde va lo que agrega el programa. */
+    /** Where what the program adds goes. */
     Container getContentPane();
 
     void setLayeredPane(JLayeredPane layeredPane);
@@ -32,6 +32,6 @@ public interface RootPaneContainer {
 
     void setGlassPane(Component glassPane);
 
-    /** El componente de arriba de todo; ver la nota de {@link JRootPane}. */
+    /** The component at the very top; see {@link JRootPane}'s note. */
     Component getGlassPane();
 }

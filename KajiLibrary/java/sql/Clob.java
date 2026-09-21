@@ -1,50 +1,52 @@
 package java.sql;
 
 /**
- * KajiLibrary's java.sql.Clob -- un texto grande, por referencia.
+ * KajiLibrary's java.sql.Clob -- a large text, by reference.
  *
- * <p>Lo mismo que {@link Blob} para caracteres, y la diferencia importa: aca las posiciones y las
- * longitudes se cuentan en **caracteres**, no en bytes, asi que dependen de la codificacion de la
- * base. Confundir las dos unidades es el error clasico con esta interfaz.
+ * <p>The same as {@link Blob} for characters, and the difference matters: here positions and
+ * lengths are counted in **characters**, not in bytes, so in a multi-byte encoding they do not
+ * match the byte counts. Confusing the two units is the classic mistake with this interface. (This
+ * note said they depend on the database's encoding; counting characters is what keeps them from
+ * depending on it.)
  */
 public interface Clob {
 
-    /** Cuantos caracteres tiene. */
+    /** How many characters it has. */
     long length() throws SQLException;
 
-    /** `length` caracteres a partir de `pos`. */
+    /** `length` characters starting at `pos`. */
     String getSubString(long pos, int length) throws SQLException;
 
-    /** Todo el contenido, como lector. */
+    /** The whole content, as a reader. */
     java.io.Reader getCharacterStream() throws SQLException;
 
-    /** `length` caracteres desde `pos`. */
+    /** `length` characters from `pos`. */
     java.io.Reader getCharacterStream(long pos, long length) throws SQLException;
 
-    /** El contenido como flujo ASCII. */
+    /** The content as an ASCII stream. */
     java.io.InputStream getAsciiStream() throws SQLException;
 
-    /** Donde empieza `searchstr` a partir de `start`, o -1. */
+    /** Where `searchstr` starts from `start`, or -1. */
     long position(String searchstr, long start) throws SQLException;
 
-    /** Igual, buscando el contenido de otro CLOB. */
+    /** The same, searching for another CLOB's content. */
     long position(Clob searchstr, long start) throws SQLException;
 
-    /** Escribe ese texto en `pos`; devuelve cuantos caracteres escribio. */
+    /** Writes that text at `pos`; returns how many characters it wrote. */
     int setString(long pos, String str) throws SQLException;
 
-    /** Igual, tomando una porcion. */
+    /** The same, taking a slice. */
     int setString(long pos, String str, int offset, int len) throws SQLException;
 
-    /** Un flujo ASCII para escribir desde `pos`. */
+    /** An ASCII stream to write from `pos`. */
     java.io.OutputStream setAsciiStream(long pos) throws SQLException;
 
-    /** Un escritor para escribir desde `pos`. */
+    /** A writer to write from `pos`. */
     java.io.Writer setCharacterStream(long pos) throws SQLException;
 
-    /** Lo recorta a `len` caracteres. */
+    /** Truncates it to `len` characters. */
     void truncate(long len) throws SQLException;
 
-    /** Suelta los recursos del puntero. */
+    /** Releases the pointer's resources. */
     void free() throws SQLException;
 }

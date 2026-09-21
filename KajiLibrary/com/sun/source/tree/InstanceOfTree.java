@@ -1,8 +1,8 @@
 package com.sun.source.tree;
 
 /**
- * `x instanceof T` y `x instanceof T t`. {@link #getPattern} es `null` en la
- * forma vieja.
+ * `x instanceof T` and `x instanceof T t`. {@link #getPattern} is `null` in the
+ * old form.
  */
 public interface InstanceOfTree extends ExpressionTree {
 
@@ -10,6 +10,6 @@ public interface InstanceOfTree extends ExpressionTree {
 
     Tree getType();
 
-    /** El patron, o `null` en la forma sin patron. */
+    /** The pattern, or `null` in the form with no pattern. */
     PatternTree getPattern();
 }

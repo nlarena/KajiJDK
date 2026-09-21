@@ -1,19 +1,19 @@
 package javax.swing.text;
 
 /**
- * Quien sabe donde cae la proxima tabulacion.
+ * Who knows where the next tab falls.
  *
- * <p>Una sola pregunta, y con dos argumentos que parecen de mas: la posicion en pixeles y el
- * <em>desplazamiento en el modelo</em> del caracter de tabulacion. El segundo hace falta porque las
- * paradas pueden ser distintas segun el parrafo, y el parrafo se sabe por el desplazamiento.
+ * <p>A single question, and with two arguments that look unnecessary: the position in pixels and
+ * the tab character's <em>model offset</em>. The second is needed because the stops may be
+ * different according to the paragraph, and the paragraph is known from the offset.
  */
 public interface TabExpander {
 
     /**
-     * Donde termina la tabulacion que empieza en {@code x}.
+     * Where the tab that starts at {@code x} ends.
      *
-     * @param x la posicion actual, en pixeles
-     * @param tabOffset el desplazamiento del caracter de tabulacion en el documento
+     * @param x the current position, in pixels
+     * @param tabOffset the offset of the tab character in the document
      */
     float nextTabStop(float x, int tabOffset);
 }

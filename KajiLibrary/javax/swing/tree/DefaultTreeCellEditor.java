@@ -23,78 +23,78 @@ import javax.swing.event.TreeSelectionEvent;
 import javax.swing.event.TreeSelectionListener;
 
 /**
- * Edita el nombre de un nodo de arbol, con el icono al lado.
+ * Edits a tree node's name, with the icon beside it.
  *
- * <h2>Tres piezas</h2>
+ * <h2>Three pieces</h2>
  *
- * <p>Un editor <em>de verdad</em> -- un campo de texto envuelto en un {@link DefaultCellEditor} --,
- * un {@link DefaultTreeCellRenderer} del que se toman prestados el icono y la tipografia, y un
- * contenedor que pone los dos uno al lado del otro. El icono no se edita: esta ahi para que la fila
- * en edicion se siga pareciendo a las demas.
+ * <p>A <em>real</em> editor -- a text field wrapped in a {@link DefaultCellEditor} --, a
+ * {@link DefaultTreeCellRenderer} from which the icon and the typeface are borrowed, and a
+ * container that puts the two side by side. The icon is not edited: it is there so that the row
+ * being edited goes on looking like the others.
  *
- * <h2>El clic que empieza a editar es el segundo, y con pausa</h2>
+ * <h2>The click that starts editing is the second one, and with a pause</h2>
  *
- * <p>Un clic sobre una fila <em>ya elegida</em> no empieza a editar enseguida: arranca un
- * {@link Timer} de un tercio de segundo. Es lo que distingue "hacer clic para elegir y despues clic
- * para renombrar" de "hacer doble clic", que es otra cosa. Un doble clic de verdad edita de
- * inmediato, sin esperar.
+ * <p>A click on an <em>already chosen</em> row does not start editing right away: it starts a
+ * {@link Timer} of a third of a second. It is what tells "click to choose and then click to
+ * rename" apart from "double-click", which is another thing. A real double click edits
+ * immediately, without waiting.
  *
- * <p>Ese temporizador es la razon de que esta clase escuche la seleccion del arbol: si la seleccion
- * cambia mientras se espera, el clic ya no significa renombrar.
+ * <p>That timer is the reason this class listens to the tree's selection: if the selection
+ * changes while waiting, the click no longer means rename.
  *
- * <h2>Donde se puede hacer clic</h2>
+ * <h2>Where one can click</h2>
  *
- * <p>{@link #inHitRegion} decide si un clic cae sobre el texto o sobre el icono. Sobre el icono no
- * edita: el icono es para desplegar, no para renombrar.
+ * <p>{@link #inHitRegion} decides whether a click falls on the text or on the icon. On the icon
+ * it does not edit: the icon is for expanding, not for renaming.
  */
 public class DefaultTreeCellEditor implements ActionListener, TreeCellEditor,
         TreeSelectionListener {
 
-    /** El editor que de verdad edita; ver la nota de la clase. */
+    /** The editor that really edits; see the class note. */
     protected TreeCellEditor realEditor;
 
-    /** De donde salen el icono y la tipografia. */
+    /** Where the icon and the typeface come from. */
     protected DefaultTreeCellRenderer renderer;
 
-    /** El contenedor que pone el icono y el editor juntos. */
+    /** The container that puts the icon and the editor together. */
     protected Container editingContainer;
 
-    /** Lo que el editor de verdad devolvio para editar. */
+    /** What the real editor returned to edit with. */
     protected transient Component editingComponent;
 
-    /** Si el ultimo camino elegido se puede editar. */
+    /** Whether the last chosen path can be edited. */
     protected boolean canEdit;
 
-    /** Cuanto se corre el editor a la derecha, por el icono. */
+    /** How far the editor is shifted right, because of the icon. */
     protected transient int offset;
 
-    /** El arbol al que pertenece. */
+    /** The tree it belongs to. */
     protected transient JTree tree;
 
-    /** El ultimo camino elegido. */
+    /** The last chosen path. */
     protected transient TreePath lastPath;
 
-    /** El temporizador del clic; ver la nota de la clase. */
+    /** The click's timer; see the class note. */
     protected transient Timer timer;
 
-    /** La ultima fila que se dibujo. */
+    /** The last row that was drawn. */
     protected transient int lastRow;
 
-    /** El color del recuadro alrededor de lo que se edita. */
+    /** The colour of the box around what is being edited. */
     protected Color borderSelectionColor;
 
-    /** El icono que se dibuja al lado del editor. */
+    /** The icon drawn beside the editor. */
     protected transient Icon editingIcon;
 
-    /** La tipografia; nula toma la del arbol. */
+    /** The typeface; null takes the tree's. */
     protected Font font;
 
-    /** Con un editor de texto armado por {@link #createTreeCellEditor}. */
+    /** With a text editor built by {@link #createTreeCellEditor}. */
     public DefaultTreeCellEditor(JTree tree, DefaultTreeCellRenderer renderer) {
         this(tree, renderer, null);
     }
 
-    /** Con ese editor de verdad; nulo arma el de texto. */
+    /** With that real editor; null builds the text one. */
     public DefaultTreeCellEditor(JTree tree, DefaultTreeCellRenderer renderer,
             TreeCellEditor editor) {
         this.renderer = renderer;
@@ -115,7 +115,7 @@ public class DefaultTreeCellEditor implements ActionListener, TreeCellEditor,
         return borderSelectionColor;
     }
 
-    /** La tipografia; nula deja la del dibujante o la del arbol. */
+    /** The typeface; null leaves the renderer's or the tree's. */
     public void setFont(Font font) {
         this.font = font;
     }
@@ -125,10 +125,10 @@ public class DefaultTreeCellEditor implements ActionListener, TreeCellEditor,
     }
 
     /**
-     * El componente con el que se edita esa fila, ya colocado al lado de su icono.
+     * The component to edit that row with, already placed beside its icon.
      *
-     * <p>Se le pide al editor de verdad y se lo mete en el contenedor. El icono y el corrimiento
-     * salen de {@link #determineOffset}.
+     * <p>It is asked of the real editor and put into the container. The icon and the shift come
+     * from {@link #determineOffset}.
      */
     public Component getTreeCellEditorComponent(JTree tree, Object value, boolean isSelected,
             boolean expanded, boolean leaf, int row) {
@@ -161,10 +161,10 @@ public class DefaultTreeCellEditor implements ActionListener, TreeCellEditor,
     }
 
     /**
-     * Si ese gesto empieza la edicion.
+     * Whether that gesture starts the editing.
      *
-     * <p>Un clic sobre la fila ya elegida arranca el temporizador y devuelve falso: la edicion
-     * empieza cuando el temporizador salta, no ahora. Ver la nota de la clase.
+     * <p>A click on the already chosen row starts the timer and returns false: the editing starts
+     * when the timer fires, not now. See the class note.
      */
     public boolean isCellEditable(EventObject event) {
         boolean retValue = false;
@@ -236,10 +236,10 @@ public class DefaultTreeCellEditor implements ActionListener, TreeCellEditor,
     }
 
     /**
-     * La seleccion cambio: se anota el nuevo camino y se corta el temporizador.
+     * The selection changed: the new path is noted and the timer is cut off.
      *
-     * <p>Sin esto, un clic que cambia la seleccion terminaria abriendo el editor sobre la fila que
-     * el usuario acaba de dejar.
+     * <p>Without this, a click that changes the selection would end up opening the editor over the
+     * row the user has just left.
      */
     public void valueChanged(TreeSelectionEvent e) {
         if (tree != null) {
@@ -254,7 +254,7 @@ public class DefaultTreeCellEditor implements ActionListener, TreeCellEditor,
         }
     }
 
-    /** El temporizador salto: ahora si se empieza a editar. */
+    /** The timer fired: now the editing does start. */
     public void actionPerformed(ActionEvent e) {
         if (tree != null && lastPath != null) {
             tree.startEditingAtPath(lastPath);
@@ -262,9 +262,9 @@ public class DefaultTreeCellEditor implements ActionListener, TreeCellEditor,
     }
 
     /**
-     * Se ata a ese arbol.
+     * It ties itself to that tree.
      *
-     * <p>Escucha su seleccion; ver {@link #valueChanged}.
+     * <p>It listens to its selection; see {@link #valueChanged}.
      */
     protected void setTree(JTree newTree) {
         if (tree != newTree) {
@@ -281,7 +281,7 @@ public class DefaultTreeCellEditor implements ActionListener, TreeCellEditor,
         }
     }
 
-    /** Si ese gesto arranca el temporizador: un clic simple sobre lo ya elegido. */
+    /** Whether that gesture starts the timer: a single click on what is already chosen. */
     protected boolean shouldStartEditingTimer(EventObject event) {
         if (event instanceof MouseEvent) {
             MouseEvent me = (MouseEvent) event;
@@ -291,7 +291,7 @@ public class DefaultTreeCellEditor implements ActionListener, TreeCellEditor,
         return false;
     }
 
-    /** Arranca el temporizador de un tercio de segundo; ver la nota de la clase. */
+    /** Starts the third-of-a-second timer; see the class note. */
     protected void startEditingTimer() {
         if (timer == null) {
             timer = new Timer(1200, this);
@@ -300,7 +300,9 @@ public class DefaultTreeCellEditor implements ActionListener, TreeCellEditor,
         timer.start();
     }
 
-    /** Si ese gesto edita sin esperar: un doble clic, o cualquier cosa que no sea del mouse. */
+    /**
+     * Whether that gesture edits without waiting: a double click, or anything not from the mouse.
+     */
     protected boolean canEditImmediately(EventObject event) {
         if (event instanceof MouseEvent) {
             MouseEvent me = (MouseEvent) event;
@@ -310,9 +312,10 @@ public class DefaultTreeCellEditor implements ActionListener, TreeCellEditor,
     }
 
     /**
-     * Si ese punto cae sobre el texto y no sobre el icono.
+     * Whether that point falls on the text and not on the icon.
      *
-     * <p>Solo mira la coordenada horizontal: la vertical ya la resolvio quien eligio la fila.
+     * <p>It only looks at the horizontal coordinate: the vertical one was already resolved by
+     * whoever chose the row.
      */
     protected boolean inHitRegion(int x, int y) {
         if (lastRow != -1 && tree != null) {
@@ -328,10 +331,11 @@ public class DefaultTreeCellEditor implements ActionListener, TreeCellEditor,
     }
 
     /**
-     * Calcula el icono y cuanto hay que correr el editor.
+     * Computes the icon and how far the editor has to be shifted.
      *
-     * <p>El icono sale del dibujante, que sabe cual va segun sea hoja, carpeta abierta o cerrada.
-     * Sin dibujante no hay icono y el editor arranca pegado a la izquierda.
+     * <p>The icon comes from the renderer, which knows which one goes according to whether it is a
+     * leaf, an open folder or a closed one. With no renderer there is no icon and the editor starts
+     * flush left.
      */
     protected void determineOffset(JTree tree, Object value, boolean isSelected,
             boolean expanded, boolean leaf, int row) {
@@ -354,32 +358,32 @@ public class DefaultTreeCellEditor implements ActionListener, TreeCellEditor,
         }
     }
 
-    /** Mete el editor en el contenedor. */
+    /** Puts the editor into the container. */
     protected void prepareForEditing() {
         if (editingComponent != null) {
             editingContainer.add(editingComponent);
         }
     }
 
-    /** El contenedor que pone el icono y el editor juntos. */
+    /** The container that puts the icon and the editor together. */
     protected Container createContainer() {
         return new EditorContainer(this);
     }
 
     /**
-     * El editor de texto que se usa si no se dio otro.
+     * The text editor used if no other was given.
      *
-     * <p>Con tres clics para empezar, que en la practica significa que el clic lo maneja esta clase
-     * y no el editor de adentro.
+     * <p>With three clicks to start, which in practice means that the click is handled by this
+     * class and not by the editor inside.
      */
     protected TreeCellEditor createTreeCellEditor() {
         Border aBorder = javax.swing.UIManager.getBorder("Tree.editorBorder");
-        DefaultCellEditor editor = new EditorDeTexto(new DefaultTextField(this, aBorder));
+        DefaultCellEditor editor = new TextEditor(new DefaultTextField(this, aBorder));
         editor.setClickCountToStart(1);
         return editor;
     }
 
-    /** Deja todo como estaba cuando la edicion termina o se cancela. */
+    /** It leaves everything as it was when the editing ends or is cancelled. */
     private void cleanupAfterEditing() {
         if (editingComponent != null) {
             editingContainer.remove(editingComponent);
@@ -387,28 +391,28 @@ public class DefaultTreeCellEditor implements ActionListener, TreeCellEditor,
         editingComponent = null;
     }
 
-    /** Un {@link DefaultCellEditor} que ademas sirve como editor de arbol. */
-    private static class EditorDeTexto extends DefaultCellEditor implements TreeCellEditor {
+    /** A {@link DefaultCellEditor} that also serves as a tree editor. */
+    private static class TextEditor extends DefaultCellEditor implements TreeCellEditor {
 
-        EditorDeTexto(JTextField campo) {
-            super(campo);
+        TextEditor(JTextField field) {
+            super(field);
         }
     }
 
     /**
-     * El campo de texto del editor de base.
+     * The base editor's text field.
      *
-     * <p>Toma prestada la tipografia del editor que lo contiene, y se mide con un ancho minimo para
-     * que un nombre vacio no deje un campo de cero pixeles.
+     * <p>It borrows the typeface from the editor that contains it, and measures itself with a
+     * minimum width so that an empty name does not leave a field of zero pixels.
      */
     public static class DefaultTextField extends JTextField {
 
-        /** El borde; puede ser nulo. */
+        /** The border; it may be null. */
         protected Border border;
 
         private final DefaultTreeCellEditor editor;
 
-        /** Con ese borde. */
+        /** With that border. */
         public DefaultTextField(DefaultTreeCellEditor editor, Border border) {
             this.editor = editor;
             setBorder(border);
@@ -423,7 +427,7 @@ public class DefaultTreeCellEditor implements ActionListener, TreeCellEditor,
             return border;
         }
 
-        /** La del editor, si tiene; si no, la propia. */
+        /** The editor's, if it has one; otherwise, its own. */
         public Font getFont() {
             Font font = super.getFont();
             if (font instanceof javax.swing.plaf.FontUIResource) {
@@ -435,7 +439,7 @@ public class DefaultTreeCellEditor implements ActionListener, TreeCellEditor,
             return font;
         }
 
-        /** Al menos el ancho de la fila que se esta editando. */
+        /** At least the width of the row being edited. */
         public Dimension getPreferredSize() {
             Dimension size = super.getPreferredSize();
             if (editor != null && editor.renderer != null && editor.tree != null) {
@@ -447,32 +451,32 @@ public class DefaultTreeCellEditor implements ActionListener, TreeCellEditor,
     }
 
     /**
-     * El contenedor que pone el icono a la izquierda y el editor a la derecha.
+     * The container that puts the icon on the left and the editor on the right.
      *
-     * <p>Es un {@link Container} de AWT y no un panel de Swing porque no tiene nada que hacer con
-     * bordes ni con aspectos: solo coloca dos cosas y dibuja un icono.
+     * <p>It is an AWT {@link Container} and not a Swing panel because it has nothing to do with
+     * borders or looks and feels: it only places two things and draws an icon.
      */
     public static class EditorContainer extends Container {
 
         private final DefaultTreeCellEditor editor;
 
-        /** Vacio, con acomodador propio. */
+        /** Empty, with a layout manager of its own. */
         public EditorContainer(DefaultTreeCellEditor editor) {
             this.editor = editor;
             setLayout(null);
         }
 
         /**
-         * No hace nada.
+         * It does nothing.
          *
-         * <p>Es un metodo con el nombre de la clase y tipo de retorno {@code void} -- o sea, no es
-         * un constructor. Esta en el JDK por un accidente historico que ya no se puede sacar sin
-         * romper compatibilidad binaria, y se copia por eso.
+         * <p>It is a method with the class's name and return type {@code void} -- that is, it is
+         * not a constructor. It is in the JDK because of a historical accident that can no longer
+         * be removed without breaking binary compatibility, and it is copied for that reason.
          */
         public void EditorContainer() {
         }
 
-        /** Dibuja el icono a la izquierda y despues los hijos. */
+        /** Draws the icon on the left and then the children. */
         public void paint(Graphics g) {
             if (editor != null && editor.editingComponent != null) {
                 Icon icon = editor.editingIcon;
@@ -488,7 +492,7 @@ public class DefaultTreeCellEditor implements ActionListener, TreeCellEditor,
             super.paint(g);
         }
 
-        /** El editor ocupa todo menos lo que se lleva el icono. */
+        /** The editor takes up everything except what the icon takes. */
         public void doLayout() {
             if (editor != null && editor.editingComponent != null) {
                 int width = getWidth();

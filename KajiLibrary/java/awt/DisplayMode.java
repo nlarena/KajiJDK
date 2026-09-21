@@ -1,13 +1,12 @@
 package java.awt;
 
 /**
- * Un modo de video: ancho, alto, bits por pixel y frecuencia de refresco.
+ * A video mode: width, height, bits per pixel and refresh rate.
  *
- * <p>Cuatro enteros inmutables. Dos de ellos tienen un valor especial que significa "no aplica" y
- * no son intercambiables: {@code BIT_DEPTH_MULTI} vale -1 y dice que el dispositivo acepta varias
- * profundidades a la vez, mientras que {@code REFRESH_RATE_UNKNOWN} vale 0 y dice que la
- * frecuencia no se pudo averiguar. Un 0 en la profundidad seria una profundidad de cero bits, no un
- * "no se".
+ * <p>Four immutable integers. Two of them have a special value meaning "does not apply", and they
+ * are not interchangeable: {@code BIT_DEPTH_MULTI} is -1 and says the device accepts several depths
+ * at once, while {@code REFRESH_RATE_UNKNOWN} is 0 and says the rate could not be found out. A 0 in
+ * the depth would be a depth of zero bits, not an "unknown".
  */
 public final class DisplayMode {
 
@@ -43,7 +42,7 @@ public final class DisplayMode {
         return refreshRate;
     }
 
-    /** Sobrecarga tipada: evita el casteo cuando ya se sabe que el otro es un DisplayMode. */
+    /** Typed overload: avoids the cast when the other is already known to be a DisplayMode. */
     public boolean equals(DisplayMode dm) {
         if (dm == null) {
             return false;
@@ -63,8 +62,10 @@ public final class DisplayMode {
     }
 
     /**
-     * Los pesos 7 y 13 son primos y distintos a proposito: sin ellos, 800x600 y 600x800 tendrian el
-     * mismo hash, y lo mismo un modo con profundidad y frecuencia intercambiadas.
+     * The JDK's formula: width and height added, depth and refresh rate weighted by 7 and 13. This
+     * note said the weights keep 800x600 and 600x800 from sharing a hash; they do not —width and
+     * height are simply added, so those two collide— and only keep depth and refresh rate from
+     * being swapped unnoticed.
      */
     public int hashCode() {
         return getWidth() + getHeight() + getBitDepth() * 7 + getRefreshRate() * 13;

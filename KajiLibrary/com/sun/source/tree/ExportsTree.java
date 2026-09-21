@@ -3,14 +3,14 @@ package com.sun.source.tree;
 import java.util.List;
 
 /**
- * La directiva `exports` de un modulo. {@link #getModuleNames} es la lista del
- * `to`, vacia cuando la exportacion es a todos — que es la distincion que decide si un paquete es
- * API publica.
+ * A module's `exports` directive. {@link #getModuleNames} is the list of the
+ * `to`, empty when the export is to everybody -- which is the distinction that decides whether
+ * a package is public API.
  */
 public interface ExportsTree extends DirectiveTree {
 
     ExpressionTree getPackageName();
 
-    /** Los modulos del `to`, o vacio si se exporta a todos. */
+    /** The modules of the `to`, or empty if it is exported to everybody. */
     List<? extends ExpressionTree> getModuleNames();
 }

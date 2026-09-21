@@ -3,35 +3,34 @@ package javax.print.attribute;
 import java.io.Serializable;
 
 /**
- * KajiLibrary's javax.print.attribute.HashPrintJobAttributeSet -- un {@link HashAttributeSet} que
- * solo acepta {@link PrintJobAttribute}, o sea atributos de trabajo de impresion.
+ * KajiLibrary's javax.print.attribute.HashPrintJobAttributeSet -- a {@link HashAttributeSet} that
+ * only accepts {@link PrintJobAttribute}s, that is print job attributes.
  *
- * <p>Sin cuerpo, igual que sus tres hermanas: los constructores le pasan
- * {@code PrintJobAttribute.class} a la clase base y la restriccion la hace
- * {@code HashAttributeSet.add}. Ver {@link HashDocAttributeSet} para la explicacion completa del
- * mecanismo.
+ * <p>No body, just like its three siblings: the constructors pass {@code PrintJobAttribute.class}
+ * to the base class and {@code HashAttributeSet.add} does the restriction. See {@link
+ * HashDocAttributeSet} for the full explanation of the mechanism.
  */
 public class HashPrintJobAttributeSet extends HashAttributeSet
         implements PrintJobAttributeSet, Serializable {
 
     private static final long serialVersionUID = -4204473656070350348L;
 
-    /** Vacio. */
+    /** Empty. */
     public HashPrintJobAttributeSet() {
         super(PrintJobAttribute.class);
     }
 
-    /** Con un atributo. NullPointerException si es null. */
+    /** With one attribute. NullPointerException if it is null. */
     public HashPrintJobAttributeSet(PrintJobAttribute attribute) {
         super(attribute, PrintJobAttribute.class);
     }
 
-    /** Con los de otro conjunto del mismo tipo. Un conjunto null da el conjunto vacio. */
+    /** With another set of the same type's attributes. A null set gives the empty set. */
     public HashPrintJobAttributeSet(PrintJobAttributeSet attributes) {
         super(attributes, PrintJobAttribute.class);
     }
 
-    /** Con los del arreglo, en orden: si hay dos de la misma categoria gana el ultimo. */
+    /** With the array's, in order: if there are two of the same category the last one wins. */
     public HashPrintJobAttributeSet(PrintJobAttribute[] attributes) {
         super(attributes, PrintJobAttribute.class);
     }

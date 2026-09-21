@@ -1,32 +1,33 @@
 package javax.management.modelmbean;
 
 /**
- * KajiLibrary's javax.management.modelmbean.InvalidTargetObjectTypeException -- el recurso
- * administrado no es de un tipo que este MBean sepa manejar.
+ * KajiLibrary's javax.management.modelmbean.InvalidTargetObjectTypeException -- the managed
+ * resource is not of a type this MBean knows how to handle.
  *
- * <p>La lanza {@code setManagedResource} cuando el segundo argumento --el <b>tipo</b> de referencia--
- * no es uno de los que la implementacion soporta. El unico que
- * {@link RequiredModelMBean} soporta es {@code "ObjectReference"}: una referencia Java directa.
+ * <p>{@code setManagedResource} throws it when the second argument --the reference <b>type</b>--
+ * is not one of those the implementation supports. The only one {@link RequiredModelMBean}
+ * supports is {@code "ObjectReference"}: a direct Java reference.
  *
- * <p>Los otros tipos que la especificacion nombra --{@code "Handle"}, {@code "IOR"},
- * {@code "EJBHandle"}, {@code "RMIReference"}-- son de un mundo que ya no existe. Que no esten
- * soportados no es una limitacion de esta biblioteca sino del JDK, que tampoco los soporta.
+ * <p>The other types the specification names --{@code "Handle"}, {@code "IOR"},
+ * {@code "EJBHandle"}, {@code "RMIReference"}-- are from a world that no longer exists. That
+ * they are not supported is not a limitation of this library but of the JDK, which does not
+ * support them either.
  */
 public class InvalidTargetObjectTypeException extends Exception {
 
     private static final long serialVersionUID = 1190536278266811217L;
 
-    /** Sin detalle. */
+    /** Without detail. */
     public InvalidTargetObjectTypeException() {
         super("Invalid target object type exception");
     }
 
-    /** Con el tipo que se paso. */
+    /** With the type that was passed. */
     public InvalidTargetObjectTypeException(String s) {
         super("Invalid target object type exception: " + s);
     }
 
-    /** Con la causa y un mensaje. */
+    /** With the cause and a message. */
     public InvalidTargetObjectTypeException(Exception e, String s) {
         super("Invalid target object type exception: " + s
             + ((e == null) ? "" : " " + e.toString()));

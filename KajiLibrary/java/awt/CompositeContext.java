@@ -4,21 +4,22 @@ import java.awt.image.Raster;
 import java.awt.image.WritableRaster;
 
 /**
- * Quien mezcla de verdad los píxeles durante una operación de dibujo.
+ * What really blends the pixels during a drawing operation.
  *
- * <p>Es a {@link Composite} lo que {@link PaintContext} es a {@link Paint}: el `Composite` describe
- * la regla y el contexto la aplica, ya sabiendo con qué formatos de píxel va a trabajar.
+ * <p>It is to {@link Composite} what {@link PaintContext} is to {@link Paint}: the `Composite`
+ * describes the rule and the context applies it, already knowing which pixel formats it will work
+ * with.
  */
 public interface CompositeContext {
 
-    /** Suelta los recursos del contexto. */
+    /** Releases the context's resources. */
     void dispose();
 
     /**
-     * Mezcla el origen con el destino y escribe el resultado.
+     * Blends the source with the destination and writes the result.
      *
-     * <p>`dstOut` puede ser el mismo objeto que `dstIn`, y de hecho suele serlo: componer sobre la
-     * superficie es lo normal.
+     * <p>`dstOut` can be the same object as `dstIn`, and in fact usually is: compositing onto the
+     * surface is the normal case.
      */
     void compose(Raster src, Raster dstIn, WritableRaster dstOut);
 }

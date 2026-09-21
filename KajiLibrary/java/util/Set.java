@@ -10,21 +10,21 @@ public interface Set<E> extends Collection<E> {
     /**
      * A spliterator over these elements.
      *
-     *  <p>DISTINCT, que es lo que hace a un conjunto un conjunto. Un consumidor que deduplica puede
-     * no hacer nada al ver esta caracteristica, y ese ahorro es todo el punto.
+     *  <p>DISTINCT, which is what makes a set a set. A consumer that deduplicates can do nothing on
+     * seeing this characteristic, and that saving is the whole point.
      *
      */
     default Spliterator<E> spliterator() {
         return Spliterators.spliterator(this, Spliterator.DISTINCT);
     }
 
-    // ---- las factorias inmutables (JDK 9+) --------------------------------------------------
+    // ---- the immutable factories (JDK 9+) ---------------------------------------------------
     //
-    // Devuelven un conjunto **inmutable** que rechaza nulos y **elementos repetidos**. Lo segundo
-    // es del contrato, no una eleccion nuestra: `Set.of("a", "a")` es IllegalArgumentException en
-    // el JDK, no un conjunto de un elemento. Un repetido en un literal es un bug del literal, y
-    // tragarselo lo esconde. `copyOf`, en cambio, si descarta repetidos: copiar de una coleccion
-    // que los tiene es normal.
+    // They return an **immutable** set that rejects nulls and **repeated elements**. The second is
+    // the contract's, not a choice of ours: `Set.of("a", "a")` is IllegalArgumentException in the
+    // JDK, not a set of one element. A repeat in a literal is a bug in the literal, and swallowing it
+    // hides it. `copyOf`, on the other hand, does drop repeats: copying from a collection that has
+    // them is normal.
 
     static <E> Set<E> of() {
         return FixedSet.fromArray(new Object[0], 0);
@@ -135,12 +135,12 @@ public interface Set<E> extends Collection<E> {
         return FixedSet.fromArray(a, 10);
     }
 
-    // El conjunto de los elementos dados.
+    // The set of the given elements.
     static <E> Set<E> of(E... elements) {
         return FixedSet.fromArray(elements, elements.length);
     }
 
-    // Una copia inmutable de `coll`, con los repetidos descartados.
+    // An immutable copy of `coll`, with the repeats dropped.
     static <E> Set<E> copyOf(Collection<? extends E> coll) {
         Object[] a = new Object[coll.size()];
         int i = 0;

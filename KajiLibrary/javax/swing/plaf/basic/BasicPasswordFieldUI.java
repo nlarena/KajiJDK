@@ -8,25 +8,25 @@ import javax.swing.text.PasswordView;
 import javax.swing.text.View;
 
 /**
- * El aspecto basico de un campo de contrasena.
+ * The basic look and feel of a password field.
  *
- * <p>Dos cosas propias, y las dos son la misma idea: que no se lea lo escrito. La vista es una
- * {@link PasswordView}, que dibuja un caracter fijo en lugar de cada letra, y el caracter se
- * instala aca -- {@code PasswordField.echoChar} --.
+ * <p>Two things of its own, and both are the same idea: that what is typed should not be read.
+ * The view is a {@link PasswordView}, which draws a fixed character in place of each letter, and
+ * the character is installed here -- {@code PasswordField.echoChar} --.
  *
- * <p>El valor medido en Metal (JDK 25) es el punto grueso {@code U+2022}, no el asterisco: el
- * asterisco es lo que trae {@link javax.swing.JPasswordField} de fabrica y lo que el aspecto pisa
- * apenas se instala.
+ * <p>The value measured in Metal (JDK 25) is the bullet {@code U+2022}, not the asterisk: the
+ * asterisk is what {@link javax.swing.JPasswordField} brings from the factory and what the look
+ * and feel overwrites as soon as it is installed.
  */
 public class BasicPasswordFieldUI extends BasicTextFieldUI {
 
-    private static final char ECO_POR_OMISION = '•';
+    private static final char DEFAULT_ECHO = '•';
 
     public BasicPasswordFieldUI() {
         super();
     }
 
-    /** Uno nuevo por campo: un UI de texto guarda el componente. */
+    /** A new one per field: a text look and feel keeps the component. */
     public static ComponentUI createUI(JComponent c) {
         return new BasicPasswordFieldUI();
     }
@@ -35,14 +35,14 @@ public class BasicPasswordFieldUI extends BasicTextFieldUI {
         return "PasswordField";
     }
 
-    /** Lo de siempre mas el caracter de eco; ver la nota de la clase. */
+    /** The usual plus the echo character; see the class note. */
     protected void installDefaults() {
         super.installDefaults();
         LookAndFeel.installProperty(getComponent(), "echoChar",
-                Character.valueOf(ECO_POR_OMISION));
+                Character.valueOf(DEFAULT_ECHO));
     }
 
-    /** Una {@link PasswordView}; ver la nota de la clase. */
+    /** A {@link PasswordView}; see the class note. */
     public View create(Element elem) {
         return new PasswordView(elem);
     }

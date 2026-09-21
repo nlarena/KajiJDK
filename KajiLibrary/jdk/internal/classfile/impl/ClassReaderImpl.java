@@ -18,28 +18,28 @@ import java.util.List;
 import java.util.Optional;
 import java.util.function.Function;
 
-// El lector de bajo nivel: los bytes del archivo, el pool ya construido y validado, y el acceso por
-// offset que usan los mapeadores de atributos.
+// The low-level reader: the bytes of the file, the pool already built and validated, and the access
+// by offset that the attribute mappers use.
 //
-// La validación es estricta a propósito, y ese es el punto de diseño del archivo. Al construirse:
+// The validation is strict on purpose, and that is the design point of the file. On construction:
 //
-//   1. exige el magic, un `constant_pool_count` &ge; 1 y que el pool entre en el archivo;
-//   2. recorre las entradas comprobando que cada etiqueta sea una de las diecisiete y que el cuerpo
-//      de cada una entre en lo que queda;
-//   3. materializa las diecisiete formas, y al hacerlo comprueba que cada índice referenciado exista
-//      y tenga LA ETIQUETA que corresponde — un `CONSTANT_Class` que apunte a un `CONSTANT_Integer`
-//      no pasa;
-//   4. exige que la ranura que sigue a un `long` o a un `double` no se use.
+//   1. it demands the magic, a `constant_pool_count` &ge; 1 and that the pool fit in the file; 2.
+//   it walks the entries checking that each tag is one of the seventeen and that the body of each
+//   one fits in what is left; 3. it materialises the seventeen forms, and in doing so checks that
+//   each referenced index exists and has THE TAG that corresponds -- a `CONSTANT_Class` pointing at
+//   a `CONSTANT_Integer` does not pass; 4. it demands that the slot following a `long` or a
+//   `double` not be used.
 //
-// Un archivo que no cumple todo eso tira `ConstantPoolException` acá, al abrirse, y no más tarde
-// desde alguna llamada suelta. Aceptar un `.class` mal formado y devolver un modelo a medio armar
-// sería peor que no tener lector.
+// A file that does not meet all that throws `ConstantPoolException` here, on opening, and not later
+// from some loose call. Accepting a malformed `.class` and returning a half-built model would be
+// worse than having no reader.
 public final class ClassReaderImpl implements ClassReader {
 
-    // Copias locales de las etiquetas de PoolEntry. No son un duplicado por gusto: el generador
-    // de bytecode no pliega una constante de otra unidad de compilación en una etiqueta `case`
-    // (ver el informe), así que un `case TAG_UTF8:` no compila. Los valores son los
-    // del JVMS §4.4 y hay una prueba que los compara contra PoolEntry.
+    // Local copies of the tags of PoolEntry. They are not a duplicate for the fun of it: the frozen
+    // javac's bytecode generator does not fold a constant of another compilation unit into a `case`
+    // label (finding #461), so a `case TAG_UTF8:` does not compile. The values are those of JVMS
+    // §4.4. The note said a test compares them against PoolEntry; no such test was found in the
+    // tree.
     private static final int TAG_UTF8 = 1;
     private static final int TAG_INTEGER = 3;
     private static final int TAG_FLOAT = 4;
@@ -60,73 +60,74 @@ public final class ClassReaderImpl implements ClassReader {
 
     private final byte[] bytes;
     private final int poolCount;
-    // Por índice de pool: la etiqueta y el offset del primer byte del `info`. Índice 0 y las ranuras
-    // muertas quedan con etiqueta 0.
-    private final int[] etiquetas;
+    // By pool index: the tag and the offset of the first byte of the `info`. Index 0 and the dead
+    // slots are left with tag 0.
+    private final int[] labels;
     private final int[] offsets;
-    private final PoolEntry[] entradas;
-    private final Function<Utf8Entry, AttributeMapper<?>> aMedida;
+    private final PoolEntry[] entries;
+    private final Function<Utf8Entry, AttributeMapper<?>> custom;
 
-    // El offset justo después del pool, donde arranca el `access_flags`.
-    final int offsetCabecera;
+    // The offset right after the pool, where the `access_flags` starts.
+    final int headerOffset;
     private final int accessFlags;
-    private final ClassEntry estaClase;
-    private final ClassEntry superClase;
+    private final ClassEntry thisClass;
+    private final ClassEntry superClass;
 
-    // La tabla de `BootstrapMethods`, que no está en el pool sino en un atributo de la clase. Se
-    // llena cuando el `ClassModel` termina de leer los atributos, porque hasta entonces no se sabe
-    // dónde está.
+    // The `BootstrapMethods` table, which is not in the pool but in an attribute of the class. It
+    // is filled when the `ClassModel` finishes reading the attributes, because until then it is not
+    // known where it is.
     private List<BootstrapMethodEntry> bsms;
 
-    public ClassReaderImpl(byte[] bytes, Function<Utf8Entry, AttributeMapper<?>> aMedida) {
+    public ClassReaderImpl(byte[] bytes, Function<Utf8Entry, AttributeMapper<?>> custom) {
         this.bytes = bytes;
-        this.aMedida = aMedida;
+        this.custom = custom;
         if (bytes.length < 10) {
             throw new IllegalArgumentException(
-                    "el archivo tiene " + bytes.length + " bytes: no llega ni al encabezado");
+                    "the file has " + bytes.length + " bytes: it does not even reach the header");
         }
-        if (leerInt(0) != ClassFile.MAGIC_NUMBER) {
-            throw new IllegalArgumentException("no empieza con 0xCAFEBABE");
+        if (rawInt(0) != ClassFile.MAGIC_NUMBER) {
+            throw new IllegalArgumentException("it does not start with 0xCAFEBABE");
         }
-        this.poolCount = leerU2(8);
+        this.poolCount = rawU2(8);
         if (this.poolCount < 1) {
             throw new ConstantPoolException("constant_pool_count = 0");
         }
-        this.etiquetas = new int[this.poolCount];
+        this.labels = new int[this.poolCount];
         this.offsets = new int[this.poolCount];
-        this.entradas = new PoolEntry[this.poolCount];
-        this.offsetCabecera = recorrerPool();
-        // Materializar todo obliga a que cada referencia interna se valide ahora y no después.
+        this.entries = new PoolEntry[this.poolCount];
+        this.headerOffset = walkPool();
+        // Materialising everything forces each internal reference to be validated now and not
+        // later.
         for (int i = 1; i < this.poolCount; i++) {
-            if (this.etiquetas[i] != 0) {
-                materializar(i);
+            if (this.labels[i] != 0) {
+                materialize(i);
             }
         }
-        exigir(this.offsetCabecera + 6 <= bytes.length, "el archivo se corta antes de this_class");
-        this.accessFlags = leerU2(this.offsetCabecera);
-        this.estaClase = entryByIndex(leerU2(this.offsetCabecera + 2), ClassEntry.class);
-        int idxSuper = leerU2(this.offsetCabecera + 4);
-        this.superClase = idxSuper == 0 ? null : entryByIndex(idxSuper, ClassEntry.class);
+        require(this.headerOffset + 6 <= bytes.length, "the file is cut short before this_class");
+        this.accessFlags = rawU2(this.headerOffset);
+        this.thisClass = entryByIndex(rawU2(this.headerOffset + 2), ClassEntry.class);
+        int idxSuper = rawU2(this.headerOffset + 4);
+        this.superClass = idxSuper == 0 ? null : entryByIndex(idxSuper, ClassEntry.class);
     }
 
-    // --- Paso 1: el recorrido del pool. Devuelve el offset del `access_flags`. ---
+    // --- Step 1: the walk of the pool. It returns the offset of the `access_flags`. ---
 
-    private int recorrerPool() {
+    private int walkPool() {
         int p = 10;
         int i = 1;
         while (i < this.poolCount) {
-            exigir(p < this.bytes.length, "el pool se sale del archivo en el índice " + i);
+            require(p < this.bytes.length, "the pool runs off the file at index " + i);
             int tag = this.bytes[p] & 0xFF;
-            int cuerpo = largoDeCuerpo(tag, p, i);
-            exigir(p + 1 + cuerpo <= this.bytes.length,
-                    "la entrada " + i + " (tag " + tag + ") se sale del archivo");
-            this.etiquetas[i] = tag;
+            int body = bodyLength(tag, p, i);
+            require(p + 1 + body <= this.bytes.length,
+                    "entry " + i + " (tag " + tag + ") runs off the file");
+            this.labels[i] = tag;
             this.offsets[i] = p + 1;
-            p += 1 + cuerpo;
+            p += 1 + body;
             if (tag == PoolEntry.TAG_LONG || tag == PoolEntry.TAG_DOUBLE) {
-                // La ranura siguiente es inutilizable (JVMS §4.4.5) y queda con etiqueta 0.
-                exigir(i + 1 < this.poolCount,
-                        "un long/double en el índice " + i + " no deja lugar para su segunda ranura");
+                // The following slot is unusable (JVMS §4.4.5) and is left with tag 0.
+                require(i + 1 < this.poolCount,
+                        "a long/double at index " + i + " leaves no room for its second slot");
                 i += 2;
             } else {
                 i += 1;
@@ -135,11 +136,11 @@ public final class ClassReaderImpl implements ClassReader {
         return p;
     }
 
-    private int largoDeCuerpo(int tag, int p, int i) {
+    private int bodyLength(int tag, int p, int i) {
         switch (tag) {
             case TAG_UTF8:
-                exigir(p + 3 <= this.bytes.length, "un CONSTANT_Utf8 truncado en el índice " + i);
-                return 2 + leerU2(p + 1);
+                require(p + 3 <= this.bytes.length, "a truncated CONSTANT_Utf8 at index " + i);
+                return 2 + rawU2(p + 1);
             case TAG_INTEGER:
             case TAG_FLOAT:
                 return 4;
@@ -163,195 +164,196 @@ public final class ClassReaderImpl implements ClassReader {
                 return 3;
             default:
                 throw new ConstantPoolException(
-                        "etiqueta desconocida " + tag + " en el índice " + i);
+                        "unknown tag " + tag + " at index " + i);
         }
     }
 
-    // --- Paso 2: materializar una entrada, validando lo que referencia. ---
+    // --- Step 2: materialising an entry, validating what it references. ---
 
-    private PoolEntry materializar(int i) {
-        PoolEntry ya = this.entradas[i];
-        if (ya != null) {
-            return ya;
+    private PoolEntry materialize(int i) {
+        PoolEntry existing = this.entries[i];
+        if (existing != null) {
+            return existing;
         }
-        int tag = this.etiquetas[i];
+        int tag = this.labels[i];
         int p = this.offsets[i];
         PoolEntry e;
         switch (tag) {
             case TAG_UTF8:
-                e = new Utf8EntryImpl(this, i, decodificarUtf8(p + 2, leerU2(p)));
+                e = new Utf8EntryImpl(this, i, decodeUtf8(p + 2, rawU2(p)));
                 break;
             case TAG_INTEGER:
-                e = new IntegerEntryImpl(this, i, leerInt(p));
+                e = new IntegerEntryImpl(this, i, rawInt(p));
                 break;
             case TAG_FLOAT:
-                e = new FloatEntryImpl(this, i, Float.intBitsToFloat(leerInt(p)));
+                e = new FloatEntryImpl(this, i, Float.intBitsToFloat(rawInt(p)));
                 break;
             case TAG_LONG:
-                e = new LongEntryImpl(this, i, leerLong(p));
+                e = new LongEntryImpl(this, i, rawLong(p));
                 break;
             case TAG_DOUBLE:
-                e = new DoubleEntryImpl(this, i, Double.longBitsToDouble(leerLong(p)));
+                e = new DoubleEntryImpl(this, i, Double.longBitsToDouble(rawLong(p)));
                 break;
             case TAG_CLASS:
-                e = new ClassEntryImpl(this, i, utf8En(leerU2(p), i));
+                e = new ClassEntryImpl(this, i, utf8At(rawU2(p), i));
                 break;
             case TAG_STRING:
-                e = new StringEntryImpl(this, i, utf8En(leerU2(p), i));
+                e = new StringEntryImpl(this, i, utf8At(rawU2(p), i));
                 break;
             case TAG_METHOD_TYPE:
-                e = new MethodTypeEntryImpl(this, i, utf8En(leerU2(p), i));
+                e = new MethodTypeEntryImpl(this, i, utf8At(rawU2(p), i));
                 break;
             case TAG_MODULE:
-                e = new ModuleEntryImpl(this, i, utf8En(leerU2(p), i));
+                e = new ModuleEntryImpl(this, i, utf8At(rawU2(p), i));
                 break;
             case TAG_PACKAGE:
-                e = new PackageEntryImpl(this, i, utf8En(leerU2(p), i));
+                e = new PackageEntryImpl(this, i, utf8At(rawU2(p), i));
                 break;
             case TAG_NAME_AND_TYPE:
                 e = new NameAndTypeEntryImpl(this, i,
-                        utf8En(leerU2(p), i),
-                        utf8En(leerU2(p + 2), i));
+                        utf8At(rawU2(p), i),
+                        utf8At(rawU2(p + 2), i));
                 break;
             case TAG_FIELDREF:
                 e = new FieldRefEntryImpl(this, i,
-                        claseEn(leerU2(p), i),
-                        natEn(leerU2(p + 2), i));
+                        classAt(rawU2(p), i),
+                        natAt(rawU2(p + 2), i));
                 break;
             case TAG_METHODREF:
                 e = new MethodRefEntryImpl(this, i,
-                        claseEn(leerU2(p), i),
-                        natEn(leerU2(p + 2), i));
+                        classAt(rawU2(p), i),
+                        natAt(rawU2(p + 2), i));
                 break;
             case TAG_INTERFACE_METHODREF:
                 e = new InterfaceMethodRefEntryImpl(this, i,
-                        claseEn(leerU2(p), i),
-                        natEn(leerU2(p + 2), i));
+                        classAt(rawU2(p), i),
+                        natAt(rawU2(p + 2), i));
                 break;
             case TAG_METHOD_HANDLE: {
                 int refKind = this.bytes[p] & 0xFF;
                 if (refKind < 1 || refKind > 9) {
                     throw new ConstantPoolException(
-                            "reference_kind " + refKind + " fuera de 1..9 en el índice " + i);
+                            "reference_kind " + refKind + " outside 1..9 at index " + i);
                 }
-                MemberRefEntry ref = miembroEn(leerU2(p + 1), i);
-                exigirCoherenciaDeHandle(refKind, ref, i);
+                MemberRefEntry ref = memberAt(rawU2(p + 1), i);
+                requireHandleConsistency(refKind, ref, i);
                 e = new MethodHandleEntryImpl(this, i, refKind, ref);
                 break;
             }
             case TAG_DYNAMIC:
-                e = new ConstantDynamicEntryImpl(this, i, leerU2(p),
-                        natEn(leerU2(p + 2), i));
+                e = new ConstantDynamicEntryImpl(this, i, rawU2(p),
+                        natAt(rawU2(p + 2), i));
                 break;
             case TAG_INVOKE_DYNAMIC:
-                e = new InvokeDynamicEntryImpl(this, i, leerU2(p),
-                        natEn(leerU2(p + 2), i));
+                e = new InvokeDynamicEntryImpl(this, i, rawU2(p),
+                        natAt(rawU2(p + 2), i));
                 break;
             default:
-                throw new ConstantPoolException("etiqueta " + tag + " en el índice " + i);
+                throw new ConstantPoolException("tag " + tag + " at index " + i);
         }
-        this.entradas[i] = e;
+        this.entries[i] = e;
         return e;
     }
 
-    // Lo que §4.4.8 exige de la combinación kind/referencia. Es la única regla del pool que no se
-    // deduce de las etiquetas, y dejarla afuera dejaría pasar handles imposibles.
-    private void exigirCoherenciaDeHandle(int refKind, MemberRefEntry ref, int i) {
-        boolean esCampo = ref.tag() == PoolEntry.TAG_FIELDREF;
+    // What §4.4.8 demands of the kind/reference combination. It is the only pool rule that is not
+    // deduced from the tags, and leaving it out would let impossible handles through.
+    private void requireHandleConsistency(int refKind, MemberRefEntry ref, int i) {
+        boolean isField = ref.tag() == PoolEntry.TAG_FIELDREF;
         if (refKind <= 4) {
-            if (!esCampo) {
-                throw new ConstantPoolException("el reference_kind " + refKind
-                        + " del índice " + i + " exige un CONSTANT_Fieldref");
+            if (!isField) {
+                throw new ConstantPoolException("reference_kind " + refKind
+                        + " of index " + i + " requires a CONSTANT_Fieldref");
             }
         } else {
-            if (esCampo) {
-                throw new ConstantPoolException("el reference_kind " + refKind
-                        + " del índice " + i + " no admite un CONSTANT_Fieldref");
+            if (isField) {
+                throw new ConstantPoolException("reference_kind " + refKind
+                        + " of index " + i + " does not admit a CONSTANT_Fieldref");
             }
-            boolean esInit = ref.name().equalsString("<init>");
-            if (refKind == 8 && !esInit) {
+            boolean isInit = ref.name().equalsString("<init>");
+            if (refKind == 8 && !isInit) {
                 throw new ConstantPoolException(
-                        "un REF_newInvokeSpecial (índice " + i + ") tiene que apuntar a <init>");
+                        "a REF_newInvokeSpecial (index " + i + ") has to point at <init>");
             }
-            if (refKind != 8 && esInit) {
-                throw new ConstantPoolException("el reference_kind " + refKind
-                        + " del índice " + i + " no puede apuntar a <init>");
+            if (refKind != 8 && isInit) {
+                throw new ConstantPoolException("reference_kind " + refKind
+                        + " of index " + i + " cannot point at <init>");
             }
         }
     }
 
-    // El UTF-8 *modificado* de §4.4.7: el `NUL` viaja en dos bytes y los caracteres suplementarios en
-    // seis (dos sustitutos de tres bytes cada uno). No es UTF-8 y no se puede delegar en un decoder
-    // estándar, que rechazaría lo primero y colapsaría lo segundo.
-    private String decodificarUtf8(int desde, int largo) {
-        exigir(desde + largo <= this.bytes.length, "un CONSTANT_Utf8 se sale del archivo");
-        StringBuilder sb = new StringBuilder(largo);
-        int p = desde;
-        int fin = desde + largo;
-        while (p < fin) {
+    // The *modified* UTF-8 of §4.4.7: `NUL` travels in two bytes and the supplementary characters
+    // in six (two surrogates of three bytes each). It is not UTF-8 and cannot be delegated to a
+    // standard decoder, which would reject the first and collapse the second.
+    private String decodeUtf8(int from, int length) {
+        require(from + length <= this.bytes.length, "a CONSTANT_Utf8 runs off the file");
+        StringBuilder sb = new StringBuilder(length);
+        int p = from;
+        int end = from + length;
+        while (p < end) {
             int b1 = this.bytes[p] & 0xFF;
             if (b1 < 0x80) {
                 if (b1 == 0) {
-                    throw new ConstantPoolException("un 0x00 crudo dentro de un CONSTANT_Utf8");
+                    throw new ConstantPoolException("a raw 0x00 inside a CONSTANT_Utf8");
                 }
                 sb.append((char) b1);
                 p += 1;
             } else if ((b1 & 0xE0) == 0xC0) {
-                exigir(p + 1 < fin, "un CONSTANT_Utf8 se corta en medio de una secuencia");
+                require(p + 1 < end, "a CONSTANT_Utf8 is cut short in the middle of a sequence");
                 int b2 = this.bytes[p + 1] & 0xFF;
-                exigir((b2 & 0xC0) == 0x80, "byte de continuación inválido en un CONSTANT_Utf8");
+                require((b2 & 0xC0) == 0x80, "invalid continuation byte in a CONSTANT_Utf8");
                 sb.append((char) (((b1 & 0x1F) << 6) | (b2 & 0x3F)));
                 p += 2;
             } else if ((b1 & 0xF0) == 0xE0) {
-                exigir(p + 2 < fin, "un CONSTANT_Utf8 se corta en medio de una secuencia");
+                require(p + 2 < end, "a CONSTANT_Utf8 is cut short in the middle of a sequence");
                 int b2 = this.bytes[p + 1] & 0xFF;
                 int b3 = this.bytes[p + 2] & 0xFF;
-                exigir((b2 & 0xC0) == 0x80 && (b3 & 0xC0) == 0x80,
-                        "byte de continuación inválido en un CONSTANT_Utf8");
+                require((b2 & 0xC0) == 0x80 && (b3 & 0xC0) == 0x80,
+                        "invalid continuation byte in a CONSTANT_Utf8");
                 sb.append((char) (((b1 & 0x0F) << 12) | ((b2 & 0x3F) << 6) | (b3 & 0x3F)));
                 p += 3;
             } else {
                 throw new ConstantPoolException(
-                        "byte 0x" + Integer.toHexString(b1) + " inválido en un CONSTANT_Utf8");
+                        "byte 0x" + Integer.toHexString(b1) + " invalid in a CONSTANT_Utf8");
             }
         }
         return sb.toString();
     }
 
-    private void exigir(boolean cond, String mensaje) {
+    private void require(boolean cond, String message) {
         if (!cond) {
-            throw new ConstantPoolException(mensaje);
+            throw new ConstantPoolException(message);
         }
     }
 
-    // Envolturas sin genéricos de `exigirTipo`. Existen porque el compilador borra el parámetro de
-    // tipo a su cota cuando la llamada genérica va directo como argumento de otra llamada, y
-    // entonces no encuentra el constructor (ver el informe). Con estas la inferencia no hace falta.
-    private Utf8Entry utf8En(int indice, int desde) {
-        return exigirTipo(indice, Utf8Entry.class, desde);
+    // Non-generic wrappers of `requireType`. They exist because the compiler used to erase the type
+    // parameter to its bound when the generic call went straight in as an argument of another call,
+    // and then did not find the constructor. The frozen javac compiles the direct form now (checked
+    // 2026-09-18), so they are no longer needed; they are harmless.
+    private Utf8Entry utf8At(int index, int from) {
+        return requireType(index, Utf8Entry.class, from);
     }
 
-    private ClassEntry claseEn(int indice, int desde) {
-        return exigirTipo(indice, ClassEntry.class, desde);
+    private ClassEntry classAt(int index, int from) {
+        return requireType(index, ClassEntry.class, from);
     }
 
-    private NameAndTypeEntry natEn(int indice, int desde) {
-        return exigirTipo(indice, NameAndTypeEntry.class, desde);
+    private NameAndTypeEntry natAt(int index, int from) {
+        return requireType(index, NameAndTypeEntry.class, from);
     }
 
-    private MemberRefEntry miembroEn(int indice, int desde) {
-        return exigirTipo(indice, MemberRefEntry.class, desde);
+    private MemberRefEntry memberAt(int index, int from) {
+        return requireType(index, MemberRefEntry.class, from);
     }
 
-    private <T extends PoolEntry> T exigirTipo(int indice, Class<T> cls, int desde) {
-        if (indice < 1 || indice >= this.poolCount || this.etiquetas[indice] == 0) {
-            throw new ConstantPoolException("el índice " + desde + " referencia el índice "
-                    + indice + ", que no es una entrada del pool");
+    private <T extends PoolEntry> T requireType(int index, Class<T> cls, int from) {
+        if (index < 1 || index >= this.poolCount || this.labels[index] == 0) {
+            throw new ConstantPoolException("index " + from + " references index "
+                    + index + ", which is not a pool entry");
         }
-        PoolEntry e = materializar(indice);
+        PoolEntry e = materialize(index);
         if (!cls.isInstance(e)) {
-            throw new ConstantPoolException("el índice " + desde + " referencia el índice " + indice
-                    + ", que es " + e.getClass().getSimpleName() + " y no " + cls.getSimpleName());
+            throw new ConstantPoolException("index " + from + " references index " + index
+                    + ", a " + e.getClass().getSimpleName() + " and not " + cls.getSimpleName());
         }
         return (T) e;
     }
@@ -359,10 +361,10 @@ public final class ClassReaderImpl implements ClassReader {
     // --- ConstantPool ---
 
     public PoolEntry entryByIndex(int index) {
-        if (index < 1 || index >= this.poolCount || this.etiquetas[index] == 0) {
-            throw new ConstantPoolException("índice de pool inválido: " + index);
+        if (index < 1 || index >= this.poolCount || this.labels[index] == 0) {
+            throw new ConstantPoolException("invalid pool index: " + index);
         }
-        return materializar(index);
+        return materialize(index);
     }
 
     public int size() {
@@ -372,57 +374,57 @@ public final class ClassReaderImpl implements ClassReader {
     public <T extends PoolEntry> T entryByIndex(int index, Class<T> cls) {
         PoolEntry e = entryByIndex(index);
         if (!cls.isInstance(e)) {
-            throw new ConstantPoolException("el índice " + index + " es "
-                    + e.getClass().getSimpleName() + " y no " + cls.getSimpleName());
+            throw new ConstantPoolException("index " + index + " is "
+                    + e.getClass().getSimpleName() + " and not " + cls.getSimpleName());
         }
         return (T) e;
     }
 
     public BootstrapMethodEntry bootstrapMethodEntry(int index) {
-        List<BootstrapMethodEntry> tabla = this.bsms;
-        if (tabla == null) {
+        List<BootstrapMethodEntry> table = this.bsms;
+        if (table == null) {
             throw new ConstantPoolException(
-                    "la clase no tiene atributo BootstrapMethods, y el índice " + index
-                    + " lo necesita");
+                    "the class has no BootstrapMethods attribute, and index " + index
+                    + " needs it");
         }
-        if (index < 0 || index >= tabla.size()) {
-            throw new ConstantPoolException("índice de BootstrapMethods fuera de rango: " + index);
+        if (index < 0 || index >= table.size()) {
+            throw new ConstantPoolException("BootstrapMethods index out of range: " + index);
         }
-        return tabla.get(index);
+        return table.get(index);
     }
 
     public int bootstrapMethodCount() {
         return this.bsms == null ? 0 : this.bsms.size();
     }
 
-    // Lo llama `ClassModelImpl` cuando encuentra el atributo, que es el único momento en que se
-    // puede saber dónde está la tabla.
-    void tablaDeArranque(int offsetCuerpo) {
-        int n = leerU2(offsetCuerpo);
-        List<BootstrapMethodEntry> tabla = new ArrayList<BootstrapMethodEntry>();
-        int p = offsetCuerpo + 2;
+    // `ClassModelImpl` calls it when it finds the attribute, which is the only moment at which it
+    // can be known where the table is.
+    void bootstrapTable(int bodyOffset) {
+        int n = rawU2(bodyOffset);
+        List<BootstrapMethodEntry> table = new ArrayList<BootstrapMethodEntry>();
+        int p = bodyOffset + 2;
         for (int i = 0; i < n; i++) {
-            exigir(p + 4 <= this.bytes.length, "BootstrapMethods truncado");
-            MethodHandleEntry handle = entryByIndex(leerU2(p), MethodHandleEntry.class);
-            int nargs = leerU2(p + 2);
+            require(p + 4 <= this.bytes.length, "truncated BootstrapMethods");
+            MethodHandleEntry handle = entryByIndex(rawU2(p), MethodHandleEntry.class);
+            int nargs = rawU2(p + 2);
             p += 4;
             List<LoadableConstantEntry> args = new ArrayList<LoadableConstantEntry>();
             for (int j = 0; j < nargs; j++) {
-                exigir(p + 2 <= this.bytes.length, "BootstrapMethods truncado");
+                require(p + 2 <= this.bytes.length, "truncated BootstrapMethods");
                 LoadableConstantEntry arg =
-                        entryByIndex(leerU2(p), LoadableConstantEntry.class);
+                        entryByIndex(rawU2(p), LoadableConstantEntry.class);
                 args.add(arg);
                 p += 2;
             }
-            tabla.add(new BootstrapMethodEntryImpl(this, i, handle, args));
+            table.add(new BootstrapMethodEntryImpl(this, i, handle, args));
         }
-        this.bsms = tabla;
+        this.bsms = table;
     }
 
     // --- ClassReader ---
 
     public Function<Utf8Entry, AttributeMapper<?>> customAttributes() {
-        return this.aMedida;
+        return this.custom;
     }
 
     public int flags() {
@@ -430,11 +432,11 @@ public final class ClassReaderImpl implements ClassReader {
     }
 
     public ClassEntry thisClassEntry() {
-        return this.estaClase;
+        return this.thisClass;
     }
 
     public Optional<ClassEntry> superclassEntry() {
-        return Optional.ofNullable(this.superClase);
+        return Optional.ofNullable(this.superClass);
     }
 
     public int classfileLength() {
@@ -460,33 +462,33 @@ public final class ClassReaderImpl implements ClassReader {
     }
 
     public int readU1(int offset) {
-        rango(offset, 1);
+        range(offset, 1);
         return this.bytes[offset] & 0xFF;
     }
 
     public int readU2(int offset) {
-        rango(offset, 2);
-        return leerU2(offset);
+        range(offset, 2);
+        return rawU2(offset);
     }
 
     public int readS1(int offset) {
-        rango(offset, 1);
+        range(offset, 1);
         return this.bytes[offset];
     }
 
     public int readS2(int offset) {
-        rango(offset, 2);
-        return (short) leerU2(offset);
+        range(offset, 2);
+        return (short) rawU2(offset);
     }
 
     public int readInt(int offset) {
-        rango(offset, 4);
-        return leerInt(offset);
+        range(offset, 4);
+        return rawInt(offset);
     }
 
     public long readLong(int offset) {
-        rango(offset, 8);
-        return leerLong(offset);
+        range(offset, 8);
+        return rawLong(offset);
     }
 
     public float readFloat(int offset) {
@@ -498,40 +500,40 @@ public final class ClassReaderImpl implements ClassReader {
     }
 
     public byte[] readBytes(int offset, int len) {
-        rango(offset, len);
+        range(offset, len);
         byte[] r = new byte[len];
         System.arraycopy(this.bytes, offset, r, 0, len);
         return r;
     }
 
     public void copyBytesTo(BufWriter buf, int offset, int len) {
-        rango(offset, len);
+        range(offset, len);
         buf.writeBytes(this.bytes, offset, len);
     }
 
-    private void rango(int offset, int len) {
+    private void range(int offset, int len) {
         if (offset < 0 || len < 0 || offset + len > this.bytes.length) {
             throw new ConstantPoolException(
-                    "lectura fuera del archivo: offset " + offset + ", " + len + " bytes, archivo de "
+                    "read outside the file: offset " + offset + ", " + len + " bytes, file of "
                     + this.bytes.length);
         }
     }
 
-    // Lecturas sin chequeo, para uso interno donde el rango ya se validó.
-    int leerU2(int p) {
+    // Unchecked reads, for internal use where the range was already validated.
+    int rawU2(int p) {
         return ((this.bytes[p] & 0xFF) << 8) | (this.bytes[p + 1] & 0xFF);
     }
 
-    int leerInt(int p) {
+    int rawInt(int p) {
         return ((this.bytes[p] & 0xFF) << 24) | ((this.bytes[p + 1] & 0xFF) << 16)
                 | ((this.bytes[p + 2] & 0xFF) << 8) | (this.bytes[p + 3] & 0xFF);
     }
 
-    long leerLong(int p) {
-        return ((long) leerInt(p) << 32) | (leerInt(p + 4) & 0xFFFFFFFFL);
+    long rawLong(int p) {
+        return ((long) rawInt(p) << 32) | (rawInt(p + 4) & 0xFFFFFFFFL);
     }
 
-    int largoDelArchivo() {
+    int fileLength() {
         return this.bytes.length;
     }
 }

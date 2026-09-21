@@ -7,57 +7,57 @@ import java.util.Stack;
 import java.util.Vector;
 
 /**
- * Un nodo de arbol que guarda un objeto y una lista de hijos.
+ * A tree node that keeps an object and a list of children.
  *
- * <h2>El nodo no es el dato</h2>
+ * <h2>The node is not the datum</h2>
  *
- * <p>Cada nodo tiene un {@code userObject}: el dato que representa. El nodo es la estructura -- el
- * padre, los hijos --, el objeto es lo que le importa al programa. Separarlos permite armar un
- * arbol sobre datos que ya existen sin tocarlos.
+ * <p>Each node has a {@code userObject}: the datum it represents. The node is the structure --
+ * the parent, the children --, the object is what matters to the program. Separating them allows
+ * building a tree over data that already exists without touching it.
  *
- * <p>{@link #toString} devuelve el {@code toString} del objeto, no del nodo. Es lo que hace que un
- * arbol de cadenas se vea bien sin escribir un dibujante.
+ * <p>{@link #toString} returns the object's {@code toString}, not the node's. It is what makes a
+ * tree of strings look right without writing a renderer.
  *
- * <h2>Permitir hijos no es tener hijos</h2>
+ * <h2>Allowing children is not having children</h2>
  *
- * <p>{@link #setAllowsChildren} decide si el nodo es una hoja aunque no tenga hijos ahora. Una
- * carpeta vacia permite hijos y por eso lleva el triangulito de desplegar; un archivo no. Sin esa
- * distincion, una carpeta vacia se veria como un archivo.
+ * <p>{@link #setAllowsChildren} decides whether the node is a leaf even though it has no children
+ * now. An empty folder allows children and that is why it carries the little expand triangle; a
+ * file does not. Without that distinction, an empty folder would look like a file.
  *
- * <h2>Los recorridos</h2>
+ * <h2>The traversals</h2>
  *
- * <p>Hay cuatro, y no son lo mismo. En preorden el padre viene antes que sus hijos; en posorden
- * despues; por niveles se recorre fila por fila. El que se quiere casi siempre es preorden, que es
- * el orden en que se ven las filas de un arbol desplegado.
+ * <p>There are four, and they are not the same. In preorder the parent comes before its children;
+ * in postorder after; by levels it is walked row by row. The one wanted almost always is
+ * preorder, which is the order the rows of an expanded tree are seen in.
  */
 public class DefaultMutableTreeNode implements Cloneable, MutableTreeNode, Serializable {
 
-    /** Un recorrido vacio, para los nodos que no tienen hijos. */
-    public static final Enumeration<TreeNode> EMPTY_ENUMERATION = new VacioEnum();
+    /** An empty traversal, for the nodes that have no children. */
+    public static final Enumeration<TreeNode> EMPTY_ENUMERATION = new EmptyEnumeration();
 
-    /** El padre, o nulo si es la raiz. */
+    /** The parent, or null if it is the root. */
     protected MutableTreeNode parent;
 
-    /** Los hijos; nulo mientras no haya ninguno. */
+    /** The children; null while there is none. */
     protected Vector<MutableTreeNode> children;
 
-    /** El dato que este nodo representa. */
+    /** The datum this node represents. */
     protected transient Object userObject;
 
-    /** Si el nodo puede tener hijos; ver la nota de la clase. */
+    /** Whether the node may have children; see the class note. */
     protected boolean allowsChildren;
 
-    /** Un nodo sin dato, que permite hijos. */
+    /** A node with no datum, which allows children. */
     public DefaultMutableTreeNode() {
         this(null);
     }
 
-    /** Un nodo con ese dato, que permite hijos. */
+    /** A node with that datum, which allows children. */
     public DefaultMutableTreeNode(Object userObject) {
         this(userObject, true);
     }
 
-    /** Un nodo con ese dato; {@code allowsChildren} decide si es hoja. */
+    /** A node with that datum; {@code allowsChildren} decides whether it is a leaf. */
     public DefaultMutableTreeNode(Object userObject, boolean allowsChildren) {
         super();
         parent = null;
@@ -66,13 +66,13 @@ public class DefaultMutableTreeNode implements Cloneable, MutableTreeNode, Seria
     }
 
     /**
-     * Inserta un hijo en esa posicion.
+     * Inserts a child at that position.
      *
-     * <p>Lo saca de su padre anterior primero: un nodo no puede estar en dos lugares, y dejarlo
-     * romperia el recorrido hacia arriba.
+     * <p>It takes it out of its previous parent first: a node cannot be in two places, and leaving
+     * it would break the walk upwards.
      *
-     * @throws IllegalArgumentException si el nodo es nulo o es un antepasado de este.
-     * @throws IllegalStateException si este nodo no permite hijos.
+     * @throws IllegalArgumentException if the node is null or is an ancestor of this one.
+     * @throws IllegalStateException if this node does not allow children.
      */
     public void insert(MutableTreeNode newChild, int childIndex) {
         if (!allowsChildren) {
@@ -95,14 +95,14 @@ public class DefaultMutableTreeNode implements Cloneable, MutableTreeNode, Seria
         children.insertElementAt(newChild, childIndex);
     }
 
-    /** Saca el hijo numero tal. */
+    /** Removes child number such and such. */
     public void remove(int childIndex) {
         MutableTreeNode child = (MutableTreeNode) getChildAt(childIndex);
         children.removeElementAt(childIndex);
         child.setParent(null);
     }
 
-    /** Cambia el padre; lo llama el padre, no quien usa el arbol. */
+    /** Changes the parent; the parent calls it, not whoever uses the tree. */
     public void setParent(MutableTreeNode newParent) {
         parent = newParent;
     }
@@ -112,9 +112,9 @@ public class DefaultMutableTreeNode implements Cloneable, MutableTreeNode, Seria
     }
 
     /**
-     * El hijo numero tal.
+     * Child number such and such.
      *
-     * @throws ArrayIndexOutOfBoundsException si no existe.
+     * @throws ArrayIndexOutOfBoundsException if it does not exist.
      */
     public TreeNode getChildAt(int index) {
         if (children == null) {
@@ -131,9 +131,9 @@ public class DefaultMutableTreeNode implements Cloneable, MutableTreeNode, Seria
     }
 
     /**
-     * En que posicion esta ese hijo, o -1.
+     * At what position that child is, or -1.
      *
-     * @throws IllegalArgumentException si el nodo es nulo.
+     * @throws IllegalArgumentException if the node is null.
      */
     public int getIndex(TreeNode aChild) {
         if (aChild == null) {
@@ -149,10 +149,10 @@ public class DefaultMutableTreeNode implements Cloneable, MutableTreeNode, Seria
         if (children == null) {
             return EMPTY_ENUMERATION;
         }
-        return new HijosEnum(children);
+        return new ChildrenEnumeration(children);
     }
 
-    /** Si el nodo puede tener hijos; ver la nota de la clase. */
+    /** Whether the node may have children; see the class note. */
     public void setAllowsChildren(boolean allows) {
         if (allows != allowsChildren) {
             allowsChildren = allows;
@@ -166,7 +166,7 @@ public class DefaultMutableTreeNode implements Cloneable, MutableTreeNode, Seria
         return allowsChildren;
     }
 
-    /** El dato que este nodo representa. */
+    /** The datum this node represents. */
     public void setUserObject(Object userObject) {
         this.userObject = userObject;
     }
@@ -175,7 +175,7 @@ public class DefaultMutableTreeNode implements Cloneable, MutableTreeNode, Seria
         return userObject;
     }
 
-    /** Se saca de su padre. */
+    /** It takes itself out of its parent. */
     public void removeFromParent() {
         MutableTreeNode parent = (MutableTreeNode) getParent();
         if (parent != null) {
@@ -184,9 +184,9 @@ public class DefaultMutableTreeNode implements Cloneable, MutableTreeNode, Seria
     }
 
     /**
-     * Saca ese hijo.
+     * Removes that child.
      *
-     * @throws IllegalArgumentException si no es hijo de este nodo.
+     * @throws IllegalArgumentException if it is not a child of this node.
      */
     public void remove(MutableTreeNode aChild) {
         if (aChild == null) {
@@ -204,7 +204,7 @@ public class DefaultMutableTreeNode implements Cloneable, MutableTreeNode, Seria
         }
     }
 
-    /** Agrega un hijo al final. */
+    /** Adds a child at the end. */
     public void add(MutableTreeNode newChild) {
         if (newChild != null && newChild.getParent() == this) {
             insert(newChild, getChildCount() - 1);
@@ -213,7 +213,7 @@ public class DefaultMutableTreeNode implements Cloneable, MutableTreeNode, Seria
         }
     }
 
-    /** Si ese nodo esta en el camino hacia la raiz desde este. */
+    /** Whether that node is on the path to the root from this one. */
     public boolean isNodeAncestor(TreeNode anotherNode) {
         if (anotherNode == null) {
             return false;
@@ -228,7 +228,7 @@ public class DefaultMutableTreeNode implements Cloneable, MutableTreeNode, Seria
         return false;
     }
 
-    /** Si este nodo esta en el camino hacia la raiz desde ese. */
+    /** Whether this node is on the path to the root from that one. */
     public boolean isNodeDescendant(DefaultMutableTreeNode anotherNode) {
         if (anotherNode == null) {
             return false;
@@ -236,7 +236,7 @@ public class DefaultMutableTreeNode implements Cloneable, MutableTreeNode, Seria
         return anotherNode.isNodeAncestor(this);
     }
 
-    /** El antepasado mas cercano que los dos comparten, o nulo. */
+    /** The nearest ancestor both share, or null. */
     public TreeNode getSharedAncestor(DefaultMutableTreeNode aNode) {
         if (aNode == this) {
             return this;
@@ -258,7 +258,7 @@ public class DefaultMutableTreeNode implements Cloneable, MutableTreeNode, Seria
             node1 = this;
             node2 = aNode;
         }
-        // Se sube el mas hondo hasta emparejar, y despues los dos a la par.
+        // The deeper one is walked up until they are level, and then both together.
         while (diff > 0) {
             node1 = node1.getParent();
             diff--;
@@ -273,12 +273,12 @@ public class DefaultMutableTreeNode implements Cloneable, MutableTreeNode, Seria
         return null;
     }
 
-    /** Si los dos estan en el mismo arbol. */
+    /** Whether both are in the same tree. */
     public boolean isNodeRelated(DefaultMutableTreeNode aNode) {
         return (aNode != null) && (getRoot() == aNode.getRoot());
     }
 
-    /** Cuantos niveles hay abajo de este nodo. */
+    /** How many levels there are below this node. */
     public int getDepth() {
         Object last = null;
         Enumeration<TreeNode> enum_ = breadthFirstEnumeration();
@@ -291,7 +291,7 @@ public class DefaultMutableTreeNode implements Cloneable, MutableTreeNode, Seria
         return ((DefaultMutableTreeNode) last).getLevel() - getLevel();
     }
 
-    /** Cuantos niveles hay arriba de este nodo. */
+    /** How many levels there are above this node. */
     public int getLevel() {
         TreeNode ancestor = this;
         int levels = 0;
@@ -301,16 +301,16 @@ public class DefaultMutableTreeNode implements Cloneable, MutableTreeNode, Seria
         return levels;
     }
 
-    /** El camino desde la raiz hasta este nodo. */
+    /** The path from the root to this node. */
     public TreeNode[] getPath() {
         return getPathToRoot(this, 0);
     }
 
     /**
-     * Arma el camino subiendo y llenando el arreglo al reves.
+     * It builds the path by walking up and filling the array backwards.
      *
-     * <p>Se sube contando primero y se llena despues, porque el largo del camino no se sabe hasta
-     * llegar a la raiz.
+     * <p>It walks up counting first and fills in afterwards, because the path's length is not known
+     * until the root is reached.
      */
     protected TreeNode[] getPathToRoot(TreeNode aNode, int depth) {
         TreeNode[] retNodes;
@@ -327,7 +327,7 @@ public class DefaultMutableTreeNode implements Cloneable, MutableTreeNode, Seria
         return retNodes;
     }
 
-    /** Los datos de los nodos del camino, no los nodos. */
+    /** The path nodes' data, not the nodes. */
     public Object[] getUserObjectPath() {
         TreeNode[] realPath = getPath();
         Object[] retPath = new Object[realPath.length];
@@ -352,10 +352,10 @@ public class DefaultMutableTreeNode implements Cloneable, MutableTreeNode, Seria
     }
 
     /**
-     * El nodo que sigue en preorden, o nulo si es el ultimo.
+     * The node that follows in preorder, or null if it is the last.
      *
-     * <p>Recorre todo el arbol, no solo los hermanos: despues del ultimo hijo viene el hermano del
-     * padre.
+     * <p>It walks the whole tree, not only the siblings: after the last child comes the parent's
+     * sibling.
      */
     public DefaultMutableTreeNode getNextNode() {
         if (getChildCount() == 0) {
@@ -378,7 +378,7 @@ public class DefaultMutableTreeNode implements Cloneable, MutableTreeNode, Seria
         return (DefaultMutableTreeNode) getChildAt(0);
     }
 
-    /** El anterior en preorden, o nulo. */
+    /** The previous one in preorder, or null. */
     public DefaultMutableTreeNode getPreviousNode() {
         DefaultMutableTreeNode previousSibling;
         DefaultMutableTreeNode myParent = (DefaultMutableTreeNode) getParent();
@@ -396,29 +396,29 @@ public class DefaultMutableTreeNode implements Cloneable, MutableTreeNode, Seria
     }
 
     public Enumeration<TreeNode> preorderEnumeration() {
-        return new PreordenEnum(this);
+        return new PreorderEnumeration(this);
     }
 
     public Enumeration<TreeNode> postorderEnumeration() {
-        return new PosordenEnum(this);
+        return new PostorderEnumeration(this);
     }
 
     public Enumeration<TreeNode> breadthFirstEnumeration() {
-        return new NivelesEnum(this);
+        return new BreadthFirstEnumeration(this);
     }
 
-    /** Igual que {@link #preorderEnumeration}, con el nombre de siempre. */
+    /** The same as {@link #preorderEnumeration}, with the usual name. */
     public Enumeration<TreeNode> depthFirstEnumeration() {
         return postorderEnumeration();
     }
 
     /**
-     * Recorre el camino desde la raiz hasta este nodo.
+     * Walks the path from the root to this node.
      *
-     * @throws IllegalArgumentException si el nodo dado no es antepasado de este.
+     * @throws IllegalArgumentException if the given node is not an ancestor of this one.
      */
     public Enumeration<TreeNode> pathFromAncestorEnumeration(TreeNode ancestor) {
-        return new CaminoEnum(this, ancestor);
+        return new PathEnumeration(this, ancestor);
     }
 
     public boolean isNodeChild(TreeNode aNode) {
@@ -432,9 +432,9 @@ public class DefaultMutableTreeNode implements Cloneable, MutableTreeNode, Seria
     }
 
     /**
-     * El primer hijo.
+     * The first child.
      *
-     * @throws NoSuchElementException si no tiene hijos.
+     * @throws NoSuchElementException if it has no children.
      */
     public TreeNode getFirstChild() {
         if (getChildCount() == 0) {
@@ -444,9 +444,9 @@ public class DefaultMutableTreeNode implements Cloneable, MutableTreeNode, Seria
     }
 
     /**
-     * El ultimo hijo.
+     * The last child.
      *
-     * @throws NoSuchElementException si no tiene hijos.
+     * @throws NoSuchElementException if it has no children.
      */
     public TreeNode getLastChild() {
         if (getChildCount() == 0) {
@@ -456,9 +456,9 @@ public class DefaultMutableTreeNode implements Cloneable, MutableTreeNode, Seria
     }
 
     /**
-     * El hijo que sigue a ese.
+     * The child that follows that one.
      *
-     * @throws IllegalArgumentException si no es hijo de este nodo.
+     * @throws IllegalArgumentException if it is not a child of this node.
      */
     public TreeNode getChildAfter(TreeNode aChild) {
         if (aChild == null) {
@@ -475,9 +475,9 @@ public class DefaultMutableTreeNode implements Cloneable, MutableTreeNode, Seria
     }
 
     /**
-     * El hijo anterior a ese.
+     * The child before that one.
      *
-     * @throws IllegalArgumentException si no es hijo de este nodo.
+     * @throws IllegalArgumentException if it is not a child of this node.
      */
     public TreeNode getChildBefore(TreeNode aChild) {
         if (aChild == null) {
@@ -534,12 +534,12 @@ public class DefaultMutableTreeNode implements Cloneable, MutableTreeNode, Seria
         return retval;
     }
 
-    /** Si no tiene hijos; distinto de no permitirlos. Ver la nota de la clase. */
+    /** Whether it has no children; different from not allowing them. See the class note. */
     public boolean isLeaf() {
         return (getChildCount() == 0);
     }
 
-    /** La primera hoja bajando siempre por el primer hijo. */
+    /** The first leaf going always down the first child. */
     public DefaultMutableTreeNode getFirstLeaf() {
         DefaultMutableTreeNode node = this;
         while (!node.isLeaf()) {
@@ -556,7 +556,7 @@ public class DefaultMutableTreeNode implements Cloneable, MutableTreeNode, Seria
         return node;
     }
 
-    /** La hoja que sigue en el arbol entero, no solo bajo este nodo. */
+    /** The leaf that follows in the whole tree, not only under this node. */
     public DefaultMutableTreeNode getNextLeaf() {
         DefaultMutableTreeNode nextSibling;
         DefaultMutableTreeNode myParent = (DefaultMutableTreeNode) getParent();
@@ -583,7 +583,7 @@ public class DefaultMutableTreeNode implements Cloneable, MutableTreeNode, Seria
         return myParent.getPreviousLeaf();
     }
 
-    /** Cuantas hojas cuelgan de este nodo. */
+    /** How many leaves hang from this node. */
     public int getLeafCount() {
         int count = 0;
         Enumeration<TreeNode> enum_ = breadthFirstEnumeration();
@@ -596,7 +596,7 @@ public class DefaultMutableTreeNode implements Cloneable, MutableTreeNode, Seria
         return count;
     }
 
-    /** El {@code toString} del dato, no del nodo; ver la nota de la clase. */
+    /** The datum's {@code toString}, not the node's; see the class note. */
     public String toString() {
         if (userObject == null) {
             return null;
@@ -605,10 +605,10 @@ public class DefaultMutableTreeNode implements Cloneable, MutableTreeNode, Seria
     }
 
     /**
-     * Una copia del nodo, sin padre y sin hijos.
+     * A copy of the node, with no parent and no children.
      *
-     * <p>Copia superficial a proposito: copiar el subarbol seria caro y casi nunca es lo que se
-     * quiere. Quien quiera el subarbol lo recorre.
+     * <p>A shallow copy on purpose: copying the subtree would be expensive and is almost never what
+     * is wanted. Whoever wants the subtree walks it.
      */
     public Object clone() {
         DefaultMutableTreeNode newNode;
@@ -622,8 +622,8 @@ public class DefaultMutableTreeNode implements Cloneable, MutableTreeNode, Seria
         return newNode;
     }
 
-    /** El recorrido vacio; ver {@link #EMPTY_ENUMERATION}. */
-    static final class VacioEnum implements Enumeration<TreeNode> {
+    /** The empty traversal; see {@link #EMPTY_ENUMERATION}. */
+    static final class EmptyEnumeration implements Enumeration<TreeNode> {
 
         public boolean hasMoreElements() {
             return false;
@@ -634,155 +634,155 @@ public class DefaultMutableTreeNode implements Cloneable, MutableTreeNode, Seria
         }
     }
 
-    /** Los hijos de un nodo, en orden. */
-    static final class HijosEnum implements Enumeration<TreeNode> {
+    /** A node's children, in order. */
+    static final class ChildrenEnumeration implements Enumeration<TreeNode> {
 
-        private final Vector<MutableTreeNode> hijos;
+        private final Vector<MutableTreeNode> children;
         private int i = 0;
 
-        HijosEnum(Vector<MutableTreeNode> hijos) {
-            this.hijos = hijos;
+        ChildrenEnumeration(Vector<MutableTreeNode> children) {
+            this.children = children;
         }
 
         public boolean hasMoreElements() {
-            return i < hijos.size();
+            return i < children.size();
         }
 
         public TreeNode nextElement() {
             if (!hasMoreElements()) {
                 throw new NoSuchElementException("No more elements");
             }
-            TreeNode n = hijos.elementAt(i);
+            TreeNode n = children.elementAt(i);
             i++;
             return n;
         }
     }
 
     /**
-     * Recorrido en preorden: el padre antes que sus hijos.
+     * Preorder traversal: the parent before its children.
      *
-     * <p>Se lleva una pila de recorridos pendientes en lugar de recursion, para que un arbol muy
-     * hondo no desborde.
+     * <p>It carries a stack of pending traversals instead of recursion, so that a very deep tree
+     * does not overflow.
      */
-    static final class PreordenEnum implements Enumeration<TreeNode> {
+    static final class PreorderEnumeration implements Enumeration<TreeNode> {
 
-        private final Stack<Enumeration<TreeNode>> pila = new Stack<Enumeration<TreeNode>>();
+        private final Stack<Enumeration<TreeNode>> stack = new Stack<Enumeration<TreeNode>>();
 
-        PreordenEnum(TreeNode raiz) {
+        PreorderEnumeration(TreeNode root) {
             Vector<TreeNode> v = new Vector<TreeNode>(1);
-            v.addElement(raiz);
-            pila.push(v.elements());
+            v.addElement(root);
+            stack.push(v.elements());
         }
 
         public boolean hasMoreElements() {
-            return (!pila.empty() && pila.peek().hasMoreElements());
+            return (!stack.empty() && stack.peek().hasMoreElements());
         }
 
         public TreeNode nextElement() {
-            Enumeration<TreeNode> arriba = pila.peek();
-            TreeNode nodo = arriba.nextElement();
-            if (!arriba.hasMoreElements()) {
-                pila.pop();
+            Enumeration<TreeNode> above = stack.peek();
+            TreeNode node = above.nextElement();
+            if (!above.hasMoreElements()) {
+                stack.pop();
             }
-            Enumeration<? extends TreeNode> hijos = nodo.children();
-            if (hijos.hasMoreElements()) {
-                pila.push((Enumeration<TreeNode>) hijos);
+            Enumeration<? extends TreeNode> children = node.children();
+            if (children.hasMoreElements()) {
+                stack.push((Enumeration<TreeNode>) children);
             }
-            return nodo;
+            return node;
         }
     }
 
-    /** Recorrido en posorden: los hijos antes que el padre. */
-    static final class PosordenEnum implements Enumeration<TreeNode> {
+    /** Postorder traversal: the children before the parent. */
+    static final class PostorderEnumeration implements Enumeration<TreeNode> {
 
-        private TreeNode raiz;
-        private Enumeration<? extends TreeNode> hijos;
-        private Enumeration<TreeNode> subarbol;
+        private TreeNode root;
+        private Enumeration<? extends TreeNode> children;
+        private Enumeration<TreeNode> subtree;
 
-        PosordenEnum(TreeNode raiz) {
-            this.raiz = raiz;
-            hijos = raiz.children();
-            subarbol = DefaultMutableTreeNode.EMPTY_ENUMERATION;
+        PostorderEnumeration(TreeNode root) {
+            this.root = root;
+            children = root.children();
+            subtree = DefaultMutableTreeNode.EMPTY_ENUMERATION;
         }
 
         public boolean hasMoreElements() {
-            return raiz != null;
+            return root != null;
         }
 
         public TreeNode nextElement() {
             TreeNode retval;
-            if (subarbol.hasMoreElements()) {
-                retval = subarbol.nextElement();
-            } else if (hijos.hasMoreElements()) {
-                subarbol = new PosordenEnum(hijos.nextElement());
-                retval = subarbol.nextElement();
+            if (subtree.hasMoreElements()) {
+                retval = subtree.nextElement();
+            } else if (children.hasMoreElements()) {
+                subtree = new PostorderEnumeration(children.nextElement());
+                retval = subtree.nextElement();
             } else {
-                retval = raiz;
-                raiz = null;
+                retval = root;
+                root = null;
             }
             return retval;
         }
     }
 
-    /** Recorrido por niveles: fila por fila. */
-    static final class NivelesEnum implements Enumeration<TreeNode> {
+    /** Traversal by levels: row by row. */
+    static final class BreadthFirstEnumeration implements Enumeration<TreeNode> {
 
-        private final java.util.LinkedList<Enumeration<? extends TreeNode>> cola =
+        private final java.util.LinkedList<Enumeration<? extends TreeNode>> queue =
                 new java.util.LinkedList<Enumeration<? extends TreeNode>>();
 
-        NivelesEnum(TreeNode raiz) {
+        BreadthFirstEnumeration(TreeNode root) {
             Vector<TreeNode> v = new Vector<TreeNode>(1);
-            v.addElement(raiz);
-            cola.addLast(v.elements());
+            v.addElement(root);
+            queue.addLast(v.elements());
         }
 
         public boolean hasMoreElements() {
-            return (!cola.isEmpty() && cola.getFirst().hasMoreElements());
+            return (!queue.isEmpty() && queue.getFirst().hasMoreElements());
         }
 
         public TreeNode nextElement() {
-            Enumeration<? extends TreeNode> primera = cola.getFirst();
-            TreeNode nodo = primera.nextElement();
-            if (!primera.hasMoreElements()) {
-                cola.removeFirst();
+            Enumeration<? extends TreeNode> first = queue.getFirst();
+            TreeNode node = first.nextElement();
+            if (!first.hasMoreElements()) {
+                queue.removeFirst();
             }
-            Enumeration<? extends TreeNode> hijos = nodo.children();
-            if (hijos.hasMoreElements()) {
-                cola.addLast(hijos);
+            Enumeration<? extends TreeNode> children = node.children();
+            if (children.hasMoreElements()) {
+                queue.addLast(children);
             }
-            return nodo;
+            return node;
         }
     }
 
-    /** Recorre el camino desde un antepasado hasta un nodo. */
-    static final class CaminoEnum implements Enumeration<TreeNode> {
+    /** Walks the path from an ancestor down to a node. */
+    static final class PathEnumeration implements Enumeration<TreeNode> {
 
-        private final Stack<TreeNode> pila = new Stack<TreeNode>();
+        private final Stack<TreeNode> stack = new Stack<TreeNode>();
 
-        CaminoEnum(TreeNode nodo, TreeNode antepasado) {
-            if (nodo == null || antepasado == null) {
+        PathEnumeration(TreeNode node, TreeNode ancestor) {
+            if (node == null || ancestor == null) {
                 throw new IllegalArgumentException("argument is null");
             }
-            TreeNode n = nodo;
-            while (n != null && n != antepasado) {
-                pila.push(n);
+            TreeNode n = node;
+            while (n != null && n != ancestor) {
+                stack.push(n);
                 n = n.getParent();
             }
-            if (n != antepasado) {
+            if (n != ancestor) {
                 throw new IllegalArgumentException("node is not an ancestor");
             }
-            pila.push(antepasado);
+            stack.push(ancestor);
         }
 
         public boolean hasMoreElements() {
-            return !pila.isEmpty();
+            return !stack.isEmpty();
         }
 
         public TreeNode nextElement() {
-            if (pila.isEmpty()) {
+            if (stack.isEmpty()) {
                 throw new NoSuchElementException("No more elements");
             }
-            return pila.pop();
+            return stack.pop();
         }
     }
 }

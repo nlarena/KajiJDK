@@ -1,6 +1,7 @@
 package java.lang;
 
-// Por import y nombre simple: calificar el tipo en el uso no resuelve desde
+// Through an import and a simple name: qualifying the type at the use site does not resolve
+// from
 // java.lang (finding #210).
 import java.lang.constant.ConstantDesc;
 import java.util.Optional;
@@ -19,13 +20,13 @@ public final class Long extends Number implements Comparable<Long>, ConstantDesc
         this.value = value;
     }
 
-    // Las instancias compartidas de -128..127. Viven en una clase anidada para que se construyan
-    // en el primer `valueOf` y no en la primera mencion de la clase.
+    // The shared instances for -128..127. They live in a nested class so they are built on
+    // the first `valueOf` and not on the first mention of the class.
     //
-    // No es una optimizacion: **JLS 5.1.7 exige que boxear un valor de ese rango devuelva la
-    // MISMA referencia**, asi que `Long.valueOf(100L) == Long.valueOf(100L)` es una promesa del lenguaje. Sin la cache
-    // la promesa se rompe en silencio -- el codigo sigue andando hasta que alguien compara con
-    // `==`, que es justo lo que la cache existe para permitir.
+    // It is not an optimisation: **JLS 5.1.7 requires that boxing a value in that range
+    // return the SAME reference**, so `Long.valueOf(100L) == Long.valueOf(100L)` is a promise of the language. Without the
+    // cache the promise breaks silently -- the code keeps working until somebody compares
+    // with `==`, which is exactly what the cache exists to allow.
     private static final class LongCache {
 
         static final Long[] CACHE = LongCache.fill();

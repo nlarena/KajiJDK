@@ -7,14 +7,14 @@ package java.text;
 // That is why it is a separate abstraction rather than a use of the collections iterator.
 public interface CharacterIterator extends Cloneable {
 
-    // Lo que devuelven first/last/next/previous/current cuando el iterador se pasa de cualquiera
-    // de los dos extremos. Vale U+FFFF, que Unicode reserva como no-carácter justamente para esto:
-    // ningún texto legal lo contiene, así que el centinela no puede confundirse con un dato.
+    // What first/last/next/previous/current return when the iterator runs past either end. It is
+    // U+FFFF, which Unicode reserves as a non-character for exactly this: no legal text contains it,
+    // so the sentinel cannot be mistaken for a datum.
     //
-    // Estuvo omitida por el finding #124 (un inicializador de campo en una interfaz hacía que el
-    // compilador sintetizara un `<init>` sobre la interfaz, o sea un miembro público de más). #124
-    // está cerrado y verificado: hoy el campo sale como `public static final char` y sin
-    // constructor espurio.
+    // It was omitted because of finding #124 (a field initialiser in an interface made the compiler
+    // synthesise an `<init>` on the interface, that is, one public member too many). #124 is closed
+    // and verified: today the field comes out as `public static final char` and with no spurious
+    // constructor.
     char DONE = '\uffff';
 
     char first();

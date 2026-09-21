@@ -1,42 +1,42 @@
 package javax.xml.validation;
 
 /**
- * KajiLibrary's javax.xml.validation.Schema -- un esquema ya compilado.
+ * KajiLibrary's javax.xml.validation.Schema -- an already compiled schema.
  *
- * <p>Representa un conjunto de reglas --XML Schema, RELAX NG, lo que sea-- <b>ya leido y
- * verificado</b>. La clase tiene dos metodos y ninguno valida: los dos fabrican algo que valida.
+ * <p>It represents a set of rules --XML Schema, RELAX NG, whatever-- <b>already read and
+ * checked</b>. The class has two methods and neither validates: both make something that validates.
  *
- * <h2>Por que la separacion en tres</h2>
+ * <h2>Why the split into three</h2>
  *
- * <p>{@code SchemaFactory} lee el esquema, {@code Schema} lo guarda compilado, y
- * {@link Validator} valida <b>un</b> documento. Podria ser una sola clase con un metodo
- * {@code validate(esquema, documento)}, y seria mucho mas lento: compilar un esquema es caro y
- * validar contra uno ya compilado es barato. La separacion hace que ese costo se pague una vez.
+ * <p>{@code SchemaFactory} reads the schema, {@code Schema} keeps it compiled, and {@link
+ * Validator} validates <b>one</b> document. It could be a single class with a {@code
+ * validate(schema, document)} method, and it would be much slower: compiling a schema is expensive
+ * and validating against an already compiled one is cheap. The split makes that cost be paid once.
  *
- * <p>De ahi sale la regla de uso que importa: un {@code Schema} es <b>inmutable y compartible entre
- * hilos</b>; un {@link Validator} no. Lo que se guarda en un campo estatico es el esquema, y el
- * validador se fabrica en cada uso -- al reves de lo que uno haria por costumbre.
+ * <p>From there comes the usage rule that matters: a {@code Schema} is <b>immutable and shareable
+ * between threads</b>; a {@link Validator} is not. What is kept in a static field is the schema,
+ * and the validator is made on each use -- the other way round from what one would do out of habit.
  *
- * <h2>Las dos formas de validar</h2>
+ * <h2>The two ways of validating</h2>
  *
- * <p>{@link #newValidator} valida algo que ya existe: un arbol, un archivo, un flujo.
- * {@link #newValidatorHandler} valida <b>mientras</b> se lee, enchufandose en una cadena SAX. La
- * segunda no necesita tener el documento entero en memoria, y ademas puede ir pasandole el contenido
- * ya validado a otro manejador.
+ * <p>{@link #newValidator} validates something that already exists: a tree, a file, a stream.
+ * {@link #newValidatorHandler} validates <b>while</b> reading, plugging into a SAX chain. The
+ * second does not need the whole document in memory, and it can also pass the already validated
+ * content on to another handler.
  */
 public abstract class Schema {
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected Schema() {
     }
 
     /**
-     * Un validador para documentos que ya existen.
+     * A validator for documents that already exist.
      *
-     * <p>Uno nuevo por cada uso, o al menos uno por hilo: ver la nota de la clase.
+     * <p>A new one for each use, or at least one per thread: see the class note.
      */
     public abstract Validator newValidator();
 
-    /** Un validador que se enchufa en una cadena SAX. */
+    /** A validator that plugs into a SAX chain. */
     public abstract ValidatorHandler newValidatorHandler();
 }

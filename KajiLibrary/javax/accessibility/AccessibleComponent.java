@@ -10,104 +10,104 @@ import java.awt.Rectangle;
 import java.awt.event.FocusListener;
 
 /**
- * La parte gráfica de un objeto accesible: dónde está, de qué tamaño, de qué color.
+ * The graphical part of an accessible object: where it is, what size, what colour.
  *
- * <p>Es casi un espejo de {@code java.awt.Component}, y esa duplicación es deliberada. Un objeto
- * accesible **no tiene por qué ser** un componente de AWT: puede ser una celda de una planilla
- * dibujada a mano o un elemento de un motor de interfaz propio. Declarar la geometría acá permite
- * que una ayuda técnica dibuje un recuadro alrededor de cualquiera de los dos.
+ * <p>It is almost a mirror of {@code java.awt.Component}, and that duplication is deliberate. An
+ * accessible object **does not have to be** an AWT component: it may be a cell of a hand-drawn
+ * spreadsheet or an element of an interface engine of its own. Declaring the geometry here allows
+ * an assistive technology to draw a box around either of the two.
  *
- * <p>{@link #getAccessibleAt} es la que hace posible "¿qué hay debajo del puntero?", que es la
- * pregunta con la que empieza casi toda inspección.
+ * <p>{@link #getAccessibleAt} is the one that makes "what is under the pointer?" possible, which is
+ * the question almost every inspection starts with.
  */
 public interface AccessibleComponent {
 
-    /** El color de fondo, o `null` si no lo admite. */
+    /** The background colour, or `null` if it does not support it. */
     Color getBackground();
 
-    /** Cambia el color de fondo. */
+    /** Changes the background colour. */
     void setBackground(Color c);
 
-    /** El color del texto, o `null` si no lo admite. */
+    /** The text colour, or `null` if it does not support it. */
     Color getForeground();
 
-    /** Cambia el color del texto. */
+    /** Changes the text colour. */
     void setForeground(Color c);
 
-    /** El cursor, o `null` si no lo admite. */
+    /** The cursor, or `null` if it does not support it. */
     Cursor getCursor();
 
-    /** Cambia el cursor. */
+    /** Changes the cursor. */
     void setCursor(Cursor cursor);
 
-    /** La fuente, o `null` si no lo admite. */
+    /** The font, or `null` if it does not support it. */
     Font getFont();
 
-    /** Cambia la fuente. */
+    /** Changes the font. */
     void setFont(Font f);
 
-    /** Las medidas de esa fuente, o `null` si no lo admite. */
+    /** That font's metrics, or `null` if it does not support it. */
     FontMetrics getFontMetrics(Font f);
 
-    /** Si responde a la entrada del usuario. */
+    /** Whether it responds to user input. */
     boolean isEnabled();
 
-    /** Lo habilita o lo deshabilita. */
+    /** Enables or disables it. */
     void setEnabled(boolean b);
 
-    /** Si está declarado visible. */
+    /** Whether it is declared visible. */
     boolean isVisible();
 
-    /** Lo muestra o lo oculta. */
+    /** Shows or hides it. */
     void setVisible(boolean b);
 
-    /** Si se ve de verdad, contando a sus ancestros. */
+    /** Whether it is really seen, counting its ancestors. */
     boolean isShowing();
 
-    /** Si ese punto, relativo al objeto, cae adentro. */
+    /** Whether that point, relative to the object, falls inside. */
     boolean contains(Point p);
 
     /**
-     * Dónde está en la pantalla.
+     * Where it is on the screen.
      *
-     * @return el punto, o `null` si no está en pantalla
+     * @return the point, or `null` if it is not on screen
      */
     Point getLocationOnScreen();
 
-    /** Dónde está, relativo a su padre. */
+    /** Where it is, relative to its parent. */
     Point getLocation();
 
-    /** Lo mueve. */
+    /** Moves it. */
     void setLocation(Point p);
 
-    /** Su rectángulo, relativo al padre. */
+    /** Its rectangle, relative to the parent. */
     Rectangle getBounds();
 
-    /** Cambia su rectángulo. */
+    /** Changes its rectangle. */
     void setBounds(Rectangle r);
 
-    /** Su tamaño. */
+    /** Its size. */
     Dimension getSize();
 
-    /** Cambia su tamaño. */
+    /** Changes its size. */
     void setSize(Dimension d);
 
     /**
-     * Qué hijo accesible cae en ese punto.
+     * Which accessible child falls at that point.
      *
-     * @return el hijo, o `null` si ninguno
+     * @return the child, or `null` if none
      */
     Accessible getAccessibleAt(Point p);
 
-    /** Si puede recibir el foco. */
+    /** Whether it can receive the focus. */
     boolean isFocusTraversable();
 
-    /** Le pide el foco. */
+    /** Asks for the focus. */
     void requestFocus();
 
-    /** Suma alguien a quien avisarle de los cambios de foco. */
+    /** Adds somebody to notify of focus changes. */
     void addFocusListener(FocusListener l);
 
-    /** Saca a ese oyente. */
+    /** Removes that listener. */
     void removeFocusListener(FocusListener l);
 }

@@ -17,77 +17,77 @@ import javax.swing.plaf.DesktopIconUI;
 import javax.swing.plaf.InternalFrameUI;
 
 /**
- * Una ventana dentro de otra.
+ * A window inside another.
  *
- * <h2>No es una ventana del sistema</h2>
+ * <h2>It is not a system window</h2>
  *
- * <p>Es un {@link JComponent} que se dibuja con marco, titulo y botones. Vive adentro de un
- * {@link JDesktopPane}; el sistema operativo no sabe que existe. De ahi que
- * {@link #getWarningString} devuelva nulo -- no hay ventana real que marcar -- y que se pueda tener
- * cien de estas sin gastar cien ventanas del sistema.
+ * <p>It is a {@link JComponent} that is drawn with a frame, a title and buttons. It lives
+ * inside a {@link JDesktopPane}; the operating system does not know it exists. Hence
+ * {@link #getWarningString} returns null -- there is no real window to mark -- and a hundred of
+ * these can be had without spending a hundred system windows.
  *
- * <h2>Los cambios de estado se pueden vetar</h2>
+ * <h2>The changes of state may be vetoed</h2>
  *
- * <p>{@link #setClosed}, {@link #setIcon}, {@link #setMaximum} y {@link #setSelected} lanzan
- * {@link PropertyVetoException}. Antes de cambiar avisan a los oyentes de veto, y cualquiera puede
- * negarse. Es el mecanismo con el que un editor impide que se cierre una ventana con cambios sin
- * guardar, sin tener que interceptar el boton de cerrar.
+ * <p>{@link #setClosed}, {@link #setIcon}, {@link #setMaximum} and {@link #setSelected} throw
+ * {@link PropertyVetoException}. Before changing they tell the veto listeners, and anybody may
+ * refuse. It is the mechanism with which an editor keeps a frame with unsaved changes from
+ * being closed, without having to intercept the close button.
  *
- * <p>El estado se cambia <em>despues</em> de que paso el veto y <em>antes</em> de avisar el cambio,
- * asi el que escucha el cambio ya ve el valor nuevo.
+ * <p>The state is changed <em>after</em> the veto has passed and <em>before</em> giving notice
+ * of the change, so whoever listens to the change already sees the new value.
  *
- * <h2>Quien mueve la ventana</h2>
+ * <h2>Who moves the frame</h2>
  *
- * <p>Casi nadie llama a {@code setBounds} sobre una ventana interna: el aspecto le pide al
- * {@link DesktopManager} del escritorio, y ese decide. Ver la nota de {@link DesktopManager}.
+ * <p>Almost nobody calls {@code setBounds} on an internal frame: the look and feel asks the
+ * desktop's {@link DesktopManager}, and that one decides. See {@link DesktopManager}'s note.
  *
- * <h2>Los hijos van al contenido</h2>
+ * <h2>The children go to the content</h2>
  *
- * <p>Como en {@link JDialog}, adentro hay un {@link JRootPane} y {@code add} redirige a su panel de
- * contenido.
+ * <p>As in {@link JDialog}, inside there is a {@link JRootPane} and {@code add} redirects to
+ * its content pane.
  */
 public class JInternalFrame extends JComponent implements Accessible, WindowConstants,
         RootPaneContainer {
 
     private static final String uiClassID = "InternalFrameUI";
 
-    /** El panel raiz; ver la nota de la clase. */
+    /** The root pane; see the class note. */
     protected JRootPane rootPane;
 
-    /** Si agregar redirige al contenido. */
+    /** Whether adding redirects to the content. */
     protected boolean rootPaneCheckingEnabled = false;
 
-    /** Si tiene boton de cerrar. */
+    /** Whether it has a close button. */
     protected boolean closable;
 
-    /** Si ya se cerro. */
+    /** Whether it has already closed. */
     protected boolean isClosed;
 
-    /** Si tiene boton de maximizar. */
+    /** Whether it has a maximize button. */
     protected boolean maximizable;
 
-    /** Si esta maximizada. */
+    /** Whether it is maximized. */
     protected boolean isMaximum;
 
-    /** Si tiene boton de minimizar. */
+    /** Whether it has a minimize button. */
     protected boolean iconable;
 
-    /** Si esta hecha icono. */
+    /** Whether it is turned into an icon. */
     protected boolean isIcon;
 
-    /** Si se puede cambiar de tamano. */
+    /** Whether it can be resized. */
     protected boolean resizable;
 
-    /** Si es la ventana activa del escritorio. */
+    /** Whether it is the desktop's active frame. */
     protected boolean isSelected;
 
-    /** El icono del titulo. */
+    /** The title's icon. */
     protected Icon frameIcon;
 
-    /** El titulo. */
+    /** The title. */
     protected String title;
 
-    /** El icono que la reemplaza cuando esta minimizada. */
+    /** The icon that replaces it when it is minimized. */
     protected JDesktopIcon desktopIcon;
 
     public static final String CONTENT_PANE_PROPERTY = "contentPane";
@@ -108,17 +108,17 @@ public class JInternalFrame extends JComponent implements Accessible, WindowCons
     private Cursor lastCursor;
     private boolean opened = false;
 
-    /** Una ventana sin titulo, que no se cierra ni se agranda ni se achica ni se redimensiona. */
+    /** A frame with no title, which neither closes nor grows nor shrinks nor resizes. */
     public JInternalFrame() {
         this("", false, false, false, false);
     }
 
-    /** Con ese titulo. */
+    /** With that title. */
     public JInternalFrame(String title) {
         this(title, false, false, false, false);
     }
 
-    /** Con ese titulo, y redimensionable o no. */
+    /** With that title, and resizable or not. */
     public JInternalFrame(String title, boolean resizable) {
         this(title, resizable, false, false, false);
     }
@@ -132,7 +132,7 @@ public class JInternalFrame extends JComponent implements Accessible, WindowCons
         this(title, resizable, closable, maximizable, false);
     }
 
-    /** Con ese titulo y esas cuatro capacidades. */
+    /** With that title and those four capabilities. */
     public JInternalFrame(String title, boolean resizable, boolean closable,
             boolean maximizable, boolean iconifiable) {
         setRootPane(createRootPane());
@@ -186,9 +186,9 @@ public class JInternalFrame extends JComponent implements Accessible, WindowCons
     }
 
     /**
-     * Agrega al contenido, no a la ventana.
+     * It adds to the content, not to the frame.
      *
-     * @throws Error si se intenta agregar el panel raiz con la redireccion prendida.
+     * @throws Error if the root pane is added with the redirection switched on.
      */
     protected void addImpl(Component comp, Object constraints, int index) {
         if (isRootPaneCheckingEnabled()) {
@@ -198,7 +198,7 @@ public class JInternalFrame extends JComponent implements Accessible, WindowCons
         }
     }
 
-    /** Saca del contenido, salvo que sea el panel raiz. */
+    /** It removes from the content, unless it is the root pane. */
     public void remove(Component comp) {
         int oldCount = getComponentCount();
         super.remove(comp);
@@ -207,7 +207,7 @@ public class JInternalFrame extends JComponent implements Accessible, WindowCons
         }
     }
 
-    /** Le pone acomodador al contenido, no a la ventana. */
+    /** It gives the layout to the content, not to the frame. */
     public void setLayout(LayoutManager manager) {
         if (isRootPaneCheckingEnabled()) {
             getContentPane().setLayout(manager);
@@ -217,7 +217,7 @@ public class JInternalFrame extends JComponent implements Accessible, WindowCons
     }
 
     /**
-     * @deprecated Usar {@link #getJMenuBar}.
+     * @deprecated Use {@link #getJMenuBar}.
      */
     @Deprecated
     public JMenuBar getMenuBar() {
@@ -229,7 +229,7 @@ public class JInternalFrame extends JComponent implements Accessible, WindowCons
     }
 
     /**
-     * @deprecated Usar {@link #setJMenuBar}.
+     * @deprecated Use {@link #setJMenuBar}.
      */
     @Deprecated
     public void setMenuBar(JMenuBar m) {
@@ -249,7 +249,7 @@ public class JInternalFrame extends JComponent implements Accessible, WindowCons
     }
 
     /**
-     * @throws java.awt.IllegalComponentStateException si es nulo.
+     * @throws java.awt.IllegalComponentStateException if it is null.
      */
     public void setContentPane(Container c) {
         Container oldValue = getContentPane();
@@ -290,7 +290,8 @@ public class JInternalFrame extends JComponent implements Accessible, WindowCons
         if (rootPane != null) {
             boolean checkingEnabled = isRootPaneCheckingEnabled();
             try {
-                // Apagado mientras se agrega el panel raiz: si no, se redirigiria a si mismo.
+                // Switched off while the root pane is added: otherwise, it would redirect to
+                // itself.
                 setRootPaneCheckingEnabled(false);
                 add(rootPane, java.awt.BorderLayout.CENTER);
             } finally {
@@ -315,12 +316,12 @@ public class JInternalFrame extends JComponent implements Accessible, WindowCons
     }
 
     /**
-     * Cierra o reabre la ventana.
+     * It closes or reopens the frame.
      *
-     * <p>Cerrar la esconde y la destruye. Reabrir una cerrada no la vuelve a mostrar sola: hay que
-     * agregarla de nuevo al escritorio.
+     * <p>Closing hides it and destroys it. Reopening a closed one does not show it again by
+     * itself: it has to be added to the desktop again.
      *
-     * @throws PropertyVetoException si algun oyente se opone.
+     * @throws PropertyVetoException if some listener objects.
      */
     public void setClosed(boolean b) throws PropertyVetoException {
         if (isClosed == b) {
@@ -352,7 +353,7 @@ public class JInternalFrame extends JComponent implements Accessible, WindowCons
     }
 
     public boolean isResizable() {
-        // Una ventana maximizada ocupa todo: dejarla redimensionar no tendria a donde crecer.
+        // A maximized frame takes up everything: letting it resize would give it nowhere to grow.
         return isMaximum ? false : resizable;
     }
 
@@ -371,9 +372,9 @@ public class JInternalFrame extends JComponent implements Accessible, WindowCons
     }
 
     /**
-     * Convierte la ventana en icono, o la devuelve.
+     * It turns the frame into an icon, or gives it back.
      *
-     * @throws PropertyVetoException si algun oyente se opone.
+     * @throws PropertyVetoException if some listener objects.
      */
     public void setIcon(boolean b) throws PropertyVetoException {
         if (isIcon == b) {
@@ -406,9 +407,9 @@ public class JInternalFrame extends JComponent implements Accessible, WindowCons
     }
 
     /**
-     * Agranda la ventana a todo el escritorio, o la devuelve a su tamano.
+     * It enlarges the frame to the whole desktop, or gives it back its size.
      *
-     * @throws PropertyVetoException si algun oyente se opone.
+     * @throws PropertyVetoException if some listener objects.
      */
     public void setMaximum(boolean b) throws PropertyVetoException {
         if (isMaximum == b) {
@@ -417,7 +418,7 @@ public class JInternalFrame extends JComponent implements Accessible, WindowCons
         Boolean oldValue = isMaximum ? Boolean.TRUE : Boolean.FALSE;
         Boolean newValue = b ? Boolean.TRUE : Boolean.FALSE;
         fireVetoableChange(IS_MAXIMUM_PROPERTY, oldValue, newValue);
-        // El estado se cambia antes de avisar: el que escucha ya ve el valor nuevo.
+        // The state is changed before giving notice: whoever listens already sees the new value.
         isMaximum = b;
         firePropertyChange(IS_MAXIMUM_PROPERTY, oldValue, newValue);
     }
@@ -433,17 +434,18 @@ public class JInternalFrame extends JComponent implements Accessible, WindowCons
     }
 
     /**
-     * Activa o desactiva la ventana.
+     * It activates or deactivates the frame.
      *
-     * <p>Para activarse tiene que estar visible en pantalla -- o su icono, si esta minimizada.
-     * Activar una ventana que no se ve dejaria el escritorio con una ventana activa invisible y
-     * ninguna de las visibles encendida. Desactivar, en cambio, se puede siempre.
+     * <p>In order to be activated it has to be visible on the screen -- or its icon, if it is
+     * minimized. Activating a frame that is not seen would leave the desktop with an invisible
+     * active frame and none of the visible ones lit. Deactivating, on the other hand, is always
+     * possible.
      *
-     * @throws PropertyVetoException si algun oyente se opone.
+     * @throws PropertyVetoException if some listener objects.
      */
     public void setSelected(boolean selected) throws PropertyVetoException {
         if (selected && isSelected) {
-            // Ya esta activa, pero el foco puede estar afuera: se lo devuelve adentro.
+            // It is already active, but the focus may be outside: it is brought back inside.
             restoreSubcomponentFocus();
             return;
         }
@@ -451,8 +453,8 @@ public class JInternalFrame extends JComponent implements Accessible, WindowCons
             return;
         }
         if (selected) {
-            boolean seVe = isIcon ? desktopIcon.isShowing() : isShowing();
-            if (!seVe) {
+            boolean showing = isIcon ? desktopIcon.isShowing() : isShowing();
+            if (!showing) {
                 return;
             }
         }
@@ -487,9 +489,9 @@ public class JInternalFrame extends JComponent implements Accessible, WindowCons
     }
 
     /**
-     * La pone adelante de las demas.
+     * It puts it in front of the others.
      *
-     * <p>Si esta hecha icono mueve el icono, no la ventana: es lo que se ve.
+     * <p>If it is turned into an icon it moves the icon, not the frame: it is what is seen.
      */
     public void moveToFront() {
         if (isIcon()) {
@@ -503,7 +505,7 @@ public class JInternalFrame extends JComponent implements Accessible, WindowCons
         }
     }
 
-    /** La manda atras de las demas. */
+    /** It sends it behind the others. */
     public void moveToBack() {
         if (isIcon()) {
             if (getDesktopIcon().getParent() instanceof JLayeredPane) {
@@ -517,10 +519,10 @@ public class JInternalFrame extends JComponent implements Accessible, WindowCons
     }
 
     /**
-     * El cursor que habia antes de que el aspecto lo cambiara para redimensionar.
+     * The cursor that was there before the look and feel changed it in order to resize.
      *
-     * <p>Al pasar por un borde el aspecto pone una flecha doble; cuando se sale tiene que
-     * devolver el de antes, y este es el que guarda cual era.
+     * <p>On passing over an edge the look and feel sets a double arrow; when one leaves it has to
+     * give back the previous one, and this is the one that keeps which it was.
      */
     public Cursor getLastCursor() {
         return lastCursor;
@@ -531,7 +533,7 @@ public class JInternalFrame extends JComponent implements Accessible, WindowCons
         super.setCursor(cursor);
     }
 
-    /** La capa del escritorio en la que esta. */
+    /** The desktop layer it is in. */
     public void setLayer(Integer layer) {
         if (getParent() != null && getParent() instanceof JLayeredPane) {
             JLayeredPane p = (JLayeredPane) getParent();
@@ -544,7 +546,7 @@ public class JInternalFrame extends JComponent implements Accessible, WindowCons
         }
     }
 
-    /** La capa, dada como entero. */
+    /** The layer, given as an integer. */
     public void setLayer(int layer) {
         this.setLayer(Integer.valueOf(layer));
     }
@@ -554,10 +556,10 @@ public class JInternalFrame extends JComponent implements Accessible, WindowCons
     }
 
     /**
-     * El escritorio que la contiene.
+     * The desktop that contains it.
      *
-     * <p>Si esta hecha icono la ventana no tiene padre; entonces se busca desde el icono, que es
-     * el que esta puesto en el escritorio.
+     * <p>If it is turned into an icon the frame has no parent; then it is looked up from the
+     * icon, which is the one that is set in the desktop.
      */
     public JDesktopPane getDesktopPane() {
         Container p = getParent();
@@ -584,10 +586,10 @@ public class JInternalFrame extends JComponent implements Accessible, WindowCons
     }
 
     /**
-     * El rectangulo que ocupaba antes de maximizarse.
+     * The rectangle it took up before maximizing.
      *
-     * <p>Si no hay uno guardado devuelve el actual, que es el correcto mientras no este
-     * maximizada.
+     * <p>If there is none kept it returns the current one, which is the right one while it is not
+     * maximized.
      */
     public Rectangle getNormalBounds() {
         if (normalBounds != null) {
@@ -600,7 +602,7 @@ public class JInternalFrame extends JComponent implements Accessible, WindowCons
         normalBounds = r;
     }
 
-    /** Quien tiene el foco adentro, o nulo si la ventana no esta activa. */
+    /** Who has the focus inside, or null if the frame is not active. */
     public Component getFocusOwner() {
         if (isSelected()) {
             return lastFocusOwner;
@@ -608,7 +610,7 @@ public class JInternalFrame extends JComponent implements Accessible, WindowCons
         return null;
     }
 
-    /** Quien tendria el foco si la ventana se activara. */
+    /** Who would have the focus if the frame were activated. */
     public Component getMostRecentFocusOwner() {
         if (isSelected()) {
             return getFocusOwner();
@@ -619,7 +621,7 @@ public class JInternalFrame extends JComponent implements Accessible, WindowCons
         return getContentPane();
     }
 
-    /** Le devuelve el foco al que lo tenia antes. */
+    /** It gives the focus back to whoever had it before. */
     public void restoreSubcomponentFocus() {
         lastFocusOwner = getMostRecentFocusOwner();
         if (lastFocusOwner != null) {
@@ -628,7 +630,7 @@ public class JInternalFrame extends JComponent implements Accessible, WindowCons
     }
 
     /**
-     * @deprecated Se llama sola; usar {@code setBounds}.
+     * @deprecated It is called by itself; use {@code setBounds}.
      */
     @Deprecated
     public void reshape(int x, int y, int width, int height) {
@@ -650,9 +652,9 @@ public class JInternalFrame extends JComponent implements Accessible, WindowCons
     }
 
     /**
-     * Avisa un evento de ventana interna.
+     * It gives notice of an internal frame event.
      *
-     * <p>El identificador decide a que metodo del oyente se llama.
+     * <p>The identifier decides which method of the listener is called.
      */
     protected void fireInternalFrameEvent(int id) {
         Object[] listeners = listenerList.getListenerList();
@@ -663,18 +665,18 @@ public class JInternalFrame extends JComponent implements Accessible, WindowCons
                     e = new InternalFrameEvent(this, id);
                 }
                 InternalFrameListener l = (InternalFrameListener) listeners[i + 1];
-                repartir(l, e, id);
+                distribute(l, e, id);
             }
         }
     }
 
     /**
-     * Le da el evento al metodo que corresponde.
+     * It gives the event to the method that applies.
      *
-     * <p>Es una cadena de comparaciones y no un {@code switch} porque los identificadores son
-     * constantes de otra clase.
+     * <p>It is a chain of comparisons and not a {@code switch} because the identifiers are
+     * constants of another class.
      */
-    private void repartir(InternalFrameListener l, InternalFrameEvent e, int id) {
+    private void distribute(InternalFrameListener l, InternalFrameEvent e, int id) {
         if (id == InternalFrameEvent.INTERNAL_FRAME_OPENED) {
             l.internalFrameOpened(e);
         } else if (id == InternalFrameEvent.INTERNAL_FRAME_CLOSING) {
@@ -693,11 +695,11 @@ public class JInternalFrame extends JComponent implements Accessible, WindowCons
     }
 
     /**
-     * Lo que pasa cuando el usuario aprieta el boton de cerrar.
+     * What happens when the user presses the close button.
      *
-     * <p>Avisa que se esta cerrando y despues hace lo que diga
-     * {@link #setDefaultCloseOperation}. Avisar primero es lo que le da al oyente la chance de
-     * cambiar la operacion antes de que se ejecute.
+     * <p>It gives notice that it is closing and afterwards does what
+     * {@link #setDefaultCloseOperation} says. Giving notice first is what gives the listener the
+     * chance to change the operation before it is carried out.
      */
     public void doDefaultCloseAction() {
         fireInternalFrameEvent(InternalFrameEvent.INTERNAL_FRAME_CLOSING);
@@ -710,7 +712,7 @@ public class JInternalFrame extends JComponent implements Accessible, WindowCons
                 try {
                     setSelected(false);
                 } catch (PropertyVetoException pve) {
-                    // Vetar la desactivacion no impide esconder: ya se escondio.
+                    // Vetoing the deactivation does not prevent hiding: it has already hidden.
                 }
             }
             return;
@@ -723,16 +725,16 @@ public class JInternalFrame extends JComponent implements Accessible, WindowCons
                 firePropertyChange(IS_CLOSED_PROPERTY, Boolean.FALSE, Boolean.TRUE);
                 dispose();
             } catch (PropertyVetoException pve) {
-                // Alguien se opuso: la ventana queda como estaba.
+                // Somebody objected: the frame is left as it was.
             }
         }
     }
 
     /**
-     * Que hacer al cerrar.
+     * What to do on closing.
      *
-     * <p>A diferencia de {@link JDialog}, por omision destruye: una ventana interna escondida
-     * seguiria ocupando lugar en el escritorio.
+     * <p>Unlike {@link JDialog}, by default it destroys: a hidden internal frame would go on
+     * taking up room in the desktop.
      */
     public void setDefaultCloseOperation(int operation) {
         this.defaultCloseOperation = operation;
@@ -742,7 +744,7 @@ public class JInternalFrame extends JComponent implements Accessible, WindowCons
         return defaultCloseOperation;
     }
 
-    /** La achica al tamano que piden sus hijos. */
+    /** It shrinks it to the size its children ask for. */
     public void pack() {
         try {
             if (isIcon()) {
@@ -751,7 +753,8 @@ public class JInternalFrame extends JComponent implements Accessible, WindowCons
                 setMaximum(false);
             }
         } catch (PropertyVetoException e) {
-            // Si no se puede desiconizar o desmaximizar no tiene sentido medir: se deja como esta.
+            // If it cannot be deiconified or unmaximized there is no point in measuring: it is left
+            // as it is.
             return;
         }
         setSize(getPreferredSize());
@@ -759,7 +762,7 @@ public class JInternalFrame extends JComponent implements Accessible, WindowCons
     }
 
     /**
-     * @deprecated Usar {@code setVisible(true)}.
+     * @deprecated Use {@code setVisible(true)}.
      */
     @Deprecated
     public void show() {
@@ -770,19 +773,19 @@ public class JInternalFrame extends JComponent implements Accessible, WindowCons
             fireInternalFrameEvent(InternalFrameEvent.INTERNAL_FRAME_OPENED);
             opened = true;
         }
-        // El icono nace escondido; se prende ahora para que aparezca al minimizar.
+        // The icon is born hidden; it is switched on now so that it appears on minimizing.
         getDesktopIcon().setVisible(true);
         toFront();
         super.show();
         try {
             setSelected(true);
         } catch (PropertyVetoException pve) {
-            // Que no se pueda activar no impide mostrarla.
+            // Its not being able to be activated does not prevent showing it.
         }
     }
 
     /**
-     * @deprecated Usar {@code setVisible(false)}.
+     * @deprecated Use {@code setVisible(false)}.
      */
     @Deprecated
     public void hide() {
@@ -792,7 +795,7 @@ public class JInternalFrame extends JComponent implements Accessible, WindowCons
         super.hide();
     }
 
-    /** La saca del escritorio y avisa que se cerro. */
+    /** It takes it off the desktop and gives notice that it closed. */
     public void dispose() {
         if (isVisible()) {
             setVisible(false);
@@ -801,7 +804,7 @@ public class JInternalFrame extends JComponent implements Accessible, WindowCons
             try {
                 setSelected(false);
             } catch (PropertyVetoException pve) {
-                // Se destruye igual.
+                // It is destroyed all the same.
             }
         }
         if (!isClosed) {
@@ -820,24 +823,24 @@ public class JInternalFrame extends JComponent implements Accessible, WindowCons
     }
 
     /**
-     * No hace nada: una ventana interna siempre es raiz de su ciclo de foco.
+     * It does nothing: an internal frame is always the root of its focus cycle.
      *
-     * <p>Tabular adentro no debe llevar el foco al escritorio.
+     * <p>Tabbing inside must not take the focus to the desktop.
      */
     public final void setFocusCycleRoot(boolean value) {
     }
 
-    /** Siempre cierto; ver {@link #setFocusCycleRoot}. */
+    /** Always true; see {@link #setFocusCycleRoot}. */
     public final boolean isFocusCycleRoot() {
         return true;
     }
 
-    /** Siempre nulo: no hay ciclo por encima. */
+    /** Always null: there is no cycle above. */
     public final Container getFocusCycleRootAncestor() {
         return null;
     }
 
-    /** Siempre nulo: no es una ventana del sistema, no hay nada que advertir. */
+    /** Always null: it is not a system window, there is nothing to warn about. */
     public final String getWarningString() {
         return null;
     }
@@ -855,17 +858,17 @@ public class JInternalFrame extends JComponent implements Accessible, WindowCons
     }
 
     /**
-     * El icono que reemplaza a una ventana interna minimizada.
+     * The icon that replaces a minimized internal frame.
      *
-     * <p>Es un componente aparte y no una forma de dibujar la ventana: mientras la ventana esta
-     * minimizada es el icono el que esta puesto en el escritorio, y la ventana no tiene padre. De
-     * ahi que {@link JInternalFrame#getDesktopPane} lo consulte.
+     * <p>It is a separate component and not a way of drawing the frame: while the frame is
+     * minimized it is the icon that is set in the desktop, and the frame has no parent. Hence
+     * {@link JInternalFrame#getDesktopPane} consults it.
      */
     public static class JDesktopIcon extends JComponent implements Accessible {
 
         private JInternalFrame internalFrame;
 
-        /** El icono de esa ventana. */
+        /** That frame's icon. */
         public JDesktopIcon(JInternalFrame f) {
             setVisible(false);
             setInternalFrame(f);
@@ -888,7 +891,7 @@ public class JInternalFrame extends JComponent implements Accessible, WindowCons
             internalFrame = f;
         }
 
-        /** El escritorio, preguntandoselo a la ventana. */
+        /** The desktop, asking the frame for it. */
         public JDesktopPane getDesktopPane() {
             if (getInternalFrame() != null) {
                 return getInternalFrame().getDesktopPane();

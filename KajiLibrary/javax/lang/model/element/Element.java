@@ -21,13 +21,12 @@ import javax.lang.model.type.TypeMirror;
 // accept() is the visitor hook — dispatch on the kind of element without a chain of
 // instanceof tests.
 //
-// Two deliberate departures from the JDK's declaration, both because of the frozen javac:
-//
-// One deliberate departure from the JDK's declaration: the JDK also re-declares
-// getAnnotationsByType here, and we cannot. That would be overriding a method whose return
-// type is an array of a type outside java.lang, which the frozen javac rejects (#211). It is
-// inherited from AnnotatedConstruct instead, so the effective member set is unchanged — only
-// the javadoc anchor is lost. The other four re-declarations (equals, hashCode,
+// One departure from the JDK's declaration: the JDK also re-declares getAnnotationsByType
+// here, and this file does not. The note blamed the frozen javac, which rejected overriding a
+// method whose return type is an array of a type outside java.lang (#211); #211 no longer
+// reproduces (see COMPILER_FINDINGS), so the re-declaration could be added now. It is
+// inherited from AnnotatedConstruct meanwhile, so the effective member set is unchanged —
+// only the javadoc anchor is lost. The other four re-declarations (equals, hashCode,
 // getAnnotationMirrors, getAnnotation) are spelled out as in the JDK.
 public interface Element extends AnnotatedConstruct {
 

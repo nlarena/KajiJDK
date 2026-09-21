@@ -1,31 +1,33 @@
 package java.awt;
 
 /**
- * La política de recorrido de fábrica: sigue el orden en que se agregaron los hijos.
+ * The default traversal policy: it follows the order in which the children were added.
  *
- * <p>Lo único que le agrega a {@link ContainerOrderFocusTraversalPolicy} es **cómo decide si un
- * componente entra en el recorrido**, y la diferencia importa. La de orden de contenedor pregunta
- * `isFocusable()`; ésta, además, mira si el componente **fijó** su focabilidad a mano
- * ({@link Component#isFocusTraversalPolicySet}, que acá se resuelve mirando si alguien llamó a
- * {@code setFocusable}). Si nadie la fijó, cae en la respuesta vieja de AWT
- * ({@link Component#isFocusTraversable}).
+ * <p>In the JDK what it adds to {@link ContainerOrderFocusTraversalPolicy} is **how it decides
+ * whether a component takes part in the traversal**: besides `isFocusable()` it looks at whether
+ * the component overrode the old `isFocusTraversable()` and, if nobody overrode it, at whether the
+ * peer accepts the focus. The reason is compatibility: before 1.4 a component said whether it
+ * entered the traversal by overriding `isFocusTraversable()`, and that override is still respected
+ * as long as nobody has said otherwise with the newer API.
  *
- * <p>El motivo es de compatibilidad: antes de 1.4 un componente decía si entraba al recorrido
- * redefiniendo `isFocusTraversable()`. Esta política sigue respetando esa redefinición mientras nadie
- * haya dicho lo contrario con la API nueva, así que el código viejo sigue recorriendo igual.
+ * <p><strong>Here it adds nothing.</strong> Against what this note used to claim, {@link #accept}
+ * consults neither `isFocusTraversable` nor whether the focusability was set by hand: it asks the
+ * same four questions as the policy it inherits from —visible, displayable, enabled and focusable—
+ * so it behaves exactly like its parent. Both halves of the JDK rule rest on the peer, and without
+ * a windowing system there is no peer to ask.
  */
 public class DefaultFocusTraversalPolicy extends ContainerOrderFocusTraversalPolicy {
 
     private static final long serialVersionUID = 8876966522510157497L;
 
-    /** Una política de fábrica. */
+    /** A default policy. */
     public DefaultFocusTraversalPolicy() {
     }
 
     /**
-     * Si ese componente entra en el recorrido.
+     * Whether that component takes part in the traversal.
      *
-     * <p>Tiene que estar visible, habilitado y mostrable, además de admitir el foco.
+     * <p>It has to be visible, enabled and displayable, besides accepting the focus.
      */
     protected boolean accept(Component aComponent) {
         if (!aComponent.isVisible() || !aComponent.isDisplayable() || !aComponent.isEnabled()) {

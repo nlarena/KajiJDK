@@ -1,7 +1,7 @@
 package com.sun.jdi;
 
 /**
- * ShortType de la maquina depurada.
+ * ShortType of the debugged machine.
  *
  * @since 1.3
  */

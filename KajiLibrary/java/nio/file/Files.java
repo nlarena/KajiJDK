@@ -32,113 +32,99 @@ import java.util.stream.Stream;
 
 import jdk.internal.io.Fs;
 
-// KajiLibrary's java.nio.file.Files -- las operaciones sobre archivos de NIO.2.
+// KajiLibrary's java.nio.file.Files -- NIO.2's file operations.
 //
 // ============================================================================================
-// **Que hay y que no, y por que.** Esta es la clase donde mas se nota el techo de la VM, asi que
-// vale la pena decirlo de entrada. Todo el acceso al disco pasa por las **seis** operaciones de
-// `jdk.internal.io.Fs`: leer el archivo entero, escribirlo entero (pisando o anexando), `stat`
-// (existe / es archivo / es directorio / se lee / se escribe), tamaño, borrar, y crear directorio.
-// No hay descriptores abiertos, ni posicion dentro de un archivo, ni **listar un directorio**, ni
-// metadatos de tiempo, ni permisos POSIX, ni enlaces.
+// **What is here and what is not, and why.** This is the class where the VM's ceiling shows most,
+// so it is worth saying up front. All disk access goes through `jdk.internal.io.Fs`: read the whole
+// file, write it whole (overwriting or appending), `stat` (exists / is a file / is a directory /
+// readable / writable), size, delete, create a directory, list a directory, read and write the
+// modification time, canonicalise a path, and the three disk-space figures.
 //
-// De los 70 metodos del JDK, aca estan los 58 que se pueden hacer honestamente. Los que faltan,
-// agrupados por **que** es lo que falta:
+// **All 70 of the JDK's methods are declared.** This note used to say 58 of them were, listing as
+// absent the nine that enumerate a directory --`newDirectoryStream` (x3), `list`, `walk` (x2),
+// `find`, `walkFileTree` (x2)-- plus `setLastModifiedTime`, `getFileStore` and `isSameFile`. Every
+// one of those came back as its native arrived: `Fs.list`, `Fs.setMtime`, the three `disk*` and
+// `Fs.canonical`. The count did not come back with them -- which is what happens to a note about
+// what is missing once what is missing stops missing.
 //
-//   1. **Falta un nativo, y la firma no tiene como decirlo.** No hay con que hacerlo, ni de a
-//      pedazos, y el metodo no declara ninguna excepcion que signifique "esto no existe aca".
+// `isSameFile` is worth a line of its own, because the old argument for leaving it out was a good
+// one: comparing normalised paths would give `false` for two names of the same file, and there
+// `false` is an assertion and not an "I do not know". It is not an edge case either -- on Windows
+// `C:\A.TXT` and `C:\a.txt` are the same file and are not the same string, and since `user.dir` is
+// `null` in this VM a relative path cannot be made absolute to compare against one that is. What
+// was missing was identity, and `Fs.canonical` gives it: canonicalising resolves case, `.`/`..`,
+// links and relatives against the current directory. Two paths are the same file if and only if
+// they canonicalise the same.
 //
-//      Los nueve que **enumeraban un directorio** --`newDirectoryStream` (x3), `list`, `walk` (x2),
-//      `find`, `walkFileTree` (x2)-- estaban aca y ya no: `jdk.internal.io.Fs.list(String)` existe y
-//      la VM lo implementa. La nota que decia que esa era "la ausencia mas grande de la lista" se
-//      escribio antes de que ese nativo llegara, y quedo desactualizada sin que nadie la mirara --
-//      que es lo que pasa con las notas de lo que falta cuando lo que falta deja de faltar.
+// **And a note on the methods that are here and only know how to fail.** `createSymbolicLink`,
+// `createLink`, `readSymbolicLink`, `getOwner`, `setOwner`, `getPosixFilePermissions`,
+// `setPosixFilePermissions` and `setAttribute` exist and throw `UnsupportedOperationException`.
+// **It is not a hole papered over**: in all eight cases the spec declares that exception for
+// exactly this situation --"the implementation does not support symbolic links", "the attribute
+// view is not available"-- so throwing it is *answering* the contract, not dodging it. A program
+// that calls them gets the same exception it would get from a JDK over a filesystem that does not
+// support them either.
 //
-//      - (`setLastModifiedTime` estaba aca. Ya no: `Fs.setMtime` existe.)
-//      - (`getFileStore` estaba aca. Ya no: `Fs.diskTotal`/`diskUsable`/`diskUnallocated` existen
-//        y `KajiFileStore` los usa.)
+// **And one on `isHidden`, which is here but does not answer what a Windows JDK would answer.** The
+// spec leaves the definition of "hidden" to the provider, and KajiJDK's is POSIX's --the name
+// starts with a dot-- which is also the one `java.io.File.isHidden()` already uses in this library.
+// It does not come from the DOS bit because `stat` does not bring it. It is written out in the
+// method with the two concrete differences it produces.
 //
-//   2. **Se podria escribir, pero seria mentir.**
-//      - (`isSameFile` estaba aca, y el argumento era bueno: comparar rutas normalizadas daria
-//        `false` para dos nombres del mismo archivo, y ahi `false` es una afirmacion y no un "no se".
-//        Lo que faltaba era la identidad, y `Fs.canonical` la da: canonicalizar resuelve mayusculas,
-//        `.`/`..`, enlaces y relativas contra el directorio actual. Dos rutas son el mismo archivo si
-//        y solo si canonizan igual.)
+// **The attributes that are read.** `readAttributes` (x2), `getAttribute` and `getLastModifiedTime`
+// work, over the `basic` view and nothing else. `stat`, `size` and `mtime` answer five of the nine
+// attributes (`isRegularFile`, `isDirectory`, `isOther`, `size`, `lastModifiedTime`); the other two
+// timestamps come out as the **epoch**, which is what `BasicFileAttributes`'s spec requires be
+// returned when the filesystem does not support them -- not an invented zero; `fileKey()` gives
+// `null`, also by spec; and the ninth, `isSymbolicLink()`, gives `false`. See `BasicAttrs`,
+// below, where the detail is attribute by attribute.
 //
-//        Y no es un caso de borde: sobre Windows `C:\A.TXT` y `C:\a.txt` son el mismo archivo y no
-//        son la misma cadena, y como `user.dir` es `null` en esta VM una ruta relativa **no** se
-//        puede llevar a absoluta para compararla con una que si lo es. Los dos usos mas comunes de
-//        `isSameFile` darian `false`. Ver `KajiFileSystemProvider.isSameFile`, que contesta el
-//        subconjunto que si se puede y falla en el resto -- ahi el metodo es `abstract` y **hay que**
-//        darle un cuerpo, asi que no existe la opcion de omitirlo.
+// **Mind the asymmetry, which is real.** The attributes are **read** and yet
+// `getFileAttributeView` returns `null` and `FileSystem.supportedFileAttributeViews()` gives empty.
+// It is not a contradiction: a *view* is an object that reads **and writes**, and
+// `BasicFileAttributeView` has `setTimes`, which sets all three timestamps at once and for which
+// there is no native -- `Fs.setMtime` writes only the modification one.
 //
-// **Y una nota sobre los metodos que estan y solo saben fallar.** `createSymbolicLink`, `createLink`,
-// `readSymbolicLink`, `getOwner`, `setOwner`, `getPosixFilePermissions`, `setPosixFilePermissions` y
-// `setAttribute` existen y tiran `UnsupportedOperationException`. **No es un hueco tapado**: en los
-// ocho casos la spec declara esa excepcion para exactamente esta situacion --"la implementacion no
-// soporta enlaces simbolicos", "la vista de atributos no esta disponible"-- asi que tirarla es
-// *contestar* el contrato, no esquivarlo. Un programa que las llama recibe la misma excepcion que
-// recibiria de un JDK sobre un sistema de archivos que tampoco las soporta.
+// **And two behavioural differences to keep in mind in what is here.**
 //
-// **Y una sobre `isHidden`, que esta pero no contesta lo que contestaria un JDK de Windows.** La
-// spec deja la definicion de "oculto" al proveedor, y la de KajiJDK es la de POSIX --el nombre
-// empieza con un punto-- que es tambien la que ya usa `java.io.File.isHidden()` en esta biblioteca.
-// No sale del bit de DOS porque `stat` no lo trae. Esta escrito en el metodo con las dos
-// diferencias concretas que produce.
+// The first: none of the creation operations is **atomic**. `createFile` is a `stat` followed by a
+// write, and between the two somebody could create the file. The JDK does it in a single system
+// call. Each affected method says so in its javadoc.
 //
-// **Los atributos que si se leen.** `readAttributes` (x2), `getAttribute` y `getLastModifiedTime`
-// funcionan, sobre la vista `basic` y nada mas. `stat` y `size` contestan cuatro de los nueve
-// atributos (`isRegularFile`, `isDirectory`, `isOther`, `size`); las tres marcas de tiempo salen
-// **epoca**, que es lo que la spec de `BasicFileAttributes` manda devolver cuando el sistema de
-// archivos no las soporta -- no un cero inventado; `fileKey()` da `null`, tambien por spec; y el
-// noveno, `isSymbolicLink()`, da `false`. Ver `AtributosBasicos`, abajo, donde esta el detalle
-// atributo por atributo.
+// The second: **not every opening method accepts the same `OpenOption`s**, and the difference is on
+// purpose. This class's rule is a single one --an option that can be honoured is accepted, and one
+// that could only be faked is rejected-- but it gives different results depending on what each
+// method is built on, because they do not all have the same capabilities underneath:
 //
-// **Ojo con la asimetria, que es real.** Los atributos se **leen** y sin embargo
-// `getFileAttributeView` devuelve `null` y `FileSystem.supportedFileAttributeViews()` da vacio. No
-// es una contradiccion: una *vista* es un objeto que lee **y escribe**, y `BasicFileAttributeView`
-// tiene `setTimes`, para lo que no hay nativo. Es la misma razon por la que falta
-// `setLastModifiedTime`.
+//   - `newInputStream`, `newOutputStream`, `newBufferedReader` and `newBufferedWriter` go to
+//     `java.io.FileInputStream` / `FileOutputStream`, which **accumulate and flush on close**.
+//     There `SYNC` and `DSYNC` cannot be honoured, and `DELETE_ON_CLOSE` is not implemented: all
+//     three are rejected, which is what `resolveOptions` does.
+//   - `newByteChannel` (x2) goes to `java.nio.channels.FileChannel`, which **writes to disk on
+//     every `write`**. There `SYNC` and `DSYNC` are already honoured by doing nothing and
+//     `DELETE_ON_CLOSE` is implemented, so all three are accepted. `newByteChannel` does not go
+//     through `resolveOptions`: it delegates the whole resolution to `FileChannel.open`.
 //
-// **Y dos diferencias de comportamiento que hay que tener presentes en lo que si esta.**
-//
-// La primera: ninguna de las operaciones de creacion es **atomica**. `createFile` es un `stat`
-// seguido de una escritura, y entre los dos alguien podria crear el archivo. El JDK lo hace en una
-// sola llamada al sistema. Cada metodo afectado lo dice en su javadoc.
-//
-// La segunda: **no todos los metodos de apertura aceptan las mismas `OpenOption`**, y la diferencia
-// es a proposito. La regla de esta clase es una sola --se acepta la opcion que se puede cumplir, y
-// se rechaza la que solo se podria fingir-- pero da resultados distintos segun sobre que este
-// construido cada metodo, porque no todos tienen las mismas capacidades abajo:
-//
-//   - `newInputStream`, `newOutputStream`, `newBufferedReader` y `newBufferedWriter` van a
-//     `java.io.FileInputStream` / `FileOutputStream`, que **acumulan y vuelcan al cerrar**. Ahi
-//     `SYNC` y `DSYNC` no se pueden cumplir, y `DELETE_ON_CLOSE` no esta implementado: los tres se
-//     rechazan, que es lo que hace `resolver`.
-//   - `newByteChannel` (x2) va a `java.nio.channels.FileChannel`, que **escribe al disco en cada
-//     `write`**. Ahi `SYNC` y `DSYNC` ya se cumplen sin hacer nada y `DELETE_ON_CLOSE` esta
-//     implementado, asi que las tres se aceptan. `newByteChannel` no pasa por `resolver`: delega la
-//     resolucion entera en `FileChannel.open`.
-//
-// `SPARSE` se rechaza en los dos lados, porque en ninguno se hacen archivos ralos. Uniformar hacia
-// el criterio estricto seria rechazar en `newByteChannel` opciones que ahi **si** se honran, y
-// uniformar hacia el laxo seria aceptar en `newOutputStream` un `SYNC` que no sincroniza, que es
-// justo la promesa falsa que esta biblioteca no hace.
+// `SPARSE` is rejected on both sides, because sparse files are made on neither. Uniforming towards
+// the strict criterion would mean rejecting in `newByteChannel` options that **are** honoured
+// there, and uniforming towards the lax one would mean accepting in `newOutputStream` a `SYNC` that
+// does not synchronise, which is exactly the false promise this library does not make.
 // ============================================================================================
 public final class Files {
 
-    // Es una clase de utilidades: no hay nada que instanciar.
+    // It is a utility class: there is nothing to instantiate.
     private Files() {
     }
 
-    // El generador de nombres temporales. Sembrado con el reloj de alta resolucion: no hace falta
-    // que sea criptografico --el JDK usa `SecureRandom` porque un nombre adivinable es un vector de
-    // ataque, y eso aca no cambia nada porque la creacion no es atomica de todos modos-- pero si
-    // que dos VMs que arrancan juntas no generen la misma secuencia.
-    private static final Random AZAR = new Random(System.nanoTime());
+    // The generator of temporary names. Seeded from the high-resolution clock: it does not have to
+    // be cryptographic --the JDK uses `SecureRandom` because a guessable name is an attack vector,
+    // and that changes nothing here because the creation is not atomic anyway-- but two VMs
+    // starting together must not generate the same sequence.
+    private static final Random RANDOM = new Random(System.nanoTime());
 
-    // La ruta como cadena, comprobando que el Path sea de esta biblioteca.
-    private static String ruta(Path path) {
+    // The path as a string, checking the Path is this library's.
+    private static String pathOf(Path path) {
         if (path == null) {
             throw new NullPointerException();
         }
@@ -148,23 +134,23 @@ public final class Files {
         return path.toString();
     }
 
-    // Las opciones de apertura ya resueltas. Se pasa una sola vez por el array y despues se
-    // consultan campos: recorrerlo en cada pregunta seria O(n) por consulta y --peor-- dejaria la
-    // validacion desparramada.
+    // The opening options, already resolved. The array is walked once and fields are consulted
+    // afterwards: walking it on every question would be O(n) per query and --worse-- would leave
+    // the validation scattered.
     //
-    // Esto vale para los metodos que abren un stream, **no** para `newByteChannel`: ver la nota de
-    // la cabecera sobre por que los dos criterios de opciones difieren y cual manda en cada caso.
-    private static final class Apertura {
-        boolean leer;
-        boolean escribir;
-        boolean anexar;
-        boolean crear;
-        boolean crearNuevo;
-        boolean truncar;
+    // This holds for the methods that open a stream, **not** for `newByteChannel`: see the header's
+    // note on why the two option criteria differ and which governs in each case.
+    private static final class Opening {
+        boolean readFrom;
+        boolean writeTo;
+        boolean appending;
+        boolean creating;
+        boolean createNew;
+        boolean truncate;
     }
 
-    private static Apertura resolver(OpenOption[] options, boolean paraEscribir) {
-        Apertura a = new Apertura();
+    private static Opening resolveOptions(OpenOption[] options, boolean forWriting) {
+        Opening a = new Opening();
         int i = 0;
         while (i < options.length) {
             OpenOption o = options[i];
@@ -172,199 +158,201 @@ public final class Files {
                 throw new NullPointerException();
             }
             if (o == StandardOpenOption.READ) {
-                a.leer = true;
+                a.readFrom = true;
             } else if (o == StandardOpenOption.WRITE) {
-                a.escribir = true;
+                a.writeTo = true;
             } else if (o == StandardOpenOption.APPEND) {
-                a.anexar = true;
+                a.appending = true;
             } else if (o == StandardOpenOption.TRUNCATE_EXISTING) {
-                a.truncar = true;
+                a.truncate = true;
             } else if (o == StandardOpenOption.CREATE) {
-                a.crear = true;
+                a.creating = true;
             } else if (o == StandardOpenOption.CREATE_NEW) {
-                a.crearNuevo = true;
+                a.createNew = true;
             } else if (o == LinkOption.NOFOLLOW_LINKS) {
-                // Sin enlaces en el modelo, no seguirlos es lo unico que se puede hacer: aceptarla
-                // no promete nada que no se cumpla, y no cambia ninguna bandera.
+                // With no links in the model, not following them is the only thing that can be
+                // done: accepting it promises nothing that is not honoured, and changes no flag.
             } else {
-                // DELETE_ON_CLOSE, SPARSE, SYNC, DSYNC y cualquier OpenOption ajena. Se rechazan en
-                // vez de ignorarse: un `SYNC` que no sincroniza es la clase de promesa falsa que
-                // hace perder datos.
+                // DELETE_ON_CLOSE, SPARSE, SYNC, DSYNC and any foreign OpenOption. They are
+                // rejected rather than ignored: a `SYNC` that does not synchronise is the kind of
+                // false promise that loses data.
                 throw new UnsupportedOperationException(String.valueOf(o) + " not supported");
             }
             i = i + 1;
         }
-        if (a.anexar && a.leer) {
+        if (a.appending && a.readFrom) {
             throw new IllegalArgumentException("READ + APPEND not allowed");
         }
-        if (a.anexar && a.truncar) {
+        if (a.appending && a.truncate) {
             throw new IllegalArgumentException("APPEND + TRUNCATE_EXISTING not allowed");
         }
-        if (paraEscribir) {
-            // Por omision: crear, truncar y escribir, que es lo que dice la spec cuando no se pasa
-            // ninguna opcion.
-            if (!a.escribir && !a.anexar) {
-                a.escribir = true;
+        if (forWriting) {
+            // By default: create, truncate and write, which is what the spec says when no option is
+            // passed.
+            if (!a.writeTo && !a.appending) {
+                a.writeTo = true;
                 if (options.length == 0) {
-                    a.crear = true;
-                    a.truncar = true;
+                    a.creating = true;
+                    a.truncate = true;
                 }
             }
-        } else if (!a.leer && options.length == 0) {
-            a.leer = true;
+        } else if (!a.readFrom && options.length == 0) {
+            a.readFrom = true;
         }
         return a;
     }
 
-    // Traduce el resultado de `stat` a la excepcion que corresponde cuando no se pudo leer.
-    private static IOException porQueNoSeLeyo(String p) {
+    // It turns `stat`'s result into the exception that fits when it could not be read.
+    private static IOException whyItWasNotRead(String p) {
         int st = Fs.stat(p);
-        if ((st & Fs.EXISTE) == 0) {
+        if ((st & Fs.EXISTS) == 0) {
             return new NoSuchFileException(p);
         }
-        if ((st & Fs.ES_DIRECTORIO) != 0) {
+        if ((st & Fs.IS_DIRECTORY) != 0) {
             return new IOException(p + " is a directory");
         }
         return new AccessDeniedException(p);
     }
 
     // ------------------------------------------------------------------------------------------
-    // Abrir
+    // Opening
     // ------------------------------------------------------------------------------------------
 
     /**
-     * Un stream de bytes sobre `path`.
+     * A stream of bytes over `path`.
      *
-     * <p>**El archivo se lee entero al abrir**, como todo en esta VM: lo que devuelve es un stream
-     * sobre una copia en memoria, no una ventana viva al archivo. Ver la nota de
-     * `java.io.FileInputStream`, que es lo que hay abajo.
+     * <p>**The file is read whole on opening**, as everything in this VM is: what it returns is a
+     * stream over a copy in memory, not a live window onto the file. See
+     * `java.io.FileInputStream`'s note, which is what is underneath.
      *
-     * @throws UnsupportedOperationException si se pide una opcion que esta VM no puede honrar
-     * @throws NoSuchFileException si el archivo no esta
+     * @throws UnsupportedOperationException if an option this VM cannot honour is asked for
+     * @throws NoSuchFileException if the file is not there
      */
     public static InputStream newInputStream(Path path, OpenOption... options) throws IOException {
-        String p = ruta(path);
-        Apertura a = resolver(options, false);
-        if (a.escribir || a.anexar || a.crear || a.crearNuevo || a.truncar) {
+        String p = pathOf(path);
+        Opening a = resolveOptions(options, false);
+        if (a.writeTo || a.appending || a.creating || a.createNew || a.truncate) {
             throw new UnsupportedOperationException("write options on newInputStream");
         }
-        // Se pregunta por `stat` antes de abrir para poder distinguir "no existe" de "no tengo
-        // permiso": `FileInputStream` solo sabe decir `FileNotFoundException`, que junta las dos.
+        // `stat` is asked before opening so as to tell "does not exist" from "I have no
+        // permission": `FileInputStream` can only say `FileNotFoundException`, which lumps the
+        // two together.
         int st = Fs.stat(p);
-        if ((st & Fs.EXISTE) == 0) {
+        if ((st & Fs.EXISTS) == 0) {
             throw new NoSuchFileException(p);
         }
-        if ((st & Fs.ES_DIRECTORIO) != 0) {
+        if ((st & Fs.IS_DIRECTORY) != 0) {
             throw new IOException(p + " is a directory");
         }
-        if ((st & Fs.SE_LEE) == 0) {
+        if ((st & Fs.CAN_READ) == 0) {
             throw new AccessDeniedException(p);
         }
         return new FileInputStream(p);
     }
 
     /**
-     * Un stream para escribir en `path`.
+     * A stream for writing into `path`.
      *
-     * <p>Sin opciones equivale a `CREATE`, `TRUNCATE_EXISTING` y `WRITE`.
+     * <p>With no options it is equivalent to `CREATE`, `TRUNCATE_EXISTING` and `WRITE`.
      *
-     * <p>**El contenido llega al disco recien al cerrar**, no a medida que se escribe: abajo esta
-     * `java.io.FileOutputStream`, que acumula y vuelca de una porque el nativo escribe el archivo
-     * entero. Un programa que se cuelga sin cerrar el stream no deja nada escrito.
+     * <p>**The content reaches the disk only on closing**, not as it is written: underneath is
+     * `java.io.FileOutputStream`, which accumulates and flushes in one go because the native writes
+     * the whole file. A program that dies without closing the stream leaves nothing written.
      *
-     * @throws FileAlreadyExistsException con `CREATE_NEW` si el archivo ya estaba
-     * @throws NoSuchFileException sin `CREATE` ni `CREATE_NEW` si el archivo no estaba
+     * @throws FileAlreadyExistsException with `CREATE_NEW` if the file was already there
+     * @throws NoSuchFileException with neither `CREATE` nor `CREATE_NEW` if the file was not
      */
     public static OutputStream newOutputStream(Path path, OpenOption... options)
             throws IOException {
-        String p = ruta(path);
-        Apertura a = resolver(options, true);
-        if (a.leer) {
+        String p = pathOf(path);
+        Opening a = resolveOptions(options, true);
+        if (a.readFrom) {
             throw new UnsupportedOperationException("READ on newOutputStream");
         }
-        boolean existe = (Fs.stat(p) & Fs.EXISTE) != 0;
-        if (a.crearNuevo && existe) {
+        boolean exists = (Fs.stat(p) & Fs.EXISTS) != 0;
+        if (a.createNew && exists) {
             throw new FileAlreadyExistsException(p);
         }
-        if (!existe && !a.crear && !a.crearNuevo) {
+        if (!exists && !a.creating && !a.createNew) {
             throw new NoSuchFileException(p);
         }
-        return new FileOutputStream(p, a.anexar);
+        return new FileOutputStream(p, a.appending);
     }
 
     /**
-     * Un canal con posicion sobre `path`.
+     * A channel with a position over `path`.
      *
-     * <p>Es el unico metodo de apertura de esta clase que **no** vuelca en memoria: abajo esta
-     * `java.nio.channels.FileChannel`, que va al disco en cada lectura y en cada escritura. Sale
-     * caro --O(n) por operacion, porque el nativo solo sabe leer y escribir el archivo entero-- y a
-     * cambio es el unico que cumple lo que promete: cuando `write` vuelve, los bytes estan en el
-     * disco. La cabecera de `FileChannel` explica el trato completo.
+     * <p>It is this class's only opening method that does **not** go through memory: underneath is
+     * `java.nio.channels.FileChannel`, which goes to the disk on every read and every write. It
+     * comes out expensive --O(n) per operation, because the native only knows how to read and write
+     * the whole file-- and in exchange it is the only one that honours what it promises: when
+     * `write` returns, the bytes are on the disk. `FileChannel`'s header explains the full deal.
      *
-     * <p>**Las opciones las resuelve `FileChannel.open`, no esta clase.** Por eso aca `SYNC`,
-     * `DSYNC` y `DELETE_ON_CLOSE` se aceptan, mientras que `newInputStream` y `newOutputStream` las
-     * rechazan: ahi no se pueden cumplir y aca si. `SPARSE` se rechaza en los dos. El porque esta
-     * en la cabecera de la clase.
+     * <p>**The options are resolved by `FileChannel.open`, not by this class.** That is why `SYNC`,
+     * `DSYNC` and `DELETE_ON_CLOSE` are accepted here while `newInputStream` and `newOutputStream`
+     * reject them: there they cannot be honoured and here they can. `SPARSE` is rejected on both.
+     * The why is in the class's header.
      *
-     * @throws ProviderMismatchException si `path` no es de esta biblioteca
-     * @throws IllegalArgumentException si las opciones se contradicen
-     * @throws UnsupportedOperationException si se pide una opcion que esta VM no puede honrar
-     * @throws NoSuchFileException si no existe y no se pidio crearlo
-     * @throws FileAlreadyExistsException con `CREATE_NEW` si ya estaba
+     * @throws ProviderMismatchException if `path` is not this library's
+     * @throws IllegalArgumentException if the options contradict each other
+     * @throws UnsupportedOperationException if an option this VM cannot honour is asked for
+     * @throws NoSuchFileException if it does not exist and creating it was not asked for
+     * @throws FileAlreadyExistsException with `CREATE_NEW` if it was already there
      */
     public static SeekableByteChannel newByteChannel(Path path, OpenOption... options)
             throws IOException {
-        // La comprobacion del proveedor se hace aca y no mas abajo: `FileChannel.open` trabaja con
-        // la ruta como cadena y le da igual de donde salga, pero el contrato de `Files` dice que un
-        // `Path` ajeno es `ProviderMismatchException`.
-        ruta(path);
+        // The provider check is done here and not further down: `FileChannel.open` works with the
+        // path as a string and does not care where it came from, but `Files`'s contract says a
+        // foreign `Path` is `ProviderMismatchException`.
+        pathOf(path);
         return FileChannel.open(path, options);
     }
 
     /**
-     * Como el otro, con las opciones en un conjunto y atributos iniciales.
+     * Like the other, with the options in a set and initial attributes.
      *
-     * <p>`attrs` tiene que venir vacio, por la misma razon que en `createFile`: no hay nativo que
-     * fije permisos al crear. Lo rechaza `FileChannel.open`, asi que no se repite la comprobacion
-     * aca --duplicarla es como se termina con dos mensajes distintos para el mismo error.
+     * <p>`attrs` has to arrive empty, for the same reason as in `createFile`: there is no native
+     * that sets permissions on creation. `FileChannel.open` rejects it, so the check is not
+     * repeated here --duplicating it is how one ends up with two different messages for the same
+     * error.
      *
-     * @throws UnsupportedOperationException si `attrs` trae algo
+     * @throws UnsupportedOperationException if `attrs` carries anything
      */
     public static SeekableByteChannel newByteChannel(Path path, Set<? extends OpenOption> options,
             FileAttribute<?>... attrs) throws IOException {
-        ruta(path);
+        pathOf(path);
         return FileChannel.open(path, options, attrs);
     }
 
-    /** Un lector con buffer sobre `path`, decodificando con `cs`. */
+    /** A buffered reader over `path`, decoding with `cs`. */
     public static BufferedReader newBufferedReader(Path path, Charset cs) throws IOException {
         return new BufferedReader(new InputStreamReader(newInputStream(path), cs));
     }
 
-    /** Como el otro, en UTF-8. */
+    /** Like the other, in UTF-8. */
     public static BufferedReader newBufferedReader(Path path) throws IOException {
         return newBufferedReader(path, StandardCharsets.UTF_8);
     }
 
-    /** Un escritor con buffer sobre `path`, codificando con `cs`. */
+    /** A buffered writer over `path`, encoding with `cs`. */
     public static BufferedWriter newBufferedWriter(Path path, Charset cs, OpenOption... options)
             throws IOException {
         return new BufferedWriter(new OutputStreamWriter(newOutputStream(path, options), cs));
     }
 
-    /** Como el otro, en UTF-8. */
+    /** Like the other, in UTF-8. */
     public static BufferedWriter newBufferedWriter(Path path, OpenOption... options)
             throws IOException {
         return newBufferedWriter(path, StandardCharsets.UTF_8, options);
     }
 
     // ------------------------------------------------------------------------------------------
-    // Crear
+    // Creating
     // ------------------------------------------------------------------------------------------
 
-    // Rechaza los atributos de creacion. Se hace en un solo lugar porque la razon es una sola: el
-    // nativo que crea no toma ningun parametro de permisos.
-    private static void sinAtributos(FileAttribute<?>[] attrs) {
+    // It rejects the creation attributes. It is done in one place because the reason is a single
+    // one: the native that creates takes no permission parameter.
+    private static void noAttributes(FileAttribute<?>[] attrs) {
         if (attrs.length > 0) {
             throw new UnsupportedOperationException(
                     "KajiJDK cannot set attributes when creating a file");
@@ -372,20 +360,21 @@ public final class Files {
     }
 
     /**
-     * Crea un archivo vacio.
+     * It creates an empty file.
      *
-     * <p>**No es atomico, a diferencia del JDK.** Aca son dos pasos --comprobar que no exista y
-     * escribir cero bytes-- y entre los dos otro proceso podria crearlo; en ese caso este metodo
-     * lo pisa en vez de fallar. El JDK lo hace en una sola llamada al sistema con `O_EXCL`. Cuando
-     * haya un nativo de creacion exclusiva, esto se arregla aca adentro y nadie mas se entera.
+     * <p>**It is not atomic, unlike the JDK's.** Here it is two steps --check it does not exist and
+     * write zero bytes-- and between the two another process could create it; in that case this
+     * method overwrites it instead of failing. The JDK does it in a single system call with
+     * `O_EXCL`. When there is a native for exclusive creation, this is fixed in here and nobody
+     * else finds out.
      *
-     * @throws FileAlreadyExistsException si ya existe
-     * @throws UnsupportedOperationException si se pasa algun `FileAttribute`
+     * @throws FileAlreadyExistsException if it already exists
+     * @throws UnsupportedOperationException if any `FileAttribute` is passed
      */
     public static Path createFile(Path path, FileAttribute<?>... attrs) throws IOException {
-        String p = ruta(path);
-        sinAtributos(attrs);
-        if ((Fs.stat(p) & Fs.EXISTE) != 0) {
+        String p = pathOf(path);
+        noAttributes(attrs);
+        if ((Fs.stat(p) & Fs.EXISTS) != 0) {
             throw new FileAlreadyExistsException(p);
         }
         if (!Fs.writeAllBytes(p, new byte[0], false)) {
@@ -395,20 +384,20 @@ public final class Files {
     }
 
     /**
-     * Crea un directorio. El padre tiene que existir.
+     * It creates a directory. The parent has to exist.
      *
-     * @throws FileAlreadyExistsException si ya hay algo con ese nombre
-     * @throws NoSuchFileException si falta el directorio padre
+     * @throws FileAlreadyExistsException if there is already something by that name
+     * @throws NoSuchFileException if the parent directory is missing
      */
     public static Path createDirectory(Path dir, FileAttribute<?>... attrs) throws IOException {
-        String p = ruta(dir);
-        sinAtributos(attrs);
-        if ((Fs.stat(p) & Fs.EXISTE) != 0) {
+        String p = pathOf(dir);
+        noAttributes(attrs);
+        if ((Fs.stat(p) & Fs.EXISTS) != 0) {
             throw new FileAlreadyExistsException(p);
         }
-        Path padre = dir.toAbsolutePath().getParent();
-        if (padre != null && (Fs.stat(padre.toString()) & Fs.EXISTE) == 0) {
-            throw new NoSuchFileException(padre.toString());
+        Path parent = dir.toAbsolutePath().getParent();
+        if (parent != null && (Fs.stat(parent.toString()) & Fs.EXISTS) == 0) {
+            throw new NoSuchFileException(parent.toString());
         }
         if (!Fs.mkdir(p, false)) {
             throw new IOException("cannot create directory " + p);
@@ -417,19 +406,19 @@ public final class Files {
     }
 
     /**
-     * Crea el directorio y todos los padres que falten.
+     * It creates the directory and every missing parent.
      *
-     * <p>A diferencia de `createDirectory`, **no falla si ya existe** -- es la unica diferencia de
-     * contrato entre las dos y es la que hace que esta sirva para asegurar una ruta.
+     * <p>Unlike `createDirectory`, it **does not fail if it already exists** -- that is the only
+     * contract difference between the two and it is what makes this one useful for ensuring a path.
      *
-     * @throws FileAlreadyExistsException si la ruta existe pero no es un directorio
+     * @throws FileAlreadyExistsException if the path exists but is not a directory
      */
     public static Path createDirectories(Path dir, FileAttribute<?>... attrs) throws IOException {
-        String p = ruta(dir);
-        sinAtributos(attrs);
+        String p = pathOf(dir);
+        noAttributes(attrs);
         int st = Fs.stat(p);
-        if ((st & Fs.EXISTE) != 0) {
-            if ((st & Fs.ES_DIRECTORIO) == 0) {
+        if ((st & Fs.EXISTS) != 0) {
+            if ((st & Fs.IS_DIRECTORY) == 0) {
                 throw new FileAlreadyExistsException(p);
             }
             return dir;
@@ -440,68 +429,69 @@ public final class Files {
         return dir;
     }
 
-    // Un nombre candidato. El JDK usa un long aleatorio en decimal; se hace igual para que los
-    // nombres tengan la misma pinta.
-    private static String nombreTemporal(String prefix, String suffix, boolean esDirectorio) {
+    // A candidate name. The JDK uses a random long in decimal; the same is done here so the names
+    // look the same.
+    private static String tempName(String prefix, String suffix, boolean isDirectory) {
         String pre = (prefix == null) ? "" : prefix;
         String suf = suffix;
         if (suf == null) {
-            suf = esDirectorio ? "" : ".tmp";
+            suf = isDirectory ? "" : ".tmp";
         }
-        long n = AZAR.nextLong();
-        // `Long.MIN_VALUE` no tiene valor absoluto: se lo trata aparte para no imprimir el signo.
-        String medio = (n == Long.MIN_VALUE) ? "0" : Long.toString(Math.abs(n));
-        return pre + medio + suf;
+        long n = RANDOM.nextLong();
+        // `Long.MIN_VALUE` has no absolute value: it is handled separately so as not to print the
+        // sign.
+        String middle = (n == Long.MIN_VALUE) ? "0" : Long.toString(Math.abs(n));
+        return pre + middle + suf;
     }
 
     /**
-     * Un archivo nuevo con nombre unico dentro de `dir`.
+     * A fresh file with a unique name inside `dir`.
      *
-     * <p>**No es atomico** por la misma razon que `createFile`; se reintenta hasta que un nombre no
-     * este tomado, y despues de varios intentos se rinde en vez de girar para siempre.
+     * <p>**It is not atomic** for the same reason as `createFile`; it retries until a name is not
+     * taken, and after several attempts it gives up rather than spin forever.
      */
     public static Path createTempFile(Path dir, String prefix, String suffix,
             FileAttribute<?>... attrs) throws IOException {
-        sinAtributos(attrs);
-        int intentos = 0;
-        while (intentos < 100) {
-            Path p = dir.resolve(nombreTemporal(prefix, suffix, false));
-            if ((Fs.stat(p.toString()) & Fs.EXISTE) == 0) {
+        noAttributes(attrs);
+        int attempts = 0;
+        while (attempts < 100) {
+            Path p = dir.resolve(tempName(prefix, suffix, false));
+            if ((Fs.stat(p.toString()) & Fs.EXISTS) == 0) {
                 return createFile(p);
             }
-            intentos = intentos + 1;
+            attempts = attempts + 1;
         }
         throw new IOException("cannot create a unique temporary file in " + dir);
     }
 
-    /** Como el otro, en el directorio de `java.io.tmpdir`. */
+    /** Like the other, in `java.io.tmpdir`'s directory. */
     public static Path createTempFile(String prefix, String suffix, FileAttribute<?>... attrs)
             throws IOException {
-        return createTempFile(directorioTemporal(), prefix, suffix, attrs);
+        return createTempFile(tempDirectory(), prefix, suffix, attrs);
     }
 
-    /** Un directorio nuevo con nombre unico dentro de `dir`. No es atomico. */
+    /** A fresh directory with a unique name inside `dir`. It is not atomic. */
     public static Path createTempDirectory(Path dir, String prefix, FileAttribute<?>... attrs)
             throws IOException {
-        sinAtributos(attrs);
-        int intentos = 0;
-        while (intentos < 100) {
-            Path p = dir.resolve(nombreTemporal(prefix, null, true));
-            if ((Fs.stat(p.toString()) & Fs.EXISTE) == 0) {
+        noAttributes(attrs);
+        int attempts = 0;
+        while (attempts < 100) {
+            Path p = dir.resolve(tempName(prefix, null, true));
+            if ((Fs.stat(p.toString()) & Fs.EXISTS) == 0) {
                 return createDirectory(p);
             }
-            intentos = intentos + 1;
+            attempts = attempts + 1;
         }
         throw new IOException("cannot create a unique temporary directory in " + dir);
     }
 
-    /** Como el otro, en el directorio de `java.io.tmpdir`. */
+    /** Like the other, in `java.io.tmpdir`'s directory. */
     public static Path createTempDirectory(String prefix, FileAttribute<?>... attrs)
             throws IOException {
-        return createTempDirectory(directorioTemporal(), prefix, attrs);
+        return createTempDirectory(tempDirectory(), prefix, attrs);
     }
 
-    private static Path directorioTemporal() {
+    private static Path tempDirectory() {
         String t = System.getProperty("java.io.tmpdir");
         if (t == null || t.length() == 0) {
             t = ".";
@@ -510,107 +500,108 @@ public final class Files {
     }
 
     // ------------------------------------------------------------------------------------------
-    // Borrar, copiar, mover
+    // Deleting, copying, moving
     // ------------------------------------------------------------------------------------------
 
     /**
-     * Borra el archivo, o el directorio **si esta vacio**.
+     * It deletes the file, or the directory **if it is empty**.
      *
-     * <p>Que un directorio con contenido no se borre es del nativo y es deliberado: un borrado
-     * recursivo escondido detras de un `delete()` convierte un error de ruta en una perdida de
-     * datos.
+     * <p>That a directory with content is not deleted is the native's doing and it is deliberate: a
+     * recursive delete hidden behind a `delete()` turns a path mistake into data loss.
      *
-     * @throws NoSuchFileException si no existe
-     * @throws DirectoryNotEmptyException si es un directorio con cosas adentro
+     * @throws NoSuchFileException if it does not exist
+     * @throws DirectoryNotEmptyException if it is a directory with things inside
      */
     public static void delete(Path path) throws IOException {
-        String p = ruta(path);
+        String p = pathOf(path);
         int st = Fs.stat(p);
-        if ((st & Fs.EXISTE) == 0) {
+        if ((st & Fs.EXISTS) == 0) {
             throw new NoSuchFileException(p);
         }
         if (Fs.delete(p)) {
             return;
         }
-        if ((st & Fs.ES_DIRECTORIO) != 0) {
+        if ((st & Fs.IS_DIRECTORY) != 0) {
             throw new DirectoryNotEmptyException(p);
         }
         throw new AccessDeniedException(p);
     }
 
     /**
-     * Borra si esta; devuelve si borro algo.
+     * It deletes if it is there; it returns whether it deleted anything.
      *
-     * <p>**No es atomico**: se comprueba y despues se borra. Sirve para el caso comun --no querer
-     * escribir el `try`/`catch`-- no para arbitrar entre procesos.
+     * <p>**It is not atomic**: it checks and then deletes. It serves the common case --not wanting
+     * to write the `try`/`catch`-- not arbitrating between processes.
      */
     public static boolean deleteIfExists(Path path) throws IOException {
-        String p = ruta(path);
-        if ((Fs.stat(p) & Fs.EXISTE) == 0) {
+        String p = pathOf(path);
+        if ((Fs.stat(p) & Fs.EXISTS) == 0) {
             return false;
         }
         delete(path);
         return true;
     }
 
-    // Separa las opciones de copia. Devuelve si hay que pisar el destino; rechaza las que no se
-    // pueden honrar, cada una con la excepcion que le corresponde por spec.
-    private static boolean resolverCopia(CopyOption[] options) throws IOException {
-        boolean pisar = false;
+    // It sorts out the copy options. It returns whether the target has to be overwritten; it
+    // rejects the ones that cannot be honoured, each with the exception the spec assigns it.
+    private static boolean resolveCopyOptions(CopyOption[] options) throws IOException {
+        boolean overwrite = false;
         int i = 0;
         while (i < options.length) {
             CopyOption o = options[i];
             if (o == StandardCopyOption.REPLACE_EXISTING) {
-                pisar = true;
+                overwrite = true;
             } else if (o == StandardCopyOption.COPY_ATTRIBUTES) {
-                // Ni leer ni escribir metadatos: aceptarla en silencio dejaria al destino con
-                // fechas y permisos distintos de los del origen sin avisar.
+                // Metadata can be neither read nor written: accepting it in silence would leave
+                // the target with dates and permissions different from the source's without a
+                // word.
                 throw new UnsupportedOperationException("COPY_ATTRIBUTES: no attribute natives");
             } else if (o == StandardCopyOption.ATOMIC_MOVE) {
                 throw new AtomicMoveNotSupportedException(null, null,
                         "move is copy+delete in KajiJDK; there is no rename native");
             } else if (o == LinkOption.NOFOLLOW_LINKS) {
-                // Sin enlaces, no seguirlos es lo que ya pasa: no cambia nada.
+                // With no links, not following them is what already happens: it changes nothing.
             } else {
                 throw new UnsupportedOperationException(String.valueOf(o) + " not supported");
             }
             i = i + 1;
         }
-        return pisar;
+        return overwrite;
     }
 
     /**
-     * Copia `source` en `target`.
+     * It copies `source` into `target`.
      *
-     * <p>**Solo archivos comunes.** Copiar un directorio en el JDK crea el directorio vacio en el
-     * destino; aca eso se puede hacer, pero recorrerlo para copiar el contenido no, y la spec dice
-     * que la copia de un directorio **no** es recursiva -- asi que el caso se soporta.
+     * <p>**Regular files only.** Copying a directory in the JDK creates the empty directory in the
+     * target; that can be done here, and the spec says a directory's copy is **not** recursive --
+     * so the case is supported.
      *
-     * <p>Como todo lo demas, pasa por memoria: un archivo de un giga se copia leyendolo entero.
+     * <p>Like everything else, it goes through memory: a one-gigabyte file is copied by reading it
+     * whole.
      *
-     * @throws FileAlreadyExistsException si el destino existe y no se paso `REPLACE_EXISTING`
-     * @throws UnsupportedOperationException con `COPY_ATTRIBUTES`
+     * @throws FileAlreadyExistsException if the target exists and `REPLACE_EXISTING` was not passed
+     * @throws UnsupportedOperationException with `COPY_ATTRIBUTES`
      */
     public static Path copy(Path source, Path target, CopyOption... options) throws IOException {
-        String s = ruta(source);
-        String t = ruta(target);
-        boolean pisar = resolverCopia(options);
-        int stOrigen = Fs.stat(s);
-        if ((stOrigen & Fs.EXISTE) == 0) {
+        String s = pathOf(source);
+        String t = pathOf(target);
+        boolean overwrite = resolveCopyOptions(options);
+        int sourceStat = Fs.stat(s);
+        if ((sourceStat & Fs.EXISTS) == 0) {
             throw new NoSuchFileException(s);
         }
-        int stDestino = Fs.stat(t);
-        if ((stDestino & Fs.EXISTE) != 0) {
-            if (!pisar) {
+        int targetStat = Fs.stat(t);
+        if ((targetStat & Fs.EXISTS) != 0) {
+            if (!overwrite) {
                 throw new FileAlreadyExistsException(t);
             }
             if (!Fs.delete(t)) {
                 throw new DirectoryNotEmptyException(t);
             }
         }
-        if ((stOrigen & Fs.ES_DIRECTORIO) != 0) {
-            // La copia de un directorio crea uno vacio en el destino; no baja. Es lo que dice la
-            // spec, no una limitacion de aca.
+        if ((sourceStat & Fs.IS_DIRECTORY) != 0) {
+            // A directory's copy creates an empty one in the target; it does not descend. It is
+            // what the spec says, not a limitation of this implementation.
             if (!Fs.mkdir(t, false)) {
                 throw new IOException("cannot create directory " + t);
             }
@@ -618,7 +609,7 @@ public final class Files {
         }
         byte[] b = Fs.readAllBytes(s);
         if (b == null) {
-            throw porQueNoSeLeyo(s);
+            throw whyItWasNotRead(s);
         }
         if (!Fs.writeAllBytes(t, b, false)) {
             throw new IOException("cannot write " + t);
@@ -627,100 +618,101 @@ public final class Files {
     }
 
     /**
-     * Mueve `source` a `target`.
+     * It moves `source` to `target`.
      *
-     * <p>**Es copiar y borrar, no un rename.** No hay nativo de rename, asi que hay un instante en
-     * el que el archivo esta en los dos lados. Las consecuencias, dichas de frente:
+     * <p>**It is copy and delete, not a rename.** There is no rename native, so there is an instant
+     * when the file is on both sides. The consequences, said plainly:
      *
      * <ul>
-     *   <li>`ATOMIC_MOVE` levanta `AtomicMoveNotSupportedException`, siempre. Es la respuesta
-     *       correcta: quien la pide la pide porque le importa.
-     *   <li>Un corte en el medio puede dejar el archivo duplicado. Nunca lo pierde: primero se
-     *       escribe el destino y recien despues se borra el origen.
-     *   <li>Mover un directorio con contenido **falla**, porque el borrado del origen no puede
-     *       borrar un directorio no vacio. En el JDK un rename dentro del mismo volumen lo mueve.
+     *   <li>`ATOMIC_MOVE` raises `AtomicMoveNotSupportedException`, always. It is the correct
+     *       answer: whoever asks for it asks because it matters to them.
+     *   <li>A cut in the middle can leave the file duplicated. It never loses it: the target is
+     *       written first and only then is the source deleted.
+     *   <li>Moving a directory with content **fails**, because deleting the source cannot delete a
+     *       non-empty directory. In the JDK a rename within the same volume moves it.
      * </ul>
      */
     public static Path move(Path source, Path target, CopyOption... options) throws IOException {
-        String s = ruta(source);
+        String s = pathOf(source);
         copy(source, target, options);
         if (!Fs.delete(s)) {
-            // El destino ya esta escrito. Se avisa en vez de callar: el arbol quedo con una copia
-            // de mas y quien llamo tiene que saberlo.
-            throw new IOException("copied to " + ruta(target) + " but cannot delete " + s);
+            // The target is already written. It is reported rather than kept quiet: the tree has
+            // been left with one copy too many and the caller has to know.
+            throw new IOException("copied to " + pathOf(target) + " but cannot delete " + s);
         }
         return target;
     }
 
     // ------------------------------------------------------------------------------------------
-    // Preguntas
+    // Queries
     // ------------------------------------------------------------------------------------------
 
     /**
-     * Si la ruta existe.
+     * Whether the path exists.
      *
-     * <p>`options` se acepta y no cambia nada: sin enlaces simbolicos en el modelo, seguirlos o no
-     * da lo mismo.
+     * <p>`options` is accepted and changes nothing: with no symbolic links in the model, following
+     * them or not comes to the same.
      */
     public static boolean exists(Path path, LinkOption... options) {
-        return (Fs.stat(ruta(path)) & Fs.EXISTE) != 0;
+        return (Fs.stat(pathOf(path)) & Fs.EXISTS) != 0;
     }
 
     /**
-     * Si la ruta **no** existe.
+     * Whether the path does **not** exist.
      *
-     * <p>No es la negacion de `exists` en el JDK --alla las dos pueden dar `false` cuando no se
-     * puede determinar-- pero aca si lo es: `stat` no distingue "no existe" de "no puedo mirar", y
-     * fingir un tercer estado que el nativo no reporta seria inventarlo.
+     * <p>It is not `exists`'s negation in the JDK --there both can give `false` when it cannot be
+     * determined-- but here it is: `stat` does not tell "does not exist" from "cannot look", and
+     * faking a third state the native does not report would be inventing it.
      */
     public static boolean notExists(Path path, LinkOption... options) {
-        return (Fs.stat(ruta(path)) & Fs.EXISTE) == 0;
+        return (Fs.stat(pathOf(path)) & Fs.EXISTS) == 0;
     }
 
-    /** Si existe y es un archivo comun. */
+    /** Whether it exists and is a regular file. */
     public static boolean isRegularFile(Path path, LinkOption... options) {
-        return (Fs.stat(ruta(path)) & Fs.ES_ARCHIVO) != 0;
+        return (Fs.stat(pathOf(path)) & Fs.IS_FILE) != 0;
     }
 
-    /** Si existe y es un directorio. */
+    /** Whether it exists and is a directory. */
     public static boolean isDirectory(Path path, LinkOption... options) {
-        return (Fs.stat(ruta(path)) & Fs.ES_DIRECTORIO) != 0;
+        return (Fs.stat(pathOf(path)) & Fs.IS_DIRECTORY) != 0;
     }
 
-    /** Si esta VM lo puede leer. */
+    /** Whether this VM can read it. */
     public static boolean isReadable(Path path) {
-        return (Fs.stat(ruta(path)) & Fs.SE_LEE) != 0;
+        return (Fs.stat(pathOf(path)) & Fs.CAN_READ) != 0;
     }
 
-    /** Si esta VM lo puede escribir. */
+    /** Whether this VM can write it. */
     public static boolean isWritable(Path path) {
-        return (Fs.stat(ruta(path)) & Fs.SE_ESCRIBE) != 0;
+        return (Fs.stat(pathOf(path)) & Fs.CAN_WRITE) != 0;
     }
 
     /**
-     * Si esta VM lo puede ejecutar -- **siempre `false` en KajiJDK**.
+     * Whether this VM can execute it -- **always `false` in KajiJDK**.
      *
-     * <p>`stat` trae lectura y escritura, no ejecucion, asi que aca no se puede determinar. Y
-     * `false` **es** la respuesta que manda la spec para ese caso: el contrato dice `false` "si el
-     * archivo no existe, si el permiso de ejecucion seria denegado, **o si el acceso no se puede
-     * determinar**". Los tres son el mismo `false`, y por eso no hace falta inventar nada.
+     * <p>`stat` brings read and write, not execute, so it cannot be determined here. And `false`
+     * **is** the answer the spec requires for that case: the contract says `false` "if the file
+     * does not exist, if execute permission would be denied, **or if the access cannot be
+     * determined**". All three are the same `false`, which is why nothing has to be invented.
      *
-     * <p>Es el unico de los tres `is*able` que difiere de su equivalente en el proveedor:
-     * `KajiFileSystemProvider.checkAccess(p, EXECUTE)` tira `UnsupportedOperationException`, porque
-     * ahi la firma **si** permite decir "no se puede", y decirlo es mejor que un `false`.
+     * <p>It is the only one of the three `is*able` that differs from its equivalent in the
+     * provider: `KajiFileSystemProvider.checkAccess(p, EXECUTE)` throws
+     * `UnsupportedOperationException`, because there the signature **does** allow saying "cannot",
+     * and saying it beats a `false`.
      */
     public static boolean isExecutable(Path path) {
-        ruta(path);
+        pathOf(path);
         return false;
     }
 
     /**
-     * Si es un enlace simbolico -- **siempre `false` en KajiJDK**.
+     * Whether it is a symbolic link -- **always `false` in KajiJDK**.
      *
-     * <p>Como en `isExecutable`, `false` es lo que la spec pide cuando no se puede determinar. El
-     * `stat` de esta VM sigue los enlaces y devuelve los datos del destino, asi que un enlace a un
-     * archivo se ve como el archivo: el modelo de abajo es transparente a los enlaces y no tiene
-     * con que distinguirlos.
+     * <p>As in `isExecutable`, `false` is what the spec asks for when it cannot be determined. This
+     * VM's `stat` follows links and returns the target's data, so a link to a file looks like the
+     * file: the model underneath is transparent to links and has nothing to tell them apart
+     * with.
      */
     public static boolean isSymbolicLink(Path path) {
         try {
@@ -732,54 +724,55 @@ public final class Files {
     }
 
     /**
-     * Si el archivo se considera oculto.
+     * Whether the file is considered hidden.
      *
-     * <p>**La definicion es del proveedor, y esta es la de KajiJDK: el nombre empieza con un
-     * punto.** No es una respuesta a medias --la spec dice textualmente que "la definicion exacta
-     * de oculto depende de la plataforma o del proveedor"--, asi que un proveedor que elige una
-     * regla y la publica esta contestando el contrato, no esquivandolo. La regla elegida es la
-     * misma que ya usa `java.io.File.isHidden()` en esta biblioteca: dos respuestas distintas para
-     * la misma pregunta sobre el mismo archivo seria la incoherencia de verdad.
+     * <p>**The definition is the provider's, and this is KajiJDK's: the name starts with a dot.**
+     * It is not a half answer --the spec says in as many words that "the exact definition of hidden
+     * is platform or provider dependent"-- so a provider that picks a rule and publishes it is
+     * answering the contract, not dodging it. The rule picked is the one `java.io.File.isHidden()`
+     * already uses in this library: two different answers to the same question about the same file
+     * would be the real inconsistency.
      *
-     * <p>**En que difiere del JDK sobre Windows.** Alla la respuesta sale del bit de DOS, que
-     * `stat` no trae: `.gitignore` da `false` en un JDK de Windows y `true` aca, y un archivo
-     * marcado oculto sin punto inicial da `true` alla y `false` aca. Es una diferencia de
-     * definicion, no un error de lectura, y por eso esta escrita.
+     * <p>**How it differs from the JDK on Windows.** There the answer comes from the DOS bit, which
+     * `stat` does not bring: `.gitignore` gives `false` on a Windows JDK and `true` here, and a
+     * file marked hidden without a leading dot gives `true` there and `false` here. It is a
+     * difference of definition, not a reading error, and that is why it is written down.
      *
-     * <p>No mira el disco --no hace falta para contestar por el nombre-- asi que tampoco falla si
-     * el archivo no existe. Es lo mismo que hace el proveedor de Unix del JDK.
+     * <p>It does not look at the disk --it does not need to in order to answer by the name-- so it
+     * does not fail if the file does not exist either. It is the same thing the JDK's Unix provider
+     * does.
      */
     public static boolean isHidden(Path path) throws IOException {
-        ruta(path);
-        Path nombre = path.getFileName();
-        if (nombre == null) {
+        pathOf(path);
+        Path name = path.getFileName();
+        if (name == null) {
             return false;
         }
-        String s = nombre.toString();
+        String s = name.toString();
         return s.length() > 0 && s.charAt(0) == '.';
     }
 
     /**
-     * El tamaño en bytes.
+     * The size in bytes.
      *
-     * @throws NoSuchFileException si no existe
+     * @throws NoSuchFileException if it does not exist
      */
     public static long size(Path path) throws IOException {
-        String p = ruta(path);
-        if ((Fs.stat(p) & Fs.EXISTE) == 0) {
+        String p = pathOf(path);
+        if ((Fs.stat(p) & Fs.EXISTS) == 0) {
             throw new NoSuchFileException(p);
         }
         return Fs.size(p);
     }
 
     /**
-     * La posicion del primer byte en que difieren los dos archivos, o -1 si son identicos.
+     * The position of the first byte where the two files differ, or -1 if they are identical.
      *
-     * <p>Si uno es prefijo del otro, la respuesta es el tamaño del mas corto.
+     * <p>If one is a prefix of the other, the answer is the shorter one's size.
      *
-     * <p>A diferencia del JDK **no** hay atajo por identidad de archivo: alla, dos rutas al mismo
-     * inodo dan -1 sin leer nada. Aca se leen y se comparan los bytes, que da la misma respuesta
-     * para el mismo contenido -- solo que trabajando de mas.
+     * <p>Unlike the JDK there is **no** shortcut by file identity: there, two paths to the same
+     * inode give -1 without reading anything. Here the bytes are read and compared, which gives the
+     * same answer for the same content -- only doing more work.
      */
     public static long mismatch(Path path, Path path2) throws IOException {
         byte[] a = readAllBytes(path);
@@ -796,21 +789,22 @@ public final class Files {
     }
 
     /**
-     * Una vista de atributos del archivo -- **siempre `null` en KajiJDK**.
+     * A view of the file's attributes -- **always `null` in KajiJDK**.
      *
-     * <p>`null` no es un hueco tapado: la spec dice que es lo que hay que devolver cuando la vista
-     * pedida no esta disponible, y aca no hay **ninguna** disponible.
+     * <p>`null` is not a hole papered over: the spec says it is what has to be returned when the
+     * view asked for is not available, and here **none** is available.
      *
-     * <p>Y no es porque no se puedan leer los atributos --`readAttributes` los lee-- sino porque una
-     * vista es un objeto que **lee y escribe**: `BasicFileAttributeView`, la unica que un JDK esta
-     * obligado a ofrecer, tiene `setTimes`, y no hay nativo que escriba metadatos ni excepcion
-     * declarada ahi con la que decirlo. Una vista cuyo `setTimes` mintiera seria peor que no tener
-     * vista. Por eso `FileSystem.supportedFileAttributeViews()` tampoco nombra `"basic"`: las dos
-     * respuestas dicen lo mismo. Ver `java.nio.file.attribute.BasicFileAttributes`.
+     * <p>And it is not because the attributes cannot be read --`readAttributes` reads them-- but
+     * because a view is an object that **reads and writes**: `BasicFileAttributeView`, the only one
+     * a JDK is obliged to offer, has `setTimes`, which sets all three timestamps at once, and there
+     * is no native that writes the other two nor an exception declared there with which to say so.
+     * A view whose `setTimes` lied would be worse than having no view. That is why
+     * `FileSystem.supportedFileAttributeViews()` does not name `"basic"` either: the two answers
+     * say the same thing. See `java.nio.file.attribute.BasicFileAttributes`.
      */
     public static <V extends FileAttributeView> V getFileAttributeView(Path path, Class<V> type,
             LinkOption... options) {
-        ruta(path);
+        pathOf(path);
         if (type == null) {
             throw new NullPointerException();
         }
@@ -818,80 +812,79 @@ public final class Files {
     }
 
     // ------------------------------------------------------------------------------------------
-    // Atributos
+    // Attributes
     // ------------------------------------------------------------------------------------------
 
-    // Todas las marcas de tiempo. La epoca **no** es un relleno: la spec de
-    // `BasicFileAttributes.lastAccessTime` y `creationTime` dicen textualmente que si el sistema de
-    // archivos no soporta la marca, el metodo devuelve "un valor por omision especifico de la
-    // implementacion, tipicamente un `FileTime` que representa la epoca". No hay nativo para
-    // ninguna de las dos, asi que este es el valor **contestado por el contrato**, no un cero
-    // disfrazado de fecha.
+    // The two timestamps with no native. The epoch is **not** a filler: the specs of
+    // `BasicFileAttributes.lastAccessTime` and `creationTime` say in as many words that if the
+    // filesystem does not support the stamp, the method returns "an implementation specific default
+    // value, typically a `FileTime` representing the epoch". There is no native for either of the
+    // two, so this is the value **the contract answers with**, not a zero dressed up as a date.
     //
-    // `lastModifiedTime` **ya no** usa esto: `Fs.mtime` la lee de verdad. Tenerla en epoca mientras
-    // `setLastModifiedTime` la escribia habria sido peor que las dos ausencias juntas -- se podria
-    // fijar una fecha y leer otra.
+    // `lastModifiedTime` does **not** use this any more: `Fs.mtime` reads it for real. Keeping it
+    // at the epoch while `setLastModifiedTime` wrote it would have been worse than both absences
+    // together -- one could set a date and read another.
     //
-    // Una sola instancia compartida: `FileTime` es inmutable.
-    private static final FileTime EPOCA = FileTime.fromMillis(0L);
+    // A single shared instance: `FileTime` is immutable.
+    private static final FileTime EPOCH = FileTime.fromMillis(0L);
 
     /**
-     * Los nueve atributos basicos de un archivo, sacados de un `stat` y un `size`.
+     * A file's nine basic attributes, taken from a `stat`, a `size` and an `mtime`.
      *
-     * <p>Atributo por atributo, de donde sale cada uno:
+     * <p>Attribute by attribute, where each comes from:
      *
      * <ul>
-     *   <li>`isRegularFile`, `isDirectory` -- banderas de `stat`, directo.
-     *   <li>`isOther` -- existe y no es ninguna de las dos. Es la definicion de la spec.
-     *   <li>`size` -- el nativo `size`.
-     *   <li>`lastModifiedTime` -- el nativo `mtime`.
-     *   <li>`lastAccessTime`, `creationTime` -- la epoca; ver `EPOCA`.
-     *   <li>`fileKey` -- `null`, que la spec declara valido cuando no hay algo como el inodo.
-     *   <li>`isSymbolicLink` -- `false`. Es el unico donde la respuesta no esta respaldada por el
-     *       contrato de este tipo sino por el de `Files.isSymbolicLink`, que hace `false` la
-     *       respuesta de "no se puede determinar". `stat` sigue los enlaces, asi que el modelo de
-     *       abajo no los ve.
+     *   <li>`isRegularFile`, `isDirectory` -- `stat` flags, directly.
+     *   <li>`isOther` -- it exists and is neither of the two. It is the spec's definition.
+     *   <li>`size` -- the `size` native.
+     *   <li>`lastModifiedTime` -- the `mtime` native.
+     *   <li>`lastAccessTime`, `creationTime` -- the epoch; see `EPOCH`.
+     *   <li>`fileKey` -- `null`, which the spec declares valid when there is nothing like an inode.
+     *   <li>`isSymbolicLink` -- `false`. It is the only one where the answer is not backed by this
+     *       type's contract but by `Files.isSymbolicLink`'s, which makes `false` the answer for
+     *       "cannot be determined". `stat` follows links, so the model underneath does not see
+     *       them.
      * </ul>
      *
-     * <p>Se toma **una** foto en el constructor y despues solo se consultan campos: eso es lo que
-     * hace que las nueve preguntas sean consistentes entre si. Preguntarle a `stat` en cada
-     * accesor podria mezclar dos momentos --archivo en uno, borrado en el otro-- que es justo lo
-     * que un `BasicFileAttributes` existe para evitar.
+     * <p>**One** snapshot is taken in the constructor and afterwards only fields are consulted:
+     * that is what makes the nine questions consistent with each other. Asking `stat` in each
+     * accessor could mix two moments --a file in one, deleted in the other-- which is exactly what
+     * a `BasicFileAttributes` exists to avoid.
      */
-    private static final class AtributosBasicos implements BasicFileAttributes {
+    private static final class BasicAttrs implements BasicFileAttributes {
 
-        private final int banderas;
+        private final int flags;
         private final long bytes;
 
-        // La fecha de modificacion, leida en la **misma foto** que las banderas y el tamano. Es lo
-        // que mantiene consistentes a las nueve preguntas entre si, que es para lo que
-        // `BasicFileAttributes` existe.
-        private final FileTime modificado;
+        // The modification date, read in the **same snapshot** as the flags and the size. It is
+        // what keeps the nine questions consistent with each other, which is what
+        // `BasicFileAttributes` exists for.
+        private final FileTime modified;
 
-        AtributosBasicos(int banderas, long bytes, long millis) {
-            this.banderas = banderas;
+        BasicAttrs(int flags, long bytes, long millis) {
+            this.flags = flags;
             this.bytes = bytes;
-            this.modificado = millis == Long.MIN_VALUE ? EPOCA : FileTime.fromMillis(millis);
+            this.modified = millis == Long.MIN_VALUE ? EPOCH : FileTime.fromMillis(millis);
         }
 
         public FileTime lastModifiedTime() {
-            return this.modificado;
+            return this.modified;
         }
 
         public FileTime lastAccessTime() {
-            return EPOCA;
+            return EPOCH;
         }
 
         public FileTime creationTime() {
-            return EPOCA;
+            return EPOCH;
         }
 
         public boolean isRegularFile() {
-            return (this.banderas & Fs.ES_ARCHIVO) != 0;
+            return (this.flags & Fs.IS_FILE) != 0;
         }
 
         public boolean isDirectory() {
-            return (this.banderas & Fs.ES_DIRECTORIO) != 0;
+            return (this.flags & Fs.IS_DIRECTORY) != 0;
         }
 
         public boolean isSymbolicLink() {
@@ -899,8 +892,8 @@ public final class Files {
         }
 
         public boolean isOther() {
-            return (this.banderas & Fs.EXISTE) != 0
-                    && (this.banderas & (Fs.ES_ARCHIVO | Fs.ES_DIRECTORIO)) == 0;
+            return (this.flags & Fs.EXISTS) != 0
+                    && (this.flags & (Fs.IS_FILE | Fs.IS_DIRECTORY)) == 0;
         }
 
         public long size() {
@@ -912,160 +905,161 @@ public final class Files {
         }
     }
 
-    // La foto de `p`, o la excepcion que corresponda si no se pudo mirar.
-    private static BasicFileAttributes leerAtributos(String p) throws IOException {
+    // `p`'s snapshot, or the exception that fits if it could not be looked at.
+    private static BasicFileAttributes readAttrs(String p) throws IOException {
         int st = Fs.stat(p);
-        if ((st & Fs.EXISTE) == 0) {
+        if ((st & Fs.EXISTS) == 0) {
             throw new NoSuchFileException(p);
         }
-        return new AtributosBasicos(st, Fs.size(p), Fs.mtime(p));
+        return new BasicAttrs(st, Fs.size(p), Fs.mtime(p));
     }
 
-    // Los nueve nombres de la vista `basic`, en el orden en que los devuelve el JDK. El orden de un
-    // `Map` no es parte de ningun contrato, pero coincidir sale gratis y hace comparables las dos
-    // salidas cuando se prueba una contra la otra.
-    private static final String[] NOMBRES_BASIC = {
+    // The `basic` view's nine names, in the order the JDK returns them. A `Map`'s order is part of
+    // no contract, but agreeing comes free and makes the two outputs comparable when one is tested
+    // against the other.
+    private static final String[] BASIC_NAMES = {
         "lastModifiedTime", "lastAccessTime", "creationTime", "size",
         "isRegularFile", "isDirectory", "isSymbolicLink", "isOther", "fileKey"
     };
 
-    // La mitad de antes de los dos puntos en "vista:atributos", con `basic` por omision.
-    private static String vistaDe(String attribute) {
+    // The half before the colon in "view:attributes", with `basic` as the default.
+    private static String viewOf(String attribute) {
         int i = attribute.indexOf(':');
         return (i < 0) ? "basic" : attribute.substring(0, i);
     }
 
-    // La mitad de despues.
-    private static String nombresDe(String attribute) {
+    // The half after it.
+    private static String namesOf(String attribute) {
         int i = attribute.indexOf(':');
         return (i < 0) ? attribute : attribute.substring(i + 1);
     }
 
-    // El valor de un atributo `basic` por nombre, o `null` si el nombre no es de los nueve.
+    // A `basic` attribute's value by name, or `null` if the name is not one of the nine.
     //
-    // Devuelve `null` en vez de tirar para que quien llama elija la excepcion: `readAttributes`
-    // pone el nombre completo con la vista en el mensaje, y `setAttribute` distingue "no existe" de
-    // "existe pero es de solo lectura".
-    private static Object atributoBasic(BasicFileAttributes a, String nombre) {
-        if (nombre.equals("lastModifiedTime")) {
+    // It returns `null` rather than throw so the caller chooses the exception: `readAttributes`
+    // puts the full name with the view in the message, and `setAttribute` tells "does not exist"
+    // from "exists but is read-only".
+    private static Object basicAttribute(BasicFileAttributes a, String name) {
+        if (name.equals("lastModifiedTime")) {
             return a.lastModifiedTime();
         }
-        if (nombre.equals("lastAccessTime")) {
+        if (name.equals("lastAccessTime")) {
             return a.lastAccessTime();
         }
-        if (nombre.equals("creationTime")) {
+        if (name.equals("creationTime")) {
             return a.creationTime();
         }
-        if (nombre.equals("size")) {
+        if (name.equals("size")) {
             return Long.valueOf(a.size());
         }
-        if (nombre.equals("isRegularFile")) {
+        if (name.equals("isRegularFile")) {
             return Boolean.valueOf(a.isRegularFile());
         }
-        if (nombre.equals("isDirectory")) {
+        if (name.equals("isDirectory")) {
             return Boolean.valueOf(a.isDirectory());
         }
-        if (nombre.equals("isSymbolicLink")) {
+        if (name.equals("isSymbolicLink")) {
             return Boolean.valueOf(a.isSymbolicLink());
         }
-        if (nombre.equals("isOther")) {
+        if (name.equals("isOther")) {
             return Boolean.valueOf(a.isOther());
         }
-        if (nombre.equals("fileKey")) {
+        if (name.equals("fileKey")) {
             return a.fileKey();
         }
         return null;
     }
 
     /**
-     * Los atributos del archivo, del tipo pedido.
+     * The file's attributes, of the type asked for.
      *
-     * <p>Solo `BasicFileAttributes.class`: es la unica vista que esta VM puede contestar. Para
-     * `DosFileAttributes` o `PosixFileAttributes` tira `UnsupportedOperationException`, que es lo
-     * que la spec declara para un tipo de atributos no soportado.
+     * <p>Only `BasicFileAttributes.class`: it is the only view this VM can answer. For
+     * `DosFileAttributes` or `PosixFileAttributes` it throws `UnsupportedOperationException`, which
+     * is what the spec declares for an unsupported attribute type.
      *
-     * <p>`options` se acepta y no cambia nada: sin enlaces en el modelo, seguirlos o no da lo
-     * mismo. Ver `AtributosBasicos` para el detalle de que sale de donde.
+     * <p>`options` is accepted and changes nothing: with no links in the model, following them or
+     * not comes to the same. See `BasicAttrs` for the detail of what comes from where.
      *
-     * @throws UnsupportedOperationException si `type` no es `BasicFileAttributes.class`
-     * @throws NoSuchFileException si el archivo no esta
+     * @throws UnsupportedOperationException if `type` is not `BasicFileAttributes.class`
+     * @throws NoSuchFileException if the file is not there
      */
     public static <A extends BasicFileAttributes> A readAttributes(Path path, Class<A> type,
             LinkOption... options) throws IOException {
-        String p = ruta(path);
+        String p = pathOf(path);
         if (type == null) {
             throw new NullPointerException();
         }
         if (type != BasicFileAttributes.class) {
             throw new UnsupportedOperationException(type.getName() + " is not supported");
         }
-        return type.cast(leerAtributos(p));
+        return type.cast(readAttrs(p));
     }
 
     /**
-     * Los atributos nombrados, como mapa de nombre a valor.
+     * The named attributes, as a map from name to value.
      *
-     * <p>`attributes` tiene la forma `[vista:]lista`, con la lista separada por comas y `*` para
-     * pedir todos. La unica vista es `basic`, que es tambien la de omision.
+     * <p>`attributes` has the shape `[view:]list`, with the list comma-separated and `*` to ask for
+     * all of them. The only view is `basic`, which is also the default.
      *
-     * <p>Las claves del mapa van **sin** el prefijo de la vista, como en el JDK.
+     * <p>The map's keys go **without** the view's prefix, as in the JDK.
      *
-     * @throws UnsupportedOperationException si se nombra una vista que no es `basic`
-     * @throws IllegalArgumentException si no se nombra ningun atributo, o si alguno no existe
-     * @throws NoSuchFileException si el archivo no esta
+     * @throws UnsupportedOperationException if a view other than `basic` is named
+     * @throws IllegalArgumentException if no attribute is named, or if one does not exist
+     * @throws NoSuchFileException if the file is not there
      */
     public static Map<String, Object> readAttributes(Path path, String attributes,
             LinkOption... options) throws IOException {
-        String p = ruta(path);
+        String p = pathOf(path);
         if (attributes == null) {
             throw new NullPointerException();
         }
-        String vista = vistaDe(attributes);
-        if (!vista.equals("basic")) {
-            throw new UnsupportedOperationException("View '" + vista + "' not available");
+        String view = viewOf(attributes);
+        if (!view.equals("basic")) {
+            throw new UnsupportedOperationException("View '" + view + "' not available");
         }
-        String lista = nombresDe(attributes);
-        if (lista.length() == 0) {
+        String list = namesOf(attributes);
+        if (list.length() == 0) {
             throw new IllegalArgumentException("No attributes specified");
         }
-        BasicFileAttributes a = leerAtributos(p);
+        BasicFileAttributes a = readAttrs(p);
         Map<String, Object> out = new LinkedHashMap<String, Object>();
-        int inicio = 0;
-        while (inicio <= lista.length()) {
-            int coma = lista.indexOf(',', inicio);
-            String nombre = (coma < 0) ? lista.substring(inicio) : lista.substring(inicio, coma);
-            if (nombre.equals("*")) {
-                // `*` gana sobre lo demas: pedir "size,*" da los nueve, igual que en el JDK.
+        int startOfRun = 0;
+        while (startOfRun <= list.length()) {
+            int comma = list.indexOf(',', startOfRun);
+            String name = (comma < 0) ? list.substring(startOfRun) : list.substring(startOfRun, comma);
+            if (name.equals("*")) {
+                // `*` wins over the rest: asking for "size,*" gives the nine, as in the JDK.
                 int i = 0;
-                while (i < NOMBRES_BASIC.length) {
-                    out.put(NOMBRES_BASIC[i], atributoBasic(a, NOMBRES_BASIC[i]));
+                while (i < BASIC_NAMES.length) {
+                    out.put(BASIC_NAMES[i], basicAttribute(a, BASIC_NAMES[i]));
                     i = i + 1;
                 }
                 return out;
             }
-            if (nombre.length() > 0) {
-                Object v = atributoBasic(a, nombre);
-                if (v == null && !nombre.equals("fileKey")) {
-                    throw new IllegalArgumentException("'basic:" + nombre + "' not recognized");
+            if (name.length() > 0) {
+                Object v = basicAttribute(a, name);
+                if (v == null && !name.equals("fileKey")) {
+                    throw new IllegalArgumentException("'basic:" + name + "' not recognized");
                 }
-                out.put(nombre, v);
+                out.put(name, v);
             }
-            if (coma < 0) {
+            if (comma < 0) {
                 break;
             }
-            inicio = coma + 1;
+            startOfRun = comma + 1;
         }
         return out;
     }
 
     /**
-     * El valor de **un** atributo.
+     * **One** attribute's value.
      *
-     * <p>Como `readAttributes(path, attributes, options)` pero para un solo nombre: ni `*` ni comas.
+     * <p>Like `readAttributes(path, attributes, options)` but for a single name: no `*` and no
+     * commas.
      *
-     * @throws IllegalArgumentException si el nombre trae `*` o `,`, o si no existe
-     * @throws UnsupportedOperationException si se nombra una vista que no es `basic`
-     * @throws NoSuchFileException si el archivo no esta
+     * @throws IllegalArgumentException if the name carries `*` or `,`, or if it does not exist
+     * @throws UnsupportedOperationException if a view other than `basic` is named
+     * @throws NoSuchFileException if the file is not there
      */
     public static Object getAttribute(Path path, String attribute, LinkOption... options)
             throws IOException {
@@ -1075,79 +1069,83 @@ public final class Files {
         if (attribute.indexOf('*') >= 0 || attribute.indexOf(',') >= 0) {
             throw new IllegalArgumentException(attribute);
         }
-        Map<String, Object> uno = readAttributes(path, attribute, options);
-        return uno.get(nombresDe(attribute));
+        Map<String, Object> one = readAttributes(path, attribute, options);
+        return one.get(namesOf(attribute));
     }
 
     /**
-     * Fija un atributo -- **nunca funciona en KajiJDK**.
+     * It sets an attribute -- **it never works in KajiJDK**.
      *
-     * <p>No hay nativo que escriba metadatos, asi que ninguna vista de esta VM es escribible. La
-     * excepcion depende de **por que** no se puede, para que el error diga algo:
+     * <p>No view of this VM is writable through here. The exception depends on **why** it cannot
+     * be, so the error says something:
      *
      * <ul>
-     *   <li>vista que no es `basic`: `UnsupportedOperationException`, que es lo que la spec declara
-     *       para "la vista de atributos no esta disponible".
-     *   <li>nombre que no es de los nueve: `IllegalArgumentException`, igual que el JDK.
-     *   <li>uno de los seis atributos de solo lectura (`size`, `isDirectory`, ...):
-     *       `IllegalArgumentException`, tambien igual que el JDK -- no son escribibles en **ningun**
-     *       sistema de archivos.
-     *   <li>una de las tres marcas de tiempo, que en el JDK **si** se pueden fijar:
-     *       `UnsupportedOperationException`. Es la unica de las cuatro donde la diferencia es de
-     *       esta VM y no de la spec, y por eso la excepcion es la que dice "aca no se puede".
+     *   <li>a view other than `basic`: `UnsupportedOperationException`, which is what the spec
+     *       declares for "the attribute view is not available".
+     *   <li>a name that is not one of the nine: `IllegalArgumentException`, as in the JDK.
+     *   <li>one of the six read-only attributes (`size`, `isDirectory`, ...):
+     *       `IllegalArgumentException`, also as in the JDK -- they are writable on **no**
+     *       filesystem.
+     *   <li>one of the three timestamps, which in the JDK **can** be set:
+     *       `UnsupportedOperationException`. It is the only one of the four where the difference is
+     *       this VM's and not the spec's, and that is why the exception is the one that says "it
+     *       cannot be done here". (`Fs.setMtime` exists and `setLastModifiedTime` uses it; what has
+     *       no native is setting a timestamp through a named attribute, which the JDK routes
+     *       through `BasicFileAttributeView.setTimes` -- all three at once.)
      * </ul>
      */
     public static Path setAttribute(Path path, String attribute, Object value,
             LinkOption... options) throws IOException {
-        ruta(path);
+        pathOf(path);
         if (attribute == null) {
             throw new NullPointerException();
         }
-        String vista = vistaDe(attribute);
-        if (!vista.equals("basic")) {
-            throw new UnsupportedOperationException("View '" + vista + "' not available");
+        String view = viewOf(attribute);
+        if (!view.equals("basic")) {
+            throw new UnsupportedOperationException("View '" + view + "' not available");
         }
-        String nombre = nombresDe(attribute);
-        boolean esTiempo = nombre.equals("lastModifiedTime") || nombre.equals("lastAccessTime")
-                || nombre.equals("creationTime");
-        if (esTiempo) {
+        String name = namesOf(attribute);
+        boolean isTimeAttribute = name.equals("lastModifiedTime") || name.equals("lastAccessTime")
+                || name.equals("creationTime");
+        if (isTimeAttribute) {
             throw new UnsupportedOperationException(
-                    "KajiJDK cannot write 'basic:" + nombre + "': no native writes timestamps");
+                    "KajiJDK cannot write 'basic:" + name + "': no native writes timestamps");
         }
-        throw new IllegalArgumentException("'basic:" + nombre + "' not recognized");
+        throw new IllegalArgumentException("'basic:" + name + "' not recognized");
     }
 
     /**
-     * La fecha de ultima modificacion -- **siempre la epoca** en KajiJDK.
+     * The last modification date.
      *
-     * <p>Ver `EPOCA`: es el valor que la spec manda devolver cuando el sistema de archivos no
-     * guarda la marca, y `stat` no la guarda.
+     * <p>This javadoc used to say the answer is always the epoch; it is read for real, out of
+     * `Fs.mtime`, in the same snapshot as the rest of the attributes. The epoch is still the answer
+     * for `lastAccessTime` and `creationTime` -- see `EPOCH`.
      *
-     * @throws NoSuchFileException si el archivo no esta
+     * @throws NoSuchFileException if the file is not there
      */
     public static FileTime getLastModifiedTime(Path path, LinkOption... options)
             throws IOException {
-        return leerAtributos(ruta(path)).lastModifiedTime();
+        return readAttrs(pathOf(path)).lastModifiedTime();
     }
 
     /**
-     * Los permisos POSIX -- **falla siempre**.
+     * The POSIX permissions -- **it always fails**.
      *
-     * <p>`UnsupportedOperationException` es lo que la spec declara para cuando el sistema de
-     * archivos no soporta `PosixFileAttributeView`, y este no la soporta: `stat` da cinco banderas y
-     * ninguna es un modo de nueve bits. Ver `FileSystem.supportedFileAttributeViews`, que devuelve
-     * el conjunto vacio y es de donde sale esta respuesta.
+     * <p>`UnsupportedOperationException` is what the spec declares for when the filesystem does not
+     * support `PosixFileAttributeView`, and this one does not: `stat` gives five flags and none of
+     * them is a nine-bit mode. See `FileSystem.supportedFileAttributeViews`, which returns the
+     * empty set and is where this answer comes from.
      */
     public static Set<PosixFilePermission> getPosixFilePermissions(Path path,
             LinkOption... options) throws IOException {
-        ruta(path);
+        pathOf(path);
         throw new UnsupportedOperationException("PosixFileAttributeView is not supported");
     }
 
-    /** Fija los permisos POSIX -- **falla siempre**, por lo mismo que el otro. */
+    /** It sets the POSIX permissions -- **it always fails**, for the same reason as the other. */
     public static Path setPosixFilePermissions(Path path, Set<PosixFilePermission> perms)
             throws IOException {
-        ruta(path);
+        pathOf(path);
         if (perms == null) {
             throw new NullPointerException();
         }
@@ -1155,21 +1153,21 @@ public final class Files {
     }
 
     /**
-     * El dueño del archivo -- **falla siempre**.
+     * The file's owner -- **it always fails**.
      *
-     * <p>`UnsupportedOperationException` es lo que la spec declara para cuando no se soporta
-     * `FileOwnerAttributeView`. No hay nativo que devuelva un uid, y tampoco hay con que convertir
-     * un uid en un `UserPrincipal`: ver `FileSystem.getUserPrincipalLookupService`, que falla por lo
-     * mismo.
+     * <p>`UnsupportedOperationException` is what the spec declares for when
+     * `FileOwnerAttributeView` is not supported. There is no native that returns a uid, and nothing
+     * with which to turn a uid into a `UserPrincipal` either: see
+     * `FileSystem.getUserPrincipalLookupService`, which fails for the same reason.
      */
     public static UserPrincipal getOwner(Path path, LinkOption... options) throws IOException {
-        ruta(path);
+        pathOf(path);
         throw new UnsupportedOperationException("FileOwnerAttributeView is not supported");
     }
 
-    /** Fija el dueño -- **falla siempre**, por lo mismo que el otro. */
+    /** It sets the owner -- **it always fails**, for the same reason as the other. */
     public static Path setOwner(Path path, UserPrincipal owner) throws IOException {
-        ruta(path);
+        pathOf(path);
         if (owner == null) {
             throw new NullPointerException();
         }
@@ -1177,99 +1175,99 @@ public final class Files {
     }
 
     /**
-     * El tipo MIME del archivo, o `null` si no se puede determinar.
+     * The file's MIME type, or `null` if it cannot be determined.
      *
-     * <p>**Hoy devuelve `null` para todo, y eso es la respuesta correcta, no un stub.** La spec dice
-     * que el resultado sale de los `FileTypeDetector` **instalados** --que se descubren con
-     * `ServiceLoader`-- mas un detector por omision del sistema. KajiJDK no trae detector por
-     * omision, y el descubrimiento no encuentra nada porque `ClassLoader` no tiene recursos (ver la
-     * cabecera de `java.util.ServiceLoader`). Con la cadena vacia, `null` --"no se pudo
-     * determinar"-- es lo unico que se puede contestar.
+     * <p>**Today it returns `null` for everything, and that is the correct answer, not a stub.**
+     * The spec says the result comes from the **installed** `FileTypeDetector`s --which are
+     * discovered with `ServiceLoader`-- plus a system default detector. KajiJDK brings no default
+     * detector, and the discovery finds nothing because the built-in loaders serve no resources
+     * (see `java.util.ServiceLoader`'s header). With the chain empty, `null` --"could not be
+     * determined"-- is the only thing that can be answered.
      *
-     * <p>El recorrido esta escrito de verdad y no cortocircuitado a `return null`: el dia que el
-     * descubrimiento funcione, un detector puesto en el classpath por la aplicacion se usa sin
-     * tocar esta clase. Adivinar por extension aca dentro seria contestar por un detector que nadie
-     * registro.
+     * <p>The walk is written out for real and not short-circuited to `return null`: the day the
+     * discovery works, a detector put on the class path by the application is used without touching
+     * this class. Guessing by extension in here would be answering on behalf of a detector nobody
+     * registered.
      */
     public static String probeContentType(Path path) throws IOException {
-        ruta(path);
-        // El `ServiceLoader` va a una variable con el tipo escrito en vez de encadenar
-        // `.iterator()` sobre la llamada: la inferencia de nuestro `javac` no propaga el parametro
-        // de tipo a traves de la cadena. Ver el informe de esta sesion.
-        ServiceLoader<FileTypeDetector> detectores = ServiceLoader.load(FileTypeDetector.class);
-        Iterator<FileTypeDetector> it = detectores.iterator();
+        pathOf(path);
+        // The `ServiceLoader` goes into a variable with the type written out rather than chaining
+        // `.iterator()` onto the call: our `javac`'s inference does not propagate the type
+        // parameter through the chain. See that session's report.
+        ServiceLoader<FileTypeDetector> detectors = ServiceLoader.load(FileTypeDetector.class);
+        Iterator<FileTypeDetector> it = detectors.iterator();
         while (it.hasNext()) {
-            String tipo = it.next().probeContentType(path);
-            if (tipo != null) {
-                return tipo;
+            String kind = it.next().probeContentType(path);
+            if (kind != null) {
+                return kind;
             }
         }
         return null;
     }
 
     // ------------------------------------------------------------------------------------------
-    // Enlaces
+    // Links
     // ------------------------------------------------------------------------------------------
 
     /**
-     * Crea un enlace simbolico -- **falla siempre**.
+     * It creates a symbolic link -- **it always fails**.
      *
-     * <p>`UnsupportedOperationException` es exactamente lo que la spec declara para "la
-     * implementacion no soporta la creacion de enlaces simbolicos", y los seis nativos de
-     * `jdk.internal.io.Fs` no incluyen ninguno que la haga. Un programa que llama a esto recibe la
-     * misma excepcion que recibiria de un JDK sobre un sistema de archivos sin enlaces.
+     * <p>`UnsupportedOperationException` is exactly what the spec declares for "the implementation
+     * does not support the creation of symbolic links", and `jdk.internal.io.Fs`'s natives include
+     * none that makes one. A program that calls this gets the same exception it would get from a
+     * JDK over a filesystem with no links.
      */
     public static Path createSymbolicLink(Path link, Path target, FileAttribute<?>... attrs)
             throws IOException {
-        ruta(link);
-        ruta(target);
+        pathOf(link);
+        pathOf(target);
         throw new UnsupportedOperationException("KajiJDK does not support symbolic links");
     }
 
     /**
-     * Crea un enlace duro -- **falla siempre**.
+     * It creates a hard link -- **it always fails**.
      *
-     * <p>La spec declara `UnsupportedOperationException` para "la implementacion no soporta agregar
-     * un archivo existente a un directorio", que es lo que pasa aca.
+     * <p>The spec declares `UnsupportedOperationException` for "the implementation does not support
+     * adding an existing file to a directory", which is what happens here.
      */
     public static Path createLink(Path link, Path existing) throws IOException {
-        ruta(link);
-        ruta(existing);
+        pathOf(link);
+        pathOf(existing);
         throw new UnsupportedOperationException("KajiJDK does not support hard links");
     }
 
     /**
-     * El destino de un enlace simbolico -- **falla siempre**.
+     * A symbolic link's target -- **it always fails**.
      *
-     * <p>Misma razon que `createSymbolicLink`, y la misma excepcion declarada por la spec. Notar que
-     * **no** es `NotLinkException`: eso diria "esta ruta no es un enlace", que es una afirmacion
-     * sobre el archivo, y aca lo que no existe es la operacion.
+     * <p>The same reason as `createSymbolicLink`, and the same exception declared by the spec. Note
+     * it is **not** `NotLinkException`: that would say "this path is not a link", which is an
+     * assertion about the file, and here what does not exist is the operation.
      */
     public static Path readSymbolicLink(Path link) throws IOException {
-        ruta(link);
+        pathOf(link);
         throw new UnsupportedOperationException("KajiJDK does not support symbolic links");
     }
 
     // ------------------------------------------------------------------------------------------
-    // Leer y escribir el contenido
+    // Reading and writing the content
     // ------------------------------------------------------------------------------------------
 
     /**
-     * Todos los bytes del archivo.
+     * All of the file's bytes.
      *
-     * <p>Es la operacion nativa tal cual: en esta VM leer un archivo es leerlo entero, asi que este
-     * metodo es el barato y los demas se arman encima.
+     * <p>It is the native operation as it stands: in this VM reading a file is reading it whole, so
+     * this method is the cheap one and the rest are built on top of it.
      */
     public static byte[] readAllBytes(Path path) throws IOException {
-        String p = ruta(path);
+        String p = pathOf(path);
         byte[] b = Fs.readAllBytes(p);
         if (b == null) {
-            throw porQueNoSeLeyo(p);
+            throw whyItWasNotRead(p);
         }
         return b;
     }
 
-    /** El archivo como texto, decodificado con `cs`. */
+    /** The file as text, decoded with `cs`. */
     public static String readString(Path path, Charset cs) throws IOException {
         if (cs == null) {
             throw new NullPointerException();
@@ -1277,176 +1275,177 @@ public final class Files {
         return new String(readAllBytes(path), cs);
     }
 
-    /** El archivo como texto, en UTF-8. */
+    /** The file as text, in UTF-8. */
     public static String readString(Path path) throws IOException {
         return readString(path, StandardCharsets.UTF_8);
     }
 
-    // Corta en lineas por `\n`, `\r` o `\r\n`, sin dejar una linea vacia al final si el archivo
-    // termina con salto. Es la regla de `BufferedReader.readLine`, escrita aca sobre la cadena ya
-    // decodificada para no armar toda la cañeria de streams por algo que es un recorrido.
-    private static List<String> cortarEnLineas(String texto) {
+    // It cuts into lines at `\n`, `\r` or `\r\n`, without leaving an empty line at the end if the
+    // file ends with a break. It is `BufferedReader.readLine`'s rule, written here over the already
+    // decoded string so as not to build the whole stream plumbing for what is a walk.
+    private static List<String> splitIntoLines(String text) {
         List<String> out = new ArrayList<String>();
         int i = 0;
-        int inicio = 0;
-        while (i < texto.length()) {
-            char c = texto.charAt(i);
+        int startOfRun = 0;
+        while (i < text.length()) {
+            char c = text.charAt(i);
             if (c == '\n') {
-                out.add(texto.substring(inicio, i));
+                out.add(text.substring(startOfRun, i));
                 i = i + 1;
-                inicio = i;
+                startOfRun = i;
             } else if (c == '\r') {
-                out.add(texto.substring(inicio, i));
+                out.add(text.substring(startOfRun, i));
                 i = i + 1;
-                if (i < texto.length() && texto.charAt(i) == '\n') {
+                if (i < text.length() && text.charAt(i) == '\n') {
                     i = i + 1;
                 }
-                inicio = i;
+                startOfRun = i;
             } else {
                 i = i + 1;
             }
         }
-        if (inicio < texto.length()) {
-            out.add(texto.substring(inicio));
+        if (startOfRun < text.length()) {
+            out.add(text.substring(startOfRun));
         }
         return out;
     }
 
-    /** Las lineas del archivo, decodificadas con `cs`. */
+    /** The file's lines, decoded with `cs`. */
     public static List<String> readAllLines(Path path, Charset cs) throws IOException {
-        return cortarEnLineas(readString(path, cs));
+        return splitIntoLines(readString(path, cs));
     }
 
-    /** Las lineas del archivo, en UTF-8. */
+    /** The file's lines, in UTF-8. */
     public static List<String> readAllLines(Path path) throws IOException {
         return readAllLines(path, StandardCharsets.UTF_8);
     }
 
     /**
-     * Las lineas del archivo como un `Stream`.
+     * The file's lines as a `Stream`.
      *
-     * <p>**Diferencia con el JDK, y no es chica: aca no es perezoso.** Alla el stream lee a medida
-     * que se consume y hay que cerrarlo; aca el archivo se lee entero primero --no hay otra forma
-     * de leerlo-- y el stream sale de una lista en memoria. El resultado son las mismas lineas en
-     * el mismo orden; lo que cambia es cuando se hace el trabajo y cuanta memoria ocupa. `close()`
-     * sobre el stream sigue siendo valido y no hace falta.
+     * <p>**A difference from the JDK, and not a small one: here it is not lazy.** There the stream
+     * reads as it is consumed and has to be closed; here the file is read whole first --there is no
+     * other way of reading it-- and the stream comes out of a list in memory. The result is the
+     * same lines in the same order; what changes is when the work is done and how much memory it
+     * takes. `close()` on the stream is still valid and is not needed.
      */
     public static Stream<String> lines(Path path, Charset cs) throws IOException {
         return readAllLines(path, cs).stream();
     }
 
-    /** Como el otro, en UTF-8. */
+    /** Like the other, in UTF-8. */
     public static Stream<String> lines(Path path) throws IOException {
         return lines(path, StandardCharsets.UTF_8);
     }
 
-    // Escribe `datos` respetando las opciones. Es el unico lugar que llama a `writeAllBytes`, para
-    // que la comprobacion de existencia y la eleccion de anexar esten escritas una sola vez.
-    private static Path escribir(Path path, byte[] datos, OpenOption[] options)
+    // It writes `data` honouring the options. It is the only place that calls `writeAllBytes`, so
+    // the existence check and the choice to append are written once.
+    private static Path writeTo(Path path, byte[] data, OpenOption[] options)
             throws IOException {
-        String p = ruta(path);
-        Apertura a = resolver(options, true);
-        if (a.leer) {
+        String p = pathOf(path);
+        Opening a = resolveOptions(options, true);
+        if (a.readFrom) {
             throw new UnsupportedOperationException("READ on write");
         }
-        boolean existe = (Fs.stat(p) & Fs.EXISTE) != 0;
-        if (a.crearNuevo && existe) {
+        boolean exists = (Fs.stat(p) & Fs.EXISTS) != 0;
+        if (a.createNew && exists) {
             throw new FileAlreadyExistsException(p);
         }
-        if (!existe && !a.crear && !a.crearNuevo && options.length > 0) {
+        if (!exists && !a.creating && !a.createNew && options.length > 0) {
             throw new NoSuchFileException(p);
         }
-        if (!Fs.writeAllBytes(p, datos, a.anexar)) {
+        if (!Fs.writeAllBytes(p, data, a.appending)) {
             throw new IOException("cannot write " + p);
         }
         return path;
     }
 
     /**
-     * Escribe los bytes en el archivo.
+     * It writes the bytes into the file.
      *
-     * <p>Sin opciones: crea, trunca y escribe. Con `APPEND`: agrega al final.
+     * <p>With no options: it creates, truncates and writes. With `APPEND`: it adds at the end.
      */
     public static Path write(Path path, byte[] bytes, OpenOption... options) throws IOException {
         if (bytes == null) {
             throw new NullPointerException();
         }
-        return escribir(path, bytes, options);
+        return writeTo(path, bytes, options);
     }
 
-    /** Escribe el texto codificado con `cs`. */
+    /** It writes the text encoded with `cs`. */
     public static Path writeString(Path path, CharSequence csq, Charset cs, OpenOption... options)
             throws IOException {
         if (csq == null || cs == null) {
             throw new NullPointerException();
         }
-        return escribir(path, csq.toString().getBytes(cs), options);
+        return writeTo(path, csq.toString().getBytes(cs), options);
     }
 
-    /** Escribe el texto en UTF-8. */
+    /** It writes the text in UTF-8. */
     public static Path writeString(Path path, CharSequence csq, OpenOption... options)
             throws IOException {
         return writeString(path, csq, StandardCharsets.UTF_8, options);
     }
 
     /**
-     * Escribe las lineas, cada una seguida del separador de linea de la plataforma.
+     * It writes the lines, each followed by the platform's line separator.
      *
-     * <p>Se arma la cadena entera y se codifica de una sola vez, en vez de linea por linea: con un
-     * nativo que escribe el archivo completo, escribir de a una seria releer y reescribir todo por
-     * cada linea.
+     * <p>The whole string is built and encoded in one go, rather than line by line: with a native
+     * that writes the complete file, writing one at a time would mean re-reading and rewriting
+     * everything for each line.
      */
     public static Path write(Path path, Iterable<? extends CharSequence> lines, Charset cs,
             OpenOption... options) throws IOException {
         if (lines == null || cs == null) {
             throw new NullPointerException();
         }
-        String salto = System.lineSeparator();
+        String lineBreak = System.lineSeparator();
         StringBuilder sb = new StringBuilder();
         Iterator<? extends CharSequence> it = lines.iterator();
         while (it.hasNext()) {
-            CharSequence linea = it.next();
-            sb.append(linea == null ? "null" : linea.toString());
-            sb.append(salto);
+            CharSequence line = it.next();
+            sb.append(line == null ? "null" : line.toString());
+            sb.append(lineBreak);
         }
-        return escribir(path, sb.toString().getBytes(cs), options);
+        return writeTo(path, sb.toString().getBytes(cs), options);
     }
 
-    /** Como el otro, en UTF-8. */
+    /** Like the other, in UTF-8. */
     public static Path write(Path path, Iterable<? extends CharSequence> lines,
             OpenOption... options) throws IOException {
         return write(path, lines, StandardCharsets.UTF_8, options);
     }
 
     /**
-     * Vuelca `in` en `target` y devuelve cuantos bytes copio.
+     * It dumps `in` into `target` and returns how many bytes it copied.
      *
-     * <p>El stream se lee entero a memoria antes de escribir, porque el nativo escribe el archivo
-     * completo de una. **`in` no se cierra**: lo abrio quien llamo, y cerrar algo que no se abrio
-     * es la clase de sorpresa que rompe un `try`-con-recursos de afuera.
+     * <p>The stream is read whole into memory before writing, because the native writes the
+     * complete file in one go. **`in` is not closed**: whoever called opened it, and closing
+     * something one did not open is the kind of surprise that breaks an outer try-with-resources.
      *
-     * @throws FileAlreadyExistsException si el destino existe y no se paso `REPLACE_EXISTING`
+     * @throws FileAlreadyExistsException if the target exists and `REPLACE_EXISTING` was not
+     *         passed
      */
     public static long copy(InputStream in, Path target, CopyOption... options) throws IOException {
         if (in == null) {
             throw new NullPointerException();
         }
-        String t = ruta(target);
-        boolean pisar = resolverCopia(options);
-        if ((Fs.stat(t) & Fs.EXISTE) != 0 && !pisar) {
+        String t = pathOf(target);
+        boolean overwrite = resolveCopyOptions(options);
+        if ((Fs.stat(t) & Fs.EXISTS) != 0 && !overwrite) {
             throw new FileAlreadyExistsException(t);
         }
-        byte[] datos = leerTodo(in);
-        if (!Fs.writeAllBytes(t, datos, false)) {
+        byte[] data = readAll(in);
+        if (!Fs.writeAllBytes(t, data, false)) {
             throw new IOException("cannot write " + t);
         }
-        return (long) datos.length;
+        return (long) data.length;
     }
 
     /**
-     * Vuelca `source` en `out` y devuelve cuantos bytes copio.
+     * It dumps `source` into `out` and returns how many bytes it copied.
      *
-     * <p>**`out` no se cierra**, por la misma razon que `in` en la otra sobrecarga.
+     * <p>**`out` is not closed**, for the same reason as `in` in the other overload.
      */
     public static long copy(Path source, OutputStream out) throws IOException {
         if (out == null) {
@@ -1457,64 +1456,64 @@ public final class Files {
         return (long) b.length;
     }
 
-    // Junta todo lo que quede en el stream. Duplica el buffer cuando se llena: crecer de a un
-    // tamaño fijo seria cuadratico en la cantidad de copias para un stream grande.
-    private static byte[] leerTodo(InputStream in) throws IOException {
+    // It gathers everything left in the stream. It doubles the buffer when it fills: growing by a
+    // fixed size would be quadratic in the number of copies for a large stream.
+    private static byte[] readAll(InputStream in) throws IOException {
         byte[] buf = new byte[8192];
-        int usado = 0;
+        int used = 0;
         while (true) {
-            if (usado == buf.length) {
-                byte[] mas = new byte[buf.length * 2];
-                System.arraycopy(buf, 0, mas, 0, usado);
-                buf = mas;
+            if (used == buf.length) {
+                byte[] more = new byte[buf.length * 2];
+                System.arraycopy(buf, 0, more, 0, used);
+                buf = more;
             }
-            int n = in.read(buf, usado, buf.length - usado);
+            int n = in.read(buf, used, buf.length - used);
             if (n < 0) {
                 break;
             }
-            usado = usado + n;
+            used = used + n;
         }
-        byte[] out = new byte[usado];
-        System.arraycopy(buf, 0, out, 0, usado);
+        byte[] out = new byte[used];
+        System.arraycopy(buf, 0, out, 0, used);
         return out;
     }
 
-    // ---- enumerar un directorio ---------------------------------------------------------------------
+    // ---- enumerating a directory --------------------------------------------------------------------
     //
-    // Los nueve se apoyan en `Fs.list`, y los nueve se apoyan en **uno**: `walkFileTree`. Los `walk`,
-    // `find` y `list` son vistas de flujo sobre el mismo recorrido, y escribirlos aparte habria dado
-    // cuatro recorridos que se pueden desincronizar.
+    // All nine rest on `Fs.list`, and all nine rest on **one**: `walkFileTree`. The `walk`s, `find`
+    // and `list` are stream views over the same traversal, and writing them separately would have
+    // given four traversals that can drift apart.
 
-    /** Las entradas **directas** de ese directorio. Sin filtrar, sin bajar. */
+    /** That directory's **direct** entries. Unfiltered, without descending. */
     public static DirectoryStream<Path> newDirectoryStream(Path dir) throws IOException {
         return new KajiDirectoryStream(dir, null);
     }
 
     /**
-     * El de arriba filtrado por un **glob** contra el nombre de cada entrada.
+     * The one above filtered by a **glob** against each entry's name.
      *
-     * <p>El patron se compara contra el ultimo elemento del camino y no contra el camino entero, que
-     * es lo que hace que `"*.java"` funcione como uno espera.
+     * <p>The pattern is compared against the path's last element and not against the whole path,
+     * which is what makes `"*.java"` work as one expects.
      */
     public static DirectoryStream<Path> newDirectoryStream(Path dir, String glob)
             throws IOException {
         if (glob == null) {
             throw new NullPointerException("glob");
         }
-        // `"*"` es el caso comun y significa "todo": no hace falta armar un matcher para eso.
+        // `"*"` is the common case and means "everything": no matcher has to be built for that.
         if (glob.equals("*")) {
             return new KajiDirectoryStream(dir, null);
         }
         final PathMatcher matcher = dir.getFileSystem().getPathMatcher("glob:" + glob);
         return new KajiDirectoryStream(dir, new DirectoryStream.Filter<Path>() {
             public boolean accept(Path entry) {
-                Path nombre = entry.getFileName();
-                return nombre != null && matcher.matches(nombre);
+                Path name = entry.getFileName();
+                return name != null && matcher.matches(name);
             }
         });
     }
 
-    /** El de arriba con un filtro propio. */
+    /** The one above with a filter of one's own. */
     public static DirectoryStream<Path> newDirectoryStream(Path dir,
             DirectoryStream.Filter<? super Path> filter) throws IOException {
         if (filter == null) {
@@ -1524,14 +1523,14 @@ public final class Files {
     }
 
     /**
-     * Recorre el arbol que cuelga de `start`, avisandole al visitante en cada paso.
+     * It walks the tree hanging off `start`, telling the visitor at each step.
      *
-     * <p>Es el metodo del que salen los otros cuatro. El orden es el que el contrato fija: para un
-     * directorio, `preVisitDirectory`, despues sus hijos, despues `postVisitDirectory`; para un
-     * archivo, `visitFile`. Y `visitFileFailed` cuando no se pudo mirar una entrada -- que **no** es
-     * un error del recorrido: el visitante decide si sigue.
+     * <p>It is the method the other four come out of. The order is the one the contract fixes: for
+     * a directory, `preVisitDirectory`, then its children, then `postVisitDirectory`; for a file,
+     * `visitFile`. And `visitFileFailed` when an entry could not be looked at -- which is **not**
+     * an error of the traversal: the visitor decides whether to carry on.
      *
-     * @param maxDepth cuantos niveles bajar; `0` visita solo `start`
+     * @param maxDepth how many levels to descend; `0` visits only `start`
      */
     public static Path walkFileTree(Path start, java.util.Set<FileVisitOption> options,
             int maxDepth, FileVisitor<? super Path> visitor) throws IOException {
@@ -1539,22 +1538,22 @@ public final class Files {
             throw new NullPointerException();
         }
         if (maxDepth < 0) {
-            throw new IllegalArgumentException("maxDepth no puede ser negativo");
+            throw new IllegalArgumentException("maxDepth cannot be negative");
         }
-        recorrer(start, 0, maxDepth, visitor);
+        walkTree(start, 0, maxDepth, visitor);
         return start;
     }
 
-    /** El de arriba sin opciones y sin limite de profundidad. */
+    /** The one above with no options and no depth limit. */
     public static Path walkFileTree(Path start, FileVisitor<? super Path> visitor)
             throws IOException {
         return walkFileTree(start, java.util.Collections.<FileVisitOption>emptySet(),
                 Integer.MAX_VALUE, visitor);
     }
 
-    // El recorrido. Devuelve lo que el visitante contesto, para que un `TERMINATE` corte todo el
-    // arbol y no solo la rama -- que es la diferencia entre `TERMINATE` y `SKIP_SUBTREE`.
-    private static FileVisitResult recorrer(Path p, int nivel, int maxDepth,
+    // The traversal. It returns what the visitor answered, so a `TERMINATE` cuts the whole tree and
+    // not only the branch -- which is the difference between `TERMINATE` and `SKIP_SUBTREE`.
+    private static FileVisitResult walkTree(Path p, int depth, int maxDepth,
             FileVisitor<? super Path> visitor) throws IOException {
         BasicFileAttributes attrs = null;
         try {
@@ -1562,7 +1561,7 @@ public final class Files {
         } catch (IOException e) {
             return visitor.visitFileFailed(p, e);
         }
-        if (!attrs.isDirectory() || nivel >= maxDepth) {
+        if (!attrs.isDirectory() || depth >= maxDepth) {
             return visitor.visitFile(p, attrs);
         }
         FileVisitResult r = visitor.preVisitDirectory(p, attrs);
@@ -1570,17 +1569,17 @@ public final class Files {
             return r;
         }
         if (r == FileVisitResult.SKIP_SUBTREE || r == FileVisitResult.SKIP_SIBLINGS) {
-            // `SKIP_SIBLINGS` sobre un directorio significa "ni entres ni sigas con sus hermanos":
-            // no se baja, y el que corta a los hermanos es el bucle de arriba.
+            // `SKIP_SIBLINGS` on a directory means "neither go in nor carry on with its
+            // siblings": it does not descend, and what cuts the siblings is the loop above.
             return r == FileVisitResult.SKIP_SIBLINGS ? r : FileVisitResult.CONTINUE;
         }
-        IOException fallo = null;
+        IOException failed = null;
         try {
-            DirectoryStream<Path> hijos = newDirectoryStream(p);
+            DirectoryStream<Path> children = newDirectoryStream(p);
             try {
-                java.util.Iterator<Path> it = hijos.iterator();
+                java.util.Iterator<Path> it = children.iterator();
                 while (it.hasNext()) {
-                    FileVisitResult hr = recorrer(it.next(), nivel + 1, maxDepth, visitor);
+                    FileVisitResult hr = walkTree(it.next(), depth + 1, maxDepth, visitor);
                     if (hr == FileVisitResult.TERMINATE) {
                         return hr;
                     }
@@ -1589,17 +1588,18 @@ public final class Files {
                     }
                 }
             } finally {
-                hijos.close();
+                children.close();
             }
         } catch (IOException e) {
-            // El fallo al listar se le pasa a `postVisitDirectory`, que es donde el contrato dice
-            // que llega. No se lanza: el visitante puede querer seguir con el resto del arbol.
-            fallo = e;
+            // The failure to list is handed to `postVisitDirectory`, which is where the contract
+            // says it arrives. It is not thrown: the visitor may want to carry on with the rest of
+            // the tree.
+            failed = e;
         }
-        return visitor.postVisitDirectory(p, fallo);
+        return visitor.postVisitDirectory(p, failed);
     }
 
-    /** Las entradas directas de un directorio, como flujo. */
+    /** A directory's direct entries, as a stream. */
     public static java.util.stream.Stream<Path> list(Path dir) throws IOException {
         List<Path> out = new ArrayList<Path>();
         DirectoryStream<Path> s = newDirectoryStream(dir);
@@ -1615,15 +1615,16 @@ public final class Files {
     }
 
     /**
-     * Todo el arbol que cuelga de `start`, como flujo, hasta `maxDepth` niveles.
+     * The whole tree hanging off `start`, as a stream, down to `maxDepth` levels.
      *
-     * <p>El primer elemento es `start`. Una entrada que no se puede mirar **corta** el flujo con
-     * `IOException`, que es lo que el JDK hace: `walk` no tiene por donde avisar de un fallo parcial.
+     * <p>The first element is `start`. An entry that cannot be looked at **cuts** the stream with
+     * an `IOException`, which is what the JDK does: `walk` has no way of reporting a partial
+     * failure.
      */
     public static java.util.stream.Stream<Path> walk(Path start, int maxDepth,
             FileVisitOption... options) throws IOException {
         final List<Path> out = new ArrayList<Path>();
-        walkFileTree(start, opcionesDe(options), maxDepth, new SimpleFileVisitor<Path>() {
+        walkFileTree(start, optionsOf(options), maxDepth, new SimpleFileVisitor<Path>() {
             public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
                 out.add(dir);
                 return FileVisitResult.CONTINUE;
@@ -1641,17 +1642,18 @@ public final class Files {
         return out.stream();
     }
 
-    /** El de arriba sin limite de profundidad. */
+    /** The one above with no depth limit. */
     public static java.util.stream.Stream<Path> walk(Path start, FileVisitOption... options)
             throws IOException {
         return walk(start, Integer.MAX_VALUE, options);
     }
 
     /**
-     * Las entradas del arbol que cumplen el predicado.
+     * The tree's entries that satisfy the predicate.
      *
-     * <p>El predicado recibe el camino **y sus atributos**, que ya se leyeron para recorrer: es lo
-     * que evita que quien filtra por tamano o por fecha tenga que volver a mirar el disco.
+     * <p>The predicate receives the path **and its attributes**, which were already read in order
+     * to walk: it is what stops whoever filters by size or by date from having to look at the disk
+     * again.
      */
     public static java.util.stream.Stream<Path> find(Path start, int maxDepth,
             java.util.function.BiPredicate<Path, BasicFileAttributes> matcher,
@@ -1661,7 +1663,7 @@ public final class Files {
         }
         final List<Path> out = new ArrayList<Path>();
         final java.util.function.BiPredicate<Path, BasicFileAttributes> pred = matcher;
-        walkFileTree(start, opcionesDe(options), maxDepth, new SimpleFileVisitor<Path>() {
+        walkFileTree(start, optionsOf(options), maxDepth, new SimpleFileVisitor<Path>() {
             public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
                 if (pred.test(dir, attrs)) {
                     out.add(dir);
@@ -1683,15 +1685,15 @@ public final class Files {
         return out.stream();
     }
 
-    // Las opciones como conjunto. Hoy la unica que existe es `FOLLOW_LINKS`, y esta VM no tiene
-    // enlaces simbolicos, asi que el recorrido sale igual con o sin ella. Se acepta igual porque la
-    // firma la declara y rechazarla seria inventar un error.
-    private static java.util.Set<FileVisitOption> opcionesDe(FileVisitOption[] options) {
+    // The options as a set. Today the only one that exists is `FOLLOW_LINKS`, and this VM has no
+    // symbolic links, so the traversal comes out the same with or without it. It is accepted all
+    // the same because the signature declares it and rejecting it would be inventing an error.
+    private static java.util.Set<FileVisitOption> optionsOf(FileVisitOption[] options) {
         java.util.Set<FileVisitOption> out = new java.util.HashSet<FileVisitOption>();
         int i = 0;
         while (options != null && i < options.length) {
             if (options[i] == null) {
-                throw new NullPointerException("una opcion es null");
+                throw new NullPointerException("an option is null");
             }
             out.add(options[i]);
             i = i + 1;
@@ -1699,23 +1701,25 @@ public final class Files {
         return out;
     }
 
-    // ---- identidad y fecha de modificacion ------------------------------------------------------
+    // ---- identity and modification date ---------------------------------------------------------
     //
-    // Los dos estuvieron afuera hasta que aparecieron sus nativos, y los dos son de la misma
-    // familia: preguntas sobre el archivo que el nombre no puede contestar.
+    // Both were out until their natives turned up, and both are of the same family: questions about
+    // the file that the name cannot answer.
 
     /**
-     * Si las dos rutas nombran **el mismo archivo**.
+     * Whether the two paths name **the same file**.
      *
-     * <p>La pregunta no la puede contestar la cadena. En Windows `C:\A.TXT` y `C:.txt` son el
-     * mismo archivo y no son el mismo texto; una ruta relativa y una absoluta tampoco; y `a/../b` y
-     * `b` menos. Por eso se compara la forma **canonica**, que resuelve las tres cosas.
+     * <p>The string cannot answer the question. On Windows `C:\A.TXT` and `C:.txt` are the same
+     * file and are not the same text; a relative path and an absolute one are not either; and
+     * `a/../b` and `b` less still. That is why the **canonical** form is compared, which resolves
+     * all three. (The second path used to carry a literal BEL where its `` had been eaten by an
+     * earlier edit.)
      *
-     * <p>El atajo por igualdad va primero y no es solo una optimizacion: la spec dice que dos
-     * caminos iguales son el mismo archivo **sin mirar el disco**, asi que dos rutas iguales que no
-     * existen dan `true` igual.
+     * <p>The equality shortcut goes first and is not only an optimisation: the spec says two equal
+     * paths are the same file **without looking at the disk**, so two equal paths that do not exist
+     * give `true` all the same.
      *
-     * @throws NoSuchFileException si alguno de los dos no existe
+     * @throws NoSuchFileException if either of the two does not exist
      */
     public static boolean isSameFile(Path path, Path path2) throws IOException {
         if (path == null || path2 == null) {
@@ -1736,11 +1740,11 @@ public final class Files {
     }
 
     /**
-     * Fija la fecha de ultima modificacion.
+     * It sets the last modification date.
      *
-     * <p>Devuelve el mismo `path`, que es lo que permite encadenarlo detras de un `write`.
+     * <p>It returns the same `path`, which is what allows chaining it after a `write`.
      *
-     * @throws NoSuchFileException si el archivo no existe
+     * @throws NoSuchFileException if the file does not exist
      */
     public static Path setLastModifiedTime(Path path, java.nio.file.attribute.FileTime time)
             throws IOException {
@@ -1748,36 +1752,36 @@ public final class Files {
             throw new NullPointerException();
         }
         if (!Fs.setMtime(path.toString(), time.toMillis())) {
-            if ((Fs.stat(path.toString()) & Fs.EXISTE) == 0) {
+            if ((Fs.stat(path.toString()) & Fs.EXISTS) == 0) {
                 throw new NoSuchFileException(path.toString());
             }
-            throw new IOException("no se pudo fijar la fecha de " + path);
+            throw new IOException("could not set the date of " + path);
         }
         return path;
     }
 
     /**
-     * El volumen donde vive ese archivo.
+     * The volume that file lives on.
      *
-     * <p>El {@link FileStore} que sale contesta los tres espacios de verdad --total, utilizable y
-     * sin asignar-- y da `"unknown"` como tipo, que es lo que el propio JDK contesta cuando no lo
-     * puede determinar. Ver {@link KajiFileStore} sobre que se sabe y que no.
+     * <p>The {@link FileStore} that comes out answers the three spaces for real --total, usable and
+     * unallocated-- and gives `"unknown"` as the type, which is what the JDK itself answers when it
+     * cannot determine one. See {@link KajiFileStore} on what is known and what is not.
      *
-     * @throws NullPointerException si `path` es `null`
-     * @throws IOException si el archivo no existe o si no se pudo leer el volumen
+     * @throws NullPointerException if `path` is `null`
+     * @throws IOException if the file does not exist or if the volume could not be read
      */
     public static FileStore getFileStore(Path path) throws IOException {
         if (path == null) {
             throw new NullPointerException("path");
         }
-        String ruta = path.toAbsolutePath().toString();
-        // Que el archivo exista se comprueba **antes** de preguntar por el volumen, y no despues: la
-        // API de espacio contesta igual por una ruta que no existe --le alcanza con el volumen-- y
-        // `getFileStore` de un archivo inexistente tiene que fallar, no devolver el volumen de su
-        // directorio.
-        if (jdk.internal.io.Fs.stat(ruta) == 0) {
+        String pathOf = path.toAbsolutePath().toString();
+        // That the file exists is checked **before** asking about the volume, and not after: the
+        // space API answers all the same for a path that does not exist --the volume is enough for
+        // it-- and `getFileStore` of a non-existent file has to fail, not return its directory's
+        // volume.
+        if (jdk.internal.io.Fs.stat(pathOf) == 0) {
             throw new NoSuchFileException(path.toString());
         }
-        return new KajiFileStore(ruta, KajiFileStore.nombreDeVolumen(ruta));
+        return new KajiFileStore(pathOf, KajiFileStore.volumeName(pathOf));
     }
 }

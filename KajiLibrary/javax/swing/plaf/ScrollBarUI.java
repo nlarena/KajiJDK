@@ -1,10 +1,11 @@
 package javax.swing.plaf;
 
 /**
- * El aspecto de una barra de desplazamiento.
+ * A scroll bar's look and feel.
  *
- * <p>No agrega nada a {@link ComponentUI}: la barra es un modelo mas dos botones, y todo lo que
- * hay que saber de ella se pregunta por su API. Existe por lo mismo que {@link ButtonUI}.
+ * <p>It adds nothing to {@link ComponentUI}: the bar is a model plus two buttons, and everything
+ * there is to know about it is asked through its API. It exists for the same reason as
+ * {@link ButtonUI}.
  */
 public abstract class ScrollBarUI extends ComponentUI {
 

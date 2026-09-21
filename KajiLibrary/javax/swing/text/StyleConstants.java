@@ -6,52 +6,54 @@ import java.awt.Component;
 import javax.swing.Icon;
 
 /**
- * Las claves de los atributos que Swing entiende, y los accesores con tipo para leerlas y
- * ponerlas.
+ * The keys of the attributes Swing understands, and the typed accessors for reading and
+ * setting them.
  *
- * <h2>Claves que son objetos, no cadenas</h2>
+ * <h2>Keys that are objects, not strings</h2>
  *
- * <p>Cada clave es una <em>instancia</em> de esta clase, no un {@code String}. Dos ventajas: dos
- * atributos distintos no pueden chocar por llamarse igual, y la clave lleva encima de que familia
- * es —de caracter, de parrafo, de color, de fuente— por las interfaces que implementa
- * ({@link AttributeSet.CharacterAttribute} y compania). Eso ultimo es lo que permite a un editor
- * preguntar "que atributos de parrafo tiene esto" sin una lista escrita a mano.
+ * <p>Each key is an <em>instance</em> of this class, not a {@code String}. Two advantages: two
+ * different attributes cannot clash by being called the same, and the key carries on it which
+ * family it belongs to --character, paragraph, colour, font-- through the interfaces it
+ * implements ({@link AttributeSet.CharacterAttribute} and company). That last thing is what
+ * allows an editor to ask "which paragraph attributes does this have" without a list written by
+ * hand.
  *
- * <p>Los accesores estaticos son la unica forma comoda de leer un atributo: el conjunto guarda
- * {@code Object}, y aca esta el casteo y el valor por omision de cada uno. Un atributo que no
- * esta no es un error: se contesta lo que corresponda —{@code false}, cero, el color de frente—.
+ * <p>The static accessors are the only convenient way of reading an attribute: the set keeps
+ * {@code Object}s, and here are each one's cast and default value. An attribute that is not there
+ * is not an error: whatever corresponds is answered --{@code false}, zero, the foreground
+ * colour.
  *
- * <p>{@link #Family} y {@link #FontFamily} son la misma clave, igual que {@link #Size} y
- * {@link #FontSize}: son dos nombres historicos del mismo objeto.
+ * <p>{@link #Family} and {@link #FontFamily} are the same key, just like {@link #Size} and
+ * {@link #FontSize}: they are two historical names of the same object.
  */
 public class StyleConstants {
 
-    /** El nombre de elemento de un componente incrustado. */
+    /** The element name of an embedded component. */
     public static final String ComponentElementName = "component";
 
-    /** El nombre de elemento de un icono incrustado. */
+    /** The element name of an embedded icon. */
     public static final String IconElementName = "icon";
 
-    /** El nombre del atributo que guarda el nombre de un elemento o estilo. */
+    /** The name of the attribute that keeps an element's or a style's name. */
     public static final Object NameAttribute = new StyleConstants("name");
 
-    /** El padre de resolucion; ver {@link MutableAttributeSet}. */
+    /** The resolving parent; see {@link MutableAttributeSet}. */
     public static final Object ResolveAttribute = new StyleConstants("resolver");
 
-    /** El modelo de un componente incrustado. */
+    /** An embedded component's model. */
     public static final Object ModelAttribute = new StyleConstants("model");
 
-    /** El nivel bidireccional del texto, para mezclar escrituras de distinto sentido. */
+    /** The text's bidirectional level, for mixing scripts of different direction. */
     public static final Object BidiLevel = new CharacterConstants("bidiLevel");
 
     public static final Object FontFamily = new FontConstants("family");
 
-    /** El otro nombre de {@link #FontFamily}; es el mismo objeto. */
+    /** {@link #FontFamily}'s other name; it is the same object. */
     public static final Object Family = FontFamily;
 
     public static final Object FontSize = new FontConstants("size");
 
-    /** El otro nombre de {@link #FontSize}; es el mismo objeto. */
+    /** {@link #FontSize}'s other name; it is the same object. */
     public static final Object Size = FontSize;
 
     public static final Object Bold = new FontConstants("bold");
@@ -70,13 +72,13 @@ public class StyleConstants {
 
     public static final Object Background = new ColorConstants("background");
 
-    /** El componente incrustado en el texto. */
+    /** The component embedded in the text. */
     public static final Object ComponentAttribute = new CharacterConstants("component");
 
-    /** El icono incrustado en el texto. */
+    /** The icon embedded in the text. */
     public static final Object IconAttribute = new CharacterConstants("icon");
 
-    /** El texto en composicion de un metodo de entrada. */
+    /** An input method's text being composed. */
     public static final Object ComposedTextAttribute = new StyleConstants("composed text");
 
     public static final Object FirstLineIndent = new ParagraphConstants("FirstLineIndent");
@@ -95,7 +97,7 @@ public class StyleConstants {
 
     public static final Object TabSet = new ParagraphConstants("TabSet");
 
-    /** El sentido de la escritura del parrafo. */
+    /** The paragraph's writing direction. */
     public static final Object Orientation = new ParagraphConstants("Orientation");
 
     public static final int ALIGN_LEFT = 0;
@@ -104,14 +106,14 @@ public class StyleConstants {
 
     public static final int ALIGN_RIGHT = 2;
 
-    /** El texto se estira para llegar a los dos margenes. */
+    /** The text is stretched to reach both margins. */
     public static final int ALIGN_JUSTIFIED = 3;
 
     /**
-     * Todas las claves, para recorrerlas.
+     * Every key, for walking them.
      *
-     * <p>Es un arreglo publico y modificable, lo que hoy seria un error de diseno; esta asi en el
-     * JDK desde 1.2 y cambiarlo romperia programas.
+     * <p>It is a public and modifiable array, which today would be a design mistake; it is so in
+     * the JDK since 1.2 and changing it would break programs.
      */
     public static Object[] keys = {
         NameAttribute, ResolveAttribute, BidiLevel,
@@ -125,19 +127,19 @@ public class StyleConstants {
 
     private String representation;
 
-    /** Una clave nueva con ese nombre para mostrar; solo la usan las anidadas. */
+    /** A new key with that display name; only the nested ones use it. */
     StyleConstants(String representation) {
         this.representation = representation;
     }
 
-    /** El nombre de la clave; es lo que se ve al imprimir un conjunto de atributos. */
+    /** The key's name; it is what is seen when printing an attribute set. */
     public String toString() {
         return representation;
     }
 
-    // -- caracter --------------------------------------------------------------------------------
+    // -- character --------------------------------------------------------------------------------
 
-    /** El nivel bidireccional; cero si no esta. */
+    /** The bidirectional level; zero if it is not there. */
     public static int getBidiLevel(AttributeSet a) {
         Integer o = (Integer) a.getAttribute(BidiLevel);
         if (o != null) {
@@ -150,18 +152,18 @@ public class StyleConstants {
         a.addAttribute(BidiLevel, Integer.valueOf(o));
     }
 
-    /** El componente incrustado, o {@code null}. */
+    /** The embedded component, or {@code null}. */
     public static Component getComponent(AttributeSet a) {
         return (Component) a.getAttribute(ComponentAttribute);
     }
 
-    /** Incrusta un componente; tambien pone el nombre de elemento que le corresponde. */
+    /** It embeds a component; it also sets the element name that corresponds to it. */
     public static void setComponent(MutableAttributeSet a, Component c) {
         a.addAttribute(AbstractDocument.ElementNameAttribute, ComponentElementName);
         a.addAttribute(ComponentAttribute, c);
     }
 
-    /** El icono incrustado, o {@code null}. */
+    /** The embedded icon, or {@code null}. */
     public static Icon getIcon(AttributeSet a) {
         return (Icon) a.getAttribute(IconAttribute);
     }
@@ -171,7 +173,7 @@ public class StyleConstants {
         a.addAttribute(IconAttribute, c);
     }
 
-    /** La familia tipografica; "Monospaced" si no esta. */
+    /** The typeface family; "Monospaced" if it is not there. */
     public static String getFontFamily(AttributeSet a) {
         String family = (String) a.getAttribute(FontFamily);
         if (family == null) {
@@ -184,7 +186,7 @@ public class StyleConstants {
         a.addAttribute(FontFamily, fam);
     }
 
-    /** El cuerpo de la fuente; 12 si no esta. */
+    /** The font's size; 12 if it is not there. */
     public static int getFontSize(AttributeSet a) {
         Integer size = (Integer) a.getAttribute(FontSize);
         if (size != null) {
@@ -269,7 +271,7 @@ public class StyleConstants {
         a.addAttribute(Subscript, Boolean.valueOf(b));
     }
 
-    /** El color del texto; negro si no esta. */
+    /** The text's colour; black if it is not there. */
     public static Color getForeground(AttributeSet a) {
         Color fg = (Color) a.getAttribute(Foreground);
         if (fg == null) {
@@ -282,7 +284,7 @@ public class StyleConstants {
         a.addAttribute(Foreground, fg);
     }
 
-    /** El color del fondo; blanco si no esta. */
+    /** The background's colour; white if it is not there. */
     public static Color getBackground(AttributeSet a) {
         Color fg = (Color) a.getAttribute(Background);
         if (fg == null) {
@@ -295,9 +297,9 @@ public class StyleConstants {
         a.addAttribute(Background, fg);
     }
 
-    // -- parrafo ---------------------------------------------------------------------------------
+    // -- paragraph --------------------------------------------------------------------------------
 
-    /** La sangria de la primera linea; cero si no esta. */
+    /** The first line's indent; zero if it is not there. */
     public static float getFirstLineIndent(AttributeSet a) {
         Float indent = (Float) a.getAttribute(FirstLineIndent);
         if (indent != null) {
@@ -334,7 +336,7 @@ public class StyleConstants {
         a.addAttribute(LeftIndent, Float.valueOf(i));
     }
 
-    /** El interlineado, como fraccion del alto de la linea; cero si no esta. */
+    /** The line spacing, as a fraction of the line's height; zero if it is not there. */
     public static float getLineSpacing(AttributeSet a) {
         Float space = (Float) a.getAttribute(LineSpacing);
         if (space != null) {
@@ -371,7 +373,7 @@ public class StyleConstants {
         a.addAttribute(SpaceBelow, Float.valueOf(i));
     }
 
-    /** La alineacion; a la izquierda si no esta. */
+    /** The alignment; to the left if it is not there. */
     public static int getAlignment(AttributeSet a) {
         Integer align = (Integer) a.getAttribute(Alignment);
         if (align != null) {
@@ -384,7 +386,7 @@ public class StyleConstants {
         a.addAttribute(Alignment, Integer.valueOf(align));
     }
 
-    /** Las paradas de tabulacion del parrafo, o {@code null}. */
+    /** The paragraph's tab stops, or {@code null}. */
     public static TabSet getTabSet(AttributeSet a) {
         return (TabSet) a.getAttribute(StyleConstants.TabSet);
     }
@@ -393,7 +395,7 @@ public class StyleConstants {
         a.addAttribute(StyleConstants.TabSet, tabs);
     }
 
-    /** Una clave de atributo de caracter. */
+    /** A character attribute key. */
     public static final class CharacterConstants extends StyleConstants
             implements AttributeSet$CharacterAttribute {
 
@@ -402,7 +404,7 @@ public class StyleConstants {
         }
     }
 
-    /** Una clave de color; tambien es de caracter. */
+    /** A colour key; it is a character one too. */
     public static final class ColorConstants extends StyleConstants
             implements AttributeSet$ColorAttribute, AttributeSet$CharacterAttribute {
 
@@ -411,7 +413,7 @@ public class StyleConstants {
         }
     }
 
-    /** Una clave de fuente; tambien es de caracter. */
+    /** A font key; it is a character one too. */
     public static final class FontConstants extends StyleConstants
             implements AttributeSet$FontAttribute, AttributeSet$CharacterAttribute {
 
@@ -420,7 +422,7 @@ public class StyleConstants {
         }
     }
 
-    /** Una clave de atributo de parrafo. */
+    /** A paragraph attribute key. */
     public static final class ParagraphConstants extends StyleConstants
             implements AttributeSet$ParagraphAttribute {
 

@@ -4,62 +4,64 @@ import java.lang.classfile.BootstrapMethodEntry;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 
-// El pool de constantes de una clase (JVMS §4.4), más la tabla del atributo `BootstrapMethods`, que
-// la API trata como una segunda mitad del pool porque `CONSTANT_Dynamic` y `CONSTANT_InvokeDynamic`
-// la indexan igual que a él.
+// A class's constant pool (JVMS §4.4), plus the `BootstrapMethods` attribute's table, which the API
+// treats as a second half of the pool because `CONSTANT_Dynamic` and `CONSTANT_InvokeDynamic` index
+// it just as they index the pool.
 //
-// `size()` es el `constant_pool_count` del archivo: uno MÁS que el índice más alto usable. El índice
-// 0 no existe por definición del formato, y las ranuras que siguen a un `long` o a un `double`
-// tampoco. El `iterator()` de acá salta las dos cosas: recorre entradas reales, no ranuras.
+// `size()` is the file's `constant_pool_count`: one MORE than the highest usable index. Index 0 does
+// not exist by definition of the format, and neither do the slots following a `long` or a `double`.
+// The `iterator()` here skips both: it walks real entries, not slots.
 public interface ConstantPool extends Iterable<PoolEntry> {
 
-    /** La entrada en `index`. Tira `ConstantPoolException` si el índice no es una entrada válida. */
+    /** The entry at `index`. It throws `ConstantPoolException` if the index is not a valid
+     * entry. */
     PoolEntry entryByIndex(int index);
 
-    /** El `constant_pool_count`: uno más que el índice más alto. */
+    /** The `constant_pool_count`: one more than the highest index. */
     int size();
 
     /**
-     * La entrada en `index`, exigiendo que sea del tipo `cls`. Tira `ConstantPoolException` si el
-     * índice no vale o si la entrada es de otra clase — que es la razón de ser del método: un lector
-     * que aceptara la entrada equivocada acá dejaría pasar un archivo mal formado.
+     * The entry at `index`, demanding that it be of type `cls`. It throws `ConstantPoolException` if
+     * the index is no good or if the entry is of another class -- which is the method's reason for
+     * being: a reader that accepted the wrong entry here would let a malformed file through.
      */
     <T extends PoolEntry> T entryByIndex(int index, Class<T> cls);
 
-    /** Recorre las entradas reales del pool, en orden de índice. */
+    /** It walks the pool's real entries, in index order. */
     default Iterator<PoolEntry> iterator() {
-        return new IteradorDePool(this);
+        return new PoolIterator(this);
     }
 
-    /** La entrada `index` de la tabla de `BootstrapMethods`. */
+    /** Entry `index` of the `BootstrapMethods` table. */
     BootstrapMethodEntry bootstrapMethodEntry(int index);
 
-    /** Cuántos métodos de arranque tiene la clase. */
+    /** How many bootstrap methods the class has. */
     int bootstrapMethodCount();
 }
 
-// El iterador del `default` de arriba. Es una clase de paquete y no una anónima porque tiene estado
-// —el índice— y porque saltar el hueco de `long`/`double` se lee mejor con nombre.
-final class IteradorDePool implements Iterator<PoolEntry> {
+// The iterator of the `default` above. It is a package-private class and not an anonymous one
+// because it has state --the index-- and because skipping the `long`/`double` gap reads better with a
+// name.
+final class PoolIterator implements Iterator<PoolEntry> {
 
     private final ConstantPool pool;
-    private int indice;
+    private int index;
 
-    IteradorDePool(ConstantPool pool) {
+    PoolIterator(ConstantPool pool) {
         this.pool = pool;
-        this.indice = 1;
+        this.index = 1;
     }
 
     public boolean hasNext() {
-        return this.indice < this.pool.size();
+        return this.index < this.pool.size();
     }
 
     public PoolEntry next() {
         if (!hasNext()) {
             throw new NoSuchElementException();
         }
-        PoolEntry e = this.pool.entryByIndex(this.indice);
-        this.indice += e.width();
+        PoolEntry e = this.pool.entryByIndex(this.index);
+        this.index += e.width();
         return e;
     }
 }

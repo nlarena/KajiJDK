@@ -11,15 +11,15 @@ import javax.accessibility.AccessibleStateSet;
 import javax.accessibility.AccessibleValue;
 
 /**
- * Una barra de desplazamiento: un valor dentro de un rango, movido con un cursor.
+ * A scrollbar: a value inside a range, moved with a thumb.
  *
- * <p>El detalle que confunde a todo el mundo es que **el valor máximo no se alcanza nunca**. La
- * barra tiene un ancho visible, y el valor sólo llega hasta {@code maximum - visibleAmount}. Es
- * coherente si se piensa en para qué existe: el valor es el renglón de arriba de lo que se ve, y el
- * renglón de arriba nunca puede ser el último, porque abajo de él tiene que entrar una pantalla.
+ * <p>The detail that confuses everybody is that **the maximum value is never reached**. The bar has
+ * a visible width, and the value only goes up to {@code maximum - visibleAmount}. It is coherent if
+ * one thinks about what it is for: the value is the top line of what is seen, and the top line can
+ * never be the last one, because a screenful has to fit below it.
  *
- * <p>Los dos incrementos son distintos: el de unidad es el de las flechas de las puntas, el de
- * bloque es el de apretar el canal, que salta una pantalla.
+ * <p>The two increments are different: the unit one belongs to the arrows at the ends, the block
+ * one to pressing the channel, which jumps a screenful.
  */
 public class Scrollbar extends Component implements Adjustable, Accessible {
 
@@ -27,53 +27,53 @@ public class Scrollbar extends Component implements Adjustable, Accessible {
 
     private static int scrollbarCounter = 0;
 
-    /** Acostada. */
+    /** Lying down. */
     public static final int HORIZONTAL = 0;
 
-    /** Parada. */
+    /** Standing up. */
     public static final int VERTICAL = 1;
 
-    /** El valor actual. */
+    /** The current value. */
     int value;
 
-    /** El tope. */
+    /** The ceiling. */
     int maximum;
 
-    /** El piso. */
+    /** The floor. */
     int minimum;
 
-    /** Cuánto del rango se ve de una. */
+    /** How much of the range is seen at once. */
     int visibleAmount;
 
-    /** Acostada o parada. */
+    /** Lying down or standing up. */
     int orientation;
 
-    /** Cuánto salta con las flechas. */
+    /** How much it jumps with the arrows. */
     int lineIncrement = 1;
 
-    /** Cuánto salta al apretar el canal. */
+    /** How much it jumps when the channel is pressed. */
     int pageIncrement = 10;
 
-    /** Si el usuario tiene el cursor agarrado. */
+    /** Whether the user is holding the thumb. */
     transient boolean isAdjusting;
 
-    /** Los oyentes, encadenados. */
+    /** The listeners, chained. */
     transient AdjustmentListener adjustmentListener;
 
-    /** Una barra parada, de 0 a 100, con 10 visibles. */
+    /** A standing bar, from 0 to 100, with 10 visible. */
     public Scrollbar() throws HeadlessException {
         this(VERTICAL, 0, 10, 0, 100);
     }
 
-    /** Una barra con esa orientación, de 0 a 100, con 10 visibles. */
+    /** A bar with that orientation, from 0 to 100, with 10 visible. */
     public Scrollbar(int orientation) throws HeadlessException {
         this(orientation, 0, 10, 0, 100);
     }
 
     /**
-     * Una barra con todo dicho.
+     * A bar with everything given.
      *
-     * @throws IllegalArgumentException si la orientación no es {@link #HORIZONTAL} ni
+     * @throws IllegalArgumentException if the orientation is neither {@link #HORIZONTAL} nor
      *     {@link #VERTICAL}
      */
     public Scrollbar(int orientation, int value, int visible, int minimum, int maximum)
@@ -93,20 +93,20 @@ public class Scrollbar extends Component implements Adjustable, Accessible {
         }
     }
 
-    /** La declara mostrable. */
+    /** Declares it showable. */
     public void addNotify() {
         super.addNotify();
     }
 
-    /** Acostada o parada. */
+    /** Lying down or standing up. */
     public int getOrientation() {
         return this.orientation;
     }
 
     /**
-     * La acuesta o la para.
+     * Lays it down or stands it up.
      *
-     * @throws IllegalArgumentException si no es una de las dos constantes
+     * @throws IllegalArgumentException if it is not one of the two constants
      */
     public void setOrientation(int orientation) {
         synchronized (this) {
@@ -121,119 +121,119 @@ public class Scrollbar extends Component implements Adjustable, Accessible {
         this.invalidate();
     }
 
-    /** El valor actual. */
+    /** The current value. */
     public int getValue() {
         return this.value;
     }
 
     /**
-     * Cambia el valor.
+     * Changes the value.
      *
-     * <p>Se recorta al rango válido, que llega hasta {@code maximum - visibleAmount} y no hasta
-     * {@code maximum}.
+     * <p>It is clamped to the valid range, which goes up to {@code maximum - visibleAmount} and not
+     * up to {@code maximum}.
      */
     public void setValue(int newValue) {
         this.setValues(newValue, this.visibleAmount, this.minimum, this.maximum);
     }
 
-    /** El piso. */
+    /** The floor. */
     public int getMinimum() {
         return this.minimum;
     }
 
     /**
-     * Cambia el piso.
+     * Changes the floor.
      *
-     * <p>Un piso mayor que el tope lo empuja: el rango no puede quedar dado vuelta.
+     * <p>A floor above the ceiling pushes the ceiling up: the range cannot be left reversed.
      */
     public void setMinimum(int newMinimum) {
         this.setValues(this.value, this.visibleAmount, newMinimum, this.maximum);
     }
 
-    /** El tope. */
+    /** The ceiling. */
     public int getMaximum() {
         return this.maximum;
     }
 
-    /** Cambia el tope; uno menor que el piso lo empuja. */
+    /** Changes the ceiling; one below the floor is pushed up to just above it. */
     public void setMaximum(int newMaximum) {
         this.setValues(this.value, this.visibleAmount, this.minimum, newMaximum);
     }
 
-    /** Cuánto del rango se ve de una. */
+    /** How much of the range is seen at once. */
     public int getVisibleAmount() {
         return this.visibleAmount;
     }
 
     /**
-     * Cuánto se ve de una.
+     * How much is seen at once.
      *
-     * @deprecated es del nombrado de 1.0. Usar {@link #getVisibleAmount}.
+     * @deprecated it is from the 1.0 naming. Use {@link #getVisibleAmount}.
      */
     @Deprecated
     public int getVisible() {
         return this.visibleAmount;
     }
 
-    /** Cambia cuánto se ve de una. */
+    /** Changes how much is seen at once. */
     public void setVisibleAmount(int newAmount) {
         this.setValues(this.value, newAmount, this.minimum, this.maximum);
     }
 
-    /** Cuánto salta con las flechas; nunca menos de 1. */
+    /** How much it jumps with the arrows; never less than 1. */
     public void setUnitIncrement(int v) {
         this.setLineIncrement(v);
     }
 
     /**
-     * Cuánto salta con las flechas.
+     * How much it jumps with the arrows.
      *
-     * @deprecated es del nombrado de 1.0. Usar {@link #setUnitIncrement}.
+     * @deprecated it is from the 1.0 naming. Use {@link #setUnitIncrement}.
      */
     @Deprecated
     public synchronized void setLineIncrement(int v) {
         this.lineIncrement = Math.max(1, v);
     }
 
-    /** Cuánto salta con las flechas. */
+    /** How much it jumps with the arrows. */
     public int getUnitIncrement() {
         return this.lineIncrement;
     }
 
     /**
-     * Cuánto salta con las flechas.
+     * How much it jumps with the arrows.
      *
-     * @deprecated es del nombrado de 1.0. Usar {@link #getUnitIncrement}.
+     * @deprecated it is from the 1.0 naming. Use {@link #getUnitIncrement}.
      */
     @Deprecated
     public int getLineIncrement() {
         return this.lineIncrement;
     }
 
-    /** Cuánto salta al apretar el canal; nunca menos de 1. */
+    /** How much it jumps when the channel is pressed; never less than 1. */
     public void setBlockIncrement(int v) {
         this.setPageIncrement(v);
     }
 
     /**
-     * Cuánto salta al apretar el canal.
+     * How much it jumps when the channel is pressed.
      *
-     * @deprecated es del nombrado de 1.0. Usar {@link #setBlockIncrement}.
+     * @deprecated it is from the 1.0 naming. Use {@link #setBlockIncrement}.
      */
     @Deprecated
     public synchronized void setPageIncrement(int v) {
         this.pageIncrement = Math.max(1, v);
     }
 
-    /** Cuánto salta al apretar el canal. */
+    /** How much it jumps when the channel is pressed. */
     public int getBlockIncrement() {
         return this.pageIncrement;
     }
 
     /**
-     * Cuánto salta al apretar el canal.
+     * How much it jumps when the channel is pressed.
      *
-     * @deprecated es del nombrado de 1.0. Usar {@link #getBlockIncrement}.
+     * @deprecated it is from the 1.0 naming. Use {@link #getBlockIncrement}.
      */
     @Deprecated
     public int getPageIncrement() {
@@ -241,11 +241,11 @@ public class Scrollbar extends Component implements Adjustable, Accessible {
     }
 
     /**
-     * Cambia las cuatro medidas de una.
+     * Changes the four measures at once.
      *
-     * <p>Existe porque cambiarlas de a una pasa por estados imposibles —un valor fuera del rango
-     * nuevo, un piso arriba del tope— y cada paso recortaría de más. Acá se ajustan todas juntas y
-     * recién después se recorta.
+     * <p>It exists because changing them one at a time goes through impossible states —a value
+     * outside the new range, a floor above the ceiling— and each step would clamp too much. Here
+     * they are all adjusted together and only then is anything clamped.
      */
     public void setValues(int value, int visible, int minimum, int maximum) {
         synchronized (this) {
@@ -255,14 +255,14 @@ public class Scrollbar extends Component implements Adjustable, Accessible {
             if (maximum <= minimum) {
                 maximum = minimum + 1;
             }
-            // El ancho visible no puede pasarse del rango, ni ser cero: una barra que no muestra
-            // nada no tiene cursor que agarrar.
-            long anchoMaximo = (long) maximum - (long) minimum;
-            if (anchoMaximo > Integer.MAX_VALUE) {
-                anchoMaximo = Integer.MAX_VALUE;
+            // The visible width cannot go past the range, nor be zero: a bar that shows nothing has
+            // no thumb to hold.
+            long maxSpan = (long) maximum - (long) minimum;
+            if (maxSpan > Integer.MAX_VALUE) {
+                maxSpan = Integer.MAX_VALUE;
             }
-            if (visible > (int) anchoMaximo) {
-                visible = (int) anchoMaximo;
+            if (visible > (int) maxSpan) {
+                visible = (int) maxSpan;
             }
             if (visible < 1) {
                 visible = 1;
@@ -280,22 +280,22 @@ public class Scrollbar extends Component implements Adjustable, Accessible {
         }
     }
 
-    /** Si el usuario tiene el cursor agarrado. */
+    /** Whether the user is holding the thumb. */
     public boolean getValueIsAdjusting() {
         return this.isAdjusting;
     }
 
     /**
-     * Dice si el usuario tiene el cursor agarrado.
+     * Says whether the user is holding the thumb.
      *
-     * <p>Sirve para no recalcular en cada píxel del arrastre: el oyente puede esperar a que esto sea
-     * `false` y hacer el trabajo caro una sola vez.
+     * <p>It serves to avoid recomputing on every pixel of the drag: the listener can wait for this
+     * to be `false` and do the expensive work just once.
      */
     public void setValueIsAdjusting(boolean b) {
         this.isAdjusting = b;
     }
 
-    /** Agrega un oyente; `null` no hace nada. */
+    /** Adds a listener; `null` does nothing. */
     public synchronized void addAdjustmentListener(AdjustmentListener l) {
         if (l == null) {
             return;
@@ -304,7 +304,7 @@ public class Scrollbar extends Component implements Adjustable, Accessible {
         this.enableEvents(AWTEvent.ADJUSTMENT_EVENT_MASK);
     }
 
-    /** Saca un oyente. */
+    /** Removes a listener. */
     public synchronized void removeAdjustmentListener(AdjustmentListener l) {
         if (l == null) {
             return;
@@ -312,7 +312,7 @@ public class Scrollbar extends Component implements Adjustable, Accessible {
         this.adjustmentListener = AWTEventMulticaster.remove(this.adjustmentListener, l);
     }
 
-    /** Los oyentes puestos. */
+    /** The listeners that are set. */
     public synchronized AdjustmentListener[] getAdjustmentListeners() {
         return AWTEventMulticaster.getListeners(this.adjustmentListener,
                 AdjustmentListener.class);
@@ -333,7 +333,7 @@ public class Scrollbar extends Component implements Adjustable, Accessible {
         super.processEvent(e);
     }
 
-    /** Les avisa a los oyentes de ajuste. */
+    /** Tells the adjustment listeners. */
     protected void processAdjustmentEvent(AdjustmentEvent e) {
         AdjustmentListener l = this.adjustmentListener;
         if (l != null) {
@@ -347,7 +347,7 @@ public class Scrollbar extends Component implements Adjustable, Accessible {
                 + (this.orientation == VERTICAL ? ",vert" : ",horz");
     }
 
-    /** La accesibilidad de la barra. */
+    /** The accessibility information of this bar. */
     public AccessibleContext getAccessibleContext() {
         if (this.accessibleContext == null) {
             this.accessibleContext = new AccessibleAWTScrollBar();
@@ -356,16 +356,16 @@ public class Scrollbar extends Component implements Adjustable, Accessible {
     }
 
     /**
-     * La accesibilidad de una barra de desplazamiento.
+     * The accessibility of a scrollbar.
      *
-     * <p>El máximo que informa es {@link Scrollbar#getMaximum}, o sea el **nominal**, aunque la
-     * barra nunca lo alcance. Informar el alcanzable sería más útil y sería inventar: el JDK informa
-     * el nominal, y se comprobó.
+     * <p>The maximum it reports is {@link Scrollbar#getMaximum}, that is the **nominal** one, even
+     * though the bar never reaches it. Reporting the reachable one would be more useful and would
+     * be inventing: the JDK reports the nominal one, and it was checked.
      */
     protected class AccessibleAWTScrollBar extends AccessibleAWTComponent
             implements AccessibleValue {
 
-        /** Para las subclases. */
+        /** For the subclasses. */
         protected AccessibleAWTScrollBar() {
         }
 
@@ -395,9 +395,9 @@ public class Scrollbar extends Component implements Adjustable, Accessible {
         }
 
         /**
-         * Cambia el valor.
+         * Changes the value.
          *
-         * @return `true` si el valor no era `null`
+         * @return `true` if the value was not `null`
          */
         public boolean setCurrentAccessibleValue(Number n) {
             if (n == null) {
@@ -411,7 +411,7 @@ public class Scrollbar extends Component implements Adjustable, Accessible {
             return Integer.valueOf(Scrollbar.this.getMinimum());
         }
 
-        /** El tope nominal. */
+        /** The nominal ceiling. */
         public Number getMaximumAccessibleValue() {
             return Integer.valueOf(Scrollbar.this.getMaximum());
         }

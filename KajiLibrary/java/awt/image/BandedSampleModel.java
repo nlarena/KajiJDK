@@ -1,32 +1,32 @@
 package java.awt.image;
 
 /**
- * Un {@link ComponentSampleModel} con **cada banda en su propio banco**: el formato por planos,
+ * A {@link ComponentSampleModel} with **each band in its own bank**: the format by planes,
  * RRR...GGG...BBB.
  *
- * <p>Es el complementario de {@link PixelInterleavedSampleModel}: alli las bandas de un pixel estan
- * juntas y aca estan en arreglos distintos. La diferencia se nota al procesar una sola banda --leer
- * el canal rojo entero es recorrer un arreglo seguido en vez de saltar de a tres-- y al agregar o
- * quitar una banda, que aca es agregar o quitar un banco.
+ * <p>It is the complement of {@link PixelInterleavedSampleModel}: there the bands of a pixel are
+ * together and here they are in different arrays. The difference shows when processing a single
+ * band --reading the whole red channel is walking one array in a row instead of jumping by three--
+ * and when adding or removing a band, which here is adding or removing a bank.
  *
- * <p>Se implementa fijando los parametros de la formula general: `pixelStride` es 1 --las bandas
- * estan juntas dentro de su banco-- y `bankIndices` es 0, 1, 2, ... El resto lo hace la clase base,
- * y por eso esta clase es tan corta.
+ * <p>It is implemented by fixing the parameters of the general formula: `pixelStride` is 1 --the
+ * bands are together inside their bank-- and `bankIndices` is 0, 1, 2, ... The rest is done by the
+ * base class, and that is why this class is so short.
  */
 public final class BandedSampleModel extends ComponentSampleModel {
 
-    /** Un banco por banda, sin relleno de fila ni desplazamientos. */
+    /** One bank per band, with no row padding and no offsets. */
     public BandedSampleModel(int dataType, int w, int h, int numBands) {
-        super(dataType, w, h, 1, w, bancos(numBands), new int[numBands]);
+        super(dataType, w, h, 1, w, bankSeries(numBands), new int[numBands]);
     }
 
-    /** Un banco por banda, con el paso de fila, los bancos y los desplazamientos dados. */
+    /** One bank per band, with the row stride, the banks and the offsets given. */
     public BandedSampleModel(int dataType, int w, int h, int scanlineStride, int[] bankIndices,
             int[] bandOffsets) {
         super(dataType, w, h, 1, scanlineStride, bankIndices, bandOffsets);
     }
 
-    private static int[] bancos(int numBands) {
+    private static int[] bankSeries(int numBands) {
         int[] out = new int[numBands];
         for (int i = 0; i < numBands; i++) {
             out[i] = i;
@@ -34,12 +34,12 @@ public final class BandedSampleModel extends ComponentSampleModel {
         return out;
     }
 
-    /** Otro por planos del tamano pedido. */
+    /** Another one by planes of the size asked for. */
     public SampleModel createCompatibleSampleModel(int w, int h) {
         int[] indices = this.getBankIndices();
         int[] offsets = this.getBandOffsets();
-        // Los desplazamientos se llevan a cero: con otro tamano, los viejos apuntarian a lugares
-        // que en el buffer nuevo no significan lo mismo.
+        // The offsets are taken to zero: with another size, the old ones would point at places that
+        // in the new buffer do not mean the same thing.
         for (int i = 0; i < offsets.length; i++) {
             offsets[i] = 0;
         }
@@ -47,9 +47,9 @@ public final class BandedSampleModel extends ComponentSampleModel {
     }
 
     /**
-     * Un por-planos con solo esas bandas, sobre los mismos datos.
+     * One by planes with only those bands, over the same data.
      *
-     * @throws RasterFormatException si alguna banda no existe
+     * @throws RasterFormatException if some band does not exist
      */
     public SampleModel createSubsetSampleModel(int[] bands) {
         int[] indices = new int[bands.length];
@@ -68,12 +68,13 @@ public final class BandedSampleModel extends ComponentSampleModel {
     }
 
     /**
-     * Un buffer con un banco por banda.
+     * A buffer with one bank per band.
      *
-     * <p>Cada banco mide lo que ocupa la imagen mas su desplazamiento, y **no** se suman entre si:
-     * son arreglos independientes. Es la diferencia con el intercalado, donde todo entra en uno.
+     * <p>Each bank measures what the image takes plus its offset, and they are **not** added up:
+     * they are independent arrays. That is the difference from the interleaved one, where
+     * everything fits in a single bank.
      *
-     * @throws IllegalArgumentException si el tipo de datos no es uno de los seis
+     * @throws IllegalArgumentException if the data type is not one of the six
      */
     public DataBuffer createDataBuffer() {
         int[] offsets = this.getBandOffsets();

@@ -4,7 +4,7 @@ import javax.swing.JComponent;
 import javax.swing.plaf.ComponentUI;
 
 /**
- * El panel de texto con estilos de Synth. Cambia el prefijo y nada mas.
+ * Synth's text pane. It changes the prefix and nothing else.
  */
 public class SynthTextPaneUI extends SynthEditorPaneUI {
 

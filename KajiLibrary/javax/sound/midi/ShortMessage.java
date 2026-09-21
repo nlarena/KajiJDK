@@ -1,101 +1,102 @@
 package javax.sound.midi;
 
 /**
- * KajiLibrary's javax.sound.midi.ShortMessage -- un mensaje MIDI de uno a tres bytes.
+ * KajiLibrary's javax.sound.midi.ShortMessage -- a MIDI message of one to three bytes.
  *
- * <p>Casi todo el MIDI es esto: notas, controladores, cambio de programa, rueda de tono, y los
- * mensajes de reloj.
+ * <p>Almost all of MIDI is this: notes, controllers, program change, pitch wheel, and the clock
+ * messages.
  *
- * <h2>Comando y canal</h2>
+ * <h2>Command and channel</h2>
  *
- * <p>El byte de estado lleva las dos cosas: los cuatro bits altos son el <b>comando</b> y los cuatro
- * bajos el <b>canal</b>. Por eso hay dieciseis canales y no diecisiete.
+ * <p>The status byte carries both things: the four high bits are the <b>command</b> and the four
+ * low ones the <b>channel</b>. That is why there are sixteen channels and not seventeen.
  *
- * <p>La trampa: en los mensajes de sistema --0xF0 para arriba-- esa division no existe, el byte
- * entero es el comando. {@link #getChannel} igual devuelve los cuatro bits bajos, y ahi el numero no
- * significa nada. Hay que mirar el comando primero.
+ * <p>The trap: in the system messages --0xF0 and up-- that division does not exist, the whole byte
+ * is the command. {@link #getChannel} still returns the four low bits, and there the number means
+ * nothing. The command has to be looked at first.
  *
- * <h2>Una nota se apaga con volumen cero</h2>
+ * <h2>A note is turned off with zero volume</h2>
  *
- * <p>{@link #NOTE_ON} con {@code data2} en 0 equivale a {@link #NOTE_OFF}. Es una optimizacion del
- * estandar --permite mandar una tira de notas sin repetir el byte de estado-- y todo lo que procese
- * MIDI tiene que contemplarla. Tratar solo {@code NOTE_OFF} deja notas colgadas sonando para siempre.
+ * <p>{@link #NOTE_ON} with {@code data2} at 0 is equivalent to {@link #NOTE_OFF}. It is an
+ * optimization of the standard --it allows sending a string of notes without repeating the status
+ * byte-- and everything that processes MIDI has to account for it. Handling only {@code NOTE_OFF}
+ * leaves notes hanging, sounding forever.
  */
 public class ShortMessage extends MidiMessage {
 
-    /** Cuadro de codigo de tiempo. */
+    /** Timecode quarter frame. */
     public static final int MIDI_TIME_CODE = 0xF1;
 
-    /** Posicion en la cancion. */
+    /** Position in the song. */
     public static final int SONG_POSITION_POINTER = 0xF2;
 
-    /** Elegir cancion. */
+    /** Song select. */
     public static final int SONG_SELECT = 0xF3;
 
-    /** Pedido de afinacion. */
+    /** Tune request. */
     public static final int TUNE_REQUEST = 0xF6;
 
-    /** Fin de un mensaje exclusivo. */
+    /** End of an exclusive message. */
     public static final int END_OF_EXCLUSIVE = 0xF7;
 
-    /** Pulso de reloj; van veinticuatro por negra. */
+    /** Clock tick; there are twenty-four per quarter note. */
     public static final int TIMING_CLOCK = 0xF8;
 
-    /** Empezar a reproducir. */
+    /** Start playing. */
     public static final int START = 0xFA;
 
-    /** Seguir desde donde se paro. */
+    /** Continue from where it stopped. */
     public static final int CONTINUE = 0xFB;
 
-    /** Parar. */
+    /** Stop. */
     public static final int STOP = 0xFC;
 
-    /** Sensor de actividad; dice que el cable sigue vivo. */
+    /** Active sensing; says the cable is still alive. */
     public static final int ACTIVE_SENSING = 0xFE;
 
-    /** Reset del sistema. */
+    /** System reset. */
     public static final int SYSTEM_RESET = 0xFF;
 
-    /** Soltar una nota. */
+    /** Release a note. */
     public static final int NOTE_OFF = 0x80;
 
-    /** Tocar una nota. Ver la nota de la clase sobre el volumen cero. */
+    /** Play a note. See the class note on zero volume. */
     public static final int NOTE_ON = 0x90;
 
-    /** Presion sobre una tecla ya pulsada. */
+    /** Pressure on a key already pressed. */
     public static final int POLY_PRESSURE = 0xA0;
 
-    /** Mover un controlador. */
+    /** Move a controller. */
     public static final int CONTROL_CHANGE = 0xB0;
 
-    /** Cambiar de sonido. */
+    /** Change sound. */
     public static final int PROGRAM_CHANGE = 0xC0;
 
-    /** Presion sobre el canal entero. */
+    /** Pressure on the whole channel. */
     public static final int CHANNEL_PRESSURE = 0xD0;
 
-    /** Rueda de tono. */
+    /** Pitch wheel. */
     public static final int PITCH_BEND = 0xE0;
 
     /**
-     * Una nota central a maximo volumen.
+     * A middle note at maximum volume.
      *
-     * <p>Los bytes son {@code 0x90 0x40 0x7F}. Es un valor arbitrario que el JDK eligio para que un
-     * mensaje recien construido sea valido y no vacio.
+     * <p>The bytes are {@code 0x90 0x40 0x7F}. It is an arbitrary value the JDK chose so that a
+     * newly built message is valid and not empty.
      */
     public ShortMessage() {
         this(new byte[3]);
         try {
             setMessage(NOTE_ON, 64, 127);
         } catch (InvalidMidiDataException e) {
-            // Los valores son constantes y validos; no puede pasar.
+            // The values are constant and valid; it cannot happen.
         }
     }
 
     /**
-     * Un mensaje de sistema sin datos.
+     * A system message without data.
      *
-     * @throws InvalidMidiDataException si ese estado lleva datos
+     * @throws InvalidMidiDataException if that status carries data
      */
     public ShortMessage(int status) throws InvalidMidiDataException {
         this(new byte[3]);
@@ -103,9 +104,9 @@ public class ShortMessage extends MidiMessage {
     }
 
     /**
-     * Un mensaje de canal con dos datos.
+     * A channel message with two data bytes.
      *
-     * @throws InvalidMidiDataException si algo esta fuera de rango
+     * @throws InvalidMidiDataException if anything is out of range
      */
     public ShortMessage(int status, int data1, int data2) throws InvalidMidiDataException {
         this(new byte[3]);
@@ -113,10 +114,10 @@ public class ShortMessage extends MidiMessage {
     }
 
     /**
-     * Idem, con el canal aparte.
+     * Likewise, with the channel separate.
      *
-     * @param command el comando, sin el canal
-     * @throws InvalidMidiDataException si algo esta fuera de rango
+     * @param command the command, without the channel
+     * @throws InvalidMidiDataException if anything is out of range
      */
     public ShortMessage(int command, int channel, int data1, int data2)
         throws InvalidMidiDataException {
@@ -124,15 +125,15 @@ public class ShortMessage extends MidiMessage {
         setMessage(command, channel, data1, data2);
     }
 
-    /** Para las subclases y los lectores. */
+    /** For the subclasses and the readers. */
     protected ShortMessage(byte[] data) {
         super(data);
     }
 
     /**
-     * Fija un mensaje sin datos.
+     * Sets a message without data.
      *
-     * @throws InvalidMidiDataException si ese estado lleva datos
+     * @throws InvalidMidiDataException if that status carries data
      */
     public void setMessage(int status) throws InvalidMidiDataException {
         int dataLength = getDataLength(status);
@@ -144,11 +145,11 @@ public class ShortMessage extends MidiMessage {
     }
 
     /**
-     * Fija un mensaje con hasta dos datos.
+     * Sets a message with up to two data bytes.
      *
-     * <p>Los datos que ese estado no use se ignoran, pero igual se validan.
+     * <p>The data bytes that status does not use are ignored, but they are still validated.
      *
-     * @throws InvalidMidiDataException si el estado o los datos estan fuera de rango
+     * @throws InvalidMidiDataException if the status or the data are out of range
      */
     public void setMessage(int status, int data1, int data2) throws InvalidMidiDataException {
         int dataLength = getDataLength(status);
@@ -174,9 +175,9 @@ public class ShortMessage extends MidiMessage {
     }
 
     /**
-     * Fija un mensaje de canal, con el comando y el canal por separado.
+     * Sets a channel message, with the command and the channel separately.
      *
-     * @throws InvalidMidiDataException si el comando, el canal o los datos estan fuera de rango
+     * @throws InvalidMidiDataException if the command, the channel or the data are out of range
      */
     public void setMessage(int command, int channel, int data1, int data2)
         throws InvalidMidiDataException {
@@ -191,20 +192,20 @@ public class ShortMessage extends MidiMessage {
     }
 
     /**
-     * Los cuatro bits bajos del estado.
+     * The four low bits of the status.
      *
-     * <p>Solo significa algo en los mensajes de canal; ver la nota de la clase.
+     * <p>It only means something in channel messages; see the class note.
      */
     public int getChannel() {
         return getStatus() & 0x0F;
     }
 
-    /** Los cuatro bits altos del estado. */
+    /** The four high bits of the status. */
     public int getCommand() {
         return getStatus() & 0xF0;
     }
 
-    /** El primer byte de datos, o 0 si no hay. */
+    /** The first data byte, or 0 if there is none. */
     public int getData1() {
         if (this.length > 1) {
             return this.data[1] & 0xFF;
@@ -212,7 +213,7 @@ public class ShortMessage extends MidiMessage {
         return 0;
     }
 
-    /** El segundo byte de datos, o 0 si no hay. */
+    /** The second data byte, or 0 if there is none. */
     public int getData2() {
         if (this.length > 2) {
             return this.data[2] & 0xFF;
@@ -220,7 +221,7 @@ public class ShortMessage extends MidiMessage {
         return 0;
     }
 
-    /** Una copia independiente. */
+    /** An independent copy. */
     @Override
     public Object clone() {
         byte[] copy = new byte[this.length];
@@ -230,15 +231,16 @@ public class ShortMessage extends MidiMessage {
     }
 
     /**
-     * Cuantos bytes de datos lleva ese estado.
+     * How many data bytes that status carries.
      *
-     * <p>Los mensajes de canal siguen el patron de siempre: dos datos, salvo cambio de programa y
-     * presion de canal, que llevan uno. Los de sistema no tienen patron y hay que saberlos de memoria.
+     * <p>Channel messages follow the usual pattern: two data bytes, except program change and
+     * channel pressure, which carry one. System messages have no pattern and have to be known by
+     * heart.
      *
-     * <p>{@code 0xF0} --el comienzo de un exclusivo-- lanza excepcion: no tiene un largo fijo, y por
-     * eso no es un {@code ShortMessage}.
+     * <p>{@code 0xF0} --the start of an exclusive-- throws an exception: it has no fixed length,
+     * and that is why it is not a {@code ShortMessage}.
      *
-     * @throws InvalidMidiDataException si ese byte no es un estado valido para esta clase
+     * @throws InvalidMidiDataException if that byte is not a valid status for this class
      */
     protected final int getDataLength(int status) throws InvalidMidiDataException {
         int cmd = status & 0xF0;

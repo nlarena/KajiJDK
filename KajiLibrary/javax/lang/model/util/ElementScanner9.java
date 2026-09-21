@@ -5,14 +5,16 @@ import javax.lang.model.SourceVersion;
 import javax.lang.model.element.ModuleElement;
 
 /**
- * El escaner de elementos de Java 9. Ver {@link ElementScanner6} por el mecanismo.
+ * The element scanner for Java 9. See {@link ElementScanner6} for the mechanism.
  *
- * <p>`visitModule` deja de tirar y baja por los elementos contenidos del modulo, que son sus paquetes.
+ * <p>`visitModule` stops throwing and goes down through the module's enclosed elements, which are
+ * its packages.
  *
- * <p>El JDK deja una duda anotada en este mismo metodo sobre si los contenidos son lo correcto para un
- * modulo: un modulo tambien tiene **directivas** — `requires`, `exports` —, y esas no son elementos y no
- * las alcanza ningun recorrido. Vale saberlo antes de confiar en que escanear un modulo lo cubre entero:
- * no lo cubre, y para las directivas hace falta {@link ElementFilter} sobre `getDirectives()`.
+ * <p>The JDK leaves a doubt noted in this very method about whether the enclosed elements are right
+ * for a module: a module also has **directives** — `requires`, `exports` —, and those are not
+ * elements and no walk reaches them. It is worth knowing before trusting that scanning a module
+ * covers it whole: it does not, and for the directives {@link ElementFilter} over `getDirectives()`
+ * is needed.
  */
 @SupportedSourceVersion(SourceVersion.RELEASE_14)
 public class ElementScanner9<R, P> extends ElementScanner8<R, P> {

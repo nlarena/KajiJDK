@@ -1,27 +1,28 @@
 package jdk.internal.reflect;
 
 /**
- * KajiLibrary's jdk.internal.reflect.FieldAccessor — el contrato de "leer y escribir este campo".
+ * KajiLibrary's jdk.internal.reflect.FieldAccessor -- the contract of "read and write this field".
  *
- * <h2>Diez y ocho metodos que son nueve tipos por dos direcciones</h2>
+ * <h2>Eighteen methods that are nine types by two directions</h2>
  *
- * <p>No hay un {@code get(Object, Class)} porque el tipo del campo no es un argumento: es una
- * propiedad del accesor, fijada cuando se lo fabrica. Lo que varia es el tipo con el que el
- * <em>llamador</em> quiere el valor, y eso se elige en el nombre del metodo — que es lo que permite
- * que {@code getInt} devuelva un {@code int} de verdad y no un {@code Integer} que haya que
- * desempacar. La reflexion sin boxeo es toda la razon de que esta interfaz no sea dos metodos.
+ * <p>There is no {@code get(Object, Class)} because the type of the field is not an argument: it is
+ * a property of the accessor, fixed when it is manufactured. What varies is the type the
+ * <em>caller</em> wants the value in, and that is chosen in the name of the method -- which is what
+ * allows {@code getInt} to return a real {@code int} and not an {@code Integer} that has to be
+ * unpacked. Reflection with no boxing is the whole reason why this interface is not two methods.
  *
- * <p>En esta biblioteca los dieciocho tienen un espejo exacto en {@link java.lang.reflect.Field}, que
- * ya los resuelve contra las costuras nativas {@code getInt0}/{@code getLong0}/{@code getReference0}
- * que mueven el slot. El accesor que devuelve {@link ReflectionFactory#newFieldAccessor} delega en
- * ese espejo: no reimplementa el acceso al campo, lo nombra.
+ * <p>In this library the eighteen have an exact mirror in {@link java.lang.reflect.Field}, which
+ * already resolves them against the native seams {@code getInt0}/{@code getLong0}/
+ * {@code getReference0} that move the slot. The accessor
+ * {@link ReflectionFactory#newFieldAccessor} returns delegates to that mirror: it does not
+ * reimplement the access to the field, it names it.
  *
- * <p>Como en {@link MethodAccessor}, la interfaz es una declaracion pura y por eso no puede mentir:
- * no tiene cuerpos.
+ * <p>As in {@link MethodAccessor}, the interface is a pure declaration and that is why it cannot
+ * lie: it has no bodies.
  */
 public interface FieldAccessor {
 
-    /** El valor del campo en {@code obj}, boxeado si el campo es primitivo. */
+    /** The value of the field in {@code obj}, boxed if the field is primitive. */
     Object get(Object obj) throws IllegalArgumentException;
 
     boolean getBoolean(Object obj) throws IllegalArgumentException;
@@ -40,7 +41,8 @@ public interface FieldAccessor {
 
     double getDouble(Object obj) throws IllegalArgumentException;
 
-    /** Escribe {@code value} en el campo de {@code obj}, desempacandolo si el campo es primitivo. */
+    /** It writes {@code value} into the field of {@code obj}, unpacking it if the field is
+     * primitive. */
     void set(Object obj, Object value) throws IllegalArgumentException, IllegalAccessException;
 
     void setBoolean(Object obj, boolean value) throws IllegalArgumentException, IllegalAccessException;

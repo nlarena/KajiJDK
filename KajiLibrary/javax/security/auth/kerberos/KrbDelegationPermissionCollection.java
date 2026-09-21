@@ -10,20 +10,20 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Los {@link DelegationPermission} de una politica.
+ * The {@link DelegationPermission}s of a policy.
  *
- * <p>Sin comodines ni acciones no hay nada que juntar: es un conjunto, y agregar dos veces el mismo
- * deja uno.
+ * <p>Without wildcards or actions there is nothing to merge: it is a set, and adding the same one
+ * twice leaves one.
  */
 @SuppressWarnings("removal")
 final class KrbDelegationPermissionCollection extends PermissionCollection {
 
     private static final long serialVersionUID = -3383936936589966948L;
 
-    /** Los permisos, sin repetidos, en orden de llegada. */
+    /** The permissions, without repeats, in order of arrival. */
     private final Set<Permission> perms = new LinkedHashSet<Permission>();
 
-    /** Si alguno es el pedido. */
+    /** Whether any of them is the one asked for. */
     @Override
     public boolean implies(Permission permission) {
         if (!(permission instanceof DelegationPermission)) {
@@ -35,10 +35,10 @@ final class KrbDelegationPermissionCollection extends PermissionCollection {
     }
 
     /**
-     * Agrega.
+     * Adds.
      *
-     * @throws IllegalArgumentException si no es un {@link DelegationPermission}
-     * @throws SecurityException si la coleccion es de solo lectura
+     * @throws IllegalArgumentException if it is not a {@link DelegationPermission}
+     * @throws SecurityException if the collection is read-only
      */
     @Override
     public void add(Permission permission) {
@@ -54,7 +54,7 @@ final class KrbDelegationPermissionCollection extends PermissionCollection {
         }
     }
 
-    /** Los permisos. */
+    /** The permissions. */
     @Override
     public Enumeration<Permission> elements() {
         List<Permission> snapshot;

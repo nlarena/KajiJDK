@@ -14,36 +14,37 @@ import javax.swing.plaf.ComponentUI;
 import javax.swing.plaf.basic.BasicSliderUI;
 
 /**
- * El deslizador de Metal.
+ * Metal's slider.
  *
- * <h2>La pista se pinta hasta donde va el pulgar</h2>
+ * <h2>The track is painted up to where the thumb is</h2>
  *
- * <p>{@link #filledSlider} arranca en {@code true} y es la diferencia visible con el basico: la
- * parte de la pista que ya se recorrio se rellena. Un programa lo apaga con la propiedad de
- * cliente {@value #SLIDER_FILL}, y de nuevo es una propiedad de cliente porque es una idea de
- * Metal y no de {@code JSlider}.
+ * <p>{@link #filledSlider} starts at {@code true} and is the visible difference from the basic
+ * one: the part of the track already covered is filled in. A program turns it off with the
+ * client property {@value #SLIDER_FILL}, and again it is a client property because it is an
+ * idea of Metal's and not of {@code JSlider}'s.
  *
- * <h2>El largo de una marca no es {@code tickLength}</h2>
+ * <h2>A tick's length is not {@code tickLength}</h2>
  *
- * <p>{@link #getTickLength} devuelve once y el campo {@link #tickLength} vale seis. La cuenta es
- * {@code tickLength + TICK_BUFFER + 1}: seis de raya, cuatro de aire y uno de la linea de la
- * pista. Es la clase de numero que solo se entiende midiendo, y esta medido.
+ * <p>{@link #getTickLength} returns eleven and the field {@link #tickLength} is worth six. The
+ * sum is {@code tickLength + TICK_BUFFER + 1}: six of stroke, four of air and one of the track's
+ * line. It is the kind of number only understood by measuring, and it is measured.
  *
- * <p>{@link #getTrackLength} puede dar negativo -- da {@code -14} en un deslizador sin tamano --
- * por la misma razon que en el basico: el buffer de cada lado se resta de un ancho que todavia es
- * cero. Esta medido y no se corrige.
+ * <p>{@link #getTrackLength} may give a negative -- it gives {@code -14} on a slider with no
+ * size -- for the same reason as in the basic one: the buffer on each side is subtracted from a
+ * width that is still zero. It is measured and is not corrected.
  *
- * <h2>Lo que queda dicho</h2>
+ * <h2>What is said</h2>
  *
- * <p>{@link #thumbColor} y {@link #darkShadowColor} quedan en {@code null}, y esta medido: salen de
- * dos claves que la tabla de Metal no define. {@link #highlightColor} si tiene valor.
+ * <p>{@link #thumbColor} and {@link #darkShadowColor} are left at {@code null}, and it is
+ * measured: they come from two keys Metal's table does not define. {@link #highlightColor} does
+ * have a value.
  */
 public class MetalSliderUI extends BasicSliderUI {
 
-    /** La propiedad de cliente que apaga el relleno. */
+    /** The client property that turns the fill off. */
     protected final String SLIDER_FILL = "JSlider.isFilled";
 
-    /** El aire entre la pista y las marcas. */
+    /** The air between the track and the ticks. */
     protected final int TICK_BUFFER = 4;
 
     protected static Color thumbColor;
@@ -65,9 +66,9 @@ public class MetalSliderUI extends BasicSliderUI {
     }
 
     public void installUI(JComponent c) {
-        thumbColor = MetalLookAndFeel.colorDeLaTabla("Slider.thumb");
-        highlightColor = MetalLookAndFeel.colorDeLaTabla("Slider.highlight");
-        darkShadowColor = MetalLookAndFeel.colorDeLaTabla("Slider.darkShadow");
+        thumbColor = MetalLookAndFeel.tableColor("Slider.thumb");
+        highlightColor = MetalLookAndFeel.tableColor("Slider.highlight");
+        darkShadowColor = MetalLookAndFeel.tableColor("Slider.darkShadow");
         horizThumbIcon = MetalIconFactory.getHorizontalSliderThumbIcon();
         vertThumbIcon = MetalIconFactory.getVerticalSliderThumbIcon();
         super.installUI(c);
@@ -81,7 +82,7 @@ public class MetalSliderUI extends BasicSliderUI {
         return new MetalPropertyListener();
     }
 
-    /** El del icono del pulgar, que depende de la orientacion. */
+    /** The thumb icon's, which depends on the orientation. */
     protected Dimension getThumbSize() {
         Icon i = (slider != null && slider.getOrientation() == JSlider.VERTICAL)
                 ? vertThumbIcon : horizThumbIcon;
@@ -95,7 +96,7 @@ public class MetalSliderUI extends BasicSliderUI {
         return trackWidth;
     }
 
-    /** Puede dar negativo; ver la nota de la clase. */
+    /** It may give a negative; see the class note. */
     protected int getTrackLength() {
         if (slider != null && slider.getOrientation() == JSlider.HORIZONTAL) {
             return trackRect.width;
@@ -103,12 +104,12 @@ public class MetalSliderUI extends BasicSliderUI {
         return (trackRect == null) ? 0 : trackRect.height;
     }
 
-    /** Cuanto sobresale el pulgar de la pista. */
+    /** How far the thumb sticks out of the track. */
     protected int getThumbOverhang() {
         return (getThumbSize().height - getTrackWidth()) / 2;
     }
 
-    /** Once, no seis; ver la nota de la clase. */
+    /** Eleven, not six; see the class note. */
     public int getTickLength() {
         return tickLength + TICK_BUFFER + 1;
     }
@@ -137,18 +138,18 @@ public class MetalSliderUI extends BasicSliderUI {
         if (!filledSlider) {
             return;
         }
-        // Lo recorrido, en el color primario; ver la nota de la clase.
+        // What has been covered, in the primary colour; see the class note.
         g.setColor(MetalLookAndFeel.getPrimaryControlShadow());
         if (slider.getOrientation() == JSlider.HORIZONTAL) {
-            int hasta = thumbRect.x + thumbRect.width / 2 - t.x;
-            if (hasta > 0) {
-                g.fillRect(t.x + 1, t.y + 1, Math.min(hasta, t.width - 2), t.height - 2);
+            int to = thumbRect.x + thumbRect.width / 2 - t.x;
+            if (to > 0) {
+                g.fillRect(t.x + 1, t.y + 1, Math.min(to, t.width - 2), t.height - 2);
             }
         } else {
-            int desde = thumbRect.y + thumbRect.height / 2;
-            int alto = t.y + t.height - desde;
-            if (alto > 0) {
-                g.fillRect(t.x + 1, desde, t.width - 2, Math.min(alto, t.height - 2));
+            int from = thumbRect.y + thumbRect.height / 2;
+            int height = t.y + t.height - from;
+            if (height > 0) {
+                g.fillRect(t.x + 1, from, t.width - 2, Math.min(height, t.height - 2));
             }
         }
     }
@@ -178,7 +179,7 @@ public class MetalSliderUI extends BasicSliderUI {
         g.drawLine(TICK_BUFFER, y, TICK_BUFFER + tickLength, y);
     }
 
-    /** El que mira la propiedad de cliente del relleno. */
+    /** The one that watches the fill's client property. */
     private class MetalPropertyListener implements PropertyChangeListener {
 
         public void propertyChange(PropertyChangeEvent e) {

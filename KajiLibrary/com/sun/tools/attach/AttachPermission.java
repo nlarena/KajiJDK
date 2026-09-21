@@ -3,26 +3,27 @@ package com.sun.tools.attach;
 import java.security.BasicPermission;
 
 /**
- * El permiso para adjuntarse a otra VM.
+ * The permission to attach to another VM.
  *
- * <p>Adjuntarse es tan poderoso como se puede ser: quien lo logra puede cargar un agente arbitrario
- * en el proceso destino, o sea ejecutar cualquier codigo con sus permisos. De ahi que sea una
- * accion con permiso propio.
+ * <p>Attaching is as powerful as one can be: whoever manages it may load an arbitrary agent into
+ * the target process, that is, execute any code with its permissions. Hence it is an action with
+ * a permission of its own.
  *
- * <p>El unico nombre definido es {@code "attachVirtualMachine"}. Extiende {@link BasicPermission},
- * asi que {@code "*"} tambien lo da. No tiene acciones; el segundo constructor las acepta y las
- * ignora, y existe solo porque el mecanismo de permisos construye por reflexion con dos argumentos.
+ * <p>The only defined name is {@code "attachVirtualMachine"}. It extends
+ * {@link BasicPermission}, so {@code "*"} gives it too. It has no actions; the second
+ * constructor accepts them and ignores them, and exists only because the permission mechanism
+ * builds by reflection with two arguments.
  */
 public final class AttachPermission extends BasicPermission {
 
     private static final long serialVersionUID = -4619447790611060661L;
 
-    /** Un permiso con ese nombre. */
+    /** A permission with that name. */
     public AttachPermission(String name) {
         super(name);
     }
 
-    /** Igual; {@code actions} se ignora. */
+    /** The same; {@code actions} is ignored. */
     public AttachPermission(String name, String actions) {
         super(name, actions);
     }

@@ -6,9 +6,9 @@ import javax.print.attribute.DateTimeSyntax;
 import javax.print.attribute.PrintJobAttribute;
 
 /**
- * Cuando el trabajo dejo de esperar en la cola y empezo a procesarse.
+ * When the job stopped waiting in the queue and started being processed.
  *
- * <p>La diferencia contra {@link DateTimeAtCreation} es lo que espero.
+ * <p>The difference against {@link DateTimeAtCreation} is how long it waited.
  */
 public final class DateTimeAtProcessing extends DateTimeSyntax implements PrintJobAttribute {
 

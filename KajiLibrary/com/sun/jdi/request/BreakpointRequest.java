@@ -6,33 +6,33 @@ import com.sun.jdi.ObjectReference;
 import com.sun.jdi.ThreadReference;
 
 /**
- * Pedir aviso al llegar a un punto del codigo.
+ * Ask to be told when a point of the code is reached.
  *
- * <p>La ubicacion se fija al crearlo y no se puede cambiar: para moverlo hay que borrarlo y crear
- * otro.
+ * <p>The location is fixed on creating it and cannot be changed: in order to move it, it has to
+ * be deleted and another created.
  *
  * @since 1.3
  */
 public interface BreakpointRequest extends EventRequest,Locatable {
 
     /**
-     * El location.
+     * The location.
      *
-     * @return el resultado
+     * @return the result
      */
     Location location();
 
     /**
-     * Filtra por thread; solo con el pedido deshabilitado.
+     * It filters by thread; only with the request disabled.
      *
-     * @param thread el ThreadReference
+     * @param thread the ThreadReference
      */
     void addThreadFilter(ThreadReference thread);
 
     /**
-     * Filtra por instance; solo con el pedido deshabilitado.
+     * It filters by instance; only with the request disabled.
      *
-     * @param object el ObjectReference
+     * @param object the ObjectReference
      */
     void addInstanceFilter(ObjectReference object);
 }

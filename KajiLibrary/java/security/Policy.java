@@ -3,50 +3,50 @@ package java.security;
 import java.util.Enumeration;
 import java.util.NoSuchElementException;
 
-// La politica: dado un dominio, que permisos tiene.
+// The policy: given a domain, which permissions it has.
 //
 // ===============================================================================================
-// LA POLITICA VIGENTE ES LA QUE NO CONCEDE NADA, Y NO SE PUEDE CAMBIAR
+// THE POLICY IN FORCE IS THE ONE THAT GRANTS NOTHING, AND IT CANNOT BE CHANGED
 // ===============================================================================================
 //
-// Esto sorprende y es lo que hace el JDK 25, verificado contra el:
+// This surprises and it is what JDK 25 does, checked against it:
 //
-//   - `getPolicy()` devuelve un objeto **no nulo** cuya respuesta a todo es "no". `implies` da
-//     `false` y `getPermissions` devuelve `UNSUPPORTED_EMPTY_COLLECTION`.
-//   - `setPolicy(...)` tira `UnsupportedOperationException`. **No se puede instalar una politica.**
-//   - `getInstance(...)` tira `NoSuchAlgorithmException`: no hay ningun proveedor de tipo
-//     "Policy".
+//   - `getPolicy()` returns a **non-null** object whose answer to everything is "no". `implies`
+//     gives `false` and `getPermissions` returns `UNSUPPORTED_EMPTY_COLLECTION`.
+//   - `setPolicy(...)` throws `UnsupportedOperationException`. **A policy cannot be installed.**
+//   - `getInstance(...)` throws `NoSuchAlgorithmException`: there is no provider of type "Policy".
 //
-// Que `getPolicy()` no devuelva null es lo que permite que `ProtectionDomain.implies` la consulte
-// sin preguntarse nada; que no conceda nada es lo que hace que consultarla sea inofensivo. El
-// mecanismo quedo con la forma intacta y el contenido vaciado, y esta clase reproduce eso en vez
-// de simular una politica que el JDK ya no deja instalar.
+// That `getPolicy()` does not return null is what lets `ProtectionDomain.implies` consult it
+// without wondering about anything; that it grants nothing is what makes consulting it harmless.
+// The mechanism was left with its shape intact and its contents emptied, and this class reproduces
+// that instead of simulating a policy the JDK no longer lets be installed.
 //
-// `UNSUPPORTED_EMPTY_COLLECTION` merece una nota aparte: **no es** una coleccion vacia comun. Su
-// `add` tira `SecurityException` y su `implies` siempre da `false`. La diferencia con una vacia
-// normal es semantica — significa "no se puede contestar", no "no hay permisos"— y sirve para que
-// un llamador que igual intente agregarle algo se entere en vez de creer que lo logro.
+// `UNSUPPORTED_EMPTY_COLLECTION` deserves a note apart: it **is not** an ordinary empty collection.
+// Its `add` throws `SecurityException` and its `implies` always gives `false`. The difference from
+// a normal empty one is semantic — it means "it cannot be answered", not "there are no
+// permissions"— and it serves so that a caller who tries to add something to it anyway finds out
+// instead of believing they managed it.
 public abstract class Policy {
 
-    // La respuesta cuando no hay politica que consultar. Ver la cabecera: niega y no se deja
-    // modificar.
+    // The answer when there is no policy to consult. See the header: it denies and does not let
+    // itself be modified.
     public static final PermissionCollection UNSUPPORTED_EMPTY_COLLECTION =
-        new ColeccionNoSoportada();
+        new UnsupportedCollection();
 
-    // La unica politica que existe. Estatica y final: `setPolicy` no la cambia.
-    private static final Policy VIGENTE = new PoliticaVacia();
+    // The only policy there is. Static and final: `setPolicy` does not change it.
+    private static final Policy IN_FORCE = new EmptyPolicy();
 
     public Policy() {
     }
 
-    // La politica vigente. Nunca null.
+    // The policy in force. Never null.
     public static Policy getPolicy() {
-        return VIGENTE;
+        return IN_FORCE;
     }
 
-    // Siempre tira. Instalar una politica global dejo de estar soportado cuando el
-    // `SecurityManager` quedo deshabilitado, y fingir que se instalo seria peor: el llamador
-    // creeria que sus reglas rigen.
+    // It always throws. Installing a global policy stopped being supported when the
+    // `SecurityManager` was disabled, and pretending that it was installed would be worse: the
+    // caller would believe that their rules are in force.
     public static void setPolicy(Policy p) {
         throw new UnsupportedOperationException(
             "Setting a system-wide Policy object is not supported");
@@ -54,7 +54,7 @@ public abstract class Policy {
 
     public static Policy getInstance(String type, Policy.Parameters params)
             throws NoSuchAlgorithmException {
-        return buscar(type, null);
+        return lookup(type, null);
     }
 
     public static Policy getInstance(String type, Policy.Parameters params, String provider)
@@ -66,7 +66,7 @@ public abstract class Policy {
         if (p == null) {
             throw new NoSuchProviderException("no such provider: " + provider);
         }
-        return buscar(type, p);
+        return lookup(type, p);
     }
 
     public static Policy getInstance(String type, Policy.Parameters params, Provider provider)
@@ -74,18 +74,18 @@ public abstract class Policy {
         if (provider == null) {
             throw new IllegalArgumentException("missing provider");
         }
-        return buscar(type, provider);
+        return lookup(type, provider);
     }
 
-    // No hay ningun proveedor de tipo "Policy" registrado, ni lo habra: escribir un proveedor de
-    // politicas requiere un parser de archivos de politica que esta biblioteca no tiene. La
-    // busqueda se hace igual —contra los proveedores que haya— para que el dia que exista uno,
-    // esto lo encuentre sin tocar nada.
-    private static Policy buscar(String type, Provider unico) throws NoSuchAlgorithmException {
+    // There is no registered provider of type "Policy", and there will not be: writing a policy
+    // provider requires a parser of policy files that this library does not have. The search is
+    // made all the same —against whatever providers there are— so that the day one exists, this
+    // finds it without anything being touched.
+    private static Policy lookup(String type, Provider only) throws NoSuchAlgorithmException {
         if (type == null) {
             throw new NullPointerException("null type name");
         }
-        Provider[] provs = unico == null ? Security.getProviders() : new Provider[] {unico};
+        Provider[] provs = only == null ? Security.getProviders() : new Provider[] {only};
         int i = 0;
         while (i < provs.length) {
             Provider.Service s = provs[i].getService("Policy", type);
@@ -102,7 +102,7 @@ public abstract class Policy {
         throw new NoSuchAlgorithmException(type + " Policy not available");
     }
 
-    // El proveedor del que salio, o null si no salio de una fabrica.
+    // The provider it came from, or null if it did not come out of a factory.
     public Provider getProvider() {
         return null;
     }
@@ -115,39 +115,39 @@ public abstract class Policy {
         return null;
     }
 
-    // Los permisos que esta politica le da a ese origen.
+    // The permissions this policy gives that origin.
     public PermissionCollection getPermissions(CodeSource codesource) {
         return UNSUPPORTED_EMPTY_COLLECTION;
     }
 
-    // Los permisos que esta politica le da a ese dominio: los propios del dominio mas los que
-    // correspondan por origen.
+    // The permissions this policy gives that domain: the domain's own ones plus the ones that
+    // correspond by origin.
     public PermissionCollection getPermissions(ProtectionDomain domain) {
-        PermissionCollection propios = domain == null ? null : domain.getPermissions();
-        PermissionCollection porOrigen =
+        PermissionCollection own = domain == null ? null : domain.getPermissions();
+        PermissionCollection bySource =
             domain == null ? null : this.getPermissions(domain.getCodeSource());
-        if (porOrigen == UNSUPPORTED_EMPTY_COLLECTION && propios == null) {
+        if (bySource == UNSUPPORTED_EMPTY_COLLECTION && own == null) {
             return UNSUPPORTED_EMPTY_COLLECTION;
         }
-        Permissions juntos = new Permissions();
-        agregarTodo(juntos, propios);
-        if (porOrigen != UNSUPPORTED_EMPTY_COLLECTION) {
-            agregarTodo(juntos, porOrigen);
+        Permissions together = new Permissions();
+        addAll(together, own);
+        if (bySource != UNSUPPORTED_EMPTY_COLLECTION) {
+            addAll(together, bySource);
         }
-        return juntos;
+        return together;
     }
 
-    private static void agregarTodo(Permissions destino, PermissionCollection origen) {
-        if (origen == null) {
+    private static void addAll(Permissions target, PermissionCollection source) {
+        if (source == null) {
             return;
         }
-        Enumeration<Permission> e = origen.elements();
+        Enumeration<Permission> e = source.elements();
         while (e.hasMoreElements()) {
-            destino.add(e.nextElement());
+            target.add(e.nextElement());
         }
     }
 
-    // Si esta politica le concede el permiso a ese dominio.
+    // Whether this policy grants the permission to that domain.
     public boolean implies(ProtectionDomain domain, Permission permission) {
         if (domain == null) {
             return false;
@@ -159,18 +159,19 @@ public abstract class Policy {
         return pc.implies(permission);
     }
 
-    // Relee la politica de donde sea que venga. La base no tiene de donde: no hace nada.
+    // It rereads the policy from wherever it comes. The base one has nowhere to read it from: it
+    // does nothing.
     public void refresh() {
     }
 
-    // Marca los parametros de configuracion de una politica. Vacia, como
-    // `AlgorithmParameterSpec`: solo hace falta el tipo comun.
+    // It marks the configuration parameters of a policy. Empty, like `AlgorithmParameterSpec`: only
+    // the common type is needed.
     public interface Parameters {
     }
 }
 
-// La politica que no concede nada. Ver la cabecera de `Policy`.
-final class PoliticaVacia extends Policy {
+// The policy that grants nothing. See the header of `Policy`.
+final class EmptyPolicy extends Policy {
 
     @Override
     public PermissionCollection getPermissions(CodeSource codesource) {
@@ -188,11 +189,11 @@ final class PoliticaVacia extends Policy {
     }
 }
 
-// "No se puede contestar", disfrazado de coleccion.
+// "It cannot be answered", dressed up as a collection.
 //
-// No es lo mismo que una coleccion vacia: `add` tira en vez de aceptar en silencio, para que quien
-// crea que esta configurando permisos se entere de que no.
-final class ColeccionNoSoportada extends PermissionCollection {
+// It is not the same as an empty collection: `add` throws instead of accepting silently, so that
+// whoever believes they are configuring permissions finds out that they are not.
+final class UnsupportedCollection extends PermissionCollection {
 
     @Override
     public void add(Permission permission) {
@@ -207,11 +208,11 @@ final class ColeccionNoSoportada extends PermissionCollection {
 
     @Override
     public Enumeration<Permission> elements() {
-        return new EnumVacia();
+        return new EmptyEnumeration();
     }
 }
 
-final class EnumVacia implements Enumeration<Permission> {
+final class EmptyEnumeration implements Enumeration<Permission> {
 
     public boolean hasMoreElements() {
         return false;

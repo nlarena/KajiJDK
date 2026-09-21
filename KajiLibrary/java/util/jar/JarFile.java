@@ -10,124 +10,125 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
 /**
- * Un JAR abierto para acceso aleatorio: un {@link ZipFile} que ademas entiende el manifiesto y las
- * entradas por version.
+ * A JAR opened for random access: a {@link ZipFile} that also understands the manifest and the
+ * per-version entries.
  *
- * <h2>Lo que queda afuera, y por que</h2>
+ * <h2>What is left out, and why</h2>
  *
- * <p><b>No se verifica ninguna firma.</b> El parametro `verify` de los constructores se acepta y se
- * ignora, y {@link JarEntry#getCertificates()} y {@link JarEntry#getCodeSigners()} devuelven siempre
- * `null`. Verificar de verdad pide PKCS#7, cadenas de certificados y validacion de rutas, y nada de
- * eso existe en esta biblioteca; escribir una verificacion a medias seria peor que no tenerla, porque
- * el que la usa cree que algo se comprobo.
+ * <p><b>No signature is verified.</b> The constructors' `verify` parameter is accepted and ignored,
+ * and {@link JarEntry#getCertificates()} and {@link JarEntry#getCodeSigners()} always return `null`.
+ * Verifying for real asks for PKCS#7, certificate chains and path validation, and none of that
+ * exists in this library; writing a half verification would be worse than not having one, because
+ * whoever uses it believes something was checked.
  *
- * <p>Lo que importa de esa ausencia es <b>hacia que lado falla</b>, y falla al lado seguro: como los
- * firmantes son siempre `null`, un JAR firmado se ve exactamente igual que uno sin firmar, y el
- * codigo que decide confianza mirando la firma **rechaza**. Lo que no pasa, y hay que saberlo, es que
- * un JAR firmado y despues adulterado tire `SecurityException` al leerlo: aca se lee y ya.
+ * <p>What matters about that absence is <b>which way it fails</b>, and it fails to the safe side:
+ * since the signers are always `null`, a signed JAR looks exactly like an unsigned one, and code
+ * that decides trust by looking at the signature **rejects**. What does not happen, and it has to be
+ * known, is that a signed and then tampered JAR throws `SecurityException` on being read: here it is
+ * read and that is that.
  *
- * <p>Multi-release si esta hecho: con el constructor de cuatro argumentos, `getEntry`/`getJarEntry`
- * buscan `META-INF/versions/N/<nombre>` desde la version pedida hacia abajo antes de caer al nombre
- * base, y {@link #versionedStream()} enumera la vista resuelta.
+ * <p>Multi-release IS implemented: with the four-argument constructor, `getEntry`/`getJarEntry` look
+ * for `META-INF/versions/N/<name>` from the requested version downwards before falling back to the
+ * base name, and {@link #versionedStream()} enumerates the resolved view.
  *
- * <h2>Dos desviaciones de firma, y el motivo</h2>
+ * <h2>Two signature deviations, and the reason</h2>
  *
- * <p><b>Los constructores no declaran `throws IOException`.</b> Los de `ZipFile` de esta biblioteca
- * tampoco: envuelven el error en `UncheckedIOException`, y como estos delegan en aquellos, declarar
- * la excepcion chequeada prometeria una senializacion que no ocurre. Los **metodos** si la declaran,
- * igual que los de `ZipFile`.
+ * <p><b>The constructors do not declare `throws IOException`.</b> This library's `ZipFile`'s do not
+ * either: they wrap the error in an `UncheckedIOException`, and since these delegate to those,
+ * declaring the checked exception would promise a signalling that does not happen. The **methods**
+ * do declare it, just as `ZipFile`'s do.
  *
- * <p><b>`entries()` devuelve `Enumeration&lt;ZipEntry&gt;` y `stream()` un `Stream&lt;ZipEntry&gt;`</b>,
- * donde el JDK dice `JarEntry`. No es una eleccion: en el JDK `ZipFile` declara
- * `Enumeration<? extends ZipEntry>`, y el comodin es justamente lo que deja que la subclase estreche;
- * el `ZipFile` de esta biblioteca declara `Enumeration<ZipEntry>` sin comodin, asi que estrechar no
- * compila. Los objetos que salen **si** son `JarEntry`, y castearlos funciona. Arreglarlo de verdad
- * es tocar `java.util.zip.ZipFile`, que es de otra sesion.
+ * <p><b>`entries()` returns `Enumeration&lt;ZipEntry&gt;` and `stream()` a
+ * `Stream&lt;ZipEntry&gt;`</b>, where the JDK says `JarEntry`. It is not a choice: in the JDK
+ * `ZipFile` declares `Enumeration<? extends ZipEntry>`, and the wildcard is precisely what lets the
+ * subclass narrow; this library's `ZipFile` declares `Enumeration<ZipEntry>` with no wildcard, so
+ * narrowing does not compile. The objects that come out **are** `JarEntry`, and casting them works.
+ * Fixing it properly means touching `java.util.zip.ZipFile`, which is another session's.
  */
 public class JarFile extends ZipFile {
 
-    /** `META-INF/MANIFEST.MF`, el unico nombre en el que un JAR busca su manifiesto. */
+    /** `META-INF/MANIFEST.MF`, the only name a JAR looks for its manifest under. */
     public static final String MANIFEST_NAME = "META-INF/MANIFEST.MF";
 
     private static final String META_INF = "META-INF/";
-    private static final String VERSIONES = "META-INF/versions/";
+    private static final String VERSIONS_PREFIX = "META-INF/versions/";
 
-    // La version "base" es 8 y no 1.8 ni 0: es la que un JAR sin `META-INF/versions/` representa, y
-    // el JDK la imprime como "8".
-    private static final int RASGO_BASE = 8;
-    private static final Runtime.Version VERSION_BASE = Runtime.Version.parse("8");
+    // The "base" version is 8 and not 1.8 nor 0: it is the one a JAR with no `META-INF/versions/`
+    // represents, and the JDK prints it as "8".
+    private static final int BASE_FEATURE = 8;
+    private static final Runtime.Version BASE_VERSION = Runtime.Version.parse("8");
 
     private final Runtime.Version version;
-    private final int rasgo;
+    private final int featureVersion;
 
     private Manifest man;
-    private boolean manLeido;
-    // 0 = sin averiguar, 1 = si, 2 = no. Averiguarlo pide leer el manifiesto, y eso no se puede
-    // hacer en el constructor sin cambiarle la senializacion de errores.
+    private boolean manifestRead;
+    // 0 = not looked up, 1 = yes, 2 = no. Looking it up asks for reading the manifest, and that
+    // cannot be done in the constructor without changing its error signalling.
     private int multi;
 
-    /** La version que un JAR sin entradas versionadas representa. Es `8`. */
+    /** The version a JAR with no versioned entries represents. It is `8`. */
     public static Runtime.Version baseVersion() {
-        return VERSION_BASE;
+        return BASE_VERSION;
     }
 
-    /** La version de esta VM, que es la que usan los constructores que no la piden. */
+    /** This VM's version, which is the one the constructors that do not ask for it use. */
     public static Runtime.Version runtimeVersion() {
         return Runtime.version();
     }
 
     public JarFile(String name) {
-        this(new File(name), true, ZipFile.OPEN_READ, VERSION_BASE);
+        this(new File(name), true, ZipFile.OPEN_READ, BASE_VERSION);
     }
 
     public JarFile(String name, boolean verify) {
-        this(new File(name), verify, ZipFile.OPEN_READ, VERSION_BASE);
+        this(new File(name), verify, ZipFile.OPEN_READ, BASE_VERSION);
     }
 
     public JarFile(File file) {
-        this(file, true, ZipFile.OPEN_READ, VERSION_BASE);
+        this(file, true, ZipFile.OPEN_READ, BASE_VERSION);
     }
 
     public JarFile(File file, boolean verify) {
-        this(file, verify, ZipFile.OPEN_READ, VERSION_BASE);
+        this(file, verify, ZipFile.OPEN_READ, BASE_VERSION);
     }
 
     public JarFile(File file, boolean verify, int mode) {
-        this(file, verify, mode, VERSION_BASE);
+        this(file, verify, mode, BASE_VERSION);
     }
 
     /**
-     * Abre el JAR resolviendo las entradas versionadas hasta `version`.
+     * It opens the JAR resolving the versioned entries up to `version`.
      *
-     * @throws NullPointerException si `version` es `null`
+     * @throws NullPointerException if `version` is `null`
      */
     public JarFile(File file, boolean verify, int mode, Runtime.Version version) {
         super(file, mode);
         if (version == null) {
             throw new NullPointerException("version");
         }
-        // Por debajo de 9 no hay entradas versionadas que valgan, asi que se normaliza a la base:
-        // es lo que hace el JDK, y evita que `getVersion()` mienta con un "1.8".
-        if (version.feature() < RASGO_BASE) {
-            this.version = VERSION_BASE;
+        // Below 9 there are no versioned entries that count, so it is normalised to the base: it is
+        // what the JDK does, and it keeps `getVersion()` from lying with a "1.8".
+        if (version.feature() < BASE_FEATURE) {
+            this.version = BASE_VERSION;
         } else {
             this.version = version;
         }
-        this.rasgo = this.version.feature();
+        this.featureVersion = this.version.feature();
         this.multi = 0;
     }
 
     /**
-     * La version a la que este JAR resuelve, o la base si no es multi-release.
+     * The version this JAR resolves to, or the base one if it is not multi-release.
      *
-     * <p>Un JAR normal abierto pidiendo la version 21 sigue contestando `8`: la version solo importa
-     * si el manifiesto declara `Multi-Release: true`.
+     * <p>An ordinary JAR opened asking for version 21 still answers `8`: the version only matters if
+     * the manifest declares `Multi-Release: true`.
      */
     public final Runtime.Version getVersion() {
-        return isMultiRelease() ? this.version : VERSION_BASE;
+        return isMultiRelease() ? this.version : BASE_VERSION;
     }
 
-    /** Si el manifiesto declara `Multi-Release: true`. */
+    /** Whether the manifest declares `Multi-Release: true`. */
     public final boolean isMultiRelease() {
         if (this.multi == 0) {
             this.multi = 2;
@@ -140,8 +141,8 @@ public class JarFile extends ZipFile {
                     }
                 }
             } catch (IOException e) {
-                // Un manifiesto ilegible no es multi-release. No se propaga porque el JDK tampoco
-                // declara excepcion aca.
+                // An unreadable manifest is not multi-release. It is not propagated because the JDK
+                // declares no exception here either.
                 this.multi = 2;
             }
         }
@@ -149,15 +150,15 @@ public class JarFile extends ZipFile {
     }
 
     /**
-     * El manifiesto del JAR, o `null` si no tiene.
+     * The JAR's manifest, or `null` if it has none.
      *
-     * <p>Se busca primero por el nombre exacto y despues sin distinguir mayusculas, que es lo que
-     * hace el JDK: hay archivos en circulacion con `META-INF/manifest.mf`.
+     * <p>It is looked up first by the exact name and then case-insensitively, which is what the JDK
+     * does: there are files in circulation with `META-INF/manifest.mf`.
      */
     public Manifest getManifest() throws IOException {
-        if (!this.manLeido) {
-            this.manLeido = true;
-            ZipEntry e = entradaDelManifiesto();
+        if (!this.manifestRead) {
+            this.manifestRead = true;
+            ZipEntry e = manifestEntry();
             if (e != null) {
                 InputStream in = super.getInputStream(e);
                 if (in != null) {
@@ -169,14 +170,14 @@ public class JarFile extends ZipFile {
         return this.man;
     }
 
-    private ZipEntry entradaDelManifiesto() {
+    private ZipEntry manifestEntry() {
         ZipEntry e = super.getEntry(MANIFEST_NAME);
         if (e != null) {
             return e;
         }
-        Enumeration<ZipEntry> todas = super.entries();
-        while (todas.hasMoreElements()) {
-            ZipEntry z = todas.nextElement();
+        Enumeration<ZipEntry> all = super.entries();
+        while (all.hasMoreElements()) {
+            ZipEntry z = all.nextElement();
             if (MANIFEST_NAME.equalsIgnoreCase(z.getName())) {
                 return z;
             }
@@ -184,17 +185,17 @@ public class JarFile extends ZipFile {
         return null;
     }
 
-    /** La entrada de ese nombre, resolviendo por version si corresponde. */
+    /** The entry by that name, resolving by version where appropriate. */
     public JarEntry getJarEntry(String name) {
         if (name == null) {
             throw new NullPointerException("name");
         }
-        if (this.rasgo > RASGO_BASE && !name.startsWith(META_INF) && isMultiRelease()) {
-            int v = this.rasgo;
-            while (v > RASGO_BASE) {
-                ZipEntry ze = super.getEntry(VERSIONES + v + "/" + name);
+        if (this.featureVersion > BASE_FEATURE && !name.startsWith(META_INF) && isMultiRelease()) {
+            int v = this.featureVersion;
+            while (v > BASE_FEATURE) {
+                ZipEntry ze = super.getEntry(VERSIONS_PREFIX + v + "/" + name);
                 if (ze != null) {
-                    return new EntradaDeJar(this, ze, name);
+                    return new JarFileEntry(this, ze, name);
                 }
                 v = v - 1;
             }
@@ -203,49 +204,49 @@ public class JarFile extends ZipFile {
         if (ze == null) {
             return null;
         }
-        return new EntradaDeJar(this, ze, name);
+        return new JarFileEntry(this, ze, name);
     }
 
-    /** Lo mismo que {@link #getJarEntry}: en un JAR toda entrada es una entrada de JAR. */
+    /** The same as {@link #getJarEntry}: in a JAR every entry is a JAR entry. */
     public ZipEntry getEntry(String name) {
         return getJarEntry(name);
     }
 
     /**
-     * Todas las entradas del archivo, **sin** resolver por version.
+     * Every entry in the file, **without** resolving by version.
      *
-     * <p>Los objetos son `JarEntry`; el tipo estatico es `ZipEntry` por lo que dice la cabecera de
-     * la clase. Para la vista resuelta esta {@link #versionedStream()}.
+     * <p>The objects are `JarEntry`; the static type is `ZipEntry` for the reason the class's header
+     * gives. For the resolved view there is {@link #versionedStream()}.
      */
     public Enumeration<ZipEntry> entries() {
-        return java.util.Collections.enumeration(listaCruda());
+        return java.util.Collections.enumeration(rawList());
     }
 
-    /** Las mismas que {@link #entries()}, como flujo. */
+    /** The same as {@link #entries()}, as a stream. */
     public java.util.stream.Stream<ZipEntry> stream() {
-        return listaCruda().stream();
+        return rawList().stream();
     }
 
     /**
-     * La vista **resuelta** de un JAR multi-release: un elemento por nombre base, con los bytes de la
-     * version mas alta que no pase de la pedida.
+     * The **resolved** view of a multi-release JAR: one element per base name, with the bytes of the
+     * highest version that does not exceed the one asked for.
      *
-     * <p>En un JAR que no es multi-release es lo mismo que {@link #stream()}.
+     * <p>In a JAR that is not multi-release it is the same as {@link #stream()}.
      */
     public java.util.stream.Stream<ZipEntry> versionedStream() {
         if (!isMultiRelease()) {
             return stream();
         }
-        List<String> nombres = new ArrayList<String>();
-        Enumeration<ZipEntry> todas = super.entries();
-        while (todas.hasMoreElements()) {
-            String base = nombreBase(todas.nextElement().getName());
-            if (base != null && !nombres.contains(base)) {
-                nombres.add(base);
+        List<String> names = new ArrayList<String>();
+        Enumeration<ZipEntry> all = super.entries();
+        while (all.hasMoreElements()) {
+            String base = baseName(all.nextElement().getName());
+            if (base != null && !names.contains(base)) {
+                names.add(base);
             }
         }
         List<ZipEntry> out = new ArrayList<ZipEntry>();
-        for (String n : nombres) {
+        for (String n : names) {
             JarEntry je = getJarEntry(n);
             if (je != null) {
                 out.add(je);
@@ -255,44 +256,45 @@ public class JarFile extends ZipFile {
     }
 
     /**
-     * El nombre base de una entrada, o `null` si es una entrada versionada que no cuenta: el
-     * directorio `META-INF/versions/` en si, uno de version, o una version mas alta que la pedida.
+     * An entry's base name, or `null` if it is a versioned entry that does not count: the
+     * `META-INF/versions/` directory itself, a version's own, or a version higher than the one asked
+     * for.
      */
-    private String nombreBase(String name) {
-        if (!name.startsWith(VERSIONES)) {
+    private String baseName(String name) {
+        if (!name.startsWith(VERSIONS_PREFIX)) {
             return name;
         }
-        int desde = VERSIONES.length();
-        int barra = name.indexOf('/', desde);
-        if (barra < 0 || barra == name.length() - 1) {
+        int from = VERSIONS_PREFIX.length();
+        int slash = name.indexOf('/', from);
+        if (slash < 0 || slash == name.length() - 1) {
             return null;
         }
         int v;
         try {
-            v = Integer.parseInt(name.substring(desde, barra));
+            v = Integer.parseInt(name.substring(from, slash));
         } catch (NumberFormatException e) {
-            // Una entrada con una "version" que no es un numero se ignora en silencio, igual que en
-            // el JDK: es un archivo mal armado, no un error del que lo lee.
+            // An entry with a "version" that is not a number is ignored in silence, just as in the
+            // JDK: it is a badly built file, not a mistake of whoever reads it.
             return null;
         }
-        if (v > this.rasgo) {
+        if (v > this.featureVersion) {
             return null;
         }
-        return name.substring(barra + 1);
+        return name.substring(slash + 1);
     }
 
     /**
-     * El contenido de esa entrada.
+     * That entry's content.
      *
-     * <p>Si la entrada vino resuelta por version, lo que se abre es el nombre **real**: el de
-     * `META-INF/versions/`, no el que la entrada dice llamarse.
+     * <p>If the entry came resolved by version, what is opened is the **real** name: the
+     * `META-INF/versions/` one, not the one the entry says it is called.
      */
     public synchronized InputStream getInputStream(ZipEntry ze) throws IOException {
         if (ze == null) {
             throw new NullPointerException("ze");
         }
-        if (ze instanceof EntradaDeJar) {
-            String real = ((EntradaDeJar) ze).real();
+        if (ze instanceof JarFileEntry) {
+            String real = ((JarFileEntry) ze).real();
             if (!real.equals(ze.getName())) {
                 ZipEntry z = super.getEntry(real);
                 if (z == null) {
@@ -304,12 +306,12 @@ public class JarFile extends ZipFile {
         return super.getInputStream(ze);
     }
 
-    private List<ZipEntry> listaCruda() {
+    private List<ZipEntry> rawList() {
         List<ZipEntry> out = new ArrayList<ZipEntry>();
-        Enumeration<ZipEntry> todas = super.entries();
-        while (todas.hasMoreElements()) {
-            ZipEntry z = todas.nextElement();
-            out.add(new EntradaDeJar(this, z, z.getName()));
+        Enumeration<ZipEntry> all = super.entries();
+        while (all.hasMoreElements()) {
+            ZipEntry z = all.nextElement();
+            out.add(new JarFileEntry(this, z, z.getName()));
         }
         return out;
     }

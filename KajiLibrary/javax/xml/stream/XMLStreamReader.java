@@ -4,467 +4,470 @@ import javax.xml.namespace.NamespaceContext;
 import javax.xml.namespace.QName;
 
 /**
- * KajiLibrary's javax.xml.stream.XMLStreamReader -- el modelo de cursor de StAX: el que **tira** del
- * documento en vez de recibirlo empujado.
+ * KajiLibrary's javax.xml.stream.XMLStreamReader -- StAX's cursor model: the one that **pulls** the
+ * document instead of having it pushed.
  *
- * <p>Es la diferencia de fondo con SAX y la razon de ser de todo el paquete. En SAX el parser manda:
- * llama a los metodos del handler cuando quiere, y la aplicacion, si necesita acordarse de donde
- * estaba, se lo tiene que anotar en campos --una maquina de estados escrita a mano en cada uso--.
- * Aca manda la aplicacion: llama a {@link #next()} cuando esta lista, y la posicion en el documento
- * es la posicion en su propio codigo. Un bucle {@code while (r.hasNext())} con un {@code switch}
- * adentro reemplaza al handler entero.
+ * <p>It is the underlying difference from SAX and the reason for the whole package. In SAX the
+ * parser is in charge: it calls the handler's methods when it wants, and the application, if it
+ * needs to remember where it was, has to note it down in fields --a state machine written by hand
+ * for each use--. Here the application is in charge: it calls {@link #next()} when it is ready, and
+ * the position in the document is the position in its own code. A {@code while (r.hasNext())} loop
+ * with a {@code switch} inside replaces the whole handler.
  *
- * <p>Eso ademas hace posibles dos cosas que en SAX cuestan mucho: **parar** en la mitad --y no leer
- * el resto-- y **combinar** dos documentos leyendo un poco de cada uno.
+ * <p>That also makes possible two things that cost a lot in SAX: **stopping** halfway --and not
+ * reading the rest-- and **combining** two documents by reading a bit of each.
  *
- * <h2>Un solo objeto que cambia de contenido</h2>
+ * <h2>A single object whose content changes</h2>
  *
- * <p>La regla que hay que tener presente: el lector **es** el evento. {@code getLocalName()} no
- * devuelve el nombre de "un" elemento sino el del elemento en que esta parado el cursor ahora, y
- * despues del proximo {@code next()} devuelve otra cosa. Nada de lo que sale de aca --ni siquiera el
- * {@code char[]} de {@link #getTextCharacters()}-- se puede guardar para despues.
+ * <p>The rule to keep in mind: the reader **is** the event. {@code getLocalName()} does not return
+ * the name of "an" element but that of the element the cursor is standing on now, and after the
+ * next {@code next()} it returns something else. Nothing that comes out of here --not even the
+ * {@code char[]} of {@link #getTextCharacters()}-- can be kept for later.
  *
- * <p>De ahi sale toda la ganancia de rendimiento del modelo de cursor: cero objetos por evento. Y de
- * ahi sale tambien la existencia del otro modelo, el de {@link XMLEventReader}, para cuando lo que
- * hace falta es justamente guardar.
+ * <p>From there comes the whole performance gain of the cursor model: zero objects per event. And
+ * from there also comes the existence of the other model, {@link XMLEventReader}, for when what is
+ * needed is precisely to keep.
  *
- * <p>La otra consecuencia, menos obvia: **cada metodo es valido solo en ciertos estados**. Pedir
- * {@link #getName()} parado en un {@link XMLStreamConstants#CHARACTERS} es un error del llamador y
- * levanta {@link IllegalStateException}, no null. Cada metodo dice abajo donde vale.
+ * <p>The other consequence, less obvious: **each method is valid only in certain states**. Asking
+ * for {@link #getName()} while standing on a {@link XMLStreamConstants#CHARACTERS} is a caller
+ * error and raises {@link IllegalStateException}, not null. Each method says below where it is
+ * valid.
  *
- * <h2>Que hay escrito aca y que no, y por que</h2>
+ * <h2>What is written here</h2>
  *
- * <p>La interfaz esta completa: los cuarenta y cinco metodos, con sus estados validos y sus
- * excepciones. Lo que no hay en esta biblioteca es una **implementacion**, y no por falta de ganas:
- * un {@code XMLStreamReader} de verdad es un parser de XML entero --tokenizador, manejo de
- * entidades, resolucion de espacios de nombres, decodificacion segun la declaracion XML-- y eso es
- * un proyecto aparte, no un miembro de esta interfaz.
+ * <p>The interface is complete: the forty-five methods, with their valid states and their
+ * exceptions. This package's implementation is {@code KajiStreamReader}, an XML 1.0 parser of its
+ * own --tokenizer, entity handling, namespace resolution, decoding according to the XML
+ * declaration--; see {@link XMLInputFactory} for what it does and does not do. (The note said there
+ * is no implementation here, because a real reader is a whole XML parser; there is one now.)
  *
- * <p>La tentacion a evitar es la contraria a la de una fabrica: una fabrica que no encuentra parser
- * puede fallar honestamente, pero un lector que devolviera eventos inventados le mentiria al
- * llamador sin que nada se rompa. Un documento que no se leyo nunca y que igual produjo eventos es
- * el peor de los resultados posibles, asi que no hay ningun lector de mentira en esta biblioteca.
- * Ver {@link XMLInputFactory} para el camino que si esta.
+ * <p>What should still be avoided is the opposite temptation to a factory's: a factory that finds
+ * no parser can fail honestly, but a reader that returned invented events would lie to the caller
+ * without anything breaking. A document that was never read and still produced events is the worst
+ * possible result, so there is no fake reader in this library.
  */
 public interface XMLStreamReader extends XMLStreamConstants {
 
     /**
-     * El valor de una propiedad de la implementacion.
+     * The value of an implementation property.
      *
-     * @param name el nombre de la propiedad; no puede ser null
-     * @return el valor
-     * @throws IllegalArgumentException si {@code name} es null
+     * @param name the name of the property; cannot be null
+     * @return the value
+     * @throws IllegalArgumentException if {@code name} is null
      */
     Object getProperty(String name) throws IllegalArgumentException;
 
     /**
-     * Avanza al proximo evento y devuelve su tipo.
+     * Advances to the next event and returns its type.
      *
-     * <p>Este es el metodo que define el modelo: nada pasa hasta que el llamador lo pide.
+     * <p>This is the method that defines the model: nothing happens until the caller asks for it.
      *
-     * @return uno de los tipos de {@link XMLStreamConstants}
-     * @throws XMLStreamException si el documento esta mal formado o falla la lectura
-     * @throws java.util.NoSuchElementException si ya no hay mas eventos
+     * @return one of the types of {@link XMLStreamConstants}
+     * @throws XMLStreamException if the document is malformed or reading fails
+     * @throws java.util.NoSuchElementException if there are no more events
      */
     int next() throws XMLStreamException;
 
     /**
-     * Verifica que el cursor este donde el llamador cree, y si no, corta.
+     * Checks that the cursor is where the caller thinks, and if not, cuts.
      *
-     * <p>Es una asercion con forma de metodo, y sirve para que un error de estructura salte en el
-     * lugar donde se noto y no cinco eventos despues, cuando ya no se sabe de donde vino. Un null en
-     * cualquiera de los dos ultimos parametros significa "no me importa este".
+     * <p>It is an assertion in the shape of a method, and it serves so that a structure error jumps
+     * out at the place where it was noticed and not five events later, when nobody knows where it
+     * came from. A null in either of the last two parameters means "I do not care about this one".
      *
-     * @param type el tipo de evento esperado
-     * @param namespaceURI el espacio de nombres esperado, o null para no chequearlo
-     * @param localName el nombre local esperado, o null para no chequearlo
-     * @throws XMLStreamException si el evento actual no coincide
+     * @param type the expected event type
+     * @param namespaceURI the expected namespace, or null not to check it
+     * @param localName the expected local name, or null not to check it
+     * @throws XMLStreamException if the current event does not match
      */
     void require(int type, String namespaceURI, String localName) throws XMLStreamException;
 
     /**
-     * El texto de un elemento que solo contiene texto, dejando el cursor en su cierre.
+     * The text of an element that only contains text, leaving the cursor at its end.
      *
-     * <p>Atajo para el caso mas comun de todos --{@code <precio>12.50</precio>}-- que sin esto son
-     * cinco lineas de bucle. Falla si el elemento tiene hijos, que es justamente lo que hace que
-     * valga la pena: no devuelve el texto de un elemento con estructura como si no la tuviera.
+     * <p>A shortcut for the most common case of all --{@code <price>12.50</price>}-- which without
+     * this is five lines of loop. It fails if the element has children, which is precisely what
+     * makes it worthwhile: it does not return the text of an element with structure as if it had
+     * none.
      *
-     * <p>Vale solo parado en un {@link XMLStreamConstants#START_ELEMENT}.
+     * <p>Valid only standing on a {@link XMLStreamConstants#START_ELEMENT}.
      *
-     * @return el texto entre la apertura y el cierre
-     * @throws XMLStreamException si el cursor no esta en una apertura o el elemento no es de solo
-     *     texto
+     * @return the text between the start and the end
+     * @throws XMLStreamException if the cursor is not at a start or the element is not text-only
      */
     String getElementText() throws XMLStreamException;
 
     /**
-     * Saltea espacio en blanco, comentarios e instrucciones de proceso hasta la proxima etiqueta.
+     * Skips whitespace, comments and processing instructions up to the next tag.
      *
-     * <p>Lo que hace legible el recorrido de un documento indentado: sin esto, cada salto de linea
-     * del archivo es un evento de texto que hay que descartar a mano.
+     * <p>What makes walking an indented document readable: without this, each line break of the
+     * file is a text event that has to be discarded by hand.
      *
-     * @return {@link XMLStreamConstants#START_ELEMENT} o {@link XMLStreamConstants#END_ELEMENT}
-     * @throws XMLStreamException si encuentra algo que no sea salteable ni una etiqueta
+     * @return {@link XMLStreamConstants#START_ELEMENT} or {@link XMLStreamConstants#END_ELEMENT}
+     * @throws XMLStreamException if it finds something that is neither skippable nor a tag
      */
     int nextTag() throws XMLStreamException;
 
     /**
-     * Si queda al menos un evento por leer.
+     * Whether at least one event remains to be read.
      *
-     * @return true si {@link #next()} tiene algo que devolver
-     * @throws XMLStreamException si falla la lectura
+     * @return true if {@link #next()} has something to return
+     * @throws XMLStreamException if reading fails
      */
     boolean hasNext() throws XMLStreamException;
 
     /**
-     * Libera lo que el lector tenga tomado.
+     * Frees whatever the reader holds.
      *
-     * <p>No cierra el {@link java.io.InputStream} ni el {@link java.io.Reader} de origen: quien lo
-     * abrio lo cierra. Esa regla evita que un lector le cierre por abajo el flujo a quien lo estaba
-     * compartiendo.
+     * <p>It does not close the source {@link java.io.InputStream} nor {@link java.io.Reader}:
+     * whoever opened it closes it. That rule avoids a reader closing the stream underneath someone
+     * who was sharing it.
      *
-     * @throws XMLStreamException si falla
+     * @throws XMLStreamException if it fails
      */
     void close() throws XMLStreamException;
 
     /**
-     * El espacio de nombres ligado a un prefijo en la posicion actual.
+     * The namespace bound to a prefix at the current position.
      *
-     * @param prefix el prefijo; la cadena vacia pregunta por el de omision
-     * @return el URI, o null si el prefijo no esta ligado
+     * @param prefix the prefix; the empty string asks for the default one
+     * @return the URI, or null if the prefix is not bound
      */
     String getNamespaceURI(String prefix);
 
     /**
-     * Si el cursor esta en una apertura de elemento.
+     * Whether the cursor is at the start of an element.
      *
-     * @return true si el evento actual es {@link XMLStreamConstants#START_ELEMENT}
+     * @return true if the current event is {@link XMLStreamConstants#START_ELEMENT}
      */
     boolean isStartElement();
 
     /**
-     * Si el cursor esta en un cierre de elemento.
+     * Whether the cursor is at the end of an element.
      *
-     * @return true si el evento actual es {@link XMLStreamConstants#END_ELEMENT}
+     * @return true if the current event is {@link XMLStreamConstants#END_ELEMENT}
      */
     boolean isEndElement();
 
     /**
-     * Si el cursor esta en texto.
+     * Whether the cursor is at text.
      *
-     * @return true si el evento actual es {@link XMLStreamConstants#CHARACTERS}
+     * @return true if the current event is {@link XMLStreamConstants#CHARACTERS}
      */
     boolean isCharacters();
 
     /**
-     * Si el evento actual es texto y es todo espacio en blanco.
+     * Whether the current event is text and it is all whitespace.
      *
-     * @return true si es espacio
+     * @return true if it is space
      */
     boolean isWhiteSpace();
 
     /**
-     * El valor de un atributo del elemento actual, buscado por nombre.
+     * The value of an attribute of the current element, looked up by name.
      *
-     * <p>Vale en {@link XMLStreamConstants#START_ELEMENT} y {@link XMLStreamConstants#ATTRIBUTE}.
+     * <p>Valid at {@link XMLStreamConstants#START_ELEMENT} and {@link
+     * XMLStreamConstants#ATTRIBUTE}.
      *
-     * @param namespaceURI el espacio de nombres del atributo, o null para no mirarlo
-     * @param localName el nombre local del atributo
-     * @return el valor, o null si el atributo no esta
-     * @throws IllegalStateException si el cursor no esta en un estado donde haya atributos
+     * @param namespaceURI the namespace of the attribute, or null not to look at it
+     * @param localName the local name of the attribute
+     * @return the value, or null if the attribute is not there
+     * @throws IllegalStateException if the cursor is not in a state where there are attributes
      */
     String getAttributeValue(String namespaceURI, String localName);
 
     /**
-     * Cuantos atributos tiene el elemento actual.
+     * How many attributes the current element has.
      *
-     * <p>No cuenta las declaraciones de espacio de nombres: {@code xmlns:a="..."} no es un atributo
-     * a estos efectos, y por eso hay un {@link #getNamespaceCount()} aparte.
+     * <p>It does not count the namespace declarations: {@code xmlns:a="..."} is not an attribute
+     * for these purposes, and that is why there is a separate {@link #getNamespaceCount()}.
      *
-     * @return la cantidad
-     * @throws IllegalStateException si el cursor no esta en un estado donde haya atributos
+     * @return the count
+     * @throws IllegalStateException if the cursor is not in a state where there are attributes
      */
     int getAttributeCount();
 
     /**
-     * El nombre calificado del atributo numero {@code index}.
+     * The qualified name of attribute number {@code index}.
      *
-     * @param index el indice, desde 0
-     * @return el nombre
-     * @throws IllegalStateException si el cursor no esta en un estado donde haya atributos
+     * @param index the index, from 0
+     * @return the name
+     * @throws IllegalStateException if the cursor is not in a state where there are attributes
      */
     QName getAttributeName(int index);
 
     /**
-     * El espacio de nombres del atributo numero {@code index}, o null si no tiene.
+     * The namespace of attribute number {@code index}, or null if it has none.
      *
-     * @param index el indice, desde 0
-     * @return el espacio de nombres
-     * @throws IllegalStateException si el cursor no esta en un estado donde haya atributos
+     * @param index the index, from 0
+     * @return the namespace
+     * @throws IllegalStateException if the cursor is not in a state where there are attributes
      */
     String getAttributeNamespace(int index);
 
     /**
-     * El nombre local del atributo numero {@code index}.
+     * The local name of attribute number {@code index}.
      *
-     * @param index el indice, desde 0
-     * @return el nombre local
-     * @throws IllegalStateException si el cursor no esta en un estado donde haya atributos
+     * @param index the index, from 0
+     * @return the local name
+     * @throws IllegalStateException if the cursor is not in a state where there are attributes
      */
     String getAttributeLocalName(int index);
 
     /**
-     * El prefijo del atributo numero {@code index}, o null si no tiene.
+     * The prefix of attribute number {@code index}, or null if it has none.
      *
-     * @param index el indice, desde 0
-     * @return el prefijo
-     * @throws IllegalStateException si el cursor no esta en un estado donde haya atributos
+     * @param index the index, from 0
+     * @return the prefix
+     * @throws IllegalStateException if the cursor is not in a state where there are attributes
      */
     String getAttributePrefix(int index);
 
     /**
-     * El tipo declarado del atributo --{@code CDATA}, {@code ID}, {@code IDREF}...-- segun el DTD.
+     * The declared type of the attribute --{@code CDATA}, {@code ID}, {@code IDREF}...-- according
+     * to the DTD.
      *
-     * <p>Sin DTD son todos {@code CDATA}, que es lo mismo que decir "texto y nada mas".
+     * <p>Without a DTD they are all {@code CDATA}, which is the same as saying "text and nothing
+     * more".
      *
-     * @param index el indice, desde 0
-     * @return el tipo
-     * @throws IllegalStateException si el cursor no esta en un estado donde haya atributos
+     * @param index the index, from 0
+     * @return the type
+     * @throws IllegalStateException if the cursor is not in a state where there are attributes
      */
     String getAttributeType(int index);
 
     /**
-     * El valor del atributo numero {@code index}.
+     * The value of attribute number {@code index}.
      *
-     * @param index el indice, desde 0
-     * @return el valor
-     * @throws IllegalStateException si el cursor no esta en un estado donde haya atributos
+     * @param index the index, from 0
+     * @return the value
+     * @throws IllegalStateException if the cursor is not in a state where there are attributes
      */
     String getAttributeValue(int index);
 
     /**
-     * Si el atributo estaba escrito en el documento o lo puso el DTD por omision.
+     * Whether the attribute was written in the document or the DTD put it there by default.
      *
-     * <p>La distincion importa para volver a escribir el documento: un atributo que vino de un valor
-     * por omision no hace falta escribirlo, y escribirlo cambia el documento.
+     * <p>The distinction matters for writing the document back: an attribute that came from a
+     * default value need not be written, and writing it changes the document.
      *
-     * @param index el indice, desde 0
-     * @return true si estaba escrito
-     * @throws IllegalStateException si el cursor no esta en un estado donde haya atributos
+     * @param index the index, from 0
+     * @return true if it was written
+     * @throws IllegalStateException if the cursor is not in a state where there are attributes
      */
     boolean isAttributeSpecified(int index);
 
     /**
-     * Cuantas declaraciones de espacio de nombres hay en este evento.
+     * How many namespace declarations there are in this event.
      *
-     * <p>Solo las declaradas **en este elemento**, no las heredadas: para las heredadas esta
-     * {@link #getNamespaceContext()}.
+     * <p>Only the ones declared **in this element**, not the inherited ones: for the inherited ones
+     * there is {@link #getNamespaceContext()}.
      *
-     * <p>Vale en {@link XMLStreamConstants#START_ELEMENT}, {@link XMLStreamConstants#END_ELEMENT} y
-     * {@link XMLStreamConstants#NAMESPACE}.
+     * <p>Valid at {@link XMLStreamConstants#START_ELEMENT}, {@link XMLStreamConstants#END_ELEMENT}
+     * and {@link XMLStreamConstants#NAMESPACE}.
      *
-     * @return la cantidad
-     * @throws IllegalStateException si el cursor no esta en uno de esos estados
+     * @return the count
+     * @throws IllegalStateException if the cursor is not in one of those states
      */
     int getNamespaceCount();
 
     /**
-     * El prefijo de la declaracion numero {@code index}, o null si es la del espacio por omision.
+     * The prefix of declaration number {@code index}, or null if it is the default namespace's.
      *
-     * @param index el indice, desde 0
-     * @return el prefijo
-     * @throws IllegalStateException si el cursor no esta en un estado con declaraciones
+     * @param index the index, from 0
+     * @return the prefix
+     * @throws IllegalStateException if the cursor is not in a state with declarations
      */
     String getNamespacePrefix(int index);
 
     /**
-     * El URI de la declaracion numero {@code index}.
+     * The URI of declaration number {@code index}.
      *
-     * @param index el indice, desde 0
-     * @return el espacio de nombres
-     * @throws IllegalStateException si el cursor no esta en un estado con declaraciones
+     * @param index the index, from 0
+     * @return the namespace
+     * @throws IllegalStateException if the cursor is not in a state with declarations
      */
     String getNamespaceURI(int index);
 
     /**
-     * Las ligaduras prefijo/URI que valen en la posicion actual, heredadas incluidas.
+     * The prefix/URI bindings in force at the current position, inherited ones included.
      *
-     * <p>El contexto es del lector, no del evento: cambia a medida que el cursor avanza, y no se
-     * puede guardar para consultarlo despues.
+     * <p>The context belongs to the reader, not to the event: it changes as the cursor advances,
+     * and it cannot be kept to be queried later.
      *
-     * @return el contexto
+     * @return the context
      */
     NamespaceContext getNamespaceContext();
 
     /**
-     * El tipo del evento actual.
+     * The type of the current event.
      *
-     * @return uno de los tipos de {@link XMLStreamConstants}
+     * @return one of the types of {@link XMLStreamConstants}
      */
     int getEventType();
 
     /**
-     * El texto del evento actual, como {@link String}.
+     * The text of the current event, as a {@link String}.
      *
-     * <p>Vale en texto, CDATA, comentario, espacio, referencia a entidad y DTD.
+     * <p>Valid at text, CDATA, comment, space, entity reference and DTD.
      *
-     * @return el texto
-     * @throws IllegalStateException si el evento actual no lleva texto
+     * @return the text
+     * @throws IllegalStateException if the current event carries no text
      */
     String getText();
 
     /**
-     * El mismo texto, sin copiarlo a un {@link String}.
+     * The same text, without copying it into a {@link String}.
      *
-     * <p>El arreglo es **del lector** y vale hasta el proximo {@link #next()}: hay que leerlo entre
-     * {@link #getTextStart()} y {@link #getTextLength()}, no entero, y no hay que guardarlo.
-     * Existe para el codigo que procesa texto grande y no quiere alocar una cadena por evento.
+     * <p>The array is **the reader's** and holds until the next {@link #next()}: it has to be read
+     * between {@link #getTextStart()} and {@link #getTextLength()}, not whole, and it must not be
+     * kept. It exists for code that processes large text and does not want to allocate a string per
+     * event.
      *
-     * @return el buffer interno
-     * @throws IllegalStateException si el evento actual no lleva texto
+     * @return the internal buffer
+     * @throws IllegalStateException if the current event carries no text
      */
     char[] getTextCharacters();
 
     /**
-     * Copia parte del texto al arreglo del llamador.
+     * Copies part of the text into the caller's array.
      *
-     * <p>La variante segura de {@link #getTextCharacters()}: lo que se copia es del llamador y dura
-     * lo que el quiera.
+     * <p>The safe variant of {@link #getTextCharacters()}: what is copied belongs to the caller and
+     * lasts as long as they want.
      *
-     * @param sourceStart desde que caracter del texto
-     * @param target adonde copiar
-     * @param targetStart desde que posicion del destino
-     * @param length cuantos caracteres como maximo
-     * @return cuantos se copiaron
-     * @throws XMLStreamException si falla la lectura
-     * @throws IndexOutOfBoundsException si los indices no entran en el destino
-     * @throws IllegalStateException si el evento actual no lleva texto
+     * @param sourceStart from which character of the text
+     * @param target where to copy
+     * @param targetStart from which position of the target
+     * @param length how many characters at most
+     * @return how many were copied
+     * @throws XMLStreamException if reading fails
+     * @throws IndexOutOfBoundsException if the indices do not fit in the target
+     * @throws IllegalStateException if the current event carries no text
      */
     int getTextCharacters(int sourceStart, char[] target, int targetStart, int length)
             throws XMLStreamException;
 
     /**
-     * Desde que posicion del arreglo de {@link #getTextCharacters()} empieza el texto.
+     * From which position of the {@link #getTextCharacters()} array the text starts.
      *
-     * @return el desplazamiento
-     * @throws IllegalStateException si el evento actual no lleva texto
+     * @return the offset
+     * @throws IllegalStateException if the current event carries no text
      */
     int getTextStart();
 
     /**
-     * Cuantos caracteres del arreglo de {@link #getTextCharacters()} son el texto.
+     * How many characters of the {@link #getTextCharacters()} array are the text.
      *
-     * @return el largo
-     * @throws IllegalStateException si el evento actual no lleva texto
+     * @return the length
+     * @throws IllegalStateException if the current event carries no text
      */
     int getTextLength();
 
     /**
-     * La codificacion del documento, si se pudo determinar.
+     * The encoding of the document, if it could be determined.
      *
-     * <p>Es la que el parser **dedujo o le dijeron**, y puede no ser la de la declaracion XML: para
-     * esa esta {@link #getCharacterEncodingScheme()}.
+     * <p>It is the one the parser **deduced or was told**, and it may not be the XML declaration's:
+     * for that one there is {@link #getCharacterEncodingScheme()}.
      *
-     * @return el nombre de la codificacion, o null
+     * @return the name of the encoding, or null
      */
     String getEncoding();
 
     /**
-     * Si el evento actual lleva texto.
+     * Whether the current event carries text.
      *
-     * @return true en texto, CDATA, comentario, espacio, referencia a entidad y DTD
+     * @return true at text, CDATA, comment, space, entity reference and DTD
      */
     boolean hasText();
 
     /**
-     * Donde, en la entrada, esta el evento actual.
+     * Where, in the input, the current event is.
      *
-     * @return la ubicacion; nunca null, aunque puede no tener numeros
+     * @return the location; never null, though it may have no numbers
      */
     Location getLocation();
 
     /**
-     * El nombre calificado del elemento actual.
+     * The qualified name of the current element.
      *
-     * <p>Vale solo en apertura y cierre de elemento; en cualquier otro estado es un error del
-     * llamador.
+     * <p>Valid only at the start and end of an element; in any other state it is a caller error.
      *
-     * @return el nombre
-     * @throws IllegalStateException si el evento actual no tiene nombre
+     * @return the name
+     * @throws IllegalStateException if the current event has no name
      */
     QName getName();
 
     /**
-     * El nombre local del elemento actual, o el nombre de la entidad en una referencia.
+     * The local name of the current element, or the entity's name in a reference.
      *
-     * @return el nombre local
-     * @throws IllegalStateException si el evento actual no tiene nombre
+     * @return the local name
+     * @throws IllegalStateException if the current event has no name
      */
     String getLocalName();
 
     /**
-     * Si el evento actual tiene nombre.
+     * Whether the current event has a name.
      *
-     * @return true en apertura y cierre de elemento
+     * @return true at the start and end of an element
      */
     boolean hasName();
 
     /**
-     * El espacio de nombres del elemento actual, o null si no tiene.
+     * The namespace of the current element, or null if it has none.
      *
-     * @return el espacio de nombres
+     * @return the namespace
      */
     String getNamespaceURI();
 
     /**
-     * El prefijo del elemento actual, o null si no tiene.
+     * The prefix of the current element, or null if it has none.
      *
-     * @return el prefijo
+     * @return the prefix
      */
     String getPrefix();
 
     /**
-     * La version declarada en la declaracion XML, o null si no habia.
+     * The version declared in the XML declaration, or null if there was none.
      *
-     * @return la version
+     * @return the version
      */
     String getVersion();
 
     /**
-     * El valor de {@code standalone} de la declaracion XML.
+     * The value of {@code standalone} of the XML declaration.
      *
-     * <p>Devuelve false tanto si decia {@code no} como si no habia declaracion; para distinguirlos
-     * hay que preguntarle a {@link #standaloneSet()}.
+     * <p>It returns false both if it said {@code no} and if there was no declaration; to tell them
+     * apart one has to ask {@link #standaloneSet()}.
      *
-     * @return true si el documento se declaro standalone
+     * @return true if the document was declared standalone
      */
     boolean isStandalone();
 
     /**
-     * Si la declaracion XML traia {@code standalone}.
+     * Whether the XML declaration carried {@code standalone}.
      *
-     * @return true si estaba escrito
+     * @return true if it was written
      */
     boolean standaloneSet();
 
     /**
-     * La codificacion **declarada** en la declaracion XML, o null si no habia.
+     * The encoding **declared** in the XML declaration, or null if there was none.
      *
-     * @return el nombre de la codificacion
+     * @return the name of the encoding
      */
     String getCharacterEncodingScheme();
 
     /**
-     * El destino de la instruccion de proceso actual.
+     * The target of the current processing instruction.
      *
-     * @return el destino, o null si el evento no es una instruccion de proceso
+     * @return the target, or null if the event is not a processing instruction
      */
     String getPITarget();
 
     /**
-     * Los datos de la instruccion de proceso actual.
+     * The data of the current processing instruction.
      *
-     * @return los datos, o null si el evento no es una instruccion de proceso
+     * @return the data, or null if the event is not a processing instruction
      */
     String getPIData();
 }

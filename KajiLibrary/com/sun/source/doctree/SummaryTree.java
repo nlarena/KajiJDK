@@ -3,8 +3,8 @@ package com.sun.source.doctree;
 import java.util.List;
 
 /**
- * El nodo de `{@summary}`, que dice explicitamente cual es la primera oracion
- * en vez de dejar que la herramienta la adivine buscando el primer punto.
+ * The node of `{@summary}`, which says explicitly which the first sentence is
+ * instead of letting the tool guess it by looking for the first full stop.
  */
 public interface SummaryTree extends InlineTagTree {
 

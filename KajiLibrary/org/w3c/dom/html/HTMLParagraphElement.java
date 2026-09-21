@@ -1,13 +1,13 @@
 package org.w3c.dom.html;
 
 /**
- * Un `<p>`.
+ * A `<p>`.
  */
 public interface HTMLParagraphElement extends HTMLElement {
 
-    /** La alineacion (presentacion; HTML 4 la desaconseja). */
+    /** The alignment (presentational; HTML 4 deprecates it). */
     String getAlign();
 
-    /** Fija la alineacion (presentacion; HTML 4 la desaconseja). */
+    /** It sets the alignment (presentational; HTML 4 deprecates it). */
     void setAlign(String align);
 }

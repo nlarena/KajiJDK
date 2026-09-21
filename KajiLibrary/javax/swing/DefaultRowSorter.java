@@ -7,35 +7,35 @@ import java.util.Comparator;
 import java.util.List;
 
 /**
- * El ordenador y filtrador de filas que usan las tablas.
+ * The row sorter and filterer the tables use.
  *
- * <h2>Dos numeraciones, y no se pueden confundir</h2>
+ * <h2>Two numberings, and they must not be confused</h2>
  *
- * <p>El <em>modelo</em> numera las filas como estan guardadas; la <em>vista</em> las numera como se
- * ven, ya ordenadas y filtradas. Con un orden puesto o un filtro activo las dos numeraciones dejan
- * de coincidir, y {@link #convertRowIndexToModel} y {@link #convertRowIndexToView} son el unico
- * puente. Usar un indice de vista contra el modelo es el error clasico con tablas ordenables: no
- * falla, devuelve otra fila.
+ * <p>The <em>model</em> numbers the rows as they are kept; the <em>view</em> numbers them as
+ * they are seen, already sorted and filtered. With a sort set or a filter active the two
+ * numberings stop matching, and {@link #convertRowIndexToModel} and
+ * {@link #convertRowIndexToView} are the only bridge. Using a view index against the model is
+ * the classic mistake with sortable tables: it does not fail, it returns another row.
  *
- * <h2>Ordena por varias columnas a la vez</h2>
+ * <h2>It sorts by several columns at once</h2>
  *
- * <p>{@link #setSortKeys} recibe una lista: la primera clave manda, la segunda desempata, y asi.
- * {@link #setMaxSortKeys} pone el tope -- tres por omision -- para que hacer clic en una columna
- * tras otra no acumule un orden infinito.
+ * <p>{@link #setSortKeys} receives a list: the first key rules, the second breaks ties, and so
+ * on. {@link #setMaxSortKeys} sets the cap -- three by default -- so that clicking on one column
+ * after another does not pile up an endless order.
  *
- * <p>El ultimo desempate es siempre el indice de modelo, y por eso el orden es
- * <strong>estable</strong>: dos filas iguales quedan en el orden en que estaban.
+ * <p>The last tie-breaker is always the model index, and that is why the order is
+ * <strong>stable</strong>: two equal rows are left in the order they were in.
  *
- * <h2>Como se comparan los valores</h2>
+ * <h2>How the values are compared</h2>
  *
- * <p>Si la columna tiene un comparador puesto, se usa ese sobre los valores tal cual. Si no, se
- * comparan sus textos con un {@link Collator}, que es lo que hace que "arbol" venga antes que
- * "Barco" -- una comparacion de {@code String} cruda pondria todas las mayusculas primero. Cual de
- * los dos caminos se toma lo decide {@link #useToString}, y una subclase puede cambiarlo mirando el
- * tipo de la columna.
+ * <p>If the column has a comparator set, that one is used over the values as they are. If not,
+ * their texts are compared with a {@link Collator}, which is what makes "arbol" come before
+ * "Barco" -- a raw {@code String} comparison would put every upper-case one first. Which of
+ * the two paths is taken is decided by {@link #useToString}, and a subclass may change it by
+ * looking at the column's type.
  *
- * <p>Los nulos van primero, siempre, y antes de que el comparador vea nada. Un comparador que
- * recibiera un nulo tendria que saber que hacer con el, y casi ninguno sabe.
+ * <p>Nulls go first, always, and before the comparator sees anything. A comparator that received
+ * a null would have to know what to do with it, and almost none does.
  */
 public abstract class DefaultRowSorter<M, I> extends RowSorter<M> {
 
@@ -45,22 +45,22 @@ public abstract class DefaultRowSorter<M, I> extends RowSorter<M> {
     private boolean sortsOnUpdates = false;
     private RowFilter<? super M, ? super I> filter;
     private Comparator<?>[] comparators = new Comparator<?>[0];
-    private boolean[] sortables = new boolean[0];
+    private boolean[] sortableColumns = new boolean[0];
 
-    /** De vista a modelo; nulo cuando no hay orden ni filtro y la identidad alcanza. */
-    private Fila[] viewToModel;
+    /** From view to model; null when there is neither sort nor filter and identity is enough. */
+    private Row[] viewToModel;
 
-    /** De modelo a vista; -1 en las filas que el filtro dejo afuera. */
+    /** From model to view; -1 in the rows the filter left out. */
     private int[] modelToView;
 
-    /** Sin envoltorio de modelo puesto todavia. */
+    /** With no model wrapper set yet. */
     public DefaultRowSorter() {
     }
 
     /**
-     * Le dice de donde salen las filas.
+     * It tells it where the rows come from.
      *
-     * @throws IllegalArgumentException si es nulo
+     * @throws IllegalArgumentException if it is null
      */
     protected final void setModelWrapper(ModelWrapper<M, I> modelWrapper) {
         if (modelWrapper == null) {
@@ -84,36 +84,36 @@ public abstract class DefaultRowSorter<M, I> extends RowSorter<M> {
     }
 
     /**
-     * Si esa columna se puede ordenar.
+     * Whether that column can be sorted.
      *
-     * <p>Una columna no ordenable se ignora al alternar el orden, pero <strong>no</strong> se
-     * rechaza si alguien la pone a mano en {@link #setSortKeys}: el JDK solo la mira en
-     * {@link #toggleSortOrder}.
+     * <p>A column that cannot be sorted is ignored when cycling the order, but it is
+     * <strong>not</strong> rejected if somebody sets it by hand in {@link #setSortKeys}: the JDK
+     * only looks at it in {@link #toggleSortOrder}.
      *
-     * @throws IndexOutOfBoundsException si la columna esta fuera de rango
+     * @throws IndexOutOfBoundsException if the column is out of range
      */
     public void setSortable(int column, boolean sortable) {
         checkColumn(column);
-        crecerSortables(column + 1);
-        sortables[column] = sortable;
+        growSortableColumns(column + 1);
+        sortableColumns[column] = sortable;
     }
 
     /**
-     * @throws IndexOutOfBoundsException si la columna esta fuera de rango
+     * @throws IndexOutOfBoundsException if the column is out of range
      */
     public boolean isSortable(int column) {
         checkColumn(column);
-        if (column >= sortables.length) {
+        if (column >= sortableColumns.length) {
             return true;
         }
-        return sortables[column];
+        return sortableColumns[column];
     }
 
     /**
-     * Las claves de orden, la primera manda.
+     * The sort keys, the first rules.
      *
-     * <p>Nulo o vacio dejan la tabla sin orden. Se guarda una copia: cambiar la lista despues no
-     * cambia el orden.
+     * <p>Null or empty leave the table with no sort. A copy is kept: changing the list afterwards
+     * does not change the sort.
      */
     public void setSortKeys(List<? extends SortKey> sortKeys) {
         List<SortKey> old = this.sortKeys;
@@ -140,14 +140,14 @@ public abstract class DefaultRowSorter<M, I> extends RowSorter<M> {
     }
 
     /**
-     * Cuantas claves se acumulan al alternar.
+     * How many keys pile up when cycling.
      *
-     * <p><strong>No recorta las que ya hay</strong>, y esto esta medido: bajar el tope con tres
-     * claves puestas las deja las tres. El tope se aplica recien en el proximo
-     * {@link #toggleSortOrder}. Recortarlas aca reordenaria la tabla como efecto de un ajuste que
-     * no habla del orden actual.
+     * <p><strong>It does not clip those that are already there</strong>, and this is measured:
+     * lowering the cap with three keys set leaves all three. The cap is applied only at the next
+     * {@link #toggleSortOrder}. Clipping them here would reorder the table as an effect of an
+     * adjustment that does not speak about the current order.
      *
-     * @throws IllegalArgumentException si es menor que uno
+     * @throws IllegalArgumentException if it is less than one
      */
     public void setMaxSortKeys(int max) {
         if (max < 1) {
@@ -161,10 +161,11 @@ public abstract class DefaultRowSorter<M, I> extends RowSorter<M> {
     }
 
     /**
-     * Si cambiar una fila la reubica enseguida.
+     * Whether changing a row relocates it at once.
      *
-     * <p>Apagado por omision, y a proposito: con esto prendido, editar una celda de la columna por
-     * la que se ordena hace saltar la fila que se esta editando a otro lugar de la pantalla.
+     * <p>Switched off by default, and on purpose: with this switched on, editing a cell of the
+     * column that is sorted by makes the row that is being edited jump somewhere else on the
+     * screen.
      */
     public void setSortsOnUpdates(boolean sortsOnUpdates) {
         this.sortsOnUpdates = sortsOnUpdates;
@@ -174,7 +175,7 @@ public abstract class DefaultRowSorter<M, I> extends RowSorter<M> {
         return sortsOnUpdates;
     }
 
-    /** El filtro; nulo muestra todo. Ver {@link RowFilter}. */
+    /** The filter; null shows everything. See {@link RowFilter}. */
     public void setRowFilter(RowFilter<? super M, ? super I> filter) {
         this.filter = filter;
         sort();
@@ -185,13 +186,13 @@ public abstract class DefaultRowSorter<M, I> extends RowSorter<M> {
     }
 
     /**
-     * Lo que hace un clic en el encabezado de una columna.
+     * What a click on a column's header does.
      *
-     * <p>Si esa columna ya era la principal, da vuelta el sentido. Si no, pasa a ser la principal en
-     * ascendente y las que estaban quedan detras como desempate, recortadas a
+     * <p>If that column was already the main one, it turns the direction round. If not, it becomes
+     * the main one ascending and those that were there are left behind as tie-breakers, clipped to
      * {@link #getMaxSortKeys}.
      *
-     * @throws IndexOutOfBoundsException si la columna esta fuera de rango
+     * @throws IndexOutOfBoundsException if the column is out of range
      */
     public void toggleSortOrder(int column) {
         checkColumn(column);
@@ -225,7 +226,7 @@ public abstract class DefaultRowSorter<M, I> extends RowSorter<M> {
     }
 
     /**
-     * @throws IndexOutOfBoundsException si el indice esta fuera de rango
+     * @throws IndexOutOfBoundsException if the index is out of range
      */
     public int convertRowIndexToView(int index) {
         if (modelToView == null) {
@@ -238,7 +239,7 @@ public abstract class DefaultRowSorter<M, I> extends RowSorter<M> {
     }
 
     /**
-     * @throws IndexOutOfBoundsException si el indice esta fuera de rango
+     * @throws IndexOutOfBoundsException if the index is out of range
      */
     public int convertRowIndexToModel(int index) {
         if (viewToModel == null) {
@@ -251,47 +252,47 @@ public abstract class DefaultRowSorter<M, I> extends RowSorter<M> {
     }
 
     /**
-     * Rehace el orden y el filtro, y avisa.
+     * It rebuilds the sort and the filter, and gives notice.
      *
-     * <p>Sin claves ni filtro no se guarda ninguna tabla de traduccion: la vista y el modelo son la
-     * misma numeracion y guardar la identidad seria memoria por nada.
+     * <p>With neither keys nor filter no translation table is kept: the view and the model are the
+     * same numbering and keeping the identity would be memory for nothing.
      */
     public void sort() {
-        int[] anterior = ultimoAModelo();
-        int filas = getModelWrapper().getRowCount();
+        int[] previous = lastToModel();
+        int rows = getModelWrapper().getRowCount();
         if (sortKeys.isEmpty() && filter == null) {
             viewToModel = null;
             modelToView = null;
-            fireRowSorterChanged(anterior);
+            fireRowSorterChanged(previous);
             return;
         }
-        List<Fila> incluidas = new ArrayList<Fila>();
-        for (int i = 0; i < filas; i++) {
-            if (incluir(i)) {
-                incluidas.add(new Fila(i));
+        List<Row> included = new ArrayList<Row>();
+        for (int i = 0; i < rows; i++) {
+            if (include(i)) {
+                included.add(new Row(i));
             }
         }
-        Fila[] arreglo = new Fila[incluidas.size()];
-        for (int i = 0; i < arreglo.length; i++) {
-            arreglo[i] = incluidas.get(i);
+        Row[] array = new Row[included.size()];
+        for (int i = 0; i < array.length; i++) {
+            array[i] = included.get(i);
         }
         if (!sortKeys.isEmpty()) {
-            prepararComparadores();
-            Arrays.sort(arreglo, new ComparadorDeFilas(this));
+            prepareComparators();
+            Arrays.sort(array, new RowComparator(this));
         }
-        viewToModel = arreglo;
-        modelToView = new int[filas];
-        for (int i = 0; i < filas; i++) {
+        viewToModel = array;
+        modelToView = new int[rows];
+        for (int i = 0; i < rows; i++) {
             modelToView[i] = -1;
         }
-        for (int i = 0; i < arreglo.length; i++) {
-            modelToView[arreglo[i].modelIndex] = i;
+        for (int i = 0; i < array.length; i++) {
+            modelToView[array[i].modelIndex] = i;
         }
-        fireRowSorterChanged(anterior);
+        fireRowSorterChanged(previous);
     }
 
-    /** La traduccion que habia antes de reordenar, que es lo que lleva el aviso. */
-    private int[] ultimoAModelo() {
+    /** The translation that was there before reordering, which is what the notice carries. */
+    private int[] lastToModel() {
         if (viewToModel == null) {
             return null;
         }
@@ -302,34 +303,34 @@ public abstract class DefaultRowSorter<M, I> extends RowSorter<M> {
         return a;
     }
 
-    /** Si el filtro deja pasar esa fila del modelo. */
-    private boolean incluir(int modelIndex) {
+    /** Whether the filter lets that model row through. */
+    private boolean include(int modelIndex) {
         if (filter == null) {
             return true;
         }
-        return filter.include(new EntradaDeFila<M, I>(this, modelIndex));
+        return filter.include(new RowEntry<M, I>(this, modelIndex));
     }
 
     /**
-     * Si esa columna se compara por su texto y no por su valor.
+     * Whether that column is compared by its text and not by its value.
      *
-     * <p>Por omision, cuando no tiene comparador propio. Una subclase que conozca el tipo de la
-     * columna puede decir que no y dejar que los valores se comparen entre si.
+     * <p>By default, when it has no comparator of its own. A subclass that knows the column's type
+     * may say no and let the values be compared with each other.
      *
-     * @throws IndexOutOfBoundsException si la columna esta fuera de rango
+     * @throws IndexOutOfBoundsException if the column is out of range
      */
     protected boolean useToString(int column) {
         return (getComparator(column) == null);
     }
 
     /**
-     * El comparador de esa columna; nulo si no tiene.
+     * That column's comparator; null if it has none.
      *
-     * @throws IndexOutOfBoundsException si la columna esta fuera de rango
+     * @throws IndexOutOfBoundsException if the column is out of range
      */
     public void setComparator(int column, Comparator<?> comparator) {
         checkColumn(column);
-        crecerComparadores(column + 1);
+        growComparators(column + 1);
         comparators[column] = comparator;
     }
 
@@ -341,7 +342,7 @@ public abstract class DefaultRowSorter<M, I> extends RowSorter<M> {
         return comparators[column];
     }
 
-    /** Cuantas filas se ven. */
+    /** How many rows are seen. */
     public int getViewRowCount() {
         if (viewToModel != null) {
             return viewToModel.length;
@@ -349,21 +350,21 @@ public abstract class DefaultRowSorter<M, I> extends RowSorter<M> {
         return getModelWrapper().getRowCount();
     }
 
-    /** Cuantas filas hay en el modelo, filtradas o no. */
+    /** How many rows there are in the model, filtered or not. */
     public int getModelRowCount() {
         return getModelWrapper().getRowCount();
     }
 
-    /** Cambio la forma del modelo: se olvida todo, incluido el orden. */
+    /** The model changed shape: everything is forgotten, the sort included. */
     public void modelStructureChanged() {
         sortKeys = new ArrayList<SortKey>();
         comparators = new Comparator<?>[0];
-        sortables = new boolean[0];
+        sortableColumns = new boolean[0];
         viewToModel = null;
         modelToView = null;
     }
 
-    /** Cambiaron todas las filas. */
+    /** Every row changed. */
     public void allRowsChanged() {
         modelToView = null;
         viewToModel = null;
@@ -371,7 +372,7 @@ public abstract class DefaultRowSorter<M, I> extends RowSorter<M> {
     }
 
     /**
-     * @throws IndexOutOfBoundsException si el rango esta fuera del modelo
+     * @throws IndexOutOfBoundsException if the range is outside the model
      */
     public void rowsInserted(int firstRow, int endRow) {
         checkAgainstModel(firstRow, endRow);
@@ -379,7 +380,7 @@ public abstract class DefaultRowSorter<M, I> extends RowSorter<M> {
     }
 
     /**
-     * @throws IndexOutOfBoundsException si el rango es invalido
+     * @throws IndexOutOfBoundsException if the range is invalid
      */
     public void rowsDeleted(int firstRow, int endRow) {
         if (firstRow < 0 || endRow < firstRow) {
@@ -389,9 +390,9 @@ public abstract class DefaultRowSorter<M, I> extends RowSorter<M> {
     }
 
     /**
-     * Cambiaron esas filas; solo reordena si {@link #getSortsOnUpdates}.
+     * Those rows changed; it only reorders if {@link #getSortsOnUpdates}.
      *
-     * @throws IndexOutOfBoundsException si el rango esta fuera del modelo
+     * @throws IndexOutOfBoundsException if the range is outside the model
      */
     public void rowsUpdated(int firstRow, int endRow) {
         checkAgainstModel(firstRow, endRow);
@@ -401,9 +402,9 @@ public abstract class DefaultRowSorter<M, I> extends RowSorter<M> {
     }
 
     /**
-     * Cambio esa columna de esas filas.
+     * That column of those rows changed.
      *
-     * @throws IndexOutOfBoundsException si el rango o la columna estan fuera del modelo
+     * @throws IndexOutOfBoundsException if the range or the column are outside the model
      */
     public void rowsUpdated(int firstRow, int endRow, int column) {
         checkColumn(column);
@@ -424,68 +425,68 @@ public abstract class DefaultRowSorter<M, I> extends RowSorter<M> {
         }
     }
 
-    private void crecerComparadores(int n) {
+    private void growComparators(int n) {
         if (comparators.length < n) {
-            Comparator<?>[] nuevo = new Comparator<?>[n];
-            System.arraycopy(comparators, 0, nuevo, 0, comparators.length);
-            comparators = nuevo;
+            Comparator<?>[] newValue = new Comparator<?>[n];
+            System.arraycopy(comparators, 0, newValue, 0, comparators.length);
+            comparators = newValue;
         }
     }
 
-    private void crecerSortables(int n) {
-        if (sortables.length < n) {
-            boolean[] nuevo = new boolean[n];
+    private void growSortableColumns(int n) {
+        if (sortableColumns.length < n) {
+            boolean[] newValue = new boolean[n];
             for (int i = 0; i < n; i++) {
-                nuevo[i] = true;
+                newValue[i] = true;
             }
-            System.arraycopy(sortables, 0, nuevo, 0, sortables.length);
-            sortables = nuevo;
+            System.arraycopy(sortableColumns, 0, newValue, 0, sortableColumns.length);
+            sortableColumns = newValue;
         }
     }
 
-    /** Los comparadores y el modo de cada clave, resueltos una vez por ordenamiento. */
-    private Comparator<?>[] usados;
-    private boolean[] porTexto;
+    /** The comparators and each key's mode, resolved once per sorting. */
+    private Comparator<?>[] used;
+    private boolean[] byText;
 
-    private void prepararComparadores() {
-        usados = new Comparator<?>[sortKeys.size()];
-        porTexto = new boolean[sortKeys.size()];
+    private void prepareComparators() {
+        used = new Comparator<?>[sortKeys.size()];
+        byText = new boolean[sortKeys.size()];
         for (int i = 0; i < sortKeys.size(); i++) {
             int column = sortKeys.get(i).getColumn();
-            porTexto[i] = useToString(column);
+            byText[i] = useToString(column);
             Comparator<?> c = getComparator(column);
-            usados[i] = (c != null) ? c : Collator.getInstance();
+            used[i] = (c != null) ? c : Collator.getInstance();
         }
     }
 
-    /** Una fila incluida, identificada por su indice de modelo. */
-    private static class Fila {
+    /** An included row, identified by its model index. */
+    private static class Row {
 
         final int modelIndex;
 
-        Fila(int modelIndex) {
+        Row(int modelIndex) {
             this.modelIndex = modelIndex;
         }
     }
 
-    /** Ordena por las claves y desempata por el indice de modelo; ver la nota de la clase. */
-    private static class ComparadorDeFilas implements Comparator<Fila> {
+    /** It sorts by the keys and breaks ties by the model index; see the class note. */
+    private static class RowComparator implements Comparator<Row> {
 
         private final DefaultRowSorter<?, ?> orden;
 
-        ComparadorDeFilas(DefaultRowSorter<?, ?> orden) {
+        RowComparator(DefaultRowSorter<?, ?> orden) {
             this.orden = orden;
         }
 
         @SuppressWarnings("unchecked")
-        public int compare(Fila a, Fila b) {
-            List<? extends SortKey> claves = orden.claves();
-            for (int i = 0; i < claves.size(); i++) {
-                SortKey key = claves.get(i);
+        public int compare(Row a, Row b) {
+            List<? extends SortKey> keys = orden.keys();
+            for (int i = 0; i < keys.size(); i++) {
+                SortKey key = keys.get(i);
                 int column = key.getColumn();
                 Object v1;
                 Object v2;
-                if (orden.esPorTexto(i)) {
+                if (orden.isByText(i)) {
                     v1 = orden.getModelWrapper().getStringValueAt(a.modelIndex, column);
                     v2 = orden.getModelWrapper().getStringValueAt(b.modelIndex, column);
                 } else {
@@ -493,7 +494,7 @@ public abstract class DefaultRowSorter<M, I> extends RowSorter<M> {
                     v2 = orden.getModelWrapper().getValueAt(b.modelIndex, column);
                 }
                 int result;
-                // Los nulos van primero y no llegan al comparador; ver la nota de la clase.
+                // Nulls go first and do not reach the comparator; see the class note.
                 if (v1 == null && v2 == null) {
                     result = 0;
                 } else if (v1 == null) {
@@ -501,7 +502,7 @@ public abstract class DefaultRowSorter<M, I> extends RowSorter<M> {
                 } else if (v2 == null) {
                     result = 1;
                 } else {
-                    result = ((Comparator<Object>) orden.comparadorUsado(i)).compare(v1, v2);
+                    result = ((Comparator<Object>) orden.comparatorUsed(i)).compare(v1, v2);
                 }
                 if (key.getSortOrder() == SortOrder.DESCENDING) {
                     result = result * -1;
@@ -514,25 +515,25 @@ public abstract class DefaultRowSorter<M, I> extends RowSorter<M> {
         }
     }
 
-    List<? extends SortKey> claves() {
+    List<? extends SortKey> keys() {
         return sortKeys;
     }
 
-    boolean esPorTexto(int i) {
-        return porTexto[i];
+    boolean isByText(int i) {
+        return byText[i];
     }
 
-    Comparator<?> comparadorUsado(int i) {
-        return usados[i];
+    Comparator<?> comparatorUsed(int i) {
+        return used[i];
     }
 
-    /** La fila que ve el filtro; ver {@link RowFilter.Entry}. */
-    private static class EntradaDeFila<M, I> extends RowFilter.Entry<M, I> {
+    /** The row the filter sees; see {@link RowFilter.Entry}. */
+    private static class RowEntry<M, I> extends RowFilter.Entry<M, I> {
 
         private final DefaultRowSorter<M, I> orden;
         private final int modelIndex;
 
-        EntradaDeFila(DefaultRowSorter<M, I> orden, int modelIndex) {
+        RowEntry(DefaultRowSorter<M, I> orden, int modelIndex) {
             this.orden = orden;
             this.modelIndex = modelIndex;
         }
@@ -559,23 +560,23 @@ public abstract class DefaultRowSorter<M, I> extends RowSorter<M> {
     }
 
     /**
-     * De donde salen las filas.
+     * Where the rows come from.
      *
-     * <p>Existe para que el mismo ordenador sirva sobre cualquier modelo: una tabla, una lista, lo
-     * que sea. El ordenador no sabe de {@code TableModel}; sabe de filas, columnas y valores.
+     * <p>It exists so that the same sorter serves over any model: a table, a list, whatever. The
+     * sorter does not know about {@code TableModel}; it knows about rows, columns and values.
      *
-     * <p>Es <strong>protegida</strong>, no publica -- `javap` la muestra publica porque ese es el
-     * modificador del archivo de clase, pero el atributo de clases internas dice protegida y es lo
-     * que el compilador hace valer. Solo una subclase del ordenador puede nombrarla, que es
-     * coherente con que {@code setModelWrapper} tambien sea protegido.
+     * <p>It is <strong>protected</strong>, not public -- `javap` shows it public because that is
+     * the class file's modifier, but the inner classes attribute says protected and it is what the
+     * compiler enforces. Only a subclass of the sorter may name it, which is consistent with
+     * {@code setModelWrapper} being protected too.
      */
     protected abstract static class ModelWrapper<M, I> {
 
-        /** Para las subclases. */
+        /** For the subclasses. */
         protected ModelWrapper() {
         }
 
-        /** El modelo de verdad. */
+        /** The real model. */
         public abstract M getModel();
 
         public abstract int getColumnCount();
@@ -585,9 +586,10 @@ public abstract class DefaultRowSorter<M, I> extends RowSorter<M> {
         public abstract Object getValueAt(int row, int column);
 
         /**
-         * El valor como texto.
+         * The value as text.
          *
-         * <p>Nulo da cadena vacia -- y tambien un {@code toString} que devuelva nulo, que existe.
+         * <p>Null gives the empty string -- and so does a {@code toString} that returns null, which
+         * exists.
          */
         public String getStringValueAt(int row, int column) {
             Object o = getValueAt(row, column);
@@ -601,7 +603,7 @@ public abstract class DefaultRowSorter<M, I> extends RowSorter<M> {
             return string;
         }
 
-        /** Con que reconoce el modelo a esa fila. */
+        /** What the model recognizes that row by. */
         public abstract I getIdentifier(int row);
     }
 }

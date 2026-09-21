@@ -3,27 +3,27 @@ package jdk.net;
 import java.security.BasicPermission;
 
 /**
- * El permiso que protege las opciones de socket de {@link ExtendedSocketOptions}.
+ * The permission that protects the socket options of {@link ExtendedSocketOptions}.
  *
- * <p>Las opciones extendidas no son inocuas: varias tocan el comportamiento del nucleo, y
- * {@link ExtendedSocketOptions#SO_PEERCRED} devuelve la identidad de otro proceso. De ahi que
- * usarlas sea una accion con permiso propio y no simplemente una llamada mas.
+ * <p>The extended options are not harmless: several touch the behaviour of the kernel, and
+ * {@link ExtendedSocketOptions#SO_PEERCRED} returns the identity of another process. Hence using
+ * them is an action with a permission of its own and not simply one more call.
  *
- * <p>Extiende {@link BasicPermission}, asi que el nombre admite comodines: {@code "*"} da todos,
- * {@code "setOption.*"} da los de una familia. No tiene acciones — el segundo constructor las
- * acepta y las ignora, y esta solo porque el mecanismo de permisos construye por reflexion con dos
- * argumentos.
+ * <p>It extends {@link BasicPermission}, so the name admits wildcards: {@code "*"} gives them all,
+ * {@code "setOption.*"} gives those of one family. It has no actions — the second constructor
+ * accepts them and ignores them, and it is there only because the permission mechanism builds by
+ * reflection with two arguments.
  */
 public final class NetworkPermission extends BasicPermission {
 
     private static final long serialVersionUID = -2004683231018171266L;
 
-    /** Un permiso con ese nombre. */
+    /** A permission with that name. */
     public NetworkPermission(String name) {
         super(name);
     }
 
-    /** Igual; {@code actions} se ignora, y el JDK hace lo mismo. */
+    /** The same; {@code actions} is ignored, and the JDK does likewise. */
     public NetworkPermission(String name, String actions) {
         super(name, actions);
     }

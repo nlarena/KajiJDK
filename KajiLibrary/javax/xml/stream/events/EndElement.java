@@ -5,38 +5,37 @@ import java.util.Iterator;
 import javax.xml.namespace.QName;
 
 /**
- * KajiLibrary's javax.xml.stream.events.EndElement -- el cierre de un elemento.
+ * KajiLibrary's javax.xml.stream.events.EndElement -- the end of an element.
  *
- * <h2>Por que un cierre trae espacios de nombres</h2>
+ * <h2>Why an end carries namespaces</h2>
  *
- * <p>La etiqueta {@code </a:x>} no declara nada, asi que la pregunta legitima es que hace
- * {@link #getNamespaces()} aca. La respuesta es que lo que devuelve no son declaraciones nuevas
- * sino las que <b>dejan de valer</b> en este punto: las que el {@link StartElement}
- * correspondiente habia introducido y que, al cerrarse el elemento, salen de alcance.
+ * <p>The tag {@code </a:x>} declares nothing, so the legitimate question is what {@link
+ * #getNamespaces()} does here. The answer is that what it returns are not new declarations but the
+ * ones that <b>stop holding</b> at this point: the ones the corresponding {@link StartElement} had
+ * introduced and that, when the element closes, go out of scope.
  *
- * <p>Sirve para lo unico que hace falta al cerrar: un escritor que mantiene su propia pila de
- * prefijos necesita saber cuales desapilar, y un consumidor que va armando un modelo necesita
- * saber cuando un prefijo vuelve a significar otra cosa. Sin esto habria que llevar la pila por
- * fuera, que es exactamente el estado que el modelo de eventos existe para no obligar a llevar.
+ * <p>It serves the only thing needed when closing: a writer that keeps its own prefix stack needs
+ * to know which to pop, and a consumer building a model needs to know when a prefix means something
+ * else again. Without this the stack would have to be kept outside, which is exactly the state the
+ * event model exists so as not to force anyone to keep.
  */
 public interface EndElement extends XMLEvent {
 
     /**
-     * El nombre del elemento que se cierra.
+     * The name of the element being closed.
      *
-     * <p>Es el mismo {@link QName} que traia el {@link StartElement}: mismo espacio de nombres,
-     * mismo nombre local. El prefijo tambien coincide, porque XML exige que las etiquetas se
-     * escriban igual, pero recordar que el prefijo no entra en {@link QName#equals}.
+     * <p>It is the same {@link QName} the {@link StartElement} carried: same namespace, same local
+     * name. The prefix also matches, because XML requires tags to be written the same, but remember
+     * that the prefix is not part of {@link QName#equals}.
      *
-     * @return el nombre calificado; nunca null
+     * @return the qualified name; never null
      */
     QName getName();
 
     /**
-     * Los espacios de nombres que salen de alcance al cerrar este elemento.
+     * The namespaces that go out of scope when this element closes.
      *
-     * @return un iterador de {@link Namespace}; vacio si el elemento no habia declarado ninguno,
-     *     nunca null
+     * @return an iterator of {@link Namespace}; empty if the element had declared none, never null
      */
     Iterator<Namespace> getNamespaces();
 }

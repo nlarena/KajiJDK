@@ -4,51 +4,50 @@ import java.util.Enumeration;
 import java.util.Vector;
 
 /**
- * La receta para reconstruir un objeto: el nombre de su clase, sus direcciones, y quien lo arma.
+ * The recipe to rebuild an object: its class name, its addresses, and who builds it.
  *
- * <h2>Por que no se ata el objeto</h2>
+ * <h2>Why the object itself is not bound</h2>
  *
- * <p>Un servicio de nombres guarda datos, no memoria de otro proceso. Atar un `DataSource` vivo no
- * significa nada para el que hace `lookup` desde otra maquina media hora despues. Lo que se ata es
- * esto: "clase `javax.sql.DataSource`, fabrica `com.x.DsFactory`, y estas direcciones --esta URL,
- * este usuario--". El que resuelve carga la fabrica y le pasa la referencia, y recibe un objeto
- * equivalente, no el mismo.
+ * <p>A naming service stores data, not another process's memory. Binding a live `DataSource` means
+ * nothing to whoever does a `lookup` from another machine half an hour later. What gets bound is
+ * this: "class `javax.sql.DataSource`, factory `com.x.DsFactory`, and these addresses --this URL,
+ * this user--". Whoever resolves it loads the factory and passes it the reference, and gets an
+ * equivalent object, not the same one.
  *
- * <p>De ahi los tres campos de identidad. `className` es lo que el que hace `lookup` **espera**
- * recibir, y sirve para filtrar sin construir nada. `classFactory` es quien sabe construirlo, y
- * `classFactoryLocation` de donde bajar esa fabrica si no esta en el classpath --una URL de
- * codebase--, que puede ser `null` y casi siempre lo es.
+ * <p>Hence the three identity fields. `className` is what whoever does the `lookup` **expects** to
+ * get, and it serves to filter without building anything. `classFactory` is who knows how to build
+ * it, and `classFactoryLocation` where to download that factory if it is not on the class path --a
+ * codebase URL--, which can be `null` and almost always is.
  *
- * <h2>Por que las direcciones son una lista y no un mapa</h2>
+ * <h2>Why the addresses are a list and not a map</h2>
  *
- * <p>Porque el orden importa y los tipos se repiten: un servicio con tres replicas tiene tres
- * direcciones de tipo `"URL"`, y el orden es la preferencia. `get(String)` devuelve **la primera**
- * de ese tipo, que es la interpretacion util de "dame la URL"; el que las quiere todas usa
- * `getAll()`.
+ * <p>Because order matters and types repeat: a service with three replicas has three addresses of
+ * type `"URL"`, and the order is the preference. `get(String)` returns **the first** of that type,
+ * which is the useful reading of "give me the URL"; whoever wants them all uses `getAll()`.
  *
- * <h2>Igualdad y clonado</h2>
+ * <h2>Equality and cloning</h2>
  *
- * <p>`equals` compara la clase y las direcciones **en orden**, y a proposito ignora la fabrica: dos
- * referencias al mismo objeto con distinta manera de construirlo describen el mismo objeto. El
- * javadoc del JDK lo dice explicitamente y no es un descuido.
+ * <p>`equals` compares the class and the addresses **in order**, and deliberately ignores the
+ * factory: two references to the same object with a different way of building it describe the same
+ * object. The JDK's javadoc says so explicitly and it is not an oversight.
  *
- * <p>`clone` es superficial en las direcciones --copia la lista, no los `RefAddr`--. Se puede
- * porque un `RefAddr` es inmutable en la practica: ninguna subclase del paquete tiene setters.
+ * <p>`clone` is shallow in the addresses --it copies the list, not the `RefAddr`s. That is fine
+ * because a `RefAddr` is immutable in practice: no subclass in the package has setters.
  */
 public class Reference implements Cloneable, java.io.Serializable {
 
     private static final long serialVersionUID = -1673475790065791735L;
 
-    /** La clase del objeto que esta referencia describe. */
+    /** The class of the object this reference describes. */
     protected String className;
 
-    /** Las direcciones, en orden de preferencia. */
+    /** The addresses, in order of preference. */
     protected Vector<RefAddr> addrs = null;
 
-    /** Quien sabe construir el objeto; `null` si el que resuelve tiene que arreglarselas. */
+    /** Who knows how to build the object; `null` if whoever resolves has to manage on their own. */
     protected String classFactory = null;
 
-    /** De donde bajar la fabrica si no esta en el classpath. Casi siempre `null`. */
+    /** Where to download the factory if it is not on the class path. Almost always `null`. */
     protected String classFactoryLocation = null;
 
     public Reference(String className) {
@@ -86,7 +85,7 @@ public class Reference implements Cloneable, java.io.Serializable {
         return classFactoryLocation;
     }
 
-    /** La **primera** direccion de ese tipo, que es la preferida; `null` si no hay ninguna. */
+    /** The **first** address of that type, which is the preferred one; `null` if there is none. */
     public RefAddr get(String addrType) {
         int len = addrs.size();
         for (int i = 0; i < len; i++) {
@@ -118,7 +117,7 @@ public class Reference implements Cloneable, java.io.Serializable {
         addrs.insertElementAt(addr, posn);
     }
 
-    /** Devuelve `Object` y no `RefAddr` por la edad de la API; siempre es un `RefAddr`. */
+    /** Returns `Object` and not `RefAddr` because of the API's age; it is always a `RefAddr`. */
     public Object remove(int posn) {
         Object r = addrs.elementAt(posn);
         addrs.removeElementAt(posn);
@@ -129,7 +128,9 @@ public class Reference implements Cloneable, java.io.Serializable {
         addrs.setSize(0);
     }
 
-    /** Clase y direcciones en orden. **No** mira la fabrica: es del contrato, no un olvido. */
+    /**
+     * Class and addresses in order. It does **not** look at the factory: contract, not oversight.
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj instanceof Reference) {
@@ -169,10 +170,11 @@ public class Reference implements Cloneable, java.io.Serializable {
     }
 
     /**
-     * Copia con lista de direcciones propia, pero compartiendo los `RefAddr`.
+     * A copy with its own address list, but sharing the `RefAddr`s.
      *
-     * <p>Alcanza porque un `RefAddr` no tiene setters: se puede compartir sin que nadie lo cambie
-     * por debajo. Lo que si hay que copiar es la lista, que es lo que `add`/`remove` mutan.
+     * <p>That is enough because a `RefAddr` has no setters: it can be shared without anyone
+     * changing it underneath. What does have to be copied is the list, which is what `add`/`remove`
+     * mutate.
      */
     @Override
     public Object clone() {

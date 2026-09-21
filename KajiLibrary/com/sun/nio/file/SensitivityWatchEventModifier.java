@@ -3,30 +3,32 @@ package com.sun.nio.file;
 import java.nio.file.WatchEvent;
 
 /**
- * Cada cuanto sondear, cuando el {@link java.nio.file.WatchService} no tiene notificaciones del
- * sistema y tiene que preguntar.
+ * How often to poll, when the {@link java.nio.file.WatchService} has no notifications from the
+ * system and has to ask.
  *
- * <h2>Por que existe algo asi</h2>
+ * <h2>Why something like this exists</h2>
  *
- * <p>La implementacion buena de un servicio de vigilancia usa la notificacion del sistema operativo
- * y se entera al instante. Cuando eso no esta —un sistema de archivos de red, una plataforma sin
- * soporte— el JDK cae a **sondear**, y ahi aparece un compromiso que nadie puede resolver por el
- * usuario: sondear seguido detecta rapido y cuesta E/S; sondear espaciado es barato y llega tarde.
+ * <p>The good implementation of a watching service uses the operating system's notification and
+ * finds out at once. When that is not there --a network file system, a platform with no
+ * support-- the JDK falls back to **polling**, and there a compromise appears that nobody can
+ * resolve for the user: to poll often detects quickly and costs I/O; to poll spaced out is cheap
+ * and arrives late.
  *
- * <p>Estas tres constantes son ese compromiso, dicho por quien registra. Sobre una implementacion
- * que no sondea, no hacen nada — y eso esta bien: es una pista, no un requisito.
+ * <p>These three constants are that compromise, said by whoever registers. Over an
+ * implementation that does not poll, they do nothing -- and that is right: it is a hint, not a
+ * requirement.
  *
- * @deprecated el JDK dejo de mirarlo: las implementaciones que sondeaban se reemplazaron, asi que
- *     hoy el modificador se acepta y se ignora.
+ * @deprecated the JDK stopped looking at it: the implementations that polled were replaced, so
+ *     today the modifier is accepted and ignored.
  */
 @Deprecated(since = "23", forRemoval = true)
 public enum SensitivityWatchEventModifier implements WatchEvent.Modifier {
 
-    /** Sondear seguido: cada 2 segundos. */
+    /** To poll often: every 2 seconds. */
     HIGH(2),
-    /** El punto medio: cada 10 segundos. */
+    /** The middle point: every 10 seconds. */
     MEDIUM(10),
-    /** Sondear poco: cada 30 segundos. */
+    /** To poll little: every 30 seconds. */
     LOW(30);
 
     private final int sensitivity;
@@ -35,7 +37,7 @@ public enum SensitivityWatchEventModifier implements WatchEvent.Modifier {
         this.sensitivity = sensitivity;
     }
 
-    /** Cada cuantos segundos sondear. */
+    /** How many seconds apart to poll. */
     public int sensitivityValueInSeconds() {
         return this.sensitivity;
     }

@@ -4,45 +4,47 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * KajiLibrary's javax.imageio.plugins.tiff.FaxTIFFTagSet -- las cuatro etiquetas de TIFF para fax.
+ * KajiLibrary's javax.imageio.plugins.tiff.FaxTIFFTagSet -- the three TIFF tags for fax.
  *
- * <p>Del perfil TIFF-F: modos de limpieza de la senal, tiempo de transmision, cantidad de lineas
- * malas. Son de 1994 y siguen ahi porque el fax sobre TIFF sobrevivio mas de lo que nadie esperaba.
+ * <p>From the TIFF-F profile: how clean the received data is, how many bad lines there were, and
+ * the longest run of consecutive bad lines. They are still there because fax over TIFF outlived
+ * what anybody expected. (An earlier note said four tags and listed a transmission time; the JDK
+ * set has these three.)
  *
- * <p>Es un singleton: se pide con {@link #getInstance}. Las etiquetas y sus valores nombrados se
- * transcribieron del JDK 25 y no a mano; un numero cambiado produce un TIFF que otros programas leen
- * distinto.
+ * <p>It is a singleton: it is obtained with {@link #getInstance}. The tags and their named values
+ * were transcribed from the JDK 25 and not by hand; a changed number produces a TIFF that other
+ * programs read differently.
  */
 public final class FaxTIFFTagSet extends TIFFTagSet {
 
-    /** El unico, armado la primera vez que se pide. */
+    /** The only one, built the first time it is asked for. */
     private static FaxTIFFTagSet theInstance = null;
 
-    /** El numero de la etiqueta bad fax lines. */
+    /** The number of the bad fax lines tag. */
     public static final int TAG_BAD_FAX_LINES = 326;
 
-    /** El numero de la etiqueta clean fax data. */
+    /** The number of the clean fax data tag. */
     public static final int TAG_CLEAN_FAX_DATA = 327;
 
-    /** Un valor de clean. */
+    /** A value of {@link #TAG_CLEAN_FAX_DATA}. */
     public static final int CLEAN_FAX_DATA_NO_ERRORS = 0;
 
-    /** Un valor de clean. */
+    /** A value of {@link #TAG_CLEAN_FAX_DATA}. */
     public static final int CLEAN_FAX_DATA_ERRORS_CORRECTED = 1;
 
-    /** Un valor de clean. */
+    /** A value of {@link #TAG_CLEAN_FAX_DATA}. */
     public static final int CLEAN_FAX_DATA_ERRORS_UNCORRECTED = 2;
 
-    /** El numero de la etiqueta consecutive bad lines. */
+    /** The number of the consecutive bad lines tag. */
     public static final int TAG_CONSECUTIVE_BAD_LINES = 328;
 
 
-    /** Se llega por {@link #getInstance}. */
+    /** Reached through {@link #getInstance}. */
     private FaxTIFFTagSet() {
         super(tags());
     }
 
-    /** El conjunto. Ver la nota de la clase. */
+    /** The set. See the class note. */
     public static synchronized FaxTIFFTagSet getInstance() {
         if (theInstance == null) {
             theInstance = new FaxTIFFTagSet();
@@ -50,7 +52,7 @@ public final class FaxTIFFTagSet extends TIFFTagSet {
         return theInstance;
     }
 
-    /** Las etiquetas de este conjunto. */
+    /** The tags of this set. */
     private static List<TIFFTag> tags() {
         List<TIFFTag> tags = new ArrayList<TIFFTag>();
         tags.add(new TIFFTag("BadFaxLines", 326, 24, 1));
@@ -59,7 +61,7 @@ public final class FaxTIFFTagSet extends TIFFTagSet {
         return tags;
     }
 
-    /** {@code CleanFaxData}, con los nombres de sus valores. */
+    /** {@code CleanFaxData}, with the names of its values. */
     private static final class TagCleanFaxData extends TIFFTag {
 
         TagCleanFaxData() {

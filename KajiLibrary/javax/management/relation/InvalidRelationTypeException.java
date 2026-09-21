@@ -1,19 +1,19 @@
 package javax.management.relation;
 
 /**
- * El tipo de relacion no sirve: ya existe uno con ese nombre, o los roles que declara son
- * inconsistentes entre si.
+ * The relation type is not valid: there is already one with that name, or the roles it declares
+ * are inconsistent with each other.
  */
 public class InvalidRelationTypeException extends RelationException {
 
     private static final long serialVersionUID = 3007446608299169973L;
 
-    /** Sin detalle. */
+    /** Without detail. */
     public InvalidRelationTypeException() {
         super();
     }
 
-    /** Con un mensaje. */
+    /** With a message. */
     public InvalidRelationTypeException(String message) {
         super(message);
     }

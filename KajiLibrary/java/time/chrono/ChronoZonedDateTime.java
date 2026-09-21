@@ -28,9 +28,9 @@ public interface ChronoZonedDateTime extends Temporal, Comparable<ChronoZonedDat
     ChronoLocalDateTime toLocalDateTime();
 
     /**
-     * Esta fecha y hora con zona, formateada con ese formateador.
+     * This zoned date and time, formatted with that formatter.
      *
-     * @throws java.time.DateTimeException si no se puede formatear
+     * @throws java.time.DateTimeException if it cannot be formatted
      */
     default String format(java.time.format.DateTimeFormatter formatter) {
         if (formatter == null) {
@@ -53,7 +53,7 @@ public interface ChronoZonedDateTime extends Temporal, Comparable<ChronoZonedDat
 
     boolean isSupported(TemporalField field);
 
-    /** La fecha y hora con zona que `temporal` tiene, en el calendario que el mismo indique. */
+    /** The zoned date and time `temporal` holds, in whatever calendar it names itself. */
     static ChronoZonedDateTime from(java.time.temporal.TemporalAccessor temporal) {
         if (temporal == null) {
             throw new NullPointerException("temporal");
@@ -65,58 +65,58 @@ public interface ChronoZonedDateTime extends Temporal, Comparable<ChronoZonedDat
     }
 
     /**
-     * El orden **solo por instante**, ignorando la zona y el calendario.
+     * The order **by instant alone**, ignoring the zone and the calendar.
      *
-     * <p>Es el complemento de `compareTo`, que desempata por fecha local y por zona. Este dice "el
-     * mismo instante es el mismo instante", que es lo que uno quiere para ordenar por cuando pasaron
-     * cosas registradas en husos distintos.
+     * <p>It is the complement of `compareTo`, which breaks ties by local date and by zone. This one
+     * says "the same instant is the same instant", which is what one wants for ordering by when
+     * things recorded in different offsets happened.
      *
-     * <p>Ojo con usarlo en un `TreeSet`: al no desempatar, las diez de Buenos Aires y las dos de
-     * Londres del mismo momento comparan 0 y el conjunto se queda con una sola.
+     * <p>Beware of using it in a `TreeSet`: breaking no ties, ten o'clock in Buenos Aires and two
+     * o'clock in London of the same moment compare 0 and the set keeps only one.
      */
     static java.util.Comparator<ChronoZonedDateTime> timeLineOrder() {
-        return new LineaDeTiempoZonada();
+        return new ZonedTimeLine();
     }
 
-    // ---- las seis redeclaraciones covariantes ---------------------------------------------------
+    // ---- the six covariant redeclarations -------------------------------------------------------
     //
-    // `Temporal` ya declara estas seis con retorno `Temporal`, asi que a primera vista repetirlas
-    // parece redundante. No lo es: son las que le dicen al que llama que sumarle horas a una fecha
-    // con zona sigue siendo una fecha con zona, sin castear. Y son las que hacen que el compilador
-    // emita los **metodos puente** en los implementadores que estrechan todavia mas el retorno
-    // --`ZonedDateTime`--, que es lo que permite que una llamada por la interfaz encuentre la
-    // implementacion real. Sin esta declaracion los puentes no existen y el contrato de `Temporal`
-    // se cumple solo de casualidad.
+    // `Temporal` already declares these six with a `Temporal` return, so at first sight repeating
+    // them looks redundant. It is not: they are what tells the caller that adding hours to a zoned
+    // date-time is still a zoned date-time, with no cast. And they are what makes the compiler emit
+    // the **bridge methods** in the implementors that narrow the return further --`ZonedDateTime`--
+    // which is what lets a call through the interface find the real implementation. Without this
+    // declaration the bridges do not exist and `Temporal`'s contract is honoured only by luck.
     //
-    // Las dos abstractas son las mismas dos que lo son en el JDK: son las unicas que **no** se pueden
-    // escribir aca arriba, porque no hay forma generica de aplicar un campo o una unidad.
+    // The two abstract ones are the same two that are abstract in the JDK: they are the only ones
+    // that **cannot** be written up here, because there is no generic way of applying a field or a
+    // unit.
 
     ChronoZonedDateTime with(TemporalField field, long newValue);
 
     ChronoZonedDateTime plus(long amountToAdd, TemporalUnit unit);
 
     default ChronoZonedDateTime with(java.time.temporal.TemporalAdjuster adjuster) {
-        // Ligado a una local: una llamada encadenada por un intermedio de tipo interfaz se pierde
-        // en silencio (#108).
-        Temporal ajustado = adjuster.adjustInto(this);
-        return (ChronoZonedDateTime) ajustado;
+        // Bound to a local: a call chained through an interface-typed intermediate is silently lost
+        // (#108).
+        Temporal adjustedOne = adjuster.adjustInto(this);
+        return (ChronoZonedDateTime) adjustedOne;
     }
 
     default ChronoZonedDateTime plus(java.time.temporal.TemporalAmount amount) {
-        Temporal sumado = amount.addTo(this);
-        return (ChronoZonedDateTime) sumado;
+        Temporal added = amount.addTo(this);
+        return (ChronoZonedDateTime) added;
     }
 
     default ChronoZonedDateTime minus(java.time.temporal.TemporalAmount amount) {
-        Temporal restado = amount.subtractFrom(this);
-        return (ChronoZonedDateTime) restado;
+        Temporal subtracted = amount.subtractFrom(this);
+        return (ChronoZonedDateTime) subtracted;
     }
 
     default ChronoZonedDateTime minus(long amountToSubtract, TemporalUnit unit) {
-        // `Long.MIN_VALUE` no se puede negar: se resta en dos pasos, como en el JDK.
+        // `Long.MIN_VALUE` cannot be negated: it is subtracted in two steps, as in the JDK.
         if (amountToSubtract == Long.MIN_VALUE) {
-            ChronoZonedDateTime medio = this.plus(Long.MAX_VALUE, unit);
-            return medio.plus(1L, unit);
+            ChronoZonedDateTime half = this.plus(Long.MAX_VALUE, unit);
+            return half.plus(1L, unit);
         }
         return this.plus(-amountToSubtract, unit);
     }
@@ -231,8 +231,8 @@ final class InstantOrder {
     }
 }
 
-// El comparador que devuelve `timeLineOrder()`: solo el instante, sin desempatar por zona.
-final class LineaDeTiempoZonada implements java.util.Comparator<ChronoZonedDateTime> {
+// The comparator `timeLineOrder()` returns: the instant alone, with no zone tie-break.
+final class ZonedTimeLine implements java.util.Comparator<ChronoZonedDateTime> {
 
     public int compare(ChronoZonedDateTime a, ChronoZonedDateTime b) {
         return InstantOrder.compare(a, b);

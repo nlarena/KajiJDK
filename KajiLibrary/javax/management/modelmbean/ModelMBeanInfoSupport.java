@@ -8,36 +8,37 @@ import javax.management.MBeanInfo;
 import javax.management.RuntimeOperationsException;
 
 /**
- * KajiLibrary's javax.management.modelmbean.ModelMBeanInfoSupport -- la descripcion concreta de un
- * model MBean.
+ * KajiLibrary's javax.management.modelmbean.ModelMBeanInfoSupport -- the concrete description of
+ * a model MBean.
  *
- * <p>Un {@link MBeanInfo} con descriptores. Los descriptores de cada atributo, operacion y aviso
- * viven en el {@code Info} correspondiente; este agrega el del MBean entero y los metodos para
- * buscarlos por nombre y por tipo.
+ * <p>An {@link MBeanInfo} with descriptors. The descriptors of each attribute, operation and
+ * notice live in the corresponding {@code Info}; this one adds the whole MBean's and the
+ * methods to look them up by name and by type.
  *
- * <h2>Buscar por tipo, no por posicion</h2>
+ * <h2>Searching by type, not by position</h2>
  *
- * <p>Casi todos los metodos de aca reciben un <b>tipo de descriptor</b>: {@code "mbean"},
- * {@code "attribute"}, {@code "operation"}, {@code "constructor"}, {@code "notification"}, o null
- * para todos. Es la forma de recorrer la configuracion sin saber cuantos hay de cada cosa.
+ * <p>Almost every method here takes a <b>descriptor type</b>: {@code "mbean"},
+ * {@code "attribute"}, {@code "operation"}, {@code "constructor"},
+ * {@code "notification"}, or null for all. It is the way to walk the configuration without
+ * knowing how many of each thing there are.
  *
- * <p>El campo {@code descriptorType} de cada descriptor es lo que lo clasifica, y por eso
- * {@link #setDescriptors} puede recibir una bolsa mezclada y repartirla sola.
+ * <p>Each descriptor's {@code descriptorType} field is what classifies it, and that is why
+ * {@link #setDescriptors} can take a mixed bag and sort it out on its own.
  *
- * <h2>Los descriptores por omision</h2>
+ * <h2>The default descriptors</h2>
  *
- * <p>Un {@code Info} sin descriptor no queda sin descriptor: se le arma uno con el nombre, el tipo y
- * el nombre para mostrar. Es lo que hace que un model MBean recien construido sea valido, y por eso
- * {@link #getMBeanDescriptor} nunca devuelve null.
+ * <p>An {@code Info} without a descriptor is not left without one: it gets one built with the
+ * name, the type and the display name. It is what makes a freshly built model MBean valid, and
+ * that is why {@link #getMBeanDescriptor} never returns null.
  */
 public class ModelMBeanInfoSupport extends MBeanInfo implements ModelMBeanInfo {
 
     private static final long serialVersionUID = -1935722590756516193L;
 
-    /** El descriptor del MBean entero; nunca null. */
+    /** The whole MBean's descriptor; never null. */
     private Descriptor mbeanDescriptor;
 
-    /** Una copia de otro. */
+    /** A copy of another one. */
     public ModelMBeanInfoSupport(ModelMBeanInfo mbi) {
         super(mbi.getClassName(), mbi.getDescription(), mbi.getAttributes(), mbi.getConstructors(),
             mbi.getOperations(), mbi.getNotifications());
@@ -51,7 +52,7 @@ public class ModelMBeanInfoSupport extends MBeanInfo implements ModelMBeanInfo {
         }
     }
 
-    /** Con los cuatro grupos y sin descriptor propio. */
+    /** With the four groups and without a descriptor of its own. */
     public ModelMBeanInfoSupport(String className, String description,
                                  ModelMBeanAttributeInfo[] attributes,
                                  ModelMBeanConstructorInfo[] constructors,
@@ -61,10 +62,10 @@ public class ModelMBeanInfoSupport extends MBeanInfo implements ModelMBeanInfo {
     }
 
     /**
-     * Todo explicito.
+     * Everything explicit.
      *
-     * @param mbeandescriptor null arma el por omision; ver la nota de la clase
-     * @throws RuntimeOperationsException si el descriptor no es valido
+     * @param mbeandescriptor null builds the default one; see the class note
+     * @throws RuntimeOperationsException if the descriptor is not valid
      */
     public ModelMBeanInfoSupport(String className, String description,
                                  ModelMBeanAttributeInfo[] attributes,
@@ -84,15 +85,15 @@ public class ModelMBeanInfoSupport extends MBeanInfo implements ModelMBeanInfo {
         this.mbeanDescriptor = (Descriptor) mbeandescriptor.clone();
     }
 
-    /** Una copia. */
+    /** A copy. */
     public Object clone() {
         return new ModelMBeanInfoSupport(this);
     }
 
     /**
-     * Todos los descriptores de ese tipo.
+     * All the descriptors of that type.
      *
-     * @param inDescriptorType null los devuelve todos, empezando por el del MBean
+     * @param inDescriptorType null returns them all, starting with the MBean's
      */
     public Descriptor[] getDescriptors(String inDescriptorType)
         throws MBeanException, RuntimeOperationsException {
@@ -117,9 +118,9 @@ public class ModelMBeanInfoSupport extends MBeanInfo implements ModelMBeanInfo {
     }
 
     /**
-     * Reparte una bolsa de descriptores segun el {@code descriptorType} de cada uno.
+     * Sorts out a bag of descriptors according to each one's {@code descriptorType}.
      *
-     * @throws RuntimeOperationsException si alguno no tiene ese campo
+     * @throws RuntimeOperationsException if one of them lacks that field
      */
     public void setDescriptors(Descriptor[] inDescriptors)
         throws MBeanException, RuntimeOperationsException {
@@ -142,9 +143,9 @@ public class ModelMBeanInfoSupport extends MBeanInfo implements ModelMBeanInfo {
     }
 
     /**
-     * El descriptor con ese nombre, de cualquier tipo.
+     * The descriptor with that name, of any type.
      *
-     * @return null si no hay ninguno con ese nombre
+     * @return null if there is none with that name
      */
     public Descriptor getDescriptor(String inDescriptorName)
         throws MBeanException, RuntimeOperationsException {
@@ -152,9 +153,9 @@ public class ModelMBeanInfoSupport extends MBeanInfo implements ModelMBeanInfo {
     }
 
     /**
-     * El descriptor con ese nombre y ese tipo.
+     * The descriptor with that name and that type.
      *
-     * @return null si no esta
+     * @return null if it is not there
      */
     public Descriptor getDescriptor(String inDescriptorName, String inDescriptorType)
         throws MBeanException, RuntimeOperationsException {
@@ -175,9 +176,9 @@ public class ModelMBeanInfoSupport extends MBeanInfo implements ModelMBeanInfo {
     }
 
     /**
-     * Lo pone en el {@code Info} que le corresponde por nombre.
+     * Puts it in the {@code Info} that corresponds to it by name.
      *
-     * @throws RuntimeOperationsException si no hay ninguno con ese nombre y ese tipo
+     * @throws RuntimeOperationsException if there is none with that name and that type
      */
     public void setDescriptor(Descriptor inDescriptor, String inDescriptorType)
         throws MBeanException, RuntimeOperationsException {
@@ -224,7 +225,7 @@ public class ModelMBeanInfoSupport extends MBeanInfo implements ModelMBeanInfo {
             "No " + inDescriptorType + " named " + name));
     }
 
-    /** El atributo con ese nombre, o null. */
+    /** The attribute with that name, or null. */
     public ModelMBeanAttributeInfo getAttribute(String inName)
         throws MBeanException, RuntimeOperationsException {
         javax.management.MBeanAttributeInfo[] all = getAttributes();
@@ -238,7 +239,7 @@ public class ModelMBeanInfoSupport extends MBeanInfo implements ModelMBeanInfo {
         return null;
     }
 
-    /** La operacion con ese nombre, o null. */
+    /** The operation with that name, or null. */
     public ModelMBeanOperationInfo getOperation(String inName)
         throws MBeanException, RuntimeOperationsException {
         javax.management.MBeanOperationInfo[] all = getOperations();
@@ -252,7 +253,7 @@ public class ModelMBeanInfoSupport extends MBeanInfo implements ModelMBeanInfo {
         return null;
     }
 
-    /** El constructor con ese nombre, o null. */
+    /** The constructor with that name, or null. */
     public ModelMBeanConstructorInfo getConstructor(String inName)
         throws MBeanException, RuntimeOperationsException {
         javax.management.MBeanConstructorInfo[] all = getConstructors();
@@ -266,7 +267,7 @@ public class ModelMBeanInfoSupport extends MBeanInfo implements ModelMBeanInfo {
         return null;
     }
 
-    /** El aviso con ese nombre, o null. */
+    /** The notice with that name, or null. */
     public ModelMBeanNotificationInfo getNotification(String inName)
         throws MBeanException, RuntimeOperationsException {
         javax.management.MBeanNotificationInfo[] all = getNotifications();
@@ -280,7 +281,7 @@ public class ModelMBeanInfoSupport extends MBeanInfo implements ModelMBeanInfo {
         return null;
     }
 
-    /** El descriptor del MBean entero. Copia. */
+    /** The whole MBean's descriptor. A copy. */
     public Descriptor getDescriptor() {
         return (Descriptor) this.mbeanDescriptor.clone();
     }
@@ -291,10 +292,10 @@ public class ModelMBeanInfoSupport extends MBeanInfo implements ModelMBeanInfo {
     }
 
     /**
-     * Lo reemplaza.
+     * Replaces it.
      *
-     * @param inMBeanDescriptor null vuelve al por omision
-     * @throws RuntimeOperationsException si no es valido
+     * @param inMBeanDescriptor null goes back to the default one
+     * @throws RuntimeOperationsException if it is not valid
      */
     public void setMBeanDescriptor(Descriptor inMBeanDescriptor)
         throws MBeanException, RuntimeOperationsException {
@@ -309,7 +310,7 @@ public class ModelMBeanInfoSupport extends MBeanInfo implements ModelMBeanInfo {
         this.mbeanDescriptor = (Descriptor) inMBeanDescriptor.clone();
     }
 
-    /** Agrega los descriptores de esos {@code Info} que sean del modelo. */
+    /** Adds the descriptors of those {@code Info}s that are model ones. */
     private static void collect(List<Descriptor> out, javax.management.MBeanFeatureInfo[] infos) {
         if (infos == null) {
             return;
@@ -323,7 +324,7 @@ public class ModelMBeanInfoSupport extends MBeanInfo implements ModelMBeanInfo {
         }
     }
 
-    /** El descriptor por omision del MBean; ver la nota de la clase. */
+    /** The MBean's default descriptor; see the class note. */
     private Descriptor defaultMBeanDescriptor() {
         return new DescriptorSupport(new String[] {"name", "descriptorType", "displayName",
                                                    "persistPolicy", "log", "visibility"},

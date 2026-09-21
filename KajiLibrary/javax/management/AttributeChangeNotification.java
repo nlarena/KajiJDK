@@ -1,42 +1,43 @@
 package javax.management;
 
 /**
- * "El atributo tal paso de este valor a este otro."
+ * "Attribute such-and-such went from this value to this other one."
  *
- * <p>Lleva el valor viejo <b>y</b> el nuevo, y eso es lo que la hace util de verdad: el que escucha
- * no tiene que haber leido antes el atributo ni guardar estado para saber que cambio. Lleva ademas
- * el tipo declarado, porque los dos valores son `Object` y sin el no se sabria como interpretarlos.
+ * <p>It carries the old value <b>and</b> the new one, and that is what makes it really useful: the
+ * listener does not have to have read the attribute beforehand nor keep state to know what
+ * changed. It also carries the declared type, because both values are {@code Object} and without
+ * it there would be no knowing how to interpret them.
  */
 public class AttributeChangeNotification extends Notification {
 
     private static final long serialVersionUID = 535176054565814134L;
 
-    /** El unico tipo que usa esta clase: {@value}. */
+    /** The only type this class uses: {@value}. */
     public static final String ATTRIBUTE_CHANGE = "jmx.attribute.change";
 
     /**
-     * @serial nombre del atributo que cambio
+     * @serial name of the attribute that changed
      */
     private String attributeName = null;
 
     /**
-     * @serial su tipo declarado
+     * @serial its declared type
      */
     private String attributeType = null;
 
     /**
-     * @serial el valor de antes
+     * @serial the value before
      */
     private Object oldValue = null;
 
     /**
-     * @serial el valor de ahora
+     * @serial the value now
      */
     private Object newValue = null;
 
     /**
-     * El tipo de la notificacion queda fijado en {@link #ATTRIBUTE_CHANGE}: no se elige, porque el
-     * que la recibe filtra por ese tipo.
+     * The notification type is fixed at {@link #ATTRIBUTE_CHANGE}: it is not chosen, because
+     * whoever receives it filters by that type.
      */
     public AttributeChangeNotification(Object source, long sequenceNumber, long timeStamp,
                                        String msg, String attributeName, String attributeType,
@@ -48,22 +49,22 @@ public class AttributeChangeNotification extends Notification {
         this.newValue = newValue;
     }
 
-    /** El nombre del atributo que cambio. */
+    /** The name of the attribute that changed. */
     public String getAttributeName() {
         return attributeName;
     }
 
-    /** Su tipo declarado, como cadena. */
+    /** Its declared type, as a string. */
     public String getAttributeType() {
         return attributeType;
     }
 
-    /** El valor de antes. */
+    /** The value before. */
     public Object getOldValue() {
         return oldValue;
     }
 
-    /** El valor de ahora. */
+    /** The value now. */
     public Object getNewValue() {
         return newValue;
     }

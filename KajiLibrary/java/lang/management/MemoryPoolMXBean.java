@@ -1,122 +1,123 @@
 package java.lang.management;
 
 /**
- * KajiLibrary's java.lang.management.MemoryPoolMXBean -- un area de memoria de la maquina virtual.
+ * KajiLibrary's java.lang.management.MemoryPoolMXBean -- one of the virtual machine's memory pools.
  *
- * <p>Cada area --la generacion joven, la vieja, el area de metodos, la cache de codigo-- tiene uno.
- * Es donde estan los numeros finos que {@link MemoryMXBean} resume en dos.
+ * <p>Each pool --the young generation, the old one, the method area, the code cache-- has one. It is
+ * where the fine-grained numbers live that {@link MemoryMXBean} sums up into two.
  *
- * <h2>Los dos umbrales</h2>
+ * <h2>The two thresholds</h2>
  *
- * <p>Es la parte que da valor a este MBean y la que se usa mal. Hay dos, y no miden lo mismo:
+ * <p>It is the part that gives this MBean its value and the part that gets used wrongly. There are
+ * two, and they do not measure the same thing:
  *
  * <ul>
- *   <li>el de <b>uso</b> ({@link #setUsageThreshold}) se cruza cuando el area supera ese tamano en
- *       cualquier momento. En un programa sano se cruza todo el tiempo, porque la memoria sube entre
- *       recolecciones;
- *   <li>el de <b>uso tras recolectar</b> ({@link #setCollectionUsageThreshold}) se cruza solo si
- *       despues de que el recolector paso <b>sigue</b> habiendo mas de ese tamano ocupado.
+ *   <li>the <b>usage</b> one ({@link #setUsageThreshold}) is crossed when the pool goes over that
+ *       size at any moment. In a healthy program it is crossed all the time, because memory rises
+ *       between collections;
+ *   <li>the <b>usage after collection</b> one ({@link #setCollectionUsageThreshold}) is crossed only
+ *       if, after the collector has been through, there is <b>still</b> more than that size in use.
  * </ul>
  *
- * <p>Para detectar una fuga sirve el segundo. Poner 0 apaga el umbral.
+ * <p>The second is the one for detecting a leak. Setting 0 switches the threshold off.
  *
- * <p>No todas las areas soportan los dos; hay que preguntar con
- * {@link #isUsageThresholdSupported} y {@link #isCollectionUsageThresholdSupported} antes, porque
- * usarlos sin soporte lanza {@link UnsupportedOperationException}.
+ * <p>Not every pool supports both; they have to be asked about with
+ * {@link #isUsageThresholdSupported} and {@link #isCollectionUsageThresholdSupported} first, because
+ * using them without support throws {@link UnsupportedOperationException}.
  *
- * <h2>{@link #getPeakUsage} y {@link #resetPeakUsage}</h2>
+ * <h2>{@link #getPeakUsage} and {@link #resetPeakUsage}</h2>
  *
- * <p>El pico es desde que arranco la maquina virtual o desde el ultimo reinicio del contador.
- * Reiniciarlo antes de una operacion cara y leerlo despues es la forma de medir cuanta memoria pide
- * esa operacion, sin que la contaminen picos anteriores.
+ * <p>The peak is since the virtual machine started or since the counter was last reset. Resetting it
+ * before an expensive operation and reading it afterwards is the way of measuring how much memory
+ * that operation asks for, without earlier peaks contaminating it.
  */
 public interface MemoryPoolMXBean extends PlatformManagedObject {
 
-    /** Su nombre. */
+    /** Its name. */
     String getName();
 
-    /** Monton o no monton. */
+    /** Heap or non-heap. */
     MemoryType getType();
 
-    /** Como esta ahora, o null si no se puede saber. */
+    /** How it stands now, or null if it cannot be known. */
     MemoryUsage getUsage();
 
-    /** El maximo alcanzado. Ver la nota de la clase. */
+    /** The peak reached. See the class's note. */
     MemoryUsage getPeakUsage();
 
-    /** Vuelve el pico al uso actual. */
+    /** It resets the peak to the current usage. */
     void resetPeakUsage();
 
-    /** Si sigue vigente; puede dejar de estarlo. */
+    /** Whether it is still valid; it can stop being so. */
     boolean isValid();
 
-    /** Que administradores la manejan. */
+    /** Which managers manage it. */
     String[] getMemoryManagerNames();
 
     /**
-     * El umbral de uso, en bytes; 0 si esta apagado.
+     * The usage threshold, in bytes; 0 if it is off.
      *
-     * @throws UnsupportedOperationException si esta area no lo soporta
+     * @throws UnsupportedOperationException if this pool does not support it
      */
     long getUsageThreshold();
 
     /**
-     * Lo fija; 0 lo apaga.
+     * It sets it; 0 switches it off.
      *
-     * @throws IllegalArgumentException si es negativo o mayor que el maximo
-     * @throws UnsupportedOperationException si esta area no lo soporta
+     * @throws IllegalArgumentException if it is negative or greater than the maximum
+     * @throws UnsupportedOperationException if this pool does not support it
      */
     void setUsageThreshold(long threshold);
 
     /**
-     * Si se cruzo.
+     * Whether it was crossed.
      *
-     * @throws UnsupportedOperationException si esta area no lo soporta
+     * @throws UnsupportedOperationException if this pool does not support it
      */
     boolean isUsageThresholdExceeded();
 
     /**
-     * Cuantas veces se cruzo.
+     * How many times it was crossed.
      *
-     * @throws UnsupportedOperationException si esta area no lo soporta
+     * @throws UnsupportedOperationException if this pool does not support it
      */
     long getUsageThresholdCount();
 
-    /** Si esta area soporta el umbral de uso. */
+    /** Whether this pool supports the usage threshold. */
     boolean isUsageThresholdSupported();
 
     /**
-     * El umbral de uso tras recolectar. Ver la nota de la clase.
+     * The usage-after-collection threshold. See the class's note.
      *
-     * @throws UnsupportedOperationException si esta area no lo soporta
+     * @throws UnsupportedOperationException if this pool does not support it
      */
     long getCollectionUsageThreshold();
 
     /**
-     * Lo fija; 0 lo apaga.
+     * It sets it; 0 switches it off.
      *
-     * @throws IllegalArgumentException si es negativo o mayor que el maximo
-     * @throws UnsupportedOperationException si esta area no lo soporta
+     * @throws IllegalArgumentException if it is negative or greater than the maximum
+     * @throws UnsupportedOperationException if this pool does not support it
      */
     void setCollectionUsageThreshold(long threshold);
 
     /**
-     * Si se cruzo.
+     * Whether it was crossed.
      *
-     * @throws UnsupportedOperationException si esta area no lo soporta
+     * @throws UnsupportedOperationException if this pool does not support it
      */
     boolean isCollectionUsageThresholdExceeded();
 
     /**
-     * Cuantas veces se cruzo.
+     * How many times it was crossed.
      *
-     * @throws UnsupportedOperationException si esta area no lo soporta
+     * @throws UnsupportedOperationException if this pool does not support it
      */
     long getCollectionUsageThresholdCount();
 
-    /** Como quedo despues de la ultima recoleccion, o null si nunca hubo una. */
+    /** How it stood after the last collection, or null if there never was one. */
     MemoryUsage getCollectionUsage();
 
-    /** Si esta area soporta el umbral de uso tras recolectar. */
+    /** Whether this pool supports the usage-after-collection threshold. */
     boolean isCollectionUsageThresholdSupported();
 }

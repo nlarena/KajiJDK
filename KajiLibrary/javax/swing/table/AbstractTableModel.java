@@ -8,37 +8,37 @@ import javax.swing.event.TableModelEvent;
 import javax.swing.event.TableModelListener;
 
 /**
- * Lo que todo modelo de tabla comparte: los oyentes y los avisos.
+ * What every table model shares: the listeners and the notices.
  *
- * <h2>Lo que hay que escribir es poco</h2>
+ * <h2>What has to be written is little</h2>
  *
- * <p>Una subclase solo tiene que dar {@code getRowCount}, {@code getColumnCount} y
- * {@code getValueAt}. Todo lo demas tiene una respuesta razonable: los nombres de columna son A, B,
- * C..., el tipo de toda columna es {@link Object}, y nada se puede editar.
+ * <p>A subclass only has to give {@code getRowCount}, {@code getColumnCount} and
+ * {@code getValueAt}. Everything else has a reasonable answer: the column names are A, B, C...,
+ * every column's type is {@link Object}, and nothing can be edited.
  *
- * <h2>Los seis avisos</h2>
+ * <h2>The six notices</h2>
  *
- * <p>{@link #fireTableDataChanged}, {@link #fireTableStructureChanged} y los cuatro por rango. La
- * diferencia que importa es la de los dos primeros: <strong>"cambiaron los datos" conserva las
- * columnas; "cambio la estructura" las tira</strong> y la tabla vuelve a armarlas desde cero. Usar
- * el segundo cuando alcanzaba el primero borra los anchos que el usuario habia ajustado a mano, y es
- * el error mas comun con esta clase.
+ * <p>{@link #fireTableDataChanged}, {@link #fireTableStructureChanged} and the four by range.
+ * The difference that matters is between the first two: <strong>"the data changed" keeps the
+ * columns; "the structure changed" throws them away</strong> and the table builds them again
+ * from scratch. Using the second when the first would have done wipes out the widths the user
+ * had adjusted by hand, and it is the commonest mistake with this class.
  *
- * <p>Los oyentes se recorren de atras para adelante, como en todo Swing.
+ * <p>The listeners are walked from the back to the front, as everywhere in Swing.
  */
 public abstract class AbstractTableModel implements TableModel, Serializable {
 
-    /** Los oyentes, por tipo. */
+    /** The listeners, by type. */
     protected EventListenerList listenerList = new EventListenerList();
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected AbstractTableModel() {
     }
 
     /**
-     * El nombre de esa columna: A, B, ... Z, AA, AB, ...
+     * That column's name: A, B, ... Z, AA, AB, ...
      *
-     * <p>Es el esquema de las hojas de calculo, y es lo que se ve cuando nadie puso nombres.
+     * <p>It is the spreadsheets' scheme, and it is what is seen when nobody set names.
      */
     public String getColumnName(int column) {
         String result = "";
@@ -49,9 +49,9 @@ public abstract class AbstractTableModel implements TableModel, Serializable {
     }
 
     /**
-     * La columna que se llama asi, o -1.
+     * The column called that, or -1.
      *
-     * <p>Compara con {@code equals}, asi que distingue mayusculas.
+     * <p>It compares with {@code equals}, so it distinguishes case.
      */
     public int findColumn(String columnName) {
         for (int i = 0; i < getColumnCount(); i++) {
@@ -62,17 +62,19 @@ public abstract class AbstractTableModel implements TableModel, Serializable {
         return -1;
     }
 
-    /** {@link Object} para toda columna; una subclase que sepa el tipo lo dice y gana renderer. */
+    /**
+     * {@link Object} for every column; a subclass that knows the type says so and gains a renderer.
+     */
     public Class<?> getColumnClass(int columnIndex) {
         return Object.class;
     }
 
-    /** Falso: nada se edita mientras la subclase no diga otra cosa. */
+    /** False: nothing is edited while the subclass does not say otherwise. */
     public boolean isCellEditable(int rowIndex, int columnIndex) {
         return false;
     }
 
-    /** No hace nada; la subclase que permita editar tiene que escribirlo. */
+    /** It does nothing; the subclass that allows editing has to write it. */
     public void setValueAt(Object aValue, int rowIndex, int columnIndex) {
     }
 
@@ -88,12 +90,12 @@ public abstract class AbstractTableModel implements TableModel, Serializable {
         return listenerList.getListeners(TableModelListener.class);
     }
 
-    /** Cambiaron los datos, no las columnas; ver la nota de la clase. */
+    /** The data changed, not the columns; see the class note. */
     public void fireTableDataChanged() {
         fireTableChanged(new TableModelEvent(this));
     }
 
-    /** Cambio la estructura: la tabla tira sus columnas y las rearma. */
+    /** The structure changed: the table throws its columns away and rebuilds them. */
     public void fireTableStructureChanged() {
         fireTableChanged(new TableModelEvent(this, TableModelEvent.HEADER_ROW));
     }
@@ -117,7 +119,7 @@ public abstract class AbstractTableModel implements TableModel, Serializable {
         fireTableChanged(new TableModelEvent(this, row, row, column));
     }
 
-    /** Reparte el aviso a los oyentes, del ultimo anotado al primero. */
+    /** Hands the notice out to the listeners, from the last registered to the first. */
     public void fireTableChanged(TableModelEvent e) {
         Object[] listeners = listenerList.getListenerList();
         for (int i = listeners.length - 2; i >= 0; i = i - 2) {
@@ -127,7 +129,7 @@ public abstract class AbstractTableModel implements TableModel, Serializable {
         }
     }
 
-    /** Los oyentes de ese tipo anotados en este modelo. */
+    /** The listeners of that type registered on this model. */
     public <T extends EventListener> T[] getListeners(Class<T> listenerType) {
         return listenerList.getListeners(listenerType);
     }

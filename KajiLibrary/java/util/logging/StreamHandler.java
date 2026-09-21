@@ -1,37 +1,37 @@
 package java.util.logging;
 
 /**
- * KajiLibrary's java.util.logging.StreamHandler -- escribe a un flujo.
+ * KajiLibrary's java.util.logging.StreamHandler -- it writes to a stream.
  *
- * <p>Es la base de casi todos los demas. Lo unico con vuelta que hace es **cuando** escribe la
- * cabecera del formateador: no al abrir sino junto con el primer registro, y si no hubo ninguno,
- * recien al cerrar. La diferencia se ve con un {@link XMLFormatter}: la declaracion del documento
- * tiene que salir antes que el primer `<record>`, y el `</log>` de cierre tiene que salir aunque no
- * haya habido ni uno -- un documento XML sin raiz no es un documento, y un archivo de traza vacio que
- * no se puede parsear es peor que uno con un `<log></log>` adentro.
+ * <p>It is the base of almost all the others. The one thing with a twist that it does is **when** it
+ * writes the formatter's head: not on opening but along with the first record, and if there was
+ * none, only on closing. The difference shows with an {@link XMLFormatter}: the document's
+ * declaration has to come out before the first `<record>`, and the closing `</log>` has to come out
+ * even if there was not a single one -- an XML document with no root is not a document, and an empty
+ * log file that cannot be parsed is worse than one with a `<log></log>` inside.
  *
- * <p>Su nivel por omision es {@link Level#INFO}, no {@link Level#ALL} como el de {@link Handler}.
- * Escribir a un flujo cuesta, y el que arma uno a mano casi siempre lo quiere para lo mismo que la
- * consola.
+ * <p>Its default level is {@link Level#INFO}, not {@link Level#ALL} like {@link Handler}'s. Writing
+ * to a stream costs, and whoever builds one by hand almost always wants it for the same thing as the
+ * console.
  */
 public class StreamHandler extends Handler {
 
     private java.io.Writer writer;
-    private boolean cabeceraEscrita = false;
+    private boolean headWritten = false;
 
     public StreamHandler() {
-        this.configurar("java.util.logging.StreamHandler");
+        this.configure("java.util.logging.StreamHandler");
     }
 
     public StreamHandler(java.io.OutputStream out, Formatter formatter) {
-        this.configurar("java.util.logging.StreamHandler");
+        this.configure("java.util.logging.StreamHandler");
         this.setFormatter(formatter);
         this.setOutputStream(out);
     }
 
-    // Lo que este manejador lee de la configuracion. `cname` es el nombre de la clase que manda: una
-    // subclase la vuelve a llamar con el suyo para que sus propiedades pisen a estas.
-    void configurar(String cname) {
+    // What this handler reads from the configuration. `cname` is the name of the class in charge: a
+    // subclass calls it again with its own so that its properties override these.
+    void configure(String cname) {
         LogManager m = LogManager.getLogManager();
         this.setLevel(m.getLevelProperty(cname + ".level", Level.INFO));
         this.setFilter(m.getFilterProperty(cname + ".filter", null));
@@ -39,22 +39,23 @@ public class StreamHandler extends Handler {
         try {
             this.setEncoding(m.getStringProperty(cname + ".encoding", null));
         } catch (Exception e) {
-            // Una codificacion que no existe deja al manejador con la de la plataforma en vez de
-            // impedir que se construya: no poder escribir la traza no puede tumbar al programa.
+            // An encoding that does not exist leaves the handler with the platform's instead of
+            // stopping it being constructed: not being able to write the log cannot bring the program
+            // down.
             try {
                 this.setEncoding(null);
             } catch (Exception e2) {
-                // No puede pasar: `null` siempre se acepta.
+                // It cannot happen: `null` is always accepted.
             }
         }
     }
 
-    /** Cambia el destino, cerrando el anterior. */
+    /** It changes the target, closing the previous one. */
     protected synchronized void setOutputStream(java.io.OutputStream out) throws SecurityException {
         if (out == null) {
             throw new NullPointerException("out");
         }
-        this.cerrarSalida();
+        this.closeOutput();
         String enc = this.getEncoding();
         if (enc == null) {
             this.writer = new java.io.OutputStreamWriter(out);
@@ -62,12 +63,12 @@ public class StreamHandler extends Handler {
             try {
                 this.writer = new java.io.OutputStreamWriter(out, enc);
             } catch (java.io.UnsupportedEncodingException e) {
-                // `setEncoding` ya la valido; si igual no se puede, la de la plataforma es mejor que
-                // ningun destino.
+                // `setEncoding` already validated it; if it still cannot be used, the platform's is
+                // better than no target at all.
                 this.writer = new java.io.OutputStreamWriter(out);
             }
         }
-        this.cabeceraEscrita = false;
+        this.headWritten = false;
     }
 
     public synchronized void publish(LogRecord record) {
@@ -75,9 +76,9 @@ public class StreamHandler extends Handler {
             return;
         }
         try {
-            if (!this.cabeceraEscrita) {
+            if (!this.headWritten) {
                 this.writer.write(this.getFormatter().getHead(this));
-                this.cabeceraEscrita = true;
+                this.headWritten = true;
             }
             this.writer.write(this.getFormatter().format(record));
         } catch (Exception e) {
@@ -97,17 +98,17 @@ public class StreamHandler extends Handler {
     }
 
     public synchronized void close() throws SecurityException {
-        this.cerrarSalida();
+        this.closeOutput();
     }
 
-    private void cerrarSalida() {
+    private void closeOutput() {
         if (this.writer == null) {
             return;
         }
         try {
-            if (!this.cabeceraEscrita) {
+            if (!this.headWritten) {
                 this.writer.write(this.getFormatter().getHead(this));
-                this.cabeceraEscrita = true;
+                this.headWritten = true;
             }
             this.writer.write(this.getFormatter().getTail(this));
             this.writer.flush();

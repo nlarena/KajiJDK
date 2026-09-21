@@ -14,273 +14,284 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLParameters;
 
 /**
- * El cliente HTTP del JDK: HTTP/1.1, HTTP/2 y WebSocket, con API sincronica y asincronica.
+ * The JDK's HTTP client: HTTP/1.1, HTTP/2 and WebSocket, with a synchronous and an asynchronous
+ * API.
  *
- * <h2>Es un objeto pesado, y eso cambia como se usa</h2>
+ * <h2>It is a heavy object, and that changes how it is used</h2>
  *
- * <p>Un cliente lleva adentro el pool de conexiones, el pool de hilos, el contexto TLS y la cache de
- * sesiones. Crear uno por pedido —que es el reflejo natural viniendo de {@code URLConnection}— tira
- * todo eso a la basura cada vez y vuelve a hacer el handshake completo en cada llamada.
+ * <p>A client carries the connection pool, the thread pool, the TLS context and the session cache.
+ * Creating one per request —the natural reflex coming from {@code URLConnection}— throws all of
+ * that away every time and redoes the full handshake on every call.
  *
- * <p>Lo correcto es <strong>uno por aplicacion</strong>, o uno por configuracion distinta, compartido
- * entre hilos: es inmutable y seguro para eso.
+ * <p>The right thing is <strong>one per application</strong>, or one per distinct configuration,
+ * shared between threads: it is immutable and safe for that.
  *
- * <h2>Los dos modos</h2>
+ * <h2>The two modes</h2>
  *
- * <p>{@link #send} bloquea; {@link #sendAsync} devuelve un {@link CompletableFuture}. No son dos
- * implementaciones: la sincronica esta escrita sobre la otra. Por eso el cliente necesita un
- * {@link Executor} incluso para el modo bloqueante.
+ * <p>{@link #send} blocks; {@link #sendAsync} returns a {@link CompletableFuture}. They are not two
+ * implementations: the synchronous one is written on top of the other. That is why the client needs
+ * an {@link Executor} even for the blocking mode.
  *
- * <h2>El cierre, que llego tarde y por algo</h2>
+ * <h2>Closing, which came late</h2>
  *
- * <p>Hasta Java 21 no habia forma de cerrarlo: un cliente quedaba con sus hilos vivos hasta que el
- * recolector lo alcanzara, y como los hilos lo referencian, eso podia no pasar nunca. Ahora es
- * {@link AutoCloseable}, con la distincion habitual entre {@link #shutdown} —no acepta pedidos
- * nuevos, termina los que hay— y {@link #shutdownNow}, que corta.
+ * <p>Until Java 21 there was no way to close it explicitly. This note said a client kept its
+ * threads alive until the collector reached it, and that since the threads reference it that might
+ * never happen. The JDK documents the opposite: its implementation releases the resources once the
+ * instance is no longer strongly reachable and every operation started on it has completed. Since
+ * 21 it is {@link AutoCloseable}, with the usual distinction between {@link #shutdown} —accepts no
+ * new requests, finishes the ones in flight— and {@link #shutdownNow}, which cuts them off.
  *
- * <h2>En esta VM</h2>
+ * <h2>In this VM</h2>
  *
- * <p>Las dos fabricas declinan. Implementar esto seria escribir un cliente HTTP/2 entero —marcos,
- * multiplexado, HPACK— sobre un TLS que esta VM tampoco tiene proveedor para negociar. La API queda
- * completa para quien compile contra ella, y lo que falta es una implementacion, no una firma.
+ * <p>Both factories refuse. Implementing this would mean writing a whole HTTP/2 client —frames,
+ * multiplexing, HPACK— over TLS that this VM has no provider to negotiate either. The API is
+ * complete for whoever compiles against it, and what is missing is an implementation, not a
+ * signature.
+ *
+ * <p>The shutdown methods are the exception: the JDK's base class gives them working defaults
+ * —{@code shutdown} does nothing, {@code awaitTermination} returns {@code true}, {@code close}
+ * waits on those— and here they throw.
  *
  * @since 11
  */
 public abstract class HttpClient implements AutoCloseable {
 
-    /** Para las implementaciones. */
+    /** For implementations. */
     protected HttpClient() {
     }
 
     /**
-     * Un cliente con la configuracion por omision.
+     * A client with the default configuration.
      *
-     * @throws UnsupportedOperationException en esta VM — ver la nota de la clase
+     * @throws UnsupportedOperationException in this VM — see the class note
      */
     public static HttpClient newHttpClient() {
         return newBuilder().build();
     }
 
     /**
-     * Un constructor de clientes.
+     * A client builder.
      *
-     * @throws UnsupportedOperationException en esta VM
+     * @throws UnsupportedOperationException in this VM
      */
     public static Builder newBuilder() {
         throw new UnsupportedOperationException(
-                "esta VM no trae implementacion del cliente HTTP");
+                "this VM has no HTTP client implementation");
     }
 
-    /** El manejador de cookies, si se configuro uno. */
+    /** The cookie handler, if one was configured. */
     public abstract Optional<CookieHandler> cookieHandler();
 
     /**
-     * El plazo para <strong>conectar</strong>, si se configuro.
+     * The timeout for <strong>connecting</strong>, if configured.
      *
-     * <p>Distinto del plazo de {@link HttpRequest#timeout}, que es el del pedido entero. Vencerse
-     * conectando da {@link HttpConnectTimeoutException}, y esa distincion decide si reintentar es
-     * seguro.
+     * <p>Different from the {@link HttpRequest#timeout} one, which is for the whole request.
+     * Running out while connecting gives {@link HttpConnectTimeoutException}, and that distinction
+     * decides whether retrying is safe.
      */
     public abstract Optional<Duration> connectTimeout();
 
-    /** Que hace con las redirecciones. */
+    /** What it does with redirects. */
     public abstract Redirect followRedirects();
 
-    /** El selector de proxy, si se configuro. */
+    /** The proxy selector, if configured. */
     public abstract Optional<ProxySelector> proxy();
 
-    /** El contexto TLS. */
+    /** The TLS context. */
     public abstract SSLContext sslContext();
 
-    /** Los parametros TLS. */
+    /** The TLS parameters. */
     public abstract SSLParameters sslParameters();
 
-    /** El autenticador, si se configuro. */
+    /** The authenticator, if configured. */
     public abstract Optional<Authenticator> authenticator();
 
-    /** La version preferida. Es una preferencia: HTTP/2 se negocia y puede caer a 1.1. */
+    /** The preferred version. It is a preference: HTTP/2 is negotiated and can fall back to 1.1. */
     public abstract Version version();
 
-    /** El ejecutor, si se configuro uno propio. */
+    /** The executor, if a custom one was configured. */
     public abstract Optional<Executor> executor();
 
     /**
-     * Manda el pedido y espera la respuesta.
+     * Sends the request and waits for the response.
      *
-     * @throws IOException si falla la red
-     * @throws InterruptedException si interrumpen el hilo mientras espera
+     * @throws IOException if the network fails
+     * @throws InterruptedException if the thread is interrupted while waiting
      */
     public abstract <T> HttpResponse<T> send(HttpRequest request,
             HttpResponse.BodyHandler<T> responseBodyHandler)
             throws IOException, InterruptedException;
 
     /**
-     * Manda el pedido sin esperar.
+     * Sends the request without waiting.
      *
-     * <p>El futuro se completa cuando llegaron los encabezados <strong>y</strong> el cuerpo termino
-     * de convertirse. Falla con la excepcion adentro, no la tira.
+     * <p>The future completes when the headers have arrived <strong>and</strong> the body handler's
+     * result is available. It fails with the exception inside rather than throwing it.
      */
     public abstract <T> CompletableFuture<HttpResponse<T>> sendAsync(HttpRequest request,
             HttpResponse.BodyHandler<T> responseBodyHandler);
 
-    /** Igual, atendiendo ademas las promesas que empuje el servidor. */
+    /** The same, also handling the promises the server pushes. */
     public abstract <T> CompletableFuture<HttpResponse<T>> sendAsync(HttpRequest request,
             HttpResponse.BodyHandler<T> responseBodyHandler,
             HttpResponse.PushPromiseHandler<T> pushPromiseHandler);
 
     /**
-     * Un constructor de WebSocket.
+     * A WebSocket builder.
      *
-     * @throws UnsupportedOperationException si el cliente no lo soporta
+     * @throws UnsupportedOperationException if the client does not support it
      */
     public WebSocket.Builder newWebSocketBuilder() {
-        throw new UnsupportedOperationException("este cliente no soporta WebSocket");
+        throw new UnsupportedOperationException("this client does not support WebSocket");
     }
 
     /**
-     * Deja de aceptar pedidos nuevos; los que estan en curso terminan.
+     * Stops accepting new requests; those in flight finish.
      *
      * @since 21
      */
     public void shutdown() {
-        throw new UnsupportedOperationException("este cliente no soporta cierre ordenado");
+        throw new UnsupportedOperationException("this client does not support orderly shutdown");
     }
 
     /**
-     * Espera hasta {@code duration} a que termine de cerrarse.
+     * Waits up to {@code duration} for the shutdown to finish.
      *
-     * @return {@code true} si termino, {@code false} si se vencio el plazo
+     * @return {@code true} if it finished, {@code false} if the time ran out
      * @since 21
      */
     public boolean awaitTermination(Duration duration) throws InterruptedException {
-        throw new UnsupportedOperationException("este cliente no soporta cierre ordenado");
+        throw new UnsupportedOperationException("this client does not support orderly shutdown");
     }
 
     /**
-     * Si ya termino de cerrarse.
+     * Whether it has finished shutting down.
      *
      * @since 21
      */
     public boolean isTerminated() {
-        throw new UnsupportedOperationException("este cliente no soporta cierre ordenado");
+        throw new UnsupportedOperationException("this client does not support orderly shutdown");
     }
 
     /**
-     * Corta: los pedidos en curso fallan.
+     * Cuts off: the requests in flight fail.
      *
      * @since 21
      */
     public void shutdownNow() {
-        throw new UnsupportedOperationException("este cliente no soporta cierre ordenado");
+        throw new UnsupportedOperationException("this client does not support orderly shutdown");
     }
 
     /**
-     * Cierra ordenadamente y espera.
+     * Shuts down in order and waits.
      *
-     * <p>No declara excepcion, a diferencia del {@code close} de {@link AutoCloseable}: cerrar tiene
-     * que poder ir en un {@code try} con recursos sin obligar a atrapar nada.
+     * <p>It declares no exception, unlike {@link AutoCloseable}'s {@code close}: closing has to fit
+     * in a try-with-resources without forcing anything to be caught.
      *
      * @since 21
      */
     public void close() {
-        throw new UnsupportedOperationException("este cliente no soporta cierre ordenado");
+        throw new UnsupportedOperationException("this client does not support orderly shutdown");
     }
 
     /**
-     * Que hacer con una redireccion.
+     * What to do with a redirect.
      *
-     * <p>{@link #NORMAL} es el unico que no es obvio, y es el que hay que usar: sigue las
-     * redirecciones <strong>salvo</strong> las que bajan de HTTPS a HTTP. Seguir esas convertiria
-     * una conexion segura en una en claro sin que nadie lo pida, que es un ataque conocido.
+     * <p>{@link #NORMAL} is the only one that is not obvious, and it is the one to use: it follows
+     * redirects <strong>except</strong> those that go down from HTTPS to HTTP. Following those
+     * would turn a secure connection into a cleartext one without anyone asking, which is a known
+     * attack.
      */
     public enum Redirect {
 
-        /** No seguir ninguna. */
+        /** Follow none. */
         NEVER,
-        /** Seguir todas, incluida la que degrada a HTTP. */
+        /** Follow all, including the one that downgrades to HTTP. */
         ALWAYS,
-        /** Seguir todas menos la que degrada de HTTPS a HTTP. */
+        /** Follow all except the one that downgrades from HTTPS to HTTP. */
         NORMAL
     }
 
-    /** La version del protocolo. */
+    /** The protocol version. */
     public enum Version {
 
         /** HTTP/1.1. */
         HTTP_1_1,
         /**
-         * HTTP/2, cayendo a 1.1 si el servidor no lo soporta.
+         * HTTP/2, falling back to 1.1 if the server does not support it.
          *
-         * <p>Es una preferencia y no una exigencia: la version se negocia por ALPN durante el
-         * handshake TLS, asi que pedirlo no garantiza obtenerlo.
+         * <p>It is a preference and not a requirement: the version is negotiated —by ALPN during
+         * the TLS handshake, or by an {@code Upgrade} header over cleartext— so asking for it does
+         * not guarantee getting it.
          */
         HTTP_2
     }
 
     /**
-     * Arma un {@link HttpClient}.
+     * Builds an {@link HttpClient}.
      *
-     * <p>Todo tiene valor por omision, asi que {@code newBuilder().build()} es valido. Lo que se
-     * configura son las excepciones a eso.
+     * <p>Everything has a default, so {@code newBuilder().build()} is valid. What gets configured
+     * is the exceptions to that.
      */
     public interface Builder {
 
         /**
-         * Que no use ningun proxy, ni siquiera el del sistema.
+         * A selector that uses no proxy at all, not even the system's.
          *
-         * <p>Existe porque no pasar nada <em>no</em> significa eso: sin configurar, el cliente usa
-         * el selector por omision, que puede leer las variables de entorno del sistema.
+         * <p>It exists because passing nothing does <em>not</em> mean that: unconfigured, the
+         * client uses the default selector, which honours the proxy system properties. (This
+         * javadoc said environment variables; what the JDK documents is system properties.)
          */
         public static final ProxySelector NO_PROXY = ProxySelector.of(null);
 
-        /** El manejador de cookies. Sin uno, el cliente no guarda ninguna. */
+        /** The cookie handler. Without one, the client keeps none. */
         Builder cookieHandler(CookieHandler cookieHandler);
 
-        /** El plazo para conectar. */
+        /** The timeout for connecting. */
         Builder connectTimeout(Duration duration);
 
-        /** El contexto TLS; sin uno, el por omision del sistema. */
+        /** The TLS context; without one, the system default. */
         Builder sslContext(SSLContext sslContext);
 
-        /** Los parametros TLS. */
+        /** The TLS parameters. */
         Builder sslParameters(SSLParameters sslParameters);
 
-        /** Donde correr las tareas asincronicas; sin uno, el cliente arma su propio pool. */
+        /** Where to run the asynchronous tasks; without one, the client builds its own pool. */
         Builder executor(Executor executor);
 
-        /** Que hacer con las redirecciones; por omision {@link Redirect#NEVER}. */
+        /** What to do with redirects; {@link Redirect#NEVER} by default. */
         Builder followRedirects(Redirect policy);
 
-        /** La version preferida. */
+        /** The preferred version. */
         Builder version(Version version);
 
         /**
-         * La prioridad de los flujos HTTP/2, entre 1 y 256.
+         * The priority of HTTP/2 streams, between 1 and 256.
          *
-         * @throws IllegalArgumentException si esta fuera de rango
+         * @throws IllegalArgumentException if it is out of range
          */
         Builder priority(int priority);
 
-        /** El selector de proxy; ver {@link #NO_PROXY}. */
+        /** The proxy selector; see {@link #NO_PROXY}. */
         Builder proxy(ProxySelector proxySelector);
 
-        /** El autenticador para los desafios {@code 401} y {@code 407}. */
+        /** The authenticator for {@code 401} and {@code 407} challenges. */
         Builder authenticator(Authenticator authenticator);
 
         /**
-         * Desde que direccion local salir.
+         * Which local address to go out from.
          *
-         * <p>Llego con cuerpo por compatibilidad. Sirve en una maquina con varias interfaces, donde
-         * cual se usa cambia la ruta y a veces el permiso.
+         * <p>It came with a body for compatibility. It is useful on a machine with several
+         * interfaces, where which one is used changes the route and sometimes the permission.
          *
          * @since 19
          */
         default Builder localAddress(InetAddress localAddr) {
             throw new UnsupportedOperationException(
-                    "este constructor no soporta fijar la direccion local");
+                    "this builder does not support setting the local address");
         }
 
-        /** El cliente armado. */
+        /** The built client. */
         HttpClient build();
     }
 }

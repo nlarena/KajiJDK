@@ -23,79 +23,82 @@ import javax.swing.undo.CompoundEdit;
 import javax.swing.undo.UndoableEdit;
 
 /**
- * La base de todos los documentos: el texto por un lado, la estructura por otro, y un candado
- * entre los dos.
+ * The base of every document: the text on one side, the structure on the other, and a lock
+ * between the two.
  *
- * <h2>Tres piezas</h2>
+ * <h2>Three pieces</h2>
  *
  * <ul>
- * <li>El <strong>contenido</strong> ({@link Content}) guarda los caracteres y sabe crear
- * {@link Position}, marcas que se mueven solas cuando se inserta o se borra antes de ellas. Es la
- * pieza que hace que nada tenga que recorrer el texto para acomodar indices.
- * <li>La <strong>estructura</strong> es un arbol de {@link Element}. Cada elemento marca un tramo
- * del contenido con {@code Position}, asi que la estructura sobrevive a las ediciones sin
- * recalcularse. Que forma tiene el arbol lo decide la subclase: {@link PlainDocument} hace una
- * lista de lineas, {@link DefaultStyledDocument} hace secciones, parrafos y tramos con estilo.
- * <li>El <strong>contexto de atributos</strong> ({@link AttributeContext}) comparte los conjuntos
- * de atributos repetidos, que en un documento con estilo son casi todos.
+ * <li>The <strong>content</strong> ({@link Content}) keeps the characters and knows how to
+ * create {@link Position}s, marks that move by themselves when something is inserted or removed
+ * before them. It is the piece that keeps anything from having to walk the text to fix up
+ * indices.
+ * <li>The <strong>structure</strong> is a tree of {@link Element}s. Each element marks a stretch
+ * of the content with {@code Position}s, so the structure survives the edits without being
+ * recomputed. What shape the tree has is decided by the subclass: {@link PlainDocument} makes a
+ * list of lines, {@link DefaultStyledDocument} makes sections, paragraphs and styled runs.
+ * <li>The <strong>attribute context</strong> ({@link AttributeContext}) shares the repeated
+ * attribute sets, which in a styled document are almost all of them.
  * </ul>
  *
- * <h2>El candado, y por que es de una sola escritura</h2>
+ * <h2>The lock, and why it is single-writer</h2>
  *
- * <p>Un documento admite muchos lectores a la vez y un solo escritor, y mientras hay un escritor no
- * lee nadie. La razon no es la velocidad: es que una edicion cambia el contenido y la estructura en
- * dos pasos, y entre esos dos pasos el documento no es consistente. {@link #render} es la forma
- * correcta de leer sin pisarse; los metodos de escritura toman el candado ellos mismos.
+ * <p>A document admits many readers at once and a single writer, and while there is a writer
+ * nobody reads. The reason is not speed: it is that an edit changes the content and the
+ * structure in two steps, and between those two steps the document is not consistent.
+ * {@link #render} is the right way of reading without treading on anybody; the writing methods
+ * take the lock themselves.
  *
- * <p>El escritor puede volver a entrar —un {@code insertUpdate} puede llamar a otra escritura—,
- * pero un lector que ya tiene el candado de lectura y pide escribir es un error de programa, no una
- * espera: seria un abrazo mortal consigo mismo, y por eso lanza {@link IllegalStateException}.
+ * <p>The writer may re-enter --an {@code insertUpdate} may call another write--, but a reader
+ * that already has the read lock and asks to write is a program error, not a wait: it would be a
+ * deadlock with itself, and that is why it throws {@link IllegalStateException}.
  *
- * <h2>Las clases anidadas son estaticas, y llevan el documento por parametro</h2>
+ * <h2>The nested classes are static, and carry the document as a parameter</h2>
  *
- * <p>En el JDK {@link AbstractElement} y las suyas son clases <em>internas</em>: cada elemento
- * tiene una referencia implicita a su documento y el constructor se escribe
- * {@code new BranchElement(padre, atributos)}. Aca son estaticas y el documento va primero:
- * {@code new BranchElement(doc, padre, atributos)}. La firma binaria que queda es la misma —una
- * clase interna compila su externa como primer parametro—, pero en el codigo fuente se ve.
+ * <p>In the JDK {@link AbstractElement} and its kin are <em>inner</em> classes: each element has
+ * an implicit reference to its document and the constructor is written
+ * {@code new BranchElement(parent, attributes)}. Here they are static and the document goes
+ * first: {@code new BranchElement(doc, parent, attributes)}. The resulting binary signature is
+ * the same --an inner class compiles its outer one as its first parameter-- but in the source it
+ * shows.
  *
- * <p>El motivo es del compilador de este proyecto, no del diseno: una clase interna todavia no
- * puede llamar al constructor de otra interna hermana ni al {@code super(...)} de una, y no hay
- * forma de escribir esa instancia a mano (hallazgos #507 y #508). Cuando eso se arregle, esto
- * vuelve a la forma del JDK.
+ * <p>The reason is this project's compiler, not the design: an inner class cannot yet call a
+ * sibling inner class's constructor nor one's {@code super(...)}, and there is no way of writing
+ * that instance by hand (findings #507 and #508). When that is fixed, this goes back to the
+ * JDK's form.
  *
- * <h2>Lo que no hay</h2>
+ * <h2>What there is not</h2>
  *
- * <p>No hay analisis bidireccional. {@link #getBidiRootElement} devuelve una estructura de un solo
- * tramo de izquierda a derecha, que es exactamente lo que el JDK arma para un texto que no mezcla
- * escrituras, y {@link #isLeftToRight} contesta siempre {@code true}. Un texto en arabe o hebreo se
- * guarda bien y se muestra en el orden en que esta, sin reordenar.
+ * <p>There is no bidirectional analysis. {@link #getBidiRootElement} returns a structure of a
+ * single left-to-right run, which is exactly what the JDK builds for a text that does not mix
+ * scripts, and {@link #isLeftToRight} always answers {@code true}. A text in Arabic or Hebrew is
+ * kept correctly and is shown in the order it is in, without reordering.
  */
 public abstract class AbstractDocument implements Document, Serializable {
 
-    /** El mensaje de las excepciones de posicion. */
+    /** The message of the position exceptions. */
     protected static final String BAD_LOCATION = "document location failure";
 
     public static final String ParagraphElementName = "paragraph";
 
     public static final String ContentElementName = "content";
 
-    /** El nombre del elemento raiz de un documento con estilo. */
+    /** The name of a styled document's root element. */
     public static final String SectionElementName = "section";
 
-    /** El nombre de los elementos del arbol bidireccional. */
+    /** The name of the bidirectional tree's elements. */
     public static final String BidiElementName = "bidi level";
 
-    /** La clave del atributo que guarda el nombre de un elemento. */
+    /** The key of the attribute that keeps an element's name. */
     public static final String ElementNameAttribute = "$ename";
 
-    /** La propiedad que marca un documento con texto internacional. */
+    /** The property that marks a document with international text. */
     static final String I18NProperty = "i18n";
 
-    /** La propiedad que marca contenido de varios bytes. */
+    /** The property that marks multi-byte content. */
     static final Object MultiByteProperty = "multiByte";
 
-    /** La propiedad con la prioridad de carga asincronica. */
+    /** The property with the asynchronous loading priority. */
     static final String AsyncLoadPriority = "load priority";
 
     protected EventListenerList listenerList = new EventListenerList();
@@ -111,7 +114,7 @@ public abstract class AbstractDocument implements Document, Serializable {
     private transient DocumentFilter documentFilter;
     private transient DocumentFilterFilterBypass filterBypass;
 
-    /** Un documento sobre ese contenido, con el contexto de estilos compartido. */
+    /** A document over that content, with the shared style context. */
     protected AbstractDocument(Content data) {
         this(data, StyleContext.getDefaultStyleContext());
     }
@@ -120,23 +123,23 @@ public abstract class AbstractDocument implements Document, Serializable {
         this.data = data;
         this.context = context;
 
-        // La raiz y el tramo bidi son un BranchElement y un LeafElement con su nombre puesto por
-        // atributo, y no dos subclases: una clase interna no puede llamar al `super(...)` de otra
-        // interna hermana con nuestro javac (#508), y el nombre por atributo da lo mismo.
-        // Con el candado tomado: crear un elemento con atributos es escribir en el documento, y
-        // el propio elemento lo comprueba.
+        // The root and the bidi run are a BranchElement and a LeafElement with their name set by
+                // attribute, and not two subclasses: an inner class cannot call a sibling inner
+                // class's `super(...)` with our javac (#508), and the name by attribute comes to
+                // the same. With the lock held: creating an element with attributes is writing in
+                // the document, and the element itself checks it.
         writeLock();
         try {
-            bidiRoot = new BranchElement(this, null, nombreBidi("bidi root"));
+            bidiRoot = new BranchElement(this, null, bidiName("bidi root"));
             Element[] p = new Element[1];
-            p[0] = new LeafElement(this, bidiRoot, nivelBidi(0), 0, 0);
+            p[0] = new LeafElement(this, bidiRoot, bidiLevel(0), 0, 0);
             bidiRoot.replace(0, 0, p);
         } finally {
             writeUnlock();
         }
     }
 
-    /** Las propiedades del documento —titulo, juego de caracteres—; se crean al primer uso. */
+    /** The document's properties --title, character set--; they are created on first use. */
     public Dictionary<Object, Object> getDocumentProperties() {
         if (documentProperties == null) {
             documentProperties = new Hashtable<Object, Object>(2);
@@ -148,7 +151,7 @@ public abstract class AbstractDocument implements Document, Serializable {
         documentProperties = x;
     }
 
-    /** Avisa una insercion; se llama con el candado de escritura tomado. */
+    /** It reports an insertion; it is called with the write lock held. */
     protected void fireInsertUpdate(DocumentEvent e) {
         notifyingListeners = true;
         try {
@@ -204,7 +207,7 @@ public abstract class AbstractDocument implements Document, Serializable {
         return listenerList.getListeners(listenerType);
     }
 
-    /** La prioridad de carga asincronica; negativa significa cargar en el hilo que pide. */
+    /** The asynchronous loading priority; negative means load on the calling thread. */
     public int getAsynchronousLoadPriority() {
         Integer loadPriority = (Integer) getProperty(AbstractDocument.AsyncLoadPriority);
         if (loadPriority != null) {
@@ -218,7 +221,7 @@ public abstract class AbstractDocument implements Document, Serializable {
         putProperty(AbstractDocument.AsyncLoadPriority, loadPriority);
     }
 
-    /** El filtro que puede vetar o cambiar cada edicion; ver {@link DocumentFilter}. */
+    /** The filter that can veto or change each edit; see {@link DocumentFilter}. */
     public void setDocumentFilter(DocumentFilter filter) {
         documentFilter = filter;
     }
@@ -227,7 +230,7 @@ public abstract class AbstractDocument implements Document, Serializable {
         return documentFilter;
     }
 
-    /** Corre eso con el candado de lectura tomado; ver la nota de la clase. */
+    /** It runs that with the read lock held; see the class note. */
     public void render(Runnable r) {
         readLock();
         try {
@@ -278,10 +281,10 @@ public abstract class AbstractDocument implements Document, Serializable {
     }
 
     /**
-     * Borra un tramo; pasa por el filtro si hay.
+     * It removes a stretch; it goes through the filter if there is one.
      *
-     * <p>Borrar cero caracteres no hace nada, ni siquiera avisa: es lo que hace que un
-     * {@code replace} sin borrado no produzca un evento de mas.
+     * <p>Removing zero characters does nothing, not even report: it is what keeps a
+     * {@code replace} with no removal from producing an extra event.
      */
     public void remove(int offs, int len) throws BadLocationException {
         DocumentFilter filter = getDocumentFilter();
@@ -298,7 +301,7 @@ public abstract class AbstractDocument implements Document, Serializable {
         }
     }
 
-    /** El borrado de verdad, ya pasado el filtro. */
+    /** The real removal, already past the filter. */
     void handleRemove(int offs, int len) throws BadLocationException {
         if (len > 0) {
             if (offs < 0 || (offs + len) > getLength()) {
@@ -325,11 +328,11 @@ public abstract class AbstractDocument implements Document, Serializable {
     }
 
     /**
-     * Borra e inserta como una sola operacion.
+     * It removes and inserts as a single operation.
      *
-     * <p>Que sea una sola importa para deshacer: sin esto, deshacer un reemplazo dejaria el texto
-     * borrado y sin reponer. Sin filtro, son un borrado y una insercion, y por eso salen dos
-     * eventos; con filtro, el filtro decide.
+     * <p>That it is a single one matters for undo: without this, undoing a replacement would leave
+     * the text removed and not put back. Without a filter, they are a removal and an insertion, and
+     * that is why two events come out; with a filter, the filter decides.
      */
     public void replace(int offset, int length, String text, AttributeSet attrs)
             throws BadLocationException {
@@ -355,7 +358,7 @@ public abstract class AbstractDocument implements Document, Serializable {
         }
     }
 
-    /** Inserta texto; pasa por el filtro si hay. */
+    /** It inserts text; it goes through the filter if there is one. */
     public void insertString(int offs, String str, AttributeSet a) throws BadLocationException {
         if ((str == null) || (str.length() == 0)) {
             return;
@@ -374,7 +377,7 @@ public abstract class AbstractDocument implements Document, Serializable {
         }
     }
 
-    /** La insercion de verdad, ya pasada por el filtro. */
+    /** The real insertion, already past the filter. */
     void handleInsertString(int offs, String str, AttributeSet a) throws BadLocationException {
         if ((str == null) || (str.length() == 0)) {
             return;
@@ -405,10 +408,10 @@ public abstract class AbstractDocument implements Document, Serializable {
     }
 
     /**
-     * El texto sin copiarlo: el segmento apunta al arreglo del contenido cuando se puede.
+     * The text without copying it: the segment points at the content's array when it can.
      *
-     * <p>Es la forma que usa el dibujado, que recorre el texto muchas veces por segundo y no
-     * puede permitirse una copia por cuadro.
+     * <p>It is the form the drawing uses, which walks the text many times per second and cannot
+     * afford one copy per frame.
      */
     public void getText(int offset, int length, Segment txt) throws BadLocationException {
         if (length < 0) {
@@ -417,12 +420,12 @@ public abstract class AbstractDocument implements Document, Serializable {
         data.getChars(offset, length, txt);
     }
 
-    /** Una marca que se mueve con el texto; ver la nota de la clase. */
+    /** A mark that moves with the text; see the class note. */
     public synchronized Position createPosition(int offs) throws BadLocationException {
         return data.createPosition(offs);
     }
 
-    /** El principio del documento; nunca se mueve. */
+    /** The document's beginning; it never moves. */
     public final Position getStartPosition() {
         Position p;
         try {
@@ -433,7 +436,7 @@ public abstract class AbstractDocument implements Document, Serializable {
         return p;
     }
 
-    /** El final del documento; se corre con cada insercion. */
+    /** The document's end; it shifts with every insertion. */
     public final Position getEndPosition() {
         Position p;
         try {
@@ -444,7 +447,7 @@ public abstract class AbstractDocument implements Document, Serializable {
         return p;
     }
 
-    /** Las dos raices: la de la estructura y la bidireccional. */
+    /** The two roots: the structure's and the bidirectional one. */
     public Element[] getRootElements() {
         Element[] elems = new Element[2];
         elems[0] = getDefaultRootElement();
@@ -454,12 +457,12 @@ public abstract class AbstractDocument implements Document, Serializable {
 
     public abstract Element getDefaultRootElement();
 
-    /** Ver la nota de la clase sobre lo que no hay. */
+    /** See the class note about what there is not. */
     public Element getBidiRootElement() {
         return bidiRoot;
     }
 
-    /** Siempre {@code true}; ver la nota de la clase. */
+    /** Always {@code true}; see the class note. */
     static boolean isLeftToRight(Document doc, int p0, int p1) {
         return true;
     }
@@ -471,53 +474,53 @@ public abstract class AbstractDocument implements Document, Serializable {
     }
 
     /**
-     * La estructura, despues de una insercion en el contenido.
+     * The structure, after an insertion in the content.
      *
-     * <p>La subclase la redefine para acomodar su arbol. La version de aca no hace nada: un
-     * documento sin estructura propia no tiene que acomodar nada.
+     * <p>The subclass redefines it to fix up its tree. The version here does nothing: a document
+     * with no structure of its own has nothing to fix up.
      */
     protected void insertUpdate(DefaultDocumentEvent chng, AttributeSet attr) {
     }
 
-    /** La estructura, antes de sacar el texto del contenido. */
+    /** The structure, before taking the text out of the content. */
     protected void removeUpdate(DefaultDocumentEvent chng) {
     }
 
-    /** La estructura, despues de sacar el texto; aca ya no se puede leer lo borrado. */
+    /** The structure, after taking the text out; here what was removed can no longer be read. */
     protected void postRemoveUpdate(DefaultDocumentEvent chng) {
     }
 
-    /** Los atributos de un elemento bidi con ese nombre. */
-    private AttributeSet nombreBidi(String nombre) {
+    /** The attributes of a bidi element with that name. */
+    private AttributeSet bidiName(String name) {
         SimpleAttributeSet a = new SimpleAttributeSet();
-        a.addAttribute(ElementNameAttribute, nombre);
+        a.addAttribute(ElementNameAttribute, name);
         return a;
     }
 
-    /** Los atributos de un tramo bidi de ese nivel. */
-    private AttributeSet nivelBidi(int nivel) {
+    /** The attributes of a bidi run of that level. */
+    private AttributeSet bidiLevel(int level) {
         SimpleAttributeSet a = new SimpleAttributeSet();
         a.addAttribute(ElementNameAttribute, BidiElementName);
-        a.addAttribute(StyleConstants.BidiLevel, Integer.valueOf(nivel));
+        a.addAttribute(StyleConstants.BidiLevel, Integer.valueOf(level));
         return a;
     }
 
     /**
-     * Rehace el tramo bidireccional para que cubra el documento entero.
+     * It rebuilds the bidirectional run so that it covers the whole document.
      *
-     * <p>Un solo tramo, de izquierda a derecha; ver la nota de la clase. Llega hasta
-     * {@code getLength() + 1}, o sea incluye el fin de linea implicito del final: el tramo
-     * bidireccional cubre el contenido, no el texto que el usuario ve. Se rehace en vez de moverse
-     * porque ese final no es una {@link Position} que se corra sola.
+     * <p>A single run, left to right; see the class note. It reaches {@code getLength() + 1}, that
+     * is it includes the implicit line ending at the end: the bidirectional run covers the content,
+     * not the text the user sees. It is rebuilt instead of moved because that end is not a
+     * {@link Position} that shifts by itself.
      */
     void updateBidi(DefaultDocumentEvent chng) {
         Element[] p = new Element[1];
-        p[0] = new LeafElement(this, bidiRoot, nivelBidi(0), 0, getLength() + 1);
+        p[0] = new LeafElement(this, bidiRoot, bidiLevel(0), 0, getLength() + 1);
         int n = bidiRoot.getElementCount();
         bidiRoot.replace(0, n, p);
     }
 
-    /** Imprime el arbol; es la herramienta de depuracion de un documento. */
+    /** It prints the tree; it is a document's debugging tool. */
     public void dump(PrintStream out) {
         Element root = getDefaultRootElement();
         if (root instanceof AbstractElement) {
@@ -530,12 +533,12 @@ public abstract class AbstractDocument implements Document, Serializable {
         return data;
     }
 
-    /** Un elemento hoja: un tramo de texto con atributos. */
+    /** A leaf element: a stretch of text with attributes. */
     protected Element createLeafElement(Element parent, AttributeSet a, int p0, int p1) {
         return new LeafElement(this, parent, a, p0, p1);
     }
 
-    /** Un elemento rama: un elemento con hijos, cuyo rango es el de ellos. */
+    /** A branch element: an element with children, whose range is theirs. */
     protected Element createBranchElement(Element parent, AttributeSet a) {
         return new BranchElement(this, parent, a);
     }
@@ -545,18 +548,19 @@ public abstract class AbstractDocument implements Document, Serializable {
     }
 
     /**
-     * Toma el candado de escritura; espera a que no quede ningun lector.
+     * It takes the write lock; it waits until no reader is left.
      *
-     * <p>Un escritor que ya lo tiene vuelve a entrar sin esperar. Un lector que pide escribir es un
-     * error de programa; ver la nota de la clase.
+     * <p>A writer that already has it re-enters without waiting. A reader that asks to write is a
+     * program error; see the class note.
      */
     protected final synchronized void writeLock() {
         try {
             while ((numReaders > 0) || (currentWriter != null)) {
                 if (Thread.currentThread() == currentWriter) {
                     if (notifyingListeners) {
-                        // Un escucha no puede modificar el documento: los demas escuchas
-                        // recibirian un evento que ya no describe lo que hay.
+                        // A listener cannot modify the document: the other listeners would receive
+                        // an
+                                                // event that no longer describes what is there.
                         throw new IllegalStateException(
                                 "Attempt to mutate in notification");
                     }
@@ -585,7 +589,7 @@ public abstract class AbstractDocument implements Document, Serializable {
         try {
             while (currentWriter != null) {
                 if (currentWriter == Thread.currentThread()) {
-                    // El escritor puede leer lo que el mismo esta escribiendo.
+                    // The writer may read what it is writing itself.
                     return;
                 }
                 wait();
@@ -614,7 +618,7 @@ public abstract class AbstractDocument implements Document, Serializable {
         return filterBypass;
     }
 
-    /** El atajo que el filtro usa para escribir sin volver a pasar por si mismo. */
+    /** The shortcut the filter uses to write without going through itself again. */
     private class DocumentFilterFilterBypass extends DocumentFilter.FilterBypass {
 
         public Document getDocument() {
@@ -642,15 +646,15 @@ public abstract class AbstractDocument implements Document, Serializable {
     }
 
     /**
-     * Lo que guarda los caracteres.
+     * What keeps the characters.
      *
-     * <p>Separado del documento porque hay mas de una forma razonable de guardarlos: un hueco
-     * movil que hace baratas las ediciones seguidas en un mismo lugar ({@link GapContent}), o una
-     * cadena simple ({@link StringContent}). Las {@link Position} son responsabilidad de esta
-     * pieza porque solo ella sabe cuando se corren los caracteres.
+     * <p>Separate from the document because there is more than one reasonable way of keeping them:
+     * a moving gap that makes successive edits in one same place cheap ({@link GapContent}), or a
+     * plain string ({@link StringContent}). The {@link Position}s are this piece's responsibility
+     * because only it knows when the characters shift.
      *
-     * <p>El contenido siempre tiene al menos un caracter, un fin de linea implicito, y por eso
-     * {@link AbstractDocument#getLength} resta uno.
+     * <p>The content always has at least one character, an implicit line ending, and that is why
+     * {@link AbstractDocument#getLength} subtracts one.
      */
     public interface Content {
 
@@ -664,16 +668,16 @@ public abstract class AbstractDocument implements Document, Serializable {
 
         String getString(int where, int len) throws BadLocationException;
 
-        /** El texto sin copiarlo cuando se puede; ver {@link AbstractDocument#getText}. */
+        /** The text without copying it when it can; see {@link AbstractDocument#getText}. */
         void getChars(int where, int len, Segment txt) throws BadLocationException;
     }
 
     /**
-     * Quien comparte los conjuntos de atributos.
+     * Who shares the attribute sets.
      *
-     * <p>Los conjuntos son inmutables: cambiar un atributo devuelve otro conjunto. Suena caro y es
-     * al reves: un documento con mil parrafos en cursiva guarda un solo conjunto "cursiva", y
-     * comparar dos tramos es comparar dos referencias.
+     * <p>The sets are immutable: changing an attribute returns another set. It sounds expensive and
+     * it is the reverse: a document with a thousand italic paragraphs keeps a single "italic" set,
+     * and comparing two runs is comparing two references.
      */
     public interface AttributeContext {
 
@@ -689,15 +693,17 @@ public abstract class AbstractDocument implements Document, Serializable {
 
         AttributeSet getEmptySet();
 
-        /** Avisa que ese conjunto ya no se usa; el contexto decide si lo tira. */
+        /**
+         * It reports that that set is no longer used; the context decides whether to throw it away.
+         */
         void reclaim(AttributeSet a);
     }
 
     /**
-     * El cambio que sufrio un elemento: que hijos se fueron y cuales llegaron.
+     * The change an element underwent: which children left and which arrived.
      *
-     * <p>Es tambien una edicion deshacible, y por eso guarda las dos listas: deshacer es poner de
-     * vuelta los que se fueron.
+     * <p>It is also an undoable edit, and that is why it keeps both lists: undoing is putting back
+     * those that left.
      */
     public static class ElementEdit extends AbstractUndoableEdit implements
             DocumentEvent$ElementChange {
@@ -719,7 +725,7 @@ public abstract class AbstractDocument implements Document, Serializable {
             return e;
         }
 
-        /** Donde empezo el cambio, contando hijos. */
+        /** Where the change started, counting children. */
         public int getIndex() {
             return index;
         }
@@ -750,32 +756,32 @@ public abstract class AbstractDocument implements Document, Serializable {
     }
 
     /**
-     * Un elemento del arbol, que ademas es su propio conjunto de atributos.
+     * An element of the tree, which is also its own attribute set.
      *
-     * <p>Esa union no es pereza: los atributos de un elemento se consultan tantas veces como el
-     * elemento, y tenerlos en el mismo objeto ahorra un salto por consulta. Los atributos de
-     * verdad viven en el contexto compartido; este objeto guarda una referencia al conjunto
-     * inmutable y la reemplaza cada vez que cambia.
+     * <p>That union is not laziness: an element's attributes are consulted as many times as the
+     * element is, and having them in the same object saves one hop per query. The real attributes
+     * live in the shared context; this object keeps a reference to the immutable set and replaces
+     * it every time it changes.
      */
     public abstract static class AbstractElement implements Element, MutableAttributeSet,
             Serializable, TreeNode {
 
-        /** El documento al que pertenece; ver la nota sobre las clases anidadas. */
-        protected final AbstractDocument documento;
+        /** The document it belongs to; see the note about the nested classes. */
+        protected final AbstractDocument document;
 
         private Element parent;
         private transient AttributeSet attributes;
 
-        public AbstractElement(AbstractDocument documento, Element parent, AttributeSet a) {
-            this.documento = documento;
+        public AbstractElement(AbstractDocument document, Element parent, AttributeSet a) {
+            this.document = document;
             this.parent = parent;
-            attributes = documento.getAttributeContext().getEmptySet();
+            attributes = document.getAttributeContext().getEmptySet();
             if (a != null) {
                 addAttributes(a);
             }
         }
 
-        /** Imprime este elemento y sus hijos, sangrados; ver {@link AbstractDocument#dump}. */
+        /** It prints this element and its children, indented; see {@link AbstractDocument#dump}. */
         public void dump(PrintStream psOut, int indentAmount) {
             String indentation = "";
             for (int i = 0; i < indentAmount; i++) {
@@ -797,7 +803,7 @@ public abstract class AbstractDocument implements Document, Serializable {
                     String text = getDocument().getText(start, end - start);
                     psOut.print("[" + text + "]");
                 } catch (BadLocationException e) {
-                    // Un elemento puede estar fuera de rango mientras se edita; no es un error.
+                    // An element may be out of range while it is being edited; it is not an error.
                 }
                 psOut.println("");
             } else {
@@ -826,7 +832,8 @@ public abstract class AbstractDocument implements Document, Serializable {
         public Object getAttribute(Object attrName) {
             Object value = attributes.getAttribute(attrName);
             if (value == null) {
-                // El padre del arbol hace de padre de resolucion: un parrafo hereda del documento.
+                // The tree's parent acts as the resolving parent: a paragraph inherits from the
+                // document.
                 AttributeSet a = attributes.getResolveParent();
                 if (a == null && parent != null) {
                     a = parent.getAttributes();
@@ -860,31 +867,31 @@ public abstract class AbstractDocument implements Document, Serializable {
 
         public void addAttribute(Object name, Object value) {
             checkForIllegalCast();
-            AttributeContext context = documento.getAttributeContext();
+            AttributeContext context = document.getAttributeContext();
             attributes = context.addAttribute(attributes, name, value);
         }
 
         public void addAttributes(AttributeSet attr) {
             checkForIllegalCast();
-            AttributeContext context = documento.getAttributeContext();
+            AttributeContext context = document.getAttributeContext();
             attributes = context.addAttributes(attributes, attr);
         }
 
         public void removeAttribute(Object name) {
             checkForIllegalCast();
-            AttributeContext context = documento.getAttributeContext();
+            AttributeContext context = document.getAttributeContext();
             attributes = context.removeAttribute(attributes, name);
         }
 
         public void removeAttributes(Enumeration<?> names) {
             checkForIllegalCast();
-            AttributeContext context = documento.getAttributeContext();
+            AttributeContext context = document.getAttributeContext();
             attributes = context.removeAttributes(attributes, names);
         }
 
         public void removeAttributes(AttributeSet attrs) {
             checkForIllegalCast();
-            AttributeContext context = documento.getAttributeContext();
+            AttributeContext context = document.getAttributeContext();
             if (attrs == this) {
                 attributes = context.getEmptySet();
             } else {
@@ -894,7 +901,7 @@ public abstract class AbstractDocument implements Document, Serializable {
 
         public void setResolveParent(AttributeSet parent) {
             checkForIllegalCast();
-            AttributeContext context = documento.getAttributeContext();
+            AttributeContext context = document.getAttributeContext();
             if (parent != null) {
                 attributes = context.addAttribute(attributes, StyleConstants.ResolveAttribute,
                         parent);
@@ -904,16 +911,16 @@ public abstract class AbstractDocument implements Document, Serializable {
             }
         }
 
-        /** Cambiar atributos es escribir en el documento: hace falta el candado. */
+        /** Changing attributes is writing in the document: the lock is needed. */
         private void checkForIllegalCast() {
-            Thread t = documento.getCurrentWriter();
+            Thread t = document.getCurrentWriter();
             if ((t == null) || (t != Thread.currentThread())) {
                 throw new StateInvariantError("Illegal cast to MutableAttributeSet");
             }
         }
 
         public Document getDocument() {
-            return documento;
+            return document;
         }
 
         public Element getParentElement() {
@@ -924,7 +931,7 @@ public abstract class AbstractDocument implements Document, Serializable {
             return this;
         }
 
-        /** El nombre del elemento, del atributo que lo guarda. */
+        /** The element's name, from the attribute that keeps it. */
         public String getName() {
             if (attributes.isDefined(ElementNameAttribute)) {
                 return (String) attributes.getAttribute(ElementNameAttribute);
@@ -944,7 +951,7 @@ public abstract class AbstractDocument implements Document, Serializable {
 
         public abstract boolean isLeaf();
 
-        // -- TreeNode: la misma estructura, vista como arbol ------------------------------------
+        // -- TreeNode: the same structure, seen as a tree ---------------------------------------
 
         public TreeNode getChildAt(int childIndex) {
             return (AbstractElement) getElement(childIndex);
@@ -972,21 +979,21 @@ public abstract class AbstractDocument implements Document, Serializable {
         public abstract Enumeration<TreeNode> children();
     }
 
-    /** Un elemento con hijos; su rango es el de ellos. */
+    /** An element with children; its range is theirs. */
     public static class BranchElement extends AbstractElement {
 
         private AbstractElement[] children;
         private int nchildren;
         private int lastIndex;
 
-        public BranchElement(AbstractDocument documento, Element parent, AttributeSet a) {
-            super(documento, parent, a);
+        public BranchElement(AbstractDocument document, Element parent, AttributeSet a) {
+            super(document, parent, a);
             children = new AbstractElement[1];
             nchildren = 0;
             lastIndex = -1;
         }
 
-        /** El hijo que contiene esa posicion, o {@code null} si esta fuera. */
+        /** The child that contains that position, or {@code null} if it is outside. */
         public Element positionToElement(int pos) {
             int index = getElementIndex(pos);
             Element child = children[index];
@@ -998,14 +1005,14 @@ public abstract class AbstractDocument implements Document, Serializable {
             return null;
         }
 
-        /** Cambia un tramo de hijos por otro; es la operacion basica de reestructurar. */
+        /** It swaps a stretch of children for another; it is the basic restructuring operation. */
         public void replace(int offset, int length, Element[] elems) {
             int delta = elems.length - length;
             int src = offset + length;
             int nmove = nchildren - src;
             int dest = src + delta;
             if ((nchildren + delta) >= children.length) {
-                // El arreglo crece de a duplicaciones: reestructurar es frecuente.
+                // The array grows by doublings: restructuring is frequent.
                 int newLength = Math.max(2 * children.length, nchildren + delta);
                 AbstractElement[] newChildren = new AbstractElement[newLength];
                 System.arraycopy(children, 0, newChildren, 0, offset);
@@ -1053,10 +1060,10 @@ public abstract class AbstractDocument implements Document, Serializable {
         }
 
         /**
-         * El indice del hijo que contiene esa posicion, por busqueda binaria.
+         * The index of the child that contains that position, by binary search.
          *
-         * <p>Guarda el ultimo resultado y lo prueba primero: las consultas vienen casi siempre en
-         * orden, recorriendo el texto, y asi la mayoria no hace ninguna comparacion de mas.
+         * <p>It keeps the last result and tries it first: the queries come almost always in order,
+         * walking the text, and that way most of them make no extra comparison.
          */
         public int getElementIndex(int offset) {
             int index;
@@ -1102,7 +1109,7 @@ public abstract class AbstractDocument implements Document, Serializable {
                 }
             }
 
-            // Sin coincidencia exacta: el mas cercano, que es lo que quiere quien busca un hueco.
+            // With no exact match: the nearest one, which is what whoever looks for a gap wants.
             if (offset < p0) {
                 index = mid;
             } else {
@@ -1132,18 +1139,18 @@ public abstract class AbstractDocument implements Document, Serializable {
         }
     }
 
-    /** Un elemento sin hijos: un tramo de texto marcado con dos {@link Position}. */
+    /** An element with no children: a stretch of text marked with two {@link Position}s. */
     public static class LeafElement extends AbstractElement {
 
         private transient Position p0;
         private transient Position p1;
 
-        public LeafElement(AbstractDocument documento, Element parent, AttributeSet a,
+        public LeafElement(AbstractDocument document, Element parent, AttributeSet a,
                 int offs0, int offs1) {
-            super(documento, parent, a);
+            super(document, parent, a);
             try {
-                p0 = documento.createPosition(offs0);
-                p1 = documento.createPosition(offs1);
+                p0 = document.createPosition(offs0);
+                p1 = document.createPosition(offs1);
             } catch (BadLocationException e) {
                 p0 = null;
                 p1 = null;
@@ -1171,7 +1178,7 @@ public abstract class AbstractDocument implements Document, Serializable {
             return nm;
         }
 
-        /** Cero: un elemento hoja no tiene hijos entre los que buscar. */
+        /** Zero: a leaf element has no children to search among. */
         public int getElementIndex(int pos) {
             return -1;
         }
@@ -1198,25 +1205,25 @@ public abstract class AbstractDocument implements Document, Serializable {
     }
 
     /**
-     * El cambio que sufrio el documento, y a la vez la edicion que lo deshace.
+     * The change the document underwent, and at the same time the edit that undoes it.
      *
-     * <p>Que sean el mismo objeto es lo que hace que deshacer sea barato: el evento ya tiene
-     * adentro cada pedacito de la edicion —el texto y los cambios de estructura—, en orden.
+     * <p>That they are the same object is what makes undoing cheap: the event already has inside
+     * every little piece of the edit --the text and the structure changes--, in order.
      */
     public static class DefaultDocumentEvent extends CompoundEdit implements DocumentEvent {
 
-        /** El documento al que pertenece; ver la nota sobre las clases anidadas. */
-        protected final AbstractDocument documento;
+        /** The document it belongs to; see the note about the nested classes. */
+        protected final AbstractDocument document;
 
         private int offset;
         private int length;
         private Hashtable<Element, DocumentEvent$ElementChange> changeLookup;
         private DocumentEvent$EventType type;
 
-        public DefaultDocumentEvent(AbstractDocument documento, int offs, int len,
+        public DefaultDocumentEvent(AbstractDocument document, int offs, int len,
                 DocumentEvent$EventType type) {
             super();
-            this.documento = documento;
+            this.document = document;
             offset = offs;
             length = len;
             this.type = type;
@@ -1226,7 +1233,7 @@ public abstract class AbstractDocument implements Document, Serializable {
             return edits.toString();
         }
 
-        /** Un cambio de estructura se indexa por elemento, para que {@link #getChange} sea barato. */
+        /** A structure change is indexed by element, so that {@link #getChange} is cheap. */
         public boolean addEdit(UndoableEdit anEdit) {
             if ((changeLookup == null) && (anEdit instanceof DocumentEvent$ElementChange)) {
                 changeLookup = new Hashtable<Element, DocumentEvent$ElementChange>();
@@ -1239,35 +1246,35 @@ public abstract class AbstractDocument implements Document, Serializable {
         }
 
         public void redo() throws CannotRedoException {
-            documento.writeLock();
+            document.writeLock();
             try {
                 super.redo();
                 if (type == DocumentEvent$EventType.INSERT) {
-                    documento.fireInsertUpdate(this);
+                    document.fireInsertUpdate(this);
                 } else if (type == DocumentEvent$EventType.REMOVE) {
-                    documento.fireRemoveUpdate(this);
+                    document.fireRemoveUpdate(this);
                 } else {
-                    documento.fireChangedUpdate(this);
+                    document.fireChangedUpdate(this);
                 }
             } finally {
-                documento.writeUnlock();
+                document.writeUnlock();
             }
         }
 
-        /** Deshacer un alta es una baja: el evento que se avisa es el contrario. */
+        /** Undoing an addition is a removal: the event reported is the opposite one. */
         public void undo() throws CannotUndoException {
-            documento.writeLock();
+            document.writeLock();
             try {
                 super.undo();
                 if (type == DocumentEvent$EventType.REMOVE) {
-                    documento.fireInsertUpdate(this);
+                    document.fireInsertUpdate(this);
                 } else if (type == DocumentEvent$EventType.INSERT) {
-                    documento.fireRemoveUpdate(this);
+                    document.fireRemoveUpdate(this);
                 } else {
-                    documento.fireChangedUpdate(this);
+                    document.fireChangedUpdate(this);
                 }
             } finally {
-                documento.writeUnlock();
+                document.writeUnlock();
             }
         }
 
@@ -1307,7 +1314,7 @@ public abstract class AbstractDocument implements Document, Serializable {
         }
 
         public Document getDocument() {
-            return documento;
+            return document;
         }
 
         public DocumentEvent$ElementChange getChange(Element elem) {

@@ -238,9 +238,10 @@ public class LinkedBlockingQueue<E> extends java.util.AbstractQueue<E> implement
     }
 
     // Null-safe equality. Written as a helper with an explicit if/else because a
-    // **boolean-valued** ternary (`o == null ? e == null : o.equals(e)`) is rejected by our
-    // javac with "operando no numérico" — finding #109. Int- and reference-valued ternaries
-    // are fine, so only this shape needs the rewrite.
+    // **boolean-valued** ternary (`o == null ? e == null : o.equals(e)`). This note said our javac
+    // rejected that shape with "operando no numérico" -- finding #109, which is fixed. The helper
+    // stays because it reads well and is used from several places, but it is no longer a
+    // workaround.
     private static boolean eq(Object a, Object b) {
         boolean same;
         if (a == null) {

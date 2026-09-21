@@ -1,31 +1,31 @@
 package javax.swing.text.html.parser;
 
 /**
- * Una entidad de la DTD: un nombre que se reemplaza por un texto.
+ * A DTD entity: a name that is replaced by a text.
  *
- * <h2>Las dos clases de entidad</h2>
+ * <h2>The two kinds of entity</h2>
  *
- * <p>Una entidad <em>general</em> es la que escribe el autor de la pagina: <code>&amp;amp;</code>
- * se reemplaza por <code>&amp;</code>. Una entidad de <em>parametro</em> solo existe dentro de la
- * DTD y sirve para no repetir listas de elementos.
+ * <p>A <em>general</em> entity is what the page's author writes: <code>&amp;amp;</code> is
+ * replaced by <code>&amp;</code>. A <em>parameter</em> entity exists only inside the DTD and
+ * serves to avoid repeating lists of elements.
  *
- * <p>Las dos comparten el campo {@code type}, y la diferencia va en dos bits aparte
- * ({@link DTDConstants#GENERAL} y {@link DTDConstants#PARAMETER}). Por eso {@link #getType}
- * enmascara: el numero crudo trae el tipo y la clase mezclados, y quien pregunta por el tipo no
- * quiere los bits de la clase.
+ * <p>Both share the {@code type} field, and the difference goes in two separate bits
+ * ({@link DTDConstants#GENERAL} and {@link DTDConstants#PARAMETER}). That is why {@link #getType}
+ * masks: the raw number carries the type and the kind mixed together, and whoever asks for the
+ * type does not want the kind's bits.
  */
 public final class Entity implements DTDConstants {
 
-    /** El nombre, sin el {@code &} ni el {@code ;}. */
+    /** The name, without the {@code &} or the {@code ;}. */
     public String name;
 
-    /** El tipo, con los bits de clase todavia adentro; ver {@link #getType}. */
+    /** The type, with the kind bits still inside; see {@link #getType}. */
     public int type;
 
-    /** El texto por el que se reemplaza. */
+    /** The text it is replaced by. */
     public char[] data;
 
-    /** Una entidad con ese nombre, tipo y contenido. */
+    /** An entity with that name, type and content. */
     public Entity(String name, int type, char[] data) {
         this.name = name;
         this.type = type;
@@ -36,7 +36,7 @@ public final class Entity implements DTDConstants {
         return name;
     }
 
-    /** El tipo, ya sin los bits que dicen si es general o de parametro. */
+    /** The type, already without the bits that say whether it is general or a parameter one. */
     public int getType() {
         return type & 0xFFFF;
     }
@@ -53,15 +53,15 @@ public final class Entity implements DTDConstants {
         return data;
     }
 
-    /** El contenido como cadena. */
+    /** The content as a string. */
     public String getString() {
         return new String(data, 0, data.length);
     }
 
     /**
-     * El numero de tipo que corresponde a ese nombre.
+     * The type number that corresponds to that name.
      *
-     * <p>Un nombre desconocido da {@code CDATA}, por el mismo motivo que en
+     * <p>An unknown name gives {@code CDATA}, for the same reason as in
      * {@link AttributeList#name2type}.
      */
     public static int name2type(String nm) {

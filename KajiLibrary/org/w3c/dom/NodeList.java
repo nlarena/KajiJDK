@@ -1,21 +1,21 @@
 package org.w3c.dom;
 
 /**
- * KajiLibrary's org.w3c.dom.NodeList -- una coleccion ordenada de nodos, indexada desde cero.
+ * KajiLibrary's org.w3c.dom.NodeList -- an ordered collection of nodes, indexed from zero.
  *
- * <p>Lo que agrega sobre una `List` de Java: **nada**, y ese es justamente el punto. El DOM se
- * especifico para varios lenguajes a la vez y no podia apoyarse en la biblioteca de ninguno, asi que
- * declaro su propia coleccion minima. De ahi que no sea `Iterable` ni tenga `size()`.
+ * <p>What it adds over a Java `List`: **nothing**, and that is precisely the point. The DOM was
+ * specified for several languages at once and could not rest on the library of any of them, so it
+ * declared its own minimal collection. Hence it is neither `Iterable` nor has a `size()`.
  *
- * <p><strong>Lo que si tiene y una `List` no: casi siempre esta viva.</strong> La lista que devuelve
- * `getChildNodes()` o `getElementsByTagName()` refleja el arbol en el momento en que se la consulta,
- * no una foto de cuando se la pidio. Por eso el bucle `for (int i = 0; i &lt; l.getLength(); i++)`
- * que borra nodos adentro se saltea la mitad: cada borrado corre el resto un lugar. Es el error
- * clasico del DOM y no hay nada en la firma que avise.
+ * <p><strong>What it does have and a `List` does not: it is almost always live.</strong> The list
+ * `getChildNodes()` or `getElementsByTagName()` returns reflects the tree at the moment it is
+ * queried, not a snapshot of when it was asked for. That is why the loop `for (int i = 0; i &lt;
+ * l.getLength(); i++)` that deletes nodes inside skips half of them: each deletion shifts the rest
+ * one place. It is the classic mistake of the DOM and there is nothing in the signature that warns.
  */
 public interface NodeList {
 
-    /** `null` --no una excepcion-- si el indice esta fuera de rango. */
+    /** `null` --not an exception-- if the index is out of range. */
     Node item(int index);
 
     int getLength();

@@ -1,17 +1,18 @@
 package javax.swing;
 
 /**
- * Marca una clave de propiedad de cliente como propiedad del aspecto.
+ * It marks a client property key as the look and feel's property.
  *
- * <h2>Para que sirve una interfaz sin metodos</h2>
+ * <h2>What an interface with no methods is for</h2>
  *
- * <p>Las propiedades de cliente de un {@link JComponent} son un mapa abierto: cualquiera pone lo que
- * quiere. El aspecto tambien las usa, y al cambiar de aspecto hay que limpiar las suyas sin tocar
- * las del programa. La unica manera de distinguirlas es por el <em>tipo de la clave</em>, y para eso
- * esta esta interfaz: una clave que la implementa es del aspecto y se va con el.
+ * <p>A {@link JComponent}'s client properties are an open map: anybody puts in what they want.
+ * The look and feel uses them too, and on changing the look and feel its own have to be cleaned
+ * up without touching the program's. The only way of telling them apart is by the <em>key's
+ * type</em>, and that is what this interface is for: a key that implements it belongs to the
+ * look and feel and goes away with it.
  *
- * <p>De ahi que no tenga metodos. No hay nada que preguntarle a la clave; alcanza con saber de que
- * tipo es.
+ * <p>Hence it has no methods. There is nothing to ask the key; knowing what type it is, is
+ * enough.
  */
 public interface UIClientPropertyKey {
 }

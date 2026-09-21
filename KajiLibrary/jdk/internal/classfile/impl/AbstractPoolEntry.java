@@ -30,14 +30,14 @@ import java.lang.constant.MethodTypeDesc;
 import java.lang.constant.ModuleDesc;
 import java.lang.constant.PackageDesc;
 
-// La base de todas las entradas del pool: el pool al que pertenecen y el índice que ocupan. Las
-// implementaciones concretas están todas en este archivo, package-private, porque son diecisiete
-// clases de tres campos cada una y separarlas en diecisiete archivos no aclararía nada.
+// The base of every pool entry: the pool it belongs to and the index it occupies. The concrete
+// implementations are all in this file, package-private, because they are seventeen classes of
+// three fields each and splitting them into seventeen files would clarify nothing.
 //
-// A diferencia del JDK, las entradas de acá se materializan **enteras** al leer el archivo: sus
-// referencias a otras entradas ya están resueltas y validadas cuando el `ClassModel` existe. El JDK
-// resuelve perezosamente, lo que es más rápido para leer un atributo suelto; esto es más simple y
-// —lo que importa más— hace que un pool mal formado falle al abrirse y no diez llamadas después.
+// Unlike the JDK, the entries here are materialised **whole** when the file is read: their
+// references to other entries are already resolved and validated when the `ClassModel` exists. The
+// JDK resolves lazily, which is faster for reading a single attribute; this is simpler and --what
+// matters more-- makes a malformed pool fail on opening and not ten calls later.
 public abstract class AbstractPoolEntry implements PoolEntry {
 
     final ConstantPool pool;
@@ -61,16 +61,16 @@ public abstract class AbstractPoolEntry implements PoolEntry {
     }
 }
 
-// `CONSTANT_Utf8`. Guarda el `String` ya decodificado del UTF-8 modificado: el formato admite
-// secuencias que `String` no produce (el `NUL` de dos bytes, los sustitutos de seis), así que la
-// decodificación no se puede delegar al juego de caracteres estándar.
+// `CONSTANT_Utf8`. It keeps the `String` already decoded from modified UTF-8: the format admits
+// sequences `String` does not produce (the two-byte `NUL`, the six-byte surrogates), so decoding
+// cannot be delegated to the standard charset.
 final class Utf8EntryImpl extends AbstractPoolEntry implements Utf8Entry {
 
-    private final String valor;
+    private final String value;
 
-    Utf8EntryImpl(ConstantPool pool, int index, String valor) {
+    Utf8EntryImpl(ConstantPool pool, int index, String value) {
         super(pool, index);
-        this.valor = valor;
+        this.value = value;
     }
 
     public int tag() {
@@ -78,50 +78,50 @@ final class Utf8EntryImpl extends AbstractPoolEntry implements Utf8Entry {
     }
 
     public String stringValue() {
-        return this.valor;
+        return this.value;
     }
 
     public ConstantDesc constantValue() {
-        return this.valor;
+        return this.value;
     }
 
     public boolean equalsString(String s) {
-        return this.valor.equals(s);
+        return this.value.equals(s);
     }
 
     public boolean isFieldType(ClassDesc desc) {
-        return this.valor.equals(desc.descriptorString());
+        return this.value.equals(desc.descriptorString());
     }
 
     public boolean isMethodType(MethodTypeDesc desc) {
-        return this.valor.equals(desc.descriptorString());
+        return this.value.equals(desc.descriptorString());
     }
 
     public int length() {
-        return this.valor.length();
+        return this.value.length();
     }
 
     public char charAt(int i) {
-        return this.valor.charAt(i);
+        return this.value.charAt(i);
     }
 
-    public CharSequence subSequence(int desde, int hasta) {
-        return this.valor.substring(desde, hasta);
+    public CharSequence subSequence(int from, int to) {
+        return this.value.substring(from, to);
     }
 
     public String toString() {
-        return this.valor;
+        return this.value;
     }
 }
 
 // `CONSTANT_Integer`.
 final class IntegerEntryImpl extends AbstractPoolEntry implements IntegerEntry {
 
-    private final int valor;
+    private final int value;
 
-    IntegerEntryImpl(ConstantPool pool, int index, int valor) {
+    IntegerEntryImpl(ConstantPool pool, int index, int value) {
         super(pool, index);
-        this.valor = valor;
+        this.value = value;
     }
 
     public int tag() {
@@ -129,26 +129,26 @@ final class IntegerEntryImpl extends AbstractPoolEntry implements IntegerEntry {
     }
 
     public int intValue() {
-        return this.valor;
+        return this.value;
     }
 
     public ConstantDesc constantValue() {
-        return Integer.valueOf(this.valor);
+        return Integer.valueOf(this.value);
     }
 
     public String toString() {
-        return "int " + this.valor;
+        return "int " + this.value;
     }
 }
 
 // `CONSTANT_Float`.
 final class FloatEntryImpl extends AbstractPoolEntry implements FloatEntry {
 
-    private final float valor;
+    private final float value;
 
-    FloatEntryImpl(ConstantPool pool, int index, float valor) {
+    FloatEntryImpl(ConstantPool pool, int index, float value) {
         super(pool, index);
-        this.valor = valor;
+        this.value = value;
     }
 
     public int tag() {
@@ -156,26 +156,26 @@ final class FloatEntryImpl extends AbstractPoolEntry implements FloatEntry {
     }
 
     public float floatValue() {
-        return this.valor;
+        return this.value;
     }
 
     public ConstantDesc constantValue() {
-        return Float.valueOf(this.valor);
+        return Float.valueOf(this.value);
     }
 
     public String toString() {
-        return "float " + this.valor;
+        return "float " + this.value;
     }
 }
 
-// `CONSTANT_Long`. Ocupa dos ranuras.
+// `CONSTANT_Long`. It takes two slots.
 final class LongEntryImpl extends AbstractPoolEntry implements LongEntry {
 
-    private final long valor;
+    private final long value;
 
-    LongEntryImpl(ConstantPool pool, int index, long valor) {
+    LongEntryImpl(ConstantPool pool, int index, long value) {
         super(pool, index);
-        this.valor = valor;
+        this.value = value;
     }
 
     public int tag() {
@@ -187,26 +187,26 @@ final class LongEntryImpl extends AbstractPoolEntry implements LongEntry {
     }
 
     public long longValue() {
-        return this.valor;
+        return this.value;
     }
 
     public ConstantDesc constantValue() {
-        return Long.valueOf(this.valor);
+        return Long.valueOf(this.value);
     }
 
     public String toString() {
-        return "long " + this.valor;
+        return "long " + this.value;
     }
 }
 
-// `CONSTANT_Double`. Ocupa dos ranuras.
+// `CONSTANT_Double`. It takes two slots.
 final class DoubleEntryImpl extends AbstractPoolEntry implements DoubleEntry {
 
-    private final double valor;
+    private final double value;
 
-    DoubleEntryImpl(ConstantPool pool, int index, double valor) {
+    DoubleEntryImpl(ConstantPool pool, int index, double value) {
         super(pool, index);
-        this.valor = valor;
+        this.value = value;
     }
 
     public int tag() {
@@ -218,15 +218,15 @@ final class DoubleEntryImpl extends AbstractPoolEntry implements DoubleEntry {
     }
 
     public double doubleValue() {
-        return this.valor;
+        return this.value;
     }
 
     public ConstantDesc constantValue() {
-        return Double.valueOf(this.valor);
+        return Double.valueOf(this.value);
     }
 
     public String toString() {
-        return "double " + this.valor;
+        return "double " + this.value;
     }
 }
 
@@ -234,7 +234,7 @@ final class DoubleEntryImpl extends AbstractPoolEntry implements DoubleEntry {
 final class ClassEntryImpl extends AbstractPoolEntry implements ClassEntry {
 
     private final Utf8Entry name;
-    private ClassDesc simbolo;
+    private ClassDesc symbol;
 
     ClassEntryImpl(ConstantPool pool, int index, Utf8Entry name) {
         super(pool, index);
@@ -254,17 +254,17 @@ final class ClassEntryImpl extends AbstractPoolEntry implements ClassEntry {
     }
 
     public ClassDesc asSymbol() {
-        if (this.simbolo == null) {
+        if (this.symbol == null) {
             String n = this.name.stringValue();
             if (n.length() == 0) {
                 throw new java.lang.classfile.constantpool.ConstantPoolException(
-                        "CONSTANT_Class con nombre vacío en el índice " + this.index);
+                        "CONSTANT_Class with an empty name at index " + this.index);
             }
-            this.simbolo = n.charAt(0) == '['
+            this.symbol = n.charAt(0) == '['
                     ? ClassDesc.ofDescriptor(n)
                     : ClassDesc.ofInternalName(n);
         }
-        return this.simbolo;
+        return this.symbol;
     }
 
     public boolean matches(ClassDesc desc) {
@@ -343,12 +343,12 @@ final class NameAndTypeEntryImpl extends AbstractPoolEntry implements NameAndTyp
 // `CONSTANT_Fieldref`.
 final class FieldRefEntryImpl extends AbstractPoolEntry implements FieldRefEntry {
 
-    private final ClassEntry duenio;
+    private final ClassEntry owner;
     private final NameAndTypeEntry nat;
 
-    FieldRefEntryImpl(ConstantPool pool, int index, ClassEntry duenio, NameAndTypeEntry nat) {
+    FieldRefEntryImpl(ConstantPool pool, int index, ClassEntry owner, NameAndTypeEntry nat) {
         super(pool, index);
-        this.duenio = duenio;
+        this.owner = owner;
         this.nat = nat;
     }
 
@@ -357,7 +357,7 @@ final class FieldRefEntryImpl extends AbstractPoolEntry implements FieldRefEntry
     }
 
     public ClassEntry owner() {
-        return this.duenio;
+        return this.owner;
     }
 
     public NameAndTypeEntry nameAndType() {
@@ -365,19 +365,19 @@ final class FieldRefEntryImpl extends AbstractPoolEntry implements FieldRefEntry
     }
 
     public String toString() {
-        return "Field " + this.duenio.asInternalName() + "." + this.nat.toString();
+        return "Field " + this.owner.asInternalName() + "." + this.nat.toString();
     }
 }
 
 // `CONSTANT_Methodref`.
 final class MethodRefEntryImpl extends AbstractPoolEntry implements MethodRefEntry {
 
-    private final ClassEntry duenio;
+    private final ClassEntry owner;
     private final NameAndTypeEntry nat;
 
-    MethodRefEntryImpl(ConstantPool pool, int index, ClassEntry duenio, NameAndTypeEntry nat) {
+    MethodRefEntryImpl(ConstantPool pool, int index, ClassEntry owner, NameAndTypeEntry nat) {
         super(pool, index);
-        this.duenio = duenio;
+        this.owner = owner;
         this.nat = nat;
     }
 
@@ -386,7 +386,7 @@ final class MethodRefEntryImpl extends AbstractPoolEntry implements MethodRefEnt
     }
 
     public ClassEntry owner() {
-        return this.duenio;
+        return this.owner;
     }
 
     public NameAndTypeEntry nameAndType() {
@@ -394,20 +394,20 @@ final class MethodRefEntryImpl extends AbstractPoolEntry implements MethodRefEnt
     }
 
     public String toString() {
-        return "Method " + this.duenio.asInternalName() + "." + this.nat.toString();
+        return "Method " + this.owner.asInternalName() + "." + this.nat.toString();
     }
 }
 
 // `CONSTANT_InterfaceMethodref`.
 final class InterfaceMethodRefEntryImpl extends AbstractPoolEntry implements InterfaceMethodRefEntry {
 
-    private final ClassEntry duenio;
+    private final ClassEntry owner;
     private final NameAndTypeEntry nat;
 
-    InterfaceMethodRefEntryImpl(ConstantPool pool, int index, ClassEntry duenio,
+    InterfaceMethodRefEntryImpl(ConstantPool pool, int index, ClassEntry owner,
             NameAndTypeEntry nat) {
         super(pool, index);
-        this.duenio = duenio;
+        this.owner = owner;
         this.nat = nat;
     }
 
@@ -416,7 +416,7 @@ final class InterfaceMethodRefEntryImpl extends AbstractPoolEntry implements Int
     }
 
     public ClassEntry owner() {
-        return this.duenio;
+        return this.owner;
     }
 
     public NameAndTypeEntry nameAndType() {
@@ -424,7 +424,7 @@ final class InterfaceMethodRefEntryImpl extends AbstractPoolEntry implements Int
     }
 
     public String toString() {
-        return "InterfaceMethod " + this.duenio.asInternalName() + "." + this.nat.toString();
+        return "InterfaceMethod " + this.owner.asInternalName() + "." + this.nat.toString();
     }
 }
 
@@ -432,7 +432,7 @@ final class InterfaceMethodRefEntryImpl extends AbstractPoolEntry implements Int
 final class MethodTypeEntryImpl extends AbstractPoolEntry implements MethodTypeEntry {
 
     private final Utf8Entry descriptor;
-    private MethodTypeDesc simbolo;
+    private MethodTypeDesc symbol;
 
     MethodTypeEntryImpl(ConstantPool pool, int index, Utf8Entry descriptor) {
         super(pool, index);
@@ -448,10 +448,10 @@ final class MethodTypeEntryImpl extends AbstractPoolEntry implements MethodTypeE
     }
 
     public MethodTypeDesc asSymbol() {
-        if (this.simbolo == null) {
-            this.simbolo = MethodTypeDesc.ofDescriptor(this.descriptor.stringValue());
+        if (this.symbol == null) {
+            this.symbol = MethodTypeDesc.ofDescriptor(this.descriptor.stringValue());
         }
-        return this.simbolo;
+        return this.symbol;
     }
 
     public boolean matches(MethodTypeDesc desc) {
@@ -467,12 +467,12 @@ final class MethodTypeEntryImpl extends AbstractPoolEntry implements MethodTypeE
 final class MethodHandleEntryImpl extends AbstractPoolEntry implements MethodHandleEntry {
 
     private final int refKind;
-    private final MemberRefEntry referencia;
+    private final MemberRefEntry reference;
 
-    MethodHandleEntryImpl(ConstantPool pool, int index, int refKind, MemberRefEntry referencia) {
+    MethodHandleEntryImpl(ConstantPool pool, int index, int refKind, MemberRefEntry reference) {
         super(pool, index);
         this.refKind = refKind;
-        this.referencia = referencia;
+        this.reference = reference;
     }
 
     public int tag() {
@@ -484,18 +484,18 @@ final class MethodHandleEntryImpl extends AbstractPoolEntry implements MethodHan
     }
 
     public MemberRefEntry reference() {
-        return this.referencia;
+        return this.reference;
     }
 
     public DirectMethodHandleDesc asSymbol() {
-        boolean esInterfaz = this.referencia instanceof InterfaceMethodRefEntry;
-        Kind k = Kind.valueOf(this.refKind, esInterfaz);
-        return MethodHandleDesc.of(k, this.referencia.owner().asSymbol(),
-                this.referencia.name().stringValue(), this.referencia.type().stringValue());
+        boolean isInterface = this.reference instanceof InterfaceMethodRefEntry;
+        Kind k = Kind.valueOf(this.refKind, isInterface);
+        return MethodHandleDesc.of(k, this.reference.owner().asSymbol(),
+                this.reference.name().stringValue(), this.reference.type().stringValue());
     }
 
     public String toString() {
-        return "MethodHandle " + this.refKind + " " + this.referencia.toString();
+        return "MethodHandle " + this.refKind + " " + this.reference.toString();
     }
 }
 

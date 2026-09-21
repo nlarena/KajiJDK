@@ -9,29 +9,30 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
 /**
- * El numero con el que un stub de RMI nombra un metodo del otro lado.
+ * The number by which an RMI stub names a method on the other side.
  *
- * <h2>Por que un numero y no el nombre</h2>
+ * <h2>Why a number and not the name</h2>
  *
- * <p>Cuando un stub llama, tiene que decirle al servidor <strong>cual</strong> de los metodos de la
- * interfaz esta invocando. Mandar el nombre y la firma en texto seria caro en cada llamada y
- * ambiguo con las sobrecargas. RMI manda un numero de 64 bits que sale del nombre y del descriptor,
- * y que las dos puntas calculan igual: si difieren, es que las interfaces no son la misma version, y
- * la llamada se rechaza en vez de ir al metodo equivocado.
+ * <p>When a stub calls, it has to tell the server <strong>which</strong> of the interface's
+ * methods it is invoking. Sending the name and the signature as text would be expensive on every
+ * call and ambiguous with overloads. RMI sends a 64-bit number derived from the name and the
+ * descriptor, and both ends compute it the same way: if they differ, the interfaces are not the
+ * same version, and the call is rejected instead of going to the wrong method.
  *
- * <h2>Como se calcula</h2>
+ * <h2>How it is computed</h2>
  *
- * <p>Es de la especificacion de RMI, no una eleccion de esta biblioteca: se escribe
- * {@code nombre(descriptor)} con {@code writeUTF} --o sea, el largo en dos bytes y despues los
- * bytes--, se le toma SHA-1, y se arman los primeros ocho bytes del resumen como un {@code long} en
- * orden de byte menos significativo primero.
+ * <p>It is from the RMI specification, not a choice of this library: {@code name(descriptor)} is
+ * written with {@code writeUTF} --that is, the length in two bytes and then the bytes--, SHA-1 is
+ * taken of it, and the digest's first eight bytes are assembled into a {@code long} in
+ * least-significant-byte-first order.
  *
- * <h2>Por que se calcula aca en vez de estar escrito</h2>
+ * <h2>Why it is computed here instead of being written down</h2>
  *
- * <p>En el JDK estos numeros son constantes en el archivo compilado, porque los calculo
- * {@code rmic} al construirlo. Copiarlos a mano seria copiar sesenta literales de dieciocho digitos
- * sin forma de comprobar ninguno. Calcularlos da lo mismo --se comprobo contra los del JDK 25-- y
- * ademas no se puede desincronizar de la firma si la firma cambia.
+ * <p>In the JDK these numbers are constants in the compiled file, because {@code rmic} computed
+ * them while building it. Copying them by hand would be copying sixty eighteen-digit literals
+ * with no way of checking any of them. Computing them gives the same --it was checked against
+ * JDK 25's-- and on top of that it cannot get out of step with the signature if the signature
+ * changes.
  */
 final class Hash {
 
@@ -39,18 +40,19 @@ final class Hash {
     }
 
     /**
-     * El numero de ese metodo.
+     * That method's number.
      *
-     * @param m el metodo
-     * @return el numero
-     * @throws Error si esta VM no tiene SHA-1, que es lo unico que impediria calcularlo
+     * @param m the method
+     * @return the number
+     * @throws Error if this VM has no SHA-1, which is the only thing that would prevent computing
+     *     it
      */
     static long de(Method m) {
         final MessageDigest md;
         try {
             md = MessageDigest.getInstance("SHA-1");
         } catch (NoSuchAlgorithmException e) {
-            throw new Error("SHA-1 no disponible", e);
+            throw new Error("SHA-1 not available", e);
         }
         try {
             final DataOutputStream out = new DataOutputStream(
@@ -58,8 +60,8 @@ final class Hash {
             out.writeUTF(descriptor(m));
             out.flush();
         } catch (IOException e) {
-            // El destino es un arreglo en memoria: no hay dispositivo que pueda fallar.
-            throw new Error("no se pudo calcular el hash", e);
+            // The destination is an array in memory: there is no device that can fail.
+            throw new Error("the hash could not be computed", e);
         }
         final byte[] h = md.digest();
         long hash = 0;
@@ -69,18 +71,18 @@ final class Hash {
         return hash;
     }
 
-    /** {@code nombre(tiposDeLosParametros)tipoDeRetorno}, en la notacion del archivo compilado. */
+    /** {@code name(parameterTypes)returnType}, in the compiled file's notation. */
     private static String descriptor(Method m) {
         final StringBuilder b = new StringBuilder(m.getName()).append('(');
         for (final Class<?> p : m.getParameterTypes()) {
-            b.append(tipo(p));
+            b.append(typeName(p));
         }
-        return b.append(')').append(tipo(m.getReturnType())).toString();
+        return b.append(')').append(typeName(m.getReturnType())).toString();
     }
 
-    private static String tipo(Class<?> c) {
+    private static String typeName(Class<?> c) {
         if (c.isArray()) {
-            return "[" + tipo(c.getComponentType());
+            return "[" + typeName(c.getComponentType());
         }
         if (!c.isPrimitive()) {
             return "L" + c.getName().replace('.', '/') + ";";

@@ -1,13 +1,13 @@
 package org.w3c.dom.html;
 
 /**
- * Un `<blockquote>` o un `<q>`.
+ * A `<blockquote>` or a `<q>`.
  */
 public interface HTMLQuoteElement extends HTMLElement {
 
-    /** El atributo `cite`. */
+    /** The `cite` attribute. */
     String getCite();
 
-    /** Fija el atributo `cite`. */
+    /** It sets the `cite` attribute. */
     void setCite(String cite);
 }

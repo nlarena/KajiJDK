@@ -4,67 +4,67 @@ import java.awt.event.ActionListener;
 import java.beans.PropertyChangeListener;
 
 /**
- * Una accion: lo que hace un boton o un menu, separado del boton o del menu.
+ * An action: what a button or a menu does, separate from the button or the menu.
  *
- * <p>Es un {@link ActionListener} con propiedades —nombre, icono, mnemonico, si esta
- * habilitada— y con avisos cuando cambian. La separacion es lo que permite que un mismo "Guardar"
- * viva en un boton, en un menu y en un atajo, y que deshabilitarlo una vez lo deshabilite en los
- * tres: cada componente escucha las propiedades y se acomoda.
+ * <p>It is an {@link ActionListener} with properties -- name, icon, mnemonic, whether it is
+ * enabled -- and with notices when they change. The separation is what allows one and the same
+ * "Save" to live in a button, in a menu and in a shortcut, and disabling it once to disable it
+ * in all three: each component listens to the properties and settles itself.
  *
- * <p>Las claves son cadenas porque las propiedades son abiertas: una aplicacion puede guardar las
- * suyas junto a las estandar.
+ * <p>The keys are strings because the properties are open: an application may keep its own
+ * beside the standard ones.
  */
 public interface Action extends ActionListener {
 
-    /** Clave de una propiedad por omision; no la usa nadie del JDK, existe por historia. */
+    /** A default property's key; nobody in the JDK uses it, it exists out of history. */
     String DEFAULT = "Default";
 
-    /** El nombre: el texto del boton o del menu. */
+    /** The name: the button's or the menu's text. */
     String NAME = "Name";
 
-    /** Una descripcion corta: el texto de ayuda flotante. */
+    /** A short description: the floating tip's text. */
     String SHORT_DESCRIPTION = "ShortDescription";
 
-    /** Una descripcion larga, para ayuda contextual. */
+    /** A long description, for contextual help. */
     String LONG_DESCRIPTION = "LongDescription";
 
-    /** El icono chico: el de un menu, y el de un boton si no hay grande. */
+    /** The small icon: a menu's, and a button's if there is no large one. */
     String SMALL_ICON = "SmallIcon";
 
-    /** El comando que va en el {@code ActionEvent}. */
+    /** The command that goes in the {@code ActionEvent}. */
     String ACTION_COMMAND_KEY = "ActionCommandKey";
 
-    /** El acelerador de teclado, un {@code KeyStroke}. */
+    /** The keyboard accelerator, a {@code KeyStroke}. */
     String ACCELERATOR_KEY = "AcceleratorKey";
 
-    /** El mnemonico, un {@code Integer} con la tecla virtual. */
+    /** The mnemonic, an {@code Integer} with the virtual key. */
     String MNEMONIC_KEY = "MnemonicKey";
 
-    /** Si esta seleccionada, para botones con estado; un {@code Boolean}. */
+    /** Whether it is selected, for buttons with state; a {@code Boolean}. */
     String SELECTED_KEY = "SwingSelectedKey";
 
-    /** Que caracter del nombre subrayar; un {@code Integer}. */
+    /** Which character of the name to underline; an {@code Integer}. */
     String DISPLAYED_MNEMONIC_INDEX_KEY = "SwingDisplayedMnemonicIndexKey";
 
-    /** El icono grande: el de un boton, si esta. */
+    /** The large icon: a button's, if it is there. */
     String LARGE_ICON_KEY = "SwingLargeIconKey";
 
-    /** La propiedad con esa clave, o {@code null}. */
+    /** The property with that key, or {@code null}. */
     Object getValue(String key);
 
-    /** Pone la propiedad con esa clave, avisando a los escuchas si cambio. */
+    /** It sets the property with that key, giving notice to the listeners if it changed. */
     void putValue(String key, Object value);
 
-    /** Habilita o deshabilita; los componentes que la usan se enteran y se acomodan. */
+    /** It enables or disables; the components that use it learn about it and settle themselves. */
     void setEnabled(boolean b);
 
     boolean isEnabled();
 
     /**
-     * Si esta accion acepta dispararse desde ese origen.
+     * Whether this action accepts being fired from that source.
      *
-     * <p>Por omision acepta a cualquiera. Es la manera de que una accion diga "desde este
-     * componente no", sin deshabilitarse para los demas.
+     * <p>By default it accepts anybody. It is the way for an action to say "not from this
+     * component", without disabling itself for the others.
      */
     default boolean accept(Object sender) {
         return true;

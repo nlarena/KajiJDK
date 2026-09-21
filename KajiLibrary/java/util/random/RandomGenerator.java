@@ -24,13 +24,15 @@ import java.util.stream.Stream;
  *           re-derive them — and risk getting the bounded case subtly non-uniform — or extend a
  *           class whose 48-bit LCG state it did not want.
  *
- * @implNote A KajiLibrary subset. The stream methods ({@code ints}/{@code longs}/{@code doubles})
- *           are omitted: the unbounded forms are infinite, which the eager
- *           {@code java.util.stream} cannot express. {@code nextGaussian}/{@code nextExponential}
- *           are omitted because the JDK computes them with the modified ziggurat method, a pair of
- *           generated lookup tables; a polar-method version would have the right distribution but
- *           a different sequence, so it could not be validated against the JDK. {@code of(String)}
- *           and {@code getDefault()} need a registry of implementations.
+ * @implNote This note used to list as omitted the {@code ints}/{@code longs}/{@code doubles}
+ *           stream methods, {@code nextGaussian}/{@code nextExponential}, {@code of(String)} and
+ *           {@code getDefault()}. All of them are declared below. What survives of it is narrower
+ *           and is stated where it applies: the four stream forms that take no size refuse, because
+ *           an unbounded stream needs laziness and this library's are eager; and the two
+ *           distributions are computed by the polar and inverse-transform methods rather than the
+ *           JDK's ziggurat, so they have the right distribution and a different sequence -- which
+ *           these defaults are allowed, because unlike {@link java.util.Random} they name no
+ *           algorithm.
  */
 public interface RandomGenerator {
 
@@ -271,33 +273,34 @@ public interface RandomGenerator {
         }
     }
 
-    // ---- los flujos de valores ------------------------------------------------------------------
+    // ---- the streams of values --------------------------------------------------------------------
     //
-    // Doce fabricas que son la misma idea cuatro veces por tipo: con o sin cantidad, con o sin
-    // rango. Estan aca --y no en cada generador-- porque no dependen de nada mas que de `nextInt`,
-    // `nextLong` y `nextDouble`, que es justamente lo que cada implementacion aporta.
+    // Twelve factories that are the same idea four times per type: with or without a count, with or
+    // without a range. They are here --and not in each generator-- because they depend on nothing
+    // more than `nextInt`, `nextLong` and `nextDouble`, which is exactly what each implementation
+    // brings.
     //
-    // **Divergencia deliberada, y es la unica**: las formas **sin cantidad** (`ints()`, `longs()`,
-    // `doubles()`) se niegan en vez de devolver un flujo infinito.
+    // **A deliberate divergence, and it is the only one**: the forms **without a count** (`ints()`,
+    // `longs()`, `doubles()`) refuse instead of returning an infinite stream.
     //
-    // El JDK las define como "efectivamente ilimitadas", y eso pide un flujo **perezoso**: los
-    // valores se generan a medida que alguien los pide, y `limit(n)` corta antes de generar el
-    // resto. Los flujos de esta biblioteca estan respaldados por un arreglo y son **ansiosos** --
-    // se materializan enteros al crearse --, asi que un flujo infinito no se puede representar.
+    // The JDK defines them as "effectively unlimited", and that asks for a **lazy** stream: the
+    // values are generated as somebody asks for them, and `limit(n)` cuts before generating the
+    // rest. This library's streams are backed by an array and are **eager** --they materialise whole
+    // on creation-- so an infinite stream cannot be represented.
     //
-    // De las dos salidas posibles se elige la ruidosa. Devolver un prefijo largo y fingir que es
-    // infinito andaria para `ints().limit(10)` y daria **menos** valores de los pedidos para
-    // `ints().limit(un_millon)`, en silencio. Un metodo que se niega y dice con que reemplazarlo es
-    // peor de usar y mejor de confiar.
-    private static UnsupportedOperationException sinTamano(String cual) {
+    // Of the two ways out the noisy one is chosen. Returning a long prefix and pretending it is
+    // infinite would work for `ints().limit(10)` and would give **fewer** values than asked for on
+    // `ints().limit(a_million)`, in silence. A method that refuses and says what to replace it with
+    // is worse to use and better to trust.
+    private static UnsupportedOperationException noSize(String which) {
         return new UnsupportedOperationException(
-                "los flujos de esta biblioteca son ansiosos: use " + cual + "(streamSize)");
+                "this library's streams are eager: use " + which + "(streamSize)");
     }
 
     /**
-     * `streamSize` enteros pseudoaleatorios.
+     * `streamSize` pseudorandom ints.
      *
-     * @throws IllegalArgumentException si `streamSize` es negativo
+     * @throws IllegalArgumentException if `streamSize` is negative
      */
     default IntStream ints(long streamSize) {
         if (streamSize < 0) {
@@ -312,7 +315,7 @@ public interface RandomGenerator {
         return IntStream.of(a);
     }
 
-    // `streamSize` enteros en `[origin, bound)`.
+    // `streamSize` ints in `[origin, bound)`.
     default IntStream ints(long streamSize, int randomNumberOrigin, int randomNumberBound) {
         if (streamSize < 0) {
             throw new IllegalArgumentException("streamSize must be non-negative");
@@ -327,11 +330,11 @@ public interface RandomGenerator {
     }
 
     default IntStream ints() {
-        throw sinTamano("ints");
+        throw noSize("ints");
     }
 
     default IntStream ints(int randomNumberOrigin, int randomNumberBound) {
-        throw sinTamano("ints");
+        throw noSize("ints");
     }
 
     default LongStream longs(long streamSize) {
@@ -361,13 +364,14 @@ public interface RandomGenerator {
     }
 
     default LongStream longs() {
-        throw sinTamano("longs");
+        throw noSize("longs");
     }
 
-    // Ojo con esta: **no** es la de la cantidad. `longs(long, long)` son origen y limite; la de una
-    // sola cantidad es `longs(long)`. La colision de firmas es del JDK y se replica tal cual.
+    // Mind this one: it is **not** the count form. `longs(long, long)` is origin and bound; the
+    // single-count one is `longs(long)`. The signature clash is the JDK's and is replicated as it
+    // is.
     default LongStream longs(long randomNumberOrigin, long randomNumberBound) {
-        throw sinTamano("longs");
+        throw noSize("longs");
     }
 
     default DoubleStream doubles(long streamSize) {
@@ -398,24 +402,24 @@ public interface RandomGenerator {
     }
 
     default DoubleStream doubles() {
-        throw sinTamano("doubles");
+        throw noSize("doubles");
     }
 
     default DoubleStream doubles(double randomNumberOrigin, double randomNumberBound) {
-        throw sinTamano("doubles");
+        throw noSize("doubles");
     }
 
     /**
-     * Un generador que sabe **partirse**: dar otro generador independiente del primero.
+     * A generator that knows how to **split**: to give another generator independent of the first.
      *
-     * <p>Existe por un problema muy concreto del paralelismo. Compartir un generador entre hilos
-     * exige sincronizarlo, y eso lo vuelve el cuello de botella; darle a cada hilo su propia semilla
-     * "al azar" no garantiza nada -- dos semillas cercanas pueden dar secuencias solapadas. Partir
-     * resuelve las dos cosas: cada hilo se lleva un generador propio, sin candado, y con la garantia
-     * de que las secuencias no se pisan.
+     * <p>It exists for a very concrete problem of parallelism. Sharing a generator between threads
+     * requires synchronising it, and that makes it the bottleneck; giving each thread its own seed
+     * "at random" guarantees nothing -- two nearby seeds can give overlapping sequences. Splitting
+     * settles both: each thread takes away a generator of its own, with no lock, and with the
+     * guarantee that the sequences do not step on each other.
      *
-     * <p>Las formas con `source` toman la entropia de **otro** generador en vez de la propia, que es
-     * lo que permite reproducir una particion entera desde una sola semilla.
+     * <p>The forms with `source` take their entropy from **another** generator instead of their own,
+     * which is what allows a whole split to be reproduced from a single seed.
      */
     interface SplittableGenerator extends RandomGenerator {
 
@@ -427,241 +431,242 @@ public interface RandomGenerator {
 
         Stream<SplittableGenerator> splits(long streamSize, SplittableGenerator source);
 
-        // Las dos sin cantidad se niegan, por la misma razon que `ints()`/`longs()`/`doubles()`:
-        // los flujos de esta biblioteca son ansiosos y no pueden ser infinitos.
+        // The two without a count refuse, for the same reason as `ints()`/`longs()`/`doubles()`:
+        // this library's streams are eager and cannot be infinite.
         default Stream<SplittableGenerator> splits() {
             throw new UnsupportedOperationException(
-                    "los flujos de esta biblioteca son ansiosos: use splits(streamSize)");
+                    "this library's streams are eager: use splits(streamSize)");
         }
 
         default Stream<SplittableGenerator> splits(SplittableGenerator source) {
             throw new UnsupportedOperationException(
-                    "los flujos de esta biblioteca son ansiosos: use splits(streamSize, source)");
+                    "this library's streams are eager: use splits(streamSize, source)");
         }
     }
 
     /**
-     * Un generador que sabe **saltar**: avanzar de golpe una distancia enorme de su secuencia.
+     * A generator that knows how to **jump**: to advance a huge distance of its sequence in one go.
      *
-     * <p>Resuelve el mismo problema que partir, por el otro camino. Un generador con un periodo
-     * gigantesco se puede repartir entre hilos dandole a cada uno un tramo **disjunto**: el hilo N
-     * arranca en la posicion N por la distancia de salto. La garantia no es estadistica sino
-     * aritmetica -- los tramos no se solapan porque la distancia es conocida.
+     * <p>It settles the same problem as splitting, by the other road. A generator with a gigantic
+     * period can be shared out among threads by giving each one a **disjoint** stretch: thread N
+     * starts at position N times the jump distance. The guarantee is not statistical but arithmetic
+     * -- the stretches do not overlap because the distance is known.
      *
-     * <p>La diferencia con partir: saltar necesita que el algoritmo tenga una forma cerrada de
-     * avanzar (una matriz de transicion elevada a una potencia), y no todos la tienen. Los LXM se
-     * parten; los xoshiro saltan.
+     * <p>The difference from splitting: jumping needs the algorithm to have a closed form for
+     * advancing (a transition matrix raised to a power), and not all of them do. The LXM split; the
+     * xoshiro jump.
      */
     interface JumpableGenerator extends RandomGenerator {
 
-        /** Una copia de este generador, en el mismo estado. */
+        /** A copy of this generator, in the same state. */
         JumpableGenerator copy();
 
-        /** Avanza este generador una distancia de salto. */
+        /** It advances this generator by one jump distance. */
         void jump();
 
-        /** Cuantos valores avanza {@link #jump()}. */
+        /** How many values {@link #jump()} advances by. */
         double jumpDistance();
 
         /**
-         * Una copia en el estado actual, y **este** queda avanzado un salto.
+         * A copy in the current state, and **this one** is left advanced by a jump.
          *
-         * <p>El orden importa y es el que dice el nombre: se copia primero. Lo que se devuelve es el
-         * tramo que empieza donde estaba, y el que llama se queda con el siguiente.
+         * <p>The order matters and it is the one the name says: the copy comes first. What is
+         * returned is the stretch that starts where it was, and the caller keeps the next one.
          */
         default RandomGenerator copyAndJump() {
-            RandomGenerator copia = this.copy();
+            RandomGenerator snapshot = this.copy();
             this.jump();
-            return copia;
+            return snapshot;
         }
 
-        /** `streamSize` generadores, cada uno un salto mas adelante que el anterior. */
+        /** `streamSize` generators, each one a jump further along than the previous. */
         default Stream<RandomGenerator> jumps(long streamSize) {
             if (streamSize < 0L) {
                 throw new IllegalArgumentException("size must be non-negative");
             }
-            java.util.List<RandomGenerator> salida = new java.util.ArrayList<RandomGenerator>();
+            java.util.List<RandomGenerator> out = new java.util.ArrayList<RandomGenerator>();
             long i = 0L;
             while (i < streamSize) {
-                salida.add(this.copyAndJump());
+                out.add(this.copyAndJump());
                 i = i + 1L;
             }
-            return salida.stream();
+            return out.stream();
         }
 
-        /** Igual que {@link #jumps(long)}: los flujos de esta biblioteca son ansiosos. */
+        /** As with {@link #jumps(long)}: this library's streams are eager. */
         default Stream<RandomGenerator> rngs(long streamSize) {
             return this.jumps(streamSize);
         }
 
-        // Las dos sin cantidad se niegan, por lo mismo que `ints()`/`longs()`/`doubles()`.
+        // The two without a count refuse, for the same reason as `ints()`/`longs()`/`doubles()`.
         default Stream<RandomGenerator> jumps() {
             throw new UnsupportedOperationException(
-                    "los flujos de esta biblioteca son ansiosos: use jumps(streamSize)");
+                    "this library's streams are eager: use jumps(streamSize)");
         }
 
         default Stream<RandomGenerator> rngs() {
             throw new UnsupportedOperationException(
-                    "los flujos de esta biblioteca son ansiosos: use rngs(streamSize)");
+                    "this library's streams are eager: use rngs(streamSize)");
         }
 
         /**
-         * Un generador saltable del algoritmo que se nombra.
+         * A jumpable generator of the algorithm named.
          *
-         * @throws IllegalArgumentException si ese algoritmo no existe o no sabe saltar
+         * @throws IllegalArgumentException if that algorithm does not exist or cannot jump
          */
         static JumpableGenerator of(String name) {
             RandomGenerator g = RandomGeneratorFactory.of(name).create();
             if (!(g instanceof JumpableGenerator)) {
-                throw new IllegalArgumentException("el algoritmo " + name + " no sabe saltar");
+                throw new IllegalArgumentException("the algorithm " + name + " cannot jump");
             }
             return (JumpableGenerator) g;
         }
     }
 
     /**
-     * Un generador que ademas sabe dar un **salto largo**.
+     * A generator that on top of that knows how to take a **leap**.
      *
-     * <p>Los dos niveles no son un capricho: el salto reparte tramos entre hilos, y el salto largo
-     * reparte **conjuntos de tramos** entre maquinas. Con un solo tamanio hay que elegir entre
-     * granularidad fina y alcance, y con dos no.
+     * <p>The two levels are not a whim: the jump shares stretches out among threads, and the leap
+     * shares **sets of stretches** out among machines. With a single size one has to choose between
+     * fine granularity and reach, and with two one does not.
      */
     interface LeapableGenerator extends JumpableGenerator {
 
-        /** Una copia de este generador, en el mismo estado. */
+        /** A copy of this generator, in the same state. */
         LeapableGenerator copy();
 
-        /** Avanza este generador una distancia de salto largo. */
+        /** It advances this generator by one leap distance. */
         void leap();
 
-        /** Cuantos valores avanza {@link #leap()}. */
+        /** How many values {@link #leap()} advances by. */
         double leapDistance();
 
-        /** Una copia en el estado actual, y **este** queda avanzado un salto largo. */
+        /** A copy in the current state, and **this one** is left advanced by a leap. */
         default JumpableGenerator copyAndLeap() {
-            JumpableGenerator copia = this.copy();
+            JumpableGenerator snapshot = this.copy();
             this.leap();
-            return copia;
+            return snapshot;
         }
 
-        /** `streamSize` generadores, cada uno un salto largo mas adelante que el anterior. */
+        /** `streamSize` generators, each one a leap further along than the previous. */
         default Stream<JumpableGenerator> leaps(long streamSize) {
             if (streamSize < 0L) {
                 throw new IllegalArgumentException("size must be non-negative");
             }
-            java.util.List<JumpableGenerator> salida = new java.util.ArrayList<JumpableGenerator>();
+            java.util.List<JumpableGenerator> out = new java.util.ArrayList<JumpableGenerator>();
             long i = 0L;
             while (i < streamSize) {
-                salida.add(this.copyAndLeap());
+                out.add(this.copyAndLeap());
                 i = i + 1L;
             }
-            return salida.stream();
+            return out.stream();
         }
 
         default Stream<JumpableGenerator> leaps() {
             throw new UnsupportedOperationException(
-                    "los flujos de esta biblioteca son ansiosos: use leaps(streamSize)");
+                    "this library's streams are eager: use leaps(streamSize)");
         }
 
         /**
-         * Un generador de salto largo del algoritmo que se nombra.
+         * A leapable generator of the algorithm named.
          *
-         * @throws IllegalArgumentException si ese algoritmo no existe o no sabe saltar largo
+         * @throws IllegalArgumentException if that algorithm does not exist or cannot leap
          */
         static LeapableGenerator of(String name) {
             RandomGenerator g = RandomGeneratorFactory.of(name).create();
             if (!(g instanceof LeapableGenerator)) {
-                throw new IllegalArgumentException("el algoritmo " + name + " no sabe saltar largo");
+                throw new IllegalArgumentException("the algorithm " + name + " cannot leap");
             }
             return (LeapableGenerator) g;
         }
     }
 
-    // ---- los estaticos de fabrica ---------------------------------------------------------------
+    // ---- the static factories     ---------------------------------------------------------------
 
     /**
-     * Un generador del algoritmo que se nombra.
+     * A generator of the algorithm named.
      *
-     * <p>Los nombres son los doce de `RandomGeneratorFactory.names()`. Uno que no este ahi es un
-     * `IllegalArgumentException`, no un generador por defecto silencioso: pedir `"Xoshiro256"` y
-     * recibir otra cosa seria el peor resultado posible, porque el codigo seguiria andando con
-     * propiedades estadisticas que no son las que pidio.
+     * <p>The names are `RandomGeneratorFactory.names()`'s twelve. One that is not there is an
+     * `IllegalArgumentException`, not a silent default generator: asking for `"Xoshiro256"` and
+     * getting something else would be the worst possible outcome, because the code would carry on
+     * running with statistical properties that are not the ones it asked for.
      *
-     * @throws IllegalArgumentException si no hay implementacion de ese algoritmo
+     * @throws IllegalArgumentException if there is no implementation of that algorithm
      */
     static RandomGenerator of(String name) {
         return RandomGeneratorFactory.of(name).create();
     }
 
     /**
-     * El generador por defecto.
+     * The default generator.
      *
-     * <p>Delega en `RandomGeneratorFactory.getDefault()`, y esa delegacion es el punto: si los dos
-     * eligieran por su cuenta podrian dejar de coincidir, y "el algoritmo por defecto" pasaria a
-     * depender de por cual de las dos puertas se entro.
+     * <p>It delegates to `RandomGeneratorFactory.getDefault()`, and that delegation is the point: if
+     * the two chose on their own they could stop agreeing, and "the default algorithm" would come to
+     * depend on which of the two doors one came in by.
      */
     static RandomGenerator getDefault() {
         return RandomGeneratorFactory.getDefault().create();
     }
 
-    // ---- las distribuciones ----------------------------------------------------------------------
+    // ---- the distributions  ----------------------------------------------------------------------
 
     /**
-     * Si el algoritmo esta **desaconsejado**.
+     * Whether the algorithm is **deprecated**.
      *
-     * <p>`false` acá, y lo sobreescribe el que lo este. Hoy no lo esta **ninguno** de los doce, y se
-     * verifico contra el JDK 25 en vez de darlo por sentado: `java.util.Random` es el candidato
-     * obvio --su LCG de 48 bits sobrevive solo por compatibilidad, porque su secuencia es parte del
-     * contrato y mejorarla romperia a todo el que dependa de ella-- y sin embargo `java` real
-     * tambien devuelve `false` para el. Coincide con lo que dice `RandomGeneratorFactory`.
+     * <p>`false` here, and whichever one is deprecated overrides it. Today **none** of the twelve is,
+     * and that was verified against JDK 25 rather than taken for granted: `java.util.Random` is the
+     * obvious candidate --its 48-bit LCG survives only for compatibility, because its sequence is
+     * part of the contract and improving it would break everyone who depends on it-- and even so the
+     * real `java` also returns `false` for it. It agrees with what `RandomGeneratorFactory` says.
      */
     default boolean isDeprecated() {
         return false;
     }
 
     /**
-     * Un valor de una normal de media 0 y desvio 1.
+     * A value from a normal of mean 0 and standard deviation 1.
      *
-     * <p>Es el metodo polar de Marsaglia: se tiran puntos uniformes en el cuadrado
-     * {@code [-1,1]x[-1,1]} hasta que uno caiga dentro del circulo unitario, y el factor
-     * {@code sqrt(-2*log(s)/s)} lo convierte en una normal.
+     * <p>It is Marsaglia's polar method: uniform points are thrown in the square
+     * {@code [-1,1]x[-1,1]} until one falls inside the unit circle, and the factor
+     * {@code sqrt(-2*log(s)/s)} turns it into a normal.
      *
-     * <p><b>El valor no es parte del contrato, y la distincion importa.</b> `java.util.Random`
-     * **sobreescribe** este metodo y ahi el valor **si** lo es --su javadoc nombra el algoritmo, asi
-     * que dos `Random` con la misma semilla tienen que dar los mismos gaussianos--. Este default no
-     * nombra ninguno: lo unico que promete es la distribucion. Por eso no se copio la version del
-     * JDK (un ziggurat con tablas de 256 entradas): daria otros numeros y ninguno de los dos estaria
-     * mal.
+     * <p><b>The value is not part of the contract, and the distinction matters.</b>
+     * `java.util.Random` **overrides** this method and there the value **is** part of it --its
+     * javadoc names the algorithm, so two `Random`s with the same seed have to give the same
+     * gaussians. This default names none: the only thing it promises is the distribution. That is
+     * why the JDK's version was not copied (a ziggurat with tables of 256 entries): it would give
+     * other numbers and neither of the two would be wrong.
      *
-     * <p>A diferencia del de `Random`, este **no guarda** el segundo valor del par: se descarta uno
-     * de cada dos. Guardarlo pediria estado, y una interfaz no tiene donde ponerlo.
+     * <p>Unlike `Random`'s, this one does **not** keep the pair's second value: one of every two is
+     * discarded. Keeping it would ask for state, and an interface has nowhere to put it.
      */
     default double nextGaussian() {
         double v1 = 0.0d;
         double s = 0.0d;
-        boolean sirve = false;
-        while (!sirve) {
+        boolean usable = false;
+        while (!usable) {
             v1 = 2 * this.nextDouble() - 1;
             double v2 = 2 * this.nextDouble() - 1;
             s = v1 * v1 + v2 * v2;
-            // `s == 0` se descarta junto con los de afuera del circulo: no solo dividiria por cero,
-            // sino que `log(0)` es -infinito.
-            sirve = s < 1 && s != 0;
+            // `s == 0` is discarded along with the ones outside the circle: not only would it
+            // divide by zero, `log(0)` is -infinity.
+            usable = s < 1 && s != 0;
         }
         return v1 * StrictMath.sqrt(-2 * StrictMath.log(s) / s);
     }
 
     /**
-     * Un valor de una normal con la media y el desvio dados.
+     * A value from a normal with the given mean and standard deviation.
      *
-     * @throws IllegalArgumentException si `stddev` es negativo
+     * @throws IllegalArgumentException if `stddev` is negative
      */
     default double nextGaussian(double mean, double stddev) {
-        // `stddev < 0`, la forma directa, y **no** una negada que atrape tambien al `NaN`.
+        // `stddev < 0`, the direct form, and **not** a negated one that would catch `NaN` too.
         //
-        // La version negada (`!(stddev >= 0)`) parece mejor y esta mal: el contrato dice "si stddev
-        // es negativo", y `NaN` no es negativo. Se verifico contra `java` real, que devuelve `NaN`
-        // en vez de tirar. Un `-0.0` tampoco tira, y tambien coincide: `-0.0 < 0` es false.
+        // The negated version (`!(stddev >= 0)`) looks better and is wrong: the contract says "if
+        // stddev is negative", and `NaN` is not negative. It was verified against the real `java`,
+        // which returns `NaN` instead of throwing. A `-0.0` does not throw either, and that agrees
+        // as well: `-0.0 < 0` is false.
         if (stddev < 0.0d) {
             throw new IllegalArgumentException("stddev must be non-negative");
         }
@@ -669,34 +674,34 @@ public interface RandomGenerator {
     }
 
     /**
-     * Un valor de una exponencial de media 1.
+     * A value from an exponential of mean 1.
      *
-     * <p>Por transformada inversa: si {@code u} es uniforme en {@code (0,1]}, entonces
-     * {@code -log(u)} es exponencial de media 1. Se usa {@code 1 - nextDouble()} y no
-     * {@code nextDouble()} a secas justamente para que el cero quede afuera --`nextDouble()` es
-     * {@code [0,1)}, y `log(0)` daria infinito--.
+     * <p>By inverse transform: if {@code u} is uniform in {@code (0,1]}, then {@code -log(u)} is
+     * exponential of mean 1. {@code 1 - nextDouble()} is used and not plain {@code nextDouble()}
+     * precisely so that zero stays out --`nextDouble()` is {@code [0,1)}, and `log(0)` would give
+     * infinity.
      *
-     * <p>Como el de arriba, el valor no es parte del contrato: solo la distribucion. El JDK usa un
-     * ziggurat, que es mas rapido y da otros numeros.
+     * <p>As with the one above, the value is not part of the contract: only the distribution. The
+     * JDK uses a ziggurat, which is faster and gives other numbers.
      */
     default double nextExponential() {
         return -StrictMath.log(1.0d - this.nextDouble());
     }
 
     /**
-     * Un flujo de doubles equidistribuidos en el rango dado.
+     * A stream of doubles equidistributed over the given range.
      *
-     * <p>**Se niega**, por lo mismo que `ints()`/`longs()`/`doubles()`: el JDK lo define sin limite
-     * de cantidad, y los flujos de esta biblioteca son ansiosos. Ver la nota larga de `sinTamano`.
+     * <p>**It refuses**, for the same reason as `ints()`/`longs()`/`doubles()`: the JDK defines it
+     * with no count limit, and this library's streams are eager. See `noSize`'s long note.
      *
-     * <p>Y acá no hay siquiera un reemplazo con tamaño que ofrecer --`equiDoubles` no tiene una
-     * sobrecarga con `streamSize`--, asi que el mensaje manda a `doubles(streamSize, origin, bound)`,
-     * que es lo mas cerca que se puede estar.
+     * <p>And here there is not even a sized replacement to offer --`equiDoubles` has no overload
+     * with `streamSize`-- so the message points at `doubles(streamSize, origin, bound)`, which is as
+     * close as one can be.
      */
     default DoubleStream equiDoubles(double origin, double bound, boolean isOriginInclusive,
             boolean isBoundInclusive) {
         throw new UnsupportedOperationException(
-                "los flujos de esta biblioteca son ansiosos y `equiDoubles` no tiene una sobrecarga"
-                        + " con tamano: use doubles(streamSize, origin, bound)");
+                "this library's streams are eager and `equiDoubles` has no overload"
+                        + " with a size: use doubles(streamSize, origin, bound)");
     }
 }

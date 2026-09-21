@@ -1,101 +1,102 @@
 package javax.sound.midi;
 
 /**
- * KajiLibrary's javax.sound.midi.Synthesizer -- un dispositivo que convierte MIDI en sonido.
+ * KajiLibrary's javax.sound.midi.Synthesizer -- a device that turns MIDI into sound.
  *
- * <p>Un {@link MidiDevice} que ademas tiene canales, voces y banco de sonidos.
+ * <p>A {@link MidiDevice} that also has channels, voices and a sound bank.
  *
- * <h2>Polifonia y voces</h2>
+ * <h2>Polyphony and voices</h2>
  *
- * <p>{@link #getMaxPolyphony} es cuantas notas pueden sonar a la vez. Al pasarse, el sintetizador le
- * roba la voz a la nota mas vieja: no falla, corta. Es por eso que un pasaje denso puede perder notas
- * sin que nada avise.
+ * <p>{@link #getMaxPolyphony} is how many notes can sound at once. When it is exceeded, the
+ * synthesizer steals the voice of the oldest note: it does not fail, it cuts. That is why a dense
+ * passage can lose notes without anything warning.
  *
- * <p>{@link #getVoiceStatus} devuelve <b>siempre</b> un arreglo del tamano de la polifonia; las voces
- * libres vienen con {@code active} en false. Ver {@link VoiceStatus}.
+ * <p>{@link #getVoiceStatus} <b>always</b> returns an array the size of the polyphony; the free
+ * voices come with {@code active} false. See {@link VoiceStatus}.
  *
  * <h2>{@link #getLatency}</h2>
  *
- * <p>Microsegundos entre que llega un mensaje y que se oye. Es lo que hay que compensar al sincronizar
- * con otra cosa, y lo que hace que tocar en vivo con un sintetizador por software se sienta lento.
+ * <p>Microseconds between a message arriving and it being heard. It is what has to be compensated
+ * when synchronizing with something else, and what makes playing live with a software synthesizer
+ * feel slow.
  *
- * <h2>Cargar y descargar instrumentos</h2>
+ * <h2>Loading and unloading instruments</h2>
  *
- * <p>{@link #loadAllInstruments} carga un banco entero, que en un SoundFont grande son cientos de
- * megabytes. {@link #loadInstruments} carga solo los que hacen falta, y es lo correcto cuando se sabe
- * que instrumentos usa la obra.
+ * <p>{@link #loadAllInstruments} loads a whole bank, which in a large SoundFont is hundreds of
+ * megabytes. {@link #loadInstruments} loads only the ones needed, and it is the right thing when it
+ * is known which instruments the piece uses.
  *
- * <p>{@link #remapInstrument} sustituye uno por otro sin tocar la musica: es como se reemplaza un
- * sonido que no gusta sin editar los cambios de programa del archivo.
+ * <p>{@link #remapInstrument} substitutes one for another without touching the music: it is how a
+ * sound one does not like is replaced without editing the file's program changes.
  */
 public interface Synthesizer extends MidiDevice {
 
-    /** Cuantas notas pueden sonar a la vez. Ver la nota de la clase. */
+    /** How many notes can sound at once. See the class note. */
     int getMaxPolyphony();
 
-    /** Microsegundos de retardo. Ver la nota de la clase. */
+    /** Microseconds of delay. See the class note. */
     long getLatency();
 
-    /** Los dieciseis canales. */
+    /** The sixteen channels. */
     MidiChannel[] getChannels();
 
-    /** El estado de todas las voces, ocupadas y libres. Ver la nota de la clase. */
+    /** The state of all the voices, busy and free. See the class note. */
     VoiceStatus[] getVoiceStatus();
 
-    /** Si entiende ese banco. */
+    /** Whether it understands that bank. */
     boolean isSoundbankSupported(Soundbank soundbank);
 
     /**
-     * Carga un instrumento.
+     * Loads an instrument.
      *
-     * @return si se pudo
-     * @throws IllegalArgumentException si el instrumento no es de un banco que este soporte
+     * @return whether it could
+     * @throws IllegalArgumentException if the instrument is not from a bank this one supports
      */
     boolean loadInstrument(Instrument instrument);
 
     /**
-     * Lo descarga.
+     * Unloads it.
      *
-     * @throws IllegalArgumentException si el instrumento no es de un banco que este soporte
+     * @throws IllegalArgumentException if the instrument is not from a bank this one supports
      */
     void unloadInstrument(Instrument instrument);
 
     /**
-     * Hace que uno suene en lugar de otro. Ver la nota de la clase.
+     * Makes one sound in place of another. See the class note.
      *
-     * @param from el que la musica pide
-     * @param to el que va a sonar
-     * @return si se pudo
-     * @throws IllegalArgumentException si alguno no es de un banco soportado
+     * @param from the one the music asks for
+     * @param to the one that is going to sound
+     * @return whether it could
+     * @throws IllegalArgumentException if either is not from a supported bank
      */
     boolean remapInstrument(Instrument from, Instrument to);
 
-    /** El banco que trae de fabrica, o null. */
+    /** The bank it comes with from the factory, or null. */
     Soundbank getDefaultSoundbank();
 
-    /** Todo lo que se podria cargar. */
+    /** Everything that could be loaded. */
     Instrument[] getAvailableInstruments();
 
-    /** Lo que esta cargado ahora. */
+    /** What is loaded now. */
     Instrument[] getLoadedInstruments();
 
     /**
-     * Carga un banco entero. Ver la nota de la clase sobre la memoria.
+     * Loads a whole bank. See the class note on memory.
      *
-     * @return si se pudo
+     * @return whether it could
      */
     boolean loadAllInstruments(Soundbank soundbank);
 
-    /** Lo descarga entero. */
+    /** Unloads it whole. */
     void unloadAllInstruments(Soundbank soundbank);
 
     /**
-     * Carga solo esos sonidos del banco.
+     * Loads only those sounds of the bank.
      *
-     * @return si se pudieron cargar todos
+     * @return whether all could be loaded
      */
     boolean loadInstruments(Soundbank soundbank, Patch[] patchList);
 
-    /** Los descarga. */
+    /** Unloads them. */
     void unloadInstruments(Soundbank soundbank, Patch[] patchList);
 }

@@ -1,43 +1,43 @@
 package org.w3c.dom.html;
 
 /**
- * Un `<button>`.
+ * A `<button>`.
  */
 public interface HTMLButtonElement extends HTMLElement {
 
-    /** El formulario que lo contiene, o nulo si no esta en ninguno. */
+    /** The form that contains it, or null if it is in none. */
     HTMLFormElement getForm();
 
-    /** El atajo de teclado. */
+    /** The keyboard shortcut. */
     String getAccessKey();
 
-    /** Fija el atajo de teclado. */
+    /** It sets the keyboard shortcut. */
     void setAccessKey(String accessKey);
 
-    /** Si esta deshabilitado. */
+    /** Whether it is disabled. */
     boolean getDisabled();
 
-    /** Fija si esta deshabilitado. */
+    /** It sets whether it is disabled. */
     void setDisabled(boolean disabled);
 
-    /** El atributo `name`. */
+    /** The `name` attribute. */
     String getName();
 
-    /** Fija el atributo `name`. */
+    /** It sets the `name` attribute. */
     void setName(String name);
 
-    /** La posicion en el orden de tabulacion. */
+    /** The position in the tabbing order. */
     int getTabIndex();
 
-    /** Fija la posicion en el orden de tabulacion. */
+    /** It sets the position in the tabbing order. */
     void setTabIndex(int tabIndex);
 
-    /** El tipo del control. */
+    /** The type of the control. */
     String getType();
 
-    /** El valor actual. */
+    /** The current value. */
     String getValue();
 
-    /** Fija el valor actual. */
+    /** It sets the current value. */
     void setValue(String value);
 }

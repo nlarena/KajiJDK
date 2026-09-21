@@ -1,49 +1,48 @@
 package javax.management.loading;
 
 /**
- * KajiLibrary's javax.management.loading.ClassLoaderRepository -- los cargadores que conoce un
- * agente.
+ * KajiLibrary's javax.management.loading.ClassLoaderRepository -- the loaders an agent knows.
  *
- * <p>Un agente JMX tiene que poder cargar clases que no estan en su propio classpath: el nombre de
- * una clase llega por la red, desde un cliente remoto, y el MBean que la implementa puede haberlo
- * traido cualquiera de los cargadores registrados. Este repositorio es esa lista, y se consulta en
- * orden de registro.
+ * <p>A JMX agent has to be able to load classes that are not on its own class path: a class name
+ * arrives over the network, from a remote client, and the MBean that implements it may have been
+ * brought in by any of the registered loaders. This repository is that list, and it is consulted in
+ * registration order.
  *
- * <h2>Por que hay tres metodos y no uno</h2>
+ * <h2>Why there are three methods and not one</h2>
  *
- * <p>Los dos con cargador existen para <b>cortar recursiones</b>, no por comodidad. Un cargador que
- * esta en el repositorio y que ante un fallo le pregunta al repositorio se llamaria a si mismo para
- * siempre. Con {@link #loadClassWithout} se excluye a si mismo y con {@link #loadClassBefore} se
- * excluye ademas a todos los que vienen despues.
+ * <p>The two that take a loader exist to <b>cut recursions</b>, not for convenience. A loader that
+ * is in the repository and that, on a failure, asks the repository would call itself forever. With
+ * {@link #loadClassWithout} it excludes itself, and with {@link #loadClassBefore} it also excludes
+ * everyone that comes after it.
  *
- * <p>La diferencia entre los dos importa: {@code loadClassWithout} sigue consultando a los
- * <b>posteriores</b>, asi que dos cargadores que se preguntan entre si todavia pueden colgarse.
- * {@code loadClassBefore} no puede, porque cada llamada mira un prefijo estrictamente mas corto de
- * la lista. Por eso es la que conviene cuando el que pregunta es parte del repositorio.
+ * <p>The difference between the two matters: {@code loadClassWithout} keeps consulting the
+ * <b>later</b> ones, so two loaders that ask each other can still hang. {@code loadClassBefore}
+ * cannot, because every call looks at a strictly shorter prefix of the list. That is why it is the
+ * one to use when the caller is part of the repository.
  */
 public interface ClassLoaderRepository {
 
     /**
-     * Busca la clase en todos los cargadores, en orden de registro.
+     * Looks for the class in all the loaders, in registration order.
      *
-     * @throws ClassNotFoundException si ninguno la tiene
+     * @throws ClassNotFoundException if none has it
      */
     Class<?> loadClass(String className) throws ClassNotFoundException;
 
     /**
-     * Igual, salteando ese cargador.
+     * The same, skipping that loader.
      *
-     * @param exclude el que no se consulta; ver la nota de la clase
-     * @throws ClassNotFoundException si ninguno de los demas la tiene
+     * @param exclude the one not consulted; see the class note
+     * @throws ClassNotFoundException if none of the others has it
      */
     Class<?> loadClassWithout(ClassLoader exclude, String className) throws ClassNotFoundException;
 
     /**
-     * Igual, pero solo con los que estan <b>antes</b> que ese.
+     * The same, but only with the ones <b>before</b> that one.
      *
-     * <p>La busqueda se detiene al llegar a {@code stop}, que no se consulta.
+     * <p>The search stops when reaching {@code stop}, which is not consulted.
      *
-     * @throws ClassNotFoundException si ninguno de los anteriores la tiene
+     * @throws ClassNotFoundException if none of the earlier ones has it
      */
     Class<?> loadClassBefore(ClassLoader stop, String className) throws ClassNotFoundException;
 }

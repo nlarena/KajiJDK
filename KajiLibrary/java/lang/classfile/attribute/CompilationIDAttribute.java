@@ -5,20 +5,20 @@ import java.lang.classfile.ClassElement;
 import java.lang.classfile.constantpool.Utf8Entry;
 import jdk.internal.classfile.impl.TypedAttributes;
 
-// `CompilationID`: el identificador de la compilación que produjo la clase. Tampoco está en el
-// JVMS; lo emite la implementación de referencia junto con `SourceID` para poder correlacionar un
-// `.class` con la corrida que lo generó.
+// `CompilationID`: the id of the compilation that produced the class. It is not in the JVMS either;
+// the reference implementation emits it along with `SourceID` so a `.class` can be correlated with
+// the run that generated it.
 public interface CompilationIDAttribute extends Attribute<CompilationIDAttribute>, ClassElement {
 
-    /** El identificador. */
+    /** The id. */
     Utf8Entry compilationId();
 
-    /** El atributo con este identificador. */
+    /** The attribute with this id. */
     public static CompilationIDAttribute of(Utf8Entry compilationId) {
         return TypedAttributes.compilationId(compilationId);
     }
 
-    /** El atributo con este identificador. */
+    /** The attribute with this id. */
     public static CompilationIDAttribute of(String compilationId) {
         return TypedAttributes.compilationId(TypedAttributes.utf8(compilationId));
     }

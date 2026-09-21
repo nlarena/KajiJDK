@@ -6,42 +6,43 @@ import java.io.InputStream;
 import java.io.RandomAccessFile;
 
 /**
- * KajiLibrary's javax.imageio.stream.FileCacheImageInputStream -- lee un flujo cualquiera, guardando
- * en un archivo temporal.
+ * KajiLibrary's javax.imageio.stream.FileCacheImageInputStream -- reads any stream, keeping what it
+ * reads in a temporary file.
  *
- * <p>La alternativa a {@link MemoryCacheImageInputStream} cuando lo que se lee no entra en memoria:
- * en lugar de juntar en el monton, junta en disco.
+ * <p>The alternative to {@link MemoryCacheImageInputStream} when what is read does not fit in
+ * memory: instead of collecting on the heap, it collects on disk.
  *
- * <p>El archivo temporal se crea en el directorio que se pase, o en el del sistema si se pasa null.
- * Se borra al cerrar.
+ * <p>The temporary file is created in the directory passed in, or in the system's if null is
+ * passed. It is deleted on close.
  *
- * <p>El compromiso es el de siempre: mas lento, memoria acotada. Un lector que procesa imagenes de
- * cientos de megabytes desde la red quiere esta; uno que lee miniaturas quiere la otra.
+ * <p>The trade-off is the usual one: slower, bounded memory. A reader that processes images of
+ * hundreds of megabytes from the network wants this one; one that reads thumbnails wants the
+ * other.
  *
- * <p>El flujo de abajo no se cierra al cerrar este.
+ * <p>The underlying stream is not closed when this one is closed.
  */
 public class FileCacheImageInputStream extends ImageInputStreamImpl {
 
-    /** De donde se lee de verdad. */
+    /** Where it really reads from. */
     private InputStream stream;
 
-    /** Donde se guarda lo leido. */
+    /** Where what was read is kept. */
     private File cacheFile;
 
-    /** El archivo temporal, abierto. */
+    /** The temporary file, open. */
     private RandomAccessFile cache;
 
-    /** Cuantos bytes se juntaron. */
+    /** How many bytes were collected. */
     private long length = 0;
 
-    /** Si el flujo de abajo se termino. */
+    /** Whether the underlying stream ended. */
     private boolean foundEOF = false;
 
     /**
-     * @param stream de donde leer
-     * @param cacheDir donde poner el temporal, o null para el del sistema
-     * @throws IllegalArgumentException si el flujo es null, o si el directorio no lo es
-     * @throws IOException si no se pudo crear el temporal
+     * @param stream where to read from
+     * @param cacheDir where to put the temporary file, or null for the system's
+     * @throws IllegalArgumentException if the stream is null, or if the directory is not one
+     * @throws IOException if the temporary file could not be created
      */
     public FileCacheImageInputStream(InputStream stream, File cacheDir) throws IOException {
         if (stream == null) {
@@ -55,7 +56,7 @@ public class FileCacheImageInputStream extends ImageInputStreamImpl {
         this.cache = new RandomAccessFile(this.cacheFile, "rw");
     }
 
-    /** Un byte. */
+    /** One byte. */
     @Override
     public int read() throws IOException {
         checkClosed();
@@ -71,7 +72,7 @@ public class FileCacheImageInputStream extends ImageInputStreamImpl {
         return value;
     }
 
-    /** Hasta {@code len} bytes. */
+    /** Up to {@code len} bytes. */
     @Override
     public int read(byte[] b, int off, int len) throws IOException {
         checkClosed();
@@ -97,13 +98,13 @@ public class FileCacheImageInputStream extends ImageInputStreamImpl {
         return nbytes;
     }
 
-    /** Si. Guarda en un archivo. */
+    /** Yes. It keeps things in a file. */
     @Override
     public boolean isCached() {
         return true;
     }
 
-    /** Si. */
+    /** Yes. */
     @Override
     public boolean isCachedFile() {
         return true;
@@ -115,29 +116,29 @@ public class FileCacheImageInputStream extends ImageInputStreamImpl {
         return false;
     }
 
-    /** Cierra y borra el temporal. No cierra el flujo de abajo. */
+    /** Closes and deletes the temporary file. Does not close the underlying stream. */
     @Override
     public void close() throws IOException {
         super.close();
         this.cache.close();
         this.cache = null;
-        // Borrar el temporal es parte del contrato: si no, un proceso que lea muchas imagenes va
-        // llenando el directorio temporal sin que nada lo avise.
+        // Deleting the temporary file is part of the contract: otherwise a process that reads many
+        // images keeps filling the temporary directory without anything warning about it.
         this.cacheFile.delete();
         this.cacheFile = null;
         this.stream = null;
     }
 
-    /** Cierra si nadie lo hizo. */
+    /** Closes it if nobody did. */
     @Override
     protected void finalize() throws Throwable {
         super.finalize();
     }
 
     /**
-     * Copia del flujo de abajo al temporal hasta tener esa cantidad.
+     * Copies from the underlying stream into the temporary file until it has that amount.
      *
-     * @return si se llego
+     * @return whether it got there
      */
     private boolean ensureAvailable(long needed) throws IOException {
         if (this.length >= needed || this.foundEOF) {

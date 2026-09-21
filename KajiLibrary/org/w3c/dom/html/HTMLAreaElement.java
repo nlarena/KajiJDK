@@ -1,55 +1,55 @@
 package org.w3c.dom.html;
 
 /**
- * Un `<area>` de un mapa de imagen.
+ * An `<area>` of an image map.
  */
 public interface HTMLAreaElement extends HTMLElement {
 
-    /** El atajo de teclado. */
+    /** The keyboard shortcut. */
     String getAccessKey();
 
-    /** Fija el atajo de teclado. */
+    /** It sets the keyboard shortcut. */
     void setAccessKey(String accessKey);
 
-    /** El texto alternativo. */
+    /** The alternative text. */
     String getAlt();
 
-    /** Fija el texto alternativo. */
+    /** It sets the alternative text. */
     void setAlt(String alt);
 
-    /** Las coordenadas. */
+    /** The coordinates. */
     String getCoords();
 
-    /** Fija las coordenadas. */
+    /** It sets the coordinates. */
     void setCoords(String coords);
 
-    /** El destino. */
+    /** The destination. */
     String getHref();
 
-    /** Fija el destino. */
+    /** It sets the destination. */
     void setHref(String href);
 
-    /** El atributo `noHref`. */
+    /** The `noHref` attribute. */
     boolean getNoHref();
 
-    /** Fija el atributo `noHref`. */
+    /** It sets the `noHref` attribute. */
     void setNoHref(boolean noHref);
 
-    /** La forma de la region. */
+    /** The shape of the region. */
     String getShape();
 
-    /** Fija la forma de la region. */
+    /** It sets the shape of the region. */
     void setShape(String shape);
 
-    /** La posicion en el orden de tabulacion. */
+    /** The position in the tabbing order. */
     int getTabIndex();
 
-    /** Fija la posicion en el orden de tabulacion. */
+    /** It sets the position in the tabbing order. */
     void setTabIndex(int tabIndex);
 
-    /** El marco de destino. */
+    /** The target frame. */
     String getTarget();
 
-    /** Fija el marco de destino. */
+    /** It sets the target frame. */
     void setTarget(String target);
 }

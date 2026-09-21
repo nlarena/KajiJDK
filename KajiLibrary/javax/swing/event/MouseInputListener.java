@@ -4,12 +4,12 @@ import java.awt.event.MouseListener;
 import java.awt.event.MouseMotionListener;
 
 /**
- * Los dos oyentes de mouse de AWT en uno.
+ * AWT's two mouse listeners in one.
  *
- * <p>No agrega ningun metodo, y aun asi no sobra: AWT los separo porque seguir el movimiento del
- * mouse tiene un costo que no todos quieren pagar. Un componente de Swing casi siempre quiere las
- * dos cosas, y sin esta interfaz habria que registrarse dos veces y guardar dos referencias al mismo
- * objeto.
+ * <p>It adds no method, and even so it is not redundant: AWT separated them because following the
+ * mouse's movement has a cost that not everybody wants to pay. A Swing component almost always
+ * wants both things, and without this interface one would have to register twice and keep two
+ * references to the same object.
  */
 public interface MouseInputListener extends MouseListener, MouseMotionListener {
 }

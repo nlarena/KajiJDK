@@ -3,45 +3,45 @@ package com.sun.jdi;
 import java.util.List;
 
 /**
- * Una interfaz de la maquina depurada.
+ * An interface of the debugged machine.
  *
  * @since 1.3
  */
 public interface InterfaceType extends ReferenceType {
 
     /**
-     * El superinterfaces.
+     * The superinterfaces.
      *
-     * @return el resultado
+     * @return the result
      */
     List<InterfaceType> superinterfaces();
 
     /**
-     * El subinterfaces.
+     * The subinterfaces.
      *
-     * @return el resultado
+     * @return the result
      */
     List<InterfaceType> subinterfaces();
 
     /**
-     * El implementors.
+     * The implementors.
      *
-     * @return el resultado
+     * @return the result
      */
     List<ClassType> implementors();
 
     /**
-     * El invoke method.
+     * The invoke method.
      *
-     * @param thread el ThreadReference
-     * @param method el Method
-     * @param values el List<? extends Value>
-     * @param index el int
-     * @return el resultado
-     * @throws InvalidTypeException si corresponde
-     * @throws ClassNotLoadedException si corresponde
-     * @throws IncompatibleThreadStateException si corresponde
-     * @throws InvocationException si corresponde
+     * @param thread the ThreadReference
+     * @param method the Method
+     * @param values the List<? extends Value>
+     * @param index the int
+     * @return the result
+     * @throws InvalidTypeException if it applies
+     * @throws ClassNotLoadedException if it applies
+     * @throws IncompatibleThreadStateException if it applies
+     * @throws InvocationException if it applies
      */
     Value invokeMethod(
             ThreadReference thread, Method method, List<? extends Value> values, int index)

@@ -3,25 +3,25 @@ package java.nio.file.attribute;
 import java.io.IOException;
 import java.util.Set;
 
-// La vista `"posix"`: los atributos basicos, mas dueño, grupo y los nueve bits de permiso.
+// The `"posix"` view: the basic attributes, plus owner, group and the nine permission bits.
 //
-// Hereda de dos interfaces a la vez --`BasicFileAttributeView` por los tiempos,
-// `FileOwnerAttributeView` por el dueño--, que es lo que hace que `getOwner()` este disponible sin
-// redeclararlo.
+// It inherits from two interfaces at once --`BasicFileAttributeView` for the times,
+// `FileOwnerAttributeView` for the owner-- which is what makes `getOwner()` available without
+// redeclaring it.
 //
-// Sin implementacion en KajiJDK: ver la nota de `PosixFileAttributes` sobre por que los permisos
-// efectivos que si sabe `stat` no alcanzan para reconstruir los bits del archivo.
+// Without an implementation in KajiJDK: see `PosixFileAttributes`'s note on why the effective
+// permissions `stat` does know are not enough to reconstruct the file's bits.
 public interface PosixFileAttributeView extends BasicFileAttributeView, FileOwnerAttributeView {
 
-    /** Siempre `"posix"`. */
+    /** Always `"posix"`. */
     String name();
 
-    /** Los atributos, leidos de una sola vez. */
+    /** The attributes, read in one go. */
     PosixFileAttributes readAttributes() throws IOException;
 
-    /** Cambia los nueve bits de permiso. */
+    /** It changes the nine permission bits. */
     void setPermissions(Set<PosixFilePermission> perms) throws IOException;
 
-    /** Cambia el grupo. */
+    /** It changes the group. */
     void setGroup(GroupPrincipal group) throws IOException;
 }

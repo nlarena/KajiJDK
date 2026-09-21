@@ -3,39 +3,39 @@ package javax.management.relation;
 import java.io.Serializable;
 
 /**
- * La descripcion de un rol dentro de un tipo de relacion: como se llama, que puede ir adentro y
- * cuantos.
+ * The description of a role within a relation type: what it is called, what can go in it and how
+ * many.
  *
- * <h2>Que es un rol</h2>
+ * <h2>What a role is</h2>
  *
- * <p>Una relacion de JMX conecta MBeans, y cada punta de la conexion es un <em>rol</em>. En una
- * relacion "dueno/recurso", {@code dueno} y {@code recurso} son roles, y esta clase describe uno de
- * ellos <strong>antes</strong> de que exista ninguna relacion concreta — es el esquema.
+ * <p>A JMX relation connects MBeans, and each end of the connection is a <em>role</em>. In an
+ * "owner/resource" relation, {@code owner} and {@code resource} are roles, and this class
+ * describes one of them <b>before</b> any concrete relation exists -- it is the schema.
  *
- * <h2>Los dos grados, que es lo que hace util al esquema</h2>
+ * <h2>The two degrees, which is what makes the schema useful</h2>
  *
- * <p>{@link #getMinDegree} y {@link #getMaxDegree} dicen cuantos MBeans puede tener el rol. Con eso
- * se expresa la cardinalidad: {@code (1,1)} es exactamente uno, {@code (0,1)} opcional,
- * {@code (1, INFINITY)} al menos uno.
+ * <p>{@link #getMinDegree} and {@link #getMaxDegree} say how many MBeans the role may have. With
+ * that the cardinality is expressed: {@code (1,1)} is exactly one, {@code (0,1)} optional,
+ * {@code (1, INFINITY)} at least one.
  *
- * <p>Es lo que el servicio de relaciones verifica en cada escritura, y lo que hace que una relacion
- * mal formada se rechace en vez de quedar inconsistente.
+ * <p>It is what the relation service checks on every write, and what makes a malformed relation be
+ * rejected instead of left inconsistent.
  *
- * <p>{@link #ROLE_CARDINALITY_INFINITY} es {@code -1} y no {@link Integer#MAX_VALUE}: si fuera un
- * numero grande, comparar seria correcto pero {@code maxDegree + 1} desbordaria. Con {@code -1} la
- * comparacion es un caso aparte y explicito.
+ * <p>{@link #ROLE_CARDINALITY_INFINITY} is {@code -1} and not {@link Integer#MAX_VALUE}: if it were
+ * a large number, comparing would be right but {@code maxDegree + 1} would overflow. With
+ * {@code -1} the comparison is a separate and explicit case.
  *
- * <h2>Inmutable</h2>
+ * <h2>Immutable</h2>
  *
- * <p>No tiene setters, y tiene que ser asi: es el esquema contra el que se valida, y si se pudiera
- * cambiar despues de declarado, las relaciones ya creadas dejarian de cumplirlo sin que nadie las
- * tocara.
+ * <p>It has no setters, and it has to be that way: it is the schema everything is validated
+ * against, and if it could be changed after being declared, the relations already created would
+ * stop meeting it without anyone touching them.
  */
 public class RoleInfo implements Serializable {
 
     private static final long serialVersionUID = 2504952983494636987L;
 
-    /** Sin limite superior. Vale {@code -1}; ver la nota de la clase. */
+    /** No upper limit. It is {@code -1}; see the class note. */
     public static final int ROLE_CARDINALITY_INFINITY = -1;
 
     private final String name;
@@ -47,27 +47,28 @@ public class RoleInfo implements Serializable {
     private final String referencedMBeanClassName;
 
     /**
-     * Con todo.
+     * With everything.
      *
-     * @param roleName el nombre; no puede ser {@code null}
-     * @param mbeanClassName la clase que los MBeans referenciados deben ser o extender
-     * @param read si el rol se puede leer
-     * @param write si el rol se puede escribir
-     * @param min cuantos MBeans como minimo
-     * @param max cuantos como maximo, o {@link #ROLE_CARDINALITY_INFINITY}
-     * @param descr una descripcion para mostrar
-     * @throws IllegalArgumentException si falta el nombre o la clase
-     * @throws InvalidRoleInfoException si el minimo es mayor que el maximo — un rol asi no se puede
-     *     cumplir nunca, y rechazarlo aca evita descubrirlo recien al crear la relacion
+     * @param roleName the name; it cannot be {@code null}
+     * @param mbeanClassName the class the referenced MBeans must be or extend
+     * @param read whether the role can be read
+     * @param write whether the role can be written
+     * @param min how many MBeans at least
+     * @param max how many at most, or {@link #ROLE_CARDINALITY_INFINITY}
+     * @param descr a description to show
+     * @throws IllegalArgumentException if the name or the class are missing
+     * @throws InvalidRoleInfoException if the minimum is greater than the maximum -- such a role
+     *     can never be fulfilled, and rejecting it here avoids discovering it only when the
+     *     relation is created
      */
     public RoleInfo(String roleName, String mbeanClassName, boolean read, boolean write,
             int min, int max, String descr)
             throws IllegalArgumentException, InvalidRoleInfoException {
         if (roleName == null) {
-            throw new IllegalArgumentException("falta el nombre del rol");
+            throw new IllegalArgumentException("the role name is missing");
         }
         if (mbeanClassName == null) {
-            throw new IllegalArgumentException("falta la clase de los MBeans referenciados");
+            throw new IllegalArgumentException("the class of the referenced MBeans is missing");
         }
         int mn = min;
         int mx = max;
@@ -79,7 +80,7 @@ public class RoleInfo implements Serializable {
         }
         if (mn > mx) {
             throw new InvalidRoleInfoException(
-                    "el grado minimo es mayor que el maximo en el rol " + roleName);
+                    "the minimum degree is greater than the maximum in the role " + roleName);
         }
         this.name = roleName;
         this.referencedMBeanClassName = mbeanClassName;
@@ -90,25 +91,25 @@ public class RoleInfo implements Serializable {
         this.description = descr;
     }
 
-    /** Sin descripcion, con cardinalidad {@code (1,1)}. */
+    /** Without a description, with cardinality {@code (1,1)}. */
     public RoleInfo(String roleName, String mbeanClassName, boolean read, boolean write)
             throws IllegalArgumentException {
         this(roleName, mbeanClassName, read, write, 1, 1, null, true);
     }
 
-    /** Legible, escribible, exactamente uno, sin descripcion. */
+    /** Readable, writable, exactly one, without a description. */
     public RoleInfo(String roleName, String mbeanClassName) throws IllegalArgumentException {
         this(roleName, mbeanClassName, true, true, 1, 1, null, true);
     }
 
     /**
-     * Una copia.
+     * A copy.
      *
-     * @throws IllegalArgumentException si {@code roleInfo} es {@code null}
+     * @throws IllegalArgumentException if {@code roleInfo} is {@code null}
      */
     public RoleInfo(RoleInfo roleInfo) throws IllegalArgumentException {
         if (roleInfo == null) {
-            throw new IllegalArgumentException("no hay nada que copiar");
+            throw new IllegalArgumentException("there is nothing to copy");
         }
         this.name = roleInfo.getName();
         this.referencedMBeanClassName = roleInfo.getRefMBeanClassName();
@@ -119,15 +120,16 @@ public class RoleInfo implements Serializable {
         this.description = roleInfo.getDescription();
     }
 
-    // Los constructores cortos no pueden tirar `InvalidRoleInfoException` —no esta en su firma— y
-    // con (1,1) es imposible que pase. Este privado existe solo para que el compilador lo sepa.
+    // The short constructors cannot throw `InvalidRoleInfoException` --it is not in their
+    // signature-- and with (1,1) it is impossible to happen. This private one exists only so that
+    // the compiler knows.
     private RoleInfo(String roleName, String mbeanClassName, boolean read, boolean write,
-            int min, int max, String descr, boolean interno) throws IllegalArgumentException {
+            int min, int max, String descr, boolean internal) throws IllegalArgumentException {
         if (roleName == null) {
-            throw new IllegalArgumentException("falta el nombre del rol");
+            throw new IllegalArgumentException("the role name is missing");
         }
         if (mbeanClassName == null) {
-            throw new IllegalArgumentException("falta la clase de los MBeans referenciados");
+            throw new IllegalArgumentException("the class of the referenced MBeans is missing");
         }
         this.name = roleName;
         this.referencedMBeanClassName = mbeanClassName;
@@ -138,47 +140,47 @@ public class RoleInfo implements Serializable {
         this.description = descr;
     }
 
-    /** El nombre del rol. */
+    /** The role's name. */
     public String getName() {
         return this.name;
     }
 
-    /** Si el rol se puede leer. */
+    /** Whether the role can be read. */
     public boolean isReadable() {
         return this.isReadable;
     }
 
-    /** Si el rol se puede escribir. */
+    /** Whether the role can be written. */
     public boolean isWritable() {
         return this.isWritable;
     }
 
-    /** La descripcion, o {@code null}. */
+    /** The description, or {@code null}. */
     public String getDescription() {
         return this.description;
     }
 
-    /** Cuantos MBeans como minimo. */
+    /** How many MBeans at least. */
     public int getMinDegree() {
         return this.minDegree;
     }
 
-    /** Cuantos como maximo. */
+    /** How many at most. */
     public int getMaxDegree() {
         return this.maxDegree;
     }
 
-    /** La clase que los MBeans referenciados deben ser o extender. */
+    /** The class the referenced MBeans must be or extend. */
     public String getRefMBeanClassName() {
         return this.referencedMBeanClassName;
     }
 
-    /** Si {@code value} llega al minimo. */
+    /** Whether {@code value} reaches the minimum. */
     public boolean checkMinDegree(int value) {
         return value >= this.minDegree;
     }
 
-    /** Si {@code value} no pasa del maximo. */
+    /** Whether {@code value} does not exceed the maximum. */
     public boolean checkMaxDegree(int value) {
         return value <= this.maxDegree;
     }

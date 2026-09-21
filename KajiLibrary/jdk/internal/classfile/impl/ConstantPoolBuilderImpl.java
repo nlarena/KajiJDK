@@ -31,27 +31,28 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-// El pool de escritura. Guarda las entradas en una lista indexada igual que el archivo —la ranura 0
-// no existe, y un `long` o un `double` ocupa dos— y un mapa de deduplicación de clave textual, que
-// es lo que hace que pedir dos veces el mismo `Utf8` devuelva la misma entrada y el mismo índice.
+// The writing pool. It keeps the entries in a list indexed like the file --slot 0 does not exist,
+// and a `long` or a `double` takes two-- and a deduplication map by textual key, which is what
+// makes asking twice for the same `Utf8` return the same entry and the same index.
 //
-// Dos decisiones que vale la pena nombrar:
+// Two decisions worth naming:
 //
-//   1. `of(ClassModel)` COPIA las entradas del modelo en vez de compartirlas, y las pone en sus
-//      mismos índices. Compartirlas sería más barato, pero entonces `entry.constantPool()` de una
-//      entrada de este pool devolvería el pool del lector, que no es este: una entrada que miente
-//      sobre a qué pool pertenece rompe cualquier código que use esa respuesta para decidir si
-//      puede escribir el índice tal cual.
-//   2. Toda entrada que llega de afuera se ADOPTA: si su `constantPool()` no es este pool, se
-//      reconstruye acá una equivalente. Aceptarla como está guardaría un índice del pool ajeno.
+//   1. `of(ClassModel)` COPIES the model's entries instead of sharing them, and puts them at the
+//      same indices. Sharing them would be cheaper, but then `entry.constantPool()` of an entry of
+//      this pool would return the reader's pool, which is not this one: an entry that lies about
+//      which pool it belongs to breaks any code that uses that answer to decide whether it can
+//      write the index as it stands. 2. Every entry that comes from outside is ADOPTED: if its
+//      `constantPool()` is not this pool, an equivalent one is rebuilt here. Accepting it as it is
+//      would keep an index of the foreign pool.
 //
-// La validación es la misma del lector y por la misma razón: un pool que acepta un
-// `reference_kind` fuera de 1..9, o un handle de campo que apunta a un método, produce un `.class`
-// que la JVM rechaza al cargarlo, y el error aparece lejísimos de donde se cometió.
+// The validation is the same as the reader's and for the same reason: a pool that accepts a
+// `reference_kind` outside 1..9, or a field handle pointing at a method, produces a `.class` the
+// JVM rejects on loading it, and the error shows up very far from where it was made.
 public final class ConstantPoolBuilderImpl implements ConstantPoolBuilder {
 
-    // Copias locales de las etiquetas de PoolEntry: el generador de bytecode no pliega una constante
-    // de otra unidad de compilación en una etiqueta `case`. Los valores son los del JVMS §4.4.
+    // Local copies of the tags of PoolEntry: the frozen javac's bytecode generator does not fold a
+    // constant of another compilation unit into a `case` label (finding #461). The values are those
+    // of JVMS §4.4.
     private static final int TAG_UTF8 = 1;
     private static final int TAG_INTEGER = 3;
     private static final int TAG_FLOAT = 4;
@@ -70,36 +71,36 @@ public final class ConstantPoolBuilderImpl implements ConstantPoolBuilder {
     private static final int TAG_MODULE = 19;
     private static final int TAG_PACKAGE = 20;
 
-    // El índice más alto que un `u2` del formato puede nombrar.
-    private static final int INDICE_MAXIMO = 65535;
+    // The highest index a `u2` of the format can name.
+    private static final int MAX_INDEX = 65535;
 
-    // Indexada por índice de pool. La posición 0 y la segunda ranura de un long/double quedan null.
-    private final List<PoolEntry> entradas = new ArrayList<PoolEntry>();
-    private final Map<String, PoolEntry> porClave = new HashMap<String, PoolEntry>();
+    // Indexed by pool index. Position 0 and the second slot of a long/double are left null.
+    private final List<PoolEntry> entries = new ArrayList<PoolEntry>();
+    private final Map<String, PoolEntry> byKey = new HashMap<String, PoolEntry>();
     private final List<BootstrapMethodEntry> bsms = new ArrayList<BootstrapMethodEntry>();
-    private final Map<String, BootstrapMethodEntry> bsmPorClave =
+    private final Map<String, BootstrapMethodEntry> bsmByKey =
             new HashMap<String, BootstrapMethodEntry>();
 
-    public ConstantPoolBuilderImpl(ClassModel modelo) {
-        this.entradas.add(null);
-        if (modelo != null) {
-            importar(modelo.constantPool());
+    public ConstantPoolBuilderImpl(ClassModel model) {
+        this.entries.add(null);
+        if (model != null) {
+            importPool(model.constantPool());
         }
     }
 
     // --- ConstantPool ---
 
     public int size() {
-        return this.entradas.size();
+        return this.entries.size();
     }
 
     public PoolEntry entryByIndex(int index) {
-        if (index < 1 || index >= this.entradas.size()) {
-            throw new ConstantPoolException("el índice " + index + " no está en el pool");
+        if (index < 1 || index >= this.entries.size()) {
+            throw new ConstantPoolException("index " + index + " is not in the pool");
         }
-        PoolEntry e = this.entradas.get(index);
+        PoolEntry e = this.entries.get(index);
         if (e == null) {
-            throw new ConstantPoolException("el índice " + index + " no es una entrada del pool");
+            throw new ConstantPoolException("index " + index + " is not a pool entry");
         }
         return e;
     }
@@ -107,8 +108,8 @@ public final class ConstantPoolBuilderImpl implements ConstantPoolBuilder {
     public <T extends PoolEntry> T entryByIndex(int index, Class<T> cls) {
         PoolEntry e = entryByIndex(index);
         if (!cls.isInstance(e)) {
-            throw new ConstantPoolException("el índice " + index + " es "
-                    + e.getClass().getSimpleName() + " y no " + cls.getSimpleName());
+            throw new ConstantPoolException("index " + index + " is "
+                    + e.getClass().getSimpleName() + " and not " + cls.getSimpleName());
         }
         return (T) e;
     }
@@ -116,7 +117,7 @@ public final class ConstantPoolBuilderImpl implements ConstantPoolBuilder {
     public BootstrapMethodEntry bootstrapMethodEntry(int index) {
         if (index < 0 || index >= this.bsms.size()) {
             throw new ConstantPoolException(
-                    "el índice " + index + " no está en la tabla de BootstrapMethods");
+                    "index " + index + " is not in the BootstrapMethods table");
         }
         return this.bsms.get(index);
     }
@@ -125,9 +126,9 @@ public final class ConstantPoolBuilderImpl implements ConstantPoolBuilder {
         return this.bsms.size();
     }
 
-    // --- ConstantPoolBuilder: las formas primitivas ---
+    // --- ConstantPoolBuilder: the primitive forms ---
 
-    // Ver la nota de alcance en `ConstantPoolBuilder`: sólo este mismo pool.
+    // See the scope note in `ConstantPoolBuilder`: only this very pool.
     public boolean canWriteDirect(ConstantPool constantPool) {
         return constantPool == this;
     }
@@ -136,96 +137,96 @@ public final class ConstantPoolBuilderImpl implements ConstantPoolBuilder {
         if (s == null) {
             throw new NullPointerException("utf8Entry(null)");
         }
-        String clave = "u:" + s;
-        PoolEntry ya = this.porClave.get(clave);
-        if (ya != null) {
-            return (Utf8Entry) ya;
+        String key = "u:" + s;
+        PoolEntry existing = this.byKey.get(key);
+        if (existing != null) {
+            return (Utf8Entry) existing;
         }
-        Utf8EntryImpl e = new Utf8EntryImpl(this, proximoIndice(), s);
-        return (Utf8Entry) agregar(clave, e, 1);
+        Utf8EntryImpl e = new Utf8EntryImpl(this, nextIndex(), s);
+        return (Utf8Entry) addEntry(key, e, 1);
     }
 
     public ClassEntry classEntry(Utf8Entry ne) {
-        Utf8Entry n = adoptar(ne);
-        String clave = "c:" + n.index();
-        PoolEntry ya = this.porClave.get(clave);
-        if (ya != null) {
-            return (ClassEntry) ya;
+        Utf8Entry n = adopt(ne);
+        String key = "c:" + n.index();
+        PoolEntry existing = this.byKey.get(key);
+        if (existing != null) {
+            return (ClassEntry) existing;
         }
-        ClassEntryImpl e = new ClassEntryImpl(this, proximoIndice(), n);
-        return (ClassEntry) agregar(clave, e, 1);
+        ClassEntryImpl e = new ClassEntryImpl(this, nextIndex(), n);
+        return (ClassEntry) addEntry(key, e, 1);
     }
 
     public PackageEntry packageEntry(Utf8Entry nameEntry) {
-        Utf8Entry n = adoptar(nameEntry);
-        String clave = "p:" + n.index();
-        PoolEntry ya = this.porClave.get(clave);
-        if (ya != null) {
-            return (PackageEntry) ya;
+        Utf8Entry n = adopt(nameEntry);
+        String key = "p:" + n.index();
+        PoolEntry existing = this.byKey.get(key);
+        if (existing != null) {
+            return (PackageEntry) existing;
         }
-        PackageEntryImpl e = new PackageEntryImpl(this, proximoIndice(), n);
-        return (PackageEntry) agregar(clave, e, 1);
+        PackageEntryImpl e = new PackageEntryImpl(this, nextIndex(), n);
+        return (PackageEntry) addEntry(key, e, 1);
     }
 
     public ModuleEntry moduleEntry(Utf8Entry moduleName) {
-        Utf8Entry n = adoptar(moduleName);
-        String clave = "m:" + n.index();
-        PoolEntry ya = this.porClave.get(clave);
-        if (ya != null) {
-            return (ModuleEntry) ya;
+        Utf8Entry n = adopt(moduleName);
+        String key = "m:" + n.index();
+        PoolEntry existing = this.byKey.get(key);
+        if (existing != null) {
+            return (ModuleEntry) existing;
         }
-        ModuleEntryImpl e = new ModuleEntryImpl(this, proximoIndice(), n);
-        return (ModuleEntry) agregar(clave, e, 1);
+        ModuleEntryImpl e = new ModuleEntryImpl(this, nextIndex(), n);
+        return (ModuleEntry) addEntry(key, e, 1);
     }
 
     public NameAndTypeEntry nameAndTypeEntry(Utf8Entry nameEntry, Utf8Entry typeEntry) {
-        Utf8Entry n = adoptar(nameEntry);
-        Utf8Entry t = adoptar(typeEntry);
-        String clave = "n:" + n.index() + ":" + t.index();
-        PoolEntry ya = this.porClave.get(clave);
-        if (ya != null) {
-            return (NameAndTypeEntry) ya;
+        Utf8Entry n = adopt(nameEntry);
+        Utf8Entry t = adopt(typeEntry);
+        String key = "n:" + n.index() + ":" + t.index();
+        PoolEntry existing = this.byKey.get(key);
+        if (existing != null) {
+            return (NameAndTypeEntry) existing;
         }
-        NameAndTypeEntryImpl e = new NameAndTypeEntryImpl(this, proximoIndice(), n, t);
-        return (NameAndTypeEntry) agregar(clave, e, 1);
+        NameAndTypeEntryImpl e = new NameAndTypeEntryImpl(this, nextIndex(), n, t);
+        return (NameAndTypeEntry) addEntry(key, e, 1);
     }
 
     public FieldRefEntry fieldRefEntry(ClassEntry owner, NameAndTypeEntry nameAndType) {
-        ClassEntry o = adoptar(owner);
-        NameAndTypeEntry nt = adoptar(nameAndType);
-        String clave = "F:" + o.index() + ":" + nt.index();
-        PoolEntry ya = this.porClave.get(clave);
-        if (ya != null) {
-            return (FieldRefEntry) ya;
+        ClassEntry o = adopt(owner);
+        NameAndTypeEntry nt = adopt(nameAndType);
+        String key = "F:" + o.index() + ":" + nt.index();
+        PoolEntry existing = this.byKey.get(key);
+        if (existing != null) {
+            return (FieldRefEntry) existing;
         }
-        FieldRefEntryImpl e = new FieldRefEntryImpl(this, proximoIndice(), o, nt);
-        return (FieldRefEntry) agregar(clave, e, 1);
+        FieldRefEntryImpl e = new FieldRefEntryImpl(this, nextIndex(), o, nt);
+        return (FieldRefEntry) addEntry(key, e, 1);
     }
 
     public MethodRefEntry methodRefEntry(ClassEntry owner, NameAndTypeEntry nameAndType) {
-        ClassEntry o = adoptar(owner);
-        NameAndTypeEntry nt = adoptar(nameAndType);
-        String clave = "M:" + o.index() + ":" + nt.index();
-        PoolEntry ya = this.porClave.get(clave);
-        if (ya != null) {
-            return (MethodRefEntry) ya;
+        ClassEntry o = adopt(owner);
+        NameAndTypeEntry nt = adopt(nameAndType);
+        String key = "M:" + o.index() + ":" + nt.index();
+        PoolEntry existing = this.byKey.get(key);
+        if (existing != null) {
+            return (MethodRefEntry) existing;
         }
-        MethodRefEntryImpl e = new MethodRefEntryImpl(this, proximoIndice(), o, nt);
-        return (MethodRefEntry) agregar(clave, e, 1);
+        MethodRefEntryImpl e = new MethodRefEntryImpl(this, nextIndex(), o, nt);
+        return (MethodRefEntry) addEntry(key, e, 1);
     }
 
     public InterfaceMethodRefEntry interfaceMethodRefEntry(ClassEntry owner,
             NameAndTypeEntry nameAndType) {
-        ClassEntry o = adoptar(owner);
-        NameAndTypeEntry nt = adoptar(nameAndType);
-        String clave = "I:" + o.index() + ":" + nt.index();
-        PoolEntry ya = this.porClave.get(clave);
-        if (ya != null) {
-            return (InterfaceMethodRefEntry) ya;
+        ClassEntry o = adopt(owner);
+        NameAndTypeEntry nt = adopt(nameAndType);
+        String key = "I:" + o.index() + ":" + nt.index();
+        PoolEntry existing = this.byKey.get(key);
+        if (existing != null) {
+            return (InterfaceMethodRefEntry) existing;
         }
         InterfaceMethodRefEntryImpl e =
-                new InterfaceMethodRefEntryImpl(this, proximoIndice(), o, nt);
-        return (InterfaceMethodRefEntry) agregar(clave, e, 1);
+                new InterfaceMethodRefEntryImpl(this, nextIndex(), o, nt);
+        return (InterfaceMethodRefEntry) addEntry(key, e, 1);
     }
 
     public MethodTypeEntry methodTypeEntry(MethodTypeDesc descriptor) {
@@ -233,189 +234,192 @@ public final class ConstantPoolBuilderImpl implements ConstantPoolBuilder {
     }
 
     public MethodTypeEntry methodTypeEntry(Utf8Entry descriptor) {
-        Utf8Entry d = adoptar(descriptor);
-        String clave = "t:" + d.index();
-        PoolEntry ya = this.porClave.get(clave);
-        if (ya != null) {
-            return (MethodTypeEntry) ya;
+        Utf8Entry d = adopt(descriptor);
+        String key = "t:" + d.index();
+        PoolEntry existing = this.byKey.get(key);
+        if (existing != null) {
+            return (MethodTypeEntry) existing;
         }
-        MethodTypeEntryImpl e = new MethodTypeEntryImpl(this, proximoIndice(), d);
-        return (MethodTypeEntry) agregar(clave, e, 1);
+        MethodTypeEntryImpl e = new MethodTypeEntryImpl(this, nextIndex(), d);
+        return (MethodTypeEntry) addEntry(key, e, 1);
     }
 
     public MethodHandleEntry methodHandleEntry(int refKind, MemberRefEntry reference) {
         if (refKind < 1 || refKind > 9) {
-            throw new IllegalArgumentException("reference_kind " + refKind + " fuera de 1..9");
+            throw new IllegalArgumentException("reference_kind " + refKind + " outside 1..9");
         }
-        MemberRefEntry r = adoptar(reference);
-        exigirCoherenciaDeHandle(refKind, r);
-        String clave = "h:" + refKind + ":" + r.index();
-        PoolEntry ya = this.porClave.get(clave);
-        if (ya != null) {
-            return (MethodHandleEntry) ya;
+        MemberRefEntry r = adopt(reference);
+        requireHandleConsistency(refKind, r);
+        String key = "h:" + refKind + ":" + r.index();
+        PoolEntry existing = this.byKey.get(key);
+        if (existing != null) {
+            return (MethodHandleEntry) existing;
         }
-        MethodHandleEntryImpl e = new MethodHandleEntryImpl(this, proximoIndice(), refKind, r);
-        return (MethodHandleEntry) agregar(clave, e, 1);
+        MethodHandleEntryImpl e = new MethodHandleEntryImpl(this, nextIndex(), refKind, r);
+        return (MethodHandleEntry) addEntry(key, e, 1);
     }
 
     public InvokeDynamicEntry invokeDynamicEntry(BootstrapMethodEntry bootstrapMethodEntry,
             NameAndTypeEntry nameAndType) {
-        int bsm = adoptar(bootstrapMethodEntry).bsmIndex();
-        NameAndTypeEntry nt = adoptar(nameAndType);
-        String clave = "y:" + bsm + ":" + nt.index();
-        PoolEntry ya = this.porClave.get(clave);
-        if (ya != null) {
-            return (InvokeDynamicEntry) ya;
+        int bsm = adopt(bootstrapMethodEntry).bsmIndex();
+        NameAndTypeEntry nt = adopt(nameAndType);
+        String key = "y:" + bsm + ":" + nt.index();
+        PoolEntry existing = this.byKey.get(key);
+        if (existing != null) {
+            return (InvokeDynamicEntry) existing;
         }
-        InvokeDynamicEntryImpl e = new InvokeDynamicEntryImpl(this, proximoIndice(), bsm, nt);
-        return (InvokeDynamicEntry) agregar(clave, e, 1);
+        InvokeDynamicEntryImpl e = new InvokeDynamicEntryImpl(this, nextIndex(), bsm, nt);
+        return (InvokeDynamicEntry) addEntry(key, e, 1);
     }
 
     public ConstantDynamicEntry constantDynamicEntry(BootstrapMethodEntry bootstrapMethodEntry,
             NameAndTypeEntry nameAndType) {
-        int bsm = adoptar(bootstrapMethodEntry).bsmIndex();
-        NameAndTypeEntry nt = adoptar(nameAndType);
-        String clave = "D:" + bsm + ":" + nt.index();
-        PoolEntry ya = this.porClave.get(clave);
-        if (ya != null) {
-            return (ConstantDynamicEntry) ya;
+        int bsm = adopt(bootstrapMethodEntry).bsmIndex();
+        NameAndTypeEntry nt = adopt(nameAndType);
+        String key = "D:" + bsm + ":" + nt.index();
+        PoolEntry existing = this.byKey.get(key);
+        if (existing != null) {
+            return (ConstantDynamicEntry) existing;
         }
-        ConstantDynamicEntryImpl e = new ConstantDynamicEntryImpl(this, proximoIndice(), bsm, nt);
-        return (ConstantDynamicEntry) agregar(clave, e, 1);
+        ConstantDynamicEntryImpl e = new ConstantDynamicEntryImpl(this, nextIndex(), bsm, nt);
+        return (ConstantDynamicEntry) addEntry(key, e, 1);
     }
 
     public IntegerEntry intEntry(int value) {
-        String clave = "i:" + value;
-        PoolEntry ya = this.porClave.get(clave);
-        if (ya != null) {
-            return (IntegerEntry) ya;
+        String key = "i:" + value;
+        PoolEntry existing = this.byKey.get(key);
+        if (existing != null) {
+            return (IntegerEntry) existing;
         }
-        IntegerEntryImpl e = new IntegerEntryImpl(this, proximoIndice(), value);
-        return (IntegerEntry) agregar(clave, e, 1);
+        IntegerEntryImpl e = new IntegerEntryImpl(this, nextIndex(), value);
+        return (IntegerEntry) addEntry(key, e, 1);
     }
 
-    // La clave va por bits y no por valor: `0.0f` y `-0.0f` son entradas distintas del pool, y dos
-    // `NaN` con la misma representación son la misma. `==` sobre float diría lo contrario en ambos.
+    // The key goes by bits and not by value: `0.0f` and `-0.0f` are different pool entries, and two
+    // `NaN`s with the same representation are the same one. `==` on float would say the opposite in
+    // both.
     public FloatEntry floatEntry(float value) {
-        String clave = "f:" + Float.floatToRawIntBits(value);
-        PoolEntry ya = this.porClave.get(clave);
-        if (ya != null) {
-            return (FloatEntry) ya;
+        String key = "f:" + Float.floatToRawIntBits(value);
+        PoolEntry existing = this.byKey.get(key);
+        if (existing != null) {
+            return (FloatEntry) existing;
         }
-        FloatEntryImpl e = new FloatEntryImpl(this, proximoIndice(), value);
-        return (FloatEntry) agregar(clave, e, 1);
+        FloatEntryImpl e = new FloatEntryImpl(this, nextIndex(), value);
+        return (FloatEntry) addEntry(key, e, 1);
     }
 
     public LongEntry longEntry(long value) {
-        String clave = "l:" + value;
-        PoolEntry ya = this.porClave.get(clave);
-        if (ya != null) {
-            return (LongEntry) ya;
+        String key = "l:" + value;
+        PoolEntry existing = this.byKey.get(key);
+        if (existing != null) {
+            return (LongEntry) existing;
         }
-        LongEntryImpl e = new LongEntryImpl(this, proximoIndice(), value);
-        return (LongEntry) agregar(clave, e, 2);
+        LongEntryImpl e = new LongEntryImpl(this, nextIndex(), value);
+        return (LongEntry) addEntry(key, e, 2);
     }
 
     public DoubleEntry doubleEntry(double value) {
-        String clave = "d:" + Double.doubleToRawLongBits(value);
-        PoolEntry ya = this.porClave.get(clave);
-        if (ya != null) {
-            return (DoubleEntry) ya;
+        String key = "d:" + Double.doubleToRawLongBits(value);
+        PoolEntry existing = this.byKey.get(key);
+        if (existing != null) {
+            return (DoubleEntry) existing;
         }
-        DoubleEntryImpl e = new DoubleEntryImpl(this, proximoIndice(), value);
-        return (DoubleEntry) agregar(clave, e, 2);
+        DoubleEntryImpl e = new DoubleEntryImpl(this, nextIndex(), value);
+        return (DoubleEntry) addEntry(key, e, 2);
     }
 
     public StringEntry stringEntry(Utf8Entry utf8) {
-        Utf8Entry u = adoptar(utf8);
-        String clave = "s:" + u.index();
-        PoolEntry ya = this.porClave.get(clave);
-        if (ya != null) {
-            return (StringEntry) ya;
+        Utf8Entry u = adopt(utf8);
+        String key = "s:" + u.index();
+        PoolEntry existing = this.byKey.get(key);
+        if (existing != null) {
+            return (StringEntry) existing;
         }
-        StringEntryImpl e = new StringEntryImpl(this, proximoIndice(), u);
-        return (StringEntry) agregar(clave, e, 1);
+        StringEntryImpl e = new StringEntryImpl(this, nextIndex(), u);
+        return (StringEntry) addEntry(key, e, 1);
     }
 
     public BootstrapMethodEntry bsmEntry(MethodHandleEntry methodReference,
             List<LoadableConstantEntry> arguments) {
-        MethodHandleEntry h = adoptar(methodReference);
+        MethodHandleEntry h = adopt(methodReference);
         List<LoadableConstantEntry> args = new ArrayList<LoadableConstantEntry>();
-        StringBuilder clave = new StringBuilder("B:").append(h.index());
+        StringBuilder key = new StringBuilder("B:").append(h.index());
         for (int i = 0; i < arguments.size(); i++) {
-            LoadableConstantEntry a = adoptarCargable(arguments.get(i));
+            LoadableConstantEntry a = adoptLoadable(arguments.get(i));
             args.add(a);
-            clave.append(':').append(a.index());
+            key.append(':').append(a.index());
         }
-        String k = clave.toString();
-        BootstrapMethodEntry ya = this.bsmPorClave.get(k);
-        if (ya != null) {
-            return ya;
+        String k = key.toString();
+        BootstrapMethodEntry existing = this.bsmByKey.get(k);
+        if (existing != null) {
+            return existing;
         }
         BootstrapMethodEntryImpl e =
                 new BootstrapMethodEntryImpl(this, this.bsms.size(), h, args);
         this.bsms.add(e);
-        this.bsmPorClave.put(k, e);
+        this.bsmByKey.put(k, e);
         return e;
     }
 
-    // --- Interno ---
+    // --- Internal ---
 
-    private int proximoIndice() {
-        int i = this.entradas.size();
-        if (i > INDICE_MAXIMO) {
+    private int nextIndex() {
+        int i = this.entries.size();
+        if (i > MAX_INDEX) {
             throw new ConstantPoolException(
-                    "el pool pasó de " + INDICE_MAXIMO + " entradas y ya no cabe en un u2");
+                    "the pool went past " + MAX_INDEX + " entries and no longer fits in a u2");
         }
         return i;
     }
 
-    private PoolEntry agregar(String clave, PoolEntry e, int ancho) {
-        this.entradas.add(e);
-        if (ancho == 2) {
-            // La segunda ranura de un long/double es inutilizable (JVMS §4.4.5).
-            this.entradas.add(null);
+    private PoolEntry addEntry(String key, PoolEntry e, int width) {
+        this.entries.add(e);
+        if (width == 2) {
+            // The second slot of a long/double is unusable (JVMS §4.4.5).
+            this.entries.add(null);
         }
-        this.porClave.put(clave, e);
+        this.byKey.put(key, e);
         return e;
     }
 
-    // §4.4.8: los kinds 1..4 nombran un campo; 5..9, un método, y sólo el 9 puede ser de interfaz.
-    private static void exigirCoherenciaDeHandle(int refKind, MemberRefEntry ref) {
-        boolean esCampo = ref.tag() == TAG_FIELDREF;
-        boolean esInterfaz = ref.tag() == TAG_INTERFACE_METHODREF;
+    // §4.4.8: kinds 1..4 name a field; 5..9, a method, and only 9 can be of an interface.
+    private static void requireHandleConsistency(int refKind, MemberRefEntry ref) {
+        boolean isField = ref.tag() == TAG_FIELDREF;
+        boolean isInterface = ref.tag() == TAG_INTERFACE_METHODREF;
         if (refKind <= 4) {
-            if (!esCampo) {
+            if (!isField) {
                 throw new IllegalArgumentException(
-                        "el reference_kind " + refKind + " exige un CONSTANT_Fieldref");
+                        "reference_kind " + refKind + " requires a CONSTANT_Fieldref");
             }
             return;
         }
-        if (esCampo) {
+        if (isField) {
             throw new IllegalArgumentException(
-                    "el reference_kind " + refKind + " no admite un CONSTANT_Fieldref");
+                    "reference_kind " + refKind + " does not admit a CONSTANT_Fieldref");
         }
-        if (refKind == 9 && !esInterfaz) {
+        if (refKind == 9 && !isInterface) {
             throw new IllegalArgumentException(
-                    "el reference_kind 9 exige un CONSTANT_InterfaceMethodref");
+                    "reference_kind 9 requires a CONSTANT_InterfaceMethodref");
         }
-        if (refKind != 9 && esInterfaz && refKind != 6 && refKind != 7) {
-            throw new IllegalArgumentException("el reference_kind " + refKind
-                    + " no admite un CONSTANT_InterfaceMethodref");
+        if (refKind != 9 && isInterface && refKind != 6 && refKind != 7) {
+            throw new IllegalArgumentException("reference_kind " + refKind
+                    + " does not admit a CONSTANT_InterfaceMethodref");
         }
     }
 
-    // --- Adopción: una entrada de otro pool se reconstruye acá ---
+    // --- Adoption: an entry of another pool is rebuilt here ---
 
     /**
-     * Esa entrada, traida a **este** pool si venia de otro.
+     * That entry, brought into **this** pool if it came from another.
      *
-     * <p>Es lo que hace posible transformar una clase: los elementos del modelo original llevan
-     * entradas del pool original, y su indice no significa nada en el pool nuevo. Sin adoptarlas, el
-     * `.class` que sale tiene indices que apuntan a cualquier cosa -- y lo peor es que **el archivo
-     * queda bien formado**, asi que no falla al escribir sino mucho despues, al leerlo.
+     * <p>It is what makes transforming a class possible: the elements of the original model carry
+     * entries of the original pool, and their index means nothing in the new pool. Without adopting
+     * them, the `.class` that comes out has indices pointing at anything -- and the worst of it is
+     * that **the file comes out well formed**, so it does not fail on writing but much later, on
+     * reading it.
      *
-     * <p>Si la entrada ya es de este pool se devuelve tal cual: adoptar es idempotente y barato.
+     * <p>If the entry is already of this pool it is returned as it is: adopting is idempotent and
+     * cheap.
      */
     public PoolEntry adoptEntry(PoolEntry e) {
         if (e == null || e.constantPool() == this) {
@@ -438,20 +442,20 @@ public final class ConstantPoolBuilderImpl implements ConstantPoolBuilder {
             return doubleEntry(((DoubleEntry) e).doubleValue());
         }
         if (tag == TAG_CLASS) {
-            return adoptar((ClassEntry) e);
+            return adopt((ClassEntry) e);
         }
         if (tag == TAG_STRING) {
             return stringEntry(utf8Entry(((StringEntry) e).stringValue()));
         }
         if (tag == TAG_NAME_AND_TYPE) {
-            return adoptar((NameAndTypeEntry) e);
+            return adopt((NameAndTypeEntry) e);
         }
         if (tag == TAG_FIELDREF || tag == TAG_METHODREF || tag == TAG_INTERFACE_METHODREF) {
-            return adoptar((MemberRefEntry) e);
+            return adopt((MemberRefEntry) e);
         }
         if (tag == TAG_METHOD_HANDLE) {
             MethodHandleEntry mh = (MethodHandleEntry) e;
-            return methodHandleEntry(mh.kind(), adoptar(mh.reference()));
+            return methodHandleEntry(mh.kind(), adopt(mh.reference()));
         }
         if (tag == TAG_METHOD_TYPE) {
             return methodTypeEntry(utf8Entry(((MethodTypeEntry) e).descriptor().stringValue()));
@@ -472,36 +476,36 @@ public final class ConstantPoolBuilderImpl implements ConstantPoolBuilder {
                 args.add((LoadableConstantEntry) adoptEntry(src.get(i)));
             }
             BootstrapMethodEntry nb = bsmEntry(mh, args);
-            NameAndTypeEntry nt = adoptar(d.nameAndType());
+            NameAndTypeEntry nt = adopt(d.nameAndType());
             if (tag == TAG_DYNAMIC) {
                 return constantDynamicEntry(nb, nt);
             }
             return invokeDynamicEntry(nb, nt);
         }
-        throw new IllegalArgumentException("no se sabe adoptar una entrada de etiqueta " + tag);
+        throw new IllegalArgumentException("cannot adopt an entry with tag " + tag);
     }
 
-    private Utf8Entry adoptar(Utf8Entry e) {
+    private Utf8Entry adopt(Utf8Entry e) {
         return e.constantPool() == this ? e : utf8Entry(e.stringValue());
     }
 
-    private ClassEntry adoptar(ClassEntry e) {
+    private ClassEntry adopt(ClassEntry e) {
         return e.constantPool() == this ? e : classEntry(utf8Entry(e.asInternalName()));
     }
 
-    private NameAndTypeEntry adoptar(NameAndTypeEntry e) {
+    private NameAndTypeEntry adopt(NameAndTypeEntry e) {
         return e.constantPool() == this
                 ? e
                 : nameAndTypeEntry(utf8Entry(e.name().stringValue()),
                         utf8Entry(e.type().stringValue()));
     }
 
-    private MemberRefEntry adoptar(MemberRefEntry e) {
+    private MemberRefEntry adopt(MemberRefEntry e) {
         if (e.constantPool() == this) {
             return e;
         }
-        ClassEntry o = adoptar(e.owner());
-        NameAndTypeEntry nt = adoptar(e.nameAndType());
+        ClassEntry o = adopt(e.owner());
+        NameAndTypeEntry nt = adopt(e.nameAndType());
         int tag = e.tag();
         if (tag == TAG_FIELDREF) {
             return fieldRefEntry(o, nt);
@@ -512,23 +516,23 @@ public final class ConstantPoolBuilderImpl implements ConstantPoolBuilder {
         return methodRefEntry(o, nt);
     }
 
-    private MethodHandleEntry adoptar(MethodHandleEntry e) {
+    private MethodHandleEntry adopt(MethodHandleEntry e) {
         return e.constantPool() == this ? e : methodHandleEntry(e.kind(), e.reference());
     }
 
-    private BootstrapMethodEntry adoptar(BootstrapMethodEntry e) {
+    private BootstrapMethodEntry adopt(BootstrapMethodEntry e) {
         return e.constantPool() == this ? e : bsmEntry(e.bootstrapMethod(), e.arguments());
     }
 
-    private LoadableConstantEntry adoptarCargable(LoadableConstantEntry e) {
+    private LoadableConstantEntry adoptLoadable(LoadableConstantEntry e) {
         if (e.constantPool() == this) {
             return e;
         }
         int tag = e.tag();
         switch (tag) {
             case TAG_UTF8:
-                // Un `Utf8` no es cargable con `ldc`; si llega acá el argumento estaba mal.
-                throw new IllegalArgumentException("un CONSTANT_Utf8 no es un argumento cargable");
+                // A `Utf8` is not loadable with `ldc`; if it gets here the argument was wrong.
+                throw new IllegalArgumentException("a CONSTANT_Utf8 is not a loadable argument");
             case TAG_INTEGER:
                 return intEntry(((IntegerEntry) e).intValue());
             case TAG_FLOAT:
@@ -545,54 +549,55 @@ public final class ConstantPoolBuilderImpl implements ConstantPoolBuilder {
                 return methodTypeEntry(
                         utf8Entry(((MethodTypeEntry) e).descriptor().stringValue()));
             case TAG_METHOD_HANDLE:
-                return adoptar((MethodHandleEntry) e);
+                return adopt((MethodHandleEntry) e);
             case TAG_DYNAMIC: {
                 ConstantDynamicEntry d = (ConstantDynamicEntry) e;
-                BootstrapMethodEntry b = adoptar(d.bootstrap());
-                return constantDynamicEntry(b, adoptar(d.nameAndType()));
+                BootstrapMethodEntry b = adopt(d.bootstrap());
+                return constantDynamicEntry(b, adopt(d.nameAndType()));
             }
             default:
                 throw new IllegalArgumentException(
-                        "la etiqueta " + tag + " no es una constante cargable");
+                        "tag " + tag + " is not a loadable constant");
         }
     }
 
-    // --- Importación de un pool completo, conservando los índices ---
+    // --- Import of a complete pool, keeping the indices ---
 
-    private void importar(ConstantPool fuente) {
-        int n = fuente.size();
-        while (this.entradas.size() < n) {
-            this.entradas.add(null);
+    private void importPool(ConstantPool source) {
+        int n = source.size();
+        while (this.entries.size() < n) {
+            this.entries.add(null);
         }
         for (int i = 1; i < n; i++) {
-            copiar(fuente, i);
+            copyEntry(source, i);
         }
-        for (int i = 0; i < fuente.bootstrapMethodCount(); i++) {
-            copiarBsm(fuente.bootstrapMethodEntry(i));
+        for (int i = 0; i < source.bootstrapMethodCount(); i++) {
+            copyBsm(source.bootstrapMethodEntry(i));
         }
     }
 
-    // Recursiva a propósito: una `CONSTANT_Class` del índice 3 puede apuntar al `Utf8` del 40, que
-    // todavía no se copió. Al volver, la copia del 40 ya está en su lugar y con su índice original.
-    private PoolEntry copiar(ConstantPool fuente, int i) {
-        PoolEntry ya = this.entradas.get(i);
-        if (ya != null) {
-            return ya;
+    // Recursive on purpose: a `CONSTANT_Class` at index 3 may point at the `Utf8` at 40, which has
+    // not been copied yet. On coming back, the copy of 40 is already in its place and with its
+    // original index.
+    private PoolEntry copyEntry(ConstantPool source, int i) {
+        PoolEntry existing = this.entries.get(i);
+        if (existing != null) {
+            return existing;
         }
         PoolEntry o;
         try {
-            o = fuente.entryByIndex(i);
-        } catch (ConstantPoolException noEsEntrada) {
-            // La ranura muerta que sigue a un long/double: se deja null, igual que en el archivo.
+            o = source.entryByIndex(i);
+        } catch (ConstantPoolException notAnEntry) {
+            // The dead slot that follows a long/double: it is left null, just as in the file.
             return null;
         }
-        PoolEntry nueva = construirCopia(fuente, o, i);
-        this.entradas.set(i, nueva);
-        this.porClave.put(claveDe(nueva), nueva);
-        return nueva;
+        PoolEntry created = buildCopy(source, o, i);
+        this.entries.set(i, created);
+        this.byKey.put(keyOf(created), created);
+        return created;
     }
 
-    private PoolEntry construirCopia(ConstantPool fuente, PoolEntry o, int i) {
+    private PoolEntry buildCopy(ConstantPool source, PoolEntry o, int i) {
         switch (o.tag()) {
             case TAG_UTF8:
                 return new Utf8EntryImpl(this, i, ((Utf8Entry) o).stringValue());
@@ -605,93 +610,93 @@ public final class ConstantPoolBuilderImpl implements ConstantPoolBuilder {
             case TAG_DOUBLE:
                 return new DoubleEntryImpl(this, i, ((DoubleEntry) o).doubleValue());
             case TAG_CLASS:
-                return new ClassEntryImpl(this, i, utf8Copiado(fuente, ((ClassEntry) o).name()));
+                return new ClassEntryImpl(this, i, copiedUtf8(source, ((ClassEntry) o).name()));
             case TAG_STRING:
-                return new StringEntryImpl(this, i, utf8Copiado(fuente, ((StringEntry) o).utf8()));
+                return new StringEntryImpl(this, i, copiedUtf8(source, ((StringEntry) o).utf8()));
             case TAG_METHOD_TYPE:
                 return new MethodTypeEntryImpl(this, i,
-                        utf8Copiado(fuente, ((MethodTypeEntry) o).descriptor()));
+                        copiedUtf8(source, ((MethodTypeEntry) o).descriptor()));
             case TAG_MODULE:
-                return new ModuleEntryImpl(this, i, utf8Copiado(fuente, ((ModuleEntry) o).name()));
+                return new ModuleEntryImpl(this, i, copiedUtf8(source, ((ModuleEntry) o).name()));
             case TAG_PACKAGE:
                 return new PackageEntryImpl(this, i,
-                        utf8Copiado(fuente, ((PackageEntry) o).name()));
+                        copiedUtf8(source, ((PackageEntry) o).name()));
             case TAG_NAME_AND_TYPE: {
                 NameAndTypeEntry nt = (NameAndTypeEntry) o;
-                return new NameAndTypeEntryImpl(this, i, utf8Copiado(fuente, nt.name()),
-                        utf8Copiado(fuente, nt.type()));
+                return new NameAndTypeEntryImpl(this, i, copiedUtf8(source, nt.name()),
+                        copiedUtf8(source, nt.type()));
             }
             case TAG_FIELDREF: {
                 MemberRefEntry m = (MemberRefEntry) o;
-                return new FieldRefEntryImpl(this, i, claseCopiada(fuente, m.owner()),
-                        natCopiado(fuente, m.nameAndType()));
+                return new FieldRefEntryImpl(this, i, copiedClass(source, m.owner()),
+                        copiedNat(source, m.nameAndType()));
             }
             case TAG_METHODREF: {
                 MemberRefEntry m = (MemberRefEntry) o;
-                return new MethodRefEntryImpl(this, i, claseCopiada(fuente, m.owner()),
-                        natCopiado(fuente, m.nameAndType()));
+                return new MethodRefEntryImpl(this, i, copiedClass(source, m.owner()),
+                        copiedNat(source, m.nameAndType()));
             }
             case TAG_INTERFACE_METHODREF: {
                 MemberRefEntry m = (MemberRefEntry) o;
-                return new InterfaceMethodRefEntryImpl(this, i, claseCopiada(fuente, m.owner()),
-                        natCopiado(fuente, m.nameAndType()));
+                return new InterfaceMethodRefEntryImpl(this, i, copiedClass(source, m.owner()),
+                        copiedNat(source, m.nameAndType()));
             }
             case TAG_METHOD_HANDLE: {
                 MethodHandleEntry h = (MethodHandleEntry) o;
-                PoolEntry r = copiar(fuente, h.reference().index());
+                PoolEntry r = copyEntry(source, h.reference().index());
                 return new MethodHandleEntryImpl(this, i, h.kind(), (MemberRefEntry) r);
             }
             case TAG_DYNAMIC: {
                 ConstantDynamicEntry d = (ConstantDynamicEntry) o;
                 return new ConstantDynamicEntryImpl(this, i, d.bootstrapMethodIndex(),
-                        natCopiado(fuente, d.nameAndType()));
+                        copiedNat(source, d.nameAndType()));
             }
             case TAG_INVOKE_DYNAMIC: {
                 InvokeDynamicEntry d = (InvokeDynamicEntry) o;
                 return new InvokeDynamicEntryImpl(this, i, d.bootstrapMethodIndex(),
-                        natCopiado(fuente, d.nameAndType()));
+                        copiedNat(source, d.nameAndType()));
             }
             default:
                 throw new ConstantPoolException(
-                        "etiqueta " + o.tag() + " desconocida en el índice " + i);
+                        "tag " + o.tag() + " unknown at index " + i);
         }
     }
 
-    private Utf8Entry utf8Copiado(ConstantPool fuente, Utf8Entry o) {
-        PoolEntry e = copiar(fuente, o.index());
+    private Utf8Entry copiedUtf8(ConstantPool source, Utf8Entry o) {
+        PoolEntry e = copyEntry(source, o.index());
         return (Utf8Entry) e;
     }
 
-    private ClassEntry claseCopiada(ConstantPool fuente, ClassEntry o) {
-        PoolEntry e = copiar(fuente, o.index());
+    private ClassEntry copiedClass(ConstantPool source, ClassEntry o) {
+        PoolEntry e = copyEntry(source, o.index());
         return (ClassEntry) e;
     }
 
-    private NameAndTypeEntry natCopiado(ConstantPool fuente, NameAndTypeEntry o) {
-        PoolEntry e = copiar(fuente, o.index());
+    private NameAndTypeEntry copiedNat(ConstantPool source, NameAndTypeEntry o) {
+        PoolEntry e = copyEntry(source, o.index());
         return (NameAndTypeEntry) e;
     }
 
-    private void copiarBsm(BootstrapMethodEntry o) {
-        MethodHandleEntry h = (MethodHandleEntry) this.entradas.get(o.bootstrapMethod().index());
+    private void copyBsm(BootstrapMethodEntry o) {
+        MethodHandleEntry h = (MethodHandleEntry) this.entries.get(o.bootstrapMethod().index());
         List<LoadableConstantEntry> args = new ArrayList<LoadableConstantEntry>();
         List<LoadableConstantEntry> orig = o.arguments();
-        StringBuilder clave = new StringBuilder("B:").append(h.index());
+        StringBuilder key = new StringBuilder("B:").append(h.index());
         for (int i = 0; i < orig.size(); i++) {
             LoadableConstantEntry a =
-                    (LoadableConstantEntry) this.entradas.get(orig.get(i).index());
+                    (LoadableConstantEntry) this.entries.get(orig.get(i).index());
             args.add(a);
-            clave.append(':').append(a.index());
+            key.append(':').append(a.index());
         }
         BootstrapMethodEntryImpl e =
                 new BootstrapMethodEntryImpl(this, this.bsms.size(), h, args);
         this.bsms.add(e);
-        this.bsmPorClave.put(clave.toString(), e);
+        this.bsmByKey.put(key.toString(), e);
     }
 
-    // La misma clave que arman los `xxxEntry`, para que una entrada importada se reutilice en vez de
-    // duplicarse cuando alguien la vuelve a pedir por valor.
-    private static String claveDe(PoolEntry e) {
+    // The same key the `xxxEntry` methods build, so that an imported entry is reused instead of
+    // duplicated when somebody asks for it again by value.
+    private static String keyOf(PoolEntry e) {
         switch (e.tag()) {
             case TAG_UTF8:
                 return "u:" + ((Utf8Entry) e).stringValue();
@@ -745,7 +750,7 @@ public final class ConstantPoolBuilderImpl implements ConstantPoolBuilder {
     }
 
     public String toString() {
-        return "ConstantPoolBuilder[" + (this.entradas.size() - 1) + " ranuras, "
+        return "ConstantPoolBuilder[" + (this.entries.size() - 1) + " slots, "
                 + this.bsms.size() + " bsm]";
     }
 }

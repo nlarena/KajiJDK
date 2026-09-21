@@ -9,56 +9,56 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 /**
- * KajiLibrary's java.nio.channels.AsynchronousSocketChannel — una conexion TCP asincronica.
+ * KajiLibrary's java.nio.channels.AsynchronousSocketChannel — an asynchronous TCP connection.
  *
- * <p>Frente a {@link SocketChannel} cambia quien espera: alli el programa pregunta al selector si
- * hay algo; aca la operacion avisa cuando termino. No hay modo bloqueante que configurar ni
- * {@link Selector} donde registrarse, y por eso esta clase **no** es un
- * {@link SelectableChannel}.
+ * <p>Against {@link SocketChannel} what changes is who waits: there the program asks the selector
+ * whether there is anything; here the operation gives notice when it has finished. There is no
+ * blocking mode to configure and no {@link Selector} to register in, and that is why this class is
+ * **not** a {@link SelectableChannel}.
  *
- * <p>La regla que mas cuesta: <strong>una lectura y una escritura pendientes por canal</strong>.
- * Pedir una segunda lectura sin que la primera haya terminado es {@link ReadPendingException}. Es
- * severo a proposito: con dos lecturas en vuelo sobre un mismo flujo de bytes, el orden en que se
- * completan decide donde caen los bytes, y eso no lo controla nadie.
+ * <p>The rule that costs the most: <strong>one read and one write pending per channel</strong>.
+ * Asking for a second read without the first having finished is {@link ReadPendingException}. It is
+ * severe on purpose: with two reads in flight over one same stream of bytes, the order in which they
+ * complete decides where the bytes fall, and nobody controls that.
  *
- * <p>Los tiempos limite van por operacion y no por canal, que es lo que permite lo que uno de verdad
- * quiere: esperar dos segundos por la cabecera y treinta por el cuerpo. Al agotarse, la operacion
- * falla con {@link InterruptedByTimeoutException} y --importante-- <strong>el canal queda
- * inservible</strong>: no se puede saber cuantos bytes alcanzo a mover, asi que seguir usandolo
- * seria seguir sobre un flujo desalineado.
+ * <p>The time limits go per operation and not per channel, which is what allows what one really
+ * wants: waiting two seconds for the header and thirty for the body. On running out, the operation
+ * fails with {@link InterruptedByTimeoutException} and --importantly-- <strong>the channel is left
+ * useless</strong>: there is no knowing how many bytes it managed to move, so going on using it
+ * would be going on over a misaligned stream.
  *
- * <h2>Estado en esta biblioteca</h2>
+ * <h2>State in this library</h2>
  *
- * <p><strong>Los dos {@code open()} ya estan.</strong> Esta nota decia que la VM no tenia nativos de
- * red; los tiene, y {@link SocketChannel} conecta de verdad. Abajo hay ese canal bloqueante y un pool
- * de hilos --ver {@code AsyncSocketChannelImpl}--, que es como el JDK implementa esta clase en las
- * plataformas sin entrada y salida asincronica del sistema.
+ * <p><strong>Both {@code open()}s are here.</strong> This note used to say the VM had no network
+ * natives; it has them, and {@link SocketChannel} really connects. Underneath there is that blocking
+ * channel and a thread pool --see {@code AsyncSocketChannelImpl}--, which is how the JDK implements
+ * this class on the platforms without asynchronous input and output of the system.
  */
 public abstract class AsynchronousSocketChannel implements AsynchronousByteChannel, NetworkChannel {
 
-    private final AsynchronousChannelProvider proveedor;
+    private final AsynchronousChannelProvider provider;
 
     protected AsynchronousSocketChannel(AsynchronousChannelProvider provider) {
-        this.proveedor = provider;
+        this.provider = provider;
     }
 
     /**
-     * Uno del grupo de omision.
+     * One of the default group.
      *
-     * @return el canal
-     * @throws IOException si no se puede abrir
+     * @return the channel
+     * @throws IOException if it cannot be opened
      */
     public static AsynchronousSocketChannel open() throws IOException {
         return open(null);
     }
 
     /**
-     * Uno de ese grupo.
+     * One of that group.
      *
-     * @param group el grupo, o {@code null} para el de omision
-     * @return el canal
-     * @throws IOException si no se puede abrir
-     * @throws ShutdownChannelGroupException si el grupo ya no acepta canales
+     * @param group the group, or {@code null} for the default one
+     * @return the channel
+     * @throws IOException if it cannot be opened
+     * @throws ShutdownChannelGroupException if the group no longer accepts channels
      */
     public static AsynchronousSocketChannel open(AsynchronousChannelGroup group) throws IOException {
         final AsynchronousChannelProvider p = group == null
@@ -66,78 +66,78 @@ public abstract class AsynchronousSocketChannel implements AsynchronousByteChann
         return p.openAsynchronousSocketChannel(group);
     }
 
-    /** El proveedor que lo fabrico. */
+    /** The provider that made it. */
     public final AsynchronousChannelProvider provider() {
-        return this.proveedor;
+        return this.provider;
     }
 
-    /** Ata el canal a una direccion local. */
+    /** Ties the channel to a local address. */
     public abstract AsynchronousSocketChannel bind(SocketAddress local) throws IOException;
 
-    /** Fija una opcion de socket. */
+    /** Sets a socket option. */
     public abstract <T> AsynchronousSocketChannel setOption(SocketOption<T> name, T value)
             throws IOException;
 
-    /** Cierra la mitad de lectura. */
+    /** Closes the reading half. */
     public abstract AsynchronousSocketChannel shutdownInput() throws IOException;
 
-    /** Cierra la mitad de escritura; el otro extremo ve fin de datos. */
+    /** Closes the writing half; the other end sees end of data. */
     public abstract AsynchronousSocketChannel shutdownOutput() throws IOException;
 
-    /** La direccion del otro extremo, o `null` si no esta conectado. */
+    /** The address of the other end, or `null` if it is not connected. */
     public abstract SocketAddress getRemoteAddress() throws IOException;
 
-    /** Conecta a `remote` y avisa a `handler`. */
+    /** Connects to `remote` and tells `handler`. */
     public abstract <A> void connect(SocketAddress remote, A attachment,
             CompletionHandler<Void, ? super A> handler);
 
-    /** Como el otro, devolviendo un {@link Future}. */
+    /** Like the other one, returning a {@link Future}. */
     public abstract Future<Void> connect(SocketAddress remote);
 
     /**
-     * Lee con tiempo limite.
+     * Reads with a time limit.
      *
-     * @param timeout `0` o menos significa sin limite. Al agotarse, el canal queda inservible; ver
-     *        la nota de la clase
+     * @param timeout `0` or less means no limit. On running out, the channel is left useless; see the
+     *        note of the class
      */
     public abstract <A> void read(ByteBuffer dst, long timeout, TimeUnit unit, A attachment,
             CompletionHandler<Integer, ? super A> handler);
 
-    /** Como el otro, sin limite de tiempo. */
+    /** Like the other one, with no time limit. */
     public final <A> void read(ByteBuffer dst, A attachment,
             CompletionHandler<Integer, ? super A> handler) {
         this.read(dst, 0L, TimeUnit.MILLISECONDS, attachment, handler);
     }
 
-    /** Lee devolviendo un {@link Future}, sin limite de tiempo. */
+    /** Reads returning a {@link Future}, with no time limit. */
     public abstract Future<Integer> read(ByteBuffer dst);
 
     /**
-     * Lee repartiendo en varios buffers.
+     * Reads spreading into several buffers.
      *
-     * <p>Devuelve `Long` y no `Integer` porque el total puede pasar los dos gigas: son varios
-     * buffers, no uno.
+     * <p>It returns `Long` and not `Integer` because the total can go past two gigabytes: they are
+     * several buffers, not one.
      */
     public abstract <A> void read(ByteBuffer[] dsts, int offset, int length, long timeout,
             TimeUnit unit, A attachment, CompletionHandler<Long, ? super A> handler);
 
-    /** Escribe con tiempo limite. Mismas salvedades que la lectura. */
+    /** Writes with a time limit. The same caveats as the read. */
     public abstract <A> void write(ByteBuffer src, long timeout, TimeUnit unit, A attachment,
             CompletionHandler<Integer, ? super A> handler);
 
-    /** Como el otro, sin limite de tiempo. */
+    /** Like the other one, with no time limit. */
     public final <A> void write(ByteBuffer src, A attachment,
             CompletionHandler<Integer, ? super A> handler) {
         this.write(src, 0L, TimeUnit.MILLISECONDS, attachment, handler);
     }
 
-    /** Escribe devolviendo un {@link Future}, sin limite de tiempo. */
+    /** Writes returning a {@link Future}, with no time limit. */
     public abstract Future<Integer> write(ByteBuffer src);
 
-    /** Escribe juntando varios buffers. */
+    /** Writes gathering several buffers. */
     public abstract <A> void write(ByteBuffer[] srcs, int offset, int length, long timeout,
             TimeUnit unit, A attachment, CompletionHandler<Long, ? super A> handler);
 
-    /** La direccion local, o `null` si no esta atado. */
+    /** The local address, or `null` if it is not tied. */
     public abstract SocketAddress getLocalAddress() throws IOException;
 }

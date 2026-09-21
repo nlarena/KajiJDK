@@ -3,7 +3,7 @@ package com.sun.source.tree;
 import java.util.List;
 
 /**
- * Un tipo con argumentos, como `List<String>`.
+ * A type with arguments, such as `List<String>`.
  */
 public interface ParameterizedTypeTree extends Tree {
 

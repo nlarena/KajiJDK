@@ -304,7 +304,7 @@ public class Phaser {
      */
     public int awaitAdvance(int p) {
         int result;
-        boolean interrumpido = false;
+        boolean interrupted = false;
         if (p < 0) {
             result = p;
         } else {
@@ -313,7 +313,7 @@ public class Phaser {
                     try {
                         root.sync.wait();
                     } catch (InterruptedException e) {
-                        interrumpido = true;
+                        interrupted = true;
                     }
                 }
                 if (root.terminated) {
@@ -322,7 +322,7 @@ public class Phaser {
                     result = root.phase;
                 }
             }
-            if (interrumpido) {
+            if (interrupted) {
                 Thread.currentThread().interrupt();
             }
         }

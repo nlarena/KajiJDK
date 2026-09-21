@@ -3,24 +3,24 @@ package java.lang.classfile.constantpool;
 import java.lang.constant.ClassDesc;
 import java.lang.constant.MethodTypeDesc;
 
-// `CONSTANT_Utf8_info` (JVMS §4.4.7): la cadena en UTF-8 modificado que está debajo de casi todo lo
-// demás — nombres de clase, de miembro, descriptores, nombres de atributo y el contenido de un
-// `CONSTANT_String`.
+// `CONSTANT_Utf8_info` (JVMS §4.4.7): the string in modified UTF-8 that sits underneath nearly
+// everything else -- class names, member names, descriptors, attribute names and a
+// `CONSTANT_String`'s contents.
 //
-// Es un `CharSequence` a propósito: permite comparar contra un nombre sin materializar el `String`.
-// `isFieldType`/`isMethodType` existen por lo mismo — comparar la cadena cruda contra el descriptor
-// de un `ClassDesc` evita construir el descriptor del otro lado.
+// It is a `CharSequence` on purpose: it allows comparing against a name without materializing the
+// `String`. `isFieldType`/`isMethodType` exist for the same reason -- comparing the raw string
+// against a `ClassDesc`'s descriptor avoids building the descriptor on the other side.
 public interface Utf8Entry extends CharSequence, AnnotationConstantValueEntry {
 
-    /** El contenido como `String`. */
+    /** The contents as a `String`. */
     String stringValue();
 
-    /** Si el contenido es exactamente `s`, sin construir el `String` intermedio. */
+    /** Whether the contents are exactly `s`, without building the intermediate `String`. */
     boolean equalsString(String s);
 
-    /** Si el contenido es el descriptor de campo de `desc`. */
+    /** Whether the contents are `desc`'s field descriptor. */
     boolean isFieldType(ClassDesc desc);
 
-    /** Si el contenido es el descriptor de método de `desc`. */
+    /** Whether the contents are `desc`'s method descriptor. */
     boolean isMethodType(MethodTypeDesc desc);
 }

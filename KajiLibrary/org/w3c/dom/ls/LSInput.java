@@ -4,76 +4,76 @@ import java.io.InputStream;
 import java.io.Reader;
 
 /**
- * KajiLibrary's org.w3c.dom.ls.LSInput -- de donde leer un documento.
+ * KajiLibrary's org.w3c.dom.ls.LSInput -- where to read a document from.
  *
- * <p>Cuatro formas de decir lo mismo --caracteres, bytes, una cadena, un URI-- y un orden de
- * preferencia que <b>si</b> importa: se mira primero {@link #getCharacterStream}, despues
- * {@link #getByteStream}, despues {@link #getStringData} y por ultimo {@link #getSystemId}. Se usa
- * la primera que no sea null y las demas se ignoran.
+ * <p>Four ways of saying the same thing --characters, bytes, a string, a URI-- and an order of
+ * preference that <b>does</b> matter: first {@link #getCharacterStream} is looked at, then
+ * {@link #getByteStream}, then {@link #getStringData} and lastly {@link #getSystemId}. The first
+ * that is not null is used and the rest are ignored.
  *
- * <p>El orden no es arbitrario: va de lo mas resuelto a lo menos. Un flujo de caracteres ya tiene la
- * codificacion decidida por quien lo abrio; un flujo de bytes todavia hay que decodificarlo; un URI
- * ni siquiera se leyo. Quien implementa un {@link LSResourceResolver} suele devolver lo de mas
- * arriba que tenga a mano, y por eso conviene tener el orden presente: poner un flujo de caracteres
- * y ademas un {@code systemId} no ofrece dos opciones, silencia la segunda.
+ * <p>The order is not arbitrary: it goes from the most resolved to the least. A character stream
+ * already has its encoding decided by whoever opened it; a byte stream still has to be decoded; a
+ * URI has not even been read. Whoever implements an {@link LSResourceResolver} usually returns the
+ * highest one they have at hand, and that is why it is as well to keep the order in mind: setting a
+ * character stream and also a {@code systemId} does not offer two options, it silences the second.
  *
- * <p>Es una interfaz con setters, que en Java no es lo comun. Viene de que la especificacion es del
- * W3C y esta escrita en IDL, donde estos son <b>atributos</b> de lectura y escritura.
+ * <p>It is an interface with setters, which in Java is not usual. It comes from the specification
+ * being the W3C's and written in IDL, where these are read-write <b>attributes</b>.
  */
 public interface LSInput {
 
-    /** El flujo de caracteres, o null. Es el que gana si esta. */
+    /** The character stream, or null. It is the one that wins if it is there. */
     Reader getCharacterStream();
 
     /** Ver {@link #getCharacterStream}. */
     void setCharacterStream(Reader characterStream);
 
-    /** El flujo de bytes, o null. Se decodifica con {@link #getEncoding}. */
+    /** The byte stream, or null. It is decoded with {@link #getEncoding}. */
     InputStream getByteStream();
 
     /** Ver {@link #getByteStream}. */
     void setByteStream(InputStream byteStream);
 
-    /** El documento entero como cadena, o null. */
+    /** The whole document as a string, or null. */
     String getStringData();
 
     /** Ver {@link #getStringData}. */
     void setStringData(String stringData);
 
     /**
-     * De donde salio, para poder resolver lo relativo.
+     * Where it came from, so that relative things can be resolved.
      *
-     * <p>Sirve para dos cosas distintas: como <b>ultimo</b> recurso para leer, y como base de las
-     * referencias relativas del documento aunque el contenido haya venido por otra via.
+     * <p>It serves for two different things: as the <b>last</b> resort for reading, and as the base
+     * of the relative references of the document even if the contents came by another road.
      */
     String getSystemId();
 
     /** Ver {@link #getSystemId}. */
     void setSystemId(String systemId);
 
-    /** El identificador publico, si lo tiene. */
+    /** The public identifier, if it has one. */
     String getPublicId();
 
     /** Ver {@link #getPublicId}. */
     void setPublicId(String publicId);
 
-    /** La base contra la que se resuelve un {@link #getSystemId} relativo. */
+    /** The base a relative {@link #getSystemId} is resolved against. */
     String getBaseURI();
 
     /** Ver {@link #getBaseURI}. */
     void setBaseURI(String baseURI);
 
-    /** La codificacion del flujo de bytes; se ignora con flujo de caracteres o cadena. */
+    /** The encoding of the byte stream; it is ignored with a character stream or a string. */
     String getEncoding();
 
     /** Ver {@link #getEncoding}. */
     void setEncoding(String encoding);
 
     /**
-     * Si quien lo entrega certifica que ya esta bien formado.
+     * Whether whoever hands it over certifies that it is already well formed.
      *
-     * <p>Con esto en true el analizador puede saltear chequeos de codificacion. Es una promesa de
-     * quien provee, no una comprobacion: si es mentira, el resultado no esta definido.
+     * <p>With this at true the parser may skip encoding checks. It is a promise of the provider,
+     * not a check: if it is a lie, the result is undefined.
      */
     boolean getCertifiedText();
 

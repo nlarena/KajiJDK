@@ -2,15 +2,14 @@ package javax.print.attribute;
 
 import java.io.Serializable;
 
-// La clase de sintaxis de los atributos que son un tamano bidimensional (una hoja, un margen).
+// The syntax class of the attributes that are a two-dimensional size (a sheet, a margin).
 //
-// Mismo truco que ResolutionSyntax: adentro es un entero en **micrometros**, y las constantes INCH
-// y MM son el factor de conversion (25400 um = 1 pulgada, 1000 um = 1 mm). Guardar el entero y no
-// el float es lo que hace que dos tamanos construidos en unidades distintas se puedan comparar por
-// igualdad exacta.
+// Same trick as ResolutionSyntax: inside it is an integer in **micrometres**, and the INCH and MM
+// constants are the conversion factor (25400 um = 1 inch, 1000 um = 1 mm). Keeping the integer and
+// not the float is what lets two sizes built in different units be compared by exact equality.
 //
-// La diferencia con ResolutionSyntax es que aca la lectura devuelve `float`: un tamano en
-// pulgadas casi nunca es entero.
+// The difference from ResolutionSyntax is that here reading returns a `float`: a size in inches is
+// almost never an integer.
 public abstract class Size2DSyntax implements Serializable, Cloneable {
 
     private static final long serialVersionUID = 5584439964938660530L;
@@ -18,7 +17,7 @@ public abstract class Size2DSyntax implements Serializable, Cloneable {
     private int x;
     private int y;
 
-    // Los dos factores a micrometros.
+    // The two factors to micrometres.
     public static final int INCH = 25400;
     public static final int MM = 1000;
 
@@ -36,7 +35,7 @@ public abstract class Size2DSyntax implements Serializable, Cloneable {
         this.y = (int) (y * units + 0.5f);
     }
 
-    // La variante entera no redondea porque no hace falta: el producto ya es exacto.
+    // The integer variant does not round because it does not need to: the product is already exact.
     protected Size2DSyntax(int x, int y, int units) {
         if (x < 0) {
             throw new IllegalArgumentException("x < 0");
@@ -58,7 +57,7 @@ public abstract class Size2DSyntax implements Serializable, Cloneable {
         return ((float) um) / ((float) units);
     }
 
-    // Los dos numeros juntos: [x, y].
+    // The two numbers together: [x, y].
     public float[] getSize(int units) {
         float[] result = new float[2];
         result[0] = getX(units);
@@ -74,7 +73,7 @@ public abstract class Size2DSyntax implements Serializable, Cloneable {
         return convertFromMicrometers(this.y, units);
     }
 
-    // "8.5x11.0 in". Con `unitsName` null se omite el sufijo y el espacio.
+    // "8.5x11.0 in". With a null `unitsName` the suffix and the space are omitted.
     public String toString(int units, String unitsName) {
         StringBuilder result = new StringBuilder();
         result.append(getX(units));
@@ -95,12 +94,12 @@ public abstract class Size2DSyntax implements Serializable, Cloneable {
         return this.x == other.x && this.y == other.y;
     }
 
-    // Los 16 bits bajos de cada componente, igual que ResolutionSyntax.
+    // The low 16 bits of each component, like ResolutionSyntax.
     public int hashCode() {
         return (this.x & 0x0000FFFF) | ((this.y & 0x0000FFFF) << 16);
     }
 
-    // En micrometros, la unidad interna: "215900x279400 um".
+    // In micrometres, the internal unit: "215900x279400 um".
     public String toString() {
         StringBuilder result = new StringBuilder();
         result.append(this.x);

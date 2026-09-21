@@ -1,10 +1,10 @@
 package java.security;
 
-// Los parametros que se le pasaron al algoritmo no son los que el algoritmo acepta.
+// The parameters passed to the algorithm are not the ones the algorithm accepts.
 //
-// No confundir con `InvalidParameterException`, que es no chequeada y hereda de
-// `IllegalArgumentException`: aquella señala un error de programacion del llamador, esta señala
-// una combinacion parametro/algoritmo que solo se puede descubrir en runtime.
+// Not to be confused with `InvalidParameterException`, which is unchecked and inherits from
+// `IllegalArgumentException`: that one points at a programming error of the caller, this one points
+// at a parameter/algorithm combination that can only be discovered at runtime.
 public class InvalidAlgorithmParameterException extends GeneralSecurityException {
 
     public InvalidAlgorithmParameterException() {

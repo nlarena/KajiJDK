@@ -3,46 +3,47 @@ package javax.swing;
 import javax.swing.event.ChangeListener;
 
 /**
- * La secuencia por la que se mueve un {@link JSpinner}.
+ * The sequence a {@link JSpinner} moves along.
  *
- * <h2>Una secuencia, no un rango</h2>
+ * <h2>A sequence, not a range</h2>
  *
- * <p>El modelo no dice cuantos elementos hay ni permite ir al numero tal: solo sabe cual es el
- * valor de ahora, cual viene despues y cual venia antes. Con eso alcanza para un control que solo
- * tiene dos flechas, y de paso permite secuencias infinitas -- una fecha, un numero sin tope -- que
- * no se podrian enumerar.
+ * <p>The model does not say how many elements there are nor allow going to number
+ * such-and-such: it only knows which is the current value, which comes afterwards and which came
+ * before. With that it is enough for a control that only has two arrows, and along the way it
+ * allows infinite sequences -- a date, a number with no cap -- that could not be enumerated.
  *
- * <h2>Nulo significa que se acabo</h2>
+ * <h2>Null means it is over</h2>
  *
- * <p>{@link #getNextValue} y {@link #getPreviousValue} devuelven nulo cuando no hay siguiente o
- * anterior. Es lo que el control usa para apagar una flecha. No es un error: es el final de la
- * secuencia.
+ * <p>{@link #getNextValue} and {@link #getPreviousValue} return null when there is no next or
+ * previous. It is what the control uses in order to switch an arrow off. It is not an error: it
+ * is the end of the sequence.
  *
- * <h2>El valor puede salirse</h2>
+ * <h2>The value may go outside</h2>
  *
- * <p>{@link #setValue} acepta lo que se le de mientras sea del tipo que el modelo entiende, aunque
- * quede fuera de los limites. Recortar en silencio esconderia el error de quien lo puso; el
- * control se entera igual, porque desde ahi las flechas devuelven nulo.
+ * <p>{@link #setValue} accepts whatever it is given as long as it is of the type the model
+ * understands, even though it ends up outside the bounds. Clipping silently would hide the
+ * mistake of whoever set it; the control learns about it all the same, because from there the
+ * arrows return null.
  */
 public interface SpinnerModel {
 
-    /** El valor de ahora. */
+    /** The current value. */
     Object getValue();
 
     /**
-     * Cambia el valor.
+     * It changes the value.
      *
-     * @throws IllegalArgumentException si el modelo no entiende ese valor.
+     * @throws IllegalArgumentException if the model does not understand that value.
      */
     void setValue(Object value);
 
-    /** El siguiente, o nulo si no hay; ver la nota de la interfaz. */
+    /** The next one, or null if there is none; see the interface note. */
     Object getNextValue();
 
-    /** El anterior, o nulo si no hay. */
+    /** The previous one, or null if there is none. */
     Object getPreviousValue();
 
-    /** Escucha los cambios de valor. */
+    /** It listens to the value changes. */
     void addChangeListener(ChangeListener l);
 
     void removeChangeListener(ChangeListener l);

@@ -8,16 +8,17 @@ import java.awt.Rectangle;
 import java.awt.Shape;
 
 /**
- * Un componente de verdad incrustado en el texto: un boton, un campo, lo que sea.
+ * A real component embedded in the text: a button, a field, whatever.
  *
- * <h2>La vista no lo dibuja</h2>
+ * <h2>The view does not draw it</h2>
  *
- * <p>El componente se agrega al contenedor del editor y se dibuja solo, como cualquier hijo. Esta
- * vista solo lo <em>ubica</em>: le pone el tamano y la posicion que le tocan en el texto. De ahi
- * que {@link #paint} no pinte nada mas que acomodarlo.
+ * <p>The component is added to the editor's container and draws itself, like any child. This
+ * view only <em>places</em> it: it sets the size and the position it gets in the text. Hence
+ * {@link #paint} paints nothing beyond arranging it.
  *
- * <p>Eso trae una consecuencia que conviene saber: el componente sigue existiendo aunque su tramo
- * de texto quede fuera de la vista, y su tamano preferido manda sobre el maquetado del parrafo.
+ * <p>That brings a consequence worth knowing: the component goes on existing even if its
+ * stretch of text falls outside the view, and its preferred size rules over the paragraph's
+ * layout.
  */
 public class ComponentView extends View {
 
@@ -29,10 +30,10 @@ public class ComponentView extends View {
     }
 
     /**
-     * El componente a mostrar; el que el elemento tiene como atributo.
+     * The component to show; the one the element has as an attribute.
      *
-     * <p>Una subclase puede fabricarlo en vez de tomarlo del atributo: es como se incrusta algo
-     * que no estaba en el documento.
+     * <p>A subclass may build it instead of taking it from the attribute: it is how something that
+     * was not in the document gets embedded.
      */
     protected Component createComponent() {
         AttributeSet attr = getElement().getAttributes();
@@ -44,7 +45,7 @@ public class ComponentView extends View {
         return createdC;
     }
 
-    /** No dibuja: acomoda. Ver la nota de la clase. */
+    /** It does not draw: it arranges. See the class note. */
     public void paint(Graphics g, Shape a) {
         if (c != null) {
             Rectangle alloc = (a instanceof Rectangle) ? (Rectangle) a : a.getBounds();
@@ -94,16 +95,16 @@ public class ComponentView extends View {
         return 0;
     }
 
-    /** Se alinea al medio, como cualquier vista sin linea de base propia. */
+    /** It is aligned in the middle, like any view with no baseline of its own. */
     public float getAlignment(int axis) {
         return super.getAlignment(axis);
     }
 
     /**
-     * Al entrar en el arbol, agrega el componente al editor; al salir, lo saca.
+     * On entering the tree, it adds the component to the editor; on leaving, it removes it.
      *
-     * <p>Es el unico lugar donde una vista toca la jerarquia de componentes, y por eso esta
-     * cuidadosamente atado al ciclo de vida de la vista.
+     * <p>It is the only place where a view touches the component hierarchy, and that is why it is
+     * carefully tied to the view's life cycle.
      */
     public void setParent(View p) {
         super.setParent(p);
@@ -122,7 +123,7 @@ public class ComponentView extends View {
             if (c != null) {
                 Container host = c.getParent();
                 if (host != null) {
-                    host.remove(c.getComponente());
+                    host.remove(c.getComponent());
                 }
                 c = null;
                 createdC = null;
@@ -130,7 +131,7 @@ public class ComponentView extends View {
         }
     }
 
-    /** Acomoda el componente dentro del editor. */
+    /** It arranges the component inside the editor. */
     void setComponentParent() {
     }
 
@@ -159,22 +160,22 @@ public class ComponentView extends View {
     }
 
     /**
-     * Envuelve al componente para saber cuando cambia de tamano.
+     * It wraps the component so as to know when it changes size.
      *
-     * <p>Un componente incrustado que cambia de tamano tiene que hacer que el parrafo se rehaga, y
-     * la unica forma de enterarse es escucharlo.
+     * <p>An embedded component that changes size has to make the paragraph be redone, and the only
+     * way of hearing about it is to listen to it.
      */
     static class Invalidator {
 
         private final Component comp;
-        private final ComponentView vista;
+        private final ComponentView view;
 
-        Invalidator(Component comp, ComponentView vista) {
+        Invalidator(Component comp, ComponentView view) {
             this.comp = comp;
-            this.vista = vista;
+            this.view = view;
         }
 
-        Component getComponente() {
+        Component getComponent() {
             return comp;
         }
 

@@ -1,21 +1,21 @@
 package com.sun.jdi;
 
 /**
- * InvalidTypeException de la maquina depurada.
+ * InvalidTypeException of the debugged machine.
  *
  * @since 1.3
  */
 public class InvalidTypeException extends Exception {
 
-    /** Sin detalle. */
+    /** With no detail. */
     public InvalidTypeException() {
         super();
     }
 
     /**
-     * Con un mensaje.
+     * With a message.
      *
-     * @param s el mensaje
+     * @param s the message
      */
     public InvalidTypeException(String s) {
         super(s);

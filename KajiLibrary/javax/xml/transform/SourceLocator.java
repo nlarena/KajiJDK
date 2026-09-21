@@ -1,41 +1,41 @@
 package javax.xml.transform;
 
 /**
- * KajiLibrary's javax.xml.transform.SourceLocator -- donde, dentro de un documento, paso algo.
+ * KajiLibrary's javax.xml.transform.SourceLocator -- where, within a document, something happened.
  *
- * <p>Es la contraparte de `org.xml.sax.Locator` para el mundo de las transformaciones, y existe por
- * una razon muy concreta: un error de XSLT ocurre en **dos** lugares a la vez --una linea de la hoja
- * de estilo y un nodo del documento-- y un mensaje que solo diga "elemento inesperado" no sirve para
- * arreglar nada. Esta interfaz es el minimo comun para poder decir *donde*.
+ * <p>It is the counterpart of `org.xml.sax.Locator` for the world of transformations, and it exists
+ * for a very concrete reason: an XSLT error happens in **two** places at once --a line of the
+ * stylesheet and a node of the document-- and a message that only says "unexpected element" is no
+ * use for fixing anything. This interface is the common minimum for being able to say *where*.
  *
- * <p>Las cuatro coordenadas son las mismas de SAX y con las mismas convenciones, que conviene
- * recordar porque no son obvias:
+ * <p>The four coordinates are SAX's and with the same conventions, which are worth remembering
+ * because they are not obvious:
  *
  * <ul>
- *   <li>las URIs (`publicId`, `systemId`) pueden ser nulas: no todo documento vino de un lugar con
- *       nombre --uno armado en memoria no tiene ninguno--;
- *   <li>las posiciones (`line`, `column`) se cuentan **desde 1**, y el **0 significa "no se"**. No
- *       hay linea cero, asi que el valor sirve de centinela sin necesidad de un `Integer` nulo. Por
- *       eso {@link TransformerException#getLocationAsString} omite del texto la linea y la columna
- *       que valgan cero: informar "Line#: 0" seria peor que callarse.
+ *   <li>the URIs (`publicId`, `systemId`) can be null: not every document came from a named place
+ *       --one built in memory has none--;
+ *   <li>the positions (`line`, `column`) are counted **from 1**, and **0 means "unknown"**. There
+ *       is no line zero, so the value serves as a sentinel without needing a null `Integer`. That
+ *       is why {@link TransformerException#getLocationAsString} leaves out of the text the line and
+ *       column that are zero: reporting "Line#: 0" would be worse than saying nothing.
  * </ul>
  *
- * <p>Y una advertencia que la spec hace y vale repetir: un `SourceLocator` que un procesador entrega
- * durante el recorrido es **valido solo durante la llamada**. El procesador puede reutilizar el
- * mismo objeto y moverlo. Guardarlo para mirarlo despues da coordenadas de otro lado; lo que se
- * guarda es una copia de los cuatro valores.
+ * <p>And a warning the spec makes and is worth repeating: a `SourceLocator` a processor hands over
+ * during the walk is **valid only during the call**. The processor may reuse the same object and
+ * move it. Keeping it to look at later gives coordinates from somewhere else; what is kept is a
+ * copy of the four values.
  */
 public interface SourceLocator {
 
-    /** El identificador publico del documento, o null si no tiene. */
+    /** The public identifier of the document, or null if it has none. */
     String getPublicId();
 
-    /** La URI del documento, o null si no vino de ninguna. */
+    /** The URI of the document, or null if it came from none. */
     String getSystemId();
 
-    /** La linea, contada desde 1; 0 si se desconoce. */
+    /** The line, counted from 1; 0 if unknown. */
     int getLineNumber();
 
-    /** La columna, contada desde 1; 0 si se desconoce. */
+    /** The column, counted from 1; 0 if unknown. */
     int getColumnNumber();
 }

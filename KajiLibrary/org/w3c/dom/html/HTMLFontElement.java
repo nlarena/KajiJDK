@@ -1,25 +1,25 @@
 package org.w3c.dom.html;
 
 /**
- * Un `<font>`. Obsoleto en HTML 4.
+ * A `<font>`. Obsolete in HTML 4.
  */
 public interface HTMLFontElement extends HTMLElement {
 
-    /** El atributo `color`. */
+    /** The `color` attribute. */
     String getColor();
 
-    /** Fija el atributo `color`. */
+    /** It sets the `color` attribute. */
     void setColor(String color);
 
-    /** El atributo `face`. */
+    /** The `face` attribute. */
     String getFace();
 
-    /** Fija el atributo `face`. */
+    /** It sets the `face` attribute. */
     void setFace(String face);
 
-    /** El tamanio visible. */
+    /** The visible size. */
     String getSize();
 
-    /** Fija el tamanio visible. */
+    /** It sets the visible size. */
     void setSize(String size);
 }

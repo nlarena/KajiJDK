@@ -9,12 +9,12 @@ import javax.imageio.stream.ImageInputStream;
 import javax.imageio.stream.MemoryCacheImageInputStream;
 
 /**
- * Envuelve un {@link InputStream} en un flujo de entrada de imagenes.
+ * Wraps an {@link InputStream} in an image input stream.
  *
- * <p>De acceso de paquete: no es API. Elige entre cachear en disco o en memoria segun lo que
- * {@code ImageIO.getUseCache} diga; ver {@code ImageIO}.
+ * <p>Package-private: it is not API. It chooses between caching on disk or in memory according to
+ * what {@code ImageIO.getUseCache} says; see {@code ImageIO}.
  *
- * <p>Puede usar archivo de cache y no lo necesita: si no se le permite, cachea en memoria.
+ * <p>It can use a cache file and does not need one: if not allowed to, it caches in memory.
  */
 final class InputStreamImageInputStreamSpi extends ImageInputStreamSpi {
 
@@ -27,13 +27,13 @@ final class InputStreamImageInputStreamSpi extends ImageInputStreamSpi {
         return "Service provider that instantiates an ImageInputStream from an InputStream";
     }
 
-    /** Si; con archivo cachea en disco. */
+    /** Yes; with a file it caches on disk. */
     @Override
     public boolean canUseCacheFile() {
         return true;
     }
 
-    /** No: sin archivo cachea en memoria. */
+    /** No: without a file it caches in memory. */
     @Override
     public boolean needsCacheFile() {
         return false;

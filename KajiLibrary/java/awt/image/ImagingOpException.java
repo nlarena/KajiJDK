@@ -1,17 +1,17 @@
 package java.awt.image;
 
 /**
- * Una operacion sobre una imagen no se pudo aplicar.
+ * An operation over an image could not be applied.
  *
- * <p>La distincion con {@link RasterFormatException} es de **quien** esta mal: alli los parametros
- * del raster, aca la operacion misma -- un filtro que no sabe tratar ese tipo de imagen, una
- * transformacion que no se puede invertir.
+ * <p>The distinction from {@link RasterFormatException} is about **who** is wrong: there the
+ * parameters of the raster, here the operation itself -- a filter that does not know how to handle
+ * that kind of image, a transformation that cannot be inverted.
  */
 public class ImagingOpException extends RuntimeException {
 
     private static final long serialVersionUID = 8026288481846276658L;
 
-    /** Con ese mensaje. */
+    /** With that message. */
     public ImagingOpException(String s) {
         super(s);
     }

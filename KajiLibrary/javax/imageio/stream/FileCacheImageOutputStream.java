@@ -6,37 +6,37 @@ import java.io.OutputStream;
 import java.io.RandomAccessFile;
 
 /**
- * KajiLibrary's javax.imageio.stream.FileCacheImageOutputStream -- escribe a un flujo cualquiera,
- * juntando en un archivo temporal.
+ * KajiLibrary's javax.imageio.stream.FileCacheImageOutputStream -- writes to any stream, collecting
+ * in a temporary file.
  *
- * <p>La combinacion de {@link FileCacheImageInputStream} y
- * {@link MemoryCacheImageOutputStream}: se puede reposicionar y corregir libremente porque todo pasa
- * primero por un archivo en disco, y {@link #flushBefore} suelta lo que ya no se va a tocar.
+ * <p>The combination of {@link FileCacheImageInputStream} and {@link MemoryCacheImageOutputStream}:
+ * it can seek and fix things up freely because everything goes through a file on disk first, and
+ * {@link #flushBefore} releases what will not be touched again.
  *
- * <p>Como en la version de memoria, <b>nada llega al flujo de abajo</b> hasta que se llama a
- * {@code flushBefore} o a {@link #close}.
+ * <p>As in the memory version, <b>nothing reaches the underlying stream</b> until
+ * {@code flushBefore} or {@link #close} is called.
  *
- * <p>El temporal se borra al cerrar; el flujo de abajo no se cierra.
+ * <p>The temporary file is deleted on close; the underlying stream is not closed.
  */
 public class FileCacheImageOutputStream extends ImageOutputStreamImpl {
 
-    /** A donde va lo que se suelta. */
+    /** Where what is released goes. */
     private OutputStream stream;
 
-    /** Donde se junta. */
+    /** Where it is collected. */
     private File cacheFile;
 
-    /** El temporal, abierto. */
+    /** The temporary file, open. */
     private RandomAccessFile cache;
 
-    /** Hasta donde se escribio. */
+    /** How far it was written. */
     private long length = 0;
 
     /**
-     * @param stream a donde escribir
-     * @param cacheDir donde poner el temporal, o null para el del sistema
-     * @throws IllegalArgumentException si el flujo es null, o si el directorio no lo es
-     * @throws IOException si no se pudo crear el temporal
+     * @param stream where to write
+     * @param cacheDir where to put the temporary file, or null for the system's
+     * @throws IllegalArgumentException if the stream is null, or if the directory is not one
+     * @throws IOException if the temporary file could not be created
      */
     public FileCacheImageOutputStream(OutputStream stream, File cacheDir) throws IOException {
         if (stream == null) {
@@ -50,7 +50,7 @@ public class FileCacheImageOutputStream extends ImageOutputStreamImpl {
         this.cache = new RandomAccessFile(this.cacheFile, "rw");
     }
 
-    /** Un byte de lo ya escrito. */
+    /** One byte of what was already written. */
     @Override
     public int read() throws IOException {
         checkClosed();
@@ -66,7 +66,7 @@ public class FileCacheImageOutputStream extends ImageOutputStreamImpl {
         return value;
     }
 
-    /** Hasta {@code len} bytes de lo ya escrito. */
+    /** Up to {@code len} bytes of what was already written. */
     @Override
     public int read(byte[] b, int off, int len) throws IOException {
         checkClosed();
@@ -92,7 +92,7 @@ public class FileCacheImageOutputStream extends ImageOutputStreamImpl {
         return nbytes;
     }
 
-    /** Un byte. */
+    /** One byte. */
     @Override
     public void write(int b) throws IOException {
         flushBits();
@@ -104,7 +104,7 @@ public class FileCacheImageOutputStream extends ImageOutputStreamImpl {
         }
     }
 
-    /** Esa parte del arreglo. */
+    /** That part of the array. */
     @Override
     public void write(byte[] b, int off, int len) throws IOException {
         flushBits();
@@ -116,13 +116,13 @@ public class FileCacheImageOutputStream extends ImageOutputStreamImpl {
         }
     }
 
-    /** Cuanto se escribio. */
+    /** How much was written. */
     @Override
     public long length() {
         return this.length;
     }
 
-    /** Se posiciona; se puede pasar del final. */
+    /** Seeks; it may go past the end. */
     @Override
     public void seek(long pos) throws IOException {
         checkClosed();
@@ -133,13 +133,13 @@ public class FileCacheImageOutputStream extends ImageOutputStreamImpl {
         this.streamPos = pos;
     }
 
-    /** Si. */
+    /** Yes. */
     @Override
     public boolean isCached() {
         return true;
     }
 
-    /** Si. */
+    /** Yes. */
     @Override
     public boolean isCachedFile() {
         return true;
@@ -152,9 +152,10 @@ public class FileCacheImageOutputStream extends ImageOutputStreamImpl {
     }
 
     /**
-     * Suelta al flujo de abajo todo lo anterior a esa posicion.
+     * Releases to the underlying stream everything before that position.
      *
-     * @throws IndexOutOfBoundsException si es anterior al descarte actual o posterior a la posicion
+     * @throws IndexOutOfBoundsException if it is before the current flushed position or after the
+     *     position
      */
     @Override
     public void flushBefore(long pos) throws IOException {
@@ -178,13 +179,13 @@ public class FileCacheImageOutputStream extends ImageOutputStreamImpl {
         this.stream.flush();
     }
 
-    /** Suelta lo pendiente, cierra y borra el temporal. */
+    /** Releases what is pending, closes and deletes the temporary file. */
     @Override
     public void close() throws IOException {
         try {
             flushBits();
         } catch (IOException e) {
-            // Ya se esta cerrando.
+            // It is already closing.
         }
         long pos = this.length;
         seek(pos);

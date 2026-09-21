@@ -11,58 +11,70 @@ import javax.naming.Referenceable;
 import javax.naming.StringRefAddr;
 
 /**
- * KajiLibrary's javax.naming.spi.NamingManager -- la maquinaria que arma los contextos y los objetos.
+ * KajiLibrary's javax.naming.spi.NamingManager -- the machinery that builds contexts and objects.
  *
- * <p>Todo estatico. Es el punto donde JNDI decide <b>quien</b> atiende cada cosa, y por eso es el
- * punto donde se puede tomar el control de todo.
+ * <p>All static. It is the point where JNDI decides <b>who</b> serves each thing, and that is why
+ * it is the point where control of everything can be taken.
  *
- * <h2>Los dos constructores se instalan una sola vez</h2>
+ * <h2>The two builders are installed only once</h2>
  *
- * <p>{@link #setInitialContextFactoryBuilder} y {@link #setObjectFactoryBuilder} fallan si ya habia
- * uno. La unicidad no es una comodidad de implementacion: son las dos palancas que deciden que
- * proveedor y que fabricas se usan en <b>todo</b> el proceso, y si se pudieran reemplazar, la
- * primera biblioteca que las use quedaria a merced de la segunda.
+ * <p>{@link #setInitialContextFactoryBuilder} and {@link #setObjectFactoryBuilder} fail if there
+ * already was one. The uniqueness is not an implementation convenience: they are the two levers
+ * that decide which provider and which factories are used in the <b>whole</b> process, and if they
+ * could be replaced, the first library to use them would be at the mercy of the second.
  *
- * <h2>Como se busca una fabrica de objetos</h2>
+ * <h2>How an object factory is looked up</h2>
  *
- * <p>Sin constructor instalado, {@link #getObjectInstance} sigue el camino por omision: si el dato es
- * una {@link Reference} con nombre de clase, se carga <b>esa</b> clase y se la usa como fabrica; si
- * no, se recorren las clases nombradas en la propiedad {@code java.naming.factory.object}.
+ * <p>With no builder installed, {@link #getObjectInstance} follows the default path: if the data is
+ * a {@link Reference} naming a factory class, <b>that</b> class is loaded and used as the factory;
+ * then the classes named in the {@code java.naming.factory.object} property are tried.
  *
- * <p>Cargar la clase que nombra el dato es lo que hace utiles a las referencias y a la vez es un
- * riesgo real: el nombre de clase viene del directorio, asi que quien pueda escribir ahi elige que
- * codigo se carga. Instalar un {@link ObjectFactoryBuilder} propio es la forma de cerrarlo.
+ * <p>Loading the class the data names is what makes references useful and at the same time a real
+ * risk: the class name comes from the directory, so whoever can write there chooses which code is
+ * loaded. Installing an {@link ObjectFactoryBuilder} of your own is the way to close that.
+ *
+ * <p>That path differs from the JDK 25 in several ways. The JDK also unwraps a
+ * {@link Referenceable} into its {@code Reference}; when the reference names a factory, the JDK
+ * returns that factory's answer (or {@code refInfo} if it cannot be loaded) and never goes on to
+ * the property's list, while this one does; a reference without a factory has its URL addresses
+ * tried first; a builder's factory answer is returned as is, even null (here null becomes
+ * {@code refInfo}); and the JDK passes every factory class named by a reference through the
+ * {@code jdk.jndi.object.factoriesFilter} global filter, which this library does not have.
  *
  * <h2>A KajiLibrary subset</h2>
  *
- * <p>{@link #getInitialContext} sin constructor y sin la propiedad {@code java.naming.factory.initial}
- * lanza {@link NoInitialContextException}, que es lo que declara para "no hay proveedor". Con la
- * propiedad puesta carga la clase y funciona: la busqueda esta implementada de verdad.
+ * <p>{@link #getInitialContext} with no builder and no {@code java.naming.factory.initial}
+ * property throws {@link NoInitialContextException}, which is what it declares for "no
+ * provider". With the property set it loads the class and works: the lookup is really
+ * implemented. (But {@code javax.naming.InitialContext} does not call it; see its class header.)
  *
- * <p>{@link #getURLContext} devuelve siempre null. Buscar un contexto por esquema de URL pide la
- * convencion de paquetes de {@code java.naming.factory.url.pkgs} y una implementacion por esquema, y
- * esta biblioteca no trae ninguna. Null es lo que el contrato define como "no hay contexto para ese
- * esquema", asi que quien llama sigue por el camino normal sin enterarse de nada raro.
+ * <p>{@link #getURLContext} always returns null. Looking up a context by URL scheme takes the
+ * package convention of {@code java.naming.factory.url.pkgs} and an implementation per scheme, and
+ * this library ships none. Null is what the contract defines as "no context for that scheme", so
+ * the caller carries on along the normal path without noticing anything odd.
  */
 public class NamingManager {
 
-    /** La clave con la que un contexto de continuacion recibe la excepcion que lo origino. */
+    /** The key under which a continuation context receives the exception that caused it. */
     public static final String CPE = "java.naming.spi.CannotProceedException";
 
-    /** El instalado, o null. */
+    /** The installed one, or null. */
     private static ObjectFactoryBuilder objectFactoryBuilder = null;
 
-    /** El instalado, o null. */
+    /** The installed one, or null. */
     private static InitialContextFactoryBuilder initialContextFactoryBuilder = null;
 
-    /** Publico por compatibilidad; la clase es solo metodos estaticos. */
+    /**
+     * Package-private, as in the JDK: the class is static methods only. (An earlier note said
+     * public for compatibility.)
+     */
     NamingManager() {
     }
 
     /**
-     * Instala el constructor de fabricas de objetos.
+     * Installs the object factory builder.
      *
-     * @throws IllegalStateException si ya habia uno; ver la nota de la clase
+     * @throws IllegalStateException if there already was one; see the class note
      */
     public static synchronized void setObjectFactoryBuilder(ObjectFactoryBuilder builder)
         throws NamingException {
@@ -73,11 +85,11 @@ public class NamingManager {
     }
 
     /**
-     * El objeto que corresponde a esos datos.
+     * The object that corresponds to that data.
      *
-     * <p>Ver el camino de busqueda en la nota de la clase.
+     * <p>See the lookup path, and how it differs from the JDK, in the class note.
      *
-     * @return el objeto, o {@code refInfo} tal cual si ninguna fabrica lo reconocio
+     * @return the object, or {@code refInfo} as is if no factory recognized it
      */
     public static Object getObjectInstance(Object refInfo, Name name, Context nameCtx,
                                            Hashtable<?, ?> environment) throws Exception {
@@ -90,7 +102,7 @@ public class NamingManager {
             Object made = factory.getObjectInstance(refInfo, name, nameCtx, environment);
             return (made == null) ? refInfo : made;
         }
-        // Camino por omision: la clase que nombra la propia referencia.
+        // Default path: the class the reference itself names.
         if (refInfo instanceof Reference) {
             String className = ((Reference) refInfo).getFactoryClassName();
             if (className != null) {
@@ -103,7 +115,7 @@ public class NamingManager {
                 }
             }
         }
-        // Y despues las de la propiedad, en orden.
+        // And then the property's ones, in order.
         String list = property(environment, Context.OBJECT_FACTORIES);
         if (list != null) {
             String[] names = list.split(":");
@@ -119,14 +131,14 @@ public class NamingManager {
                 i = i + 1;
             }
         }
-        // Ninguna lo reconocio: se devuelve lo que entro, que es lo que pide el contrato.
+        // None recognized it: what came in is returned, which is what the contract asks for.
         return refInfo;
     }
 
     /**
-     * El contexto que atiende ese esquema de URL.
+     * The context that serves that URL scheme.
      *
-     * @return null siempre en KajiLibrary; ver la nota de la clase
+     * @return null always in KajiLibrary; see the class note
      */
     public static Context getURLContext(String scheme, Hashtable<?, ?> environment)
         throws NamingException {
@@ -134,9 +146,9 @@ public class NamingManager {
     }
 
     /**
-     * El contexto inicial del proveedor configurado.
+     * The initial context of the configured provider.
      *
-     * @throws NoInitialContextException si no hay proveedor
+     * @throws NoInitialContextException if there is no provider
      */
     public static Context getInitialContext(Hashtable<?, ?> environment) throws NamingException {
         InitialContextFactoryBuilder builder;
@@ -171,9 +183,9 @@ public class NamingManager {
     }
 
     /**
-     * Instala el constructor de fabricas de contexto inicial.
+     * Installs the initial context factory builder.
      *
-     * @throws IllegalStateException si ya habia uno
+     * @throws IllegalStateException if there already was one
      */
     public static synchronized void setInitialContextFactoryBuilder(
         InitialContextFactoryBuilder builder) throws NamingException {
@@ -183,7 +195,7 @@ public class NamingManager {
         initialContextFactoryBuilder = builder;
     }
 
-    /** Si ya hay uno instalado. */
+    /** Whether one is already installed. */
     public static boolean hasInitialContextFactoryBuilder() {
         synchronized (NamingManager.class) {
             return initialContextFactoryBuilder != null;
@@ -191,14 +203,13 @@ public class NamingManager {
     }
 
     /**
-     * El contexto donde seguir una operacion que se corto.
+     * The context in which to carry on an operation that was cut short.
      *
-     * <p>Cuando un contexto no puede seguir resolviendo un nombre lanza
-     * {@link CannotProceedException} con el objeto donde se corto; esto lo convierte de vuelta en un
-     * contexto para retomar desde ahi.
+     * <p>When a context cannot keep resolving a name it throws {@link CannotProceedException} with
+     * the object where it stopped; this turns it back into a context to resume from there.
      *
-     * <p>La excepcion se pasa en el ambiente bajo la clave {@link #CPE}: el contexto nuevo puede
-     * necesitar saber de donde viene, y no hay otro canal para decirselo.
+     * <p>The exception is passed in the environment under the {@link #CPE} key: the new context may
+     * need to know where it comes from, and there is no other channel to tell it.
      */
     public static Context getContinuationContext(CannotProceedException cpe)
         throws NamingException {
@@ -216,16 +227,19 @@ public class NamingManager {
         } catch (NamingException e) {
             throw e;
         } catch (Exception e) {
-            // No se pudo continuar: se propaga la original, que es la que explica el corte.
+            // Could not continue: the original is propagated, since it is the one that explains the
+            // cut.
         }
         throw cpe;
     }
 
     /**
-     * Lo que hay que guardar en lugar de ese objeto.
+     * What to store in place of that object.
      *
-     * <p>Recorre las fabricas de la propiedad {@code java.naming.factory.state}. Si el objeto es
-     * {@link Referenceable} y ninguna lo reconoce, se guarda su referencia.
+     * <p>It walks the factories of the {@code java.naming.factory.state} property and returns the
+     * first non-null answer, or the object itself. (An earlier note said a {@link Referenceable}
+     * nobody recognizes is stored as its reference; this method does not do that, and neither does
+     * the JDK's -- that conversion is the provider's.)
      */
     public static Object getStateToBind(Object obj, Name name, Context nameCtx,
                                         Hashtable<?, ?> environment) throws NamingException {
@@ -247,7 +261,7 @@ public class NamingManager {
         return obj;
     }
 
-    /** El valor de esa propiedad: primero el ambiente, despues el sistema. */
+    /** That property's value: first the environment, then the system. */
     static String property(Hashtable<?, ?> environment, String key) {
         if (environment != null) {
             Object v = environment.get(key);
@@ -262,7 +276,7 @@ public class NamingManager {
         }
     }
 
-    /** El cargador con el que se buscan las clases nombradas por configuracion. */
+    /** The class loader used to look up the classes named by configuration. */
     static ClassLoader contextLoader() {
         ClassLoader loader = Thread.currentThread().getContextClassLoader();
         if (loader == null) {
@@ -271,23 +285,23 @@ public class NamingManager {
         return loader;
     }
 
-    /** Una fabrica de objetos por nombre de clase, o null si no se pudo. */
+    /** An object factory by class name, or null if it could not be made. */
     private static ObjectFactory loadFactory(String className) {
         Object made = instantiate(className);
         return (made instanceof ObjectFactory) ? (ObjectFactory) made : null;
     }
 
-    /** Una fabrica de estado por nombre de clase, o null. */
+    /** A state factory by class name, or null. */
     private static StateFactory loadStateFactory(String className) {
         Object made = instantiate(className);
         return (made instanceof StateFactory) ? (StateFactory) made : null;
     }
 
     /**
-     * Instancia esa clase, o null.
+     * Instantiates that class, or null.
      *
-     * <p>Se traga la falla a proposito: una fabrica que no carga no es un error de la operacion,
-     * es una fabrica menos en la lista. El contrato pide seguir con la que viene.
+     * <p>It swallows the failure on purpose: a factory that does not load is not an error of the
+     * operation, it is one factory fewer in the list. The contract asks to carry on with the next.
      */
     private static Object instantiate(String className) {
         try {

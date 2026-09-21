@@ -1,14 +1,14 @@
 package javax.sql;
 
 /**
- * KajiLibrary's javax.sql.RowSetWriter -- devuelve a la base los cambios de un {@link RowSet}.
+ * KajiLibrary's javax.sql.RowSetWriter -- returns a {@link RowSet}'s changes to the database.
  *
- * <p>Devuelve `boolean` y no `void`, que es lo que lo distingue de {@link RowSetReader}: `false`
- * significa **conflicto** --alguien mas cambio esas filas desde que se leyeron-- y no un error. Es la
- * unica respuesta honesta cuando dos escrituras se pisan.
+ * <p>It returns `boolean` and not `void`, which is what sets it apart from {@link RowSetReader}:
+ * `false` means **conflict** --somebody else changed those rows since they were read-- and not an
+ * error. It is the only honest answer when two writes overwrite each other.
  */
 public interface RowSetWriter {
 
-    /** Escribe los cambios; `false` si hubo conflicto. */
+    /** Writes the changes; `false` if there was a conflict. */
     boolean writeData(RowSetInternal caller) throws java.sql.SQLException;
 }

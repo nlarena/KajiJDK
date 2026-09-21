@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Set;
 
 import java.nio.channels.spi.AbstractSelectableChannel;
+import java.nio.channels.spi.AbstractSelectionKey;
 import java.nio.channels.spi.AbstractSelector;
 import java.nio.channels.spi.SelectorProvider;
 
@@ -208,9 +209,9 @@ final class KajiSelector extends AbstractSelector {
             }
             synchronized (this.selected) {
                 if (this.selected.contains(k)) {
-                    // Already reported and not yet drained: the ops are merged, and the key does not
-                    // count again. That is what the JDK's return value means -- new keys, not ready
-                    // ones.
+                    // Already reported and not yet drained: the ops are merged, and the key does
+                    // not count again. That is what the JDK's return value means -- new keys, not
+                    // ready ones.
                     k.readyOps(k.readyOps() | ops);
                 } else {
                     k.readyOps(ops);
@@ -254,8 +255,8 @@ final class KajiSelector extends AbstractSelector {
         }
         if ((revents & jdk.internal.net.Net.POLL_ERROR) != 0) {
             // An error is reported as every readiness the program asked about: whichever operation
-            // it goes on to attempt is the one that will tell it what happened, which is better than
-            // a channel that never comes up again.
+            // it goes on to attempt is the one that will tell it what happened, which is better
+            // than a channel that never comes up again.
             ops |= interest;
         }
         return ops;
@@ -287,7 +288,8 @@ final class KajiSelector extends AbstractSelector {
             this.wakeupWrite.write(java.nio.ByteBuffer.wrap(new byte[] {1}));
         } catch (IOException ignored) {
             // A wake-up that cannot be delivered leaves the select waiting, which is bad, but there
-            // is nothing to report it to: `wakeup` does not throw and its callers are shutting down.
+            // is nothing to report it to: `wakeup` does not throw and its callers are shutting
+            // down.
         }
         return this;
     }
@@ -318,8 +320,12 @@ final class KajiSelector extends AbstractSelector {
                 synchronized (this.selected) {
                     this.selected.remove(k);
                 }
-                if (k.channel() instanceof AbstractSelectableChannel) {
-                    ((AbstractSelectableChannel) k.channel()).removeKey(k);
+                // Through `deregister`, which is how the JDK does it (`AbstractSelector.deregister`):
+                // `removeKey` is package-private and lives in `java.nio.channels.spi`, so calling it from
+                // here is not valid Java. `deregister` does exactly that line.
+                if (k instanceof AbstractSelectionKey
+                        && k.channel() instanceof AbstractSelectableChannel) {
+                    deregister((AbstractSelectionKey) k);
                 }
             }
             cancelled.clear();
@@ -328,8 +334,8 @@ final class KajiSelector extends AbstractSelector {
 
     @Override
     protected void implCloseSelector() throws IOException {
-        // Waking up first: a thread parked in `select()` has to come out before the sockets under it
-        // are closed, or it would find them gone mid-poll.
+        // Waking up first: a thread parked in `select()` has to come out before the sockets under
+        // it are closed, or it would find them gone mid-poll.
         wakeup();
         synchronized (this.keys) {
             for (final SelectionKey k : new ArrayList<SelectionKey>(this.keys)) {

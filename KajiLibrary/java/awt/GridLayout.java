@@ -3,17 +3,17 @@ package java.awt;
 import java.io.Serializable;
 
 /**
- * Reparte a los hijos en una grilla de celdas **todas iguales**.
+ * Distributes the children in a grid of cells that are **all equal**.
  *
- * <p>La medida preferida de cada hijo no se respeta: todos quedan del mismo tamaño, el de la celda.
- * Es lo que la hace tan útil para una botonera y tan mala para un formulario.
+ * <p>Each child's preferred size is not respected: they all end up the same size, the cell's. That
+ * is what makes it so useful for a button pad and so bad for a form.
  *
- * <p>Poner una de las dos dimensiones en **cero** significa "la que haga falta": con tres filas y
- * cero columnas, las columnas salen de cuántos hijos haya. Las dos en cero es un error, porque no
- * habría de dónde sacar ninguna.
+ * <p>Setting one of the two dimensions to **zero** means "as many as needed": with three rows and
+ * zero columns, the columns come from how many children there are. Both at zero is an error,
+ * because there would be nowhere to get either from.
  *
- * <p>Cuando las dos están dadas, **las filas ganan**: si hay más hijos que celdas, se agregan
- * columnas y la cantidad de filas se respeta.
+ * <p>When both are given, **the rows win**: if there are more children than cells, columns are
+ * added and the number of rows is respected.
  */
 public class GridLayout implements LayoutManager, Serializable {
 
@@ -24,25 +24,25 @@ public class GridLayout implements LayoutManager, Serializable {
     private int hgap;
     private int vgap;
 
-    /** Una sola fila, con tantas columnas como hijos. */
+    /** A single row, with as many columns as children. */
     public GridLayout() {
         this(1, 0, 0, 0);
     }
 
     /**
-     * Con esa cantidad de filas y columnas, sin separación.
+     * With that number of rows and columns, and no gap.
      *
-     * @throws IllegalArgumentException si las dos son cero
+     * @throws IllegalArgumentException if both are zero
      */
     public GridLayout(int rows, int cols) {
         this(rows, cols, 0, 0);
     }
 
     /**
-     * Con filas, columnas y separaciones.
+     * With rows, columns and gaps.
      *
-     * @throws IllegalArgumentException si las dos dimensiones son cero: no habría de dónde deducir
-     *     ninguna
+     * @throws IllegalArgumentException if both dimensions are zero: there would be nowhere to
+     *     deduce either from
      */
     public GridLayout(int rows, int cols, int hgap, int vgap) {
         if (rows == 0 && cols == 0) {
@@ -54,15 +54,15 @@ public class GridLayout implements LayoutManager, Serializable {
         this.vgap = vgap;
     }
 
-    /** Cuántas filas, o 0 si se deducen. */
+    /** How many rows, or 0 if they are deduced. */
     public int getRows() {
         return this.rows;
     }
 
     /**
-     * Cambia la cantidad de filas.
+     * Changes the number of rows.
      *
-     * @throws IllegalArgumentException si queda en cero y las columnas también
+     * @throws IllegalArgumentException if it becomes zero while the columns are zero too
      */
     public void setRows(int rows) {
         if (rows == 0 && this.cols == 0) {
@@ -71,15 +71,15 @@ public class GridLayout implements LayoutManager, Serializable {
         this.rows = rows;
     }
 
-    /** Cuántas columnas, o 0 si se deducen. */
+    /** How many columns, or 0 if they are deduced. */
     public int getColumns() {
         return this.cols;
     }
 
     /**
-     * Cambia la cantidad de columnas.
+     * Changes the number of columns.
      *
-     * @throws IllegalArgumentException si queda en cero y las filas también
+     * @throws IllegalArgumentException if it becomes zero while the rows are zero too
      */
     public void setColumns(int cols) {
         if (cols == 0 && this.rows == 0) {
@@ -88,46 +88,46 @@ public class GridLayout implements LayoutManager, Serializable {
         this.cols = cols;
     }
 
-    /** Cuánto se separan horizontalmente. */
+    /** How much they are separated horizontally. */
     public int getHgap() {
         return this.hgap;
     }
 
-    /** Cambia la separación horizontal. */
+    /** Changes the horizontal gap. */
     public void setHgap(int hgap) {
         this.hgap = hgap;
     }
 
-    /** Cuánto se separan verticalmente. */
+    /** How much they are separated vertically. */
     public int getVgap() {
         return this.vgap;
     }
 
-    /** Cambia la separación vertical. */
+    /** Changes the vertical gap. */
     public void setVgap(int vgap) {
         this.vgap = vgap;
     }
 
-    /** No hace nada: esta distribución no guarda nada por hijo. */
+    /** It does nothing: this layout keeps nothing per child. */
     public void addLayoutComponent(String name, Component comp) {
     }
 
-    /** No hace nada, por el mismo motivo. */
+    /** It does nothing, for the same reason. */
     public void removeLayoutComponent(Component comp) {
     }
 
-    /** La celda más grande, multiplicada por la grilla. */
+    /** The largest cell, multiplied by the grid. */
     public Dimension preferredLayoutSize(Container parent) {
-        return this.medir(parent, true);
+        return this.measure(parent, true);
     }
 
-    /** Lo mismo, con las medidas mínimas. */
+    /** The same, with the minimum sizes. */
     public Dimension minimumLayoutSize(Container parent) {
-        return this.medir(parent, false);
+        return this.measure(parent, false);
     }
 
-    /** Todas las celdas miden lo que la mayor, así que se busca el máximo y se multiplica. */
-    private Dimension medir(Container parent, boolean preferida) {
+    /** All cells measure what the largest does, so the maximum is found and multiplied. */
+    private Dimension measure(Container parent, boolean preferred) {
         synchronized (parent.getTreeLock()) {
             Insets insets = parent.getInsets();
             int ncomponents = parent.getComponentCount();
@@ -142,7 +142,7 @@ public class GridLayout implements LayoutManager, Serializable {
             int h = 0;
             for (int i = 0; i < ncomponents; i++) {
                 Component comp = parent.getComponent(i);
-                Dimension d = preferida ? comp.getPreferredSize() : comp.getMinimumSize();
+                Dimension d = preferred ? comp.getPreferredSize() : comp.getMinimumSize();
                 w = Math.max(w, d.width);
                 h = Math.max(h, d.height);
             }
@@ -153,10 +153,11 @@ public class GridLayout implements LayoutManager, Serializable {
     }
 
     /**
-     * Reparte el espacio en celdas iguales y pone un hijo en cada una.
+     * Divides the space into equal cells and puts one child in each.
      *
-     * <p>El sobrante de la división se reparte entre las primeras celdas, de a un píxel: sin eso, la
-     * última columna quedaría más angosta y se vería.
+     * <p>The remainder of the division is split between the two sides, so the grid is centred in
+     * the container, as in the JDK. This javadoc said it was handed out a pixel at a time among the
+     * first cells; nothing here does that.
      */
     public void layoutContainer(Container parent) {
         synchronized (parent.getTreeLock()) {

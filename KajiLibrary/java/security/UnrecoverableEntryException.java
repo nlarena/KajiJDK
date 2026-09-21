@@ -1,10 +1,10 @@
 package java.security;
 
-// Una entrada del almacen de claves no se pudo recuperar: tipicamente, la contraseña esta mal.
+// An entry of the key store could not be recovered: typically, the password is wrong.
 //
-// Dos constructores y no cuatro: no lleva causa encadenada porque la causa real —"la contraseña no
-// era la correcta"— es justo lo que no conviene exponer. Un stack trace que distinga "clave mal
-// puesta" de "entrada corrupta" le dice a un atacante cuando acerto la mitad del problema.
+// Two constructors and not four: it carries no chained cause because the real cause —"the password
+// was not the right one"— is just what it is better not to expose. A stack trace that told "badly
+// set key" apart from "corrupt entry" would tell an attacker when they got half the problem right.
 public class UnrecoverableEntryException extends GeneralSecurityException {
 
     public UnrecoverableEntryException() {

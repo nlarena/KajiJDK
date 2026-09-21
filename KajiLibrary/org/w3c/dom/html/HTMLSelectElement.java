@@ -3,84 +3,84 @@ package org.w3c.dom.html;
 import org.w3c.dom.DOMException;
 
 /**
- * Un `<select>`.
+ * A `<select>`.
  *
- * <p>`add(elemento, antesDe)` inserta una opcion; con `antesDe` en nulo agrega al final. Si
- * `antesDe` no es hijo de este `select`, es `NOT_FOUND_ERR` -- por eso el metodo declara
- * {@link org.w3c.dom.DOMException} y los demas de esta clase no.
+ * <p>`add(element, before)` inserts an option; with `before` at null it appends at the end. If
+ * `before` is not a child of this `select`, it is `NOT_FOUND_ERR` -- that is why the method
+ * declares {@link org.w3c.dom.DOMException} and the others of this class do not.
  *
- * <p>`getType` contesta `"select-one"` o `"select-multiple"` segun `multiple`, que es lo que el
- * DOM define aunque el elemento no tenga atributo `type`.
+ * <p>`getType` answers `"select-one"` or `"select-multiple"` according to `multiple`, which is what
+ * the DOM defines even though the element has no `type` attribute.
  */
 public interface HTMLSelectElement extends HTMLElement {
 
-    /** El tipo del control. */
+    /** The type of the control. */
     String getType();
 
-    /** La posicion de la opcion elegida, o -1 si no hay ninguna. */
+    /** The position of the chosen option, or -1 if there is none. */
     int getSelectedIndex();
 
-    /** Fija la posicion de la opcion elegida, o -1 si no hay ninguna. */
+    /** It sets the position of the chosen option, or -1 if there is none. */
     void setSelectedIndex(int selectedIndex);
 
-    /** El valor actual. */
+    /** The current value. */
     String getValue();
 
-    /** Fija el valor actual. */
+    /** It sets the current value. */
     void setValue(String value);
 
-    /** La cantidad. */
+    /** The count. */
     int getLength();
 
-    /** El formulario que lo contiene, o nulo si no esta en ninguno. */
+    /** The form that contains it, or null if it is in none. */
     HTMLFormElement getForm();
 
-    /** Las opciones, en una coleccion viva. */
+    /** The options, in a live collection. */
     HTMLCollection getOptions();
 
-    /** Si esta deshabilitado. */
+    /** Whether it is disabled. */
     boolean getDisabled();
 
-    /** Fija si esta deshabilitado. */
+    /** It sets whether it is disabled. */
     void setDisabled(boolean disabled);
 
-    /** Si admite varias selecciones. */
+    /** Whether it admits several selections. */
     boolean getMultiple();
 
-    /** Fija si admite varias selecciones. */
+    /** It sets whether it admits several selections. */
     void setMultiple(boolean multiple);
 
-    /** El atributo `name`. */
+    /** The `name` attribute. */
     String getName();
 
-    /** Fija el atributo `name`. */
+    /** It sets the `name` attribute. */
     void setName(String name);
 
-    /** El tamanio visible. */
+    /** The visible size. */
     int getSize();
 
-    /** Fija el tamanio visible. */
+    /** It sets the visible size. */
     void setSize(int size);
 
-    /** La posicion en el orden de tabulacion. */
+    /** The position in the tabbing order. */
     int getTabIndex();
 
-    /** Fija la posicion en el orden de tabulacion. */
+    /** It sets the position in the tabbing order. */
     void setTabIndex(int tabIndex);
 
     /**
-     * Agrega esa opcion antes de `before`, o al final si `before` es nulo.
+     * It adds that option before `before`, or at the end if `before` is null.
      *
-     * @throws DOMException `NOT_FOUND_ERR` si `before` no es hijo de este elemento
+     * @throws DOMException `NOT_FOUND_ERR` if `before` is not a child of this element
      */
     void add(HTMLElement element, HTMLElement before) throws org.w3c.dom.DOMException;
 
-    /** Saca la opcion de esa posicion. Un indice fuera de rango no hace nada. */
+    /** It removes the option at that position. An index out of range does nothing. */
     void remove(int index);
 
-    /** Le saca el foco. */
+    /** It takes the focus away from it. */
     void blur();
 
-    /** Le da el foco. */
+    /** It gives it the focus. */
     void focus();
 }

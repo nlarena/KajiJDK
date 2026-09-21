@@ -58,7 +58,7 @@ public interface MapJoin<Z, K, V>
      * @return metamodel type representing the {@code Map} that is
      *         the target of the join
      */
-    // OMITIDO (subset): MapAttribute<? super Z, K, V> getModel();  -- finding #123, se hereda de PluralJoin
+    // OMITTED (subset): MapAttribute<? super Z, K, V> getModel();  -- finding #123, inherited from PluralJoin
     
     /**
      * Create a path expression that corresponds to the map key.

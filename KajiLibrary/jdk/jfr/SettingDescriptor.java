@@ -5,88 +5,88 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * La descripcion de un <strong>ajuste</strong> de un evento: {@code threshold}, {@code stackTrace}
- * o uno propio.
+ * The description of a <strong>setting</strong> of an event: {@code threshold}, {@code stackTrace}
+ * or one of one's own.
  *
- * <h2>En que se diferencia de un {@link ValueDescriptor}</h2>
+ * <h2>How it differs from a {@link ValueDescriptor}</h2>
  *
- * <p>Un {@code ValueDescriptor} describe un <strong>dato</strong> del evento: algo que se graba
- * cada vez que el evento ocurre. Un {@code SettingDescriptor} describe una
- * <strong>perilla</strong>: algo que se configura una vez y decide si el evento ocurre.
+ * <p>A {@code ValueDescriptor} describes a <strong>datum</strong> of the event: something that is
+ * recorded every time the event happens. A {@code SettingDescriptor} describes a
+ * <strong>knob</strong>: something that is configured once and decides whether the event happens.
  *
- * <p>La confusion es facil porque los dos tienen nombre, etiqueta, descripcion y tipo. La
- * diferencia esta en {@link #getDefaultValue}, que solo tiene sentido para una perilla — un dato no
- * tiene valor por omision, lo trae el evento.
+ * <p>The confusion is easy because both have a name, a label, a description and a type. The
+ * difference is in {@link #getDefaultValue}, which only makes sense for a knob -- a datum has no
+ * default value, the event brings it.
  *
- * <h2>Por que no tiene constructor publico</h2>
+ * <h2>Why it has no public constructor</h2>
  *
- * <p>Porque los ajustes no se inventan del lado del que consulta: salen de las anotaciones del
- * evento y de los metodos marcados con {@link SettingDefinition}. Se obtienen de
- * {@link EventType#getSettingDescriptors}.
+ * <p>Because the settings are not invented on the side of the one who consults: they come from the
+ * annotations of the event and from the methods marked with {@link SettingDefinition}. They are
+ * obtained from {@link EventType#getSettingDescriptors}.
  *
  * @since 9
  */
 public final class SettingDescriptor {
 
-    private final String nombre;
-    private final String tipoNombre;
-    private final long tipoId;
-    private final String etiqueta;
-    private final String descripcion;
-    private final String valorPorOmision;
-    private final List<AnnotationElement> anotaciones;
+    private final String name;
+    private final String typeName;
+    private final long typeId;
+    private final String label;
+    private final String description;
+    private final String defaultValue;
+    private final List<AnnotationElement> annotations;
 
     /**
-     * La etiqueta y la descripcion se guardan aparte y no salen de las anotaciones, que es lo que
-     * hace el JDK: los ajustes de siempre tienen etiqueta y {@code getAnnotationElements} vacio.
-     * Comprobado contra el JDK 25.
+     * The label and the description are kept apart and do not come from the annotations, which is
+     * what the JDK does: the usual settings have a label and an empty {@code
+     * getAnnotationElements}. Checked against the JDK 25.
      */
-    SettingDescriptor(final String nombre, final String tipoNombre, final String etiqueta,
-            final String descripcion, final String valorPorOmision,
-            final List<AnnotationElement> anotaciones) {
-        this.nombre = nombre;
-        this.tipoNombre = tipoNombre;
-        this.tipoId = Tipos.idDeNombre(tipoNombre);
-        this.etiqueta = etiqueta;
-        this.descripcion = descripcion;
-        this.valorPorOmision = valorPorOmision;
-        this.anotaciones = Collections.unmodifiableList(anotaciones);
+    SettingDescriptor(final String name, final String typeName, final String label,
+            final String description, final String defaultValue,
+            final List<AnnotationElement> annotations) {
+        this.name = name;
+        this.typeName = typeName;
+        this.typeId = Types.idOfName(typeName);
+        this.label = label;
+        this.description = description;
+        this.defaultValue = defaultValue;
+        this.annotations = Collections.unmodifiableList(annotations);
     }
 
     /**
-     * El nombre del ajuste, como se escribe en una configuracion.
+     * The name of the setting, as it is written in a configuration.
      *
-     * @return el nombre
+     * @return the name
      */
     public String getName() {
-        return nombre;
+        return name;
     }
 
     /**
-     * El nombre legible del ajuste.
+     * The readable name of the setting.
      *
-     * @return la etiqueta, o {@code null} si no tiene
+     * @return the label, or {@code null} if it has none
      */
     public String getLabel() {
-        return etiqueta;
+        return label;
     }
 
     /**
-     * La explicacion del ajuste.
+     * The explanation of the setting.
      *
-     * @return la descripcion, o {@code null} si no tiene
+     * @return the description, or {@code null} if it has none
      */
     public String getDescription() {
-        return descripcion;
+        return description;
     }
 
     /**
-     * El nombre de la anotacion que le da significado al valor, si tiene una.
+     * The name of the annotation that gives the value its meaning, if it has one.
      *
-     * @return el nombre del tipo de contenido, o {@code null}
+     * @return the name of the content type, or {@code null}
      */
     public String getContentType() {
-        for (final AnnotationElement a : anotaciones) {
+        for (final AnnotationElement a : annotations) {
             for (final AnnotationElement meta : a.getAnnotationElements()) {
                 if (ContentType.class.getName().equals(meta.getTypeName())) {
                     return a.getTypeName();
@@ -97,32 +97,32 @@ public final class SettingDescriptor {
     }
 
     /**
-     * El nombre del tipo del ajuste.
+     * The name of the type of the setting.
      *
-     * @return el nombre del tipo
+     * @return the name of the type
      */
     public String getTypeName() {
-        return tipoNombre;
+        return typeName;
     }
 
     /**
-     * El identificador numerico del tipo del ajuste.
+     * The numeric identifier of the type of the setting.
      *
-     * @return el identificador
+     * @return the identifier
      */
     public long getTypeId() {
-        return tipoId;
+        return typeId;
     }
 
     /**
-     * La anotacion de ese tipo que lleva el ajuste, si la lleva.
+     * The annotation of that type the setting carries, if it carries it.
      *
-     * @param <A> el tipo de la anotacion
-     * @param annotationType el tipo de la anotacion
-     * @return la anotacion, o {@code null}
+     * @param <A> the type of the annotation
+     * @param annotationType the type of the annotation
+     * @return the annotation, or {@code null}
      */
     public <A extends Annotation> A getAnnotation(final Class<A> annotationType) {
-        for (final AnnotationElement a : anotaciones) {
+        for (final AnnotationElement a : annotations) {
             if (a.getTypeName().equals(annotationType.getName())) {
                 return a.<A>getAnnotation(annotationType);
             }
@@ -131,20 +131,20 @@ public final class SettingDescriptor {
     }
 
     /**
-     * Las anotaciones del ajuste.
+     * The annotations of the setting.
      *
-     * @return las anotaciones
+     * @return the annotations
      */
     public List<AnnotationElement> getAnnotationElements() {
-        return anotaciones;
+        return annotations;
     }
 
     /**
-     * El valor con el que arranca el ajuste si nadie lo configura.
+     * The value the setting starts with if nobody configures it.
      *
-     * @return el valor por omision
+     * @return the default value
      */
     public String getDefaultValue() {
-        return valorPorOmision;
+        return defaultValue;
     }
 }

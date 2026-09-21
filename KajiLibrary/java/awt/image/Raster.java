@@ -4,67 +4,68 @@ import java.awt.Point;
 import java.awt.Rectangle;
 
 /**
- * Píxeles con **domicilio**: un {@link SampleModel} más un {@link DataBuffer} más un rectángulo.
+ * Pixels with an **address**: a {@link SampleModel} plus a {@link DataBuffer} plus a rectangle.
  *
- * <p>El modelo de muestras sabe cómo está guardado un píxel y el buffer tiene los números, pero
- * ninguno de los dos sabe *dónde* está la imagen. Eso lo agrega el ráster: sus coordenadas empiezan
- * en `(minX, minY)`, que no tiene por qué ser el origen.
+ * <p>The sample model knows how a pixel is stored and the buffer has the numbers, but neither of
+ * them knows *where* the image is. That is what the raster adds: its coordinates start at
+ * `(minX, minY)`, which does not have to be the origin.
  *
- * <p>De ahí sale el único concepto no obvio de la clase, `sampleModelTranslate`. Las coordenadas del
- * ráster y las del modelo de muestras son dos sistemas distintos, y la traducción es una resta:
+ * <p>From there comes the one non-obvious concept of the class, `sampleModelTranslate`. The
+ * coordinates of the raster and those of the sample model are two different systems, and the
+ * translation is a subtraction:
  *
- * <pre>coordenada del modelo = coordenada del ráster - sampleModelTranslate</pre>
+ * <pre>model coordinate = raster coordinate - sampleModelTranslate</pre>
  *
- * <p>Sirve para que un **hijo** —un recorte— comparta los datos del padre en vez de copiarlos. El
- * hijo se declara en las coordenadas que quiera y su traducción absorbe la diferencia; los dos
- * rásters leen el mismo buffer. Un recorte, entonces, no cuesta memoria: es una ventana.
+ * <p>It serves so that a **child** —a crop— can share the parent's data instead of copying it. The
+ * child is declared in whatever coordinates it likes and its translation absorbs the difference;
+ * both rasters read the same buffer. A crop, then, costs no memory: it is a window.
  *
- * <p>Esta clase es de **sólo lectura**. Los métodos que escriben están en {@link WritableRaster},
- * que hereda de ésta. La separación es real y no decorativa: `getParent()` de un ráster de sólo
- * lectura puede devolver un ráster que sí se puede escribir, y al revés no.
+ * <p>This class is **read-only**. The methods that write are in {@link WritableRaster}, which
+ * inherits from it. The separation is real and not decorative: `getParent()` of a read-only raster
+ * can return a raster that can be written to, and not the other way round.
  *
- * <p>Los constructores son protegidos: un ráster se pide por los métodos estáticos `create*`, que
- * eligen el modelo de muestras adecuado a cada disposición.
+ * <p>The constructors are protected: a raster is asked for through the static `create*` methods,
+ * which choose the sample model suited to each layout.
  */
 public class Raster {
 
-    /** Cómo están dispuestos los píxeles. */
+    /** How the pixels are laid out. */
     protected SampleModel sampleModel;
 
-    /** Dónde están los números. */
+    /** Where the numbers are. */
     protected DataBuffer dataBuffer;
 
-    /** Coordenada X del ángulo superior izquierdo. */
+    /** X coordinate of the top-left corner. */
     protected int minX;
 
-    /** Coordenada Y del ángulo superior izquierdo. */
+    /** Y coordinate of the top-left corner. */
     protected int minY;
 
-    /** Ancho, en píxeles. */
+    /** Width, in pixels. */
     protected int width;
 
-    /** Alto, en píxeles. */
+    /** Height, in pixels. */
     protected int height;
 
-    /** Lo que hay que restarle a una X del ráster para obtener la del modelo. */
+    /** What has to be subtracted from a raster X to get the model's. */
     protected int sampleModelTranslateX;
 
-    /** Lo que hay que restarle a una Y del ráster para obtener la del modelo. */
+    /** What has to be subtracted from a raster Y to get the model's. */
     protected int sampleModelTranslateY;
 
-    /** Cuántas bandas tiene cada píxel. */
+    /** How many bands each pixel has. */
     protected int numBands;
 
-    /** Cuántos elementos del buffer ocupa un píxel. */
+    /** How many elements of the buffer a pixel takes. */
     protected int numDataElements;
 
-    /** El ráster del que éste es un recorte, o `null`. */
+    /** The raster this one is a crop of, or `null`. */
     protected Raster parent;
 
     /**
-     * Un ráster con un buffer nuevo, del tamaño del modelo, ubicado en `origin`.
+     * A raster with a new buffer, of the size of the model, placed at `origin`.
      *
-     * @throws RasterFormatException si el tamaño resultante es vacío
+     * @throws RasterFormatException if the resulting size is empty
      */
     protected Raster(SampleModel sampleModel, Point origin) {
         this(sampleModel, sampleModel.createDataBuffer(),
@@ -73,9 +74,9 @@ public class Raster {
     }
 
     /**
-     * Un ráster sobre el buffer dado, del tamaño del modelo, ubicado en `origin`.
+     * A raster over the given buffer, of the size of the model, placed at `origin`.
      *
-     * @throws RasterFormatException si el tamaño resultante es vacío
+     * @throws RasterFormatException if the resulting size is empty
      */
     protected Raster(SampleModel sampleModel, DataBuffer dataBuffer, Point origin) {
         this(sampleModel, dataBuffer,
@@ -84,10 +85,10 @@ public class Raster {
     }
 
     /**
-     * El constructor general: región, traducción y padre dados por separado.
+     * The general constructor: region, translation and parent given separately.
      *
-     * @throws NullPointerException si falta cualquiera de los cuatro primeros
-     * @throws RasterFormatException si la región es vacía o si sus coordenadas se pasan de `int`
+     * @throws NullPointerException if any of the first four is missing
+     * @throws RasterFormatException if the region is empty or if its coordinates go past `int`
      */
     protected Raster(SampleModel sampleModel, DataBuffer dataBuffer, Rectangle aRegion,
             Point sampleModelTranslate, Raster parent) {
@@ -106,8 +107,8 @@ public class Raster {
             throw new RasterFormatException("negative or zero "
                     + (this.width <= 0 ? "width" : "height"));
         }
-        // La suma se comprueba porque un rectangulo que se pasa de int daria un limite menor que su
-        // propio origen, y todas las comprobaciones de borde de mas abajo pasarian al reves.
+        // The sum is checked because a rectangle that goes past int would give a limit lower than
+        // its own origin, and every edge check further down would pass the wrong way round.
         if (this.minX + this.width < this.minX) {
             throw new RasterFormatException("overflow condition for X coordinates of Raster");
         }
@@ -121,12 +122,12 @@ public class Raster {
         this.parent = parent;
     }
 
-    // ---- fábricas ------------------------------------------------------------------------------
+    // ---- factories ----------------------------------------------------------------------------
 
     /**
-     * Un ráster intercalado con las bandas en orden y sin relleno.
+     * An interleaved raster with the bands in order and no padding.
      *
-     * @throws IllegalArgumentException si el tipo no es `byte` ni `ushort`
+     * @throws IllegalArgumentException if the type is neither `byte` nor `ushort`
      */
     public static WritableRaster createInterleavedRaster(int dataType, int w, int h, int bands,
             Point location) {
@@ -138,12 +139,13 @@ public class Raster {
     }
 
     /**
-     * Un ráster intercalado con la disposición dada, sobre un buffer nuevo.
+     * An interleaved raster with the given layout, over a new buffer.
      *
-     * <p>Sólo `byte` y `ushort`: son los tipos en los que una imagen intercalada tiene sentido, y es
-     * la misma restricción del JDK.
+     * <p>Only `byte` and `ushort`: they are the types an interleaved image makes sense in, and it
+     * is the same restriction as the JDK's.
      *
-     * @throws IllegalArgumentException si el tipo no es `byte` ni `ushort`, o si el tamaño es vacío
+     * @throws IllegalArgumentException if the type is neither `byte` nor `ushort`, or if the size
+     *     is empty
      */
     public static WritableRaster createInterleavedRaster(int dataType, int w, int h,
             int scanlineStride, int pixelStride, int[] bandOffsets, Point location) {
@@ -157,8 +159,8 @@ public class Raster {
                 maxBandOff = bandOffsets[i];
             }
         }
-        // El ultimo elemento que se va a tocar es la banda mas lejana del ultimo pixel de la ultima
-        // fila. El "+1" es porque lo anterior es un indice y esto un tamano.
+        // The last element that is going to be touched is the furthest band of the last pixel of
+        // the last row. The "+1" is because the former is an index and this a size.
         int size = maxBandOff + scanlineStride * (h - 1) + pixelStride * (w - 1) + 1;
         DataBuffer d;
         if (dataType == DataBuffer.TYPE_BYTE) {
@@ -172,20 +174,20 @@ public class Raster {
     }
 
     /**
-     * Un ráster intercalado sobre el buffer dado.
+     * An interleaved raster over the given buffer.
      *
-     * @throws NullPointerException si el buffer es `null`
-     * @throws RasterFormatException si el buffer tiene más de un banco
-     * @throws IllegalArgumentException si el tipo no es `byte` ni `ushort`
+     * @throws NullPointerException if the buffer is `null`
+     * @throws RasterFormatException if the buffer has more than one bank
+     * @throws IllegalArgumentException if the type is neither `byte` nor `ushort`
      */
     public static WritableRaster createInterleavedRaster(DataBuffer dataBuffer, int w, int h,
             int scanlineStride, int pixelStride, int[] bandOffsets, Point location) {
         if (dataBuffer == null) {
             throw new NullPointerException("DataBuffer cannot be null");
         }
-        Point donde = location;
-        if (donde == null) {
-            donde = new Point(0, 0);
+        Point where = location;
+        if (where == null) {
+            where = new Point(0, 0);
         }
         int dataType = dataBuffer.getDataType();
         if (dataType != DataBuffer.TYPE_BYTE && dataType != DataBuffer.TYPE_USHORT) {
@@ -197,13 +199,13 @@ public class Raster {
         }
         PixelInterleavedSampleModel csm = new PixelInterleavedSampleModel(dataType, w, h,
                 pixelStride, scanlineStride, bandOffsets);
-        return new WritableRaster(csm, dataBuffer, donde);
+        return new WritableRaster(csm, dataBuffer, where);
     }
 
     /**
-     * Un ráster por planos con una banda por banco y sin relleno.
+     * A raster by planes with one band per bank and no padding.
      *
-     * @throws ArrayIndexOutOfBoundsException si `bands` no es positivo
+     * @throws ArrayIndexOutOfBoundsException if `bands` is not positive
      */
     public static WritableRaster createBandedRaster(int dataType, int w, int h, int bands,
             Point location) {
@@ -221,11 +223,11 @@ public class Raster {
     }
 
     /**
-     * Un ráster por planos con la disposición dada, sobre un buffer nuevo.
+     * A raster by planes with the given layout, over a new buffer.
      *
-     * @throws ArrayIndexOutOfBoundsException si falta alguno de los dos arreglos
-     * @throws IllegalArgumentException si los arreglos no miden lo mismo, si el tamaño es vacío o si
-     *     el tipo no es `byte`, `ushort` ni `int`
+     * @throws ArrayIndexOutOfBoundsException if either of the two arrays is missing
+     * @throws IllegalArgumentException if the arrays are not the same length, if the size is empty
+     *     or if the type is neither `byte`, `ushort` nor `int`
      */
     public static WritableRaster createBandedRaster(int dataType, int w, int h, int scanlineStride,
             int[] bankIndices, int[] bandOffsets, Point location) {
@@ -271,19 +273,19 @@ public class Raster {
     }
 
     /**
-     * Un ráster por planos sobre el buffer dado.
+     * A raster by planes over the given buffer.
      *
-     * @throws NullPointerException si el buffer es `null`
-     * @throws IllegalArgumentException si el tipo no es `byte`, `ushort` ni `int`
+     * @throws NullPointerException if the buffer is `null`
+     * @throws IllegalArgumentException if the type is neither `byte`, `ushort` nor `int`
      */
     public static WritableRaster createBandedRaster(DataBuffer dataBuffer, int w, int h,
             int scanlineStride, int[] bankIndices, int[] bandOffsets, Point location) {
         if (dataBuffer == null) {
             throw new NullPointerException("DataBuffer cannot be null");
         }
-        Point donde = location;
-        if (donde == null) {
-            donde = new Point(0, 0);
+        Point where = location;
+        if (where == null) {
+            where = new Point(0, 0);
         }
         int dataType = dataBuffer.getDataType();
         if (dataType != DataBuffer.TYPE_BYTE && dataType != DataBuffer.TYPE_USHORT
@@ -292,13 +294,13 @@ public class Raster {
         }
         BandedSampleModel bsm = new BandedSampleModel(dataType, w, h, scanlineStride, bankIndices,
                 bandOffsets);
-        return new WritableRaster(bsm, dataBuffer, donde);
+        return new WritableRaster(bsm, dataBuffer, where);
     }
 
     /**
-     * Un ráster empaquetado con las bandas dadas por sus máscaras, sobre un buffer nuevo.
+     * A packed raster with the bands given by their masks, over a new buffer.
      *
-     * @throws IllegalArgumentException si el tipo no es `byte`, `ushort` ni `int`
+     * @throws IllegalArgumentException if the type is neither `byte`, `ushort` nor `int`
      */
     public static WritableRaster createPackedRaster(int dataType, int w, int h, int[] bandMasks,
             Point location) {
@@ -316,14 +318,14 @@ public class Raster {
     }
 
     /**
-     * Un ráster empaquetado con `bands` bandas de `bitsPerBand` bits cada una.
+     * A packed raster with `bands` bands of `bitsPerBand` bits each.
      *
-     * <p>Con más de una banda son campos de bits dentro de un píxel, y salen máscaras contiguas de
-     * la más alta a la más baja. Con **una sola** banda son varios píxeles por elemento, que es el
-     * otro empaquetado: ahí el modelo es {@link MultiPixelPackedSampleModel}.
+     * <p>With more than one band they are bit fields inside one pixel, and contiguous masks come
+     * out from the highest to the lowest. With **a single** band they are several pixels per
+     * element, which is the other packing: there the model is {@link MultiPixelPackedSampleModel}.
      *
-     * @throws IllegalArgumentException si algún parámetro no es positivo, si las bandas no entran en
-     *     el tipo, o si el tipo no es `byte`, `ushort` ni `int`
+     * @throws IllegalArgumentException if some parameter is not positive, if the bands do not fit
+     *     in the type, or if the type is neither `byte`, `ushort` nor `int`
      */
     public static WritableRaster createPackedRaster(int dataType, int w, int h, int bands,
             int bitsPerBand, Point location) {
@@ -353,36 +355,36 @@ public class Raster {
             }
             return createPackedRaster(dataType, w, h, masks, location);
         }
-        // Una sola banda: varios pixeles por elemento. El tamano se redondea para arriba porque una
-        // fila que no llene el ultimo elemento igual lo ocupa entero.
-        int porElemento = DataBuffer.getDataTypeSize(dataType) / bitsPerBand;
-        int elementosPorFila = (w + porElemento - 1) / porElemento;
+        // A single band: several pixels per element. The size is rounded up because a row that does
+        // not fill the last element takes it whole all the same.
+        int perElement = DataBuffer.getDataTypeSize(dataType) / bitsPerBand;
+        int elementsPerRow = (w + perElement - 1) / perElement;
         DataBuffer d;
         if (dataType == DataBuffer.TYPE_BYTE) {
-            d = new DataBufferByte(elementosPorFila * h);
+            d = new DataBufferByte(elementsPerRow * h);
         } else if (dataType == DataBuffer.TYPE_USHORT) {
-            d = new DataBufferUShort(elementosPorFila * h);
+            d = new DataBufferUShort(elementsPerRow * h);
         } else {
-            d = new DataBufferInt(elementosPorFila * h);
+            d = new DataBufferInt(elementsPerRow * h);
         }
         return createPackedRaster(d, w, h, bitsPerBand, location);
     }
 
     /**
-     * Un ráster empaquetado por máscaras sobre el buffer dado.
+     * A raster packed by masks over the given buffer.
      *
-     * @throws NullPointerException si el buffer es `null`
-     * @throws RasterFormatException si el buffer tiene más de un banco
-     * @throws IllegalArgumentException si el tipo no es `byte`, `ushort` ni `int`
+     * @throws NullPointerException if the buffer is `null`
+     * @throws RasterFormatException if the buffer has more than one bank
+     * @throws IllegalArgumentException if the type is neither `byte`, `ushort` nor `int`
      */
     public static WritableRaster createPackedRaster(DataBuffer dataBuffer, int w, int h,
             int scanlineStride, int[] bandMasks, Point location) {
         if (dataBuffer == null) {
             throw new NullPointerException("DataBuffer cannot be null");
         }
-        Point donde = location;
-        if (donde == null) {
-            donde = new Point(0, 0);
+        Point where = location;
+        if (where == null) {
+            where = new Point(0, 0);
         }
         int dataType = dataBuffer.getDataType();
         if (dataType != DataBuffer.TYPE_BYTE && dataType != DataBuffer.TYPE_USHORT
@@ -395,24 +397,24 @@ public class Raster {
         }
         SinglePixelPackedSampleModel sppsm = new SinglePixelPackedSampleModel(dataType, w, h,
                 scanlineStride, bandMasks);
-        return new WritableRaster(sppsm, dataBuffer, donde);
+        return new WritableRaster(sppsm, dataBuffer, where);
     }
 
     /**
-     * Un ráster de varios píxeles por elemento sobre el buffer dado.
+     * A raster of several pixels per element over the given buffer.
      *
-     * @throws NullPointerException si el buffer es `null`
-     * @throws RasterFormatException si el buffer tiene más de un banco
-     * @throws IllegalArgumentException si el tipo no es `byte`, `ushort` ni `int`
+     * @throws NullPointerException if the buffer is `null`
+     * @throws RasterFormatException if the buffer has more than one bank
+     * @throws IllegalArgumentException if the type is neither `byte`, `ushort` nor `int`
      */
     public static WritableRaster createPackedRaster(DataBuffer dataBuffer, int w, int h,
             int bitsPerPixel, Point location) {
         if (dataBuffer == null) {
             throw new NullPointerException("DataBuffer cannot be null");
         }
-        Point donde = location;
-        if (donde == null) {
-            donde = new Point(0, 0);
+        Point where = location;
+        if (where == null) {
+            where = new Point(0, 0);
         }
         int dataType = dataBuffer.getDataType();
         if (dataType != DataBuffer.TYPE_BYTE && dataType != DataBuffer.TYPE_USHORT
@@ -425,88 +427,88 @@ public class Raster {
         }
         MultiPixelPackedSampleModel mppsm = new MultiPixelPackedSampleModel(dataType, w, h,
                 bitsPerPixel);
-        return new WritableRaster(mppsm, dataBuffer, donde);
+        return new WritableRaster(mppsm, dataBuffer, where);
     }
 
     /**
-     * Un ráster de sólo lectura sobre el modelo y el buffer dados.
+     * A read-only raster over the given model and buffer.
      *
-     * @throws NullPointerException si falta el modelo o el buffer
+     * @throws NullPointerException if the model or the buffer is missing
      */
     public static Raster createRaster(SampleModel sm, DataBuffer db, Point location) {
         if (sm == null || db == null) {
             throw new NullPointerException("SampleModel and DataBuffer cannot be null");
         }
-        Point donde = location;
-        if (donde == null) {
-            donde = new Point(0, 0);
+        Point where = location;
+        if (where == null) {
+            where = new Point(0, 0);
         }
-        return new Raster(sm, db, donde);
+        return new Raster(sm, db, where);
     }
 
     /**
-     * Un ráster escribible sobre el modelo dado, con un buffer nuevo.
+     * A writable raster over the given model, with a new buffer.
      *
-     * @throws NullPointerException si falta el modelo
+     * @throws NullPointerException if the model is missing
      */
     public static WritableRaster createWritableRaster(SampleModel sm, Point location) {
         if (sm == null) {
             throw new NullPointerException("SampleModel cannot be null");
         }
-        Point donde = location;
-        if (donde == null) {
-            donde = new Point(0, 0);
+        Point where = location;
+        if (where == null) {
+            where = new Point(0, 0);
         }
-        return new WritableRaster(sm, donde);
+        return new WritableRaster(sm, where);
     }
 
     /**
-     * Un ráster escribible sobre el modelo y el buffer dados.
+     * A writable raster over the given model and buffer.
      *
-     * @throws NullPointerException si falta el modelo o el buffer
+     * @throws NullPointerException if the model or the buffer is missing
      */
     public static WritableRaster createWritableRaster(SampleModel sm, DataBuffer db,
             Point location) {
         if (sm == null || db == null) {
             throw new NullPointerException("SampleModel and DataBuffer cannot be null");
         }
-        Point donde = location;
-        if (donde == null) {
-            donde = new Point(0, 0);
+        Point where = location;
+        if (where == null) {
+            where = new Point(0, 0);
         }
-        return new WritableRaster(sm, db, donde);
+        return new WritableRaster(sm, db, where);
     }
 
-    // ---- geometría -----------------------------------------------------------------------------
+    // ---- geometry -----------------------------------------------------------------------------
 
-    /** El ráster del que éste es un recorte, o `null` si no lo es. */
+    /** The raster this one is a crop of, or `null` if it is not one. */
     public Raster getParent() {
         return this.parent;
     }
 
-    /** Lo que hay que restarle a una X del ráster para obtener la del modelo. */
+    /** What has to be subtracted from a raster X to get the model's. */
     public final int getSampleModelTranslateX() {
         return this.sampleModelTranslateX;
     }
 
-    /** Lo que hay que restarle a una Y del ráster para obtener la del modelo. */
+    /** What has to be subtracted from a raster Y to get the model's. */
     public final int getSampleModelTranslateY() {
         return this.sampleModelTranslateY;
     }
 
     /**
-     * Otro ráster escribible con el mismo modelo, en el origen y con datos **propios**.
+     * Another writable raster with the same model, at the origin and with data **of its own**.
      *
-     * <p>Comparte la disposición, no los píxeles.
+     * <p>It shares the layout, not the pixels.
      */
     public WritableRaster createCompatibleWritableRaster() {
         return new WritableRaster(this.sampleModel, new Point(0, 0));
     }
 
     /**
-     * Como el anterior, del tamaño pedido.
+     * Like the previous one, of the size asked for.
      *
-     * @throws RasterFormatException si el tamaño es vacío
+     * @throws RasterFormatException if the size is empty
      */
     public WritableRaster createCompatibleWritableRaster(int w, int h) {
         if (w <= 0 || h <= 0) {
@@ -517,9 +519,9 @@ public class Raster {
     }
 
     /**
-     * Como el anterior, del tamaño y en la posición pedidos.
+     * Like the previous one, of the size and at the position asked for.
      *
-     * @throws RasterFormatException si el rectángulo es vacío
+     * @throws RasterFormatException if the rectangle is empty
      */
     public WritableRaster createCompatibleWritableRaster(int x, int y, int w, int h) {
         WritableRaster ret = this.createCompatibleWritableRaster(w, h);
@@ -527,9 +529,9 @@ public class Raster {
     }
 
     /**
-     * Como el anterior, con el rectángulo dado.
+     * Like the previous one, with the given rectangle.
      *
-     * @throws NullPointerException si el rectángulo es `null`
+     * @throws NullPointerException if the rectangle is `null`
      */
     public WritableRaster createCompatibleWritableRaster(Rectangle rect) {
         if (rect == null) {
@@ -539,9 +541,9 @@ public class Raster {
     }
 
     /**
-     * El mismo ráster mudado a otras coordenadas, **sobre los mismos datos**.
+     * The same raster moved to other coordinates, **over the same data**.
      *
-     * @throws RasterFormatException si las coordenadas nuevas se pasan de `int`
+     * @throws RasterFormatException if the new coordinates go past `int`
      */
     public Raster createTranslatedChild(int childMinX, int childMinY) {
         return this.createChild(this.minX, this.minY, this.width, this.height, childMinX, childMinY,
@@ -549,12 +551,13 @@ public class Raster {
     }
 
     /**
-     * Un recorte sobre los **mismos datos**, opcionalmente con menos bandas.
+     * A crop over the **same data**, optionally with fewer bands.
      *
-     * <p>`bandList` elige qué bandas ve el hijo y en qué orden; con `null` las ve todas.
+     * <p>`bandList` chooses which bands the child sees and in what order; with `null` it sees them
+     * all.
      *
-     * @throws RasterFormatException si el rectángulo pedido no cae dentro de éste, o si las
-     *     coordenadas del hijo se pasan de `int`
+     * @throws RasterFormatException if the rectangle asked for does not fall inside this one, or if
+     *     the child's coordinates go past `int`
      */
     public Raster createChild(int parentX, int parentY, int width, int height, int childMinX,
             int childMinY, int[] bandList) {
@@ -576,8 +579,8 @@ public class Raster {
         } else {
             subSampleModel = this.sampleModel.createSubsetSampleModel(bandList);
         }
-        // El hijo se declara donde le pidan; la traduccion absorbe la diferencia para que las dos
-        // coordenadas sigan cayendo en el mismo elemento del buffer.
+        // The child is declared wherever it is asked for; the translation absorbs the difference so
+        // that both coordinates go on falling on the same element of the buffer.
         int deltaX = childMinX - parentX;
         int deltaY = childMinY - parentY;
         return new Raster(subSampleModel, this.dataBuffer,
@@ -587,67 +590,67 @@ public class Raster {
                 this);
     }
 
-    /** El rectángulo que ocupa. */
+    /** The rectangle it occupies. */
     public Rectangle getBounds() {
         return new Rectangle(this.minX, this.minY, this.width, this.height);
     }
 
-    /** Coordenada X del ángulo superior izquierdo. */
+    /** X coordinate of the top-left corner. */
     public final int getMinX() {
         return this.minX;
     }
 
-    /** Coordenada Y del ángulo superior izquierdo. */
+    /** Y coordinate of the top-left corner. */
     public final int getMinY() {
         return this.minY;
     }
 
-    /** Ancho, en píxeles. */
+    /** Width, in pixels. */
     public final int getWidth() {
         return this.width;
     }
 
-    /** Alto, en píxeles. */
+    /** Height, in pixels. */
     public final int getHeight() {
         return this.height;
     }
 
-    /** Cuántas bandas tiene cada píxel. */
+    /** How many bands each pixel has. */
     public final int getNumBands() {
         return this.numBands;
     }
 
-    /** Cuántos elementos del buffer ocupa un píxel. */
+    /** How many elements of the buffer a pixel takes. */
     public final int getNumDataElements() {
         return this.numDataElements;
     }
 
-    /** El tipo con el que se transfiere un píxel crudo. */
+    /** The type a raw pixel is transferred with. */
     public final int getTransferType() {
         return this.sampleModel.getTransferType();
     }
 
     /**
-     * El buffer con los números.
+     * The buffer with the numbers.
      *
-     * <p>Es el de verdad, no una copia: escribir en él cambia la imagen, y la de todos los rásters
-     * que lo compartan.
+     * <p>It is the real one, not a copy: writing into it changes the image, and that of every
+     * raster that shares it.
      */
     public DataBuffer getDataBuffer() {
         return this.dataBuffer;
     }
 
-    /** Cómo están dispuestos los píxeles. */
+    /** How the pixels are laid out. */
     public SampleModel getSampleModel() {
         return this.sampleModel;
     }
 
-    // ---- lectura -------------------------------------------------------------------------------
+    // ---- reading -------------------------------------------------------------------------------
 
     /**
-     * Comprueba que un punto caiga adentro.
+     * Checks that a point falls inside.
      *
-     * @throws ArrayIndexOutOfBoundsException si no cae
+     * @throws ArrayIndexOutOfBoundsException if it does not
      */
     private void checkPoint(int x, int y) {
         if (x < this.minX || y < this.minY || x >= this.minX + this.width
@@ -657,9 +660,9 @@ public class Raster {
     }
 
     /**
-     * Comprueba que un rectángulo caiga adentro.
+     * Checks that a rectangle falls inside.
      *
-     * @throws ArrayIndexOutOfBoundsException si no cae
+     * @throws ArrayIndexOutOfBoundsException if it does not
      */
     private void checkRect(int x, int y, int w, int h) {
         if (x < this.minX || y < this.minY || x + w > this.minX + this.width
@@ -669,9 +672,9 @@ public class Raster {
     }
 
     /**
-     * El píxel crudo, sin desempaquetar, en el tipo de {@link #getTransferType}.
+     * The raw pixel, unpacked, in the type of {@link #getTransferType}.
      *
-     * @throws ArrayIndexOutOfBoundsException si el punto cae afuera
+     * @throws ArrayIndexOutOfBoundsException if the point falls outside
      */
     public Object getDataElements(int x, int y, Object outData) {
         this.checkPoint(x, y);
@@ -680,9 +683,9 @@ public class Raster {
     }
 
     /**
-     * Los píxeles crudos de un rectángulo.
+     * The raw pixels of a rectangle.
      *
-     * @throws ArrayIndexOutOfBoundsException si el rectángulo se sale
+     * @throws ArrayIndexOutOfBoundsException if the rectangle goes outside
      */
     public Object getDataElements(int x, int y, int w, int h, Object outData) {
         this.checkRect(x, y, w, h);
@@ -691,9 +694,9 @@ public class Raster {
     }
 
     /**
-     * Las bandas de un píxel.
+     * The bands of a pixel.
      *
-     * @throws ArrayIndexOutOfBoundsException si el punto cae afuera
+     * @throws ArrayIndexOutOfBoundsException if the point falls outside
      */
     public int[] getPixel(int x, int y, int[] iArray) {
         this.checkPoint(x, y);
@@ -702,9 +705,9 @@ public class Raster {
     }
 
     /**
-     * Las bandas de un píxel, en `float`.
+     * The bands of a pixel, in `float`.
      *
-     * @throws ArrayIndexOutOfBoundsException si el punto cae afuera
+     * @throws ArrayIndexOutOfBoundsException if the point falls outside
      */
     public float[] getPixel(int x, int y, float[] fArray) {
         this.checkPoint(x, y);
@@ -713,9 +716,9 @@ public class Raster {
     }
 
     /**
-     * Las bandas de un píxel, en `double`.
+     * The bands of a pixel, in `double`.
      *
-     * @throws ArrayIndexOutOfBoundsException si el punto cae afuera
+     * @throws ArrayIndexOutOfBoundsException if the point falls outside
      */
     public double[] getPixel(int x, int y, double[] dArray) {
         this.checkPoint(x, y);
@@ -724,9 +727,9 @@ public class Raster {
     }
 
     /**
-     * Los píxeles de un rectángulo, banda por banda.
+     * The pixels of a rectangle, band by band.
      *
-     * @throws ArrayIndexOutOfBoundsException si el rectángulo se sale
+     * @throws ArrayIndexOutOfBoundsException if the rectangle goes outside
      */
     public int[] getPixels(int x, int y, int w, int h, int[] iArray) {
         this.checkRect(x, y, w, h);
@@ -735,9 +738,9 @@ public class Raster {
     }
 
     /**
-     * Como el anterior, en `float`.
+     * Like the previous one, in `float`.
      *
-     * @throws ArrayIndexOutOfBoundsException si el rectángulo se sale
+     * @throws ArrayIndexOutOfBoundsException if the rectangle goes outside
      */
     public float[] getPixels(int x, int y, int w, int h, float[] fArray) {
         this.checkRect(x, y, w, h);
@@ -746,9 +749,9 @@ public class Raster {
     }
 
     /**
-     * Como el anterior, en `double`.
+     * Like the previous one, in `double`.
      *
-     * @throws ArrayIndexOutOfBoundsException si el rectángulo se sale
+     * @throws ArrayIndexOutOfBoundsException if the rectangle goes outside
      */
     public double[] getPixels(int x, int y, int w, int h, double[] dArray) {
         this.checkRect(x, y, w, h);
@@ -757,9 +760,9 @@ public class Raster {
     }
 
     /**
-     * Una banda de un píxel.
+     * One band of a pixel.
      *
-     * @throws ArrayIndexOutOfBoundsException si el punto cae afuera
+     * @throws ArrayIndexOutOfBoundsException if the point falls outside
      */
     public int getSample(int x, int y, int b) {
         this.checkPoint(x, y);
@@ -768,9 +771,9 @@ public class Raster {
     }
 
     /**
-     * Una banda de un píxel, en `float`.
+     * One band of a pixel, in `float`.
      *
-     * @throws ArrayIndexOutOfBoundsException si el punto cae afuera
+     * @throws ArrayIndexOutOfBoundsException if the point falls outside
      */
     public float getSampleFloat(int x, int y, int b) {
         this.checkPoint(x, y);
@@ -779,9 +782,9 @@ public class Raster {
     }
 
     /**
-     * Una banda de un píxel, en `double`.
+     * One band of a pixel, in `double`.
      *
-     * @throws ArrayIndexOutOfBoundsException si el punto cae afuera
+     * @throws ArrayIndexOutOfBoundsException if the point falls outside
      */
     public double getSampleDouble(int x, int y, int b) {
         this.checkPoint(x, y);
@@ -790,9 +793,9 @@ public class Raster {
     }
 
     /**
-     * Una banda en un rectángulo.
+     * One band over a rectangle.
      *
-     * @throws ArrayIndexOutOfBoundsException si el rectángulo se sale
+     * @throws ArrayIndexOutOfBoundsException if the rectangle goes outside
      */
     public int[] getSamples(int x, int y, int w, int h, int b, int[] iArray) {
         this.checkRect(x, y, w, h);
@@ -801,9 +804,9 @@ public class Raster {
     }
 
     /**
-     * Como el anterior, en `float`.
+     * Like the previous one, in `float`.
      *
-     * @throws ArrayIndexOutOfBoundsException si el rectángulo se sale
+     * @throws ArrayIndexOutOfBoundsException if the rectangle goes outside
      */
     public float[] getSamples(int x, int y, int w, int h, int b, float[] fArray) {
         this.checkRect(x, y, w, h);
@@ -812,9 +815,9 @@ public class Raster {
     }
 
     /**
-     * Como el anterior, en `double`.
+     * Like the previous one, in `double`.
      *
-     * @throws ArrayIndexOutOfBoundsException si el rectángulo se sale
+     * @throws ArrayIndexOutOfBoundsException if the rectangle goes outside
      */
     public double[] getSamples(int x, int y, int w, int h, int b, double[] dArray) {
         this.checkRect(x, y, w, h);

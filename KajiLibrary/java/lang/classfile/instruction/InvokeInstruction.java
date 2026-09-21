@@ -9,57 +9,58 @@ import java.lang.classfile.constantpool.Utf8Entry;
 import java.lang.constant.MethodTypeDesc;
 import jdk.internal.classfile.impl.Instructions;
 
-// Una invocación que no es `invokedynamic`. Dos rarezas del formato quedan expuestas acá porque no
-// se pueden esconder:
+// An invocation that is not `invokedynamic`. Two oddities of the format are exposed here because
+// they cannot be hidden:
 //
-//   1. `isInterface()` NO se deduce del opcode. `invokestatic` e `invokespecial` pueden apuntar
-//      tanto a un `CONSTANT_Methodref` como a un `CONSTANT_InterfaceMethodref`, y cuál de los dos
-//      sea cambia cómo la JVM resuelve el método.
-//   2. `count()` es el byte `count` que sólo `invokeinterface` lleva, y vale 0 en las otras tres.
-//      Es redundante con el descriptor —la JVM podría calcularlo— pero el archivo lo guarda igual.
+//   1. `isInterface()` is NOT worked out from the opcode. `invokestatic` and `invokespecial` may
+//      point either at a `CONSTANT_Methodref` or at a `CONSTANT_InterfaceMethodref`, and which of the
+//      two it is changes how the JVM resolves the method.
+//   2. `count()` is the `count` byte only `invokeinterface` carries, and it is 0 in the other three.
+//      It is redundant with the descriptor --the JVM could work it out-- but the file stores it all
+//      the same.
 public interface InvokeInstruction extends Instruction {
 
-    /** La entrada del pool con el método. */
+    /** The pool entry holding the method. */
     MemberRefEntry method();
 
-    /** Si la referencia es un `CONSTANT_InterfaceMethodref`. */
+    /** Whether the reference is a `CONSTANT_InterfaceMethodref`. */
     boolean isInterface();
 
-    /** El `count` de `invokeinterface`; 0 en las demás. */
+    /** `invokeinterface`'s `count`; 0 in the others. */
     int count();
 
-    /** La clase o interfaz que declara el método. */
+    /** The class or interface that declares the method. */
     default ClassEntry owner() {
         return method().owner();
     }
 
-    /** El nombre del método. */
+    /** The method's name. */
     default Utf8Entry name() {
         return method().nameAndType().name();
     }
 
-    /** El descriptor del método, como `Utf8`. */
+    /** The method's descriptor, as a `Utf8`. */
     default Utf8Entry type() {
         return method().nameAndType().type();
     }
 
-    /** El descriptor del método. */
+    /** The method's descriptor. */
     default MethodTypeDesc typeSymbol() {
         return MethodTypeDesc.ofDescriptor(type().stringValue());
     }
 
-    /** La invocación de este opcode a este método. */
+    /** This opcode's invocation of this method. */
     public static InvokeInstruction of(Opcode op, MemberRefEntry method) {
         return Instructions.invoke(op, method);
     }
 
-    /** La invocación de este opcode al método `name` de tipo `type` en `owner`. */
+    /** This opcode's invocation of the method `name` of type `type` in `owner`. */
     public static InvokeInstruction of(Opcode op, ClassEntry owner, Utf8Entry name, Utf8Entry type,
             boolean isInterface) {
         return Instructions.invoke(op, owner, name, type, isInterface);
     }
 
-    /** La invocación de este opcode al método que nombra `nameAndType` en `owner`. */
+    /** This opcode's invocation of the method `nameAndType` names in `owner`. */
     public static InvokeInstruction of(Opcode op, ClassEntry owner, NameAndTypeEntry nameAndType,
             boolean isInterface) {
         return Instructions.invoke(op, owner, nameAndType, isInterface);

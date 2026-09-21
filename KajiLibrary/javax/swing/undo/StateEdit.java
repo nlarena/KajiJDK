@@ -4,60 +4,61 @@ import java.util.Enumeration;
 import java.util.Hashtable;
 
 /**
- * Una edicion que deshace <strong>comparando fotos del estado</strong>, no revirtiendo la accion.
+ * An edit that undoes by <strong>comparing snapshots of the state</strong>, not by reverting the
+ * action.
  *
- * <h2>Como se usa, y por que en dos tiempos</h2>
+ * <h2>How it is used, and why in two steps</h2>
  *
- * <p>El constructor saca la foto de antes; {@link #end} saca la de despues. Entre las dos llamadas
- * va el cambio real, que esta clase nunca ve — de ahi que sirva para operaciones cuya inversa nadie
- * quiere escribir.
+ * <p>The constructor takes the before snapshot; {@link #end} takes the after one. The real change
+ * goes between the two calls, and this class never sees it -- hence it serves for operations
+ * whose inverse nobody wants to write.
  *
- * <p>Deshacer es poner la foto vieja y rehacer es poner la nueva. Las dos operaciones son la misma
- * llamada con distinta tabla, que es lo que hace a esta clase tan corta.
+ * <p>Undoing is putting the old snapshot back and redoing is putting the new one. Both operations
+ * are the same call with a different table, which is what makes this class so short.
  *
- * <h2>{@link #removeRedundantState}, que es lo que la hace practica</h2>
+ * <h2>{@link #removeRedundantState}, which is what makes it practical</h2>
  *
- * <p>Sin esa poda, cada edicion guardaria el estado <em>entero</em> del objeto dos veces, aunque
- * hubiera cambiado un solo campo. El metodo saca de las dos tablas las claves cuyo valor no cambio,
- * asi que lo que queda es la diferencia. Es la razon de que el enfoque por fotos no sea
- * inmediatamente inviable en memoria.
+ * <p>Without that pruning, each edit would keep the object's <em>whole</em> state twice, even if a
+ * single field had changed. The method removes from both tables the keys whose value did not
+ * change, so what is left is the difference. It is the reason the snapshot approach is not
+ * immediately unviable in memory.
  */
 public class StateEdit extends AbstractUndoableEdit {
 
     private static final long serialVersionUID = 5297308062724130866L;
 
-    /** Identificador de version del JDK; se conserva por fidelidad de la superficie. */
+    /** The JDK's version identifier; it is kept for surface fidelity. */
     protected static final String RCSID = "$Id: StateEdit.java,v 1.6 1997/10/01 20:05:51 sandipc Exp $";
 
-    /** El objeto cuyo estado se fotografia. */
+    /** The object whose state is snapshotted. */
     protected StateEditable object;
 
-    /** La foto de antes del cambio. */
+    /** The snapshot from before the change. */
     protected Hashtable<Object, Object> preState;
 
-    /** La foto de despues, que llena {@link #end}. */
+    /** The snapshot from after, which {@link #end} fills in. */
     protected Hashtable<Object, Object> postState;
 
-    /** El nombre para mostrar. */
+    /** The name to show. */
     protected String undoRedoName;
 
-    /** Saca la foto de antes, sin nombre. */
+    /** Takes the before snapshot, with no name. */
     public StateEdit(StateEditable anObject) {
         super();
         init(anObject, null);
     }
 
-    /** Saca la foto de antes, con un nombre para mostrar. */
+    /** Takes the before snapshot, with a name to show. */
     public StateEdit(StateEditable anObject, String name) {
         super();
         init(anObject, name);
     }
 
     /**
-     * Guarda el objeto y le pide la foto de antes.
+     * Keeps the object and asks it for the before snapshot.
      *
-     * <p>{@code protected} y separada del constructor porque los dos constructores hacen lo mismo:
-     * es el lugar unico donde una subclase puede meterse.
+     * <p>{@code protected} and separate from the constructor because both constructors do the same
+     * thing: it is the single place where a subclass can step in.
      */
     protected void init(StateEditable anObject, String name) {
         this.object = anObject;
@@ -67,20 +68,20 @@ public class StateEdit extends AbstractUndoableEdit {
         this.undoRedoName = name;
     }
 
-    /** Saca la foto de despues y poda lo que no cambio. */
+    /** Takes the after snapshot and prunes what did not change. */
     public void end() {
         this.postState = new Hashtable<Object, Object>(11);
         this.object.storeState(this.postState);
         removeRedundantState();
     }
 
-    /** Le pone al objeto la foto de antes. */
+    /** Puts the before snapshot back on the object. */
     public void undo() {
         super.undo();
         this.object.restoreState(this.preState);
     }
 
-    /** Le pone al objeto la foto de despues. */
+    /** Puts the after snapshot on the object. */
     public void redo() {
         super.redo();
         this.object.restoreState(this.postState);
@@ -91,29 +92,29 @@ public class StateEdit extends AbstractUndoableEdit {
     }
 
     /**
-     * Saca de las dos fotos las claves cuyo valor no cambio.
+     * Removes from both snapshots the keys whose value did not change.
      *
-     * <p>Se recorre la foto vieja y se compara contra la nueva; lo que coincide sale de las dos. Una
-     * clave que solo esta en una de las dos <strong>si</strong> es un cambio —aparecio o
-     * desaparecio— y por eso no se toca.
+     * <p>The old snapshot is walked and compared against the new one; what matches leaves both. A
+     * key that is in only one of the two <strong>is</strong> a change --it appeared or
+     * disappeared-- and that is why it is left alone.
      */
     protected void removeRedundantState() {
-        java.util.Vector<Object> aSacar = new java.util.Vector<Object>();
-        Enumeration<Object> claves = this.preState.keys();
-        while (claves.hasMoreElements()) {
-            Object clave = claves.nextElement();
-            if (this.postState.containsKey(clave)) {
-                Object antes = this.preState.get(clave);
-                Object despues = this.postState.get(clave);
-                if (antes.equals(despues)) {
-                    aSacar.addElement(clave);
+        java.util.Vector<Object> uselessKeys = new java.util.Vector<Object>();
+        Enumeration<Object> keys = this.preState.keys();
+        while (keys.hasMoreElements()) {
+            Object key = keys.nextElement();
+            if (this.postState.containsKey(key)) {
+                Object before = this.preState.get(key);
+                Object after = this.postState.get(key);
+                if (before.equals(after)) {
+                    uselessKeys.addElement(key);
                 }
             }
         }
-        for (int i = 0; i < aSacar.size(); i++) {
-            Object clave = aSacar.elementAt(i);
-            this.preState.remove(clave);
-            this.postState.remove(clave);
+        for (int i = 0; i < uselessKeys.size(); i++) {
+            Object key = uselessKeys.elementAt(i);
+            this.preState.remove(key);
+            this.postState.remove(key);
         }
     }
 }

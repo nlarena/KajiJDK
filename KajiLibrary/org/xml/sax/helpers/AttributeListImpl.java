@@ -5,28 +5,28 @@ import java.util.List;
 
 import org.xml.sax.AttributeList;
 
-// KajiLibrary's org.xml.sax.helpers.AttributeListImpl -- la lista de atributos de SAX1, guardable
-// y mutable.
+// KajiLibrary's org.xml.sax.helpers.AttributeListImpl -- the SAX1 attribute list, keepable and
+// mutable.
 //
-// Existe por la misma razon que LocatorImpl: el AttributeList que un parser SAX1 pasa a
-// startElement vale solo mientras dura esa llamada, y un manejador que quiera quedarse con los
-// atributos tiene que copiarlos. `new AttributeListImpl(atts)` es esa copia.
+// It exists for the same reason as LocatorImpl: the AttributeList a SAX1 parser passes to
+// startElement is valid only while that call lasts, and a handler that wants to keep the
+// attributes has to copy them. `new AttributeListImpl(atts)` is that copy.
 //
-// El otro uso es el reflejo del anterior: codigo que tiene que *producir* eventos startElement
-// necesita un AttributeList para entregar, y armarlo con addAttribute/clear es mas facil que
-// implementar la interfaz cada vez.
+// The other use is the mirror of the previous one: code that has to *produce* startElement events
+// needs an AttributeList to hand over, and building it with addAttribute/clear is easier than
+// implementing the interface every time.
 //
-// Tres listas paralelas en vez de una lista de ternas, porque esa es la forma que quieren los
-// getters: getName(i)/getType(i)/getValue(i) son tres busquedas independientes por el mismo
-// indice. El reemplazo de SAX2, AttributesImpl, empaqueta todo en un solo String[] plano con un
-// paso de cinco; son la misma idea con distinta aritmetica.
+// Three parallel lists instead of a list of triples, because that is the shape the getters want:
+// getName(i)/getType(i)/getValue(i) are three independent lookups by the same index. The SAX2
+// replacement, AttributesImpl, packs everything into one flat String[] with a stride of five; they
+// are the same idea with different arithmetic.
 //
-// La busqueda por nombre (getType(String)/getValue(String)) es un recorrido lineal de los nombres
-// y devuelve la *primera* coincidencia. SAX1 no tenia nocion de espacios de nombres, asi que aca
-// un nombre es el nombre literal del atributo tal como estaba escrito, con el prefijo pegado.
+// The lookup by name (getType(String)/getValue(String)) is a linear walk of the names and returns
+// the *first* match. SAX1 had no notion of namespaces, so here a name is the literal name of the
+// attribute as it was written, with the prefix attached.
 //
-// Esta clase esta deprecada en el JDK, junto con toda la capa SAX1; esta aca porque el contrato
-// la sigue listando y porque ParserAdapter necesita algo con esta forma.
+// This class is deprecated in the JDK, together with the whole SAX1 layer; it is here because the
+// contract still lists it and because ParserAdapter needs something of this shape.
 public class AttributeListImpl implements AttributeList {
 
     List<String> names = new ArrayList<String>();
@@ -36,17 +36,17 @@ public class AttributeListImpl implements AttributeList {
     public AttributeListImpl() {
     }
 
-    // El constructor de copia descrito arriba.
+    // The copy constructor described above.
     public AttributeListImpl(AttributeList atts) {
         setAttributeList(atts);
     }
 
     ////////////////////////////////////////////////////////////////////
-    // Construccion
+    // Construction
     ////////////////////////////////////////////////////////////////////
 
-    // Reemplaza todo por una copia de `atts`. Lee getLength() una sola vez y despues la recorre,
-    // asi que es una copia fija incluso de una lista que esta por cambiar.
+    // It replaces everything with a copy of `atts`. It reads getLength() once and then walks it, so
+    // it is a fixed copy even of a list that is about to change.
     public void setAttributeList(AttributeList atts) {
         int count = atts.getLength();
 
@@ -63,8 +63,8 @@ public class AttributeListImpl implements AttributeList {
         values.add(value);
     }
 
-    // Saca el primer atributo con este nombre, si hay alguno; un nombre que no esta no es un
-    // error, simplemente no hay nada que hacer.
+    // It removes the first attribute with this name, if there is any; a name that is not there is
+    // not an error, there is simply nothing to do.
     public void removeAttribute(String name) {
         int i = names.indexOf(name);
         if (i >= 0) {
@@ -88,8 +88,8 @@ public class AttributeListImpl implements AttributeList {
         return names.size();
     }
 
-    // Los getters por indice contestan null ante un indice fuera de rango en vez de tirar
-    // excepcion, que es lo que pide el contrato de SAX1.
+    // The getters by index answer null for an index out of range instead of throwing, which is what
+    // the SAX1 contract asks for.
     public String getName(int i) {
         if (i < 0 || i >= names.size()) {
             return null;

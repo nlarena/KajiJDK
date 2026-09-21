@@ -4,49 +4,49 @@ import java.io.Serializable;
 import java.util.Arrays;
 
 /**
- * KajiLibrary's javax.smartcardio.ATR -- lo primero que dice una tarjeta al encenderse.
+ * KajiLibrary's javax.smartcardio.ATR -- the first thing a card says when it powers up.
  *
- * <p>ATR es <i>Answer To Reset</i>: la tarjeta responde con una tira de bytes que declara a que
- * velocidad habla, que protocolos entiende y quien es. Es lo unico que se puede leer sin haber
- * negociado nada.
+ * <p>ATR is <i>Answer To Reset</i>: the card answers with a string of bytes declaring at what speed
+ * it talks, which protocols it understands and who it is. It is the only thing that can be read
+ * without having negotiated anything.
  *
- * <h2>Los bytes historicos</h2>
+ * <h2>The historical bytes</h2>
  *
- * <p>{@link #getHistoricalBytes} devuelve la parte del final, que es la que identifica al producto
- * --el sistema operativo de la tarjeta, el emisor--. Llegar hasta ellos no es cortar por una posicion
- * fija: hay que <b>caminar</b> el ATR, porque los bytes de interfaz que van antes son opcionales y
- * cada uno anuncia al siguiente.
+ * <p>{@link #getHistoricalBytes} returns the part at the end, which is the one that identifies the
+ * product --the card's operating system, the issuer--. Getting to them is not cutting at a fixed
+ * position: the ATR has to be <b>walked</b>, because the interface bytes before them are optional
+ * and each one announces the next.
  *
- * <p>El byte T0 dice cuantos bytes historicos hay (los cuatro bits de abajo) y cuales de TA1, TB1,
- * TC1 y TD1 estan presentes (los cuatro de arriba). Si TD1 esta, sus cuatro bits de arriba anuncian a
- * TA2, TB2, TC2 y TD2, y asi hasta que un TD no anuncie al siguiente. Un ATR truncado devuelve un
- * arreglo vacio en vez de reventar: lo que se leyo de una tarjeta que se saco a mitad de camino no es
- * un error de programacion.
+ * <p>The T0 byte says how many historical bytes there are (the low four bits) and which of TA1,
+ * TB1, TC1 and TD1 are present (the high four). If TD1 is there, its high four bits announce TA2,
+ * TB2, TC2 and TD2, and so on until a TD does not announce the next one. A truncated ATR returns an
+ * empty array instead of blowing up: what was read from a card pulled out halfway is not a
+ * programming error.
  */
 public final class ATR implements Serializable {
 
     private static final long serialVersionUID = 6695383790847736493L;
 
-    /** El ATR completo, tal cual vino. */
+    /** The whole ATR, as it came. */
     private final byte[] atr;
 
-    /** Donde empiezan los bytes historicos, o -1 si el ATR esta truncado. */
+    /** Where the historical bytes start, or -1 if the ATR is truncated. */
     private transient int startHistorical;
 
-    /** Cuantos bytes historicos hay. */
+    /** How many historical bytes there are. */
     private transient int nHistorical;
 
     /**
-     * Con esos bytes. El arreglo se copia.
+     * With those bytes. The array is copied.
      *
-     * @throws NullPointerException si es null
+     * @throws NullPointerException if it is null
      */
     public ATR(byte[] atr) {
         this.atr = atr.clone();
         parse();
     }
 
-    /** Camina los bytes de interfaz hasta dar con los historicos. Ver la nota de la clase. */
+    /** Walks the interface bytes until it reaches the historical ones. See the class note. */
     private void parse() {
         this.startHistorical = -1;
         this.nHistorical = 0;
@@ -81,15 +81,15 @@ public final class ATR implements Serializable {
         this.nHistorical = count;
     }
 
-    /** El ATR completo. Una copia. */
+    /** The whole ATR. A copy. */
     public byte[] getBytes() {
         return this.atr.clone();
     }
 
     /**
-     * Los bytes historicos. Ver la nota de la clase.
+     * The historical bytes. See the class note.
      *
-     * @return un arreglo vacio si el ATR esta truncado
+     * @return an empty array if the ATR is truncated
      */
     public byte[] getHistoricalBytes() {
         if (this.startHistorical < 0) {
@@ -100,13 +100,13 @@ public final class ATR implements Serializable {
         return result;
     }
 
-    /** Cuantos bytes tiene. */
+    /** How many bytes it has. */
     @Override
     public String toString() {
         return "ATR: " + this.atr.length + " bytes";
     }
 
-    /** Dos ATR son iguales si tienen los mismos bytes. */
+    /** Two ATRs are equal if they have the same bytes. */
     @Override
     public boolean equals(Object obj) {
         if (this == obj) {
@@ -123,7 +123,7 @@ public final class ATR implements Serializable {
         return Arrays.hashCode(this.atr);
     }
 
-    /** Al leerse de un flujo hay que volver a caminar el ATR: la posicion no se serializa. */
+    /** When read from a stream the ATR has to be walked again: the position is not serialised. */
     private void readObject(java.io.ObjectInputStream in)
             throws java.io.IOException, ClassNotFoundException {
         in.defaultReadObject();

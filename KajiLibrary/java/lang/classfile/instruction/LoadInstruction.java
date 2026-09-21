@@ -5,23 +5,23 @@ import java.lang.classfile.Opcode;
 import java.lang.classfile.TypeKind;
 import jdk.internal.classfile.impl.Instructions;
 
-// La carga de una variable local a la pila. Las tres formas del formato —`aload_0`, `aload` con un
-// byte, y `wide aload` con dos— son la MISMA operación con distinta codificación, y esta interfaz
-// las unifica: `slot()` da el número de ranura sin importar cómo estaba escrito.
+// The load of a local variable onto the stack. The format's three forms --`aload_0`, `aload` with
+// one byte, and `wide aload` with two-- are the SAME operation with a different encoding, and this
+// interface unifies them: `slot()` gives the slot number whatever way it was written.
 public interface LoadInstruction extends Instruction {
 
-    /** La ranura de variable local. */
+    /** The local variable slot. */
     int slot();
 
-    /** El tipo que carga. */
+    /** The type it loads. */
     TypeKind typeKind();
 
-    /** La carga de este tipo desde esta ranura, en la codificación más corta que le entre. */
+    /** The load of this type from this slot, in the shortest encoding it fits into. */
     public static LoadInstruction of(TypeKind typeKind, int slot) {
         return Instructions.load(typeKind, slot);
     }
 
-    /** La carga de este opcode desde esta ranura. */
+    /** The load of this opcode from this slot. */
     public static LoadInstruction of(Opcode op, int slot) {
         return Instructions.load(op, slot);
     }

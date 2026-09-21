@@ -1,29 +1,29 @@
 package org.xml.sax;
 
-// KajiLibrary's org.xml.sax.Locator -- "en que parte del documento estamos ahora?".
+// KajiLibrary's org.xml.sax.Locator -- "what part of the document are we in now?".
 //
-// El parser le entrega uno de estos a la aplicacion una sola vez, por
-// ContentHandler.setDocumentLocator, *antes* de startDocument. El objeto esta vivo: la misma
-// instancia sigue contestando con la posicion actual a medida que avanza el analisis. Por eso el
-// contrato dice que solo vale adentro de la llamada de un evento --guardarlo y consultarlo
-// despues devuelve lo que el parser estuviera haciendo en ese momento, o basura. Una aplicacion
-// que quiera recordar una posicion la copia en una foto LocatorImpl.
+// The parser hands one of these to the application only once, through
+// ContentHandler.setDocumentLocator, *before* startDocument. The object is alive: the same
+// instance goes on answering with the current position as the analysis advances. That is why the
+// contract says it is only valid inside the call of an event --keeping it and consulting it later
+// returns whatever the parser was doing at that moment, or rubbish. An application that wants to
+// remember a position copies it into a LocatorImpl snapshot.
 //
-// La linea y la columna empiezan en 1, y cualquiera de las dos puede ser -1 cuando el parser no
-// sabe.
+// The line and the column start at 1, and either of the two may be -1 when the parser does not
+// know.
 public interface Locator {
 
-    // El identificador publico del evento actual del documento, o null si no hay ninguno.
+    // The public identifier of the current event of the document, or null if there is none.
     String getPublicId();
 
-    // El identificador de sistema (tipicamente un URI) del evento actual del documento, o null.
+    // The system identifier (typically a URI) of the current event of the document, or null.
     String getSystemId();
 
-    // El numero de linea donde termina el evento actual del documento, o -1 si no se sabe. Apunta
-    // al *fin* de la construccion que produjo el evento, no a su comienzo.
+    // The line number where the current event of the document ends, or -1 if it is not known. It
+    // points at the *end* of the construct that produced the event, not at its start.
     int getLineNumber();
 
-    // El numero de columna donde termina el evento actual del documento, o -1 si no se sabe. La
-    // primera columna es la 1.
+    // The column number where the current event of the document ends, or -1 if it is not known. The
+    // first column is 1.
     int getColumnNumber();
 }

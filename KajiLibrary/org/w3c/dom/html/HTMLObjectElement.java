@@ -3,115 +3,115 @@ package org.w3c.dom.html;
 import org.w3c.dom.Document;
 
 /**
- * Un `<object>`.
+ * An `<object>`.
  */
 public interface HTMLObjectElement extends HTMLElement {
 
-    /** El formulario que lo contiene, o nulo si no esta en ninguno. */
+    /** The form that contains it, or null if it is in none. */
     HTMLFormElement getForm();
 
-    /** El atributo `code`. */
+    /** The `code` attribute. */
     String getCode();
 
-    /** Fija el atributo `code`. */
+    /** It sets the `code` attribute. */
     void setCode(String code);
 
-    /** La alineacion (presentacion; HTML 4 la desaconseja). */
+    /** The alignment (presentational; HTML 4 deprecates it). */
     String getAlign();
 
-    /** Fija la alineacion (presentacion; HTML 4 la desaconseja). */
+    /** It sets the alignment (presentational; HTML 4 deprecates it). */
     void setAlign(String align);
 
-    /** El atributo `archive`. */
+    /** The `archive` attribute. */
     String getArchive();
 
-    /** Fija el atributo `archive`. */
+    /** It sets the `archive` attribute. */
     void setArchive(String archive);
 
-    /** El borde. */
+    /** The border. */
     String getBorder();
 
-    /** Fija el borde. */
+    /** It sets the border. */
     void setBorder(String border);
 
-    /** El atributo `codeBase`. */
+    /** The `codeBase` attribute. */
     String getCodeBase();
 
-    /** Fija el atributo `codeBase`. */
+    /** It sets the `codeBase` attribute. */
     void setCodeBase(String codeBase);
 
-    /** El atributo `codeType`. */
+    /** The `codeType` attribute. */
     String getCodeType();
 
-    /** Fija el atributo `codeType`. */
+    /** It sets the `codeType` attribute. */
     void setCodeType(String codeType);
 
-    /** El atributo `data`. */
+    /** The `data` attribute. */
     String getData();
 
-    /** Fija el atributo `data`. */
+    /** It sets the `data` attribute. */
     void setData(String data);
 
-    /** El atributo `declare`. */
+    /** The `declare` attribute. */
     boolean getDeclare();
 
-    /** Fija el atributo `declare`. */
+    /** It sets the `declare` attribute. */
     void setDeclare(boolean declare);
 
-    /** El alto. */
+    /** The height. */
     String getHeight();
 
-    /** Fija el alto. */
+    /** It sets the height. */
     void setHeight(String height);
 
-    /** El atributo `hspace`. */
+    /** The `hspace` attribute. */
     String getHspace();
 
-    /** Fija el atributo `hspace`. */
+    /** It sets the `hspace` attribute. */
     void setHspace(String hspace);
 
-    /** El atributo `name`. */
+    /** The `name` attribute. */
     String getName();
 
-    /** Fija el atributo `name`. */
+    /** It sets the `name` attribute. */
     void setName(String name);
 
-    /** El atributo `standby`. */
+    /** The `standby` attribute. */
     String getStandby();
 
-    /** Fija el atributo `standby`. */
+    /** It sets the `standby` attribute. */
     void setStandby(String standby);
 
-    /** La posicion en el orden de tabulacion. */
+    /** The position in the tabbing order. */
     int getTabIndex();
 
-    /** Fija la posicion en el orden de tabulacion. */
+    /** It sets the position in the tabbing order. */
     void setTabIndex(int tabIndex);
 
-    /** El tipo del control. */
+    /** The type of the control. */
     String getType();
 
-    /** Fija el tipo del control. */
+    /** It sets the type of the control. */
     void setType(String type);
 
-    /** El atributo `useMap`. */
+    /** The `useMap` attribute. */
     String getUseMap();
 
-    /** Fija el atributo `useMap`. */
+    /** It sets the `useMap` attribute. */
     void setUseMap(String useMap);
 
-    /** El atributo `vspace`. */
+    /** The `vspace` attribute. */
     String getVspace();
 
-    /** Fija el atributo `vspace`. */
+    /** It sets the `vspace` attribute. */
     void setVspace(String vspace);
 
-    /** El ancho. */
+    /** The width. */
     String getWidth();
 
-    /** Fija el ancho. */
+    /** It sets the width. */
     void setWidth(String width);
 
-    /** El documento cargado adentro, o nulo si no hay o es de otro origen. */
+    /** The document loaded inside, or null if there is none or it is from another origin. */
     Document getContentDocument();
 }

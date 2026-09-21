@@ -7,13 +7,13 @@ import javax.accessibility.AccessibleContext;
 import javax.accessibility.AccessibleRole;
 
 /**
- * Un contenedor de **un solo hijo** que muestra una parte de él y deja desplazarse por el resto.
+ * A container of **a single child** that shows part of it and lets one scroll through the rest.
  *
- * <p>Lo de "un solo hijo" es literal: agregar un segundo saca al primero. Cuando hay que desplazar
- * varias cosas, se mete un {@link Panel} adentro y los componentes van en él.
+ * <p>The "single child" part is literal: adding a second one takes the first away. When several
+ * things have to be scrolled, a {@link Panel} goes inside and the components go in it.
  *
- * <p>Tiene su distribución propia y {@link #setLayout} es `final`: cambiarla rompería la única cosa
- * que el panel hace.
+ * <p>It has a layout of its own and {@link #setLayout} is `final`: changing it would break the only
+ * thing the pane does.
  */
 public class ScrollPane extends Container implements Accessible {
 
@@ -21,36 +21,36 @@ public class ScrollPane extends Container implements Accessible {
 
     private static int scrollPaneCounter = 0;
 
-    /** Muestra las barras sólo cuando el hijo no entra. */
+    /** Shows the bars only when the child does not fit. */
     public static final int SCROLLBARS_AS_NEEDED = 0;
 
-    /** Las muestra siempre. */
+    /** Shows them always. */
     public static final int SCROLLBARS_ALWAYS = 1;
 
-    /** No las muestra nunca; el desplazamiento queda sólo por programa. */
+    /** Never shows them; the scrolling is left to the program only. */
     public static final int SCROLLBARS_NEVER = 2;
 
-    /** Cuál de las tres políticas se pidió. */
+    /** Which of the three policies was asked for. */
     private final int scrollbarDisplayPolicy;
 
-    /** La barra vertical. */
+    /** The vertical bar. */
     private final ScrollPaneAdjustable vAdjustable;
 
-    /** La horizontal. */
+    /** The horizontal one. */
     private final ScrollPaneAdjustable hAdjustable;
 
-    /** Si la rueda del mouse lo desplaza. */
+    /** Whether the mouse wheel scrolls it. */
     private boolean wheelScrollingEnabled = true;
 
-    /** Un panel que muestra las barras cuando hacen falta. */
+    /** A pane that shows the bars when they are needed. */
     public ScrollPane() throws HeadlessException {
         this(SCROLLBARS_AS_NEEDED);
     }
 
     /**
-     * Un panel con esa política de barras.
+     * A pane with that bar policy.
      *
-     * @throws IllegalArgumentException si la política no es una de las tres
+     * @throws IllegalArgumentException if the policy is not one of the three
      */
     public ScrollPane(int scrollbarDisplayPolicy) throws HeadlessException {
         if (scrollbarDisplayPolicy != SCROLLBARS_AS_NEEDED
@@ -73,10 +73,11 @@ public class ScrollPane extends Container implements Accessible {
     }
 
     /**
-     * Agrega el hijo, sacando al que hubiera.
+     * Adds the child, taking away whichever one was there.
      *
-     * <p>Es `final` y hace desaparecer al anterior a propósito: un panel de desplazamiento con dos
-     * hijos no tiene sentido, y dejar que se agreguen para después ignorar a uno sería peor.
+     * <p>It is `final` and it makes the previous one disappear on purpose: a scroll pane with two
+     * children makes no sense, and letting them be added only to ignore one afterwards would be
+     * worse.
      */
     protected final void addImpl(Component comp, Object constraints, int index) {
         if (this.getComponentCount() > 0) {
@@ -85,15 +86,16 @@ public class ScrollPane extends Container implements Accessible {
         super.addImpl(comp, constraints, 0);
     }
 
-    /** Qué política de barras se pidió. */
+    /** Which bar policy was asked for. */
     public int getScrollbarDisplayPolicy() {
         return this.scrollbarDisplayPolicy;
     }
 
     /**
-     * Cuánto se ve del hijo.
+     * How much of the child is seen.
      *
-     * <p>Como las barras no ocupan lugar sin pantalla, es el tamaño del panel menos sus márgenes.
+     * <p>Since the bars take up no room without a screen, it is the size of the pane minus its
+     * insets.
      */
     public Dimension getViewportSize() {
         Insets i = this.getInsets();
@@ -102,114 +104,114 @@ public class ScrollPane extends Container implements Accessible {
     }
 
     /**
-     * Cuánto alto se lleva la barra horizontal.
+     * How much height the horizontal bar takes.
      *
-     * @return 0: sin pantalla no hay barra dibujada que ocupe lugar
+     * @return 0: without a screen there is no drawn bar taking up room
      */
     public int getHScrollbarHeight() {
         return 0;
     }
 
     /**
-     * Cuánto ancho se lleva la vertical.
+     * How much width the vertical one takes.
      *
-     * @return 0, por lo mismo
+     * @return 0, for the same reason
      */
     public int getVScrollbarWidth() {
         return 0;
     }
 
-    /** La barra vertical. */
+    /** The vertical bar. */
     public Adjustable getVAdjustable() {
         return this.vAdjustable;
     }
 
-    /** La horizontal. */
+    /** The horizontal one. */
     public Adjustable getHAdjustable() {
         return this.hAdjustable;
     }
 
     /**
-     * Desplaza a esa posición del hijo.
+     * Scrolls to that position of the child.
      *
-     * <p>Se recorta a lo que se puede desplazar de verdad, que es el tamaño del hijo menos el de la
-     * ventanilla. Desplazar más allá dejaría un vacío abajo del contenido.
+     * <p>It is clamped to what can really be scrolled, which is the size of the child minus that of
+     * the viewport. Scrolling beyond that would leave a gap below the content.
      *
-     * @throws NullPointerException si el panel no tiene hijo
+     * @throws NullPointerException if the pane has no child
      */
     public void setScrollPosition(int x, int y) {
         synchronized (this.getTreeLock()) {
             if (this.getComponentCount() == 0) {
                 throw new NullPointerException("Child does not exist");
             }
-            Component hijo = this.getComponent(0);
+            Component child = this.getComponent(0);
             Dimension v = this.getViewportSize();
-            int maxX = Math.max(0, hijo.getWidth() - v.width);
-            int maxY = Math.max(0, hijo.getHeight() - v.height);
+            int maxX = Math.max(0, child.getWidth() - v.width);
+            int maxY = Math.max(0, child.getHeight() - v.height);
             int nx = Math.max(0, Math.min(x, maxX));
             int ny = Math.max(0, Math.min(y, maxY));
             Insets i = this.getInsets();
-            hijo.setLocation(i.left - nx, i.top - ny);
-            this.ajustarBarras();
+            child.setLocation(i.left - nx, i.top - ny);
+            this.updateAdjustables();
         }
     }
 
     /**
-     * Desplaza a esa posición.
+     * Scrolls to that position.
      *
-     * @throws NullPointerException si el punto es `null` o el panel no tiene hijo
+     * @throws NullPointerException if the point is `null` or the pane has no child
      */
     public void setScrollPosition(Point p) {
         this.setScrollPosition(p.x, p.y);
     }
 
     /**
-     * Por dónde va el desplazamiento.
+     * Where the scrolling is at.
      *
-     * @throws NullPointerException si el panel no tiene hijo
+     * @throws NullPointerException if the pane has no child
      */
     public Point getScrollPosition() {
         synchronized (this.getTreeLock()) {
             if (this.getComponentCount() == 0) {
                 throw new NullPointerException("Child does not exist");
             }
-            Component hijo = this.getComponent(0);
+            Component child = this.getComponent(0);
             Insets i = this.getInsets();
-            return new Point(i.left - hijo.getX(), i.top - hijo.getY());
+            return new Point(i.left - child.getX(), i.top - child.getY());
         }
     }
 
     /**
-     * No se puede cambiar la distribución.
+     * The layout cannot be changed.
      *
-     * @throws AWTError siempre: el panel tiene la suya y es lo único que hace
+     * @throws AWTError always: the pane has its own and it is the only thing it does
      */
     public final void setLayout(LayoutManager mgr) {
         throw new AWTError("ScrollPane controls layout");
     }
 
     /**
-     * Acomoda al hijo.
+     * Lays the child out.
      *
-     * <p>Le da su tamaño preferido, o el de la ventanilla si el preferido es más chico: un hijo más
-     * chico que la ventanilla la llena en vez de dejar un borde sin usar.
+     * <p>It gives it its preferred size, or the viewport's if the preferred one is smaller: a child
+     * smaller than the viewport fills it instead of leaving an unused border.
      */
     public void doLayout() {
         this.layout();
     }
 
-    /** Cuánto tiene que medir el hijo. */
+    /** How much the child has to measure. */
     Dimension calculateChildSize() {
-        Component hijo = this.getComponent(0);
-        Dimension p = hijo.getPreferredSize();
+        Component child = this.getComponent(0);
+        Dimension p = child.getPreferredSize();
         Dimension v = this.getViewportSize();
         return new Dimension(Math.max(p.width, v.width), Math.max(p.height, v.height));
     }
 
     /**
-     * Acomoda al hijo.
+     * Lays the child out.
      *
-     * @deprecated es del nombrado de 1.1. Usar {@link #doLayout}.
+     * @deprecated it is from the 1.1 naming. Use {@link #doLayout}.
      */
     @Deprecated
     public void layout() {
@@ -217,44 +219,44 @@ public class ScrollPane extends Container implements Accessible {
             if (this.getComponentCount() == 0) {
                 return;
             }
-            Component hijo = this.getComponent(0);
+            Component child = this.getComponent(0);
             Dimension d = this.calculateChildSize();
-            hijo.setSize(d.width, d.height);
-            this.ajustarBarras();
+            child.setSize(d.width, d.height);
+            this.updateAdjustables();
         }
     }
 
-    /** Pone el rango de las dos barras a partir del tamaño del hijo y de la ventanilla. */
-    private void ajustarBarras() {
+    /** Sets the range of both bars from the size of the child and of the viewport. */
+    private void updateAdjustables() {
         if (this.getComponentCount() == 0) {
             return;
         }
-        Component hijo = this.getComponent(0);
+        Component child = this.getComponent(0);
         Dimension v = this.getViewportSize();
-        this.hAdjustable.setSpan(0, hijo.getWidth(), v.width);
-        this.vAdjustable.setSpan(0, hijo.getHeight(), v.height);
+        this.hAdjustable.setSpan(0, child.getWidth(), v.width);
+        this.vAdjustable.setSpan(0, child.getHeight(), v.height);
     }
 
     /**
-     * Imprime a los hijos.
+     * Prints the children.
      *
-     * <p>No hace nada: imprimir necesita un {@link Graphics} de verdad y esta implementación no
-     * tiene rasterizador.
+     * <p>It does nothing: printing needs a real {@link Graphics} and this implementation has no
+     * rasteriser.
      */
     public void printComponents(Graphics g) {
     }
 
-    /** Lo declara mostrable. */
+    /** Declares it showable. */
     public void addNotify() {
         super.addNotify();
     }
 
     public String paramString() {
-        String politica = "as-needed";
+        String policyName = "as-needed";
         if (this.scrollbarDisplayPolicy == SCROLLBARS_ALWAYS) {
-            politica = "always";
+            policyName = "always";
         } else if (this.scrollbarDisplayPolicy == SCROLLBARS_NEVER) {
-            politica = "never";
+            policyName = "never";
         }
         String pos = "";
         if (this.getComponentCount() > 0) {
@@ -262,31 +264,38 @@ public class ScrollPane extends Container implements Accessible {
             pos = ",ScrollPosition=(" + p.x + "," + p.y + ")";
         }
         return super.paramString() + pos + ",Insets=" + this.getInsets()
-                + ",ScrollbarDisplayPolicy=" + politica + ",wheelScrollingEnabled="
+                + ",ScrollbarDisplayPolicy=" + policyName + ",wheelScrollingEnabled="
                 + this.wheelScrollingEnabled;
     }
 
-    /** Desplaza según la rueda, si está habilitada. */
+    /** Scrolls according to the wheel, if it is enabled. */
     void autoProcessMouseWheel(MouseWheelEvent e) {
         this.processMouseWheelEvent(e);
     }
 
     /**
-     * Atiende la rueda del mouse.
+     * Handles the mouse wheel.
      *
-     * <p>Desplaza vertical por unidades, que es lo que hace el JDK cuando la rueda pide
-     * {@link MouseWheelEvent#WHEEL_UNIT_SCROLL}.
+     * <p>It scrolls vertically by units, which is what the JDK does when the wheel asks for {@link
+     * MouseWheelEvent#WHEEL_UNIT_SCROLL}. What it does not do is tell the block case apart —the JDK
+     * hands the event to an internal scroller that does— nor scroll horizontally.
      */
     protected void processMouseWheelEvent(MouseWheelEvent e) {
         if (this.wheelScrollingEnabled && !e.isConsumed() && this.getComponentCount() > 0) {
-            int cuanto = e.getUnitsToScroll() * this.vAdjustable.getUnitIncrement();
-            this.vAdjustable.setValue(this.vAdjustable.getValue() + cuanto);
+            int amount = e.getUnitsToScroll() * this.vAdjustable.getUnitIncrement();
+            this.vAdjustable.setValue(this.vAdjustable.getValue() + amount);
             e.consume();
         }
         super.processMouseWheelEvent(e);
     }
 
-    /** Si le interesa esa familia de eventos; la rueda le interesa siempre que esté habilitada. */
+    /**
+     * Whether that family of events is of interest; the wheel is, whenever it is enabled.
+     *
+     * <p>For any other family it answers `false` and does not ask its parent, which is what the JDK
+     * does: here {@link Component} has no such method, so there is nothing to ask, and nobody calls
+     * this one either.
+     */
     protected boolean eventTypeEnabled(int type) {
         if (type == MouseEvent.MOUSE_WHEEL) {
             return this.isWheelScrollingEnabled();
@@ -294,17 +303,17 @@ public class ScrollPane extends Container implements Accessible {
         return false;
     }
 
-    /** Prende o apaga el desplazamiento con la rueda. */
+    /** Turns wheel scrolling on or off. */
     public void setWheelScrollingEnabled(boolean handleWheel) {
         this.wheelScrollingEnabled = handleWheel;
     }
 
-    /** Si la rueda lo desplaza. */
+    /** Whether the wheel scrolls it. */
     public boolean isWheelScrollingEnabled() {
         return this.wheelScrollingEnabled;
     }
 
-    /** La accesibilidad del panel. */
+    /** The accessibility information of this pane. */
     public AccessibleContext getAccessibleContext() {
         if (this.accessibleContext == null) {
             this.accessibleContext = new AccessibleAWTScrollPane();
@@ -312,10 +321,10 @@ public class ScrollPane extends Container implements Accessible {
         return this.accessibleContext;
     }
 
-    /** Un panel de desplazamiento, para la accesibilidad, es un panel de desplazamiento. */
+    /** A scroll pane, for accessibility, is a scroll pane. */
     protected class AccessibleAWTScrollPane extends AccessibleAWTContainer {
 
-        /** Para las subclases. */
+        /** For the subclasses. */
         protected AccessibleAWTScrollPane() {
         }
 

@@ -6,58 +6,59 @@ import java.security.Provider;
 import java.security.Security;
 
 /**
- * KajiLibrary's javax.security.auth.login.Configuration -- que modulos usa cada aplicacion.
+ * KajiLibrary's javax.security.auth.login.Configuration -- which modules each application uses.
  *
- * <p>Traduce un nombre --el que la aplicacion le pasa a {@link LoginContext}-- a la lista de
- * {@link AppConfigurationEntry} con la que se va a autenticar. Toda la gracia de JAAS esta en esa
- * indireccion: el programa dice "autenticame como 'MiApp'" y quien despliega decide si eso es una
- * contrasena local, un Kerberos o los dos.
+ * <p>It translates a name --the one the application passes to {@link LoginContext}-- to the list of
+ * {@link AppConfigurationEntry} it is going to authenticate with. All of JAAS's point is in that
+ * indirection: the program says "authenticate me as 'MyApp'" and whoever deploys decides whether
+ * that is a local password, Kerberos or both.
  *
- * <h2>Una sola por proceso</h2>
+ * <h2>Only one per process</h2>
  *
- * <p>{@link #getConfiguration} y {@link #setConfiguration} son estaticos, asi que la configuracion
- * es global. Eso es exactamente lo que se quiere aca --que una biblioteca no pueda cambiarle las
- * reglas de autenticacion al resto del programa por su cuenta-- y por eso el que la cambia necesita
- * permiso.
+ * <p>{@link #getConfiguration} and {@link #setConfiguration} are static, so the configuration is
+ * global. That is exactly what is wanted here --that a library cannot change the authentication
+ * rules of the rest of the program on its own-- and that is why whoever changes it needs
+ * permission.
  *
- * <h2>Los tres {@code getInstance}</h2>
+ * <h2>The three {@code getInstance}s</h2>
  *
- * <p>Son la via alternativa: en vez de la configuracion global, una construida por un proveedor a
- * partir de {@link Parameters}. Sirve para armarse una configuracion propia sin pisarle la de nadie.
+ * <p>They are the alternative route: instead of the global configuration, one built by a provider
+ * from {@link Parameters}. It serves to set up a configuration of one's own without overwriting
+ * anybody else's.
  *
  * <h2>A KajiLibrary subset</h2>
  *
- * <p>Esta biblioteca <b>no trae un lector de archivos de configuracion</b>. Falta el parser, no el
- * API: mientras nadie instale una, {@link #getConfiguration} devuelve una configuracion vacia y un
- * {@link LoginContext} sobre cualquier nombre falla con "No LoginModules configured", que es
- * exactamente lo que hace el JDK cuando no encuentra el archivo. Instalar la propia con
- * {@link #setConfiguration} --o pasarla al constructor del contexto-- anda igual que siempre.
+ * <p>This library <b>does not come with a configuration file reader</b>. What is missing is the
+ * parser, not the API: while nobody installs one, {@link #getConfiguration} returns an empty
+ * configuration and a {@link LoginContext} on any name fails with "No LoginModules configured",
+ * which is exactly what the JDK does when it does not find the file. Installing one's own with
+ * {@link #setConfiguration} --or passing it to the context's constructor-- works as always.
  *
- * <p>Los tres {@code getInstance} lanzan {@link NoSuchAlgorithmException} porque no hay ningun
- * proveedor que registre un servicio {@code Configuration}. Es la salida declarada del metodo.
+ * <p>The three {@code getInstance}s throw {@link NoSuchAlgorithmException} because there is no
+ * provider that registers a {@code Configuration} service. It is the method's declared way out.
  */
 public abstract class Configuration {
 
-    /** La instalada, o null hasta que alguien pregunte. */
+    /** The installed one, or null until somebody asks. */
     private static Configuration installed;
 
-    /** De donde salio, cuando se obtuvo con {@link #getInstance}; null si no. */
+    /** Where it came from, when obtained with {@link #getInstance}; null otherwise. */
     private Provider provider;
 
-    /** El tipo con el que se pidio, o null. */
+    /** The type it was asked for with, or null. */
     private String type;
 
-    /** Los parametros con los que se pidio, o null. */
+    /** The parameters it was asked for with, or null. */
     private Parameters parameters;
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected Configuration() {
     }
 
     /**
-     * La configuracion del proceso.
+     * The process's configuration.
      *
-     * <p>Si nadie instalo una, devuelve una vacia; ver la nota de la clase.
+     * <p>If nobody installed one, it returns an empty one; see the class note.
      */
     public static synchronized Configuration getConfiguration() {
         if (installed == null) {
@@ -67,18 +68,18 @@ public abstract class Configuration {
     }
 
     /**
-     * Cambia la configuracion del proceso.
+     * Changes the process's configuration.
      *
-     * @param configuration la nueva; null vuelve a la vacia
+     * @param configuration the new one; null goes back to the empty one
      */
     public static synchronized void setConfiguration(Configuration configuration) {
         installed = configuration;
     }
 
     /**
-     * Una configuracion armada por el primer proveedor que sepa hacerla.
+     * A configuration built by the first provider that knows how to build it.
      *
-     * @throws NoSuchAlgorithmException si ninguno la sabe hacer; siempre en KajiLibrary
+     * @throws NoSuchAlgorithmException if none knows how; always in KajiLibrary
      */
     public static Configuration getInstance(String type, Parameters params)
         throws NoSuchAlgorithmException {
@@ -98,9 +99,9 @@ public abstract class Configuration {
     }
 
     /**
-     * Idem, de un proveedor con nombre.
+     * Likewise, from a named provider.
      *
-     * @throws NoSuchProviderException si no hay proveedor con ese nombre
+     * @throws NoSuchProviderException if there is no provider with that name
      */
     public static Configuration getInstance(String type, Parameters params, String provider)
         throws NoSuchProviderException, NoSuchAlgorithmException {
@@ -114,7 +115,7 @@ public abstract class Configuration {
         return getInstance(type, params, p);
     }
 
-    /** Idem, de un proveedor ya en la mano. */
+    /** Likewise, from a provider already at hand. */
     public static Configuration getInstance(String type, Parameters params, Provider provider)
         throws NoSuchAlgorithmException {
         if (provider == null) {
@@ -131,7 +132,7 @@ public abstract class Configuration {
         return build(s, type, params);
     }
 
-    /** El armado comun de los tres {@code getInstance}. */
+    /** What the three {@code getInstance}s build in common. */
     private static Configuration build(Provider.Service s, String type, Parameters params)
         throws NoSuchAlgorithmException {
         Object o = s.newInstance(params);
@@ -146,55 +147,56 @@ public abstract class Configuration {
         return made;
     }
 
-    /** El proveedor que la armo, o null si no salio de {@link #getInstance}. */
+    /** The provider that built it, or null if it did not come from {@link #getInstance}. */
     public Provider getProvider() {
         return this.provider;
     }
 
-    /** El tipo con el que se pidio, o null. */
+    /** The type it was asked for with, or null. */
     public String getType() {
         return this.type;
     }
 
-    /** Los parametros con los que se pidio, o null. */
+    /** The parameters it was asked for with, or null. */
     public Parameters getParameters() {
         return this.parameters;
     }
 
     /**
-     * Los modulos configurados para ese nombre.
+     * The modules configured for that name.
      *
-     * @return null si ese nombre no tiene nada configurado, que <b>no</b> es un error
+     * @return null if that name has nothing configured, which is <b>not</b> an error
      */
     public abstract AppConfigurationEntry[] getAppConfigurationEntry(String name);
 
     /**
-     * Vuelve a leer la configuracion.
+     * Reads the configuration again.
      *
-     * <p>Por omision no hace nada: una configuracion armada en memoria no tiene de donde releer.
+     * <p>By default it does nothing: a configuration built in memory has nowhere to reread from.
      */
     public void refresh() {
     }
 
     /**
-     * Lo que se le pasa a un proveedor para que arme una configuracion.
+     * What is passed to a provider so that it builds a configuration.
      *
-     * <p>Marcadora y sin metodos: cada tipo de configuracion define los suyos. Existe solo para que
-     * la firma de {@link Configuration#getInstance} diga algo mas util que {@code Object}.
+     * <p>A marker without methods: each type of configuration defines its own. It exists only so
+     * that the signature of {@link Configuration#getInstance} says something more useful than
+     * {@code Object}.
      */
     public interface Parameters {
     }
 
-    /** La que se usa cuando nadie instalo ninguna. Ver la nota de la clase. */
+    /** The one used when nobody installed any. See the class note. */
     private static final class EmptyConfiguration extends Configuration {
 
-        /** Siempre null: no hay nada configurado para ningun nombre. */
+        /** Always null: there is nothing configured for any name. */
         public AppConfigurationEntry[] getAppConfigurationEntry(String name) {
             return null;
         }
     }
 
-    /** La que devuelven los {@code getInstance}: le pasa todo al SPI del proveedor. */
+    /** The one the {@code getInstance}s return: it hands everything to the provider's SPI. */
     private static final class ConfigurationDelegate extends Configuration {
 
         private final ConfigurationSpi spi;

@@ -1,10 +1,11 @@
 package java.security;
 
-// La mitad publicable de un par asimetrico.
+// The publishable half of an asymmetric pair.
 //
-// No agrega ni un metodo sobre `AsymmetricKey`, y no le hace falta: lo unico que aporta es **el
-// tipo**. Que `Signature.initVerify` pida una `PublicKey` y `Signature.initSign` una `PrivateKey`
-// es lo que hace que confundirlas sea un error de compilacion y no una vulnerabilidad.
+// It does not add a single method over `AsymmetricKey`, and it does not need to: the only thing it
+// contributes is **the type**. That `Signature.initVerify` asks for a `PublicKey` and
+// `Signature.initSign` for a `PrivateKey` is what makes confusing them a compilation error and not
+// a vulnerability.
 public interface PublicKey extends AsymmetricKey {
 
     long serialVersionUID = 7187392471159151072L;

@@ -3,42 +3,40 @@ package javax.print.attribute;
 import java.io.Serializable;
 
 /**
- * KajiLibrary's javax.print.attribute.Attribute -- lo que hace que un objeto sea un atributo de
- * impresion.
+ * KajiLibrary's javax.print.attribute.Attribute -- what makes an object a print attribute.
  *
- * <h2>La idea central del paquete: categoria y valor son cosas distintas</h2>
+ * <h2>The package's central idea: category and value are different things</h2>
  *
- * <p>Un atributo de impresion es un **valor tipado** --"tres copias", "a dos caras", "papel A4"-- y
- * cada valor pertenece a una **categoria**, que es la pregunta que ese valor contesta. La categoria
- * no se guarda como un string ni como un numero: es un {@code Class}, el que devuelve
- * {@link #getCategory()}.
+ * <p>A print attribute is a **typed value** --"three copies", "two-sided", "A4 paper"-- and each
+ * value belongs to a **category**, which is the question that value answers. The category is not
+ * kept as a string or a number: it is a {@code Class}, the one {@link #getCategory()} returns.
  *
- * <p>Eso es lo que gobierna todo el paquete. En un {@link AttributeSet} la clave es la categoria, no
- * la clase del objeto ni el objeto mismo: meter {@code new Copies(3)} donde ya habia
- * {@code new Copies(2)} **reemplaza**, porque las dos contestan la misma pregunta. Y por eso hay dos
- * metodos y no uno --sin la categoria explicita, una subclase de un atributo se archivaria bajo una
- * clave distinta que su padre y el conjunto tendria dos respuestas para la misma pregunta.
+ * <p>That is what governs the whole package. In an {@link AttributeSet} the key is the category,
+ * not the object's class nor the object itself: putting {@code new Copies(3)} where there was
+ * {@code new Copies(2)} **replaces**, because both answer the same question. And that is why there
+ * are two methods and not one --without the explicit category, a subclass of an attribute would be
+ * filed under a key different from its parent's and the set would have two answers to the same
+ * question.
  *
- * <p>Lo normal es que la categoria sea la clase misma ({@code Copies.getCategory()} es
- * {@code Copies.class}). Las excepciones son justamente las que explican para que sirve la
- * indireccion: {@code MediaSizeName}, {@code MediaTray} y {@code MediaName} son tres clases
- * distintas y las tres reportan {@code Media.class}, porque "que papel" es **una** pregunta que se
- * puede contestar por tamano, por bandeja o por nombre, y un trabajo no puede tener las tres
- * respuestas a la vez.
+ * <p>Normally the category is the class itself ({@code Copies.getCategory()} is {@code
+ * Copies.class}). The exceptions are exactly the ones that explain what the indirection is for:
+ * {@code MediaSizeName}, {@code MediaTray} and {@code MediaName} are three different classes and
+ * all three report {@code Media.class}, because "which paper" is **one** question that can be
+ * answered by size, by tray or by name, and a job cannot have the three answers at once.
  *
- * <p>{@link #getName()} devuelve el nombre del protocolo IPP (RFC 2911) --{@code "copies"},
- * {@code "sides"}-- y no cambia con el idioma: es para el cable, no para el usuario.
+ * <p>{@link #getName()} returns the IPP protocol name (RFC 2911) --{@code "copies"},
+ * {@code "sides"}-- and does not change with the language: it is for the wire, not for the user.
  */
 public interface Attribute extends Serializable {
 
     /**
-     * La pregunta que este valor contesta.
+     * The question this value answers.
      *
-     * <p>Es la clave bajo la que un {@link AttributeSet} lo archiva, y por eso importa que no
-     * siempre sea {@code getClass()}: ver la nota sobre {@code Media} en la cabecera.
+     * <p>It is the key under which an {@link AttributeSet} files it, and that is why it matters
+     * that it is not always {@code getClass()}: see the note about {@code Media} in the header.
      */
     Class<? extends Attribute> getCategory();
 
-    /** El nombre IPP de la categoria; no se traduce. */
+    /** The IPP name of the category; it is not translated. */
     String getName();
 }

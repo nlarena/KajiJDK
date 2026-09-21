@@ -12,31 +12,34 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Junta los pedidos de repintado y los resuelve todos juntos.
+ * It gathers the repainting requests and resolves them all together.
  *
- * <h2>Por que no se repinta enseguida</h2>
+ * <h2>Why it does not repaint at once</h2>
  *
- * <p>Cambiar el texto de una etiqueta, su color y su borde son tres pedidos de repintado del mismo
- * rectangulo. Atenderlos uno por uno dibujaria tres veces lo mismo. En vez de eso, cada pedido se
- * anota -- {@link #addDirtyRegion} -- y los rectangulos del mismo componente se <em>unen</em>; el
- * dibujado ocurre despues, una sola vez, en {@link #paintDirtyRegions}.
+ * <p>Changing a label's text, its colour and its border are three repainting requests for the
+ * same rectangle. Attending them one by one would draw the same thing three times. Instead,
+ * each request is noted -- {@link #addDirtyRegion} -- and the rectangles of the same component
+ * are <em>merged</em>; the drawing happens afterwards, only once, in
+ * {@link #paintDirtyRegions}.
  *
- * <p>Lo mismo con las medidas: {@link #addInvalidComponent} anota que hay que volver a acomodar, y
- * {@link #validateInvalidComponents} lo hace todo junto.
+ * <p>The same with the measurements: {@link #addInvalidComponent} notes that a layout has to be
+ * done again, and {@link #validateInvalidComponents} does it all together.
  *
- * <h2>El doble buffer</h2>
+ * <h2>The double buffer</h2>
  *
- * <p>Dibujar directo sobre la pantalla se ve como un parpadeo: primero el fondo, despues el texto.
- * El doble buffer dibuja en una imagen en memoria y copia el resultado de una vez. La imagen se
- * comparte entre todos los componentes de una ventana -- {@link #getOffscreenBuffer} -- porque una
- * por componente seria muchisima memoria para algo que se usa un instante.
+ * <p>Drawing straight onto the screen looks like a flicker: first the background, then the
+ * text. The double buffer draws into an image in memory and copies the result in one go. The
+ * image is shared between every component of a window -- {@link #getOffscreenBuffer} -- because
+ * one per component would be a great deal of memory for something that is used for an
+ * instant.
  *
- * <h2>Sin pantalla</h2>
+ * <h2>With no screen</h2>
  *
- * <p>Todo lo que es <em>contabilidad</em> anda: se anotan los rectangulos, se unen, se listan, se
- * limpian. Lo que no ocurre es el dibujado -- {@link #paintDirtyRegions} recorre lo anotado y no
- * tiene a donde pintarlo --, ni el encolado en el hilo de eventos, que aca no corre. Un componente
- * se pinta cuando alguien le pasa un {@code Graphics}, y eso no pasa por aca.
+ * <p>Everything that is <em>bookkeeping</em> works: the rectangles are noted, merged, listed,
+ * cleared. What does not happen is the drawing -- {@link #paintDirtyRegions} walks what is
+ * noted and has nowhere to paint it --, nor the queueing on the event thread, which does not
+ * run here. A component is painted when somebody passes it a {@code Graphics}, and that does
+ * not go through here.
  */
 public class RepaintManager {
 
@@ -44,7 +47,7 @@ public class RepaintManager {
 
     Rectangle tmp = new Rectangle();
 
-    private static RepaintManager delegado;
+    private static RepaintManager delegate;
 
     private final Map<Component, Rectangle> dirtyComponents =
             new HashMap<Component, Rectangle>();
@@ -55,40 +58,40 @@ public class RepaintManager {
 
     private Image doubleBuffer;
 
-    /** El administrador de este contexto. */
+    /** This context's manager. */
     public static RepaintManager currentManager(Component c) {
-        return actual();
+        return current();
     }
 
-    /** El administrador de este contexto. */
+    /** This context's manager. */
     public static RepaintManager currentManager(JComponent c) {
-        return actual();
+        return current();
     }
 
-    private static synchronized RepaintManager actual() {
-        if (delegado == null) {
-            delegado = new RepaintManager();
+    private static synchronized RepaintManager current() {
+        if (delegate == null) {
+            delegate = new RepaintManager();
         }
-        return delegado;
+        return delegate;
     }
 
-    /** Cambia el administrador; nulo devuelve el de siempre. */
+    /** It changes the manager; null gives back the usual one. */
     public static void setCurrentManager(RepaintManager aRepaintManager) {
         synchronized (RepaintManager.class) {
-            delegado = aRepaintManager;
+            delegate = aRepaintManager;
         }
     }
 
-    /** Uno vacio. */
+    /** An empty one. */
     public RepaintManager() {
     }
 
     /**
-     * Anota que ese componente tiene que volver a acomodarse.
+     * It notes that that component has to be laid out again.
      *
-     * <p>Se anota el <em>ancestro validante</em> mas cercano -- el primero que puede resolver un
-     * cambio de tamano sin molestar a su padre --, no el componente. Es lo que evita que cambiar el
-     * texto de una etiqueta rearme la ventana entera.
+     * <p>The nearest <em>validating ancestor</em> is noted -- the first that can resolve a change
+     * of size without troubling its parent --, not the component. It is what keeps changing a
+     * label's text from rebuilding the whole window.
      */
     public synchronized void addInvalidComponent(JComponent invalidComponent) {
         Component validateRoot = null;
@@ -118,38 +121,38 @@ public class RepaintManager {
         invalidComponents.add((JComponent) validateRoot);
     }
 
-    /** Lo saca de la lista de los que hay que acomodar. */
+    /** It takes it off the list of those that have to be laid out. */
     public synchronized void removeInvalidComponent(JComponent component) {
         invalidComponents.remove(component);
     }
 
     /**
-     * Anota que hay que repintar ese rectangulo de ese componente.
+     * It notes that that rectangle of that component has to be repainted.
      *
-     * <p>Si ya habia uno anotado, los dos se unen en el rectangulo que los contiene. Unir en vez de
-     * guardar los dos es la decision que hace barata a esta clase: la union puede pintar de mas,
-     * pero nunca de menos, y pintar de mas es solo mas lento.
+     * <p>If one was already noted, the two are merged into the rectangle that contains them.
+     * Merging instead of keeping both is the decision that makes this class cheap: the union may
+     * paint too much, but never too little, and painting too much is only slower.
      */
     public void addDirtyRegion(JComponent c, int x, int y, int w, int h) {
-        anotar(c, x, y, w, h);
+        record(c, x, y, w, h);
     }
 
-    /** Idem, para una ventana. */
+    /** The same, for a window. */
     public void addDirtyRegion(Window window, int x, int y, int w, int h) {
-        anotar(window, x, y, w, h);
+        record(window, x, y, w, h);
     }
 
     /**
-     * Idem, para un applet.
+     * The same, for an applet.
      *
-     * @deprecated Como en el JDK: los applets ya no corren en ningun lado.
+     * @deprecated As in the JDK: applets no longer run anywhere.
      */
     @Deprecated
     public void addDirtyRegion(java.applet.Applet applet, int x, int y, int w, int h) {
-        anotar(applet, x, y, w, h);
+        record(applet, x, y, w, h);
     }
 
-    private synchronized void anotar(Component c, int x, int y, int w, int h) {
+    private synchronized void record(Component c, int x, int y, int w, int h) {
         if (w <= 0 || h <= 0 || c == null) {
             return;
         }
@@ -158,33 +161,34 @@ public class RepaintManager {
         }
         Rectangle r = dirtyComponents.get(c);
         if (r != null) {
-            // Ya estaba anotado: se agranda y listo, sin volver a mirar los ancestros.
-            unir(r, x, y, w, h);
+            // It was already noted: it is enlarged and that is that, without looking at the
+            // ancestors again.
+            merge(r, x, y, w, h);
             return;
         }
-        if (!seVe(c)) {
+        if (!isShowing(c)) {
             return;
         }
         dirtyComponents.put(c, new Rectangle(x, y, w, h));
     }
 
     /**
-     * Si ese componente esta en pantalla de verdad.
+     * Whether that component is really on the screen.
      *
-     * <p>Anotar lo que no se ve no sirve para nada: cuando el componente aparezca habra que pintarlo
-     * entero igual. Asi que si el componente no tiene padre, o alguno de sus ancestros esta
-     * escondido o todavia no tiene ventana, la anotacion se descarta.
+     * <p>Noting what is not seen is of no use: when the component appears it will have to be
+     * painted whole all the same. So if the component has no parent, or some of its ancestors is
+     * hidden or does not have a window yet, the note is discarded.
      *
-     * <p>Esto es lo que hace que en una biblioteca sin pantalla {@link #getDirtyRegion} devuelva
-     * siempre el rectangulo vacio y {@link #isCompletelyDirty} siempre `false`. Esta medido contra
-     * el JDK, que hace exactamente lo mismo.
+     * <p>This is what makes {@link #getDirtyRegion} always return the empty rectangle and
+     * {@link #isCompletelyDirty} always `false` in a library with no screen. It is measured
+     * against the JDK, which does exactly the same.
      */
-    private static boolean seVe(Component c) {
-        Container padre = c.getParent();
-        if (padre == null) {
+    private static boolean isShowing(Component c) {
+        Container parent = c.getParent();
+        if (parent == null) {
             return false;
         }
-        for (Container p = padre; p != null; p = p.getParent()) {
+        for (Container p = parent; p != null; p = p.getParent()) {
             if (!p.isVisible() || !p.isDisplayable()) {
                 return false;
             }
@@ -195,8 +199,8 @@ public class RepaintManager {
         return true;
     }
 
-    /** Agranda el rectangulo para que contenga tambien al nuevo. */
-    private static void unir(Rectangle r, int x, int y, int w, int h) {
+    /** It enlarges the rectangle so that it also contains the new one. */
+    private static void merge(Rectangle r, int x, int y, int w, int h) {
         int x1 = Math.min(r.x, x);
         int y1 = Math.min(r.y, y);
         int x2 = Math.max(r.x + r.width, x + w);
@@ -207,7 +211,7 @@ public class RepaintManager {
         r.height = y2 - y1;
     }
 
-    /** Lo que hay anotado para repintar de ese componente; vacio si no hay nada. */
+    /** What is noted to be repainted of that component; empty if there is nothing. */
     public Rectangle getDirtyRegion(JComponent aComponent) {
         Rectangle r;
         synchronized (this) {
@@ -219,12 +223,12 @@ public class RepaintManager {
         return new Rectangle(r);
     }
 
-    /** Anota que hay que repintar el componente entero. */
+    /** It notes that the whole component has to be repainted. */
     public void markCompletelyDirty(JComponent aComponent) {
         addDirtyRegion(aComponent, 0, 0, Integer.MAX_VALUE, Integer.MAX_VALUE);
     }
 
-    /** Olvida lo anotado de ese componente. */
+    /** It forgets what was noted of that component. */
     public void markCompletelyClean(JComponent aComponent) {
         synchronized (this) {
             dirtyComponents.remove(aComponent);
@@ -232,17 +236,18 @@ public class RepaintManager {
     }
 
     /**
-     * Si hay que repintarlo entero.
+     * Whether it has to be repainted whole.
      *
-     * <p>Se contesta mirando el ancho del rectangulo anotado: {@link Integer#MAX_VALUE} es la marca
-     * de "todo". Es lo que deja que {@link #markCompletelyDirty} no necesite un campo aparte.
+     * <p>It is answered by looking at the width of the noted rectangle:
+     * {@link Integer#MAX_VALUE} is the mark for "everything". It is what allows
+     * {@link #markCompletelyDirty} not to need a separate field.
      */
     public boolean isCompletelyDirty(JComponent aComponent) {
         Rectangle r = getDirtyRegion(aComponent);
         return (r.width == Integer.MAX_VALUE) && (r.height == Integer.MAX_VALUE);
     }
 
-    /** Acomoda todo lo que quedo pendiente y limpia la lista. */
+    /** It lays out everything that was left pending and clears the list. */
     public void validateInvalidComponents() {
         List<JComponent> ic;
         synchronized (this) {
@@ -258,10 +263,10 @@ public class RepaintManager {
     }
 
     /**
-     * Repinta todo lo anotado y limpia la lista.
+     * It repaints everything that was noted and clears the list.
      *
-     * <p>Sin pantalla no hay a donde pintar; ver la nota de la clase. Lo que si ocurre es que la
-     * lista se vacia, que es lo que el resto del sistema observa.
+     * <p>With no screen there is nowhere to paint; see the class note. What does happen is that
+     * the list is emptied, which is what the rest of the system observes.
      */
     public void paintDirtyRegions() {
         Map<Component, Rectangle> tmpDirtyComponents;
@@ -294,19 +299,20 @@ public class RepaintManager {
     }
 
     /**
-     * La imagen compartida donde se dibuja antes de copiar; ver la nota de la clase.
+     * The shared image that is drawn into before copying; see the class note.
      *
-     * <p>Se agranda cuando hace falta y nunca se achica: achicarla obligaria a crear otra la proxima
-     * vez que se necesite el tamano grande, y son pocos tamanos distintos en la vida de una ventana.
+     * <p>It is enlarged when needed and never shrunk: shrinking it would force another to be
+     * created the next time the large size was needed, and there are few different sizes in a
+     * window's life.
      */
     public Image getOffscreenBuffer(Component c, int proposedWidth, int proposedHeight) {
         return buffer(c, proposedWidth, proposedHeight);
     }
 
     /**
-     * Como {@link #getOffscreenBuffer}, pero pidiendo memoria de la placa si la hubiera.
+     * Like {@link #getOffscreenBuffer}, but asking for the card's memory if there were any.
      *
-     * <p>Aca no la hay, asi que devuelve la misma imagen.
+     * <p>Here there is none, so it returns the same image.
      */
     public Image getVolatileOffscreenBuffer(Component c, int proposedWidth,
             int proposedHeight) {
@@ -333,7 +339,7 @@ public class RepaintManager {
         return doubleBuffer;
     }
 
-    /** Cuanto puede crecer la imagen compartida. */
+    /** How much the shared image may grow. */
     public void setDoubleBufferMaximumSize(Dimension d) {
         doubleBufferMaxSize = d;
         if (doubleBuffer != null) {
@@ -345,24 +351,25 @@ public class RepaintManager {
     }
 
     /**
-     * El tope.
+     * The cap.
      *
-     * <p>Por omision, lo que ocupan todas las pantallas juntas: no tiene sentido guardar un buffer
-     * mas grande que todo lo que se puede llegar a mostrar. Sin pantallas no hay ese tope, y el
-     * valor es {@link Integer#MAX_VALUE} en los dos lados; asi lo hace el JDK y esta medido.
+     * <p>By default, what every screen together takes up: there is no point in keeping a buffer
+     * larger than everything that can be shown. With no screens there is no such cap, and the
+     * value is {@link Integer#MAX_VALUE} on both sides; that is how the JDK does it and it is
+     * measured.
      */
     public Dimension getDoubleBufferMaximumSize() {
         if (doubleBufferMaxSize == null) {
             try {
-                java.awt.Rectangle todas = new java.awt.Rectangle();
+                java.awt.Rectangle all = new java.awt.Rectangle();
                 java.awt.GraphicsEnvironment ge =
                         java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment();
-                java.awt.GraphicsDevice[] pantallas = ge.getScreenDevices();
-                for (int i = 0; i < pantallas.length; i++) {
-                    todas = todas.union(
-                            pantallas[i].getDefaultConfiguration().getBounds());
+                java.awt.GraphicsDevice[] screens = ge.getScreenDevices();
+                for (int i = 0; i < screens.length; i++) {
+                    all = all.union(
+                            screens[i].getDefaultConfiguration().getBounds());
                 }
-                doubleBufferMaxSize = new Dimension(todas.width, todas.height);
+                doubleBufferMaxSize = new Dimension(all.width, all.height);
             } catch (java.awt.HeadlessException e) {
                 doubleBufferMaxSize = new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE);
             }
@@ -370,7 +377,7 @@ public class RepaintManager {
         return doubleBufferMaxSize;
     }
 
-    /** Prende o apaga el doble buffer para toda la aplicacion. */
+    /** It switches the double buffer on or off for the whole application. */
     public void setDoubleBufferingEnabled(boolean aFlag) {
         doubleBufferingEnabled = aFlag;
     }

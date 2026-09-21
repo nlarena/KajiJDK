@@ -6,10 +6,9 @@ import javax.print.attribute.PrintServiceAttribute;
 import javax.print.attribute.URISyntax;
 
 /**
- * La URI que identifica a la impresora en el protocolo, normalmente {@code ipp:}.
+ * The URI that identifies the printer in the protocol, normally {@code ipp:}.
  *
- * <p>Es el identificador con el que se le habla, no el nombre para mostrar --ese es {@link
- * PrinterName}.
+ * <p>It is the identifier it is spoken to with, not the display name --that is {@link PrinterName}.
  */
 public final class PrinterURI extends URISyntax implements PrintServiceAttribute {
 

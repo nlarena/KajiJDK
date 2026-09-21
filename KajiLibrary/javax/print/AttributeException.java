@@ -3,26 +3,26 @@ package javax.print;
 import javax.print.attribute.Attribute;
 
 /**
- * KajiLibrary's javax.print.AttributeException -- el fallo fue por atributos.
+ * KajiLibrary's javax.print.AttributeException -- the failure was because of attributes.
  *
- * <p>Una interfaz, no una excepcion; ver la nota de {@link PrintException} sobre por que.
+ * <p>An interface, not an exception; see the note of {@link PrintException} on why.
  *
- * <p>Distingue dos cosas que se confunden:
+ * <p>It tells apart two things that get confused:
  *
  * <ul>
- *   <li>{@link #getUnsupportedAttributes} son <b>categorias</b> enteras que la impresora no entiende
- *       --no sabe que es el duplex--;
- *   <li>{@link #getUnsupportedValues} son atributos que si entiende con un valor que no puede dar
- *       --entiende el duplex, no lo tiene--.
+ *   <li>{@link #getUnsupportedAttributes} are whole <b>categories</b> the printer does not
+ *       understand --it does not know what duplex is--;
+ *   <li>{@link #getUnsupportedValues} are attributes it does understand with a value it cannot give
+ *       --it understands duplex, it does not have it--.
  * </ul>
  *
- * <p>Los dos pueden devolver null si no hay nada de esa clase.
+ * <p>Both may return null if there is nothing of that kind.
  */
 public interface AttributeException {
 
-    /** Las categorias que no entiende, o null. */
+    /** The categories it does not understand, or null. */
     Class<?>[] getUnsupportedAttributes();
 
-    /** Los valores que no puede dar, o null. */
+    /** The values it cannot give, or null. */
     Attribute[] getUnsupportedValues();
 }

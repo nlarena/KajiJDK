@@ -1,37 +1,37 @@
 package org.xml.sax;
 
-// KajiLibrary's org.xml.sax.AttributeList -- la lista de atributos de SAX1, reemplazada por
+// KajiLibrary's org.xml.sax.AttributeList -- the attribute list of SAX1, replaced by
 // Attributes.
 //
-// Se conserva porque las formas de SAX1 (DocumentHandler, Parser) todavia la nombran, y porque
-// el puente helpers.ParserAdapter existe justamente para convertir una de estas en un
-// Attributes. La diferencia con Attributes es que aca no hay espacios de nombres en absoluto: un
-// atributo tiene un solo nombre, el que estaba escrito en el documento, con prefijo y todo.
+// It is kept because the SAX1 shapes (DocumentHandler, Parser) still name it, and because the
+// helpers.ParserAdapter bridge exists precisely to turn one of these into an Attributes. The
+// difference with Attributes is that here there are no namespaces at all: an attribute has one
+// single name, the one that was written in the document, prefix and all.
 //
-// Vale la misma regla de vigencia que en Attributes: solo sirve dentro de la llamada a
-// startElement; para conservarla hay que copiarla con helpers.AttributeListImpl.
+// The same rule of validity as in Attributes holds: it only serves inside the call to
+// startElement; to keep it, it has to be copied with helpers.AttributeListImpl.
 //
-// Esta deprecada en el JDK. Aca no lleva @Deprecated: la anotacion es metadato y no un miembro,
-// asi que no entra en el contrato contra el que se mide esta biblioteca, y dejarla afuera
-// mantiene el archivo compilando en el javac congelado sin depender de como se retienen las
-// anotaciones.
+// It is deprecated in the JDK. Here it carries no @Deprecated: the annotation is metadata and not
+// a member, so it does not enter the contract this library is measured against, and leaving it
+// out keeps the file compiling on the frozen javac without depending on how annotations are
+// retained.
 public interface AttributeList {
 
-    // La cantidad de atributos de la lista.
+    // The number of attributes in the list.
     int getLength();
 
-    // El nombre del atributo en `index`, o null si el indice esta fuera de rango.
+    // The name of the attribute at `index`, or null if the index is out of range.
     String getName(int i);
 
-    // El tipo del atributo en `index` ("CDATA" y demas), o null si esta fuera de rango.
+    // The type of the attribute at `index` ("CDATA" and the rest), or null if it is out of range.
     String getType(int i);
 
-    // El valor del atributo en `index`, o null si esta fuera de rango.
+    // The value of the attribute at `index`, or null if it is out of range.
     String getValue(int i);
 
-    // El tipo del atributo con ese nombre, o null si no existe tal atributo.
+    // The type of the attribute with that name, or null if there is no such attribute.
     String getType(String name);
 
-    // El valor del atributo con ese nombre, o null si no existe tal atributo.
+    // The value of the attribute with that name, or null if there is no such attribute.
     String getValue(String name);
 }

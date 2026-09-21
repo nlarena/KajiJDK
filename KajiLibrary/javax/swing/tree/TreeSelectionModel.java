@@ -5,37 +5,37 @@ import java.beans.PropertyChangeListener;
 import javax.swing.event.TreeSelectionListener;
 
 /**
- * Que nodos de un arbol estan elegidos.
+ * Which nodes of a tree are chosen.
  *
- * <h2>Se guardan caminos, no filas</h2>
+ * <h2>Paths are kept, not rows</h2>
  *
- * <p>Un camino sigue siendo el mismo si se despliega o se pliega algo mas arriba; una fila no. Por
- * eso la seleccion son {@link TreePath}, y las filas se calculan cuando hacen falta preguntandole
- * al {@link RowMapper}. Ver la nota de esa interfaz.
+ * <p>A path is still the same if something further up is expanded or collapsed; a row is not.
+ * That is why the selection is {@link TreePath}s, and the rows are computed when needed by asking
+ * the {@link RowMapper}. See that interface's note.
  *
- * <h2>Tres modos, y el del medio es el raro</h2>
+ * <h2>Three modes, and the middle one is the odd one</h2>
  *
- * <p>Uno solo, varios contiguos, o cualquiera. El contiguo pide que las filas elegidas sean
- * seguidas, y eso depende de lo que este desplegado: plegar un nodo del medio puede volver contigua
- * una seleccion que no lo era. Es la razon de que exista {@link #resetRowSelection}, que la vista
- * llama cuando cambia lo desplegado.
+ * <p>One only, several contiguous, or any. The contiguous one asks that the chosen rows be
+ * consecutive, and that depends on what is expanded: collapsing a node in the middle may make a
+ * selection that was not contiguous become so. It is the reason {@link #resetRowSelection}
+ * exists, which the view calls when what is expanded changes.
  */
 public interface TreeSelectionModel {
 
-    /** Un solo nodo. */
+    /** A single node. */
     int SINGLE_TREE_SELECTION = 1;
 
-    /** Varios, pero en filas seguidas. */
+    /** Several, but on consecutive rows. */
     int CONTIGUOUS_TREE_SELECTION = 2;
 
-    /** Cualquier conjunto. */
+    /** Any set. */
     int DISCONTIGUOUS_TREE_SELECTION = 4;
 
     void setSelectionMode(int mode);
 
     int getSelectionMode();
 
-    /** Deja elegido solo ese camino. */
+    /** It leaves only that path chosen. */
     void setSelectionPath(TreePath path);
 
     void setSelectionPaths(TreePath[] paths);
@@ -48,7 +48,7 @@ public interface TreeSelectionModel {
 
     void removeSelectionPaths(TreePath[] paths);
 
-    /** El primero de los elegidos, o nulo. */
+    /** The first of the chosen ones, or null. */
     TreePath getSelectionPath();
 
     TreePath[] getSelectionPaths();
@@ -61,7 +61,7 @@ public interface TreeSelectionModel {
 
     void clearSelection();
 
-    /** Quien traduce caminos a filas; ver la nota de la interfaz. */
+    /** Who translates paths to rows; see the interface note. */
     void setRowMapper(RowMapper newMapper);
 
     RowMapper getRowMapper();
@@ -74,7 +74,7 @@ public interface TreeSelectionModel {
 
     boolean isRowSelected(int row);
 
-    /** Vuelve a calcular las filas; la llama la vista al cambiar lo desplegado. */
+    /** It computes the rows again; the view calls it when what is expanded changes. */
     void resetRowSelection();
 
     int getLeadSelectionRow();

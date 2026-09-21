@@ -1,12 +1,12 @@
 package java.security;
 
-// Un objeto que puede vigilar el acceso a otro.
+// An object that can watch over the access to another.
 //
-// Es la interfaz mas chica del paquete y la que explica su forma: `Permission` la implementa, asi
-// que **un permiso es su propio guardia**. Un `GuardedObject` no necesita saber que clase de
-// control se le pide — le pasa el objeto al guardia y este decide.
+// It is the smallest interface of the package and the one that explains its shape: `Permission`
+// implements it, so **a permission is its own guard**. A `GuardedObject` does not need to know what
+// kind of control is asked of it — it passes the object to the guard and the guard decides.
 public interface Guard {
 
-    // Determina si se permite el acceso a `object`. Lanza SecurityException si no.
+    // Determines whether access to `object` is allowed. Throws SecurityException if not.
     void checkGuard(Object object) throws SecurityException;
 }

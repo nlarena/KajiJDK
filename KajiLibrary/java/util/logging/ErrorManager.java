@@ -1,41 +1,41 @@
 package java.util.logging;
 
 /**
- * KajiLibrary's java.util.logging.ErrorManager -- que hacer cuando **el registro mismo** falla.
+ * KajiLibrary's java.util.logging.ErrorManager -- what to do when **the logging itself** fails.
  *
- * <p>Existe por un problema circular: si escribir un mensaje falla, no se puede reportar el fallo
- * escribiendo un mensaje. Y lanzar tampoco sirve -- una aplicacion no deberia caerse porque el disco
- * de la traza se lleno. La salida del JDK es reportar **una sola vez** al error estandar y despues
- * callarse, que es lo que hace esta implementacion.
+ * <p>It exists because of a circular problem: if writing a message fails, the failure cannot be
+ * reported by writing a message. And throwing is no use either -- an application should not crash
+ * because the log's disk filled up. The JDK's way out is to report **once only** to standard error
+ * and then keep quiet, which is what this implementation does.
  */
 public class ErrorManager {
 
-    /** Un fallo sin clasificar. */
+    /** An unclassified failure. */
     public static final int GENERIC_FAILURE = 0;
 
-    /** Fallo al escribir. */
+    /** A failure while writing. */
     public static final int WRITE_FAILURE = 1;
 
-    /** Fallo al vaciar el buffer. */
+    /** A failure while flushing the buffer. */
     public static final int FLUSH_FAILURE = 2;
 
-    /** Fallo al cerrar. */
+    /** A failure while closing. */
     public static final int CLOSE_FAILURE = 3;
 
-    /** Fallo al abrir. */
+    /** A failure while opening. */
     public static final int OPEN_FAILURE = 4;
 
-    /** Fallo al aplicar la configuracion. */
+    /** A failure while applying the configuration. */
     public static final int FORMAT_FAILURE = 5;
 
-    private boolean yaReporto = false;
+    private boolean alreadyReported = false;
 
-    /** Reporta el fallo; solo el primero sale. */
+    /** It reports the failure; only the first one gets out. */
     public synchronized void error(String msg, Exception ex, int code) {
-        if (this.yaReporto) {
+        if (this.alreadyReported) {
             return;
         }
-        this.yaReporto = true;
+        this.alreadyReported = true;
         System.err.println("java.util.logging.ErrorManager: " + code
                 + (msg != null ? ": " + msg : ""));
         if (ex != null) {

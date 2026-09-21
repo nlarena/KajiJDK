@@ -3,36 +3,36 @@ package java.awt;
 import java.io.Serializable;
 
 /**
- * Pone los hijos en fila y baja de renglón cuando no entran.
+ * Puts the children in a row and wraps to a new line when they do not fit.
  *
- * <p>Es la distribución de un párrafo, aplicada a componentes. Cada hijo queda de su tamaño
- * preferido y se van acomodando de izquierda a derecha; cuando el siguiente no entra, se corta el
- * renglón.
+ * <p>It is the layout of a paragraph, applied to components. Each child keeps its preferred size
+ * and they are placed from left to right; when the next one does not fit, the line is broken.
  *
- * <p>{@link #LEADING} y {@link #TRAILING} no son sinónimos de izquierda y derecha: siguen la
- * **orientación del contenedor**, así que en un texto que se lee de derecha a izquierda se dan
- * vuelta solos. Es la diferencia entre una interfaz que se traduce bien y una que hay que rehacer.
+ * <p>{@link #LEADING} and {@link #TRAILING} are not synonyms of left and right: they follow the
+ * **container's orientation**, so in a text that reads right to left they flip by themselves. It is
+ * the difference between an interface that translates well and one that has to be redone.
  *
- * <p>La alineación por línea de base junta los hijos por el renglón del texto y no por el borde de
- * arriba, que es lo que hace que una etiqueta al lado de un campo se vea alineada de verdad.
+ * <p>Baseline alignment lines the children up by the text's baseline and not by the top edge, which
+ * is what makes a label next to a field look really aligned. This implementation stores that
+ * setting but does not apply it: rows are always centred vertically.
  */
 public class FlowLayout implements LayoutManager, Serializable {
 
     private static final long serialVersionUID = -7262534875583282631L;
 
-    /** Pegados a la izquierda. */
+    /** Flush to the left. */
     public static final int LEFT = 0;
 
-    /** Centrados. */
+    /** Centred. */
     public static final int CENTER = 1;
 
-    /** Pegados a la derecha. */
+    /** Flush to the right. */
     public static final int RIGHT = 2;
 
-    /** Pegados al lado por donde empieza el texto. */
+    /** Flush to the side where the text starts. */
     public static final int LEADING = 3;
 
-    /** Pegados al lado por donde termina. */
+    /** Flush to the side where it ends. */
     public static final int TRAILING = 4;
 
     private int align;
@@ -40,29 +40,32 @@ public class FlowLayout implements LayoutManager, Serializable {
     private int vgap;
     private boolean alignOnBaseline;
 
-    /** Centrados, con cinco píxeles de separación. */
+    /** Centred, with a five-pixel gap. */
     public FlowLayout() {
         this(CENTER, 5, 5);
     }
 
-    /** Con esa alineación y cinco píxeles de separación. */
+    /** With that alignment and a five-pixel gap. */
     public FlowLayout(int align) {
         this(align, 5, 5);
     }
 
-    /** Con alineación y separaciones dadas. */
+    /** With the given alignment and gaps. */
     public FlowLayout(int align, int hgap, int vgap) {
         this.hgap = hgap;
         this.vgap = vgap;
         this.setAlignment(align);
     }
 
-    /** Cómo se alinean dentro del renglón. */
+    /** How they align within the line. */
     public int getAlignment() {
         return this.align;
     }
 
-    /** Cambia la alineación; un valor que no sea una de las cinco se toma como centrado. */
+    /**
+     * Changes the alignment; a value that is not one of the five is taken as centred. (The JDK
+     * stores it as given.)
+     */
     public void setAlignment(int align) {
         if (align < LEFT || align > TRAILING) {
             this.align = CENTER;
@@ -71,78 +74,78 @@ public class FlowLayout implements LayoutManager, Serializable {
         }
     }
 
-    /** Cuánto se separan horizontalmente. */
+    /** How much they are separated horizontally. */
     public int getHgap() {
         return this.hgap;
     }
 
-    /** Cambia la separación horizontal. */
+    /** Changes the horizontal gap. */
     public void setHgap(int hgap) {
         this.hgap = hgap;
     }
 
-    /** Cuánto se separan verticalmente. */
+    /** How much they are separated vertically. */
     public int getVgap() {
         return this.vgap;
     }
 
-    /** Cambia la separación vertical. */
+    /** Changes the vertical gap. */
     public void setVgap(int vgap) {
         this.vgap = vgap;
     }
 
-    /** Declara si se alinean por la línea de base del texto. */
+    /** Declares whether they align on the text's baseline; see the class note. */
     public void setAlignOnBaseline(boolean alignOnBaseline) {
         this.alignOnBaseline = alignOnBaseline;
     }
 
-    /** Si se alinean por la línea de base. */
+    /** Whether they align on the baseline. */
     public boolean getAlignOnBaseline() {
         return this.alignOnBaseline;
     }
 
-    /** No hace nada: esta distribución no guarda nada por hijo. */
+    /** It does nothing: this layout keeps nothing per child. */
     public void addLayoutComponent(String name, Component comp) {
     }
 
-    /** No hace nada, por el mismo motivo. */
+    /** It does nothing, for the same reason. */
     public void removeLayoutComponent(Component comp) {
     }
 
     /**
-     * Lo que el contenedor necesita para poner todo **en un solo renglón**.
+     * What the container needs to put everything **on a single line**.
      *
-     * <p>Es a propósito: la medida preferida de una fila es la de la fila entera. Si no entra, ahí
-     * recién se corta, pero preferir un tamaño ya cortado dejaría al contenedor sin margen para
-     * crecer.
+     * <p>That is on purpose: the preferred size of a row is that of the whole row. If it does not
+     * fit, only then is it broken, but preferring an already broken size would leave the container
+     * no room to grow.
      */
     public Dimension preferredLayoutSize(Container target) {
-        return this.medir(target, true);
+        return this.measure(target, true);
     }
 
-    /** Lo mínimo, con cada hijo en su medida mínima. */
+    /** The minimum, with each child at its minimum size. */
     public Dimension minimumLayoutSize(Container target) {
-        return this.medir(target, false);
+        return this.measure(target, false);
     }
 
-    /** La suma de los anchos y el alto del más alto, más las separaciones y los márgenes. */
-    private Dimension medir(Container target, boolean preferida) {
+    /** The sum of the widths and the height of the tallest, plus the gaps and the insets. */
+    private Dimension measure(Container target, boolean preferred) {
         synchronized (target.getTreeLock()) {
             Dimension dim = new Dimension(0, 0);
             int n = target.getComponentCount();
-            boolean primero = true;
+            boolean first = true;
             for (int i = 0; i < n; i++) {
                 Component m = target.getComponent(i);
                 if (!m.isVisible()) {
                     continue;
                 }
-                Dimension d = preferida ? m.getPreferredSize() : m.getMinimumSize();
+                Dimension d = preferred ? m.getPreferredSize() : m.getMinimumSize();
                 dim.height = Math.max(dim.height, d.height);
-                if (!primero) {
+                if (!first) {
                     dim.width = dim.width + this.hgap;
                 }
                 dim.width = dim.width + d.width;
-                primero = false;
+                first = false;
             }
             Insets insets = target.getInsets();
             dim.width = dim.width + insets.left + insets.right + this.hgap * 2;
@@ -152,10 +155,11 @@ public class FlowLayout implements LayoutManager, Serializable {
     }
 
     /**
-     * Acomoda los hijos en renglones.
+     * Lays the children out in lines.
      *
-     * <p>Cada renglón se acomoda **cuando se cierra**, no mientras se llena: hasta no saber cuántos
-     * entran no se sabe cuánto espacio sobra, y sin eso no se puede centrar ni alinear a la derecha.
+     * <p>Each line is placed **when it closes**, not while it fills: until it is known how many
+     * fit, it is not known how much space is left over, and without that one cannot centre or
+     * right-align.
      */
     public void layoutContainer(Container target) {
         synchronized (target.getTreeLock()) {
@@ -181,23 +185,23 @@ public class FlowLayout implements LayoutManager, Serializable {
                     x = x + d.width;
                     rowh = Math.max(rowh, d.height);
                 } else {
-                    this.acomodarFila(target, start, i, maxwidth - x, y, rowh, ltr);
+                    this.placeRow(target, start, i, maxwidth - x, y, rowh, ltr);
                     x = d.width;
                     y = y + this.vgap + rowh;
                     rowh = d.height;
                     start = i;
                 }
             }
-            this.acomodarFila(target, start, n, maxwidth - x, y, rowh, ltr);
+            this.placeRow(target, start, n, maxwidth - x, y, rowh, ltr);
         }
     }
 
-    /** Ubica los hijos de un renglón ya cerrado, repartiendo el espacio que sobró. */
-    private void acomodarFila(Container target, int rowStart, int rowEnd, int sobra, int y,
+    /** Places the children of an already closed line, distributing the space left over. */
+    private void placeRow(Container target, int rowStart, int rowEnd, int spare, int y,
             int height, boolean ltr) {
         int a = this.align;
-        // LEADING y TRAILING se resuelven a izquierda o derecha segun la orientacion: es acá donde
-        // una interfaz en árabe se da vuelta sola.
+        // LEADING and TRAILING are resolved to left or right according to the orientation: this is
+        // where an interface in Arabic flips by itself.
         if (a == LEADING) {
             a = ltr ? LEFT : RIGHT;
         } else if (a == TRAILING) {
@@ -206,9 +210,9 @@ public class FlowLayout implements LayoutManager, Serializable {
         Insets insets = target.getInsets();
         int x = insets.left + this.hgap;
         if (a == CENTER) {
-            x = x + sobra / 2;
+            x = x + spare / 2;
         } else if (a == RIGHT) {
-            x = x + sobra;
+            x = x + spare;
         }
         for (int i = rowStart; i < rowEnd; i++) {
             Component m = target.getComponent(i);

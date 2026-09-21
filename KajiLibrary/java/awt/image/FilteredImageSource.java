@@ -3,14 +3,16 @@ package java.awt.image;
 import java.util.Hashtable;
 
 /**
- * Un productor que toma los píxeles de otro y los pasa por un {@link ImageFilter}.
+ * A producer that takes the pixels of another one and passes them through an {@link ImageFilter}.
  *
- * <p>Es la pieza que arma la tubería: del lado del consumidor parece un productor común, y del lado
- * del productor original parece un consumidor común. Encadenar dos es envolver uno en otro.
+ * <p>It is the piece that builds the pipe: from the consumer's side it looks like an ordinary
+ * producer, and from the original producer's side like an ordinary consumer. Chaining two is
+ * wrapping one in the other.
  *
- * <p>Lleva una tabla de consumidor a filtro porque cada consumidor necesita **su** copia del filtro:
- * el filtro guarda el estado de una entrega, y dos entregas simultáneas se pisarían. Por eso el
- * filtro que se pasa al constructor es un molde y nunca se usa directamente.
+ * <p>It carries a table from consumer to filter because each consumer needs **its** copy of the
+ * filter: the filter keeps the state of one delivery, and two simultaneous deliveries would step on
+ * each other. That is why the filter passed to the constructor is a mould and is never used
+ * directly.
  */
 public class FilteredImageSource implements ImageProducer {
 
@@ -19,9 +21,9 @@ public class FilteredImageSource implements ImageProducer {
     private Hashtable<ImageConsumer, ImageFilter> proxies;
 
     /**
-     * Con el productor y el filtro dados.
+     * With the given producer and filter.
      *
-     * @throws NullPointerException si falta alguno de los dos
+     * @throws NullPointerException if either of the two is missing
      */
     public FilteredImageSource(ImageProducer orig, ImageFilter imgf) {
         if (orig == null || imgf == null) {
@@ -31,7 +33,7 @@ public class FilteredImageSource implements ImageProducer {
         this.filter = imgf;
     }
 
-    /** Suma un consumidor, con su propia copia del filtro. */
+    /** Adds a consumer, with its own copy of the filter. */
     public synchronized void addConsumer(ImageConsumer ic) {
         if (this.proxies == null) {
             this.proxies = new Hashtable<ImageConsumer, ImageFilter>();
@@ -43,12 +45,12 @@ public class FilteredImageSource implements ImageProducer {
         }
     }
 
-    /** Si ese consumidor está registrado. */
+    /** Whether that consumer is registered. */
     public synchronized boolean isConsumer(ImageConsumer ic) {
         return this.proxies != null && this.proxies.containsKey(ic);
     }
 
-    /** Saca a ese consumidor y su copia del filtro. */
+    /** Removes that consumer and its copy of the filter. */
     public synchronized void removeConsumer(ImageConsumer ic) {
         if (this.proxies != null) {
             ImageFilter imgf = this.proxies.get(ic);
@@ -62,7 +64,7 @@ public class FilteredImageSource implements ImageProducer {
         }
     }
 
-    /** Lo registra si hace falta y arranca la entrega. */
+    /** Registers it if need be and starts the delivery. */
     public synchronized void startProduction(ImageConsumer ic) {
         if (this.proxies == null) {
             this.proxies = new Hashtable<ImageConsumer, ImageFilter>();
@@ -76,10 +78,10 @@ public class FilteredImageSource implements ImageProducer {
     }
 
     /**
-     * Pide la reentrega de arriba abajo.
+     * Asks for the redelivery from top to bottom.
      *
-     * <p>El pedido se le hace al **filtro**, no al productor: un filtro que sepa reordenar por su
-     * cuenta lo resuelve sin molestar a la fuente.
+     * <p>The request is made to the **filter**, not to the producer: a filter that knows how to
+     * reorder on its own resolves it without bothering the source.
      */
     public synchronized void requestTopDownLeftRightResend(ImageConsumer ic) {
         if (this.proxies != null) {

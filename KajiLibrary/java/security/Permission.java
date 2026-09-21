@@ -2,82 +2,81 @@ package java.security;
 
 import java.io.Serializable;
 
-// Un permiso: un nombre, unas acciones opcionales, y la regla de cuando un permiso **implica** a
-// otro.
+// A permission: a name, some optional actions, and the rule of when one permission **implies**
+// another.
 //
-// `implies` es el corazon de todo el modelo y lo que lo distingue de una simple lista de
-// etiquetas: tener `FilePermission("/tmp/*", "read")` implica tener
-// `FilePermission("/tmp/x.txt", "read")`, sin que nadie haya enumerado el segundo. Un chequeo de
-// acceso es siempre "¿alguno de los permisos que tengo implica el que hace falta?".
+// `implies` is the heart of the whole model and what tells it apart from a simple list of labels:
+// having `FilePermission("/tmp/*", "read")` implies having
+// `FilePermission("/tmp/x.txt", "read")`, without anybody having enumerated the second. An access
+// check is always "does any of the permissions I have imply the one that is needed?".
 //
-// La clase es abstracta porque esa regla no se puede escribir en general: cada clase de permiso
-// tiene su propia nocion de "mas amplio que". `BasicPermission` da la de nombres jerarquicos con
-// comodin, que es la que usan casi todos.
+// The class is abstract because that rule cannot be written in general: each class of permission
+// has its own notion of "wider than". `BasicPermission` gives the one of hierarchical names with a
+// wildcard, which is the one almost all of them use.
 //
-// **Nota sobre el estado del modelo**: desde JDK 24 el `SecurityManager` esta permanentemente
-// deshabilitado, asi que estas clases siguen en las firmas del JDK pero ya no gobiernan nada en
-// runtime. Se implementan porque son contrato —20 paquetes de `java.base` las nombran— no porque
-// hagan cumplir algo. `checkGuard` lo dice explicitamente mas abajo.
+// **Note on the state of the model**: since JDK 24 the `SecurityManager` is permanently disabled,
+// so these classes are still in the signatures of the JDK but no longer govern anything at runtime.
+// They are implemented because they are contract —20 packages of `java.base` name them— not because
+// they enforce anything. `checkGuard` says so explicitly further down.
 public abstract class Permission implements Guard, Serializable {
 
-    // El nombre del permiso. Su significado depende de la subclase: una ruta, una propiedad, un
-    // host. Final: cambiarlo convertiria el permiso en otro.
+    // The name of the permission. Its meaning depends on the subclass: a path, a property, a host.
+    // Final: changing it would turn the permission into another one.
     private final String name;
 
-    // Un permiso con el nombre dado.
+    // A permission with the given name.
     public Permission(String name) {
         this.name = name;
     }
 
-    // Vigila el acceso a `object`. **Siempre lanza.**
+    // It watches over the access to `object`. **It always throws.**
     //
-    // Parece al reves y no lo es. Desde que el `SecurityManager` quedo permanentemente
-    // deshabilitado (JDK 24) no hay nadie a quien preguntarle si el permiso esta concedido, y ante
-    // esa pregunta hay dos respuestas posibles: dejar pasar o negar. El JDK 25 niega —tira
-    // `SecurityException("checking permissions is not supported")`— y es la unica correcta: un
-    // `GuardedObject` existe **para** que alguien decida, y un guardia que no puede decidir y deja
-    // pasar convierte cada uno de esos objetos en un objeto sin proteccion, en silencio y sin que
-    // el codigo que lo armo se entere.
+    // It looks the wrong way round and it is not. Since the `SecurityManager` was left permanently
+    // disabled (JDK 24) there is nobody to ask whether the permission is granted, and faced with
+    // that question there are two possible answers: let it through or deny. JDK 25 denies —it
+    // throws `SecurityException("checking permissions is not supported")`— and it is the only right
+    // one: a `GuardedObject` exists **so that** somebody decides, and a guard that cannot decide
+    // and lets things through turns each of those objects into an unprotected object, silently and
+    // without the code that built it finding out.
     //
-    // Esta clase decia lo contrario hasta que la prueba de comportamiento la comparo contra el JDK
-    // real: devolvia sin hacer nada, con un comentario afirmando que eso era lo que hacia el JDK.
-    // No lo era. La diferencia se veia justo donde importa: un `GuardedObject` que el JDK cierra,
-    // aca se abria.
+    // This class said the opposite until the behaviour test compared it against the real JDK: it
+    // returned without doing anything, with a comment asserting that that was what the JDK did. It
+    // was not. The difference showed exactly where it matters: a `GuardedObject` the JDK closes was
+    // opened here.
     public void checkGuard(Object object) throws SecurityException {
         throw new SecurityException("checking permissions is not supported");
     }
 
-    // Si este permiso implica al otro. Es la unica pregunta que un chequeo de acceso hace.
+    // Whether this permission implies the other. It is the only question an access check asks.
     public abstract boolean implies(Permission permission);
 
-    // Abstracto a proposito, aunque `Object` ya lo tenga: dos permisos de la misma clase con el
-    // mismo nombre y acciones **deben** ser iguales, porque si no una coleccion de permisos
-    // guardaria duplicados que implican lo mismo. Obligar a la subclase a escribirlo es la forma
-    // de que nadie herede el de `Object` por descuido.
+    // Abstract on purpose, although `Object` has it already: two permissions of the same class with
+    // the same name and actions **must** be equal, because if not a collection of permissions would
+    // keep duplicates that imply the same thing. Forcing the subclass to write it is the way of
+    // keeping nobody from inheriting `Object`'s by oversight.
     public abstract boolean equals(Object obj);
 
-    // Igual que `equals`: abstracto para que sea coherente con el.
+    // Just like `equals`: abstract so that it is coherent with it.
     public abstract int hashCode();
 
-    // El nombre de este permiso.
+    // The name of this permission.
     public final String getName() {
         return this.name;
     }
 
-    // Las acciones, como cadena canonica; "" si esta clase no las usa.
+    // The actions, as a canonical string; "" if this class does not use them.
     public abstract String getActions();
 
-    // Una coleccion vacia adecuada para guardar permisos de esta clase, o null si sirve
-    // cualquiera.
+    // An empty collection suitable for keeping permissions of this class, or null if any will do.
     //
-    // Existe porque algunas clases pueden responder `implies` mucho mas rapido sobre un conjunto
-    // que preguntandole a cada permiso de a uno. `null` significa "no tengo nada mejor", y el
-    // llamador usa una coleccion generica.
+    // It exists because some classes can answer `implies` much faster over a set than by asking
+    // each permission one at a time. `null` means "I have nothing better", and the caller uses a
+    // generic collection.
     public PermissionCollection newPermissionCollection() {
         return null;
     }
 
-    // `("clase" "nombre")`, o `("clase" "nombre" "acciones")` si tiene acciones.
+    // `("class" "name")`, or `("class" "name" "actions")` if it has actions.
     public String toString() {
         String actions = this.getActions();
         if (actions == null || actions.length() == 0) {

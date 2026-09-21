@@ -4,58 +4,63 @@ import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 
 /**
- * KajiLibrary's org.w3c.dom.ls.LSParserFilter -- decide que entra al arbol, mientras se analiza.
+ * KajiLibrary's org.w3c.dom.ls.LSParserFilter -- it decides what gets into the tree, while parsing.
  *
- * <p>Para lo que sirve de verdad es para <b>no construir</b> lo que no interesa. Un documento de
- * cien megas del que solo importan unos elementos se puede analizar sin que el arbol entero llegue a
- * existir, y esa es la unica forma de leerlo con DOM sin quedarse sin memoria.
+ * <p>What it is really for is <b>not building</b> what is of no interest. A document of a hundred
+ * megabytes of which only a few elements matter can be parsed without the whole tree ever existing,
+ * and that is the only way of reading it with DOM without running out of memory.
  *
- * <h2>Los dos metodos son dos momentos</h2>
+ * <h2>The two methods are two moments</h2>
  *
- * <p>{@link #startElement} se llama al ver la etiqueta de apertura, con el elemento <b>vacio</b>:
- * todavia no tiene hijos ni texto. {@link #acceptNode} se llama con el nodo ya completo. La
- * diferencia es todo el punto: rechazar en {@code startElement} evita construir el subarbol, y
- * rechazar en {@code acceptNode} solo lo tira despues de haberlo armado. Solo se puede decidir
- * temprano con lo que hay en la etiqueta --el nombre y los atributos-- y por eso ahi conviene mirar.
+ * <p>{@link #startElement} is called on seeing the opening tag, with the element <b>empty</b>: it
+ * has no children nor text yet. {@link #acceptNode} is called with the node already complete. The
+ * difference is the whole point: rejecting in {@code startElement} avoids building the subtree, and
+ * rejecting in {@code acceptNode} only throws it away after having built it. One can only decide
+ * early with what there is in the tag --the name and the attributes-- and that is why it is as well
+ * to look there.
  *
- * <p>{@link #SKIP} y {@link #REJECT} tampoco son lo mismo: saltear descarta el elemento pero
- * <b>conserva</b> sus hijos, que suben un nivel; rechazar se lleva el subarbol entero.
+ * <p>{@link #FILTER_SKIP} and {@link #FILTER_REJECT} are not the same either (the note linked
+ * `#SKIP` and `#REJECT`, which do not exist): skipping discards the element but <b>keeps</b> its
+ * children, which move up one level; rejecting takes the whole subtree.
  *
- * <p>{@link #getWhatToShow} limita a que tipos de nodo se le pregunta, con las mascaras de
- * {@code NodeFilter}. Sirve para no pagar una llamada por cada nodo de texto de un documento cuando
- * el filtro solo mira elementos.
+ * <p>{@link #getWhatToShow} limits which types of node it is asked about, with the masks of
+ * {@code NodeFilter}. It serves for not paying one call for each text node of a document when the
+ * filter only looks at elements.
  */
 public interface LSParserFilter {
 
-    /** El nodo entra tal cual. */
+    /** The node gets in as it is. */
     short FILTER_ACCEPT = 1;
 
-    /** El nodo y todo su subarbol se descartan. */
+    /** The node and its whole subtree are discarded. */
     short FILTER_REJECT = 2;
 
-    /** El nodo se descarta pero sus hijos suben un nivel. Ver la nota de la clase. */
+    /** The node is discarded but its children move up one level. See the note of the class. */
     short FILTER_SKIP = 3;
 
-    /** Se corta el analisis; el documento queda incompleto. */
+    /** The analysis is cut short; the document is left incomplete. */
     short FILTER_INTERRUPT = 4;
 
     /**
-     * Al abrir la etiqueta, con el elemento todavia vacio.
+     * On opening the tag, with the element still empty.
      *
-     * <p>Es el momento en que conviene rechazar; ver la nota de la clase.
+     * <p>It is the moment when it is as well to reject; see the note of the class.
      *
-     * @return una de las cuatro constantes
+     * @return one of the four constants
      */
     short startElement(Element elementArg);
 
     /**
-     * Con el nodo ya armado.
+     * With the node already built.
      *
-     * @return una de las cuatro constantes; {@link #FILTER_SKIP} no vale para elementos que ya se
-     *     aceptaron en {@link #startElement}
+     * <p>The note said that {@link #FILTER_SKIP} is not valid for elements already accepted in
+     * {@link #startElement}; the specification states no such restriction -- it gives it the same
+     * meaning here as there: the node is skipped and replaced by its children.
+     *
+     * @return one of the four constants
      */
     short acceptNode(Node nodeArg);
 
-    /** Que tipos de nodo se le pasan, con las mascaras de {@code NodeFilter}. */
+    /** Which types of node are passed to it, with the masks of {@code NodeFilter}. */
     int getWhatToShow();
 }

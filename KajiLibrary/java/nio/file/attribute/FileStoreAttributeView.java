@@ -1,6 +1,6 @@
 package java.nio.file.attribute;
 
-// La contraparte de `FileAttributeView` del lado del volumen (`FileStore`). Igual de vacia y por la
-// misma razon: separa las dos familias en el sistema de tipos.
+// `FileAttributeView`'s counterpart on the volume's side (`FileStore`). Just as empty and for the
+// same reason: it separates the two families in the type system.
 public interface FileStoreAttributeView extends AttributeView {
 }

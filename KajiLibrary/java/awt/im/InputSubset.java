@@ -1,50 +1,52 @@
 package java.awt.im;
 
 /**
- * Los conjuntos de caracteres que se le pueden pedir a un método de entrada.
+ * The character sets that can be requested from an input method.
  *
- * <p>Sirve para acotar lo que el usuario puede escribir en un campo: en uno que sólo admite números
- * no tiene sentido que el método de entrada ofrezca candidatos en kanji.
+ * <p>It serves to narrow what the user can type in a field: in one that only accepts numbers it
+ * makes no sense for the input method to offer kanji candidates.
  *
- * <p>Los tres subconjuntos han son el mismo bloque de Unicode mirado desde tres idiomas. Un mismo
- * carácter puede pertenecer a los tres, y la distinción no está en qué caracteres son sino en cuáles
- * conviene ofrecer primero según en qué idioma se esté escribiendo.
+ * <p>The four Han subsets —traditional and simplified Hanzi, Kanji, Hanja— are parts of the same
+ * Unicode block, each as used in one language, and one character can belong to several of them.
+ * (This note said there were three, and that the distinction lies not in which characters they are
+ * but in which ones are worth offering first; the JDK defines each as the characters used in its
+ * language.)
  *
- * <p>Extiende {@code Character.Subset}, que se compara **por identidad**: dos subconjuntos con el
- * mismo nombre son objetos distintos y no son iguales. Por eso las constantes de acá son las que hay
- * que usar y no unas propias con el mismo nombre.
+ * <p>It extends {@code Character.Subset}, which is compared **by identity**: two subsets with the
+ * same name are distinct objects and are not equal. That is why the constants here are the ones to
+ * use, and not ones of one's own with the same name.
  */
 public final class InputSubset extends Character.Subset {
 
-    /** Con el nombre dado; privado porque los subconjuntos que existen son los de acá. */
+    /** With the given name; private because the subsets that exist are the ones here. */
     private InputSubset(String name) {
         super(name);
     }
 
-    /** Letras latinas. */
+    /** Latin letters. */
     public static final InputSubset LATIN = new InputSubset("LATIN");
 
-    /** Dígitos latinos. */
+    /** Latin digits. */
     public static final InputSubset LATIN_DIGITS = new InputSubset("LATIN_DIGITS");
 
-    /** Caracteres han tradicionales. */
+    /** Traditional Han characters. */
     public static final InputSubset TRADITIONAL_HANZI = new InputSubset("TRADITIONAL_HANZI");
 
-    /** Caracteres han simplificados. */
+    /** Simplified Han characters. */
     public static final InputSubset SIMPLIFIED_HANZI = new InputSubset("SIMPLIFIED_HANZI");
 
-    /** Los han que se usan en japonés. */
+    /** The Han characters used in Japanese. */
     public static final InputSubset KANJI = new InputSubset("KANJI");
 
-    /** Los han que se usan en coreano. */
+    /** The Han characters used in Korean. */
     public static final InputSubset HANJA = new InputSubset("HANJA");
 
-    /** Katakana de ancho mitad. */
+    /** Half-width katakana. */
     public static final InputSubset HALFWIDTH_KATAKANA = new InputSubset("HALFWIDTH_KATAKANA");
 
-    /** Letras latinas de ancho completo. */
+    /** Full-width Latin letters. */
     public static final InputSubset FULLWIDTH_LATIN = new InputSubset("FULLWIDTH_LATIN");
 
-    /** Dígitos de ancho completo. */
+    /** Full-width digits. */
     public static final InputSubset FULLWIDTH_DIGITS = new InputSubset("FULLWIDTH_DIGITS");
 }

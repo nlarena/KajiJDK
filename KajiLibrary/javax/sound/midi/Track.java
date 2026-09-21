@@ -3,48 +3,49 @@ package javax.sound.midi;
 import java.util.ArrayList;
 
 /**
- * KajiLibrary's javax.sound.midi.Track -- una pista de eventos MIDI ordenados por tiempo.
+ * KajiLibrary's javax.sound.midi.Track -- a track of MIDI events sorted by time.
  *
- * <p>No se construye: se pide con {@code Sequence.createTrack()}. Una pista suelta no tendria contra
- * que medir sus pulsos.
+ * <p>It is not constructed: it is asked for with {@code Sequence.createTrack()}. A loose track
+ * would have nothing to measure its ticks against.
  *
- * <h2>Siempre tiene el fin de pista</h2>
+ * <h2>It always has the end of track</h2>
  *
- * <p>Una pista recien creada ya tiene <b>un</b> evento: el meta mensaje de tipo 0x2F, fin de pista, en
- * el pulso 0. Por eso {@code size()} de una pista vacia devuelve 1, que sorprende la primera vez.
+ * <p>A newly created track already has <b>one</b> event: the meta message of type 0x2F, end of
+ * track, at tick 0. That is why {@code size()} of an empty track returns 1, which surprises the
+ * first time.
  *
- * <p>La pista lo mantiene sola: al agregar un evento mas tarde, el fin de pista se corre para quedar
- * siempre ultimo. Es obligatorio en el formato de archivo, y dejarlo en manos de quien usa la API
- * seria pedir archivos rotos.
+ * <p>The track keeps it by itself: when an event is added later, the end of track moves to stay
+ * always last. It is mandatory in the file format, and leaving it in the hands of whoever uses the
+ * API would be asking for broken files.
  *
- * <h2>Se ordena al insertar</h2>
+ * <h2>It is sorted on insertion</h2>
  *
- * <p>{@link #add} pone el evento en su lugar por pulso, no al final. Los eventos con el mismo pulso
- * quedan en el orden en que se agregaron.
+ * <p>{@link #add} puts the event in its place by tick, not at the end. Events with the same tick
+ * stay in the order they were added.
  *
- * <p>Y el mismo objeto {@link MidiEvent} no se puede agregar dos veces: el segundo intento devuelve
- * false. Es identidad, no igualdad -- dos eventos distintos con el mismo contenido si entran los dos.
+ * <p>And the same {@link MidiEvent} object cannot be added twice: the second attempt returns false.
+ * It is identity, not equality -- two different events with the same content both go in.
  */
 public final class Track {
 
-    /** Los eventos, ordenados por pulso. */
+    /** The events, sorted by tick. */
     private final ArrayList<MidiEvent> events = new ArrayList<MidiEvent>();
 
-    /** El fin de pista, que siempre esta y siempre es el ultimo. */
+    /** The end of track, which is always there and always last. */
     private final MidiEvent endOfTrack;
 
-    /** De acceso de paquete: solo {@link Sequence} crea pistas. */
+    /** Package access: only {@link Sequence} creates tracks. */
     Track() {
         this.endOfTrack = new ImmutableEndOfTrack();
         this.events.add(this.endOfTrack);
     }
 
     /**
-     * Agrega un evento en su lugar.
+     * Adds an event in its place.
      *
-     * <p>Ver la nota de la clase: se ordena por pulso y el fin de pista queda ultimo.
+     * <p>See the class note: it is sorted by tick and the end of track stays last.
      *
-     * @return si se agrego; false si es null o si ese mismo objeto ya estaba
+     * @return whether it was added; false if it is null or if that same object was already there
      */
     public boolean add(MidiEvent event) {
         if (event == null) {
@@ -59,13 +60,14 @@ public final class Track {
                 this.endOfTrack.setTick(tick);
             }
             int at = this.events.size();
-            // Se busca desde el final: lo habitual es agregar en orden, y asi eso cuesta una
-            // comparacion en lugar de recorrer la pista entera.
+            // It is searched from the end: the usual thing is adding in order, and that way it
+            // costs one comparison instead of walking the whole track.
             while (at > 0 && this.events.get(at - 1).getTick() > tick) {
                 at = at - 1;
             }
-            // El fin de pista se queda ultimo aunque comparta el pulso. Se comprueba que siga ahi:
-            // se lo puede sacar con remove(), y en ese caso no hay nada que preservar.
+            // The end of track stays last even if it shares the tick. It is checked that it is
+            // still there: it can be taken out with remove(), and in that case there is nothing to
+            // preserve.
             if (at == this.events.size() && at > 0
                 && this.events.get(at - 1) == this.endOfTrack) {
                 at = at - 1;
@@ -76,9 +78,9 @@ public final class Track {
     }
 
     /**
-     * Saca un evento.
+     * Removes an event.
      *
-     * @return si estaba
+     * @return whether it was there
      */
     public boolean remove(MidiEvent event) {
         if (event == null) {
@@ -95,9 +97,9 @@ public final class Track {
     }
 
     /**
-     * El evento numero {@code index}.
+     * Event number {@code index}.
      *
-     * @throws ArrayIndexOutOfBoundsException si no existe
+     * @throws ArrayIndexOutOfBoundsException if it does not exist
      */
     public MidiEvent get(int index) throws ArrayIndexOutOfBoundsException {
         synchronized (this.events) {
@@ -108,14 +110,14 @@ public final class Track {
         }
     }
 
-    /** Cuantos eventos hay, contando el fin de pista. Ver la nota de la clase. */
+    /** How many events there are, counting the end of track. See the class note. */
     public int size() {
         synchronized (this.events) {
             return this.events.size();
         }
     }
 
-    /** En que pulso termina. */
+    /** At which tick it ends. */
     public long ticks() {
         synchronized (this.events) {
             if (this.events.isEmpty()) {
@@ -125,7 +127,7 @@ public final class Track {
         }
     }
 
-    /** Donde esta ese objeto exacto, o -1. Por identidad; ver la nota de la clase. */
+    /** Where that exact object is, or -1. By identity; see the class note. */
     private int indexOfIdentity(MidiEvent event) {
         int i = 0;
         while (i < this.events.size()) {
@@ -138,11 +140,11 @@ public final class Track {
     }
 
     /**
-     * El evento de fin de pista.
+     * The end of track event.
      *
-     * <p>De acceso de paquete. Es un {@link MidiEvent} normal salvo por una cosa: su mensaje no se
-     * puede cambiar. Si alguien pudiera reescribirlo, la pista dejaria de tener fin y el archivo que
-     * saliera de ella no seria valido.
+     * <p>Package access. It is a normal {@link MidiEvent} except for one thing: its message cannot
+     * be changed. If somebody could rewrite it, the track would stop having an end and the file
+     * that came out of it would not be valid.
      */
     private static final class ImmutableEndOfTrack extends MidiEvent {
 
@@ -151,7 +153,7 @@ public final class Track {
         }
     }
 
-    /** El meta mensaje 0x2F, sin datos, que no se deja modificar. */
+    /** The 0x2F meta message, without data, that will not let itself be modified. */
     private static final class EndOfTrackMessage extends MetaMessage {
 
         EndOfTrackMessage() {
@@ -159,16 +161,18 @@ public final class Track {
         }
 
         /**
-         * No hace nada.
+         * Does nothing.
          *
-         * <p>Ignorar en silencio es lo que hace el JDK. Lanzar seria mas honesto y romperia codigo que
-         * recorre una pista reescribiendo mensajes, que es justamente cuando esto se toca sin querer.
+         * <p>The note said ignoring silently is what the JDK does. It is not: JDK 25 throws {@code
+         * InvalidMidiDataException("cannot modify end of track message")}. The note's reason for
+         * not throwing was that it would break code that walks a track rewriting messages, which is
+         * just when this gets touched by accident.
          */
         @Override
         public void setMessage(int type, byte[] data, int length) {
         }
 
-        /** Una copia normal, ya modificable. */
+        /** A normal copy, now modifiable. */
         @Override
         public Object clone() {
             return new MetaMessage(getMessage());

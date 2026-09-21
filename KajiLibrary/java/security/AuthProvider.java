@@ -5,63 +5,64 @@ import javax.security.auth.callback.CallbackHandler;
 import javax.security.auth.login.LoginException;
 
 /**
- * Un {@link Provider} cuyas claves hay que desbloquear antes de usarlas.
+ * A {@link Provider} whose keys have to be unlocked before being used.
  *
- * <h2>Por que un proveedor necesitaria autenticacion</h2>
+ * <h2>Why a provider would need authentication</h2>
  *
- * <p>Porque no todos guardan sus claves en un archivo. Un proveedor respaldado por una tarjeta
- * inteligente, un token USB o un HSM tiene las claves adentro del dispositivo, y el dispositivo pide
- * un PIN antes de dejar firmar con ellas. Ese estado —conectado o no— no existe en un
- * {@link Provider} comun, que se supone disponible desde que se lo registra.
+ * <p>Because not all of them keep their keys in a file. A provider backed by a smart card, a USB
+ * token or an HSM has the keys inside the device, and the device asks for a PIN before letting one
+ * sign with them. That state —connected or not— does not exist in an ordinary {@link Provider},
+ * which is supposed to be available from the moment it is registered.
  *
- * <p>De ahi los tres metodos: {@link #login} abre la sesion, {@link #logout} la cierra, y
- * {@link #setCallbackHandler} dice <strong>como</strong> se le pide el PIN al usuario — porque el
- * proveedor no sabe si hay una terminal, una ventana o un servicio del otro lado. Es el mismo
- * mecanismo de {@code javax.security.auth.callback} que usa JAAS, y por eso lo reusa.
+ * <p>Hence the three methods: {@link #login} opens the session, {@link #logout} closes it, and
+ * {@link #setCallbackHandler} says <strong>how</strong> the PIN is asked of the user — because the
+ * provider does not know whether there is a terminal, a window or a service on the other side. It
+ * is the same mechanism of {@code javax.security.auth.callback} that JAAS uses, and that is why it
+ * reuses it.
  *
- * <p>Toda la clase es declarativa: quien la extiende es el proveedor concreto, que es el unico que
- * sabe hablar con su dispositivo.
+ * <p>The whole class is declarative: whoever extends it is the concrete provider, which is the only
+ * one that knows how to talk to its device.
  */
 public abstract class AuthProvider extends Provider {
 
     private static final long serialVersionUID = 4197859053084546461L;
 
     /**
-     * @deprecated usar el constructor que toma la version como {@link String}: un {@code double} no
-     *     puede representar una version de tres partes, y {@code 1.10} es menor que {@code 1.9}
+     * @deprecated use the constructor that takes the version as a {@link String}: a {@code double}
+     *     cannot represent a three-part version, and {@code 1.10} is smaller than {@code 1.9}
      */
     @Deprecated(since = "9")
     protected AuthProvider(String name, double version, String info) {
         super(name, version, info);
     }
 
-    /** Con el nombre, la version y una descripcion. */
+    /** With the name, the version and a description. */
     protected AuthProvider(String name, String versionStr, String info) {
         super(name, versionStr, info);
     }
 
     /**
-     * Abre la sesion con el dispositivo.
+     * Opens the session with the device.
      *
-     * @param subject donde dejar los principales que resulten, o {@code null}
-     * @param handler como pedirle las credenciales al usuario; {@code null} usa el que se haya
-     *     puesto con {@link #setCallbackHandler}
-     * @throws LoginException si no se pudo
+     * @param subject where to leave the principals that result, or {@code null}
+     * @param handler how to ask the user for the credentials; {@code null} uses the one that was
+     *     set with {@link #setCallbackHandler}
+     * @throws LoginException if it could not be done
      */
     public abstract void login(Subject subject, CallbackHandler handler) throws LoginException;
 
     /**
-     * Cierra la sesion.
+     * Closes the session.
      *
-     * <p>Despues de esto las claves del dispositivo vuelven a no estar disponibles, que es el punto:
-     * una aplicacion que termino de firmar no deberia dejar el token abierto.
+     * <p>After this the keys of the device go back to being unavailable, which is the point: an
+     * application that has finished signing should not leave the token open.
      */
     public abstract void logout() throws LoginException;
 
     /**
-     * Fija como se le piden las credenciales al usuario.
+     * Sets how the credentials are asked of the user.
      *
-     * <p>Se puede llamar antes de {@link #login} para que este no tenga que recibir uno.
+     * <p>It can be called before {@link #login} so that the latter does not have to receive one.
      */
     public abstract void setCallbackHandler(CallbackHandler handler);
 }

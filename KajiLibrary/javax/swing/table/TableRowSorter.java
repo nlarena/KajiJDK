@@ -5,47 +5,47 @@ import java.util.Comparator;
 import javax.swing.DefaultRowSorter;
 
 /**
- * El ordenador de filas de una tabla.
+ * A table's row sorter.
  *
- * <h2>Lo que agrega sobre {@link DefaultRowSorter}</h2>
+ * <h2>What it adds over {@link DefaultRowSorter}</h2>
  *
- * <p>Dos cosas, y las dos vienen de que una tabla si sabe de que tipo es cada columna:
+ * <p>Two things, and both come from a table knowing which type each column is:
  *
  * <ul>
- * <li><strong>Elige el comparador por el tipo de la columna.</strong> Una columna de numeros se
- *     ordena como numeros y no como texto -- "9" antes que "10" --, y cualquier tipo comparable por
- *     su orden natural. Una de texto va por el {@link java.text.Collator} del idioma, que es lo que
- *     hace que "arbol" venga antes que "Barco".</li>
- * <li><strong>Deja poner un convertidor a texto</strong> ({@link #setStringConverter}), para cuando
- *     el {@code toString} de la celda no es lo que se muestra.</li>
+ * <li><strong>It picks the comparator by the column's type.</strong> A column of numbers is
+ *     sorted as numbers and not as text -- "9" before "10" --, and any type comparable by its
+ *     natural order likewise. One of text goes through the language's
+ *     {@link java.text.Collator}, which is what makes "tree" sort before "Wood".</li>
+ * <li><strong>It allows setting a converter to text</strong> ({@link #setStringConverter}), for
+ *     when the cell's {@code toString} is not what is shown.</li>
  * </ul>
  *
- * <p>El identificador de fila es el indice de modelo, un {@link Integer}: en una tabla las filas no
- * tienen otra identidad.
+ * <p>The row identifier is the model index, an {@link Integer}: in a table the rows have no other
+ * identity.
  */
 public class TableRowSorter<M extends TableModel> extends DefaultRowSorter<M, Integer> {
 
-    /** Compara lo que sea comparable, por su orden natural. */
-    private static final Comparator<Object> COMPARADOR_NATURAL = new ComparadorNatural();
+    /** Compares whatever is comparable, by its natural order. */
+    private static final Comparator<Object> NATURAL_COMPARATOR = new NaturalComparator();
 
     private TableStringConverter stringConverter;
 
-    /** Sin modelo. */
+    /** With no model. */
     public TableRowSorter() {
         this(null);
     }
 
-    /** Sobre ese modelo. */
+    /** Over that model. */
     public TableRowSorter(M model) {
         setModel(model);
     }
 
-    /** Cambia el modelo; sin modelo, uno vacio. */
+    /** Changes the model; with no model, an empty one. */
     public void setModel(M model) {
-        setModelWrapper(new EnvoltorioDeTabla<M>(this, model));
+        setModelWrapper(new TableWrapper<M>(this, model));
     }
 
-    /** Como se convierte una celda a texto; nulo usa {@code toString}. */
+    /** How a cell is converted to text; null uses {@code toString}. */
     public void setStringConverter(TableStringConverter stringConverter) {
         this.stringConverter = stringConverter;
     }
@@ -55,11 +55,11 @@ public class TableRowSorter<M extends TableModel> extends DefaultRowSorter<M, In
     }
 
     /**
-     * El comparador de esa columna.
+     * That column's comparator.
      *
-     * <p>Si nadie puso uno, lo elige por el tipo que declara la columna; ver la nota de la clase.
+     * <p>If nobody set one, it picks it by the type the column declares; see the class note.
      *
-     * @throws IndexOutOfBoundsException si la columna esta fuera de rango
+     * @throws IndexOutOfBoundsException if the column is out of range
      */
     public Comparator<?> getComparator(int column) {
         Comparator<?> comparator = super.getComparator(column);
@@ -71,23 +71,24 @@ public class TableRowSorter<M extends TableModel> extends DefaultRowSorter<M, In
             return java.text.Collator.getInstance();
         }
         if (Comparable.class.isAssignableFrom(columnClass)) {
-            return COMPARADOR_NATURAL;
+            return NATURAL_COMPARATOR;
         }
         return java.text.Collator.getInstance();
     }
 
     /**
-     * Si esa columna se compara por su texto.
+     * Whether that column is compared by its text.
      *
-     * <p><strong>Casi nunca.</strong> Una columna de texto se compara con el {@link
-     * java.text.Collator} del idioma sobre los valores -- que ya son texto -- y una de cualquier
-     * tipo comparable, por su orden natural. Solo cae en el texto una columna cuyo tipo no es
-     * comparable y no tiene comparador propio.
+     * <p><strong>Almost never.</strong> A column of text is compared with the language's
+     * {@link java.text.Collator} over the values -- which are already text -- and one of any
+     * comparable type, by its natural order. Only a column whose type is not comparable and has no
+     * comparator of its own falls back on the text.
      *
-     * <p>Es distinto de {@link javax.swing.DefaultRowSorter#useToString}, que dice que si cuando no
-     * hay comparador: alla no hay de donde saber el tipo de la columna, aca si.
+     * <p>It is different from {@link javax.swing.DefaultRowSorter#useToString}, which says yes when
+     * there is no comparator: over there there is nowhere to learn the column's type from, here
+     * there is.
      *
-     * @throws IndexOutOfBoundsException si la columna esta fuera de rango
+     * @throws IndexOutOfBoundsException if the column is out of range
      */
     protected boolean useToString(int column) {
         Comparator<?> comparator = super.getComparator(column);
@@ -101,8 +102,8 @@ public class TableRowSorter<M extends TableModel> extends DefaultRowSorter<M, In
         return !Comparable.class.isAssignableFrom(columnClass);
     }
 
-    /** Compara por el orden natural del tipo. */
-    private static class ComparadorNatural implements Comparator<Object>, java.io.Serializable {
+    /** Compares by the type's natural order. */
+    private static class NaturalComparator implements Comparator<Object>, java.io.Serializable {
 
         @SuppressWarnings("unchecked")
         public int compare(Object a, Object b) {
@@ -110,14 +111,14 @@ public class TableRowSorter<M extends TableModel> extends DefaultRowSorter<M, In
         }
     }
 
-    /** Le dice al ordenador de donde salen las filas de una tabla. */
-    private static class EnvoltorioDeTabla<M extends TableModel>
+    /** Tells the sorter where a table's rows come from. */
+    private static class TableWrapper<M extends TableModel>
             extends DefaultRowSorter.ModelWrapper<M, Integer> {
 
         private final TableRowSorter<M> orden;
         private final M model;
 
-        EnvoltorioDeTabla(TableRowSorter<M> orden, M model) {
+        TableWrapper(TableRowSorter<M> orden, M model) {
             this.orden = orden;
             this.model = model;
         }
@@ -139,10 +140,10 @@ public class TableRowSorter<M extends TableModel> extends DefaultRowSorter<M, In
         }
 
         /**
-         * El texto de una celda, pasando por el convertidor si hay uno.
+         * A cell's text, going through the converter if there is one.
          *
-         * <p>Es el unico lugar donde el convertidor se usa, y por eso el envoltorio necesita
-         * conocer a su ordenador.
+         * <p>It is the only place where the converter is used, and that is why the wrapper needs to
+         * know its sorter.
          */
         public String getStringValueAt(int row, int column) {
             TableStringConverter converter = orden.getStringConverter();
@@ -153,7 +154,7 @@ public class TableRowSorter<M extends TableModel> extends DefaultRowSorter<M, In
             return super.getStringValueAt(row, column);
         }
 
-        /** El identificador de una fila es su indice de modelo; ver la nota de la clase. */
+        /** A row's identifier is its model index; see the class note. */
         public Integer getIdentifier(int row) {
             return Integer.valueOf(row);
         }

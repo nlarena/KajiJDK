@@ -8,28 +8,28 @@ import java.beans.PropertyVetoException;
 import java.io.Serializable;
 
 /**
- * El administrador de escritorio que viene puesto.
+ * The desktop manager that comes set.
  *
- * <h2>Donde se guarda el estado</h2>
+ * <h2>Where the state is kept</h2>
  *
- * <p>Un administrador atiende a todas las ventanas de un escritorio, asi que no puede guardar en
- * campos propios cosas que son de cada ventana. Las guarda en la ventana misma: el rectangulo de
- * antes de maximizar va en {@link JInternalFrame#setNormalBounds}, y la marca de "ya estuvo
- * minimizada" en una propiedad de cliente. De ahi los cuatro metodos protegidos
- * {@link #setPreviousBounds}, {@link #getPreviousBounds}, {@link #setWasIcon} y {@link #wasIcon}:
- * son el punto donde una subclase puede cambiar ese guardado.
+ * <p>A manager attends every frame of a desktop, so it cannot keep in fields of its own things
+ * that belong to each frame. It keeps them in the frame itself: the rectangle from before
+ * maximizing goes in {@link JInternalFrame#setNormalBounds}, and the "it has already been
+ * minimized" mark in a client property. Hence the four protected methods
+ * {@link #setPreviousBounds}, {@link #getPreviousBounds}, {@link #setWasIcon} and
+ * {@link #wasIcon}: they are the point where a subclass may change that keeping.
  *
- * <h2>Por que importa "ya estuvo minimizada"</h2>
+ * <h2>Why "it has already been minimized" matters</h2>
  *
- * <p>La primera vez que una ventana se minimiza hay que elegirle un lugar al icono; las siguientes
- * hay que respetar el lugar donde el usuario lo dejo. Sin esa marca, cada minimizada le devolveria
- * el icono al rincon.
+ * <p>The first time a frame is minimized a place has to be chosen for the icon; the following
+ * times the place where the user left it has to be respected. Without that mark, each
+ * minimizing would return the icon to the corner.
  *
- * <h2>Como se ubica un icono</h2>
+ * <h2>How an icon is placed</h2>
  *
- * <p>{@link #getBoundsForIconOf} va probando lugares en una fila al pie del escritorio y se queda
- * con el primero que no pisa a otro icono; cuando se llena la fila sube una. Es un acomodo simple y
- * a proposito: cualquier cosa mas fina depende del aspecto.
+ * <p>{@link #getBoundsForIconOf} tries places in a row at the foot of the desktop and keeps the
+ * first that does not overlap another icon; when the row is full it goes up one. It is a simple
+ * arrangement and on purpose: anything finer depends on the look and feel.
  */
 public class DefaultDesktopManager implements DesktopManager, Serializable {
 
@@ -43,15 +43,15 @@ public class DefaultDesktopManager implements DesktopManager, Serializable {
 
     private Rectangle currentBounds = null;
 
-    /** El administrador de siempre. */
+    /** The usual manager. */
     public DefaultDesktopManager() {
     }
 
     /**
-     * Muestra la ventana en lugar de su icono.
+     * It shows the frame in place of its icon.
      *
-     * <p>Solo hace algo si el icono estaba puesto: abrir una ventana que ya esta abierta no tiene
-     * que sacarla de donde esta.
+     * <p>It only does something if the icon was set: opening a frame that is already open must not
+     * take it from where it is.
      */
     public void openFrame(JInternalFrame f) {
         if (f.getDesktopIcon().getParent() != null) {
@@ -61,21 +61,21 @@ public class DefaultDesktopManager implements DesktopManager, Serializable {
     }
 
     /**
-     * Saca la ventana del escritorio.
+     * It takes the frame off the desktop.
      *
-     * <p>Si era la activa, primero la desactiva: dejar el escritorio apuntando a una ventana que ya
-     * no esta seria un fantasma. Tambien se olvida el rectangulo guardado y la marca de minimizada,
-     * porque una ventana cerrada que se vuelva a agregar empieza de cero.
+     * <p>If it was the active one, it deactivates it first: leaving the desktop pointing at a frame
+     * that is no longer there would be a ghost. The kept rectangle and the minimized mark are also
+     * forgotten, because a closed frame that is added again starts from scratch.
      */
     public void closeFrame(JInternalFrame f) {
         JDesktopPane d = f.getDesktopPane();
-        boolean estabaActiva = f.isSelected();
+        boolean wasActive = f.isSelected();
         Container c = f.getParent();
-        if (estabaActiva) {
+        if (wasActive) {
             try {
                 f.setSelected(false);
             } catch (PropertyVetoException e2) {
-                // Se cierra igual: la ventana se va del escritorio.
+                // It closes all the same: the frame leaves the desktop.
             }
         }
         if (c != null) {
@@ -90,40 +90,40 @@ public class DefaultDesktopManager implements DesktopManager, Serializable {
         if (wasIcon(f)) {
             setWasIcon(f, null);
         }
-        if (estabaActiva && d != null) {
+        if (wasActive && d != null) {
             d.setSelectedFrame(null);
         }
     }
 
     /**
-     * Agranda la ventana a todo el escritorio.
+     * It enlarges the frame to the whole desktop.
      *
-     * <p>Una minimizada primero se restituye: no se puede maximizar un icono.
+     * <p>A minimized one is restored first: an icon cannot be maximized.
      */
     public void maximizeFrame(JInternalFrame f) {
         if (f.isIcon()) {
             try {
                 f.setIcon(false);
             } catch (PropertyVetoException e2) {
-                // Si no se puede restituir tampoco se puede maximizar.
+                // If it cannot be restored it cannot be maximized either.
                 return;
             }
         } else {
             setPreviousBounds(f, f.getBounds());
-            Container padre = f.getParent();
-            if (padre != null) {
-                Rectangle limites = padre.getBounds();
-                setBoundsForFrame(f, 0, 0, limites.width, limites.height);
+            Container parent = f.getParent();
+            if (parent != null) {
+                Rectangle bounds = parent.getBounds();
+                setBoundsForFrame(f, 0, 0, bounds.width, bounds.height);
             }
         }
         try {
             f.setSelected(true);
         } catch (PropertyVetoException e2) {
-            // Queda maximizada aunque no se pueda activar.
+            // It is left maximized even though it cannot be activated.
         }
     }
 
-    /** La devuelve al rectangulo que tenia antes de maximizarse. */
+    /** It gives it back the rectangle it had before maximizing. */
     public void minimizeFrame(JInternalFrame f) {
         Rectangle r = getPreviousBounds(f);
         if (r != null) {
@@ -131,46 +131,46 @@ public class DefaultDesktopManager implements DesktopManager, Serializable {
             try {
                 f.setSelected(true);
             } catch (PropertyVetoException e2) {
-                // Vuelve a su tamano aunque no se pueda activar.
+                // It goes back to its size even though it cannot be activated.
             }
             setBoundsForFrame(f, r.x, r.y, r.width, r.height);
         }
     }
 
     /**
-     * Reemplaza la ventana por su icono.
+     * It replaces the frame with its icon.
      *
-     * <p>El icono hereda la capa de la ventana: si no, una ventana de la capa modal se minimizaria
-     * a un icono que queda debajo de las demas.
+     * <p>The icon inherits the frame's layer: otherwise, a frame of the modal layer would minimize
+     * to an icon that ends up below the others.
      */
     public void iconifyFrame(JInternalFrame f) {
-        JInternalFrame.JDesktopIcon icono = f.getDesktopIcon();
+        JInternalFrame.JDesktopIcon icon = f.getDesktopIcon();
         Container c = f.getParent();
         JDesktopPane d = f.getDesktopPane();
-        boolean estabaActiva = f.isSelected();
+        boolean wasActive = f.isSelected();
         if (c == null) {
             return;
         }
         if (!wasIcon(f)) {
-            // Primera vez: hay que elegirle un lugar. Ver la nota de la clase.
+            // The first time: a place has to be chosen for it. See the class note.
             Rectangle r = getBoundsForIconOf(f);
-            icono.setBounds(r.x, r.y, r.width, r.height);
+            icon.setBounds(r.x, r.y, r.width, r.height);
             setWasIcon(f, Boolean.TRUE);
         }
         if (c instanceof JLayeredPane) {
             JLayeredPane lp = (JLayeredPane) c;
-            int capa = lp.getLayer(f);
-            JLayeredPane.putLayer(icono, capa);
+            int layer = lp.getLayer(f);
+            JLayeredPane.putLayer(icon, layer);
         }
         Rectangle r = f.getBounds();
         c.remove(f);
-        c.add(icono);
+        c.add(icon);
         c.repaint(r.x, r.y, r.width, r.height);
-        if (estabaActiva) {
+        if (wasActive) {
             try {
                 f.setSelected(false);
             } catch (PropertyVetoException e2) {
-                // Se minimiza igual.
+                // It minimizes all the same.
             }
             if (d != null) {
                 d.setSelectedFrame(null);
@@ -178,10 +178,10 @@ public class DefaultDesktopManager implements DesktopManager, Serializable {
         }
     }
 
-    /** Devuelve la ventana en lugar de su icono. */
+    /** It gives the frame back in place of its icon. */
     public void deiconifyFrame(JInternalFrame f) {
-        JInternalFrame.JDesktopIcon icono = f.getDesktopIcon();
-        Container c = icono.getParent();
+        JInternalFrame.JDesktopIcon icon = f.getDesktopIcon();
+        Container c = icon.getParent();
         if (c == null) {
             return;
         }
@@ -190,33 +190,33 @@ public class DefaultDesktopManager implements DesktopManager, Serializable {
         try {
             f.setSelected(true);
         } catch (PropertyVetoException e2) {
-            // Vuelve igual aunque no se pueda activar.
+            // It comes back all the same even though it cannot be activated.
         }
     }
 
     /**
-     * La ventana paso a ser la activa.
+     * The frame became the active one.
      *
-     * <p>Desactivar la anterior es parte del trabajo: dos ventanas con barra de titulo encendida
-     * al mismo tiempo es exactamente lo que este metodo evita.
+     * <p>Deactivating the previous one is part of the job: two frames with the title bar lit at
+     * the same time is exactly what this method avoids.
      */
     public void activateFrame(JInternalFrame f) {
         Container p = f.getParent();
         JDesktopPane d = f.getDesktopPane();
-        JInternalFrame activa = (d == null) ? null : d.getSelectedFrame();
+        JInternalFrame active = (d == null) ? null : d.getSelectedFrame();
         if (p == null) {
             return;
         }
-        if (activa == null) {
+        if (active == null) {
             if (d != null) {
                 d.setSelectedFrame(f);
             }
-        } else if (activa != f) {
-            if (activa.isSelected()) {
+        } else if (active != f) {
+            if (active.isSelected()) {
                 try {
-                    activa.setSelected(false);
+                    active.setSelected(false);
                 } catch (PropertyVetoException e2) {
-                    // Si la anterior se niega, la nueva se activa igual.
+                    // If the previous one refuses, the new one is activated all the same.
                 }
             }
             if (d != null) {
@@ -226,16 +226,16 @@ public class DefaultDesktopManager implements DesktopManager, Serializable {
         f.moveToFront();
     }
 
-    /** La ventana dejo de ser la activa. */
+    /** The frame stopped being the active one. */
     public void deactivateFrame(JInternalFrame f) {
         JDesktopPane d = f.getDesktopPane();
-        JInternalFrame activa = (d == null) ? null : d.getSelectedFrame();
-        if (activa == f) {
+        JInternalFrame active = (d == null) ? null : d.getSelectedFrame();
+        if (active == f) {
             d.setSelectedFrame(null);
         }
     }
 
-    /** Empieza un arrastre; toma el modo del escritorio. */
+    /** It begins a drag; it takes the mode from the desktop. */
     public void beginDraggingFrame(JComponent f) {
         JDesktopPane d = getDesktopPane(f);
         if (d != null && d.getDragMode() == JDesktopPane.OUTLINE_DRAG_MODE) {
@@ -247,9 +247,9 @@ public class DefaultDesktopManager implements DesktopManager, Serializable {
     }
 
     /**
-     * El arrastre va por esa posicion.
+     * The drag is going by that position.
      *
-     * <p>En modo contorno solo se anota a donde va: mover de verdad se hace al soltar.
+     * <p>In outline mode only where it is going is noted: really moving is done on releasing.
      */
     public void dragFrame(JComponent f, int newX, int newY) {
         if (dragMode == OUTLINE_DRAG_MODE) {
@@ -259,7 +259,7 @@ public class DefaultDesktopManager implements DesktopManager, Serializable {
         }
     }
 
-    /** Termina el arrastre; en modo contorno recien aca se mueve. */
+    /** It ends the drag; in outline mode only here does it move. */
     public void endDraggingFrame(JComponent f) {
         if (dragMode == OUTLINE_DRAG_MODE && currentBounds != null) {
             setBoundsForFrame(f, currentBounds.x, currentBounds.y, currentBounds.width,
@@ -268,7 +268,7 @@ public class DefaultDesktopManager implements DesktopManager, Serializable {
         currentBounds = null;
     }
 
-    /** Empieza a redimensionar; el mismo esquema que el arrastre. */
+    /** It begins resizing; the same scheme as the drag. */
     public void beginResizingFrame(JComponent f, int direction) {
         JDesktopPane d = getDesktopPane(f);
         if (d != null && d.getDragMode() == JDesktopPane.OUTLINE_DRAG_MODE) {
@@ -279,7 +279,7 @@ public class DefaultDesktopManager implements DesktopManager, Serializable {
         currentBounds = f.getBounds();
     }
 
-    /** El redimensionado va por ese rectangulo. */
+    /** The resizing is going by that rectangle. */
     public void resizeFrame(JComponent f, int newX, int newY, int newWidth, int newHeight) {
         if (dragMode == OUTLINE_DRAG_MODE) {
             currentBounds = new Rectangle(newX, newY, newWidth, newHeight);
@@ -288,7 +288,7 @@ public class DefaultDesktopManager implements DesktopManager, Serializable {
         }
     }
 
-    /** Termina el redimensionado. */
+    /** It ends the resizing. */
     public void endResizingFrame(JComponent f) {
         if (dragMode == OUTLINE_DRAG_MODE && currentBounds != null) {
             setBoundsForFrame(f, currentBounds.x, currentBounds.y, currentBounds.width,
@@ -298,26 +298,26 @@ public class DefaultDesktopManager implements DesktopManager, Serializable {
     }
 
     /**
-     * Mueve y redimensiona la ventana.
+     * It moves and resizes the frame.
      *
-     * <p>Se repinta el rectangulo viejo <em>y</em> el nuevo: repintar solo el nuevo dejaria pintado
-     * el rastro del lugar de donde salio.
+     * <p>The old rectangle <em>and</em> the new one are repainted: repainting only the new one
+     * would leave the trace of the place it came from painted.
      */
     public void setBoundsForFrame(JComponent f, int newX, int newY, int newWidth, int newHeight) {
-        boolean cambioTamano = (f.getWidth() != newWidth || f.getHeight() != newHeight);
-        Rectangle antes = f.getBounds();
+        boolean resize = (f.getWidth() != newWidth || f.getHeight() != newHeight);
+        Rectangle before = f.getBounds();
         f.setBounds(newX, newY, newWidth, newHeight);
-        if (cambioTamano) {
+        if (resize) {
             f.validate();
         }
-        Container padre = f.getParent();
-        if (padre != null) {
-            padre.repaint(antes.x, antes.y, antes.width, antes.height);
-            padre.repaint(newX, newY, newWidth, newHeight);
+        Container parent = f.getParent();
+        if (parent != null) {
+            parent.repaint(before.x, before.y, before.width, before.height);
+            parent.repaint(newX, newY, newWidth, newHeight);
         }
     }
 
-    /** Saca el icono del escritorio. */
+    /** It takes the icon off the desktop. */
     protected void removeIconFor(JInternalFrame f) {
         JInternalFrame.JDesktopIcon di = f.getDesktopIcon();
         Container c = di.getParent();
@@ -329,83 +329,83 @@ public class DefaultDesktopManager implements DesktopManager, Serializable {
     }
 
     /**
-     * Elige lugar para el icono de esa ventana.
+     * It chooses a place for that frame's icon.
      *
-     * <p>Prueba lugares en una fila al pie del escritorio y devuelve el primero que no pisa a otro
-     * icono; al llenarse la fila sube una. Ver la nota de la clase.
+     * <p>It tries places in a row at the foot of the desktop and returns the first that does not
+     * overlap another icon; when the row is full it goes up one. See the class note.
      */
     protected Rectangle getBoundsForIconOf(JInternalFrame f) {
-        JInternalFrame.JDesktopIcon icono = f.getDesktopIcon();
-        Dimension medida = icono.getPreferredSize();
+        JInternalFrame.JDesktopIcon icon = f.getDesktopIcon();
+        Dimension measured = icon.getPreferredSize();
         Container c = f.getParent();
         if (c == null) {
             c = f.getDesktopIcon().getParent();
         }
         if (c == null) {
-            // Todavia no esta en ningun lado: el rincon es tan bueno como cualquier otro.
-            return new Rectangle(0, 0, medida.width, medida.height);
+            // It is not anywhere yet: the corner is as good as any other.
+            return new Rectangle(0, 0, measured.width, measured.height);
         }
-        Rectangle limites = c.getBounds();
-        Component[] hijos = c.getComponents();
-        int w = medida.width;
-        int h = medida.height;
+        Rectangle bounds = c.getBounds();
+        Component[] children = c.getComponents();
+        int w = measured.width;
+        int h = measured.height;
         int x = 0;
-        int y = limites.height - h;
-        Rectangle libre = new Rectangle(x, y, w, h);
-        boolean encontrado = false;
-        while (!encontrado) {
-            libre = new Rectangle(x, y, w, h);
-            encontrado = true;
-            for (int i = 0; i < hijos.length; i++) {
-                JInternalFrame.JDesktopIcon otro = null;
-                if (hijos[i] instanceof JInternalFrame) {
-                    otro = ((JInternalFrame) hijos[i]).getDesktopIcon();
-                } else if (hijos[i] instanceof JInternalFrame.JDesktopIcon) {
-                    otro = (JInternalFrame.JDesktopIcon) hijos[i];
+        int y = bounds.height - h;
+        Rectangle free = new Rectangle(x, y, w, h);
+        boolean found = false;
+        while (!found) {
+            free = new Rectangle(x, y, w, h);
+            found = true;
+            for (int i = 0; i < children.length; i++) {
+                JInternalFrame.JDesktopIcon other = null;
+                if (children[i] instanceof JInternalFrame) {
+                    other = ((JInternalFrame) children[i]).getDesktopIcon();
+                } else if (children[i] instanceof JInternalFrame.JDesktopIcon) {
+                    other = (JInternalFrame.JDesktopIcon) children[i];
                 } else {
                     continue;
                 }
-                if (icono != otro && otro.isVisible()) {
-                    if (libre.intersects(otro.getBounds())) {
-                        encontrado = false;
+                if (icon != other && other.isVisible()) {
+                    if (free.intersects(other.getBounds())) {
+                        found = false;
                         break;
                     }
                 }
             }
-            if (!encontrado) {
+            if (!found) {
                 x = x + w;
-                if (x + w > limites.width) {
+                if (x + w > bounds.width) {
                     x = 0;
                     y = y - h;
                 }
             }
         }
-        return libre;
+        return free;
     }
 
-    /** Guarda el rectangulo de antes de maximizar; ver la nota de la clase. */
+    /** It keeps the rectangle from before maximizing; see the class note. */
     protected void setPreviousBounds(JInternalFrame f, Rectangle r) {
         f.setNormalBounds(r);
     }
 
-    /** El rectangulo guardado, o nulo. */
+    /** The kept rectangle, or null. */
     protected Rectangle getPreviousBounds(JInternalFrame f) {
         return f.getNormalBounds();
     }
 
-    /** Marca que la ventana ya estuvo minimizada; ver la nota de la clase. */
+    /** It marks that the frame has already been minimized; see the class note. */
     protected void setWasIcon(JInternalFrame f, Boolean value) {
         if (value != null) {
             f.putClientProperty(HAS_BEEN_ICONIFIED_PROPERTY, value);
         }
     }
 
-    /** Si ya estuvo minimizada alguna vez. */
+    /** Whether it has already been minimized at some point. */
     protected boolean wasIcon(JInternalFrame f) {
         return (f.getClientProperty(HAS_BEEN_ICONIFIED_PROPERTY) == Boolean.TRUE);
     }
 
-    /** El escritorio de ese componente, buscando hacia arriba. */
+    /** That component's desktop, looking upwards. */
     JDesktopPane getDesktopPane(JComponent frame) {
         JDesktopPane pane = null;
         Component c = frame.getParent();

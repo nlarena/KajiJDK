@@ -3,28 +3,27 @@ package jdk.internal.vm;
 import java.lang.ScopedValue;
 
 /**
- * KajiLibrary's jdk.internal.vm.ScopedValueContainer — el ámbito donde viven las ligaduras de
- * {@link ScopedValue}.
+ * KajiLibrary's jdk.internal.vm.ScopedValueContainer -- the scope where the bindings of
+ * {@link ScopedValue} live.
  *
- * <p>Un `ScopedValue` está ligado sólo mientras dura una llamada, y esa llamada puede anidar otras.
- * Este contenedor es lo que marca dónde empieza y termina cada tramo: se apila antes de correr el
- * cuerpo y se saca después, pase lo que pase.
+ * <p>A `ScopedValue` is bound only while a call lasts, and that call may nest others. This
+ * container is what marks where each stretch starts and ends: it is pushed before running the body
+ * and popped afterwards, whatever happens.
  *
- * <p>Que sea un {@link StackableScope} es lo que hace que las ligaduras se deshagan **en orden
- * inverso** aunque el cuerpo salga por una excepción — es exactamente el problema que la clase base
- * resuelve.
+ * <p>That it is a {@link StackableScope} is what makes the bindings be undone **in reverse order**
+ * even if the body leaves through an exception -- it is exactly the problem the base class solves.
  */
 public class ScopedValueContainer extends StackableScope {
 
     /**
-     * Una foto de las ligaduras vigentes, junto con el contenedor donde estaban.
+     * A snapshot of the bindings in force, together with the container where they were.
      *
-     * <p>Es un `record` porque es eso y nada más: dos valores que viajan juntos y se comparan por
-     * contenido. Sirve para que un hilo que arranca dentro de un ámbito herede lo que había, sin
-     * quedarse con una referencia viva al ámbito que quizás ya se cerró.
+     * <p>It is a `record` because it is that and nothing else: two values that travel together and
+     * are compared by contents. It serves so that a thread that starts inside a scope inherits what
+     * there was, without keeping a live reference to a scope that may already have closed.
      *
-     * @param scopedValueBindings las ligaduras
-     * @param container el contenedor que las tenía
+     * @param scopedValueBindings the bindings
+     * @param container the container that had them
      */
     public record BindingsSnapshot(Object scopedValueBindings, ScopedValueContainer container) {
     }
@@ -33,39 +32,40 @@ public class ScopedValueContainer extends StackableScope {
         super();
     }
 
-    /** El contenedor más cercano de ese tipo en el hilo actual, o `null`. */
-    public static <T extends ScopedValueContainer> T latest(Class<T> tipo) {
-        StackableScope cabeza = StackableScope.head();
-        if (cabeza == null) {
+    /** The nearest container of that type on the current thread, or `null`. */
+    public static <T extends ScopedValueContainer> T latest(Class<T> type) {
+        StackableScope head = StackableScope.head();
+        if (head == null) {
             return null;
         }
-        if (tipo.isInstance(cabeza)) {
-            return (T) cabeza;
+        if (type.isInstance(head)) {
+            return (T) head;
         }
-        return cabeza.enclosingScope(tipo);
+        return head.enclosingScope(type);
     }
 
-    /** El contenedor más cercano del hilo actual, o `null`. */
+    /** The nearest container of the current thread, or `null`. */
     public static ScopedValueContainer latest() {
         return ScopedValueContainer.latest(ScopedValueContainer.class);
     }
 
     /**
-     * Una foto de las ligaduras vigentes.
+     * A snapshot of the bindings in force.
      *
-     * <p>Devuelve una foto con `null` de ligaduras cuando no hay ninguna --que es lo que corresponde,
-     * y no una foto nula: "no hay ligaduras" es un estado, no la ausencia de respuesta.
+     * <p>It returns a snapshot with `null` bindings when there are none --which is what
+     * corresponds, and not a null snapshot: "there are no bindings" is a state, not the absence of
+     * an answer.
      */
     public static BindingsSnapshot captureBindings() {
         return new BindingsSnapshot(null, ScopedValueContainer.latest());
     }
 
     /**
-     * Corre `op` dentro de un contenedor nuevo.
+     * It runs `op` inside a new container.
      *
-     * <p>El `finally` es la clase entera: si el cuerpo tira, el contenedor **igual** se saca. Sin eso,
-     * una excepción dejaría ligaduras vivas en un hilo que ya salió del ámbito, que es la clase de
-     * error que después aparece a mil líneas de distancia.
+     * <p>The `finally` is the whole class: if the body throws, the container is popped **all the
+     * same**. Without that, an exception would leave bindings alive on a thread that has already
+     * left the scope, which is the kind of error that later shows up a thousand lines away.
      */
     public static void run(Runnable op) {
         if (op == null) {
@@ -81,11 +81,11 @@ public class ScopedValueContainer extends StackableScope {
     }
 
     /**
-     * Corre `op` dentro de un contenedor nuevo y devuelve su resultado.
+     * It runs `op` inside a new container and returns its result.
      *
-     * <p>La variante que devuelve valor y que puede tirar una excepción **chequeada** propia: por eso
-     * la segunda variable de tipo. Es lo que permite envolver código que tira sin obligarlo a
-     * envolverse en algo no chequeado.
+     * <p>The variant that returns a value and that can throw a **checked** exception of its own:
+     * hence the second type variable. It is what allows wrapping code that throws without forcing
+     * it to be wrapped in something unchecked.
      */
     public static <V, X extends Throwable> V call(ScopedValue.CallableOp<V, X> op) throws X {
         if (op == null) {

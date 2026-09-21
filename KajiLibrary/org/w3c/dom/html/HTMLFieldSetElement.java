@@ -1,10 +1,10 @@
 package org.w3c.dom.html;
 
 /**
- * Un `<fieldset>`.
+ * A `<fieldset>`.
  */
 public interface HTMLFieldSetElement extends HTMLElement {
 
-    /** El formulario que lo contiene, o nulo si no esta en ninguno. */
+    /** The form that contains it, or null if it is in none. */
     HTMLFormElement getForm();
 }

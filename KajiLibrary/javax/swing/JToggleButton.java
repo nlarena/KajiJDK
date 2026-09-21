@@ -8,22 +8,24 @@ import java.awt.event.InputEvent;
 import java.awt.event.ItemEvent;
 import java.util.Enumeration;
 
+import javax.accessibility.Accessible;
 import javax.accessibility.AccessibleContext;
 
 import javax.swing.plaf.ButtonUI;
 import javax.swing.plaf.basic.BasicToggleButtonUI;
 
 /**
- * Un boton con dos estados: cada click lo selecciona o lo deselecciona.
+ * A button with two states: each click selects it or deselects it.
  *
- * <p>Toda la diferencia con {@link JButton} esta en el modelo: {@link ToggleButtonModel} cambia
- * la seleccion al soltar, y consulta al {@link ButtonGroup} si hay uno, que es lo que hace que
- * los botones de radio se excluyan. {@link JCheckBox} y {@link JRadioButton} heredan de aca y
- * solo cambian el aspecto.
+ * <p>The whole difference with {@link JButton} is in the model: {@link ToggleButtonModel}
+ * changes the selection on releasing, and consults the {@link ButtonGroup} if there is one,
+ * which is what makes radio buttons exclude one another. {@link JCheckBox} and
+ * {@link JRadioButton} inherit from here and only change the look and feel.
  *
- * <p>El foco, dentro de un grupo, va al seleccionado: recorrer con Tab un grupo de radios para en
- * el que esta marcado, no en el primero. Es {@link #requestFocus(FocusEvent.Cause)} redirigiendo
- * la peticion cuando la causa es un recorrido o una activacion.
+ * <p>The focus, inside a group, goes to the selected one: walking a group of radio buttons with
+ * Tab stops at the one that is ticked, not at the first. It is
+ * {@link #requestFocus(FocusEvent.Cause)} redirecting the request when the cause is a walk or
+ * an activation.
  */
 public class JToggleButton extends AbstractButton implements Accessible {
 
@@ -64,7 +66,7 @@ public class JToggleButton extends AbstractButton implements Accessible {
         init(text, icon);
     }
 
-    /** Instala el aspecto basico; ver {@code JButton#updateUI}. */
+    /** It installs the basic look and feel; see {@code JButton#updateUI}. */
     public void updateUI() {
         setUI((ButtonUI) BasicToggleButtonUI.createUI(this));
     }
@@ -73,75 +75,78 @@ public class JToggleButton extends AbstractButton implements Accessible {
         return uiClassID;
     }
 
-    /** Si: un boton con estado sigue la seleccion de su accion, y ella la de el. */
+    /**
+     * Yes: a button with state follows its action's selection, and the action follows the button's.
+     */
     boolean shouldUpdateSelectedStateFromAction() {
         return true;
     }
 
     /**
-     * A quien va el foco pedido con esa causa: al seleccionado del grupo si la causa es un
-     * recorrido o una activacion, y a este boton en cualquier otro caso.
+     * Who the focus asked for with that cause goes to: to the group's selected one if the cause
+     * is a walk or an activation, and to this button in any other case.
      */
-    private JToggleButton seleccionDelGrupo(FocusEvent.Cause causa) {
-        boolean recorrido = causa == FocusEvent.Cause.ACTIVATION
-                || causa == FocusEvent.Cause.TRAVERSAL
-                || causa == FocusEvent.Cause.TRAVERSAL_UP
-                || causa == FocusEvent.Cause.TRAVERSAL_DOWN
-                || causa == FocusEvent.Cause.TRAVERSAL_FORWARD
-                || causa == FocusEvent.Cause.TRAVERSAL_BACKWARD;
-        if (!recorrido) {
+    private JToggleButton groupSelection(FocusEvent.Cause cause) {
+        boolean walk = cause == FocusEvent.Cause.ACTIVATION
+                || cause == FocusEvent.Cause.TRAVERSAL
+                || cause == FocusEvent.Cause.TRAVERSAL_UP
+                || cause == FocusEvent.Cause.TRAVERSAL_DOWN
+                || cause == FocusEvent.Cause.TRAVERSAL_FORWARD
+                || cause == FocusEvent.Cause.TRAVERSAL_BACKWARD;
+        if (!walk) {
             return this;
         }
-        ButtonGroup grupo = getModel().getGroup();
-        if (grupo == null) {
+        ButtonGroup group = getModel().getGroup();
+        if (group == null) {
             return this;
         }
-        ButtonModel seleccion = grupo.getSelection();
-        if (seleccion == null || seleccion == getModel()) {
+        ButtonModel selection = group.getSelection();
+        if (selection == null || selection == getModel()) {
             return this;
         }
-        Enumeration<AbstractButton> miembros = grupo.getElements();
-        while (miembros.hasMoreElements()) {
-            AbstractButton miembro = miembros.nextElement();
-            if (miembro instanceof JToggleButton && miembro.getModel() == seleccion) {
-                return (JToggleButton) miembro;
+        Enumeration<AbstractButton> members = group.getElements();
+        while (members.hasMoreElements()) {
+            AbstractButton member = members.nextElement();
+            if (member instanceof JToggleButton && member.getModel() == selection) {
+                return (JToggleButton) member;
             }
         }
         return this;
     }
 
     public void requestFocus(FocusEvent.Cause cause) {
-        seleccionDelGrupo(cause).pedirFocoSinRedirigir(cause);
+        groupSelection(cause).requestFocusNoRedirect(cause);
     }
 
-    private void pedirFocoSinRedirigir(FocusEvent.Cause causa) {
-        super.requestFocus(causa);
+    private void requestFocusNoRedirect(FocusEvent.Cause cause) {
+        super.requestFocus(cause);
     }
 
     public boolean requestFocusInWindow(FocusEvent.Cause cause) {
-        return seleccionDelGrupo(cause).pedirFocoEnVentanaSinRedirigir(cause);
+        return groupSelection(cause).requestFocusInWindowNoRedirect(cause);
     }
 
-    private boolean pedirFocoEnVentanaSinRedirigir(FocusEvent.Cause causa) {
-        return super.requestFocusInWindow(causa);
+    private boolean requestFocusInWindowNoRedirect(FocusEvent.Cause cause) {
+        return super.requestFocusInWindow(cause);
     }
 
     protected String paramString() {
         return super.paramString();
     }
 
-    /** Sin contexto de accesibilidad: no hay tecnologia asistiva que lo lea en esta VM. */
+    /** With no accessibility context: there is no assistive technology that reads it on this VM. */
     public AccessibleContext getAccessibleContext() {
         return null;
     }
 
     /**
-     * El modelo de un boton con estado: soltar cambia la seleccion, y el grupo manda.
+     * The model of a button with state: releasing changes the selection, and the group rules.
      *
-     * <p>{@link #setSelected} pasa primero por el grupo, si hay: es el grupo el que decide que se
-     * selecciona y que se deselecciona, y este modelo toma lo que el grupo diga. Sin grupo, se
-     * comporta como {@link DefaultButtonModel} salvo por {@link #setPressed}, que al soltar
-     * estando armado invierte la seleccion antes de disparar la accion.
+     * <p>{@link #setSelected} goes through the group first, if there is one: it is the group that
+     * decides what is selected and what is deselected, and this model takes whatever the group
+     * says. With no group, it behaves like {@link DefaultButtonModel} save for
+     * {@link #setPressed}, which on releasing while armed inverts the selection before firing the
+     * action.
      */
     public static class ToggleButtonModel extends DefaultButtonModel {
 
@@ -153,10 +158,10 @@ public class JToggleButton extends AbstractButton implements Accessible {
         }
 
         public void setSelected(boolean b) {
-            ButtonGroup grupo = getGroup();
-            if (grupo != null) {
-                grupo.setSelected(this, b);
-                b = grupo.isSelected(this);
+            ButtonGroup group = getGroup();
+            if (group != null) {
+                group.setSelected(this, b);
+                b = group.isSelected(this);
             }
             if (isSelected() == b) {
                 return;
@@ -185,15 +190,15 @@ public class JToggleButton extends AbstractButton implements Accessible {
             }
             fireStateChanged();
             if (!isPressed() && isArmed()) {
-                int modificadores = 0;
-                AWTEvent actual = EventQueue.getCurrentEvent();
-                if (actual instanceof InputEvent) {
-                    modificadores = ((InputEvent) actual).getModifiers();
-                } else if (actual instanceof ActionEvent) {
-                    modificadores = ((ActionEvent) actual).getModifiers();
+                int modifiers = 0;
+                AWTEvent current = EventQueue.getCurrentEvent();
+                if (current instanceof InputEvent) {
+                    modifiers = ((InputEvent) current).getModifiers();
+                } else if (current instanceof ActionEvent) {
+                    modifiers = ((ActionEvent) current).getModifiers();
                 }
                 fireActionPerformed(new ActionEvent(this, ActionEvent.ACTION_PERFORMED,
-                        getActionCommand(), EventQueue.getMostRecentEventTime(), modificadores));
+                        getActionCommand(), EventQueue.getMostRecentEventTime(), modifiers));
             }
         }
     }

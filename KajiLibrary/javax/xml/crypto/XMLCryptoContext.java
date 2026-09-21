@@ -1,84 +1,84 @@
 package javax.xml.crypto;
 
 /**
- * KajiLibrary's javax.xml.crypto.XMLCryptoContext -- el contexto de una operacion criptografica XML.
+ * KajiLibrary's javax.xml.crypto.XMLCryptoContext -- the context of an XML cryptographic operation.
  *
- * <p>Junta todo lo que firmar o validar necesita saber y que no esta en el documento: con que clave
- * ({@link KeySelector}), como resolver las referencias ({@link URIDereferencer}), contra que base se
- * resuelve lo relativo, y que prefijos usar al escribir.
+ * <p>It gathers everything signing or validating needs to know that is not in the document: with
+ * which key ({@link KeySelector}), how to resolve the references ({@link URIDereferencer}), against
+ * which base relative things are resolved, and which prefixes to use when writing.
  *
- * <h2>Dos mapas, no uno</h2>
+ * <h2>Two maps, not one</h2>
  *
- * <p>{@link #setProperty} y {@link #put} parecen lo mismo y no lo son:
+ * <p>{@link #setProperty} and {@link #put} look the same and are not:
  *
  * <ul>
- *   <li>las <b>propiedades</b> tienen clave {@code String} y las define la implementacion: son
- *       configuracion;
- *   <li>el mapa de {@link #put} tiene clave {@code Object} y es para que quien usa el API pase
- *       informacion suya de un lado a otro -- entre un {@code URIDereferencer} propio y un
- *       {@code KeySelector} propio, por ejemplo.
+ *   <li>the <b>properties</b> have a {@code String} key and are defined by the implementation: they
+ *       are configuration;
+ *   <li>the map of {@link #put} has an {@code Object} key and is for whoever uses the API to pass
+ *       information of their own from one place to another -- between a custom {@code
+ *       URIDereferencer} and a custom {@code KeySelector}, for example.
  * </ul>
  *
- * <p>Estan separados para que la configuracion de la implementacion y los datos de la aplicacion no
- * se pisen por elegir el mismo nombre.
+ * <p>They are separate so that the implementation's configuration and the application's data do not
+ * overwrite each other by choosing the same name.
  *
- * <h2>Los prefijos de espacio de nombres</h2>
+ * <h2>Namespace prefixes</h2>
  *
- * <p>{@link #putNamespacePrefix} solo afecta a lo que se <b>escribe</b>. Al leer no importa: los
- * prefijos del documento son los que son. Sirve para que la firma que se genera se lea, y para que
- * coincida con la de otra herramienta si hace falta compararlas.
+ * <p>{@link #putNamespacePrefix} only affects what is <b>written</b>. When reading it does not
+ * matter: the document's prefixes are what they are. It serves so that the signature that is
+ * generated reads well, and so that it matches another tool's if they need to be compared.
  */
 public interface XMLCryptoContext {
 
-    /** Contra que se resuelve lo relativo. */
+    /** What relative things are resolved against. */
     String getBaseURI();
 
     /** Ver {@link #getBaseURI}. */
     void setBaseURI(String baseURI);
 
-    /** Con que clave. */
+    /** With which key. */
     KeySelector getKeySelector();
 
     /** Ver {@link #getKeySelector}. */
     void setKeySelector(KeySelector ks);
 
-    /** Como se resuelven las referencias. Ver {@link URIDereferencer}. */
+    /** How the references are resolved. See {@link URIDereferencer}. */
     URIDereferencer getURIDereferencer();
 
     /** Ver {@link #getURIDereferencer}. */
     void setURIDereferencer(URIDereferencer dereferencer);
 
     /**
-     * El prefijo que se usa para ese espacio de nombres.
+     * The prefix used for that namespace.
      *
-     * @param defaultPrefix que devolver si no hay ninguno registrado
+     * @param defaultPrefix what to return if none is registered
      */
     String getNamespacePrefix(String namespaceURI, String defaultPrefix);
 
     /**
-     * Lo registra.
+     * Registers it.
      *
-     * @return el que estaba, o null
+     * @return the one that was there, or null
      */
     String putNamespacePrefix(String namespaceURI, String prefix);
 
-    /** El prefijo por omision al escribir. */
+    /** The default prefix when writing. */
     String getDefaultNamespacePrefix();
 
     /** Ver {@link #getDefaultNamespacePrefix}. */
     void setDefaultNamespacePrefix(String defaultPrefix);
 
     /**
-     * Una propiedad de la implementacion.
+     * A property of the implementation.
      *
-     * @return el valor que estaba, o null
+     * @return the value that was there, or null
      */
     Object setProperty(String name, Object value);
 
     /** Ver {@link #setProperty}. */
     Object getProperty(String name);
 
-    /** Un dato de la aplicacion. Ver la nota de la clase sobre los dos mapas. */
+    /** A datum of the application. See the class note on the two maps. */
     Object get(Object key);
 
     /** Ver {@link #get}. */

@@ -1,77 +1,82 @@
 package sun.misc;
 
 /**
- * Una senal del sistema operativo, para poder atenderla desde Java.
+ * A signal of the operating system, so that it can be attended to from Java.
  *
- * <h2>Para que se usa</h2>
+ * <h2>What it is used for</h2>
  *
- * <p>Casi siempre para lo mismo: enterarse de que alguien pidio terminar el proceso —{@code
- * SIGTERM} de un {@code kill}, {@code SIGINT} de un Ctrl-C— y cerrar ordenadamente. Tambien para
- * {@code SIGHUP}, que por convencion significa "reelee tu configuracion".
+ * <p>Almost always for the same thing: finding out that somebody asked for the process to end
+ * --{@code SIGTERM} from a {@code kill}, {@code SIGINT} from a Ctrl-C-- and closing down in order.
+ * Also for {@code SIGHUP}, which by convention means "reread your configuration".
  *
- * <p>Es {@code sun.misc} y nunca fue API publica; lo que hay para esto en la API oficial es
- * {@code Runtime.addShutdownHook}, que cubre el caso comun y no permite distinguir que senal llego
- * ni ignorarla.
+ * <p>It is {@code sun.misc} and was never public API; what there is for this in the official API is
+ * {@code Runtime.addShutdownHook}, which covers the common case and allows neither telling which
+ * signal arrived nor ignoring it.
  *
- * <h2>Por que el numero no se puede inventar</h2>
+ * <h2>Why the number cannot be invented</h2>
  *
- * <p>El nombre de una senal es portable y su numero no. {@code SIGUSR1} es 10 en Linux sobre x86 y
- * 30 en macOS; en Windows la mayoria directamente no existe. El numero sale de preguntarle al
- * sistema operativo por el nombre, y es lo primero que hace el constructor del JDK.
+ * <p>The name of a signal is portable and its number is not. {@code SIGUSR1} is 10 on Linux on x86
+ * and 30 on macOS; on Windows most of them simply do not exist. The number comes from asking the
+ * operating system for the name, and it is the first thing the constructor of the JDK does.
  *
- * <h2>Estado en esta VM</h2>
+ * <h2>State in this VM</h2>
  *
- * <p>El constructor lanza {@link UnsupportedOperationException}. Es la misma decision que en
- * {@code com.sun.security.auth.module.UnixSystem}: cuando el dato solo lo tiene el sistema
- * operativo y esta VM no puede preguntarselo, inventarlo es peor que fallar.
+ * <p>The constructor throws {@link UnsupportedOperationException}. It is the same decision as in
+ * {@code com.sun.security.auth.module.UnixSystem}: when only the operating system has the datum and
+ * this VM cannot ask for it, inventing it is worse than failing.
  *
- * <p>Aca el dano seria concreto. Un numero de senal equivocado no da un error: instala el manejador
- * sobre <strong>otra</strong> senal. Un programa que cree estar atendiendo {@code SIGTERM} y en
- * realidad atiende {@code SIGSEGV} se comporta de forma inexplicable, y el sintoma no apunta ni de
- * cerca a la causa.
+ * <p>Here the damage would be concrete. A wrong signal number does not give an error: it installs
+ * the handler on <strong>another</strong> signal. A program that believes it is attending to
+ * {@code SIGTERM} and is really attending to {@code SIGSEGV} behaves inexplicably, and the symptom
+ * does not point anywhere near the cause.
  *
  * @since 1.2
  */
 public final class Signal {
 
-    private static final String NO_HAY =
-            "el numero de una senal se lo asigna el sistema operativo al nombre, y esta VM no puede "
-            + "preguntarselo; un numero inventado instalaria el manejador sobre otra senal";
+    private static final String NOT_THERE =
+            "the operating system assigns the number of a signal to its name, and this VM cannot "
+            + "ask it; an invented number would install the handler on another signal";
 
     /**
-     * La senal con ese nombre, sin el prefijo {@code SIG}.
+     * The signal with that name, without the {@code SIG} prefix.
      *
-     * @param name el nombre, por ejemplo {@code "TERM"} o {@code "INT"}
-     * @throws IllegalArgumentException si el sistema operativo no conoce esa senal
-     * @throws UnsupportedOperationException en esta VM siempre; ver la nota de la clase
+     * @param name the name, for example {@code "TERM"} or {@code "INT"}
+     * @throws IllegalArgumentException if the operating system does not know that signal
+     * @throws UnsupportedOperationException in this VM always; see the note of the class
      */
     public Signal(String name) {
-        throw new UnsupportedOperationException(NO_HAY);
+        throw new UnsupportedOperationException(NOT_THERE);
     }
 
     /**
-     * El numero que el sistema operativo le da a esta senal.
+     * The number the operating system gives this signal.
      *
-     * @return el numero
+     * @return the number
      */
     public int getNumber() {
-        throw new UnsupportedOperationException(NO_HAY);
+        throw new UnsupportedOperationException(NOT_THERE);
     }
 
     /**
-     * El nombre de la senal, sin el prefijo {@code SIG}.
+     * The name of the signal, without the {@code SIG} prefix.
      *
-     * @return el nombre
+     * @return the name
      */
     public String getName() {
-        throw new UnsupportedOperationException(NO_HAY);
+        throw new UnsupportedOperationException(NOT_THERE);
     }
 
     /**
-     * Dos senales son iguales si tienen el mismo nombre y el mismo numero.
+     * Whether the two are the same signal.
      *
-     * @param other la otra
-     * @return si son la misma senal
+     * <p>The note said "the same name and the same number", which is the JDK's rule; this one
+     * compares <strong>identity</strong>. They cannot disagree here, because the constructor always
+     * throws and no {@code Signal} can exist to compare -- but the day the constructor works, this
+     * has to become the JDK's rule.
+     *
+     * @param other the other one
+     * @return whether they are the same signal
      */
     public boolean equals(Object other) {
         return this == other;
@@ -88,34 +93,35 @@ public final class Signal {
     }
 
     /**
-     * Instala un manejador para esa senal y devuelve el que estaba.
+     * It installs a handler for that signal and returns the one that was there.
      *
-     * <p>Devolver el anterior no es un detalle: es lo que permite encadenar. Un manejador educado
-     * hace lo suyo y despues llama al que habia, porque puede haber sido la VM la que lo instalo
-     * —para {@code SIGQUIT}, por ejemplo, que es lo que produce el volcado de hilos—.
+     * <p>Returning the previous one is not a detail: it is what allows chaining. A polite handler
+     * does its own thing and then calls the one that was there, because it may have been the VM
+     * that installed it --for {@code SIGQUIT}, for example, which is what produces the thread
+     * dump--.
      *
-     * @param sig la senal
-     * @param handler el manejador, o {@link SignalHandler#SIG_DFL} / {@link SignalHandler#SIG_IGN}
-     * @return el manejador que estaba
-     * @throws IllegalArgumentException si la senal no se puede atender
-     * @throws UnsupportedOperationException en esta VM siempre
+     * @param sig the signal
+     * @param handler the handler, or {@link SignalHandler#SIG_DFL} / {@link SignalHandler#SIG_IGN}
+     * @return the handler that was there
+     * @throws IllegalArgumentException if the signal cannot be attended to
+     * @throws UnsupportedOperationException in this VM always
      */
     public static synchronized SignalHandler handle(Signal sig, SignalHandler handler)
             throws IllegalArgumentException {
         throw new UnsupportedOperationException(
-                "instalar un manejador de senales necesita que la VM se registre ante el sistema "
-                + "operativo, y esta VM no lo hace");
+                "installing a signal handler needs the VM to register itself with the operating "
+                + "system, and this VM does not");
     }
 
     /**
-     * Le manda esa senal al propio proceso.
+     * It sends that signal to the process itself.
      *
-     * @param sig la senal
-     * @throws IllegalArgumentException si la senal no se puede levantar
-     * @throws UnsupportedOperationException en esta VM siempre
+     * @param sig the signal
+     * @throws IllegalArgumentException if the signal cannot be raised
+     * @throws UnsupportedOperationException in this VM always
      */
     public static void raise(Signal sig) throws IllegalArgumentException {
         throw new UnsupportedOperationException(
-                "levantar una senal necesita el sistema operativo, y esta VM no lo alcanza");
+                "raising a signal needs the operating system, and this VM does not reach it");
     }
 }

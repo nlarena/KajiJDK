@@ -1,27 +1,27 @@
 package org.ietf.jgss;
 
 /**
- * KajiLibrary's org.ietf.jgss.MessageProp -- que proteccion se pide, y que se obtuvo.
+ * KajiLibrary's org.ietf.jgss.MessageProp -- what protection is asked for, and what was obtained.
  *
- * <p>El mismo objeto viaja en las dos direcciones, y ahi esta lo que hay que entender: al
- * <b>enviar</b>, quien llama lo llena para pedir --calidad de proteccion y si quiere cifrado--; al
- * <b>recibir</b>, la implementacion lo llena para contar que paso de verdad.
+ * <p>The same object travels in both directions, and there lies what one has to understand: when
+ * <b>sending</b>, the caller fills it in to ask --quality of protection and whether it wants
+ * encryption--; when <b>receiving</b>, the implementation fills it in to tell what really happened.
  *
- * <p>Reusar un objeto para las dos cosas ahorra una clase y tiene una consecuencia practica: un
- * {@code MessageProp} que se pasa a {@code unwrap} vuelve <b>modificado</b>, y reusarlo despues para
- * enviar arrastra lo que quedo adentro.
+ * <p>Reusing one object for both things saves a class and has a practical consequence: a
+ * {@code MessageProp} that is passed to {@code unwrap} comes back <b>modified</b>, and reusing it
+ * afterwards for sending drags along whatever was left inside.
  *
- * <h2>Los cuatro estados suplementarios</h2>
+ * <h2>The four supplementary states</h2>
  *
- * <p>{@link #isDuplicateToken}, {@link #isOldToken}, {@link #isUnseqToken} y {@link #isGapToken} son
- * avisos sobre el <b>orden</b> de los mensajes, no sobre su contenido. Y son avisos y no errores a
- * proposito: el mensaje se descifro bien y es autentico, lo que pasa es que llego dos veces, o
- * tarde, o antes que otro. Que hacer con eso depende de la aplicacion --sobre UDP un desorden es
- * normal, sobre una sesion es un ataque de repeticion-- y por eso la biblioteca informa en vez de
- * decidir.
+ * <p>{@link #isDuplicateToken}, {@link #isOldToken}, {@link #isUnseqToken} and {@link #isGapToken}
+ * are warnings about the <b>order</b> of the messages, not about their contents. And they are
+ * warnings and not errors on purpose: the message was decrypted fine and is authentic, what happens
+ * is that it arrived twice, or late, or before another one. What to do with that depends on the
+ * application --over UDP a disorder is normal, over a session it is a replay attack-- and that is
+ * why the library reports instead of deciding.
  *
- * <p>Quien no los mira se pierde la deteccion de repeticion entera, que es el error clasico de este
- * API.
+ * <p>Whoever does not look at them loses the whole detection of replay, which is the classic
+ * mistake of this API.
  */
 public class MessageProp {
 
@@ -42,29 +42,29 @@ public class MessageProp {
     private String minorString = null;
 
     /**
-     * Con la calidad por omision.
+     * With the default quality.
      *
-     * @param privState si se pide cifrado ademas de integridad
+     * @param privState whether encryption is asked for besides integrity
      */
     public MessageProp(boolean privState) {
         this(0, privState);
     }
 
     /**
-     * @param qop la calidad de proteccion; 0 es la por omision del mecanismo
-     * @param privState si se pide cifrado ademas de integridad
+     * @param qop the quality of protection; 0 is the default of the mechanism
+     * @param privState whether encryption is asked for besides integrity
      */
     public MessageProp(int qop, boolean privState) {
         this.qop = qop;
         this.privacyState = privState;
     }
 
-    /** La calidad de proteccion. */
+    /** The quality of protection. */
     public int getQOP() {
         return this.qop;
     }
 
-    /** Si hay cifrado y no solo integridad. */
+    /** Whether there is encryption and not only integrity. */
     public boolean getPrivacy() {
         return this.privacyState;
     }
@@ -79,40 +79,40 @@ public class MessageProp {
         this.privacyState = privState;
     }
 
-    /** El token ya se habia recibido. Ver la nota de la clase. */
+    /** The token had already been received. See the note of the class. */
     public boolean isDuplicateToken() {
         return this.duplicate;
     }
 
-    /** El token es demasiado viejo para saber si es duplicado. */
+    /** The token is too old to know whether it is a duplicate. */
     public boolean isOldToken() {
         return this.old;
     }
 
-    /** Llego despues de uno posterior. */
+    /** It arrived after a later one. */
     public boolean isUnseqToken() {
         return this.unseq;
     }
 
-    /** Falto al menos un token anterior. */
+    /** At least one earlier token is missing. */
     public boolean isGapToken() {
         return this.gap;
     }
 
-    /** El codigo del mecanismo, o 0. */
+    /** The code of the mechanism, or 0. */
     public int getMinorStatus() {
         return this.minorStatus;
     }
 
-    /** Lo que dijo el mecanismo, o null. */
+    /** What the mechanism said, or null. */
     public String getMinorString() {
         return this.minorString;
     }
 
     /**
-     * Los cuatro estados de una vez.
+     * The four states at once.
      *
-     * <p>Es la implementacion la que lo llama, no quien usa el API.
+     * <p>It is the implementation that calls it, not whoever uses the API.
      */
     public void setSupplementaryStates(boolean duplicate, boolean old, boolean unseq, boolean gap,
                                        int minorStatus, String minorString) {

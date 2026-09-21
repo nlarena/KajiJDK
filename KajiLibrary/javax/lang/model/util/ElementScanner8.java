@@ -4,10 +4,9 @@ import javax.annotation.processing.SupportedSourceVersion;
 import javax.lang.model.SourceVersion;
 
 /**
- * El escaner de elementos de Java 8. Ver {@link ElementScanner6} por el mecanismo.
+ * The element scanner for Java 8. See {@link ElementScanner6} for the mechanism.
  *
- * <p>Java 8 no agrego declaraciones ni cambio de quien es hijo de quien, asi que el recorrido es el
- * mismo.
+ * <p>Java 8 added no declarations nor changed who is a child of whom, so the walk is the same.
  */
 @SupportedSourceVersion(SourceVersion.RELEASE_8)
 public class ElementScanner8<R, P> extends ElementScanner7<R, P> {

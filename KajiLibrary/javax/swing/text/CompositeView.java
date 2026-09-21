@@ -4,27 +4,27 @@ import java.awt.Rectangle;
 import java.awt.Shape;
 
 /**
- * Una vista con hijos: la base de todo lo que agrupa.
+ * A view with children: the base of everything that groups.
  *
- * <h2>Lo que resuelve, y lo que deja abierto</h2>
+ * <h2>What it solves, and what it leaves open</h2>
  *
- * <p>Guarda los hijos, los crea a partir de los elementos del documento ({@link #loadChildren}) y
- * traduce entre modelo y pantalla delegando en el hijo que corresponde. Lo que <em>no</em> decide
- * es como estan puestos: eso lo contestan {@link #childAllocation}, {@link #isBefore} y
- * {@link #isAfter}, que cada subclase implementa. Poner los hijos en fila, en columna o en una
- * grilla es la unica diferencia entre las subclases.
+ * <p>It keeps the children, creates them from the document's elements ({@link #loadChildren})
+ * and translates between model and screen by delegating to the child that corresponds. What it
+ * does <em>not</em> decide is how they are placed: that is answered by {@link #childAllocation},
+ * {@link #isBefore} and {@link #isAfter}, which each subclass implements. Putting the children in
+ * a row, in a column or in a grid is the only difference between the subclasses.
  *
- * <h2>Los margenes</h2>
+ * <h2>The margins</h2>
  *
- * <p>Los cuatro insets son {@code short} y no {@code int}: una vista puede haber miles en un
- * documento y cada campo cuenta. {@link #getInsideAllocation} es la que descuenta los margenes y
- * deja el rectangulo donde de verdad van los hijos.
+ * <p>The four insets are {@code short} and not {@code int}: a document may have thousands of
+ * views and every field counts. {@link #getInsideAllocation} is the one that subtracts the
+ * margins and leaves the rectangle where the children really go.
  *
- * <h2>Moverse con las flechas</h2>
+ * <h2>Moving with the arrows</h2>
  *
- * <p>{@link #getNextVisualPositionFrom} se parte en dos: arriba y abajo lo resuelve el padre
- * —hay que cambiar de hijo—, izquierda y derecha lo resuelve el hijo mientras pueda. Esa division
- * es la que hace que bajar una linea funcione igual en un parrafo que en una tabla.
+ * <p>{@link #getNextVisualPositionFrom} splits in two: up and down are resolved by the parent
+ * --the child has to change-- and left and right by the child while it can. That division is what
+ * makes going down one line work the same in a paragraph as in a table.
  */
 public abstract class CompositeView extends View {
 
@@ -36,7 +36,7 @@ public abstract class CompositeView extends View {
     private short bottom;
     private Rectangle childAlloc;
 
-    /** Una vista de ese elemento, sin hijos todavia. */
+    /** A view of that element, with no children yet. */
     public CompositeView(Element elem) {
         super(elem);
         children = new View[1];
@@ -45,10 +45,10 @@ public abstract class CompositeView extends View {
     }
 
     /**
-     * Crea las vistas hijas, una por elemento hijo.
+     * It creates the child views, one per child element.
      *
-     * <p>Se llama sola la primera vez que la vista tiene padre: hasta ese momento no hay fabrica
-     * a quien pedirselas.
+     * <p>It is called by itself the first time the view has a parent: until that moment there is no
+     * factory to ask them for.
      */
     protected void loadChildren(ViewFactory f) {
         if (f == null) {
@@ -65,7 +65,7 @@ public abstract class CompositeView extends View {
         }
     }
 
-    /** Al tener padre por primera vez, carga los hijos. */
+    /** On having a parent for the first time, it loads the children. */
     public void setParent(View parent) {
         super.setParent(parent);
         if ((parent != null) && (nchildren == 0)) {
@@ -82,7 +82,7 @@ public abstract class CompositeView extends View {
         return children[n];
     }
 
-    /** Cambia un tramo de hijos por otro; a los que se van les saca el padre. */
+    /** It swaps a stretch of children for another; those that leave have their parent removed. */
     public void replace(int offset, int length, View[] views) {
         if (views == null) {
             views = new View[0];
@@ -117,14 +117,14 @@ public abstract class CompositeView extends View {
         }
     }
 
-    /** El lugar de ese hijo, ya descontados los margenes. */
+    /** That child's place, with the margins already subtracted. */
     public Shape getChildAllocation(int index, Shape a) {
         Rectangle alloc = getInsideAllocation(a);
         childAllocation(index, alloc);
         return alloc;
     }
 
-    /** Donde cae esa posicion: en el hijo que la contiene. */
+    /** Where that position falls: in the child that contains it. */
     public Shape modelToView(int pos, Shape a, Position.Bias b) throws BadLocationException {
         boolean isBackward = (b == Position.Bias.Backward);
         int testPos = (isBackward) ? Math.max(0, pos - 1) : pos;
@@ -141,7 +141,7 @@ public abstract class CompositeView extends View {
                 }
                 Shape retShape = v.modelToView(pos, childShape, b);
                 if (retShape == null && v.getEndOffset() == pos) {
-                    // El final de un hijo es el principio del siguiente.
+                    // A child's end is the next one's beginning.
                     if (++vIndex < getViewCount()) {
                         v = getView(vIndex);
                         retShape = v.modelToView(pos, getChildAllocation(vIndex, a), b);
@@ -153,7 +153,7 @@ public abstract class CompositeView extends View {
         throw new BadLocationException("Position not represented by view", pos);
     }
 
-    /** La region de las dos posiciones; si caen en el mismo hijo se la pide a el. */
+    /** The region of the two positions; if they fall in the same child it is asked of it. */
     public Shape modelToView(int p0, Position.Bias b0, int p1, Position.Bias b1, Shape a)
             throws BadLocationException {
         if (p0 == getStartOffset() && p1 == getEndOffset()) {
@@ -170,7 +170,7 @@ public abstract class CompositeView extends View {
             }
             return v0.modelToView(p0, b0, p1, b1, r0);
         }
-        // En hijos distintos: la union de los dos lugares.
+        // In different children: the union of the two places.
         Shape r = (v0 != null) ? v0.modelToView(p0, b0, v0.getEndOffset(),
                 Position.Bias.Backward, r0) : a;
         Rectangle rr = (r instanceof Rectangle) ? (Rectangle) r : r.getBounds();
@@ -182,11 +182,11 @@ public abstract class CompositeView extends View {
         return rr;
     }
 
-    /** Que posicion hay en ese punto: la que diga el hijo que lo contiene. */
+    /** Which position is at that point: whatever the child that contains it says. */
     public int viewToModel(float x, float y, Shape a, Position.Bias[] bias) {
         Rectangle alloc = getInsideAllocation(a);
         if (isBefore((int) x, (int) y, alloc)) {
-            // Antes del principio: la primera posicion.
+            // Before the beginning: the first position.
             int retValue = -1;
             try {
                 View v = getViewAtPoint((int) x, (int) y, alloc);
@@ -225,7 +225,7 @@ public abstract class CompositeView extends View {
         return -1;
     }
 
-    /** Ver la nota de la clase sobre por que se parte en dos. */
+    /** See the class note about why it splits in two. */
     public int getNextVisualPositionFrom(int pos, Position.Bias b, Shape a, int direction,
             Position.Bias[] biasRet) throws BadLocationException {
         if (pos < -1) {
@@ -242,7 +242,7 @@ public abstract class CompositeView extends View {
         throw new IllegalArgumentException("Bad direction: " + direction);
     }
 
-    /** El hijo que cubre esa posicion, o {@code -1}. */
+    /** The child that covers that position, or {@code -1}. */
     public int getViewIndex(int pos, Position.Bias b) {
         if (b == Position.Bias.Backward) {
             pos = pos - 1;
@@ -253,17 +253,17 @@ public abstract class CompositeView extends View {
         return -1;
     }
 
-    /** Si ese punto esta antes del principio de la region; lo contesta cada subclase. */
+    /** Whether that point is before the region's beginning; each subclass answers it. */
     protected abstract boolean isBefore(int x, int y, Rectangle alloc);
 
     protected abstract boolean isAfter(int x, int y, Rectangle alloc);
 
     protected abstract View getViewAtPoint(int x, int y, Rectangle alloc);
 
-    /** Deja en el rectangulo el lugar de ese hijo; lo contesta cada subclase. */
+    /** It leaves that child's place in the rectangle; each subclass answers it. */
     protected abstract void childAllocation(int index, Rectangle a);
 
-    /** El hijo que cubre esa posicion, con su lugar puesto en el rectangulo. */
+    /** The child that covers that position, with its place put in the rectangle. */
     protected View getViewAtPosition(int pos, Rectangle a) {
         int index = getViewIndexAtPosition(pos);
         if ((index >= 0) && (index < getViewCount())) {
@@ -277,22 +277,23 @@ public abstract class CompositeView extends View {
     }
 
     /**
-     * Que hijo corresponde a esa posicion.
+     * Which child corresponds to that position.
      *
-     * <p>Lo contesta el <em>elemento</em>, no los hijos. Parece un rodeo teniendo los hijos a mano,
-     * pero es lo que hace que la respuesta sea la misma antes y despues de armarlos: una vista que
-     * todavia no creo a sus hijos, o que los descarto, sigue sabiendo donde caeria cada posicion.
-     * Buscando entre los hijos, una vista a medio armar contestaria que la posicion no existe.
+     * <p>The <em>element</em> answers it, not the children. It looks like a detour with the
+     * children at hand, but it is what makes the answer the same before and after building them: a
+     * view that has not created its children yet, or that discarded them, still knows where each
+     * position would fall. Searching among the children, a half-built view would answer that the
+     * position does not exist.
      *
-     * <p>Quien de verdad tenga hijos que no siguen a los elementos uno a uno lo sobrescribe; es lo
-     * que hace {@link ZoneView}.
+     * <p>Whoever really has children that do not follow the elements one to one overrides it; it is
+     * what {@link ZoneView} does.
      */
     protected int getViewIndexAtPosition(int pos) {
         Element elem = getElement();
         return elem.getElementIndex(pos);
     }
 
-    /** El rectangulo de adentro: el lugar menos los margenes. */
+    /** The inner rectangle: the place minus the margins. */
     protected Rectangle getInsideAllocation(Shape a) {
         if (a != null) {
             Rectangle alloc;
@@ -311,7 +312,7 @@ public abstract class CompositeView extends View {
         return null;
     }
 
-    /** Toma los margenes de los atributos de parrafo: sangrias y espacio antes y despues. */
+    /** It takes the margins from the paragraph attributes: indents and space before and after. */
     protected void setParagraphInsets(AttributeSet attr) {
         top = (short) StyleConstants.getSpaceAbove(attr);
         left = (short) StyleConstants.getLeftIndent(attr);
@@ -343,48 +344,49 @@ public abstract class CompositeView extends View {
     }
 
     /**
-     * Subir o bajar una linea.
+     * Going up or down one line.
      *
-     * <p>Por omision no se mueve: una vista que no apila hijos en vertical no sabe que es "la
-     * linea de arriba". {@code BoxView} vertical y {@code ParagraphView} lo redefinen.
+     * <p>By default it does not move: a view that does not stack children vertically does not know
+     * what "the line above" is. Vertical {@code BoxView} and {@code ParagraphView} redefine it.
      */
     protected int getNextNorthSouthVisualPositionFrom(int pos, Position.Bias b, Shape a,
             int direction, Position.Bias[] biasRet) throws BadLocationException {
-        return siguienteEnHijos(pos, b, a, direction, biasRet);
+        return nextInChildren(pos, b, a, direction, biasRet);
     }
 
     /**
-     * Un caracter a la izquierda o a la derecha.
+     * One character to the left or to the right.
      *
-     * <p>Se lo pide al hijo que tiene la posicion; si el hijo dice que se acabo, pasa al de al
-     * lado. Es lo que hace que la flecha derecha salte de una palabra a la siguiente sin que
-     * nadie tenga que saber donde termina cada una.
+     * <p>It is asked of the child that has the position; if the child says it has run out, it moves
+     * on to the one beside it. It is what makes the right arrow jump from one word to the next
+     * without anybody having to know where each one ends.
      */
     protected int getNextEastWestVisualPositionFrom(int pos, Position.Bias b, Shape a,
             int direction, Position.Bias[] biasRet) throws BadLocationException {
-        return siguienteEnHijos(pos, b, a, direction, biasRet);
+        return nextInChildren(pos, b, a, direction, biasRet);
     }
 
     /**
-     * Le pide la proxima posicion al hijo que tiene la actual, y si se le acaba, al de al lado.
+     * It asks the child that has the current position for the next one, and if it runs out, the
+     * one beside it.
      *
-     * <p>El {@code -1} como posicion significa "vengo de afuera": el hijo empieza por su punta.
-     * Es como se pasa de un hijo al siguiente sin que ninguno tenga que saber del otro.
+     * <p>The {@code -1} as a position means "I come from outside": the child starts at its tip.
+     * It is how one goes from one child to the next without either having to know about the other.
      */
-    private int siguienteEnHijos(int pos, Position.Bias b, Shape a, int direction,
+    private int nextInChildren(int pos, Position.Bias b, Shape a, int direction,
             Position.Bias[] biasRet) throws BadLocationException {
         if (getViewCount() == 0) {
             return pos;
         }
-        boolean haciaAtras = (direction == NORTH || direction == WEST);
+        boolean backwards = (direction == NORTH || direction == WEST);
         int retValue;
         if (pos == -1) {
-            int childIndex = haciaAtras ? getViewCount() - 1 : 0;
+            int childIndex = backwards ? getViewCount() - 1 : 0;
             View child = getView(childIndex);
             Shape childBounds = getChildAllocation(childIndex, a);
             retValue = child.getNextVisualPositionFrom(pos, b, childBounds, direction, biasRet);
         } else {
-            int increment = haciaAtras ? -1 : 1;
+            int increment = backwards ? -1 : 1;
             int childIndex;
             if (b == Position.Bias.Backward && pos > 0) {
                 childIndex = getViewIndex(pos - 1, Position.Bias.Forward);
@@ -412,10 +414,10 @@ public abstract class CompositeView extends View {
     }
 
     /**
-     * Si en los extremos hay que dar vuelta izquierda y derecha.
+     * Whether at the ends left and right have to be swapped.
      *
-     * <p>Hace falta en texto que se lee de derecha a izquierda: ahi "la siguiente a la derecha"
-     * es la anterior del documento. Sin analisis bidireccional, siempre {@code false}.
+     * <p>It is needed in text read from right to left: there "the next one to the right" is the
+     * previous one in the document. Without bidirectional analysis, always {@code false}.
      */
     protected boolean flipEastAndWestAtEnds(int position, Position.Bias bias) {
         return false;

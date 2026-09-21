@@ -18,15 +18,15 @@ import javax.swing.border.MatteBorder;
 import javax.swing.border.TitledBorder;
 
 /**
- * Un {@link Border} que puso el aspecto; ver {@link UIResource}.
+ * A {@link Border} the look and feel set; see {@link UIResource}.
  *
- * <p>Dos formas de ponerle la etiqueta a un borde: envolver uno cualquiera con esta clase, o usar
- * las anidadas —{@code CompoundBorderUIResource}, {@code EmptyBorderUIResource}...—, que son cada
- * borde de {@code javax.swing.border} con la etiqueta puesta de nacimiento. Los aspectos usan las
- * anidadas; la envoltura es para bordes que no son de esa familia.
+ * <p>Two ways of putting the label on a border: wrapping any one with this class, or using the
+ * nested ones --{@code CompoundBorderUIResource}, {@code EmptyBorderUIResource}...--, which are
+ * each border of {@code javax.swing.border} with the label put on at birth. The looks and feels
+ * use the nested ones; the wrapper is for borders that are not of that family.
  *
- * <p>Los tres bordes compartidos —grabado, biseles— se crean una vez: son inmutables y no llevan
- * estado del componente, asi que uno alcanza para todos.
+ * <p>The three shared borders --etched, bevels-- are created once: they are immutable and carry
+ * no state of the component, so one is enough for everybody.
  */
 public class BorderUIResource implements Border, UIResource, Serializable {
 
@@ -37,7 +37,7 @@ public class BorderUIResource implements Border, UIResource, Serializable {
 
     private Border delegate;
 
-    /** Envuelve ese borde. {@code null} no es un borde. */
+    /** Wraps that border. {@code null} is not a border. */
     public BorderUIResource(Border delegate) {
         if (delegate == null) {
             throw new IllegalArgumentException("null border delegate argument");
@@ -45,7 +45,7 @@ public class BorderUIResource implements Border, UIResource, Serializable {
         this.delegate = delegate;
     }
 
-    /** El borde grabado compartido. */
+    /** The shared etched border. */
     public static Border getEtchedBorderUIResource() {
         if (etched == null) {
             etched = new EtchedBorderUIResource();
@@ -53,7 +53,7 @@ public class BorderUIResource implements Border, UIResource, Serializable {
         return etched;
     }
 
-    /** El bisel hundido compartido. */
+    /** The shared lowered bevel. */
     public static Border getLoweredBevelBorderUIResource() {
         if (loweredBevel == null) {
             loweredBevel = new BevelBorderUIResource(BevelBorder.LOWERED);
@@ -61,7 +61,7 @@ public class BorderUIResource implements Border, UIResource, Serializable {
         return loweredBevel;
     }
 
-    /** El bisel levantado compartido. */
+    /** The shared raised bevel. */
     public static Border getRaisedBevelBorderUIResource() {
         if (raisedBevel == null) {
             raisedBevel = new BevelBorderUIResource(BevelBorder.RAISED);
@@ -69,7 +69,7 @@ public class BorderUIResource implements Border, UIResource, Serializable {
         return raisedBevel;
     }
 
-    /** La linea negra de un pixel compartida. */
+    /** The shared one-pixel black line. */
     public static Border getBlackLineBorderUIResource() {
         if (blackLine == null) {
             blackLine = new LineBorderUIResource(Color.black);
@@ -89,14 +89,14 @@ public class BorderUIResource implements Border, UIResource, Serializable {
         return delegate.isBorderOpaque();
     }
 
-    /** Un {@link CompoundBorder} del aspecto. */
+    /** A {@link CompoundBorder} of the look and feel. */
     public static class CompoundBorderUIResource extends CompoundBorder implements UIResource {
         public CompoundBorderUIResource(Border outsideBorder, Border insideBorder) {
             super(outsideBorder, insideBorder);
         }
     }
 
-    /** Un {@link EmptyBorder} del aspecto. */
+    /** An {@link EmptyBorder} of the look and feel. */
     public static class EmptyBorderUIResource extends EmptyBorder implements UIResource {
         public EmptyBorderUIResource(int top, int left, int bottom, int right) {
             super(top, left, bottom, right);
@@ -107,7 +107,7 @@ public class BorderUIResource implements Border, UIResource, Serializable {
         }
     }
 
-    /** Un {@link LineBorder} del aspecto. */
+    /** A {@link LineBorder} of the look and feel. */
     public static class LineBorderUIResource extends LineBorder implements UIResource {
         public LineBorderUIResource(Color color) {
             super(color);
@@ -118,7 +118,7 @@ public class BorderUIResource implements Border, UIResource, Serializable {
         }
     }
 
-    /** Un {@link BevelBorder} del aspecto. */
+    /** A {@link BevelBorder} of the look and feel. */
     public static class BevelBorderUIResource extends BevelBorder implements UIResource {
         public BevelBorderUIResource(int bevelType) {
             super(bevelType);
@@ -134,7 +134,7 @@ public class BorderUIResource implements Border, UIResource, Serializable {
         }
     }
 
-    /** Un {@link EtchedBorder} del aspecto. */
+    /** An {@link EtchedBorder} of the look and feel. */
     public static class EtchedBorderUIResource extends EtchedBorder implements UIResource {
         public EtchedBorderUIResource() {
             super();
@@ -153,7 +153,7 @@ public class BorderUIResource implements Border, UIResource, Serializable {
         }
     }
 
-    /** Un {@link MatteBorder} del aspecto. */
+    /** A {@link MatteBorder} of the look and feel. */
     public static class MatteBorderUIResource extends MatteBorder implements UIResource {
         public MatteBorderUIResource(int top, int left, int bottom, int right, Color color) {
             super(top, left, bottom, right, color);
@@ -168,7 +168,7 @@ public class BorderUIResource implements Border, UIResource, Serializable {
         }
     }
 
-    /** Un {@link TitledBorder} del aspecto. */
+    /** A {@link TitledBorder} of the look and feel. */
     public static class TitledBorderUIResource extends TitledBorder implements UIResource {
         public TitledBorderUIResource(String title) {
             super(title);

@@ -5,41 +5,41 @@ import java.lang.classfile.Label;
 import java.lang.classfile.Opcode;
 import jdk.internal.classfile.impl.Instructions;
 
-// Las instrucciones que la JVM ya no acepta en clases nuevas pero que hay que poder LEER: `jsr` y
-// `ret`, que implementaban el `finally` antes de Java 6 y que el verificador de mapas de pila
-// prohíbe desde la versión mayor 51. Una biblioteca de lectura que no las modele no puede abrir un
-// `.class` viejo, que es justamente el caso donde más falta hace.
+// The instructions the JVM no longer accepts in new classes but that have to be READable: `jsr` and
+// `ret`, which implemented `finally` before Java 6 and which the stack map verifier has forbidden
+// since major version 51. A reading library that does not model them cannot open an old `.class`,
+// which is precisely the case where it is needed most.
 public interface DiscontinuedInstruction extends Instruction {
 
-    /** `jsr` o `jsr_w`: salta guardando la dirección de retorno en la pila. */
+    /** `jsr` or `jsr_w`: it jumps storing the return address on the stack. */
     public interface JsrInstruction extends DiscontinuedInstruction {
 
-        /** A dónde salta. */
+        /** Where it jumps to. */
         Label target();
 
-        /** El `jsr` de este opcode a esta etiqueta. */
+        /** The `jsr` of this opcode to this label. */
         public static JsrInstruction of(Opcode op, Label target) {
             return Instructions.jsr(op, target);
         }
 
-        /** El `jsr` de tres bytes a esta etiqueta. */
+        /** The three-byte `jsr` to this label. */
         public static JsrInstruction of(Label target) {
             return Instructions.jsr(Opcode.JSR, target);
         }
     }
 
-    /** `ret`: vuelve a la dirección guardada en una variable local. */
+    /** `ret`: it returns to the address stored in a local variable. */
     public interface RetInstruction extends DiscontinuedInstruction {
 
-        /** La ranura donde está la dirección de retorno. */
+        /** The slot the return address is in. */
         int slot();
 
-        /** El `ret` de este opcode sobre esta ranura. */
+        /** The `ret` of this opcode over this slot. */
         public static RetInstruction of(Opcode op, int slot) {
             return Instructions.ret(op, slot);
         }
 
-        /** El `ret` en la codificación más corta que le entre a la ranura. */
+        /** The `ret` in the shortest encoding the slot fits into. */
         public static RetInstruction of(int slot) {
             return Instructions.ret(slot);
         }

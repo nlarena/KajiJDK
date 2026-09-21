@@ -4,66 +4,79 @@ import javax.xml.namespace.QName;
 import org.w3c.dom.Node;
 
 /**
- * KajiLibrary's javax.xml.xpath.XPathEvaluationResult -- un resultado que sabe de que tipo es.
+ * KajiLibrary's javax.xml.xpath.XPathEvaluationResult -- a result that knows its own type.
  *
- * <p>Es lo que devuelve {@code evaluateExpression} cuando no se dice que tipo se espera. Trae el
- * valor y su tipo juntos, que es la unica forma de contestar sin obligar a quien pregunta a adivinar.
+ * <p>It is what {@code evaluateExpression} returns when the expected type is not given. It carries
+ * the value and its type together, which is the only way to answer without forcing the caller to
+ * guess.
  *
- * <p>Existe porque la via vieja --{@code evaluate} con un {@link QName}-- obliga a decidir el tipo
- * <b>antes</b> de evaluar, y hay expresiones cuyo tipo depende del documento. Con esto se evalua
- * primero y se decide despues.
+ * <p>It exists because the old way --{@code evaluate} with a {@link QName}-- forces you to decide
+ * the type <b>before</b> evaluating, and there are expressions whose type depends on the document.
+ * With this you evaluate first and decide afterwards.
  */
 public interface XPathEvaluationResult<T> {
 
-    /** De que tipo es el valor. */
+    /** Which type the value is. */
     XPathResultType type();
 
-    /** El valor. */
+    /** The value. */
     T value();
 
     /**
-     * Los tipos que XPath puede producir, como enum.
+     * The types XPath can produce, as an enum.
      *
-     * <p>Es la version moderna de las constantes de {@link XPathConstants}, que son {@code QName}.
-     * Los dos juegos conviven y {@link #getQNameType} es el puente entre ellos.
+     * <p>It is the modern version of the {@link XPathConstants} constants, which are {@code
+     * QName}s. The two sets coexist and {@link #getQNameType} is the bridge between them.
      *
-     * <p>{@link #ANY} no es un tipo de resultado sino un pedido: significa "el que salga". Por eso
-     * no tiene {@code QName} y por eso es el primero del enum.
+     * <p>{@link #ANY} is not a result type but a request: it means "whatever comes out".
+     *
+     * <p>Unlike the JDK, the constants here carry neither a {@code QName} nor a {@code Class}. In
+     * the JDK 25 sources {@code ANY} is bound to the {@code QName} {@code any} in the XSLT
+     * namespace and to {@code XPathEvaluationResult.class}, so {@code
+     * getQNameType(XPathEvaluationResult.class)} returns that {@code QName} there; here it returns
+     * null. (An earlier note said {@code ANY} has no {@code QName}; that holds for this library,
+     * not for the JDK.)
      */
     public static enum XPathResultType {
 
-        /** Cualquiera; se usa al pedir, no al recibir. */
+        /** Any; used when asking, not when receiving. */
         ANY,
 
-        /** Un booleano. */
+        /** A boolean. */
         BOOLEAN,
 
-        /** Un numero; en XPath 1.0 siempre un {@code double}. */
+        /** A number; in XPath 1.0 always a {@code double}. */
         NUMBER,
 
-        /** Una cadena. */
+        /** A string. */
         STRING,
 
-        /** Un conjunto de nodos. */
+        /** A node-set. */
         NODESET,
 
-        /** Un solo nodo. */
+        /** A single node. */
         NODE;
 
         /**
-         * El {@link QName} que corresponde a esa clase de Java.
+         * The {@link QName} that corresponds to that Java class.
          *
-         * <p>El mapeo tiene dos sorpresas que conviene tener presentes:
+         * <p>The mapping has two surprises worth keeping in mind:
          *
          * <ul>
-         *   <li>cualquier {@link Number} da {@link XPathConstants#NUMBER}, asi que pedir
-         *       {@code Integer.class} funciona aunque XPath 1.0 no tenga enteros;
-         *   <li>{@code org.w3c.dom.NodeList} devuelve <b>null</b>, aunque sea justo el tipo que la
-         *       via vieja usa para un conjunto de nodos. El conjunto de nodos moderno es
-         *       {@link XPathNodes}, y esta tabla es la del API moderno.
+         *   <li>any {@link Number} gives {@link XPathConstants#NUMBER}, so asking for {@code
+         *       Integer.class} works even though XPath 1.0 has no integers;
+         *   <li>{@code org.w3c.dom.NodeList} returns <b>null</b>, even though it is exactly the
+         *       type the old way uses for a node-set. The modern node-set is {@link XPathNodes},
+         *       and this table is the modern API's.
          * </ul>
          *
-         * @return null si esa clase no es un tipo de resultado de XPath
+         * <p>This differs from the JDK 25 sources in two places. There, only {@code Number}, {@code
+         * Double}, {@code Integer} and {@code Long} map to {@code NUMBER} ({@code Float}, {@code
+         * Short} or {@code BigDecimal} give null), and every subtype of {@code Node} --{@code
+         * Element.class}, say-- maps to {@code NODE}, where here only {@code Node.class} itself
+         * does.
+         *
+         * @return null if that class is not an XPath result type
          */
         public static QName getQNameType(Class<?> clsType) {
             if (clsType == null) {
@@ -81,7 +94,7 @@ public interface XPathEvaluationResult<T> {
             if (Node.class.equals(clsType)) {
                 return XPathConstants.NODE;
             }
-            // Cualquier numero, no solo Double; ver la nota del metodo.
+            // Any number, not just Double; see the method note.
             if (Number.class.isAssignableFrom(clsType)) {
                 return XPathConstants.NUMBER;
             }

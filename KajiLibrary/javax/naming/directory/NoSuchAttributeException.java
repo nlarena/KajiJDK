@@ -3,21 +3,22 @@ package javax.naming.directory;
 import javax.naming.NamingException;
 
 /**
- * KajiLibrary's javax.naming.directory.NoSuchAttributeException -- ese atributo no esta en la entrada.
+ * KajiLibrary's javax.naming.directory.NoSuchAttributeException -- that attribute is not in the
+ * entry.
  *
- * <p>Distinta de {@link InvalidAttributeIdentifierException}: alla el nombre no era valido, aca es
- * valido y la entrada no lo tiene.
+ * <p>Different from {@link InvalidAttributeIdentifierException}: there the name was not valid, here
+ * it is valid and the entry does not have it.
  */
 public class NoSuchAttributeException extends NamingException {
 
     private static final long serialVersionUID = 4836415647935888137L;
 
-    /** Sin detalle. */
+    /** With no detail. */
     public NoSuchAttributeException() {
         super();
     }
 
-    /** Con un mensaje que diga cual fue el problema. */
+    /** With a message saying what the problem was. */
     public NoSuchAttributeException(String explanation) {
         super(explanation);
     }

@@ -3,33 +3,34 @@ package javax.swing.filechooser;
 import java.io.File;
 
 /**
- * Que archivos se le muestran al usuario en un selector.
+ * Which files are shown to the user in a chooser.
  *
- * <h2>Por que es una clase abstracta y no la {@link java.io.FileFilter} que ya existe</h2>
+ * <h2>Why it is an abstract class and not the {@link java.io.FileFilter} that already exists</h2>
  *
- * <p>Porque hace falta un segundo metodo: {@link #getDescription}. Un selector de archivos no solo
- * filtra — muestra una lista desplegable con los filtros disponibles, y cada uno necesita un texto
- * que una persona pueda leer, del estilo "Imagenes (*.jpg, *.png)". La interfaz de
- * {@code java.io} solo sabe decir si o no.
+ * <p>Because a second method is needed: {@link #getDescription}. A file chooser does not only
+ * filter -- it shows a drop-down list with the available filters, and each one needs a text a
+ * person can read, of the sort "Images (*.jpg, *.png)". The {@code java.io} interface only
+ * knows how to say yes or no.
  *
- * <p>Y es una clase y no una interfaz para que agregar un metodo mas adelante no rompa a quien ya la
- * extendio. El precio es que un filtro no puede heredar de otra cosa, que en la practica no molesta.
+ * <p>And it is a class and not an interface so that adding a method later does not break whoever
+ * already extended it. The price is that a filter cannot inherit from anything else, which in
+ * practice does not get in the way.
  */
 public abstract class FileFilter {
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected FileFilter() {
     }
 
     /**
-     * Si {@code f} se muestra.
+     * Whether {@code f} is shown.
      *
-     * <p>Los directorios <strong>casi siempre</strong> tienen que pasar: filtrarlos dejaria al
-     * usuario sin poder navegar hasta donde estan los archivos que el filtro si acepta. Es el error
-     * mas comun al escribir uno.
+     * <p>Directories <strong>almost always</strong> have to pass: filtering them out would leave
+     * the user unable to navigate to where the files the filter does accept are. It is the
+     * commonest mistake when writing one.
      */
     public abstract boolean accept(File f);
 
-    /** El texto que se muestra en la lista de filtros. */
+    /** The text shown in the filter list. */
     public abstract String getDescription();
 }

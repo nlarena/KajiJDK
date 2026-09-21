@@ -1,36 +1,37 @@
 package javax.sound.midi;
 
 /**
- * KajiLibrary's javax.sound.midi.Soundbank -- una coleccion de sonidos para un sintetizador.
+ * KajiLibrary's javax.sound.midi.Soundbank -- a collection of sounds for a synthesizer.
  *
- * <p>MIDI manda numeros de nota, no sonido. Lo que suena lo pone el sintetizador, y de aca lo saca: un
- * banco de sonidos es el archivo --SoundFont, DLS-- que dice como suena cada instrumento.
+ * <p>MIDI sends note numbers, not sound. What sounds is supplied by the synthesizer, and it takes
+ * it from here: a sound bank is the file --SoundFont, DLS-- that says how each instrument sounds.
  *
- * <p>Por eso el mismo archivo MIDI suena distinto en dos maquinas: cambia el banco, no la musica.
+ * <p>That is why the same MIDI file sounds different on two machines: the bank changes, not the
+ * music.
  *
- * <p>{@link #getInstruments} son los sonidos tocables; {@link #getResources} incluye ademas lo que los
- * instrumentos usan por dentro --las muestras de audio-- y que no se puede tocar directamente.
+ * <p>{@link #getInstruments} are the playable sounds; {@link #getResources} also includes what the
+ * instruments use inside --the audio samples-- and that cannot be played directly.
  */
 public interface Soundbank {
 
-    /** Como se llama. */
+    /** What it is called. */
     String getName();
 
-    /** Que version. */
+    /** Which version. */
     String getVersion();
 
-    /** Quien lo hizo. */
+    /** Who made it. */
     String getVendor();
 
-    /** Que trae. */
+    /** What it contains. */
     String getDescription();
 
-    /** Todo lo que contiene, tocable o no. Ver la nota de la clase. */
+    /** Everything it contains, playable or not. See the class note. */
     SoundbankResource[] getResources();
 
-    /** Los sonidos tocables. */
+    /** The playable sounds. */
     Instrument[] getInstruments();
 
-    /** El sonido de esa direccion, o null. */
+    /** The sound at that address, or null. */
     Instrument getInstrument(Patch patch);
 }

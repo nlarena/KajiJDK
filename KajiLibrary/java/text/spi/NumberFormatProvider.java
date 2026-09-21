@@ -5,41 +5,41 @@ import java.util.Locale;
 import java.util.spi.LocaleServiceProvider;
 
 /**
- * KajiLibrary's java.text.spi.NumberFormatProvider -- como se escribe un numero.
+ * KajiLibrary's java.text.spi.NumberFormatProvider -- how a number is written.
  *
- * <p>Cuatro formas obligatorias y una con default, y las cuatro son distintas de verdad y no solo de
- * decoracion: la de moneda pone el simbolo donde esa cultura lo pone --antes en ingles, despues en
- * frances-- y con los decimales que la moneda usa; la entera redondea en vez de truncar; la de
- * porcentaje multiplica por cien.
+ * <p>Four mandatory forms and one with a default, and the four are genuinely different and not just
+ * decoratively so: the currency one puts the symbol where that culture puts it --before in English,
+ * after in French-- and with the decimals that currency uses; the integer one rounds instead of
+ * truncating; the percentage one multiplies by a hundred.
  *
- * <p>{@link #getCompactNumberInstance} tiene default y lanza: es la que escribe {@code "1,2 M"} en
- * vez de {@code "1200000"}, llego mucho despues que el resto, y un proveedor viejo que no la conozca
- * tiene que seguir compilando. Lanzar --en vez de devolver el formato normal-- es lo correcto:
- * devolver {@code "1200000"} donde se pidio la forma compacta rompe la maqueta de quien la pidio, y
- * en silencio.
+ * <p>{@link #getCompactNumberInstance} has a default and it throws: it is the one that writes
+ * {@code "1,2 M"} instead of {@code "1200000"}, it arrived long after the rest, and an old provider
+ * that does not know it has to go on compiling. Throwing --instead of returning the ordinary
+ * format-- is the right thing: returning {@code "1200000"} where the compact form was asked for
+ * breaks the layout of whoever asked for it, and does so in silence.
  */
 public abstract class NumberFormatProvider extends LocaleServiceProvider {
 
     protected NumberFormatProvider() {
     }
 
-    /** Con simbolo de moneda, donde esa cultura lo pone. */
+    /** With the currency symbol, where that culture puts it. */
     public abstract NumberFormat getCurrencyInstance(Locale locale);
 
-    /** Entero. Redondea, no trunca. */
+    /** Integer. It rounds, it does not truncate. */
     public abstract NumberFormat getIntegerInstance(Locale locale);
 
-    /** El de proposito general. */
+    /** The general-purpose one. */
     public abstract NumberFormat getNumberInstance(Locale locale);
 
-    /** Porcentaje: multiplica por cien y agrega el signo. */
+    /** Percentage: it multiplies by a hundred and adds the sign. */
     public abstract NumberFormat getPercentInstance(Locale locale);
 
     /**
-     * La forma compacta.
+     * The compact form.
      *
-     * @throws UnsupportedOperationException por omision; ver la nota de la clase para por que lanza
-     *     en vez de caer al formato normal
+     * @throws UnsupportedOperationException by default; see the class's note for why it throws
+     *     instead of falling back to the ordinary format
      */
     public NumberFormat getCompactNumberInstance(Locale locale, NumberFormat.Style formatStyle) {
         throw new UnsupportedOperationException(

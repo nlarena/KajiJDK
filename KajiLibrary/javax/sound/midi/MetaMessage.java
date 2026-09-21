@@ -1,47 +1,47 @@
 package javax.sound.midi;
 
 /**
- * KajiLibrary's javax.sound.midi.MetaMessage -- un mensaje que solo existe en archivos.
+ * KajiLibrary's javax.sound.midi.MetaMessage -- a message that only exists in files.
  *
- * <p>El tempo, la armadura, el compas, el nombre de la pista, la letra. Nada de esto viaja por un
- * cable MIDI: son anotaciones del archivo.
+ * <p>The tempo, the key signature, the time signature, the track name, the lyrics. None of this
+ * travels over a MIDI cable: they are annotations of the file.
  *
- * <p>El byte de estado es {@link #META}, que vale 0xFF -- el mismo que "reset del sistema" en el
- * cable. Por eso mandarle uno de estos a un dispositivo real no solo no sirve: lo resetea.
+ * <p>The status byte is {@link #META}, which is 0xFF -- the same as "system reset" on the cable.
+ * That is why sending one of these to a real device not only does not work: it resets it.
  *
- * <h2>El largo va codificado</h2>
+ * <h2>The length is encoded</h2>
  *
- * <p>Los bytes son {@code 0xFF}, el tipo, el <b>largo de los datos en cantidad de largo variable</b>,
- * y los datos. Esa codificacion --siete bits por byte, el bit alto indica que sigue-- es la que usa
- * todo el formato de archivo MIDI, y es la razon de que un archivo MIDI de tres minutos ocupe unos
- * pocos kilobytes.
+ * <p>The bytes are {@code 0xFF}, the type, the <b>length of the data as a variable-length
+ * quantity</b>, and the data. That encoding --seven bits per byte, the high bit says more follows--
+ * is the one the whole MIDI file format uses, and it is the reason a three-minute MIDI file takes a
+ * few kilobytes.
  *
- * <p>{@link #getData} devuelve solo los datos, sin el encabezado. {@link #getLength} devuelve el
- * total, encabezado incluido, asi que los dos no coinciden y no tienen por que.
+ * <p>{@link #getData} returns only the data, without the header. {@link #getLength} returns the
+ * total, header included, so the two do not match and need not.
  *
- * <h2>El tipo 0x2F es el fin de pista</h2>
+ * <h2>Type 0x2F is the end of track</h2>
  *
- * <p>Es obligatorio y va al final de cada pista. {@link Track} lo mantiene solo; no hay que agregarlo
- * a mano.
+ * <p>It is mandatory and goes at the end of each track. {@link Track} keeps it by itself; it need
+ * not be added by hand.
  */
 public class MetaMessage extends MidiMessage {
 
-    /** El byte de estado de todos los meta mensajes. */
+    /** The status byte of all meta messages. */
     public static final int META = 0xFF;
 
-    /** Cuantos bytes ocupa el encabezado: 0xFF, el tipo, y el largo variable. */
+    /** How many bytes the header takes: 0xFF, the type, and the variable length. */
     private int dataLength = 0;
 
-    /** Un meta mensaje de tipo 0 sin datos. */
+    /** A meta message of type 0 without data. */
     public MetaMessage() {
         this(new byte[] { (byte) META, 0 });
     }
 
     /**
-     * Un meta mensaje con tipo y datos.
+     * A meta message with type and data.
      *
-     * @param type de 0 a 127
-     * @throws InvalidMidiDataException si el tipo esta fuera de rango
+     * @param type from 0 to 127
+     * @throws InvalidMidiDataException if the type is out of range
      */
     public MetaMessage(int type, byte[] data, int length) throws InvalidMidiDataException {
         super(null);
@@ -49,10 +49,10 @@ public class MetaMessage extends MidiMessage {
     }
 
     /**
-     * Para las subclases y los lectores.
+     * For the subclasses and the readers.
      *
-     * <p>Lee el largo variable del encabezado para saber donde empiezan los datos; no alcanza con
-     * restar tres, porque el largo puede ocupar mas de un byte.
+     * <p>It reads the header's variable length to know where the data starts; subtracting three is
+     * not enough, because the length can take more than one byte.
      */
     protected MetaMessage(byte[] data) {
         super(data);
@@ -70,11 +70,11 @@ public class MetaMessage extends MidiMessage {
     }
 
     /**
-     * Reemplaza tipo y datos.
+     * Replaces type and data.
      *
-     * @param type de 0 a 127
-     * @param length cuantos bytes de {@code data} usar
-     * @throws InvalidMidiDataException si el tipo esta fuera de rango o el largo no cierra
+     * @param type from 0 to 127
+     * @param length how many bytes of {@code data} to use
+     * @throws InvalidMidiDataException if the type is out of range or the length does not add up
      */
     public void setMessage(int type, byte[] data, int length) throws InvalidMidiDataException {
         if (type >= 128 || type < 0) {
@@ -98,7 +98,7 @@ public class MetaMessage extends MidiMessage {
         }
     }
 
-    /** El tipo, de 0 a 127. */
+    /** The type, from 0 to 127. */
     public int getType() {
         if (this.length >= 2) {
             return this.data[1] & 0xFF;
@@ -106,14 +106,14 @@ public class MetaMessage extends MidiMessage {
         return 0;
     }
 
-    /** Una copia de los datos, sin el encabezado. Ver la nota de la clase. */
+    /** A copy of the data, without the header. See the class note. */
     public byte[] getData() {
         byte[] copy = new byte[this.dataLength];
         System.arraycopy(this.data, this.length - this.dataLength, copy, 0, this.dataLength);
         return copy;
     }
 
-    /** Una copia independiente. */
+    /** An independent copy. */
     @Override
     public Object clone() {
         byte[] copy = new byte[this.length];
@@ -122,10 +122,10 @@ public class MetaMessage extends MidiMessage {
     }
 
     /**
-     * Codifica un numero en cantidad de largo variable.
+     * Encodes a number as a variable-length quantity.
      *
-     * <p>Siete bits por byte, del mas significativo al menos; todos menos el ultimo llevan el bit alto
-     * en uno. Ver la nota de la clase.
+     * <p>Seven bits per byte, from the most significant to the least; all but the last carry the
+     * high bit set. See the class note.
      */
     private static byte[] variableLength(int value) {
         int bytes = 1;

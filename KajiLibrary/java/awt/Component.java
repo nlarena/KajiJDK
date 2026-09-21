@@ -42,80 +42,82 @@ import javax.accessibility.AccessibleState;
 import javax.accessibility.AccessibleStateSet;
 
 /**
- * Cualquier cosa que ocupa lugar en pantalla y puede recibir entrada del usuario.
+ * Anything that takes up room on a screen and can receive input from the user.
  *
- * <p>Es la clase más grande de AWT y la raíz de todo lo visible. Junta cinco responsabilidades que
- * en un diseño de hoy estarían separadas, y conviene verlas por separado para entenderla:
+ * <p>It is the biggest class of AWT and the root of everything visible. It brings together five
+ * responsibilities that in a design of today would be separate, and it helps to look at them apart
+ * to understand it:
  *
  * <ul>
- *   <li><strong>geometría</strong>: dónde está y cuánto mide, más las tres medidas sugeridas
- *       —mínima, preferida y máxima— que las distribuciones usan para repartir el espacio;
- *   <li><strong>apariencia</strong>: color de frente y de fondo, fuente, cursor, si se ve;
- *   <li><strong>eventos</strong>: registrar oyentes y repartirles lo que llega;
- *   <li><strong>foco</strong>: si puede recibirlo, con qué teclas se recorre;
- *   <li><strong>pintado</strong>: {@code paint}, {@code update} y {@code repaint}.
+ *   <li><strong>geometry</strong>: where it is and how much it measures, plus the three suggested
+ *       sizes —minimum, preferred and maximum— that the layouts use to share out the room;
+ *   <li><strong>appearance</strong>: foreground and background colour, font, cursor, whether it is
+ *       seen;
+ *   <li><strong>events</strong>: registering listeners and handing them what arrives;
+ *   <li><strong>focus</strong>: whether it can receive it, which keys walk through it;
+ *   <li><strong>painting</strong>: {@code paint}, {@code update} and {@code repaint}.
  * </ul>
  *
- * <p>Las tres medidas tienen una regla que se olvida: {@link #getPreferredSize} devuelve lo que se
- * le haya fijado con {@link #setPreferredSize}, y sólo si no se le fijó nada la calcula. Por eso
- * {@link #isPreferredSizeSet} existe — es la única forma de distinguir "me dijeron que mida esto" de
- * "yo creo que debería medir esto".
+ * <p>The three sizes have a rule that gets forgotten: {@link #getPreferredSize} returns whatever
+ * was set on it with {@link #setPreferredSize}, and only if nothing was set does it work it out.
+ * That is why {@link #isPreferredSizeSet} exists — it is the only way of telling "I was told to
+ * measure this" from "I think I should measure this".
  *
- * <p>El reparto de eventos es de tres pasos y cada uno se puede interceptar:
- * {@link #dispatchEvent} recibe, {@link #processEvent} clasifica, y los {@code processXEvent}
- * avisan a los oyentes. Redefinir el del medio permite ver todo; redefinir uno de los últimos,
- * cambiar el tratamiento de una familia sin tocar el resto.
+ * <p>The event dispatching is three steps and each one can be intercepted: {@link #dispatchEvent}
+ * receives, {@link #processEvent} sorts out, and the {@code processXEvent} methods tell the
+ * listeners. Overriding the middle one allows seeing everything; overriding one of the last ones,
+ * changing the treatment of one family without touching the rest.
  *
- * <p><strong>Este componente nunca es mostrable.</strong> Todo lo que necesita una ventana del
- * sistema —{@link #isDisplayable}, {@link #getGraphics}, {@link #getLocationOnScreen},
- * {@link #createImage(int, int)}, el foco de verdad— contesta lo que corresponde a un componente que
- * no está en pantalla: `false`, `null` o la excepción que el método declara para ese caso. No son
- * rellenos: son las respuestas ciertas. Todo lo demás —la geometría, los colores, los oyentes, el
- * reparto de eventos, la jerarquía, la accesibilidad— funciona de verdad y se puede usar y probar.
+ * <p><strong>This component is never displayable.</strong> Everything that needs a window of the
+ * system —{@link #isDisplayable}, {@link #getGraphics}, {@link #getLocationOnScreen},
+ * {@link #createImage(int, int)}, the real focus— answers what corresponds to a component that is
+ * not on a screen: `false`, `null` or the exception the method declares for that case. They are not
+ * filler: they are the true answers. Everything else —the geometry, the colours, the listeners, the
+ * event dispatching, the hierarchy, the accessibility— really works and can be used and tested.
  */
 public abstract class Component implements ImageObserver, MenuContainer, Serializable {
 
     private static final long serialVersionUID = -7644114512714619750L;
 
-    /** Alineado con el borde superior. */
+    /** Aligned with the top edge. */
     public static final float TOP_ALIGNMENT = 0.0f;
 
-    /** Centrado. */
+    /** Centred. */
     public static final float CENTER_ALIGNMENT = 0.5f;
 
-    /** Alineado con el borde inferior. */
+    /** Aligned with the bottom edge. */
     public static final float BOTTOM_ALIGNMENT = 1.0f;
 
-    /** Alineado con el borde izquierdo. */
+    /** Aligned with the left edge. */
     public static final float LEFT_ALIGNMENT = 0.0f;
 
-    /** Alineado con el borde derecho. */
+    /** Aligned with the right edge. */
     public static final float RIGHT_ALIGNMENT = 1.0f;
 
     /**
-     * El candado con el que se sincroniza el árbol de componentes.
+     * The lock the component tree synchronises on.
      *
-     * <p>Es **uno solo** para todo AWT. Un candado por componente parecería mejor, pero recorrer el
-     * árbol tomándolos en distinto orden terminaría en un abrazo mortal; con uno global eso no puede
-     * pasar.
+     * <p>There is **one only** for all of AWT. One lock per component would seem better, but
+     * walking the tree taking them in different orders would end in a deadlock; with a global one
+     * that cannot happen.
      */
     static final Object LOCK = new Object();
 
     private static int nameCounter;
 
-    /** Cómo se estira la línea de base cuando el componente cambia de alto. */
+    /** How the baseline stretches when the component changes height. */
     public static enum BaselineResizeBehavior {
 
-        /** La distancia desde arriba no cambia. */
+        /** The distance from the top does not change. */
         CONSTANT_ASCENT,
 
-        /** La distancia desde abajo no cambia. */
+        /** The distance from the bottom does not change. */
         CONSTANT_DESCENT,
 
-        /** La línea de base se mantiene a la misma distancia del centro. */
+        /** The baseline stays at the same distance from the centre. */
         CENTER_OFFSET,
 
-        /** Ninguna de las tres: hay que volver a preguntar en cada tamaño. */
+        /** None of the three: it has to be asked again at every size. */
         OTHER
     }
 
@@ -144,12 +146,12 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
     private boolean prefSizeSet;
     private boolean maxSizeSet;
     private java.awt.dnd.DropTarget dropTarget;
-    private final Set<AWTKeyStroke>[] focusTraversalKeys = crearJuegoDeTeclas();
+    private final Set<AWTKeyStroke>[] focusTraversalKeys = newKeyStrokeSets();
     private Container parent;
     private final List<PopupMenu> popups = new ArrayList<PopupMenu>();
     private PropertyChangeSupport changeSupport;
 
-    /** Qué familias de eventos pidió recibir. */
+    /** Which families of events it asked to receive. */
     long eventMask;
 
     private transient ComponentListener componentListener;
@@ -162,23 +164,23 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
     private transient MouseWheelListener mouseWheelListener;
     private transient InputMethodListener inputMethodListener;
 
-    /** La información de accesibilidad, armada a demanda. */
+    /** The accessibility information, built on demand. */
     protected AccessibleContext accessibleContext;
 
-    /** Un arreglo de cuatro conjuntos de teclas, uno por sentido de recorrido. */
+    /** An array of four sets of keys, one per traversal direction. */
     @SuppressWarnings("unchecked")
-    private static Set<AWTKeyStroke>[] crearJuegoDeTeclas() {
+    private static Set<AWTKeyStroke>[] newKeyStrokeSets() {
         return (Set<AWTKeyStroke>[]) new Set<?>[4];
     }
 
     /**
-     * Las teclas de recorrido de fábrica.
+     * The default traversal keys.
      *
-     * <p>Tabulador hacia adelante, tabulador con mayúsculas hacia atrás, y nada para subir y bajar
-     * de ciclo. Son las mismas de cualquier escritorio, y estar acá y no en un gestor de foco es lo
-     * que permite que un componente suelto conteste bien sin que haya un gestor instalado.
+     * <p>Tab forwards, shift-tab backwards, and nothing for going up and down a cycle. They are the
+     * same ones as on any desktop, and being here and not in a focus manager is what lets a loose
+     * component answer correctly without a manager being installed.
      */
-    private static Set<AWTKeyStroke> tecladoPorOmision(int id) {
+    private static Set<AWTKeyStroke> defaultKeyStrokes(int id) {
         Set<AWTKeyStroke> s = new HashSet<AWTKeyStroke>();
         if (id == 0) {
             s.add(AWTKeyStroke.getAWTKeyStroke(KeyEvent.VK_TAB, 0));
@@ -194,11 +196,11 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         return Collections.unmodifiableSet(s);
     }
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected Component() {
     }
 
-    /** El nombre por omisión, distinto para cada uno. */
+    /** The default name, a different one for each. */
     String constructComponentName() {
         synchronized (Component.class) {
             String n = this.getClass().getName() + nameCounter;
@@ -207,7 +209,7 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         }
     }
 
-    /** Cómo se llama; si nadie le puso nombre, se le arma uno para poder depurar. */
+    /** What it is called; if nobody gave it a name, one is built so that debugging is possible. */
     public String getName() {
         if (this.name == null && !this.nameExplicitlySet) {
             synchronized (this.getObjectLock()) {
@@ -219,67 +221,67 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         return this.name;
     }
 
-    /** Le pone nombre y avisa del cambio. */
+    /** Gives it a name and reports the change. */
     public void setName(String name) {
-        String viejo;
+        String old;
         synchronized (this.getObjectLock()) {
-            viejo = this.name;
+            old = this.name;
             this.name = name;
             this.nameExplicitlySet = true;
         }
-        this.firePropertyChange("name", viejo, name);
+        this.firePropertyChange("name", old, name);
     }
 
-    /** El candado de este objeto; separado del del árbol para no serializarlo. */
-    private Object getObjectLock() {
+    /** The lock of this object; kept apart from the tree's so as not to serialise it. */
+    Object getObjectLock() {
         return this;
     }
 
-    /** De qué contenedor cuelga, o `null`. */
+    /** Which container it hangs from, or `null`. */
     public Container getParent() {
         return this.parent;
     }
 
-    /** Lo usa el contenedor al agregarlo o sacarlo. */
+    /** The container uses it when adding or removing it. */
     void setParent(Container p) {
         this.parent = p;
     }
 
     /**
-     * El candado del árbol de componentes.
+     * The lock of the component tree.
      *
-     * <p>Es `final` y es el mismo para todos: ver {@link #LOCK}.
+     * <p>It is `final` and it is the same for all of them: see {@link #LOCK}.
      */
     public final Object getTreeLock() {
         return LOCK;
     }
 
-    /** El juego de herramientas de la plataforma. */
+    /** The platform's toolkit. */
     public Toolkit getToolkit() {
         return Toolkit.getDefaultToolkit();
     }
 
     /**
-     * Si el componente tiene una ventana del sistema detrás.
+     * Whether the component has a window of the system behind it.
      *
-     * <p>Contesta `false` siempre: esta biblioteca no trae sistema de ventanas, así que ningún
-     * componente llega a tener una. De acá salen casi todas las demás respuestas negativas de la
-     * clase, y todas son ciertas.
+     * <p>It answers `false` always: this library ships no windowing system, so no component gets to
+     * have one. Almost every other negative answer of the class comes from here, and they are all
+     * true.
      */
     public boolean isDisplayable() {
         return false;
     }
 
-    /** Si está declarado visible. */
+    /** Whether it is declared visible. */
     public boolean isVisible() {
         return this.visible;
     }
 
     /**
-     * Si se ve de verdad.
+     * Whether it is really seen.
      *
-     * <p>No alcanza con estar declarado visible: hay que estarlo, tener padre, y que el padre
-     * también se vea. Contesta `false` siempre porque ningún componente llega a estar en pantalla.
+     * <p>Being declared visible is not enough: it has to be, to have a parent, and for the parent
+     * to be seen too. It answers `false` always because no component gets to be on a screen.
      */
     public boolean isShowing() {
         if (this.visible && this.isDisplayable()) {
@@ -289,25 +291,25 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         return false;
     }
 
-    /** Si responde a la entrada del usuario. */
+    /** Whether it responds to the user's input. */
     public boolean isEnabled() {
         return this.enabled;
     }
 
-    /** Lo habilita o lo deshabilita. */
+    /** Enables it or disables it. */
     public void setEnabled(boolean b) {
-        boolean viejo;
+        boolean old;
         synchronized (this.getTreeLock()) {
-            viejo = this.enabled;
+            old = this.enabled;
             this.enabled = b;
         }
-        this.firePropertyChange("enabled", viejo, b);
+        this.firePropertyChange("enabled", old, b);
     }
 
     /**
-     * Lo habilita.
+     * Enables it.
      *
-     * @deprecated es del modelo de 1.0. Usar {@link #setEnabled}.
+     * @deprecated it is from the 1.0 model. Use {@link #setEnabled}.
      */
     @Deprecated
     public void enable() {
@@ -315,9 +317,9 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
     }
 
     /**
-     * Lo habilita o lo deshabilita.
+     * Enables it or disables it.
      *
-     * @deprecated es del modelo de 1.0. Usar {@link #setEnabled}.
+     * @deprecated it is from the 1.0 model. Use {@link #setEnabled}.
      */
     @Deprecated
     public void enable(boolean b) {
@@ -325,51 +327,51 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
     }
 
     /**
-     * Lo deshabilita.
+     * Disables it.
      *
-     * @deprecated es del modelo de 1.0. Usar {@link #setEnabled}.
+     * @deprecated it is from the 1.0 model. Use {@link #setEnabled}.
      */
     @Deprecated
     public void disable() {
         this.setEnabled(false);
     }
 
-    /** Si dibuja en dos pasos para evitar el parpadeo. */
+    /** Whether it draws in two steps to avoid flicker. */
     public boolean isDoubleBuffered() {
         return false;
     }
 
-    /** Prende o apaga el método de entrada para este componente. */
+    /** Switches the input method on or off for this component. */
     public void enableInputMethods(boolean enable) {
     }
 
-    /** Lo muestra o lo oculta, y avisa. */
+    /** Shows it or hides it, and reports. */
     public void setVisible(boolean b) {
         this.show(b);
     }
 
     /**
-     * Lo muestra.
+     * Shows it.
      *
-     * @deprecated es del modelo de 1.0. Usar {@link #setVisible}.
+     * @deprecated it is from the 1.0 model. Use {@link #setVisible}.
      */
     @Deprecated
     public void show() {
-        boolean viejo;
+        boolean old;
         synchronized (this.getTreeLock()) {
-            viejo = this.visible;
+            old = this.visible;
             this.visible = true;
         }
-        if (!viejo) {
+        if (!old) {
             this.firePropertyChange("visible", false, true);
-            this.dispararComponente(ComponentEvent.COMPONENT_SHOWN);
+            this.fireComponentEvent(ComponentEvent.COMPONENT_SHOWN);
         }
     }
 
     /**
-     * Lo muestra o lo oculta.
+     * Shows it or hides it.
      *
-     * @deprecated es del modelo de 1.0. Usar {@link #setVisible}.
+     * @deprecated it is from the 1.0 model. Use {@link #setVisible}.
      */
     @Deprecated
     public void show(boolean b) {
@@ -381,32 +383,33 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
     }
 
     /**
-     * Lo oculta.
+     * Hides it.
      *
-     * @deprecated es del modelo de 1.0. Usar {@link #setVisible}.
+     * @deprecated it is from the 1.0 model. Use {@link #setVisible}.
      */
     @Deprecated
     public void hide() {
-        boolean viejo;
+        boolean old;
         synchronized (this.getTreeLock()) {
-            viejo = this.visible;
+            old = this.visible;
             this.visible = false;
         }
-        if (viejo) {
+        if (old) {
             this.firePropertyChange("visible", true, false);
-            this.dispararComponente(ComponentEvent.COMPONENT_HIDDEN);
+            this.fireComponentEvent(ComponentEvent.COMPONENT_HIDDEN);
         }
     }
 
     /**
-     * Dispara un evento de componente si alguien lo pidió **y** el componente está en pantalla.
+     * Fires a component event if anyone asked for them **and** the component is on a screen.
      *
-     * <p>La segunda condición es la que sorprende y es la del JDK: estos eventos los genera el
-     * sistema de ventanas al mover o redimensionar de verdad, no el modelo al cambiar un número.
-     * Un componente que nunca llega a la pantalla no genera ninguno por su cuenta — lo que no impide
-     * entregárselos a mano con {@link #dispatchEvent}, que es lo que hace un armador de pruebas.
+     * <p>The second condition is the one that surprises and it is the JDK's: these events are
+     * generated by the windowing system when really moving or resizing, not by the model when a
+     * number changes. A component that never reaches a screen generates none on its own — which
+     * does not stop them from being delivered by hand with {@link #dispatchEvent}, which is what a
+     * test harness does.
      */
-    private void dispararComponente(int id) {
+    private void fireComponentEvent(int id) {
         if (!this.isDisplayable()) {
             return;
         }
@@ -416,7 +419,7 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         }
     }
 
-    /** El color con el que se dibuja; se hereda del padre si no tiene propio. */
+    /** The colour it is drawn with; inherited from the parent if it has none of its own. */
     public Color getForeground() {
         Color c = this.foreground;
         if (c != null) {
@@ -429,19 +432,19 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         return null;
     }
 
-    /** Le pone color propio. */
+    /** Gives it a colour of its own. */
     public void setForeground(Color c) {
-        Color viejo = this.foreground;
+        Color old = this.foreground;
         this.foreground = c;
-        this.firePropertyChange("foreground", viejo, c);
+        this.firePropertyChange("foreground", old, c);
     }
 
-    /** Si tiene color propio, sin contar el heredado. */
+    /** Whether it has a colour of its own, not counting the inherited one. */
     public boolean isForegroundSet() {
         return this.foreground != null;
     }
 
-    /** El color de fondo; se hereda del padre si no tiene propio. */
+    /** The background colour; inherited from the parent if it has none of its own. */
     public Color getBackground() {
         Color c = this.background;
         if (c != null) {
@@ -454,19 +457,19 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         return null;
     }
 
-    /** Le pone color de fondo propio. */
+    /** Gives it a background colour of its own. */
     public void setBackground(Color c) {
-        Color viejo = this.background;
+        Color old = this.background;
         this.background = c;
-        this.firePropertyChange("background", viejo, c);
+        this.firePropertyChange("background", old, c);
     }
 
-    /** Si tiene color de fondo propio. */
+    /** Whether it has a background colour of its own. */
     public boolean isBackgroundSet() {
         return this.background != null;
     }
 
-    /** La fuente; se hereda del padre si no tiene propia. */
+    /** The font; inherited from the parent if it has none of its own. */
     public Font getFont() {
         Font f = this.font;
         if (f != null) {
@@ -480,27 +483,27 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
     }
 
     /**
-     * Le pone fuente propia.
+     * Gives it a font of its own.
      *
-     * <p>Invalida el componente: cambiar la fuente cambia cuánto mide el texto, y con eso la medida
-     * preferida.
+     * <p>It invalidates the component: changing the font changes how much the text measures, and
+     * with it the preferred size.
      */
     public void setFont(Font f) {
-        Font viejo;
+        Font old;
         synchronized (this.getTreeLock()) {
-            viejo = this.font;
+            old = this.font;
             this.font = f;
         }
-        this.firePropertyChange("font", viejo, f);
+        this.firePropertyChange("font", old, f);
         this.invalidate();
     }
 
-    /** Si tiene fuente propia. */
+    /** Whether it has a font of its own. */
     public boolean isFontSet() {
         return this.font != null;
     }
 
-    /** El idioma; se hereda del padre si no tiene propio. */
+    /** The locale; inherited from the parent if it has none of its own. */
     public Locale getLocale() {
         Locale l = this.locale;
         if (l != null) {
@@ -514,33 +517,33 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         return p.getLocale();
     }
 
-    /** Le pone idioma propio. */
+    /** Gives it a locale of its own. */
     public void setLocale(Locale l) {
-        Locale viejo = this.locale;
+        Locale old = this.locale;
         this.locale = l;
-        this.firePropertyChange("locale", viejo, l);
+        this.firePropertyChange("locale", old, l);
         this.invalidate();
     }
 
     /**
-     * El formato de color en el que dibuja.
+     * The colour format it draws in.
      *
-     * <p>Sin ventana propia, el del juego de herramientas.
+     * <p>With no window of its own, the toolkit's.
      */
     public ColorModel getColorModel() {
         return this.getToolkit().getColorModel();
     }
 
-    /** Dónde está, relativo a su padre. */
+    /** Where it is, relative to its parent. */
     public Point getLocation() {
         return this.location();
     }
 
     /**
-     * Dónde está en la pantalla.
+     * Where it is on the screen.
      *
-     * @throws IllegalComponentStateException siempre: el componente no está en pantalla, así que no
-     *     tiene posición en ella. Es la excepción que el método declara para este caso.
+     * @throws IllegalComponentStateException always: the component is not on a screen, so it has no
+     *     position on one. It is the exception the method declares for this case.
      */
     public Point getLocationOnScreen() {
         throw new IllegalComponentStateException("component must be showing on the screen to "
@@ -548,24 +551,24 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
     }
 
     /**
-     * Dónde está.
+     * Where it is.
      *
-     * @deprecated es del modelo de 1.0. Usar {@link #getLocation}.
+     * @deprecated it is from the 1.0 model. Use {@link #getLocation}.
      */
     @Deprecated
     public Point location() {
         return new Point(this.x, this.y);
     }
 
-    /** Lo mueve. */
+    /** Moves it. */
     public void setLocation(int x, int y) {
         this.move(x, y);
     }
 
     /**
-     * Lo mueve.
+     * Moves it.
      *
-     * @deprecated es del modelo de 1.0. Usar {@link #setLocation}.
+     * @deprecated it is from the 1.0 model. Use {@link #setLocation}.
      */
     @Deprecated
     public void move(int x, int y) {
@@ -575,38 +578,38 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
     }
 
     /**
-     * Lo mueve.
+     * Moves it.
      *
-     * @throws NullPointerException si el punto es `null`
+     * @throws NullPointerException if the point is `null`
      */
     public void setLocation(Point p) {
         this.setLocation(p.x, p.y);
     }
 
-    /** Cuánto mide. */
+    /** How much it measures. */
     public Dimension getSize() {
         return this.size();
     }
 
     /**
-     * Cuánto mide.
+     * How much it measures.
      *
-     * @deprecated es del modelo de 1.0. Usar {@link #getSize}.
+     * @deprecated it is from the 1.0 model. Use {@link #getSize}.
      */
     @Deprecated
     public Dimension size() {
         return new Dimension(this.width, this.height);
     }
 
-    /** Lo redimensiona. */
+    /** Resizes it. */
     public void setSize(int width, int height) {
         this.resize(width, height);
     }
 
     /**
-     * Lo redimensiona.
+     * Resizes it.
      *
-     * @deprecated es del modelo de 1.0. Usar {@link #setSize}.
+     * @deprecated it is from the 1.0 model. Use {@link #setSize}.
      */
     @Deprecated
     public void resize(int width, int height) {
@@ -616,48 +619,48 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
     }
 
     /**
-     * Lo redimensiona.
+     * Resizes it.
      *
-     * @throws NullPointerException si la dimensión es `null`
+     * @throws NullPointerException if the dimension is `null`
      */
     public void setSize(Dimension d) {
         this.setSize(d.width, d.height);
     }
 
     /**
-     * Lo redimensiona.
+     * Resizes it.
      *
-     * @deprecated es del modelo de 1.0. Usar {@link #setSize}.
+     * @deprecated it is from the 1.0 model. Use {@link #setSize}.
      */
     @Deprecated
     public void resize(Dimension d) {
         this.setSize(d.width, d.height);
     }
 
-    /** Dónde está y cuánto mide. */
+    /** Where it is and how much it measures. */
     public Rectangle getBounds() {
         return this.bounds();
     }
 
     /**
-     * Dónde está y cuánto mide.
+     * Where it is and how much it measures.
      *
-     * @deprecated es del modelo de 1.0. Usar {@link #getBounds}.
+     * @deprecated it is from the 1.0 model. Use {@link #getBounds}.
      */
     @Deprecated
     public Rectangle bounds() {
         return new Rectangle(this.x, this.y, this.width, this.height);
     }
 
-    /** Lo mueve y lo redimensiona de una vez. */
+    /** Moves it and resizes it in one go. */
     public void setBounds(int x, int y, int width, int height) {
         this.reshape(x, y, width, height);
     }
 
     /**
-     * Lo mueve y lo redimensiona.
+     * Moves it and resizes it.
      *
-     * @deprecated es del modelo de 1.0. Usar {@link #setBounds}.
+     * @deprecated it is from the 1.0 model. Use {@link #setBounds}.
      */
     @Deprecated
     public void reshape(int x, int y, int width, int height) {
@@ -667,62 +670,62 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
     }
 
     /**
-     * Cambia el rectángulo y dispara los eventos que correspondan.
+     * Changes the rectangle and fires whichever events correspond.
      *
-     * <p>Moverse y redimensionarse son dos eventos distintos, y una operación que haga las dos cosas
-     * tiene que disparar los dos: hay código que escucha sólo uno.
+     * <p>Moving and resizing are two different events, and an operation that does both has to fire
+     * both: there is code that listens to only one.
      */
     private void setBoundsOp(int x, int y, int width, int height) {
-        boolean seMovio = this.x != x || this.y != y;
-        boolean cambioTamano = this.width != width || this.height != height;
+        boolean moved = this.x != x || this.y != y;
+        boolean sizeChanged = this.width != width || this.height != height;
         this.x = x;
         this.y = y;
         this.width = width;
         this.height = height;
-        if (cambioTamano) {
+        if (sizeChanged) {
             this.invalidate();
         }
-        if (seMovio) {
-            this.dispararComponente(ComponentEvent.COMPONENT_MOVED);
+        if (moved) {
+            this.fireComponentEvent(ComponentEvent.COMPONENT_MOVED);
         }
-        if (cambioTamano) {
-            this.dispararComponente(ComponentEvent.COMPONENT_RESIZED);
+        if (sizeChanged) {
+            this.fireComponentEvent(ComponentEvent.COMPONENT_RESIZED);
         }
     }
 
     /**
-     * Lo mueve y lo redimensiona.
+     * Moves it and resizes it.
      *
-     * @throws NullPointerException si el rectángulo es `null`
+     * @throws NullPointerException if the rectangle is `null`
      */
     public void setBounds(Rectangle r) {
         this.setBounds(r.x, r.y, r.width, r.height);
     }
 
-    /** La X, relativa al padre. */
+    /** The X, relative to the parent. */
     public int getX() {
         return this.x;
     }
 
-    /** La Y, relativa al padre. */
+    /** The Y, relative to the parent. */
     public int getY() {
         return this.y;
     }
 
-    /** El ancho. */
+    /** The width. */
     public int getWidth() {
         return this.width;
     }
 
-    /** El alto. */
+    /** The height. */
     public int getHeight() {
         return this.height;
     }
 
     /**
-     * Su rectángulo, escrito en el que se pasa.
+     * Its rectangle, written into the one that is passed in.
      *
-     * <p>Existe para no crear un objeto por consulta en un bucle de maquetado.
+     * <p>It exists so as not to create an object per query in a layout loop.
      */
     public Rectangle getBounds(Rectangle rv) {
         if (rv == null) {
@@ -732,7 +735,7 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         return rv;
     }
 
-    /** Su tamaño, escrito en el que se pasa. */
+    /** Its size, written into the one that is passed in. */
     public Dimension getSize(Dimension rv) {
         if (rv == null) {
             return new Dimension(this.width, this.height);
@@ -741,7 +744,7 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         return rv;
     }
 
-    /** Su posición, escrita en el que se pasa. */
+    /** Its position, written into the one that is passed in. */
     public Point getLocation(Point rv) {
         if (rv == null) {
             return new Point(this.x, this.y);
@@ -751,45 +754,46 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
     }
 
     /**
-     * Si pinta todos sus píxeles.
+     * Whether it paints all of its pixels.
      *
-     * <p>Contesta `false` cuando no tiene color de fondo: sin fondo, lo de abajo se ve.
+     * <p>It answers `false` always here —a generic component paints nothing— so whatever is below
+     * shows through. A subclass that fills its whole rectangle overrides it.
      */
     public boolean isOpaque() {
         return false;
     }
 
     /**
-     * Si no tiene ventana propia del sistema.
+     * Whether it has no window of the system of its own.
      *
-     * <p>Contesta `true` siempre acá: ningún componente de esta biblioteca llega a tener una.
+     * <p>It answers `true` always here: no component of this library gets to have one.
      */
     public boolean isLightweight() {
         return true;
     }
 
-    /** Le fija la medida preferida; con `null` vuelve a calcularla. */
+    /** Sets its preferred size; with `null` it goes back to working it out. */
     public void setPreferredSize(Dimension preferredSize) {
-        Dimension viejo = this.prefSize;
+        Dimension old = this.prefSize;
         this.prefSize = preferredSize;
         this.prefSizeSet = preferredSize != null;
-        this.firePropertyChange("preferredSize", viejo, preferredSize);
+        this.firePropertyChange("preferredSize", old, preferredSize);
     }
 
-    /** Si alguien le fijó la medida preferida. */
+    /** Whether somebody set its preferred size. */
     public boolean isPreferredSizeSet() {
         return this.prefSizeSet;
     }
 
-    /** La medida preferida: la fijada, o la calculada si no hay. */
+    /** The preferred size: the one that was set, or the worked-out one if there is none. */
     public Dimension getPreferredSize() {
         return this.preferredSize();
     }
 
     /**
-     * La medida preferida.
+     * The preferred size.
      *
-     * @deprecated es del modelo de 1.0. Usar {@link #getPreferredSize}.
+     * @deprecated it is from the 1.0 model. Use {@link #getPreferredSize}.
      */
     @Deprecated
     public Dimension preferredSize() {
@@ -799,28 +803,28 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         return this.getMinimumSize();
     }
 
-    /** Le fija la medida mínima; con `null` vuelve a calcularla. */
+    /** Sets its minimum size; with `null` it goes back to working it out. */
     public void setMinimumSize(Dimension minimumSize) {
-        Dimension viejo = this.minSize;
+        Dimension old = this.minSize;
         this.minSize = minimumSize;
         this.minSizeSet = minimumSize != null;
-        this.firePropertyChange("minimumSize", viejo, minimumSize);
+        this.firePropertyChange("minimumSize", old, minimumSize);
     }
 
-    /** Si alguien le fijó la medida mínima. */
+    /** Whether somebody set its minimum size. */
     public boolean isMinimumSizeSet() {
         return this.minSizeSet;
     }
 
-    /** La medida mínima: la fijada, o el tamaño actual si no hay. */
+    /** The minimum size: the one that was set, or the current size if there is none. */
     public Dimension getMinimumSize() {
         return this.minimumSize();
     }
 
     /**
-     * La medida mínima.
+     * The minimum size.
      *
-     * @deprecated es del modelo de 1.0. Usar {@link #getMinimumSize}.
+     * @deprecated it is from the 1.0 model. Use {@link #getMinimumSize}.
      */
     @Deprecated
     public Dimension minimumSize() {
@@ -830,24 +834,24 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         return new Dimension(this.width, this.height);
     }
 
-    /** Le fija la medida máxima; con `null` vuelve a calcularla. */
+    /** Sets its maximum size; with `null` it goes back to working it out. */
     public void setMaximumSize(Dimension maximumSize) {
-        Dimension viejo = this.maxSize;
+        Dimension old = this.maxSize;
         this.maxSize = maximumSize;
         this.maxSizeSet = maximumSize != null;
-        this.firePropertyChange("maximumSize", viejo, maximumSize);
+        this.firePropertyChange("maximumSize", old, maximumSize);
     }
 
-    /** Si alguien le fijó la medida máxima. */
+    /** Whether somebody set its maximum size. */
     public boolean isMaximumSizeSet() {
         return this.maxSizeSet;
     }
 
     /**
-     * La medida máxima.
+     * The maximum size.
      *
-     * <p>Sin fijar, es el máximo entero en las dos direcciones: significa "no tengo tope", que es
-     * distinto de "quiero ser enorme".
+     * <p>Unset, it is the maximum `short` in both directions —32767, which is what the JDK
+     * returns—: it means "I have no limit", which is different from "I want to be enormous".
      */
     public Dimension getMaximumSize() {
         if (this.maxSizeSet && this.maxSize != null) {
@@ -856,22 +860,22 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         return new Dimension(Short.MAX_VALUE, Short.MAX_VALUE);
     }
 
-    /** Cómo se alinea horizontalmente dentro de su contenedor. */
+    /** How it aligns horizontally inside its container. */
     public float getAlignmentX() {
         return CENTER_ALIGNMENT;
     }
 
-    /** Cómo se alinea verticalmente. */
+    /** How it aligns vertically. */
     public float getAlignmentY() {
         return CENTER_ALIGNMENT;
     }
 
     /**
-     * A qué altura tiene la línea de base para ese tamaño.
+     * At what height it has the baseline for that size.
      *
-     * @return -1: un componente genérico no tiene línea de base, y decir que la tiene en cualquier
-     *     lado desalinearía el texto de toda una fila
-     * @throws IllegalArgumentException si alguna medida es negativa
+     * @return -1: a generic component has no baseline, and saying it has one anywhere would
+     *     misalign the text of a whole row
+     * @throws IllegalArgumentException if either measure is negative
      */
     public int getBaseline(int width, int height) {
         if (width < 0 || height < 0) {
@@ -880,30 +884,30 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         return -1;
     }
 
-    /** Cómo se mueve la línea de base al cambiar el alto. */
+    /** How the baseline moves when the height changes. */
     public BaselineResizeBehavior getBaselineResizeBehavior() {
         return BaselineResizeBehavior.OTHER;
     }
 
-    /** Reordena a sus hijos; un componente sin hijos no hace nada. */
+    /** Lays its children out again; a component with no children does nothing. */
     public void doLayout() {
         this.layout();
     }
 
     /**
-     * Reordena a sus hijos.
+     * Lays its children out again.
      *
-     * @deprecated es del modelo de 1.0. Usar {@link #doLayout}.
+     * @deprecated it is from the 1.0 model. Use {@link #doLayout}.
      */
     @Deprecated
     public void layout() {
     }
 
     /**
-     * Vuelve a maquetar si hacía falta.
+     * Lays out again if it was needed.
      *
-     * <p>Marca el componente como válido de abajo hacia arriba; lo hace un contenedor de verdad al
-     * redefinirlo.
+     * <p>It marks the component as valid from the bottom up; a real container does it by overriding
+     * this.
      */
     public void validate() {
         synchronized (this.getTreeLock()) {
@@ -912,17 +916,17 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
     }
 
     /**
-     * Marca que hay que volver a maquetar.
+     * Marks that laying out has to happen again.
      *
-     * <p>Se propaga **hacia arriba**: si un hijo cambió de tamaño preferido, el padre tiene que
-     * recalcular el suyo. De ahí que invalidar sea barato y validar caro.
+     * <p>It propagates **upwards**: if a child changed preferred size, the parent has to work its
+     * own out again. Hence invalidating being cheap and validating expensive.
      *
-     * <p>Ahora bien, sube **sólo si el padre estaba válido**. Si ya estaba inválido, alguien lo
-     * invalidó antes y la rama de arriba ya se enteró: seguir subiendo sería recorrer el árbol de
-     * nuevo para no cambiar nada. Y no es sólo eficiencia: una distribución que está ubicando a sus
-     * hijos hace un `setBounds` por cada uno, y cada uno la invalidaría **a ella en el medio del
-     * trabajo**, tirando lo que acababa de calcular. Con la guarda, el padre inválido —que es lo
-     * que es un contenedor mientras se lo maqueta— no se entera de nada.
+     * <p>Now then, it goes up **only if the parent was valid**. If it was invalid already, somebody
+     * invalidated it earlier and the branch above has found out: going on up would be walking the
+     * tree again to change nothing. And it is not only efficiency: a layout that is placing its
+     * children does a `setBounds` per child, and each one would invalidate **it in the middle of
+     * the work**, throwing away what it had just worked out. With the guard, the invalid parent
+     * —which is what a container is while it is being laid out— finds out nothing.
      */
     public void invalidate() {
         synchronized (this.getTreeLock()) {
@@ -934,7 +938,7 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         }
     }
 
-    /** Invalida al padre, si lo hay y si estaba válido. */
+    /** Invalidates the parent, if there is one and it was valid. */
     void invalidateParent() {
         Container p = this.parent;
         if (p != null) {
@@ -942,14 +946,14 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         }
     }
 
-    /** Se invalida sólo si estaba válido; si ya estaba inválido no hay nada que avisar. */
+    /** It invalidates itself only if it was valid; if it was invalid there is nothing to report. */
     void invalidateIfValid() {
         if (this.isValid()) {
             this.invalidate();
         }
     }
 
-    /** Invalida y pide revalidar la rama. */
+    /** Invalidates and asks for the branch to be revalidated. */
     public void revalidate() {
         this.invalidate();
         Container p = this.parent;
@@ -958,31 +962,31 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         }
     }
 
-    /** Si no hace falta volver a maquetarlo. */
+    /** Whether it does not need laying out again. */
     public boolean isValid() {
         return this.valid;
     }
 
     /**
-     * Un contexto para dibujar sobre este componente.
+     * A context to draw over this component.
      *
-     * @return `null` siempre: el componente no está en pantalla, y es lo que el JDK devuelve en ese
-     *     caso. Para dibujar sobre píxeles está {@link java.awt.image.BufferedImage}.
+     * @return `null` always: the component is not on a screen, and it is what the JDK returns in
+     *     that case. For drawing onto pixels there is {@link java.awt.image.BufferedImage}.
      */
     public Graphics getGraphics() {
         return null;
     }
 
     /**
-     * Las medidas de esa fuente.
+     * The measures of that font.
      *
-     * @throws NullPointerException si la fuente es `null`
+     * @throws NullPointerException if the font is `null`
      */
     public FontMetrics getFontMetrics(Font font) {
         return this.getToolkit().getFontMetrics(font);
     }
 
-    /** El cursor; se hereda del padre si no tiene propio. */
+    /** The cursor; inherited from the parent if it has none of its own. */
     public Cursor getCursor() {
         Cursor c = this.cursor;
         if (c != null) {
@@ -995,29 +999,30 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         return Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR);
     }
 
-    /** Le pone cursor propio. */
+    /** Gives it a cursor of its own. */
     public void setCursor(Cursor cursor) {
         this.cursor = cursor;
     }
 
-    /** Si tiene cursor propio. */
+    /** Whether it has a cursor of its own. */
     public boolean isCursorSet() {
         return this.cursor != null;
     }
 
     /**
-     * Dibuja el componente.
+     * Draws the component.
      *
-     * <p>No hace nada: un componente genérico no tiene nada que dibujar. Las subclases lo redefinen.
+     * <p>It does nothing: a generic component has nothing to draw. The subclasses override it.
      */
     public void paint(Graphics g) {
     }
 
     /**
-     * Borra el fondo y dibuja.
+     * Clears the background and draws.
      *
-     * <p>Es lo que se llama al repintar un componente que ya estaba dibujado. Separarlo de
-     * {@link #paint} permite que un componente que sabe que va a cubrir todo se saltee el borrado.
+     * <p>It is what gets called when repainting a component that was already drawn. Keeping it
+     * apart from {@link #paint} lets a component that knows it is going to cover everything skip
+     * the clearing.
      */
     public void update(Graphics g) {
         if (this.isOpaque()) {
@@ -1028,7 +1033,7 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         this.paint(g);
     }
 
-    /** Dibuja este componente y todos sus hijos. */
+    /** Draws this component and all of its children. */
     public void paintAll(Graphics g) {
         if (this.isShowing()) {
             this.paint(g);
@@ -1036,69 +1041,69 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
     }
 
     /**
-     * Dibuja el componente para imprimirlo.
+     * Draws the component for printing.
      *
-     * <p>Por omisión es lo mismo que pintarlo. Se separa para que un componente pueda imprimirse
-     * distinto de como se ve — sin fondo oscuro, por ejemplo.
+     * <p>By default it is the same as painting it. It is kept apart so that a component can print
+     * differently from how it looks — with no dark background, for instance.
      */
     public void print(Graphics g) {
         this.paint(g);
     }
 
-    /** Imprime este componente y todos sus hijos. */
+    /** Prints this component and all of its children. */
     public void printAll(Graphics g) {
         this.print(g);
     }
 
     /**
-     * Pide que se lo vuelva a dibujar.
+     * Asks for it to be drawn again.
      *
-     * <p>No hace nada: repintar es encolar un pedido en la cola de eventos para que el sistema lo
-     * atienda, y sin ventana no hay nada en pantalla que actualizar. No es un descarte silencioso de
-     * trabajo — es que el trabajo no existe.
+     * <p>It does nothing: repainting is queueing a request on the event queue for the system to
+     * serve, and with no window there is nothing on a screen to refresh. It is not a silent
+     * discarding of work — it is that the work does not exist.
      */
     public void repaint() {
         this.repaint(0, 0, 0, this.width, this.height);
     }
 
-    /** Como el anterior, con un plazo máximo. */
+    /** Like the previous one, with a time limit. */
     public void repaint(long tm) {
         this.repaint(tm, 0, 0, this.width, this.height);
     }
 
-    /** Como el anterior, sólo de ese rectángulo. */
+    /** Like the previous one, of that rectangle only. */
     public void repaint(int x, int y, int width, int height) {
         this.repaint(0, x, y, width, height);
     }
 
-    /** Como el anterior, con plazo y rectángulo. */
+    /** Like the previous one, with a time limit and a rectangle. */
     public void repaint(long tm, int x, int y, int width, int height) {
     }
 
-    /** Si hay que ignorar los pedidos de repintado del sistema. */
+    /** Whether the system's repaint requests are to be ignored. */
     public boolean getIgnoreRepaint() {
         return this.ignoreRepaint;
     }
 
     /**
-     * Declara si hay que ignorarlos.
+     * Declares whether they are to be ignored.
      *
-     * <p>Sirve para las aplicaciones que dibujan cada cuadro por su cuenta: el repintado del sistema
-     * sólo les agregaría trabajo y parpadeo.
+     * <p>It serves the applications that draw every frame themselves: the system's repainting would
+     * only add work and flicker for them.
      */
     public void setIgnoreRepaint(boolean ignoreRepaint) {
         this.ignoreRepaint = ignoreRepaint;
     }
 
-    /** Si ese punto, relativo al componente, cae adentro. */
+    /** Whether that point, relative to the component, falls inside. */
     public boolean contains(int x, int y) {
         return this.inside(x, y);
     }
 
     /**
-     * Si ese punto cae adentro.
+     * Whether that point falls inside.
      *
-     * @deprecated es del modelo de 1.0. Usar {@link #contains(int, int)}.
+     * @deprecated it is from the 1.0 model. Use {@link #contains(int, int)}.
      */
     @Deprecated
     public boolean inside(int x, int y) {
@@ -1106,23 +1111,23 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
     }
 
     /**
-     * Si ese punto cae adentro.
+     * Whether that point falls inside.
      *
-     * @throws NullPointerException si el punto es `null`
+     * @throws NullPointerException if the point is `null`
      */
     public boolean contains(Point p) {
         return this.contains(p.x, p.y);
     }
 
-    /** Qué componente hay en ese punto: él mismo, o `null` si el punto cae afuera. */
+    /** Which component is at that point: itself, or `null` if the point falls outside. */
     public Component getComponentAt(int x, int y) {
         return this.locate(x, y);
     }
 
     /**
-     * Qué componente hay en ese punto.
+     * Which component is at that point.
      *
-     * @deprecated es del modelo de 1.0. Usar {@link #getComponentAt(int, int)}.
+     * @deprecated it is from the 1.0 model. Use {@link #getComponentAt(int, int)}.
      */
     @Deprecated
     public Component locate(int x, int y) {
@@ -1130,29 +1135,28 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
     }
 
     /**
-     * Qué componente hay en ese punto.
+     * Which component is at that point.
      *
-     * @throws NullPointerException si el punto es `null`
+     * @throws NullPointerException if the point is `null`
      */
     public Component getComponentAt(Point p) {
         return this.getComponentAt(p.x, p.y);
     }
 
     /**
-     * Dónde está el ratón sobre este componente.
+     * Where the mouse is over this component.
      *
-     * @return `null` siempre: el componente no está en pantalla, así que el ratón no puede estar
-     *     sobre él
-     * @throws HeadlessException si no hay pantalla
+     * @return `null` always: the component is not on a screen, so the mouse cannot be over it
+     * @throws HeadlessException if there is no screen
      */
     public Point getMousePosition() throws HeadlessException {
         return null;
     }
 
     /**
-     * Le manda un evento del modelo viejo.
+     * Sends it an event of the old model.
      *
-     * @deprecated es del modelo de 1.0. Usar {@link #dispatchEvent}.
+     * @deprecated it is from the 1.0 model. Use {@link #dispatchEvent}.
      */
     @Deprecated
     public void deliverEvent(Event e) {
@@ -1160,9 +1164,9 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
     }
 
     /**
-     * Le manda un evento del modelo viejo al padre.
+     * Sends the parent an event of the old model.
      *
-     * @deprecated es del modelo de 1.0. Usar {@link #dispatchEvent}.
+     * @deprecated it is from the 1.0 model. Use {@link #dispatchEvent}.
      */
     @Deprecated
     public boolean postEvent(Event e) {
@@ -1174,21 +1178,21 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
     }
 
     /**
-     * Le entrega un evento a este componente.
+     * Delivers an event to this component.
      *
-     * <p>Es `final`: el punto de extensión es {@link #processEvent}, no éste. Que sea así permite
-     * que el sistema haga lo suyo —marcar el evento, consumirlo si hace falta— antes de que el
-     * componente lo vea.
+     * <p>It is `final`: the extension point is {@link #processEvent}, not this one. That it is so
+     * lets the system do its part —marking the event, consuming it if needed— before the component
+     * sees it.
      */
     public final void dispatchEvent(AWTEvent e) {
         this.processEvent(e);
     }
 
     /**
-     * Clasifica el evento y se lo pasa al método de su familia.
+     * Sorts the event out and hands it to the method of its family.
      *
-     * <p>Es el punto donde interceptar **todo** lo que le llega al componente. Una subclase que lo
-     * redefina tiene que llamar a `super` o los oyentes dejan de recibir.
+     * <p>It is the place to intercept **everything** that reaches the component. A subclass that
+     * overrides it has to call `super` or the listeners stop receiving.
      */
     protected void processEvent(AWTEvent e) {
         if (e instanceof FocusEvent) {
@@ -1219,7 +1223,7 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         }
     }
 
-    /** Les avisa a los oyentes de componente. */
+    /** Tells the component listeners. */
     protected void processComponentEvent(ComponentEvent e) {
         ComponentListener l = this.componentListener;
         if (l == null) {
@@ -1237,7 +1241,7 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         }
     }
 
-    /** Les avisa a los oyentes de foco. */
+    /** Tells the focus listeners. */
     protected void processFocusEvent(FocusEvent e) {
         FocusListener l = this.focusListener;
         if (l == null) {
@@ -1250,7 +1254,7 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         }
     }
 
-    /** Les avisa a los oyentes de teclado. */
+    /** Tells the keyboard listeners. */
     protected void processKeyEvent(KeyEvent e) {
         KeyListener l = this.keyListener;
         if (l == null) {
@@ -1266,7 +1270,7 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         }
     }
 
-    /** Les avisa a los oyentes de botones del ratón. */
+    /** Tells the mouse button listeners. */
     protected void processMouseEvent(MouseEvent e) {
         MouseListener l = this.mouseListener;
         if (l == null) {
@@ -1286,7 +1290,7 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         }
     }
 
-    /** Les avisa a los oyentes de movimiento del ratón. */
+    /** Tells the mouse motion listeners. */
     protected void processMouseMotionEvent(MouseEvent e) {
         MouseMotionListener l = this.mouseMotionListener;
         if (l == null) {
@@ -1299,7 +1303,7 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         }
     }
 
-    /** Les avisa a los oyentes de la rueda. */
+    /** Tells the wheel listeners. */
     protected void processMouseWheelEvent(MouseWheelEvent e) {
         MouseWheelListener l = this.mouseWheelListener;
         if (l != null && e.getID() == MouseEvent.MOUSE_WHEEL) {
@@ -1307,7 +1311,7 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         }
     }
 
-    /** Les avisa a los oyentes del método de entrada. */
+    /** Tells the input method listeners. */
     protected void processInputMethodEvent(InputMethodEvent e) {
         InputMethodListener l = this.inputMethodListener;
         if (l == null) {
@@ -1320,7 +1324,7 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         }
     }
 
-    /** Les avisa a los oyentes del árbol. */
+    /** Tells the tree listeners. */
     protected void processHierarchyEvent(HierarchyEvent e) {
         HierarchyListener l = this.hierarchyListener;
         if (l != null && e.getID() == HierarchyEvent.HIERARCHY_CHANGED) {
@@ -1328,7 +1332,7 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         }
     }
 
-    /** Les avisa a los oyentes de cambios de tamaño de los ancestros. */
+    /** Tells the listeners of ancestor size changes. */
     protected void processHierarchyBoundsEvent(HierarchyEvent e) {
         HierarchyBoundsListener l = this.hierarchyBoundsListener;
         if (l == null) {
@@ -1342,31 +1346,32 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
     }
 
     /**
-     * Pide recibir esas familias de eventos.
+     * Asks to receive those families of events.
      *
-     * <p>Registrar un oyente ya la prende sola; esto sirve para recibir una familia **sin** oyente,
-     * que es lo que hace una subclase que atiende los eventos redefiniendo `processXEvent`.
+     * <p>Registering a listener switches it on by itself; this serves for receiving a family
+     * **without** a listener, which is what a subclass that handles the events by overriding
+     * `processXEvent` does.
      */
     protected final void enableEvents(long eventsToEnable) {
         this.eventMask = this.eventMask | eventsToEnable;
     }
 
-    /** Deja de recibirlas. */
+    /** Stops receiving them. */
     protected final void disableEvents(long eventsToDisable) {
         this.eventMask = this.eventMask & ~eventsToDisable;
     }
 
     /**
-     * Junta dos eventos de la misma familia en uno.
+     * Joins two events of the same family into one.
      *
-     * @return `null` siempre: juntar eventos es una optimización de la cola, y sin cola no hay
-     *     ninguno que juntar
+     * @return `null` always: joining events is an optimisation of the queue, and with no queue
+     *     there is none to join
      */
     protected AWTEvent coalesceEvents(AWTEvent existingEvent, AWTEvent newEvent) {
         return null;
     }
 
-    /** Suma un oyente de componente; un `null` se ignora. */
+    /** Adds a component listener; a `null` is ignored. */
     public synchronized void addComponentListener(ComponentListener l) {
         if (l == null) {
             return;
@@ -1375,7 +1380,7 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         this.enableEvents(AWTEvent.COMPONENT_EVENT_MASK);
     }
 
-    /** Saca a ese oyente. */
+    /** Removes that listener. */
     public synchronized void removeComponentListener(ComponentListener l) {
         if (l == null) {
             return;
@@ -1383,12 +1388,12 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         this.componentListener = AWTEventMulticaster.remove(this.componentListener, l);
     }
 
-    /** Los oyentes de componente. */
+    /** The component listeners. */
     public synchronized ComponentListener[] getComponentListeners() {
         return AWTEventMulticaster.getListeners(this.componentListener, ComponentListener.class);
     }
 
-    /** Suma un oyente de foco; un `null` se ignora. */
+    /** Adds a focus listener; a `null` is ignored. */
     public synchronized void addFocusListener(FocusListener l) {
         if (l == null) {
             return;
@@ -1397,7 +1402,7 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         this.enableEvents(AWTEvent.FOCUS_EVENT_MASK);
     }
 
-    /** Saca a ese oyente. */
+    /** Removes that listener. */
     public synchronized void removeFocusListener(FocusListener l) {
         if (l == null) {
             return;
@@ -1405,12 +1410,12 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         this.focusListener = AWTEventMulticaster.remove(this.focusListener, l);
     }
 
-    /** Los oyentes de foco. */
+    /** The focus listeners. */
     public synchronized FocusListener[] getFocusListeners() {
         return AWTEventMulticaster.getListeners(this.focusListener, FocusListener.class);
     }
 
-    /** Suma un oyente del árbol; un `null` se ignora. */
+    /** Adds a tree listener; a `null` is ignored. */
     public void addHierarchyListener(HierarchyListener l) {
         if (l == null) {
             return;
@@ -1421,7 +1426,7 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         }
     }
 
-    /** Saca a ese oyente. */
+    /** Removes that listener. */
     public void removeHierarchyListener(HierarchyListener l) {
         if (l == null) {
             return;
@@ -1431,12 +1436,12 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         }
     }
 
-    /** Los oyentes del árbol. */
+    /** The tree listeners. */
     public synchronized HierarchyListener[] getHierarchyListeners() {
         return AWTEventMulticaster.getListeners(this.hierarchyListener, HierarchyListener.class);
     }
 
-    /** Suma un oyente de cambios de tamaño de ancestros; un `null` se ignora. */
+    /** Adds a listener of ancestor size changes; a `null` is ignored. */
     public void addHierarchyBoundsListener(HierarchyBoundsListener l) {
         if (l == null) {
             return;
@@ -1448,7 +1453,7 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         }
     }
 
-    /** Saca a ese oyente. */
+    /** Removes that listener. */
     public void removeHierarchyBoundsListener(HierarchyBoundsListener l) {
         if (l == null) {
             return;
@@ -1459,13 +1464,13 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         }
     }
 
-    /** Los oyentes de cambios de tamaño de ancestros. */
+    /** The listeners of ancestor size changes. */
     public synchronized HierarchyBoundsListener[] getHierarchyBoundsListeners() {
         return AWTEventMulticaster.getListeners(this.hierarchyBoundsListener,
                 HierarchyBoundsListener.class);
     }
 
-    /** Suma un oyente de teclado; un `null` se ignora. */
+    /** Adds a keyboard listener; a `null` is ignored. */
     public synchronized void addKeyListener(KeyListener l) {
         if (l == null) {
             return;
@@ -1474,7 +1479,7 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         this.enableEvents(AWTEvent.KEY_EVENT_MASK);
     }
 
-    /** Saca a ese oyente. */
+    /** Removes that listener. */
     public synchronized void removeKeyListener(KeyListener l) {
         if (l == null) {
             return;
@@ -1482,12 +1487,12 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         this.keyListener = AWTEventMulticaster.remove(this.keyListener, l);
     }
 
-    /** Los oyentes de teclado. */
+    /** The keyboard listeners. */
     public synchronized KeyListener[] getKeyListeners() {
         return AWTEventMulticaster.getListeners(this.keyListener, KeyListener.class);
     }
 
-    /** Suma un oyente de botones del ratón; un `null` se ignora. */
+    /** Adds a mouse button listener; a `null` is ignored. */
     public synchronized void addMouseListener(MouseListener l) {
         if (l == null) {
             return;
@@ -1496,7 +1501,7 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         this.enableEvents(AWTEvent.MOUSE_EVENT_MASK);
     }
 
-    /** Saca a ese oyente. */
+    /** Removes that listener. */
     public synchronized void removeMouseListener(MouseListener l) {
         if (l == null) {
             return;
@@ -1504,12 +1509,12 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         this.mouseListener = AWTEventMulticaster.remove(this.mouseListener, l);
     }
 
-    /** Los oyentes de botones del ratón. */
+    /** The mouse button listeners. */
     public synchronized MouseListener[] getMouseListeners() {
         return AWTEventMulticaster.getListeners(this.mouseListener, MouseListener.class);
     }
 
-    /** Suma un oyente de movimiento del ratón; un `null` se ignora. */
+    /** Adds a mouse motion listener; a `null` is ignored. */
     public synchronized void addMouseMotionListener(MouseMotionListener l) {
         if (l == null) {
             return;
@@ -1518,7 +1523,7 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         this.enableEvents(AWTEvent.MOUSE_MOTION_EVENT_MASK);
     }
 
-    /** Saca a ese oyente. */
+    /** Removes that listener. */
     public synchronized void removeMouseMotionListener(MouseMotionListener l) {
         if (l == null) {
             return;
@@ -1526,13 +1531,13 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         this.mouseMotionListener = AWTEventMulticaster.remove(this.mouseMotionListener, l);
     }
 
-    /** Los oyentes de movimiento del ratón. */
+    /** The mouse motion listeners. */
     public synchronized MouseMotionListener[] getMouseMotionListeners() {
         return AWTEventMulticaster.getListeners(this.mouseMotionListener,
                 MouseMotionListener.class);
     }
 
-    /** Suma un oyente de la rueda; un `null` se ignora. */
+    /** Adds a wheel listener; a `null` is ignored. */
     public synchronized void addMouseWheelListener(MouseWheelListener l) {
         if (l == null) {
             return;
@@ -1541,7 +1546,7 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         this.enableEvents(AWTEvent.MOUSE_WHEEL_EVENT_MASK);
     }
 
-    /** Saca a ese oyente. */
+    /** Removes that listener. */
     public synchronized void removeMouseWheelListener(MouseWheelListener l) {
         if (l == null) {
             return;
@@ -1549,13 +1554,13 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         this.mouseWheelListener = AWTEventMulticaster.remove(this.mouseWheelListener, l);
     }
 
-    /** Los oyentes de la rueda. */
+    /** The wheel listeners. */
     public synchronized MouseWheelListener[] getMouseWheelListeners() {
         return AWTEventMulticaster.getListeners(this.mouseWheelListener,
                 MouseWheelListener.class);
     }
 
-    /** Suma un oyente del método de entrada; un `null` se ignora. */
+    /** Adds an input method listener; a `null` is ignored. */
     public synchronized void addInputMethodListener(InputMethodListener l) {
         if (l == null) {
             return;
@@ -1564,7 +1569,7 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         this.enableEvents(AWTEvent.INPUT_METHOD_EVENT_MASK);
     }
 
-    /** Saca a ese oyente. */
+    /** Removes that listener. */
     public synchronized void removeInputMethodListener(InputMethodListener l) {
         if (l == null) {
             return;
@@ -1572,17 +1577,19 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         this.inputMethodListener = AWTEventMulticaster.remove(this.inputMethodListener, l);
     }
 
-    /** Los oyentes del método de entrada. */
+    /** The input method listeners. */
     public synchronized InputMethodListener[] getInputMethodListeners() {
         return AWTEventMulticaster.getListeners(this.inputMethodListener,
                 InputMethodListener.class);
     }
 
     /**
-     * Los oyentes de esa clase.
+     * The listeners of that class.
      *
-     * @throws ClassCastException si la clase no es de oyente
-     * @throws NullPointerException si la clase es `null`
+     * <p>The {@code T extends EventListener} bound is what keeps the question well posed: a class
+     * that is not a listener one cannot be passed without raw types.
+     *
+     * @throws NullPointerException if the class is `null`
      */
     public <T extends EventListener> T[] getListeners(Class<T> listenerType) {
         EventListener l = null;
@@ -1609,9 +1616,9 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
     }
 
     /**
-     * El estado de escritura de la ventana que lo contiene.
+     * The write state of the window that contains it.
      *
-     * @return `null` si no cuelga de ninguna ventana
+     * @return `null` if it hangs from no window
      */
     public InputContext getInputContext() {
         Container p = this.parent;
@@ -1622,33 +1629,33 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
     }
 
     /**
-     * Lo que el método de entrada necesita preguntarle a este componente.
+     * What the input method needs to ask this component.
      *
-     * @return `null`: un componente genérico no muestra texto en composición
+     * @return `null`: a generic component shows no text being composed
      */
     public InputMethodRequests getInputMethodRequests() {
         return null;
     }
 
-    /** El destino de arrastre enganchado, o `null`. */
+    /** The drop target attached, or `null`. */
     public synchronized java.awt.dnd.DropTarget getDropTarget() {
         return this.dropTarget;
     }
 
     /**
-     * Le engancha un destino de arrastre.
+     * Attaches a drop target to it.
      *
-     * <p>Desengancha el anterior y le avisa al nuevo cuál es su componente: los dos lados de la
-     * relación se mantienen consistentes desde acá.
+     * <p>It detaches the previous one and tells the new one which its component is: both sides of
+     * the relation are kept consistent from here.
      */
     public synchronized void setDropTarget(java.awt.dnd.DropTarget dt) {
         if (dt == this.dropTarget) {
             return;
         }
-        java.awt.dnd.DropTarget anterior = this.dropTarget;
+        java.awt.dnd.DropTarget previous = this.dropTarget;
         this.dropTarget = dt;
-        if (anterior != null && anterior.getComponent() == this) {
-            anterior.setComponent(null);
+        if (previous != null && previous.getComponent() == this) {
+            previous.setComponent(null);
         }
         if (dt != null && dt.getComponent() != this) {
             dt.setComponent(this);
@@ -1656,9 +1663,9 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
     }
 
     /**
-     * Le engancha un menú emergente.
+     * Attaches a popup menu to it.
      *
-     * @throws NullPointerException si el menú es `null`
+     * @throws NullPointerException if the menu is `null`
      */
     public void add(PopupMenu popup) {
         synchronized (this.getTreeLock()) {
@@ -1670,7 +1677,7 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         }
     }
 
-    /** Le saca un menú emergente. */
+    /** Takes a popup menu away from it. */
     public void remove(MenuComponent popup) {
         synchronized (this.getTreeLock()) {
             if (this.popups.remove(popup)) {
@@ -1679,33 +1686,33 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         }
     }
 
-    /** Avisa que puede mostrarse. */
+    /** Notifies that it can be shown. */
     public void addNotify() {
     }
 
-    /** Avisa que dejó de poder mostrarse. */
+    /** Notifies that it can no longer be shown. */
     public void removeNotify() {
     }
 
-    /** Si puede recibir el foco. */
+    /** Whether it can receive the focus. */
     public boolean isFocusable() {
         return this.focusable;
     }
 
-    /** Declara si puede recibir el foco. */
+    /** Declares whether it can receive the focus. */
     public void setFocusable(boolean focusable) {
-        boolean viejo;
+        boolean old;
         synchronized (this) {
-            viejo = this.focusable;
+            old = this.focusable;
             this.focusable = focusable;
         }
-        this.firePropertyChange("focusable", viejo, focusable);
+        this.firePropertyChange("focusable", old, focusable);
     }
 
     /**
-     * Si puede recibir el foco.
+     * Whether it can receive the focus.
      *
-     * @deprecated es del modelo de 1.1. Usar {@link #isFocusable}.
+     * @deprecated it is from the 1.1 model. Use {@link #isFocusable}.
      */
     @Deprecated
     public boolean isFocusTraversable() {
@@ -1713,14 +1720,15 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
     }
 
     /**
-     * Las teclas que recorren el foco en ese sentido.
+     * The keys that walk the focus in that direction.
      *
-     * <p>Si no se le fijaron, se heredan del padre; si no hay padre, son las de fábrica.
+     * <p>If none were set on it, they are inherited from the parent; if there is no parent, they
+     * are the default ones.
      *
-     * @throws IllegalArgumentException si el sentido no es uno de los cuatro
+     * @throws IllegalArgumentException if the direction is not one of the four
      */
     public Set<AWTKeyStroke> getFocusTraversalKeys(int id) {
-        this.comprobarSentido(id);
+        this.checkEventId(id);
         Set<AWTKeyStroke> s = this.focusTraversalKeys[id];
         if (s != null) {
             return s;
@@ -1729,22 +1737,22 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         if (p != null) {
             return p.getFocusTraversalKeys(id);
         }
-        return tecladoPorOmision(id);
+        return defaultKeyStrokes(id);
     }
 
     /**
-     * Cambia las teclas de recorrido en ese sentido.
+     * Changes the traversal keys in that direction.
      *
-     * <p>Con `null` se vuelve a heredar del padre.
+     * <p>With `null` they go back to being inherited from the parent.
      *
-     * @throws IllegalArgumentException si el sentido no es uno de los cuatro, si el conjunto trae un
-     *     `null`, o si trae un atajo de tecla soltada
+     * @throws IllegalArgumentException if the direction is not one of the four, if the set carries
+     *     a `null`, or if it carries a key-released shortcut
      */
     public void setFocusTraversalKeys(int id, Set<? extends AWTKeyStroke> keystrokes) {
-        this.comprobarSentido(id);
-        Set<AWTKeyStroke> nuevo = null;
+        this.checkEventId(id);
+        Set<AWTKeyStroke> fresh = null;
         if (keystrokes != null) {
-            Set<AWTKeyStroke> copia = new HashSet<AWTKeyStroke>();
+            Set<AWTKeyStroke> copy = new HashSet<AWTKeyStroke>();
             java.util.Iterator<? extends AWTKeyStroke> it = keystrokes.iterator();
             while (it.hasNext()) {
                 AWTKeyStroke k = it.next();
@@ -1752,40 +1760,40 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
                     throw new IllegalArgumentException(
                             "cannot set null focus traversal key");
                 }
-                // Un atajo al soltar no sirve para recorrer: para cuando la tecla se suelta, el foco
-                // ya se movio con el apretón y el recorrido saltaría dos veces.
+                // A shortcut on release is no good for traversing: by the time the key is released,
+                // the focus has already moved with the press and the traversal would jump twice.
                 if (k.getKeyChar() != KeyEvent.CHAR_UNDEFINED) {
                     throw new IllegalArgumentException(
                             "focus traversal keys cannot map to KEY_TYPED events");
                 }
-                copia.add(k);
+                copy.add(k);
             }
-            nuevo = Collections.unmodifiableSet(copia);
+            fresh = Collections.unmodifiableSet(copy);
         }
-        Set<AWTKeyStroke> viejo = this.focusTraversalKeys[id];
-        this.focusTraversalKeys[id] = nuevo;
-        this.firePropertyChange(nombreDeSentido(id), viejo, nuevo);
+        Set<AWTKeyStroke> old = this.focusTraversalKeys[id];
+        this.focusTraversalKeys[id] = fresh;
+        this.firePropertyChange(eventIdName(id), old, fresh);
     }
 
-    /** Si a este componente se le fijaron teclas propias en ese sentido. */
+    /** Whether keys of its own were set on this component in that direction. */
     public boolean areFocusTraversalKeysSet(int id) {
-        this.comprobarSentido(id);
+        this.checkEventId(id);
         return this.focusTraversalKeys[id] != null;
     }
 
     /**
-     * Comprueba que el sentido sea uno de los cuatro.
+     * Checks that the direction is one of the four.
      *
-     * @throws IllegalArgumentException si no lo es
+     * @throws IllegalArgumentException if it is not
      */
-    private void comprobarSentido(int id) {
+    private void checkEventId(int id) {
         if (id < 0 || id > 3) {
             throw new IllegalArgumentException("invalid focus traversal key identifier");
         }
     }
 
-    /** El nombre de propiedad que corresponde a ese sentido. */
-    private static String nombreDeSentido(int id) {
+    /** The property name that corresponds to that direction. */
+    private static String eventIdName(int id) {
         if (id == 0) {
             return "forwardFocusTraversalKeys";
         }
@@ -1798,118 +1806,120 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         return "downCycleFocusTraversalKeys";
     }
 
-    /** Si el componente atiende las teclas de recorrido en vez de recibirlas como teclado. */
+    /**
+     * Whether the component handles the traversal keys instead of receiving them as keyboard input.
+     */
     public boolean getFocusTraversalKeysEnabled() {
         return this.focusTraversalKeysEnabled;
     }
 
     /**
-     * Declara si las atiende.
+     * Declares whether it handles them.
      *
-     * <p>Apagarlo es lo que hace que un editor de texto pueda recibir el tabulador como carácter en
-     * vez de perder el foco.
+     * <p>Switching it off is what lets a text editor receive the tab key as a character instead of
+     * losing the focus.
      */
     public void setFocusTraversalKeysEnabled(boolean focusTraversalKeysEnabled) {
-        boolean viejo;
+        boolean old;
         synchronized (this) {
-            viejo = this.focusTraversalKeysEnabled;
+            old = this.focusTraversalKeysEnabled;
             this.focusTraversalKeysEnabled = focusTraversalKeysEnabled;
         }
-        this.firePropertyChange("focusTraversalKeysEnabled", viejo, focusTraversalKeysEnabled);
+        this.firePropertyChange("focusTraversalKeysEnabled", old, focusTraversalKeysEnabled);
     }
 
     /**
-     * Le pide el foco.
+     * Asks for the focus.
      *
-     * <p>No hace nada: mover el foco lo decide el gestor de foco a partir de lo que el sistema de
-     * ventanas informe, y no hay ninguno de los dos. El método no devuelve nada, así que no afirma
-     * haberlo conseguido.
+     * <p>It does nothing: moving the focus is decided by the focus manager out of what the
+     * windowing system reports, and there is neither of the two. The method returns nothing, so it
+     * does not claim to have got it.
      */
     public void requestFocus() {
     }
 
-    /** Como el anterior, declarando por qué se pide. */
+    /** Like the previous one, declaring why it is asked for. */
     public void requestFocus(FocusEvent.Cause cause) {
     }
 
     /**
-     * Le pide el foco, diciendo si el cambio es temporal.
+     * Asks for the focus, saying whether the change is temporary.
      *
-     * @return `false` siempre: el foco no se pudo mover porque no hay gestor de foco
+     * @return `false` always: the focus could not be moved because there is no focus manager
      */
     protected boolean requestFocus(boolean temporary) {
         return false;
     }
 
     /**
-     * Como el anterior, declarando por qué.
+     * Like the previous one, declaring why.
      *
-     * @return `false` siempre
+     * @return `false` always
      */
     protected boolean requestFocus(boolean temporary, FocusEvent.Cause cause) {
         return false;
     }
 
     /**
-     * Le pide el foco sólo si su ventana ya lo tiene.
+     * Asks for the focus only if its window has it already.
      *
-     * @return `false` siempre
+     * @return `false` always
      */
     public boolean requestFocusInWindow() {
         return false;
     }
 
     /**
-     * Como el anterior, declarando por qué.
+     * Like the previous one, declaring why.
      *
-     * @return `false` siempre
+     * @return `false` always
      */
     public boolean requestFocusInWindow(FocusEvent.Cause cause) {
         return false;
     }
 
     /**
-     * Como el anterior, diciendo si el cambio es temporal.
+     * Like the previous one, saying whether the change is temporary.
      *
-     * @return `false` siempre
+     * @return `false` always
      */
     protected boolean requestFocusInWindow(boolean temporary) {
         return false;
     }
 
-    /** Si tiene el foco del teclado. */
+    /** Whether it has the keyboard focus. */
     public boolean hasFocus() {
         return false;
     }
 
-    /** Si es el componente con el foco. */
+    /** Whether it is the component with the focus. */
     public boolean isFocusOwner() {
         return this.hasFocus();
     }
 
-    /** Le pasa el foco al siguiente del recorrido; no hace nada sin gestor de foco. */
+    /** Passes the focus to the next one in the traversal; it does nothing with no focus manager. */
     public void transferFocus() {
     }
 
-    /** Le pasa el foco al anterior. */
+    /** Passes the focus to the previous one. */
     public void transferFocusBackward() {
     }
 
-    /** Sube un nivel de ciclo de foco. */
+    /** Goes up one focus cycle level. */
     public void transferFocusUpCycle() {
     }
 
     /**
-     * Le pasa el foco al siguiente.
+     * Passes the focus to the next one.
      *
-     * @deprecated es del modelo de 1.1. Usar {@link #transferFocus}.
+     * @deprecated it is from the 1.1 model. Use {@link #transferFocus}.
      */
     @Deprecated
     public void nextFocus() {
         this.transferFocus();
     }
 
-    /** La raíz del ciclo de foco al que pertenece, o `null`. */
+    /** The root of the focus cycle it belongs to, or `null`. */
     public Container getFocusCycleRootAncestor() {
         Container p = this.parent;
         while (p != null) {
@@ -1921,12 +1931,12 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         return null;
     }
 
-    /** Si ese contenedor es la raíz del ciclo de foco de este componente. */
+    /** Whether that container is the focus cycle root of this component. */
     public boolean isFocusCycleRoot(Container container) {
         return this.getFocusCycleRootAncestor() == container;
     }
 
-    /** La configuración gráfica; `null` sin ventana. */
+    /** The graphics configuration; `null` with no window. */
     public GraphicsConfiguration getGraphicsConfiguration() {
         Container p = this.parent;
         if (p != null) {
@@ -1936,40 +1946,40 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
     }
 
     /**
-     * Una imagen para dibujar fuera de pantalla.
+     * An image to draw off screen.
      *
-     * @return `null` siempre: sin ventana no hay formato de destino al que ajustarla. Para dibujar
-     *     sobre píxeles está {@link java.awt.image.BufferedImage}.
+     * @return `null` always: with no window there is no destination format to fit it to. For
+     *     drawing onto pixels there is {@link java.awt.image.BufferedImage}.
      */
     public Image createImage(int width, int height) {
         return null;
     }
 
     /**
-     * Una imagen a partir de un productor de píxeles.
+     * An image from a producer of pixels.
      *
-     * <p>Esta sí funciona: no necesita ventana, sólo el productor.
+     * <p>This one does work: it needs no window, only the producer.
      *
-     * @throws NullPointerException si el productor es `null`
+     * @throws NullPointerException if the producer is `null`
      */
     public Image createImage(ImageProducer producer) {
         return this.getToolkit().createImage(producer);
     }
 
     /**
-     * Una imagen volátil.
+     * A volatile image.
      *
-     * @return `null` siempre: una imagen volátil vive en la memoria del dispositivo de video
+     * @return `null` always: a volatile image lives in the memory of the video device
      */
     public VolatileImage createVolatileImage(int width, int height) {
         return null;
     }
 
     /**
-     * Una imagen volátil con las capacidades pedidas.
+     * A volatile image with the capabilities asked for.
      *
-     * @return `null` siempre, por el mismo motivo
-     * @throws AWTException si las capacidades no se pueden cumplir
+     * @return `null` always, for the same reason
+     * @throws AWTException if the capabilities cannot be met
      */
     public VolatileImage createVolatileImage(int width, int height, ImageCapabilities caps)
             throws AWTException {
@@ -1977,38 +1987,38 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
     }
 
     /**
-     * Empieza a cargar una imagen a ese tamaño.
+     * Starts loading an image at that size.
      *
-     * @return si ya está lista
+     * @return whether it is ready already
      */
     public boolean prepareImage(Image image, ImageObserver observer) {
         return this.prepareImage(image, -1, -1, observer);
     }
 
     /**
-     * Como el anterior, a un tamaño concreto.
+     * Like the previous one, at a concrete size.
      *
-     * @return si ya está lista
+     * @return whether it is ready already
      */
     public boolean prepareImage(Image image, int width, int height, ImageObserver observer) {
         return this.getToolkit().prepareImage(image, width, height, observer);
     }
 
-    /** Cuánto se cargó de una imagen, como banderas de {@link ImageObserver}. */
+    /** How much of an image was loaded, as {@link ImageObserver} flags. */
     public int checkImage(Image image, ImageObserver observer) {
         return this.checkImage(image, -1, -1, observer);
     }
 
-    /** Como el anterior, a un tamaño concreto. */
+    /** Like the previous one, at a concrete size. */
     public int checkImage(Image image, int width, int height, ImageObserver observer) {
         return this.getToolkit().checkImage(image, width, height, observer);
     }
 
     /**
-     * Le avisan que una imagen avanzó.
+     * It is told that an image has made progress.
      *
-     * <p>Repinta cuando llegan píxeles nuevos y deja de escuchar cuando la imagen está completa o
-     * falló — que es lo que el valor de retorno significa.
+     * <p>It repaints when new pixels arrive and stops listening when the image is complete or has
+     * failed — which is what the return value means.
      */
     public boolean imageUpdate(Image img, int infoflags, int x, int y, int w, int h) {
         if ((infoflags & (ALLBITS | FRAMEBITS)) != 0) {
@@ -2024,27 +2034,27 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         return true;
     }
 
-    /** De qué lado se lee el contenido. */
+    /** Which side the content is read from. */
     public ComponentOrientation getComponentOrientation() {
         return this.componentOrientation;
     }
 
     /**
-     * Declara de qué lado se lee.
+     * Declares which side it is read from.
      *
-     * @throws NullPointerException si la orientación es `null`
+     * @throws NullPointerException if the orientation is `null`
      */
     public void setComponentOrientation(ComponentOrientation o) {
-        ComponentOrientation viejo = this.componentOrientation;
+        ComponentOrientation old = this.componentOrientation;
         this.componentOrientation = o;
-        this.firePropertyChange("componentOrientation", viejo, o);
+        this.firePropertyChange("componentOrientation", old, o);
         this.invalidate();
     }
 
     /**
-     * Le pone esa orientación a él y a todos sus descendientes.
+     * Gives that orientation to itself and to every descendant.
      *
-     * @throws NullPointerException si la orientación es `null`
+     * @throws NullPointerException if the orientation is `null`
      */
     public void applyComponentOrientation(ComponentOrientation orientation) {
         if (orientation == null) {
@@ -2053,11 +2063,11 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         this.setComponentOrientation(orientation);
     }
 
-    /** Le da forma al recorte que usa la mezcla de componentes pesados y livianos. */
+    /** Shapes the clip used by the mixing of heavyweight and lightweight components. */
     public void setMixingCutoutShape(Shape shape) {
     }
 
-    /** Suma alguien a quien avisarle de los cambios de propiedad. */
+    /** Adds someone to tell about the property changes. */
     public void addPropertyChangeListener(PropertyChangeListener listener) {
         if (listener == null) {
             return;
@@ -2070,7 +2080,7 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         }
     }
 
-    /** Saca a ese oyente. */
+    /** Removes that listener. */
     public void removePropertyChangeListener(PropertyChangeListener listener) {
         if (listener == null || this.changeSupport == null) {
             return;
@@ -2080,7 +2090,7 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         }
     }
 
-    /** Los oyentes de cambios de propiedad. */
+    /** The property change listeners. */
     public PropertyChangeListener[] getPropertyChangeListeners() {
         synchronized (this.getObjectLock()) {
             if (this.changeSupport == null) {
@@ -2090,7 +2100,7 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         }
     }
 
-    /** Suma un oyente para una propiedad concreta. */
+    /** Adds a listener for one particular property. */
     public void addPropertyChangeListener(String propertyName, PropertyChangeListener listener) {
         if (listener == null) {
             return;
@@ -2103,7 +2113,7 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         }
     }
 
-    /** Saca a ese oyente de esa propiedad. */
+    /** Removes that listener of that property. */
     public void removePropertyChangeListener(String propertyName,
             PropertyChangeListener listener) {
         if (listener == null || this.changeSupport == null) {
@@ -2114,7 +2124,7 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         }
     }
 
-    /** Los oyentes de esa propiedad. */
+    /** The listeners of that property. */
     public PropertyChangeListener[] getPropertyChangeListeners(String propertyName) {
         synchronized (this.getObjectLock()) {
             if (this.changeSupport == null) {
@@ -2124,7 +2134,7 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         }
     }
 
-    /** Avisa que cambió una propiedad. */
+    /** Reports that a property changed. */
     protected void firePropertyChange(String propertyName, Object oldValue, Object newValue) {
         PropertyChangeSupport s = this.changeSupport;
         if (s != null) {
@@ -2132,7 +2142,7 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         }
     }
 
-    /** Avisa que cambió una propiedad booleana. */
+    /** Reports that a boolean property changed. */
     protected void firePropertyChange(String propertyName, boolean oldValue, boolean newValue) {
         PropertyChangeSupport s = this.changeSupport;
         if (s != null) {
@@ -2140,7 +2150,7 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         }
     }
 
-    /** Avisa que cambió una propiedad entera. */
+    /** Reports that an int property changed. */
     protected void firePropertyChange(String propertyName, int oldValue, int newValue) {
         PropertyChangeSupport s = this.changeSupport;
         if (s != null) {
@@ -2148,41 +2158,41 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         }
     }
 
-    /** Avisa que cambió una propiedad de tipo `byte`. */
+    /** Reports that a `byte` property changed. */
     public void firePropertyChange(String propertyName, byte oldValue, byte newValue) {
         this.firePropertyChange(propertyName, Byte.valueOf(oldValue), Byte.valueOf(newValue));
     }
 
-    /** Avisa que cambió una propiedad de tipo `char`. */
+    /** Reports that a `char` property changed. */
     public void firePropertyChange(String propertyName, char oldValue, char newValue) {
         this.firePropertyChange(propertyName, Character.valueOf(oldValue),
                 Character.valueOf(newValue));
     }
 
-    /** Avisa que cambió una propiedad de tipo `short`. */
+    /** Reports that a `short` property changed. */
     public void firePropertyChange(String propertyName, short oldValue, short newValue) {
         this.firePropertyChange(propertyName, Short.valueOf(oldValue), Short.valueOf(newValue));
     }
 
-    /** Avisa que cambió una propiedad de tipo `long`. */
+    /** Reports that a `long` property changed. */
     public void firePropertyChange(String propertyName, long oldValue, long newValue) {
         this.firePropertyChange(propertyName, Long.valueOf(oldValue), Long.valueOf(newValue));
     }
 
-    /** Avisa que cambió una propiedad de tipo `float`. */
+    /** Reports that a `float` property changed. */
     public void firePropertyChange(String propertyName, float oldValue, float newValue) {
         this.firePropertyChange(propertyName, Float.valueOf(oldValue), Float.valueOf(newValue));
     }
 
-    /** Avisa que cambió una propiedad de tipo `double`. */
+    /** Reports that a `double` property changed. */
     public void firePropertyChange(String propertyName, double oldValue, double newValue) {
         this.firePropertyChange(propertyName, Double.valueOf(oldValue), Double.valueOf(newValue));
     }
 
     /**
-     * Atiende un evento del modelo viejo.
+     * Handles an event of the old model.
      *
-     * @deprecated es del modelo de 1.0. Usar {@link #processEvent}.
+     * @deprecated it is from the 1.0 model. Use {@link #processEvent}.
      */
     @Deprecated
     public boolean handleEvent(Event evt) {
@@ -2190,9 +2200,9 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
     }
 
     /**
-     * Se apretó el ratón.
+     * The mouse was pressed.
      *
-     * @deprecated es del modelo de 1.0. Usar {@link #processMouseEvent}.
+     * @deprecated it is from the 1.0 model. Use {@link #processMouseEvent}.
      */
     @Deprecated
     public boolean mouseDown(Event evt, int x, int y) {
@@ -2200,9 +2210,9 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
     }
 
     /**
-     * Se arrastró el ratón.
+     * The mouse was dragged.
      *
-     * @deprecated es del modelo de 1.0. Usar {@link #processMouseMotionEvent}.
+     * @deprecated it is from the 1.0 model. Use {@link #processMouseMotionEvent}.
      */
     @Deprecated
     public boolean mouseDrag(Event evt, int x, int y) {
@@ -2210,9 +2220,9 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
     }
 
     /**
-     * Se soltó el ratón.
+     * The mouse was released.
      *
-     * @deprecated es del modelo de 1.0. Usar {@link #processMouseEvent}.
+     * @deprecated it is from the 1.0 model. Use {@link #processMouseEvent}.
      */
     @Deprecated
     public boolean mouseUp(Event evt, int x, int y) {
@@ -2220,9 +2230,9 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
     }
 
     /**
-     * Se movió el ratón.
+     * The mouse was moved.
      *
-     * @deprecated es del modelo de 1.0. Usar {@link #processMouseMotionEvent}.
+     * @deprecated it is from the 1.0 model. Use {@link #processMouseMotionEvent}.
      */
     @Deprecated
     public boolean mouseMove(Event evt, int x, int y) {
@@ -2230,9 +2240,9 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
     }
 
     /**
-     * El ratón entró.
+     * The mouse came in.
      *
-     * @deprecated es del modelo de 1.0. Usar {@link #processMouseEvent}.
+     * @deprecated it is from the 1.0 model. Use {@link #processMouseEvent}.
      */
     @Deprecated
     public boolean mouseEnter(Event evt, int x, int y) {
@@ -2240,9 +2250,9 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
     }
 
     /**
-     * El ratón salió.
+     * The mouse went out.
      *
-     * @deprecated es del modelo de 1.0. Usar {@link #processMouseEvent}.
+     * @deprecated it is from the 1.0 model. Use {@link #processMouseEvent}.
      */
     @Deprecated
     public boolean mouseExit(Event evt, int x, int y) {
@@ -2250,9 +2260,9 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
     }
 
     /**
-     * Se apretó una tecla.
+     * A key was pressed.
      *
-     * @deprecated es del modelo de 1.0. Usar {@link #processKeyEvent}.
+     * @deprecated it is from the 1.0 model. Use {@link #processKeyEvent}.
      */
     @Deprecated
     public boolean keyDown(Event evt, int key) {
@@ -2260,9 +2270,9 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
     }
 
     /**
-     * Se soltó una tecla.
+     * A key was released.
      *
-     * @deprecated es del modelo de 1.0. Usar {@link #processKeyEvent}.
+     * @deprecated it is from the 1.0 model. Use {@link #processKeyEvent}.
      */
     @Deprecated
     public boolean keyUp(Event evt, int key) {
@@ -2270,9 +2280,9 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
     }
 
     /**
-     * Se ejecutó una acción.
+     * An action was run.
      *
-     * @deprecated es del modelo de 1.0. Usar un {@code ActionListener}.
+     * @deprecated it is from the 1.0 model. Use an {@code ActionListener}.
      */
     @Deprecated
     public boolean action(Event evt, Object what) {
@@ -2280,9 +2290,9 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
     }
 
     /**
-     * Ganó el foco.
+     * It gained the focus.
      *
-     * @deprecated es del modelo de 1.0. Usar {@link #processFocusEvent}.
+     * @deprecated it is from the 1.0 model. Use {@link #processFocusEvent}.
      */
     @Deprecated
     public boolean gotFocus(Event evt, Object what) {
@@ -2290,26 +2300,26 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
     }
 
     /**
-     * Perdió el foco.
+     * It lost the focus.
      *
-     * @deprecated es del modelo de 1.0. Usar {@link #processFocusEvent}.
+     * @deprecated it is from the 1.0 model. Use {@link #processFocusEvent}.
      */
     @Deprecated
     public boolean lostFocus(Event evt, Object what) {
         return false;
     }
 
-    /** Escribe el árbol de componentes en la salida estándar. */
+    /** Writes the component tree to the standard output. */
     public void list() {
         this.list(System.out, 0);
     }
 
-    /** Lo escribe en ese flujo. */
+    /** Writes it to that stream. */
     public void list(PrintStream out) {
         this.list(out, 0);
     }
 
-    /** Lo escribe con esa sangría. */
+    /** Writes it with that indentation. */
     public void list(PrintStream out, int indent) {
         for (int i = 0; i < indent; i++) {
             out.print(" ");
@@ -2317,12 +2327,12 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         out.println(this.toString());
     }
 
-    /** Lo escribe en ese escritor. */
+    /** Writes it to that writer. */
     public void list(PrintWriter out) {
         this.list(out, 0);
     }
 
-    /** Lo escribe con esa sangría. */
+    /** Writes it with that indentation. */
     public void list(PrintWriter out, int indent) {
         for (int i = 0; i < indent; i++) {
             out.print(" ");
@@ -2330,7 +2340,7 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
         out.println(this.toString());
     }
 
-    /** La descripción del componente, sin el nombre de la clase. */
+    /** The description of the component, without the class name. */
     protected String paramString() {
         String s = this.getName() + "," + this.x + "," + this.y + "," + this.width + "x"
                 + this.height;
@@ -2351,35 +2361,37 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
     }
 
     /**
-     * La información de accesibilidad de este componente.
+     * The accessibility information of this component.
      *
-     * <p>Devuelve `null` mientras ninguna subclase concreta haya armado la suya, y **no la arma
-     * sola**: un componente genérico no sabe qué rol tiene, y armar un contexto que conteste
-     * `AWT_COMPONENT` a todo sería peor que no contestar. Las subclases concretas lo redefinen.
+     * <p>It returns `null` while no concrete subclass has built its own, and it **does not build
+     * one itself**: a generic component does not know which role it has, and building a context
+     * that answers `AWT_COMPONENT` to everything would be worse than not answering. The concrete
+     * subclasses override it.
      */
     public AccessibleContext getAccessibleContext() {
         return this.accessibleContext;
     }
 
     /**
-     * La accesibilidad de un componente.
+     * The accessibility of a component.
      *
-     * <p>Informa lo que se puede saber sin pantalla: el nombre, el rol, si está habilitado, si está
-     * declarado visible y si puede recibir el foco. Lo que depende de estar en pantalla —{@code
-     * SHOWING}, {@code FOCUSED}— no se informa, porque no es cierto.
+     * <p>It reports what can be known without a screen: the name, the role, whether it is enabled,
+     * whether it is declared visible and whether it can receive the focus. {@code SHOWING} is asked
+     * for too and comes out false, because the component never reaches a screen; {@code FOCUSED} is
+     * not reported at all, because there is no focus manager that could have given it.
      */
     protected abstract class AccessibleAWTComponent extends AccessibleContext {
 
-        /** Para las subclases. */
+        /** For the subclasses. */
         protected AccessibleAWTComponent() {
         }
 
-        /** Desconocido; las subclases concretas lo afinan. */
+        /** {@code AWT_COMPONENT}: the non-specific role, which the concrete subclasses refine. */
         public AccessibleRole getAccessibleRole() {
             return AccessibleRole.AWT_COMPONENT;
         }
 
-        /** Los estados que se pueden saber sin pantalla. */
+        /** The states that can be known without a screen. */
         public AccessibleStateSet getAccessibleStateSet() {
             AccessibleStateSet s = new AccessibleStateSet();
             if (Component.this.isEnabled()) {
@@ -2397,37 +2409,37 @@ public abstract class Component implements ImageObserver, MenuContainer, Seriali
             return s;
         }
 
-        /** El nombre del componente. */
+        /** The name of the component. */
         public String getAccessibleName() {
             return Component.this.getName();
         }
 
-        /** Cero: un componente sin hijos. */
+        /** Zero: a component with no children. */
         public int getAccessibleChildrenCount() {
             return 0;
         }
 
-        /** Siempre `null`. */
+        /** Always `null`: a component has no accessible children. */
         public javax.accessibility.Accessible getAccessibleChild(int i) {
             return null;
         }
 
-        /** Su posición dentro del padre, o -1 si no tiene. */
+        /** Its position inside the parent, or -1 if it has none. */
         public int getAccessibleIndexInParent() {
             Container p = Component.this.getParent();
             if (p == null) {
                 return -1;
             }
-            Component[] hijos = p.getComponents();
-            for (int i = 0; i < hijos.length; i++) {
-                if (hijos[i] == Component.this) {
+            Component[] children = p.getComponents();
+            for (int i = 0; i < children.length; i++) {
+                if (children[i] == Component.this) {
                     return i;
                 }
             }
             return -1;
         }
 
-        /** El idioma del componente. */
+        /** The locale of the component. */
         public Locale getLocale() {
             return Component.this.getLocale();
         }

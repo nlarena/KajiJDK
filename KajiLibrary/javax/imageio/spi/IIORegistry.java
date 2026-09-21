@@ -5,33 +5,32 @@ import java.util.Iterator;
 import java.util.List;
 
 /**
- * KajiLibrary's javax.imageio.spi.IIORegistry -- el registro que usa {@code ImageIO}.
+ * KajiLibrary's javax.imageio.spi.IIORegistry -- the registry {@code ImageIO} uses.
  *
- * <p>Un {@link ServiceRegistry} con las seis categorias de {@code javax.imageio} ya declaradas, y con
- * los proveedores del sistema ya cargados.
+ * <p>A {@link ServiceRegistry} with the five {@code javax.imageio} categories already declared, and
+ * with the system providers already loaded.
  *
- * <p>Es el que {@code ImageIO} consulta para todo. Registrar un lector aca es lo que lo hace visible
- * para {@code ImageIO.read}.
+ * <p>It is the one {@code ImageIO} consults for everything. Registering a reader here is what makes
+ * it visible to {@code ImageIO.read}.
  *
- * <h2>Una instancia por grupo de hilos</h2>
+ * <h2>One instance per thread group</h2>
  *
- * <p>{@link #getDefaultInstance} no devuelve un unico registro global. En el JDK hay uno por
- * {@code ThreadGroup}, para que dos aplicaciones que compartan maquina virtual --lo que antes eran los
- * applets-- no se vean los complementos.
+ * <p>{@link #getDefaultInstance} does not return a single global registry. In the JDK there is one
+ * per {@code ThreadGroup}, so that two applications sharing a virtual machine --what applets used
+ * to be-- do not see each other's plug-ins.
  *
- * <p>Esta biblioteca no tiene ese aislamiento y devuelve siempre el mismo, que es lo que corresponde
- * cuando hay un solo grupo: el comportamiento observable es identico salvo que alguien cree grupos a
- * proposito para separarse.
+ * <p>This library has no such isolation and always returns the same one, which is what fits when
+ * there is a single group: the observable behaviour is identical unless someone creates groups on
+ * purpose to keep apart.
  *
  * <h2>{@link #registerApplicationClasspathSpis}</h2>
  *
- * <p>Vuelve a recorrer la ruta de clases buscando proveedores declarados como servicio. Existe para
- * los casos en que aparecen despues de arrancar -- un cargador de clases nuevo, un complemento que se
- * agrega en caliente.
+ * <p>It walks the class path again looking for providers declared as services. It exists for the
+ * cases where they appear after startup -- a new class loader, a plug-in added at run time.
  */
 public final class IIORegistry extends ServiceRegistry {
 
-    /** Las seis categorias de {@code javax.imageio}. */
+    /** The five {@code javax.imageio} categories. (An earlier note said six.) */
     private static final Class<?>[] CATEGORIES = {
         ImageReaderSpi.class,
         ImageWriterSpi.class,
@@ -40,10 +39,10 @@ public final class IIORegistry extends ServiceRegistry {
         ImageOutputStreamSpi.class,
     };
 
-    /** El registro; ver la nota de la clase. */
+    /** The registry; see the class note. */
     private static IIORegistry theRegistry = null;
 
-    /** Se llega por {@link #getDefaultInstance}. */
+    /** Reached through {@link #getDefaultInstance}. */
     private IIORegistry() {
         super(categoryIterator());
         registerStandardSpis();
@@ -51,11 +50,11 @@ public final class IIORegistry extends ServiceRegistry {
     }
 
     /**
-     * Registra los cuatro proveedores de flujo que vienen de fabrica.
+     * Registers the four stream providers that come by default.
      *
-     * <p>Son los que hacen que {@code ImageIO.createImageInputStream} funcione sobre un {@code File} o
-     * un {@code InputStream} sin que nadie instale nada. No son complementos de formato: no decodifican
-     * ninguna imagen, solo envuelven.
+     * <p>They are the ones that make {@code ImageIO.createImageInputStream} work over a {@code
+     * File} or an {@code InputStream} without anybody installing anything. They are not format
+     * plug-ins: they decode no image, they only wrap.
      */
     private void registerStandardSpis() {
         registerServiceProvider(new FileImageInputStreamSpi());
@@ -64,7 +63,7 @@ public final class IIORegistry extends ServiceRegistry {
         registerServiceProvider(new OutputStreamImageOutputStreamSpi());
     }
 
-    /** El registro que usa {@code ImageIO}. Ver la nota de la clase. */
+    /** The registry {@code ImageIO} uses. See the class note. */
     public static IIORegistry getDefaultInstance() {
         synchronized (IIORegistry.class) {
             if (theRegistry == null) {
@@ -75,17 +74,17 @@ public final class IIORegistry extends ServiceRegistry {
     }
 
     /**
-     * Vuelve a buscar proveedores declarados como servicio. Ver la nota de la clase.
+     * Looks again for providers declared as services. See the class note.
      *
-     * <p>Un proveedor que falle al cargarse se saltea: uno roto no puede impedir que se registren los
-     * demas.
+     * <p>A provider that fails to load is skipped: a broken one cannot prevent the rest from being
+     * registered.
      */
     public void registerApplicationClasspathSpis() {
         ClassLoader loader = null;
         try {
             loader = Thread.currentThread().getContextClassLoader();
         } catch (Throwable e) {
-            // Sin cargador de contexto se usa el que ServiceLoader elija.
+            // Without a context class loader, whichever ServiceLoader picks is used.
         }
         int i = 0;
         while (i < CATEGORIES.length) {
@@ -94,7 +93,7 @@ public final class IIORegistry extends ServiceRegistry {
         }
     }
 
-    /** Registra los de esa categoria, salteando los que no carguen. */
+    /** Registers the ones of that category, skipping those that do not load. */
     private void registerFound(Class<?> category, ClassLoader loader) {
         try {
             Iterator<?> it;
@@ -107,15 +106,15 @@ public final class IIORegistry extends ServiceRegistry {
                 try {
                     registerServiceProvider(it.next());
                 } catch (Throwable e) {
-                    // Ese proveedor no carga; se sigue con los demas.
+                    // That provider does not load; carry on with the rest.
                 }
             }
         } catch (Throwable e) {
-            // Ni siquiera se pudo abrir el cargador de servicios para esta categoria.
+            // The service loader could not even be opened for this category.
         }
     }
 
-    /** Las categorias, como iterador. */
+    /** The categories, as an iterator. */
     private static Iterator<Class<?>> categoryIterator() {
         List<Class<?>> list = new ArrayList<Class<?>>();
         int i = 0;

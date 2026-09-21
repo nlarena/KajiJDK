@@ -1,31 +1,31 @@
 package org.w3c.dom.html;
 
 /**
- * Un `<param>` de un `<object>` o un `<applet>`.
+ * A `<param>` of an `<object>` or an `<applet>`.
  */
 public interface HTMLParamElement extends HTMLElement {
 
-    /** El atributo `name`. */
+    /** The `name` attribute. */
     String getName();
 
-    /** Fija el atributo `name`. */
+    /** It sets the `name` attribute. */
     void setName(String name);
 
-    /** El tipo del control. */
+    /** The type of the control. */
     String getType();
 
-    /** Fija el tipo del control. */
+    /** It sets the type of the control. */
     void setType(String type);
 
-    /** El valor actual. */
+    /** The current value. */
     String getValue();
 
-    /** Fija el valor actual. */
+    /** It sets the current value. */
     void setValue(String value);
 
-    /** El atributo `valueType`. */
+    /** The `valueType` attribute. */
     String getValueType();
 
-    /** Fija el atributo `valueType`. */
+    /** It sets the `valueType` attribute. */
     void setValueType(String valueType);
 }

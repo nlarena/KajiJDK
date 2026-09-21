@@ -7,17 +7,17 @@ import java.io.Serializable;
 import javax.swing.Icon;
 
 /**
- * Un {@link Icon} que puso el aspecto; ver {@link UIResource}.
+ * An {@link Icon} the look and feel set; see {@link UIResource}.
  *
- * <p>A diferencia de color, fuente o insets, un icono no se puede heredar —es una interfaz—, asi
- * que este envuelve al icono real y le delega todo. Es la unica manera de ponerle la etiqueta a un
- * icono que ya existe.
+ * <p>Unlike a colour, a font or insets, an icon cannot be inherited from --it is an interface--,
+ * so this one wraps the real icon and delegates everything to it. It is the only way of putting
+ * the label on an icon that already exists.
  */
 public class IconUIResource implements Icon, UIResource, Serializable {
 
     private Icon delegate;
 
-    /** Envuelve ese icono. {@code null} no es un icono. */
+    /** Wraps that icon. {@code null} is not an icon. */
     public IconUIResource(Icon delegate) {
         if (delegate == null) {
             throw new IllegalArgumentException("null delegate icon argument");

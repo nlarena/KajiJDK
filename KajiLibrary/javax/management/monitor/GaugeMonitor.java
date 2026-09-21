@@ -6,88 +6,88 @@ import javax.management.MBeanNotificationInfo;
 import javax.management.ObjectName;
 
 /**
- * KajiLibrary's javax.management.monitor.GaugeMonitor -- vigila un valor que sube y baja.
+ * KajiLibrary's javax.management.monitor.GaugeMonitor -- watches a value that goes up and down.
  *
- * <p>La banda de histeresis esta explicada en {@link GaugeMonitorMBean}. Aca esta el estado por
- * observado: en cual de los dos lados de la banda esta cada uno, que es lo unico que hay que
- * recordar para no repetir avisos.
+ * <p>The hysteresis band is explained in {@link GaugeMonitorMBean}. Here is the per-observed-object
+ * state: which of the two sides of the band each one is on, which is the only thing that has to be
+ * remembered so as not to repeat notices.
  *
- * <p>A diferencia de {@link CounterMonitor}, este si acepta valores con coma: un medidor de
- * temperatura o de carga es naturalmente fraccionario. La comparacion se hace en {@code double}
- * cuando alguno de los umbrales lo es, y en {@code long} cuando los dos son enteros -- asi un
- * medidor entero no arrastra el error de representacion de los flotantes.
+ * <p>Unlike {@link CounterMonitor}, this one does accept values with a decimal point: a temperature
+ * or load gauge is naturally fractional. The comparison is made in {@code double} when either
+ * threshold is one, and in {@code long} when both are integers -- so that an integer gauge does not
+ * drag along the representation error of floating point.
  */
 public class GaugeMonitor extends Monitor implements GaugeMonitorMBean {
 
-    /** En que lado de la banda esta cada observado. */
+    /** Which side of the band each observed object is on. */
     private final Map<ObjectName, Gauged> state = new HashMap<ObjectName, Gauged>();
 
-    /** El umbral de arriba. */
+    /** The high threshold. */
     private Number highThreshold = Integer.valueOf(0);
 
-    /** El de abajo. */
+    /** The low one. */
     private Number lowThreshold = Integer.valueOf(0);
 
-    /** Si se avisa al pasar el de arriba. */
+    /** Whether it notifies on crossing the high one. */
     private boolean notifyHigh = false;
 
-    /** Si se avisa al bajar del de abajo. */
+    /** Whether it notifies on dropping below the low one. */
     private boolean notifyLow = false;
 
-    /** Si se compara la diferencia. */
+    /** Whether the difference is compared. */
     private boolean differenceMode = false;
 
-    /** Un monitor parado, con los dos umbrales en cero. */
+    /** A stopped monitor, with both thresholds at zero. */
     public GaugeMonitor() {
     }
 
-    /** Arranca la observacion. */
+    /** Starts observing. */
     public synchronized void start() {
         startPolling();
     }
 
-    /** La para. */
+    /** Stops it. */
     public synchronized void stop() {
         stopPolling();
     }
 
-    /** El valor calculado para el primer observado. */
+    /** The value computed for the first observed object. */
     public synchronized Number getDerivedGauge() {
         return getDerivedGauge(getObservedObject());
     }
 
-    /** Cuando se calculo. */
+    /** When it was computed. */
     public synchronized long getDerivedGaugeTimeStamp() {
         return getDerivedGaugeTimeStamp(getObservedObject());
     }
 
-    /** El valor calculado para ese observado, o null si nunca se leyo. */
+    /** The value computed for that observed object, or null if it was never read. */
     public synchronized Number getDerivedGauge(ObjectName object) {
         Gauged g = this.state.get(object);
         return (g == null) ? null : g.derivedGauge;
     }
 
-    /** Cuando se calculo; 0 si nunca. */
+    /** When it was computed; 0 if never. */
     public synchronized long getDerivedGaugeTimeStamp(ObjectName object) {
         Gauged g = this.state.get(object);
         return (g == null) ? 0 : g.timestamp;
     }
 
-    /** El umbral de arriba. */
+    /** The high threshold. */
     public synchronized Number getHighThreshold() {
         return this.highThreshold;
     }
 
-    /** El de abajo. */
+    /** The low one. */
     public synchronized Number getLowThreshold() {
         return this.lowThreshold;
     }
 
     /**
-     * Pone los dos. Ver {@link GaugeMonitorMBean#setThresholds} sobre por que van juntos.
+     * Sets both. See {@link GaugeMonitorMBean#setThresholds} about why they go together.
      *
-     * @throws IllegalArgumentException si alguno es null, si son de tipos distintos, o si el de
-     *     arriba es menor que el de abajo
+     * @throws IllegalArgumentException if either is null, if they are of different types, or if the
+     *     high one is lower than the low one
      */
     public synchronized void setThresholds(Number highValue, Number lowValue)
         throws IllegalArgumentException {
@@ -108,7 +108,7 @@ public class GaugeMonitor extends Monitor implements GaugeMonitorMBean {
         }
     }
 
-    /** Si se avisa al pasar el de arriba. */
+    /** Whether it notifies on crossing the high one. */
     public synchronized boolean getNotifyHigh() {
         return this.notifyHigh;
     }
@@ -118,7 +118,7 @@ public class GaugeMonitor extends Monitor implements GaugeMonitorMBean {
         this.notifyHigh = value;
     }
 
-    /** Si se avisa al bajar del de abajo. */
+    /** Whether it notifies on dropping below the low one. */
     public synchronized boolean getNotifyLow() {
         return this.notifyLow;
     }
@@ -128,7 +128,7 @@ public class GaugeMonitor extends Monitor implements GaugeMonitorMBean {
         this.notifyLow = value;
     }
 
-    /** Si se compara la diferencia con la lectura anterior. */
+    /** Whether the difference with the previous reading is compared. */
     public synchronized boolean getDifferenceMode() {
         return this.differenceMode;
     }
@@ -138,7 +138,7 @@ public class GaugeMonitor extends Monitor implements GaugeMonitorMBean {
         this.differenceMode = value;
     }
 
-    /** Los cinco errores comunes mas los dos disparos del medidor. */
+    /** The five common errors plus the gauge's two firings. */
     public MBeanNotificationInfo[] getNotificationInfo() {
         String[] types = {
             MonitorNotification.RUNTIME_ERROR,
@@ -155,7 +155,7 @@ public class GaugeMonitor extends Monitor implements GaugeMonitorMBean {
         };
     }
 
-    /** Estado inicial del observado nuevo; ver {@link Monitor#createObserved}. */
+    /** Initial state of a new observed object; see {@link Monitor#createObserved}. */
     synchronized void createObserved(ObjectName name) {
         Gauged g = new Gauged();
         g.derivedGauge = Integer.valueOf(0);
@@ -163,12 +163,12 @@ public class GaugeMonitor extends Monitor implements GaugeMonitorMBean {
         this.state.put(name, g);
     }
 
-    /** Se olvida de el. */
+    /** It forgets about it. */
     synchronized void forgetObserved(ObjectName name) {
         this.state.remove(name);
     }
 
-    /** Una lectura: calcula el valor derivado y mira de que lado de la banda cayo. */
+    /** A reading: computes the derived value and looks at which side of the band it fell on. */
     synchronized void onValue(ObjectName name, int index, Object value) {
         if (!(value instanceof Number)) {
             notifyOnce(index, OBSERVED_ATTRIBUTE_TYPE_ERROR_NOTIFIED,
@@ -195,8 +195,8 @@ public class GaugeMonitor extends Monitor implements GaugeMonitorMBean {
         double high = this.highThreshold.doubleValue();
         double low = this.lowThreshold.doubleValue();
         if (derived >= high) {
-            // Al cruzar hacia arriba se limpia el lado de abajo: la banda queda armada para el
-            // proximo descenso.
+            // On crossing upwards the low side is cleared: the band is left armed for the next
+            // descent.
             g.belowLow = false;
             if (!g.aboveHigh) {
                 g.aboveHigh = true;
@@ -217,10 +217,10 @@ public class GaugeMonitor extends Monitor implements GaugeMonitorMBean {
                 }
             }
         }
-        // Adentro de la banda no pasa nada, que es justamente para lo que la banda existe.
+        // Inside the band nothing happens, which is exactly what the band exists for.
     }
 
-    /** Lo que el monitor recuerda de cada observado. */
+    /** What the monitor remembers about each observed object. */
     private static final class Gauged {
         private Number derivedGauge = null;
         private long timestamp = 0;

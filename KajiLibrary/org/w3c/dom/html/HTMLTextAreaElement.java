@@ -1,77 +1,76 @@
 package org.w3c.dom.html;
 
 /**
- * Un `<textarea>`. Vale la misma nota de `defaultValue`/`value` que en
- * {@link HTMLInputElement}.
+ * A `<textarea>`. The same note on `defaultValue`/`value` as in {@link HTMLInputElement} holds.
  */
 public interface HTMLTextAreaElement extends HTMLElement {
 
-    /** El valor que dice el documento. */
+    /** The value the document states. */
     String getDefaultValue();
 
-    /** Fija el valor que dice el documento. */
+    /** It sets the value the document states. */
     void setDefaultValue(String defaultValue);
 
-    /** El formulario que lo contiene, o nulo si no esta en ninguno. */
+    /** The form that contains it, or null if it is in none. */
     HTMLFormElement getForm();
 
-    /** El atajo de teclado. */
+    /** The keyboard shortcut. */
     String getAccessKey();
 
-    /** Fija el atajo de teclado. */
+    /** It sets the keyboard shortcut. */
     void setAccessKey(String accessKey);
 
-    /** El atributo `cols`. */
+    /** The `cols` attribute. */
     int getCols();
 
-    /** Fija el atributo `cols`. */
+    /** It sets the `cols` attribute. */
     void setCols(int cols);
 
-    /** Si esta deshabilitado. */
+    /** Whether it is disabled. */
     boolean getDisabled();
 
-    /** Fija si esta deshabilitado. */
+    /** It sets whether it is disabled. */
     void setDisabled(boolean disabled);
 
-    /** El atributo `name`. */
+    /** The `name` attribute. */
     String getName();
 
-    /** Fija el atributo `name`. */
+    /** It sets the `name` attribute. */
     void setName(String name);
 
-    /** Si es de solo lectura. */
+    /** Whether it is read-only. */
     boolean getReadOnly();
 
-    /** Fija si es de solo lectura. */
+    /** It sets whether it is read-only. */
     void setReadOnly(boolean readOnly);
 
-    /** Las filas, en una coleccion viva. */
+    /** The number of visible text lines. */
     int getRows();
 
-    /** Fija las filas, en una coleccion viva. */
+    /** It sets the number of visible text lines. */
     void setRows(int rows);
 
-    /** La posicion en el orden de tabulacion. */
+    /** The position in the tabbing order. */
     int getTabIndex();
 
-    /** Fija la posicion en el orden de tabulacion. */
+    /** It sets the position in the tabbing order. */
     void setTabIndex(int tabIndex);
 
-    /** El tipo del control. */
+    /** The type of the control. */
     String getType();
 
-    /** El valor actual. */
+    /** The current value. */
     String getValue();
 
-    /** Fija el valor actual. */
+    /** It sets the current value. */
     void setValue(String value);
 
-    /** Le saca el foco. */
+    /** It takes the focus away from it. */
     void blur();
 
-    /** Le da el foco. */
+    /** It gives it the focus. */
     void focus();
 
-    /** Selecciona todo su contenido. */
+    /** It selects all of its content. */
     void select();
 }

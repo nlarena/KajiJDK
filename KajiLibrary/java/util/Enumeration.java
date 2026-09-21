@@ -10,21 +10,22 @@ public interface Enumeration<E> {
     E nextElement();
 
     /**
-     * Esta misma enumeracion vista como {@link Iterator}.
+     * This same enumeration seen as an {@link Iterator}.
      *
-     * <p>Es el puente que faltaba del lado de la interfaz vieja: `Collections.enumeration` va de
-     * Iterator a Enumeration, y este vuelve. Sin el, cualquier API anterior a 1.2 que devuelva una
-     * Enumeration queda fuera del for-each y de los streams.
+     * <p>It is the bridge that was missing on the old interface's side: `Collections.enumeration`
+     * goes from Iterator to Enumeration, and this one comes back. Without it, any pre-1.2 API that
+     * returns an Enumeration is left out of the for-each and of the streams.
      *
-     * <p>El Iterator que sale **no** soporta `remove()`: una Enumeration no tiene con que.
+     * <p>The Iterator that comes out does **not** support `remove()`: an Enumeration has nothing to
+     * do it with.
      */
     default Iterator<E> asIterator() {
         return new EnumerationItr<E>(this);
     }
 }
 
-// El adaptador de `asIterator`. Package-private, y top-level en vez de anidado por el miscompilado
-// de una anidada dentro de una generica (#13).
+// `asIterator`'s adapter. Package-private, and top-level rather than nested because of the
+// miscompilation of a nested class inside a generic one (#13).
 final class EnumerationItr<E> implements Iterator<E> {
 
     private final Enumeration<E> e;

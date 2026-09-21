@@ -5,32 +5,32 @@ import java.util.List;
 import jdk.jfr.ValueDescriptor;
 
 /**
- * Un grupo de hilos, tal como quedo grabado.
+ * A group of threads, as it was recorded.
  *
- * <p>{@link #getParent} arma la cadena hasta el grupo raiz. Sirve para agrupar hilos por su origen
- * —un pool, un contenedor— cuando los nombres de los hilos no lo dicen.
+ * <p>{@link #getParent} puts together the chain up to the root group. It serves for grouping
+ * threads by their origin --a pool, a container-- when the names of the threads do not say it.
  *
  * @since 9
  */
 public final class RecordedThreadGroup extends RecordedObject {
 
-    RecordedThreadGroup(List<ValueDescriptor> descriptores, Object[] valores) {
-        super(descriptores, valores);
+    RecordedThreadGroup(List<ValueDescriptor> descriptors, Object[] values) {
+        super(descriptors, values);
     }
 
     /**
-     * El nombre del grupo.
+     * The name of the group.
      *
-     * @return el nombre
+     * @return the name
      */
     public String getName() {
         return getString("name");
     }
 
     /**
-     * El grupo que lo contiene.
+     * The group that contains it.
      *
-     * @return el grupo padre, o {@code null} si este es la raiz
+     * @return the parent group, or {@code null} if this one is the root
      */
     public RecordedThreadGroup getParent() {
         return getValue("parent");

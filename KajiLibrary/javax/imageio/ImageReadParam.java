@@ -4,70 +4,72 @@ import java.awt.Dimension;
 import java.awt.image.BufferedImage;
 
 /**
- * KajiLibrary's javax.imageio.ImageReadParam -- como leer una imagen.
+ * KajiLibrary's javax.imageio.ImageReadParam -- how to read an image.
  *
- * <p>Agrega sobre {@link IIOParam} lo que solo tiene sentido al leer: donde escribir el resultado, que
- * bandas del destino usar, el tamano de renderizado, y hasta que pasada leer.
+ * <p>It adds to {@link IIOParam} what only makes sense when reading: where to write the result,
+ * which destination bands to use, the render size, and up to which pass to read.
  *
- * <h2>{@link #setDestination} contra {@code setDestinationType}</h2>
+ * <h2>{@link #setDestination} versus {@code setDestinationType}</h2>
  *
- * <p>Los dos dicen algo sobre el destino y no son lo mismo:
+ * <p>Both say something about the destination and they are not the same:
  *
  * <ul>
- *   <li>el <b>tipo</b> ({@link IIOParam#setDestinationType}) dice de que clase crear la imagen;
- *   <li>el <b>destino</b> ({@link #setDestination}) da una imagen <b>que ya existe</b> y en la que hay
- *       que escribir.
+ *   <li>the <b>type</b> ({@link IIOParam#setDestinationType}) says what class of image to create;
+ *   <li>the <b>destination</b> ({@link #setDestination}) gives an image <b>that already exists</b>
+ *       and has to be written into.
  * </ul>
  *
- * <p>Dar los dos es contradictorio, y por eso {@link #setDestinationType} redefinido aca lo permite:
- * el que gana es el destino. Reusar una imagen es lo que permite leer una animacion cuadro a cuadro
- * sin alocar uno nuevo cada vez.
+ * <p>Giving both is contradictory, and {@link #setDestinationType}, redefined here, clears the
+ * destination: the last one set wins. (An earlier note said the destination always wins; the
+ * JDK's override also clears it.) Here it also clears the destination bands, which the JDK does
+ * not. Reusing an image is what allows reading an animation frame by frame without allocating a
+ * new one each time.
  *
- * <h2>El tamano de renderizado</h2>
+ * <h2>The render size</h2>
  *
- * <p>{@link #setSourceRenderSize} solo funciona en formatos que <b>escalan mientras decodifican</b>
- * --los vectoriales, o los progresivos con niveles--. Por eso hay que preguntar antes con
- * {@link #canSetSourceRenderSize}: pedirlo cuando no se puede lanza
+ * <p>{@link #setSourceRenderSize} only works in formats that <b>scale while decoding</b> --vector
+ * ones, or progressive ones with levels. That is why you have to ask first with
+ * {@link #canSetSourceRenderSize}: asking for it when it cannot be done throws
  * {@link UnsupportedOperationException}.
  *
- * <p>No es lo mismo que submuestrear: el submuestreo tira pixeles, esto le pide al decodificador que
- * produzca directamente el tamano que se quiere, que suele salir bastante mejor.
+ * <p>It is not the same as subsampling: subsampling drops pixels, this asks the decoder to produce
+ * the wanted size directly, which usually comes out quite a bit better.
  *
- * <h2>Las pasadas progresivas</h2>
+ * <h2>Progressive passes</h2>
  *
- * <p>Un JPEG progresivo se decodifica en pasadas, cada una mas nitida. {@link #setSourceProgressivePasses}
- * permite cortar antes: leer solo las primeras da una imagen borrosa en una fraccion del tiempo, que
- * es exactamente lo que sirve para una vista previa.
+ * <p>A progressive JPEG is decoded in passes, each one sharper.
+ * {@link #setSourceProgressivePasses} allows stopping early: reading only the first ones gives a
+ * blurry image in a fraction of the time, which is exactly what a preview needs.
  */
 public class ImageReadParam extends IIOParam {
 
-    /** Si este lector sabe escalar mientras decodifica. */
+    /** Whether this reader can scale while decoding. */
     protected boolean canSetSourceRenderSize = false;
 
-    /** A que tamano renderizar, o null. */
+    /** What size to render at, or null. */
     protected Dimension sourceRenderSize = null;
 
-    /** Donde escribir, o null para que se cree una. */
+    /** Where to write, or null to have one created. */
     protected BufferedImage destination = null;
 
-    /** Que bandas del destino usar, o null para todas. */
+    /** Which destination bands to use, or null for all. */
     protected int[] destinationBands = null;
 
-    /** Desde que pasada. */
+    /** From which pass. */
     protected int minProgressivePass = 0;
 
-    /** Cuantas pasadas leer; {@link Integer#MAX_VALUE} son todas. */
+    /** How many passes to read; {@link Integer#MAX_VALUE} is all of them. */
     protected int numProgressivePasses = Integer.MAX_VALUE;
 
-    /** Todo por omision. */
+    /** Everything by default. */
     public ImageReadParam() {
     }
 
     /**
-     * De que tipo crear el destino.
+     * What type to create the destination as.
      *
-     * <p>Redefinido solo para documentar que pierde contra {@link #setDestination}; ver la nota de la
-     * clase.
+     * <p>Redefined so that setting the type clears the destination (and, in this library, the
+     * destination bands); see the class note.
      */
     @Override
     public void setDestinationType(ImageTypeSpecifier destinationType) {
@@ -76,22 +78,24 @@ public class ImageReadParam extends IIOParam {
         setDestinationBands(null);
     }
 
-    /** Donde escribir; null hace que el lector cree una imagen. */
+    /** Where to write; null makes the reader create an image. */
     public void setDestination(BufferedImage destination) {
         this.destination = destination;
     }
 
-    /** Donde escribir, o null. */
+    /** Where to write, or null. */
     public BufferedImage getDestination() {
         return this.destination;
     }
 
     /**
-     * Que bandas del destino escribir; null son todas.
+     * Which destination bands to write; null means all.
      *
-     * <p>Mismas reglas que {@link IIOParam#setSourceBands}: sin repetidos y sin negativos.
+     * <p>Same rules as {@link IIOParam#setSourceBands}, without repeats and without negatives,
+     * except that here an empty array is rejected (the JDK accepts it, as it does for source
+     * bands).
      *
-     * @throws IllegalArgumentException si esta vacio, tiene negativos o repite alguna
+     * @throws IllegalArgumentException if it is empty, has negatives or repeats one
      */
     public void setDestinationBands(int[] destinationBands) {
         if (destinationBands == null) {
@@ -121,7 +125,7 @@ public class ImageReadParam extends IIOParam {
         System.arraycopy(destinationBands, 0, this.destinationBands, 0, numBands);
     }
 
-    /** Que bandas del destino, o null. Es una copia. */
+    /** Which destination bands, or null. It is a copy. */
     public int[] getDestinationBands() {
         if (this.destinationBands == null) {
             return null;
@@ -131,16 +135,16 @@ public class ImageReadParam extends IIOParam {
         return copy;
     }
 
-    /** Si este lector sabe escalar mientras decodifica. Ver la nota de la clase. */
+    /** Whether this reader can scale while decoding. See the class note. */
     public boolean canSetSourceRenderSize() {
         return this.canSetSourceRenderSize;
     }
 
     /**
-     * A que tamano renderizar; null vuelve al natural.
+     * What size to render at; null goes back to the natural one.
      *
-     * @throws UnsupportedOperationException si este lector no sabe hacerlo
-     * @throws IllegalArgumentException si el ancho o el alto no son positivos
+     * @throws UnsupportedOperationException if this reader cannot do it
+     * @throws IllegalArgumentException if the width or height are not positive
      */
     public void setSourceRenderSize(Dimension size) throws UnsupportedOperationException {
         if (!canSetSourceRenderSize()) {
@@ -156,7 +160,7 @@ public class ImageReadParam extends IIOParam {
         this.sourceRenderSize = (Dimension) size.clone();
     }
 
-    /** A que tamano, o null. Es una copia. */
+    /** What size, or null. It is a copy. */
     public Dimension getSourceRenderSize() {
         if (this.sourceRenderSize == null) {
             return null;
@@ -165,12 +169,12 @@ public class ImageReadParam extends IIOParam {
     }
 
     /**
-     * Que pasadas progresivas leer. Ver la nota de la clase.
+     * Which progressive passes to read. See the class note.
      *
-     * @param minPass la primera, desde 0
-     * @param numPasses cuantas; {@link Integer#MAX_VALUE} son todas las que haya
-     * @throws IllegalArgumentException si la primera es negativa, si la cantidad no es positiva, o si
-     *     la suma se desborda
+     * @param minPass the first one, from 0
+     * @param numPasses how many; {@link Integer#MAX_VALUE} is all there are
+     * @throws IllegalArgumentException if the first is negative, if the count is not positive, or
+     *     if the sum overflows
      */
     public void setSourceProgressivePasses(int minPass, int numPasses) {
         if (minPass < 0) {
@@ -186,16 +190,15 @@ public class ImageReadParam extends IIOParam {
         this.numProgressivePasses = numPasses;
     }
 
-    /** Desde que pasada. */
+    /** From which pass. */
     public int getSourceMinProgressivePass() {
         return this.minProgressivePass;
     }
 
     /**
-     * Hasta cual.
+     * Up to which.
      *
-     * <p>{@link Integer#MAX_VALUE} significa "todas las que haya", no una pasada numero dos mil
-     * millones.
+     * <p>{@link Integer#MAX_VALUE} means "all there are", not a pass number two billion.
      */
     public int getSourceMaxProgressivePass() {
         if (this.numProgressivePasses == Integer.MAX_VALUE) {
@@ -204,7 +207,7 @@ public class ImageReadParam extends IIOParam {
         return getSourceMinProgressivePass() + this.numProgressivePasses - 1;
     }
 
-    /** Cuantas. */
+    /** How many. */
     public int getSourceNumProgressivePasses() {
         return this.numProgressivePasses;
     }

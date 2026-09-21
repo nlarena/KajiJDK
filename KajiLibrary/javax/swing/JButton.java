@@ -1,21 +1,23 @@
 package javax.swing;
 
+import javax.accessibility.Accessible;
 import javax.accessibility.AccessibleContext;
 
 import javax.swing.plaf.ButtonUI;
 import javax.swing.plaf.basic.BasicButtonUI;
 
 /**
- * Un boton que se aprieta: texto, icono, o los dos, y un {@code ActionEvent} al soltar.
+ * A button that is pressed: text, icon, or both, and an {@code ActionEvent} on releasing.
  *
- * <p>Casi todo esta en {@link AbstractButton}: el modelo, los iconos por estado, las alineaciones,
- * la {@link Action}. Lo que agrega esta clase es el concepto de <em>boton por omision</em> —el que
- * dispara Enter en un dialogo—, y ese concepto vive en {@code JRootPane}, que no esta. De ahi que
- * {@link #isDefaultButton} sea siempre {@code false}: no hay panel raiz que lo haya nombrado.
- * {@link #isDefaultCapable} si funciona, porque es una propiedad del boton.
+ * <p>Almost everything is in {@link AbstractButton}: the model, the icons by state, the
+ * alignments, the {@link Action}. What this class adds is the concept of the <em>default
+ * button</em> -- the one Enter fires in a dialog --, and that concept lives in
+ * {@code JRootPane}, which is not there. Hence {@link #isDefaultButton} is always
+ * {@code false}: there is no root pane that has named it. {@link #isDefaultCapable} does work,
+ * because it is a property of the button.
  *
- * <p>Sin {@code UIManager}, {@link #updateUI} instala el aspecto basico directamente; ver
- * {@link BasicButtonUI} para los valores por omision y de donde salen.
+ * <p>With no {@code UIManager}, {@link #updateUI} installs the basic look and feel directly; see
+ * {@link BasicButtonUI} for the default values and where they come from.
  */
 public class JButton extends AbstractButton implements Accessible {
 
@@ -33,7 +35,7 @@ public class JButton extends AbstractButton implements Accessible {
         this(text, null);
     }
 
-    /** Un boton que toma texto, icono, mnemonico y estado de esa accion, y la dispara. */
+    /** A button that takes text, icon, mnemonic and state from that action, and fires it. */
     public JButton(Action a) {
         this();
         setAction(a);
@@ -44,7 +46,7 @@ public class JButton extends AbstractButton implements Accessible {
         init(text, icon);
     }
 
-    /** Instala el aspecto basico; ver la nota de la clase. */
+    /** It installs the basic look and feel; see the class note. */
     public void updateUI() {
         setUI((ButtonUI) BasicButtonUI.createUI(this));
     }
@@ -53,27 +55,27 @@ public class JButton extends AbstractButton implements Accessible {
         return uiClassID;
     }
 
-    /** Si es el boton por omision de su panel raiz: nunca, porque no hay panel raiz. */
+    /** Whether it is its root pane's default button: never, because there is no root pane. */
     public boolean isDefaultButton() {
         return false;
     }
 
-    /** Si puede ser el boton por omision de un dialogo; {@code true} salvo que se le quite. */
+    /** Whether it can be a dialog's default button; {@code true} unless it is taken away. */
     public boolean isDefaultCapable() {
         return defaultCapable;
     }
 
     public void setDefaultCapable(boolean defaultCapable) {
-        boolean viejo = this.defaultCapable;
+        boolean old = this.defaultCapable;
         this.defaultCapable = defaultCapable;
-        firePropertyChange("defaultCapable", viejo, defaultCapable);
+        firePropertyChange("defaultCapable", old, defaultCapable);
     }
 
     /**
-     * Se va de la jerarquia.
+     * It leaves the hierarchy.
      *
-     * <p>El JDK aprovecha para dejar de ser el boton por omision de su panel raiz; sin panel raiz,
-     * queda lo de {@link AbstractButton#removeNotify}.
+     * <p>The JDK takes the chance to stop being its root pane's default button; with no root pane,
+     * what is left is {@link AbstractButton#removeNotify}.
      */
     public void removeNotify() {
         super.removeNotify();
@@ -84,7 +86,7 @@ public class JButton extends AbstractButton implements Accessible {
         return super.paramString() + ",defaultCapable=" + defaultCapableString;
     }
 
-    /** Sin contexto de accesibilidad: no hay tecnologia asistiva que lo lea en esta VM. */
+    /** With no accessibility context: there is no assistive technology that reads it on this VM. */
     public AccessibleContext getAccessibleContext() {
         return null;
     }

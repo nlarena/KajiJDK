@@ -4,43 +4,43 @@ import java.io.PrintStream;
 import java.io.PrintWriter;
 
 /**
- * KajiLibrary's javax.xml.transform.TransformerException -- algo salio mal, y **donde**.
+ * KajiLibrary's javax.xml.transform.TransformerException -- something went wrong, and **where**.
  *
- * <p>Es la excepcion base de todo el paquete. Lo que la distingue de una `Exception` cualquiera es
- * el {@link SourceLocator}: un error de transformacion sin la linea de la hoja de estilo es casi
- * inutil, porque el mensaje describe una regla y el usuario necesita el lugar.
+ * <p>It is the base exception of the whole package. What sets it apart from any `Exception` is the
+ * {@link SourceLocator}: a transformation error without the stylesheet line is almost useless,
+ * because the message describes a rule and the user needs the place.
  *
- * <p>**El detalle historico que hay que respetar y que sorprende a todo el mundo:** esta clase tiene
- * su propio campo de causa --`containedException`-- y **no** usa el de {@link Throwable}. Nacio en
- * TrAX antes de que Java 1.4 le pusiera causa encadenada a `Throwable`, y cuando la plataforma la
- * incorporo ya habia codigo que llamaba a {@code getException()}. La compatibilidad se resolvio
- * dejando el campo propio y **redefiniendo** {@link #getCause} y {@link #initCause} para que operen
- * sobre el, de modo que las dos vias --la vieja y la de la plataforma-- ven lo mismo. Copiar la
- * causa a los dos lados hubiera sido peor: dos campos que se pueden desincronizar.
+ * <p>**The historical detail that has to be respected and that surprises everyone:** this class has
+ * its own cause field --`containedException`-- and does **not** use {@link Throwable}'s. It was
+ * born in TrAX before Java 1.4 gave `Throwable` a chained cause, and when the platform took it in
+ * there was already code calling {@code getException()}. Compatibility was solved by keeping its
+ * own field and **overriding** {@link #getCause} and {@link #initCause} to operate on it, so that
+ * both routes --the old one and the platform's-- see the same. Copying the cause to both sides
+ * would have been worse: two fields that can get out of sync.
  *
- * <p>Una consecuencia concreta de eso, que aca se respeta al pie: {@link #initCause} sobre una
- * excepcion construida con causa tira {@link IllegalStateException}, igual que en `Throwable`, pero
- * mirando el campo propio. Y {@code initCause(null)} sobre una sin causa **es valido** y la deja
- * sin causa -- no es un error, y `Throwable` se comporta igual.
+ * <p>A concrete consequence of that, respected here to the letter: {@link #initCause} on an
+ * exception built with a cause throws {@link IllegalStateException}, as in `Throwable`, but looking
+ * at its own field. And {@code initCause(null)} on one without a cause **is valid** and leaves it
+ * without a cause -- it is not an error, and `Throwable` behaves the same.
  *
- * <p>Otro detalle que no es cosmetico: los constructores que reciben una causa y un mensaje vacio o
- * nulo usan {@code causa.toString()} como mensaje. Una excepcion envuelta sin mensaje propio es un
- * mensaje en blanco en el log, que es la peor forma de perder un error.
+ * <p>Another detail that is not cosmetic: the constructors that receive a cause and an empty or
+ * null message use {@code cause.toString()} as the message. A wrapped exception without its own
+ * message is a blank message in the log, which is the worst way of losing an error.
  */
 public class TransformerException extends Exception {
 
     private static final long serialVersionUID = 975798773772956428L;
 
-    /** Donde paso, si se sabe. */
+    /** Where it happened, if known. */
     private SourceLocator locator;
 
-    /** La causa. Ver la nota del encabezado sobre por que no es la de `Throwable`. */
+    /** The cause. See the header note on why it is not `Throwable`'s. */
     private Throwable containedException;
 
     /**
-     * Con un mensaje y nada mas.
+     * With a message and nothing else.
      *
-     * @param message la descripcion del error
+     * @param message the description of the error
      */
     public TransformerException(String message) {
         super(message);
@@ -49,9 +49,9 @@ public class TransformerException extends Exception {
     }
 
     /**
-     * Envolviendo otra excepcion; el mensaje sale de ella.
+     * Wrapping another exception; the message comes from it.
      *
-     * @param e la causa
+     * @param e the cause
      */
     public TransformerException(Throwable e) {
         super(e.toString());
@@ -60,12 +60,12 @@ public class TransformerException extends Exception {
     }
 
     /**
-     * Con mensaje y causa.
+     * With message and cause.
      *
-     * <p>Si el mensaje es nulo o vacio se usa {@code e.toString()}: ver la nota del encabezado.
+     * <p>If the message is null or empty {@code e.toString()} is used: see the header note.
      *
-     * @param message la descripcion del error
-     * @param e la causa
+     * @param message the description of the error
+     * @param e the cause
      */
     public TransformerException(String message, Throwable e) {
         super((message == null || message.length() == 0) ? e.toString() : message);
@@ -74,10 +74,10 @@ public class TransformerException extends Exception {
     }
 
     /**
-     * Con mensaje y ubicacion.
+     * With message and location.
      *
-     * @param message la descripcion del error
-     * @param locator donde paso
+     * @param message the description of the error
+     * @param locator where it happened
      */
     public TransformerException(String message, SourceLocator locator) {
         super(message);
@@ -86,11 +86,11 @@ public class TransformerException extends Exception {
     }
 
     /**
-     * Con mensaje, ubicacion y causa.
+     * With message, location and cause.
      *
-     * @param message la descripcion del error
-     * @param locator donde paso
-     * @param e la causa
+     * @param message the description of the error
+     * @param locator where it happened
+     * @param e the cause
      */
     public TransformerException(String message, SourceLocator locator, Throwable e) {
         super(message);
@@ -98,48 +98,50 @@ public class TransformerException extends Exception {
         this.locator = locator;
     }
 
-    // ---- ubicacion --------------------------------------------------------------------------
+    // ---- location ---------------------------------------------------------------------------
 
-    /** Donde paso, o null si no se sabe. */
+    /** Where it happened, or null if not known. */
     public SourceLocator getLocator() {
         return locator;
     }
 
     /**
-     * Fija la ubicacion.
+     * Sets the location.
      *
-     * <p>Existe porque quien detecta el error no siempre es quien sabe donde esta: una capa interna
-     * lanza, y la de afuera --que si tiene el contexto-- completa la ubicacion antes de propagar.
+     * <p>It exists because whoever detects the error is not always who knows where it is: an inner
+     * layer throws, and the outer one --which does have the context-- fills in the location before
+     * propagating.
      *
-     * @param location donde paso, o null para borrarla
+     * @param location where it happened, or null to clear it
      */
     public void setLocator(SourceLocator location) {
         this.locator = location;
     }
 
     /**
-     * La ubicacion como texto, o null si no hay {@link SourceLocator}.
+     * The location as text, or null if there is no {@link SourceLocator}.
      *
-     * <p>Ojo con los dos "vacios", que son distintos y significan cosas distintas: **null** es "no
-     * hay ubicacion"; la **cadena vacia** es "hay ubicacion pero no dice nada" --un locator con URI
-     * nula y linea y columna en cero--. Los componentes en cero se omiten porque no hay linea cero:
-     * el 0 es el centinela de "no se", y escribirlo seria informar lo que no se sabe.
+     * <p>Watch the two "empties", which are different and mean different things: **null** is "there
+     * is no location"; the **empty string** is "there is a location but it says nothing" --a
+     * locator with a null URI and line and column at zero--. Zero components are left out because
+     * there is no line zero: 0 is the "unknown" sentinel, and writing it would be reporting what is
+     * not known.
      */
     public String getLocationAsString() {
         if (locator == null) {
             return null;
         }
         StringBuilder buf = new StringBuilder();
-        agregarUbicacion(buf);
+        appendLocation(buf);
         return buf.toString();
     }
 
     /**
-     * El mensaje seguido de la ubicacion.
+     * The message followed by the location.
      *
-     * <p>Lo que corresponde poner en un log: el mensaje solo describe la regla violada, y sin el
-     * lugar no alcanza para arreglarla. A diferencia de {@link #getLocationAsString}, esto nunca
-     * devuelve null -- si no hay ni mensaje ni ubicacion, devuelve la cadena vacia.
+     * <p>What belongs in a log: the message alone describes the rule violated, and without the
+     * place it is not enough to fix it. Unlike {@link #getLocationAsString}, this never returns
+     * null -- if there is neither message nor location, it returns the empty string.
      */
     public String getMessageAndLocation() {
         StringBuilder buf = new StringBuilder();
@@ -148,13 +150,13 @@ public class TransformerException extends Exception {
             buf.append(message);
         }
         if (locator != null) {
-            agregarUbicacion(buf);
+            appendLocation(buf);
         }
         return buf.toString();
     }
 
-    /** El armado comun de las dos de arriba, para que no se puedan separar los formatos. */
-    private void agregarUbicacion(StringBuilder buf) {
+    /** What the two above build in common, so that the formats cannot drift apart. */
+    private void appendLocation(StringBuilder buf) {
         String systemID = locator.getSystemId();
         int line = locator.getLineNumber();
         int column = locator.getColumnNumber();
@@ -172,32 +174,32 @@ public class TransformerException extends Exception {
         }
     }
 
-    // ---- causa ------------------------------------------------------------------------------
+    // ---- cause ------------------------------------------------------------------------------
 
-    /** La causa, por el nombre viejo de TrAX. Equivale a {@link #getCause}. */
+    /** The cause, by TrAX's old name. Equivalent to {@link #getCause}. */
     public Throwable getException() {
         return containedException;
     }
 
     /**
-     * La causa, por el nombre de la plataforma.
+     * The cause, by the platform's name.
      *
-     * <p>La comparacion con {@code this} es la convencion de `Throwable` para "sin causa" y se
-     * respeta aca por si alguien construye la excepcion consigo misma adentro.
+     * <p>The comparison with {@code this} is `Throwable`'s convention for "no cause" and is
+     * respected here in case someone builds the exception with itself inside.
      */
     public Throwable getCause() {
         return (containedException == this) ? null : containedException;
     }
 
     /**
-     * Fija la causa, una sola vez.
+     * Sets the cause, only once.
      *
-     * <p>Opera sobre el campo propio, no sobre el de `Throwable`: ver la nota del encabezado.
+     * <p>It operates on its own field, not on `Throwable`'s: see the header note.
      *
-     * @param cause la causa, o null
-     * @return esta misma excepcion
-     * @throws IllegalStateException si ya tenia causa
-     * @throws IllegalArgumentException si la causa es ella misma
+     * @param cause the cause, or null
+     * @return this same exception
+     * @throws IllegalStateException if it already had a cause
+     * @throws IllegalArgumentException if the cause is itself
      */
     public synchronized Throwable initCause(Throwable cause) {
         if (this.containedException != null) {
@@ -210,37 +212,37 @@ public class TransformerException extends Exception {
         return this;
     }
 
-    // ---- impresion --------------------------------------------------------------------------
+    // ---- printing ---------------------------------------------------------------------------
 
     /**
-     * Imprime la ubicacion, la traza, y despues la cadena de causas.
+     * Prints the location, the trace, and then the chain of causes.
      *
-     * <p>La ubicacion va **primero**, antes de la traza: es el dato que el usuario necesita y una
-     * traza de pila lo enterraria.
+     * <p>The location goes **first**, before the trace: it is the datum the user needs and a stack
+     * trace would bury it.
      */
     public void printStackTrace() {
         printStackTrace(new PrintWriter(System.err, true));
     }
 
     /**
-     * Idem, sobre un flujo de bytes.
+     * Likewise, to a byte stream.
      *
-     * @param s a donde escribir; null significa el error estandar
+     * @param s where to write; null means standard error
      */
     public void printStackTrace(PrintStream s) {
         printStackTrace(new PrintWriter(s == null ? System.err : s, true));
     }
 
     /**
-     * Idem, sobre un escritor de caracteres. Esta es la forma real; las otras dos delegan aca.
+     * Likewise, to a character writer. This is the real form; the other two delegate here.
      *
-     * <p>El bucle sobre las causas tiene un tope de 10 y un corte por igualdad. No es paranoia
-     * gratuita: la cadena la arma quien lanza, y una excepcion que se contiene a si misma --o dos
-     * que se contienen mutuamente-- convertiria un intento de loguear un error en un cuelgue. Un
-     * metodo de diagnostico nunca puede ser peor que el problema que esta diagnosticando; por eso
-     * ademas todo va dentro de un `catch (Throwable)` que se traga lo que salga.
+     * <p>The loop over the causes has a cap of 10 and a cut on equality. It is not gratuitous
+     * paranoia: the chain is built by whoever throws, and an exception that contains itself --or
+     * two that contain each other-- would turn an attempt to log an error into a hang. A diagnostic
+     * method can never be worse than the problem it is diagnosing; that is also why everything goes
+     * inside a `catch (Throwable)` that swallows whatever comes out.
      *
-     * @param s a donde escribir; null significa el error estandar
+     * @param s where to write; null means standard error
      */
     public void printStackTrace(PrintWriter s) {
         PrintWriter w = (s == null) ? new PrintWriter(System.err, true) : s;
@@ -250,8 +252,8 @@ public class TransformerException extends Exception {
                 w.println(locInfo);
             }
             super.printStackTrace(w);
-        } catch (Throwable ignorada) {
-            // Ni el reporte de un error puede lanzar.
+        } catch (Throwable ignored) {
+            // Not even the report of an error may throw.
         }
         Throwable exception = getException();
         int i = 0;
@@ -259,13 +261,13 @@ public class TransformerException extends Exception {
             w.println("---------");
             try {
                 exception.printStackTrace(w);
-            } catch (Throwable ignorada) {
+            } catch (Throwable ignored) {
                 w.println("Could not print stack trace...");
             }
             if (exception instanceof TransformerException) {
-                Throwable previa = exception;
+                Throwable previous = exception;
                 exception = ((TransformerException) exception).getException();
-                if (previa == exception) {
+                if (previous == exception) {
                     break;
                 }
             } else {

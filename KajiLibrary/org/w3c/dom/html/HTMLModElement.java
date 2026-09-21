@@ -1,19 +1,19 @@
 package org.w3c.dom.html;
 
 /**
- * Un `<ins>` o un `<del>`.
+ * An `<ins>` or a `<del>`.
  */
 public interface HTMLModElement extends HTMLElement {
 
-    /** El atributo `cite`. */
+    /** The `cite` attribute. */
     String getCite();
 
-    /** Fija el atributo `cite`. */
+    /** It sets the `cite` attribute. */
     void setCite(String cite);
 
-    /** El atributo `dateTime`. */
+    /** The `dateTime` attribute. */
     String getDateTime();
 
-    /** Fija el atributo `dateTime`. */
+    /** It sets the `dateTime` attribute. */
     void setDateTime(String dateTime);
 }

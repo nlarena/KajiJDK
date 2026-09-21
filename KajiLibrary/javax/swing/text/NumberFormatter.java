@@ -6,35 +6,35 @@ import java.text.NumberFormat;
 import java.text.ParseException;
 
 /**
- * Un formateador de numeros.
+ * A number formatter.
  *
- * <h2>El problema del tipo</h2>
+ * <h2>The problem of the type</h2>
  *
- * <p>Un {@link NumberFormat} devuelve siempre un {@code Long} o un {@code Double}, nunca un
- * {@code Integer} ni un {@code BigDecimal}. Si el campo tenia un {@code Integer} y el usuario
- * escribe otro numero, sin corregir el tipo el valor cambiaria de clase a mitad de camino y el
- * programa que lo lee reventaria con una conversion invalida.
+ * <p>A {@link NumberFormat} always returns a {@code Long} or a {@code Double}, never an
+ * {@code Integer} or a {@code BigDecimal}. If the field had an {@code Integer} and the user types
+ * another number, without correcting the type the value would change class halfway and the
+ * program that reads it would blow up with an invalid conversion.
  *
- * <p>Por eso {@link #stringToValue} vuelve a convertir el resultado a la clase que dice
- * {@link #getValueClass}. Eso ademas es lo que le da sentido a
- * {@code new NumberFormatter().setValueClass(Integer.class)}: sin eso, el tipo lo elegiria el
- * formato y no quien usa el campo.
+ * <p>That is why {@link #stringToValue} converts the result again to the class
+ * {@link #getValueClass} says. That is also what gives sense to
+ * {@code new NumberFormatter().setValueClass(Integer.class)}: without it, the type would be
+ * chosen by the format and not by whoever uses the field.
  */
 public class NumberFormatter extends InternationalFormatter {
 
-    /** Un formateador con el formato de numeros del idioma del sistema. */
+    /** A formatter with the number format of the system's language. */
     public NumberFormatter() {
         this(NumberFormat.getNumberInstance());
     }
 
-    /** Un formateador que usa ese formato de numeros. */
+    /** A formatter that uses that number format. */
     public NumberFormatter(NumberFormat format) {
         super(format);
         setFormat(format);
         setValueClass(null);
     }
 
-    /** El formato; se espera un {@link NumberFormat}. */
+    /** The format; a {@link NumberFormat} is expected. */
     public void setFormat(Format format) {
         super.setFormat(format);
     }
@@ -44,18 +44,19 @@ public class NumberFormatter extends InternationalFormatter {
     }
 
     /**
-     * El valor del texto, convertido a la clase pedida.
+     * The text's value, converted to the requested class.
      *
-     * @throws ParseException si el texto no es un numero o no entra en la clase pedida.
+     * @throws ParseException if the text is not a number or does not fit the requested class.
      */
     public Object stringToValue(String text) throws ParseException {
-        // La conversion al tipo pedido la hace {@link InternationalFormatter}, que la necesita
-        // antes de comparar el rango. Repetirla aca daria dos caminos que pueden no coincidir.
+        // The conversion to the requested type is done by {@link InternationalFormatter}, which
+                // needs it before comparing the range. Repeating it here would give two paths that
+                // may not agree.
         return super.stringToValue(text);
     }
 
-    /** Pasa el numero a esa clase, sin perder lo que no cabe en silencio. */
-    private Object convertir(Number n, Class<?> vc) throws ParseException {
+    /** It turns the number into that class, without silently losing what does not fit. */
+    private Object convert(Number n, Class<?> vc) throws ParseException {
         if (vc == Integer.class) {
             return Integer.valueOf(n.intValue());
         }
@@ -80,11 +81,11 @@ public class NumberFormatter extends InternationalFormatter {
         if (vc == java.math.BigDecimal.class) {
             return new java.math.BigDecimal(n.toString());
         }
-        // Una clase que no se conoce: se prueba el constructor de una cadena.
+        // A class that is not known: the constructor taking a string is tried.
         return super.stringToValue(n.toString());
     }
 
-    /** Suma o resta uno al numero. */
+    /** It adds or subtracts one from the number. */
     void adjustValue(int direction) {
         javax.swing.JFormattedTextField ftf = getFormattedTextField();
         if (ftf == null) {
@@ -95,21 +96,21 @@ public class NumberFormatter extends InternationalFormatter {
             return;
         }
         Number n = (Number) value;
-        Object nuevo;
+        Object newValue;
         if (n instanceof Double || n instanceof Float) {
-            nuevo = Double.valueOf(n.doubleValue() + direction);
+            newValue = Double.valueOf(n.doubleValue() + direction);
         } else {
-            nuevo = Long.valueOf(n.longValue() + direction);
+            newValue = Long.valueOf(n.longValue() + direction);
         }
         try {
             Class<?> vc = getValueClass();
             if (vc != null) {
-                nuevo = convertir((Number) nuevo, vc);
+                newValue = convert((Number) newValue, vc);
             }
-            ftf.setText(valueToString(nuevo));
+            ftf.setText(valueToString(newValue));
             ftf.commitEdit();
         } catch (ParseException pe) {
-            // El numero nuevo no se pudo formatear: se deja el anterior.
+            // The new number could not be formatted: the previous one is left.
         }
     }
 }

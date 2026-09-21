@@ -1,20 +1,20 @@
 package org.w3c.dom;
 
 /**
- * KajiLibrary's org.w3c.dom.DOMImplementationList -- una lista ordenada de implementaciones.
+ * KajiLibrary's org.w3c.dom.DOMImplementationList -- an ordered list of implementations.
  *
- * <p>La devuelve {@link DOMImplementationSource#getDOMImplementationList} cuando mas de una
- * implementacion dice soportar lo que se pidio. Misma forma minima que {@link NodeList} --e
- * indexada desde cero-- y por la misma razon: el DOM no se apoya en las colecciones de ningun
- * lenguaje.
+ * <p>{@link DOMImplementationSource#getDOMImplementationList} returns it when more than one
+ * implementation says it supports what was asked for. The same minimal shape as {@link NodeList}
+ * --and indexed from zero-- and for the same reason: the DOM does not rest on the collections of
+ * any language.
  *
- * <p>Interfaz declarada entera.
+ * <p>The interface is declared whole.
  */
 public interface DOMImplementationList {
 
-    /** La implementacion en esa posicion, o {@code null} si el indice se fue de rango. */
+    /** The implementation at that position, or {@code null} if the index went out of range. */
     public DOMImplementation item(int index);
 
-    /** Cuantas hay. */
+    /** How many there are. */
     public int getLength();
 }

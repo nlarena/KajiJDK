@@ -4,64 +4,66 @@ import java.io.Serializable;
 import java.net.MalformedURLException;
 
 /**
- * KajiLibrary's javax.management.remote.JMXServiceURL -- la direccion de un conector JMX.
+ * KajiLibrary's javax.management.remote.JMXServiceURL -- a JMX connector's address.
  *
- * <p>La forma es {@code service:jmx:<protocolo>://[<host>][:<puerto>][<camino>]}. El prefijo
- * {@code service:jmx:} viene del estandar de URL de servicio y es obligatorio.
+ * <p>The form is {@code service:jmx:<protocol>://[<host>][:<port>][<path>]}. The
+ * {@code service:jmx:} prefix comes from the service URL standard and is mandatory.
  *
- * <h2>La gramatica del host, que es mas estricta de lo que parece</h2>
+ * <h2>The host grammar, which is stricter than it looks</h2>
  *
- * <p>Se acepta una de tres cosas:
+ * <p>One of three things is accepted:
  *
  * <ul>
- *   <li>una direccion IPv4 en cuatro numeros, cada uno de 0 a 255. {@code 1.2.3.4} vale;
- *       {@code 1.2.3}, {@code 1.2.3.4.5} y {@code 256.1.1.1} no;
- *   <li>una direccion IPv6 numerica, con o sin corchetes. Se detecta por tener dos puntos, y por eso
- *       cualquier host con {@code :} adentro se valida como IPv6 y falla si no lo es;
- *   <li>un nombre de maquina: etiquetas separadas por puntos, cada una de letras, digitos y guiones,
- *       sin empezar ni terminar en guion. La <b>primera</b> etiqueta puede empezar con digito
- *       --{@code 12a.b} vale-- pero las siguientes tienen que empezar con letra, asi que
- *       {@code abc.123} no vale. Es la regla que impide confundir un nombre con una direccion.
+ *   <li>an IPv4 address in four numbers, each from 0 to 255. {@code 1.2.3.4} is valid;
+ *       {@code 1.2.3}, {@code 1.2.3.4.5} and {@code 256.1.1.1} are not;
+ *   <li>a numeric IPv6 address, with or without brackets. It is detected by having colons, and
+ *       that is why any host with a {@code :} inside is validated as IPv6 and fails if it is not;
+ *   <li>a machine name: labels separated by dots, each of letters, digits and hyphens, neither
+ *       starting nor ending in a hyphen. The <b>first</b> label may start with a digit
+ *       --{@code 12a.b} is valid-- but the following ones have to start with a letter, so
+ *       {@code abc.123} is not valid. It is the rule that keeps a name from being confused with
+ *       an address.
  * </ul>
  *
- * <p>Un host vacio esta permitido y significa "la maquina local, sin decir cual"; en ese caso el
- * puerto tiene que ser 0. Pasar null a los constructores de tres y cuatro argumentos es distinto:
- * ahi si se resuelve el nombre de la maquina.
+ * <p>An empty host is allowed and means "the local machine, without saying which"; in that case
+ * the port has to be 0. Passing null to the three- and four-argument constructors is different:
+ * there the machine's name is resolved.
  *
- * <h2>{@code hashCode} coherente con {@code equals}</h2>
+ * <h2>{@code hashCode} consistent with {@code equals}</h2>
  *
- * <p>{@link #equals} ignora mayusculas en el host, como manda el DNS. El JDK calcula
- * {@link #hashCode} sobre {@link #toString}, que conserva las mayusculas del host, asi que dos URL
- * iguales pueden tener hash distinto -- se comprobo contra el JDK 25 y es asi. Eso rompe el contrato
- * de {@code Object} y hace que una tabla hash con estas claves falle.
+ * <p>{@link #equals} ignores case in the host, as DNS commands. The JDK computes
+ * {@link #hashCode} over {@link #toString}, which keeps the host's capitals, so two equal URLs
+ * may have different hashes -- it was checked against JDK 25 and that is how it is. That breaks
+ * {@code Object}'s contract and makes a hash table with these keys fail.
  *
- * <p>Aca el hash se calcula sobre la forma que usa {@code equals}, con el host en minusculas. Es la
- * unica divergencia deliberada de esta clase y es a favor del contrato.
+ * <p>Here the hash is computed over the form {@code equals} uses, with the host in lower case. It
+ * is this class's only deliberate divergence and it is in favour of the contract.
  */
 public class JMXServiceURL implements Serializable {
 
     private static final long serialVersionUID = 8173364409860779292L;
 
-    /** El protocolo, en minusculas. */
+    /** The protocol, in lower case. */
     private final String protocol;
 
-    /** El host, con las mayusculas que se hayan pasado. */
+    /** The host, with whatever capitals were passed. */
     private final String host;
 
-    /** El puerto; 0 significa sin puerto. */
+    /** The port; 0 means no port. */
     private final int port;
 
-    /** El camino, o vacio. */
+    /** The path, or empty. */
     private final String urlPath;
 
-    /** La forma de texto, que no cambia. */
+    /** The text form, which does not change. */
     private transient String toString;
 
     /**
-     * Analiza una URL completa.
+     * Parses a complete URL.
      *
-     * @throws MalformedURLException si no arranca con {@code service:jmx:} o algo no cierra
-     * @throws NullPointerException si es null
+     * @throws MalformedURLException if it does not start with {@code service:jmx:} or something
+     *     does not add up
+     * @throws NullPointerException if it is null
      */
     public JMXServiceURL(String serviceURL) throws MalformedURLException {
         final String prefix = "service:jmx:";
@@ -113,22 +115,22 @@ public class JMXServiceURL implements Serializable {
     }
 
     /**
-     * Arma una URL sin camino.
+     * Builds a URL without a path.
      *
-     * @param protocol el protocolo; null significa {@code jmxmp}
-     * @param host el host; null significa el nombre de esta maquina
-     * @param port el puerto, o 0
-     * @throws MalformedURLException si algo no cierra
+     * @param protocol the protocol; null means {@code jmxmp}
+     * @param host the host; null means this machine's name
+     * @param port the port, or 0
+     * @throws MalformedURLException if something does not add up
      */
     public JMXServiceURL(String protocol, String host, int port) throws MalformedURLException {
         this(protocol, host, port, null);
     }
 
     /**
-     * Arma una URL completa.
+     * Builds a complete URL.
      *
-     * @param urlPath el camino; tiene que empezar con {@code /} o {@code ;}, o ser vacio o null
-     * @throws MalformedURLException si algo no cierra
+     * @param urlPath the path; it has to start with {@code /} or {@code ;}, or be empty or null
+     * @throws MalformedURLException if something does not add up
      */
     public JMXServiceURL(String protocol, String host, int port, String urlPath)
         throws MalformedURLException {
@@ -158,30 +160,30 @@ public class JMXServiceURL implements Serializable {
         validate();
     }
 
-    /** El protocolo, siempre en minusculas. */
+    /** The protocol, always in lower case. */
     public String getProtocol() {
         return this.protocol;
     }
 
-    /** El host, sin corchetes aunque sea IPv6, y con las mayusculas originales. */
+    /** The host, without brackets even if it is IPv6, and with the original capitals. */
     public String getHost() {
         return this.host;
     }
 
-    /** El puerto, o 0 si no se dio. */
+    /** The port, or 0 if none was given. */
     public int getPort() {
         return this.port;
     }
 
-    /** El camino, o vacio. */
+    /** The path, or empty. */
     public String getURLPath() {
         return this.urlPath;
     }
 
     /**
-     * La URL completa.
+     * The complete URL.
      *
-     * <p>El puerto 0 no se escribe, y un host IPv6 sale entre corchetes.
+     * <p>Port 0 is not written, and an IPv6 host comes out between brackets.
      */
     @Override
     public String toString() {
@@ -204,9 +206,10 @@ public class JMXServiceURL implements Serializable {
     }
 
     /**
-     * Protocolo y host sin distinguir mayusculas, puerto igual, camino exacto.
+     * Protocol and host without distinguishing case, the same port, the exact path.
      *
-     * <p>Que el camino si distinga no es un descuido: puede ser un nombre JNDI, y esos si distinguen.
+     * <p>That the path does distinguish is not an oversight: it may be a JNDI name, and those do
+     * distinguish.
      */
     @Override
     public boolean equals(Object obj) {
@@ -220,7 +223,7 @@ public class JMXServiceURL implements Serializable {
             && this.urlPath.equals(other.urlPath);
     }
 
-    /** Coherente con {@link #equals}. Ver la nota de la clase. */
+    /** Consistent with {@link #equals}. See the class note. */
     @Override
     public int hashCode() {
         return this.protocol.hashCode() * 31 * 31 * 31
@@ -229,7 +232,7 @@ public class JMXServiceURL implements Serializable {
             + this.urlPath.hashCode();
     }
 
-    /** El nombre de esta maquina, o {@code localhost} si no se puede averiguar. */
+    /** This machine's name, or {@code localhost} if it cannot be found out. */
     private static String localHostName() throws MalformedURLException {
         String name;
         try {
@@ -243,7 +246,7 @@ public class JMXServiceURL implements Serializable {
         return name;
     }
 
-    /** Saca los corchetes de un host IPv6 escrito con ellos. */
+    /** Removes the brackets from an IPv6 host written with them. */
     private static String unbracket(String h) {
         if (h.length() >= 2 && h.charAt(0) == '[' && h.charAt(h.length() - 1) == ']') {
             return h.substring(1, h.length() - 1);
@@ -251,7 +254,7 @@ public class JMXServiceURL implements Serializable {
         return h;
     }
 
-    /** El primer indice donde aparece alguno de esos caracteres, o -1. */
+    /** The first index where one of those characters appears, or -1. */
     private static int firstIndexOf(String s, String chars) {
         int i = 0;
         while (i < s.length()) {
@@ -263,7 +266,7 @@ public class JMXServiceURL implements Serializable {
         return -1;
     }
 
-    /** Lee {@code ":1234"}; vacio significa 0. */
+    /** Reads {@code ":1234"}; empty means 0. */
     private static int parsePort(String s) throws MalformedURLException {
         if (s.length() == 0) {
             return 0;
@@ -279,7 +282,7 @@ public class JMXServiceURL implements Serializable {
         }
     }
 
-    /** Los tres controles que comparten los constructores. */
+    /** The three checks the constructors share. */
     private void validate() throws MalformedURLException {
         if (!isValidProtocol(this.protocol)) {
             throw new MalformedURLException(
@@ -305,7 +308,7 @@ public class JMXServiceURL implements Serializable {
         }
     }
 
-    /** Una letra seguida de letras, digitos, {@code +} y {@code -}. */
+    /** A letter followed by letters, digits, {@code +} and {@code -}. */
     private static boolean isValidProtocol(String p) {
         if (p.length() == 0 || !isAlpha(p.charAt(0))) {
             return false;
@@ -321,7 +324,7 @@ public class JMXServiceURL implements Serializable {
         return true;
     }
 
-    /** Un IPv4 en cuatro numeros, o un nombre. Ver la nota de la clase. */
+    /** An IPv4 in four numbers, or a name. See the class note. */
     private static boolean isValidHostName(String h) {
         if (isNumericIPv4(h)) {
             return true;
@@ -348,9 +351,9 @@ public class JMXServiceURL implements Serializable {
     }
 
     /**
-     * Una etiqueta de nombre.
+     * A name label.
      *
-     * @param first si es la primera; solo esa puede empezar con digito
+     * @param first whether it is the first one; only that one may start with a digit
      */
     private static boolean isValidLabel(String h, int start, int end, boolean first) {
         if (end <= start) {
@@ -378,7 +381,7 @@ public class JMXServiceURL implements Serializable {
         return true;
     }
 
-    /** Cuatro numeros de 0 a 255 separados por puntos. */
+    /** Four numbers from 0 to 255 separated by dots. */
     private static boolean isNumericIPv4(String s) {
         int start = 0;
         int parts = 0;
@@ -418,20 +421,21 @@ public class JMXServiceURL implements Serializable {
         return true;
     }
 
-    /** Un host con dos puntos se trata como IPv6, valido o no. Es lo que hace el JDK. */
+    /** A host with colons is treated as IPv6, valid or not. It is what the JDK does. */
     private static boolean isNumericIPv6Address(String s) {
         return s.indexOf(':') >= 0;
     }
 
     /**
-     * Si ese texto es un literal IPv6 bien formado.
+     * Whether that text is a well-formed IPv6 literal.
      *
-     * <p>Acepta la abreviatura {@code ::} una sola vez, un IPv4 en el ultimo grupo, y un identificador
-     * de ambito numerico despues de {@code %}.
+     * <p>It accepts the {@code ::} abbreviation once, an IPv4 in the last group, and a numeric
+     * scope identifier after {@code %}.
      *
-     * <p>Un ambito con <b>nombre</b> --{@code %eth0}-- se rechaza. El JDK lo acepta solo si esa placa
-     * existe en la maquina, asi que no es una propiedad del texto sino del equipo; sin placas que
-     * consultar, rechazarlo es lo unico que se puede decir con certeza.
+     * <p>A <b>named</b> scope --{@code %eth0}-- is rejected. The JDK accepts it only if that
+     * interface exists on the machine, so it is not a property of the text but of the equipment;
+     * with no interfaces to consult, rejecting it is the only thing that can be said with
+     * certainty.
      */
     private static boolean isWellFormedIPv6(String s) {
         int pct = s.indexOf('%');
@@ -477,9 +481,9 @@ public class JMXServiceURL implements Serializable {
     }
 
     /**
-     * Cuenta los grupos de una mitad y dice si estan bien formados.
+     * Counts a half's groups and says whether they are well formed.
      *
-     * @param allowIPv4 si el ultimo grupo puede ser un IPv4, que cuenta como dos
+     * @param allowIPv4 whether the last group may be an IPv4, which counts as two
      */
     private static boolean countGroups(String s, int[] count, boolean allowIPv4) {
         if (s.length() == 0) {

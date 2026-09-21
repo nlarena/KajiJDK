@@ -5,26 +5,26 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * KajiLibrary's javax.security.auth.x500.Parser -- lee un nombre distinguido escrito en RFC 2253.
+ * KajiLibrary's javax.security.auth.x500.Parser -- reads a distinguished name written in RFC 2253.
  *
- * <h2>La gramatica, que es mas chica de lo que parece</h2>
+ * <h2>The grammar, which is smaller than it looks</h2>
  *
- * <p>Un nombre son pasos separados por comas; cada paso son pares separados por `+`; cada par es
- * `type=value`. Todo lo demas es como se escribe un valor, que tiene **tres** formas y hay que
- * distinguirlas antes de hacer nada:
+ * <p>A name is steps separated by commas; each step is pairs separated by `+`; each pair is
+ * `type=value`. Everything else is how a value is written, which has **three** forms that have to
+ * be told apart before doing anything:
  *
  * <ul>
- *   <li>**Hexadecimal**: empieza con `#` y es el DER del valor, crudo. Se usa para tipos que no se
- *       pueden escribir como texto.
- *   <li>**Entre comillas**: adentro de las comillas casi todo es literal, incluidas las comas.
- *   <li>**Con escapes**: la forma normal. Una barra invertida vuelve literal al caracter siguiente, y
- *       ademas `\\XX` con dos digitos hexadecimales mete un byte crudo.
+ *   <li>**Hexadecimal**: it starts with `#` and is the value's DER, raw. It is used for types that
+ *       cannot be written as text.
+ *   <li>**In quotes**: inside the quotes almost everything is literal, commas included.
+ *   <li>**With escapes**: the normal form. A backslash makes the next character literal, and
+ *       besides `\\XX` with two hexadecimal digits puts in a raw byte.
  * </ul>
  *
- * <p>El caso que hace falta pensar --y donde casi todos los parsers se equivocan-- son los **espacios
- * de los bordes**: un espacio al principio o al final de un valor **no cuenta** salvo que este
- * escapado. `CN= Juan ` es `Juan`, y `CN=\\ Juan` es `" Juan"`. Adentro del valor los espacios se
- * respetan tal cual.
+ * <p>The case that needs thinking about --and where almost all parsers go wrong-- is the **spaces
+ * at the edges**: a space at the start or at the end of a value **does not count** unless it is
+ * escaped. `CN= Juan ` is `Juan`, and `CN=\\ Juan` is `" Juan"`. Inside the value the spaces are
+ * kept as they are.
  */
 final class Parser {
 
@@ -32,51 +32,53 @@ final class Parser {
     }
 
     /**
-     * Los pasos del nombre, en el orden en que se escribieron: del mas particular al mas general.
+     * The steps of the name, in the order they were written: from the most particular to the most
+     * general.
      *
-     * @throws IllegalArgumentException si el nombre no parsea
+     * @throws IllegalArgumentException if the name does not parse
      */
     static X500Principal.Rdn[] parse(String name, Map<String, String> words) {
         List<X500Principal.Rdn> rdns = new ArrayList<X500Principal.Rdn>();
-        // Un nombre vacio es un DN vacio y es **valido**: designa la raiz del directorio. No es un
-        // error, y tratarlo como tal rompe los certificados que lo usan.
+        // An empty name is an empty DN and it is **valid**: it designates the root of the
+        // directory. It is not an error, and treating it as one breaks the certificates that use
+        // it.
         if (name.trim().length() == 0) {
             return new X500Principal.Rdn[0];
         }
-        List<String> trozos = partirNivelSuperior(name, ',');
+        List<String> parts = splitTopLevel(name, ',');
         int i = 0;
-        while (i < trozos.size()) {
-            rdns.add(oneRdn(trozos.get(i), words));
+        while (i < parts.size()) {
+            rdns.add(oneRdn(parts.get(i), words));
             i = i + 1;
         }
         return rdns.toArray(new X500Principal.Rdn[rdns.size()]);
     }
 
-    // Un paso: uno o mas `type=value` unidos por `+`.
+    // A step: one or more `type=value` joined by `+`.
     private static X500Principal.Rdn oneRdn(String text, Map<String, String> words) {
-        List<String> pairs = partirNivelSuperior(text, '+');
+        List<String> pairs = splitTopLevel(text, '+');
         String[] types = new String[pairs.size()];
         String[] values = new String[pairs.size()];
         int i = 0;
         while (i < pairs.size()) {
             String pair = pairs.get(i);
-            int igual = posicionDelIgual(pair);
-            if (igual < 0) {
-                throw new IllegalArgumentException("falta el `=` en: " + pair);
+            int eq = equalsSignIndex(pair);
+            if (eq < 0) {
+                throw new IllegalArgumentException("missing `=` in: " + pair);
             }
-            String type = pair.substring(0, igual).trim();
-            String value = pair.substring(igual + 1, pair.length());
-            types[i] = aOid(type, words);
+            String type = pair.substring(0, eq).trim();
+            String value = pair.substring(eq + 1, pair.length());
+            types[i] = toOid(type, words);
             values[i] = AttrValue.read(value);
             i = i + 1;
         }
         return new X500Principal.Rdn(types, values);
     }
 
-    // El primer `=` que no este adentro de comillas ni escapado. Buscarlo con `indexOf` estaria mal:
-    // un valor puede contener `=` y de hecho es comun en los correos.
-    private static int posicionDelIgual(String s) {
-        boolean comillas = false;
+    // The first `=` that is not inside quotes nor escaped. Looking for it with `indexOf` would be
+    // wrong: a value can contain `=`, and in fact it is common in email addresses.
+    private static int equalsSignIndex(String s) {
+        boolean inQuotes = false;
         int i = 0;
         while (i < s.length()) {
             char c = s.charAt(i);
@@ -85,8 +87,8 @@ final class Parser {
                 continue;
             }
             if (c == '"') {
-                comillas = !comillas;
-            } else if (c == '=' && !comillas) {
+                inQuotes = !inQuotes;
+            } else if (c == '=' && !inQuotes) {
                 return i;
             }
             i = i + 1;
@@ -95,55 +97,57 @@ final class Parser {
     }
 
     /**
-     * Parte por ese separador, **respetando** comillas y escapes.
+     * Splits by that separator, **respecting** quotes and escapes.
      *
-     * <p>Es lo que impide que `CN=Perez, Juan` --con la coma adentro de un valor citado-- se lea como
-     * dos pasos. Un `split` comun no puede hacer esto, y por eso no se usa.
+     * <p>It is what prevents `CN="Perez, Juan"` --with the comma inside a quoted value-- from being
+     * read as two steps. A plain `split` cannot do this, and that is why it is not used.
      */
-    private static List<String> partirNivelSuperior(String s, char separator) {
+    private static List<String> splitTopLevel(String s, char separator) {
         List<String> out = new ArrayList<String>();
-        StringBuilder actual = new StringBuilder();
-        boolean comillas = false;
+        StringBuilder current = new StringBuilder();
+        boolean inQuotes = false;
         int i = 0;
         while (i < s.length()) {
             char c = s.charAt(i);
             if (c == '\\' && i + 1 < s.length()) {
-                actual.append(c).append(s.charAt(i + 1));
+                current.append(c).append(s.charAt(i + 1));
                 i = i + 2;
                 continue;
             }
             if (c == '"') {
-                comillas = !comillas;
-                actual.append(c);
-            } else if (c == separator && !comillas) {
-                out.add(actual.toString());
-                actual = new StringBuilder();
+                inQuotes = !inQuotes;
+                current.append(c);
+            } else if (c == separator && !inQuotes) {
+                out.add(current.toString());
+                current = new StringBuilder();
             } else {
-                actual.append(c);
+                current.append(c);
             }
             i = i + 1;
         }
-        out.add(actual.toString());
+        out.add(current.toString());
         return out;
     }
 
-    // El tipo, siempre como OID en numeros: una palabra clave conocida, una del mapa, o ya un OID.
-    private static String aOid(String type, Map<String, String> words) {
+    // The type, always as a numeric OID: a known keyword, one from the map, or already an OID.
+    private static String toOid(String type, Map<String, String> words) {
         if (type.length() == 0) {
-            throw new IllegalArgumentException("tipo vacio");
+            throw new IllegalArgumentException("empty type");
         }
         String known = X500Principal.oidForWord(type);
         if (known != null) {
             return known;
         }
-        // El mapa del llamador va despues de los conocidos: no puede redefinir `CN`.
+        // The caller's map comes after the known ones: it cannot redefine `CN`. In the JDK it is
+        // the other way round, the map takes precedence: {"CN" -> "1.2.3.4"} turns `CN=x` into
+        // `1.2.3.4=#130178`.
         String fromMap = lookupIgnoringCase(words, type);
         if (fromMap != null) {
             validateOid(fromMap);
             return fromMap;
         }
         String cleanCert = type;
-        // `OID.1.2.3` es la forma larga de escribir un OID; RFC 1779 la usa siempre.
+        // `OID.1.2.3` is the long way of writing an OID; RFC 1779 always uses it.
         if (cleanCert.length() > 4 && cleanCert.substring(0, 4).equalsIgnoreCase("OID.")) {
             cleanCert = cleanCert.substring(4, cleanCert.length());
         }
@@ -151,9 +155,9 @@ final class Parser {
         return cleanCert;
     }
 
-    private static String lookupIgnoringCase(Map<String, String> m, String clave) {
+    private static String lookupIgnoringCase(Map<String, String> m, String key) {
         for (Map.Entry<String, String> e : m.entrySet()) {
-            if (e.getKey() != null && e.getKey().equalsIgnoreCase(clave)) {
+            if (e.getKey() != null && e.getKey().equalsIgnoreCase(key)) {
                 return e.getValue();
             }
         }
@@ -161,17 +165,17 @@ final class Parser {
     }
 
     /**
-     * Que el OID tenga forma de OID.
+     * That the OID has the shape of an OID.
      *
-     * <p>Se valida al parsear y no al usar, y por eso el mensaje puede nombrar lo que estaba mal
-     * escrito. Un OID mal formado que pasa el parseo reaparece mucho despues como un nombre que no
-     * matchea con nada, y ahi ya no se sabe de donde salio.
+     * <p>It is validated when parsing and not when using, and that is why the message can name what
+     * was badly written. A malformed OID that gets through parsing reappears much later as a name
+     * that matches nothing, and by then nobody knows where it came from.
      */
     static void validateOid(String oid) {
         if (oid == null || oid.length() == 0) {
-            throw new IllegalArgumentException("OID vacio");
+            throw new IllegalArgumentException("empty OID");
         }
-        int arcos = 0;
+        int arcs = 0;
         int i = 0;
         while (i < oid.length()) {
             int end = i;
@@ -179,28 +183,29 @@ final class Parser {
                 end = end + 1;
             }
             if (end == i) {
-                throw new IllegalArgumentException("OID mal formado: " + oid);
+                throw new IllegalArgumentException("malformed OID: " + oid);
             }
             int k = i;
             while (k < end) {
                 if (oid.charAt(k) < '0' || oid.charAt(k) > '9') {
-                    throw new IllegalArgumentException("OID mal formado: " + oid);
+                    throw new IllegalArgumentException("malformed OID: " + oid);
                 }
                 k = k + 1;
             }
-            arcos = arcos + 1;
+            arcs = arcs + 1;
             i = end + 1;
             if (i == oid.length()) {
-                throw new IllegalArgumentException("el OID termina en punto: " + oid);
+                throw new IllegalArgumentException("OID ends in a dot: " + oid);
             }
         }
-        // Menos de dos arcos no es un OID: el primero elige la autoridad y el segundo la rama.
-        if (arcos < 2) {
-            throw new IllegalArgumentException("un OID necesita al menos dos arcos: " + oid);
+        // Fewer than two arcs is not an OID: the first chooses the authority and the second the
+        // branch.
+        if (arcs < 2) {
+            throw new IllegalArgumentException("an OID needs at least two arcs: " + oid);
         }
         int first = Integer.parseInt(oid.substring(0, oid.indexOf('.')));
         if (first > 2) {
-            throw new IllegalArgumentException("el primer arco de un OID es 0, 1 o 2: " + oid);
+            throw new IllegalArgumentException("the first arc of an OID is 0, 1 or 2: " + oid);
         }
     }
 }

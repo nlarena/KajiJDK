@@ -8,24 +8,25 @@ import javax.swing.SizeRequirements;
 import javax.swing.event.DocumentEvent;
 
 /**
- * Una vista que reparte su contenido en filas: la base de un parrafo con corte de linea.
+ * A view that shares its content out into rows: the base of a paragraph with line breaking.
  *
- * <h2>Dos arboles de vistas para lo mismo</h2>
+ * <h2>Two view trees for the same thing</h2>
  *
- * <p>Hay un arbol <em>logico</em> —una vista por elemento del documento, en
- * {@link #layoutPool}— y otro <em>fisico</em>, que son las filas que se ven. El logico no cambia
- * cuando cambia el ancho; el fisico se rehace entero. Tener los dos es lo que permite volver a
- * cortar en lineas sin volver a crear una vista por tramo de texto.
+ * <p>There is a <em>logical</em> tree --one view per document element, in
+ * {@link #layoutPool}-- and a <em>physical</em> one, which are the rows that are seen. The
+ * logical one does not change when the width changes; the physical one is rebuilt whole. Having
+ * both is what allows breaking into lines again without creating a view per stretch of text
+ * again.
  *
- * <p>Quien decide donde cortar es la {@link FlowStrategy}, que esta afuera de la vista y se puede
- * cambiar: cortar por palabras, por caracteres o de otra forma es cambiar ese objeto.
+ * <p>Who decides where to break is the {@link FlowStrategy}, which is outside the view and can
+ * be changed: breaking by words, by characters or in another way is changing that object.
  */
 public abstract class FlowView extends BoxView {
 
-    /** El ancho disponible para cada fila. */
+    /** The width available for each row. */
     protected int layoutSpan;
 
-    /** El arbol logico; ver la nota de la clase. */
+    /** The logical tree; see the class note. */
     protected View layoutPool;
 
     protected FlowStrategy strategy;
@@ -36,7 +37,7 @@ public abstract class FlowView extends BoxView {
         strategy = new FlowStrategy();
     }
 
-    /** El eje sobre el que fluye el contenido: el perpendicular al de apilado. */
+    /** The axis the content flows on: the one perpendicular to the stacking one. */
     public int getFlowAxis() {
         if (getAxis() == Y_AXIS) {
             return X_AXIS;
@@ -44,24 +45,24 @@ public abstract class FlowView extends BoxView {
         return Y_AXIS;
     }
 
-    /** Cuanto espacio tiene esa fila; todas lo mismo, salvo que una subclase diga otra cosa. */
+    /** How much room that row has; all the same, unless a subclass says otherwise. */
     public int getFlowSpan(int index) {
         return layoutSpan;
     }
 
-    /** Donde empieza esa fila. */
+    /** Where that row starts. */
     public int getFlowStart(int index) {
         return 0;
     }
 
-    /** Una fila vacia; la subclase decide de que tipo. */
+    /** An empty row; the subclass decides of what kind. */
     protected abstract View createRow();
 
     /**
-     * Arma el arbol logico y deja el fisico vacio.
+     * It builds the logical tree and leaves the physical one empty.
      *
-     * <p>Las filas se crean recien al maquetar, cuando se sabe el ancho: antes no se puede saber
-     * cuantas hacen falta.
+     * <p>The rows are created only when laying out, when the width is known: before that it cannot
+     * be known how many are needed.
      */
     protected void loadChildren(ViewFactory f) {
         if (layoutPool == null) {
@@ -85,7 +86,7 @@ public abstract class FlowView extends BoxView {
         return -1;
     }
 
-    /** Antes de acomodar, vuelve a cortar en filas si cambio el ancho. */
+    /** Before arranging, it breaks into rows again if the width changed. */
     protected void layout(int width, int height) {
         final int faxis = getFlowAxis();
         int newSpan;
@@ -115,7 +116,7 @@ public abstract class FlowView extends BoxView {
         super.layout(width, height);
     }
 
-    /** El minimo sobre el eje menor es el de la fila mas exigente. */
+    /** The minimum on the minor axis is that of the most demanding row. */
     protected SizeRequirements calculateMinorAxisRequirements(int axis, SizeRequirements r) {
         if (r == null) {
             r = new SizeRequirements();
@@ -152,10 +153,10 @@ public abstract class FlowView extends BoxView {
     }
 
     /**
-     * Como se reparte el contenido en filas.
+     * How the content is shared out into rows.
      *
-     * <p>Esta afuera de la vista para poder cambiarla; ver la nota de {@link FlowView}. La de aca
-     * corta por palabras usando los pesos de corte de las vistas.
+     * <p>It is outside the view so as to be changeable; see {@link FlowView}'s note. The one here
+     * breaks by words using the views' break weights.
      */
     public static class FlowStrategy {
 
@@ -202,16 +203,16 @@ public abstract class FlowView extends BoxView {
             insertUpdate(fv, e, alloc);
         }
 
-        /** El arbol logico de esa vista. */
+        /** That view's logical tree. */
         protected View getLogicalView(FlowView fv) {
             return fv.layoutPool;
         }
 
         /**
-         * Rehace las filas.
+         * It rebuilds the rows.
          *
-         * <p>Va creando filas y llenandolas hasta que el contenido se acaba. Cada fila se llena
-         * con {@link #layoutRow}, que es quien decide donde cortar.
+         * <p>It goes on creating rows and filling them until the content runs out. Each row is
+         * filled with {@link #layoutRow}, which is the one that decides where to break.
          */
         public void layout(FlowView fv) {
             View pool = getLogicalView(fv);
@@ -226,7 +227,7 @@ public abstract class FlowView extends BoxView {
                 fv.append(row);
                 int next = layoutRow(fv, rowIndex, p);
                 if (next <= p) {
-                    // No entro nada: se fuerza el avance para no colgarse.
+                    // Nothing fitted: the advance is forced so as not to hang.
                     next = p + 1;
                 }
                 p = next;
@@ -235,10 +236,10 @@ public abstract class FlowView extends BoxView {
         }
 
         /**
-         * Llena una fila desde esa posicion y devuelve donde quedo.
+         * It fills a row from that position and returns where it ended up.
          *
-         * <p>Va agregando vistas mientras entren; la primera que no entra se parte con
-         * {@code breakView}, que es donde se decide cortar por una palabra y no por una letra.
+         * <p>It goes on adding views while they fit; the first one that does not fit is split with
+         * {@code breakView}, which is where breaking by a word and not by a letter is decided.
          */
         protected int layoutRow(FlowView fv, int rowIndex, int pos) {
             View row = fv.getView(rowIndex);
@@ -255,7 +256,7 @@ public abstract class FlowView extends BoxView {
                 }
                 float chunk = v.getPreferredSpan(flowAxis);
                 if (chunk > spanLeft && row.getViewCount() > 0) {
-                    // No entra y ya hay algo en la fila: se corta aca.
+                    // It does not fit and there is already something in the row: it breaks here.
                     break;
                 }
                 row.append(v);
@@ -268,7 +269,7 @@ public abstract class FlowView extends BoxView {
             return p;
         }
 
-        /** Acomoda la fila una vez llena; sin justificado, no hace nada. */
+        /** It arranges the row once it is full; without justification, it does nothing. */
         protected void adjustRow(FlowView fv, int rowIndex, int desiredSpan, int x) {
         }
 
@@ -276,9 +277,9 @@ public abstract class FlowView extends BoxView {
         }
 
         /**
-         * La vista que hay que poner a partir de esa posicion, recortada a lo que entra.
+         * The view to put starting at that position, trimmed to what fits.
          *
-         * <p>Devuelve la del arbol logico entera si entra, y un fragmento si no.
+         * <p>It returns the logical tree's one whole if it fits, and a fragment if not.
          */
         protected View createView(FlowView fv, int startOffset, int spanLeft, int rowIndex) {
             View pool = getLogicalView(fv);
@@ -296,9 +297,9 @@ public abstract class FlowView extends BoxView {
             int flowAxis = fv.getFlowAxis();
             float span = v.getPreferredSpan(flowAxis);
             if (span > spanLeft) {
-                View partida = v.breakView(flowAxis, v.getStartOffset(), 0f, spanLeft);
-                if (partida != null && partida.getEndOffset() > v.getStartOffset()) {
-                    return partida;
+                View split = v.breakView(flowAxis, v.getStartOffset(), 0f, spanLeft);
+                if (split != null && split.getEndOffset() > v.getStartOffset()) {
+                    return split;
                 }
             }
             return v;
@@ -306,9 +307,10 @@ public abstract class FlowView extends BoxView {
     }
 
     /**
-     * El arbol logico: una vista por elemento hijo, que no se rehace al cambiar el ancho.
+     * The logical tree: one view per child element, which is not rebuilt when the width changes.
      *
-     * <p>Es privada en el JDK y aca tambien: se llega a ella por {@link FlowStrategy#getLogicalView}.
+     * <p>It is private in the JDK and here too: it is reached through
+     * {@link FlowStrategy#getLogicalView}.
      */
     static class LogicalView extends CompositeView {
 
@@ -377,7 +379,7 @@ public abstract class FlowView extends BoxView {
             v.setParent(parent);
         }
 
-        // -- lo que una vista logica no necesita, porque no se dibuja ------------------------
+        // -- what a logical view does not need, because it is not drawn ----------------------
 
         protected boolean isBefore(int x, int y, Rectangle alloc) {
             return false;

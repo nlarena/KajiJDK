@@ -4,81 +4,82 @@ import java.awt.image.BufferedImage;
 import java.util.Locale;
 
 /**
- * El entorno gráfico de una máquina sin pantalla.
+ * The graphics environment of a machine without a screen.
  *
- * <p>Es al {@link GraphicsEnvironment} lo que {@link HeadlessToolkit} al {@link Toolkit}, y sigue la
- * misma regla: contesta con la verdad lo que no necesita pantalla, tira {@link HeadlessException} en
- * lo que sí, y no inventa nada en el medio.
+ * <p>It is to {@link GraphicsEnvironment} what {@link HeadlessToolkit} is to {@link Toolkit}, and
+ * it follows the same rule: it answers truthfully whatever needs no screen, throws {@link
+ * HeadlessException} on whatever does, and invents nothing in between.
  *
- * <p>Las listas de tipografías salen vacías. No es una pantalla lo que falta ahí sino un motor de
- * tipografías: no hay cómo leer las instaladas ni cómo crear una desde un archivo, así que no hay
- * ninguna que nombrar. El motivo está en {@link GraphicsEnvironment#registerFont}.
+ * <p>The font lists come out empty. What is missing there is not a screen but a font engine: there
+ * is no way to read the installed ones nor to create one from a file, so there is none to name. The
+ * reason is in {@link GraphicsEnvironment#registerFont}.
  */
 final class HeadlessGraphicsEnvironment extends GraphicsEnvironment {
 
-    /** Lo arma {@link GraphicsEnvironment#getLocalGraphicsEnvironment}. */
+    /** {@link GraphicsEnvironment#getLocalGraphicsEnvironment} builds it. */
     HeadlessGraphicsEnvironment() {
     }
 
     /**
-     * Las pantallas.
+     * The screens.
      *
-     * @throws HeadlessException siempre: no hay ninguna
+     * @throws HeadlessException always: there is none
      */
     public GraphicsDevice[] getScreenDevices() throws HeadlessException {
         throw new HeadlessException(GraphicsEnvironment.getHeadlessMessage());
     }
 
     /**
-     * La pantalla principal.
+     * The main screen.
      *
-     * @throws HeadlessException siempre, por lo mismo
+     * @throws HeadlessException always, for the same reason
      */
     public GraphicsDevice getDefaultScreenDevice() throws HeadlessException {
         throw new HeadlessException(GraphicsEnvironment.getHeadlessMessage());
     }
 
     /**
-     * Un contexto de dibujo sobre esa imagen.
+     * A drawing context over that image.
      *
-     * <p>No hay pantalla que lo impida —dibujar sobre una {@link BufferedImage} es todo en memoria—
-     * pero sí falta el rasterizador: nadie sabe convertir una línea o una letra en píxeles.
+     * <p>No screen stands in the way —drawing onto a {@link BufferedImage} is all in memory— but
+     * the rasteriser is missing: nobody knows how to turn a line or a letter into pixels.
      *
-     * @throws UnsupportedOperationException siempre, con el motivo dicho. Devolver un `Graphics2D`
-     *     que acepte todo y no dibuje nada sería peor: el llamador creería que la imagen tiene algo.
-     * @throws NullPointerException si la imagen es `null`
+     * @throws UnsupportedOperationException always, with that reason. Returning a `Graphics2D` that
+     *     accepts everything and draws nothing would be worse: the caller would believe the image
+     *     has something in it.
+     * @throws NullPointerException if the image is `null`
      */
     public Graphics2D createGraphics(BufferedImage img) {
         if (img == null) {
             throw new NullPointerException("BufferedImage cannot be null");
         }
         throw new UnsupportedOperationException(
-                "esta implementación no tiene rasterizador: no hay con qué dibujar sobre la imagen");
+                "this implementation has no rasteriser: there is nothing to draw on the image with");
     }
 
     /**
-     * Todas las tipografías.
+     * All the fonts.
      *
-     * @return un arreglo vacío; nunca `null`
+     * @return an empty array; never `null`
      */
     public Font[] getAllFonts() {
         return new Font[0];
     }
 
     /**
-     * Los nombres de familia.
+     * The family names.
      *
-     * @return un arreglo vacío
+     * @return an empty array
      */
     public String[] getAvailableFontFamilyNames() {
         return new String[0];
     }
 
     /**
-     * Lo mismo, con los nombres en ese idioma.
+     * The same, with the names in that locale.
      *
-     * @param l el idioma; se acepta `null` porque no hay nada que traducir
-     * @return un arreglo vacío
+     * @param l the locale; `null` is accepted because there is nothing to translate
+     * @return an empty array
      */
     public String[] getAvailableFontFamilyNames(Locale l) {
         return new String[0];

@@ -4,20 +4,20 @@ import java.lang.reflect.AccessFlag;
 import java.lang.reflect.AccessFlag.Location;
 import java.util.Set;
 
-// La máscara `access_flags` de una clase, un campo o un método (JVMS §4.1, §4.5, §4.6), con la
-// ubicación que le da sentido a cada bit: el mismo `0x0020` es `ACC_SUPER` en una clase y
-// `ACC_SYNCHRONIZED` en un método, así que sin la ubicación la máscara no se puede leer.
+// The `access_flags` mask of a class, a field or a method (JVMS §4.1, §4.5, §4.6), together with the
+// location that gives each bit its meaning: the same `0x0020` is `ACC_SUPER` on a class and
+// `ACC_SYNCHRONIZED` on a method, so without the location the mask cannot be read.
 public interface AccessFlags extends ClassElement, MethodElement, FieldElement {
 
-    /** La máscara cruda. */
+    /** The raw mask. */
     int flagsMask();
 
-    /** Las banderas puestas, ya interpretadas para esta ubicación. */
+    /** The flags that are set, already interpreted for this location. */
     Set<AccessFlag> flags();
 
-    /** Dónde vive esta máscara. */
+    /** Where this mask lives. */
     Location location();
 
-    /** Si `flag` está puesta. Tira `IllegalArgumentException` si `flag` no vale acá. */
+    /** Whether `flag` is set. It throws `IllegalArgumentException` if `flag` is no good here. */
     boolean has(AccessFlag flag);
 }

@@ -3,70 +3,69 @@ package javax.smartcardio;
 import java.security.Permission;
 
 /**
- * KajiLibrary's javax.smartcardio.CardPermission -- permiso para hablar con un lector.
+ * KajiLibrary's javax.smartcardio.CardPermission -- permission to talk to a reader.
  *
- * <p>El nombre es el del lector, o {@code "*"} para todos. Las acciones son seis:
+ * <p>The name is the reader's, or {@code "*"} for all of them. There are six actions:
  *
  * <ul>
- *   <li>{@code connect}: conectarse a la tarjeta;
- *   <li>{@code reset}: reiniciarla, que se lleva puesto el estado de cualquier otro que la este
- *       usando;
- *   <li>{@code exclusive}: quedarse con el lector para uno solo;
- *   <li>{@code transmitControl}: mandarle ordenes al lector, no a la tarjeta;
- *   <li>{@code getBasicChannel}: usar el canal basico;
- *   <li>{@code openLogicalChannel}: abrir un canal logico nuevo.
+ *   <li>{@code connect}: connect to the card;
+ *   <li>{@code reset}: reset it, which wipes the state of anybody else using it;
+ *   <li>{@code exclusive}: keep the reader for one only;
+ *   <li>{@code transmitControl}: send commands to the reader, not to the card;
+ *   <li>{@code getBasicChannel}: use the basic channel;
+ *   <li>{@code openLogicalChannel}: open a new logical channel.
  * </ul>
  *
- * <p>{@code "*"} tambien vale como accion y son las seis. Nombrarlas todas da lo mismo: la forma
- * canonica que devuelve {@link #getActions} las colapsa en un asterisco.
+ * <p>{@code "*"} is also valid as an action and means all six. Naming them all gives the same: the
+ * canonical form {@link #getActions} returns collapses them into an asterisk.
  *
- * <p>Esa forma canonica ordena las acciones <b>alfabeticamente</b>, no por importancia; dos permisos
- * con las mismas acciones en distinto orden son iguales.
+ * <p>That canonical form orders the actions <b>alphabetically</b>, not by importance; two
+ * permissions with the same actions in a different order are equal.
  */
 public class CardPermission extends Permission {
 
     private static final long serialVersionUID = 7146787880530705613L;
 
-    /** Conectarse a la tarjeta. */
+    /** Connect to the card. */
     private static final int CONNECT = 0x1;
 
-    /** Quedarse con el lector. */
+    /** Keep the reader. */
     private static final int EXCLUSIVE = 0x2;
 
-    /** Usar el canal basico. */
+    /** Use the basic channel. */
     private static final int GET_BASIC_CHANNEL = 0x4;
 
-    /** Abrir un canal logico. */
+    /** Open a logical channel. */
     private static final int OPEN_LOGICAL_CHANNEL = 0x8;
 
-    /** Reiniciar la tarjeta. */
+    /** Reset the card. */
     private static final int RESET = 0x10;
 
-    /** Mandarle ordenes al lector. */
+    /** Send commands to the reader. */
     private static final int TRANSMIT_CONTROL = 0x20;
 
-    /** Las seis juntas. */
+    /** All six together. */
     private static final int ALL = CONNECT | EXCLUSIVE | GET_BASIC_CHANNEL | OPEN_LOGICAL_CHANNEL
         | RESET | TRANSMIT_CONTROL;
 
-    /** Los nombres, en el orden de los bits, que es el alfabetico. */
+    /** The names, in bit order, which is the alphabetical one. */
     private static final String[] ACTION_NAMES = {
         "connect", "exclusive", "getBasicChannel", "openLogicalChannel", "reset", "transmitControl",
     };
 
-    /** Que acciones estan permitidas. */
+    /** Which actions are permitted. */
     private final int mask;
 
-    /** La forma canonica, o null si se construyo sin acciones. */
+    /** The canonical form, or null if it was built without actions. */
     private final String actions;
 
     /**
-     * Ese permiso sobre ese lector.
+     * That permission on that reader.
      *
-     * @param name el nombre del lector, o {@code "*"}
-     * @param actions las acciones separadas por comas, {@code "*"}, o null
-     * @throws NullPointerException si el nombre es null
-     * @throws IllegalArgumentException si las acciones son la cadena vacia o alguna no existe
+     * @param name the reader's name, or {@code "*"}
+     * @param actions the actions separated by commas, {@code "*"}, or null
+     * @throws NullPointerException if the name is null
+     * @throws IllegalArgumentException if the actions are the empty string or one does not exist
      */
     public CardPermission(String name, String actions) {
         super(name);
@@ -77,17 +76,17 @@ public class CardPermission extends Permission {
         this.actions = actions == null ? null : canonicalize(this.mask);
     }
 
-    /** Las acciones en forma canonica, o null si se construyo sin ellas. */
+    /** The actions in canonical form, or null if it was built without them. */
     @Override
     public String getActions() {
         return this.actions;
     }
 
     /**
-     * Si este permiso alcanza para lo que el otro pide.
+     * Whether this permission covers what the other asks for.
      *
-     * <p>Hacen falta las dos cosas: que el nombre sea el mismo o el nuestro sea {@code "*"}, y que
-     * nuestras acciones incluyan a todas las suyas.
+     * <p>Both things are needed: that the name be the same or ours be {@code "*"}, and that our
+     * actions include all of theirs.
      */
     @Override
     public boolean implies(Permission permission) {
@@ -101,7 +100,7 @@ public class CardPermission extends Permission {
         return "*".equals(getName()) || getName().equals(other.getName());
     }
 
-    /** Dos permisos son iguales si nombran al mismo lector y permiten las mismas acciones. */
+    /** Two permissions are equal if they name the same reader and permit the same actions. */
     @Override
     public boolean equals(Object obj) {
         if (this == obj) {
@@ -120,10 +119,11 @@ public class CardPermission extends Permission {
     }
 
     /**
-     * Los bits de esa lista de acciones.
+     * The bits of that list of actions.
      *
-     * <p>No recorta espacios a proposito: {@code " connect "} no es una accion, y aceptarlo callado
-     * dejaria pasar listas mal escritas que despues dan permisos que nadie quiso dar.
+     * <p>It does not trim spaces on purpose: {@code " connect "} is not an action, and accepting it
+     * quietly would let badly written lists through that later give permissions nobody meant to
+     * give.
      */
     private static int getMask(String actions) {
         if (actions == null) {
@@ -149,7 +149,7 @@ public class CardPermission extends Permission {
         return mask;
     }
 
-    /** El bit de esa accion, sin distinguir mayusculas, o cero si no existe. */
+    /** The bit of that action, case-insensitively, or zero if it does not exist. */
     private static int bitFor(String action) {
         int i = 0;
         while (i < ACTION_NAMES.length) {
@@ -161,7 +161,7 @@ public class CardPermission extends Permission {
         return 0;
     }
 
-    /** La forma canonica de esos bits. Ver la nota de la clase. */
+    /** The canonical form of those bits. See the class note. */
     private static String canonicalize(int mask) {
         if (mask == ALL) {
             return "*";

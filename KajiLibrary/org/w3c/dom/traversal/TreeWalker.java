@@ -4,76 +4,76 @@ import org.w3c.dom.DOMException;
 import org.w3c.dom.Node;
 
 /**
- * KajiLibrary's org.w3c.dom.traversal.TreeWalker -- recorre un documento <b>como arbol</b>.
+ * KajiLibrary's org.w3c.dom.traversal.TreeWalker -- it walks a document <b>as a tree</b>.
  *
- * <p>Es la otra mitad de {@code org.w3c.dom.traversal}. Donde {@link NodeIterator} aplana el
- * documento a una lista, este conserva la forma: tiene {@link #parentNode()}, {@link #firstChild()}
- * y hermanos, y presenta un arbol <b>podado</b> -- el que queda despues de aplicar la mascara y el
- * filtro.
+ * <p>It is the other half of {@code org.w3c.dom.traversal}. Where {@link NodeIterator} flattens the
+ * document to a list, this one keeps the shape: it has {@link #parentNode()}, {@link #firstChild()}
+ * and siblings, and presents a <b>pruned</b> tree -- the one left after applying the mask and the
+ * filter.
  *
- * <h2>El arbol que se ve no es el que hay</h2>
+ * <h2>The tree one sees is not the one there is</h2>
  *
- * <p>Y ahi esta lo que sorprende: si un nodo intermedio da {@code FILTER_SKIP}, sus hijos se
- * <b>promueven</b>, asi que {@link #parentNode()} desde uno de ellos devuelve el <b>abuelo</b>. El
- * recorrido es consistente consigo mismo, pero no coincide con {@code Node.getParentNode()} del
- * documento. Quien mezcle los dos se pierde.
+ * <p>And there lies what is surprising: if an intermediate node gives {@code FILTER_SKIP}, its
+ * children are <b>promoted</b>, so {@link #parentNode()} from one of them returns the
+ * <b>grandparent</b>. The walk is consistent with itself, but it does not coincide with the
+ * {@code Node.getParentNode()} of the document. Whoever mixes the two gets lost.
  *
- * <p>Es tambien donde {@code FILTER_REJECT} se distingue de {@code FILTER_SKIP}: aca rechazar poda
- * el subarbol entero, mientras que en un iterador las dos hacen lo mismo.
+ * <p>It is also where {@code FILTER_REJECT} is told apart from {@code FILTER_SKIP}: here rejecting
+ * prunes the whole subtree, while in an iterator the two do the same.
  *
- * <h2>El nodo actual puede estar fuera de la vista</h2>
+ * <h2>The current node may be outside the view</h2>
  *
- * <p>{@link #setCurrentNode} acepta <b>cualquier</b> nodo, incluso uno que el filtro esconde e
- * incluso uno fuera de la raiz. No es un descuido de la especificacion: sirve para reposicionar el
- * recorrido desde un nodo que se obtuvo por otro camino. Los movimientos posteriores si respetan el
- * filtro, asi que desde un nodo escondido se sale a la primera.
+ * <p>{@link #setCurrentNode} accepts <b>any</b> node, even one the filter hides and even one
+ * outside the root. It is not an oversight of the specification: it serves for repositioning the
+ * walk from a node obtained by another road. The later movements do respect the filter, so from a
+ * hidden node one gets out at the first move.
  */
 public interface TreeWalker {
 
-    /** La raiz del recorrido. Ningun movimiento sale de su subarbol. */
+    /** The root of the walk. No movement leaves its subtree. */
     Node getRoot();
 
-    /** La mascara de tipos, un OR de las {@code SHOW_*} de {@link NodeFilter}. */
+    /** The mask of types, an OR of the {@code SHOW_*} of {@link NodeFilter}. */
     int getWhatToShow();
 
-    /** El filtro, o null si no hay. */
+    /** The filter, or null if there is none. */
     NodeFilter getFilter();
 
-    /** Si las referencias a entidad se expanden al recorrer. */
+    /** Whether entity references are expanded while walking. */
     boolean getExpandEntityReferences();
 
-    /** Donde esta parado. Puede ser un nodo que el filtro esconde; ver la nota de la clase. */
+    /** Where it is standing. It may be a node the filter hides; see the note of the class. */
     Node getCurrentNode();
 
     /**
-     * Lo reposiciona.
+     * It repositions it.
      *
-     * @throws DOMException {@code NOT_SUPPORTED_ERR} si es null
+     * @throws DOMException {@code NOT_SUPPORTED_ERR} if it is null
      */
     void setCurrentNode(Node currentNode) throws DOMException;
 
     /**
-     * Sube al padre <b>visible</b>, o null si no hay ninguno adentro de la raiz.
+     * It goes up to the <b>visible</b> parent, or null if there is none inside the root.
      *
-     * <p>Puede no ser el padre real; ver la nota de la clase.
+     * <p>It may not be the real parent; see the note of the class.
      */
     Node parentNode();
 
-    /** El primer hijo visible, o null. */
+    /** The first visible child, or null. */
     Node firstChild();
 
-    /** El ultimo hijo visible, o null. */
+    /** The last visible child, or null. */
     Node lastChild();
 
-    /** El hermano anterior visible, o null. */
+    /** The previous visible sibling, or null. */
     Node previousSibling();
 
-    /** El hermano siguiente visible, o null. */
+    /** The next visible sibling, or null. */
     Node nextSibling();
 
-    /** El anterior en orden de documento dentro del arbol podado, o null. */
+    /** The previous one in document order inside the pruned tree, or null. */
     Node previousNode();
 
-    /** El siguiente en orden de documento dentro del arbol podado, o null. */
+    /** The next one in document order inside the pruned tree, or null. */
     Node nextNode();
 }

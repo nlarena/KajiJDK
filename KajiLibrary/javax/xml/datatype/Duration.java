@@ -9,90 +9,91 @@ import java.util.GregorianCalendar;
 import javax.xml.namespace.QName;
 
 /**
- * KajiLibrary's javax.xml.datatype.Duration -- una cantidad de tiempo escrita como
- * {@code PnYnMnDTnHnMnS}, con la particularidad de que dos de ellas no siempre se pueden comparar.
+ * KajiLibrary's javax.xml.datatype.Duration -- an amount of time written as {@code PnYnMnDTnHnMnS},
+ * with the peculiarity that two of them cannot always be compared.
  *
- * <h2>Por que no implementa {@code Comparable}</h2>
+ * <h2>Why it does not implement {@code Comparable}</h2>
  *
- * <p>Es la decision de diseño que explica casi toda la clase. Una duracion tiene seis campos, y dos
- * de ellos --anios y meses-- miden en una unidad que <b>no tiene un largo fijo</b>. {@code P1M} son
- * 28 dias si empieza el 1 de febrero de 2023 y 31 si empieza el 1 de marzo. Asi que la pregunta
- * "{@code P1M} es mas larga que {@code P30D}?" no tiene una respuesta: tiene dos, segun cuando.
+ * <p>It is the design decision that explains almost the whole class. A duration has six fields, and
+ * two of them --years and months-- measure in a unit that <b>has no fixed length</b>. {@code P1M}
+ * is 28 days if it starts on 1 February 2023 and 31 if it starts on 1 March. So the question "is
+ * {@code P1M} longer than {@code P30D}?" has no answer: it has two, depending on when.
  *
- * <p>Por eso {@link #compare} devuelve cuatro valores y no tres, y el cuarto,
- * {@link DatatypeConstants#INDETERMINATE}, es una respuesta correcta y no un error. Y por eso esta
- * clase no puede implementar {@code Comparable}: no hay orden total que implementar.
+ * <p>That is why {@link #compare} returns four values and not three, and the fourth, {@link
+ * DatatypeConstants#INDETERMINATE}, is a right answer and not an error. And that is why this class
+ * cannot implement {@code Comparable}: there is no total order to implement.
  *
- * <p>La trampa que se cobra sola: <b>{@code !isLongerThan(d)} no quiere decir "es mas corta o
- * igual"</b>. Quiere decir "no es mas larga", que incluye "no se sabe". Un codigo que ordene
- * duraciones con eso da resultados distintos segun el orden en que le lleguen.
+ * <p>The trap that claims its victims: <b>{@code !isLongerThan(d)} does not mean "it is shorter or
+ * equal"</b>. It means "it is not longer", which includes "unknown". Code that sorts durations with
+ * it gives different results depending on the order they arrive in.
  *
- * <p>Y una mas, que sorprende igual: {@link #equals} <b>tampoco</b> es una comparacion campo a
- * campo. Esta definido como {@code compare(otra) == EQUAL}, asi que {@code P1M} y {@code P30D} no
- * son iguales --dan {@code INDETERMINATE}--, pero {@code PT60S} y {@code PT1M} si lo son.
+ * <p>And one more, equally surprising: {@link #equals} is <b>not</b> a field-by-field comparison
+ * either. It is defined as {@code compare(other) == EQUAL}, so {@code P1M} and {@code P30D} are not
+ * equal --they give {@code INDETERMINATE}--, but {@code PT60S} and {@code PT1M} are.
  *
- * <h2>El signo esta afuera de los campos</h2>
+ * <h2>The sign is outside the fields</h2>
  *
- * <p>Una duracion es un signo mas seis magnitudes, y no seis numeros con signo. {@link #getField}
- * devuelve siempre valores no negativos y {@link #getSign} devuelve -1, 0 o 1 aparte. Es lo que dice
- * XML Schema --{@code -P1Y2M} es "menos (un anio y dos meses)", no "menos un anio, mas dos meses"--
- * y hace que {@code P1Y2M} y {@code -P1Y2M} tengan los mismos campos.
+ * <p>A duration is a sign plus six magnitudes, and not six signed numbers. {@link #getField} always
+ * returns non-negative values and {@link #getSign} returns -1, 0 or 1 separately. It is what XML
+ * Schema says --{@code -P1Y2M} is "minus (one year and two months)", not "minus one year, plus two
+ * months"-- and it makes {@code P1Y2M} and {@code -P1Y2M} have the same fields.
  *
- * <h2>Los campos pueden no estar</h2>
+ * <h2>Fields may be absent</h2>
  *
- * <p>{@code P1Y} no es lo mismo que {@code P1Y0M0DT0H0M0S}: el primero tiene un solo campo puesto y
- * el resto ausentes. {@link #getField} devuelve null para un campo ausente e {@link #isSet} lo dice
- * sin ambigüedad; {@link #getYears} y sus hermanos, que devuelven {@code int}, contestan
- * {@link DatatypeConstants#FIELD_UNDEFINED} en ese caso. Que campos esten puestos es tambien lo que
- * decide {@link #getXMLSchemaType}.
+ * <p>{@code P1Y} is not the same as {@code P1Y0M0DT0H0M0S}: the first has a single field set and
+ * the rest absent. {@link #getField} returns null for an absent field and {@link #isSet} says so
+ * unambiguously; {@link #getYears} and its siblings, which return {@code int}, answer {@link
+ * DatatypeConstants#FIELD_UNDEFINED} in that case. Which fields are set is also what decides {@link
+ * #getXMLSchemaType}.
  *
- * <h2>Que hay aca</h2>
+ * <h2>What is here</h2>
  *
- * <p>La clase entera, con la misma division que el original entre lo abstracto y lo concreto: los
- * diez metodos abstractos son los que dependen de como se guarden los campos, y los demas estan
- * escritos <b>en terminos de esos diez</b> --{@code subtract} es {@code add(rhs.negate())},
- * {@code multiply(int)} es {@code multiply(BigDecimal)}, {@code equals} es {@code compare}--, asi
- * que una subclase que implemente los diez recibe los otros catorce funcionando de verdad.
+ * <p>The whole class, with the same division as the original between the abstract and the concrete:
+ * the ten abstract methods are the ones that depend on how the fields are stored, and the rest are
+ * written <b>in terms of those ten</b> --{@code subtract} is {@code add(rhs.negate())}, {@code
+ * multiply(int)} is {@code multiply(BigDecimal)}, {@code equals} is {@code compare}--, so a
+ * subclass that implements the ten gets the other sixteen really working. (The note said fourteen.)
  *
- * <p>Esta biblioteca trae esa subclase: {@link DatatypeFactory#newInstance()} devuelve una fabrica
- * que produce duraciones reales, con parseo de la forma lexica, aritmetica y comparacion. No hace
- * falta ningun parser de XML para eso --una duracion es una cadena con numeros y letras, no un
- * documento-- asi que aca no hay nada recortado.
+ * <p>This library comes with that subclass: {@link DatatypeFactory#newInstance()} returns a factory
+ * that produces real durations, with parsing of the lexical form, arithmetic and comparison. No XML
+ * parser is needed for that --a duration is a string of numbers and letters, not a document-- so
+ * nothing is cut down here.
  */
 public abstract class Duration {
 
     /**
-     * Para las subclases.
+     * For the subclasses.
      *
-     * <p>Publico como en el original, aunque la clase sea abstracta: hay codigo que la extiende
-     * desde otro paquete.
+     * <p>Public as in the original, even though the class is abstract: there is code that extends
+     * it from another package.
      */
     public Duration() {
     }
 
     /**
-     * Cual de los tres tipos de duracion de XML es esta, segun que campos tenga puestos.
+     * Which of the three XML duration types this is, according to which fields it has set.
      *
-     * <p>Las tres formas legales, y no hay mas:
+     * <p>The three legal forms, and there are no more:
      *
      * <ul>
-     *   <li>los seis campos puestos: {@link DatatypeConstants#DURATION}, el {@code xs:duration} de
-     *       XML Schema;
-     *   <li>dias, horas, minutos y segundos, sin anios ni meses:
+     *   <li>the six fields set: {@link DatatypeConstants#DURATION}, XML Schema's {@code
+     *     xs:duration};
+     *   <li>days, hours, minutes and seconds, without years or months:
      *       {@link DatatypeConstants#DURATION_DAYTIME};
-     *   <li>anios y meses, sin nada mas: {@link DatatypeConstants#DURATION_YEARMONTH}.
+     *   <li>years and months, with nothing else: {@link DatatypeConstants#DURATION_YEARMONTH}.
      * </ul>
      *
-     * <p>Las dos ultimas son de XPath 2.0 y existen justamente porque <b>si</b> son ordenables: sin
-     * meses todo se cuenta en segundos, y sin dias todo se cuenta en meses. Es
-     * {@link DatatypeConstants#DURATION} la que puede dar {@link DatatypeConstants#INDETERMINATE}.
+     * <p>The last two are from XPath 2.0 and exist precisely because they <b>can</b> be ordered:
+     * without months everything is counted in seconds, and without days everything is counted in
+     * months. It is {@link DatatypeConstants#DURATION} that can give {@link
+     * DatatypeConstants#INDETERMINATE}.
      *
-     * <p>Cualquier otra combinacion --{@code P1Y1D}, por ejemplo, con anios y dias pero sin
-     * meses-- no es ninguno de los tres tipos y levanta. Es un valor construible pero sin nombre en
-     * el sistema de tipos de XML.
+     * <p>Any other combination --{@code P1Y1D}, for example, with years and days but without
+     * months-- is none of the three types and throws. It is a buildable value but without a name in
+     * the XML type system.
      *
-     * @return uno de los tres nombres calificados
-     * @throws IllegalStateException si los campos puestos no forman ninguno de los tres
+     * @return one of the three qualified names
+     * @throws IllegalStateException if the fields set do not make any of the three
      */
     public QName getXMLSchemaType() {
         boolean hasYears = isSet(DatatypeConstants.YEARS);
@@ -123,76 +124,76 @@ public abstract class Duration {
     }
 
     /**
-     * El signo de la duracion entera: -1, 0 o 1.
+     * The sign of the whole duration: -1, 0 or 1.
      *
-     * <p>Cero solo cuando todos los campos puestos valen cero.
+     * <p>Zero only when all the fields set are zero.
      *
-     * @return -1, 0 o 1
+     * @return -1, 0 or 1
      */
     public abstract int getSign();
 
     /**
-     * Los anios, siempre no negativos.
+     * The years, always non-negative.
      *
-     * @return los anios, o {@link DatatypeConstants#FIELD_UNDEFINED} si el campo no esta
+     * @return the years, or {@link DatatypeConstants#FIELD_UNDEFINED} if the field is not there
      */
     public int getYears() {
         return valueAsInt(DatatypeConstants.YEARS);
     }
 
     /**
-     * Los meses, siempre no negativos.
+     * The months, always non-negative.
      *
-     * @return los meses, o {@link DatatypeConstants#FIELD_UNDEFINED} si el campo no esta
+     * @return the months, or {@link DatatypeConstants#FIELD_UNDEFINED} if the field is not there
      */
     public int getMonths() {
         return valueAsInt(DatatypeConstants.MONTHS);
     }
 
     /**
-     * Los dias, siempre no negativos.
+     * The days, always non-negative.
      *
-     * @return los dias, o {@link DatatypeConstants#FIELD_UNDEFINED} si el campo no esta
+     * @return the days, or {@link DatatypeConstants#FIELD_UNDEFINED} if the field is not there
      */
     public int getDays() {
         return valueAsInt(DatatypeConstants.DAYS);
     }
 
     /**
-     * Las horas, siempre no negativas.
+     * The hours, always non-negative.
      *
-     * @return las horas, o {@link DatatypeConstants#FIELD_UNDEFINED} si el campo no esta
+     * @return the hours, or {@link DatatypeConstants#FIELD_UNDEFINED} if the field is not there
      */
     public int getHours() {
         return valueAsInt(DatatypeConstants.HOURS);
     }
 
     /**
-     * Los minutos, siempre no negativos.
+     * The minutes, always non-negative.
      *
-     * @return los minutos, o {@link DatatypeConstants#FIELD_UNDEFINED} si el campo no esta
+     * @return the minutes, or {@link DatatypeConstants#FIELD_UNDEFINED} if the field is not there
      */
     public int getMinutes() {
         return valueAsInt(DatatypeConstants.MINUTES);
     }
 
     /**
-     * Los segundos <b>enteros</b>: la parte fraccionaria se pierde aca.
+     * The <b>whole</b> seconds: the fractional part is lost here.
      *
-     * <p>{@code PT1.5S} da 1. Para no perderla hay que pedir
-     * {@code getField(DatatypeConstants.SECONDS)}, que devuelve el {@link BigDecimal} completo.
+     * <p>{@code PT1.5S} gives 1. To keep it, one has to ask for {@code
+     * getField(DatatypeConstants.SECONDS)}, which returns the complete {@link BigDecimal}.
      *
-     * @return los segundos, o {@link DatatypeConstants#FIELD_UNDEFINED} si el campo no esta
+     * @return the seconds, or {@link DatatypeConstants#FIELD_UNDEFINED} if the field is not there
      */
     public int getSeconds() {
         return valueAsInt(DatatypeConstants.SECONDS);
     }
 
     /**
-     * Un campo como {@code int}, con {@link DatatypeConstants#FIELD_UNDEFINED} para el ausente.
+     * A field as an {@code int}, with {@link DatatypeConstants#FIELD_UNDEFINED} for the absent one.
      *
-     * @param campo cual
-     * @return el valor entero
+     * @param fieldId which
+     * @return the integer value
      */
     private int valueAsInt(javax.xml.datatype.DatatypeConstants.Field fieldId) {
         Number n = getField(fieldId);
@@ -203,24 +204,24 @@ public abstract class Duration {
     }
 
     /**
-     * Cuantos milisegundos dura esta duracion <b>si empieza en este instante</b>.
+     * How many milliseconds this duration lasts <b>if it starts at this instant</b>.
      *
-     * <p>Que haga falta un instante de partida es toda la historia de esta clase en una firma: sin
-     * el, la pregunta no tiene respuesta. La cuenta es literal --se copia el calendario, se le suma
-     * la duracion, y se restan los dos instantes--, asi que el resultado sale bien tambien cuando
-     * hay cambio de horario de verano en el medio.
+     * <p>That a starting instant is needed is the whole story of this class in one signature:
+     * without it, the question has no answer. The calculation is literal --the calendar is copied,
+     * the duration is added to it, and the two instants are subtracted--, so the result also comes
+     * out right when there is a daylight saving change in between.
      *
-     * <p>El calendario que se pasa <b>no</b> se toca: se trabaja sobre una copia.
+     * <p>The calendar passed is <b>not</b> touched: the work is done on a copy.
      *
-     * <p>La copia se arma con el instante y la zona horaria del original y no con {@code clone()},
-     * que es lo que hace el JDK: el {@link Calendar} de esta biblioteca todavia no es
-     * {@code Cloneable}. La diferencia se nota en un solo caso --un {@code Calendar} de otra
-     * subclase que no sea gregoriana, cuyo tipo la copia pierde--; para todo lo que esta API
-     * modela, que es el calendario gregoriano, el resultado es el mismo.
+     * <p>The copy is built with the original's instant and time zone and not with {@code clone()},
+     * which is what the JDK does. The difference shows in a single case --a {@code Calendar} of
+     * another subclass that is not Gregorian, whose type the copy loses--; for everything this API
+     * models, which is the Gregorian calendar, the result is the same. (The note gave as the reason
+     * that this library's {@link Calendar} is not {@code Cloneable} yet; it is now.)
      *
-     * @param startInstant el instante de partida; se usan tambien su zona horaria y su calendario
-     * @return los milisegundos, con signo
-     * @throws NullPointerException si {@code startInstant} es null
+     * @param startInstant the starting instant; its time zone and calendar are also used
+     * @return the milliseconds, signed
+     * @throws NullPointerException if {@code startInstant} is null
      */
     public long getTimeInMillis(Calendar startInstant) {
         Calendar copy = new GregorianCalendar();
@@ -231,15 +232,15 @@ public abstract class Duration {
     }
 
     /**
-     * Lo mismo, partiendo de una {@link Date}.
+     * The same, starting from a {@link Date}.
      *
-     * <p>Usa un {@link GregorianCalendar} con la zona horaria por omision, porque una {@code Date}
-     * no trae ninguna. Si eso importa --y con meses de por medio importa-- conviene la version que
-     * toma un {@link Calendar}.
+     * <p>It uses a {@link GregorianCalendar} with the default time zone, because a {@code Date}
+     * brings none. If that matters --and with months involved it does-- the version that takes a
+     * {@link Calendar} is preferable.
      *
-     * @param startInstant el instante de partida
-     * @return los milisegundos, con signo
-     * @throws NullPointerException si {@code startInstant} es null
+     * @param startInstant the starting instant
+     * @return the milliseconds, signed
+     * @throws NullPointerException if {@code startInstant} is null
      */
     public long getTimeInMillis(Date startInstant) {
         Calendar cal = new GregorianCalendar();
@@ -249,63 +250,65 @@ public abstract class Duration {
     }
 
     /**
-     * El valor de un campo, o null si el campo no esta puesto.
+     * The value of a field, or null if the field is not set.
      *
-     * <p>El tipo del resultado depende del campo: {@link BigInteger} para los cinco primeros y
-     * {@link BigDecimal} para {@link DatatypeConstants#SECONDS}, que es el unico fraccionario.
-     * Siempre no negativo: el signo esta en {@link #getSign}.
+     * <p>The type of the result depends on the field: {@link BigInteger} for the first five and
+     * {@link BigDecimal} for {@link DatatypeConstants#SECONDS}, which is the only fractional one.
+     * Always non-negative: the sign is in {@link #getSign}.
      *
-     * @param field cual campo
-     * @return el valor, o null
-     * @throws NullPointerException si {@code field} es null
+     * @param field which field
+     * @return the value, or null
+     * @throws NullPointerException if {@code field} is null
      */
     public abstract Number getField(javax.xml.datatype.DatatypeConstants.Field field);
 
     /**
-     * Si el campo esta puesto.
+     * Whether the field is set.
      *
-     * <p>Distinto de "vale cero": {@code P0Y} tiene los anios puestos en cero, y {@code P1D} los
-     * tiene ausentes.
+     * <p>Different from "is zero": {@code P0Y} has the years set to zero, and {@code P1D} has them
+     * absent.
      *
-     * @param field cual campo
-     * @return true si esta puesto
-     * @throws NullPointerException si {@code field} es null
+     * @param field which field
+     * @return true if it is set
+     * @throws NullPointerException if {@code field} is null
      */
     public abstract boolean isSet(javax.xml.datatype.DatatypeConstants.Field field);
 
     /**
-     * La suma de las dos duraciones.
+     * The sum of the two durations.
      *
-     * <p>No siempre existe, y el motivo es el de siempre: sumar {@code P1M} y {@code -P30D} daria
-     * una duracion cuyo signo depende del mes, y no hay forma de escribir eso. En ese caso levanta.
+     * <p>It does not always exist, and the reason is the usual one: adding {@code P1M} and {@code
+     * -P30D} would give a duration whose sign depends on the month, and there is no way of writing
+     * that. In that case it throws.
      *
-     * @param rhs la otra; no puede ser null
-     * @return la suma
-     * @throws IllegalStateException si el resultado tendria campos de los dos signos
-     * @throws NullPointerException si {@code rhs} es null
+     * @param rhs the other; cannot be null
+     * @return the sum
+     * @throws IllegalStateException if the result would have fields of both signs
+     * @throws NullPointerException if {@code rhs} is null
      */
     public abstract Duration add(Duration rhs);
 
     /**
-     * Le suma esta duracion al calendario, en el lugar.
+     * Adds this duration to the calendar, in place.
      *
-     * <p>El orden importa y esta fijado por la especificacion: primero anios, despues meses, dias,
-     * horas, minutos y segundos. Sumar un mes y despues un dia no da lo mismo que al reves cuando se
-     * empieza el 31 de enero, asi que un orden fijo es lo unico que hace la operacion reproducible.
+     * <p>The order matters and is fixed by the specification: first years, then months, days,
+     * hours, minutes and seconds. Adding a month and then a day does not give the same as the other
+     * way round when starting on 31 January, so a fixed order is the only thing that makes the
+     * operation reproducible.
      *
-     * @param calendar el calendario a modificar; no puede ser null
-     * @throws NullPointerException si {@code calendar} es null
+     * @param calendar the calendar to modify; cannot be null
+     * @throws NullPointerException if {@code calendar} is null
      */
     public abstract void addTo(Calendar calendar);
 
     /**
-     * Le suma esta duracion a la fecha, en el lugar.
+     * Adds this duration to the date, in place.
      *
-     * <p>Pasa por un {@link GregorianCalendar} con la zona horaria por omision, con la misma
-     * salvedad que {@link #getTimeInMillis(Date)}.
+     * <p>It goes through a {@link GregorianCalendar} with the default time zone, with the same
+     * caveat as {@link #getTimeInMillis(Date)}.
      *
-     * @param date la fecha a modificar; no puede ser null
-     * @throws NullPointerException si {@code date} es null
+     * @param date the date to modify; cannot be null
+     * @throws NullPointerException if {@code date} is null
      */
     public void addTo(Date date) {
         Calendar cal = new GregorianCalendar();
@@ -315,121 +318,119 @@ public abstract class Duration {
     }
 
     /**
-     * La resta, que es {@code add(rhs.negate())} y nada mas.
+     * The subtraction, which is {@code add(rhs.negate())} and nothing more.
      *
-     * @param rhs la que se resta; no puede ser null
-     * @return la diferencia
-     * @throws IllegalStateException si la suma equivalente no se puede representar
-     * @throws NullPointerException si {@code rhs} es null
+     * @param rhs the one subtracted; cannot be null
+     * @return the difference
+     * @throws IllegalStateException if the equivalent sum cannot be represented
+     * @throws NullPointerException if {@code rhs} is null
      */
     public Duration subtract(Duration rhs) {
         return add(rhs.negate());
     }
 
     /**
-     * La duracion multiplicada por un entero.
+     * The duration multiplied by an integer.
      *
-     * @param factor por cuanto
-     * @return el producto
+     * @param factor by how much
+     * @return the product
      */
     public Duration multiply(int factor) {
         return multiply(BigDecimal.valueOf(factor));
     }
 
     /**
-     * La duracion multiplicada por un decimal.
+     * The duration multiplied by a decimal.
      *
-     * <p>La parte fraccionaria que quede en un campo no fraccionario <b>baja al campo siguiente</b>:
-     * medio anio son seis meses, medio dia son doce horas. Con una excepcion que sorprende y que es
-     * la de siempre: de los meses no se puede bajar a los dias, porque no hay una equivalencia fija.
-     * Multiplicar {@code P1M} por {@code 0.5} levanta.
+     * <p>The fractional part left in a non-fractional field <b>goes down to the next field</b>:
+     * half a year is six months, half a day is twelve hours. With one exception that surprises and
+     * that is the usual one: from months one cannot go down to days, because there is no fixed
+     * equivalence. Multiplying {@code P1M} by {@code 0.5} throws.
      *
-     * @param factor por cuanto; no puede ser null
-     * @return el producto
-     * @throws IllegalStateException si quedaria una fraccion de mes
-     * @throws NullPointerException si {@code factor} es null
+     * @param factor by how much; cannot be null
+     * @return the product
+     * @throws IllegalStateException if a fraction of a month would be left
+     * @throws NullPointerException if {@code factor} is null
      */
     public abstract Duration multiply(BigDecimal factor);
 
     /**
-     * La misma duracion con el signo cambiado; los campos no se tocan.
+     * The same duration with the sign changed; the fields are not touched.
      *
-     * @return la opuesta
+     * @return the opposite
      */
     public abstract Duration negate();
 
     /**
-     * La misma duracion con los anios y meses convertidos a dias, usando este calendario de
-     * referencia.
+     * The same duration with the years and months converted to days, using this reference calendar.
      *
-     * <p>Es la operacion que <b>saca</b> la ambigüedad: fijado el punto de partida, un mes ya tiene
-     * una cantidad de dias, asi que el resultado es una duracion sin meses --y por lo tanto
-     * comparable con cualquier otra igual--.
+     * <p>It is the operation that <b>removes</b> the ambiguity: once the starting point is fixed, a
+     * month has a number of days, so the result is a duration without months --and therefore
+     * comparable with any other like it--.
      *
-     * @param startTimeInstant el punto de referencia; no puede ser null
-     * @return la duracion normalizada
-     * @throws NullPointerException si {@code startTimeInstant} es null
+     * @param startTimeInstant the reference point; cannot be null
+     * @return the normalized duration
+     * @throws NullPointerException if {@code startTimeInstant} is null
      */
     public abstract Duration normalizeWith(Calendar startTimeInstant);
 
     /**
-     * Compara las dos duraciones, y puede contestar que no se pueden comparar.
+     * Compares the two durations, and may answer that they cannot be compared.
      *
-     * <p>Los cuatro resultados son {@link DatatypeConstants#LESSER},
-     * {@link DatatypeConstants#EQUAL}, {@link DatatypeConstants#GREATER} y
-     * {@link DatatypeConstants#INDETERMINATE}. El ultimo no es un error: ver el encabezado de la
-     * clase.
+     * <p>The four results are {@link DatatypeConstants#LESSER}, {@link DatatypeConstants#EQUAL},
+     * {@link DatatypeConstants#GREATER} and {@link DatatypeConstants#INDETERMINATE}. The last is
+     * not an error: see the class header.
      *
-     * <p>La definicion de la especificacion es indirecta y vale conocerla, porque explica por que
-     * hay casos indeterminados y otros que no: se le suman las dos duraciones a cuatro instantes
-     * elegidos --1696-09-01, 1697-02-01, 1903-03-01 y 1903-07-01, que cubren todas las
-     * combinaciones de largo de febrero y de mes de 30 y 31 dias-- y, si las cuatro comparaciones
-     * coinciden, ese es el resultado; si no, es indeterminado.
+     * <p>The specification's definition is indirect and worth knowing, because it explains why some
+     * cases are indeterminate and others are not: both durations are added to four chosen instants
+     * --1696-09-01, 1697-02-01, 1903-03-01 and 1903-07-01, which cover all the combinations of
+     * February length and months of 30 and 31 days-- and, if the four comparisons agree, that is
+     * the result; if not, it is indeterminate.
      *
-     * @param duration la otra; no puede ser null
-     * @return uno de los cuatro
-     * @throws NullPointerException si {@code duration} es null
+     * @param duration the other; cannot be null
+     * @return one of the four
+     * @throws NullPointerException if {@code duration} is null
      */
     public abstract int compare(Duration duration);
 
     /**
-     * Si esta duracion es estrictamente mas larga que la otra.
+     * Whether this duration is strictly longer than the other.
      *
-     * <p><b>Cuidado</b>: false no quiere decir "es mas corta o igual". Con
-     * {@link DatatypeConstants#INDETERMINATE} las dos direcciones dan false a la vez.
+     * <p><b>Careful</b>: false does not mean "it is shorter or equal". With
+     * {@link DatatypeConstants#INDETERMINATE} both directions give false at the same time.
      *
-     * @param duration la otra; no puede ser null
-     * @return true solo si la comparacion dio {@link DatatypeConstants#GREATER}
-     * @throws NullPointerException si {@code duration} es null
+     * @param duration the other; cannot be null
+     * @return true only if the comparison gave {@link DatatypeConstants#GREATER}
+     * @throws NullPointerException if {@code duration} is null
      */
     public boolean isLongerThan(Duration duration) {
         return compare(duration) == DatatypeConstants.GREATER;
     }
 
     /**
-     * Si esta duracion es estrictamente mas corta que la otra, con la misma salvedad.
+     * Whether this duration is strictly shorter than the other, with the same caveat.
      *
-     * @param duration la otra; no puede ser null
-     * @return true solo si la comparacion dio {@link DatatypeConstants#LESSER}
-     * @throws NullPointerException si {@code duration} es null
+     * @param duration the other; cannot be null
+     * @return true only if the comparison gave {@link DatatypeConstants#LESSER}
+     * @throws NullPointerException if {@code duration} is null
      */
     public boolean isShorterThan(Duration duration) {
         return compare(duration) == DatatypeConstants.LESSER;
     }
 
     /**
-     * Dos duraciones son iguales si {@link #compare} dice {@link DatatypeConstants#EQUAL}.
+     * Two durations are equal if {@link #compare} says {@link DatatypeConstants#EQUAL}.
      *
-     * <p>No es una comparacion campo a campo, y las dos consecuencias van en direcciones opuestas:
-     * {@code PT60S} y {@code PT1M} <b>son</b> iguales aunque tengan campos distintos, y {@code P1M}
-     * y {@code P30D} <b>no</b> lo son porque la comparacion da indeterminado.
+     * <p>It is not a field-by-field comparison, and the two consequences go in opposite directions:
+     * {@code PT60S} and {@code PT1M} <b>are</b> equal although they have different fields, and
+     * {@code P1M} and {@code P30D} are <b>not</b> because the comparison gives indeterminate.
      *
-     * <p>Lo que queda incomodo, y esta asi en el original: {@code equals} no es transitivo en
-     * presencia de duraciones indeterminadas, asi que un {@code HashSet} de duraciones con meses no
-     * se comporta como uno espera. Es el precio de que el tipo no tenga orden total.
+     * <p>What remains awkward, and is like this in the original: {@code equals} is not transitive
+     * in the presence of indeterminate durations, so a {@code HashSet} of durations with months
+     * does not behave as one expects. It is the price of the type having no total order.
      *
-     * @param duration el otro objeto
-     * @return true si es una {@code Duration} que compara igual
+     * @param duration the other object
+     * @return true if it is a {@code Duration} that compares equal
      */
     public boolean equals(Object duration) {
         if (duration == this) {
@@ -442,23 +443,25 @@ public abstract class Duration {
     }
 
     /**
-     * El hash, que la subclase tiene que dar.
+     * The hash, which the subclass has to give.
      *
-     * <p>Es abstracto justamente porque {@link #equals} esta definido en terminos de
-     * {@link #compare}: no hay una formula sobre los campos que sea coherente con eso, y la
-     * subclase es la unica que sabe como normalizar antes de hashear.
+     * <p>It is abstract precisely because {@link #equals} is defined in terms of {@link #compare}:
+     * there is no formula over the fields that is coherent with that, and the subclass is the only
+     * one that knows how to normalize before hashing.
      *
-     * @return el hash
+     * @return the hash
      */
     public abstract int hashCode();
 
     /**
-     * La duracion en la forma lexica de XML Schema: {@code PnYnMnDTnHnMnS}.
+     * The duration in XML Schema's lexical form: {@code PnYnMnDTnHnMnS}.
      *
-     * <p>Solo salen los campos puestos, la {@code T} aparece unicamente si hay algun campo de
-     * tiempo, y el signo va adelante de la {@code P}. Los segundos se escriben sin ceros de mas.
+     * <p>Only the fields that are set come out, the {@code T} appears only if there is some time
+     * field, and the sign goes before the {@code P}. The seconds are written with the scale they
+     * carry --{@code PT1.50S} stays {@code PT1.50S}, as in JDK 25-- and without scientific
+     * notation. (The note said without extra zeros.)
      *
-     * @return la representacion lexica
+     * @return the lexical representation
      */
     public String toString() {
         StringBuilder buf = new StringBuilder();
@@ -499,14 +502,14 @@ public abstract class Duration {
     }
 
     /**
-     * Un {@link BigDecimal} no negativo escrito sin notacion cientifica.
+     * A non-negative {@link BigDecimal} written without scientific notation.
      *
-     * <p>Hace falta escribirlo a mano porque {@code toString()} de {@code BigDecimal} puede sacar
-     * un exponente --{@code 1E+2}-- y eso no es una forma lexica valida de XML Schema. Se arma
-     * insertando el punto en el valor sin escala, que es la definicion misma de la escala.
+     * <p>It has to be written by hand because {@code BigDecimal}'s {@code toString()} can produce
+     * an exponent --{@code 1E+2}-- and that is not a valid XML Schema lexical form. It is built by
+     * inserting the point into the unscaled value, which is the very definition of the scale.
      *
-     * @param bd el numero, que aca siempre viene no negativo
-     * @return el texto
+     * @param bd the number, which here always comes non-negative
+     * @return the text
      */
     private String asText(BigDecimal bd) {
         String ints = bd.unscaledValue().toString();

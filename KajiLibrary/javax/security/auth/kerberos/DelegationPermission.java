@@ -7,54 +7,54 @@ import java.security.PermissionCollection;
 import java.util.Objects;
 
 /**
- * KajiLibrary's javax.security.auth.kerberos.DelegationPermission -- permiso para delegar
- * credenciales.
+ * KajiLibrary's javax.security.auth.kerberos.DelegationPermission -- permission to delegate
+ * credentials.
  *
- * <p>Es el permiso de que un servicio use el ticket de un cliente para hablar con <b>otro</b>
- * servicio en su nombre. El nombre lleva los dos principales entre comillas, separados por espacio:
- * {@code "\"host/web@REINO\" \"krbtgt/REINO@REINO\""} es "el servicio web puede pedir tickets
- * en nombre del cliente". El primero es el subordinado --quien delega-- y el segundo el destino.
+ * <p>It is the permission for a service to use a client's ticket to talk to <b>another</b> service
+ * on its behalf. The name carries the two principals in quotes, separated by a space: {@code
+ * "\"host/web@REALM\" \"krbtgt/REALM@REALM\""} is "the web service may ask for tickets on the
+ * client's behalf". The first is the subordinate --who delegates-- and the second the target.
  *
- * <p>El formato es estricto: las dos partes van entre comillas, con al menos un espacio entre ellas y
- * nada alrededor. Cada error tiene su mensaje --{@code improperly quoted}, {@code not enough input},
- * {@code extra input}--, porque el nombre viene de un archivo de politica escrito a mano y el que lo
- * escribio tiene que poder ver que le falto.
+ * <p>The format is strict: both parts go in quotes, with at least one space between them and
+ * nothing around. Each error has its own message --{@code improperly quoted}, {@code not enough
+ * input}, {@code extra input}--, because the name comes from a hand-written policy file and whoever
+ * wrote it has to be able to see what they left out.
  *
- * <p>No hay acciones. Dos permisos son iguales si sus dos principales coinciden; el espacio entre
- * las comillas no cuenta.
+ * <p>There are no actions. Two permissions are equal if their two principals match; the space
+ * between the quotes does not count.
  *
- * @deprecated el JDK lo marca para remocion junto con el gestor de seguridad; sigue aca porque el
- *     codigo que lo instancia tiene que poder compilar y correr
+ * @deprecated the JDK marks it for removal together with the security manager; it is still here
+ *     because code that instantiates it has to be able to compile and run
  */
 @Deprecated(since = "17", forRemoval = true)
 public final class DelegationPermission extends BasicPermission implements Serializable {
 
     private static final long serialVersionUID = 883133252142523922L;
 
-    /** Quien delega. */
+    /** Who delegates. */
     private transient String subordinate;
 
-    /** A quien. */
+    /** To whom. */
     private transient String service;
 
     /**
-     * Con ese nombre. Ver la nota de la clase sobre el formato.
+     * With that name. See the class note on the format.
      *
-     * @throws NullPointerException si es null
-     * @throws IllegalArgumentException si esta vacio o mal formado
+     * @throws NullPointerException if it is null
+     * @throws IllegalArgumentException if it is empty or malformed
      */
     public DelegationPermission(String principals) {
         super(principals);
         init(principals);
     }
 
-    /** Idem; las acciones se ignoran. */
+    /** Likewise; the actions are ignored. */
     public DelegationPermission(String principals, String actions) {
         super(principals, actions);
         init(principals);
     }
 
-    /** Separa los dos principales. Ver la nota de la clase. */
+    /** Splits the two principals. See the class note. */
     private void init(String target) {
         if (target == null) {
             throw new NullPointerException("name can't be null");
@@ -106,7 +106,7 @@ public final class DelegationPermission extends BasicPermission implements Seria
         }
     }
 
-    /** Si es el mismo par de principales. No hay comodines. */
+    /** Whether it is the same pair of principals. There are no wildcards. */
     @Override
     public boolean implies(Permission p) {
         if (!(p instanceof DelegationPermission)) {
@@ -116,7 +116,7 @@ public final class DelegationPermission extends BasicPermission implements Seria
         return this.subordinate.equals(that.subordinate) && this.service.equals(that.service);
     }
 
-    /** Iguales si sus dos principales coinciden. */
+    /** Equal if their two principals match. */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -133,13 +133,13 @@ public final class DelegationPermission extends BasicPermission implements Seria
         return Objects.hash(this.subordinate, this.service);
     }
 
-    /** Una coleccion de estos. */
+    /** A collection of these. */
     @Override
     public PermissionCollection newPermissionCollection() {
         return new KrbDelegationPermissionCollection();
     }
 
-    /** Al leerse de un flujo se vuelven a separar los principales: no se serializan. */
+    /** When read from a stream the principals are split again: they are not serialized. */
     private void readObject(java.io.ObjectInputStream in)
             throws java.io.IOException, ClassNotFoundException {
         in.defaultReadObject();

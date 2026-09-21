@@ -1,8 +1,8 @@
 package com.sun.source.doctree;
 
 /**
- * Un comentario HTML dentro del javadoc. Se conserva en el arbol en vez de tirarse:
- * una herramienta puede querer verlo, y borrarlo aca lo haria irrecuperable.
+ * An HTML comment inside the javadoc. It is kept in the tree instead of being thrown
+ * away: a tool may want to see it, and deleting it here would make it unrecoverable.
  */
 public interface CommentTree extends DocTree {
 

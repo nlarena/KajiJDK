@@ -4,26 +4,27 @@ import java.awt.Graphics;
 import java.awt.Shape;
 
 /**
- * Un resaltador que pinta <em>debajo</em> del texto, vista por vista.
+ * A highlighter that paints <em>underneath</em> the text, view by view.
  *
- * <p>La diferencia con {@link Highlighter} a secas esta en el orden: el de arriba pinta todo
- * despues del texto, asi que un fondo opaco lo taparia; este se mete en el dibujado de cada vista
- * y pinta antes. Es lo que permite que la seleccion tenga fondo solido y el texto se siga leyendo.
+ * <p>The difference from plain {@link Highlighter} is the order: the one above paints everything
+ * after the text, so an opaque background would cover it; this one gets into each view's drawing
+ * and paints before. It is what allows the selection to have a solid background and the text to
+ * go on being readable.
  */
 public abstract class LayeredHighlighter implements Highlighter {
 
     protected LayeredHighlighter() {
     }
 
-    /** Pinta los resaltados de ese tramo dentro de esa vista, antes de su texto. */
+    /** It paints that stretch's highlights inside that view, before its text. */
     public abstract void paintLayeredHighlights(Graphics g, int p0, int p1, Shape viewBounds,
             JTextComponent editor, View view);
 
     /**
-     * Un pintor que trabaja por capas.
+     * A painter that works by layers.
      *
-     * <p>Devuelve la region que pinto, que es lo que el componente usa para saber que repintar
-     * despues; un pintor comun no lo sabe.
+     * <p>It returns the region it painted, which is what the component uses to know what to repaint
+     * afterwards; an ordinary painter does not know it.
      */
     public abstract static class LayerPainter implements Highlighter.HighlightPainter {
 

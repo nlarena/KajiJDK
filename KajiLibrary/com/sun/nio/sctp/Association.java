@@ -1,22 +1,22 @@
 package com.sun.nio.sctp;
 
 /**
- * Una asociacion SCTP: la relacion entre dos puntas, con sus flujos.
+ * An SCTP association: the relation between two ends, with its streams.
  *
- * <h2>Que aporta SCTP sobre TCP, y por que hace falta este objeto</h2>
+ * <h2>What SCTP contributes over TCP, and why this object is needed</h2>
  *
- * <p>Una conexion TCP es un unico flujo de bytes, y eso trae el bloqueo de cabecera: un segmento
- * perdido frena todo lo que venia atras, aunque fuera independiente. Una asociacion SCTP lleva
- * <strong>varios flujos</strong> en paralelo, cada uno con su orden propio, asi que una perdida en
- * uno no detiene a los otros.
+ * <p>A TCP connection is a single stream of bytes, and that brings head-of-line blocking: a
+ * lost segment holds up everything that came behind it, even though it was independent. An
+ * SCTP association carries <strong>several streams</strong> in parallel, each one with an order
+ * of its own, so a loss in one does not stop the others.
  *
- * <p>Esa es la razon de que exista este objeto y de que no alcance con un descriptor: una asociacion
- * tiene identidad ({@link #associationID}) y una capacidad negociada de cuantos flujos admite en
- * cada sentido, y esos numeros hacen falta para saber que {@code streamNumber} es valido en un
- * {@link MessageInfo}.
+ * <p>That is the reason this object exists and that a descriptor is not enough: an association
+ * has an identity ({@link #associationID}) and a negotiated capacity of how many streams it
+ * admits in each direction, and those numbers are needed in order to know which
+ * {@code streamNumber} is valid in a {@link MessageInfo}.
  *
- * <p>Los maximos son <strong>asimetricos</strong> a proposito: cada punta declara cuantos flujos
- * acepta recibir, y las dos declaraciones no tienen por que coincidir.
+ * <p>The maxima are <strong>asymmetric</strong> on purpose: each end declares how many streams
+ * it accepts to receive, and the two declarations do not have to agree.
  */
 public class Association {
 
@@ -25,11 +25,11 @@ public class Association {
     private final int maxOutStreams;
 
     /**
-     * Para las implementaciones de SCTP.
+     * For the SCTP implementations.
      *
-     * <p>{@code protected} porque una asociacion la crea la pila del protocolo cuando se negocia,
-     * no el codigo de usuario: fabricar una a mano daria un objeto que no describe ninguna
-     * conexion real.
+     * <p>{@code protected} because an association is created by the protocol's stack when it is
+     * negotiated, not by user code: making one by hand would give an object that describes no
+     * real connection.
      */
     protected Association(int associationID, int maxInStreams, int maxOutStreams) {
         this.associationID = associationID;
@@ -37,17 +37,17 @@ public class Association {
         this.maxOutStreams = maxOutStreams;
     }
 
-    /** El identificador que le dio la pila local. Unico mientras la asociacion viva. */
+    /** The identifier the local stack gave it. Unique while the association lives. */
     public final int associationID() {
         return this.associationID;
     }
 
-    /** Cuantos flujos entrantes admite. */
+    /** How many incoming streams it admits. */
     public final int maxInboundStreams() {
         return this.maxInStreams;
     }
 
-    /** Cuantos flujos salientes admite. */
+    /** How many outgoing streams it admits. */
     public final int maxOutboundStreams() {
         return this.maxOutStreams;
     }

@@ -8,87 +8,88 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-// KajiLibrary's org.xml.sax.helpers.NamespaceSupport -- la pila que convierte `foo:bar` en un par
-// (URI, nombre local).
+// KajiLibrary's org.xml.sax.helpers.NamespaceSupport -- the stack that turns `foo:bar` into a
+// (URI, local name) pair.
 //
-// Los espacios de nombres de XML tienen alcance por elemento: un prefijo declarado en <a> se ve
-// adentro de <a> y desaparece despues de </a>, y un elemento interno puede redeclarar el mismo
-// prefijo para que signifique otra cosa. Asi que el estado es una pila de contextos, uno por
-// elemento abierto, y quien llama es el que la maneja:
+// XML namespaces have per-element scope: a prefix declared in <a> is seen inside <a> and
+// disappears after </a>, and an inner element can redeclare the same prefix to mean something
+// else. So the state is a stack of contexts, one per open element, and the caller is the one who
+// drives it:
 //
-//     support.pushContext();                       // entrando a un elemento
-//     por cada atributo xmlns:p="u":
+//     support.pushContext();                       // entering an element
+//     for each attribute xmlns:p="u":
 //         support.declarePrefix("p", "u");
-//     support.processName(qName, parts, false);    // el nombre del elemento mismo
-//     ... hijos ...
-//     support.popContext();                        // saliendo de el
+//     support.processName(qName, parts, false);    // the name of the element itself
+//     ... children ...
+//     support.popContext();                        // leaving it
 //
-// El orden importa: cada declarePrefix de un elemento tiene que pasar despues de su pushContext y
-// antes del primer processName, porque processName memoriza sus respuestas por contexto y una
-// declaracion que llega mas tarde puede no ser vista por los nombres ya resueltos. Nada obliga a
-// esto -- el JDK llego a tener una bandera declsOK que tiraba IllegalStateException y la dejo
-// comentada en el fuente que distribuye, asi que quien declara tarde simplemente recibe respuestas
-// viejas. Esta biblioteca no vuelve a agregar el chequeo: tiraria donde el JDK devuelve, que es
-// una mentira mas ruidosa que el silencio.
+// The order matters: each declarePrefix of an element has to happen after its pushContext and
+// before the first processName, because processName memoises its answers per context and a
+// declaration that arrives later may not be seen by the names already resolved. Nothing enforces
+// this -- the JDK once had a declsOK flag that threw IllegalStateException and left it commented
+// out in the source it ships, so whoever declares late simply receives stale answers. This library
+// does not add the check back: it would throw where the JDK returns, which is a louder lie than the
+// silence.
 //
-// Las reglas faciles de errar, todas respetadas aca:
+// The rules that are easy to get wrong, all respected here:
 //
-//   - El prefijo por omision ("") aplica *solo a elementos*. Un atributo sin prefijo no esta en
-//     ningun espacio de nombres, nunca en el de omision, asi que processName("id", parts, true)
-//     da un URI de "" incluso con un espacio de nombres por omision vigente. Esta es la lectura
-//     equivocada mas comun de la norma.
-//   - "xml" viene predeclarado, permanentemente, a http://www.w3.org/XML/1998/namespace. Queda
-//     ligado antes de que quien llama tenga oportunidad de hablar, y reset() lo repone.
-//   - declarePrefix rechaza "xml" y "xmlns" devolviendo false. No tira: rechazarlos es un
-//     resultado normal, y se espera que un parser trate ese false como "eso no era una
-//     declaracion de espacio de nombres".
-//   - Un prefijo sin ligar no es un error aca, es un null que devuelve processName. Decidir que
-//     hacer con eso es asunto de quien llama.
+//   - The default prefix ("") applies *only to elements*. An attribute with no prefix is in no
+//     namespace, never in the default one, so processName("id", parts, true) gives a URI of ""
+//     even with a default namespace in force. This is the most common misreading of the standard.
+//   - "xml" comes predeclared, permanently, to http://www.w3.org/XML/1998/namespace. It is bound
+//     before the caller has a chance to speak, and reset() puts it back.
+//   - declarePrefix rejects "xml" and "xmlns" by returning false. It does not throw: rejecting them
+//     is a normal result, and a parser is expected to treat that false as "that was not a
+//     namespace declaration".
+//   - An unbound prefix is not an error here, it is a null processName returns. Deciding what to do
+//     with that is the caller's business.
 //
-// setNamespaceDeclUris(true) enciende el comportamiento opcional donde los atributos xmlns se
-// reportan a su vez dentro de un espacio de nombres (NSDECL) en vez de ser invisibles. Solo se
-// puede llamar sin ningun elemento abierto, es decir antes del primer pushContext o despues del
-// popContext que le corresponde; si no, los contextos ya armados no coincidirian con los que
-// vengan despues.
+// setNamespaceDeclUris(true) switches on the optional behaviour where the xmlns attributes are in
+// turn reported inside a namespace (NSDECL) instead of being invisible. It can only be called with
+// no element open, that is before the first pushContext or after its matching popContext;
+// otherwise the contexts already built would not match the ones that come later.
 //
-// El detalle de implementacion que hace que esto salga barato: un contexto que no declara nada no
-// copia las tablas de su padre, las comparte. La copia ocurre en el primer declarePrefix, que
-// para documentos reales es una minoria chica de los elementos. Por eso Context tiene tanto un
-// `parent` como una bandera `declSeen`, y por eso clear() se toma el trabajo de soltar las
-// referencias -- un contexto que se saco de la pila se reusa en el siguiente push a esa
-// profundidad, y quedarse con las tablas viejas las mantendria vivas.
+// The implementation detail that makes this cheap: a context that declares nothing does not copy
+// the tables of its parent, it shares them. The copy happens on the first declarePrefix, which for
+// real documents is a small minority of the elements. That is why Context has both a `parent` and
+// a `declSeen` flag, and why clear() takes the trouble of letting go of the references -- a
+// context that was popped off the stack is reused on the next push at that depth, and keeping the
+// old tables would keep them alive.
 public class NamespaceSupport {
 
     ////////////////////////////////////////////////////////////////////
-    // Constantes
+    // Constants
     ////////////////////////////////////////////////////////////////////
 
-    // El URI ligado al prefijo "xml", siempre, por la norma misma.
+    // The URI bound to the prefix "xml", always, by the standard itself.
     public static final String XMLNS =
         "http://www.w3.org/XML/1998/namespace";
 
-    // El URI de los atributos xmlns cuando setNamespaceDeclUris(true) esta vigente.
+    // The URI of the xmlns attributes when setNamespaceDeclUris(true) is in force.
     public static final String NSDECL =
         "http://www.w3.org/xmlns/2000/";
 
     private static final Enumeration<String> EMPTY_ENUMERATION =
         Collections.enumeration(new ArrayList<String>());
 
-    // Si String.intern() anda en la VM sobre la que estamos corriendo. Es un metodo nativo, y en
-    // la VM propia de KajiJDK esta declarado pero no implementado, asi que llamarlo tira
-    // UnsatisfiedLinkError. El NamespaceSupport del JDK internea todo prefijo, URI y nombre que
-    // guarda; eso no es parte del contrato de SAX (nada documenta estas cadenas como interneadas)
-    // pero es el comportamiento del JDK, y en una VM que puede hacerlo nosotros tambien lo
-    // hacemos. En una que no puede, canon() devuelve la cadena sin tocar: los mapas van por
-    // equals(), asi que toda respuesta que da esta clase es identica en cualquiera de los dos
-    // casos -- lo unico que cambia es la identidad de referencia de las cadenas devueltas, y nada
-    // de aca ni de ParserAdapter depende de eso.
+    // Whether String.intern() works on the VM we are running on. The JDK's NamespaceSupport interns
+    // every prefix, URI and name it keeps; that is not part of the SAX contract (nothing documents
+    // these strings as interned) but it is the JDK's behaviour, and on a VM that can do it we do it
+    // too. On one that cannot, canon() returns the string untouched: the maps go by equals(), so
+    // every answer this class gives is identical in either case -- the only thing that changes is
+    // the reference identity of the strings returned, and nothing here nor in ParserAdapter depends
+    // on that.
     //
-    // Se prueba una sola vez en vez de atrapar la falla en cada llamada, porque esto queda en el
-    // medio del lazo mas caliente del procesamiento de espacios de nombres.
-    private static final boolean PUEDE_INTERNAR = pruebaIntern();
+    // The note said that on KajiJDK's own VM intern() is declared but not implemented, so calling
+    // it throws UnsatisfiedLinkError. It is implemented now (the VM's natives register
+    // java/lang/String.intern), so the probe answers true and the interning path is the one that
+    // runs. The probe stays for any other VM.
+    //
+    // It is tested once instead of catching the failure on every call, because this sits in the
+    // middle of the hottest loop of namespace processing.
+    private static final boolean CAN_INTERN = probeIntern();
 
-    private static boolean pruebaIntern() {
+    private static boolean probeIntern() {
         try {
             String s = "";
             return s.intern() != null;
@@ -98,14 +99,14 @@ public class NamespaceSupport {
     }
 
     private static String canon(String s) {
-        if (PUEDE_INTERNAR) {
+        if (CAN_INTERN) {
             return s.intern();
         }
         return s;
     }
 
     ////////////////////////////////////////////////////////////////////
-    // Estado
+    // State
     ////////////////////////////////////////////////////////////////////
 
     private Context[] contexts;
@@ -113,50 +114,49 @@ public class NamespaceSupport {
     private int contextPos;
     private boolean namespaceDeclUris;
 
-    // Arranca reseteado, es decir con un contexto que tiene la ligadura predeclarada de "xml".
+    // It starts reset, that is with a context that has the predeclared binding of "xml".
     public NamespaceSupport() {
         reset();
     }
 
-    // De vuelta al estado inicial, listo para otro documento. Tira todos los contextos y repone la
-    // ligadura de "xml"; tambien limpia namespaceDeclUris.
+    // Back to the initial state, ready for another document. It throws away all the contexts and
+    // puts back the binding of "xml"; it also clears namespaceDeclUris.
     public void reset() {
         contexts = new Context[32];
         namespaceDeclUris = false;
         contextPos = 0;
-        // Partido en dos a proposito: `contexts[i] = currentContext = new Context()` compila
-        // mal con el javac de esta casa. Ver el comentario en pushContext().
+        // Split in two. The note said `contexts[i] = currentContext = new Context()` miscompiles on
+        // the house javac; see the comment in pushContext().
         currentContext = new Context();
         contexts[contextPos] = currentContext;
         currentContext.declarePrefix("xml", XMLNS);
     }
 
     ////////////////////////////////////////////////////////////////////
-    // La pila
+    // The stack
     ////////////////////////////////////////////////////////////////////
 
-    // Entrar a un elemento.
+    // Entering an element.
     public void pushContext() {
         int max = contexts.length;
 
         contextPos++;
 
-        // Crece si nos quedamos sin lugar. Los documentos profundos son raros; 32 cubre casi
-        // todo.
+        // It grows if we run out of room. Deep documents are rare; 32 covers almost everything.
         if (contextPos >= max) {
             Context newContexts[] = new Context[max * 2];
             System.arraycopy(contexts, 0, newContexts, 0, max);
             contexts = newContexts;
         }
 
-        // Reusar el objeto Context que dejo a esta profundidad un hermano anterior, si lo hay.
+        // Reuse the Context object a previous sibling left at this depth, if there is one.
         currentContext = contexts[contextPos];
         if (currentContext == null) {
-            // Partido en dos. El javac de esta casa genera mal el bytecode de
-            // `arreglo[i] = campoDeInstancia = valor`: deja la pila mal armada y el aastore
-            // se encuentra un int donde tiene que haber una referencia, con lo que la VM se
-            // cae. `campo = valor; arreglo[i] = campo;` es lo mismo y sale bien. Repro en
-            // el informe; con un campo estatico o una variable local en el medio no pasa.
+            // Split in two. The note said the house javac generated wrong bytecode for `array[i] =
+            // instanceField = value` -- a badly built stack, with the aastore finding an int where
+            // a reference has to be. Checked 2026-09-18: the frozen javac emits dup_x1/putfield/
+            // aastore for exactly this shape and the JDK 25 verifier accepts it, so the bug is
+            // gone. The split form is equivalent and is kept.
             currentContext = new Context();
             contexts[contextPos] = currentContext;
         }
@@ -166,8 +166,8 @@ public class NamespaceSupport {
         }
     }
 
-    // Salir de un elemento. El objeto Context se queda en el arreglo para reusarse, pero sus
-    // tablas se sueltan asi nada sobrevive al elemento.
+    // Leaving an element. The Context object stays in the array to be reused, but its tables are
+    // let go so that nothing outlives the element.
     public void popContext() {
         contexts[contextPos].clear();
 
@@ -179,14 +179,14 @@ public class NamespaceSupport {
     }
 
     ////////////////////////////////////////////////////////////////////
-    // Declaraciones
+    // Declarations
     ////////////////////////////////////////////////////////////////////
 
-    // Liga `prefix` a `uri` para el elemento actual y sus hijos. Un prefijo vacio fija el espacio
-    // de nombres por omision, y un uri vacio lo desactiva (que es como funciona xmlns="").
+    // It binds `prefix` to `uri` for the current element and its children. An empty prefix sets the
+    // default namespace, and an empty uri turns it off (which is how xmlns="" works).
     //
-    // Devuelve false, sin declarar nada, para "xml" y "xmlns": el primero ya esta ligado y no se
-    // puede religar, el segundo directamente no es un prefijo.
+    // It returns false, declaring nothing, for "xml" and "xmlns": the first is already bound and
+    // cannot be rebound, the second is not a prefix at all.
     public boolean declarePrefix(String prefix, String uri) {
         if (prefix.equals("xml") || prefix.equals("xmlns")) {
             return false;
@@ -197,16 +197,15 @@ public class NamespaceSupport {
     }
 
     ////////////////////////////////////////////////////////////////////
-    // Resolucion
+    // Resolution
     ////////////////////////////////////////////////////////////////////
 
-    // Parte un nombre calificado en (URI, nombre local, qName) y escribe los tres en `parts`, que
-    // tiene que tener lugar para tres. Devuelve `parts` cuando sale bien y null cuando el prefijo
-    // del nombre no esta ligado.
+    // It splits a qualified name into (URI, local name, qName) and writes the three into `parts`,
+    // which has to have room for three. It returns `parts` when it works and null when the prefix
+    // of the name is not bound.
     //
-    // `isAttribute` no es cosmetico: un nombre de *elemento* sin prefijo toma el espacio de
-    // nombres por omision, un nombre de *atributo* sin prefijo no toma ninguno. Ver el comentario
-    // de la clase.
+    // `isAttribute` is not cosmetic: an *element* name with no prefix takes the default namespace,
+    // an *attribute* name with no prefix takes none. See the comment of the class.
     public String[] processName(String qName, String[] parts,
                                 boolean isAttribute) {
         String[] myParts = currentContext.processName(qName, isAttribute);
@@ -220,28 +219,28 @@ public class NamespaceSupport {
         }
     }
 
-    // El URI que este prefijo significa en este momento, o null si no significa nada. "" pregunta
-    // por el espacio de nombres por omision.
+    // The URI this prefix means at this moment, or null if it means nothing. "" asks for the
+    // default namespace.
     public String getURI(String prefix) {
         return currentContext.getURI(prefix);
     }
 
-    // Todos los prefijos en alcance en este momento, *salvo* el de omision y salvo "xml". El de
-    // omision queda afuera porque no es un prefijo y getURI("") ya contesta por el; "xml" queda
-    // afuera solo en el sentido de que se declaro en el contexto raiz y por lo tanto si aparece
-    // -- quien se preocupe por eso lo filtra por su cuenta.
+    // All the prefixes in scope at this moment, *except* the default one and except "xml". The
+    // default one is left out because it is not a prefix and getURI("") already answers for it;
+    // "xml" is left out only in the sense that it was declared in the root context and therefore it
+    // does appear -- whoever cares about that filters it on their own.
     public Enumeration<String> getPrefixes() {
         return currentContext.getPrefixes();
     }
 
-    // Un prefijo ligado a este URI, o null. Cual, cuando hay varios ligados al mismo URI, no esta
-    // especificado; el prefijo por omision nunca se devuelve, porque quien hace esta pregunta
-    // quiere algo que pueda poner delante de dos puntos.
+    // A prefix bound to this URI, or null. Which one, when several are bound to the same URI, is
+    // not specified; the default prefix is never returned, because whoever asks this question wants
+    // something they can put in front of a colon.
     public String getPrefix(String uri) {
         return currentContext.getPrefix(uri);
     }
 
-    // Todos los prefijos ligados a este URI, a diferencia de la respuesta unica de getPrefix.
+    // All the prefixes bound to this URI, unlike the single answer of getPrefix.
     public Enumeration<String> getPrefixes(String uri) {
         List<String> prefixes = new ArrayList<String>();
         Enumeration<String> allPrefixes = getPrefixes();
@@ -254,19 +253,19 @@ public class NamespaceSupport {
         return Collections.enumeration(prefixes);
     }
 
-    // Los prefijos declarados *por este elemento mismo*, no los heredados. Esto es lo que un
-    // parser reporta a traves de startPrefixMapping/endPrefixMapping.
+    // The prefixes declared *by this element itself*, not the inherited ones. This is what a parser
+    // reports through startPrefixMapping/endPrefixMapping.
     public Enumeration<String> getDeclaredPrefixes() {
         return currentContext.getDeclaredPrefixes();
     }
 
     ////////////////////////////////////////////////////////////////////
-    // El modo opcional de xmlns-dentro-de-un-espacio-de-nombres
+    // The optional xmlns-inside-a-namespace mode
     ////////////////////////////////////////////////////////////////////
 
-    // Solo se puede llamar entre documentos, es decir sin ningun elemento abierto. Cambiarlo en
-    // medio del analisis haria que los contextos ya armados no coincidan con los que vengan
-    // despues, asi que tira.
+    // It can only be called between documents, that is with no element open. Changing it in the
+    // middle of the analysis would make the contexts already built not match the ones that come
+    // later, so it throws.
     public void setNamespaceDeclUris(boolean value) {
         if (contextPos != 0) {
             throw new IllegalStateException();
@@ -278,8 +277,8 @@ public class NamespaceSupport {
         if (value) {
             currentContext.declarePrefix("xmlns", NSDECL);
         } else {
-            // Apagarlo tiene que soltar la ligadura de xmlns, y la forma correcta mas barata es un
-            // contexto raiz nuevo con solo "xml" adentro. Partido en dos por lo de pushContext().
+            // Switching it off has to let go of the xmlns binding, and the cheapest correct way is
+            // a new root context with only "xml" inside. Split in two as in pushContext().
             currentContext = new Context();
             contexts[contextPos] = currentContext;
             currentContext.declarePrefix("xml", XMLNS);
@@ -291,16 +290,15 @@ public class NamespaceSupport {
     }
 
     ////////////////////////////////////////////////////////////////////
-    // Las ligaduras que corresponden a un elemento.
+    // The bindings that belong to an element.
     ////////////////////////////////////////////////////////////////////
 
-    // Interna y no estatica porque processName tiene que consultar la bandera namespaceDeclUris
-    // del NamespaceSupport que la contiene.
+    // Inner and not static because processName has to consult the namespaceDeclUris flag of the
+    // enclosing NamespaceSupport.
     //
-    // Las dos tablas de nombres son caches de memorizacion: dentro de un mismo elemento, el mismo
-    // qName resuelve siempre a la misma terna, y los elementos repiten nombres de atributo todo el
-    // tiempo. Estan separadas para elementos y atributos justamente porque los dos resuelven
-    // distinto.
+    // The two name tables are memoisation caches: inside one same element, the same qName always
+    // resolves to the same triple, and elements repeat attribute names all the time. They are
+    // separate for elements and attributes precisely because the two resolve differently.
     final class Context {
 
         Map<String, String> prefixTable;
@@ -317,8 +315,9 @@ public class NamespaceSupport {
             copyTables();
         }
 
-        // Reusar este objeto para un elemento nuevo bajo `parent`. Comparte las tablas del padre
-        // en vez de copiarlas; la copia pasa en declarePrefix, y solo si alguna vez se lo llama.
+        // Reuse this object for a new element under `parent`. It shares the tables of the parent
+        // instead of copying them; the copy happens in declarePrefix, and only if it is ever
+        // called.
         void setParent(Context parent) {
             this.parent = parent;
             declarations = null;
@@ -330,8 +329,8 @@ public class NamespaceSupport {
             declSeen = false;
         }
 
-        // Soltar todo al salir. El objeto sobrevive en el arreglo contexts para reusarse, pero no
-        // tiene que dejar alcanzables las tablas del elemento que se saco de la pila.
+        // Let go of everything on leaving. The object survives in the contexts array to be reused,
+        // but it must not leave the tables of the popped element reachable.
         void clear() {
             parent = null;
             prefixTable = null;
@@ -342,7 +341,7 @@ public class NamespaceSupport {
         }
 
         void declarePrefix(String prefix, String uri) {
-            // Primera declaracion en este elemento: dejar de compartir las tablas del padre.
+            // First declaration in this element: stop sharing the tables of the parent.
             if (!declSeen) {
                 copyTables();
             }
@@ -350,13 +349,12 @@ public class NamespaceSupport {
                 declarations = new ArrayList<String>();
             }
 
-            // Interneados para que las ternas cacheadas de processName se puedan comparar y
-            // compartir barato, y para que las cadenas que se le entregan a quien llama sean las
-            // canonicas.
+            // Interned so that the cached triples of processName can be compared and shared
+            // cheaply, and so that the strings handed to the caller are the canonical ones.
             prefix = canon(prefix);
             uri = canon(uri);
             if ("".equals(prefix)) {
-                // xmlns="" desactiva el espacio de nombres por omision en vez de ligarlo a "".
+                // xmlns="" turns off the default namespace instead of binding it to "".
                 if ("".equals(uri)) {
                     defaultNS = null;
                 } else {
@@ -372,7 +370,8 @@ public class NamespaceSupport {
         String[] processName(String qName, boolean isAttribute) {
             Map<String, String[]> table;
 
-            // La division entre elemento y atributo, que es toda la razon de que haya dos tablas.
+            // The division between element and attribute, which is the whole reason for there being
+            // two tables.
             if (isAttribute) {
                 table = attributeNameTable;
             } else {
@@ -388,24 +387,23 @@ public class NamespaceSupport {
             name[2] = canon(qName);
             int index = qName.indexOf(':');
 
-            // Sin dos puntos: un nombre sin prefijo.
+            // No colon: a name with no prefix.
             if (index == -1) {
                 if (isAttribute) {
-                    // Un atributo sin prefijo no esta en ningun espacio de nombres -- nunca en el
-                    // de omision. La unica excepcion es el atributo xmlns mismo, y solo cuando
-                    // quien llama pidio que a los atributos xmlns se les de un URI.
+                    // An attribute with no prefix is in no namespace -- never in the default one.
+                    // The only exception is the xmlns attribute itself, and only when the caller
+                    // asked for the xmlns attributes to be given a URI.
                     //
-                    // El `==` no es un desliz ni es un equals() disfrazado: aca el JDK compara
-                    // por identidad, asi que un "xmlns" que no sea el literal interneado --uno
-                    // construido en tiempo de ejecucion, pongamos-- cae en "" incluso con la
-                    // funcionalidad encendida. Verificado contra jdk-25.0.2: processName(new
-                    // StringBuilder("xml").append("ns").toString(), p, true) contesta "" alla, y
-                    // contesta "" aca. Escrito como equals() esta biblioteca no coincidiria con
-                    // el JDK ante esa entrada, asi que identidad es. Los parsers le pasan a este
-                    // metodo nombres que vinieron del documento, y un parser que los internee
-                    // (cosa que ParserAdapter no necesita hacer, porque filtra los atributos
-                    // xmlns antes siquiera de preguntar) es el unico llamador para el que esta
-                    // rama se dispara.
+                    // The `==` is not a slip nor an equals() in disguise: here the JDK compares by
+                    // identity, so an "xmlns" that is not the interned literal --one built at run
+                    // time, say-- falls to "" even with the functionality switched on. Checked
+                    // against jdk-25.0.2: processName(new
+                    // StringBuilder("xml").append("ns").toString(), p, true) answers "" there, and
+                    // answers "" here. Written as equals() this library would not match the JDK on
+                    // that input, so identity it is. Parsers pass this method names that came from
+                    // the document, and a parser that interns them (something ParserAdapter does
+                    // not need to do, because it filters out the xmlns attributes before even
+                    // asking) is the only caller for which this branch fires.
                     if (qName == "xmlns" && namespaceDeclUris) {
                         name[0] = NSDECL;
                     } else {
@@ -419,7 +417,7 @@ public class NamespaceSupport {
                 name[1] = name[2];
             }
 
-            // Un nombre con prefijo.
+            // A name with a prefix.
             else {
                 String prefix = qName.substring(0, index);
                 String local = qName.substring(index + 1);
@@ -429,9 +427,9 @@ public class NamespaceSupport {
                 } else {
                     uri = prefixTable.get(prefix);
                 }
-                // Un prefijo sin ligar, o un xmlns:* usado donde se esperaba un nombre de
-                // elemento, es una respuesta null y no una excepcion: que hacer con eso es
-                // decision de quien llama, no nuestra.
+                // An unbound prefix, or an xmlns:* used where an element name was expected, is a
+                // null answer and not an exception: what to do with that is the caller's decision,
+                // not ours.
                 if (uri == null
                         || (!isAttribute && "xmlns".equals(prefix))) {
                     return null;
@@ -478,9 +476,9 @@ public class NamespaceSupport {
             }
         }
 
-        // Sacar copias privadas de lo que veniamos compartiendo con el padre. Los dos caches de
-        // nombres *no* se copian sino que arrancan vacios: memorizan respuestas que dependen de
-        // las ligaduras, y las ligaduras estan por cambiar.
+        // Take private copies of what we were sharing with the parent. The two name caches are
+        // *not* copied but start empty: they memoise answers that depend on the bindings, and the
+        // bindings are about to change.
         private void copyTables() {
             if (prefixTable != null) {
                 prefixTable = new HashMap<String, String>(prefixTable);

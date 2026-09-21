@@ -3,10 +3,10 @@ package javax.swing.event;
 import java.util.EventListener;
 
 /**
- * Quien quiere enterarse de que pasa algo con un enlace.
+ * Whoever wants to hear that something is happening with a link.
  */
 public interface HyperlinkListener extends EventListener {
 
-    /** El mouse entro, salio, o se activo el enlace. */
+    /** The mouse entered, left, or the link was activated. */
     void hyperlinkUpdate(HyperlinkEvent e);
 }

@@ -3,35 +3,36 @@ package org.w3c.dom.css;
 import org.w3c.dom.DOMException;
 
 /**
- * El valor de una declaracion CSS.
+ * The value of a CSS declaration.
  *
- * <p>Tres formas: un valor primitivo, una lista de valores, o `inherit`. La cuarta constante,
- * `CSS_CUSTOM`, es para lo que una implementacion entienda y el DOM no modele -- una propiedad
- * abreviada como `background`, por ejemplo, cuyo valor no es ni un primitivo ni una lista.
+ * <p>Three forms: a primitive value, a list of values, or `inherit`. The fourth constant,
+ * `CSS_CUSTOM`, is for whatever an implementation understands and the DOM does not model -- a
+ * shorthand property such as `background`, for example, whose value is neither a primitive nor a
+ * list.
  */
 public interface CSSValue {
 
-    /** El valor es la palabra clave `inherit`. */
+    /** The value is the keyword `inherit`. */
     public static final short CSS_INHERIT = 0;
-    /** Es un {@link CSSPrimitiveValue}. */
+    /** It is a {@link CSSPrimitiveValue}. */
     public static final short CSS_PRIMITIVE_VALUE = 1;
-    /** Es un {@link CSSValueList}. */
+    /** It is a {@link CSSValueList}. */
     public static final short CSS_VALUE_LIST = 2;
-    /** Es algo que el DOM no modela; ver la nota de la clase. */
+    /** It is something the DOM does not model; see the note of the class. */
     public static final short CSS_CUSTOM = 3;
 
-    /** El valor como texto. */
+    /** The value as text. */
     String getCssText();
 
     /**
-     * Reemplaza el valor con ese texto.
+     * It replaces the value with that text.
      *
-     * @throws DOMException `SYNTAX_ERR` si no parsea; `INVALID_MODIFICATION_ERR` si el texto
-     *     describe un valor de otra forma que la actual; `NO_MODIFICATION_ALLOWED_ERR` si el valor
-     *     es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if it does not parse; `INVALID_MODIFICATION_ERR` if the
+     *     text describes a value of a form other than the current one;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the value is read-only
      */
     void setCssText(String cssText) throws DOMException;
 
-    /** Cual de las cuatro formas es. */
+    /** Which of the four forms it is. */
     short getCssValueType();
 }

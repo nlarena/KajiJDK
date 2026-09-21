@@ -56,5 +56,5 @@ public interface SetJoin<Z, E> extends PluralJoin<Z, Set<E>, E> {
      * @return metamodel type representing the {@code Set} that is
      *         the target of the join
      */
-    // OMITIDO (subset): SetAttribute<? super Z, E> getModel();  -- finding #123, se hereda de PluralJoin
+    // OMITTED (subset): SetAttribute<? super Z, E> getModel();  -- finding #123, inherited from PluralJoin
 }

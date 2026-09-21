@@ -5,43 +5,46 @@ package java.util.concurrent.locks;
 // releasing the lock and parking); another thread {@code signal}s it (waking a waiter,
 // which re-acquires the lock before returning). The caller must hold the owning lock.
 //
-// The timed forms ({@code awaitNanos}, {@code await(long,TimeUnit)}) and {@code
-// awaitUntil(Date)} are intentionally omitted for now: distinguishing a signal from a
-// deadline cleanly needs a per-waiter signalled flag not yet built, and {@code awaitUntil}
-// needs {@code java.util.Date}. The four core methods below are complete.
+// This header used to say the timed forms ({@code awaitNanos}, {@code await(long,TimeUnit)}) and
+// {@code awaitUntil(Date)} were intentionally omitted. They are not: all three are declared below.
+// The two things that blocked them are gone -- the implementations carry a per-waiter signalled
+// flag, so a signal is told from a deadline, and {@code java.util.Date} exists. All seven methods
+// are here.
 public interface Condition {
 
     // Release the lock and wait until signalled, then re-acquire the lock.
     void await() throws InterruptedException;
 
-    // Like {@link #await}, but not responsive to interruption (a no-op distinction on
-    // KajiJDK, which has none — kept for source compatibility).
+    // Like {@link #await}, but not responsive to interruption. The distinction is real here: our
+    // {@code Object.wait()} does throw {@code InterruptedException}, so {@link #await} declares it
+    // and this one swallows the interruption and re-marks the flag before returning.
     void awaitUninterruptibly();
 
     // Wake one thread waiting on this condition.
     /**
-     * Espera hasta que la senialen o pase `time`.
+     * It waits until it is signalled or `time` passes.
      *
-     * @return `false` si el plazo se agoto antes de la senial
+     * @return `false` if the deadline ran out before the signal
      */
     boolean await(long time, java.util.concurrent.TimeUnit unit)
             throws InterruptedException;
 
     /**
-     * Espera hasta que la senialen o pasen `nanosTimeout` nanosegundos.
+     * It waits until it is signalled or `nanosTimeout` nanoseconds pass.
      *
-     * <p>Devuelve **lo que sobro del plazo**, y ese detalle es el que la hace util en un bucle: una
-     * espera puede despertar sin senial --un *spurious wakeup*-- y hay que volver a esperar, pero
-     * solo por el resto. Con un `boolean` no se puede, porque no se sabe cuanto paso.
+     * <p>It returns **what was left of the deadline**, and that detail is what makes it useful in a
+     * loop: a wait can wake with no signal --a *spurious wakeup*-- and has to wait again, but
+     * only for the rest. With a `boolean` it cannot be done, because how much has passed is not
+     * known.
      *
-     * @return los nanosegundos que sobraron; cero o menos si el plazo se agoto
+     * @return the nanoseconds left over; zero or less if the deadline ran out
      */
     long awaitNanos(long nanosTimeout) throws InterruptedException;
 
     /**
-     * Espera hasta que la senialen o llegue `deadline`.
+     * It waits until it is signalled or `deadline` arrives.
      *
-     * @return `false` si la fecha llego antes de la senial
+     * @return `false` if the date arrived before the signal
      */
     boolean awaitUntil(java.util.Date deadline) throws InterruptedException;
 

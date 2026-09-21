@@ -1,11 +1,11 @@
 package javax.naming;
 
 /**
- * Se lanza cuando el proveedor no implementa la operacion pedida. `Context` es una interfaz
- * grande y hay servicios que son de solo lectura o que no tienen subcontextos; esta es la manera
- * pactada de decirlo.
+ * Thrown when the provider does not implement the requested operation. `Context` is a big
+ * interface and some services are read-only or have no subcontexts; this is the agreed way to say
+ * so.
  *
- * <p>La jerarquia entera y el estado que arrastra estan explicados en `NamingException`.
+ * <p>The whole hierarchy and the state it carries are explained in `NamingException`.
  */
 public class OperationNotSupportedException extends NamingException {
 

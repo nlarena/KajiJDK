@@ -16,10 +16,10 @@ import java.nio.channels.spi.AsynchronousChannelProvider;
 // ONE ACCEPT IN FLIGHT
 // ===============================================================================================
 //
-// As in the socket channel, and for the same kind of reason: underneath there is a blocking `accept`,
-// and two threads calling it at once would split the incoming connections between them in a way
-// neither can predict. The API already forbids it --`AcceptPendingException`-- so there is nothing to
-// invent.
+// As in the socket channel, and for the same kind of reason: underneath there is a blocking
+// `accept`, and two threads calling it at once would split the incoming connections between them in
+// a way neither can predict. The API already forbids it --`AcceptPendingException`-- so there is
+// nothing to invent.
 //
 // The accepted channel is registered in the same group: it is what makes the group's `shutdown()`
 // wait for the connections the server has been creating as well, and not only for the server.

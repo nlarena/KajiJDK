@@ -5,26 +5,26 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * KajiLibrary's javax.xml.crypto.dsig.spec.XPathFilter2ParameterSpec -- una secuencia de filtros
- * XPath.
+ * KajiLibrary's javax.xml.crypto.dsig.spec.XPathFilter2ParameterSpec -- a sequence of XPath
+ * filters.
  *
- * <p>Los parametros de la transformacion XPath Filter 2.0, que reemplaza a la original por ser mucho
- * mas rapida: trabaja por subarboles en vez de nodo por nodo. Ver {@link XPathType} para las tres
- * operaciones.
+ * <p>The parameters of the XPath Filter 2.0 transform, which replaces the original one for being
+ * much faster: it works by subtrees instead of node by node. See {@link XPathType} for the three
+ * operations.
  *
- * <p>La lista es una <b>secuencia</b> y no un conjunto: se aplican en orden sobre el resultado
- * acumulado. Cambiar el orden cambia lo que se firma.
+ * <p>The list is a <b>sequence</b> and not a set: they are applied in order on the accumulated
+ * result. Changing the order changes what is signed.
  */
 public final class XPathFilter2ParameterSpec implements TransformParameterSpec {
 
-    /** Los filtros, en orden. No modificable. */
+    /** The filters, in order. Unmodifiable. */
     private final List<XPathType> xPathList;
 
     /**
-     * @param xPathList los filtros, en el orden en que se aplican
-     * @throws NullPointerException si la lista es null
-     * @throws IllegalArgumentException si esta vacia: una secuencia sin filtros no selecciona nada
-     * @throws ClassCastException si algun elemento no es un {@link XPathType}
+     * @param xPathList the filters, in the order they are applied
+     * @throws NullPointerException if the list is null
+     * @throws IllegalArgumentException if it is empty: a sequence without filters selects nothing
+     * @throws ClassCastException if some element is not an {@link XPathType}
      */
     public XPathFilter2ParameterSpec(List<XPathType> xPathList) {
         if (xPathList == null) {
@@ -46,7 +46,7 @@ public final class XPathFilter2ParameterSpec implements TransformParameterSpec {
         this.xPathList = Collections.unmodifiableList(copy);
     }
 
-    /** Los filtros, en orden. No modificable. */
+    /** The filters, in order. Unmodifiable. */
     public List<XPathType> getXPathList() {
         return this.xPathList;
     }

@@ -9,79 +9,80 @@ import java.util.Collection;
 import java.util.List;
 import jdk.internal.classfile.impl.TypedAttributes;
 
-// Una cláusula `exports` del atributo `Module` (JVMS §4.7.25). `exportsTo()` vacío significa
-// exportar a TODOS: la lista vacía y la ausencia de destinatarios son la misma cosa en este formato,
-// y por eso un `exports foo to bar` con la lista vacía sería un error de quien lo escribió.
+// An `exports` clause of the `Module` attribute (JVMS §4.7.25). An empty `exportsTo()` means
+// exporting to EVERYONE: the empty list and the absence of recipients are the same thing in this
+// format, and that is why an `exports foo to bar` with an empty list would be a mistake by whoever
+// wrote it.
 public interface ModuleExportInfo {
 
-    /** El paquete exportado. */
+    /** The exported package. */
     PackageEntry exportedPackage();
 
-    /** Las banderas, como máscara. */
+    /** The flags, as a mask. */
     int exportsFlagsMask();
 
-    /** Las banderas, como conjunto. */
+    /** The flags, as a set. */
     default java.util.Set<AccessFlag> exportsFlags() {
         return AccessFlag.maskToAccessFlags(exportsFlagsMask(), AccessFlag.Location.MODULE_EXPORTS);
     }
 
-    /** Si esta bandera está puesta. */
+    /** Whether this flag is set. */
     default boolean has(AccessFlag flag) {
         return (exportsFlagsMask() & flag.mask()) != 0;
     }
 
-    /** A qué módulos se exporta; vacío quiere decir a todos. */
+    /** Which modules it is exported to; empty means to all of them. */
     List<ModuleEntry> exportsTo();
 
-    /** La cláusula con estos valores. */
+    /** The clause with these values. */
     public static ModuleExportInfo of(PackageEntry exports, int exportFlags,
             List<ModuleEntry> exportsTo) {
         return TypedAttributes.moduleExportInfo(exports, exportFlags, exportsTo);
     }
 
-    /** La cláusula con estos valores. */
+    /** The clause with these values. */
     public static ModuleExportInfo of(PackageEntry exports, Collection<AccessFlag> exportFlags,
             List<ModuleEntry> exportsTo) {
         return TypedAttributes.moduleExportInfo(exports, TypedAttributes.mask(exportFlags),
                 exportsTo);
     }
 
-    /** La cláusula con estos valores. */
+    /** The clause with these values. */
     public static ModuleExportInfo of(PackageEntry exports, int exportFlags,
             ModuleEntry... exportsTo) {
         return TypedAttributes.moduleExportInfo(exports, exportFlags,
                 TypedAttributes.listOfModules(exportsTo));
     }
 
-    /** La cláusula con estos valores. */
+    /** The clause with these values. */
     public static ModuleExportInfo of(PackageEntry exports, Collection<AccessFlag> exportFlags,
             ModuleEntry... exportsTo) {
         return TypedAttributes.moduleExportInfo(exports, TypedAttributes.mask(exportFlags),
                 TypedAttributes.listOfModules(exportsTo));
     }
 
-    /** La cláusula con estos valores. */
+    /** The clause with these values. */
     public static ModuleExportInfo of(PackageDesc exports, int exportFlags,
             List<ModuleDesc> exportsTo) {
         return TypedAttributes.moduleExportInfo(TypedAttributes.packageEntry(exports), exportFlags,
                 TypedAttributes.moduleEntries(exportsTo));
     }
 
-    /** La cláusula con estos valores. */
+    /** The clause with these values. */
     public static ModuleExportInfo of(PackageDesc exports, Collection<AccessFlag> exportFlags,
             List<ModuleDesc> exportsTo) {
         return TypedAttributes.moduleExportInfo(TypedAttributes.packageEntry(exports),
                 TypedAttributes.mask(exportFlags), TypedAttributes.moduleEntries(exportsTo));
     }
 
-    /** La cláusula con estos valores. */
+    /** The clause with these values. */
     public static ModuleExportInfo of(PackageDesc exports, int exportFlags,
             ModuleDesc... exportsTo) {
         return TypedAttributes.moduleExportInfo(TypedAttributes.packageEntry(exports), exportFlags,
                 TypedAttributes.moduleEntries(exportsTo));
     }
 
-    /** La cláusula con estos valores. */
+    /** The clause with these values. */
     public static ModuleExportInfo of(PackageDesc exports, Collection<AccessFlag> exportFlags,
             ModuleDesc... exportsTo) {
         return TypedAttributes.moduleExportInfo(TypedAttributes.packageEntry(exports),

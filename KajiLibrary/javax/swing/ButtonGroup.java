@@ -5,34 +5,34 @@ import java.util.Enumeration;
 import java.util.Vector;
 
 /**
- * Un grupo de botones del que a lo sumo uno esta seleccionado.
+ * A group of buttons of which at most one is selected.
  *
- * <p>Es la exclusion mutua de los botones de radio, y vive fuera de ellos: el grupo no pinta nada
- * ni tiene padre, solo recuerda quien esta seleccionado y deselecciona al anterior cuando otro se
- * selecciona. Un boton pertenece al grupo por su <em>modelo</em>, no por si mismo, que es por lo que
- * {@link #setSelected} y {@link #isSelected} reciben un {@link ButtonModel}.
+ * <p>It is the radio buttons' mutual exclusion, and it lives outside them: the group paints
+ * nothing and has no parent, it only remembers who is selected and deselects the previous one
+ * when another is selected. A button belongs to the group by its <em>model</em>, not by itself,
+ * which is why {@link #setSelected} and {@link #isSelected} receive a {@link ButtonModel}.
  *
- * <p>La seleccion, una vez hecha, no se puede quitar clickeando: un boton de radio seleccionado
- * sigue seleccionado aunque se lo vuelva a apretar. La unica manera de que ninguno lo este es
+ * <p>The selection, once made, cannot be taken away by clicking: a selected radio button stays
+ * selected even though it is pressed again. The only way for none to be selected is
  * {@link #clearSelection}.
  */
 public class ButtonGroup implements Serializable {
 
-    /** Los botones, en el orden en que se agregaron. */
+    /** The buttons, in the order they were added. */
     protected Vector<AbstractButton> buttons = new Vector<AbstractButton>();
 
-    /** El modelo seleccionado, o {@code null}. */
+    /** The selected model, or {@code null}. */
     ButtonModel selection = null;
 
     public ButtonGroup() {
     }
 
     /**
-     * Agrega un boton.
+     * It adds a button.
      *
-     * <p>Si ya esta seleccionado y el grupo no tiene seleccion, pasa a ser la seleccion; si el
-     * grupo ya tenia una, el que llega se deselecciona. Es la regla del grupo aplicada al momento
-     * de entrar.
+     * <p>If it is already selected and the group has no selection, it becomes the selection; if
+     * the group already had one, the one that arrives is deselected. It is the group's rule applied
+     * at the moment of entering.
      */
     public void add(AbstractButton b) {
         if (b == null) {
@@ -49,7 +49,7 @@ public class ButtonGroup implements Serializable {
         b.getModel().setGroup(this);
     }
 
-    /** Quita un boton; si era la seleccion, el grupo queda sin ella. */
+    /** It removes a button; if it was the selection, the group is left without one. */
     public void remove(AbstractButton b) {
         if (b == null) {
             return;
@@ -61,12 +61,12 @@ public class ButtonGroup implements Serializable {
         b.getModel().setGroup(null);
     }
 
-    /** Deja al grupo sin seleccion, deseleccionando al que la tenia. */
+    /** It leaves the group with no selection, deselecting the one that had it. */
     public void clearSelection() {
         if (selection != null) {
-            ButtonModel viejo = selection;
+            ButtonModel old = selection;
             selection = null;
-            viejo.setSelected(false);
+            old.setSelected(false);
         }
     }
 
@@ -74,23 +74,23 @@ public class ButtonGroup implements Serializable {
         return buttons.elements();
     }
 
-    /** El modelo seleccionado, o {@code null}. */
+    /** The selected model, or {@code null}. */
     public ButtonModel getSelection() {
         return selection;
     }
 
     /**
-     * Selecciona ese modelo, deseleccionando al que estaba.
+     * It selects that model, deselecting the one that was selected.
      *
-     * <p>Solo selecciona: pedir {@code false} no hace nada, que es la regla de "no se puede quitar
-     * clickeando" dicha en la API. Lo llama el propio modelo cuando lo seleccionan.
+     * <p>It only selects: asking for {@code false} does nothing, which is the "it cannot be taken
+     * away by clicking" rule stated in the API. The model itself calls it when it is selected.
      */
     public void setSelected(ButtonModel m, boolean b) {
         if (b && m != null && m != selection) {
-            ButtonModel viejo = selection;
+            ButtonModel old = selection;
             selection = m;
-            if (viejo != null) {
-                viejo.setSelected(false);
+            if (old != null) {
+                old.setSelected(false);
             }
             m.setSelected(true);
         }

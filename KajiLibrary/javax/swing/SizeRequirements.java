@@ -3,51 +3,53 @@ package javax.swing;
 import java.io.Serializable;
 
 /**
- * Cuanto quiere medir algo: minimo, preferido, maximo y donde tiene su linea de alineacion.
+ * How much something wants to measure: minimum, preferred, maximum and where its alignment
+ * line is.
  *
- * <h2>Una dimension a la vez</h2>
+ * <h2>One dimension at a time</h2>
  *
- * <p>Esta clase no habla de anchos ni de altos: habla de <em>una</em> dimension. Un componente en
- * una caja horizontal aporta dos de estos objetos, uno por eje, y cada eje se resuelve por
- * separado. Es lo que permite que el mismo par de rutinas sirva para acomodar en fila o en
- * columna: cambia cual de los dos ejes se reparte y cual se alinea.
+ * <p>This class does not talk about widths or heights: it talks about <em>one</em> dimension. A
+ * component in a horizontal box contributes two of these objects, one per axis, and each axis is
+ * resolved separately. It is what allows the same pair of routines to serve for laying out in a
+ * row or in a column: what changes is which of the two axes is shared out and which is aligned.
  *
- * <h2>Repartir y alinear</h2>
+ * <h2>Sharing out and aligning</h2>
  *
- * <p>Son las dos operaciones, y son distintas:
+ * <p>They are the two operations, and they are different:
  *
  * <ul>
- * <li><strong>Repartir</strong> ({@link #calculateTiledPositions}) pone a los hijos uno detras de
- * otro y les da a cada uno una parte del espacio. Si sobra, cada uno crece en proporcion a lo que
- * puede crecer; si falta, cada uno se achica en proporcion a lo que puede achicarse. Nunca se
- * pisan.
- * <li><strong>Alinear</strong> ({@link #calculateAlignedPositions}) los pone a todos en el mismo
- * lugar, cada uno colgado de su linea de alineacion. Es lo que hace que una fila de botones quede
- * centrada, o que sus bases coincidan.
+ * <li><strong>Sharing out</strong> ({@link #calculateTiledPositions}) puts the children one
+ * after another and gives each one a part of the space. If there is space left over, each one
+ * grows in proportion to how much it can grow; if there is not enough, each one shrinks in
+ * proportion to how much it can shrink. They never overlap.
+ * <li><strong>Aligning</strong> ({@link #calculateAlignedPositions}) puts them all in the same
+ * place, each one hanging from its alignment line. It is what makes a row of buttons end up
+ * centred, or their baselines agree.
  * </ul>
  *
- * <p>La alineacion va de 0 a 1: 0 es "mi punto de enganche esta en mi borde de arriba (o
- * izquierdo)", 1 en el de abajo (o derecho), y 0.5 al medio. Un componente que quiere alinear por
- * su linea de base dice que fraccion de su alto queda por encima de ella.
+ * <p>The alignment goes from 0 to 1: 0 is "my hook point is at my top (or left) edge", 1 at the
+ * bottom (or right) one, and 0.5 in the middle. A component that wants to align by its baseline
+ * says what fraction of its height is above it.
  *
- * <p>Las sumas se hacen en {@code long} y se recortan al maximo entero: sumar tres hijos que dicen
- * "sin tope" no debe dar un numero negativo, que es lo que pasaria con un desborde silencioso.
+ * <p>The sums are done in {@code long} and clipped to the maximum integer: adding three children
+ * that say "no cap" must not give a negative number, which is what would happen with a silent
+ * overflow.
  */
 public class SizeRequirements implements Serializable {
 
-    /** Lo menos que puede medir. */
+    /** The least it may measure. */
     public int minimum;
 
-    /** Lo que quiere medir. */
+    /** What it wants to measure. */
     public int preferred;
 
-    /** Lo mas que puede medir. */
+    /** The most it may measure. */
     public int maximum;
 
-    /** Donde esta su linea de enganche, de 0 a 1; ver la nota de la clase. */
+    /** Where its hook line is, from 0 to 1; see the class note. */
     public float alignment;
 
-    /** Un pedido de tamano cero, alineado al centro. */
+    /** A size request of zero, aligned to the centre. */
     public SizeRequirements() {
         minimum = 0;
         preferred = 0;
@@ -67,10 +69,10 @@ public class SizeRequirements implements Serializable {
     }
 
     /**
-     * Lo que piden entre todos si van uno detras de otro: la suma de cada cosa.
+     * What they ask for between them all if they go one after another: the sum of each thing.
      *
-     * <p>La alineacion del total es 0.5 y no la de nadie en particular: una fila no hereda el
-     * enganche de sus hijos, lo decide quien la ubique.
+     * <p>The total's alignment is 0.5 and not anybody's in particular: a row does not inherit its
+     * children's hook, it is decided by whoever places it.
      */
     public static SizeRequirements getTiledSizeRequirements(SizeRequirements[] children) {
         SizeRequirements total = new SizeRequirements();
@@ -87,12 +89,12 @@ public class SizeRequirements implements Serializable {
     }
 
     /**
-     * Lo que piden entre todos si van encimados y alineados.
+     * What they ask for between them all if they go overlapped and aligned.
      *
-     * <p>Se mide por separado lo que sobresale de cada lado de la linea de enganche y se toma el
-     * peor de cada lado: el conjunto necesita lo que necesita el que mas sube mas lo que necesita
-     * el que mas baja. La alineacion resultante es la que deja esa linea en su lugar, calculada
-     * sobre los tamanos preferidos.
+     * <p>What sticks out on each side of the hook line is measured separately and the worst of each
+     * side is taken: the set needs what the one that goes up most needs plus what the one that goes
+     * down most needs. The resulting alignment is the one that leaves that line in its place,
+     * computed over the preferred sizes.
      */
     public static SizeRequirements getAlignedSizeRequirements(SizeRequirements[] children) {
         SizeRequirements totalAscent = new SizeRequirements();
@@ -121,9 +123,9 @@ public class SizeRequirements implements Serializable {
                 Integer.MAX_VALUE);
         int max = (int) Math.min((long) totalAscent.maximum + (long) totalDescent.maximum,
                 Integer.MAX_VALUE);
-        // La alineacion sale del minimo y no del preferido: es la unica que se cumple siempre,
-        // porque el conjunto nunca mide menos que su minimo. Con el preferido, una caja apretada
-        // engancharia por una linea que no tiene.
+        // The alignment comes from the minimum and not from the preferred one: it is the only one
+                // that always holds, because the set never measures less than its minimum. With the
+                // preferred one, a tight box would hook by a line it does not have.
         float alignment = 0.0f;
         if (min > 0) {
             alignment = (float) totalAscent.minimum / min;
@@ -132,26 +134,26 @@ public class SizeRequirements implements Serializable {
         return new SizeRequirements(min, pref, max, alignment);
     }
 
-    /** Reparte de adelante hacia atras; ver {@link #calculateTiledPositions(int,
-     * SizeRequirements, SizeRequirements[], int[], int[], boolean)}. */
+    /** It shares out front to back; see {@link #calculateTiledPositions(int,
+         * SizeRequirements, SizeRequirements[], int[], int[], boolean)}. */
     public static void calculateTiledPositions(int allocated, SizeRequirements total,
             SizeRequirements[] children, int[] offsets, int[] spans) {
         calculateTiledPositions(allocated, total, children, offsets, spans, true);
     }
 
     /**
-     * Reparte {@code allocated} entre los hijos, uno detras de otro.
+     * It shares {@code allocated} out among the children, one after another.
      *
-     * <p>Si el espacio alcanza para lo preferido, cada uno crece; si no, cada uno se achica. En
-     * los dos casos el reparto es proporcional al margen de maniobra de cada uno, no al tamano:
-     * un hijo que no puede achicarse no se achica aunque sea el mas grande.
+     * <p>If the space is enough for the preferred one, each one grows; if not, each one shrinks.
+     * In both cases the sharing out is proportional to each one's room for manoeuvre, not to its
+     * size: a child that cannot shrink does not shrink even though it is the biggest.
      *
-     * <p>{@code forward} en {@code false} llena desde el final, que es como se acomoda una fila
-     * en un idioma que se lee de derecha a izquierda.
+     * <p>{@code forward} at {@code false} fills from the end, which is how a row is laid out in a
+     * language that is read right to left.
      */
     public static void calculateTiledPositions(int allocated, SizeRequirements total,
             SizeRequirements[] children, int[] offsets, int[] spans, boolean forward) {
-        // Las sumas van en long: los maximos suelen ser enormes y la suma desbordaria.
+        // The sums go in long: the maximums are usually enormous and the sum would overflow.
         long min = 0;
         long pref = 0;
         long max = 0;
@@ -167,7 +169,7 @@ public class SizeRequirements implements Serializable {
         }
     }
 
-    /** Falta espacio: cada uno cede una fraccion de lo que puede ceder. */
+    /** There is not enough space: each one gives up a fraction of what it can give up. */
     private static void compressedTile(int allocated, long min, long pref, long max,
             SizeRequirements[] request, int[] offsets, int[] spans, boolean forward) {
         float totalPlay = Math.min(pref - allocated, pref - min);
@@ -197,7 +199,7 @@ public class SizeRequirements implements Serializable {
         }
     }
 
-    /** Sobra espacio: cada uno toma una fraccion de lo que puede crecer. */
+    /** There is space left over: each one takes a fraction of what it can grow. */
     private static void expandedTile(int allocated, long min, long pref, long max,
             SizeRequirements[] request, int[] offsets, int[] spans, boolean forward) {
         float totalPlay = Math.min(allocated - pref, max - pref);
@@ -227,18 +229,19 @@ public class SizeRequirements implements Serializable {
         }
     }
 
-    /** Alinea a todos en el mismo lugar, cada uno por su linea de enganche. */
+    /** It aligns them all in the same place, each one by its hook line. */
     public static void calculateAlignedPositions(int allocated, SizeRequirements total,
             SizeRequirements[] children, int[] offsets, int[] spans) {
         calculateAlignedPositions(allocated, total, children, offsets, spans, true);
     }
 
     /**
-     * Alinea a todos en el mismo lugar; {@code normal} en {@code false} da vuelta el eje.
+     * It aligns them all in the same place; {@code normal} at {@code false} turns the axis
+     * around.
      *
-     * <p>El espacio se parte en dos por la linea del total, y cada hijo toma de cada mitad lo que
-     * su maximo le permita. Un hijo con maximo enorme llena; uno con maximo chico queda de su
-     * tamano, colgado de la linea.
+     * <p>The space is split in two by the total's line, and each child takes from each half what
+     * its maximum allows it. A child with an enormous maximum fills; one with a small maximum
+     * stays its size, hanging from the line.
      */
     public static void calculateAlignedPositions(int allocated, SizeRequirements total,
             SizeRequirements[] children, int[] offsets, int[] spans, boolean normal) {
@@ -259,11 +262,11 @@ public class SizeRequirements implements Serializable {
     }
 
     /**
-     * Reparte un cambio de tamano entre varios pedidos.
+     * It shares a change of size out among several requests.
      *
-     * <p>Devuelve un arreglo vacio: en el JDK esta es una rutina auxiliar que quedo sin
-     * implementar —siempre devolvio {@code new int[0]}— y copiar su comportamiento es lo unico
-     * honesto. Quien reparte de verdad es {@link #calculateTiledPositions}.
+     * <p>It returns an empty array: in the JDK this is an auxiliary routine that was left
+     * unimplemented -- it always returned {@code new int[0]} -- and copying its behaviour is the
+     * only honest thing. Who really shares out is {@link #calculateTiledPositions}.
      */
     public static int[] adjustSizes(int delta, SizeRequirements[] children) {
         return new int[0];

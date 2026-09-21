@@ -2,7 +2,7 @@ package java.security.cert;
 
 import java.security.GeneralSecurityException;
 
-// Fallo el acceso a un repositorio de certificados o de CRLs.
+// The access to a store of certificates or of CRLs failed.
 public class CertStoreException extends GeneralSecurityException {
 
     private static final long serialVersionUID = 2395296107471573245L;

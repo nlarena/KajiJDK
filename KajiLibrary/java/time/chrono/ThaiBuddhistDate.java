@@ -11,9 +11,13 @@ import java.time.temporal.ChronoField;
 // KajiLibrary's java.time.chrono.ThaiBuddhistDate — a date in the Thai Buddhist calendar, which runs
 // 543 years ahead of the ISO calendar and is otherwise identical. Stored as the equivalent ISO
 // LocalDate; only the year (and era) are reinterpreted. Implements ChronoLocalDate, inheriting
-// isLeapYear/lengthOfYear/isSupported/adjustInto as defaults. A KajiLibrary subset: now()/from()/
-// range()/atTime()/until(ChronoLocalDate) are omitted (they need Clock, TemporalAccessor.from,
-// ValueRange plumbing, or the ChronoLocalDateTime/ChronoPeriod types).
+// isLeapYear/lengthOfYear/isSupported/adjustInto as defaults.
+//
+// This note used to list now()/from()/range()/atTime()/until(ChronoLocalDate) as omitted. Four of
+// the five answer today: now(), from() and until(ChronoLocalDate) are declared below, and atTime()
+// comes from ChronoLocalDate as a default. What is still missing is range(ChronoField): it is not
+// overridden here, so it gives ChronoField's generic range rather than one refined by this
+// calendar.
 public final class ThaiBuddhistDate implements ChronoLocalDate {
 
     private static final int YEARS_DIFFERENCE = 543;
@@ -83,20 +87,20 @@ public final class ThaiBuddhistDate implements ChronoLocalDate {
     }
 
     /**
-     * El periodo entre esta fecha y `endDateExclusive`, en **este** calendario.
+     * The period between this date and `endDateExclusive`, in **this** calendar.
      *
-     * <p>Se calcula sobre las fechas ISO equivalentes y se devuelve como `ChronoPeriod` de este
-     * calendario. La cuenta es la misma --los tres calendarios de esta biblioteca solo renumeran los
-     * años, no cambian la longitud de los meses--, y por eso alcanza con delegar; un calendario con
-     * meses de otra longitud necesitaria su propia cuenta.
+     * <p>It is computed over the equivalent ISO dates and returned as a `ChronoPeriod` of this
+     * calendar. The sum is the same --this library's three calendars only renumber the years, they
+     * do not change the months' lengths-- and that is why delegating is enough; a calendar with
+     * months of another length would need a sum of its own.
      */
     public ChronoPeriod until(ChronoLocalDate endDateExclusive) {
         if (endDateExclusive == null) {
             throw new NullPointerException("endDateExclusive");
         }
-        java.time.LocalDate fin = java.time.LocalDate.ofEpochDay(endDateExclusive.toEpochDay());
+        java.time.LocalDate end = java.time.LocalDate.ofEpochDay(endDateExclusive.toEpochDay());
         java.time.Period p = java.time.Period.between(
-                java.time.LocalDate.ofEpochDay(this.toEpochDay()), fin);
+                java.time.LocalDate.ofEpochDay(this.toEpochDay()), end);
         return new ChronoPeriodImpl(this.getChronology(), p.getYears(), p.getMonths(), p.getDays());
     }
 
@@ -152,32 +156,32 @@ public final class ThaiBuddhistDate implements ChronoLocalDate {
         return buf.toString();
     }
 
-    // ---- las cuatro entradas que faltaban --------------------------------------------------------
+    // ---- the four entry points that were missing -------------------------------------------------
     //
-    // `now()` y `from(...)` son las dos formas de conseguir una fecha sin escribir sus numeros: una
-    // la saca del reloj, la otra la traduce de otro temporal. Sin ellas, la unica manera de tener
-    // una ThaiBuddhistDate de hoy era calcular a mano el anio budista, que es justo lo que la clase existe
-    // para no tener que hacer.
+    // `now()` and `from(...)` are the two ways of getting a date without writing its numbers: one
+    // takes it from the clock, the other translates it from another temporal. Without them, the only
+    // way of having today's ThaiBuddhistDate was to work out the Buddhist year by hand, which is
+    // exactly what the class exists to save.
 
-    /** Hoy, en la zona por defecto del sistema. */
+    /** Today, in the system's default zone. */
     public static ThaiBuddhistDate now() {
-        return ThaiBuddhistDate.deIso(LocalDate.now());
+        return ThaiBuddhistDate.fromIso(LocalDate.now());
     }
 
-    /** Hoy en esa zona. */
+    /** Today in that zone. */
     public static ThaiBuddhistDate now(java.time.ZoneId zone) {
-        return ThaiBuddhistDate.deIso(LocalDate.now(zone));
+        return ThaiBuddhistDate.fromIso(LocalDate.now(zone));
     }
 
-    /** Hoy **segun ese reloj**, que es la forma que se puede probar con un `Clock.fixed`. */
+    /** Today **according to that clock**, the form that can be tested with a `Clock.fixed`. */
     public static ThaiBuddhistDate now(java.time.Clock clock) {
-        return ThaiBuddhistDate.deIso(LocalDate.now(clock));
+        return ThaiBuddhistDate.fromIso(LocalDate.now(clock));
     }
 
     /**
-     * La fecha que `temporal` tiene, leida en este calendario.
+     * The date `temporal` holds, read in this calendar.
      *
-     * @throws java.time.DateTimeException si `temporal` no lleva una fecha
+     * @throws java.time.DateTimeException if `temporal` carries no date
      */
     public static ThaiBuddhistDate from(java.time.temporal.TemporalAccessor temporal) {
         if (temporal == null) {
@@ -186,11 +190,11 @@ public final class ThaiBuddhistDate implements ChronoLocalDate {
         if (temporal instanceof ThaiBuddhistDate) {
             return (ThaiBuddhistDate) temporal;
         }
-        return ThaiBuddhistDate.deIso(LocalDate.from(temporal));
+        return ThaiBuddhistDate.fromIso(LocalDate.from(temporal));
     }
 
-    // El puente desde el ISO, que es como esta clase esta guardada por dentro.
-    private static ThaiBuddhistDate deIso(LocalDate iso) {
+    // The bridge from ISO, which is how this class is stored inside.
+    private static ThaiBuddhistDate fromIso(LocalDate iso) {
         return ThaiBuddhistDate.of(iso.getYear() + YEARS_DIFFERENCE, iso.getMonthValue(), iso.getDayOfMonth());
     }
 }

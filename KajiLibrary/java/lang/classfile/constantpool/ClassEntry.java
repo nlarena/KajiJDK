@@ -3,24 +3,25 @@ package java.lang.classfile.constantpool;
 import java.lang.constant.ClassDesc;
 import java.lang.constant.ConstantDesc;
 
-// `CONSTANT_Class_info` (JVMS §4.4.1). Su `name_index` apunta a un `Utf8` con el *nombre interno*
-// de la clase (`java/lang/String`) o, para un arreglo, directamente con su descriptor (`[[I`). Esa
-// asimetría del formato es la razón de que `asInternalName()` y `asSymbol()` sean cosas distintas.
+// `CONSTANT_Class_info` (JVMS §4.4.1). Its `name_index` points at a `Utf8` holding the class's
+// *internal name* (`java/lang/String`) or, for an array, its descriptor directly (`[[I`). That
+// asymmetry of the format is the reason `asInternalName()` and `asSymbol()` are different things.
 public interface ClassEntry extends LoadableConstantEntry {
 
-    /** La entrada `Utf8` con el nombre, tal cual está en el archivo. */
+    /** The `Utf8` entry holding the name, exactly as it is in the file. */
     Utf8Entry name();
 
-    /** El nombre interno: `java/lang/String`, o `[[I` si es un arreglo. */
+    /** The internal name: `java/lang/String`, or `[[I` if it is an array. */
     String asInternalName();
 
-    /** El descriptor nominal de la clase o del arreglo. */
+    /** The class's or the array's nominal descriptor. */
     ClassDesc asSymbol();
 
-    /** Si esta entrada nombra exactamente a `desc`. */
+    /** Whether this entry names exactly `desc`. */
     boolean matches(ClassDesc desc);
 
-    /** Una `CONSTANT_Class` cargada con `ldc` da un `Class`; su descriptor es el `ClassDesc`. */
+    /** A `CONSTANT_Class` loaded with `ldc` gives a `Class`; its descriptor is the
+     * `ClassDesc`. */
     default ConstantDesc constantValue() {
         return asSymbol();
     }

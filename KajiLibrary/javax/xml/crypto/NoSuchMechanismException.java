@@ -4,58 +4,59 @@ import java.io.PrintStream;
 import java.io.PrintWriter;
 
 /**
- * KajiLibrary's javax.xml.crypto.NoSuchMechanismException -- no hay implementacion para ese mecanismo.
+ * KajiLibrary's javax.xml.crypto.NoSuchMechanismException -- there is no implementation for that
+ * mechanism.
  *
- * <p>La unica <b>no comprobada</b> del paquete, y esta bien que lo sea: pedir un mecanismo
- * que la plataforma no tiene es un error de despliegue, no una condicion que el programa
- * pueda manejar. Es la misma decision que {@code NoSuchAlgorithmException} no toma --esa si
- * es comprobada-- y la diferencia se nota al escribir un {@code getInstance}: aca no hay que
- * atajar nada.
+ * <p>The only <b>unchecked</b> one of the package, and rightly so: asking for a mechanism the
+ * platform does not have is a deployment error, not a condition the program can handle. It is the
+ * same decision {@code NoSuchAlgorithmException} does not make --that one is checked-- and the
+ * difference shows when writing a {@code getInstance}: here there is nothing to catch.
  *
- * <p>Redefine {@code getCause} y los tres {@code printStackTrace} porque en el JDK guarda su causa
- * en un campo propio, de cuando {@code Throwable} todavia no las tenia. Aca la causa es la de
- * {@code Throwable} y las redefiniciones delegan: mismo comportamiento, sin dos copias del dato.
+ * <p>It redefines {@code getCause} and the three {@code printStackTrace}s because in the JDK it
+ * keeps its cause in a field of its own, from when {@code Throwable} did not have one yet. Here the
+ * cause is {@code Throwable}'s and the redefinitions delegate: same behaviour, without two copies
+ * of the datum.
  */
 public class NoSuchMechanismException extends RuntimeException {
 
     private static final long serialVersionUID = 4189669069570660166L;
 
-    /** Sin detalle. */
+    /** Without detail. */
     public NoSuchMechanismException() {
         super();
     }
 
-    /** Con un mensaje. */
+    /** With a message. */
     public NoSuchMechanismException(String message) {
         super(message);
     }
 
-    /** Con un mensaje y la causa de abajo. */
+    /** With a message and the underlying cause. */
     public NoSuchMechanismException(String message, Throwable cause) {
         super(message, cause);
     }
 
-    /** Solo con la causa; el mensaje sale de su {@code toString}. */
+    /** With the cause only; the message comes from its {@code toString}. */
     public NoSuchMechanismException(Throwable cause) {
         super(cause);
     }
 
-    /** La causa, o null. */
+    /** The cause, or null. */
     public Throwable getCause() {
         return super.getCause();
     }
 
-    /** A la salida de error. */
+    /** To standard error. */
     public void printStackTrace() {
         super.printStackTrace();
     }
 
-    /** A ese flujo. */
+    /** To that stream. */
     public void printStackTrace(PrintStream s) {
         super.printStackTrace(s);
     }
 
-    /** A ese escritor. */
+    /** To that writer. */
     public void printStackTrace(PrintWriter s) {
         super.printStackTrace(s);
     }

@@ -1,14 +1,14 @@
 package com.sun.source.doctree;
 
 /**
- * Una referencia a un elemento de Java, como la que va adentro de un `{@link}`.
+ * A reference to a Java element, such as the one that goes inside a `{@link}`.
  *
- * <p>Devuelve la **firma cruda**, sin resolver: convertir `Foo#bar(int)` en el metodo que nombra
- * necesita el contexto de compilacion, que este arbol no tiene. Resolverla es trabajo de
- * `DocTrees`, no de este nodo.
+ * <p>It returns the **raw signature**, unresolved: turning `Foo#bar(int)` into the method it
+ * names needs the compilation context, which this tree does not have. Resolving it is
+ * `DocTrees`' work, not this node's.
  */
 public interface ReferenceTree extends DocTree {
 
-    /** La firma tal cual se escribio, sin resolver. */
+    /** The signature just as it was written, unresolved. */
     String getSignature();
 }

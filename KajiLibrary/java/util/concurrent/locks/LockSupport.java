@@ -1,170 +1,171 @@
 package java.util.concurrent.locks;
 
-// La primitiva de bloqueo y despertar sobre la que el JDK construye todo `java.util.concurrent`:
-// `park()` duerme al hilo actual, `unpark(t)` lo despierta. Lo que la hace utilizable --y lo que
-// la distingue de `wait`/`notify`-- es el **permiso**: un `unpark` que llega antes del `park` no
-// se pierde, se guarda, y el `park` siguiente lo consume y retorna en el acto. Por eso quien
-// llama puede comprobar su condicion y despues dormirse sin ventana entre las dos cosas.
+// The blocking and waking primitive the JDK builds the whole of `java.util.concurrent` on:
+// `park()` puts the current thread to sleep, `unpark(t)` wakes it. What makes it usable --and what
+// distinguishes it from `wait`/`notify`-- is the **permit**: an `unpark` arriving before the `park`
+// is not lost, it is stored, and the next `park` consumes it and returns at once. That is why a
+// caller can check their condition and then fall asleep with no window between the two.
 //
-// # Que sostiene esto en KajiJDK
+// # What holds this up in KajiJDK
 //
-// `park` y `unpark` son **nativos de verdad**: la VM los intercepta en `invokestatic` (son
-// operaciones del planificador, no llamadas de hoja) y mantiene el permiso por hilo. No es una
-// emulacion ni un bucle de espera activa. `java/ParkTest.java` lo comprueba con las tres
-// substancias de hilos, incluida la paralela real.
+// `park` and `unpark` are **genuinely native**: the VM intercepts them at `invokestatic` (they are
+// scheduler operations, not leaf calls) and keeps the permit per thread. It is not an emulation nor
+// a spin loop. `java/ParkTest.java` checks it with all three thread substrates, the real parallel
+// one included.
 //
-// # Las esperas con plazo
+// # The timed waits
 //
-// `parkNanos` y `parkUntil` **estan**, y estan bien: el plazo lo lleva la VM, no un rodeo de este
-// lado. Este archivo decia lo contrario --que las cuatro sobrecargas no se podian escribir con
-// honestidad-- y era cierto mientras el unico intrinseco fuera `park()` a secas. Lo que se hizo fue
-// levantar el bloqueo: la VM tiene ahora un `park` con plazo, con el **mismo** permiso que el
-// `park()` sin plazo.
+// `parkNanos` and `parkUntil` **are here**, and they are sound: the deadline is kept by the VM, not
+// by a detour on this side. This file used to say the opposite --that the four overloads could not
+// be written honestly-- and that was true while the only intrinsic was a bare `park()`. What was
+// done was to lift the block: the VM now has a `park` with a deadline, with the **same** permit as
+// the deadline-less `park()`.
 //
-// Que compartan el permiso es lo que importa, y es exactamente lo que hacia imposible emularlo
-// desde Java: un `Object.wait(ms)` de este lado no lo despertaria un `unpark`, y un `unpark` no
-// consumiria esa espera. Serian dos sistemas de permisos, y `unpark(t)` --que la VM se queda--
-// tocaria solo uno. Adentro de la VM hay uno solo.
+// That they share the permit is what matters, and it is exactly what made emulating it from Java
+// impossible: an `Object.wait(ms)` on this side would not be woken by an `unpark`, and an `unpark`
+// would not consume that wait. They would be two permit systems, and `unpark(t)` --which the VM
+// keeps-- would touch only one. Inside the VM there is a single one.
 //
-// **El plazo se mide en el reloj de opcodes**, como toda espera con plazo de esta VM
-// (`Thread.sleep`, `Object.wait(ms)`, `join(ms)`): aca no hay reloj de pared. Un `parkNanos` no
-// espera nanosegundos de verdad sino su equivalente en instrucciones ejecutadas. Es una propiedad de
-// la VM entera y no de este metodo, pero conviene tenerla presente antes de usar el plazo para medir
-// algo. Lo que si se cumple, y es lo que a un `Lock` le importa: la espera **termina**, la termina
-// tambien un `unpark`, y un permiso que llego antes la saltea.
+// **The deadline is measured on the opcode clock**, like every timed wait on this VM
+// (`Thread.sleep`, `Object.wait(ms)`, `join(ms)`): there is no wall clock here. A `parkNanos` does
+// not wait real nanoseconds but their equivalent in executed instructions. It is a property of the
+// whole VM and not of this method, but it is worth bearing in mind before using the deadline to
+// measure anything. What does hold, and it is what a `Lock` cares about: the wait **ends**, an
+// `unpark` also ends it, and a permit that arrived earlier skips it.
 //
-// `park(Object blocker)` **si** esta, y bloquea correctamente, pero **no registra el
-// bloqueador**: la VM se queda la llamada antes de que corra una sola instruccion del cuerpo, asi
-// que no hay donde anotarlo. `setCurrentBlocker`/`getBlocker` son un par honesto y completo entre
-// ellos --lo que uno guarda es lo que el otro devuelve--; lo que falta es el efecto lateral de
-// `park(Object)`, y esta dicho aca en vez de simulado.
+// `park(Object blocker)` **is** here, and it blocks correctly, but it **does not record the
+// blocker**: the VM keeps the call before a single instruction of the body runs, so there is nowhere
+// to note it. `setCurrentBlocker`/`getBlocker` are an honest and complete pair between themselves
+// --what one stores is what the other returns--; what is missing is `park(Object)`'s side effect,
+// and it is said here rather than simulated.
 //
-// # Un defecto de fidelidad de la VM, que conviene saber antes de usar esto
+// # A fidelity defect of the VM's, worth knowing before using this
 //
-// Interrumpir un hilo estacionado en `park()` **lanza `InterruptedException`** en vez de hacer
-// que `park` retorne con la bandera de interrupcion puesta. La excepcion ademas es indeclarada
-// (`park` no tiene `throws`). Repro en `scratchpad/zzlocks/ParkIntr.java`: el JDK real devuelve
-// 1, nuestra VM mata al hilo. Por eso `AbstractQueuedSynchronizer` **no** se apoya en `park`
-// para su cola: usa el monitor de cada nodo, que si lanza donde corresponde.
+// Interrupting a thread parked in `park()` **throws `InterruptedException`** instead of making
+// `park` return with the interrupt flag set. The exception is also undeclared (`park` has no
+// `throws`). Repro in `scratchpad/zzlocks/ParkIntr.java`: the real JDK returns 1, our VM kills the
+// thread. That is why `AbstractQueuedSynchronizer` does **not** lean on `park` for its queue: it
+// uses each node's monitor, which does throw where it should.
 public final class LockSupport {
 
-    // Los bloqueadores anotados con `setCurrentBlocker`, por hilo. Un mapa y no un campo de
-    // `Thread` porque `Thread` no tiene ese campo y este paquete no lo puede agregar. La entrada
-    // se **borra** cuando el bloqueador vuelve a `null`, que es lo que hace todo llamador
-    // razonable al salir de la espera, asi que el mapa no crece con los hilos muertos.
-    private static final java.util.HashMap<Thread, Object> BLOQUEADORES =
+    // The blockers noted with `setCurrentBlocker`, per thread. A map and not a field of `Thread`
+    // because `Thread` does not have that field and this package cannot add it. The entry is
+    // **removed** when the blocker goes back to `null`, which is what every reasonable caller does
+    // on leaving the wait, so the map does not grow with dead threads.
+    private static final java.util.HashMap<Thread, Object> BLOCKERS =
             new java.util.HashMap<Thread, Object>();
 
     private LockSupport() {
     }
 
     /**
-     * Duerme al hilo actual hasta que lo despierten con {@link #unpark}, salvo que ya tenga un
-     * permiso guardado, en cuyo caso lo consume y retorna en el acto.
+     * It puts the current thread to sleep until it is woken with {@link #unpark}, unless it
+     * already has a stored permit, in which case it consumes it and returns at once.
      *
-     * <p>Puede retornar **sin razon** (un despertar espurio), como en el JDK: quien llama tiene
-     * que comprobar su condicion en un bucle, nunca suponer que un retorno significa algo.
+     * <p>It may return **for no reason** (a spurious wake-up), as in the JDK: the caller has to
+     * check their condition in a loop, never assume that a return means anything.
      */
     public static native void park();
 
     /**
-     * Igual que {@link #park()}, con un objeto que dice *por que* se esta esperando.
+     * The same as {@link #park()}, with an object saying *why* one is waiting.
      *
-     * <p>El bloqueador es solo para diagnostico y **este no lo registra** (la VM se queda la
-     * llamada; ver el encabezado de la clase). El bloqueo en si es identico al de `park()`.
+     * <p>The blocker is for diagnostics only and **this does not record it** (the VM keeps the call;
+     * see the class's header). The blocking itself is identical to `park()`'s.
      */
     public static native void park(Object blocker);
 
     /**
-     * Le da un permiso a `thread`: si esta estacionado, lo despierta; si no, el permiso queda
-     * guardado y su proximo {@link #park()} retorna en el acto.
+     * It gives `thread` a permit: if it is parked, it wakes it; if not, the permit is stored and
+     * its next {@link #park()} returns at once.
      *
-     * <p>`unpark(null)`, o sobre un hilo que no arranco o que ya termino, no hace nada.
+     * <p>`unpark(null)`, or on a thread that has not started or has already finished, does
+     * nothing.
      */
     public static native void unpark(Thread thread);
 
     /**
-     * Duerme al hilo actual hasta que lo despierten con {@link #unpark} o hasta que pasen `nanos`,
-     * lo que ocurra primero.
+     * It puts the current thread to sleep until it is woken with {@link #unpark} or until `nanos`
+     * have passed, whichever comes first.
      *
-     * <p>Consume el permiso si ya habia uno, igual que {@link #park()}. Un `nanos` cero o negativo
-     * retorna en el acto **sin** consumirlo: es lo que hace el JDK -- `parkNanos(0)` no es una
-     * espera de cero, es no esperar.
+     * <p>It consumes the permit if there already was one, just like {@link #park()}. A zero or
+     * negative `nanos` returns at once **without** consuming it: it is what the JDK does --
+     * `parkNanos(0)` is not a wait of zero, it is not waiting.
      *
-     * <p>Ver el encabezado de la clase sobre en que unidades corre el plazo.
+     * <p>See the class's header on what units the deadline runs in.
      */
     public static native void parkNanos(long nanos);
 
     /**
-     * Igual que {@link #parkNanos(long)}, con un objeto que dice *por que* se esta esperando.
+     * The same as {@link #parkNanos(long)}, with an object saying *why* one is waiting.
      *
-     * <p>El bloqueador es solo para diagnostico y **este no lo registra**, por lo mismo que
-     * {@link #park(Object)}: la VM se queda la llamada antes de que corra una instruccion del
-     * cuerpo. El bloqueo y el plazo son identicos a los de la otra forma.
+     * <p>The blocker is for diagnostics only and **this does not record it**, for the same reason as
+     * {@link #park(Object)}: the VM keeps the call before an instruction of the body runs. The
+     * blocking and the deadline are identical to the other form's.
      */
     public static native void parkNanos(Object blocker, long nanos);
 
     /**
-     * Duerme al hilo actual hasta que lo despierten o hasta ese instante absoluto, en milisegundos
-     * desde la epoca -- la misma escala de {@link System#currentTimeMillis}.
+     * It puts the current thread to sleep until it is woken or until that absolute instant, in
+     * milliseconds since the epoch -- {@link System#currentTimeMillis}'s scale.
      *
-     * <p>Esta escrito sobre {@link #parkNanos(long)} y no es un nativo aparte, y eso es a proposito:
-     * un plazo absoluto **es** un plazo relativo calculado una vez. Escribirlo asi deja una sola
-     * espera con plazo en la VM en vez de dos que podrian divergir.
+     * <p>It is written on {@link #parkNanos(long)} and is not a separate intrinsic, and that is on
+     * purpose: an absolute deadline **is** a relative deadline computed once. Writing it this way
+     * leaves a single timed wait in the VM instead of two that could drift apart.
      *
-     * <p>Un plazo ya vencido retorna en el acto sin consumir el permiso.
+     * <p>An already expired deadline returns at once without consuming the permit.
      */
     public static void parkUntil(long deadline) {
-        long resta = deadline - System.currentTimeMillis();
-        if (resta > 0L) {
-            LockSupport.parkNanos(resta * 1000000L);
+        long left = deadline - System.currentTimeMillis();
+        if (left > 0L) {
+            LockSupport.parkNanos(left * 1000000L);
         }
     }
 
     /**
-     * Igual que {@link #parkUntil(long)}, con un bloqueador de diagnostico.
+     * The same as {@link #parkUntil(long)}, with a diagnostic blocker.
      *
-     * <p>Ver {@link #park(Object)}: el bloqueador no se registra.
+     * <p>See {@link #park(Object)}: the blocker is not recorded.
      */
     public static void parkUntil(Object blocker, long deadline) {
-        long resta = deadline - System.currentTimeMillis();
-        if (resta > 0L) {
-            LockSupport.parkNanos(blocker, resta * 1000000L);
+        long left = deadline - System.currentTimeMillis();
+        if (left > 0L) {
+            LockSupport.parkNanos(blocker, left * 1000000L);
         }
     }
 
     /**
-     * Anota el bloqueador del hilo actual. `null` lo borra.
+     * It notes the current thread's blocker. `null` clears it.
      *
-     * <p>Es lo que un `Lock` hace antes de estacionarse para que un volcado de hilos diga sobre
-     * que se esta esperando.
+     * <p>It is what a `Lock` does before parking, so that a thread dump says what is being waited
+     * on.
      */
     public static void setCurrentBlocker(Object blocker) {
-        Thread yo = Thread.currentThread();
-        synchronized (BLOQUEADORES) {
+        Thread self = Thread.currentThread();
+        synchronized (BLOCKERS) {
             if (blocker == null) {
-                BLOQUEADORES.remove(yo);
+                BLOCKERS.remove(self);
             } else {
-                BLOQUEADORES.put(yo, blocker);
+                BLOCKERS.put(self, blocker);
             }
         }
     }
 
     /**
-     * El bloqueador anotado para `thread`, o `null` si no hay ninguno.
+     * The blocker noted for `thread`, or `null` if there is none.
      *
-     * <p>Es una **foto** y solo sirve para diagnosticar: para cuando la respuesta llegue, el hilo
-     * puede haber dejado de esperar. El javadoc del JDK dice lo mismo.
+     * <p>It is a **snapshot** and serves only for diagnostics: by the time the answer arrives, the
+     * thread may have stopped waiting. The JDK's javadoc says the same.
      *
-     * @throws NullPointerException si `thread` es `null`
+     * @throws NullPointerException if `thread` is `null`
      */
     public static Object getBlocker(Thread thread) {
         if (thread == null) {
             throw new NullPointerException("thread");
         }
         Object b;
-        synchronized (BLOQUEADORES) {
-            b = BLOQUEADORES.get(thread);
+        synchronized (BLOCKERS) {
+            b = BLOCKERS.get(thread);
         }
         return b;
     }

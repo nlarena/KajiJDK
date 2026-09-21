@@ -3,15 +3,15 @@ package javax.swing.event;
 import java.util.EventObject;
 
 /**
- * La seleccion de una lista cambio.
+ * A list's selection changed.
  *
- * <p>El rango que trae es <strong>donde pudo haber cambiado algo</strong>, no lo que quedo
- * seleccionado. Es una diferencia real: quien escucha tiene que preguntarle al modelo por el estado
- * final de esas filas. El evento acota el trabajo, no lo hace.
+ * <p>The range it carries is <strong>where something may have changed</strong>, not what was left
+ * selected. It is a real difference: whoever listens has to ask the model for those rows' final
+ * state. The event bounds the work, it does not do it.
  *
- * <p>{@link #getValueIsAdjusting} en {@code true} significa que vienen mas: el usuario esta
- * arrastrando. Recalcular en cada paso intermedio es trabajo tirado, y el ultimo evento —con la
- * bandera apagada— es el que vale.
+ * <p>{@link #getValueIsAdjusting} at {@code true} means more are coming: the user is dragging.
+ * Recomputing at every intermediate step is wasted work, and the last event --with the flag off--
+ * is the one that counts.
  */
 public class ListSelectionEvent extends EventObject {
 
@@ -28,17 +28,17 @@ public class ListSelectionEvent extends EventObject {
         this.isAdjusting = isAdjusting;
     }
 
-    /** La primera fila que pudo cambiar. */
+    /** The first row that may have changed. */
     public int getFirstIndex() {
         return this.firstIndex;
     }
 
-    /** La ultima fila que pudo cambiar, inclusive. */
+    /** The last row that may have changed, inclusive. */
     public int getLastIndex() {
         return this.lastIndex;
     }
 
-    /** Si vienen mas cambios. */
+    /** Whether more changes are coming. */
     public boolean getValueIsAdjusting() {
         return this.isAdjusting;
     }

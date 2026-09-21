@@ -7,24 +7,25 @@ import javax.sql.RowSetWriter;
 import javax.sql.rowset.WebRowSet;
 
 /**
- * El escritor que vuelca un {@link WebRowSet} a XML.
+ * The writer that dumps a {@link WebRowSet} to XML.
  *
- * <p>Es la contraparte de {@link XmlReader} y escribe lo mismo que aquel espera: propiedades,
- * metadatos, filas actuales y valores originales de las modificadas.
+ * <p>It is the counterpart of {@link XmlReader} and writes the same thing that one expects:
+ * properties, metadata, current rows and original values of the modified ones.
  *
- * <p>A diferencia de un {@link RowSetWriter} comun, esto no sincroniza con nada: no devuelve los
- * cambios al origen, los <strong>serializa</strong>. El destino es un documento, no una base.
+ * <p>Unlike an ordinary {@link RowSetWriter}, this synchronizes with nothing: it does not return
+ * the changes to the source, it <strong>serializes</strong> them. The destination is a document,
+ * not a database.
  *
  * @since 1.5
  */
 public interface XmlWriter extends RowSetWriter {
 
     /**
-     * Escribe el conjunto entero como XML.
+     * Writes the whole set as XML.
      *
-     * @param caller el conjunto a escribir
-     * @param writer adonde escribirlo
-     * @throws SQLException si no se pudo escribir
+     * @param caller the set to write
+     * @param writer where to write it
+     * @throws SQLException if it could not be written
      */
     void writeXML(WebRowSet caller, Writer writer) throws SQLException;
 }

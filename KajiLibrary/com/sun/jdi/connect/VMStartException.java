@@ -1,27 +1,27 @@
 package com.sun.jdi.connect;
 
 /**
- * La VM se lanzo pero la conexion de depuracion no llego a establecerse.
+ * The VM was launched but the debugging connection was not established.
  *
- * <p>Lo que la hace util es que **trae el proceso**. Cuando un
- * {@link LaunchingConnector} falla, el motivo casi siempre esta en la salida de error de la VM que
- * se acaba de lanzar --una opcion de `-agentlib:jdwp` mal escrita, un puerto ocupado-- y sin el
- * `Process` esa salida se pierde junto con el proceso huerfano.
+ * <p>What makes it useful is that it **brings the process**. When a
+ * {@link LaunchingConnector} fails, the reason is almost always in the error output of the VM
+ * that has just been launched -- a misspelt `-agentlib:jdwp` option, a busy port -- and without
+ * the `Process` that output is lost along with the orphaned process.
  *
- * <p>Quien atrapa esta excepcion tiene entonces dos obligaciones: leer los flujos del proceso para
- * saber que paso, y terminarlo.
+ * <p>Whoever catches this exception then has two duties: to read the process's streams in order
+ * to know what happened, and to end it.
  */
 public class VMStartException extends Exception {
 
     private static final long serialVersionUID = 6408644824640801020L;
 
-    /** El proceso de la VM lanzada. De paquete, como en el JDK. */
+    /** The launched VM's process. Package-private, as in the JDK. */
     Process process;
 
     /**
-     * Un fallo sobre ese proceso, sin detalle.
+     * A failure about that process, with no detail.
      *
-     * @param process la VM que se lanzo
+     * @param process the VM that was launched
      */
     public VMStartException(Process process) {
         super();
@@ -29,17 +29,17 @@ public class VMStartException extends Exception {
     }
 
     /**
-     * Un fallo sobre ese proceso, con detalle.
+     * A failure about that process, with a detail.
      *
-     * @param s el detalle
-     * @param process la VM que se lanzo
+     * @param s the detail
+     * @param process the VM that was launched
      */
     public VMStartException(String s, Process process) {
         super(s);
         this.process = process;
     }
 
-    /** El proceso de la VM lanzada; ver la nota de la clase sobre que hacer con el. */
+    /** The launched VM's process; see the class note about what to do with it. */
     public Process process() {
         return this.process;
     }

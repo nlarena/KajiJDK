@@ -1,7 +1,7 @@
 package com.sun.source.tree;
 
 /**
- * Una etiqueta de `case` que es un patron.
+ * A `case` label that is a pattern.
  */
 public interface PatternCaseLabelTree extends CaseLabelTree {
 

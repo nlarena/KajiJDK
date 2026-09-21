@@ -8,74 +8,76 @@ import java.nio.channels.ClosedByInterruptException;
 import java.nio.channels.InterruptibleChannel;
 
 /**
- * KajiLibrary's java.nio.channels.spi.AbstractInterruptibleChannel — la base de todo canal.
+ * KajiLibrary's java.nio.channels.spi.AbstractInterruptibleChannel — the base of every channel.
  *
- * <p>Resuelve una sola cosa, y por eso existe: que **cerrar sea idempotente y ocurra una vez**. El
- * `close()` publico es `final` y lleva la contabilidad del bit de abierto; lo que cada canal tiene
- * de propio va en {@link #implCloseChannel()}, que se llama exactamente una vez por canal aunque se
- * cierre diez veces desde cinco hilos. Sin esta separacion cada canal reimplementaria el mismo
- * `if (yaCerrado) return;` y alguno lo haria mal.
+ * <p>It solves a single thing, and that is why it exists: that **closing be idempotent and happen
+ * once**. The public `close()` is `final` and keeps the bookkeeping of the open bit; what each
+ * channel has of its own goes in {@link #implCloseChannel()}, which is called exactly once per
+ * channel even if it is closed ten times from five threads. Without this separation each channel
+ * would reimplement the same `if (alreadyClosed) return;` and one of them would do it wrongly.
  *
- * <h2>Lo que `begin()`/`end()` hacen aca, y lo que no</h2>
+ * <h2>What `begin()`/`end()` do here, and what they do not</h2>
  *
- * <p>En el JDK este par envuelve cada operacion bloqueante y sirve para **abortarla desde afuera**:
- * `begin()` inscribe un interruptor en el hilo, y si alguien lo interrumpe mientras esta adentro, el
- * canal se cierra debajo suyo y la llamada revienta en el acto con {@link ClosedByInterruptException}.
+ * <p>In the JDK this pair wraps each blocking operation and serves for **aborting it from
+ * outside**: `begin()` enrols an interruptor in the thread, and if somebody interrupts it while it
+ * is inside, the channel is closed underneath it and the call blows up on the spot with
+ * {@link ClosedByInterruptException}.
  *
- * <p>Aca la deteccion es **al salir, no en el medio**, y conviene decirlo sin adornos: `end()` mira
- * si el canal se cerro o si el hilo quedo interrumpido durante la operacion y recien entonces tira.
- * La razon es que esta VM no expone el gancho que el JDK usa para desbloquear a un hilo parado en
- * una syscall. La diferencia no se nota en los canales que esta biblioteca sabe fabricar --los de
- * archivo, donde ninguna operacion se bloquea de verdad-- pero se notaria en uno de red, y por eso
- * queda escrito.
+ * <p>Here the detection is **on the way out, not in the middle**, and it is best said without
+ * adornment: `end()` looks at whether the channel was closed or whether the thread was left
+ * interrupted during the operation and only then throws. The reason is that this VM does not expose
+ * the hook the JDK uses to unblock a thread stopped in a syscall. The difference does not show in
+ * the channels this library makes with its own hands --the file ones, where no operation really
+ * blocks-- but it would show in a network one, and that is why it is written down.
  *
- * <p>El contrato que **si** se cumple entero: si el canal se cerro asincronicamente mientras la
- * operacion corria, la operacion no devuelve un resultado a medias sino
- * {@link AsynchronousCloseException}; y si el hilo fue interrumpido, el canal queda cerrado y sale
- * {@link ClosedByInterruptException}. Un resultado parcial de una operacion abandonada es
- * exactamente lo que estas excepciones existen para no entregar.
+ * <p>The contract that **is** fulfilled whole: if the channel was closed asynchronously while the
+ * operation was running, the operation does not return a half result but
+ * {@link AsynchronousCloseException}; and if the thread was interrupted, the channel is left closed
+ * and {@link ClosedByInterruptException} comes out. A partial result of an abandoned operation is
+ * exactly what these exceptions exist not to hand over.
  *
- * <h2>`close()` sin `throws IOException`</h2>
+ * <h2>`close()` without `throws IOException`</h2>
  *
- * <p>El JDK la declara; aca no se puede. {@link Channel} de esta biblioteca hereda de
- * `java.io.Closeable`, cuyo `close()` no la declara, y §8.4.8.3 prohibe que una redefinicion
- * ensanche las excepciones chequeadas. La divergencia nace en `Closeable` y se arrastra hasta aca.
- * Para no perder el motivo, lo que {@link #implCloseChannel()} tire como {@link IOException} sale
- * envuelto en {@link UncheckedIOException}: el error no se traga, cambia de forma.
+ * <p>The JDK declares it; here it cannot be done. This library's {@link Channel} inherits from
+ * `java.io.Closeable`, whose `close()` does not declare it, and §8.4.8.3 forbids an override to
+ * widen the checked exceptions. The divergence is born in `Closeable` and is dragged as far as
+ * here. So as not to lose the reason, whatever {@link #implCloseChannel()} throws as an {@link
+ * IOException} comes out wrapped in {@link UncheckedIOException}: the error is not swallowed, it
+ * changes shape.
  */
 public abstract class AbstractInterruptibleChannel implements Channel, InterruptibleChannel {
 
-    // Sin `volatile` a proposito: esta VM no garantiza que la palabra clave signifique lo que el
-    // JMM dice, y un `volatile` que no ordena nada es peor que su ausencia porque invita a confiar.
-    // Lo que si se garantiza es la idempotencia bajo el cerrojo de abajo.
-    private boolean abierto = true;
+    // Without `volatile` on purpose: this VM does not guarantee that the keyword means what the JMM
+    // says, and a `volatile` that orders nothing is worse than its absence because it invites
+    // trust. What is guaranteed is the idempotence under the latch below.
+    private boolean openFlag = true;
 
-    // Cerrojo propio y no `this`: si el candado fuera el canal, cualquiera que sincronice sobre un
-    // canal ajeno podria trabar su cierre.
-    private final Object cerrojo = new Object();
+    // A latch of its own and not `this`: if the lock were the channel, anybody who synchronised on
+    // somebody else's channel could block its closing.
+    private final Object latch = new Object();
 
-    // Marca de cierre asincronico ocurrido mientras habia una operacion adentro. Es lo que separa
-    // "me cerraron" de "termine normal" cuando `end()` tiene que decidir que tirar.
-    private boolean cerradoDuranteOperacion = false;
+    // Mark of an asynchronous close that happened while there was an operation inside. It is what
+    // separates "I was closed" from "I finished normally" when `end()` has to decide what to throw.
+    private boolean closedDuringOp = false;
 
     protected AbstractInterruptibleChannel() {
     }
 
     /**
-     * Cierra el canal.
+     * Closes the channel.
      *
-     * <p>Es `final` porque el punto de la clase es que nadie se saltee la contabilidad; lo propio de
-     * cada canal va en {@link #implCloseChannel()}.
+     * <p>It is `final` because the point of the class is that nobody skip the bookkeeping; each
+     * channel's own part goes in {@link #implCloseChannel()}.
      *
-     * @throws UncheckedIOException si el cierre concreto falla; ver la nota de la clase
+     * @throws UncheckedIOException if the concrete closing fails; see the note of the class
      */
     public final void close() {
-        synchronized (this.cerrojo) {
-            if (!this.abierto) {
+        synchronized (this.latch) {
+            if (!this.openFlag) {
                 return;
             }
-            this.abierto = false;
-            this.cerradoDuranteOperacion = true;
+            this.openFlag = false;
+            this.closedDuringOp = true;
         }
         try {
             this.implCloseChannel();
@@ -85,50 +87,54 @@ public abstract class AbstractInterruptibleChannel implements Channel, Interrupt
     }
 
     /**
-     * El cierre concreto de este canal, llamado una sola vez.
+     * The concrete closing of this channel, called a single time.
      *
-     * <p>Cuando corre, el canal ya figura cerrado: quien pregunte {@link #isOpen()} desde adentro va
-     * a ver `false`, que es lo correcto --el cierre ya se decidio, esto es solo ejecutarlo--.
+     * <p>When it runs, the channel appears closed already: whoever asks {@link #isOpen()} from
+     * inside is going to see `false`, which is right --the closing has been decided, this is only
+     * carrying it out--.
      */
     protected abstract void implCloseChannel() throws IOException;
 
     public final boolean isOpen() {
-        synchronized (this.cerrojo) {
-            return this.abierto;
+        synchronized (this.latch) {
+            return this.openFlag;
         }
     }
 
     /**
-     * Marca el arranque de una operacion que podria bloquear.
+     * Marks the start of an operation that could block.
      *
-     * <p>Va siempre en pareja con {@link #end}, y el `end` va en un `finally`; si no, una excepcion
-     * en el medio deja la marca puesta y la proxima operacion hereda un estado que no es suyo.
+     * <p>It always goes in a pair with {@link #end}, and the `end` goes in a `finally`; if not, an
+     * exception in the middle leaves the mark set and the next operation inherits a state that is
+     * not its own.
      */
     protected final void begin() {
-        synchronized (this.cerrojo) {
-            this.cerradoDuranteOperacion = !this.abierto;
+        synchronized (this.latch) {
+            this.closedDuringOp = !this.openFlag;
         }
     }
 
     /**
-     * Cierra la pareja de {@link #begin}.
+     * Closes the pair of {@link #begin}.
      *
-     * @param completed `true` si la operacion llego a completarse
-     * @throws AsynchronousCloseException si el canal se cerro mientras la operacion corria
-     * @throws ClosedByInterruptException si el hilo quedo interrumpido; el canal queda cerrado
+     * @param completed `true` if the operation got as far as completing
+     * @throws AsynchronousCloseException if the channel was closed while the operation was running
+     * @throws ClosedByInterruptException if the thread was left interrupted; the channel is left
+     *     closed
      */
     protected final void end(boolean completed) throws AsynchronousCloseException {
-        boolean cerrado;
-        synchronized (this.cerrojo) {
-            cerrado = this.cerradoDuranteOperacion || !this.abierto;
+        boolean closed;
+        synchronized (this.latch) {
+            closed = this.closedDuringOp || !this.openFlag;
         }
-        // El interrumpido se mira primero porque es la causa y el cierre es su consecuencia: al
-        // reves, una interrupcion se reportaria como un cierre anonimo y se perderia el porque.
+        // The interrupted one is looked at first because it is the cause and the closing is its
+        // consequence: the other way round, an interruption would be reported as an anonymous close
+        // and the why would be lost.
         if (Thread.currentThread().isInterrupted()) {
             this.close();
             throw new ClosedByInterruptException();
         }
-        if (cerrado && !completed) {
+        if (closed && !completed) {
             throw new AsynchronousCloseException();
         }
     }

@@ -4,15 +4,15 @@ import java.awt.Point;
 import java.util.EventObject;
 
 /**
- * La base de los eventos que le llegan al **origen** de un arrastre.
+ * The base of the events that reach the **source** of a drag.
  *
- * <p>La posición es de **pantalla**, no del componente, y no puede ser de otra manera: el arrastre
- * puede estar pasando por encima de otra ventana o de otro programa, así que no hay ningún
- * componente propio respecto del cual medir.
+ * <p>The position is of the **screen**, not of the component, and it cannot be otherwise: the drag
+ * may be passing over another window or another program, so there is no component of one's own to
+ * measure against.
  *
- * <p>Puede no haber posición: el constructor de un solo argumento arma un evento sin punto, y ahí
- * {@link #getLocation} devuelve `null`. Es lo que corresponde cuando el evento no viene de un
- * movimiento sino del final del arrastre.
+ * <p>There may be no position: the one-argument constructor builds an event with no point, and
+ * there {@link #getLocation} returns `null`. It is what fits when the event does not come from a
+ * movement but from the end of the drag.
  */
 public class DragSourceEvent extends EventObject {
 
@@ -23,9 +23,9 @@ public class DragSourceEvent extends EventObject {
     private final int y;
 
     /**
-     * Sin posición.
+     * With no position.
      *
-     * @throws IllegalArgumentException si el contexto es `null`
+     * @throws IllegalArgumentException if the context is `null`
      */
     public DragSourceEvent(DragSourceContext dsc) {
         super(dsc);
@@ -35,9 +35,9 @@ public class DragSourceEvent extends EventObject {
     }
 
     /**
-     * Con la posición en pantalla.
+     * With the position on the screen.
      *
-     * @throws IllegalArgumentException si el contexto es `null`
+     * @throws IllegalArgumentException if the context is `null`
      */
     public DragSourceEvent(DragSourceContext dsc, int x, int y) {
         super(dsc);
@@ -46,15 +46,15 @@ public class DragSourceEvent extends EventObject {
         this.y = y;
     }
 
-    /** El contexto del arrastre en curso. */
+    /** The context of the drag under way. */
     public DragSourceContext getDragSourceContext() {
         return (DragSourceContext) this.getSource();
     }
 
     /**
-     * Dónde está el puntero, en coordenadas de pantalla.
+     * Where the pointer is, in screen coordinates.
      *
-     * @return el punto, o `null` si este evento no trae posición
+     * @return the point, or `null` if this event brings no position
      */
     public Point getLocation() {
         if (this.locationSpecified) {
@@ -63,12 +63,12 @@ public class DragSourceEvent extends EventObject {
         return null;
     }
 
-    /** La X en pantalla, o 0 si no hay posición. */
+    /** The X on the screen, or 0 if there is no position. */
     public int getX() {
         return this.x;
     }
 
-    /** La Y en pantalla, o 0 si no hay posición. */
+    /** The Y on the screen, or 0 if there is no position. */
     public int getY() {
         return this.y;
     }

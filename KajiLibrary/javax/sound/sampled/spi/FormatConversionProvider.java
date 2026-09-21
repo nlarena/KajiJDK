@@ -4,63 +4,63 @@ import javax.sound.sampled.AudioFormat;
 import javax.sound.sampled.AudioInputStream;
 
 /**
- * KajiLibrary's javax.sound.sampled.spi.FormatConversionProvider -- convierte audio de un formato a
- * otro.
+ * KajiLibrary's javax.sound.sampled.spi.FormatConversionProvider -- converts audio from one format
+ * to another.
  *
- * <p>Decodificar mu-law a PCM, cambiar la frecuencia de muestreo, pasar de estereo a mono. Se registra
- * como servicio y {@code AudioSystem} lo encuentra solo.
+ * <p>Decoding mu-law to PCM, changing the sample rate, going from stereo to mono. It is registered
+ * as a service and {@code AudioSystem} finds it by itself.
  *
- * <h2>La conversion es perezosa</h2>
+ * <h2>The conversion is lazy</h2>
  *
- * <p>{@code getAudioInputStream} devuelve un flujo que convierte <b>a medida que se lee</b>, no un
- * bufer ya convertido. Eso es lo que permite convertir un archivo de una hora sin cargarlo en memoria,
- * y lo que permite encadenar conversores.
+ * <p>{@code getAudioInputStream} returns a stream that converts <b>as it is read</b>, not an
+ * already converted buffer. That is what allows converting an hour-long file without loading it
+ * into memory, and what allows chaining converters.
  *
- * <h2>Codificacion contra formato completo</h2>
+ * <h2>Encoding against complete format</h2>
  *
- * <p>Los metodos vienen de a pares: uno toma una {@link AudioFormat.Encoding} y otro un
- * {@link AudioFormat} entero. El primero dice "pasalo a PCM, elegi vos el resto"; el segundo dice
- * exactamente a que. El primero es el util cuando solo hace falta descomprimir.
+ * <p>The methods come in pairs: one takes an {@link AudioFormat.Encoding} and the other a whole
+ * {@link AudioFormat}. The first says "turn it into PCM, you choose the rest"; the second says
+ * exactly into what. The first is the useful one when only decompressing is needed.
  *
- * <p>Los cuatro metodos de consulta vienen implementados sobre los abstractos; una subclase solo
- * necesita los cinco abstractos.
+ * <p>The four query methods come implemented over the abstract ones; a subclass only needs the six
+ * abstract ones. (The note said five.)
  */
 public abstract class FormatConversionProvider {
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected FormatConversionProvider() {
     }
 
-    /** De que codificaciones sabe partir. */
+    /** Which encodings it can start from. */
     public abstract AudioFormat.Encoding[] getSourceEncodings();
 
-    /** A cuales sabe llegar. */
+    /** Which ones it can arrive at. */
     public abstract AudioFormat.Encoding[] getTargetEncodings();
 
-    /** Si sabe partir de esa. */
+    /** Whether it can start from that one. */
     public boolean isSourceEncodingSupported(AudioFormat.Encoding sourceEncoding) {
         return contains(getSourceEncodings(), sourceEncoding);
     }
 
-    /** Si sabe llegar a esa. */
+    /** Whether it can arrive at that one. */
     public boolean isTargetEncodingSupported(AudioFormat.Encoding targetEncoding) {
         return contains(getTargetEncodings(), targetEncoding);
     }
 
-    /** A que codificaciones puede llevar ese formato concreto. */
+    /** Which encodings it can take that concrete format to. */
     public abstract AudioFormat.Encoding[] getTargetEncodings(AudioFormat sourceFormat);
 
-    /** Si puede llevar ese formato a esa codificacion. */
+    /** Whether it can take that format to that encoding. */
     public boolean isConversionSupported(AudioFormat.Encoding targetEncoding,
                                          AudioFormat sourceFormat) {
         return contains(getTargetEncodings(sourceFormat), targetEncoding);
     }
 
-    /** Los formatos concretos a los que puede llevarlo. */
+    /** The concrete formats it can take it to. */
     public abstract AudioFormat[] getTargetFormats(AudioFormat.Encoding targetEncoding,
                                                    AudioFormat sourceFormat);
 
-    /** Si puede convertir entre esos dos formatos. */
+    /** Whether it can convert between those two formats. */
     public boolean isConversionSupported(AudioFormat targetFormat, AudioFormat sourceFormat) {
         AudioFormat[] formats = getTargetFormats(targetFormat.getEncoding(), sourceFormat);
         int i = 0;
@@ -74,22 +74,22 @@ public abstract class FormatConversionProvider {
     }
 
     /**
-     * Un flujo que convierte a esa codificacion mientras se lee.
+     * A stream that converts to that encoding while it is read.
      *
-     * @throws IllegalArgumentException si no soporta esa conversion
+     * @throws IllegalArgumentException if it does not support that conversion
      */
     public abstract AudioInputStream getAudioInputStream(AudioFormat.Encoding targetEncoding,
                                                          AudioInputStream sourceStream);
 
     /**
-     * Idem, a un formato concreto.
+     * Likewise, to a concrete format.
      *
-     * @throws IllegalArgumentException si no soporta esa conversion
+     * @throws IllegalArgumentException if it does not support that conversion
      */
     public abstract AudioInputStream getAudioInputStream(AudioFormat targetFormat,
                                                          AudioInputStream sourceStream);
 
-    /** Si esa codificacion esta en el arreglo. */
+    /** Whether that encoding is in the array. */
     private static boolean contains(AudioFormat.Encoding[] all, AudioFormat.Encoding one) {
         int i = 0;
         while (all != null && i < all.length) {

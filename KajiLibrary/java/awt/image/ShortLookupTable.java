@@ -1,23 +1,23 @@
 package java.awt.image;
 
 /**
- * Una {@link LookupTable} de shorts, leidos **sin signo** (0..65535).
+ * A {@link LookupTable} of shorts, read **unsigned** (0..65535).
  *
- * <p>Es la que sirve para imagenes de 16 bits por componente. Vale la misma nota de signo que
- * {@link ByteLookupTable}.
+ * <p>It is the one that serves for images of 16 bits per component. The same note about the sign as
+ * in {@link ByteLookupTable} applies.
  */
 public class ShortLookupTable extends LookupTable {
 
     private final short[][] data;
 
     /**
-     * Una tabla por componente.
+     * One table per component.
      *
-     * <p>Los arreglos **no se copian**: la tabla se queda con los que se le dan. Es lo
-     * que hace el JDK y lo que permite compartir una tabla grande entre varios filtros
-     * sin duplicarla.
+     * <p>The arrays **are not copied**: the table keeps the ones it is given, and only the array of
+     * arrays is its own. It is what the JDK does and what allows a big table to be shared between
+     * several filters without duplicating it.
      *
-     * @throws IllegalArgumentException si el desplazamiento es negativo
+     * @throws IllegalArgumentException if the offset is negative
      */
     public ShortLookupTable(int offset, short[][] data) {
         super(offset, data.length);
@@ -27,26 +27,26 @@ public class ShortLookupTable extends LookupTable {
         }
     }
 
-    /** Una sola tabla, que se aplica a todos los componentes. */
+    /** A single table, which is applied to every component. */
     public ShortLookupTable(int offset, short[] data) {
         super(offset, 1);
         this.data = new short[1][];
         this.data[0] = data;
     }
 
-    /** Las tablas, sin copiar. */
+    /** The tables, without copying. */
     public final short[][] getTable() {
         return this.data;
     }
 
     /**
-     * Aplica la tabla a un pixel.
+     * Applies the table to a pixel.
      *
-     * <p>Con una sola tabla se usa esa para todos los componentes; con varias, la que
-     * corresponde a cada uno.
+     * <p>With a single table that one is used for every component; with several, the one that
+     * corresponds to each.
      *
-     * @throws ArrayIndexOutOfBoundsException si un valor cae fuera de la tabla despues
-     *     de restarle el desplazamiento
+     * @throws ArrayIndexOutOfBoundsException if a value falls outside the table after subtracting
+     *     the offset from it
      */
     public int[] lookupPixel(int[] src, int[] dst) {
         int[] out = dst == null ? new int[src.length] : dst;
@@ -62,7 +62,7 @@ public class ShortLookupTable extends LookupTable {
         return out;
     }
 
-    /** Igual que la otra forma, con el tipo propio de esta tabla. */
+    /** The same as the other form, with the type of this table. */
     public short[] lookupPixel(short[] src, short[] dst) {
         short[] out = dst == null ? new short[src.length] : dst;
         if (this.data.length == 1) {

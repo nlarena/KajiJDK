@@ -1,42 +1,43 @@
 package javax.swing.tree;
 
 /**
- * El camino desde la raiz de un arbol hasta un nodo.
+ * The path from a tree's root to a node.
  *
- * <h2>Por que un camino y no el nodo</h2>
+ * <h2>Why a path and not the node</h2>
  *
- * <p>Porque un mismo objeto puede estar colgado en dos lugares del arbol. Si la seleccion fuera "el
- * nodo", no habria forma de decir <em>cual</em> de sus apariciones. El camino desambigua, y por eso
- * todo el modelo de arbol de Swing habla en caminos y no en nodos.
+ * <p>Because one same object may hang in two places of the tree. If the selection were "the
+ * node", there would be no way of saying <em>which</em> of its appearances. The path
+ * disambiguates, and that is why the whole of Swing's tree model talks in paths and not in
+ * nodes.
  *
- * <h2>Inmutable, y compartiendo la cola</h2>
+ * <h2>Immutable, and sharing the tail</h2>
  *
- * <p>Un {@code TreePath} no cambia nunca. {@link #pathByAddingChild} devuelve uno nuevo que
- * <strong>guarda al anterior como padre</strong> en vez de copiar el arreglo: un arbol de mil nodos
- * de profundidad diez no aloca diez mil elementos, sino que comparte los prefijos. Es la misma idea
- * que una lista enlazada persistente.
+ * <p>A {@code TreePath} never changes. {@link #pathByAddingChild} returns a new one that
+ * <strong>keeps the previous one as its parent</strong> instead of copying the array: a tree of a
+ * thousand nodes of depth ten does not allocate ten thousand elements, it shares the prefixes. It
+ * is the same idea as a persistent linked list.
  *
- * <p>De ahi que {@link #getPath} tenga que reconstruir el arreglo recorriendo la cadena: el arreglo
- * completo no existe hasta que alguien lo pide.
+ * <p>Hence {@link #getPath} has to rebuild the array by walking the chain: the complete array does
+ * not exist until somebody asks for it.
  */
 public class TreePath implements java.io.Serializable {
 
     private static final long serialVersionUID = 4380089275673032332L;
 
-    /** El ultimo componente: el nodo al que este camino apunta. */
+    /** The last component: the node this path points at. */
     private Object lastPathComponent;
 
-    /** El camino hasta el padre, o {@code null} si este es la raiz. */
+    /** The path up to the parent, or {@code null} if this is the root. */
     private TreePath parentPath;
 
     /**
-     * Un camino con esos componentes, de la raiz al nodo.
+     * A path with those components, from the root to the node.
      *
-     * @throws IllegalArgumentException si el arreglo es {@code null} o vacio
+     * @throws IllegalArgumentException if the array is {@code null} or empty
      */
     public TreePath(Object[] path) {
         if (path == null || path.length == 0) {
-            throw new IllegalArgumentException("El camino no puede ser null ni vacio");
+            throw new IllegalArgumentException("The path cannot be null or empty");
         }
         this.lastPathComponent = path[path.length - 1];
         if (path.length > 1) {
@@ -45,28 +46,28 @@ public class TreePath implements java.io.Serializable {
     }
 
     /**
-     * Un camino de un solo componente, o sea la raiz.
+     * A path of a single component, that is the root.
      *
-     * @throws IllegalArgumentException si es {@code null}
+     * @throws IllegalArgumentException if it is {@code null}
      */
     public TreePath(Object singlePath) {
         if (singlePath == null) {
-            throw new IllegalArgumentException("El componente no puede ser null");
+            throw new IllegalArgumentException("The component cannot be null");
         }
         this.lastPathComponent = singlePath;
         this.parentPath = null;
     }
 
-    /** El camino de {@code parent} mas un hijo. Es lo que comparte el prefijo. */
+    /** {@code parent}'s path plus a child. It is what shares the prefix. */
     protected TreePath(TreePath parent, Object lastElement) {
         if (lastElement == null) {
-            throw new IllegalArgumentException("El componente no puede ser null");
+            throw new IllegalArgumentException("The component cannot be null");
         }
         this.parentPath = parent;
         this.lastPathComponent = lastElement;
     }
 
-    /** Los primeros {@code length} componentes de {@code path}. */
+    /** The first {@code length} components of {@code path}. */
     protected TreePath(Object[] path, int length) {
         this.lastPathComponent = path[length - 1];
         if (length > 1) {
@@ -74,73 +75,73 @@ public class TreePath implements java.io.Serializable {
         }
     }
 
-    /** Sin componentes. Para las subclases que los guardan de otra forma. */
+    /** With no components. For the subclasses that keep them some other way. */
     protected TreePath() {
     }
 
-    /** El camino como arreglo, de la raiz al nodo. */
+    /** The path as an array, from the root to the node. */
     public Object[] getPath() {
         int n = getPathCount();
-        Object[] resultado = new Object[n];
-        TreePath actual = this;
+        Object[] result = new Object[n];
+        TreePath current = this;
         for (int i = n - 1; i >= 0; i--) {
-            resultado[i] = actual.getLastPathComponent();
-            actual = actual.getParentPath();
+            result[i] = current.getLastPathComponent();
+            current = current.getParentPath();
         }
-        return resultado;
+        return result;
     }
 
-    /** El nodo al que apunta. */
+    /** The node it points at. */
     public Object getLastPathComponent() {
         return this.lastPathComponent;
     }
 
-    /** Cuantos componentes tiene, contando la raiz. */
+    /** How many components it has, counting the root. */
     public int getPathCount() {
         int n = 0;
-        TreePath actual = this;
-        while (actual != null) {
+        TreePath current = this;
+        while (current != null) {
             n = n + 1;
-            actual = actual.getParentPath();
+            current = current.getParentPath();
         }
         return n;
     }
 
     /**
-     * El componente numero {@code element}, contando desde la raiz.
+     * Component number {@code element}, counting from the root.
      *
-     * @throws IllegalArgumentException si el indice esta fuera de rango
+     * @throws IllegalArgumentException if the index is out of range
      */
     public Object getPathComponent(int element) {
         int n = getPathCount();
         if (element < 0 || element >= n) {
-            throw new IllegalArgumentException("Indice fuera de rango: " + String.valueOf(element));
+            throw new IllegalArgumentException("Index out of range: " + String.valueOf(element));
         }
-        TreePath actual = this;
+        TreePath current = this;
         for (int i = n - 1; i != element; i--) {
-            actual = actual.getParentPath();
+            current = current.getParentPath();
         }
-        return actual.getLastPathComponent();
+        return current.getLastPathComponent();
     }
 
     /**
-     * Iguales si tienen los mismos componentes en el mismo orden.
+     * Equal if they have the same components in the same order.
      *
-     * <p>Compara con {@code equals} y no por identidad, asi que dos caminos armados por separado
-     * sobre los mismos nodos son iguales — que es lo que hace falta para que una seleccion
-     * reconstruida siga siendo la misma.
+     * <p>It compares with {@code equals} and not by identity, so two paths built separately over
+     * the same nodes are equal -- which is what is needed for a rebuilt selection to go on being
+     * the same one.
      */
     public boolean equals(Object o) {
         if (o == this) {
             return true;
         }
         if (o instanceof TreePath) {
-            TreePath otro = (TreePath) o;
-            if (getPathCount() != otro.getPathCount()) {
+            TreePath other = (TreePath) o;
+            if (getPathCount() != other.getPathCount()) {
                 return false;
             }
             TreePath a = this;
-            TreePath b = otro;
+            TreePath b = other;
             while (a != null) {
                 if (!a.getLastPathComponent().equals(b.getLastPathComponent())) {
                     return false;
@@ -154,17 +155,17 @@ public class TreePath implements java.io.Serializable {
     }
 
     /**
-     * El hash del ultimo componente.
+     * The last component's hash.
      *
-     * <p>Alcanza, y es lo que hace el JDK: dos caminos iguales terminan en el mismo nodo, asi que
-     * la propiedad que un hash necesita se cumple. Recorrer la cadena entera solo haria mas caro
-     * el calculo sin separar mejor.
+     * <p>It is enough, and it is what the JDK does: two equal paths end at the same node, so the
+     * property a hash needs holds. Walking the whole chain would only make the computation more
+     * expensive without separating any better.
      */
     public int hashCode() {
         return this.lastPathComponent.hashCode();
     }
 
-    /** Si {@code aTreePath} cuelga de este camino, o es este mismo. */
+    /** Whether {@code aTreePath} hangs from this path, or is this same one. */
     public boolean isDescendant(TreePath aTreePath) {
         if (aTreePath == this) {
             return true;
@@ -172,29 +173,30 @@ public class TreePath implements java.io.Serializable {
         if (aTreePath == null) {
             return false;
         }
-        int miLargo = getPathCount();
-        int suLargo = aTreePath.getPathCount();
-        if (suLargo < miLargo) {
+        int myLength = getPathCount();
+        int otherLength = aTreePath.getPathCount();
+        if (otherLength < myLength) {
             return false;
         }
-        // Se sube por el candidato hasta ponerlo a la misma altura, y recien ahi se comparan.
-        TreePath candidato = aTreePath;
-        while (suLargo > miLargo) {
-            candidato = candidato.getParentPath();
-            suLargo = suLargo - 1;
+        // The candidate is walked up until it is at the same height, and only then are they
+        // compared.
+        TreePath candidate = aTreePath;
+        while (otherLength > myLength) {
+            candidate = candidate.getParentPath();
+            otherLength = otherLength - 1;
         }
-        return equals(candidato);
+        return equals(candidate);
     }
 
-    /** Este camino mas un hijo. Comparte el prefijo; ver la nota de la clase. */
+    /** This path plus a child. It shares the prefix; see the class note. */
     public TreePath pathByAddingChild(Object child) {
         if (child == null) {
-            throw new NullPointerException("El hijo no puede ser null");
+            throw new NullPointerException("The child cannot be null");
         }
         return new TreePath(this, child);
     }
 
-    /** El camino hasta el padre, o {@code null} si este es la raiz. */
+    /** The path up to the parent, or {@code null} if this is the root. */
     public TreePath getParentPath() {
         return this.parentPath;
     }

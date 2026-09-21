@@ -3,55 +3,55 @@ package javax.sql.rowset;
 import java.sql.SQLException;
 
 /**
- * Fabrica los cinco tipos de {@code RowSet} sin nombrar sus implementaciones.
+ * Makes the five kinds of {@code RowSet} without naming their implementations.
  *
- * <p>Es lo que evita el {@code new com.sun.rowset.CachedRowSetImpl()} que aparecia en el codigo
- * antes de que esta interfaz existiera: nombrar la clase concreta ataba la aplicacion a una
- * implementacion, y cambiarla obligaba a tocar cada punto de creacion.
+ * <p>It is what avoids the {@code new com.sun.rowset.CachedRowSetImpl()} that appeared in code
+ * before this interface existed: naming the concrete class tied the application to an
+ * implementation, and changing it forced touching every creation point.
  *
- * <p>La instancia se consigue con {@link RowSetProvider#newFactory()}.
+ * <p>The instance is obtained with {@link RowSetProvider#newFactory()}.
  *
  * @since 1.7
  */
 public interface RowSetFactory {
 
     /**
-     * Un conjunto desconectado con cache.
+     * A disconnected set with a cache.
      *
-     * @return el conjunto
-     * @throws SQLException si no se pudo crear
+     * @return the set
+     * @throws SQLException if it could not be created
      */
     CachedRowSet createCachedRowSet() throws SQLException;
 
     /**
-     * Un conjunto con filtro.
+     * A set with a filter.
      *
-     * @return el conjunto
-     * @throws SQLException si no se pudo crear
+     * @return the set
+     * @throws SQLException if it could not be created
      */
     FilteredRowSet createFilteredRowSet() throws SQLException;
 
     /**
-     * Un conjunto conectado, envoltorio de un {@code ResultSet}.
+     * A connected set, a wrapper of a {@code ResultSet}.
      *
-     * @return el conjunto
-     * @throws SQLException si no se pudo crear
+     * @return the set
+     * @throws SQLException if it could not be created
      */
     JdbcRowSet createJdbcRowSet() throws SQLException;
 
     /**
-     * Un conjunto que une otros.
+     * A set that joins others.
      *
-     * @return el conjunto
-     * @throws SQLException si no se pudo crear
+     * @return the set
+     * @throws SQLException if it could not be created
      */
     JoinRowSet createJoinRowSet() throws SQLException;
 
     /**
-     * Un conjunto que se serializa a XML.
+     * A set that is serialized to XML.
      *
-     * @return el conjunto
-     * @throws SQLException si no se pudo crear
+     * @return the set
+     * @throws SQLException if it could not be created
      */
     WebRowSet createWebRowSet() throws SQLException;
 }

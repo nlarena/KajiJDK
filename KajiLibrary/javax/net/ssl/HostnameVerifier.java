@@ -1,24 +1,23 @@
 package javax.net.ssl;
 
 /**
- * La ultima palabra sobre si el nombre del servidor corresponde a su certificado.
+ * The last word on whether the server's name corresponds to its certificate.
  *
- * <h2>Por que esto existe y es un punto de extension</h2>
+ * <h2>Why this exists and is an extension point</h2>
  *
- * <p>Que un certificado sea valido y este firmado por alguien de confianza <strong>no dice que sea
- * de quien nos conectamos</strong>: un certificado legitimo de otro sitio pasa todas las
- * verificaciones criptograficas. Comparar el nombre pedido contra el del certificado es un paso
- * aparte, y es el que frena a un atacante que consiguio un certificado valido de cualquier otro
- * dominio.
+ * <p>That a certificate is valid and signed by somebody trusted <strong>does not say it belongs to
+ * whom we connected to</strong>: a legitimate certificate of another site passes every
+ * cryptographic check. Comparing the requested name against the certificate's is a separate step,
+ * and it is the one that stops an attacker who got a valid certificate for any other domain.
  *
- * <p>Se consulta <em>solo cuando la verificacion estandar ya fallo</em>. Devolver {@code true}
- * desde aca anula esa proteccion, que es la razon de que sea tan facil desactivar la seguridad de
- * TLS sin darse cuenta.
+ * <p>It is consulted <em>only when the standard check already failed</em>. Returning {@code true}
+ * from here cancels that protection, which is why it is so easy to turn off TLS security without
+ * noticing.
  */
 public interface HostnameVerifier {
 
     /**
-     * @return {@code true} para aceptar la conexion pese a que el nombre no coincidio
+     * @return {@code true} to accept the connection even though the name did not match
      */
     boolean verify(String hostname, SSLSession session);
 }

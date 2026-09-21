@@ -1,13 +1,13 @@
 package java.security.cert;
 
-// El resultado de construir un camino: el camino que se encontro.
+// The result of building a path: the path that was found.
 //
-// Construir incluye validar —un constructor que devolviera cadenas sin verificar no serviria para
-// nada— y por eso `PKIXCertPathBuilderResult` extiende al resultado de validacion en vez de ser un
-// tipo aparte.
+// Building includes validating —a builder that returned unverified chains would be of no use— and
+// that is why `PKIXCertPathBuilderResult` extends the validation result instead of being a separate
+// type.
 public interface CertPathBuilderResult extends Cloneable {
 
-    // El camino construido.
+    // The built path.
     CertPath getCertPath();
 
     Object clone();

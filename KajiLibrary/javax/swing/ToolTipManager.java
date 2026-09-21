@@ -10,29 +10,30 @@ import java.awt.event.MouseEvent;
 import java.awt.event.MouseMotionListener;
 
 /**
- * Decide cuando aparece y cuando se va un cartel de ayuda.
+ * It decides when a tool tip appears and when it goes away.
  *
- * <h2>Tres demoras, y las tres tienen un motivo</h2>
+ * <h2>Three delays, and all three have a reason</h2>
  *
- * <p>{@link #setInitialDelay} es cuanto hay que quedarse quieto sobre algo para que aparezca el
- * cartel: sin esa espera, mover el mouse por la pantalla llenaria todo de carteles.
- * {@link #setDismissDelay} es cuanto se queda antes de irse solo, porque un cartel que no se va tapa
- * lo que esta debajo. {@link #setReshowDelay} es la ventana durante la cual pasar a otro componente
- * muestra su cartel <em>sin</em> volver a esperar -- es lo que permite recorrer una barra de
- * herramientas leyendo cada boton sin detenerse en cada uno.
+ * <p>{@link #setInitialDelay} is how long one has to stay still over something for the tip to
+ * appear: without that wait, moving the mouse across the screen would fill everything with
+ * tips. {@link #setDismissDelay} is how long it stays before going away by itself, because a
+ * tip that does not go away covers what is underneath. {@link #setReshowDelay} is the window
+ * during which going to another component shows its tip <em>without</em> waiting again -- it is
+ * what allows a tool bar to be walked reading each button without stopping at each one.
  *
- * <h2>Uno solo para toda la aplicacion</h2>
+ * <h2>A single one for the whole application</h2>
  *
- * <p>{@link #sharedInstance} es la unica forma de conseguirlo, y el constructor no es publico. Tiene
- * que ser uno: dos carteles a la vez no tienen sentido, y las tres demoras son una decision de la
- * aplicacion entera.
+ * <p>{@link #sharedInstance} is the only way of getting it, and the constructor is not public.
+ * There has to be one: two tips at once make no sense, and the three delays are a decision of
+ * the whole application.
  *
- * <h2>Sin pantalla no hay cartel</h2>
+ * <h2>With no screen there is no tip</h2>
  *
- * <p>El estado -- las demoras, si esta prendido, que componentes estan registrados -- se guarda y se
- * lee. Lo que no ocurre es la aparicion: mostrar un cartel necesita una ventana y un mouse que se
- * mueva, y sin ninguno de los dos no hay nada que mostrar. {@link #registerComponent} conecta los
- * oyentes igual, asi que en cuanto haya pantalla funciona.
+ * <p>The state -- the delays, whether it is switched on, which components are registered -- is
+ * kept and read. What does not happen is the appearing: showing a tip needs a window and a
+ * mouse that moves, and with neither of the two there is nothing to show.
+ * {@link #registerComponent} connects the listeners all the same, so as soon as there is a
+ * screen it works.
  */
 public final class ToolTipManager extends MouseAdapter implements MouseMotionListener {
 
@@ -48,25 +49,25 @@ public final class ToolTipManager extends MouseAdapter implements MouseMotionLis
     JToolTip tip;
     boolean enabled = true;
 
-    /** Si el cartel puede dibujarse adentro de la ventana en vez de en una propia. */
+    /** Whether the tip may be drawn inside the window instead of in one of its own. */
     protected boolean lightWeightPopupEnabled = true;
 
-    /** Si se permite una ventana del sistema para el cartel. */
+    /** Whether a system window is allowed for the tip. */
     protected boolean heavyWeightPopupEnabled = false;
 
-    private static final ToolTipManager UNICO = new ToolTipManager();
+    private static final ToolTipManager SHARED = new ToolTipManager();
 
-    /** No es publico; ver la nota de la clase. */
+    /** It is not public; see the class note. */
     ToolTipManager() {
-        enterTimer = new Timer(750, new AlEntrar(this));
+        enterTimer = new Timer(750, new InsideTimerAction(this));
         enterTimer.setRepeats(false);
-        exitTimer = new Timer(500, new AlSalir(this));
+        exitTimer = new Timer(500, new OutsideTimerAction(this));
         exitTimer.setRepeats(false);
-        insideTimer = new Timer(4000, new AlQuedarse(this));
+        insideTimer = new Timer(4000, new StillInsideTimerAction(this));
         insideTimer.setRepeats(false);
     }
 
-    /** Prende o apaga los carteles de toda la aplicacion. */
+    /** It switches the whole application's tips on or off. */
     public void setEnabled(boolean flag) {
         enabled = flag;
         if (!flag) {
@@ -79,10 +80,10 @@ public final class ToolTipManager extends MouseAdapter implements MouseMotionLis
     }
 
     /**
-     * Si el cartel puede dibujarse adentro de la ventana.
+     * Whether the tip may be drawn inside the window.
      *
-     * <p>Es mas barato, y no sirve cuando el cartel se sale del borde de la ventana o cuando hay un
-     * componente pesado debajo que lo taparia.
+     * <p>It is cheaper, and it does not serve when the tip goes outside the window's edge or when
+     * there is a heavyweight component underneath that would cover it.
      */
     public void setLightWeightPopupEnabled(boolean aFlag) {
         lightWeightPopupEnabled = aFlag;
@@ -92,7 +93,7 @@ public final class ToolTipManager extends MouseAdapter implements MouseMotionLis
         return lightWeightPopupEnabled;
     }
 
-    /** Cuanto hay que quedarse quieto para que aparezca; ver la nota de la clase. */
+    /** How long one has to stay still for it to appear; see the class note. */
     public void setInitialDelay(int milliseconds) {
         enterTimer.setInitialDelay(milliseconds);
     }
@@ -101,7 +102,7 @@ public final class ToolTipManager extends MouseAdapter implements MouseMotionLis
         return enterTimer.getInitialDelay();
     }
 
-    /** Cuanto se queda antes de irse solo. */
+    /** How long it stays before going away by itself. */
     public void setDismissDelay(int milliseconds) {
         insideTimer.setInitialDelay(milliseconds);
     }
@@ -110,7 +111,7 @@ public final class ToolTipManager extends MouseAdapter implements MouseMotionLis
         return insideTimer.getInitialDelay();
     }
 
-    /** La ventana para pasar de un componente a otro sin volver a esperar. */
+    /** The window for going from one component to another without waiting again. */
     public void setReshowDelay(int milliseconds) {
         exitTimer.setInitialDelay(milliseconds);
     }
@@ -120,10 +121,10 @@ public final class ToolTipManager extends MouseAdapter implements MouseMotionLis
     }
 
     /**
-     * Muestra el cartel.
+     * It shows the tip.
      *
-     * <p>Sin pantalla no hay donde mostrarlo; ver la nota de la clase. Lo que si ocurre es la parte
-     * de estado: se arma el cartel y se arranca el temporizador que lo va a esconder.
+     * <p>With no screen there is nowhere to show it; see the class note. What does happen is the
+     * state part: the tip is built and the timer that is going to hide it is started.
      */
     void showTipWindow() {
         if (insideComponent == null || !insideComponent.isShowing()) {
@@ -140,7 +141,7 @@ public final class ToolTipManager extends MouseAdapter implements MouseMotionLis
         insideTimer.start();
     }
 
-    /** Esconde el cartel y para los temporizadores. */
+    /** It hides the tip and stops the timers. */
     void hideTipWindow() {
         if (tipWindow != null) {
             tipWindow.hide();
@@ -150,16 +151,16 @@ public final class ToolTipManager extends MouseAdapter implements MouseMotionLis
         insideTimer.stop();
     }
 
-    /** El unico administrador de carteles; ver la nota de la clase. */
+    /** The single tip manager; see the class note. */
     public static ToolTipManager sharedInstance() {
-        return UNICO;
+        return SHARED;
     }
 
     /**
-     * Empieza a vigilar ese componente.
+     * It starts watching that component.
      *
-     * <p>Se lo desanota primero: registrar dos veces dejaria dos oyentes y el cartel aparecería
-     * dos veces.
+     * <p>It is unregistered first: registering twice would leave two listeners and the tip would
+     * appear twice.
      */
     public void registerComponent(JComponent component) {
         component.removeMouseListener(this);
@@ -168,7 +169,7 @@ public final class ToolTipManager extends MouseAdapter implements MouseMotionLis
         component.addMouseMotionListener(this);
     }
 
-    /** Deja de vigilarlo. */
+    /** It stops watching it. */
     public void unregisterComponent(JComponent component) {
         component.removeMouseListener(this);
         component.removeMouseMotionListener(this);
@@ -180,7 +181,9 @@ public final class ToolTipManager extends MouseAdapter implements MouseMotionLis
         }
     }
 
-    /** El mouse entro: arranca la espera, o muestra ya si viene de otro componente. */
+    /**
+     * The mouse came in: it starts the wait, or shows at once if it comes from another component.
+     */
     public void mouseEntered(MouseEvent event) {
         initiateToolTip(event);
     }
@@ -211,7 +214,7 @@ public final class ToolTipManager extends MouseAdapter implements MouseMotionLis
         }
     }
 
-    /** El mouse salio: se esconde, pero queda la ventana de reaparicion. */
+    /** The mouse went out: it hides, but the reappearing window is left. */
     public void mouseExited(MouseEvent event) {
         if (insideComponent == null) {
             return;
@@ -234,7 +237,7 @@ public final class ToolTipManager extends MouseAdapter implements MouseMotionLis
         return SwingUtilities.getWindowAncestor((Component) e.getSource());
     }
 
-    /** Un clic esconde el cartel: el usuario ya no esta leyendo, esta haciendo algo. */
+    /** A click hides the tip: the user is no longer reading, they are doing something. */
     public void mousePressed(MouseEvent event) {
         hideTipWindow();
         enterTimer.stop();
@@ -243,15 +246,15 @@ public final class ToolTipManager extends MouseAdapter implements MouseMotionLis
         mouseEvent = null;
     }
 
-    /** Arrastrar tampoco es leer. */
+    /** Dragging is not reading either. */
     public void mouseDragged(MouseEvent event) {
     }
 
     /**
-     * Mover el mouse dentro del mismo componente reinicia la espera.
+     * Moving the mouse within the same component restarts the wait.
      *
-     * <p>Salvo que el texto haya cambiado -- una tabla da un texto por celda --, en cuyo caso el
-     * cartel se rehace.
+     * <p>Unless the text has changed -- a table gives a text per cell --, in which case the tip is
+     * rebuilt.
      */
     public void mouseMoved(MouseEvent event) {
         if (tipWindow != null) {
@@ -284,7 +287,7 @@ public final class ToolTipManager extends MouseAdapter implements MouseMotionLis
         mouseEvent = event;
     }
 
-    /** La ventana del sistema que contiene a ese componente, o nulo. */
+    /** The system window that contains that component, or null. */
     static Frame frameForComponent(Component component) {
         Component c = component;
         while (c != null && !(c instanceof Frame)) {
@@ -293,12 +296,12 @@ public final class ToolTipManager extends MouseAdapter implements MouseMotionLis
         return (Frame) c;
     }
 
-    /** Se cumplio la espera: aparece el cartel. */
-    private static class AlEntrar implements ActionListener {
+    /** The wait is up: the tip appears. */
+    private static class InsideTimerAction implements ActionListener {
 
         private final ToolTipManager m;
 
-        AlEntrar(ToolTipManager m) {
+        InsideTimerAction(ToolTipManager m) {
             this.m = m;
         }
 
@@ -308,12 +311,12 @@ public final class ToolTipManager extends MouseAdapter implements MouseMotionLis
         }
     }
 
-    /** Se paso la ventana de reaparicion: la proxima vez hay que volver a esperar. */
-    private static class AlSalir implements ActionListener {
+    /** The reappearing window has passed: next time it has to wait again. */
+    private static class OutsideTimerAction implements ActionListener {
 
         private final ToolTipManager m;
 
-        AlSalir(ToolTipManager m) {
+        OutsideTimerAction(ToolTipManager m) {
             this.m = m;
         }
 
@@ -324,12 +327,12 @@ public final class ToolTipManager extends MouseAdapter implements MouseMotionLis
         }
     }
 
-    /** El cartel lleva demasiado tiempo puesto: se va. */
-    private static class AlQuedarse implements ActionListener {
+    /** The tip has been up too long: it goes away. */
+    private static class StillInsideTimerAction implements ActionListener {
 
         private final ToolTipManager m;
 
-        AlQuedarse(ToolTipManager m) {
+        StillInsideTimerAction(ToolTipManager m) {
             this.m = m;
         }
 

@@ -3,7 +3,7 @@ package com.sun.source.tree;
 import java.util.List;
 
 /**
- * Un `switch` usado como sentencia.
+ * A `switch` used as a statement.
  */
 public interface SwitchTree extends StatementTree {
 

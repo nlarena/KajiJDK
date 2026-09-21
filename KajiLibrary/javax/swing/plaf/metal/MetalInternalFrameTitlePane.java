@@ -13,26 +13,25 @@ import javax.swing.JMenu;
 import javax.swing.plaf.basic.BasicInternalFrameTitlePane;
 
 /**
- * La barra de titulo de una ventana interna, en Metal.
+ * An internal frame's title bar, in Metal.
  *
- * <h2>Dos barras en una clase</h2>
+ * <h2>Two bars in one class</h2>
  *
- * <p>{@link #isPalette} decide cual de las dos se dibuja. Una barra normal mide veintitres pixeles
- * de alto y lleva tres botones; una de <strong>paleta</strong> mide once y lleva uno solo, el de
- * cerrar, de siete por siete. Medido.
+ * <p>{@link #isPalette} decides which of the two is drawn. A normal bar is twenty-three pixels
+ * high and carries three buttons; a <strong>palette</strong> one is eleven and carries a single
+ * one, the close button, seven by seven. Measured.
  *
- * <p>Una paleta es una ventanita de herramientas -- la de colores de un editor de dibujo -- que
- * tiene que estar siempre a mano y ocupar lo menos posible. Achicarle la barra a la mitad es lo
- * que hace que quepa; darle un solo boton es porque una paleta no se maximiza ni se minimiza, se
- * cierra.
+ * <p>A palette is a little tool window -- a drawing editor's colour one -- that has to be always
+ * at hand and take up as little as possible. Halving its bar is what makes it fit; giving it a
+ * single button is because a palette is neither maximized nor iconified, it is closed.
  *
- * <p>El cambio es en caliente: {@link #setPalette} rehace los botones y vuelve a armar la barra.
- * Por eso {@link #createButtons} y {@link #addSubComponents} son metodos y no codigo del
- * constructor.
+ * <p>The change is on the fly: {@link #setPalette} rebuilds the buttons and assembles the bar
+ * again. That is why {@link #createButtons} and {@link #addSubComponents} are methods and not
+ * code in the constructor.
  */
 public class MetalInternalFrameTitlePane extends BasicInternalFrameTitlePane {
 
-    /** Once; ver la nota de la clase. */
+    /** Eleven; see the class note. */
     protected int paletteTitleHeight = 11;
 
     protected Icon paletteCloseIcon;
@@ -62,7 +61,7 @@ public class MetalInternalFrameTitlePane extends BasicInternalFrameTitlePane {
         super.createButtons();
     }
 
-    /** Como paleta, solo el boton de cerrar; ver la nota de la clase. */
+    /** As a palette, only the close button; see the class note. */
     protected void addSubComponents() {
         if (!isPalette) {
             super.addSubComponents();
@@ -99,7 +98,7 @@ public class MetalInternalFrameTitlePane extends BasicInternalFrameTitlePane {
         }
     }
 
-    /** Cambia entre las dos barras y rehace los hijos. */
+    /** It switches between the two bars and rebuilds the children. */
     public void setPalette(boolean b) {
         isPalette = b;
         addSubComponents();
@@ -115,7 +114,7 @@ public class MetalInternalFrameTitlePane extends BasicInternalFrameTitlePane {
         super.paintComponent(g);
     }
 
-    /** La barra de once pixeles: un relleno y una linea, sin titulo. */
+    /** The eleven-pixel bar: a fill and a line, with no title. */
     public void paintPalette(Graphics g) {
         Dimension s = getSize();
         g.setColor(MetalLookAndFeel.getPrimaryControlShadow());
@@ -124,7 +123,7 @@ public class MetalInternalFrameTitlePane extends BasicInternalFrameTitlePane {
         g.drawLine(0, s.height - 1, s.width, s.height - 1);
     }
 
-    /** La distribucion de la barra; como paleta, el alto es otro. */
+    /** The bar's layout; as a palette, the height is another. */
     private class MetalTitlePaneLayout implements LayoutManager {
 
         public void addLayoutComponent(String name, java.awt.Component c) {
@@ -134,7 +133,7 @@ public class MetalInternalFrameTitlePane extends BasicInternalFrameTitlePane {
         }
 
         public Dimension preferredLayoutSize(Container c) {
-            Dimension d = laDelBasico().preferredLayoutSize(c);
+            Dimension d = basicLayoutManager().preferredLayoutSize(c);
             if (isPalette) {
                 return new Dimension(d.width, paletteTitleHeight);
             }
@@ -146,46 +145,46 @@ public class MetalInternalFrameTitlePane extends BasicInternalFrameTitlePane {
         }
 
         public void layoutContainer(Container c) {
-            laDelBasico().layoutContainer(c);
+            basicLayoutManager().layoutContainer(c);
         }
     }
 
-    private LayoutManager distribucionDelBasico;
+    private LayoutManager basicLayout;
 
     /**
-     * La del basico, guardada aca y no adentro de la clase interna.
+     * The basic one's, kept here and not inside the inner class.
      *
-     * <p>Por dos razones. Una: el compilador de esta casa todavia no acepta
-     * {@code MetalInternalFrameTitlePane.super.createLayout()}; ver el hallazgo #400. La otra, mas
-     * de fondo: {@code createLayout} lo llama el constructor de la superclase, asi que un campo de
-     * la clase interna inicializado ahi se arma antes de que esta clase termine de construirse.
-     * Pedirla cuando hace falta lo evita.
+     * <p>For two reasons. One: this house's compiler does not yet accept
+     * {@code MetalInternalFrameTitlePane.super.createLayout()}; see finding #400. The other, more
+     * fundamental: {@code createLayout} is called by the superclass's constructor, so a field of
+     * the inner class initialized there is built before this class finishes constructing itself.
+     * Asking for it when it is needed avoids that.
      */
-    private LayoutManager laDelBasico() {
-        if (distribucionDelBasico == null) {
-            distribucionDelBasico = super.createLayout();
+    private LayoutManager basicLayoutManager() {
+        if (basicLayout == null) {
+            basicLayout = super.createLayout();
         }
-        return distribucionDelBasico;
+        return basicLayout;
     }
 
-    /** El que escucha los cambios de la ventana. */
+    /** The one that listens to the window's changes. */
     private class MetalPropertyChangeHandler implements PropertyChangeListener {
 
         public void propertyChange(PropertyChangeEvent e) {
-            elDelBasico().propertyChange(e);
+            basicPropertyListener().propertyChange(e);
             if (MetalInternalFrameUI.IS_PALETTE.equals(e.getPropertyName())) {
                 setPalette(Boolean.TRUE.equals(e.getNewValue()));
             }
         }
     }
 
-    private PropertyChangeListener escuchaDelBasico;
+    private PropertyChangeListener basicListener;
 
-    /** Igual que {@link #laDelBasico}. */
-    private PropertyChangeListener elDelBasico() {
-        if (escuchaDelBasico == null) {
-            escuchaDelBasico = super.createPropertyChangeListener();
+    /** The same as {@link #basicLayoutManager}. */
+    private PropertyChangeListener basicPropertyListener() {
+        if (basicListener == null) {
+            basicListener = super.createPropertyChangeListener();
         }
-        return escuchaDelBasico;
+        return basicListener;
     }
 }

@@ -18,23 +18,24 @@ import javax.swing.plaf.InsetsUIResource;
 import javax.swing.plaf.metal.MetalIconFactory;
 
 /**
- * El aspecto basico de un boton de radio: un icono por omision que pinta el estado, y el texto
- * al lado.
+ * The basic look and feel of a radio button: a default icon that paints the state, and the
+ * text beside it.
  *
- * <p>El icono es lo nuevo respecto de {@link BasicToggleButtonUI}: si el boton no tiene uno
- * propio, se usa {@link #getDefaultIcon}, que en Metal es el circulo de
- * {@link MetalIconFactory#getRadioButtonIcon}, y ese icono lee el modelo para saber como
- * pintarse. Un icono propio del boton se elige por estado como en cualquier boton con estado.
+ * <p>The icon is what is new with respect to {@link BasicToggleButtonUI}: if the button does not
+ * have one of its own, {@link #getDefaultIcon} is used, which in Metal is the circle of
+ * {@link MetalIconFactory#getRadioButtonIcon}, and that icon reads the model in order to know
+ * how to paint itself. An icon of the button's own is chosen by state as in any button with
+ * state.
  *
- * <p>Los valores por omision son los de {@code RadioButton.*} en Metal: margen (2, 2, 2, 2), el
- * borde de {@link BasicBorders#getRadioButtonBorder} (que no se pinta: el boton nace con
- * {@code borderPainted} en {@code false}, pero sus insets cuentan), y rollover.
+ * <p>The default values are those of {@code RadioButton.*} in Metal: margin (2, 2, 2, 2), the
+ * border from {@link BasicBorders#getRadioButtonBorder} (which is not painted: the button is
+ * born with {@code borderPainted} at {@code false}, but its insets count), and rollover.
  */
 public class BasicRadioButtonUI extends BasicToggleButtonUI {
 
     private static final BasicRadioButtonUI radioButtonUI = new BasicRadioButtonUI();
 
-    /** El icono por omision; ver la nota de la clase. */
+    /** The default icon; see the class note. */
     protected Icon icon;
 
     private boolean defaults_initialized = false;
@@ -44,7 +45,7 @@ public class BasicRadioButtonUI extends BasicToggleButtonUI {
     public BasicRadioButtonUI() {
     }
 
-    /** El aspecto compartido. */
+    /** The shared look and feel. */
     public static ComponentUI createUI(JComponent b) {
         return radioButtonUI;
     }
@@ -53,27 +54,27 @@ public class BasicRadioButtonUI extends BasicToggleButtonUI {
         return propertyPrefix;
     }
 
-    Insets margenPorOmision() {
+    Insets defaultMargin() {
         return new InsetsUIResource(2, 2, 2, 2);
     }
 
-    Border bordePorOmision() {
+    Border defaultBorder() {
         return BasicBorders.getRadioButtonBorder();
     }
 
-    Boolean rolloverPorOmision() {
+    Boolean defaultRollover() {
         return Boolean.TRUE;
     }
 
-    /** Lo que {@code UIManager} daria bajo {@code prefijo + "icon"}. */
-    Icon iconoPorOmision() {
+    /** What {@code UIManager} would give under {@code prefix + "icon"}. */
+    Icon defaultIcon() {
         return MetalIconFactory.getRadioButtonIcon();
     }
 
     protected void installDefaults(AbstractButton b) {
         super.installDefaults(b);
         if (!defaults_initialized) {
-            icon = iconoPorOmision();
+            icon = defaultIcon();
             defaults_initialized = true;
         }
     }
@@ -89,108 +90,110 @@ public class BasicRadioButtonUI extends BasicToggleButtonUI {
 
     public synchronized void paint(Graphics g, JComponent c) {
         AbstractButton b = (AbstractButton) c;
-        ButtonModel modelo = b.getModel();
+        ButtonModel model = b.getModel();
 
         Font f = c.getFont();
         g.setFont(f);
         FontMetrics fm = b.getFontMetrics(f);
 
         Insets i = c.getInsets();
-        Dimension tamano = b.getSize();
-        Rectangle vistaR = new Rectangle(i.left, i.top, tamano.width - (i.right + i.left),
-                tamano.height - (i.bottom + i.top));
-        Rectangle iconoR = new Rectangle();
-        Rectangle textoR = new Rectangle();
+        Dimension size = b.getSize();
+        Rectangle viewRect = new Rectangle(i.left, i.top, size.width - (i.right + i.left),
+                size.height - (i.bottom + i.top));
+        Rectangle iconRect = new Rectangle();
+        Rectangle textRect = new Rectangle();
 
-        Icon propio = b.getIcon();
-        String texto = SwingUtilities.layoutCompoundLabel(c, fm, b.getText(),
-                propio != null ? propio : getDefaultIcon(), b.getVerticalAlignment(),
+        Icon own = b.getIcon();
+        String text = SwingUtilities.layoutCompoundLabel(c, fm, b.getText(),
+                own != null ? own : getDefaultIcon(), b.getVerticalAlignment(),
                 b.getHorizontalAlignment(), b.getVerticalTextPosition(),
-                b.getHorizontalTextPosition(), vistaR, iconoR, textoR,
+                b.getHorizontalTextPosition(), viewRect, iconRect, textRect,
                 b.getText() == null ? 0 : b.getIconTextGap());
 
         if (c.isOpaque()) {
             g.setColor(b.getBackground());
-            g.fillRect(0, 0, tamano.width, tamano.height);
+            g.fillRect(0, 0, size.width, size.height);
         }
 
-        if (propio != null) {
-            Icon delEstado = propio;
-            if (!modelo.isEnabled()) {
-                if (modelo.isSelected()) {
-                    delEstado = b.getDisabledSelectedIcon();
+        if (own != null) {
+            Icon ofState = own;
+            if (!model.isEnabled()) {
+                if (model.isSelected()) {
+                    ofState = b.getDisabledSelectedIcon();
                 } else {
-                    delEstado = b.getDisabledIcon();
+                    ofState = b.getDisabledIcon();
                 }
-            } else if (modelo.isPressed() && modelo.isArmed()) {
-                delEstado = b.getPressedIcon();
-                if (delEstado == null) {
-                    delEstado = b.getSelectedIcon();
+            } else if (model.isPressed() && model.isArmed()) {
+                ofState = b.getPressedIcon();
+                if (ofState == null) {
+                    ofState = b.getSelectedIcon();
                 }
-            } else if (modelo.isSelected()) {
-                if (b.isRolloverEnabled() && modelo.isRollover()) {
-                    delEstado = b.getRolloverSelectedIcon();
-                    if (delEstado == null) {
-                        delEstado = b.getSelectedIcon();
+            } else if (model.isSelected()) {
+                if (b.isRolloverEnabled() && model.isRollover()) {
+                    ofState = b.getRolloverSelectedIcon();
+                    if (ofState == null) {
+                        ofState = b.getSelectedIcon();
                     }
                 } else {
-                    delEstado = b.getSelectedIcon();
+                    ofState = b.getSelectedIcon();
                 }
-            } else if (b.isRolloverEnabled() && modelo.isRollover()) {
-                delEstado = b.getRolloverIcon();
+            } else if (b.isRolloverEnabled() && model.isRollover()) {
+                ofState = b.getRolloverIcon();
             }
-            if (delEstado == null) {
-                delEstado = b.getIcon();
+            if (ofState == null) {
+                ofState = b.getIcon();
             }
-            delEstado.paintIcon(c, g, iconoR.x, iconoR.y);
+            ofState.paintIcon(c, g, iconRect.x, iconRect.y);
         } else {
-            getDefaultIcon().paintIcon(c, g, iconoR.x, iconoR.y);
+            getDefaultIcon().paintIcon(c, g, iconRect.x, iconRect.y);
         }
 
-        if (texto != null) {
-            paintText(g, b, textoR, texto);
-            if (b.hasFocus() && b.isFocusPainted() && textoR.width > 0 && textoR.height > 0) {
-                paintFocus(g, textoR, tamano);
+        if (text != null) {
+            paintText(g, b, textRect, text);
+            if (b.hasFocus() && b.isFocusPainted() && textRect.width > 0 && textRect.height > 0) {
+                paintFocus(g, textRect, size);
             }
         }
     }
 
-    /** Nada: el aspecto basico no marca el foco; los que derivan de el, si. */
+    /** Nothing: the basic look and feel does not mark the focus; those that derive from it do. */
     protected void paintFocus(Graphics g, Rectangle textRect, Dimension size) {
     }
 
-    /** Icono y texto en una vista infinita, mas los insets; {@code null} si el boton tiene hijos. */
+    /**
+     * Icon and text in an infinite view, plus the insets; {@code null} if the button has children.
+     */
     public Dimension getPreferredSize(JComponent c) {
         if (c.getComponentCount() > 0) {
             return null;
         }
         AbstractButton b = (AbstractButton) c;
-        String texto = b.getText();
-        Icon icono = b.getIcon();
-        if (icono == null) {
-            icono = getDefaultIcon();
+        String text = b.getText();
+        Icon icon = b.getIcon();
+        if (icon == null) {
+            icon = getDefaultIcon();
         }
-        Font fuente = b.getFont();
-        FontMetrics fm = b.getFontMetrics(fuente);
+        Font font = b.getFont();
+        FontMetrics fm = b.getFontMetrics(font);
 
-        Rectangle vistaR = new Rectangle(0, 0, Short.MAX_VALUE, Short.MAX_VALUE);
-        Rectangle iconoR = new Rectangle();
-        Rectangle textoR = new Rectangle();
-        SwingUtilities.layoutCompoundLabel(c, fm, texto, icono, b.getVerticalAlignment(),
+        Rectangle viewRect = new Rectangle(0, 0, Short.MAX_VALUE, Short.MAX_VALUE);
+        Rectangle iconRect = new Rectangle();
+        Rectangle textRect = new Rectangle();
+        SwingUtilities.layoutCompoundLabel(c, fm, text, icon, b.getVerticalAlignment(),
                 b.getHorizontalAlignment(), b.getVerticalTextPosition(),
-                b.getHorizontalTextPosition(), vistaR, iconoR, textoR,
-                texto == null ? 0 : b.getIconTextGap());
+                b.getHorizontalTextPosition(), viewRect, iconRect, textRect,
+                text == null ? 0 : b.getIconTextGap());
 
-        int x1 = Math.min(iconoR.x, textoR.x);
-        int x2 = Math.max(iconoR.x + iconoR.width, textoR.x + textoR.width);
-        int y1 = Math.min(iconoR.y, textoR.y);
-        int y2 = Math.max(iconoR.y + iconoR.height, textoR.y + textoR.height);
-        int ancho = x2 - x1;
-        int alto = y2 - y1;
+        int x1 = Math.min(iconRect.x, textRect.x);
+        int x2 = Math.max(iconRect.x + iconRect.width, textRect.x + textRect.width);
+        int y1 = Math.min(iconRect.y, textRect.y);
+        int y2 = Math.max(iconRect.y + iconRect.height, textRect.y + textRect.height);
+        int width = x2 - x1;
+        int height = y2 - y1;
 
         Insets insets = b.getInsets();
-        ancho = ancho + insets.left + insets.right;
-        alto = alto + insets.top + insets.bottom;
-        return new Dimension(ancho, alto);
+        width = width + insets.left + insets.right;
+        height = height + insets.top + insets.bottom;
+        return new Dimension(width, height);
     }
 }

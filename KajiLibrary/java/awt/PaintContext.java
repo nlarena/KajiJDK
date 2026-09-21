@@ -4,28 +4,28 @@ import java.awt.image.ColorModel;
 import java.awt.image.Raster;
 
 /**
- * Quien genera los píxeles de un {@link Paint} durante una operación de dibujo.
+ * What generates a {@link Paint}'s pixels during a drawing operation.
  *
- * <p>La separación entre `Paint` y su contexto es la que hace que un degradé se pueda describir una
- * vez y dibujar muchas: el `Paint` es la **descripción** —dos puntos y dos colores— y el contexto es
- * la máquina que, para una transformación y un modelo de color concretos, produce los píxeles.
+ * <p>The separation between `Paint` and its context is what lets a gradient be described once and
+ * drawn many times: the `Paint` is the **description** —two points and two colours— and the context
+ * is the machine that, for a concrete transformation and colour model, produces the pixels.
  *
- * <p>Se pide de a rectángulos y no de a píxeles porque casi todo degradé se calcula mucho más barato
- * por filas que punto por punto.
+ * <p>It is asked for by rectangles and not by pixels because almost every gradient is computed much
+ * more cheaply by rows than point by point.
  */
 public interface PaintContext {
 
     /**
-     * Suelta los recursos del contexto.
+     * Releases the context's resources.
      *
-     * <p>Se llama siempre, también cuando el dibujo falló, así que tiene que poder llamarse sobre un
-     * contexto que nunca generó un píxel.
+     * <p>It is called every time, also when drawing failed, so it has to be callable on a context
+     * that never generated a pixel.
      */
     void dispose();
 
-    /** En qué formato vienen los píxeles que genera. */
+    /** The format of the pixels it generates. */
     ColorModel getColorModel();
 
-    /** Los píxeles de ese rectángulo, en coordenadas de dispositivo. */
+    /** The pixels of that rectangle, in device coordinates. */
     Raster getRaster(int x, int y, int w, int h);
 }

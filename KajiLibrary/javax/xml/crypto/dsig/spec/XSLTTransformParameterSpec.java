@@ -3,25 +3,24 @@ package javax.xml.crypto.dsig.spec;
 import javax.xml.crypto.XMLStructure;
 
 /**
- * KajiLibrary's javax.xml.crypto.dsig.spec.XSLTTransformParameterSpec -- la hoja de estilo de una
- * transformacion XSLT.
+ * KajiLibrary's javax.xml.crypto.dsig.spec.XSLTTransformParameterSpec -- the stylesheet of an XSLT
+ * transform.
  *
- * <p>La transformacion XSLT de XML-DSig aplica una hoja de estilo antes de firmar, y esta clase la
- * lleva.
+ * <p>XML-DSig's XSLT transform applies a stylesheet before signing, and this class carries it.
  *
- * <p>Es la transformacion mas peligrosa del conjunto y vale decirlo: validar una firma que la usa
- * significa <b>ejecutar</b> una hoja de estilo que escribio quien firmo, con todo lo que XSLT puede
- * hacer --leer documentos, en algunas implementaciones invocar codigo--. La especificacion la define
- * y la practica es no aceptarla en firmas de origen desconocido.
+ * <p>It is the most dangerous transform of the set and it is worth saying: validating a signature
+ * that uses it means <b>running</b> a stylesheet written by whoever signed, with everything XSLT
+ * can do --read documents, in some implementations call code--. The specification defines it and
+ * the practice is not to accept it in signatures of unknown origin.
  */
 public final class XSLTTransformParameterSpec implements TransformParameterSpec {
 
-    /** La hoja de estilo. */
+    /** The stylesheet. */
     private final XMLStructure stylesheet;
 
     /**
-     * @param stylesheet la hoja de estilo
-     * @throws NullPointerException si es null
+     * @param stylesheet the stylesheet
+     * @throws NullPointerException if it is null
      */
     public XSLTTransformParameterSpec(XMLStructure stylesheet) {
         if (stylesheet == null) {
@@ -30,7 +29,7 @@ public final class XSLTTransformParameterSpec implements TransformParameterSpec 
         this.stylesheet = stylesheet;
     }
 
-    /** La hoja de estilo. */
+    /** The stylesheet. */
     public XMLStructure getStylesheet() {
         return this.stylesheet;
     }

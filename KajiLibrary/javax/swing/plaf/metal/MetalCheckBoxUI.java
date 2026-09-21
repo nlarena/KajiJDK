@@ -5,25 +5,25 @@ import javax.swing.JComponent;
 import javax.swing.plaf.ComponentUI;
 
 /**
- * La casilla de Metal.
+ * Metal's check box.
  *
- * <p>Todo el dibujo lo hace {@link MetalRadioButtonUI}, de la que hereda. Lo unico que esta clase
- * cambia es {@link #getPropertyPrefix}, que pasa a ser {@code "CheckBox."}: con eso, los mismos
- * cuatro metodos de la clase de arriba leen {@code "CheckBox.focus"} en vez de
- * {@code "RadioButton.focus"} y la casilla puede tener colores propios sin una linea de dibujo
- * repetida.
+ * <p>All the drawing is done by {@link MetalRadioButtonUI}, which it inherits from. The only
+ * thing this class changes is {@link #getPropertyPrefix}, which becomes {@code "CheckBox."}:
+ * with that, the same four methods of the class above read {@code "CheckBox.focus"} instead of
+ * {@code "RadioButton.focus"} and the check box can have colours of its own without a single
+ * repeated line of drawing.
  *
- * <p>Es la clase mas corta del paquete y la que mejor muestra para que sirve el prefijo.
+ * <p>It is the shortest class in the package and the one that best shows what the prefix is for.
  */
 public class MetalCheckBoxUI extends MetalRadioButtonUI {
 
-    private static final MetalCheckBoxUI UNICO = new MetalCheckBoxUI();
+    private static final MetalCheckBoxUI SHARED = new MetalCheckBoxUI();
 
     public MetalCheckBoxUI() {
     }
 
     public static ComponentUI createUI(JComponent c) {
-        return UNICO;
+        return SHARED;
     }
 
     public String getPropertyPrefix() {

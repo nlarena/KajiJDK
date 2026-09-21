@@ -1,12 +1,12 @@
 package javax.xml.crypto.dsig.spec;
 
 /**
- * KajiLibrary's javax.xml.crypto.dsig.spec.C14NMethodParameterSpec -- los parametros de una
- * canonicalizacion.
+ * KajiLibrary's javax.xml.crypto.dsig.spec.C14NMethodParameterSpec -- the parameters of a
+ * canonicalization.
  *
- * <p>Extiende {@link TransformParameterSpec} y no {@code AlgorithmParameterSpec} directamente, y eso
- * dice algo del modelo: una canonicalizacion <b>es</b> una transformacion --la que convierte nodos en
- * bytes-- y por eso sus parametros valen en los dos lugares.
+ * <p>It extends {@link TransformParameterSpec} and not {@code AlgorithmParameterSpec} directly, and
+ * that says something about the model: a canonicalization <b>is</b> a transform --the one that
+ * turns nodes into bytes-- and that is why its parameters hold in both places.
  */
 public interface C14NMethodParameterSpec extends TransformParameterSpec {
 }

@@ -4,9 +4,8 @@ import javax.annotation.processing.SupportedSourceVersion;
 import javax.lang.model.SourceVersion;
 
 /**
- * El visitante por kind de tipo de las construcciones en **vista previa**. Ver
- * {@link TypeKindVisitor6} por el mecanismo y {@link AbstractElementVisitorPreview} por que significa
- * "vista previa" aca.
+ * The type-kind visitor for **preview** constructs. See {@link TypeKindVisitor6} for the mechanism
+ * and {@link AbstractElementVisitorPreview} for what "preview" means here.
  */
 @SupportedSourceVersion(SourceVersion.RELEASE_25)
 public class TypeKindVisitorPreview<R, P> extends TypeKindVisitor14<R, P> {

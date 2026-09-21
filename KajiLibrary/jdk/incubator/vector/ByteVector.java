@@ -4,1391 +4,1394 @@ import java.lang.foreign.MemorySegment;
 import java.nio.ByteOrder;
 
 /**
- * Un vector de posiciones {@code byte}.
+ * A vector of {@code byte} lanes.
  *
- * <p>Es una de las seis clases donde el API se vuelve concreto. {@link Vector} habla de posiciones
- * sin decir de que son y por eso sus metodos toman y devuelven {@code Object} o el tipo envuelto;
- * aca las posiciones son {@code byte} de verdad, asi que se puede cargar desde un {@code byte[]},
- * leer una posicion como {@code byte} y operar sin envolver nada.
+ * <p>It is one of the six classes where the API becomes concrete. {@link Vector} talks about lanes
+ * without saying what they are, and that is why its methods take and return {@code Object} or the
+ * boxed type; here the lanes really are {@code byte}, so one can load from a {@code byte[]}, read a
+ * lane as a {@code byte} and operate without boxing anything.
  *
- * <h2>Las constantes {@code SPECIES_}</h2>
+ * <h2>The {@code SPECIES_} constants</h2>
  *
- * <p>Cada una es esta clase con una forma ya elegida, y son objetos de verdad: contestan cuantas
- * posiciones tienen, cuanto ocupan y donde termina un bucle que avanza de a un vector. Lo que no
- * pueden es fabricar el vector.
+ * <p>Each one is this class with a shape already chosen, and they are real objects: they answer how
+ * many lanes they have, how much they take and where a loop that advances one vector at a time
+ * ends. What they cannot do is make the vector.
  *
- * <p>{@link #SPECIES_MAX} y {@link #SPECIES_PREFERRED} dependen de la maquina. Aca las dos dan 64
- * bits, que es el minimo del API: el maximo real sale de los intrinsecos y no hay a quien
- * preguntarle.
+ * <p>{@link #SPECIES_MAX} and {@link #SPECIES_PREFERRED} depend on the machine. Here both give 64
+ * bits, which is the API's minimum: the real maximum comes from the intrinsics and there is nobody
+ * to ask.
  *
- * <h2>Estado en esta VM</h2>
+ * <h2>State on this VM</h2>
  *
- * <p>Las firmas estan todas y son las del JDK 25, asi que el codigo que use este API compila.
- * Ninguna operacion puede ejecutar: crear u operar un vector se apoya en intrinsecos de la VM
- * --cada operacion se reemplaza por una instruccion vectorial de la maquina-- y esta VM no los
- * tiene. Cada metodo concreto tira {@link UnsupportedOperationException} en vez de devolver un
- * vector inventado, que es lo unico honesto que se puede hacer -- un vector de ceros compilaria
- * igual y daria resultados equivocados sin avisar.
+ * <p>The signatures are all here and they are JDK 25's, so code that uses this API compiles. No
+ * operation can run: creating or operating on a vector relies on VM intrinsics --each operation is
+ * replaced by a vector instruction of the machine-- and this VM does not have them. Each concrete
+ * method throws {@link UnsupportedOperationException} instead of returning a made-up vector, which
+ * is the only honest thing to do -- a vector of zeros would compile all the same and give wrong
+ * results without warning.
  *
  * @since 16
  */
 public abstract class ByteVector extends AbstractVector<Byte> {
 
     /**
-     * Con esa carga util.
+     * With that payload.
      *
-     * <p>En el JDK este constructor es de paquete, asi que no aparece en los volcados. Va escrito
-     * igual porque la superclase no tiene uno sin argumentos: sin el, javac genera uno que llama a
-     * un {@code super()} que no existe, y el archivo compilado queda invalido (hallazgo #515).
+     * <p>In the JDK this constructor is package-private, so it does not show up in the dumps. It is
+     * written anyway because the superclass has no no-argument one: without it, the implicit
+     * default constructor would call a {@code super()} that does not exist. The note said javac
+     * then emits an invalid class file (finding #515); that finding is closed in the source javac,
+     * which now rejects the class instead, but the frozen {@code bin/javac.exe} predates the fix.
+     * The constructor is needed either way.
      *
-     * @param payload el arreglo de posiciones
+     * @param payload the array of lanes
      */
     ByteVector(Object payload) {
         super(payload);
     }
 
-    /** La especie de {@code byte} de 64 bits. */
+    /** The {@code byte} species of 64 bits. */
     public static final VectorSpecies<Byte> SPECIES_64 =
-            Especie.de(byte.class, VectorShape.S_64_BIT);
+            SpeciesImpl.create(byte.class, VectorShape.S_64_BIT);
 
-    /** La especie de {@code byte} de 128 bits. */
+    /** The {@code byte} species of 128 bits. */
     public static final VectorSpecies<Byte> SPECIES_128 =
-            Especie.de(byte.class, VectorShape.S_128_BIT);
+            SpeciesImpl.create(byte.class, VectorShape.S_128_BIT);
 
-    /** La especie de {@code byte} de 256 bits. */
+    /** The {@code byte} species of 256 bits. */
     public static final VectorSpecies<Byte> SPECIES_256 =
-            Especie.de(byte.class, VectorShape.S_256_BIT);
+            SpeciesImpl.create(byte.class, VectorShape.S_256_BIT);
 
-    /** La especie de {@code byte} de 512 bits. */
+    /** The {@code byte} species of 512 bits. */
     public static final VectorSpecies<Byte> SPECIES_512 =
-            Especie.de(byte.class, VectorShape.S_512_BIT);
+            SpeciesImpl.create(byte.class, VectorShape.S_512_BIT);
 
-    /** La especie de {@code byte} de la forma mas grande de esta maquina. */
+    /** The {@code byte} species of this machine\'s largest shape. */
     public static final VectorSpecies<Byte> SPECIES_MAX =
-            Especie.de(byte.class, VectorShape.S_Max_BIT);
+            SpeciesImpl.create(byte.class, VectorShape.S_Max_BIT);
 
-    /** La especie de {@code byte} de la forma que conviene en esta maquina. */
+    /** The {@code byte} species of this machine\'s preferred shape. */
     public static final VectorSpecies<Byte> SPECIES_PREFERRED =
-            Especie.de(byte.class, VectorShape.preferredShape());
+            SpeciesImpl.create(byte.class, VectorShape.preferredShape());
 
     /**
-     * Un vector con todas las posiciones en cero.
+     * A vector with every lane at zero.
      *
-     * @param vectorSpecies el {@code VectorSpecies<Byte>}
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vectorSpecies the {@code VectorSpecies<Byte>}
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public static ByteVector zero(VectorSpecies<Byte> vectorSpecies) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Un vector con el mismo valor en todas las posiciones.
+     * A vector with the same value in every lane.
      *
-     * @param b el {@code byte}
-     * @return el {@code ByteVector}
+     * @param b the {@code byte}
+     * @return the {@code ByteVector}
      */
     public abstract ByteVector broadcast(byte b);
 
     /**
-     * Un vector con el mismo valor en todas las posiciones.
+     * A vector with the same value in every lane.
      *
-     * @param vectorSpecies el {@code VectorSpecies<Byte>}
-     * @param b el {@code byte}
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vectorSpecies the {@code VectorSpecies<Byte>}
+     * @param b the {@code byte}
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public static ByteVector broadcast(VectorSpecies<Byte> vectorSpecies, byte b) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Un vector con el mismo valor en todas las posiciones.
+     * A vector with the same value in every lane.
      *
-     * @param l el {@code long}
-     * @return el {@code ByteVector}
+     * @param l the {@code long}
+     * @return the {@code ByteVector}
      */
     public abstract ByteVector broadcast(long l);
 
     /**
-     * Un vector con el mismo valor en todas las posiciones.
+     * A vector with the same value in every lane.
      *
-     * @param vectorSpecies el {@code VectorSpecies<Byte>}
-     * @param l el {@code long}
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vectorSpecies the {@code VectorSpecies<Byte>}
+     * @param l the {@code long}
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public static ByteVector broadcast(VectorSpecies<Byte> vectorSpecies, long l) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Aplica ese operador a cada posicion.
+     * Applies that operator to each lane.
      *
-     * @param unary el {@code VectorOperators.Unary}
-     * @return el {@code ByteVector}
+     * @param unary the {@code VectorOperators.Unary}
+     * @return the {@code ByteVector}
      */
     public abstract ByteVector lanewise(VectorOperators.Unary unary);
 
     /**
-     * Aplica ese operador a cada posicion.
+     * Applies that operator to each lane.
      *
-     * @param unary el {@code VectorOperators.Unary}
-     * @param vectorMask el {@code VectorMask<Byte>}
-     * @return el {@code ByteVector}
+     * @param unary the {@code VectorOperators.Unary}
+     * @param vectorMask the {@code VectorMask<Byte>}
+     * @return the {@code ByteVector}
      */
     public abstract ByteVector lanewise(VectorOperators.Unary unary, VectorMask<Byte> vectorMask);
 
     /**
-     * Aplica ese operador a cada posicion.
+     * Applies that operator to each lane.
      *
-     * @param binary el {@code VectorOperators.Binary}
-     * @param vector el {@code Vector<Byte>}
-     * @return el {@code ByteVector}
+     * @param binary the {@code VectorOperators.Binary}
+     * @param vector the {@code Vector<Byte>}
+     * @return the {@code ByteVector}
      */
     public abstract ByteVector lanewise(VectorOperators.Binary binary, Vector<Byte> vector);
 
     /**
-     * Aplica ese operador a cada posicion.
+     * Applies that operator to each lane.
      *
-     * @param binary el {@code VectorOperators.Binary}
-     * @param vector el {@code Vector<Byte>}
-     * @param vectorMask el {@code VectorMask<Byte>}
-     * @return el {@code ByteVector}
+     * @param binary the {@code VectorOperators.Binary}
+     * @param vector the {@code Vector<Byte>}
+     * @param vectorMask the {@code VectorMask<Byte>}
+     * @return the {@code ByteVector}
      */
     public abstract ByteVector lanewise(VectorOperators.Binary binary, Vector<Byte> vector,
             VectorMask<Byte> vectorMask);
 
     /**
-     * Aplica ese operador a cada posicion.
+     * Applies that operator to each lane.
      *
-     * @param binary el {@code VectorOperators.Binary}
-     * @param b el {@code byte}
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param binary the {@code VectorOperators.Binary}
+     * @param b the {@code byte}
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ByteVector lanewise(VectorOperators.Binary binary, byte b) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Aplica ese operador a cada posicion.
+     * Applies that operator to each lane.
      *
-     * @param binary el {@code VectorOperators.Binary}
-     * @param b el {@code byte}
-     * @param vectorMask el {@code VectorMask<Byte>}
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param binary the {@code VectorOperators.Binary}
+     * @param b the {@code byte}
+     * @param vectorMask the {@code VectorMask<Byte>}
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ByteVector lanewise(VectorOperators.Binary binary, byte b,
             VectorMask<Byte> vectorMask) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Aplica ese operador a cada posicion.
+     * Applies that operator to each lane.
      *
-     * @param binary el {@code VectorOperators.Binary}
-     * @param l el {@code long}
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param binary the {@code VectorOperators.Binary}
+     * @param l the {@code long}
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ByteVector lanewise(VectorOperators.Binary binary, long l) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Aplica ese operador a cada posicion.
+     * Applies that operator to each lane.
      *
-     * @param binary el {@code VectorOperators.Binary}
-     * @param l el {@code long}
-     * @param vectorMask el {@code VectorMask<Byte>}
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param binary the {@code VectorOperators.Binary}
+     * @param l the {@code long}
+     * @param vectorMask the {@code VectorMask<Byte>}
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ByteVector lanewise(VectorOperators.Binary binary, long l,
             VectorMask<Byte> vectorMask) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Aplica ese operador a cada posicion.
+     * Applies that operator to each lane.
      *
-     * @param ternary el {@code VectorOperators.Ternary}
-     * @param vector el {@code Vector<Byte>}
-     * @param vector2 el {@code Vector<Byte>}
-     * @return el {@code ByteVector}
+     * @param ternary the {@code VectorOperators.Ternary}
+     * @param vector the {@code Vector<Byte>}
+     * @param vector2 the {@code Vector<Byte>}
+     * @return the {@code ByteVector}
      */
     public abstract ByteVector lanewise(VectorOperators.Ternary ternary, Vector<Byte> vector,
             Vector<Byte> vector2);
 
     /**
-     * Aplica ese operador a cada posicion.
+     * Applies that operator to each lane.
      *
-     * @param ternary el {@code VectorOperators.Ternary}
-     * @param vector el {@code Vector<Byte>}
-     * @param vector2 el {@code Vector<Byte>}
-     * @param vectorMask el {@code VectorMask<Byte>}
-     * @return el {@code ByteVector}
+     * @param ternary the {@code VectorOperators.Ternary}
+     * @param vector the {@code Vector<Byte>}
+     * @param vector2 the {@code Vector<Byte>}
+     * @param vectorMask the {@code VectorMask<Byte>}
+     * @return the {@code ByteVector}
      */
     public abstract ByteVector lanewise(VectorOperators.Ternary ternary, Vector<Byte> vector,
             Vector<Byte> vector2, VectorMask<Byte> vectorMask);
 
     /**
-     * Aplica ese operador a cada posicion.
+     * Applies that operator to each lane.
      *
-     * @param ternary el {@code VectorOperators.Ternary}
-     * @param b el {@code byte}
-     * @param b2 el {@code byte}
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param ternary the {@code VectorOperators.Ternary}
+     * @param b the {@code byte}
+     * @param b2 the {@code byte}
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ByteVector lanewise(VectorOperators.Ternary ternary, byte b, byte b2) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Aplica ese operador a cada posicion.
+     * Applies that operator to each lane.
      *
-     * @param ternary el {@code VectorOperators.Ternary}
-     * @param b el {@code byte}
-     * @param b2 el {@code byte}
-     * @param vectorMask el {@code VectorMask<Byte>}
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param ternary the {@code VectorOperators.Ternary}
+     * @param b the {@code byte}
+     * @param b2 the {@code byte}
+     * @param vectorMask the {@code VectorMask<Byte>}
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ByteVector lanewise(VectorOperators.Ternary ternary, byte b, byte b2,
             VectorMask<Byte> vectorMask) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Aplica ese operador a cada posicion.
+     * Applies that operator to each lane.
      *
-     * @param ternary el {@code VectorOperators.Ternary}
-     * @param vector el {@code Vector<Byte>}
-     * @param b el {@code byte}
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param ternary the {@code VectorOperators.Ternary}
+     * @param vector the {@code Vector<Byte>}
+     * @param b the {@code byte}
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ByteVector lanewise(VectorOperators.Ternary ternary, Vector<Byte> vector, byte b) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Aplica ese operador a cada posicion.
+     * Applies that operator to each lane.
      *
-     * @param ternary el {@code VectorOperators.Ternary}
-     * @param vector el {@code Vector<Byte>}
-     * @param b el {@code byte}
-     * @param vectorMask el {@code VectorMask<Byte>}
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param ternary the {@code VectorOperators.Ternary}
+     * @param vector the {@code Vector<Byte>}
+     * @param b the {@code byte}
+     * @param vectorMask the {@code VectorMask<Byte>}
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ByteVector lanewise(VectorOperators.Ternary ternary, Vector<Byte> vector, byte b,
             VectorMask<Byte> vectorMask) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Aplica ese operador a cada posicion.
+     * Applies that operator to each lane.
      *
-     * @param ternary el {@code VectorOperators.Ternary}
-     * @param b el {@code byte}
-     * @param vector el {@code Vector<Byte>}
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param ternary the {@code VectorOperators.Ternary}
+     * @param b the {@code byte}
+     * @param vector the {@code Vector<Byte>}
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ByteVector lanewise(VectorOperators.Ternary ternary, byte b, Vector<Byte> vector) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Aplica ese operador a cada posicion.
+     * Applies that operator to each lane.
      *
-     * @param ternary el {@code VectorOperators.Ternary}
-     * @param b el {@code byte}
-     * @param vector el {@code Vector<Byte>}
-     * @param vectorMask el {@code VectorMask<Byte>}
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param ternary the {@code VectorOperators.Ternary}
+     * @param b the {@code byte}
+     * @param vector the {@code Vector<Byte>}
+     * @param vectorMask the {@code VectorMask<Byte>}
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ByteVector lanewise(VectorOperators.Ternary ternary, byte b, Vector<Byte> vector,
             VectorMask<Byte> vectorMask) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Suma posicion a posicion.
+     * Adds lane by lane.
      *
-     * @param vector el {@code Vector<Byte>}
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vector the {@code Vector<Byte>}
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ByteVector add(Vector<Byte> vector) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Suma posicion a posicion.
+     * Adds lane by lane.
      *
-     * @param b el {@code byte}
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param b the {@code byte}
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ByteVector add(byte b) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Suma posicion a posicion.
+     * Adds lane by lane.
      *
-     * @param vector el {@code Vector<Byte>}
-     * @param vectorMask el {@code VectorMask<Byte>}
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vector the {@code Vector<Byte>}
+     * @param vectorMask the {@code VectorMask<Byte>}
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ByteVector add(Vector<Byte> vector, VectorMask<Byte> vectorMask) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Suma posicion a posicion.
+     * Adds lane by lane.
      *
-     * @param b el {@code byte}
-     * @param vectorMask el {@code VectorMask<Byte>}
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param b the {@code byte}
+     * @param vectorMask the {@code VectorMask<Byte>}
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ByteVector add(byte b, VectorMask<Byte> vectorMask) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Resta posicion a posicion.
+     * Subtracts lane by lane.
      *
-     * @param vector el {@code Vector<Byte>}
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vector the {@code Vector<Byte>}
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ByteVector sub(Vector<Byte> vector) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Resta posicion a posicion.
+     * Subtracts lane by lane.
      *
-     * @param b el {@code byte}
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param b the {@code byte}
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ByteVector sub(byte b) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Resta posicion a posicion.
+     * Subtracts lane by lane.
      *
-     * @param vector el {@code Vector<Byte>}
-     * @param vectorMask el {@code VectorMask<Byte>}
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vector the {@code Vector<Byte>}
+     * @param vectorMask the {@code VectorMask<Byte>}
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ByteVector sub(Vector<Byte> vector, VectorMask<Byte> vectorMask) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Resta posicion a posicion.
+     * Subtracts lane by lane.
      *
-     * @param b el {@code byte}
-     * @param vectorMask el {@code VectorMask<Byte>}
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param b the {@code byte}
+     * @param vectorMask the {@code VectorMask<Byte>}
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ByteVector sub(byte b, VectorMask<Byte> vectorMask) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Multiplica posicion a posicion.
+     * Multiplies lane by lane.
      *
-     * @param vector el {@code Vector<Byte>}
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vector the {@code Vector<Byte>}
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ByteVector mul(Vector<Byte> vector) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Multiplica posicion a posicion.
+     * Multiplies lane by lane.
      *
-     * @param b el {@code byte}
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param b the {@code byte}
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ByteVector mul(byte b) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Multiplica posicion a posicion.
+     * Multiplies lane by lane.
      *
-     * @param vector el {@code Vector<Byte>}
-     * @param vectorMask el {@code VectorMask<Byte>}
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vector the {@code Vector<Byte>}
+     * @param vectorMask the {@code VectorMask<Byte>}
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ByteVector mul(Vector<Byte> vector, VectorMask<Byte> vectorMask) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Multiplica posicion a posicion.
+     * Multiplies lane by lane.
      *
-     * @param b el {@code byte}
-     * @param vectorMask el {@code VectorMask<Byte>}
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param b the {@code byte}
+     * @param vectorMask the {@code VectorMask<Byte>}
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ByteVector mul(byte b, VectorMask<Byte> vectorMask) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Divide posicion a posicion.
+     * Divides lane by lane.
      *
-     * @param vector el {@code Vector<Byte>}
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vector the {@code Vector<Byte>}
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ByteVector div(Vector<Byte> vector) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Divide posicion a posicion.
+     * Divides lane by lane.
      *
-     * @param b el {@code byte}
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param b the {@code byte}
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ByteVector div(byte b) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Divide posicion a posicion.
+     * Divides lane by lane.
      *
-     * @param vector el {@code Vector<Byte>}
-     * @param vectorMask el {@code VectorMask<Byte>}
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vector the {@code Vector<Byte>}
+     * @param vectorMask the {@code VectorMask<Byte>}
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ByteVector div(Vector<Byte> vector, VectorMask<Byte> vectorMask) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Divide posicion a posicion.
+     * Divides lane by lane.
      *
-     * @param b el {@code byte}
-     * @param vectorMask el {@code VectorMask<Byte>}
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param b the {@code byte}
+     * @param vectorMask the {@code VectorMask<Byte>}
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ByteVector div(byte b, VectorMask<Byte> vectorMask) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * El menor de cada par de posiciones.
+     * The smaller of each pair of lanes.
      *
-     * @param vector el {@code Vector<Byte>}
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vector the {@code Vector<Byte>}
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ByteVector min(Vector<Byte> vector) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * El menor de cada par de posiciones.
+     * The smaller of each pair of lanes.
      *
-     * @param b el {@code byte}
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param b the {@code byte}
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ByteVector min(byte b) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * El mayor de cada par de posiciones.
+     * The larger of each pair of lanes.
      *
-     * @param vector el {@code Vector<Byte>}
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vector the {@code Vector<Byte>}
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ByteVector max(Vector<Byte> vector) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * El mayor de cada par de posiciones.
+     * The larger of each pair of lanes.
      *
-     * @param b el {@code byte}
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param b the {@code byte}
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ByteVector max(byte b) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * La conjuncion bit a bit.
+     * The bitwise conjunction.
      *
-     * @param vector el {@code Vector<Byte>}
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vector the {@code Vector<Byte>}
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ByteVector and(Vector<Byte> vector) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * La conjuncion bit a bit.
+     * The bitwise conjunction.
      *
-     * @param b el {@code byte}
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param b the {@code byte}
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ByteVector and(byte b) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * La disyuncion bit a bit.
+     * The bitwise disjunction.
      *
-     * @param vector el {@code Vector<Byte>}
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vector the {@code Vector<Byte>}
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ByteVector or(Vector<Byte> vector) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * La disyuncion bit a bit.
+     * The bitwise disjunction.
      *
-     * @param b el {@code byte}
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param b the {@code byte}
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ByteVector or(byte b) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * El opuesto de cada posicion.
+     * The negation of each lane.
      *
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ByteVector neg() {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * El valor absoluto de cada posicion.
+     * The absolute value of each lane.
      *
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ByteVector abs() {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Invierte cada posicion.
+     * Inverts each lane.
      *
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ByteVector not() {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * La mascara de las posiciones iguales.
+     * The mask of the equal lanes.
      *
-     * @param vector el {@code Vector<Byte>}
-     * @return el {@code VectorMask<Byte>}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vector the {@code Vector<Byte>}
+     * @return the {@code VectorMask<Byte>}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final VectorMask<Byte> eq(Vector<Byte> vector) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * La mascara de las posiciones iguales.
+     * The mask of the equal lanes.
      *
-     * @param b el {@code byte}
-     * @return el {@code VectorMask<Byte>}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param b the {@code byte}
+     * @return the {@code VectorMask<Byte>}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final VectorMask<Byte> eq(byte b) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * La mascara de las posiciones menores.
+     * The mask of the lanes that are less.
      *
-     * @param vector el {@code Vector<Byte>}
-     * @return el {@code VectorMask<Byte>}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vector the {@code Vector<Byte>}
+     * @return the {@code VectorMask<Byte>}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final VectorMask<Byte> lt(Vector<Byte> vector) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * La mascara de las posiciones menores.
+     * The mask of the lanes that are less.
      *
-     * @param b el {@code byte}
-     * @return el {@code VectorMask<Byte>}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param b the {@code byte}
+     * @return the {@code VectorMask<Byte>}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final VectorMask<Byte> lt(byte b) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * La mascara de las posiciones que cumplen esa prueba.
+     * The mask of the lanes that pass that test.
      *
-     * @param test el {@code VectorOperators.Test}
-     * @return el {@code VectorMask<Byte>}
+     * @param test the {@code VectorOperators.Test}
+     * @return the {@code VectorMask<Byte>}
      */
     public abstract VectorMask<Byte> test(VectorOperators.Test test);
 
     /**
-     * La mascara de las posiciones que cumplen esa prueba.
+     * The mask of the lanes that pass that test.
      *
-     * @param test el {@code VectorOperators.Test}
-     * @param vectorMask el {@code VectorMask<Byte>}
-     * @return el {@code VectorMask<Byte>}
+     * @param test the {@code VectorOperators.Test}
+     * @param vectorMask the {@code VectorMask<Byte>}
+     * @return the {@code VectorMask<Byte>}
      */
     public abstract VectorMask<Byte> test(VectorOperators.Test test, VectorMask<Byte> vectorMask);
 
     /**
-     * Compara posicion a posicion y devuelve la mascara del resultado.
+     * Compares lane by lane and returns the mask of the result.
      *
-     * @param comparison el {@code VectorOperators.Comparison}
-     * @param vector el {@code Vector<Byte>}
-     * @return el {@code VectorMask<Byte>}
+     * @param comparison the {@code VectorOperators.Comparison}
+     * @param vector the {@code Vector<Byte>}
+     * @return the {@code VectorMask<Byte>}
      */
     public abstract VectorMask<Byte> compare(VectorOperators.Comparison comparison,
             Vector<Byte> vector);
 
     /**
-     * Compara posicion a posicion y devuelve la mascara del resultado.
+     * Compares lane by lane and returns the mask of the result.
      *
-     * @param comparison el {@code VectorOperators.Comparison}
-     * @param b el {@code byte}
-     * @return el {@code VectorMask<Byte>}
+     * @param comparison the {@code VectorOperators.Comparison}
+     * @param b the {@code byte}
+     * @return the {@code VectorMask<Byte>}
      */
     public abstract VectorMask<Byte> compare(VectorOperators.Comparison comparison, byte b);
 
     /**
-     * Compara posicion a posicion y devuelve la mascara del resultado.
+     * Compares lane by lane and returns the mask of the result.
      *
-     * @param comparison el {@code VectorOperators.Comparison}
-     * @param b el {@code byte}
-     * @param vectorMask el {@code VectorMask<Byte>}
-     * @return el {@code VectorMask<Byte>}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param comparison the {@code VectorOperators.Comparison}
+     * @param b the {@code byte}
+     * @param vectorMask the {@code VectorMask<Byte>}
+     * @return the {@code VectorMask<Byte>}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final VectorMask<Byte> compare(VectorOperators.Comparison comparison, byte b,
             VectorMask<Byte> vectorMask) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Compara posicion a posicion y devuelve la mascara del resultado.
+     * Compares lane by lane and returns the mask of the result.
      *
-     * @param comparison el {@code VectorOperators.Comparison}
-     * @param l el {@code long}
-     * @return el {@code VectorMask<Byte>}
+     * @param comparison the {@code VectorOperators.Comparison}
+     * @param l the {@code long}
+     * @return the {@code VectorMask<Byte>}
      */
     public abstract VectorMask<Byte> compare(VectorOperators.Comparison comparison, long l);
 
     /**
-     * Compara posicion a posicion y devuelve la mascara del resultado.
+     * Compares lane by lane and returns the mask of the result.
      *
-     * @param comparison el {@code VectorOperators.Comparison}
-     * @param l el {@code long}
-     * @param vectorMask el {@code VectorMask<Byte>}
-     * @return el {@code VectorMask<Byte>}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param comparison the {@code VectorOperators.Comparison}
+     * @param l the {@code long}
+     * @param vectorMask the {@code VectorMask<Byte>}
+     * @return the {@code VectorMask<Byte>}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final VectorMask<Byte> compare(VectorOperators.Comparison comparison, long l,
             VectorMask<Byte> vectorMask) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Mezcla dos vectores tomando de uno o del otro segun la mascara.
+     * Blends two vectors, taking from one or the other according to the mask.
      *
-     * @param vector el {@code Vector<Byte>}
-     * @param vectorMask el {@code VectorMask<Byte>}
-     * @return el {@code ByteVector}
+     * @param vector the {@code Vector<Byte>}
+     * @param vectorMask the {@code VectorMask<Byte>}
+     * @return the {@code ByteVector}
      */
     public abstract ByteVector blend(Vector<Byte> vector, VectorMask<Byte> vectorMask);
 
     /**
-     * Le suma a cada posicion su propio indice multiplicado por ese paso.
+     * Adds to each lane its own index multiplied by that step.
      *
-     * @param i el {@code int}
-     * @return el {@code ByteVector}
+     * @param i the {@code int}
+     * @return the {@code ByteVector}
      */
     public abstract ByteVector addIndex(int i);
 
     /**
-     * Mezcla dos vectores tomando de uno o del otro segun la mascara.
+     * Blends two vectors, taking from one or the other according to the mask.
      *
-     * @param b el {@code byte}
-     * @param vectorMask el {@code VectorMask<Byte>}
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param b the {@code byte}
+     * @param vectorMask the {@code VectorMask<Byte>}
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ByteVector blend(byte b, VectorMask<Byte> vectorMask) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Mezcla dos vectores tomando de uno o del otro segun la mascara.
+     * Blends two vectors, taking from one or the other according to the mask.
      *
-     * @param l el {@code long}
-     * @param vectorMask el {@code VectorMask<Byte>}
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param l the {@code long}
+     * @param vectorMask the {@code VectorMask<Byte>}
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ByteVector blend(long l, VectorMask<Byte> vectorMask) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Un vector que arranca en esa posicion.
+     * A vector starting at that lane.
      *
-     * @param i el {@code int}
-     * @param vector el {@code Vector<Byte>}
-     * @return el {@code ByteVector}
+     * @param i the {@code int}
+     * @param vector the {@code Vector<Byte>}
+     * @return the {@code ByteVector}
      */
     public abstract ByteVector slice(int i, Vector<Byte> vector);
 
     /**
-     * Un vector que arranca en esa posicion.
+     * A vector starting at that lane.
      *
-     * @param i el {@code int}
-     * @param vector el {@code Vector<Byte>}
-     * @param vectorMask el {@code VectorMask<Byte>}
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param i the {@code int}
+     * @param vector the {@code Vector<Byte>}
+     * @param vectorMask the {@code VectorMask<Byte>}
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ByteVector slice(int i, Vector<Byte> vector, VectorMask<Byte> vectorMask) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Un vector que arranca en esa posicion.
+     * A vector starting at that lane.
      *
-     * @param i el {@code int}
-     * @return el {@code ByteVector}
+     * @param i the {@code int}
+     * @return the {@code ByteVector}
      */
     public abstract ByteVector slice(int i);
 
     /**
-     * La operacion inversa de {@code slice}: devuelve las posiciones a su lugar.
+     * The inverse of {@code slice}: puts the lanes back in their place.
      *
-     * @param i el {@code int}
-     * @param vector el {@code Vector<Byte>}
-     * @param i2 el {@code int}
-     * @return el {@code ByteVector}
+     * @param i the {@code int}
+     * @param vector the {@code Vector<Byte>}
+     * @param i2 the {@code int}
+     * @return the {@code ByteVector}
      */
     public abstract ByteVector unslice(int i, Vector<Byte> vector, int i2);
 
     /**
-     * La operacion inversa de {@code slice}: devuelve las posiciones a su lugar.
+     * The inverse of {@code slice}: puts the lanes back in their place.
      *
-     * @param i el {@code int}
-     * @param vector el {@code Vector<Byte>}
-     * @param i2 el {@code int}
-     * @param vectorMask el {@code VectorMask<Byte>}
-     * @return el {@code ByteVector}
+     * @param i the {@code int}
+     * @param vector the {@code Vector<Byte>}
+     * @param i2 the {@code int}
+     * @param vectorMask the {@code VectorMask<Byte>}
+     * @return the {@code ByteVector}
      */
     public abstract ByteVector unslice(int i, Vector<Byte> vector, int i2,
             VectorMask<Byte> vectorMask);
 
     /**
-     * La operacion inversa de {@code slice}: devuelve las posiciones a su lugar.
+     * The inverse of {@code slice}: puts the lanes back in their place.
      *
-     * @param i el {@code int}
-     * @return el {@code ByteVector}
+     * @param i the {@code int}
+     * @return the {@code ByteVector}
      */
     public abstract ByteVector unslice(int i);
 
     /**
-     * Reordena las posiciones segun ese barajado.
+     * Rearranges the lanes according to that shuffle.
      *
-     * @param vectorShuffle el {@code VectorShuffle<Byte>}
-     * @return el {@code ByteVector}
+     * @param vectorShuffle the {@code VectorShuffle<Byte>}
+     * @return the {@code ByteVector}
      */
     public abstract ByteVector rearrange(VectorShuffle<Byte> vectorShuffle);
 
     /**
-     * Reordena las posiciones segun ese barajado.
+     * Rearranges the lanes according to that shuffle.
      *
-     * @param vectorShuffle el {@code VectorShuffle<Byte>}
-     * @param vectorMask el {@code VectorMask<Byte>}
-     * @return el {@code ByteVector}
+     * @param vectorShuffle the {@code VectorShuffle<Byte>}
+     * @param vectorMask the {@code VectorMask<Byte>}
+     * @return the {@code ByteVector}
      */
     public abstract ByteVector rearrange(VectorShuffle<Byte> vectorShuffle,
             VectorMask<Byte> vectorMask);
 
     /**
-     * Reordena las posiciones segun ese barajado.
+     * Rearranges the lanes according to that shuffle.
      *
-     * @param vectorShuffle el {@code VectorShuffle<Byte>}
-     * @param vector el {@code Vector<Byte>}
-     * @return el {@code ByteVector}
+     * @param vectorShuffle the {@code VectorShuffle<Byte>}
+     * @param vector the {@code Vector<Byte>}
+     * @return the {@code ByteVector}
      */
     public abstract ByteVector rearrange(VectorShuffle<Byte> vectorShuffle, Vector<Byte> vector);
 
     /**
-     * Junta las posiciones prendidas al principio.
+     * Gathers the set lanes at the start.
      *
-     * @param vectorMask el {@code VectorMask<Byte>}
-     * @return el {@code ByteVector}
+     * @param vectorMask the {@code VectorMask<Byte>}
+     * @return the {@code ByteVector}
      */
     public abstract ByteVector compress(VectorMask<Byte> vectorMask);
 
     /**
-     * Reparte las posiciones del principio en los lugares que la mascara marca.
+     * Spreads the lanes from the start into the places the mask marks.
      *
-     * @param vectorMask el {@code VectorMask<Byte>}
-     * @return el {@code ByteVector}
+     * @param vectorMask the {@code VectorMask<Byte>}
+     * @return the {@code ByteVector}
      */
     public abstract ByteVector expand(VectorMask<Byte> vectorMask);
 
     /**
-     * Toma de otro vector las posiciones que este indica.
+     * Takes from another vector the lanes this one indicates.
      *
-     * @param vector el {@code Vector<Byte>}
-     * @return el {@code ByteVector}
+     * @param vector the {@code Vector<Byte>}
+     * @return the {@code ByteVector}
      */
     public abstract ByteVector selectFrom(Vector<Byte> vector);
 
     /**
-     * Toma de otro vector las posiciones que este indica.
+     * Takes from another vector the lanes this one indicates.
      *
-     * @param vector el {@code Vector<Byte>}
-     * @param vectorMask el {@code VectorMask<Byte>}
-     * @return el {@code ByteVector}
+     * @param vector the {@code Vector<Byte>}
+     * @param vectorMask the {@code VectorMask<Byte>}
+     * @return the {@code ByteVector}
      */
     public abstract ByteVector selectFrom(Vector<Byte> vector, VectorMask<Byte> vectorMask);
 
     /**
-     * Toma de otro vector las posiciones que este indica.
+     * Takes from another vector the lanes this one indicates.
      *
-     * @param vector el {@code Vector<Byte>}
-     * @param vector2 el {@code Vector<Byte>}
-     * @return el {@code ByteVector}
+     * @param vector the {@code Vector<Byte>}
+     * @param vector2 the {@code Vector<Byte>}
+     * @return the {@code ByteVector}
      */
     public abstract ByteVector selectFrom(Vector<Byte> vector, Vector<Byte> vector2);
 
     /**
-     * Elige bit a bit entre dos vectores segun un tercero.
+     * Chooses bit by bit between two vectors according to a third.
      *
-     * @param vector el {@code Vector<Byte>}
-     * @param vector2 el {@code Vector<Byte>}
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vector the {@code Vector<Byte>}
+     * @param vector2 the {@code Vector<Byte>}
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ByteVector bitwiseBlend(Vector<Byte> vector, Vector<Byte> vector2) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Elige bit a bit entre dos vectores segun un tercero.
+     * Chooses bit by bit between two vectors according to a third.
      *
-     * @param b el {@code byte}
-     * @param b2 el {@code byte}
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param b the {@code byte}
+     * @param b2 the {@code byte}
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ByteVector bitwiseBlend(byte b, byte b2) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Elige bit a bit entre dos vectores segun un tercero.
+     * Chooses bit by bit between two vectors according to a third.
      *
-     * @param b el {@code byte}
-     * @param vector el {@code Vector<Byte>}
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param b the {@code byte}
+     * @param vector the {@code Vector<Byte>}
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ByteVector bitwiseBlend(byte b, Vector<Byte> vector) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Elige bit a bit entre dos vectores segun un tercero.
+     * Chooses bit by bit between two vectors according to a third.
      *
-     * @param vector el {@code Vector<Byte>}
-     * @param b el {@code byte}
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vector the {@code Vector<Byte>}
+     * @param b the {@code byte}
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ByteVector bitwiseBlend(Vector<Byte> vector, byte b) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Combina todas las posiciones en un solo valor con ese operador.
+     * Combines all the lanes into a single value with that operator.
      *
-     * @param associative el {@code VectorOperators.Associative}
-     * @return el {@code byte}
+     * @param associative the {@code VectorOperators.Associative}
+     * @return the {@code byte}
      */
     public abstract byte reduceLanes(VectorOperators.Associative associative);
 
     /**
-     * Combina todas las posiciones en un solo valor con ese operador.
+     * Combines all the lanes into a single value with that operator.
      *
-     * @param associative el {@code VectorOperators.Associative}
-     * @param vectorMask el {@code VectorMask<Byte>}
-     * @return el {@code byte}
+     * @param associative the {@code VectorOperators.Associative}
+     * @param vectorMask the {@code VectorMask<Byte>}
+     * @return the {@code byte}
      */
     public abstract byte reduceLanes(VectorOperators.Associative associative,
             VectorMask<Byte> vectorMask);
 
     /**
-     * Como {@code reduceLanes}, pero el resultado se devuelve como {@code long}.
+     * Like {@code reduceLanes}, but the result is returned as a {@code long}.
      *
-     * @param associative el {@code VectorOperators.Associative}
-     * @return el numero
+     * @param associative the {@code VectorOperators.Associative}
+     * @return the number
      */
     public abstract long reduceLanesToLong(VectorOperators.Associative associative);
 
     /**
-     * Como {@code reduceLanes}, pero el resultado se devuelve como {@code long}.
+     * Like {@code reduceLanes}, but the result is returned as a {@code long}.
      *
-     * @param associative el {@code VectorOperators.Associative}
-     * @param vectorMask el {@code VectorMask<Byte>}
-     * @return el numero
+     * @param associative the {@code VectorOperators.Associative}
+     * @param vectorMask the {@code VectorMask<Byte>}
+     * @return the number
      */
     public abstract long reduceLanesToLong(VectorOperators.Associative associative,
             VectorMask<Byte> vectorMask);
 
     /**
-     * El valor de esa posicion.
+     * The value of that lane.
      *
-     * @param i el {@code int}
-     * @return el {@code byte}
+     * @param i the {@code int}
+     * @return the {@code byte}
      */
     public abstract byte lane(int i);
 
     /**
-     * El mismo vector con esa posicion cambiada.
+     * The same vector with that lane changed.
      *
-     * @param i el {@code int}
-     * @param b el {@code byte}
-     * @return el {@code ByteVector}
+     * @param i the {@code int}
+     * @param b the {@code byte}
+     * @return the {@code ByteVector}
      */
     public abstract ByteVector withLane(int i, byte b);
 
     /**
-     * Las posiciones en un arreglo nuevo.
+     * The lanes in a new array.
      *
-     * @return el {@code byte[]}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @return the {@code byte[]}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final byte[] toArray() {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Las posiciones en un arreglo de {@code int} nuevo.
+     * The lanes in a new {@code int} array.
      *
-     * @return el {@code int[]}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @return the {@code int[]}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final int[] toIntArray() {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Las posiciones en un arreglo de {@code long} nuevo.
+     * The lanes in a new {@code long} array.
      *
-     * @return el {@code long[]}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @return the {@code long[]}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final long[] toLongArray() {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Las posiciones en un arreglo de {@code double} nuevo.
+     * The lanes in a new {@code double} array.
      *
-     * @return el {@code double[]}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @return the {@code double[]}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final double[] toDoubleArray() {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Un vector leido de ese arreglo.
+     * A vector read from that array.
      *
-     * @param vectorSpecies el {@code VectorSpecies<Byte>}
-     * @param bs el {@code byte[]}
-     * @param i el {@code int}
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vectorSpecies the {@code VectorSpecies<Byte>}
+     * @param bs the {@code byte[]}
+     * @param i the {@code int}
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public static ByteVector fromArray(VectorSpecies<Byte> vectorSpecies, byte[] bs, int i) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Un vector leido de ese arreglo.
+     * A vector read from that array.
      *
-     * @param vectorSpecies el {@code VectorSpecies<Byte>}
-     * @param bs el {@code byte[]}
-     * @param i el {@code int}
-     * @param vectorMask el {@code VectorMask<Byte>}
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vectorSpecies the {@code VectorSpecies<Byte>}
+     * @param bs the {@code byte[]}
+     * @param i the {@code int}
+     * @param vectorMask the {@code VectorMask<Byte>}
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public static ByteVector fromArray(VectorSpecies<Byte> vectorSpecies, byte[] bs, int i,
             VectorMask<Byte> vectorMask) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Un vector leido de ese arreglo.
+     * A vector read from that array.
      *
-     * @param vectorSpecies el {@code VectorSpecies<Byte>}
-     * @param bs el {@code byte[]}
-     * @param i el {@code int}
-     * @param is el {@code int[]}
-     * @param i2 el {@code int}
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vectorSpecies the {@code VectorSpecies<Byte>}
+     * @param bs the {@code byte[]}
+     * @param i the {@code int}
+     * @param is the {@code int[]}
+     * @param i2 the {@code int}
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public static ByteVector fromArray(VectorSpecies<Byte> vectorSpecies, byte[] bs, int i,
             int[] is, int i2) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Un vector leido de ese arreglo.
+     * A vector read from that array.
      *
-     * @param vectorSpecies el {@code VectorSpecies<Byte>}
-     * @param bs el {@code byte[]}
-     * @param i el {@code int}
-     * @param is el {@code int[]}
-     * @param i2 el {@code int}
-     * @param vectorMask el {@code VectorMask<Byte>}
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vectorSpecies the {@code VectorSpecies<Byte>}
+     * @param bs the {@code byte[]}
+     * @param i the {@code int}
+     * @param is the {@code int[]}
+     * @param i2 the {@code int}
+     * @param vectorMask the {@code VectorMask<Byte>}
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public static ByteVector fromArray(VectorSpecies<Byte> vectorSpecies, byte[] bs, int i,
             int[] is, int i2, VectorMask<Byte> vectorMask) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Una mascara leida de ese arreglo de banderas.
+     * A mask read from that array of flags.
      *
-     * @param vectorSpecies el {@code VectorSpecies<Byte>}
-     * @param flags el {@code boolean[]}
-     * @param i el {@code int}
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vectorSpecies the {@code VectorSpecies<Byte>}
+     * @param flags the {@code boolean[]}
+     * @param i the {@code int}
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public static ByteVector fromBooleanArray(VectorSpecies<Byte> vectorSpecies, boolean[] flags,
             int i) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Una mascara leida de ese arreglo de banderas.
+     * A mask read from that array of flags.
      *
-     * @param vectorSpecies el {@code VectorSpecies<Byte>}
-     * @param flags el {@code boolean[]}
-     * @param i el {@code int}
-     * @param vectorMask el {@code VectorMask<Byte>}
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vectorSpecies the {@code VectorSpecies<Byte>}
+     * @param flags the {@code boolean[]}
+     * @param i the {@code int}
+     * @param vectorMask the {@code VectorMask<Byte>}
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public static ByteVector fromBooleanArray(VectorSpecies<Byte> vectorSpecies, boolean[] flags,
             int i, VectorMask<Byte> vectorMask) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Una mascara leida de ese arreglo de banderas.
+     * A mask read from that array of flags.
      *
-     * @param vectorSpecies el {@code VectorSpecies<Byte>}
-     * @param flags el {@code boolean[]}
-     * @param i el {@code int}
-     * @param is el {@code int[]}
-     * @param i2 el {@code int}
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vectorSpecies the {@code VectorSpecies<Byte>}
+     * @param flags the {@code boolean[]}
+     * @param i the {@code int}
+     * @param is the {@code int[]}
+     * @param i2 the {@code int}
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public static ByteVector fromBooleanArray(VectorSpecies<Byte> vectorSpecies, boolean[] flags,
             int i, int[] is, int i2) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Una mascara leida de ese arreglo de banderas.
+     * A mask read from that array of flags.
      *
-     * @param vectorSpecies el {@code VectorSpecies<Byte>}
-     * @param flags el {@code boolean[]}
-     * @param i el {@code int}
-     * @param is el {@code int[]}
-     * @param i2 el {@code int}
-     * @param vectorMask el {@code VectorMask<Byte>}
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vectorSpecies the {@code VectorSpecies<Byte>}
+     * @param flags the {@code boolean[]}
+     * @param i the {@code int}
+     * @param is the {@code int[]}
+     * @param i2 the {@code int}
+     * @param vectorMask the {@code VectorMask<Byte>}
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public static ByteVector fromBooleanArray(VectorSpecies<Byte> vectorSpecies, boolean[] flags,
             int i, int[] is, int i2, VectorMask<Byte> vectorMask) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Un vector leido de esa zona de memoria.
+     * A vector read from that memory segment.
      *
-     * @param vectorSpecies el {@code VectorSpecies<Byte>}
-     * @param memorySegment el {@code java.lang.foreign.MemorySegment}
-     * @param l el {@code long}
-     * @param byteOrder el {@code java.nio.ByteOrder}
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vectorSpecies the {@code VectorSpecies<Byte>}
+     * @param memorySegment the {@code java.lang.foreign.MemorySegment}
+     * @param l the {@code long}
+     * @param byteOrder the {@code java.nio.ByteOrder}
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public static ByteVector fromMemorySegment(VectorSpecies<Byte> vectorSpecies,
             java.lang.foreign.MemorySegment memorySegment, long l, java.nio.ByteOrder byteOrder) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Un vector leido de esa zona de memoria.
+     * A vector read from that memory segment.
      *
-     * @param vectorSpecies el {@code VectorSpecies<Byte>}
-     * @param memorySegment el {@code java.lang.foreign.MemorySegment}
-     * @param l el {@code long}
-     * @param byteOrder el {@code java.nio.ByteOrder}
-     * @param vectorMask el {@code VectorMask<Byte>}
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param vectorSpecies the {@code VectorSpecies<Byte>}
+     * @param memorySegment the {@code java.lang.foreign.MemorySegment}
+     * @param l the {@code long}
+     * @param byteOrder the {@code java.nio.ByteOrder}
+     * @param vectorMask the {@code VectorMask<Byte>}
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public static ByteVector fromMemorySegment(VectorSpecies<Byte> vectorSpecies,
             java.lang.foreign.MemorySegment memorySegment, long l, java.nio.ByteOrder byteOrder,
             VectorMask<Byte> vectorMask) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Escribe el vector en ese arreglo.
+     * Writes the vector into that array.
      *
-     * @param bs el {@code byte[]}
-     * @param i el {@code int}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param bs the {@code byte[]}
+     * @param i the {@code int}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final void intoArray(byte[] bs, int i) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Escribe el vector en ese arreglo.
+     * Writes the vector into that array.
      *
-     * @param bs el {@code byte[]}
-     * @param i el {@code int}
-     * @param vectorMask el {@code VectorMask<Byte>}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param bs the {@code byte[]}
+     * @param i the {@code int}
+     * @param vectorMask the {@code VectorMask<Byte>}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final void intoArray(byte[] bs, int i, VectorMask<Byte> vectorMask) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Escribe el vector en ese arreglo.
+     * Writes the vector into that array.
      *
-     * @param bs el {@code byte[]}
-     * @param i el {@code int}
-     * @param is el {@code int[]}
-     * @param i2 el {@code int}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param bs the {@code byte[]}
+     * @param i the {@code int}
+     * @param is the {@code int[]}
+     * @param i2 the {@code int}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final void intoArray(byte[] bs, int i, int[] is, int i2) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Escribe el vector en ese arreglo.
+     * Writes the vector into that array.
      *
-     * @param bs el {@code byte[]}
-     * @param i el {@code int}
-     * @param is el {@code int[]}
-     * @param i2 el {@code int}
-     * @param vectorMask el {@code VectorMask<Byte>}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param bs the {@code byte[]}
+     * @param i the {@code int}
+     * @param is the {@code int[]}
+     * @param i2 the {@code int}
+     * @param vectorMask the {@code VectorMask<Byte>}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final void intoArray(byte[] bs, int i, int[] is, int i2, VectorMask<Byte> vectorMask) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Escribe la mascara en ese arreglo de banderas.
+     * Writes the mask into that array of flags.
      *
-     * @param flags el {@code boolean[]}
-     * @param i el {@code int}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param flags the {@code boolean[]}
+     * @param i the {@code int}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final void intoBooleanArray(boolean[] flags, int i) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Escribe la mascara en ese arreglo de banderas.
+     * Writes the mask into that array of flags.
      *
-     * @param flags el {@code boolean[]}
-     * @param i el {@code int}
-     * @param vectorMask el {@code VectorMask<Byte>}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param flags the {@code boolean[]}
+     * @param i the {@code int}
+     * @param vectorMask the {@code VectorMask<Byte>}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final void intoBooleanArray(boolean[] flags, int i, VectorMask<Byte> vectorMask) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Escribe la mascara en ese arreglo de banderas.
+     * Writes the mask into that array of flags.
      *
-     * @param flags el {@code boolean[]}
-     * @param i el {@code int}
-     * @param is el {@code int[]}
-     * @param i2 el {@code int}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param flags the {@code boolean[]}
+     * @param i the {@code int}
+     * @param is the {@code int[]}
+     * @param i2 the {@code int}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final void intoBooleanArray(boolean[] flags, int i, int[] is, int i2) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Escribe la mascara en ese arreglo de banderas.
+     * Writes the mask into that array of flags.
      *
-     * @param flags el {@code boolean[]}
-     * @param i el {@code int}
-     * @param is el {@code int[]}
-     * @param i2 el {@code int}
-     * @param vectorMask el {@code VectorMask<Byte>}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param flags the {@code boolean[]}
+     * @param i the {@code int}
+     * @param is the {@code int[]}
+     * @param i2 the {@code int}
+     * @param vectorMask the {@code VectorMask<Byte>}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final void intoBooleanArray(boolean[] flags, int i, int[] is, int i2,
             VectorMask<Byte> vectorMask) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Escribe el vector en esa zona de memoria.
+     * Writes the vector into that memory segment.
      *
-     * @param memorySegment el {@code java.lang.foreign.MemorySegment}
-     * @param l el {@code long}
-     * @param byteOrder el {@code java.nio.ByteOrder}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param memorySegment the {@code java.lang.foreign.MemorySegment}
+     * @param l the {@code long}
+     * @param byteOrder the {@code java.nio.ByteOrder}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final void intoMemorySegment(java.lang.foreign.MemorySegment memorySegment, long l,
             java.nio.ByteOrder byteOrder) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Escribe el vector en esa zona de memoria.
+     * Writes the vector into that memory segment.
      *
-     * @param memorySegment el {@code java.lang.foreign.MemorySegment}
-     * @param l el {@code long}
-     * @param byteOrder el {@code java.nio.ByteOrder}
-     * @param vectorMask el {@code VectorMask<Byte>}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param memorySegment the {@code java.lang.foreign.MemorySegment}
+     * @param l the {@code long}
+     * @param byteOrder the {@code java.nio.ByteOrder}
+     * @param vectorMask the {@code VectorMask<Byte>}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final void intoMemorySegment(java.lang.foreign.MemorySegment memorySegment, long l,
             java.nio.ByteOrder byteOrder, VectorMask<Byte> vectorMask) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Los mismos bits leidos como {@code byte}.
+     * The same bits read as {@code byte}.
      *
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ByteVector reinterpretAsBytes() {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Los mismos bits vistos como el entero del mismo tamano.
+     * The same bits seen as the integral type of the same size.
      *
-     * @return el {@code ByteVector}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @return the {@code ByteVector}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final ByteVector viewAsIntegralLanes() {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Los mismos bits vistos como el flotante del mismo tamano.
+     * The same bits seen as the floating-point type of the same size.
      *
-     * @return el {@code Vector<?>}
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @return the {@code Vector<?>}
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final Vector<?> viewAsFloatingLanes() {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Una representacion legible.
+     * A readable representation.
      *
-     * @return el texto
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @return the text
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final String toString() {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * Si el otro es igual a este.
+     * Whether the other one is equal to this one.
      *
-     * @param obj el {@code Object}
-     * @return cierto o falso, segun corresponda
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param obj the {@code Object}
+     * @return true or false, as the case may be
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final boolean equals(Object obj) {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 
     /**
-     * El codigo de dispersion.
+     * The hash code.
      *
-     * @return el numero
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @return the number
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public final int hashCode() {
-        throw new UnsupportedOperationException(Msg.NO_HAY);
+        throw new UnsupportedOperationException(Msg.NOT_THERE);
     }
 }

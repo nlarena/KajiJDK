@@ -1,34 +1,34 @@
 package javax.net.ssl;
 
 /**
- * El criterio con el que un servidor acepta o rechaza un nombre SNI que le mandaron.
+ * The criterion by which a server accepts or rejects an SNI name it was sent.
  *
- * <p>Es una clase y no un predicado suelto porque lleva el <strong>tipo</strong> que sabe examinar:
- * un matcher solo se consulta para nombres de su mismo tipo, y sin ese dato el servidor tendria que
- * pasarle todo a todos.
+ * <p>It is a class and not a loose predicate because it carries the <strong>type</strong> it knows
+ * how to examine: a matcher is only consulted for names of its own type, and without that datum the
+ * server would have to pass everything to everyone.
  *
- * <p>Rechazar no es un detalle de configuracion: si ningun matcher acepta, el servidor corta el
- * handshake. Es la forma de que un servidor solo atienda los nombres que realmente sirve.
+ * <p>Rejecting is not a configuration detail: if no matcher accepts, the server cuts the handshake.
+ * It is the way for a server to serve only the names it really serves.
  */
 public abstract class SNIMatcher {
 
     private final int type;
 
     /**
-     * @throws IllegalArgumentException si el tipo no entra en un byte sin signo
+     * @throws IllegalArgumentException if the type does not fit in an unsigned byte
      */
     protected SNIMatcher(int type) {
         if (type < 0 || type > 255) {
-            throw new IllegalArgumentException("tipo fuera de rango: " + String.valueOf(type));
+            throw new IllegalArgumentException("type out of range: " + String.valueOf(type));
         }
         this.type = type;
     }
 
-    /** El tipo de nombre que este matcher examina. */
+    /** The type of name this matcher examines. */
     public final int getType() {
         return this.type;
     }
 
-    /** Si el nombre es aceptable. */
+    /** Whether the name is acceptable. */
     public abstract boolean matches(SNIServerName serverName);
 }

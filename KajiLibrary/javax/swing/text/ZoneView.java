@@ -7,22 +7,21 @@ import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentEvent$ElementChange;
 
 /**
- * Una vista que arma sus hijos de a zonas y descarta las que no se ven.
+ * A view that builds its children in zones and discards those that are not seen.
  *
- * <h2>Para documentos que no entran en memoria como vistas</h2>
+ * <h2>For documents that do not fit in memory as views</h2>
  *
- * <p>Un documento de un millon de lineas tendria un millon de vistas si se armaran todas. Esta
- * clase parte el contenido en <em>zonas</em> de un tamano maximo y solo tiene armadas las ultimas
- * que se usaron; las demas quedan como una vista vacia que sabe su rango y se arma sola cuando
- * hace falta.
+ * <p>A document of a million lines would have a million views if they were all built. This class
+ * splits the content into <em>zones</em> of a maximum size and has only the last ones used built;
+ * the rest are left as an empty view that knows its range and builds itself when needed.
  *
- * <p>El costo es que una zona que se descarta pierde su maquetado y hay que rehacerlo al volver.
- * De ahi los dos numeros que la gobiernan: {@link #setMaximumZoneSize}, que decide cuanto se
- * rehace de una vez, y {@link #setMaxZonesLoaded}, cuantas se guardan.
+ * <p>The cost is that a zone that is discarded loses its layout and it has to be redone on coming
+ * back. Hence the two numbers that govern it: {@link #setMaximumZoneSize}, which decides how much
+ * is redone in one go, and {@link #setMaxZonesLoaded}, how many are kept.
  *
- * <p>En esta biblioteca las zonas se arman y no se descartan nunca: sin documentos enormes que
- * probar, descartar seria complejidad sin beneficio medible. {@link #unloadZone} esta y funciona;
- * lo que no hay es quien la llame sola.
+ * <p>In this library the zones are built and never discarded: with no huge documents to test on,
+ * discarding would be complexity with no measurable benefit. {@link #unloadZone} is there and
+ * works; what there is not is anybody calling it by itself.
  */
 public class ZoneView extends BoxView {
 
@@ -30,13 +29,13 @@ public class ZoneView extends BoxView {
     int maxZonesLoaded = 3;
     Vector<View> loadedZones;
 
-    /** Una vista por zonas sobre ese eje. */
+    /** A zoned view on that axis. */
     public ZoneView(Element elem, int axis) {
         super(elem, axis);
         loadedZones = new Vector<View>();
     }
 
-    /** Cuanto texto entra en una zona. */
+    /** How much text fits in a zone. */
     public int getMaximumZoneSize() {
         return maxZoneSize;
     }
@@ -57,13 +56,13 @@ public class ZoneView extends BoxView {
         unloadOldZones();
     }
 
-    /** Anota que esa zona quedo armada. */
+    /** It notes that that zone was built. */
     protected void zoneWasLoaded(View zone) {
         loadedZones.addElement(zone);
         unloadOldZones();
     }
 
-    /** Descarta las zonas viejas; ver la nota de la clase. */
+    /** It discards the old zones; see the class note. */
     void unloadOldZones() {
         while (loadedZones.size() > getMaxZonesLoaded()) {
             View zone = loadedZones.elementAt(0);
@@ -72,7 +71,7 @@ public class ZoneView extends BoxView {
         }
     }
 
-    /** Suelta los hijos de esa zona; su rango se conserva. */
+    /** It releases that zone's children; its range is kept. */
     protected void unloadZone(View zone) {
         zone.removeAll();
     }
@@ -81,7 +80,7 @@ public class ZoneView extends BoxView {
         return (zone.getViewCount() > 0);
     }
 
-    /** Una zona vacia que cubre ese tramo. */
+    /** An empty zone covering that stretch. */
     protected View createZone(int p0, int p1) {
         Document doc = getDocument();
         View zone;
@@ -93,7 +92,7 @@ public class ZoneView extends BoxView {
         return zone;
     }
 
-    /** Parte el contenido en zonas del tamano maximo. */
+    /** It splits the content into zones of the maximum size. */
     protected void loadChildren(ViewFactory f) {
         int offs0 = getStartOffset();
         int offs1 = getEndOffset();
@@ -101,7 +100,7 @@ public class ZoneView extends BoxView {
         checkZoneSize(0);
     }
 
-    /** Si la zona es mas grande que el maximo, se parte al medio. */
+    /** If the zone is larger than the maximum, it is split in half. */
     private void checkZoneSize(int index) {
         View zone = getView(index);
         int offs0 = zone.getStartOffset();
@@ -149,17 +148,17 @@ public class ZoneView extends BoxView {
         }
     }
 
-    /** Parte una zona en dos por esa posicion. */
+    /** It splits a zone in two at that position. */
     void splitZone(int index, int offs0, int offs1) {
         View zona = getView(index);
-        int fin = zona.getEndOffset();
-        View[] nuevas = new View[2];
-        nuevas[0] = createZone(offs0, offs1);
-        nuevas[1] = createZone(offs1, fin);
-        replace(index, 1, nuevas);
+        int end = zona.getEndOffset();
+        View[] newLeaves = new View[2];
+        newLeaves[0] = createZone(offs0, offs1);
+        newLeaves[1] = createZone(offs1, end);
+        replace(index, 1, newLeaves);
     }
 
-    /** Hasta donde deberia llegar una zona que empieza ahi. */
+    /** How far a zone that starts there should reach. */
     int getDesiredZoneEnd(int index) {
         View v = getView(index);
         int offs0 = v.getStartOffset();
@@ -168,7 +167,7 @@ public class ZoneView extends BoxView {
 
     protected boolean updateChildren(DocumentEvent$ElementChange ec, DocumentEvent e,
             ViewFactory f) {
-        // Las zonas no siguen a los elementos uno a uno: se acomodan solas.
+        // The zones do not follow the elements one to one: they arrange themselves.
         return false;
     }
 
@@ -183,25 +182,25 @@ public class ZoneView extends BoxView {
     }
 
     /**
-     * Una zona: un tramo del documento que se arma cuando hace falta.
+     * A zone: a stretch of the document that is built when needed.
      *
-     * <p>Es privada en el JDK y aca tambien. Guarda su rango con dos {@link Position}, asi que
-     * sobrevive a las ediciones aunque no este armada.
+     * <p>It is private in the JDK and here too. It keeps its range with two {@link Position}s, so
+     * it survives the edits even when it is not built.
      */
     static class Zone extends BoxView {
 
         private Position start;
         private Position end;
-        private final ZoneView padre;
+        private final ZoneView parent;
 
-        Zone(Element elem, Position start, Position end, ZoneView padre) {
-            super(elem, padre.getAxis());
+        Zone(Element elem, Position start, Position end, ZoneView parent) {
+            super(elem, parent.getAxis());
             this.start = start;
             this.end = end;
-            this.padre = padre;
+            this.parent = parent;
         }
 
-        /** Arma los hijos recien cuando alguien los pide. */
+        /** It builds the children only when somebody asks for them. */
         public void load() {
             if (!isLoaded()) {
                 setEstimatedMajorSpan(true);
@@ -214,7 +213,7 @@ public class ZoneView extends BoxView {
                     added[i - index0] = f.create(e.getElement(i));
                 }
                 replace(0, 0, added);
-                padre.zoneWasLoaded(this);
+                parent.zoneWasLoaded(this);
             }
         }
 
@@ -234,7 +233,7 @@ public class ZoneView extends BoxView {
         }
 
         protected void loadChildren(ViewFactory f) {
-            // Se cargan por demanda; ver load().
+            // They are loaded on demand; see load().
         }
 
         public Shape modelToView(int pos, Shape a, Position.Bias b) throws BadLocationException {

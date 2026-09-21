@@ -9,24 +9,26 @@ import java.awt.Point;
 import java.io.Serializable;
 
 /**
- * La distribucion de un {@link JViewport}: ubica al unico hijo, que es la vista.
+ * A {@link JViewport}'s layout: it places the only child, which is the view.
  *
- * <h2>Tres decisiones</h2>
+ * <h2>Three decisions</h2>
  *
- * <p>Cada vez que se acomoda decide, en este orden:
+ * <p>Every time it lays out it decides, in this order:
  *
  * <ol>
- * <li><strong>Que tamano darle a la vista.</strong> Su tamano preferido, salvo que la vista sea
- * {@link Scrollable} y diga que quiere seguir al ancho o al alto de la ventana.
- * <li><strong>Si hay que correr la posicion.</strong> Si al agrandarse la ventana quedaria espacio
- * vacio despues del final de la vista, se la vuelve a acercar: es lo que hace que al agrandar una
- * ventana desplazada hasta el fondo el contenido se pegue al borde en vez de dejar un hueco.
- * <li><strong>Si hay que estirar la vista.</strong> Una vista comun —no {@code Scrollable}— que
- * esta en el origen y es mas chica que la ventana se agranda hasta llenarla. Es lo que hace que un
- * contenido chico se vea con fondo propio y no con el del viewport.
+ * <li><strong>What size to give the view.</strong> Its preferred size, unless the view is
+ * {@link Scrollable} and says it wants to follow the viewport's width or height.
+ * <li><strong>Whether the position has to be shifted.</strong> If on the viewport growing there
+ * would be empty space after the end of the view, it is brought closer again: it is what makes
+ * the content stick to the edge instead of leaving a gap when a window scrolled to the bottom
+ * is enlarged.
+ * <li><strong>Whether the view has to be stretched.</strong> An ordinary view -- not
+ * {@code Scrollable} -- that is at the origin and is smaller than the viewport is enlarged
+ * until it fills it. It is what makes a small content be seen with a background of its own and
+ * not with the viewport's.
  * </ol>
  *
- * <p>La instancia es compartida: no guarda nada de ningun viewport.
+ * <p>The instance is shared: it keeps nothing of any viewport.
  */
 public class ViewportLayout implements LayoutManager, Serializable {
 
@@ -35,14 +37,14 @@ public class ViewportLayout implements LayoutManager, Serializable {
     public ViewportLayout() {
     }
 
-    /** Nada: un viewport tiene un solo hijo y no lo distingue por nombre. */
+    /** Nothing: a viewport has a single child and does not tell it apart by name. */
     public void addLayoutComponent(String name, Component c) {
     }
 
     public void removeLayoutComponent(Component c) {
     }
 
-    /** Lo que quiere la vista, o cero si no hay. */
+    /** What the view wants, or zero if there is none. */
     public Dimension preferredLayoutSize(Container parent) {
         Component view = ((JViewport) parent).getView();
         if (view == null) {
@@ -54,12 +56,12 @@ public class ViewportLayout implements LayoutManager, Serializable {
         }
     }
 
-    /** Cuatro por cuatro: una ventana puede achicarse hasta casi nada, la vista no la limita. */
+    /** Four by four: a viewport may shrink to almost nothing, the view does not limit it. */
     public Dimension minimumLayoutSize(Container parent) {
         return new Dimension(4, 4);
     }
 
-    /** Ver la nota de la clase. */
+    /** See the class note. */
     public void layoutContainer(Container parent) {
         JViewport vp = (JViewport) parent;
         Component view = vp.getView();
@@ -71,7 +73,7 @@ public class ViewportLayout implements LayoutManager, Serializable {
             scrollableView = (Scrollable) view;
         }
 
-        // Todo lo de abajo esta en coordenadas de la vista, salvo vpSize.
+        // Everything below is in the view's coordinates, save vpSize.
         Insets insets = vp.getInsets();
         Dimension viewPrefSize = view.getPreferredSize();
         Dimension vpSize = vp.getSize();
@@ -89,7 +91,7 @@ public class ViewportLayout implements LayoutManager, Serializable {
 
         Point viewPosition = vp.getViewPosition();
 
-        // Si sobrara espacio despues del final de la vista, se la acerca al borde.
+        // If space were left over after the end of the view, it is brought closer to the edge.
         if (scrollableView == null || vp.getParent() == null
                 || vp.getParent().getComponentOrientation().isLeftToRight()) {
             if ((viewPosition.x + extentSize.width) > viewSize.width) {
@@ -108,7 +110,7 @@ public class ViewportLayout implements LayoutManager, Serializable {
             viewPosition.y = Math.max(0, viewSize.height - extentSize.height);
         }
 
-        // Una vista comun que esta en el origen y no llena, se estira hasta llenar.
+        // An ordinary view that is at the origin and does not fill, is stretched until it fills.
         if (scrollableView == null) {
             if ((viewPosition.x == 0) && (vpSize.width > viewPrefSize.width)) {
                 viewSize.width = vpSize.width;

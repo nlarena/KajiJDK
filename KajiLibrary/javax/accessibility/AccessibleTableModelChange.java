@@ -1,35 +1,35 @@
 package javax.accessibility;
 
 /**
- * Qué cambió en una tabla accesible.
+ * What changed in an accessible table.
  *
- * <p>Describe el cambio como un **rectángulo** de filas y columnas más el tipo de cambio, en vez de
- * mandar la tabla entera. Es lo que permite que una ayuda técnica siga una planilla grande sin
- * releerla en cada modificación.
+ * <p>It describes the change as a **rectangle** of rows and columns plus the kind of change,
+ * instead of sending the whole table. It is what lets an assistive technology follow a large
+ * spreadsheet without rereading it on each modification.
  */
 public interface AccessibleTableModelChange {
 
-    /** Se insertaron filas o columnas. */
+    /** Rows or columns were inserted. */
     int INSERT = 1;
 
-    /** Cambió el contenido. */
+    /** The contents changed. */
     int UPDATE = 0;
 
-    /** Se borraron filas o columnas. */
+    /** Rows or columns were deleted. */
     int DELETE = -1;
 
-    /** `INSERT`, `UPDATE` o `DELETE`. */
+    /** `INSERT`, `UPDATE` or `DELETE`. */
     int getType();
 
-    /** La primera fila afectada. */
+    /** The first row affected. */
     int getFirstRow();
 
-    /** La última fila afectada. */
+    /** The last row affected. */
     int getLastRow();
 
-    /** La primera columna afectada. */
+    /** The first column affected. */
     int getFirstColumn();
 
-    /** La última columna afectada. */
+    /** The last column affected. */
     int getLastColumn();
 }

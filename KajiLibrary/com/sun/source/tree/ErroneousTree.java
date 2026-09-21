@@ -3,11 +3,11 @@ package com.sun.source.tree;
 import java.util.List;
 
 /**
- * Codigo que no se pudo parsear.
+ * Code that could not be parsed.
  *
- * <p>Extiende {@link ExpressionTree} y conserva en {@link #getErrorTrees} lo que si se entendio.
- * Es lo que permite que un IDE siga dando autocompletado sobre un archivo a medio escribir: el
- * arbol representa el error en vez de no existir.
+ * <p>It extends {@link ExpressionTree} and keeps in {@link #getErrorTrees} what was understood.
+ * It is what allows an IDE to go on giving autocompletion over a half-written file: the tree
+ * represents the error instead of not existing.
  */
 public interface ErroneousTree extends ExpressionTree {
 

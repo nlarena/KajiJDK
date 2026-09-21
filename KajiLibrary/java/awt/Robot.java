@@ -4,45 +4,45 @@ import java.awt.image.BufferedImage;
 import java.awt.image.MultiResolutionImage;
 
 /**
- * Genera eventos de mouse y teclado **a nivel del sistema**, como si los hubiera hecho una persona.
+ * Generates mouse and keyboard events **at the system level**, as though a person had made them.
  *
- * <p>Es la diferencia con armar un {@link java.awt.event.KeyEvent} y repartirlo a mano: eso le llega
- * sólo a este programa, y un `Robot` le llega al sistema de ventanas, así que puede manejar
- * cualquier ventana y además **leer la pantalla**. Por eso es la base de las pruebas automatizadas de
- * interfaz.
+ * <p>That is the difference from building a {@link java.awt.event.KeyEvent} and dispatching it by
+ * hand: that one reaches this program only, and a `Robot` reaches the windowing system, so it can
+ * drive any window and also **read the screen**. That is why it is the basis of automated interface
+ * testing.
  *
- * <p><strong>Acá no se puede construir.</strong> Los dos constructores tiran {@link AWTException},
- * que es lo que hace el JDK sin pantalla: sin sistema de ventanas no hay a quién mandarle los
- * eventos ni pantalla que leer. Los métodos de instancia están declarados porque son parte de la
- * clase, pero no hay forma de llegar a ellos: no existe ninguna instancia.
+ * <p><strong>Here it cannot be built.</strong> Both constructors throw {@link AWTException}, which
+ * is what the JDK does without a screen: with no windowing system there is nobody to send the
+ * events to and no screen to read. The instance methods are declared because they are part of the
+ * class, but there is no way to reach them: no instance exists.
  *
- * <p>El {@code autoDelay} y el {@code autoWaitForIdle} son lo que hace usable a esta clase: sin
- * ellos, los eventos se generan más rápido de lo que la interfaz los procesa y la prueba mide
- * cualquier cosa.
+ * <p>The {@code autoDelay} and the {@code autoWaitForIdle} are what make this class usable: without
+ * them the events are generated faster than the interface processes them and the test measures
+ * nothing in particular.
  */
 public class Robot {
 
-    /** Cuánto espera después de cada evento generado, en milisegundos. */
+    /** How long it waits after each generated event, in milliseconds. */
     private int autoDelay;
 
-    /** Si espera a que se vacíe la cola de eventos después de cada uno. */
+    /** Whether it waits for the event queue to drain after each one. */
     private boolean autoWaitForIdle;
 
     /**
-     * Un robot sobre la pantalla principal.
+     * A robot over the main screen.
      *
-     * @throws AWTException siempre: sin pantalla no hay sistema de ventanas al que mandarle eventos
+     * @throws AWTException always: with no screen there is no windowing system to send events to
      */
     public Robot() throws AWTException {
         throw new AWTException("headless environment");
     }
 
     /**
-     * Un robot sobre esa pantalla.
+     * A robot over that screen.
      *
-     * @throws AWTException siempre, por lo mismo
-     * @throws IllegalArgumentException si el dispositivo no es una pantalla
-     * @throws NullPointerException si el dispositivo es `null`
+     * @throws AWTException always, for the same reason
+     * @throws IllegalArgumentException if the device is not a screen
+     * @throws NullPointerException if the device is `null`
      */
     public Robot(GraphicsDevice screen) throws AWTException {
         if (screen == null) {
@@ -54,113 +54,113 @@ public class Robot {
         throw new AWTException("headless environment");
     }
 
-    /** Mueve el puntero a ese punto de la pantalla. */
+    /** Moves the pointer to that point of the screen. */
     public synchronized void mouseMove(int x, int y) {
-        this.despues();
+        this.afterEvent();
     }
 
     /**
-     * Aprieta esos botones del mouse.
+     * Presses those mouse buttons.
      *
-     * @param buttons una combinación de las máscaras {@code BUTTONn_DOWN_MASK} de
+     * @param buttons a combination of the {@code BUTTONn_DOWN_MASK} masks of
      *     {@link java.awt.event.InputEvent}
-     * @throws IllegalArgumentException si no hay ninguna máscara de botón
+     * @throws IllegalArgumentException if there is no button mask at all
      */
     public synchronized void mousePress(int buttons) {
-        this.comprobarBotones(buttons);
-        this.despues();
+        this.checkButtons(buttons);
+        this.afterEvent();
     }
 
     /**
-     * Suelta esos botones.
+     * Releases those buttons.
      *
-     * @throws IllegalArgumentException si no hay ninguna máscara de botón
+     * @throws IllegalArgumentException if there is no button mask at all
      */
     public synchronized void mouseRelease(int buttons) {
-        this.comprobarBotones(buttons);
-        this.despues();
+        this.checkButtons(buttons);
+        this.afterEvent();
     }
 
     /**
-     * Gira la rueda esa cantidad de muescas.
+     * Turns the wheel that many notches.
      *
-     * @param wheelAmt negativo hacia arriba, positivo hacia abajo
+     * @param wheelAmt negative upwards, positive downwards
      */
     public synchronized void mouseWheel(int wheelAmt) {
-        this.despues();
+        this.afterEvent();
     }
 
     /**
-     * Aprieta esa tecla.
+     * Presses that key.
      *
-     * @param keycode uno de los {@code VK_} de {@link java.awt.event.KeyEvent}
-     * @throws IllegalArgumentException si el código no es válido
+     * @param keycode one of the {@code VK_} constants of {@link java.awt.event.KeyEvent}
+     * @throws IllegalArgumentException if the code is not valid
      */
     public synchronized void keyPress(int keycode) {
-        this.despues();
+        this.afterEvent();
     }
 
     /**
-     * Suelta esa tecla.
+     * Releases that key.
      *
-     * @throws IllegalArgumentException si el código no es válido
+     * @throws IllegalArgumentException if the code is not valid
      */
     public synchronized void keyRelease(int keycode) {
-        this.despues();
+        this.afterEvent();
     }
 
     /**
-     * De qué color es ese píxel de la pantalla.
+     * What colour that pixel of the screen is.
      *
-     * @throws IllegalStateException nunca se llega acá: no hay instancias
+     * @throws IllegalStateException always —though nothing gets here: there are no instances
      */
     public synchronized Color getPixelColor(int x, int y) {
-        throw new IllegalStateException("no hay pantalla que leer");
+        throw new IllegalStateException("there is no screen to read");
     }
 
     /**
-     * Una foto de ese rectángulo de la pantalla.
+     * A snapshot of that rectangle of the screen.
      *
-     * @throws IllegalArgumentException si el rectángulo está vacío
+     * @throws IllegalArgumentException if the rectangle is empty
      */
     public synchronized BufferedImage createScreenCapture(Rectangle screenRect) {
-        this.comprobarRect(screenRect);
-        throw new IllegalStateException("no hay pantalla que leer");
+        this.checkRect(screenRect);
+        throw new IllegalStateException("there is no screen to read");
     }
 
     /**
-     * Lo mismo, pero con una imagen por cada resolución de pantalla.
+     * The same, but with one image per screen resolution.
      *
-     * <p>Existe por las pantallas de alta densidad: la foto tiene más píxeles que el rectángulo
-     * pedido, y una {@link MultiResolutionImage} deja elegir cuál usar.
+     * <p>It exists because of high-density screens: the snapshot has more pixels than the rectangle
+     * that was asked for, and a {@link MultiResolutionImage} lets one choose which to use.
      *
-     * @throws IllegalArgumentException si el rectángulo está vacío
+     * @throws IllegalArgumentException if the rectangle is empty
      */
     public synchronized MultiResolutionImage createMultiResolutionScreenCapture(
             Rectangle screenRect) {
-        this.comprobarRect(screenRect);
-        throw new IllegalStateException("no hay pantalla que leer");
+        this.checkRect(screenRect);
+        throw new IllegalStateException("there is no screen to read");
     }
 
-    /** Si espera a que se vacíe la cola de eventos después de cada uno. */
+    /** Whether it waits for the event queue to drain after each one. */
     public synchronized boolean isAutoWaitForIdle() {
         return this.autoWaitForIdle;
     }
 
-    /** Dice si esperar a que se vacíe la cola después de cada evento. */
+    /** Says whether to wait for the queue to drain after each event. */
     public synchronized void setAutoWaitForIdle(boolean isOn) {
         this.autoWaitForIdle = isOn;
     }
 
-    /** Cuánto espera después de cada evento. */
+    /** How long it waits after each event. */
     public synchronized int getAutoDelay() {
         return this.autoDelay;
     }
 
     /**
-     * Cambia cuánto esperar después de cada evento.
+     * Changes how long to wait after each event.
      *
-     * @throws IllegalArgumentException si no está entre 0 y 60000
+     * @throws IllegalArgumentException if it is not between 0 and 60000
      */
     public synchronized void setAutoDelay(int ms) {
         if (ms < 0 || ms > 60000) {
@@ -170,13 +170,14 @@ public class Robot {
     }
 
     /**
-     * Duerme ese tiempo.
+     * Sleeps for that long.
      *
-     * <p>Es lo único de esta clase que no necesita pantalla, y por eso es el único que hace algo de
-     * verdad. Se traga la interrupción, igual que el JDK: quien la use en una prueba no quiere
-     * atrapar una `InterruptedException` en cada paso.
+     * <p>It is the only thing in this class that needs no screen, and that is why it is the only
+     * one that really does something. It does not let the interruption out, just as the JDK does
+     * not: instead of printing the trace, as the JDK does, it restores the interrupt flag, so
+     * whoever uses it in a test does not have to catch an `InterruptedException` at every step.
      *
-     * @throws IllegalArgumentException si no está entre 0 y 60000
+     * @throws IllegalArgumentException if it is not between 0 and 60000
      */
     public void delay(int ms) {
         if (ms < 0 || ms > 60000) {
@@ -189,7 +190,7 @@ public class Robot {
         }
     }
 
-    /** Espera a que se vacíe la cola de eventos. */
+    /** Waits for the event queue to drain. */
     public synchronized void waitForIdle() {
         try {
             EventQueue.invokeAndWait(new Runnable() {
@@ -197,7 +198,7 @@ public class Robot {
                 }
             });
         } catch (Exception e) {
-            // Que la cola no se pueda vaciar no es un error del robot.
+            // That the queue cannot be drained is not the robot's fault.
         }
     }
 
@@ -206,8 +207,8 @@ public class Robot {
                 + ", autoWaitForIdle = " + this.isAutoWaitForIdle() + " ]";
     }
 
-    /** Lo que va después de cada evento generado. */
-    private void despues() {
+    /** What goes after each generated event. */
+    private void afterEvent() {
         if (this.autoWaitForIdle) {
             this.waitForIdle();
         }
@@ -216,18 +217,18 @@ public class Robot {
         }
     }
 
-    /** Que haya al menos una máscara de botón. */
-    private void comprobarBotones(int buttons) {
-        int mascara = java.awt.event.InputEvent.BUTTON1_DOWN_MASK
+    /** That there is at least one button mask. */
+    private void checkButtons(int buttons) {
+        int mask = java.awt.event.InputEvent.BUTTON1_DOWN_MASK
                 | java.awt.event.InputEvent.BUTTON2_DOWN_MASK
                 | java.awt.event.InputEvent.BUTTON3_DOWN_MASK;
-        if ((buttons & mascara) == 0) {
+        if ((buttons & mask) == 0) {
             throw new IllegalArgumentException("Invalid combination of button flags");
         }
     }
 
-    /** Que el rectángulo tenga superficie. */
-    private void comprobarRect(Rectangle r) {
+    /** That the rectangle has some surface. */
+    private void checkRect(Rectangle r) {
         if (r == null) {
             throw new NullPointerException("screenRect");
         }

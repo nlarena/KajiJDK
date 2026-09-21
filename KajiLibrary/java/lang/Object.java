@@ -68,10 +68,10 @@ public class Object {
         this.wait0(timeout);
     }
 
-    // La costura al scheduler, privada y con el mismo nombre que le pone el JDK. Que el metodo
-    // publico NO sea nativo no es cosmetico: es lo unico que lo hace igual al de referencia
-    // (`Method.getModifiers()` responde distinto), y ademas es donde entra la validacion del
-    // argumento, que un nativo tendria que duplicar.
+    // The seam to the scheduler, private and with the same name the JDK gives it. That the public
+    // method is NOT native is not cosmetic: it is the only thing that makes it equal to the
+    // reference's (`Method.getModifiers()` answers differently), and it is also where the argument's
+    // validation goes, which a native would have to duplicate.
     private final native void wait0(long timeout) throws InterruptedException;
 
     /**

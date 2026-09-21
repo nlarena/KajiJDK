@@ -6,15 +6,15 @@ import java.lang.classfile.constantpool.ConstantPoolBuilder;
 import java.lang.classfile.constantpool.PoolEntry;
 
 /**
- * El bufer de bytes en el que se escribe un `.class`.
+ * The byte buffer a `.class` is written into.
  *
- * <p>Crece solo, en potencias de dos: duplicar es lo que hace que escribir N bytes cueste O(N) en
- * total y no O(N^2). Nada mas que eso.
+ * <p>It grows by itself, in powers of two: doubling is what makes writing N bytes cost O(N) in
+ * total and not O(N^2). Nothing more than that.
  *
- * <p><strong>`patchInt` es la razon por la que esto es un arreglo y no un flujo.</strong> Varias
- * estructuras del formato llevan adelante un largo que solo se sabe despues de escribir el
- * contenido --el de un atributo, el de `code`-- y la unica forma de no recorrer todo dos veces es
- * dejar el hueco, seguir, y volver a taparlo.
+ * <p><strong>`patchInt` is the reason this is an array and not a stream.</strong> Several
+ * structures of the format carry up front a length that is known only after writing the contents
+ * --that of an attribute, that of `code`-- and the only way of not walking everything twice is to
+ * leave the gap, go on, and come back to fill it.
  */
 public final class BufWriterImpl implements BufWriter {
 
@@ -22,7 +22,7 @@ public final class BufWriterImpl implements BufWriter {
     private byte[] buf;
     private int size;
 
-    /** Un bufer que escribe indices contra ese pool. */
+    /** A buffer that writes indices against that pool. */
     public BufWriterImpl(ConstantPoolBuilder pool) {
         this.pool = pool;
         this.buf = new byte[1024];
@@ -34,16 +34,16 @@ public final class BufWriterImpl implements BufWriter {
     }
 
     /**
-     * Si una entrada de ese pool se puede escribir por su indice tal cual.
+     * Whether an entry of that pool can be written by its index as it stands.
      *
-     * <p>Solo si es **el mismo** pool: un indice de otro pool nombra otra cosa. Quien escriba una
-     * entrada ajena tiene que adoptarla primero.
+     * <p>Only if it is **the same** pool: an index of another pool names something else. Whoever
+     * writes a foreign entry has to adopt it first.
      */
     public boolean canWriteDirect(ConstantPool other) {
         return this.pool == other;
     }
 
-    /** Reserva lugar para al menos esos bytes mas. */
+    /** It reserves room for at least that many more bytes. */
     public void reserveSpace(int freeBytes) {
         this.grow(this.size + freeBytes);
     }
@@ -56,9 +56,9 @@ public final class BufWriterImpl implements BufWriter {
         while (n < needed) {
             n = n * 2;
         }
-        byte[] mas = new byte[n];
-        System.arraycopy(this.buf, 0, mas, 0, this.size);
-        this.buf = mas;
+        byte[] grown = new byte[n];
+        System.arraycopy(this.buf, 0, grown, 0, this.size);
+        this.buf = grown;
     }
 
     public void writeU1(int x) {
@@ -106,14 +106,14 @@ public final class BufWriterImpl implements BufWriter {
         this.size = this.size + length;
     }
 
-    /** Reescribe `intSize` bytes en `offset` con ese valor. Ver la nota de la clase. */
+    /** It rewrites `intSize` bytes at `offset` with that value. See the class note. */
     public void patchInt(int offset, int intSize, int value) {
         for (int i = 0; i < intSize; i++) {
             this.buf[offset + i] = (byte) (value >> ((intSize - 1 - i) * 8));
         }
     }
 
-    /** Escribe ese valor en `intSize` bytes. */
+    /** It writes that value in `intSize` bytes. */
     public void writeIntBytes(int intSize, long value) {
         for (int i = 0; i < intSize; i++) {
             this.writeU1((int) (value >> ((intSize - 1 - i) * 8)));
@@ -121,31 +121,31 @@ public final class BufWriterImpl implements BufWriter {
     }
 
     /**
-     * El indice de esa entrada, en dos bytes.
+     * The index of that entry, in two bytes.
      *
-     * <p>Si la entrada viene de **otro** pool se la adopta primero. Sin eso, transformar una clase
-     * escribe los indices del pool original en el archivo nuevo: el `.class` sale bien formado y
-     * apunta a cualquier cosa, asi que no falla al escribirlo sino al leerlo, con un mensaje que no
-     * dice nada del lugar donde estuvo el error.
+     * <p>If the entry comes from **another** pool it is adopted first. Without that, transforming a
+     * class writes the original pool's indices into the new file: the `.class` comes out well
+     * formed and points at anything, so it does not fail on writing but on reading, with a message
+     * that says nothing about the place where the error was.
      */
     public void writeIndex(PoolEntry entry) {
         if (entry == null) {
-            throw new NullPointerException("no hay entrada de pool que escribir");
+            throw new NullPointerException("there is no pool entry to write");
         }
         this.writeU2(this.adopt(entry).index());
     }
 
-    /** El indice de esa entrada, o cero si es `null`. */
+    /** The index of that entry, or zero if it is `null`. */
     public void writeIndexOrZero(PoolEntry entry) {
         this.writeU2(entry == null ? 0 : this.adopt(entry).index());
     }
 
     /**
-     * El indice que esa entrada tiene **en este pool**, adoptandola si venia de otro.
+     * The index that entry has **in this pool**, adopting it if it came from another.
      *
-     * <p>Lo necesita quien escribe el indice en un solo byte (`ldc`), donde `writeIndex` no sirve.
-     * Toda escritura de un indice tiene que pasar por aca o por `writeIndex`: escribir
-     * `entry.index()` a secas es lo que produce un archivo que apunta al pool equivocado.
+     * <p>Whoever writes the index in a single byte (`ldc`) needs it, where `writeIndex` does not
+     * serve. Every write of an index has to go through here or through `writeIndex`: writing
+     * `entry.index()` bare is what produces a file that points at the wrong pool.
      */
     public int indexOf(PoolEntry entry) {
         return this.adopt(entry).index();
@@ -158,17 +158,17 @@ public final class BufWriterImpl implements BufWriter {
         if (this.pool instanceof ConstantPoolBuilderImpl) {
             return ((ConstantPoolBuilderImpl) this.pool).adoptEntry(entry);
         }
-        // Un pool que no es el nuestro y que no sabe adoptar: no hay forma de traducir el indice, y
-        // escribirlo tal cual seria escribir un archivo que miente.
+        // A pool that is not ours and that does not know how to adopt: there is no way of
+        // translating the index, and writing it as it stands would be writing a file that lies.
         throw new IllegalArgumentException(
-                "la entrada viene de otro pool y este no sabe adoptarla: " + entry);
+                "the entry comes from another pool and this one cannot adopt it: " + entry);
     }
 
     public int size() {
         return this.size;
     }
 
-    /** Los bytes escritos, en un arreglo del tamano justo. */
+    /** The written bytes, in an array of exactly the right size. */
     public byte[] toByteArray() {
         byte[] out = new byte[this.size];
         System.arraycopy(this.buf, 0, out, 0, this.size);

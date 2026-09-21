@@ -4,11 +4,11 @@ import javax.annotation.processing.SupportedSourceVersion;
 import javax.lang.model.SourceVersion;
 
 /**
- * El visitante de valores de anotacion de Java 8. Ver {@link AbstractAnnotationValueVisitor6}.
+ * The annotation value visitor for Java 8. See {@link AbstractAnnotationValueVisitor6}.
  *
- * <p>Java 8 trajo las anotaciones de tipo y las repetibles, y ninguna de las dos toca esta familia: son
- * anotaciones en lugares nuevos, no **valores** de forma nueva. Una anotacion repetida se modela con la
- * contenedora, cuyo valor es un arreglo — que ya existia.
+ * <p>Java 8 brought type annotations and repeatable ones, and neither touches this family: they are
+ * annotations in new places, not **values** of a new form. A repeated annotation is modelled with
+ * the container, whose value is an array — which already existed.
  */
 @SupportedSourceVersion(SourceVersion.RELEASE_8)
 public abstract class AbstractAnnotationValueVisitor8<R, P>

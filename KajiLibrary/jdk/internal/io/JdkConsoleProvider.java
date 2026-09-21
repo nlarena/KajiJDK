@@ -3,33 +3,35 @@ package jdk.internal.io;
 import java.nio.charset.Charset;
 
 /**
- * KajiLibrary's jdk.internal.io.JdkConsoleProvider — quien fabrica la {@link JdkConsole}.
+ * KajiLibrary's jdk.internal.io.JdkConsoleProvider -- the one that manufactures the
+ * {@link JdkConsole}.
  *
- * <p>En el JDK esto es un punto de extensión de verdad: se busca por `ServiceLoader`, de modo que un
- * runtime con terminal --o `jshell`, que tiene la suya-- pueda entregar una consola distinta sin que
- * `java.io.Console` sepa nada del asunto. `DEFAULT_PROVIDER_MODULE_NAME` nombra al proveedor que se
- * usa cuando no hay ninguno mejor.
+ * <p>In the JDK this is a real point of extension: it is looked up with `ServiceLoader`, so that a
+ * runtime with a terminal --or `jshell`, which has its own-- can hand over a different console
+ * without `java.io.Console` knowing anything about the matter.
+ * `DEFAULT_PROVIDER_MODULE_NAME` names the provider that is used when there is no better one.
  *
- * <p>La interfaz es una declaración pura y por eso está completa. Lo que esta biblioteca no tiene es
- * un proveedor **registrado**: `System.console()` devuelve `null` sin consultar a nadie, porque no
- * hay terminal. El punto de extensión existe y funciona; lo que no hay es quién se enchufe.
+ * <p>The interface is a pure declaration and that is why it is complete. What this library does not
+ * have is a **registered** provider: `System.console()` returns `null` without consulting anybody,
+ * because there is no terminal. The point of extension exists and works; what there is not is
+ * somebody to plug into it.
  */
 public interface JdkConsoleProvider {
 
     /**
-     * El módulo del proveedor por omisión.
+     * The module of the default provider.
      *
-     * <p>Es `"java.base"` y no el nombre de una clase: lo que se busca es el módulo donde vive la
-     * implementación, no la implementación misma.
+     * <p>It is `"java.base"` and not the name of a class: what is looked up is the module where the
+     * implementation lives, not the implementation itself.
      */
     String DEFAULT_PROVIDER_MODULE_NAME = "java.base";
 
     /**
-     * La consola, o `null` si no hay.
+     * The console, or `null` if there is none.
      *
-     * @param isTTY si la entrada y la salida estan conectadas a una terminal
-     * @param inCharset el juego de caracteres de la entrada
-     * @param outCharset el de la salida
+     * @param isTTY whether the input and the output are connected to a terminal
+     * @param inCharset the character set of the input
+     * @param outCharset that of the output
      */
     JdkConsole console(boolean isTTY, Charset inCharset, Charset outCharset);
 }

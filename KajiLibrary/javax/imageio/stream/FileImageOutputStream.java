@@ -6,28 +6,29 @@ import java.io.IOException;
 import java.io.RandomAccessFile;
 
 /**
- * KajiLibrary's javax.imageio.stream.FileImageOutputStream -- escribe un archivo, con acceso directo.
+ * KajiLibrary's javax.imageio.stream.FileImageOutputStream -- writes a file, with random access.
  *
- * <p>El espejo de {@link FileImageInputStream}, sobre un {@link RandomAccessFile} abierto para lectura
- * y escritura. Es la implementacion que hace facil el patron de "escribo el encabezado con un largo
- * que no se, escribo la imagen, vuelvo y corrijo".
+ * <p>The mirror of {@link FileImageInputStream}, over a {@link RandomAccessFile} open for reading
+ * and writing. It is the implementation that makes the pattern "write the header with a length I
+ * do not know yet, write the image, go back and fix it" easy.
  *
- * <p>El archivo se abre en modo {@code "rw"}: si no existe se crea, y si existe <b>no se trunca</b>.
- * Escribir un archivo mas corto que el anterior deja la cola del viejo pegada al final.
+ * <p>The file is opened in {@code "rw"} mode: if it does not exist it is created, and if it exists
+ * it <b>is not truncated</b>. Writing a file shorter than the previous one leaves the old one's
+ * tail stuck at the end.
  *
- * <p>Ver {@link FileImageInputStream} sobre quien cierra que.
+ * <p>See {@link FileImageInputStream} about who closes what.
  */
 public class FileImageOutputStream extends ImageOutputStreamImpl {
 
-    /** El archivo. */
+    /** The file. */
     private RandomAccessFile raf;
 
     /**
-     * Abre ese archivo para leer y escribir.
+     * Opens that file for reading and writing.
      *
-     * @throws IllegalArgumentException si es null
-     * @throws FileNotFoundException si no se puede abrir
-     * @throws IOException si fallo
+     * @throws IllegalArgumentException if it is null
+     * @throws FileNotFoundException if it cannot be opened
+     * @throws IOException if it failed
      */
     public FileImageOutputStream(File f) throws FileNotFoundException, IOException {
         if (f == null) {
@@ -37,9 +38,9 @@ public class FileImageOutputStream extends ImageOutputStreamImpl {
     }
 
     /**
-     * Usa ese archivo ya abierto.
+     * Uses that already open file.
      *
-     * @throws IllegalArgumentException si es null
+     * @throws IllegalArgumentException if it is null
      */
     public FileImageOutputStream(RandomAccessFile raf) {
         if (raf == null) {
@@ -48,7 +49,7 @@ public class FileImageOutputStream extends ImageOutputStreamImpl {
         this.raf = raf;
     }
 
-    /** Un byte. */
+    /** One byte. */
     @Override
     public int read() throws IOException {
         checkClosed();
@@ -60,7 +61,7 @@ public class FileImageOutputStream extends ImageOutputStreamImpl {
         return val;
     }
 
-    /** Hasta {@code len} bytes. */
+    /** Up to {@code len} bytes. */
     @Override
     public int read(byte[] b, int off, int len) throws IOException {
         checkClosed();
@@ -72,7 +73,7 @@ public class FileImageOutputStream extends ImageOutputStreamImpl {
         return nbytes;
     }
 
-    /** Un byte; cierra antes el byte de bits pendiente. */
+    /** One byte; first closes the pending bit byte. */
     @Override
     public void write(int b) throws IOException {
         flushBits();
@@ -80,7 +81,7 @@ public class FileImageOutputStream extends ImageOutputStreamImpl {
         this.streamPos = this.streamPos + 1;
     }
 
-    /** Esa parte del arreglo. */
+    /** That part of the array. */
     @Override
     public void write(byte[] b, int off, int len) throws IOException {
         flushBits();
@@ -88,7 +89,7 @@ public class FileImageOutputStream extends ImageOutputStreamImpl {
         this.streamPos = this.streamPos + len;
     }
 
-    /** El tamano del archivo, o -1. */
+    /** The size of the file, or -1. */
     @Override
     public long length() {
         try {
@@ -100,10 +101,10 @@ public class FileImageOutputStream extends ImageOutputStreamImpl {
     }
 
     /**
-     * Se posiciona.
+     * Seeks.
      *
-     * <p>Se puede pasar del final: el archivo crece con ceros al escribir ahi. Es lo que permite
-     * reservar espacio para un encabezado y llenarlo despues.
+     * <p>It may go past the end: the file grows with zeros when written there. It is what allows
+     * reserving space for a header and filling it in later.
      */
     @Override
     public void seek(long pos) throws IOException {
@@ -116,20 +117,20 @@ public class FileImageOutputStream extends ImageOutputStreamImpl {
         this.streamPos = this.raf.getFilePointer();
     }
 
-    /** Cierra el byte pendiente, cierra el flujo y el archivo. */
+    /** Closes the pending byte, closes the stream and the file. */
     @Override
     public void close() throws IOException {
         try {
             flushBits();
         } catch (IOException e) {
-            // Ya se esta cerrando; no hay nada mejor que hacer que seguir cerrando.
+            // It is already closing; there is nothing better to do than keep closing.
         }
         super.close();
         this.raf.close();
         this.raf = null;
     }
 
-    /** Cierra si nadie lo hizo. */
+    /** Closes it if nobody did. */
     @Override
     protected void finalize() throws Throwable {
         super.finalize();

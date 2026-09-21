@@ -1,16 +1,16 @@
 package java.lang.classfile;
 
-// El par `major_version`/`minor_version` del encabezado (JVMS §4.1), como elemento de clase para que
-// una transformación pueda cambiarlo igual que a cualquier otra pieza.
+// The header's `major_version`/`minor_version` pair (JVMS §4.1), as a class element so a
+// transformation can change it just like any other piece.
 public interface ClassFileVersion extends ClassElement {
 
-    /** La versión mayor. */
+    /** The major version. */
     int majorVersion();
 
-    /** La versión menor. */
+    /** The minor version. */
     int minorVersion();
 
-    /** El par. */
+    /** The pair. */
     public static ClassFileVersion of(int majorVersion, int minorVersion) {
         return new jdk.internal.classfile.impl.ClassFileVersionImpl(majorVersion, minorVersion);
     }

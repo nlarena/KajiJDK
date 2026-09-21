@@ -1,7 +1,7 @@
 package com.sun.source.tree;
 
 /**
- * Un `;` suelto.
+ * A loose `;`.
  */
 public interface EmptyStatementTree extends StatementTree {
 }

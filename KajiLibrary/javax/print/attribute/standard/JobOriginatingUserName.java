@@ -6,10 +6,11 @@ import javax.print.attribute.PrintJobAttribute;
 import javax.print.attribute.TextSyntax;
 
 /**
- * Quien mando el trabajo, segun la impresora.
+ * Who sent the job, according to the printer.
  *
- * <p>No es lo que el cliente pidio en {@link RequestingUserName}: este lo pone el servicio, con la
- * identidad que pudo autenticar, y por eso es el que sirve para cobrar o para auditar.
+ * <p>It is not what the client asked for in {@link RequestingUserName}: this one is set by the
+ * service, with the identity it could authenticate, and that is why it is the one that serves for
+ * charging or auditing.
  */
 public final class JobOriginatingUserName extends TextSyntax implements PrintJobAttribute {
 

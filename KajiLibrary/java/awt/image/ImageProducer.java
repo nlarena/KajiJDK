@@ -1,35 +1,35 @@
 package java.awt.image;
 
 /**
- * La fuente de los píxeles de una imagen.
+ * The source of the pixels of an image.
  *
- * <p>Es el otro extremo de {@link ImageConsumer}. Un productor puede tener varios consumidores a la
- * vez, y cada uno recibe la imagen entera: registrarse no es repartirse el trabajo sino sumarse a la
- * entrega.
+ * <p>It is the other end of {@link ImageConsumer}. A producer can have several consumers at once,
+ * and each one receives the whole image: registering is not sharing out the work but joining the
+ * delivery.
  */
 public interface ImageProducer {
 
     /**
-     * Suma un consumidor y le empieza a entregar.
+     * Adds a consumer and starts delivering to it.
      *
-     * <p>Registrar dos veces al mismo consumidor no está definido y conviene evitarlo.
+     * <p>Registering the same consumer twice is not defined and is better avoided.
      */
     void addConsumer(ImageConsumer ic);
 
-    /** Si ese consumidor está registrado. */
+    /** Whether that consumer is registered. */
     boolean isConsumer(ImageConsumer ic);
 
-    /** Saca a ese consumidor; si no estaba, no pasa nada. */
+    /** Removes that consumer; if it was not there, nothing happens. */
     void removeConsumer(ImageConsumer ic);
 
-    /** Lo registra si hace falta y arranca la entrega. */
+    /** Registers it if need be and starts the delivery. */
     void startProduction(ImageConsumer ic);
 
     /**
-     * Pide que los píxeles se vuelvan a mandar de arriba abajo.
+     * Asks for the pixels to be sent again from top to bottom.
      *
-     * <p>Es para el consumidor que necesita ese orden y no lo consiguió la primera vez. El productor
-     * puede ignorarlo.
+     * <p>It is for the consumer that needs that order and did not get it the first time. The
+     * producer may ignore it.
      */
     void requestTopDownLeftRightResend(ImageConsumer ic);
 }

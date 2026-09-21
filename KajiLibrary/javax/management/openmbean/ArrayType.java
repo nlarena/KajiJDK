@@ -4,31 +4,33 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * El tipo de un arreglo de `n` dimensiones cuyos elementos son de otro tipo abierto.
+ * The type of an {@code n}-dimensional array whose elements are of another open type.
  *
- * <p>Hay dos formas de arreglo y la diferencia se ve al leer un valor:
+ * <p>There are two array forms and the difference shows when reading a value:
  *
  * <ul>
- * <li>El **de referencias** (`new ArrayType&lt;&gt;(1, SimpleType.INTEGER)`) tiene elementos
- *     `Integer`, así que un elemento puede ser nulo. Su `className` es `[Ljava.lang.Integer;`.</li>
- * <li>El **de primitivos** (`new ArrayType&lt;&gt;(SimpleType.INTEGER, true)`) tiene elementos
- *     `int`, así que ninguno puede ser nulo y ocupa menos. Su `className` es `[I`.</li>
+ * <li>The <b>reference</b> one ({@code new ArrayType<>(1, SimpleType.INTEGER)}) has {@code Integer}
+ *     elements, so an element may be null. Its {@code className} is {@code
+ *     [Ljava.lang.Integer;}.</li>
+ * <li>The <b>primitive</b> one ({@code new ArrayType<>(SimpleType.INTEGER, true)}) has {@code int}
+ *     elements, so none can be null and it takes less space. Its {@code className} is {@code
+ *     [I}.</li>
  * </ul>
  *
- * <p>Los dos declaran `SimpleType.INTEGER` como {@link #getElementOpenType}, porque el tipo abierto
- * de un `int` **es** `SimpleType.INTEGER` -- no hay tipos abiertos primitivos. Lo que los distingue
- * es {@link #isPrimitiveArray}, y por eso ese método existe: sin él, dos tipos que aceptan valores
- * distintos serían indistinguibles.
+ * <p>Both declare {@code SimpleType.INTEGER} as {@link #getElementOpenType}, because the open type
+ * of an {@code int} <b>is</b> {@code SimpleType.INTEGER} -- there are no primitive open types. What
+ * tells them apart is {@link #isPrimitiveArray}, and that is why that method exists: without it,
+ * two types that accept different values would be indistinguishable.
  *
- * <p>Sólo los ocho envoltorios más `Void` tienen forma primitiva; pedir un arreglo primitivo de
- * `String` es un error.
+ * <p>Only the eight wrappers have a primitive form; asking for a primitive array of {@code String}
+ * is an error, and so is asking for one of {@code Void} (an earlier note included it).
  */
 public class ArrayType<T> extends OpenType<T> {
 
     private static final long serialVersionUID = 720504429830309770L;
 
-    // Del nombre del envoltorio al descriptor y al nombre del primitivo. Es la tabla del §4.3.2 del
-    // JVMS, que es de donde salen los nombres `[I`, `[Z`, etcétera.
+    // From the wrapper's name to the descriptor and to the primitive's name. It is the table of
+    // JVMS 4.3.2, which is where the names `[I`, `[Z` and so on come from.
     private static final Map<String, String> DESCRIPTOR = descriptors();
     private static final Map<String, String> PRIMITIVE_NAME = primitiveNames();
     private static final Map<String, SimpleType<?>> OPEN_TYPE_OF_PRIMITIVE = openTypesOfPrimitives();
@@ -79,23 +81,24 @@ public class ArrayType<T> extends OpenType<T> {
     private transient int hash;
 
     /**
-     * Un arreglo de referencias de `dimension` dimensiones.
+     * A reference array of {@code dimension} dimensions.
      *
-     * <p>Si `elementType` ya es un {@link ArrayType}, las dimensiones se **suman**: un arreglo de
-     * una dimensión de un arreglo de dos es uno de tres, no uno de una cuyos elementos son
-     * arreglos. Es lo que hace que `[[[I` tenga una sola representación.
+     * <p>If {@code elementType} is already an {@link ArrayType}, the dimensions are <b>added</b>: a
+     * one-dimensional array of a two-dimensional one is a three-dimensional one, not a
+     * one-dimensional one whose elements are arrays. It is what makes {@code [[[I} have a single
+     * representation.
      *
-     * @throws OpenDataException si `dimension` es menor que 1 o mayor que 15
-     * @throws IllegalArgumentException si `elementType` es nulo
+     * @throws OpenDataException if {@code dimension} is less than 1 or greater than 15
+     * @throws IllegalArgumentException if {@code elementType} is null
      */
     public ArrayType(int dimension, OpenType<?> elementType) throws OpenDataException {
         super(arrayClassName(dimension, elementType), arrayClassName(dimension, elementType),
                 arrayDescription(dimension, elementType), true);
         if (elementType == null) {
-            throw new IllegalArgumentException("el tipo de los elementos no puede ser nulo");
+            throw new IllegalArgumentException("the element type cannot be null");
         }
         if (dimension < 1) {
-            throw new IllegalArgumentException("la dimensión tiene que ser 1 o más: " + dimension);
+            throw new IllegalArgumentException("the dimension must be 1 or more: " + dimension);
         }
         if (elementType instanceof ArrayType) {
             ArrayType<?> a = (ArrayType<?>) elementType;
@@ -109,34 +112,35 @@ public class ArrayType<T> extends OpenType<T> {
         }
         if (this.dimension > 15) {
             throw new IllegalArgumentException(
-                    "un arreglo no puede tener más de 15 dimensiones: " + this.dimension);
+                    "an array cannot have more than 15 dimensions: " + this.dimension);
         }
     }
 
     /**
-     * Un arreglo de una dimensión, primitivo o no.
+     * A one-dimensional array, primitive or not.
      *
-     * <p>Con `primitiveArray` en `false` es lo mismo que `new ArrayType&lt;&gt;(1, elementType)`.
+     * <p>With {@code primitiveArray} false it is the same as {@code new ArrayType<>(1,
+     * elementType)}.
      *
-     * @throws OpenDataException si se pide primitivo de un tipo que no tiene forma primitiva
-     * @throws IllegalArgumentException si `elementType` es nulo
+     * @throws OpenDataException if a primitive one is asked for of a type with no primitive form
+     * @throws IllegalArgumentException if {@code elementType} is null
      */
     public ArrayType(SimpleType<?> elementType, boolean primitiveArray) throws OpenDataException {
         super(simpleArrayClassName(elementType, primitiveArray), simpleArrayClassName(elementType, primitiveArray),
                 simpleArrayDescription(elementType, primitiveArray), true);
         if (elementType == null) {
-            throw new IllegalArgumentException("el tipo de los elementos no puede ser nulo");
+            throw new IllegalArgumentException("the element type cannot be null");
         }
         if (primitiveArray && !DESCRIPTOR.containsKey(elementType.getClassName())) {
             throw new OpenDataException(
-                    elementType.getClassName() + " no tiene forma primitiva");
+                    elementType.getClassName() + " has no primitive form");
         }
         this.dimension = 1;
         this.elementType = elementType;
         this.primitiveArray = primitiveArray;
     }
 
-    // El constructor de paquete: se lo saltea la validación porque quien lo llama ya la hizo.
+    // The package-private constructor: it skips validation because the caller already did it.
     ArrayType(String className, String typeName, String description, int dimension,
             OpenType<?> elementType, boolean primitiveArray) {
         super(className, typeName, description, true);
@@ -145,12 +149,12 @@ public class ArrayType<T> extends OpenType<T> {
         this.primitiveArray = primitiveArray;
     }
 
-    // Los nombres se arman antes de llamar a `super`, así que no pueden mirar los campos. De ahí
-    // que sean estáticos y repitan el aplanado de dimensiones que hace el constructor.
+    // The names are built before calling `super`, so they cannot look at the fields. Hence them
+    // being static and repeating the dimension flattening the constructor does.
     private static String arrayClassName(int dimension, OpenType<?> elementType) {
         if (elementType == null || dimension < 1) {
-            // El constructor va a tirar igual; acá sólo hay que devolver algo que no rompa a
-            // `super`, que valida por su cuenta.
+            // The constructor is going to throw anyway; here it is only a matter of returning
+            // something that does not break `super`, which validates on its own.
             return "[Ljava.lang.Object;";
         }
         int d = dimension;
@@ -171,8 +175,8 @@ public class ArrayType<T> extends OpenType<T> {
         }
         if (primitiveArray) {
             String d = DESCRIPTOR.get(elementType.getClassName());
-            // Un tipo sin forma primitiva: el constructor lo rechaza; acá se devuelve el nombre de
-            // referencias sólo para que `super` no falle antes con un mensaje peor.
+            // A type without a primitive form: the constructor rejects it; here the reference name
+            // is returned only so that `super` does not fail earlier with a worse message.
             return d == null ? "[L" + elementType.getClassName() + ";" : "[" + d;
         }
         return "[L" + elementType.getClassName() + ";";
@@ -210,27 +214,27 @@ public class ArrayType<T> extends OpenType<T> {
         return sb.toString();
     }
 
-    /** Cuántas dimensiones tiene. */
+    /** How many dimensions it has. */
     public int getDimension() {
         return this.dimension;
     }
 
-    /** El tipo abierto de los elementos del fondo, ya sin dimensiones. */
+    /** The open type of the elements at the bottom, with no dimensions left. */
     public OpenType<?> getElementOpenType() {
         return this.elementType;
     }
 
-    /** Si sus elementos son primitivos y no envoltorios. */
+    /** Whether its elements are primitives and not wrappers. */
     public boolean isPrimitiveArray() {
         return this.primitiveArray;
     }
 
     /**
-     * Si `obj` es un arreglo de este tipo.
+     * Whether {@code obj} is an array of this type.
      *
-     * <p>Se compara el **nombre de clase** del objeto contra el de este tipo, que es exactamente la
-     * pregunta: `[I` y `[Ljava.lang.Integer;` son clases distintas, y ésa es la diferencia entre un
-     * arreglo primitivo y uno de referencias.
+     * <p>The object's <b>class name</b> is compared against this type's, which is exactly the
+     * question: {@code [I} and {@code [Ljava.lang.Integer;} are different classes, and that is the
+     * difference between a primitive array and a reference one.
      */
     public boolean isValue(Object obj) {
         if (obj == null) {
@@ -239,7 +243,7 @@ public class ArrayType<T> extends OpenType<T> {
         return obj.getClass().getName().equals(this.getClassName());
     }
 
-    /** Igualdad por dimensión, tipo de elemento y si es primitivo. */
+    /** Equality by dimension, element type and whether it is primitive. */
     public boolean equals(Object obj) {
         if (this == obj) {
             return true;
@@ -272,13 +276,13 @@ public class ArrayType<T> extends OpenType<T> {
     }
 
     /**
-     * Un arreglo de una dimensión de ese tipo.
+     * A one-dimensional array of that type.
      *
-     * <p>Existe además de los constructores porque **conserva el parámetro de tipo**: dado un
-     * `OpenType&lt;Integer&gt;` devuelve un `ArrayType&lt;Integer[]&gt;`, que es lo que un
-     * constructor no puede expresar.
+     * <p>It exists besides the constructors because it <b>keeps the type parameter</b>: given an
+     * {@code OpenType<Integer>} it returns an {@code ArrayType<Integer[]>}, which a constructor
+     * cannot express.
      *
-     * @throws OpenDataException si el tipo no admite arreglos
+     * @throws OpenDataException if the type does not admit arrays
      */
     public static <E> ArrayType<E[]> getArrayType(OpenType<E> elementType)
             throws OpenDataException {
@@ -287,13 +291,13 @@ public class ArrayType<T> extends OpenType<T> {
     }
 
     /**
-     * El tipo del arreglo primitivo de esa clase, por ejemplo `int[].class`.
+     * The type of the primitive array of that class, for example {@code int[].class}.
      *
-     * @throws IllegalArgumentException si la clase no es un arreglo de primitivos de una dimensión
+     * @throws IllegalArgumentException if the class is not a one-dimensional primitive array
      */
     public static <T> ArrayType<T> getPrimitiveArrayType(Class<T> arrayClass) {
         if (arrayClass == null || !arrayClass.isArray()) {
-            throw new IllegalArgumentException("no es una clase de arreglo: " + arrayClass);
+            throw new IllegalArgumentException("not an array class: " + arrayClass);
         }
         String name = arrayClass.getName();
         int d = 0;
@@ -309,7 +313,7 @@ public class ArrayType<T> extends OpenType<T> {
         }
         if (element == null) {
             throw new IllegalArgumentException(
-                    "no es un arreglo de primitivos: " + arrayClass.getName());
+                    "not an array of primitives: " + arrayClass.getName());
         }
         String description = d + "-dimension array of "
                 + PRIMITIVE_NAME.get(element.getClassName());

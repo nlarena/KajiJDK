@@ -10,121 +10,123 @@ import java.nio.channels.spi.SelectorProvider;
 import java.util.Set;
 
 /**
- * Un canal sobre una unica asociacion SCTP.
+ * A channel over a single SCTP association.
  *
- * <h2>El equivalente de un {@code SocketChannel}, con dos diferencias</h2>
+ * <h2>The equivalent of a {@code SocketChannel}, with two differences</h2>
  *
- * <p>La primera es el <strong>multihoming</strong>: {@link #bindAddress} y {@link #unbindAddress}
- * agregan y sacan direcciones locales <em>mientras la asociacion esta abierta</em>. Un
- * {@code SocketChannel} se liga a una direccion y ahi se queda; este puede ir cambiando el conjunto,
- * que es lo que le da tolerancia a fallas sin reconectar.
+ * <p>The first is <strong>multihoming</strong>: {@link #bindAddress} and
+ * {@link #unbindAddress} add and take out local addresses <em>while the association is
+ * open</em>. A {@code SocketChannel} is bound to an address and stays there; this one may go
+ * on changing the set, which is what gives it fault tolerance without reconnecting.
  *
- * <p>La segunda es que se manda y se recibe por <strong>mensajes</strong>, no por bytes: de ahi que
- * {@link #send} y {@link #receive} lleven un {@link MessageInfo} y no sean los {@code read}/
- * {@code write} de un canal de bytes.
+ * <p>The second is that sending and receiving go by <strong>messages</strong>, not by bytes:
+ * hence {@link #send} and {@link #receive} carry a {@link MessageInfo} and are not a byte
+ * channel's {@code read}/{@code write}.
  *
- * <h2>Por que {@link #receive} recibe un manejador de notificaciones</h2>
+ * <h2>Why {@link #receive} receives a notification handler</h2>
  *
- * <p>Porque mientras se espera un mensaje pueden llegar eventos de la asociacion, y no hay otro
- * momento en que el programa mire el canal. El {@link NotificationHandler} los atiende ahi mismo y
- * decide, con su {@link HandlerResult}, si la espera sigue.
+ * <p>Because while a message is being waited for, events of the association may arrive, and
+ * there is no other moment at which the program looks at the channel. The
+ * {@link NotificationHandler} attends to them right there and decides, with its
+ * {@link HandlerResult}, whether the wait goes on.
  *
- * <h2>Lo que esta VM no puede</h2>
+ * <h2>What this VM cannot do</h2>
  *
- * <p>Los tres {@link #open} tiran {@link UnsupportedOperationException}: SCTP es un protocolo del
- * sistema operativo y esta VM no tiene la pila. No es algo que se arregle escribiendo mas Java. La
- * clase queda con la forma exacta del JDK —los metodos abstractos son declaraciones y no prometen
- * nada— y lo unico que declina es fabricar un canal que despues no hablaria con nadie.
+ * <p>The three {@link #open}s throw {@link UnsupportedOperationException}: SCTP is a protocol
+ * of the operating system and this VM has no stack for it. It is not something that is fixed
+ * by writing more Java. The class is left with the exact shape of the JDK's -- the abstract
+ * methods are declarations and promise nothing -- and the only thing that declines is making a
+ * channel that afterwards would talk to nobody.
  */
 public abstract class SctpChannel extends AbstractSelectableChannel {
 
-    /** Para las implementaciones de SCTP. */
+    /** For the SCTP implementations. */
     protected SctpChannel(SelectorProvider provider) {
         super(provider);
     }
 
     /**
-     * Un canal sin conectar.
+     * An unconnected channel.
      *
-     * @throws UnsupportedOperationException siempre, en esta VM — ver la nota de la clase
+     * @throws UnsupportedOperationException always, on this VM -- see the class note
      */
     public static SctpChannel open() throws IOException {
-        throw new UnsupportedOperationException("esta VM no tiene pila SCTP");
+        throw new UnsupportedOperationException("this VM does not have an SCTP stack");
     }
 
     /**
-     * Un canal conectado a {@code remote}, pidiendo esa cantidad de flujos.
+     * A channel connected to {@code remote}, asking for that number of streams.
      *
-     * @throws UnsupportedOperationException siempre, en esta VM
+     * @throws UnsupportedOperationException always, on this VM
      */
     public static SctpChannel open(SocketAddress remote, int maxOutStreams, int maxInStreams)
             throws IOException {
-        throw new UnsupportedOperationException("esta VM no tiene pila SCTP");
+        throw new UnsupportedOperationException("this VM does not have an SCTP stack");
     }
 
-    /** La asociacion, o {@code null} si todavia no esta conectado. */
+    /** The association, or {@code null} if it is not connected yet. */
     public abstract Association association() throws IOException;
 
-    /** Liga el canal a una direccion local; {@code null} deja elegir al sistema. */
+    /** It binds the channel to a local address; {@code null} lets the system choose. */
     public abstract SctpChannel bind(SocketAddress local) throws IOException;
 
-    /** Agrega una direccion local a la asociacion. Ver el multihoming en la nota de la clase. */
+    /** It adds a local address to the association. See the multihoming in the class note. */
     public abstract SctpChannel bindAddress(InetAddress address) throws IOException;
 
-    /** Saca una direccion local de la asociacion. */
+    /** It takes a local address out of the association. */
     public abstract SctpChannel unbindAddress(InetAddress address) throws IOException;
 
-    /** Conecta a {@code remote}; {@code false} si la conexion queda pendiente. */
+    /** It connects to {@code remote}; {@code false} if the connection is left pending. */
     public abstract boolean connect(SocketAddress remote) throws IOException;
 
-    /** Igual, pidiendo esa cantidad de flujos. */
+    /** The same, asking for that number of streams. */
     public abstract boolean connect(SocketAddress remote, int maxOutStreams, int maxInStreams)
             throws IOException;
 
-    /** Si hay una conexion empezada y sin terminar. */
+    /** Whether there is a connection started and not finished. */
     public abstract boolean isConnectionPending();
 
-    /** Termina una conexion pendiente. */
+    /** It finishes a pending connection. */
     public abstract boolean finishConnect() throws IOException;
 
-    /** Todas las direcciones locales de la asociacion. */
+    /** All the association's local addresses. */
     public abstract Set<SocketAddress> getAllLocalAddresses() throws IOException;
 
-    /** Todas las direcciones del par. */
+    /** All the peer's addresses. */
     public abstract Set<SocketAddress> getRemoteAddresses() throws IOException;
 
-    /** Empieza a cerrar la asociacion ordenadamente. */
+    /** It starts closing the association in an orderly way. */
     public abstract SctpChannel shutdown() throws IOException;
 
-    /** El valor de una opcion. */
+    /** An option's value. */
     public abstract <T> T getOption(SctpSocketOption<T> name) throws IOException;
 
-    /** Fija una opcion. */
+    /** It fixes an option. */
     public abstract <T> SctpChannel setOption(SctpSocketOption<T> name, T value) throws IOException;
 
-    /** Las opciones que este canal entiende. */
+    /** The options this channel understands. */
     public abstract Set<SctpSocketOption<?>> supportedOptions();
 
     /**
-     * Las operaciones que este canal admite en un selector.
+     * The operations this channel admits in a selector.
      *
-     * <p>Las mismas tres que un {@code SocketChannel}: leer, escribir y conectar. Es {@code final}
-     * porque no depende de la implementacion sino del tipo de canal.
+     * <p>The same three as a {@code SocketChannel}: read, write and connect. It is {@code final}
+     * because it does not depend on the implementation but on the kind of channel.
      */
     public final int validOps() {
         return SelectionKey.OP_READ | SelectionKey.OP_WRITE | SelectionKey.OP_CONNECT;
     }
 
     /**
-     * Recibe un mensaje, atendiendo por el camino las notificaciones que lleguen.
+     * It receives a message, attending on the way to the notifications that arrive.
      *
-     * @param handler quien atiende las notificaciones; {@code null} para ignorarlas
-     * @return el descriptor del mensaje, o {@code null} si el manejador dijo
+     * @param handler who attends to the notifications; {@code null} in order to ignore them
+     * @return the message's descriptor, or {@code null} if the handler said
      *     {@link HandlerResult#RETURN}
      */
     public abstract <T> MessageInfo receive(ByteBuffer dst, T attachment,
             NotificationHandler<T> handler) throws IOException;
 
-    /** Manda el contenido de {@code src} como un mensaje. */
+    /** It sends the contents of {@code src} as a message. */
     public abstract int send(ByteBuffer src, MessageInfo messageInfo) throws IOException;
 }

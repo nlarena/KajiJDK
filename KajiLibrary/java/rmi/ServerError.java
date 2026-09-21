@@ -1,25 +1,25 @@
 package java.rmi;
 
 /**
- * KajiLibrary's java.rmi.ServerError -- el servidor tiro un {@link Error}.
+ * KajiLibrary's java.rmi.ServerError -- the server threw an {@link Error}.
  *
- * <p>Un {@code Error} del lado servidor no se puede propagar tal cual: alla significaria que la
- * maquina virtual <b>del cliente</b> esta rota, y no lo esta. Asi que se envuelve en una
- * {@link RemoteException}, que es lo que el cliente ya tiene que atajar.
+ * <p>A server-side {@code Error} cannot be propagated as it is: over there it would mean the
+ * <b>client's</b> virtual machine is broken, and it is not. So it is wrapped in a
+ * {@link RemoteException}, which is what the client already has to catch.
  *
- * <p>Es el mismo razonamiento que {@code javax.management.remote.JMXServerErrorException}, y no es
- * casualidad: los dos resuelven el problema de cruzar un error de maquina por una red.
+ * <p>It is the same reasoning as {@code javax.management.remote.JMXServerErrorException}, and not
+ * by chance: both settle the problem of carrying a machine error across a network.
  *
- * <p>El nombre confunde: <b>no</b> es un {@code Error}, es una {@code RemoteException} que lleva uno
- * adentro.
+ * <p>The name misleads: it is <b>not</b> an {@code Error}, it is a {@code RemoteException} carrying
+ * one inside.
  */
 public class ServerError extends RemoteException {
 
     private static final long serialVersionUID = 8455284893909696482L;
 
     /**
-     * @param s el mensaje
-     * @param err el error del servidor
+     * @param s the message
+     * @param err the server's error
      */
     public ServerError(String s, Error err) {
         super(s, err);

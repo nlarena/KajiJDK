@@ -12,14 +12,14 @@ import java.util.List;
 import java.util.function.Consumer;
 
 /**
- * Lo que devuelve `ClassFile.of()`. La puerta de entrada, y nada más: leer lo hace
- * {@link ClassReaderImpl} con {@link ClassModelImpl}, y escribir {@link DirectClassBuilder}.
+ * What `ClassFile.of()` returns. The entry door, and nothing more: reading is done by
+ * {@link ClassReaderImpl} with {@link ClassModelImpl}, and writing by {@link DirectClassBuilder}.
  *
- * <p>ALCANCE: `withOptions` no guarda nada. Las opciones del JDK (`StackMapsOption`,
- * `DeadCodeOption`, `AttributeMapperOption`, …) prenden y apagan comportamientos que acá no tienen
- * dos formas: no se generan mapas de pila --con lo cual `StackMapsOption` no tiene qué elegir-- y no
- * hay mapeadores a medida que registrar. Devolver `this` no es ignorar una opción en silencio: es
- * que no hay ninguna instancia de `Option` que se le pueda pasar, y el método lo dice tirando.
+ * <p>SCOPE: `withOptions` keeps nothing. The JDK's options (`StackMapsOption`, `DeadCodeOption`,
+ * `AttributeMapperOption`, ...) turn on and off behaviours that here have no two forms: no stack
+ * maps are generated --so `StackMapsOption` has nothing to choose-- and there are no custom mappers
+ * to register. Returning `this` is not ignoring an option in silence: there is no `Option` instance
+ * that can be passed to it, and the method says so by throwing.
  */
 public final class ClassFileImpl implements ClassFile {
 
@@ -35,8 +35,8 @@ public final class ClassFileImpl implements ClassFile {
                 throw new NullPointerException("options[" + i + "]");
             }
             throw new IllegalArgumentException(
-                    "opcion no reconocida: " + options[i]
-                            + " (esta implementacion no define ninguna Option)");
+                    "unrecognised option: " + options[i]
+                            + " (this implementation defines no Option)");
         }
         return this;
     }
@@ -59,11 +59,11 @@ public final class ClassFileImpl implements ClassFile {
     }
 
     /**
-     * Copia el modelo elemento por elemento a través de la transformación.
+     * It copies the model element by element through the transformation.
      *
-     * <p>La versión del formato se copia primero y aparte: no es un elemento que el modelo emita
-     * --`ClassModel` la expone como dos enteros-- así que sin esto la clase nueva saldría con la
-     * versión por omisión del constructor y no con la del original.
+     * <p>The format version is copied first and separately: it is not an element the model emits
+     * --`ClassModel` exposes it as two integers-- so without this the new class would come out with
+     * the builder's default version and not with the original's.
      */
     public byte[] transformClass(ClassModel model, ClassEntry newClassName,
             ClassTransform transform) {
@@ -81,11 +81,11 @@ public final class ClassFileImpl implements ClassFile {
         return cb.build();
     }
 
-    /** Ver el javadoc de {@link ClassFile#verify}: comprueba la estructura, no el flujo de tipos. */
+    /** See the javadoc of {@link ClassFile#verify}: it checks the structure, not the type flow. */
     public List<VerifyError> verify(byte[] bytes) {
         List<VerifyError> out = new ArrayList<VerifyError>();
         if (bytes == null) {
-            out.add(new VerifyError("no hay bytes que verificar"));
+            out.add(new VerifyError("there are no bytes to verify"));
             return out;
         }
         try {
@@ -97,11 +97,11 @@ public final class ClassFileImpl implements ClassFile {
         return out;
     }
 
-    /** Ver el javadoc de {@link ClassFile#verify}. */
+    /** See the javadoc of {@link ClassFile#verify}. */
     public List<VerifyError> verify(ClassModel model) {
         List<VerifyError> out = new ArrayList<VerifyError>();
         if (model == null) {
-            out.add(new VerifyError("no hay modelo que verificar"));
+            out.add(new VerifyError("there is no model to verify"));
             return out;
         }
         try {
@@ -112,10 +112,13 @@ public final class ClassFileImpl implements ClassFile {
         return out;
     }
 
-    // El recorrido completo del modelo. Parece no hacer nada y hace lo único que este `verify` puede
-    // hacer honestamente: **forzar la lectura de todo**. El modelo es perezoso -- los atributos de un
-    // método no se leen hasta que alguien los pide-- así que un archivo con un atributo roto en el
-    // último método se parsea sin quejarse. Tocar cada pieza es lo que hace salir esos errores.
+    // The complete walk of the model. It looks like it does nothing, and it does the only thing
+    // this `verify` can honestly do: **force everything to be read**. The field and method
+    // attributes are read when the model is built; what is lazy is a method's `Code` body, which is
+    // decoded the first time it is asked for -- so a file with a broken body in the last method
+    // parses without complaint. Touching each piece is what brings those errors out. (The note said
+    // a method's attributes are not read until somebody asks for them; they are read in the
+    // constructor, and only the body waits.)
     private static void walk(ClassModel m, List<VerifyError> out) {
         m.thisClass();
         m.superclass();
@@ -127,7 +130,7 @@ public final class ClassFileImpl implements ClassFile {
                 fs.get(i).attributes();
             } catch (IllegalArgumentException e) {
                 out.add(new VerifyError(
-                        "campo " + fs.get(i).fieldName().stringValue() + ": " + e.getMessage()));
+                        "field " + fs.get(i).fieldName().stringValue() + ": " + e.getMessage()));
             }
         }
         List<java.lang.classfile.MethodModel> ms = m.methods();
@@ -140,7 +143,7 @@ public final class ClassFileImpl implements ClassFile {
                 }
             } catch (IllegalArgumentException e) {
                 out.add(new VerifyError(
-                        "metodo " + ms.get(i).methodName().stringValue() + ": " + e.getMessage()));
+                        "method " + ms.get(i).methodName().stringValue() + ": " + e.getMessage()));
             }
         }
     }

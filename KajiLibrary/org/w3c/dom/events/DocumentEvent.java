@@ -3,23 +3,24 @@ package org.w3c.dom.events;
 import org.w3c.dom.DOMException;
 
 /**
- * KajiLibrary's org.w3c.dom.events.DocumentEvent -- la fabrica de eventos.
+ * KajiLibrary's org.w3c.dom.events.DocumentEvent -- the factory of events.
  *
- * <p>La implementa el {@code Document}. Es la unica forma de crear un evento: no hay constructores.
+ * <p>The {@code Document} implements it. It is the only way of creating an event: there are no
+ * constructors.
  *
- * <p>El evento sale <b>vacio</b> y hay que inicializarlo con el {@code init*} que le corresponda a su
- * tipo antes de despacharlo. Es en dos pasos porque la fabrica toma un nombre de interfaz y no puede
- * saber que argumentos lleva cada una.
+ * <p>The event comes out <b>empty</b> and has to be initialised with the {@code init*} that belongs
+ * to its type before dispatching it. It is in two steps because the factory takes an interface name
+ * and cannot know which arguments each one carries.
  */
 public interface DocumentEvent {
 
     /**
-     * Un evento del tipo pedido, sin inicializar.
+     * An event of the type asked for, uninitialised.
      *
-     * @param eventType el nombre de la <b>interfaz</b>, no del evento: {@code "MouseEvents"},
-     *     {@code "MutationEvents"}, {@code "UIEvents"}, {@code "Events"}. En plural, que es como lo
-     *     escribe el estandar y es facil de equivocar
-     * @throws DOMException {@code NOT_SUPPORTED_ERR} si esa interfaz no esta implementada
+     * @param eventType the name of the <b>interface</b>, not of the event: {@code "MouseEvents"},
+     *     {@code "MutationEvents"}, {@code "UIEvents"}, {@code "Events"}. In the plural, which is
+     *     how the standard writes it and is easy to get wrong
+     * @throws DOMException {@code NOT_SUPPORTED_ERR} if that interface is not implemented
      */
     Event createEvent(String eventType) throws DOMException;
 }

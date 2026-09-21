@@ -7,33 +7,32 @@ import javax.xml.XMLConstants;
 import javax.xml.namespace.NamespaceContext;
 
 /**
- * El escritor de XML de esta biblioteca, en forma de cursor.
+ * This library's XML writer, in cursor form.
  *
- * <h2>La etiqueta abierta</h2>
+ * <h2>The open tag</h2>
  *
- * <p>Toda la maquinaria gira alrededor de un estado: {@code <a} escrito y el {@code >} todavia no,
- * porque puede venir un atributo. Cualquier cosa que no sea un atributo o una declaracion cierra la
- * etiqueta primero. Es lo que permite que la API tenga {@code writeStartElement} y
- * {@code writeAttribute} como llamadas separadas sin que el llamador tenga que avisar cuando
- * termino de poner atributos.
+ * <p>All the machinery revolves around one state: {@code <a} written and the {@code >} not yet,
+ * because an attribute may come. Anything that is not an attribute or a declaration closes the tag
+ * first. It is what allows the API to have {@code writeStartElement} and {@code writeAttribute} as
+ * separate calls without the caller having to say when they finished putting attributes.
  *
- * <h2>Los dos modos de espacios de nombres</h2>
+ * <h2>The two namespace modes</h2>
  *
- * <p>Con {@link XMLOutputFactory#IS_REPAIRING_NAMESPACES} apagado el escritor escribe lo que se le
- * dice: si se usa un prefijo que nadie declaro, sale un documento mal formado, y es responsabilidad
- * del llamador. Encendido, antes de escribir un nombre calificado se fija si su espacio de nombres
- * esta en alcance y, si no, emite la declaracion --inventando un prefijo si hace falta--.
+ * <p>With {@link XMLOutputFactory#IS_REPAIRING_NAMESPACES} off the writer writes what it is told:
+ * if a prefix nobody declared is used, a malformed document comes out, and it is the caller's
+ * responsibility. On, before writing a qualified name it checks whether its namespace is in scope
+ * and, if not, emits the declaration --inventing a prefix if needed--.
  *
- * <p>Lo que el modo reparador no hace es adivinar intenciones: si se pide explicitamente un
- * prefijo, ese se usa; lo que se agrega es la declaracion que faltaba.
+ * <p>What repairing mode does not do is guess intentions: if a prefix is asked for explicitly, that
+ * one is used; what is added is the declaration that was missing.
  *
- * <h2>Que no comprueba</h2>
+ * <h2>What it does not check</h2>
  *
- * <p>No verifica que el documento tenga un solo elemento raiz, ni que los nombres sean nombres XML
- * validos, ni que el texto de un comentario no contenga {@code --}. Un escritor que valida todo eso
- * es util, pero cuesta en el camino caliente y la especificacion no lo pide; lo que si se
- * comprueba es lo estructural --cerrar un elemento que no esta abierto, escribir un atributo fuera
- * de una etiqueta-- porque eso produce basura silenciosa en vez de un error.
+ * <p>It does not verify that the document has a single root element, nor that names are valid XML
+ * names, nor that a comment's text does not contain {@code --}. A writer that validates all that is
+ * useful, but it costs on the hot path and the specification does not ask for it; what is checked
+ * is the structural --closing an element that is not open, writing an attribute outside a tag--
+ * because that produces silent garbage instead of an error.
  */
 final class KajiStreamWriter implements XMLStreamWriter {
 
@@ -43,7 +42,7 @@ final class KajiStreamWriter implements XMLStreamWriter {
     private final KajiNsContext ctx = new KajiNsContext();
     private NamespaceContext rootCtx;
 
-    /** Prefijos declarados con {@code setPrefix} que todavia no tienen elemento donde vivir. */
+    /** Prefixes declared with {@code setPrefix} that do not yet have an element to live in. */
     private String[] pendingPrefix = new String[4];
     private String[] pendingUri = new String[4];
     private int pendingCount;
@@ -60,7 +59,7 @@ final class KajiStreamWriter implements XMLStreamWriter {
         this.repairing = repairing;
     }
 
-    // ---- plomeria ---------------------------------------------------------------------------
+    // ---- plumbing ---------------------------------------------------------------------------
 
     private void emit(String s) throws XMLStreamException {
         try {
@@ -87,7 +86,7 @@ final class KajiStreamWriter implements XMLStreamWriter {
     private void requireOpenTag() throws XMLStreamException {
         if (!tagOpen) {
             throw new XMLStreamException(
-                    "esto solo se puede escribir dentro de una etiqueta de apertura");
+                    "this can only be written inside a start tag");
         }
     }
 
@@ -112,7 +111,9 @@ final class KajiStreamWriter implements XMLStreamWriter {
         pendingCount++;
     }
 
-    /** El prefijo en alcance para un URI, mirando primero lo propio y despues el contexto puesto. */
+    /**
+     * The prefix in scope for a URI, looking first at its own and then at the context that was set.
+     */
     private String prefixFor(String uri) {
         String p = ctx.getPrefix(uri);
         if (p != null) {
@@ -155,7 +156,7 @@ final class KajiStreamWriter implements XMLStreamWriter {
         depth++;
     }
 
-    // ---- elementos --------------------------------------------------------------------------
+    // ---- elements ---------------------------------------------------------------------------
 
     public void writeStartElement(String localName) throws XMLStreamException {
         closeTag();
@@ -209,8 +210,8 @@ final class KajiStreamWriter implements XMLStreamWriter {
             if (p == null) {
                 if (!repairing) {
                     throw new XMLStreamException(
-                            "el espacio de nombres " + uri + " no tiene prefijo en alcance; "
-                                    + "declaralo antes, o encende isRepairingNamespaces");
+                            "the namespace " + uri + " has no prefix in scope; "
+                                    + "declare it first, or turn on isRepairingNamespaces");
                 }
                 p = XMLConstants.DEFAULT_NS_PREFIX;
                 mustDeclare = true;
@@ -221,8 +222,8 @@ final class KajiStreamWriter implements XMLStreamWriter {
                 if (repairing) {
                     mustDeclare = true;
                 } else {
-                    // Sin reparacion la declaracion la escribe el llamador; el binding se anota
-                    // igual para que getPrefix() diga la verdad.
+                    // Without repairing the caller writes the declaration; the binding is noted
+                    // anyway so that getPrefix() tells the truth.
                     ctx.declare(p, uri);
                 }
             }
@@ -253,22 +254,22 @@ final class KajiStreamWriter implements XMLStreamWriter {
     }
 
     /**
-     * Cierra el elemento abierto mas reciente.
+     * Closes the most recent open element.
      *
-     * <p>Si lo ultimo que se escribio fue un {@link #writeEmptyElement}, esta llamada cierra al
-     * elemento QUE LO CONTIENE, no al vacio -- el vacio ya se cierra solo con su `/>`. Es lo que
-     * hace el JDK: `writeStartElement("r"); writeEmptyElement("e"); writeEndElement();` produce
-     * `<r><e/></r>`.
+     * <p>If the last thing written was a {@link #writeEmptyElement}, this call closes the element
+     * THAT CONTAINS IT, not the empty one -- the empty one already closes itself with its `/>`. It
+     * is what the JDK does: `writeStartElement("r"); writeEmptyElement("e"); writeEndElement();`
+     * produces `<r><e/></r>`.
      *
-     * <p>Esto tiraba una excepcion hasta que la prueba de comportamiento se corrio contra el JDK 25
-     * y no coincidio. Parecia razonable --nadie "cierra" un elemento vacio-- pero lee mal la
-     * llamada: `writeEndElement` no dice cual cierra, cierra el que este abierto, y despues de un
-     * vacio el que esta abierto es el de afuera.
+     * <p>This used to throw an exception until the behaviour test was run against JDK 25 and did
+     * not match. It seemed reasonable --nobody "closes" an empty element-- but it misreads the
+     * call: `writeEndElement` does not say which one it closes, it closes whichever is open, and
+     * after an empty one the open one is the outer one.
      */
     public void writeEndElement() throws XMLStreamException {
         closeTag();
         if (depth == 0) {
-            throw new XMLStreamException("no hay ningun elemento abierto");
+            throw new XMLStreamException("there is no open element");
         }
         depth--;
         emit("</" + stack[depth] + ">");
@@ -282,7 +283,7 @@ final class KajiStreamWriter implements XMLStreamWriter {
         }
     }
 
-    // ---- atributos y declaraciones -----------------------------------------------------------
+    // ---- attributes and declarations ------------------------------------------------------------
 
     private void emitEscapedValue(String v) throws XMLStreamException {
         try {
@@ -322,12 +323,12 @@ final class KajiStreamWriter implements XMLStreamWriter {
         }
         boolean declare = false;
         if (p == null || p.length() == 0) {
-            // Un atributo sin prefijo no queda en el espacio de nombres por omision, asi que aca
-            // hace falta uno de verdad; en modo reparador se inventa.
+            // An attribute without a prefix does not fall into the default namespace, so here a
+            // real one is needed; in repairing mode one is invented.
             if (!repairing) {
                 throw new XMLStreamException(
-                        "el espacio de nombres " + uri + " no tiene prefijo en alcance para un "
-                                + "atributo; declaralo antes, o encende isRepairingNamespaces");
+                        "the namespace " + uri + " has no prefix in scope for an "
+                                + "attribute; declare it first, or turn on isRepairingNamespaces");
             }
             invented++;
             p = "ns" + invented;
@@ -378,7 +379,7 @@ final class KajiStreamWriter implements XMLStreamWriter {
         emit("\"");
     }
 
-    // ---- contenido --------------------------------------------------------------------------
+    // ---- content ----------------------------------------------------------------------------
 
     public void writeCharacters(String text) throws XMLStreamException {
         closeTag();
@@ -460,7 +461,7 @@ final class KajiStreamWriter implements XMLStreamWriter {
         }
     }
 
-    // ---- estado -----------------------------------------------------------------------------
+    // ---- state ------------------------------------------------------------------------------
 
     public String getPrefix(String uri) throws XMLStreamException {
         return prefixFor(uri);
@@ -468,17 +469,17 @@ final class KajiStreamWriter implements XMLStreamWriter {
 
     public void setPrefix(String prefix, String uri) throws XMLStreamException {
         if (prefix == null) {
-            throw new XMLStreamException("el prefijo no puede ser null");
+            throw new XMLStreamException("the prefix cannot be null");
         }
         if (uri == null) {
-            throw new XMLStreamException("el espacio de nombres no puede ser null");
+            throw new XMLStreamException("the namespace cannot be null");
         }
         addPending(prefix, uri);
     }
 
     public void setDefaultNamespace(String uri) throws XMLStreamException {
         if (uri == null) {
-            throw new XMLStreamException("el espacio de nombres no puede ser null");
+            throw new XMLStreamException("the namespace cannot be null");
         }
         addPending(XMLConstants.DEFAULT_NS_PREFIX, uri);
     }
@@ -486,7 +487,7 @@ final class KajiStreamWriter implements XMLStreamWriter {
     public void setNamespaceContext(NamespaceContext context) throws XMLStreamException {
         if (depth > 0 || tagOpen) {
             throw new XMLStreamException(
-                    "el contexto de espacios de nombres se pone antes de escribir la raiz");
+                    "the namespace context is set before writing the root");
         }
         rootCtx = context;
     }
@@ -497,7 +498,7 @@ final class KajiStreamWriter implements XMLStreamWriter {
 
     public Object getProperty(String name) throws IllegalArgumentException {
         if (name == null) {
-            throw new IllegalArgumentException("el nombre de la propiedad no puede ser null");
+            throw new IllegalArgumentException("the property name cannot be null");
         }
         if (name.equals(XMLOutputFactory.IS_REPAIRING_NAMESPACES)) {
             return Boolean.valueOf(repairing);

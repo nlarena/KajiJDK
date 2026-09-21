@@ -23,8 +23,9 @@ public interface VariableElement extends Element {
 
     Element getEnclosingElement();
 
-    // The JDK writes this as `getSimpleName().isEmpty()`. KajiLibrary's java.lang.CharSequence
-    // is the pre-15 shape and has no isEmpty(), so the same test goes through length().
+    // The JDK writes this as `getSimpleName().isEmpty()`. The note said KajiLibrary's
+    // java.lang.CharSequence had no isEmpty(); it has one now (a default method). The test goes
+    // through length(), which gives the same answer.
     default boolean isUnnamed() {
         return getSimpleName().length() == 0;
     }

@@ -5,116 +5,116 @@ import java.util.Vector;
 import javax.management.InstanceNotFoundException;
 
 /**
- * KajiLibrary's javax.management.timer.TimerMBean -- la interfaz de administracion del reloj.
+ * KajiLibrary's javax.management.timer.TimerMBean -- the clock's management interface.
  *
- * <p>Es un MBean estandar, asi que esta interfaz <b>es</b> el API remoto: cada metodo de aca se
- * puede llamar desde una consola JMX sin saber nada de la clase que lo implementa.
+ * <p>It is a standard MBean, so this interface <b>is</b> the remote API: every method here can be
+ * called from a JMX console without knowing anything about the class that implements it.
  *
- * <h2>Por que devuelve envoltorios y {@code Vector}</h2>
+ * <h2>Why it returns wrappers and {@code Vector}</h2>
  *
- * <p>Los consultores devuelven {@code Integer}, {@code Long}, {@code Boolean} y no primitivos porque
- * tienen que poder contestar <b>null</b>: preguntar por un identificador que no existe no es un
- * error, y con un {@code long} habria que inventar un valor centinela. {@code getNbNotifications}
- * si es primitivo, porque "cuantas hay" siempre tiene respuesta.
+ * <p>The getters return {@code Integer}, {@code Long}, {@code Boolean} and not primitives because
+ * they have to be able to answer <b>null</b>: asking about an identifier that does not exist is not
+ * an error, and with a {@code long} a sentinel value would have to be invented.
+ * {@code getNbNotifications} is primitive, because "how many are there" always has an answer.
  *
- * <p>Los {@code Vector} son de 1998 y hoy nadie los elegiria, pero el tipo de retorno de un MBean es
- * parte del protocolo: cambiarlo por {@code List} rompe a todo cliente compilado contra el original.
- * Es la misma razon por la que sobrevive el error de tipeo de {@link #getNbOccurences}.
+ * <p>The {@code Vector}s are from 1998 and nobody would choose them today, but an MBean's return
+ * type is part of the protocol: changing it for {@code List} breaks every client compiled against
+ * the original. It is the same reason the typo in {@link #getNbOccurences} survives.
  */
 public interface TimerMBean {
 
-    /** Arranca el reloj. Si ya estaba activo no hace nada. */
+    /** Starts the clock. If it was already active it does nothing. */
     void start();
 
-    /** Lo para. Las inscripciones <b>no</b> se pierden: vuelven a valer en el proximo arranque. */
+    /** Stops it. The registrations are <b>not</b> lost: they hold for the next start. */
     void stop();
 
     /**
-     * Inscribe una notificacion.
+     * Registers a notification.
      *
-     * @param period milisegundos entre repeticiones; 0 significa una sola vez
-     * @param nbOccurences cuantas veces; 0 significa para siempre
-     * @param fixedRate true para contar desde la fecha original, false desde cada envio
-     * @return el identificador con el que se la consulta o se la da de baja
-     * @throws IllegalArgumentException si la fecha es null, o el periodo o las ocurrencias son
-     *     negativos
+     * @param period milliseconds between repetitions; 0 means once only
+     * @param nbOccurences how many times; 0 means forever
+     * @param fixedRate true to count from the original date, false from each send
+     * @return the identifier it is queried or removed by
+     * @throws IllegalArgumentException if the date is null, or the period or the occurrences are
+     *     negative
      */
     Integer addNotification(String type, String message, Object userData, Date date, long period,
                             long nbOccurences, boolean fixedRate) throws IllegalArgumentException;
 
-    /** Igual, con reloj de retardo fijo. */
+    /** The same, with a fixed-delay clock. */
     Integer addNotification(String type, String message, Object userData, Date date, long period,
                             long nbOccurences) throws IllegalArgumentException;
 
-    /** Igual, repitiendo para siempre. */
+    /** The same, repeating forever. */
     Integer addNotification(String type, String message, Object userData, Date date, long period)
         throws IllegalArgumentException;
 
-    /** Igual, una sola vez. */
+    /** The same, once only. */
     Integer addNotification(String type, String message, Object userData, Date date)
         throws IllegalArgumentException;
 
     /**
-     * Da de baja una inscripcion.
+     * Removes a registration.
      *
-     * @throws InstanceNotFoundException si ese identificador no existe
+     * @throws InstanceNotFoundException if that identifier does not exist
      */
     void removeNotification(Integer id) throws InstanceNotFoundException;
 
     /**
-     * Da de baja todas las de ese tipo.
+     * Removes all of that type.
      *
-     * @throws InstanceNotFoundException si no hay ninguna de ese tipo
+     * @throws InstanceNotFoundException if there is none of that type
      */
     void removeNotifications(String type) throws InstanceNotFoundException;
 
-    /** Las da de baja a todas. */
+    /** Removes them all. */
     void removeAllNotifications();
 
-    /** Cuantas inscripciones hay. */
+    /** How many registrations there are. */
     int getNbNotifications();
 
-    /** Los identificadores de todas. */
+    /** The identifiers of all of them. */
     Vector<Integer> getAllNotificationIDs();
 
-    /** Los de ese tipo; vacio si no hay ninguna, que no es un error. */
+    /** Those of that type; empty if there are none, which is not an error. */
     Vector<Integer> getNotificationIDs(String type);
 
-    /** El tipo de esa inscripcion, o null si no existe. */
+    /** The type of that registration, or null if it does not exist. */
     String getNotificationType(Integer id);
 
-    /** Su mensaje, o null. */
+    /** Its message, or null. */
     String getNotificationMessage(Integer id);
 
-    /** Su dato adjunto, o null. */
+    /** Its attached data, or null. */
     Object getNotificationUserData(Integer id);
 
-    /** Su proxima fecha de disparo, o null. */
+    /** Its next firing date, or null. */
     Date getDate(Integer id);
 
-    /** Su periodo en milisegundos, o null. */
+    /** Its period in milliseconds, or null. */
     Long getPeriod(Integer id);
 
     /**
-     * Cuantos disparos le quedan, o null.
+     * How many firings it has left, or null.
      *
-     * <p>El nombre esta mal escrito --seria "occurrences"-- desde 1.5 y quedo asi: corregirlo
-     * cambiaria el API de administracion y romperia a los clientes.
+     * <p>The name is misspelled --it would be "occurrences"-- and stayed that way: fixing it would
+     * change the management API and break the clients.
      */
     Long getNbOccurences(Integer id);
 
-    /** Si cuenta desde la fecha original, o null. */
+    /** Whether it counts from the original date, or null. */
     Boolean getFixedRate(Integer id);
 
-    /** Si al arrancar se mandan las que quedaron atrasadas. */
+    /** Whether the overdue ones are sent on start. */
     boolean getSendPastNotifications();
 
     /** Ver {@link #getSendPastNotifications}. */
     void setSendPastNotifications(boolean value);
 
-    /** Si esta corriendo. */
+    /** Whether it is running. */
     boolean isActive();
 
-    /** Si no hay ninguna inscripcion. */
+    /** Whether there is no registration at all. */
     boolean isEmpty();
 }

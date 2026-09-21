@@ -3,50 +3,50 @@ package javax.management.openmbean;
 import java.util.Collection;
 
 /**
- * Un valor compuesto: items con nombre, cada uno de su tipo abierto.
+ * A composite value: named items, each of its own open type.
  *
- * <p>Es de **sólo lectura**, y eso es a propósito: un `CompositeData` describe el estado de algo en
- * un momento dado y viaja a un cliente remoto. Si tuviera setters, un cliente podría creer que
- * cambiarlo cambia el MBean del otro lado, que es exactamente lo que no pasa.
+ * <p>It is <b>read-only</b>, and that is on purpose: a {@code CompositeData} describes the state of
+ * something at a given moment and travels to a remote client. If it had setters, a client might
+ * believe that changing it changes the MBean on the other side, which is exactly what does not
+ * happen.
  *
- * <p>Dos `CompositeData` son iguales si tienen el mismo {@link CompositeType} y los mismos valores.
- * La clase que los implementa no cuenta: un {@link CompositeDataSupport} puede ser igual a otra
- * implementación cualquiera, y tiene que serlo para que la comparación sobreviva a la
- * serialización.
+ * <p>Two {@code CompositeData} are equal if they have the same {@link CompositeType} and the same
+ * values. The class implementing them does not count: a {@link CompositeDataSupport} can be equal
+ * to any other implementation, and it has to be so that the comparison survives serialization.
  */
 public interface CompositeData {
 
-    /** El tipo de este valor. */
+    /** The type of this value. */
     CompositeType getCompositeType();
 
     /**
-     * El valor de ese item.
+     * The value of that item.
      *
-     * @throws IllegalArgumentException si el nombre es nulo o vacío
-     * @throws InvalidKeyException si no hay un item con ese nombre
+     * @throws IllegalArgumentException if the name is null or empty
+     * @throws InvalidKeyException if there is no item with that name
      */
     Object get(String key);
 
     /**
-     * Los valores de esos items, en el mismo orden en que se pidieron.
+     * The values of those items, in the same order they were asked for.
      *
-     * @throws IllegalArgumentException si el arreglo o alguno de sus nombres es nulo o vacío
-     * @throws InvalidKeyException si alguno no es un item de este valor
+     * @throws IllegalArgumentException if the array or any of its names is null or empty
+     * @throws InvalidKeyException if one is not an item of this value
      */
     Object[] getAll(String[] keys);
 
-    /** Si hay un item con ese nombre. Un nulo da `false`, no un error. */
+    /** Whether there is an item with that name. A null gives {@code false}, not an error. */
     boolean containsKey(String key);
 
-    /** Si alguno de los items tiene ese valor. */
+    /** Whether any of the items has that value. */
     boolean containsValue(Object value);
 
     /**
-     * Los valores, **en el orden de los nombres de los items**.
+     * The values, <b>in the order of the item names</b>.
      *
-     * <p>Ese orden es el que expone {@link CompositeType#keySet}, así que el valor de la posición
-     * `i` corresponde al nombre de la posición `i` de ese conjunto. No es el orden en que se
-     * construyó el valor.
+     * <p>That order is the one {@link CompositeType#keySet} exposes, so the value at position
+     * {@code i} corresponds to the name at position {@code i} of that set. It is not the order the
+     * value was built in.
      */
     Collection<?> values();
 

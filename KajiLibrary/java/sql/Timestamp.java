@@ -1,25 +1,25 @@
 package java.sql;
 
 /**
- * KajiLibrary's java.sql.Timestamp -- fecha, hora y **nanosegundos**.
+ * KajiLibrary's java.sql.Timestamp -- date, time and **nanoseconds**.
  *
- * <p>Los nanosegundos son la razon de ser de la clase, y tambien de todos sus problemas. Se guardan
- * en un campo aparte porque `java.util.Date` solo llega al milisegundo; el heredado guarda los
- * segundos enteros y el campo nuevo la fraccion. Por eso {@link #getTime} tiene que reconstruir los
- * milisegundos sumando la fraccion.
+ * <p>The nanoseconds are the class's reason to exist, and also the cause of all its problems. They
+ * are kept in a separate field because `java.util.Date` only reaches the millisecond; the inherited
+ * part keeps the whole seconds and the new field the fraction. That is why {@link #getTime} has to
+ * rebuild the milliseconds by adding the fraction back in.
  *
- * <p>De esa herencia sale la asimetria famosa: `equals` con un `java.util.Date` que representa el
- * mismo instante da `false` --el otro no puede tener nanos-- pero `compareTo` con el mismo objeto da
- * cero. Es una violacion del contrato de `Comparable`, esta documentada en el JDK desde siempre, y se
- * reproduce aca porque cambiarla romperia el codigo que la conoce.
+ * <p>Out of that inheritance comes the famous asymmetry: `equals` with a `java.util.Date` standing
+ * for the same instant gives `false` --the other cannot have nanos-- but `compareTo` with the same
+ * object gives zero. It is a violation of `Comparable`'s contract, it has been documented in the
+ * JDK forever, and it is reproduced here because changing it would break the code that knows it.
  */
 public class Timestamp extends java.util.Date {
 
-    // La fraccion de segundo, de 0 a 999999999. El heredado guarda solo los segundos enteros.
+    // The fraction of a second, from 0 to 999999999. The inherited part keeps only whole seconds.
     private int nanos;
 
     /**
-     * @deprecated usar {@link #Timestamp(long)} o {@link #valueOf(java.time.LocalDateTime)}
+     * @deprecated use {@link #Timestamp(long)} or {@link #valueOf(java.time.LocalDateTime)}
      */
     @Deprecated
     public Timestamp(int year, int month, int date, int hour, int minute, int second, int nano) {
@@ -30,39 +30,39 @@ public class Timestamp extends java.util.Date {
         this.nanos = nano;
     }
 
-    /** El instante de esos milisegundos; la fraccion se reparte entre los dos campos. */
+    /** The instant of those milliseconds; the fraction is shared between the two fields. */
     public Timestamp(long time) {
         super(time);
-        this.repartir(time);
+        this.splitMillis(time);
     }
 
     public void setTime(long time) {
         super.setTime(time);
-        this.repartir(time);
+        this.splitMillis(time);
     }
 
-    // El heredado se queda con los segundos enteros y aca va la fraccion. El `+ 1000` es por los
-    // instantes anteriores a 1970: el resto de un negativo es negativo, y los nanos no pueden serlo.
-    private void repartir(long time) {
-        int milis = (int) (time % 1000);
-        if (milis < 0) {
-            milis = milis + 1000;
+    // The inherited part keeps the whole seconds and the fraction goes here. The `+ 1000` is for
+    // the instants before 1970: a negative's remainder is negative, and nanos cannot be.
+    private void splitMillis(long time) {
+        int millis = (int) (time % 1000);
+        if (millis < 0) {
+            millis = millis + 1000;
         }
-        this.nanos = milis * 1000000;
-        super.setTime(time - milis);
+        this.nanos = millis * 1000000;
+        super.setTime(time - millis);
     }
 
-    /** Los milisegundos del instante, sumando la fraccion. */
+    /** The instant's milliseconds, adding the fraction in. */
     public long getTime() {
         return super.getTime() + (this.nanos / 1000000);
     }
 
-    /** La fraccion de segundo, en nanosegundos. */
+    /** The fraction of a second, in nanoseconds. */
     public int getNanos() {
         return this.nanos;
     }
 
-    /** Fija la fraccion de segundo. */
+    /** It sets the fraction of a second. */
     public void setNanos(int n) {
         if (n > 999999999 || n < 0) {
             throw new IllegalArgumentException("nanos out of range");
@@ -71,31 +71,31 @@ public class Timestamp extends java.util.Date {
     }
 
     /**
-     * El instante escrito `yyyy-mm-dd hh:mm:ss[.f...]`.
+     * The instant written `yyyy-mm-dd hh:mm:ss[.f...]`.
      *
-     * @throws IllegalArgumentException si no tiene esa forma
+     * @throws IllegalArgumentException if it is not in that shape
      */
     public static Timestamp valueOf(String s) {
         if (s == null) {
             throw new IllegalArgumentException("null");
         }
-        int espacio = s.indexOf(' ');
-        if (espacio < 0) {
+        int space = s.indexOf(' ');
+        if (space < 0) {
             throw new IllegalArgumentException(s);
         }
-        Date fecha = Date.valueOf(s.substring(0, espacio));
-        String resto = s.substring(espacio + 1, s.length());
-        int punto = resto.indexOf('.');
-        String horaSola = punto < 0 ? resto : resto.substring(0, punto);
-        Time hora = Time.valueOf(horaSola);
+        Date date = Date.valueOf(s.substring(0, space));
+        String rest = s.substring(space + 1, s.length());
+        int dot = rest.indexOf('.');
+        String timeOnly = dot < 0 ? rest : rest.substring(0, dot);
+        Time hour = Time.valueOf(timeOnly);
         int nanos = 0;
-        if (punto >= 0) {
-            String fraccion = resto.substring(punto + 1, resto.length());
-            if (fraccion.length() == 0 || fraccion.length() > 9) {
+        if (dot >= 0) {
+            String fraction = rest.substring(dot + 1, rest.length());
+            if (fraction.length() == 0 || fraction.length() > 9) {
                 throw new IllegalArgumentException(s);
             }
-            // Se completa a nueve digitos: `.5` es medio segundo, no cinco nanosegundos.
-            StringBuilder sb = new StringBuilder(fraccion);
+            // It is padded to nine digits: `.5` is half a second, not five nanoseconds.
+            StringBuilder sb = new StringBuilder(fraction);
             while (sb.length() < 9) {
                 sb.append('0');
             }
@@ -105,90 +105,90 @@ public class Timestamp extends java.util.Date {
                 throw new IllegalArgumentException(s);
             }
         }
-        return new Timestamp(fecha.getYear(), fecha.getMonth(), fecha.getDate(), hora.getHours(),
-                hora.getMinutes(), hora.getSeconds(), nanos);
+        return new Timestamp(date.getYear(), date.getMonth(), date.getDate(), hour.getHours(),
+                hour.getMinutes(), hour.getSeconds(), nanos);
     }
 
-    /** El instante de ese {@link java.time.LocalDateTime}. */
+    /** That {@link java.time.LocalDateTime}'s instant. */
     public static Timestamp valueOf(java.time.LocalDateTime dateTime) {
         return new Timestamp(dateTime.getYear() - 1900, dateTime.getMonthValue() - 1,
                 dateTime.getDayOfMonth(), dateTime.getHour(), dateTime.getMinute(),
                 dateTime.getSecond(), dateTime.getNano());
     }
 
-    /** Este instante como {@link java.time.LocalDateTime}. */
+    /** This instant as a {@link java.time.LocalDateTime}. */
     public java.time.LocalDateTime toLocalDateTime() {
         return java.time.LocalDateTime.of(this.getYear() + 1900, this.getMonth() + 1,
                 this.getDate(), this.getHours(), this.getMinutes(), this.getSeconds(), this.nanos);
     }
 
-    /** El instante de ese {@link java.time.Instant}, sin perder los nanosegundos. */
+    /** That {@link java.time.Instant}'s instant, without losing the nanoseconds. */
     public static Timestamp from(java.time.Instant instant) {
         Timestamp t = new Timestamp(instant.getEpochSecond() * 1000);
         t.setNanos(instant.getNano());
         return t;
     }
 
-    /** Este instante como {@link java.time.Instant}, con los nanosegundos. */
+    /** This instant as a {@link java.time.Instant}, with the nanoseconds. */
     public java.time.Instant toInstant() {
         return java.time.Instant.ofEpochSecond(super.getTime() / 1000, this.nanos);
     }
 
-    /** `yyyy-mm-dd hh:mm:ss.fffffffff`, sin los ceros finales de la fraccion. */
+    /** `yyyy-mm-dd hh:mm:ss.fffffffff`, without the fraction's trailing zeros. */
     public String toString() {
         StringBuilder sb = new StringBuilder();
         sb.append(new Date(super.getTime()).toString());
         sb.append(' ');
-        int hora = this.getHours();
-        int minuto = this.getMinutes();
-        int segundo = this.getSeconds();
-        if (hora < 10) {
+        int hour = this.getHours();
+        int minute = this.getMinutes();
+        int second = this.getSeconds();
+        if (hour < 10) {
             sb.append('0');
         }
-        sb.append(hora);
+        sb.append(hour);
         sb.append(':');
-        if (minuto < 10) {
+        if (minute < 10) {
             sb.append('0');
         }
-        sb.append(minuto);
+        sb.append(minute);
         sb.append(':');
-        if (segundo < 10) {
+        if (second < 10) {
             sb.append('0');
         }
-        sb.append(segundo);
+        sb.append(second);
         sb.append('.');
-        // Nueve digitos, y despues se recortan los ceros -- pero queda al menos uno, porque
-        // `2020-01-01 00:00:00.` no seria un instante bien escrito.
+        // Nine digits, and then the zeros are trimmed -- but at least one is left, because
+        // `2020-01-01 00:00:00.` would not be a well-written instant.
         StringBuilder frac = new StringBuilder();
         frac.append(this.nanos);
         while (frac.length() < 9) {
             frac.insert(0, '0');
         }
-        int fin = 9;
-        while (fin > 1 && frac.charAt(fin - 1) == '0') {
-            fin = fin - 1;
+        int end = 9;
+        while (end > 1 && frac.charAt(end - 1) == '0') {
+            end = end - 1;
         }
-        sb.append(frac.substring(0, fin));
+        sb.append(frac.substring(0, end));
         return sb.toString();
     }
 
-    /** Si son el mismo instante, nanosegundos incluidos. */
+    /** Whether they are the same instant, nanoseconds included. */
     public boolean equals(Timestamp ts) {
         if (ts == null) {
             return false;
         }
-        return super.getTime() == ts.getTimeInterno() && this.nanos == ts.nanos;
+        return super.getTime() == ts.getTimeInternal() && this.nanos == ts.nanos;
     }
 
-    long getTimeInterno() {
+    long getTimeInternal() {
         return super.getTime();
     }
 
     /**
-     * Si `ts` es un `Timestamp` y son el mismo instante.
+     * Whether `ts` is a `Timestamp` and they are the same instant.
      *
-     * <p>Devuelve `false` para un `java.util.Date` que represente el mismo instante, aunque
-     * {@link #compareTo} devuelva cero. Es la asimetria documentada de esta clase.
+     * <p>It returns `false` for a `java.util.Date` standing for the same instant, even though
+     * {@link #compareTo} returns zero. It is this class's documented asymmetry.
      */
     public boolean equals(Object ts) {
         if (ts instanceof Timestamp) {
@@ -201,19 +201,19 @@ public class Timestamp extends java.util.Date {
         return (int) (super.getTime() ^ (super.getTime() >>> 32));
     }
 
-    /** Si este instante es anterior a `ts`. */
+    /** Whether this instant is before `ts`. */
     public boolean before(Timestamp ts) {
         return this.compareTo(ts) < 0;
     }
 
-    /** Si es posterior. */
+    /** Whether it is after. */
     public boolean after(Timestamp ts) {
         return this.compareTo(ts) > 0;
     }
 
     public int compareTo(Timestamp ts) {
         long a = super.getTime();
-        long b = ts.getTimeInterno();
+        long b = ts.getTimeInternal();
         if (a != b) {
             return a < b ? -1 : 1;
         }
@@ -223,7 +223,7 @@ public class Timestamp extends java.util.Date {
         return this.nanos < ts.nanos ? -1 : 1;
     }
 
-    /** Compara contra un `java.util.Date`, que no tiene nanosegundos. */
+    /** It compares against a `java.util.Date`, which has no nanoseconds. */
     public int compareTo(java.util.Date o) {
         if (o instanceof Timestamp) {
             return this.compareTo((Timestamp) o);

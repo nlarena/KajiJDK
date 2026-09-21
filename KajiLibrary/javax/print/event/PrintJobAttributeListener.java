@@ -1,15 +1,15 @@
 package javax.print.event;
 
 /**
- * KajiLibrary's javax.print.event.PrintJobAttributeListener -- escucha cambios de atributos de un
- * trabajo.
+ * KajiLibrary's javax.print.event.PrintJobAttributeListener -- listens to a job's attribute
+ * changes.
  *
- * <p>Se registra con {@code DocPrintJob.addPrintJobAttributeListener}, que ademas recibe el conjunto
- * de atributos que interesan. Sin ese filtro un trabajo largo genera un evento por cada cambio de
- * cualquier atributo.
+ * <p>It is registered with {@code DocPrintJob.addPrintJobAttributeListener}, which also receives
+ * the set of attributes of interest. Without that filter a long job generates an event for each
+ * change of any attribute.
  */
 public interface PrintJobAttributeListener {
 
-    /** Cambio algo de lo que se pidio escuchar. */
+    /** Something of what one asked to listen to changed. */
     void attributeUpdate(PrintJobAttributeEvent pjae);
 }

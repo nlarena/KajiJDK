@@ -26,94 +26,99 @@ import javax.swing.event.EventListenerList;
 import javax.swing.plaf.ComponentUI;
 
 /**
- * La raiz de todo componente de Swing: lo que un boton, una tabla o un panel tienen en comun.
+ * The root of every Swing component: what a button, a table or a panel have in common.
  *
- * <h2>Lo que esta clase agrega sobre {@link Container}</h2>
+ * <h2>What this class adds over {@link Container}</h2>
  *
- * <p>AWT ya sabe tener hijos, un tamano, una fuente y pintar. Swing agrega tres cosas encima, y las
- * tres estan aca de verdad:
- *
- * <ul>
- * <li><strong>La tuberia de pintado en tres pasos</strong> — {@link #paintComponent},
- *     {@link #paintBorder} y {@link #paintChildren}, en ese orden y cada uno redefinible por
- *     separado. Es lo que permite que una subclase dibuje su contenido sin saber nada de bordes ni
- *     de hijos.</li>
- * <li><strong>El borde como objeto</strong> — {@link #setBorder}. Los {@link #getInsets} salen de
- *     el, asi que un layout respeta el borde sin que nadie se lo cuente.</li>
- * <li><strong>El aspecto separado</strong> — {@link #setUI}: si hay un {@link ComponentUI}, el
- *     dibujado y las medidas se le delegan. Sin el, el componente se las arregla solo, y ese "solo"
- *     es honesto: rellena el fondo si es opaco, y mide con lo que AWT ya sabe.</li>
- * </ul>
- *
- * <h2>Lo que <em>no</em> esta, y por que</h2>
- *
- * <p>Casi todo esta. Lo que falta es lo que necesita cosas que esta biblioteca todavia no tiene, y
- * cada grupo por una razon concreta:
+ * <p>AWT already knows how to have children, a size, a typeface and to paint. Swing adds three
+ * things on top, and all three are really here:
  *
  * <ul>
- * <li>El <strong>recorrido del foco</strong> mas alla de lo que AWT ya da -- por ejemplo
- *     {@code getNextFocusableComponent} -- necesita un {@code KeyboardFocusManager} que decida.
- *     {@link #setInputVerifier} si esta: guarda y devuelve el verificador, que es todo lo que este
- *     componente hace con el; quien lo consulta al mover el foco es el administrador que falta.</li>
- * <li>{@code paintImmediately} y el repintado diferido pasan por un {@code RepaintManager} que
- *     dibuja en una <em>pantalla</em>. Esta VM no tiene una: un componente se pinta cuando alguien
- *     le pasa un {@link Graphics}, tipicamente el de una {@code BufferedImage}, y eso es lo que
- *     {@link #paint} hace bien. {@link #repaint} y {@link #revalidate} siguen existiendo con el
- *     significado que pueden tener sin pantalla, y lo dicen.</li>
+ * <li><strong>The three-step painting pipeline</strong> -- {@link #paintComponent},
+ *     {@link #paintBorder} and {@link #paintChildren}, in that order and each one redefinable
+ *     separately. It is what allows a subclass to draw its content without knowing anything
+ *     about borders or children.</li>
+ * <li><strong>The border as an object</strong> -- {@link #setBorder}. The {@link #getInsets}
+ *     come from it, so a layout respects the border without anybody telling it.</li>
+ * <li><strong>The separate look and feel</strong> -- {@link #setUI}: if there is a
+ *     {@link ComponentUI}, the drawing and the measurements are delegated to it. Without it,
+ *     the component manages on its own, and that "on its own" is honest: it fills the
+ *     background if it is opaque, and measures with what AWT already knows.</li>
  * </ul>
  *
- * <p>Las acciones por teclado, los menus emergentes, la transferencia y los carteles de ayuda
- * estuvieron en esta lista y ya no: {@code InputMap}, {@code ActionMap}, {@code JPopupMenu},
- * {@code TransferHandler}, {@code JToolTip} y {@code JRootPane} existen, y los miembros que los
- * nombran tambien.
+ * <h2>What is <em>not</em> there, and why</h2>
  *
- * <p>El criterio es el de siempre: un miembro que falta es un subconjunto legal; uno que fingiera
- * tener un {@code KeyboardFocusManager} detras compila y revienta despues.
+ * <p>Almost everything is there. What is missing is what needs things this library does not
+ * have yet, and each group for a concrete reason:
  *
- * <h2>Nota sobre el JDK: quien rellena el fondo</h2>
+ * <ul>
+ * <li>The <strong>focus walk</strong> beyond what AWT already gives -- for instance
+ *     {@code getNextFocusableComponent} -- needs a {@code KeyboardFocusManager} to decide.
+ *     {@link #setInputVerifier} is there: it keeps and returns the verifier, which is all this
+ *     component does with it; who consults it on moving the focus is the manager that is
+ *     missing.</li>
+ * <li>{@code paintImmediately} and the deferred repainting go through a
+ *     {@code RepaintManager} that draws on a <em>screen</em>. This VM does not have one: a
+ *     component is painted when somebody passes it a {@link Graphics}, typically a
+ *     {@code BufferedImage}'s, and that is what {@link #paint} does well. {@link #repaint} and
+ *     {@link #revalidate} go on existing with the meaning they can have with no screen, and
+ *     they say so.</li>
+ * </ul>
  *
- * <p>En el JDK, {@link #paintComponent} no pinta nada por si mismo: le pide al UI que lo haga, y es
- * el UI basico de cada componente el que rellena el fondo cuando el componente es opaco. Aca, sin
- * un aspecto instalado, esa responsabilidad se quedaria sin dueno y un panel opaco no tendria fondo.
- * Por eso {@code paintComponent} rellena el fondo <strong>cuando no hay UI</strong> y delega cuando
- * lo hay: el comportamiento observable es el mismo, y el reparto de responsabilidades se restituye
- * en cuanto alguien instala un UI.
+ * <p>The keyboard actions, the popup menus, the transfer and the tool tips were on this list
+ * and no longer are: {@code InputMap}, {@code ActionMap}, {@code JPopupMenu},
+ * {@code TransferHandler}, {@code JToolTip} and {@code JRootPane} exist, and so do the members
+ * that name them.
+ *
+ * <p>The criterion is the usual one: a member that is missing is a legal subset; one that
+ * pretended to have a {@code KeyboardFocusManager} behind it compiles and blows up
+ * afterwards.
+ *
+ * <h2>A note about the JDK: who fills the background</h2>
+ *
+ * <p>In the JDK, {@link #paintComponent} paints nothing by itself: it asks the look and feel to
+ * do it, and it is each component's basic look and feel that fills the background when the
+ * component is opaque. Here, with no look and feel installed, that responsibility would be left
+ * with no owner and an opaque panel would have no background. That is why
+ * {@code paintComponent} fills the background <strong>when there is no look and feel</strong>
+ * and delegates when there is one: the observable behaviour is the same, and the sharing out of
+ * responsibilities is restored as soon as somebody installs one.
  */
 public abstract class JComponent extends Container implements Serializable {
 
     private static final long serialVersionUID = -5876370834061273469L;
 
-    /** Condicion de una accion de teclado: solo con el foco. Definida aca por compatibilidad. */
+    /** Condition of a keyboard action: only with the focus. Defined here for compatibility. */
     public static final int WHEN_FOCUSED = 0;
 
-    /** Condicion: cuando el foco esta en un descendiente. */
+    /** Condition: when the focus is in a descendant. */
     public static final int WHEN_ANCESTOR_OF_FOCUSED_COMPONENT = 1;
 
-    /** Condicion: cuando la ventana tiene el foco. */
+    /** Condition: when the window has the focus. */
     public static final int WHEN_IN_FOCUSED_WINDOW = 2;
 
-    /** Ninguna condicion registrada. */
+    /** No condition registered. */
     public static final int UNDEFINED_CONDITION = -1;
 
-    /** La clave de propiedad de cliente bajo la que vive el texto de ayuda. */
+    /** The client property key the tool tip text lives under. */
     public static final String TOOL_TIP_TEXT_KEY = "ToolTipText";
 
     /**
-     * La clave con la que se guarda el verificador de entrada.
+     * The key the input verifier is kept with.
      *
-     * <p>Va en las propiedades de cliente y no en un campo, como en el JDK: son pocos los
-     * componentes que tienen verificador, y un campo mas por componente en una pantalla con
-     * cientos se nota.
+     * <p>It goes in the client properties and not in a field, as in the JDK: there are few
+     * components that have a verifier, and one more field per component on a screen with hundreds
+     * shows.
      */
     private static final String INPUT_VERIFIER_KEY = "_InputVerifier";
 
-    /** La clave con la que se guarda el menu emergente; ver {@link #getComponentPopupMenu}. */
+    /** The key the popup menu is kept with; see {@link #getComponentPopupMenu}. */
     private static final String POPUP_MENU_KEY = "_ComponentPopupMenu";
 
-    /** El aspecto instalado, o {@code null} si el componente se dibuja y se mide solo. */
+    /** The installed look and feel, or {@code null} if the component draws and measures itself. */
     protected transient ComponentUI ui;
 
-    /** Los oyentes propios de Swing; los de AWT viven en {@link Component}. */
+    /** Swing's own listeners; AWT's live in {@link Component}. */
     protected EventListenerList listenerList = new EventListenerList();
 
     private static Locale defaultLocale;
@@ -125,8 +130,8 @@ public abstract class JComponent extends Container implements Serializable {
     private Hashtable<Object, Object> clientProperties;
     private boolean doubleBuffered;
     private boolean autoscrolls;
-    private boolean opaquePuesto;
-    private boolean autoscrollsPuesto;
+    private boolean opaqueSet;
+    private boolean autoscrollsSet;
     private int debugGraphicsOptions;
     private boolean requestFocusEnabled = true;
     private boolean verifyInputWhenFocusTarget = true;
@@ -134,70 +139,71 @@ public abstract class JComponent extends Container implements Serializable {
     private VetoableChangeSupport vetoableChangeSupport;
 
     /**
-     * Un componente vacio, no opaco, sin borde ni aspecto.
+     * An empty component, not opaque, with neither border nor look and feel.
      *
-     * <p>Le pone de entrada la localidad por omision de Swing. Sin eso, {@code getLocale()} sobre
-     * un componente todavia no agregado a nada lanzaria {@code IllegalComponentStateException}, que
-     * es lo que hace un componente de AWT sin padre; un componente de Swing tiene que poder
-     * contestar por su idioma antes de estar en pantalla, porque de ahi salen los formatos con los
-     * que se arma a si mismo.
+     * <p>It gives it Swing's default locale from the start. Without that, {@code getLocale()} on a
+     * component not yet added to anything would throw {@code IllegalComponentStateException},
+     * which is what an AWT component with no parent does; a Swing component has to be able to
+     * answer for its language before being on the screen, because the formats it builds itself
+     * with come from there.
      */
     public JComponent() {
         super();
         setLocale(JComponent.getDefaultLocale());
     }
 
-    // -- el aspecto -----------------------------------------------------------------------------
+    // -- the look and feel ----------------------------------------------------------------------
 
     /**
-     * Instala un aspecto, desinstalando el anterior.
+     * It installs a look and feel, uninstalling the previous one.
      *
-     * <p>Protegido porque cada subclase expone el suyo con el tipo preciso —{@code setUI(ButtonUI)}—
-     * y este es el mecanismo comun debajo. Termina con {@link #revalidate} y {@link #repaint}: un
-     * aspecto nuevo puede medir distinto.
+     * <p>Protected because each subclass exposes its own with the precise type
+     * -- {@code setUI(ButtonUI)} -- and this is the common mechanism underneath. It ends with
+     * {@link #revalidate} and {@link #repaint}: a new look and feel may measure differently.
      */
     protected void setUI(ComponentUI newUI) {
         if (this.ui != null) {
             this.ui.uninstallUI(this);
         }
-        ComponentUI viejo = this.ui;
+        ComponentUI old = this.ui;
         this.ui = newUI;
         if (this.ui != null) {
             this.ui.installUI(this);
         }
-        firePropertyChange("UI", viejo, newUI);
+        firePropertyChange("UI", old, newUI);
         revalidate();
         repaint();
     }
 
-    /** El aspecto instalado, o {@code null}. */
+    /** The installed look and feel, or {@code null}. */
     public ComponentUI getUI() {
         return this.ui;
     }
 
     /**
-     * Vuelve a pedirle el aspecto al {@code UIManager}.
+     * It asks the {@code UIManager} for the look and feel again.
      *
-     * <p>No hace nada, y no es un marcador: en el JDK este metodo tambien esta vacio en
-     * {@code JComponent}, porque cada subclase sabe que clave pedir. Lo que falta es el
-     * {@code UIManager} al que pedirsela, y eso lo dice cada subclase en el suyo.
+     * <p>It does nothing, and it is not a marker: in the JDK this method is empty in
+     * {@code JComponent} too, because each subclass knows which key to ask for. What is missing is
+     * the {@code UIManager} to ask it of, and each subclass says so in its own.
      */
     public void updateUI() {
     }
 
-    /** La clave con la que el {@code UIManager} buscaria el aspecto de esta clase. */
+    /** The key the {@code UIManager} would look this class's look and feel up with. */
     public String getUIClassID() {
         return "ComponentUI";
     }
 
-    // -- la tuberia de pintado --------------------------------------------------------------------
+    // -- the painting pipeline
+    // ---------------------------------------------------------------------
 
     /**
-     * Pinta el componente entero: contenido, borde e hijos, en ese orden.
+     * It paints the whole component: content, border and children, in that order.
      *
-     * <p>El orden es el contrato: el borde va encima del contenido —para que un contenido que se
-     * pase de la raya quede debajo del marco— y los hijos van encima de todo. Las subclases no
-     * redefinen esto sino {@link #paintComponent}.
+     * <p>The order is the contract: the border goes on top of the content -- so that a content
+     * that goes over the line ends up below the frame -- and the children go on top of
+     * everything. The subclasses do not redefine this but {@link #paintComponent}.
      */
     public void paint(Graphics g) {
         if (getWidth() <= 0 || getHeight() <= 0) {
@@ -210,32 +216,33 @@ public abstract class JComponent extends Container implements Serializable {
     }
 
     /**
-     * Pinta el contenido propio, sin borde ni hijos.
+     * It paints its own content, with neither border nor children.
      *
-     * <p>Con aspecto, se lo delega sobre una <em>copia</em> del contexto: el UI puede cambiar color,
-     * fuente o recorte y nada de eso tiene que llegar al borde ni a los hijos. Sin aspecto, rellena
-     * el fondo si el componente es opaco — ver la nota de la clase sobre por que ese fondo se pinta
-     * aca y no en el UI que no hay.
+     * <p>With a look and feel, it is delegated to it over a <em>copy</em> of the context: the look
+     * and feel may change colour, typeface or clip and none of that has to reach the border or the
+     * children. With no look and feel, it fills the background if the component is opaque -- see
+     * the class note about why that background is painted here and not in the look and feel that
+     * is not there.
      */
     protected void paintComponent(Graphics g) {
         if (this.ui != null) {
-            Graphics copia = g.create();
+            Graphics copy = g.create();
             try {
-                this.ui.update(copia, this);
+                this.ui.update(copy, this);
             } finally {
-                copia.dispose();
+                copy.dispose();
             }
             return;
         }
         if (isOpaque()) {
-            java.awt.Color viejo = g.getColor();
+            java.awt.Color old = g.getColor();
             g.setColor(getBackground());
             g.fillRect(0, 0, getWidth(), getHeight());
-            g.setColor(viejo);
+            g.setColor(old);
         }
     }
 
-    /** Pinta el borde, si hay, sobre el contenido. */
+    /** It paints the border, if there is one, over the content. */
     protected void paintBorder(Graphics g) {
         Border b = getBorder();
         if (b != null) {
@@ -244,26 +251,26 @@ public abstract class JComponent extends Container implements Serializable {
     }
 
     /**
-     * Pinta los hijos, del ultimo agregado al primero.
+     * It paints the children, from the last added to the first.
      *
-     * <p>Al reves del orden de agregado, porque el primero que se agrega es el que queda arriba: es
-     * la regla del z-order de AWT. Cada hijo recibe un contexto trasladado a su esquina y recortado
-     * a su tamano, asi que no puede dibujar afuera de si mismo.
+     * <p>The reverse of the order they were added in, because the first that is added is the one
+     * that ends up on top: it is AWT's z-order rule. Each child receives a context translated to
+     * its corner and clipped to its size, so it cannot draw outside itself.
      */
     protected void paintChildren(Graphics g) {
         synchronized (getTreeLock()) {
             for (int i = getComponentCount() - 1; i >= 0; i--) {
-                Component hijo = getComponent(i);
-                if (!hijo.isVisible()) {
+                Component child = getComponent(i);
+                if (!child.isVisible()) {
                     continue;
                 }
-                Graphics cg = g.create(hijo.getX(), hijo.getY(), hijo.getWidth(),
-                        hijo.getHeight());
+                Graphics cg = g.create(child.getX(), child.getY(), child.getWidth(),
+                        child.getHeight());
                 if (cg == null) {
                     continue;
                 }
                 try {
-                    hijo.paint(cg);
+                    child.paint(cg);
                 } finally {
                     cg.dispose();
                 }
@@ -272,19 +279,22 @@ public abstract class JComponent extends Container implements Serializable {
     }
 
     /**
-     * Pinta sin borrar el fondo primero.
+     * It paints without clearing the background first.
      *
-     * <p>AWT borra en {@code update} y despues pinta; Swing no borra nunca aca, porque el fondo lo
-     * decide {@link #paintComponent} segun {@link #isOpaque}. Es lo que evita el parpadeo de AWT.
+     * <p>AWT clears in {@code update} and then paints; Swing never clears here, because the
+     * background is decided by {@link #paintComponent} according to {@link #isOpaque}. It is what
+     * avoids AWT's flicker.
      */
     public void update(Graphics g) {
         paint(g);
     }
 
     /**
-     * El contexto con el que se pinta este componente: el dado, con su color y su fuente puestos.
+     * The context this component is painted with: the given one, with its colour and its typeface
+     * set.
      *
-     * <p>Sin esto, un componente pintaria con el color y la fuente que le dejo el anterior.
+     * <p>Without this, a component would paint with the colour and the typeface the previous one
+     * left it.
      */
     protected Graphics getComponentGraphics(Graphics g) {
         g.setColor(getForeground());
@@ -292,7 +302,7 @@ public abstract class JComponent extends Container implements Serializable {
         return g;
     }
 
-    /** Imprime: la misma tuberia que {@link #paint}, con {@link #isPaintingForPrint} en alto. */
+    /** It prints: the same pipeline as {@link #paint}, with {@link #isPaintingForPrint} raised. */
     public void print(Graphics g) {
         this.paintingForPrint = true;
         try {
@@ -305,65 +315,71 @@ public abstract class JComponent extends Container implements Serializable {
         }
     }
 
-    /** Imprime el componente y sus hijos. */
+    /** It prints the component and its children. */
     public void printAll(Graphics g) {
         print(g);
     }
 
-    /** Imprime el contenido; por omision, lo pinta. */
+    /** It prints the content; by default, it paints it. */
     protected void printComponent(Graphics g) {
         paintComponent(g);
     }
 
-    /** Imprime el borde; por omision, lo pinta. */
+    /** It prints the border; by default, it paints it. */
     protected void printBorder(Graphics g) {
         paintBorder(g);
     }
 
-    /** Imprime los hijos; por omision, los pinta. */
+    /** It prints the children; by default, it paints them. */
     protected void printChildren(Graphics g) {
         paintChildren(g);
     }
 
-    /** Si el pintado en curso es una impresion; ver {@link #print}. */
+    /** Whether the painting under way is a printing; see {@link #print}. */
     public boolean isPaintingForPrint() {
         return this.paintingForPrint;
     }
 
     /**
-     * Si el pintado en curso es un mosaico de un pintado mayor.
+     * Whether the painting under way is a tile of a larger painting.
      *
-     * <p>Siempre {@code false}: el mosaico lo arma el {@code RepaintManager} cuando dibuja a una
-     * pantalla por partes, y aca el pintado es de una sola vez sobre la imagen que le den.
+     * <p>Always {@code false}: the tiling is built by the {@code RepaintManager} when it draws to
+     * a screen in parts, and here the painting is done in one go over the image it is given.
      */
     public boolean isPaintingTile() {
         return false;
     }
 
-    /** Si este componente es un origen de pintado propio. {@code false}, salvo que una subclase diga. */
+    /**
+     * Whether this component is a painting origin of its own. {@code false}, unless a subclass says
+     * so.
+     */
     protected boolean isPaintingOrigin() {
         return false;
     }
 
     /**
-     * Si los hijos no se solapan, y por lo tanto se pueden pintar sin recortarse entre si.
+     * Whether the children do not overlap, and may therefore be painted without clipping one
+     * another.
      *
-     * <p>{@code true} por omision, como en el JDK: un contenedor con hijos que se pisan lo redefine.
+     * <p>{@code true} by default, as in the JDK: a container with children that overlap redefines
+     * it.
      */
     public boolean isOptimizedDrawingEnabled() {
         return true;
     }
 
-    /** Si una validacion puede detenerse aca. {@code false}: solo las raices lo dicen. */
+    /** Whether a validation may stop here. {@code false}: only the roots say so. */
     public boolean isValidateRoot() {
         return false;
     }
 
     /**
-     * Pide un relayout.
+     * It asks for a relayout.
      *
-     * <p>En el JDK lo encola el {@code RepaintManager} y se hace despues, junto. Sin cola de eventos
-     * que lo despache, aca es sincronico: invalida y valida al padre, que es el que sabe disponer.
+     * <p>In the JDK the {@code RepaintManager} queues it and it is done afterwards, all together.
+     * With no event queue to dispatch it, here it is synchronous: it invalidates and validates the
+     * parent, which is the one that knows how to arrange.
      */
     public void revalidate() {
         invalidate();
@@ -375,18 +391,18 @@ public abstract class JComponent extends Container implements Serializable {
         }
     }
 
-    /** Repinta una region dada como rectangulo. */
+    /** It repaints a region given as a rectangle. */
     public void repaint(Rectangle r) {
         repaint(0, r.x, r.y, r.width, r.height);
     }
 
     /**
-     * Pinta ahora una region, sin esperar a la cola.
+     * It paints a region now, without waiting for the queue.
      *
-     * <p>No hace nada, y lo dice: pintar "ahora" es pintar a la pantalla, y esta VM no tiene una.
-     * Un componente se pinta cuando alguien le pasa un {@link Graphics} a {@link #paint}. No se
-     * inventa un {@link Graphics} de la nada porque {@link #getGraphics} devuelve {@code null}, que
-     * es la respuesta correcta sin superficie.
+     * <p>It does nothing, and it says so: painting "now" is painting to the screen, and this VM
+     * does not have one. A component is painted when somebody passes a {@link Graphics} to
+     * {@link #paint}. A {@link Graphics} is not invented out of nothing because
+     * {@link #getGraphics} returns {@code null}, which is the right answer with no surface.
      */
     public void paintImmediately(int x, int y, int w, int h) {
     }
@@ -396,36 +412,37 @@ public abstract class JComponent extends Container implements Serializable {
         paintImmediately(r.x, r.y, r.width, r.height);
     }
 
-    // -- borde, insets, opacidad -----------------------------------------------------------------
+    // -- border, insets, opacity -----------------------------------------------------------------
 
     /**
-     * Pone un borde; {@code null} lo saca.
+     * It sets a border; {@code null} removes it.
      *
-     * <p>Cambiar el borde cambia los insets, y con ellos el layout: de ahi el {@link #revalidate}.
+     * <p>Changing the border changes the insets, and with them the layout: hence the
+     * {@link #revalidate}.
      */
     public void setBorder(Border border) {
-        Border viejo = this.border;
+        Border old = this.border;
         this.border = border;
-        firePropertyChange("border", viejo, border);
-        if (border != viejo) {
-            if (border == null || viejo == null
-                    || !border.getBorderInsets(this).equals(viejo.getBorderInsets(this))) {
+        firePropertyChange("border", old, border);
+        if (border != old) {
+            if (border == null || old == null
+                    || !border.getBorderInsets(this).equals(old.getBorderInsets(this))) {
                 revalidate();
             }
             repaint();
         }
     }
 
-    /** El borde, o {@code null}. */
+    /** The border, or {@code null}. */
     public Border getBorder() {
         return this.border;
     }
 
     /**
-     * Cuanto espacio reserva el borde, o los insets de AWT si no hay borde.
+     * How much space the border reserves, or AWT's insets if there is no border.
      *
-     * <p>Es lo que hace que un layout respete el borde sin saber que existe: pregunta los insets, y
-     * los insets ya lo tienen adentro.
+     * <p>It is what makes a layout respect the border without knowing it exists: it asks for the
+     * insets, and the insets already have it inside.
      */
     public Insets getInsets() {
         if (this.border != null) {
@@ -434,7 +451,7 @@ public abstract class JComponent extends Container implements Serializable {
         return super.getInsets();
     }
 
-    /** Lo mismo, llenando el objeto dado para no alocar. */
+    /** The same, filling the given object so as not to allocate. */
     public Insets getInsets(Insets insets) {
         if (insets == null) {
             insets = new Insets(0, 0, 0, 0);
@@ -448,32 +465,32 @@ public abstract class JComponent extends Container implements Serializable {
     }
 
     /**
-     * Declara si este componente cubre todos sus pixeles.
+     * It declares whether this component covers all its pixels.
      *
-     * <p>Es una promesa, no una medida: quien la hace se compromete a que {@link #paintComponent}
-     * pinte el area entera. Swing la usa para no pintar lo que hay debajo. Mentir aqui no falla:
-     * deja basura en pantalla.
+     * <p>It is a promise, not a measurement: whoever makes it undertakes that
+     * {@link #paintComponent} paints the whole area. Swing uses it in order not to paint what is
+     * underneath. Lying here does not fail: it leaves rubbish on the screen.
      */
     public void setOpaque(boolean isOpaque) {
-        boolean viejo = this.opaque;
+        boolean old = this.opaque;
         this.opaque = isOpaque;
-        this.opaquePuesto = true;
-        firePropertyChange("opaque", viejo, isOpaque);
+        this.opaqueSet = true;
+        firePropertyChange("opaque", old, isOpaque);
     }
 
-    /** Si cubre todos sus pixeles. {@code false} por omision, que es lo seguro. */
+    /** Whether it covers all its pixels. {@code false} by default, which is the safe thing. */
     public boolean isOpaque() {
         return this.opaque;
     }
 
-    // -- tamanos y alineacion ---------------------------------------------------------------------
+    // -- sizes and alignment -------------------------------------------------------------------
 
     /**
-     * El tamano preferido: el fijado, si alguien lo fijo; si no, el del aspecto; si no, el del
-     * layout de AWT.
+     * The preferred size: the one that was fixed, if somebody fixed it; if not, the look and
+     * feel's; if not, AWT's layout's.
      *
-     * <p>El orden es el del JDK y es lo que permite que {@code setPreferredSize} le gane al aspecto
-     * sin que el aspecto se entere.
+     * <p>The order is the JDK's and it is what allows {@code setPreferredSize} to beat the look
+     * and feel without the look and feel learning about it.
      */
     public Dimension getPreferredSize() {
         if (isPreferredSizeSet()) {
@@ -488,7 +505,7 @@ public abstract class JComponent extends Container implements Serializable {
         return super.getPreferredSize();
     }
 
-    /** Como {@link #getPreferredSize}, para el minimo. */
+    /** Like {@link #getPreferredSize}, for the minimum. */
     public Dimension getMinimumSize() {
         if (isMinimumSizeSet()) {
             return super.getMinimumSize();
@@ -502,7 +519,7 @@ public abstract class JComponent extends Container implements Serializable {
         return super.getMinimumSize();
     }
 
-    /** Como {@link #getPreferredSize}, para el maximo. */
+    /** Like {@link #getPreferredSize}, for the maximum. */
     public Dimension getMaximumSize() {
         if (isMaximumSizeSet()) {
             return super.getMaximumSize();
@@ -516,12 +533,12 @@ public abstract class JComponent extends Container implements Serializable {
         return super.getMaximumSize();
     }
 
-    /** Fija la alineacion horizontal, recortada a {@code [0, 1]}. */
+    /** It fixes the horizontal alignment, clipped to {@code [0, 1]}. */
     public void setAlignmentX(float alignmentX) {
         this.alignmentX = Math.max(0.0f, Math.min(1.0f, alignmentX));
     }
 
-    /** La alineacion horizontal; la de AWT si no se fijo ninguna. */
+    /** The horizontal alignment; AWT's if none was fixed. */
     public float getAlignmentX() {
         if (this.alignmentX < 0.0f) {
             return super.getAlignmentX();
@@ -529,12 +546,12 @@ public abstract class JComponent extends Container implements Serializable {
         return this.alignmentX;
     }
 
-    /** Fija la alineacion vertical, recortada a {@code [0, 1]}. */
+    /** It fixes the vertical alignment, clipped to {@code [0, 1]}. */
     public void setAlignmentY(float alignmentY) {
         this.alignmentY = Math.max(0.0f, Math.min(1.0f, alignmentY));
     }
 
-    /** La alineacion vertical; la de AWT si no se fijo ninguna. */
+    /** The vertical alignment; AWT's if none was fixed. */
     public float getAlignmentY() {
         if (this.alignmentY < 0.0f) {
             return super.getAlignmentY();
@@ -542,7 +559,7 @@ public abstract class JComponent extends Container implements Serializable {
         return this.alignmentY;
     }
 
-    /** La linea de base: la del aspecto si hay, si no la de AWT. */
+    /** The baseline: the look and feel's if there is one, otherwise AWT's. */
     public int getBaseline(int width, int height) {
         if (this.ui != null) {
             return this.ui.getBaseline(this, width, height);
@@ -551,10 +568,10 @@ public abstract class JComponent extends Container implements Serializable {
     }
 
     /**
-     * Como se mueve la linea de base; la del aspecto si hay.
+     * How the baseline moves; the look and feel's if there is one.
      *
-     * <p>Con el nombre binario {@code Component$BaselineResizeBehavior}: un tipo anidado de otro
-     * archivo no resuelve por su nombre Java en nuestro compilador (#101).
+     * <p>With the binary name {@code Component$BaselineResizeBehavior}: a type nested in another
+     * file does not resolve by its Java name in our compiler (#101).
      */
     public Component$BaselineResizeBehavior getBaselineResizeBehavior() {
         if (this.ui != null) {
@@ -563,7 +580,10 @@ public abstract class JComponent extends Container implements Serializable {
         return super.getBaselineResizeBehavior();
     }
 
-    /** Si el punto cae adentro; el aspecto puede darle una forma que no sea el rectangulo. */
+    /**
+     * Whether the point falls inside; the look and feel may give it a shape that is not the
+     * rectangle.
+     */
     public boolean contains(int x, int y) {
         if (this.ui != null) {
             return this.ui.contains(this, x, y);
@@ -574,11 +594,11 @@ public abstract class JComponent extends Container implements Serializable {
     // -- region visible ---------------------------------------------------------------------------
 
     /**
-     * Calcula que parte de este componente se ve, intersecando con todos los ancestros.
+     * It computes which part of this component is seen, intersecting with every ancestor.
      *
-     * <p>Un componente adentro de un area de desplazamiento tiene casi todo tapado: lo que se ve es
-     * la interseccion de su rectangulo con el de cada contenedor hasta arriba, cada uno en las
-     * coordenadas de este.
+     * <p>A component inside a scrolling area has almost everything covered: what is seen is the
+     * intersection of its rectangle with each container's as far up as they go, each one in this
+     * one's coordinates.
      */
     public void computeVisibleRect(Rectangle visibleRect) {
         visibleRect.x = 0;
@@ -588,11 +608,11 @@ public abstract class JComponent extends Container implements Serializable {
         int dx = 0;
         int dy = 0;
         Container p = getParent();
-        Component actual = this;
+        Component current = this;
         while (p != null) {
-            dx = dx + actual.getX();
-            dy = dy + actual.getY();
-            // El rectangulo del padre, traido a las coordenadas de este componente.
+            dx = dx + current.getX();
+            dy = dy + current.getY();
+            // The parent's rectangle, brought to this component's coordinates.
             int px = -dx;
             int py = -dy;
             int x1 = Math.max(visibleRect.x, px);
@@ -606,12 +626,12 @@ public abstract class JComponent extends Container implements Serializable {
             if (p instanceof Window || p instanceof Applet) {
                 break;
             }
-            actual = p;
+            current = p;
             p = p.getParent();
         }
     }
 
-    /** La parte visible, en un rectangulo nuevo. */
+    /** The visible part, in a new rectangle. */
     public Rectangle getVisibleRect() {
         Rectangle r = new Rectangle();
         computeVisibleRect(r);
@@ -619,11 +639,12 @@ public abstract class JComponent extends Container implements Serializable {
     }
 
     /**
-     * Pide que un rectangulo de este componente quede a la vista.
+     * It asks for a rectangle of this component to be in sight.
      *
-     * <p>El pedido sube: se traduce a las coordenadas del padre y se le reenvia. Quien lo atiende de
-     * verdad es un area de desplazamiento mas arriba, que redefine este metodo. Sin ninguna, el
-     * pedido llega a la raiz y no pasa nada — que es lo correcto, porque no hay nada que desplazar.
+     * <p>The request goes up: it is translated to the parent's coordinates and forwarded to it.
+     * Who really attends it is a scrolling area further up, which redefines this method. With
+     * none, the request reaches the root and nothing happens -- which is right, because there is
+     * nothing to scroll.
      */
     public void scrollRectToVisible(Rectangle aRect) {
         Container p = getParent();
@@ -636,7 +657,7 @@ public abstract class JComponent extends Container implements Serializable {
         }
     }
 
-    /** La ventana o applet que contiene a este componente, o {@code null} si no esta en ninguna. */
+    /** The window or applet that contains this component, or {@code null} if it is in none. */
     public Container getTopLevelAncestor() {
         Container p = getParent();
         while (p != null) {
@@ -648,20 +669,21 @@ public abstract class JComponent extends Container implements Serializable {
         return null;
     }
 
-    // -- propiedades de cliente y ayuda -----------------------------------------------------------
+    // -- client properties and tip
+    // -----------------------------------------------------------------
 
     /**
-     * Guarda un valor bajo una clave, sin que la clase lo declare.
+     * It keeps a value under a key, without the class declaring it.
      *
-     * <p>Es el cajon donde un aspecto o una herramienta deja datos propios sobre un componente
-     * ajeno. {@code null} borra. Avisa como cambio de propiedad con la clave como nombre, asi que se
-     * puede escuchar.
+     * <p>It is the drawer where a look and feel or a tool leaves data of its own about somebody
+     * else's component. {@code null} erases. It gives notice as a property change with the key as
+     * the name, so it can be listened to.
      */
     public final void putClientProperty(Object key, Object value) {
         if (key == null) {
-            throw new NullPointerException("La clave no puede ser null");
+            throw new NullPointerException("The key cannot be null");
         }
-        Object viejo;
+        Object old;
         synchronized (this) {
             if (this.clientProperties == null) {
                 if (value == null) {
@@ -669,17 +691,17 @@ public abstract class JComponent extends Container implements Serializable {
                 }
                 this.clientProperties = new Hashtable<Object, Object>();
             }
-            viejo = this.clientProperties.get(key);
+            old = this.clientProperties.get(key);
             if (value != null) {
                 this.clientProperties.put(key, value);
             } else {
                 this.clientProperties.remove(key);
             }
         }
-        firePropertyChange(key.toString(), viejo, value);
+        firePropertyChange(key.toString(), old, value);
     }
 
-    /** El valor bajo esa clave, o {@code null}. */
+    /** The value under that key, or {@code null}. */
     public final Object getClientProperty(Object key) {
         if (key == null) {
             return null;
@@ -693,32 +715,32 @@ public abstract class JComponent extends Container implements Serializable {
     }
 
     /**
-     * Fija el texto de ayuda.
+     * It fixes the tool tip text.
      *
-     * <p>Se guarda como propiedad de cliente, como en el JDK. Mostrarlo en una burbuja pide un
-     * {@code ToolTipManager} y un {@code JToolTip} que no estan; el texto queda disponible para
-     * quien lo pregunte.
+     * <p>It is kept as a client property, as in the JDK. Showing it in a bubble asks for a
+     * {@code ToolTipManager} and a {@code JToolTip} that are not there; the text stays available
+     * for whoever asks for it.
      */
     public void setToolTipText(String text) {
         putClientProperty(TOOL_TIP_TEXT_KEY, text);
     }
 
-    /** El texto de ayuda, o {@code null}. */
+    /** The tool tip text, or {@code null}. */
     public String getToolTipText() {
         return (String) getClientProperty(TOOL_TIP_TEXT_KEY);
     }
 
-    /** El texto de ayuda para ese punto; por omision, el mismo para todo el componente. */
+    /** The tool tip text for that point; by default, the same for the whole component. */
     public String getToolTipText(MouseEvent event) {
         return getToolTipText();
     }
 
     /**
-     * El cartel con el que se muestra la ayuda de este componente.
+     * The tip the help of this component is shown with.
      *
-     * <p>Se sobreescribe para devolver una subclase de {@link JToolTip} cuando el cartel de base no
-     * alcanza. El cartel queda apuntando a este componente, que es de donde el aspecto le toma la
-     * tipografia y los colores.
+     * <p>It is overridden in order to return a subclass of {@link JToolTip} when the base tip is
+     * not enough. The tip is left pointing at this component, which is where the look and feel
+     * takes its typeface and its colours from.
      */
     public JToolTip createToolTip() {
         JToolTip tip = new JToolTip();
@@ -726,7 +748,7 @@ public abstract class JComponent extends Container implements Serializable {
         return tip;
     }
 
-    /** Donde mostrar la ayuda; {@code null} deja elegir a quien la muestre. */
+    /** Where to show the tip; {@code null} lets whoever shows it choose. */
     public java.awt.Point getToolTipLocation(MouseEvent event) {
         return null;
     }
@@ -734,10 +756,10 @@ public abstract class JComponent extends Container implements Serializable {
     // -- banderas varias --------------------------------------------------------------------------
 
     /**
-     * Si se pinta primero fuera de pantalla y despues se copia entero.
+     * Whether it is painted off screen first and copied whole afterwards.
      *
-     * <p>Se guarda y se reporta. Sin pantalla no hay parpadeo que evitar, asi que el pintado va
-     * directo a la imagen que le den, que es en si misma un buffer.
+     * <p>It is kept and reported. With no screen there is no flicker to avoid, so the painting
+     * goes straight to the image it is given, which is itself a buffer.
      */
     public void setDoubleBuffered(boolean aFlag) {
         this.doubleBuffered = aFlag;
@@ -747,17 +769,20 @@ public abstract class JComponent extends Container implements Serializable {
         return this.doubleBuffered;
     }
 
-    /** Si arrastrar el mouse fuera del componente lo desplaza. Se guarda; lo usa un area de desplazamiento. */
+    /**
+     * Whether dragging the mouse outside the component scrolls it. It is kept; a scrolling area
+     * uses it.
+     */
     public void setAutoscrolls(boolean autoscrolls) {
         this.autoscrolls = autoscrolls;
-        this.autoscrollsPuesto = true;
+        this.autoscrollsSet = true;
     }
 
     public boolean getAutoscrolls() {
         return this.autoscrolls;
     }
 
-    /** Las banderas de depuracion del pintado. Se guardan; no hay {@code DebugGraphics}. */
+    /** The painting debug flags. They are kept; there is no {@code DebugGraphics}. */
     public void setDebugGraphicsOptions(int debugOptions) {
         this.debugGraphicsOptions = debugOptions;
     }
@@ -766,7 +791,7 @@ public abstract class JComponent extends Container implements Serializable {
         return this.debugGraphicsOptions;
     }
 
-    /** Si el componente acepta que le pidan el foco por programa. */
+    /** Whether the component accepts being asked for the focus by program. */
     public void setRequestFocusEnabled(boolean requestFocusEnabled) {
         this.requestFocusEnabled = requestFocusEnabled;
     }
@@ -776,10 +801,10 @@ public abstract class JComponent extends Container implements Serializable {
     }
 
     /**
-     * El menu que aparece al hacer clic derecho sobre este componente.
+     * The menu that appears on right-clicking on this component.
      *
-     * <p>Nulo significa "el del contenedor", pero solo si {@code getInheritsPopupMenu} lo permite:
-     * ver {@link #getComponentPopupMenu}, que resuelve las dos cosas juntas.
+     * <p>Null means "the container's", but only if {@code getInheritsPopupMenu} allows it: see
+     * {@link #getComponentPopupMenu}, which resolves both things together.
      */
     public void setComponentPopupMenu(JPopupMenu popup) {
         if (popup != null) {
@@ -791,11 +816,11 @@ public abstract class JComponent extends Container implements Serializable {
     }
 
     /**
-     * El menu que corresponde a este componente.
+     * The menu that corresponds to this component.
      *
-     * <p>Si no tiene uno propio y hereda, se lo pide al padre; si no hereda, devuelve nulo. Es lo
-     * que hace que un panel entero comparta un menu sin ponerselo a cada hijo, y que un hijo que no
-     * quiere ninguno pueda decirlo.
+     * <p>If it does not have one of its own and it inherits, it asks the parent for it; if it does
+     * not inherit, it returns null. It is what makes a whole panel share a menu without setting it
+     * on each child, and a child that wants none be able to say so.
      */
     public JPopupMenu getComponentPopupMenu() {
         if (!getInheritsPopupMenu()) {
@@ -818,56 +843,57 @@ public abstract class JComponent extends Container implements Serializable {
         return popup;
     }
 
-    /** El panel raiz que lo contiene, o nulo. */
+    /** The root pane that contains it, or null. */
     public JRootPane getRootPane() {
         return SwingUtilities.getRootPane(this);
     }
 
     /**
-     * Quien decide si este componente puede soltar el foco.
+     * Who decides whether this component may let go of the focus.
      *
-     * <p>Nulo -- que es lo de entrada -- significa que puede siempre. Ver {@link InputVerifier},
-     * sobre todo la parte de que un verificador que dice que no encierra el foco.
+     * <p>Null -- which is the starting value -- means that it always may. See
+     * {@link InputVerifier}, above all the part about a verifier that says no locking the focus
+     * in.
      */
     public void setInputVerifier(InputVerifier inputVerifier) {
-        InputVerifier viejo = (InputVerifier) getClientProperty(INPUT_VERIFIER_KEY);
+        InputVerifier old = (InputVerifier) getClientProperty(INPUT_VERIFIER_KEY);
         putClientProperty(INPUT_VERIFIER_KEY, inputVerifier);
-        firePropertyChange("inputVerifier", viejo, inputVerifier);
+        firePropertyChange("inputVerifier", old, inputVerifier);
     }
 
-    /** El verificador, o {@code null} si no tiene. */
+    /** The verifier, or {@code null} if it has none. */
     public InputVerifier getInputVerifier() {
         return (InputVerifier) getClientProperty(INPUT_VERIFIER_KEY);
     }
 
-    /** Si el verificador de entrada del componente que pierde el foco debe correr antes. */
+    /** Whether the input verifier of the component that loses the focus has to run first. */
     public void setVerifyInputWhenFocusTarget(boolean verifyInputWhenFocusTarget) {
-        boolean viejo = this.verifyInputWhenFocusTarget;
+        boolean old = this.verifyInputWhenFocusTarget;
         this.verifyInputWhenFocusTarget = verifyInputWhenFocusTarget;
-        firePropertyChange("verifyInputWhenFocusTarget", viejo, verifyInputWhenFocusTarget);
+        firePropertyChange("verifyInputWhenFocusTarget", old, verifyInputWhenFocusTarget);
     }
 
     public boolean getVerifyInputWhenFocusTarget() {
         return this.verifyInputWhenFocusTarget;
     }
 
-    /** Pide el foco, sin importar {@link #isRequestFocusEnabled}. */
+    /** It asks for the focus, whatever {@link #isRequestFocusEnabled} says. */
     public void grabFocus() {
         requestFocus();
     }
 
     /**
-     * Le da el foco al primer descendiente que pueda tenerlo.
+     * It gives the focus to the first descendant that can have it.
      *
-     * @deprecated como en el JDK; la politica de recorrido de foco la decide el
-     *     {@code KeyboardFocusManager}, que no esta
+     * @deprecated as in the JDK; the focus traversal policy is decided by the
+     *     {@code KeyboardFocusManager}, which is not there
      */
     @Deprecated
     public boolean requestDefaultFocus() {
         return false;
     }
 
-    /** La localidad por omision de los componentes nuevos. */
+    /** The default locale of new components. */
     public static Locale getDefaultLocale() {
         if (defaultLocale == null) {
             defaultLocale = Locale.getDefault();
@@ -875,34 +901,34 @@ public abstract class JComponent extends Container implements Serializable {
         return defaultLocale;
     }
 
-    /** Cambia la localidad por omision. */
+    /** It changes the default locale. */
     public static void setDefaultLocale(Locale l) {
         defaultLocale = l;
     }
 
-    // -- oyentes de ancestro y vetables ----------------------------------------------------------
+    // -- ancestor and vetoable listeners ---------------------------------------------------------
 
-    /** Agrega un oyente de cambios en los ancestros. */
+    /** It adds a listener of changes in the ancestors. */
     public void addAncestorListener(AncestorListener listener) {
         this.listenerList.add(AncestorListener.class, listener);
     }
 
-    /** Saca un oyente de ancestros. */
+    /** It removes an ancestor listener. */
     public void removeAncestorListener(AncestorListener listener) {
         this.listenerList.remove(AncestorListener.class, listener);
     }
 
-    /** Los oyentes de ancestros. */
+    /** The ancestor listeners. */
     public AncestorListener[] getAncestorListeners() {
         return this.listenerList.getListeners(AncestorListener.class);
     }
 
     /**
-     * Agrega un oyente que puede <em>vetar</em> un cambio de propiedad.
+     * It adds a listener that may <em>veto</em> a property change.
      *
-     * <p>Distinto de un oyente comun: este se consulta antes, y si tira
-     * {@link PropertyVetoException} el cambio no ocurre. Lo usa {@code JInternalFrame} para que
-     * alguien pueda impedir que una ventana se cierre.
+     * <p>Different from an ordinary listener: this one is consulted first, and if it throws
+     * {@link PropertyVetoException} the change does not happen. {@code JInternalFrame} uses it so
+     * that somebody may prevent a frame from closing.
      */
     public synchronized void addVetoableChangeListener(VetoableChangeListener listener) {
         if (this.vetoableChangeSupport == null) {
@@ -911,14 +937,14 @@ public abstract class JComponent extends Container implements Serializable {
         this.vetoableChangeSupport.addVetoableChangeListener(listener);
     }
 
-    /** Saca un oyente vetable. */
+    /** It removes a vetoable listener. */
     public synchronized void removeVetoableChangeListener(VetoableChangeListener listener) {
         if (this.vetoableChangeSupport != null) {
             this.vetoableChangeSupport.removeVetoableChangeListener(listener);
         }
     }
 
-    /** Los oyentes vetables. */
+    /** The vetoable listeners. */
     public synchronized VetoableChangeListener[] getVetoableChangeListeners() {
         if (this.vetoableChangeSupport == null) {
             return new VetoableChangeListener[0];
@@ -927,9 +953,9 @@ public abstract class JComponent extends Container implements Serializable {
     }
 
     /**
-     * Consulta a los oyentes vetables antes de un cambio.
+     * It consults the vetoable listeners before a change.
      *
-     * @throws PropertyVetoException si alguno se opone; el cambio no debe hacerse
+     * @throws PropertyVetoException if one of them objects; the change must not be made
      */
     protected void fireVetoableChange(String propertyName, Object oldValue, Object newValue)
             throws PropertyVetoException {
@@ -938,21 +964,21 @@ public abstract class JComponent extends Container implements Serializable {
         }
     }
 
-    /** Publico aca, protegido en AWT: Swing deja que cualquiera avise por un componente. */
+    /** Public here, protected in AWT: Swing lets anybody give notice on behalf of a component. */
     public void firePropertyChange(String propertyName, boolean oldValue, boolean newValue) {
         super.firePropertyChange(propertyName, oldValue, newValue);
     }
 
-    /** Publico aca, protegido en AWT. */
+    /** Public here, protected in AWT. */
     public void firePropertyChange(String propertyName, int oldValue, int newValue) {
         super.firePropertyChange(propertyName, oldValue, newValue);
     }
 
     /**
-     * Los oyentes de un tipo, incluidos los propios de Swing.
+     * The listeners of a type, Swing's own included.
      *
-     * <p>AWT solo conoce los suyos; los de ancestro y los vetables viven aca, asi que hay que
-     * atenderlos antes de delegar.
+     * <p>AWT only knows its own; the ancestor and the vetoable ones live here, so they have to be
+     * attended before delegating.
      */
     public <T extends EventListener> T[] getListeners(Class<T> listenerType) {
         if (listenerType == AncestorListener.class) {
@@ -966,56 +992,62 @@ public abstract class JComponent extends Container implements Serializable {
         return super.getListeners(listenerType);
     }
 
-    // -- ciclo de vida en la jerarquia -----------------------------------------------------------
+    // -- life cycle in the hierarchy
+    // ---------------------------------------------------------------
 
     /**
-     * Entra en una jerarquia con ventana.
+     * It enters a hierarchy with a window.
      *
-     * <p>Aca es donde se avisa a los oyentes de ancestro que hay ancestros. El JDK ademas registra
-     * oyentes en cada ancestro para seguir los movimientos; sin pantalla no hay movimiento que
-     * seguir, asi que solo se avisan la entrada y la salida.
+     * <p>Here is where the ancestor listeners are told that there are ancestors. The JDK also
+     * registers listeners on each ancestor in order to follow the movements; with no screen there
+     * is no movement to follow, so only the entry and the exit are given notice of.
      */
     public void addNotify() {
         super.addNotify();
         Container p = getParent();
-        avisarAncestros(AncestorEvent.ANCESTOR_ADDED, p, p == null ? null : p.getParent());
+        notifyAncestors(AncestorEvent.ANCESTOR_ADDED, p, p == null ? null : p.getParent());
     }
 
-    /** Sale de la jerarquia. */
+    /** It leaves the hierarchy. */
     public void removeNotify() {
         Container p = getParent();
-        avisarAncestros(AncestorEvent.ANCESTOR_REMOVED, p, p == null ? null : p.getParent());
+        notifyAncestors(AncestorEvent.ANCESTOR_REMOVED, p, p == null ? null : p.getParent());
         super.removeNotify();
     }
 
-    private void avisarAncestros(int id, Container ancestro, Container padreDelAncestro) {
-        AncestorListener[] oyentes = getAncestorListeners();
-        if (oyentes.length == 0) {
+    private void notifyAncestors(int id, Container ancestor, Container ancestorParent) {
+        AncestorListener[] listeners = getAncestorListeners();
+        if (listeners.length == 0) {
             return;
         }
-        AncestorEvent e = new AncestorEvent(this, id, ancestro, padreDelAncestro);
-        for (int i = 0; i < oyentes.length; i++) {
+        AncestorEvent e = new AncestorEvent(this, id, ancestor, ancestorParent);
+        for (int i = 0; i < listeners.length; i++) {
             if (id == AncestorEvent.ANCESTOR_ADDED) {
-                oyentes[i].ancestorAdded(e);
+                listeners[i].ancestorAdded(e);
             } else {
-                oyentes[i].ancestorRemoved(e);
+                listeners[i].ancestorRemoved(e);
             }
         }
     }
 
-    // -- estado que se propaga -------------------------------------------------------------------
+    // -- state that propagates -----------------------------------------------------------------
 
-    /** Habilita o deshabilita, avisando y repintando: un componente deshabilitado se ve distinto. */
+    /**
+     * It enables or disables, giving notice and repainting: a disabled component looks different.
+     */
     public void setEnabled(boolean enabled) {
-        boolean viejo = isEnabled();
+        boolean old = isEnabled();
         super.setEnabled(enabled);
-        firePropertyChange("enabled", viejo, enabled);
-        if (enabled != viejo) {
+        firePropertyChange("enabled", old, enabled);
+        if (enabled != old) {
             repaint();
         }
     }
 
-    /** Muestra u oculta; un cambio pide relayout al padre, porque ocupa o libera lugar. */
+    /**
+     * It shows or hides; a change asks the parent for a relayout, because it takes up or frees
+     * room.
+     */
     public void setVisible(boolean aFlag) {
         if (aFlag != isVisible()) {
             super.setVisible(aFlag);
@@ -1045,20 +1077,20 @@ public abstract class JComponent extends Container implements Serializable {
     }
 
     /**
-     * @deprecated como en el JDK; queda por compatibilidad y delega en AWT
+     * @deprecated as in the JDK; it stays for compatibility and delegates to AWT
      */
     @Deprecated
     public void reshape(int x, int y, int w, int h) {
         super.reshape(x, y, w, h);
     }
 
-    // -- teclado ----------------------------------------------------------------------------------
+    // -- keyboard ---------------------------------------------------------------------------------
 
     /**
-     * Procesa una tecla: primero los oyentes de AWT, despues {@link #processComponentKeyEvent}.
+     * It processes a key: first AWT's listeners, then {@link #processComponentKeyEvent}.
      *
-     * <p>El JDK ademas consulta las acciones registradas por teclado, que no estan; ver la nota de
-     * la clase.
+     * <p>The JDK also consults the actions registered by keyboard, which are not there; see the
+     * class note.
      */
     protected void processKeyEvent(KeyEvent e) {
         super.processKeyEvent(e);
@@ -1067,18 +1099,18 @@ public abstract class JComponent extends Container implements Serializable {
         }
     }
 
-    /** El gancho para que una subclase atienda teclas sin registrar oyentes. Vacio por omision. */
+    /** The hook for a subclass to attend keys without registering listeners. Empty by default. */
     protected void processComponentKeyEvent(KeyEvent e) {
     }
 
-    // -- depuracion -------------------------------------------------------------------------------
+    // -- debugging --------------------------------------------------------------------------------
 
     protected String paramString() {
-        String bordeStr = this.border == null ? "" : this.border.toString();
+        String borderStr = this.border == null ? "" : this.border.toString();
         return super.paramString()
                 + ",alignmentX=" + String.valueOf(this.alignmentX)
                 + ",alignmentY=" + String.valueOf(this.alignmentY)
-                + ",border=" + bordeStr
+                + ",border=" + borderStr
                 + ",flags=" + (this.opaque ? "opaque" : "")
                 + ",maximumSize=" + (isMaximumSizeSet() ? getMaximumSize().toString() : "")
                 + ",minimumSize=" + (isMinimumSizeSet() ? getMinimumSize().toString() : "")
@@ -1086,27 +1118,27 @@ public abstract class JComponent extends Container implements Serializable {
     }
 
     /**
-     * Pone una propiedad en nombre de un aspecto: solo si el usuario no la puso antes.
+     * It sets a property on behalf of a look and feel: only if the user did not set it before.
      *
-     * <p>Es lo que hay detras de {@code LookAndFeel.installProperty}. Las propiedades que un
-     * aspecto puede proponer son pocas y estan enumeradas: "opaque" y "autoscrolls" aca, y las
-     * subclases agregan las suyas. El JDK acepta tambien las teclas de recorrido del foco, que en
-     * esta VM no hay como instalar. Cada una recuerda si la puso el usuario ({@code *Puesto});
-     * esta llamada respeta eso y, al terminar, deja el recuerdo como estaba.
+     * <p>It is what lies behind {@code LookAndFeel.installProperty}. The properties a look and
+     * feel may propose are few and enumerated: "opaque" and "autoscrolls" here, and the
+     * subclasses add their own. The JDK also accepts the focus traversal keys, which on this VM
+     * there is no way of installing. Each one remembers whether the user set it ({@code *Set});
+     * this call respects that and, on finishing, leaves the memory as it was.
      */
     void setUIProperty(String propertyName, Object value) {
         if (customSetUIProperty(propertyName, value)) {
             return;
         }
         if ("opaque".equals(propertyName)) {
-            if (!opaquePuesto) {
+            if (!opaqueSet) {
                 setOpaque(((Boolean) value).booleanValue());
-                opaquePuesto = false;
+                opaqueSet = false;
             }
         } else if ("autoscrolls".equals(propertyName)) {
-            if (!autoscrollsPuesto) {
+            if (!autoscrollsSet) {
                 setAutoscrolls(((Boolean) value).booleanValue());
-                autoscrollsPuesto = false;
+                autoscrollsSet = false;
             }
         } else {
             throw new IllegalArgumentException("property \"" + propertyName
@@ -1115,69 +1147,70 @@ public abstract class JComponent extends Container implements Serializable {
     }
 
     /**
-     * El gancho para las propiedades que solo entiende una subclase.
+     * The hook for the properties only a subclass understands.
      *
-     * <p>{@link JPasswordField} lo usa para el caracter de eco. Cada una que lo redefine tiene que
-     * respetar la misma regla que {@link #setUIProperty}: si el usuario ya puso esa propiedad a
-     * mano, el aspecto no la pisa.
+     * <p>{@link JPasswordField} uses it for the echo character. Each one that redefines it has to
+     * respect the same rule as {@link #setUIProperty}: if the user has already set that property
+     * by hand, the look and feel does not overwrite it.
      *
-     * @return `true` si la subclase se hizo cargo; `false` para seguir con las de siempre
+     * @return `true` if the subclass took charge; `false` to go on with the usual ones
      */
     boolean customSetUIProperty(String propertyName, Object value) {
         return false;
     }
 
-    // ---- atajos de teclado ----
+    // ---- keyboard shortcuts ----
 
-    private InputMap[] mapasEntrada = new InputMap[3];
-    private ActionMap mapaAcciones;
+    private InputMap[] inputMaps = new InputMap[3];
+    private ActionMap actionMap;
     private TransferHandler transferHandler;
     private java.awt.Component nextFocusableComponent;
     private boolean inheritsPopupMenu;
 
     /**
-     * La tabla de atajos de esa condicion.
+     * That condition's table of shortcuts.
      *
-     * <p>Las tres condiciones son tres tablas distintas, no tres filtros sobre una: un atajo que
-     * vale con el foco puesto y uno que vale en toda la ventana no se estorban, y separarlas es lo
-     * que permite que el aspecto ponga los suyos sin pisar los del programa.
+     * <p>The three conditions are three different tables, not three filters over one: a shortcut
+     * that holds with the focus set and one that holds in the whole window do not get in each
+     * other's way, and separating them is what allows the look and feel to set its own without
+     * overwriting the program's.
      *
-     * @throws IllegalArgumentException si la condicion no es una de las tres.
+     * @throws IllegalArgumentException if the condition is not one of the three.
      */
     public final InputMap getInputMap(int condition) {
-        int i = indiceDeCondicion(condition);
-        if (mapasEntrada[i] == null) {
+        int i = indexForCondition(condition);
+        if (inputMaps[i] == null) {
             if (condition == WHEN_IN_FOCUSED_WINDOW) {
-                mapasEntrada[i] = new ComponentInputMap(this);
+                inputMaps[i] = new ComponentInputMap(this);
             } else {
-                mapasEntrada[i] = new InputMap();
+                inputMaps[i] = new InputMap();
             }
         }
-        return mapasEntrada[i];
+        return inputMaps[i];
     }
 
-    /** La tabla de la condicion de siempre: con el foco puesto. */
+    /** The usual condition's table: with the focus set. */
     public final InputMap getInputMap() {
         return getInputMap(WHEN_FOCUSED);
     }
 
     /**
-     * Cambia la tabla de esa condicion.
+     * It changes that condition's table.
      *
-     * @throws IllegalArgumentException si la condicion no existe, o si la tabla de
-     *     {@code WHEN_IN_FOCUSED_WINDOW} no es un {@link ComponentInputMap}.
+     * @throws IllegalArgumentException if the condition does not exist, or if
+     *     {@code WHEN_IN_FOCUSED_WINDOW}'s table is not a {@link ComponentInputMap}.
      */
     public final void setInputMap(int condition, InputMap map) {
-        int i = indiceDeCondicion(condition);
+        int i = indexForCondition(condition);
         if (condition == WHEN_IN_FOCUSED_WINDOW && map != null
                 && !(map instanceof ComponentInputMap)) {
             throw new IllegalArgumentException(
                     "WHEN_IN_FOCUSED_WINDOW InputMaps must be of type ComponentInputMap");
         }
-        mapasEntrada[i] = map;
+        inputMaps[i] = map;
     }
 
-    private static int indiceDeCondicion(int condition) {
+    private static int indexForCondition(int condition) {
         if (condition == WHEN_FOCUSED) {
             return 0;
         }
@@ -1192,34 +1225,34 @@ public abstract class JComponent extends Container implements Serializable {
                 + "JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT");
     }
 
-    /** La tabla de nombre a accion del componente. */
+    /** The component's table from name to action. */
     public final ActionMap getActionMap() {
-        if (mapaAcciones == null) {
-            mapaAcciones = new ActionMap();
+        if (actionMap == null) {
+            actionMap = new ActionMap();
         }
-        return mapaAcciones;
+        return actionMap;
     }
 
     public final void setActionMap(ActionMap am) {
-        mapaAcciones = am;
+        actionMap = am;
     }
 
     /**
-     * Ata una tecla a un oyente, con un nombre.
+     * It ties a key to a listener, with a name.
      *
-     * <p>Es la forma vieja, de antes de que existieran los dos mapas. Sigue andando porque se
-     * implementa <em>sobre</em> ellos: guarda una envoltura en el mapa de entrada y la misma
-     * envoltura como accion. Por eso lo que se registra asi se ve despues en
+     * <p>It is the old way, from before the two maps existed. It goes on working because it is
+     * implemented <em>over</em> them: it keeps a wrapper in the input map and the same wrapper as
+     * the action. That is why what is registered this way is seen afterwards in
      * {@link #getInputMap}.
      */
     public void registerKeyboardAction(java.awt.event.ActionListener anAction,
             String aCommand, KeyStroke aKeyStroke, int aCondition) {
-        InputMap entrada = getInputMap(aCondition);
-        if (entrada != null) {
-            ActionMap acciones = getActionMap();
-            EnvoltorioDeOyente envoltorio = new EnvoltorioDeOyente(anAction, aCommand);
-            entrada.put(aKeyStroke, envoltorio);
-            acciones.put(envoltorio, envoltorio);
+        InputMap entry = getInputMap(aCondition);
+        if (entry != null) {
+            ActionMap actions = getActionMap();
+            ListenerWrapper wrapper = new ListenerWrapper(anAction, aCommand);
+            entry.put(aKeyStroke, wrapper);
+            actions.put(wrapper, wrapper);
         }
     }
 
@@ -1228,50 +1261,50 @@ public abstract class JComponent extends Container implements Serializable {
         registerKeyboardAction(anAction, null, aKeyStroke, aCondition);
     }
 
-    /** Saca esa tecla de las tres condiciones. */
+    /** It removes that key from the three conditions. */
     public void unregisterKeyboardAction(KeyStroke aKeyStroke) {
-        ActionMap acciones = getActionMap();
+        ActionMap actions = getActionMap();
         for (int i = 0; i < 3; i++) {
-            InputMap entrada = mapasEntrada[i];
-            if (entrada != null) {
-                Object nombre = entrada.get(aKeyStroke);
-                entrada.remove(aKeyStroke);
-                if (nombre != null && acciones != null) {
-                    acciones.remove(nombre);
+            InputMap entry = inputMaps[i];
+            if (entry != null) {
+                Object name = entry.get(aKeyStroke);
+                entry.remove(aKeyStroke);
+                if (name != null && actions != null) {
+                    actions.remove(name);
                 }
             }
         }
     }
 
-    /** Todas las teclas atadas, de las tres condiciones y sin repetir. */
+    /** Every tied key, of the three conditions and without repeating. */
     public KeyStroke[] getRegisteredKeyStrokes() {
-        java.util.ArrayList<KeyStroke> todas = new java.util.ArrayList<KeyStroke>();
+        java.util.ArrayList<KeyStroke> all = new java.util.ArrayList<KeyStroke>();
         for (int i = 0; i < 3; i++) {
-            if (mapasEntrada[i] != null) {
-                KeyStroke[] ks = mapasEntrada[i].allKeys();
+            if (inputMaps[i] != null) {
+                KeyStroke[] ks = inputMaps[i].allKeys();
                 if (ks != null) {
                     for (int j = 0; j < ks.length; j++) {
-                        if (!todas.contains(ks[j])) {
-                            todas.add(ks[j]);
+                        if (!all.contains(ks[j])) {
+                            all.add(ks[j]);
                         }
                     }
                 }
             }
         }
-        return todas.toArray(new KeyStroke[todas.size()]);
+        return all.toArray(new KeyStroke[all.size()]);
     }
 
-    /** En que condicion esta atada esa tecla, o -1. */
+    /** Which condition that key is tied in, or -1. */
     public int getConditionForKeyStroke(KeyStroke aKeyStroke) {
         for (int i = 0; i < 3; i++) {
-            if (mapasEntrada[i] != null && mapasEntrada[i].get(aKeyStroke) != null) {
-                return condicionDeIndice(i);
+            if (inputMaps[i] != null && inputMaps[i].get(aKeyStroke) != null) {
+                return conditionForIndex(i);
             }
         }
         return -1;
     }
 
-    private static int condicionDeIndice(int i) {
+    private static int conditionForIndex(int i) {
         if (i == 0) {
             return WHEN_FOCUSED;
         }
@@ -1281,19 +1314,19 @@ public abstract class JComponent extends Container implements Serializable {
         return WHEN_IN_FOCUSED_WINDOW;
     }
 
-    /** El oyente atado a esa tecla, o nulo. */
+    /** The listener tied to that key, or null. */
     public java.awt.event.ActionListener getActionForKeyStroke(KeyStroke aKeyStroke) {
-        ActionMap acciones = getActionMap();
-        if (acciones == null) {
+        ActionMap actions = getActionMap();
+        if (actions == null) {
             return null;
         }
         for (int i = 0; i < 3; i++) {
-            if (mapasEntrada[i] != null) {
-                Object nombre = mapasEntrada[i].get(aKeyStroke);
-                if (nombre != null) {
-                    Action a = acciones.get(nombre);
-                    if (a instanceof EnvoltorioDeOyente) {
-                        return ((EnvoltorioDeOyente) a).oyente;
+            if (inputMaps[i] != null) {
+                Object name = inputMaps[i].get(aKeyStroke);
+                if (name != null) {
+                    Action a = actions.get(name);
+                    if (a instanceof ListenerWrapper) {
+                        return ((ListenerWrapper) a).listener;
                     }
                     return a;
                 }
@@ -1302,36 +1335,36 @@ public abstract class JComponent extends Container implements Serializable {
         return null;
     }
 
-    /** Vacia las tres tablas de entrada y la de acciones. */
+    /** It empties the three input tables and the action one. */
     public void resetKeyboardActions() {
         for (int i = 0; i < 3; i++) {
-            if (mapasEntrada[i] != null) {
-                mapasEntrada[i].clear();
+            if (inputMaps[i] != null) {
+                inputMaps[i].clear();
             }
         }
-        if (mapaAcciones != null) {
-            mapaAcciones.clear();
+        if (actionMap != null) {
+            actionMap.clear();
         }
     }
 
     /**
-     * Busca esa tecla en la tabla de esa condicion y dispara su accion.
+     * It looks that key up in that condition's table and fires its action.
      *
-     * <p>Devuelve si la atendio. Ese resultado es lo que hace que la tecla no siga viajando hacia
-     * arriba: un atajo que se atendio no tiene que llegar tambien al padre.
+     * <p>It returns whether it attended it. That result is what keeps the key from going on
+     * travelling upwards: a shortcut that was attended must not also reach the parent.
      */
     protected boolean processKeyBinding(KeyStroke ks, java.awt.event.KeyEvent e, int condition,
             boolean pressed) {
-        InputMap entrada = mapasEntrada[indiceDeCondicion(condition)];
-        ActionMap acciones = mapaAcciones;
-        if (entrada == null || acciones == null || !isEnabled()) {
+        InputMap entry = inputMaps[indexForCondition(condition)];
+        ActionMap actions = actionMap;
+        if (entry == null || actions == null || !isEnabled()) {
             return false;
         }
-        Object nombre = entrada.get(ks);
-        if (nombre == null) {
+        Object name = entry.get(ks);
+        if (name == null) {
             return false;
         }
-        Action a = acciones.get(nombre);
+        Action a = actions.get(name);
         if (a == null || !a.isEnabled()) {
             return false;
         }
@@ -1341,30 +1374,30 @@ public abstract class JComponent extends Container implements Serializable {
     }
 
     /**
-     * Una accion que envuelve a un oyente, para la forma vieja de registrar.
+     * An action that wraps a listener, for the old way of registering.
      *
-     * <p>Se usa como clave y como valor en el mapa de acciones: asi cada registro tiene una clave
-     * unica sin inventar nombres que puedan chocar con los del aspecto.
+     * <p>It is used as the key and as the value in the action map: that way each registration has
+     * a unique key without inventing names that might clash with the look and feel's.
      */
-    static class EnvoltorioDeOyente extends AbstractAction {
+    static class ListenerWrapper extends AbstractAction {
 
-        final java.awt.event.ActionListener oyente;
-        private final String comando;
+        final java.awt.event.ActionListener listener;
+        private final String command;
 
-        EnvoltorioDeOyente(java.awt.event.ActionListener oyente, String comando) {
-            this.oyente = oyente;
-            this.comando = comando;
+        ListenerWrapper(java.awt.event.ActionListener listener, String command) {
+            this.listener = listener;
+            this.command = command;
         }
 
         public void actionPerformed(java.awt.event.ActionEvent e) {
-            if (oyente != null) {
-                oyente.actionPerformed(new java.awt.event.ActionEvent(e.getSource(),
-                        e.getID(), comando, e.getModifiers()));
+            if (listener != null) {
+                listener.actionPerformed(new java.awt.event.ActionEvent(e.getSource(),
+                        e.getID(), command, e.getModifiers()));
             }
         }
     }
 
-    /** Quien maneja arrastrar y soltar sobre este componente. */
+    /** Who handles dragging and dropping over this component. */
     public void setTransferHandler(TransferHandler newHandler) {
         TransferHandler oldHandler = transferHandler;
         transferHandler = newHandler;
@@ -1375,15 +1408,15 @@ public abstract class JComponent extends Container implements Serializable {
         return transferHandler;
     }
 
-    /** Si el componente es de Swing y se dibuja sin ventana propia del sistema. */
+    /** Whether the component is Swing's and is drawn with no system window of its own. */
     public static boolean isLightweightComponent(java.awt.Component c) {
         return c.isLightweight();
     }
 
     /**
-     * Si el componente atiende el tabulador el mismo.
+     * Whether the component attends the tab key itself.
      *
-     * @deprecated Lo decide el sistema de foco, no el componente.
+     * @deprecated The focus system decides it, not the component.
      */
     @Deprecated
     public boolean isManagingFocus() {
@@ -1391,9 +1424,9 @@ public abstract class JComponent extends Container implements Serializable {
     }
 
     /**
-     * A quien pasarle el foco con el tabulador.
+     * Who to pass the focus on to with the tab key.
      *
-     * @deprecated Lo decide el sistema de foco.
+     * @deprecated The focus system decides it.
      */
     @Deprecated
     public java.awt.Component getNextFocusableComponent() {
@@ -1401,9 +1434,9 @@ public abstract class JComponent extends Container implements Serializable {
     }
 
     /**
-     * A quien pasarle el foco con el tabulador.
+     * Who to pass the focus on to with the tab key.
      *
-     * @deprecated Ver {@link #getNextFocusableComponent}.
+     * @deprecated See {@link #getNextFocusableComponent}.
      */
     @Deprecated
     public void setNextFocusableComponent(java.awt.Component aComponent) {
@@ -1412,7 +1445,7 @@ public abstract class JComponent extends Container implements Serializable {
         firePropertyChange("nextFocusableComponent", oldValue, aComponent);
     }
 
-    /** Si el menu contextual se hereda del padre cuando este no tiene uno. */
+    /** Whether the context menu is inherited from the parent when this one has none. */
     public void setInheritsPopupMenu(boolean value) {
         boolean oldValue = inheritsPopupMenu;
         inheritsPopupMenu = value;
@@ -1424,21 +1457,21 @@ public abstract class JComponent extends Container implements Serializable {
     }
 
     /**
-     * Donde abrir el menu contextual.
+     * Where to open the context menu.
      *
-     * <p>Nulo significa "donde esta el mouse". Devolver un punto sirve para que el menu de un
-     * renglon de tabla se abra en el renglon y no donde se hizo clic.
+     * <p>Null means "where the mouse is". Returning a point serves so that a table row's menu
+     * opens on the row and not where the click was made.
      */
     public java.awt.Point getPopupLocation(java.awt.event.MouseEvent event) {
         return null;
     }
 
     /**
-     * Le avisa al componente que una de sus tablas de atajos cambio.
+     * It tells the component that one of its shortcut tables changed.
      *
-     * <p>La llama {@link ComponentInputMap}. Aca no hay nada que rehacer todavia porque no existe
-     * la tabla de atajos por ventana; el gancho esta para que la tabla pueda avisar sin saber si
-     * alguien la escucha.
+     * <p>{@link ComponentInputMap} calls it. Here there is nothing to redo yet because the
+     * per-window shortcut table does not exist; the hook is there so that the table can give
+     * notice without knowing whether anybody listens.
      */
     void componentInputMapChanged(ComponentInputMap inputMap) {
     }

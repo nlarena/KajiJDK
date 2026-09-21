@@ -3,36 +3,36 @@ package javax.accessibility;
 import java.awt.Rectangle;
 
 /**
- * Texto accesible que se puede pedir **de a tramos** en vez de de a unidades.
+ * Accessible text that can be asked for **by ranges** instead of by units.
  *
- * <p>La diferencia con {@link AccessibleText} está en lo que devuelve: allá una cadena suelta, acá un
- * {@link AccessibleTextSequence} que además dice **dónde empieza y dónde termina**. Sin eso, quien
- * lee tiene que adivinar la posición del texto que recibió, y con unidades de largo variable eso no
- * se puede.
+ * <p>The difference from {@link AccessibleText} is in what it returns: there a loose string, here
+ * an {@link AccessibleTextSequence} that also says **where it starts and where it ends**. Without
+ * that, whoever reads has to guess the position of the text received, and with units of variable
+ * length that cannot be done.
  *
- * <p>Agrega dos unidades que la otra no tiene: la línea y el "atributo homogéneo", que es el tramo
- * más largo alrededor de una posición que se dibuja todo igual.
+ * <p>It adds two units the other lacks: the line and the "homogeneous attribute", which is the
+ * longest stretch around a position that is all drawn alike.
  */
 public interface AccessibleExtendedText {
 
-    /** La unidad "una línea". */
+    /** The unit "one line". */
     int LINE = 4;
 
-    /** La unidad "un tramo dibujado todo igual". */
+    /** The unit "a stretch all drawn alike". */
     int ATTRIBUTE_RUN = 5;
 
-    /** El texto de ese tramo. */
+    /** The text of that range. */
     String getTextRange(int startIndex, int endIndex);
 
-    /** La unidad que contiene a ese índice, con sus límites. */
+    /** The unit that contains that index, with its bounds. */
     AccessibleTextSequence getTextSequenceAt(int part, int index);
 
-    /** La unidad siguiente, con sus límites. */
+    /** The next unit, with its bounds. */
     AccessibleTextSequence getTextSequenceAfter(int part, int index);
 
-    /** La unidad anterior, con sus límites. */
+    /** The previous unit, with its bounds. */
     AccessibleTextSequence getTextSequenceBefore(int part, int index);
 
-    /** Dónde cae ese tramo en la pantalla. */
+    /** Where that range falls on the screen. */
     Rectangle getTextBounds(int startIndex, int endIndex);
 }

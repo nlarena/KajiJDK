@@ -28,15 +28,17 @@ import javax.management.RuntimeOperationsException;
 import javax.management.ValueExp;
 
 /**
- * Comportamiento de `javax.management`, para correr en las dos VMs y comparar.
+ * Behaviour of `javax.management`, to be run in both VMs and compared.
  *
- * <p>`run()` devuelve -1 si todo pasa, o el indice del primer caso que fallo. Las expectativas se
- * corrieron primero contra el JDK 25 y varias salieron distintas de lo que uno supondria: la cadena
- * vacia como `ObjectName` es `*:*`, un valor citado con `*` adentro <b>si</b> es un patron, y
- * `BadAttributeValueExpException.toString()` dice `BadAttributeValueException`, sin el `Exp`.
+ * <p>`run()` returns -1 if everything passes, or the index of the first case that failed. The
+ * expectations were run against JDK 25 first and several came out differently from what one would
+ * suppose: the empty string as an `ObjectName` is `*:*`, a quoted value with a `*` inside <b>is</b>
+ * a pattern, and `BadAttributeValueExpException.toString()` says `BadAttributeValueException`,
+ * without the `Exp`.
  *
- * <p>No se comparan los mensajes de las `MalformedObjectNameException`, solo que la excepcion sea
- * esa: los textos son detalle de implementacion y compararlos ataria la prueba a una redaccion.
+ * <p>The messages of the `MalformedObjectNameException`s are not compared, only that the exception
+ * is that one: the texts are an implementation detail and comparing them would tie the test to a
+ * wording.
  */
 public class JmxTest {
 
@@ -44,7 +46,7 @@ public class JmxTest {
 
     private static boolean ok;
 
-    private static int fallo;
+    private static int failed;
 
     private static void chk(boolean cond) {
         if (!ok) {
@@ -53,7 +55,7 @@ public class JmxTest {
         }
         if (!cond) {
             ok = false;
-            fallo = n;
+            failed = n;
         }
         n++;
     }
@@ -62,17 +64,17 @@ public class JmxTest {
         chk(a == null ? b == null : a.equals(b));
     }
 
-    /** Que la cadena no se pueda analizar como nombre. */
-    private static void malo(String s) {
-        boolean tiro = false;
+    /** That the string cannot be parsed as a name. */
+    private static void bad(String s) {
+        boolean threw = false;
         try {
             new ObjectName(s);
         } catch (MalformedObjectNameException e) {
-            tiro = true;
+            threw = true;
         } catch (Exception e) {
-            tiro = false;
+            threw = false;
         }
-        chk(tiro);
+        chk(threw);
     }
 
     private static ObjectName on(String s) {
@@ -86,28 +88,28 @@ public class JmxTest {
     public static int run() {
         n = 0;
         ok = true;
-        fallo = -1;
+        failed = -1;
 
-        // ---- ObjectName: forma canonica y orden de las claves --------------------------------
+        // ---- ObjectName: canonical form and order of the keys --------------------------------
         eq(on("d:k=v").getCanonicalName(), "d:k=v");                                     // 0
         eq(on("d:b=2,a=1").getCanonicalName(), "d:a=1,b=2");                             // 1
         eq(on("d:b=2,a=1").toString(), "d:b=2,a=1");                                     // 2
         eq(on("d:b=2,a=1").getKeyPropertyListString(), "b=2,a=1");                       // 3
         eq(on("d:b=2,a=1").getCanonicalKeyPropertyListString(), "a=1,b=2");              // 4
-        // Orden por unidad de codigo: las mayusculas van antes.
+        // Order by code unit: the upper case ones go first.
         eq(on("d:B=2,a=1,C=3").getCanonicalName(), "d:B=2,C=3,a=1");                     // 5
         eq(on("d:aa=1,a=2").getCanonicalName(), "d:a=2,aa=1");                           // 6
         eq(on("d:k=").getCanonicalName(), "d:k=");                                       // 7
         eq(on(":k=v").getDomain(), "");                                                  // 8
 
-        // ---- la cadena vacia es el comodin ---------------------------------------------------
+        // ---- the empty string is the wildcard ------------------------------------------------
         eq(on("").getCanonicalName(), "*:*");                                            // 9
         eq(on("").getDomain(), "*");                                                     // 10
         chk(on("").isPattern() && on("").isDomainPattern());                             // 11
         chk(on("").isPropertyListPattern());                                             // 12
         eq(ObjectName.WILDCARD.getCanonicalName(), "*:*");                               // 13
 
-        // ---- las tres clases de comodin ------------------------------------------------------
+        // ---- the three kinds of wildcard -----------------------------------------------------
         chk(on("*:k=v").isDomainPattern() && !on("*:k=v").isPropertyListPattern());       // 14
         chk(on("d*n:k=v").isDomainPattern());                                            // 15
         chk(on("d?n:k=v").isDomainPattern());                                            // 16
@@ -117,7 +119,7 @@ public class JmxTest {
         chk(on("d:k=a*b").isPropertyValuePattern());                                     // 20
         chk(on("d:k=?").isPropertyValuePattern());                                       // 21
         chk(!on("d:k=v").isPattern());                                                   // 22
-        // El `*` de lista se va al final, este donde este.
+        // The `*` of a list goes to the end, wherever it is.
         eq(on("d:*,k=v").getCanonicalName(), "d:k=v,*");                                 // 23
         eq(on("d:*,k=v").toString(), "d:k=v,*");                                         // 24
         eq(on("d:k=v,*,l=w").getCanonicalName(), "d:k=v,l=w,*");                          // 25
@@ -132,34 +134,34 @@ public class JmxTest {
         }
         chk(iae);                                                                        // 29
 
-        // ---- citar no apaga el comodin; la barra si ------------------------------------------
+        // ---- quoting does not turn the wildcard off; the slash does --------------------------
         chk(on("d:k=\"a*b\"").isPropertyValuePattern());                                 // 30
         chk(!on("d:k=\"a\\*b\"").isPropertyValuePattern());                              // 31
         eq(on("d:k=\"a,b\"").getKeyProperty("k"), "\"a,b\"");                            // 32
         eq(on("d:k=\"\"").getCanonicalName(), "d:k=\"\"");                               // 33
 
-        // ---- nombres invalidos ---------------------------------------------------------------
-        malo("d");                                                                       // 34
-        malo("d:");                                                                      // 35
-        malo("*");                                                                       // 36
-        malo("d:=v");                                                                    // 37
-        malo("d:k=v,k=w");                                                               // 38
-        malo("d:k=v,");                                                                  // 39
-        malo("d:,k=v");                                                                  // 40
-        malo("d:k=v:w");                                                                 // 41
-        malo("d\n:k=v");                                                                 // 42
-        malo("d:k");                                                                     // 43
-        malo("d:k=a\"b");                                                                // 44
-        malo("d:k=\"a");                                                                 // 45
-        malo("d:k=\"a\\zb\"");                                                           // 46
-        malo("d:k=\"a\nb\"");                                                            // 47
-        malo("d:*,*");                                                                   // 48
-        malo("d:*x");                                                                    // 49
-        malo("d:k*x=v");                                                                 // 50
-        malo("d:k?x=v");                                                                 // 51
-        malo("::k=v");                                                                   // 52
+        // ---- invalid names -------------------------------------------------------------------
+        bad("d");                                                                       // 34
+        bad("d:");                                                                      // 35
+        bad("*");                                                                       // 36
+        bad("d:=v");                                                                    // 37
+        bad("d:k=v,k=w");                                                               // 38
+        bad("d:k=v,");                                                                  // 39
+        bad("d:,k=v");                                                                  // 40
+        bad("d:k=v:w");                                                                 // 41
+        bad("d\n:k=v");                                                                 // 42
+        bad("d:k");                                                                     // 43
+        bad("d:k=a\"b");                                                                // 44
+        bad("d:k=\"a");                                                                 // 45
+        bad("d:k=\"a\\zb\"");                                                           // 46
+        bad("d:k=\"a\nb\"");                                                            // 47
+        bad("d:*,*");                                                                   // 48
+        bad("d:*x");                                                                    // 49
+        bad("d:k*x=v");                                                                 // 50
+        bad("d:k?x=v");                                                                 // 51
+        bad("::k=v");                                                                   // 52
 
-        // ---- nombres validos que uno diria que no --------------------------------------------
+        // ---- valid names one would say are not ----------------------------------------------
         eq(on("d:k=v w").getKeyProperty("k"), "v w");                                    // 53
         eq(on("d:k =v").getKeyProperty("k "), "v");                                 // 54
         eq(on("d:k\"x=v").getKeyProperty("k\"x"), "v");                                  // 55
@@ -167,7 +169,7 @@ public class JmxTest {
         eq(on("d,x:k=v").getDomain(), "d,x");                                            // 57
         eq(on("d:k=v,*,").getCanonicalName(), "d:k=v,*");                                // 58
 
-        // ---- identidad -----------------------------------------------------------------------
+        // ---- identity -----------------------------------------------------------------------
         chk(on("d:b=2,a=1").equals(on("d:a=1,b=2")));                                    // 59
         chk(on("d:b=2,a=1").hashCode() == on("d:a=1,b=2").hashCode());                   // 60
         chk(on("d:k=v").hashCode() == "d:k=v".hashCode());                               // 61
@@ -188,7 +190,7 @@ public class JmxTest {
         chk(on("d*:k=v").apply(on("d1:k=v")));                                           // 74
         chk(on("*d:k=v").apply(on("xd:k=v")));                                           // 75
         chk(on("?:k=v").apply(on("d:k=v")));                                             // 76
-        // Un patron nunca designa a otro patron.
+        // A pattern never designates another pattern.
         chk(!on("d:k=v").apply(on("d:*")));                                              // 77
         chk(!on("*:*").apply(on("*:*")));                                                // 78
         chk(on("d:k=\"a*b\"").apply(on("d:k=\"axxb\"")));                                // 79
@@ -208,15 +210,15 @@ public class JmxTest {
         eq(ObjectName.unquote("\"a\\\\b\""), "a\\b");                                    // 91
         eq(ObjectName.unquote("\"a\\*b\""), "a*b");                                      // 92
         eq(ObjectName.unquote("\"\""), "");                                              // 93
-        // unquote es mas estricta que el analizador: aca el `*` sin escapar es error.
-        chk(unquoteMalo("a"));                                                           // 94
-        chk(unquoteMalo("\"a"));                                                         // 95
-        chk(unquoteMalo("\"a\\qb\""));                                                   // 96
-        chk(unquoteMalo("\"a*b\""));                                                     // 97
-        // Lo que sale de quote se puede volver a leer y da lo mismo.
+        // unquote is stricter than the parser: here the unescaped `*` is an error.
+        chk(unquoteBad("a"));                                                           // 94
+        chk(unquoteBad("\"a"));                                                         // 95
+        chk(unquoteBad("\"a\\qb\""));                                                   // 96
+        chk(unquoteBad("\"a*b\""));                                                     // 97
+        // What comes out of quote can be read back and gives the same.
         eq(ObjectName.unquote(ObjectName.quote("a*b?c\"d\\e")), "a*b?c\"d\\e");          // 98
 
-        // ---- constructores partidos ----------------------------------------------------------
+        // ---- split constructors ----------------------------------------------------------
         ObjectName tres = null;
         try {
             tres = new ObjectName("d", "k", "v");
@@ -224,19 +226,19 @@ public class JmxTest {
             chk(false);
         }
         eq(tres == null ? null : tres.getCanonicalName(), "d:k=v");                      // 99
-        chk(patronDeValor("d", "k", "*"));                                               // 100
-        chk(!patronDeValor("d", "k", "v"));                                              // 101
-        chk(dominioMalo("d:x"));                                                         // 102
-        chk(claveMala("d", "k*"));                                                       // 103
+        chk(valuePattern("d", "k", "*"));                                               // 100
+        chk(!valuePattern("d", "k", "v"));                                              // 101
+        chk(badDomain("d:x"));                                                         // 102
+        chk(badKey("d", "k*"));                                                       // 103
 
-        // ---- orden ---------------------------------------------------------------------------
-        chk(signo(on("a:k=v").compareTo(on("b:k=v"))) < 0);                              // 104
+        // ---- order ---------------------------------------------------------------------------
+        chk(sign(on("a:k=v").compareTo(on("b:k=v"))) < 0);                              // 104
         chk(on("d:k=v").compareTo(on("d:k=v")) == 0);                                    // 105
-        chk(signo(on("d:a=1").compareTo(on("d:b=1"))) < 0);                              // 106
-        // La clave `type` pesa mas que el resto de la forma canonica.
-        chk(signo(on("d:type=b,a=9").compareTo(on("d:type=a,a=1"))) > 0);                // 107
+        chk(sign(on("d:a=1").compareTo(on("d:b=1"))) < 0);                              // 106
+        // The `type` key weighs more than the rest of the canonical form.
+        chk(sign(on("d:type=b,a=9").compareTo(on("d:type=a,a=1"))) > 0);                // 107
 
-        // ---- excepciones ---------------------------------------------------------------------
+        // ---- exceptions ---------------------------------------------------------------------
         Exception env = new IllegalStateException("x");
         MBeanException me = new MBeanException(env, "m");
         chk(me.getTargetException() == env && me.getCause() == env);                     // 108
@@ -252,9 +254,9 @@ public class JmxTest {
         RuntimeErrorException ree = new RuntimeErrorException(err);
         chk(ree.getTargetError() == err && ree.getCause() == err);                       // 113
         chk(new AttributeNotFoundException("a") instanceof JMException);                 // 114
-        // Los dos arboles no se tocan: el no verificado no es un JMException.
+        // The two trees do not touch: the unchecked one is not a JMException.
         chk(!JMException.class.isInstance(rme));                                         // 115
-        // Rareza del JDK: dice BadAttributeValueException, sin el `Exp`.
+        // An oddity of the JDK: it says BadAttributeValueException, without the `Exp`.
         eq(new BadAttributeValueExpException("xy").toString(),
            "BadAttributeValueException: xy");                                            // 116
         eq(new BadAttributeValueExpException(null).toString(),
@@ -269,20 +271,20 @@ public class JmxTest {
         chk(at.equals(new Attribute("n", "v")));                                         // 121
         chk(!at.equals(new Attribute("n", null)));                                       // 122
         chk(new Attribute("n", null).hashCode() == "n".hashCode());                      // 123
-        chk(nombreNulo());                                                               // 124
+        chk(nullName());                                                               // 124
         ObjectInstance oi = new ObjectInstance(on("d:k=v"), "C");
         eq(oi.toString(), "C[d:k=v]");                                                   // 125
         chk(oi.hashCode() == (on("d:k=v").hashCode() ^ "C".hashCode()));                 // 126
-        chk(instanciaConPatron());                                                       // 127
+        chk(instanceWithPattern());                                                       // 127
 
-        // ---- descriptores --------------------------------------------------------------------
+        // ---- descriptors --------------------------------------------------------------------
         ImmutableDescriptor d1 = new ImmutableDescriptor(new String[] {"b", "a"},
                                                          new Object[] {"2", "1"});
         eq(d1.toString(), "{a=1, b=2}");                                                 // 128
-        eq(unir(d1.getFieldNames()), "a|b");                                             // 129
-        eq(unir(d1.getFields()), "a=1|b=2");                                             // 130
+        eq(join(d1.getFieldNames()), "a|b");                                             // 129
+        eq(join(d1.getFields()), "a=1|b=2");                                             // 130
         eq(String.valueOf(d1.getFieldValue("a")), "1");                                  // 131
-        // Los nombres no distinguen mayusculas.
+        // The names do not distinguish upper case.
         eq(String.valueOf(d1.getFieldValue("A")), "1");                                  // 132
         chk(d1.getFieldValue("zz") == null);                                             // 133
         chk(d1.equals(new ImmutableDescriptor(new String[] {"a", "b"},
@@ -292,7 +294,7 @@ public class JmxTest {
         eq(ImmutableDescriptor.EMPTY_DESCRIPTOR.toString(), "{}");                       // 137
         eq(ImmutableDescriptor.union(d1, new ImmutableDescriptor("c=3")).toString(),
            "{a=1, b=2, c=3}");                                                           // 138
-        chk(descriptorInmutable(d1));                                                    // 139
+        chk(immutableDescriptor(d1));                                                    // 139
         Object[] vs = d1.getFieldValues("a", "zz");
         chk(vs.length == 2 && "1".equals(vs[0]) && vs[1] == null);                       // 140
 
@@ -334,9 +336,9 @@ public class JmxTest {
                 new MBeanNotificationInfo[] {ni});
         eq(mi.getClassName(), "com.C");                                                  // 153
         chk(mi.getAttributes().length == 1 && mi.getOperations().length == 1);           // 154
-        // Un arreglo nulo se guarda vacio, no nulo.
-        MBeanInfo vacio = new MBeanInfo("com.C", "d", null, null, null, null);
-        chk(vacio.getAttributes().length == 0 && vacio.getNotifications().length == 0);  // 155
+        // A null array is kept empty, not null.
+        MBeanInfo empty = new MBeanInfo("com.C", "d", null, null, null, null);
+        chk(empty.getAttributes().length == 0 && empty.getNotifications().length == 0);  // 155
         eq(mi.getDescriptor().toString(), "{}");                                         // 156
         chk(mi.equals(new MBeanInfo("com.C", "dmi", new MBeanAttributeInfo[] {ai},
                 new MBeanConstructorInfo[] {ci}, new MBeanOperationInfo[] {op},
@@ -351,9 +353,9 @@ public class JmxTest {
         al.add(new Attribute("m", Integer.valueOf(1)));
         eq(al.toString(), "[n = v, m = 1]");                                             // 161
         chk(al.size() == 2 && al.asList().size() == 2);                                  // 162
-        chk(listaContaminada());                                                         // 163
+        chk(taintedList());                                                         // 163
 
-        // ---- notificaciones ------------------------------------------------------------------
+        // ---- notifications ------------------------------------------------------------------
         Notification nt = new Notification("t", "src", 7L, 11L, "msg");
         eq(nt.toString(), "javax.management.Notification[source=src][type=t][message=msg]"); // 164
         chk(nt.getSequenceNumber() == 7L && nt.getTimeStamp() == 11L);                   // 165
@@ -377,7 +379,7 @@ public class JmxTest {
                 + "[type=JMX.mbean.registered][message=][mbeanName=d:k=v]");             // 175
         eq(msn.getMBeanName().getCanonicalName(), "d:k=v");                              // 176
 
-        // ---- Query: la forma textual ---------------------------------------------------------
+        // ---- Query: the text form ------------------------------------------------------------
         eq(Query.value(3).toString(), "3");                                              // 177
         eq(Query.value(3L).toString(), "3");                                             // 178
         eq(Query.value(3.5).toString(), "3.5");                                          // 179
@@ -412,7 +414,7 @@ public class JmxTest {
         eq(Query.minus(Query.value(1), Query.value(2)).toString(), "1 - 2");             // 199
         eq(Query.times(Query.value(3), Query.value(2)).toString(), "3 * 2");             // 200
         eq(Query.div(Query.value(1), Query.value(2)).toString(), "1 / 2");               // 201
-        // Los tres atajos escapan el texto antes de pegarle la estrella.
+        // The three shortcuts escape the text before sticking the star on it.
         eq(Query.initialSubString(Query.attr("a"), Query.value("pre")).toString(),
            "a like 'pre*'");                                                             // 202
         eq(Query.anySubString(Query.attr("a"), Query.value("mid")).toString(),
@@ -421,7 +423,7 @@ public class JmxTest {
            "a like '*suf'");                                                             // 204
         eq(Query.initialSubString(Query.attr("a"), Query.value("a*b")).toString(),
            "a like 'a\\*b*'");                                                           // 205
-        // Los parentesis solo donde hacen falta.
+        // The parentheses only where they are needed.
         eq(Query.plus(Query.value(1), Query.times(Query.value(2), Query.value(3)))
                 .toString(), "1 + 2 * 3");                                               // 206
         eq(Query.times(Query.value(1), Query.plus(Query.value(2), Query.value(3)))
@@ -435,52 +437,52 @@ public class JmxTest {
         eq(Query.PLUS + "/" + Query.MINUS + "/" + Query.TIMES + "/" + Query.DIV,
            "0/1/2/3");                                                                   // 211
 
-        // ---- Query: evaluar sin agente -------------------------------------------------------
-        // Con constantes de los dos lados la consulta se resuelve sola.
-        ObjectName cualquiera = on("d:k=v");
-        chk(aplica(Query.eq(Query.value(1), Query.value(1)), cualquiera));               // 212
-        chk(!aplica(Query.eq(Query.value(1), Query.value(2)), cualquiera));              // 213
-        chk(aplica(Query.gt(Query.value(2), Query.value(1)), cualquiera));               // 214
-        chk(aplica(Query.leq(Query.value(1), Query.value(1)), cualquiera));              // 215
-        // 1 y 1.0 comparan iguales pese a ser de tipos distintos.
-        chk(aplica(Query.eq(Query.value(1), Query.value(1.0)), cualquiera));             // 216
-        chk(aplica(Query.eq(Query.value("a"), Query.value("a")), cualquiera));           // 217
-        chk(aplica(Query.lt(Query.value("a"), Query.value("b")), cualquiera));           // 218
-        chk(aplica(Query.eq(Query.value(true), Query.value(true)), cualquiera));         // 219
-        chk(aplica(Query.between(Query.value(2), Query.value(1), Query.value(3)),
-                   cualquiera));                                                         // 220
-        chk(!aplica(Query.between(Query.value(4), Query.value(1), Query.value(3)),
-                    cualquiera));                                                        // 221
-        // Extremos incluidos.
-        chk(aplica(Query.between(Query.value(1), Query.value(1), Query.value(3)),
-                   cualquiera));                                                         // 222
-        chk(aplica(Query.in(Query.value(2),
-                   new ValueExp[] {Query.value(1), Query.value(2)}), cualquiera));       // 223
-        chk(!aplica(Query.in(Query.value(9),
-                    new ValueExp[] {Query.value(1), Query.value(2)}), cualquiera));      // 224
-        chk(aplica(Query.and(Query.eq(Query.value(1), Query.value(1)),
-                             Query.eq(Query.value(2), Query.value(2))), cualquiera));    // 225
-        chk(!aplica(Query.and(Query.eq(Query.value(1), Query.value(1)),
-                              Query.eq(Query.value(2), Query.value(3))), cualquiera));   // 226
-        chk(aplica(Query.or(Query.eq(Query.value(1), Query.value(9)),
-                            Query.eq(Query.value(2), Query.value(2))), cualquiera));     // 227
-        chk(aplica(Query.not(Query.eq(Query.value(1), Query.value(9))), cualquiera));    // 228
-        // La aritmetica entera se queda entera.
-        eq(evaluar(Query.plus(Query.value(2), Query.value(3)), cualquiera), "5");        // 229
-        eq(evaluar(Query.div(Query.value(7), Query.value(2)), cualquiera), "3");         // 230
-        eq(evaluar(Query.div(Query.value(7.0), Query.value(2)), cualquiera), "3.5");     // 231
-        eq(evaluar(Query.plus(Query.value("a"), Query.value("b")), cualquiera), "'ab'"); // 232
+        // ---- Query: evaluating with no agent --------------------------------------------------
+        // With constants on both sides the query resolves itself.
+        ObjectName anyName = on("d:k=v");
+        chk(applies(Query.eq(Query.value(1), Query.value(1)), anyName));               // 212
+        chk(!applies(Query.eq(Query.value(1), Query.value(2)), anyName));              // 213
+        chk(applies(Query.gt(Query.value(2), Query.value(1)), anyName));               // 214
+        chk(applies(Query.leq(Query.value(1), Query.value(1)), anyName));              // 215
+        // 1 and 1.0 compare equal despite being of different types.
+        chk(applies(Query.eq(Query.value(1), Query.value(1.0)), anyName));             // 216
+        chk(applies(Query.eq(Query.value("a"), Query.value("a")), anyName));           // 217
+        chk(applies(Query.lt(Query.value("a"), Query.value("b")), anyName));           // 218
+        chk(applies(Query.eq(Query.value(true), Query.value(true)), anyName));         // 219
+        chk(applies(Query.between(Query.value(2), Query.value(1), Query.value(3)),
+                   anyName));                                                         // 220
+        chk(!applies(Query.between(Query.value(4), Query.value(1), Query.value(3)),
+                    anyName));                                                        // 221
+        // Both ends included.
+        chk(applies(Query.between(Query.value(1), Query.value(1), Query.value(3)),
+                   anyName));                                                         // 222
+        chk(applies(Query.in(Query.value(2),
+                   new ValueExp[] {Query.value(1), Query.value(2)}), anyName));       // 223
+        chk(!applies(Query.in(Query.value(9),
+                    new ValueExp[] {Query.value(1), Query.value(2)}), anyName));      // 224
+        chk(applies(Query.and(Query.eq(Query.value(1), Query.value(1)),
+                             Query.eq(Query.value(2), Query.value(2))), anyName));    // 225
+        chk(!applies(Query.and(Query.eq(Query.value(1), Query.value(1)),
+                              Query.eq(Query.value(2), Query.value(3))), anyName));   // 226
+        chk(applies(Query.or(Query.eq(Query.value(1), Query.value(9)),
+                            Query.eq(Query.value(2), Query.value(2))), anyName));     // 227
+        chk(applies(Query.not(Query.eq(Query.value(1), Query.value(9))), anyName));    // 228
+        // The integer arithmetic stays integer.
+        eq(evaluate(Query.plus(Query.value(2), Query.value(3)), anyName), "5");        // 229
+        eq(evaluate(Query.div(Query.value(7), Query.value(2)), anyName), "3");         // 230
+        eq(evaluate(Query.div(Query.value(7.0), Query.value(2)), anyName), "3.5");     // 231
+        eq(evaluate(Query.plus(Query.value("a"), Query.value("b")), anyName), "'ab'"); // 232
 
-        return ok ? -1 : fallo;
+        return ok ? -1 : failed;
     }
 
     // ---- ayudantes -----------------------------------------------------------------------------
 
-    private static int signo(int x) {
+    private static int sign(int x) {
         return x < 0 ? -1 : (x > 0 ? 1 : 0);
     }
 
-    private static String unir(String[] a) {
+    private static String join(String[] a) {
         StringBuilder b = new StringBuilder();
         for (int i = 0; i < a.length; i++) {
             if (i > 0) {
@@ -491,7 +493,7 @@ public class JmxTest {
         return b.toString();
     }
 
-    private static boolean unquoteMalo(String s) {
+    private static boolean unquoteBad(String s) {
         try {
             ObjectName.unquote(s);
             return false;
@@ -500,7 +502,7 @@ public class JmxTest {
         }
     }
 
-    private static boolean patronDeValor(String d, String k, String v) {
+    private static boolean valuePattern(String d, String k, String v) {
         try {
             return new ObjectName(d, k, v).isPropertyValuePattern();
         } catch (MalformedObjectNameException e) {
@@ -508,7 +510,7 @@ public class JmxTest {
         }
     }
 
-    private static boolean dominioMalo(String d) {
+    private static boolean badDomain(String d) {
         try {
             new ObjectName(d, "k", "v");
             return false;
@@ -517,7 +519,7 @@ public class JmxTest {
         }
     }
 
-    private static boolean claveMala(String d, String k) {
+    private static boolean badKey(String d, String k) {
         try {
             new ObjectName(d, k, "v");
             return false;
@@ -526,7 +528,7 @@ public class JmxTest {
         }
     }
 
-    private static boolean nombreNulo() {
+    private static boolean nullName() {
         try {
             new Attribute(null, "v");
             return false;
@@ -535,7 +537,7 @@ public class JmxTest {
         }
     }
 
-    private static boolean instanciaConPatron() {
+    private static boolean instanceWithPattern() {
         try {
             new ObjectInstance(new ObjectName("d:*"), "C");
             return false;
@@ -546,7 +548,7 @@ public class JmxTest {
         }
     }
 
-    private static boolean descriptorInmutable(Descriptor d) {
+    private static boolean immutableDescriptor(Descriptor d) {
         try {
             d.setField("z", "1");
             return false;
@@ -555,7 +557,7 @@ public class JmxTest {
         }
     }
 
-    private static boolean listaContaminada() {
+    private static boolean taintedList() {
         AttributeList l = new AttributeList();
         l.add((Object) "no soy un Attribute");
         try {
@@ -566,7 +568,7 @@ public class JmxTest {
         }
     }
 
-    private static boolean aplica(QueryExp q, ObjectName name) {
+    private static boolean applies(QueryExp q, ObjectName name) {
         try {
             return q.apply(name);
         } catch (Exception e) {
@@ -574,7 +576,7 @@ public class JmxTest {
         }
     }
 
-    private static String evaluar(ValueExp v, ObjectName name) {
+    private static String evaluate(ValueExp v, ObjectName name) {
         try {
             return v.apply(name).toString();
         } catch (Exception e) {

@@ -9,61 +9,62 @@ import javax.swing.plaf.ComponentUI;
 import javax.swing.plaf.PanelUI;
 
 /**
- * La interfaz grafica de Panel que reparte cada llamada entre varias.
+ * The Panel look and feel that shares out every call among several.
  *
- * <h2>Que es</h2>
+ * <h2>What it is</h2>
  *
- * <p>Guarda una lista de interfaces graficas de Panel y le pasa cada operacion a todas. Lo que
- * devuelve es lo que contesto la primera, que es la del aspecto principal; las demas se enteran
- * igual, y de eso se trata.
+ * <p>It keeps a list of Panel looks and feels and passes every operation to them all. What it
+ * returns is what the first one answered, which is the main look and feel's; the rest
+ * hear about it all the same, and that is the point.
  *
- * <h2>Para que sirve tener varias</h2>
+ * <h2>What having several is for</h2>
  *
- * <p>Para colgarle a un aspecto grafico otro que no dibuja: un lector de pantalla, un registrador
- * de lo que el usuario hace, una ayuda que sigue al foco. Esos observadores necesitan las mismas
- * llamadas que la interfaz de verdad --instalarse, enterarse de cada dibujo-- y no tienen por que
- * saber que hay otro.
+ * <p>For hanging on a look and feel another one that does not draw: a screen reader, a logger of
+ * what the user does, a help system that follows the focus. Those observers need the same calls as
+ * the real look and feel --to install themselves, to hear about every drawing-- and have no reason
+ * to know that there is another.
  *
- * <p>Sin este mecanismo habria que envolver cada aspecto a mano. Con el, se los enumera en una
- * propiedad y {@link MultiLookAndFeel} arma la lista.
+ * <p>Without this mechanism each look and feel would have to be wrapped by hand. With it, they are
+ * listed in a property and {@link MultiLookAndFeel} builds the list.
  *
- * <h2>Por que la primera manda</h2>
+ * <h2>Why the first one rules</h2>
  *
- * <p>Un metodo devuelve un solo valor y hay varias respuestas. Elegir la primera --y no combinarlas
- * ni quedarse con la ultima-- es lo que hace que el aspecto principal siga mandando: los auxiliares
- * miran, no deciden.
+ * <p>A method returns a single value and there are several answers. Choosing the first --and not
+ * combining them nor keeping the last-- is what keeps the main look and feel in charge: the
+ * auxiliaries watch, they do not decide.
  */
 public class MultiPanelUI extends PanelUI {
 
     /**
-     * Las interfaces graficas que se manejan, en orden.
+     * The looks and feels that are handled, in order.
      *
-     * <p>La primera es la principal. El orden lo fija {@link MultiLookAndFeel#createUIs} y no es un
-     * detalle: es lo que decide quien contesta.
+     * <p>The first one is the main one. The order is fixed by {@link MultiLookAndFeel#createUIs}
+     * and is not a detail: it is what decides who answers.
      */
     protected Vector<ComponentUI> uis = new Vector<ComponentUI>();
 
-    /** Una sin ninguna interfaz; las agrega {@link #createUI}. */
+    /** One with no look and feel; {@link #createUI} adds them. */
     public MultiPanelUI() {
     }
 
     /**
-     * Las interfaces graficas que se manejan.
+     * The looks and feels that are handled.
      *
-     * @return un arreglo nuevo, con la principal primero
+     * @return a new array, with the main one first
      */
     public ComponentUI[] getUIs() {
         return MultiLookAndFeel.uisToArray(uis);
     }
 
     /**
-     * La interfaz grafica para ese componente.
+     * The look and feel for that component.
      *
-     * <p>Devuelve una de estas solo si hay mas de un aspecto configurado. Con uno solo devuelve ese,
-     * sin envolverlo: repartir entre uno no hace falta y costaria una llamada de mas por operacion.
+     * <p>It returns one of these only if there is more than one look and feel configured. With a
+     * single one it returns that one, without wrapping it: sharing out among one is not needed and
+     * would cost one extra call per operation.
      *
-     * @param a el componente
-     * @return la interfaz grafica
+     * @param a the component
+     * @return the look and feel
      */
     public static ComponentUI createUI(JComponent a) {
         MultiPanelUI mui = new MultiPanelUI();
@@ -72,12 +73,12 @@ public class MultiPanelUI extends PanelUI {
 
 
     /**
-     * Si el punto cae dentro del componente.
+     * Whether the point falls inside the component.
      *
-     * @param jComponent el {@code JComponent}
-     * @param i2 el {@code int}
-     * @param i3 el {@code int}
-     * @return lo que haya contestado la primera
+     * @param jComponent the {@code JComponent}
+     * @param i2 the {@code int}
+     * @param i3 the {@code int}
+     * @return whatever the first one answered
      */
     public boolean contains(JComponent jComponent, int i2, int i3) {
         boolean returnValue = ((PanelUI) uis.elementAt(0)).contains(jComponent, i2, i3);
@@ -88,10 +89,10 @@ public class MultiPanelUI extends PanelUI {
     }
 
     /**
-     * Redibuja el fondo y despues el componente.
+     * It redraws the background and then the component.
      *
-     * @param graphics el {@code Graphics}
-     * @param jComponent el {@code JComponent}
+     * @param graphics the {@code Graphics}
+     * @param jComponent the {@code JComponent}
      */
     public void update(Graphics graphics, JComponent jComponent) {
         for (int i = 0; i < uis.size(); i++) {
@@ -100,9 +101,9 @@ public class MultiPanelUI extends PanelUI {
     }
 
     /**
-     * Se instala sobre el componente.
+     * It installs itself on the component.
      *
-     * @param jComponent el {@code JComponent}
+     * @param jComponent the {@code JComponent}
      */
     public void installUI(JComponent jComponent) {
         for (int i = 0; i < uis.size(); i++) {
@@ -111,9 +112,9 @@ public class MultiPanelUI extends PanelUI {
     }
 
     /**
-     * Se desinstala del componente.
+     * It uninstalls itself from the component.
      *
-     * @param jComponent el {@code JComponent}
+     * @param jComponent the {@code JComponent}
      */
     public void uninstallUI(JComponent jComponent) {
         for (int i = 0; i < uis.size(); i++) {
@@ -122,10 +123,10 @@ public class MultiPanelUI extends PanelUI {
     }
 
     /**
-     * Dibuja el componente.
+     * It draws the component.
      *
-     * @param graphics el {@code Graphics}
-     * @param jComponent el {@code JComponent}
+     * @param graphics the {@code Graphics}
+     * @param jComponent the {@code JComponent}
      */
     public void paint(Graphics graphics, JComponent jComponent) {
         for (int i = 0; i < uis.size(); i++) {
@@ -134,10 +135,10 @@ public class MultiPanelUI extends PanelUI {
     }
 
     /**
-     * El tamano que preferiria tener.
+     * The size it would prefer to have.
      *
-     * @param jComponent el {@code JComponent}
-     * @return lo que haya contestado la primera
+     * @param jComponent the {@code JComponent}
+     * @return whatever the first one answered
      */
     public Dimension getPreferredSize(JComponent jComponent) {
         Dimension returnValue = ((PanelUI) uis.elementAt(0)).getPreferredSize(jComponent);
@@ -148,10 +149,10 @@ public class MultiPanelUI extends PanelUI {
     }
 
     /**
-     * El tamano mas chico con el que puede.
+     * The smallest size it can manage with.
      *
-     * @param jComponent el {@code JComponent}
-     * @return lo que haya contestado la primera
+     * @param jComponent the {@code JComponent}
+     * @return whatever the first one answered
      */
     public Dimension getMinimumSize(JComponent jComponent) {
         Dimension returnValue = ((PanelUI) uis.elementAt(0)).getMinimumSize(jComponent);
@@ -162,10 +163,10 @@ public class MultiPanelUI extends PanelUI {
     }
 
     /**
-     * El tamano mas grande que acepta.
+     * The largest size it accepts.
      *
-     * @param jComponent el {@code JComponent}
-     * @return lo que haya contestado la primera
+     * @param jComponent the {@code JComponent}
+     * @return whatever the first one answered
      */
     public Dimension getMaximumSize(JComponent jComponent) {
         Dimension returnValue = ((PanelUI) uis.elementAt(0)).getMaximumSize(jComponent);
@@ -176,10 +177,10 @@ public class MultiPanelUI extends PanelUI {
     }
 
     /**
-     * Cuantos hijos accesibles tiene.
+     * How many accessible children it has.
      *
-     * @param jComponent el {@code JComponent}
-     * @return lo que haya contestado la primera
+     * @param jComponent the {@code JComponent}
+     * @return whatever the first one answered
      */
     public int getAccessibleChildrenCount(JComponent jComponent) {
         int returnValue = ((PanelUI) uis.elementAt(0)).getAccessibleChildrenCount(jComponent);
@@ -190,11 +191,11 @@ public class MultiPanelUI extends PanelUI {
     }
 
     /**
-     * El hijo accesible de esa posicion.
+     * The accessible child at that position.
      *
-     * @param jComponent el {@code JComponent}
-     * @param i2 el {@code int}
-     * @return lo que haya contestado la primera
+     * @param jComponent the {@code JComponent}
+     * @param i2 the {@code int}
+     * @return whatever the first one answered
      */
     public Accessible getAccessibleChild(JComponent jComponent, int i2) {
         Accessible returnValue = ((PanelUI) uis.elementAt(0)).getAccessibleChild(jComponent, i2);

@@ -3,62 +3,63 @@ package com.sun.tools.javac;
 import java.io.PrintWriter;
 
 /**
- * La puerta vieja al compilador.
+ * The old door to the compiler.
  *
- * <h2>Qué es históricamente</h2>
+ * <h2>What it is historically</h2>
  *
- * <p>Antes de que existiera {@link javax.tools.JavaCompiler}, invocar al compilador desde un
- * programa se hacía llamando a esta clase. Quedó por compatibilidad y hoy no es más que una fachada:
- * en el JDK real delega en la misma maquinaria que usa la API moderna. La forma soportada de
- * compilar desde código es {@link javax.tools.ToolProvider#getSystemJavaCompiler}.
+ * <p>Before {@link javax.tools.JavaCompiler} existed, invoking the compiler from a program was
+ * done by calling this class. It was left for compatibility and today it is no more than a
+ * facade: in the real JDK it delegates to the same machinery the modern API uses. The supported
+ * way of compiling from code is {@link javax.tools.ToolProvider#getSystemJavaCompiler}.
  *
- * <h2>Por qué acá no compila nada</h2>
+ * <h2>Why it compiles nothing here</h2>
  *
- * <p>Y no es una carencia que se arregle escribiendo más Java: en este proyecto el compilador
- * <strong>no está escrito en Java</strong>. Es {@code bin/javac.exe}, un binario Rust, y esa
- * decisión es del diseño del proyecto —rompe el bootstrap a propósito— no un paso pendiente.
- * {@link javax.tools.ToolProvider#getSystemJavaCompiler} devuelve {@code null} por lo mismo.
+ * <p>And it is not a lack that is fixed by writing more Java: in this project the compiler
+ * <strong>is not written in Java</strong>. It is {@code bin/javac.exe}, a Rust binary, and that
+ * decision is the project's design -- it breaks the bootstrap on purpose -- not a pending step.
+ * {@link javax.tools.ToolProvider#getSystemJavaCompiler} returns {@code null} for the same
+ * reason.
  *
- * <p>Podría hacerse que estos métodos lancen un proceso externo. No se hace: el contrato de
- * {@code compile} es devolver el código de salida de <em>un</em> compilador, y disparar un
- * subproceso cuya ubicación se adivina daría un resultado que a veces es el correcto y a veces es
- * "no encontré el ejecutable", con el mismo tipo de retorno. El criterio de la casa es que un
- * miembro que falta es un subconjunto legal y uno que miente compila y revienta después; declarar
- * que no se puede es la versión honesta.
+ * <p>These methods could be made to launch an external process. It is not done: the contract of
+ * {@code compile} is to return the exit code of <em>a</em> compiler, and firing a subprocess
+ * whose location is guessed would give a result that is sometimes the right one and sometimes
+ * "I did not find the executable", with the same return type. The house's criterion is that a
+ * member that is missing is a legal subset and one that lies compiles and blows up afterwards;
+ * to declare that it cannot be done is the honest version.
  */
 public class Main {
 
-    /** El JDK también la deja instanciable, aunque no haya nada que instanciar. */
+    /** The JDK also leaves it instantiable, even though there is nothing to instantiate. */
     public Main() {
     }
 
     /**
-     * El punto de entrada de la línea de comandos.
+     * The command line's entry point.
      *
-     * @throws UnsupportedOperationException siempre, en esta VM — ver la nota de la clase
+     * @throws UnsupportedOperationException always, on this VM -- see the class note
      */
     public static void main(String[] args) throws Exception {
         throw new UnsupportedOperationException(
-                "el javac de este proyecto es bin/javac.exe, un binario Rust, no esta clase");
+                "this project's javac is bin/javac.exe, a Rust binary, not this class");
     }
 
     /**
-     * Compila, y devuelve el código que devolvería la línea de comandos.
+     * It compiles, and returns the code the command line would return.
      *
-     * @throws UnsupportedOperationException siempre, en esta VM
+     * @throws UnsupportedOperationException always, on this VM
      */
     public static int compile(String[] args) {
         throw new UnsupportedOperationException(
-                "el javac de este proyecto es bin/javac.exe, un binario Rust, no esta clase");
+                "this project's javac is bin/javac.exe, a Rust binary, not this class");
     }
 
     /**
-     * Igual, mandando los diagnósticos a {@code out} en vez de al error estándar.
+     * The same, sending the diagnostics to {@code out} instead of to the standard error.
      *
-     * @throws UnsupportedOperationException siempre, en esta VM
+     * @throws UnsupportedOperationException always, on this VM
      */
     public static int compile(String[] args, PrintWriter out) {
         throw new UnsupportedOperationException(
-                "el javac de este proyecto es bin/javac.exe, un binario Rust, no esta clase");
+                "this project's javac is bin/javac.exe, a Rust binary, not this class");
     }
 }

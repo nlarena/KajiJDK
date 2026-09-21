@@ -46,7 +46,7 @@ class GenericBeanInfo implements BeanInfo {
         if (r == null) {
             r = this.properties;
         }
-        return copiaP(r);
+        return copyProperties(r);
     }
 
     public EventSetDescriptor[] getEventSetDescriptors() {
@@ -57,7 +57,7 @@ class GenericBeanInfo implements BeanInfo {
         if (r == null) {
             r = this.events;
         }
-        return copiaE(r);
+        return copyEvents(r);
     }
 
     public MethodDescriptor[] getMethodDescriptors() {
@@ -68,7 +68,7 @@ class GenericBeanInfo implements BeanInfo {
         if (r == null) {
             r = this.methods;
         }
-        return copiaM(r);
+        return copyMethods(r);
     }
 
     public int getDefaultPropertyIndex() {
@@ -106,7 +106,7 @@ class GenericBeanInfo implements BeanInfo {
 
     // It is copied on the way out: the cached array cannot be left exposed to the caller sorting it
     // or overwriting it, because the next query would see the damage.
-    private static PropertyDescriptor[] copiaP(PropertyDescriptor[] a) {
+    private static PropertyDescriptor[] copyProperties(PropertyDescriptor[] a) {
         PropertyDescriptor[] r = null;
         if (a != null) {
             r = new PropertyDescriptor[a.length];
@@ -115,7 +115,7 @@ class GenericBeanInfo implements BeanInfo {
         return r;
     }
 
-    private static EventSetDescriptor[] copiaE(EventSetDescriptor[] a) {
+    private static EventSetDescriptor[] copyEvents(EventSetDescriptor[] a) {
         EventSetDescriptor[] r = null;
         if (a != null) {
             r = new EventSetDescriptor[a.length];
@@ -124,7 +124,7 @@ class GenericBeanInfo implements BeanInfo {
         return r;
     }
 
-    private static MethodDescriptor[] copiaM(MethodDescriptor[] a) {
+    private static MethodDescriptor[] copyMethods(MethodDescriptor[] a) {
         MethodDescriptor[] r = null;
         if (a != null) {
             r = new MethodDescriptor[a.length];

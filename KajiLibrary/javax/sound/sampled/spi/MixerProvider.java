@@ -3,25 +3,24 @@ package javax.sound.sampled.spi;
 import javax.sound.sampled.Mixer;
 
 /**
- * KajiLibrary's javax.sound.sampled.spi.MixerProvider -- trae dispositivos de audio.
+ * KajiLibrary's javax.sound.sampled.spi.MixerProvider -- provides audio devices.
  *
- * <p>Lo que implementa quien conecta la plataforma con placas de sonido reales, o quien escribe un
- * mezclador por software. Se registra como servicio y {@code AudioSystem} lo encuentra solo.
+ * <p>What is implemented by whoever connects the platform with real sound cards, or whoever writes
+ * a software mixer. It is registered as a service and {@code AudioSystem} finds it by itself.
  *
- * <p>{@link #getMixer} con null tiene un significado especial: <b>el mezclador por omision</b> de este
- * proveedor. Es lo que permite que {@code AudioSystem.getMixer(null)} funcione sin que nadie tenga que
- * elegir por nombre.
+ * <p>{@link #getMixer} with null has a special meaning: <b>the default mixer</b> of this provider.
+ * It is what lets {@code AudioSystem.getMixer(null)} work without anybody having to choose by name.
  *
- * <p>{@link #isMixerSupported} viene implementado sobre {@link #getMixerInfo}; una subclase no
- * necesita tocarlo.
+ * <p>{@link #isMixerSupported} comes implemented over {@link #getMixerInfo}; a subclass need not
+ * touch it.
  */
 public abstract class MixerProvider {
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected MixerProvider() {
     }
 
-    /** Si este proveedor tiene ese mezclador. */
+    /** Whether this provider has that mixer. */
     public boolean isMixerSupported(Mixer.Info info) {
         Mixer.Info[] all = getMixerInfo();
         int i = 0;
@@ -34,13 +33,13 @@ public abstract class MixerProvider {
         return false;
     }
 
-    /** Los mezcladores que trae. */
+    /** The mixers it provides. */
     public abstract Mixer.Info[] getMixerInfo();
 
     /**
-     * Ese mezclador; null pide el de omision. Ver la nota de la clase.
+     * That mixer; null asks for the default one. See the class note.
      *
-     * @throws IllegalArgumentException si no tiene ninguno asi
+     * @throws IllegalArgumentException if it has none like that
      */
     public abstract Mixer getMixer(Mixer.Info info);
 }

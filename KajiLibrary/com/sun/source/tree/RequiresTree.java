@@ -1,14 +1,14 @@
 package com.sun.source.tree;
 
 /**
- * La directiva `requires` de un modulo, con sus dos banderas.
+ * A module's `requires` directive, with its two flags.
  */
 public interface RequiresTree extends DirectiveTree {
 
-    /** Si el modulo hace falta para compilar pero no para correr. */
+    /** Whether the module is needed in order to compile but not in order to run. */
     boolean isStatic();
 
-    /** Si quien requiera este modulo tambien lee al requerido. */
+    /** Whether whoever requires this module also reads the required one. */
     boolean isTransitive();
 
     ExpressionTree getModuleName();

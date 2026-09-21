@@ -1,41 +1,41 @@
 package jdk.jfr;
 
 /**
- * En que punto de su vida esta una grabacion.
+ * At what point of its life a recording is.
  *
- * <h2>El orden es de ida y no se vuelve</h2>
+ * <h2>The order goes one way and there is no coming back</h2>
  *
- * <p>{@link #NEW} a {@link #RUNNING} a {@link #STOPPED} a {@link #CLOSED}, con {@link #DELAYED}
- * como desvio cuando el arranque quedo programado para mas tarde. No hay camino de vuelta: una
- * grabacion detenida no se puede reanudar.
+ * <p>{@link #NEW} to {@link #RUNNING} to {@link #STOPPED} to {@link #CLOSED}, with {@link #DELAYED}
+ * as a detour when the start was scheduled for later. There is no way back: a stopped recording
+ * cannot be resumed.
  *
- * <p>La razon es el formato del archivo. Una grabacion es una secuencia continua de bloques con sus
- * marcas de tiempo; reanudarla dejaria un agujero en el medio, y una herramienta que la lea no
- * tendria como distinguir ese agujero de un periodo sin actividad. Para seguir grabando se empieza
- * una grabacion nueva.
+ * <p>The reason is the format of the file. A recording is a continuous sequence of blocks with
+ * their time marks; resuming it would leave a hole in the middle, and a tool that read it would
+ * have no way of telling that hole apart from a period with no activity. In order to go on
+ * recording, a new recording is started.
  *
- * <h2>Detenida y cerrada no es lo mismo</h2>
+ * <h2>Stopped and closed are not the same</h2>
  *
- * <p>{@link #STOPPED} ya no graba y <strong>todavia tiene los datos</strong>: se pueden volcar a un
- * archivo o leer como flujo. {@link #CLOSED} los solto. Cerrar sin haber volcado pierde la
- * grabacion, y es el error mas comun con esta API.
+ * <p>{@link #STOPPED} no longer records and <strong>still has the data</strong>: they can be dumped
+ * to a file or read as a stream. {@link #CLOSED} released them. Closing without having dumped loses
+ * the recording, and it is the most common mistake with this API.
  *
  * @since 9
  */
 public enum RecordingState {
 
-    /** Creada y sin arrancar. */
+    /** Created and not started. */
     NEW,
 
-    /** Con arranque programado para un momento futuro. */
+    /** With the start scheduled for a future moment. */
     DELAYED,
 
     /** Grabando. */
     RUNNING,
 
-    /** Detenida, con los datos todavia disponibles. */
+    /** Stopped, with the data still available. */
     STOPPED,
 
-    /** Cerrada; los datos ya se soltaron. */
+    /** Closed; the data have already been released. */
     CLOSED
 }

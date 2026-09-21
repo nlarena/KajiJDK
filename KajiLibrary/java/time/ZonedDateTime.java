@@ -13,18 +13,17 @@ import java.time.temporal.ValueRange;
 import java.time.format.DateTimeFormatter;
 import java.time.zone.ZoneRulesException;
 
-// KajiLibrary's java.time.ZonedDateTime -- una fecha y hora con zona, guardada como un
-// `LocalDateTime`, el `ZoneOffset` resuelto, y el `ZoneId`.
+// KajiLibrary's java.time.ZonedDateTime -- a date and time with a zone, kept as a
+// `LocalDateTime`, the resolved `ZoneOffset`, and the `ZoneId`.
 //
-// **Solo se admiten zonas de desplazamiento fijo.** Las de region --`America/Argentina/Buenos_Aires`--
-// necesitan las reglas de transicion de la base IANA, que es una pared de datos y no de codigo:
-// `ZoneId.of` las rechaza. La consecuencia visible es que aca no hay horario de verano, y por lo
-// tanto no hay huecos ni solapamientos: los dos `*OffsetAtOverlap` devuelven `this` y estan
-// documentados como tales.
+// **Only fixed-offset zones are accepted.** The regional ones --`America/Argentina/Buenos_Aires`--
+// need the IANA database's transition rules, which is a wall of data and not of code: `ZoneId.of`
+// rejects them. The visible consequence is that there is no daylight saving here, and therefore no
+// gaps and no overlaps: both `*OffsetAtOverlap` return `this` and are documented as doing so.
 //
-// Lo que **no** cambia es la forma: la aritmetica reresuelve el desplazamiento contra la zona en cada
-// operacion, aunque hoy siempre de el mismo. El dia que haya reglas de verdad, el lugar donde
-// entran es `con(...)` y `ZonedDateTime.of`, y nada de lo de arriba se entera.
+// What does **not** change is the shape: the arithmetic re-resolves the offset against the zone on
+// every operation, even though today it always gives the same one. The day there are real rules, the
+// place they enter is `resolveLocal(...)` and `ZonedDateTime.of`, and nothing above finds out.
 public final class ZonedDateTime
         implements Temporal, TemporalAdjuster, java.time.chrono.ChronoZonedDateTime, Serializable {
 
@@ -72,7 +71,7 @@ public final class ZonedDateTime
         return ofInstant(Instant.now(), ZoneOffset.UTC);
     }
 
-    /** Ahora, en `zone`. */
+    /** Now, in `zone`. */
     public static ZonedDateTime now(ZoneId zone) {
         if (zone == null) {
             throw new NullPointerException("zone");
@@ -81,32 +80,32 @@ public final class ZonedDateTime
     }
 
     /**
-     * Ahora **segun `clock`**, y en la zona del reloj.
+     * Now **according to `clock`**, and in the clock's zone.
      *
-     * <p>La forma que se puede probar: un `Clock.fixed` hace que esto devuelva siempre lo mismo, que
-     * es la unica manera de escribir una prueba sobre codigo que mira la hora.
+     * <p>The testable form: a `Clock.fixed` makes this always return the same thing, which is the
+     * only way of writing a test over code that looks at the time.
      */
     public static ZonedDateTime now(Clock clock) {
         if (clock == null) {
             throw new NullPointerException("clock");
         }
-        // Ligados a locales: la llamada encadenada por un intermedio de tipo interfaz se pierde (#108).
-        Instant ahora = clock.instant();
-        ZoneId zona = clock.getZone();
-        return ofInstant(ahora, zona);
+        // Bound to locals: a call chained through an interface-typed intermediate gets lost (#108).
+        Instant now = clock.instant();
+        ZoneId zone = clock.getZone();
+        return ofInstant(now, zone);
     }
 
-    /** La fecha y la hora por separado. */
+    /** The date and the time separately. */
     public static ZonedDateTime of(LocalDate date, LocalTime time, ZoneId zone) {
         return of(LocalDateTime.of(date, time), zone);
     }
 
     /**
-     * El instante que designan `dateTime` **leidos con `offset`**, visto desde `zone`.
+     * The instant `dateTime` names **read with `offset`**, seen from `zone`.
      *
-     * <p>Los dos primeros argumentos dicen *que instante es*; el tercero, *como mostrarlo*. Si el
-     * desplazamiento de la zona no es el mismo, el resultado tiene otra fecha y hora locales que las
-     * que se pasaron, y eso es lo correcto: el instante manda.
+     * <p>The first two arguments say *which instant it is*; the third, *how to show it*. If the
+     * zone's offset is not the same, the result has a local date and time other than the ones passed
+     * in, and that is right: the instant rules.
      */
     public static ZonedDateTime ofInstant(LocalDateTime dateTime, ZoneOffset offset, ZoneId zone) {
         if (dateTime == null) {
@@ -119,23 +118,23 @@ public final class ZonedDateTime
     }
 
     /**
-     * La fecha y hora locales en `zone`, con `preferredOffset` para desempatar un solapamiento.
+     * The local date and time in `zone`, with `preferredOffset` to break an overlap's tie.
      *
-     * <p>Aca no hay solapamientos --las zonas son de desplazamiento fijo-- asi que el preferido no
-     * llega nunca a decidir nada y el desplazamiento sale de la zona. Se admite `null`, como en el
-     * JDK. Ver la nota de la clase.
+     * <p>There are no overlaps here --the zones are fixed-offset-- so the preferred one never gets to
+     * decide anything and the offset comes from the zone. `null` is accepted, as in the JDK. See the
+     * class's note.
      */
     public static ZonedDateTime ofLocal(LocalDateTime localDateTime, ZoneId zone, ZoneOffset preferredOffset) {
         return of(localDateTime, zone);
     }
 
     /**
-     * Los tres, **exigiendo que sean coherentes**: si `offset` no es un desplazamiento valido de
-     * `zone` para esa fecha y hora, tira en vez de corregir.
+     * All three, **demanding that they agree**: if `offset` is not a valid offset of `zone` for that
+     * date and time, it throws instead of correcting.
      *
-     * <p>Es la version estricta de {@link #ofInstant(LocalDateTime, ZoneOffset, ZoneId)}, que ante lo
-     * mismo se queda con el instante y cambia la hora local. Cual de las dos se quiere depende de si
-     * los datos vienen de una fuente en la que se confia.
+     * <p>It is the strict version of {@link #ofInstant(LocalDateTime, ZoneOffset, ZoneId)}, which
+     * given the same thing keeps the instant and changes the local time. Which of the two is wanted
+     * depends on whether the data comes from a source that is trusted.
      */
     public static ZonedDateTime ofStrict(LocalDateTime localDateTime, ZoneOffset offset, ZoneId zone) {
         if (localDateTime == null) {
@@ -144,8 +143,8 @@ public final class ZonedDateTime
         if (offset == null) {
             throw new NullPointerException("offset");
         }
-        ZoneOffset valido = resolveOffset(zone);
-        if (!offset.equals(valido)) {
+        ZoneOffset valid = resolveOffset(zone);
+        if (!offset.equals(valid)) {
             throw new java.time.DateTimeException("ZoneOffset '" + offset
                     + "' is not valid for ZoneId '" + zone.getId() + "'");
         }
@@ -153,32 +152,32 @@ public final class ZonedDateTime
     }
 
     /**
-     * Parsea la forma ISO: `2007-12-03T10:15:30+01:00`, con `[zona]` opcional al final.
+     * It parses the ISO form: `2007-12-03T10:15:30+01:00`, with an optional `[zone]` at the end.
      *
-     * <p>El corchete existe porque el desplazamiento **no alcanza** para recuperar la zona: `+01:00`
-     * puede ser Paris o Lagos, y se comportan distinto seis meses despues. Aca solo se admiten zonas
-     * de desplazamiento fijo, asi que un `[Europe/Paris]` lo rechaza `ZoneId.of` con su propio
-     * mensaje, que dice exactamente lo que falta.
+     * <p>The bracket exists because the offset is **not enough** to recover the zone: `+01:00` may be
+     * Paris or Lagos, and they behave differently six months later. Only fixed-offset zones are
+     * accepted here, so a `[Europe/Paris]` is rejected by `ZoneId.of` with its own message, which
+     * says exactly what is missing.
      */
     public static ZonedDateTime parse(CharSequence text) {
         if (text == null) {
             throw new NullPointerException("text");
         }
         String s = text.toString();
-        String zonaEntre = null;
-        int abre = s.indexOf('[');
-        if (abre >= 0) {
+        String zoneBetween = null;
+        int open = s.indexOf('[');
+        if (open >= 0) {
             if (s.charAt(s.length() - 1) != ']') {
                 throw new java.time.format.DateTimeParseException(
-                        "Text '" + s + "' could not be parsed: unclosed zone region", text, abre);
+                        "Text '" + s + "' could not be parsed: unclosed zone region", text, open);
             }
-            zonaEntre = s.substring(abre + 1, s.length() - 1);
-            s = s.substring(0, abre);
+            zoneBetween = s.substring(open + 1, s.length() - 1);
+            s = s.substring(0, open);
         }
         OffsetDateTime odt = OffsetDateTime.parse(s);
         ZoneOffset off = odt.getOffset();
-        ZoneId zona = zonaEntre == null ? off : ZoneId.of(zonaEntre);
-        return ofStrict(odt.toLocalDateTime(), off, zona);
+        ZoneId zone = zoneBetween == null ? off : ZoneId.of(zoneBetween);
+        return ofStrict(odt.toLocalDateTime(), off, zone);
     }
 
     public LocalDateTime toLocalDateTime() {
@@ -251,18 +250,18 @@ public final class ZonedDateTime
         return this.dateTime.getMonth();
     }
 
-    // ---- los dos `withZone`, y los dos del solapamiento ------------------------------------------
+    // ---- the two `withZone`, and the two of the overlap ------------------------------------------
     //
-    // Cuatro metodos que existen por una sola razon: **una fecha y hora local no siempre designa un
-    // instante unico**. Cuando el reloj se atrasa por el fin del horario de verano, la hora que se
-    // repite ocurre dos veces; cuando se adelanta, hay una hora que no ocurre.
+    // Four methods that exist for a single reason: **a local date and time does not always name a
+    // unique instant**. When the clock goes back at the end of daylight saving, the hour that repeats
+    // happens twice; when it goes forward, there is an hour that does not happen.
     //
-    // En esta biblioteca las zonas son de desplazamiento **fijo** --las de region necesitan la base
-    // de datos IANA-- asi que no hay solapamientos ni huecos, y los dos `*OffsetAtOverlap` devuelven
-    // `this`. Estan igual, y con esta nota, porque la firma es parte del contrato y porque el dia que
-    // haya reglas de verdad este es el lugar donde se implementan.
+    // In this library the zones are **fixed**-offset --the regional ones need the IANA database-- so
+    // there are no overlaps and no gaps, and both `*OffsetAtOverlap` return `this`. They are here all
+    // the same, and with this note, because the signature is part of the contract and because the day
+    // there are real rules this is where they are implemented.
 
-    /** Otra zona, **la misma fecha y hora escritas**. Es otro instante. */
+    /** Another zone, **the same date and time as written**. It is another instant. */
     public ZonedDateTime withZoneSameLocal(ZoneId zone) {
         if (zone == null) {
             throw new NullPointerException("zone");
@@ -270,7 +269,7 @@ public final class ZonedDateTime
         return zone.equals(this.zone) ? this : ZonedDateTime.of(this.dateTime, zone);
     }
 
-    /** Otra zona, **el mismo instante**: la fecha y hora se corrigen. */
+    /** Another zone, **the same instant**: the date and time are corrected. */
     public ZonedDateTime withZoneSameInstant(ZoneId zone) {
         if (zone == null) {
             throw new NullPointerException("zone");
@@ -279,76 +278,77 @@ public final class ZonedDateTime
     }
 
     /**
-     * Esta misma fecha y hora con la zona reducida a su desplazamiento.
+     * This same date and time with the zone reduced to its offset.
      *
-     * <p>Sirve para congelar el momento: un `ZonedDateTime` de zona con reglas puede cambiar de
-     * desplazamiento si las reglas cambian, y este no.
+     * <p>It serves to freeze the moment: a `ZonedDateTime` of a zone with rules can change offset if
+     * the rules change, and this one cannot.
      */
     public ZonedDateTime withFixedOffsetZone() {
         return this.zone.equals(this.offset) ? this : ZonedDateTime.of(this.dateTime, this.offset);
     }
 
     /**
-     * En un solapamiento, el **primero** de los dos instantes posibles.
+     * In an overlap, the **first** of the two possible instants.
      *
-     * <p>Devuelve `this`: las zonas de esta biblioteca son de desplazamiento fijo, asi que no hay
-     * solapamientos. Ver la nota de arriba.
+     * <p>It returns `this`: this library's zones are fixed-offset, so there are no overlaps. See the
+     * note above.
      */
     public ZonedDateTime withEarlierOffsetAtOverlap() {
         return this;
     }
 
-    /** El **segundo**. Ver la nota de arriba. */
+    /** The **second**. See the note above. */
     public ZonedDateTime withLaterOffsetAtOverlap() {
         return this;
     }
 
-    // ---- `with*` de campo -----------------------------------------------------------------------
+    // ---- the per-field `with*` -----------------------------------------------------------------
 
     public ZonedDateTime withYear(int year) {
-        return this.con(this.dateTime.withYear(year));
+        return this.resolveLocal(this.dateTime.withYear(year));
     }
 
     public ZonedDateTime withMonth(int month) {
-        return this.con(this.dateTime.withMonth(month));
+        return this.resolveLocal(this.dateTime.withMonth(month));
     }
 
     public ZonedDateTime withDayOfMonth(int dayOfMonth) {
-        return this.con(this.dateTime.withDayOfMonth(dayOfMonth));
+        return this.resolveLocal(this.dateTime.withDayOfMonth(dayOfMonth));
     }
 
     public ZonedDateTime withDayOfYear(int dayOfYear) {
-        return this.con(this.dateTime.withDayOfYear(dayOfYear));
+        return this.resolveLocal(this.dateTime.withDayOfYear(dayOfYear));
     }
 
     public ZonedDateTime withHour(int hour) {
-        return this.con(this.dateTime.withHour(hour));
+        return this.resolveLocal(this.dateTime.withHour(hour));
     }
 
     public ZonedDateTime withMinute(int minute) {
-        return this.con(this.dateTime.withMinute(minute));
+        return this.resolveLocal(this.dateTime.withMinute(minute));
     }
 
     public ZonedDateTime withSecond(int second) {
-        return this.con(this.dateTime.withSecond(second));
+        return this.resolveLocal(this.dateTime.withSecond(second));
     }
 
     public ZonedDateTime withNano(int nanoOfSecond) {
-        return this.con(this.dateTime.withNano(nanoOfSecond));
+        return this.resolveLocal(this.dateTime.withNano(nanoOfSecond));
     }
 
     public ZonedDateTime truncatedTo(TemporalUnit unit) {
-        return this.con(this.dateTime.truncatedTo(unit));
+        return this.resolveLocal(this.dateTime.truncatedTo(unit));
     }
 
-    // Rehace el objeto con otra fecha y hora local, **reresolviendo** el desplazamiento contra la
-    // zona. Con zonas fijas da el mismo; con reglas de verdad es donde el horario de verano entra.
-    private ZonedDateTime con(LocalDateTime nuevo) {
-        return nuevo.equals(this.dateTime) ? this : ZonedDateTime.of(nuevo, this.zone);
+    // It remakes the object with another local date and time, **re-resolving** the offset against
+    // the zone. With fixed zones it gives the same one; with real rules this is where daylight saving
+    // enters.
+    private ZonedDateTime resolveLocal(LocalDateTime newOne) {
+        return newOne.equals(this.dateTime) ? this : ZonedDateTime.of(newOne, this.zone);
     }
 
     public ZonedDateTime plusNanos(long nanos) {
-        return this.con(this.dateTime.plusNanos(nanos));
+        return this.resolveLocal(this.dateTime.plusNanos(nanos));
     }
 
     public ZonedDateTime minusNanos(long nanos) {
@@ -356,7 +356,7 @@ public final class ZonedDateTime
     }
 
     public ZonedDateTime plus(long amountToAdd, TemporalUnit unit) {
-        return this.con(this.dateTime.plus(amountToAdd, unit));
+        return this.resolveLocal(this.dateTime.plus(amountToAdd, unit));
     }
 
     public ZonedDateTime minus(long amountToSubtract, TemporalUnit unit) {
@@ -382,13 +382,13 @@ public final class ZonedDateTime
             throw new NullPointerException("adjuster");
         }
         if (adjuster instanceof LocalDateTime) {
-            return this.con((LocalDateTime) adjuster);
+            return this.resolveLocal((LocalDateTime) adjuster);
         }
         if (adjuster instanceof LocalDate) {
-            return this.con(LocalDateTime.of((LocalDate) adjuster, this.dateTime.toLocalTime()));
+            return this.resolveLocal(LocalDateTime.of((LocalDate) adjuster, this.dateTime.toLocalTime()));
         }
         if (adjuster instanceof LocalTime) {
-            return this.con(LocalDateTime.of(this.dateTime.toLocalDate(), (LocalTime) adjuster));
+            return this.resolveLocal(LocalDateTime.of(this.dateTime.toLocalDate(), (LocalTime) adjuster));
         }
         if (adjuster instanceof ZonedDateTime) {
             return (ZonedDateTime) adjuster;
@@ -401,7 +401,7 @@ public final class ZonedDateTime
             throw new NullPointerException("field");
         }
         if (field == ChronoField.OFFSET_SECONDS) {
-            // Cambiar el desplazamiento de una zona fija es cambiar la zona.
+            // Changing a fixed zone's offset is changing the zone.
             return ZonedDateTime.of(this.dateTime, ZoneOffset.ofTotalSeconds(
                     (int) ChronoField.OFFSET_SECONDS.checkValidValue(newValue)));
         }
@@ -410,7 +410,7 @@ public final class ZonedDateTime
                     Instant.ofEpochSecond(newValue, (long) this.getNano()), this.zone);
         }
         if (field instanceof ChronoField) {
-            return this.con(this.dateTime.with(field, newValue));
+            return this.resolveLocal(this.dateTime.with(field, newValue));
         }
         return (ZonedDateTime) field.adjustInto(this, newValue);
     }
@@ -456,14 +456,14 @@ public final class ZonedDateTime
                 .with(ChronoField.OFFSET_SECONDS, this.offset.getTotalSeconds());
     }
 
-    /** Cuantas `unit` hay hasta `endExclusive`, llevandolo antes a **esta** zona. */
+    /** How many `unit` there are to `endExclusive`, bringing it into **this** zone first. */
     public long until(Temporal endExclusive, TemporalUnit unit) {
-        ZonedDateTime fin = ZonedDateTime.from(endExclusive);
-        fin = fin.withZoneSameInstant(this.zone);
-        return this.dateTime.until(fin.dateTime, unit);
+        ZonedDateTime end = ZonedDateTime.from(endExclusive);
+        end = end.withZoneSameInstant(this.zone);
+        return this.dateTime.until(end.dateTime, unit);
     }
 
-    /** La fecha y hora con zona que `temporal` tiene. */
+    /** The zoned date and time `temporal` holds. */
     public static ZonedDateTime from(TemporalAccessor temporal) {
         if (temporal == null) {
             throw new NullPointerException("temporal");
@@ -546,11 +546,11 @@ public final class ZonedDateTime
 
     // --- TemporalAccessor (field access delegates to the local date-time) ---
 
-    // Los dos campos que **son de la zona y no de la fecha**: el desplazamiento, y el segundo del
-    // epoch. Antes los tres metodos delegaban entero en el `LocalDateTime`, que no los tiene, asi que
-    // pedirlos tiraba. El sintoma no era obvio: `formatter.format(zdt)` con un patron que llevara
-    // `X` fallaba con un `IllegalArgumentException` sin mensaje, y desde afuera parecia un problema
-    // del formateador. Lo encontro `FmtTest`, formateando una fecha con zona.
+    // The two fields that **belong to the zone and not to the date**: the offset, and the epoch
+    // second. The three methods used to delegate entirely to the `LocalDateTime`, which does not have
+    // them, so asking for them threw. The symptom was not obvious: `formatter.format(zdt)` with a
+    // pattern carrying an `X` failed with a message-less `IllegalArgumentException`, and from outside
+    // it looked like a problem of the formatter's. `FmtTest` found it, formatting a zoned date.
     public boolean isSupported(TemporalField field) {
         if (field == ChronoField.OFFSET_SECONDS || field == ChronoField.INSTANT_SECONDS) {
             return true;
@@ -570,8 +570,9 @@ public final class ZonedDateTime
 
     public int get(TemporalField field) {
         if (field == ChronoField.INSTANT_SECONDS) {
-            // No entra en un `int` y truncarlo daria un numero plausible y equivocado, que es lo
-            // peor que puede pasar aca. El JDK tira, y con el mismo mensaje.
+            // It does not fit in an `int` and truncating it would give a plausible and wrong
+            // number, which is the worst thing that can happen here. The JDK throws, with the same
+            // message.
             throw new java.time.temporal.UnsupportedTemporalTypeException(
                     "Invalid field 'InstantSeconds' for get() method, use getLong() instead");
         }
@@ -623,21 +624,21 @@ public final class ZonedDateTime
     }
 
     /**
-     * Lee `text` con ese formateador.
+     * It reads `text` with that formatter.
      *
-     * <p>El que decide que campos hay es el formateador; esta clase solo dice **cual de ellos
-     * quiere**, pasando su propio `from`. Por eso un patron que no traiga fecha, hora y zona
-     * falla aca y no al usar el resultado.
+     * <p>The one that decides which fields are there is the formatter; this class only says
+     * **which of them it wants**, by passing its own `from`. That is why a pattern that brings no date, time and zone
+     * fails here and not when the result is used.
      *
-     * @throws java.time.format.DateTimeParseException si el texto no encaja con el patron, o si lo
-     *     que encaja no alcanza para una fecha y hora con zona
+     * @throws java.time.format.DateTimeParseException if the text does not fit the pattern, or what
+     *     fits is not enough for a zoned date and time
      */
     public static ZonedDateTime parse(CharSequence text, java.time.format.DateTimeFormatter formatter) {
         if (formatter == null) {
             throw new NullPointerException("formatter");
         }
-        // Ligado a una local: encadenar por un intermedio de tipo interfaz se pierde (#108).
-        java.time.temporal.TemporalQuery<ZonedDateTime> consulta = ZonedDateTime::from;
-        return formatter.parse(text, consulta);
+        // Bound to a local: chaining through an interface-typed intermediate gets lost (#108).
+        java.time.temporal.TemporalQuery<ZonedDateTime> queryOf = ZonedDateTime::from;
+        return formatter.parse(text, queryOf);
     }
 }

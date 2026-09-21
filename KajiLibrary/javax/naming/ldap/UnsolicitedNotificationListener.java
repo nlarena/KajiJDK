@@ -3,14 +3,14 @@ package javax.naming.ldap;
 import javax.naming.event.NamingListener;
 
 /**
- * Quien quiere enterarse de las {@link UnsolicitedNotification}.
+ * Whoever wants to hear about {@link UnsolicitedNotification}s.
  *
- * <p>Extiende {@link NamingListener} para entrar en el mismo registro de oyentes que el resto de
- * {@code javax.naming.event}, y de ahi hereda el manejo de errores: un fallo del oyente llega por
- * {@code namingExceptionThrown}, no por este metodo.
+ * <p>It extends {@link NamingListener} to enter the same listener registry as the rest of
+ * {@code javax.naming.event}, and from there it inherits the error handling: a failure of the
+ * subscription arrives through {@code namingExceptionThrown}, not through this method.
  */
 public interface UnsolicitedNotificationListener extends NamingListener {
 
-    /** Llego una notificacion. */
+    /** A notification arrived. */
     void notificationReceived(UnsolicitedNotificationEvent evt);
 }

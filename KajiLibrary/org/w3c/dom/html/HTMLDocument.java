@@ -4,74 +4,74 @@ import org.w3c.dom.Document;
 import org.w3c.dom.NodeList;
 
 /**
- * Un documento HTML: la raiz, mas los atajos que HTML agrega sobre un `Document`.
+ * An HTML document: the root, plus the shortcuts HTML adds over a `Document`.
  *
- * <p>Las colecciones que devuelve --`getImages`, `getLinks`, `getForms`, `getAnchors`,
- * `getApplets`-- son **vivas**: reflejan el documento en el momento en que se las consulta, no una
- * foto de cuando se las pidio. Agregar un `<img>` cambia lo que `getImages().getLength()` contesta
- * sin volver a llamarlo. Es la misma regla que en `NodeList` y es lo que hace que guardarse una
- * coleccion sea barato y a la vez peligroso si uno itera mientras modifica.
+ * <p>The collections it returns --`getImages`, `getLinks`, `getForms`, `getAnchors`,
+ * `getApplets`-- are **live**: they reflect the document at the moment they are queried, not a
+ * snapshot of when they were asked for. Adding an `<img>` changes what `getImages().getLength()`
+ * answers without calling it again. It is the same rule as in `NodeList` and it is what makes
+ * keeping a collection cheap and at the same time dangerous if one iterates while modifying.
  *
- * <p>`open`, `close`, `write` y `writeln` son la interfaz del `document.write` de los navegadores:
- * escribir sobre un documento ya cargado lo **reemplaza** en vez de agregarle. Estan en la API
- * porque el DOM Nivel 1 de HTML las define; lo que hagan depende de la implementacion.
+ * <p>`open`, `close`, `write` and `writeln` are the interface of the browsers' `document.write`:
+ * writing over an already loaded document **replaces** it instead of adding to it. They are in the
+ * API because DOM Level 1 HTML defines them; what they do depends on the implementation.
  */
 public interface HTMLDocument extends Document {
 
-    /** El atributo `title`. */
+    /** The `title` attribute. */
     String getTitle();
 
-    /** Fija el atributo `title`. */
+    /** It sets the `title` attribute. */
     void setTitle(String title);
 
-    /** La URI de la que se llego a este documento, o la cadena vacia. */
+    /** The URI this document was reached from, or the empty string. */
     String getReferrer();
 
-    /** El dominio del servidor que sirvio el documento, o la cadena vacia. */
+    /** The domain of the server that served the document, or the empty string. */
     String getDomain();
 
-    /** El atributo `uRL`. */
+    /** The complete URI of the document. */
     String getURL();
 
-    /** El `<body>`, o el `<frameset>` si el documento tiene marcos. */
+    /** The `<body>`, or the `<frameset>` if the document has frames. */
     HTMLElement getBody();
 
-    /** Fija el `<body>`, o el `<frameset>` si el documento tiene marcos. */
+    /** It sets the `<body>`, or the `<frameset>` if the document has frames. */
     void setBody(HTMLElement body);
 
-    /** Los `<img>` del documento, en una coleccion viva. */
+    /** The `<img>`s of the document, in a live collection. */
     HTMLCollection getImages();
 
-    /** Los `<applet>` y los `<object>` que son applets, en una coleccion viva. */
+    /** The `<applet>`s and the `<object>`s that are applets, in a live collection. */
     HTMLCollection getApplets();
 
-    /** Los `<a>` y `<area>` con `href`, en una coleccion viva. */
+    /** The `<a>`s and `<area>`s with an `href`, in a live collection. */
     HTMLCollection getLinks();
 
-    /** Los `<form>` del documento, en una coleccion viva. */
+    /** The `<form>`s of the document, in a live collection. */
     HTMLCollection getForms();
 
-    /** Los `<a>` con `name`, en una coleccion viva. */
+    /** The `<a>`s with a `name`, in a live collection. */
     HTMLCollection getAnchors();
 
-    /** Las cookies del documento, en el formato de la cabecera `Cookie`. */
+    /** The cookies of the document, in the format of the `Cookie` header. */
     String getCookie();
 
-    /** Fija las cookies del documento, en el formato de la cabecera `Cookie`. */
+    /** It sets the cookies of the document, in the format of the `Cookie` header. */
     void setCookie(String cookie);
 
-    /** Abre el documento para escribir. Lo que hubiera se descarta. */
+    /** It opens the document for writing. Whatever was there is discarded. */
     void open();
 
-    /** Cierra el flujo abierto por {@link #open}. */
+    /** It closes the stream opened by {@link #open}. */
     void close();
 
-    /** Escribe ese texto en el documento abierto. */
+    /** It writes that text into the open document. */
     void write(String text);
 
-    /** Como {@link #write}, mas un fin de linea. */
+    /** Like {@link #write}, plus an end of line. */
     void writeln(String text);
 
-    /** El atributo `elementsByName`. */
+    /** The elements whose `name` is `elementName`. */
     NodeList getElementsByName(String elementName);
 }

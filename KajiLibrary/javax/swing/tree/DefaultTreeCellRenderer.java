@@ -15,74 +15,74 @@ import javax.swing.UIManager;
 import javax.swing.plaf.UIResource;
 
 /**
- * Dibuja una fila de arbol: un icono y un texto.
+ * Draws a tree row: an icon and a text.
  *
- * <h2>Un solo componente para todas las filas</h2>
+ * <h2>One single component for every row</h2>
  *
- * <p>El arbol no tiene un componente por fila: tiene <em>este</em>, y lo configura y lo dibuja una
- * vez por fila. De ahi que casi todos los metodos que en un componente normal disparan un
- * repintado -- {@link #revalidate}, {@link #repaint}, {@link #invalidate},
- * {@code firePropertyChange} -- esten <strong>vaciados a proposito</strong>: un dibujante que pide
- * repintarse mientras lo estan dibujando haria que el arbol se repinte en bucle.
+ * <p>The tree does not have one component per row: it has <em>this</em> one, and it configures
+ * it and draws it once per row. Hence almost every method that in a normal component fires a
+ * repaint -- {@link #revalidate}, {@link #repaint}, {@link #invalidate},
+ * {@code firePropertyChange} -- is <strong>emptied on purpose</strong>: a renderer that asks to
+ * be repainted while it is being drawn would make the tree repaint in a loop.
  *
- * <p>Es la razon de que la lista de metodos de esta clase sea tan larga y tan aburrida. No es
- * codigo de mas; es la lista de cosas que hay que apagar.
+ * <p>It is the reason this class's list of methods is so long and so boring. It is not extra
+ * code; it is the list of things that have to be turned off.
  *
- * <h2>Tres iconos, no uno</h2>
+ * <h2>Three icons, not one</h2>
  *
- * <p>Hoja, carpeta abierta y carpeta cerrada. Los elige {@link #getTreeCellRendererComponent} segun
- * lo que le diga el arbol, y no segun lo que el nodo sepa de si mismo: si una carpeta esta abierta o
- * cerrada es de la vista, no del modelo.
+ * <p>Leaf, open folder and closed folder. {@link #getTreeCellRendererComponent} picks them
+ * according to what the tree tells it, and not according to what the node knows about itself:
+ * whether a folder is open or closed belongs to the view, not to the model.
  *
- * <h2>Los colores salen del aspecto</h2>
+ * <h2>The colours come from the look and feel</h2>
  *
- * <p>El constructor los pide por {@link UIManager}. Sin un aspecto instalado quedan nulos, y
- * entonces el arbol se dibuja con los colores del componente. Los seis {@code setXxx} los cambian a
- * mano y funcionan siempre.
+ * <p>The constructor asks {@link UIManager} for them. With no look and feel installed they stay
+ * null, and then the tree is drawn with the component's colours. The six {@code setXxx} change
+ * them by hand and always work.
  */
 public class DefaultTreeCellRenderer extends JLabel implements TreeCellRenderer {
 
-    /** Si la fila que se esta dibujando esta elegida. */
+    /** Whether the row being drawn is chosen. */
     protected boolean selected;
 
-    /** Si la fila que se esta dibujando tiene el foco. */
+    /** Whether the row being drawn has the focus. */
     protected boolean hasFocus;
 
     private boolean drawsFocusBorderAroundIcon;
     private boolean drawDashedFocusIndicator;
 
-    /** El icono de una carpeta cerrada. */
+    /** A closed folder's icon. */
     protected transient Icon closedIcon;
 
-    /** El icono de una hoja. */
+    /** A leaf's icon. */
     protected transient Icon leafIcon;
 
-    /** El icono de una carpeta abierta. */
+    /** An open folder's icon. */
     protected transient Icon openIcon;
 
-    /** El color del texto elegido. */
+    /** The chosen text's colour. */
     protected Color textSelectionColor;
 
-    /** El color del texto no elegido. */
+    /** The unchosen text's colour. */
     protected Color textNonSelectionColor;
 
-    /** El fondo del texto elegido. */
+    /** The chosen text's background. */
     protected Color backgroundSelectionColor;
 
-    /** El fondo del texto no elegido. */
+    /** The unchosen text's background. */
     protected Color backgroundNonSelectionColor;
 
-    /** El color del recuadro alrededor de lo elegido. */
+    /** The colour of the box around what is chosen. */
     protected Color borderSelectionColor;
 
     private transient JTree tree;
 
-    /** Un dibujante con los iconos y colores del aspecto. */
+    /** A renderer with the look and feel's icons and colours. */
     public DefaultTreeCellRenderer() {
-        inicializar();
+        initialize();
     }
 
-    private void inicializar() {
+    private void initialize() {
         setHorizontalAlignment(JLabel.LEFT);
         setLeafIcon(UIManager.getIcon("Tree.leafIcon"));
         setClosedIcon(UIManager.getIcon("Tree.closedIcon"));
@@ -98,7 +98,7 @@ public class DefaultTreeCellRenderer extends JLabel implements TreeCellRenderer 
         drawDashedFocusIndicator = (value != null && ((Boolean) value).booleanValue());
     }
 
-    /** Vuelve a pedirle al aspecto los iconos y colores que no se pusieron a mano. */
+    /** It asks the look and feel again for the icons and colours not set by hand. */
     public void updateUI() {
         super.updateUI();
         if (closedIcon instanceof UIResource) {
@@ -110,20 +110,20 @@ public class DefaultTreeCellRenderer extends JLabel implements TreeCellRenderer 
         if (leafIcon instanceof UIResource) {
             leafIcon = null;
         }
-        inicializar();
+        initialize();
     }
 
-    /** El icono de carpeta abierta que dice el aspecto. */
+    /** The open folder icon the look and feel says. */
     public Icon getDefaultOpenIcon() {
         return UIManager.getIcon("Tree.openIcon");
     }
 
-    /** El icono de carpeta cerrada que dice el aspecto. */
+    /** The closed folder icon the look and feel says. */
     public Icon getDefaultClosedIcon() {
         return UIManager.getIcon("Tree.closedIcon");
     }
 
-    /** El icono de hoja que dice el aspecto. */
+    /** The leaf icon the look and feel says. */
     public Icon getDefaultLeafIcon() {
         return UIManager.getIcon("Tree.leafIcon");
     }
@@ -193,9 +193,9 @@ public class DefaultTreeCellRenderer extends JLabel implements TreeCellRenderer 
     }
 
     /**
-     * Cambia la tipografia.
+     * Changes the typeface.
      *
-     * <p>Una tipografia que venga del aspecto se descarta: ver {@link #getFont}.
+     * <p>A typeface that comes from the look and feel is discarded: see {@link #getFont}.
      */
     public void setFont(Font font) {
         if (font instanceof javax.swing.plaf.FontUIResource) {
@@ -205,10 +205,10 @@ public class DefaultTreeCellRenderer extends JLabel implements TreeCellRenderer 
     }
 
     /**
-     * La tipografia; si no tiene una propia, la del arbol.
+     * The typeface; if it has none of its own, the tree's.
      *
-     * <p>Es lo que hace que cambiarle la tipografia al arbol se note en las filas sin tocar el
-     * dibujante.
+     * <p>It is what makes changing the tree's typeface show in the rows without touching the
+     * renderer.
      */
     public Font getFont() {
         Font font = super.getFont();
@@ -219,9 +219,10 @@ public class DefaultTreeCellRenderer extends JLabel implements TreeCellRenderer 
     }
 
     /**
-     * Cambia el fondo.
+     * Changes the background.
      *
-     * <p>Un color que venga del aspecto se descarta, por lo mismo que en {@link #setFont}.
+     * <p>A colour that comes from the look and feel is discarded, for the same reason as in
+     * {@link #setFont}.
      */
     public void setBackground(Color color) {
         if (color instanceof javax.swing.plaf.ColorUIResource) {
@@ -231,10 +232,10 @@ public class DefaultTreeCellRenderer extends JLabel implements TreeCellRenderer 
     }
 
     /**
-     * Se configura para dibujar esa fila y se devuelve a si mismo.
+     * It configures itself to draw that row and returns itself.
      *
-     * <p>El texto sale de {@link JTree#convertValueToText}, no de {@code toString}: es el arbol el
-     * que decide como se escribe un nodo.
+     * <p>The text comes from {@link JTree#convertValueToText}, not from {@code toString}: it is the
+     * tree that decides how a node is written.
      */
     public Component getTreeCellRendererComponent(JTree tree, Object value, boolean sel,
             boolean expanded, boolean leaf, int row, boolean hasFocus) {
@@ -275,10 +276,10 @@ public class DefaultTreeCellRenderer extends JLabel implements TreeCellRenderer 
     }
 
     /**
-     * Dibuja el fondo de la fila y despues el texto.
+     * Draws the row's background and then the text.
      *
-     * <p>El fondo solo cubre lo que ocupan el icono y el texto, no la fila entera: en un arbol la
-     * seleccion se ve como una etiqueta pintada, no como una banda de lado a lado.
+     * <p>The background covers only what the icon and the text take up, not the whole row: in a
+     * tree the selection looks like a painted label, not like a band from side to side.
      */
     public void paint(Graphics g) {
         Color bColor;
@@ -319,7 +320,7 @@ public class DefaultTreeCellRenderer extends JLabel implements TreeCellRenderer 
         super.paint(g);
     }
 
-    /** Donde empieza el texto: despues del icono y su separacion. */
+    /** Where the text starts: after the icon and its gap. */
     private int getLabelStart() {
         Icon currentI = getIcon();
         if (currentI != null && getText() != null) {
@@ -329,10 +330,10 @@ public class DefaultTreeCellRenderer extends JLabel implements TreeCellRenderer 
     }
 
     /**
-     * Lo que ocupa, con tres pixeles de mas a la derecha.
+     * What it takes up, with three extra pixels on the right.
      *
-     * <p>Los tres pixeles no son cosmeticos: sin ellos la ultima letra queda pegada al borde del
-     * recuadro de seleccion.
+     * <p>The three pixels are not cosmetic: without them the last letter ends up stuck to the edge
+     * of the selection box.
      */
     public Dimension getPreferredSize() {
         Dimension retDimension = super.getPreferredSize();
@@ -342,39 +343,41 @@ public class DefaultTreeCellRenderer extends JLabel implements TreeCellRenderer 
         return retDimension;
     }
 
-    /** No hace nada; ver la nota de la clase. */
+    /** It does nothing; see the class note. */
     public void validate() {
     }
 
-    /** No hace nada; ver la nota de la clase. */
+    /** It does nothing; see the class note. */
     public void invalidate() {
     }
 
-    /** No hace nada; ver la nota de la clase. */
+    /** It does nothing; see the class note. */
     public void revalidate() {
     }
 
-    /** No hace nada; ver la nota de la clase. */
+    /** It does nothing; see the class note. */
     public void repaint(long tm, int x, int y, int width, int height) {
     }
 
-    /** No hace nada; ver la nota de la clase. */
+    /** It does nothing; see the class note. */
     public void repaint(Rectangle r) {
     }
 
-    /** No hace nada; ver la nota de la clase. */
+    /** It does nothing; see the class note. */
     public void repaint() {
     }
 
     /**
-     * Solo deja pasar el aviso de que cambio el texto.
+     * It only lets through the notice that the text changed.
      *
-     * <p>Los demas se descartan por lo que dice la nota de la clase. El texto pasa porque el aspecto
-     * lo necesita para volver a medir la fila, y eso ocurre una vez por fila, no en bucle.
+     * <p>The rest are discarded for what the class note says. The text goes through because the
+     * look and feel needs it to measure the row again, and that happens once per row, not in a
+     * loop.
      *
-     * <p>El JDK deja pasar tambien la tipografia y el color <em>cuando el texto es HTML</em>, porque
-     * entonces la vista de HTML tiene que rearmarse. Esa rama pide {@code BasicHTML}, que esta
-     * biblioteca no trae; sin ella el texto sigue siendo texto y la rama no haria nada.
+     * <p>The JDK also lets the typeface and the colour through <em>when the text is HTML</em>,
+     * because then the HTML view has to be rebuilt. That branch asks for {@code BasicHTML}, which
+     * this library does not ship; without it the text is still text and the branch would do
+     * nothing.
      */
     protected void firePropertyChange(String propertyName, Object oldValue, Object newValue) {
         if (propertyName == "text") {
@@ -382,35 +385,35 @@ public class DefaultTreeCellRenderer extends JLabel implements TreeCellRenderer 
         }
     }
 
-    /** No hace nada; ver la nota de la clase. */
+    /** It does nothing; see the class note. */
     public void firePropertyChange(String propertyName, byte oldValue, byte newValue) {
     }
 
-    /** No hace nada; ver la nota de la clase. */
+    /** It does nothing; see the class note. */
     public void firePropertyChange(String propertyName, char oldValue, char newValue) {
     }
 
-    /** No hace nada; ver la nota de la clase. */
+    /** It does nothing; see the class note. */
     public void firePropertyChange(String propertyName, short oldValue, short newValue) {
     }
 
-    /** No hace nada; ver la nota de la clase. */
+    /** It does nothing; see the class note. */
     public void firePropertyChange(String propertyName, int oldValue, int newValue) {
     }
 
-    /** No hace nada; ver la nota de la clase. */
+    /** It does nothing; see the class note. */
     public void firePropertyChange(String propertyName, long oldValue, long newValue) {
     }
 
-    /** No hace nada; ver la nota de la clase. */
+    /** It does nothing; see the class note. */
     public void firePropertyChange(String propertyName, float oldValue, float newValue) {
     }
 
-    /** No hace nada; ver la nota de la clase. */
+    /** It does nothing; see the class note. */
     public void firePropertyChange(String propertyName, double oldValue, double newValue) {
     }
 
-    /** No hace nada; ver la nota de la clase. */
+    /** It does nothing; see the class note. */
     public void firePropertyChange(String propertyName, boolean oldValue, boolean newValue) {
     }
 }

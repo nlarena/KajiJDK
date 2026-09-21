@@ -7,16 +7,15 @@ import java.io.Serializable;
 import javax.swing.Icon;
 
 /**
- * La flechita de un desplegable de Metal: diez de ancho por cinco de alto.
+ * A Metal combo box's little arrow: ten wide by five high.
  *
- * <p>Es un triangulo lleno que apunta para abajo, dibujado renglon por renglon: se arranca con una
- * linea de diez y se le quita uno de cada lado en cada renglon. Cinco renglones para diez pixeles
- * de ancho no es casualidad: es lo que hace que los lados queden a cuarenta y cinco grados y no se
- * vean escalonados.
+ * <p>It is a filled triangle pointing down, drawn row by row: it starts with a line of ten and
+ * one is taken off each side on every row. Five rows for ten pixels of width is no coincidence:
+ * it is what makes the sides come out at forty-five degrees and not look stepped.
  *
- * <p>No es un {@code UIResource}, y eso importa: un desplegable al que el programa le puso este
- * icono a mano se lo queda aunque cambie el aspecto. Los iconos que si son {@code UIResource} -- el
- * de la casilla, por ejemplo -- se reemplazan solos.
+ * <p>It is not a {@code UIResource}, and that matters: a combo box the program set this icon on
+ * by hand keeps it even if the look and feel changes. The icons that are {@code UIResource} --
+ * the check box's, for instance -- are replaced by themselves.
  */
 public class MetalComboBoxIcon implements Icon, Serializable {
 
@@ -32,14 +31,14 @@ public class MetalComboBoxIcon implements Icon, Serializable {
     }
 
     public void paintIcon(Component c, Graphics g, int x, int y) {
-        int ancho = getIconWidth();
+        int width = getIconWidth();
         g.translate(x, y);
         g.setColor((c == null || c.isEnabled())
                 ? MetalLookAndFeel.getControlInfo()
                 : MetalLookAndFeel.getControlShadow());
-        // Renglon i: se arranca en i y se termina dos pixeles antes que el anterior.
+        // Row i: it starts at i and ends two pixels before the previous one.
         for (int i = 0; i < getIconHeight(); i++) {
-            g.drawLine(i, i, i + (ancho - 1 - 2 * i), i);
+            g.drawLine(i, i, i + (width - 1 - 2 * i), i);
         }
         g.translate(-x, -y);
     }

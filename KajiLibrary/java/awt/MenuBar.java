@@ -9,14 +9,18 @@ import javax.accessibility.AccessibleContext;
 import javax.accessibility.AccessibleRole;
 
 /**
- * La barra de menús de un marco.
+ * The menu bar of a frame.
  *
- * <p>Es un {@link MenuComponent} y no un {@link Component}: la barra no vive en el espacio de la
- * ventana sino que la dibuja el escritorio, arriba de todo. Por eso no tiene posición ni tamaño.
+ * <p>It is a {@link MenuComponent} and not a {@link Component}: the bar does not live in the
+ * window's space but is drawn by the desktop, right at the top. That is why it has no position or
+ * size.
  *
- * <p>El **menú de ayuda** tiene lugar propio porque las plataformas lo tratan distinto: en algunas va
- * pegado a la derecha, separado del resto. Declararlo permite que cada escritorio lo ubique como
- * corresponde en vez de dejarlo como uno más.
+ * <p>The **help menu** has a place of its own because the platforms treat it differently: on some
+ * it goes stuck to the right, apart from the rest. Declaring it lets each desktop put it where it
+ * belongs instead of leaving it as one more.
+ *
+ * <p>Its constructor declares {@link HeadlessException} like the JDK's and never throws it; see
+ * {@link MenuComponent}.
  */
 public class MenuBar extends MenuComponent implements MenuContainer, Accessible {
 
@@ -25,15 +29,11 @@ public class MenuBar extends MenuComponent implements MenuContainer, Accessible 
     private final List<Menu> menus = new ArrayList<Menu>();
     private Menu helpMenu;
 
-    /**
-     * Una barra vacía.
-     *
-     * @throws HeadlessException si no hay pantalla
-     */
+    /** An empty bar. */
     public MenuBar() throws HeadlessException {
     }
 
-    /** Avisa que puede mostrarse, y se lo avisa a sus menús. */
+    /** Notifies that it can be shown, and tells its menus. */
     public void addNotify() {
         synchronized (this.getTreeLock()) {
             for (int i = 0; i < this.menus.size(); i++) {
@@ -42,7 +42,7 @@ public class MenuBar extends MenuComponent implements MenuContainer, Accessible 
         }
     }
 
-    /** Avisa que dejó de poder mostrarse. */
+    /** Notifies that it can no longer be shown. */
     public void removeNotify() {
         synchronized (this.getTreeLock()) {
             for (int i = 0; i < this.menus.size(); i++) {
@@ -53,18 +53,18 @@ public class MenuBar extends MenuComponent implements MenuContainer, Accessible 
     }
 
     /**
-     * El menú de ayuda.
+     * The help menu.
      *
-     * @return el menú, o `null` si no hay
+     * @return the menu, or `null` if there is none
      */
     public Menu getHelpMenu() {
         return this.helpMenu;
     }
 
     /**
-     * Declara cuál es el menú de ayuda.
+     * Declares which is the help menu.
      *
-     * <p>Si estaba en otra barra se lo saca de ahí: un menú cuelga de un solo padre.
+     * <p>If it was in another bar it is taken out of there: a menu hangs from a single parent.
      */
     public void setHelpMenu(Menu m) {
         synchronized (this.getTreeLock()) {
@@ -85,10 +85,10 @@ public class MenuBar extends MenuComponent implements MenuContainer, Accessible 
     }
 
     /**
-     * Agrega un menú al final.
+     * Adds a menu at the end.
      *
-     * @return el mismo menú, para poder encadenar
-     * @throws NullPointerException si el menú es `null`
+     * @return the same menu, so calls can be chained
+     * @throws NullPointerException if the menu is `null`
      */
     public Menu add(Menu m) {
         synchronized (this.getTreeLock()) {
@@ -102,9 +102,9 @@ public class MenuBar extends MenuComponent implements MenuContainer, Accessible 
     }
 
     /**
-     * Saca el menú de esa posición.
+     * Takes out the menu at that position.
      *
-     * @throws ArrayIndexOutOfBoundsException si no existe
+     * @throws ArrayIndexOutOfBoundsException if there is no such menu
      */
     public void remove(int index) {
         synchronized (this.getTreeLock()) {
@@ -113,7 +113,7 @@ public class MenuBar extends MenuComponent implements MenuContainer, Accessible 
         }
     }
 
-    /** Saca ese menú; si no estaba, no pasa nada. */
+    /** Takes that menu out; if it was not there, nothing happens. */
     public void remove(MenuComponent m) {
         synchronized (this.getTreeLock()) {
             int i = this.menus.indexOf(m);
@@ -126,15 +126,15 @@ public class MenuBar extends MenuComponent implements MenuContainer, Accessible 
         }
     }
 
-    /** Cuántos menús tiene, sin contar el de ayuda. */
+    /** How many menus it has, not counting the help one. */
     public int getMenuCount() {
         return this.countMenus();
     }
 
     /**
-     * Cuántos menús tiene.
+     * How many menus it has.
      *
-     * @deprecated es del modelo de 1.0. Usar {@link #getMenuCount}.
+     * @deprecated it is from the 1.0 model. Use {@link #getMenuCount}.
      */
     @Deprecated
     public int countMenus() {
@@ -144,9 +144,9 @@ public class MenuBar extends MenuComponent implements MenuContainer, Accessible 
     }
 
     /**
-     * El menú de esa posición.
+     * The menu at that position.
      *
-     * @throws ArrayIndexOutOfBoundsException si no existe
+     * @throws ArrayIndexOutOfBoundsException if there is no such menu
      */
     public Menu getMenu(int i) {
         synchronized (this.getTreeLock()) {
@@ -154,17 +154,23 @@ public class MenuBar extends MenuComponent implements MenuContainer, Accessible 
         }
     }
 
-    /** Todos los atajos de teclado de la barra. */
+    /**
+     * The keyboard shortcuts of the bar's own menus.
+     *
+     * <p>One level only: it does not go into the submenus, nor into the help menu, which is not one
+     * of the bar's menus. The JDK walks the whole tree, because there each menu knows how to list
+     * its own shortcuts recursively.
+     */
     public synchronized Enumeration<MenuShortcut> shortcuts() {
         Vector<MenuShortcut> v = new Vector<MenuShortcut>();
-        this.juntarAtajos(this.menus, v);
+        this.collectShortcuts(this.menus, v);
         return v.elements();
     }
 
-    /** Recorre los menús juntando los atajos de sus opciones. */
-    private void juntarAtajos(List<Menu> desde, Vector<MenuShortcut> v) {
-        for (int i = 0; i < desde.size(); i++) {
-            Menu m = desde.get(i);
+    /** Walks the menus collecting the shortcuts of their options, without going into submenus. */
+    private void collectShortcuts(List<Menu> source, Vector<MenuShortcut> v) {
+        for (int i = 0; i < source.size(); i++) {
+            Menu m = source.get(i);
             for (int j = 0; j < m.getItemCount(); j++) {
                 MenuItem mi = m.getItem(j);
                 MenuShortcut s = mi.getShortcut();
@@ -176,9 +182,12 @@ public class MenuBar extends MenuComponent implements MenuContainer, Accessible 
     }
 
     /**
-     * Qué opción tiene ese atajo.
+     * Which option has that shortcut.
      *
-     * @return la opción, o `null` si ninguna
+     * <p>It looks at the options of the bar's menus, one level deep, with the same limit as
+     * {@link #shortcuts}.
+     *
+     * @return the option, or `null` if there is none
      */
     public MenuItem getShortcutMenuItem(MenuShortcut s) {
         synchronized (this.getTreeLock()) {
@@ -195,7 +204,7 @@ public class MenuBar extends MenuComponent implements MenuContainer, Accessible 
         }
     }
 
-    /** Le saca ese atajo a la opción que lo tenga. */
+    /** Takes that shortcut away from whichever option has it. */
     public void deleteShortcut(MenuShortcut s) {
         MenuItem mi = this.getShortcutMenuItem(s);
         if (mi != null) {
@@ -203,7 +212,7 @@ public class MenuBar extends MenuComponent implements MenuContainer, Accessible 
         }
     }
 
-    /** La información de accesibilidad de esta barra. */
+    /** The accessibility information of this bar. */
     public AccessibleContext getAccessibleContext() {
         if (this.accessibleContext == null) {
             this.accessibleContext = new AccessibleAWTMenuBar();
@@ -211,27 +220,27 @@ public class MenuBar extends MenuComponent implements MenuContainer, Accessible 
         return this.accessibleContext;
     }
 
-    /** La accesibilidad de una barra de menús. */
+    /** The accessibility of a menu bar. */
     protected class AccessibleAWTMenuBar extends AccessibleAWTMenuComponent {
 
-        /** Para las subclases. */
+        /** For the subclasses. */
         protected AccessibleAWTMenuBar() {
         }
 
-        /** Es una barra de menús. */
+        /** It is a menu bar. */
         public AccessibleRole getAccessibleRole() {
             return AccessibleRole.MENU_BAR;
         }
 
-        /** Cuántos menús tiene. */
+        /** How many menus it has. */
         public int getAccessibleChildrenCount() {
             return MenuBar.this.getMenuCount();
         }
 
         /**
-         * El menú de esa posición.
+         * The menu at that position.
          *
-         * @return el menú, o `null` si no existe
+         * @return the menu, or `null` if there is no such one
          */
         public Accessible getAccessibleChild(int i) {
             if (i < 0 || i >= MenuBar.this.getMenuCount()) {

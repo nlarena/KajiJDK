@@ -3,7 +3,7 @@ package com.sun.source.doctree;
 import java.util.List;
 
 /**
- * El nodo de `@serialData`, que documenta el formato de la serializacion.
+ * The node of `@serialData`, which documents the serialization's format.
  */
 public interface SerialDataTree extends BlockTagTree {
 

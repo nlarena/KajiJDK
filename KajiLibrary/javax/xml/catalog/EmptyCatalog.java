@@ -3,45 +3,45 @@ package javax.xml.catalog;
 import java.util.stream.Stream;
 
 /**
- * Un catalogo sin entradas.
+ * A catalog without entries.
  *
- * <p>De acceso de paquete: no es API. Es lo que {@link CatalogManager} devuelve cuando no hay archivos
- * que leer, y es un catalogo perfectamente valido -- uno vacio no coincide con nada, que es
- * exactamente lo que dice.
+ * <p>Package access: it is not API. It is what {@link CatalogManager} returns when there are no
+ * files to read, and it is a perfectly valid catalog -- an empty one matches nothing, which is
+ * exactly what it says.
  *
- * <p>Guarda las caracteristicas con las que se pidio porque el resolutor necesita la de
- * {@code RESOLVE} para saber que hacer cuando no hay coincidencia, que aca es siempre.
+ * <p>It keeps the features it was asked for with because the resolver needs the {@code RESOLVE} one
+ * to know what to do when there is no match, which here is always.
  */
 final class EmptyCatalog implements Catalog {
 
-    /** Con que se pidio. */
+    /** What it was asked for with. */
     private final CatalogFeatures features;
 
     EmptyCatalog(CatalogFeatures features) {
         this.features = features;
     }
 
-    /** Siempre null: no hay entradas. */
+    /** Always null: there are no entries. */
     public String matchSystem(String systemId) {
         return null;
     }
 
-    /** Siempre null. */
+    /** Always null. */
     public String matchPublic(String publicId) {
         return null;
     }
 
-    /** Siempre null. */
+    /** Always null. */
     public String matchURI(String uri) {
         return null;
     }
 
-    /** Vacio: no hay catalogos encadenados. */
+    /** Empty: there are no chained catalogs. */
     public Stream<Catalog> catalogs() {
         return Stream.empty();
     }
 
-    /** Que hacer sin coincidencia, segun las caracteristicas con las que se pidio. */
+    /** What to do without a match, according to the features it was asked for with. */
     CatalogResolver.NotFoundAction action() {
         String resolve = this.features.get(CatalogFeatures.Feature.RESOLVE);
         if (resolve == null) {

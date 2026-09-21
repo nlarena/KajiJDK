@@ -4,57 +4,59 @@ import java.io.PrintStream;
 import java.io.PrintWriter;
 
 /**
- * KajiLibrary's javax.xml.crypto.MarshalException -- no se pudo escribir o leer una estructura como XML.
+ * KajiLibrary's javax.xml.crypto.MarshalException -- a structure could not be written or read as
+ * XML.
  *
- * <p>Sale al convertir entre el modelo de objetos y el documento, en cualquiera de las dos
- * direcciones. Es distinta de un fallo de firma: aca el problema es la <b>forma</b> del
- * XML, no la criptografia. Confundirlas manda a buscar un problema de claves donde lo
- * que hay es un elemento mal ubicado.
+ * <p>It comes out when converting between the object model and the document, in either direction.
+ * It is different from a signature failure: here the problem is the <b>shape</b> of the XML, not
+ * the cryptography. Confusing them sends one looking for a key problem where what there is is a
+ * misplaced element.
  *
- * <p>Redefine {@code getCause} y los tres {@code printStackTrace} porque en el JDK guarda su causa
- * en un campo propio, de cuando {@code Throwable} todavia no las tenia. Aca la causa es la de
- * {@code Throwable} y las redefiniciones delegan: mismo comportamiento, sin dos copias del dato.
+ * <p>It redefines {@code getCause} and the three {@code printStackTrace}s because in the JDK it
+ * keeps its cause in a field of its own, from when {@code Throwable} did not have one yet. Here the
+ * cause is {@code Throwable}'s and the redefinitions delegate: same behaviour, without two copies
+ * of the datum.
  */
 public class MarshalException extends Exception {
 
     private static final long serialVersionUID = -863185580789085695L;
 
-    /** Sin detalle. */
+    /** Without detail. */
     public MarshalException() {
         super();
     }
 
-    /** Con un mensaje. */
+    /** With a message. */
     public MarshalException(String message) {
         super(message);
     }
 
-    /** Con un mensaje y la causa de abajo. */
+    /** With a message and the underlying cause. */
     public MarshalException(String message, Throwable cause) {
         super(message, cause);
     }
 
-    /** Solo con la causa; el mensaje sale de su {@code toString}. */
+    /** With the cause only; the message comes from its {@code toString}. */
     public MarshalException(Throwable cause) {
         super(cause);
     }
 
-    /** La causa, o null. */
+    /** The cause, or null. */
     public Throwable getCause() {
         return super.getCause();
     }
 
-    /** A la salida de error. */
+    /** To standard error. */
     public void printStackTrace() {
         super.printStackTrace();
     }
 
-    /** A ese flujo. */
+    /** To that stream. */
     public void printStackTrace(PrintStream s) {
         super.printStackTrace(s);
     }
 
-    /** A ese escritor. */
+    /** To that writer. */
     public void printStackTrace(PrintWriter s) {
         super.printStackTrace(s);
     }

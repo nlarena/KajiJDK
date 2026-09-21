@@ -6,42 +6,43 @@ import javax.swing.plaf.LabelUI;
 import javax.swing.plaf.basic.BasicLabelUI;
 
 /**
- * Un texto, un icono, o los dos: el componente mas simple que muestra algo.
+ * A text, an icon, or both: the simplest component that shows something.
  *
- * <h2>Seis perillas para una cosa</h2>
+ * <h2>Six knobs for one thing</h2>
  *
- * <p>Una etiqueta tiene dos alineaciones y dos posiciones, y la diferencia es la que confunde:
- * la <em>alineacion</em> dice donde va el conjunto icono-texto dentro del area de la etiqueta; la
- * <em>posicion</em> del texto dice donde va el texto <em>respecto del icono</em>. Con las cuatro
- * mas la separacion ({@link #setIconTextGap}) se describe cualquier disposicion, y quien la
- * resuelve es {@code SwingUtilities.layoutCompoundLabel}, el mismo para botones y celdas.
+ * <p>A label has two alignments and two positions, and the difference is the one that confuses:
+ * the <em>alignment</em> says where the icon-text set goes within the label's area; the text's
+ * <em>position</em> says where the text goes <em>with respect to the icon</em>. With the four
+ * plus the gap ({@link #setIconTextGap}) any arrangement is described, and who resolves it is
+ * {@code SwingUtilities.layoutCompoundLabel}, the same one for buttons and cells.
  *
- * <p>Por omision: alineada al principio ({@code LEADING}), centrada verticalmente, y el texto
- * despues del icono ({@code TRAILING}) — o sea icono a la izquierda y texto a la derecha en un
- * idioma que se lee asi.
+ * <p>By default: aligned to the start ({@code LEADING}), centred vertically, and the text after
+ * the icon ({@code TRAILING}) -- that is, icon on the left and text on the right in a language
+ * that is read that way.
  *
- * <h2>Lo que hace de {@code UIManager}</h2>
+ * <h2>What it does about {@code UIManager}</h2>
  *
- * <p>{@link #updateUI} instala {@link BasicLabelUI} directamente. En el JDK le pregunta al
- * {@code UIManager}, que puede contestar con el aspecto de Metal, de Windows o del que este
- * instalado; aca hay un solo aspecto, y preguntar seria una ceremonia con una sola respuesta.
+ * <p>{@link #updateUI} installs {@link BasicLabelUI} directly. In the JDK it asks the
+ * {@code UIManager}, which may answer with Metal's look and feel, Windows' or whichever is
+ * installed; here there is a single look and feel, and asking would be a ceremony with a single
+ * answer.
  *
- * <h2>Lo que no esta</h2>
+ * <h2>What is not there</h2>
  *
- * <p>Tres cosas, y ninguna es un olvido. {@code getDisabledIcon} no fabrica una version gris del
- * icono cuando no se fijo una: eso pide una imagen que filtrar, y un {@link Icon} no promete tener
- * una. {@code imageUpdate} no esta porque su unica razon es repintar cuando una imagen asincronica
- * termina de cargar, y aca las imagenes no se cargan asincronicamente. Y la accesibilidad, que es
- * un subsistema propio.
+ * <p>Three things, and none is an oversight. {@code getDisabledIcon} does not make a grey
+ * version of the icon when one was not fixed: that asks for an image to filter, and an
+ * {@link Icon} does not promise to have one. {@code imageUpdate} is not there because its only
+ * reason is to repaint when an asynchronous image finishes loading, and here images are not
+ * loaded asynchronously. And accessibility, which is a subsystem of its own.
  */
 public class JLabel extends JComponent implements SwingConstants {
 
     private static final long serialVersionUID = 5296049245363908046L;
 
-    /** La propiedad de cliente con la que un componente sabe que etiqueta lo nombra. */
+    /** The client property a component knows which label names it with. */
     static final String LABELED_BY_PROPERTY = "labeledBy";
 
-    /** El componente que esta etiqueta describe, o {@code null}. */
+    /** The component this label describes, or {@code null}. */
     protected Component labelFor;
 
     private int mnemonic = '\0';
@@ -56,7 +57,7 @@ public class JLabel extends JComponent implements SwingConstants {
     private int horizontalTextPosition = TRAILING;
     private int iconTextGap = 4;
 
-    /** Con texto, icono y alineacion horizontal. */
+    /** With text, icon and horizontal alignment. */
     public JLabel(String text, Icon icon, int horizontalAlignment) {
         setText(text);
         setIcon(icon);
@@ -65,42 +66,42 @@ public class JLabel extends JComponent implements SwingConstants {
         setAlignmentX(LEFT_ALIGNMENT);
     }
 
-    /** Con texto y alineacion horizontal. */
+    /** With text and horizontal alignment. */
     public JLabel(String text, int horizontalAlignment) {
         this(text, null, horizontalAlignment);
     }
 
-    /** Con texto, alineado al principio. */
+    /** With text, aligned to the start. */
     public JLabel(String text) {
         this(text, null, LEADING);
     }
 
-    /** Con icono y alineacion horizontal. */
+    /** With icon and horizontal alignment. */
     public JLabel(Icon image, int horizontalAlignment) {
         this(null, image, horizontalAlignment);
     }
 
-    /** Con icono, centrado. */
+    /** With icon, centred. */
     public JLabel(Icon image) {
         this(null, image, CENTER);
     }
 
-    /** Vacia. */
+    /** Empty. */
     public JLabel() {
         this("", null, LEADING);
     }
 
-    /** El aspecto instalado. */
+    /** The installed look and feel. */
     public LabelUI getUI() {
         return (LabelUI) this.ui;
     }
 
-    /** Instala un aspecto de etiqueta. */
+    /** It installs a label look and feel. */
     public void setUI(LabelUI ui) {
         super.setUI(ui);
     }
 
-    /** Instala el aspecto basico; ver la nota de la clase sobre {@code UIManager}. */
+    /** It installs the basic look and feel; see the class note about {@code UIManager}. */
     public void updateUI() {
         setUI((LabelUI) BasicLabelUI.createUI(this));
     }
@@ -109,63 +110,63 @@ public class JLabel extends JComponent implements SwingConstants {
         return "LabelUI";
     }
 
-    /** El texto, o {@code null}. */
+    /** The text, or {@code null}. */
     public String getText() {
         return this.text;
     }
 
     /**
-     * Cambia el texto.
+     * It changes the text.
      *
-     * <p>Si habia un mnemonico, se vuelve a buscar en el texto nuevo: la letra subrayada tiene que
-     * seguir siendo la del mnemonico, no la que estaba en esa posicion.
+     * <p>If there was a mnemonic, it is looked up again in the new text: the underlined letter has
+     * to go on being the mnemonic's, not the one that was at that position.
      */
     public void setText(String text) {
-        String viejo = this.text;
+        String old = this.text;
         this.text = text;
-        firePropertyChange("text", viejo, text);
+        firePropertyChange("text", old, text);
         setDisplayedMnemonicIndex(SwingUtilities.findDisplayedMnemonicIndex(text, getDisplayedMnemonic()));
-        if (text == null || viejo == null || !text.equals(viejo)) {
+        if (text == null || old == null || !text.equals(old)) {
             revalidate();
             repaint();
         }
     }
 
-    /** El icono, o {@code null}. */
+    /** The icon, or {@code null}. */
     public Icon getIcon() {
         return this.defaultIcon;
     }
 
-    /** Cambia el icono; pide relayout solo si cambio de tamano. */
+    /** It changes the icon; it asks for a relayout only if it changed size. */
     public void setIcon(Icon icon) {
-        Icon viejo = this.defaultIcon;
+        Icon old = this.defaultIcon;
         this.defaultIcon = icon;
-        firePropertyChange("icon", viejo, icon);
-        if (viejo != icon) {
-            if (viejo == null || icon == null
-                    || viejo.getIconWidth() != icon.getIconWidth()
-                    || viejo.getIconHeight() != icon.getIconHeight()) {
+        firePropertyChange("icon", old, icon);
+        if (old != icon) {
+            if (old == null || icon == null
+                    || old.getIconWidth() != icon.getIconWidth()
+                    || old.getIconHeight() != icon.getIconHeight()) {
                 revalidate();
             }
             repaint();
         }
     }
 
-    /** El icono para cuando esta deshabilitada, o {@code null}; ver la nota de la clase. */
+    /** The icon for when it is disabled, or {@code null}; see the class note. */
     public Icon getDisabledIcon() {
         return this.disabledIcon;
     }
 
-    /** Fija el icono para cuando esta deshabilitada. */
+    /** It fixes the icon for when it is disabled. */
     public void setDisabledIcon(Icon disabledIcon) {
-        Icon viejo = this.disabledIcon;
+        Icon old = this.disabledIcon;
         this.disabledIcon = disabledIcon;
         this.disabledIconSet = disabledIcon != null;
-        firePropertyChange("disabledIcon", viejo, disabledIcon);
-        if (disabledIcon != viejo) {
-            if (disabledIcon == null || viejo == null
-                    || disabledIcon.getIconWidth() != viejo.getIconWidth()
-                    || disabledIcon.getIconHeight() != viejo.getIconHeight()) {
+        firePropertyChange("disabledIcon", old, disabledIcon);
+        if (disabledIcon != old) {
+            if (disabledIcon == null || old == null
+                    || disabledIcon.getIconWidth() != old.getIconWidth()
+                    || disabledIcon.getIconHeight() != old.getIconHeight()) {
                 revalidate();
             }
             if (!isEnabled()) {
@@ -175,68 +176,70 @@ public class JLabel extends JComponent implements SwingConstants {
     }
 
     /**
-     * Fija el mnemonico como codigo de tecla, y busca que letra subrayar.
+     * It fixes the mnemonic as a key code, and looks up which letter to underline.
      *
-     * <p>Es {@code int} y no {@code char} porque es un codigo de {@code KeyEvent}, que no siempre
-     * corresponde a un caracter.
+     * <p>It is an {@code int} and not a {@code char} because it is a {@code KeyEvent} code, which
+     * does not always correspond to a character.
      */
     public void setDisplayedMnemonic(int key) {
-        int viejo = this.mnemonic;
+        int old = this.mnemonic;
         this.mnemonic = key;
-        firePropertyChange("displayedMnemonic", viejo, this.mnemonic);
+        firePropertyChange("displayedMnemonic", old, this.mnemonic);
         setDisplayedMnemonicIndex(SwingUtilities.findDisplayedMnemonicIndex(getText(), this.mnemonic));
-        if (key != viejo) {
+        if (key != old) {
             revalidate();
             repaint();
         }
     }
 
-    /** Fija el mnemonico como caracter; se guarda en mayuscula, que es el codigo de tecla. */
+    /** It fixes the mnemonic as a character; it is kept in upper case, which is the key code. */
     public void setDisplayedMnemonic(char aChar) {
         setDisplayedMnemonic((int) Character.toUpperCase(aChar));
     }
 
-    /** El mnemonico, como codigo de tecla; {@code 0} si no hay. */
+    /** The mnemonic, as a key code; {@code 0} if there is none. */
     public int getDisplayedMnemonic() {
         return this.mnemonic;
     }
 
     /**
-     * Fija que caracter se subraya, por posicion.
+     * It fixes which character is underlined, by position.
      *
-     * <p>Para cuando la busqueda automatica elige mal: en {@code "Save As"} con mnemonico
-     * {@code A}, la primera {@code A} es la de {@code As}, y quiza se queria la de {@code Save}.
+     * <p>For when the automatic search chooses wrongly: in {@code "Save As"} with mnemonic
+     * {@code A}, the first {@code A} is the one in {@code As}, and perhaps the one in {@code Save}
+     * was wanted.
      *
-     * @throws IllegalArgumentException si la posicion no cae en el texto, salvo {@code -1}
+     * @throws IllegalArgumentException if the position does not fall in the text, save {@code -1}
      */
     public void setDisplayedMnemonicIndex(int index) {
-        int viejo = this.mnemonicIndex;
+        int old = this.mnemonicIndex;
         if (index == -1) {
             this.mnemonicIndex = -1;
         } else {
             String t = getText();
-            int largo = t == null ? 0 : t.length();
-            if (index < -1 || index >= largo) {
+            int length = t == null ? 0 : t.length();
+            if (index < -1 || index >= length) {
                 throw new IllegalArgumentException("index == " + String.valueOf(index));
             }
             this.mnemonicIndex = index;
         }
-        firePropertyChange("displayedMnemonicIndex", viejo, index);
-        if (index != viejo) {
+        firePropertyChange("displayedMnemonicIndex", old, index);
+        if (index != old) {
             revalidate();
             repaint();
         }
     }
 
-    /** La posicion del caracter subrayado, o {@code -1}. */
+    /** The position of the underlined character, or {@code -1}. */
     public int getDisplayedMnemonicIndex() {
         return this.mnemonicIndex;
     }
 
     /**
-     * Valida una clave horizontal.
+     * It validates a horizontal key.
      *
-     * @throws IllegalArgumentException con el mensaje dado si no es una de las cinco validas
+     * @throws IllegalArgumentException with the given message if it is not one of the five valid
+     *     ones
      */
     protected int checkHorizontalKey(int key, String message) {
         if (key == LEFT || key == CENTER || key == RIGHT || key == LEADING || key == TRAILING) {
@@ -246,9 +249,10 @@ public class JLabel extends JComponent implements SwingConstants {
     }
 
     /**
-     * Valida una clave vertical.
+     * It validates a vertical key.
      *
-     * @throws IllegalArgumentException con el mensaje dado si no es una de las tres validas
+     * @throws IllegalArgumentException with the given message if it is not one of the three valid
+     *     ones
      */
     protected int checkVerticalKey(int key, String message) {
         if (key == TOP || key == CENTER || key == BOTTOM) {
@@ -257,23 +261,23 @@ public class JLabel extends JComponent implements SwingConstants {
         throw new IllegalArgumentException(message);
     }
 
-    /** Los pixeles entre el icono y el texto. */
+    /** The pixels between the icon and the text. */
     public int getIconTextGap() {
         return this.iconTextGap;
     }
 
-    /** Cambia la separacion entre icono y texto. */
+    /** It changes the gap between icon and text. */
     public void setIconTextGap(int iconTextGap) {
-        int viejo = this.iconTextGap;
+        int old = this.iconTextGap;
         this.iconTextGap = iconTextGap;
-        firePropertyChange("iconTextGap", viejo, iconTextGap);
-        if (iconTextGap != viejo) {
+        firePropertyChange("iconTextGap", old, iconTextGap);
+        if (iconTextGap != old) {
             revalidate();
             repaint();
         }
     }
 
-    /** Donde va el conjunto verticalmente: {@code TOP}, {@code CENTER} o {@code BOTTOM}. */
+    /** Where the set goes vertically: {@code TOP}, {@code CENTER} or {@code BOTTOM}. */
     public int getVerticalAlignment() {
         return this.verticalAlignment;
     }
@@ -282,13 +286,13 @@ public class JLabel extends JComponent implements SwingConstants {
         if (alignment == this.verticalAlignment) {
             return;
         }
-        int viejo = this.verticalAlignment;
+        int old = this.verticalAlignment;
         this.verticalAlignment = checkVerticalKey(alignment, "verticalAlignment");
-        firePropertyChange("verticalAlignment", viejo, this.verticalAlignment);
+        firePropertyChange("verticalAlignment", old, this.verticalAlignment);
         repaint();
     }
 
-    /** Donde va el conjunto horizontalmente. */
+    /** Where the set goes horizontally. */
     public int getHorizontalAlignment() {
         return this.horizontalAlignment;
     }
@@ -297,13 +301,13 @@ public class JLabel extends JComponent implements SwingConstants {
         if (alignment == this.horizontalAlignment) {
             return;
         }
-        int viejo = this.horizontalAlignment;
+        int old = this.horizontalAlignment;
         this.horizontalAlignment = checkHorizontalKey(alignment, "horizontalAlignment");
-        firePropertyChange("horizontalAlignment", viejo, this.horizontalAlignment);
+        firePropertyChange("horizontalAlignment", old, this.horizontalAlignment);
         repaint();
     }
 
-    /** Donde va el texto respecto del icono, verticalmente. */
+    /** Where the text goes with respect to the icon, vertically. */
     public int getVerticalTextPosition() {
         return this.verticalTextPosition;
     }
@@ -312,44 +316,46 @@ public class JLabel extends JComponent implements SwingConstants {
         if (textPosition == this.verticalTextPosition) {
             return;
         }
-        int viejo = this.verticalTextPosition;
+        int old = this.verticalTextPosition;
         this.verticalTextPosition = checkVerticalKey(textPosition, "verticalTextPosition");
-        firePropertyChange("verticalTextPosition", viejo, this.verticalTextPosition);
+        firePropertyChange("verticalTextPosition", old, this.verticalTextPosition);
         revalidate();
         repaint();
     }
 
-    /** Donde va el texto respecto del icono, horizontalmente. */
+    /** Where the text goes with respect to the icon, horizontally. */
     public int getHorizontalTextPosition() {
         return this.horizontalTextPosition;
     }
 
     public void setHorizontalTextPosition(int textPosition) {
-        int viejo = this.horizontalTextPosition;
+        int old = this.horizontalTextPosition;
         this.horizontalTextPosition = checkHorizontalKey(textPosition, "horizontalTextPosition");
-        firePropertyChange("horizontalTextPosition", viejo, this.horizontalTextPosition);
+        firePropertyChange("horizontalTextPosition", old, this.horizontalTextPosition);
         revalidate();
         repaint();
     }
 
     protected String paramString() {
-        String textoStr = this.text != null ? this.text : "";
-        String iconoStr = this.defaultIcon != null && this.defaultIcon != this ? this.defaultIcon.toString() : "";
-        String desIconoStr = this.disabledIcon != null && this.disabledIcon != this ? this.disabledIcon.toString() : "";
+        String textStr = this.text != null ? this.text : "";
+        String iconStr = this.defaultIcon != null && this.defaultIcon != this
+                ? this.defaultIcon.toString() : "";
+        String disabledIconStr = this.disabledIcon != null && this.disabledIcon != this
+                ? this.disabledIcon.toString() : "";
         String labelForStr = this.labelFor != null ? this.labelFor.toString() : "";
         return super.paramString()
-                + ",defaultIcon=" + iconoStr
-                + ",disabledIcon=" + desIconoStr
-                + ",horizontalAlignment=" + nombreHorizontal(this.horizontalAlignment)
-                + ",horizontalTextPosition=" + nombreHorizontal(this.horizontalTextPosition)
+                + ",defaultIcon=" + iconStr
+                + ",disabledIcon=" + disabledIconStr
+                + ",horizontalAlignment=" + horizontalName(this.horizontalAlignment)
+                + ",horizontalTextPosition=" + horizontalName(this.horizontalTextPosition)
                 + ",iconTextGap=" + String.valueOf(this.iconTextGap)
                 + ",labelFor=" + labelForStr
-                + ",text=" + textoStr
-                + ",verticalAlignment=" + nombreVertical(this.verticalAlignment)
-                + ",verticalTextPosition=" + nombreVertical(this.verticalTextPosition);
+                + ",text=" + textStr
+                + ",verticalAlignment=" + verticalName(this.verticalAlignment)
+                + ",verticalTextPosition=" + verticalName(this.verticalTextPosition);
     }
 
-    private static String nombreHorizontal(int k) {
+    private static String horizontalName(int k) {
         if (k == LEFT) {
             return "LEFT";
         }
@@ -368,7 +374,7 @@ public class JLabel extends JComponent implements SwingConstants {
         return "";
     }
 
-    private static String nombreVertical(int k) {
+    private static String verticalName(int k) {
         if (k == TOP) {
             return "TOP";
         }
@@ -381,23 +387,23 @@ public class JLabel extends JComponent implements SwingConstants {
         return "";
     }
 
-    /** El componente que esta etiqueta describe, o {@code null}. */
+    /** The component this label describes, or {@code null}. */
     public Component getLabelFor() {
         return this.labelFor;
     }
 
     /**
-     * Dice a que componente describe esta etiqueta.
+     * It says which component this label describes.
      *
-     * <p>El componente se entera por la propiedad de cliente {@code labeledBy}: es como un lector
-     * de pantalla, o el mnemonico, encuentran el campo a partir de su etiqueta.
+     * <p>The component learns about it through the client property {@code labeledBy}: it is how a
+     * screen reader, or the mnemonic, finds the field from its label.
      */
     public void setLabelFor(Component c) {
-        Component viejo = this.labelFor;
+        Component old = this.labelFor;
         this.labelFor = c;
-        firePropertyChange("labelFor", viejo, c);
-        if (viejo instanceof JComponent) {
-            ((JComponent) viejo).putClientProperty(LABELED_BY_PROPERTY, null);
+        firePropertyChange("labelFor", old, c);
+        if (old instanceof JComponent) {
+            ((JComponent) old).putClientProperty(LABELED_BY_PROPERTY, null);
         }
         if (c instanceof JComponent) {
             ((JComponent) c).putClientProperty(LABELED_BY_PROPERTY, this);

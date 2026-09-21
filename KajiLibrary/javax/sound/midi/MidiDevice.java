@@ -3,104 +3,104 @@ package javax.sound.midi;
 import java.util.List;
 
 /**
- * KajiLibrary's javax.sound.midi.MidiDevice -- un dispositivo MIDI.
+ * KajiLibrary's javax.sound.midi.MidiDevice -- a MIDI device.
  *
- * <p>Un puerto fisico, un sintetizador por software, un secuenciador. Todos se abren, se cierran, y
- * reparten receptores y transmisores.
+ * <p>A physical port, a software synthesizer, a sequencer. They all open, close, and hand out
+ * receivers and transmitters.
  *
- * <h2>Receptor y transmisor, desde el dispositivo</h2>
+ * <h2>Receiver and transmitter, from the device</h2>
  *
- * <p>Es la misma inversion de nombres que en el audio muestreado, y por la misma razon:
+ * <p>It is the same inversion of names as in sampled audio, and for the same reason:
  *
  * <ul>
- *   <li>un {@link Receiver} del dispositivo es donde el programa <b>escribe</b>;
- *   <li>un {@link Transmitter} del dispositivo es de donde el programa <b>lee</b>.
+ *   <li>a {@link Receiver} of the device is where the program <b>writes</b>;
+ *   <li>a {@link Transmitter} of the device is where the program <b>reads</b> from.
  * </ul>
  *
- * <p>Un puerto de <b>salida</b> MIDI provee receptores; uno de <b>entrada</b> provee transmisores. Un
- * dispositivo que devuelve 0 en {@link #getMaxReceivers} no acepta que le manden nada.
+ * <p>A MIDI <b>output</b> port provides receivers; an <b>input</b> one provides transmitters. A
+ * device that returns 0 from {@link #getMaxReceivers} does not accept being sent anything.
  *
- * <h2>{@link #getMaxReceivers} puede devolver -1</h2>
+ * <h2>{@link #getMaxReceivers} can return -1</h2>
  *
- * <p>Significa "sin limite", no "ninguno". Confundirlo lleva a codigo que se niega a usar un
- * dispositivo perfectamente bueno.
+ * <p>It means "no limit", not "none". Confusing it leads to code that refuses to use a perfectly
+ * good device.
  *
- * <h2>Se cierra cuando se cierra su ultimo receptor</h2>
+ * <h2>It closes when its last receiver closes</h2>
  *
- * <p>Un dispositivo que se abrio implicitamente --al pedirle un receptor sin haberlo abierto-- se
- * cierra solo cuando se cierra el ultimo. Uno abierto a mano con {@link #open} no: ese hay que
- * cerrarlo a mano.
+ * <p>A device that was opened implicitly --by asking it for a receiver without having opened it--
+ * closes by itself when the last one closes. One opened by hand with {@link #open} does not: that
+ * one has to be closed by hand.
  */
 public interface MidiDevice extends AutoCloseable {
 
-    /** Como se llama. */
+    /** What it is called. */
     MidiDevice.Info getDeviceInfo();
 
     /**
-     * Reserva el recurso del sistema.
+     * Reserves the system resource.
      *
-     * @throws MidiUnavailableException si esta ocupado
+     * @throws MidiUnavailableException if it is busy
      */
     void open() throws MidiUnavailableException;
 
-    /** Lo libera, y cierra todo lo que haya repartido. */
+    /** Releases it, and closes everything it has handed out. */
     void close();
 
-    /** Si esta abierto. */
+    /** Whether it is open. */
     boolean isOpen();
 
-    /** El reloj del dispositivo, en microsegundos, o -1 si no lleva. */
+    /** The device's clock, in microseconds, or -1 if it keeps none. */
     long getMicrosecondPosition();
 
-    /** Cuantos receptores puede dar a la vez; -1 es sin limite. Ver la nota de la clase. */
+    /** How many receivers it can give at once; -1 is no limit. See the class note. */
     int getMaxReceivers();
 
-    /** Cuantos transmisores puede dar a la vez; -1 es sin limite. */
+    /** How many transmitters it can give at once; -1 is no limit. */
     int getMaxTransmitters();
 
     /**
-     * Un receptor nuevo.
+     * A new receiver.
      *
-     * @throws MidiUnavailableException si no puede dar mas
+     * @throws MidiUnavailableException if it cannot give more
      */
     Receiver getReceiver() throws MidiUnavailableException;
 
-    /** Los que ya dio y siguen abiertos. */
+    /** The ones it already gave that are still open. */
     List<Receiver> getReceivers();
 
     /**
-     * Un transmisor nuevo.
+     * A new transmitter.
      *
-     * @throws MidiUnavailableException si no puede dar mas
+     * @throws MidiUnavailableException if it cannot give more
      */
     Transmitter getTransmitter() throws MidiUnavailableException;
 
-    /** Los que ya dio y siguen abiertos. */
+    /** The ones it already gave that are still open. */
     List<Transmitter> getTransmitters();
 
     /**
-     * Como se llama un dispositivo.
+     * What a device is called.
      *
-     * <p>Cuatro cadenas para mostrar. La igualdad es por <b>identidad</b>: dos dispositivos con el
-     * mismo nombre siguen siendo dos.
+     * <p>Four strings for display. Equality is by <b>identity</b>: two devices with the same name
+     * are still two.
      *
-     * <p>{@link #toString} devuelve solo el nombre, no las cuatro cosas.
+     * <p>{@link #toString} returns only the name, not the four things.
      */
     class Info {
 
-        /** El nombre. */
+        /** The name. */
         private final String name;
 
-        /** Quien lo hizo. */
+        /** Who made it. */
         private final String vendor;
 
-        /** Que es. */
+        /** What it is. */
         private final String description;
 
-        /** Que version. */
+        /** Which version. */
         private final String version;
 
-        /** Protegido: estos datos los define quien implementa el dispositivo. */
+        /** Protected: this data is defined by whoever implements the device. */
         protected Info(String name, String vendor, String description, String version) {
             this.name = name;
             this.vendor = vendor;
@@ -108,39 +108,39 @@ public interface MidiDevice extends AutoCloseable {
             this.version = version;
         }
 
-        /** Por identidad. Ver la nota de la clase. */
+        /** By identity. See the class note. */
         @Override
         public final boolean equals(Object obj) {
             return super.equals(obj);
         }
 
-        /** El de identidad. */
+        /** The identity one. */
         @Override
         public final int hashCode() {
             return super.hashCode();
         }
 
-        /** El nombre. */
+        /** The name. */
         public final String getName() {
             return this.name;
         }
 
-        /** Quien lo hizo. */
+        /** Who made it. */
         public final String getVendor() {
             return this.vendor;
         }
 
-        /** Que es. */
+        /** What it is. */
         public final String getDescription() {
             return this.description;
         }
 
-        /** Que version. */
+        /** Which version. */
         public final String getVersion() {
             return this.version;
         }
 
-        /** Solo el nombre. Ver la nota de la clase. */
+        /** Only the name. See the class note. */
         @Override
         public final String toString() {
             return this.name;

@@ -11,29 +11,29 @@ import javax.accessibility.Accessible;
 import javax.accessibility.AccessibleContext;
 
 /**
- * Un applet de Swing.
+ * A Swing applet.
  *
- * <h2>Historia, no tecnologia</h2>
+ * <h2>History, not technology</h2>
  *
- * <p>Los applets ya no corren en ningun navegador: el complemento de Java se retiro y
- * {@link Applet} esta marcado obsoleto en el JDK. Esta clase existe porque su superclase existe, y
- * porque codigo viejo la nombra.
+ * <p>Applets no longer run in any browser: the Java plug-in was withdrawn and {@link Applet} is
+ * marked obsolete in the JDK. This class exists because its superclass exists, and because old
+ * code names it.
  *
- * <p>Lo unico que agrega sobre {@code Applet} es lo mismo que {@link JWindow} agrega sobre
- * {@code Window}: un {@link JRootPane} adentro, con panel de contenido, panel por capas, panel de
- * vidrio y barra de menu. Todo eso sirve igual afuera de un navegador -- un {@code JApplet} se puede
- * meter adentro de un panel como cualquier componente --, que es la unica razon por la que hoy
- * alguien la tocaria.
+ * <p>The only thing it adds over {@code Applet} is the same as what {@link JWindow} adds over
+ * {@code Window}: a {@link JRootPane} inside, with content pane, layered pane, glass pane and
+ * menu bar. All that serves just as well outside a browser -- a {@code JApplet} can be put
+ * inside a panel like any component --, which is the only reason anybody would touch it
+ * today.
  *
- * <p>Los hijos van al contenido; ver la nota de {@link JDialog}.
+ * <p>The children go to the content; see {@link JDialog}'s note.
  */
 public class JApplet extends Applet implements Accessible, RootPaneContainer,
         TransferHandler.HasGetTransferHandler {
 
-    /** El panel raiz; ver la nota de la clase. */
+    /** The root pane; see the class note. */
     protected JRootPane rootPane;
 
-    /** Si agregar redirige al contenido. */
+    /** Whether adding redirects to the content. */
     protected boolean rootPaneCheckingEnabled = false;
 
     protected AccessibleContext accessibleContext;
@@ -41,9 +41,9 @@ public class JApplet extends Applet implements Accessible, RootPaneContainer,
     private TransferHandler transferHandler;
 
     /**
-     * Un applet con su panel raiz.
+     * An applet with its root pane.
      *
-     * @throws HeadlessException si no hay pantalla
+     * @throws HeadlessException if there is no screen
      */
     public JApplet() throws HeadlessException {
         super();
@@ -72,9 +72,10 @@ public class JApplet extends Applet implements Accessible, RootPaneContainer,
     }
 
     /**
-     * Dibuja sin borrar el fondo primero.
+     * It draws without clearing the background first.
      *
-     * <p>Swing dibuja cada pixel que le toca, asi que borrar antes solo produce un parpadeo.
+     * <p>Swing draws every pixel that falls to it, so clearing beforehand only produces a
+     * flicker.
      */
     public void update(Graphics g) {
         paint(g);
@@ -97,10 +98,10 @@ public class JApplet extends Applet implements Accessible, RootPaneContainer,
     }
 
     /**
-     * Agrega al contenido, no al applet.
+     * It adds to the content, not to the applet.
      *
-     * @throws IllegalArgumentException si se intenta agregar el panel raiz con la redireccion
-     *     prendida
+     * @throws IllegalArgumentException if the root pane is added with the redirection switched
+     *     on
      */
     protected void addImpl(Component comp, Object constraints, int index) {
         if (isRootPaneCheckingEnabled()) {
@@ -110,7 +111,7 @@ public class JApplet extends Applet implements Accessible, RootPaneContainer,
         }
     }
 
-    /** Saca del contenido, salvo que sea el panel raiz. */
+    /** It removes from the content, unless it is the root pane. */
     public void remove(Component comp) {
         if (comp == rootPane) {
             super.remove(comp);
@@ -119,7 +120,7 @@ public class JApplet extends Applet implements Accessible, RootPaneContainer,
         }
     }
 
-    /** Le pone acomodador al contenido, no al applet. */
+    /** It gives the layout to the content, not to the applet. */
     public void setLayout(LayoutManager manager) {
         if (isRootPaneCheckingEnabled()) {
             getContentPane().setLayout(manager);
@@ -140,7 +141,8 @@ public class JApplet extends Applet implements Accessible, RootPaneContainer,
         if (rootPane != null) {
             boolean checkingEnabled = isRootPaneCheckingEnabled();
             try {
-                // Apagado mientras se agrega el panel raiz: si no, se redirigiria a si mismo.
+                // Switched off while the root pane is added: otherwise, it would redirect to
+                // itself.
                 setRootPaneCheckingEnabled(false);
                 add(rootPane, java.awt.BorderLayout.CENTER);
             } finally {

@@ -1,9 +1,10 @@
 package javax.swing.undo;
 
 /**
- * Se pidio rehacer algo que no se puede rehacer.
+ * A redo was asked for on something that cannot be redone.
  *
- * <p>El gemelo de {@link CannotUndoException}; ver alli el argumento sobre por que no lleva mensaje.
+ * <p>{@link CannotUndoException}'s twin; see there for the argument on why it carries no
+ * message.
  */
 public class CannotRedoException extends RuntimeException {
 

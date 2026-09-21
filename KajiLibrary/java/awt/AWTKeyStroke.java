@@ -8,22 +8,22 @@ import java.util.Map;
 import java.util.StringTokenizer;
 
 /**
- * Una pulsación de teclado descrita **sin haber pasado**.
+ * A keystroke described **without having happened**.
  *
- * <p>Un {@link KeyEvent} dice que algo pasó; esto describe algo que podría pasar. Sirve para
- * declarar atajos: "Ctrl+S guarda" es una descripción, no un evento.
+ * <p>A {@link KeyEvent} says something happened; this describes something that could happen. It
+ * serves to declare shortcuts: "Ctrl+S saves" is a description, not an event.
  *
- * <p>Las instancias se **comparten**: pedir dos veces el mismo atajo devuelve el mismo objeto. Por
- * eso no hay constructor público y por eso {@link #equals} es `final`. Un programa que arme miles de
- * atajos iguales gasta un objeto, y compararlos es comparar referencias.
+ * <p>The instances are **shared**: asking twice for the same shortcut returns the same object. That
+ * is why there is no public constructor and why {@link #equals} is `final`. A program that builds
+ * thousands of equal shortcuts spends one object, and comparing them is comparing references.
  *
- * <p>De ahí también {@link #readResolve}: un atajo deserializado tiene que volver a ser **el mismo
- * objeto** que el que ya estaba en la caché, o dos atajos iguales dejarían de serlo después de
- * pasar por disco.
+ * <p>Hence {@link #readResolve} as well: a deserialized shortcut has to become **the same object**
+ * as the one that was already in the cache, or two equal shortcuts would stop being so after going
+ * through disk.
  *
- * <p>Un atajo puede describirse por **tecla** —{@code VK_S}— o por **carácter** —la letra `s`—, y no
- * es lo mismo: lo primero es una tecla física y lo segundo lo que se escribió. Los dos casos se
- * distinguen por si el código de tecla es {@code VK_UNDEFINED}.
+ * <p>A shortcut can be described by **key** —{@code VK_S}— or by **character** —the letter `s`—,
+ * and they are not the same: the first is a physical key and the second what was typed. The two
+ * cases are told apart by whether the key code is {@code VK_UNDEFINED}.
  */
 public class AWTKeyStroke implements Serializable {
 
@@ -37,11 +37,11 @@ public class AWTKeyStroke implements Serializable {
     private int modifiers;
     private boolean onKeyRelease;
 
-    /** Uno vacío, para deserializar. */
+    /** An empty one, for deserializing. */
     protected AWTKeyStroke() {
     }
 
-    /** Con todo dado; se llega por las fábricas. */
+    /** With everything given; one gets here through the factories. */
     protected AWTKeyStroke(char keyChar, int keyCode, int modifiers, boolean onKeyRelease) {
         this.keyChar = keyChar;
         this.keyCode = keyCode;
@@ -50,10 +50,15 @@ public class AWTKeyStroke implements Serializable {
     }
 
     /**
-     * Declara que las fábricas devuelvan instancias de esa subclase.
+     * Checks that the class is a subclass of this one.
      *
-     * @throws IllegalArgumentException si la clase no hereda de ésta o no tiene constructor sin
-     *     argumentos
+     * <p>Against what this note used to claim, it does not make the factories return instances of
+     * that subclass —they keep returning {@code AWTKeyStroke}— and it does not check for a
+     * no-argument constructor either. In the JDK the method is empty and does not even check this
+     * much; here at least what could never work is rejected.
+     *
+     * @throws IllegalArgumentException if the class is `null`
+     * @throws ClassCastException if the class does not derive from this one
      */
     protected static void registerSubclass(Class<?> subclass) {
         if (subclass == null) {
@@ -64,63 +69,64 @@ public class AWTKeyStroke implements Serializable {
         }
     }
 
-    /** El de la caché si ya estaba, o éste guardado en ella. */
-    private static AWTKeyStroke unico(AWTKeyStroke k) {
+    /** The cached one if it was already there, or this one stored in the cache. */
+    private static AWTKeyStroke shared(AWTKeyStroke k) {
         synchronized (AWTKeyStroke.class) {
-            AWTKeyStroke ya = cache.get(k);
-            if (ya != null) {
-                return ya;
+            AWTKeyStroke cached = cache.get(k);
+            if (cached != null) {
+                return cached;
             }
             cache.put(k, k);
             return k;
         }
     }
 
-    /** El atajo de escribir ese carácter. */
+    /** The shortcut of typing that character. */
     public static AWTKeyStroke getAWTKeyStroke(char keyChar) {
-        return unico(new AWTKeyStroke(keyChar, KeyEvent.VK_UNDEFINED, 0, false));
+        return shared(new AWTKeyStroke(keyChar, KeyEvent.VK_UNDEFINED, 0, false));
     }
 
     /**
-     * El atajo de ese carácter con modificadores.
+     * The shortcut of that character with modifiers.
      *
-     * @throws IllegalArgumentException si el carácter es `null`
+     * @throws IllegalArgumentException if the character is `null`
      */
     public static AWTKeyStroke getAWTKeyStroke(Character keyChar, int modifiers) {
         if (keyChar == null) {
             throw new IllegalArgumentException("keyChar cannot be null");
         }
-        return unico(new AWTKeyStroke(keyChar.charValue(), KeyEvent.VK_UNDEFINED,
-                conLasDosMascaras(modifiers), false));
+        return shared(new AWTKeyStroke(keyChar.charValue(), KeyEvent.VK_UNDEFINED,
+                withBothMasks(modifiers), false));
     }
 
     /**
-     * El atajo de esa tecla, al apretarla o al soltarla.
+     * The shortcut of that key, on pressing it or on releasing it.
      *
-     * <p>`onKeyRelease` no es un detalle: un atajo al soltar y uno al apretar son distintos, y hay
-     * interfaces que usan los dos.
+     * <p>`onKeyRelease` is not a detail: a shortcut on release and one on press are different, and
+     * there are interfaces that use both.
      */
     public static AWTKeyStroke getAWTKeyStroke(int keyCode, int modifiers,
             boolean onKeyRelease) {
-        return unico(new AWTKeyStroke(KeyEvent.CHAR_UNDEFINED, keyCode,
-                conLasDosMascaras(modifiers), onKeyRelease));
+        return shared(new AWTKeyStroke(KeyEvent.CHAR_UNDEFINED, keyCode,
+                withBothMasks(modifiers), onKeyRelease));
     }
 
     /**
-     * Los modificadores con sus dos mascaras: la nueva y la vieja.
+     * The modifiers with their two masks: the new one and the old one.
      *
-     * <p>Cada modificador de teclado tiene dos constantes en {@code InputEvent}: la nueva
-     * ({@code CTRL_DOWN_MASK}) y la de antes ({@code CTRL_MASK}, en desuso). Un atajo lleva las dos
-     * puestas, y no es redundancia inutil: hay codigo que sigue leyendo la vieja --el texto del
-     * acelerador de un item de menu, sin ir mas lejos, que sale de
-     * {@code KeyEvent.getKeyModifiersText}--, y con la vieja en cero se queda sin nombre de
-     * modificador y el acelerador se muestra como {@code "O"} en vez de {@code "Ctrl-O"}.
+     * <p>Every keyboard modifier has two constants in {@code InputEvent}: the new one ({@code
+     * CTRL_DOWN_MASK}) and the earlier one ({@code CTRL_MASK}, deprecated). A shortcut carries both
+     * of them on, and it is not useless redundancy: there is code that still reads the old one
+     * --{@code KeyEvent.getKeyModifiersText}, which is what writes the accelerator of a menu item
+     * out for a person, looks at nothing else-- and with the old one at zero it is left without a
+     * modifier name and the accelerator shows as {@code "O"} instead of {@code "Ctrl-O"}.
      *
-     * <p>Los botones del mouse no entran: {@code BUTTON2_MASK} y {@code BUTTON3_MASK} valen lo
-     * mismo que {@code ALT_MASK} y {@code META_MASK}, y agregarlas inventaria modificadores que
-     * nadie pidio. Esta medido: {@code ctrl O} da 130 y {@code ctrl shift S} da 195.
+     * <p>The mouse buttons do not come in: {@code BUTTON2_MASK} and {@code BUTTON3_MASK} are worth
+     * the same as {@code ALT_MASK} and {@code META_MASK}, and adding them would invent modifiers
+     * nobody asked for. It is measured: {@code ctrl O} gives 130 and {@code ctrl shift S} gives
+     * 195.
      */
-    private static int conLasDosMascaras(int modifiers) {
+    private static int withBothMasks(int modifiers) {
         if ((modifiers & java.awt.event.InputEvent.SHIFT_DOWN_MASK) != 0) {
             modifiers |= java.awt.event.InputEvent.SHIFT_MASK;
         }
@@ -136,7 +142,7 @@ public class AWTKeyStroke implements Serializable {
         if ((modifiers & java.awt.event.InputEvent.ALT_GRAPH_DOWN_MASK) != 0) {
             modifiers |= java.awt.event.InputEvent.ALT_GRAPH_MASK;
         }
-        // Y al reves, para quien todavia pase las viejas.
+        // And the other way round, for whoever still passes the old ones.
         if ((modifiers & java.awt.event.InputEvent.SHIFT_MASK) != 0) {
             modifiers |= java.awt.event.InputEvent.SHIFT_DOWN_MASK;
         }
@@ -152,18 +158,18 @@ public class AWTKeyStroke implements Serializable {
         return modifiers;
     }
 
-    /** El atajo de esa tecla al apretarla. */
+    /** The shortcut of that key on pressing it. */
     public static AWTKeyStroke getAWTKeyStroke(int keyCode, int modifiers) {
         return getAWTKeyStroke(keyCode, modifiers, false);
     }
 
     /**
-     * El atajo que corresponde a ese evento de teclado.
+     * The shortcut that corresponds to that keyboard event.
      *
-     * <p>Un {@code KEY_TYPED} da un atajo por carácter y los otros dos, uno por tecla: es la misma
-     * distinción que hace {@link KeyEvent}, conservada.
+     * <p>A {@code KEY_TYPED} gives a shortcut by character and the other two, one by key: it is the
+     * same distinction {@link KeyEvent} makes, kept.
      *
-     * @throws NullPointerException si el evento es `null`
+     * @throws NullPointerException if the event is `null`
      */
     public static AWTKeyStroke getAWTKeyStrokeForEvent(KeyEvent anEvent) {
         int id = anEvent.getID();
@@ -176,9 +182,9 @@ public class AWTKeyStroke implements Serializable {
     }
 
     /**
-     * El atajo que describe esa cadena, como `"control S"` o `"released F1"`.
+     * The shortcut that string describes, such as `"control S"` or `"released F1"`.
      *
-     * @throws IllegalArgumentException si la cadena es `null` o no se entiende
+     * @throws IllegalArgumentException if the string is `null` or is not understood
      */
     public static AWTKeyStroke getAWTKeyStroke(String s) {
         if (s == null) {
@@ -187,7 +193,7 @@ public class AWTKeyStroke implements Serializable {
         int modifiers = 0;
         boolean release = false;
         StringTokenizer st = new StringTokenizer(s, " ");
-        String ultimo = null;
+        String last = null;
         while (st.hasMoreTokens()) {
             String t = st.nextToken();
             if (t.equals("shift")) {
@@ -212,15 +218,15 @@ public class AWTKeyStroke implements Serializable {
                 release = true;
             } else if (t.equals("typed")) {
                 release = false;
-                ultimo = "typed";
+                last = "typed";
             } else {
-                if ("typed".equals(ultimo)) {
+                if ("typed".equals(last)) {
                     if (t.length() != 1) {
                         throw new IllegalArgumentException("Invalid typed key: " + t);
                     }
                     return getAWTKeyStroke(Character.valueOf(t.charAt(0)), modifiers);
                 }
-                int vk = codigoDe(t);
+                int vk = keyCodeFor(t);
                 if (vk == KeyEvent.VK_UNDEFINED) {
                     throw new IllegalArgumentException("Unknown keycode: " + t);
                 }
@@ -231,15 +237,17 @@ public class AWTKeyStroke implements Serializable {
     }
 
     /**
-     * El código de tecla que se llama así.
+     * The key code that goes by that name.
      *
-     * <p>Sólo entiende los nombres de una letra o dígito y los de `VK_`. Los nombres largos del JDK
-     * —`ENTER`, `F1`— salen de una tabla que se arma por reflexión sobre {@code KeyEvent}, y acá se
-     * resuelven comparando contra las constantes que hacen falta.
+     * <p>It understands the names of one letter or digit and a closed list of long ones: {@code
+     * ENTER}, {@code ESCAPE}, {@code SPACE}, {@code TAB}, {@code DELETE}, {@code BACK_SPACE}, the
+     * four arrows and {@code F1} to {@code F12}. Against what this note used to claim, it
+     * understands no {@code VK_} prefix and no other constant name: the JDK resolves any of them by
+     * reflection over {@code KeyEvent}, and here whatever is not on the list is rejected.
      */
-    private static int codigoDe(String nombre) {
-        if (nombre.length() == 1) {
-            char c = nombre.charAt(0);
+    private static int keyCodeFor(String name) {
+        if (name.length() == 1) {
+            char c = name.charAt(0);
             if (c >= 'A' && c <= 'Z') {
                 return KeyEvent.VK_A + (c - 'A');
             }
@@ -247,39 +255,39 @@ public class AWTKeyStroke implements Serializable {
                 return KeyEvent.VK_0 + (c - '0');
             }
         }
-        if (nombre.equals("ENTER")) {
+        if (name.equals("ENTER")) {
             return KeyEvent.VK_ENTER;
         }
-        if (nombre.equals("ESCAPE")) {
+        if (name.equals("ESCAPE")) {
             return KeyEvent.VK_ESCAPE;
         }
-        if (nombre.equals("SPACE")) {
+        if (name.equals("SPACE")) {
             return KeyEvent.VK_SPACE;
         }
-        if (nombre.equals("TAB")) {
+        if (name.equals("TAB")) {
             return KeyEvent.VK_TAB;
         }
-        if (nombre.equals("DELETE")) {
+        if (name.equals("DELETE")) {
             return KeyEvent.VK_DELETE;
         }
-        if (nombre.equals("BACK_SPACE")) {
+        if (name.equals("BACK_SPACE")) {
             return KeyEvent.VK_BACK_SPACE;
         }
-        if (nombre.equals("LEFT")) {
+        if (name.equals("LEFT")) {
             return KeyEvent.VK_LEFT;
         }
-        if (nombre.equals("RIGHT")) {
+        if (name.equals("RIGHT")) {
             return KeyEvent.VK_RIGHT;
         }
-        if (nombre.equals("UP")) {
+        if (name.equals("UP")) {
             return KeyEvent.VK_UP;
         }
-        if (nombre.equals("DOWN")) {
+        if (name.equals("DOWN")) {
             return KeyEvent.VK_DOWN;
         }
-        if (nombre.length() >= 2 && nombre.charAt(0) == 'F') {
+        if (name.length() >= 2 && name.charAt(0) == 'F') {
             try {
-                int n = Integer.parseInt(nombre.substring(1));
+                int n = Integer.parseInt(name.substring(1));
                 if (n >= 1 && n <= 12) {
                     return KeyEvent.VK_F1 + (n - 1);
                 }
@@ -290,27 +298,27 @@ public class AWTKeyStroke implements Serializable {
         return KeyEvent.VK_UNDEFINED;
     }
 
-    /** El carácter, o {@code CHAR_UNDEFINED} si el atajo es por tecla. */
+    /** The character, or {@code CHAR_UNDEFINED} if the shortcut is by key. */
     public final char getKeyChar() {
         return this.keyChar;
     }
 
-    /** La tecla, o {@code VK_UNDEFINED} si el atajo es por carácter. */
+    /** The key, or {@code VK_UNDEFINED} if the shortcut is by character. */
     public final int getKeyCode() {
         return this.keyCode;
     }
 
-    /** Qué modificadores hacen falta. */
+    /** Which modifiers are needed. */
     public final int getModifiers() {
         return this.modifiers;
     }
 
-    /** Si dispara al soltar en vez de al apretar. */
+    /** Whether it fires on release instead of on press. */
     public final boolean isOnKeyRelease() {
         return this.onKeyRelease;
     }
 
-    /** Con qué identificador de {@link KeyEvent} coincide este atajo. */
+    /** Which {@link KeyEvent} identifier this shortcut matches. */
     public final int getKeyEventType() {
         if (this.keyCode == KeyEvent.VK_UNDEFINED) {
             return KeyEvent.KEY_TYPED;
@@ -327,10 +335,10 @@ public class AWTKeyStroke implements Serializable {
     }
 
     /**
-     * Igualdad por tecla, carácter, modificadores y momento.
+     * Equality by key, character, modifiers and moment.
      *
-     * <p>Es `final` porque las instancias se comparten: dos atajos iguales son el **mismo** objeto,
-     * y dejar que una subclase cambiara la igualdad rompería la caché.
+     * <p>It is `final` because the instances are shared: two equal shortcuts are the **same**
+     * object, and letting a subclass change equality would break the cache.
      */
     public final boolean equals(Object anObject) {
         if (!(anObject instanceof AWTKeyStroke)) {
@@ -342,26 +350,32 @@ public class AWTKeyStroke implements Serializable {
     }
 
     /**
-     * El atajo escrito como lo lee {@link #getAWTKeyStroke(String)}.
+     * The shortcut written the way {@link #getAWTKeyStroke(String)} reads it.
      *
-     * <p>Los dos formatos son el mismo: {@code "ctrl released ENTER"} sale de aca y vuelve a
-     * entrar por el analizador sin perder nada. Por eso los modificadores se escriben con su
-     * nombre --{@code shift ctrl meta alt altGraph button1 button2 button3}, en ese orden-- y la
-     * tecla con el nombre de su constante {@code VK_} sin el prefijo, que no es lo mismo que
-     * {@link KeyEvent#getKeyText}: esa devuelve texto para mostrarle a una persona y esta el
-     * nombre exacto de la constante.
+     * <p>The two formats are meant to be one: {@code "ctrl released ENTER"} comes out of here and
+     * goes back in through the parser without losing anything. That is why the modifiers are
+     * written with their name --{@code shift ctrl meta alt altGraph button1 button2 button3}, in
+     * that order-- and the key with the name of its {@code VK_} constant without the prefix, which
+     * is not the same as {@link KeyEvent#getKeyText}: that one returns text to show a person and
+     * this one the exact name of the constant.
+     *
+     * <p>The round trip only closes for the names the parser knows --a letter, a digit, {@code
+     * ENTER}, {@code ESCAPE}, {@code SPACE}, {@code TAB}, {@code DELETE}, {@code BACK_SPACE}, the
+     * arrows and {@code F1} to {@code F12}--. Any other key is written with the name of its
+     * constant, which is right, and {@link #getAWTKeyStroke(String)} rejects it: {@code VK_HOME}
+     * comes out as {@code "pressed HOME"} and does not go back in.
      */
     public String toString() {
         if (this.keyCode == KeyEvent.VK_UNDEFINED) {
-            return textoDeModificadores(this.modifiers) + "typed " + this.keyChar;
+            return modifiersText(this.modifiers) + "typed " + this.keyChar;
         }
-        return textoDeModificadores(this.modifiers)
+        return modifiersText(this.modifiers)
                 + (this.onKeyRelease ? "released" : "pressed") + " "
-                + nombreDeTecla(this.keyCode);
+                + keyName(this.keyCode);
     }
 
-    /** Los modificadores en el orden que espera el analizador; cada uno con un espacio atras. */
-    private static String textoDeModificadores(int modifiers) {
+    /** The modifiers in the order the parser expects; each one with a space after it. */
+    private static String modifiersText(int modifiers) {
         StringBuilder buf = new StringBuilder();
         if ((modifiers & java.awt.event.InputEvent.SHIFT_DOWN_MASK) != 0) {
             buf.append("shift ");
@@ -390,56 +404,60 @@ public class AWTKeyStroke implements Serializable {
         return buf.toString();
     }
 
-    /** Los nombres ya buscados; buscar por reflexion 189 campos por atajo seria caro. */
-    private static final Map<Integer, String> NOMBRES = new HashMap<Integer, String>();
+    /**
+     * The names already looked up; searching the 189 {@code VK_} constants of {@code KeyEvent} for
+     * every shortcut would be expensive.
+     */
+    private static final Map<Integer, String> NAMES = new HashMap<Integer, String>();
 
     /**
-     * El nombre de la constante {@code VK_} de esa tecla, sin el prefijo.
+     * The name of the {@code VK_} constant of that key, without the prefix.
      *
-     * <p>Sale por reflexion sobre {@link KeyEvent} y no de una tabla escrita a mano: son casi
-     * doscientas constantes, y una tabla que se olvide de una da un nombre equivocado en vez de
-     * faltar. {@code "UNKNOWN"} si no hay ninguna, que es lo que contesta el JDK.
+     * <p>It comes out by reflection over {@link KeyEvent} and not from a table written by hand:
+     * there are 189 constants, and a table that forgets one gives a wrong name instead of missing.
+     * {@code "UNKNOWN"} if there is none, which is what the JDK answers.
      */
-    private static String nombreDeTecla(int keyCode) {
-        Integer clave = Integer.valueOf(keyCode);
-        synchronized (NOMBRES) {
-            String ya = NOMBRES.get(clave);
-            if (ya != null) {
-                return ya;
+    private static String keyName(int keyCode) {
+        Integer key = Integer.valueOf(keyCode);
+        synchronized (NAMES) {
+            String cached = NAMES.get(key);
+            if (cached != null) {
+                return cached;
             }
         }
-        int esperados = java.lang.reflect.Modifier.PUBLIC | java.lang.reflect.Modifier.STATIC
+        int expected = java.lang.reflect.Modifier.PUBLIC | java.lang.reflect.Modifier.STATIC
                 | java.lang.reflect.Modifier.FINAL;
-        java.lang.reflect.Field[] campos = KeyEvent.class.getDeclaredFields();
-        for (int i = 0; i < campos.length; i++) {
+        java.lang.reflect.Field[] fields = KeyEvent.class.getDeclaredFields();
+        for (int i = 0; i < fields.length; i++) {
             try {
-                if (campos[i].getModifiers() == esperados
-                        && campos[i].getType() == Integer.TYPE
-                        && campos[i].getName().startsWith("VK_")
-                        && campos[i].getInt(KeyEvent.class) == keyCode) {
-                    String nombre = campos[i].getName().substring(3);
-                    synchronized (NOMBRES) {
-                        NOMBRES.put(clave, nombre);
+                if (fields[i].getModifiers() == expected
+                        && fields[i].getType() == Integer.TYPE
+                        && fields[i].getName().startsWith("VK_")
+                        && fields[i].getInt(KeyEvent.class) == keyCode) {
+                    String name = fields[i].getName().substring(3);
+                    synchronized (NAMES) {
+                        NAMES.put(key, name);
                     }
-                    return nombre;
+                    return name;
                 }
             } catch (IllegalAccessException e) {
-                // Un campo publico de una clase publica siempre es accesible; si algun dia no lo
-                // fuera, se sigue con el que viene en vez de romper el toString.
+                // A public field of a public class is always accessible; if some day it were not,
+                // the loop goes on with the next one instead of breaking toString.
             }
         }
         return "UNKNOWN";
     }
 
     /**
-     * La instancia compartida que corresponde a este atajo.
+     * The shared instance that corresponds to this shortcut.
      *
-     * <p>Sin esto, un atajo deserializado sería un objeto distinto del que ya estaba en la caché, y
-     * dos atajos iguales dejarían de compararse iguales por identidad después de pasar por disco.
+     * <p>Without this, a deserialized shortcut would be a different object from the one that was
+     * already in the cache, and two equal shortcuts would stop comparing equal by identity after
+     * going through disk.
      *
-     * @throws ObjectStreamException si la instancia no se puede resolver
+     * @throws ObjectStreamException if the instance cannot be resolved
      */
     protected Object readResolve() throws ObjectStreamException {
-        return unico(this);
+        return shared(this);
     }
 }

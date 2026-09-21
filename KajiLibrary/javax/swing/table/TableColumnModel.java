@@ -6,83 +6,83 @@ import javax.swing.ListSelectionModel;
 import javax.swing.event.TableColumnModelListener;
 
 /**
- * Que columnas tiene una tabla, en que orden y cuales estan seleccionadas.
+ * Which columns a table has, in what order and which ones are selected.
  *
- * <h2>Separado del modelo de datos, y por eso la tabla se puede reordenar</h2>
+ * <h2>Separate from the data model, and that is why the table can be reordered</h2>
  *
- * <p>{@link TableModel} dice que datos hay; esto dice como se presentan. Arrastrar una columna a otro
- * lugar es {@link #moveColumn} sobre este modelo y el de datos ni se entera — que es exactamente lo
- * que hace falta, porque el orden de las columnas es una preferencia de la vista.
+ * <p>{@link TableModel} says which data there is; this says how it is presented. Dragging a
+ * column elsewhere is {@link #moveColumn} over this model and the data one does not even find out
+ * -- which is exactly what is needed, because the columns' order is a preference of the view.
  *
- * <p>De ahi que cada {@link TableColumn} lleve su propio indice de modelo: la posicion en esta lista
- * y la columna de la que saca los datos son dos numeros distintos.
+ * <p>Hence each {@link TableColumn} carries its own model index: the position in this list and
+ * the column it takes the data from are two different numbers.
  *
- * <h2>El margen, que parece un detalle y no lo es</h2>
+ * <h2>The margin, which looks like a detail and is not</h2>
  *
- * <p>{@link #getColumnMargin} es el espacio entre columnas, y entra en
- * {@link #getTotalColumnWidth} y en {@link #getColumnIndexAtX}. Olvidarlo hace que el ancho total no
- * cierre y que al hacer clic cerca de un borde se seleccione la columna de al lado.
+ * <p>{@link #getColumnMargin} is the space between columns, and it enters into
+ * {@link #getTotalColumnWidth} and {@link #getColumnIndexAtX}. Forgetting it makes the total
+ * width not add up and makes a click near an edge select the neighbouring column.
  */
 public interface TableColumnModel {
 
-    /** Agrega una columna al final. */
+    /** Adds a column at the end. */
     void addColumn(TableColumn aColumn);
 
-    /** Saca una columna. */
+    /** Removes a column. */
     void removeColumn(TableColumn column);
 
-    /** Mueve una columna de lugar en la vista. */
+    /** Moves a column around in the view. */
     void moveColumn(int columnIndex, int newIndex);
 
-    /** Cambia el espacio entre columnas. */
+    /** Changes the space between columns. */
     void setColumnMargin(int newMargin);
 
-    /** Cuantas columnas hay. */
+    /** How many columns there are. */
     int getColumnCount();
 
-    /** Las columnas, en orden de vista. */
+    /** The columns, in view order. */
     Enumeration<TableColumn> getColumns();
 
     /**
-     * Donde esta la columna con ese identificador.
+     * Where the column with that identifier is.
      *
-     * @throws IllegalArgumentException si no hay ninguna, o si el identificador es {@code null}
+     * @throws IllegalArgumentException if there is none, or if the identifier is {@code null}
      */
     int getColumnIndex(Object columnIdentifier);
 
-    /** La columna que esta en esa posicion de la vista. */
+    /** The column at that position in the view. */
     TableColumn getColumn(int columnIndex);
 
-    /** El espacio entre columnas. */
+    /** The space between columns. */
     int getColumnMargin();
 
-    /** Que columna cae en esa coordenada horizontal, o {@code -1}. */
+    /** Which column falls on that horizontal coordinate, or {@code -1}. */
     int getColumnIndexAtX(int xPosition);
 
-    /** El ancho de todas las columnas, contando los margenes. */
+    /** The width of all the columns, counting the margins. */
     int getTotalColumnWidth();
 
-    /** Cambia si se pueden seleccionar columnas. */
+    /** Changes whether columns can be selected. */
     void setColumnSelectionAllowed(boolean flag);
 
-    /** Si se pueden seleccionar columnas. */
+    /** Whether columns can be selected. */
     boolean getColumnSelectionAllowed();
 
-    /** Las columnas seleccionadas. */
+    /** The selected columns. */
     int[] getSelectedColumns();
 
-    /** Cuantas columnas estan seleccionadas. */
+    /** How many columns are selected. */
     int getSelectedColumnCount();
 
-    /** Cambia el modelo de seleccion de columnas. */
+    /** Changes the column selection model. */
     void setSelectionModel(ListSelectionModel newModel);
 
-    /** El modelo de seleccion de columnas. */
+    /** The column selection model. */
     ListSelectionModel getSelectionModel();
 
-    /** Agrega un oyente. */
+    /** Adds a listener. */
     void addColumnModelListener(TableColumnModelListener x);
 
-    /** Saca un oyente. */
+    /** Removes a listener. */
     void removeColumnModelListener(TableColumnModelListener x);
 }

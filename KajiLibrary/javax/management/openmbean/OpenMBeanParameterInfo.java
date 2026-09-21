@@ -3,54 +3,54 @@ package javax.management.openmbean;
 import java.util.Set;
 
 /**
- * La descripción de un parámetro de un MBean abierto: su nombre, su tipo abierto y, opcionalmente,
- * qué valores acepta.
+ * The description of a parameter of an open MBean: its name, its open type and, optionally, which
+ * values it accepts.
  *
- * <p>Las restricciones son tres y **se excluyen entre sí**: o hay una lista de valores legales, o
- * hay un mínimo y/o un máximo, o no hay nada. Declarar las dos primeras juntas no tiene sentido
- * --una lista ya dice cuáles valen-- y por eso las implementaciones lo rechazan en vez de intentar
- * combinarlas.
+ * <p>The constraints are three and <b>exclude each other</b>: either there is a list of legal
+ * values, or there is a minimum and/or a maximum, or there is nothing. Declaring the first two
+ * together makes no sense --a list already says which ones are valid-- and that is why the
+ * implementations reject it instead of trying to combine them.
  *
- * <p>Los `hasXxx` existen porque `null` es ambiguo: un `getDefaultValue()` nulo puede significar
- * "no tiene valor por omisión" o "su valor por omisión es nulo". El par pregunta/valor separa las
- * dos cosas.
+ * <p>The {@code hasXxx} methods exist because {@code null} is ambiguous: a null
+ * {@code getDefaultValue()} may mean "it has no default value" or "its default value is null".
+ * The question/value pair separates the two.
  */
 public interface OpenMBeanParameterInfo {
 
-    /** La descripción, para una persona. */
+    /** The description, for a person. */
     String getDescription();
 
-    /** El nombre del parámetro. */
+    /** The parameter's name. */
     String getName();
 
-    /** Su tipo abierto. */
+    /** Its open type. */
     OpenType<?> getOpenType();
 
-    /** El valor por omisión, o nulo si no tiene. Ver la nota sobre los `hasXxx`. */
+    /** The default value, or null if it has none. See the note about the {@code hasXxx}. */
     Object getDefaultValue();
 
-    /** Los valores legales, o nulo si no están enumerados. */
+    /** The legal values, or null if they are not enumerated. */
     Set<?> getLegalValues();
 
-    /** El mínimo, o nulo si no hay. */
+    /** The minimum, or null if there is none. */
     Comparable<?> getMinValue();
 
-    /** El máximo, o nulo si no hay. */
+    /** The maximum, or null if there is none. */
     Comparable<?> getMaxValue();
 
-    /** Si tiene valor por omisión. */
+    /** Whether it has a default value. */
     boolean hasDefaultValue();
 
-    /** Si sus valores legales están enumerados. */
+    /** Whether its legal values are enumerated. */
     boolean hasLegalValues();
 
-    /** Si tiene mínimo. */
+    /** Whether it has a minimum. */
     boolean hasMinValue();
 
-    /** Si tiene máximo. */
+    /** Whether it has a maximum. */
     boolean hasMaxValue();
 
-    /** Si `obj` es un valor válido: del tipo abierto **y** dentro de las restricciones. */
+    /** Whether {@code obj} is a valid value: of the open type <b>and</b> within the constraints. */
     boolean isValue(Object obj);
 
     boolean equals(Object obj);

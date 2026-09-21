@@ -6,88 +6,89 @@ import java.awt.Dimension;
 import java.awt.Graphics;
 import java.awt.LayoutManager;
 
+import javax.accessibility.Accessible;
 import javax.accessibility.AccessibleContext;
 
 /**
- * Un contenedor liviano que solo sabe usar {@link BoxLayout}, y las piezas de relleno que lo
- * acompanan.
+ * A lightweight container that only knows how to use {@link BoxLayout}, and the filler pieces
+ * that go with it.
  *
- * <h2>El contenedor</h2>
+ * <h2>The container</h2>
  *
- * <p>No pinta nada por omision —es transparente— y no deja cambiarle la distribucion: eso es todo
- * lo que agrega sobre {@link JComponent}. Su valor esta en los metodos de fabrica: un
- * {@code createHorizontalBox()} dice en una linea lo que con {@code new JPanel} y
- * {@code setLayout} lleva tres.
+ * <p>It paints nothing by default -- it is transparent -- and does not allow its arrangement to
+ * be changed: that is all it adds over {@link JComponent}. Its value is in the factory methods:
+ * a {@code createHorizontalBox()} says in one line what with {@code new JPanel} and
+ * {@code setLayout} takes three.
  *
- * <h2>Las piezas de relleno</h2>
+ * <h2>The filler pieces</h2>
  *
- * <p>Un {@link Filler} es un componente invisible que solo existe para ocupar lugar. Con los tres
- * tamanos iguales es un <em>separador</em> —un hueco de tamano fijo—; con maximo enorme es
- * <em>pegamento</em>, que absorbe todo el espacio sobrante y empuja al resto. Dos pegamentos, uno
- * a cada lado, centran; uno solo adelante alinea al final.
+ * <p>A {@link Filler} is an invisible component that exists only in order to take up room. With
+ * the three sizes equal it is a <em>strut</em> -- a gap of a fixed size --; with an enormous
+ * maximum it is <em>glue</em>, which absorbs all the leftover space and pushes the rest. Two
+ * pieces of glue, one on each side, centre; one alone in front aligns to the end.
  *
- * <p>El pegamento es la respuesta de esta familia a "quiero que ese boton quede a la derecha": no
- * hay una restriccion que lo diga, hay algo que ocupa el medio.
+ * <p>Glue is this family's answer to "I want that button to end up on the right": there is no
+ * constraint that says so, there is something that takes up the middle.
  */
 public class Box extends JComponent implements Accessible {
 
-    /** Una caja sobre ese eje; ver las constantes de {@link BoxLayout}. */
+    /** A box on that axis; see {@link BoxLayout}'s constants. */
     public Box(int axis) {
         super();
         super.setLayout(new BoxLayout(this, axis));
     }
 
-    /** Una caja horizontal. */
+    /** A horizontal box. */
     public static Box createHorizontalBox() {
         return new Box(BoxLayout.X_AXIS);
     }
 
-    /** Una caja vertical. */
+    /** A vertical box. */
     public static Box createVerticalBox() {
         return new Box(BoxLayout.Y_AXIS);
     }
 
-    /** Un hueco de tamano fijo en las dos direcciones. */
+    /** A gap of a fixed size in both directions. */
     public static Component createRigidArea(Dimension d) {
         return new Filler(d, d, d);
     }
 
-    /** Un hueco de ancho fijo, que no ocupa alto y puede estirarse a lo alto. */
+    /** A gap of a fixed width, which takes up no height and may stretch in height. */
     public static Component createHorizontalStrut(int width) {
         return new Filler(new Dimension(width, 0), new Dimension(width, 0),
                 new Dimension(width, Short.MAX_VALUE));
     }
 
-    /** Un hueco de alto fijo, que no ocupa ancho y puede estirarse a lo ancho. */
+    /** A gap of a fixed height, which takes up no width and may stretch in width. */
     public static Component createVerticalStrut(int height) {
         return new Filler(new Dimension(0, height), new Dimension(0, height),
                 new Dimension(Short.MAX_VALUE, height));
     }
 
-    /** Pegamento en las dos direcciones; ver la nota de la clase. */
+    /** Glue in both directions; see the class note. */
     public static Component createGlue() {
         return new Filler(new Dimension(0, 0), new Dimension(0, 0),
                 new Dimension(Short.MAX_VALUE, Short.MAX_VALUE));
     }
 
-    /** Pegamento horizontal. */
+    /** Horizontal glue. */
     public static Component createHorizontalGlue() {
         return new Filler(new Dimension(0, 0), new Dimension(0, 0),
                 new Dimension(Short.MAX_VALUE, 0));
     }
 
-    /** Pegamento vertical. */
+    /** Vertical glue. */
     public static Component createVerticalGlue() {
         return new Filler(new Dimension(0, 0), new Dimension(0, 0),
                 new Dimension(0, Short.MAX_VALUE));
     }
 
-    /** Un {@link AWTError}: una caja es su {@link BoxLayout}, sin el no es nada. */
+    /** An {@link AWTError}: a box is its {@link BoxLayout}, without it it is nothing. */
     public void setLayout(LayoutManager l) {
         throw new AWTError("Illegal request");
     }
 
-    /** Pinta el fondo si es opaca; por omision no lo es. */
+    /** It paints the background if it is opaque; by default it is not. */
     protected void paintComponent(Graphics g) {
         if (ui != null) {
             Graphics scratchGraphics = (g == null) ? null : g.create();
@@ -102,27 +103,27 @@ public class Box extends JComponent implements Accessible {
         }
     }
 
-    /** Sin contexto de accesibilidad: no hay tecnologia asistiva que lo lea en esta VM. */
+    /** With no accessibility context: there is no assistive technology that reads it on this VM. */
     public AccessibleContext getAccessibleContext() {
         return null;
     }
 
     /**
-     * Un componente invisible con los tres tamanos a pedido; ver la nota de {@link Box}.
+     * An invisible component with the three sizes to order; see {@link Box}'s note.
      *
-     * <p>Es publica y no anonima porque los tamanos se pueden cambiar despues, con
-     * {@link #changeShape}: un separador que se agranda cuando la ventana lo hace.
+     * <p>It is public and not anonymous because the sizes can be changed afterwards, with
+     * {@link #changeShape}: a strut that grows when the window does.
      */
     public static class Filler extends JComponent implements Accessible {
 
-        /** Un relleno con esos tres tamanos. */
+        /** A filler with those three sizes. */
         public Filler(Dimension min, Dimension pref, Dimension max) {
             setMinimumSize(min);
             setPreferredSize(pref);
             setMaximumSize(max);
         }
 
-        /** Le cambia los tres tamanos de una vez y pide que lo reacomoden. */
+        /** It changes its three sizes at once and asks to be laid out again. */
         public void changeShape(Dimension min, Dimension pref, Dimension max) {
             setMinimumSize(min);
             setPreferredSize(pref);
@@ -130,7 +131,10 @@ public class Box extends JComponent implements Accessible {
             revalidate();
         }
 
-        /** Pinta el fondo si es opaco; por omision no lo es, y por eso no se ve. */
+        /**
+         * It paints the background if it is opaque; by default it is not, and that is why it is not
+         * seen.
+         */
         protected void paintComponent(Graphics g) {
             if (ui != null) {
                 Graphics scratchGraphics = (g == null) ? null : g.create();
@@ -145,7 +149,9 @@ public class Box extends JComponent implements Accessible {
             }
         }
 
-        /** Sin contexto de accesibilidad: no hay tecnologia asistiva que lo lea en esta VM. */
+        /**
+         * With no accessibility context: there is no assistive technology that reads it on this VM.
+         */
         public AccessibleContext getAccessibleContext() {
             return null;
         }

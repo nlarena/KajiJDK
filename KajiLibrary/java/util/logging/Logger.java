@@ -1,44 +1,47 @@
 package java.util.logging;
 
 /**
- * KajiLibrary's java.util.logging.Logger -- por donde se emiten los mensajes.
+ * KajiLibrary's java.util.logging.Logger -- where messages are emitted from.
  *
- * <p>Los loggers forman un **arbol por el punto del nombre**: `com.acme.db` es hijo de `com.acme`,
- * que es hijo de la raiz. De ahi salen las dos cosas que hay que entender.
+ * <p>Loggers form a **tree by the dots in the name**: `com.acme.db` is a child of `com.acme`, which
+ * is a child of the root. Two things follow from that, and they are the ones to understand.
  *
- * <p>La primera es que el nivel se **hereda**: un logger sin nivel propio usa el del padre, asi que
- * poner `com.acme` en `FINE` afecta a todos sus descendientes sin nombrarlos. La segunda es que los
- * mensajes **suben**: un registro que pasa el filtro se publica en los manejadores de este logger y
- * despues en los del padre, y asi hasta la raiz, salvo que alguno corte con
- * {@link #setUseParentHandlers}. Por eso alcanza con poner **un** manejador en la raiz para ver todo.
+ * <p>The first is that the level is **inherited**: a logger with no level of its own uses its
+ * parent's, so putting `com.acme` at `FINE` affects all its descendants without naming them. The
+ * second is that messages **go up**: a record that passes the filter is published to this logger's
+ * handlers and then to its parent's, and so on to the root, unless one of them cuts it off with
+ * {@link #setUseParentHandlers}. That is why putting **one** handler on the root is enough to see
+ * everything.
  *
- * <p>Las variantes con {@link java.util.function.Supplier} existen por el costo: armar el mensaje
- * cuesta aunque despues se descarte, y un `log(FINE, () -> caro())` no evalua nada si `FINE` no esta
- * habilitado. Es la unica manera de tener traza fina sin pagarla cuando esta apagada.
+ * <p>The {@link java.util.function.Supplier} variants exist because of cost: building the message
+ * costs something even if it is then discarded, and a `log(FINE, () -> expensive())` evaluates
+ * nothing if `FINE` is not enabled. It is the only way of having fine logging without paying for it
+ * when it is off.
  *
- * <p>La localizacion tambien se hereda por el arbol, y con una vuelta de tuerca: el catalogo que se
- * usa al emitir es el del ancestro mas cercano que tenga uno, pero {@link #getResourceBundle}
- * devuelve **solo el propio**. No es una inconsistencia -- una cosa es que catalogo se aplica y otra
- * cual configuro este logger, y confundirlas haria imposible saber si hay que configurarlo.
+ * <p>Localisation is also inherited down the tree, and with a twist: the bundle used when emitting
+ * is the nearest ancestor's that has one, but {@link #getResourceBundle} returns **only its own**.
+ * It is not an inconsistency -- which bundle applies is one thing and which one configured this
+ * logger is another, and confusing them would make it impossible to know whether it needs
+ * configuring.
  */
 public class Logger {
 
-    /** El nombre del logger que registra las llamadas al sistema global. */
+    /** The name of the logger that records the global system's calls. */
     public static final String GLOBAL_LOGGER_NAME = "global";
 
     /**
-     * El logger global. Existe para ejemplos y para codigo desechable, no para una aplicacion.
+     * The global logger. It exists for examples and for throwaway code, not for an application.
      *
-     * @deprecated Un campo `static final` publico se inicializa cuando la clase se inicializa, y eso
-     *             pasa mas temprano de lo que uno cree: leerlo desde el arranque de la propia
-     *             infraestructura de traza podia dar `null` a mitad de la inicializacion. Por eso el
-     *             JDK agrego {@link #getGlobal()}, que es un metodo y por lo tanto no tiene ese
-     *             problema.
+     * @deprecated A public `static final` field is initialised when the class is initialised, and
+     *             that happens earlier than one thinks: reading it from the start-up of the logging
+     *             infrastructure itself could give `null` halfway through initialisation. That is
+     *             why the JDK added {@link #getGlobal()}, which is a method and therefore does not
+     *             have that problem.
      */
     @Deprecated
     public static final Logger global = Logger.getLogger(GLOBAL_LOGGER_NAME);
 
-    /** El logger global, sin el problema de inicializacion del campo {@link #global}. */
+    /** The global logger, without the {@link #global} field's initialisation problem. */
     public static final Logger getGlobal() {
         return global;
     }
@@ -57,107 +60,108 @@ public class Logger {
         this.resourceBundleName = resourceBundleName;
     }
 
-    // ---- obtenerlos ------------------------------------------------------------------------------------
+    // ---- obtaining them -------------------------------------------------------------------------
 
     /**
-     * El logger de ese nombre, creandolo si no existe.
+     * The logger by that name, creating it if it does not exist.
      *
-     * <p>Devuelve **el mismo** objeto para el mismo nombre, que es lo que permite configurarlo en un
-     * lado y usarlo en otro.
+     * <p>It returns **the same** object for the same name, which is what lets it be configured in
+     * one place and used in another.
      */
     public static Logger getLogger(String name) {
         if (name == null) {
             throw new NullPointerException("name");
         }
         LogManager m = LogManager.getLogManager();
-        Logger ya = m.getLogger(name);
-        if (ya != null) {
-            return ya;
+        Logger already = m.getLogger(name);
+        if (already != null) {
+            return already;
         }
-        Logger nuevo = new Logger(name, null);
+        Logger newOne = new Logger(name, null);
         if (!name.isEmpty()) {
-            // Se fuerza a que la raiz exista **antes** de registrar: `addLogger` cuelga al recien
-            // llegado de su ancestro mas cercano, y sin raiz no habria de que colgarlo.
-            raiz();
+            // The root is forced to exist **before** registering: `addLogger` hangs the newcomer
+            // off its nearest ancestor, and with no root there would be nothing to hang it off.
+            root();
         }
-        if (!m.addLogger(nuevo)) {
-            // Otro hilo gano la carrera: vale el suyo, para que la identidad por nombre se mantenga.
+        if (!m.addLogger(newOne)) {
+            // Another thread won the race: theirs stands, so that identity by name holds.
             return m.getLogger(name);
         }
-        return nuevo;
+        return newOne;
     }
 
     /**
-     * El de arriba, con el nombre del catalogo con el que se traducen los mensajes.
+     * The one above, with the name of the bundle the messages are translated with.
      *
-     * <p>Si el logger ya existia **sin** catalogo, se le pone este. Si ya tenia **otro**, es un error:
-     * dos partes del programa que pidieron el mismo logger con catalogos distintos no se pueden
-     * conformar las dos, y elegir en silencio le rompe la traduccion a una de ellas sin avisarle.
+     * <p>If the logger already existed **without** a bundle, this one is set on it. If it already had
+     * **another**, that is an error: two parts of the program that asked for the same logger with
+     * different bundles cannot both be satisfied, and choosing in silence breaks one of them's
+     * translation without telling it.
      *
-     * @throws java.util.MissingResourceException si el catalogo no se encuentra -- se busca al pedirlo y no al
-     *         emitir, que es cuando todavia se puede hacer algo al respecto
-     * @throws IllegalArgumentException si el logger ya tenia otro catalogo
+     * @throws java.util.MissingResourceException if the bundle is not found -- it is looked up when
+     *         asked for and not when emitting, which is while something can still be done about it
+     * @throws IllegalArgumentException if the logger already had another bundle
      */
     public static Logger getLogger(String name, String resourceBundleName) {
         Logger l = getLogger(name);
         if (resourceBundleName != null) {
-            String ya = l.resourceBundleName;
-            if (ya == null) {
-                // Se carga primero: si no existe, el logger queda como estaba y no a medio configurar.
+            String already = l.resourceBundleName;
+            if (already == null) {
+                // It is loaded first: if it does not exist, the logger is left as it was and not half configured.
                 l.bundle = java.util.ResourceBundle.getBundle(resourceBundleName);
                 l.resourceBundleName = resourceBundleName;
-            } else if (!ya.equals(resourceBundleName)) {
-                throw new IllegalArgumentException(ya + " != " + resourceBundleName);
+            } else if (!already.equals(resourceBundleName)) {
+                throw new IllegalArgumentException(already + " != " + resourceBundleName);
             }
         }
         return l;
     }
 
     /**
-     * Un logger **sin nombre**, que no se registra en ningun lado.
+     * A logger **with no name**, registered nowhere.
      *
-     * <p>Sirve justamente para lo contrario que {@link #getLogger}: como nadie mas lo puede
-     * encontrar, nadie mas lo puede reconfigurar. Es lo que corresponde para una biblioteca que no
-     * quiere que su traza dependa de la configuracion global.
+     * <p>It serves exactly the opposite purpose to {@link #getLogger}: since nobody else can find
+     * it, nobody else can reconfigure it. It is what suits a library that does not want its logging
+     * to depend on the global configuration.
      */
     public static Logger getAnonymousLogger() {
         return getAnonymousLogger(null);
     }
 
     /**
-     * El de arriba, con catalogo.
+     * The one above, with a bundle.
      *
-     * @throws java.util.MissingResourceException si el catalogo no se encuentra
+     * @throws java.util.MissingResourceException if the bundle is not found
      */
     public static Logger getAnonymousLogger(String resourceBundleName) {
         Logger l = new Logger(null, resourceBundleName);
         if (resourceBundleName != null) {
             l.bundle = java.util.ResourceBundle.getBundle(resourceBundleName);
         }
-        l.parent = raiz();
+        l.parent = root();
         return l;
     }
 
-    private static Logger raiz() {
+    private static Logger root() {
         LogManager m = LogManager.getLogManager();
         Logger r = m.getLogger("");
         if (r != null) {
             return r;
         }
-        Logger nueva = new Logger("", null);
-        // Un nivel de arranque por si la configuracion no dice nada: la raiz es la unica que no tiene
-        // de quien heredar. Sus manejadores y su nivel definitivo salen de la configuracion, que
-        // `addLogger` le aplica.
-        nueva.level = Level.INFO;
-        if (!m.addLogger(nueva)) {
+        Logger fresh = new Logger("", null);
+        // A start-up level in case the configuration says nothing: the root is the only one with
+        // nobody to inherit from. Its handlers and its final level come from the configuration, which
+        // `addLogger` applies to it.
+        fresh.level = Level.INFO;
+        if (!m.addLogger(fresh)) {
             return m.getLogger("");
         }
-        return nueva;
+        return fresh;
     }
 
-    // ---- configuracion ----------------------------------------------------------------------------------
+    // ---- configuration --------------------------------------------------------------------------
 
-    /** El nombre, o `null` si es anonimo. */
+    /** The name, or `null` if it is anonymous. */
     public String getName() {
         return this.name;
     }
@@ -167,26 +171,26 @@ public class Logger {
     }
 
     /**
-     * El catalogo **propio**, o `null` si no tiene uno.
+     * The bundle **of its own**, or `null` if it has none.
      *
-     * <p>`null` no significa que los mensajes no se traduzcan: si un ancestro tiene catalogo, es el
-     * que se usa. Lo que este metodo contesta es si **este** logger fue configurado, que es otra
-     * pregunta.
+     * <p>`null` does not mean the messages are not translated: if an ancestor has a bundle, that is
+     * the one used. What this method answers is whether **this** logger was configured, which is
+     * another question.
      */
     public java.util.ResourceBundle getResourceBundle() {
         return this.bundle;
     }
 
     /**
-     * Fija el catalogo propio.
+     * It sets the bundle of its own.
      *
-     * <p>El catalogo tiene que tener nombre base porque el nombre es lo que viaja: un registro
-     * serializado lleva el nombre y no el objeto, y un catalogo anonimo daria un registro que del otro
-     * lado no se puede traducir.
+     * <p>The bundle has to have a base name because the name is what travels: a serialised record
+     * carries the name and not the object, and an anonymous bundle would give a record that cannot be
+     * translated on the other side.
      *
-     * @throws NullPointerException si `bundle` es `null`
-     * @throws IllegalArgumentException si el catalogo no tiene nombre base, o si este logger ya tenia
-     *         otro catalogo -- por lo mismo que {@link #getLogger(String, String)}
+     * @throws NullPointerException if `bundle` is `null`
+     * @throws IllegalArgumentException if the bundle has no base name, or if this logger already had
+     *         another bundle -- for the same reason as {@link #getLogger(String, String)}
      */
     public void setResourceBundle(java.util.ResourceBundle bundle) {
         if (bundle == null) {
@@ -196,20 +200,20 @@ public class Logger {
         if (base == null || base.isEmpty()) {
             throw new IllegalArgumentException("resource bundle must have a name");
         }
-        String ya = this.resourceBundleName;
-        if (ya != null && !ya.equals(base)) {
+        String already = this.resourceBundleName;
+        if (already != null && !already.equals(base)) {
             throw new IllegalArgumentException("can't replace resource bundle");
         }
         this.bundle = bundle;
         this.resourceBundleName = base;
     }
 
-    /** El nivel propio, o `null` si hereda el del padre. */
+    /** The level of its own, or `null` if it inherits its parent's. */
     public Level getLevel() {
         return this.level;
     }
 
-    /** Fija el nivel; `null` para volver a heredar. */
+    /** It sets the level; `null` to go back to inheriting. */
     public void setLevel(Level newLevel) throws SecurityException {
         this.level = newLevel;
     }
@@ -225,7 +229,7 @@ public class Logger {
         this.parent = parent;
     }
 
-    /** Si los mensajes tambien van a los manejadores del padre. */
+    /** Whether the messages also go to the parent's handlers. */
     public boolean getUseParentHandlers() {
         return this.useParentHandlers;
     }
@@ -267,21 +271,21 @@ public class Logger {
     }
 
     /**
-     * Si un mensaje de ese nivel se registraria.
+     * Whether a message at that level would be recorded.
      *
-     * <p>Vale la pena preguntarlo antes de armar un mensaje caro -- o usar la variante con
-     * {@link java.util.function.Supplier}, que lo hace sola.
+     * <p>It is worth asking before building an expensive message -- or using the
+     * {@link java.util.function.Supplier} variant, which does it by itself.
      */
     public boolean isLoggable(Level level) {
-        int propio = this.nivelEfectivo().intValue();
-        if (propio == Level.OFF.intValue()) {
+        int own = this.effectiveLevel().intValue();
+        if (own == Level.OFF.intValue()) {
             return false;
         }
-        return level.intValue() >= propio;
+        return level.intValue() >= own;
     }
 
-    // El primer nivel propio subiendo por el arbol; `INFO` si no hay ninguno.
-    private Level nivelEfectivo() {
+    // The first level of its own going up the tree; `INFO` if there is none.
+    private Level effectiveLevel() {
         Logger l = this;
         while (l != null) {
             Level n = l.level;
@@ -293,14 +297,15 @@ public class Logger {
         return Level.INFO;
     }
 
-    // ---- emitir -----------------------------------------------------------------------------------------
+    // ---- publishing -----------------------------------------------------------------------------
 
     /**
-     * Publica ese registro: en los manejadores propios y, si corresponde, en los del padre.
+     * It publishes that record: to its own handlers and, where appropriate, to its parent's.
      *
-     * <p>Todos los demas metodos terminan aca -- pero **no** al reves: este toma el registro tal como
-     * viene y no le pone ni el nombre del logger ni el catalogo. Es lo que corresponde para el unico
-     * metodo al que se le entrega un {@link LogRecord} ya armado: quien lo armo decidio que dice.
+     * <p>Every other method ends up here -- but **not** the other way round: this one takes the
+     * record as it comes and sets neither the logger's name nor the bundle on it. That is what suits
+     * the one method handed an already built {@link LogRecord}: whoever built it decided what it
+     * says.
      */
     public void log(LogRecord record) {
         if (record == null || !this.isLoggable(record.getLevel())) {
@@ -326,15 +331,15 @@ public class Logger {
     }
 
     /**
-     * Le pone al registro lo que sale de **este** logger y despues lo publica.
+     * It sets on the record what comes from **this** logger and then publishes it.
      *
-     * <p>Es por donde pasan todos los metodos de conveniencia, y la razon de que exista es que
-     * {@link #log(LogRecord)} no debe hacer esto: un registro que el llamador armo ya dice lo que
-     * tiene que decir.
+     * <p>It is where every convenience method goes through, and the reason it exists is that
+     * {@link #log(LogRecord)} must not do this: a record the caller built already says what it has
+     * to say.
      */
     private void doLog(LogRecord record) {
         record.setLoggerName(this.name);
-        java.util.ResourceBundle rb = this.catalogoEfectivo();
+        java.util.ResourceBundle rb = this.effectiveBundle();
         if (rb != null) {
             record.setResourceBundle(rb);
             record.setResourceBundleName(rb.getBaseBundleName());
@@ -342,14 +347,15 @@ public class Logger {
         this.log(record);
     }
 
-    // El de arriba con un catalogo dicho por nombre, para los `logrb` deprecados. Un nombre que no
-    // resuelve deja el registro con el nombre puesto y sin catalogo: es la verdad --se pidio esa
-    // traduccion y no se encontro-- y el formateador cae al mensaje crudo, que es lo unico que queda.
+    // The one above with a bundle given by name, for the deprecated `logrb`. A name that does not
+    // resolve leaves the record with the name set and no bundle: that is the truth --that translation
+    // was asked for and not found-- and the formatter falls back to the raw message, which is all
+    // that is left.
     private void doLog(LogRecord record, String rbname) {
         record.setLoggerName(this.name);
         if (rbname != null) {
             record.setResourceBundleName(rbname);
-            record.setResourceBundle(porNombre(rbname));
+            record.setResourceBundle(byName(rbname));
         }
         this.log(record);
     }
@@ -363,8 +369,8 @@ public class Logger {
         this.log(record);
     }
 
-    // El catalogo del ancestro mas cercano que tenga uno, incluido este.
-    private java.util.ResourceBundle catalogoEfectivo() {
+    // The bundle of the nearest ancestor that has one, this one included.
+    private java.util.ResourceBundle effectiveBundle() {
         Logger l = this;
         while (l != null) {
             java.util.ResourceBundle rb = l.bundle;
@@ -376,7 +382,7 @@ public class Logger {
         return null;
     }
 
-    private static java.util.ResourceBundle porNombre(String rbname) {
+    private static java.util.ResourceBundle byName(String rbname) {
         try {
             return java.util.ResourceBundle.getBundle(rbname);
         } catch (java.util.MissingResourceException e) {
@@ -391,7 +397,7 @@ public class Logger {
         this.doLog(new LogRecord(level, msg));
     }
 
-    /** El mensaje se arma **solo si** el nivel esta habilitado. */
+    /** The message is built **only if** the level is enabled. */
     public void log(Level level, java.util.function.Supplier<String> msgSupplier) {
         if (!this.isLoggable(level)) {
             return;
@@ -435,17 +441,17 @@ public class Logger {
         this.doLog(r);
     }
 
-    // ---- con origen explicito ----------------------------------------------------------------------------
+    // ---- with an explicit source -------------------------------------------------------------------------
     //
-    // Los `logp` reciben la clase y el metodo en vez de deducirlos. Existen para el codigo que
-    // registra **en nombre de otro** -- un envoltorio, un marco de trabajo-- donde el origen deducido
-    // seria el envoltorio y no lo que al lector le interesa.
+    // The `logp` take the class and the method instead of deducing them. They exist for code that
+    // logs **on somebody else's behalf** --a wrapper, a framework-- where the deduced source would be
+    // the wrapper and not what the reader cares about.
 
     public void logp(Level level, String sourceClass, String sourceMethod, String msg) {
         if (!this.isLoggable(level)) {
             return;
         }
-        this.doLog(conOrigen(level, msg, sourceClass, sourceMethod));
+        this.doLog(withSource(level, msg, sourceClass, sourceMethod));
     }
 
     public void logp(Level level, String sourceClass, String sourceMethod,
@@ -453,7 +459,7 @@ public class Logger {
         if (!this.isLoggable(level)) {
             return;
         }
-        this.doLog(conOrigen(level, msgSupplier.get(), sourceClass, sourceMethod));
+        this.doLog(withSource(level, msgSupplier.get(), sourceClass, sourceMethod));
     }
 
     public void logp(Level level, String sourceClass, String sourceMethod, String msg,
@@ -461,7 +467,7 @@ public class Logger {
         if (!this.isLoggable(level)) {
             return;
         }
-        LogRecord r = conOrigen(level, msg, sourceClass, sourceMethod);
+        LogRecord r = withSource(level, msg, sourceClass, sourceMethod);
         r.setParameters(new Object[] {param1});
         this.doLog(r);
     }
@@ -471,7 +477,7 @@ public class Logger {
         if (!this.isLoggable(level)) {
             return;
         }
-        LogRecord r = conOrigen(level, msg, sourceClass, sourceMethod);
+        LogRecord r = withSource(level, msg, sourceClass, sourceMethod);
         r.setParameters(params);
         this.doLog(r);
     }
@@ -481,7 +487,7 @@ public class Logger {
         if (!this.isLoggable(level)) {
             return;
         }
-        LogRecord r = conOrigen(level, msg, sourceClass, sourceMethod);
+        LogRecord r = withSource(level, msg, sourceClass, sourceMethod);
         r.setThrown(thrown);
         this.doLog(r);
     }
@@ -491,63 +497,63 @@ public class Logger {
         if (!this.isLoggable(level)) {
             return;
         }
-        LogRecord r = conOrigen(level, msgSupplier.get(), sourceClass, sourceMethod);
+        LogRecord r = withSource(level, msgSupplier.get(), sourceClass, sourceMethod);
         r.setThrown(thrown);
         this.doLog(r);
     }
 
-    // ---- con catalogo explicito ---------------------------------------------------------------------------
+    // ---- with an explicit bundle -------------------------------------------------------------------------
     //
-    // Los `logrb` traducen con **este** catalogo en vez de con el del logger. Es lo que necesita una
-    // biblioteca que emite por un logger de la aplicacion --para que la configuracion de la
-    // aplicacion la alcance-- pero cuyos mensajes estan en su propio catalogo, no en el de ella.
+    // The `logrb` translate with **this** bundle instead of with the logger's. It is what a library
+    // needs when it emits through the application's logger --so that the application's configuration
+    // reaches it-- but whose messages are in its own bundle, not in the application's.
     //
-    // Las cuatro formas que reciben el catalogo por **nombre** estan deprecadas, y con razon: un
-    // nombre se resuelve contra un cargador de clases que en el momento de emitir puede no ser el que
-    // uno cree. Pasar el objeto no tiene esa ambiguedad.
+    // The four forms that take the bundle by **name** are deprecated, and with reason: a name is
+    // resolved against a class loader that at emission time may not be the one one thinks. Passing
+    // the object has no such ambiguity.
 
-    /** @deprecated Usar la forma que recibe el {@link java.util.ResourceBundle}. */
+    /** @deprecated Use the form that takes the {@link java.util.ResourceBundle}. */
     @Deprecated
     public void logrb(Level level, String sourceClass, String sourceMethod, String bundleName,
             String msg) {
         if (!this.isLoggable(level)) {
             return;
         }
-        this.doLog(conOrigen(level, msg, sourceClass, sourceMethod), bundleName);
+        this.doLog(withSource(level, msg, sourceClass, sourceMethod), bundleName);
     }
 
-    /** @deprecated Usar la forma que recibe el {@link java.util.ResourceBundle}. */
+    /** @deprecated Use the form that takes the {@link java.util.ResourceBundle}. */
     @Deprecated
     public void logrb(Level level, String sourceClass, String sourceMethod, String bundleName,
             String msg, Object param1) {
         if (!this.isLoggable(level)) {
             return;
         }
-        LogRecord r = conOrigen(level, msg, sourceClass, sourceMethod);
+        LogRecord r = withSource(level, msg, sourceClass, sourceMethod);
         r.setParameters(new Object[] {param1});
         this.doLog(r, bundleName);
     }
 
-    /** @deprecated Usar la forma que recibe el {@link java.util.ResourceBundle}. */
+    /** @deprecated Use the form that takes the {@link java.util.ResourceBundle}. */
     @Deprecated
     public void logrb(Level level, String sourceClass, String sourceMethod, String bundleName,
             String msg, Object[] params) {
         if (!this.isLoggable(level)) {
             return;
         }
-        LogRecord r = conOrigen(level, msg, sourceClass, sourceMethod);
+        LogRecord r = withSource(level, msg, sourceClass, sourceMethod);
         r.setParameters(params);
         this.doLog(r, bundleName);
     }
 
-    /** @deprecated Usar la forma que recibe el {@link java.util.ResourceBundle}. */
+    /** @deprecated Use the form that takes the {@link java.util.ResourceBundle}. */
     @Deprecated
     public void logrb(Level level, String sourceClass, String sourceMethod, String bundleName,
             String msg, Throwable thrown) {
         if (!this.isLoggable(level)) {
             return;
         }
-        LogRecord r = conOrigen(level, msg, sourceClass, sourceMethod);
+        LogRecord r = withSource(level, msg, sourceClass, sourceMethod);
         r.setThrown(thrown);
         this.doLog(r, bundleName);
     }
@@ -557,7 +563,7 @@ public class Logger {
         if (!this.isLoggable(level)) {
             return;
         }
-        LogRecord r = conOrigen(level, msg, sourceClass, sourceMethod);
+        LogRecord r = withSource(level, msg, sourceClass, sourceMethod);
         if (params != null && params.length != 0) {
             r.setParameters(params);
         }
@@ -569,7 +575,7 @@ public class Logger {
         if (!this.isLoggable(level)) {
             return;
         }
-        LogRecord r = conOrigen(level, msg, sourceClass, sourceMethod);
+        LogRecord r = withSource(level, msg, sourceClass, sourceMethod);
         r.setThrown(thrown);
         this.doLog(r, bundle);
     }
@@ -594,17 +600,17 @@ public class Logger {
         this.doLog(r, bundle);
     }
 
-    private static LogRecord conOrigen(Level level, String msg, String clase, String metodo) {
+    private static LogRecord withSource(Level level, String msg, String cls, String method) {
         LogRecord r = new LogRecord(level, msg);
-        r.setSourceClassName(clase);
-        r.setSourceMethodName(metodo);
+        r.setSourceClassName(cls);
+        r.setSourceMethodName(method);
         return r;
     }
 
-    // ---- entrada y salida de metodo ----------------------------------------------------------------------
+    // ---- method entry and exit ---------------------------------------------------------------------------
     //
-    // Todos en `FINER`, y con mensajes fijos (`ENTRY`, `RETURN`, `THROW`) para que una herramienta
-    // pueda reconocerlos sin parsear.
+    // All at `FINER`, and with fixed messages (`ENTRY`, `RETURN`, `THROW`) so that a tool can
+    // recognise them without parsing.
 
     public void entering(String sourceClass, String sourceMethod) {
         this.logp(Level.FINER, sourceClass, sourceMethod, "ENTRY");
@@ -638,21 +644,22 @@ public class Logger {
     }
 
     /**
-     * Registra que el metodo salio lanzando.
+     * It records that the method left by throwing.
      *
-     * <p>En `FINER` y no en `SEVERE`, aunque haya una excepcion: no es un fallo del programa sino la
-     * traza de un metodo que termino asi, y quien atrape la excepcion decidira si es grave.
+     * <p>At `FINER` and not at `SEVERE`, even though there is an exception: it is not a failure of
+     * the program but the trace of a method that ended that way, and whoever catches the exception
+     * will decide whether it is serious.
      */
     public void throwing(String sourceClass, String sourceMethod, Throwable thrown) {
         if (!this.isLoggable(Level.FINER)) {
             return;
         }
-        LogRecord r = conOrigen(Level.FINER, "THROW", sourceClass, sourceMethod);
+        LogRecord r = withSource(Level.FINER, "THROW", sourceClass, sourceMethod);
         r.setThrown(thrown);
         this.doLog(r);
     }
 
-    // ---- atajos por nivel ---------------------------------------------------------------------------------
+    // ---- the per-level shortcuts -------------------------------------------------------------------------
 
     public void severe(String msg) {
         this.log(Level.SEVERE, msg);

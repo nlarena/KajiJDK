@@ -5,23 +5,24 @@ import java.lang.classfile.Opcode;
 import java.lang.classfile.TypeKind;
 import jdk.internal.classfile.impl.Instructions;
 
-// Una conversión numérica (`i2l`, `d2f`, `i2b`, …). Las tres que estrechan a `byte`, `char` y
-// `short` salen de `INT` y vuelven a `INT` en la pila, pero `toType()` dice el tipo angosto: es lo
-// que distingue a `i2b` de un `nop`.
+// A numeric conversion (`i2l`, `d2f`, `i2b`, ...). The three that narrow to `byte`, `char` and
+// `short` start from `INT` and come back to `INT` on the stack, but `toType()` says the narrow type:
+// it is what tells `i2b` from a `nop`.
 public interface ConvertInstruction extends Instruction {
 
-    /** El tipo de partida. */
+    /** The type it starts from. */
     TypeKind fromType();
 
-    /** El tipo de llegada. */
+    /** The type it arrives at. */
     TypeKind toType();
 
-    /** La conversión de `fromType` a `toType`. Tira `IllegalArgumentException` si no existe. */
+    /** The conversion from `fromType` to `toType`. It throws `IllegalArgumentException` if it does
+     * not exist. */
     public static ConvertInstruction of(TypeKind fromType, TypeKind toType) {
         return Instructions.convert(fromType, toType);
     }
 
-    /** La conversión de este opcode. */
+    /** This opcode's conversion. */
     public static ConvertInstruction of(Opcode op) {
         return Instructions.convert(op);
     }

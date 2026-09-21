@@ -1,37 +1,37 @@
 package java.sql;
 
 /**
- * KajiLibrary's java.sql.Array -- una columna que contiene un arreglo SQL.
+ * KajiLibrary's java.sql.Array -- a column that holds an SQL array.
  *
- * <p>Ofrece el contenido de **dos** formas, y no es redundancia: como arreglo Java, cuando entra en
- * memoria y se quiere manipular; o como {@link ResultSet} de dos columnas --indice y valor-- cuando
- * es grande y conviene recorrerlo de a poco. Es la misma tension que resuelve {@link Blob}, con las
- * dos salidas puestas en la misma interfaz.
+ * <p>It offers the content in **two** ways, and that is not redundancy: as a Java array, when it
+ * fits in memory and is to be manipulated; or as a {@link ResultSet} of two columns --index and
+ * value-- when it is large and better walked a little at a time. It is the same tension {@link
+ * Blob} resolves, with both outlets put in the same interface.
  *
- * <p>Los indices se cuentan **desde uno**.
+ * <p>Indices are counted **from one**.
  */
 public interface Array {
 
-    /** El nombre SQL del tipo de los elementos. */
+    /** The SQL name of the elements' type. */
     String getBaseTypeName() throws SQLException;
 
-    /** El codigo SQL del tipo de los elementos. */
+    /** The SQL code of the elements' type. */
     int getBaseType() throws SQLException;
 
-    /** Todo el contenido, como arreglo Java. */
+    /** The whole content, as a Java array. */
     Object getArray() throws SQLException;
 
-    /** Igual, traduciendo los tipos SQL con ese mapa. */
+    /** The same, translating the SQL types with that map. */
     Object getArray(java.util.Map<String, Class<?>> map) throws SQLException;
 
-    /** `count` elementos desde `index`. */
+    /** `count` elements from `index`. */
     Object getArray(long index, int count) throws SQLException;
 
-    /** Igual, con mapa de tipos. */
+    /** The same, with a type map. */
     Object getArray(long index, int count, java.util.Map<String, Class<?>> map)
             throws SQLException;
 
-    /** Todo el contenido, como filas de (indice, valor). */
+    /** The whole content, as (index, value) rows. */
     ResultSet getResultSet() throws SQLException;
 
     ResultSet getResultSet(java.util.Map<String, Class<?>> map) throws SQLException;
@@ -41,6 +41,6 @@ public interface Array {
     ResultSet getResultSet(long index, int count, java.util.Map<String, Class<?>> map)
             throws SQLException;
 
-    /** Suelta los recursos del puntero. */
+    /** Releases the pointer's resources. */
     void free() throws SQLException;
 }

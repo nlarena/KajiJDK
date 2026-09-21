@@ -3,72 +3,73 @@ package javax.sound.midi;
 import java.util.Vector;
 
 /**
- * KajiLibrary's javax.sound.midi.Sequence -- una obra MIDI completa, con sus pistas.
+ * KajiLibrary's javax.sound.midi.Sequence -- a complete MIDI piece, with its tracks.
  *
- * <p>Es lo que se carga de un archivo y lo que se le da a un {@link Sequencer} para que suene.
+ * <p>It is what is loaded from a file and what is given to a {@link Sequencer} to be played.
  *
- * <h2>Las dos formas de contar el tiempo</h2>
+ * <h2>The two ways of counting time</h2>
  *
- * <p>Es lo unico que hay que entender de esta clase, y decide todo lo demas:
+ * <p>It is the only thing to understand about this class, and it decides everything else:
  *
  * <ul>
- *   <li>{@link #PPQ}: los pulsos son <b>musicales</b>. La resolucion son pulsos por negra, y cuanto
- *       dura un pulso depende del tempo actual. Cambiar el tempo acelera la obra sin tocar un solo
- *       evento;
- *   <li>{@code SMPTE_*}: los pulsos son <b>de reloj</b>. La division es cuadros por segundo y la
- *       resolucion pulsos por cuadro, asi que un pulso dura siempre lo mismo. El tempo no lo afecta.
+ *   <li>{@link #PPQ}: the ticks are <b>musical</b>. The resolution is ticks per quarter note, and
+ *       how long a tick lasts depends on the current tempo. Changing the tempo speeds the piece up
+ *       without touching a single event;
+ *   <li>{@code SMPTE_*}: the ticks are <b>clock</b> ticks. The division is frames per second and
+ *       the resolution ticks per frame, so a tick always lasts the same. The tempo does not affect
+ *       it.
  * </ul>
  *
- * <p>Para musica se usa PPQ; para sincronizar con video o pelicula, SMPTE. Elegir mal se descubre
- * tarde: una obra en SMPTE ignora los cambios de tempo que uno le escriba.
+ * <p>For music PPQ is used; to synchronize with video or film, SMPTE. Choosing wrong is discovered
+ * late: a piece in SMPTE ignores the tempo changes one writes into it.
  *
- * <p>{@link #SMPTE_30DROP} vale 29.97 y no 30. Es la tasa real de la television en color de Norteamerica,
- * y esos 0.03 de diferencia son la razon de que exista el codigo de tiempo con salto de cuadro.
+ * <p>{@link #SMPTE_30DROP} is 29.97 and not 30. It is the real rate of North American colour
+ * television, and those 0.03 of difference are the reason drop-frame timecode exists.
  *
  * <h2>{@link #getPatchList}</h2>
  *
- * <p>Devuelve un arreglo vacio. No es una omision de esta biblioteca: el JDK tampoco lo implementa
- * --se comprobo contra el JDK 25-- y su documentacion ya avisa que no esta terminado.
+ * <p>It returns an empty array. It is not an omission of this library: the JDK does not implement
+ * it either --checked against JDK 25-- and its documentation already warns that it is not finished.
  */
 public class Sequence {
 
-    /** Pulsos por negra: tiempo musical. Ver la nota de la clase. */
+    /** Ticks per quarter note: musical time. See the class note. */
     public static final float PPQ = 0.0f;
 
-    /** Veinticuatro cuadros por segundo, el del cine. */
+    /** Twenty-four frames per second, the cinema's. */
     public static final float SMPTE_24 = 24.0f;
 
-    /** Veinticinco, el de la television europea. */
+    /** Twenty-five, European television's. */
     public static final float SMPTE_25 = 25.0f;
 
-    /** 29.97, con salto de cuadro. Ver la nota de la clase. */
+    /** 29.97, with drop frame. See the class note. */
     public static final float SMPTE_30DROP = 29.97f;
 
-    /** Treinta justos. */
+    /** Exactly thirty. */
     public static final float SMPTE_30 = 30.0f;
 
-    /** Cual de las cinco. */
+    /** Which of the five. */
     protected float divisionType;
 
-    /** Pulsos por negra, o pulsos por cuadro. */
+    /** Ticks per quarter note, or ticks per frame. */
     protected int resolution;
 
-    /** Las pistas. */
+    /** The tracks. */
     protected Vector<Track> tracks = new Vector<Track>();
 
     /**
-     * Una secuencia vacia.
+     * An empty sequence.
      *
-     * @throws InvalidMidiDataException si la division no es una de las cinco
+     * @throws InvalidMidiDataException if the division is not one of the five
      */
     public Sequence(float divisionType, int resolution) throws InvalidMidiDataException {
         this(divisionType, resolution, 0);
     }
 
     /**
-     * Idem, con esa cantidad de pistas vacias.
+     * Likewise, with that many empty tracks.
      *
-     * @throws InvalidMidiDataException si la division no es una de las cinco
+     * @throws InvalidMidiDataException if the division is not one of the five
      */
     public Sequence(float divisionType, int resolution, int numTracks)
         throws InvalidMidiDataException {
@@ -85,17 +86,17 @@ public class Sequence {
         }
     }
 
-    /** Cual de las cinco. Ver la nota de la clase. */
+    /** Which of the five. See the class note. */
     public float getDivisionType() {
         return this.divisionType;
     }
 
-    /** Pulsos por negra, o pulsos por cuadro. */
+    /** Ticks per quarter note, or ticks per frame. */
     public int getResolution() {
         return this.resolution;
     }
 
-    /** Una pista nueva, vacia, ya agregada. */
+    /** A new, empty track, already added. */
     public Track createTrack() {
         synchronized (this.tracks) {
             Track track = new Track();
@@ -105,9 +106,9 @@ public class Sequence {
     }
 
     /**
-     * Saca esa pista.
+     * Removes that track.
      *
-     * @return si estaba
+     * @return whether it was there
      */
     public boolean deleteTrack(Track track) {
         synchronized (this.tracks) {
@@ -115,7 +116,7 @@ public class Sequence {
         }
     }
 
-    /** Las pistas, en un arreglo nuevo. */
+    /** The tracks, in a new array. */
     public Track[] getTracks() {
         synchronized (this.tracks) {
             return this.tracks.toArray(new Track[this.tracks.size()]);
@@ -123,12 +124,15 @@ public class Sequence {
     }
 
     /**
-     * Cuanto dura, en microsegundos.
+     * How long it lasts, in microseconds.
      *
-     * <p>En SMPTE es exacto. En PPQ supone el tempo por omision --120 negras por minuto, medio millon
-     * de microsegundos por negra-- e <b>ignora los cambios de tempo</b> que la obra tenga escritos.
-     * Es lo que hace el JDK, y significa que para una obra con cambios de tempo este numero es una
-     * estimacion.
+     * <p>In SMPTE it is exact. In PPQ it assumes the default tempo --120 quarter notes per minute,
+     * half a million microseconds per quarter note-- and <b>ignores the tempo changes</b> the piece
+     * has written in it, so for a piece with tempo changes this number is an estimate.
+     *
+     * <p>The note said this is what the JDK does. It is not: JDK 25 follows the tempo events, and a
+     * sequence at PPQ 480 with a 60 bpm tempo event at tick 0 and 480 ticks lasts 1,000,000
+     * microseconds there and 500,000 here.
      */
     public long getMicrosecondLength() {
         long ticks = getTickLength();
@@ -145,7 +149,7 @@ public class Sequence {
         return (long) (ticks * 1000000.0 / ticksPerSecond);
     }
 
-    /** El pulso mas alto de todas las pistas. */
+    /** The highest tick of all the tracks. */
     public long getTickLength() {
         long longest = 0;
         synchronized (this.tracks) {
@@ -161,7 +165,7 @@ public class Sequence {
         return longest;
     }
 
-    /** Vacio. Ver la nota de la clase: el JDK tampoco lo implementa. */
+    /** Empty. See the class note: the JDK does not implement it either. */
     public Patch[] getPatchList() {
         return new Patch[0];
     }

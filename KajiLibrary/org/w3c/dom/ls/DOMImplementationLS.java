@@ -3,42 +3,42 @@ package org.w3c.dom.ls;
 import org.w3c.dom.DOMException;
 
 /**
- * KajiLibrary's org.w3c.dom.ls.DOMImplementationLS -- la fabrica de todo este paquete.
+ * KajiLibrary's org.w3c.dom.ls.DOMImplementationLS -- the factory of this whole package.
  *
- * <p>Se obtiene preguntandole a un {@code DOMImplementation} por la caracteristica {@code "LS"}, y
- * de ahi salen las cuatro piezas: analizador, serializador, entrada y salida.
+ * <p>It is obtained by asking a {@code DOMImplementation} for the {@code "LS"} feature, and from it
+ * come the four pieces: parser, serialiser, input and output.
  *
- * <p>Las dos ultimas --{@link #createLSInput} y {@link #createLSOutput}-- son fabricas de objetos que
- * <b>no tienen constructor publico</b>. Es lo que hace usable a {@link LSResourceResolver}: quien
- * escribe uno necesita devolver un {@code LSInput}, y sin esto tendria que implementar la interfaz a
- * mano cada vez.
+ * <p>The last two --{@link #createLSInput} and {@link #createLSOutput}-- are factories of objects
+ * that <b>have no public constructor</b>. It is what makes {@link LSResourceResolver} usable:
+ * whoever writes one needs to return an {@code LSInput}, and without this they would have to
+ * implement the interface by hand every time.
  *
- * <p>El modo asincronico se elige al crear el analizador y no despues, porque cambia como esta
- * construido por dentro y no solo como se lo llama.
+ * <p>The asynchronous mode is chosen when creating the parser and not afterwards, because it
+ * changes how it is built inside and not only how it is called.
  */
 public interface DOMImplementationLS {
 
-    /** El analizador bloquea hasta terminar. */
+    /** The parser blocks until it finishes. */
     short MODE_SYNCHRONOUS = 1;
 
-    /** El analizador vuelve enseguida y avisa por eventos. */
+    /** The parser returns at once and notifies through events. */
     short MODE_ASYNCHRONOUS = 2;
 
     /**
-     * Un analizador.
+     * A parser.
      *
-     * @param mode uno de los dos de arriba
-     * @param schemaType el espacio de nombres del lenguaje de esquema con el que validar, o null
-     * @throws DOMException si esta implementacion no soporta ese modo o ese tipo de esquema
+     * @param mode one of the two above
+     * @param schemaType the namespace of the schema language to validate with, or null
+     * @throws DOMException if this implementation does not support that mode or that type of schema
      */
     LSParser createLSParser(short mode, String schemaType) throws DOMException;
 
-    /** Un serializador. */
+    /** A serialiser. */
     LSSerializer createLSSerializer();
 
-    /** Una entrada vacia, para llenarla. Ver la nota de la clase. */
+    /** An empty input, to be filled in. See the note of the class. */
     LSInput createLSInput();
 
-    /** Una salida vacia, para llenarla. */
+    /** An empty output, to be filled in. */
     LSOutput createLSOutput();
 }

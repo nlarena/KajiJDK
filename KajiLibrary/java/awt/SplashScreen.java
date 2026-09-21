@@ -4,40 +4,41 @@ import java.io.IOException;
 import java.net.URL;
 
 /**
- * La pantalla de bienvenida que la JVM muestra **antes** de que arranque el programa.
+ * The welcome screen the JVM shows **before** the program starts.
  *
- * <p>La particularidad es cuándo aparece: la muestra el lanzador, con la opción `-splash:` o el
- * atributo `SplashScreen-Image` del manifiesto, antes de cargar ninguna clase. Por eso no se puede
- * crear una: para cuando el programa corre, o ya está o no va a estar nunca. Lo único que se puede
- * hacer es dibujarle encima —una barra de progreso— y cerrarla.
+ * <p>What is peculiar is when it appears: the launcher shows it, with the `-splash:` option or the
+ * `SplashScreen-Image` attribute of the manifest, before loading any class. That is why one cannot
+ * be created: by the time the program runs, either it is already there or it never will be. The
+ * only thing that can be done is drawing over it —a progress bar— and closing it.
  *
- * <p><strong>Acá nunca hay ninguna.</strong> {@link #getSplashScreen} tira
- * {@link HeadlessException}, no devuelve `null`, y la diferencia es la de siempre: `null` significa
- * "no se pidió ninguna", y lo que pasa acá es que **no hay dónde mostrarla**. Son dos situaciones
- * distintas y el JDK las distingue igual. Los métodos de instancia están declarados porque son parte
- * de la clase, pero no hay forma de llegar a ellos: no existe ninguna instancia.
+ * <p><strong>Here there is never one.</strong> {@link #getSplashScreen} throws
+ * {@link HeadlessException}, it does not return `null`, and the difference is the usual one: `null`
+ * means "none was asked for", and what happens here is that **there is nowhere to show it**. They
+ * are two different situations and the JDK tells them apart the same way. The instance methods are
+ * declared because they are part of the class, but there is no way to reach them: no instance
+ * exists.
  */
 public final class SplashScreen {
 
-    /** El identificador nativo de la ventana; siempre 0 acá. */
+    /** The native handle of the window; always 0 here. */
     private final long splashPtr;
 
-    /** Si se cerró. */
-    private boolean cerrada;
+    /** Whether it was closed. */
+    private boolean closed;
 
-    /** La imagen que muestra. */
-    private URL imagen;
+    /** The image it shows. */
+    private URL url;
 
-    /** La arma el lanzador, nadie más. */
+    /** The launcher builds it, nobody else. */
     SplashScreen(long ptr) {
         this.splashPtr = ptr;
     }
 
     /**
-     * La pantalla de bienvenida de este programa.
+     * The welcome screen of this program.
      *
-     * @return la pantalla, o `null` si el programa no arrancó con una
-     * @throws HeadlessException siempre acá: sin pantalla no hay dónde mostrarla
+     * @return the screen, or `null` if the program did not start with one
+     * @throws HeadlessException always here: with no screen there is nowhere to show it
      */
     public static SplashScreen getSplashScreen() {
         synchronized (SplashScreen.class) {
@@ -49,100 +50,102 @@ public final class SplashScreen {
     }
 
     /**
-     * Cambia la imagen que muestra.
+     * Changes the image it shows.
      *
-     * <p>El tamaño de la ventana se ajusta a la imagen nueva y la ventana se recentra, que es lo que
-     * hace que valga la pena: sirve para una animación de arranque.
+     * <p>In the JDK the size of the window is adjusted to the new image and the window is
+     * re-centred, which is what makes it worth it: it serves for a start-up animation. Here there
+     * is no window, so the only thing that happens is that the address is recorded; {@code
+     * IOException} stays in the signature because the image is never read.
      *
-     * @throws NullPointerException si la dirección es `null`
-     * @throws IOException si la imagen no se puede leer
-     * @throws IllegalStateException si la pantalla ya se cerró
+     * @throws NullPointerException if the address is `null`
+     * @throws IOException if the image cannot be read
+     * @throws IllegalStateException if the screen was already closed
      */
     public void setImageURL(URL imageURL) throws NullPointerException, IOException,
             IllegalStateException {
-        this.comprobarViva();
+        this.checkAlive();
         if (imageURL == null) {
             throw new NullPointerException("imageURL");
         }
-        this.imagen = imageURL;
+        this.url = imageURL;
     }
 
     /**
-     * De dónde salió la imagen.
+     * Where the image came from.
      *
-     * @throws IllegalStateException si la pantalla ya se cerró
+     * @throws IllegalStateException if the screen was already closed
      */
     public URL getImageURL() throws IllegalStateException {
-        this.comprobarViva();
-        return this.imagen;
+        this.checkAlive();
+        return this.url;
     }
 
     /**
-     * Dónde está y cuánto mide, en coordenadas de pantalla.
+     * Where it is and how big it is, in screen coordinates.
      *
-     * @throws IllegalStateException si la pantalla ya se cerró
+     * @throws IllegalStateException always: there is no screen to measure, closed or not
      */
     public Rectangle getBounds() throws IllegalStateException {
-        this.comprobarViva();
+        this.checkAlive();
         throw new IllegalStateException("no splash screen available");
     }
 
     /**
-     * Cuánto mide.
+     * How big it is.
      *
-     * @throws IllegalStateException si la pantalla ya se cerró
+     * @throws IllegalStateException always, for the same reason as {@link #getBounds}
      */
     public Dimension getSize() throws IllegalStateException {
         return this.getBounds().getSize();
     }
 
     /**
-     * Un contexto para dibujarle encima.
+     * A context to draw over it.
      *
-     * <p>Lo que se dibuje va sobre una capa **transparente** arriba de la imagen, así que dibujar no
-     * borra lo que había: por eso hace falta {@link #update} para que se vea.
+     * <p>In the JDK what is drawn goes onto a **transparent** layer above the image, so drawing
+     * does not erase what was there: that is why {@link #update} is needed for it to be seen.
      *
-     * @throws IllegalStateException si la pantalla ya se cerró
+     * @throws IllegalStateException always: there is no screen to draw over
      */
     public Graphics2D createGraphics() throws IllegalStateException {
-        this.comprobarViva();
+        this.checkAlive();
         throw new IllegalStateException("no splash screen available");
     }
 
     /**
-     * Muestra lo que se dibujó desde la última vez.
+     * Shows what has been drawn since the last time.
      *
-     * @throws IllegalStateException si la pantalla ya se cerró
+     * @throws IllegalStateException if the screen was already closed
      */
     public void update() throws IllegalStateException {
-        this.comprobarViva();
+        this.checkAlive();
     }
 
     /**
-     * La cierra y suelta sus recursos.
+     * Closes it and releases its resources.
      *
-     * <p>Después de esto la instancia queda inservible: todos los demás métodos tiran.
+     * <p>After this the instance is useless: every other method throws.
      *
-     * @throws IllegalStateException si ya estaba cerrada
+     * @throws IllegalStateException if it was already closed
      */
     public void close() throws IllegalStateException {
-        this.comprobarViva();
-        this.cerrada = true;
+        this.checkAlive();
+        this.closed = true;
     }
 
-    /** Marca que se cerró desde afuera —al mostrarse la primera ventana del programa—. */
+    /** Marks that it was closed from outside —when the program's first window is shown—. */
     void markClosed() {
-        this.cerrada = true;
+        this.closed = true;
     }
 
-    /** Si sigue en pantalla. */
+    /** Whether it is still on the screen. */
     public boolean isVisible() {
-        return !this.cerrada && this.splashPtr != 0;
+        return !this.closed && this.splashPtr != 0;
     }
 
-    /** Tira si ya se cerró. */
-    private void comprobarViva() {
-        if (this.cerrada) {
+    /** Throws if it was already closed. */
+    private void checkAlive() {
+        if (this.closed) {
             throw new IllegalStateException("no splash screen available");
         }
     }

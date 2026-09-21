@@ -7,9 +7,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * KajiLibrary's javax.security.auth.x500.Der -- el nombre X.501 en su forma codificada.
+ * KajiLibrary's javax.security.auth.x500.Der -- the X.501 name in its encoded form.
  *
- * <p>La estructura entera son tres anidamientos y conviene tenerla a mano:
+ * <p>The whole structure is three levels of nesting and it is as well to have it at hand:
  *
  * <pre>
  *   Name  ::= SEQUENCE OF RelativeDistinguishedName
@@ -17,12 +17,12 @@ import java.util.List;
  *   ATV   ::= SEQUENCE { type OBJECT IDENTIFIER, value ANY }
  * </pre>
  *
- * <p>El SET del medio es el que sorprende: un paso del nombre puede tener **varios** pares, y por eso
- * es un conjunto y no un valor. En la practica casi siempre tiene uno.
+ * <p>The SET in the middle is the surprising one: a step of the name can have **several** pairs,
+ * and that is why it is a set and not a value. In practice it almost always has one.
  *
- * <p><strong>El orden va al reves que en el texto.</strong> El DER lista los pasos de lo general a lo
- * particular --pais primero, nombre comun ultimo-- y el texto al reves. Invertirlo aca es todo lo que
- * separa un nombre correcto de uno que parece bien y encadena mal.
+ * <p><strong>The order is the reverse of the text's.</strong> The DER lists the steps from the
+ * general to the particular --country first, common name last-- and the text the other way round.
+ * Reversing it here is all that separates a correct name from one that looks fine and chains wrong.
  */
 final class Der {
 
@@ -39,20 +39,20 @@ final class Der {
     static final int BMP = 0x1e;
     static final int UNIVERSAL = 0x1c;
 
-    // ---- lectura -----------------------------------------------------------------------------------
+    // ---- reading --------------------------------------------------------------------------------
 
-    /** Los pasos del nombre, **ya dados vuelta** al orden del texto. */
+    /** The steps of the name, **already turned around** to the text's order. */
     static X500Principal.Rdn[] readName(byte[] der) throws IOException {
         Cursor c = new Cursor(der, 0, der.length);
         Cursor seq = c.descend(SEQUENCE);
         List<X500Principal.Rdn> rdns = new ArrayList<X500Principal.Rdn>();
-        while (seq.hay()) {
+        while (seq.hasMore()) {
             rdns.add(readRdn(seq.descend(SET)));
         }
-        if (c.hay()) {
-            throw new IOException("sobran bytes despues del Name");
+        if (c.hasMore()) {
+            throw new IOException("extra bytes after the Name");
         }
-        // Del orden del DER al del texto.
+        // From the DER's order to the text's.
         X500Principal.Rdn[] out = new X500Principal.Rdn[rdns.size()];
         int i = 0;
         while (i < out.length) {
@@ -65,16 +65,16 @@ final class Der {
     private static X500Principal.Rdn readRdn(Cursor set) throws IOException {
         List<String> types = new ArrayList<String>();
         List<String> values = new ArrayList<String>();
-        while (set.hay()) {
+        while (set.hasMore()) {
             Cursor atv = set.descend(SEQUENCE);
             types.add(readOid(atv));
             values.add(readAttributeValue(atv.restOfValue()));
-            if (atv.hay()) {
-                throw new IOException("sobran bytes en un AttributeTypeAndValue");
+            if (atv.hasMore()) {
+                throw new IOException("extra bytes in an AttributeTypeAndValue");
             }
         }
         if (types.isEmpty()) {
-            throw new IOException("un RDN vacio");
+            throw new IOException("an empty RDN");
         }
         return new X500Principal.Rdn(types.toArray(new String[types.size()]),
                 values.toArray(new String[values.size()]));
@@ -83,43 +83,49 @@ final class Der {
     private static String readOid(Cursor c) throws IOException {
         byte[] body = c.readBody(OID);
         if (body.length == 0) {
-            throw new IOException("OID vacio");
+            throw new IOException("empty OID");
         }
         StringBuilder sb = new StringBuilder();
-        // El primer byte lleva **dos** arcos: `40*a + b`. Es la unica irregularidad de la
-        // codificacion de OID, y viene de que el primer arco solo puede ser 0, 1 o 2.
+        // The first byte carries **two** arcs: `40*a + b`. It is the only irregularity of the OID
+        // encoding, and it comes from the first arc only being able to be 0, 1 or 2.
         int first = body[0] & 0xff;
         sb.append(first / 40).append('.').append(first % 40);
-        long acum = 0;
+        long acc = 0;
         int i = 1;
         while (i < body.length) {
             int b = body[i] & 0xff;
-            acum = (acum << 7) | (long) (b & 0x7f);
+            acc = (acc << 7) | (long) (b & 0x7f);
             if ((b & 0x80) == 0) {
-                sb.append('.').append(acum);
-                acum = 0;
+                sb.append('.').append(acc);
+                acc = 0;
             }
             i = i + 1;
         }
-        if (acum != 0) {
-            throw new IOException("OID truncado");
+        if (acc != 0) {
+            throw new IOException("truncated OID");
         }
         return sb.toString();
     }
 
     /**
-     * El valor de un atributo, como texto.
+     * The value of an attribute, as text.
      *
-     * <p>Los cinco tipos de cadena que un DN usa se leen igual --son bytes-- salvo `BMPString`, que
-     * es UTF-16 de dos bytes por caracter. Un tipo que no sea ninguno de esos **no se inventa**: se
-     * devuelve su forma hexadecimal con `#` adelante, que es exactamente lo que el JDK muestra.
+     * <p>`PrintableString`, `IA5String`, `UTF8String`, `TeletexString` and `UniversalString` are
+     * decoded as UTF-8, and `BMPString` as UTF-16 with two bytes per character. A type that is none
+     * of those **is not made up**: its hexadecimal form is returned with `#` in front, which is
+     * exactly what the JDK shows.
+     *
+     * <p>The note said the five were read the same because they are bytes. For the first three that
+     * holds; the JDK reads `TeletexString` as Latin-1 (a lone {@code 0xE9} is an e with an acute
+     * accent, here it is U+FFFD) and does not decode `UniversalString` at all: it shows it in
+     * hexadecimal, whereas here its four bytes per character come out as three NULs and the letter.
      */
     static String readAttributeValue(byte[] der) throws IOException {
         if (der.length < 2) {
-            throw new IOException("valor de atributo truncado");
+            throw new IOException("truncated attribute value");
         }
         Cursor c = new Cursor(der, 0, der.length);
-        int tag = c.verTag();
+        int tag = c.peekTag();
         if (tag == PRINTABLE || tag == UTF8 || tag == IA5 || tag == T61 || tag == UNIVERSAL) {
             byte[] body = c.readBody(tag);
             return new String(body, java.nio.charset.StandardCharsets.UTF_8);
@@ -137,17 +143,20 @@ final class Der {
         return "#" + toHex(der);
     }
 
-    /** Lee **un** valor DER de un flujo y devuelve sus bytes, dejando el flujo justo despues. */
+    /**
+     * Reads **one** DER value from a stream and returns its bytes, leaving the stream just after
+     * it.
+     */
     static byte[] readOneValue(InputStream is) throws IOException {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         int tag = is.read();
         if (tag < 0) {
-            throw new IOException("flujo vacio");
+            throw new IOException("empty stream");
         }
         out.write(tag);
         int first = is.read();
         if (first < 0) {
-            throw new IOException("largo truncado");
+            throw new IOException("truncated length");
         }
         out.write(first);
         int len;
@@ -156,14 +165,14 @@ final class Der {
         } else {
             int n = first & 0x7f;
             if (n == 0 || n > 4) {
-                throw new IOException("largo indefinido o demasiado grande");
+                throw new IOException("indefinite or too large length");
             }
             len = 0;
             int i = 0;
             while (i < n) {
                 int b = is.read();
                 if (b < 0) {
-                    throw new IOException("largo truncado");
+                    throw new IOException("truncated length");
                 }
                 out.write(b);
                 len = (len << 8) | b;
@@ -174,7 +183,7 @@ final class Der {
         while (readCount < len) {
             int b = is.read();
             if (b < 0) {
-                throw new IOException("valor truncado");
+                throw new IOException("truncated value");
             }
             out.write(b);
             readCount = readCount + 1;
@@ -182,9 +191,9 @@ final class Der {
         return out.toByteArray();
     }
 
-    // ---- escritura ---------------------------------------------------------------------------------
+    // ---- escritura ------------------------------------------------------------------------------
 
-    /** El nombre en DER, **dando vuelta** los pasos al orden del DER. */
+    /** The name in DER, **turning** the steps **around** to the DER's order. */
     static byte[] writeName(X500Principal.Rdn[] rdns) {
         ByteArrayOutputStream body = new ByteArrayOutputStream();
         int i = rdns.length - 1;
@@ -193,7 +202,7 @@ final class Der {
             body.write(rdn, 0, rdn.length);
             i = i - 1;
         }
-        return envolver(SEQUENCE, body.toByteArray());
+        return wrap(SEQUENCE, body.toByteArray());
     }
 
     private static byte[] writeRdn(X500Principal.Rdn rdn) {
@@ -205,27 +214,27 @@ final class Der {
             atv.write(oid, 0, oid.length);
             byte[] val = writeValue(rdn.values[i]);
             atv.write(val, 0, val.length);
-            byte[] onePrincipal = envolver(SEQUENCE, atv.toByteArray());
+            byte[] onePrincipal = wrap(SEQUENCE, atv.toByteArray());
             body.write(onePrincipal, 0, onePrincipal.length);
             i = i + 1;
         }
-        return envolver(SET, body.toByteArray());
+        return wrap(SET, body.toByteArray());
     }
 
     private static byte[] writeOid(String oid) {
-        String[] arcos = partir(oid);
+        String[] arcs = splitArcs(oid);
         ByteArrayOutputStream out = new ByteArrayOutputStream();
-        // Los dos primeros arcos van juntos en un byte, igual que al leer.
-        out.write(Integer.parseInt(arcos[0]) * 40 + Integer.parseInt(arcos[1]));
+        // The first two arcs go together in one byte, just as when reading.
+        out.write(Integer.parseInt(arcs[0]) * 40 + Integer.parseInt(arcs[1]));
         int i = 2;
-        while (i < arcos.length) {
-            writeBase128(out, Long.parseLong(arcos[i]));
+        while (i < arcs.length) {
+            writeBase128(out, Long.parseLong(arcs[i]));
             i = i + 1;
         }
-        return envolver(OID, out.toByteArray());
+        return wrap(OID, out.toByteArray());
     }
 
-    // Base 128 con el bit alto marcando "sigue", y el ultimo byte sin marcar.
+    // Base 128 with the high bit marking "more follows", and the last byte unmarked.
     private static void writeBase128(ByteArrayOutputStream out, long v) {
         if (v == 0) {
             out.write(0);
@@ -247,30 +256,34 @@ final class Der {
     }
 
     /**
-     * El valor con el tipo de cadena mas **angosto** que lo pueda representar.
+     * The value with the **narrowest** string type that can represent it.
      *
-     * <p>`PrintableString` si entra --letras, digitos y un puñado de signos-- y `UTF8String` si no.
-     * Elegir el mas angosto no es tacañeria: es lo que hace que el DER que emitimos sea el mismo que
-     * emite cualquier otra implementacion para el mismo nombre, y eso es lo que permite comparar
-     * certificados byte a byte.
+     * <p>`PrintableString` if it fits --letters, digits and a handful of signs-- and `UTF8String`
+     * if not. Choosing the narrowest is not stinginess: it is what makes the DER we emit the same
+     * as the one the JDK emits for the same name, and that is what allows comparing certificates
+     * byte by byte.
+     *
+     * <p>The note said it was the same as any other implementation's. Not always: the JDK writes
+     * {@code EMAILADDRESS} and {@code DC} as `IA5String`, and here {@code EMAILADDRESS=a@b} comes
+     * out as `UTF8String`, so those names do not compare byte by byte with the JDK's.
      */
     static byte[] writeValue(String value) {
-        // Un valor que quedo en forma hexadecimal es DER crudo: se devuelve tal cual.
+        // A value that stayed in hexadecimal form is raw DER: it is returned as is.
         if (value.length() > 1 && value.charAt(0) == '#') {
             byte[] rawBytes = fromHex(value.substring(1, value.length()));
             if (rawBytes != null) {
                 return rawBytes;
             }
         }
-        if (esPrintable(value)) {
-            return envolver(PRINTABLE, value.getBytes(java.nio.charset.StandardCharsets.US_ASCII));
+        if (isPrintable(value)) {
+            return wrap(PRINTABLE, value.getBytes(java.nio.charset.StandardCharsets.US_ASCII));
         }
-        return envolver(UTF8, value.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        return wrap(UTF8, value.getBytes(java.nio.charset.StandardCharsets.UTF_8));
     }
 
-    // El juego de `PrintableString` (X.680): es chico y no incluye ni `@` ni `_`, que es por lo que un
-    // correo electronico siempre termina en UTF8String o IA5String.
-    private static boolean esPrintable(String s) {
+    // The `PrintableString` set (X.680): it is small and includes neither `@` nor `_`, which is why
+    // an email address always ends up in UTF8String or IA5String.
+    private static boolean isPrintable(String s) {
         int i = 0;
         while (i < s.length()) {
             char c = s.charAt(i);
@@ -284,16 +297,16 @@ final class Der {
         return true;
     }
 
-    // ---- utilidades --------------------------------------------------------------------------------
+    // ---- utilities ------------------------------------------------------------------------------
 
-    private static byte[] envolver(int tag, byte[] body) {
+    private static byte[] wrap(int tag, byte[] body) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         out.write(tag);
         int n = body.length;
         if (n < 128) {
             out.write(n);
         } else {
-            // Forma larga: un byte con la cantidad de bytes del largo, y despues el largo.
+            // Long form: one byte with the number of bytes of the length, and then the length.
             int bytes = n < 256 ? 1 : (n < 65536 ? 2 : (n < 16777216 ? 3 : 4));
             out.write(0x80 | bytes);
             int i = bytes - 1;
@@ -335,7 +348,7 @@ final class Der {
         return out;
     }
 
-    private static String[] partir(String oid) {
+    private static String[] splitArcs(String oid) {
         List<String> out = new ArrayList<String>();
         int from = 0;
         int i = 0;
@@ -350,11 +363,11 @@ final class Der {
     }
 
     /**
-     * Un cursor sobre un tramo de DER.
+     * A cursor over a stretch of DER.
      *
-     * <p>Existe para que leer una estructura anidada no sea una cuenta de indices: `descend(tag)`
-     * devuelve un cursor sobre el **contenido** y avanza el de afuera, asi que el anidamiento del
-     * codigo sigue al de los datos.
+     * <p>It exists so that reading a nested structure is not index arithmetic: `descend(tag)`
+     * returns a cursor over the **content** and advances the outer one, so the nesting of the code
+     * follows that of the data.
      */
     private static final class Cursor {
         private final byte[] b;
@@ -367,26 +380,26 @@ final class Der {
             this.end = end;
         }
 
-        boolean hay() {
+        boolean hasMore() {
             return this.pos < this.end;
         }
 
-        int verTag() throws IOException {
-            if (!this.hay()) {
-                throw new IOException("DER truncado");
+        int peekTag() throws IOException {
+            if (!this.hasMore()) {
+                throw new IOException("truncated DER");
             }
             return this.b[this.pos] & 0xff;
         }
 
         Cursor descend(int expectedTag) throws IOException {
-            int[] r = this.cabecera(expectedTag);
+            int[] r = this.header(expectedTag);
             Cursor inner = new Cursor(this.b, r[0], r[0] + r[1]);
             this.pos = r[0] + r[1];
             return inner;
         }
 
         byte[] readBody(int expectedTag) throws IOException {
-            int[] r = this.cabecera(expectedTag);
+            int[] r = this.header(expectedTag);
             byte[] out = new byte[r[1]];
             int i = 0;
             while (i < out.length) {
@@ -399,15 +412,15 @@ final class Der {
 
         byte[] restOfValue() throws IOException {
             int from = this.pos;
-            // Se mide el valor y se **consume entero** --cabecera y cuerpo--, y se devuelven sus
-            // bytes con la cabecera puesta: quien lo reciba necesita el tag para saber que tipo de
-            // cadena es.
+            // The value is measured and **consumed whole** --header and body--, and its bytes are
+            // returned with the header on: whoever receives it needs the tag to know what kind of
+            // string it is.
             //
-            // El `pos = body + len` no sobra: `cabecera` deja el cursor al **principio del
-            // cuerpo**, que es lo que quiere `descend`. Sin esta linea se devolvia solo la cabecera y
-            // el cursor quedaba corrido, y el error salia mucho despues como "el valor se pasa del
-            // tramo" sobre un dato que estaba bien.
-            int[] r = this.cabecera(-1);
+            // The `pos = body + len` is not superfluous: `header` leaves the cursor at the **start
+            // of the body**, which is what `descend` wants. Without this line only the header was
+            // returned and the cursor was left out of place, and the error came out much later as
+            // "value runs past its range" on a datum that was fine.
+            int[] r = this.header(-1);
             this.pos = r[0] + r[1];
             byte[] out = new byte[this.pos - from];
             int i = 0;
@@ -418,15 +431,16 @@ final class Der {
             return out;
         }
 
-        // {posicion del cuerpo, largo}. `expectedTag` en -1 acepta cualquiera.
-        private int[] cabecera(int expectedTag) throws IOException {
+        // {position of the body, length}. `expectedTag` at -1 accepts any.
+        private int[] header(int expectedTag) throws IOException {
             if (this.pos + 1 >= this.end) {
-                throw new IOException("DER truncado");
+                throw new IOException("truncated DER");
             }
             int tag = this.b[this.pos] & 0xff;
             if (expectedTag >= 0 && tag != expectedTag) {
-                throw new IOException("se esperaba el tag 0x"
-                        + Integer.toHexString(expectedTag) + " y vino 0x" + Integer.toHexString(tag));
+                throw new IOException("expected tag 0x"
+                        + Integer.toHexString(expectedTag) + " but got 0x"
+                        + Integer.toHexString(tag));
             }
             int p = this.pos + 1;
             int first = this.b[p] & 0xff;
@@ -436,16 +450,16 @@ final class Der {
                 len = first;
             } else {
                 int n = first & 0x7f;
-                // La forma indefinida (`n == 0`) no existe en DER, solo en BER. Un largo de mas de
-                // cuatro bytes no cabe en un `int` y no hay nombre que lo necesite.
+                // The indefinite form (`n == 0`) does not exist in DER, only in BER. A length of
+                // more than four bytes does not fit in an `int` and no name needs it.
                 if (n == 0 || n > 4) {
-                    throw new IOException("largo indefinido o demasiado grande");
+                    throw new IOException("indefinite or too large length");
                 }
                 len = 0;
                 int i = 0;
                 while (i < n) {
                     if (p >= this.end) {
-                        throw new IOException("largo truncado");
+                        throw new IOException("truncated length");
                     }
                     len = (len << 8) | (this.b[p] & 0xff);
                     p = p + 1;
@@ -453,7 +467,7 @@ final class Der {
                 }
             }
             if (len < 0 || p + len > this.end) {
-                throw new IOException("el valor se pasa del tramo");
+                throw new IOException("value runs past its range");
             }
             this.pos = p;
             return new int[] {p, len};

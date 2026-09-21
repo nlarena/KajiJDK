@@ -4,96 +4,96 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * KajiLibrary's javax.xml.catalog.CatalogFeatures -- como se comporta un catalogo.
+ * KajiLibrary's javax.xml.catalog.CatalogFeatures -- how a catalog behaves.
  *
- * <p>Cuatro opciones, inmutables una vez armadas. Se construye con {@link #builder}, o se toman las de
- * omision con {@link #defaults}.
+ * <p>Four options, immutable once built. It is built with {@link #builder}, or the defaults are
+ * taken with {@link #defaults}.
  *
- * <h2>Las cuatro</h2>
+ * <h2>The four</h2>
  *
  * <ul>
- *   <li>{@code FILES}: los catalogos a usar, como URI separados por punto y coma. Sin omision;
- *   <li>{@code PREFER}: cual identificador gana cuando el documento trae los dos. Por omision
+ *   <li>{@code FILES}: the catalogs to use, as URIs separated by semicolons. No default;
+ *   <li>{@code PREFER}: which identifier wins when the document carries both. By default
  *       {@code "public"};
- *   <li>{@code DEFER}: si los catalogos encadenados se leen recien cuando hacen falta. Por omision
- *       {@code "true"};
- *   <li>{@code RESOLVE}: que hacer cuando no hay coincidencia. Por omision {@code "strict"}.
+ *   <li>{@code DEFER}: whether chained catalogs are read only when needed. By default {@code
+ *     "true"};
+ *   <li>{@code RESOLVE}: what to do when there is no match. By default {@code "strict"}.
  * </ul>
  *
- * <h2>De donde sale cada valor</h2>
+ * <h2>Where each value comes from</h2>
  *
- * <p>Se busca en tres lugares, en este orden: lo que se le puso al constructor, la propiedad del
- * sistema del mismo nombre, y el valor de omision. Eso es lo que permite cambiar el catalogo de un
- * programa ya compilado con un {@code -D} en la linea de comandos.
+ * <p>It is looked for in three places, in this order: what was given to the builder, the system
+ * property of the same name, and the default value. That is what allows changing an already
+ * compiled program's catalog with a {@code -D} on the command line.
  *
- * <h2>{@code RESOLVE} por omision es estricto</h2>
+ * <h2>{@code RESOLVE} is strict by default</h2>
  *
- * <p>Es la trampa: no encontrar una entrada <b>lanza</b> {@link CatalogException} en lugar de dejar
- * pasar. Es lo correcto para un despliegue --si el catalogo no cubre algo, mejor enterarse-- y
- * sorprende a quien lo prueba por primera vez con un catalogo incompleto.
+ * <p>It is the trap: not finding an entry <b>throws</b> {@link CatalogException} instead of letting
+ * it through. It is right for a deployment --if the catalog does not cover something, better to
+ * find out-- and it surprises whoever tries it for the first time with an incomplete catalog.
  */
 public class CatalogFeatures {
 
-    /** La propiedad de los archivos de catalogo. */
+    /** The property of the catalog files. */
     static final String CATALOG_FILES = "javax.xml.catalog.files";
 
-    /** La de la preferencia. */
+    /** The one of the preference. */
     static final String CATALOG_PREFER = "javax.xml.catalog.prefer";
 
-    /** La de la lectura diferida. */
+    /** The one of deferred reading. */
     static final String CATALOG_DEFER = "javax.xml.catalog.defer";
 
-    /** La de que hacer sin coincidencia. */
+    /** The one of what to do without a match. */
     static final String CATALOG_RESOLVE = "javax.xml.catalog.resolve";
 
-    /** Gana el identificador de sistema. */
+    /** The system identifier wins. */
     static final String PREFER_SYSTEM = "system";
 
-    /** Gana el publico. */
+    /** The public one wins. */
     static final String PREFER_PUBLIC = "public";
 
-    /** Leer los encadenados recien cuando hagan falta. */
+    /** Read the chained ones only when they are needed. */
     static final String DEFER_TRUE = "true";
 
-    /** Leerlos todos al arrancar. */
+    /** Read them all at startup. */
     static final String DEFER_FALSE = "false";
 
-    /** Sin coincidencia, error. */
+    /** Without a match, an error. */
     static final String RESOLVE_STRICT = "strict";
 
-    /** Sin coincidencia, seguir por el camino normal. */
+    /** Without a match, carry on along the normal path. */
     static final String RESOLVE_CONTINUE = "continue";
 
-    /** Sin coincidencia, devolver algo vacio. */
+    /** Without a match, return something empty. */
     static final String RESOLVE_IGNORE = "ignore";
 
-    /** Lo que se le puso explicitamente. */
+    /** What was set explicitly. */
     private final Map<Feature, String> values;
 
     /**
-     * Las cuatro caracteristicas.
+     * The four features.
      *
-     * <p>Cada una conoce su propiedad del sistema y su valor de omision, y por eso
-     * {@link #getPropertyName} y {@link #defaultValue} viven aca y no en un mapa aparte.
+     * <p>Each one knows its system property and its default value, and that is why
+     * {@link #getPropertyName} and {@link #defaultValue} live here and not in a separate map.
      */
     public enum Feature {
 
-        /** Los catalogos a usar, separados por punto y coma. Sin omision. */
+        /** The catalogs to use, separated by semicolons. No default. */
         FILES(CATALOG_FILES, null),
 
-        /** Cual identificador gana. */
+        /** Which identifier wins. */
         PREFER(CATALOG_PREFER, PREFER_PUBLIC),
 
-        /** Si los encadenados se leen al vuelo. */
+        /** Whether the chained ones are read on the fly. */
         DEFER(CATALOG_DEFER, DEFER_TRUE),
 
-        /** Que hacer sin coincidencia. */
+        /** What to do without a match. */
         RESOLVE(CATALOG_RESOLVE, RESOLVE_STRICT);
 
-        /** La propiedad del sistema equivalente. */
+        /** The equivalent system property. */
         private final String name;
 
-        /** El valor si nadie dice nada. */
+        /** The value if nobody says anything. */
         private final String defaultValue;
 
         Feature(String name, String value) {
@@ -101,22 +101,22 @@ public class CatalogFeatures {
             this.defaultValue = value;
         }
 
-        /** La propiedad del sistema equivalente. */
+        /** The equivalent system property. */
         public String getPropertyName() {
             return this.name;
         }
 
-        /** El valor si nadie dice nada; null para {@link #FILES}. */
+        /** The value if nobody says anything; null for {@link #FILES}. */
         public String defaultValue() {
             return this.defaultValue;
         }
 
-        /** Si ese es el nombre de su propiedad. */
+        /** Whether that is the name of its property. */
         boolean equalsPropertyName(String propertyName) {
             return this.name.equals(propertyName);
         }
 
-        /** Lo que diga la propiedad del sistema, o null. */
+        /** Whatever the system property says, or null. */
         String getValue() {
             try {
                 return System.getProperty(this.name);
@@ -125,28 +125,28 @@ public class CatalogFeatures {
             }
         }
 
-        /** Si la propiedad del sistema esta puesta. */
+        /** Whether the system property is set. */
         boolean hasSystemProperty() {
             return getValue() != null;
         }
     }
 
-    /** El armador. Un objeto aparte para que {@link CatalogFeatures} pueda ser inmutable. */
+    /** The builder. A separate object so that {@link CatalogFeatures} can be immutable. */
     public static class Builder {
 
-        /** Lo que se fue poniendo. */
+        /** What has been set so far. */
         Map<Feature, String> values = new HashMap<Feature, String>();
 
-        /** Solo se llega por {@link CatalogFeatures#builder}. */
+        /** Only reached through {@link CatalogFeatures#builder}. */
         Builder() {
         }
 
         /**
-         * Fija una caracteristica.
+         * Sets a feature.
          *
-         * @throws NullPointerException si la caracteristica o el valor son null
-         * @throws IllegalArgumentException si el valor no es uno de los aceptados; los valores
-         *     distinguen mayusculas
+         * @throws NullPointerException if the feature or the value is null
+         * @throws IllegalArgumentException if the value is not one of the accepted ones; the values
+         *     are case-sensitive
          */
         public Builder with(Feature feature, String value) {
             if (feature == null) {
@@ -160,12 +160,12 @@ public class CatalogFeatures {
             return this;
         }
 
-        /** Las caracteristicas ya armadas. */
+        /** The features, built. */
         public CatalogFeatures build() {
             return new CatalogFeatures(this);
         }
 
-        /** Los valores aceptados de cada caracteristica; {@code FILES} acepta cualquier cosa. */
+        /** The accepted values of each feature; {@code FILES} accepts anything. */
         private static void validate(Feature feature, String value) {
             if (feature == Feature.PREFER) {
                 if (!value.equals(PREFER_SYSTEM) && !value.equals(PREFER_PUBLIC)) {
@@ -184,21 +184,21 @@ public class CatalogFeatures {
         }
     }
 
-    /** Se llega por {@link Builder#build}. */
+    /** Reached through {@link Builder#build}. */
     CatalogFeatures(Builder builder) {
         this.values = new HashMap<Feature, String>(builder.values);
     }
 
-    /** Las de omision, sin nada puesto a mano. */
+    /** The defaults, with nothing set by hand. */
     public static CatalogFeatures defaults() {
         return builder().build();
     }
 
     /**
-     * El valor de esa caracteristica.
+     * The value of that feature.
      *
-     * <p>Lo puesto a mano, si no la propiedad del sistema, si no el valor de omision. Ver la nota de
-     * la clase.
+     * <p>What was set by hand, otherwise the system property, otherwise the default value. See the
+     * class note.
      */
     public String get(Feature cf) {
         String explicit = this.values.get(cf);
@@ -212,7 +212,7 @@ public class CatalogFeatures {
         return cf.defaultValue();
     }
 
-    /** Un armador nuevo. */
+    /** A new builder. */
     public static Builder builder() {
         return new Builder();
     }

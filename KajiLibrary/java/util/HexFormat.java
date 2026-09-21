@@ -13,11 +13,10 @@ package java.util;
 // than mutating: `HexFormat.of().withUpperCase().withDelimiter(":")`. That is what makes it safe
 // to keep one in a static field and share it.
 //
-// KajiLibrary implements the byte[]/String surface. The `<A extends Appendable>` overloads
-// (formatHex(A, byte[]), toHexDigits(A, byte)) are omitted: they call methods on a receiver
-// whose static type is a type variable, which compiler finding #111 miscompiles into silence.
-// The char[] parseHex overload and the (fromIndex, toIndex) forms of the static digit parsers
-// are omitted as redundant with the CharSequence ones we do provide.
+// This note used to list as omitted the `<A extends Appendable>` overloads (blamed on finding #111,
+// a call on a receiver of a type-variable type being miscompiled into silence), the char[] parseHex
+// overload and the (fromIndex, toIndex) forms of the static digit parsers. Finding #111 was fixed on
+// 2026-08-24 and all of them are declared below.
 public final class HexFormat {
 
     // Nibble value 0..15 -> digit character, in this format's case. A `final char[]` instance
@@ -126,29 +125,30 @@ public final class HexFormat {
     }
 
     /**
-     * Formatea a un `Appendable` en vez de a un `String`.
+     * It formats to an `Appendable` instead of to a `String`.
      *
-     * <p>Existe para no construir la cadena intermedia cuando el destino ya es un buffer: formatear
-     * un megabyte a un `StringBuilder` con la version de `String` haria una copia entera de mas.
+     * <p>It exists so as not to build the intermediate string when the destination is already a
+     * buffer: formatting a megabyte to a `StringBuilder` with the `String` version would make one
+     * whole copy too many.
      *
-     * <p>Devuelve **el mismo** `out` que recibio, para poder encadenarlo.
+     * <p>It returns **the same** `out` it was given, so it can be chained.
      */
     public <A extends Appendable> A formatHex(A out, byte[] bytes) {
         return formatHex(out, bytes, 0, bytes.length);
     }
 
-    /** Idem, sobre un tramo. */
+    /** The same, over a stretch. */
     public <A extends Appendable> A formatHex(A out, byte[] bytes, int fromIndex, int toIndex) {
-        // El JDK no declara `throws IOException` y envuelve en `UncheckedIOException`: quien formatea
-        // hexadecimal a un `Appendable` no tiene por que atrapar E/S. El error no se pierde.
+        // The JDK declares no `throws IOException` and wraps in `UncheckedIOException`: whoever
+        // formats hexadecimal to an `Appendable` has no reason to catch I/O. The error is not lost.
         try {
-            return this.formatearHex(out, bytes, fromIndex, toIndex);
+            return this.formatHexValue(out, bytes, fromIndex, toIndex);
         } catch (java.io.IOException e) {
             throw new java.io.UncheckedIOException(e);
         }
     }
 
-    private <A extends Appendable> A formatearHex(A out, byte[] bytes, int fromIndex, int toIndex)
+    private <A extends Appendable> A formatHexValue(A out, byte[] bytes, int fromIndex, int toIndex)
             throws java.io.IOException {
         if (out == null) {
             throw new NullPointerException();
@@ -167,11 +167,11 @@ public final class HexFormat {
     }
 
     /**
-     * Los dos digitos de `value` a un `Appendable`.
+     * `value`'s two digits to an `Appendable`.
      *
-     * <p>Ojo: **no** lleva prefijo, sufijo ni delimitador. `toHexDigits` es la conversion cruda y
-     * `formatHex` la que aplica el formato -- la diferencia esta en los dos nombres y es facil de
-     * pasar por alto.
+     * <p>Mind that it carries **no** prefix, suffix or delimiter. `toHexDigits` is the raw conversion
+     * and `formatHex` the one that applies the format -- the difference is in the two names and it is
+     * easy to overlook.
      */
     public <A extends Appendable> A toHexDigits(A out, byte value) {
         if (out == null) {
@@ -208,11 +208,11 @@ public final class HexFormat {
     }
 
     /**
-     * Parsea desde un `char[]`.
+     * It parses from a `char[]`.
      *
-     * <p>Se copia el tramo a un `String` y se delega. Copiar parece un desperdicio y es lo correcto:
-     * el arreglo es **mutable** y de quien llama, asi que leerlo perezosamente dejaria al parser
-     * expuesto a que se lo cambien en el medio. El JDK hace lo mismo por la misma razon.
+     * <p>The stretch is copied into a `String` and delegated. Copying looks like a waste and is the
+     * right thing: the array is **mutable** and the caller's, so reading it lazily would leave the
+     * parser open to being changed underneath. The JDK does the same for the same reason.
      */
     public byte[] parseHex(char[] chars, int fromIndex, int toIndex) {
         if (chars == null) {
@@ -383,10 +383,11 @@ public final class HexFormat {
     }
 
     /**
-     * Los digitos de `[fromIndex, toIndex)` como `int`.
+     * The digits of `[fromIndex, toIndex)` as an `int`.
      *
-     * @throws IllegalArgumentException si el tramo tiene mas de 8 digitos, o alguno no es hexadecimal
-     * @throws IndexOutOfBoundsException si el tramo no cae dentro de `string`
+     * @throws IllegalArgumentException if the stretch has more than 8 digits, or one of them is not
+     *         hexadecimal
+     * @throws IndexOutOfBoundsException if the stretch does not fall inside `string`
      */
     public static int fromHexDigits(CharSequence string, int fromIndex, int toIndex) {
         if (string == null) {
@@ -399,7 +400,7 @@ public final class HexFormat {
         return fromHexDigits(string.subSequence(fromIndex, toIndex));
     }
 
-    /** Idem, hasta 16 digitos, como `long`. */
+    /** The same, up to 16 digits, as a `long`. */
     public static long fromHexDigitsToLong(CharSequence string, int fromIndex, int toIndex) {
         if (string == null) {
             throw new NullPointerException();

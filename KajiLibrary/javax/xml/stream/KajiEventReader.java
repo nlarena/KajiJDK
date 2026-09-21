@@ -7,20 +7,20 @@ import javax.xml.stream.events.XMLEvent;
 import javax.xml.stream.util.XMLEventAllocator;
 
 /**
- * El lector de eventos de esta biblioteca: un cursor mas un {@link XMLEventAllocator}.
+ * This library's event reader: a cursor plus an {@link XMLEventAllocator}.
  *
- * <h2>El primer evento ya esta puesto</h2>
+ * <h2>The first event is already there</h2>
  *
- * <p>Un {@link XMLStreamReader} recien construido <b>ya esta parado</b> en {@code START_DOCUMENT},
- * asi que el primer {@link #nextEvent()} tiene que fotografiar donde esta en vez de avanzar. De ahi
- * el {@code actualSinEntregar}: es el desfasaje de uno entre las dos APIs, y es la unica sutileza
- * de esta clase.
+ * <p>A newly built {@link XMLStreamReader} <b>is already standing</b> at {@code START_DOCUMENT}, so
+ * the first {@link #nextEvent()} has to take a snapshot of where it is instead of advancing. Hence
+ * {@code currentUndelivered}: it is the off-by-one between the two APIs, and it is the only
+ * subtlety of this class.
  *
  * <h2>{@link #peek()}</h2>
  *
- * <p>Mirar sin consumir es lo que el modelo de cursor no puede dar, y se resuelve de la unica forma
- * posible: se pide el evento de verdad y se guarda. Como los eventos son objetos independientes,
- * guardarlo no cuesta nada; con el cursor habria que copiar todo su estado.
+ * <p>Looking without consuming is what the cursor model cannot give, and it is solved in the only
+ * possible way: the real event is asked for and kept. Since events are independent objects, keeping
+ * it costs nothing; with the cursor all its state would have to be copied.
  */
 final class KajiEventReader implements XMLEventReader {
 
@@ -58,7 +58,7 @@ final class KajiEventReader implements XMLEventReader {
             return last;
         }
         if (!r.hasNext()) {
-            throw new NoSuchElementException("no quedan eventos");
+            throw new NoSuchElementException("no events left");
         }
         r.next();
         last = alloc.allocate(r);
@@ -82,8 +82,8 @@ final class KajiEventReader implements XMLEventReader {
         try {
             return nextEvent();
         } catch (XMLStreamException e) {
-            // La interfaz de Iterator no deja pasar una excepcion comprobada, y perder el motivo
-            // seria peor que el cambio de tipo: va encadenada.
+            // The Iterator interface does not let a checked exception through, and losing the
+            // reason would be worse than the change of type: it goes chained.
             NoSuchElementException n = new NoSuchElementException(e.getMessage());
             n.initCause(e);
             throw n;
@@ -91,13 +91,13 @@ final class KajiEventReader implements XMLEventReader {
     }
 
     public void remove() {
-        throw new UnsupportedOperationException("de un documento XML no se saca un evento");
+        throw new UnsupportedOperationException("an event cannot be taken from an XML document");
     }
 
     public String getElementText() throws XMLStreamException {
         if (last == null || !last.isStartElement()) {
             throw new XMLStreamException(
-                    "getElementText() se llama despues de haber leido un START_ELEMENT");
+                    "getElementText() is called after reading a START_ELEMENT");
         }
         StringBuilder sb = new StringBuilder();
         while (true) {
@@ -115,7 +115,7 @@ final class KajiEventReader implements XMLEventReader {
                 continue;
             }
             throw new XMLStreamException(
-                    "el elemento no tiene solo texto: aparecio el evento " + e.getEventType(),
+                    "the element is not text-only: got event " + e.getEventType(),
                     e.getLocation());
         }
     }
@@ -135,7 +135,7 @@ final class KajiEventReader implements XMLEventReader {
                 continue;
             }
             throw new XMLStreamException(
-                    "se esperaba una etiqueta y vino el evento " + e.getEventType(),
+                    "expected a tag and got event " + e.getEventType(),
                     e.getLocation());
         }
     }

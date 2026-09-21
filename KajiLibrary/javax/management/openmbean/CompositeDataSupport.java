@@ -10,33 +10,34 @@ import java.util.Set;
 import java.util.TreeMap;
 
 /**
- * La implementación de {@link CompositeData}: un mapa de nombre a valor, congelado al construirse.
+ * The implementation of {@link CompositeData}: a name-to-value map, frozen on construction.
  *
- * <p>Lo que hace el constructor y conviene tener presente: **valida cada valor contra su tipo**. Un
- * item declarado `SimpleType.INTEGER` al que se le pasa un `String` no entra, y el error sale en el
- * momento de armar el valor en vez de en el otro extremo de la conexión. Eso es todo lo que un tipo
- * abierto compra, y por eso el constructor tira `OpenDataException` en vez de confiar.
+ * <p>What the constructor does and is worth keeping in mind: it <b>validates every value against
+ * its type</b>. An item declared {@code SimpleType.INTEGER} that is given a {@code String} does not
+ * go in, and the error comes out when building the value instead of at the other end of the
+ * connection. That is all an open type buys, and that is why the constructor throws
+ * {@code OpenDataException} instead of trusting.
  *
- * <p>Un nulo **sí** se acepta para cualquier item: significa "sin valor" y es distinto de que el
- * item no exista. `containsKey` de un item con valor nulo devuelve `true`.
+ * <p>A null <b>is</b> accepted for any item: it means "no value" and is different from the item
+ * not existing. {@code containsKey} of an item with a null value returns {@code true}.
  */
 public class CompositeDataSupport implements CompositeData, Serializable {
 
     private static final long serialVersionUID = 8003518976613702244L;
 
     private final CompositeType compositeType;
-    // Ordenado por nombre, igual que los items del tipo: `values()` promete ese orden.
+    // Sorted by name, like the type's items: `values()` promises that order.
     private final Map<String, Object> contents;
 
     /**
-     * Un valor compuesto con esos items.
+     * A composite value with those items.
      *
-     * <p>Los dos arreglos van en paralelo.
+     * <p>The two arrays go in parallel.
      *
-     * @throws OpenDataException si falta un item del tipo, si sobra uno que el tipo no tiene, o si
-     *     algún valor no es del tipo que su item declara
-     * @throws IllegalArgumentException si el tipo o los arreglos son nulos, si no tienen el mismo
-     *     largo, o si algún nombre está en blanco
+     * @throws OpenDataException if an item of the type is missing, if there is an extra one the
+     *     type does not have, or if some value is not of the type its item declares
+     * @throws IllegalArgumentException if the type or the arrays are null, if they do not have the
+     *     same length, or if some name is blank
      */
     public CompositeDataSupport(CompositeType compositeType, String[] itemNames,
             Object[] itemValues) throws OpenDataException {
@@ -44,72 +45,72 @@ public class CompositeDataSupport implements CompositeData, Serializable {
     }
 
     /**
-     * Un valor compuesto con los items de ese mapa.
+     * A composite value with the items of that map.
      *
-     * @throws OpenDataException si falta un item del tipo, si sobra uno, o si algún valor no es
-     *     del tipo que su item declara
-     * @throws IllegalArgumentException si el tipo o el mapa son nulos, o si alguna clave está en
-     *     blanco
+     * @throws OpenDataException if an item of the type is missing, if there is an extra one, or if
+     *     some value is not of the type its item declares
+     * @throws IllegalArgumentException if the type or the map are null, or if some key is blank
      */
     public CompositeDataSupport(CompositeType compositeType, Map<String, ?> items)
             throws OpenDataException {
         if (compositeType == null) {
-            throw new IllegalArgumentException("el tipo compuesto no puede ser nulo");
+            throw new IllegalArgumentException("the composite type cannot be null");
         }
         if (items == null) {
-            throw new IllegalArgumentException("el mapa de items no puede ser nulo");
+            throw new IllegalArgumentException("the item map cannot be null");
         }
         Set<String> expected = compositeType.keySet();
         Map<String, Object> given = new TreeMap<String, Object>();
         for (Map.Entry<String, ?> e : items.entrySet()) {
             String n = e.getKey();
             if (n == null || n.trim().length() == 0) {
-                throw new IllegalArgumentException("hay una key en blanco");
+                throw new IllegalArgumentException("there is a blank key");
             }
             n = n.trim();
             if (!expected.contains(n)) {
-                throw new OpenDataException(n + " no es un item de " + compositeType.getTypeName());
+                throw new OpenDataException(
+                    n + " is not an item of " + compositeType.getTypeName());
             }
             Object v = e.getValue();
-            // El nulo pasa siempre: es "sin valor", y ningún `isValue` lo acepta. Comprobarlo
-            // contra el tipo lo rechazaría, que es justo lo contrario de lo que define el contrato.
+            // A null always passes: it is "no value", and no `isValue` accepts it. Checking it
+            // against the type would reject it, which is the opposite of what the contract defines.
             if (v != null && !compositeType.getType(n).isValue(v)) {
-                throw new OpenDataException("el valor de " + n + " no es de tipo "
+                throw new OpenDataException("the value of " + n + " is not of type "
                         + compositeType.getType(n).getTypeName());
             }
             given.put(n, v);
         }
-        // Faltar un item es un error y no un nulo implícito. La diferencia importa: un valor
-        // compuesto describe algo completo, y "no me acordé de poner este item" y "este item vale
-        // nulo" son dos cosas distintas que el que lee no podría separar.
+        // A missing item is an error and not an implicit null. The difference matters: a composite
+        // value describes something complete, and "I forgot to put this item" and "this item is
+        // null" are two different things the reader could not tell apart.
         for (String n : expected) {
             if (!given.containsKey(n)) {
-                throw new OpenDataException("falta el item " + n);
+                throw new OpenDataException("missing item: " + n);
             }
         }
         this.compositeType = compositeType;
         this.contents = Collections.unmodifiableMap(given);
     }
 
-    // Se arma el mapa antes de llamar al otro constructor porque `this(...)` tiene que ser la
-    // primera sentencia y la validación de los arreglos necesita correr antes que él.
+    // The map is built before calling the other constructor because `this(...)` has to be the first
+    // statement and the arrays' validation has to run before it.
     private static Map<String, Object> asMap(CompositeType compositeType, String[] itemNames,
             Object[] itemValues) throws OpenDataException {
         if (itemNames == null || itemValues == null) {
-            throw new IllegalArgumentException("los arreglos de items no pueden ser nulos");
+            throw new IllegalArgumentException("the item arrays cannot be null");
         }
         if (itemNames.length != itemValues.length) {
             throw new IllegalArgumentException(
-                    "los arreglos de names y valores tienen que tener el mismo largo");
+                    "the name and value arrays must have the same length");
         }
         Map<String, Object> m = new TreeMap<String, Object>();
         for (int i = 0; i < itemNames.length; i++) {
             if (itemNames[i] == null || itemNames[i].trim().length() == 0) {
-                throw new IllegalArgumentException("el nombre del item " + i + " está en blanco");
+                throw new IllegalArgumentException("the name of item " + i + " is blank");
             }
             String n = itemNames[i].trim();
             if (m.containsKey(n)) {
-                throw new OpenDataException("el item " + n + " está repetido");
+                throw new OpenDataException("the item " + n + " is repeated");
             }
             m.put(n, itemValues[i]);
         }
@@ -138,10 +139,10 @@ public class CompositeDataSupport implements CompositeData, Serializable {
 
     private void requireItem(String key) {
         if (key == null || key.trim().length() == 0) {
-            throw new IllegalArgumentException("el nombre del item está en blanco");
+            throw new IllegalArgumentException("the item name is blank");
         }
         if (!this.contents.containsKey(key.trim())) {
-            throw new InvalidKeyException(key + " no es un item de este valor");
+            throw new InvalidKeyException(key + " is not an item of this value");
         }
     }
 
@@ -156,16 +157,16 @@ public class CompositeDataSupport implements CompositeData, Serializable {
         return this.contents.containsValue(value);
     }
 
-    /** Los valores, en el orden de los nombres. Ver {@link CompositeData#values}. */
+    /** The values, in the order of the names. See {@link CompositeData#values}. */
     public Collection<?> values() {
         List<Object> out = new ArrayList<Object>(this.contents.values());
         return Collections.unmodifiableList(out);
     }
 
     /**
-     * Igualdad por tipo y valores, contra **cualquier** {@link CompositeData}.
+     * Equality by type and values, against <b>any</b> {@link CompositeData}.
      *
-     * <p>No se compara la clase: ver la nota de {@link CompositeData}.
+     * <p>The class is not compared: see the note in {@link CompositeData}.
      */
     public boolean equals(Object obj) {
         if (this == obj) {
@@ -188,9 +189,9 @@ public class CompositeDataSupport implements CompositeData, Serializable {
         return true;
     }
 
-    // Un item puede ser un arreglo, y `Object.equals` de dos arreglos distintos con el mismo
-    // contenido es `false`. Comparar por contenido es lo que hace que dos valores compuestos
-    // iguales que viajaron por separado se reconozcan.
+    // An item may be an array, and `Object.equals` of two different arrays with the same content
+    // is `false`. Comparing by content is what makes two equal composite values that travelled
+    // separately recognize each other.
     private static boolean deepEquals(Object a, Object b) {
         if (a == b) {
             return true;
@@ -217,7 +218,7 @@ public class CompositeDataSupport implements CompositeData, Serializable {
         return a.equals(b);
     }
 
-    /** La suma de los hashes del tipo y de los valores no nulos, como manda el contrato. */
+    /** The sum of the hashes of the type and of the non-null values, as the contract dictates. */
     public int hashCode() {
         int h = this.compositeType.hashCode();
         for (Object v : this.contents.values()) {

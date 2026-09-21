@@ -5,40 +5,39 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * KajiLibrary's javax.xml.crypto.dsig.spec.XPathType -- una expresion XPath con su operacion de
- * conjunto.
+ * KajiLibrary's javax.xml.crypto.dsig.spec.XPathType -- an XPath expression with its set operation.
  *
- * <p>Es la pieza de {@link XPathFilter2ParameterSpec}: cada expresion viene con una operacion que
- * dice que hacer con lo que selecciona.
+ * <p>It is the piece of {@link XPathFilter2ParameterSpec}: each expression comes with an operation
+ * that says what to do with what it selects.
  *
  * <ul>
- *   <li>{@link Filter#INTERSECT} -- se queda con lo que este en los dos;
- *   <li>{@link Filter#SUBTRACT} -- saca lo seleccionado, <b>con todo su subarbol</b>;
- *   <li>{@link Filter#UNION} -- lo agrega.
+ *   <li>{@link Filter#INTERSECT} -- keeps what is in both;
+ *   <li>{@link Filter#SUBTRACT} -- removes what is selected, <b>with its whole subtree</b>;
+ *   <li>{@link Filter#UNION} -- adds it.
  * </ul>
  *
- * <p>Que trabajen por subarboles y no por nodo es la diferencia de fondo con la transformacion XPath
- * original: seleccionar un elemento se lleva sus descendientes, que es lo que uno espera y lo que
- * hace que el filtrado sea rapido.
+ * <p>Working by subtrees and not by node is the underlying difference from the original XPath
+ * transform: selecting an element takes its descendants along, which is what one expects and what
+ * makes the filtering fast.
  *
- * <p>El orden importa: las expresiones se aplican en secuencia sobre el resultado acumulado, asi que
- * restar antes o despues de unir da conjuntos distintos.
+ * <p>The order matters: the expressions are applied in sequence on the accumulated result, so
+ * subtracting before or after joining gives different sets.
  */
 public class XPathType {
 
-    /** La expresion. */
+    /** The expression. */
     private final String expression;
 
-    /** Que hacer con lo que selecciona. */
+    /** What to do with what it selects. */
     private final Filter filter;
 
-    /** Prefijo a espacio de nombres; nunca null. */
+    /** Prefix to namespace; never null. */
     private final Map<String, String> nsMap;
 
     /**
-     * Sin espacios de nombres.
+     * Without namespaces.
      *
-     * @throws NullPointerException si alguno es null
+     * @throws NullPointerException if either is null
      */
     public XPathType(String expression, Filter filter) {
         if (expression == null || filter == null) {
@@ -50,9 +49,9 @@ public class XPathType {
     }
 
     /**
-     * Con los prefijos declarados; el mapa se copia.
+     * With the declared prefixes; the map is copied.
      *
-     * @throws NullPointerException si alguno es null
+     * @throws NullPointerException if either is null
      */
     public XPathType(String expression, Filter filter, Map<String, String> namespaceMap) {
         if (expression == null || filter == null || namespaceMap == null) {
@@ -64,36 +63,37 @@ public class XPathType {
         this.nsMap = Collections.unmodifiableMap(new HashMap<String, String>(namespaceMap));
     }
 
-    /** La expresion. */
+    /** The expression. */
     public String getExpression() {
         return this.expression;
     }
 
-    /** Que hacer con lo que selecciona. */
+    /** What to do with what it selects. */
     public Filter getFilter() {
         return this.filter;
     }
 
-    /** Los prefijos declarados. No modificable. */
+    /** The declared prefixes. Unmodifiable. */
     public Map<String, String> getNamespaceMap() {
         return this.nsMap;
     }
 
     /**
-     * Las tres operaciones de conjunto.
+     * The three set operations.
      *
-     * <p>No es un enum porque la clase es de 2005; son tres constantes con constructor privado, el
-     * patron de enum a mano de la epoca.
+     * <p>It is not an enum; it is three constants with a private constructor, the hand-made enum
+     * pattern of that time. (The note said the reason is that the class is from 2005; Java 5
+     * already had enums in 2004, but JSR 105 was also meant to run on J2SE 1.4, which had none.)
      */
     public static class Filter {
 
-        /** Se queda con lo que este en los dos. */
+        /** Keeps what is in both. */
         public static final Filter INTERSECT = new Filter("intersect");
 
-        /** Lo saca, con todo su subarbol. */
+        /** Removes it, with its whole subtree. */
         public static final Filter SUBTRACT = new Filter("subtract");
 
-        /** Lo agrega. */
+        /** Adds it. */
         public static final Filter UNION = new Filter("union");
 
         private final String operation;
@@ -102,7 +102,7 @@ public class XPathType {
             this.operation = operation;
         }
 
-        /** El nombre de la operacion, tal como va en el XML. */
+        /** The name of the operation, as it goes in the XML. */
         public String toString() {
             return this.operation;
         }

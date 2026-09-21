@@ -15,41 +15,43 @@ import java.util.Objects;
 // RFC 4291 -- and it can be written whole here without touching the network. The second needs a
 // resolver, which is to say DNS, which is to say sockets, and KajiJDK has none.
 //
-// So: **the parsing and the formatting are complete and faithful**; resolution does not exist and is
-// not simulated. `getByName` of a literal returns the address; of a name other than "localhost" it
-// throws `UnknownHostException`, which is exactly what the JDK does when DNS does not answer. That is
-// not a lie: it is the honest result of having no resolver, and the exception's type was already in
-// the contract.
+// So: **the parsing and the formatting are complete and faithful**; resolution does not exist and
+// is not simulated. `getByName` of a literal returns the address; of a name other than "localhost"
+// it throws `UnknownHostException`, which is exactly what the JDK does when DNS does not answer.
+// That is not a lie: it is the honest result of having no resolver, and the exception's type was
+// already in the contract.
 //
 // ===========================================================================================
 // `java.net.IDN`, WHICH USED TO BE MISSING AND WHOSE PLACE THIS IS
 // ===========================================================================================
 //
-// `IDN` turns an internationalized host name into one that can be resolved --which is what this class
-// does with the result-- so its absence used to be recorded here.
+// `IDN` turns an internationalized host name into one that can be resolved --which is what this
+// class does with the result-- so its absence used to be recorded here.
 //
 // `toASCII` **is not** Punycode. It is *nameprep* (RFC 3491) and **then** Punycode, and the first
 // step is the one that cannot be written: full case folding, NFKC normalization, and the tables of
 // forbidden characters. It is not an academic detail, it shows in a two-word example: the JDK turns
-// `strasse.de` and `stra{eszett}.de` **into the same string**, because full folding sends the eszett
-// to `ss`. A `toLowerCase` does not do that, and the version that used it would give two different
-// names for the same domain -- which in a resolver is exactly the error that is not forgiven.
+// `strasse.de` and `stra{eszett}.de` **into the same string**, because full folding sends the
+// eszett to `ss`. A `toLowerCase` does not do that, and the version that used it would give two
+// different names for the same domain -- which in a resolver is exactly the error that is not
+// forgiven.
 //
 // It is the same wall that leaves `java.text.Normalizer` without NFKC: Unicode's tables are needed,
 // and this tree does not have them. `IDN` is here now, written with the folding and the checks that
-// can be done without tables, and it says in its own header which step it is not doing and what that
-// changes. Punycode alone, which can be written exactly, is the part that is exact.
+// can be done without tables, and it says in its own header which step it is not doing and what
+// that changes. Punycode alone, which can be written exactly, is the part that is exact.
 
-// `isReachable(int)` **really probes**: a TCP to port 7 where a refusal counts as an answer, because
-// the RST is sent by the host. It is the JDK's own fallback path when it cannot send an ICMP, which
-// is the normal case --a raw ping needs permissions an ordinary process does not have. It used to
-// answer `false` always, which was legal but useless; it stopped being so when the VM learnt TCP.
+// `isReachable(int)` **really probes**: a TCP to port 7 where a refusal counts as an answer,
+// because the RST is sent by the host. It is the JDK's own fallback path when it cannot send an
+// ICMP, which is the normal case --a raw ping needs permissions an ordinary process does not have.
+// It used to answer `false` always, which was legal but useless; it stopped being so when the VM
+// learnt TCP.
 //
 // **The only observable thing separating it from the JDK is the time**, and it is worth knowing
 // before choosing a deadline: on Windows the system takes some two seconds to report a TCP refusal,
-// so a live host with the port closed needs a deadline of at least that to give `true`. The JDK, when
-// it can, sends an ICMP and answers on the spot. The answer is the same; what changes is how long it
-// has to be waited for.
+// so a live host with the port closed needs a deadline of at least that to give `true`. The JDK,
+// when it can, sends an ICMP and answers on the spot. The answer is the same; what changes is how
+// long it has to be waited for.
 //
 // The class is concrete and has a package-private constructor, as in the JDK: it is never
 // instantiated directly, every instance is an `Inet4Address` or an `Inet6Address`. The methods here
@@ -59,13 +61,13 @@ public class InetAddress implements Serializable {
 
     private static final long serialVersionUID = 3286316764910316507L;
 
-    // The address's bytes: four for IPv4, sixteen for IPv6. In the base class it is null, because the
-    // base represents no concrete address.
+    // The address's bytes: four for IPv4, sixteen for IPv6. In the base class it is null, because
+    // the base represents no concrete address.
     final byte[] addr;
 
     // The name it was created with, or null if it is anonymous. **null is not the same as ""**: an
-    // address born from a literal has no name, and `toString` prints it as "/1.2.3.4". Confusing the
-    // two was the bug in the previous version of this file.
+    // address born from a literal has no name, and `toString` prints it as "/1.2.3.4". Confusing
+    // the two was the bug in the previous version of this file.
     final String hostName;
 
     InetAddress(String hostName, byte[] addr) {
@@ -153,11 +155,11 @@ public class InetAddress implements Serializable {
      * to {@link #isReachable(int)}.
      *
      * <p>**With an interface or with a TTL the probe asserts less**, and that has to be said: the
-     * one-parameter version takes a refusal as an answer --an RST proves the host is alive-- and this
-     * one, which has to build the socket by hand in order to choose the interface, does not tell a
-     * refusal from silence. A `true` still means "it answered"; a `false` with an interface may be a
-     * live host that refused the connection. It is the only difference between the two, and it cannot
-     * be avoided without reimplementing each system's non-blocking `connect`.
+     * one-parameter version takes a refusal as an answer --an RST proves the host is alive-- and
+     * this one, which has to build the socket by hand in order to choose the interface, does not
+     * tell a refusal from silence. A `true` still means "it answered"; a `false` with an interface
+     * may be a live host that refused the connection. It is the only difference between the two,
+     * and it cannot be avoided without reimplementing each system's non-blocking `connect`.
      *
      * @param netif the interface the probe goes out through, or null
      * @param ttl the hop limit, or zero
@@ -178,9 +180,9 @@ public class InetAddress implements Serializable {
     }
 
     // Which local address a probe that has to go through that interface goes out from: the first of
-    // the interface's that is of the same family as the destination --binding an IPv4 end to an IPv6
-    // connection is not a request that can be fulfilled. The empty string means "let the system
-    // choose".
+    // the interface's that is of the same family as the destination --binding an IPv4 end to an
+    // IPv6 connection is not a request that can be fulfilled. The empty string means "let the
+    // system choose".
     private static String outboundFrom(NetworkInterface netif, InetAddress target) {
         if (netif == null) {
             return "";
@@ -214,8 +216,8 @@ public class InetAddress implements Serializable {
             while (r == -3) {
                 if (System.currentTimeMillis() - started >= deadline) {
                     // No answer within the deadline is exactly what this method calls "not
-                    // reachable": it does not assert that the host does not exist, it asserts that it
-                    // did not answer.
+                    // reachable": it does not assert that the host does not exist, it asserts that
+                    // it did not answer.
                     return false;
                 }
                 try {
@@ -240,7 +242,7 @@ public class InetAddress implements Serializable {
         return this.getHostAddress();
     }
 
-    /** El nombre completamente calificado. Sin resolucion inversa, es {@link #getHostName()}. */
+    /** The fully qualified name. With no reverse resolution, it is {@link #getHostName()}. */
     public String getCanonicalHostName() {
         return this.getHostName();
     }
@@ -250,7 +252,7 @@ public class InetAddress implements Serializable {
         return null;
     }
 
-    /** La direccion en forma textual. */
+    /** The address in textual form. */
     public String getHostAddress() {
         return null;
     }
@@ -274,8 +276,8 @@ public class InetAddress implements Serializable {
      *
      * <p>Four bytes give an {@link Inet4Address}; sixteen give an {@link Inet6Address}, unless they
      * are the "IPv4-mapped" form (::ffff:a.b.c.d), which collapses to an `Inet4Address` -- that
-     * address **is** an IPv4, written with IPv6's syntax, and treating it as v6 would make two objects
-     * naming the same host unequal.
+     * address **is** an IPv4, written with IPv6's syntax, and treating it as v6 would make two
+     * objects naming the same host unequal.
      *
      * @throws UnknownHostException if {@code addr} is neither 4 nor 16 long
      */
@@ -318,8 +320,8 @@ public class InetAddress implements Serializable {
     }
 
     /**
-     * Every address of {@code host}. With no resolver there is at most one, so the array always has a
-     * single element (or nothing gets returned at all).
+     * Every address of {@code host}. With no resolver there is at most one, so the array always has
+     * a single element (or nothing gets returned at all).
      */
     public static InetAddress[] getAllByName(String host) throws UnknownHostException {
         if (host == null || host.length() == 0) {
@@ -335,8 +337,8 @@ public class InetAddress implements Serializable {
             }
         }
         // It is only tried as a literal if it starts the way one could start. Without this filter,
-        // "beef.example" would go into the IPv4 parser and come out the same side, but the filter is
-        // also what keeps a name starting with a non-hex letter from even being tried.
+        // "beef.example" would go into the IPv4 parser and come out the same side, but the filter
+        // is also what keeps a name starting with a non-hex letter from even being tried.
         if (host.length() > 0 && (digit(host.charAt(0), 16) != -1 || host.charAt(0) == ':')) {
             InetAddress parsed = null;
             if (!bracketed) {
@@ -366,8 +368,8 @@ public class InetAddress implements Serializable {
     /**
      * The address {@code s} describes, which has to be an IPv4 or IPv6 literal.
      *
-     * <p>Unlike {@link #getByName}, this admits no names: if it is not a literal, there is nothing to
-     * consult and it fails on the spot.
+     * <p>Unlike {@link #getByName}, this admits no names: if it is not a literal, there is nothing
+     * to consult and it fails on the spot.
      *
      * @throws IllegalArgumentException if it is not a valid literal
      */

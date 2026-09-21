@@ -3,8 +3,8 @@ package com.sun.source.doctree;
 import java.util.List;
 
 /**
- * El nodo de `@throws` y de `@exception`, que son sinonimos y se distinguen por el
- * {@link #getTagName}.
+ * The node of `@throws` and of `@exception`, which are synonyms and are told apart by
+ * the {@link #getTagName}.
  */
 public interface ThrowsTree extends BlockTagTree {
 

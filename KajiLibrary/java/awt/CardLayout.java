@@ -4,148 +4,147 @@ import java.io.Serializable;
 import java.util.ArrayList;
 
 /**
- * Apila a los hijos como cartas y muestra **uno solo** por vez.
+ * Stacks the children like cards and shows **only one** at a time.
  *
- * <p>Es la distribución de un asistente paso a paso o de un panel de pestañas sin las pestañas: los
- * hijos están todos agregados y ocupan el mismo lugar, y sólo uno es visible.
+ * <p>It is the layout of a step-by-step wizard, or of a tabbed panel without the tabs: the children
+ * are all added and occupy the same place, and only one is visible.
  *
- * <p>Cada carta se agrega con un **nombre**, y ése es el motivo de que
- * {@link LayoutManager#addLayoutComponent(String, Component)} exista con esa firma rara en la
- * interfaz vieja: esta distribución es prácticamente la única que la usa para algo.
+ * <p>Each card is added with a **name**, and that is why
+ * {@link LayoutManager#addLayoutComponent(String, Component)} exists with that odd signature in the
+ * old interface: this layout is practically the only one that uses it for something.
  *
- * <p>Las medidas son las de la carta **más grande**, no las de la que se está mostrando. Es lo
- * correcto: si el contenedor se ajustara a la carta visible, cambiar de carta lo haría saltar de
- * tamaño.
+ * <p>The sizes are those of the **largest** card, not of the one being shown. That is right: if the
+ * container adjusted to the visible card, changing card would make it jump in size.
  */
 public class CardLayout implements LayoutManager2, Serializable {
 
     private static final long serialVersionUID = -4328196481005934313L;
 
-    // `java.util.List` va con el nombre entero: en este paquete `List` es el widget de AWT, y un
-    // `import java.util.List` --que el JLS admite y tapa al homonimo del paquete-- nuestro javac
-    // todavia no lo resuelve al derecho (hallazgo #493).
-    private final java.util.List<Component> componentes = new ArrayList<Component>();
-    private final java.util.List<String> nombres = new ArrayList<String>();
+    // `java.util.List` goes with its full name: in this package `List` is the AWT widget, and an
+    // `import java.util.List` --which the JLS allows, and which shadows the package's namesake--
+    // our javac does not yet resolve the right way round (finding #493, still open).
+    private final java.util.List<Component> components = new ArrayList<Component>();
+    private final java.util.List<String> names = new ArrayList<String>();
     private int hgap;
     private int vgap;
-    private int actual;
+    private int current;
 
-    /** Sin margen alrededor de las cartas. */
+    /** With no margin around the cards. */
     public CardLayout() {
         this(0, 0);
     }
 
-    /** Con los márgenes dados. */
+    /** With the given margins. */
     public CardLayout(int hgap, int vgap) {
         this.hgap = hgap;
         this.vgap = vgap;
     }
 
-    /** El margen horizontal. */
+    /** The horizontal margin. */
     public int getHgap() {
         return this.hgap;
     }
 
-    /** Cambia el margen horizontal. */
+    /** Changes the horizontal margin. */
     public void setHgap(int hgap) {
         this.hgap = hgap;
     }
 
-    /** El margen vertical. */
+    /** The vertical margin. */
     public int getVgap() {
         return this.vgap;
     }
 
-    /** Cambia el margen vertical. */
+    /** Changes the vertical margin. */
     public void setVgap(int vgap) {
         this.vgap = vgap;
     }
 
     /**
-     * Agrega una carta con ese nombre.
+     * Adds a card with that name.
      *
-     * <p>La primera que se agrega es la que se muestra; las demás nacen ocultas.
+     * <p>The first one added is the one shown; the rest are born hidden.
      *
-     * @throws IllegalArgumentException si el nombre no es una cadena
+     * @throws IllegalArgumentException if the name is not a string
      */
     public void addLayoutComponent(Component comp, Object constraints) {
         synchronized (comp.getTreeLock()) {
             if (constraints == null) {
-                this.agregar(comp, "");
+                this.addCard(comp, "");
                 return;
             }
             if (!(constraints instanceof String)) {
                 throw new IllegalArgumentException(
                         "cannot add to layout: constraint must be a string");
             }
-            this.agregar(comp, (String) constraints);
+            this.addCard(comp, (String) constraints);
         }
     }
 
-    /** Guarda la carta y esconde todas menos la que toca. */
-    private void agregar(Component comp, String name) {
-        if (!this.componentes.isEmpty()) {
+    /** Stores the card and hides all but the one to show. */
+    private void addCard(Component comp, String name) {
+        if (!this.components.isEmpty()) {
             comp.setVisible(false);
         }
-        for (int i = 0; i < this.nombres.size(); i++) {
-            if (this.nombres.get(i).equals(name)) {
-                this.componentes.get(i).setVisible(false);
+        for (int i = 0; i < this.names.size(); i++) {
+            if (this.names.get(i).equals(name)) {
+                this.components.get(i).setVisible(false);
             }
         }
-        this.componentes.add(comp);
-        this.nombres.add(name);
-        if (this.componentes.size() == 1) {
+        this.components.add(comp);
+        this.names.add(name);
+        if (this.components.size() == 1) {
             comp.setVisible(true);
-            this.actual = 0;
+            this.current = 0;
         }
     }
 
     /**
-     * Agrega una carta con ese nombre.
+     * Adds a card with that name.
      *
-     * @deprecated es del modelo de 1.0. Usar {@link #addLayoutComponent(Component, Object)}.
+     * @deprecated it is from the 1.0 model. Use {@link #addLayoutComponent(Component, Object)}.
      */
     @Deprecated
     public void addLayoutComponent(String name, Component comp) {
         synchronized (comp.getTreeLock()) {
-            this.agregar(comp, name == null ? "" : name);
+            this.addCard(comp, name == null ? "" : name);
         }
     }
 
     /**
-     * Saca esa carta.
+     * Removes that card.
      *
-     * <p>Si era la que se estaba mostrando, se muestra la primera que quede: dejar el contenedor sin
-     * ninguna carta visible sería un panel en blanco sin motivo.
+     * <p>If it was the one being shown, the first one left is shown: leaving the container with no
+     * visible card would be a blank panel for no reason. The JDK shows the next card instead.
      */
     public void removeLayoutComponent(Component comp) {
         synchronized (comp.getTreeLock()) {
-            int i = this.componentes.indexOf(comp);
+            int i = this.components.indexOf(comp);
             if (i < 0) {
                 return;
             }
-            boolean eraLaVisible = comp.isVisible();
-            this.componentes.remove(i);
-            this.nombres.remove(i);
-            if (eraLaVisible && !this.componentes.isEmpty()) {
-                this.actual = 0;
-                this.componentes.get(0).setVisible(true);
+            boolean wasVisible = comp.isVisible();
+            this.components.remove(i);
+            this.names.remove(i);
+            if (wasVisible && !this.components.isEmpty()) {
+                this.current = 0;
+                this.components.get(0).setVisible(true);
             }
         }
     }
 
-    /** La medida de la carta más grande, más los márgenes. */
+    /** The size of the largest card, plus the margins. */
     public Dimension preferredLayoutSize(Container parent) {
-        return this.medir(parent, true);
+        return this.measure(parent, true);
     }
 
-    /** Lo mismo, con las medidas mínimas. */
+    /** The same, with the minimum sizes. */
     public Dimension minimumLayoutSize(Container parent) {
-        return this.medir(parent, false);
+        return this.measure(parent, false);
     }
 
-    /** El máximo de todas las cartas, no el de la visible. */
-    private Dimension medir(Container parent, boolean preferida) {
+    /** The maximum over all the cards, not the visible one's. */
+    private Dimension measure(Container parent, boolean preferred) {
         synchronized (parent.getTreeLock()) {
             Insets insets = parent.getInsets();
             int ncomponents = parent.getComponentCount();
@@ -153,7 +152,7 @@ public class CardLayout implements LayoutManager2, Serializable {
             int h = 0;
             for (int i = 0; i < ncomponents; i++) {
                 Component comp = parent.getComponent(i);
-                Dimension d = preferida ? comp.getPreferredSize() : comp.getMinimumSize();
+                Dimension d = preferred ? comp.getPreferredSize() : comp.getMinimumSize();
                 w = Math.max(w, d.width);
                 h = Math.max(h, d.height);
             }
@@ -162,26 +161,26 @@ public class CardLayout implements LayoutManager2, Serializable {
         }
     }
 
-    /** Sin tope: la carta visible aprovecha todo lo que le den. */
+    /** No limit: the visible card makes use of everything it is given. */
     public Dimension maximumLayoutSize(Container target) {
         return new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE);
     }
 
-    /** Centrado. */
+    /** Centred. */
     public float getLayoutAlignmentX(Container parent) {
         return 0.5f;
     }
 
-    /** Centrado. */
+    /** Centred. */
     public float getLayoutAlignmentY(Container parent) {
         return 0.5f;
     }
 
-    /** No guarda cuentas entre llamadas. */
+    /** It keeps no computations between calls. */
     public void invalidateLayout(Container target) {
     }
 
-    /** Le da a la carta visible todo el espacio disponible menos los márgenes. */
+    /** Gives the visible card all the available space minus the margins. */
     public void layoutContainer(Container parent) {
         synchronized (parent.getTreeLock()) {
             Insets insets = parent.getInsets();
@@ -197,57 +196,57 @@ public class CardLayout implements LayoutManager2, Serializable {
         }
     }
 
-    /** Muestra la carta de esa posición y esconde la anterior. */
-    private void mostrar(Container parent, int indice) {
+    /** Shows the card at that position and hides the rest. */
+    private void showCard(Container parent, int index) {
         synchronized (parent.getTreeLock()) {
-            if (this.componentes.isEmpty()) {
+            if (this.components.isEmpty()) {
                 return;
             }
-            int n = this.componentes.size();
-            int i = ((indice % n) + n) % n;
+            int n = this.components.size();
+            int i = ((index % n) + n) % n;
             for (int j = 0; j < n; j++) {
-                this.componentes.get(j).setVisible(j == i);
+                this.components.get(j).setVisible(j == i);
             }
-            this.actual = i;
+            this.current = i;
             parent.validate();
         }
     }
 
-    /** Muestra la primera carta. */
+    /** Shows the first card. */
     public void first(Container parent) {
-        this.mostrar(parent, 0);
+        this.showCard(parent, 0);
     }
 
     /**
-     * Muestra la siguiente.
+     * Shows the next one.
      *
-     * <p>Después de la última vuelve a la primera: es un ciclo, no una lista con final.
+     * <p>After the last it goes back to the first: it is a cycle, not a list with an end.
      */
     public void next(Container parent) {
-        this.mostrar(parent, this.actual + 1);
+        this.showCard(parent, this.current + 1);
     }
 
-    /** Muestra la anterior; antes de la primera va a la última. */
+    /** Shows the previous one; before the first it goes to the last. */
     public void previous(Container parent) {
-        this.mostrar(parent, this.actual - 1);
+        this.showCard(parent, this.current - 1);
     }
 
-    /** Muestra la última. */
+    /** Shows the last one. */
     public void last(Container parent) {
-        this.mostrar(parent, this.componentes.size() - 1);
+        this.showCard(parent, this.components.size() - 1);
     }
 
     /**
-     * Muestra la carta que se agregó con ese nombre.
+     * Shows the card that was added with that name.
      *
-     * <p>Si no hay ninguna con ese nombre no pasa nada: es lo que hace el JDK, y tiene sentido —
-     * pedir una carta que no está no debería romper la navegación.
+     * <p>If there is none with that name nothing happens: it is what the JDK does, and it makes
+     * sense — asking for a card that is not there should not break navigation.
      */
     public void show(Container parent, String name) {
         synchronized (parent.getTreeLock()) {
-            for (int i = 0; i < this.nombres.size(); i++) {
-                if (this.nombres.get(i).equals(name)) {
-                    this.mostrar(parent, i);
+            for (int i = 0; i < this.names.size(); i++) {
+                if (this.names.get(i).equals(name)) {
+                    this.showCard(parent, i);
                     return;
                 }
             }

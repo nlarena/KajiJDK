@@ -3,29 +3,29 @@ package javax.swing.undo;
 import java.util.Hashtable;
 
 /**
- * Un objeto que sabe guardar y restaurar su propio estado en una tabla.
+ * An object that knows how to save and restore its own state in a table.
  *
- * <h2>La otra forma de deshacer</h2>
+ * <h2>The other way of undoing</h2>
  *
- * <p>Un {@link UndoableEdit} corriente sabe <em>revertir una accion</em>: conoce la operacion y su
- * inversa. Esto es el enfoque opuesto — no se guarda la operacion sino <strong>una foto del estado
- * antes y otra despues</strong>, y deshacer es volver a poner la primera. Ver {@link StateEdit}, que
- * es quien las toma.
+ * <p>An ordinary {@link UndoableEdit} knows how to <em>revert an action</em>: it knows the
+ * operation and its inverse. This is the opposite approach -- what is kept is not the operation
+ * but <strong>a snapshot of the state before and another after</strong>, and undoing is putting
+ * the first one back. See {@link StateEdit}, which is what takes them.
  *
- * <p>Sirve cuando la inversa de una operacion es dificil o imposible de escribir, y cuesta memoria:
- * dos copias del estado por cada paso.
+ * <p>It serves when an operation's inverse is hard or impossible to write, and it costs memory:
+ * two copies of the state for each step.
  *
- * <p>Las dos firmas no son simetricas y eso es deliberado: guardar recibe una tabla que se puede
- * escribir, restaurar recibe una que solo se lee.
+ * <p>The two signatures are not symmetric and that is deliberate: saving takes a table that can
+ * be written, restoring takes one that is only read.
  */
 public interface StateEditable {
 
-    /** Identificador de version del JDK; se conserva por fidelidad de la superficie. */
+    /** The JDK's version identifier; it is kept for surface fidelity. */
     public static final String RCSID = "$Id: StateEditable.java,v 1.2 1997/09/08 19:39:08 marklin Exp $";
 
-    /** Guarda en {@code state} lo que haga falta para poder volver a este estado. */
+    /** Saves in {@code state} whatever is needed to come back to this state. */
     void storeState(Hashtable<Object, Object> state);
 
-    /** Vuelve al estado que describe {@code state}. */
+    /** Goes back to the state {@code state} describes. */
     void restoreState(Hashtable<?, ?> state);
 }

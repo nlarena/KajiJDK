@@ -7,139 +7,139 @@ import javax.xml.stream.util.XMLEventAllocator;
 import javax.xml.transform.Source;
 
 /**
- * KajiLibrary's javax.xml.stream.XMLInputFactory -- la puerta de entrada a la lectura con StAX.
+ * KajiLibrary's javax.xml.stream.XMLInputFactory -- the way into reading with StAX.
  *
- * <h2>Los dos modelos salen de aca</h2>
+ * <h2>Both models come out of here</h2>
  *
- * <p>{@code createXMLStreamReader} devuelve el lector de cursor y {@code createXMLEventReader} el
- * de eventos; son la misma lectura con dos formas de entregarla, y estan en la misma fabrica porque
- * la configuracion --las propiedades de abajo-- vale para las dos.
+ * <p>{@code createXMLStreamReader} returns the cursor reader and {@code createXMLEventReader} the
+ * event one; they are the same reading with two ways of delivering it, and they are in the same
+ * factory because the configuration --the properties below-- holds for both.
  *
- * <h2>Que parser hay detras</h2>
+ * <h2>Which parser is behind it</h2>
  *
- * <p>Esta biblioteca trae un analizador de XML 1.0 propio, no validador y con soporte de espacios
- * de nombres, y es el que devuelven estos metodos. Lee la declaracion XML, elementos, atributos,
- * texto, secciones CDATA, comentarios, instrucciones de procesamiento y las cinco entidades
- * predefinidas mas las referencias numericas.
+ * <p>This library comes with its own XML 1.0 parser, non-validating and namespace-aware, and it is
+ * the one these methods return. It reads the XML declaration, elements, attributes, text, CDATA
+ * sections, comments, processing instructions and the five predefined entities plus numeric
+ * references.
  *
- * <p>Lo que <b>no</b> hace, y hay que saberlo antes de confiarle un documento:
+ * <p>What it does <b>not</b> do, and it has to be known before trusting it with a document:
  *
  * <ul>
- *   <li>no interpreta el DTD. La declaracion {@code <!DOCTYPE ...>} se entrega entera como evento
- *       {@link XMLStreamConstants#DTD} y no se mira: no hay entidades declaradas por el usuario, ni
- *       valores de atributo por omision, ni tipos de atributo, ni espacio ignorable;
- *   <li>no resuelve entidades externas. Por eso {@link #SUPPORT_DTD} y
- *       {@link #IS_SUPPORTING_EXTERNAL_ENTITIES} son de solo lectura y valen false: aceptar que se
- *       pongan en true seria prometer algo que no pasa;
- *   <li>no valida. {@link #IS_VALIDATING} tambien es de solo lectura en false, que es ademas el
- *       valor por omision que manda la especificacion.
+ *   <li>it does not interpret the DTD. The {@code <!DOCTYPE ...>} declaration is delivered whole as
+ *       a {@link XMLStreamConstants#DTD} event and not looked at: there are no user-declared
+ *       entities, nor default attribute values, nor attribute types, nor ignorable space;
+ *   <li>it does not resolve external entities. That is why {@link #SUPPORT_DTD} and {@link
+ *       #IS_SUPPORTING_EXTERNAL_ENTITIES} are read-only and false: accepting that they be set to
+ *       true would be promising something that does not happen;
+ *   <li>it does not validate. {@link #IS_VALIDATING} is also read-only at false, which is moreover
+ *       the default value the specification dictates.
  * </ul>
  *
- * <p>Esa lista es exactamente la razon por la que {@link #isPropertySupported} contesta true para
- * las propiedades que si tienen efecto y {@link #setProperty} rechaza las otras con
- * {@link IllegalArgumentException}. Un {@code setProperty} que acepta y no hace nada es la clase de
- * mentira que hace que un documento con entidades externas se lea distinto de como el llamador
- * pidio, sin que nadie se entere.
+ * <p>That list is exactly the reason {@link #isPropertySupported} answers true for the properties
+ * that do have an effect and {@link #setProperty} rejects the others with {@link
+ * IllegalArgumentException}. A {@code setProperty} that accepts and does nothing is the kind of lie
+ * that makes a document with external entities read differently from how the caller asked, without
+ * anybody finding out.
  *
- * <h2>Que si se puede configurar</h2>
+ * <h2>What can be configured</h2>
  *
- * <p>{@link #IS_COALESCING}, {@link #IS_NAMESPACE_AWARE},
- * {@link #IS_REPLACING_ENTITY_REFERENCES}, {@link #REPORTER}, {@link #RESOLVER} y
- * {@link #ALLOCATOR}. Las tres primeras cambian de verdad lo que sale del parser.
+ * <p>{@link #IS_COALESCING}, {@link #IS_NAMESPACE_AWARE}, {@link #IS_REPLACING_ENTITY_REFERENCES},
+ * {@link #REPORTER}, {@link #RESOLVER} and {@link #ALLOCATOR}. The first three really change what
+ * comes out of the parser.
  */
 public abstract class XMLInputFactory {
 
     /**
-     * {@code javax.xml.stream.isNamespaceAware}: si el parser separa prefijo y espacio de nombres.
+     * {@code javax.xml.stream.isNamespaceAware}: whether the parser separates prefix and namespace.
      *
-     * <p>Por omision true, y en esta biblioteca cambiarlo a false hace lo que dice: los nombres
-     * quedan sin calificar y las declaraciones {@code xmlns} pasan a ser atributos comunes.
+     * <p>True by default, and in this library changing it to false does what it says: the names are
+     * left unqualified and the {@code xmlns} declarations become ordinary attributes.
      */
     public static final String IS_NAMESPACE_AWARE = "javax.xml.stream.isNamespaceAware";
 
     /**
-     * {@code javax.xml.stream.isValidating}: si el parser valida contra el DTD.
+     * {@code javax.xml.stream.isValidating}: whether the parser validates against the DTD.
      *
-     * <p>De solo lectura en false; ver el encabezado de la clase.
+     * <p>Read-only at false; see the class header.
      */
     public static final String IS_VALIDATING = "javax.xml.stream.isValidating";
 
     /**
-     * {@code javax.xml.stream.isCoalescing}: si el texto adyacente se junta en un solo evento.
+     * {@code javax.xml.stream.isCoalescing}: whether adjacent text is joined into a single event.
      *
-     * <p>Por omision false. En true, el texto y las secciones CDATA que se tocan llegan como un
-     * unico {@link XMLStreamConstants#CHARACTERS}, que es casi siempre lo que uno quiere: sin esto
-     * un {@code &amp;} en medio de una frase la parte en tres eventos.
+     * <p>False by default. With true, the text and CDATA sections that touch arrive as a single
+     * {@link XMLStreamConstants#CHARACTERS}, which is almost always what one wants: without this an
+     * {@code &amp;} in the middle of a sentence splits it into three events.
      */
     public static final String IS_COALESCING = "javax.xml.stream.isCoalescing";
 
     /**
-     * {@code javax.xml.stream.isReplacingEntityReferences}: si las entidades se expanden.
+     * {@code javax.xml.stream.isReplacingEntityReferences}: whether entities are expanded.
      *
-     * <p>Por omision true. En false, una referencia a una entidad que no sea de las cinco
-     * predefinidas llega como {@link XMLStreamConstants#ENTITY_REFERENCE} en vez de expandirse.
+     * <p>True by default. With false, a reference to an entity that is not one of the five
+     * predefined ones arrives as {@link XMLStreamConstants#ENTITY_REFERENCE} instead of being
+     * expanded.
      */
     public static final String IS_REPLACING_ENTITY_REFERENCES =
             "javax.xml.stream.isReplacingEntityReferences";
 
     /**
-     * {@code javax.xml.stream.isSupportingExternalEntities}: si se van a buscar las entidades
-     * externas.
+     * {@code javax.xml.stream.isSupportingExternalEntities}: whether external entities are fetched.
      *
-     * <p>De solo lectura en false; ver el encabezado de la clase.
+     * <p>Read-only at false; see the class header.
      */
     public static final String IS_SUPPORTING_EXTERNAL_ENTITIES =
             "javax.xml.stream.isSupportingExternalEntities";
 
     /**
-     * {@code javax.xml.stream.supportDTD}: si se procesa la declaracion de tipo de documento.
+     * {@code javax.xml.stream.supportDTD}: whether the document type declaration is processed.
      *
-     * <p>De solo lectura en false; ver el encabezado de la clase.
+     * <p>Read-only at false; see the class header.
      */
     public static final String SUPPORT_DTD = "javax.xml.stream.supportDTD";
 
-    /** {@code javax.xml.stream.reporter}: el {@link XMLReporter} al que avisar de los avisos. */
+    /** {@code javax.xml.stream.reporter}: the {@link XMLReporter} to notify of warnings. */
     public static final String REPORTER = "javax.xml.stream.reporter";
 
-    /** {@code javax.xml.stream.resolver}: el {@link XMLResolver} con que resolver entidades. */
+    /** {@code javax.xml.stream.resolver}: the {@link XMLResolver} to resolve entities with. */
     public static final String RESOLVER = "javax.xml.stream.resolver";
 
-    /** {@code javax.xml.stream.allocator}: el {@link XMLEventAllocator} que arma los eventos. */
+    /** {@code javax.xml.stream.allocator}: the {@link XMLEventAllocator} that builds the events. */
     public static final String ALLOCATOR = "javax.xml.stream.allocator";
 
-    /** La propiedad de sistema con que se enchufa otra implementacion. */
+    /** The system property another implementation is plugged in with. */
     static final String PROPERTY = "javax.xml.stream.XMLInputFactory";
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected XMLInputFactory() {
     }
 
-    // ---- descubrimiento ---------------------------------------------------------------------
+    // ---- discovery --------------------------------------------------------------------------
 
     /**
-     * La implementacion de la plataforma, sin mirar la configuracion.
+     * The platform implementation, without looking at the configuration.
      *
-     * @return la fabrica de lectura de esta biblioteca; nunca null
+     * @return this library's reading factory; never null
      */
     public static XMLInputFactory newDefaultFactory() {
         return new KajiInputFactory();
     }
 
     /**
-     * La fabrica configurada, o la de la plataforma si no hay ninguna.
+     * The configured factory, or the platform's if there is none.
      *
-     * @return la fabrica; nunca null
-     * @throws FactoryConfigurationError si la configuracion nombra una clase que no se puede usar
+     * @return the factory; never null
+     * @throws FactoryConfigurationError if the configuration names a class that cannot be used
      */
     public static XMLInputFactory newInstance() {
         return newFactory();
     }
 
     /**
-     * Lo mismo que {@link #newInstance()}, con el nombre nuevo.
+     * The same as {@link #newInstance()}, with the new name.
      *
-     * @return la fabrica; nunca null
-     * @throws FactoryConfigurationError si la configuracion nombra una clase que no se puede usar
+     * @return the factory; never null
+     * @throws FactoryConfigurationError if the configuration names a class that cannot be used
      */
     public static XMLInputFactory newFactory() {
         Object f = Factories.fromSystemProperty(PROPERTY, XMLInputFactory.class);
@@ -150,24 +150,28 @@ public abstract class XMLInputFactory {
     }
 
     /**
-     * La fabrica nombrada explicitamente.
+     * The factory named explicitly.
      *
-     * @param factoryId el nombre de la clase; null cae en {@link #newFactory()}
-     * @param classLoader el cargador con que buscarla; null usa el del contexto
-     * @return la fabrica; nunca null
-     * @throws FactoryConfigurationError si la clase no se puede cargar o no es una fabrica
+     * @param factoryId the name of the factory class; null falls back to {@link #newFactory()}. In
+     *     JDK 25 it is instead the name of a property that holds the class name, and a class name
+     *     there fails
+     * @param classLoader the loader to look for it with; null uses the context one
+     * @return the factory; never null
+     * @throws FactoryConfigurationError if the class cannot be loaded or is not a factory
      */
     public static XMLInputFactory newInstance(String factoryId, ClassLoader classLoader) {
         return newFactory(factoryId, classLoader);
     }
 
     /**
-     * Lo mismo que {@link #newInstance(String, ClassLoader)}, con el nombre nuevo.
+     * The same as {@link #newInstance(String, ClassLoader)}, with the new name.
      *
-     * @param factoryId el nombre de la clase; null cae en {@link #newFactory()}
-     * @param classLoader el cargador con que buscarla; null usa el del contexto
-     * @return la fabrica; nunca null
-     * @throws FactoryConfigurationError si la clase no se puede cargar o no es una fabrica
+     * @param factoryId the name of the factory class; null falls back to {@link #newFactory()}. In
+     *     JDK 25 it is instead the name of a property that holds the class name, and a class name
+     *     there fails
+     * @param classLoader the loader to look for it with; null uses the context one
+     * @return the factory; never null
+     * @throws FactoryConfigurationError if the class cannot be loaded or is not a factory
      */
     public static XMLInputFactory newFactory(String factoryId, ClassLoader classLoader) {
         if (factoryId == null) {
@@ -176,239 +180,241 @@ public abstract class XMLInputFactory {
         return (XMLInputFactory) Factories.instantiate(factoryId, classLoader, XMLInputFactory.class);
     }
 
-    // ---- lectores de cursor -----------------------------------------------------------------
+    // ---- cursor readers -------------------------------------------------------------------------
 
     /**
-     * Un lector de cursor sobre un {@link Reader}.
+     * A cursor reader over a {@link Reader}.
      *
-     * @param reader de donde leer
-     * @return el lector, parado antes del primer evento
-     * @throws XMLStreamException si no se puede empezar a leer
+     * @param reader where to read from
+     * @return the reader, standing before the first event
+     * @throws XMLStreamException if reading cannot start
      */
     public abstract XMLStreamReader createXMLStreamReader(Reader reader) throws XMLStreamException;
 
     /**
-     * Un lector de cursor sobre un {@link Source}.
+     * A cursor reader over a {@link Source}.
      *
-     * @param source de donde leer
-     * @return el lector
-     * @throws XMLStreamException si el tipo de {@code Source} no se soporta o no se puede leer
+     * @param source where to read from
+     * @return the reader
+     * @throws XMLStreamException if the type of {@code Source} is not supported or it cannot be
+     *     read
      */
     public abstract XMLStreamReader createXMLStreamReader(Source source) throws XMLStreamException;
 
     /**
-     * Un lector de cursor sobre un flujo de bytes.
+     * A cursor reader over a byte stream.
      *
-     * @param stream de donde leer
-     * @return el lector
-     * @throws XMLStreamException si no se puede empezar a leer
+     * @param stream where to read from
+     * @return the reader
+     * @throws XMLStreamException if reading cannot start
      */
     public abstract XMLStreamReader createXMLStreamReader(InputStream stream)
             throws XMLStreamException;
 
     /**
-     * Un lector de cursor sobre un flujo de bytes con la codificacion dada.
+     * A cursor reader over a byte stream with the given encoding.
      *
-     * @param stream de donde leer
-     * @param encoding la codificacion, que gana sobre la que declare el documento
-     * @return el lector
-     * @throws XMLStreamException si no se puede empezar a leer
+     * @param stream where to read from
+     * @param encoding the encoding, which wins over the one the document declares
+     * @return the reader
+     * @throws XMLStreamException if reading cannot start
      */
     public abstract XMLStreamReader createXMLStreamReader(InputStream stream, String encoding)
             throws XMLStreamException;
 
     /**
-     * Un lector de cursor sobre un flujo de bytes, recordando de donde vino.
+     * A cursor reader over a byte stream, remembering where it came from.
      *
-     * @param systemId el identificador de sistema, para los mensajes y las ubicaciones
-     * @param stream de donde leer
-     * @return el lector
-     * @throws XMLStreamException si no se puede empezar a leer
+     * @param systemId the system identifier, for messages and locations
+     * @param stream where to read from
+     * @return the reader
+     * @throws XMLStreamException if reading cannot start
      */
     public abstract XMLStreamReader createXMLStreamReader(String systemId, InputStream stream)
             throws XMLStreamException;
 
     /**
-     * Un lector de cursor sobre un {@link Reader}, recordando de donde vino.
+     * A cursor reader over a {@link Reader}, remembering where it came from.
      *
-     * @param systemId el identificador de sistema, para los mensajes y las ubicaciones
-     * @param reader de donde leer
-     * @return el lector
-     * @throws XMLStreamException si no se puede empezar a leer
+     * @param systemId the system identifier, for messages and locations
+     * @param reader where to read from
+     * @return the reader
+     * @throws XMLStreamException if reading cannot start
      */
     public abstract XMLStreamReader createXMLStreamReader(String systemId, Reader reader)
             throws XMLStreamException;
 
-    // ---- lectores de eventos ----------------------------------------------------------------
+    // ---- event readers --------------------------------------------------------------------------
 
     /**
-     * Un lector de eventos sobre un {@link Reader}.
+     * An event reader over a {@link Reader}.
      *
-     * @param reader de donde leer
-     * @return el lector
-     * @throws XMLStreamException si no se puede empezar a leer
+     * @param reader where to read from
+     * @return the reader
+     * @throws XMLStreamException if reading cannot start
      */
     public abstract XMLEventReader createXMLEventReader(Reader reader) throws XMLStreamException;
 
     /**
-     * Un lector de eventos sobre un {@link Reader}, recordando de donde vino.
+     * An event reader over a {@link Reader}, remembering where it came from.
      *
-     * @param systemId el identificador de sistema
-     * @param reader de donde leer
-     * @return el lector
-     * @throws XMLStreamException si no se puede empezar a leer
+     * @param systemId the system identifier
+     * @param reader where to read from
+     * @return the reader
+     * @throws XMLStreamException if reading cannot start
      */
     public abstract XMLEventReader createXMLEventReader(String systemId, Reader reader)
             throws XMLStreamException;
 
     /**
-     * Un lector de eventos montado sobre un lector de cursor que ya existe.
+     * An event reader mounted on an existing cursor reader.
      *
-     * <p>Es el puente entre los dos modelos: el cursor sigue haciendo el trabajo y este envuelve
-     * cada posicion en un evento propio.
+     * <p>It is the bridge between the two models: the cursor keeps doing the work and this wraps
+     * each position in an event of its own.
      *
-     * @param reader el lector de cursor
-     * @return el lector de eventos
-     * @throws XMLStreamException si no se puede envolver
+     * @param reader the cursor reader
+     * @return the event reader
+     * @throws XMLStreamException if it cannot be wrapped
      */
     public abstract XMLEventReader createXMLEventReader(XMLStreamReader reader)
             throws XMLStreamException;
 
     /**
-     * Un lector de eventos sobre un {@link Source}.
+     * An event reader over a {@link Source}.
      *
-     * @param source de donde leer
-     * @return el lector
-     * @throws XMLStreamException si el tipo de {@code Source} no se soporta o no se puede leer
+     * @param source where to read from
+     * @return the reader
+     * @throws XMLStreamException if the type of {@code Source} is not supported or it cannot be
+     *     read
      */
     public abstract XMLEventReader createXMLEventReader(Source source) throws XMLStreamException;
 
     /**
-     * Un lector de eventos sobre un flujo de bytes.
+     * An event reader over a byte stream.
      *
-     * @param stream de donde leer
-     * @return el lector
-     * @throws XMLStreamException si no se puede empezar a leer
+     * @param stream where to read from
+     * @return the reader
+     * @throws XMLStreamException if reading cannot start
      */
     public abstract XMLEventReader createXMLEventReader(InputStream stream)
             throws XMLStreamException;
 
     /**
-     * Un lector de eventos sobre un flujo de bytes con la codificacion dada.
+     * An event reader over a byte stream with the given encoding.
      *
-     * @param stream de donde leer
-     * @param encoding la codificacion, que gana sobre la que declare el documento
-     * @return el lector
-     * @throws XMLStreamException si no se puede empezar a leer
+     * @param stream where to read from
+     * @param encoding the encoding, which wins over the one the document declares
+     * @return the reader
+     * @throws XMLStreamException if reading cannot start
      */
     public abstract XMLEventReader createXMLEventReader(InputStream stream, String encoding)
             throws XMLStreamException;
 
     /**
-     * Un lector de eventos sobre un flujo de bytes, recordando de donde vino.
+     * An event reader over a byte stream, remembering where it came from.
      *
-     * @param systemId el identificador de sistema
-     * @param stream de donde leer
-     * @return el lector
-     * @throws XMLStreamException si no se puede empezar a leer
+     * @param systemId the system identifier
+     * @param stream where to read from
+     * @return the reader
+     * @throws XMLStreamException if reading cannot start
      */
     public abstract XMLEventReader createXMLEventReader(String systemId, InputStream stream)
             throws XMLStreamException;
 
-    // ---- filtros ----------------------------------------------------------------------------
+    // ---- filters ----------------------------------------------------------------------------
 
     /**
-     * Un lector de cursor que solo se detiene en los eventos que el filtro acepta.
+     * A cursor reader that only stops at the events the filter accepts.
      *
-     * @param reader el lector de abajo
-     * @param filter que eventos dejar pasar
-     * @return el lector filtrado
-     * @throws XMLStreamException si no se puede construir
+     * @param reader the underlying reader
+     * @param filter which events to let through
+     * @return the filtered reader
+     * @throws XMLStreamException if it cannot be built
      */
     public abstract XMLStreamReader createFilteredReader(XMLStreamReader reader, StreamFilter filter)
             throws XMLStreamException;
 
     /**
-     * Un lector de eventos que solo entrega los eventos que el filtro acepta.
+     * An event reader that only delivers the events the filter accepts.
      *
-     * @param reader el lector de abajo
-     * @param filter que eventos dejar pasar
-     * @return el lector filtrado
-     * @throws XMLStreamException si no se puede construir
+     * @param reader the underlying reader
+     * @param filter which events to let through
+     * @return the filtered reader
+     * @throws XMLStreamException if it cannot be built
      */
     public abstract XMLEventReader createFilteredReader(XMLEventReader reader, EventFilter filter)
             throws XMLStreamException;
 
-    // ---- configuracion ----------------------------------------------------------------------
+    // ---- configuration ----------------------------------------------------------------------
 
     /**
-     * El resolutor de entidades configurado.
+     * The configured entity resolver.
      *
-     * @return el resolutor, o null si no hay
+     * @return the resolver, or null if there is none
      */
     public abstract XMLResolver getXMLResolver();
 
     /**
-     * Pone el resolutor de entidades.
+     * Sets the entity resolver.
      *
-     * @param resolver el resolutor
+     * @param resolver the resolver
      */
     public abstract void setXMLResolver(XMLResolver resolver);
 
     /**
-     * El informador de avisos configurado.
+     * The configured warning reporter.
      *
-     * @return el informador, o null si no hay
+     * @return the reporter, or null if there is none
      */
     public abstract XMLReporter getXMLReporter();
 
     /**
-     * Pone el informador de avisos.
+     * Sets the warning reporter.
      *
-     * @param reporter el informador
+     * @param reporter the reporter
      */
     public abstract void setXMLReporter(XMLReporter reporter);
 
     /**
-     * Cambia una propiedad de la fabrica.
+     * Changes a property of the factory.
      *
-     * @param name el nombre de la propiedad
-     * @param value el valor
-     * @throws IllegalArgumentException si la propiedad no se conoce, o se conoce pero es de solo
-     *     lectura en esta implementacion y el valor pedido no es el que tiene
+     * @param name the name of the property
+     * @param value the value
+     * @throws IllegalArgumentException if the property is not known, or it is known but read-only
+     *     in this implementation and the value asked for is not the one it has
      */
     public abstract void setProperty(String name, Object value) throws IllegalArgumentException;
 
     /**
-     * El valor de una propiedad.
+     * The value of a property.
      *
-     * @param name el nombre de la propiedad
-     * @return el valor
-     * @throws IllegalArgumentException si la propiedad no se conoce
+     * @param name the name of the property
+     * @return the value
+     * @throws IllegalArgumentException if the property is not known
      */
     public abstract Object getProperty(String name) throws IllegalArgumentException;
 
     /**
-     * Si la fabrica conoce una propiedad.
+     * Whether the factory knows a property.
      *
-     * <p>Conocerla no es lo mismo que dejar cambiarla: ver {@link #setProperty}.
+     * <p>Knowing it is not the same as letting it be changed: see {@link #setProperty}.
      *
-     * @param name el nombre de la propiedad
-     * @return true si la conoce
+     * @param name the name of the property
+     * @return true if it knows it
      */
     public abstract boolean isPropertySupported(String name);
 
     /**
-     * Pone el constructor de eventos que va a usar el lector de eventos.
+     * Sets the event builder the event reader is going to use.
      *
-     * @param allocator el constructor
+     * @param allocator the builder
      */
     public abstract void setEventAllocator(XMLEventAllocator allocator);
 
     /**
-     * El constructor de eventos configurado.
+     * The configured event builder.
      *
-     * @return el constructor; nunca null
+     * @return the builder; never null
      */
     public abstract XMLEventAllocator getEventAllocator();
 }

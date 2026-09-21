@@ -1,8 +1,8 @@
 package com.sun.source.tree;
 
 /**
- * Cualquier patron: ver {@link BindingPatternTree},
- * {@link DeconstructionPatternTree} y {@link AnyPatternTree}.
+ * Any pattern: see {@link BindingPatternTree},
+ * {@link DeconstructionPatternTree} and {@link AnyPatternTree}.
  */
 public interface PatternTree extends Tree {
 }

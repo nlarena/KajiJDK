@@ -1,35 +1,35 @@
 package java.awt;
 
 /**
- * Dónde está el puntero del mouse, sin necesidad de un evento.
+ * Where the mouse pointer is, without needing an event.
  *
- * <p>Es la forma de preguntar por la posición del mouse **fuera** del reparto de eventos: un
- * {@link java.awt.event.MouseEvent} dice dónde estaba el puntero cuando pasó algo, y esto dice dónde
- * está ahora.
+ * <p>It is the way to ask for the mouse position **outside** event dispatch: a {@link
+ * java.awt.event.MouseEvent} says where the pointer was when something happened, and this says
+ * where it is now.
  *
- * <p>Sin pantalla no hay puntero, así que los dos métodos tiran {@link HeadlessException}. No hay
- * respuesta razonable: ni un (0,0) —que sería una posición inventada— ni un cero botones, que haría
- * creer que hay un mouse sin botones en vez de que no hay mouse.
+ * <p>Without a screen there is no pointer, so both methods throw {@link HeadlessException}. There
+ * is no reasonable answer: neither a (0,0) —which would be an invented position— nor zero buttons,
+ * which would make it look as if there were a mouse without buttons instead of no mouse.
  */
 public class MouseInfo {
 
-    /** No se instancia: es todo estático. */
+    /** Not instantiated: it is all static. */
     private MouseInfo() {
     }
 
     /**
-     * Dónde está el puntero.
+     * Where the pointer is.
      *
-     * @throws HeadlessException siempre: sin pantalla no hay puntero
+     * @throws HeadlessException always: without a screen there is no pointer
      */
     public static PointerInfo getPointerInfo() throws HeadlessException {
         throw new HeadlessException();
     }
 
     /**
-     * Cuántos botones tiene el mouse.
+     * How many buttons the mouse has.
      *
-     * @throws HeadlessException siempre, por lo mismo
+     * @throws HeadlessException always, for the same reason
      */
     public static int getNumberOfButtons() throws HeadlessException {
         throw new HeadlessException();

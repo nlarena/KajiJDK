@@ -1,68 +1,70 @@
 package java.sql;
 
 /**
- * KajiLibrary's java.sql.Statement -- una sentencia SQL que se manda como texto.
+ * KajiLibrary's java.sql.Statement -- an SQL statement sent as text.
  *
- * <p><strong>Subconjunto declarado.</strong> Estan la ejecucion, los lotes, los limites y el ciclo de
- * vida. Quedan afuera las variantes que devuelven claves generadas y los `getMoreResults` con
- * banderas, que dependen de tipos y comportamientos que solo un driver define.
+ * <p><strong>The interface is complete.</strong> This note used to say the variants that return
+ * generated keys and the `getMoreResults` with flags were left out; `getMoreResults(int)` and
+ * `getGeneratedKeys` are declared below, and the section further down already describes them.
  *
- * <p>Que reciba la sentencia como texto es lo que la hace peligrosa: concatenar un valor del usuario
- * dentro de ese texto es exactamente la inyeccion SQL. Para valores esta {@link PreparedStatement},
- * que los manda **aparte** de la sentencia y por eso no puede confundirlos con codigo.
+ * <p>That it takes the statement as text is what makes it dangerous: concatenating a user's value
+ * inside that text is exactly SQL injection. For values there is {@link PreparedStatement}, which
+ * sends them **apart** from the statement and therefore cannot confuse them with code.
  */
 public interface Statement extends Wrapper, AutoCloseable {
 
-    /** No devolver las claves que la base genero. */
+    /** Do not return the keys the database generated. */
     int NO_GENERATED_KEYS = 2;
 
     /** Devolverlas. */
     int RETURN_GENERATED_KEYS = 1;
 
-    /** Cerrar los resultados abiertos antes de traer el siguiente. */
+    /** Close the open results before fetching the next. */
     int CLOSE_CURRENT_RESULT = 1;
 
-    /** Dejarlos abiertos. */
+    /** To leave them open. */
     int KEEP_CURRENT_RESULT = 2;
 
-    /** Cerrar todos los resultados de esta sentencia. */
+    /** Close every result of this statement. */
     int CLOSE_ALL_RESULTS = 3;
 
-    /** La sentencia se ejecuto bien y no devolvio filas. */
+    /** The statement ran fine and returned no rows. */
     int SUCCESS_NO_INFO = -2;
 
-    /** Esa sentencia del lote fallo. */
+    /** That statement of the batch failed. */
     int EXECUTE_FAILED = -3;
 
-    /** Ejecuta una consulta y devuelve sus filas. */
+    /** It runs a query and returns its rows. */
     ResultSet executeQuery(String sql) throws SQLException;
 
-    /** Ejecuta una modificacion y devuelve cuantas filas toco. */
+    /** It runs a modification and returns how many rows it touched. */
     int executeUpdate(String sql) throws SQLException;
 
-    /** Igual, para cuentas que no entran en un `int`. */
+    /** The same, for counts that do not fit in an `int`. */
     long executeLargeUpdate(String sql) throws SQLException;
 
     /**
-     * Ejecuta cualquier sentencia.
+     * It runs any statement.
      *
-     * @return `true` si lo primero que devolvio son filas; entonces se pide con {@link #getResultSet}
+     * @return `true` if the first thing it returned is rows; they are then asked for with
+     *         {@link #getResultSet}
      */
     boolean execute(String sql) throws SQLException;
 
-    /** Las filas del resultado actual, o `null` si el actual es una cuenta. */
+    /** The current result's rows, or `null` if the current one is a count. */
     ResultSet getResultSet() throws SQLException;
 
-    /** La cuenta del resultado actual, o -1 si el actual son filas. */
+    /** The current result's count, or -1 if the current one is rows. */
     int getUpdateCount() throws SQLException;
 
-    /** Pasa al resultado siguiente. */
+    /** It moves on to the next result. */
     boolean getMoreResults() throws SQLException;
 
-    // ---- lotes ---------------------------------------------------------------------------------------
+    // ---- batches --------------------------------------------------------------------------------
     //
-    // Existen por la latencia: mandar mil `insert` de a uno son mil viajes de ida y vuelta. El lote
-    // los manda juntos, y por eso devuelve **un arreglo** de cuentas y no una sola.
+    // They exist because of latency: sending a thousand `insert`s one at a time is a thousand round
+    // trips. The batch sends them together, and that is why it returns **an array** of counts and
+    // not a single one.
 
     void addBatch(String sql) throws SQLException;
 
@@ -72,19 +74,19 @@ public interface Statement extends Wrapper, AutoCloseable {
 
     long[] executeLargeBatch() throws SQLException;
 
-    // ---- limites -------------------------------------------------------------------------------------
+    // ---- limits ---------------------------------------------------------------------------------
 
-    /** El maximo de bytes que devuelve una columna grande; cero para sin limite. */
+    /** The maximum bytes a large column returns; zero for no limit. */
     void setMaxFieldSize(int max) throws SQLException;
 
     int getMaxFieldSize() throws SQLException;
 
-    /** El maximo de filas; cero para sin limite. */
+    /** The maximum rows; zero for no limit. */
     void setMaxRows(int max) throws SQLException;
 
     int getMaxRows() throws SQLException;
 
-    /** Segundos antes de cancelar; cero para sin limite. */
+    /** Seconds before cancelling; zero for no limit. */
     void setQueryTimeout(int seconds) throws SQLException;
 
     int getQueryTimeout() throws SQLException;
@@ -97,33 +99,33 @@ public interface Statement extends Wrapper, AutoCloseable {
 
     int getFetchDirection() throws SQLException;
 
-    /** Si la base debe interpretar las secuencias de escape `{fn ...}`. */
+    /** Whether the database should interpret the `{fn ...}` escape sequences. */
     void setEscapeProcessing(boolean enable) throws SQLException;
 
-    /** El nombre del cursor de los resultados que produzca. */
+    /** The cursor name for the results it produces. */
     void setCursorName(String name) throws SQLException;
 
-    // ---- ciclo de vida -------------------------------------------------------------------------------
+    // ---- life cycle -----------------------------------------------------------------------------
 
-    /** Cancela la ejecucion en curso, **desde otro hilo**. */
+    /** It cancels the execution in progress, **from another thread**. */
     void cancel() throws SQLException;
 
     void close() throws SQLException;
 
     boolean isClosed() throws SQLException;
 
-    /** Que se cierre sola cuando se cierre su ultimo resultado. */
+    /** That it close itself when its last result closes. */
     void closeOnCompletion() throws SQLException;
 
     boolean isCloseOnCompletion() throws SQLException;
 
-    /** Una pista de que no se va a reutilizar, para que el pool la descarte. */
+    /** A hint that it will not be reused, so the pool discards it. */
     default void setPoolable(boolean poolable) throws SQLException {
-        throw new UnsupportedOperationException("setPoolable no esta implementado");
+        throw new UnsupportedOperationException("setPoolable not implemented");
     }
 
     default boolean isPoolable() throws SQLException {
-        throw new UnsupportedOperationException("isPoolable no esta implementado");
+        throw new UnsupportedOperationException("isPoolable not implemented");
     }
 
     int getResultSetType() throws SQLException;
@@ -132,27 +134,27 @@ public interface Statement extends Wrapper, AutoCloseable {
 
     int getResultSetHoldability() throws SQLException;
 
-    /** La conexion que la creo. */
+    /** The connection that created it. */
     Connection getConnection() throws SQLException;
 
     SQLWarning getWarnings() throws SQLException;
 
     void clearWarnings() throws SQLException;
 
-    // ---- claves generadas y citado -------------------------------------------------------------------
+    // ---- generated keys and quoting -------------------------------------------------------------
     //
-    // Las variantes de `execute`/`executeUpdate` con un segundo argumento son todas la misma pregunta:
-    // que hacer con las claves que la base genero sola. Se pueden pedir todas
-    // ({@link #RETURN_GENERATED_KEYS}), o nombrar cuales interesan por indice o por nombre de columna;
-    // despues se leen con {@link #getGeneratedKeys}. Sin esto habria que hacer un `select` extra y
-    // adivinar cual fila es la recien insertada.
+    // The variants of `execute`/`executeUpdate` with a second argument are all the same question:
+    // what to do with the keys the database generated by itself. All of them can be asked for
+    // ({@link #RETURN_GENERATED_KEYS}), or the ones of interest named by index or by column name;
+    // they are then read with {@link #getGeneratedKeys}. Without this one would have to do an extra
+    // `select` and guess which row is the one just inserted.
     //
-    // Los `enquote*` son la respuesta tardia --Java 9-- a que la unica forma de meter un identificador
-    // en una sentencia era concatenarlo. Siguen sin ser tan seguros como un parametro: un
-    // identificador **no** puede ser un parametro, asi que citar bien es lo mejor que se puede hacer.
+    // The `enquote*` are the late answer --Java 9-- to the only way of putting an identifier into a
+    // statement being to concatenate it. They are still not as safe as a parameter: an identifier
+    // **cannot** be a parameter, so quoting well is the best that can be done.
     //
-    // Los `large*` duplican metodos que devolvian `int` porque una tabla puede tener mas de dos mil
-    // millones de filas, y el `int` los desbordaba en silencio.
+    // The `large*` duplicate methods that returned `int` because a table can have more than two
+    // billion rows, and the `int` overflowed them in silence.
 
     boolean execute(java.lang.String sql, int autoGeneratedKeys) throws java.sql.SQLException;
 
@@ -166,8 +168,8 @@ public interface Statement extends Wrapper, AutoCloseable {
         if (identifier == null || identifier.length() == 0 || identifier.length() > 128) {
             return false;
         }
-        // Simple = empieza con letra y sigue con letras, digitos o guion bajo. Nada mas alcanza para
-        // ir en una sentencia sin comillas.
+        // Simple = it starts with a letter and carries on with letters, digits or underscores.
+        // Nothing else is enough to go into a statement unquoted.
         char c = identifier.charAt(0);
         if (!Character.isLetter(c)) {
             return false;
@@ -196,17 +198,17 @@ public interface Statement extends Wrapper, AutoCloseable {
         if (!alwaysQuote && this.isSimpleIdentifier(identifier)) {
             return identifier;
         }
-        // Un identificador va entre comillas **dobles**; una comilla doble adentro se duplica.
-        // Un cero adentro no se puede citar de ninguna forma.
+        // An identifier goes between **double** quotes; a double quote inside is doubled. A zero
+        // inside cannot be quoted in any way.
         if (identifier.indexOf('\u0000') >= 0) {
-            throw new java.sql.SQLException("el identificador tiene un nulo");
+            throw new java.sql.SQLException("Invalid name");
         }
         return "\"" + identifier.replace("\"", "\"\"") + "\"";
     }
 
     default java.lang.String enquoteLiteral(java.lang.String val) throws java.sql.SQLException {
-        // Una comilla simple adentro se escribe duplicandola. Es la unica regla, y es la que hace
-        // segura la operacion.
+        // A single quote inside is written by doubling it. It is the only rule, and it is what
+        // makes the operation safe.
         return "'" + val.replace("'", "''") + "'";
     }
 
@@ -217,15 +219,15 @@ public interface Statement extends Wrapper, AutoCloseable {
     java.sql.ResultSet getGeneratedKeys() throws java.sql.SQLException;
 
     default long executeLargeUpdate(java.lang.String sql, int autoGeneratedKeys) throws java.sql.SQLException {
-        throw new java.sql.SQLFeatureNotSupportedException("executeLargeUpdate no esta implementado");
+        throw new java.sql.SQLFeatureNotSupportedException("executeLargeUpdate not implemented");
     }
 
     default long executeLargeUpdate(java.lang.String sql, int[] columnIndexes) throws java.sql.SQLException {
-        throw new java.sql.SQLFeatureNotSupportedException("executeLargeUpdate no esta implementado");
+        throw new java.sql.SQLFeatureNotSupportedException("executeLargeUpdate not implemented");
     }
 
     default long executeLargeUpdate(java.lang.String sql, java.lang.String[] columnNames) throws java.sql.SQLException {
-        throw new java.sql.SQLFeatureNotSupportedException("executeLargeUpdate no esta implementado");
+        throw new java.sql.SQLFeatureNotSupportedException("executeLargeUpdate not implemented");
     }
 
     default long getLargeMaxRows() throws java.sql.SQLException {
@@ -233,10 +235,10 @@ public interface Statement extends Wrapper, AutoCloseable {
     }
 
     default long getLargeUpdateCount() throws java.sql.SQLException {
-        throw new UnsupportedOperationException("getLargeUpdateCount no esta implementado");
+        throw new UnsupportedOperationException("getLargeUpdateCount not implemented");
     }
 
     default void setLargeMaxRows(long max) throws java.sql.SQLException {
-        throw new UnsupportedOperationException("setLargeMaxRows no esta implementado");
+        throw new UnsupportedOperationException("setLargeMaxRows not implemented");
     }
 }

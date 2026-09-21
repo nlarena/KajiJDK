@@ -1,27 +1,28 @@
 package javax.security.cert;
 
 /**
- * KajiLibrary's javax.security.cert.CertificateEncodingException -- no se pudo producir la
- * codificacion.
+ * KajiLibrary's javax.security.cert.CertificateEncodingException -- the encoding could not be
+ * produced.
  *
- * <p>Sale de {@code getEncoded}, y casi siempre significa que el certificado se armo en memoria a
- * partir de partes y que alguna no se puede volver a escribir en DER.
+ * <p>It comes out of {@code getEncoded}, and almost always means the certificate was put together
+ * in memory from parts and one of them cannot be written back in DER.
  *
- * <p>Obsoleta <b>y marcada para remocion</b> desde Java 9. El reemplazo es
- * {@code java.security.cert}, que no es una version mejorada de esto sino otra cosa: soporta la
- * version 3 del formato, con extensiones, que es lo unico que sirve para validar una cadena de hoy.
+ * <p>Deprecated <b>and marked for removal</b> since Java 9. The replacement is {@code
+ * java.security.cert}, which is not an improved version of this but something else: it supports
+ * version 3 of the format, with extensions, which is the only thing that serves to validate a chain
+ * today.
  */
 @Deprecated(since = "9", forRemoval = true)
 public class CertificateEncodingException extends CertificateException {
 
     private static final long serialVersionUID = -8187642723048403470L;
 
-    /** Sin detalle. */
+    /** Without detail. */
     public CertificateEncodingException() {
         super();
     }
 
-    /** Con un mensaje que diga que paso. */
+    /** With a message that says what happened. */
     public CertificateEncodingException(String message) {
         super(message);
     }

@@ -5,36 +5,37 @@ import java.util.EventObject;
 import javax.swing.tree.TreePath;
 
 /**
- * El arbol cambio.
+ * The tree changed.
  *
- * <h2>El camino es al PADRE, no a lo que cambio</h2>
+ * <h2>The path is to the PARENT, not to what changed</h2>
  *
- * <p>Es la trampa de esta clase. {@link #getTreePath} devuelve el camino al nodo <em>cuyos hijos</em>
- * cambiaron, y {@link #getChildIndices} dice cuales. Leerlo como "el nodo que cambio" da el resultado
- * equivocado en todos los casos menos uno.
+ * <p>It is this class's trap. {@link #getTreePath} returns the path to the node <em>whose
+ * children</em> changed, and {@link #getChildIndices} says which ones. Reading it as "the node
+ * that changed" gives the wrong result in every case but one.
  *
- * <p>La excepcion es {@code treeStructureChanged}, donde el camino apunta a la raiz del subarbol que
- * se rehizo entero y los indices son {@code null}: no hay hijos que enumerar porque cambiaron todos.
+ * <p>The exception is {@code treeStructureChanged}, where the path points at the root of the
+ * subtree that was redone whole and the indices are {@code null}: there are no children to
+ * enumerate because they all changed.
  */
 public class TreeModelEvent extends EventObject {
 
     private static final long serialVersionUID = 1L;
 
-    /** El camino al padre. */
+    /** The path to the parent. */
     protected TreePath path;
 
-    /** Que hijos cambiaron, en orden creciente. */
+    /** Which children changed, in increasing order. */
     protected int[] childIndices;
 
-    /** Los hijos que cambiaron. */
+    /** The children that changed. */
     protected Object[] children;
 
-    /** Con el camino como arreglo de nodos. */
+    /** With the path as an array of nodes. */
     public TreeModelEvent(Object source, Object[] path, int[] childIndices, Object[] children) {
         this(source, path == null ? null : new TreePath(path), childIndices, children);
     }
 
-    /** Con el camino como {@link TreePath}. */
+    /** With the path as a {@link TreePath}. */
     public TreeModelEvent(Object source, TreePath path, int[] childIndices, Object[] children) {
         super(source);
         this.path = path;
@@ -42,24 +43,24 @@ public class TreeModelEvent extends EventObject {
         this.children = children;
     }
 
-    /** Cambio la estructura debajo de ese camino, dado como arreglo. */
+    /** The structure under that path changed, given as an array. */
     public TreeModelEvent(Object source, Object[] path) {
         this(source, path == null ? null : new TreePath(path));
     }
 
-    /** Cambio la estructura debajo de ese camino. */
+    /** The structure under that path changed. */
     public TreeModelEvent(Object source, TreePath path) {
         super(source);
         this.path = path;
         this.childIndices = new int[0];
     }
 
-    /** El camino al padre; ver la nota de la clase. */
+    /** The path to the parent; see the class note. */
     public TreePath getTreePath() {
         return this.path;
     }
 
-    /** El mismo camino, como arreglo de nodos. */
+    /** The same path, as an array of nodes. */
     public Object[] getPath() {
         if (this.path != null) {
             return this.path.getPath();
@@ -67,28 +68,28 @@ public class TreeModelEvent extends EventObject {
         return null;
     }
 
-    /** Los hijos que cambiaron, en un arreglo nuevo. */
+    /** The children that changed, in a new array. */
     public Object[] getChildren() {
         if (this.children == null) {
             return null;
         }
-        Object[] copia = new Object[this.children.length];
+        Object[] copy = new Object[this.children.length];
         for (int i = 0; i < this.children.length; i++) {
-            copia[i] = this.children[i];
+            copy[i] = this.children[i];
         }
-        return copia;
+        return copy;
     }
 
-    /** Los indices de los hijos que cambiaron, en un arreglo nuevo. */
+    /** The indices of the children that changed, in a new array. */
     public int[] getChildIndices() {
         if (this.childIndices == null) {
             return null;
         }
-        int[] copia = new int[this.childIndices.length];
+        int[] copy = new int[this.childIndices.length];
         for (int i = 0; i < this.childIndices.length; i++) {
-            copia[i] = this.childIndices[i];
+            copy[i] = this.childIndices[i];
         }
-        return copia;
+        return copy;
     }
 
     public String toString() {

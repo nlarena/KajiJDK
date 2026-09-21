@@ -1,16 +1,16 @@
 package org.w3c.dom.html;
 
 /**
- * Un `<isindex>`. Obsoleto en HTML 4.
+ * An `<isindex>`. Obsolete in HTML 4.
  */
 public interface HTMLIsIndexElement extends HTMLElement {
 
-    /** El formulario que lo contiene, o nulo si no esta en ninguno. */
+    /** The form that contains it, or null if it is in none. */
     HTMLFormElement getForm();
 
-    /** El atributo `prompt`. */
+    /** The `prompt` attribute. */
     String getPrompt();
 
-    /** Fija el atributo `prompt`. */
+    /** It sets the `prompt` attribute. */
     void setPrompt(String prompt);
 }

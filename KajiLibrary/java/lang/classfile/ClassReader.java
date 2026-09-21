@@ -7,69 +7,69 @@ import java.lang.classfile.constantpool.Utf8Entry;
 import java.util.Optional;
 import java.util.function.Function;
 
-// La vista de bajo nivel de un `.class` que se está leyendo: el arreglo de bytes con acceso por
-// offset, más el pool ya construido. Es lo que recibe un {@link AttributeMapper} para interpretar el
-// cuerpo de un atributo, y es el único lugar de la API donde se habla de offsets absolutos.
+// The low-level view of a `.class` being read: the byte array with access by offset, plus the pool
+// already built. It is what an {@link AttributeMapper} receives in order to interpret an attribute's
+// body, and it is the only place in the API where absolute offsets are spoken of.
 //
-// Todos los `read*` validan el rango antes de tocar el arreglo y tiran
-// `ConstantPoolException` si el offset se sale del archivo. Esa decisión es deliberada: un lector
-// que devuelve basura para un archivo truncado es peor que uno que falla.
+// Every `read*` validates the range before touching the array and throws `ConstantPoolException` if
+// the offset falls outside the file. That decision is deliberate: a reader returning garbage for a
+// truncated file is worse than one that fails.
 public interface ClassReader extends ConstantPool {
 
-    /** Los mapeadores de atributos a medida que se registraron al abrir el archivo. */
+    /** The custom attribute mappers registered when the file was opened. */
     Function<Utf8Entry, AttributeMapper<?>> customAttributes();
 
-    /** El `access_flags` de la clase, crudo. */
+    /** The class's `access_flags`, raw. */
     int flags();
 
-    /** La entrada `this_class`. */
+    /** The `this_class` entry. */
     ClassEntry thisClassEntry();
 
-    /** La entrada `super_class`; vacío si el índice es 0. */
+    /** The `super_class` entry; empty if the index is 0. */
     Optional<ClassEntry> superclassEntry();
 
-    /** El largo del archivo en bytes. */
+    /** The file's length in bytes. */
     int classfileLength();
 
-    /** La entrada cuyo índice es el u2 que está en `offset`. */
+    /** The entry whose index is the u2 sitting at `offset`. */
     PoolEntry readEntry(int offset);
 
-    /** Como `readEntry`, exigiendo que la entrada sea de la clase `cls`. */
+    /** Like `readEntry`, demanding that the entry be of class `cls`. */
     <T extends PoolEntry> T readEntry(int offset, Class<T> cls);
 
-    /** Como `readEntry`, pero devuelve `null` si el índice es 0. */
+    /** Like `readEntry`, but it returns `null` if the index is 0. */
     PoolEntry readEntryOrNull(int offset);
 
-    /** Como `readEntry(int, Class)`, pero devuelve `null` si el índice es 0. */
+    /** Like `readEntry(int, Class)`, but it returns `null` if the index is 0. */
     <T extends PoolEntry> T readEntryOrNull(int offset, Class<T> cls);
 
-    /** El byte sin signo en `offset`. */
+    /** The unsigned byte at `offset`. */
     int readU1(int offset);
 
-    /** Los dos bytes sin signo en `offset`. */
+    /** The two unsigned bytes at `offset`. */
     int readU2(int offset);
 
-    /** El byte con signo en `offset`. */
+    /** The signed byte at `offset`. */
     int readS1(int offset);
 
-    /** Los dos bytes con signo en `offset`. */
+    /** The two signed bytes at `offset`. */
     int readS2(int offset);
 
-    /** Los cuatro bytes en `offset`, como `int`. */
+    /** The four bytes at `offset`, as an `int`. */
     int readInt(int offset);
 
-    /** Los ocho bytes en `offset`, como `long`. */
+    /** The eight bytes at `offset`, as a `long`. */
     long readLong(int offset);
 
-    /** Los cuatro bytes en `offset`, como `float`. */
+    /** The four bytes at `offset`, as a `float`. */
     float readFloat(int offset);
 
-    /** Los ocho bytes en `offset`, como `double`. */
+    /** The eight bytes at `offset`, as a `double`. */
     double readDouble(int offset);
 
-    /** Una copia de `len` bytes desde `offset`. */
+    /** A copy of `len` bytes starting at `offset`. */
     byte[] readBytes(int offset, int len);
 
-    /** Copia `len` bytes desde `offset` a `buf`. */
+    /** It copies `len` bytes from `offset` into `buf`. */
     void copyBytesTo(BufWriter buf, int offset, int len);
 }

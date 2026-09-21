@@ -2,19 +2,19 @@ package java.security;
 
 import java.nio.ByteBuffer;
 
-// Un cargador que le asocia a cada clase el origen del que vino.
+// A loader that associates with each class the origin it came from.
 //
-// Es la pieza que conecta el modelo de permisos con el de carga de clases: `ClassLoader` sabe
-// definir una clase a partir de bytes, y esta subclase le agrega el `CodeSource`, que es lo que
-// permite que despues alguien pregunte "¿de donde salio esta clase?" y obtenga una respuesta
-// verificable en vez de un nombre. Sin esto, todo el codigo del proceso seria indistinguible.
+// It is the piece that connects the permission model with the class loading one: `ClassLoader`
+// knows how to define a class from bytes, and this subclass adds the `CodeSource`, which is what
+// allows somebody afterwards to ask "where did this class come from?" and obtain a verifiable
+// answer instead of a name. Without this, all the code of the process would be indistinguishable.
 //
-// Los dominios se **cachean por origen**: dos clases del mismo jar comparten `ProtectionDomain`, y
-// eso no es solo un ahorro de memoria — es lo que hace que concederle un permiso a un jar valga
-// para todas sus clases y no haya que repetir la decision por cada una.
+// The domains are **cached by origin**: two classes of the same jar share a `ProtectionDomain`, and
+// that is not only a saving of memory — it is what makes granting a permission to a jar hold for
+// all of its classes without the decision having to be repeated for each one.
 public class SecureClassLoader extends ClassLoader {
 
-    private final java.util.HashMap<CodeSource, ProtectionDomain> dominios =
+    private final java.util.HashMap<CodeSource, ProtectionDomain> domains =
         new java.util.HashMap<CodeSource, ProtectionDomain>();
 
     protected SecureClassLoader(ClassLoader parent) {
@@ -29,38 +29,38 @@ public class SecureClassLoader extends ClassLoader {
         super(name, parent);
     }
 
-    // Define una clase asociandola al origen dado.
+    // It defines a class associating it with the given origin.
     protected final Class<?> defineClass(String name, byte[] b, int off, int len,
                                          CodeSource cs) {
-        return super.defineClass(name, b, off, len, this.dominioPara(cs));
+        return super.defineClass(name, b, off, len, this.domainFor(cs));
     }
 
     protected final Class<?> defineClass(String name, ByteBuffer b, CodeSource cs) {
-        return super.defineClass(name, b, this.dominioPara(cs));
+        return super.defineClass(name, b, this.domainFor(cs));
     }
 
-    // Los permisos que le corresponden a ese origen.
+    // The permissions that correspond to that origin.
     //
-    // La base devuelve una coleccion **vacia**, igual que el JDK, y eso no significa "sin
-    // permisos": el dominio que se arma con ella es dinamico, asi que lo que finalmente pueda
-    // hacer lo decide la `Policy` en el momento de preguntar. Una subclase que quiera conceder
-    // algo fijo —el clasico permiso de leer el propio jar— lo agrega aca.
+    // The base one returns an **empty** collection, just as the JDK does, and that does not mean
+    // "no permissions": the domain built with it is dynamic, so what it can finally do is decided
+    // by the `Policy` at the moment of asking. A subclass that wants to grant something fixed —the
+    // classic permission to read its own jar— adds it here.
     protected PermissionCollection getPermissions(CodeSource codesource) {
         return new Permissions();
     }
 
-    // El dominio de ese origen, creandolo la primera vez.
-    private synchronized ProtectionDomain dominioPara(CodeSource cs) {
+    // The domain of that origin, creating it the first time.
+    private synchronized ProtectionDomain domainFor(CodeSource cs) {
         if (cs == null) {
             return null;
         }
-        ProtectionDomain pd = this.dominios.get(cs);
+        ProtectionDomain pd = this.domains.get(cs);
         if (pd == null) {
-            // Cuatro argumentos: dominio **dinamico**, para que un cambio de politica alcance a
-            // clases ya cargadas. Con el de dos quedarian congeladas con los permisos que hubiera
-            // en el momento de definirlas.
+            // Four arguments: a **dynamic** domain, so that a change of policy reaches classes that
+            // are loaded already. With the two-argument one they would be frozen with the
+            // permissions there were at the moment of defining them.
             pd = new ProtectionDomain(cs, this.getPermissions(cs), this, null);
-            this.dominios.put(cs, pd);
+            this.domains.put(cs, pd);
         }
         return pd;
     }

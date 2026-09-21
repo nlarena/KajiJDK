@@ -1,18 +1,18 @@
 package javax.management.relation;
 
 /**
- * El tipo de relacion no declara ningun rol con ese nombre.
+ * The relation type declares no role with that name.
  */
 public class RoleInfoNotFoundException extends RelationException {
 
     private static final long serialVersionUID = 4394752332832935831L;
 
-    /** Sin detalle. */
+    /** Without detail. */
     public RoleInfoNotFoundException() {
         super();
     }
 
-    /** Con un mensaje. */
+    /** With a message. */
     public RoleInfoNotFoundException(String message) {
         super(message);
     }

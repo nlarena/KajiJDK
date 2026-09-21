@@ -1,22 +1,22 @@
 package javax.management.relation;
 
 /**
- * El servicio de relaciones existe pero no esta registrado en ningun servidor de MBeans.
+ * The relation service exists but is not registered in any MBean server.
  *
- * <p>Es una distincion util: el objeto se puede construir y configurar antes de registrarlo, pero
- * casi ninguna operacion sirve hasta que este — necesita el servidor para verificar que los MBeans
- * referenciados existan.
+ * <p>It is a useful distinction: the object can be built and configured before registering it, but
+ * almost no operation works until it is -- it needs the server to verify that the referenced MBeans
+ * exist.
  */
 public class RelationServiceNotRegisteredException extends RelationException {
 
     private static final long serialVersionUID = 8454744887157122910L;
 
-    /** Sin detalle. */
+    /** Without detail. */
     public RelationServiceNotRegisteredException() {
         super();
     }
 
-    /** Con un mensaje. */
+    /** With a message. */
     public RelationServiceNotRegisteredException(String message) {
         super(message);
     }

@@ -3,44 +3,45 @@ package java.lang.instrument;
 import java.security.ProtectionDomain;
 
 /**
- * KajiLibrary's java.lang.instrument.ClassFileTransformer -- reescribe los bytes de una clase antes
- * de que se cargue.
+ * KajiLibrary's java.lang.instrument.ClassFileTransformer -- it rewrites a class's bytes before the
+ * class is loaded.
  *
- * <p>Es la pieza que hace posible un perfilador, un rastreador o un inyector de dependencias sin
- * tocar el codigo: la maquina virtual le pasa los bytes de cada clase que va a cargar y usa lo que
- * devuelva.
+ * <p>It is the piece that makes a profiler, a tracer or a dependency injector possible without
+ * touching the code: the virtual machine hands it the bytes of every class it is about to load and
+ * uses whatever comes back.
  *
- * <h2>Devolver null es lo normal</h2>
+ * <h2>Returning null is the normal case</h2>
  *
- * <p>Un transformador se aplica a <b>todas</b> las clases, incluidas las miles de la plataforma.
- * Devolver null significa "no la toco" y es la respuesta correcta para casi todas; devolver una copia
- * sin cambios funciona igual pero cuesta una reescritura por clase.
+ * <p>A transformer is applied to <b>every</b> class, the thousands of platform ones included.
+ * Returning null means "I am not touching it" and is the right answer for nearly all of them;
+ * returning an unchanged copy works just as well but costs one rewrite per class.
  *
- * <h2>Los dos metodos, y cual redefinir</h2>
+ * <h2>The two methods, and which one to override</h2>
  *
- * <p>Los dos tienen default y llamarse igual, y esa es la parte que confunde. El de <b>seis</b>
- * argumentos --el que recibe el {@code Module}-- es el que la maquina virtual llama; su default
- * delega en el de cinco, que es el que existia antes de los modulos.
+ * <p>Both have a default and both are called the same, and that is the confusing part. The
+ * <b>six</b>-argument one --the one taking the {@code Module}-- is the one the virtual machine
+ * calls; its default delegates to the five-argument one, which is the one that existed before
+ * modules.
  *
- * <p>Asi que redefinir el de cinco alcanza y es lo habitual. Redefinir el de seis solo hace falta
- * cuando el transformador necesita saber en que modulo esta la clase -- por ejemplo para no tocar
- * nada de {@code java.base}.
+ * <p>So overriding the five-argument one is enough and is the usual thing. Overriding the
+ * six-argument one is only needed when the transformer has to know which module the class is in --
+ * to leave everything in {@code java.base} alone, for instance.
  *
- * <p>El default de cinco devuelve null: un transformador que no redefine ninguno de los dos no
- * transforma nada, que es lo unico coherente.
+ * <p>The five-argument default returns null: a transformer overriding neither of the two transforms
+ * nothing, which is the only coherent answer.
  */
 public interface ClassFileTransformer {
 
     /**
-     * La version anterior a los modulos.
+     * The version from before modules.
      *
-     * @param loader quien esta cargando la clase; null es el cargador de arranque
-     * @param className el nombre interno, con barras y sin {@code .class}
-     * @param classBeingRedefined la clase que se esta redefiniendo, o null si es una carga nueva
-     * @param protectionDomain de donde viene
-     * @param classfileBuffer los bytes actuales
-     * @return los bytes nuevos, o null para no tocarla
-     * @throws IllegalClassFormatException si los bytes que llegaron no sirven
+     * @param loader who is loading the class; null is the bootstrap loader
+     * @param className the internal name, with slashes and without {@code .class}
+     * @param classBeingRedefined the class being redefined, or null on a fresh load
+     * @param protectionDomain where it comes from
+     * @param classfileBuffer the current bytes
+     * @return the new bytes, or null to leave it alone
+     * @throws IllegalClassFormatException if the bytes that arrived are no good
      */
     default byte[] transform(ClassLoader loader, String className, Class<?> classBeingRedefined,
                              ProtectionDomain protectionDomain, byte[] classfileBuffer)
@@ -49,11 +50,11 @@ public interface ClassFileTransformer {
     }
 
     /**
-     * La version con modulo, que es la que la maquina virtual llama.
+     * The version with a module, which is the one the virtual machine calls.
      *
-     * <p>Por omision delega en la de cinco; ver la nota de la clase.
+     * <p>By default it delegates to the five-argument one; see the class's note.
      *
-     * @param module el modulo de la clase
+     * @param module the class's module
      */
     default byte[] transform(Module module, ClassLoader loader, String className,
                              Class<?> classBeingRedefined, ProtectionDomain protectionDomain,

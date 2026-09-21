@@ -1,24 +1,24 @@
 package java.util;
 
-// Las vistas y adaptadores chicos que devuelve Collections: un Set apoyado en un Map, una Queue
-// apoyada en un Deque, las dos Enumeration y el comparador invertido. Package-private.
+// The small views and adapters Collections returns: a Set resting on a Map, a Queue resting on a
+// Deque, the two Enumerations and the reversed comparator. Package-private.
 
-// Un Set respaldado por un Map<E, Boolean>.
+// A Set backed by a Map<E, Boolean>.
 //
-// Parece un rodeo hasta que se ve para que existe: el JDK tiene IdentityHashMap y
-// ConcurrentHashMap pero no tiene IdentityHashSet ni ConcurrentHashSet, y en vez de duplicar cada
-// implementacion de mapa en version conjunto, expone esta. `newSetFromMap(new IdentityHashMap())`
-// da un conjunto que compara por identidad; `newSetFromMap(new ConcurrentHashMap())`, uno seguro
-// entre hilos. Un Set no es mas que un Map al que no le importan los valores.
+// It looks like a detour until one sees what it exists for: the JDK has IdentityHashMap and
+// ConcurrentHashMap but has no IdentityHashSet nor ConcurrentHashSet, and instead of duplicating each
+// map implementation in a set version, it exposes this. `newSetFromMap(new IdentityHashMap())` gives
+// a set that compares by identity; `newSetFromMap(new ConcurrentHashMap())`, a thread-safe one. A Set
+// is nothing more than a Map that does not care about the values.
 //
-// El mapa tiene que llegar **vacio** y no lo puede tocar nadie mas: si tiene claves de antes, el
-// conjunto nace con elementos que nadie agrego; si alguien le escribe por afuera, el conjunto
-// cambia sin que se lo pidan.
+// The map has to arrive **empty** and nobody else can touch it: if it has keys from before, the set
+// is born with elements nobody added; if somebody writes to it from outside, the set changes
+// unasked.
 class SetFromMap<E> implements Set<E> {
 
     final Map<E, Boolean> m;
 
-    // La vista de claves, que es donde vive casi todo el comportamiento del conjunto.
+    // The key view, which is where almost all of the set's behaviour lives.
     private final Set<E> keys;
 
     SetFromMap(Map<E, Boolean> map) {
@@ -41,8 +41,8 @@ class SetFromMap<E> implements Set<E> {
         return this.m.containsKey(o);
     }
 
-    // `put` devuelve el valor anterior, o null si la clave no estaba: eso es exactamente lo que
-    // `add` tiene que informar.
+    // `put` returns the previous value, or null if the key was not there: that is exactly what `add`
+    // has to report.
     public boolean add(E e) {
         return this.m.put(e, Boolean.TRUE) == null;
     }
@@ -103,8 +103,8 @@ class SetFromMap<E> implements Set<E> {
     }
 }
 
-// La misma idea sobre un SequencedMap, que conserva el orden de encuentro y por lo tanto puede
-// darse vuelta.
+// The same idea over a SequencedMap, which keeps the encounter order and can therefore be
+// reversed.
 final class SequencedSetFromMap<E> extends SetFromMap<E> implements SequencedSet<E> {
 
     SequencedSetFromMap(SequencedMap<E, Boolean> map) {
@@ -140,11 +140,11 @@ final class SequencedSetFromMap<E> extends SetFromMap<E> implements SequencedSet
     }
 }
 
-// Una Queue que saca por donde mete: una pila con cara de cola.
+// A Queue that takes out where it puts in: a stack with a queue's face.
 //
-// Sirve para pasarle una pila a codigo escrito contra Queue sin que ese codigo se entere. Lo
-// unico que cambia respecto del Deque de atras es que las tres operaciones de cola apuntan al
-// mismo extremo -- el frente -- en vez de meter atras y sacar adelante.
+// It serves to hand a stack to code written against Queue without that code noticing. The only thing
+// that changes from the Deque behind is that the three queue operations point at the same end -- the
+// front -- instead of putting in at the back and taking out at the front.
 final class LifoQueue<E> implements Queue<E> {
 
     private final Deque<E> back;
@@ -232,7 +232,7 @@ final class LifoQueue<E> implements Queue<E> {
     }
 }
 
-// La Enumeration que no tiene nada.
+// The Enumeration that has nothing.
 final class EmptyEnumeration<E> implements Enumeration<E> {
 
     public boolean hasMoreElements() {
@@ -244,10 +244,10 @@ final class EmptyEnumeration<E> implements Enumeration<E> {
     }
 }
 
-// Una Enumeration sobre una foto de la coleccion. Se toma la foto en el constructor a proposito:
-// `Collections.enumeration` promete recorrer lo que habia, y una Enumeration no tiene forma de
-// avisar que la coleccion cambio mientras tanto -- no existe el equivalente de
-// ConcurrentModificationException para ella.
+// An Enumeration over a snapshot of the collection. The snapshot is taken in the constructor on
+// purpose: `Collections.enumeration` promises to walk what was there, and an Enumeration has no way
+// of saying the collection changed in the meantime -- there is no equivalent of
+// ConcurrentModificationException for it.
 final class ArrayEnumeration<E> implements Enumeration<E> {
 
     private final Object[] items;
@@ -272,10 +272,10 @@ final class ArrayEnumeration<E> implements Enumeration<E> {
     }
 }
 
-// El comparador que da vuelta a otro, o al orden natural si no se le pasa ninguno.
+// The comparator that reverses another, or the natural order if none is passed.
 //
-// Invertir es `compare(b, a)` y no `-compare(a, b)`: la negacion se rompe con Integer.MIN_VALUE,
-// que es su propio negativo, y un comparador que devuelve MIN_VALUE es raro pero legal.
+// Reversing is `compare(b, a)` and not `-compare(a, b)`: the negation breaks with Integer.MIN_VALUE,
+// which is its own negative, and a comparator that returns MIN_VALUE is odd but legal.
 final class ReverseComparator<T> implements Comparator<T> {
 
     private final Comparator<T> inner;

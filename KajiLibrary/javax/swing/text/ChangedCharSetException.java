@@ -3,14 +3,14 @@ package javax.swing.text;
 import java.io.IOException;
 
 /**
- * "El juego de caracteres no era el que dijiste, hay que empezar de nuevo."
+ * "The character set was not the one you said, we have to start again."
  *
- * <p>La lanza un lector de HTML cuando encuentra, ya empezado el documento, una etiqueta que
- * declara otra codificacion. Es una excepcion y no un error porque el que lee <em>puede</em>
- * manejarla: cierra el flujo, lo vuelve a abrir con la codificacion que dice y arranca otra vez.
+ * <p>An HTML reader throws it when it finds, with the document already started, a tag that
+ * declares another encoding. It is an exception and not an error because the reader <em>can</em>
+ * handle it: it closes the stream, opens it again with the encoding it says and starts over.
  *
- * <p>{@link #keyEqualsCharSet} distingue las dos formas de escribir esa declaracion en HTML, y
- * hace falta porque el texto que se guarda es distinto en cada caso.
+ * <p>{@link #keyEqualsCharSet} tells the two ways of writing that declaration in HTML apart, and
+ * it is needed because the text that is kept is different in each case.
  */
 public class ChangedCharSetException extends IOException {
 
@@ -22,12 +22,12 @@ public class ChangedCharSetException extends IOException {
         this.charSetKey = charSetKey;
     }
 
-    /** Lo que decia la declaracion. */
+    /** What the declaration said. */
     public String getCharSetSpec() {
         return charSetSpec;
     }
 
-    /** Si la declaracion venia como {@code charset=...} y no como el atributo entero. */
+    /** Whether the declaration came as {@code charset=...} and not as the whole attribute. */
     public boolean keyEqualsCharSet() {
         return charSetKey;
     }

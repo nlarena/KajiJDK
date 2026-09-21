@@ -1,108 +1,108 @@
 package javax.sound.sampled;
 
 /**
- * KajiLibrary's javax.sound.sampled.Mixer -- un dispositivo de audio con sus lineas.
+ * KajiLibrary's javax.sound.sampled.Mixer -- an audio device with its lines.
  *
- * <p>Es a la vez una {@link Line} y el contenedor de otras. La tarjeta de sonido, un dispositivo USB,
- * un mezclador puramente por software.
+ * <p>It is at the same time a {@link Line} and the container of others. The sound card, a USB
+ * device, a purely software mixer.
  *
- * <h2>Fuente y destino, otra vez desde el mezclador</h2>
+ * <h2>Source and target, again from the mixer</h2>
  *
- * <p>{@link #getSourceLineInfo} son las lineas que <b>entran</b> al mezclador --a las que el programa
- * escribe-- y {@link #getTargetLineInfo} las que <b>salen</b> --de las que el programa lee--. Es la
- * misma inversion de {@link SourceDataLine}, y por la misma razon.
+ * <p>{@link #getSourceLineInfo} are the lines that <b>go into</b> the mixer --the ones the program
+ * writes to-- and {@link #getTargetLineInfo} the ones that <b>come out</b> --the ones the program
+ * reads from--. It is the same inversion as {@link SourceDataLine}, and for the same reason.
  *
  * <h2>{@link #synchronize}</h2>
  *
- * <p>Ata varias lineas para que arranquen y paren <b>en el mismo instante</b>. Es la unica forma de
- * reproducir varias pistas en sincronia: llamarles {@code start()} de a una deja milisegundos de
- * diferencia, y eso se oye.
+ * <p>It ties several lines together so that they start and stop <b>at the same instant</b>. It is
+ * the only way to play several tracks in sync: calling {@code start()} on them one at a time leaves
+ * milliseconds of difference, and that can be heard.
  *
- * <p>El argumento {@code maintainSync} pide ademas que se mantengan alineadas durante la
- * reproduccion, y es mas caro. Hay que preguntar con {@link #isSynchronizationSupported} antes.
+ * <p>The {@code maintainSync} argument also asks for them to stay aligned during playback, and it
+ * is more expensive. {@link #isSynchronizationSupported} has to be asked first.
  *
- * <p>{@link #getMaxLines} devuelve cuantas lineas de ese tipo se pueden abrir a la vez, o
- * {@link AudioSystem#NOT_SPECIFIED} si no hay limite conocido.
+ * <p>{@link #getMaxLines} returns how many lines of that type can be open at once, or
+ * {@link AudioSystem#NOT_SPECIFIED} if there is no known limit.
  */
 public interface Mixer extends Line {
 
-    /** Como se llama este mezclador. */
+    /** What this mixer is called. */
     Mixer.Info getMixerInfo();
 
-    /** Las lineas que entran al mezclador. Ver la nota de la clase. */
+    /** The lines that go into the mixer. See the class note. */
     Line.Info[] getSourceLineInfo();
 
-    /** Las que salen. */
+    /** The ones that come out. */
     Line.Info[] getTargetLineInfo();
 
-    /** Las que entran y coinciden con ese descriptor. */
+    /** The ones going in that match that descriptor. */
     Line.Info[] getSourceLineInfo(Line.Info info);
 
-    /** Las que salen y coinciden. */
+    /** The ones coming out that match. */
     Line.Info[] getTargetLineInfo(Line.Info info);
 
-    /** Si soporta una linea asi. */
+    /** Whether it supports a line like that. */
     boolean isLineSupported(Line.Info info);
 
     /**
-     * Una linea de ese tipo, sin abrir.
+     * A line of that type, not opened.
      *
-     * @throws LineUnavailableException si no hay disponible
-     * @throws IllegalArgumentException si no soporta ese tipo
+     * @throws LineUnavailableException if there is none available
+     * @throws IllegalArgumentException if it does not support that type
      */
     Line getLine(Line.Info info) throws LineUnavailableException;
 
-    /** Cuantas de ese tipo se pueden abrir a la vez. Ver la nota de la clase. */
+    /** How many of that type can be open at once. See the class note. */
     int getMaxLines(Line.Info info);
 
-    /** Las lineas de entrada que estan abiertas. */
+    /** The input lines that are open. */
     Line[] getSourceLines();
 
-    /** Las de salida que estan abiertas. */
+    /** The output ones that are open. */
     Line[] getTargetLines();
 
     /**
-     * Ata esas lineas para que arranquen y paren juntas. Ver la nota de la clase.
+     * Ties those lines so that they start and stop together. See the class note.
      *
-     * @param maintainSync si ademas hay que mantenerlas alineadas mientras suenan
-     * @throws IllegalArgumentException si no se pueden sincronizar asi
+     * @param maintainSync whether they also have to be kept aligned while they sound
+     * @throws IllegalArgumentException if they cannot be synchronized like that
      */
     void synchronize(Line[] lines, boolean maintainSync);
 
     /**
-     * Las desata.
+     * Unties them.
      *
-     * @throws IllegalArgumentException si no estaban atadas
+     * @throws IllegalArgumentException if they were not tied
      */
     void unsynchronize(Line[] lines);
 
-    /** Si se pueden atar asi. */
+    /** Whether they can be tied like that. */
     boolean isSynchronizationSupported(Line[] lines, boolean maintainSync);
 
     /**
-     * Como se llama un mezclador.
+     * What a mixer is called.
      *
-     * <p>Cuatro cadenas para mostrar. El constructor es protegido porque estos datos los define quien
-     * implementa el mezclador.
+     * <p>Four strings for display. The constructor is protected because this data is defined by
+     * whoever implements the mixer.
      *
-     * <p>La igualdad es por <b>identidad</b>: dos mezcladores con el mismo nombre y version siguen
-     * siendo dos dispositivos distintos.
+     * <p>Equality is by <b>identity</b>: two mixers with the same name and version are still two
+     * different devices.
      */
     class Info {
 
-        /** El nombre. */
+        /** The name. */
         private final String name;
 
-        /** Quien lo hizo. */
+        /** Who made it. */
         private final String vendor;
 
-        /** Que es. */
+        /** What it is. */
         private final String description;
 
-        /** Que version. */
+        /** Which version. */
         private final String version;
 
-        /** Protegido: estos datos los define quien implementa el mezclador. */
+        /** Protected: this data is defined by whoever implements the mixer. */
         protected Info(String name, String vendor, String description, String version) {
             this.name = name;
             this.vendor = vendor;
@@ -110,39 +110,39 @@ public interface Mixer extends Line {
             this.version = version;
         }
 
-        /** Por identidad. Ver la nota de la clase. */
+        /** By identity. See the class note. */
         @Override
         public final boolean equals(Object obj) {
             return super.equals(obj);
         }
 
-        /** El de identidad. */
+        /** The identity one. */
         @Override
         public final int hashCode() {
             return super.hashCode();
         }
 
-        /** El nombre. */
+        /** The name. */
         public final String getName() {
             return this.name;
         }
 
-        /** Quien lo hizo. */
+        /** Who made it. */
         public final String getVendor() {
             return this.vendor;
         }
 
-        /** Que es. */
+        /** What it is. */
         public final String getDescription() {
             return this.description;
         }
 
-        /** Que version. */
+        /** Which version. */
         public final String getVersion() {
             return this.version;
         }
 
-        /** El nombre y la version. */
+        /** The name and the version. */
         @Override
         public final String toString() {
             return this.name + ", version " + this.version;

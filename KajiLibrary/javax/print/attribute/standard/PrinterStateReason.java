@@ -4,11 +4,11 @@ import javax.print.attribute.Attribute;
 import javax.print.attribute.EnumSyntax;
 
 /**
- * Una condicion suelta de la impresora: papel trabado, toner bajo, tapa abierta.
+ * A single condition of the printer: paper jam, low toner, open cover.
  *
- * <p>Sola no dice si es grave. Lo que se archiva en un conjunto de atributos es {@link
- * PrinterStateReasons}, que le pone una {@link Severity} a cada razon --la misma {@code MEDIA_LOW}
- * es un aviso o un error segun cuanto papel quede.
+ * <p>Alone it does not say whether it is serious. What is filed in an attribute set is {@link
+ * PrinterStateReasons}, which gives each reason a {@link Severity} --the same {@code MEDIA_LOW} is
+ * a warning or an error depending on how much paper is left.
  */
 public class PrinterStateReason extends EnumSyntax implements Attribute {
 

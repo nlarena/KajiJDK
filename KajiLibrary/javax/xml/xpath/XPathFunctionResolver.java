@@ -3,22 +3,22 @@ package javax.xml.xpath;
 import javax.xml.namespace.QName;
 
 /**
- * KajiLibrary's javax.xml.xpath.XPathFunctionResolver -- de donde salen las funciones propias.
+ * KajiLibrary's javax.xml.xpath.XPathFunctionResolver -- where the custom functions come from.
  *
- * <p>Se le pregunta por nombre <b>y cantidad de argumentos</b>, porque en XPath dos funciones con el
- * mismo nombre y distinta aridad son funciones distintas. No hay forma de enumerar lo que un
- * resolvedor ofrece: solo se le puede preguntar por una en concreto.
+ * <p>It is asked by name <b>and number of arguments</b>, because in XPath two functions with the
+ * same name and a different arity are different functions. There is no way to enumerate what a
+ * resolver offers: you can only ask it about one in particular.
  *
- * <p>El nombre viene calificado con espacio de nombres, y eso no es decoracion: una funcion propia
- * <b>tiene</b> que estar en un espacio de nombres propio. Sin prefijo, el nombre cae en el de las
- * funciones incorporadas de XPath, donde no se puede agregar nada.
+ * <p>The name comes qualified with a namespace, and that is not decoration: a custom function
+ * <b>has</b> to be in a namespace of its own. Without a prefix, the name falls into the one of
+ * XPath's built-in functions, where nothing can be added.
  */
 public interface XPathFunctionResolver {
 
     /**
-     * La funcion con ese nombre y esa aridad.
+     * The function with that name and that arity.
      *
-     * @return null si este resolvedor no la conoce
+     * @return null if this resolver does not know it
      */
     XPathFunction resolveFunction(QName functionName, int arity);
 }

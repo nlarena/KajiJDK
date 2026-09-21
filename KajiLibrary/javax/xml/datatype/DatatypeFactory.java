@@ -11,94 +11,95 @@ import java.util.Properties;
 import java.util.ServiceLoader;
 
 /**
- * KajiLibrary's javax.xml.datatype.DatatypeFactory -- de donde salen las {@link Duration} y las
- * {@link XMLGregorianCalendar}.
+ * KajiLibrary's javax.xml.datatype.DatatypeFactory -- where {@link Duration}s and
+ * {@link XMLGregorianCalendar}s come from.
  *
- * <p>Es una fabrica conectable como las demas de JAXP: la aplicacion pide un tipo abstracto y la
- * implementacion se descubre en tiempo de ejecucion. {@link #newInstance()} mira, en este orden, la
- * propiedad de sistema {@link #DATATYPEFACTORY_PROPERTY}, el archivo
- * {@code $java.home/conf/jaxp.properties}, los proveedores declarados via {@link ServiceLoader}, y
- * por ultimo la implementacion de la plataforma.
+ * <p>It is a pluggable factory like the other JAXP ones: the application asks for an abstract type
+ * and the implementation is discovered at run time. {@link #newInstance()} looks, in this order, at
+ * the system property {@link #DATATYPEFACTORY_PROPERTY}, the file {@code
+ * $java.home/conf/jaxp.properties}, the providers declared via {@link ServiceLoader}, and finally
+ * the platform implementation.
  *
- * <h2>Aca el ultimo escalon existe, y esa es la diferencia con el resto de la pila</h2>
+ * <h2>Here the last step exists</h2>
  *
- * <p>Las otras fabricas de esta biblioteca --{@link javax.xml.transform.TransformerFactory},
- * {@link javax.xml.stream.XMLInputFactory}-- fallan cuando llegan al final, porque lo que tendrian
- * que devolver es un procesador de XSLT o un parser de XML y esta biblioteca no trae ninguno.
+ * <p>{@link javax.xml.transform.TransformerFactory} fails when it reaches the end, because what it
+ * would have to return is an XSLT processor and this library comes with none. (The note also named
+ * {@code XMLInputFactory}; since then {@code javax.xml.stream} has its own StAX implementation, and
+ * {@code newDefaultFactory()} returns it.)
  *
- * <p>Esta no. Una {@code Duration} es aritmetica sobre seis numeros y una
- * {@code XMLGregorianCalendar} es un calendario con campos opcionales: <b>ninguna de las dos
- * necesita leer un documento</b>. Su forma lexica, {@code P1Y2M3DT4H5M6S} o
- * {@code 2024-05-25T12:00:00-03:00}, es una cadena con numeros y letras, no XML. Asi que
- * {@link #newDefaultInstance()} devuelve una implementacion de verdad, y {@link #newInstance()} la
- * encuentra: las duraciones y las fechas de esta biblioteca calculan.
+ * <p>This one does not. A {@code Duration} is arithmetic over six numbers and an {@code
+ * XMLGregorianCalendar} is a calendar with optional fields: <b>neither of the two needs to read a
+ * document</b>. Their lexical form, {@code P1Y2M3DT4H5M6S} or {@code 2024-05-25T12:00:00-03:00}, is
+ * a string of numbers and letters, not XML. So {@link #newDefaultInstance()} returns a real
+ * implementation, and {@link #newInstance()} finds it: this library's durations and dates compute.
  *
- * <h2>Lo abstracto y lo concreto</h2>
+ * <h2>The abstract and the concrete</h2>
  *
- * <p>La division es la misma del original y vale entenderla. Los siete metodos abstractos son los
- * <b>generales</b>: los que toman {@link BigInteger} y {@link BigDecimal}, que es lo unico que no
- * pierde precision. Los doce concretos son <b>atajos</b> escritos en terminos de aquellos: el que
- * toma {@code int} convierte y delega, {@code newDurationDayTime(long)} arma la duracion completa y
- * se queda con los campos de dia y tiempo, {@code newXMLGregorianCalendarDate} llama al general con
- * los campos de hora en {@link DatatypeConstants#FIELD_UNDEFINED}.
+ * <p>The division is the same as the original's and it is worth understanding. The seven abstract
+ * methods are the <b>general</b> ones: the ones that take {@link BigInteger} and {@link
+ * BigDecimal}, which is the only thing that loses no precision. The fourteen concrete ones are
+ * <b>shortcuts</b> written in terms of those: the one that takes {@code int} converts and
+ * delegates, {@code newDurationDayTime(long)} builds the whole duration and keeps the day and time
+ * fields, {@code newXMLGregorianCalendarDate} calls the general one with the time fields at {@link
+ * DatatypeConstants#FIELD_UNDEFINED}. (The note said twelve.)
  *
- * <p>Asi que una implementacion que escriba los siete recibe los doce funcionando, y --lo que
- * importa mas-- los doce se comportan igual en cualquier implementacion, porque estan escritos una
- * sola vez y aca.
+ * <p>So an implementation that writes the seven gets the fourteen working, and --what matters
+ * more-- the fourteen behave the same in any implementation, because they are written once and
+ * here.
  */
 public abstract class DatatypeFactory {
 
     /**
-     * La propiedad de sistema con que se enchufa otra implementacion:
+     * The system property another implementation is plugged in with:
      * {@code javax.xml.datatype.DatatypeFactory}.
      */
     public static final String DATATYPEFACTORY_PROPERTY = "javax.xml.datatype.DatatypeFactory";
 
     /**
-     * El nombre de la clase de la implementacion de la plataforma.
+     * The class name of the platform implementation.
      *
-     * <p>Es la de Xerces en el JDK; aca es la nuestra. La constante existe porque es parte de la API
-     * publica --hay codigo que la compara-- pero es una cadena informativa y no un punto de
-     * extension: cambiarla no cambia lo que devuelve {@link #newDefaultInstance()}.
+     * <p>It is Xerces's in the JDK; here it is ours. The constant exists because it is part of the
+     * public API --there is code that compares it-- but it is an informative string and not an
+     * extension point: changing it does not change what {@link #newDefaultInstance()} returns.
      */
     public static final String DATATYPEFACTORY_IMPLEMENTATION_CLASS =
             "javax.xml.datatype.KajiDatatypeFactory";
 
-    /** Para las subclases; no hay estado que inicializar. */
+    /** For the subclasses; there is no state to initialize. */
     protected DatatypeFactory() {
     }
 
-    // ---- descubrimiento ---------------------------------------------------------------------
+    // ---- discovery ------------------------------------------------------------------------
 
     /**
-     * La implementacion de la plataforma, sin mirar la configuracion.
+     * The platform implementation, without looking at the configuration.
      *
-     * <p>Se saltea los escalones de {@link #newInstance()} a proposito: existe para que una pieza
-     * que necesita la implementacion de referencia --y no la que la aplicacion haya enchufado-- la
-     * pueda pedir.
+     * <p>It skips the steps of {@link #newInstance()} on purpose: it exists so that a piece that
+     * needs the reference implementation --and not the one the application may have plugged in--
+     * can ask for it.
      *
-     * <p>A diferencia de las otras fabricas de esta biblioteca, aca hay una y este metodo la
-     * devuelve. Ver el encabezado de la clase.
+     * <p>Unlike the other factories of this library, here there is one and this method returns it.
+     * See the class header.
      *
-     * @return la implementacion de la plataforma
+     * @return the platform implementation
      */
     public static DatatypeFactory newDefaultInstance() {
         return new KajiDatatypeFactory();
     }
 
     /**
-     * La fabrica configurada, buscada en los cuatro escalones del encabezado.
+     * The configured factory, looked for in the four steps of the header.
      *
-     * @return la fabrica encontrada; nunca null
-     * @throws DatatypeConfigurationException si un escalon nombra una clase que no se puede cargar
+     * @return the factory found; never null
+     * @throws DatatypeConfigurationException if a step names a class that cannot be loaded
      */
     public static DatatypeFactory newInstance() throws DatatypeConfigurationException {
-        // 1. La propiedad de sistema.
+        // 1. The system property.
         String className = null;
         try {
             className = System.getProperty(DATATYPEFACTORY_PROPERTY);
         } catch (SecurityException ignored) {
-            // Sin permiso para leerla es lo mismo que no estar puesta.
+            // Without permission to read it, it is the same as not being set.
         }
         if (className != null && className.length() > 0) {
             return instantiate(className, null);
@@ -110,23 +111,23 @@ public abstract class DatatypeFactory {
             return instantiate(className, null);
         }
 
-        // 3. Los proveedores declarados en el classpath.
+        // 3. The providers declared on the classpath.
         DatatypeFactory fromService = fromServiceLoader();
         if (fromService != null) {
             return fromService;
         }
 
-        // 4. La implementacion de la plataforma, que aca si existe.
+        // 4. The platform implementation, which does exist here.
         return newDefaultInstance();
     }
 
     /**
-     * Una fabrica de una clase nombrada, sin descubrimiento ninguno.
+     * A factory of a named class, without any discovery.
      *
-     * @param factoryClassName el nombre completo de la clase; no puede ser null
-     * @param classLoader con que cargarla; null usa el que corresponda por omision
-     * @return la fabrica
-     * @throws DatatypeConfigurationException si la clase no esta o no se puede instanciar
+     * @param factoryClassName the fully qualified name of the class; cannot be null
+     * @param classLoader what to load it with; null uses the one that corresponds by default
+     * @return the factory
+     * @throws DatatypeConfigurationException if the class is not there or cannot be instantiated
      */
     public static DatatypeFactory newInstance(String factoryClassName, ClassLoader classLoader)
             throws DatatypeConfigurationException {
@@ -138,10 +139,10 @@ public abstract class DatatypeFactory {
     }
 
     /**
-     * Carga e instancia la clase nombrada, con los dos mensajes de error que el contrato distingue.
+     * Loads and instantiates the named class, with the two error messages the contract tells apart.
      *
-     * <p>Se separan porque se arreglan distinto: **not found** es un jar que falta, **could not be
-     * instantiated** es una clase que esta pero no sirve.
+     * <p>They are separate because they are fixed differently: **not found** is a missing jar,
+     * **could not be instantiated** is a class that is there but is no good.
      */
     private static DatatypeFactory instantiate(String className, ClassLoader loader)
             throws DatatypeConfigurationException {
@@ -171,10 +172,10 @@ public abstract class DatatypeFactory {
     }
 
     /**
-     * El nombre de clase que declare {@code $java.home/conf/jaxp.properties}, o null.
+     * The class name {@code $java.home/conf/jaxp.properties} declares, or null.
      *
-     * <p>Cualquier fallo de lectura devuelve null en vez de propagar: el archivo es opcional, y que
-     * no se pueda leer es la ausencia de configuracion y no un error.
+     * <p>Any read failure returns null instead of propagating: the file is optional, and not being
+     * able to read it is the absence of configuration and not an error.
      */
     private static String fromJaxpProperties() {
         try {
@@ -200,11 +201,11 @@ public abstract class DatatypeFactory {
     }
 
     /**
-     * La primera fabrica que declare un proveedor del classpath, o null.
+     * The first factory a classpath provider declares, or null.
      *
-     * <p>Hoy siempre da null, y no por un atajo de aca: el {@link ServiceLoader} de esta biblioteca
-     * no puede enumerar {@code META-INF/services} porque nuestro {@code ClassLoader} no tiene
-     * recursos. La maquinaria esta enchufada donde va.
+     * <p>Today it always gives null, and not because of a shortcut here: this library's {@link
+     * ServiceLoader} cannot enumerate {@code META-INF/services} because our {@code ClassLoader} has
+     * no resources. The machinery is plugged in where it goes.
      */
     private static DatatypeFactory fromServiceLoader() {
         try {
@@ -214,52 +215,52 @@ public abstract class DatatypeFactory {
                 return it.next();
             }
         } catch (Throwable ignored) {
-            // Un proveedor roto no puede impedir que se pruebe el escalon siguiente.
+            // A broken provider cannot stop the next step from being tried.
         }
         return null;
     }
 
-    // ---- duraciones -------------------------------------------------------------------------
+    // ---- durations --------------------------------------------------------------------------
 
     /**
-     * Una duracion a partir de su forma lexica {@code PnYnMnDTnHnMnS}.
+     * A duration from its lexical form {@code PnYnMnDTnHnMnS}.
      *
-     * <p>Solo aparecen los campos que se escriban: {@code P1Y} deja los otros cinco ausentes, que no
-     * es lo mismo que ponerlos en cero. Ver {@link Duration#isSet}.
+     * <p>Only the fields that are written appear: {@code P1Y} leaves the other five absent, which
+     * is not the same as setting them to zero. See {@link Duration#isSet}.
      *
-     * @param lexicalRepresentation la forma lexica; no puede ser null
-     * @return la duracion
-     * @throws IllegalArgumentException si no es una forma lexica valida
-     * @throws UnsupportedOperationException si la implementacion no la soporta
+     * @param lexicalRepresentation the lexical form; cannot be null
+     * @return the duration
+     * @throws IllegalArgumentException if it is not a valid lexical form
+     * @throws UnsupportedOperationException if the implementation does not support it
      */
     public abstract Duration newDuration(String lexicalRepresentation);
 
     /**
-     * Una duracion de tantos milisegundos, con los seis campos puestos.
+     * A duration of that many milliseconds, with the six fields set.
      *
-     * <p>Los anios y los meses salen de contar sobre el calendario desde la epoca, que es la unica
-     * forma de repartir milisegundos en campos de largo variable.
+     * <p>The years and months come from counting on the calendar from the epoch, which is the only
+     * way of distributing milliseconds into fields of variable length.
      *
-     * @param durationInMilliseconds los milisegundos, con signo
-     * @return la duracion
+     * @param durationInMilliseconds the milliseconds, signed
+     * @return the duration
      */
     public abstract Duration newDuration(long durationInMilliseconds);
 
     /**
-     * Una duracion campo por campo; null en un campo lo deja ausente.
+     * A duration field by field; null in a field leaves it absent.
      *
-     * <p>Es el constructor general y el que los demas terminan llamando. Los valores tienen que ser
-     * no negativos: el signo va aparte, en {@code isPositive}.
+     * <p>It is the general constructor and the one the others end up calling. The values have to be
+     * non-negative: the sign goes separately, in {@code isPositive}.
      *
-     * @param isPositive el signo
-     * @param years los anios, o null
-     * @param months los meses, o null
-     * @param days los dias, o null
-     * @param hours las horas, o null
-     * @param minutes los minutos, o null
-     * @param seconds los segundos, con fraccion, o null
-     * @return la duracion
-     * @throws IllegalArgumentException si todos los campos son null o si alguno es negativo
+     * @param isPositive the sign
+     * @param years the years, or null
+     * @param months the months, or null
+     * @param days the days, or null
+     * @param hours the hours, or null
+     * @param minutes the minutes, or null
+     * @param seconds the seconds, with fraction, or null
+     * @return the duration
+     * @throws IllegalArgumentException if all the fields are null or if some is negative
      */
     public abstract Duration newDuration(
             boolean isPositive,
@@ -271,18 +272,18 @@ public abstract class DatatypeFactory {
             BigDecimal seconds);
 
     /**
-     * Lo mismo con {@code int}, donde {@link DatatypeConstants#FIELD_UNDEFINED} deja el campo
-     * ausente.
+     * The same with {@code int}, where {@link DatatypeConstants#FIELD_UNDEFINED} leaves the field
+     * absent.
      *
-     * @param isPositive el signo
-     * @param years los anios
-     * @param months los meses
-     * @param days los dias
-     * @param hours las horas
-     * @param minutes los minutos
-     * @param seconds los segundos, sin fraccion
-     * @return la duracion
-     * @throws IllegalArgumentException si todos estan indefinidos o si alguno es negativo
+     * @param isPositive the sign
+     * @param years the years
+     * @param months the months
+     * @param days the days
+     * @param hours the hours
+     * @param minutes the minutes
+     * @param seconds the seconds, without fraction
+     * @return the duration
+     * @throws IllegalArgumentException if all are undefined or if some is negative
      */
     public Duration newDuration(
             final boolean isPositive,
@@ -304,18 +305,18 @@ public abstract class DatatypeFactory {
     }
 
     /**
-     * Una {@code xdt:dayTimeDuration} a partir de su forma lexica.
+     * An {@code xdt:dayTimeDuration} from its lexical form.
      *
-     * <p>Es una duracion sin anios ni meses, y esa restriccion es toda la gracia del tipo: sin meses
-     * la comparacion nunca da {@link DatatypeConstants#INDETERMINATE}, porque un dia siempre dura lo
-     * mismo. De ahi que el control sea sobre la <b>forma lexica</b> --que no tenga {@code Y} ni
-     * {@code M} antes de la {@code T}-- y no sobre los campos: una cadena con anios se rechaza aca y
-     * no despues.
+     * <p>It is a duration without years or months, and that restriction is the whole point of the
+     * type: without months the comparison never gives {@link DatatypeConstants#INDETERMINATE},
+     * because a day always lasts the same. Hence the check is on the <b>lexical form</b> --that it
+     * has no {@code Y} nor {@code M} before the {@code T}-- and not on the fields: a string with
+     * years is rejected here and not later.
      *
-     * @param lexicalRepresentation la forma lexica, {@code PnDTnHnMnS}; no puede ser null
-     * @return la duracion
-     * @throws IllegalArgumentException si tiene anios o meses, o si la forma esta mal
-     * @throws NullPointerException si es null
+     * @param lexicalRepresentation the lexical form, {@code PnDTnHnMnS}; cannot be null
+     * @return the duration
+     * @throws IllegalArgumentException if it has years or months, or if the form is wrong
+     * @throws NullPointerException if it is null
      */
     public Duration newDurationDayTime(final String lexicalRepresentation) {
         if (lexicalRepresentation == null) {
@@ -333,13 +334,13 @@ public abstract class DatatypeFactory {
     }
 
     /**
-     * Una {@code xdt:dayTimeDuration} de tantos milisegundos.
+     * An {@code xdt:dayTimeDuration} of that many milliseconds.
      *
-     * <p>Arma la duracion completa y se queda con los cuatro campos de dia y tiempo; los de anio y
-     * mes se descartan, no se suman a los dias.
+     * <p>It builds the whole duration and keeps the four day and time fields; the year and month
+     * ones are discarded, not added to the days.
      *
-     * @param durationInMilliseconds los milisegundos, con signo
-     * @return la duracion
+     * @param durationInMilliseconds the milliseconds, signed
+     * @return the duration
      */
     public Duration newDurationDayTime(final long durationInMilliseconds) {
         Duration complete = newDuration(durationInMilliseconds);
@@ -358,15 +359,15 @@ public abstract class DatatypeFactory {
     }
 
     /**
-     * Una {@code xdt:dayTimeDuration} campo por campo.
+     * An {@code xdt:dayTimeDuration} field by field.
      *
-     * @param isPositive el signo
-     * @param day los dias, o null
-     * @param hour las horas, o null
-     * @param minute los minutos, o null
-     * @param second los segundos, o null
-     * @return la duracion
-     * @throws IllegalArgumentException si todos son null o si alguno es negativo
+     * @param isPositive the sign
+     * @param day the days, or null
+     * @param hour the hours, or null
+     * @param minute the minutes, or null
+     * @param second the seconds, or null
+     * @return the duration
+     * @throws IllegalArgumentException if all are null or if some is negative
      */
     public Duration newDurationDayTime(
             final boolean isPositive,
@@ -380,15 +381,15 @@ public abstract class DatatypeFactory {
     }
 
     /**
-     * Lo mismo con {@code int}.
+     * The same with {@code int}.
      *
-     * @param isPositive el signo
-     * @param day los dias
-     * @param hour las horas
-     * @param minute los minutos
-     * @param second los segundos
-     * @return la duracion
-     * @throws IllegalArgumentException si alguno es negativo
+     * @param isPositive the sign
+     * @param day the days
+     * @param hour the hours
+     * @param minute the minutes
+     * @param second the seconds
+     * @return the duration
+     * @throws IllegalArgumentException if some is negative
      */
     public Duration newDurationDayTime(
             final boolean isPositive,
@@ -405,14 +406,15 @@ public abstract class DatatypeFactory {
     }
 
     /**
-     * Una {@code xdt:yearMonthDuration} a partir de su forma lexica.
+     * An {@code xdt:yearMonthDuration} from its lexical form.
      *
-     * <p>La otra mitad ordenable: solo anios y meses. Contada en meses tampoco tiene ambigüedad.
+     * <p>The other orderable half: only years and months. Counted in months it has no ambiguity
+     * either.
      *
-     * @param lexicalRepresentation la forma lexica, {@code PnYnM}; no puede ser null
-     * @return la duracion
-     * @throws IllegalArgumentException si tiene dias u hora, o si la forma esta mal
-     * @throws NullPointerException si es null
+     * @param lexicalRepresentation the lexical form, {@code PnYnM}; cannot be null
+     * @return the duration
+     * @throws IllegalArgumentException if it has days or time, or if the form is wrong
+     * @throws NullPointerException if it is null
      */
     public Duration newDurationYearMonth(final String lexicalRepresentation) {
         if (lexicalRepresentation == null) {
@@ -430,14 +432,14 @@ public abstract class DatatypeFactory {
     }
 
     /**
-     * Una {@code xdt:yearMonthDuration} de tantos milisegundos.
+     * An {@code xdt:yearMonthDuration} of that many milliseconds.
      *
-     * <p>Arma la duracion completa y se queda con los anios y los meses; los dias y el tiempo se
-     * descartan. Por eso {@code newDurationYearMonth} de un dia entero da {@code P0Y0M} y no una
-     * fraccion de mes.
+     * <p>It builds the whole duration and keeps the years and months; the days and time are
+     * discarded. That is why {@code newDurationYearMonth} of a whole day gives {@code P0Y0M} and
+     * not a fraction of a month.
      *
-     * @param durationInMilliseconds los milisegundos, con signo
-     * @return la duracion
+     * @param durationInMilliseconds the milliseconds, signed
+     * @return the duration
      */
     public Duration newDurationYearMonth(final long durationInMilliseconds) {
         Duration complete = newDuration(durationInMilliseconds);
@@ -450,13 +452,13 @@ public abstract class DatatypeFactory {
     }
 
     /**
-     * Una {@code xdt:yearMonthDuration} campo por campo.
+     * An {@code xdt:yearMonthDuration} field by field.
      *
-     * @param isPositive el signo
-     * @param year los anios, o null
-     * @param month los meses, o null
-     * @return la duracion
-     * @throws IllegalArgumentException si los dos son null o si alguno es negativo
+     * @param isPositive the sign
+     * @param year the years, or null
+     * @param month the months, or null
+     * @return the duration
+     * @throws IllegalArgumentException if both are null or if some is negative
      */
     public Duration newDurationYearMonth(
             final boolean isPositive, final BigInteger year, final BigInteger month) {
@@ -464,13 +466,13 @@ public abstract class DatatypeFactory {
     }
 
     /**
-     * Lo mismo con {@code int}.
+     * The same with {@code int}.
      *
-     * @param isPositive el signo
-     * @param year los anios
-     * @param month los meses
-     * @return la duracion
-     * @throws IllegalArgumentException si alguno es negativo
+     * @param isPositive the sign
+     * @param year the years
+     * @param month the months
+     * @return the duration
+     * @throws IllegalArgumentException if some is negative
      */
     public Duration newDurationYearMonth(
             final boolean isPositive, final int year, final int month) {
@@ -479,102 +481,103 @@ public abstract class DatatypeFactory {
     }
 
     /**
-     * La forma lexica de una {@code dayTimeDuration}: {@code [^YM]*[DT][^Y]*}.
+     * The lexical form of a {@code dayTimeDuration}: {@code [^YM]*[DT][^Y]*}.
      *
-     * <p>La expresion no es la que uno escribiria de memoria y vale leerla despacio. Pide tres
-     * cosas: que haya una {@code D} o una {@code T}, que antes no haya ni {@code Y} ni {@code M}, y
-     * que despues no haya {@code Y}. La asimetria --{@code M} prohibida antes pero permitida
-     * despues-- es justamente el punto: la {@code M} de <b>meses</b> va antes de la {@code T} y esta
-     * prohibida, y la de <b>minutos</b> va despues y es legal. Una expresion simetrica rechazaria
-     * {@code PT1M}, que es una duracion de dia-tiempo perfectamente valida.
+     * <p>The expression is not the one one would write from memory and it is worth reading slowly.
+     * It asks for three things: that there is a {@code D} or a {@code T}, that before it there is
+     * neither {@code Y} nor {@code M}, and that after it there is no {@code Y}. The asymmetry
+     * --{@code M} forbidden before but allowed after-- is precisely the point: the {@code M} of
+     * <b>months</b> goes before the {@code T} and is forbidden, and the one of <b>minutes</b> goes
+     * after and is legal. A symmetric expression would reject {@code PT1M}, which is a perfectly
+     * valid day-time duration.
      *
-     * <p>Es la del JDK, y esta comprobada contra el: se corrieron las ocho formas de la tabla de
-     * {@code XmlDatatypeDurTest} --{@code PT1M}, {@code P1DT1M}, {@code PT1H}, {@code P1D},
-     * {@code PT0.5S}, {@code -P1DT2H}, {@code P1M}, {@code P1Y}-- contra
-     * {@code java.exe} y las ocho respuestas coinciden.
+     * <p>It is the JDK's, and it is checked against it: the eight forms of the
+     * {@code XmlDatatypeDurTest} table --{@code PT1M}, {@code P1DT1M}, {@code PT1H}, {@code P1D},
+     * {@code PT0.5S}, {@code -P1DT2H}, {@code P1M}, {@code P1Y}-- were run against {@code java.exe}
+     * and the eight answers match.
      */
-    private static final java.util.regex.Pattern FORMA_DAYTIME =
+    private static final java.util.regex.Pattern DAYTIME_FORM =
             java.util.regex.Pattern.compile("[^YM]*[DT][^Y]*");
 
     /**
-     * La forma lexica de una {@code yearMonthDuration}: {@code [^DT]*}.
+     * The lexical form of a {@code yearMonthDuration}: {@code [^DT]*}.
      *
-     * <p>Aca alcanza con prohibir la {@code D} y la {@code T}, porque ninguna de las dos aparece
-     * nunca en una duracion de anios y meses, y sin {@code T} no hay minutos con que confundir la
-     * {@code M}.
+     * <p>Here forbidding {@code D} and {@code T} is enough, because neither of the two ever appears
+     * in a duration of years and months, and without {@code T} there are no minutes to confuse the
+     * {@code M} with.
      */
-    private static final java.util.regex.Pattern FORMA_YEARMONTH =
+    private static final java.util.regex.Pattern YEARMONTH_FORM =
             java.util.regex.Pattern.compile("[^DT]*");
 
-    /** Si la forma lexica es la de una {@code dayTimeDuration}. */
+    /** Whether the lexical form is that of a {@code dayTimeDuration}. */
     private static boolean isDayTimeForm(String lexical) {
-        return FORMA_DAYTIME.matcher(lexical).matches();
+        return DAYTIME_FORM.matcher(lexical).matches();
     }
 
-    /** Si la forma lexica es la de una {@code yearMonthDuration}. */
+    /** Whether the lexical form is that of a {@code yearMonthDuration}. */
     private static boolean isYearMonthForm(String lexical) {
-        return FORMA_YEARMONTH.matcher(lexical).matches();
+        return YEARMONTH_FORM.matcher(lexical).matches();
     }
 
-    /** {@link DatatypeConstants#FIELD_UNDEFINED} se vuelve null; el resto, un {@link BigInteger}. */
+    /** {@link DatatypeConstants#FIELD_UNDEFINED} becomes null; the rest, a {@link BigInteger}. */
     private static BigInteger toInt(int v) {
         return v != DatatypeConstants.FIELD_UNDEFINED ? BigInteger.valueOf((long) v) : null;
     }
 
-    // ---- fechas ------------------------------------------------------------------------------
+    // ---- dates -------------------------------------------------------------------------------
 
     /**
-     * Una fecha con todos los campos sin definir.
+     * A date with all the fields undefined.
      *
-     * <p>Para llenarla despues con los setters; ver {@link XMLGregorianCalendar#clear}.
+     * <p>To fill it later with the setters; see {@link XMLGregorianCalendar#clear}.
      *
-     * @return la fecha vacia
+     * @return the empty date
      */
     public abstract XMLGregorianCalendar newXMLGregorianCalendar();
 
     /**
-     * Una fecha a partir de su forma lexica.
+     * A date from its lexical form.
      *
-     * <p>Acepta las ocho de XML Schema --{@code dateTime}, {@code date}, {@code time},
-     * {@code gYearMonth}, {@code gMonthDay}, {@code gYear}, {@code gMonth} y {@code gDay}-- y decide
-     * cual es por la forma. Los campos que el tipo no tenga quedan en
-     * {@link DatatypeConstants#FIELD_UNDEFINED}.
+     * <p>It accepts the eight of XML Schema --{@code dateTime}, {@code date}, {@code time}, {@code
+     * gYearMonth}, {@code gMonthDay}, {@code gYear}, {@code gMonth} and {@code gDay}-- and decides
+     * which it is by the form. The fields the type does not have are left at {@link
+     * DatatypeConstants#FIELD_UNDEFINED}.
      *
-     * @param lexicalRepresentation la forma lexica; no puede ser null
-     * @return la fecha
-     * @throws IllegalArgumentException si no es ninguna de las ocho formas
-     * @throws NullPointerException si es null
+     * @param lexicalRepresentation the lexical form; cannot be null
+     * @return the date
+     * @throws IllegalArgumentException if it is none of the eight forms
+     * @throws NullPointerException if it is null
      */
     public abstract XMLGregorianCalendar newXMLGregorianCalendar(String lexicalRepresentation);
 
     /**
-     * Una fecha copiada de un {@link GregorianCalendar}.
+     * A date copied from a {@link GregorianCalendar}.
      *
-     * <p>Todos los campos quedan definidos, incluida la zona horaria: un {@code GregorianCalendar}
-     * siempre tiene una, asi que el resultado es siempre un {@code xs:dateTime} completo.
+     * <p>All the fields end up defined, the time zone included: a {@code GregorianCalendar} always
+     * has one, so the result is always a complete {@code xs:dateTime}.
      *
-     * @param cal el calendario; no puede ser null
-     * @return la fecha
-     * @throws NullPointerException si es null
+     * @param cal the calendar; cannot be null
+     * @return the date
+     * @throws NullPointerException if it is null
      */
     public abstract XMLGregorianCalendar newXMLGregorianCalendar(GregorianCalendar cal);
 
     /**
-     * Una fecha campo por campo, con el anio sin tope.
+     * A date field by field, with an unbounded year.
      *
-     * <p>Es el constructor general. {@link DatatypeConstants#FIELD_UNDEFINED} --o null para el
-     * anio y la fraccion-- deja el campo sin definir, que es como se arman los tipos parciales.
+     * <p>It is the general constructor. {@link DatatypeConstants#FIELD_UNDEFINED} --or null for the
+     * year and the fraction-- leaves the field undefined, which is how the partial types are built.
      *
-     * @param year el anio, o null
-     * @param month el mes de 1 a 12, o {@link DatatypeConstants#FIELD_UNDEFINED}
-     * @param day el dia de 1 a 31, o {@link DatatypeConstants#FIELD_UNDEFINED}
-     * @param hour la hora de 0 a 23, o {@link DatatypeConstants#FIELD_UNDEFINED}
-     * @param minute el minuto de 0 a 59, o {@link DatatypeConstants#FIELD_UNDEFINED}
-     * @param second el segundo de 0 a 60, o {@link DatatypeConstants#FIELD_UNDEFINED}
-     * @param fractionalSecond la fraccion, de 0 inclusive a 1 exclusive, o null
-     * @param timezone los minutos de desplazamiento, o {@link DatatypeConstants#FIELD_UNDEFINED}
-     * @return la fecha
-     * @throws IllegalArgumentException si algun campo esta fuera de rango
+     * @param year the year, or null
+     * @param month the month from 1 to 12, or {@link DatatypeConstants#FIELD_UNDEFINED}
+     * @param day the day from 1 to 31, or {@link DatatypeConstants#FIELD_UNDEFINED}
+     * @param hour the hour from 0 to 23, or {@link DatatypeConstants#FIELD_UNDEFINED}
+     * @param minute the minute from 0 to 59, or {@link DatatypeConstants#FIELD_UNDEFINED}
+     * @param second the second from 0 to 60, or {@link DatatypeConstants#FIELD_UNDEFINED}
+     * @param fractionalSecond the fraction, from 0 inclusive to 1 exclusive, or null
+     * @param timezone the offset minutes, or {@link DatatypeConstants#FIELD_UNDEFINED}
+     * @return the date
+     * @throws IllegalArgumentException if some field is out of range
      */
     public abstract XMLGregorianCalendar newXMLGregorianCalendar(
             BigInteger year,
@@ -587,18 +590,19 @@ public abstract class DatatypeFactory {
             int timezone);
 
     /**
-     * Lo mismo con el anio como {@code int} y la fraccion como milisegundos.
+     * The same with the year as an {@code int} and the fraction as milliseconds.
      *
-     * @param year el anio, o {@link DatatypeConstants#FIELD_UNDEFINED}
-     * @param month el mes
-     * @param day el dia
-     * @param hour la hora
-     * @param minute el minuto
-     * @param second el segundo
-     * @param millisecond los milisegundos de 0 a 1000, o {@link DatatypeConstants#FIELD_UNDEFINED}
-     * @param timezone los minutos de desplazamiento
-     * @return la fecha
-     * @throws IllegalArgumentException si algun campo esta fuera de rango
+     * @param year the year, or {@link DatatypeConstants#FIELD_UNDEFINED}
+     * @param month the month
+     * @param day the day
+     * @param hour the hour
+     * @param minute the minute
+     * @param second the second
+     * @param millisecond the milliseconds from 0 to 1000, or {@link
+     *     DatatypeConstants#FIELD_UNDEFINED}
+     * @param timezone the offset minutes
+     * @return the date
+     * @throws IllegalArgumentException if some field is out of range
      */
     public XMLGregorianCalendar newXMLGregorianCalendar(
             final int year,
@@ -619,8 +623,8 @@ public abstract class DatatypeFactory {
                                 + " int second, int millisecond, int timezone)"
                                 + " with invalid millisecond: " + millisecond);
             }
-            // Escala tres: los milisegundos son la fraccion con tres decimales, y guardarlos asi
-            // hace que `toXMLFormat` escriba `.500` y no `.5`, que es lo que hace el original.
+            // Scale three: milliseconds are the fraction with three decimals, and keeping them that
+            // way makes `toXMLFormat` write `.500` and not `.5`, which is what the original does.
             fractionValue = BigDecimal.valueOf((long) millisecond, 3);
         }
         return newXMLGregorianCalendar(
@@ -628,14 +632,14 @@ public abstract class DatatypeFactory {
     }
 
     /**
-     * Un {@code xs:date}: anio, mes, dia y zona, sin hora.
+     * An {@code xs:date}: year, month, day and zone, without time.
      *
-     * @param year el anio
-     * @param month el mes
-     * @param day el dia
-     * @param timezone los minutos de desplazamiento, o {@link DatatypeConstants#FIELD_UNDEFINED}
-     * @return la fecha
-     * @throws IllegalArgumentException si algun campo esta fuera de rango
+     * @param year the year
+     * @param month the month
+     * @param day the day
+     * @param timezone the offset minutes, or {@link DatatypeConstants#FIELD_UNDEFINED}
+     * @return the date
+     * @throws IllegalArgumentException if some field is out of range
      */
     public XMLGregorianCalendar newXMLGregorianCalendarDate(
             final int year, final int month, final int day, final int timezone) {
@@ -651,14 +655,14 @@ public abstract class DatatypeFactory {
     }
 
     /**
-     * Un {@code xs:time}: hora, minuto, segundo y zona, sin fecha.
+     * An {@code xs:time}: hour, minute, second and zone, without date.
      *
-     * @param hours la hora
-     * @param minutes el minuto
-     * @param seconds el segundo
-     * @param timezone los minutos de desplazamiento, o {@link DatatypeConstants#FIELD_UNDEFINED}
-     * @return la hora
-     * @throws IllegalArgumentException si algun campo esta fuera de rango
+     * @param hours the hour
+     * @param minutes the minute
+     * @param seconds the second
+     * @param timezone the offset minutes, or {@link DatatypeConstants#FIELD_UNDEFINED}
+     * @return the time
+     * @throws IllegalArgumentException if some field is out of range
      */
     public XMLGregorianCalendar newXMLGregorianCalendarTime(
             final int hours, final int minutes, final int seconds, final int timezone) {
@@ -674,15 +678,15 @@ public abstract class DatatypeFactory {
     }
 
     /**
-     * Un {@code xs:time} con la fraccion de segundo completa.
+     * An {@code xs:time} with the complete fraction of a second.
      *
-     * @param hours la hora
-     * @param minutes el minuto
-     * @param seconds el segundo
-     * @param fractionalSecond la fraccion, de 0 inclusive a 1 exclusive, o null
-     * @param timezone los minutos de desplazamiento
-     * @return la hora
-     * @throws IllegalArgumentException si algun campo esta fuera de rango
+     * @param hours the hour
+     * @param minutes the minute
+     * @param seconds the second
+     * @param fractionalSecond the fraction, from 0 inclusive to 1 exclusive, or null
+     * @param timezone the offset minutes
+     * @return the time
+     * @throws IllegalArgumentException if some field is out of range
      */
     public XMLGregorianCalendar newXMLGregorianCalendarTime(
             final int hours,
@@ -702,15 +706,15 @@ public abstract class DatatypeFactory {
     }
 
     /**
-     * Un {@code xs:time} con la fraccion dada en milisegundos.
+     * An {@code xs:time} with the fraction given in milliseconds.
      *
-     * @param hours la hora
-     * @param minutes el minuto
-     * @param seconds el segundo
-     * @param milliseconds los milisegundos
-     * @param timezone los minutos de desplazamiento
-     * @return la hora
-     * @throws IllegalArgumentException si algun campo esta fuera de rango
+     * @param hours the hour
+     * @param minutes the minute
+     * @param seconds the second
+     * @param milliseconds the milliseconds
+     * @param timezone the offset minutes
+     * @return the time
+     * @throws IllegalArgumentException if some field is out of range
      */
     public XMLGregorianCalendar newXMLGregorianCalendarTime(
             final int hours,

@@ -4,32 +4,32 @@ import javax.xml.transform.Templates;
 import org.xml.sax.ContentHandler;
 
 /**
- * KajiLibrary's javax.xml.transform.sax.TemplatesHandler -- compila una hoja de estilo desde eventos.
+ * KajiLibrary's javax.xml.transform.sax.TemplatesHandler -- compiles a stylesheet from events.
  *
- * <p>Un {@link ContentHandler} al que se le manda una hoja de estilo por eventos SAX y que, cuando
- * termina, entrega la hoja ya compilada en {@link #getTemplates}.
+ * <p>A {@link ContentHandler} that is sent a stylesheet as SAX events and that, when it finishes,
+ * hands over the compiled stylesheet in {@link #getTemplates}.
  *
- * <p>Sirve para lo mismo que un {@code TransformerFactory.newTemplates(Source)}, con una diferencia
- * que a veces decide: la hoja de estilo puede venir de algo que <b>no es un archivo</b> -- la salida
- * de otra transformacion, un filtro, un flujo que se esta generando-- sin tener que escribirla en
- * ningun lado primero.
+ * <p>It serves the same purpose as a {@code TransformerFactory.newTemplates(Source)}, with a
+ * difference that sometimes decides: the stylesheet can come from something that <b>is not a
+ * file</b> -- the output of another transformation, a filter, a stream being generated-- without
+ * having to write it anywhere first.
  *
- * <p>{@link #getTemplates} antes de que termine el documento no tiene sentido y devuelve null: hasta
- * el {@code endDocument} no hay hoja compilada.
+ * <p>{@link #getTemplates} before the document finishes makes no sense and returns null: until
+ * {@code endDocument} there is no compiled stylesheet.
  *
- * <p>El identificador de sistema hay que ponerlo <b>antes</b> de empezar a mandar eventos, porque es
- * contra el que se resuelven los {@code xsl:import} y {@code xsl:include} que aparezcan.
+ * <p>The system identifier has to be set <b>before</b> starting to send events, because it is what
+ * the {@code xsl:import}s and {@code xsl:include}s that appear are resolved against.
  */
 public interface TemplatesHandler extends ContentHandler {
 
     /**
-     * La hoja compilada.
+     * The compiled stylesheet.
      *
-     * @return null si el documento todavia no termino
+     * @return null if the document has not finished yet
      */
     Templates getTemplates();
 
-    /** De donde sale la hoja. Ponerlo antes del primer evento; ver la nota de la clase. */
+    /** Where the stylesheet comes from. Set it before the first event; see the class note. */
     void setSystemId(String systemID);
 
     /** Ver {@link #setSystemId}. */

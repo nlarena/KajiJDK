@@ -1,19 +1,19 @@
 package org.w3c.dom.ranges;
 
 /**
- * KajiLibrary's org.w3c.dom.ranges.DocumentRange -- la fabrica de rangos.
+ * KajiLibrary's org.w3c.dom.ranges.DocumentRange -- the factory of ranges.
  *
- * <p>La implementa el {@code Document}, por lo mismo que {@code DocumentTraversal}: un rango queda
- * atado a su documento --se ajusta cuando el documento cambia-- y para eso el documento tiene que
- * saber que existe.
+ * <p>The {@code Document} implements it, for the same reason as {@code DocumentTraversal}: a range
+ * is tied to its document --it adjusts when the document changes-- and for that the document has to
+ * know it exists.
  *
- * <p>Un {@code Document} que no soporte rangos no implementa esta interfaz; se pregunta con
- * {@code hasFeature("Range", "2.0")}.
+ * <p>A {@code Document} that does not support ranges does not implement this interface; one asks
+ * with {@code hasFeature("Range", "2.0")}.
  */
 public interface DocumentRange {
 
     /**
-     * Un rango nuevo, con los dos extremos puestos al principio del documento -- o sea, colapsado.
+     * A new range, with both ends set at the start of the document -- that is, collapsed.
      */
     Range createRange();
 }

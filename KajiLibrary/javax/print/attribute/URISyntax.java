@@ -3,8 +3,8 @@ package javax.print.attribute;
 import java.io.Serializable;
 import java.net.URI;
 
-// La clase de sintaxis de los atributos cuyo valor es una URI. Delega todo -- igualdad, hash y
-// texto -- en la URI, que ya es un valor inmutable bien portado.
+// The syntax class of the attributes whose value is a URI. It delegates everything -- equality,
+// hash and text -- to the URI, which is already a well-behaved immutable value.
 public abstract class URISyntax implements Serializable, Cloneable {
 
     private static final long serialVersionUID = -7842661210486401678L;

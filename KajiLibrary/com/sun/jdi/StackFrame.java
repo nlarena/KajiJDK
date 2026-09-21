@@ -4,89 +4,90 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Un marco de la pila de un hilo suspendido.
+ * A frame of a suspended thread's stack.
  *
- * <p>Vale <strong>solo mientras el hilo siga suspendido en el mismo punto</strong>. Reanudarlo
- * invalida todos sus marcos, y usarlos despues tira {@link InvalidStackFrameException}.
+ * <p>It holds <strong>only while the thread stays suspended at the same point</strong>.
+ * Resuming it invalidates all its frames, and using them afterwards throws
+ * {@link InvalidStackFrameException}.
  *
- * <p>Es el error clasico de quien escribe un depurador: guardarse un marco para mirarlo mas tarde.
- * Hay que volver a pedirlo despues de cada suspension.
+ * <p>It is the classic mistake of whoever writes a debugger: keeping a frame in order to look
+ * at it later. It has to be asked for again after each suspension.
  *
  * @since 1.3
  */
 public interface StackFrame extends Mirror,Locatable {
 
     /**
-     * El location.
+     * The location.
      *
-     * @return el resultado
+     * @return the result
      */
     Location location();
 
     /**
-     * El thread.
+     * The thread.
      *
-     * @return el resultado
+     * @return the result
      */
     ThreadReference thread();
 
     /**
-     * El this object.
+     * The this object.
      *
-     * @return el resultado
+     * @return the result
      */
     ObjectReference thisObject();
 
     /**
-     * El visible variables.
+     * The visible variables.
      *
-     * @return el resultado
-     * @throws AbsentInformationException si corresponde
+     * @return the result
+     * @throws AbsentInformationException if it applies
      */
     List<LocalVariable> visibleVariables()
             throws AbsentInformationException;
 
     /**
-     * El visible variable by name.
+     * The visible variable by name.
      *
-     * @param name el String
-     * @return el resultado
-     * @throws AbsentInformationException si corresponde
+     * @param name the String
+     * @return the result
+     * @throws AbsentInformationException if it applies
      */
     LocalVariable visibleVariableByName(String name)
             throws AbsentInformationException;
 
     /**
-     * El value.
+     * The value.
      *
-     * @param variable el LocalVariable
-     * @return el resultado
+     * @param variable the LocalVariable
+     * @return the result
      */
     Value getValue(LocalVariable variable);
 
     /**
-     * El values.
+     * The values.
      *
-     * @param values el List<? extends LocalVariable>
-     * @return el resultado
+     * @param values the List<? extends LocalVariable>
+     * @return the result
      */
     Map<LocalVariable, Value> getValues(List<? extends LocalVariable> values);
 
     /**
-     * Fija el value.
+     * It fixes the value.
      *
-     * @param variable el LocalVariable
-     * @param value el Value
-     * @throws InvalidTypeException si corresponde
-     * @throws ClassNotLoadedException si corresponde
+     * @param variable the LocalVariable
+     * @param value the Value
+     * @throws InvalidTypeException if it applies
+     * @throws ClassNotLoadedException if it applies
      */
     void setValue(LocalVariable variable, Value value)
             throws InvalidTypeException, ClassNotLoadedException;
 
     /**
-     * El argument values.
+     * The argument values.
      *
-     * @return el resultado
+     * @return the result
      */
     List<Value> getArgumentValues();
 }

@@ -4,30 +4,30 @@ import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 
 /**
- * Un nombre de host en la extension SNI: el unico tipo que hoy existe.
+ * A host name in the SNI extension: the only type that exists today.
  *
- * <h2>Por que el nombre se guarda en ASCII y no como se escribio</h2>
+ * <h2>Why the name is kept in ASCII and not as it was written</h2>
  *
- * <p>Porque el protocolo transporta bytes y un nombre de dominio puede tener acentos. La conversion
- * a la forma ASCII (el {@code xn--...} de IDN) tiene que pasar <strong>una sola vez y en un solo
- * lugar</strong>: dos puntas que la hagan distinto no se reconocen, y el servidor manda el
- * certificado equivocado o corta.
+ * <p>Because the protocol carries bytes and a domain name may have accents. The conversion to the
+ * ASCII form (IDN's {@code xn--...}) has to happen <strong>only once and in a single
+ * place</strong>: two ends that do it differently do not recognise each other, and the server sends
+ * the wrong certificate or cuts off.
  *
- * <p>Esta clase no implementa esa conversion — vive en {@code java.net.IDN} — pero si fija la otra
- * mitad de la regla: el nombre se compara <strong>sin distinguir mayusculas</strong>, porque los
- * nombres de dominio no las distinguen y {@code Ejemplo.com} tiene que matchear a {@code ejemplo.com}.
+ * <p>This class does not implement that conversion — it lives in {@code java.net.IDN} — but it does
+ * fix the other half of the rule: the name is compared <strong>case-insensitively</strong>, because
+ * domain names do not distinguish case and {@code Example.com} has to match {@code example.com}.
  */
 public final class SNIHostName extends SNIServerName {
 
     private final String hostname;
 
     /**
-     * Desde un nombre de host.
+     * From a host name.
      *
-     * @throws NullPointerException si es {@code null}
-     * @throws IllegalArgumentException si esta vacio o termina en punto — un nombre absoluto con el
-     *     punto final es valido en DNS pero no en SNI, y aceptarlo produciria una comparacion que
-     *     nunca matchea
+     * @throws NullPointerException if it is {@code null}
+     * @throws IllegalArgumentException if it is empty or ends in a dot — an absolute name with the
+     *     final dot is valid in DNS but not in SNI, and accepting it would produce a comparison
+     *     that never matches
      */
     public SNIHostName(String hostname) {
         super(StandardConstants.SNI_HOST_NAME, bytes(hostname));
@@ -35,50 +35,50 @@ public final class SNIHostName extends SNIServerName {
     }
 
     /**
-     * Desde los bytes tal como vinieron del protocolo.
+     * From the bytes as they came from the protocol.
      *
-     * @throws IllegalArgumentException si no son ASCII de siete bits, o si no forman un nombre
-     *     valido
+     * @throws IllegalArgumentException if they are not seven-bit ASCII, or if they do not form a
+     *     valid name
      */
     public SNIHostName(byte[] encoded) {
         super(StandardConstants.SNI_HOST_NAME, encoded);
-        this.hostname = revisar(new String(encoded, StandardCharsets.US_ASCII));
+        this.hostname = validate(new String(encoded, StandardCharsets.US_ASCII));
     }
 
     private static byte[] bytes(String hostname) {
         if (hostname == null) {
             throw new NullPointerException("hostname");
         }
-        return revisar(hostname).getBytes(StandardCharsets.US_ASCII);
+        return validate(hostname).getBytes(StandardCharsets.US_ASCII);
     }
 
-    private static String revisar(String hostname) {
+    private static String validate(String hostname) {
         if (hostname.isEmpty()) {
-            throw new IllegalArgumentException("el nombre de host esta vacio");
+            throw new IllegalArgumentException("the host name is empty");
         }
         if (hostname.endsWith(".")) {
-            throw new IllegalArgumentException("el nombre de host termina en punto: " + hostname);
+            throw new IllegalArgumentException("the host name ends in a dot: " + hostname);
         }
         for (int i = 0; i < hostname.length(); i++) {
             if (hostname.charAt(i) > 127) {
                 throw new IllegalArgumentException(
-                        "el nombre de host no es ASCII; convertirlo antes con java.net.IDN");
+                        "the host name is not ASCII; convert it first with java.net.IDN");
             }
         }
         return hostname;
     }
 
-    /** El nombre en su forma ASCII. */
+    /** The name in its ASCII form. */
     public String getAsciiName() {
         return this.hostname;
     }
 
     /**
-     * Sin distinguir mayusculas — ver la nota de la clase.
+     * Case-insensitive — see the class note.
      *
-     * <p>El {@link Locale#ENGLISH} en el {@code toLowerCase} no es decoracion: con el turco,
-     * {@code "I"} baja a una i sin punto y {@code "INDEX"} dejaria de matchear a {@code "index"}.
-     * Un nombre de dominio no depende del idioma de quien corre el programa.
+     * <p>The {@link Locale#ENGLISH} in the {@code toLowerCase} is not decoration: with Turkish,
+     * {@code "I"} lowers to a dotless i and {@code "INDEX"} would stop matching {@code "index"}. A
+     * domain name does not depend on the language of whoever runs the program.
      */
     public boolean equals(Object other) {
         if (this == other) {
@@ -100,13 +100,13 @@ public final class SNIHostName extends SNIServerName {
     }
 
     /**
-     * Un {@link SNIMatcher} que acepta los nombres de host que casen con esa expresion regular.
+     * An {@link SNIMatcher} that accepts the host names matching that regular expression.
      *
-     * <p>Regular y no una lista literal porque un servidor sirve familias de nombres —todo un
-     * dominio y sus subdominios— y enumerarlas seria imposible.
+     * <p>Regular and not a literal list because a server serves families of names --a whole domain
+     * and its subdomains-- and enumerating them would be impossible.
      *
-     * @throws NullPointerException si {@code regex} es {@code null}
-     * @throws java.util.regex.PatternSyntaxException si la expresion no compila
+     * @throws NullPointerException if {@code regex} is {@code null}
+     * @throws java.util.regex.PatternSyntaxException if the expression does not compile
      */
     public static SNIMatcher createSNIMatcher(String regex) {
         if (regex == null) {

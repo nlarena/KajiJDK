@@ -1,10 +1,11 @@
 package java.sql;
 
 /**
- * KajiLibrary's java.sql.SQLIntegrityConstraintViolationException -- Se violo una restriccion: una clave duplicada, una foranea sin destino, un `not null` nulo.
+ * KajiLibrary's java.sql.SQLIntegrityConstraintViolationException -- a constraint was violated: a
+ * duplicate key, a foreign key with no target, a null in a `not null` column.
 
- * <p>Es la excepcion que mas conviene distinguir de las demas: casi siempre no es un error del
- * programa sino **un dato que el usuario mando dos veces**, y merece un mensaje y no una traza.
+ * <p>It is the exception most worth telling apart from the rest: often it is not a program error
+ * but **a value the user sent twice**, and it deserves a message and not a stack trace.
  */
 public class SQLIntegrityConstraintViolationException extends SQLNonTransientException {
 

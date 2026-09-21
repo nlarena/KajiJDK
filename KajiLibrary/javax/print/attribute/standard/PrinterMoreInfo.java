@@ -6,8 +6,8 @@ import javax.print.attribute.PrintServiceAttribute;
 import javax.print.attribute.URISyntax;
 
 /**
- * Una pagina web con mas informacion sobre <em>esta</em> impresora en particular: su estado, su
- * cola, sus consumibles.
+ * A web page with more information about <em>this</em> particular printer: its state, its queue,
+ * its consumables.
  */
 public final class PrinterMoreInfo extends URISyntax implements PrintServiceAttribute {
 

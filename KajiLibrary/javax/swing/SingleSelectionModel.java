@@ -3,28 +3,28 @@ package javax.swing;
 import javax.swing.event.ChangeListener;
 
 /**
- * Un indice elegido, o ninguno.
+ * A chosen index, or none.
  *
- * <h2>Cuando alcanza con esto</h2>
+ * <h2>When this is enough</h2>
  *
- * <p>Una solapa abierta, una opcion de menu resaltada, un panel visible. Todo lo que tiene
- * exactamente un elegido usa este modelo y no {@link ListSelectionModel}, que sabe de tramos y de
- * ancla y guia: esas tres cosas no significan nada cuando solo puede haber uno.
+ * <p>An open tab, a highlighted menu option, a visible pane. Everything that has exactly one
+ * chosen thing uses this model and not {@link ListSelectionModel}, which knows about ranges and
+ * about anchor and lead: those three things mean nothing when there can only be one.
  *
- * <p>{@link #isSelected} y {@code getSelectedIndex() != -1} dicen lo mismo. Los dos estan porque el
- * segundo obliga a saber que el -1 es el valor especial.
+ * <p>{@link #isSelected} and {@code getSelectedIndex() != -1} say the same. Both are there
+ * because the second forces one to know that -1 is the special value.
  */
 public interface SingleSelectionModel {
 
-    /** El indice elegido, o -1. */
+    /** The chosen index, or -1. */
     int getSelectedIndex();
 
-    /** Elige ese indice; con -1 no queda ninguno. */
+    /** It chooses that index; with -1 none is left. */
     void setSelectedIndex(int index);
 
     void clearSelection();
 
-    /** Si hay alguno elegido. */
+    /** Whether there is one chosen. */
     boolean isSelected();
 
     void addChangeListener(ChangeListener listener);

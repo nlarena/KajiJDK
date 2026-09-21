@@ -6,14 +6,14 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Cada cuanto se emite un evento periodico.
+ * How often a periodic event is emitted.
  *
- * <p>Un evento periodico no lo dispara nada que pase en el programa: lo emite JFR solo, cada tanto,
- * y sirve para tomar el estado de algo —cuanta memoria hay, cuantos hilos— en vez de para registrar
- * un hecho.
+ * <p>A periodic event is not triggered by anything that happens in the program: JFR emits it by
+ * itself, every so often, and it serves for taking the state of something --how much memory there
+ * is, how many threads-- instead of for recording a fact.
  *
- * <p>{@code "everyChunk"}, el valor por omision, lo emite una vez por bloque del archivo, que es lo
- * que garantiza que el dato este en cualquier trozo de la grabacion que alguien mire.
+ * <p>{@code "everyChunk"}, the default value, emits it once per block of the file, which is what
+ * guarantees that the datum is in whatever piece of the recording somebody looks at.
  *
  * @since 9
  */
@@ -22,13 +22,13 @@ import java.lang.annotation.Target;
 @MetadataDefinition
 public @interface Period {
 
-    /** El nombre del ajuste que esta anotacion configura. */
+    /** The name of the setting this annotation configures. */
     String NAME = "period";
 
     /**
-     * El valor de la anotacion.
+     * The value of the annotation.
      *
-     * @return el valor
+     * @return the value
      */
     String value() default "everyChunk";
 }

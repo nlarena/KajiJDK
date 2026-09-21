@@ -3,63 +3,66 @@ package org.w3c.dom.events;
 import org.w3c.dom.views.AbstractView;
 
 /**
- * KajiLibrary's org.w3c.dom.events.MouseEvent -- un evento de puntero.
+ * KajiLibrary's org.w3c.dom.events.MouseEvent -- a pointer event.
  *
- * <h2>Dos sistemas de coordenadas, y ninguno es el que uno quiere</h2>
+ * <h2>Two coordinate systems, and neither is the one one wants</h2>
  *
  * <ul>
- *   <li><b>screen</b> -- relativo a la pantalla fisica. Sirve para posicionar algo fuera del
- *       documento; adentro no dice nada.
- *   <li><b>client</b> -- relativo al area visible del cliente. <b>No incluye el desplazamiento</b>:
- *       el mismo punto del documento da coordenadas distintas si la pagina esta scrolleada.
+ *   <li><b>screen</b> -- relative to the physical screen. It serves for positioning something
+ *       outside the document; inside it says nothing.
+ *   <li><b>client</b> -- relative to the visible area of the client. <b>It does not include the
+ *       scrolling</b>: the same point of the document gives different coordinates if the page is
+ *       scrolled.
  * </ul>
  *
- * <p>La coordenada relativa al documento --la que casi siempre se busca-- <b>no esta</b> en este
- * nivel del DOM; hay que sumarle el desplazamiento a mano.
+ * <p>The coordinate relative to the document --the one almost always sought-- <b>is not</b> at this
+ * level of the DOM; the scrolling has to be added by hand.
  *
- * <h2>relatedTarget cambia de sentido segun el evento</h2>
+ * <h2>relatedTarget changes meaning according to the event</h2>
  *
- * <p>Para {@code mouseover} es de <b>donde venia</b> el puntero; para {@code mouseout}, a <b>donde
- * va</b>. Para los demas es null. Leerlo sin mirar el tipo del evento da el nodo equivocado la mitad
- * de las veces.
+ * <p>For {@code mouseover} it is where the pointer <b>came from</b>; for {@code mouseout}, where it
+ * <b>is going</b>. For the rest it is null. Reading it without looking at the type of the event
+ * gives the wrong node half of the time.
  */
 public interface MouseEvent extends UIEvent {
 
-    /** X relativa a la pantalla. */
+    /** X relative to the screen. */
     int getScreenX();
 
-    /** Y relativa a la pantalla. */
+    /** Y relative to the screen. */
     int getScreenY();
 
-    /** X relativa al area visible. No incluye el desplazamiento; ver la nota de la clase. */
+    /**
+     * X relative to the visible area. It does not include the scrolling; see the note of the class.
+     */
     int getClientX();
 
-    /** Y relativa al area visible. */
+    /** Y relative to the visible area. */
     int getClientY();
 
-    /** Si Control estaba apretada. */
+    /** Whether Control was held down. */
     boolean getCtrlKey();
 
-    /** Si Shift estaba apretada. */
+    /** Whether Shift was held down. */
     boolean getShiftKey();
 
-    /** Si Alt estaba apretada. */
+    /** Whether Alt was held down. */
     boolean getAltKey();
 
-    /** Si Meta estaba apretada. */
+    /** Whether Meta was held down. */
     boolean getMetaKey();
 
     /**
-     * Que boton: 0 el principal, 1 el del medio, 2 el secundario.
+     * Which button: 0 the primary, 1 the middle one, 2 the secondary.
      *
-     * <p>Son posiciones logicas, no fisicas: en un raton para zurdos el 0 es el de la derecha.
+     * <p>They are logical positions, not physical ones: on a left-handed mouse 0 is the right one.
      */
     short getButton();
 
-    /** El otro nodo involucrado. Su sentido depende del evento; ver la nota de la clase. */
+    /** The other node involved. Its meaning depends on the event; see the note of the class. */
     EventTarget getRelatedTarget();
 
-    /** Inicializa un evento de puntero recien creado. */
+    /** It initialises a newly created pointer event. */
     void initMouseEvent(String typeArg, boolean canBubbleArg, boolean cancelableArg,
         AbstractView viewArg, int detailArg, int screenXArg, int screenYArg, int clientXArg,
         int clientYArg, boolean ctrlKeyArg, boolean altKeyArg, boolean shiftKeyArg,

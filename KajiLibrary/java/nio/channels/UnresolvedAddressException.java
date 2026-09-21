@@ -1,17 +1,18 @@
 package java.nio.channels;
 
 /**
- * KajiLibrary's java.nio.channels.UnresolvedAddressException — Se uso una direccion de socket que nunca se resolvio.
+ * KajiLibrary's java.nio.channels.UnresolvedAddressException — a socket address that was never
+ * resolved was used.
  *
- * <p>Una direccion sin resolver es un nombre sin numero: se puede construir y pasar, pero no se
- * puede usar para conectar. Fallar aca, y no adentro de la pila de red, hace que el error senale
- * el lugar donde se puede arreglar.
+ * <p>An unresolved address is a name with no number: it can be built and passed, but it cannot be
+ * used to connect. Failing here, and not inside the network stack, makes the error point at the
+ * place where it can be fixed.
  */
 public class UnresolvedAddressException extends IllegalArgumentException {
 
     private static final long serialVersionUID = 1000000022L;
 
-    /** Construye una. Sin mensaje: el nombre de la clase **es** el mensaje. */
+    /** Builds one. With no message: the name of the class **is** the message. */
     public UnresolvedAddressException() {
         super();
     }

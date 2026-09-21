@@ -12,92 +12,92 @@ import com.sun.tools.attach.VirtualMachine;
 import com.sun.tools.attach.VirtualMachineDescriptor;
 
 /**
- * Quien sabe adjuntarse a una VM, para un mecanismo de transporte concreto.
+ * Who knows how to attach to a VM, for a concrete transport mechanism.
  *
- * <h2>Por que es un punto de extension y no una implementacion</h2>
+ * <h2>Why it is an extension point and not an implementation</h2>
  *
- * <p>Adjuntarse a otro proceso es lo mas dependiente del sistema operativo que hay: en Linux se hace
- * por un socket de dominio Unix en {@code /tmp}, en Windows por memoria compartida y un evento con
- * nombre, y en una VM embebida puede no existir del todo. Ninguna de las tres formas se parece a las
- * otras, asi que {@link VirtualMachine} no las implementa: las busca.
+ * <p>Attaching to another process is the most operating-system-dependent thing there is: on
+ * Linux it is done over a Unix domain socket in {@code /tmp}, on Windows over shared memory
+ * and a named event, and on an embedded VM it may not exist at all. None of the three forms is
+ * like the others, so {@link VirtualMachine} does not implement them: it looks for them.
  *
- * <p>{@link #providers} los encuentra por {@link ServiceLoader}. La consecuencia practica es que
- * <strong>un JDK sin proveedores instalados no falla, devuelve una lista vacia</strong> — y
- * {@link VirtualMachine#attach} termina tirando {@link AttachNotSupportedException}, que es el
- * comportamiento correcto y no un error de esta biblioteca.
+ * <p>{@link #providers} finds them by {@link ServiceLoader}. The practical consequence is that
+ * <strong>a JDK with no providers installed does not fail, it returns an empty list</strong> --
+ * and {@link VirtualMachine#attach} ends up throwing {@link AttachNotSupportedException}, which
+ * is the correct behaviour and not an error of this library.
  *
- * <p>Es la situacion de esta VM hoy: no trae proveedor propio. Lo que hay aca es el mecanismo
- * completo y funcionando; lo que falta es alguien que se registre en el.
+ * <p>It is this VM's situation today: it brings no provider of its own. What there is here is
+ * the complete mechanism, working; what is missing is somebody to register in it.
  */
 public abstract class AttachProvider {
 
-    // La lista se resuelve una vez. El JDK hace lo mismo: los proveedores no aparecen ni
-    // desaparecen mientras la VM corre, y volver a recorrer el ServiceLoader en cada `attach`
-    // costaria una busqueda en el classpath por llamada.
-    private static List<AttachProvider> proveedores;
+    // The list is resolved once. The JDK does the same: the providers neither appear nor
+        // disappear while the VM runs, and walking the ServiceLoader again on each `attach` would
+        // cost a search in the classpath per call.
+    private static List<AttachProvider> cachedProviders;
 
-    /** Para las implementaciones. */
+    /** For the implementations. */
     protected AttachProvider() {
     }
 
-    /** El nombre del proveedor. */
+    /** The provider's name. */
     public abstract String name();
 
-    /** El mecanismo de transporte que usa. */
+    /** The transport mechanism it uses. */
     public abstract String type();
 
     /**
-     * Se adjunta a la VM identificada por {@code id}.
+     * It attaches to the VM identified by {@code id}.
      *
-     * <p>Que es un identificador lo decide cada proveedor. En los que trae el JDK es el pid del
-     * proceso, pero nada obliga a eso — de ahi que sea un {@code String} y no un numero.
+     * <p>What an identifier is is decided by each provider. In those the JDK brings it is the
+     * process's pid, but nothing forces that -- hence it is a {@code String} and not a number.
      */
     public abstract VirtualMachine attachVirtualMachine(String id)
             throws AttachNotSupportedException, IOException;
 
     /**
-     * Se adjunta a la VM que describe {@code vmd}.
+     * It attaches to the VM {@code vmd} describes.
      *
-     * @throws IllegalArgumentException si el descriptor fue emitido por <em>otro</em> proveedor. No
-     *     es rigidez: un identificador solo significa algo dentro del proveedor que lo genero, y
-     *     aceptarlo aca adjuntaria a otro proceso o a ninguno
+     * @throws IllegalArgumentException if the descriptor was emitted by <em>another</em> provider.
+     *     It is not rigidity: an identifier only means something inside the provider that generated
+     *     it, and accepting it here would attach to another process or to none
      */
     public VirtualMachine attachVirtualMachine(VirtualMachineDescriptor vmd)
             throws AttachNotSupportedException, IOException {
         if (vmd.provider() != this) {
-            throw new IllegalArgumentException("el descriptor no es de este proveedor");
+            throw new IllegalArgumentException("the descriptor is not from this provider");
         }
         return attachVirtualMachine(vmd.id());
     }
 
     /**
-     * Las VMs que este proveedor ve ahora.
+     * The VMs this provider sees now.
      *
-     * <p>Es una foto, no una vista viva: entre listarlas y adjuntarse, una VM puede haber
-     * terminado. Por eso {@link #attachVirtualMachine} puede fallar sobre un descriptor que esta
-     * lista acaba de devolver, y no es un error de nadie.
+     * <p>It is a snapshot, not a live view: between listing them and attaching, a VM may have
+     * finished. That is why {@link #attachVirtualMachine} may fail over a descriptor this list has
+     * just returned, and it is nobody's error.
      */
     public abstract List<VirtualMachineDescriptor> listVirtualMachines();
 
     /**
-     * Los proveedores instalados; vacia si no hay ninguno.
+     * The installed providers; empty if there are none.
      *
-     * <p>Vacia y no una excepcion: no tener proveedores es una configuracion legitima —una VM
-     * embebida, un entorno que deshabilito el mecanismo— y no una falla. Quien necesite uno se
-     * entera al intentar adjuntarse.
+     * <p>Empty and not an exception: not having providers is a legitimate configuration -- an
+     * embedded VM, an environment that disabled the mechanism -- and not a failure. Whoever needs
+     * one finds out on trying to attach.
      */
     public static List<AttachProvider> providers() {
         synchronized (AttachProvider.class) {
-            if (proveedores == null) {
-                List<AttachProvider> lista = new ArrayList<AttachProvider>();
+            if (cachedProviders == null) {
+                List<AttachProvider> list = new ArrayList<AttachProvider>();
                 Iterator<AttachProvider> it =
                         ServiceLoader.load(AttachProvider.class).iterator();
                 while (it.hasNext()) {
-                    lista.add(it.next());
+                    list.add(it.next());
                 }
-                proveedores = Collections.unmodifiableList(lista);
+                cachedProviders = Collections.unmodifiableList(list);
             }
-            return proveedores;
+            return cachedProviders;
         }
     }
 }

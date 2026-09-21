@@ -7,30 +7,30 @@ import java.security.NoSuchAlgorithmException;
 import java.security.UnrecoverableKeyException;
 
 /**
- * Lo que un proveedor implementa para que exista una {@link KeyManagerFactory}.
+ * What a provider implements for a {@link KeyManagerFactory} to exist.
  *
- * <p>Es el patron SPI del JDK: la clase publica hace la busqueda de proveedor, valida los
- * argumentos y fija el orden de las llamadas; esta hace el trabajo. Separarlos permite cambiar el
- * proveedor sin tocar el codigo que lo usa, que es la razon de que toda
- * {@code java.security} este partida en dos asi.
+ * <p>It is the JDK's SPI pattern: the public class does the provider lookup, validates the
+ * arguments and fixes the order of the calls; this one does the work. Separating them allows
+ * changing the provider without touching the code that uses it, which is why the whole of {@code
+ * java.security} is split in two like this.
  */
 public abstract class KeyManagerFactorySpi {
 
     public KeyManagerFactorySpi() {
     }
 
-    /** Inicializa desde un almacen de claves y su contrasena. */
+    /** Initializes from a key store and its password. */
     protected abstract void engineInit(KeyStore ks, char[] password)
             throws KeyStoreException, NoSuchAlgorithmException, UnrecoverableKeyException;
 
-    /** Inicializa desde parametros que no son un almacen; ver {@link ManagerFactoryParameters}. */
+    /** Initializes from parameters that are not a store; see {@link ManagerFactoryParameters}. */
     protected abstract void engineInit(ManagerFactoryParameters spec)
             throws InvalidAlgorithmParameterException;
 
     /**
-     * Los manejadores, uno por tipo de clave.
+     * The managers, one per key type.
      *
-     * @throws IllegalStateException si no se inicializo antes
+     * @throws IllegalStateException if it was not initialized first
      */
     protected abstract KeyManager[] engineGetKeyManagers();
 }

@@ -9,36 +9,37 @@ import java.security.Provider;
 import java.security.PublicKey;
 import java.security.SignatureException;
 
-// Un certificado: una clave publica atada a una identidad por la firma de un tercero.
+// A certificate: a public key tied to an identity by the signature of a third party.
 //
 // ===============================================================================================
-// POR QUE ESTA CLASE PUEDE SER HONESTA SIN SABER CRIPTOGRAFIA
+// WHY THIS CLASS CAN BE HONEST WITHOUT KNOWING CRYPTOGRAPHY
 // ===============================================================================================
 //
-// Todo lo que decide si un certificado es de fiar —`verify`— es **abstracto**. Esta clase no lo
-// implementa ni podria: no sabe de que formato es el certificado ni con que algoritmo esta
-// firmado. Lo que si define es la parte estructural: el tipo, la igualdad por codificacion, y el
-// contrato de que `verify` lanza si la firma no valida.
+// Everything that decides whether a certificate is to be trusted —`verify`— is **abstract**. This
+// class does not implement it and could not: it does not know what format the certificate is in or
+// which algorithm it is signed with. What it does define is the structural part: the type, the
+// equality by encoding, and the contract that `verify` throws if the signature does not validate.
 //
-// Ese contrato merece leerse dos veces porque es al reves del de `Signature.verify`: aca **no hay
-// valor de retorno**. Una verificacion que sale bien vuelve sin decir nada, y una que sale mal
-// lanza. El que escribe `try { c.verify(k); } catch (Exception e) {}` no esta manejando el error:
-// esta aceptando cualquier certificado.
+// That contract deserves reading twice because it is the other way round from
+// `Signature.verify`'s: here there is **no return value**. A verification that goes well returns
+// without saying anything, and one that goes badly throws. Whoever writes
+// `try { c.verify(k); } catch (Exception e) {}` is not handling the error: they are accepting any
+// certificate.
 //
 // ===============================================================================================
 // A KajiLibrary subset
 // ===============================================================================================
 //
-// **No hay ninguna subclase.** `X509Certificate` y las fabricas (`CertificateFactory`) no estan:
-// parsear un X.509 es leer ASN.1/DER y verificar su firma es RSA o ECDSA, y nada de eso esta
-// implementado en esta biblioteca. Esta clase existe porque es el tipo que nombran `CodeSource`,
-// `CodeSigner`, `CertPath` y `UnresolvedPermission`, y porque su parte estructural se puede
-// escribir entera sin mentir.
+// **There is no subclass.** `X509Certificate` and the factories (`CertificateFactory`) are not
+// there: parsing an X.509 is reading ASN.1/DER and verifying its signature is RSA or ECDSA, and
+// none of that is implemented in this library. This class exists because it is the type
+// `CodeSource`, `CodeSigner`, `CertPath` and `UnresolvedPermission` name, and because its
+// structural part can be written whole without lying.
 //
-// La igualdad se define **por la codificacion**, no por identidad ni por campos: dos objetos
-// distintos que codifican los mismos bytes son el mismo certificado. Es lo unico correcto —el
-// certificado es sus bytes— y es lo que hace que comparar cadenas de certificados funcione entre
-// implementaciones distintas.
+// The equality is defined **by the encoding**, not by identity or by fields: two different objects
+// that encode the same bytes are the same certificate. It is the only right thing —the certificate
+// is its bytes— and it is what makes comparing chains of certificates work between different
+// implementations.
 public abstract class Certificate implements Serializable {
 
     private final String type;
@@ -47,7 +48,7 @@ public abstract class Certificate implements Serializable {
         this.type = type;
     }
 
-    // El tipo: "X.509".
+    // The type: "X.509".
     public final String getType() {
         return this.type;
     }
@@ -75,8 +76,8 @@ public abstract class Certificate implements Serializable {
             }
             return true;
         } catch (CertificateEncodingException e) {
-            // Un certificado que no se puede codificar no se puede comparar. Decir "distinto" es
-            // mas seguro que decir "igual": lo peor que pasa es que se rechace algo valido.
+            // A certificate that cannot be encoded cannot be compared. Saying "different" is safer
+            // than saying "equal": the worst that happens is that something valid is rejected.
             return false;
         }
     }
@@ -97,10 +98,11 @@ public abstract class Certificate implements Serializable {
         }
     }
 
-    // La forma codificada del certificado.
+    // The encoded form of the certificate.
     public abstract byte[] getEncoded() throws CertificateEncodingException;
 
-    // Verifica la firma del certificado con `key`. **No devuelve nada: si no lanza, valido.**
+    // It verifies the signature of the certificate with `key`. **It returns nothing: if it does not
+    // throw, it is valid.**
     public abstract void verify(PublicKey key)
         throws CertificateException, NoSuchAlgorithmException, InvalidKeyException,
                NoSuchProviderException, SignatureException;
@@ -109,12 +111,12 @@ public abstract class Certificate implements Serializable {
         throws CertificateException, NoSuchAlgorithmException, InvalidKeyException,
                NoSuchProviderException, SignatureException;
 
-    // La variante que recibe un `Provider` ya resuelto.
+    // The variant that receives an already resolved `Provider`.
     //
-    // Tira `UnsupportedOperationException` y **asi es en el JDK**: se agrego en Java 8 con una
-    // implementacion base que no hace nada, para no romper a las subclases que ya existian. Una
-    // que quiera soportarla la sobreescribe. Copiar el comportamiento es lo correcto — inventar
-    // una verificacion aca seria justamente el agujero.
+    // It throws `UnsupportedOperationException` and **it is like that in the JDK**: it was added in
+    // Java 8 with a base implementation that does nothing, so as not to break the subclasses that
+    // already existed. One that wants to support it overrides it. Copying the behaviour is the
+    // right thing — inventing a verification here would be exactly the hole.
     public void verify(PublicKey key, Provider sigProvider)
             throws CertificateException, NoSuchAlgorithmException, InvalidKeyException,
                    SignatureException {
@@ -124,15 +126,15 @@ public abstract class Certificate implements Serializable {
     @Override
     public abstract String toString();
 
-    // La clave publica que este certificado certifica.
+    // The public key this certificate certifies.
     public abstract PublicKey getPublicKey();
 
-    // Serializa el certificado por su tipo y su codificacion, no por sus campos.
+    // It serialises the certificate by its type and its encoding, not by its fields.
     //
-    // A KajiLibrary subset: en el JDK devuelve un `CertificateRep`, una clase interna que al
-    // deserializar reconstruye el certificado con una `CertificateFactory`. Aca no hay fabricas,
-    // asi que no hay forma de volver: se lanza en vez de escribir algo que despues no se pueda
-    // leer.
+    // A KajiLibrary subset: in the JDK it returns a `CertificateRep`, an internal class that on
+    // deserialising rebuilds the certificate with a `CertificateFactory`. Here there are no
+    // factories, so there is no way back: it throws instead of writing something that cannot be
+    // read afterwards.
     protected Object writeReplace() throws ObjectStreamException {
         throw new java.io.NotSerializableException(
             "java.security.cert.Certificate: no CertificateFactory available to restore it");

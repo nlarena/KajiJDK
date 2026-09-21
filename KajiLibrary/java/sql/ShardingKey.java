@@ -1,10 +1,11 @@
 package java.sql;
 
 /**
- * KajiLibrary's java.sql.ShardingKey -- la clave que dice **en que particion** vive un dato.
+ * KajiLibrary's java.sql.ShardingKey -- the key that says **which shard** a value lives in.
  *
- * <p>No tiene miembros, y eso es lo que es: un valor opaco que el driver arma y entiende. Quien la
- * usa la pide con {@link ShardingKeyBuilder} y la pasa; no la inspecciona.
+ * <p>It has no members, and that is what it is: an opaque value the driver builds and understands.
+ * Whoever uses it asks for it with {@link ShardingKeyBuilder} and passes it on; they do not inspect
+ * it.
  */
 public interface ShardingKey {
 }

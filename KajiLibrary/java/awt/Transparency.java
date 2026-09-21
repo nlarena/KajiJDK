@@ -1,25 +1,25 @@
 package java.awt;
 
 /**
- * Cuanto deja pasar por detras lo que se pinta: opaco, recortado o mezclado.
+ * How much of what is behind shows through what is painted: opaque, masked or blended.
  *
- * <p>Es una de las pocas interfaces de {@code java.awt} que no menciona ningun tipo del sistema de
- * ventanas: son tres enteros y un metodo. Esta primero porque {@code Color},
- * {@code MultipleGradientPaint} y {@code TexturePaint} la implementan y sin ella no se declaran.
+ * <p>It is one of the few {@code java.awt} interfaces that mention no type of the window system:
+ * three integers and one method. {@code Color}, {@code MultipleGradientPaint} and {@code
+ * TexturePaint} implement it and cannot be declared without it.
  */
 public interface Transparency {
 
-    /** Todo lo que se pinta tapa el fondo por completo. */
+    /** Everything painted covers the background completely. */
     int OPAQUE = 1;
 
     /**
-     * Cada pixel tapa del todo o no tapa nada: no hay puntos medios. Es lo que hace un GIF con su
-     * color transparente, y por eso vale la pena distinguirlo de TRANSLUCENT: quien compone puede
-     * saltearse la mezcla y limitarse a copiar o no copiar.
+     * Each pixel covers completely or not at all: there are no halfway points. It is what a GIF
+     * does with its transparent colour, and that is why it is worth telling apart from TRANSLUCENT:
+     * whoever composites can skip blending and just copy or not copy.
      */
     int BITMASK = 2;
 
-    /** Cada pixel tiene su propio alfa y hay que mezclarlo con el fondo. */
+    /** Each pixel has its own alpha and has to be blended with the background. */
     int TRANSLUCENT = 3;
 
     int getTransparency();

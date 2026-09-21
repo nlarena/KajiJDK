@@ -4,27 +4,27 @@ import java.nio.channels.MapModes;
 import java.nio.channels.FileChannel;
 
 /**
- * Los modos de mapeo que no estan en {@link FileChannel.MapMode}.
+ * The mapping modes that are not in {@link FileChannel.MapMode}.
  *
- * <p>Los dos son para memoria **no volatil**: un mapeo hecho con ellos se puede forzar a persistir
- * con `MappedByteBuffer.force()`, que es lo que los distingue de `READ_ONLY` y `READ_WRITE`. La
- * diferencia vive del lado de `map()`, no aca: un `MapMode` es una etiqueta, y estas dos son las
- * etiquetas.
+ * <p>Both are for **non-volatile** memory: a mapping made with them can be forced to persist with
+ * `MappedByteBuffer.force()`, which is what tells them apart from `READ_ONLY` and `READ_WRITE`. The
+ * difference lives on the `map()` side, not here: a `MapMode` is a label, and these two are the
+ * labels.
  *
- * <p>Que `map()` las acepte depende del `FileChannel` concreto. El nuestro ya mapea, pero **estas
- * dos las rechaza** con `UnsupportedOperationException`: pedir memoria no volatil y recibir un
- * mapeo comun seria justamente la clase de respuesta que miente. El JDK 25 sobre Windows contesta
- * lo mismo, por la misma razon.
+ * <p>Whether `map()` accepts them depends on the concrete `FileChannel`. Ours maps already, but
+ * **these two it rejects** with `UnsupportedOperationException`: asking for non-volatile memory and
+ * receiving an ordinary mapping would be exactly the kind of answer that lies. JDK 25 on Windows
+ * answers the same, for the same reason.
  *
  * @since 14
  */
 public class ExtendedMapMode {
 
-    /** Mapeo de solo lectura sobre memoria no volatil. */
+    /** A read-only mapping over non-volatile memory. */
     public static final FileChannel.MapMode READ_ONLY_SYNC =
             MapModes.of("READ_ONLY_SYNC");
 
-    /** Mapeo de lectura y escritura sobre memoria no volatil. */
+    /** A read-and-write mapping over non-volatile memory. */
     public static final FileChannel.MapMode READ_WRITE_SYNC =
             MapModes.of("READ_WRITE_SYNC");
 

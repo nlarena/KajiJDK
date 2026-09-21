@@ -4,37 +4,36 @@ import javax.print.DocPrintJob;
 import javax.print.attribute.PrintJobAttributeSet;
 
 /**
- * KajiLibrary's javax.print.event.PrintJobAttributeEvent -- cambiaron atributos de un trabajo.
+ * KajiLibrary's javax.print.event.PrintJobAttributeEvent -- a job's attributes changed.
  *
- * <p>{@link #getAttributes} trae <b>solo los que cambiaron</b>, no el estado completo del trabajo. Es
- * la parte que se malinterpreta: un conjunto de un solo atributo no significa que el trabajo tenga uno
- * solo.
+ * <p>{@link #getAttributes} brings <b>only the ones that changed</b>, not the job's complete state.
+ * It is the part that gets misread: a set of a single attribute does not mean the job has only one.
  *
- * <p>El conjunto es de solo lectura; ver {@code AttributeSetUtilities.unmodifiableView}.
+ * <p>The set is read-only; see {@code AttributeSetUtilities.unmodifiableView}.
  */
 public class PrintJobAttributeEvent extends PrintEvent {
 
     private static final long serialVersionUID = -6534469883874742101L;
 
-    /** Los que cambiaron. */
+    /** The ones that changed. */
     private final PrintJobAttributeSet attributes;
 
     /**
-     * @param source el trabajo
-     * @param attributes los atributos que cambiaron
-     * @throws IllegalArgumentException si el trabajo es null
+     * @param source the job
+     * @param attributes the attributes that changed
+     * @throws IllegalArgumentException if the job is null
      */
     public PrintJobAttributeEvent(DocPrintJob source, PrintJobAttributeSet attributes) {
         super(source);
         this.attributes = attributes;
     }
 
-    /** El trabajo. */
+    /** The job. */
     public DocPrintJob getPrintJob() {
         return (DocPrintJob) getSource();
     }
 
-    /** Los que cambiaron. Ver la nota de la clase. */
+    /** The ones that changed. See the class note. */
     public PrintJobAttributeSet getAttributes() {
         return this.attributes;
     }

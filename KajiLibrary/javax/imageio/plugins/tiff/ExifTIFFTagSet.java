@@ -4,522 +4,522 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * KajiLibrary's javax.imageio.plugins.tiff.ExifTIFFTagSet -- las etiquetas de Exif.
+ * KajiLibrary's javax.imageio.plugins.tiff.ExifTIFFTagSet -- the Exif tags.
  *
- * <p>Lo que la camara escribe: exposicion, apertura, sensibilidad, distancia focal, flash, modelo de
- * lente, fecha de disparo. Es el conjunto mas grande despues del basico.
+ * <p>What the camera writes: exposure, aperture, sensitivity, focal length, flash, lens model, shot
+ * date. It is the largest set after the baseline one.
  *
- * <p>Cuelga de un directorio al que apunta {@code ExifParentTIFFTagSet.TAG_EXIF_IFD_POINTER}, y a su
- * vez apunta al de interoperabilidad.
+ * <p>It hangs from a directory pointed to by {@code ExifParentTIFFTagSet.TAG_EXIF_IFD_POINTER}, and
+ * in turn points to the interoperability one.
  *
- * <p>Es un singleton: se pide con {@link #getInstance}. Las etiquetas y sus valores nombrados se
- * transcribieron del JDK 25 y no a mano; un numero cambiado produce un TIFF que otros programas leen
- * distinto.
+ * <p>It is a singleton: it is obtained with {@link #getInstance}. The tags and their named values
+ * were transcribed from the JDK 25 and not by hand; a changed number produces a TIFF that other
+ * programs read differently.
  */
 public final class ExifTIFFTagSet extends TIFFTagSet {
 
-    /** El unico, armado la primera vez que se pide. */
+    /** The only one, built the first time it is asked for. */
     private static ExifTIFFTagSet theInstance = null;
 
-    /** El numero de la etiqueta gps info ifd pointer. */
+    /** The number of the gps info ifd pointer tag. */
     public static final int TAG_GPS_INFO_IFD_POINTER = 34853;
 
-    /** El numero de la etiqueta interoperability ifd pointer. */
+    /** The number of the interoperability ifd pointer tag. */
     public static final int TAG_INTEROPERABILITY_IFD_POINTER = 40965;
 
-    /** El numero de la etiqueta exif version. */
+    /** The number of the exif version tag. */
     public static final int TAG_EXIF_VERSION = 36864;
 
-    /** El numero de la etiqueta flashpix version. */
+    /** The number of the flashpix version tag. */
     public static final int TAG_FLASHPIX_VERSION = 40960;
 
-    /** El numero de la etiqueta color space. */
+    /** The number of the color space tag. */
     public static final int TAG_COLOR_SPACE = 40961;
 
-    /** Un valor de color. */
+    /** A value of {@link #TAG_COLOR_SPACE}. */
     public static final int COLOR_SPACE_SRGB = 1;
 
-    /** Un valor de color. */
+    /** A value of {@link #TAG_COLOR_SPACE}. */
     public static final int COLOR_SPACE_UNCALIBRATED = 65535;
 
-    /** El numero de la etiqueta components configuration. */
+    /** The number of the components configuration tag. */
     public static final int TAG_COMPONENTS_CONFIGURATION = 37121;
 
-    /** Un valor de components. */
+    /** A value of {@link #TAG_COMPONENTS_CONFIGURATION}. */
     public static final int COMPONENTS_CONFIGURATION_DOES_NOT_EXIST = 0;
 
-    /** Un valor de components. */
+    /** A value of {@link #TAG_COMPONENTS_CONFIGURATION}. */
     public static final int COMPONENTS_CONFIGURATION_Y = 1;
 
-    /** Un valor de components. */
+    /** A value of {@link #TAG_COMPONENTS_CONFIGURATION}. */
     public static final int COMPONENTS_CONFIGURATION_CB = 2;
 
-    /** Un valor de components. */
+    /** A value of {@link #TAG_COMPONENTS_CONFIGURATION}. */
     public static final int COMPONENTS_CONFIGURATION_CR = 3;
 
-    /** Un valor de components. */
+    /** A value of {@link #TAG_COMPONENTS_CONFIGURATION}. */
     public static final int COMPONENTS_CONFIGURATION_R = 4;
 
-    /** Un valor de components. */
+    /** A value of {@link #TAG_COMPONENTS_CONFIGURATION}. */
     public static final int COMPONENTS_CONFIGURATION_G = 5;
 
-    /** Un valor de components. */
+    /** A value of {@link #TAG_COMPONENTS_CONFIGURATION}. */
     public static final int COMPONENTS_CONFIGURATION_B = 6;
 
-    /** El numero de la etiqueta compressed bits per pixel. */
+    /** The number of the compressed bits per pixel tag. */
     public static final int TAG_COMPRESSED_BITS_PER_PIXEL = 37122;
 
-    /** El numero de la etiqueta pixel x dimension. */
+    /** The number of the pixel x dimension tag. */
     public static final int TAG_PIXEL_X_DIMENSION = 40962;
 
-    /** El numero de la etiqueta pixel y dimension. */
+    /** The number of the pixel y dimension tag. */
     public static final int TAG_PIXEL_Y_DIMENSION = 40963;
 
-    /** El numero de la etiqueta maker note. */
+    /** The number of the maker note tag. */
     public static final int TAG_MAKER_NOTE = 37500;
 
-    /** El numero de la etiqueta marker note. */
+    /** The number of the marker note tag. */
     public static final int TAG_MARKER_NOTE = 37500;
 
-    /** El numero de la etiqueta user comment. */
+    /** The number of the user comment tag. */
     public static final int TAG_USER_COMMENT = 37510;
 
-    /** El numero de la etiqueta related sound file. */
+    /** The number of the related sound file tag. */
     public static final int TAG_RELATED_SOUND_FILE = 40964;
 
-    /** El numero de la etiqueta date time original. */
+    /** The number of the date time original tag. */
     public static final int TAG_DATE_TIME_ORIGINAL = 36867;
 
-    /** El numero de la etiqueta date time digitized. */
+    /** The number of the date time digitized tag. */
     public static final int TAG_DATE_TIME_DIGITIZED = 36868;
 
-    /** El numero de la etiqueta sub sec time. */
+    /** The number of the sub sec time tag. */
     public static final int TAG_SUB_SEC_TIME = 37520;
 
-    /** El numero de la etiqueta sub sec time original. */
+    /** The number of the sub sec time original tag. */
     public static final int TAG_SUB_SEC_TIME_ORIGINAL = 37521;
 
-    /** El numero de la etiqueta sub sec time digitized. */
+    /** The number of the sub sec time digitized tag. */
     public static final int TAG_SUB_SEC_TIME_DIGITIZED = 37522;
 
-    /** El numero de la etiqueta exposure time. */
+    /** The number of the exposure time tag. */
     public static final int TAG_EXPOSURE_TIME = 33434;
 
-    /** El numero de la etiqueta f number. */
+    /** The number of the f number tag. */
     public static final int TAG_F_NUMBER = 33437;
 
-    /** El numero de la etiqueta exposure program. */
+    /** The number of the exposure program tag. */
     public static final int TAG_EXPOSURE_PROGRAM = 34850;
 
-    /** Un valor de exposure. */
+    /** A value of {@link #TAG_EXPOSURE_PROGRAM}. */
     public static final int EXPOSURE_PROGRAM_NOT_DEFINED = 0;
 
-    /** Un valor de exposure. */
+    /** A value of {@link #TAG_EXPOSURE_PROGRAM}. */
     public static final int EXPOSURE_PROGRAM_MANUAL = 1;
 
-    /** Un valor de exposure. */
+    /** A value of {@link #TAG_EXPOSURE_PROGRAM}. */
     public static final int EXPOSURE_PROGRAM_NORMAL_PROGRAM = 2;
 
-    /** Un valor de exposure. */
+    /** A value of {@link #TAG_EXPOSURE_PROGRAM}. */
     public static final int EXPOSURE_PROGRAM_APERTURE_PRIORITY = 3;
 
-    /** Un valor de exposure. */
+    /** A value of {@link #TAG_EXPOSURE_PROGRAM}. */
     public static final int EXPOSURE_PROGRAM_SHUTTER_PRIORITY = 4;
 
-    /** Un valor de exposure. */
+    /** A value of {@link #TAG_EXPOSURE_PROGRAM}. */
     public static final int EXPOSURE_PROGRAM_CREATIVE_PROGRAM = 5;
 
-    /** Un valor de exposure. */
+    /** A value of {@link #TAG_EXPOSURE_PROGRAM}. */
     public static final int EXPOSURE_PROGRAM_ACTION_PROGRAM = 6;
 
-    /** Un valor de exposure. */
+    /** A value of {@link #TAG_EXPOSURE_PROGRAM}. */
     public static final int EXPOSURE_PROGRAM_PORTRAIT_MODE = 7;
 
-    /** Un valor de exposure. */
+    /** A value of {@link #TAG_EXPOSURE_PROGRAM}. */
     public static final int EXPOSURE_PROGRAM_LANDSCAPE_MODE = 8;
 
-    /** Un valor de exposure. */
+    /** A value of {@link #TAG_EXPOSURE_PROGRAM}. */
     public static final int EXPOSURE_PROGRAM_MAX_RESERVED = 255;
 
-    /** El numero de la etiqueta spectral sensitivity. */
+    /** The number of the spectral sensitivity tag. */
     public static final int TAG_SPECTRAL_SENSITIVITY = 34852;
 
-    /** El numero de la etiqueta iso speed ratings. */
+    /** The number of the iso speed ratings tag. */
     public static final int TAG_ISO_SPEED_RATINGS = 34855;
 
-    /** El numero de la etiqueta oecf. */
+    /** The number of the oecf tag. */
     public static final int TAG_OECF = 34856;
 
-    /** El numero de la etiqueta shutter speed value. */
+    /** The number of the shutter speed value tag. */
     public static final int TAG_SHUTTER_SPEED_VALUE = 37377;
 
-    /** El numero de la etiqueta aperture value. */
+    /** The number of the aperture value tag. */
     public static final int TAG_APERTURE_VALUE = 37378;
 
-    /** El numero de la etiqueta brightness value. */
+    /** The number of the brightness value tag. */
     public static final int TAG_BRIGHTNESS_VALUE = 37379;
 
-    /** El numero de la etiqueta exposure bias value. */
+    /** The number of the exposure bias value tag. */
     public static final int TAG_EXPOSURE_BIAS_VALUE = 37380;
 
-    /** El numero de la etiqueta max aperture value. */
+    /** The number of the max aperture value tag. */
     public static final int TAG_MAX_APERTURE_VALUE = 37381;
 
-    /** El numero de la etiqueta subject distance. */
+    /** The number of the subject distance tag. */
     public static final int TAG_SUBJECT_DISTANCE = 37382;
 
-    /** El numero de la etiqueta metering mode. */
+    /** The number of the metering mode tag. */
     public static final int TAG_METERING_MODE = 37383;
 
-    /** Un valor de metering. */
+    /** A value of {@link #TAG_METERING_MODE}. */
     public static final int METERING_MODE_UNKNOWN = 0;
 
-    /** Un valor de metering. */
+    /** A value of {@link #TAG_METERING_MODE}. */
     public static final int METERING_MODE_AVERAGE = 1;
 
-    /** Un valor de metering. */
+    /** A value of {@link #TAG_METERING_MODE}. */
     public static final int METERING_MODE_CENTER_WEIGHTED_AVERAGE = 2;
 
-    /** Un valor de metering. */
+    /** A value of {@link #TAG_METERING_MODE}. */
     public static final int METERING_MODE_SPOT = 3;
 
-    /** Un valor de metering. */
+    /** A value of {@link #TAG_METERING_MODE}. */
     public static final int METERING_MODE_MULTI_SPOT = 4;
 
-    /** Un valor de metering. */
+    /** A value of {@link #TAG_METERING_MODE}. */
     public static final int METERING_MODE_PATTERN = 5;
 
-    /** Un valor de metering. */
+    /** A value of {@link #TAG_METERING_MODE}. */
     public static final int METERING_MODE_PARTIAL = 6;
 
-    /** Un valor de metering. */
+    /** A value of {@link #TAG_METERING_MODE}. */
     public static final int METERING_MODE_MIN_RESERVED = 7;
 
-    /** Un valor de metering. */
+    /** A value of {@link #TAG_METERING_MODE}. */
     public static final int METERING_MODE_MAX_RESERVED = 254;
 
-    /** Un valor de metering. */
+    /** A value of {@link #TAG_METERING_MODE}. */
     public static final int METERING_MODE_OTHER = 255;
 
-    /** El numero de la etiqueta light source. */
+    /** The number of the light source tag. */
     public static final int TAG_LIGHT_SOURCE = 37384;
 
-    /** Un valor de light. */
+    /** A value of {@link #TAG_LIGHT_SOURCE}. */
     public static final int LIGHT_SOURCE_UNKNOWN = 0;
 
-    /** Un valor de light. */
+    /** A value of {@link #TAG_LIGHT_SOURCE}. */
     public static final int LIGHT_SOURCE_DAYLIGHT = 1;
 
-    /** Un valor de light. */
+    /** A value of {@link #TAG_LIGHT_SOURCE}. */
     public static final int LIGHT_SOURCE_FLUORESCENT = 2;
 
-    /** Un valor de light. */
+    /** A value of {@link #TAG_LIGHT_SOURCE}. */
     public static final int LIGHT_SOURCE_TUNGSTEN = 3;
 
-    /** Un valor de light. */
+    /** A value of {@link #TAG_LIGHT_SOURCE}. */
     public static final int LIGHT_SOURCE_FLASH = 4;
 
-    /** Un valor de light. */
+    /** A value of {@link #TAG_LIGHT_SOURCE}. */
     public static final int LIGHT_SOURCE_FINE_WEATHER = 9;
 
-    /** Un valor de light. */
+    /** A value of {@link #TAG_LIGHT_SOURCE}. */
     public static final int LIGHT_SOURCE_CLOUDY_WEATHER = 10;
 
-    /** Un valor de light. */
+    /** A value of {@link #TAG_LIGHT_SOURCE}. */
     public static final int LIGHT_SOURCE_SHADE = 11;
 
-    /** Un valor de light. */
+    /** A value of {@link #TAG_LIGHT_SOURCE}. */
     public static final int LIGHT_SOURCE_DAYLIGHT_FLUORESCENT = 12;
 
-    /** Un valor de light. */
+    /** A value of {@link #TAG_LIGHT_SOURCE}. */
     public static final int LIGHT_SOURCE_DAY_WHITE_FLUORESCENT = 13;
 
-    /** Un valor de light. */
+    /** A value of {@link #TAG_LIGHT_SOURCE}. */
     public static final int LIGHT_SOURCE_COOL_WHITE_FLUORESCENT = 14;
 
-    /** Un valor de light. */
+    /** A value of {@link #TAG_LIGHT_SOURCE}. */
     public static final int LIGHT_SOURCE_WHITE_FLUORESCENT = 15;
 
-    /** Un valor de light. */
+    /** A value of {@link #TAG_LIGHT_SOURCE}. */
     public static final int LIGHT_SOURCE_STANDARD_LIGHT_A = 17;
 
-    /** Un valor de light. */
+    /** A value of {@link #TAG_LIGHT_SOURCE}. */
     public static final int LIGHT_SOURCE_STANDARD_LIGHT_B = 18;
 
-    /** Un valor de light. */
+    /** A value of {@link #TAG_LIGHT_SOURCE}. */
     public static final int LIGHT_SOURCE_STANDARD_LIGHT_C = 19;
 
-    /** Un valor de light. */
+    /** A value of {@link #TAG_LIGHT_SOURCE}. */
     public static final int LIGHT_SOURCE_D55 = 20;
 
-    /** Un valor de light. */
+    /** A value of {@link #TAG_LIGHT_SOURCE}. */
     public static final int LIGHT_SOURCE_D65 = 21;
 
-    /** Un valor de light. */
+    /** A value of {@link #TAG_LIGHT_SOURCE}. */
     public static final int LIGHT_SOURCE_D75 = 22;
 
-    /** Un valor de light. */
+    /** A value of {@link #TAG_LIGHT_SOURCE}. */
     public static final int LIGHT_SOURCE_D50 = 23;
 
-    /** Un valor de light. */
+    /** A value of {@link #TAG_LIGHT_SOURCE}. */
     public static final int LIGHT_SOURCE_ISO_STUDIO_TUNGSTEN = 24;
 
-    /** Un valor de light. */
+    /** A value of {@link #TAG_LIGHT_SOURCE}. */
     public static final int LIGHT_SOURCE_OTHER = 255;
 
-    /** El numero de la etiqueta flash. */
+    /** The number of the flash tag. */
     public static final int TAG_FLASH = 37385;
 
-    /** Un valor de flash. */
+    /** A value of {@link #TAG_FLASH}. */
     public static final int FLASH_DID_NOT_FIRE = 0;
 
-    /** Un valor de flash. */
+    /** A value of {@link #TAG_FLASH}. */
     public static final int FLASH_FIRED = 1;
 
-    /** Un valor de flash. */
+    /** A value of {@link #TAG_FLASH}. */
     public static final int FLASH_STROBE_RETURN_LIGHT_NOT_DETECTED = 5;
 
-    /** Un valor de flash. */
+    /** A value of {@link #TAG_FLASH}. */
     public static final int FLASH_STROBE_RETURN_LIGHT_DETECTED = 7;
 
-    /** Un valor de flash. */
+    /** A value of {@link #TAG_FLASH}. */
     public static final int FLASH_MASK_FIRED = 1;
 
-    /** Un valor de flash. */
+    /** A value of {@link #TAG_FLASH}. */
     public static final int FLASH_MASK_RETURN_NOT_DETECTED = 4;
 
-    /** Un valor de flash. */
+    /** A value of {@link #TAG_FLASH}. */
     public static final int FLASH_MASK_RETURN_DETECTED = 6;
 
-    /** Un valor de flash. */
+    /** A value of {@link #TAG_FLASH}. */
     public static final int FLASH_MASK_MODE_FLASH_FIRING = 8;
 
-    /** Un valor de flash. */
+    /** A value of {@link #TAG_FLASH}. */
     public static final int FLASH_MASK_MODE_FLASH_SUPPRESSION = 16;
 
-    /** Un valor de flash. */
+    /** A value of {@link #TAG_FLASH}. */
     public static final int FLASH_MASK_MODE_AUTO = 24;
 
-    /** Un valor de flash. */
+    /** A value of {@link #TAG_FLASH}. */
     public static final int FLASH_MASK_FUNCTION_NOT_PRESENT = 32;
 
-    /** Un valor de flash. */
+    /** A value of {@link #TAG_FLASH}. */
     public static final int FLASH_MASK_RED_EYE_REDUCTION = 64;
 
-    /** El numero de la etiqueta focal length. */
+    /** The number of the focal length tag. */
     public static final int TAG_FOCAL_LENGTH = 37386;
 
-    /** El numero de la etiqueta subject area. */
+    /** The number of the subject area tag. */
     public static final int TAG_SUBJECT_AREA = 37396;
 
-    /** El numero de la etiqueta flash energy. */
+    /** The number of the flash energy tag. */
     public static final int TAG_FLASH_ENERGY = 41483;
 
-    /** El numero de la etiqueta spatial frequency response. */
+    /** The number of the spatial frequency response tag. */
     public static final int TAG_SPATIAL_FREQUENCY_RESPONSE = 41484;
 
-    /** El numero de la etiqueta focal plane x resolution. */
+    /** The number of the focal plane x resolution tag. */
     public static final int TAG_FOCAL_PLANE_X_RESOLUTION = 41486;
 
-    /** El numero de la etiqueta focal plane y resolution. */
+    /** The number of the focal plane y resolution tag. */
     public static final int TAG_FOCAL_PLANE_Y_RESOLUTION = 41487;
 
-    /** El numero de la etiqueta focal plane resolution unit. */
+    /** The number of the focal plane resolution unit tag. */
     public static final int TAG_FOCAL_PLANE_RESOLUTION_UNIT = 41488;
 
-    /** Un valor de focal. */
+    /** A value of {@link #TAG_FOCAL_PLANE_RESOLUTION_UNIT}. */
     public static final int FOCAL_PLANE_RESOLUTION_UNIT_NONE = 1;
 
-    /** Un valor de focal. */
+    /** A value of {@link #TAG_FOCAL_PLANE_RESOLUTION_UNIT}. */
     public static final int FOCAL_PLANE_RESOLUTION_UNIT_INCH = 2;
 
-    /** Un valor de focal. */
+    /** A value of {@link #TAG_FOCAL_PLANE_RESOLUTION_UNIT}. */
     public static final int FOCAL_PLANE_RESOLUTION_UNIT_CENTIMETER = 3;
 
-    /** El numero de la etiqueta subject location. */
+    /** The number of the subject location tag. */
     public static final int TAG_SUBJECT_LOCATION = 41492;
 
-    /** El numero de la etiqueta exposure index. */
+    /** The number of the exposure index tag. */
     public static final int TAG_EXPOSURE_INDEX = 41493;
 
-    /** El numero de la etiqueta sensing method. */
+    /** The number of the sensing method tag. */
     public static final int TAG_SENSING_METHOD = 41495;
 
-    /** Un valor de sensing. */
+    /** A value of {@link #TAG_SENSING_METHOD}. */
     public static final int SENSING_METHOD_NOT_DEFINED = 1;
 
-    /** Un valor de sensing. */
+    /** A value of {@link #TAG_SENSING_METHOD}. */
     public static final int SENSING_METHOD_ONE_CHIP_COLOR_AREA_SENSOR = 2;
 
-    /** Un valor de sensing. */
+    /** A value of {@link #TAG_SENSING_METHOD}. */
     public static final int SENSING_METHOD_TWO_CHIP_COLOR_AREA_SENSOR = 3;
 
-    /** Un valor de sensing. */
+    /** A value of {@link #TAG_SENSING_METHOD}. */
     public static final int SENSING_METHOD_THREE_CHIP_COLOR_AREA_SENSOR = 4;
 
-    /** Un valor de sensing. */
+    /** A value of {@link #TAG_SENSING_METHOD}. */
     public static final int SENSING_METHOD_COLOR_SEQUENTIAL_AREA_SENSOR = 5;
 
-    /** Un valor de sensing. */
+    /** A value of {@link #TAG_SENSING_METHOD}. */
     public static final int SENSING_METHOD_TRILINEAR_SENSOR = 7;
 
-    /** Un valor de sensing. */
+    /** A value of {@link #TAG_SENSING_METHOD}. */
     public static final int SENSING_METHOD_COLOR_SEQUENTIAL_LINEAR_SENSOR = 8;
 
-    /** El numero de la etiqueta file source. */
+    /** The number of the file source tag. */
     public static final int TAG_FILE_SOURCE = 41728;
 
-    /** Un valor de file. */
+    /** A value of {@link #TAG_FILE_SOURCE}. */
     public static final int FILE_SOURCE_DSC = 3;
 
-    /** El numero de la etiqueta scene type. */
+    /** The number of the scene type tag. */
     public static final int TAG_SCENE_TYPE = 41729;
 
-    /** Un valor de scene. */
+    /** A value of {@link #TAG_SCENE_TYPE}. */
     public static final int SCENE_TYPE_DSC = 1;
 
-    /** El numero de la etiqueta cfa pattern. */
+    /** The number of the cfa pattern tag. */
     public static final int TAG_CFA_PATTERN = 41730;
 
-    /** El numero de la etiqueta custom rendered. */
+    /** The number of the custom rendered tag. */
     public static final int TAG_CUSTOM_RENDERED = 41985;
 
-    /** Un valor de custom. */
+    /** A value of {@link #TAG_CUSTOM_RENDERED}. */
     public static final int CUSTOM_RENDERED_NORMAL = 0;
 
-    /** Un valor de custom. */
+    /** A value of {@link #TAG_CUSTOM_RENDERED}. */
     public static final int CUSTOM_RENDERED_CUSTOM = 1;
 
-    /** El numero de la etiqueta exposure mode. */
+    /** The number of the exposure mode tag. */
     public static final int TAG_EXPOSURE_MODE = 41986;
 
-    /** Un valor de exposure. */
+    /** A value of {@link #TAG_EXPOSURE_MODE}. */
     public static final int EXPOSURE_MODE_AUTO_EXPOSURE = 0;
 
-    /** Un valor de exposure. */
+    /** A value of {@link #TAG_EXPOSURE_MODE}. */
     public static final int EXPOSURE_MODE_MANUAL_EXPOSURE = 1;
 
-    /** Un valor de exposure. */
+    /** A value of {@link #TAG_EXPOSURE_MODE}. */
     public static final int EXPOSURE_MODE_AUTO_BRACKET = 2;
 
-    /** El numero de la etiqueta white balance. */
+    /** The number of the white balance tag. */
     public static final int TAG_WHITE_BALANCE = 41987;
 
-    /** Un valor de white. */
+    /** A value of {@link #TAG_WHITE_BALANCE}. */
     public static final int WHITE_BALANCE_AUTO = 0;
 
-    /** Un valor de white. */
+    /** A value of {@link #TAG_WHITE_BALANCE}. */
     public static final int WHITE_BALANCE_MANUAL = 1;
 
-    /** El numero de la etiqueta digital zoom ratio. */
+    /** The number of the digital zoom ratio tag. */
     public static final int TAG_DIGITAL_ZOOM_RATIO = 41988;
 
-    /** El numero de la etiqueta focal length in 35mm film. */
+    /** The number of the focal length in 35mm film tag. */
     public static final int TAG_FOCAL_LENGTH_IN_35MM_FILM = 41989;
 
-    /** El numero de la etiqueta scene capture type. */
+    /** The number of the scene capture type tag. */
     public static final int TAG_SCENE_CAPTURE_TYPE = 41990;
 
-    /** Un valor de scene. */
+    /** A value of {@link #TAG_SCENE_CAPTURE_TYPE}. */
     public static final int SCENE_CAPTURE_TYPE_STANDARD = 0;
 
-    /** Un valor de scene. */
+    /** A value of {@link #TAG_SCENE_CAPTURE_TYPE}. */
     public static final int SCENE_CAPTURE_TYPE_LANDSCAPE = 1;
 
-    /** Un valor de scene. */
+    /** A value of {@link #TAG_SCENE_CAPTURE_TYPE}. */
     public static final int SCENE_CAPTURE_TYPE_PORTRAIT = 2;
 
-    /** Un valor de scene. */
+    /** A value of {@link #TAG_SCENE_CAPTURE_TYPE}. */
     public static final int SCENE_CAPTURE_TYPE_NIGHT_SCENE = 3;
 
-    /** El numero de la etiqueta gain control. */
+    /** The number of the gain control tag. */
     public static final int TAG_GAIN_CONTROL = 41991;
 
-    /** Un valor de gain. */
+    /** A value of {@link #TAG_GAIN_CONTROL}. */
     public static final int GAIN_CONTROL_NONE = 0;
 
-    /** Un valor de gain. */
+    /** A value of {@link #TAG_GAIN_CONTROL}. */
     public static final int GAIN_CONTROL_LOW_GAIN_UP = 1;
 
-    /** Un valor de gain. */
+    /** A value of {@link #TAG_GAIN_CONTROL}. */
     public static final int GAIN_CONTROL_HIGH_GAIN_UP = 2;
 
-    /** Un valor de gain. */
+    /** A value of {@link #TAG_GAIN_CONTROL}. */
     public static final int GAIN_CONTROL_LOW_GAIN_DOWN = 3;
 
-    /** Un valor de gain. */
+    /** A value of {@link #TAG_GAIN_CONTROL}. */
     public static final int GAIN_CONTROL_HIGH_GAIN_DOWN = 4;
 
-    /** El numero de la etiqueta contrast. */
+    /** The number of the contrast tag. */
     public static final int TAG_CONTRAST = 41992;
 
-    /** Un valor de contrast. */
+    /** A value of {@link #TAG_CONTRAST}. */
     public static final int CONTRAST_NORMAL = 0;
 
-    /** Un valor de contrast. */
+    /** A value of {@link #TAG_CONTRAST}. */
     public static final int CONTRAST_SOFT = 1;
 
-    /** Un valor de contrast. */
+    /** A value of {@link #TAG_CONTRAST}. */
     public static final int CONTRAST_HARD = 2;
 
-    /** El numero de la etiqueta saturation. */
+    /** The number of the saturation tag. */
     public static final int TAG_SATURATION = 41993;
 
-    /** Un valor de saturation. */
+    /** A value of {@link #TAG_SATURATION}. */
     public static final int SATURATION_NORMAL = 0;
 
-    /** Un valor de saturation. */
+    /** A value of {@link #TAG_SATURATION}. */
     public static final int SATURATION_LOW = 1;
 
-    /** Un valor de saturation. */
+    /** A value of {@link #TAG_SATURATION}. */
     public static final int SATURATION_HIGH = 2;
 
-    /** El numero de la etiqueta sharpness. */
+    /** The number of the sharpness tag. */
     public static final int TAG_SHARPNESS = 41994;
 
-    /** Un valor de sharpness. */
+    /** A value of {@link #TAG_SHARPNESS}. */
     public static final int SHARPNESS_NORMAL = 0;
 
-    /** Un valor de sharpness. */
+    /** A value of {@link #TAG_SHARPNESS}. */
     public static final int SHARPNESS_SOFT = 1;
 
-    /** Un valor de sharpness. */
+    /** A value of {@link #TAG_SHARPNESS}. */
     public static final int SHARPNESS_HARD = 2;
 
-    /** El numero de la etiqueta device setting description. */
+    /** The number of the device setting description tag. */
     public static final int TAG_DEVICE_SETTING_DESCRIPTION = 41995;
 
-    /** El numero de la etiqueta subject distance range. */
+    /** The number of the subject distance range tag. */
     public static final int TAG_SUBJECT_DISTANCE_RANGE = 41996;
 
-    /** Un valor de subject. */
+    /** A value of {@link #TAG_SUBJECT_DISTANCE_RANGE}. */
     public static final int SUBJECT_DISTANCE_RANGE_UNKNOWN = 0;
 
-    /** Un valor de subject. */
+    /** A value of {@link #TAG_SUBJECT_DISTANCE_RANGE}. */
     public static final int SUBJECT_DISTANCE_RANGE_MACRO = 1;
 
-    /** Un valor de subject. */
+    /** A value of {@link #TAG_SUBJECT_DISTANCE_RANGE}. */
     public static final int SUBJECT_DISTANCE_RANGE_CLOSE_VIEW = 2;
 
-    /** Un valor de subject. */
+    /** A value of {@link #TAG_SUBJECT_DISTANCE_RANGE}. */
     public static final int SUBJECT_DISTANCE_RANGE_DISTANT_VIEW = 3;
 
-    /** El numero de la etiqueta image unique id. */
+    /** The number of the image unique id tag. */
     public static final int TAG_IMAGE_UNIQUE_ID = 42016;
 
-    /** Un valor de exif. */
+    /** A value of {@link #TAG_EXIF_VERSION}. */
     public static final String EXIF_VERSION_2_1 = "0210";
 
-    /** Un valor de exif. */
+    /** A value of {@link #TAG_EXIF_VERSION}. */
     public static final String EXIF_VERSION_2_2 = "0220";
 
 
-    /** Se llega por {@link #getInstance}. */
+    /** Reached through {@link #getInstance}. */
     private ExifTIFFTagSet() {
         super(tags());
     }
 
-    /** El conjunto. Ver la nota de la clase. */
+    /** The set. See the class note. */
     public static synchronized ExifTIFFTagSet getInstance() {
         if (theInstance == null) {
             theInstance = new ExifTIFFTagSet();
@@ -527,7 +527,7 @@ public final class ExifTIFFTagSet extends TIFFTagSet {
         return theInstance;
     }
 
-    /** Las etiquetas de este conjunto. */
+    /** The tags of this set. */
     private static List<TIFFTag> tags() {
         List<TIFFTag> tags = new ArrayList<TIFFTag>();
         tags.add(new TIFFTag("ExposureTime", 33434, 32, 1));
@@ -590,7 +590,7 @@ public final class ExifTIFFTagSet extends TIFFTagSet {
         return tags;
     }
 
-    /** {@code ExposureProgram}, con los nombres de sus valores. */
+    /** {@code ExposureProgram}, with the names of its values. */
     private static final class TagExposureProgram extends TIFFTag {
 
         TagExposureProgram() {
@@ -607,7 +607,7 @@ public final class ExifTIFFTagSet extends TIFFTagSet {
         }
     }
 
-    /** {@code ComponentsConfiguration}, con los nombres de sus valores. */
+    /** {@code ComponentsConfiguration}, with the names of its values. */
     private static final class TagComponentsConfiguration extends TIFFTag {
 
         TagComponentsConfiguration() {
@@ -622,7 +622,7 @@ public final class ExifTIFFTagSet extends TIFFTagSet {
         }
     }
 
-    /** {@code MeteringMode}, con los nombres de sus valores. */
+    /** {@code MeteringMode}, with the names of its values. */
     private static final class TagMeteringMode extends TIFFTag {
 
         TagMeteringMode() {
@@ -638,7 +638,7 @@ public final class ExifTIFFTagSet extends TIFFTagSet {
         }
     }
 
-    /** {@code LightSource}, con los nombres de sus valores. */
+    /** {@code LightSource}, with the names of its values. */
     private static final class TagLightSource extends TIFFTag {
 
         TagLightSource() {
@@ -657,7 +657,7 @@ public final class ExifTIFFTagSet extends TIFFTagSet {
         }
     }
 
-    /** {@code Flash}, con los nombres de sus valores. */
+    /** {@code Flash}, with the names of its values. */
     private static final class TagFlash extends TIFFTag {
 
         TagFlash() {
@@ -669,7 +669,7 @@ public final class ExifTIFFTagSet extends TIFFTagSet {
         }
     }
 
-    /** {@code ColorSpace}, con los nombres de sus valores. */
+    /** {@code ColorSpace}, with the names of its values. */
     private static final class TagColorSpace extends TIFFTag {
 
         TagColorSpace() {
@@ -679,7 +679,7 @@ public final class ExifTIFFTagSet extends TIFFTagSet {
         }
     }
 
-    /** {@code FocalPlaneResolutionUnit}, con los nombres de sus valores. */
+    /** {@code FocalPlaneResolutionUnit}, with the names of its values. */
     private static final class TagFocalPlaneResolutionUnit extends TIFFTag {
 
         TagFocalPlaneResolutionUnit() {
@@ -690,7 +690,7 @@ public final class ExifTIFFTagSet extends TIFFTagSet {
         }
     }
 
-    /** {@code SensingMethod}, con los nombres de sus valores. */
+    /** {@code SensingMethod}, with the names of its values. */
     private static final class TagSensingMethod extends TIFFTag {
 
         TagSensingMethod() {
@@ -705,7 +705,7 @@ public final class ExifTIFFTagSet extends TIFFTagSet {
         }
     }
 
-    /** {@code FileSource}, con los nombres de sus valores. */
+    /** {@code FileSource}, with the names of its values. */
     private static final class TagFileSource extends TIFFTag {
 
         TagFileSource() {
@@ -714,7 +714,7 @@ public final class ExifTIFFTagSet extends TIFFTagSet {
         }
     }
 
-    /** {@code SceneType}, con los nombres de sus valores. */
+    /** {@code SceneType}, with the names of its values. */
     private static final class TagSceneType extends TIFFTag {
 
         TagSceneType() {
@@ -723,7 +723,7 @@ public final class ExifTIFFTagSet extends TIFFTagSet {
         }
     }
 
-    /** {@code CustomRendered}, con los nombres de sus valores. */
+    /** {@code CustomRendered}, with the names of its values. */
     private static final class TagCustomRendered extends TIFFTag {
 
         TagCustomRendered() {
@@ -733,7 +733,7 @@ public final class ExifTIFFTagSet extends TIFFTagSet {
         }
     }
 
-    /** {@code ExposureMode}, con los nombres de sus valores. */
+    /** {@code ExposureMode}, with the names of its values. */
     private static final class TagExposureMode extends TIFFTag {
 
         TagExposureMode() {
@@ -744,7 +744,7 @@ public final class ExifTIFFTagSet extends TIFFTagSet {
         }
     }
 
-    /** {@code WhiteBalance}, con los nombres de sus valores. */
+    /** {@code WhiteBalance}, with the names of its values. */
     private static final class TagWhiteBalance extends TIFFTag {
 
         TagWhiteBalance() {
@@ -754,7 +754,7 @@ public final class ExifTIFFTagSet extends TIFFTagSet {
         }
     }
 
-    /** {@code SceneCaptureType}, con los nombres de sus valores. */
+    /** {@code SceneCaptureType}, with the names of its values. */
     private static final class TagSceneCaptureType extends TIFFTag {
 
         TagSceneCaptureType() {
@@ -766,7 +766,7 @@ public final class ExifTIFFTagSet extends TIFFTagSet {
         }
     }
 
-    /** {@code GainControl}, con los nombres de sus valores. */
+    /** {@code GainControl}, with the names of its values. */
     private static final class TagGainControl extends TIFFTag {
 
         TagGainControl() {
@@ -779,7 +779,7 @@ public final class ExifTIFFTagSet extends TIFFTagSet {
         }
     }
 
-    /** {@code Contrast}, con los nombres de sus valores. */
+    /** {@code Contrast}, with the names of its values. */
     private static final class TagContrast extends TIFFTag {
 
         TagContrast() {
@@ -790,7 +790,7 @@ public final class ExifTIFFTagSet extends TIFFTagSet {
         }
     }
 
-    /** {@code Saturation}, con los nombres de sus valores. */
+    /** {@code Saturation}, with the names of its values. */
     private static final class TagSaturation extends TIFFTag {
 
         TagSaturation() {
@@ -801,7 +801,7 @@ public final class ExifTIFFTagSet extends TIFFTagSet {
         }
     }
 
-    /** {@code Sharpness}, con los nombres de sus valores. */
+    /** {@code Sharpness}, with the names of its values. */
     private static final class TagSharpness extends TIFFTag {
 
         TagSharpness() {
@@ -812,7 +812,7 @@ public final class ExifTIFFTagSet extends TIFFTagSet {
         }
     }
 
-    /** {@code SubjectDistanceRange}, con los nombres de sus valores. */
+    /** {@code SubjectDistanceRange}, with the names of its values. */
     private static final class TagSubjectDistanceRange extends TIFFTag {
 
         TagSubjectDistanceRange() {

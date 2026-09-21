@@ -56,25 +56,25 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-// Las implementaciones de `java.lang.classfile.instruction` y el decodificador que las saca del
-// arreglo `code`.
+// The implementations of `java.lang.classfile.instruction` and the decoder that takes them out of
+// the `code` array.
 //
-// Una sola idea organiza todo esto: el formato tiene MUCHAS más codificaciones que operaciones.
-// `aload_0`, `aload 0` y `wide aload 0` son tres bytes distintos y la misma carga; `bipush 5`,
-// `iconst_5` y `ldc #5` ponen el mismo cinco en la pila por tres caminos. La API modela la
-// operación y guarda el opcode, así que quien lee ve la operación y quien escribe conserva la
-// codificación exacta que había — no reescribe el archivo "mejor".
+// A single idea organises all of this: the format has MANY more encodings than operations.
+// `aload_0`, `aload 0` and `wide aload 0` are three different byte sequences and the same load;
+// `bipush 5`, `iconst_5` and `ldc #5` put the same five on the stack by three roads. The API models
+// the operation and keeps the opcode, so whoever reads sees the operation and whoever writes keeps
+// the exact encoding there was -- it does not rewrite the file "better".
 //
-// El tamaño de una instrucción suelta —construida por una fábrica y no leída de un archivo— es el
-// del opcode. Las dos únicas que no lo tienen son los switches, cuyo largo depende del relleno hasta
-// el próximo múltiplo de 4 CONTADO DESDE EL INICIO DEL MÉTODO: sin saber en qué bci van, no hay
-// respuesta. Ahí `sizeInBytes()` devuelve -1, que es lo mismo que contesta el JDK.
+// The size of a loose instruction --built by a factory and not read from a file-- is that of the
+// opcode. The only two that have none are the switches, whose length depends on the padding up to
+// the next multiple of 4 COUNTED FROM THE START OF THE METHOD: without knowing at which bci they
+// go, there is no answer. There `sizeInBytes()` returns -1, which is what the JDK answers too.
 public final class Instructions {
 
     private Instructions() {
     }
 
-    // --- Fábricas ---
+    // --- Factories ---
 
     public static ArrayLoadInstruction arrayLoad(Opcode op) {
         require(op, Opcode.Kind.ARRAY_LOAD);
@@ -122,7 +122,7 @@ public final class Instructions {
     public static ConvertInstruction convert(TypeKind from, TypeKind to) {
         Opcode op = convertOpcode(from, to);
         if (op == null) {
-            throw new IllegalArgumentException("no hay conversión de " + from + " a " + to);
+            throw new IllegalArgumentException("there is no conversion from " + from + " a " + to);
         }
         return new ConvertImpl(op, 1);
     }
@@ -173,8 +173,8 @@ public final class Instructions {
     }
 
     public static IncrementInstruction increment(int slot, int constant) {
-        boolean corto = slot >= 0 && slot <= 255 && constant >= -128 && constant <= 127;
-        Opcode op = corto ? Opcode.IINC : Opcode.IINC_W;
+        boolean isShort = slot >= 0 && slot <= 255 && constant >= -128 && constant <= 127;
+        Opcode op = isShort ? Opcode.IINC : Opcode.IINC_W;
         return new IncrementImpl(op, op.sizeIfFixed(), slot, constant);
     }
 
@@ -183,13 +183,13 @@ public final class Instructions {
         return new FieldImpl(op, op.sizeIfFixed(), field);
     }
 
-    public static FieldInstruction field(Opcode op, ClassEntry duenio, Utf8Entry name,
+    public static FieldInstruction field(Opcode op, ClassEntry owner, Utf8Entry name,
             Utf8Entry typeKind) {
-        return field(op, duenio, TemporaryConstantPool.nameAndType(name, typeKind));
+        return field(op, owner, TemporaryConstantPool.nameAndType(name, typeKind));
     }
 
-    public static FieldInstruction field(Opcode op, ClassEntry duenio, NameAndTypeEntry nyt) {
-        return field(op, TemporaryConstantPool.fieldRef(duenio, nyt));
+    public static FieldInstruction field(Opcode op, ClassEntry owner, NameAndTypeEntry nyt) {
+        return field(op, TemporaryConstantPool.fieldRef(owner, nyt));
     }
 
     public static InvokeInstruction invoke(Opcode op, MemberRefEntry method) {
@@ -199,15 +199,15 @@ public final class Instructions {
                 op == Opcode.INVOKEINTERFACE ? argumentSlotCount(method) : 0);
     }
 
-    public static InvokeInstruction invoke(Opcode op, ClassEntry duenio, Utf8Entry name,
+    public static InvokeInstruction invoke(Opcode op, ClassEntry owner, Utf8Entry name,
             Utf8Entry typeKind, boolean interfaceRef) {
-        return invoke(op, duenio, TemporaryConstantPool.nameAndType(name, typeKind), interfaceRef);
+        return invoke(op, owner, TemporaryConstantPool.nameAndType(name, typeKind), interfaceRef);
     }
 
-    public static InvokeInstruction invoke(Opcode op, ClassEntry duenio, NameAndTypeEntry nyt,
+    public static InvokeInstruction invoke(Opcode op, ClassEntry owner, NameAndTypeEntry nyt,
             boolean interfaceRef) {
-        MemberRefEntry ref = interfaceRef ? (MemberRefEntry) TemporaryConstantPool.interfaceMethodRef(duenio, nyt)
-                : (MemberRefEntry) TemporaryConstantPool.methodRef(duenio, nyt);
+        MemberRefEntry ref = interfaceRef ? (MemberRefEntry) TemporaryConstantPool.interfaceMethodRef(owner, nyt)
+                : (MemberRefEntry) TemporaryConstantPool.methodRef(owner, nyt);
         require(op, Opcode.Kind.INVOKE);
         return new InvokeImpl(op, op.sizeIfFixed(), ref, interfaceRef,
                 op == Opcode.INVOKEINTERFACE ? argumentSlotCount(ref) : 0);
@@ -222,8 +222,8 @@ public final class Instructions {
     }
 
     public static NewPrimitiveArrayInstruction newPrimitiveArray(TypeKind typeKind) {
-        // `newarrayCode()` ya tira si el tipo no es primitivo; llamarlo acá hace que el error
-        // aparezca al construir la instrucción y no al escribirla.
+        // `newarrayCode()` already throws if the type is not primitive; calling it here makes the
+        // error show up when the instruction is built and not when it is written.
         typeKind.newarrayCode();
         return new NewPrimitiveArrayImpl(Opcode.NEWARRAY, 2, typeKind);
     }
@@ -235,7 +235,7 @@ public final class Instructions {
     public static NewMultiArrayInstruction newMultiArray(ClassEntry typeKind, int dimensions) {
         if (dimensions < 1 || dimensions > 255) {
             throw new IllegalArgumentException(
-                    "multianewarray con " + dimensions + " dimensiones; el formato admite 1..255");
+                    "multianewarray with " + dimensions + " dimensions; the format admits 1..255");
         }
         return new NewMultiArrayImpl(Opcode.MULTIANEWARRAY, 4, typeKind, dimensions);
     }
@@ -256,7 +256,7 @@ public final class Instructions {
     public static TableSwitchInstruction tableSwitch(int low, int high, Label defaultTarget,
             List<SwitchCase> cases) {
         if (high < low) {
-            throw new IllegalArgumentException("tableswitch con high " + high + " < low " + low);
+            throw new IllegalArgumentException("tableswitch with high " + high + " < low " + low);
         }
         return new TableSwitchImpl(Opcode.TABLESWITCH, -1, low, high, defaultTarget, immutableCases(cases));
     }
@@ -269,30 +269,32 @@ public final class Instructions {
     public static IntrinsicConstantInstruction intrinsicConstant(Opcode op) {
         ConstantDesc v = intrinsicValue(op);
         if (v == null) {
-            throw new IllegalArgumentException(op + " no lleva la constante en el opcode");
+            throw new IllegalArgumentException(op + " does not carry the constant in the opcode");
         }
         return new IntrinsicConstantImpl(op, 1, v);
     }
 
     public static ArgumentConstantInstruction argumentConstant(Opcode op, int value) {
         if (op != Opcode.BIPUSH && op != Opcode.SIPUSH) {
-            throw new IllegalArgumentException(op + " no lleva la constante en el operando");
+            throw new IllegalArgumentException(op + " does not carry the constant in the operand");
         }
         if (op == Opcode.BIPUSH && (value < -128 || value > 127)) {
-            throw new IllegalArgumentException("bipush con " + value + ", que no entra en un byte");
+            throw new IllegalArgumentException("bipush with " + value + " does not fit in a byte");
         }
         if (op == Opcode.SIPUSH && (value < -32768 || value > 32767)) {
-            throw new IllegalArgumentException("sipush con " + value + ", que no entra en un short");
+            throw new IllegalArgumentException("sipush with " + value + " does not fit in a short");
         }
         return new ArgumentConstantImpl(op, op.sizeIfFixed(), Integer.valueOf(value));
     }
 
     /**
-     * La entrada de pool de un `ldc`, preguntada por su interfaz anidada.
+     * The pool entry of an `ldc`, asked through its nested interface.
      *
-     * <p>Esta acá y no en el escritor porque nuestro javac no resuelve un metodo declarado en una
-     * interfaz **anidada** que redefine al de la que la encierra, y desde este paquete se puede
-     * preguntar a la implementacion, que si lo declara directo.
+     * <p>It is here and not in the writer because, the note said, our javac does not resolve a
+     * method declared in a **nested** interface that overrides the one of the interface enclosing
+     * it, and from this package the implementation can be asked, which declares it directly. The
+     * frozen javac does resolve that case now (checked 2026-09-18), so the detour is no longer
+     * needed; it is harmless.
      */
     public static LoadableConstantEntry constantEntryOf(Instruction ins) {
         return ((LoadConstantInstruction) ins).constantEntry();
@@ -300,12 +302,12 @@ public final class Instructions {
 
     public static LoadConstantInstruction loadConstant(Opcode op, LoadableConstantEntry entry) {
         if (op != Opcode.LDC && op != Opcode.LDC_W && op != Opcode.LDC2_W) {
-            throw new IllegalArgumentException(op + " no es un ldc");
+            throw new IllegalArgumentException(op + " is not an ldc");
         }
         return new LoadConstantImpl(op, op.sizeIfFixed(), entry);
     }
 
-    /** El tipo de una constante que viaja dentro del opcode. */
+    /** The type of a constant that travels inside the opcode. */
     public static TypeKind intrinsicConstantTypeKind(Opcode op) {
         int b = op.bytecode();
         if (b == 0x01) {
@@ -323,19 +325,19 @@ public final class Instructions {
         if (b == 0x0E || b == 0x0F) {
             return TypeKind.DOUBLE;
         }
-        throw new IllegalArgumentException(op + " no lleva la constante en el opcode");
+        throw new IllegalArgumentException(op + " does not carry the constant in the opcode");
     }
 
     public static JsrInstruction jsr(Opcode op, Label target) {
         if (op != Opcode.JSR && op != Opcode.JSR_W) {
-            throw new IllegalArgumentException(op + " no es un jsr");
+            throw new IllegalArgumentException(op + " is not a jsr");
         }
         return new JsrImpl(op, op.sizeIfFixed(), target);
     }
 
     public static RetInstruction ret(Opcode op, int slot) {
         if (op != Opcode.RET && op != Opcode.RET_W) {
-            throw new IllegalArgumentException(op + " no es un ret");
+            throw new IllegalArgumentException(op + " is not a ret");
         }
         return new RetImpl(op, op.sizeIfFixed(), slot);
     }
@@ -380,11 +382,12 @@ public final class Instructions {
         return new CharacterRangeImpl(start, end, from, to, flags);
     }
 
-    // --- Decodificación ---
+    // --- Decoding ---
 
     /**
-     * La instrucción que empieza en `codeStart + bci`, ya con sus operandos. `op` y `size` los
-     * calculó el recorrido del arreglo `code`, que es quien sabe manejar `wide` y los switches.
+     * The instruction starting at `codeStart + bci`, already with its operands. `op` and `size`
+     * were computed by the walk of the `code` array, which is the one that knows how to handle
+     * `wide` and the switches.
      */
     public static Instruction decode(ClassReader cf, int codeStart, int bci, Opcode op,
             int size) {
@@ -529,8 +532,9 @@ public final class Instructions {
         return new LookupSwitchImpl(op, size, defaultTarget, Collections.unmodifiableList(cases));
     }
 
-    // El primer múltiplo de 4 a partir del byte que sigue al opcode. Es el relleno de §6.5 de
-    // `tableswitch`, y se cuenta desde el inicio del arreglo `code`, no desde la instrucción.
+    // The first multiple of 4 from the byte following the opcode. It is the padding of §6.5's
+    // `tableswitch`, and it is counted from the start of the `code` array, not from the
+    // instruction.
     private static int aligned(int bci) {
         int p = bci + 1;
         while ((p & 3) != 0) {
@@ -543,14 +547,14 @@ public final class Instructions {
         if (op.isWide()) {
             return cf.readU2(p + 2);
         }
-        int fija = fixedSlot(op);
-        if (fija >= 0) {
-            return fija;
+        int fixed = fixedSlot(op);
+        if (fixed >= 0) {
+            return fixed;
         }
         return cf.readU1(p + 1);
     }
 
-    // Las veinte formas `xload_N` / `xstore_N` llevan la ranura en el propio opcode.
+    // The twenty `xload_N` and the twenty `xstore_N` forms carry the slot in the opcode itself.
     private static int fixedSlot(Opcode op) {
         int b = op.bytecode();
         if (b >= 0x1A && b <= 0x2D) {
@@ -562,9 +566,9 @@ public final class Instructions {
         return -1;
     }
 
-    // --- Tablas ---
+    // --- Tables ---
 
-    /** El tipo sobre el que trabaja un opcode con tipo en el nombre. */
+    /** The type a typed-name opcode works on. */
     static TypeKind typeKindOf(Opcode op) {
         int b = op.bytecode();
         switch (b) {
@@ -585,8 +589,8 @@ public final class Instructions {
             case 0xBE: return TypeKind.INT;                 // arraylength
             default: break;
         }
-        // Los `xload`/`xstore` y los operadores llevan el tipo en la primera letra del nombre; para
-        // las formas ensanchadas la letra es la misma, así que alcanza con mirar el nombre.
+        // The `xload`/`xstore` and the operators carry the type in the first letter of the name;
+        // for the widened forms the letter is the same, so looking at the name is enough.
         char c = op.name().charAt(0);
         if (c == 'I') {
             return TypeKind.INT;
@@ -603,13 +607,13 @@ public final class Instructions {
         if (c == 'A') {
             return TypeKind.REFERENCE;
         }
-        throw new IllegalArgumentException("no se puede deducir el tipo de " + op);
+        throw new IllegalArgumentException("cannot deduce the type of " + op);
     }
 
     private static Opcode localAccessOpcode(TypeKind typeKind, int slot, boolean isLoad) {
         TypeKind t = typeKind.asLoadable();
         if (t == TypeKind.VOID) {
-            throw new IllegalArgumentException("no hay variable local de tipo void");
+            throw new IllegalArgumentException("there is no local variable of type void");
         }
         int row;
         if (t == TypeKind.INT) {
@@ -624,12 +628,12 @@ public final class Instructions {
             row = 4;
         }
         if (slot < 0 || slot > 65535) {
-            throw new IllegalArgumentException("ranura fuera de rango: " + slot);
+            throw new IllegalArgumentException("slot out of range: " + slot);
         }
         int base = isLoad ? 0x15 : 0x36;
-        int baseCorta = isLoad ? 0x1A : 0x3B;
+        int shortBase = isLoad ? 0x1A : 0x3B;
         if (slot <= 3) {
-            return OpcodeTable.simple(baseCorta + row * 4 + slot);
+            return OpcodeTable.simple(shortBase + row * 4 + slot);
         }
         if (slot <= 255) {
             return OpcodeTable.simple(base + row);
@@ -681,8 +685,8 @@ public final class Instructions {
         return b == 0 ? null : OpcodeTable.simple(b);
     }
 
-    // El par (desde, hasta) de un opcode de conversión. `i2b`, `i2c` e `i2s` son los tres que no
-    // cambian de categoría en la pila pero sí de tipo declarado.
+    // The (from, to) pair of a conversion opcode. `i2b`, `i2c` and `i2s` are the three that do not
+    // change category on the stack but do change declared type.
     static TypeKind fromTypeOf(Opcode op) {
         int b = op.bytecode();
         if (b >= 0x85 && b <= 0x87) {
@@ -718,7 +722,7 @@ public final class Instructions {
             case 0x92: return TypeKind.CHAR;
             case 0x93: return TypeKind.SHORT;
             default:
-                throw new IllegalArgumentException(op + " no es una conversión");
+                throw new IllegalArgumentException(op + " is not a conversion");
         }
     }
 
@@ -743,7 +747,7 @@ public final class Instructions {
         }
     }
 
-    // Cuántas ranuras ocupan los argumentos más el receptor: es el `count` de `invokeinterface`.
+    // How many slots the arguments plus the receiver take: it is the `count` of `invokeinterface`.
     private static int argumentSlotCount(MemberRefEntry ref) {
         String d = ref.nameAndType().type().stringValue();
         int n = 1;
@@ -771,7 +775,7 @@ public final class Instructions {
 
     private static void require(Opcode op, Opcode.Kind k) {
         if (op.kind() != k) {
-            throw new IllegalArgumentException(op + " no es de la familia " + k);
+            throw new IllegalArgumentException(op + " is not of the family " + k);
         }
     }
 
@@ -784,7 +788,7 @@ public final class Instructions {
     }
 }
 
-// La base de toda instrucción: el opcode y cuántos bytes ocupa.
+// The base of every instruction: the opcode and how many bytes it takes.
 abstract class AbstractInstruction implements Instruction {
 
     private final Opcode op;

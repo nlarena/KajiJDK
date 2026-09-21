@@ -1,18 +1,19 @@
 package java.util;
 
-// Señala que una fuente de eventos **unicast** ya tiene su oyente.
+// It signals that a **unicast** event source already has its listener.
 //
-// Es una excepcion chequeada, y eso es el mecanismo entero: el modelo de eventos de Java es
-// multicast por defecto, y la unica forma de declarar "esta fuente admite un solo oyente" es que
-// su `addXListener` declare `throws TooManyListenersException`. La firma es la documentacion.
+// It is a checked exception, and that is the whole mechanism: Java's event model is multicast by
+// default, and the only way of declaring "this source admits a single listener" is for its
+// `addXListener` to declare `throws TooManyListenersException`. The signature is the
+// documentation.
 public class TooManyListenersException extends Exception {
 
-    // Sin mensaje.
+    // With no message.
     public TooManyListenersException() {
         super();
     }
 
-    // Con el mensaje dado.
+    // With the given message.
     public TooManyListenersException(String s) {
         super(s);
     }

@@ -1,7 +1,7 @@
 package com.sun.jdi;
 
 /**
- * BooleanType de la maquina depurada.
+ * BooleanType of the debugged machine.
  *
  * @since 1.3
  */

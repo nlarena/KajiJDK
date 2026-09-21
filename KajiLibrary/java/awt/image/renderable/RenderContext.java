@@ -5,29 +5,33 @@ import java.awt.Shape;
 import java.awt.geom.AffineTransform;
 
 /**
- * KajiLibrary's java.awt.image.renderable.RenderContext -- que parte, a que escala y con que
- * criterio.
+ * KajiLibrary's java.awt.image.renderable.RenderContext -- which part, at what scale and by which
+ * criterion.
  *
- * <p>Las tres cosas que hacen falta para convertir una {@link RenderableImage} en pixeles:
+ * <p>The three things needed to turn a {@link RenderableImage} into pixels:
  *
  * <ul>
- *   <li>la <b>transformacion</b>, que es la que fija la resolucion. No hay un campo "escala": el
- *       tamano sale de cuanto agranda la matriz, y por eso el mismo objeto sirve para escalar, rotar
- *       y sesgar sin tener un metodo para cada cosa;
- *   <li>el <b>area de interes</b>, para no calcular lo que no se va a ver. Es un {@link Shape} y no
- *       un rectangulo porque una region rotada no es un rectangulo;
- *   <li>las <b>preferencias</b>, que dicen si se prefiere calidad o velocidad.
+ *   <li>the <b>transformation</b>, which is what fixes the resolution. There is no "scale" field:
+ *       the size comes from how much the matrix enlarges, and that is why the same object serves to
+ *       scale, rotate and shear without having a method for each;
+ *   <li>the <b>area of interest</b>, so as not to compute what will not be seen. It is a
+ *       {@link Shape} and not a rectangle because a rotated region is not a rectangle;
+ *   <li>the <b>hints</b>, which say whether quality or speed is preferred.
  * </ul>
  *
- * <h2>Los cuatro metodos de transformacion, y dos que son un error de tipeo</h2>
+ * <h2>The transformation methods, and two that are a typo</h2>
  *
- * <p>{@link #concatenateTransform} compone <b>despues</b> --se aplica primero lo que ya habia-- y
- * {@link #preConcatenateTransform} compone antes. La diferencia importa porque componer matrices no
- * conmuta: rotar y despues mover no es lo mismo que mover y despues rotar.
+ * <p>{@link #concatenateTransform} applies {@code modTransform} <b>first</b> and then the transform
+ * that was already there ({@code [this] = [this] x [modTransform]}); {@link
+ * #preConcatenateTransform} applies the existing one first and {@code modTransform} after it
+ * ({@code [this] = [modTransform] x [this]}). This note had it the other way round. The difference
+ * matters because composing matrices does not commute: rotating and then moving is not the same as
+ * moving and then rotating.
  *
- * <p>{@link #concetenateTransform} y {@link #preConcetenateTransform} son los mismos metodos con el
- * nombre mal escrito. Salieron asi en 1999, y estan obsoletos desde que se agregaron los correctos.
- * Siguen porque hay codigo compilado que los llama: sacarlos no arreglaria nada y rompería eso.
+ * <p>{@link #concetenateTransform} and {@link #preConcetenateTransform} are the same methods with
+ * the name misspelled. They shipped that way in 1.2 (this note said 1999), and have been deprecated
+ * since the correct ones were added in 1.3. They remain because there is compiled code that calls
+ * them: removing them would fix nothing and would break that.
  */
 public class RenderContext implements Cloneable {
 
@@ -38,14 +42,14 @@ public class RenderContext implements Cloneable {
     private RenderingHints hints;
 
     /**
-     * Todo explicito.
+     * Everything explicit.
      *
-     * <p>La transformacion se copia, para que moverla afuera no mueva la del contexto.
+     * <p>The transformation is copied, so moving it outside does not move the context's.
      *
-     * @throws NullPointerException si la transformacion es null. No hay defensa contra eso ni la
-     *     habia en el JDK, y esta bien que no la haya: un contexto sin transformacion no tiene
-     *     resolucion, y sustituirla por la identidad en silencio produciria una renderizacion a
-     *     escala 1 que nadie pidio
+     * @throws NullPointerException if the transformation is null. There is no defence against that,
+     *     nor was there in the JDK, and it is right that there is none: a context without a
+     *     transformation has no resolution, and silently substituting the identity would produce a
+     *     rendering at scale 1 that nobody asked for
      */
     public RenderContext(AffineTransform usr2dev, Shape aoi, RenderingHints hints) {
         this.hints = hints;
@@ -53,22 +57,22 @@ public class RenderContext implements Cloneable {
         this.usr2dev = (AffineTransform) usr2dev.clone();
     }
 
-    /** Solo la transformacion: toda la imagen y sin preferencias. */
+    /** Only the transformation: the whole image and no hints. */
     public RenderContext(AffineTransform usr2dev) {
         this(usr2dev, null, null);
     }
 
-    /** Sin area de interes. */
+    /** No area of interest. */
     public RenderContext(AffineTransform usr2dev, RenderingHints hints) {
         this(usr2dev, null, hints);
     }
 
-    /** Sin preferencias. */
+    /** No hints. */
     public RenderContext(AffineTransform usr2dev, Shape aoi) {
         this(usr2dev, aoi, null);
     }
 
-    /** Las preferencias de calidad contra velocidad, o null. */
+    /** The quality-versus-speed hints, or null. */
     public RenderingHints getRenderingHints() {
         return this.hints;
     }
@@ -78,47 +82,53 @@ public class RenderContext implements Cloneable {
         this.hints = hints;
     }
 
-    /** La transformacion de coordenadas de usuario a dispositivo. Se guarda una copia. */
+    /** The user-to-device transformation. A copy is stored. */
     public void setTransform(AffineTransform newTransform) {
         this.usr2dev = (AffineTransform) newTransform.clone();
     }
 
-    /** Compone {@code modTransform} <b>antes</b> de la que ya habia. */
+    /**
+     * Applies {@code modTransform} <b>after</b> the existing transformation:
+     * {@code [this] = [modTransform] x [this]}. (This javadoc said before.)
+     */
     public void preConcatenateTransform(AffineTransform modTransform) {
         this.usr2dev.preConcatenate(modTransform);
     }
 
     /**
-     * Igual que {@link #preConcatenateTransform}.
+     * The same as {@link #preConcatenateTransform}.
      *
-     * @deprecated el nombre esta mal escrito; ver la nota de la clase
+     * @deprecated the name is misspelled; see the class note
      */
     @Deprecated
     public void preConcetenateTransform(AffineTransform modTransform) {
         preConcatenateTransform(modTransform);
     }
 
-    /** Compone {@code modTransform} <b>despues</b> de la que ya habia. */
+    /**
+     * Applies {@code modTransform} <b>before</b> the existing transformation:
+     * {@code [this] = [this] x [modTransform]}. (This javadoc said after.)
+     */
     public void concatenateTransform(AffineTransform modTransform) {
         this.usr2dev.concatenate(modTransform);
     }
 
     /**
-     * Igual que {@link #concatenateTransform}.
+     * The same as {@link #concatenateTransform}.
      *
-     * @deprecated el nombre esta mal escrito; ver la nota de la clase
+     * @deprecated the name is misspelled; see the class note
      */
     @Deprecated
     public void concetenateTransform(AffineTransform modTransform) {
         concatenateTransform(modTransform);
     }
 
-    /** La transformacion. Se devuelve una copia, para que nadie la mueva por atras. */
+    /** The transformation. A copy is returned, so nobody moves it behind its back. */
     public AffineTransform getTransform() {
         return (AffineTransform) this.usr2dev.clone();
     }
 
-    /** La region que interesa, o null para toda la imagen. */
+    /** The region of interest, or null for the whole image. */
     public void setAreaOfInterest(Shape newAoi) {
         this.aoi = newAoi;
     }
@@ -129,10 +139,10 @@ public class RenderContext implements Cloneable {
     }
 
     /**
-     * Una copia.
+     * A copy.
      *
-     * <p>La transformacion se copia de verdad --es mutable y compartirla arruinaria las dos
-     * copias--; el area de interes y las preferencias se comparten, que es lo que hace el JDK.
+     * <p>The transformation is really copied --it is mutable, and sharing it would ruin both
+     * copies--; the area of interest and the hints are shared, which is what the JDK does.
      */
     public Object clone() {
         RenderContext copy = new RenderContext(this.usr2dev, this.aoi, this.hints);

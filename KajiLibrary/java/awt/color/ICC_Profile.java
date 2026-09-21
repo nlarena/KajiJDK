@@ -13,8 +13,8 @@ import java.io.Serializable;
  * An ICC profile: the description of a colour space in the ICC.1 specification's format.
  *
  * <p>A profile is bytes with a fixed structure: a **128-byte header** with the essentials --which
- * space it describes, against which connection space, which version-- and then a **tag table**, each
- * entry with its four-character signature, its offset and its size. Everything else --an RGB
+ * space it describes, against which connection space, which version-- and then a **tag table**,
+ * each entry with its four-character signature, its offset and its size. Everything else --an RGB
  * profile's matrix, its response curves, the white point-- lives in those tags.
  *
  * <p>This class really reads and writes that format: {@link #getInstance(byte[])} validates the
@@ -40,11 +40,11 @@ import java.io.Serializable;
  * <li><b>CIEXYZ</b> is an abstract profile with neither matrix nor curves.</li>
  * </ul>
  *
- * <p><strong>{@link ColorSpace#CS_PYCC} is not here</strong>, and it is the only absence. PhotoYCC is
- * defined not by formulas but by 230 KB of **interpolation tables** that come inside the profile:
- * without that file there is nothing to build, and assembling an empty profile with its signature
- * would be an object claiming to be PhotoYCC that does not convert like PhotoYCC.
- * {@code getInstance(CS_PYCC)} throws saying so.
+ * <p><strong>{@link ColorSpace#CS_PYCC} is not here</strong>, and it is the only absence. PhotoYCC
+ * is defined not by formulas but by 230 KB of **interpolation tables** that come inside the
+ * profile: without that file there is nothing to build, and assembling an empty profile with its
+ * signature would be an object claiming to be PhotoYCC that does not convert like PhotoYCC. {@code
+ * getInstance(CS_PYCC)} throws saying so.
  */
 public class ICC_Profile implements Serializable {
 
@@ -70,7 +70,7 @@ public class ICC_Profile implements Serializable {
     public static final int CLASS_NAMEDCOLOR = 6;
 
     // ---- The colour spaces, by their four-character ICC signature packed into
-    // un `int`. `icSigRgbData` es 'RGB ' leido como big-endian.
+    // an `int`. `icSigRgbData` is 'RGB ' read as big-endian.
 
     /** `icSigXYZData`. */
     public static final int icSigXYZData = 1482250784;
@@ -350,14 +350,14 @@ public class ICC_Profile implements Serializable {
     /** The `acsp` signature, without which the bytes are not a profile. */
     private static final int MAGIC = 0x61637370;
 
-    // ---- fabricas ------------------------------------------------------------------------------
+    // ---- factories ------------------------------------------------------------------------------
 
     /**
      * The profile those bytes describe.
      *
-     * <p>The declared size and the `acsp` signature are checked. What is **not** checked is that each
-     * tag makes sense: that is discovered by whoever asks for it, and doing it up front would mean
-     * understanding tags this library does not interpret.
+     * <p>The declared size and the `acsp` signature are checked. What is **not** checked is that
+     * each tag makes sense: that is discovered by whoever asks for it, and doing it up front would
+     * mean understanding tags this library does not interpret.
      *
      * @throws IllegalArgumentException if the bytes are not a valid profile
      */
@@ -365,42 +365,42 @@ public class ICC_Profile implements Serializable {
         if (data == null || data.length < HEADER_LEN) {
             throw new IllegalArgumentException("Invalid ICC Profile Data");
         }
-        int declarado = readInt(data, icHdrSize);
-        if (declarado < HEADER_LEN || declarado > data.length) {
+        int declared = readInt(data, icHdrSize);
+        if (declared < HEADER_LEN || declared > data.length) {
             throw new IllegalArgumentException("Invalid ICC Profile Data");
         }
         if (readInt(data, icHdrMagic) != MAGIC) {
             throw new IllegalArgumentException("Invalid ICC Profile Data");
         }
-        byte[] copy = new byte[declarado];
-        System.arraycopy(data, 0, copy, 0, declarado);
-        return conClaseSegunEspacio(copy);
+        byte[] copy = new byte[declared];
+        System.arraycopy(data, 0, copy, 0, declared);
+        return withClassForSpace(copy);
     }
 
     // The subclass that suits the space and the tags present. The JDK does the same: an RGB profile
-    // with matrix and curves is an `ICC_ProfileRGB`, a grey one with a curve is an `ICC_ProfileGray`,
-    // and anything else is a plain `ICC_Profile`.
-    private static ICC_Profile conClaseSegunEspacio(byte[] d) {
-        ICC_Profile crudo = new ICC_Profile(d);
-        int espacio = crudo.getColorSpaceType();
-        if (espacio == ColorSpace.TYPE_RGB
-                && crudo.getData(icSigRedColorantTag) != null
-                && crudo.getData(icSigGreenColorantTag) != null
-                && crudo.getData(icSigBlueColorantTag) != null
-                && crudo.getData(icSigRedTRCTag) != null) {
+    // with matrix and curves is an `ICC_ProfileRGB`, a grey one with a curve is an
+    // `ICC_ProfileGray`, and anything else is a plain `ICC_Profile`.
+    private static ICC_Profile withClassForSpace(byte[] d) {
+        ICC_Profile raw = new ICC_Profile(d);
+        int space = raw.getColorSpaceType();
+        if (space == ColorSpace.TYPE_RGB
+                && raw.getData(icSigRedColorantTag) != null
+                && raw.getData(icSigGreenColorantTag) != null
+                && raw.getData(icSigBlueColorantTag) != null
+                && raw.getData(icSigRedTRCTag) != null) {
             return new ICC_ProfileRGB(d);
         }
-        if (espacio == ColorSpace.TYPE_GRAY && crudo.getData(icSigGrayTRCTag) != null) {
+        if (space == ColorSpace.TYPE_GRAY && raw.getData(icSigGrayTRCTag) != null) {
             return new ICC_ProfileGray(d);
         }
-        return crudo;
+        return raw;
     }
 
     /**
      * One of the built-in profiles.
      *
-     * @throws IllegalArgumentException if the identifier is not one of the `ColorSpace.CS_`, or if it
-     *     is {@link ColorSpace#CS_PYCC} -- see the class's note
+     * @throws IllegalArgumentException if the identifier is not one of the `ColorSpace.CS_`, or if
+     *     it is {@link ColorSpace#CS_PYCC} -- see the class's note
      */
     public static ICC_Profile getInstance(int cspace) {
         if (cspace == ColorSpace.CS_sRGB) {
@@ -418,7 +418,8 @@ public class ICC_Profile implements Serializable {
         if (cspace == ColorSpace.CS_PYCC) {
             throw new IllegalArgumentException(
                     "CS_PYCC is not available: its profile is interpolation tables that this "
-                            + "biblioteca no trae, y no se pueden derivar de ninguna formula");
+                            + "library does not bring, and they cannot be derived from any "
+                            + "formula");
         }
         throw new IllegalArgumentException("Unknown color space");
     }
@@ -463,13 +464,13 @@ public class ICC_Profile implements Serializable {
 
     private static void readFully(InputStream s, byte[] buf, int off, int len)
             throws IOException {
-        int puestos = 0;
-        while (puestos < len) {
-            int n = s.read(buf, off + puestos, len - puestos);
+        int placed = 0;
+        while (placed < len) {
+            int n = s.read(buf, off + placed, len - placed);
             if (n < 0) {
                 throw new IOException("the profile is cut short of what its header declares");
             }
-            puestos = puestos + n;
+            placed = placed + n;
         }
     }
 
@@ -523,15 +524,15 @@ public class ICC_Profile implements Serializable {
 
     /** The device's space, as a `ColorSpace.TYPE_` constant. */
     public int getColorSpaceType() {
-        return tipoDeFirma(readInt(this.data, icHdrColorSpace));
+        return typeOfSignature(readInt(this.data, icHdrColorSpace));
     }
 
     /** The connection space, as a `ColorSpace.TYPE_` constant. */
     public int getPCSType() {
-        return tipoDeFirma(readInt(this.data, icHdrPcs));
+        return typeOfSignature(readInt(this.data, icHdrPcs));
     }
 
-    private static int tipoDeFirma(int sig) {
+    private static int typeOfSignature(int sig) {
         if (sig == icSigXYZData) {
             return ColorSpace.TYPE_XYZ;
         }
@@ -566,15 +567,15 @@ public class ICC_Profile implements Serializable {
             return ColorSpace.TYPE_CMY;
         }
         // The generic `nCLR` ones run consecutively, and so do their signatures: 2CLR..FCLR map to
-        // TYPE_2CLR..TYPE_FCLR sin tabla.
+        // TYPE_2CLR..TYPE_FCLR with no table.
         if (sig >= icSigSpace2CLR && sig <= icSigSpaceFCLR) {
             int i = 0;
-            int[] genericos = {
+            int[] generics = {
                 icSigSpace2CLR, icSigSpace3CLR, icSigSpace4CLR, icSigSpace5CLR, icSigSpace6CLR,
                 icSigSpace7CLR, icSigSpace8CLR, icSigSpace9CLR, icSigSpaceACLR, icSigSpaceBCLR,
                 icSigSpaceCCLR, icSigSpaceDCLR, icSigSpaceECLR, icSigSpaceFCLR };
-            while (i < genericos.length) {
-                if (genericos[i] == sig) {
+            while (i < generics.length) {
+                if (generics[i] == sig) {
                     return ColorSpace.TYPE_2CLR + i;
                 }
                 i = i + 1;
@@ -644,8 +645,8 @@ public class ICC_Profile implements Serializable {
      * every one that comes after it. Doing it in place would only work when the size happened to
      * match, and that asymmetry is exactly the kind of thing that breaks once in a thousand times.
      *
-     * @throws IllegalArgumentException if {@link #icSigHead} is passed with something that is not 128
-     *     bytes long
+     * @throws IllegalArgumentException if {@link #icSigHead} is passed with something that is not
+     *     128 bytes long
      */
     public void setData(int tagSignature, byte[] tagData) {
         if (tagSignature == icSigHead) {
@@ -656,61 +657,61 @@ public class ICC_Profile implements Serializable {
             return;
         }
         int n = readInt(this.data, HEADER_LEN);
-        int[] firmas = new int[n + 1];
-        byte[][] cuerpos = new byte[n + 1][];
-        int cuantas = 0;
-        boolean reemplazada = false;
+        int[] signatures = new int[n + 1];
+        byte[][] bodies = new byte[n + 1][];
+        int howMany = 0;
+        boolean replaced = false;
         for (int i = 0; i < n; i++) {
             int e = HEADER_LEN + 4 + i * 12;
             int sig = readInt(this.data, e);
             if (sig == tagSignature) {
                 if (tagData == null) {
                     // A `null` deletes the tag, which is what the JDK does.
-                    reemplazada = true;
+                    replaced = true;
                     continue;
                 }
-                firmas[cuantas] = sig;
-                cuerpos[cuantas] = tagData;
-                cuantas = cuantas + 1;
-                reemplazada = true;
+                signatures[howMany] = sig;
+                bodies[howMany] = tagData;
+                howMany = howMany + 1;
+                replaced = true;
                 continue;
             }
-            firmas[cuantas] = sig;
-            cuerpos[cuantas] = this.getData(sig);
-            cuantas = cuantas + 1;
+            signatures[howMany] = sig;
+            bodies[howMany] = this.getData(sig);
+            howMany = howMany + 1;
         }
-        if (!reemplazada && tagData != null) {
-            firmas[cuantas] = tagSignature;
-            cuerpos[cuantas] = tagData;
-            cuantas = cuantas + 1;
+        if (!replaced && tagData != null) {
+            signatures[howMany] = tagSignature;
+            bodies[howMany] = tagData;
+            howMany = howMany + 1;
         }
         byte[] header = new byte[HEADER_LEN];
         System.arraycopy(this.data, 0, header, 0, HEADER_LEN);
-        this.data = assemble(header, firmas, cuerpos, cuantas);
+        this.data = assemble(header, signatures, bodies, howMany);
     }
 
     /**
      * Assembles a profile from its header and its tags.
      *
-     * <p>Each tag is aligned to four bytes, as the format requires, and the padding is left at zero.
-     * The total size is written into the header at the end, once it is known.
+     * <p>Each tag is aligned to four bytes, as the format requires, and the padding is left at
+     * zero. The total size is written into the header at the end, once it is known.
      */
-    static byte[] assemble(byte[] header, int[] firmas, byte[][] cuerpos, int cuantas) {
-        int off = HEADER_LEN + 4 + cuantas * 12;
-        int[] offsets = new int[cuantas];
-        for (int i = 0; i < cuantas; i++) {
+    static byte[] assemble(byte[] header, int[] signatures, byte[][] bodies, int howMany) {
+        int off = HEADER_LEN + 4 + howMany * 12;
+        int[] offsets = new int[howMany];
+        for (int i = 0; i < howMany; i++) {
             offsets[i] = off;
-            off = off + ((cuerpos[i].length + 3) & ~3);
+            off = off + ((bodies[i].length + 3) & ~3);
         }
         byte[] out = new byte[off];
         System.arraycopy(header, 0, out, 0, HEADER_LEN);
-        writeInt(out, HEADER_LEN, cuantas);
-        for (int i = 0; i < cuantas; i++) {
+        writeInt(out, HEADER_LEN, howMany);
+        for (int i = 0; i < howMany; i++) {
             int e = HEADER_LEN + 4 + i * 12;
-            writeInt(out, e, firmas[i]);
+            writeInt(out, e, signatures[i]);
             writeInt(out, e + 4, offsets[i]);
-            writeInt(out, e + 8, cuerpos[i].length);
-            System.arraycopy(cuerpos[i], 0, out, offsets[i], cuerpos[i].length);
+            writeInt(out, e + 8, bodies[i].length);
+            System.arraycopy(bodies[i], 0, out, offsets[i], bodies[i].length);
         }
         writeInt(out, icHdrSize, off);
         return out;
@@ -780,11 +781,11 @@ public class ICC_Profile implements Serializable {
     /**
      * The same as {@link #getGamma}, with a name that **cannot be confused**.
      *
-     * <p>It exists because of a trap in the inherited contract: `ICC_ProfileRGB.getGamma(int)` takes
-     * a COMPONENT number and `ICC_Profile.getGamma(int)` takes a tag SIGNATURE -- the same method
-     * signature, different meanings -- so the second is overridden by the first. Calling
-     * `profile.getGamma(icSigRedTRCTag)` on an RGB profile does not read the red curve: it reads the
-     * signature as a component and throws "Must be Red, Green, or Blue".
+     * <p>It exists because of a trap in the inherited contract: `ICC_ProfileRGB.getGamma(int)`
+     * takes a COMPONENT number and `ICC_Profile.getGamma(int)` takes a tag SIGNATURE -- the same
+     * method signature, different meanings -- so the second is overridden by the first. Calling
+     * `profile.getGamma(icSigRedTRCTag)` on an RGB profile does not read the red curve: it reads
+     * the signature as a component and throws "Must be Red, Green, or Blue".
      *
      * <p>Whoever wants the curve by its tag uses this one. The collision comes from the JDK and
      * cannot be fixed without changing the public surface.
@@ -841,14 +842,14 @@ public class ICC_Profile implements Serializable {
             ColorSpace.CS_CIEXYZ };
         for (int i = 0; i < ids.length; i++) {
             ICC_Profile p = getInstance(ids[i]);
-            if (mismoContenido(p.data, this.data)) {
+            if (sameContent(p.data, this.data)) {
                 return p;
             }
         }
         return this;
     }
 
-    private static boolean mismoContenido(byte[] a, byte[] b) {
+    private static boolean sameContent(byte[] a, byte[] b) {
         if (a.length != b.length) {
             return false;
         }

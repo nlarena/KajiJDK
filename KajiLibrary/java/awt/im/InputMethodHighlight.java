@@ -4,43 +4,42 @@ import java.awt.font.TextAttribute;
 import java.util.Map;
 
 /**
- * Cómo se resalta un tramo de texto que todavía está en composición.
+ * How a stretch of text that is still being composed is highlighted.
  *
- * <p>Mientras el método de entrada trabaja, el texto pasa por estados y el usuario tiene que poder
- * distinguirlos de un vistazo. Hay dos ejes:
+ * <p>While the input method works, the text goes through states and the user has to be able to
+ * tell them apart at a glance. There are two axes:
  *
  * <ul>
- *   <li>el <strong>estado</strong>: crudo, tal como se tecleó, o ya convertido a la escritura
- *       final;
- *   <li>la <strong>selección</strong>: si es el tramo sobre el que el usuario está trabajando ahora
- *       o uno de los otros.
+ *   <li>the <strong>state</strong>: raw, as it was typed, or already converted to the final script;
+ *   <li>the <strong>selection</strong>: whether it is the stretch the user is working on now or one
+ *       of the others.
  * </ul>
  *
- * <p>Cuatro combinaciones, cuatro constantes. La **variación** deja que un método de entrada
- * concreto agregue más matices dentro de un estado, y el estilo permite decir exactamente con qué
- * atributos dibujarlo en vez de dejarlo librado al componente.
+ * <p>Four combinations, four constants. The **variation** lets a concrete input method add more
+ * nuances within a state, and the style lets it say exactly which attributes to draw it with
+ * instead of leaving it to the component.
  */
 public class InputMethodHighlight {
 
-    /** Texto tal como se tecleó, sin convertir. */
+    /** Text as it was typed, not converted. */
     public static final int RAW_TEXT = 0;
 
-    /** Texto ya convertido a la escritura final. */
+    /** Text already converted to the final script. */
     public static final int CONVERTED_TEXT = 1;
 
-    /** Crudo y fuera del tramo en el que se está trabajando. */
+    /** Raw and outside the stretch being worked on. */
     public static final InputMethodHighlight UNSELECTED_RAW_TEXT_HIGHLIGHT =
             new InputMethodHighlight(false, RAW_TEXT);
 
-    /** Crudo y dentro del tramo en el que se está trabajando. */
+    /** Raw and inside the stretch being worked on. */
     public static final InputMethodHighlight SELECTED_RAW_TEXT_HIGHLIGHT =
             new InputMethodHighlight(true, RAW_TEXT);
 
-    /** Convertido y fuera del tramo en el que se está trabajando. */
+    /** Converted and outside the stretch being worked on. */
     public static final InputMethodHighlight UNSELECTED_CONVERTED_TEXT_HIGHLIGHT =
             new InputMethodHighlight(false, CONVERTED_TEXT);
 
-    /** Convertido y dentro del tramo en el que se está trabajando. */
+    /** Converted and inside the stretch being worked on. */
     public static final InputMethodHighlight SELECTED_CONVERTED_TEXT_HIGHLIGHT =
             new InputMethodHighlight(true, CONVERTED_TEXT);
 
@@ -50,27 +49,27 @@ public class InputMethodHighlight {
     private final Map<TextAttribute, ?> style;
 
     /**
-     * Con la selección y el estado, sin variación.
+     * With the selection and the state, without variation.
      *
-     * @throws IllegalArgumentException si el estado no es uno de los dos
+     * @throws IllegalArgumentException if the state is not one of the two
      */
     public InputMethodHighlight(boolean selected, int state) {
         this(selected, state, 0, null);
     }
 
     /**
-     * Con una variación del estado.
+     * With a variation of the state.
      *
-     * @throws IllegalArgumentException si el estado no es uno de los dos
+     * @throws IllegalArgumentException if the state is not one of the two
      */
     public InputMethodHighlight(boolean selected, int state, int variation) {
         this(selected, state, variation, null);
     }
 
     /**
-     * Con el estilo de dibujo ya resuelto.
+     * With the drawing style already resolved.
      *
-     * @throws IllegalArgumentException si el estado no es uno de los dos
+     * @throws IllegalArgumentException if the state is not one of the two
      */
     public InputMethodHighlight(boolean selected, int state, int variation,
             Map<TextAttribute, ?> style) {
@@ -83,25 +82,25 @@ public class InputMethodHighlight {
         this.style = style;
     }
 
-    /** Si es el tramo sobre el que se está trabajando. */
+    /** Whether it is the stretch being worked on. */
     public boolean isSelected() {
         return this.selected;
     }
 
-    /** Crudo o convertido. */
+    /** Raw or converted. */
     public int getState() {
         return this.state;
     }
 
-    /** Qué matiz dentro del estado. */
+    /** Which nuance within the state. */
     public int getVariation() {
         return this.variation;
     }
 
     /**
-     * Con qué atributos dibujarlo.
+     * Which attributes to draw it with.
      *
-     * @return el estilo, o `null` para que lo decida el componente
+     * @return the style, or `null` to let the component decide
      */
     public Map<TextAttribute, ?> getStyle() {
         return this.style;

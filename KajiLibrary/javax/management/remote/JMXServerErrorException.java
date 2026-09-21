@@ -3,34 +3,36 @@ package javax.management.remote;
 import java.io.IOException;
 
 /**
- * KajiLibrary's javax.management.remote.JMXServerErrorException -- el servidor tiro un {@link Error}.
+ * KajiLibrary's javax.management.remote.JMXServerErrorException -- the server threw an
+ * {@link Error}.
  *
- * <p>Existe por un problema concreto de las llamadas remotas. Un {@code Error} del lado servidor
- * --sin memoria, una clase que falta-- no se puede propagar tal cual al cliente: alla significaria que
- * <b>el cliente</b> esta roto, y no lo esta.
+ * <p>It exists because of a concrete problem of remote calls. A server-side {@code Error} --out of
+ * memory, a missing class-- cannot be propagated as such to the client: over there it would mean
+ * that <b>the client</b> is broken, and it is not.
  *
- * <p>Asi que se envuelve en una {@link IOException}, que es lo que el cliente ya esta preparado para
- * atajar cuando habla por red. La causa sigue siendo el {@code Error} original, para poder verlo.
+ * <p>So it is wrapped in an {@link IOException}, which is what the client is already prepared to
+ * catch when it talks over the network. The cause is still the original {@code Error}, so that it
+ * can be seen.
  *
- * <p>El unico constructor exige el {@code Error}: sin el la clase no tendria sentido.
+ * <p>The only constructor demands the {@code Error}: without it the class would make no sense.
  */
 public class JMXServerErrorException extends IOException {
 
     private static final long serialVersionUID = 3996732239558744666L;
 
-    /** El del servidor. */
+    /** The server's. */
     private Error cause = null;
 
     /**
-     * @param s el mensaje
-     * @param err el error del servidor
+     * @param s the message
+     * @param err the server's error
      */
     public JMXServerErrorException(String s, Error err) {
         super(s);
         this.cause = err;
     }
 
-    /** El error del servidor. */
+    /** The server's error. */
     @Override
     public Throwable getCause() {
         return this.cause;

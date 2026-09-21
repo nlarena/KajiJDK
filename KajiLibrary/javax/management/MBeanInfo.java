@@ -4,49 +4,50 @@ import java.io.Serializable;
 import java.util.Arrays;
 
 /**
- * Todo lo que hay que saber de un MBean sin tener su clase: atributos, constructores, operaciones y
- * notificaciones.
+ * Everything there is to know about an MBean without having its class: attributes, constructors,
+ * operations and notifications.
  *
- * <p>Es la pieza que sostiene el modelo entero. Un cliente remoto no carga la clase del MBean --
- * puede no tenerla-- y sin embargo puede listar sus atributos, invocar sus operaciones y suscribirse
- * a sus notificaciones, porque todo eso esta descrito aca en cadenas. Por eso los tipos son
- * `String` y no `Class`: un `Class` obligaria a cargar del otro lado lo que se quiso evitar.
+ * <p>It is the piece that holds up the whole model. A remote client does not load the MBean's class
+ * -- it may not have it-- and yet it can list its attributes, invoke its operations and subscribe
+ * to its notifications, because all of that is described here in strings. That is why the types are
+ * {@code String} and not {@code Class}: a {@code Class} would force loading on the other side what
+ * was meant to be avoided.
  *
- * <p>Los cuatro arreglos nunca son `null` al salir: un `null` que entra se guarda como arreglo
- * vacio. Es la diferencia entre "no declara operaciones" y "no se sabe", y JMX se queda con la
- * primera.
+ * <p>The four arrays are never {@code null} on the way out: a {@code null} coming in is kept as an
+ * empty array. It is the difference between "declares no operations" and "unknown", and JMX
+ * keeps the first.
  */
 public class MBeanInfo implements Cloneable, Serializable, DescriptorRead {
 
     static final long serialVersionUID = -6451021435135161911L;
 
     /**
-     * @serial texto para leer
+     * @serial text to read
      */
     private final String description;
 
     /**
-     * @serial el nombre de la clase Java del MBean
+     * @serial the name of the MBean's Java class
      */
     private final String className;
 
     /**
-     * @serial los atributos
+     * @serial the attributes
      */
     private final MBeanAttributeInfo[] attributes;
 
     /**
-     * @serial las operaciones
+     * @serial the operations
      */
     private final MBeanOperationInfo[] operations;
 
     /**
-     * @serial los constructores
+     * @serial the constructors
      */
     private final MBeanConstructorInfo[] constructors;
 
     /**
-     * @serial las notificaciones
+     * @serial the notifications
      */
     private final MBeanNotificationInfo[] notifications;
 
@@ -76,10 +77,11 @@ public class MBeanInfo implements Cloneable, Serializable, DescriptorRead {
     }
 
     /**
-     * Copia superficial, con la identidad de la subclase intacta.
+     * Shallow copy, with the subclass's identity intact.
      *
-     * <p>Va por `Object.clone()` y no por el constructor justamente por eso: un `new MBeanInfo(...)`
-     * devolveria un `MBeanInfo` pelado aunque el original fuera de una subclase.
+     * <p>It goes through {@code Object.clone()} and not through the constructor precisely for that:
+     * a {@code new MBeanInfo(...)} would return a bare {@code MBeanInfo} even if the original were
+     * of a subclass.
      */
     public Object clone() {
         try {
@@ -89,45 +91,45 @@ public class MBeanInfo implements Cloneable, Serializable, DescriptorRead {
         }
     }
 
-    /** El nombre de la clase Java del MBean. */
+    /** The name of the MBean's Java class. */
     public String getClassName() {
         return className;
     }
 
-    /** Texto para leer. */
+    /** Text to read. */
     public String getDescription() {
         return description;
     }
 
-    /** Copia nueva en cada llamada. */
+    /** A fresh copy on every call. */
     public MBeanAttributeInfo[] getAttributes() {
         MBeanAttributeInfo[] r = new MBeanAttributeInfo[attributes.length];
         System.arraycopy(attributes, 0, r, 0, attributes.length);
         return r;
     }
 
-    /** Copia nueva en cada llamada. */
+    /** A fresh copy on every call. */
     public MBeanOperationInfo[] getOperations() {
         MBeanOperationInfo[] r = new MBeanOperationInfo[operations.length];
         System.arraycopy(operations, 0, r, 0, operations.length);
         return r;
     }
 
-    /** Copia nueva en cada llamada. */
+    /** A fresh copy on every call. */
     public MBeanConstructorInfo[] getConstructors() {
         MBeanConstructorInfo[] r = new MBeanConstructorInfo[constructors.length];
         System.arraycopy(constructors, 0, r, 0, constructors.length);
         return r;
     }
 
-    /** Copia nueva en cada llamada. */
+    /** A fresh copy on every call. */
     public MBeanNotificationInfo[] getNotifications() {
         MBeanNotificationInfo[] r = new MBeanNotificationInfo[notifications.length];
         System.arraycopy(notifications, 0, r, 0, notifications.length);
         return r;
     }
 
-    /** Nunca `null`. */
+    /** Never {@code null}. */
     public Descriptor getDescriptor() {
         return descriptor == null ? ImmutableDescriptor.EMPTY_DESCRIPTOR : descriptor;
     }
@@ -135,21 +137,22 @@ public class MBeanInfo implements Cloneable, Serializable, DescriptorRead {
     public String toString() {
         return getClass().getName()
                 + "[description=" + getDescription()
-                + ", attributes=" + aTexto(attributes)
-                + ", constructors=" + aTexto(constructors)
-                + ", operations=" + aTexto(operations)
-                + ", notifications=" + aTexto(notifications)
+                + ", attributes=" + asText(attributes)
+                + ", constructors=" + asText(constructors)
+                + ", operations=" + asText(operations)
+                + ", notifications=" + asText(notifications)
                 + ", descriptor=" + getDescriptor()
                 + "]";
     }
 
     /**
-     * {@code [a, b, c]}, como el de `Arrays.toString`.
+     * {@code [a, b, c]}, like {@code Arrays.toString}'s.
      *
-     * <p>Vive aca y es de paquete porque las cinco clases de `MBean*Info` la comparten y esta
-     * biblioteca no trae `Arrays.toString` para arreglos de objetos.
+     * <p>It lives here and is package-private because the five {@code MBean*Info} classes share it.
+     * (An earlier note said this library had no {@code Arrays.toString} for object arrays; it has
+     * one now, and this helper simply predates it.)
      */
-    static String aTexto(Object[] a) {
+    static String asText(Object[] a) {
         if (a == null) {
             return "null";
         }
@@ -171,8 +174,8 @@ public class MBeanInfo implements Cloneable, Serializable, DescriptorRead {
             return false;
         }
         MBeanInfo p = (MBeanInfo) o;
-        return MBeanFeatureInfo.igual(p.getClassName(), getClassName())
-                && MBeanFeatureInfo.igual(p.getDescription(), getDescription())
+        return MBeanFeatureInfo.same(p.getClassName(), getClassName())
+                && MBeanFeatureInfo.same(p.getDescription(), getDescription())
                 && p.getDescriptor().equals(getDescriptor())
                 && Arrays.equals(p.attributes, attributes)
                 && Arrays.equals(p.operations, operations)
@@ -180,7 +183,7 @@ public class MBeanInfo implements Cloneable, Serializable, DescriptorRead {
                 && Arrays.equals(p.notifications, notifications);
     }
 
-    /** Se calcula una vez: el objeto es inmutable. */
+    /** Computed once: the object is immutable. */
     public int hashCode() {
         if (hashCode == 0) {
             hashCode = getClassName().hashCode()

@@ -3,19 +3,19 @@ package javax.sound.sampled;
 import java.util.EventListener;
 
 /**
- * KajiLibrary's javax.sound.sampled.LineListener -- escucha los cambios de estado de una linea.
+ * KajiLibrary's javax.sound.sampled.LineListener -- listens to a line's state changes.
  *
- * <p>Un solo metodo para los cuatro eventos; el tipo se lee del {@link LineEvent}.
+ * <p>A single method for the four events; the type is read from the {@link LineEvent}.
  *
- * <p>Es la unica forma de saber que un clip termino de sonar: {@code Clip.start()} vuelve enseguida y
- * la reproduccion sigue en otro hilo. Esperar con pausas es lo que hace casi todo el mundo y siempre
- * queda mal.
+ * <p>It is the only way to know that a clip finished sounding: {@code Clip.start()} returns right
+ * away and playback goes on in another thread. Waiting with pauses is what almost everybody does
+ * and it always comes out wrong.
  *
- * <p>El aviso llega en un hilo del sistema de audio, no en el que pidio la operacion. Bloquearlo
- * retrasa el audio de todo el programa.
+ * <p>The notice arrives on a thread of the audio system, not on the one that asked for the
+ * operation. Blocking it delays the audio of the whole program.
  */
 public interface LineListener extends EventListener {
 
-    /** Algo cambio en una linea. */
+    /** Something changed in a line. */
     void update(LineEvent event);
 }

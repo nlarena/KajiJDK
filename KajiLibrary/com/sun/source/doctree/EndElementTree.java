@@ -3,9 +3,9 @@ package com.sun.source.doctree;
 import javax.lang.model.element.Name;
 
 /**
- * Una etiqueta HTML de cierre. Aparece como nodo hermano del de apertura y no como
- * un cierre estructural, porque el javadoc de un comentario puede tener HTML mal balanceado y el
- * arbol tiene que poder representarlo igual.
+ * A closing HTML tag. It appears as a sibling node of the opening one and not as
+ * a structural close, because a comment's javadoc may have badly balanced HTML and the tree has
+ * to be able to represent it all the same.
  */
 public interface EndElementTree extends DocTree {
 

@@ -7,19 +7,19 @@ import javax.swing.plaf.ComponentUI;
 import javax.swing.plaf.basic.BasicDesktopIconUI;
 
 /**
- * El icono de una ventana interna minimizada, en Metal.
+ * A minimized internal frame's icon, in Metal.
  *
- * <p>Metal no lo dibuja como un icono: lo dibuja como una <strong>ventana chiquita</strong>, con su
- * barra de titulo y su boton de restaurar. Por eso el ancho preferido es fijo -- 160 pixeles -- y
- * no depende del titulo: si dependiera, un escritorio con varias ventanas minimizadas tendria
- * botones de distinto largo y no se leerian como una fila.
+ * <p>Metal does not draw it as an icon: it draws it as a <strong>tiny window</strong>, with its
+ * title bar and its restore button. That is why the preferred width is fixed -- 160 pixels --
+ * and does not depend on the title: if it did, a desktop with several minimized windows would
+ * have buttons of different lengths and would not read as a row.
  *
- * <p>Los tres tamanos son el mismo. Un icono de escritorio no se estira.
+ * <p>The three sizes are the same. A desktop icon does not stretch.
  */
 public class MetalDesktopIconUI extends BasicDesktopIconUI {
 
-    /** El ancho fijo; ver la nota de la clase. */
-    private static final int ANCHO = 160;
+    /** The fixed width; see the class note. */
+    private static final int WIDTH = 160;
 
     public MetalDesktopIconUI() {
     }
@@ -28,7 +28,7 @@ public class MetalDesktopIconUI extends BasicDesktopIconUI {
         return new MetalDesktopIconUI();
     }
 
-    /** Los del basico; Metal no cambia ninguno, y el icono queda opaco. Medido. */
+    /** The basic one's; Metal changes none, and the icon stays opaque. Measured. */
     protected void installDefaults() {
         super.installDefaults();
     }
@@ -50,7 +50,7 @@ public class MetalDesktopIconUI extends BasicDesktopIconUI {
     }
 
     public Dimension getPreferredSize(JComponent c) {
-        return new Dimension(ANCHO, alto());
+        return new Dimension(WIDTH, height());
     }
 
     public Dimension getMinimumSize(JComponent c) {
@@ -61,8 +61,8 @@ public class MetalDesktopIconUI extends BasicDesktopIconUI {
         return getPreferredSize(c);
     }
 
-    /** El de la barra de titulo que lleva adentro. */
-    private int alto() {
+    /** The one of the title bar it carries inside. */
+    private int height() {
         if (iconPane != null) {
             return iconPane.getPreferredSize().height;
         }

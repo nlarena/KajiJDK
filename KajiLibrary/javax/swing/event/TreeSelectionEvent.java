@@ -5,37 +5,37 @@ import java.util.EventObject;
 import javax.swing.tree.TreePath;
 
 /**
- * La seleccion del arbol cambio.
+ * The tree's selection changed.
  *
- * <h2>Trae la DIFERENCIA, no la seleccion</h2>
+ * <h2>It brings the DIFFERENCE, not the selection</h2>
  *
- * <p>{@link #getPaths} devuelve los caminos que <em>cambiaron de estado</em>, y el arreglo paralelo
- * {@code areNew} dice si cada uno entro o salio. No es la seleccion actual: para eso hay que
- * preguntarle al arbol.
+ * <p>{@link #getPaths} returns the paths that <em>changed state</em>, and the parallel array
+ * {@code areNew} says whether each one came in or went out. It is not the current selection: for
+ * that the tree has to be asked.
  *
- * <p>Traer la diferencia es lo que hace barato seleccionar mil filas — el evento describe lo que se
- * movio, no lo que quedo.
+ * <p>Bringing the difference is what makes selecting a thousand rows cheap -- the event describes
+ * what moved, not what was left.
  *
- * <p>El camino <em>lider</em> es el ultimo que el usuario toco, y viene con su valor anterior:
- * mueve el foco del teclado, y quien dibuja necesita repintar los dos.
+ * <p>The <em>lead</em> path is the last one the user touched, and it comes with its previous
+ * value: it moves the keyboard focus, and whoever draws needs to repaint both.
  */
 public class TreeSelectionEvent extends EventObject {
 
     private static final long serialVersionUID = 1L;
 
-    /** Los caminos que cambiaron de estado. */
+    /** The paths that changed state. */
     protected TreePath[] paths;
 
-    /** Para cada uno, si entro ({@code true}) o salio. */
+    /** For each one, whether it came in ({@code true}) or went out. */
     protected boolean[] areNew;
 
-    /** El lider anterior. */
+    /** The previous lead. */
     protected TreePath oldLeadSelectionPath;
 
-    /** El lider nuevo. */
+    /** The new lead. */
     protected TreePath newLeadSelectionPath;
 
-    /** Con varios caminos. */
+    /** With several paths. */
     public TreeSelectionEvent(Object source, TreePath[] paths, boolean[] areNew,
             TreePath oldLeadSelectionPath, TreePath newLeadSelectionPath) {
         super(source);
@@ -45,7 +45,7 @@ public class TreeSelectionEvent extends EventObject {
         this.newLeadSelectionPath = newLeadSelectionPath;
     }
 
-    /** Con uno solo. */
+    /** With a single one. */
     public TreeSelectionEvent(Object source, TreePath path, boolean isNew,
             TreePath oldLeadSelectionPath, TreePath newLeadSelectionPath) {
         super(source);
@@ -57,55 +57,55 @@ public class TreeSelectionEvent extends EventObject {
         this.newLeadSelectionPath = newLeadSelectionPath;
     }
 
-    /** Los caminos que cambiaron, en un arreglo nuevo. */
+    /** The paths that changed, in a new array. */
     public TreePath[] getPaths() {
         int n = this.paths.length;
-        TreePath[] copia = new TreePath[n];
+        TreePath[] copy = new TreePath[n];
         for (int i = 0; i < n; i++) {
-            copia[i] = this.paths[i];
+            copy[i] = this.paths[i];
         }
-        return copia;
+        return copy;
     }
 
-    /** El primero de los caminos que cambiaron. */
+    /** The first of the paths that changed. */
     public TreePath getPath() {
         return this.paths[0];
     }
 
-    /** Si {@link #getPath} entro en la seleccion. */
+    /** Whether {@link #getPath} came into the selection. */
     public boolean isAddedPath() {
         return this.areNew[0];
     }
 
-    /** Si ese camino entro en la seleccion. */
+    /** Whether that path came into the selection. */
     public boolean isAddedPath(TreePath path) {
         for (int i = this.paths.length - 1; i >= 0; i--) {
             if (this.paths[i].equals(path)) {
                 return this.areNew[i];
             }
         }
-        throw new IllegalArgumentException("ese camino no esta en el evento");
+        throw new IllegalArgumentException("that path is not in the event");
     }
 
-    /** Si el camino numero {@code index} entro en la seleccion. */
+    /** Whether path number {@code index} came into the selection. */
     public boolean isAddedPath(int index) {
         if (this.paths == null || index < 0 || index >= this.paths.length) {
-            throw new IllegalArgumentException("indice fuera de rango");
+            throw new IllegalArgumentException("index out of range");
         }
         return this.areNew[index];
     }
 
-    /** El lider anterior. */
+    /** The previous lead. */
     public TreePath getOldLeadSelectionPath() {
         return this.oldLeadSelectionPath;
     }
 
-    /** El lider nuevo. */
+    /** The new lead. */
     public TreePath getNewLeadSelectionPath() {
         return this.newLeadSelectionPath;
     }
 
-    /** Una copia con otro origen, para reenviarlo. */
+    /** A copy with another source, for forwarding it. */
     public Object cloneWithSource(Object newSource) {
         return new TreeSelectionEvent(newSource, this.paths, this.areNew,
                 this.oldLeadSelectionPath, this.newLeadSelectionPath);

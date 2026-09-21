@@ -1,47 +1,47 @@
 package javax.swing.text;
 
 /**
- * Una marca en el documento que <strong>se mueve sola</strong> cuando el texto cambia.
+ * A mark in the document that <strong>moves by itself</strong> when the text changes.
  *
- * <h2>Por que no alcanza con un {@code int}</h2>
+ * <h2>Why an {@code int} is not enough</h2>
  *
- * <p>Un desplazamiento es un numero, y un numero no sabe nada del documento: si alguien inserta diez
- * caracteres mas arriba, el numero sigue apuntando al mismo lugar del <em>texto viejo</em>, que ya
- * no es donde estaba lo que interesaba. Una {@code Position} la mantiene el documento y se corre con
- * las inserciones y los borrados.
+ * <p>An offset is a number, and a number knows nothing about the document: if somebody inserts
+ * ten characters further up, the number goes on pointing at the same place of the <em>old
+ * text</em>, which is no longer where what mattered was. A {@code Position} is maintained by the
+ * document and shifts with the insertions and the removals.
  *
- * <p>Es lo que hace que un cursor, una seleccion o un marcador sobrevivan a que alguien edite arriba
- * de ellos. Todo el modelo de texto de Swing se apoya en esta distincion.
+ * <p>It is what makes a cursor, a selection or a bookmark survive somebody editing above them.
+ * The whole of Swing's text model rests on this distinction.
  */
 public interface Position {
 
-    /** Donde esta la marca ahora. */
+    /** Where the mark is now. */
     int getOffset();
 
     /**
-     * De que lado del texto insertado se queda una marca.
+     * Which side of the inserted text a mark stays on.
      *
-     * <p>La pregunta no es retorica: si se inserta exactamente en la posicion de la marca, no hay
-     * respuesta obvia a si la marca queda antes o despues de lo insertado. Los dos comportamientos
-     * se necesitan — un cursor quiere quedar despues de lo que acaba de escribir, y el final de un
-     * resaltado quiere quedar antes.
+     * <p>The question is not rhetorical: if something is inserted exactly at the mark's position,
+     * there is no obvious answer as to whether the mark ends up before or after what was inserted.
+     * Both behaviours are needed -- a cursor wants to end up after what it has just typed, and the
+     * end of a highlight wants to end up before.
      */
     public static final class Bias {
 
-        /** La marca queda <em>despues</em> de lo insertado. */
+        /** The mark ends up <em>after</em> what was inserted. */
         public static final Bias Forward = new Bias("Forward");
 
-        /** La marca queda <em>antes</em> de lo insertado. */
+        /** The mark ends up <em>before</em> what was inserted. */
         public static final Bias Backward = new Bias("Backward");
 
-        private String nombre;
+        private String name;
 
-        private Bias(String nombre) {
-            this.nombre = nombre;
+        private Bias(String name) {
+            this.name = name;
         }
 
         public String toString() {
-            return this.nombre;
+            return this.name;
         }
     }
 }

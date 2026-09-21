@@ -5,44 +5,44 @@ import java.awt.AWTEvent;
 import javax.swing.JInternalFrame;
 
 /**
- * Algo paso con una ventana interna.
+ * Something happened with an internal frame.
  *
- * <p>Los identificadores replican los de {@link java.awt.event.WindowEvent} en un rango propio, y
- * esa simetria es a proposito: una ventana interna tiene el mismo ciclo de vida que una de verdad
- * —se abre, se activa, se minimiza, se cierra— aunque viva adentro de otra.
+ * <p>The identifiers replicate {@link java.awt.event.WindowEvent}'s in a range of their own, and
+ * that symmetry is on purpose: an internal frame has the same life cycle as a real one --it
+ * opens, is activated, is iconified, closes-- even though it lives inside another.
  *
- * <p>La distincion que importa es {@link #INTERNAL_FRAME_CLOSING} contra
- * {@link #INTERNAL_FRAME_CLOSED}: el primero se puede cancelar, el segundo ya paso.
+ * <p>The distinction that matters is {@link #INTERNAL_FRAME_CLOSING} against
+ * {@link #INTERNAL_FRAME_CLOSED}: the first can be cancelled, the second has already happened.
  */
 public class InternalFrameEvent extends AWTEvent {
 
     private static final long serialVersionUID = 1L;
 
-    /** El primero de los identificadores de este rango. */
+    /** The first of this range's identifiers. */
     public static final int INTERNAL_FRAME_FIRST = 25549;
 
-    /** El ultimo de los identificadores de este rango. */
+    /** The last of this range's identifiers. */
     public static final int INTERNAL_FRAME_LAST = 25555;
 
-    /** Se abrio. */
+    /** It opened. */
     public static final int INTERNAL_FRAME_OPENED = 25549;
 
-    /** Se esta por cerrar; todavia se puede cancelar. */
+    /** It is about to close; it can still be cancelled. */
     public static final int INTERNAL_FRAME_CLOSING = 25550;
 
-    /** Se cerro. */
+    /** It closed. */
     public static final int INTERNAL_FRAME_CLOSED = 25551;
 
-    /** Se minimizo a un icono. */
+    /** It was iconified. */
     public static final int INTERNAL_FRAME_ICONIFIED = 25552;
 
-    /** Se restauro. */
+    /** It was restored. */
     public static final int INTERNAL_FRAME_DEICONIFIED = 25553;
 
-    /** Tomo el foco. */
+    /** It took the focus. */
     public static final int INTERNAL_FRAME_ACTIVATED = 25554;
 
-    /** Perdio el foco. */
+    /** It lost the focus. */
     public static final int INTERNAL_FRAME_DEACTIVATED = 25555;
 
     public InternalFrameEvent(JInternalFrame source, int id) {
@@ -75,7 +75,7 @@ public class InternalFrameEvent extends AWTEvent {
         return "unknown type";
     }
 
-    /** La ventana interna. */
+    /** The internal frame. */
     public JInternalFrame getInternalFrame() {
         return (JInternalFrame) getSource();
     }

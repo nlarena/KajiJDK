@@ -1,58 +1,58 @@
 package com.sun.jdi;
 
 /**
- * Un miembro de un tipo: un campo o un metodo.
+ * A member of a type: a field or a method.
  *
  * @since 1.3
  */
 public interface TypeComponent extends Mirror,Accessible {
 
     /**
-     * El nombre.
+     * The name.
      *
-     * @return el resultado
+     * @return the result
      */
     String name();
 
     /**
-     * El signature.
+     * The signature.
      *
-     * @return el resultado
+     * @return the result
      */
     String signature();
 
     /**
-     * El generic signature.
+     * The generic signature.
      *
-     * @return el resultado
+     * @return the result
      */
     String genericSignature();
 
     /**
-     * El declaring type.
+     * The declaring type.
      *
-     * @return el resultado
+     * @return the result
      */
     ReferenceType declaringType();
 
     /**
-     * Si static.
+     * Whether static.
      *
-     * @return el resultado
+     * @return the result
      */
     boolean isStatic();
 
     /**
-     * Si final.
+     * Whether final.
      *
-     * @return el resultado
+     * @return the result
      */
     boolean isFinal();
 
     /**
-     * Si synthetic.
+     * Whether synthetic.
      *
-     * @return el resultado
+     * @return the result
      */
     boolean isSynthetic();
 }

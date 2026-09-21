@@ -1,18 +1,19 @@
 package java.awt.dnd;
 
 /**
- * El arrastre está pasando por encima de un destino, visto desde el origen.
+ * The drag is passing over a destination, seen from the source.
  *
- * <p>Trae **tres** acciones distintas y confundirlas es fácil:
+ * <p>It brings **three** different actions and confusing them is easy:
  *
  * <ul>
- *   <li>{@link #getUserAction}: lo que el usuario pide, según las teclas que tenga apretadas;
- *   <li>{@link #getTargetActions}: lo que el destino declaró que acepta;
- *   <li>{@link #getDropAction}: la intersección de las dos, que es lo que efectivamente va a pasar.
+ *   <li>{@link #getUserAction}: what the user asks for, according to the keys they have held down;
+ *   <li>{@link #getTargetActions}: what the destination declared it accepts;
+ *   <li>{@link #getDropAction}: the intersection of the two, which is what is actually going to
+ *       happen.
  * </ul>
  *
- * <p>La tercera es la que decide el cursor, y es cero cuando el usuario pide algo que el destino no
- * acepta.
+ * <p>The third one is the one that decides the cursor, and it is zero when the user asks for
+ * something the destination does not accept.
  */
 public class DragSourceDragEvent extends DragSourceEvent {
 
@@ -23,9 +24,9 @@ public class DragSourceDragEvent extends DragSourceEvent {
     private final int gestureModifiers;
 
     /**
-     * Sin posición.
+     * With no position.
      *
-     * @throws IllegalArgumentException si el contexto es `null`
+     * @throws IllegalArgumentException if the context is `null`
      */
     public DragSourceDragEvent(DragSourceContext dsc, int dropAction, int action, int modifiers) {
         super(dsc);
@@ -35,9 +36,9 @@ public class DragSourceDragEvent extends DragSourceEvent {
     }
 
     /**
-     * Con la posición en pantalla.
+     * With the position on the screen.
      *
-     * @throws IllegalArgumentException si el contexto es `null`
+     * @throws IllegalArgumentException if the context is `null`
      */
     public DragSourceDragEvent(DragSourceContext dsc, int dropAction, int action, int modifiers,
             int x, int y) {
@@ -47,40 +48,42 @@ public class DragSourceDragEvent extends DragSourceEvent {
         this.gestureModifiers = modifiers;
     }
 
-    /** Qué acepta el destino. */
+    /** What the destination accepts. */
     public int getTargetActions() {
         return this.targetActions;
     }
 
     /**
-     * Los modificadores en la codificación vieja.
+     * The modifiers in the old encoding.
      *
-     * @deprecated mezcla teclas con botones de forma ambigua. Usar {@link #getGestureModifiersEx}.
+     * @deprecated it mixes keys with buttons in an ambiguous way. Use {@link
+     *     #getGestureModifiersEx}.
      */
     @Deprecated
     public int getGestureModifiers() {
         return this.gestureModifiers;
     }
 
-    /** Los modificadores en la codificación nueva. */
+    /** The modifiers in the new encoding. */
     public int getGestureModifiersEx() {
         return this.gestureModifiers;
     }
 
     /**
-     * Qué acción pide el usuario, según las teclas.
+     * Which action the user asks for, according to the keys.
      *
-     * <p>Se saca de los modificadores y **no** de las acciones del destino: es lo que el usuario
-     * quiere, aunque no se pueda.
+     * <p>It is the one the drag source passed in, worked out from the modifiers, and **not** from
+     * the actions of the destination: it is what the user wants, even if it cannot be done.
      */
     public int getUserAction() {
         return this.dropAction;
     }
 
     /**
-     * Qué va a pasar de verdad: lo que el usuario pide **y** el destino acepta.
+     * What is really going to happen: what the user asks for **and** the destination accepts.
      *
-     * <p>Cero si no coinciden, que es cuando el cursor muestra que ahí no se puede soltar.
+     * <p>Zero if they do not coincide, which is when the cursor shows that nothing can be dropped
+     * there.
      */
     public int getDropAction() {
         return this.dropAction & this.targetActions;

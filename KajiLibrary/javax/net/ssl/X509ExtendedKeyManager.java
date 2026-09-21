@@ -3,31 +3,31 @@ package javax.net.ssl;
 import java.security.Principal;
 
 /**
- * Un {@link X509KeyManager} que tambien sabe elegir para un {@link SSLEngine}.
+ * An {@link X509KeyManager} that can also choose for an {@link SSLEngine}.
  *
- * <h2>Por que hizo falta una clase mas</h2>
+ * <h2>Why one more class was needed</h2>
  *
- * <p>Porque {@link X509KeyManager} recibe un {@link java.net.Socket} para decidir, y un
- * {@code SSLEngine} no tiene socket: es justamente la abstraccion que separo el protocolo del
- * transporte. Agregarle metodos a la interfaz habria roto a todo el que ya la implementaba, asi que
- * los nuevos llegaron en una clase abstracta con cuerpo.
+ * <p>Because {@link X509KeyManager} receives a {@link java.net.Socket} to decide, and an {@code
+ * SSLEngine} has no socket: it is precisely the abstraction that separated the protocol from the
+ * transport. Adding methods to the interface would have broken everybody who already implemented
+ * it, so the new ones arrived in an abstract class with a body.
  *
- * <p>Esos cuerpos devuelven {@code null}, que significa "no tengo credencial para esto". Es la
- * respuesta segura: no elegir nada es peor que fallar, pero mucho mejor que presentar una credencial
- * que no corresponde.
+ * <p>Those bodies return {@code null}, which means "I have no credential for this". It is the safe
+ * answer: choosing nothing is worse than failing, but much better than presenting a credential that
+ * does not correspond.
  */
 public abstract class X509ExtendedKeyManager implements X509KeyManager {
 
-    /** Para las subclases. */
+    /** For subclasses. */
     protected X509ExtendedKeyManager() {
     }
 
-    /** Elige el alias de cliente para un motor; {@code null} si ninguno sirve. */
+    /** Chooses the client alias for an engine; {@code null} if none serves. */
     public String chooseEngineClientAlias(String[] keyType, Principal[] issuers, SSLEngine engine) {
         return null;
     }
 
-    /** Elige el alias de servidor para un motor; {@code null} si ninguno sirve. */
+    /** Chooses the server alias for an engine; {@code null} if none serves. */
     public String chooseEngineServerAlias(String keyType, Principal[] issuers, SSLEngine engine) {
         return null;
     }

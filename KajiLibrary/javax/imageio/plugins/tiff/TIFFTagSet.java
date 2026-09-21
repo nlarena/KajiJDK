@@ -9,44 +9,44 @@ import java.util.SortedSet;
 import java.util.TreeSet;
 
 /**
- * KajiLibrary's javax.imageio.plugins.tiff.TIFFTagSet -- un grupo de etiquetas TIFF relacionadas.
+ * KajiLibrary's javax.imageio.plugins.tiff.TIFFTagSet -- a group of related TIFF tags.
  *
- * <p>Los numeros de etiqueta de TIFF no son globales: el 0x8769 significa una cosa en el directorio
- * principal y otra adentro de un directorio Exif. Un conjunto es el que da el contexto.
+ * <p>TIFF tag numbers are not global: tag 1 is {@code GPSLatitudeRef} in a GPS directory and
+ * {@code InteroperabilityIndex} in an Exif interoperability one. A set is what gives the context.
+ * (An earlier note used 0x8769 as the example; that is the Exif directory pointer, and it has no
+ * other meaning inside an Exif directory.)
  *
- * <p>De ahi que los conjuntos vengan de a familias --la base de TIFF, Exif, GPS, fax, GeoTIFF-- y que
- * un lector tenga que saber en cual esta parado.
+ * <p>That is why sets come in families --the TIFF baseline, Exif, GPS, fax, GeoTIFF-- and why a
+ * reader has to know which one it is standing in.
  *
- * <p>Se busca por numero, que es lo que trae el archivo, o por nombre, que es lo que escribe una
- * persona. Los dos devuelven null si no esta.
+ * <p>Lookup is by number, which is what the file carries, or by name, which is what a person
+ * writes. Both return null if it is not there.
  *
- * <p>Es inmutable: la lista se copia al construir y los dos conjuntos que devuelve son de solo
- * lectura. Una subclase concreta arma su lista en un {@code static} y no se toca mas.
+ * <p>It is immutable: the list is copied on construction and the two sets it returns are
+ * read-only. A concrete subclass builds its list in a {@code static} and it is not touched again.
  *
- * <h2>A KajiLibrary subset</h2>
- *
- * <p>De este paquete estan implementados {@link TIFFTag} y esta clase, que son el nucleo y no dependen
- * de nada. Los siete conjuntos concretos --{@code BaselineTIFFTagSet} y companeros-- y las tres clases
- * que manejan directorios y campos necesitan {@code javax.imageio} y {@code javax.imageio.metadata},
- * que esta biblioteca todavia no tiene.
+ * <p>The seven concrete sets --{@code BaselineTIFFTagSet} and friends-- and the classes that handle
+ * directories and fields are all in this package. (An earlier note said they were missing, waiting
+ * for {@code javax.imageio} and {@code javax.imageio.metadata}; both packages are here now.)
  */
 public class TIFFTagSet {
 
-    /** Por numero. */
+    /** By number. */
     private final Map<Integer, TIFFTag> byNumber = new HashMap<Integer, TIFFTag>();
 
-    /** Por nombre. */
+    /** By name. */
     private final Map<String, TIFFTag> byName = new HashMap<String, TIFFTag>();
 
-    /** Los numeros, ordenados y de solo lectura. */
+    /** The numbers, sorted and read-only. */
     private final SortedSet<Integer> numbers;
 
-    /** Los nombres, ordenados y de solo lectura. */
+    /** The names, sorted and read-only. */
     private final SortedSet<String> names;
 
     /**
-     * @param tags las etiquetas del grupo; se copian
-     * @throws IllegalArgumentException si la lista es null o tiene algo que no es un {@link TIFFTag}
+     * @param tags the tags of the group; they are copied
+     * @throws IllegalArgumentException if the list is null or has something that is not a
+     *     {@link TIFFTag}
      */
     public TIFFTagSet(List<TIFFTag> tags) {
         if (tags == null) {
@@ -71,12 +71,12 @@ public class TIFFTagSet {
         this.names = Collections.unmodifiableSortedSet(allNames);
     }
 
-    /** La etiqueta con ese numero, o null. */
+    /** The tag with that number, or null. */
     public TIFFTag getTag(int tagNumber) {
         return this.byNumber.get(Integer.valueOf(tagNumber));
     }
 
-    /** La etiqueta con ese nombre, o null. */
+    /** The tag with that name, or null. */
     public TIFFTag getTag(String tagName) {
         if (tagName == null) {
             throw new IllegalArgumentException("tagName == null!");
@@ -84,12 +84,12 @@ public class TIFFTagSet {
         return this.byName.get(tagName);
     }
 
-    /** Los numeros, ordenados; de solo lectura. */
+    /** The numbers, sorted; read-only. */
     public SortedSet<Integer> getTagNumbers() {
         return this.numbers;
     }
 
-    /** Los nombres, ordenados; de solo lectura. */
+    /** The names, sorted; read-only. */
     public SortedSet<String> getTagNames() {
         return this.names;
     }

@@ -4,25 +4,29 @@ import java.awt.Image;
 import java.util.Hashtable;
 
 /**
- * El puente de vuelta: convierte la tubería asíncrona de {@link ImageProducer} en un arreglo de
- * píxeles y una llamada que espera.
+ * The bridge back: it turns the asynchronous pipe of {@link ImageProducer} into an array of pixels
+ * and a call that waits.
  *
- * <p>Todo lo demás en este paquete empuja píxeles hacia adelante. Esto es lo que los junta: se
- * registra como consumidor, deja que la imagen llegue, y {@link #grabPixels()} bloquea hasta que
- * terminó. Es la forma de sacar los píxeles de cualquier `Image`, venga de donde venga.
+ * <p>Everything else in this package pushes pixels forward. This is what gathers them: it registers
+ * as a consumer, lets the image arrive, and {@link #grabPixels()} blocks until it is finished. It
+ * is the way to get the pixels out of any `Image`, wherever it comes from.
  *
- * <p>Hay dos maneras de usarlo y la diferencia importa. Si se le da un arreglo, escribe ahí y
- * respeta el modelo de color que traiga la imagen; si no, reserva el suyo cuando se entera del
- * tamaño. El constructor con `forceRGB` pide además que todo se convierta a ARGB de ocho bits por
- * canal, que es lo que se quiere cuando hay que mirar los colores y no sólo copiarlos.
+ * <p>There are two ways of using it and the difference matters. If it is given an array, it writes
+ * there and respects the colour model the image brings; if not, it reserves its own when it learns
+ * the size. The constructor with `forceRGB` asks besides that everything be converted to ARGB of
+ * eight bits per channel, which is what one wants when the colours have to be looked at and not
+ * just copied.
  *
- * <p>Esa conversión puede pasar **a mitad de camino**: mientras todas las tandas vengan con el mismo
- * modelo de color se guardan los píxeles crudos, y en cuanto llega una con otro modelo hay que pasar
- * a ARGB todo lo que ya se había juntado, porque no hay un modelo que sirva para las dos.
+ * <p>That conversion can happen **halfway**: as long as every batch comes with the same colour
+ * model the raw pixels are kept, and as soon as one arrives with another model everything gathered
+ * so far has to be taken to ARGB, because there is no model that serves for both.
  *
- * <p>Terminar sin error **no** garantiza una imagen completa: hay que mirar {@link #getStatus} y
- * comprobar que tenga `ALLBITS`. Una imagen abortada a mitad devuelve `true` de `grabPixels` con un
- * arreglo parcialmente lleno, y no darse cuenta es la equivocación clásica con esta clase.
+ * <p>Finishing without an error does **not** guarantee a complete image, and this note used to say
+ * the trap was the other way round. `grabPixels` returns `true` when `FRAMEBITS` or `ALLBITS` is
+ * set, so an image that was aborted halfway, one that failed and a wait that timed out all return
+ * `false`; what returns `true` without the image being whole is one frame of a multi-frame image,
+ * which sets `FRAMEBITS`. To know that everything is there, {@link #getStatus} has to be asked for
+ * `ALLBITS`.
  */
 public class PixelGrabber implements ImageConsumer {
 
@@ -43,19 +47,19 @@ public class PixelGrabber implements ImageConsumer {
     private static final int DONEBITS = GRABBEDBITS | ImageObserver.ERROR;
 
     /**
-     * Junta un rectángulo de una imagen en el arreglo dado, en ARGB.
+     * Gathers a rectangle of an image into the given array, in ARGB.
      *
-     * @throws NullPointerException si la imagen es `null`
+     * @throws NullPointerException if the image is `null`
      */
     public PixelGrabber(Image img, int x, int y, int w, int h, int[] pix, int off, int scansize) {
         this(img.getSource(), x, y, w, h, pix, off, scansize);
     }
 
     /**
-     * Junta un rectángulo de un productor en el arreglo dado, en ARGB.
+     * Gathers a rectangle of a producer into the given array, in ARGB.
      *
-     * <p>Con `pix` en `null` y las medidas en -1, el arreglo se reserva cuando el productor anuncia
-     * el tamaño.
+     * <p>With `pix` as `null` and the measures as -1, the array is reserved when the producer
+     * announces the size.
      */
     public PixelGrabber(ImageProducer ip, int x, int y, int w, int h, int[] pix, int off,
             int scansize) {
@@ -71,12 +75,12 @@ public class PixelGrabber implements ImageConsumer {
     }
 
     /**
-     * Junta un rectángulo de una imagen en un arreglo propio.
+     * Gathers a rectangle of an image into an array of its own.
      *
-     * <p>Con `forceRGB` en `false` se guardan los píxeles tal como vengan y el modelo de color queda
-     * en {@link #getColorModel}; con `true` se convierte todo a ARGB.
+     * <p>With `forceRGB` as `false` the pixels are kept just as they come and the colour model is
+     * left in {@link #getColorModel}; with `true` everything is converted to ARGB.
      *
-     * @throws NullPointerException si la imagen es `null`
+     * @throws NullPointerException if the image is `null`
      */
     public PixelGrabber(Image img, int x, int y, int w, int h, boolean forceRGB) {
         this.producer = img.getSource();
@@ -89,7 +93,7 @@ public class PixelGrabber implements ImageConsumer {
         }
     }
 
-    /** Arranca la entrega sin esperarla. */
+    /** Starts the delivery without waiting for it. */
     public synchronized void startGrabbing() {
         if ((this.flags & DONEBITS) != 0) {
             return;
@@ -101,26 +105,26 @@ public class PixelGrabber implements ImageConsumer {
         }
     }
 
-    /** Corta la entrega. */
+    /** Cuts the delivery short. */
     public synchronized void abortGrabbing() {
         this.imageComplete(ImageConsumer.IMAGEABORTED);
     }
 
     /**
-     * Arranca la entrega si hace falta y espera hasta que termine.
+     * Starts the delivery if need be and waits until it finishes.
      *
-     * @return `true` si se juntaron píxeles, lo que **no** quiere decir que la imagen esté completa
-     * @throws InterruptedException si se interrumpe el hilo mientras espera
+     * @return `true` if pixels were gathered, which does **not** mean the image is complete
+     * @throws InterruptedException if the thread is interrupted while it waits
      */
     public boolean grabPixels() throws InterruptedException {
         return this.grabPixels(0);
     }
 
     /**
-     * Como el anterior, con un plazo.
+     * Like the previous one, with a deadline.
      *
-     * @param ms cuánto esperar como máximo, o 0 para esperar sin plazo
-     * @throws InterruptedException si se interrumpe el hilo mientras espera
+     * @param ms how long to wait at most, or 0 to wait with no deadline
+     * @throws InterruptedException if the thread is interrupted while it waits
      */
     public synchronized boolean grabPixels(long ms) throws InterruptedException {
         if ((this.flags & DONEBITS) != 0) {
@@ -148,35 +152,34 @@ public class PixelGrabber implements ImageConsumer {
     }
 
     /**
-     * Las banderas de {@link ImageObserver} que describen cómo terminó.
+     * The {@link ImageObserver} flags that describe how it finished.
      *
-     * @deprecated el nombre no dice que devuelve banderas de estado. Usar {@link #getStatus}.
+     * @deprecated the name does not say that it returns status flags. Use {@link #getStatus}.
      */
     @Deprecated
     public synchronized int status() {
         return this.flags;
     }
 
-    /** Las banderas de {@link ImageObserver} que describen cómo terminó. */
+    /** The {@link ImageObserver} flags that describe how it finished. */
     public synchronized int getStatus() {
         return this.flags;
     }
 
-    /** El ancho de lo que se juntó, o -1 si todavía no se sabe. */
+    /** The width of what was gathered, or -1 if it is not known yet. */
     public synchronized int getWidth() {
         return this.dstW < 0 ? -1 : this.dstW;
     }
 
-    /** El alto de lo que se juntó, o -1 si todavía no se sabe. */
+    /** The height of what was gathered, or -1 if it is not known yet. */
     public synchronized int getHeight() {
         return this.dstH < 0 ? -1 : this.dstH;
     }
 
     /**
-     * El arreglo con los píxeles: un `byte[]` o un `int[]`.
+     * The array with the pixels: a `byte[]` or an `int[]`.
      *
-     * <p>Hay que preguntarle a {@link #getColorModel} cómo interpretarlos, salvo que se haya pedido
-     * ARGB.
+     * <p>{@link #getColorModel} has to be asked how to read them, unless ARGB was asked for.
      */
     public synchronized Object getPixels() {
         if (this.bytePixels == null) {
@@ -186,16 +189,16 @@ public class PixelGrabber implements ImageConsumer {
     }
 
     /**
-     * El modelo de color de los píxeles juntados.
+     * The colour model of the gathered pixels.
      *
-     * <p>Puede no ser el de la imagen: si las tandas vinieron con modelos distintos, todo se
-     * convirtió a ARGB y esto devuelve el modelo ARGB.
+     * <p>It may not be the one of the image: if the batches came with different models, everything
+     * was converted to ARGB and this returns the ARGB model.
      */
     public synchronized ColorModel getColorModel() {
         return this.imageModel;
     }
 
-    /** Anota el tamaño y reserva el arreglo si hace falta. */
+    /** Records the size and reserves the array if need be. */
     public void setDimensions(int width, int height) {
         if (this.dstW < 0) {
             this.dstW = width - this.dstX;
@@ -213,28 +216,28 @@ public class PixelGrabber implements ImageConsumer {
         this.flags = this.flags | ImageObserver.WIDTH | ImageObserver.HEIGHT;
     }
 
-    /** No hace nada: este consumidor acepta cualquier orden. */
+    /** It does nothing: this consumer accepts any order. */
     public void setHints(int hints) {
     }
 
-    /** No hace nada: este consumidor no guarda propiedades. */
+    /** It does nothing: this consumer does not keep properties. */
     public void setProperties(Hashtable<?, ?> props) {
     }
 
     /**
-     * No hace nada.
+     * It does nothing.
      *
-     * <p>El modelo de color no se toma de acá sino de cada tanda: el productor anuncia el que va a
-     * usar para la mayoría, pero puede mandar tandas con otro.
+     * <p>The colour model is not taken from here but from each batch: the producer announces the
+     * one it is going to use for most of them, but it may send batches with another.
      */
     public void setColorModel(ColorModel model) {
     }
 
     /**
-     * Pasa a ARGB todo lo que se haya juntado hasta ahora.
+     * Takes everything gathered so far to ARGB.
      *
-     * <p>Hace falta cuando llega una tanda con un modelo de color distinto del de las anteriores: no
-     * hay un modelo que describa a las dos, así que se pasa al único común.
+     * <p>It is needed when a batch arrives with a colour model different from that of the previous
+     * ones: there is no model that describes both, so everything moves to the only common one.
      */
     private void convertToRGB() {
         int size = this.dstW * this.dstH;
@@ -255,8 +258,8 @@ public class PixelGrabber implements ImageConsumer {
         this.imageModel = ColorModel.getRGBdefault();
     }
 
-    /** Recorta la tanda al rectángulo pedido; devuelve `null` si no queda nada. */
-    private int[] recortar(int srcX, int srcY, int srcW, int srcH, int srcOff, int srcScan) {
+    /** Crops the batch to the rectangle asked for; returns `null` if nothing is left. */
+    private int[] cropBatch(int srcX, int srcY, int srcW, int srcH, int srcOff, int srcScan) {
         int x = srcX;
         int y = srcY;
         int w = srcW;
@@ -301,10 +304,10 @@ public class PixelGrabber implements ImageConsumer {
         return r;
     }
 
-    /** Guarda una tanda de píxeles de un byte. */
+    /** Stores a batch of pixels of one byte. */
     public void setPixels(int srcX, int srcY, int srcW, int srcH, ColorModel model, byte[] pixels,
             int srcOff, int srcScan) {
-        int[] r = this.recortar(srcX, srcY, srcW, srcH, srcOff, srcScan);
+        int[] r = this.cropBatch(srcX, srcY, srcW, srcH, srcOff, srcScan);
         if (r == null) {
             return;
         }
@@ -326,7 +329,7 @@ public class PixelGrabber implements ImageConsumer {
         int dstPtr = this.dstOff + (y - this.dstY) * this.dstScan + (x - this.dstX);
         if (this.intPixels == null) {
             int srcPtr = off;
-            for (int fila = h; fila > 0; fila--) {
+            for (int row = h; row > 0; row--) {
                 System.arraycopy(pixels, srcPtr, this.bytePixels, dstPtr, w);
                 srcPtr = srcPtr + srcScan;
                 dstPtr = dstPtr + this.dstScan;
@@ -335,7 +338,7 @@ public class PixelGrabber implements ImageConsumer {
             int dstRem = this.dstScan - w;
             int srcRem = srcScan - w;
             int srcPtr = off;
-            for (int fila = h; fila > 0; fila--) {
+            for (int row = h; row > 0; row--) {
                 for (int col = w; col > 0; col--) {
                     this.intPixels[dstPtr] = model.getRGB(pixels[srcPtr] & 0xFF);
                     dstPtr = dstPtr + 1;
@@ -348,10 +351,10 @@ public class PixelGrabber implements ImageConsumer {
         this.flags = this.flags | ImageObserver.SOMEBITS;
     }
 
-    /** Guarda una tanda de píxeles de un `int`. */
+    /** Stores a batch of pixels of one `int`. */
     public void setPixels(int srcX, int srcY, int srcW, int srcH, ColorModel model, int[] pixels,
             int srcOff, int srcScan) {
-        int[] r = this.recortar(srcX, srcY, srcW, srcH, srcOff, srcScan);
+        int[] r = this.cropBatch(srcX, srcY, srcW, srcH, srcOff, srcScan);
         if (r == null) {
             return;
         }
@@ -363,14 +366,14 @@ public class PixelGrabber implements ImageConsumer {
         if (this.intPixels == null) {
             this.convertToRGB();
         }
-        boolean convertir = this.imageModel != model;
+        boolean convert = this.imageModel != model;
         int dstPtr = this.dstOff + (y - this.dstY) * this.dstScan + (x - this.dstX);
         int dstRem = this.dstScan - w;
         int srcRem = srcScan - w;
         int srcPtr = off;
-        for (int fila = h; fila > 0; fila--) {
+        for (int row = h; row > 0; row--) {
             for (int col = w; col > 0; col--) {
-                if (convertir) {
+                if (convert) {
                     this.intPixels[dstPtr] = model.getRGB(pixels[srcPtr]);
                 } else {
                     this.intPixels[dstPtr] = pixels[srcPtr];
@@ -384,7 +387,7 @@ public class PixelGrabber implements ImageConsumer {
         this.flags = this.flags | ImageObserver.SOMEBITS;
     }
 
-    /** Anota cómo terminó la entrega y despierta a quien esté esperando. */
+    /** Records how the delivery finished and wakes whoever is waiting. */
     public synchronized void imageComplete(int status) {
         this.grabbing = false;
         if (status == ImageConsumer.IMAGEABORTED) {

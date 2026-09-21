@@ -1,15 +1,15 @@
 package java.security.spec;
 
-// Los parametros de MGF1, la funcion de generacion de mascara de PKCS#1 v2.
+// The parameters of MGF1, the mask generation function of PKCS#1 v2.
 //
-// MGF1 convierte una semilla corta en todos los bytes que hagan falta, concatenando
-// Hash(semilla || contador) con el contador creciendo. Es lo que usan OAEP y PSS para producir la
-// mascara con la que enmascaran el bloque, y su unico parametro es **cual** hash.
+// MGF1 turns a short seed into as many bytes as needed, concatenating Hash(seed || counter) with
+// the counter increasing. It is what OAEP and PSS use to produce the mask they apply to the block,
+// and its only parameter is **which** hash.
 //
-// Que el hash de MGF1 sea configurable aparte del hash principal es una fuente clasica de errores de
-// interoperabilidad: una firma PSS con SHA-256 como digest y SHA-1 como MGF1 es perfectamente legal
-// y no verifica contra un verificador que asumio SHA-256 en los dos lados. Por eso el valor viaja
-// explicito en `PSSParameterSpec` en vez de darse por sentado.
+// That the MGF1 hash is configurable separately from the main hash is a classic source of
+// interoperability errors: a PSS signature with SHA-256 as digest and SHA-1 as MGF1 is perfectly
+// legal and does not verify against a verifier that assumed SHA-256 on both sides. That is why the
+// value travels explicitly in `PSSParameterSpec` instead of being taken for granted.
 public class MGF1ParameterSpec implements AlgorithmParameterSpec {
 
     public static final MGF1ParameterSpec SHA1 = new MGF1ParameterSpec("SHA-1");
@@ -33,13 +33,13 @@ public class MGF1ParameterSpec implements AlgorithmParameterSpec {
         this.mdName = mdName;
     }
 
-    // El nombre del hash, tal cual se lo pasaria a `MessageDigest.getInstance`.
+    // The name of the hash, exactly as it would be passed to `MessageDigest.getInstance`.
     public String getDigestAlgorithm() {
         return this.mdName;
     }
 
-    // El formato es parte del contrato observable: `PSSParameterSpec.toString()` mete este texto
-    // adentro del suyo.
+    // The format is part of the observable contract: `PSSParameterSpec.toString()` puts this text
+    // inside its own.
     @Override
     public String toString() {
         return "MGF1ParameterSpec[hashAlgorithm=" + this.mdName + "]";

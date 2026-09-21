@@ -5,33 +5,33 @@ import com.sun.jdi.ObjectReference;
 import com.sun.jdi.Value;
 
 /**
- * Se toco un campo que estaba vigilado.
+ * A field that was being watched was touched.
  *
- * <p>{@link #valueCurrent} es el valor que tenia; en la variante de modificacion hay ademas el que
- * va a quedar.
+ * <p>{@link #valueCurrent} is the value it had; in the modification variant there is also the one
+ * that is going to be left.
  *
  * @since 1.3
  */
 public interface WatchpointEvent extends LocatableEvent {
 
     /**
-     * El field.
+     * The field.
      *
-     * @return el resultado
+     * @return the result
      */
     Field field();
 
     /**
-     * El object.
+     * The object.
      *
-     * @return el resultado
+     * @return the result
      */
     ObjectReference object();
 
     /**
-     * El value current.
+     * The value current.
      *
-     * @return el resultado
+     * @return the result
      */
     Value valueCurrent();
 }

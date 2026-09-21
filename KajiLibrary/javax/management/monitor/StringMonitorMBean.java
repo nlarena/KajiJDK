@@ -3,52 +3,52 @@ package javax.management.monitor;
 import javax.management.ObjectName;
 
 /**
- * KajiLibrary's javax.management.monitor.StringMonitorMBean -- la administracion del monitor de
- * cadenas.
+ * KajiLibrary's javax.management.monitor.StringMonitorMBean -- the management of the string
+ * monitor.
  *
- * <p>El mas simple de los tres: compara un atributo de texto con una cadena fija y avisa cuando
- * <b>cambia</b> el resultado de la comparacion.
+ * <p>The simplest of the three: it compares a text attribute with a fixed string and notifies when
+ * the result of the comparison <b>changes</b>.
  *
- * <p>La palabra clave es cambia. No avisa mientras coincide, avisa cuando <b>pasa</b> a coincidir; y
- * lo mismo del otro lado. Es la misma idea de histeresis que en {@link GaugeMonitorMBean}, aplicada
- * a algo que solo tiene dos estados: un atributo que dice OK durante una hora produce un aviso, no
- * tres mil seiscientos.
+ * <p>The key word is changes. It does not notify while it matches, it notifies when it
+ * <b>starts</b> matching; and the same on the other side. It is the same hysteresis idea as in
+ * {@link GaugeMonitorMBean}, applied to something with only two states: an attribute that says OK
+ * for an hour produces one notice, not three thousand six hundred.
  *
- * <p>De ahi que las dos banderas sean independientes y las dos arranquen apagadas. Lo comun es
- * prender solo una: {@link #setNotifyDiffer} para vigilar que algo deje de estar bien, o
- * {@link #setNotifyMatch} para esperar a que llegue a un estado.
+ * <p>Hence the two flags being independent and both starting off. The common thing is to turn only
+ * one on: {@link #setNotifyDiffer} to watch for something ceasing to be right, or
+ * {@link #setNotifyMatch} to wait for it to reach a state.
  */
 public interface StringMonitorMBean extends MonitorMBean {
 
-    /** El valor leido del primer observado. */
+    /** The value read from the first observed object. */
     String getDerivedGauge();
 
-    /** Cuando se leyo. */
+    /** When it was read. */
     long getDerivedGaugeTimeStamp();
 
-    /** El valor leido de ese observado. */
+    /** The value read from that observed object. */
     String getDerivedGauge(ObjectName object);
 
-    /** Cuando se leyo, para ese observado. */
+    /** When it was read, for that observed object. */
     long getDerivedGaugeTimeStamp(ObjectName object);
 
-    /** Con que se compara. */
+    /** What it is compared with. */
     String getStringToCompare();
 
     /**
-     * Ver {@link #getStringToCompare}.
+     * See {@link #getStringToCompare}.
      *
-     * @throws IllegalArgumentException si es null
+     * @throws IllegalArgumentException if it is null
      */
     void setStringToCompare(String value) throws IllegalArgumentException;
 
-    /** Si se avisa cuando pasa a coincidir. */
+    /** Whether it notifies when it starts matching. */
     boolean getNotifyMatch();
 
     /** Ver {@link #getNotifyMatch}. */
     void setNotifyMatch(boolean value);
 
-    /** Si se avisa cuando deja de coincidir. */
+    /** Whether it notifies when it stops matching. */
     boolean getNotifyDiffer();
 
     /** Ver {@link #getNotifyDiffer}. */

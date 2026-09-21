@@ -1,35 +1,38 @@
 package java.awt;
 
 /**
- * Dónde está el puntero del mouse y en qué pantalla.
+ * Where the mouse pointer is, and on which screen.
  *
- * <p>Es una **foto**, no un seguimiento: los datos son los del instante en que
- * {@link MouseInfo#getPointerInfo} la sacó, y no se actualizan solos. Por eso no tiene forma de
- * construirse desde afuera.
+ * <p>It is a **snapshot**, not tracking: the data are those of the instant {@link
+ * MouseInfo#getPointerInfo} took it, and they do not update by themselves. That is why it cannot be
+ * constructed from outside.
  */
 public final class PointerInfo {
 
-    /** En qué pantalla estaba. */
+    /** Which screen it was on. */
     private final GraphicsDevice device;
 
-    /** Dónde estaba, en coordenadas de esa pantalla. */
+    /** Where it was, in that screen's coordinates. */
     private final Point location;
 
-    /** La arma {@link MouseInfo}; nadie más. */
+    /**
+     * Package-private, for {@link MouseInfo}; here that method always throws, so nothing builds
+     * one.
+     */
     PointerInfo(GraphicsDevice device, Point location) {
         this.device = device;
         this.location = location;
     }
 
-    /** La pantalla donde estaba el puntero. */
+    /** The screen the pointer was on. */
     public GraphicsDevice getDevice() {
         return this.device;
     }
 
     /**
-     * Dónde estaba.
+     * Where it was.
      *
-     * @return una copia; mover el punto devuelto no mueve nada
+     * @return a copy; moving the returned point moves nothing
      */
     public Point getLocation() {
         return new Point(this.location);

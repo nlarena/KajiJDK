@@ -1,38 +1,43 @@
 package jdk.internal.vm;
 
 /**
- * KajiLibrary's jdk.internal.vm.TranslatedException — una excepción que cruzó una frontera.
+ * KajiLibrary's jdk.internal.vm.TranslatedException -- an exception that crossed a border.
  *
- * <p>Existe para el compilador JIT escrito en Java (JVMCI): cuando una excepción nace del otro lado
- * de esa frontera, el objeto original **no se puede traer** —vive en otro montón, o su clase no está
- * cargada de este lado— así que se codifica a bytes, se pasa, y se reconstruye. Lo que no se puede
- * reconstruir se representa con una de éstas, que conserva el nombre de la clase y el mensaje.
+ * <p>It exists for the JIT compiler written in Java (JVMCI): when an exception is born on the other
+ * side of that border, the original object **cannot be brought over** --it lives in another heap,
+ * or its class is not loaded on this side-- so it is encoded to bytes, passed, and rebuilt. What
+ * cannot be rebuilt is represented by one of these, which keeps the name of the class and the
+ * message.
  *
- * <p>El constructor es de paquete: nadie de afuera fabrica una. Aparecen sólo al decodificar.
+ * <p>The constructor is package-private: nobody from outside manufactures one. They appear only
+ * when decoding.
  */
 public final class TranslatedException extends Exception {
 
-    private final String claseOriginal;
+    private final String originalClass;
 
     TranslatedException(Throwable original) {
         super(original == null ? null : original.toString());
-        this.claseOriginal = original == null ? null : original.getClass().getName();
+        this.originalClass = original == null ? null : original.getClass().getName();
     }
 
     /**
-     * No captura la pila, y devuelve `this`.
+     * It does not capture the stack, and returns `this`.
      *
-     * <p>Es la parte con intención de toda la clase. La pila de una excepción traducida sería la del
-     * **decodificador** --el lugar donde se reconstruyó-- y no la del punto donde la excepción
-     * original ocurrió, que es lo único que a alguien le importaría. Una pila que apunta al lugar
-     * equivocado es peor que ninguna: se lee como si fuera la verdadera.
+     * <p>It is the part of the whole class with an intention. The stack of a translated exception
+     * would be that of the **decoder** --the place where it was rebuilt-- and not that of the point
+     * where the original exception happened, which is the only thing anybody would care about. A
+     * stack that points to the wrong place is worse than none: it reads as if it were the real one.
      */
     public Throwable fillInStackTrace() {
         return this;
     }
 
-    /** El nombre de la clase original, o `null`. De paquete: es detalle de la traducción. */
-    String claseOriginal() {
-        return this.claseOriginal;
+    /**
+     * The name of the original class, or `null`. Package-private: it is a detail of the
+     * translation.
+     */
+    String originalClass() {
+        return this.originalClass;
     }
 }

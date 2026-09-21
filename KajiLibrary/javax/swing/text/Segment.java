@@ -3,38 +3,38 @@ package javax.swing.text;
 import java.text.CharacterIterator;
 
 /**
- * Un pedazo de texto <strong>prestado</strong>: un arreglo ajeno, un desplazamiento y un largo.
+ * A <strong>borrowed</strong> piece of text: somebody else's array, an offset and a length.
  *
- * <h2>Para que existe</h2>
+ * <h2>What it exists for</h2>
  *
- * <p>Para no copiar. Pedirle a un documento un fragmento como {@link String} aloca y copia; un
- * {@code Segment} apunta al arreglo que el documento ya tiene. En un editor eso pasa en cada
- * repintado, asi que la diferencia se nota.
+ * <p>So as not to copy. Asking a document for a fragment as a {@link String} allocates and
+ * copies; a {@code Segment} points at the array the document already has. In an editor that
+ * happens on every repaint, so the difference shows.
  *
- * <p>El precio esta en la palabra <em>prestado</em>: el arreglo <strong>no es propio</strong> y el
- * documento puede cambiarlo. Un {@code Segment} vale hasta la proxima edicion, y guardarlo mas alla
- * de eso es leer memoria que ya significa otra cosa.
+ * <p>The price is in the word <em>borrowed</em>: the array <strong>is not its own</strong> and
+ * the document may change it. A {@code Segment} holds until the next edit, and keeping it beyond
+ * that is reading memory that already means something else.
  */
 public class Segment implements Cloneable, CharacterIterator, CharSequence {
 
-    /** El arreglo, que es de otro. */
+    /** The array, which belongs to somebody else. */
     public char[] array;
 
-    /** Donde empieza el pedazo. */
+    /** Where the piece starts. */
     public int offset;
 
-    /** Cuantos caracteres tiene. */
+    /** How many characters it has. */
     public int count;
 
     private boolean partialReturn;
     private int pos;
 
-    /** Un segmento vacio, sin arreglo. */
+    /** An empty segment, with no array. */
     public Segment() {
         this(null, 0, 0);
     }
 
-    /** Un segmento sobre {@code array}. */
+    /** A segment over {@code array}. */
     public Segment(char[] array, int offset, int count) {
         this.array = array;
         this.offset = offset;
@@ -43,18 +43,18 @@ public class Segment implements Cloneable, CharacterIterator, CharSequence {
     }
 
     /**
-     * Si se acepta que el documento devuelva menos de lo pedido.
+     * Whether it is accepted that the document return less than was asked for.
      *
-     * <p>Un documento puede tener el texto partido en varios arreglos. Con esto en {@code true}
-     * entrega el primer tramo contiguo en vez de juntar todo en uno nuevo — que es justamente la
-     * copia que esta clase vino a evitar. Quien lo prende tiene que estar dispuesto a llamar de
-     * nuevo por lo que falta.
+     * <p>A document may have the text split into several arrays. With this at {@code true} it hands
+     * over the first contiguous stretch instead of joining everything into a new one -- which is
+     * exactly the copy this class came to avoid. Whoever turns it on has to be willing to call
+     * again for what is missing.
      */
     public void setPartialReturn(boolean p) {
         this.partialReturn = p;
     }
 
-    /** Si se acepta una devolucion parcial. */
+    /** Whether a partial return is accepted. */
     public boolean isPartialReturn() {
         return this.partialReturn;
     }
@@ -92,9 +92,9 @@ public class Segment implements Cloneable, CharacterIterator, CharSequence {
 
     public char next() {
         this.pos = this.pos + 1;
-        int fin = this.offset + this.count;
-        if (this.pos >= fin) {
-            this.pos = fin;
+        int end = this.offset + this.count;
+        if (this.pos >= end) {
+            this.pos = end;
             return CharacterIterator.DONE;
         }
         return current();
@@ -109,12 +109,12 @@ public class Segment implements Cloneable, CharacterIterator, CharSequence {
     }
 
     public char setIndex(int position) {
-        int fin = this.offset + this.count;
-        if (position < this.offset || position > fin) {
-            throw new IllegalArgumentException("posicion fuera de rango");
+        int end = this.offset + this.count;
+        if (position < this.offset || position > end) {
+            throw new IllegalArgumentException("position out of range");
         }
         this.pos = position;
-        if (this.pos != fin && this.count != 0) {
+        if (this.pos != end && this.count != 0) {
             return this.array[this.pos];
         }
         return CharacterIterator.DONE;
@@ -145,7 +145,7 @@ public class Segment implements Cloneable, CharacterIterator, CharSequence {
 
     public CharSequence subSequence(int start, int end) {
         if (start < 0 || end > this.count || start > end) {
-            throw new StringIndexOutOfBoundsException("subSequence fuera de rango");
+            throw new StringIndexOutOfBoundsException("subSequence out of range");
         }
         Segment s = new Segment();
         s.array = this.array;
@@ -155,18 +155,19 @@ public class Segment implements Cloneable, CharacterIterator, CharSequence {
     }
 
     /**
-     * Una copia superficial: comparte el arreglo.
+     * A shallow copy: it shares the array.
      *
-     * <p>Y tiene que compartirlo. Copiar el arreglo seria exactamente lo que esta clase evita, y
-     * ademas romperia la relacion con el documento, que es de donde el arreglo saca su sentido.
+     * <p>And it has to share it. Copying the array would be exactly what this class avoids, and
+     * besides it would break the relation with the document, which is where the array gets its
+     * meaning from.
      */
     public Object clone() {
-        Object copia = null;
+        Object copy = null;
         try {
-            copia = super.clone();
+            copy = super.clone();
         } catch (CloneNotSupportedException e) {
-            // No puede pasar: esta clase implementa Cloneable.
+            // It cannot happen: this class implements Cloneable.
         }
-        return copia;
+        return copy;
     }
 }

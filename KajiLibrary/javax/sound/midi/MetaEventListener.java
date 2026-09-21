@@ -3,18 +3,19 @@ package javax.sound.midi;
 import java.util.EventListener;
 
 /**
- * KajiLibrary's javax.sound.midi.MetaEventListener -- avisa cuando el secuenciador pasa por un meta
- * evento.
+ * KajiLibrary's javax.sound.midi.MetaEventListener -- tells when the sequencer goes through a meta
+ * event.
  *
- * <p>A diferencia de {@link ControllerEventListener}, este no lleva filtro: llegan todos.
+ * <p>Unlike {@link ControllerEventListener}, this one has no filter: they all arrive.
  *
- * <p>Su uso mas comun es detectar el <b>fin de la obra</b>: el meta evento de tipo 0x2F. Es la unica
- * forma limpia de saber que un secuenciador termino, porque {@code start()} vuelve enseguida.
+ * <p>Its commonest use is detecting the <b>end of the piece</b>: the meta event of type 0x2F. It is
+ * the only clean way of knowing that a sequencer finished, because {@code start()} returns right
+ * away.
  *
- * <p>El aviso llega en el hilo del secuenciador. Bloquearlo desacomoda la reproduccion.
+ * <p>The notice arrives on the sequencer's thread. Blocking it throws playback off.
  */
 public interface MetaEventListener extends EventListener {
 
-    /** Paso un meta evento. */
+    /** A meta event went by. */
     void meta(MetaMessage meta);
 }

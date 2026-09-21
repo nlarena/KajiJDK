@@ -7,72 +7,71 @@ import java.rmi.Remote;
 import java.rmi.RemoteException;
 
 /**
- * Un registro RMI: la libreta de direcciones desde la que arranca todo cliente.
+ * An RMI registry: the address book every client starts from.
  *
- * <p>Es el arranque en frio de RMI. Para llamar a un objeto remoto hace falta una referencia, y
- * para conseguir la primera hace falta un lugar conocido de antemano: el registro, que vive en un
- * puerto fijo ({@link #REGISTRY_PORT}) y se busca por nombre y no por referencia. De ahi en mas
- * las referencias viajan como argumentos y valores de retorno, y el registro no vuelve a hacer
- * falta.
+ * <p>It is RMI's cold start. Calling a remote object takes a reference, and getting the first one
+ * takes a place known in advance: the registry, which lives on a fixed port
+ * ({@link #REGISTRY_PORT}) and is looked up by name rather than by reference. From there on the
+ * references travel as arguments and return values, and the registry is not needed again.
  *
- * <p>{@link java.rmi.Naming} es la misma cosa con nombres en forma de URL; esta interfaz es la
- * cruda, con el registro ya localizado.
+ * <p>{@link java.rmi.Naming} is the same thing with URL-shaped names; this interface is the raw
+ * one, with the registry already located.
  *
- * <h2>Quien puede modificarlo</h2>
+ * <h2>Who may modify it</h2>
  *
- * <p>{@link #bind}, {@link #rebind} y {@link #unbind} solo se aceptan desde la **misma maquina**
- * en la que corre el registro; de afuera lanzan {@link AccessException}. {@link #lookup} y
- * {@link #list} no tienen esa restriccion.
+ * <p>{@link #bind}, {@link #rebind} and {@link #unbind} are only accepted from the **same
+ * machine** the registry runs on; from outside they throw {@link AccessException}. {@link #lookup}
+ * and {@link #list} have no such restriction.
  *
- * <p>No es autenticacion: es lo unico que hay. Cualquier proceso de la maquina puede reemplazar
- * cualquier anotacion, y cualquiera que llegue al puerto puede listar todo lo anotado.
+ * <p>It is not authentication: it is all there is. Any process on the machine can replace any
+ * binding, and anyone who reaches the port can list everything bound.
  */
 public interface Registry extends Remote {
 
-    /** El puerto de siempre: 1099. */
+    /** The usual port: 1099. */
     int REGISTRY_PORT = 1099;
 
     /**
-     * La referencia anotada bajo ese nombre.
+     * The reference bound under that name.
      *
-     * @throws NotBoundException si no hay nada anotado con ese nombre
-     * @throws AccessException si el registro rechaza la llamada
-     * @throws RemoteException si falla la comunicacion
+     * @throws NotBoundException if nothing is bound under that name
+     * @throws AccessException if the registry refuses the call
+     * @throws RemoteException if the communication fails
      */
     Remote lookup(String name) throws RemoteException, NotBoundException, AccessException;
 
     /**
-     * Anota la referencia bajo ese nombre, si el nombre esta libre.
+     * It binds the reference under that name, if the name is free.
      *
-     * @throws AlreadyBoundException si el nombre ya esta anotado
-     * @throws AccessException si la llamada no viene de la maquina del registro
-     * @throws RemoteException si falla la comunicacion
+     * @throws AlreadyBoundException if the name is already bound
+     * @throws AccessException if the call does not come from the registry's machine
+     * @throws RemoteException if the communication fails
      */
     void bind(String name, Remote obj) throws RemoteException, AlreadyBoundException,
             AccessException;
 
     /**
-     * Borra la anotacion de ese nombre.
+     * It removes the binding of that name.
      *
-     * @throws NotBoundException si no habia nada anotado
-     * @throws AccessException si la llamada no viene de la maquina del registro
-     * @throws RemoteException si falla la comunicacion
+     * @throws NotBoundException if nothing was bound
+     * @throws AccessException if the call does not come from the registry's machine
+     * @throws RemoteException if the communication fails
      */
     void unbind(String name) throws RemoteException, NotBoundException, AccessException;
 
     /**
-     * Anota la referencia bajo ese nombre, pisando lo que hubiera.
+     * It binds the reference under that name, overwriting whatever was there.
      *
-     * @throws AccessException si la llamada no viene de la maquina del registro
-     * @throws RemoteException si falla la comunicacion
+     * @throws AccessException if the call does not come from the registry's machine
+     * @throws RemoteException if the communication fails
      */
     void rebind(String name, Remote obj) throws RemoteException, AccessException;
 
     /**
-     * Los nombres anotados, en el momento de la llamada.
+     * The bound names, as of the moment of the call.
      *
-     * @throws AccessException si el registro rechaza la llamada
-     * @throws RemoteException si falla la comunicacion
+     * @throws AccessException if the registry refuses the call
+     * @throws RemoteException if the communication fails
      */
     String[] list() throws RemoteException, AccessException;
 }

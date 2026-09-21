@@ -3,23 +3,23 @@ package javax.sql.rowset;
 import java.sql.SQLException;
 
 /**
- * Un aviso de un {@code RowSet}: algo que conviene saber y que no impidio seguir.
+ * A warning of a {@code RowSet}: something worth knowing that did not stop things going on.
  *
- * <h2>Por que es una excepcion que nadie lanza</h2>
+ * <h2>Why it is an exception nobody throws</h2>
  *
- * <p>Porque hereda de {@link SQLException} para reusar su forma —mensaje, estado SQL, codigo de
- * error— pero se <strong>devuelve</strong>, no se lanza. Si se lanzara, la operacion se cortaria, y
- * la definicion de un aviso es justamente que no la corto.
+ * <p>Because it inherits from {@link SQLException} to reuse its shape —message, SQL state, error
+ * code— but it is <strong>returned</strong>, not thrown. If it were thrown, the operation would be
+ * cut short, and the definition of a warning is precisely that it did not cut it short.
  *
- * <h2>La cadena</h2>
+ * <h2>The chain</h2>
  *
- * <p>Una operacion puede generar varios avisos y estos se encadenan con
- * {@link #setNextWarning}. El que consulta obtiene el primero y recorre con
- * {@link #getNextWarning} hasta que devuelva {@code null}.
+ * <p>An operation can generate several warnings and they are chained with {@link #setNextWarning}.
+ * Whoever queries gets the first and walks with {@link #getNextWarning} until it returns {@code
+ * null}.
  *
- * <p>Es la misma forma que usa {@code SQLWarning}, y existe aparte porque un aviso de
- * {@code RowSet} puede venir de la capa desconectada —una fila que no se pudo sincronizar— y no de
- * la base.
+ * <p>It is the same shape {@code SQLWarning} uses, and it exists separately because a {@code
+ * RowSet} warning can come from the disconnected layer —a row that could not be synchronized— and
+ * not from the database.
  *
  * @since 1.5
  */
@@ -30,53 +30,53 @@ public class RowSetWarning extends SQLException {
     private RowSetWarning rwarning;
 
     /**
-     * Con un mensaje.
+     * With a message.
      *
-     * @param reason el mensaje
+     * @param reason the message
      */
     public RowSetWarning(String reason) {
         super(reason);
     }
 
-    /** Sin detalle. */
+    /** Without detail. */
     public RowSetWarning() {
         super();
     }
 
     /**
-     * Con mensaje y estado SQL.
+     * With message and SQL state.
      *
-     * @param reason el mensaje
-     * @param SQLState el estado SQL
+     * @param reason the message
+     * @param SQLState the SQL state
      */
     public RowSetWarning(String reason, String SQLState) {
         super(reason, SQLState);
     }
 
     /**
-     * Con mensaje, estado SQL y codigo de error.
+     * With message, SQL state and error code.
      *
-     * @param reason el mensaje
-     * @param SQLState el estado SQL
-     * @param vendorCode el codigo del fabricante
+     * @param reason the message
+     * @param SQLState the SQL state
+     * @param vendorCode the vendor's code
      */
     public RowSetWarning(String reason, String SQLState, int vendorCode) {
         super(reason, SQLState, vendorCode);
     }
 
     /**
-     * El aviso siguiente de la cadena.
+     * The next warning of the chain.
      *
-     * @return el siguiente, o {@code null} si este es el ultimo
+     * @return the next one, or {@code null} if this is the last
      */
     public RowSetWarning getNextWarning() {
         return rwarning;
     }
 
     /**
-     * Encadena otro aviso a continuacion de este.
+     * Chains another warning after this one.
      *
-     * @param warning el aviso siguiente
+     * @param warning the next warning
      */
     public void setNextWarning(RowSetWarning warning) {
         rwarning = warning;

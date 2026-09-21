@@ -3,7 +3,7 @@ package com.sun.source.tree;
 import javax.lang.model.element.Name;
 
 /**
- * `break`, con etiqueta o sin ella.
+ * `break`, with a label or without one.
  */
 public interface BreakTree extends StatementTree {
 

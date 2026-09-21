@@ -1,94 +1,94 @@
 package org.w3c.dom.html;
 
 /**
- * Un `<td>` o un `<th>`. Las dos son la misma interfaz.
+ * A `<td>` or a `<th>`. The two are the same interface.
  */
 public interface HTMLTableCellElement extends HTMLElement {
 
-    /** La posicion en su fila. */
+    /** The position in its row. */
     int getCellIndex();
 
-    /** El atributo `abbr`. */
+    /** The `abbr` attribute. */
     String getAbbr();
 
-    /** Fija el atributo `abbr`. */
+    /** It sets the `abbr` attribute. */
     void setAbbr(String abbr);
 
-    /** La alineacion (presentacion; HTML 4 la desaconseja). */
+    /** The alignment (presentational; HTML 4 deprecates it). */
     String getAlign();
 
-    /** Fija la alineacion (presentacion; HTML 4 la desaconseja). */
+    /** It sets the alignment (presentational; HTML 4 deprecates it). */
     void setAlign(String align);
 
-    /** El atributo `axis`. */
+    /** The `axis` attribute. */
     String getAxis();
 
-    /** Fija el atributo `axis`. */
+    /** It sets the `axis` attribute. */
     void setAxis(String axis);
 
-    /** El atributo `bgColor`. */
+    /** The `bgColor` attribute. */
     String getBgColor();
 
-    /** Fija el atributo `bgColor`. */
+    /** It sets the `bgColor` attribute. */
     void setBgColor(String bgColor);
 
-    /** El atributo `ch`. */
+    /** The `ch` attribute. */
     String getCh();
 
-    /** Fija el atributo `ch`. */
+    /** It sets the `ch` attribute. */
     void setCh(String ch);
 
-    /** El atributo `chOff`. */
+    /** The `chOff` attribute. */
     String getChOff();
 
-    /** Fija el atributo `chOff`. */
+    /** It sets the `chOff` attribute. */
     void setChOff(String chOff);
 
-    /** Cuantas columnas ocupa. */
+    /** How many columns it spans. */
     int getColSpan();
 
-    /** Fija cuantas columnas ocupa. */
+    /** It sets how many columns it spans. */
     void setColSpan(int colSpan);
 
-    /** El atributo `headers`. */
+    /** The `headers` attribute. */
     String getHeaders();
 
-    /** Fija el atributo `headers`. */
+    /** It sets the `headers` attribute. */
     void setHeaders(String headers);
 
-    /** El alto. */
+    /** The height. */
     String getHeight();
 
-    /** Fija el alto. */
+    /** It sets the height. */
     void setHeight(String height);
 
-    /** El atributo `noWrap`. */
+    /** The `noWrap` attribute. */
     boolean getNoWrap();
 
-    /** Fija el atributo `noWrap`. */
+    /** It sets the `noWrap` attribute. */
     void setNoWrap(boolean noWrap);
 
-    /** Cuantas filas ocupa. */
+    /** How many rows it spans. */
     int getRowSpan();
 
-    /** Fija cuantas filas ocupa. */
+    /** It sets how many rows it spans. */
     void setRowSpan(int rowSpan);
 
-    /** El atributo `scope`. */
+    /** The `scope` attribute. */
     String getScope();
 
-    /** Fija el atributo `scope`. */
+    /** It sets the `scope` attribute. */
     void setScope(String scope);
 
-    /** El atributo `vAlign`. */
+    /** The `vAlign` attribute. */
     String getVAlign();
 
-    /** Fija el atributo `vAlign`. */
+    /** It sets the `vAlign` attribute. */
     void setVAlign(String vAlign);
 
-    /** El ancho. */
+    /** The width. */
     String getWidth();
 
-    /** Fija el ancho. */
+    /** It sets the width. */
     void setWidth(String width);
 }

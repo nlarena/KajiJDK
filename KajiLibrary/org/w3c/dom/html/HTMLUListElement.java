@@ -1,19 +1,19 @@
 package org.w3c.dom.html;
 
 /**
- * Una `<ul>`.
+ * An `<ul>`.
  */
 public interface HTMLUListElement extends HTMLElement {
 
-    /** El atributo `compact`. */
+    /** The `compact` attribute. */
     boolean getCompact();
 
-    /** Fija el atributo `compact`. */
+    /** It sets the `compact` attribute. */
     void setCompact(boolean compact);
 
-    /** El tipo del control. */
+    /** The type of the control. */
     String getType();
 
-    /** Fija el tipo del control. */
+    /** It sets the type of the control. */
     void setType(String type);
 }

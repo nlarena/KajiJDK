@@ -2,13 +2,14 @@ package jdk.internal.apt;
 
 import javax.lang.model.element.Name;
 
-// La reificación de un **nombre** del modelo `javax.lang.model` (`javax.lang.model.element.Name`):
-// una envoltura mínima sobre el `String` que el VM ya internó. El contrato de `Element` devuelve
-// `Name` (un `CharSequence` con `contentEquals`), no `String`, así que `SymElement.getSimpleName`
-// / `getQualifiedName` construyen uno de estos: el native aloca el objeto y le escribe el campo
-// `value` (el `String` internado), y los accesores de `CharSequence` delegan en ese `String`.
+// The reification of a **name** of the `javax.lang.model` model
+// (`javax.lang.model.element.Name`): a minimal wrapper over the `String` the VM has already
+// interned. The contract of `Element` returns `Name` (a `CharSequence` with `contentEquals`), not
+// `String`, so `SymElement.getSimpleName` / `getQualifiedName` build one of these: the native
+// allocates the object and writes the field `value` (the interned `String`) into it, and the
+// accessors of `CharSequence` delegate to that `String`.
 public final class SymName implements Name {
-    // El texto del nombre (`String` internado). Lo escribe el VM al construir el objeto.
+    // The text of the name (an interned `String`). The VM writes it when building the object.
     String value;
 
     public int length() {
@@ -27,9 +28,9 @@ public final class SymName implements Name {
         return value;
     }
 
-    // Igualdad de contenido con cualquier `CharSequence` (contrato de `Name`): compara el texto.
-    // No hay `String.contentEquals` en KajiLibrary, así que se materializa la otra secuencia con
-    // `toString()` (parte del contrato de `CharSequence`) y se compara por `String.equals`.
+    // Equality of contents with any `CharSequence` (the contract of `Name`): it compares the text.
+    // There is no `String.contentEquals` in KajiLibrary, so the other sequence is materialised with
+    // `toString()` (part of the contract of `CharSequence`) and compared with `String.equals`.
     public boolean contentEquals(CharSequence cs) {
         return value.equals(cs.toString());
     }

@@ -1,8 +1,8 @@
 package com.sun.source.tree;
 
 /**
- * Cualquier cosa que tiene valor. La otra mitad del arbol es
- * {@link StatementTree}, y la division es la de la gramatica de Java.
+ * Anything that has a value. The other half of the tree is
+ * {@link StatementTree}, and the division is Java's grammar's.
  */
 public interface ExpressionTree extends Tree {
 }

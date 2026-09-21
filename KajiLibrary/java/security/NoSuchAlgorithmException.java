@@ -1,10 +1,11 @@
 package java.security;
 
-// No hay implementacion del algoritmo pedido.
+// There is no implementation of the algorithm asked for.
 //
-// La tira toda fabrica `getInstance` cuando ningun proveedor registrado ofrece el servicio. En
-// KajiLibrary es el caso normal para casi todo el paquete: la unica fabrica con algoritmos de
-// verdad detras es `MessageDigest`, y solo para los tres que estan implementados de cero.
+// Every `getInstance` factory throws it when no registered provider offers the service. In
+// KajiLibrary it is the normal case for almost the whole package: the only factory with real
+// algorithms behind it is `MessageDigest`, and only for the three that are implemented from
+// scratch.
 public class NoSuchAlgorithmException extends GeneralSecurityException {
 
     public NoSuchAlgorithmException() {

@@ -7,96 +7,98 @@ import java.security.cert.Certificate;
 import java.util.Optional;
 
 /**
- * Una {@link HttpURLConnection} sobre TLS, con lo que hace falta para inspeccionar el canal.
+ * An {@link HttpURLConnection} over TLS, with what is needed to inspect the channel.
  *
- * <h2>Lo que agrega, y por que</h2>
+ * <h2>What it adds, and why</h2>
  *
- * <p>{@code HttpURLConnection} entrega el contenido y no dice nada de como viajo. Con HTTPS eso no
- * alcanza: hay decisiones que dependen de con quien se hablo realmente —que certificado presento,
- * que suite se acordo— y sin estos metodos habria que confiar a ciegas en que la biblioteca hizo
- * bien la verificacion.
+ * <p>{@code HttpURLConnection} delivers the content and says nothing about how it travelled. With
+ * HTTPS that is not enough: some decisions depend on whom one really talked to --which certificate
+ * it presented, which suite was agreed-- and without these methods one would have to trust blindly
+ * that the library did the check right.
  *
- * <h2>Los dos niveles de configuracion</h2>
+ * <h2>The two levels of configuration</h2>
  *
- * <p>Cada opcion viene por duplicado: una estatica y una de instancia. La estatica cambia el valor
- * por omision de <em>toda conexion futura</em>; la de instancia solo esta. Estan las dos porque el
- * caso comun —confiar en una CA propia para todo el programa— no deberia obligar a tocar cada
- * conexion, y el caso raro —una sola conexion distinta— no deberia obligar a cambiarle la politica a
- * todas.
+ * <p>Each option comes twice: a static one and an instance one. The static one changes the default
+ * of <em>every future connection</em>; the instance one only this one. Both are there because the
+ * common case --trusting an own CA for the whole program-- should not force touching every
+ * connection, and the rare case --a single different connection-- should not force changing
+ * everybody's policy.
  *
- * <p>Cuidado con la estatica: es estado global, y un {@link HostnameVerifier} permisivo puesto ahi
- * desactiva la verificacion de identidad en todo el programa, incluido el codigo que no escribio
- * quien lo puso.
+ * <p>Careful with the static one: it is global state, and a permissive {@link HostnameVerifier} put
+ * there turns off identity checking in the whole program, including code not written by whoever
+ * put it there.
  */
 public abstract class HttpsURLConnection extends HttpURLConnection {
 
     /**
-     * El verificador por omision: rechaza siempre.
+     * The default verifier: it always rejects.
      *
-     * <p>Y es lo correcto, no una limitacion: este verificador solo se consulta cuando la
-     * verificacion estandar de identidad <strong>ya fallo</strong>, asi que devolver {@code true}
-     * seria aceptar un certificado que no corresponde al destino.
+     * <p>And that is right, not a limitation: this verifier is only consulted when the standard
+     * identity check <strong>already failed</strong>, so returning {@code true} would be accepting
+     * a certificate that does not belong to the destination.
      *
-     * <p>Es una clase con nombre y no una anonima —que es como lo escribe el JDK— por el finding
-     * #499: nuestro generador no soporta una clase anonima en un inicializador de campo. Adentro de
-     * un metodo si, y con nombre tambien; el cruce de los dos es lo que falla.
+     * <p>It is a named class and not an anonymous one --which is how the JDK writes it-- because of
+     * finding #499: the frozen javac that builds this library does not support an anonymous class
+     * in a field initializer. Inside a method it does, and a named one too; the combination of the
+     * two is what fails. (#499 is closed in the source-built javac; checked 2026-09-18.)
      */
-    private static final class RechazaTodo implements HostnameVerifier {
+    private static final class RejectsEverything implements HostnameVerifier {
 
         public boolean verify(String hostname, SSLSession session) {
             return false;
         }
     }
 
-    private static HostnameVerifier defaultHostnameVerifier = new RechazaTodo();
+    private static HostnameVerifier defaultHostnameVerifier = new RejectsEverything();
 
     private static SSLSocketFactory defaultSSLSocketFactory;
 
-    /** El verificador de esta conexion. */
+    /** This connection's verifier. */
     protected HostnameVerifier hostnameVerifier = defaultHostnameVerifier;
 
     private SSLSocketFactory sslSocketFactory = getDefaultSSLSocketFactory();
 
-    /** Para las subclases. */
+    /** For subclasses. */
     protected HttpsURLConnection(URL url) {
         super(url);
     }
 
     /**
-     * La suite acordada.
+     * The agreed suite.
      *
-     * @throws IllegalStateException si la conexion todavia no se establecio — no hay suite antes del
-     *     handshake, y devolver {@code null} dejaria pasar la pregunta mal hecha
+     * @throws IllegalStateException if the connection is not established yet — there is no suite
+     *     before the handshake, and returning {@code null} would let the badly asked question
+     *     through
      */
     public abstract String getCipherSuite();
 
-    /** Los certificados que se presentaron, o {@code null}. */
+    /** The certificates that were presented, or {@code null}. */
     public abstract Certificate[] getLocalCertificates();
 
     /**
-     * Los certificados del servidor.
+     * The server's certificates.
      *
-     * @throws SSLPeerUnverifiedException si no se autentico
+     * @throws SSLPeerUnverifiedException if it did not authenticate
      */
     public abstract Certificate[] getServerCertificates() throws SSLPeerUnverifiedException;
 
     /**
-     * Quien es el servidor.
+     * Who the server is.
      *
-     * <p>Por omision sale del primer certificado de {@link #getServerCertificates}, que es lo que
-     * corresponde con X.509. Una subclase que use otra autenticacion lo sobrescribe.
+     * <p>By default it comes from the first certificate of {@link #getServerCertificates}, which is
+     * what corresponds with X.509. A subclass that uses another authentication overrides it.
      *
-     * @throws SSLPeerUnverifiedException si no se autentico
+     * @throws SSLPeerUnverifiedException if it did not authenticate
      */
     public Principal getPeerPrincipal() throws SSLPeerUnverifiedException {
         Certificate[] certs = getServerCertificates();
         if (certs.length == 0 || !(certs[0] instanceof java.security.cert.X509Certificate)) {
-            throw new SSLPeerUnverifiedException("no hay certificado X.509 del par");
+            throw new SSLPeerUnverifiedException("there is no X.509 peer certificate");
         }
         return ((java.security.cert.X509Certificate) certs[0]).getSubjectX500Principal();
     }
 
-    /** Quien nos presentamos como, o {@code null}. */
+    /** Who we presented ourselves as, or {@code null}. */
     public Principal getLocalPrincipal() {
         Certificate[] certs = getLocalCertificates();
         if (certs == null || certs.length == 0
@@ -107,52 +109,52 @@ public abstract class HttpsURLConnection extends HttpURLConnection {
     }
 
     /**
-     * Cambia el verificador por omision de todas las conexiones futuras.
+     * Changes the default verifier of all future connections.
      *
-     * @throws IllegalArgumentException si es {@code null}
+     * @throws IllegalArgumentException if it is {@code null}
      */
     public static void setDefaultHostnameVerifier(HostnameVerifier v) {
         if (v == null) {
-            throw new IllegalArgumentException("el verificador no puede ser null");
+            throw new IllegalArgumentException("the verifier cannot be null");
         }
         defaultHostnameVerifier = v;
     }
 
-    /** El verificador por omision. */
+    /** The default verifier. */
     public static HostnameVerifier getDefaultHostnameVerifier() {
         return defaultHostnameVerifier;
     }
 
     /**
-     * Cambia el verificador de esta conexion.
+     * Changes this connection's verifier.
      *
-     * @throws IllegalArgumentException si es {@code null}
+     * @throws IllegalArgumentException if it is {@code null}
      */
     public void setHostnameVerifier(HostnameVerifier v) {
         if (v == null) {
-            throw new IllegalArgumentException("el verificador no puede ser null");
+            throw new IllegalArgumentException("the verifier cannot be null");
         }
         this.hostnameVerifier = v;
     }
 
-    /** El verificador de esta conexion. */
+    /** This connection's verifier. */
     public HostnameVerifier getHostnameVerifier() {
         return this.hostnameVerifier;
     }
 
     /**
-     * Cambia la fabrica de sockets por omision.
+     * Changes the default socket factory.
      *
-     * @throws IllegalArgumentException si es {@code null}
+     * @throws IllegalArgumentException if it is {@code null}
      */
     public static void setDefaultSSLSocketFactory(SSLSocketFactory sf) {
         if (sf == null) {
-            throw new IllegalArgumentException("la fabrica no puede ser null");
+            throw new IllegalArgumentException("the factory cannot be null");
         }
         defaultSSLSocketFactory = sf;
     }
 
-    /** La fabrica por omision; la de {@link SSLSocketFactory#getDefault} si no se cambio. */
+    /** The default factory; {@link SSLSocketFactory#getDefault}'s if it was not changed. */
     public static synchronized SSLSocketFactory getDefaultSSLSocketFactory() {
         if (defaultSSLSocketFactory == null) {
             defaultSSLSocketFactory = (SSLSocketFactory) SSLSocketFactory.getDefault();
@@ -161,27 +163,28 @@ public abstract class HttpsURLConnection extends HttpURLConnection {
     }
 
     /**
-     * Cambia la fabrica de esta conexion. Es como se usa un {@link SSLContext} propio en una sola.
+     * Changes this connection's factory. It is how an own {@link SSLContext} is used for a single
+     * one.
      *
-     * @throws IllegalArgumentException si es {@code null}
+     * @throws IllegalArgumentException if it is {@code null}
      */
     public void setSSLSocketFactory(SSLSocketFactory sf) {
         if (sf == null) {
-            throw new IllegalArgumentException("la fabrica no puede ser null");
+            throw new IllegalArgumentException("the factory cannot be null");
         }
         this.sslSocketFactory = sf;
     }
 
-    /** La fabrica de esta conexion. */
+    /** This connection's factory. */
     public SSLSocketFactory getSSLSocketFactory() {
         return this.sslSocketFactory;
     }
 
     /**
-     * La sesion, si hay.
+     * The session, if there is one.
      *
-     * <p>Un {@link Optional} y no {@code null} porque llego despues, y porque la respuesta legitima
-     * es "todavia no" — llega antes de que la conexion se establezca.
+     * <p>An {@link Optional} and not {@code null} because it came later, and because the legitimate
+     * answer is "not yet" — it arrives before the connection is established.
      */
     public Optional<SSLSession> getSSLSession() {
         return Optional.empty();

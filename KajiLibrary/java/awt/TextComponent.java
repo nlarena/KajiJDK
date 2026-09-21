@@ -12,46 +12,46 @@ import javax.accessibility.AccessibleStateSet;
 import javax.accessibility.AccessibleText;
 
 /**
- * Lo que tienen en común un campo de texto y un área de texto: el texto, la selección y el cursor.
+ * What a text field and a text area have in common: the text, the selection and the caret.
  *
- * <p>No se puede instanciar —su constructor es de paquete— porque un componente de texto sin decidir
- * si es de un renglón o de varios no es nada.
+ * <p>It cannot be instantiated —its constructor is package-private— because a text component that
+ * has not decided whether it is one line or several is nothing.
  *
- * <p>La selección se guarda como dos posiciones, y la clase se encarga de que estén ordenadas y
- * dentro del texto. El cursor no es un tercer número: es el principio de la selección.
+ * <p>The selection is kept as two positions, and the class takes care that they are in order and
+ * inside the text. The caret is not a third number: it is the start of the selection.
  */
 public class TextComponent extends Component implements Accessible {
 
     private static final long serialVersionUID = -2214773872412987419L;
 
-    /** Lo que dice. */
+    /** What it says. */
     String text;
 
-    /** Si se puede escribir en él. */
+    /** Whether it can be typed into. */
     boolean editable = true;
 
-    /** Dónde arranca la selección. */
+    /** Where the selection starts. */
     int selectionStart;
 
-    /** Dónde termina. */
+    /** Where it ends. */
     int selectionEnd;
 
-    /** Si alguien de afuera le fijó el color de fondo. */
+    /** Whether someone from outside set its background colour. */
     boolean backgroundSetByClientCode = false;
 
-    /** Los oyentes, encadenados. */
+    /** The listeners, chained. */
     protected transient TextListener textListener;
 
-    /** Con ese texto; `null` cuenta como vacío. */
+    /** With that text; `null` counts as empty. */
     TextComponent(String text) throws HeadlessException {
         this.text = text == null ? "" : text;
     }
 
     /**
-     * Prende o apaga los métodos de entrada.
+     * Turns the input methods on or off.
      *
-     * <p>Sin pantalla no hay ninguno activo, pero el pedido se acepta sin romper: un programa que lo
-     * llama en el armado no tiene por qué fallar por eso.
+     * <p>Without a screen none of them is active, but the request is accepted without breaking: a
+     * program that calls it while building its interface has no reason to fail because of that.
      */
     public void enableInputMethods(boolean enable) {
         super.enableInputMethods(enable);
@@ -62,32 +62,32 @@ public class TextComponent extends Component implements Accessible {
     }
 
     /**
-     * Lo que el método de entrada necesita saber del componente.
+     * What the input method needs to know about the component.
      *
-     * @return `null` siempre: sin método de entrada activo no hay nada que contestar, y contestar
-     *     algo vacío haría creer que la composición sobre el componente funciona
+     * @return `null` always: with no active input method there is nothing to answer, and answering
+     *     something empty would make it look as though composing over the component works
      */
     public InputMethodRequests getInputMethodRequests() {
         return null;
     }
 
-    /** Lo declara mostrable. */
+    /** Declares it showable. */
     public void addNotify() {
         super.addNotify();
     }
 
-    /** Lo declara no mostrable. */
+    /** Declares it no longer showable. */
     public void removeNotify() {
         super.removeNotify();
     }
 
     /**
-     * Cambia el texto.
+     * Changes the text.
      *
-     * <p>La selección se recorta al texto nuevo: dejarla apuntando afuera sería un estado inválido
-     * que después explota en cualquier `getSelectedText`.
+     * <p>The selection is clamped to the new text: leaving it pointing outside would be an invalid
+     * state that later blows up in any `getSelectedText`.
      *
-     * @param t el texto; `null` cuenta como vacío
+     * @param t the text; `null` counts as empty
      */
     public synchronized void setText(String t) {
         this.text = t == null ? "" : t;
@@ -99,36 +99,36 @@ public class TextComponent extends Component implements Accessible {
         }
     }
 
-    /** Lo que dice. */
+    /** What it says. */
     public synchronized String getText() {
         return this.text;
     }
 
     /**
-     * Lo que está seleccionado.
+     * What is selected.
      *
-     * @return el tramo seleccionado, o la cadena vacía si no hay selección
+     * @return the selected stretch, or the empty string if there is no selection
      */
     public synchronized String getSelectedText() {
         return this.getText().substring(this.getSelectionStart(), this.getSelectionEnd());
     }
 
-    /** Si se puede escribir en él. */
+    /** Whether it can be typed into. */
     public boolean isEditable() {
         return this.editable;
     }
 
-    /** Lo deja escribir o no. */
+    /** Lets it be typed into or not. */
     public synchronized void setEditable(boolean b) {
         this.editable = b;
     }
 
     /**
-     * El color de fondo.
+     * The background colour.
      *
-     * <p>Un componente de texto **no editable** hereda el fondo del padre aunque a él nunca se lo
-     * hayan puesto, y ése es el motivo de que esto esté redefinido: el color de un campo de sólo
-     * lectura tiene que verse como el del panel que lo contiene.
+     * <p>A **non-editable** text component inherits the parent's background even if one was never
+     * set on it, and that is the reason this is overridden: the colour of a read-only field has to
+     * look like that of the panel holding it.
      */
     public Color getBackground() {
         if (!this.editable && !this.backgroundSetByClientCode) {
@@ -140,42 +140,45 @@ public class TextComponent extends Component implements Accessible {
         return super.getBackground();
     }
 
-    /** Le fija el color de fondo. */
+    /** Sets its background colour. */
     public void setBackground(Color c) {
         this.backgroundSetByClientCode = true;
         super.setBackground(c);
     }
 
-    /** Dónde arranca la selección. */
+    /** Where the selection starts. */
     public synchronized int getSelectionStart() {
         return this.selectionStart;
     }
 
     /**
-     * Mueve el principio de la selección.
+     * Moves the start of the selection.
      *
-     * <p>Pasarlo del final la arrastra: la selección nunca queda dada vuelta.
+     * <p>Moving it past the end drags the end with it: the selection never ends up reversed.
      */
     public synchronized void setSelectionStart(int selectionStart) {
         this.select(selectionStart, this.getSelectionEnd());
     }
 
-    /** Dónde termina la selección. */
+    /** Where the selection ends. */
     public synchronized int getSelectionEnd() {
         return this.selectionEnd;
     }
 
-    /** Mueve el final de la selección; ponerlo antes del principio lo arrastra. */
+    /** Moves the end of the selection; putting it before the start pulls it up to the start. */
     public synchronized void setSelectionEnd(int selectionEnd) {
         this.select(this.getSelectionStart(), selectionEnd);
     }
 
     /**
-     * Selecciona ese tramo.
+     * Selects that stretch.
      *
-     * <p>Las posiciones se recortan al texto y se ordenan, así que cualquier par sirve. Es
-     * deliberadamente tolerante: el llamador típico calcula posiciones a partir de una búsqueda y no
-     * tiene por qué validar.
+     * <p>The positions are clamped to the text, so any pair works. It is deliberately tolerant: the
+     * typical caller works positions out from a search and has no reason to validate them.
+     *
+     * <p>A reversed pair is not swapped: the end is pulled up to the start and what is left is an
+     * empty selection there. It is what the JDK does, and it is why `select(5, 2)` selects nothing
+     * instead of the same as `select(2, 5)`.
      */
     public synchronized void select(int selectionStart, int selectionEnd) {
         String t = this.getText();
@@ -195,17 +198,17 @@ public class TextComponent extends Component implements Accessible {
         this.selectionEnd = selectionEnd;
     }
 
-    /** Selecciona todo. */
+    /** Selects everything. */
     public synchronized void selectAll() {
         this.select(0, this.getText().length());
     }
 
     /**
-     * Pone el cursor ahí.
+     * Puts the caret there.
      *
-     * <p>Es la selección vacía en esa posición, no un tercer estado.
+     * <p>It is the empty selection at that position, not a third state.
      *
-     * @throws IllegalArgumentException si la posición es negativa
+     * @throws IllegalArgumentException if the position is negative
      */
     public synchronized void setCaretPosition(int position) {
         if (position < 0) {
@@ -219,17 +222,17 @@ public class TextComponent extends Component implements Accessible {
     }
 
     /**
-     * Dónde está el cursor.
+     * Where the caret is.
      *
-     * <p>Es el **principio** de la selección, no el final. Suena al revés —al arrastrar, el cursor
-     * va donde está el mouse, que es el final— pero es lo que devuelve AWT sin ventana, y se
-     * comprobó contra el JDK.
+     * <p>It is the **start** of the selection, not the end. It sounds backwards —while dragging,
+     * the caret goes where the mouse is, which is the end— but it is what AWT answers without a
+     * window, and it was checked against the JDK.
      */
     public synchronized int getCaretPosition() {
         return this.getSelectionStart();
     }
 
-    /** Agrega un oyente; `null` no hace nada. */
+    /** Adds a listener; `null` does nothing. */
     public synchronized void addTextListener(TextListener l) {
         if (l == null) {
             return;
@@ -238,7 +241,7 @@ public class TextComponent extends Component implements Accessible {
         this.enableEvents(AWTEvent.TEXT_EVENT_MASK);
     }
 
-    /** Saca un oyente. */
+    /** Removes a listener. */
     public synchronized void removeTextListener(TextListener l) {
         if (l == null) {
             return;
@@ -246,7 +249,7 @@ public class TextComponent extends Component implements Accessible {
         this.textListener = AWTEventMulticaster.remove(this.textListener, l);
     }
 
-    /** Los oyentes puestos. */
+    /** The listeners that are set. */
     public synchronized TextListener[] getTextListeners() {
         return AWTEventMulticaster.getListeners(this.textListener, TextListener.class);
     }
@@ -266,7 +269,7 @@ public class TextComponent extends Component implements Accessible {
         super.processEvent(e);
     }
 
-    /** Les avisa a los oyentes de texto. */
+    /** Tells the text listeners. */
     protected void processTextEvent(TextEvent e) {
         TextListener l = this.textListener;
         if (l != null) {
@@ -282,7 +285,7 @@ public class TextComponent extends Component implements Accessible {
         return s + ",selection=" + this.getSelectionStart() + "-" + this.getSelectionEnd();
     }
 
-    /** La accesibilidad del componente de texto. */
+    /** The accessibility information of this text component. */
     public AccessibleContext getAccessibleContext() {
         if (this.accessibleContext == null) {
             this.accessibleContext = new AccessibleAWTTextComponent();
@@ -291,18 +294,22 @@ public class TextComponent extends Component implements Accessible {
     }
 
     /**
-     * La accesibilidad de un componente de texto.
+     * The accessibility of a text component.
      *
-     * <p>Implementa {@link AccessibleText}, que es lo que le permite a un lector de pantalla recorrer
-     * el contenido por letra, palabra o renglón. Lo que **no** implementa es
-     * {@link AccessibleText#getCharacterBounds}, que devuelve `null`, ni
-     * {@link AccessibleText#getCharacterAttribute}: los dos necesitan la tipografía medida sobre una
-     * pantalla, y sin ella cualquier respuesta sería inventada.
+     * <p>It implements {@link AccessibleText}, which is what lets a screen reader walk the content
+     * by letter, word or line. What it does **not** implement is {@link
+     * AccessibleText#getCharacterBounds}, which returns `null`, nor {@link
+     * AccessibleText#getCharacterAttribute}: both need the typography measured on a screen, and
+     * without it any answer would be invented.
+     *
+     * <p>{@link AccessibleText#SENTENCE} is answered with the **line**. Telling where a sentence
+     * ends needs text analysis that is not done here, and for a field or an area the line is the
+     * unit that the reader ends up walking.
      */
     protected class AccessibleAWTTextComponent extends AccessibleAWTComponent
             implements AccessibleText {
 
-        /** Para las subclases. */
+        /** For the subclasses. */
         protected AccessibleAWTTextComponent() {
         }
 
@@ -324,37 +331,37 @@ public class TextComponent extends Component implements Accessible {
         }
 
         /**
-         * Qué letra hay en ese punto de la pantalla.
+         * Which letter is at that point of the screen.
          *
-         * @return -1 siempre: sin tipografía medida no hay forma de saberlo
+         * @return -1 always: without measured typography there is no way to know
          */
         public int getIndexAtPoint(Point p) {
             return -1;
         }
 
         /**
-         * Dónde cae esa letra en la pantalla.
+         * Where that letter falls on the screen.
          *
-         * @return `null` siempre, por lo mismo
+         * @return `null` always, for the same reason
          */
         public Rectangle getCharacterBounds(int i) {
             return null;
         }
 
-        /** Cuántas letras tiene. */
+        /** How many letters it has. */
         public int getCharCount() {
             return TextComponent.this.getText().length();
         }
 
-        /** Dónde está el cursor. */
+        /** Where the caret is. */
         public int getCaretPosition() {
             return TextComponent.this.getCaretPosition();
         }
 
         /**
-         * Los atributos de esa letra.
+         * The attributes of that letter.
          *
-         * @return `null` siempre: el texto de AWT no tiene atributos por letra
+         * @return `null` always: AWT text has no per-letter attributes
          */
         public javax.swing.text.AttributeSet getCharacterAttribute(int i) {
             return null;
@@ -374,65 +381,66 @@ public class TextComponent extends Component implements Accessible {
         }
 
         /**
-         * La letra, palabra o renglón que está en esa posición.
+         * The letter, word or line at that position.
          *
-         * @return el tramo, o `null` si la posición no existe o la parte no es una de las tres
+         * @return the stretch, or `null` if the position does not exist or the part is not one of
+         *     the three
          */
         public String getAtIndex(int part, int index) {
-            return this.tramo(part, index, 0);
+            return this.segment(part, index, 0);
         }
 
-        /** Lo mismo, pero lo que viene después. */
+        /** The same, but what comes after. */
         public String getAfterIndex(int part, int index) {
-            return this.tramo(part, index, 1);
+            return this.segment(part, index, 1);
         }
 
-        /** Lo mismo, pero lo que viene antes. */
+        /** The same, but what comes before. */
         public String getBeforeIndex(int part, int index) {
-            return this.tramo(part, index, -1);
+            return this.segment(part, index, -1);
         }
 
         /**
-         * Recorta la letra, palabra o renglón que está en esa posición, corrida en esa dirección.
+         * Takes the letter, word or line at that position, shifted in that direction.
          *
-         * @param direccion -1 el anterior, 0 el de la posición, 1 el siguiente
+         * @param direction -1 the previous one, 0 the one at the position, 1 the next one
          */
-        private String tramo(int part, int index, int direccion) {
+        private String segment(int part, int index, int direction) {
             String t = TextComponent.this.getText();
             if (index < 0 || index >= t.length()) {
                 return null;
             }
             if (part == AccessibleText.CHARACTER) {
-                int i = index + direccion;
+                int i = index + direction;
                 if (i < 0 || i >= t.length()) {
                     return null;
                 }
                 return t.substring(i, i + 1);
             }
             if (part == AccessibleText.WORD) {
-                return this.palabra(t, index, direccion);
+                return this.word(t, index, direction);
             }
             if (part == AccessibleText.SENTENCE) {
-                return this.renglon(t, index, direccion);
+                return this.line(t, index, direction);
             }
             return null;
         }
 
-        /** La palabra de esa posición, corrida en esa dirección. */
-        private String palabra(String t, int index, int direccion) {
-            int desde = index;
-            int hasta = index;
-            while (desde > 0 && !Character.isWhitespace(t.charAt(desde - 1))) {
-                desde = desde - 1;
+        /** The word at that position, shifted in that direction. */
+        private String word(String t, int index, int direction) {
+            int from = index;
+            int to = index;
+            while (from > 0 && !Character.isWhitespace(t.charAt(from - 1))) {
+                from = from - 1;
             }
-            while (hasta < t.length() && !Character.isWhitespace(t.charAt(hasta))) {
-                hasta = hasta + 1;
+            while (to < t.length() && !Character.isWhitespace(t.charAt(to))) {
+                to = to + 1;
             }
-            if (direccion == 0) {
-                return desde == hasta ? null : t.substring(desde, hasta);
+            if (direction == 0) {
+                return from == to ? null : t.substring(from, to);
             }
-            if (direccion > 0) {
-                int i = hasta;
+            if (direction > 0) {
+                int i = to;
                 while (i < t.length() && Character.isWhitespace(t.charAt(i))) {
                     i = i + 1;
                 }
@@ -445,7 +453,7 @@ public class TextComponent extends Component implements Accessible {
                 }
                 return t.substring(i, j);
             }
-            int i = desde;
+            int i = from;
             while (i > 0 && Character.isWhitespace(t.charAt(i - 1))) {
                 i = i - 1;
             }
@@ -459,30 +467,30 @@ public class TextComponent extends Component implements Accessible {
             return t.substring(j, i);
         }
 
-        /** El renglón de esa posición, corrido en esa dirección. */
-        private String renglon(String t, int index, int direccion) {
-            int desde = t.lastIndexOf('\n', index - 1) + 1;
-            int hasta = t.indexOf('\n', index);
-            if (hasta < 0) {
-                hasta = t.length();
+        /** The line at that position, shifted in that direction. */
+        private String line(String t, int index, int direction) {
+            int from = t.lastIndexOf('\n', index - 1) + 1;
+            int to = t.indexOf('\n', index);
+            if (to < 0) {
+                to = t.length();
             } else {
-                hasta = hasta + 1;
+                to = to + 1;
             }
-            if (direccion == 0) {
-                return t.substring(desde, hasta);
+            if (direction == 0) {
+                return t.substring(from, to);
             }
-            if (direccion > 0) {
-                if (hasta >= t.length()) {
+            if (direction > 0) {
+                if (to >= t.length()) {
                     return null;
                 }
-                int fin = t.indexOf('\n', hasta);
-                return fin < 0 ? t.substring(hasta) : t.substring(hasta, fin + 1);
+                int nextEnd = t.indexOf('\n', to);
+                return nextEnd < 0 ? t.substring(to) : t.substring(to, nextEnd + 1);
             }
-            if (desde <= 0) {
+            if (from <= 0) {
                 return null;
             }
-            int inicio = t.lastIndexOf('\n', desde - 2) + 1;
-            return t.substring(inicio, desde);
+            int prevStart = t.lastIndexOf('\n', from - 2) + 1;
+            return t.substring(prevStart, from);
         }
     }
 }

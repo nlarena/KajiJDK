@@ -3,13 +3,13 @@ package com.sun.source.util;
 import com.sun.source.doctree.DocTree;
 
 /**
- * Un {@link DocTreeScanner} que lleva la cuenta de por donde va.
+ * A {@link DocTreeScanner} that keeps track of where it is.
  *
- * <p>El equivalente de {@link TreePathScanner} para el arbol de documentacion, y con el mismo
- * proposito: que cualquier visita pueda preguntar que la contiene sin recorrer el arbol otra vez.
+ * <p>The equivalent of {@link TreePathScanner} for the documentation tree, and with the same
+ * purpose: that any visit may ask what contains it without walking the tree again.
  *
- * @param <R> lo que devuelve cada visita
- * @param <P> el dato que se arrastra
+ * @param <R> what each visit returns
+ * @param <P> the datum that is carried along
  */
 public class DocTreePathScanner<R, P> extends DocTreeScanner<R, P> {
 
@@ -18,7 +18,7 @@ public class DocTreePathScanner<R, P> extends DocTreeScanner<R, P> {
     public DocTreePathScanner() {
     }
 
-    /** Arranca el recorrido desde ese camino. */
+    /** It starts the walk from that path. */
     public R scan(DocTreePath path, P p) {
         this.path = path.getParentPath();
         try {
@@ -28,23 +28,23 @@ public class DocTreePathScanner<R, P> extends DocTreeScanner<R, P> {
         }
     }
 
-    /** Visita un nodo, empujandolo al camino mientras dura. */
+    /** It visits a node, pushing it onto the path while it lasts. */
     public R scan(DocTree tree, P p) {
         if (tree == null) {
             return null;
         }
-        DocTreePath anterior = this.path;
-        if (anterior != null) {
-            this.path = new DocTreePath(anterior, tree);
+        DocTreePath previous = this.path;
+        if (previous != null) {
+            this.path = new DocTreePath(previous, tree);
         }
         try {
             return tree.accept(this, p);
         } finally {
-            this.path = anterior;
+            this.path = previous;
         }
     }
 
-    /** Donde esta parado el recorrido ahora. */
+    /** Where the walk is standing now. */
     public DocTreePath getCurrentPath() {
         return this.path;
     }

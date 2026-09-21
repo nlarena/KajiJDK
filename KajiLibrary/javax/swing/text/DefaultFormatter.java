@@ -8,24 +8,25 @@ import javax.swing.JFormattedTextField;
 import javax.swing.JFormattedTextField$AbstractFormatter;
 
 /**
- * El formateador de siempre: convierte con {@code toString} y con un constructor de una cadena.
+ * The usual formatter: it converts with {@code toString} and with a constructor taking a
+ * string.
  *
- * <h2>Como convierte de vuelta</h2>
+ * <h2>How it converts back</h2>
  *
- * <p>Para ir de valor a texto alcanza con {@code toString}. Para volver, busca en la clase del
- * valor un constructor que reciba una {@code String} y lo llama. Por eso funciona sin configurar
- * nada con {@code Integer}, {@code Double} o cualquier clase que tenga ese constructor, y no
- * funciona con las que no lo tienen.
+ * <p>To go from value to text {@code toString} is enough. To come back, it looks in the value's
+ * class for a constructor that takes a {@code String} and calls it. That is why it works with no
+ * configuration at all with {@code Integer}, {@code Double} or any class that has that
+ * constructor, and does not work with those that do not have it.
  *
- * <h2>Edicion valida a cada tecla</h2>
+ * <h2>Valid editing at every keystroke</h2>
  *
- * <p>Con {@link #setAllowsInvalid} en falso, cada tecla se prueba antes de aceptarla: se arma como
- * quedaria el texto, se intenta convertir, y si no se puede la tecla se rechaza. Eso es lo que
- * permite un campo donde literalmente no se puede escribir algo invalido.
+ * <p>With {@link #setAllowsInvalid} at false, every key is tried before being accepted: what the
+ * text would look like is built, the conversion is attempted, and if it cannot be done the key
+ * is rejected. That is what allows a field where something invalid literally cannot be typed.
  *
- * <p>El precio es que hay estados intermedios validos que se vuelven inalcanzables. Escribir
- * <code>-5</code> requiere pasar por <code>-</code>, que no es un numero. Por eso el valor por
- * omision es dejar escribir cualquier cosa y validar despues.
+ * <p>The price is that there are valid intermediate states that become unreachable. Typing
+ * <code>-5</code> requires going through <code>-</code>, which is not a number. That is why the
+ * default is to let anything be typed and validate afterwards.
  */
 public class DefaultFormatter extends JFormattedTextField$AbstractFormatter
         implements Cloneable, Serializable {
@@ -35,22 +36,22 @@ public class DefaultFormatter extends JFormattedTextField$AbstractFormatter
     private boolean allowsInvalid;
     private Class<?> valueClass;
 
-    private transient DocumentFilter filtroDoc;
-    private transient NavigationFilter filtroNav;
+    private transient DocumentFilter documentFilter;
+    private transient NavigationFilter navigationFilter;
 
-    /** Un formateador que deja escribir cualquier cosa y sobrescribe al escribir. */
+    /** A formatter that lets anything be typed and overwrites while typing. */
     public DefaultFormatter() {
         overwriteMode = true;
         allowsInvalid = true;
     }
 
-    /** Se engancha al campo y deja el cursor al principio. */
+    /** It hooks itself to the field and leaves the cursor at the beginning. */
     public void install(JFormattedTextField ftf) {
         super.install(ftf);
         positionCursorAtInitialLocation();
     }
 
-    /** Si cada edicion valida pasa enseguida al valor del campo. */
+    /** Whether every valid edit passes straight to the field's value. */
     public void setCommitsOnValidEdit(boolean commit) {
         commitOnEdit = commit;
     }
@@ -59,7 +60,7 @@ public class DefaultFormatter extends JFormattedTextField$AbstractFormatter
         return commitOnEdit;
     }
 
-    /** Si escribir reemplaza en lugar de insertar. */
+    /** Whether typing replaces instead of inserting. */
     public void setOverwriteMode(boolean overwriteMode) {
         this.overwriteMode = overwriteMode;
     }
@@ -68,7 +69,7 @@ public class DefaultFormatter extends JFormattedTextField$AbstractFormatter
         return overwriteMode;
     }
 
-    /** Si se puede dejar el campo en un estado que no se convierte; ver la nota de la clase. */
+    /** Whether the field may be left in a state that does not convert; see the class note. */
     public void setAllowsInvalid(boolean allowsInvalid) {
         this.allowsInvalid = allowsInvalid;
     }
@@ -77,7 +78,7 @@ public class DefaultFormatter extends JFormattedTextField$AbstractFormatter
         return allowsInvalid;
     }
 
-    /** La clase a la que se convierte el texto. */
+    /** The class the text is converted to. */
     public void setValueClass(Class<?> valueClass) {
         this.valueClass = valueClass;
     }
@@ -87,9 +88,9 @@ public class DefaultFormatter extends JFormattedTextField$AbstractFormatter
     }
 
     /**
-     * Convierte el texto al valor con el constructor de una cadena.
+     * It converts the text to the value with the constructor taking a string.
      *
-     * @throws ParseException si la clase no tiene ese constructor o si lo rechaza.
+     * @throws ParseException if the class does not have that constructor or if it rejects it.
      */
     public Object stringToValue(String string) throws ParseException {
         Class<?> vc = getValueClass();
@@ -121,7 +122,7 @@ public class DefaultFormatter extends JFormattedTextField$AbstractFormatter
         return string;
     }
 
-    /** El texto del valor: su {@code toString}, o vacio si es nulo. */
+    /** The value's text: its {@code toString}, or empty if it is null. */
     public String valueToString(Object value) throws ParseException {
         if (value == null) {
             return "";
@@ -129,30 +130,30 @@ public class DefaultFormatter extends JFormattedTextField$AbstractFormatter
         return value.toString();
     }
 
-    /** El filtro que valida cada tecla; ver la nota de la clase. */
+    /** The filter that validates every key; see the class note. */
     protected DocumentFilter getDocumentFilter() {
-        if (filtroDoc == null) {
-            filtroDoc = new DefaultDocumentFilter(this);
+        if (documentFilter == null) {
+            documentFilter = new DefaultDocumentFilter(this);
         }
-        return filtroDoc;
+        return documentFilter;
     }
 
-    /** El filtro que decide donde se puede parar el cursor. */
+    /** The filter that decides where the cursor may stop. */
     protected NavigationFilter getNavigationFilter() {
-        if (filtroNav == null) {
-            filtroNav = new DefaultNavigationFilter(this);
+        if (navigationFilter == null) {
+            navigationFilter = new DefaultNavigationFilter(this);
         }
-        return filtroNav;
+        return navigationFilter;
     }
 
     public Object clone() throws CloneNotSupportedException {
         DefaultFormatter formatter = (DefaultFormatter) super.clone();
-        formatter.filtroDoc = null;
-        formatter.filtroNav = null;
+        formatter.documentFilter = null;
+        formatter.navigationFilter = null;
         return formatter;
     }
 
-    /** Donde empieza el cursor al instalarse. */
+    /** Where the cursor starts on installing. */
     void positionCursorAtInitialLocation() {
         JFormattedTextField ftf = getFormattedTextField();
         if (ftf != null) {
@@ -165,17 +166,17 @@ public class DefaultFormatter extends JFormattedTextField$AbstractFormatter
     }
 
     /**
-     * Reenvia a {@link #invalidEdit()} desde las clases anidadas.
+     * It forwards to {@link #invalidEdit()} from the nested classes.
      *
-     * <p>El filtro es una clase anidada y nuestro compilador todavia no le deja tocar un
-     * {@code protected} heredado de otro paquete (hallazgo #512 en
+     * <p>The filter is a nested class and our compiler does not yet let it touch a
+     * {@code protected} member inherited from another package (finding #512 in
      * <code>COMPILER_FINDINGS.md</code>).
      */
-    void avisarInvalido() {
+    void reportInvalid() {
         invalidEdit();
     }
 
-    /** Si el texto que quedaria es aceptable. */
+    /** Whether the text that would be left is acceptable. */
     boolean isValidEdit(String text) {
         if (!getAllowsInvalid()) {
             try {
@@ -187,7 +188,7 @@ public class DefaultFormatter extends JFormattedTextField$AbstractFormatter
         return true;
     }
 
-    /** Pasa el texto al valor, si asi se pidio. */
+    /** It passes the text to the value, if that was asked for. */
     void commitEdit() {
         JFormattedTextField ftf = getFormattedTextField();
         if (ftf != null) {
@@ -200,7 +201,7 @@ public class DefaultFormatter extends JFormattedTextField$AbstractFormatter
         }
     }
 
-    /** Marca si lo escrito hasta ahora se convierte. */
+    /** It marks whether what has been typed so far converts. */
     void updateValue(String text) {
         try {
             stringToValue(text);
@@ -214,10 +215,10 @@ public class DefaultFormatter extends JFormattedTextField$AbstractFormatter
     }
 
     /**
-     * Filtra la escritura: valida antes de dejar pasar y sobrescribe si corresponde.
+     * It filters the typing: it validates before letting through and overwrites if it applies.
      *
-     * <p>En el JDK es una clase interna; aca es estatica con el formateador como primer parametro.
-     * No es publica, asi que la firma no se ve desde afuera.
+     * <p>In the JDK it is an inner class; here it is static with the formatter as its first
+     * parameter. It is not public, so the signature is not seen from outside.
      */
     static class DefaultDocumentFilter extends DocumentFilter implements Serializable {
 
@@ -229,13 +230,13 @@ public class DefaultFormatter extends JFormattedTextField$AbstractFormatter
 
         public void remove(DocumentFilter.FilterBypass fb, int offset, int length)
                 throws BadLocationException {
-            String actual = fb.getDocument().getText(0, fb.getDocument().getLength());
-            String queda = actual.substring(0, offset) + actual.substring(offset + length);
-            if (fmt.isValidEdit(queda)) {
+            String current = fb.getDocument().getText(0, fb.getDocument().getLength());
+            String left = current.substring(0, offset) + current.substring(offset + length);
+            if (fmt.isValidEdit(left)) {
                 fb.remove(offset, length);
-                fmt.updateValue(queda);
+                fmt.updateValue(left);
             } else {
-                fmt.avisarInvalido();
+                fmt.reportInvalid();
             }
         }
 
@@ -250,23 +251,23 @@ public class DefaultFormatter extends JFormattedTextField$AbstractFormatter
                 text = "";
             }
             Document doc = fb.getDocument();
-            String actual = doc.getText(0, doc.getLength());
-            int fin = offset + length;
+            String current = doc.getText(0, doc.getLength());
+            int end = offset + length;
             if (fmt.getOverwriteMode() && length == 0) {
-                // Sobrescribir: lo que se escribe se come lo que hay adelante.
-                fin = Math.min(offset + text.length(), actual.length());
+                // Overwriting: what is typed eats what is ahead.
+                end = Math.min(offset + text.length(), current.length());
             }
-            String queda = actual.substring(0, offset) + text + actual.substring(fin);
-            if (fmt.isValidEdit(queda)) {
-                fb.replace(offset, fin - offset, text, attr);
-                fmt.updateValue(queda);
+            String left = current.substring(0, offset) + text + current.substring(end);
+            if (fmt.isValidEdit(left)) {
+                fb.replace(offset, end - offset, text, attr);
+                fmt.updateValue(left);
             } else {
-                fmt.avisarInvalido();
+                fmt.reportInvalid();
             }
         }
     }
 
-    /** Filtra el movimiento del cursor; el de siempre no lo limita. */
+    /** It filters the cursor's movement; the usual one does not limit it. */
     static class DefaultNavigationFilter extends NavigationFilter implements Serializable {
 
         private final DefaultFormatter fmt;

@@ -1,12 +1,13 @@
 package java.security;
 
-// La raiz de las excepciones chequeadas del paquete.
+// The root of the checked exceptions of the package.
 //
-// Existe para que un llamador que no quiere distinguir entre "no esta el algoritmo", "la clave no
-// sirve" y "la firma no se pudo procesar" pueda atrapar las tres con un solo catch. Casi todo el
-// paquete tira alguna de sus subclases, y las dos que se salen de la jerarquia lo hacen a
-// proposito: `ProviderException` es no chequeada porque señala un proveedor roto, e
-// `InvalidParameterException` porque señala un error de programacion del llamador.
+// It exists so that a caller who does not want to tell "the algorithm is not there", "the key does
+// not serve" and "the signature could not be processed" apart can catch all three with a single
+// catch. Almost the whole package throws one of its subclasses, and the two that step out of the
+// hierarchy do it on purpose: `ProviderException` is unchecked because it points at a broken
+// provider, and `InvalidParameterException` because it points at a programming error of the
+// caller.
 public class GeneralSecurityException extends Exception {
 
     public GeneralSecurityException() {

@@ -5,18 +5,19 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * El comentario entero, y la raiz de todo arbol de este paquete.
+ * The whole comment, and the root of every tree of this package.
  *
- * <p>La particion en {@link #getFirstSentence} y {@link #getBody} no es decorativa: la primera
- * oracion es la que javadoc muestra en las tablas de resumen, asi que donde termina cambia lo que
- * se ve. {@link #getFullBody} es la concatenacion, para quien no necesita esa distincion.
+ * <p>The partition into {@link #getFirstSentence} and {@link #getBody} is not decorative: the
+ * first sentence is the one javadoc shows in the summary tables, so where it ends changes what
+ * is seen. {@link #getFullBody} is the concatenation, for whoever does not need that
+ * distinction.
  */
 public interface DocCommentTree extends DocTree {
 
-    /** La primera oracion, que es lo que aparece en las tablas de resumen. */
+    /** The first sentence, which is what appears in the summary tables. */
     List<? extends DocTree> getFirstSentence();
 
-    /** La primera oracion y el cuerpo, concatenados. */
+    /** The first sentence and the body, concatenated. */
     default List<? extends DocTree> getFullBody() {
         List<DocTree> completo = new ArrayList<DocTree>();
         completo.addAll(getFirstSentence());
@@ -24,18 +25,18 @@ public interface DocCommentTree extends DocTree {
         return completo;
     }
 
-    /** El cuerpo, sin la primera oracion. */
+    /** The body, without the first sentence. */
     List<? extends DocTree> getBody();
 
-    /** Los tags de bloque, en el orden en que se escribieron. */
+    /** The block tags, in the order in which they were written. */
     List<? extends DocTree> getBlockTags();
 
-    /** Lo que hay antes del contenido en un archivo suelto: el `<!DOCTYPE>`, el `<head>`. */
+    /** What there is before the content in a loose file: the `<!DOCTYPE>`, the `<head>`. */
     default List<? extends DocTree> getPreamble() {
         return Collections.<DocTree>emptyList();
     }
 
-    /** Lo que hay despues del contenido en un archivo suelto. */
+    /** What there is after the content in a loose file. */
     default List<? extends DocTree> getPostamble() {
         return Collections.<DocTree>emptyList();
     }

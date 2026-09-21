@@ -3,45 +3,47 @@ package org.w3c.dom.html;
 import org.w3c.dom.Element;
 
 /**
- * Lo que todo elemento de un documento HTML tiene, sea cual sea su etiqueta.
+ * What every element of an HTML document has, whatever its tag.
  *
- * <p>Los cuatro atributos de aca --`id`, `title`, `lang`, `dir`, `class`-- son los que HTML 4 define
- * para cualquier elemento, y por eso viven en la raiz de la jerarquia y no repetidos en cada
- * subtipo.
+ * <p>The five attributes here --`id`, `title`, `lang`, `dir`, `class`; the note said "four"-- are
+ * the ones HTML 4 defines for any element, and that is why they live at the root of the hierarchy
+ * and are not repeated in each subtype.
  *
- * <p>Ojo con `getClassName`: el atributo se llama `class` en el documento y el metodo `className`
- * en la API. No es un descuido de nadie --`class` es palabra reservada de Java-- y es la unica
- * propiedad de este paquete donde el nombre del metodo y el del atributo no coinciden.
+ * <p>Careful with `getClassName`: the attribute is called `class` in the document and the method
+ * `className` in the API. It is nobody's oversight --`class` is a reserved word of Java--. The note
+ * said it is the only property of this package where the name of the method and that of the
+ * attribute do not match; it is not: `htmlFor` (`for`), `httpEquiv` (`http-equiv`) and
+ * `acceptCharset` (`accept-charset`) differ as well, for the same kind of reason.
  */
 public interface HTMLElement extends org.w3c.dom.Element {
 
-    /** El atributo `id`. */
+    /** The `id` attribute. */
     String getId();
 
-    /** Fija el atributo `id`. */
+    /** It sets the `id` attribute. */
     void setId(String id);
 
-    /** El atributo `title`. */
+    /** The `title` attribute. */
     String getTitle();
 
-    /** Fija el atributo `title`. */
+    /** It sets the `title` attribute. */
     void setTitle(String title);
 
-    /** El atributo `lang`. */
+    /** The `lang` attribute. */
     String getLang();
 
-    /** Fija el atributo `lang`. */
+    /** It sets the `lang` attribute. */
     void setLang(String lang);
 
-    /** El atributo `dir`. */
+    /** The `dir` attribute. */
     String getDir();
 
-    /** Fija el atributo `dir`. */
+    /** It sets the `dir` attribute. */
     void setDir(String dir);
 
-    /** El atributo `class`. */
+    /** The `class` attribute. */
     String getClassName();
 
-    /** Fija el atributo `class`. */
+    /** It sets the `class` attribute. */
     void setClassName(String className);
 }

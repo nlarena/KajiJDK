@@ -5,8 +5,8 @@ import java.util.List;
 import javax.lang.model.element.Name;
 
 /**
- * Una declaracion de tipo: clase, interfaz, enum, record o anotacion. Cual de las
- * cinco lo dice {@link Tree#getKind}.
+ * A type declaration: class, interface, enum, record or annotation. Which of the
+ * five it is is said by {@link Tree#getKind}.
  */
 public interface ClassTree extends StatementTree {
 
@@ -20,7 +20,7 @@ public interface ClassTree extends StatementTree {
 
     List<? extends Tree> getImplementsClause();
 
-    /** La clausula `permits` de un tipo sellado; vacia si no la tiene. */
+    /** A sealed type's `permits` clause; empty if it has none. */
     default List<? extends Tree> getPermitsClause() {
         return Collections.<Tree>emptyList();
     }

@@ -3,15 +3,16 @@ package javax.swing.tree;
 import java.util.Enumeration;
 
 /**
- * Un nodo de arbol visto desde afuera: hijos, padre y poco mas.
+ * A tree node seen from outside: children, parent and little more.
  *
- * <p>Es de solo lectura a proposito. Un {@code JTree} no arma el arbol, lo muestra; quien lo arma
- * usa {@code MutableTreeNode} o su propio modelo. Que la estructura de un documento de texto
- * implemente esta interfaz es lo que permite mirarla con un arbol sin convertir nada.
+ * <p>It is read-only on purpose. A {@code JTree} does not build the tree, it shows it; whoever
+ * builds it uses {@code MutableTreeNode} or a model of their own. That a text document's
+ * structure implements this interface is what allows looking at it with a tree without converting
+ * anything.
  *
- * <p>{@link #getAllowsChildren} y {@link #isLeaf} no son lo mismo: una carpeta vacia <em>admite</em>
- * hijos y no tiene ninguno, y esa diferencia es la que decide si se dibuja el triangulito para
- * desplegarla.
+ * <p>{@link #getAllowsChildren} and {@link #isLeaf} are not the same thing: an empty folder
+ * <em>admits</em> children and has none, and that difference is what decides whether the little
+ * triangle to expand it is drawn.
  */
 public interface TreeNode {
 
@@ -19,13 +20,13 @@ public interface TreeNode {
 
     int getChildCount();
 
-    /** El padre, o {@code null} si es la raiz. */
+    /** The parent, or {@code null} if it is the root. */
     TreeNode getParent();
 
-    /** La posicion de ese nodo entre los hijos, o {@code -1} si no es hijo de este. */
+    /** That node's position among the children, or {@code -1} if it is not a child of this one. */
     int getIndex(TreeNode node);
 
-    /** Si admite hijos; ver la nota de la interfaz. */
+    /** Whether it admits children; see the interface note. */
     boolean getAllowsChildren();
 
     boolean isLeaf();

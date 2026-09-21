@@ -25,56 +25,57 @@ import javax.swing.plaf.UIResource;
 import javax.swing.plaf.metal.MetalBorders;
 
 /**
- * El aspecto basico de un boton: ubica icono y texto con {@code layoutCompoundLabel} y los pinta
- * segun el modelo.
+ * The basic look and feel of a button: it places icon and text with
+ * {@code layoutCompoundLabel} and paints them according to the model.
  *
- * <h2>Un solo objeto para todos los botones</h2>
+ * <h2>A single object for every button</h2>
  *
- * <p>{@link #createUI} devuelve siempre la misma instancia; puede porque el UI no guarda nada del
- * boton salvo el corrimiento del texto al apretar, que se pone y se borra dentro de un mismo
- * {@link #paint}. Los rectangulos de trabajo son locales por lo mismo.
+ * <p>{@link #createUI} always returns the same instance; it can because the look and feel keeps
+ * nothing of the button save the text's shift when pressed, which is set and erased inside a
+ * single {@link #paint}. The working rectangles are locals for the same reason.
  *
- * <h2>Lo que instala, y de donde sale</h2>
+ * <h2>What it installs, and where it comes from</h2>
  *
- * <p>{@link #installDefaults} pone lo que en el JDK viene de {@code UIManager} bajo
- * {@code Button.*}, con los valores medidos en Metal (JDK 25): fuente Dialog negrita 12, frente
- * (51, 51, 51), fondo (238, 238, 238), margen (2, 14, 2, 14), separacion icono-texto 4, rollover
- * habilitado, corrimiento del texto 0, y el borde de {@link MetalBorders#getButtonBorder}. Se
- * instalan como {@link UIResource}, y solo donde el boton tiene nada o un valor de aspecto: lo que
- * puso el usuario se respeta, que es la regla del JDK.
+ * <p>{@link #installDefaults} sets what in the JDK comes from {@code UIManager} under
+ * {@code Button.*}, with the values measured in Metal (JDK 25): typeface Dialog bold 12,
+ * foreground (51, 51, 51), background (238, 238, 238), margin (2, 14, 2, 14), icon-text gap 4,
+ * rollover enabled, text shift 0, and the border from {@link MetalBorders#getButtonBorder}.
+ * They are installed as a {@link UIResource}, and only where the button has nothing or a look
+ * and feel value: what the user set is respected, which is the JDK's rule.
  *
- * <p>La negrita es la de la API; el rasterizador dibuja toda fuente con la misma cara regular
- * ({@code jdk.internal.awt.FuenteBitmap}).
+ * <p>The bold is the API's; the rasterizer draws every typeface with the same regular face
+ * ({@code jdk.internal.awt.BitmapFont}).
  *
- * <p>Lo que Metal pinta de mas —el degradado del fondo, el marco de foco, el fondo de seleccion al
- * apretar, el texto deshabilitado en gris plano— es de {@code MetalButtonUI}, que no esta. Este es
- * el aspecto basico tal cual: fondo plano, sin marco de foco, texto deshabilitado en relieve.
+ * <p>What Metal paints on top -- the background's gradient, the focus frame, the selection
+ * background when pressed, the disabled text in flat grey -- belongs to {@code MetalButtonUI},
+ * which is not there. This is the basic look and feel as it is: flat background, no focus
+ * frame, disabled text in relief.
  */
 public class BasicButtonUI extends ButtonUI {
 
     private static final BasicButtonUI buttonUI = new BasicButtonUI();
 
-    private static final Font FUENTE_POR_OMISION = new FontUIResource("Dialog", Font.BOLD, 12);
-    private static final ColorUIResource FRENTE_POR_OMISION = new ColorUIResource(51, 51, 51);
-    private static final ColorUIResource FONDO_POR_OMISION = new ColorUIResource(238, 238, 238);
+    private static final Font DEFAULT_FONT = new FontUIResource("Dialog", Font.BOLD, 12);
+    private static final ColorUIResource DEFAULT_FOREGROUND = new ColorUIResource(51, 51, 51);
+    private static final ColorUIResource DEFAULT_BACKGROUND = new ColorUIResource(238, 238, 238);
 
-    /** La separacion entre icono y texto que devuelve {@link #getDefaultTextIconGap}. */
+    /** The gap between icon and text that {@link #getDefaultTextIconGap} returns. */
     protected int defaultTextIconGap;
 
-    private int corrimiento = 0;
+    private int shift = 0;
 
-    /** Cuanto se corre el texto al apretar; cero en Metal. */
+    /** How much the text shifts when pressed; zero in Metal. */
     protected int defaultTextShiftOffset;
 
     public BasicButtonUI() {
     }
 
-    /** El aspecto compartido. */
+    /** The shared look and feel. */
     public static ComponentUI createUI(JComponent c) {
         return buttonUI;
     }
 
-    /** El prefijo de las claves de {@code UIManager} de este componente. */
+    /** The prefix of this component's {@code UIManager} keys. */
     protected String getPropertyPrefix() {
         return "Button.";
     }
@@ -86,7 +87,7 @@ public class BasicButtonUI extends ButtonUI {
         installKeyboardActions(b);
     }
 
-    /** Ver la nota de la clase. */
+    /** See the class note. */
     protected void installDefaults(AbstractButton b) {
         defaultTextShiftOffset = 0;
 
@@ -97,21 +98,21 @@ public class BasicButtonUI extends ButtonUI {
         }
 
         if (b.getMargin() == null || (b.getMargin() instanceof UIResource)) {
-            b.setMargin(margenPorOmision());
+            b.setMargin(defaultMargin());
         }
         if (b.getBackground() == null || (b.getBackground() instanceof UIResource)) {
-            b.setBackground(FONDO_POR_OMISION);
+            b.setBackground(DEFAULT_BACKGROUND);
         }
         if (b.getForeground() == null || (b.getForeground() instanceof UIResource)) {
-            b.setForeground(FRENTE_POR_OMISION);
+            b.setForeground(DEFAULT_FOREGROUND);
         }
         if (b.getFont() == null || (b.getFont() instanceof UIResource)) {
-            b.setFont(FUENTE_POR_OMISION);
+            b.setFont(DEFAULT_FONT);
         }
         if (b.getBorder() == null || (b.getBorder() instanceof UIResource)) {
-            b.setBorder(bordePorOmision());
+            b.setBorder(defaultBorder());
         }
-        Boolean rollover = rolloverPorOmision();
+        Boolean rollover = defaultRollover();
         if (rollover != null) {
             LookAndFeel.installProperty(b, "rolloverEnabled", rollover);
         }
@@ -119,41 +120,42 @@ public class BasicButtonUI extends ButtonUI {
     }
 
     /**
-     * Lo que {@code UIManager} daria bajo {@code prefijo + "margin"}: (2, 14, 2, 14) para un boton.
-     * Las subclases responden por su prefijo.
+     * What {@code UIManager} would give under {@code prefix + "margin"}: (2, 14, 2, 14) for a
+     * button. The subclasses answer for their prefix.
      */
-    Insets margenPorOmision() {
+    Insets defaultMargin() {
         return new InsetsUIResource(2, 14, 2, 14);
     }
 
-    /** Lo que {@code UIManager} daria bajo {@code prefijo + "border"}. */
-    Border bordePorOmision() {
+    /** What {@code UIManager} would give under {@code prefix + "border"}. */
+    Border defaultBorder() {
         return MetalBorders.getButtonBorder();
     }
 
     /**
-     * Lo que {@code UIManager} daria bajo {@code prefijo + "rollover"}; {@code null} si no hay
-     * valor, y entonces no se instala nada. Metal lo define para todos menos el boton con estado.
+     * What {@code UIManager} would give under {@code prefix + "rollover"}; {@code null} if there
+     * is no value, and then nothing is installed. Metal defines it for all but the button with
+     * state.
      */
-    Boolean rolloverPorOmision() {
+    Boolean defaultRollover() {
         return Boolean.TRUE;
     }
 
     protected void installListeners(AbstractButton b) {
-        BasicButtonListener escucha = createButtonListener(b);
-        if (escucha != null) {
-            b.addMouseListener(escucha);
-            b.addMouseMotionListener(escucha);
-            b.addFocusListener(escucha);
-            b.addPropertyChangeListener(escucha);
-            b.addChangeListener(escucha);
+        BasicButtonListener listener = createButtonListener(b);
+        if (listener != null) {
+            b.addMouseListener(listener);
+            b.addMouseMotionListener(listener);
+            b.addFocusListener(listener);
+            b.addPropertyChangeListener(listener);
+            b.addChangeListener(listener);
         }
     }
 
     protected void installKeyboardActions(AbstractButton b) {
-        BasicButtonListener escucha = escuchaDe(b);
-        if (escucha != null) {
-            escucha.installKeyboardActions(b);
+        BasicButtonListener listener = listenerOf(b);
+        if (listener != null) {
+            listener.installKeyboardActions(b);
         }
     }
 
@@ -164,24 +166,27 @@ public class BasicButtonUI extends ButtonUI {
     }
 
     protected void uninstallKeyboardActions(AbstractButton b) {
-        BasicButtonListener escucha = escuchaDe(b);
-        if (escucha != null) {
-            escucha.uninstallKeyboardActions(b);
+        BasicButtonListener listener = listenerOf(b);
+        if (listener != null) {
+            listener.uninstallKeyboardActions(b);
         }
     }
 
     protected void uninstallListeners(AbstractButton b) {
-        BasicButtonListener escucha = escuchaDe(b);
-        if (escucha != null) {
-            b.removeMouseListener(escucha);
-            b.removeMouseMotionListener(escucha);
-            b.removeFocusListener(escucha);
-            b.removeChangeListener(escucha);
-            b.removePropertyChangeListener(escucha);
+        BasicButtonListener listener = listenerOf(b);
+        if (listener != null) {
+            b.removeMouseListener(listener);
+            b.removeMouseMotionListener(listener);
+            b.removeFocusListener(listener);
+            b.removeChangeListener(listener);
+            b.removePropertyChangeListener(listener);
         }
     }
 
-    /** Quita el borde si es del aspecto; los colores y la fuente se quedan, como en el JDK. */
+    /**
+     * It removes the border if it is the look and feel's; the colours and the typeface stay, as in
+     * the JDK.
+     */
     protected void uninstallDefaults(AbstractButton b) {
         LookAndFeel.uninstallBorder(b);
     }
@@ -190,13 +195,16 @@ public class BasicButtonUI extends ButtonUI {
         return new BasicButtonListener(b);
     }
 
-    /** El escucha que este UI instalo, buscandolo entre los del mouse; {@code null} si no hay. */
-    private BasicButtonListener escuchaDe(AbstractButton b) {
-        MouseMotionListener[] escuchas = b.getMouseMotionListeners();
-        if (escuchas != null) {
-            for (int i = 0; i < escuchas.length; i++) {
-                if (escuchas[i] instanceof BasicButtonListener) {
-                    return (BasicButtonListener) escuchas[i];
+    /**
+     * The listener this look and feel installed, looked up among the mouse ones; {@code null} if
+     * there is none.
+     */
+    private BasicButtonListener listenerOf(AbstractButton b) {
+        MouseMotionListener[] listeners = b.getMouseMotionListeners();
+        if (listeners != null) {
+            for (int i = 0; i < listeners.length; i++) {
+                if (listeners[i] instanceof BasicButtonListener) {
+                    return (BasicButtonListener) listeners[i];
                 }
             }
         }
@@ -208,118 +216,119 @@ public class BasicButtonUI extends ButtonUI {
     }
 
     /**
-     * Ubica icono y texto en el boton de ese tamano; devuelve el texto, recortado si no entra.
+     * It places icon and text in a button of that size; it returns the text, clipped if it does
+     * not fit.
      *
-     * <p>Sin texto, la separacion icono-texto es cero: un boton de solo icono lo centra sin dejar
-     * lugar para un texto que no esta.
+     * <p>With no text, the icon-text gap is zero: an icon-only button centres it without leaving
+     * room for a text that is not there.
      */
-    private String ubicar(AbstractButton b, FontMetrics fm, int ancho, int alto,
-            Rectangle vistaR, Rectangle iconoR, Rectangle textoR) {
+    private String place(AbstractButton b, FontMetrics fm, int width, int height,
+            Rectangle viewRect, Rectangle iconRect, Rectangle textRect) {
         Insets i = b.getInsets();
-        vistaR.x = i.left;
-        vistaR.y = i.top;
-        vistaR.width = ancho - (i.right + vistaR.x);
-        vistaR.height = alto - (i.bottom + vistaR.y);
-        textoR.x = 0;
-        textoR.y = 0;
-        textoR.width = 0;
-        textoR.height = 0;
-        iconoR.x = 0;
-        iconoR.y = 0;
-        iconoR.width = 0;
-        iconoR.height = 0;
+        viewRect.x = i.left;
+        viewRect.y = i.top;
+        viewRect.width = width - (i.right + viewRect.x);
+        viewRect.height = height - (i.bottom + viewRect.y);
+        textRect.x = 0;
+        textRect.y = 0;
+        textRect.width = 0;
+        textRect.height = 0;
+        iconRect.x = 0;
+        iconRect.y = 0;
+        iconRect.width = 0;
+        iconRect.height = 0;
         return SwingUtilities.layoutCompoundLabel(b, fm, b.getText(), b.getIcon(),
                 b.getVerticalAlignment(), b.getHorizontalAlignment(),
-                b.getVerticalTextPosition(), b.getHorizontalTextPosition(), vistaR, iconoR,
-                textoR, b.getText() == null ? 0 : b.getIconTextGap());
+                b.getVerticalTextPosition(), b.getHorizontalTextPosition(), viewRect, iconRect,
+                textRect, b.getText() == null ? 0 : b.getIconTextGap());
     }
 
     /**
-     * Pinta el boton: lo apretado, el icono, el texto y el foco, en ese orden.
+     * It paints the button: what is pressed, the icon, the text and the focus, in that order.
      *
-     * <p>El fondo no se pinta aca sino en {@link #update}, si el boton es opaco; y el borde lo
-     * pinta el propio boton despues, si {@code isBorderPainted}.
+     * <p>The background is not painted here but in {@link #update}, if the button is opaque; and
+     * the border is painted by the button itself afterwards, if {@code isBorderPainted}.
      */
     public void paint(Graphics g, JComponent c) {
         AbstractButton b = (AbstractButton) c;
-        ButtonModel modelo = b.getModel();
+        ButtonModel model = b.getModel();
         FontMetrics fm = b.getFontMetrics(b.getFont());
-        Rectangle vistaR = new Rectangle();
-        Rectangle iconoR = new Rectangle();
-        Rectangle textoR = new Rectangle();
-        String texto = ubicar(b, fm, b.getWidth(), b.getHeight(), vistaR, iconoR, textoR);
+        Rectangle viewRect = new Rectangle();
+        Rectangle iconRect = new Rectangle();
+        Rectangle textRect = new Rectangle();
+        String text = place(b, fm, b.getWidth(), b.getHeight(), viewRect, iconRect, textRect);
 
         clearTextShiftOffset();
 
-        if (modelo.isArmed() && modelo.isPressed()) {
+        if (model.isArmed() && model.isPressed()) {
             paintButtonPressed(g, b);
         }
         if (b.getIcon() != null) {
-            paintIcon(g, c, iconoR);
+            paintIcon(g, c, iconRect);
         }
-        if (texto != null && !texto.isEmpty()) {
-            paintText(g, b, textoR, texto);
+        if (text != null && !text.isEmpty()) {
+            paintText(g, b, textRect, text);
         }
         if (b.isFocusPainted() && b.hasFocus()) {
-            paintFocus(g, b, vistaR, textoR, iconoR);
+            paintFocus(g, b, viewRect, textRect, iconRect);
         }
     }
 
     /**
-     * Pinta el icono que corresponde al estado.
+     * It paints the icon that corresponds to the state.
      *
-     * <p>La eleccion va de mas a menos especifico: deshabilitado (y seleccionado), apretado,
-     * rollover (y seleccionado), seleccionado, y el icono comun si el del estado no esta. Un
-     * icono apretado que existe anula el corrimiento del texto: ya dice "apretado" el solo.
+     * <p>The choice goes from more to less specific: disabled (and selected), pressed, rollover
+     * (and selected), selected, and the ordinary icon if the state's is not there. A pressed icon
+     * that exists cancels the text's shift: it says "pressed" all by itself.
      */
     protected void paintIcon(Graphics g, JComponent c, Rectangle iconRect) {
         AbstractButton b = (AbstractButton) c;
-        ButtonModel modelo = b.getModel();
-        Icon icono = b.getIcon();
-        Icon delEstado = null;
-        if (icono == null) {
+        ButtonModel model = b.getModel();
+        Icon icon = b.getIcon();
+        Icon ofState = null;
+        if (icon == null) {
             return;
         }
-        if (modelo.isSelected()) {
-            Icon seleccionado = b.getSelectedIcon();
-            if (seleccionado != null) {
-                icono = seleccionado;
+        if (model.isSelected()) {
+            Icon selected = b.getSelectedIcon();
+            if (selected != null) {
+                icon = selected;
             }
         }
-        if (!modelo.isEnabled()) {
-            if (modelo.isSelected()) {
-                delEstado = b.getDisabledSelectedIcon();
-                if (delEstado == null) {
-                    delEstado = b.getSelectedIcon();
+        if (!model.isEnabled()) {
+            if (model.isSelected()) {
+                ofState = b.getDisabledSelectedIcon();
+                if (ofState == null) {
+                    ofState = b.getSelectedIcon();
                 }
             }
-            if (delEstado == null) {
-                delEstado = b.getDisabledIcon();
+            if (ofState == null) {
+                ofState = b.getDisabledIcon();
             }
-        } else if (modelo.isPressed() && modelo.isArmed()) {
-            delEstado = b.getPressedIcon();
-            if (delEstado != null) {
+        } else if (model.isPressed() && model.isArmed()) {
+            ofState = b.getPressedIcon();
+            if (ofState != null) {
                 clearTextShiftOffset();
             }
-        } else if (b.isRolloverEnabled() && modelo.isRollover()) {
-            if (modelo.isSelected()) {
-                delEstado = b.getRolloverSelectedIcon();
-                if (delEstado == null) {
-                    delEstado = b.getSelectedIcon();
+        } else if (b.isRolloverEnabled() && model.isRollover()) {
+            if (model.isSelected()) {
+                ofState = b.getRolloverSelectedIcon();
+                if (ofState == null) {
+                    ofState = b.getSelectedIcon();
                 }
             }
-            if (delEstado == null) {
-                delEstado = b.getRolloverIcon();
+            if (ofState == null) {
+                ofState = b.getRolloverIcon();
             }
         }
-        if (delEstado != null) {
-            icono = delEstado;
+        if (ofState != null) {
+            icon = ofState;
         }
-        if (modelo.isPressed() && modelo.isArmed()) {
-            icono.paintIcon(c, g, iconRect.x + getTextShiftOffset(),
+        if (model.isPressed() && model.isArmed()) {
+            icon.paintIcon(c, g, iconRect.x + getTextShiftOffset(),
                     iconRect.y + getTextShiftOffset());
         } else {
-            icono.paintIcon(c, g, iconRect.x, iconRect.y);
+            icon.paintIcon(c, g, iconRect.x, iconRect.y);
         }
     }
 
@@ -328,85 +337,85 @@ public class BasicButtonUI extends ButtonUI {
     }
 
     /**
-     * Pinta el texto: en el color del frente si esta habilitado, en relieve si no.
+     * It paints the text: in the foreground colour if it is enabled, in relief if not.
      *
-     * <p>El relieve es el del aspecto basico: el fondo aclarado en su lugar y el fondo oscurecido
-     * un pixel arriba y a la izquierda. Metal lo reemplaza por un gris plano; ver la nota de la
-     * clase.
+     * <p>The relief is the basic look and feel's: the background lightened in its place and the
+     * background darkened one pixel up and to the left. Metal replaces it with a flat grey; see
+     * the class note.
      */
     protected void paintText(Graphics g, AbstractButton b, Rectangle textRect, String text) {
-        ButtonModel modelo = b.getModel();
+        ButtonModel model = b.getModel();
         FontMetrics fm = b.getFontMetrics(b.getFont());
-        int indice = b.getDisplayedMnemonicIndex();
-        if (modelo.isEnabled()) {
+        int index = b.getDisplayedMnemonicIndex();
+        if (model.isEnabled()) {
             g.setColor(b.getForeground());
-            BasicGraphicsUtils.drawStringUnderlineCharAt(g, text, indice,
+            BasicGraphicsUtils.drawStringUnderlineCharAt(g, text, index,
                     textRect.x + getTextShiftOffset(),
                     textRect.y + fm.getAscent() + getTextShiftOffset());
         } else {
             g.setColor(b.getBackground().brighter());
-            BasicGraphicsUtils.drawStringUnderlineCharAt(g, text, indice, textRect.x,
+            BasicGraphicsUtils.drawStringUnderlineCharAt(g, text, index, textRect.x,
                     textRect.y + fm.getAscent());
             g.setColor(b.getBackground().darker());
-            BasicGraphicsUtils.drawStringUnderlineCharAt(g, text, indice, textRect.x - 1,
+            BasicGraphicsUtils.drawStringUnderlineCharAt(g, text, index, textRect.x - 1,
                     textRect.y + fm.getAscent() - 1);
         }
     }
 
-    /** Nada: el aspecto basico no marca el foco; los que derivan de el, si. */
+    /** Nothing: the basic look and feel does not mark the focus; those that derive from it do. */
     protected void paintFocus(Graphics g, AbstractButton b, Rectangle viewRect,
             Rectangle textRect, Rectangle iconRect) {
     }
 
-    /** Nada: el aspecto basico muestra lo apretado solo con el borde. */
+    /** Nothing: the basic look and feel shows what is pressed with the border alone. */
     protected void paintButtonPressed(Graphics g, AbstractButton b) {
     }
 
     protected void clearTextShiftOffset() {
-        corrimiento = 0;
+        shift = 0;
     }
 
     protected void setTextShiftOffset() {
-        corrimiento = defaultTextShiftOffset;
+        shift = defaultTextShiftOffset;
     }
 
     protected int getTextShiftOffset() {
-        return corrimiento;
+        return shift;
     }
 
-    /** El minimo es el preferido: un boton no se achica sin recortar el texto. */
+    /** The minimum is the preferred one: a button does not shrink without clipping the text. */
     public Dimension getMinimumSize(JComponent c) {
         return getPreferredSize(c);
     }
 
-    /** Lo que ocupan icono y texto en una vista infinita, mas los insets. */
+    /** What icon and text take up in an infinite view, plus the insets. */
     public Dimension getPreferredSize(JComponent c) {
         AbstractButton b = (AbstractButton) c;
         return BasicGraphicsUtils.getPreferredButtonSize(b, b.getIconTextGap());
     }
 
-    /** El maximo es el preferido: un boton no crece por si solo. */
+    /** The maximum is the preferred one: a button does not grow by itself. */
     public Dimension getMaximumSize(JComponent c) {
         return getPreferredSize(c);
     }
 
-    /** La linea de base del texto, ubicado en esa caja; {@code -1} sin texto. */
+    /** The baseline of the text, placed in that box; {@code -1} with no text. */
     public int getBaseline(JComponent c, int width, int height) {
         super.getBaseline(c, width, height);
         AbstractButton b = (AbstractButton) c;
-        String texto = b.getText();
-        if (texto == null || texto.isEmpty()) {
+        String text = b.getText();
+        if (text == null || text.isEmpty()) {
             return -1;
         }
         FontMetrics fm = b.getFontMetrics(b.getFont());
-        Rectangle vistaR = new Rectangle();
-        Rectangle iconoR = new Rectangle();
-        Rectangle textoR = new Rectangle();
-        ubicar(b, fm, width, height, vistaR, iconoR, textoR);
-        return textoR.y + fm.getAscent();
+        Rectangle viewRect = new Rectangle();
+        Rectangle iconRect = new Rectangle();
+        Rectangle textRect = new Rectangle();
+        place(b, fm, width, height, viewRect, iconRect, textRect);
+        return textRect.y + fm.getAscent();
     }
 
-    /** Como se mueve la linea de base: segun donde este alineado el texto verticalmente. */
+    /** How the baseline moves: according to where the text is aligned vertically. */
     public Component$BaselineResizeBehavior getBaselineResizeBehavior(JComponent c) {
         super.getBaselineResizeBehavior(c);
         int v = ((AbstractButton) c).getVerticalAlignment();

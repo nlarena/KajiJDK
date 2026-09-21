@@ -6,10 +6,10 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * El campo es el hilo <strong>desde el cual</strong> se hizo una transicion.
+ * The field is the thread <strong>from which</strong> a transition was made.
  *
- * <p>Junto con {@link TransitionTo} permite reconstruir que hilo le paso trabajo a cual, que es lo
- * que hace legible una traza en un programa con ejecutores.
+ * <p>Together with {@link TransitionTo} it allows one to rebuild which thread handed work to which,
+ * which is what makes a trace readable in a program with executors.
  *
  * @since 9
  */

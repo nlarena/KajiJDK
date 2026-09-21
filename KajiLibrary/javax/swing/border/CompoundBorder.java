@@ -5,14 +5,15 @@ import java.awt.Graphics;
 import java.awt.Insets;
 
 /**
- * Dos bordes, uno adentro del otro.
+ * Two borders, one inside the other.
  *
- * <p>Es lo que justifica que un borde sea un objeto y no un puñado de propiedades del componente: el
- * resultado de combinar dos es otro {@link Border}, indistinguible de uno basico, asi que se pueden
- * anidar sin limite — una linea adentro de un margen adentro de un titulo.
+ * <p>It is what justifies a border being an object and not a handful of properties of the
+ * component: the result of combining two is another {@link Border}, indistinguishable from a
+ * basic one, so they can be nested without limit -- a line inside a margin inside a title.
  *
- * <p>Cualquiera de los dos puede ser {@code null}, y entonces esta clase se comporta como el otro
- * solo. Eso permite construir la combinacion sin saber de antemano si las dos partes existen.
+ * <p>Either of the two may be {@code null}, and then this class behaves like the other one
+ * alone. That allows building the combination without knowing beforehand whether both parts
+ * exist.
  */
 public class CompoundBorder extends AbstractBorder {
 
@@ -21,41 +22,41 @@ public class CompoundBorder extends AbstractBorder {
     protected Border outsideBorder;
     protected Border insideBorder;
 
-    /** Los dos en {@code null}: no dibuja ni ocupa nada. */
+    /** Both {@code null}: it neither draws nor takes up anything. */
     public CompoundBorder() {
         this.outsideBorder = null;
         this.insideBorder = null;
     }
 
-    /** El de afuera rodeando al de adentro. */
+    /** The outer one surrounding the inner one. */
     public CompoundBorder(Border outsideBorder, Border insideBorder) {
         this.outsideBorder = outsideBorder;
         this.insideBorder = insideBorder;
     }
 
     /**
-     * Opaco solo si <strong>los dos</strong> lo son.
+     * Opaque only if <strong>both</strong> are.
      *
-     * <p>Uno opaco adentro de uno que no lo es deja sin cubrir la franja de afuera, asi que la
-     * promesa no se puede heredar del mas fuerte.
+     * <p>An opaque one inside one that is not leaves the outer strip uncovered, so the promise
+     * cannot be inherited from the stronger one.
      */
     public boolean isBorderOpaque() {
-        boolean afuera = this.outsideBorder == null || this.outsideBorder.isBorderOpaque();
-        boolean adentro = this.insideBorder == null || this.insideBorder.isBorderOpaque();
-        return afuera && adentro;
+        boolean outside = this.outsideBorder == null || this.outsideBorder.isBorderOpaque();
+        boolean inside = this.insideBorder == null || this.insideBorder.isBorderOpaque();
+        return outside && inside;
     }
 
     public void paintBorder(Component c, Graphics g, int x, int y, int width, int height) {
-        Insets libre = new Insets(0, 0, 0, 0);
+        Insets used = new Insets(0, 0, 0, 0);
         if (this.outsideBorder != null) {
             this.outsideBorder.paintBorder(c, g, x, y, width, height);
-            libre = this.outsideBorder.getBorderInsets(c);
+            used = this.outsideBorder.getBorderInsets(c);
         }
-        // El de adentro se pinta en lo que dejo libre el de afuera. De ahi el orden: primero el
-        // externo, porque su tamano es lo que decide donde empieza el interno.
+        // The inner one is painted in what the outer one left free. Hence the order: the outer one
+        // first, because its size is what decides where the inner one starts.
         if (this.insideBorder != null) {
-            this.insideBorder.paintBorder(c, g, x + libre.left, y + libre.top,
-                    width - libre.right - libre.left, height - libre.top - libre.bottom);
+            this.insideBorder.paintBorder(c, g, x + used.left, y + used.top,
+                    width - used.right - used.left, height - used.top - used.bottom);
         }
     }
 
@@ -81,12 +82,12 @@ public class CompoundBorder extends AbstractBorder {
         return insets;
     }
 
-    /** El borde de afuera, o {@code null}. */
+    /** The outer border, or {@code null}. */
     public Border getOutsideBorder() {
         return this.outsideBorder;
     }
 
-    /** El borde de adentro, o {@code null}. */
+    /** The inner border, or {@code null}. */
     public Border getInsideBorder() {
         return this.insideBorder;
     }

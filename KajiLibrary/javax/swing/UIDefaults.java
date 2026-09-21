@@ -18,40 +18,42 @@ import javax.swing.border.Border;
 import javax.swing.plaf.ComponentUI;
 
 /**
- * La tabla donde un aspecto grafico guarda todos sus valores.
+ * The table where a graphical look and feel keeps all its values.
  *
- * <h2>Que hay adentro</h2>
+ * <h2>What there is inside</h2>
  *
- * <p>Colores, tipografias, bordes, iconos, margenes y --lo mas importante-- que clase implementa la
- * interfaz grafica de cada componente. Las claves son textos como {@code "Button.background"} o
- * {@code "ButtonUI"}.
+ * <p>Colours, typefaces, borders, icons, margins and -- most importantly -- which class
+ * implements each component's graphical interface. The keys are texts such as
+ * {@code "Button.background"} or {@code "ButtonUI"}.
  *
- * <h2>Los tres tipos de valor</h2>
+ * <h2>The three kinds of value</h2>
  *
- * <p>Un valor puede ser el objeto directamente, o uno de dos envoltorios que lo fabrican recien
- * cuando se lo pide.
+ * <p>A value may be the object directly, or one of two wrappers that make it only when it is
+ * asked for.
  *
- * <p>{@link LazyValue} lo fabrica <strong>una vez</strong> y reemplaza la entrada por el resultado.
- * Existe por una razon concreta: un aspecto grafico define miles de entradas y una sesion usa unas
- * pocas. Construir todos los iconos y todas las tipografias al arrancar seria pagar por lo que no se
- * va a mirar.
+ * <p>{@link LazyValue} makes it <strong>once</strong> and replaces the entry with the result.
+ * It exists for a concrete reason: a graphical look and feel defines thousands of entries and a
+ * session uses a few. Building every icon and every typeface at start-up would be paying for
+ * what is not going to be looked at.
  *
- * <p>{@link ActiveValue} lo fabrica <strong>cada vez</strong> y no se guarda. Es para lo que no se
- * puede compartir: si dos componentes reciben el mismo objeto de estado, uno le pisa el estado al
- * otro.
+ * <p>{@link ActiveValue} makes it <strong>each time</strong> and it is not kept. It is for what
+ * cannot be shared: if two components receive the same object with state, one overwrites the
+ * other's state.
  *
- * <p>La diferencia entre los dos no es de rendimiento sino de correccion, y confundirlos da errores
- * que aparecen recien cuando hay dos componentes del mismo tipo en pantalla.
+ * <p>The difference between the two is not of performance but of correctness, and confusing
+ * them gives errors that appear only when there are two components of the same type on the
+ * screen.
  *
- * <h2>El idioma</h2>
+ * <h2>The language</h2>
  *
- * <p>Cada operacion tiene una version con {@link Locale}. Los textos que ve el usuario --los nombres
- * de los botones de un dialogo, por ejemplo-- salen de aqui, y una aplicacion puede tener abiertas
- * dos ventanas en dos idiomas. Sin el parametro habria un solo idioma por proceso.
+ * <p>Each operation has a version with a {@link Locale}. The texts the user sees -- the names
+ * of a dialog's buttons, for instance -- come from here, and an application may have two
+ * windows open in two languages. Without the parameter there would be a single language per
+ * process.
  *
- * <p>Los textos que no estan en la tabla se buscan en los {@link ResourceBundle} que se hayan
- * agregado, del ultimo al primero: el que se agrega despues tapa al anterior, que es lo que permite
- * a una aplicacion cambiar un texto sin reescribir el paquete entero.
+ * <p>The texts that are not in the table are looked up in the {@link ResourceBundle}s that were
+ * added, from the last to the first: the one that is added later covers the previous one, which
+ * is what allows an application to change one text without rewriting the whole bundle.
  *
  * @since 1.2
  */
@@ -59,33 +61,33 @@ public class UIDefaults extends Hashtable<Object, Object> {
 
     private static final long serialVersionUID = 7341222528856548117L;
 
-    private final PropertyChangeSupport cambios = new PropertyChangeSupport(this);
-    private final List<String> paquetes = new ArrayList<String>();
+    private final PropertyChangeSupport changes = new PropertyChangeSupport(this);
+    private final List<String> packages = new ArrayList<String>();
 
-    private Locale idiomaPorOmision = Locale.getDefault();
+    private Locale defaultLocale = Locale.getDefault();
 
-    /** Una tabla vacia. */
+    /** An empty table. */
     public UIDefaults() {
         super(700, 0.75f);
     }
 
     /**
-     * Una tabla vacia con esa capacidad.
+     * An empty table with that capacity.
      *
-     * @param initialCapacity cuantas entradas se esperan
-     * @param loadFactor cuanto se llena antes de agrandarse
+     * @param initialCapacity how many entries are expected
+     * @param loadFactor how full it gets before enlarging itself
      */
     public UIDefaults(int initialCapacity, float loadFactor) {
         super(initialCapacity, loadFactor);
     }
 
     /**
-     * Una tabla con esos pares clave-valor.
+     * A table with those key-value pairs.
      *
-     * <p>El arreglo va plano: clave, valor, clave, valor. Es incomodo de leer y es como esta escrita
-     * la definicion de todos los aspectos graficos, que son listas de cientos de pares.
+     * <p>The array goes flat: key, value, key, value. It is awkward to read and it is how every
+     * graphical look and feel's definition is written, which are lists of hundreds of pairs.
      *
-     * @param keyValueList los pares, alternados
+     * @param keyValueList the pairs, alternating
      */
     public UIDefaults(Object[] keyValueList) {
         super(keyValueList.length / 2 + 1, 0.75f);
@@ -93,10 +95,10 @@ public class UIDefaults extends Hashtable<Object, Object> {
     }
 
     /**
-     * El valor de esa clave, con el idioma por omision.
+     * That key's value, with the default language.
      *
-     * @param key la clave
-     * @return el valor, o {@code null}
+     * @param key the key
+     * @return the value, or {@code null}
      */
     @Override
     public Object get(Object key) {
@@ -104,31 +106,32 @@ public class UIDefaults extends Hashtable<Object, Object> {
     }
 
     /**
-     * El valor de esa clave en ese idioma.
+     * That key's value in that language.
      *
-     * <p>Aca es donde se resuelven los dos envoltorios: un {@link LazyValue} se fabrica y se guarda
-     * en su lugar, y un {@link ActiveValue} se fabrica y no se guarda.
+     * <p>Here is where the two wrappers are resolved: a {@link LazyValue} is made and kept in its
+     * place, and an {@link ActiveValue} is made and not kept.
      *
-     * @param key la clave
-     * @param l el idioma, o {@code null} para el de la tabla
-     * @return el valor, o {@code null}
+     * @param key the key
+     * @param l the language, or {@code null} for the table's
+     * @return the value, or {@code null}
      */
     public Object get(Object key, Locale l) {
         Object v = super.get(key);
         if (v == null) {
-            v = deLosPaquetes(key, l);
+            v = fromPackages(key, l);
         }
         if (v instanceof LazyValue) {
-            final Object hecho = ((LazyValue) v).createValue(this);
-            // Se reemplaza la entrada, que es lo que hace que se fabrique una sola vez. Si el
-            // fabricante devolvio null se saca la clave: dejar el envoltorio haria que se lo intente
-            // fabricar en cada consulta, sin exito, para siempre.
-            if (hecho == null) {
+            final Object done = ((LazyValue) v).createValue(this);
+            // The entry is replaced, which is what makes it be made only once. If the maker
+            // returned
+                        // null the key is removed: leaving the wrapper would make it be attempted
+                        // on every query, without success, for ever.
+            if (done == null) {
                 super.remove(key);
             } else {
-                super.put(key, hecho);
+                super.put(key, done);
             }
-            return hecho;
+            return done;
         }
         if (v instanceof ActiveValue) {
             return ((ActiveValue) v).createValue(this);
@@ -137,32 +140,33 @@ public class UIDefaults extends Hashtable<Object, Object> {
     }
 
     /**
-     * Guarda un valor y avisa del cambio.
+     * It keeps a value and gives notice of the change.
      *
-     * <p>Con valor {@code null} se saca la clave. No es lo mismo que guardar {@code null}: una
-     * tabla de dispersion de las de este tipo no admite valores nulos, y ademas "no hay valor" es
-     * justamente lo que se quiere decir.
+     * <p>With a {@code null} value the key is removed. It is not the same as keeping
+     * {@code null}: a hash table of this kind does not admit null values, and besides "there is
+     * no value" is precisely what is meant.
      *
-     * @param key la clave
-     * @param value el valor, o {@code null} para sacarla
-     * @return el valor anterior, o {@code null}
+     * @param key the key
+     * @param value the value, or {@code null} to remove it
+     * @return the previous value, or {@code null}
      */
     @Override
     public Object put(Object key, Object value) {
-        final Object viejo = value == null ? super.remove(key) : super.put(key, value);
+        final Object old = value == null ? super.remove(key) : super.put(key, value);
         if (key instanceof String) {
-            cambios.firePropertyChange((String) key, viejo, value);
+            changes.firePropertyChange((String) key, old, value);
         }
-        return viejo;
+        return old;
     }
 
     /**
-     * Guarda varios pares de una.
+     * It keeps several pairs at once.
      *
-     * <p>Los avisos de cambio salen todos al final, no uno por par: quien escucha suele redibujar, y
-     * con un aviso por entrada redibujaria cientos de veces para el mismo cambio.
+     * <p>The change notices all come out at the end, not one per pair: whoever listens usually
+     * redraws, and with one notice per entry it would redraw hundreds of times for the same
+     * change.
      *
-     * @param keyValueList los pares, alternados
+     * @param keyValueList the pairs, alternating
      */
     public void putDefaults(Object[] keyValueList) {
         for (int i = 0; i < keyValueList.length - 1; i += 2) {
@@ -174,25 +178,25 @@ public class UIDefaults extends Hashtable<Object, Object> {
                 super.put(k, v);
             }
         }
-        cambios.firePropertyChange("UIDefaults", null, null);
+        changes.firePropertyChange("UIDefaults", null, null);
     }
 
     /**
-     * La tipografia de esa clave.
+     * That key's typeface.
      *
-     * @param key la clave
-     * @return la tipografia, o {@code null} si no hay o no es una
+     * @param key the key
+     * @return the typeface, or {@code null}
      */
     public Font getFont(Object key) {
         return getFont(key, getDefaultLocale());
     }
 
     /**
-     * La tipografia de esa clave en ese idioma.
+     * That key's typeface in that language.
      *
-     * @param key la clave
-     * @param l el idioma
-     * @return la tipografia, o {@code null}
+     * @param key the key
+     * @param l the language
+     * @return the typeface, or {@code null}
      */
     public Font getFont(Object key, Locale l) {
         final Object v = get(key, l);
@@ -200,21 +204,21 @@ public class UIDefaults extends Hashtable<Object, Object> {
     }
 
     /**
-     * El color de esa clave.
+     * That key's colour.
      *
-     * @param key la clave
-     * @return el color, o {@code null}
+     * @param key the key
+     * @return the colour, or {@code null}
      */
     public Color getColor(Object key) {
         return getColor(key, getDefaultLocale());
     }
 
     /**
-     * El color de esa clave en ese idioma.
+     * That key's colour in that language.
      *
-     * @param key la clave
-     * @param l el idioma
-     * @return el color, o {@code null}
+     * @param key the key
+     * @param l the language
+     * @return the colour, or {@code null}
      */
     public Color getColor(Object key, Locale l) {
         final Object v = get(key, l);
@@ -222,21 +226,21 @@ public class UIDefaults extends Hashtable<Object, Object> {
     }
 
     /**
-     * El icono de esa clave.
+     * That key's icon.
      *
-     * @param key la clave
-     * @return el icono, o {@code null}
+     * @param key the key
+     * @return the icon, or {@code null}
      */
     public Icon getIcon(Object key) {
         return getIcon(key, getDefaultLocale());
     }
 
     /**
-     * El icono de esa clave en ese idioma.
+     * That key's icon in that language.
      *
-     * @param key la clave
-     * @param l el idioma
-     * @return el icono, o {@code null}
+     * @param key the key
+     * @param l the language
+     * @return the icon, or {@code null}
      */
     public Icon getIcon(Object key, Locale l) {
         final Object v = get(key, l);
@@ -244,21 +248,21 @@ public class UIDefaults extends Hashtable<Object, Object> {
     }
 
     /**
-     * El borde de esa clave.
+     * That key's border.
      *
-     * @param key la clave
-     * @return el borde, o {@code null}
+     * @param key the key
+     * @return the border, or {@code null}
      */
     public Border getBorder(Object key) {
         return getBorder(key, getDefaultLocale());
     }
 
     /**
-     * El borde de esa clave en ese idioma.
+     * That key's border in that language.
      *
-     * @param key la clave
-     * @param l el idioma
-     * @return el borde, o {@code null}
+     * @param key the key
+     * @param l the language
+     * @return the border, or {@code null}
      */
     public Border getBorder(Object key, Locale l) {
         final Object v = get(key, l);
@@ -266,21 +270,21 @@ public class UIDefaults extends Hashtable<Object, Object> {
     }
 
     /**
-     * El texto de esa clave.
+     * That key's text.
      *
-     * @param key la clave
-     * @return el texto, o {@code null}
+     * @param key the key
+     * @return the text, or {@code null}
      */
     public String getString(Object key) {
         return getString(key, getDefaultLocale());
     }
 
     /**
-     * El texto de esa clave en ese idioma.
+     * That key's text in that language.
      *
-     * @param key la clave
-     * @param l el idioma
-     * @return el texto, o {@code null}
+     * @param key the key
+     * @param l the language
+     * @return the text, or {@code null}
      */
     public String getString(Object key, Locale l) {
         final Object v = get(key, l);
@@ -288,21 +292,21 @@ public class UIDefaults extends Hashtable<Object, Object> {
     }
 
     /**
-     * El numero entero de esa clave.
+     * That key's integer number.
      *
-     * @param key la clave
-     * @return el numero, o cero si no hay
+     * @param key the key
+     * @return the number, or zero if there is none
      */
     public int getInt(Object key) {
         return getInt(key, getDefaultLocale());
     }
 
     /**
-     * El numero entero de esa clave en ese idioma.
+     * That key's integer number in that language.
      *
-     * @param key la clave
-     * @param l el idioma
-     * @return el numero, o cero si no hay
+     * @param key the key
+     * @param l the language
+     * @return the number, or zero if there is none
      */
     public int getInt(Object key, Locale l) {
         final Object v = get(key, l);
@@ -310,21 +314,21 @@ public class UIDefaults extends Hashtable<Object, Object> {
     }
 
     /**
-     * El valor de verdad de esa clave.
+     * That key's truth value.
      *
-     * @param key la clave
-     * @return el valor, o falso si no hay
+     * @param key the key
+     * @return the value, or false if there is none
      */
     public boolean getBoolean(Object key) {
         return getBoolean(key, getDefaultLocale());
     }
 
     /**
-     * El valor de verdad de esa clave en ese idioma.
+     * That key's truth value in that language.
      *
-     * @param key la clave
-     * @param l el idioma
-     * @return el valor, o falso si no hay
+     * @param key the key
+     * @param l the language
+     * @return the value, or false if there is none
      */
     public boolean getBoolean(Object key, Locale l) {
         final Object v = get(key, l);
@@ -332,21 +336,21 @@ public class UIDefaults extends Hashtable<Object, Object> {
     }
 
     /**
-     * Los margenes de esa clave.
+     * That key's margins.
      *
-     * @param key la clave
-     * @return los margenes, o {@code null}
+     * @param key the key
+     * @return the margins, or {@code null}
      */
     public Insets getInsets(Object key) {
         return getInsets(key, getDefaultLocale());
     }
 
     /**
-     * Los margenes de esa clave en ese idioma.
+     * That key's margins in that language.
      *
-     * @param key la clave
-     * @param l el idioma
-     * @return los margenes, o {@code null}
+     * @param key the key
+     * @param l the language
+     * @return the margins, or {@code null}
      */
     public Insets getInsets(Object key, Locale l) {
         final Object v = get(key, l);
@@ -354,21 +358,21 @@ public class UIDefaults extends Hashtable<Object, Object> {
     }
 
     /**
-     * El tamano de esa clave.
+     * That key's size.
      *
-     * @param key la clave
-     * @return el tamano, o {@code null}
+     * @param key the key
+     * @return the size, or {@code null}
      */
     public Dimension getDimension(Object key) {
         return getDimension(key, getDefaultLocale());
     }
 
     /**
-     * El tamano de esa clave en ese idioma.
+     * That key's size in that language.
      *
-     * @param key la clave
-     * @param l el idioma
-     * @return el tamano, o {@code null}
+     * @param key the key
+     * @param l the language
+     * @return the size, or {@code null}
      */
     public Dimension getDimension(Object key, Locale l) {
         final Object v = get(key, l);
@@ -376,11 +380,11 @@ public class UIDefaults extends Hashtable<Object, Object> {
     }
 
     /**
-     * La clase que implementa la interfaz grafica de ese componente.
+     * The class that implements that component's graphical interface.
      *
-     * @param uiClassID el identificador, como {@code "ButtonUI"}
-     * @param uiClassLoader el cargador con el que buscarla, o {@code null}
-     * @return la clase, o {@code null} si no se pudo encontrar
+     * @param uiClassID the identifier, such as {@code "ButtonUI"}
+     * @param uiClassLoader the loader to look it up with, or {@code null}
+     * @return the class, or {@code null} if it could not be found
      */
     @SuppressWarnings("unchecked")
     public Class<? extends ComponentUI> getUIClass(String uiClassID, ClassLoader uiClassLoader) {
@@ -388,26 +392,30 @@ public class UIDefaults extends Hashtable<Object, Object> {
         if (!(v instanceof String)) {
             return null;
         }
-        final String nombre = (String) v;
-        // La clase resuelta se guarda bajo su propio nombre. No es solo por velocidad: la tabla es
-        // publica, y el JDK deja ahi el `Class` para que quien quiera pueda mirarlo.
-        final Object cacheada = get(nombre);
-        if (cacheada instanceof Class) {
-            return (Class<? extends ComponentUI>) cacheada;
+        final String name = (String) v;
+        // The resolved class is kept under its own name. It is not only for speed: the table is
+                // public, and the JDK leaves the `Class` there so that whoever wants may look at
+                // it.
+        final Object cached = get(name);
+        if (cached instanceof Class) {
+            return (Class<? extends ComponentUI>) cached;
         }
-        // Sin cargador se usa el del contexto del hilo, no el de esta clase. La diferencia no es
-        // teorica: la clase de la interfaz grafica la trae el aspecto grafico, que vive donde vive
-        // la aplicacion, y el cargador de esta biblioteca no llega ahi.
+        // With no loader the thread's context one is used, not this class's. The difference is not
+                // theoretical: the graphical interface's class is brought by the graphical look and
+                // feel, which lives where the application lives, and this library's loader does not
+                // reach there.
         ClassLoader cl = uiClassLoader;
         if (cl == null) {
             cl = Thread.currentThread().getContextClassLoader();
         }
         try {
-            final Class<?> c = cl == null ? Class.forName(nombre) : cl.loadClass(nombre);
-            put(nombre, c);
-            // La conversion va sin comprobar, y eso es a proposito: lo unico que se le pide a esta
-            // clase es tener un `createUI` estatico. Exigirle ademas ser un ComponentUI dejaria
-            // afuera a las fabricas, que es una forma legitima --y usada-- de escribir un aspecto.
+            final Class<?> c = cl == null ? Class.forName(name) : cl.loadClass(name);
+            put(name, c);
+            // The cast goes unchecked, and that is on purpose: the only thing asked of this class
+            // is
+                        // to have a static `createUI`. Requiring it also to be a ComponentUI would
+                        // leave the factories out, which is a legitimate -- and used -- way of
+                        // writing a look and feel.
             return (Class<? extends ComponentUI>) c;
         } catch (ClassNotFoundException e) {
             return null;
@@ -417,148 +425,151 @@ public class UIDefaults extends Hashtable<Object, Object> {
     }
 
     /**
-     * La clase que implementa la interfaz grafica de ese componente.
+     * The class that implements that component's graphical interface.
      *
-     * @param uiClassID el identificador
-     * @return la clase, o {@code null}
+     * @param uiClassID the identifier
+     * @return the class, or {@code null}
      */
     public Class<? extends ComponentUI> getUIClass(String uiClassID) {
         return getUIClass(uiClassID, null);
     }
 
     /**
-     * Aviso de que no se pudo encontrar o construir una interfaz grafica.
+     * Notice that a graphical interface could not be found or built.
      *
-     * <p>Se lo puede redefinir para registrarlo en otro lado. Que no lance nada es a proposito: un
-     * componente sin interfaz grafica se ve mal, y una aplicacion que se cae se ve peor.
+     * <p>It may be redefined in order to record it somewhere else. That it throws nothing is on
+     * purpose: a component with no graphical interface looks wrong, and an application that falls
+     * over looks worse.
      *
-     * @param msg que paso
+     * @param msg what happened
      */
     protected void getUIError(String msg) {
         System.err.println("UIDefaults.getUI() failed: " + msg);
     }
 
     /**
-     * Construye la interfaz grafica de ese componente.
+     * It builds that component's graphical interface.
      *
-     * <p>Busca la clase por el identificador que el componente declara y le pide su
-     * {@code createUI}. Que la fabricacion pase por un metodo estatico y no por el constructor es lo
-     * que permite a una implementacion devolver una instancia compartida entre componentes, que es
-     * lo que hacen casi todas.
+     * <p>It looks the class up by the identifier the component declares and asks it for its
+     * {@code createUI}. That the making goes through a static method and not through the
+     * constructor is what allows an implementation to return an instance shared between
+     * components, which is what almost all of them do.
      *
-     * @param target el componente
-     * @return la interfaz grafica, o {@code null} si no se pudo
+     * @param target the component
+     * @return the graphical interface, or {@code null} if it could not be done
      */
     public ComponentUI getUI(JComponent target) {
         final String id = target.getUIClassID();
-        final Class<? extends ComponentUI> clase = getUIClass(id, null);
-        if (clase == null) {
-            getUIError("no hay clase para " + id);
+        final Class<? extends ComponentUI> clazz = getUIClass(id, null);
+        if (clazz == null) {
+            getUIError("no class for " + id);
             return null;
         }
         try {
-            final Method m = clase.getMethod("createUI", new Class<?>[] {JComponent.class});
+            final Method m = clazz.getMethod("createUI", new Class<?>[] {JComponent.class});
             return (ComponentUI) m.invoke(null, new Object[] {target});
         } catch (Exception e) {
-            getUIError("no se pudo crear " + clase.getName() + ": " + e);
+            getUIError("could not create " + clazz.getName() + ": " + e);
             return null;
         }
     }
 
     /**
-     * Registra un oyente de los cambios de la tabla.
+     * It registers a listener of the table's changes.
      *
-     * @param listener el oyente
+     * @param listener the listener
      */
     public synchronized void addPropertyChangeListener(PropertyChangeListener listener) {
-        cambios.addPropertyChangeListener(listener);
+        changes.addPropertyChangeListener(listener);
     }
 
     /**
-     * Saca un oyente.
+     * It removes a listener.
      *
-     * @param listener el oyente
+     * @param listener the listener
      */
     public synchronized void removePropertyChangeListener(PropertyChangeListener listener) {
-        cambios.removePropertyChangeListener(listener);
+        changes.removePropertyChangeListener(listener);
     }
 
     /**
-     * Los oyentes registrados.
+     * The registered listeners.
      *
-     * @return los oyentes
+     * @return the listeners
      */
     public synchronized PropertyChangeListener[] getPropertyChangeListeners() {
-        return cambios.getPropertyChangeListeners();
+        return changes.getPropertyChangeListeners();
     }
 
     /**
-     * Avisa de un cambio.
+     * It gives notice of a change.
      *
-     * @param propertyName la clave que cambio
-     * @param oldValue lo que habia
-     * @param newValue lo que hay
+     * @param propertyName the key that changed
+     * @param oldValue what was there
+     * @param newValue what is there
      */
     protected void firePropertyChange(String propertyName, Object oldValue, Object newValue) {
-        cambios.firePropertyChange(propertyName, oldValue, newValue);
+        changes.firePropertyChange(propertyName, oldValue, newValue);
     }
 
     /**
-     * Agrega un paquete de textos donde buscar lo que no este en la tabla.
+     * It adds a bundle of texts to look up what is not in the table in.
      *
-     * @param bundleName el nombre del paquete
+     * @param bundleName the bundle's name
      */
     public synchronized void addResourceBundle(String bundleName) {
-        if (bundleName != null && !paquetes.contains(bundleName)) {
-            paquetes.add(bundleName);
+        if (bundleName != null && !packages.contains(bundleName)) {
+            packages.add(bundleName);
         }
     }
 
     /**
-     * Saca un paquete de textos.
+     * It removes a bundle of texts.
      *
-     * @param bundleName el nombre del paquete
+     * @param bundleName the bundle's name
      */
     public synchronized void removeResourceBundle(String bundleName) {
-        paquetes.remove(bundleName);
+        packages.remove(bundleName);
     }
 
     /**
-     * Fija el idioma que se usa cuando no se pasa ninguno.
+     * It fixes the language that is used when none is passed.
      *
-     * @param l el idioma
+     * @param l the language
      */
     public void setDefaultLocale(Locale l) {
-        idiomaPorOmision = l;
+        defaultLocale = l;
     }
 
     /**
-     * El idioma que se usa cuando no se pasa ninguno.
+     * The language that is used when none is passed.
      *
-     * @return el idioma
+     * @return the language
      */
     public Locale getDefaultLocale() {
-        return idiomaPorOmision;
+        return defaultLocale;
     }
 
     /**
-     * Busca la clave en los paquetes de textos, del ultimo agregado al primero.
+     * It looks the key up in the bundles of texts, from the last added to the first.
      *
-     * <p>Del ultimo al primero para que el que se agrega despues tape al anterior: es lo que permite
-     * a una aplicacion cambiar un texto sin reescribir el paquete entero.
+     * <p>From the last to the first so that the one that is added later covers the previous one:
+     * it is what allows an application to change one text without rewriting the whole bundle.
      */
-    private synchronized Object deLosPaquetes(Object key, Locale l) {
+    private synchronized Object fromPackages(Object key, Locale l) {
         if (!(key instanceof String)) {
             return null;
         }
-        for (int i = paquetes.size() - 1; i >= 0; i--) {
+        for (int i = packages.size() - 1; i >= 0; i--) {
             try {
-                final ResourceBundle b = ResourceBundle.getBundle(paquetes.get(i),
+                final ResourceBundle b = ResourceBundle.getBundle(packages.get(i),
                         l == null ? getDefaultLocale() : l);
                 return b.getObject((String) key);
             } catch (MissingResourceException e) {
-                // Ni el paquete ni la clave: se sigue con el anterior. Que falte es lo normal --por
-                // eso hay varios-- y solo importa si no esta en ninguno.
+                // Neither the bundle nor the key: it goes on with the previous one. That it is
+                // missing is
+                                // normal -- that is why there are several -- and it only matters if
+                                // it is in none.
                 continue;
             }
         }
@@ -566,49 +577,49 @@ public class UIDefaults extends Hashtable<Object, Object> {
     }
 
     /**
-     * Un valor que se fabrica cada vez que se lo pide y no se guarda.
+     * A value that is made each time it is asked for and is not kept.
      *
-     * <p>Es para lo que no se puede compartir entre componentes: si dos reciben el mismo objeto con
-     * estado, uno le pisa el estado al otro.
+     * <p>It is for what cannot be shared between components: if two receive the same object with
+     * state, one overwrites the other's state.
      *
      * @since 1.2
      */
     public interface ActiveValue {
 
         /**
-         * Fabrica el valor.
+         * It makes the value.
          *
-         * @param table la tabla que lo pide
-         * @return el valor
+         * @param table the table that asks for it
+         * @return the value
          */
         Object createValue(UIDefaults table);
     }
 
     /**
-     * Un valor que se fabrica la primera vez que se lo pide y despues queda guardado.
+     * A value that is made the first time it is asked for and afterwards stays kept.
      *
-     * <p>Un aspecto grafico define miles de entradas y una sesion usa unas pocas: construirlas todas
-     * al arrancar seria pagar por lo que no se va a mirar.
+     * <p>A graphical look and feel defines thousands of entries and a session uses a few: building
+     * them all at start-up would be paying for what is not going to be looked at.
      *
      * @since 1.2
      */
     public interface LazyValue {
 
         /**
-         * Fabrica el valor.
+         * It makes the value.
          *
-         * @param table la tabla que lo pide
-         * @return el valor
+         * @param table the table that asks for it
+         * @return the value
          */
         Object createValue(UIDefaults table);
     }
 
     /**
-     * Un {@link LazyValue} que fabrica su valor llamando a un metodo por reflexion.
+     * A {@link LazyValue} that makes its value by calling a method by reflection.
      *
-     * <p>Sirve para nombrar en una tabla de datos algo que hay que construir con codigo, sin que la
-     * tabla tenga que cargar la clase para poder nombrarla. Esa es la parte que importa: cargarla
-     * seria justamente lo que se quiere postergar.
+     * <p>It serves to name in a table of data something that has to be built with code, without
+     * the table having to load the class in order to be able to name it. That is the part that
+     * matters: loading it would be precisely what one wants to postpone.
      *
      * @since 1.2
      */
@@ -619,40 +630,40 @@ public class UIDefaults extends Hashtable<Object, Object> {
         private final Object[] args;
 
         /**
-         * Construye con el constructor sin argumentos de esa clase.
+         * It builds with that class's no-argument constructor.
          *
-         * @param c el nombre de la clase
+         * @param c the class's name
          */
         public ProxyLazyValue(String c) {
             this(c, (String) null, null);
         }
 
         /**
-         * Llama a ese metodo estatico sin argumentos.
+         * It calls that static method with no arguments.
          *
-         * @param c el nombre de la clase
-         * @param m el nombre del metodo
+         * @param c the class's name
+         * @param m the method's name
          */
         public ProxyLazyValue(String c, String m) {
             this(c, m, null);
         }
 
         /**
-         * Construye con el constructor que acepte esos argumentos.
+         * It builds with the constructor that accepts those arguments.
          *
-         * @param c el nombre de la clase
-         * @param o los argumentos
+         * @param c the class's name
+         * @param o the arguments
          */
         public ProxyLazyValue(String c, Object[] o) {
             this(c, null, o);
         }
 
         /**
-         * Llama a ese metodo estatico con esos argumentos.
+         * It calls that static method with those arguments.
          *
-         * @param c el nombre de la clase
-         * @param m el nombre del metodo, o {@code null} para el constructor
-         * @param o los argumentos
+         * @param c the class's name
+         * @param m the method's name, or {@code null} for the constructor
+         * @param o the arguments
          */
         public ProxyLazyValue(String c, String m, Object[] o) {
             this.className = c;
@@ -661,27 +672,27 @@ public class UIDefaults extends Hashtable<Object, Object> {
         }
 
         /**
-         * Fabrica el valor.
+         * It makes the value.
          *
-         * @param table la tabla que lo pide
-         * @return el valor, o {@code null} si no se pudo fabricar
+         * @param table the table that asks for it
+         * @return the value, or {@code null} if it could not be made
          */
         @Override
         public Object createValue(UIDefaults table) {
             try {
                 final Class<?> c = Class.forName(className);
-                final Class<?>[] tipos = tiposDe(args);
+                final Class<?>[] types = typesOf(args);
                 if (methodName == null) {
-                    return c.getConstructor(tipos).newInstance(args == null ? new Object[0] : args);
+                    return c.getConstructor(types).newInstance(args == null ? new Object[0] : args);
                 }
-                return c.getMethod(methodName, tipos)
+                return c.getMethod(methodName, types)
                         .invoke(null, args == null ? new Object[0] : args);
             } catch (Exception e) {
                 return null;
             }
         }
 
-        private static Class<?>[] tiposDe(Object[] o) {
+        private static Class<?>[] typesOf(Object[] o) {
             if (o == null) {
                 return new Class<?>[0];
             }
@@ -694,10 +705,10 @@ public class UIDefaults extends Hashtable<Object, Object> {
     }
 
     /**
-     * Un {@link LazyValue} que arma un mapa de teclas.
+     * A {@link LazyValue} that builds a key map.
      *
-     * <p>Los atajos de teclado de un aspecto grafico son cientos y casi ninguno se usa en una sesion
-     * dada; armarlos al pedido es la diferencia entre arrancar rapido y no.
+     * <p>A graphical look and feel's keyboard shortcuts are hundreds and almost none is used in a
+     * given session; building them on demand is the difference between starting fast and not.
      *
      * @since 1.3
      */
@@ -706,37 +717,39 @@ public class UIDefaults extends Hashtable<Object, Object> {
         private final Object[] bindings;
 
         /**
-         * Con esos pares de tecla y accion, alternados.
+         * With those key and action pairs, alternating.
          *
-         * @param bindings los pares
+         * @param bindings the pairs
          */
         public LazyInputMap(Object[] bindings) {
             this.bindings = bindings == null ? null : bindings.clone();
         }
 
         /**
-         * Arma el mapa.
+         * It builds the map.
          *
-         * @param table la tabla que lo pide
-         * @return el mapa, o {@code null} si no hay ataduras
+         * @param table the table that asks for it
+         * @return the map, or {@code null} if there are no bindings
          */
         @Override
         public Object createValue(UIDefaults table) {
             if (bindings == null) {
                 return null;
             }
-            final InputMap mapa = new InputMap();
+            final InputMap map = new InputMap();
             for (int i = 0; i < bindings.length - 1; i += 2) {
-                // La tecla puede venir ya resuelta o como texto: la tabla de un aspecto grafico se
-                // escribe con textos --"ctrl C"-- porque asi se lee, y se resuelven al armarla.
+                // The key may come already resolved or as text: a graphical look and feel's table
+                // is
+                                // written with texts -- "ctrl C" -- because that is how it reads,
+                                // and they are resolved when building it.
                 final Object k = bindings[i];
-                final KeyStroke tecla = k instanceof KeyStroke
+                final KeyStroke key = k instanceof KeyStroke
                         ? (KeyStroke) k : KeyStroke.getKeyStroke(String.valueOf(k));
-                if (tecla != null) {
-                    mapa.put(tecla, bindings[i + 1]);
+                if (key != null) {
+                    map.put(key, bindings[i + 1]);
                 }
             }
-            return mapa;
+            return map;
         }
     }
 }

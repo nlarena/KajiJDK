@@ -10,7 +10,7 @@ import javax.xml.namespace.QName;
 import javax.xml.stream.events.EndElement;
 import javax.xml.stream.events.Namespace;
 
-/** El cierre de un elemento como evento. */
+/** The end of an element as an event. */
 final class EvtEndElement extends EvtBase implements EndElement {
 
     private final QName name;
@@ -36,7 +36,7 @@ final class EvtEndElement extends EvtBase implements EndElement {
 
     public void writeAsEncodedUnicode(Writer writer) throws XMLStreamException {
         if (writer == null) {
-            throw new XMLStreamException("el escritor no puede ser null");
+            throw new XMLStreamException("the writer cannot be null");
         }
         try {
             writer.write("</");

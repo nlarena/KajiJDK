@@ -10,140 +10,145 @@ import javax.management.MBeanServer;
 import javax.management.MBeanServerConnection;
 
 /**
- * KajiLibrary's java.lang.management.ManagementFactory -- de donde salen las MXBean de la plataforma.
+ * KajiLibrary's java.lang.management.ManagementFactory -- where the platform's MXBeans come from.
  *
- * <p>Todo el paquete se consigue por aca. Hay tres formas de pedir lo mismo y conviene saber cual usar:
+ * <p>The whole package is reached through here. There are three ways of asking for the same thing
+ * and it is worth knowing which to use:
  *
  * <ul>
- *   <li>los {@code getXxxMXBean()} concretos, para la maquina virtual <b>propia</b>. Es lo directo;
- *   <li>{@link #getPlatformMXBean(Class)}, tambien local pero generico, para codigo que no sabe de
- *       antemano que MBean quiere;
- *   <li>las versiones que toman un {@link MBeanServerConnection}, para una maquina virtual
- *       <b>remota</b>. Devuelven un proxy que traduce cada llamada en una consulta por la red.
+ *   <li>the concrete {@code getXxxMXBean()}, for this virtual machine's <b>own</b> data. It is the
+ *       direct way;
+ *   <li>{@link #getPlatformMXBean(Class)}, also local but generic, for code that does not know in
+ *       advance which MBean it wants;
+ *   <li>the versions taking an {@link MBeanServerConnection}, for a <b>remote</b> virtual machine.
+ *       They return a proxy that turns each call into a query over the network.
  * </ul>
  *
- * <p>Ese ultimo punto es lo que hace potente al paquete: el mismo codigo que lee la memoria propia
- * lee la de otro proceso, cambiando solo de donde sale el MBean.
+ * <p>That last point is what makes the package powerful: the same code that reads its own memory
+ * reads another process's, changing only where the MBean comes from.
  *
- * <h2>{@link #getCompilationMXBean} puede devolver null</h2>
+ * <h2>{@link #getCompilationMXBean} may return null</h2>
  *
- * <p>Y no es un error: significa que esta maquina virtual no tiene compilador de tiempo de ejecucion.
- * Es de los pocos lugares de la API donde null es la respuesta correcta.
+ * <p>And that is not an error: it means the virtual machine has no run-time compiler. It is one of
+ * the few places in the API where null is the right answer. <b>Here it is not null</b> -- see below.
  *
  * <h2>A KajiLibrary subset</h2>
  *
- * <p>Aca hay tres grupos, y la diferencia entre ellos es de donde sale el dato:
+ * <p>There are three groups here, and what tells them apart is where the datum comes from:
  *
  * <ul>
- *   <li><b>reales</b>: {@link #getOperatingSystemMXBean}, {@link #getRuntimeMXBean} y
- *       {@link #getMemoryMXBean} contestan con datos de verdad, sacados de {@code System} y de
- *       {@code Runtime}. Lo que dicen es cierto;
- *   <li><b>null legitimo</b>: {@link #getCompilationMXBean} devuelve null, que es exactamente lo que
- *       corresponde -- este es un interprete y no compila nada;
- *   <li><b>no instrumentado</b>: los contadores por area de memoria, los de carga de clases y los de
- *       hilos necesitan que la maquina virtual los lleve, y esta todavia no los expone. Esos metodos
- *       lanzan {@link UnsupportedOperationException} en lugar de devolver ceros, porque un cero seria
- *       una afirmacion falsa y no una ausencia.
+ *   <li><b>real</b>: {@link #getOperatingSystemMXBean}, {@link #getRuntimeMXBean},
+ *       {@link #getMemoryMXBean} and {@link #getCompilationMXBean} answer with genuine data, taken
+ *       from {@code System}, from {@code Runtime} and from the fact that `src/burst` is a JIT. What
+ *       they say is true;
+ *   <li><b>partly measurable</b>: the compilation bean names the compiler but refuses
+ *       {@code getTotalCompilationTime}, because nothing in the virtual machine publishes that
+ *       counter. Refusing is the branch the JDK's own contract defines for a machine that cannot
+ *       measure it;
+ *   <li><b>not instrumented</b>: the per-memory-area counters, the class-loading ones and the thread
+ *       ones need the virtual machine to keep them, and it does not expose them yet. Those methods
+ *       throw {@link UnsupportedOperationException} instead of returning zeros, because a zero would
+ *       be a false statement and not an absence.
  * </ul>
  *
- * <p>{@link #getPlatformMBeanServer} y los proxies remotos tambien faltan: piden un servidor de MBeans
- * de la plataforma con todo esto ya registrado.
+ * <p>{@link #getPlatformMBeanServer} and the remote proxies are missing too: they ask for a platform
+ * MBean server with all of this already registered.
  */
 public class ManagementFactory {
 
-    /** El nombre del MBean de carga de clases. */
+    /** The class-loading MBean's name. */
     public static final String CLASS_LOADING_MXBEAN_NAME = "java.lang:type=ClassLoading";
 
-    /** El del compilador. */
+    /** The compiler's. */
     public static final String COMPILATION_MXBEAN_NAME = "java.lang:type=Compilation";
 
-    /** El de memoria. */
+    /** Memory's. */
     public static final String MEMORY_MXBEAN_NAME = "java.lang:type=Memory";
 
-    /** El del sistema operativo. */
+    /** The operating system's. */
     public static final String OPERATING_SYSTEM_MXBEAN_NAME = "java.lang:type=OperatingSystem";
 
-    /** El de arranque. */
+    /** The runtime's. */
     public static final String RUNTIME_MXBEAN_NAME = "java.lang:type=Runtime";
 
-    /** El de hilos. */
+    /** Threads'. */
     public static final String THREAD_MXBEAN_NAME = "java.lang:type=Threading";
 
-    /** El prefijo de los recolectores; cada uno agrega {@code ,name=<el suyo>}. */
+    /** The collectors' prefix; each one appends {@code ,name=<its own>}. */
     public static final String GARBAGE_COLLECTOR_MXBEAN_DOMAIN_TYPE =
         "java.lang:type=GarbageCollector";
 
-    /** El prefijo de los administradores de memoria. */
+    /** The memory managers' prefix. */
     public static final String MEMORY_MANAGER_MXBEAN_DOMAIN_TYPE = "java.lang:type=MemoryManager";
 
-    /** El prefijo de las areas de memoria. */
+    /** The memory pools' prefix. */
     public static final String MEMORY_POOL_MXBEAN_DOMAIN_TYPE = "java.lang:type=MemoryPool";
 
-    /** No se instancia; el constructor publico es el que el JDK dejo. */
+    /** Not instantiated; the public constructor is the one the JDK left behind. */
     public ManagementFactory() {
     }
 
     /**
-     * El MBean de carga de clases.
+     * The class-loading MBean.
      *
-     * <p>Ver la nota de la clase: existe y sus metodos declaran su falta de instrumentacion.
+     * <p>See the class's note: it exists, and its methods declare their lack of instrumentation.
      */
     public static ClassLoadingMXBean getClassLoadingMXBean() {
         return UninstrumentedBeans.CLASS_LOADING;
     }
 
-    /** El MBean de memoria, con el monton medido de verdad. Ver la nota de la clase. */
+    /** The memory MBean, with the heap genuinely measured. See the class's note. */
     public static MemoryMXBean getMemoryMXBean() {
         return RuntimeBackedBeans.MEMORY;
     }
 
-    /** El MBean de hilos. */
+    /** The thread MBean. */
     public static ThreadMXBean getThreadMXBean() {
         return UninstrumentedBeans.THREADS;
     }
 
-    /** El MBean de arranque, con datos reales. */
+    /** The runtime MBean, with real data. */
     public static RuntimeMXBean getRuntimeMXBean() {
         return RuntimeBackedBeans.RUNTIME;
     }
 
     /**
-     * El MBean del compilador, o null si no hay.
+     * The compiler's MBean, or null if there is none.
      *
-     * <p>Aca es null: esta maquina virtual interpreta. Ver la nota de la clase.
+     * <p>Here it is not null: this virtual machine has a JIT. See the class's note.
      */
     public static CompilationMXBean getCompilationMXBean() {
-        return null;
+        return RuntimeBackedBeans.COMPILATION;
     }
 
-    /** El MBean del sistema operativo, con datos reales. */
+    /** The operating system MBean, with real data. */
     public static OperatingSystemMXBean getOperatingSystemMXBean() {
         return RuntimeBackedBeans.OS;
     }
 
     /**
-     * Las areas de memoria.
+     * The memory pools.
      *
-     * <p>Vacio: esta maquina virtual no publica sus areas por separado. Ver la nota de la clase.
+     * <p>Empty: this virtual machine does not publish its pools separately. See the class's note.
      */
     public static List<MemoryPoolMXBean> getMemoryPoolMXBeans() {
         return Collections.emptyList();
     }
 
-    /** Los administradores de memoria. Vacio, por lo mismo. */
+    /** The memory managers. Empty, for the same reason. */
     public static List<MemoryManagerMXBean> getMemoryManagerMXBeans() {
         return Collections.emptyList();
     }
 
-    /** Los recolectores. Vacio, por lo mismo. */
+    /** The collectors. Empty, for the same reason. */
     public static List<GarbageCollectorMXBean> getGarbageCollectorMXBeans() {
         return Collections.emptyList();
     }
 
     /**
-     * El servidor de MBeans de la plataforma, con todo lo anterior ya registrado.
+     * The platform MBean server, with everything above already registered.
      *
-     * @throws UnsupportedOperationException siempre en esta biblioteca; ver la nota de la clase
+     * @throws UnsupportedOperationException always in this library; see the class's note
      */
     public static synchronized MBeanServer getPlatformMBeanServer() {
         throw new UnsupportedOperationException(
@@ -151,11 +156,11 @@ public class ManagementFactory {
     }
 
     /**
-     * Un proxy hacia una MXBean de otra maquina virtual.
+     * A proxy to another virtual machine's MXBean.
      *
-     * @throws IllegalArgumentException si el nombre no es de una MXBean de la plataforma
-     * @throws IOException si fallo la comunicacion
-     * @throws UnsupportedOperationException siempre en esta biblioteca
+     * @throws IllegalArgumentException if the name is not a platform MXBean's
+     * @throws IOException if the communication failed
+     * @throws UnsupportedOperationException always in this library
      */
     public static <T> T newPlatformMXBeanProxy(MBeanServerConnection connection, String mxbeanName,
                                                Class<T> mxbeanInterface) throws IOException {
@@ -164,13 +169,13 @@ public class ManagementFactory {
     }
 
     /**
-     * La MXBean de la plataforma de ese tipo, o null si esta maquina virtual no la tiene.
+     * The platform MXBean of that type, or null if this virtual machine does not have it.
      *
-     * <p>Es la forma generica de los {@code getXxxMXBean()}; sirve cuando el tipo se decide en tiempo
-     * de ejecucion.
+     * <p>It is the generic form of the {@code getXxxMXBean()}; it is for when the type is decided at
+     * run time.
      *
-     * @throws IllegalArgumentException si ese tipo no es una MXBean de la plataforma, o si hay mas de
-     *     una instancia -- para esas esta {@link #getPlatformMXBeans}
+     * @throws IllegalArgumentException if that type is not a platform MXBean's, or if there is more
+     *     than one instance -- {@link #getPlatformMXBeans} is there for those
      */
     public static <T extends PlatformManagedObject> T getPlatformMXBean(Class<T> mxbeanInterface) {
         if (mxbeanInterface == null) {
@@ -206,12 +211,12 @@ public class ManagementFactory {
     }
 
     /**
-     * Todas las MXBean de la plataforma de ese tipo.
+     * Every platform MXBean of that type.
      *
-     * <p>Devuelve una lista porque hay tipos con mas de una instancia: hay un
-     * {@link GarbageCollectorMXBean} por recolector, un {@link MemoryPoolMXBean} por area.
+     * <p>It returns a list because there are types with more than one instance: there is one
+     * {@link GarbageCollectorMXBean} per collector, one {@link MemoryPoolMXBean} per pool.
      *
-     * @throws IllegalArgumentException si ese tipo no es una MXBean de la plataforma
+     * @throws IllegalArgumentException if that type is not a platform MXBean's
      */
     public static <T extends PlatformManagedObject> List<T> getPlatformMXBeans(
         Class<T> mxbeanInterface) {
@@ -235,9 +240,9 @@ public class ManagementFactory {
     }
 
     /**
-     * Idem, de una maquina virtual remota.
+     * The same, from a remote virtual machine.
      *
-     * @throws UnsupportedOperationException siempre en esta biblioteca
+     * @throws UnsupportedOperationException always in this library
      */
     public static <T extends PlatformManagedObject> T getPlatformMXBean(
         MBeanServerConnection connection, Class<T> mxbeanInterface) throws IOException {
@@ -246,9 +251,9 @@ public class ManagementFactory {
     }
 
     /**
-     * Idem, en lista.
+     * The same, as a list.
      *
-     * @throws UnsupportedOperationException siempre en esta biblioteca
+     * @throws UnsupportedOperationException always in this library
      */
     public static <T extends PlatformManagedObject> List<T> getPlatformMXBeans(
         MBeanServerConnection connection, Class<T> mxbeanInterface) throws IOException {
@@ -256,7 +261,7 @@ public class ManagementFactory {
             "no platform MXBean proxies in this library");
     }
 
-    /** Todos los tipos de MXBean de la plataforma que esta maquina virtual conoce. */
+    /** Every platform MXBean type this virtual machine knows. */
     public static Set<Class<? extends PlatformManagedObject>> getPlatformManagementInterfaces() {
         Set<Class<? extends PlatformManagedObject>> all =
             new HashSet<Class<? extends PlatformManagedObject>>();

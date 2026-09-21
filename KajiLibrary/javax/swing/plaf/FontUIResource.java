@@ -2,7 +2,7 @@ package javax.swing.plaf;
 
 import java.awt.Font;
 
-/** Una {@link Font} que puso el aspecto; ver {@link UIResource}. */
+/** A {@link Font} the look and feel set; see {@link UIResource}. */
 public class FontUIResource extends Font implements UIResource {
 
     public FontUIResource(String name, int style, int size) {

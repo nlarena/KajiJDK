@@ -25,18 +25,14 @@ import java.util.Set;
 //
 // The mask alone cannot iterate: bit 3 tells you *that* the fourth constant is present, not
 // *which object* that is. The JDK recovers it from `elementType.getEnumConstants()`, the full
-// universe of constants in ordinal order. KajiLibrary's {@link Class} has no such method — it
-// would need static-field reflection the VM does not implement — so this implementation records
-// each constant in a `universe` array as it first sees it. Everything that can be built from
-// constants the caller hands us works exactly as in the JDK; the three factories that need the
-// *whole* universe up front cannot be written at all, and are omitted rather than half-built:
+// universe of constants in ordinal order. This note used to say KajiLibrary's {@link Class} has no
+// such method and that `allOf(Class)`, `range(from, to)`, `complementOf(set)` and the varargs
+// `of(E, E...)` therefore could not be written: the method exists and all four are declared below.
+// This implementation still records each constant in a `universe` array as it first sees it, which
+// is what lets everything built from constants the caller hands us work without consulting the type
+// at all.
 //
-//   - `allOf(Class)`      — needs every constant of the type.
-//   - `range(from, to)`   — knows the two endpoints' ordinals but not the constants between.
-//   - `complementOf(set)` — needs to know which constants are *missing*.
-//
-// Also omitted: the varargs `of(E, E...)`, clone, and the bulk Collection operations our
-// `Collection` does not have.
+// Still omitted: clone, and the bulk Collection operations our `Collection` does not have.
 public abstract class EnumSet<E extends Enum> extends AbstractSet<E> implements Set<E>, Serializable, Cloneable {
 
     // The enum type this set holds. Package-private, as in the JDK — and assigned by the
@@ -160,25 +156,25 @@ public abstract class EnumSet<E extends Enum> extends AbstractSet<E> implements 
 
     // Copying another EnumSet is a mask copy — no iteration, no hashing, no comparisons.
     /**
-     * El universo entero de `elementType`.
+     * The whole universe of `elementType`.
      *
-     * <p>**Esto no se podia escribir hasta ahora**, y vale contar por que: pide la lista completa de
-     * constantes por adelantado, y `Class.getEnumConstants()` no existia. Las fabricas de arriba se
-     * las arreglan sin ella --aprenden cada constante a medida que la ven--, pero `allOf` tiene que
-     * conocer las que nadie le paso. Con `getEnumConstants` ya disponible, sale directo.
+     * <p>**This could not be written until now**, and it is worth saying why: it asks for the full
+     * list of constants up front, and `Class.getEnumConstants()` did not exist. The factories above
+     * manage without it --they learn each constant as they see it-- but `allOf` has to know the ones
+     * nobody handed it. With `getEnumConstants` available, it comes out directly.
      *
-     * @throws NullPointerException si `elementType` es null
+     * @throws NullPointerException if `elementType` is null
      */
     public static <E extends Enum> EnumSet<E> allOf(Class<E> elementType) {
         if (elementType == null) {
             throw new NullPointerException();
         }
         EnumSet<E> set = new RegularEnumSet<E>(elementType);
-        E[] todas = elementType.getEnumConstants();
-        if (todas != null) {
+        E[] all = elementType.getEnumConstants();
+        if (all != null) {
             int i = 0;
-            while (i < todas.length) {
-                set.add(todas[i]);
+            while (i < all.length) {
+                set.add(all[i]);
                 i = i + 1;
             }
         }
@@ -186,9 +182,9 @@ public abstract class EnumSet<E extends Enum> extends AbstractSet<E> implements 
     }
 
     /**
-     * Las constantes entre `from` y `to`, **inclusive**, por orden de declaracion.
+     * The constants between `from` and `to`, **inclusive**, in declaration order.
      *
-     * @throws IllegalArgumentException si `from` viene despues de `to`
+     * @throws IllegalArgumentException if `from` comes after `to`
      */
     public static <E extends Enum> EnumSet<E> range(E from, E to) {
         Object a = from;
@@ -201,26 +197,27 @@ public abstract class EnumSet<E extends Enum> extends AbstractSet<E> implements 
         }
         Class<E> type = (Class<E>) a.getClass();
         EnumSet<E> set = new RegularEnumSet<E>(type);
-        E[] todas = type.getEnumConstants();
-        if (todas == null) {
-            // Una constante con cuerpo compila a una subclase anonima, que no es un tipo enum y
-            // responde null. Se cae a agregar solo los dos extremos, que es lo unico conocido.
+        E[] all = type.getEnumConstants();
+        if (all == null) {
+            // A constant with a body compiles to an anonymous subclass, which is not an enum type
+            // and answers null. It falls back to adding only the two endpoints, which is all that is
+            // known.
             set.add(from);
             set.add(to);
             return set;
         }
         int i = from.ordinal();
         while (i <= to.ordinal()) {
-            set.add(todas[i]);
+            set.add(all[i]);
             i = i + 1;
         }
         return set;
     }
 
     /**
-     * El **complemento** de `s`: las constantes de su tipo que no estan en el.
+     * `s`'s **complement**: the constants of its type that are not in it.
      *
-     * @throws IllegalArgumentException si `s` esta vacio -- no hay de donde sacar el tipo
+     * @throws IllegalArgumentException if `s` is empty -- there is nowhere to take the type from
      */
     public static <E extends Enum> EnumSet<E> complementOf(EnumSet<E> s) {
         if (s == null) {
@@ -230,12 +227,12 @@ public abstract class EnumSet<E extends Enum> extends AbstractSet<E> implements 
             throw new IllegalArgumentException("Collection is empty");
         }
         EnumSet<E> out = new RegularEnumSet<E>(s.elementType);
-        E[] todas = s.elementType.getEnumConstants();
-        if (todas != null) {
+        E[] all = s.elementType.getEnumConstants();
+        if (all != null) {
             int i = 0;
-            while (i < todas.length) {
-                if (!s.contains(todas[i])) {
-                    out.add(todas[i]);
+            while (i < all.length) {
+                if (!s.contains(all[i])) {
+                    out.add(all[i]);
                 }
                 i = i + 1;
             }
@@ -244,10 +241,11 @@ public abstract class EnumSet<E extends Enum> extends AbstractSet<E> implements 
     }
 
     /**
-     * Un conjunto con esas constantes. La forma **varargs**, para mas de cinco.
+     * A set with those constants. The **varargs** form, for more than five.
      *
-     * <p>El primer elemento va aparte en la firma para que `of()` sin argumentos no compile: sin un
-     * elemento no hay de donde leer el tipo. Es la misma razon por la que el JDK la escribe asi.
+     * <p>The first element goes separately in the signature so that `of()` with no arguments does not
+     * compile: with no element there is nowhere to read the type from. It is the same reason the JDK
+     * writes it that way.
      */
     public static <E extends Enum> EnumSet<E> of(E first, E... rest) {
         EnumSet<E> set = emptyLike(first);
@@ -260,7 +258,7 @@ public abstract class EnumSet<E extends Enum> extends AbstractSet<E> implements 
         return set;
     }
 
-    /** Una copia independiente de este conjunto. */
+    /** A copy of this set, independent of it. */
     public EnumSet<E> clone() {
         return EnumSet.copyOf(this);
     }

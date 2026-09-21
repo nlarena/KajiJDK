@@ -1,27 +1,27 @@
 package javax.sound.midi;
 
 /**
- * KajiLibrary's javax.sound.midi.Instrument -- un sonido tocable de un banco.
+ * KajiLibrary's javax.sound.midi.Instrument -- a playable sound of a bank.
  *
- * <p>Un {@link SoundbankResource} con una direccion: su {@link Patch}. Esa es toda la diferencia, y es
- * la que importa -- un instrumento se puede seleccionar con un cambio de programa, una muestra suelta
- * no.
+ * <p>A {@link SoundbankResource} with an address: its {@link Patch}. That is the whole difference,
+ * and it is the one that matters -- an instrument can be selected with a program change, a loose
+ * sample cannot.
  *
- * <p>Se carga en un sintetizador con {@code Synthesizer.loadInstrument}. Cargar todo un banco grande
- * puede llevar bastante memoria; por eso existen los metodos que cargan de a uno.
+ * <p>It is loaded into a synthesizer with {@code Synthesizer.loadInstrument}. Loading a whole large
+ * bank can take a lot of memory; that is why the methods that load one at a time exist.
  */
 public abstract class Instrument extends SoundbankResource {
 
-    /** Donde esta en el banco. */
+    /** Where it is in the bank. */
     private final Patch patch;
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected Instrument(Soundbank soundbank, Patch patch, String name, Class<?> dataClass) {
         super(soundbank, name, dataClass);
         this.patch = patch;
     }
 
-    /** Donde esta en el banco. */
+    /** Where it is in the bank. */
     public Patch getPatch() {
         return this.patch;
     }

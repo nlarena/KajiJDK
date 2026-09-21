@@ -25,8 +25,8 @@ public class ArrayDeque<E> extends AbstractCollection<E> implements Deque<E>, Se
         elements = new Object[16];
     }
 
-    // Copia los elementos de otra coleccion, en el orden de su iterador: el primero queda al
-    // frente.
+    // It copies another collection's elements, in its iterator's order: the first is left at the
+    // front.
     public ArrayDeque(Collection<? extends E> c) {
         this(c.size() < 1 ? 1 : c.size() + 1);
         Iterator<? extends E> it = c.iterator();
@@ -35,7 +35,7 @@ public class ArrayDeque<E> extends AbstractCollection<E> implements Deque<E>, Se
         }
     }
 
-    // Una copia superficial: mismo contenido, arreglo propio.
+    // A shallow copy: the same content, an array of its own.
     public ArrayDeque<E> clone() {
         return new ArrayDeque<E>(this);
     }

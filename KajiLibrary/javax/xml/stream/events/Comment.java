@@ -1,24 +1,23 @@
 package javax.xml.stream.events;
 
 /**
- * KajiLibrary's javax.xml.stream.events.Comment -- un comentario {@code <!-- ... -->}.
+ * KajiLibrary's javax.xml.stream.events.Comment -- a comment {@code <!-- ... -->}.
  *
- * <p>Un comentario no tiene ningun significado para el documento y aun asi StAX lo entrega, porque
- * la otra opcion --tirarlo-- hace imposible reescribir un archivo sin perderlo. Muchos formatos
- * basados en XML usan comentarios como licencia, marca de generacion o instrucciones para
- * herramientas; una transformacion que los borrara silenciosamente seria una transformacion que
- * nadie quiere.
+ * <p>A comment has no meaning for the document and StAX still delivers it, because the other option
+ * --throwing it away-- makes it impossible to rewrite a file without losing it. Many XML-based
+ * formats use comments as a licence, a generation mark or instructions for tools; a transformation
+ * that deleted them silently would be a transformation nobody wants.
  *
- * <p>El texto que devuelve {@link #getText()} es lo de adentro, sin los delimitadores y <b>sin
- * ningun escape</b>: dentro de un comentario no hay entidades ni marcado, solo la regla de que no
- * puede aparecer {@code --}.
+ * <p>The text {@link #getText()} returns is what is inside, without the delimiters and <b>without
+ * any escaping</b>: inside a comment there are no entities nor markup, only the rule that {@code
+ * --} cannot appear.
  */
 public interface Comment extends XMLEvent {
 
     /**
-     * El texto del comentario, sin {@code <!--} ni {@code -->}.
+     * The text of the comment, without {@code <!--} nor {@code -->}.
      *
-     * @return el contenido; nunca null, puede ser la cadena vacia
+     * @return the content; never null, it can be the empty string
      */
     String getText();
 }

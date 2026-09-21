@@ -3,20 +3,20 @@ package java.awt;
 import java.awt.geom.Point2D;
 
 /**
- * Un punto con coordenadas enteras.
+ * A point with integer coordinates.
  *
- * <p>Hereda de {@code Point2D}, que ya estaba, y con eso se lleva gratis {@code distance()},
- * {@code hashCode()} y compania: lo unico propio es guardar dos {@code int} en vez de dos
- * {@code double}.
+ * <p>It inherits from {@code Point2D}, which already existed, and with that gets {@code
+ * distance()}, {@code hashCode()} and company for free: the only thing of its own is keeping two
+ * {@code int} instead of two {@code double}.
  *
- * <p>Lo que si es propio y facil de errar es {@code setLocation(double, double)}: hereda una firma
- * en coma flotante y tiene que meterla en enteros. El JDK **no** trunca, redondea al mas cercano
- * con {@code floor(v + 0.5)}, que no es lo mismo que {@code (int) v} para los negativos:
- * {@code setLocation(-2.6, -2.6)} da -3 y no -2. Truncar moveria el punto hacia el origen y
- * romperia la simetria de la funcion respecto del cero.
+ * <p>What is its own and easy to get wrong is {@code setLocation(double, double)}: it inherits a
+ * floating-point signature and has to fit it into integers. The JDK does **not** truncate: it
+ * rounds with {@code floor(v + 0.5)}, which is not the same as {@code (int) v} for negatives:
+ * {@code setLocation(-2.6, -2.6)} gives -3 and not -2. Truncating would move the point towards the
+ * origin. (This note added that truncating would break the function's symmetry around zero; {@code
+ * floor(v + 0.5)} is not symmetric either: -2.5 gives -2 and 2.5 gives 3.)
  *
- * <p>Que exista Point tambien completa {@code Rectangle}, que hasta ahora dejaba afuera todos sus
- * miembros con Point justamente porque el tipo no existia.
+ * <p>Point's existence is also what let {@code Rectangle} declare its members that take a Point.
  */
 public class Point extends Point2D implements java.io.Serializable {
 
@@ -79,8 +79,8 @@ public class Point extends Point2D implements java.io.Serializable {
             Point pt = (Point) obj;
             return (x == pt.x) && (y == pt.y);
         }
-        // Contra un Point2D cualquiera se compara por valor, no por clase: un Point(3,4) y un
-        // Point2D.Double(3,4) son el mismo punto y el JDK los da iguales en los dos sentidos.
+        // Against any Point2D it compares by value, not by class: a Point(3,4) and a
+        // Point2D.Double(3,4) are the same point and the JDK gives them as equal both ways.
         return super.equals(obj);
     }
 

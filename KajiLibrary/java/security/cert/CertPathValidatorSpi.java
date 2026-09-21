@@ -2,10 +2,10 @@ package java.security.cert;
 
 import java.security.InvalidAlgorithmParameterException;
 
-// Lo que un proveedor tiene que escribir para ofrecer un validador de caminos.
+// What a provider has to write in order to offer a path validator.
 //
-// El contrato de `engineValidate` es el mismo que el de la clase de arriba: si el camino no vale,
-// **lanza**; si vuelve, vale. Devolver un resultado nunca significa "fallo".
+// The contract of `engineValidate` is the same as that of the class above: if the path is not
+// valid, it **throws**; if it returns, it is valid. Returning a result never means "it failed".
 public abstract class CertPathValidatorSpi {
 
     public CertPathValidatorSpi() {
@@ -15,7 +15,7 @@ public abstract class CertPathValidatorSpi {
                                                            CertPathParameters params)
         throws CertPathValidatorException, InvalidAlgorithmParameterException;
 
-    // Ver `CertPathBuilderSpi.engineGetRevocationChecker()`: mismo default y mismo motivo.
+    // See `CertPathBuilderSpi.engineGetRevocationChecker()`: the same default and the same reason.
     public CertPathChecker engineGetRevocationChecker() {
         throw new UnsupportedOperationException();
     }

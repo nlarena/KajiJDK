@@ -17,29 +17,29 @@ import java.util.function.BiConsumer;
 import java.util.zip.ZipFile;
 
 /**
- * Firma archivos JAR.
+ * It signs JAR files.
  *
- * <p>Es inmutable y se arma con {@link Builder}. Que sea inmutable es lo que la hace reusable: un
- * mismo `JarSigner` firma muchos JAR, y firmar no cambia nada de el.
+ * <p>It is immutable and is built with {@link Builder}. That it is immutable is what makes it
+ * reusable: one same `JarSigner` signs many JARs, and signing changes nothing of it.
  *
- * <p>Firmar un JAR son tres archivos en `META-INF/`: el manifiesto con un resumen por entrada, un
- * `.SF` con un resumen del manifiesto, y un `.DSA`/`.RSA`/`.EC` con la firma PKCS#7 del `.SF` mas
- * la cadena de certificados. Verificar es rehacer los resumenes y comprobar la firma; por eso
- * agregar entradas a un JAR firmado lo invalida y quitar la carpeta `META-INF/` lo "desfirma"
- * sin dejar rastro.
+ * <p>Signing a JAR is three files in `META-INF/`: the manifest with a digest per entry, a `.SF` with
+ * a digest of the manifest, and a `.DSA`/`.RSA`/`.EC` with the PKCS#7 signature of the `.SF` plus
+ * the chain of certificates. Verifying is redoing the digests and checking the signature; that is
+ * why adding entries to a signed JAR invalidates it and removing the `META-INF/` folder "unsigns"
+ * it without leaving a trace.
  *
  * <h2>A KajiLibrary subset</h2>
  *
- * <p>{@link #sign} no esta implementado. Producir la firma pide PKCS#7 --codificacion DER,
- * `SignerInfo`, `ContentInfo`, atributos autenticados-- y, si hay TSA, ademas el protocolo RFC 3161
- * por HTTP contra un tercero. Nada de eso esta en esta biblioteca.
+ * <p>{@link #sign} is not implemented. Producing the signature asks for PKCS#7 --DER encoding,
+ * `SignerInfo`, `ContentInfo`, authenticated attributes-- and, if there is a TSA, also the RFC 3161
+ * protocol over HTTP against a third party. None of that is in this library.
  *
- * <p>Todo lo demas si: el {@link Builder} valida los algoritmos de verdad contra los proveedores
- * instalados, y los seis metodos de consulta devuelven lo que se configuro. Un `JarSigner` mal
- * armado falla aca, en la linea que lo arma, y no al firmar.
+ * <p>Everything else is: the {@link Builder} really validates the algorithms against the installed
+ * providers, and the six query methods return what was configured. A badly built `JarSigner` fails
+ * here, in the line that builds it, and not when signing.
  *
- * <p>{@link #sign} lanza {@link JarSignerException} --que es lo que ya declara para cualquier
- * fallo-- con el motivo adentro. No escribe nada en la salida antes de lanzar.
+ * <p>{@link #sign} throws {@link JarSignerException} --which is what it already declares for any
+ * failure-- with the reason inside. It writes nothing into the output before throwing.
  *
  * @since 9
  */
@@ -79,15 +79,15 @@ public final class JarSigner {
     }
 
     /**
-     * Firma el JAB de entrada y escribe el firmado en la salida.
+     * It signs the input JAR and writes the signed one into the output.
      *
-     * <p><b>No implementado en esta biblioteca.</b> Ver la nota de la clase: falta PKCS#7 y, con
-     * TSA, RFC 3161. Lanza sin escribir nada en `os`.
+     * <p><b>Not implemented in this library.</b> See the note of the class: PKCS#7 is missing and, with
+     * a TSA, RFC 3161. It throws without writing anything into `os`.
      *
-     * @param file el JAR a firmar
-     * @param os donde escribir el JAR firmado
-     * @throws JarSignerException siempre, en esta biblioteca
-     * @throws NullPointerException si alguno de los dos es nulo
+     * @param file the JAR to sign
+     * @param os where to write the signed JAR
+     * @throws JarSignerException always, in this library
+     * @throws NullPointerException if either of the two is null
      */
     public void sign(ZipFile file, OutputStream os) {
         Objects.requireNonNull(file);
@@ -97,35 +97,35 @@ public final class JarSigner {
                 new UnsupportedOperationException("PKCS#7 SignedData is not implemented"));
     }
 
-    /** El algoritmo de resumen con el que se firmaria. */
+    /** The digest algorithm it would sign with. */
     public String getDigestAlgorithm() {
         return this.digestalg[0];
     }
 
-    /** El algoritmo de firma. */
+    /** The signature algorithm. */
     public String getSignatureAlgorithm() {
         return this.sigalg;
     }
 
-    /** La TSA con la que se sellaria el tiempo, o `null` si no hay. */
+    /** The TSA the time would be stamped with, or `null` if there is none. */
     public URI getTsa() {
         return this.tsaUrl;
     }
 
-    /** El nombre del firmante: el que llevan los archivos `META-INF/<nombre>.SF` y `.DSA`. */
+    /** The name of the signer: the one the files `META-INF/<name>.SF` and `.DSA` carry. */
     public String getSignerName() {
         return this.signerName;
     }
 
     /**
-     * Una de las propiedades adicionales.
+     * One of the additional properties.
      *
-     * <p>Las reconocidas son {@code tsaDigestAlg}, {@code tsaPolicyId}, {@code internalsf} y
-     * {@code sectionsonly}. Cualquier otra clave es un error y no un `null`: pedir una propiedad
-     * que no existe casi siempre es un nombre mal escrito, y devolver `null` lo taparia.
+     * <p>The recognised ones are {@code tsaDigestAlg}, {@code tsaPolicyId}, {@code internalsf} and
+     * {@code sectionsonly}. Any other key is an error and not a `null`: asking for a property that does
+     * not exist is almost always a badly written name, and returning `null` would cover it up.
      *
-     * @throws UnsupportedOperationException si la clave no es una de las cuatro
-     * @throws NullPointerException si la clave es nula
+     * @throws UnsupportedOperationException if the key is not one of the four
+     * @throws NullPointerException if the key is null
      */
     public String getProperty(String key) {
         Objects.requireNonNull(key);
@@ -145,11 +145,11 @@ public final class JarSigner {
     }
 
     /**
-     * El armador de {@link JarSigner}.
+     * The builder of {@link JarSigner}.
      *
-     * <p>Cada metodo valida en el acto y devuelve el mismo armador, para encadenar. Validar
-     * temprano es el punto: un algoritmo mal escrito falla en la linea que lo nombra y no adentro
-     * de `sign`, donde el mensaje no diria de donde salio.
+     * <p>Each method validates on the spot and returns the same builder, for chaining. Validating early
+     * is the point: a badly written algorithm fails in the line that names it and not inside `sign`,
+     * where the message would not say where it came from.
      */
     public static class Builder {
 
@@ -168,57 +168,56 @@ public final class JarSigner {
         boolean internalsf = false;
 
         /**
-         * Un armador con la clave y la cadena de esa entrada de almacen.
+         * A builder with the key and the chain of that store entry.
          *
-         * @throws IllegalArgumentException si la cadena no es de certificados X.509
-         * @throws NullPointerException si la entrada es nula
+         * @throws IllegalArgumentException if the chain is not of X.509 certificates
+         * @throws NullPointerException if the entry is null
          */
         public Builder(KeyStore.PrivateKeyEntry entry) {
             Objects.requireNonNull(entry);
             this.privateKey = entry.getPrivateKey();
-            Certificate[] cadena = entry.getCertificateChain();
-            this.certChain = aX509(cadena);
+            Certificate[] chain = entry.getCertificateChain();
+            this.certChain = toX509(chain);
         }
 
         /**
-         * Un armador con esa clave privada y esa cadena de certificacion.
+         * A builder with that private key and that certification chain.
          *
-         * @throws IllegalArgumentException si la cadena no es de certificados X.509, o si esta
-         *     vacia
-         * @throws NullPointerException si alguno de los dos es nulo
+         * @throws IllegalArgumentException if the chain is not of X.509 certificates, or if it is empty
+         * @throws NullPointerException if either of the two is null
          */
         public Builder(PrivateKey privateKey, CertPath certPath) {
             Objects.requireNonNull(privateKey);
             Objects.requireNonNull(certPath);
-            List<? extends Certificate> lista = certPath.getCertificates();
-            if (lista.isEmpty()) {
+            List<? extends Certificate> list = certPath.getCertificates();
+            if (list.isEmpty()) {
                 throw new IllegalArgumentException("empty certPath");
             }
-            Certificate[] cadena = new Certificate[lista.size()];
-            for (int i = 0; i < cadena.length; i++) {
-                cadena[i] = lista.get(i);
+            Certificate[] chain = new Certificate[list.size()];
+            for (int i = 0; i < chain.length; i++) {
+                chain[i] = list.get(i);
             }
             this.privateKey = privateKey;
-            this.certChain = aX509(cadena);
+            this.certChain = toX509(chain);
         }
 
-        /** La cadena, comprobando que sea de X.509: un JAR firmado no admite otra cosa. */
-        private static X509Certificate[] aX509(Certificate[] cadena) {
-            Objects.requireNonNull(cadena);
-            X509Certificate[] out = new X509Certificate[cadena.length];
-            for (int i = 0; i < cadena.length; i++) {
-                if (!(cadena[i] instanceof X509Certificate)) {
+        /** The chain, checking that it is of X.509: a signed JAR admits nothing else. */
+        private static X509Certificate[] toX509(Certificate[] chain) {
+            Objects.requireNonNull(chain);
+            X509Certificate[] out = new X509Certificate[chain.length];
+            for (int i = 0; i < chain.length; i++) {
+                if (!(chain[i] instanceof X509Certificate)) {
                     throw new IllegalArgumentException("Only X.509 certificates are supported");
                 }
-                out[i] = (X509Certificate) cadena[i];
+                out[i] = (X509Certificate) chain[i];
             }
             return out;
         }
 
         /**
-         * El algoritmo de resumen de las entradas.
+         * The digest algorithm of the entries.
          *
-         * @throws NoSuchAlgorithmException si ningun proveedor lo tiene
+         * @throws NoSuchAlgorithmException if no provider has it
          */
         public Builder digestAlgorithm(String algorithm) throws NoSuchAlgorithmException {
             Objects.requireNonNull(algorithm);
@@ -229,9 +228,9 @@ public final class JarSigner {
         }
 
         /**
-         * El algoritmo de resumen, de ese proveedor.
+         * The digest algorithm, of that provider.
          *
-         * @throws NoSuchAlgorithmException si ese proveedor no lo tiene
+         * @throws NoSuchAlgorithmException if that provider does not have it
          */
         public Builder digestAlgorithm(String algorithm, Provider provider)
                 throws NoSuchAlgorithmException {
@@ -244,9 +243,9 @@ public final class JarSigner {
         }
 
         /**
-         * El algoritmo de firma.
+         * The signature algorithm.
          *
-         * @throws NoSuchAlgorithmException si ningun proveedor lo tiene
+         * @throws NoSuchAlgorithmException if no provider has it
          */
         public Builder signatureAlgorithm(String algorithm) throws NoSuchAlgorithmException {
             Objects.requireNonNull(algorithm);
@@ -257,9 +256,9 @@ public final class JarSigner {
         }
 
         /**
-         * El algoritmo de firma, de ese proveedor.
+         * The signature algorithm, of that provider.
          *
-         * @throws NoSuchAlgorithmException si ese proveedor no lo tiene
+         * @throws NoSuchAlgorithmException if that provider does not have it
          */
         public Builder signatureAlgorithm(String algorithm, Provider provider)
                 throws NoSuchAlgorithmException {
@@ -271,17 +270,17 @@ public final class JarSigner {
             return this;
         }
 
-        /** La autoridad de sellado de tiempo, o `null` para no sellar. */
+        /** The time stamping authority, or `null` for not stamping. */
         public Builder tsa(URI uri) {
             this.tsaUrl = uri;
             return this;
         }
 
         /**
-         * El nombre del firmante: el que llevan `META-INF/<nombre>.SF` y el bloque de firma.
+         * The name of the signer: the one `META-INF/<name>.SF` and the signature block carry.
          *
-         * @throws IllegalArgumentException si esta vacio, o si tiene caracteres que no pueden
-         *     estar en un nombre de entrada de JAR
+         * @throws IllegalArgumentException if it is empty, or if it has characters that cannot be in the
+         *     name of a JAR entry
          */
         public Builder signerName(String name) {
             Objects.requireNonNull(name);
@@ -301,7 +300,7 @@ public final class JarSigner {
             return this;
         }
 
-        /** Un receptor de los avisos de progreso, en pares (accion, entrada). */
+        /** A receiver of the progress notices, in pairs (action, entry). */
         public Builder eventHandler(BiConsumer<String, String> handler) {
             Objects.requireNonNull(handler);
             this.handler = handler;
@@ -309,15 +308,15 @@ public final class JarSigner {
         }
 
         /**
-         * Una propiedad adicional.
+         * An additional property.
          *
-         * <p>Las claves --sin distinguir mayusculas-- son {@code tsadigestalg},
-         * {@code tsapolicyid}, {@code internalsf} y {@code sectionsonly}.
+         * <p>The keys --case-insensitive-- are {@code tsadigestalg}, {@code tsapolicyid},
+         * {@code internalsf} and {@code sectionsonly}.
          *
-         * @throws UnsupportedOperationException si la clave no es una de las cuatro
-         * @throws IllegalArgumentException si el valor no sirve para esa clave
-         * @throws NoSuchAlgorithmException nunca se declara: un algoritmo desconocido en
-         *     {@code tsadigestalg} sale como {@link IllegalArgumentException}, igual que en el JDK
+         * @throws UnsupportedOperationException if the key is not one of the four
+         * @throws IllegalArgumentException if the value does not serve for that key
+         * @throws NoSuchAlgorithmException it is never declared: an unknown algorithm in
+         *     {@code tsadigestalg} comes out as {@link IllegalArgumentException}, just as in the JDK
          */
         public Builder setProperty(String key, String value) {
             Objects.requireNonNull(key);
@@ -347,7 +346,7 @@ public final class JarSigner {
             throw new UnsupportedOperationException("Unsupported key " + key);
         }
 
-        /** `"true"`/`"false"` y nada mas: un valor raro es un error y no un `false`. */
+        /** `"true"`/`"false"` and nothing else: an odd value is an error and not a `false`. */
         private static boolean parseBoolean(String key, String value) {
             if (value.equals("true")) {
                 return true;
@@ -358,18 +357,18 @@ public final class JarSigner {
             throw new IllegalArgumentException("Invalid " + key + " value: " + value);
         }
 
-        /** El algoritmo de resumen que se usa cuando no se pide otro. */
+        /** The digest algorithm that is used when no other is asked for. */
         public static String getDefaultDigestAlgorithm() {
             return "SHA-384";
         }
 
         /**
-         * El algoritmo de firma que corresponde a esa clave, o `null` si no se sabe.
+         * The signature algorithm that corresponds to that key, or `null` if it is not known.
          *
-         * <p>`null` y no una excepcion: el JDK deja que un proveedor con un tipo de clave que
-         * nadie conoce se firme igual, nombrando el algoritmo a mano.
+         * <p>`null` and not an exception: the JDK lets a provider with a kind of key nobody knows sign all
+         * the same, naming the algorithm by hand.
          *
-         * @throws NullPointerException si la clave es nula
+         * @throws NullPointerException if the key is null
          */
         public static String getDefaultSignatureAlgorithm(PrivateKey key) {
             Objects.requireNonNull(key);
@@ -395,7 +394,7 @@ public final class JarSigner {
             return null;
         }
 
-        /** El {@link JarSigner} con lo configurado hasta aca. */
+        /** The {@link JarSigner} with what has been configured so far. */
         public JarSigner build() {
             return new JarSigner(this);
         }

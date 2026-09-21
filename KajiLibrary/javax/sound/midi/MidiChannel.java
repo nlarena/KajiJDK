@@ -1,117 +1,117 @@
 package javax.sound.midi;
 
 /**
- * KajiLibrary's javax.sound.midi.MidiChannel -- uno de los dieciseis canales de un sintetizador.
+ * KajiLibrary's javax.sound.midi.MidiChannel -- one of the sixteen channels of a synthesizer.
  *
- * <p>Es la API de conveniencia: en lugar de armar un {@link ShortMessage} y mandarlo por un
- * {@link Receiver}, se llama a un metodo. Hace exactamente lo mismo.
+ * <p>It is the convenience API: instead of building a {@link ShortMessage} and sending it through a
+ * {@link Receiver}, a method is called. It does exactly the same.
  *
- * <h2>Las notas se apagan de dos formas</h2>
+ * <h2>Notes are turned off in two ways</h2>
  *
- * <p>{@link #noteOff(int, int)} lleva la velocidad de <b>soltado</b> --con que rapidez se levanta el
- * dedo--, que algunos instrumentos usan para cambiar como se apaga el sonido. {@link #noteOff(int)}
- * es el atajo cuando eso no importa.
+ * <p>{@link #noteOff(int, int)} carries the <b>release</b> velocity --how fast the finger is
+ * lifted--, which some instruments use to change how the sound dies away. {@link #noteOff(int)} is
+ * the shortcut when that does not matter.
  *
- * <h2>{@link #allNotesOff} y {@link #allSoundOff} no son lo mismo</h2>
+ * <h2>{@link #allNotesOff} and {@link #allSoundOff} are not the same</h2>
  *
- * <p>El primero suelta las notas: lo que este sonando se apaga como se apagaria naturalmente, con su
- * resonancia. El segundo <b>corta</b> el sonido de inmediato.
+ * <p>The first releases the notes: whatever is sounding dies away as it naturally would, with its
+ * resonance. The second <b>cuts</b> the sound immediately.
  *
- * <p>Para un boton de panico se quiere el segundo. El primero deja sonando una nota con pedal.
+ * <p>For a panic button the second is wanted. The first leaves a note held by the pedal sounding.
  *
- * <h2>Mute y solo son del secuenciador, no del sonido</h2>
+ * <h2>Mute and solo belong to the sequencer, not to the sound</h2>
  *
- * <p>{@link #setMute} y {@link #setSolo} no tocan el volumen: le dicen al secuenciador que no mande
- * --o que mande solo-- los eventos de este canal. Y son opcionales: un sintetizador que no los soporte
- * los ignora y {@link #getMute} sigue devolviendo false.
+ * <p>{@link #setMute} and {@link #setSolo} do not touch the volume: they tell the sequencer not to
+ * send --or to send only-- this channel's events. And they are optional: a synthesizer that does
+ * not support them ignores them and {@link #getMute} keeps returning false.
  *
  * <h2>{@link #localControl}</h2>
  *
- * <p>Apagado, el teclado deja de tocar su propio sintetizador. Es lo que se hace al secuenciar: si no,
- * cada nota suena dos veces --una por el teclado y otra por el eco del secuenciador-- con un retardo
- * audible.
+ * <p>Off, the keyboard stops playing its own synthesizer. It is what is done when sequencing:
+ * otherwise each note sounds twice --once from the keyboard and once from the sequencer's echo--
+ * with an audible delay.
  */
 public interface MidiChannel {
 
-    /** Toca una nota. Velocidad 0 la apaga; ver {@link ShortMessage}. */
+    /** Plays a note. Velocity 0 turns it off; see {@link ShortMessage}. */
     void noteOn(int noteNumber, int velocity);
 
-    /** La suelta, con velocidad de soltado. Ver la nota de la clase. */
+    /** Releases it, with release velocity. See the class note. */
     void noteOff(int noteNumber, int velocity);
 
-    /** La suelta. */
+    /** Releases it. */
     void noteOff(int noteNumber);
 
-    /** Presion sobre una tecla ya pulsada. */
+    /** Pressure on a key already pressed. */
     void setPolyPressure(int noteNumber, int pressure);
 
-    /** Cuanta presion tiene esa tecla. */
+    /** How much pressure that key has. */
     int getPolyPressure(int noteNumber);
 
-    /** Presion sobre el canal entero. */
+    /** Pressure on the whole channel. */
     void setChannelPressure(int pressure);
 
-    /** Cuanta presion tiene el canal. */
+    /** How much pressure the channel has. */
     int getChannelPressure();
 
-    /** Mueve un controlador. */
+    /** Moves a controller. */
     void controlChange(int controller, int value);
 
-    /** En cuanto esta ese controlador. */
+    /** Where that controller is. */
     int getController(int controller);
 
-    /** Cambia el sonido dentro del banco actual. */
+    /** Changes the sound within the current bank. */
     void programChange(int program);
 
-    /** Cambia de banco y de sonido. */
+    /** Changes bank and sound. */
     void programChange(int bank, int program);
 
-    /** Que sonido esta puesto. */
+    /** Which sound is set. */
     int getProgram();
 
-    /** Mueve la rueda de tono; 8192 es el centro. */
+    /** Moves the pitch wheel; 8192 is the centre. */
     void setPitchBend(int bend);
 
-    /** Donde esta la rueda de tono. */
+    /** Where the pitch wheel is. */
     int getPitchBend();
 
-    /** Vuelve todos los controladores a su valor de omision. */
+    /** Sets all the controllers back to their default value. */
     void resetAllControllers();
 
-    /** Suelta todas las notas. Ver la nota de la clase. */
+    /** Releases all the notes. See the class note. */
     void allNotesOff();
 
-    /** Corta todo el sonido de inmediato. Ver la nota de la clase. */
+    /** Cuts all the sound immediately. See the class note. */
     void allSoundOff();
 
     /**
-     * Conecta o desconecta el teclado de su propio sintetizador. Ver la nota de la clase.
+     * Connects or disconnects the keyboard from its own synthesizer. See the class note.
      *
-     * @return como quedo; puede no ser lo que se pidio
+     * @return how it ended up; it may not be what was asked
      */
     boolean localControl(boolean on);
 
-    /** Modo monofonico: una sola nota a la vez. */
+    /** Monophonic mode: a single note at a time. */
     void setMono(boolean on);
 
-    /** Si esta en monofonico. */
+    /** Whether it is monophonic. */
     boolean getMono();
 
-    /** Modo omni: responder a todos los canales. */
+    /** Omni mode: respond to all channels. */
     void setOmni(boolean on);
 
-    /** Si esta en omni. */
+    /** Whether it is in omni. */
     boolean getOmni();
 
-    /** Silencia este canal en el secuenciador. Ver la nota de la clase. */
+    /** Mutes this channel in the sequencer. See the class note. */
     void setMute(boolean mute);
 
-    /** Si esta silenciado. */
+    /** Whether it is muted. */
     boolean getMute();
 
-    /** Deja sonar solo este canal. Ver la nota de la clase. */
+    /** Lets only this channel sound. See the class note. */
     void setSolo(boolean soloState);
 
-    /** Si esta en solo. */
+    /** Whether it is soloed. */
     boolean getSolo();
 }

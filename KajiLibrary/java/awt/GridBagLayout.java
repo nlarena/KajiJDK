@@ -4,88 +4,89 @@ import java.io.Serializable;
 import java.util.Hashtable;
 
 /**
- * Una grilla de celdas **de tamaño desigual**, donde cada hijo dice cuántas celdas ocupa y cómo se
- * comporta cuando sobra espacio.
+ * A grid of cells **of unequal size**, where each child says how many cells it occupies and how it
+ * behaves when there is space to spare.
  *
- * <p>Es la distribución más poderosa de AWT y la más difícil de usar, y las dos cosas vienen del
- * mismo lugar: cada hijo trae un {@link GridBagConstraints} con once decisiones. Vale la pena
- * separarlas en tres grupos.
+ * <p>It is AWT's most powerful layout and the hardest to use, and both come from the same place:
+ * each child brings a {@link GridBagConstraints} with eleven decisions. It is worth splitting them
+ * into three groups.
  *
  * <ul>
- *   <li><strong>dónde va</strong>: {@code gridx}, {@code gridy}, y cuántas celdas ocupa con
- *       {@code gridwidth} y {@code gridheight};
- *   <li><strong>qué pasa cuando sobra espacio</strong>: {@code weightx} y {@code weighty} dicen qué
- *       fracción del sobrante le toca a su fila o columna;
- *   <li><strong>qué hace con el espacio que le tocó</strong>: {@code fill} si se estira,
- *       {@code anchor} si no.
+ *   <li><strong>where it goes</strong>: {@code gridx}, {@code gridy}, and how many cells it
+ *       occupies with {@code gridwidth} and {@code gridheight};
+ *   <li><strong>what happens when there is space to spare</strong>: {@code weightx} and
+ *       {@code weighty} say what fraction of the spare space goes to its row or column;
+ *   <li><strong>what it does with the space it got</strong>: {@code fill} if it stretches,
+ *       {@code anchor} if not.
  * </ul>
  *
- * <p>El punto que más confunde es que **el peso es de la fila o la columna, no del componente**. Un
- * hijo con peso 1 no crece: hace crecer a su columna, y recién ahí `fill` decide si él la llena o
- * queda centrado en ella. Un componente con peso y sin `fill` se queda de su tamaño en el medio de
- * una columna enorme, que es el resultado desconcertante con el que todo el mundo se topa la primera
- * vez.
+ * <p>The most confusing point is that **the weight belongs to the row or the column, not to the
+ * component**. A child with weight 1 does not grow: it makes its column grow, and only then does
+ * `fill` decide whether it fills it or stays centred in it. A component with weight and no `fill`
+ * stays at its size in the middle of a huge column, which is the baffling result everyone runs into
+ * the first time.
  *
- * <p>Los métodos vienen en pares que sólo se diferencian por la mayúscula —{@code getLayoutInfo} y
- * {@code GetLayoutInfo}— y no es un error: los de mayúscula son de 1.1 y quedaron por
- * compatibilidad. Los dos hacen lo mismo.
+ * <p>The methods come in pairs that differ only by the capital letter —{@code getLayoutInfo} and
+ * {@code GetLayoutInfo}— and it is not a mistake: the capitalized ones are from 1.1 and stayed for
+ * compatibility. Both do the same. Here they, and {@code addLayoutComponent(String, Component)},
+ * are marked deprecated; the JDK only calls them obsolete and does not deprecate them.
  */
 public class GridBagLayout implements LayoutManager2, Serializable {
 
     private static final long serialVersionUID = 8838754796412211005L;
 
-    /** El tamaño máximo de la grilla. */
+    /** The maximum size of the grid. */
     protected static final int MAXGRIDSIZE = 512;
 
-    /** El menor tamaño posible de la grilla. */
+    /** The smallest possible grid size. */
     protected static final int MINSIZE = 1;
 
-    /** La marca para pedir las medidas preferidas en vez de las mínimas. */
+    /** The flag for asking for preferred sizes instead of minimum ones. */
     protected static final int PREFERREDSIZE = 2;
 
-    /** Las restricciones de cada hijo. */
+    /** Each child's constraints. */
     protected Hashtable<Component, GridBagConstraints> comptable =
             new Hashtable<Component, GridBagConstraints>();
 
-    /** Lo que se le da a un hijo que se agrega sin restricciones. */
+    /** What a child added without constraints gets. */
     protected GridBagConstraints defaultConstraints = new GridBagConstraints();
 
-    /** La grilla calculada, o `null` si hay que recalcularla. */
+    /** The computed grid, or `null` if it has to be recomputed. */
     protected GridBagLayoutInfo layoutInfo;
 
-    /** Anchos mínimos por columna, si se quieren imponer desde afuera. */
+    /** Minimum widths per column, if they are to be imposed from outside. */
     public int[] columnWidths;
 
-    /** Altos mínimos por fila. */
+    /** Minimum heights per row. */
     public int[] rowHeights;
 
-    /** Pesos mínimos por columna. */
+    /** Minimum weights per column. */
     public double[] columnWeights;
 
-    /** Pesos mínimos por fila. */
+    /** Minimum weights per row. */
     public double[] rowWeights;
 
-    /** Una distribución vacía. */
+    /** An empty layout. */
     public GridBagLayout() {
     }
 
     /**
-     * Le pone restricciones a un hijo.
+     * Sets a child's constraints.
      *
-     * <p>Se guarda una **copia**: las restricciones son mutables y quien las pasó puede seguir
-     * usando el mismo objeto para el hijo siguiente, que es exactamente como se usa esta clase.
+     * <p>A **copy** is stored: constraints are mutable, and whoever passed them may keep using the
+     * same object for the next child, which is exactly how this class is used.
      *
-     * @throws NullPointerException si las restricciones son `null`
+     * @throws NullPointerException if the constraints are `null`
      */
     public void setConstraints(Component comp, GridBagConstraints constraints) {
         this.comptable.put(comp, (GridBagConstraints) constraints.clone());
     }
 
     /**
-     * Las restricciones de un hijo.
+     * A child's constraints.
      *
-     * @return una copia; cambiarla no cambia nada hasta que se la vuelva a poner con
-     *     {@link #setConstraints}
+     * @return a copy; changing it changes nothing until it is set again with {@link
+     *     #setConstraints}
      */
     public GridBagConstraints getConstraints(Component comp) {
         GridBagConstraints c = this.comptable.get(comp);
@@ -97,10 +98,10 @@ public class GridBagLayout implements LayoutManager2, Serializable {
     }
 
     /**
-     * Las restricciones de un hijo, **sin** copiar.
+     * A child's constraints, **without** copying.
      *
-     * <p>Es para uso interno de la distribución: devolver el objeto de verdad evita una copia por
-     * hijo y por pasada, y las pasadas son varias.
+     * <p>It is for the layout's internal use: returning the real object avoids one copy per child
+     * and per pass, and there are several passes.
      */
     protected GridBagConstraints lookupConstraints(Component comp) {
         GridBagConstraints c = this.comptable.get(comp);
@@ -111,15 +112,15 @@ public class GridBagLayout implements LayoutManager2, Serializable {
         return c;
     }
 
-    /** Saca las restricciones de un hijo. */
+    /** Removes a child's constraints. */
     private void removeConstraints(Component comp) {
         this.comptable.remove(comp);
     }
 
     /**
-     * Dónde arranca la grilla dentro del contenedor.
+     * Where the grid starts within the container.
      *
-     * @return el ángulo superior izquierdo, o (0,0) si todavía no se maquetó
+     * @return the top-left corner, or (0,0) if it has not been laid out yet
      */
     public Point getLayoutOrigin() {
         Point origin = new Point(0, 0);
@@ -131,9 +132,9 @@ public class GridBagLayout implements LayoutManager2, Serializable {
     }
 
     /**
-     * Cuánto mide cada columna y cada fila.
+     * How wide each column and how tall each row is.
      *
-     * @return dos arreglos: anchos y altos, o dos vacíos si todavía no se maquetó
+     * @return two arrays: widths and heights, or two empty ones if it has not been laid out yet
      */
     public int[][] getLayoutDimensions() {
         if (this.layoutInfo == null) {
@@ -148,9 +149,9 @@ public class GridBagLayout implements LayoutManager2, Serializable {
     }
 
     /**
-     * Qué peso tiene cada columna y cada fila.
+     * What weight each column and each row has.
      *
-     * @return dos arreglos: pesos horizontales y verticales
+     * @return two arrays: horizontal and vertical weights
      */
     public double[][] getLayoutWeights() {
         if (this.layoutInfo == null) {
@@ -165,10 +166,10 @@ public class GridBagLayout implements LayoutManager2, Serializable {
     }
 
     /**
-     * En qué celda cae ese punto del contenedor.
+     * Which cell that point of the container falls in.
      *
-     * <p>Un punto a la izquierda de la grilla da columna 0 y uno a la derecha da la cantidad de
-     * columnas: el resultado siempre es una celda válida para insertar, aunque el punto caiga afuera.
+     * <p>A point to the left of the grid gives column 0 and one to the right gives the number of
+     * columns: the result is always a valid cell to insert at, even if the point falls outside.
      */
     public Point location(int x, int y) {
         Point loc = new Point(0, 0);
@@ -196,9 +197,9 @@ public class GridBagLayout implements LayoutManager2, Serializable {
     }
 
     /**
-     * Agrega un hijo con restricciones.
+     * Adds a child with constraints.
      *
-     * @throws IllegalArgumentException si las restricciones no son un {@link GridBagConstraints}
+     * @throws IllegalArgumentException if the constraints are not a {@link GridBagConstraints}
      */
     public void addLayoutComponent(Component comp, Object constraints) {
         if (constraints == null) {
@@ -212,72 +213,72 @@ public class GridBagLayout implements LayoutManager2, Serializable {
     }
 
     /**
-     * Agrega un hijo por nombre.
+     * Adds a child by name.
      *
-     * @deprecated esta distribución no usa nombres: no hace nada. Usar
+     * @deprecated this layout does not use names: it does nothing. Use
      *     {@link #addLayoutComponent(Component, Object)}.
      */
     @Deprecated
     public void addLayoutComponent(String name, Component comp) {
     }
 
-    /** Saca las restricciones de ese hijo. */
+    /** Removes that child's constraints. */
     public void removeLayoutComponent(Component comp) {
         this.removeConstraints(comp);
     }
 
-    /** Lo que la grilla necesita con cada hijo en su medida preferida. */
+    /** What the grid needs with each child at its preferred size. */
     public Dimension preferredLayoutSize(Container parent) {
         GridBagLayoutInfo info = this.getLayoutInfo(parent, PREFERREDSIZE);
         return this.getMinSize(parent, info);
     }
 
-    /** Lo mismo, con las medidas mínimas. */
+    /** The same, with the minimum sizes. */
     public Dimension minimumLayoutSize(Container parent) {
         GridBagLayoutInfo info = this.getLayoutInfo(parent, MINSIZE);
         return this.getMinSize(parent, info);
     }
 
-    /** Sin tope: las columnas con peso aprovechan todo lo que les den. */
+    /** No limit: the weighted columns make use of everything they are given. */
     public Dimension maximumLayoutSize(Container target) {
         return new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE);
     }
 
-    /** Centrado. */
+    /** Centred. */
     public float getLayoutAlignmentX(Container parent) {
         return 0.5f;
     }
 
-    /** Centrado. */
+    /** Centred. */
     public float getLayoutAlignmentY(Container parent) {
         return 0.5f;
     }
 
-    /** Tira la grilla calculada: la próxima consulta la vuelve a armar. */
+    /** Throws away the computed grid: the next query builds it again. */
     public void invalidateLayout(Container target) {
         this.layoutInfo = null;
     }
 
-    /** Arma la grilla y ubica a los hijos. */
+    /** Builds the grid and places the children. */
     public void layoutContainer(Container parent) {
         this.arrangeGrid(parent);
     }
 
     /**
-     * Calcula la grilla: cuántas filas y columnas, cuánto mide cada una y cuánto pesa.
+     * Computes the grid: how many rows and columns, how big each one is and how much it weighs.
      *
-     * <p>Va en dos pasadas y no se puede hacer en una. La primera resuelve las posiciones
-     * **relativas** —un hijo con {@code gridx} en {@code RELATIVE} va después del anterior— y de paso
-     * averigua el tamaño de la grilla. Recién con la grilla dimensionada, la segunda reparte los
-     * anchos y los pesos, porque un hijo que ocupa tres columnas tiene que repartir su medida entre
-     * las tres y no se sabe cuáles son hasta terminar la primera.
+     * <p>It goes in two passes and cannot be done in one. The first resolves the **relative**
+     * positions —a child with {@code gridx} set to {@code RELATIVE} goes after the previous one—
+     * and on the way finds out the grid's size. Only with the grid sized does the second distribute
+     * the widths and the weights, because a child that spans three columns has to spread its size
+     * over the three, and which ones they are is not known until the first pass is done.
      *
-     * @param sizeflag {@link #MINSIZE} o {@link #PREFERREDSIZE}
+     * @param sizeflag {@link #MINSIZE} or {@link #PREFERREDSIZE}
      */
     protected GridBagLayoutInfo getLayoutInfo(Container parent, int sizeflag) {
         synchronized (parent.getTreeLock()) {
             int ncomponents = parent.getComponentCount();
-            // --- primera pasada: resolver posiciones y averiguar el tamano de la grilla
+            // --- first pass: resolve positions and find out the grid's size
             int[] gx = new int[ncomponents];
             int[] gy = new int[ncomponents];
             int[] gw = new int[ncomponents];
@@ -309,7 +310,7 @@ public class GridBagLayout implements LayoutManager2, Serializable {
                 gy[i] = y;
                 gw[i] = w;
                 gh[i] = h;
-                // Un hijo con gridwidth REMAINDER cierra la fila: el siguiente arranca abajo.
+                // A child with gridwidth REMAINDER closes the row: the next one starts below.
                 if (c.gridwidth == GridBagConstraints.REMAINDER) {
                     cursorX = 0;
                     cursorY = y + h;
@@ -327,7 +328,7 @@ public class GridBagLayout implements LayoutManager2, Serializable {
                 maxY = 1;
             }
             GridBagLayoutInfo info = new GridBagLayoutInfo(maxX, maxY);
-            // --- segunda pasada: repartir medidas y pesos
+            // --- second pass: distribute sizes and weights
             for (int i = 0; i < ncomponents; i++) {
                 Component comp = parent.getComponent(i);
                 if (!comp.isVisible()) {
@@ -336,95 +337,99 @@ public class GridBagLayout implements LayoutManager2, Serializable {
                 GridBagConstraints c = this.lookupConstraints(comp);
                 Dimension d = sizeflag == PREFERREDSIZE ? comp.getPreferredSize()
                         : comp.getMinimumSize();
-                // Queda anotado en las restricciones: `adjustForGravity` lo necesita despues, y
-                // volver a medir ahi seria medir dos veces lo mismo.
+                // It is recorded in the constraints: `adjustForGravity` needs it later, and
+                // measuring again there would be measuring the same thing twice.
                 c.minWidth = d.width;
                 c.minHeight = d.height;
-                int anchoTotal = d.width + c.insets.left + c.insets.right + c.ipadx;
-                int altoTotal = d.height + c.insets.top + c.insets.bottom + c.ipady;
-                repartirMedida(info.minWidth, gx[i], gw[i], anchoTotal);
-                repartirMedida(info.minHeight, gy[i], gh[i], altoTotal);
-                repartirPeso(info.weightX, gx[i], gw[i], c.weightx);
-                repartirPeso(info.weightY, gy[i], gh[i], c.weighty);
+                int totalWidth = d.width + c.insets.left + c.insets.right + c.ipadx;
+                int totalHeight = d.height + c.insets.top + c.insets.bottom + c.ipady;
+                spreadSize(info.minWidth, gx[i], gw[i], totalWidth);
+                spreadSize(info.minHeight, gy[i], gh[i], totalHeight);
+                spreadWeight(info.weightX, gx[i], gw[i], c.weightx);
+                spreadWeight(info.weightY, gy[i], gh[i], c.weighty);
             }
-            // Lo que el usuario haya impuesto desde afuera es un piso, no un reemplazo.
-            imponer(info.minWidth, this.columnWidths);
-            imponer(info.minHeight, this.rowHeights);
-            imponerPeso(info.weightX, this.columnWeights);
-            imponerPeso(info.weightY, this.rowWeights);
+            // What the user has imposed from outside is a floor, not a replacement.
+            impose(info.minWidth, this.columnWidths);
+            impose(info.minHeight, this.rowHeights);
+            imposeWeights(info.weightX, this.columnWeights);
+            imposeWeights(info.weightY, this.rowWeights);
             return info;
         }
     }
 
     /**
-     * Reparte la medida de un hijo entre las celdas que ocupa.
+     * Spreads a child's size over the cells it occupies.
      *
-     * <p>Un hijo que ocupa una sola celda impone su medida directamente. Uno que ocupa varias sólo
-     * exige que **la suma** alcance: si ya alcanza no se toca nada, y si no, la diferencia se agrega
-     * a la última. Repartirla en partes iguales sería peor — ensancharía columnas que no lo
-     * necesitan.
+     * <p>A child that occupies a single cell imposes its size directly. One that occupies several
+     * only requires that **the sum** be enough: if it already is, nothing is touched, and if not,
+     * the difference is added to the last one. Splitting it in equal parts would be worse — it
+     * would widen columns that do not need it.
      */
-    private static void repartirMedida(int[] medidas, int inicio, int cuantas, int total) {
-        if (inicio < 0 || inicio + cuantas > medidas.length) {
+    private static void spreadSize(int[] sizes, int start, int count, int total) {
+        if (start < 0 || start + count > sizes.length) {
             return;
         }
-        if (cuantas == 1) {
-            medidas[inicio] = Math.max(medidas[inicio], total);
+        if (count == 1) {
+            sizes[start] = Math.max(sizes[start], total);
             return;
         }
-        int suma = 0;
-        for (int i = inicio; i < inicio + cuantas; i++) {
-            suma = suma + medidas[i];
+        int sum = 0;
+        for (int i = start; i < start + count; i++) {
+            sum = sum + sizes[i];
         }
-        if (suma < total) {
-            medidas[inicio + cuantas - 1] = medidas[inicio + cuantas - 1] + (total - suma);
-        }
-    }
-
-    /** Lo mismo con los pesos: el de un hijo que abarca varias celdas es el de la mayor. */
-    private static void repartirPeso(double[] pesos, int inicio, int cuantas, double peso) {
-        if (peso <= 0 || inicio < 0 || inicio + cuantas > pesos.length) {
-            return;
-        }
-        if (cuantas == 1) {
-            pesos[inicio] = Math.max(pesos[inicio], peso);
-            return;
-        }
-        double suma = 0;
-        for (int i = inicio; i < inicio + cuantas; i++) {
-            suma = suma + pesos[i];
-        }
-        if (suma < peso) {
-            pesos[inicio + cuantas - 1] = pesos[inicio + cuantas - 1] + (peso - suma);
-        }
-    }
-
-    /** Aplica los mínimos que se hayan impuesto desde afuera. */
-    private static void imponer(int[] destino, int[] impuestos) {
-        if (impuestos == null) {
-            return;
-        }
-        int n = Math.min(destino.length, impuestos.length);
-        for (int i = 0; i < n; i++) {
-            destino[i] = Math.max(destino[i], impuestos[i]);
-        }
-    }
-
-    /** Idem para los pesos. */
-    private static void imponerPeso(double[] destino, double[] impuestos) {
-        if (impuestos == null) {
-            return;
-        }
-        int n = Math.min(destino.length, impuestos.length);
-        for (int i = 0; i < n; i++) {
-            destino[i] = Math.max(destino[i], impuestos[i]);
+        if (sum < total) {
+            sizes[start + count - 1] = sizes[start + count - 1] + (total - sum);
         }
     }
 
     /**
-     * Calcula la grilla.
+     * The same for the weights: a child spanning several cells only requires that their sum reach
+     * its weight, and the difference goes to the last one. (This javadoc said the child's weight is
+     * that of the largest cell.)
+     */
+    private static void spreadWeight(double[] weights, int start, int count, double weight) {
+        if (weight <= 0 || start < 0 || start + count > weights.length) {
+            return;
+        }
+        if (count == 1) {
+            weights[start] = Math.max(weights[start], weight);
+            return;
+        }
+        double sum = 0;
+        for (int i = start; i < start + count; i++) {
+            sum = sum + weights[i];
+        }
+        if (sum < weight) {
+            weights[start + count - 1] = weights[start + count - 1] + (weight - sum);
+        }
+    }
+
+    /** Applies the minimums imposed from outside. */
+    private static void impose(int[] dest, int[] imposed) {
+        if (imposed == null) {
+            return;
+        }
+        int n = Math.min(dest.length, imposed.length);
+        for (int i = 0; i < n; i++) {
+            dest[i] = Math.max(dest[i], imposed[i]);
+        }
+    }
+
+    /** The same for the weights. */
+    private static void imposeWeights(double[] dest, double[] imposed) {
+        if (imposed == null) {
+            return;
+        }
+        int n = Math.min(dest.length, imposed.length);
+        for (int i = 0; i < n; i++) {
+            dest[i] = Math.max(dest[i], imposed[i]);
+        }
+    }
+
+    /**
+     * Computes the grid.
      *
-     * @deprecated el nombre con mayúscula es de 1.1. Usar {@link #getLayoutInfo}.
+     * @deprecated the capitalized name is from 1.1. Use {@link #getLayoutInfo}.
      */
     @Deprecated
     protected GridBagLayoutInfo GetLayoutInfo(Container parent, int sizeflag) {
@@ -432,10 +437,12 @@ public class GridBagLayout implements LayoutManager2, Serializable {
     }
 
     /**
-     * Ajusta el rectángulo de un hijo según su relleno y su anclaje.
+     * Adjusts a child's rectangle according to its fill and its anchor.
      *
-     * <p>Es donde `fill` y `anchor` se aplican de verdad: el rectángulo que entra es la celda que le
-     * tocó y el que sale es dónde va a quedar el componente adentro de ella.
+     * <p>It is where `fill` and `anchor` are really applied: the rectangle that comes in is the
+     * cell it got and the one that goes out is where the component will sit inside it. Only the
+     * nine absolute anchors move it; a relative or baseline anchor, which the JDK resolves against
+     * the orientation or the baseline, leaves it at the top-left of the cell.
      */
     protected void adjustForGravity(GridBagConstraints constraints, Rectangle r) {
         int diffx = 0;
@@ -444,21 +451,21 @@ public class GridBagLayout implements LayoutManager2, Serializable {
         r.width = r.width - (constraints.insets.left + constraints.insets.right);
         r.y = r.y + constraints.insets.top;
         r.height = r.height - (constraints.insets.top + constraints.insets.bottom);
-        // Sin `fill`, el componente se queda de su tamano y lo que sobra de la celda es `diffx`,
-        // que despues el anclaje reparte entre los dos costados.
-        int anchoPropio = constraints.minWidth + constraints.ipadx;
+        // Without `fill`, the component keeps its size, and what is left of the cell is `diffx`,
+        // which the anchor then splits between the two sides.
+        int ownWidth = constraints.minWidth + constraints.ipadx;
         if (constraints.fill != GridBagConstraints.HORIZONTAL
                 && constraints.fill != GridBagConstraints.BOTH
-                && r.width > anchoPropio) {
-            diffx = r.width - anchoPropio;
-            r.width = anchoPropio;
+                && r.width > ownWidth) {
+            diffx = r.width - ownWidth;
+            r.width = ownWidth;
         }
-        int altoPropio = constraints.minHeight + constraints.ipady;
+        int ownHeight = constraints.minHeight + constraints.ipady;
         if (constraints.fill != GridBagConstraints.VERTICAL
                 && constraints.fill != GridBagConstraints.BOTH
-                && r.height > altoPropio) {
-            diffy = r.height - altoPropio;
-            r.height = altoPropio;
+                && r.height > ownHeight) {
+            diffy = r.height - ownHeight;
+            r.height = ownHeight;
         }
         int a = constraints.anchor;
         if (a == GridBagConstraints.CENTER) {
@@ -485,16 +492,16 @@ public class GridBagLayout implements LayoutManager2, Serializable {
     }
 
     /**
-     * Ajusta el rectángulo de un hijo.
+     * Adjusts a child's rectangle.
      *
-     * @deprecated el nombre con mayúscula es de 1.1. Usar {@link #adjustForGravity}.
+     * @deprecated the capitalized name is from 1.1. Use {@link #adjustForGravity}.
      */
     @Deprecated
     protected void AdjustForGravity(GridBagConstraints constraints, Rectangle r) {
         this.adjustForGravity(constraints, r);
     }
 
-    /** La suma de las columnas y de las filas, más los márgenes del contenedor. */
+    /** The sum of the columns and of the rows, plus the container's insets. */
     protected Dimension getMinSize(Container parent, GridBagLayoutInfo info) {
         if (info == null) {
             return new Dimension(0, 0);
@@ -512,9 +519,9 @@ public class GridBagLayout implements LayoutManager2, Serializable {
     }
 
     /**
-     * La suma de la grilla.
+     * The sum of the grid.
      *
-     * @deprecated el nombre con mayúscula es de 1.1. Usar {@link #getMinSize}.
+     * @deprecated the capitalized name is from 1.1. Use {@link #getMinSize}.
      */
     @Deprecated
     protected Dimension GetMinSize(Container parent, GridBagLayoutInfo info) {
@@ -522,11 +529,12 @@ public class GridBagLayout implements LayoutManager2, Serializable {
     }
 
     /**
-     * Ubica a los hijos.
+     * Places the children.
      *
-     * <p>El espacio sobrante se reparte **por peso**, y ahí está la parte que sorprende: el peso es
-     * de la columna, no del componente. Recién después, con la celda ya dimensionada,
-     * {@link #adjustForGravity} decide si el componente la llena o queda anclado adentro.
+     * <p>The spare space is distributed **by weight**, and there is the part that surprises: the
+     * weight belongs to the column, not to the component. Only afterwards, with the cell already
+     * sized, {@link #adjustForGravity} decides whether the component fills it or stays anchored
+     * inside.
      */
     protected void arrangeGrid(Container parent) {
         synchronized (parent.getTreeLock()) {
@@ -542,13 +550,13 @@ public class GridBagLayout implements LayoutManager2, Serializable {
             }
             this.layoutInfo = info;
             Insets insets = parent.getInsets();
-            int sobraX = parent.getWidth() - d.width;
-            int sobraY = parent.getHeight() - d.height;
-            repartirSobrante(info.minWidth, info.weightX, sobraX);
-            repartirSobrante(info.minHeight, info.weightY, sobraY);
+            int spareX = parent.getWidth() - d.width;
+            int spareY = parent.getHeight() - d.height;
+            distributeSpare(info.minWidth, info.weightX, spareX);
+            distributeSpare(info.minHeight, info.weightY, spareY);
             info.startx = insets.left;
             info.starty = insets.top;
-            // Donde empieza cada columna y cada fila, acumulando.
+            // Where each column and each row starts, accumulating.
             int[] xs = new int[info.width + 1];
             xs[0] = info.startx;
             for (int i = 0; i < info.width; i++) {
@@ -590,34 +598,35 @@ public class GridBagLayout implements LayoutManager2, Serializable {
     }
 
     /**
-     * Reparte el espacio que sobra entre las celdas, en proporción a su peso.
+     * Distributes the space left over among the cells, in proportion to their weight.
      *
-     * <p>Si ningún peso es positivo no se reparte nada: la grilla queda de su tamaño natural y
-     * centrada por el contenedor, que es lo que corresponde cuando nadie pidió crecer.
+     * <p>If no weight is positive nothing is distributed: the grid stays at its natural size,
+     * starting at the container's top-left inset. This javadoc said it is centred in the container;
+     * the JDK centres it, but this implementation does not.
      */
-    private static void repartirSobrante(int[] medidas, double[] pesos, int sobra) {
-        if (sobra <= 0) {
+    private static void distributeSpare(int[] sizes, double[] weights, int spare) {
+        if (spare <= 0) {
             return;
         }
         double total = 0;
-        for (int i = 0; i < pesos.length; i++) {
-            total = total + pesos[i];
+        for (int i = 0; i < weights.length; i++) {
+            total = total + weights[i];
         }
         if (total <= 0) {
             return;
         }
-        int repartido = 0;
-        for (int i = 0; i < medidas.length; i++) {
-            int parte = (int) (sobra * (pesos[i] / total));
-            medidas[i] = medidas[i] + parte;
-            repartido = repartido + parte;
+        int distributed = 0;
+        for (int i = 0; i < sizes.length; i++) {
+            int share = (int) (spare * (weights[i] / total));
+            sizes[i] = sizes[i] + share;
+            distributed = distributed + share;
         }
-        // El resto de la division entera va a la ultima celda con peso: si se lo dejara sin
-        // repartir, la grilla no llenaria el contenedor por unos pocos pixeles.
-        if (repartido < sobra) {
-            for (int i = medidas.length - 1; i >= 0; i--) {
-                if (pesos[i] > 0) {
-                    medidas[i] = medidas[i] + (sobra - repartido);
+        // The remainder of the integer division goes to the last weighted cell: if it were left
+        // undistributed, the grid would fall a few pixels short of filling the container.
+        if (distributed < spare) {
+            for (int i = sizes.length - 1; i >= 0; i--) {
+                if (weights[i] > 0) {
+                    sizes[i] = sizes[i] + (spare - distributed);
                     break;
                 }
             }
@@ -625,9 +634,9 @@ public class GridBagLayout implements LayoutManager2, Serializable {
     }
 
     /**
-     * Ubica a los hijos.
+     * Places the children.
      *
-     * @deprecated el nombre con mayúscula es de 1.1. Usar {@link #arrangeGrid}.
+     * @deprecated the capitalized name is from 1.1. Use {@link #arrangeGrid}.
      */
     @Deprecated
     protected void ArrangeGrid(Container parent) {

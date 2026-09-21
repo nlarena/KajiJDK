@@ -22,33 +22,34 @@ import javax.swing.plaf.ComponentUI;
 import javax.swing.plaf.UIResource;
 
 /**
- * Lo que comparten todos los botones: modelo, texto, iconos por estado, alineaciones y accion.
+ * What every button shares: model, text, icons by state, alignments and action.
  *
- * <h2>El boton es una vista de su modelo</h2>
+ * <h2>The button is a view of its model</h2>
  *
- * <p>El estado —armado, apretado, seleccionado, habilitado, con el cursor encima— no esta aca sino
- * en el {@link ButtonModel}. Esta clase escucha al modelo y se repinta, y reenvia sus eventos de
- * accion, de item y de cambio a los escuchas del boton, con el boton como origen. Por eso
- * {@link #setEnabled} escribe en los dos lados y {@link #isSelected} lee del modelo: el boton no
- * tiene copia propia.
+ * <p>The state -- armed, pressed, selected, enabled, with the cursor over it -- is not here but
+ * in the {@link ButtonModel}. This class listens to the model and repaints itself, and forwards
+ * its action, item and change events to the button's listeners, with the button as the source.
+ * That is why {@link #setEnabled} writes on both sides and {@link #isSelected} reads from the
+ * model: the button has no copy of its own.
  *
- * <h2>Iconos por estado</h2>
+ * <h2>Icons by state</h2>
  *
- * <p>Siete ranuras: el icono, y los de apretado, seleccionado, rollover, rollover seleccionado,
- * deshabilitado y deshabilitado seleccionado. El aspecto elige cual pintar; una ranura vacia
- * vuelve al icono comun. El JDK fabrica el deshabilitado agrisando un {@code ImageIcon}; sin
- * {@code ImageIcon}, {@link #getDisabledIcon} devuelve lo que se puso y nada mas.
+ * <p>Seven slots: the icon, and those for pressed, selected, rollover, rollover selected,
+ * disabled and disabled selected. The look and feel chooses which to paint; an empty slot falls
+ * back to the ordinary icon. The JDK makes the disabled one by greying an {@code ImageIcon};
+ * with no {@code ImageIcon}, {@link #getDisabledIcon} returns what was set and nothing more.
  *
- * <h2>Lo que puso el usuario y lo que puso el aspecto</h2>
+ * <h2>What the user set and what the look and feel set</h2>
  *
- * <p>Cuatro propiedades —borde pintado, rollover, separacion icono-texto, area rellena— las propone
- * el aspecto al instalarse y las puede fijar el usuario. Cada una recuerda quien la puso
- * ({@code *Set}), y {@link #setUIProperty} solo escribe las que el usuario no toco. El margen usa
- * {@link UIResource} para lo mismo.
+ * <p>Four properties -- border painted, rollover, icon-text gap, content area filled -- are
+ * proposed by the look and feel on installing itself and may be fixed by the user. Each one
+ * remembers who set it ({@code *Set}), and {@link #setUIProperty} only writes those the user
+ * did not touch. The margin uses {@link UIResource} for the same.
  *
- * <p>No estan {@code getAccessibleContext} ni la clase {@code AccessibleAbstractButton}: no hay
- * tecnologia asistiva en esta VM. {@link #addImpl} no instala {@code OverlayLayout}, que no esta:
- * un hijo agregado a un boton queda con el layout del contenedor.
+ * <p>{@code getAccessibleContext} and the class {@code AccessibleAbstractButton} are not there:
+ * there is no assistive technology on this VM. {@link #addImpl} does not install
+ * {@code OverlayLayout}, which is not there: a child added to a button is left with the
+ * container's layout.
  */
 public abstract class AbstractButton extends JComponent implements ItemSelectable, SwingConstants {
 
@@ -73,7 +74,7 @@ public abstract class AbstractButton extends JComponent implements ItemSelectabl
     public static final String DISABLED_ICON_CHANGED_PROPERTY = "disabledIcon";
     public static final String DISABLED_SELECTED_ICON_CHANGED_PROPERTY = "disabledSelectedIcon";
 
-    /** El modelo; ver la nota de la clase. */
+    /** The model; see the class note. */
     protected ButtonModel model = null;
 
     private String text = "";
@@ -115,39 +116,39 @@ public abstract class AbstractButton extends JComponent implements ItemSelectabl
     private Action action;
     private PropertyChangeListener actionPropertyChangeListener;
 
-    /** Si puede ser el boton por omision de un dialogo; lo usa {@code JButton}. */
+    /** Whether it can be a dialog's default button; {@code JButton} uses it. */
     boolean defaultCapable = true;
 
-    /** El escucha de cambios del modelo; lo crea {@link #createChangeListener}. */
+    /** The model's change listener; {@link #createChangeListener} creates it. */
     protected ChangeListener changeListener = null;
 
-    /** El escucha de acciones del modelo; lo crea {@link #createActionListener}. */
+    /** The model's action listener; {@link #createActionListener} creates it. */
     protected ActionListener actionListener = null;
 
-    /** El escucha de items del modelo; lo crea {@link #createItemListener}. */
+    /** The model's item listener; {@link #createItemListener} creates it. */
     protected ItemListener itemListener = null;
 
-    /** El evento de cambio que se reenvia, creado una vez. */
+    /** The change event that is forwarded, created once. */
     protected transient ChangeEvent changeEvent;
 
-    private Manejador manejador;
+    private Handler handler;
 
     protected AbstractButton() {
     }
 
-    // -- accion ----------------------------------------------------------------------------------
+    // -- action ----------------------------------------------------------------------------------
 
     /**
-     * Si el texto de la accion se oculta: un boton de barra de herramientas muestra solo el icono.
+     * Whether the action's text is hidden: a tool bar button shows only the icon.
      *
-     * <p>Solo afecta al texto que viene de la {@link Action}; uno puesto con {@link #setText} no se
-     * oculta.
+     * <p>It only affects the text that comes from the {@link Action}; one set with
+     * {@link #setText} is not hidden.
      */
     public void setHideActionText(boolean hideActionText) {
         if (hideActionText != this.hideActionText) {
             this.hideActionText = hideActionText;
             if (getAction() != null) {
-                textoDesdeAccion(getAction(), false);
+                textFromAction(getAction(), false);
             }
             firePropertyChange("hideActionText", !hideActionText, hideActionText);
         }
@@ -157,19 +158,19 @@ public abstract class AbstractButton extends JComponent implements ItemSelectabl
         return hideActionText;
     }
 
-    // -- texto y seleccion -----------------------------------------------------------------------
+    // -- text and selection ----------------------------------------------------------------------
 
     public String getText() {
         return text;
     }
 
-    /** Pone el texto y recalcula que caracter subraya el mnemonico. */
+    /** It sets the text and recomputes which character the mnemonic underlines. */
     public void setText(String text) {
-        String viejo = this.text;
+        String old = this.text;
         this.text = text;
-        firePropertyChange(TEXT_CHANGED_PROPERTY, viejo, text);
-        actualizarIndiceDeMnemonico(text, getMnemonic());
-        if (text == null || viejo == null || !text.equals(viejo)) {
+        firePropertyChange(TEXT_CHANGED_PROPERTY, old, text);
+        updateMnemonicIndex(text, getMnemonic());
+        if (text == null || old == null || !text.equals(old)) {
             revalidate();
             repaint();
         }
@@ -183,22 +184,22 @@ public abstract class AbstractButton extends JComponent implements ItemSelectabl
         model.setSelected(b);
     }
 
-    /** Un click como el del mouse: arma, aprieta, y suelta, disparando la accion. */
+    /** A click like the mouse's: it arms, presses, and releases, firing the action. */
     public void doClick() {
         doClick(68);
     }
 
     /**
-     * Un click que se ve: el boton queda apretado {@code pressTime} milisegundos.
+     * A click that is seen: the button stays pressed for {@code pressTime} milliseconds.
      *
-     * <p>Es lo que hace el mnemonico: el usuario ve el boton hundirse, como si lo hubiera
-     * apretado. La accion se dispara al soltar, como siempre.
+     * <p>It is what the mnemonic does: the user sees the button sink, as though they had pressed
+     * it. The action is fired on releasing, as always.
      */
     public void doClick(int pressTime) {
-        Dimension tamano = getSize();
+        Dimension size = getSize();
         model.setArmed(true);
         model.setPressed(true);
-        paintImmediately(0, 0, tamano.width, tamano.height);
+        paintImmediately(0, 0, size.width, size.height);
         try {
             Thread.sleep(pressTime);
         } catch (InterruptedException ie) {
@@ -207,14 +208,15 @@ public abstract class AbstractButton extends JComponent implements ItemSelectabl
         model.setArmed(false);
     }
 
-    // -- margen ----------------------------------------------------------------------------------
+    // -- margin ----------------------------------------------------------------------------------
 
     /**
-     * El margen entre el borde y el contenido.
+     * The margin between the border and the content.
      *
-     * <p>{@code null} vuelve al margen del aspecto: el ultimo {@link UIResource} que se puso, que
-     * esta clase recuerda para eso. Que el margen cuente en los insets depende del borde: el del
-     * aspecto lleva un {@code MarginBorder} adentro; uno del usuario, no.
+     * <p>{@code null} goes back to the look and feel's margin: the last {@link UIResource} that
+     * was set, which this class remembers for that. Whether the margin counts in the insets
+     * depends on the border: the look and feel's carries a {@code MarginBorder} inside; one of the
+     * user's does not.
      */
     public void setMargin(Insets m) {
         if (m instanceof UIResource) {
@@ -225,16 +227,19 @@ public abstract class AbstractButton extends JComponent implements ItemSelectabl
         if (m == null) {
             m = defaultMargin;
         }
-        Insets viejo = margin;
+        Insets old = margin;
         margin = m;
-        firePropertyChange(MARGIN_CHANGED_PROPERTY, viejo, m);
-        if (viejo == null || !viejo.equals(m)) {
+        firePropertyChange(MARGIN_CHANGED_PROPERTY, old, m);
+        if (old == null || !old.equals(m)) {
             revalidate();
             repaint();
         }
     }
 
-    /** Una copia del margen, o {@code null}; la copia conserva si es del aspecto o del usuario. */
+    /**
+     * A copy of the margin, or {@code null}; the copy keeps whether it is the look and feel's or
+     * the user's.
+     */
     public Insets getMargin() {
         if (margin == null) {
             return null;
@@ -242,28 +247,28 @@ public abstract class AbstractButton extends JComponent implements ItemSelectabl
         return (Insets) margin.clone();
     }
 
-    // -- iconos ----------------------------------------------------------------------------------
+    // -- icons -----------------------------------------------------------------------------------
 
     public Icon getIcon() {
         return defaultIcon;
     }
 
     /**
-     * Pone el icono; si cambia de tamano, el boton se reacomoda.
+     * It sets the icon; if it changes size, the button is laid out again.
      *
-     * <p>Un icono deshabilitado que puso el aspecto se descarta: era una version de este.
+     * <p>A disabled icon the look and feel set is discarded: it was a version of this one.
      */
     public void setIcon(Icon defaultIcon) {
-        Icon viejo = this.defaultIcon;
+        Icon old = this.defaultIcon;
         this.defaultIcon = defaultIcon;
-        if (defaultIcon != viejo && (disabledIcon instanceof UIResource)) {
+        if (defaultIcon != old && (disabledIcon instanceof UIResource)) {
             disabledIcon = null;
         }
-        firePropertyChange(ICON_CHANGED_PROPERTY, viejo, defaultIcon);
-        if (defaultIcon != viejo) {
-            if (defaultIcon == null || viejo == null
-                    || defaultIcon.getIconWidth() != viejo.getIconWidth()
-                    || defaultIcon.getIconHeight() != viejo.getIconHeight()) {
+        firePropertyChange(ICON_CHANGED_PROPERTY, old, defaultIcon);
+        if (defaultIcon != old) {
+            if (defaultIcon == null || old == null
+                    || defaultIcon.getIconWidth() != old.getIconWidth()
+                    || defaultIcon.getIconHeight() != old.getIconHeight()) {
                 revalidate();
             }
             repaint();
@@ -275,10 +280,10 @@ public abstract class AbstractButton extends JComponent implements ItemSelectabl
     }
 
     public void setPressedIcon(Icon pressedIcon) {
-        Icon viejo = this.pressedIcon;
+        Icon old = this.pressedIcon;
         this.pressedIcon = pressedIcon;
-        firePropertyChange(PRESSED_ICON_CHANGED_PROPERTY, viejo, pressedIcon);
-        if (pressedIcon != viejo) {
+        firePropertyChange(PRESSED_ICON_CHANGED_PROPERTY, old, pressedIcon);
+        if (pressedIcon != old) {
             if (getModel().isPressed() && getModel().isArmed()) {
                 repaint();
             }
@@ -290,13 +295,13 @@ public abstract class AbstractButton extends JComponent implements ItemSelectabl
     }
 
     public void setSelectedIcon(Icon selectedIcon) {
-        Icon viejo = this.selectedIcon;
+        Icon old = this.selectedIcon;
         this.selectedIcon = selectedIcon;
-        if (selectedIcon != viejo && disabledSelectedIcon instanceof UIResource) {
+        if (selectedIcon != old && disabledSelectedIcon instanceof UIResource) {
             disabledSelectedIcon = null;
         }
-        firePropertyChange(SELECTED_ICON_CHANGED_PROPERTY, viejo, selectedIcon);
-        if (selectedIcon != viejo) {
+        firePropertyChange(SELECTED_ICON_CHANGED_PROPERTY, old, selectedIcon);
+        if (selectedIcon != old) {
             if (isSelected()) {
                 repaint();
             }
@@ -307,13 +312,13 @@ public abstract class AbstractButton extends JComponent implements ItemSelectabl
         return rolloverIcon;
     }
 
-    /** Poner un icono de rollover habilita el rollover: sin eso, nunca se veria. */
+    /** Setting a rollover icon enables rollover: without that, it would never be seen. */
     public void setRolloverIcon(Icon rolloverIcon) {
-        Icon viejo = this.rolloverIcon;
+        Icon old = this.rolloverIcon;
         this.rolloverIcon = rolloverIcon;
-        firePropertyChange(ROLLOVER_ICON_CHANGED_PROPERTY, viejo, rolloverIcon);
+        firePropertyChange(ROLLOVER_ICON_CHANGED_PROPERTY, old, rolloverIcon);
         setRolloverEnabled(true);
-        if (rolloverIcon != viejo) {
+        if (rolloverIcon != old) {
             repaint();
         }
     }
@@ -323,46 +328,46 @@ public abstract class AbstractButton extends JComponent implements ItemSelectabl
     }
 
     public void setRolloverSelectedIcon(Icon rolloverSelectedIcon) {
-        Icon viejo = this.rolloverSelectedIcon;
+        Icon old = this.rolloverSelectedIcon;
         this.rolloverSelectedIcon = rolloverSelectedIcon;
-        firePropertyChange(ROLLOVER_SELECTED_ICON_CHANGED_PROPERTY, viejo, rolloverSelectedIcon);
+        firePropertyChange(ROLLOVER_SELECTED_ICON_CHANGED_PROPERTY, old, rolloverSelectedIcon);
         setRolloverEnabled(true);
-        if (rolloverSelectedIcon != viejo) {
+        if (rolloverSelectedIcon != old) {
             if (isSelected()) {
                 repaint();
             }
         }
     }
 
-    /** El icono deshabilitado que se puso, o {@code null}; ver la nota de la clase. */
+    /** The disabled icon that was set, or {@code null}; see the class note. */
     public Icon getDisabledIcon() {
         return disabledIcon;
     }
 
     public void setDisabledIcon(Icon disabledIcon) {
-        Icon viejo = this.disabledIcon;
+        Icon old = this.disabledIcon;
         this.disabledIcon = disabledIcon;
-        firePropertyChange(DISABLED_ICON_CHANGED_PROPERTY, viejo, disabledIcon);
-        if (disabledIcon != viejo) {
+        firePropertyChange(DISABLED_ICON_CHANGED_PROPERTY, old, disabledIcon);
+        if (disabledIcon != old) {
             if (!isEnabled()) {
                 repaint();
             }
         }
     }
 
-    /** El icono deshabilitado y seleccionado que se puso, o {@code null}. */
+    /** The disabled and selected icon that was set, or {@code null}. */
     public Icon getDisabledSelectedIcon() {
         return disabledSelectedIcon;
     }
 
     public void setDisabledSelectedIcon(Icon disabledSelectedIcon) {
-        Icon viejo = this.disabledSelectedIcon;
+        Icon old = this.disabledSelectedIcon;
         this.disabledSelectedIcon = disabledSelectedIcon;
-        firePropertyChange(DISABLED_SELECTED_ICON_CHANGED_PROPERTY, viejo, disabledSelectedIcon);
-        if (disabledSelectedIcon != viejo) {
-            if (disabledSelectedIcon == null || viejo == null
-                    || disabledSelectedIcon.getIconWidth() != viejo.getIconWidth()
-                    || disabledSelectedIcon.getIconHeight() != viejo.getIconHeight()) {
+        firePropertyChange(DISABLED_SELECTED_ICON_CHANGED_PROPERTY, old, disabledSelectedIcon);
+        if (disabledSelectedIcon != old) {
+            if (disabledSelectedIcon == null || old == null
+                    || disabledSelectedIcon.getIconWidth() != old.getIconWidth()
+                    || disabledSelectedIcon.getIconHeight() != old.getIconHeight()) {
                 revalidate();
             }
             if (!isEnabled() && isSelected()) {
@@ -371,7 +376,7 @@ public abstract class AbstractButton extends JComponent implements ItemSelectabl
         }
     }
 
-    // -- alineaciones ----------------------------------------------------------------------------
+    // -- alignments ------------------------------------------------------------------------------
 
     public int getVerticalAlignment() {
         return verticalAlignment;
@@ -381,9 +386,9 @@ public abstract class AbstractButton extends JComponent implements ItemSelectabl
         if (alignment == verticalAlignment) {
             return;
         }
-        int viejo = verticalAlignment;
+        int old = verticalAlignment;
         verticalAlignment = checkVerticalKey(alignment, "verticalAlignment");
-        firePropertyChange(VERTICAL_ALIGNMENT_CHANGED_PROPERTY, viejo, verticalAlignment);
+        firePropertyChange(VERTICAL_ALIGNMENT_CHANGED_PROPERTY, old, verticalAlignment);
         repaint();
     }
 
@@ -395,9 +400,9 @@ public abstract class AbstractButton extends JComponent implements ItemSelectabl
         if (alignment == horizontalAlignment) {
             return;
         }
-        int viejo = horizontalAlignment;
+        int old = horizontalAlignment;
         horizontalAlignment = checkHorizontalKey(alignment, "horizontalAlignment");
-        firePropertyChange(HORIZONTAL_ALIGNMENT_CHANGED_PROPERTY, viejo, horizontalAlignment);
+        firePropertyChange(HORIZONTAL_ALIGNMENT_CHANGED_PROPERTY, old, horizontalAlignment);
         repaint();
     }
 
@@ -409,9 +414,9 @@ public abstract class AbstractButton extends JComponent implements ItemSelectabl
         if (textPosition == verticalTextPosition) {
             return;
         }
-        int viejo = verticalTextPosition;
+        int old = verticalTextPosition;
         verticalTextPosition = checkVerticalKey(textPosition, "verticalTextPosition");
-        firePropertyChange(VERTICAL_TEXT_POSITION_CHANGED_PROPERTY, viejo, verticalTextPosition);
+        firePropertyChange(VERTICAL_TEXT_POSITION_CHANGED_PROPERTY, old, verticalTextPosition);
         revalidate();
         repaint();
     }
@@ -424,9 +429,9 @@ public abstract class AbstractButton extends JComponent implements ItemSelectabl
         if (textPosition == horizontalTextPosition) {
             return;
         }
-        int viejo = horizontalTextPosition;
+        int old = horizontalTextPosition;
         horizontalTextPosition = checkHorizontalKey(textPosition, "horizontalTextPosition");
-        firePropertyChange(HORIZONTAL_TEXT_POSITION_CHANGED_PROPERTY, viejo,
+        firePropertyChange(HORIZONTAL_TEXT_POSITION_CHANGED_PROPERTY, old,
                 horizontalTextPosition);
         revalidate();
         repaint();
@@ -437,17 +442,17 @@ public abstract class AbstractButton extends JComponent implements ItemSelectabl
     }
 
     public void setIconTextGap(int iconTextGap) {
-        int viejo = this.iconTextGap;
+        int old = this.iconTextGap;
         this.iconTextGap = iconTextGap;
         iconTextGapSet = true;
-        firePropertyChange("iconTextGap", viejo, iconTextGap);
-        if (iconTextGap != viejo) {
+        firePropertyChange("iconTextGap", old, iconTextGap);
+        if (iconTextGap != old) {
             revalidate();
             repaint();
         }
     }
 
-    /** Valida una clave horizontal; {@code exception} es el nombre que va en el error. */
+    /** It validates a horizontal key; {@code exception} is the name that goes in the error. */
     protected int checkHorizontalKey(int key, String exception) {
         if (key == LEFT || key == CENTER || key == RIGHT || key == LEADING || key == TRAILING) {
             return key;
@@ -455,7 +460,7 @@ public abstract class AbstractButton extends JComponent implements ItemSelectabl
         throw new IllegalArgumentException(exception);
     }
 
-    /** Valida una clave vertical. */
+    /** It validates a vertical key. */
     protected int checkVerticalKey(int key, String exception) {
         if (key == TOP || key == CENTER || key == BOTTOM) {
             return key;
@@ -463,7 +468,7 @@ public abstract class AbstractButton extends JComponent implements ItemSelectabl
         throw new IllegalArgumentException(exception);
     }
 
-    /** Se va de la jerarquia: si mostraba rollover, lo deja de mostrar. */
+    /** It leaves the hierarchy: if it was showing rollover, it stops showing it. */
     public void removeNotify() {
         super.removeNotify();
         if (isRolloverEnabled()) {
@@ -471,13 +476,13 @@ public abstract class AbstractButton extends JComponent implements ItemSelectabl
         }
     }
 
-    // -- comando y accion ------------------------------------------------------------------------
+    // -- command and action ----------------------------------------------------------------------
 
     public void setActionCommand(String actionCommand) {
         getModel().setActionCommand(actionCommand);
     }
 
-    /** El comando del modelo, o el texto si el modelo no tiene. */
+    /** The model's command, or the text if the model does not have one. */
     public String getActionCommand() {
         String ac = getModel().getActionCommand();
         if (ac == null) {
@@ -487,36 +492,36 @@ public abstract class AbstractButton extends JComponent implements ItemSelectabl
     }
 
     /**
-     * Ata el boton a una accion: toma de ella texto, icono, mnemonico, comando, ayuda y estado, la
-     * dispara al apretar, y la sigue cuando cambia.
+     * It ties the button to an action: it takes text, icon, mnemonic, command, tip and state from
+     * it, fires it on pressing, and follows it when it changes.
      *
-     * <p>Atar otra suelta la anterior: deja de escucharla y de dispararla.
+     * <p>Tying another one lets the previous go: it stops listening to it and firing it.
      */
     public void setAction(Action a) {
-        Action viejo = getAction();
+        Action old = getAction();
         if (action == null || !action.equals(a)) {
             action = a;
-            if (viejo != null) {
-                removeActionListener(viejo);
-                viejo.removePropertyChangeListener(actionPropertyChangeListener);
+            if (old != null) {
+                removeActionListener(old);
+                old.removePropertyChangeListener(actionPropertyChangeListener);
                 actionPropertyChangeListener = null;
             }
             configurePropertiesFromAction(action);
             if (action != null) {
-                if (!esEscucha(ActionListener.class, action)) {
+                if (!isListener(ActionListener.class, action)) {
                     addActionListener(action);
                 }
                 actionPropertyChangeListener = createActionPropertyChangeListener(action);
                 action.addPropertyChangeListener(actionPropertyChangeListener);
             }
-            firePropertyChange("action", viejo, action);
+            firePropertyChange("action", old, action);
         }
     }
 
-    private boolean esEscucha(Class<?> clase, ActionListener a) {
-        Object[] escuchas = listenerList.getListenerList();
-        for (int i = escuchas.length - 2; i >= 0; i = i - 2) {
-            if (escuchas[i] == clase && escuchas[i + 1] == a) {
+    private boolean isListener(Class<?> clazz, ActionListener a) {
+        Object[] listeners = listenerList.getListenerList();
+        for (int i = listeners.length - 2; i >= 0; i = i - 2) {
+            if (listeners[i] == clazz && listeners[i + 1] == a) {
                 return true;
             }
         }
@@ -527,37 +532,40 @@ public abstract class AbstractButton extends JComponent implements ItemSelectabl
         return action;
     }
 
-    /** Toma todo de la accion; {@code null} deja el boton como si nunca hubiera tenido una. */
+    /**
+     * It takes everything from the action; {@code null} leaves the button as though it had never
+     * had one.
+     */
     protected void configurePropertiesFromAction(Action a) {
-        mnemonicoDesdeAccion(a);
-        textoDesdeAccion(a, false);
+        mnemonicFromAction(a);
+        textFromAction(a, false);
         setToolTipText(a != null ? (String) a.getValue(Action.SHORT_DESCRIPTION) : null);
         setIconFromAction(a);
-        comandoDesdeAccion(a);
+        commandFromAction(a);
         setEnabled(a != null ? a.isEnabled() : true);
-        if (tieneClaveDeSeleccion(a) && shouldUpdateSelectedStateFromAction()) {
-            seleccionDesdeAccion(a);
+        if (hasSelectedKey(a) && shouldUpdateSelectedStateFromAction()) {
+            selectedFromAction(a);
         }
-        indiceDeMnemonicoDesdeAccion(a, false);
+        mnemonicIndexFromAction(a, false);
     }
 
     /**
-     * Si el estado de seleccion sigue a la accion: no en un boton comun, si en uno con estado.
-     * Lo redefine {@code JToggleButton}.
+     * Whether the selection state follows the action: no in an ordinary button, yes in one with
+     * state. {@code JToggleButton} redefines it.
      */
     boolean shouldUpdateSelectedStateFromAction() {
         return false;
     }
 
     /**
-     * Cambio una propiedad de la accion: se copia la que cambio.
+     * A property of the action changed: the one that changed is copied.
      *
-     * <p>Lo llama el escucha de {@link #createActionPropertyChangeListener}; redefinirlo es la
-     * manera de seguir propiedades propias de una accion.
+     * <p>{@link #createActionPropertyChangeListener}'s listener calls it; redefining it is the way
+     * of following properties of an action's own.
      */
     protected void actionPropertyChanged(Action action, String propertyName) {
         if (Action.NAME.equals(propertyName)) {
-            textoDesdeAccion(action, true);
+            textFromAction(action, true);
         } else if ("enabled".equals(propertyName)) {
             setEnabled(action != null ? action.isEnabled() : true);
         } else if (Action.SHORT_DESCRIPTION.equals(propertyName)) {
@@ -566,41 +574,41 @@ public abstract class AbstractButton extends JComponent implements ItemSelectabl
         } else if (Action.SMALL_ICON.equals(propertyName)) {
             smallIconChanged(action);
         } else if (Action.MNEMONIC_KEY.equals(propertyName)) {
-            mnemonicoDesdeAccion(action);
+            mnemonicFromAction(action);
         } else if (Action.ACTION_COMMAND_KEY.equals(propertyName)) {
-            comandoDesdeAccion(action);
+            commandFromAction(action);
         } else if (Action.SELECTED_KEY.equals(propertyName)
-                && tieneClaveDeSeleccion(action) && shouldUpdateSelectedStateFromAction()) {
-            seleccionDesdeAccion(action);
+                && hasSelectedKey(action) && shouldUpdateSelectedStateFromAction()) {
+            selectedFromAction(action);
         } else if (Action.DISPLAYED_MNEMONIC_INDEX_KEY.equals(propertyName)) {
-            indiceDeMnemonicoDesdeAccion(action, true);
+            mnemonicIndexFromAction(action, true);
         } else if (Action.LARGE_ICON_KEY.equals(propertyName)) {
             largeIconChanged(action);
         }
     }
 
-    private void textoDesdeAccion(Action a, boolean propertyChange) {
-        boolean ocultar = getHideActionText();
+    private void textFromAction(Action a, boolean propertyChange) {
+        boolean hide = getHideActionText();
         if (!propertyChange) {
-            setText((a != null && !ocultar) ? (String) a.getValue(Action.NAME) : null);
-        } else if (!ocultar) {
+            setText((a != null && !hide) ? (String) a.getValue(Action.NAME) : null);
+        } else if (!hide) {
             setText((String) a.getValue(Action.NAME));
         }
     }
 
-    /** El icono grande si esta, si no el chico, si no ninguno. */
+    /** The large icon if it is there, otherwise the small one, otherwise none. */
     void setIconFromAction(Action a) {
-        Icon icono = null;
+        Icon icon = null;
         if (a != null) {
-            icono = (Icon) a.getValue(Action.LARGE_ICON_KEY);
-            if (icono == null) {
-                icono = (Icon) a.getValue(Action.SMALL_ICON);
+            icon = (Icon) a.getValue(Action.LARGE_ICON_KEY);
+            if (icon == null) {
+                icon = (Icon) a.getValue(Action.SMALL_ICON);
             }
         }
-        setIcon(icono);
+        setIcon(icon);
     }
 
-    /** Cambio el icono chico: importa solo si no hay grande. */
+    /** The small icon changed: it only matters if there is no large one. */
     void smallIconChanged(Action a) {
         if (a.getValue(Action.LARGE_ICON_KEY) == null) {
             setIconFromAction(a);
@@ -611,82 +619,83 @@ public abstract class AbstractButton extends JComponent implements ItemSelectabl
         setIconFromAction(a);
     }
 
-    private void comandoDesdeAccion(Action a) {
+    private void commandFromAction(Action a) {
         setActionCommand(a != null ? (String) a.getValue(Action.ACTION_COMMAND_KEY) : null);
     }
 
-    private void mnemonicoDesdeAccion(Action a) {
+    private void mnemonicFromAction(Action a) {
         Integer n = (a == null) ? null : (Integer) a.getValue(Action.MNEMONIC_KEY);
         setMnemonic(n == null ? '\0' : n.intValue());
     }
 
-    private static boolean tieneClaveDeSeleccion(Action a) {
+    private static boolean hasSelectedKey(Action a) {
         return a != null && a.getValue(Action.SELECTED_KEY) != null;
     }
 
-    private void seleccionDesdeAccion(Action a) {
-        boolean seleccionado = false;
+    private void selectedFromAction(Action a) {
+        boolean selected = false;
         if (a != null) {
-            seleccionado = Boolean.TRUE.equals(a.getValue(Action.SELECTED_KEY));
+            selected = Boolean.TRUE.equals(a.getValue(Action.SELECTED_KEY));
         }
-        if (seleccionado != isSelected()) {
-            setSelected(seleccionado);
+        if (selected != isSelected()) {
+            setSelected(selected);
         }
     }
 
-    private void indiceDeMnemonicoDesdeAccion(Action a, boolean fromPropertyChange) {
-        Integer valor = (a == null) ? null : (Integer) a.getValue(Action.DISPLAYED_MNEMONIC_INDEX_KEY);
-        if (fromPropertyChange || valor != null) {
-            int indice = (valor == null) ? -1 : valor.intValue();
-            if (indice == -1) {
-                actualizarIndiceDeMnemonico(getText(), getMnemonic());
+    private void mnemonicIndexFromAction(Action a, boolean fromPropertyChange) {
+        Integer value = (a == null) ? null
+                : (Integer) a.getValue(Action.DISPLAYED_MNEMONIC_INDEX_KEY);
+        if (fromPropertyChange || value != null) {
+            int index = (value == null) ? -1 : value.intValue();
+            if (index == -1) {
+                updateMnemonicIndex(getText(), getMnemonic());
             } else {
                 try {
-                    setDisplayedMnemonicIndex(indice);
+                    setDisplayedMnemonicIndex(index);
                 } catch (IllegalArgumentException iae) {
                 }
             }
         }
     }
 
-    /** El escucha que sigue a la accion; avisa a {@link #actionPropertyChanged}. */
+    /** The listener that follows the action; it tells {@link #actionPropertyChanged}. */
     protected PropertyChangeListener createActionPropertyChangeListener(Action a) {
-        return new EscuchaDeAccion(this, a);
+        return new ActionListenerImpl(this, a);
     }
 
-    /** Sigue a la accion en nombre de un boton; nombrada y no anonima (#499). */
-    private static class EscuchaDeAccion implements PropertyChangeListener {
-        private final AbstractButton boton;
-        private final Action accion;
+    /** It follows the action on behalf of a button; named and not anonymous (#499). */
+    private static class ActionListenerImpl implements PropertyChangeListener {
+        private final AbstractButton button;
+        private final Action action;
 
-        EscuchaDeAccion(AbstractButton boton, Action accion) {
-            this.boton = boton;
-            this.accion = accion;
+        ActionListenerImpl(AbstractButton button, Action action) {
+            this.button = button;
+            this.action = action;
         }
 
         public void propertyChange(PropertyChangeEvent e) {
-            boton.actionPropertyChanged(accion, e.getPropertyName());
+            button.actionPropertyChanged(action, e.getPropertyName());
         }
     }
 
-    // -- borde, foco, relleno, rollover ----------------------------------------------------------
+    // -- border, focus, fill, rollover -----------------------------------------------------------
 
     public boolean isBorderPainted() {
         return paintBorder;
     }
 
     public void setBorderPainted(boolean b) {
-        boolean viejo = paintBorder;
+        boolean old = paintBorder;
         paintBorder = b;
         borderPaintedSet = true;
-        firePropertyChange(BORDER_PAINTED_CHANGED_PROPERTY, viejo, paintBorder);
-        if (b != viejo) {
+        firePropertyChange(BORDER_PAINTED_CHANGED_PROPERTY, old, paintBorder);
+        if (b != old) {
             revalidate();
             repaint();
         }
     }
 
-    /** Pinta el borde solo si {@link #isBorderPainted}; los insets cuentan igual. */
+    /** It paints the border only if {@link #isBorderPainted}; the insets count all the same. */
     protected void paintBorder(Graphics g) {
         if (isBorderPainted()) {
             super.paintBorder(g);
@@ -698,10 +707,10 @@ public abstract class AbstractButton extends JComponent implements ItemSelectabl
     }
 
     public void setFocusPainted(boolean b) {
-        boolean viejo = paintFocus;
+        boolean old = paintFocus;
         paintFocus = b;
-        firePropertyChange(FOCUS_PAINTED_CHANGED_PROPERTY, viejo, paintFocus);
-        if (b != viejo && isFocusOwner()) {
+        firePropertyChange(FOCUS_PAINTED_CHANGED_PROPERTY, old, paintFocus);
+        if (b != old && isFocusOwner()) {
             revalidate();
             repaint();
         }
@@ -711,13 +720,16 @@ public abstract class AbstractButton extends JComponent implements ItemSelectabl
         return contentAreaFilled;
     }
 
-    /** Si el aspecto rellena el fondo; apagarlo es como se hace un boton transparente. */
+    /**
+     * Whether the look and feel fills the background; switching it off is how a transparent button
+     * is made.
+     */
     public void setContentAreaFilled(boolean b) {
-        boolean viejo = contentAreaFilled;
+        boolean old = contentAreaFilled;
         contentAreaFilled = b;
         contentAreaFilledSet = true;
-        firePropertyChange(CONTENT_AREA_FILLED_CHANGED_PROPERTY, viejo, contentAreaFilled);
-        if (b != viejo) {
+        firePropertyChange(CONTENT_AREA_FILLED_CHANGED_PROPERTY, old, contentAreaFilled);
+        if (b != old) {
             repaint();
         }
     }
@@ -727,28 +739,33 @@ public abstract class AbstractButton extends JComponent implements ItemSelectabl
     }
 
     public void setRolloverEnabled(boolean b) {
-        boolean viejo = rolloverEnabled;
+        boolean old = rolloverEnabled;
         rolloverEnabled = b;
         rolloverEnabledSet = true;
-        firePropertyChange(ROLLOVER_ENABLED_CHANGED_PROPERTY, viejo, rolloverEnabled);
-        if (b != viejo) {
+        firePropertyChange(ROLLOVER_ENABLED_CHANGED_PROPERTY, old, rolloverEnabled);
+        if (b != old) {
             repaint();
         }
     }
 
-    // -- mnemonico -------------------------------------------------------------------------------
+    // -- mnemonic --------------------------------------------------------------------------------
 
     public int getMnemonic() {
         return mnemonic;
     }
 
-    /** El mnemonico como tecla virtual de {@code KeyEvent}; va al modelo y de ahi vuelve. */
+    /**
+     * The mnemonic as a {@code KeyEvent} virtual key; it goes to the model and comes back from
+     * there.
+     */
     public void setMnemonic(int mnemonic) {
         model.setMnemonic(mnemonic);
-        actualizarMnemonico();
+        updateMnemonic();
     }
 
-    /** El mnemonico como caracter; una minuscula se pasa a mayuscula, que es la tecla. */
+    /**
+     * The mnemonic as a character; a lower-case one is turned into upper case, which is the key.
+     */
     public void setMnemonic(char mnemonic) {
         int vk = (int) mnemonic;
         if (vk >= 'a' && vk <= 'z') {
@@ -758,25 +775,25 @@ public abstract class AbstractButton extends JComponent implements ItemSelectabl
     }
 
     /**
-     * Que caracter del texto subrayar; {@code -1}, ninguno.
+     * Which character of the text to underline; {@code -1}, none.
      *
-     * <p>Por omision es la primera aparicion del mnemonico; ponerlo a mano sirve cuando la letra
-     * aparece varias veces y la que se subraya debe ser otra.
+     * <p>By default it is the mnemonic's first appearance; setting it by hand serves when the
+     * letter appears several times and the one that is underlined must be another.
      */
     public void setDisplayedMnemonicIndex(int index) throws IllegalArgumentException {
-        int viejo = mnemonicIndex;
+        int old = mnemonicIndex;
         if (index == -1) {
             mnemonicIndex = -1;
         } else {
             String t = getText();
-            int largo = (t == null) ? 0 : t.length();
-            if (index < -1 || index >= largo) {
+            int length = (t == null) ? 0 : t.length();
+            if (index < -1 || index >= length) {
                 throw new IllegalArgumentException("index == " + index);
             }
         }
         mnemonicIndex = index;
-        firePropertyChange("displayedMnemonicIndex", viejo, index);
-        if (index != viejo) {
+        firePropertyChange("displayedMnemonicIndex", old, index);
+        if (index != old) {
             revalidate();
             repaint();
         }
@@ -786,26 +803,26 @@ public abstract class AbstractButton extends JComponent implements ItemSelectabl
         return mnemonicIndex;
     }
 
-    private void actualizarIndiceDeMnemonico(String texto, int mnemonico) {
-        setDisplayedMnemonicIndex(SwingUtilities.findDisplayedMnemonicIndex(texto, mnemonico));
+    private void updateMnemonicIndex(String text, int mnemonic) {
+        setDisplayedMnemonicIndex(SwingUtilities.findDisplayedMnemonicIndex(text, mnemonic));
     }
 
-    /** El modelo cambio de mnemonico: el boton lo copia y avisa. */
-    private void actualizarMnemonico() {
-        int nuevo = model.getMnemonic();
-        if (mnemonic != nuevo) {
-            int viejo = mnemonic;
-            mnemonic = nuevo;
-            firePropertyChange(MNEMONIC_CHANGED_PROPERTY, viejo, mnemonic);
-            actualizarIndiceDeMnemonico(getText(), mnemonic);
+    /** The model changed mnemonic: the button copies it and gives notice. */
+    private void updateMnemonic() {
+        int newValue = model.getMnemonic();
+        if (mnemonic != newValue) {
+            int old = mnemonic;
+            mnemonic = newValue;
+            firePropertyChange(MNEMONIC_CHANGED_PROPERTY, old, mnemonic);
+            updateMnemonicIndex(getText(), mnemonic);
             revalidate();
             repaint();
         }
     }
 
     /**
-     * Los milisegundos entre dos presiones para que la segunda cuente aparte; cero, todas
-     * cuentan.
+     * The milliseconds between two presses for the second to count separately; zero, they all
+     * count.
      */
     public void setMultiClickThreshhold(long threshhold) {
         if (threshhold < 0) {
@@ -818,23 +835,25 @@ public abstract class AbstractButton extends JComponent implements ItemSelectabl
         return multiClickThreshhold;
     }
 
-    // -- modelo ----------------------------------------------------------------------------------
+    // -- model -----------------------------------------------------------------------------------
 
     public ButtonModel getModel() {
         return model;
     }
 
     /**
-     * Cambia el modelo: deja de escuchar al viejo, escucha al nuevo y copia su estado.
+     * It changes the model: it stops listening to the old one, listens to the new one and copies
+     * its state.
      *
-     * <p>Habilitado y mnemonico se copian del modelo al boton, porque el modelo es la verdad.
+     * <p>Enabled and mnemonic are copied from the model to the button, because the model is the
+     * truth.
      */
     public void setModel(ButtonModel newModel) {
-        ButtonModel viejo = getModel();
-        if (viejo != null) {
-            viejo.removeChangeListener(changeListener);
-            viejo.removeActionListener(actionListener);
-            viejo.removeItemListener(itemListener);
+        ButtonModel old = getModel();
+        if (old != null) {
+            old.removeChangeListener(changeListener);
+            old.removeActionListener(actionListener);
+            old.removeItemListener(itemListener);
             changeListener = null;
             actionListener = null;
             itemListener = null;
@@ -847,20 +866,20 @@ public abstract class AbstractButton extends JComponent implements ItemSelectabl
             newModel.addChangeListener(changeListener);
             newModel.addActionListener(actionListener);
             newModel.addItemListener(itemListener);
-            actualizarMnemonico();
+            updateMnemonic();
             setEnabled(newModel.isEnabled());
         } else {
             mnemonic = '\0';
         }
-        actualizarIndiceDeMnemonico(getText(), mnemonic);
-        firePropertyChange(MODEL_CHANGED_PROPERTY, viejo, newModel);
-        if (newModel != viejo) {
+        updateMnemonicIndex(getText(), mnemonic);
+        firePropertyChange(MODEL_CHANGED_PROPERTY, old, newModel);
+        if (newModel != old) {
             revalidate();
             repaint();
         }
     }
 
-    // -- aspecto ---------------------------------------------------------------------------------
+    // -- look and feel ---------------------------------------------------------------------------
 
     public ButtonUI getUI() {
         return (ButtonUI) ui;
@@ -870,11 +889,11 @@ public abstract class AbstractButton extends JComponent implements ItemSelectabl
         super.setUI(ui);
     }
 
-    /** Nada: cada boton concreto sabe que aspecto instalar. */
+    /** Nothing: each concrete button knows which look and feel to install. */
     public void updateUI() {
     }
 
-    /** Ver la nota de la clase sobre {@code OverlayLayout}. */
+    /** See the class note about {@code OverlayLayout}. */
     protected void addImpl(Component comp, Object constraints, int index) {
         super.addImpl(comp, constraints, index);
     }
@@ -884,7 +903,7 @@ public abstract class AbstractButton extends JComponent implements ItemSelectabl
         super.setLayout(mgr);
     }
 
-    // -- escuchas del boton ----------------------------------------------------------------------
+    // -- the button's listeners ------------------------------------------------------------------
 
     public void addChangeListener(ChangeListener l) {
         listenerList.add(ChangeListener.class, l);
@@ -898,15 +917,15 @@ public abstract class AbstractButton extends JComponent implements ItemSelectabl
         return listenerList.getListeners(ChangeListener.class);
     }
 
-    /** Reenvia el cambio del modelo con el boton como origen. */
+    /** It forwards the model's change with the button as the source. */
     protected void fireStateChanged() {
-        Object[] escuchas = listenerList.getListenerList();
-        for (int i = escuchas.length - 2; i >= 0; i = i - 2) {
-            if (escuchas[i] == ChangeListener.class) {
+        Object[] listeners = listenerList.getListenerList();
+        for (int i = listeners.length - 2; i >= 0; i = i - 2) {
+            if (listeners[i] == ChangeListener.class) {
                 if (changeEvent == null) {
                     changeEvent = new ChangeEvent(this);
                 }
-                ((ChangeListener) escuchas[i + 1]).stateChanged(changeEvent);
+                ((ChangeListener) listeners[i + 1]).stateChanged(changeEvent);
             }
         }
     }
@@ -928,64 +947,64 @@ public abstract class AbstractButton extends JComponent implements ItemSelectabl
     }
 
     protected ChangeListener createChangeListener() {
-        return manejador();
+        return handler();
     }
 
     /**
-     * Reenvia la accion del modelo con el boton como origen y el comando del boton.
+     * It forwards the model's action with the button as the source and the button's command.
      *
-     * <p>El evento nuevo se arma una sola vez, y solo si hay quien lo escuche.
+     * <p>The new event is built once only, and only if there is somebody to listen to it.
      */
     protected void fireActionPerformed(ActionEvent event) {
-        Object[] escuchas = listenerList.getListenerList();
+        Object[] listeners = listenerList.getListenerList();
         ActionEvent e = null;
-        for (int i = escuchas.length - 2; i >= 0; i = i - 2) {
-            if (escuchas[i] == ActionListener.class) {
+        for (int i = listeners.length - 2; i >= 0; i = i - 2) {
+            if (listeners[i] == ActionListener.class) {
                 if (e == null) {
-                    String comando = event.getActionCommand();
-                    if (comando == null) {
-                        comando = getActionCommand();
+                    String command = event.getActionCommand();
+                    if (command == null) {
+                        command = getActionCommand();
                     }
-                    e = new ActionEvent(this, ActionEvent.ACTION_PERFORMED, comando,
+                    e = new ActionEvent(this, ActionEvent.ACTION_PERFORMED, command,
                             event.getWhen(), event.getModifiers());
                 }
-                ((ActionListener) escuchas[i + 1]).actionPerformed(e);
+                ((ActionListener) listeners[i + 1]).actionPerformed(e);
             }
         }
     }
 
     protected void fireItemStateChanged(ItemEvent event) {
-        Object[] escuchas = listenerList.getListenerList();
+        Object[] listeners = listenerList.getListenerList();
         ItemEvent e = null;
-        for (int i = escuchas.length - 2; i >= 0; i = i - 2) {
-            if (escuchas[i] == ItemListener.class) {
+        for (int i = listeners.length - 2; i >= 0; i = i - 2) {
+            if (listeners[i] == ItemListener.class) {
                 if (e == null) {
                     e = new ItemEvent(this, ItemEvent.ITEM_STATE_CHANGED, this,
                             event.getStateChange());
                 }
-                ((ItemListener) escuchas[i + 1]).itemStateChanged(e);
+                ((ItemListener) listeners[i + 1]).itemStateChanged(e);
             }
         }
     }
 
     protected ActionListener createActionListener() {
-        return manejador();
+        return handler();
     }
 
     protected ItemListener createItemListener() {
-        return manejador();
+        return handler();
     }
 
-    private Manejador manejador() {
-        if (manejador == null) {
-            manejador = new Manejador(this);
+    private Handler handler() {
+        if (handler == null) {
+            handler = new Handler(this);
         }
-        return manejador;
+        return handler;
     }
 
-    /** Un cambio del modelo: el boton copia mnemonico y habilitado, y avisa. */
-    void cambioDelModelo() {
-        actualizarMnemonico();
+    /** A change of the model: the button copies mnemonic and enabled, and gives notice. */
+    void modelChange() {
+        updateMnemonic();
         if (isEnabled() != model.isEnabled()) {
             setEnabled(model.isEnabled());
         }
@@ -993,57 +1012,60 @@ public abstract class AbstractButton extends JComponent implements ItemSelectabl
         repaint();
     }
 
-    /** Un cambio de item del modelo: se reenvia, y si la accion tiene estado, se le copia. */
-    void itemDelModelo(ItemEvent event) {
+    /**
+     * An item change of the model: it is forwarded, and if the action has state, it is copied to
+     * it.
+     */
+    void modelItem(ItemEvent event) {
         fireItemStateChanged(event);
         if (shouldUpdateSelectedStateFromAction()) {
             Action a = getAction();
-            if (a != null && tieneClaveDeSeleccion(a)) {
-                boolean seleccionado = isSelected();
-                boolean enAccion = Boolean.TRUE.equals(a.getValue(Action.SELECTED_KEY));
-                if (enAccion != seleccionado) {
-                    a.putValue(Action.SELECTED_KEY, Boolean.valueOf(seleccionado));
+            if (a != null && hasSelectedKey(a)) {
+                boolean selected = isSelected();
+                boolean inAction = Boolean.TRUE.equals(a.getValue(Action.SELECTED_KEY));
+                if (inAction != selected) {
+                    a.putValue(Action.SELECTED_KEY, Boolean.valueOf(selected));
                 }
             }
         }
     }
 
-    /** Los tres escuchas del modelo en un objeto; nombrado y no anonimo (#499). */
-    private static class Manejador implements ActionListener, ChangeListener, ItemListener,
+    /** The model's three listeners in one object; named and not anonymous (#499). */
+    private static class Handler implements ActionListener, ChangeListener, ItemListener,
             Serializable {
-        private final AbstractButton boton;
+        private final AbstractButton button;
 
-        Manejador(AbstractButton boton) {
-            this.boton = boton;
+        Handler(AbstractButton button) {
+            this.button = button;
         }
 
         public void stateChanged(ChangeEvent e) {
-            boton.cambioDelModelo();
+            button.modelChange();
         }
 
         public void actionPerformed(ActionEvent e) {
-            boton.fireActionPerformed(e);
+            button.fireActionPerformed(e);
         }
 
         public void itemStateChanged(ItemEvent e) {
-            boton.itemDelModelo(e);
+            button.modelItem(e);
         }
     }
 
     /**
-     * El escucha de cambios del modelo, como clase; el JDK la conserva por compatibilidad y
-     * {@link #createChangeListener} ya no la usa.
+     * The model's change listener, as a class; the JDK keeps it for compatibility and
+     * {@link #createChangeListener} no longer uses it.
      */
     protected class ButtonChangeListener implements ChangeListener, Serializable {
         ButtonChangeListener() {
         }
 
         public void stateChanged(ChangeEvent e) {
-            cambioDelModelo();
+            modelChange();
         }
     }
 
-    /** Habilita o deshabilita boton y modelo; deshabilitar apaga el rollover. */
+    /** It enables or disables button and model; disabling switches the rollover off. */
     public void setEnabled(boolean b) {
         if (!b && model.isRollover()) {
             model.setRollover(false);
@@ -1052,13 +1074,13 @@ public abstract class AbstractButton extends JComponent implements ItemSelectabl
         model.setEnabled(b);
     }
 
-    /** @deprecated es {@link #getText}. */
+    /** @deprecated it is {@link #getText}. */
     @Deprecated
     public String getLabel() {
         return getText();
     }
 
-    /** @deprecated es {@link #setText}. */
+    /** @deprecated it is {@link #setText}. */
     @Deprecated
     public void setLabel(String label) {
         setText(label);
@@ -1076,18 +1098,19 @@ public abstract class AbstractButton extends JComponent implements ItemSelectabl
         return listenerList.getListeners(ItemListener.class);
     }
 
-    /** El texto, en un arreglo de uno, si esta seleccionado; {@code null} si no. */
+    /** The text, in an array of one, if it is selected; {@code null} if not. */
     public Object[] getSelectedObjects() {
         if (!isSelected()) {
             return null;
         }
-        Object[] seleccionados = new Object[1];
-        seleccionados[0] = getText();
-        return seleccionados;
+        Object[] selected = new Object[1];
+        selected[0] = getText();
+        return selected;
     }
 
     /**
-     * Lo que hace cada constructor: texto, icono, aspecto, y alineado a la izquierda y al centro.
+     * What each constructor does: text, icon, look and feel, and aligned to the left and to the
+     * centre.
      */
     protected void init(String text, Icon icon) {
         if (text != null) {
@@ -1102,41 +1125,41 @@ public abstract class AbstractButton extends JComponent implements ItemSelectabl
     }
 
     /**
-     * Llego mas de una imagen: repinta si hay un icono a la vista.
+     * More than one image arrived: it repaints if there is an icon in sight.
      *
-     * <p>El JDK comprueba ademas que la imagen sea la del icono que se muestra, cosa que solo
-     * puede saber con {@code ImageIcon}. Sin el, cualquier imagen que llegue mientras hay icono
-     * repinta; de mas, nunca de menos.
+     * <p>The JDK also checks that the image is that of the icon that is shown, which it can only
+     * know with {@code ImageIcon}. Without it, any image that arrives while there is an icon
+     * repaints; too much, never too little.
      */
     public boolean imageUpdate(Image img, int infoflags, int x, int y, int w, int h) {
-        Icon aLaVista = null;
+        Icon visible = null;
         if (!model.isEnabled()) {
             if (model.isSelected()) {
-                aLaVista = getDisabledSelectedIcon();
+                visible = getDisabledSelectedIcon();
             } else {
-                aLaVista = getDisabledIcon();
+                visible = getDisabledIcon();
             }
         } else if (model.isPressed() && model.isArmed()) {
-            aLaVista = getPressedIcon();
+            visible = getPressedIcon();
         } else if (isRolloverEnabled() && model.isRollover()) {
             if (model.isSelected()) {
-                aLaVista = getRolloverSelectedIcon();
+                visible = getRolloverSelectedIcon();
             } else {
-                aLaVista = getRolloverIcon();
+                visible = getRolloverIcon();
             }
         } else if (model.isSelected()) {
-            aLaVista = getSelectedIcon();
+            visible = getSelectedIcon();
         }
-        if (aLaVista == null) {
-            aLaVista = getIcon();
+        if (visible == null) {
+            visible = getIcon();
         }
-        if (aLaVista == null) {
+        if (visible == null) {
             return false;
         }
         return super.imageUpdate(img, infoflags, x, y, w, h);
     }
 
-    /** Ver la nota de la clase; las cuatro propias, y el resto a {@code JComponent}. */
+    /** See the class note; the four of its own, and the rest to {@code JComponent}. */
     void setUIProperty(String propertyName, Object value) {
         if ("borderPainted".equals(propertyName)) {
             if (!borderPaintedSet) {

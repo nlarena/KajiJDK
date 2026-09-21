@@ -10,66 +10,65 @@ import javax.accessibility.Accessible;
 import javax.accessibility.AccessibleContext;
 
 /**
- * Un contenedor con capas: lo de una capa alta tapa a lo de una baja.
+ * A container with layers: what is in a high layer covers what is in a low one.
  *
- * <h2>La capa no es una lista aparte</h2>
+ * <h2>The layer is not a separate list</h2>
  *
- * <p>Todos los hijos van en la misma lista del contenedor; lo que hace la capa es decidir en que
- * posicion de esa lista entra cada uno. Los de capa alta van adelante -- indice chico --, que en
- * AWT es lo que se dibuja encima.
+ * <p>Every child goes in the container's same list; what the layer does is decide at which
+ * position of that list each one goes in. Those of a high layer go in front -- a small index --,
+ * which in AWT is what is drawn on top.
  *
- * <p>Por eso {@link #getIndexOf} y {@link #getPosition} son distintos: el primero es el indice
- * absoluto entre todos los hijos, el segundo la posicion dentro de su capa.
+ * <p>That is why {@link #getIndexOf} and {@link #getPosition} are different: the first is the
+ * absolute index among every child, the second the position within its layer.
  *
- * <h2>Las seis capas con nombre</h2>
+ * <h2>The six named layers</h2>
  *
- * <p>No son las unicas -- la capa es cualquier entero --, pero son las que Swing usa y conviene
- * respetar: un menu desplegable que se dibuje en la capa de las ventanas internas va a quedar
- * tapado por la primera ventana que se mueva.
+ * <p>They are not the only ones -- the layer is any integer --, but they are the ones Swing
+ * uses and it is worth respecting them: a drop-down menu drawn in the internal frames' layer is
+ * going to end up covered by the first frame that moves.
  *
- * <h2>Por que dibuja el mismo</h2>
+ * <h2>Why it draws itself</h2>
  *
- * <p>{@link #isOptimizedDrawingEnabled} devuelve falso: las capas se pisan por definicion, y el
- * sistema de repintado tiene que dibujarlas en orden en lugar de elegir una.
+ * <p>{@link #isOptimizedDrawingEnabled} returns false: the layers overlap by definition, and
+ * the repainting system has to draw them in order instead of choosing one.
  */
 public class JLayeredPane extends JComponent implements Accessible {
 
-    /** La capa de lo normal. */
+    /** The layer of ordinary things. */
     public static final Integer DEFAULT_LAYER = Integer.valueOf(0);
 
-    /** La de las paletas flotantes. */
+    /** The floating palettes'. */
     public static final Integer PALETTE_LAYER = Integer.valueOf(100);
 
-    /** La de los dialogos modales. */
+    /** The modal dialogs'. */
     public static final Integer MODAL_LAYER = Integer.valueOf(200);
 
-    /** La de los menus desplegables. */
+    /** The drop-down menus'. */
     public static final Integer POPUP_LAYER = Integer.valueOf(300);
 
-    /** La de lo que se esta arrastrando; es la mas alta. */
+    /** That of what is being dragged; it is the highest. */
     public static final Integer DRAG_LAYER = Integer.valueOf(400);
 
-    /** La del contenido de una ventana; es la mas baja. */
+    /** That of a window's content; it is the lowest. */
     public static final Integer FRAME_CONTENT_LAYER = Integer.valueOf(-30000);
 
-    /** La propiedad con la que un componente puede llevar su capa. */
+    /** The property a component may carry its layer with. */
     public static final String LAYER_PROPERTY = "layeredContainerLayer";
 
     private Hashtable<Component, Integer> componentToLayer;
     private boolean optimizedDrawingPossible = true;
-    private AccessibleContext accessibleContext;
 
-    /** Un panel de capas vacio. */
+    /** An empty layered pane. */
     public JLayeredPane() {
         setLayout(null);
     }
 
     /**
-     * Agrega un hijo en la capa que corresponda.
+     * It adds a child in the layer that applies.
      *
-     * <p>La capa sale de la restriccion si es un {@link Integer}, de la propiedad del componente si
-     * la tiene, o de la capa de siempre. Ese orden importa: es lo que permite poner la capa en el
-     * componente y despues agregarlo sin repetirla.
+     * <p>The layer comes from the constraint if it is an {@link Integer}, from the component's
+     * property if it has it, or from the usual layer. That order matters: it is what allows the
+     * layer to be set in the component and it to be added afterwards without repeating it.
      */
     protected void addImpl(Component comp, Object constraints, int index) {
         int layer;
@@ -106,16 +105,16 @@ public class JLayeredPane extends JComponent implements Accessible {
         super.removeAll();
     }
 
-    /** Siempre falso; ver la nota de la clase. */
+    /** Always false; see the class note. */
     public boolean isOptimizedDrawingEnabled() {
         return false;
     }
 
     /**
-     * Guarda la capa en el componente mismo.
+     * It keeps the layer in the component itself.
      *
-     * <p>Es estatico y no cambia nada del panel: sirve para marcar un componente <em>antes</em> de
-     * agregarlo. Agregarlo despues lo pone donde dice la marca.
+     * <p>It is static and changes nothing of the pane: it serves to mark a component
+     * <em>before</em> adding it. Adding it afterwards puts it where the mark says.
      */
     public static void putLayer(JComponent c, int layer) {
         c.putClientProperty(LAYER_PROPERTY, Integer.valueOf(layer));
@@ -129,7 +128,7 @@ public class JLayeredPane extends JComponent implements Accessible {
         return DEFAULT_LAYER.intValue();
     }
 
-    /** El panel de capas mas cercano arriba de ese componente, o nulo. */
+    /** The nearest layered pane above that component, or null. */
     public static JLayeredPane getLayeredPaneAbove(Component c) {
         if (c == null) {
             return null;
@@ -141,16 +140,16 @@ public class JLayeredPane extends JComponent implements Accessible {
         return (JLayeredPane) parent;
     }
 
-    /** Pone el componente en esa capa, al frente de ella. */
+    /** It puts the component in that layer, at the front of it. */
     public void setLayer(Component c, int layer) {
         setLayer(c, layer, -1);
     }
 
     /**
-     * Pone el componente en esa capa y en esa posicion dentro de ella.
+     * It puts the component in that layer and at that position within it.
      *
-     * <p>Si ya estaba agregado, se lo saca y se lo vuelve a agregar: la capa decide el indice entre
-     * los hijos, y cambiarla es cambiar de lugar en la lista.
+     * <p>If it was already added, it is taken out and added again: the layer decides the index
+     * among the children, and changing it is changing place in the list.
      */
     public void setLayer(Component c, int layer, int position) {
         Integer layerObj = getObjectForLayer(layer);
@@ -172,7 +171,7 @@ public class JLayeredPane extends JComponent implements Accessible {
         repaint(c.getBounds());
     }
 
-    /** La capa de ese componente. */
+    /** That component's layer. */
     public int getLayer(Component c) {
         Integer i;
         if (c instanceof JComponent) {
@@ -186,7 +185,7 @@ public class JLayeredPane extends JComponent implements Accessible {
         return i.intValue();
     }
 
-    /** El indice entre todos los hijos, o -1; ver la nota de la clase. */
+    /** The index among every child, or -1; see the class note. */
     public int getIndexOf(Component c) {
         int i;
         int count = getComponentCount();
@@ -198,7 +197,7 @@ public class JLayeredPane extends JComponent implements Accessible {
         return -1;
     }
 
-    /** Lo lleva al frente de su capa; no lo cambia de capa. */
+    /** It takes it to the front of its layer; it does not change its layer. */
     public void moveToFront(Component c) {
         setPosition(c, 0);
     }
@@ -207,12 +206,12 @@ public class JLayeredPane extends JComponent implements Accessible {
         setPosition(c, -1);
     }
 
-    /** Lo pone en esa posicion dentro de su capa; -1 es al fondo. */
+    /** It puts it at that position within its layer; -1 is at the back. */
     public void setPosition(Component c, int position) {
         setLayer(c, getLayer(c), position);
     }
 
-    /** La posicion dentro de su capa, o -1 si no esta. */
+    /** The position within its layer, or -1 if it is not there. */
     public int getPosition(Component c) {
         int i;
         int startLayer;
@@ -236,7 +235,7 @@ public class JLayeredPane extends JComponent implements Accessible {
         return pos;
     }
 
-    /** La capa mas alta en uso, o la de siempre si no hay hijos. */
+    /** The highest layer in use, or the usual one if there are no children. */
     public int highestLayer() {
         if (getComponentCount() > 0) {
             return getLayer(getComponent(0));
@@ -262,7 +261,7 @@ public class JLayeredPane extends JComponent implements Accessible {
             if (curLayer == layer) {
                 layerCount++;
             } else if (layerCount > 0 || curLayer < layer) {
-                // Los hijos estan ordenados por capa: pasada la capa, no hay mas.
+                // The children are sorted by layer: past the layer, there are no more.
                 break;
             }
         }
@@ -287,7 +286,9 @@ public class JLayeredPane extends JComponent implements Accessible {
         return results;
     }
 
-    /** Dibuja el fondo y despues los hijos, de la capa mas baja a la mas alta. */
+    /**
+     * It draws the background and afterwards the children, from the lowest layer to the highest.
+     */
     public void paint(Graphics g) {
         if (isOpaque()) {
             Rectangle r = g.getClipBounds();
@@ -306,10 +307,10 @@ public class JLayeredPane extends JComponent implements Accessible {
     }
 
     /**
-     * La tabla de capas de los componentes que no son de Swing.
+     * The table of layers of the components that are not Swing's.
      *
-     * <p>Los de Swing la llevan como propiedad de cliente. Los de AWT no tienen donde, y por eso
-     * hace falta esta tabla aparte.
+     * <p>Swing's carry it as a client property. AWT's have nowhere to, and that is why this
+     * separate table is needed.
      */
     protected Hashtable<Component, Integer> getComponentToLayer() {
         if (componentToLayer == null) {
@@ -318,7 +319,7 @@ public class JLayeredPane extends JComponent implements Accessible {
         return componentToLayer;
     }
 
-    /** El {@link Integer} de esa capa, reusando los seis con nombre. */
+    /** That layer's {@link Integer}, reusing the six named ones. */
     protected Integer getObjectForLayer(int layer) {
         if (layer == DEFAULT_LAYER.intValue()) {
             return DEFAULT_LAYER;
@@ -342,10 +343,10 @@ public class JLayeredPane extends JComponent implements Accessible {
     }
 
     /**
-     * En que indice entre los hijos entra algo de esa capa.
+     * At which index among the children something of that layer goes in.
      *
-     * <p>Los hijos estan ordenados por capa de mayor a menor, asi que alcanza con recorrer hasta
-     * encontrar la primera capa mas baja.
+     * <p>The children are sorted by layer from highest to lowest, so it is enough to walk until
+     * the first lower layer is found.
      */
     protected int insertIndexForLayer(int layer, int position) {
         return insertIndexForLayer(null, layer, position);
@@ -375,7 +376,7 @@ public class JLayeredPane extends JComponent implements Accessible {
             }
             if (curLayer < layer) {
                 if (i == 0) {
-                    // La capa nueva es la mas alta: va primera.
+                    // The new layer is the highest: it goes first.
                     return 0;
                 }
                 layerEnd = i;

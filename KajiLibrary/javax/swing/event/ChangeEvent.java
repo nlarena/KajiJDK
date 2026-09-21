@@ -3,20 +3,20 @@ package javax.swing.event;
 import java.util.EventObject;
 
 /**
- * Algo cambio, y no dice que.
+ * Something changed, and it does not say what.
  *
- * <p>Es el evento mas usado de Swing y el mas pobre a proposito: solo lleva su origen. La idea
- * es que quien escucha ya tiene el objeto que cambio y puede preguntarle lo que necesite — el
- * evento no tiene por que adivinar cual de sus propiedades le interesa.
+ * <p>It is Swing's most used event and the poorest on purpose: it only carries its source. The
+ * idea is that whoever listens already has the object that changed and can ask it whatever it
+ * needs -- the event has no reason to guess which of its properties interests them.
  *
- * <p>Esa pobreza tiene una consecuencia practica: como no lleva datos, una misma instancia sirve
- * para todos los avisos de un objeto. Casi todo Swing crea uno y lo reusa para siempre.
+ * <p>That poverty has a practical consequence: since it carries no data, one same instance serves
+ * for all of an object's notices. Almost all of Swing creates one and reuses it for ever.
  */
 public class ChangeEvent extends EventObject {
 
     private static final long serialVersionUID = 1L;
 
-    /** @param source el objeto que cambio */
+    /** @param source the object that changed */
     public ChangeEvent(Object source) {
         super(source);
     }

@@ -5,24 +5,24 @@ import java.io.IOException;
 import java.util.Map;
 
 /**
- * El conector que se pega a una VM que **ya esta corriendo**.
+ * The connector that attaches to a VM that is **already running**.
  *
- * <p>Es el caso mas comun fuera del desarrollo: un servidor que arranco con
- * {@code -agentlib:jdwp=transport=dt_socket,server=y,suspend=n} y al que uno se conecta despues,
- * sin reiniciarlo.
+ * <p>It is the commonest case outside development: a server that started with
+ * {@code -agentlib:jdwp=transport=dt_socket,server=y,suspend=n} and that one connects to
+ * afterwards, without restarting it.
  *
- * <p>La VM depurada es la que escucha; el depurador es el que llama. Es al reves de
- * {@link ListeningConnector}.
+ * <p>The debugged VM is the one that listens; the debugger is the one that calls. It is the
+ * other way round from {@link ListeningConnector}.
  */
 public interface AttachingConnector extends Connector {
 
     /**
-     * Se pega a la VM que describan esos argumentos.
+     * It attaches to the VM those arguments describe.
      *
-     * @param arguments el mapa que salio de {@link #defaultArguments()}, con los valores puestos
-     * @return la VM depurada
-     * @throws IOException si no se pudo llegar al otro extremo
-     * @throws IllegalConnectorArgumentsException si algun argumento falta o no sirve
+     * @param arguments the map that came out of {@link #defaultArguments()}, with the values set
+     * @return the debugged VM
+     * @throws IOException if the other end could not be reached
+     * @throws IllegalConnectorArgumentsException if some argument is missing or does not serve
      */
     VirtualMachine attach(Map<String, ? extends Connector.Argument> arguments)
             throws IOException, IllegalConnectorArgumentsException;

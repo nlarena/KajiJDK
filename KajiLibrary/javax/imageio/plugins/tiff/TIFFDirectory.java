@@ -11,51 +11,51 @@ import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
 /**
- * KajiLibrary's javax.imageio.plugins.tiff.TIFFDirectory -- un directorio de un TIFF, con sus campos.
+ * KajiLibrary's javax.imageio.plugins.tiff.TIFFDirectory -- a TIFF directory, with its fields.
  *
- * <p>Un TIFF es una cabecera de ocho bytes y una cadena de directorios; cada uno lista sus campos
- * ordenados por numero de etiqueta. Esto es uno de esos directorios, ya leido.
+ * <p>A TIFF is an eight-byte header and a chain of directories; each one lists its fields sorted
+ * by tag number. This is one of those directories, already read.
  *
- * <h2>Los directorios se anidan</h2>
+ * <h2>Directories nest</h2>
  *
- * <p>Un campo cuya etiqueta es un puntero --ver {@link TIFFTag#isIFDPointer}-- no lleva un valor sino
- * <b>otro directorio</b>. Asi es como un JPEG con Exif tiene, por dentro, un TIFF con el directorio
- * Exif colgando del principal y el de posicion colgando de ese. {@link #getParentTag} dice de que
- * etiqueta cuelga este; null si es el de arriba de todo.
+ * <p>A field whose tag is a pointer --see {@link TIFFTag#isIFDPointer}-- carries not a value but
+ * <b>another directory</b>. That is how a JPEG with Exif has, inside, a TIFF with the Exif
+ * directory hanging from the main one and the position one hanging from that. {@link #getParentTag}
+ * says which tag this one hangs from; null if it is the top one.
  *
- * <h2>Un solo campo por numero de etiqueta</h2>
+ * <h2>One field per tag number</h2>
  *
- * <p>{@link #addTIFFField} <b>reemplaza</b> el campo que hubiera con ese numero; el formato no permite
- * dos campos con la misma etiqueta en un directorio. {@link #getTIFFFields} los devuelve ordenados por
- * numero, que es como se escriben al archivo.
+ * <p>{@link #addTIFFField} <b>replaces</b> whatever field there was with that number; the format
+ * does not allow two fields with the same tag in one directory. {@link #getTIFFFields} returns them
+ * sorted by number, which is how they are written to the file.
  *
- * <h2>Los conjuntos de etiquetas deciden que nombres hay</h2>
+ * <h2>The tag sets decide which names there are</h2>
  *
- * <p>{@link #getTag} busca en los conjuntos declarados, en el orden en que se declararon. Un numero
- * que ningun conjunto conozca no tiene nombre, y el campo se puede guardar igual --como anonimo-- pero
- * nadie sabe que significa. Agregar el conjunto que falta con {@link #addTagSet} es lo que hace que
- * las mismas etiquetas pasen a tener sentido.
+ * <p>{@link #getTag} looks in the declared sets, in the order they were declared. A number no set
+ * knows has no name, and the field can be kept anyway --as anonymous-- but nobody knows what it
+ * means. Adding the missing set with {@link #addTagSet} is what makes those same tags start to
+ * make sense.
  */
 public class TIFFDirectory implements Cloneable {
 
-    /** Como se llama el formato de metadatos nativo de TIFF. */
+    /** What TIFF's native metadata format is called. */
     static final String NATIVE_FORMAT = "javax_imageio_tiff_image_1.0";
 
-    /** Los conjuntos declarados, en orden de consulta. */
+    /** The declared sets, in lookup order. */
     private List<TIFFTagSet> tagSets;
 
-    /** De que etiqueta cuelga este directorio, o null. */
+    /** Which tag this directory hangs from, or null. */
     private TIFFTag parentTag;
 
-    /** Los campos, ordenados por numero de etiqueta. */
+    /** The fields, sorted by tag number. */
     private TreeMap<Integer, TIFFField> fields = new TreeMap<Integer, TIFFField>();
 
     /**
-     * Un directorio vacio.
+     * An empty directory.
      *
-     * @param tagSets contra que conjuntos resolver los numeros de etiqueta
-     * @param parentTag de que etiqueta cuelga, o null si es el principal
-     * @throws NullPointerException si el arreglo de conjuntos es null
+     * @param tagSets which sets to resolve tag numbers against
+     * @param parentTag which tag it hangs from, or null if it is the main one
+     * @throws NullPointerException if the array of sets is null
      */
     public TIFFDirectory(TIFFTagSet[] tagSets, TIFFTag parentTag) {
         if (tagSets == null) {
@@ -71,14 +71,14 @@ public class TIFFDirectory implements Cloneable {
     }
 
     /**
-     * El directorio principal de esos metadatos.
+     * The main directory of that metadata.
      *
-     * <p>Lee el arbol del formato nativo de TIFF, asi que sirve para cualquier {@link IIOMetadata} que
-     * lo declare, no solo para el que devuelve {@link #getAsMetadata}.
+     * <p>It reads the TIFF native format tree, so it works for any {@link IIOMetadata} that
+     * declares it, not only for the one {@link #getAsMetadata} returns.
      *
-     * @throws NullPointerException si los metadatos son null
-     * @throws IllegalArgumentException si no entienden el formato nativo de TIFF
-     * @throws IIOInvalidTreeException si el arbol no tiene la forma que el formato pide
+     * @throws NullPointerException if the metadata is null
+     * @throws IllegalArgumentException if it does not understand the TIFF native format
+     * @throws IIOInvalidTreeException if the tree does not have the shape the format asks for
      */
     public static TIFFDirectory createFromMetadata(IIOMetadata tiffImageMetadata)
             throws IIOInvalidTreeException {
@@ -96,18 +96,18 @@ public class TIFFDirectory implements Cloneable {
         return fromIFDNode(ifd, null);
     }
 
-    /** Los conjuntos declarados. Una copia del arreglo. */
+    /** The declared sets. A copy of the array. */
     public TIFFTagSet[] getTagSets() {
         return this.tagSets.toArray(new TIFFTagSet[this.tagSets.size()]);
     }
 
     /**
-     * Agrega un conjunto al final de la lista de consulta.
+     * Adds a set at the end of the lookup list.
      *
-     * <p>Agregar uno que ya esta no hace nada; en particular no lo mueve de lugar, asi que no cambia
-     * quien gana cuando dos conjuntos declaran el mismo numero.
+     * <p>Adding one that is already there does nothing; in particular it does not move it, so it
+     * does not change who wins when two sets declare the same number.
      *
-     * @throws NullPointerException si es null
+     * @throws NullPointerException if it is null
      */
     public void addTagSet(TIFFTagSet tagSet) {
         if (tagSet == null) {
@@ -119,9 +119,9 @@ public class TIFFDirectory implements Cloneable {
     }
 
     /**
-     * Lo saca. Los campos que ya estaban no se tocan: solo dejan de tener nombre nuevo.
+     * Removes it. The fields already there are not touched: they just stop getting a new name.
      *
-     * @throws NullPointerException si es null
+     * @throws NullPointerException if it is null
      */
     public void removeTagSet(TIFFTagSet tagSet) {
         if (tagSet == null) {
@@ -130,15 +130,15 @@ public class TIFFDirectory implements Cloneable {
         this.tagSets.remove(tagSet);
     }
 
-    /** De que etiqueta cuelga este directorio, o null si es el principal. */
+    /** Which tag this directory hangs from, or null if it is the main one. */
     public TIFFTag getParentTag() {
         return this.parentTag;
     }
 
     /**
-     * La etiqueta con ese numero, buscando en los conjuntos declarados en orden.
+     * The tag with that number, looking in the declared sets in order.
      *
-     * @return null si ningun conjunto la conoce
+     * @return null if no set knows it
      */
     public TIFFTag getTag(int tagNumber) {
         int i = 0;
@@ -155,20 +155,20 @@ public class TIFFDirectory implements Cloneable {
         return null;
     }
 
-    /** Cuantos campos hay. */
+    /** How many fields there are. */
     public int getNumTIFFFields() {
         return this.fields.size();
     }
 
-    /** Si hay un campo con ese numero de etiqueta. */
+    /** Whether there is a field with that tag number. */
     public boolean containsTIFFField(int tagNumber) {
         return this.fields.containsKey(Integer.valueOf(tagNumber));
     }
 
     /**
-     * Agrega el campo, reemplazando al que hubiera con el mismo numero. Ver la nota de la clase.
+     * Adds the field, replacing whatever had the same number. See the class note.
      *
-     * @throws NullPointerException si es null
+     * @throws NullPointerException if it is null
      */
     public void addTIFFField(TIFFField f) {
         if (f == null) {
@@ -178,34 +178,34 @@ public class TIFFDirectory implements Cloneable {
     }
 
     /**
-     * El campo con ese numero de etiqueta.
+     * The field with that tag number.
      *
-     * @return null si no esta
+     * @return null if it is not there
      */
     public TIFFField getTIFFField(int tagNumber) {
         return this.fields.get(Integer.valueOf(tagNumber));
     }
 
-    /** Saca el campo con ese numero. Si no esta, no hace nada. */
+    /** Removes the field with that number. If it is not there, does nothing. */
     public void removeTIFFField(int tagNumber) {
         this.fields.remove(Integer.valueOf(tagNumber));
     }
 
-    /** Todos los campos, ordenados por numero de etiqueta. Una copia del arreglo. */
+    /** All the fields, sorted by tag number. A copy of the array. */
     public TIFFField[] getTIFFFields() {
         return this.fields.values().toArray(new TIFFField[this.fields.size()]);
     }
 
-    /** Saca todos los campos. Los conjuntos y la etiqueta padre quedan. */
+    /** Removes all the fields. The sets and the parent tag stay. */
     public void removeTIFFFields() {
         this.fields.clear();
     }
 
     /**
-     * Este directorio como metadatos de imagen.
+     * This directory as image metadata.
      *
-     * <p>Es una <b>foto</b>: los cambios posteriores a este directorio no se ven en los metadatos, ni
-     * al reves. {@link #createFromMetadata} deshace el viaje.
+     * <p>It is a <b>snapshot</b>: later changes to this directory are not seen in the metadata, nor
+     * the other way round. {@link #createFromMetadata} undoes the trip.
      */
     public IIOMetadata getAsMetadata() {
         TIFFDirectory snapshot;
@@ -218,15 +218,15 @@ public class TIFFDirectory implements Cloneable {
     }
 
     /**
-     * Una copia con sus propios campos.
+     * A copy with its own fields.
      *
-     * <p>La lista de campos y la de conjuntos se copian, y cada campo tambien --con
-     * {@link TIFFField#clone}--, asi que sacar o cambiar campos en la copia no toca al original.
+     * <p>The field list and the set list are copied, and so is each field --with
+     * {@link TIFFField#clone}--, so removing or changing fields in the copy does not touch the
+     * original.
      *
-     * <p>El JDK aca comparte parte del estado: su copia mantiene sus propias etiquetas de numero bajo
-     * pero comparte el mapa de las altas, y un {@code removeTIFFFields()} sobre el original le vacia a
-     * la copia la mitad de los campos. Esta implementacion copia las dos, que es lo que una copia
-     * significa.
+     * <p>The JDK shares part of the state here: its copy keeps its own low-numbered tags but shares
+     * the map of the high ones, and a {@code removeTIFFFields()} on the original empties half of
+     * the copy's fields. This implementation copies both, which is what a copy means.
      */
     @Override
     public TIFFDirectory clone() throws CloneNotSupportedException {
@@ -239,7 +239,7 @@ public class TIFFDirectory implements Cloneable {
         return copy;
     }
 
-    /** El arbol de este directorio en el formato nativo, como nodo {@code TIFFIFD}. */
+    /** This directory's tree in the native format, as a {@code TIFFIFD} node. */
     IIOMetadataNode getAsIFDNode() {
         IIOMetadataNode ifd = new IIOMetadataNode("TIFFIFD");
         if (this.parentTag != null) {
@@ -264,9 +264,9 @@ public class TIFFDirectory implements Cloneable {
         ifd.setAttribute("tagSets", names.toString());
         for (TIFFField field : this.fields.values()) {
             if (field.hasDirectory()) {
-                // Un puntero no se escribe como campo: se escribe como el directorio al que apunta,
-                // anidado, con el numero de la etiqueta que lo trajo. Asi el arbol tiene la misma
-                // forma que el archivo.
+                // A pointer is not written as a field: it is written as the directory it points to,
+                // nested, with the number of the tag that brought it. That way the tree has the
+                // same shape as the file.
                 ifd.appendChild(field.getDirectory().getAsIFDNode());
             } else {
                 ifd.appendChild(field.getAsNativeNode());
@@ -275,7 +275,7 @@ public class TIFFDirectory implements Cloneable {
         return ifd;
     }
 
-    /** Reconstruye un directorio desde un nodo {@code TIFFIFD}. */
+    /** Rebuilds a directory from a {@code TIFFIFD} node. */
     static TIFFDirectory fromIFDNode(Node ifd, TIFFTag parentTag) throws IIOInvalidTreeException {
         List<TIFFTagSet> sets = new ArrayList<TIFFTagSet>();
         String names = attribute(ifd, "tagSets");
@@ -312,13 +312,13 @@ public class TIFFDirectory implements Cloneable {
             }
             i = i + 1;
         }
-        // Los campos se leyeron sin conjunto para no resolver contra uno equivocado; ahora que el
-        // directorio ya tiene los suyos, se vuelven a resolver y toman su nombre.
+        // The fields were read without a set so as not to resolve against the wrong one; now that
+        // the directory has its own, they are resolved again and take their name.
         dir.resolveNames();
         return dir;
     }
 
-    /** Vuelve a resolver los numeros de etiqueta contra los conjuntos de este directorio. */
+    /** Resolves the tag numbers again against this directory's sets. */
     private void resolveNames() {
         TreeMap<Integer, TIFFField> resolved = new TreeMap<Integer, TIFFField>();
         for (java.util.Map.Entry<Integer, TIFFField> entry : this.fields.entrySet()) {
@@ -333,7 +333,7 @@ public class TIFFDirectory implements Cloneable {
         this.fields = resolved;
     }
 
-    /** El campo puntero que representa a un directorio anidado del arbol. */
+    /** The pointer field that stands for a nested directory of the tree. */
     private static TIFFField subdirectoryField(TIFFDirectory parent, Node ifd)
             throws IIOInvalidTreeException {
         String numberText = attribute(ifd, "parentTagNumber");
@@ -355,12 +355,12 @@ public class TIFFDirectory implements Cloneable {
             tag = new TIFFTag(name, number, 1 << TIFFTag.TIFF_LONG);
         }
         TIFFDirectory sub = fromIFDNode(ifd, tag);
-        // El arbol no dice en que posicion del archivo estaba el directorio --no es un dato del
-        // formato de metadatos-- asi que se usa 1, que es lo que hace el JDK.
+        // The tree does not say at which position of the file the directory was --it is not a piece
+        // of data of the metadata format-- so 1 is used, which is what the JDK does.
         return new TIFFField(tag, TIFFTag.TIFF_LONG, 1L, sub);
     }
 
-    /** El conjunto de fabrica que se llama asi, o null si no es ninguno de los siete. */
+    /** The built-in set with that name, or null if it is none of the seven. */
     private static TIFFTagSet tagSetForClassName(String className) {
         if ("javax.imageio.plugins.tiff.BaselineTIFFTagSet".equals(className)) {
             return BaselineTIFFTagSet.getInstance();
@@ -387,11 +387,11 @@ public class TIFFDirectory implements Cloneable {
     }
 
     /**
-     * Un conjunto de un complemento, por su {@code getInstance} estatico.
+     * A plug-in's set, through its static {@code getInstance}.
      *
-     * <p>Es la convencion que el arbol da por sentada al guardar solo el nombre de la clase. Si algo
-     * falla --la clase no esta, no tiene el metodo, no devuelve un conjunto-- el conjunto se saltea:
-     * un TIFF al que le falta un perfil se sigue leyendo, con las etiquetas de ese perfil anonimas.
+     * <p>It is the convention the tree takes for granted when it stores only the class name. If
+     * anything fails --the class is not there, it lacks the method, it does not return a set-- the
+     * set is skipped: a TIFF missing a profile is still read, with that profile's tags anonymous.
      */
     private static TIFFTagSet byReflection(String className) {
         try {
@@ -406,7 +406,7 @@ public class TIFFDirectory implements Cloneable {
         return null;
     }
 
-    /** Si esos metadatos declaran el formato nativo de TIFF. */
+    /** Whether that metadata declares the TIFF native format. */
     private static boolean supportsNativeFormat(IIOMetadata metadata) {
         String[] names = metadata.getMetadataFormatNames();
         if (names == null) {
@@ -422,7 +422,7 @@ public class TIFFDirectory implements Cloneable {
         return false;
     }
 
-    /** El valor de ese atributo, o null si no esta. */
+    /** The value of that attribute, or null if it is not there. */
     private static String attribute(Node node, String name) {
         NamedNodeMap attrs = node.getAttributes();
         if (attrs == null) {
@@ -435,7 +435,7 @@ public class TIFFDirectory implements Cloneable {
         return attr.getNodeValue();
     }
 
-    /** El primer hijo que sea un elemento, o null. */
+    /** The first child that is an element, or null. */
     private static Node firstElement(Node node) {
         NodeList children = node.getChildNodes();
         int i = 0;

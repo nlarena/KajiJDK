@@ -3,8 +3,8 @@ package com.sun.source.doctree;
 import java.util.List;
 
 /**
- * El nodo de `{@snippet}`, que inserta codigo de ejemplo con atributos que
- * controlan de donde sale y como se muestra.
+ * The node of `{@snippet}`, which inserts example code with attributes that
+ * control where it comes from and how it is shown.
  */
 public interface SnippetTree extends InlineTagTree {
 

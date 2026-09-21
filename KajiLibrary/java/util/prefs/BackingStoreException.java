@@ -1,27 +1,26 @@
 package java.util.prefs;
 
-// La excepcion que dice "no pude hablar con el deposito".
+// The exception that says "I could not talk to the store".
 //
-// Es la unica excepcion *comprobada* del paquete, y esta puesta en muy pocos metodos a proposito:
-// `keys`, `childrenNames`, `nodeExists`, `removeNode`, `clear`, `flush` y `sync`. Los `put` y los
-// `get` NO la tiran, y eso es el diseño central de `Preferences`: guardar y leer una preferencia
-// tiene que poder escribirse sin un `try`, porque una preferencia que no se pudo leer se resuelve
-// con el valor por omision y no hay nada que informar. Solo las operaciones que *no* tienen una
-// respuesta por omision razonable --enumerar, borrar, forzar la escritura-- pueden fracasar de
-// manera visible.
+// It is the package's only *checked* exception, and it is put on very few methods on purpose:
+// `keys`, `childrenNames`, `nodeExists`, `removeNode`, `clear`, `flush` and `sync`. The `put`s and
+// the `get`s do NOT throw it, and that is `Preferences`'s central design: storing and reading a
+// preference has to be writable without a `try`, because a preference that could not be read is
+// settled with the default value and there is nothing to report. Only the operations that do *not*
+// have a reasonable default answer --enumerating, removing, forcing the write-- can fail visibly.
 //
-// No tiene constructor sin argumentos: una falla del deposito sin una causa ni un mensaje no le
-// sirve a nadie.
+// It has no no-argument constructor: a store failure with neither a cause nor a message is of use to
+// nobody.
 public class BackingStoreException extends Exception {
 
     private static final long serialVersionUID = 859796500401108469L;
 
-    // Una falla descrita por `s`.
+    // A failure described by `s`.
     public BackingStoreException(String s) {
         super(s);
     }
 
-    // Una falla provocada por `cause` --tipicamente la excepcion de entrada/salida que la origino.
+    // A failure brought on by `cause` --typically the I/O exception that started it.
     public BackingStoreException(Throwable cause) {
         super(cause);
     }

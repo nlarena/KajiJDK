@@ -4,39 +4,39 @@ import org.xml.sax.AttributeList;
 import org.xml.sax.Locator;
 import org.xml.sax.SAXException;
 
-// KajiLibrary's org.xml.sax.DocumentHandler -- el antecesor de ContentHandler en SAX1.
+// KajiLibrary's org.xml.sax.DocumentHandler -- the predecessor of ContentHandler in SAX1.
 //
-// Las diferencias son exactamente dos, y las dos son por los espacios de nombres: un elemento
-// llega con un solo nombre en vez de la terna (uri, localName, qName), y no hay eventos de
-// mapeo de prefijos. Todo lo demas --el orden de las llamadas, la regla de que `characters`
-// puede venir partido, la regla de que el char[] es una ventana prestada-- es igual.
+// The differences are exactly two, and both are about namespaces: an element arrives with one
+// single name instead of the triple (uri, localName, qName), and there are no prefix mapping
+// events. Everything else --the order of the calls, the rule that `characters` may come split,
+// the rule that the char[] is a lent window-- is the same.
 //
-// helpers.XMLReaderAdapter convierte un XMLReader de SAX2 en uno de estos;
-// helpers.ParserAdapter va al reves. Deprecada en el JDK en favor de ContentHandler; ver
-// AttributeList por que aca no se escribe @Deprecated.
+// helpers.XMLReaderAdapter turns a SAX2 XMLReader into one of these; helpers.ParserAdapter goes
+// the other way. Deprecated in the JDK in favour of ContentHandler; see AttributeList for why
+// @Deprecated is not written here.
 public interface DocumentHandler {
 
-    // El oraculo de posicion en vivo; ver ContentHandler.setDocumentLocator.
+    // The live oracle of position; see ContentHandler.setDocumentLocator.
     void setDocumentLocator(Locator locator);
 
-    // El comienzo del documento.
+    // The start of the document.
     void startDocument() throws SAXException;
 
-    // El fin del documento.
+    // The end of the document.
     void endDocument() throws SAXException;
 
-    // El comienzo de un elemento, nombrado tal cual estaba escrito en el documento.
+    // The start of an element, named as it was written in the document.
     void startElement(String name, AttributeList atts) throws SAXException;
 
-    // El fin de un elemento.
+    // The end of an element.
     void endElement(String name) throws SAXException;
 
-    // Datos de caracteres; pueden venir partidos entre varias llamadas.
+    // Character data; it may come split across several calls.
     void characters(char[] ch, int start, int length) throws SAXException;
 
-    // Blanco del contenido de un elemento, reportado por un parser que valida.
+    // White space of the content of an element, reported by a validating parser.
     void ignorableWhitespace(char[] ch, int start, int length) throws SAXException;
 
-    // Una instruccion de procesamiento.
+    // A processing instruction.
     void processingInstruction(String target, String data) throws SAXException;
 }

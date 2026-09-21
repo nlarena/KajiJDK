@@ -1,30 +1,32 @@
 package javax.imageio.spi;
 
 /**
- * KajiLibrary's javax.imageio.spi.RegisterableService -- el proveedor quiere enterarse de que lo
- * registran.
+ * KajiLibrary's javax.imageio.spi.RegisterableService -- the provider wants to be told it is being
+ * registered.
  *
- * <p>Es opcional: un proveedor que no la implemente funciona igual. Sirve para dos cosas concretas:
+ * <p>It is optional: a provider that does not implement it works the same. It serves two concrete
+ * purposes:
  *
  * <ul>
- *   <li><b>declarar preferencias</b>. Al registrarse, un proveedor puede llamar
- *       {@code ServiceRegistry.setOrdering} para decir que va antes que otro. Es la unica forma de que
- *       un lector especializado gane sobre uno generico;
- *   <li><b>liberar</b>. {@link #onDeregistration} es donde se cierra lo que se haya abierto.
+ *   <li><b>declaring preferences</b>. When registered, a provider can call
+ *       {@code ServiceRegistry.setOrdering} to say it goes before another. It is the only way for a
+ *       specialized reader to win over a generic one;
+ *   <li><b>releasing</b>. {@link #onDeregistration} is where whatever was opened gets closed.
  * </ul>
  *
- * <p>Un mismo proveedor puede estar registrado en varias categorias --leer y escribir, por ejemplo--,
- * y por eso los dos metodos reciben <b>cual</b>: los avisos llegan una vez por categoria.
+ * <p>The same provider can be registered in several categories --reading and writing, for
+ * example--, which is why both methods receive <b>which one</b>: the notices arrive once per
+ * category.
  */
 public interface RegisterableService {
 
     /**
-     * Lo acaban de registrar en esa categoria.
+     * It was just registered in that category.
      *
-     * @param category en cual; ver la nota de la clase
+     * @param category which one; see the class note
      */
     void onRegistration(ServiceRegistry registry, Class<?> category);
 
-    /** Lo acaban de dar de baja de esa categoria. */
+    /** It was just deregistered from that category. */
     void onDeregistration(ServiceRegistry registry, Class<?> category);
 }

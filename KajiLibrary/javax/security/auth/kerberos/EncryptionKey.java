@@ -5,35 +5,35 @@ import javax.crypto.SecretKey;
 import javax.security.auth.DestroyFailedException;
 
 /**
- * KajiLibrary's javax.security.auth.kerberos.EncryptionKey -- una clave de Kerberos, con su tipo.
+ * KajiLibrary's javax.security.auth.kerberos.EncryptionKey -- a Kerberos key, with its type.
  *
- * <p>Son los bytes y el numero de tipo de cifrado; {@link #getAlgorithm} traduce el numero a nombre.
- * No sabe cifrar: es el <b>material</b>, y quien cifra es otro.
+ * <p>It is the bytes and the encryption type number; {@link #getAlgorithm} translates the number to
+ * a name. It cannot encrypt: it is the <b>material</b>, and whoever encrypts is someone else.
  *
- * <h2>Se destruye</h2>
+ * <h2>It is destroyed</h2>
  *
- * <p>{@link #destroy} borra los bytes y deja el objeto inservible: todo lo que pregunte por la clave
- * lanza {@link IllegalStateException}. No es un capricho: una clave de Kerberos en memoria es una
- * contrasena en memoria, y el programa que termino de usarla tiene que poder asegurarse de que ya no
- * esta. Un objeto destruido no es igual a nada mas que a si mismo.
+ * <p>{@link #destroy} erases the bytes and leaves the object unusable: everything that asks about
+ * the key throws {@link IllegalStateException}. It is not a whim: a Kerberos key in memory is a
+ * password in memory, and the program that finished using it has to be able to make sure it is
+ * gone. A destroyed object is equal to nothing but itself.
  */
 public final class EncryptionKey implements SecretKey {
 
     private static final long serialVersionUID = 9L;
 
-    /** Los bytes, o null una vez destruida. */
+    /** The bytes, or null once destroyed. */
     private byte[] keyBytes;
 
-    /** El numero de tipo. */
+    /** The type number. */
     private final int keyType;
 
-    /** Si ya se borro. */
+    /** Whether it was already erased. */
     private transient boolean destroyed = false;
 
     /**
-     * Con esos bytes y ese tipo. El arreglo se copia.
+     * With those bytes and that type. The array is copied.
      *
-     * @throws NullPointerException si los bytes son null
+     * @throws NullPointerException if the bytes are null
      */
     public EncryptionKey(byte[] keyBytes, int keyType) {
         this.keyBytes = keyBytes.clone();
@@ -41,9 +41,9 @@ public final class EncryptionKey implements SecretKey {
     }
 
     /**
-     * El numero de tipo.
+     * The type number.
      *
-     * @throws IllegalStateException si esta destruida
+     * @throws IllegalStateException if it is destroyed
      */
     public int getKeyType() {
         checkAlive();
@@ -51,9 +51,9 @@ public final class EncryptionKey implements SecretKey {
     }
 
     /**
-     * Como se llama el tipo: {@code "aes128-cts-hmac-sha1-96"}, {@code "des-cbc-md5"}...
+     * What the type is called: {@code "aes128-cts-hmac-sha1-96"}, {@code "des-cbc-md5"}...
      *
-     * @throws IllegalStateException si esta destruida
+     * @throws IllegalStateException if it is destroyed
      */
     @Override
     public String getAlgorithm() {
@@ -62,9 +62,9 @@ public final class EncryptionKey implements SecretKey {
     }
 
     /**
-     * Siempre {@code "RAW"}.
+     * Always {@code "RAW"}.
      *
-     * @throws IllegalStateException si esta destruida
+     * @throws IllegalStateException if it is destroyed
      */
     @Override
     public String getFormat() {
@@ -73,9 +73,9 @@ public final class EncryptionKey implements SecretKey {
     }
 
     /**
-     * Los bytes. Una copia.
+     * The bytes. A copy.
      *
-     * @throws IllegalStateException si esta destruida
+     * @throws IllegalStateException if it is destroyed
      */
     @Override
     public byte[] getEncoded() {
@@ -83,7 +83,7 @@ public final class EncryptionKey implements SecretKey {
         return this.keyBytes.clone();
     }
 
-    /** Borra los bytes. Ver la nota de la clase. Destruir dos veces no hace nada. */
+    /** Erases the bytes. See the class note. Destroying twice does nothing. */
     @Override
     public void destroy() throws DestroyFailedException {
         if (!this.destroyed) {
@@ -95,13 +95,13 @@ public final class EncryptionKey implements SecretKey {
         }
     }
 
-    /** Si ya se borro. */
+    /** Whether it was already erased. */
     @Override
     public boolean isDestroyed() {
         return this.destroyed;
     }
 
-    /** El tipo y el largo; nunca los bytes. */
+    /** The type and the length; never the bytes. */
     @Override
     public String toString() {
         if (this.destroyed) {
@@ -110,7 +110,7 @@ public final class EncryptionKey implements SecretKey {
         return "EncryptionKey: keyType=" + this.keyType + ", " + this.keyBytes.length + "-byte key";
     }
 
-    /** Una destruida vale 17. */
+    /** A destroyed one is 17. */
     @Override
     public int hashCode() {
         int result = 17;
@@ -122,7 +122,9 @@ public final class EncryptionKey implements SecretKey {
         return result;
     }
 
-    /** Iguales si tienen el mismo tipo y los mismos bytes; una destruida solo es igual a si misma. */
+    /**
+     * Equal if they have the same type and the same bytes; a destroyed one is only equal to itself.
+     */
     @Override
     public boolean equals(Object other) {
         if (other == this) {
@@ -138,7 +140,7 @@ public final class EncryptionKey implements SecretKey {
         return this.keyType == that.keyType && Arrays.equals(this.keyBytes, that.keyBytes);
     }
 
-    /** Lanza si ya se destruyo. */
+    /** Throws if it was already destroyed. */
     private void checkAlive() {
         if (this.destroyed) {
             throw new IllegalStateException("This key is no longer valid");

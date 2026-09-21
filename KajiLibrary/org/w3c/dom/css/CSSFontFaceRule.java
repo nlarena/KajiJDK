@@ -1,8 +1,8 @@
 package org.w3c.dom.css;
 
-/** Un `@font-face`: las declaraciones que describen una fuente. */
+/** A `@font-face`: the declarations that describe a font. */
 public interface CSSFontFaceRule extends CSSRule {
 
-    /** Las declaraciones de la fuente. */
+    /** The declarations of the font. */
     CSSStyleDeclaration getStyle();
 }

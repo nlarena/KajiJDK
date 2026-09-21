@@ -4,25 +4,25 @@ import java.util.EventListener;
 import javax.imageio.ImageWriter;
 
 /**
- * KajiLibrary's javax.imageio.event.IIOWriteWarningListener -- avisa de un problema no fatal al
- * escribir.
+ * KajiLibrary's javax.imageio.event.IIOWriteWarningListener -- reports a non-fatal problem while
+ * writing.
  *
- * <p>El espejo de {@link IIOReadWarningListener}, con un argumento mas: <b>cual</b> imagen, porque un
- * archivo puede llevar varias.
+ * <p>The mirror of {@link IIOReadWarningListener}, with one more argument: <b>which</b> image,
+ * because a file may hold several.
  *
- * <p>La advertencia tipica al escribir es una perdida: metadatos que el formato de destino no puede
- * expresar, un color que no entra en la paleta, una precision que se recorta. El archivo sale igual, y
- * mas pobre de lo que se pidio.
+ * <p>The typical warning when writing is a loss: metadata the target format cannot express, a
+ * colour that does not fit in the palette, a precision that gets cut. The file comes out anyway,
+ * and poorer than asked for.
  *
- * <p>Como en la lectura, sin escuchas registrados eso se pierde en silencio -- que es peor al escribir,
- * porque el original puede no estar mas.
+ * <p>As when reading, with no listeners registered that is silently lost -- which is worse when
+ * writing, because the original may no longer exist.
  */
 public interface IIOWriteWarningListener extends EventListener {
 
     /**
-     * Algo se perdio y se pudo seguir. Ver la nota de la clase.
+     * Something was lost and it could carry on. See the class note.
      *
-     * @param imageIndex cual imagen del archivo
+     * @param imageIndex which image of the file
      */
     void warningOccurred(ImageWriter source, int imageIndex, String warning);
 }

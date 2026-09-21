@@ -1,27 +1,27 @@
 package javax.swing.plaf.synth;
 
 /**
- * Una parte de un componente que se dibuja por separado.
+ * A part of a component that is drawn separately.
  *
- * <h2>Que es una region</h2>
+ * <h2>What a region is</h2>
  *
- * <p>Un componente no es una sola superficie. Una barra de desplazamiento tiene la pista, el pulgar
- * y dos botones; una pestana tiene la solapa y el area. Cada una de esas partes puede tener su
- * propio color, su propio borde y su propio pintor, y una region es como se la nombra.
+ * <p>A component is not a single surface. A scroll bar has the track, the thumb and two buttons;
+ * a tabbed pane has the tab and the area. Each of those parts may have its own colour, its own
+ * border and its own painter, and a region is how it is named.
  *
- * <h2>Region y subregion</h2>
+ * <h2>Region and subregion</h2>
  *
- * <p>Una region con {@link #isSubregion()} en falso corresponde a un componente entero y tiene una
- * clase de interfaz grafica propia. Una subregion es una parte de otro componente y no la tiene: no
- * hay un {@code ScrollBarThumbUI}, el pulgar lo dibuja la interfaz de la barra.
+ * <p>A region with {@link #isSubregion()} at false corresponds to a whole component and has a
+ * look and feel class of its own. A subregion is a part of another component and does not have
+ * one: there is no {@code ScrollBarThumbUI}, the thumb is drawn by the bar's look and feel.
  *
- * <p>La diferencia importa al buscar el estilo: para una region se pregunta por el componente, para
- * una subregion hay que decir ademas de que parte se trata.
+ * <p>The difference matters when looking up the style: for a region the component is asked for,
+ * for a subregion which part it is about has to be said as well.
  *
- * <h2>Por que son constantes y no un enum</h2>
+ * <h2>Why they are constants and not an enum</h2>
  *
- * <p>Porque un aspecto grafico puede definir las suyas heredando de esta clase, y de un enum no se
- * hereda. Es el mismo motivo por el que el constructor es {@code protected} y no privado.
+ * <p>Because a look and feel may define its own by inheriting from this class, and an enum cannot
+ * be inherited from. It is the same reason the constructor is {@code protected} and not private.
  *
  * @since 1.5
  */
@@ -82,7 +82,7 @@ public class Region {
     /** MenuItem */
     public static final Region MENU_ITEM = new Region("MenuItem", false);
 
-    /** MenuItemAccelerator, una subregion */
+    /** MenuItemAccelerator, a subregion */
     public static final Region MENU_ITEM_ACCELERATOR = new Region("MenuItemAccelerator", true);
 
     /** OptionPane */
@@ -115,10 +115,10 @@ public class Region {
     /** ScrollBar */
     public static final Region SCROLL_BAR = new Region("ScrollBar", false);
 
-    /** ScrollBarTrack, una subregion */
+    /** ScrollBarTrack, a subregion */
     public static final Region SCROLL_BAR_TRACK = new Region("ScrollBarTrack", true);
 
-    /** ScrollBarThumb, una subregion */
+    /** ScrollBarThumb, a subregion */
     public static final Region SCROLL_BAR_THUMB = new Region("ScrollBarThumb", true);
 
     /** ScrollPane */
@@ -130,10 +130,10 @@ public class Region {
     /** Slider */
     public static final Region SLIDER = new Region("Slider", false);
 
-    /** SliderTrack, una subregion */
+    /** SliderTrack, a subregion */
     public static final Region SLIDER_TRACK = new Region("SliderTrack", true);
 
-    /** SliderThumb, una subregion */
+    /** SliderThumb, a subregion */
     public static final Region SLIDER_THUMB = new Region("SliderThumb", true);
 
     /** Spinner */
@@ -142,19 +142,19 @@ public class Region {
     /** SplitPane */
     public static final Region SPLIT_PANE = new Region("SplitPane", false);
 
-    /** SplitPaneDivider, una subregion */
+    /** SplitPaneDivider, a subregion */
     public static final Region SPLIT_PANE_DIVIDER = new Region("SplitPaneDivider", true);
 
     /** TabbedPane */
     public static final Region TABBED_PANE = new Region("TabbedPane", false);
 
-    /** TabbedPaneTab, una subregion */
+    /** TabbedPaneTab, a subregion */
     public static final Region TABBED_PANE_TAB = new Region("TabbedPaneTab", true);
 
-    /** TabbedPaneTabArea, una subregion */
+    /** TabbedPaneTabArea, a subregion */
     public static final Region TABBED_PANE_TAB_AREA = new Region("TabbedPaneTabArea", true);
 
-    /** TabbedPaneContent, una subregion */
+    /** TabbedPaneContent, a subregion */
     public static final Region TABBED_PANE_CONTENT = new Region("TabbedPaneContent", true);
 
     /** Table */
@@ -178,7 +178,7 @@ public class Region {
     /** ToolBar */
     public static final Region TOOL_BAR = new Region("ToolBar", false);
 
-    /** ToolBarContent, una subregion */
+    /** ToolBarContent, a subregion */
     public static final Region TOOL_BAR_CONTENT = new Region("ToolBarContent", true);
 
     /** ToolBarDragWindow */
@@ -193,14 +193,14 @@ public class Region {
     /** Tree */
     public static final Region TREE = new Region("Tree", false);
 
-    /** TreeCell, una subregion */
+    /** TreeCell, a subregion */
     public static final Region TREE_CELL = new Region("TreeCell", true);
 
     /** Viewport */
     public static final Region VIEWPORT = new Region("Viewport", false);
 
-    /** Todas, para poder buscar por interfaz grafica. */
-    private static final Region[] TODAS = {
+    /** All of them, so that they can be looked up by look and feel. */
+    private static final Region[] ALL = {
         ARROW_BUTTON, BUTTON, CHECK_BOX, CHECK_BOX_MENU_ITEM, COLOR_CHOOSER, COMBO_BOX,
         DESKTOP_PANE, DESKTOP_ICON, EDITOR_PANE, FILE_CHOOSER, FORMATTED_TEXT_FIELD, INTERNAL_FRAME,
         INTERNAL_FRAME_TITLE_PANE, LABEL, LIST, MENU, MENU_BAR, MENU_ITEM, MENU_ITEM_ACCELERATOR,
@@ -218,23 +218,23 @@ public class Region {
     private final boolean subregion;
 
     /**
-     * Una region con ese nombre.
+     * A region with that name.
      *
-     * <p>El identificador de la interfaz grafica se deduce del nombre, que es la convencion: la
-     * region {@code Button} se dibuja con lo que este bajo la clave {@code ButtonUI}. Una subregion
-     * no tiene, porque no la dibuja una interfaz propia.
+     * <p>The look and feel's identifier is deduced from the name, which is the convention: the
+     * {@code Button} region is drawn with whatever is under the key {@code ButtonUI}. A subregion
+     * does not have one, because it is not drawn by a look and feel of its own.
      */
     private Region(String name, boolean subregion) {
         this(name, subregion ? null : name + "UI", subregion);
     }
 
     /**
-     * Una region con ese nombre y esa clase de interfaz grafica.
+     * A region with that name and that look and feel class.
      *
-     * @param name el nombre
-     * @param ui la clave de la interfaz grafica, o {@code null} si no tiene
-     * @param subregion si es parte de otro componente
-     * @throws NullPointerException si {@code name} es {@code null}
+     * @param name the name
+     * @param ui the look and feel's key, or {@code null} if it has none
+     * @param subregion whether it is part of another component
+     * @throws NullPointerException if {@code name} is {@code null}
      */
     protected Region(String name, String ui, boolean subregion) {
         if (name == null) {
@@ -246,46 +246,46 @@ public class Region {
     }
 
     /**
-     * Si es parte de otro componente.
+     * Whether it is part of another component.
      *
-     * @return cierto si es una subregion
+     * @return true if it is a subregion
      */
     public boolean isSubregion() {
         return subregion;
     }
 
     /**
-     * El nombre.
+     * The name.
      *
-     * @return el nombre
+     * @return the name
      */
     public String getName() {
         return name;
     }
 
     /**
-     * La region cuya interfaz grafica se llama asi, o {@code null}.
+     * The region whose look and feel is called that, or {@code null}.
      *
-     * <p>No es parte del API. La busqueda es lineal sobre cincuenta y siete constantes y se hace una
-     * vez por componente al instalarse, no por repintado: armar un mapa costaria mas de lo que
-     * ahorra.
+     * <p>It is not part of the API. The search is linear over fifty-seven constants and is done
+     * once per component on installing, not per repaint: building a map would cost more than it
+     * saves.
      */
-    static Region porUI(String ui) {
+    static Region byUI(String ui) {
         if (ui == null) {
             return null;
         }
-        for (int i = 0; i < TODAS.length; i++) {
-            if (ui.equals(TODAS[i].ui)) {
-                return TODAS[i];
+        for (int i = 0; i < ALL.length; i++) {
+            if (ui.equals(ALL[i].ui)) {
+                return ALL[i];
             }
         }
         return null;
     }
 
     /**
-     * El nombre.
+     * The name.
      *
-     * @return el nombre
+     * @return the name
      */
     @Override
     public String toString() {

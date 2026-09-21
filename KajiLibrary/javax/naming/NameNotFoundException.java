@@ -1,10 +1,10 @@
 package javax.naming;
 
 /**
- * Se lanza cuando el componente que se estaba resolviendo no esta atado a nada. El nombre
- * resuelto y el restante de la excepcion dicen exactamente donde se corto.
+ * Thrown when the component being resolved is not bound to anything. The exception's resolved and
+ * remaining names say exactly where it stopped.
  *
- * <p>La jerarquia entera y el estado que arrastra estan explicados en `NamingException`.
+ * <p>The whole hierarchy and the state it carries are explained in `NamingException`.
  */
 public class NameNotFoundException extends NamingException {
 

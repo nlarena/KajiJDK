@@ -4,10 +4,10 @@ import javax.print.attribute.Attribute;
 import javax.print.attribute.EnumSyntax;
 
 /**
- * De que bandeja de entrada sale el papel.
+ * From which input tray the paper comes.
  *
- * <p>Es la tercera manera de decir "que papel": en vez de describirlo se elige la ranura, y lo que
- * haya cargado ahi es cosa del operador.
+ * <p>It is the third way of saying "which paper": instead of describing it one chooses the slot,
+ * and whatever is loaded there is the operator's business.
  */
 public class MediaTray extends Media implements Attribute {
 

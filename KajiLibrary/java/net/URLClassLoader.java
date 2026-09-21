@@ -42,18 +42,18 @@ import java.util.List;
 public class URLClassLoader extends SecureClassLoader implements Closeable {
 
     private final List<URL> urls = new ArrayList<URL>();
-    private volatile boolean cerrado;
+    private volatile boolean closed;
 
     /** A loader over {@code urls}, delegating to {@code parent}. */
     public URLClassLoader(URL[] urls, ClassLoader parent) {
         super(parent);
-        this.agregarTodas(urls);
+        this.addAll(urls);
     }
 
     /** A loader over {@code urls}, delegating to the system loader. */
     public URLClassLoader(URL[] urls) {
         super();
-        this.agregarTodas(urls);
+        this.addAll(urls);
     }
 
     /**
@@ -66,23 +66,23 @@ public class URLClassLoader extends SecureClassLoader implements Closeable {
      */
     public URLClassLoader(URL[] urls, ClassLoader parent, URLStreamHandlerFactory factory) {
         super(parent);
-        this.agregarTodas(urls);
+        this.addAll(urls);
     }
 
     /** A named loader. The name serves for diagnostics and for the modules. */
     public URLClassLoader(String name, URL[] urls, ClassLoader parent) {
         super(name, parent);
-        this.agregarTodas(urls);
+        this.addAll(urls);
     }
 
     /** Like the previous one, with its own factory. See {@link #URLClassLoader(URL[], ClassLoader, URLStreamHandlerFactory)}. */
     public URLClassLoader(String name, URL[] urls, ClassLoader parent,
             URLStreamHandlerFactory factory) {
         super(name, parent);
-        this.agregarTodas(urls);
+        this.addAll(urls);
     }
 
-    private void agregarTodas(URL[] us) {
+    private void addAll(URL[] us) {
         if (us == null) {
             throw new NullPointerException("urls");
         }
@@ -95,7 +95,7 @@ public class URLClassLoader extends SecureClassLoader implements Closeable {
 
     /** One more URL at the end of the search list. */
     protected void addURL(URL url) {
-        if (this.cerrado || url == null) {
+        if (this.closed || url == null) {
             return;
         }
         synchronized (this.urls) {
@@ -119,7 +119,7 @@ public class URLClassLoader extends SecureClassLoader implements Closeable {
         if (name == null) {
             throw new ClassNotFoundException("null");
         }
-        if (this.cerrado) {
+        if (this.closed) {
             throw new ClassNotFoundException(name + " (cargador cerrado)");
         }
         String path = name.replace('.', '/') + ".class";
@@ -143,7 +143,7 @@ public class URLClassLoader extends SecureClassLoader implements Closeable {
 
     /** The first URL that has the resource {@code name}, or null. */
     public URL findResource(String name) {
-        if (name == null || this.cerrado) {
+        if (name == null || this.closed) {
             return null;
         }
         URL[] us = this.getURLs();
@@ -164,7 +164,7 @@ public class URLClassLoader extends SecureClassLoader implements Closeable {
     /** Every URL that has the resource {@code name}, in search order. */
     public Enumeration<URL> findResources(String name) throws IOException {
         List<URL> out = new ArrayList<URL>();
-        if (name != null && !this.cerrado) {
+        if (name != null && !this.closed) {
             URL[] us = this.getURLs();
             int i = 0;
             while (i < us.length) {
@@ -222,7 +222,7 @@ public class URLClassLoader extends SecureClassLoader implements Closeable {
      * the JDK. What it does is release the open resources and stop serving new requests.
      */
     public void close() throws java.io.IOException {
-        this.cerrado = true;
+        this.closed = true;
     }
 
     /** A new loader over {@code urls}, delegating to {@code parent}. */

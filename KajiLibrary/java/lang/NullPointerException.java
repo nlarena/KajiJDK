@@ -11,8 +11,8 @@ package java.lang;
 // explicit message (null when none was given) and the overrides just keep the JDK's surface.
 public class NullPointerException extends RuntimeException {
 
-    // El mensaje extendido, calculado de forma perezosa por el JDK a partir del bytecode. Sin
-    // reconstrucción nativa queda siempre null.
+    // The extended message, computed lazily by the JDK out of the bytecode. With no native
+    // reconstruction it stays null for ever.
     private String extendedMessage;
 
     public NullPointerException() {
@@ -23,7 +23,7 @@ public class NullPointerException extends RuntimeException {
     }
 
     public synchronized Throwable fillInStackTrace() {
-        // Un nuevo stack trace invalidaría el mensaje extendido calculado: se descarta.
+        // A new stack trace would invalidate the computed extended message: it is discarded.
         this.extendedMessage = null;
         return super.fillInStackTrace();
     }

@@ -3,30 +3,30 @@ package java.awt.dnd;
 import java.util.EventObject;
 
 /**
- * La base de los eventos que le llegan a un destino de arrastre.
+ * The base of the events that reach a drop target.
  *
- * <p>Lo único que trae es el contexto, y es lo único que hace falta: el contexto es por donde el
- * destino contesta —aceptar, rechazar, pedir los datos— y por donde llega a saber sobre qué
- * componente está pasando el arrastre.
+ * <p>The only thing it brings is the context, and it is the only thing needed: the context is where
+ * the destination answers through —accept, reject, ask for the data— and where it gets to know
+ * which component the drag is passing over.
  */
 public class DropTargetEvent extends EventObject {
 
     private static final long serialVersionUID = 2821229066521922993L;
 
-    /** Por dónde se contesta. */
+    /** Where the answering is done. */
     protected DropTargetContext context;
 
     /**
-     * Con el contexto del destino.
+     * With the context of the destination.
      *
-     * @throws NullPointerException si el contexto es `null`
+     * @throws NullPointerException if the context is `null`
      */
     public DropTargetEvent(DropTargetContext dtc) {
         super(dtc.getDropTarget());
         this.context = dtc;
     }
 
-    /** Por dónde contestarle al arrastre. */
+    /** Where to answer the drag. */
     public DropTargetContext getDropTargetContext() {
         return this.context;
     }

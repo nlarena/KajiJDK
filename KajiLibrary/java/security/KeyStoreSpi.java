@@ -10,52 +10,52 @@ import java.util.Date;
 import java.util.Enumeration;
 import java.util.Set;
 
-// Lo que un proveedor tiene que escribir para ofrecer un formato de almacen de claves.
+// What a provider has to write in order to offer a format of key store.
 //
-// La mayoria de los metodos son abstractos porque el SPI es de Java 1.2; los pocos que no lo son
-// llegaron despues —las entradas tipadas de Java 5, `engineProbe` de Java 9— y tienen una
-// implementacion base para no romper a los proveedores que ya existian.
+// Most of the methods are abstract because the SPI is from Java 1.2; the few that are not arrived
+// afterwards —the typed entries of Java 5, `engineProbe` of Java 9— and have a base implementation
+// so as not to break the providers that already existed.
 //
-// `engineGetEntry` y `engineSetEntry` merecen atencion: su implementacion base traduce entre el
-// modelo viejo —tres metodos distintos segun el tipo de entrada— y el nuevo, uniforme. Es
-// compatibilidad, no una capa util: un proveedor que sepa distinguir sus tipos hace mejor
-// trabajo sobreescribiendolos.
+// `engineGetEntry` and `engineSetEntry` deserve attention: their base implementation translates
+// between the old model —three different methods depending on the type of entry— and the new,
+// uniform one. It is compatibility, not a useful layer: a provider that knows how to tell its types
+// apart does a better job by overriding them.
 //
-// A KajiLibrary subset: la sobrecarga `engineGetEntry`/`engineSetEntry` que trabajaria con
-// `KeyStore.SecretKeyEntry` no puede resolver ese caso porque `javax.crypto.SecretKey` no existe en
-// esta biblioteca; el codigo de traduccion cubre claves privadas y certificados de confianza, que
-// es lo que si se puede representar.
+// A KajiLibrary subset: the `engineGetEntry`/`engineSetEntry` overload that would work with
+// `KeyStore.SecretKeyEntry` cannot resolve that case because `javax.crypto.SecretKey` does not
+// exist in this library; the translation code covers private keys and trusted certificates, which
+// is what can be represented.
 public abstract class KeyStoreSpi {
 
     public KeyStoreSpi() {
     }
 
-    // La clave asociada al alias, o null si no hay. La contraseña protege **esa entrada**, no el
-    // almacen entero: en PKCS#12 y en JKS cada clave privada esta cifrada por separado.
+    // The key associated with the alias, or null if there is none. The password protects **that
+    // entry**, not the whole store: in PKCS#12 and in JKS each private key is encrypted separately.
     public abstract Key engineGetKey(String alias, char[] password)
         throws NoSuchAlgorithmException, UnrecoverableKeyException;
 
-    // La cadena de certificados de esa clave, del sujeto hacia la raiz, o null.
+    // The chain of certificates of that key, from the subject towards the root, or null.
     public abstract Certificate[] engineGetCertificateChain(String alias);
 
     public abstract Certificate engineGetCertificate(String alias);
 
     public abstract Date engineGetCreationDate(String alias);
 
-    // Guarda una clave con su cadena. La cadena es **obligatoria** para una clave privada: una
-    // clave privada sin el certificado que la publica no sirve para nada, porque nadie podria
-    // verificar lo que firme.
+    // It saves a key with its chain. The chain is **compulsory** for a private key: a private key
+    // without the certificate that publishes it is of no use at all, because nobody could verify
+    // what it signs.
     public abstract void engineSetKeyEntry(String alias, Key key, char[] password,
                                            Certificate[] chain) throws KeyStoreException;
 
-    // Guarda una clave que ya viene protegida en su formato final. El almacen no la interpreta: es
-    // el camino para mover una clave entre almacenes sin descifrarla en el medio.
+    // It saves a key that comes already protected in its final format. The store does not interpret
+    // it: it is the road for moving a key between stores without deciphering it on the way.
     public abstract void engineSetKeyEntry(String alias, byte[] key, Certificate[] chain)
         throws KeyStoreException;
 
-    // Guarda un certificado **de confianza**. Es la operacion mas delicada del almacen: lo que entra
-    // por aca se convierte en una raiz, y una raiz de mas puede firmar un certificado para cualquier
-    // nombre.
+    // It saves a **trusted** certificate. It is the most delicate operation of the store: what
+    // comes in through here becomes a root, and one root too many can sign a certificate for any
+    // name.
     public abstract void engineSetCertificateEntry(String alias, Certificate cert)
         throws KeyStoreException;
 
@@ -71,22 +71,22 @@ public abstract class KeyStoreSpi {
 
     public abstract boolean engineIsCertificateEntry(String alias);
 
-    // El alias del primer certificado que coincida, o null. La comparacion es por codificacion.
+    // The alias of the first certificate that matches, or null. The comparison is by encoding.
     public abstract String engineGetCertificateAlias(Certificate cert);
 
     public abstract void engineStore(OutputStream stream, char[] password)
         throws IOException, NoSuchAlgorithmException, CertificateException;
 
-    // Guardar con parametros en vez de con una contraseña suelta. Base que lanza, porque llego
-    // despues.
+    // Saving with parameters instead of with a loose password. A base that throws, because it
+    // arrived afterwards.
     public void engineStore(KeyStore.LoadStoreParameter param)
             throws IOException, NoSuchAlgorithmException, CertificateException {
         throw new UnsupportedOperationException();
     }
 
-    // Carga el almacen. La contraseña puede ser null: en ese caso **no se verifica la integridad**
-    // del archivo, solo se lee. Es legitimo cuando solo interesan los certificados publicos, y es un
-    // error cuando de ahi van a salir anclas de confianza.
+    // It loads the store. The password may be null: in that case the integrity of the file is **not
+    // verified**, it is only read. It is legitimate when only the public certificates are of
+    // interest, and it is a mistake when trust anchors are going to come out of there.
     public abstract void engineLoad(InputStream stream, char[] password)
         throws IOException, NoSuchAlgorithmException, CertificateException;
 
@@ -95,14 +95,14 @@ public abstract class KeyStoreSpi {
         throw new UnsupportedOperationException();
     }
 
-    // Los atributos de la entrada, o un conjunto vacio. Los atributos son cosa de PKCS#12: nombre
-    // amigable, identificador local.
+    // The attributes of the entry, or an empty set. The attributes are a thing of PKCS#12: friendly
+    // name, local identifier.
     public Set<KeyStore.Entry.Attribute> engineGetAttributes(String alias) {
         return Collections.<KeyStore.Entry.Attribute>emptySet();
     }
 
-    // Traduce el modelo viejo al de entradas tipadas. Un proveedor que distinga sus tipos mejor
-    // que esto lo sobreescribe.
+    // It translates the old model into that of typed entries. A provider that tells its types apart
+    // better than this overrides it.
     public KeyStore.Entry engineGetEntry(String alias, KeyStore.ProtectionParameter protParam)
             throws KeyStoreException, NoSuchAlgorithmException, UnrecoverableEntryException {
         if (!this.engineContainsAlias(alias)) {
@@ -116,10 +116,10 @@ public abstract class KeyStoreSpi {
             throw new UnrecoverableKeyException(
                 "requested entry requires a password");
         }
-        // A KajiLibrary subset: el JDK acepta aca una `KeyStore.PasswordProtection`, que no existe
-        // en esta biblioteca porque necesita `javax.security.auth.Destroyable`. Sin ella no hay
-        // forma de sacar la contraseña de un `ProtectionParameter`, asi que el unico caso que se
-        // puede atender es el de un certificado de confianza, que no lleva contraseña.
+        // A KajiLibrary subset: the JDK accepts here a `KeyStore.PasswordProtection`, which does
+        // not exist in this library because it needs `javax.security.auth.Destroyable`. Without it
+        // there is no way of getting the password out of a `ProtectionParameter`, so the only case
+        // that can be attended is that of a trusted certificate, which carries no password.
         if (this.engineIsCertificateEntry(alias)) {
             return new KeyStore.TrustedCertificateEntry(
                 this.engineGetCertificate(alias), this.engineGetAttributes(alias));
@@ -133,10 +133,10 @@ public abstract class KeyStoreSpi {
         if (entry == null) {
             throw new KeyStoreException("invalid null input");
         }
-        // A KajiLibrary subset: el JDK acepta aca una `KeyStore.PasswordProtection` y le saca la
-        // contraseña. Esa clase no existe en esta biblioteca (ver `KeyStore`), asi que cualquier
-        // proteccion que no sea null se rechaza — que es lo mismo que hace el JDK con una
-        // proteccion de un tipo que no conoce.
+        // A KajiLibrary subset: the JDK accepts here a `KeyStore.PasswordProtection` and takes the
+        // password out of it. That class does not exist in this library (see `KeyStore`), so any
+        // protection that is not null is rejected — which is the same thing the JDK does with a
+        // protection of a type it does not know.
         if (protParam != null) {
             throw new KeyStoreException("unsupported protection parameter");
         }
@@ -146,8 +146,8 @@ public abstract class KeyStoreSpi {
             return;
         }
         if (entry instanceof KeyStore.PrivateKeyEntry) {
-            // Sin contraseña no se puede guardar una clave privada: quedaria en claro dentro del
-            // almacen. Fallar es lo unico correcto.
+            // Without a password a private key cannot be saved: it would be left in the clear
+            // inside the store. Failing is the only right thing.
             throw new KeyStoreException("non-null password required to create PrivateKeyEntry");
         }
         throw new KeyStoreException(
@@ -165,11 +165,11 @@ public abstract class KeyStoreSpi {
         return false;
     }
 
-    // Si este stream parece ser de este formato. Sirve para que `KeyStore.getInstance(File, ...)`
-    // adivine el tipo sin que se lo digan.
+    // Whether this stream looks as if it were of this format. It serves so that
+    // `KeyStore.getInstance(File, ...)` guesses the type without being told.
     //
-    // Tiene que dejar el stream **como lo encontro**: se lo van a pasar a otro proveedor si este
-    // dice que no.
+    // It has to leave the stream **as it found it**: it is going to be passed to another provider
+    // if this one says no.
     public boolean engineProbe(InputStream stream) throws IOException {
         return false;
     }

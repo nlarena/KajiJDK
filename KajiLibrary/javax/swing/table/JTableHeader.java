@@ -17,65 +17,65 @@ import javax.swing.plaf.ComponentUI;
 import javax.swing.plaf.TableHeaderUI;
 
 /**
- * La barra de titulos de una tabla.
+ * A table's title bar.
  *
- * <h2>Es un componente aparte, y por una razon concreta</h2>
+ * <h2>It is a separate component, and for a concrete reason</h2>
  *
- * <p>Adentro de un panel con barras de desplazamiento, el encabezado va en la franja de arriba y la
- * tabla en la parte que se desplaza. Si fueran un solo componente, los titulos se irian hacia arriba
- * al bajar. Que sean dos es lo que hace que los titulos queden fijos.
+ * <p>Inside a pane with scroll bars, the header goes in the strip at the top and the table in
+ * the part that scrolls. If they were a single component, the titles would go up on scrolling
+ * down. That they are two is what keeps the titles fixed.
  *
- * <p>De ahi que comparta el <em>modelo de columnas</em> con su tabla y no los datos: lo unico que
- * necesita saber es cuales columnas hay y cuanto miden.
+ * <p>Hence it shares the <em>column model</em> with its table and not the data: all it needs to
+ * know is which columns there are and how much they measure.
  *
- * <h2>Dos permisos distintos</h2>
+ * <h2>Two different permissions</h2>
  *
- * <p>{@link #setReorderingAllowed} deja arrastrar una columna a otro lugar;
- * {@link #setResizingAllowed} deja cambiarle el ancho tirando del borde. Son independientes: es
- * comun dejar cambiar el ancho y no el orden.
+ * <p>{@link #setReorderingAllowed} allows dragging a column elsewhere;
+ * {@link #setResizingAllowed} allows changing its width by pulling the edge. They are
+ * independent: it is common to allow changing the width and not the order.
  *
- * <h2>Lo que se ve mientras se arrastra</h2>
+ * <h2>What is seen while dragging</h2>
  *
- * <p>{@link #getDraggedColumn} y {@link #getDraggedDistance} son el estado de un arrastre en curso,
- * y los lee el aspecto para dibujar la columna a medio mover. Sin aspecto instalado nadie los
- * escribe, y quedan en nulo y cero.
+ * <p>{@link #getDraggedColumn} and {@link #getDraggedDistance} are the state of a drag in
+ * progress, and the look and feel reads them to draw the half-moved column. With no look and
+ * feel installed nobody writes them, and they stay null and zero.
  */
 public class JTableHeader extends JComponent implements TableColumnModelListener, Accessible {
 
     private static final String uiClassID = "TableHeaderUI";
 
-    /** La tabla a la que pertenece, o nulo. */
+    /** The table it belongs to, or null. */
     protected JTable table;
 
-    /** El modelo de columnas, compartido con la tabla. */
+    /** The column model, shared with the table. */
     protected TableColumnModel columnModel;
 
-    /** Si se pueden arrastrar columnas a otro lugar. */
+    /** Whether columns can be dragged elsewhere. */
     protected boolean reorderingAllowed;
 
-    /** Si se les puede cambiar el ancho. */
+    /** Whether their width can be changed. */
     protected boolean resizingAllowed;
 
-    /** Si la tabla se reacomoda mientras se arrastra, o recien al soltar. */
+    /** Whether the table rearranges itself while dragging, or only on release. */
     protected boolean updateTableInRealTime;
 
-    /** La columna cuyo ancho se esta cambiando, o nulo. */
+    /** The column whose width is being changed, or null. */
     protected transient TableColumn resizingColumn;
 
-    /** La columna que se esta arrastrando, o nulo. */
+    /** The column being dragged, or null. */
     protected transient TableColumn draggedColumn;
 
-    /** Cuanto se lleva arrastrada. */
+    /** How far it has been dragged. */
     protected transient int draggedDistance;
 
     private TableCellRenderer defaultRenderer;
 
-    /** Un encabezado con un modelo de columnas propio. */
+    /** A header with a column model of its own. */
     public JTableHeader() {
         this(null);
     }
 
-    /** Un encabezado sobre ese modelo de columnas; nulo arma uno vacio. */
+    /** A header over that column model; null builds an empty one. */
     public JTableHeader(TableColumnModel cm) {
         super();
         if (cm == null) {
@@ -86,7 +86,7 @@ public class JTableHeader extends JComponent implements TableColumnModelListener
         updateUI();
     }
 
-    /** La tabla a la que pertenece; la pone la tabla, no el llamador. */
+    /** The table it belongs to; the table sets it, not the caller. */
     public void setTable(JTable table) {
         JTable old = this.table;
         this.table = table;
@@ -97,7 +97,7 @@ public class JTableHeader extends JComponent implements TableColumnModelListener
         return table;
     }
 
-    /** Si se pueden arrastrar columnas; ver la nota de la clase. */
+    /** Whether columns can be dragged; see the class note. */
     public void setReorderingAllowed(boolean reorderingAllowed) {
         boolean old = this.reorderingAllowed;
         this.reorderingAllowed = reorderingAllowed;
@@ -108,7 +108,7 @@ public class JTableHeader extends JComponent implements TableColumnModelListener
         return reorderingAllowed;
     }
 
-    /** Si se les puede cambiar el ancho. */
+    /** Whether their width can be changed. */
     public void setResizingAllowed(boolean resizingAllowed) {
         boolean old = this.resizingAllowed;
         this.resizingAllowed = resizingAllowed;
@@ -132,9 +132,9 @@ public class JTableHeader extends JComponent implements TableColumnModelListener
     }
 
     /**
-     * Si la tabla se reacomoda mientras se arrastra.
+     * Whether the table rearranges itself while dragging.
      *
-     * @deprecated Como en el JDK: el valor se guarda y se devuelve, y ya no lo mira nadie.
+     * @deprecated As in the JDK: the value is kept and returned, and nobody looks at it any more.
      */
     @Deprecated
     public void setUpdateTableInRealTime(boolean flag) {
@@ -149,7 +149,7 @@ public class JTableHeader extends JComponent implements TableColumnModelListener
         return updateTableInRealTime;
     }
 
-    /** El dibujante de los titulos; nulo devuelve la decision al aspecto. */
+    /** The titles' renderer; null gives the decision back to the look and feel. */
     public void setDefaultRenderer(TableCellRenderer defaultRenderer) {
         this.defaultRenderer = defaultRenderer;
     }
@@ -158,7 +158,7 @@ public class JTableHeader extends JComponent implements TableColumnModelListener
         return defaultRenderer;
     }
 
-    /** La columna que cae en ese punto, o -1. */
+    /** The column that falls on that point, or -1. */
     public int columnAtPoint(Point point) {
         int x = point.x;
         if (!getComponentOrientation().isLeftToRight()) {
@@ -175,10 +175,10 @@ public class JTableHeader extends JComponent implements TableColumnModelListener
     }
 
     /**
-     * El rectangulo del titulo de esa columna.
+     * That column's title rectangle.
      *
-     * <p>Un indice fuera de rango devuelve un rectangulo vacio en la posicion que le tocaria, no un
-     * error: el aspecto lo pide mientras dibuja y no tiene como saber donde termina.
+     * <p>An index out of range returns an empty rectangle at the position it would have, not an
+     * error: the look and feel asks for it while drawing and has no way of knowing where it ends.
      */
     public Rectangle getHeaderRect(int column) {
         Rectangle r = new Rectangle();
@@ -204,7 +204,7 @@ public class JTableHeader extends JComponent implements TableColumnModelListener
         return r;
     }
 
-    /** El texto de ayuda del titulo que esta bajo el puntero, si su dibujante da uno. */
+    /** The tooltip text of the title under the pointer, if its renderer gives one. */
     public String getToolTipText(MouseEvent event) {
         String tip = null;
         Point p = event.getPoint();
@@ -236,9 +236,10 @@ public class JTableHeader extends JComponent implements TableColumnModelListener
     }
 
     /**
-     * Lo que ocupa: tan ancho como la suma de las columnas.
+     * How much it takes up: as wide as the sum of the columns.
      *
-     * <p>El alto lo decide el aspecto; sin aspecto queda en el que tenga puesto.
+     * <p>The height is decided by the look and feel; with no look and feel it stays at whatever it
+     * has set.
      */
     public Dimension getPreferredSize() {
         if (isPreferredSizeSet()) {
@@ -273,9 +274,9 @@ public class JTableHeader extends JComponent implements TableColumnModelListener
     }
 
     /**
-     * Cambia el modelo de columnas.
+     * Changes the column model.
      *
-     * @throws IllegalArgumentException si es nulo
+     * @throws IllegalArgumentException if it is null
      */
     public void setColumnModel(TableColumnModel columnModel) {
         if (columnModel == null) {
@@ -313,7 +314,7 @@ public class JTableHeader extends JComponent implements TableColumnModelListener
         resizeAndRepaint();
     }
 
-    /** No hace nada: el encabezado no muestra la seleccion de columnas. */
+    /** It does nothing: the header does not show the column selection. */
     public void columnSelectionChanged(ListSelectionEvent e) {
     }
 
@@ -322,11 +323,11 @@ public class JTableHeader extends JComponent implements TableColumnModelListener
     }
 
     /**
-     * El dibujante de titulos de base.
+     * The base title renderer.
      *
-     * <p>En el JDK es una subclase de {@link DefaultTableCellRenderer} centrada y con el borde del
-     * aspecto. Aca es el mismo dibujante de celda: sin aspecto instalado no hay borde de encabezado
-     * que pedir, y el texto se ve igual.
+     * <p>In the JDK it is a subclass of {@link DefaultTableCellRenderer}, centred and with the look
+     * and feel's border. Here it is the same cell renderer: with no look and feel installed there
+     * is no header border to ask for, and the text looks the same.
      */
     protected TableCellRenderer createDefaultRenderer() {
         DefaultTableCellRenderer label = new DefaultTableCellRenderer.UIResource();
@@ -334,7 +335,7 @@ public class JTableHeader extends JComponent implements TableColumnModelListener
         return label;
     }
 
-    /** Los valores de arranque; lo llama el constructor. */
+    /** The starting values; the constructor calls it. */
     protected void initializeLocalVars() {
         setOpaque(true);
         table = null;
@@ -347,23 +348,23 @@ public class JTableHeader extends JComponent implements TableColumnModelListener
         setDefaultRenderer(createDefaultRenderer());
     }
 
-    /** Vuelve a medir y a dibujar. */
+    /** It measures and draws again. */
     public void resizeAndRepaint() {
         revalidate();
         repaint();
     }
 
-    /** Anota que columna se esta arrastrando; lo escribe el aspecto. */
+    /** Notes which column is being dragged; the look and feel writes it. */
     public void setDraggedColumn(TableColumn aColumn) {
         draggedColumn = aColumn;
     }
 
-    /** Anota cuanto se lleva arrastrada. */
+    /** Notes how far it has been dragged. */
     public void setDraggedDistance(int distance) {
         draggedDistance = distance;
     }
 
-    /** Anota que columna se esta redimensionando. */
+    /** Notes which column is being resized. */
     public void setResizingColumn(TableColumn aColumn) {
         resizingColumn = aColumn;
     }

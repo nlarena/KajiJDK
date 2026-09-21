@@ -1,82 +1,90 @@
 package org.w3c.dom.events;
 
 /**
- * KajiLibrary's org.w3c.dom.events.Event -- algo que paso en el documento.
+ * KajiLibrary's org.w3c.dom.events.Event -- something that happened in the document.
  *
- * <h2>El recorrido en tres fases</h2>
+ * <h2>The walk in three phases</h2>
  *
- * <p>Un evento no se entrega solo en el nodo donde paso: recorre el arbol dos veces.
+ * <p>An event is not delivered only at the node where it happened: it walks the tree twice.
  *
  * <ol>
- *   <li>{@link #CAPTURING_PHASE} -- baja desde la raiz hasta el objetivo. Solo lo ven los escuchas
- *       registrados con {@code useCapture = true}.
- *   <li>{@link #AT_TARGET} -- llega al nodo donde paso.
- *   <li>{@link #BUBBLING_PHASE} -- sube de vuelta hasta la raiz, si el evento burbujea.
+ *   <li>{@link #CAPTURING_PHASE} -- it goes down from the root to the target. Only the listeners
+ *       registered with {@code useCapture = true} see it.
+ *   <li>{@link #AT_TARGET} -- it arrives at the node where it happened.
+ *   <li>{@link #BUBBLING_PHASE} -- it goes back up to the root, if the event bubbles.
  * </ol>
  *
- * <p>De ahi sale la diferencia entre {@link #getTarget()} --donde <b>paso</b>, siempre el mismo-- y
- * {@link #getCurrentTarget()} --por donde <b>va pasando</b>, distinto en cada escucha--. Leer el
- * segundo creyendo que es el primero es el error clasico de este API.
+ * <p>From there comes the difference between {@link #getTarget()} --where it <b>happened</b>,
+ * always the same-- and {@link #getCurrentTarget()} --where it <b>is passing</b>, different in each
+ * listener--. Reading the second believing it is the first is the classic mistake of this API.
  *
- * <h2>Detener no es cancelar</h2>
+ * <h2>Stopping is not cancelling</h2>
  *
- * <p>Los dos metodos de control hacen cosas distintas y son independientes:
+ * <p>The two control methods do different things and are independent:
  *
  * <ul>
- *   <li>{@link #stopPropagation()} corta el <b>recorrido</b>: los nodos que faltan no se enteran. La
- *       accion por omision igual ocurre.
- *   <li>{@link #preventDefault()} cancela la <b>accion</b> --seguir un enlace, enviar un
- *       formulario-- y el recorrido sigue. Solo sirve si el evento es cancelable.
+ *   <li>{@link #stopPropagation()} cuts the <b>walk</b>: the nodes that are left do not find out.
+ *       The default action still happens.
+ *   <li>{@link #preventDefault()} cancels the <b>action</b> --following a link, submitting a form--
+ *       and the walk goes on. It only serves if the event is cancelable.
  * </ul>
  */
 public interface Event {
 
-    /** Bajando desde la raiz hacia el objetivo. */
+    /** Going down from the root towards the target. */
     short CAPTURING_PHASE = 1;
 
-    /** En el nodo donde paso. */
+    /** At the node where it happened. */
     short AT_TARGET = 2;
 
-    /** Subiendo desde el objetivo hacia la raiz. */
+    /** Going up from the target towards the root. */
     short BUBBLING_PHASE = 3;
 
-    /** El nombre del evento: {@code "click"}, {@code "DOMNodeInserted"}. Sin prefijo {@code "on"}. */
+    /**
+     * The name of the event: {@code "click"}, {@code "DOMNodeInserted"}. With no {@code "on"}
+     * prefix.
+     */
     String getType();
 
-    /** Donde <b>paso</b>. No cambia durante el recorrido. */
+    /** Where it <b>happened</b>. It does not change during the walk. */
     EventTarget getTarget();
 
-    /** Por donde <b>va pasando</b>. Cambia en cada escucha; ver la nota de la clase. */
+    /** Where it <b>is passing</b>. It changes in each listener; see the note of the class. */
     EventTarget getCurrentTarget();
 
-    /** En cual de las tres fases esta. */
+    /** Which of the three phases it is in. */
     short getEventPhase();
 
-    /** Si sube por la fase de burbujeo. Un evento que no burbujea solo llega al objetivo. */
+    /**
+     * Whether it goes up through the bubbling phase. An event that does not bubble only reaches the
+     * target.
+     */
     boolean getBubbles();
 
-    /** Si {@link #preventDefault()} tiene algun efecto sobre el. */
+    /** Whether {@link #preventDefault()} has any effect on it. */
     boolean getCancelable();
 
     /**
-     * Cuando ocurrio, en milisegundos desde la epoca.
+     * When it happened, in milliseconds since the epoch.
      *
-     * <p>Puede ser 0: el estandar admite que una implementacion no tenga un reloj con suficiente
-     * resolucion, y devolver 0 es como lo dice.
+     * <p>It may be 0: the standard admits that an implementation may not have a clock with enough
+     * resolution, and returning 0 is how it says so.
      */
     long getTimeStamp();
 
-    /** Corta el recorrido. No cancela la accion; ver la nota de la clase. */
+    /** It cuts the walk. It does not cancel the action; see the note of the class. */
     void stopPropagation();
 
-    /** Cancela la accion por omision. No corta el recorrido. */
+    /** It cancels the default action. It does not cut the walk. */
     void preventDefault();
 
     /**
-     * Inicializa un evento recien creado por {@code DocumentEvent.createEvent}.
+     * It initialises an event newly created by {@code DocumentEvent.createEvent}.
      *
-     * <p>Hace falta porque el evento se crea vacio: la fabrica no toma argumentos. Llamarlo sobre un
-     * evento que ya se esta despachando no hace nada.
+     * <p>It is needed because the event is created empty: the factory takes no arguments. The
+     * specification says it may only be called before the event is dispatched (several times, the
+     * last one winning); the note said that calling it on an event already being dispatched does
+     * nothing, which the specification does not say -- it leaves that case undefined.
      */
     void initEvent(String eventTypeArg, boolean canBubbleArg, boolean cancelableArg);
 }

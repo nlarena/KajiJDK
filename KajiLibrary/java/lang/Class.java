@@ -1,6 +1,7 @@
 package java.lang;
 
-// Por import y nombre simple: calificar el tipo en el uso no resuelve desde java.lang
+// Through an import and a simple name: qualifying the type at the use site does not resolve from
+// java.lang
 // (finding #210).
 import java.io.Serializable;
 import java.lang.constant.ClassDesc;
@@ -140,9 +141,10 @@ public final class Class<T> implements Type, java.lang.invoke.TypeDescriptor.OfF
     // the use site, or the @interface's defaults) and allocates an instance. No @Inherited walk.
     private native java.lang.annotation.Annotation[] declaredAnnotations0();
 
-    // La bandera dice si ademas de **cargar** hay que **inicializar**: son dos cosas distintas
-    // (JVMS 5.4 y 5.5) y `forName` promete una u otra segun por donde se entre. La VM la necesita
-    // explicita porque correr un `<clinit>` no es algo que este lado pueda pedir de otra forma.
+    // The flag says whether, besides **loading**, it has to **initialise**: they are two different
+    // things (JVMS 5.4 and 5.5) and `forName` promises one or the other depending on the way in. The
+    // VM needs it explicitly because running a `<clinit>` is not something this side can ask for any
+    // other way.
     private static native Class<?> forName0(String name, boolean initialize);
 
     // The mirror of a PRIMITIVE type, by its keyword. Package-private and native, exactly as the
@@ -289,7 +291,7 @@ public final class Class<T> implements Type, java.lang.invoke.TypeDescriptor.OfF
         if (this.isInnerClass0()) {
             String inner = this.innerName0();
             if (inner == null) {
-                return ""; // anonima: no tiene nombre que dar
+                return ""; // anonymous: it has no name to give
             }
             return inner;
         }
@@ -535,9 +537,9 @@ public final class Class<T> implements Type, java.lang.invoke.TypeDescriptor.OfF
      * @throws ClassNotFoundException if there is no such class
      */
     public static Class<?> forName(String className) throws ClassNotFoundException {
-        // Esta forma **si** inicializa, y es la unica de las tres que lo hace siempre. Es lo que
-        // convierte a `Class.forName("...")` en la manera estandar de hacer que una clase se
-        // registre sola desde su bloque `static`.
+        // This form **does** initialise, and it is the only one of the three that always does. It is
+        // what makes `Class.forName("...")` the standard way of getting a class to register itself
+        // from its `static` block.
         Class<?> found = Class.forName0(className, true);
         if (found == null) {
             throw new ClassNotFoundException(className);
@@ -548,13 +550,13 @@ public final class Class<T> implements Type, java.lang.invoke.TypeDescriptor.OfF
     /**
      * The mirror of the type named {@code name}.
      *
-     * <p>{@code loader} se acepta y se ignora, y eso es honesto y no perezoso: hay exactamente un
-     * cargador de clases aca, asi que nombrar otro no puede cambiar la respuesta.
+     * <p>{@code loader} is accepted and ignored, and that is honest rather than lazy: there is
+     * exactly one class loader here, so naming another cannot change the answer.
      *
-     * <p>{@code initialize} <b>si</b> se respeta, y es la unica diferencia entre esta forma y la de
-     * un argumento. Con `false` la clase queda **cargada pero sin inicializar**: su bloque `static`
-     * no corrio, y va a correr recien en el primer uso activo. Es la forma que se usa cuando
-     * nombrar una clase no deberia tener efectos.
+     * <p>{@code initialize} <b>is</b> respected, and it is the only difference between this form and
+     * the one-argument one. With `false` the class is left **loaded but not initialised**: its
+     * `static` block has not run, and will run only on the first active use. It is the form used when
+     * naming a class should have no effects.
      *
      * @param name the binary name, with dots
      * @param initialize whether to run the static initializer
@@ -575,9 +577,9 @@ public final class Class<T> implements Type, java.lang.invoke.TypeDescriptor.OfF
      * reports absence with {@code null} rather than an exception. The module is ignored: with a
      * single unnamed module over one class path, naming one cannot change which class is found.
      *
-     * <p><b>No inicializa</b>, a diferencia de {@link #forName(String)}: la clase queda cargada y su
-     * bloque `static` corre recien en el primer uso activo. Se comprobo contra el JDK 25, que hace
-     * exactamente esto.
+     * <p><b>It does not initialise</b>, unlike {@link #forName(String)}: the class is left loaded and
+     * its `static` block runs only on the first active use. This was checked against JDK 25, which
+     * does exactly this.
      *
      * @param module the module to search (ignored)
      * @param name the binary name, with dots
@@ -822,13 +824,13 @@ public final class Class<T> implements Type, java.lang.invoke.TypeDescriptor.OfF
         if (wanted == null) {
             wanted = new Class<?>[0];
         }
-        Class<?>[] actual = method.getParameterTypes();
-        if (actual.length != wanted.length) {
+        Class<?>[] current = method.getParameterTypes();
+        if (current.length != wanted.length) {
             return false;
         }
         int i = 0;
-        while (i < actual.length) {
-            if (actual[i] != wanted[i]) {
+        while (i < current.length) {
+            if (current[i] != wanted[i]) {
                 return false;
             }
             i = i + 1;
@@ -859,9 +861,9 @@ public final class Class<T> implements Type, java.lang.invoke.TypeDescriptor.OfF
 
     // ---- the constructors ----
     //
-    // Un constructor es un metodo llamado `<init>`: en el archivo de clase vive en la misma tabla
-    // que los demas. La reflexion lo separa porque se INVOCA distinto -- aloca antes de correr --
-    // y esa diferencia es la unica razon por la que `Constructor` no es un `Method`.
+    // A constructor is a method called `<init>`: in the class file it lives in the same table as the
+    // rest. Reflection separates it because it is INVOKED differently -- it allocates before running
+    // -- and that difference is the only reason `Constructor` is not a `Method`.
 
     /**
      * The constructors this type declares, of every visibility.
@@ -947,13 +949,13 @@ public final class Class<T> implements Type, java.lang.invoke.TypeDescriptor.OfF
         if (wanted == null) {
             wanted = new Class<?>[0];
         }
-        Class<?>[] actual = candidate.getParameterTypes();
-        if (actual.length != wanted.length) {
+        Class<?>[] current = candidate.getParameterTypes();
+        if (current.length != wanted.length) {
             return false;
         }
         int i = 0;
-        while (i < actual.length) {
-            if (actual[i] != wanted[i]) {
+        while (i < current.length) {
+            if (current[i] != wanted[i]) {
                 return false;
             }
             i = i + 1;
@@ -985,18 +987,18 @@ public final class Class<T> implements Type, java.lang.invoke.TypeDescriptor.OfF
         try {
             return ctor.newInstance();
         } catch (java.lang.reflect.InvocationTargetException ex) {
-            // Y aca esta la misfeature, reproducida a proposito: la excepcion del constructor
-            // sale SIN envolver y sin estar declarada. `sneak` es lo que lo hace posible -- el
-            // borrado de tipos deja lanzar una chequeada donde el compilador espera otra cosa --
-            // y es exactamente lo que el JDK hace con `Unsafe.throwException`.
+            // And here is the misfeature, reproduced on purpose: the constructor's exception comes
+            // out UNWRAPPED and undeclared. `sneak` is what makes it possible -- type erasure allows
+            // throwing a checked one where the compiler expects something else -- and it is exactly
+            // what the JDK does with `Unsafe.throwException`.
             Class.sneak(ex.getTargetException());
-            return null; // inalcanzable
+            return null; // unreachable
         }
     }
 
-    // Lanza `t` tal cual, sea chequeada o no. Legal por borrado: `E` se infiere como
-    // RuntimeException en el sitio de llamada, el compilador deja de exigir el `throws`, y en
-    // tiempo de ejecucion no hay chequeo ninguno porque el cast a `E` se borro.
+    // It throws `t` as it stands, checked or not. Legal by erasure: `E` is inferred as
+    // RuntimeException at the call site, the compiler stops demanding the `throws`, and at run time
+    // there is no check at all because the cast to `E` was erased.
     private static <E extends Throwable> void sneak(Throwable t) throws E {
         throw (E) t;
     }
@@ -1059,10 +1061,11 @@ public final class Class<T> implements Type, java.lang.invoke.TypeDescriptor.OfF
      * one domain keyed by its (bootstrap) class loader.
      */
     public java.security.ProtectionDomain getProtectionDomain() {
-        // Cuatro argumentos y no dos: el de dos crea un dominio de permisos **estaticos**, y decir
-        // que este dominio tiene fijados sus permisos para siempre seria afirmar algo que nadie
-        // comprobo. Con el de cuatro queda dinamico, que es lo que hace el JDK, y sin codesource ni
-        // permisos —los dos en null— porque es lo unico que se sabe: quien lo cargo.
+        // Four arguments and not two: the two-argument one creates a domain of **static**
+        // permissions, and saying this domain has its permissions fixed for ever would be stating
+        // something nobody checked. With the four-argument one it stays dynamic, which is what the
+        // JDK does, and with neither codesource nor permissions --both null-- because that is all
+        // that is known: who loaded it.
         return new ProtectionDomain(null, null, this.getClassLoader(), null);
     }
 
@@ -1187,10 +1190,10 @@ public final class Class<T> implements Type, java.lang.invoke.TypeDescriptor.OfF
 
     // ---- where this type was declared ----
     //
-    // Un archivo de clase no sabe que estaba adentro de otro: `Outer` y `Outer$Inner` son dos
-    // archivos sueltos con un `$` en el nombre, y el `$` es un caracter legal en un identificador.
-    // La estructura del LENGUAJE la reconstruye el atributo `InnerClasses`, y por eso todo lo que
-    // sigue lo consulta en vez de mirar el nombre.
+    // A class file does not know it was inside another: `Outer` and `Outer$Inner` are two loose
+    // files with a `$` in the name, and `$` is a legal character in an identifier.
+    // The LANGUAGE's structure is reconstructed by the `InnerClasses` attribute, and that is why
+    // everything that follows consults it instead of looking at the name.
 
     /**
      * Whether this type is declared inside a method or a constructor.
@@ -1313,8 +1316,8 @@ public final class Class<T> implements Type, java.lang.invoke.TypeDescriptor.OfF
         return null;
     }
 
-    // El descriptor de un metodo, rearmado desde los mirrors. Es lo que permite comparar contra
-    // el que el atributo `EnclosingMethod` guarda, que es texto.
+    // A method's descriptor, rebuilt from the mirrors. It is what allows comparing against the one
+    // the `EnclosingMethod` attribute keeps, which is text.
     private static String descriptorOf(Class<?>[] parameters, Class<?> returns) {
         StringBuilder out = new StringBuilder("(");
         int i = 0;
@@ -1328,9 +1331,10 @@ public final class Class<T> implements Type, java.lang.invoke.TypeDescriptor.OfF
 
     // ---- the nest ----
     //
-    // Un nido son las clases que comparten acceso `private` entre si: una externa y todas sus
-    // anidadas. Existe desde Java 11 y reemplazo a los metodos puente sinteticos que el compilador
-    // generaba antes para el mismo fin, que es por que un `.class` moderno tiene menos basura.
+    // A nest is the classes that share `private` access with each other: an outer one and all its
+    // nested ones. It has existed since Java 11 and replaced the synthetic bridge methods the
+    // compiler used to generate for the same end, which is why a modern `.class` has less rubbish in
+    // it.
 
     /** The nest this type belongs to, named by its host. */
     public Class<?> getNestHost() {
@@ -1411,10 +1415,10 @@ public final class Class<T> implements Type, java.lang.invoke.TypeDescriptor.OfF
 
     // ---- classpath resources ----
     //
-    // El JDK busca el recurso por el classpath a traves del ClassLoader. KajiJDK no tiene carga de
-    // recursos (no hay un classpath de datos que recorrer), asi que la busqueda no encuentra nada y
-    // devuelve `null` -- que es exactamente el resultado que el contrato define para "no hallado".
-    // No es un placeholder: para toda entrada, el resultado honesto aqui es "no hay tal recurso".
+    // The JDK looks the resource up along the classpath through the ClassLoader. KajiJDK has no
+    // resource loading (there is no data classpath to walk), so the search finds nothing and returns
+    // `null` -- which is exactly the result the contract defines for "not found". It is not a
+    // placeholder: for every input, the honest result here is "there is no such resource".
 
     /**
      * Find the resource named {@code name} on the class path, as a {@link java.net.URL} — always

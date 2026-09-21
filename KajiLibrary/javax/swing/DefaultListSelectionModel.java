@@ -9,23 +9,23 @@ import javax.swing.event.ListSelectionEvent;
 import javax.swing.event.ListSelectionListener;
 
 /**
- * Que renglones estan elegidos.
+ * Which lines are chosen.
  *
- * <h2>Un conjunto de bits y dos indices</h2>
+ * <h2>A set of bits and two indices</h2>
  *
- * <p>Lo elegido va en un {@link BitSet}: una lista de un millon de renglones con dos elegidos ocupa
- * lo mismo que una de mil. Ademas se llevan dos indices que no dicen que esta elegido sino
- * <em>como</em> se llego: el ancla es donde empezo la seleccion y el guia donde esta ahora. Con los
- * dos, arrastrar el mouse hacia atras puede desmarcar lo que marco hacia adelante.
+ * <p>What is chosen goes in a {@link BitSet}: a list of a million lines with two chosen takes
+ * up the same as one of a thousand. Two indices are also carried that do not say what is chosen
+ * but <em>how</em> it was reached: the anchor is where the selection started and the lead where
+ * it is now. With both, dragging the mouse backwards may unmark what it marked forwards.
  *
- * <h2>Los avisos se juntan</h2>
+ * <h2>The notices are gathered</h2>
  *
- * <p>Mientras {@link #setValueIsAdjusting} esta prendido, quien escucha sabe que la seleccion esta
- * a medio hacer y puede no actualizar nada hasta el final. Es lo que evita que arrastrar el mouse
- * por cien renglones haga cien consultas a una base de datos.
+ * <p>While {@link #setValueIsAdjusting} is switched on, whoever listens knows that the
+ * selection is half made and may update nothing until the end. It is what keeps dragging the
+ * mouse over a hundred lines from making a hundred queries to a database.
  *
- * <p>Ademas cada aviso lleva el rango que cambio, no la seleccion entera. El rango se junta
- * mientras se hacen varios cambios seguidos y se manda uno solo.
+ * <p>Besides, each notice carries the range that changed, not the whole selection. The range is
+ * gathered while several changes are made in a row and a single one is sent.
  */
 public class DefaultListSelectionModel implements ListSelectionModel, Cloneable, Serializable {
 
@@ -33,7 +33,7 @@ public class DefaultListSelectionModel implements ListSelectionModel, Cloneable,
     private static final int MAX = Integer.MAX_VALUE;
 
     private int value = MIN;
-    private BitSet valor = new BitSet(32);
+    private BitSet bits = new BitSet(32);
     private int minIndex = MAX;
     private int maxIndex = MIN;
     private int anchorIndex = -1;
@@ -45,13 +45,13 @@ public class DefaultListSelectionModel implements ListSelectionModel, Cloneable,
     private int lastChangedIndex = MIN;
     private int selectionMode = MULTIPLE_INTERVAL_SELECTION;
 
-    /** Quienes escuchan. */
+    /** Those who listen. */
     protected EventListenerList listenerList = new EventListenerList();
 
-    /** Si al cambiar el ancla o el guia hay que avisar. */
+    /** Whether notice has to be given when the anchor or the lead changes. */
     protected boolean leadAnchorNotificationEnabled = true;
 
-    /** Un modelo sin nada elegido. */
+    /** A model with nothing chosen. */
     public DefaultListSelectionModel() {
     }
 
@@ -72,9 +72,9 @@ public class DefaultListSelectionModel implements ListSelectionModel, Cloneable,
     }
 
     /**
-     * Cuantos renglones se pueden elegir a la vez.
+     * How many lines may be chosen at a time.
      *
-     * @throws IllegalArgumentException si no es uno de los tres modos.
+     * @throws IllegalArgumentException if it is not one of the three modes.
      */
     public void setSelectionMode(int selectionMode) {
         if (selectionMode != SINGLE_SELECTION && selectionMode != SINGLE_INTERVAL_SELECTION
@@ -84,8 +84,9 @@ public class DefaultListSelectionModel implements ListSelectionModel, Cloneable,
         int oldMode = this.selectionMode;
         this.selectionMode = selectionMode;
         if (oldMode == selectionMode || isSelectionEmpty()) {
-            // Con la seleccion vacia no hay nada que achicar, y no se puede tocar: los extremos
-            // valen los centinelas, y usarlos como indices marcaria un renglon inexistente.
+            // With the selection empty there is nothing to shrink, and it must not be touched: the
+                        // ends hold the sentinels, and using them as indices would mark a line that
+                        // does not exist.
             return;
         }
         if (selectionMode == SINGLE_SELECTION) {
@@ -96,7 +97,7 @@ public class DefaultListSelectionModel implements ListSelectionModel, Cloneable,
     }
 
     public boolean isSelectedIndex(int index) {
-        return ((index < minIndex) || (index > maxIndex)) ? false : valor.get(index);
+        return ((index < minIndex) || (index > maxIndex)) ? false : bits.get(index);
     }
 
     public boolean isSelectionEmpty() {
@@ -115,12 +116,12 @@ public class DefaultListSelectionModel implements ListSelectionModel, Cloneable,
         return listenerList.getListeners(ListSelectionListener.class);
     }
 
-    /** Avisa que cambio la seleccion entre esos dos indices. */
+    /** It gives notice that the selection between those two indices changed. */
     protected void fireValueChanged(int firstIndex, int lastIndex) {
         fireValueChanged(firstIndex, lastIndex, getValueIsAdjusting());
     }
 
-    /** Avisa que la seleccion dejo de estar a medio hacer. */
+    /** It gives notice that the selection stopped being half made. */
     protected void fireValueChanged(boolean isAdjusting) {
         if (lastChangedIndex == MIN) {
             return;
@@ -149,7 +150,7 @@ public class DefaultListSelectionModel implements ListSelectionModel, Cloneable,
         return listenerList.getListeners(listenerType);
     }
 
-    /** Si mover el ancla o el guia cuenta como un cambio que hay que avisar. */
+    /** Whether moving the anchor or the lead counts as a change notice has to be given of. */
     public void setLeadAnchorNotificationEnabled(boolean flag) {
         leadAnchorNotificationEnabled = flag;
     }
@@ -159,17 +160,17 @@ public class DefaultListSelectionModel implements ListSelectionModel, Cloneable,
     }
 
     /**
-     * Deja la seleccion vacia.
+     * It leaves the selection empty.
      *
-     * <p>No mueve el ancla ni el guia. Parece una omision y no lo es: los dos dicen por donde
-     * venia el usuario, y borrar lo elegido no borra ese recorrido. Es lo que permite que apretar
-     * Escape y despues Shift+flecha siga extendiendo desde donde estaba.
+     * <p>It moves neither the anchor nor the lead. It looks like an omission and it is not: both
+     * say where the user was coming from, and erasing what is chosen does not erase that walk. It
+     * is what allows pressing Escape and then Shift+arrow to go on extending from where it was.
      */
     public void clearSelection() {
-        quitarTramo(minIndex, maxIndex, false);
+        removeRange(minIndex, maxIndex, false);
     }
 
-    /** Deja elegido solo ese tramo. */
+    /** It leaves only that range chosen. */
     public void setSelectionInterval(int index0, int index1) {
         if (index0 == -1 || index1 == -1) {
             return;
@@ -185,7 +186,7 @@ public class DefaultListSelectionModel implements ListSelectionModel, Cloneable,
         changeSelection(clearMin, clearMax, setMin, setMax);
     }
 
-    /** Agrega ese tramo a lo elegido. */
+    /** It adds that range to what is chosen. */
     public void addSelectionInterval(int index0, int index1) {
         if (index0 == -1 || index1 == -1) {
             return;
@@ -202,17 +203,17 @@ public class DefaultListSelectionModel implements ListSelectionModel, Cloneable,
         changeSelection(clearMin, clearMax, setMin, setMax);
     }
 
-    /** Saca ese tramo de lo elegido. */
+    /** It removes that range from what is chosen. */
     public void removeSelectionInterval(int index0, int index1) {
-        quitarTramo(index0, index1, true);
+        removeRange(index0, index1, true);
     }
 
-    /** Saca ese tramo; {@code moverGuia} dice si ademas se mueven el ancla y el guia. */
-    private void quitarTramo(int index0, int index1, boolean moverGuia) {
+    /** It removes that range; {@code moveLead} says whether the anchor and the lead also move. */
+    private void removeRange(int index0, int index1, boolean moveLead) {
         if (index0 == -1 || index1 == -1) {
             return;
         }
-        if (moverGuia) {
+        if (moveLead) {
             updateLeadAnchorIndices(index0, index1);
         }
         int clearMin = Math.min(index0, index1);
@@ -223,19 +224,19 @@ public class DefaultListSelectionModel implements ListSelectionModel, Cloneable,
     }
 
     /**
-     * Corre la seleccion porque se insertaron renglones.
+     * It shifts the selection because lines were inserted.
      *
-     * <p>Lo llama la lista cuando el modelo de datos cambia. Sin esto, insertar un renglon arriba
-     * dejaria elegido el de al lado del que estaba elegido.
+     * <p>The list calls it when the data model changes. Without this, inserting a line above would
+     * leave the one beside the one that was chosen chosen.
      */
     public void insertIndexInterval(int index, int length, boolean before) {
         int insMinIndex = (before) ? index : index + 1;
         int insMaxIndex = (insMinIndex + length) - 1;
         for (int i = maxIndex; i >= insMinIndex; i--) {
-            setState(i + length, valor.get(i));
+            setState(i + length, bits.get(i));
         }
         boolean setInsertedValues = ((getSelectionMode() == SINGLE_SELECTION)
-                ? false : valor.get(index));
+                ? false : bits.get(index));
         for (int i = insMinIndex; i <= insMaxIndex; i++) {
             setState(i, setInsertedValues);
         }
@@ -253,17 +254,17 @@ public class DefaultListSelectionModel implements ListSelectionModel, Cloneable,
         fireValueChanged();
     }
 
-    /** Corre la seleccion porque se sacaron renglones. */
+    /** It shifts the selection because lines were removed. */
     public void removeIndexInterval(int index0, int index1) {
         int rmMinIndex = Math.min(index0, index1);
         int rmMaxIndex = Math.max(index0, index1);
         int gapLength = (rmMaxIndex - rmMinIndex) + 1;
         for (int i = rmMinIndex; i <= maxIndex; i++) {
-            setState(i, valor.get(i + gapLength));
+            setState(i, bits.get(i + gapLength));
         }
         int leadIndex = this.leadIndex;
         if (leadIndex == 0 && rmMinIndex == 0) {
-            // No se mueve.
+            // It does not move.
         } else if (leadIndex > rmMaxIndex) {
             leadIndex = this.leadIndex - gapLength;
         } else if (leadIndex >= rmMinIndex) {
@@ -271,7 +272,7 @@ public class DefaultListSelectionModel implements ListSelectionModel, Cloneable,
         }
         int anchorIndex = this.anchorIndex;
         if (anchorIndex == 0 && rmMinIndex == 0) {
-            // Tampoco.
+                // Nor does it.
         } else if (anchorIndex > rmMaxIndex) {
             anchorIndex = this.anchorIndex - gapLength;
         } else if (anchorIndex >= rmMinIndex) {
@@ -283,7 +284,7 @@ public class DefaultListSelectionModel implements ListSelectionModel, Cloneable,
         fireValueChanged();
     }
 
-    /** Marca que la seleccion esta a medio hacer; ver la nota de la clase. */
+    /** It marks that the selection is half made; see the class note. */
     public void setValueIsAdjusting(boolean isAdjusting) {
         if (isAdjusting != this.isAdjusting) {
             this.isAdjusting = isAdjusting;
@@ -292,14 +293,14 @@ public class DefaultListSelectionModel implements ListSelectionModel, Cloneable,
     }
 
     public String toString() {
-        String s = ((getValueIsAdjusting()) ? "~" : "") + valor.toString();
+        String s = ((getValueIsAdjusting()) ? "~" : "") + bits.toString();
         return getClass().getName() + " " + Integer.toString(hashCode()) + " " + s;
     }
 
-    /** Una copia con la misma seleccion y sin los que escuchan. */
+    /** A copy with the same selection and without those who listen. */
     public Object clone() throws CloneNotSupportedException {
         DefaultListSelectionModel clone = (DefaultListSelectionModel) super.clone();
-        clone.valor = (BitSet) valor.clone();
+        clone.bits = (BitSet) bits.clone();
         clone.listenerList = new EventListenerList();
         return clone;
     }
@@ -317,7 +318,7 @@ public class DefaultListSelectionModel implements ListSelectionModel, Cloneable,
         fireValueChanged();
     }
 
-    /** Mueve el guia sin cambiar lo elegido. */
+    /** It moves the lead without changing what is chosen. */
     public void moveLeadSelectionIndex(int leadIndex) {
         if (leadIndex == -1 && anchorIndex != -1) {
             return;
@@ -330,11 +331,11 @@ public class DefaultListSelectionModel implements ListSelectionModel, Cloneable,
     }
 
     /**
-     * Mueve el guia arrastrando la seleccion desde el ancla.
+     * It moves the lead dragging the selection from the anchor.
      *
-     * <p>Es lo que pasa al arrastrar el mouse: lo que quedo entre el ancla y el guia nuevo toma el
-     * estado del ancla, y lo que quedo fuera vuelve a como estaba. Asi, arrastrar hacia atras
-     * desmarca.
+     * <p>It is what happens when dragging the mouse: what is left between the anchor and the new
+     * lead takes the anchor's state, and what is left outside goes back to how it was. That way,
+     * dragging backwards unmarks.
      */
     public void setLeadSelectionIndex(int leadIndex) {
         int anchorIndex = this.anchorIndex;
@@ -353,18 +354,18 @@ public class DefaultListSelectionModel implements ListSelectionModel, Cloneable,
         int newMin = Math.min(anchorIndex, leadIndex);
         int newMax = Math.max(anchorIndex, leadIndex);
         updateLeadAnchorIndices(anchorIndex, leadIndex);
-        // Los dos casos no son simetricos. Arrastrando desde un ancla elegida se marca lo nuevo y
-        // se desmarca lo que quedo afuera; desde un ancla no elegida es al reves, y ademas el
-        // tramo que esta en los dos rangos tiene que quedar DESmarcado. De ahi el `false`: dice
-        // cual de los dos gana en la parte que se pisa.
-        if (valor.get(this.anchorIndex)) {
+        // The two cases are not symmetrical. Dragging from a chosen anchor marks the new and
+                // unmarks what was left outside; from an unchosen anchor it is the other way round,
+                // and besides the range that is in both must be left UNmarked. Hence the `false`:
+                // it says which of the two wins in the part that overlaps.
+        if (bits.get(this.anchorIndex)) {
             changeSelection(oldMin, oldMax, newMin, newMax);
         } else {
             changeSelection(newMin, newMax, oldMin, oldMax, false);
         }
     }
 
-    // ---- lo de adentro ----
+    // ---- the inside ----
 
     private void updateLeadAnchorIndices(int anchorIndex, int leadIndex) {
         if (leadAnchorNotificationEnabled) {
@@ -398,32 +399,32 @@ public class DefaultListSelectionModel implements ListSelectionModel, Cloneable,
     }
 
     private void set(int r) {
-        if (valor.get(r)) {
+        if (bits.get(r)) {
             return;
         }
-        valor.set(r);
+        bits.set(r);
         markAsDirty(r);
         minIndex = Math.min(minIndex, r);
         maxIndex = Math.max(maxIndex, r);
     }
 
     private void clear(int r) {
-        if (!valor.get(r)) {
+        if (!bits.get(r)) {
             return;
         }
-        valor.clear(r);
+        bits.clear(r);
         markAsDirty(r);
-        // Si se saco un extremo, hay que buscar el nuevo: el conjunto no lo lleva.
+        // If an end was removed, the new one has to be looked for: the set does not carry it.
         if (r == minIndex) {
             for (minIndex = minIndex + 1; minIndex <= maxIndex; minIndex++) {
-                if (valor.get(minIndex)) {
+                if (bits.get(minIndex)) {
                     break;
                 }
             }
         }
         if (r == maxIndex) {
             for (maxIndex = maxIndex - 1; minIndex <= maxIndex; maxIndex--) {
-                if (valor.get(maxIndex)) {
+                if (bits.get(maxIndex)) {
                     break;
                 }
             }
@@ -464,7 +465,7 @@ public class DefaultListSelectionModel implements ListSelectionModel, Cloneable,
         return (i >= a) && (i <= b);
     }
 
-    /** Manda el aviso con el rango que se junto, si hay alguno. */
+    /** It sends the notice with the range that was gathered, if there is one. */
     private void fireValueChanged() {
         if (lastAdjustedIndex == MIN) {
             return;

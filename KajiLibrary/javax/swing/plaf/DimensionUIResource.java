@@ -2,7 +2,7 @@ package javax.swing.plaf;
 
 import java.awt.Dimension;
 
-/** Una {@link Dimension} que puso el aspecto; ver {@link UIResource}. */
+/** A {@link Dimension} the look and feel set; see {@link UIResource}. */
 public class DimensionUIResource extends Dimension implements UIResource {
 
     public DimensionUIResource(int width, int height) {

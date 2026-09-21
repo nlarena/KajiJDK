@@ -6,17 +6,18 @@ import javax.swing.CellEditor;
 import javax.swing.JTree;
 
 /**
- * Quien deja editar el nombre de un nodo en el lugar.
+ * Whoever allows editing a node's name in place.
  *
- * <p>Hereda de {@link CellEditor} todo lo de empezar, terminar y cancelar una edicion; lo unico que
- * agrega es el metodo que arma el componente sabiendo de que nodo se trata.
+ * <p>It inherits from {@link CellEditor} everything about starting, ending and cancelling an
+ * edit; the only thing it adds is the method that builds the component knowing which node it is
+ * about.
  *
- * <p>No recibe {@code hasFocus} como el dibujante: un editor siempre tiene el foco, porque para eso
- * se abrio.
+ * <p>It does not receive {@code hasFocus} like the renderer: an editor always has the focus,
+ * because that is what it was opened for.
  */
 public interface TreeCellEditor extends CellEditor {
 
-    /** El componente con el que se edita ese nodo. */
+    /** The component to edit that node with. */
     Component getTreeCellEditorComponent(JTree tree, Object value, boolean isSelected,
             boolean expanded, boolean leaf, int row);
 }

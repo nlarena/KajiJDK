@@ -4,55 +4,56 @@ import java.io.Serializable;
 import java.net.URL;
 import java.security.cert.Certificate;
 
-// De donde vino el codigo: una URL y, opcionalmente, quien lo firmo.
+// Where the code came from: a URL and, optionally, who signed it.
 //
-// Es la mitad "quien sos" de una decision de politica. `Policy` mira un `CodeSource` y contesta
-// que permisos le corresponden, y el `implies` de esta clase es lo que decide si una entrada de la
-// politica —"todo lo que este debajo de file:/opt/app/-"— aplica a un codigo concreto.
+// It is the "who you are" half of a policy decision. `Policy` looks at a `CodeSource` and answers
+// which permissions correspond to it, and the `implies` of this class is what decides whether an
+// entry of the policy —"everything below file:/opt/app/-"— applies to a concrete piece of code.
 //
 // ===============================================================================================
-// `implies` ES UNA DECISION DE SEGURIDAD, Y ACA ES DELIBERADAMENTE MAS ESTRICTO QUE EL JDK
+// `implies` IS A SECURITY DECISION, AND HERE IT IS DELIBERATELY STRICTER THAN THE JDK
 // ===============================================================================================
 //
-// Un `implies` que devuelve `true` de mas concede permisos que la politica no queria conceder. Por
-// eso, donde el JDK usa la logica de comodines de host de `SocketPermission` —que resuelve nombres
-// y acepta patrones como `*.ejemplo.com`— aca solo se aceptan el host exacto y el comodin total
-// `*`. La diferencia es siempre en la direccion segura: lo que aca da `false` y en el JDK daria
-// `true` se traduce en un permiso **no** concedido, nunca al reves.
+// An `implies` that returns `true` too often grants permissions the policy did not want to grant.
+// That is why, where the JDK uses the host wildcard logic of `SocketPermission` —which resolves
+// names and accepts patterns such as `*.example.com`— here only the exact host and the total
+// wildcard `*` are accepted. The difference is always in the safe direction: what gives `false`
+// here and would give `true` in the JDK translates into a permission **not** granted, never the
+// other way round.
 //
-// Los certificados se guardan pero **no se validan**: esta clase no verifica ninguna firma, y no
-// promete que quien figura como firmante haya firmado nada. Lo unico que hace `matchCerts` es
-// comparar conjuntos. La verificacion real la haria quien construya el `CodeSource`, y en esta
-// biblioteca no hay nadie que pueda hacerla.
+// The certificates are kept but **not validated**: this class verifies no signature, and does not
+// promise that whoever appears as the signer signed anything. The only thing `matchCerts` does is
+// compare sets. The real verification would be done by whoever builds the `CodeSource`, and in this
+// library there is nobody who can do it.
 public class CodeSource implements Serializable {
 
-    // null significa "cualquier origen", y por eso implica a todos.
+    // null means "any origin", and that is why it implies them all.
     private final URL location;
 
-    // Los certificados de la cadena de firma, o null si el codigo no viene firmado.
+    // The certificates of the signing chain, or null if the code does not come signed.
     private final Certificate[] certs;
 
     private final CodeSigner[] signers;
 
     public CodeSource(URL url, Certificate[] certs) {
         this.location = url;
-        this.certs = certs == null ? null : copiar(certs);
+        this.certs = certs == null ? null : copyOf(certs);
         this.signers = null;
     }
 
     public CodeSource(URL url, CodeSigner[] signers) {
         this.location = url;
-        this.signers = signers == null ? null : copiarFirmantes(signers);
+        this.signers = signers == null ? null : copySigners(signers);
         this.certs = null;
     }
 
-    private static Certificate[] copiar(Certificate[] a) {
+    private static Certificate[] copyOf(Certificate[] a) {
         Certificate[] c = new Certificate[a.length];
         System.arraycopy(a, 0, c, 0, a.length);
         return c;
     }
 
-    private static CodeSigner[] copiarFirmantes(CodeSigner[] a) {
+    private static CodeSigner[] copySigners(CodeSigner[] a) {
         CodeSigner[] c = new CodeSigner[a.length];
         System.arraycopy(a, 0, c, 0, a.length);
         return c;
@@ -79,62 +80,62 @@ public class CodeSource implements Serializable {
         } else if (!this.location.equals(cs.location)) {
             return false;
         }
-        // Igualdad simetrica: cada uno tiene que tener todos los certificados del otro.
-        return this.tieneTodos(cs.getCertificates()) && cs.tieneTodos(this.getCertificates());
+        // Symmetric equality: each one has to have every certificate of the other.
+        return this.hasAll(cs.getCertificates()) && cs.hasAll(this.getCertificates());
     }
 
     public final URL getLocation() {
         return this.location;
     }
 
-    // Los certificados de la firma, o null si no hay.
+    // The certificates of the signature, or null if there are none.
     //
-    // Cuando el `CodeSource` se construyo con firmantes, se derivan de ellos: cada firmante aporta
-    // los certificados de su cadena, en orden.
+    // When the `CodeSource` was built with signers, they are derived from them: each signer
+    // contributes the certificates of its chain, in order.
     public final Certificate[] getCertificates() {
         if (this.certs != null) {
-            return copiar(this.certs);
+            return copyOf(this.certs);
         }
         if (this.signers == null) {
             return null;
         }
-        java.util.ArrayList<Certificate> lista = new java.util.ArrayList<Certificate>();
+        java.util.ArrayList<Certificate> list = new java.util.ArrayList<Certificate>();
         int i = 0;
         while (i < this.signers.length) {
             java.util.List<? extends Certificate> cs =
                 this.signers[i].getSignerCertPath().getCertificates();
             int j = 0;
             while (j < cs.size()) {
-                lista.add(cs.get(j));
+                list.add(cs.get(j));
                 j = j + 1;
             }
             i = i + 1;
         }
-        Certificate[] a = new Certificate[lista.size()];
+        Certificate[] a = new Certificate[list.size()];
         int k = 0;
-        while (k < lista.size()) {
-            a[k] = lista.get(k);
+        while (k < list.size()) {
+            a[k] = list.get(k);
             k = k + 1;
         }
         return a;
     }
 
-    // Los firmantes, o null si el `CodeSource` se construyo con certificados sueltos.
+    // The signers, or null if the `CodeSource` was built with loose certificates.
     //
-    // A KajiLibrary subset: el JDK sabe **deducir** los firmantes a partir de un arreglo de
-    // certificados, partiendo la lista en cadenas por emisor. Eso requiere leer el emisor y el
-    // sujeto de cada X.509, y aca no hay parser de X.509. Devolver null es decir "no se", que es
-    // la verdad; inventar un agrupamiento seria afirmar que ciertos certificados forman una cadena
-    // sin haberlo comprobado.
+    // A KajiLibrary subset: the JDK knows how to **deduce** the signers from an array of
+    // certificates, splitting the list into chains by issuer. That requires reading the issuer and
+    // the subject of each X.509, and here there is no X.509 parser. Returning null is saying "I do
+    // not know", which is the truth; inventing a grouping would be asserting that certain
+    // certificates form a chain without having checked it.
     public final CodeSigner[] getCodeSigners() {
         if (this.signers == null) {
             return null;
         }
-        return copiarFirmantes(this.signers);
+        return copySigners(this.signers);
     }
 
-    // Si este `CodeSource` cubre al otro: mismos o menos requisitos de firma, y una ubicacion que
-    // abarca la del otro.
+    // Whether this `CodeSource` covers the other: the same or fewer signing requirements, and a
+    // location that takes in the other's.
     public boolean implies(CodeSource codesource) {
         if (codesource == null) {
             return false;
@@ -142,32 +143,32 @@ public class CodeSource implements Serializable {
         return this.matchCerts(codesource) && this.matchLocation(codesource);
     }
 
-    // El otro tiene que traer **todos** los certificados que este exige. Traer de mas no molesta:
-    // un codigo firmado por A y B satisface una politica que pide solo A.
+    // The other has to bring **every** certificate this one demands. Bringing extra ones does not
+    // matter: code signed by A and B satisfies a policy that asks only for A.
     private boolean matchCerts(CodeSource that) {
-        Certificate[] mios = this.getCertificates();
-        if (mios == null || mios.length == 0) {
+        Certificate[] mine = this.getCertificates();
+        if (mine == null || mine.length == 0) {
             return true;
         }
-        return that.tieneTodos(mios);
+        return that.hasAll(mine);
     }
 
-    private boolean tieneTodos(Certificate[] buscados) {
-        if (buscados == null || buscados.length == 0) {
+    private boolean hasAll(Certificate[] wanted) {
+        if (wanted == null || wanted.length == 0) {
             return true;
         }
-        Certificate[] mios = this.getCertificates();
-        if (mios == null) {
+        Certificate[] mine = this.getCertificates();
+        if (mine == null) {
             return false;
         }
         int i = 0;
-        while (i < buscados.length) {
+        while (i < wanted.length) {
             boolean hallado = false;
             int j = 0;
-            while (j < mios.length) {
-                if (buscados[i].equals(mios[j])) {
+            while (j < mine.length) {
+                if (wanted[i].equals(mine[j])) {
                     hallado = true;
-                    j = mios.length;
+                    j = mine.length;
                 } else {
                     j = j + 1;
                 }
@@ -180,86 +181,86 @@ public class CodeSource implements Serializable {
         return true;
     }
 
-    // La comparacion de ubicaciones. El grueso de la decision esta en el sufijo del path:
+    // The comparison of locations. The bulk of the decision is in the suffix of the path:
     //
-    //     ".../-"   todo lo que cuelgue, a cualquier profundidad
-    //     ".../*"   los archivos de ese directorio, sin bajar mas
-    //     ".../"    lo que empiece con ese prefijo
-    //     otro      igualdad exacta
+    //     ".../-"   everything that hangs from it, at any depth
+    //     ".../*"   the files of that directory, without going deeper
+    //     ".../"    whatever starts with that prefix
+    //     other     exact equality
     private boolean matchLocation(CodeSource that) {
         if (this.location == null) {
             return true;
         }
-        URL otra = that.location;
-        if (otra == null) {
+        URL other = that.location;
+        if (other == null) {
             return false;
         }
-        if (this.location.equals(otra)) {
+        if (this.location.equals(other)) {
             return true;
         }
         String p1 = this.location.getProtocol();
-        String p2 = otra.getProtocol();
+        String p2 = other.getProtocol();
         if (p1 == null || p2 == null || !p1.equalsIgnoreCase(p2)) {
             return false;
         }
-        if (!this.matchHost(this.location.getHost(), otra.getHost())) {
+        if (!this.matchHost(this.location.getHost(), other.getHost())) {
             return false;
         }
-        int puerto = this.location.getPort();
-        if (puerto != -1 && puerto != otra.getPort()) {
+        int port = this.location.getPort();
+        if (port != -1 && port != other.getPort()) {
             return false;
         }
         String ref = this.location.getRef();
-        if (ref != null && !ref.equals(otra.getRef())) {
+        if (ref != null && !ref.equals(other.getRef())) {
             return false;
         }
-        return this.matchFile(this.location.getFile(), otra.getFile());
+        return this.matchFile(this.location.getFile(), other.getFile());
     }
 
-    // Solo host exacto o `*`. Ver la cabecera: el JDK acepta ademas patrones con comodin parcial
-    // y equivalencias por DNS, y no soportarlos solo puede negar de mas.
-    private boolean matchHost(String mio, String otro) {
-        if (mio == null || mio.isEmpty()) {
+    // Only the exact host or `*`. See the header: the JDK also accepts patterns with a partial
+    // wildcard and equivalences by DNS, and not supporting them can only deny too much.
+    private boolean matchHost(String mine, String other) {
+        if (mine == null || mine.isEmpty()) {
             return true;
         }
-        if (mio.equals("*")) {
+        if (mine.equals("*")) {
             return true;
         }
-        if (otro == null) {
+        if (other == null) {
             return false;
         }
-        if (mio.equalsIgnoreCase(otro)) {
+        if (mine.equalsIgnoreCase(other)) {
             return true;
         }
-        // "" y "localhost" son la misma maquina en una URL `file:` o `http:` sin host.
-        boolean mioLocal = mio.equalsIgnoreCase("localhost");
-        boolean otroLocal = otro.isEmpty() || otro.equalsIgnoreCase("localhost");
-        return mioLocal && otroLocal;
+        // "" and "localhost" are the same machine in a `file:` or `http:` URL with no host.
+        boolean mineIsLocal = mine.equalsIgnoreCase("localhost");
+        boolean otherLoc = other.isEmpty() || other.equalsIgnoreCase("localhost");
+        return mineIsLocal && otherLoc;
     }
 
-    private boolean matchFile(String mio, String otro) {
-        if (mio == null) {
-            return otro == null;
+    private boolean matchFile(String mine, String other) {
+        if (mine == null) {
+            return other == null;
         }
-        if (otro == null) {
+        if (other == null) {
             return false;
         }
-        if (mio.endsWith("/-")) {
-            return otro.startsWith(mio.substring(0, mio.length() - 1));
+        if (mine.endsWith("/-")) {
+            return other.startsWith(mine.substring(0, mine.length() - 1));
         }
-        if (mio.endsWith("/*")) {
-            String prefijo = mio.substring(0, mio.length() - 1);
-            if (!otro.startsWith(prefijo)) {
+        if (mine.endsWith("/*")) {
+            String prefix = mine.substring(0, mine.length() - 1);
+            if (!other.startsWith(prefix)) {
                 return false;
             }
-            // Sin bajar de directorio: lo que sigue al prefijo no puede tener otra barra.
-            return otro.indexOf('/', prefijo.length()) < 0;
+            // Without going down a directory: what follows the prefix cannot have another slash.
+            return other.indexOf('/', prefix.length()) < 0;
         }
-        if (mio.endsWith("/")) {
-            return otro.startsWith(mio);
+        if (mine.endsWith("/")) {
+            return other.startsWith(mine);
         }
-        // Un directorio escrito sin barra final tambien cubre a si mismo con ella.
-        return mio.equals(otro) || (mio + "/").equals(otro);
+        // A directory written without a trailing slash also covers itself with one.
+        return mine.equals(other) || (mine + "/").equals(other);
     }
 
     @Override

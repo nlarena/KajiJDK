@@ -1,74 +1,74 @@
 package org.w3c.dom.html;
 
 /**
- * Un `<applet>`. Obsoleto ya en HTML 4, y la interfaz sigue existiendo
- * porque el DOM Nivel 1 de HTML la define.
+ * An `<applet>`. Already obsolete in HTML 4, and the interface still exists because DOM Level 1
+ * HTML defines it.
  */
 public interface HTMLAppletElement extends HTMLElement {
 
-    /** La alineacion (presentacion; HTML 4 la desaconseja). */
+    /** The alignment (presentational; HTML 4 deprecates it). */
     String getAlign();
 
-    /** Fija la alineacion (presentacion; HTML 4 la desaconseja). */
+    /** It sets the alignment (presentational; HTML 4 deprecates it). */
     void setAlign(String align);
 
-    /** El texto alternativo. */
+    /** The alternative text. */
     String getAlt();
 
-    /** Fija el texto alternativo. */
+    /** It sets the alternative text. */
     void setAlt(String alt);
 
-    /** El atributo `archive`. */
+    /** The `archive` attribute. */
     String getArchive();
 
-    /** Fija el atributo `archive`. */
+    /** It sets the `archive` attribute. */
     void setArchive(String archive);
 
-    /** El atributo `code`. */
+    /** The `code` attribute. */
     String getCode();
 
-    /** Fija el atributo `code`. */
+    /** It sets the `code` attribute. */
     void setCode(String code);
 
-    /** El atributo `codeBase`. */
+    /** The `codeBase` attribute. */
     String getCodeBase();
 
-    /** Fija el atributo `codeBase`. */
+    /** It sets the `codeBase` attribute. */
     void setCodeBase(String codeBase);
 
-    /** El alto. */
+    /** The height. */
     String getHeight();
 
-    /** Fija el alto. */
+    /** It sets the height. */
     void setHeight(String height);
 
-    /** El atributo `hspace`. */
+    /** The `hspace` attribute. */
     String getHspace();
 
-    /** Fija el atributo `hspace`. */
+    /** It sets the `hspace` attribute. */
     void setHspace(String hspace);
 
-    /** El atributo `name`. */
+    /** The `name` attribute. */
     String getName();
 
-    /** Fija el atributo `name`. */
+    /** It sets the `name` attribute. */
     void setName(String name);
 
-    /** El atributo `object`. */
+    /** The `object` attribute. */
     String getObject();
 
-    /** Fija el atributo `object`. */
+    /** It sets the `object` attribute. */
     void setObject(String object);
 
-    /** El atributo `vspace`. */
+    /** The `vspace` attribute. */
     String getVspace();
 
-    /** Fija el atributo `vspace`. */
+    /** It sets the `vspace` attribute. */
     void setVspace(String vspace);
 
-    /** El ancho. */
+    /** The width. */
     String getWidth();
 
-    /** Fija el ancho. */
+    /** It sets the width. */
     void setWidth(String width);
 }

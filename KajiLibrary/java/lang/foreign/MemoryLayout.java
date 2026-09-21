@@ -4,256 +4,231 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * KajiLibrary's java.lang.foreign.MemoryLayout -- la **forma** de una region de memoria: cuanto
- * ocupa, como esta alineada, y --si es compuesta-- que hay adentro y en que orden.
+ * KajiLibrary's java.lang.foreign.MemoryLayout -- the **shape** of a region of memory: how much it
+ * takes up, how it is aligned, and --if it is composite-- what is inside it and in what order.
  *
- * <p>Lo primero que conviene entender es que un layout **no es memoria**: es una descripcion. No
- * hay nada reservado, nada que liberar, nada que se pueda leer ni escribir. Un `MemoryLayout` es al
- * `MemorySegment` lo que un tipo es a un valor.
+ * <p>The first thing worth understanding is that a layout **is not memory**: it is a description.
+ * Nothing is reserved, nothing to free, nothing that can be read or written. A `MemoryLayout` is to
+ * a `MemorySegment` what a type is to a value.
  *
- * <p>Y por eso esta mitad del paquete se puede escribir entera en Java puro, mientras que la otra
- * --el enlazador nativo-- no. Ver la nota de {@link Linker}.
+ * <p>And that is why this half of the package can be written entirely in plain Java, while the other
+ * --the native linker-- cannot. See {@link Linker}'s note.
  *
- * <h2>El alineamiento, que es de donde salen casi todas las sorpresas</h2>
+ * <h2>Alignment, which is where nearly all the surprises come from</h2>
  *
- * <p>Cada layout dice cuantos bytes ocupa **y** a que multiplo tiene que empezar. Un `int` ocupa 4 y
- * se alinea a 4; un `long` ocupa 8 y se alinea a 8. Componer no es solo sumar tamanios: un
- * {@link #structLayout} exige que cada miembro caiga en un offset multiplo de su alineamiento, y si
- * no, **falla en vez de acomodar**. Poner un `long` despues de un `int` no compila un struct: hay
- * que escribir el relleno a mano con {@link #paddingLayout}.
+ * <p>Each layout says how many bytes it takes **and** at what multiple it has to start. An `int`
+ * takes 4 and aligns to 4; a `long` takes 8 and aligns to 8. Composing is not just adding sizes up:
+ * a {@link #structLayout} demands that each member fall at an offset that is a multiple of its
+ * alignment, and if it does not, it **fails instead of arranging things**. Putting a `long` after an
+ * `int` does not make a struct: the padding has to be written by hand with {@link #paddingLayout}.
  *
- * <p>Eso puede parecer inflexible y es a proposito: un struct que se acomoda solo tiene un layout
- * que depende de la plataforma, y todo este paquete existe para describir memoria **de forma
- * exacta**. El relleno explicito es la unica manera de que la descripcion diga lo mismo en todos
- * lados.
+ * <p>That may look inflexible and it is on purpose: a struct that arranges itself has a layout that
+ * depends on the platform, and this whole package exists to describe memory **exactly**. Explicit
+ * padding is the only way for the description to say the same thing everywhere.
  *
- * <h2>Lo que esta biblioteca no trae, y por que</h2>
+ * <h2>The five handle factories</h2>
  *
- * <p>Quedan afuera los cinco metodos que fabrican un `VarHandle` o un `MethodHandle`
- * --`varHandle`, `arrayElementVarHandle`, `byteOffsetHandle`, `sliceHandle`, `scaleHandle`--. No es
- * una decision de alcance: es que hoy **no hay manera de escribir el sitio de llamada** que los
- * usa. Los cinco devuelven un objeto cuyo unico uso es invocarlo, y esa invocacion no compila a
- * bytecode valido en esta cadena de herramientas. Cuatro hechos, los cuatro comprobados:
+ * <p>{@link #varHandle}, {@link #arrayElementVarHandle}, {@link #byteOffsetHandle},
+ * {@link #sliceHandle} and {@link #scaleHandle} are here and they work. They used to be absent, and
+ * the reason was not scope but the tool chain: the VM did not intercept `VarHandle` and this javac
+ * did not implement signature polymorphism (JLS 15.12.3), so the object they return could not be
+ * invoked from a call site that compiled. Both halves have since landed --the interpreter routes a
+ * `VarHandle` accessor through `SiteKind::VarHandleAccess`, and the compiler emits the polymorphic
+ * descriptor-- and `MhLayoutTest` and `VhTest` cover the five.
  *
- * <ol>
- *   <li><b>La VM no sabe nada de `VarHandle`.</b> `grep -rn VarHandle src/` da cero: no hay
- *       interceptacion en `invokevirtual` ni implementacion nativa. `MethodHandle` si esta
- *       interceptado, pero el intrinseco lee de la instancia los campos `owner`/`name`/
- *       `descriptor`/`kind` --los de un handle *directo*--, que
- *       {@link java.lang.invoke.MethodHandle} de esta biblioteca no tiene; y un handle directo
- *       tampoco podria llevar adentro el layout y el camino que estos cinco metodos necesitan.
- *   <li><b>Un `native` sin implementacion no tira: mata el proceso.</b> La VM hace `panic!` en
- *       `natives.rs` ("no native implementation for ..."). Los 31 accesores de `VarHandle` son
- *       `public final native`, asi que un `varHandle()` que devolviera algo entregaria un objeto
- *       que al primer `get` voltea la VM. Eso es estrictamente peor que la ausencia.
- *   <li><b>Nuestro javac no implementa el polimorfismo de firma (JLS 15.12.3).</b> Trata
- *       `vh.get(seg, 0L)` como un varargs comun: boxea en `Object[]` y emite
- *       `get:([Ljava/lang/Object;)Ljava/lang/Object;`. La JVM real rechaza ese sitio con
- *       `WrongMethodTypeException`, y al reves el descriptor que emite el javac real
- *       --`get:()Ljava/lang/Object;`-- no resuelve contra nuestra `VarHandle`. Repro en
- *       `scratchpad/sigpoly/`.
- *   <li><b>Hacerlos andar exigiria mentir en la superficie publica.</b> La unica forma de que un
- *       cuerpo Java atienda esos accesores es sacarles `native` --un modificador observable, en 31
- *       miembros publicos de `java.lang.invoke.VarHandle`-- y aun asi solo andaria compilado con
- *       nuestro javac. Un miembro que falta es un subconjunto legal; uno que anda en una sola
- *       cadena de herramientas, no.
- * </ol>
- *
- * <p>El acceso por offset --{@link MemorySegment#get(ValueLayout.OfInt, long)} y compania-- hace lo
- * mismo sin el handle, y ese si esta: `layout.byteOffset(camino)` da el offset y el `get`/`set` del
- * segmento lo lee. Lo que se pierde es poder *guardar* ese acceso en un objeto y componerlo; el
- * dia que la VM intercepte `VarHandle`, estos cinco son media hora de trabajo sobre `byteOffset`,
- * `select` y `scale`, que ya estan.
+ * <p>Access by offset --{@link MemorySegment#get(ValueLayout.OfInt, long)} and company-- does the
+ * same reading without a handle, and is still the shorter way when the access is used once:
+ * `layout.byteOffset(path)` gives the offset and the segment's `get`/`set` reads it. What a handle
+ * adds is being able to *keep* that access in an object, pass it around and compose it.
  */
 public interface MemoryLayout {
 
-    /** Cuantos bytes ocupa. */
+    /** How many bytes it takes up. */
     long byteSize();
 
-    /** A que multiplo de bytes tiene que empezar. */
+    /** At what multiple of bytes it has to start. */
     long byteAlignment();
 
-    /** El nombre de este layout, si se le puso uno. */
+    /** This layout's name, if it was given one. */
     Optional<String> name();
 
-    /** El mismo layout con ese nombre. */
+    /** The same layout with that name. */
     MemoryLayout withName(String name);
 
-    /** El mismo layout sin nombre. */
+    /** The same layout with no name. */
     MemoryLayout withoutName();
 
     /**
-     * El mismo layout con otro alineamiento.
+     * The same layout with another alignment.
      *
-     * @throws IllegalArgumentException si no es una potencia de dos positiva
+     * @throws IllegalArgumentException if it is not a positive power of two
      */
     MemoryLayout withByteAlignment(long byteAlignment);
 
     /**
-     * El offset en bytes al que lleva ese camino dentro de este layout.
+     * The offset in bytes that path leads to inside this layout.
      *
-     * <p>Un camino es una sucesion de pasos --"el miembro `y`", "el elemento 3"-- y cada paso baja
-     * un nivel. Es la forma de nombrar una posicion dentro de una estructura anidada sin calcular
-     * offsets a mano, que es exactamente donde se cometen los errores.
+     * <p>A path is a succession of steps --"member `y`", "element 3"-- and each step goes down one
+     * level. It is the way of naming a position inside a nested structure without computing offsets
+     * by hand, which is exactly where the mistakes are made.
      */
     long byteOffset(PathElement... elements);
 
-    /** El layout al que lleva ese camino. */
+    /** The layout that path leads to. */
     MemoryLayout select(PathElement... elements);
 
     /**
-     * Un {@link java.lang.invoke.VarHandle} que lee y escribe el valor que hay al final de ese
-     * camino.
+     * A {@link java.lang.invoke.VarHandle} that reads and writes the value at the end of that path.
      *
-     * <p>Sus coordenadas son el segmento, el desplazamiento del layout raiz dentro de el, y **un
-     * `long` por cada paso abierto** del camino (los `sequenceElement()` sin indice). O sea que
-     * `estructura.varHandle(groupElement("x"))` se accede con `vh.get(seg, 0L)` y
-     * `secuencia.varHandle(sequenceElement(), groupElement("x"))` con `vh.get(seg, 0L, i)`.
+     * <p>Its coordinates are the segment, the root layout's displacement within it, and **one `long`
+     * per open step** of the path (the `sequenceElement()` with no index). So
+     * `struct.varHandle(groupElement("x"))` is accessed with `vh.get(seg, 0L)` and
+     * `sequence.varHandle(sequenceElement(), groupElement("x"))` with `vh.get(seg, 0L, i)`.
      *
-     * <p>Es lo mismo que hace `seg.get(distribucion, layout.byteOffset(camino) + desplazamiento)`,
-     * con una diferencia que es toda la gracia: el acceso queda **guardado en un objeto**, se puede
-     * pasar, componer y usar sin repetir el camino en cada lugar.
+     * <p>It is the same as `seg.get(valueLayout, layout.byteOffset(path) + displacement)`, with one
+     * difference that is the whole point: the access is **kept in an object**, and can be passed
+     * around, composed and used without repeating the path at each place.
      */
     default java.lang.invoke.VarHandle varHandle(PathElement... elements) {
-        return Layouts.handleDeCamino(this, 0L, elements);
+        return Layouts.pathHandle(this, 0L, elements);
     }
 
     /**
-     * El de arriba para un **arreglo** de este layout: agrega un indice de elemento al principio.
+     * The one above for an **array** of this layout: it adds an element index at the front.
      *
-     * <p>Equivale a `sequenceLayout(this).varHandle(sequenceElement(), camino)`, y por eso sus
-     * coordenadas llevan un `long` mas que las de {@link #varHandle}: el indice del elemento, que se
-     * multiplica por {@link #byteSize()}.
+     * <p>It is equivalent to `sequenceLayout(this).varHandle(sequenceElement(), path)`, and that is
+     * why its coordinates carry one `long` more than {@link #varHandle}'s: the element's index,
+     * which is multiplied by {@link #byteSize()}.
      */
     default java.lang.invoke.VarHandle arrayElementVarHandle(PathElement... elements) {
-        return Layouts.handleDeCamino(this, this.byteSize(), elements);
+        return Layouts.pathHandle(this, this.byteSize(), elements);
     }
 
     /**
-     * Un {@link java.lang.invoke.MethodHandle} que calcula el desplazamiento de ese camino:
-     * `(long base, long… indices) -> long`.
+     * A {@link java.lang.invoke.MethodHandle} computing that path's displacement:
+     * `(long base, long... indices) -> long`.
      *
-     * <p>Es {@link #byteOffset} guardado en un objeto, con los pasos abiertos del camino como
-     * argumentos. Sirve para componer -- lo que `byteOffset` no permite, porque devuelve un numero y
-     * no una operacion.
+     * <p>It is {@link #byteOffset} kept in an object, with the path's open steps as arguments. It is
+     * for composing -- which `byteOffset` does not allow, because it returns a number and not an
+     * operation.
      */
     default java.lang.invoke.MethodHandle byteOffsetHandle(PathElement... elements) {
-        return Layouts.handleDeOffset(this, elements);
+        return Layouts.offsetHandle(this, elements);
     }
 
     /**
-     * Un handle que **recorta** el segmento al layout que hay al final del camino:
-     * `(MemorySegment, long base, long… indices) -> MemorySegment`.
+     * A handle that **slices** the segment down to the layout at the end of the path:
+     * `(MemorySegment, long base, long... indices) -> MemorySegment`.
      *
-     * <p>La rebanada mide exactamente lo que mide ese layout, que es la diferencia con calcular el
-     * offset a mano y llamar a `asSlice`: el largo sale del layout y no de quien llama, asi que no se
-     * puede equivocar.
+     * <p>The slice measures exactly what that layout measures, which is the difference from
+     * computing the offset by hand and calling `asSlice`: the length comes from the layout and not
+     * from the caller, so it cannot be got wrong.
      */
     default java.lang.invoke.MethodHandle sliceHandle(PathElement... elements) {
-        return Layouts.handleDeRebanada(this, elements);
+        return Layouts.sliceHandle0(this, elements);
     }
 
     /**
-     * Un handle que escala un indice por el tamano de este layout: `(long base, long indice) -> long`.
+     * A handle scaling an index by this layout's size: `(long base, long index) -> long`.
      *
-     * <p>Es {@link #scale} guardado en un objeto, y es el bloque con el que se recorre un arreglo sin
-     * repetir la multiplicacion en cada lugar.
+     * <p>It is {@link #scale} kept in an object, and it is the building block for walking an array
+     * without repeating the multiplication at each place.
      */
     default java.lang.invoke.MethodHandle scaleHandle() {
-        return java.lang.invoke.VarHandles.escala(this);
+        return java.lang.invoke.VarHandles.scale(this);
     }
 
     /**
-     * El offset de un elemento en un arreglo de este layout: `base + index * byteSize()`.
+     * The offset of an element in an array of this layout: `base + index * byteSize()`.
      *
-     * @throws IllegalArgumentException si alguno es negativo
+     * @throws IllegalArgumentException if either is negative
      */
     long scale(long offset, long index);
 
-    // ---- las cuatro fabricas --------------------------------------------------------------------
+    // ---- the four factories ---------------------------------------------------------------------
 
     /**
-     * Relleno: ocupa lugar y no lleva nada.
+     * Padding: it takes up space and carries nothing.
      *
-     * <p>Su alineamiento es **1** a proposito. Un relleno con alineamiento propio impondria una
-     * restriccion sobre donde puede caer la nada, que no tiene sentido.
+     * <p>Its alignment is **1** on purpose. Padding with an alignment of its own would impose a
+     * constraint on where nothing may fall, which makes no sense.
      *
-     * @throws IllegalArgumentException si `byteSize` no es positivo
+     * @throws IllegalArgumentException if `byteSize` is not positive
      */
     static PaddingLayout paddingLayout(long byteSize) {
         return Layouts.padding(byteSize);
     }
 
     /**
-     * Una secuencia de `elementCount` copias de `elementLayout`, una detras de otra.
+     * A sequence of `elementCount` copies of `elementLayout`, one after the other.
      *
-     * @throws IllegalArgumentException si `elementCount` es negativo, o si el tamanio total se pasa
+     * @throws IllegalArgumentException if `elementCount` is negative, or if the total size overflows
      */
     static SequenceLayout sequenceLayout(long elementCount, MemoryLayout elementLayout) {
         return Layouts.sequence(elementCount, elementLayout);
     }
 
     /**
-     * Los miembros **uno detras del otro**, como los campos de un `struct` de C.
+     * The members **one after the other**, like a C `struct`'s fields.
      *
-     * @throws IllegalArgumentException si algun miembro cae en un offset que no respeta su propio
-     *     alineamiento. Ver la nota de la clase: el relleno va explicito.
+     * @throws IllegalArgumentException if some member falls at an offset that does not respect its
+     *     own alignment. See the class's note: padding goes in explicitly.
      */
     static StructLayout structLayout(MemoryLayout... elements) {
         return Layouts.struct(elements);
     }
 
     /**
-     * Los miembros **superpuestos**, todos empezando en el offset cero, como una `union` de C.
+     * The members **overlaid**, all starting at offset zero, like a C `union`.
      *
-     * <p>El tamanio es el del mas grande y el alineamiento el mas estricto de todos.
+     * <p>The size is that of the largest and the alignment the strictest of them all.
      */
     static UnionLayout unionLayout(MemoryLayout... elements) {
         return Layouts.union(elements);
     }
 
     /**
-     * Un paso de un camino dentro de un layout.
+     * One step of a path inside a layout.
      *
-     * <p>Existe como tipo propio, y no como un `String` o un `int`, porque los pasos son de clases
-     * distintas --por nombre, por indice, por todos los elementos-- y mezclarlos en un solo tipo
-     * dejaria que se escriba un camino sin sentido.
+     * <p>It exists as a type of its own, and not as a `String` or an `int`, because the steps are of
+     * different kinds --by name, by index, by all the elements-- and mixing them into a single type
+     * would let a meaningless path be written.
      */
     interface PathElement {
 
-        /** El miembro de ese nombre dentro de un grupo. */
+        /** The member with that name inside a group. */
         static PathElement groupElement(String name) {
-            return Layouts.porNombre(name);
+            return Layouts.byName(name);
         }
 
-        /** El miembro en esa posicion dentro de un grupo. */
+        /** The member at that position inside a group. */
         static PathElement groupElement(long index) {
-            return Layouts.porPosicion(index);
+            return Layouts.byPosition(index);
         }
 
-        /** **Todos** los elementos de una secuencia: es el paso que abre un rango, no uno solo. */
+        /** **All** of a sequence's elements: it is the step that opens a range, not a single one. */
         static PathElement sequenceElement() {
-            return Layouts.todosLosElementos();
+            return Layouts.allElements();
         }
 
-        /** El elemento en esa posicion de una secuencia. */
+        /** The element at that position of a sequence. */
         static PathElement sequenceElement(long index) {
-            return Layouts.elemento(index);
+            return Layouts.element(index);
         }
 
-        /** Los elementos de una secuencia desde `start`, de a `step`. */
+        /** A sequence's elements from `start` on, `step` at a time. */
         static PathElement sequenceElement(long start, long step) {
-            return Layouts.elementos(start, step);
+            return Layouts.elements0(start, step);
         }
 
         /**
-         * Sigue un puntero: baja al layout al que apunta una {@link AddressLayout}.
+         * It follows a pointer: it goes down to the layout an {@link AddressLayout} points at.
          *
-         * <p>Es el unico paso que **sale** del layout en el que se esta, y por eso solo se puede dar
-         * sobre una direccion que declare a que apunta (`withTargetLayout`).
+         * <p>It is the only step that **leaves** the layout one is in, and that is why it can only
+         * be taken over an address that declares what it points at (`withTargetLayout`).
          */
         static PathElement dereferenceElement() {
-            return Layouts.dereferencia();
+            return Layouts.dereference();
         }
     }
 }

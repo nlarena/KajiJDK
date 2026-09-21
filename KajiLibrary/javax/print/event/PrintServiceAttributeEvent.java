@@ -4,34 +4,35 @@ import javax.print.PrintService;
 import javax.print.attribute.PrintServiceAttributeSet;
 
 /**
- * KajiLibrary's javax.print.event.PrintServiceAttributeEvent -- cambio algo de la impresora.
+ * KajiLibrary's javax.print.event.PrintServiceAttributeEvent -- something about the printer
+ * changed.
  *
- * <p>Es de la impresora, no de un trabajo: se quedo sin papel, cambio de estado, se lleno la cola. El
- * conjunto trae solo los atributos que cambiaron, igual que en {@link PrintJobAttributeEvent}.
+ * <p>It is about the printer, not a job: it ran out of paper, changed state, the queue filled up.
+ * The set brings only the attributes that changed, just as in {@link PrintJobAttributeEvent}.
  */
 public class PrintServiceAttributeEvent extends PrintEvent {
 
     private static final long serialVersionUID = -7565987018140326600L;
 
-    /** Los que cambiaron. */
+    /** The ones that changed. */
     private final PrintServiceAttributeSet attributes;
 
     /**
-     * @param source la impresora
-     * @param attributes los atributos que cambiaron
-     * @throws IllegalArgumentException si la impresora es null
+     * @param source the printer
+     * @param attributes the attributes that changed
+     * @throws IllegalArgumentException if the printer is null
      */
     public PrintServiceAttributeEvent(PrintService source, PrintServiceAttributeSet attributes) {
         super(source);
         this.attributes = attributes;
     }
 
-    /** La impresora. */
+    /** The printer. */
     public PrintService getPrintService() {
         return (PrintService) getSource();
     }
 
-    /** Los que cambiaron. */
+    /** The ones that changed. */
     public PrintServiceAttributeSet getAttributes() {
         return this.attributes;
     }

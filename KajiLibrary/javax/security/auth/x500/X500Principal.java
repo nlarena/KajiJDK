@@ -7,100 +7,112 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * KajiLibrary's javax.security.auth.x500.X500Principal -- un nombre distinguido X.501.
+ * KajiLibrary's javax.security.auth.x500.X500Principal -- an X.501 distinguished name.
  *
- * <p>Es como se nombra a alguien en un certificado: al sujeto, al emisor, al titular de una lista de
- * revocacion. Un DN es una **secuencia ordenada** de pasos --pais, organizacion, unidad, nombre
- * comun-- que van de lo general a lo particular, y el orden importa porque el nombre **es** el camino.
+ * <p>It is how someone is named in a certificate: the subject, the issuer, the holder of a
+ * revocation list. A DN is an **ordered sequence** of steps --country, organization, unit, common
+ * name-- that go from the general to the particular, and the order matters because the name **is**
+ * the path.
  *
- * <h2>Las dos formas, y por que van al reves</h2>
+ * <h2>The two forms, and why they go the opposite way</h2>
  *
- * <p>El mismo nombre se escribe de dos maneras y hay que tener las dos en la cabeza, porque el orden
- * es **opuesto**:
- *
- * <ul>
- *   <li>En **texto** (RFC 2253) va de lo particular a lo general:
- *       {@code CN=Juan, OU=Ventas, O=Acme, C=AR}.
- *   <li>En **DER** va de lo general a lo particular: primero el pais, ultimo el nombre comun.
- * </ul>
- *
- * <p>No es un capricho de nadie: el DER refleja la jerarquia del directorio --se baja desde la raiz--
- * y el texto refleja como se lee un nombre en voz alta. Invertirlo es el error mas comun al
- * implementar esta clase, y produce certificados que parecen bien y encadenan mal.
- *
- * <h2>Los tres formatos de salida</h2>
+ * <p>The same name is written in two ways and both have to be kept in mind, because the order is
+ * **opposite**:
  *
  * <ul>
- *   <li>{@link #RFC2253} -- la forma canonica de escribir un DN. Es la que devuelve {@link #getName()}.
- *   <li>{@link #RFC1779} -- la forma vieja, con espacios despues de las comas y {@code OID.x.y} para
- *       los tipos que no tienen palabra clave.
- *   <li>{@link #CANONICAL} -- la de **comparar**, no la de mostrar: todo en minusculas, sin espacios
- *       de sobra, con los espacios internos colapsados. Dos DN que designan a la misma entidad dan la
- *       misma cadena canonica aunque se hayan escrito distinto, y eso es lo unico para lo que sirve.
+ *   <li>In **text** (RFC 2253) it goes from the particular to the general:
+ *       {@code CN=Juan, OU=Sales, O=Acme, C=AR}.
+ *   <li>In **DER** it goes from the general to the particular: first the country, last the common
+ *       name.
  * </ul>
  *
- * <h2>Que hay aca y que no</h2>
+ * <p>It is nobody's whim: the DER reflects the hierarchy of the directory --one goes down from the
+ * root-- and the text reflects how a name is read aloud. Reversing it is the most common mistake
+ * when implementing this class, and it produces certificates that look fine and chain wrong.
  *
- * <p>Esto es **codificacion, no criptografia**: parsear un nombre y volver a escribirlo no toma
- * ninguna decision de confianza. Un error aca da un nombre mal leido o una excepcion, nunca una firma
- * aceptada sin verificar. Por eso se puede implementar entero y de verdad, a diferencia de casi todo
- * lo que lo rodea.
+ * <h2>The three output formats</h2>
  *
- * <p>Lo que **no** esta: la serializacion propia (`writeObject`/`readObject`). Esta biblioteca no
- * tiene `ObjectOutputStream`, asi que declarar `Serializable` es honesto --el contrato lo pide-- y
- * escribir la serializacion seria inventar un formato que nadie puede leer.
+ * <ul>
+ *   <li>{@link #RFC2253} -- the standard way of writing a DN. It is the one {@link #getName()}
+ *     returns.
+ *   <li>{@link #RFC1779} -- the old form, with spaces after the commas and {@code OID.x.y} for the
+ *       types that have no keyword.
+ *   <li>{@link #CANONICAL} -- the one for **comparing**, not for showing: all in lower case, no
+ *       extra spaces, with the inner spaces collapsed. Two DNs that designate the same entity give
+ *       the same canonical string even if they were written differently, and that is the only thing
+ *       it is for. See {@code AttrValue.canonical} for what the JDK does beyond that and this does
+ *       not.
+ * </ul>
+ *
+ * <h2>What is here and what is not</h2>
+ *
+ * <p>This is **encoding, not cryptography**: parsing a name and writing it again makes no trust
+ * decision. A mistake here gives a misread name or an exception, never a signature accepted without
+ * verifying. That is why it can be implemented whole and for real, unlike almost everything around
+ * it.
+ *
+ * <p>What is **not** here: the class's own serialization (`writeObject`/`readObject`). The JDK's
+ * writes the DER encoding as a {@code byte[]} and reads it back; this one has neither, and its
+ * field `rdns` is an array of `Rdn`, which is not `Serializable`, so serializing a principal fails.
+ * The note said the library had no `ObjectOutputStream` and that writing the serialization would be
+ * inventing a format nobody could read; `java.io.ObjectOutputStream` is there, and it writes the
+ * same bytes as the JDK's.
  */
 public final class X500Principal implements java.security.Principal, java.io.Serializable {
 
-    /** La forma vieja: espacios despues de las comas, `OID.x.y` para lo que no tiene palabra clave. */
+    /** The old form: spaces after the commas, `OID.x.y` for what has no keyword. */
     public static final String RFC1779 = "RFC1779";
 
-    /** La forma normal de escribir un DN. Es la que devuelve {@link #getName()}. */
+    /** The normal way of writing a DN. It is the one {@link #getName()} returns. */
     public static final String RFC2253 = "RFC2253";
 
-    /** La forma de **comparar**: minusculas, sin espacios de sobra. No es para mostrarle a nadie. */
+    /**
+     * The form for **comparing**: lower case, no extra spaces. It is not for showing to anybody.
+     */
     public static final String CANONICAL = "CANONICAL";
 
-    // Los pasos del nombre, en el orden del **texto**: del mas particular al mas general. Se guarda
-    // asi y no al reves porque es el orden en que se escribe y se lee; el DER lo invierte al salir.
+    // The steps of the name, in the **text's** order: from the most particular to the most general.
+    // It is kept this way and not the other because it is the order in which it is written and
+    // read; the DER reverses it on the way out.
     private final Rdn[] rdns;
 
-    // La codificacion DER original, cuando el nombre vino de bytes. Se guarda **tal cual** en vez de
-    // recodificarla, y eso importa: un certificado se firma sobre sus bytes exactos, asi que
-    // devolverlos re-codificados --aunque fueran equivalentes-- rompe la verificacion de la firma.
-    private final byte[] derOriginal;
+    // The original DER encoding, when the name came from bytes. It is kept **as is** instead of
+    // being re-encoded, and that matters: a certificate is signed over its exact bytes, so
+    // returning them re-encoded --even if equivalent-- breaks the verification of the signature.
+    private final byte[] originalDer;
 
-    // ---- construccion ----------------------------------------------------------------------------
+    // ---- construction ---------------------------------------------------------------------------
 
     /**
-     * El nombre escrito en RFC 2253.
+     * The name written in RFC 2253.
      *
-     * @throws IllegalArgumentException si no parsea
+     * @throws IllegalArgumentException if it does not parse
      */
     public X500Principal(String name) {
         this(name, java.util.Collections.<String, String>emptyMap());
     }
 
     /**
-     * El de arriba con palabras clave **propias**.
+     * The above with keywords of **one's own**.
      *
-     * <p>El mapa va de palabra clave a OID, y sirve para nombres que usan tipos que el estandar no
-     * bautizo. Las palabras clave conocidas siguen valiendo; las del mapa se suman.
+     * <p>The map goes from keyword to OID, and serves for names that use types the standard did not
+     * name. The known keywords still hold; the map's are added. (In the JDK the map's take
+     * precedence over the known ones; here a known keyword cannot be redefined.)
      *
-     * @throws IllegalArgumentException si no parsea, o si un OID del mapa esta mal formado
+     * @throws IllegalArgumentException if it does not parse, or if an OID of the map is malformed
      */
     public X500Principal(String name, Map<String, String> keywordMap) {
         if (name == null || keywordMap == null) {
             throw new NullPointerException();
         }
         this.rdns = Parser.parse(name, keywordMap);
-        this.derOriginal = null;
+        this.originalDer = null;
     }
 
     /**
-     * El nombre codificado en DER.
+     * The name encoded in DER.
      *
-     * @throws IllegalArgumentException si los bytes no son un `Name` valido
+     * @throws IllegalArgumentException if the bytes are not a valid `Name`
      */
     public X500Principal(byte[] name) {
         if (name == null) {
@@ -117,17 +129,17 @@ public final class X500Principal implements java.security.Principal, java.io.Ser
         } catch (IOException e) {
             throw new IllegalArgumentException(e.getMessage());
         }
-        this.derOriginal = copyOf;
+        this.originalDer = copyOf;
     }
 
     /**
-     * El nombre leido de un flujo.
+     * The name read from a stream.
      *
-     * <p>Lee **solo** el nombre y deja el flujo justo despues, que es lo que permite leer un
-     * certificado campo por campo. Para saber donde termina se mira el largo del DER, no el fin del
-     * flujo.
+     * <p>It reads **only** the name and leaves the stream just after it, which is what allows
+     * reading a certificate field by field. To know where it ends, the DER length is looked at, not
+     * the end of the stream.
      *
-     * @throws IllegalArgumentException si no hay un `Name` valido en esa posicion
+     * @throws IllegalArgumentException if there is no valid `Name` at that position
      */
     public X500Principal(InputStream is) {
         if (is == null) {
@@ -140,34 +152,36 @@ public final class X500Principal implements java.security.Principal, java.io.Ser
         } catch (IOException e) {
             throw new IllegalArgumentException(e.getMessage());
         }
-        this.derOriginal = bytes;
+        this.originalDer = bytes;
     }
 
-    // ---- salida ------------------------------------------------------------------------------------
+    // ---- output ---------------------------------------------------------------------------------
 
-    /** El nombre en RFC 2253. */
+    /** The name in RFC 2253. */
     public String getName() {
         return this.getName(RFC2253);
     }
 
     /**
-     * El nombre en el formato pedido.
+     * The name in the requested format.
      *
-     * @throws IllegalArgumentException si el formato no es ninguno de los tres
+     * @throws IllegalArgumentException if the format is none of the three
      */
     public String getName(String format) {
         return this.getName(format, java.util.Collections.<String, String>emptyMap());
     }
 
     /**
-     * El de arriba con OID **propios** traducidos a palabra clave.
+     * The above with OIDs of **one's own** translated to keywords.
      *
-     * <p>El mapa va al reves que el del constructor: de OID a palabra clave. Es el mismo diccionario
-     * leido en la otra direccion, y va aparte porque no siempre se quiere escribir con las mismas
-     * palabras con las que se leyo.
+     * <p>The map goes the other way from the constructor's: from OID to keyword. It is the same
+     * dictionary read in the other direction, and it is separate because one does not always want
+     * to write with the same words one read with.
      *
-     * @throws IllegalArgumentException si el formato no es ninguno de los tres, o si se le pasa un
-     *         mapa no vacio a {@link #CANONICAL}, que no admite traducciones
+     * @throws IllegalArgumentException if the format is none of the three, or if a non-empty map is
+     *         passed with {@link #CANONICAL}, which admits no translations. The JDK rejects {@code
+     *         CANONICAL} with any map, even an empty one ("invalid format specified"); here an
+     *         empty one gives the canonical form
      */
     public String getName(String format, Map<String, String> oidMap) {
         if (format == null || oidMap == null) {
@@ -180,29 +194,30 @@ public final class X500Principal implements java.security.Principal, java.io.Ser
             return NameFormat.write(this.rdns, oidMap, true, false);
         }
         if (CANONICAL.equalsIgnoreCase(format)) {
-            // El canonico no admite diccionario: si dos programas tradujeran distinto, dos nombres
-            // iguales darian cadenas distintas y la forma canonica no serviria para lo unico que
-            // sirve, que es comparar.
+            // Canonical admits no dictionary: if two programs translated differently, two equal
+            // names would give different strings and the canonical form would not serve for the
+            // only thing it serves for, which is comparing.
             if (!oidMap.isEmpty()) {
-                throw new IllegalArgumentException("CANONICAL no admite un mapa de OID");
+                throw new IllegalArgumentException("CANONICAL does not accept an OID map");
             }
             return NameFormat.write(this.rdns, oidMap, false, true);
         }
-        throw new IllegalArgumentException("formato invalido: " + format);
+        throw new IllegalArgumentException("invalid format: " + format);
     }
 
     /**
-     * El nombre en DER.
+     * The name in DER.
      *
-     * <p>Si vino de bytes se devuelven **esos** bytes, no una recodificacion: un certificado se firma
-     * sobre su codificacion exacta, y devolver una equivalente pero distinta rompe la verificacion.
+     * <p>If it came from bytes, **those** bytes are returned, not a re-encoding: a certificate is
+     * signed over its exact encoding, and returning an equivalent but different one breaks the
+     * verification.
      */
     public byte[] getEncoded() {
-        byte[] fuente = this.derOriginal != null ? this.derOriginal : Der.writeName(this.rdns);
-        byte[] copyOf = new byte[fuente.length];
+        byte[] source = this.originalDer != null ? this.originalDer : Der.writeName(this.rdns);
+        byte[] copyOf = new byte[source.length];
         int i = 0;
         while (i < copyOf.length) {
-            copyOf[i] = fuente[i];
+            copyOf[i] = source[i];
             i = i + 1;
         }
         return copyOf;
@@ -213,10 +228,10 @@ public final class X500Principal implements java.security.Principal, java.io.Ser
     }
 
     /**
-     * Si los dos nombres designan a la misma entidad.
+     * Whether the two names designate the same entity.
      *
-     * <p>Se compara la forma **canonica** y no los bytes: `CN=Juan,O=Acme` y `cn=juan, o=acme` son el
-     * mismo nombre escrito distinto, y comparar el DER diria que no.
+     * <p>The **canonical** form is compared, not the bytes: `CN=Juan,O=Acme` and `cn=juan, o=acme`
+     * are the same name written differently, and comparing the DER would say they are not.
      */
     public boolean equals(Object o) {
         if (this == o) {
@@ -233,12 +248,13 @@ public final class X500Principal implements java.security.Principal, java.io.Ser
     }
 
     // ================================================================================================
-    // Un paso del nombre: un conjunto de pares tipo=valor. Casi siempre uno solo; mas de uno es un
-    // "RDN multivaluado", que se escribe con `+` y sirve para desempatar dos entidades homonimas.
+    // A step of the name: a set of type=value pairs. Almost always just one; more than one is a
+    // "multi-valued RDN", which is written with `+` and serves to tell apart two entities with the
+    // same name.
     // ================================================================================================
 
     static final class Rdn {
-        final String[] types;   // OID en forma de numeros, siempre
+        final String[] types;   // OID in numeric form, always
         final String[] values;
 
         Rdn(String[] types, String[] values) {
@@ -248,11 +264,11 @@ public final class X500Principal implements java.security.Principal, java.io.Ser
     }
 
     // ================================================================================================
-    // El diccionario de palabras clave. Es del estandar (RFC 4514 y los agregados de uso comun), y va
-    // en las dos direcciones porque se lee en las dos.
+    // The dictionary of keywords. It is the standard's (RFC 4514 and the additions in common use),
+    // and it goes in both directions because it is read in both.
     // ================================================================================================
 
-    static final String[][] CONOCIDOS = {
+    static final String[][] KNOWN = {
         {"CN", "2.5.4.3"},
         {"L", "2.5.4.7"},
         {"ST", "2.5.4.8"},
@@ -274,9 +290,9 @@ public final class X500Principal implements java.security.Principal, java.io.Ser
 
     static String oidForWord(String word) {
         int i = 0;
-        while (i < CONOCIDOS.length) {
-            if (CONOCIDOS[i][0].equalsIgnoreCase(word)) {
-                return CONOCIDOS[i][1];
+        while (i < KNOWN.length) {
+            if (KNOWN[i][0].equalsIgnoreCase(word)) {
+                return KNOWN[i][1];
             }
             i = i + 1;
         }
@@ -285,9 +301,9 @@ public final class X500Principal implements java.security.Principal, java.io.Ser
 
     static String wordForOid(String oid) {
         int i = 0;
-        while (i < CONOCIDOS.length) {
-            if (CONOCIDOS[i][1].equals(oid)) {
-                return CONOCIDOS[i][0];
+        while (i < KNOWN.length) {
+            if (KNOWN[i][1].equals(oid)) {
+                return KNOWN[i][0];
             }
             i = i + 1;
         }

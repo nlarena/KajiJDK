@@ -5,7 +5,7 @@ import java.util.Set;
 import javax.lang.model.element.Modifier;
 
 /**
- * Los modificadores y las anotaciones de una declaracion.
+ * A declaration's modifiers and annotations.
  */
 public interface ModifiersTree extends Tree {
 

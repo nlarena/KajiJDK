@@ -1,64 +1,64 @@
 package com.sun.jdi;
 
 /**
- * Un campo de un tipo de la maquina depurada.
+ * A field of a type of the debugged machine.
  *
- * <p>El valor no esta aca: se pide con {@code ObjectReference.getValue} para un campo de instancia
- * o con {@code ReferenceType.getValue} para uno estatico.
+ * <p>The value is not here: it is asked for with {@code ObjectReference.getValue} for an
+ * instance field or with {@code ReferenceType.getValue} for a static one.
  *
  * @since 1.3
  */
 public interface Field extends TypeComponent, Comparable<Field> {
 
     /**
-     * El type name.
+     * The type name.
      *
-     * @return el resultado
+     * @return the result
      */
     String typeName();
 
     /**
-     * El tipo.
+     * The type.
      *
-     * @return el resultado
-     * @throws ClassNotLoadedException si corresponde
+     * @return the result
+     * @throws ClassNotLoadedException if it applies
      */
     Type type()
             throws ClassNotLoadedException;
 
     /**
-     * Si transient.
+     * Whether transient.
      *
-     * @return el resultado
+     * @return the result
      */
     boolean isTransient();
 
     /**
-     * Si volatile.
+     * Whether volatile.
      *
-     * @return el resultado
+     * @return the result
      */
     boolean isVolatile();
 
     /**
-     * Si enum constant.
+     * Whether enum constant.
      *
-     * @return el resultado
+     * @return the result
      */
     boolean isEnumConstant();
 
     /**
-     * Dos reflejos son iguales si nombran a lo mismo en la misma VM.
+     * Two mirrors are equal if they name the same thing in the same VM.
      *
-     * @param obj el Object
-     * @return el resultado
+     * @param obj the Object
+     * @return the result
      */
     boolean equals(Object obj);
 
     /**
-     * Coherente con {@link #equals}.
+     * Consistent with {@link #equals}.
      *
-     * @return el resultado
+     * @return the result
      */
     int hashCode();
 }

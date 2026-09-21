@@ -3,7 +3,7 @@ package com.sun.source.doctree;
 import java.util.List;
 
 /**
- * Lo mismo que {@link UnknownBlockTagTree}, para un tag en linea.
+ * The same as {@link UnknownBlockTagTree}, for an inline tag.
  */
 public interface UnknownInlineTagTree extends InlineTagTree {
 

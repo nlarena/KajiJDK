@@ -1,69 +1,69 @@
 package com.sun.source.doctree;
 
 /**
- * Cualquier nodo del arbol de un comentario de documentacion.
+ * Any node of the tree of a documentation comment.
  *
- * <h2>Que es este paquete</h2>
+ * <h2>What this package is</h2>
  *
- * <p>Un comentario de javadoc no es texto: tiene estructura —tags, HTML, referencias a codigo— y una
- * herramienta que quiera hacer algo con el necesita esa estructura, no la cadena. Este paquete es el
- * arbol de sintaxis de esa estructura, hermano del de {@code com.sun.source.tree} para el codigo.
+ * <p>A javadoc comment is not text: it has structure -- tags, HTML, references to code -- and a
+ * tool that wants to do something with it needs that structure, not the string. This package is
+ * the syntax tree of that structure, brother of {@code com.sun.source.tree}'s for the code.
  *
- * <h2>Las dos formas de recorrerlo</h2>
+ * <h2>The two ways of walking it</h2>
  *
- * <p>{@link #getKind} y {@link #accept} son la misma pregunta contestada de dos maneras, y estan las
- * dos a proposito. El {@link Kind} sirve para una decision suelta —"¿esto es un `@param`?"— sin
- * escribir un visitante entero. El {@link DocTreeVisitor} sirve cuando hay que atender a todos: el
- * compilador avisa si se agrega un tipo de nodo y falta el metodo, mientras que un {@code switch}
- * sobre el {@code Kind} se queda callado.
+ * <p>{@link #getKind} and {@link #accept} are the same question answered in two ways, and the
+ * two are there on purpose. The {@link Kind} serves for a loose decision -- "is this a
+ * `@param`?" -- without writing a whole visitor. The {@link DocTreeVisitor} serves when all of
+ * them have to be attended to: the compiler says so if a kind of node is added and the method
+ * is missing, whereas a {@code switch} over the {@code Kind} keeps quiet.
  *
- * <h2>La trampa: mas nodos que tipos</h2>
+ * <h2>The trap: more nodes than types</h2>
  *
- * <p>{@link Kind} tiene mas constantes que interfaces hay en el paquete, y no es un descuido.
- * `{@code @throws}` y `{@code @exception}` son el mismo {@link ThrowsTree} con distinto
- * {@code tagName}; lo mismo `{@code {@link}}` y `{@code {@linkplain}}`, y `{@code {@code}}` con
- * `{@code {@literal}}`. Preguntar por el tipo Java no alcanza para distinguirlos — hay que mirar el
- * nombre del tag.
+ * <p>{@link Kind} has more constants than there are interfaces in the package, and it is not an
+ * oversight. `{@code @throws}` and `{@code @exception}` are the same {@link ThrowsTree} with a
+ * different {@code tagName}; the same for `{@code {@link}}` and `{@code {@linkplain}}`, and
+ * `{@code {@code}}` with `{@code {@literal}}`. Asking for the Java type is not enough in order
+ * to tell them apart -- the tag's name has to be looked at.
  */
 public interface DocTree {
 
     /**
-     * Que clase de nodo es este.
+     * What kind of node this is.
      *
-     * <p>Cada constante lleva el {@code tagName} con el que se escribe, o {@code null} para los
-     * nodos que no son un tag: texto, HTML, entidades, el comentario entero.
+     * <p>Each constant carries the {@code tagName} it is written with, or {@code null} for the
+     * nodes that are not a tag: text, HTML, entities, the whole comment.
      */
     enum Kind {
 
-        /** Un atributo de una etiqueta HTML. */
+        /** An attribute of an HTML tag. */
         ATTRIBUTE(null),
         /** `@author`. */
         AUTHOR("author"),
-        /** `{@code}` — el mismo {@link LiteralTree} que {@link #LITERAL}. */
+        /** `{@code}` -- the same {@link LiteralTree} as {@link #LITERAL}. */
         CODE("code"),
-        /** Un comentario HTML. */
+        /** An HTML comment. */
         COMMENT(null),
         /** `@deprecated`. */
         DEPRECATED("deprecated"),
-        /** El comentario entero: la raiz. */
+        /** The whole comment: the root. */
         DOC_COMMENT(null),
         /** `{@docRoot}`. */
         DOC_ROOT("docRoot"),
-        /** Un `<!DOCTYPE>`. */
+        /** A `<!DOCTYPE>`. */
         DOC_TYPE(null),
-        /** Una etiqueta HTML de cierre. */
+        /** A closing HTML tag. */
         END_ELEMENT(null),
-        /** Una entidad HTML. */
+        /** An HTML entity. */
         ENTITY(null),
-        /** Algo que no se pudo parsear. */
+        /** Something that could not be parsed. */
         ERRONEOUS(null),
-        /** Un escape de Markdown. */
+        /** A Markdown escape. */
         ESCAPE(null),
-        /** `@exception` — el mismo {@link ThrowsTree} que {@link #THROWS}. */
+        /** `@exception` -- the same {@link ThrowsTree} as {@link #THROWS}. */
         EXCEPTION("exception"),
         /** `@hidden`. */
         HIDDEN("hidden"),
-        /** Un identificador de Java dentro de un tag. */
+        /** A Java identifier inside a tag. */
         IDENTIFIER(null),
         /** `{@index}`. */
         INDEX("index"),
@@ -71,19 +71,19 @@ public interface DocTree {
         INHERIT_DOC("inheritDoc"),
         /** `{@link}`. */
         LINK("link"),
-        /** `{@linkplain}` — el mismo {@link LinkTree} que {@link #LINK}. */
+        /** `{@linkplain}` -- the same {@link LinkTree} as {@link #LINK}. */
         LINK_PLAIN("linkplain"),
         /** `{@literal}`. */
         LITERAL("literal"),
-        /** Contenido Markdown sin interpretar. */
+        /** Markdown content, uninterpreted. */
         MARKDOWN(null),
         /** `@param`. */
         PARAM("param"),
         /** `@provides`. */
         PROVIDES("provides"),
-        /** Una referencia a un elemento de Java. */
+        /** A reference to a Java element. */
         REFERENCE(null),
-        /** `@return`, en cualquiera de sus dos formas. */
+        /** `@return`, in either of its two forms. */
         RETURN("return"),
         /** `@see`. */
         SEE("see"),
@@ -99,19 +99,19 @@ public interface DocTree {
         SNIPPET("snippet"),
         /** `@spec`. */
         SPEC("spec"),
-        /** Una etiqueta HTML de apertura. */
+        /** An opening HTML tag. */
         START_ELEMENT(null),
         /** `{@systemProperty}`. */
         SYSTEM_PROPERTY("systemProperty"),
         /** `{@summary}`. */
         SUMMARY("summary"),
-        /** Texto plano. */
+        /** Plain text. */
         TEXT(null),
         /** `@throws`. */
         THROWS("throws"),
-        /** Un tag de bloque que este arbol no conoce. */
+        /** A block tag this tree does not know. */
         UNKNOWN_BLOCK_TAG(null),
-        /** Un tag en linea que este arbol no conoce. */
+        /** An inline tag this tree does not know. */
         UNKNOWN_INLINE_TAG(null),
         /** `@uses`. */
         USES("uses"),
@@ -120,20 +120,20 @@ public interface DocTree {
         /** `@version`. */
         VERSION("version"),
         /**
-         * Una implementacion propia que no es ninguno de los anteriores.
+         * An implementation of one's own that is none of the previous ones.
          *
-         * <p>Existe por la misma razon que {@link #UNKNOWN_BLOCK_TAG}: este arbol es una interfaz
-         * publica y alguien puede implementarla con nodos que el JDK no previo. Sin esta constante,
-         * {@link #getKind} no tendria que devolver.
+         * <p>It exists for the same reason as {@link #UNKNOWN_BLOCK_TAG}: this tree is a public
+         * interface and somebody may implement it with nodes the JDK did not foresee. Without this
+         * constant, {@link #getKind} would have nothing to return.
          */
         OTHER(null);
 
         /**
-         * El nombre con el que se escribe el tag, o {@code null} si este nodo no es un tag.
+         * The name the tag is written with, or {@code null} if this node is not a tag.
          *
-         * <p>Publico y final, no un getter, y asi es en el JDK: es un dato del enum, no un calculo.
-         * Es ademas lo unico que separa a {@link #THROWS} de {@link #EXCEPTION}, que comparten
-         * interfaz.
+         * <p>Public and final, not a getter, and that is how it is in the JDK: it is a datum of the
+         * enum, not a computation. It is besides the only thing that separates {@link #THROWS} from
+         * {@link #EXCEPTION}, which share an interface.
          */
         public final String tagName;
 
@@ -142,17 +142,17 @@ public interface DocTree {
         }
     }
 
-    /** Que clase de nodo es. */
+    /** What kind of node it is. */
     Kind getKind();
 
     /**
-     * Le pasa este nodo al visitante.
+     * It passes this node to the visitor.
      *
-     * <p>Doble despacho: el nodo sabe cual es su tipo y el visitante sabe que hacer con cada uno;
-     * ninguno de los dos sabe las dos cosas, y este metodo es donde se juntan.
+     * <p>Double dispatch: the node knows which its type is and the visitor knows what to do with
+     * each one; neither of the two knows both things, and this method is where they meet.
      *
-     * @param <R> lo que devuelve el visitante
-     * @param <D> el dato que se le arrastra
+     * @param <R> what the visitor returns
+     * @param <D> the datum that is carried along to it
      */
     <R, D> R accept(DocTreeVisitor<R, D> visitor, D data);
 }

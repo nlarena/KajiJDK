@@ -1,11 +1,12 @@
 package java.sql;
 
 /**
- * KajiLibrary's java.sql.SQLRecoverableException -- Fallo del que se puede volver, pero **no** reintentando lo mismo.
+ * KajiLibrary's java.sql.SQLRecoverableException -- a failure that can be recovered from, but
+ * **not** by retrying the same thing.
 
- * <p>La diferencia con {@link SQLTransientException} es sutil y real: aca la conexion quedo
- * inservible, asi que hay que armar una nueva y rehacer la transaccion entera. Reintentar la
- * operacion sobre la misma conexion no va a andar nunca.
+ * <p>The difference from {@link SQLTransientException} is subtle and real: here the connection was
+ * left unusable, so a new one has to be made and the whole transaction redone. Retrying the
+ * operation on the same connection will never work.
  */
 public class SQLRecoverableException extends SQLException {
 

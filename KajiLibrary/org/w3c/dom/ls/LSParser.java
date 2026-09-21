@@ -6,90 +6,91 @@ import org.w3c.dom.Document;
 import org.w3c.dom.Node;
 
 /**
- * KajiLibrary's org.w3c.dom.ls.LSParser -- el analizador de la especificacion del W3C.
+ * KajiLibrary's org.w3c.dom.ls.LSParser -- the parser of the W3C specification.
  *
- * <p>Hace lo mismo que {@code javax.xml.parsers.DocumentBuilder} y no es un duplicado por descuido:
- * este viene de la especificacion DOM Level 3 y aquel de la plataforma Java. Conviven porque codigo
- * escrito contra el W3C tiene que poder correr en Java sin reescribirse.
+ * <p>It does the same as {@code javax.xml.parsers.DocumentBuilder} and it is not a duplicate by
+ * oversight: this one comes from the DOM Level 3 specification and that one from the Java platform.
+ * They coexist because code written against the W3C has to be able to run on Java without being
+ * rewritten.
  *
- * <p>Lo que este tiene y el otro no es {@link #parseWithContext}, que analiza un fragmento y lo
- * inserta <b>dentro</b> de un documento que ya existe. No es azucar: analizar un fragmento suelto y
- * despues importarlo pierde el contexto --los espacios de nombres declarados en los ancestros, las
- * entidades del documento-- y puede dar un arbol distinto.
+ * <p>What this one has and the other does not is {@link #parseWithContext}, which parses a fragment
+ * and inserts it <b>inside</b> a document that already exists. It is not sugar: parsing a loose
+ * fragment and then importing it loses the context --the namespaces declared in the ancestors, the
+ * entities of the document-- and may give a different tree.
  *
- * <p>La configuracion no son metodos sino un {@link DOMConfiguration} con parametros por nombre. Es
- * mas flojo de tipos y a cambio deja que una implementacion agregue opciones sin cambiar la
- * interfaz.
+ * <p>The configuration is not methods but a {@link DOMConfiguration} with parameters by name. It is
+ * looser on types and in exchange it lets an implementation add options without changing the
+ * interface.
  */
 public interface LSParser {
 
-    /** El fragmento se agrega al final de los hijos del nodo de contexto. */
+    /** The fragment is appended at the end of the children of the context node. */
     short ACTION_APPEND_AS_CHILDREN = 1;
 
-    /** Reemplaza a todos los hijos del nodo de contexto. */
+    /** It replaces all the children of the context node. */
     short ACTION_REPLACE_CHILDREN = 2;
 
-    /** Se inserta antes del nodo de contexto, como hermano. */
+    /** It is inserted before the context node, as a sibling. */
     short ACTION_INSERT_BEFORE = 3;
 
-    /** Se inserta despues del nodo de contexto, como hermano. */
+    /** It is inserted after the context node, as a sibling. */
     short ACTION_INSERT_AFTER = 4;
 
-    /** Reemplaza al nodo de contexto. */
+    /** It replaces the context node. */
     short ACTION_REPLACE = 5;
 
-    /** Los parametros del analizador, por nombre. Ver la nota de la clase. */
+    /** The parameters of the parser, by name. See the note of the class. */
     DOMConfiguration getDomConfig();
 
-    /** El filtro que decide que entra al arbol, o null. */
+    /** The filter that decides what gets into the tree, or null. */
     LSParserFilter getFilter();
 
     /** Ver {@link #getFilter}. */
     void setFilter(LSParserFilter filter);
 
     /**
-     * Si trabaja en segundo plano.
+     * Whether it works in the background.
      *
-     * <p>Es una propiedad del analizador y no de la llamada: se elige al crearlo con
-     * {@link DOMImplementationLS#createLSParser} y despues no cambia.
+     * <p>It is a property of the parser and not of the call: it is chosen when creating it with
+     * {@link DOMImplementationLS#createLSParser} and does not change afterwards.
      */
     boolean getAsync();
 
     /**
-     * Si esta ocupado con un analisis.
+     * Whether it is busy with an analysis.
      *
-     * <p>Llamar a {@code parse} sobre uno ocupado es un error, y esta es la forma de preguntarlo sin
-     * provocarlo.
+     * <p>Calling {@code parse} on a busy one is an error, and this is the way of asking without
+     * causing it.
      */
     boolean getBusy();
 
     /**
-     * Analiza y devuelve un documento nuevo.
+     * It parses and returns a new document.
      *
-     * @throws LSException con {@link LSException#PARSE_ERR} si no se pudo
+     * @throws LSException with {@link LSException#PARSE_ERR} if it could not
      */
     Document parse(LSInput input) throws DOMException, LSException;
 
-    /** Idem, leyendo de un URI. */
+    /** The same, reading from a URI. */
     Document parseURI(String uri) throws DOMException, LSException;
 
     /**
-     * Analiza un fragmento y lo mete en un documento que ya existe.
+     * It parses a fragment and puts it into a document that already exists.
      *
-     * <p>Ver la nota de la clase sobre por que esto no es lo mismo que analizar aparte e importar.
+     * <p>See the note of the class on why this is not the same as parsing apart and importing.
      *
-     * @param contextArg el nodo relativo al cual se ubica lo leido
-     * @param action una de las cinco constantes de arriba
-     * @return el nodo resultante, que puede no ser el mismo que se leyo
+     * @param contextArg the node relative to which what was read is placed
+     * @param action one of the five constants above
+     * @return the resulting node, which may not be the same one that was read
      */
     Node parseWithContext(LSInput input, Node contextArg, short action)
         throws DOMException, LSException;
 
     /**
-     * Corta un analisis en curso.
+     * It cuts an analysis in progress short.
      *
-     * <p>Tiene sentido sobre todo en el modo asincronico; sobre uno sincronico solo lo puede llamar
-     * el filtro o un manejador de eventos, que son los unicos que corren mientras se analiza.
+     * <p>It makes sense above all in asynchronous mode; on a synchronous one only the filter or an
+     * event handler can call it, which are the only ones that run while parsing.
      */
     void abort();
 }

@@ -7,26 +7,27 @@ import java.util.Collections;
 import java.util.Enumeration;
 import java.util.List;
 
-// La coleccion que devuelve `FilePermission.newPermissionCollection()`. Package-private: el contrato
-// solo promete una `PermissionCollection`, y el nombre no es API.
+// The collection `FilePermission.newPermissionCollection()` returns. Package-private: the contract
+// only promises a `PermissionCollection`, and the name is not API.
 //
-// Recorre en vez de indexar, y el porque esta en el javadoc de `newPermissionCollection`: un `/a/-`
-// cubre rutas de cualquier profundidad, asi que no hay un puñado de claves que consultar.
+// It walks instead of indexing, and the why is in `newPermissionCollection`'s javadoc: a `/a/-`
+// covers paths of any depth, so there is no handful of keys to look up.
 //
-// `implies` es la disyuncion de los `implies` de sus miembros y **no** su union: tener
-// `("/tmp/x", "read")` y `("/tmp/x", "write")` no da `("/tmp/x", "read,write")` aca, igual que en el
-// JDK. Combinar mascaras entre permisos distintos seria conceder algo que nadie escribio.
+// `implies` is the disjunction of its members' `implies` and **not** their union: having
+// `("/tmp/x", "read")` and `("/tmp/x", "write")` does not give `("/tmp/x", "read,write")` here,
+// just as in the JDK. Combining masks across different permissions would be granting something
+// nobody wrote.
 final class FilePermissionCollection extends PermissionCollection {
 
-    private final List<Permission> permisos = new ArrayList<Permission>();
+    private final List<Permission> permissions = new ArrayList<Permission>();
 
     FilePermissionCollection() {
     }
 
     /**
-     * @throws IllegalArgumentException si no es un `FilePermission` -- mezclar clases haria que la
-     *     coleccion contestara por permisos que no entiende
-     * @throws SecurityException si ya se marco de solo lectura
+     * @throws IllegalArgumentException if it is not a `FilePermission` -- mixing classes would make
+     *     the collection answer for permissions it does not understand
+     * @throws SecurityException if it has already been marked read-only
      */
     public void add(Permission permission) {
         if (!(permission instanceof FilePermission)) {
@@ -36,7 +37,7 @@ final class FilePermissionCollection extends PermissionCollection {
             throw new SecurityException("attempt to add a Permission to a readonly PermissionCollection");
         }
         synchronized (this) {
-            this.permisos.add(permission);
+            this.permissions.add(permission);
         }
     }
 
@@ -46,8 +47,8 @@ final class FilePermissionCollection extends PermissionCollection {
         }
         synchronized (this) {
             int i = 0;
-            while (i < this.permisos.size()) {
-                if (this.permisos.get(i).implies(permission)) {
+            while (i < this.permissions.size()) {
+                if (this.permissions.get(i).implies(permission)) {
                     return true;
                 }
                 i = i + 1;
@@ -58,7 +59,7 @@ final class FilePermissionCollection extends PermissionCollection {
 
     public Enumeration<Permission> elements() {
         synchronized (this) {
-            return Collections.enumeration(new ArrayList<Permission>(this.permisos));
+            return Collections.enumeration(new ArrayList<Permission>(this.permissions));
         }
     }
 }

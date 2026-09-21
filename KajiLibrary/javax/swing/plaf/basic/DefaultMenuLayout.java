@@ -8,47 +8,47 @@ import javax.swing.JPopupMenu;
 import javax.swing.plaf.UIResource;
 
 /**
- * El acomodador de una barra de menu y de un menu desplegable.
+ * The layout of a menu bar and of a popup menu.
  *
- * <p>Es un {@link BoxLayout} con dos agregados chicos y necesarios.
+ * <p>It is a {@link BoxLayout} with two small and necessary additions.
  *
- * <h2>Un menu vacio no ocupa nada</h2>
+ * <h2>An empty menu takes up nothing</h2>
  *
- * <p>Un {@link JPopupMenu} sin items mide cero por cero, y no lo que midan sus margenes. Sin eso, un
- * menu contextual que no tiene nada que mostrar apareceria igual como un rectangulito de unos pocos
- * pixeles. Esta medido: una barra de menu vacia mide 0 x 2 --sus margenes-- y un menu desplegable
- * vacio mide 0 x 0.
+ * <p>A {@link JPopupMenu} with no items measures zero by zero, and not whatever its margins
+ * measure. Without that, a context menu that has nothing to show would appear all the same as a
+ * little rectangle a few pixels across. It is measured: an empty menu bar measures 0 x 2 -- its
+ * margins -- and an empty popup menu measures 0 x 0.
  *
- * <h2>La columna de los aceleradores</h2>
+ * <h2>The accelerators' column</h2>
  *
- * <p>Antes de medir, el menu se olvida del ancho de acelerador mas grande que habia calculado. Ese
- * numero es lo que alinea los {@code Ctrl-O} de todos los items en una columna, y tiene que
- * recalcularse cada vez: si un item cambia de acelerador y el numero quedara viejo, la columna
- * queda torcida o el menu mas ancho de lo que hace falta.
+ * <p>Before measuring, the menu forgets the largest accelerator width it had computed. That
+ * number is what lines up every item's {@code Ctrl-O} in a column, and it has to be recomputed
+ * each time: if an item changes its accelerator and the number were left stale, the column comes
+ * out crooked or the menu wider than it needs to be.
  *
- * <p>Es {@link UIResource} para que instalar otro aspecto lo reemplace; un acomodador que puso el
- * programa se respeta.
+ * <p>It is a {@link UIResource} so that installing another look and feel replaces it; a layout
+ * the program set is respected.
  */
 public class DefaultMenuLayout extends BoxLayout implements UIResource {
 
-    /** Donde el menu guarda el ancho de acelerador mas grande; ver la nota de la clase. */
-    static final String ANCHO_MAXIMO_DEL_ACELERADOR = "maxAccWidth";
+    /** Where the menu keeps the largest accelerator width; see the class note. */
+    static final String MAX_ACCELERATOR_WIDTH = "maxAccWidth";
 
     public DefaultMenuLayout(Container target, int axis) {
         super(target, axis);
     }
 
-    /** Ver la nota de la clase. */
+    /** See the class note. */
     public Dimension preferredLayoutSize(Container target) {
         if (target instanceof JPopupMenu) {
             JPopupMenu popupMenu = (JPopupMenu) target;
-            popupMenu.putClientProperty(ANCHO_MAXIMO_DEL_ACELERADOR, null);
+            popupMenu.putClientProperty(MAX_ACCELERATOR_WIDTH, null);
             if (popupMenu.getComponentCount() == 0) {
                 return new Dimension(0, 0);
             }
         }
-        // El BoxLayout guarda los tamanos de los hijos; hay que hacerselos olvidar para que
-        // vuelva a preguntar.
+        // The BoxLayout keeps the children's sizes; they have to be made to be forgotten so that
+                // it asks again.
         super.invalidateLayout(target);
         return super.preferredLayoutSize(target);
     }

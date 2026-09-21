@@ -1,62 +1,61 @@
 package java.sql;
 
 /**
- * KajiLibrary's java.sql.Connection -- una sesion con una base de datos.
+ * KajiLibrary's java.sql.Connection -- a session with a database.
  *
- * <p><strong>Un subconjunto, y conviene decir cual.</strong> Estan los miembros que gobiernan la
- * **sesion**: el ciclo de vida (`close`/`isClosed`/`isValid`/`abort`), la transaccion
- * (`setAutoCommit`/`commit`/`rollback`/el nivel de aislamiento), el contexto (`catalog`/`schema`) y
- * los avisos. No estan los que **fabrican** otros objetos JDBC --`createStatement`,
- * `prepareStatement`, `getMetaData`, `createBlob`-- porque cada uno arrastra una interfaz de
- * cientos de miembros (`Statement`, `ResultSet`, `DatabaseMetaData`) que solo tiene sentido con un
- * driver detras.
+ * <p><strong>The interface is complete.</strong> This note used to say the members that **make**
+ * other JDBC objects --`createStatement`, `prepareStatement`, `getMetaData`, `createBlob`-- were
+ * absent because each drags in an interface of hundreds of members that only makes sense with a
+ * driver behind it. Those interfaces were written, and all four are declared below; the "making
+ * statements" section further down already describes them.
  *
- * <p>Traer la interfaz sin driver es honesto justamente porque es una **interfaz**: un contrato no
- * promete que alguien lo cumpla. Lo que no se podria hacer es dar una implementacion que finja
- * conectarse.
+ * <p>Bringing the interface without a driver is honest precisely because it is an **interface**: a
+ * contract does not promise anybody honours it. What could not be done is giving an implementation
+ * that pretends to connect.
  *
- * <p>Es `AutoCloseable`, que es la razon por la que una conexion se escribe casi siempre dentro de un
- * `try`-con-recursos: una conexion que se olvida de cerrar no se nota hasta que el pool se agota.
+ * <p>It is `AutoCloseable`, which is why a connection is almost always written inside a
+ * try-with-resources: a connection one forgets to close does not show until the pool runs out.
  */
 public interface Connection extends Wrapper, AutoCloseable {
 
-    // ---- niveles de aislamiento --------------------------------------------------------------------
+    // ---- isolation levels -----------------------------------------------------------------------
     //
-    // Los cuatro estan ordenados de menos a mas estricto, y cada escalon **quita** un fenomeno: el
-    // primero deja leer lo que otra transaccion todavia no confirmo; el segundo lo impide pero deja
-    // que un mismo `select` de dos valores distintos; el tercero lo impide pero deja aparecer filas
-    // nuevas; el cuarto no deja nada. Mas estricto es mas correcto y mas lento, siempre.
+    // The four are ordered from least to most strict, and each step **removes** one phenomenon: the
+    // first allows reading what another transaction has not committed; the second forbids that but
+    // allows the same `select` to give two different values; the third forbids that but allows new
+    // rows to appear; the fourth allows nothing. Stricter is more correct and slower, always.
 
-    /** Sin transacciones. */
+    /** With no transactions. */
     int TRANSACTION_NONE = 0;
 
-    /** Deja leer cambios que otra transaccion no confirmo. */
+    /** It allows reading changes another transaction has not committed. */
     int TRANSACTION_READ_UNCOMMITTED = 1;
 
-    /** Solo lee lo confirmado; un mismo `select` puede dar distinto. */
+    /** It reads only what is committed; the same `select` can give different results. */
     int TRANSACTION_READ_COMMITTED = 2;
 
-    /** Un mismo `select` da lo mismo; pueden aparecer filas nuevas. */
+    /** The same `select` gives the same; new rows can appear. */
     int TRANSACTION_REPEATABLE_READ = 4;
 
-    /** Como si las transacciones corrieran de a una. */
+    /** As if the transactions ran one at a time. */
     int TRANSACTION_SERIALIZABLE = 8;
 
-    // ---- transaccion --------------------------------------------------------------------------------
+    // ---- transaction ----------------------------------------------------------------------------
 
     /**
-     * Si cada sentencia se confirma sola.
+     * Whether each statement commits itself.
      *
-     * <p>Apagarlo es lo que **empieza** una transaccion: no hay un `begin`, hay un `setAutoCommit(false)`.
+     * <p>Turning it off is what **starts** a transaction: there is no `begin`, there is a
+     * `setAutoCommit(false)`.
      */
     void setAutoCommit(boolean autoCommit) throws SQLException;
 
     boolean getAutoCommit() throws SQLException;
 
-    /** Confirma lo hecho desde el ultimo `commit`/`rollback`. */
+    /** It commits what has been done since the last `commit`/`rollback`. */
     void commit() throws SQLException;
 
-    /** Descarta lo hecho desde el ultimo `commit`/`rollback`. */
+    /** It discards what has been done since the last `commit`/`rollback`. */
     void rollback() throws SQLException;
 
     void setTransactionIsolation(int level) throws SQLException;
@@ -64,48 +63,48 @@ public interface Connection extends Wrapper, AutoCloseable {
     int getTransactionIsolation() throws SQLException;
 
     /**
-     * Anuncia que esta conexion **no** va a escribir.
+     * It announces that this connection will **not** write.
      *
-     * <p>Es una pista para que la base optimice, no una garantia que ella imponga -- y por eso solo
-     * se puede fijar fuera de una transaccion.
+     * <p>It is a hint so the database can optimise, not a guarantee it enforces -- and that is why
+     * it can only be set outside a transaction.
      */
     void setReadOnly(boolean readOnly) throws SQLException;
 
     boolean isReadOnly() throws SQLException;
 
-    // ---- ciclo de vida ------------------------------------------------------------------------------
+    // ---- life cycle -----------------------------------------------------------------------------
 
-    /** Cierra la conexion y suelta sus recursos. */
+    /** It closes the connection and releases its resources. */
     void close() throws SQLException;
 
-    /** Si ya se cerro. */
+    /** Whether it has already been closed. */
     boolean isClosed() throws SQLException;
 
     /**
-     * Si la conexion **sigue viva**, esperando como mucho `timeout` segundos.
+     * Whether the connection is **still alive**, waiting at most `timeout` seconds.
      *
-     * <p>Distinto de `!isClosed()`: aquella pregunta si alguien la cerro de este lado, esta pregunta
-     * si del otro lado sigue habiendo alguien. Un pool necesita la segunda.
+     * <p>Different from `!isClosed()`: that one asks whether somebody closed it on this side, this
+     * one asks whether there is still somebody on the other. A pool needs the second.
      *
-     * @param timeout segundos a esperar; cero para no poner limite
+     * @param timeout seconds to wait; zero for no limit
      */
     boolean isValid(int timeout) throws SQLException;
 
     /**
-     * Cierra la conexion **desde afuera**, aunque este ocupada.
+     * It closes the connection **from outside**, even if it is busy.
      *
-     * <p>Es la salida para una conexion colgada: `close()` espera a que la operacion en curso
-     * termine, y si esa operacion es la que quedo trabada, espera para siempre.
+     * <p>It is the way out for a hung connection: `close()` waits for the operation in progress to
+     * end, and if that operation is the one that jammed, it waits forever.
      */
     void abort(java.util.concurrent.Executor executor) throws SQLException;
 
-    /** Cuanto puede tardar una operacion antes de que la conexion se cierre sola. */
+    /** How long an operation may take before the connection closes itself. */
     void setNetworkTimeout(java.util.concurrent.Executor executor, int milliseconds)
             throws SQLException;
 
     int getNetworkTimeout() throws SQLException;
 
-    // ---- contexto -----------------------------------------------------------------------------------
+    // ---- context --------------------------------------------------------------------------------
 
     void setCatalog(String catalog) throws SQLException;
 
@@ -115,38 +114,38 @@ public interface Connection extends Wrapper, AutoCloseable {
 
     String getSchema() throws SQLException;
 
-    /** La sentencia traducida al dialecto de esta base. */
+    /** The statement translated into this database's dialect. */
     String nativeSQL(String sql) throws SQLException;
 
-    // ---- avisos --------------------------------------------------------------------------------------
+    // ---- warnings -------------------------------------------------------------------------------
 
-    /** El primer aviso pendiente, o `null`. */
+    /** The first pending warning, or `null`. */
     SQLWarning getWarnings() throws SQLException;
 
-    /** Descarta los avisos pendientes. */
+    /** It discards the pending warnings. */
     void clearWarnings() throws SQLException;
 
-    // ---- fabricar sentencias -------------------------------------------------------------------------
+    // ---- making statements ----------------------------------------------------------------------
     //
-    // Las tres familias --`createStatement`, `prepareStatement`, `prepareCall`-- se corresponden con
-    // las tres formas de mandar SQL, y cada una viene en cuatro tamanos: sin opciones, con tipo y
-    // concurrencia del conjunto, con eso mas la retencion, y --solo la preparada-- con las claves
-    // generadas. Es combinatoria, no diseno: cada version del estandar agrego un parametro y no podia
-    // cambiar las firmas anteriores.
+    // The three families --`createStatement`, `prepareStatement`, `prepareCall`-- correspond to the
+    // three ways of sending SQL, and each comes in four sizes: with no options, with the result
+    // set's type and concurrency, with that plus the holdability, and --only the prepared one--
+    // with the generated keys. It is combinatorics, not design: each version of the standard added
+    // a parameter and could not change the earlier signatures.
     //
-    // Los `create*` de tipos grandes fabrican un {@link Blob}/{@link Clob} **vacio** del lado de la
-    // base, para llenarlo antes de escribirlo; sin ellos habria que armar el valor entero en memoria,
-    // que es justo lo que esos tipos evitan.
+    // The `create*` for the large types make an **empty** {@link Blob}/{@link Clob} on the
+    // database's side, to be filled before being written; without them the whole value would have
+    // to be built in memory, which is exactly what those types avoid.
     //
-    // Los puntos de guardado, la informacion de cliente y las claves de particion completan lo que
-    // faltaba de la sesion.
+    // The savepoints, the client information and the sharding keys complete what was missing of the
+    // session.
 
     default boolean setShardingKeyIfValid(java.sql.ShardingKey shardingKey, int timeout) throws java.sql.SQLException {
-        throw new java.sql.SQLFeatureNotSupportedException("setShardingKeyIfValid no esta implementado");
+        throw new java.sql.SQLFeatureNotSupportedException("setShardingKeyIfValid not implemented");
     }
 
     default boolean setShardingKeyIfValid(java.sql.ShardingKey shardingKey, java.sql.ShardingKey superShardingKey, int timeout) throws java.sql.SQLException {
-        throw new java.sql.SQLFeatureNotSupportedException("setShardingKeyIfValid no esta implementado");
+        throw new java.sql.SQLFeatureNotSupportedException("setShardingKeyIfValid not implemented");
     }
 
     int getHoldability() throws java.sql.SQLException;
@@ -200,11 +199,11 @@ public interface Connection extends Wrapper, AutoCloseable {
     java.util.Properties getClientInfo() throws java.sql.SQLException;
 
     default void beginRequest() throws java.sql.SQLException {
-        // Sin agrupacion de pedidos: no hay nada que empezar.
+        // With no request batching: there is nothing to begin.
     }
 
     default void endRequest() throws java.sql.SQLException {
-        // Sin agrupacion de pedidos: no hay nada que terminar.
+        // With no request batching: there is nothing to end.
     }
 
     void releaseSavepoint(java.sql.Savepoint savepoint) throws java.sql.SQLException;
@@ -218,11 +217,11 @@ public interface Connection extends Wrapper, AutoCloseable {
     void setHoldability(int holdability) throws java.sql.SQLException;
 
     default void setShardingKey(java.sql.ShardingKey shardingKey) throws java.sql.SQLException {
-        throw new java.sql.SQLFeatureNotSupportedException("setShardingKey no esta implementado");
+        throw new java.sql.SQLFeatureNotSupportedException("setShardingKey not implemented");
     }
 
     default void setShardingKey(java.sql.ShardingKey shardingKey, java.sql.ShardingKey superShardingKey) throws java.sql.SQLException {
-        throw new java.sql.SQLFeatureNotSupportedException("setShardingKey no esta implementado");
+        throw new java.sql.SQLFeatureNotSupportedException("setShardingKey not implemented");
     }
 
     void setTypeMap(java.util.Map map) throws java.sql.SQLException;

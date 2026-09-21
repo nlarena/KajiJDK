@@ -3,22 +3,23 @@ package javax.swing.plaf.synth;
 import javax.swing.JComponent;
 
 /**
- * Todo lo que hace falta saber para dibujar una parte de un componente.
+ * Everything that has to be known in order to draw a part of a component.
  *
- * <h2>Los cuatro datos</h2>
+ * <h2>The four data</h2>
  *
- * <p>El componente, que parte de el se esta dibujando, con que estilo, y en que estado. Van juntos
- * porque siempre se necesitan juntos: el color de un boton depende de que boton es, de si se esta
- * dibujando su fondo o su borde, del estilo, y de si esta apretado.
+ * <p>The component, which part of it is being drawn, with which style, and in what state. They go
+ * together because they are always needed together: a button's colour depends on which button it
+ * is, on whether its background or its border is being drawn, on the style, and on whether it is
+ * pressed.
  *
- * <p>Que sea un objeto y no cuatro parametros es lo que permite que un pintor reciba una sola cosa y
- * que agregarle un dato mas al contexto no cambie ciento treinta firmas.
+ * <p>That it is an object and not four parameters is what allows a painter to receive a single
+ * thing and adding one more datum to the context not to change a hundred and thirty signatures.
  *
- * <h2>Es inmutable</h2>
+ * <h2>It is immutable</h2>
  *
- * <p>Se construye uno por cada operacion de dibujo. En el JDK esto llego a reusarse por razones de
- * rendimiento y se volvio atras: un contexto compartido que cambia bajo los pies del que lo esta
- * mirando es una fuente de errores que aparecen solo al repintar rapido.
+ * <p>One is built for each drawing operation. In the JDK this came to be reused for performance
+ * reasons and was reverted: a shared context that changes under the feet of whoever is looking at
+ * it is a source of errors that appear only when repainting fast.
  *
  * @since 1.5
  */
@@ -30,13 +31,13 @@ public class SynthContext {
     private final int state;
 
     /**
-     * Un contexto con esos datos.
+     * A context with those data.
      *
-     * @param component el componente
-     * @param region la parte que se esta dibujando
-     * @param style el estilo
-     * @param state el estado, combinacion de las banderas de {@link SynthConstants}
-     * @throws NullPointerException si alguno de los tres primeros es {@code null}
+     * @param component the component
+     * @param region the part that is being drawn
+     * @param style the style
+     * @param state the state, a combination of {@link SynthConstants}' flags
+     * @throws NullPointerException if any of the first three is {@code null}
      */
     public SynthContext(JComponent component, Region region, SynthStyle style, int state) {
         if (component == null || region == null || style == null) {
@@ -49,23 +50,23 @@ public class SynthContext {
     }
 
     /**
-     * Uno que acepta un estilo nulo.
+     * One that accepts a null style.
      *
-     * <p>El constructor publico exige los tres, y esta bien: un programa que arma un contexto a
-     * mano y le pasa un estilo nulo se equivoco. Pero las clases {@code SynthXxxUI} del paquete
-     * necesitan armar el contexto <em>antes</em> de tener el estilo -- es con ese contexto que se
-     * lo piden a la fabrica -- y por eso existe esta version. El JDK hace lo mismo, y por eso
-     * {@code getContext} de una interfaz grafica sin instalar contesta con estilo nulo en vez de
-     * reventar. Medido.
+     * <p>The public constructor demands all three, and rightly: a program that builds a context by
+     * hand and passes it a null style made a mistake. But the package's {@code SynthXxxUI} classes
+     * need to build the context <em>before</em> having the style -- it is with that context that
+     * they ask the factory for it -- and that is why this version exists. The JDK does the same,
+     * and that is why an uninstalled look and feel's {@code getContext} answers with a null style
+     * instead of blowing up. Measured.
      *
-     * @param component el componente
-     * @param region la parte
-     * @param style el estilo, que puede ser nulo
-     * @param state el estado
-     * @param interno para distinguir esta version de la publica
+     * @param component the component
+     * @param region the part
+     * @param style the style, which may be null
+     * @param state the state
+     * @param internal to tell this version from the public one
      */
     SynthContext(JComponent component, Region region, SynthStyle style, int state,
-            boolean interno) {
+            boolean internal) {
         this.component = component;
         this.region = region;
         this.style = style;
@@ -73,36 +74,36 @@ public class SynthContext {
     }
 
     /**
-     * El componente.
+     * The component.
      *
-     * @return el componente
+     * @return the component
      */
     public JComponent getComponent() {
         return component;
     }
 
     /**
-     * La parte que se esta dibujando.
+     * The part that is being drawn.
      *
-     * @return la region
+     * @return the region
      */
     public Region getRegion() {
         return region;
     }
 
     /**
-     * El estilo.
+     * The style.
      *
-     * @return el estilo
+     * @return the style
      */
     public SynthStyle getStyle() {
         return style;
     }
 
     /**
-     * El estado del componente.
+     * The component's state.
      *
-     * @return la combinacion de banderas de {@link SynthConstants}
+     * @return the combination of {@link SynthConstants}' flags
      */
     public int getComponentState() {
         return state;

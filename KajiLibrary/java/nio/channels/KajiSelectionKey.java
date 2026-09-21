@@ -9,8 +9,9 @@ import java.nio.channels.spi.AbstractSelectionKey;
 // either side needs about the other -- what is being watched for, what turned out to be ready -- is
 // in here.
 //
-// `interestOps` is read by the selector on every turn and written by the program from any thread, so
-// it is volatile. `readyOps` is written only by the selector, during a select, and read afterwards.
+// `interestOps` is read by the selector on every turn and written by the program from any thread,
+// so it is volatile. `readyOps` is written only by the selector, during a select, and read
+// afterwards.
 //
 // Package-private on purpose: keys are made by `KajiSelector.register` and by nothing else.
 final class KajiSelectionKey extends AbstractSelectionKey {

@@ -8,26 +8,26 @@ import javax.swing.SizeRequirements;
 import javax.swing.event.DocumentEvent;
 
 /**
- * Un parrafo: filas de texto con sangria, interlineado, alineacion y tabulaciones.
+ * A paragraph: rows of text with indentation, line spacing, alignment and tabs.
  *
- * <h2>Lo que agrega sobre {@link FlowView}</h2>
+ * <h2>What it adds over {@link FlowView}</h2>
  *
- * <p>Flow sabe cortar en filas. Este sabe <em>como se ve</em> un parrafo: la primera linea puede
- * ir sangrada distinto, las lineas pueden ir separadas, el texto puede ir centrado o a la derecha,
- * y hay paradas de tabulacion. Todo eso sale de los atributos de parrafo, y por eso
- * {@link #setPropertiesFromAttributes} es el metodo central.
+ * <p>Flow knows how to break into rows. This one knows <em>how a paragraph looks</em>: the first
+ * line may be indented differently, the lines may be spaced out, the text may be centred or
+ * right-aligned, and there are tab stops. All that comes from the paragraph attributes, and that
+ * is why {@link #setPropertiesFromAttributes} is the central method.
  *
- * <p>Es {@link TabExpander} porque las paradas son del parrafo: una tabulacion en medio de una
- * fila pregunta a su parrafo, no a la fila.
+ * <p>It is a {@link TabExpander} because the stops belong to the paragraph: a tab in the middle
+ * of a row asks its paragraph, not the row.
  */
 public class ParagraphView extends FlowView implements TabExpander {
 
-    /** Cuanto se sangra la primera linea, en pixeles. */
+    /** How much the first line is indented, in pixels. */
     protected int firstLineIndent = 0;
 
     static Class<?> i18nStrategy;
 
-    /** Los caracteres que cortan en una tabulacion decimal. */
+    /** The characters that break at a decimal tab. */
     static char[] tabChars = {'\t'};
 
     static char[] tabDecimalChars = {'\t', '.'};
@@ -36,7 +36,7 @@ public class ParagraphView extends FlowView implements TabExpander {
     private float lineSpacing;
     private TabSet tabSet;
 
-    /** Un parrafo de ese elemento, apilando filas hacia abajo. */
+    /** A paragraph of that element, stacking rows downwards. */
     public ParagraphView(Element elem) {
         super(elem, View.Y_AXIS);
         setPropertiesFromAttributes();
@@ -54,7 +54,7 @@ public class ParagraphView extends FlowView implements TabExpander {
         firstLineIndent = (int) fi;
     }
 
-    /** Toma sangrias, interlineado, alineacion y tabulaciones de los atributos. */
+    /** It takes indents, line spacing, alignment and tabs from the attributes. */
     protected void setPropertiesFromAttributes() {
         AttributeSet attr = getAttributes();
         if (attr != null) {
@@ -66,7 +66,7 @@ public class ParagraphView extends FlowView implements TabExpander {
         }
     }
 
-    /** Cuantas vistas hay en el arbol logico. */
+    /** How many views there are in the logical tree. */
     protected int getLayoutViewCount() {
         return layoutPool.getViewCount();
     }
@@ -75,7 +75,7 @@ public class ParagraphView extends FlowView implements TabExpander {
         return layoutPool.getView(index);
     }
 
-    /** Subir o bajar una linea dentro del parrafo. */
+    /** Going up or down one line within the paragraph. */
     protected int getNextNorthSouthVisualPositionFrom(int pos, Position.Bias b, Shape a,
             int direction, Position.Bias[] biasRet) throws BadLocationException {
         int vIndex;
@@ -108,7 +108,7 @@ public class ParagraphView extends FlowView implements TabExpander {
         return getClosestPositionTo(pos, b, a, direction, biasRet, vIndex, x);
     }
 
-    /** La posicion de esa fila que queda mas cerca de esa columna. */
+    /** The position of that row that comes closest to that column. */
     protected int getClosestPositionTo(int pos, Position.Bias b, Shape a, int direction,
             Position.Bias[] biasRet, int rowIndex, int x) throws BadLocationException {
         View row = getView(rowIndex);
@@ -124,7 +124,7 @@ public class ParagraphView extends FlowView implements TabExpander {
         return false;
     }
 
-    /** La primera fila puede tener menos lugar, por la sangria. */
+    /** The first row may have less room, because of the indentation. */
     public int getFlowSpan(int index) {
         View row = getView(index);
         int adjust = 0;
@@ -141,19 +141,19 @@ public class ParagraphView extends FlowView implements TabExpander {
         return 0;
     }
 
-    /** Una fila; es una caja horizontal con la alineacion del parrafo. */
+    /** A row; it is a horizontal box with the paragraph's alignment. */
     protected View createRow() {
         return new Row(getElement(), this);
     }
 
-    /** Donde cae la proxima tabulacion, segun las paradas del parrafo. */
+    /** Where the next tab falls, according to the paragraph's stops. */
     public float nextTabStop(float x, int tabOffset) {
         if (tabSet == null) {
-            // Sin paradas propias: cada media pulgada, como el JDK.
+            // With no stops of its own: every half inch, like the JDK.
             float tabBase = getTabBase();
-            float defaultAncho = 36;
-            int ntabs = (int) ((x - tabBase) / defaultAncho);
-            return tabBase + ((ntabs + 1) * defaultAncho);
+            float defaultWidth = 36;
+            int ntabs = (int) ((x - tabBase) / defaultWidth);
+            return tabBase + ((ntabs + 1) * defaultWidth);
         }
         float tabBase = getTabBase();
         TabStop tab = tabSet.getTabAfter(x - tabBase + 0.01f);
@@ -164,7 +164,7 @@ public class ParagraphView extends FlowView implements TabExpander {
         if (alignment == TabStop.ALIGN_LEFT || alignment == TabStop.ALIGN_BAR) {
             return tabBase + tab.getPosition();
         }
-        // Las demas alineaciones necesitan medir lo que viene: se mide hasta el proximo corte.
+        // The other alignments need to measure what is coming: it measures up to the next break.
         int p = getPartialLength(tabOffset, alignment);
         float tabPos = tabBase + tab.getPosition();
         if (alignment == TabStop.ALIGN_RIGHT || alignment == TabStop.ALIGN_DECIMAL) {
@@ -173,21 +173,21 @@ public class ParagraphView extends FlowView implements TabExpander {
         return Math.max(x, tabPos - (p / 2));
     }
 
-    /** Cuanto ocupa lo que sigue hasta el proximo corte, para alinear una tabulacion. */
+    /** How much what follows up to the next break takes up, for aligning a tab. */
     private int getPartialLength(int tabOffset, int alignment) {
-        char[] cortes = (alignment == TabStop.ALIGN_DECIMAL) ? tabDecimalChars : tabChars;
-        int hasta = findOffsetToCharactersInString(cortes, tabOffset + 1);
-        if (hasta == -1) {
-            hasta = getEndOffset();
+        char[] splits = (alignment == TabStop.ALIGN_DECIMAL) ? tabDecimalChars : tabChars;
+        int to = findOffsetToCharactersInString(splits, tabOffset + 1);
+        if (to == -1) {
+            to = getEndOffset();
         }
-        return (int) getPartialSize(tabOffset + 1, hasta);
+        return (int) getPartialSize(tabOffset + 1, to);
     }
 
     protected TabSet getTabSet() {
         return StyleConstants.getTabSet(getElement().getAttributes());
     }
 
-    /** Cuanto ocupa ese tramo del parrafo. */
+    /** How much that stretch of the paragraph takes up. */
     protected float getPartialSize(int startOffset, int endOffset) {
         float size = 0;
         int viewIndex;
@@ -213,7 +213,7 @@ public class ParagraphView extends FlowView implements TabExpander {
         return size;
     }
 
-    /** Donde esta el primero de esos caracteres a partir de esa posicion. */
+    /** Where the first of those characters is from that position on. */
     protected int findOffsetToCharactersInString(char[] string, int start) {
         int stringLength = string.length;
         int end = getEndOffset();
@@ -235,7 +235,7 @@ public class ParagraphView extends FlowView implements TabExpander {
         return -1;
     }
 
-    /** Desde donde se cuentan las tabulaciones: el borde izquierdo del parrafo. */
+    /** Where the tabs are counted from: the paragraph's left edge. */
     protected float getTabBase() {
         return (float) (getLeftInset() + firstLineIndent);
     }
@@ -245,7 +245,7 @@ public class ParagraphView extends FlowView implements TabExpander {
         super.paint(g, a);
     }
 
-    /** Un parrafo se alinea por arriba en vertical. */
+    /** A paragraph is aligned at the top vertically. */
     public float getAlignment(int axis) {
         if (axis == View.Y_AXIS) {
             return 0;
@@ -253,7 +253,7 @@ public class ParagraphView extends FlowView implements TabExpander {
         return 0.5f;
     }
 
-    /** Un parrafo no se parte: sus filas ya son el corte. */
+    /** A paragraph does not split: its rows are already the break. */
     public View breakView(int axis, float len, Shape a) {
         if (axis == View.Y_AXIS) {
             if (a != null) {
@@ -269,7 +269,7 @@ public class ParagraphView extends FlowView implements TabExpander {
         return BadBreakWeight;
     }
 
-    /** El minimo horizontal es el de la palabra mas larga. */
+    /** The horizontal minimum is that of the longest word. */
     protected SizeRequirements calculateMinorAxisRequirements(int axis, SizeRequirements r) {
         r = super.calculateMinorAxisRequirements(axis, r);
         float insets = getLeftInset() + getRightInset();
@@ -279,7 +279,7 @@ public class ParagraphView extends FlowView implements TabExpander {
         return r;
     }
 
-    /** Cambiaron los atributos: hay que volver a leer sangrias y alineacion. */
+    /** The attributes changed: indents and alignment have to be read again. */
     public void changedUpdate(DocumentEvent changes, Shape a, ViewFactory f) {
         setPropertiesFromAttributes();
         layoutChanged(X_AXIS);
@@ -288,21 +288,21 @@ public class ParagraphView extends FlowView implements TabExpander {
     }
 
     /**
-     * Una fila del parrafo: una caja horizontal.
+     * A row of the paragraph: a horizontal box.
      *
-     * <p>Es privada en el JDK y aca tambien. Su alineacion horizontal es la del parrafo, y de ahi
-     * que un parrafo centrado tenga las filas centradas sin que la fila sepa nada.
+     * <p>It is private in the JDK and here too. Its horizontal alignment is the paragraph's, and
+     * hence a centred paragraph has centred rows without the row knowing anything.
      */
     static class Row extends BoxView {
 
-        private final ParagraphView parrafo;
+        private final ParagraphView paragraph;
 
-        Row(Element elem, ParagraphView parrafo) {
+        Row(Element elem, ParagraphView paragraph) {
             super(elem, View.X_AXIS);
-            this.parrafo = parrafo;
+            this.paragraph = paragraph;
         }
 
-        /** Una fila no tiene margenes propios: los del parrafo ya se aplicaron. */
+        /** A row has no margins of its own: the paragraph's have already been applied. */
         protected void loadChildren(ViewFactory f) {
         }
 
@@ -313,7 +313,7 @@ public class ParagraphView extends FlowView implements TabExpander {
 
         public float getAlignment(int axis) {
             if (axis == View.X_AXIS) {
-                int j = (parrafo != null) ? parrafo.justification : StyleConstants.ALIGN_LEFT;
+                int j = (paragraph != null) ? paragraph.justification : StyleConstants.ALIGN_LEFT;
                 if (j == StyleConstants.ALIGN_LEFT) {
                     return 0;
                 }
@@ -332,7 +332,7 @@ public class ParagraphView extends FlowView implements TabExpander {
             Rectangle r = a.getBounds();
             View v = getViewAtPosition(pos, r);
             if ((v != null) && (!v.getElement().isLeaf())) {
-                // El fin de linea de una fila no se dibuja: la posicion cae al final.
+                // A row's line ending is not drawn: the position falls at the end.
                 return super.modelToView(pos, a, b);
             }
             r = a.getBounds();
@@ -365,7 +365,7 @@ public class ParagraphView extends FlowView implements TabExpander {
             return offs;
         }
 
-        /** Las filas se alinean por su linea de base. */
+        /** The rows are aligned by their baseline. */
         protected void layoutMinorAxis(int targetSpan, int axis, int[] offsets, int[] spans) {
             baselineLayout(targetSpan, axis, offsets, spans);
         }

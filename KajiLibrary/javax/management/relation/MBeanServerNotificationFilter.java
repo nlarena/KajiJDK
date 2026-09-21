@@ -10,41 +10,41 @@ import javax.management.NotificationFilterSupport;
 import javax.management.ObjectName;
 
 /**
- * Un filtro que deja pasar las notificaciones de registro y desregistro <strong>solo de ciertos
- * MBeans</strong>.
+ * A filter that lets through registration and unregistration notifications <b>only for certain
+ * MBeans</b>.
  *
- * <h2>Por que hace falta filtrar por nombre y no solo por tipo</h2>
+ * <h2>Why filtering by name and not only by type is needed</h2>
  *
- * <p>{@link NotificationFilterSupport} filtra por el <em>tipo</em> de notificacion, y el servidor de
- * MBeans emite un solo tipo para todos los registros. Suscribirse a el en un sistema con miles de
- * MBeans significa despertarse por cada uno.
+ * <p>{@link NotificationFilterSupport} filters by the notification's <em>type</em>, and the MBean
+ * server emits a single type for all registrations. Subscribing to it in a system with thousands
+ * of MBeans means waking up for every one.
  *
- * <p>Este filtro agrega la otra dimension: <em>cual</em> MBean. Es lo que le permite al servicio de
- * relaciones enterarse de que se desregistro justo uno de los que sus relaciones referencian, sin
- * mirar todos los demas.
+ * <p>This filter adds the other dimension: <em>which</em> MBean. It is what lets the relation
+ * service learn that exactly one of the MBeans its relations reference was unregistered, without
+ * looking at all the others.
  *
- * <h2>La lista negra y la blanca conviven</h2>
+ * <h2>The blacklist and the whitelist coexist</h2>
  *
- * <p>Y el orden entre ellas es lo que hay que entender: <strong>lo deshabilitado gana</strong>.
- * {@link #enableAllObjectNames} seguido de {@link #disableObjectName} es "todos menos ese", que es
- * la forma util de expresar una excepcion sin enumerar el resto.
+ * <p>And the order between them is what has to be understood: <b>disabled wins</b>.
+ * {@link #enableAllObjectNames} followed by {@link #disableObjectName} is "everyone but that
+ * one", which is the useful way of expressing an exception without listing the rest.
  */
 public class MBeanServerNotificationFilter extends NotificationFilterSupport {
 
     private static final long serialVersionUID = 2605900539589789736L;
 
-    /** {@code null} significa "todos"; una lista significa "solo estos". */
+    /** {@code null} means "all"; a list means "only these". */
     private List<ObjectName> selectedNames = new ArrayList<ObjectName>();
 
-    /** {@code null} significa "todos deshabilitados"; una lista, "estos no". */
+    /** {@code null} means "all disabled"; a list, "not these". */
     private List<ObjectName> deselectedNames = null;
 
     /**
-     * Un filtro que no deja pasar nada todavia.
+     * A filter that lets nothing through yet.
      *
-     * <p>Arranca cerrado a proposito: habilita el tipo de notificacion del servidor pero con la
-     * lista de nombres vacia. Un filtro que arrancara abierto entregaria todo hasta que alguien se
-     * acuerde de cerrarlo.
+     * <p>It starts closed on purpose: it enables the server's notification type but with the list
+     * of names empty. A filter that started open would deliver everything until someone remembered
+     * to close it.
      */
     public MBeanServerNotificationFilter() {
         super();
@@ -52,21 +52,21 @@ public class MBeanServerNotificationFilter extends NotificationFilterSupport {
         enableType(MBeanServerNotification.UNREGISTRATION_NOTIFICATION);
     }
 
-    /** Ningun MBean pasa. */
+    /** No MBean passes. */
     public synchronized void disableAllObjectNames() {
         this.selectedNames = new ArrayList<ObjectName>();
         this.deselectedNames = null;
     }
 
     /**
-     * Ese MBean no pasa, aunque este habilitado.
+     * That MBean does not pass, even if it is enabled.
      *
-     * @throws IllegalArgumentException si es {@code null}
+     * @throws IllegalArgumentException if it is {@code null}
      */
     public synchronized void disableObjectName(ObjectName objectName)
             throws IllegalArgumentException {
         if (objectName == null) {
-            throw new IllegalArgumentException("el nombre no puede ser null");
+            throw new IllegalArgumentException("the name cannot be null");
         }
         if (this.selectedNames != null) {
             this.selectedNames.remove(objectName);
@@ -76,21 +76,21 @@ public class MBeanServerNotificationFilter extends NotificationFilterSupport {
         }
     }
 
-    /** Todos los MBeans pasan. */
+    /** All MBeans pass. */
     public synchronized void enableAllObjectNames() {
         this.selectedNames = null;
         this.deselectedNames = new ArrayList<ObjectName>();
     }
 
     /**
-     * Ese MBean pasa.
+     * That MBean passes.
      *
-     * @throws IllegalArgumentException si es {@code null}
+     * @throws IllegalArgumentException if it is {@code null}
      */
     public synchronized void enableObjectName(ObjectName objectName)
             throws IllegalArgumentException {
         if (objectName == null) {
-            throw new IllegalArgumentException("el nombre no puede ser null");
+            throw new IllegalArgumentException("the name cannot be null");
         }
         if (this.deselectedNames != null) {
             this.deselectedNames.remove(objectName);
@@ -100,26 +100,26 @@ public class MBeanServerNotificationFilter extends NotificationFilterSupport {
         }
     }
 
-    /** Los habilitados, o {@code null} si estan todos. */
+    /** The enabled ones, or {@code null} if they all are. */
     public synchronized Vector<ObjectName> getEnabledObjectNames() {
         return this.selectedNames == null ? null : new Vector<ObjectName>(this.selectedNames);
     }
 
-    /** Los deshabilitados, o {@code null} si lo estan todos. */
+    /** The disabled ones, or {@code null} if they all are. */
     public synchronized Vector<ObjectName> getDisabledObjectNames() {
         return this.deselectedNames == null ? null : new Vector<ObjectName>(this.deselectedNames);
     }
 
     /**
-     * Si la notificacion pasa: primero por tipo, despues por nombre.
+     * Whether the notification passes: first by type, then by name.
      *
-     * <p>El orden importa por costo: la comprobacion de tipo es una comparacion de cadenas y
-     * descarta casi todo antes de tocar las listas.
+     * <p>The order matters for cost: the type check is a string comparison and discards almost
+     * everything before touching the lists.
      */
     public synchronized boolean isNotificationEnabled(Notification notif)
             throws IllegalArgumentException {
         if (notif == null) {
-            throw new IllegalArgumentException("la notificacion no puede ser null");
+            throw new IllegalArgumentException("the notification cannot be null");
         }
         if (!super.isNotificationEnabled(notif)) {
             return false;
@@ -128,7 +128,7 @@ public class MBeanServerNotificationFilter extends NotificationFilterSupport {
             return false;
         }
         ObjectName name = ((MBeanServerNotification) notif).getMBeanName();
-        // Lo deshabilitado gana; ver la nota de la clase.
+        // Disabled wins; see the class note.
         if (this.deselectedNames == null) {
             return false;
         }

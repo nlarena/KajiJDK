@@ -4,55 +4,55 @@ import java.io.Serializable;
 import javax.naming.NamingEnumeration;
 
 /**
- * KajiLibrary's javax.naming.directory.Attributes -- el conjunto de atributos de una entrada.
+ * KajiLibrary's javax.naming.directory.Attributes -- the set of attributes of an entry.
  *
- * <p>Un mapa de identificador a {@link Attribute}, con una particularidad que decide todo lo demas:
- * {@link #isCaseIgnored}. Los directorios LDAP <b>no distinguen mayusculas</b> en los nombres de
- * atributo --{@code cn}, {@code CN} y {@code Cn} son el mismo-- y por eso la coleccion tiene que
- * saber con que regla busca.
+ * <p>A map from identifier to {@link Attribute}, with one peculiarity that decides everything else:
+ * {@link #isCaseIgnored}. LDAP directories are <b>case-insensitive</b> in attribute names
+ * --{@code cn}, {@code CN} and {@code Cn} are the same-- and so the collection has to know which
+ * rule it looks up with.
  *
- * <p>Eso no es un detalle de comodidad: dos colecciones con la misma informacion y distinta regla se
- * comportan distinto ante la misma consulta, y por eso la regla se fija al construir y no se puede
- * cambiar despues.
+ * <p>That is not a convenience detail: two collections with the same information and a different
+ * rule behave differently for the same query, which is why the rule is fixed at construction and
+ * cannot change afterwards.
  *
- * <p>{@link #put(String, Object)} es un atajo que arma el {@link Attribute} por dentro. Conviene
- * saber que envuelve un <b>solo</b> valor: para un atributo con varios hay que armarlo y usar la otra
- * sobrecarga.
+ * <p>{@link #put(String, Object)} is a shortcut that builds the {@link Attribute} inside. Worth
+ * knowing that it wraps a <b>single</b> value: for an attribute with several, build it and use the
+ * other overload.
  */
 public interface Attributes extends Cloneable, Serializable {
 
-    /** Si los identificadores se comparan sin distinguir mayusculas. Ver la nota de la clase. */
+    /** Whether identifiers are compared ignoring case. See the class note. */
     boolean isCaseIgnored();
 
-    /** Cuantos atributos hay. */
+    /** How many attributes there are. */
     int size();
 
     /**
-     * El atributo con ese identificador.
+     * The attribute with that identifier.
      *
-     * @return null si no esta
+     * @return null if it is not there
      */
     Attribute get(String attrID);
 
-    /** Todos los atributos. */
+    /** All the attributes. */
     NamingEnumeration<? extends Attribute> getAll();
 
-    /** Solo los identificadores. */
+    /** Only the identifiers. */
     NamingEnumeration<String> getIDs();
 
     /**
-     * Agrega un atributo de un solo valor.
+     * Adds a single-valued attribute.
      *
-     * @return el que estaba con ese identificador, o null
+     * @return the one that was there with that identifier, or null
      */
     Attribute put(String attrID, Object val);
 
-    /** Agrega un atributo ya armado. */
+    /** Adds an already built attribute. */
     Attribute put(Attribute attr);
 
-    /** Lo saca y lo devuelve. */
+    /** Removes it and returns it. */
     Attribute remove(String attrID);
 
-    /** Una copia. */
+    /** A copy. */
     Object clone();
 }

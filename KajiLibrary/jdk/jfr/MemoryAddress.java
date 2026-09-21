@@ -6,10 +6,10 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * El campo es una <strong>direccion de memoria</strong>.
+ * The field is a <strong>memory address</strong>.
  *
- * <p>Se muestra en hexadecimal, que es la unica forma en que una direccion se puede comparar con
- * otra de un vistazo.
+ * <p>It is shown in hexadecimal, which is the only way in which one address can be compared with
+ * another at a glance.
  *
  * @since 9
  */

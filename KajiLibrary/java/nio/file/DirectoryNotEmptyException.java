@@ -1,16 +1,16 @@
 package java.nio.file;
 
-// Se quiso borrar un directorio que todavia tiene cosas adentro.
+// A directory that still has things inside was to be deleted.
 //
-// KajiJDK la puede levantar de verdad: el nativo `Fs.delete` borra directorios **solo si estan
-// vacios** --a proposito, para que un `delete()` sobre el directorio equivocado no sea una perdida
-// de datos-- y devuelve `false` cuando no puede. `Files.delete` traduce ese `false` sobre un
-// directorio existente a esta excepcion.
+// KajiJDK really can throw it: the `Fs.delete` native deletes directories **only if they are
+// empty** --on purpose, so a `delete()` on the wrong directory is not data loss-- and returns
+// `false` when it cannot. `Files.delete` turns that `false` over an existing directory into this
+// exception.
 public class DirectoryNotEmptyException extends FileSystemException {
 
     private static final long serialVersionUID = 3056667871802779003L;
 
-    /** @param dir el directorio que no estaba vacio, o `null` */
+    /** @param dir the directory that was not empty, or `null` */
     public DirectoryNotEmptyException(String dir) {
         super(dir);
     }

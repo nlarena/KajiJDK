@@ -6,47 +6,47 @@ import javax.print.event.PrintJobAttributeListener;
 import javax.print.event.PrintJobListener;
 
 /**
- * KajiLibrary's javax.print.DocPrintJob -- un trabajo de impresion.
+ * KajiLibrary's javax.print.DocPrintJob -- a print job.
  *
- * <p>Se saca de {@code PrintService.createPrintJob()} y sirve <b>una sola vez</b>: llamar
- * {@link #print} dos veces sobre el mismo trabajo lanza {@code PrintException}. Para imprimir otra
- * cosa hay que pedirle otro trabajo al servicio.
+ * <p>It is taken from {@code PrintService.createPrintJob()} and serves <b>only once</b>: calling
+ * {@link #print} twice on the same job throws {@code PrintException}. To print something else one
+ * has to ask the service for another job.
  *
- * <p>{@link #print} bloquea hasta que el servicio tomo el documento, no hasta que salio el papel. Para
- * saber que paso despues hay que registrar un {@link PrintJobListener} <b>antes</b> de llamarla.
+ * <p>{@link #print} blocks until the service took the document, not until the paper came out. To
+ * know what happened later one has to register a {@link PrintJobListener} <b>before</b> calling it.
  *
- * <p>El escucha de atributos lleva un conjunto que dice cuales interesan; ver
+ * <p>The attribute listener carries a set saying which ones are of interest; see
  * {@link PrintJobAttributeListener}.
  */
 public interface DocPrintJob {
 
-    /** De que impresora es. */
+    /** Which printer it belongs to. */
     PrintService getPrintService();
 
-    /** Los atributos actuales del trabajo. */
+    /** The job's current attributes. */
     PrintJobAttributeSet getAttributes();
 
-    /** Registra un escucha de estado. Antes de {@link #print}. */
+    /** Registers a state listener. Before {@link #print}. */
     void addPrintJobListener(PrintJobListener listener);
 
-    /** Lo da de baja. */
+    /** Unregisters it. */
     void removePrintJobListener(PrintJobListener listener);
 
     /**
-     * Registra un escucha de atributos.
+     * Registers an attribute listener.
      *
-     * @param attributes cuales interesan; null significa todos
+     * @param attributes which are of interest; null means all
      */
     void addPrintJobAttributeListener(PrintJobAttributeListener listener,
                                       PrintJobAttributeSet attributes);
 
-    /** Lo da de baja. */
+    /** Unregisters it. */
     void removePrintJobAttributeListener(PrintJobAttributeListener listener);
 
     /**
-     * Imprime. Ver la nota de la clase: se usa una sola vez y no espera al papel.
+     * Prints. See the class note: it is used only once and does not wait for the paper.
      *
-     * @throws PrintException si fallo, o si este trabajo ya se uso
+     * @throws PrintException if it failed, or if this job was already used
      */
     void print(Doc doc, PrintRequestAttributeSet attributes) throws PrintException;
 }

@@ -4,39 +4,39 @@ import java.awt.Transparency;
 import java.awt.color.ColorSpace;
 
 /**
- * El modelo de color de una pantalla: rojo, verde, azul y opcionalmente alfa, en campos de bits de
- * un mismo píxel.
+ * The colour model of a screen: red, green, blue and optionally alpha, in bit fields of one same
+ * pixel.
  *
- * <p>Es el caso concreto de {@link PackedColorModel} para RGB, y de lejos el más usado: el ARGB de
- * 32 bits que devuelve {@link ColorModel#getRGBdefault} es una instancia de esta clase, y también lo
- * son los 565 de 16 bits y los RGB de 24.
+ * <p>It is the concrete case of {@link PackedColorModel} for RGB, and by far the most used: the
+ * 32-bit ARGB that {@link ColorModel#getRGBdefault} returns is an instance of this class, and so
+ * are the 16-bit 565 and the 24-bit RGB.
  *
- * <p>Toda la conversión pasa por la misma cadena: sacar la componente con su máscara, llevarla a
- * 0..1 dividiendo por su propio máximo, deshacer la premultiplicación si la hay, y recién ahí
- * convertir. Cuando el espacio es sRGB —el caso normal— esa conversión es una multiplicación por
- * 255; cuando no lo es, hay que pasar por {@link ColorSpace#toRGB}, que es lo que hace que un modelo
- * en otro espacio siga contestando bien qué tan rojo es un píxel.
+ * <p>Every conversion goes through the same chain: take the component out with its mask, bring it
+ * to 0..1 by dividing by its own maximum, undo the premultiplication if there is one, and only then
+ * convert. When the space is sRGB —the normal case— that conversion is a multiplication by 255;
+ * when it is not, one has to go through {@link ColorSpace#toRGB}, which is what makes a model in
+ * another space go on answering correctly how red a pixel is.
  *
- * <p>El espacio tiene que ser de tipo RGB. No es una restricción de esta clase sino de su API: la
- * de tres máscaras llamadas rojo, verde y azul no significa nada en un espacio que no las tenga.
+ * <p>The space has to be of RGB type. It is not a restriction of this class but of its API: the one
+ * of three masks called red, green and blue means nothing in a space that does not have them.
  */
 public class DirectColorModel extends PackedColorModel {
 
     /**
-     * Un modelo RGB opaco en sRGB.
+     * An opaque RGB model in sRGB.
      *
-     * @throws IllegalArgumentException si `bits` no está entre 1 y 32 o si alguna máscara no es
-     *     contigua
+     * @throws IllegalArgumentException if `bits` is not between 1 and 32 or if some mask is not
+     *     contiguous
      */
     public DirectColorModel(int bits, int rmask, int gmask, int bmask) {
         this(bits, rmask, gmask, bmask, 0);
     }
 
     /**
-     * Un modelo RGB en sRGB, con alfa si `amask` no es cero.
+     * An RGB model in sRGB, with alpha if `amask` is not zero.
      *
-     * @throws IllegalArgumentException si `bits` no está entre 1 y 32 o si alguna máscara no es
-     *     contigua
+     * @throws IllegalArgumentException if `bits` is not between 1 and 32 or if some mask is not
+     *     contiguous
      */
     public DirectColorModel(int bits, int rmask, int gmask, int bmask, int amask) {
         super(ColorSpace.getInstance(ColorSpace.CS_sRGB), bits, rmask, gmask, bmask, amask, false,
@@ -45,10 +45,10 @@ public class DirectColorModel extends PackedColorModel {
     }
 
     /**
-     * El constructor general: cualquier espacio RGB, con o sin alfa premultiplicado.
+     * The general constructor: any RGB space, with or without premultiplied alpha.
      *
-     * @throws IllegalArgumentException si el espacio no es de tipo RGB, si `bits` no está entre 1 y
-     *     32, o si alguna máscara no es contigua
+     * @throws IllegalArgumentException if the space is not of RGB type, if `bits` is not between 1
+     *     and 32, or if some mask is not contiguous
      */
     public DirectColorModel(ColorSpace space, int bits, int rmask, int gmask, int bmask, int amask,
             boolean isAlphaPremultiplied, int transferType) {
@@ -56,22 +56,22 @@ public class DirectColorModel extends PackedColorModel {
                 amask == 0 ? Transparency.OPAQUE : Transparency.TRANSLUCENT, transferType);
     }
 
-    /** La máscara del rojo. */
+    /** The mask of the red. */
     public final int getRedMask() {
         return this.maskArray[0];
     }
 
-    /** La máscara del verde. */
+    /** The mask of the green. */
     public final int getGreenMask() {
         return this.maskArray[1];
     }
 
-    /** La máscara del azul. */
+    /** The mask of the blue. */
     public final int getBlueMask() {
         return this.maskArray[2];
     }
 
-    /** La máscara del alfa, o 0 si no tiene. */
+    /** The mask of the alpha, or 0 if it has none. */
     public final int getAlphaMask() {
         if (this.supportsAlpha) {
             return this.maskArray[3];
@@ -79,30 +79,30 @@ public class DirectColorModel extends PackedColorModel {
         return 0;
     }
 
-    /** La componente cruda, tal como está guardada. */
-    private int crudo(int pixel, int idx) {
+    /** The raw component, just as it is stored. */
+    private int rawComponent(int pixel, int idx) {
         return (pixel & this.maskArray[idx]) >>> this.maskOffsets[idx];
     }
 
-    /** El alfa del píxel, de 0 a 1. */
-    private float alfaNormalizado(int pixel) {
+    /** The alpha of the pixel, from 0 to 1. */
+    private float normalizedAlpha(int pixel) {
         if (!this.supportsAlpha) {
             return 1.0f;
         }
-        int a = this.crudo(pixel, 3);
+        int a = this.rawComponent(pixel, 3);
         return ((float) a) / ((float) ((1 << this.nBits[3]) - 1));
     }
 
     /**
-     * Una componente de color de 0 a 1, ya deshecha la premultiplicación.
+     * A colour component from 0 to 1, with the premultiplication already undone.
      *
-     * <p>Con alfa cero no hay color que recuperar: el píxel es invisible y lo único que se puede
-     * decir es cero. Dividir igual daría infinito o NaN, que no es un color.
+     * <p>With alpha zero there is no colour to recover: the pixel is invisible and all that can be
+     * said is zero. Dividing anyway would give infinity or NaN, which is not a colour.
      */
-    private float colorNormalizado(int pixel, int idx) {
-        float c = ((float) this.crudo(pixel, idx)) / ((float) ((1 << this.nBits[idx]) - 1));
+    private float normalizedColor(int pixel, int idx) {
+        float c = ((float) this.rawComponent(pixel, idx)) / ((float) ((1 << this.nBits[idx]) - 1));
         if (this.isAlphaPremultiplied) {
-            float a = this.alfaNormalizado(pixel);
+            float a = this.normalizedAlpha(pixel);
             if (a == 0.0f) {
                 return 0.0f;
             }
@@ -112,21 +112,21 @@ public class DirectColorModel extends PackedColorModel {
     }
 
     /**
-     * Una de las tres componentes sRGB del píxel, de 0 a 255.
+     * One of the three sRGB components of the pixel, from 0 to 255.
      *
-     * <p>Si el espacio ya es sRGB no hay nada que convertir y basta con escalar. Si no lo es, hay
-     * que pasar las tres juntas por el espacio: el rojo sRGB de un píxel en otro espacio depende de
-     * sus tres componentes, no sólo de la primera.
+     * <p>If the space is sRGB already there is nothing to convert and scaling is enough. If it is
+     * not, the three have to go through the space together: the sRGB red of a pixel in another
+     * space depends on its three components, not only on the first.
      */
     private int enSrgb(int pixel, int idx) {
         if (this.isSrgb) {
-            return (int) (this.colorNormalizado(pixel, idx) * 255.0f + 0.5f);
+            return (int) (this.normalizedColor(pixel, idx) * 255.0f + 0.5f);
         }
         float[] comps = new float[this.numColorComponents];
         for (int i = 0; i < this.numColorComponents; i++) {
             float min = this.colorSpace.getMinValue(i);
             float max = this.colorSpace.getMaxValue(i);
-            comps[i] = min + this.colorNormalizado(pixel, i) * (max - min);
+            comps[i] = min + this.normalizedColor(pixel, i) * (max - min);
         }
         float[] rgb = this.colorSpace.toRGB(comps);
         float v = rgb[idx];
@@ -139,42 +139,42 @@ public class DirectColorModel extends PackedColorModel {
         return (int) (v * 255.0f + 0.5f);
     }
 
-    /** El rojo del píxel, de 0 a 255 y en sRGB. */
+    /** The red of the pixel, from 0 to 255 and in sRGB. */
     public final int getRed(int pixel) {
         return this.enSrgb(pixel, 0);
     }
 
-    /** El verde del píxel, de 0 a 255 y en sRGB. */
+    /** The green of the pixel, from 0 to 255 and in sRGB. */
     public final int getGreen(int pixel) {
         return this.enSrgb(pixel, 1);
     }
 
-    /** El azul del píxel, de 0 a 255 y en sRGB. */
+    /** The blue of the pixel, from 0 to 255 and in sRGB. */
     public final int getBlue(int pixel) {
         return this.enSrgb(pixel, 2);
     }
 
-    /** El alfa del píxel, de 0 a 255; 255 si el modelo no tiene alfa. */
+    /** The alpha of the pixel, from 0 to 255; 255 if the model has no alpha. */
     public final int getAlpha(int pixel) {
         if (!this.supportsAlpha) {
             return 255;
         }
-        return (int) (this.alfaNormalizado(pixel) * 255.0f + 0.5f);
+        return (int) (this.normalizedAlpha(pixel) * 255.0f + 0.5f);
     }
 
-    /** El píxel entero como ARGB de ocho bits por canal. */
+    /** The whole pixel as ARGB with eight bits per channel. */
     public final int getRGB(int pixel) {
         return (this.getAlpha(pixel) << 24) | (this.getRed(pixel) << 16)
                 | (this.getGreen(pixel) << 8) | this.getBlue(pixel);
     }
 
     /**
-     * Un píxel crudo llevado a un `int`.
+     * A raw pixel brought into an `int`.
      *
-     * @throws UnsupportedOperationException si el tipo no entra en un `int`
-     * @throws ClassCastException si el arreglo no es del tipo de transferencia
+     * @throws UnsupportedOperationException if the type does not fit in an `int`
+     * @throws ClassCastException if the array is not of the transfer type
      */
-    private int desdeCrudo(Object inData) {
+    private int fromRaw(Object inData) {
         if (this.transferType == DataBuffer.TYPE_BYTE) {
             return ((byte[]) inData)[0] & 0xFF;
         }
@@ -189,11 +189,11 @@ public class DirectColorModel extends PackedColorModel {
     }
 
     /**
-     * Un `int` guardado en un arreglo del tipo de transferencia.
+     * An `int` stored in an array of the transfer type.
      *
-     * @throws UnsupportedOperationException si el tipo no entra en un `int`
+     * @throws UnsupportedOperationException if the type does not fit in an `int`
      */
-    private Object aCrudo(int pixel, Object obj) {
+    private Object toRaw(int pixel, Object obj) {
         if (this.transferType == DataBuffer.TYPE_BYTE) {
             byte[] out = obj == null ? new byte[1] : (byte[]) obj;
             out[0] = (byte) pixel;
@@ -214,54 +214,54 @@ public class DirectColorModel extends PackedColorModel {
     }
 
     /**
-     * El rojo de un píxel crudo.
+     * The red of a raw pixel.
      *
-     * @throws UnsupportedOperationException si el tipo no entra en un `int`
+     * @throws UnsupportedOperationException if the type does not fit in an `int`
      */
     public int getRed(Object inData) {
-        return this.getRed(this.desdeCrudo(inData));
+        return this.getRed(this.fromRaw(inData));
     }
 
     /**
-     * El verde de un píxel crudo.
+     * The green of a raw pixel.
      *
-     * @throws UnsupportedOperationException si el tipo no entra en un `int`
+     * @throws UnsupportedOperationException if the type does not fit in an `int`
      */
     public int getGreen(Object inData) {
-        return this.getGreen(this.desdeCrudo(inData));
+        return this.getGreen(this.fromRaw(inData));
     }
 
     /**
-     * El azul de un píxel crudo.
+     * The blue of a raw pixel.
      *
-     * @throws UnsupportedOperationException si el tipo no entra en un `int`
+     * @throws UnsupportedOperationException if the type does not fit in an `int`
      */
     public int getBlue(Object inData) {
-        return this.getBlue(this.desdeCrudo(inData));
+        return this.getBlue(this.fromRaw(inData));
     }
 
     /**
-     * El alfa de un píxel crudo.
+     * The alpha of a raw pixel.
      *
-     * @throws UnsupportedOperationException si el tipo no entra en un `int`
+     * @throws UnsupportedOperationException if the type does not fit in an `int`
      */
     public int getAlpha(Object inData) {
-        return this.getAlpha(this.desdeCrudo(inData));
+        return this.getAlpha(this.fromRaw(inData));
     }
 
     /**
-     * Un píxel crudo como ARGB de ocho bits por canal.
+     * A raw pixel as ARGB with eight bits per channel.
      *
-     * @throws UnsupportedOperationException si el tipo no entra en un `int`
+     * @throws UnsupportedOperationException if the type does not fit in an `int`
      */
     public int getRGB(Object inData) {
-        return this.getRGB(this.desdeCrudo(inData));
+        return this.getRGB(this.fromRaw(inData));
     }
 
     /**
-     * Un ARGB llevado a un píxel de este modelo.
+     * An ARGB brought into a pixel of this model.
      *
-     * @throws UnsupportedOperationException si el tipo no entra en un `int`
+     * @throws UnsupportedOperationException if the type does not fit in an `int`
      */
     public Object getDataElements(int rgb, Object pixel) {
         float r = ((rgb >> 16) & 0xFF) / 255.0f;
@@ -299,34 +299,34 @@ public class DirectColorModel extends PackedColorModel {
             int v = (int) (a * ((1 << this.nBits[3]) - 1) + 0.5f);
             intpixel = intpixel | ((v << this.maskOffsets[3]) & this.maskArray[3]);
         }
-        return this.aCrudo(intpixel, pixel);
+        return this.toRaw(intpixel, pixel);
     }
 
-    /** Las componentes crudas del píxel, cada una en su propia escala. */
+    /** The raw components of the pixel, each one in its own scale. */
     public final int[] getComponents(int pixel, int[] components, int offset) {
         int[] out = components;
         if (out == null) {
             out = new int[offset + this.numComponents];
         }
         for (int i = 0; i < this.numComponents; i++) {
-            out[offset + i] = this.crudo(pixel, i);
+            out[offset + i] = this.rawComponent(pixel, i);
         }
         return out;
     }
 
     /**
-     * Las componentes crudas de un píxel crudo.
+     * The raw components of a raw pixel.
      *
-     * @throws UnsupportedOperationException si el tipo no entra en un `int`
+     * @throws UnsupportedOperationException if the type does not fit in an `int`
      */
     public final int[] getComponents(Object pixel, int[] components, int offset) {
-        return this.getComponents(this.desdeCrudo(pixel), components, offset);
+        return this.getComponents(this.fromRaw(pixel), components, offset);
     }
 
     /**
-     * Componentes crudas llevadas a un píxel.
+     * Raw components brought into a pixel.
      *
-     * @throws IllegalArgumentException si el arreglo no trae todas las componentes
+     * @throws IllegalArgumentException if the array does not carry every component
      */
     public int getDataElement(int[] components, int offset) {
         if (components.length - offset < this.numComponents) {
@@ -342,19 +342,19 @@ public class DirectColorModel extends PackedColorModel {
     }
 
     /**
-     * Componentes crudas llevadas a un píxel crudo.
+     * Raw components brought into a raw pixel.
      *
-     * @throws IllegalArgumentException si el arreglo no trae todas las componentes
-     * @throws UnsupportedOperationException si el tipo no entra en un `int`
+     * @throws IllegalArgumentException if the array does not carry every component
+     * @throws UnsupportedOperationException if the type does not fit in an `int`
      */
     public Object getDataElements(int[] components, int offset, Object obj) {
-        return this.aCrudo(this.getDataElement(components, offset), obj);
+        return this.toRaw(this.getDataElement(components, offset), obj);
     }
 
     /**
-     * Un ráster empaquetado con estas máscaras.
+     * A packed raster with these masks.
      *
-     * @throws IllegalArgumentException si el tamaño es vacío
+     * @throws IllegalArgumentException if the size is empty
      */
     public final WritableRaster createCompatibleWritableRaster(int w, int h) {
         if (w <= 0 || h <= 0) {
@@ -380,7 +380,7 @@ public class DirectColorModel extends PackedColorModel {
         return Raster.createPackedRaster(DataBuffer.TYPE_BYTE, w, h, bandmasks, null);
     }
 
-    /** Si ese ráster está empaquetado con exactamente estas máscaras. */
+    /** Whether that raster is packed with exactly these masks. */
     public boolean isCompatibleRaster(Raster raster) {
         SampleModel sm = raster.getSampleModel();
         if (!(sm instanceof SinglePixelPackedSampleModel)) {
@@ -400,14 +400,14 @@ public class DirectColorModel extends PackedColorModel {
     }
 
     /**
-     * Premultiplica el ráster por su alfa, o lo deshace, **en el lugar**.
+     * Premultiplies the raster by its alpha, or undoes it, **in place**.
      *
-     * <p>Devuelve el modelo que describe al ráster después del cambio; si ya estaba como se pidió, o
-     * si no hay alfa que premultiplicar, se devuelve a sí mismo sin tocar nada.
+     * <p>It returns the model that describes the raster after the change; if it was as asked for
+     * already, or if there is no alpha to premultiply, it returns itself without touching anything.
      *
-     * <p>La operación pierde información en un sentido: premultiplicar un píxel de alfa cero lo
-     * lleva a negro, y deshacerlo después no lo recupera. Es propio de la representación, no de esta
-     * implementación.
+     * <p>The operation loses information in one direction: premultiplying a pixel of alpha zero
+     * takes it to black, and undoing it afterwards does not bring it back. It belongs to the
+     * representation, not to this implementation.
      */
     public final ColorModel coerceData(WritableRaster raster, boolean isAlphaPremultiplied) {
         if (!this.supportsAlpha || this.isAlphaPremultiplied == isAlphaPremultiplied) {

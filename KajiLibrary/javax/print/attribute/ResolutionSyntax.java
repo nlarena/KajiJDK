@@ -2,15 +2,15 @@ package javax.print.attribute;
 
 import java.io.Serializable;
 
-// La clase de sintaxis de los atributos que son una resolucion de impresion: dos numeros, uno a lo
-// ancho del papel (cross feed) y otro a lo largo (feed).
+// The syntax class of the attributes that are a print resolution: two numbers, one across the paper
+// (cross feed) and another along it (feed).
 //
-// Adentro se guarda todo en **dphi** -- puntos por cien pulgadas --, que es un entero, para que la
-// comparacion sea exacta y no dependa de en que unidad se construyo. Las constantes DPI y DPCM son
-// justamente el factor de conversion a dphi: 100 dphi = 1 dpi, 254 dphi = 1 dpcm. Esto es lo que
-// hace que `new R(300, 300, DPI)` y `new R(300, 300, DPI)` sean iguales sin punto flotante.
+// Inside everything is kept in **dphi** -- dots per hundred inches --, which is an integer, so that
+// the comparison is exact and does not depend on which unit it was built in. The DPI and DPCM
+// constants are precisely the conversion factor to dphi: 100 dphi = 1 dpi, 254 dphi = 1 dpcm. That
+// is what makes `new R(300, 300, DPI)` and `new R(300, 300, DPI)` equal without floating point.
 //
-// A diferencia del resto de las clases de sintaxis, su constructor es **public**, no protected.
+// Unlike the rest of the syntax classes, its constructor is **public**, not protected.
 public abstract class ResolutionSyntax implements Serializable, Cloneable {
 
     private static final long serialVersionUID = 2706743076526672017L;
@@ -18,7 +18,7 @@ public abstract class ResolutionSyntax implements Serializable, Cloneable {
     private int crossFeedResolution;
     private int feedResolution;
 
-    // Los dos factores a dphi. No son un enum: son el numero por el que se multiplica.
+    // The two factors to dphi. They are not an enum: they are the number one multiplies by.
     public static final int DPI = 100;
     public static final int DPCM = 254;
 
@@ -36,7 +36,7 @@ public abstract class ResolutionSyntax implements Serializable, Cloneable {
         this.feedResolution = feedResolution * units;
     }
 
-    // Vuelta de dphi a la unidad pedida, redondeando al entero mas cercano.
+    // Back from dphi to the requested unit, rounding to the nearest integer.
     private static int convertFromDphi(int dphi, int units) {
         if (units < 1) {
             throw new IllegalArgumentException(": units is < 1");
@@ -45,7 +45,7 @@ public abstract class ResolutionSyntax implements Serializable, Cloneable {
         return (dphi + round) / units;
     }
 
-    // Los dos numeros juntos: [cross feed, feed].
+    // The two numbers together: [cross feed, feed].
     public int[] getResolution(int units) {
         int[] result = new int[2];
         result[0] = getCrossFeedResolution(units);
@@ -61,7 +61,7 @@ public abstract class ResolutionSyntax implements Serializable, Cloneable {
         return convertFromDphi(this.feedResolution, units);
     }
 
-    // "300x600 dpi". Con `unitsName` null se omite el sufijo y el espacio.
+    // "300x600 dpi". With a null `unitsName` the suffix and the space are omitted.
     public String toString(int units, String unitsName) {
         StringBuilder result = new StringBuilder();
         result.append(getCrossFeedResolution(units));
@@ -74,8 +74,8 @@ public abstract class ResolutionSyntax implements Serializable, Cloneable {
         return result.toString();
     }
 
-    // Orden parcial, no total: pide que **las dos** componentes sean menores o iguales. Dos
-    // resoluciones como 300x600 y 600x300 no estan ordenadas entre si en ningun sentido.
+    // A partial order, not a total one: it asks that **both** components be less or equal. Two
+    // resolutions such as 300x600 and 600x300 are not ordered with each other in either direction.
     public boolean lessThanOrEquals(ResolutionSyntax other) {
         if (other == null) {
             throw new NullPointerException("other is null");
@@ -93,14 +93,14 @@ public abstract class ResolutionSyntax implements Serializable, Cloneable {
                 && this.feedResolution == other.feedResolution;
     }
 
-    // Los 16 bits bajos de cada componente, empaquetados. Choca para resoluciones enormes, pero es
-    // el del JDK y hay que replicarlo: un hash distinto rompe cualquier tabla compartida.
+    // The low 16 bits of each component, packed. It collides for huge resolutions, but it is the
+    // JDK's and has to be replicated: a different hash breaks any shared table.
     public int hashCode() {
         return (this.crossFeedResolution & 0x0000FFFF)
                 | ((this.feedResolution & 0x0000FFFF) << 16);
     }
 
-    // En dphi, la unidad interna: "30000x60000 dphi".
+    // In dphi, the internal unit: "30000x60000 dphi".
     public String toString() {
         return toString(1, "dphi");
     }

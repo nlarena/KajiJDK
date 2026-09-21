@@ -4,7 +4,7 @@ import javax.swing.JComponent;
 import javax.swing.plaf.ComponentUI;
 
 /**
- * El campo con formato de Synth. Cambia el prefijo y nada mas.
+ * Synth's formatted field. It changes the prefix and nothing else.
  */
 public class SynthFormattedTextFieldUI extends SynthTextFieldUI {
 

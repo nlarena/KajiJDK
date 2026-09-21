@@ -1,13 +1,14 @@
 package org.w3c.dom.stylesheets;
 
 /**
- * Un documento que expone sus hojas de estilo.
+ * A document that exposes its style sheets.
  *
- * <p>Es una interfaz aparte y no un metodo de `Document` porque un documento XML sin hojas de
- * estilo no tiene por que implementarla: el DOM se arma por capas y esta es la de estilos.
+ * <p>It is a separate interface and not a method of `Document` because an XML document with no
+ * style sheets has no reason to implement it: the DOM is built in layers and this is the one of
+ * styles.
  */
 public interface DocumentStyle {
 
-    /** Las hojas del documento, en una lista viva. */
+    /** The sheets of the document, in a live list. */
     StyleSheetList getStyleSheets();
 }

@@ -8,26 +8,26 @@ import javax.swing.AbstractAction;
 import javax.swing.Action;
 
 /**
- * Una accion que trabaja sobre el componente de texto que la disparo.
+ * An action that works on the text component that fired it.
  *
- * <h2>Por que no guarda el componente</h2>
+ * <h2>Why it does not keep the component</h2>
  *
- * <p>Una accion de edicion —"borrar la palabra anterior"— vale para cualquier componente de texto,
- * y ponerla en un menu compartido significa que no se sabe de antemano sobre cual va a actuar. Por
- * eso {@link #getTextComponent} lo saca del evento: el que disparo la accion.
+ * <p>An editing action --"delete the previous word"-- holds for any text component, and putting
+ * it in a shared menu means that which one it will act on is not known beforehand. That is why
+ * {@link #getTextComponent} takes it from the event: the one that fired the action.
  *
- * <p>Cuando el evento no dice de donde vino —una accion invocada desde codigo—, se cae en
- * {@link #getFocusedComponent}, que en esta VM devuelve {@code null} porque no hay foco de
- * teclado.
+ * <p>When the event does not say where it came from --an action invoked from code--, it falls
+ * back on {@link #getFocusedComponent}, which in this VM returns {@code null} because there is
+ * no keyboard focus.
  */
 public abstract class TextAction extends AbstractAction {
 
-    /** Una accion con ese nombre; el nombre es lo que la ata a una tecla. */
+    /** An action with that name; the name is what ties it to a key. */
     public TextAction(String name) {
         super(name);
     }
 
-    /** El componente sobre el que hay que actuar; ver la nota de la clase. */
+    /** The component to act on; see the class note. */
     protected final JTextComponent getTextComponent(ActionEvent e) {
         if (e != null) {
             Object o = e.getSource();
@@ -39,10 +39,10 @@ public abstract class TextAction extends AbstractAction {
     }
 
     /**
-     * Junta dos listas de acciones, ganando la segunda.
+     * It joins two lists of actions, the second one winning.
      *
-     * <p>Es como un juego de edicion agrega las suyas a las que hereda sin repetir: dos acciones
-     * con el mismo nombre son la misma, y queda la de la lista de abajo.
+     * <p>It is how an editor kit adds its own to those it inherits without repeating: two actions
+     * with the same name are the same one, and the one from the lower list stays.
      */
     public static final Action[] augmentList(Action[] list1, Action[] list2) {
         Hashtable<String, Action> h = new Hashtable<String, Action>();
@@ -65,7 +65,7 @@ public abstract class TextAction extends AbstractAction {
         return actions;
     }
 
-    /** {@code null}: esta VM no tiene foco de teclado; ver la nota de la clase. */
+    /** {@code null}: this VM has no keyboard focus; see the class note. */
     protected final JTextComponent getFocusedComponent() {
         return JTextComponent.getFocusedComponent();
     }

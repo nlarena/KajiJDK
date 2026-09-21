@@ -1,15 +1,17 @@
 package java.net.http;
 
 /**
- * Se vencio el plazo <strong>antes de conectar</strong>.
+ * The timeout ran out <strong>before connecting</strong>.
  *
- * <h2>Por que merece su propio tipo</h2>
+ * <h2>Why it deserves its own type</h2>
  *
- * <p>Porque distingue "no llegue" de "llegue y tardo". Si la conexion nunca se establecio, el
- * servidor <strong>no vio el pedido</strong> — y entonces reintentar es seguro incluso para un
- * {@code POST}, que no lo seria si la respuesta se hubiera perdido despues de haberlo procesado.
+ * <p>Because it separates "did not get there" from "got there and was slow". If the connection was
+ * never established, the server <strong>did not see the request</strong> — and then retrying is
+ * safe even for a {@code POST}, which it would not be if the response had been lost after the
+ * server processed it.
  *
- * <p>Es la unica forma que da esta API de saber eso, y por eso vale un tipo y no un campo.
+ * <p>It is the only way this API gives to know that, which is why it is worth a type and not a
+ * field.
  *
  * @since 11
  */
@@ -17,7 +19,7 @@ public class HttpConnectTimeoutException extends HttpTimeoutException {
 
     private static final long serialVersionUID = 321L + 11L;
 
-    /** Con un mensaje. */
+    /** With a message. */
     public HttpConnectTimeoutException(String message) {
         super(message);
     }

@@ -1,11 +1,11 @@
 package java.awt;
 
 /**
- * Base de las enumeraciones de {@code java.awt} anteriores a {@code enum}.
+ * Base of the {@code java.awt} enumerations that predate {@code enum}.
  *
- * <p>No es publica --no es API-- pero hace falta: {@code BufferCapabilities.FlipContents} hereda de
- * ella y sin ella no compila. Un valor es un indice mas una tabla de nombres, y de ahi salen el
- * {@code hashCode()} --el indice-- y el {@code toString()} --el nombre--.
+ * <p>It is not public --it is not API-- but it is needed: {@code BufferCapabilities.FlipContents}
+ * inherits from it and does not compile without it. A value is an index plus a table of names, and
+ * from that come {@code hashCode()} --the index-- and {@code toString()} --the name--.
  */
 abstract class AttributeValue {
 

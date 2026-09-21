@@ -6,50 +6,60 @@ import javax.management.MBeanNotificationInfo;
 import javax.management.RuntimeOperationsException;
 
 /**
- * KajiLibrary's javax.management.modelmbean.ModelMBeanNotificationInfo -- un aviso de un model MBean.
+ * KajiLibrary's javax.management.modelmbean.ModelMBeanNotificationInfo -- a notice of a model
+ * MBean.
  *
- * <p>El descriptor de un aviso lleva los campos de <b>registro</b>: {@code log} dice si se
- * guarda, {@code logfile} adonde. Es lo que permite que un aviso quede escrito sin que
- * nadie escuche, que es exactamente lo que se quiere de una traza de auditoria.
+ * <p>A notice's descriptor carries the <b>logging</b> fields: {@code log} says whether it is
+ * kept, {@code logfile} where. In the specification that is what allows a notice to end up
+ * written with nobody listening, which is exactly what is wanted of an audit trail.
  *
- * <h2>El descriptor es mutable, y el {@code Info} deja de serlo</h2>
+ * <p>{@link RequiredModelMBean} in this library carries those fields and <b>writes nothing</b>:
+ * sending a notice reaches the registered listeners and no further. Whoever needs the trail
+ * registers a listener that writes it.
  *
- * <p>{@code MBeanFeatureInfo} es inmutable a proposito: es lo que un agente publica y lo que los
- * clientes se guardan. Esta subclase agrega {@link #setDescriptor}, que lo rompe.
+ * <h2>The descriptor is mutable, and the {@code Info} stops being so</h2>
  *
- * <p>Esta bien que lo rompa --un model MBean se configura en tiempo de ejecucion y para eso hace
- * falta poder cambiar el descriptor-- y hay que saberlo: cambiar el descriptor de un
- * {@code Info} que ya se publico cambia lo que ven los clientes que se lo guardaron.
+ * <p>{@code MBeanFeatureInfo} is immutable on purpose: it is what an agent publishes and what the
+ * clients keep. This subclass adds {@link #setDescriptor}, which breaks that.
  *
- * <p>Por eso {@link #getDescriptor} devuelve una <b>copia</b>: leerlo no da forma de escribirlo.
+ * <p>It is right that it breaks it --a model MBean is configured at run time and for that the
+ * descriptor has to be changeable-- and it has to be known: changing the descriptor of an
+ * {@code Info} that was already published changes what the clients who kept it see.
+ *
+ * <p>That is why {@link #getDescriptor} returns a <b>copy</b>: reading it gives no way of writing
+ * it.
+ *
+ * <p>What {@link #setDescriptor} checks is only {@link Descriptor#isValid}: a {@code name} and a
+ * {@code descriptorType}, both with a value. The JDK also demands that the type be the one that
+ * matches the feature; here a descriptor of the wrong type goes through.
  */
 public class ModelMBeanNotificationInfo extends MBeanNotificationInfo implements DescriptorAccess {
 
     private static final long serialVersionUID = -7445681389570207141L;
 
-    /** El descriptor; nunca null. */
+    /** The descriptor; never null. */
     private Descriptor modelDescriptor;
 
-    /** Sin descriptor. */
+    /** Without a descriptor. */
     public ModelMBeanNotificationInfo(String[] notifTypes, String name, String description) {
         super(notifTypes, name, description);
     }
 
-    /** Con descriptor. */
+    /** With a descriptor. */
     public ModelMBeanNotificationInfo(String[] notifTypes, String name, String description,
                                       Descriptor descriptor) {
         super(notifTypes, name, description);
         setDescriptor(descriptor);
     }
 
-    /** Una copia. */
+    /** A copy. */
     public ModelMBeanNotificationInfo(ModelMBeanNotificationInfo inInfo) {
         super(inInfo.getNotifTypes(), inInfo.getName(), inInfo.getDescription());
         setDescriptor(inInfo.getDescriptor());
     }
 
 
-    /** Una copia del descriptor. Ver la nota de la clase. */
+    /** A copy of the descriptor. See the class note. */
     public Descriptor getDescriptor() {
         if (this.modelDescriptor == null) {
             this.modelDescriptor = defaultDescriptor();
@@ -58,10 +68,11 @@ public class ModelMBeanNotificationInfo extends MBeanNotificationInfo implements
     }
 
     /**
-     * Lo reemplaza.
+     * Replaces it.
      *
-     * @param inDescriptor null vuelve al descriptor por omision
-     * @throws RuntimeOperationsException si el descriptor no es valido para esta clase
+     * @param inDescriptor {@code null} goes back to the default descriptor
+     * @throws RuntimeOperationsException if the descriptor is not {@link Descriptor#isValid
+     *     valid}
      */
     public void setDescriptor(Descriptor inDescriptor) {
         if (inDescriptor == null) {
@@ -75,22 +86,22 @@ public class ModelMBeanNotificationInfo extends MBeanNotificationInfo implements
         this.modelDescriptor = (Descriptor) inDescriptor.clone();
     }
 
-    /** Una copia. */
+    /** A copy. */
     public Object clone() {
         return new ModelMBeanNotificationInfo(this);
     }
 
-    /** El nombre, la descripcion y el descriptor. */
+    /** The name, the description and the descriptor. */
     public String toString() {
         return getClass().getName() + "(name=" + getName() + ",descriptor=" + getDescriptor() + ")";
     }
 
     /**
-     * El descriptor por omision: nombre, tipo y {@code displayName}.
+     * The default descriptor: name, type and {@code displayName}.
      *
-     * <p>Los tres campos son los que {@code isValid} exige mas el que toda herramienta muestra. Sin
-     * ellos, un {@code Info} recien construido tendria un descriptor invalido, que es justo lo que
-     * {@link #setDescriptor} rechaza.
+     * <p>The three fields are the ones {@code isValid} demands plus the one every tool shows.
+     * Without them a freshly built {@code Info} would have an invalid descriptor, which is
+     * exactly what {@link #setDescriptor} rejects.
      */
     private Descriptor defaultDescriptor() {
         return new DescriptorSupport(new String[] {"name", "descriptorType", "displayName"},

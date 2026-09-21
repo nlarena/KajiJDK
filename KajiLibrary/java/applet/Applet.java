@@ -41,7 +41,7 @@ public class Applet extends Panel {
     /** The browser's representative, or `null` until the browser sets it. */
     private transient AppletStub stub;
 
-    /** La accesibilidad, armada al primer pedido. */
+    /** The accessibility, built at the first request. */
     AccessibleContext accessibleContext;
 
     /**

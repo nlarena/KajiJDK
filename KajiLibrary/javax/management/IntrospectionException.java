@@ -1,6 +1,6 @@
 package javax.management;
 
-/** Fallo la introspeccion del MBean. */
+/** Introspection of the MBean failed. */
 public class IntrospectionException extends OperationsException {
 
     private static final long serialVersionUID = 1054516935875481725L;

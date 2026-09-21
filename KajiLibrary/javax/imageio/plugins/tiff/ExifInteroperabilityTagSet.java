@@ -4,38 +4,41 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * KajiLibrary's javax.imageio.plugins.tiff.ExifInteroperabilityTagSet -- las dos etiquetas de interoperabilidad de Exif.
+ * KajiLibrary's javax.imageio.plugins.tiff.ExifInteroperabilityTagSet -- Exif's interoperability
+ * tag.
  *
- * <p>El conjunto mas chico del paquete: dice a que perfil de interoperabilidad se ajusta el archivo
- * --{@code "R98"} para el Exif clasico, {@code "THM"} para una miniatura--.
+ * <p>The smallest set in the package: a single tag, which says which interoperability profile the
+ * file follows --{@code "R98"} for classic Exif, {@code "THM"} for a thumbnail. (An earlier note
+ * spoke of two tags; there is one, with those two named values.)
  *
- * <p>Cuelga de un directorio al que apunta {@code ExifTIFFTagSet.TAG_INTEROPERABILITY_IFD_POINTER}.
+ * <p>It hangs from a directory pointed to by {@code
+ * ExifTIFFTagSet.TAG_INTEROPERABILITY_IFD_POINTER}.
  *
- * <p>Es un singleton: se pide con {@link #getInstance}. Las etiquetas y sus valores nombrados se
- * transcribieron del JDK 25 y no a mano; un numero cambiado produce un TIFF que otros programas leen
- * distinto.
+ * <p>It is a singleton: it is obtained with {@link #getInstance}. The tags and their named values
+ * were transcribed from the JDK 25 and not by hand; a changed number produces a TIFF that other
+ * programs read differently.
  */
 public final class ExifInteroperabilityTagSet extends TIFFTagSet {
 
-    /** El unico, armado la primera vez que se pide. */
+    /** The only one, built the first time it is asked for. */
     private static ExifInteroperabilityTagSet theInstance = null;
 
-    /** El numero de la etiqueta interoperability index. */
+    /** The number of the interoperability index tag. */
     public static final int TAG_INTEROPERABILITY_INDEX = 1;
 
-    /** Un valor de interoperability. */
+    /** A value of {@link #TAG_INTEROPERABILITY_INDEX}. */
     public static final String INTEROPERABILITY_INDEX_R98 = "R98";
 
-    /** Un valor de interoperability. */
+    /** A value of {@link #TAG_INTEROPERABILITY_INDEX}. */
     public static final String INTEROPERABILITY_INDEX_THM = "THM";
 
 
-    /** Se llega por {@link #getInstance}. */
+    /** Reached through {@link #getInstance}. */
     private ExifInteroperabilityTagSet() {
         super(tags());
     }
 
-    /** El conjunto. Ver la nota de la clase. */
+    /** The set. See the class note. */
     public static synchronized ExifInteroperabilityTagSet getInstance() {
         if (theInstance == null) {
             theInstance = new ExifInteroperabilityTagSet();
@@ -43,7 +46,7 @@ public final class ExifInteroperabilityTagSet extends TIFFTagSet {
         return theInstance;
     }
 
-    /** Las etiquetas de este conjunto. */
+    /** The tags of this set. */
     private static List<TIFFTag> tags() {
         List<TIFFTag> tags = new ArrayList<TIFFTag>();
         tags.add(new TIFFTag("InteroperabilityIndex", 1, 4, -1));

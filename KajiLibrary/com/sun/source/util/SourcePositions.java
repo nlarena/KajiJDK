@@ -4,26 +4,26 @@ import com.sun.source.tree.CompilationUnitTree;
 import com.sun.source.tree.Tree;
 
 /**
- * Donde empieza y termina un nodo dentro del archivo.
+ * Where a node starts and ends inside the file.
  *
- * <h2>Por que no vive en el nodo</h2>
+ * <h2>Why it does not live in the node</h2>
  *
- * <p>Porque una posicion solo significa algo <strong>dentro de una unidad de compilacion</strong>, y
- * un nodo no sabe en cual esta: los arboles se pueden compartir y reusar. De ahi que los dos metodos
- * pidan el {@link CompilationUnitTree} y no sean getters del nodo.
+ * <p>Because a position only means something <strong>inside a compilation unit</strong>, and a
+ * node does not know which it is in: the trees may be shared and reused. Hence the two methods
+ * ask for the {@link CompilationUnitTree} and are not getters of the node.
  *
- * <p>Las posiciones son absolutas —un solo numero desde el principio del archivo— y no linea y
- * columna. Convertirlas es trabajo de {@link com.sun.source.tree.LineMap}, y se hace solo al
- * mostrarle algo a una persona.
+ * <p>The positions are absolute -- a single number from the beginning of the file -- and not
+ * line and column. Converting them is {@link com.sun.source.tree.LineMap}'s work, and it is
+ * done only when showing something to a person.
  */
 public interface SourcePositions {
 
     /**
-     * Donde empieza, o {@link javax.tools.Diagnostic#NOPOS} si el nodo no vino del fuente — un nodo
-     * sintetico que agrego el compilador no esta escrito en ningun lado.
+     * Where it starts, or {@link javax.tools.Diagnostic#NOPOS} if the node did not come from the
+     * source -- a synthetic node the compiler added is not written anywhere.
      */
     long getStartPosition(CompilationUnitTree file, Tree tree);
 
-    /** Donde termina, o {@code NOPOS}. */
+    /** Where it ends, or {@code NOPOS}. */
     long getEndPosition(CompilationUnitTree file, Tree tree);
 }

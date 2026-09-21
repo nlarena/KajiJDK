@@ -3,76 +3,78 @@ package javax.swing.text;
 import java.util.Enumeration;
 
 /**
- * Un conjunto de atributos de estilo, de sólo lectura y encadenable.
+ * A set of style attributes, read-only and chainable.
  *
- * <p>Lo que lo distingue de un mapa común es el **padre**. Un conjunto puede resolver un atributo
- * que no tiene delegando en otro, y así un párrafo hereda el estilo del documento sin copiarlo. Por
- * eso {@link #getAttribute} puede contestar algo que {@link #isDefined} niega: lo primero busca en
- * la cadena, lo segundo mira sólo este eslabón.
+ * <p>What tells it apart from an ordinary map is the **parent**. A set can resolve an attribute
+ * it does not have by delegating to another, and that way a paragraph inherits the document's
+ * style without copying it. That is why {@link #getAttribute} may answer something
+ * {@link #isDefined} denies: the first looks along the chain, the second looks only at this
+ * link.
  *
- * <p>Las cuatro interfaces anidadas no declaran nada: son **marcas** que clasifican una clave según
- * a qué se aplica —al carácter, al párrafo, al color, a la fuente— para que quien componga estilos
- * sepa qué puede mezclar con qué.
+ * <p>The four nested interfaces declare nothing: they are **marks** that classify a key
+ * according to what it applies to --the character, the paragraph, the colour, the font-- so that
+ * whoever composes styles knows what can be mixed with what.
  *
- * <p><strong>Es lo único de `javax.swing.text` que esta biblioteca trae.</strong> Está porque
- * {@code javax.accessibility.AccessibleText} la nombra, y sin ella ese paquete no podría declarar
- * dos de sus métodos. Escribirla entera —es autocontenida y son ocho métodos— era mejor que dejar
- * incompletos a los que dependen de ella.
+ * <p><strong>It is the only thing of `javax.swing.text` this library brought.</strong> It is
+ * here because {@code javax.accessibility.AccessibleText} names it, and without it that package
+ * could not declare two of its methods. Writing it whole --it is self-contained and it is eight
+ * methods-- was better than leaving those that depend on it incomplete.
  */
 public interface AttributeSet {
 
-    /** La clave con la que un conjunto guarda su nombre. */
+    /** The key under which a set keeps its name. */
     Object NameAttribute = "name";
 
-    /** La clave con la que un conjunto guarda a su padre. */
+    /** The key under which a set keeps its parent. */
     Object ResolveAttribute = "resolver";
 
-    /** Marca de las claves que se aplican a un carácter. */
+    /** Mark of the keys that apply to a character. */
     public interface CharacterAttribute {
     }
 
-    /** Marca de las claves que se aplican a un párrafo. */
+    /** Mark of the keys that apply to a paragraph. */
     public interface ParagraphAttribute {
     }
 
-    /** Marca de las claves de color. */
+    /** Mark of the colour keys. */
     public interface ColorAttribute {
     }
 
-    /** Marca de las claves de fuente. */
+    /** Mark of the font keys. */
     public interface FontAttribute {
     }
 
-    /** Cuántos atributos tiene **este** conjunto, sin contar los heredados. */
+    /** How many attributes **this** set has, not counting the inherited ones. */
     int getAttributeCount();
 
-    /** Si este conjunto define esa clave por sí mismo. */
+    /** Whether this set defines that key by itself. */
     boolean isDefined(Object attrName);
 
-    /** Si los dos conjuntos definen exactamente lo mismo. */
+    /** Whether the two sets define exactly the same. */
     boolean isEqual(AttributeSet attr);
 
-    /** Una copia independiente. */
+    /** An independent copy. */
     AttributeSet copyAttributes();
 
     /**
-     * El valor de esa clave.
+     * That key's value.
      *
-     * <p>Busca en la cadena de padres, así que puede devolver algo que {@link #isDefined} niegue.
+     * <p>It looks along the chain of parents, so it may return something {@link #isDefined}
+     * denies.
      *
-     * @return el valor, o `null` si no está en ningún eslabón
+     * @return the value, or `null` if it is in no link
      */
     Object getAttribute(Object key);
 
-    /** Las claves de **este** conjunto, sin las heredadas. */
+    /** **This** set's keys, without the inherited ones. */
     Enumeration<?> getAttributeNames();
 
-    /** Si ese par clave-valor está en la cadena. */
+    /** Whether that key-value pair is in the chain. */
     boolean containsAttribute(Object name, Object value);
 
-    /** Si todos esos pares están en la cadena. */
+    /** Whether all those pairs are in the chain. */
     boolean containsAttributes(AttributeSet attributes);
 
-    /** El conjunto en el que se sigue buscando, o `null` si éste es el último. */
+    /** The set the search goes on in, or `null` if this is the last one. */
     AttributeSet getResolveParent();
 }

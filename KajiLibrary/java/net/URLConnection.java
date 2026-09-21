@@ -31,12 +31,12 @@ import java.util.Map;
 // only abstract method is `connect()`. Everything else is base implementations the JDK defines, and
 // the base definitions are honest to reproduce because they promise no data:
 //
-//  - `getHeaderFields()` returns the empty map, `getHeaderField(String)` returns null. It is what the
-//    JDK does: a base connection has no headers, and the subclasses that do have them override them.
-//    `getContentType`, `getDate`, `getExpiration` and company come out of that.
-//  - `getInputStream()` and `getOutputStream()` throw `UnknownServiceException` with the same text as
-//    the JDK ("protocol doesn't support input"/"output"). **That is not a method that lies**: it is
-//    literally the method's documented contract in the base class, not a stub. Whoever writes a
+//  - `getHeaderFields()` returns the empty map, `getHeaderField(String)` returns null. It is what
+//    the JDK does: a base connection has no headers, and the subclasses that do have them override
+//    them. `getContentType`, `getDate`, `getExpiration` and company come out of that.
+//  - `getInputStream()` and `getOutputStream()` throw `UnknownServiceException` with the same text
+//    as the JDK ("protocol doesn't support input"/"output"). **That is not a method that lies**: it
+//    is literally the method's documented contract in the base class, not a stub. Whoever writes a
 //    subclass that does know how to read overrides it and it works.
 //
 // What does NOT go in: nothing. The one piece left limping is `ContentHandler` resolution, which in
@@ -55,7 +55,7 @@ public abstract class URLConnection {
     /** Whether the resource is going to be read. True by default. */
     protected boolean doInput = true;
 
-    /** Si se va a escribir al recurso. Por defecto false. */
+    /** Whether the resource is going to be written to. False by default. */
     protected boolean doOutput = false;
 
     /** Whether the user may be asked things (a password dialog, for instance). */
@@ -73,15 +73,15 @@ public abstract class URLConnection {
     private static boolean defaultAllowUserInteraction = false;
     private static volatile FileNameMap fileNameMap;
     private static ContentHandlerFactory contentHandlerFactory;
-    private static final Map<String, Boolean> defaultUseCachesPorProtocolo =
+    private static final Map<String, Boolean> defaultUseCachesByProtocol =
             new HashMap<String, Boolean>();
 
     private int connectTimeout;
     private int readTimeout;
 
     // They are kept in the order they were added and in the case they were written in, but they are
-    // looked up case-insensitively: it is what the JDK does, and it reflects that in HTTP a header's
-    // name is case-insensitive but is sent as it was written.
+    // looked up case-insensitively: it is what the JDK does, and it reflects that in HTTP a
+    // header's name is case-insensitive but is sent as it was written.
     private final Map<String, List<String>> requestProperties =
             new LinkedHashMap<String, List<String>>();
 
@@ -98,12 +98,12 @@ public abstract class URLConnection {
     /**
      * Talks to the other side.
      *
-     * <p>Abstract on purpose and from the JDK: it is THE operation that depends on the protocol, and
-     * there is no base implementation that would make sense.
+     * <p>Abstract on purpose and from the JDK: it is THE operation that depends on the protocol,
+     * and there is no base implementation that would make sense.
      */
     public abstract void connect() throws IOException;
 
-    // ---- configuracion previa a la conexion ----
+    // ---- configuration before connecting ----
 
     /** Milliseconds to wait for the connection to be established; 0 is "forever". */
     public void setConnectTimeout(int timeout) {
@@ -133,14 +133,14 @@ public abstract class URLConnection {
         return this.url;
     }
 
-    private void chequearNoConectado() {
+    private void checkNotConnected() {
         if (this.connected) {
             throw new IllegalStateException("Already connected");
         }
     }
 
     public void setDoInput(boolean doinput) {
-        this.chequearNoConectado();
+        this.checkNotConnected();
         this.doInput = doinput;
     }
 
@@ -149,7 +149,7 @@ public abstract class URLConnection {
     }
 
     public void setDoOutput(boolean dooutput) {
-        this.chequearNoConectado();
+        this.checkNotConnected();
         this.doOutput = dooutput;
     }
 
@@ -158,7 +158,7 @@ public abstract class URLConnection {
     }
 
     public void setAllowUserInteraction(boolean allowuserinteraction) {
-        this.chequearNoConectado();
+        this.checkNotConnected();
         this.allowUserInteraction = allowuserinteraction;
     }
 
@@ -175,7 +175,7 @@ public abstract class URLConnection {
     }
 
     public void setUseCaches(boolean usecaches) {
-        this.chequearNoConectado();
+        this.checkNotConnected();
         this.useCaches = usecaches;
     }
 
@@ -184,7 +184,7 @@ public abstract class URLConnection {
     }
 
     public void setIfModifiedSince(long ifmodifiedsince) {
-        this.chequearNoConectado();
+        this.checkNotConnected();
         this.ifModifiedSince = ifmodifiedsince;
     }
 
@@ -194,11 +194,11 @@ public abstract class URLConnection {
 
     /** The value `useCaches` takes in new connections of this one's protocol. */
     public boolean getDefaultUseCaches() {
-        return getDefaultUseCaches(this.protocoloDeLaUrl());
+        return getDefaultUseCaches(this.urlProtocol());
     }
 
     public void setDefaultUseCaches(boolean defaultusecaches) {
-        setDefaultUseCaches(this.protocoloDeLaUrl(), defaultusecaches);
+        setDefaultUseCaches(this.urlProtocol(), defaultusecaches);
     }
 
     /**
@@ -207,19 +207,19 @@ public abstract class URLConnection {
      * <p>The protocol is case-insensitive: "HTTP" and "http" are the same.
      */
     public static void setDefaultUseCaches(String protocol, boolean defaultVal) {
-        synchronized (defaultUseCachesPorProtocolo) {
-            defaultUseCachesPorProtocolo.put(protocol.toLowerCase(), Boolean.valueOf(defaultVal));
+        synchronized (defaultUseCachesByProtocol) {
+            defaultUseCachesByProtocol.put(protocol.toLowerCase(), Boolean.valueOf(defaultVal));
         }
     }
 
     public static boolean getDefaultUseCaches(String protocol) {
-        synchronized (defaultUseCachesPorProtocolo) {
-            Boolean v = defaultUseCachesPorProtocolo.get(protocol.toLowerCase());
+        synchronized (defaultUseCachesByProtocol) {
+            Boolean v = defaultUseCachesByProtocol.get(protocol.toLowerCase());
             return v == null ? true : v.booleanValue();
         }
     }
 
-    private String protocoloDeLaUrl() {
+    private String urlProtocol() {
         return this.url == null ? "" : String.valueOf(this.url.getProtocol());
     }
 
@@ -227,61 +227,65 @@ public abstract class URLConnection {
 
     /** Sets the header {@code key}, overwriting whatever was there. */
     public void setRequestProperty(String key, String value) {
-        this.chequearNoConectado();
+        this.checkNotConnected();
         if (key == null) {
             throw new NullPointerException("key is null");
         }
-        String existente = this.claveExistente(key);
-        if (existente != null) {
-            this.requestProperties.remove(existente);
+        String existing = this.existingKey(key);
+        if (existing != null) {
+            this.requestProperties.remove(existing);
         }
         List<String> vals = new ArrayList<String>();
         vals.add(value);
         this.requestProperties.put(key, vals);
     }
 
-    /** Adds one more value to the header {@code key}, without overwriting the ones already there. */
+    /**
+     * Adds one more value to the header {@code key}, without overwriting the ones already there.
+     */
     public void addRequestProperty(String key, String value) {
-        this.chequearNoConectado();
+        this.checkNotConnected();
         if (key == null) {
             throw new NullPointerException("key is null");
         }
-        String existente = this.claveExistente(key);
-        if (existente == null) {
+        String existing = this.existingKey(key);
+        if (existing == null) {
             List<String> vals = new ArrayList<String>();
             vals.add(value);
             this.requestProperties.put(key, vals);
         } else {
-            this.requestProperties.get(existente).add(value);
+            this.requestProperties.get(existing).add(value);
         }
     }
 
-    /** The LAST value of {@code key}, or null. That it is the last and not the first is the JDK's. */
+    /**
+     * The LAST value of {@code key}, or null. That it is the last and not the first is the JDK's.
+     */
     public String getRequestProperty(String key) {
-        this.chequearNoConectado();
-        String existente = this.claveExistente(key);
-        if (existente == null) {
+        this.checkNotConnected();
+        String existing = this.existingKey(key);
+        if (existing == null) {
             return null;
         }
-        List<String> vals = this.requestProperties.get(existente);
+        List<String> vals = this.requestProperties.get(existing);
         return vals.isEmpty() ? null : vals.get(vals.size() - 1);
     }
 
     /** Every header of the request, read-only. */
     public Map<String, List<String>> getRequestProperties() {
-        this.chequearNoConectado();
-        Map<String, List<String>> copia = new LinkedHashMap<String, List<String>>();
+        this.checkNotConnected();
+        Map<String, List<String>> copy = new LinkedHashMap<String, List<String>>();
         Iterator<String> it = this.requestProperties.keySet().iterator();
         while (it.hasNext()) {
             String k = it.next();
-            copia.put(k, Collections.unmodifiableList(
+            copy.put(k, Collections.unmodifiableList(
                     new ArrayList<String>(this.requestProperties.get(k))));
         }
-        return Collections.unmodifiableMap(copia);
+        return Collections.unmodifiableMap(copy);
     }
 
     // The already stored key matching `key` case-insensitively, or null.
-    private String claveExistente(String key) {
+    private String existingKey(String key) {
         if (key == null) {
             return null;
         }
@@ -305,16 +309,16 @@ public abstract class URLConnection {
     }
 
     /**
-     * Siempre null, como en el JDK.
+     * Always null, as in the JDK.
      *
-     * @deprecated ver {@link #setDefaultRequestProperty}.
+     * @deprecated see {@link #setDefaultRequestProperty}.
      */
     @Deprecated
     public static String getDefaultRequestProperty(String key) {
         return null;
     }
 
-    // ---- lectura de la respuesta ----
+    // ---- reading the response ----
 
     /**
      * Every header of the response. In the base class, the empty map.
@@ -326,7 +330,7 @@ public abstract class URLConnection {
         return Collections.emptyMap();
     }
 
-    /** El valor de la cabecera {@code name}, o null. */
+    /** The value of the {@code name} header, or null. */
     public String getHeaderField(String name) {
         return null;
     }
@@ -341,7 +345,9 @@ public abstract class URLConnection {
         return null;
     }
 
-    /** La cabecera {@code name} como entero, o {@code Default} si falta o no es un numero. */
+    /**
+     * The {@code name} header as an integer, or {@code Default} if it is missing or not a number.
+     */
     public int getHeaderFieldInt(String name, int Default) {
         String value = this.getHeaderField(name);
         try {
@@ -351,7 +357,7 @@ public abstract class URLConnection {
         }
     }
 
-    /** Como {@link #getHeaderFieldInt}, en 64 bits. */
+    /** Like {@link #getHeaderFieldInt}, in 64 bits. */
     public long getHeaderFieldLong(String name, long Default) {
         String value = this.getHeaderField(name);
         try {
@@ -375,7 +381,9 @@ public abstract class URLConnection {
         return t == Long.MIN_VALUE ? Default : t;
     }
 
-    /** The body's size, or -1 if it is not known. It overflows from 2 GiB on: use the long version. */
+    /**
+     * The body's size, or -1 if it is not known. It overflows from 2 GiB on: use the long version.
+     */
     public int getContentLength() {
         long l = this.getContentLengthLong();
         return l > Integer.MAX_VALUE ? -1 : (int) l;
@@ -412,8 +420,8 @@ public abstract class URLConnection {
     /**
      * The permission needed to make this connection.
      *
-     * <p>The base class returns `AllPermission`, just like the JDK: it does not know what it is going
-     * to connect to, so it cannot ask for anything finer. The subclasses tighten it.
+     * <p>The base class returns `AllPermission`, just like the JDK: it does not know what it is
+     * going to connect to, so it cannot ask for anything finer. The subclasses tighten it.
      */
     public java.security.Permission getPermission() throws IOException {
         return new java.security.AllPermission();
@@ -454,30 +462,32 @@ public abstract class URLConnection {
      */
     public Object getContent() throws IOException {
         this.getInputStream();
-        return this.manejador().getContent(this);
+        return this.handler().getContent(this);
     }
 
-    /** Like {@link #getContent()}, but it returns null if the object is of none of {@code classes}. */
+    /**
+     * Like {@link #getContent()}, but it returns null if the object is of none of {@code classes}.
+     */
     public Object getContent(Class<?>[] classes) throws IOException {
         this.getInputStream();
-        return this.manejador().getContent(this, classes);
+        return this.handler().getContent(this, classes);
     }
 
-    private ContentHandler manejador() throws UnknownServiceException {
-        String tipo = this.getContentType();
-        if (tipo != null) {
-            int puntoYComa = tipo.indexOf(';');
-            if (puntoYComa != -1) {
-                tipo = tipo.substring(0, puntoYComa).trim();
+    private ContentHandler handler() throws UnknownServiceException {
+        String type = this.getContentType();
+        if (type != null) {
+            int semicolon = type.indexOf(';');
+            if (semicolon != -1) {
+                type = type.substring(0, semicolon).trim();
             }
         }
-        if (tipo == null || tipo.length() == 0) {
+        if (type == null || type.length() == 0) {
             throw new UnknownServiceException("no content-type");
         }
         ContentHandlerFactory f = contentHandlerFactory;
-        ContentHandler h = f == null ? null : f.createContentHandler(tipo);
+        ContentHandler h = f == null ? null : f.createContentHandler(type);
         if (h == null) {
-            throw new UnknownServiceException("no content handler for " + tipo);
+            throw new UnknownServiceException("no content handler for " + type);
         }
         return h;
     }
@@ -494,7 +504,7 @@ public abstract class URLConnection {
         contentHandlerFactory = fac;
     }
 
-    // ---- adivinar el tipo ----
+    // ---- guessing the type ----
 
     /** The extension-to-MIME-type table {@link #guessContentTypeFromName} uses. */
     public static FileNameMap getFileNameMap() {
@@ -502,7 +512,7 @@ public abstract class URLConnection {
         if (m == null) {
             synchronized (URLConnection.class) {
                 if (fileNameMap == null) {
-                    fileNameMap = new TablaDeExtensiones();
+                    fileNameMap = new ExtensionTable();
                 }
                 m = fileNameMap;
             }
@@ -522,8 +532,8 @@ public abstract class URLConnection {
     /**
      * The MIME type the first bytes of {@code is} suggest, or null.
      *
-     * <p>It looks and gives the stream back as it was: it uses `mark`/`reset`, and if the stream does
-     * not support marks it returns null instead of consuming it. Consuming bytes from a stream
+     * <p>It looks and gives the stream back as it was: it uses `mark`/`reset`, and if the stream
+     * does not support marks it returns null instead of consuming it. Consuming bytes from a stream
      * somebody is going to read afterwards would be an invisible side effect.
      */
     public static String guessContentTypeFromStream(InputStream is) throws IOException {
@@ -532,26 +542,26 @@ public abstract class URLConnection {
         }
         is.mark(16);
         int[] b = new int[16];
-        int leidos = 0;
-        while (leidos < 16) {
+        int readSoFar = 0;
+        while (readSoFar < 16) {
             int c = is.read();
             if (c == -1) {
                 break;
             }
-            b[leidos] = c;
-            leidos = leidos + 1;
+            b[readSoFar] = c;
+            readSoFar = readSoFar + 1;
         }
         is.reset();
-        return porNumeroMagico(b, leidos);
+        return byMagicNumber(b, readSoFar);
     }
 
-    private static boolean empieza(int[] b, int n, int[] magico) {
-        if (n < magico.length) {
+    private static boolean startsWith(int[] b, int n, int[] magic) {
+        if (n < magic.length) {
             return false;
         }
         int i = 0;
-        while (i < magico.length) {
-            if (b[i] != magico[i]) {
+        while (i < magic.length) {
+            if (b[i] != magic[i]) {
                 return false;
             }
             i = i + 1;
@@ -559,11 +569,11 @@ public abstract class URLConnection {
         return true;
     }
 
-    private static boolean empiezaTexto(int[] b, int n, String s) {
-        return empieza(b, n, aBytes(s));
+    private static boolean startsWithText(int[] b, int n, String s) {
+        return startsWith(b, n, toBytes(s));
     }
 
-    private static int[] aBytes(String s) {
+    private static int[] toBytes(String s) {
         int[] out = new int[s.length()];
         int i = 0;
         while (i < s.length()) {
@@ -582,13 +592,13 @@ public abstract class URLConnection {
     // incompatible. The behaviour test caught it.
     //
     // For the same reason, JPEG asks for more than `FF D8 FF`: the JDK looks at the fourth byte and
-    // only accepts E0, EE, or E1 followed by "Exif\0". An `FF D8 FF DB` --which is a perfectly valid
-    // JPEG-- gives it null, and it does here too.
-    private static String porNumeroMagico(int[] b, int n) {
-        if (empieza(b, n, new int[] {0xCA, 0xFE, 0xBA, 0xBE})) {
+    // only accepts E0, EE, or E1 followed by "Exif\0". An `FF D8 FF DB` --which is a perfectly
+    // valid JPEG-- gives it null, and it does here too.
+    private static String byMagicNumber(int[] b, int n) {
+        if (startsWith(b, n, new int[] {0xCA, 0xFE, 0xBA, 0xBE})) {
             return "application/java-vm";
         }
-        if (empieza(b, n, new int[] {0xAC, 0xED})) {
+        if (startsWith(b, n, new int[] {0xAC, 0xED})) {
             return "application/x-java-serialized-object";
         }
         if (n >= 1 && b[0] == '<') {
@@ -598,22 +608,22 @@ public abstract class URLConnection {
             if (n >= 2 && b[1] == '!') {
                 return "text/html";
             }
-            if (empiezaTexto(b, n, "<html") || empiezaTexto(b, n, "<head")
-                    || empiezaTexto(b, n, "<body") || empiezaTexto(b, n, "<HTML")
-                    || empiezaTexto(b, n, "<HEAD") || empiezaTexto(b, n, "<BODY")) {
+            if (startsWithText(b, n, "<html") || startsWithText(b, n, "<head")
+                    || startsWithText(b, n, "<body") || startsWithText(b, n, "<HTML")
+                    || startsWithText(b, n, "<HEAD") || startsWithText(b, n, "<BODY")) {
                 return "text/html";
             }
-            if (empiezaTexto(b, n, "<?xml ")) {
+            if (startsWithText(b, n, "<?xml ")) {
                 return "application/xml";
             }
         }
-        if (empiezaTexto(b, n, "! XPM2")) {
+        if (startsWithText(b, n, "! XPM2")) {
             return "image/x-pixmap";
         }
-        if (empieza(b, n, new int[] {0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A})) {
+        if (startsWith(b, n, new int[] {0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A})) {
             return "image/png";
         }
-        if (empieza(b, n, new int[] {0xFF, 0xD8, 0xFF}) && n >= 4) {
+        if (startsWith(b, n, new int[] {0xFF, 0xD8, 0xFF}) && n >= 4) {
             if (b[3] == 0xE0 || b[3] == 0xEE) {
                 return "image/jpeg";
             }
@@ -622,32 +632,32 @@ public abstract class URLConnection {
                 return "image/jpeg";
             }
         }
-        if (empiezaTexto(b, n, "GIF8")) {
+        if (startsWithText(b, n, "GIF8")) {
             return "image/gif";
         }
-        if (empiezaTexto(b, n, "#def")) {
+        if (startsWithText(b, n, "#def")) {
             return "image/x-bitmap";
         }
-        if (empiezaTexto(b, n, ".snd")) {
+        if (startsWithText(b, n, ".snd")) {
             return "audio/basic";
         }
-        if (empiezaTexto(b, n, "dns.")) {
+        if (startsWithText(b, n, "dns.")) {
             return "audio/basic";
         }
-        if (empiezaTexto(b, n, "MThd")) {
+        if (startsWithText(b, n, "MThd")) {
             return "audio/midi";
         }
-        if (empiezaTexto(b, n, "RIFF")) {
+        if (startsWithText(b, n, "RIFF")) {
             return "audio/x-wav";
         }
-        if (empieza(b, n, new int[] {0xF7, 0x02})) {
+        if (startsWith(b, n, new int[] {0xF7, 0x02})) {
             return "application/x-dvi";
         }
         return null;
     }
 
     /**
-     * {@code getClass().getName() + ":" + url}, como en el JDK.
+     * {@code getClass().getName() + ":" + url}, as in the JDK.
      */
     @Override
     public String toString() {
@@ -655,7 +665,7 @@ public abstract class URLConnection {
     }
 
     // ===========================================================================================
-    // Fecha HTTP
+    // The HTTP date
     // ===========================================================================================
 
     // It returns `Long.MIN_VALUE` --and not an exception-- when it does not understand, because the
@@ -670,11 +680,9 @@ public abstract class URLConnection {
         if (comma != -1) {
             v = v.substring(comma + 1).trim();
         }
-        // Three possible forms are left:
-        //   "06 Nov 1994 08:49:37 GMT"   (RFC 1123, the preferred one)
-        //   "06-Nov-94 08:49:37 GMT"     (RFC 850, historical; the two-digit year is its problem)
-        //   "Nov  6 08:49:37 1994"       (asctime, with no comma, which is why the trim above left it
-        //                                 alone)
+        // Three possible forms are left: "06 Nov 1994 08:49:37 GMT" (RFC 1123, the preferred one)
+        //   "06-Nov-94 08:49:37 GMT" (RFC 850, historical; the two-digit year is its problem) "Nov
+        //   6 08:49:37 1994" (asctime, with no comma, which is why the trim above left it alone)
         v = v.replace('-', ' ');
         String[] p = split(v);
         if (p.length >= 4 && isNumber(p[0])) {
@@ -718,7 +726,8 @@ public abstract class URLConnection {
 
     // Howard Hinnant's algorithm: it counts the running days of a proleptic Gregorian calendar with
     // no tables and no loops. This is used and not a `Calendar` because an HTTP date is always GMT:
-    // there is no zone and no summer time to consult, and bringing in a `Calendar` would bring both.
+    // there is no zone and no summer time to consult, and bringing in a `Calendar` would bring
+    // both.
     private static long daysSince1970(long year, int month, int day) {
         long y = year;
         long m = month + 1;
@@ -730,7 +739,7 @@ public abstract class URLConnection {
         return era * 146097 + doe - 719468;
     }
 
-    private static final String[] MESES = {
+    private static final String[] MONTHS = {
         "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"
     };
 
@@ -740,8 +749,8 @@ public abstract class URLConnection {
         }
         String tres = s.substring(0, 3).toLowerCase();
         int i = 0;
-        while (i < MESES.length) {
-            if (MESES[i].equals(tres)) {
+        while (i < MONTHS.length) {
+            if (MONTHS[i].equals(tres)) {
                 return i;
             }
             i = i + 1;
@@ -805,20 +814,21 @@ public abstract class URLConnection {
         return out.toArray(new String[out.size()]);
     }
 
-    // The default table. The JDK reads `content-types.properties` from its own installation; here the
-    // table is written out, with the same answers for the common extensions (verified against the real
-    // JDK). An extension that is not there gives null, which is what is right: "I do not know".
-    private static class TablaDeExtensiones implements FileNameMap {
+    // The default table. The JDK reads `content-types.properties` from its own installation; here
+    // the table is written out, with the same answers for the common extensions (verified against
+    // the real JDK). An extension that is not there gives null, which is what is right: "I do not
+    // know".
+    private static class ExtensionTable implements FileNameMap {
 
         public String getContentTypeFor(String fileName) {
             if (fileName == null) {
                 return null;
             }
-            int punto = fileName.lastIndexOf('.');
-            if (punto == -1 || punto == fileName.length() - 1) {
+            int dot = fileName.lastIndexOf('.');
+            if (dot == -1 || dot == fileName.length() - 1) {
                 return null;
             }
-            String ext = fileName.substring(punto + 1).toLowerCase();
+            String ext = fileName.substring(dot + 1).toLowerCase();
             if (ext.equals("html") || ext.equals("htm")) {
                 return "text/html";
             }

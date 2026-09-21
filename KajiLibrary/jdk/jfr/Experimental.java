@@ -6,10 +6,10 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * El elemento es <strong>experimental</strong> y puede desaparecer.
+ * The element is <strong>experimental</strong> and may disappear.
  *
- * <p>Una herramienta lo esconde por omision. Es lo que permite publicar un evento para probarlo sin
- * que quede convertido en compromiso por el solo hecho de que alguien lo haya usado.
+ * <p>A tool hides it by default. It is what allows one to publish an event in order to try it out
+ * without it turning into a commitment for the sole reason that somebody used it.
  *
  * @since 9
  */

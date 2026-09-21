@@ -1185,7 +1185,7 @@ final class FjScheduled<V> implements ScheduledFuture<V>, Runnable {
         return report();
     }
 
-    private V report() {
+    private V report() throws ExecutionException {
         V value;
         synchronized (lock) {
             if (cancelled) {

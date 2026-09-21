@@ -3,15 +3,15 @@ package javax.management;
 import java.lang.reflect.Method;
 
 /**
- * Un atributo declarado por un MBean: nombre, tipo y que se puede hacer con el.
+ * An attribute declared by an MBean: name, type and what can be done with it.
  *
- * <p>Tres booleanos y no dos, que es lo que sorprende. Ademas de lectura y escritura esta
- * {@link #isIs()}, que dice si el accesor se llama {@code isX} en vez de {@code getX}. Solo tiene
- * sentido para `boolean`, y esta porque un MBean estandar se descubre por reflexion sobre los
- * nombres de los metodos: sin ese bit, el servidor no sabria como llamar de vuelta.
+ * <p>Three booleans and not two, which is what surprises. Besides readable and writable there is
+ * {@link #isIs()}, which says whether the accessor is called {@code isX} instead of {@code getX}.
+ * It only makes sense for {@code boolean}, and it is there because a standard MBean is discovered
+ * by reflection over method names: without that bit, the server would not know how to call back.
  *
- * <p>Un atributo con lectura y escritura en `false` es legal, aunque inutil: describe algo que el
- * MBean declara y no deja tocar.
+ * <p>An attribute with readable and writable both {@code false} is legal, if useless: it describes
+ * something the MBean declares and does not let be touched.
  */
 public class MBeanAttributeInfo extends MBeanFeatureInfo implements Cloneable {
 
@@ -20,22 +20,22 @@ public class MBeanAttributeInfo extends MBeanFeatureInfo implements Cloneable {
     static final MBeanAttributeInfo[] NO_ATTRIBUTES = new MBeanAttributeInfo[0];
 
     /**
-     * @serial el nombre de la clase del atributo
+     * @serial the class name of the attribute
      */
     private final String attributeType;
 
     /**
-     * @serial si se puede escribir
+     * @serial whether it can be written
      */
     private final boolean isWrite;
 
     /**
-     * @serial si se puede leer
+     * @serial whether it can be read
      */
     private final boolean isRead;
 
     /**
-     * @serial si el accesor de lectura se llama isX
+     * @serial whether the read accessor is called isX
      */
     private final boolean is;
 
@@ -55,25 +55,24 @@ public class MBeanAttributeInfo extends MBeanFeatureInfo implements Cloneable {
     }
 
     /**
-     * Deduce todo de los dos metodos accesores.
+     * Deduces everything from the two accessor methods.
      *
-     * <p>Cualquiera de los dos puede ser `null`: eso es lo que hace a un atributo de solo lectura o
-     * de solo escritura.
+     * <p>Either may be {@code null}: that is what makes an attribute read-only or write-only.
      *
-     * @throws IntrospectionException si los dos metodos no hablan del mismo tipo
+     * @throws IntrospectionException if the two methods do not talk about the same type
      */
     public MBeanAttributeInfo(String name, String description, Method getter, Method setter)
             throws IntrospectionException {
-        this(name, tipoDe(getter, setter), description,
-             getter != null, setter != null, esIs(getter));
+        this(name, typeOf(getter, setter), description,
+             getter != null, setter != null, isIsGetter(getter));
     }
 
-    private static boolean esIs(Method getter) {
+    private static boolean isIsGetter(Method getter) {
         return getter != null && getter.getName().startsWith("is");
     }
 
-    private static String tipoDe(Method getter, Method setter) throws IntrospectionException {
-        String delGetter = null;
+    private static String typeOf(Method getter, Method setter) throws IntrospectionException {
+        String fromGetter = null;
         if (getter != null) {
             if (getter.getParameterTypes().length != 0) {
                 throw new IntrospectionException("bad getter arg count");
@@ -82,34 +81,35 @@ public class MBeanAttributeInfo extends MBeanFeatureInfo implements Cloneable {
             if (r == Void.TYPE) {
                 throw new IntrospectionException("getter returns void");
             }
-            delGetter = r.getName();
+            fromGetter = r.getName();
         }
-        String delSetter = null;
+        String fromSetter = null;
         if (setter != null) {
             Class<?>[] p = setter.getParameterTypes();
             if (p.length != 1) {
                 throw new IntrospectionException("bad setter arg count");
             }
-            delSetter = p[0].getName();
+            fromSetter = p[0].getName();
         }
-        if (delGetter == null && delSetter == null) {
+        if (fromGetter == null && fromSetter == null) {
             throw new IntrospectionException("getter and setter cannot both be null");
         }
-        if (delGetter != null && delSetter != null && !delGetter.equals(delSetter)) {
+        if (fromGetter != null && fromSetter != null && !fromGetter.equals(fromSetter)) {
             throw new IntrospectionException("type mismatch between getter and setter");
         }
-        return delGetter != null ? delGetter : delSetter;
+        return fromGetter != null ? fromGetter : fromSetter;
     }
 
     /**
-     * Copia superficial.
+     * Shallow copy.
      *
-     * <p>No devuelve `this` aunque la clase sea inmutable: se comprobo contra el JDK y ahi la
-     * copia es un objeto <b>distinto</b>. Igual por `equals`, distinto por identidad.
+     * <p>It does not return {@code this} even though the class is immutable: it was checked against
+     * the JDK and there the copy is a <b>different</b> object. Equal by {@code equals}, different
+     * by identity.
      *
-     * <p>Traga la `CloneNotSupportedException` y devuelve `null` en vez de propagarla, como el
-     * JDK: la clase implementa `Cloneable`, asi que no puede ocurrir, y declararla obligaria a
-     * atajarla a todo el que llame.
+     * <p>It swallows the {@code CloneNotSupportedException} and returns {@code null} instead of
+     * propagating it, as the JDK does: the class implements {@code Cloneable}, so it cannot happen,
+     * and declaring it would force every caller to catch it.
      */
     public Object clone() {
         try {
@@ -119,39 +119,39 @@ public class MBeanAttributeInfo extends MBeanFeatureInfo implements Cloneable {
         }
     }
 
-    /** El nombre de la clase del atributo. */
+    /** The class name of the attribute. */
     public String getType() {
         return attributeType;
     }
 
-    /** Si se puede leer. */
+    /** Whether it can be read. */
     public boolean isReadable() {
         return isRead;
     }
 
-    /** Si se puede escribir. */
+    /** Whether it can be written. */
     public boolean isWritable() {
         return isWrite;
     }
 
-    /** Si el accesor de lectura se llama {@code isX} en vez de {@code getX}. */
+    /** Whether the read accessor is called {@code isX} instead of {@code getX}. */
     public boolean isIs() {
         return is;
     }
 
     /**
-     * El acceso se imprime como {@code read-only}, {@code write-only}, {@code read/write} o
-     * {@code no-access}, y el bit de {@code isIs} agrega una coma mas.
+     * The access is printed as {@code read-only}, {@code write-only}, {@code read/write} or
+     * {@code no-access}, and the {@code isIs} bit adds one more comma.
      */
     public String toString() {
-        String acceso;
+        String access;
         if (isReadable()) {
-            acceso = isWritable() ? "read/write" : "read-only";
+            access = isWritable() ? "read/write" : "read-only";
         } else {
-            acceso = isWritable() ? "write-only" : "no-access";
+            access = isWritable() ? "write-only" : "no-access";
         }
         return getClass().getName() + "[description=" + getDescription() + ", name=" + getName()
-                + ", type=" + getType() + ", " + acceso + (isIs() ? ", isIs" : "")
+                + ", type=" + getType() + ", " + access + (isIs() ? ", isIs" : "")
                 + ", descriptor=" + getDescriptor() + "]";
     }
 
@@ -163,9 +163,9 @@ public class MBeanAttributeInfo extends MBeanFeatureInfo implements Cloneable {
             return false;
         }
         MBeanAttributeInfo p = (MBeanAttributeInfo) o;
-        return igual(p.getName(), getName())
-                && igual(p.getType(), getType())
-                && igual(p.getDescription(), getDescription())
+        return same(p.getName(), getName())
+                && same(p.getType(), getType())
+                && same(p.getDescription(), getDescription())
                 && p.getDescriptor().equals(getDescriptor())
                 && p.isReadable() == isReadable()
                 && p.isWritable() == isWritable()

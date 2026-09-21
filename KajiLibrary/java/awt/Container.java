@@ -13,23 +13,23 @@ import javax.accessibility.Accessible;
 import javax.accessibility.AccessibleContext;
 
 /**
- * Un componente que contiene otros componentes.
+ * A component that contains other components.
  *
- * <p>Que un contenedor **sea** un componente es lo que hace que la interfaz se pueda armar como un
- * árbol de profundidad arbitraria sin ningún caso especial: un panel adentro de otro panel adentro
- * de una ventana son todos lo mismo.
+ * <p>That a container **is** a component is what lets the interface be built as a tree of arbitrary
+ * depth with no special case at all: a panel inside another panel inside a window are all the same
+ * thing.
  *
- * <p>La ubicación de los hijos no la decide el contenedor sino su {@link LayoutManager}. Sin
- * distribución, los hijos quedan donde se los ponga a mano — que a veces es exactamente lo que se
- * quiere y casi siempre no, porque deja de funcionar en cuanto cambia el tamaño de la fuente.
+ * <p>Where the children go is not decided by the container but by its {@link LayoutManager}. With
+ * no layout, the children stay where they are put by hand — which is sometimes exactly what is
+ * wanted and almost always not, because it stops working as soon as the font size changes.
  *
- * <p>El **orden Z** es el orden de los hijos en la lista, y decide dos cosas a la vez: cuál se
- * dibuja encima y cuál recibe primero un clic. El índice 0 es el de más arriba, que es al revés de
- * lo que la intuición dice.
+ * <p>The **Z order** is the order of the children in the list, and it decides two things at once:
+ * which one is drawn on top and which one receives a click first. Index 0 is the topmost one, which
+ * is the other way round from what intuition says.
  *
- * <p>El ciclo de foco es la otra jerarquía que vive acá. Un contenedor puede ser **raíz de ciclo**,
- * y entonces el tabulador da la vuelta adentro suyo en vez de salir. Es lo que hace que en un
- * diálogo el foco no se escape a la ventana de atrás.
+ * <p>The focus cycle is the other hierarchy that lives here. A container can be a **cycle root**,
+ * and then the tab key goes round inside it instead of leaving. It is what keeps the focus in a
+ * dialog from escaping to the window behind.
  */
 public class Container extends Component {
 
@@ -42,19 +42,19 @@ public class Container extends Component {
     private boolean focusCycleRoot;
     private boolean focusTraversalPolicyProvider;
 
-    /** Un contenedor vacío, sin distribución. */
+    /** An empty container, with no layout. */
     public Container() {
     }
 
-    /** Cuántos hijos tiene. */
+    /** How many children it has. */
     public int getComponentCount() {
         return this.countComponents();
     }
 
     /**
-     * Cuántos hijos tiene.
+     * How many children it has.
      *
-     * @deprecated es del modelo de 1.0. Usar {@link #getComponentCount}.
+     * @deprecated it is from the 1.0 model. Use {@link #getComponentCount}.
      */
     @Deprecated
     public int countComponents() {
@@ -64,9 +64,9 @@ public class Container extends Component {
     }
 
     /**
-     * El hijo de esa posición.
+     * The child at that position.
      *
-     * @throws ArrayIndexOutOfBoundsException si no existe
+     * @throws ArrayIndexOutOfBoundsException if there is none
      */
     public Component getComponent(int n) {
         synchronized (this.getTreeLock()) {
@@ -77,7 +77,7 @@ public class Container extends Component {
         }
     }
 
-    /** Los hijos, en orden Z: el 0 es el de más arriba. */
+    /** The children, in Z order: 0 is the topmost one. */
     public Component[] getComponents() {
         synchronized (this.getTreeLock()) {
             return this.component.toArray(new Component[this.component.size()]);
@@ -85,19 +85,19 @@ public class Container extends Component {
     }
 
     /**
-     * Los márgenes que el contenedor se reserva para sí: bordes, barra de título.
+     * The insets the container keeps for itself: borders, title bar.
      *
-     * <p>Sin ventana no hay decoración que reservar, así que son cero. Una subclase con borde propio
-     * lo redefine.
+     * <p>With no window there is no decoration to keep room for, so they are zero. A subclass with
+     * a border of its own overrides it.
      */
     public Insets getInsets() {
         return this.insets();
     }
 
     /**
-     * Los márgenes reservados.
+     * The insets kept.
      *
-     * @deprecated es del modelo de 1.0. Usar {@link #getInsets}.
+     * @deprecated it is from the 1.0 model. Use {@link #getInsets}.
      */
     @Deprecated
     public Insets insets() {
@@ -105,11 +105,11 @@ public class Container extends Component {
     }
 
     /**
-     * Agrega un hijo al final.
+     * Adds a child at the end.
      *
-     * @return el mismo componente, para poder encadenar
-     * @throws NullPointerException si el componente es `null`
-     * @throws IllegalArgumentException si se lo agrega a sí mismo o a un descendiente suyo
+     * @return the same component, so calls can be chained
+     * @throws NullPointerException if the component is `null`
+     * @throws IllegalArgumentException if it is added to itself or to one of its descendants
      */
     public Component add(Component comp) {
         this.addImpl(comp, null, -1);
@@ -117,10 +117,10 @@ public class Container extends Component {
     }
 
     /**
-     * Agrega un hijo con ese nombre, para las distribuciones que los usan.
+     * Adds a child with that name, for the layouts that use them.
      *
-     * @return el mismo componente
-     * @throws NullPointerException si el componente es `null`
+     * @return the same component
+     * @throws NullPointerException if the component is `null`
      */
     public Component add(String name, Component comp) {
         this.addImpl(comp, name, -1);
@@ -128,11 +128,11 @@ public class Container extends Component {
     }
 
     /**
-     * Agrega un hijo en esa posición del orden Z.
+     * Adds a child at that position of the Z order.
      *
-     * @param index dónde ponerlo, o -1 para el final
-     * @return el mismo componente
-     * @throws NullPointerException si el componente es `null`
+     * @param index where to put it, or -1 for the end
+     * @return the same component
+     * @throws NullPointerException if the component is `null`
      */
     public Component add(Component comp, int index) {
         this.addImpl(comp, null, index);
@@ -140,32 +140,32 @@ public class Container extends Component {
     }
 
     /**
-     * Agrega un hijo con restricciones para la distribución.
+     * Adds a child with constraints for the layout.
      *
-     * @throws NullPointerException si el componente es `null`
+     * @throws NullPointerException if the component is `null`
      */
     public void add(Component comp, Object constraints) {
         this.addImpl(comp, constraints, -1);
     }
 
     /**
-     * Como el anterior, en esa posición.
+     * Like the previous one, at that position.
      *
-     * @throws NullPointerException si el componente es `null`
+     * @throws NullPointerException if the component is `null`
      */
     public void add(Component comp, Object constraints, int index) {
         this.addImpl(comp, constraints, index);
     }
 
     /**
-     * El único lugar por el que se agrega un hijo.
+     * The only place a child gets added through.
      *
-     * <p>Los cinco {@code add} públicos pasan por acá, así que redefinirlo es la forma de
-     * interceptar **todas** las incorporaciones sin tener que redefinir cinco métodos.
+     * <p>The five public {@code add} methods go through here, so overriding it is the way to
+     * intercept **every** addition without having to override five methods.
      *
-     * @throws NullPointerException si el componente es `null`
-     * @throws IllegalArgumentException si el componente es este mismo contenedor o un ancestro suyo,
-     *     o si el índice no es válido
+     * @throws NullPointerException if the component is `null`
+     * @throws IllegalArgumentException if the component is this container itself or an ancestor of
+     *     it, or if the index is not valid
      */
     protected void addImpl(Component comp, Object constraints, int index) {
         synchronized (this.getTreeLock()) {
@@ -176,16 +176,16 @@ public class Container extends Component {
                 throw new IllegalArgumentException(
                         "illegal component position");
             }
-            // Agregar un contenedor adentro de si mismo o de uno de sus hijos armaria un ciclo, y el
-            // arbol dejaria de ser un arbol: recorrerlo no terminaria nunca.
+            // Adding a container inside itself or inside one of its children would build a cycle,
+            // and the tree would stop being a tree: walking it would never end.
             if (comp instanceof Container) {
                 if (comp == this || ((Container) comp).isAncestorOf(this)) {
                     throw new IllegalArgumentException("adding container's parent to itself");
                 }
             }
-            Container anterior = comp.getParent();
-            if (anterior != null) {
-                anterior.remove(comp);
+            Container previous = comp.getParent();
+            if (previous != null) {
+                previous.remove(comp);
             }
             if (index == -1) {
                 this.component.add(comp);
@@ -212,9 +212,9 @@ public class Container extends Component {
     }
 
     /**
-     * Saca el hijo de esa posición.
+     * Removes the child at that position.
      *
-     * @throws ArrayIndexOutOfBoundsException si no existe
+     * @throws ArrayIndexOutOfBoundsException if there is none
      */
     public void remove(int index) {
         synchronized (this.getTreeLock()) {
@@ -235,7 +235,7 @@ public class Container extends Component {
         }
     }
 
-    /** Saca ese hijo; si no estaba, no pasa nada. */
+    /** Removes that child; if it was not there, nothing happens. */
     public void remove(Component comp) {
         synchronized (this.getTreeLock()) {
             int i = this.component.indexOf(comp);
@@ -245,7 +245,7 @@ public class Container extends Component {
         }
     }
 
-    /** Saca todos los hijos. */
+    /** Removes every child. */
     public void removeAll() {
         synchronized (this.getTreeLock()) {
             while (!this.component.isEmpty()) {
@@ -255,9 +255,9 @@ public class Container extends Component {
     }
 
     /**
-     * Qué posición ocupa ese hijo en el orden Z.
+     * Which position that child occupies in the Z order.
      *
-     * @return la posición, o -1 si no es hijo de este contenedor
+     * @return the position, or -1 if it is not a child of this container
      */
     public int getComponentZOrder(Component comp) {
         if (comp == null) {
@@ -272,14 +272,15 @@ public class Container extends Component {
     }
 
     /**
-     * Mueve un hijo a esa posición del orden Z.
+     * Moves a child to that position of the Z order.
      *
-     * <p>No dispara eventos de contenedor: el hijo no se agregó ni se sacó, sólo cambió de lugar en
-     * la pila. Es la diferencia con sacarlo y volverlo a agregar, que sí los dispararía.
+     * <p>It fires no container events: the child was neither added nor removed, it only changed
+     * place in the stack. That is the difference from removing it and adding it again, which would
+     * fire them.
      *
-     * @throws NullPointerException si el componente es `null`
-     * @throws IllegalArgumentException si el componente es este contenedor o un ancestro, o si la
-     *     posición no es válida
+     * @throws NullPointerException if the component is `null`
+     * @throws IllegalArgumentException if the component is this container or an ancestor, or if the
+     *     position is not valid
      */
     public void setComponentZOrder(Component comp, int index) {
         synchronized (this.getTreeLock()) {
@@ -302,7 +303,7 @@ public class Container extends Component {
         }
     }
 
-    /** Si ese componente cuelga de este contenedor, a cualquier profundidad. */
+    /** Whether that component hangs off this container, at any depth. */
     public boolean isAncestorOf(Component c) {
         synchronized (this.getTreeLock()) {
             Container p = c == null ? null : c.getParent();
@@ -316,26 +317,26 @@ public class Container extends Component {
         }
     }
 
-    /** La distribución, o `null` si no tiene. */
+    /** The layout, or `null` if it has none. */
     public LayoutManager getLayout() {
         return this.layoutMgr;
     }
 
-    /** Le cambia la distribución e invalida, porque las posiciones dejan de valer. */
+    /** Changes its layout and invalidates, because the positions stop being valid. */
     public void setLayout(LayoutManager mgr) {
         this.layoutMgr = mgr;
         this.invalidate();
     }
 
-    /** Le pide a la distribución que ubique a los hijos. */
+    /** Asks the layout to place the children. */
     public void doLayout() {
         this.layout();
     }
 
     /**
-     * Ubica a los hijos.
+     * Places the children.
      *
-     * @deprecated es del modelo de 1.0. Usar {@link #doLayout}.
+     * @deprecated it is from the 1.0 model. Use {@link #doLayout}.
      */
     @Deprecated
     public void layout() {
@@ -346,26 +347,27 @@ public class Container extends Component {
     }
 
     /**
-     * Si al validar hay que parar acá en vez de seguir subiendo.
+     * Whether validating has to stop here instead of going on upwards.
      *
-     * <p>Contesta `false`: un contenedor común propaga la validación hacia arriba. Los que tienen
-     * tamaño propio —una ventana, un panel con barras— lo redefinen, y eso es lo que evita que
-     * cambiar un botón revalide la aplicación entera.
+     * <p>It answers `false`: an ordinary container propagates the validation upwards. The ones with
+     * a size of their own —a window, a panel with bars— override it, and that is what keeps
+     * changing a button from revalidating the whole application.
      */
     public boolean isValidateRoot() {
         return false;
     }
 
     /**
-     * Vuelve a maquetar el subárbol si hacía falta.
+     * Lays the subtree out again if it was needed.
      *
-     * <p>Es la operación cara del maquetado, y por eso no hace nada si el contenedor ya era válido.
+     * <p>It is the expensive operation of laying out, and that is why it does nothing if the
+     * container was valid already.
      */
     public void validate() {
         synchronized (this.getTreeLock()) {
-            // Sin pantalla no hay nada que maquetar, y marcarlo valido seria afirmar que se
-            // maqueto. Es lo mismo que hace el JDK: `Container.validate` no llama a la version del
-            // componente y no hace nada mientras no haya ventana detras.
+            // Without a screen there is nothing to lay out, and marking it valid would be claiming
+            // that it was laid out. It is the same thing the JDK does: `Container.validate` does
+            // not call the component's version and does nothing while there is no window behind it.
             if (!this.isDisplayable()) {
                 return;
             }
@@ -377,10 +379,9 @@ public class Container extends Component {
     }
 
     /**
-     * Recorre el subárbol maquetando de arriba hacia abajo.
+     * Walks the subtree laying out from the top down.
      *
-     * <p>El orden importa: un hijo no puede ubicarse antes de que su padre sepa cuánto espacio le
-     * toca.
+     * <p>The order matters: a child cannot be placed before its parent knows how much room it gets.
      */
     protected void validateTree() {
         synchronized (this.getTreeLock()) {
@@ -396,7 +397,7 @@ public class Container extends Component {
         }
     }
 
-    /** Marca que hay que volver a maquetar, y le avisa a la distribución. */
+    /** Marks that laying out has to happen again, and tells the layout. */
     public void invalidate() {
         synchronized (this.getTreeLock()) {
             LayoutManager m = this.layoutMgr;
@@ -407,15 +408,15 @@ public class Container extends Component {
         }
     }
 
-    /** La medida preferida, según la distribución. */
+    /** The preferred size, according to the layout. */
     public Dimension getPreferredSize() {
         return this.preferredSize();
     }
 
     /**
-     * La medida preferida.
+     * The preferred size.
      *
-     * @deprecated es del modelo de 1.0. Usar {@link #getPreferredSize}.
+     * @deprecated it is from the 1.0 model. Use {@link #getPreferredSize}.
      */
     @Deprecated
     public Dimension preferredSize() {
@@ -427,21 +428,21 @@ public class Container extends Component {
             if (m != null) {
                 return m.preferredLayoutSize(this);
             }
-            // `super.preferredSize()` y no `super.getPreferredSize()`: lo segundo vuelve a
-            // despachar a este mismo metodo y la llamada no termina nunca.
+            // `super.preferredSize()` and not `super.getPreferredSize()`: the latter dispatches
+            // back to this very method and the call never ends.
             return super.preferredSize();
         }
     }
 
-    /** La medida mínima, según la distribución. */
+    /** The minimum size, according to the layout. */
     public Dimension getMinimumSize() {
         return this.minimumSize();
     }
 
     /**
-     * La medida mínima.
+     * The minimum size.
      *
-     * @deprecated es del modelo de 1.0. Usar {@link #getMinimumSize}.
+     * @deprecated it is from the 1.0 model. Use {@link #getMinimumSize}.
      */
     @Deprecated
     public Dimension minimumSize() {
@@ -458,10 +459,10 @@ public class Container extends Component {
     }
 
     /**
-     * La medida máxima, según la distribución.
+     * The maximum size, according to the layout.
      *
-     * <p>Sólo una {@link LayoutManager2} sabe contestarla; con una distribución simple se cae en la
-     * respuesta de {@link Component}, que es "sin tope".
+     * <p>Only a {@link LayoutManager2} knows how to answer it; with a simple layout it falls back
+     * to the answer of {@link Component}, which is "no limit".
      */
     public Dimension getMaximumSize() {
         if (this.isMaximumSizeSet()) {
@@ -476,7 +477,7 @@ public class Container extends Component {
         }
     }
 
-    /** Cómo se alinea horizontalmente, según la distribución. */
+    /** How it aligns horizontally, according to the layout. */
     public float getAlignmentX() {
         LayoutManager m = this.layoutMgr;
         if (m instanceof LayoutManager2) {
@@ -485,7 +486,7 @@ public class Container extends Component {
         return super.getAlignmentX();
     }
 
-    /** Cómo se alinea verticalmente, según la distribución. */
+    /** How it aligns vertically, according to the layout. */
     public float getAlignmentY() {
         LayoutManager m = this.layoutMgr;
         if (m instanceof LayoutManager2) {
@@ -494,15 +495,16 @@ public class Container extends Component {
         return super.getAlignmentY();
     }
 
-    /** Se dibuja y dibuja a sus hijos. */
+    /** It draws itself and draws its children. */
     public void paint(Graphics g) {
         this.paintComponents(g);
     }
 
     /**
-     * Borra el fondo, se dibuja y dibuja a sus hijos.
+     * Clears the background, draws itself and draws its children.
      *
-     * <p>El borrado sólo si el contenedor es opaco: si no lo es, borrar taparía lo que hay debajo.
+     * <p>The clearing only if the container is opaque: if it is not, clearing would cover what is
+     * below.
      */
     public void update(Graphics g) {
         if (this.isOpaque()) {
@@ -513,16 +515,16 @@ public class Container extends Component {
         this.paint(g);
     }
 
-    /** Se imprime e imprime a sus hijos. */
+    /** It prints itself and prints its children. */
     public void print(Graphics g) {
         this.printComponents(g);
     }
 
     /**
-     * Dibuja a los hijos, cada uno con su propio contexto recortado.
+     * Draws the children, each one with its own clipped context.
      *
-     * <p>El recorte por hijo es lo que garantiza que un hijo no pueda pintar fuera de su rectángulo
-     * por más que lo intente.
+     * <p>The clip per child is what guarantees that a child cannot paint outside its rectangle
+     * however hard it tries.
      */
     public void paintComponents(Graphics g) {
         synchronized (this.getTreeLock()) {
@@ -542,7 +544,7 @@ public class Container extends Component {
         }
     }
 
-    /** Lo mismo, para imprimir. */
+    /** The same, for printing. */
     public void printComponents(Graphics g) {
         synchronized (this.getTreeLock()) {
             for (int i = this.component.size() - 1; i >= 0; i--) {
@@ -561,7 +563,7 @@ public class Container extends Component {
         }
     }
 
-    /** Suma un oyente de contenedor; un `null` se ignora. */
+    /** Adds a container listener; a `null` is ignored. */
     public synchronized void addContainerListener(ContainerListener l) {
         if (l == null) {
             return;
@@ -570,7 +572,7 @@ public class Container extends Component {
         this.enableEvents(AWTEvent.CONTAINER_EVENT_MASK);
     }
 
-    /** Saca a ese oyente. */
+    /** Removes that listener. */
     public synchronized void removeContainerListener(ContainerListener l) {
         if (l == null) {
             return;
@@ -578,15 +580,16 @@ public class Container extends Component {
         this.containerListener = AWTEventMulticaster.remove(this.containerListener, l);
     }
 
-    /** Los oyentes de contenedor. */
+    /** The container listeners. */
     public synchronized ContainerListener[] getContainerListeners() {
         return AWTEventMulticaster.getListeners(this.containerListener, ContainerListener.class);
     }
 
     /**
-     * Los oyentes de esa clase.
+     * The listeners of that class.
      *
-     * @throws ClassCastException si la clase no es de oyente
+     * <p>The {@code T extends EventListener} bound is what keeps the question well posed: a class
+     * that is not a listener one cannot be passed without raw types.
      */
     public <T extends EventListener> T[] getListeners(Class<T> listenerType) {
         if (listenerType == ContainerListener.class) {
@@ -595,7 +598,7 @@ public class Container extends Component {
         return super.getListeners(listenerType);
     }
 
-    /** Clasifica el evento; los de contenedor los atiende él, el resto sube. */
+    /** Sorts the event out; the container ones it handles, the rest go up. */
     protected void processEvent(AWTEvent e) {
         if (e instanceof ContainerEvent) {
             this.processContainerEvent((ContainerEvent) e);
@@ -604,7 +607,7 @@ public class Container extends Component {
         }
     }
 
-    /** Les avisa a los oyentes de contenedor. */
+    /** Tells the container listeners. */
     protected void processContainerEvent(ContainerEvent e) {
         ContainerListener l = this.containerListener;
         if (l == null) {
@@ -618,9 +621,9 @@ public class Container extends Component {
     }
 
     /**
-     * Le manda un evento del modelo viejo.
+     * Sends it an event of the old model.
      *
-     * @deprecated es del modelo de 1.0. Usar {@link #dispatchEvent}.
+     * @deprecated it is from the 1.0 model. Use {@link #dispatchEvent}.
      */
     @Deprecated
     public void deliverEvent(Event e) {
@@ -633,18 +636,19 @@ public class Container extends Component {
     }
 
     /**
-     * Qué hijo hay en ese punto.
+     * Which child is at that point.
      *
-     * <p>Recorre en orden Z, así que devuelve el de **más arriba**: es el que recibiría el clic.
+     * <p>It walks in Z order, so it returns the **topmost** one: it is the one that would receive
+     * the click.
      */
     public Component getComponentAt(int x, int y) {
         return this.locate(x, y);
     }
 
     /**
-     * Qué hijo hay en ese punto.
+     * Which child is at that point.
      *
-     * @deprecated es del modelo de 1.0. Usar {@link #getComponentAt(int, int)}.
+     * @deprecated it is from the 1.0 model. Use {@link #getComponentAt(int, int)}.
      */
     @Deprecated
     public Component locate(int x, int y) {
@@ -663,21 +667,21 @@ public class Container extends Component {
     }
 
     /**
-     * Qué hijo hay en ese punto.
+     * Which child is at that point.
      *
-     * @throws NullPointerException si el punto es `null`
+     * @throws NullPointerException if the point is `null`
      */
     public Component getComponentAt(Point p) {
         return this.getComponentAt(p.x, p.y);
     }
 
     /**
-     * Qué componente hay en ese punto, **bajando** por el árbol.
+     * Which component is at that point, **going down** the tree.
      *
-     * <p>Es la diferencia con {@link #getComponentAt}: aquél mira sólo a los hijos directos, éste
-     * llega hasta la hoja. Es lo que hace falta para saber a quién entregarle un clic.
+     * <p>That is the difference from {@link #getComponentAt}: that one looks only at the direct
+     * children, this one reaches the leaf. It is what is needed to know who to deliver a click to.
      *
-     * @return el componente más profundo, o `null` si el punto cae afuera
+     * @return the deepest component, or `null` if the point falls outside
      */
     public Component findComponentAt(int x, int y) {
         synchronized (this.getTreeLock()) {
@@ -692,9 +696,9 @@ public class Container extends Component {
                     continue;
                 }
                 if (c instanceof Container) {
-                    Component hondo = ((Container) c).findComponentAt(cx, cy);
-                    if (hondo != null) {
-                        return hondo;
+                    Component deep = ((Container) c).findComponentAt(cx, cy);
+                    if (deep != null) {
+                        return deep;
                     }
                 } else {
                     return c;
@@ -705,26 +709,26 @@ public class Container extends Component {
     }
 
     /**
-     * Lo mismo, con un punto.
+     * The same, with a point.
      *
-     * @throws NullPointerException si el punto es `null`
+     * @throws NullPointerException if the point is `null`
      */
     public Component findComponentAt(Point p) {
         return this.findComponentAt(p.x, p.y);
     }
 
     /**
-     * Dónde está el ratón sobre este contenedor.
+     * Where the mouse is over this container.
      *
-     * @param allowChildren si cuenta cuando el ratón está sobre un hijo
-     * @return `null` siempre: el contenedor no está en pantalla
-     * @throws HeadlessException si no hay pantalla
+     * @param allowChildren whether it counts when the mouse is over a child
+     * @return `null` always: the container is not on a screen
+     * @throws HeadlessException if there is no screen
      */
     public Point getMousePosition(boolean allowChildren) throws HeadlessException {
         return null;
     }
 
-    /** Avisa que puede mostrarse, y se lo avisa a sus hijos. */
+    /** Notifies that it can be shown, and tells its children. */
     public void addNotify() {
         synchronized (this.getTreeLock()) {
             super.addNotify();
@@ -734,7 +738,7 @@ public class Container extends Component {
         }
     }
 
-    /** Avisa que dejó de poder mostrarse, y se lo avisa a sus hijos. */
+    /** Notifies that it can no longer be shown, and tells its children. */
     public void removeNotify() {
         synchronized (this.getTreeLock()) {
             for (int i = this.component.size() - 1; i >= 0; i--) {
@@ -745,17 +749,17 @@ public class Container extends Component {
     }
 
     /**
-     * Le cambia la fuente a él y con eso a los hijos que no tengan propia.
+     * Changes the font of this one and with it that of the children that have none of their own.
      *
-     * <p>Se redefine para invalidar el subárbol: cambiar la fuente cambia cuánto mide el texto de
-     * todos los descendientes que la heredan.
+     * <p>It is overridden so as to invalidate the subtree: changing the font changes how much the
+     * text of every descendant that inherits it measures.
      */
     public void setFont(Font f) {
         super.setFont(f);
         this.invalidate();
     }
 
-    /** Le pone esa orientación a él y a todos sus descendientes. */
+    /** Gives that orientation to itself and to every descendant. */
     public void applyComponentOrientation(ComponentOrientation o) {
         super.applyComponentOrientation(o);
         synchronized (this.getTreeLock()) {
@@ -765,17 +769,17 @@ public class Container extends Component {
         }
     }
 
-    /** Suma alguien a quien avisarle de los cambios de propiedad. */
+    /** Adds someone to tell about the property changes. */
     public void addPropertyChangeListener(PropertyChangeListener listener) {
         super.addPropertyChangeListener(listener);
     }
 
-    /** Suma un oyente para una propiedad concreta. */
+    /** Adds a listener for one particular property. */
     public void addPropertyChangeListener(String propertyName, PropertyChangeListener listener) {
         super.addPropertyChangeListener(propertyName, listener);
     }
 
-    /** En qué orden el tabulador recorre a los hijos. */
+    /** In what order the tab key walks the children. */
     public FocusTraversalPolicy getFocusTraversalPolicy() {
         if (!this.isFocusTraversalPolicyProvider() && !this.isFocusCycleRoot()) {
             return null;
@@ -784,52 +788,52 @@ public class Container extends Component {
         if (p != null) {
             return p;
         }
-        Container padre = this.getParent();
-        if (padre != null) {
-            return padre.getFocusTraversalPolicy();
+        Container parent = this.getParent();
+        if (parent != null) {
+            return parent.getFocusTraversalPolicy();
         }
         return null;
     }
 
-    /** Le cambia el orden de recorrido; con `null` vuelve a heredarlo. */
+    /** Changes its traversal order; with `null` it goes back to inheriting it. */
     public void setFocusTraversalPolicy(FocusTraversalPolicy policy) {
-        FocusTraversalPolicy viejo;
+        FocusTraversalPolicy old;
         synchronized (this) {
-            viejo = this.focusTraversalPolicy;
+            old = this.focusTraversalPolicy;
             this.focusTraversalPolicy = policy;
         }
-        this.firePropertyChange("focusTraversalPolicy", viejo, policy);
+        this.firePropertyChange("focusTraversalPolicy", old, policy);
     }
 
-    /** Si tiene orden de recorrido propio. */
+    /** Whether it has a traversal order of its own. */
     public boolean isFocusTraversalPolicySet() {
         return this.focusTraversalPolicy != null;
     }
 
     /**
-     * Si el tabulador da la vuelta adentro suyo en vez de salir.
+     * Whether the tab key goes round inside it instead of leaving.
      *
-     * <p>Es lo que encierra el foco en un diálogo.
+     * <p>It is what shuts the focus into a dialog.
      */
     public boolean isFocusCycleRoot() {
         return this.focusCycleRoot;
     }
 
-    /** Declara si el foco da la vuelta adentro suyo. */
+    /** Declares whether the focus goes round inside it. */
     public void setFocusCycleRoot(boolean focusCycleRoot) {
-        boolean viejo;
+        boolean old;
         synchronized (this) {
-            viejo = this.focusCycleRoot;
+            old = this.focusCycleRoot;
             this.focusCycleRoot = focusCycleRoot;
         }
-        this.firePropertyChange("focusCycleRoot", viejo, focusCycleRoot);
+        this.firePropertyChange("focusCycleRoot", old, focusCycleRoot);
     }
 
     /**
-     * Si ese contenedor es la raíz del ciclo de foco de éste.
+     * Whether that container is the focus cycle root of this one.
      *
-     * <p>Un contenedor que sea raíz de ciclo es la raíz **de sí mismo**, que es la diferencia con la
-     * versión de {@link Component}.
+     * <p>A container that is a cycle root is the root **of itself**, which is the difference from
+     * the version of {@link Component}.
      */
     public boolean isFocusCycleRoot(Container container) {
         if (this.isFocusCycleRoot() && container == this) {
@@ -839,56 +843,56 @@ public class Container extends Component {
     }
 
     /**
-     * Si aporta orden de recorrido a sus hijos sin ser raíz de ciclo.
+     * Whether it gives a traversal order to its children without being a cycle root.
      *
-     * <p>Es el punto medio entre las dos cosas: ordena a los suyos, pero el tabulador puede salirse.
+     * <p>It is the middle ground between the two: it orders its own, but the tab key can leave.
      */
     public final boolean isFocusTraversalPolicyProvider() {
         return this.focusTraversalPolicyProvider;
     }
 
-    /** Declara si aporta orden de recorrido. */
+    /** Declares whether it gives a traversal order. */
     public final void setFocusTraversalPolicyProvider(boolean provider) {
-        boolean viejo;
+        boolean old;
         synchronized (this) {
-            viejo = this.focusTraversalPolicyProvider;
+            old = this.focusTraversalPolicyProvider;
             this.focusTraversalPolicyProvider = provider;
         }
-        this.firePropertyChange("focusTraversalPolicyProvider", viejo, provider);
+        this.firePropertyChange("focusTraversalPolicyProvider", old, provider);
     }
 
-    /** Baja el foco a este contenedor; no hace nada sin gestor de foco. */
+    /** Takes the focus down into this container; it does nothing with no focus manager. */
     public void transferFocusDownCycle() {
     }
 
     /**
-     * Las teclas de recorrido en ese sentido.
+     * The traversal keys in that direction.
      *
-     * @throws IllegalArgumentException si el sentido no es uno de los cuatro
+     * @throws IllegalArgumentException if the direction is not one of the four
      */
     public Set<AWTKeyStroke> getFocusTraversalKeys(int id) {
         return super.getFocusTraversalKeys(id);
     }
 
     /**
-     * Cambia las teclas de recorrido.
+     * Changes the traversal keys.
      *
-     * @throws IllegalArgumentException si el sentido o alguna tecla no son válidos
+     * @throws IllegalArgumentException if the direction or some keystroke is not valid
      */
     public void setFocusTraversalKeys(int id, Set<? extends AWTKeyStroke> keystrokes) {
         super.setFocusTraversalKeys(id, keystrokes);
     }
 
     /**
-     * Si se le fijaron teclas propias en ese sentido.
+     * Whether keys of its own were set in that direction.
      *
-     * @throws IllegalArgumentException si el sentido no es uno de los cuatro
+     * @throws IllegalArgumentException if the direction is not one of the four
      */
     public boolean areFocusTraversalKeysSet(int id) {
         return super.areFocusTraversalKeysSet(id);
     }
 
-    /** Escribe este contenedor y su subárbol, con sangría creciente. */
+    /** Writes this container and its subtree out, with growing indentation. */
     public void list(PrintStream out, int indent) {
         super.list(out, indent);
         synchronized (this.getTreeLock()) {
@@ -898,7 +902,7 @@ public class Container extends Component {
         }
     }
 
-    /** Lo mismo, en un escritor. */
+    /** The same, to a writer. */
     public void list(PrintWriter out, int indent) {
         super.list(out, indent);
         synchronized (this.getTreeLock()) {
@@ -918,26 +922,26 @@ public class Container extends Component {
     }
 
     /**
-     * La accesibilidad de un contenedor.
+     * The accessibility of a container.
      *
-     * <p>Lo único que agrega respecto de un componente son los hijos, y es todo lo que hace falta:
-     * el árbol de accesibilidad sigue al de componentes.
+     * <p>The only thing it adds over a component is the children, and that is all that is needed:
+     * the accessibility tree follows the component one.
      */
     protected class AccessibleAWTContainer extends AccessibleAWTComponent {
 
-        /** Para las subclases. */
+        /** For the subclasses. */
         protected AccessibleAWTContainer() {
         }
 
-        /** Cuántos hijos tiene. */
+        /** How many children it has. */
         public int getAccessibleChildrenCount() {
             return Container.this.getComponentCount();
         }
 
         /**
-         * El hijo de esa posición, si es accesible.
+         * The child at that position, if it is accessible.
          *
-         * @return el hijo, o `null` si no existe o no es accesible
+         * @return the child, or `null` if there is none or it is not accessible
          */
         public Accessible getAccessibleChild(int i) {
             if (i < 0 || i >= Container.this.getComponentCount()) {

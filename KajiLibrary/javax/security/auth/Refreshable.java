@@ -1,23 +1,23 @@
 package javax.security.auth;
 
 /**
- * KajiLibrary's javax.security.auth.Refreshable -- una credencial que vence y se puede renovar.
+ * KajiLibrary's javax.security.auth.Refreshable -- a credential that expires and can be renewed.
  *
- * <p>Los dos metodos son abstractos, a diferencia de {@link Destroyable}, que los tiene por defecto.
- * La razon es que aca no hay ningun default seguro: {@code isCurrent()} tendria que decir false --
- * "no se si sigue vigente" -- y entonces {@code refresh()} se llamaria siempre, o decir true y
- * mentir. Quien implementa esta interfaz es porque sabe cuando vence su credencial; el que no sabe
- * no la implementa.
+ * <p>Both methods are abstract, unlike {@link Destroyable}, which has them by default. The reason
+ * is that here there is no safe default: {@code isCurrent()} would have to say false -- "I do not
+ * know whether it is still valid" -- and then {@code refresh()} would be called always, or say true
+ * and lie. Whoever implements this interface does so because they know when their credential
+ * expires; whoever does not know does not implement it.
  */
 public interface Refreshable {
 
-    /** Si la credencial sigue vigente. */
+    /** Whether the credential is still valid. */
     boolean isCurrent();
 
     /**
-     * Renueva la credencial.
+     * Renews the credential.
      *
-     * @throws RefreshFailedException si no se pudo -- la credencial vieja puede seguir sirviendo
+     * @throws RefreshFailedException if it could not -- the old credential may keep serving
      */
     void refresh() throws RefreshFailedException;
 }

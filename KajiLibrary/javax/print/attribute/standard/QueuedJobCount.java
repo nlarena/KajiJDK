@@ -5,7 +5,7 @@ import javax.print.attribute.IntegerSyntax;
 import javax.print.attribute.PrintServiceAttribute;
 
 /**
- * Cuantos trabajos hay en la cola de la impresora, contando el que se esta imprimiendo.
+ * How many jobs there are in the printer's queue, counting the one being printed.
  */
 public final class QueuedJobCount extends IntegerSyntax implements PrintServiceAttribute {
 
@@ -15,8 +15,10 @@ public final class QueuedJobCount extends IntegerSyntax implements PrintServiceA
         super(value, 0, Integer.MAX_VALUE);
     }
 
-    /** El {@code instanceof} es lo que impide que un QueuedJobCount de igual a otro atributo
-     * entero con el mismo numero. */
+    /**
+     * The {@code instanceof} is what keeps a QueuedJobCount from being equal to another
+     * integer attribute with the same number.
+     */
     public boolean equals(Object object) {
         return super.equals(object) && object instanceof QueuedJobCount;
     }

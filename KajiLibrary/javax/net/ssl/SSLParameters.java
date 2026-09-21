@@ -9,18 +9,18 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Toda la configuracion de una conexion TLS, en un objeto.
+ * All the configuration of a TLS connection, in one object.
  *
- * <h2>Por que existe si {@link SSLSocket} ya tiene setters</h2>
+ * <h2>Why it exists if {@link SSLSocket} already has setters</h2>
  *
- * <p>Porque los setters sueltos aplican <strong>de a uno</strong>, y varias de estas opciones solo
- * tienen sentido juntas: cambiar las suites sin cambiar los protocolos puede dejar una combinacion
- * que no negocia nada. Este objeto se arma entero y se aplica de una, y ademas se puede guardar,
- * pasar y reusar entre conexiones — un socket no.
+ * <p>Because the loose setters apply <strong>one at a time</strong>, and several of these options
+ * only make sense together: changing the suites without changing the protocols can leave a
+ * combination that negotiates nothing. This object is put together whole and applied in one go, and
+ * besides it can be kept, passed around and reused between connections — a socket cannot.
  *
- * <p>Es <strong>mutable y no se comparte</strong>: los getters de {@link SSLSocket} y
- * {@link SSLEngine} devuelven una copia, y modificar lo que devolvieron no toca la conexion hasta
- * que se lo pase al setter. Es deliberado, y es lo contrario de lo que uno supone.
+ * <p>It is <strong>mutable and not shared</strong>: the getters of {@link SSLSocket} and
+ * {@link SSLEngine} return a copy, and modifying what they returned does not touch the connection
+ * until it is passed to the setter. It is deliberate, and it is the opposite of what one assumes.
  */
 public class SSLParameters {
 
@@ -39,106 +39,108 @@ public class SSLParameters {
     private String[] signatureSchemes;
     private String[] namedGroups;
 
-    /** Todo por omision: sin suites ni protocolos fijados. */
+    /** Everything default: no suites nor protocols set. */
     public SSLParameters() {
     }
 
-    /** Fijando las suites de cifrado. */
+    /** Setting the cipher suites. */
     public SSLParameters(String[] cipherSuites) {
         setCipherSuites(cipherSuites);
     }
 
-    /** Fijando las suites y los protocolos. */
+    /** Setting the suites and the protocols. */
     public SSLParameters(String[] cipherSuites, String[] protocols) {
         setCipherSuites(cipherSuites);
         setProtocols(protocols);
     }
 
-    private static String[] copia(String[] v) {
+    private static String[] copy(String[] v) {
         return v == null ? null : v.clone();
     }
 
-    /** Las suites habilitadas, o {@code null}. Una copia: mutarla no cambia nada. */
+    /** The enabled suites, or {@code null}. A copy: mutating it changes nothing. */
     public String[] getCipherSuites() {
-        return copia(this.cipherSuites);
+        return copy(this.cipherSuites);
     }
 
-    /** Fija las suites habilitadas. */
+    /** Sets the enabled suites. */
     public void setCipherSuites(String[] cipherSuites) {
-        this.cipherSuites = copia(cipherSuites);
+        this.cipherSuites = copy(cipherSuites);
     }
 
-    /** Los protocolos habilitados, o {@code null}. */
+    /** The enabled protocols, or {@code null}. */
     public String[] getProtocols() {
-        return copia(this.protocols);
+        return copy(this.protocols);
     }
 
-    /** Fija los protocolos habilitados. */
+    /** Sets the enabled protocols. */
     public void setProtocols(String[] protocols) {
-        this.protocols = copia(protocols);
+        this.protocols = copy(protocols);
     }
 
     /**
-     * Si se pide autenticacion de cliente sin exigirla.
+     * Whether client authentication is requested without requiring it.
      *
-     * <p>La diferencia con {@link #getNeedClientAuth} es lo que pasa cuando el cliente no tiene
-     * certificado: con {@code want} la conexion sigue sin autenticar, con {@code need} se corta. Son
-     * excluyentes — fijar uno apaga el otro, y por eso los setters lo hacen explicitamente.
+     * <p>The difference from {@link #getNeedClientAuth} is what happens when the client has no
+     * certificate: with {@code want} the connection goes on unauthenticated, with {@code need} it
+     * is cut. They are mutually exclusive — setting one turns the other off, and that is why the
+     * setters do it explicitly.
      */
     public boolean getWantClientAuth() {
         return this.wantClientAuth;
     }
 
-    /** Pide autenticacion de cliente sin exigirla; apaga {@code needClientAuth}. */
+    /** Requests client authentication without requiring it; turns {@code needClientAuth} off. */
     public void setWantClientAuth(boolean wantClientAuth) {
         this.wantClientAuth = wantClientAuth;
         this.needClientAuth = false;
     }
 
-    /** Si se exige autenticacion de cliente. */
+    /** Whether client authentication is required. */
     public boolean getNeedClientAuth() {
         return this.needClientAuth;
     }
 
-    /** Exige autenticacion de cliente; apaga {@code wantClientAuth}. */
+    /** Requires client authentication; turns {@code wantClientAuth} off. */
     public void setNeedClientAuth(boolean needClientAuth) {
         this.needClientAuth = needClientAuth;
         this.wantClientAuth = false;
     }
 
-    /** Las restricciones sobre algoritmos, o {@code null}. */
+    /** The constraints on algorithms, or {@code null}. */
     public AlgorithmConstraints getAlgorithmConstraints() {
         return this.algorithmConstraints;
     }
 
-    /** Fija las restricciones sobre algoritmos. */
+    /** Sets the constraints on algorithms. */
     public void setAlgorithmConstraints(AlgorithmConstraints constraints) {
         this.algorithmConstraints = constraints;
     }
 
     /**
-     * El algoritmo con el que se verifica que el certificado corresponda al destino, o {@code null}.
+     * The algorithm with which it is checked that the certificate belongs to the destination, or
+     * {@code null}.
      *
-     * <p>{@code null} —el valor por omision— significa <strong>que no se verifica</strong>, y es una
-     * de las trampas mas caras de esta API: un {@link SSLSocket} recien creado cifra pero no
-     * comprueba que del otro lado este quien se pidio. Ponerle {@code "HTTPS"} es lo que activa esa
-     * comprobacion.
+     * <p>{@code null} --the default-- means <strong>that it is not checked</strong>, and it is one
+     * of the most expensive traps of this API: a freshly created {@link SSLSocket} encrypts but
+     * does not check that whoever was asked for is on the other side. Setting it to {@code "HTTPS"}
+     * is what turns that check on.
      */
     public String getEndpointIdentificationAlgorithm() {
         return this.identificationAlgorithm;
     }
 
-    /** Fija el algoritmo de identificacion del extremo; {@code "HTTPS"} es el habitual. */
+    /** Sets the endpoint identification algorithm; {@code "HTTPS"} is the usual one. */
     public void setEndpointIdentificationAlgorithm(String algorithm) {
         this.identificationAlgorithm = algorithm;
     }
 
     /**
-     * Los nombres SNI a mandar.
+     * The SNI names to send.
      *
-     * @throws NullPointerException si la lista es {@code null}
-     * @throws IllegalArgumentException si hay dos del mismo tipo — el protocolo admite uno por tipo,
-     *     y mandar dos seria ambiguo
+     * @throws NullPointerException if the list is {@code null}
+     * @throws IllegalArgumentException if there are two of the same type — the protocol admits one
+     *     per type, and sending two would be ambiguous
      */
     public final void setServerNames(List<SNIServerName> serverNames) {
         if (serverNames == null) {
@@ -148,14 +150,14 @@ public class SSLParameters {
         for (int i = 0; i < serverNames.size(); i++) {
             SNIServerName n = serverNames.get(i);
             if (m.put(Integer.valueOf(n.getType()), n) != null) {
-                throw new IllegalArgumentException("dos nombres del mismo tipo: "
+                throw new IllegalArgumentException("two names of the same type: "
                         + String.valueOf(n.getType()));
             }
         }
         this.sniNames = m;
     }
 
-    /** Los nombres SNI, o {@code null} si no se fijaron. */
+    /** The SNI names, or {@code null} if they were not set. */
     public final List<SNIServerName> getServerNames() {
         if (this.sniNames == null) {
             return null;
@@ -165,9 +167,9 @@ public class SSLParameters {
     }
 
     /**
-     * Los criterios con los que un servidor acepta nombres SNI.
+     * The criteria with which a server accepts SNI names.
      *
-     * @throws IllegalArgumentException si hay dos del mismo tipo
+     * @throws IllegalArgumentException if there are two of the same type
      */
     public final void setSNIMatchers(Collection<SNIMatcher> matchers) {
         if (matchers == null) {
@@ -176,14 +178,14 @@ public class SSLParameters {
         Map<Integer, SNIMatcher> m = new HashMap<Integer, SNIMatcher>();
         for (SNIMatcher x : matchers) {
             if (m.put(Integer.valueOf(x.getType()), x) != null) {
-                throw new IllegalArgumentException("dos matchers del mismo tipo: "
+                throw new IllegalArgumentException("two matchers of the same type: "
                         + String.valueOf(x.getType()));
             }
         }
         this.sniMatchers = m;
     }
 
-    /** Los matchers SNI, o {@code null}. */
+    /** The SNI matchers, or {@code null}. */
     public final Collection<SNIMatcher> getSNIMatchers() {
         if (this.sniMatchers == null) {
             return null;
@@ -193,98 +195,98 @@ public class SSLParameters {
     }
 
     /**
-     * Si manda el orden de suites del servidor y no el del cliente.
+     * Whether the server's suite order rules and not the client's.
      *
-     * <p>Importa: quien elige el orden elige, en la practica, la suite. Dejar decidir al cliente
-     * significa aceptar su idea de que es seguro.
+     * <p>It matters: whoever chooses the order chooses, in practice, the suite. Letting the client
+     * decide means accepting its idea of what is secure.
      */
     public final void setUseCipherSuitesOrder(boolean honorOrder) {
         this.preferLocalCipherSuites = honorOrder;
     }
 
-    /** Si manda el orden local de suites. */
+    /** Whether the local suite order rules. */
     public final boolean getUseCipherSuitesOrder() {
         return this.preferLocalCipherSuites;
     }
 
     /**
-     * Si se retransmiten los mensajes de handshake perdidos. Solo aplica a DTLS.
+     * Whether lost handshake messages are retransmitted. It only applies to DTLS.
      *
-     * <p>Sobre TCP no hace falta porque el transporte ya retransmite; sobre datagramas, si no lo
-     * hace el protocolo no lo hace nadie.
+     * <p>Over TCP it is not needed because the transport already retransmits; over datagrams, if
+     * the protocol does not do it nobody does.
      */
     public void setEnableRetransmissions(boolean enableRetransmissions) {
         this.enableRetransmissions = enableRetransmissions;
     }
 
-    /** Si las retransmisiones estan habilitadas. */
+    /** Whether retransmissions are enabled. */
     public boolean getEnableRetransmissions() {
         return this.enableRetransmissions;
     }
 
     /**
-     * El paquete mas grande que se puede producir; {@code 0} deja decidir a la implementacion.
+     * The largest packet that can be produced; {@code 0} lets the implementation decide.
      *
-     * @throws IllegalArgumentException si es negativo
+     * @throws IllegalArgumentException if it is negative
      */
     public void setMaximumPacketSize(int maximumPacketSize) {
         if (maximumPacketSize < 0) {
-            throw new IllegalArgumentException("el tamano maximo no puede ser negativo");
+            throw new IllegalArgumentException("the maximum size cannot be negative");
         }
         this.maximumPacketSize = maximumPacketSize;
     }
 
-    /** El tamano maximo de paquete. */
+    /** The maximum packet size. */
     public int getMaximumPacketSize() {
         return this.maximumPacketSize;
     }
 
     /**
-     * Los protocolos de aplicacion a negociar por ALPN, en orden de preferencia.
+     * The application protocols to negotiate through ALPN, in order of preference.
      *
-     * <p>Es como un cliente y un servidor acuerdan hablar HTTP/2 en vez de HTTP/1.1
-     * <strong>dentro</strong> del mismo handshake, sin un viaje extra.
+     * <p>It is how a client and a server agree to speak HTTP/2 instead of HTTP/1.1
+     * <strong>within</strong> the same handshake, without an extra round trip.
      */
     public String[] getApplicationProtocols() {
         return this.applicationProtocols.clone();
     }
 
     /**
-     * Fija los protocolos de aplicacion.
+     * Sets the application protocols.
      *
-     * @throws IllegalArgumentException si alguno es {@code null} o vacio
+     * @throws IllegalArgumentException if any is {@code null} or empty
      */
     public void setApplicationProtocols(String[] protocols) {
         if (protocols == null) {
             throw new IllegalArgumentException("protocols");
         }
-        String[] copia = protocols.clone();
-        for (int i = 0; i < copia.length; i++) {
-            if (copia[i] == null || copia[i].isEmpty()) {
+        String[] copy = protocols.clone();
+        for (int i = 0; i < copy.length; i++) {
+            if (copy[i] == null || copy[i].isEmpty()) {
                 throw new IllegalArgumentException(
-                        "un protocolo de aplicacion no puede ser nulo ni vacio");
+                        "an application protocol cannot be null or empty");
             }
         }
-        this.applicationProtocols = copia;
+        this.applicationProtocols = copy;
     }
 
-    /** Los esquemas de firma habilitados, o {@code null}. */
+    /** The enabled signature schemes, or {@code null}. */
     public String[] getSignatureSchemes() {
-        return copia(this.signatureSchemes);
+        return copy(this.signatureSchemes);
     }
 
-    /** Fija los esquemas de firma. */
+    /** Sets the signature schemes. */
     public void setSignatureSchemes(String[] signatureSchemes) {
-        this.signatureSchemes = copia(signatureSchemes);
+        this.signatureSchemes = copy(signatureSchemes);
     }
 
-    /** Los grupos con nombre para el intercambio de claves, o {@code null}. */
+    /** The named groups for the key exchange, or {@code null}. */
     public String[] getNamedGroups() {
-        return copia(this.namedGroups);
+        return copy(this.namedGroups);
     }
 
-    /** Fija los grupos con nombre. */
+    /** Sets the named groups. */
     public void setNamedGroups(String[] namedGroups) {
-        this.namedGroups = copia(namedGroups);
+        this.namedGroups = copy(namedGroups);
     }
 }

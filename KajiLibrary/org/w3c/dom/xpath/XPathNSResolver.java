@@ -1,19 +1,19 @@
 package org.w3c.dom.xpath;
 
 /**
- * KajiLibrary's org.w3c.dom.xpath.XPathNSResolver -- traduce prefijos a espacios de nombres.
+ * KajiLibrary's org.w3c.dom.xpath.XPathNSResolver -- it translates prefixes to namespaces.
  *
- * <p>Hace falta porque los prefijos de una expresion XPath <b>no tienen por que ser los del
- * documento</b>: la expresion la escribe quien consulta, el documento lo escribio otro, y los dos
- * pueden usar prefijos distintos para el mismo espacio de nombres -- o el mismo prefijo para dos
- * distintos. Lo que se compara es el espacio, y este resolvedor es quien lo dice.
+ * <p>It is needed because the prefixes of an XPath expression <b>do not have to be those of the
+ * document</b>: whoever queries writes the expression, somebody else wrote the document, and the
+ * two may use different prefixes for the same namespace -- or the same prefix for two different
+ * ones. What is compared is the namespace, and this resolver is the one that says it.
  */
 public interface XPathNSResolver {
 
     /**
-     * El espacio de nombres de ese prefijo, o null si no lo conoce.
+     * The namespace of that prefix, or null if it does not know it.
      *
-     * @param prefix el prefijo, o null para el espacio por omision
+     * @param prefix the prefix, or null for the default namespace
      */
     String lookupNamespaceURI(String prefix);
 }

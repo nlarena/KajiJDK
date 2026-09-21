@@ -3,47 +3,47 @@ package com.sun.jdi;
 import java.util.List;
 
 /**
- * Un grupo de hilos de la maquina depurada.
+ * A thread group of the debugged machine.
  *
  * @since 1.3
  */
 public interface ThreadGroupReference extends ObjectReference {
 
     /**
-     * El nombre.
+     * The name.
      *
-     * @return el resultado
+     * @return the result
      */
     String name();
 
     /**
-     * El parent.
+     * The parent.
      *
-     * @return el resultado
+     * @return the result
      */
     ThreadGroupReference parent();
 
     /**
-     * El suspend.
+     * The suspend.
      */
     void suspend();
 
     /**
-     * El resume.
+     * The resume.
      */
     void resume();
 
     /**
-     * El threads.
+     * The threads.
      *
-     * @return el resultado
+     * @return the result
      */
     List<ThreadReference> threads();
 
     /**
-     * El thread groups.
+     * The thread groups.
      *
-     * @return el resultado
+     * @return the result
      */
     List<ThreadGroupReference> threadGroups();
 }

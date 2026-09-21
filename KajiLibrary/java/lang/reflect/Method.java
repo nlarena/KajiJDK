@@ -343,11 +343,12 @@ public final class Method extends Executable {
     //
     // A KajiLibrary subset, as on Field: method-level RUNTIME annotation reflection is not wired.
     /**
-     * Las anotaciones escritas sobre este metodo, retenidas en runtime.
+     * The annotations written on this method, retained at run time.
      *
-     * <p>Sale de un native porque hay que leer el atributo {@code RuntimeVisibleAnnotations} del
-     * {@code method_info}, y la instancia que se devuelve es de una clase que la VM fabrica al
-     * vuelo -- una anotacion es una interfaz, y no hay ninguna clase que la implemente.
+     * <p>It comes out of a native because the {@code method_info}'s
+     * {@code RuntimeVisibleAnnotations} attribute has to be read, and the instance returned is of a
+     * class the VM builds on the fly -- an annotation is an interface, and no class implements
+     * it.
      */
     private native Annotation[] declaredAnnotations0();
 
@@ -356,11 +357,11 @@ public final class Method extends Executable {
     }
 
     /**
-     * La anotacion de ese tipo, o null.
+     * The annotation of that type, or null.
      *
-     * <p>Se compara por {@code isInstance} y no por nombre: la clase sintetica que fabrica la VM
-     * implementa la interfaz de la anotacion, asi que el chequeo de tipo es el correcto y no hace
-     * falta mirar {@code annotationType()}.
+     * <p>It compares by {@code isInstance} and not by name: the synthetic class the VM builds
+     * implements the annotation's interface, so the type check is the right one and does not need
+     * to look at {@code annotationType()}.
      */
     public <T extends Annotation> T getAnnotation(Class<T> annotationClass) {
         if (annotationClass == null) {

@@ -16,120 +16,125 @@ import javax.management.NotificationBroadcasterSupport;
 import javax.management.ObjectName;
 
 /**
- * KajiLibrary's javax.management.timer.Timer -- el reloj que manda notificaciones.
+ * KajiLibrary's javax.management.timer.Timer -- the clock that sends notifications.
  *
- * <p>Es un MBean que se registra en un agente y al que se le piden avisos para una fecha, con o sin
- * repeticion. Sirve para que un cliente JMX programe algo <b>del lado del agente</b> sin tener que
- * dejar un hilo propio esperando del otro lado de la red.
+ * <p>It is an MBean registered in an agent and asked for notices at a given date, with or without
+ * repetition. It serves so that a JMX client can schedule something <b>on the agent's side</b>
+ * without leaving a thread of its own waiting on the other side of the network.
  *
- * <h2>Las fechas pasadas</h2>
+ * <h2>Past dates</h2>
  *
- * <p>Es la parte del comportamiento que no se adivina. Una notificacion inscrita para una fecha que
- * ya paso --porque el reloj estuvo parado, o porque se inscribio con fecha vieja-- se resuelve al
- * arrancar segun {@link #getSendPastNotifications}:
+ * <p>It is the part of the behaviour that cannot be guessed. A notification registered for a date
+ * that has already passed --because the clock was stopped, or because it was registered with an
+ * old date-- is resolved on start according to {@link #getSendPastNotifications}:
  *
  * <ul>
- *   <li>si es false, la de una sola vez se <b>descarta</b> sin avisar y se borra de la tabla; la
- *       periodica corre su fecha hacia adelante hasta la primera que este en el futuro;
- *   <li>si es true, se manda <b>una</b> vez y despues sigue el mismo camino.
+ *   <li>if it is false, the one-shot one is <b>dropped</b> without notice and removed from the
+ *       table; the periodic one runs its date forward to the first one in the future;
+ *   <li>if it is true, it is sent <b>once</b> and then follows the same path.
  * </ul>
  *
- * <p>La de una sola vez que se descarta no se llega a programar, asi que <b>no puede</b> salir. Vale
- * decirlo porque el JDK ahi tiene una carrera: programa la atrasada para ya y recien despues decide
- * darla de baja, asi que segun cuan rapido arranque el hilo del reloj el aviso sale o no sale. Lo
- * que hace esta clase es lo que dice la especificacion, y ademas siempre lo mismo.
+ * <p>The one-shot one that gets dropped is never scheduled, so it <b>cannot</b> come out.
  *
- * <p>Se manda una sola vez y no una por cada repeticion perdida: un reloj parado dos dias con
- * periodo de un minuto largaria casi tres mil avisos de golpe, y ninguno de ellos serviria para
- * nada. Por la misma razon las repeticiones que se saltearon <b>no</b> se descuentan de
- * {@code nbOccurences}: lo que se pidio fue "avisame tantas veces", no "tantas ranuras de reloj".
+ * <p>It is sent once and not once per missed repetition: a clock stopped for two days with a
+ * one-minute period would fire almost three thousand notices at once, and none of them would be
+ * of any use. For the same reason the repetitions that were skipped are <b>not</b> subtracted
+ * from {@code nbOccurences}: what was asked for was "tell me this many times", not "this many
+ * clock slots".
  *
- * <h2>El hilo no es demonio</h2>
+ * <p>That is a deliberate divergence from the JDK, and worth knowing. The JDK's
+ * {@code sendPastNotifications} loops while the date is in the past: with the flag on it sends
+ * <b>one notification per missed occurrence</b> and decrements {@code nbOccurences} on each,
+ * and with the flag off it only advances the date (removing the one-shot one). (An earlier note
+ * said the JDK has a race there between scheduling the overdue notification and removing it;
+ * reading the JDK 25 sources, it does not -- the whole loop runs before any alarm is started.)
  *
- * <p>Mientras el reloj esta activo, su hilo mantiene viva a la maquina virtual. Es a proposito y hay
- * que saberlo: un programa que arranca un {@link Timer} y no lo para <b>no termina</b>. La
- * alternativa --un hilo demonio-- perderia avisos justo cuando el programa esta cerrando, que es
- * cuando suelen importar.
+ * <h2>The thread is not a daemon</h2>
  *
- * <h2>Fijo contra retardado</h2>
+ * <p>While the clock is active, its thread keeps the virtual machine alive. It is on purpose and
+ * has to be known: a program that starts a {@link Timer} and does not stop it <b>does not
+ * finish</b>. The alternative --a daemon thread-- would lose notices just when the program is
+ * shutting down, which is when they usually matter.
  *
- * <p>Con {@code fixedRate} en true la proxima fecha se calcula desde la <b>anterior programada</b>,
- * asi que el ritmo promedio se mantiene aunque un disparo salga tarde. Con false se calcula desde el
- * momento en que salio, asi que un atraso se arrastra. Lo primero sirve para muestrear en el tiempo;
- * lo segundo, para dejar un hueco garantizado entre dos tareas pesadas.
+ * <h2>Fixed rate versus fixed delay</h2>
+ *
+ * <p>With {@code fixedRate} true the next date is computed from the <b>previously scheduled</b>
+ * one, so the average rate is kept even if one firing comes out late. With false it is computed
+ * from the moment it went out, so a delay is carried along. The first serves for sampling over
+ * time; the second, for leaving a guaranteed gap between two heavy tasks.
  */
 public class Timer extends NotificationBroadcasterSupport implements TimerMBean, MBeanRegistration {
 
-    /** Un segundo, en milisegundos. */
+    /** One second, in milliseconds. */
     public static final long ONE_SECOND = 1000;
 
-    /** Un minuto. */
+    /** One minute. */
     public static final long ONE_MINUTE = 60 * ONE_SECOND;
 
-    /** Una hora. */
+    /** One hour. */
     public static final long ONE_HOUR = 60 * ONE_MINUTE;
 
-    /** Un dia. */
+    /** One day. */
     public static final long ONE_DAY = 24 * ONE_HOUR;
 
-    /** Una semana. */
+    /** One week. */
     public static final long ONE_WEEK = 7 * ONE_DAY;
 
-    /** El tipo declarado en {@link #getNotificationInfo}. */
+    /** The type declared in {@link #getNotificationInfo}. */
     private static final String NOTIFICATION_CLASS = "javax.management.timer.TimerNotification";
 
-    /** Las inscripciones, en orden de alta. */
+    /** The registrations, in registration order. */
     private final Map<Integer, Registration> table = new LinkedHashMap<Integer, Registration>();
 
-    /** El proximo identificador. Vuelve a 1 cuando la tabla queda vacia. */
+    /** The next identifier. It goes back to 1 when the table is left empty. */
     private int nextId = 1;
 
-    /** El numero de secuencia, que avanza en cada <b>envio</b>. */
+    /** The sequence number, which advances on every <b>send</b>. */
     private long sequence = 1;
 
-    /** Ver la nota de la clase sobre fechas pasadas. */
+    /** See the class note about past dates. */
     private boolean sendPastNotifications = false;
 
-    /** Null mientras el reloj esta parado. */
+    /** Null while the clock is stopped. */
     private java.util.Timer engine;
 
-    /** El agente donde esta registrado, o null. */
+    /** The agent it is registered in, or null. */
     private MBeanServer server;
 
-    /** El nombre bajo el que se registro, o null. */
+    /** The name it was registered under, or null. */
     private ObjectName objectName;
 
-    /** Un reloj parado y sin inscripciones. */
+    /** A stopped clock with no registrations. */
     public Timer() {
     }
 
     // ---- MBeanRegistration -----------------------------------------------------------------
 
-    /** Se queda con el agente y el nombre; no arranca nada. */
+    /** It keeps the agent and the name; it starts nothing. */
     public ObjectName preRegister(MBeanServer server, ObjectName name) throws Exception {
         this.server = server;
         this.objectName = name;
         return name;
     }
 
-    /** Nada que hacer. */
+    /** Nothing to do. */
     public void postRegister(Boolean registrationDone) {
     }
 
-    /** Nada que hacer: parar antes de tiempo dejaria avisos sin mandar si la baja falla. */
+    /** Nothing to do: stopping early would leave notices unsent if the unregistration failed. */
     public void preDeregister() throws Exception {
     }
 
-    /** Para el reloj: ya no hay a quien avisarle. */
+    /** Stops the clock: there is no longer anyone to notify. */
     public void postDeregister() {
         stop();
     }
 
     /**
-     * Que manda este MBean.
+     * What this MBean sends.
      *
-     * <p>Los tipos salen de las inscripciones que hay <b>en este momento</b>, ordenados. No pueden
-     * ser una lista fija porque los elige quien inscribe, no esta clase.
+     * <p>The types come from the registrations there are <b>right now</b>, sorted. They cannot be a
+     * fixed list because whoever registers chooses them, not this class.
      */
     public synchronized MBeanNotificationInfo[] getNotificationInfo() {
         TreeSet<String> types = new TreeSet<String>();
@@ -142,13 +147,13 @@ public class Timer extends NotificationBroadcasterSupport implements TimerMBean,
         };
     }
 
-    // ---- arranque y parada -----------------------------------------------------------------
+    // ---- starting and stopping ----------------------------------------------------------
 
     /**
-     * Arranca el reloj.
+     * Starts the clock.
      *
-     * <p>Aca se resuelven las fechas pasadas; ver la nota de la clase. Si ya estaba activo no hace
-     * nada, ni siquiera reprogramar.
+     * <p>This is where past dates are resolved; see the class note. If it was already active it
+     * does nothing, not even reschedule.
      */
     public synchronized void start() {
         if (this.engine != null) {
@@ -170,10 +175,10 @@ public class Timer extends NotificationBroadcasterSupport implements TimerMBean,
     }
 
     /**
-     * Para el reloj.
+     * Stops the clock.
      *
-     * <p>Las inscripciones quedan: un {@link #start} posterior las vuelve a programar, y las que
-     * hayan quedado atrasadas pasan por la regla de fechas pasadas.
+     * <p>The registrations stay: a later {@link #start} schedules them again, and those left
+     * overdue go through the past-date rule.
      */
     public synchronized void stop() {
         if (this.engine == null) {
@@ -189,9 +194,11 @@ public class Timer extends NotificationBroadcasterSupport implements TimerMBean,
         this.engine = null;
     }
 
-    // ---- altas y bajas ---------------------------------------------------------------------
+    // ---- registration and removal ---------------------------------------------------------
 
-    /** Ver {@link TimerMBean#addNotification(String, String, Object, Date, long, long, boolean)}. */
+    /**
+     * Ver {@link TimerMBean#addNotification(String, String, Object, Date, long, long, boolean)}.
+     */
     public synchronized Integer addNotification(String type, String message, Object userData,
                                                 Date date, long period, long nbOccurences,
                                                 boolean fixedRate) throws IllegalArgumentException {
@@ -211,7 +218,7 @@ public class Timer extends NotificationBroadcasterSupport implements TimerMBean,
         r.type = type;
         r.message = message;
         r.userData = userData;
-        // Copia: quien inscribio se puede quedar con el `Date` y mutarlo.
+        // A copy: whoever registered may keep the `Date` and mutate it.
         r.date = new Date(date.getTime());
         r.period = period;
         r.occurrences = nbOccurences;
@@ -280,19 +287,19 @@ public class Timer extends NotificationBroadcasterSupport implements TimerMBean,
         }
     }
 
-    // ---- consultas -------------------------------------------------------------------------
+    // ---- queries ---------------------------------------------------------------------------
 
-    /** Cuantas inscripciones hay. */
+    /** How many registrations there are. */
     public synchronized int getNbNotifications() {
         return this.table.size();
     }
 
-    /** Los identificadores de todas, en orden de alta. */
+    /** The identifiers of all of them, in registration order. */
     public synchronized Vector<Integer> getAllNotificationIDs() {
         return new Vector<Integer>(this.table.keySet());
     }
 
-    /** Los de ese tipo; vacio si no hay ninguna. */
+    /** Those of that type; empty if there are none. */
     public synchronized Vector<Integer> getNotificationIDs(String type) {
         Vector<Integer> found = new Vector<Integer>();
         for (Registration r : this.table.values()) {
@@ -303,49 +310,49 @@ public class Timer extends NotificationBroadcasterSupport implements TimerMBean,
         return found;
     }
 
-    /** El tipo, o null si ese identificador no existe. */
+    /** The type, or null if that identifier does not exist. */
     public synchronized String getNotificationType(Integer id) {
         Registration r = lookup(id);
         return (r == null) ? null : r.type;
     }
 
-    /** El mensaje, o null. */
+    /** The message, or null. */
     public synchronized String getNotificationMessage(Integer id) {
         Registration r = lookup(id);
         return (r == null) ? null : r.message;
     }
 
-    /** El dato adjunto, o null. */
+    /** The attached data, or null. */
     public synchronized Object getNotificationUserData(Integer id) {
         Registration r = lookup(id);
         return (r == null) ? null : r.userData;
     }
 
-    /** La proxima fecha de disparo, o null. Copia, para que no la muevan desde afuera. */
+    /** The next firing date, or null. A copy, so that it is not moved from outside. */
     public synchronized Date getDate(Integer id) {
         Registration r = lookup(id);
         return (r == null) ? null : new Date(r.date.getTime());
     }
 
-    /** El periodo, o null. */
+    /** The period, or null. */
     public synchronized Long getPeriod(Integer id) {
         Registration r = lookup(id);
         return (r == null) ? null : Long.valueOf(r.period);
     }
 
-    /** Los disparos que quedan, o null. Ver el nombre en {@link TimerMBean#getNbOccurences}. */
+    /** The firings left, or null. See the name in {@link TimerMBean#getNbOccurences}. */
     public synchronized Long getNbOccurences(Integer id) {
         Registration r = lookup(id);
         return (r == null) ? null : Long.valueOf(r.occurrences);
     }
 
-    /** Si cuenta desde la fecha original, o null. */
+    /** Whether it counts from the original date, or null. */
     public synchronized Boolean getFixedRate(Integer id) {
         Registration r = lookup(id);
         return (r == null) ? null : Boolean.valueOf(r.fixedRate);
     }
 
-    /** Ver la nota de la clase sobre fechas pasadas. */
+    /** See the class note about past dates. */
     public boolean getSendPastNotifications() {
         return this.sendPastNotifications;
     }
@@ -355,24 +362,24 @@ public class Timer extends NotificationBroadcasterSupport implements TimerMBean,
         this.sendPastNotifications = value;
     }
 
-    /** Si esta corriendo. */
+    /** Whether it is running. */
     public boolean isActive() {
         return this.engine != null;
     }
 
-    /** Si no hay ninguna inscripcion. */
+    /** Whether there is no registration at all. */
     public synchronized boolean isEmpty() {
         return this.table.isEmpty();
     }
 
-    // ---- adentro ---------------------------------------------------------------------------
+    // ---- internals -------------------------------------------------------------------------
 
-    /** La busqueda que usan todos los consultores; null es una respuesta valida. */
+    /** The lookup all the getters use; null is a valid answer. */
     private Registration lookup(Integer id) {
         return (id == null) ? null : this.table.get(id);
     }
 
-    /** Da de baja una inscripcion y cancela lo que tuviera programado. */
+    /** Removes a registration and cancels whatever it had scheduled. */
     private void drop(Registration r) {
         if (r.task != null) {
             r.task.cancel();
@@ -384,7 +391,7 @@ public class Timer extends NotificationBroadcasterSupport implements TimerMBean,
         }
     }
 
-    /** Programa el proximo disparo de una inscripcion cuya fecha ya esta en el futuro. */
+    /** Schedules the next firing of a registration whose date is already in the future. */
     private void schedule(Registration r) {
         if (this.engine == null) {
             return;
@@ -395,14 +402,14 @@ public class Timer extends NotificationBroadcasterSupport implements TimerMBean,
     }
 
     /**
-     * Resuelve una inscripcion cuya fecha ya paso. Ver la nota de la clase.
+     * Resolves a registration whose date has passed. See the class note.
      *
-     * <p>Cuando hay que mandarla, se la <b>programa para ya</b> en vez de mandarla en el acto: el
-     * aviso sale por el hilo del reloj como cualquier otro, y no adentro de {@link #start} en el
-     * hilo de quien arranca. La diferencia se nota --un oyente lento colgaria el arranque-- y es lo
-     * que hace que un disparo atrasado y uno normal se comporten igual.
+     * <p>When it has to be sent, it is <b>scheduled for now</b> instead of being sent on the spot:
+     * the notice goes out through the clock's thread like any other, and not inside {@link #start}
+     * on the thread of whoever started it. The difference shows --a slow listener would hang the
+     * start-- and it is what makes an overdue firing and a normal one behave the same.
      *
-     * @param now el instante contra el que se compara, tomado una sola vez por el llamador
+     * @param now the instant compared against, taken only once by the caller
      */
     private void catchUp(Registration r, long now) {
         if (this.sendPastNotifications) {
@@ -411,7 +418,7 @@ public class Timer extends NotificationBroadcasterSupport implements TimerMBean,
             return;
         }
         if (r.period == 0) {
-            // De una sola vez y sin mandar: no queda nada que programar.
+            // One-shot and not sent: there is nothing left to schedule.
             drop(r);
             return;
         }
@@ -420,10 +427,10 @@ public class Timer extends NotificationBroadcasterSupport implements TimerMBean,
     }
 
     /**
-     * Corre una fecha hacia adelante de a periodos enteros hasta pasar {@code now}.
+     * Runs a date forward in whole periods until it passes {@code now}.
      *
-     * <p>Las repeticiones que se saltearon <b>no</b> se descuentan de las ocurrencias; ver la nota
-     * de la clase sobre por que.
+     * <p>The repetitions that were skipped are <b>not</b> subtracted from the occurrences; see the
+     * class note for why.
      */
     private static long advance(long from, long period, long now) {
         long next = from;
@@ -433,7 +440,7 @@ public class Timer extends NotificationBroadcasterSupport implements TimerMBean,
         return next;
     }
 
-    /** Manda el aviso de una inscripcion. */
+    /** Sends a registration's notice. */
     private void fire(Registration r) {
         long seq = this.sequence;
         this.sequence = this.sequence + 1;
@@ -444,10 +451,10 @@ public class Timer extends NotificationBroadcasterSupport implements TimerMBean,
     }
 
     /**
-     * Lo que corre en el hilo del reloj cuando llega la fecha.
+     * What runs on the clock's thread when the date arrives.
      *
-     * <p>Toma el candado del {@link Timer} igual que los metodos publicos, asi que un disparo no se
-     * cruza con un alta o una baja a mitad de camino.
+     * <p>It takes the {@link Timer}'s lock just like the public methods, so a firing does not cross
+     * with a registration or a removal halfway through.
      */
     private final class Alarm extends TimerTask {
 
@@ -460,7 +467,7 @@ public class Timer extends NotificationBroadcasterSupport implements TimerMBean,
         public void run() {
             synchronized (Timer.this) {
                 Registration r = this.registration;
-                // Pudo darse de baja entre que se programo y que llego la hora.
+                // It may have been removed between being scheduled and the time arriving.
                 if (Timer.this.table.get(r.id) != r) {
                     return;
                 }
@@ -480,7 +487,7 @@ public class Timer extends NotificationBroadcasterSupport implements TimerMBean,
                 long base = r.fixedRate ? r.date.getTime() : now;
                 long next = base + r.period;
                 if (next <= now) {
-                    // El reloj venia atrasado: se salta a la proxima ranura futura.
+                    // The clock was behind: skip to the next future slot.
                     next = advance(next, r.period, now);
                 }
                 r.date = new Date(next);
@@ -489,7 +496,7 @@ public class Timer extends NotificationBroadcasterSupport implements TimerMBean,
         }
     }
 
-    /** Una inscripcion: lo que se pidio mas lo que falta por hacer. */
+    /** A registration: what was asked for plus what is left to do. */
     private static final class Registration {
         private Integer id;
         private String type;

@@ -1,24 +1,23 @@
 package java.awt.image;
 
 /**
- * Una tabla de consulta: por cada componente de un pixel, que valor sale para cada valor que entra.
+ * A lookup table: for each component of a pixel, which value comes out for each value that goes in.
  *
- * <p>Es la forma de expresar cualquier transformacion **por componente y sin memoria** -- ajustar
- * el brillo, invertir, aplicar una curva-- de manera que aplicarla sea leer un arreglo y no evaluar
- * una funcion por pixel.
+ * <p>It is the way of expressing any transformation **per component and without memory** -- adjust
+ * the brightness, invert, apply a curve-- in such a way that applying it is reading an array and
+ * not evaluating a function per pixel.
  *
- * <h2>El desplazamiento</h2>
+ * <h2>The offset</h2>
  *
- * <p>{@link #getOffset} es lo que se le **resta** al valor de entrada antes de indexar. Una tabla
- * que solo cubre el rango 100..200 se guarda con 101 entradas y desplazamiento 100, en vez de con
- * 201 entradas de las cuales las primeras 100 no se usan. Olvidarse de restarlo da una imagen
- * corrida.
+ * <p>{@link #getOffset} is what is **subtracted** from the input value before indexing. A table
+ * that only covers the range 100..200 is stored with 101 entries and offset 100, instead of with
+ * 201 entries of which the first 100 are not used. Forgetting to subtract it gives a shifted image.
  *
- * <h2>Una tabla o una por componente</h2>
+ * <h2>One table or one per component</h2>
  *
- * <p>Las subclases aceptan las dos formas. Con **una sola** tabla, se aplica a todos los
- * componentes; con **varias**, una a cada uno. La segunda forma es la que permite, por ejemplo,
- * subir el rojo sin tocar el verde.
+ * <p>The subclasses accept both forms. With a **single** table, it is applied to every component;
+ * with **several**, one to each. The second form is the one that allows, for example, raising the
+ * red without touching the green.
  */
 public abstract class LookupTable {
 
@@ -26,9 +25,9 @@ public abstract class LookupTable {
     private final int offset;
 
     /**
-     * Una tabla para `numComponents` componentes, con ese desplazamiento.
+     * A table for `numComponents` components, with that offset.
      *
-     * @throws IllegalArgumentException si el desplazamiento es negativo o no hay componentes
+     * @throws IllegalArgumentException if the offset is negative or there are no components
      */
     protected LookupTable(int offset, int numComponents) {
         if (offset < 0) {
@@ -41,21 +40,21 @@ public abstract class LookupTable {
         this.offset = offset;
     }
 
-    /** Cuantos componentes cubre. */
+    /** How many components it covers. */
     public int getNumComponents() {
         return this.numComponents;
     }
 
-    /** Lo que se le resta a la entrada antes de indexar. Ver la nota de la clase. */
+    /** What is subtracted from the input before indexing. See the note of the class. */
     public int getOffset() {
         return this.offset;
     }
 
     /**
-     * Aplica la tabla a un pixel.
+     * Applies the table to a pixel.
      *
-     * @param src los componentes que entran
-     * @param dst donde dejar los que salen, o nulo para que se reserve uno
+     * @param src the components that go in
+     * @param dst where to leave the ones that come out, or null for one to be reserved
      */
     public abstract int[] lookupPixel(int[] src, int[] dst);
 }

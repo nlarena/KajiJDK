@@ -1,24 +1,25 @@
 package javax.xml.crypto;
 
 /**
- * KajiLibrary's javax.xml.crypto.URIDereferencer -- resuelve un {@link URIReference} en datos.
+ * KajiLibrary's javax.xml.crypto.URIDereferencer -- resolves a {@link URIReference} into data.
  *
- * <p>Un metodo, y es el punto de control mas importante del paquete. Validar una firma implica ir a
- * buscar lo que las referencias apuntan, y esas referencias las escribio <b>quien firmo</b>.
+ * <p>One method, and it is the most important control point of the package. Validating a signature
+ * means fetching what the references point to, and those references were written by <b>whoever
+ * signed</b>.
  *
- * <p>Sin un dereferenciador propio, validar una firma de origen desconocido puede hacer que el
- * programa lea archivos locales o haga pedidos de red que nadie pidio -- el mismo problema que XXE,
- * con otro nombre. Poner uno que solo resuelva referencias internas al documento es la defensa
- * habitual.
+ * <p>Without a dereferencer of one's own, validating a signature of unknown origin can make the
+ * program read local files or make network requests nobody asked for -- the same problem as XXE,
+ * under another name. Putting in one that only resolves references internal to the document is the
+ * usual defence.
  *
- * <p>Se instala en el {@link XMLCryptoContext}, asi que vale para toda la validacion.
+ * <p>It is installed in the {@link XMLCryptoContext}, so it holds for the whole validation.
  */
 public interface URIDereferencer {
 
     /**
-     * Los datos que esa referencia apunta.
+     * The data that reference points to.
      *
-     * @throws URIReferenceException si no se puede resolver
+     * @throws URIReferenceException if it cannot be resolved
      */
     Data dereference(URIReference uriReference, XMLCryptoContext context)
         throws URIReferenceException;

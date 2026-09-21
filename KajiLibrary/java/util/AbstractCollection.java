@@ -76,14 +76,14 @@ public abstract class AbstractCollection<E> implements Collection<E> {
         b.append(']');
         return b.toString();
     }
-    // ---- las operaciones en bloque -----------------------------------------------------------
+    // ---- the bulk operations -----------------------------------------------------------------
     //
-    // Todas trabajan sobre una **foto** (`toArray()`) y no sobre el iterador vivo. El JDK las
-    // escribe con `Iterator.remove()`, y ese camino esta cerrado aca: nuestro `Iterator.remove()`
-    // es el `default` que lanza, y ningun iterador concreto de la biblioteca lo implementa. Sacar
-    // la foto primero cuesta una pasada mas y es correcto con cualquier iterador.
+    // All of them work over a **snapshot** (`toArray()`) and not over the live iterator. The JDK
+    // writes them with `Iterator.remove()`, and that road is closed here: our `Iterator.remove()` is
+    // the `default` that throws, and no concrete iterator in the library implements it. Taking the
+    // snapshot first costs one extra pass and is correct with any iterator.
 
-    // Todos los elementos de `c` estan en esta coleccion.
+    // Every element of `c` is in this collection.
     public boolean containsAll(Collection<?> c) {
         Iterator<?> it = c.iterator();
         while (it.hasNext()) {
@@ -94,54 +94,54 @@ public abstract class AbstractCollection<E> implements Collection<E> {
         return true;
     }
 
-    // Agrega todos los de `c`; devuelve si esta coleccion cambio.
+    // It adds all of `c`'s; it returns whether this collection changed.
     public boolean addAll(Collection<? extends E> c) {
-        boolean cambio = false;
+        boolean changed = false;
         Iterator<? extends E> it = c.iterator();
         while (it.hasNext()) {
             if (this.add(it.next())) {
-                cambio = true;
+                changed = true;
             }
         }
-        return cambio;
+        return changed;
     }
 
-    // Quita **todas** las apariciones de cada elemento de `c`.
+    // It removes **every** occurrence of each element of `c`.
     //
-    // El bucle interno no es de mas: `remove(Object)` saca una sola aparicion, y una lista puede
-    // tener varias del mismo elemento. Sin el, `removeAll` dejaria duplicados atras.
+    // The inner loop is not superfluous: `remove(Object)` takes out a single occurrence, and a list
+    // can hold several of the same element. Without it, `removeAll` would leave duplicates behind.
     public boolean removeAll(Collection<?> c) {
-        boolean cambio = false;
-        Object[] foto = this.toArray();
+        boolean changed = false;
+        Object[] snapshot = this.toArray();
         int i = 0;
-        while (i < foto.length) {
-            if (c.contains(foto[i])) {
-                while (this.remove(foto[i])) {
-                    cambio = true;
+        while (i < snapshot.length) {
+            if (c.contains(snapshot[i])) {
+                while (this.remove(snapshot[i])) {
+                    changed = true;
                 }
             }
             i = i + 1;
         }
-        return cambio;
+        return changed;
     }
 
-    // Deja solo los elementos que tambien estan en `c`.
+    // It keeps only the elements that are also in `c`.
     public boolean retainAll(Collection<?> c) {
-        boolean cambio = false;
-        Object[] foto = this.toArray();
+        boolean changed = false;
+        Object[] snapshot = this.toArray();
         int i = 0;
-        while (i < foto.length) {
-            if (!c.contains(foto[i])) {
-                while (this.remove(foto[i])) {
-                    cambio = true;
+        while (i < snapshot.length) {
+            if (!c.contains(snapshot[i])) {
+                while (this.remove(snapshot[i])) {
+                    changed = true;
                 }
             }
             i = i + 1;
         }
-        return cambio;
+        return changed;
     }
 
-    // Los elementos en un arreglo nuevo, en el orden del iterador.
+    // The elements in a fresh array, in the iterator's order.
     public Object[] toArray() {
         Object[] out = new Object[this.size()];
         int i = 0;
@@ -153,14 +153,14 @@ public abstract class AbstractCollection<E> implements Collection<E> {
         return out;
     }
 
-    // Los elementos en `a` si entran, o en un arreglo nuevo **del mismo tipo dinamico** si no.
+    // The elements in `a` if they fit, or in a fresh array **of the same runtime type** if not.
     //
-    // Ese "del mismo tipo dinamico" es el motivo de que exista la sobrecarga: el llamador pasa un
-    // `String[0]` justamente para recibir un `String[]` y no un `Object[]`. Hace falta reflexion
-    // para crearlo, porque el tipo del arreglo solo se conoce en runtime.
+    // That "of the same runtime type" is why the overload exists: the caller passes a `String[0]`
+    // precisely in order to get back a `String[]` and not an `Object[]`. Reflection is needed to
+    // create it, because the array's type is only known at run time.
     //
-    // Si `a` sobra lugar, la posicion siguiente al ultimo elemento queda en null: es como el
-    // llamador sabe donde termina lo copiado cuando reusa un arreglo mas grande.
+    // If `a` has room left over, the position after the last element is left null: it is how the
+    // caller knows where what was copied ends when reusing a larger array.
     public <T> T[] toArray(T[] a) {
         int n = this.size();
         Object[] dest = a;

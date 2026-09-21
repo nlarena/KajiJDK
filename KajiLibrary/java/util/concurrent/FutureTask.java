@@ -19,13 +19,13 @@ public class FutureTask<V> implements RunnableFuture<V> {
     // ConstantValue at class initialization, every constant reads back as 0, and
     // `state = COMPLETED` would leave the task looking unfinished forever (finding #112).
     // Dropping `final` forces a real `<clinit>`, which does run.
-    private static int NEW = 0;
+    private static final int NEW = 0;
     // It finished normally and `result` holds the value.
     private static int COMPLETED = 1;
     // It threw, and `failure` holds what it threw.
     private static int FAILED = 2;
     // It was cancelled before running to completion.
-    private static int CANCELLED = 3;
+    private static final int CANCELLED = 3;
 
     private final Object sync = new Object();
     private final Callable<V> callable;
@@ -200,7 +200,7 @@ public class FutureTask<V> implements RunnableFuture<V> {
     }
 
     // No `throws` on these two overrides — see #104 on ExecutionException.
-    public V get() throws InterruptedException {
+    public V get() throws InterruptedException, ExecutionException {
         V value;
         synchronized (sync) {
             while (state == NEW) {
@@ -211,7 +211,8 @@ public class FutureTask<V> implements RunnableFuture<V> {
         return value;
     }
 
-    public V get(long timeout, TimeUnit unit) throws InterruptedException {
+    public V get(long timeout, TimeUnit unit)
+            throws InterruptedException, ExecutionException, TimeoutException {
         V value;
         synchronized (sync) {
             if (state == NEW) {
@@ -230,7 +231,7 @@ public class FutureTask<V> implements RunnableFuture<V> {
 
     // Turn the finished state into a value or the matching exception. Caller holds sync
     // and has checked that the task is no longer NEW.
-    private V report() {
+    private V report() throws ExecutionException {
         if (state == CANCELLED) {
             throw new CancellationException();
         }

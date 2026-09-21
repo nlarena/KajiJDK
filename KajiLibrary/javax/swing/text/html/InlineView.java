@@ -11,27 +11,27 @@ import javax.swing.text.View;
 import javax.swing.text.ViewFactory;
 
 /**
- * La vista del texto que va en la linea.
+ * The view of the text that goes on the line.
  *
- * <h2>Que agrega sobre una etiqueta comun</h2>
+ * <h2>What it adds over a plain label</h2>
  *
- * <p>Una {@link LabelView} dibuja texto con una tipografia. Esta saca esa tipografia y ese color de
- * la hoja de estilos en lugar de los atributos de Swing, y ademas hace caso a
+ * <p>A {@link LabelView} draws text with a typeface. This one takes that typeface and that
+ * colour from the style sheet instead of from the Swing attributes, and also obeys
  * <code>white-space: nowrap</code>.
  *
- * <h2>Cortar o no cortar</h2>
+ * <h2>To break or not to break</h2>
  *
- * <p>{@link #getBreakWeight} contesta cuanto le conviene a esta vista partirse para que el parrafo
- * entre en el ancho. Con <code>nowrap</code> contesta que no se parte de ninguna manera, y entonces
- * el parrafo se pasa de largo. Es lo que pide esa propiedad: mejor una linea larga que una palabra
- * cortada donde el autor dijo que no.
+ * <p>{@link #getBreakWeight} answers how much it suits this view to split so that the paragraph
+ * fits the width. With <code>nowrap</code> it answers that it does not split in any way, and
+ * then the paragraph runs over. It is what that property asks for: better a long line than a
+ * word broken where the author said not to.
  */
 public class InlineView extends LabelView {
 
     private AttributeSet attr;
-    private boolean sinCorte;
+    private boolean noBreak;
 
-    /** Una vista de texto en linea sobre ese elemento. */
+    /** An inline text view on that element. */
     public InlineView(Element elem) {
         super(elem);
         StyleSheet sheet = getStyleSheet();
@@ -57,22 +57,22 @@ public class InlineView extends LabelView {
         return (attr == null) ? super.getAttributes() : attr;
     }
 
-    /** Cuanto conviene partir aca; cero si el CSS lo prohibe. */
+    /** How much it suits to break here; zero if the CSS forbids it. */
     public int getBreakWeight(int axis, float pos, float len) {
-        if (sinCorte) {
+        if (noBreak) {
             return BadBreakWeight;
         }
         return super.getBreakWeight(axis, pos, len);
     }
 
     public View breakView(int axis, int offset, float pos, float len) {
-        if (sinCorte) {
+        if (noBreak) {
             return this;
         }
         return super.breakView(axis, offset, pos, len);
     }
 
-    /** Lee del CSS lo que cambia como se dibuja el texto. */
+    /** It reads from the CSS what changes how the text is drawn. */
     protected void setPropertiesFromAttributes() {
         super.setPropertiesFromAttributes();
         StyleSheet sheet = getStyleSheet();
@@ -81,9 +81,9 @@ public class InlineView extends LabelView {
         }
         AttributeSet a = getAttributes();
         Object ws = a.getAttribute(CSS.Attribute.WHITE_SPACE);
-        sinCorte = (ws != null && "nowrap".equals(ws.toString()));
-        // El color y la tipografia no se ponen desde aca: los pide GlyphView a los atributos, y
-        // los atributos ya son los que resolvio la hoja.
+        noBreak = (ws != null && "nowrap".equals(ws.toString()));
+        // The colour and the typeface are not set from here: GlyphView asks the attributes for
+                // them, and the attributes are already the ones the sheet resolved.
         Object dec = a.getAttribute(CSS.Attribute.TEXT_DECORATION);
         String d = (dec == null) ? "" : dec.toString();
         setUnderline(d.indexOf("underline") >= 0);
@@ -96,7 +96,7 @@ public class InlineView extends LabelView {
         }
     }
 
-    /** La hoja de estilos del documento, o nulo si el documento no es de HTML. */
+    /** The document's style sheet, or null if the document is not an HTML one. */
     protected StyleSheet getStyleSheet() {
         Document d = getDocument();
         if (d instanceof HTMLDocument) {

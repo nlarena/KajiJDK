@@ -1,19 +1,19 @@
 package org.w3c.dom.html;
 
 /**
- * Un `<frameset>`.
+ * A `<frameset>`.
  */
 public interface HTMLFrameSetElement extends HTMLElement {
 
-    /** El atributo `cols`. */
+    /** The `cols` attribute. */
     String getCols();
 
-    /** Fija el atributo `cols`. */
+    /** It sets the `cols` attribute. */
     void setCols(String cols);
 
-    /** Las filas, en una coleccion viva. */
+    /** The `rows` attribute: the heights of the rows of frames, as a string. */
     String getRows();
 
-    /** Fija las filas, en una coleccion viva. */
+    /** It sets the `rows` attribute. */
     void setRows(String rows);
 }

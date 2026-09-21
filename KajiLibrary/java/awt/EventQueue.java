@@ -7,25 +7,25 @@ import java.util.Deque;
 import java.util.EmptyStackException;
 
 /**
- * La cola por la que pasan todos los eventos de AWT, y el hilo que los atiende.
+ * The queue every AWT event goes through, and the thread that serves them.
  *
- * <p>Es el corazón de la regla más estricta de la interfaz gráfica: **todo lo que toca la pantalla
- * corre en un solo hilo**. No es una limitación técnica sino la única forma de que el estado de la
- * interfaz sea consistente sin poner un candado en cada componente.
+ * <p>It is the heart of the strictest rule of the graphical interface: **everything that touches
+ * the screen runs on a single thread**. It is not a technical limitation but the only way for the
+ * state of the interface to be consistent without putting a lock on every component.
  *
- * <p>De ahí salen {@link #invokeLater} e {@link #invokeAndWait}, que son la puerta de entrada legal
- * desde otro hilo: encolan trabajo para que lo corra el hilo de eventos. La diferencia entre las dos
- * es si el que llama espera, y esa espera es exactamente donde nace el abrazo mortal clásico —
- * llamar a `invokeAndWait` **desde** el hilo de eventos es esperarse a uno mismo, y por eso está
- * prohibido explícitamente.
+ * <p>From there come {@link #invokeLater} and {@link #invokeAndWait}, which are the legal way in
+ * from another thread: they queue work for the event thread to run. The difference between the two
+ * is whether the caller waits, and that wait is exactly where the classic deadlock is born —calling
+ * `invokeAndWait` **from** the event thread is waiting for oneself, and that is why it is forbidden
+ * explicitly.
  *
- * <p>{@link #push} y {@link #pop} permiten meter una cola propia por encima de la que hay. Es lo que
- * usa un diálogo modal: apila una cola que filtra lo que llega hasta que el diálogo se cierra.
+ * <p>{@link #push} and {@link #pop} allow putting a queue of one's own above the current one. It is
+ * what a modal dialog uses: it stacks a queue that filters what arrives until the dialog closes.
  *
- * <p><strong>Esta cola funciona de verdad.</strong> Atender eventos no necesita ventanas, sólo un
- * hilo, así que acá hay uno real: los eventos que se encolan se despachan, `invokeLater` corre lo
- * que se le da e `invokeAndWait` espera a que termine. Lo que no hay es quién **produzca** eventos de
- * teclado o de ratón, porque para eso sí hace falta un sistema de ventanas.
+ * <p><strong>This queue really works.</strong> Serving events needs no windows, only a thread, so
+ * here there is a real one: the events that get queued are dispatched, `invokeLater` runs what it
+ * is given and `invokeAndWait` waits for it to finish. What there is not is anyone to **produce**
+ * keyboard or mouse events, because for that a windowing system is needed.
  */
 public class EventQueue {
 
@@ -34,18 +34,18 @@ public class EventQueue {
     private EventQueue previousQueue;
     private Thread dispatchThread;
     private volatile DispatcherAccess.Dispatcher foreign;
-    private volatile boolean detiene;
+    private volatile boolean stopped;
 
     private static AWTEvent currentEvent;
     private static long mostRecentEventTime = System.currentTimeMillis();
-    private static final Object ESTATICO = new Object();
+    private static final Object STATIC_LOCK = new Object();
 
-    /** Una cola nueva, con su hilo todavía sin arrancar. */
+    /** A new queue, with its thread not started yet. */
     public EventQueue() {
     }
 
-    /** La cola que efectivamente atiende: la última que se apiló. */
-    private EventQueue laDeArriba() {
+    /** The queue that actually serves: the last one stacked. */
+    private EventQueue topmost() {
         EventQueue q = this;
         while (q.nextQueue != null) {
             q = q.nextQueue;
@@ -54,41 +54,41 @@ public class EventQueue {
     }
 
     /**
-     * Encola un evento.
+     * Queues an event.
      *
-     * <p>Arranca el hilo de despacho la primera vez que hace falta: una cola que nadie usa no
-     * debería costar un hilo.
+     * <p>It starts the dispatch thread the first time it is needed: a queue nobody uses should not
+     * cost a thread.
      *
-     * @throws NullPointerException si el evento es `null`
+     * @throws NullPointerException if the event is `null`
      */
     public void postEvent(AWTEvent theEvent) {
         if (theEvent == null) {
             throw new NullPointerException("theEvent");
         }
-        EventQueue q = this.laDeArriba();
+        EventQueue q = this.topmost();
         synchronized (q) {
             q.queue.addLast(theEvent);
-            q.arrancarHilo();
+            q.startDispatchThread();
             q.notifyAll();
         }
     }
 
-    /** Arranca el hilo de despacho si todavía no está. */
-    private void arrancarHilo() {
+    /** Starts the dispatch thread if it is not up yet. */
+    private void startDispatchThread() {
         if (this.dispatchThread != null) {
             return;
         }
-        Thread t = new Thread(new Bombeo(), "AWT-EventQueue");
+        Thread t = new Thread(new Pump(), "AWT-EventQueue");
         t.setDaemon(true);
         this.dispatchThread = t;
         t.start();
     }
 
-    /** El bucle que saca eventos y los despacha. */
-    private final class Bombeo implements Runnable {
+    /** The loop that takes events out and dispatches them. */
+    private final class Pump implements Runnable {
 
         public void run() {
-            while (!EventQueue.this.detiene) {
+            while (!EventQueue.this.stopped) {
                 AWTEvent e;
                 try {
                     e = EventQueue.this.getNextEvent();
@@ -100,8 +100,8 @@ public class EventQueue {
                 try {
                     EventQueue.this.dispatchEvent(e);
                 } catch (RuntimeException re) {
-                    // Un evento que tira no puede matar al hilo de despacho: la interfaz entera
-                    // dejaria de responder por un error de un solo oyente.
+                    // An event that throws cannot kill the dispatch thread: the whole interface
+                    // would stop responding because of a single listener's error.
                     System.err.println("Exception occurred during event dispatching:");
                     re.printStackTrace();
                 }
@@ -110,12 +110,12 @@ public class EventQueue {
     }
 
     /**
-     * Saca el evento siguiente, esperando si no hay ninguno.
+     * Takes the next event out, waiting if there is none.
      *
-     * @throws InterruptedException si se interrumpe el hilo mientras espera
+     * @throws InterruptedException if the thread is interrupted while waiting
      */
     public AWTEvent getNextEvent() throws InterruptedException {
-        EventQueue q = this.laDeArriba();
+        EventQueue q = this.topmost();
         synchronized (q) {
             while (q.queue.isEmpty()) {
                 q.wait();
@@ -125,24 +125,24 @@ public class EventQueue {
     }
 
     /**
-     * Mira el evento siguiente sin sacarlo.
+     * Looks at the next event without taking it out.
      *
-     * @return el evento, o `null` si la cola está vacía
+     * @return the event, or `null` if the queue is empty
      */
     public AWTEvent peekEvent() {
-        EventQueue q = this.laDeArriba();
+        EventQueue q = this.topmost();
         synchronized (q) {
             return q.queue.peekFirst();
         }
     }
 
     /**
-     * Mira el primer evento de ese identificador sin sacarlo.
+     * Looks at the first event with that identifier without taking it out.
      *
-     * @return el evento, o `null` si no hay ninguno de ésos
+     * @return the event, or `null` if there is none of those
      */
     public AWTEvent peekEvent(int id) {
-        EventQueue q = this.laDeArriba();
+        EventQueue q = this.topmost();
         synchronized (q) {
             java.util.Iterator<AWTEvent> it = q.queue.iterator();
             while (it.hasNext()) {
@@ -156,12 +156,12 @@ public class EventQueue {
     }
 
     /**
-     * Despacha un evento a quien corresponda.
+     * Dispatches an event to whoever it belongs to.
      *
-     * <p>Un evento que se atiende solo —un {@link ActiveEvent}— se despacha a sí mismo; el resto va
-     * a su fuente. Redefinirlo es la forma de ver todo lo que pasa por la cola.
+     * <p>An event that serves itself —an {@link ActiveEvent}— is dispatched to itself; the rest go
+     * to their source. Overriding it is the way to see everything that goes through the queue.
      *
-     * @throws NullPointerException si el evento es `null`
+     * @throws NullPointerException if the event is `null`
      */
     protected void dispatchEvent(AWTEvent event) {
         DispatcherAccess.Dispatcher d = this.foreign;
@@ -209,7 +209,7 @@ public class EventQueue {
      * toolkit's. And the question always goes to the topmost queue, which is the one serving.
      */
     final boolean isDispatchThreadImpl() {
-        EventQueue q = this.laDeArriba();
+        EventQueue q = this.topmost();
         DispatcherAccess.Dispatcher d = q.foreign;
         if (d != null) {
             return d.isDispatchThread();
@@ -219,35 +219,35 @@ public class EventQueue {
 
     /** Stores the foreign dispatcher in the topmost queue, which is the one serving. */
     final void installDispatcher(DispatcherAccess.Dispatcher d) {
-        this.laDeArriba().foreign = d;
+        this.topmost().foreign = d;
     }
 
     /**
-     * Cuándo pasó el último evento de entrada.
+     * When the last input event happened.
      *
-     * <p>Sirve para detectar inactividad del usuario: la diferencia con la hora actual es cuánto
-     * hace que no toca nada.
+     * <p>It serves to detect user inactivity: the difference with the current time is how long it
+     * has been since they touched anything.
      */
     public static long getMostRecentEventTime() {
-        synchronized (ESTATICO) {
+        synchronized (STATIC_LOCK) {
             return mostRecentEventTime;
         }
     }
 
     /**
-     * El evento que se está despachando ahora.
+     * The event being dispatched right now.
      *
-     * @return el evento, o `null` si no se está despachando ninguno
+     * @return the event, or `null` if none is being dispatched
      */
     public static AWTEvent getCurrentEvent() {
-        synchronized (ESTATICO) {
+        synchronized (STATIC_LOCK) {
             return currentEvent;
         }
     }
 
-    /** Anota qué evento se está despachando y cuándo. */
+    /** Notes which event is being dispatched and when. */
     static void setCurrentEventAndMostRecentTime(AWTEvent e) {
-        synchronized (ESTATICO) {
+        synchronized (STATIC_LOCK) {
             currentEvent = e;
             if (e instanceof java.awt.event.InputEvent) {
                 mostRecentEventTime = ((java.awt.event.InputEvent) e).getWhen();
@@ -260,19 +260,19 @@ public class EventQueue {
     }
 
     /**
-     * Mete otra cola por encima de ésta.
+     * Puts another queue above this one.
      *
-     * <p>Los eventos que quedaban en ésta se pasan a la nueva: si se perdieran, un diálogo modal
-     * haría desaparecer los repintados pendientes al abrirse.
+     * <p>The events still left in this one are passed to the new one: if they were lost, a modal
+     * dialog would make the pending repaints disappear as it opened.
      *
-     * @throws NullPointerException si la cola es `null`
+     * @throws NullPointerException if the queue is `null`
      * @throws RuntimeException if this queue gave up dispatching to another toolkit
      */
     public void push(EventQueue newEventQueue) {
         if (newEventQueue == null) {
             throw new NullPointerException("newEventQueue");
         }
-        EventQueue q = this.laDeArriba();
+        EventQueue q = this.topmost();
         synchronized (q) {
             if (q.foreign != null) {
                 // Stacking another queue on top would cover the foreign dispatcher without taking
@@ -289,61 +289,61 @@ public class EventQueue {
     }
 
     /**
-     * Saca esta cola de la pila y devuelve lo que quede en ella a la de abajo.
+     * Takes this queue off the stack and gives whatever is left in it back to the one below.
      *
-     * @throws EmptyStackException si esta cola no está apilada sobre otra
+     * @throws EmptyStackException if this queue is not stacked on top of another
      */
     protected void pop() throws EmptyStackException {
-        EventQueue anterior = this.previousQueue;
-        if (anterior == null) {
+        EventQueue prev = this.previousQueue;
+        if (prev == null) {
             throw new EmptyStackException();
         }
         synchronized (this) {
             while (!this.queue.isEmpty()) {
-                anterior.postEvent(this.queue.removeFirst());
+                prev.postEvent(this.queue.removeFirst());
             }
-            this.detiene = true;
+            this.stopped = true;
             this.notifyAll();
         }
-        anterior.nextQueue = null;
+        prev.nextQueue = null;
         this.previousQueue = null;
     }
 
     /**
-     * Un bucle secundario, para esperar sin bloquear el hilo de eventos.
+     * A secondary loop, to wait without blocking the event thread.
      *
-     * @return el bucle, o `null` si no se puede crear
+     * @return the loop, or `null` if it cannot be created
      */
     public SecondaryLoop createSecondaryLoop() {
-        DispatcherAccess.Dispatcher d = this.laDeArriba().foreign;
+        DispatcherAccess.Dispatcher d = this.topmost().foreign;
         if (d != null) {
             return d.secondaryLoop();
         }
-        return new BucleSecundario();
+        return new SimpleSecondaryLoop();
     }
 
     /**
-     * Un bucle secundario que espera de verdad.
+     * A secondary loop that really waits.
      *
-     * <p>El hilo de eventos sigue atendiendo por su lado; esto sólo bloquea a quien llame
-     * {@link SecondaryLoop#enter}, que es lo que un diálogo modal necesita.
+     * <p>The event thread keeps serving on its side; this only blocks whoever calls
+     * {@link SecondaryLoop#enter}, which is what a modal dialog needs.
      */
-    private static final class BucleSecundario implements SecondaryLoop {
+    private static final class SimpleSecondaryLoop implements SecondaryLoop {
 
-        private boolean corriendo;
+        private boolean running;
 
         public boolean enter() {
             synchronized (this) {
-                if (this.corriendo) {
+                if (this.running) {
                     return false;
                 }
-                this.corriendo = true;
-                while (this.corriendo) {
+                this.running = true;
+                while (this.running) {
                     try {
                         this.wait();
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
-                        this.corriendo = false;
+                        this.running = false;
                         return false;
                     }
                 }
@@ -353,25 +353,25 @@ public class EventQueue {
 
         public boolean exit() {
             synchronized (this) {
-                if (!this.corriendo) {
+                if (!this.running) {
                     return false;
                 }
-                this.corriendo = false;
+                this.running = false;
                 this.notifyAll();
                 return true;
             }
         }
     }
 
-    /** Si el hilo actual es el que atiende los eventos. */
+    /** Whether the current thread is the one that serves the events. */
     public static boolean isDispatchThread() {
         return Thread.currentThread().getName().startsWith("AWT-EventQueue");
     }
 
     /**
-     * Encola trabajo para el hilo de eventos y vuelve enseguida.
+     * Queues work for the event thread and returns right away.
      *
-     * @throws NullPointerException si la tarea es `null`
+     * @throws NullPointerException if the task is `null`
      */
     public static void invokeLater(Runnable runnable) {
         if (runnable == null) {
@@ -382,15 +382,15 @@ public class EventQueue {
     }
 
     /**
-     * Encola trabajo para el hilo de eventos y **espera** a que termine.
+     * Queues work for the event thread and **waits** for it to finish.
      *
-     * <p>Llamarlo desde el hilo de eventos sería esperarse a uno mismo, y por eso está prohibido: no
-     * es una restricción arbitraria, es un abrazo mortal seguro.
+     * <p>Calling it from the event thread would be waiting for oneself, and that is why it is
+     * forbidden: it is not an arbitrary restriction, it is a sure deadlock.
      *
-     * @throws NullPointerException si la tarea es `null`
-     * @throws InterruptedException si se interrumpe el hilo mientras espera
-     * @throws InvocationTargetException si la tarea tiró algo
-     * @throws Error si se lo llama desde el hilo de eventos
+     * @throws NullPointerException if the task is `null`
+     * @throws InterruptedException if the thread is interrupted while waiting
+     * @throws InvocationTargetException if the task threw something
+     * @throws Error if it is called from the event thread
      */
     public static void invokeAndWait(Runnable runnable)
             throws InterruptedException, InvocationTargetException {
@@ -400,13 +400,13 @@ public class EventQueue {
         if (isDispatchThread()) {
             throw new Error("Cannot call invokeAndWait from the event dispatcher thread");
         }
-        Object candado = new Object();
+        Object lock = new Object();
         InvocationEvent event =
-                new InvocationEvent(Toolkit.getDefaultToolkit(), runnable, candado, true);
-        synchronized (candado) {
+                new InvocationEvent(Toolkit.getDefaultToolkit(), runnable, lock, true);
+        synchronized (lock) {
             Toolkit.getDefaultToolkit().getSystemEventQueue().postEvent(event);
             while (!event.isDispatched()) {
-                candado.wait();
+                lock.wait();
             }
         }
         Throwable t = event.getThrowable();

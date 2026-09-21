@@ -1,27 +1,27 @@
 package javax.accessibility;
 
 /**
- * La descripción de un ícono, para quien no lo puede ver.
+ * The description of an icon, for whoever cannot see it.
  *
- * <p>La descripción es lo único que importa acá: un ícono sin descripción es invisible para una
- * ayuda técnica, aunque esté perfectamente dibujado. El tamaño está para que se pueda maquetar un
- * hueco equivalente.
+ * <p>The description is the only thing that matters here: an icon without a description is
+ * invisible to an assistive technology, however perfectly drawn. The size is there so that an
+ * equivalent gap can be laid out.
  */
 public interface AccessibleIcon {
 
     /**
-     * Qué representa el ícono, en palabras.
+     * What the icon represents, in words.
      *
-     * @return la descripción, o `null` si no tiene
+     * @return the description, or `null` if it has none
      */
     String getAccessibleIconDescription();
 
-    /** Cambia la descripción. */
+    /** Changes the description. */
     void setAccessibleIconDescription(String description);
 
-    /** Ancho del ícono, o -1 si no se sabe. */
+    /** Width of the icon, or -1 if not known. */
     int getAccessibleIconWidth();
 
-    /** Alto del ícono, o -1 si no se sabe. */
+    /** Height of the icon, or -1 if not known. */
     int getAccessibleIconHeight();
 }

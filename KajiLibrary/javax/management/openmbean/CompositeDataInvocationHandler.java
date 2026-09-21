@@ -5,52 +5,53 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 
 /**
- * El manejador que hace que un {@link CompositeData} se pueda usar a traves de una interfaz de
- * getters.
+ * The handler that makes a {@link CompositeData} usable through an interface of getters.
  *
- * <p>Es lo que resuelve el problema del lado del cliente. Un `CompositeData` se consulta por cadenas
- * --`datos.get("nombre")`-- y eso no lo revisa el compilador: una falta de ortografia en la clave
- * aparece en ejecucion. Con esto, uno declara una interfaz `Persona` con `getNombre()` y
- * `getEdad()`, envuelve el dato en un proxy con este manejador, y a partir de ahi el compilador
- * comprueba los nombres y los tipos.
+ * <p>It is what solves the problem on the client side. A {@code CompositeData} is queried by
+ * strings --{@code data.get("name")}-- and the compiler does not check that: a typo in the key
+ * shows up at run time. With this, you declare an interface {@code Person} with {@code getName()}
+ * and {@code getAge()}, wrap the data in a proxy with this handler, and from then on the compiler
+ * checks the names and the types.
  *
- * <p>La traduccion de metodo a item es la convencion de beans: `getFoo()` lee el item `foo` y
- * `isFoo()` tambien --el prefijo `is` solo se acepta para `boolean`, que es donde Java lo permite--.
- * La primera letra se pasa a minuscula salvo que las dos primeras sean mayusculas, que es la regla
- * de `Introspector` y la que hace que `getURL()` lea el item `URL` y no `uRL`.
+ * <p>The method-to-item translation is the beans convention: {@code getFoo()} reads the item
+ * {@code foo} and so does {@code isFoo()} --the {@code is} prefix is only accepted for
+ * {@code boolean}, which is where Java allows it. The first letter is lower-cased unless the first
+ * two are upper case, which is {@code Introspector}'s rule and what makes {@code getURL()} read the
+ * item {@code URL} and not {@code uRL}.
  *
- * <p>Solo se aceptan getters sin argumentos. Un metodo con parametros no puede corresponder a un
- * item, y llamarlo es {@link IllegalArgumentException} en vez de un item inventado.
+ * <p>Only getters with no arguments are accepted. A method with parameters cannot correspond to an
+ * item, and calling it is an {@link IllegalArgumentException} instead of a made-up item.
  */
 public class CompositeDataInvocationHandler implements InvocationHandler {
 
     private final CompositeData compositeData;
 
     /**
-     * Un manejador sobre ese dato.
+     * A handler over that data.
      *
-     * @throws IllegalArgumentException si el dato es nulo
+     * @throws IllegalArgumentException if the data is null
      */
     public CompositeDataInvocationHandler(CompositeData compositeData) {
         if (compositeData == null) {
-            throw new IllegalArgumentException("el dato compuesto no puede ser nulo");
+            throw new IllegalArgumentException("the composite data cannot be null");
         }
         this.compositeData = compositeData;
     }
 
-    /** El dato que este manejador expone. */
+    /** The data this handler exposes. */
     public CompositeData getCompositeData() {
         return this.compositeData;
     }
 
     /**
-     * Contesta la llamada leyendo el item que corresponde.
+     * Answers the call by reading the matching item.
      *
-     * <p>`equals`, `hashCode` y `toString` se atienden aparte y no van a los items: un proxy que
-     * buscara un item llamado `toString` seria inusable con cualquier herramienta que imprima
-     * objetos.
+     * <p>{@code equals}, {@code hashCode} and {@code toString} are served apart and do not go to
+     * the items: a proxy that looked for an item called {@code toString} would be unusable with any
+     * tool that prints objects.
      *
-     * @throws IllegalArgumentException si el metodo no es un getter, o si no hay item con ese nombre
+     * @throws IllegalArgumentException if the method is not a getter, or if there is no item with
+     *     that name
      */
     public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
         String name = method.getName();
@@ -70,17 +71,17 @@ public class CompositeDataInvocationHandler implements InvocationHandler {
         String item = itemOf(name, method);
         if (args != null && args.length > 0) {
             throw new IllegalArgumentException(
-                    "un getter de un dato compuesto no lleva argumentos: " + name);
+                    "a composite data getter takes no arguments: " + name);
         }
         if (!this.compositeData.containsKey(item)) {
             throw new IllegalArgumentException(
-                    "no hay un item llamado " + item + " en este dato compuesto");
+                    "there is no item named " + item + " in this composite data");
         }
         return this.compositeData.get(item);
     }
 
-    // Dos proxies son iguales si sus datos lo son. Comparar los proxies con `equals` los mandaria de
-    // vuelta a este mismo metodo y no terminaria nunca.
+    // Two proxies are equal if their data are. Comparing the proxies with `equals` would send them
+    // back into this same method and never end.
     private boolean equalsProxy(Object proxy, Object other) {
         if (other == null) {
             return false;
@@ -100,20 +101,20 @@ public class CompositeDataInvocationHandler implements InvocationHandler {
     }
 
     private static String itemOf(String name, Method method) {
-        String resto;
+        String rest;
         if (name.startsWith("get") && name.length() > 3) {
-            resto = name.substring(3);
+            rest = name.substring(3);
         } else if (name.startsWith("is") && name.length() > 2
                 && method.getReturnType() == Boolean.TYPE) {
-            resto = name.substring(2);
+            rest = name.substring(2);
         } else {
-            throw new IllegalArgumentException(name + " no es un getter");
+            throw new IllegalArgumentException(name + " is not a getter");
         }
-        // La regla de `Introspector`: `getURL` da `URL`, `getNombre` da `nombre`. Sin ella, un item
-        // cuyo nombre empieza con una sigla no se encontraria nunca.
-        if (resto.length() > 1 && Character.isUpperCase(resto.charAt(1))) {
-            return resto;
+        // `Introspector`'s rule: `getURL` gives `URL`, `getName` gives `name`. Without it, an item
+        // whose name starts with an acronym would never be found.
+        if (rest.length() > 1 && Character.isUpperCase(rest.charAt(1))) {
+            return rest;
         }
-        return Character.toLowerCase(resto.charAt(0)) + resto.substring(1);
+        return Character.toLowerCase(rest.charAt(0)) + rest.substring(1);
     }
 }

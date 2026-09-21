@@ -13,30 +13,30 @@ import java.io.Writer;
 import javax.swing.Action;
 
 /**
- * El juego de edicion de texto plano: el que usa cualquier componente que no diga otra cosa.
+ * The plain text editor kit: the one any component that does not say otherwise uses.
  *
- * <h2>Las acciones tienen nombre</h2>
+ * <h2>The actions have names</h2>
  *
- * <p>Las constantes de esta clase son los nombres de las acciones, no las acciones. Un mapa de
- * teclas ata una combinacion a un <em>nombre</em>, y recien al instalarse se resuelve contra las
- * acciones que el juego ofrece. Esa vuelta permite escribir la tabla de atajos sin tener las
- * acciones a mano y cambiar el juego sin rehacer la tabla.
+ * <p>This class's constants are the actions' names, not the actions. A key map ties a
+ * combination to a <em>name</em>, and only on installing is it resolved against the actions the
+ * kit offers. That detour allows writing the shortcut table without having the actions at hand
+ * and changing the kit without redoing the table.
  *
- * <p>Los nombres siguen un patron que conviene leer una vez: {@code selection*} es la misma accion
- * extendiendo la seleccion en vez de mover el cursor, y {@code *Action} es siempre un sufijo.
- * "Avanzar un caracter" y "avanzar seleccionando" son dos acciones y no una con parametro, porque
- * una tecla ata una accion.
+ * <p>The names follow a pattern worth reading once: {@code selection*} is the same action
+ * extending the selection instead of moving the cursor, and {@code *Action} is always a suffix.
+ * "Move forward one character" and "move forward selecting" are two actions and not one with
+ * a parameter, because a key ties one action.
  *
- * <h2>Que hacen las que estan</h2>
+ * <h2>What those that are there do</h2>
  *
- * <p>Las que necesitan pantalla o portapapeles —cortar, pegar, avanzar de a paginas— estan como
- * clase y como nombre, y no hacen nada: sin foco de teclado no hay quien las dispare, y sin
- * portapapeles no habria de donde sacar el texto. Las que trabajan sobre el documento —escribir un
- * caracter, insertar un fin de linea, una tabulacion— funcionan.
+ * <p>Those that need a screen or a clipboard --cut, paste, move by pages-- are there as a class
+ * and as a name, and do nothing: without keyboard focus there is nobody to fire them, and
+ * without a clipboard there would be nowhere to get the text from. Those that work on the
+ * document --typing a character, inserting a line ending, a tab-- work.
  */
 public class DefaultEditorKit extends EditorKit {
 
-    /** La propiedad del documento con el fin de linea que traia el archivo leido. */
+    /** The document property with the line ending the file that was read carried. */
     public static final String EndOfLineStringProperty = "__EndOfLine__";
 
     public static final String insertContentAction = "insert-content";
@@ -120,12 +120,12 @@ public class DefaultEditorKit extends EditorKit {
     public DefaultEditorKit() {
     }
 
-    /** Texto plano. */
+    /** Plain text. */
     public String getContentType() {
         return "text/plain";
     }
 
-    /** La fabrica que arma vistas de texto plano: una linea por linea. */
+    /** The factory that builds plain text views: one line per line. */
     public ViewFactory getViewFactory() {
         return null;
     }
@@ -142,7 +142,7 @@ public class DefaultEditorKit extends EditorKit {
         return new PlainDocument();
     }
 
-    /** Lee texto plano; los tres fines de linea se normalizan a uno. */
+    /** It reads plain text; the three line endings are normalized to one. */
     public void read(InputStream in, Document doc, int pos) throws IOException,
             BadLocationException {
         read(new InputStreamReader(in), doc, pos);
@@ -155,17 +155,17 @@ public class DefaultEditorKit extends EditorKit {
         osw.flush();
     }
 
-    /** Los atributos con los que se escribe; en texto plano, ninguno. */
+    /** The attributes things are written with; in plain text, none. */
     MutableAttributeSet getInputAttributes() {
         return null;
     }
 
     /**
-     * Lee del flujo e inserta.
+     * It reads from the stream and inserts.
      *
-     * <p>Un {@code \r\n} o un {@code \r} sueltos se guardan como {@code \n}, y el fin de linea que
-     * traia el archivo queda anotado en la propiedad {@link #EndOfLineStringProperty}: asi se
-     * puede escribir de vuelta como estaba.
+     * <p>A loose {@code \r\n} or {@code \r} is kept as {@code \n}, and the line ending the file
+     * carried is noted in the {@link #EndOfLineStringProperty} property: that way it can be written
+     * back as it was.
      */
     public void read(Reader in, Document doc, int pos) throws IOException, BadLocationException {
         char[] buff = new char[4096];
@@ -177,7 +177,7 @@ public class DefaultEditorKit extends EditorKit {
         boolean wasEmpty = (doc.getLength() == 0);
         AttributeSet attr = null;
 
-        StringBuilder acumulado = new StringBuilder();
+        StringBuilder accumulated = new StringBuilder();
         while ((nch = in.read(buff, 0, buff.length)) != -1) {
             last = 0;
             for (int counter = 0; counter < nch; counter++) {
@@ -185,36 +185,36 @@ public class DefaultEditorKit extends EditorKit {
                 if (c == '\r') {
                     if (lastWasCR) {
                         isCR = true;
-                        acumulado.append(buff, last, counter - last);
-                        acumulado.append('\n');
+                        accumulated.append(buff, last, counter - last);
+                        accumulated.append('\n');
                         last = counter + 1;
                     } else {
                         lastWasCR = true;
-                        acumulado.append(buff, last, counter - last);
+                        accumulated.append(buff, last, counter - last);
                         last = counter + 1;
                     }
                 } else if (lastWasCR) {
                     if (c == '\n') {
                         isCRLF = true;
-                        acumulado.append('\n');
+                        accumulated.append('\n');
                         last = counter + 1;
                     } else {
                         isCR = true;
-                        acumulado.append('\n');
+                        accumulated.append('\n');
                         last = counter;
                     }
                     lastWasCR = false;
                 }
             }
             if (last < nch) {
-                acumulado.append(buff, last, nch - last);
+                accumulated.append(buff, last, nch - last);
             }
         }
         if (lastWasCR) {
-            acumulado.append('\n');
+            accumulated.append('\n');
             isCR = true;
         }
-        doc.insertString(pos, acumulado.toString(), attr);
+        doc.insertString(pos, accumulated.toString(), attr);
 
         if (wasEmpty) {
             if (isCRLF) {
@@ -227,7 +227,7 @@ public class DefaultEditorKit extends EditorKit {
         }
     }
 
-    /** Escribe el tramo, poniendo el fin de linea que el documento recuerda. */
+    /** It writes the stretch, putting the line ending the document remembers. */
     public void write(Writer out, Document doc, int pos, int len) throws IOException,
             BadLocationException {
         if ((pos < 0) || ((pos + len) > doc.getLength())) {
@@ -262,10 +262,10 @@ public class DefaultEditorKit extends EditorKit {
     }
 
     /**
-     * Escribe el caracter que se tecleo.
+     * It writes the character that was typed.
      *
-     * <p>Es la accion por omision de un mapa de teclas: la que atiende todo lo que no tiene un
-     * atajo propio. Filtra los caracteres de control, que no se escriben.
+     * <p>It is a key map's default action: the one that attends to everything that has no shortcut
+     * of its own. It filters out the control characters, which are not written.
      */
     public static class DefaultKeyTypedAction extends TextAction {
 
@@ -291,7 +291,7 @@ public class DefaultEditorKit extends EditorKit {
         }
     }
 
-    /** Inserta el texto del comando del evento. */
+    /** It inserts the text of the event's command. */
     public static class InsertContentAction extends TextAction {
 
         public InsertContentAction() {
@@ -314,7 +314,7 @@ public class DefaultEditorKit extends EditorKit {
         }
     }
 
-    /** Inserta un fin de linea: es lo que hace Enter. */
+    /** It inserts a line ending: it is what Enter does. */
     public static class InsertBreakAction extends TextAction {
 
         public InsertBreakAction() {
@@ -332,7 +332,7 @@ public class DefaultEditorKit extends EditorKit {
         }
     }
 
-    /** Inserta una tabulacion. */
+    /** It inserts a tab. */
     public static class InsertTabAction extends TextAction {
 
         public InsertTabAction() {
@@ -350,7 +350,7 @@ public class DefaultEditorKit extends EditorKit {
         }
     }
 
-    /** Un sonido: la respuesta a algo que no se puede hacer. */
+    /** A sound: the answer to something that cannot be done. */
     public static class BeepAction extends TextAction {
 
         public BeepAction() {
@@ -362,7 +362,7 @@ public class DefaultEditorKit extends EditorKit {
         }
     }
 
-    /** Cortar; sin portapapeles no hace nada. Ver la nota de la clase. */
+    /** Cut; without a clipboard it does nothing. See the class note. */
     public static class CutAction extends TextAction {
 
         public CutAction() {
@@ -373,7 +373,7 @@ public class DefaultEditorKit extends EditorKit {
         }
     }
 
-    /** Copiar; sin portapapeles no hace nada. */
+    /** Copy; without a clipboard it does nothing. */
     public static class CopyAction extends TextAction {
 
         public CopyAction() {
@@ -384,7 +384,7 @@ public class DefaultEditorKit extends EditorKit {
         }
     }
 
-    /** Pegar; sin portapapeles no hace nada. */
+    /** Paste; without a clipboard it does nothing. */
     public static class PasteAction extends TextAction {
 
         public PasteAction() {
@@ -395,7 +395,7 @@ public class DefaultEditorKit extends EditorKit {
         }
     }
 
-    /** Borra el caracter de antes del cursor, o la seleccion. */
+    /** It removes the character before the cursor, or the selection. */
     static class DeletePrevCharAction extends TextAction {
 
         DeletePrevCharAction() {
@@ -422,7 +422,7 @@ public class DefaultEditorKit extends EditorKit {
         }
     }
 
-    /** Borra el caracter que sigue al cursor, o la seleccion. */
+    /** It removes the character after the cursor, or the selection. */
     static class DeleteNextCharAction extends TextAction {
 
         DeleteNextCharAction() {
@@ -449,7 +449,7 @@ public class DefaultEditorKit extends EditorKit {
         }
     }
 
-    /** Pone el componente de solo lectura. */
+    /** It makes the component read-only. */
     static class ReadOnlyAction extends TextAction {
 
         ReadOnlyAction() {
@@ -478,7 +478,7 @@ public class DefaultEditorKit extends EditorKit {
         }
     }
 
-    /** Selecciona todo. */
+    /** It selects everything. */
     static class SelectAllAction extends TextAction {
 
         SelectAllAction() {
@@ -493,7 +493,7 @@ public class DefaultEditorKit extends EditorKit {
         }
     }
 
-    /** Deshace la seleccion sin mover el cursor. */
+    /** It undoes the selection without moving the cursor. */
     static class UnselectAction extends TextAction {
 
         UnselectAction() {
@@ -508,7 +508,7 @@ public class DefaultEditorKit extends EditorKit {
         }
     }
 
-    /** Da vuelta el sentido de escritura del componente. */
+    /** It flips the component's writing direction. */
     static class ToggleComponentOrientationAction extends TextAction {
 
         ToggleComponentOrientationAction() {
@@ -532,11 +532,11 @@ public class DefaultEditorKit extends EditorKit {
     }
 
     /**
-     * Las acciones de movimiento del cursor.
+     * The cursor movement actions.
      *
-     * <p>Todas necesitan el arbol de vistas para saber que es "una linea mas abajo", y ese arbol
-     * lo tiene el UI, que en esta biblioteca no existe todavia para texto. Estan como clase para
-     * que la lista de acciones este completa; cuando haya UI, funcionan.
+     * <p>They all need the view tree to know what "one line further down" is, and that tree is
+     * held by the UI, which in this library does not exist yet for text. They are there as classes
+     * so that the list of actions is complete; when there is a UI, they work.
      */
     static class NextVisualPositionAction extends TextAction {
 
@@ -628,7 +628,7 @@ public class DefaultEditorKit extends EditorKit {
         }
     }
 
-    /** Al principio del documento. */
+    /** To the beginning of the document. */
     static class BeginAction extends TextAction {
 
         private final boolean select;
@@ -650,7 +650,7 @@ public class DefaultEditorKit extends EditorKit {
         }
     }
 
-    /** Al final del documento. */
+    /** To the end of the document. */
     static class EndAction extends TextAction {
 
         private final boolean select;
@@ -673,7 +673,7 @@ public class DefaultEditorKit extends EditorKit {
         }
     }
 
-    /** Selecciona la palabra, la linea o el parrafo; necesitan el arbol de vistas. */
+    /** It selects the word, the line or the paragraph; they need the view tree. */
     static class SelectWordAction extends TextAction {
 
         SelectWordAction() {
@@ -712,7 +712,7 @@ public class DefaultEditorKit extends EditorKit {
         }
     }
 
-    /** Avanza o retrocede una pantalla; necesita saber cuanto se ve. */
+    /** It moves forward or back one screen; it needs to know how much is seen. */
     static class VerticalPageAction extends TextAction {
 
         VerticalPageAction(String nm, int direction, boolean select) {

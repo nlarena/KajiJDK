@@ -1,8 +1,9 @@
 package com.sun.source.doctree;
 
 /**
- * El nodo de `{@docRoot}`, que se sustituye por la ruta relativa a la raiz de la
- * documentacion generada. No tiene contenido: todo lo que dice esta en ser de este tipo.
+ * The node of `{@docRoot}`, which is substituted by the path relative to the root of
+ * the generated documentation. It has no content: everything it says is in its being of this
+ * type.
  */
 public interface DocRootTree extends InlineTagTree {
 }

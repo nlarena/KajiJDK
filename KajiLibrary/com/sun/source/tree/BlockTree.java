@@ -3,12 +3,12 @@ package com.sun.source.tree;
 import java.util.List;
 
 /**
- * Un bloque `{ ... }`. {@link #isStatic} lo distingue de un inicializador estatico,
- * que tiene la misma forma.
+ * A `{ ... }` block. {@link #isStatic} tells it apart from a static initializer,
+ * which has the same shape.
  */
 public interface BlockTree extends StatementTree {
 
-    /** Si es un inicializador estatico y no un bloque comun. */
+    /** Whether it is a static initializer and not a common block. */
     boolean isStatic();
 
     List<? extends StatementTree> getStatements();

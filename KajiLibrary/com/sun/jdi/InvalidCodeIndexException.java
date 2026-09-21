@@ -1,21 +1,21 @@
 package com.sun.jdi;
 
 /**
- * InvalidCodeIndexException de la maquina depurada.
+ * InvalidCodeIndexException of the debugged machine.
  *
  * @since 1.3
  */
 public class InvalidCodeIndexException extends RuntimeException {
 
-    /** Sin detalle. */
+    /** With no detail. */
     public InvalidCodeIndexException() {
         super();
     }
 
     /**
-     * Con un mensaje.
+     * With a message.
      *
-     * @param s el mensaje
+     * @param s the message
      */
     public InvalidCodeIndexException(String s) {
         super(s);

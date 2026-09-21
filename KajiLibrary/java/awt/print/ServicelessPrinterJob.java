@@ -4,30 +4,30 @@ import java.awt.HeadlessException;
 import javax.print.attribute.PrintRequestAttributeSet;
 
 /**
- * El trabajo que devuelve {@code PrinterJob.getPrinterJob()} cuando no hay sistema de impresion.
+ * The job {@code PrinterJob.getPrinterJob()} returns when there is no printing system.
  *
- * <p>De acceso de paquete: no es API, es el detalle que hace que {@code getPrinterJob} pueda cumplir su
- * contrato de no devolver null. Ver la nota de {@link PrinterJob} sobre el alcance.
+ * <p>Package-private: it is not API, it is the detail that lets {@code getPrinterJob} keep its
+ * contract of never returning null. See the note in {@link PrinterJob} on the scope.
  *
- * <p>Lo que depende de la maquina falla de forma declarada; el resto --el nombre, las copias, la
- * cancelacion, el ajuste de formatos-- funciona de verdad, porque no necesita impresora.
+ * <p>What depends on the machine fails in a declared way; the rest --the name, the copies,
+ * cancellation, adjusting formats-- behaves as the JDK's does, because it needs no printer.
  */
 final class ServicelessPrinterJob extends PrinterJob {
 
-    /** Lo que se pidio imprimir; se guarda aunque no se pueda. */
+    /** What was asked to be printed; kept even though it cannot be printed. */
     private Pageable document;
 
-    /** Cuantas copias. */
+    /** How many copies. */
     private int copies = 1;
 
-    /** El nombre en la cola. */
+    /** The name in the queue. */
     private String jobName = "Java Printing";
 
     /**
-     * Si hay una impresion en curso. Nunca lo hay, porque {@link #print} falla enseguida.
+     * Whether a print is in progress. There never is, because {@link #print} fails at once.
      *
-     * <p>Existe porque {@link #cancel} solo tiene efecto durante una impresion, y sin este campo el
-     * motivo de que no haga nada no se leeria en el codigo.
+     * <p>It exists because {@link #cancel} only has an effect during a print, and without this
+     * field the reason it does nothing would not be readable in the code.
      */
     private volatile boolean printing = false;
 
@@ -54,46 +54,47 @@ final class ServicelessPrinterJob extends PrinterJob {
         this.document = document;
     }
 
-    /** No hay pantalla. */
+    /** There is no screen. */
     @Override
     public boolean printDialog() throws HeadlessException {
         throw new HeadlessException();
     }
 
     /**
-     * No hay pantalla, y eso gana sobre el control de null de la clase base.
+     * There is no screen, and that wins over the base class's null check.
      *
-     * <p>Es lo que hace el JDK sin pantalla: su subclase concreta comprueba primero y por eso
-     * {@code printDialog(null)} alla tampoco da {@code NullPointerException}.
+     * <p>It is what the JDK does with no screen: its concrete subclass checks first, and that is
+     * why {@code printDialog(null)} does not give a {@code NullPointerException} there either.
      */
     @Override
     public boolean printDialog(PrintRequestAttributeSet attributes) throws HeadlessException {
         throw new HeadlessException();
     }
 
-    /** No hay pantalla. */
+    /** There is no screen. */
     @Override
     public PageFormat pageDialog(PageFormat page) throws HeadlessException {
         throw new HeadlessException();
     }
 
-    /** Idem {@link #printDialog(PrintRequestAttributeSet)}. */
+    /** The same as {@link #printDialog(PrintRequestAttributeSet)}. */
     @Override
     public PageFormat pageDialog(PrintRequestAttributeSet attributes) throws HeadlessException {
         throw new HeadlessException();
     }
 
-    /** Sin impresora contra que ajustar, una copia tal cual. */
+    /** With no printer to adjust against, a copy as is. */
     @Override
     public PageFormat defaultPage(PageFormat page) {
         return (PageFormat) page.clone();
     }
 
     /**
-     * Acota el area imprimible a la hoja.
+     * Narrows the imageable area to the sheet.
      *
-     * <p>Es lo unico que se puede validar sin saber los margenes mecanicos de una impresora concreta, y
-     * ya alcanza para arreglar el error tipico: un area negativa o mas grande que el papel.
+     * <p>It is the only thing that can be validated without knowing the mechanical margins of a
+     * concrete printer, and it is already enough to fix the typical mistake: a negative area or one
+     * larger than the paper.
      */
     @Override
     public PageFormat validatePage(PageFormat page) {
@@ -108,7 +109,7 @@ final class ServicelessPrinterJob extends PrinterJob {
         return copy;
     }
 
-    /** No hay a donde mandarlo. */
+    /** There is nowhere to send it. */
     @Override
     public void print() throws PrinterException {
         throw new PrinterException("No print service found.");
@@ -124,7 +125,7 @@ final class ServicelessPrinterJob extends PrinterJob {
         return this.copies;
     }
 
-    /** El usuario del sistema, si se puede leer. */
+    /** The system user, if it can be read. */
     @Override
     public String getUserName() {
         try {
@@ -145,11 +146,11 @@ final class ServicelessPrinterJob extends PrinterJob {
     }
 
     /**
-     * Cancela la impresion en curso, si la hubiera.
+     * Cancels the print in progress, if there were one.
      *
-     * <p>No hay ninguna nunca, asi que no hace nada. Es lo mismo que hace el JDK cuando se lo llama
-     * fuera de una impresion --se comprobo contra el JDK 25--, y lo que dice la documentacion del
-     * metodo: cancela un trabajo <b>en curso</b>.
+     * <p>There never is, so it does nothing. It is the same as the JDK does when it is called
+     * outside a print --checked against JDK 25--, and what the method's documentation says: it
+     * cancels a job <b>in progress</b>.
      */
     @Override
     public void cancel() {
@@ -158,7 +159,7 @@ final class ServicelessPrinterJob extends PrinterJob {
         }
     }
 
-    /** Siempre false; ver {@link #cancel}. */
+    /** Always false; see {@link #cancel}. */
     @Override
     public boolean isCancelled() {
         return false;

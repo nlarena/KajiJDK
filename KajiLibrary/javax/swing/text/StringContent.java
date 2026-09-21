@@ -9,17 +9,17 @@ import javax.swing.undo.CannotUndoException;
 import javax.swing.undo.UndoableEdit;
 
 /**
- * El contenido mas simple: un arreglo de caracteres que se copia entero en cada edicion.
+ * The simplest content: an array of characters that is copied whole on every edit.
  *
- * <p>Sirve para documentos chicos y para entender que hace un {@link AbstractDocument.Content}
- * sin la aritmetica del hueco de {@link GapContent}. Cada insercion o borrado mueve todo lo que
- * viene despues, asi que escribir de a un caracter en un documento largo es cuadratico: por eso
- * los documentos de verdad usan {@code GapContent}.
+ * <p>It serves for small documents and for understanding what an
+ * {@link AbstractDocument.Content} does without {@link GapContent}'s gap arithmetic. Every
+ * insertion or removal moves everything that comes afterwards, so typing one character at a
+ * time in a long document is quadratic: that is why real documents use {@code GapContent}.
  *
- * <p>Las marcas —lo que hay detras de cada {@link Position}— se guardan en una lista de enteros
- * que se recorre entera en cada edicion. Las que ya no usa nadie se sacan cuando la lista crece,
- * mirando su cuenta de referencias: sin eso, un documento que se edita mucho acumularia marcas
- * muertas para siempre.
+ * <p>The marks --what is behind each {@link Position}-- are kept in a list of integers that is
+ * walked whole on every edit. Those nobody uses any more are taken out when the list grows, by
+ * looking at their reference count: without that, a document edited a lot would pile up dead
+ * marks for ever.
  */
 public final class StringContent implements AbstractDocument.Content, Serializable {
 
@@ -28,15 +28,15 @@ public final class StringContent implements AbstractDocument.Content, Serializab
     private char[] data;
     private int count;
 
-    /** Las marcas vivas; ver la nota de la clase. */
+    /** The live marks; see the class note. */
     transient Vector<PosRec> marks;
 
-    /** Un contenido con lugar para diez caracteres. */
+    /** A content with room for ten characters. */
     public StringContent() {
         this(10);
     }
 
-    /** Un contenido con lugar inicial para esa cantidad; siempre arranca con un fin de linea. */
+    /** A content with initial room for that many; it always starts with a line ending. */
     public StringContent(int initialLength) {
         if (initialLength < 2) {
             initialLength = 2;
@@ -62,7 +62,7 @@ public final class StringContent implements AbstractDocument.Content, Serializab
         return new InsertUndo(where, str.length());
     }
 
-    /** Devuelve una edicion que sabe reponer lo borrado; por eso guarda el texto. */
+    /** It returns an edit that knows how to put back what was removed; hence it keeps the text. */
     public UndoableEdit remove(int where, int nitems) throws BadLocationException {
         if (where + nitems >= count) {
             throw new BadLocationException("Invalid range", count);
@@ -84,10 +84,10 @@ public final class StringContent implements AbstractDocument.Content, Serializab
     }
 
     /**
-     * El texto en el segmento.
+     * The text in the segment.
      *
-     * <p>Apunta al arreglo propio, sin copiar: quien lo reciba no debe escribirlo. Es el trato de
-     * {@link Segment}, y lo que hace que dibujar texto no reserve memoria.
+     * <p>It points at its own array, without copying: whoever receives it must not write to it. It
+     * is {@link Segment}'s deal, and what keeps drawing text from allocating memory.
      */
     public void getChars(int where, int len, Segment chars) throws BadLocationException {
         if (where + len > count) {
@@ -98,7 +98,7 @@ public final class StringContent implements AbstractDocument.Content, Serializab
         chars.count = len;
     }
 
-    /** Una marca en esa posicion; dos posiciones iguales comparten la marca. */
+    /** A mark at that position; two equal positions share the mark. */
     public Position createPosition(int offset) throws BadLocationException {
         if (marks == null) {
             marks = new Vector<PosRec>();
@@ -106,7 +106,7 @@ public final class StringContent implements AbstractDocument.Content, Serializab
         return new StickyPosition(offset);
     }
 
-    /** Reemplaza un tramo por otro, agrandando el arreglo si hace falta. */
+    /** It replaces a stretch with another, growing the array if needed. */
     void replace(int offset, int length, char[] replArray, int replOffset, int replLength) {
         int delta = replLength - length;
         int src = offset + length;
@@ -120,7 +120,7 @@ public final class StringContent implements AbstractDocument.Content, Serializab
         count = count + delta;
     }
 
-    /** Agranda el arreglo al doble o a lo pedido, lo que sea mayor. */
+    /** It grows the array to double or to what was asked for, whichever is greater. */
     void resize(int ncount) {
         char[] ndata = new char[ncount * 2 + 1];
         System.arraycopy(data, 0, ndata, 0, count);
@@ -129,7 +129,7 @@ public final class StringContent implements AbstractDocument.Content, Serializab
 
     synchronized void updateMarksForInsert(int offset, int length) {
         if (offset == 0) {
-            // Una marca en cero no se corre: es el principio del documento.
+            // A mark at zero does not shift: it is the document's beginning.
             offset = 1;
         }
         int n = marks.size();
@@ -156,13 +156,13 @@ public final class StringContent implements AbstractDocument.Content, Serializab
             } else if (mark.offset >= (offset + length)) {
                 mark.offset = mark.offset - length;
             } else if (mark.offset >= offset) {
-                // Una marca dentro de lo borrado se pega al principio del hueco.
+                // A mark inside what was removed sticks to the beginning of the gap.
                 mark.offset = offset;
             }
         }
     }
 
-    /** Las marcas que caen en ese rango, para que una edicion pueda reponerlas al deshacer. */
+    /** The marks that fall in that range, so that an edit can put them back when undoing. */
     protected Vector<UndoPosRef> getPositionsInRange(Vector<UndoPosRef> v, int offset, int length) {
         int n = marks.size();
         int end = offset + length;
@@ -180,7 +180,7 @@ public final class StringContent implements AbstractDocument.Content, Serializab
         return placeIn;
     }
 
-    /** Vuelve a poner cada marca donde estaba; lo llama una edicion al deshacerse. */
+    /** It puts each mark back where it was; an edit calls it when undoing itself. */
     protected void updateUndoPositions(Vector<UndoPosRef> positions) {
         for (int counter = positions.size() - 1; counter >= 0; counter--) {
             UndoPosRef ref = positions.elementAt(counter);
@@ -189,10 +189,10 @@ public final class StringContent implements AbstractDocument.Content, Serializab
     }
 
     /**
-     * Una marca compartida: el entero al que apuntan una o mas {@link Position}.
+     * A shared mark: the integer one or more {@link Position}s point at.
      *
-     * <p>Estatica y no interna: no necesita el contenido, y nuestro javac todavia no pasa la
-     * instancia externa implicita cuando una clase interna crea a una hermana (#508).
+     * <p>Static and not inner: it does not need the content, and our javac does not yet pass the
+     * implicit outer instance when an inner class creates a sibling (#508).
      */
     static final class PosRec {
 
@@ -205,11 +205,11 @@ public final class StringContent implements AbstractDocument.Content, Serializab
     }
 
     /**
-     * Una posicion que se pega al texto.
+     * A position that sticks to the text.
      *
-     * <p>Al recolectarse marca su registro como no usado, y la proxima edicion lo saca de la
-     * lista. Es la unica forma de no crecer sin limite sin obligar al usuario a soltar posiciones
-     * a mano.
+     * <p>When it is collected it marks its record as unused, and the next edit takes it out of the
+     * list. It is the only way of not growing without limit without forcing the user to release
+     * positions by hand.
      */
     final class StickyPosition implements Position {
 
@@ -233,7 +233,7 @@ public final class StringContent implements AbstractDocument.Content, Serializab
         PosRec rec;
     }
 
-    /** Donde estaba una marca antes de una edicion, para reponerla al deshacer; estatica por #508. */
+    /** Where a mark was before an edit, to put it back when undoing; static because of #508. */
     static final class UndoPosRef {
 
         UndoPosRef(PosRec rec) {
@@ -249,7 +249,7 @@ public final class StringContent implements AbstractDocument.Content, Serializab
         protected int undoLocation;
     }
 
-    /** Deshacer una insercion es borrar lo insertado; rehacerla, volver a ponerlo. */
+    /** Undoing an insertion is removing what was inserted; redoing it, putting it back. */
     class InsertUndo extends AbstractUndoableEdit {
 
         protected InsertUndo(int offset, int length) {
@@ -295,7 +295,7 @@ public final class StringContent implements AbstractDocument.Content, Serializab
         protected Vector<UndoPosRef> posRefs;
     }
 
-    /** Deshacer un borrado es reponer el texto, y con el las marcas que quedaron adentro. */
+    /** Undoing a removal is putting back the text, and with it the marks that were left inside. */
     class RemoveUndo extends AbstractUndoableEdit {
 
         protected RemoveUndo(int offset, String string) {

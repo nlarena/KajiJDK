@@ -4,201 +4,203 @@ import java.io.InputStream;
 import java.io.OutputStream;
 
 /**
- * KajiLibrary's org.ietf.jgss.GSSContext -- una conversacion segura entre dos partes.
+ * KajiLibrary's org.ietf.jgss.GSSContext -- a secure conversation between two parties.
  *
- * <p>Es la interfaz central del paquete y tiene dos etapas bien separadas: primero se <b>establece</b>
- * el contexto intercambiando tokens, y despues se lo usa para proteger mensajes.
+ * <p>It is the central interface of the package and it has two well separated stages: first the
+ * context is <b>established</b> by exchanging tokens, and then it is used to protect messages.
  *
- * <h2>El establecimiento es un baile de tokens</h2>
+ * <h2>The establishment is a dance of tokens</h2>
  *
- * <p>Quien inicia llama a {@link #initSecContext} y obtiene un token; se lo manda al otro por donde
- * sea --GSS-API no transporta nada--, el otro se lo pasa a {@link #acceptSecContext} y obtiene otro,
- * y asi hasta que {@link #isEstablished} da true de los dos lados. Cuantas vueltas hacen falta
- * depende del mecanismo: por eso el bucle se escribe siempre igual y nunca se asume una sola vuelta.
+ * <p>The initiator calls {@link #initSecContext} and gets a token; it sends it to the other by
+ * whatever means --GSS-API transports nothing--, the other passes it to {@link #acceptSecContext}
+ * and gets another one, and so on until {@link #isEstablished} gives true on both sides. How many
+ * rounds are needed depends on the mechanism: that is why the loop is always written the same and a
+ * single round is never assumed.
  *
- * <h2>Lo que se pide antes, y lo que se obtiene despues</h2>
+ * <h2>What is asked for before, and what is obtained after</h2>
  *
- * <p>Los {@code request*} solo valen <b>antes</b> de empezar, y todos son pedidos y no ordenes: el
- * otro extremo o el mecanismo pueden no darlos. Por eso a cada uno le corresponde un {@code get*}
- * que dice que se consiguio, y comparar los dos es obligacion de quien usa el API. Pedir
- * {@link #requestConf} y no chequear {@link #getConfState} es mandar en claro creyendo que se
- * cifro -- el error mas caro de este paquete.
+ * <p>The {@code request*} are only valid <b>before</b> starting, and all of them are requests and
+ * not orders: the other end or the mechanism may not grant them. That is why each one has a
+ * matching {@code get*} that says what was obtained, and comparing the two is the duty of whoever
+ * uses the API. Asking for {@link #requestConf} and not checking {@link #getConfState} is sending
+ * in clear believing one encrypted -- the most expensive mistake of this package.
  *
- * <h2>Proteger mensajes: dos niveles</h2>
+ * <h2>Protecting messages: two levels</h2>
  *
- * <p>{@link #wrap} protege el mensaje entero --integridad, y cifrado si se pidio-- y devuelve un
- * token que reemplaza al mensaje. {@link #getMIC} deja el mensaje como esta y produce una etiqueta
- * <b>aparte</b>, que se verifica con {@link #verifyMIC}. La segunda sirve cuando el mensaje tiene
- * que seguir siendo legible para intermediarios que no participan de la seguridad.
+ * <p>{@link #wrap} protects the whole message --integrity, and encryption if it was asked for-- and
+ * returns a token that replaces the message. {@link #getMIC} leaves the message as it is and
+ * produces a label <b>apart</b>, which is verified with {@link #verifyMIC}. The second one serves
+ * when the message has to stay readable for intermediaries that take no part in the security.
  *
- * <p>{@link #getWrapSizeLimit} contesta cuanto se puede meter en un {@code wrap} sin pasarse de un
- * tamano de token dado. Existe porque la proteccion agranda, y cuanto depende del mecanismo y de si
- * hay cifrado: calcularlo a ojo es como se llega a tokens que el otro lado no puede recibir.
+ * <p>{@link #getWrapSizeLimit} answers how much can be put into a {@code wrap} without going past a
+ * given token size. It exists because protection makes things bigger, and by how much depends on
+ * the mechanism and on whether there is encryption: guessing it is how one ends up with tokens the
+ * other side cannot receive.
  *
- * <p>Cada metodo viene en dos formas, con arreglos y con flujos. La de flujos evita tener el mensaje
- * entero en memoria dos veces, que para un mensaje grande es la diferencia.
+ * <p>Each method comes in two forms, with arrays and with streams. The one with streams avoids
+ * having the whole message in memory twice, which for a large message is the difference.
  */
 public interface GSSContext {
 
-    /** El vencimiento por omision del mecanismo. */
+    /** The default expiry of the mechanism. */
     public static final int DEFAULT_LIFETIME = 0;
 
-    /** No vence. */
+    /** It does not expire. */
     public static final int INDEFINITE_LIFETIME = Integer.MAX_VALUE;
 
     /**
-     * Una vuelta del establecimiento, del lado que inicia.
+     * One round of the establishment, on the initiating side.
      *
-     * @return el token a mandarle al otro, o null si no hay mas nada que mandar
+     * @return the token to send to the other, or null if there is nothing more to send
      */
     byte[] initSecContext(byte[] inputBuf, int offset, int len) throws GSSException;
 
     /**
-     * Idem, con flujos.
+     * The same, with streams.
      *
-     * @return cuantos bytes se escribieron
+     * @return how many bytes were written
      */
     int initSecContext(InputStream inStream, OutputStream outStream) throws GSSException;
 
-    /** Una vuelta del establecimiento, del lado que acepta. */
+    /** One round of the establishment, on the accepting side. */
     byte[] acceptSecContext(byte[] inTok, int offset, int len) throws GSSException;
 
-    /** Idem, con flujos. */
+    /** The same, with streams. */
     void acceptSecContext(InputStream inStream, OutputStream outStream) throws GSSException;
 
-    /** Si ya se puede usar para proteger mensajes. */
+    /** Whether it can already be used to protect messages. */
     boolean isEstablished();
 
-    /** Libera lo que el contexto tenga. Despues de esto no sirve para nada. */
+    /** It releases whatever the context holds. After this it is good for nothing. */
     void dispose() throws GSSException;
 
     /**
-     * Cuanto mensaje entra en un token de ese tamano.
+     * How much message fits in a token of that size.
      *
-     * <p>Ver la nota de la clase sobre por que no se calcula a ojo.
+     * <p>See the note of the class on why it is not guessed.
      */
     int getWrapSizeLimit(int qop, boolean confReq, int maxTokenSize) throws GSSException;
 
-    /** Protege el mensaje y devuelve el token que lo reemplaza. */
+    /** It protects the message and returns the token that replaces it. */
     byte[] wrap(byte[] inBuf, int offset, int len, MessageProp msgProp) throws GSSException;
 
-    /** Idem, con flujos. */
+    /** The same, with streams. */
     void wrap(InputStream inStream, OutputStream outStream, MessageProp msgProp)
         throws GSSException;
 
     /**
-     * Deshace un {@link #wrap}.
+     * It undoes a {@link #wrap}.
      *
-     * <p>El {@code msgProp} vuelve <b>lleno</b> con lo que de verdad paso, incluidos los avisos de
-     * duplicado y desorden; ver {@link MessageProp}.
+     * <p>The {@code msgProp} comes back <b>filled in</b> with what really happened, including the
+     * warnings of duplicate and disorder; see {@link MessageProp}.
      */
     byte[] unwrap(byte[] inBuf, int offset, int len, MessageProp msgProp) throws GSSException;
 
-    /** Idem, con flujos. */
+    /** The same, with streams. */
     void unwrap(InputStream inStream, OutputStream outStream, MessageProp msgProp)
         throws GSSException;
 
-    /** La etiqueta de integridad de un mensaje que viaja aparte. Ver la nota de la clase. */
+    /** The integrity label of a message that travels apart. See the note of the class. */
     byte[] getMIC(byte[] inMsg, int offset, int len, MessageProp msgProp) throws GSSException;
 
-    /** Idem, con flujos. */
+    /** The same, with streams. */
     void getMIC(InputStream inStream, OutputStream outStream, MessageProp msgProp)
         throws GSSException;
 
     /**
-     * Comprueba una etiqueta contra su mensaje.
+     * It checks a label against its message.
      *
-     * @throws GSSException con {@link GSSException#BAD_MIC} si no corresponde
+     * @throws GSSException with {@link GSSException#BAD_MIC} if it does not match
      */
     void verifyMIC(byte[] inTok, int tokOffset, int tokLen, byte[] inMsg, int msgOffset, int msgLen,
                    MessageProp msgProp) throws GSSException;
 
-    /** Idem, con flujos. */
+    /** The same, with streams. */
     void verifyMIC(InputStream tokStream, InputStream msgStream, MessageProp msgProp)
         throws GSSException;
 
-    /** Serializa el contexto para pasarlo a otro proceso. */
+    /** It serialises the context in order to pass it to another process. */
     byte[] export() throws GSSException;
 
-    /** Pide autenticacion mutua. Antes de empezar; ver la nota de la clase. */
+    /** It asks for mutual authentication. Before starting; see the note of the class. */
     void requestMutualAuth(boolean state) throws GSSException;
 
-    /** Pide deteccion de repeticion. */
+    /** It asks for detection of replay. */
     void requestReplayDet(boolean state) throws GSSException;
 
-    /** Pide deteccion de desorden. */
+    /** It asks for detection of disorder. */
     void requestSequenceDet(boolean state) throws GSSException;
 
     /**
-     * Pide delegar la credencial al otro extremo.
+     * It asks for the credential to be delegated to the other end.
      *
-     * <p>Es el pedido mas caro de todos: el otro queda pudiendo actuar <b>en nombre de uno</b>
-     * contra terceros.
+     * <p>It is the most expensive request of all: the other is left able to act <b>on one's
+     * behalf</b> against third parties.
      */
     void requestCredDeleg(boolean state) throws GSSException;
 
-    /** Pide iniciar sin decir quien es. */
+    /** It asks to initiate without saying who one is. */
     void requestAnonymity(boolean state) throws GSSException;
 
-    /** Pide cifrado ademas de integridad. */
+    /** It asks for encryption besides integrity. */
     void requestConf(boolean state) throws GSSException;
 
-    /** Pide integridad. */
+    /** It asks for integrity. */
     void requestInteg(boolean state) throws GSSException;
 
-    /** Pide un vencimiento en segundos. */
+    /** It asks for an expiry in seconds. */
     void requestLifetime(int lifetime) throws GSSException;
 
-    /** Ata el contexto al canal; ver {@link ChannelBinding}. */
+    /** It ties the context to the channel; see {@link ChannelBinding}. */
     void setChannelBinding(ChannelBinding cb) throws GSSException;
 
-    /** Si la credencial se delego de verdad. */
+    /** Whether the credential really was delegated. */
     boolean getCredDelegState();
 
-    /** Si la autenticacion es mutua de verdad. */
+    /** Whether the authentication really is mutual. */
     boolean getMutualAuthState();
 
-    /** Si hay deteccion de repeticion de verdad. */
+    /** Whether there really is detection of replay. */
     boolean getReplayDetState();
 
-    /** Si hay deteccion de desorden de verdad. */
+    /** Whether there really is detection of disorder. */
     boolean getSequenceDetState();
 
-    /** Si el iniciador quedo anonimo de verdad. */
+    /** Whether the initiator really was left anonymous. */
     boolean getAnonymityState();
 
-    /** Si el contexto se puede exportar. */
+    /** Whether the context can be exported. */
     boolean isTransferable() throws GSSException;
 
     /**
-     * Si ya se pueden proteger mensajes.
+     * Whether messages can already be protected.
      *
-     * <p>Puede dar true <b>antes</b> de {@link #isEstablished}: algunos mecanismos habilitan la
-     * proteccion antes de terminar el ultimo intercambio.
+     * <p>It may give true <b>before</b> {@link #isEstablished}: some mechanisms enable the
+     * protection before finishing the last exchange.
      */
     boolean isProtReady();
 
-    /** Si hay cifrado de verdad. Ver la nota de la clase. */
+    /** Whether there really is encryption. See the note of the class. */
     boolean getConfState();
 
-    /** Si hay integridad de verdad. */
+    /** Whether there really is integrity. */
     boolean getIntegState();
 
-    /** Cuantos segundos le quedan. */
+    /** How many seconds it has left. */
     int getLifetime();
 
-    /** Quien inicio. */
+    /** Who initiated. */
     GSSName getSrcName() throws GSSException;
 
-    /** Contra quien se inicio. */
+    /** Against whom it was initiated. */
     GSSName getTargName() throws GSSException;
 
-    /** Que mecanismo quedo en uso. */
+    /** Which mechanism was left in use. */
     Oid getMech() throws GSSException;
 
-    /** La credencial que el otro delego, o null si no delego. */
+    /** The credential the other delegated, or null if it did not delegate. */
     GSSCredential getDelegCred() throws GSSException;
 
-    /** Si este lado es el que inicio. */
+    /** Whether this side is the one that initiated. */
     boolean isInitiator() throws GSSException;
 }

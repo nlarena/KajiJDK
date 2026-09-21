@@ -4,57 +4,62 @@ import java.util.Enumeration;
 import java.util.Properties;
 
 /**
- * El nombre **dentro de un** espacio de nombres, con la sintaxis que le dicta el proveedor.
+ * The name **within one** namespace, with the syntax the provider dictates.
  *
- * <h2>La diferencia con `CompositeName`</h2>
+ * <h2>The difference from `CompositeName`</h2>
  *
- * <p>`CompositeName` cruza espacios de nombres y por eso su sintaxis es fija. Este vive adentro de
- * uno solo, y ahi la sintaxis es la que el proveedor diga: LDAP separa con coma y cuenta de derecha
- * a izquierda, un sistema de archivos de Windows separa con contrabarra y de izquierda a derecha, y
- * un espacio plano no separa nada. Un componente de un `CompositeName` es, tipicamente, la forma de
- * cadena de un `CompoundName`.
+ * <p>`CompositeName` crosses namespaces and that is why its syntax is fixed. This one lives inside
+ * a single one, and there the syntax is whatever the provider says: LDAP separates with a comma and
+ * counts right to left, a Windows file system separates with a backslash and left to right, and a
+ * flat namespace separates nothing. A component of a `CompositeName` is, typically, the string form
+ * of a `CompoundName`.
  *
- * <h2>El `Properties` de sintaxis</h2>
+ * <h2>The syntax `Properties`</h2>
  *
- * <p>Las claves que se miran son `jndi.syntax.direction` --`left_to_right`, `right_to_left` o
- * `flat`--, `.separator`, `.separator2`, `.escape`, `.beginquote`, `.endquote`, `.beginquote2`,
- * `.endquote2`, `.ignorecase`, `.trimblanks`, `.ava` y `.typeval`. La direccion es obligatoria y
- * el separador lo es salvo en plano.
+ * <p>The keys looked at are `jndi.syntax.direction` --`left_to_right`, `right_to_left` or `flat`--,
+ * `.separator`, `.separator2`, `.escape`, `.beginquote`, `.endquote`, `.beginquote2`, `.endquote2`,
+ * `.ignorecase`, `.trimblanks`, `.ava` and `.typeval`. The direction is mandatory and so is the
+ * separator, except when flat.
  *
- * <p>De derecha a izquierda **no** es cosmetico: en `cn=juan,o=acme` con direccion
- * `right_to_left`, `get(0)` es `o=acme` y no `cn=juan`. El componente 0 es siempre el mas
- * significativo, o sea el mas cercano a la raiz, y de que lado de la cadena cae eso es
- * precisamente lo que la direccion dice. Todo lo que sigue --`getPrefix`, `startsWith`, `add`--
- * habla en indices, asi que hereda esa convencion sin volver a mencionarla.
+ * <p>Right to left is **not** cosmetic: in `cn=john,o=acme` with direction `right_to_left`,
+ * `get(0)` is `o=acme` and not `cn=john`. Component 0 is always the most significant, that is, the
+ * one closest to the root, and which side of the string that falls on is precisely what the
+ * direction says. Everything that follows --`getPrefix`, `startsWith`, `add`-- speaks in indices,
+ * so it inherits that convention without mentioning it again.
  *
- * <h2>El `Properties` no se copia, y es a proposito</h2>
+ * <h2>The `Properties` is not copied, on purpose</h2>
  *
- * <p>`mySyntax` guarda el objeto que se paso, no una copia, y `clone` se lo pasa al nombre nuevo.
- * Es lo que hace el JDK real y tiene sentido: un proveedor tiene **una** instancia de sintaxis y
- * la comparte entre todos sus nombres. El precio es que modificar ese `Properties` despues de
- * construir un nombre es un error del que llama; la sintaxis ya quedo leida en el `NameImpl` y el
- * nombre no se entera.
+ * <p>`mySyntax` keeps the object that was passed, not a copy, and `clone` passes it to the new
+ * name. It is what the real JDK does and it makes sense: a provider has **one** syntax instance and
+ * shares it among all its names. The price is that modifying that `Properties` after building a
+ * name is the caller's error; the syntax was already read into the `NameImpl` and the name does not
+ * notice.
  *
- * <h2>Comparar es asimetrico</h2>
+ * <h2>Comparing is asymmetric</h2>
  *
- * <p>`equals`, `compareTo`, `startsWith` y `endsWith` normalizan con la sintaxis **de este**
- * nombre, no la del otro. Si esta ignora mayusculas y la del otro no, `a.equals(b)` puede ser
- * `true` y `b.equals(a)` `false`. Esta en el contrato del JDK y no se puede arreglar sin cambiarlo.
+ * <p>`equals`, `compareTo`, `startsWith` and `endsWith` normalize with **this** name's syntax, not
+ * the other's. If this one ignores case and the other's does not, `a.equals(b)` may be `true` and
+ * `b.equals(a)` `false`. It is in the JDK's contract and cannot be fixed without changing it.
  */
 public class CompoundName implements Name {
 
     private static final long serialVersionUID = 3513100557083972036L;
 
-    /** Ver la nota de `transient` en `CompositeName`: la forma serial es propia. */
+    /**
+     * See the `transient` note in `CompositeName`: the serial form is its own, and is not written.
+     */
     private transient NameImpl impl;
 
     /**
-     * La sintaxis, tal cual la paso el que construyo. `protected` para las subclases y `transient`
-     * porque la forma serial escribe las propiedades una por una, no el objeto.
+     * The syntax, as the constructor's caller passed it. `protected` for subclasses and `transient`
+     * because the serial form writes the properties one by one, not the object. (That form is not
+     * written either: see the note in `CompositeName`.)
      */
     protected transient Properties mySyntax;
 
-    /** Desde componentes ya partidos. Ver la nota del constructor equivalente en `CompositeName`. */
+    /**
+     * From already split components. See the note on the equivalent constructor in `CompositeName`.
+     */
     protected CompoundName(Enumeration<String> comps, Properties syntax) {
         if (syntax == null) {
             throw new NullPointerException();
@@ -63,7 +68,7 @@ public class CompoundName implements Name {
         impl = new NameImpl(syntax, comps);
     }
 
-    /** Parsea `n` con `syntax`. La sintaxis es obligatoria: sin ella no hay como partir la cadena. */
+    /** Parses `n` with `syntax`. The syntax is mandatory: without it there is no way to split. */
     public CompoundName(String n, Properties syntax) throws InvalidNameException {
         if (syntax == null) {
             throw new NullPointerException();
@@ -72,13 +77,13 @@ public class CompoundName implements Name {
         impl = new NameImpl(syntax, n);
     }
 
-    /** Vuelve a parsearse **con la misma sintaxis**: sin ella la cadena sola no alcanza. */
+    /** Parses back **with the same syntax**: the string alone is not enough. */
     @Override
     public String toString() {
         return impl.toString();
     }
 
-    /** Compara componentes, no sintaxis: dos nombres con sintaxis distintas pueden dar `true`. */
+    /** Compares components, not syntax: two names with different syntaxes can give `true`. */
     @Override
     public boolean equals(Object obj) {
         return (obj instanceof CompoundName)
@@ -90,7 +95,7 @@ public class CompoundName implements Name {
         return impl.hashCode();
     }
 
-    /** Comparte el `Properties` con el original; ver la cabecera. */
+    /** Shares the `Properties` with the original; see the class header. */
     @Override
     public Object clone() {
         return new CompoundName(getAll(), mySyntax);
@@ -124,7 +129,7 @@ public class CompoundName implements Name {
         return impl.get(posn);
     }
 
-    /** El nombre nuevo hereda esta sintaxis: un prefijo de un nombre LDAP sigue siendo LDAP. */
+    /** The new name inherits this syntax: a prefix of an LDAP name is still LDAP. */
     @Override
     public Name getPrefix(int posn) {
         return new CompoundName(impl.getPrefix(posn), mySyntax);

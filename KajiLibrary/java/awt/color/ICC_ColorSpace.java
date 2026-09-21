@@ -37,11 +37,11 @@ public class ICC_ColorSpace extends ColorSpace {
      *     number of components it declares
      */
     public ICC_ColorSpace(ICC_Profile profile) {
-        super(tipoDe(profile), profile.getNumComponents());
+        super(typeOf(profile), profile.getNumComponents());
         this.profile = profile;
     }
 
-    private static int tipoDe(ICC_Profile p) {
+    private static int typeOf(ICC_Profile p) {
         if (p == null) {
             throw new IllegalArgumentException("the profile cannot be null");
         }
@@ -98,8 +98,8 @@ public class ICC_ColorSpace extends ColorSpace {
         if (t == TYPE_GRAY) {
             require(colorvalue, 1);
             float y = this.componentToLinear(0, colorvalue[0]);
-            float[] blanco = this.profile.getMediaWhitePoint();
-            return new float[] { blanco[0] * y, y, blanco[2] * y };
+            float[] white = this.profile.getMediaWhitePoint();
+            return new float[] { white[0] * y, y, white[2] * y };
         }
         if (t == TYPE_RGB) {
             require(colorvalue, 3);
@@ -168,7 +168,7 @@ public class ICC_ColorSpace extends ColorSpace {
     // Each component has its curve, stored as a gamma or as a table. They are read once and kept:
     // `getTRC` copies the array on every call, and doing that per pixel would be absurd.
 
-    private void cargarCurvas() {
+    private void loadCurves() {
         if (this.curves != null) {
             return;
         }
@@ -194,7 +194,7 @@ public class ICC_ColorSpace extends ColorSpace {
 
     /** From an encoded value to a linear one, with that component's curve. */
     private float componentToLinear(int i, float v) {
-        this.cargarCurvas();
+        this.loadCurves();
         if (this.curves[i] == null) {
             if (this.gammas[i] == 1.0f) {
                 return v;
@@ -205,26 +205,26 @@ public class ICC_ColorSpace extends ColorSpace {
         // backwards. It is done with a binary search and an interpolation, which is what gives a
         // continuous inverse without storing a second table.
         short[] t = this.curves[i];
-        int objetivo = (int) (v * 65535.0f + 0.5f);
+        int target = (int) (v * 65535.0f + 0.5f);
         int lo = 0;
         int hi = t.length - 1;
         while (lo < hi - 1) {
-            int med = (lo + hi) / 2;
-            if ((t[med] & 0xFFFF) <= objetivo) {
-                lo = med;
+            int mid = (lo + hi) / 2;
+            if ((t[mid] & 0xFFFF) <= target) {
+                lo = mid;
             } else {
-                hi = med;
+                hi = mid;
             }
         }
         int a = t[lo] & 0xFFFF;
         int b = t[hi] & 0xFFFF;
-        float frac = b == a ? 0.0f : ((float) (objetivo - a)) / (b - a);
+        float frac = b == a ? 0.0f : ((float) (target - a)) / (b - a);
         return (lo + frac) / (t.length - 1);
     }
 
     /** From linear to an encoded value. */
     private float componentFromLinear(int i, float v) {
-        this.cargarCurvas();
+        this.loadCurves();
         if (this.curves[i] == null) {
             if (this.gammas[i] == 1.0f) {
                 return v;

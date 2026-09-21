@@ -3,17 +3,17 @@ package javax.naming.ldap;
 import java.io.Serializable;
 
 /**
- * La respuesta a un {@link ExtendedRequest}.
+ * The response to an {@link ExtendedRequest}.
  *
- * <p>Deliberadamente flaca: OID y bytes. Lo que <em>significan</em> esos bytes lo sabe la subclase
- * concreta, que es la que agrega los accesores con sentido — ver {@link StartTlsResponse}, cuya
- * respuesta no lleva datos y en cambio ofrece {@code negotiate()}.
+ * <p>Deliberately thin: OID and bytes. What those bytes <em>mean</em> is known by the concrete
+ * subclass, which is the one that adds the meaningful accessors -- see {@link StartTlsResponse},
+ * whose response carries no data and instead offers {@code negotiate()}.
  */
 public interface ExtendedResponse extends Serializable {
 
-    /** El OID de la operacion que la genero, o {@code null}. */
+    /** The OID of the operation that produced it, or {@code null}. */
     String getID();
 
-    /** La respuesta codificada en BER, o {@code null} si no lleva datos. */
+    /** The BER-encoded response, or {@code null} if it carries no data. */
     byte[] getEncodedValue();
 }

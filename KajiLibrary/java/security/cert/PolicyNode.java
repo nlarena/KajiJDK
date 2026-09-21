@@ -3,37 +3,37 @@ package java.security.cert;
 import java.util.Iterator;
 import java.util.Set;
 
-// Un nodo del arbol de politicas que produce la validacion PKIX.
+// A node of the policy tree the PKIX validation produces.
 //
-// Las politicas de certificado son la parte de PKIX que casi nadie usa, y vale decir para que
-// estan: una CA puede declarar bajo que reglas emitio un certificado —cuanta verificacion de
-// identidad hizo, por ejemplo— y quien valida puede exigir que la cadena entera sostenga una
-// politica determinada de punta a punta. El arbol es el resultado de esa cuenta: cada nivel
-// corresponde a un certificado del camino, y las ramas que sobreviven son las politicas que valen
-// para toda la cadena.
+// Certificate policies are the part of PKIX hardly anybody uses, and it is worth saying what they
+// are for: a CA can declare under which rules it issued a certificate —how much verification of
+// identity it did, for example— and whoever validates can demand that the whole chain sustain a
+// given policy from end to end. The tree is the result of that sum: each level corresponds to a
+// certificate of the path, and the branches that survive are the policies that hold for the whole
+// chain.
 //
-// Todos los metodos son de solo lectura y el arbol lo construye el validador: no hay forma de
-// armarlo a mano desde el API publico, y eso es intencional.
+// Every method is read-only and the tree is built by the validator: there is no way of assembling
+// it by hand from the public API, and that is intentional.
 public interface PolicyNode {
 
-    // El nodo padre, o null si es la raiz.
+    // The parent node, or null if it is the root.
     PolicyNode getParent();
 
-    // Los hijos. El iterador es inmutable.
+    // The children. The iterator is immutable.
     Iterator<? extends PolicyNode> getChildren();
 
-    // La profundidad: 0 en la raiz, y coincide con la posicion en el camino.
+    // The depth: 0 at the root, and it coincides with the position in the path.
     int getDepth();
 
-    // El OID de la politica que representa este nodo.
+    // The OID of the policy this node represents.
     String getValidPolicy();
 
-    // Los calificadores asociados: texto legal, URLs de la declaracion de practicas de la CA.
+    // The associated qualifiers: legal text, URLs of the declaration of practices of the CA.
     Set<? extends PolicyQualifierInfo> getPolicyQualifiers();
 
-    // Los OIDs que un hijo podria tener para seguir esta rama.
+    // The OIDs a child could have in order to follow this branch.
     Set<String> getExpectedPolicies();
 
-    // Si la extension de politicas del certificado de este nivel venia marcada critica.
+    // Whether the policy extension of the certificate of this level came marked critical.
     boolean isCritical();
 }

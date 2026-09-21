@@ -1,20 +1,21 @@
 package org.w3c.dom.css;
 
 /**
- * Un color, por sus tres componentes.
+ * A colour, by its three components.
  *
- * <p>Cada componente es un {@link CSSPrimitiveValue} y no un entero porque CSS admite las dos
- * formas --`rgb(255,0,0)` y `rgb(100%,0%,0%)`--, y el tipo primitivo de cada componente dice cual
- * de las dos se escribio. Reducirlas a un `int` perderia esa distincion al reescribir la hoja.
+ * <p>Each component is a {@link CSSPrimitiveValue} and not an integer because CSS admits both forms
+ * --`rgb(255,0,0)` and `rgb(100%,0%,0%)`--, and the primitive type of each component says which of
+ * the two was written. Reducing them to an `int` would lose that distinction when rewriting the
+ * sheet.
  */
 public interface RGBColor {
 
-    /** El rojo. */
+    /** The red. */
     CSSPrimitiveValue getRed();
 
-    /** El verde. */
+    /** The green. */
     CSSPrimitiveValue getGreen();
 
-    /** El azul. */
+    /** The blue. */
     CSSPrimitiveValue getBlue();
 }

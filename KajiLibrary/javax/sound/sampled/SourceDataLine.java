@@ -1,42 +1,42 @@
 package javax.sound.sampled;
 
 /**
- * KajiLibrary's javax.sound.sampled.SourceDataLine -- una linea a la que se le escribe audio.
+ * KajiLibrary's javax.sound.sampled.SourceDataLine -- a line audio is written to.
  *
- * <p>El nombre confunde y vale aclararlo de una: es la <b>salida</b>. Se llama "fuente" porque es la
- * fuente de datos <b>del mezclador</b>, no del programa. La entrada, la que captura, es
- * {@link TargetDataLine}.
+ * <p>The name confuses and it is worth clearing up at once: it is the <b>output</b>. It is called
+ * "source" because it is the source of data <b>of the mixer</b>, not of the program. The input, the
+ * one that captures, is {@link TargetDataLine}.
  *
- * <p>{@link #write} bloquea hasta que entra todo lo que se le paso, y eso es lo que marca el ritmo: el
- * programa avanza a la velocidad a la que el dispositivo consume. Es la forma correcta de reproducir
- * sin acumular retraso ni cortar.
+ * <p>{@link #write} blocks until everything passed to it has gone in, and that is what sets the
+ * pace: the program advances at the speed at which the device consumes. It is the right way to play
+ * without building up delay or cutting out.
  *
- * <p>Escribe siempre cuadros enteros; un largo que no sea multiplo del cuadro lanza
+ * <p>It always writes whole frames; a length that is not a multiple of the frame throws
  * {@link IllegalArgumentException}.
  */
 public interface SourceDataLine extends DataLine {
 
     /**
-     * Abre con ese formato y ese tamano de bufer.
+     * Opens with that format and that buffer size.
      *
-     * <p>El bufer es una <b>sugerencia</b>: el dispositivo puede darle otro. Un bufer chico baja la
-     * latencia y sube el riesgo de cortes.
+     * <p>The buffer is a <b>suggestion</b>: the device can give it another. A small buffer lowers
+     * the latency and raises the risk of dropouts.
      *
-     * @throws LineUnavailableException si el recurso no esta disponible
-     * @throws IllegalArgumentException si no soporta ese formato
-     * @throws IllegalStateException si ya estaba abierta
+     * @throws LineUnavailableException if the resource is not available
+     * @throws IllegalArgumentException if it does not support that format
+     * @throws IllegalStateException if it was already open
      */
     void open(AudioFormat format, int bufferSize) throws LineUnavailableException;
 
-    /** Idem, con el bufer que el dispositivo prefiera. */
+    /** Likewise, with the buffer the device prefers. */
     void open(AudioFormat format) throws LineUnavailableException;
 
     /**
-     * Escribe audio. Bloquea; ver la nota de la clase.
+     * Writes audio. It blocks; see the class note.
      *
-     * @param len tiene que ser multiplo del tamano de cuadro
-     * @return cuantos bytes se escribieron
-     * @throws IllegalArgumentException si el largo no es multiplo del cuadro
+     * @param len it has to be a multiple of the frame size
+     * @return how many bytes were written
+     * @throws IllegalArgumentException if the length is not a multiple of the frame
      */
     int write(byte[] b, int off, int len);
 }

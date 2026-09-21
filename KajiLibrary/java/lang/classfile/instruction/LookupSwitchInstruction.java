@@ -5,17 +5,17 @@ import java.lang.classfile.Label;
 import java.util.List;
 import jdk.internal.classfile.impl.Instructions;
 
-// `lookupswitch`: los valores son arbitrarios y van con su destino en una tabla que el formato
-// obliga a mantener ordenada por valor, porque la JVM la busca en binario.
+// `lookupswitch`: the values are arbitrary and go with their destination in a table the format
+// requires to be kept sorted by value, because the JVM searches it binarily.
 public interface LookupSwitchInstruction extends Instruction {
 
-    /** A dónde va lo que no cae en ninguna rama. */
+    /** Where whatever falls into no branch goes. */
     Label defaultTarget();
 
-    /** Las ramas, ordenadas por valor. */
+    /** The branches, sorted by value. */
     List<SwitchCase> cases();
 
-    /** El `lookupswitch` con este destino por omisión y estas ramas. */
+    /** The `lookupswitch` with this default destination and these branches. */
     public static LookupSwitchInstruction of(Label defaultTarget, List<SwitchCase> cases) {
         return Instructions.lookupSwitch(defaultTarget, cases);
     }

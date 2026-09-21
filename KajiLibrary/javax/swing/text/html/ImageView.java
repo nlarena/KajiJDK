@@ -18,24 +18,26 @@ import javax.swing.text.View;
 import javax.swing.text.ViewFactory;
 
 /**
- * La vista de un {@code <img>}.
+ * The view of an {@code <img>}.
  *
- * <h2>Tres cosas que puede estar mostrando</h2>
+ * <h2>Three things it may be showing</h2>
  *
- * <p>La imagen, si ya llego. Un icono de "cargando", mientras viaja. O un icono de "no se pudo",
- * si fallo. Los tres ocupan lugar, y por eso la vista tiene tamano desde el principio: si midiera
- * cero hasta que llegue la imagen, la pagina se rearmaria entera al llegar cada una.
+ * <p>The image, if it has arrived. A "loading" icon, while it travels. Or a "could not"
+ * icon, if it failed. All three take up room, and that is why the view has a size from the
+ * start: if it measured zero until the image arrived, the page would rebuild itself entirely as
+ * each one arrived.
  *
- * <p>Ese es tambien el motivo de que <code>width</code> y <code>height</code> valgan la pena en el
- * HTML: con ellos la vista ya sabe cuanto va a ocupar antes de tener nada.
+ * <p>That is also the reason <code>width</code> and <code>height</code> are worth it in the
+ * HTML: with them the view already knows how much it is going to take up before having
+ * anything.
  *
- * <h2>Cargar de a una o esperando</h2>
+ * <h2>Loading one at a time or waiting</h2>
  *
- * <p>{@link #setLoadsSynchronously} decide si la carga bloquea. Por omision no bloquea: una imagen
- * lenta no tiene que dejar la ventana quieta. Bloquear sirve para imprimir o para dibujar fuera de
- * pantalla, donde no hay nadie que vuelva a pintar cuando la imagen llegue.
+ * <p>{@link #setLoadsSynchronously} decides whether the loading blocks. By default it does not
+ * block: a slow image must not leave the window still. Blocking serves for printing or for
+ * drawing off screen, where there is nobody to repaint when the image arrives.
  *
- * <p>Sin ventana no hay imagen que cargar, asi que aca se muestra siempre el texto alternativo.
+ * <p>Without a window there is no image to load, so here the alternative text is always shown.
  */
 public class ImageView extends View {
 
@@ -51,22 +53,22 @@ public class ImageView extends View {
     private short topInset;
     private short bottomInset;
 
-    /** Una vista de imagen sobre ese elemento. */
+    /** An image view on that element. */
     public ImageView(Element elem) {
         super(elem);
         loadsSynchronously = false;
     }
 
-    /** El texto del atributo <code>alt</code>. */
+    /** The <code>alt</code> attribute's text. */
     public String getAltText() {
         return (String) getElement().getAttributes().getAttribute(HTML.Attribute.ALT);
     }
 
     /**
-     * La direccion de la imagen, resuelta contra la base del documento.
+     * The image's address, resolved against the document's base.
      *
-     * <p>Devuelve nulo si no hay <code>src</code> o si no se puede formar la direccion. Un
-     * <code>src</code> roto es lo normal en el HTML de verdad, y no deberia costar una excepcion.
+     * <p>It returns null if there is no <code>src</code> or if the address cannot be formed. A
+     * broken <code>src</code> is normal in real HTML, and should not cost an exception.
      */
     public URL getImageURL() {
         String src = (String) getElement().getAttributes().getAttribute(HTML.Attribute.SRC);
@@ -81,22 +83,22 @@ public class ImageView extends View {
         }
     }
 
-    /** El icono que se muestra cuando la imagen no se pudo traer. */
+    /** The icon shown when the image could not be fetched. */
     public Icon getNoImageIcon() {
         return null;
     }
 
-    /** El icono que se muestra mientras la imagen viaja. */
+    /** The icon shown while the image travels. */
     public Icon getLoadingImageIcon() {
         return null;
     }
 
-    /** La imagen, o nulo si todavia no llego. */
+    /** The image, or null if it has not arrived yet. */
     public Image getImage() {
         return image;
     }
 
-    /** Si la carga bloquea; ver la nota de la clase. */
+    /** Whether the loading blocks; see the class note. */
     public void setLoadsSynchronously(boolean newValue) {
         loadsSynchronously = newValue;
     }
@@ -105,7 +107,7 @@ public class ImageView extends View {
         return loadsSynchronously;
     }
 
-    /** La hoja de estilos del documento, o nulo si el documento no es de HTML. */
+    /** The document's style sheet, or null if the document is not an HTML one. */
     protected StyleSheet getStyleSheet() {
         Document d = getDocument();
         if (d instanceof HTMLDocument) {
@@ -122,12 +124,12 @@ public class ImageView extends View {
         return attr;
     }
 
-    /** El texto de ayuda: el mismo <code>alt</code>. */
+    /** The tooltip text: the <code>alt</code> itself. */
     public String getToolTipText(float x, float y, Shape allocation) {
         return getAltText();
     }
 
-    /** Lee tamano y borde de los atributos. */
+    /** It reads size and border from the attributes. */
     protected void setPropertiesFromAttributes() {
         attr = null;
         AttributeSet a = getAttributes();
@@ -156,7 +158,7 @@ public class ImageView extends View {
         preferenceChanged(null, true, true);
     }
 
-    /** Dibuja la imagen si llego, y si no el texto alternativo con su marco. */
+    /** It draws the image if it arrived, and otherwise the alternative text with its frame. */
     public void paint(Graphics g, Shape a) {
         Rectangle rect = (a instanceof Rectangle) ? (Rectangle) a : a.getBounds();
         if (borderSize > 0 && borderColor != null) {
@@ -180,10 +182,10 @@ public class ImageView extends View {
     }
 
     /**
-     * El tamano que ocupa.
+     * The size it takes up.
      *
-     * <p>El declarado si lo hay; si no, el de la imagen; si tampoco, un cuadro donde entre el texto
-     * alternativo. Nunca cero: ver la nota de la clase.
+     * <p>The declared one if there is one; if not, the image's; if not that either, a box where the
+     * alternative text fits. Never zero: see the class note.
      */
     public float getPreferredSpan(int axis) {
         if (axis == X_AXIS) {
@@ -200,7 +202,7 @@ public class ImageView extends View {
         return 32 + topInset + bottomInset;
     }
 
-    /** Una imagen se apoya en la linea de base del texto. */
+    /** An image rests on the text's baseline. */
     public float getAlignment(int axis) {
         if (axis == Y_AXIS) {
             return 1.0f;

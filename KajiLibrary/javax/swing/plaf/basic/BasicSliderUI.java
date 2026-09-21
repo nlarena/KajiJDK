@@ -34,57 +34,57 @@ import javax.swing.plaf.SliderUI;
 import javax.swing.plaf.UIResource;
 
 /**
- * El aspecto basico de un deslizador.
+ * The basic look and feel of a slider.
  *
- * <h2>Seis rectangulos, uno adentro del otro</h2>
+ * <h2>Six rectangles, one inside the other</h2>
  *
- * <p>Toda la clase gira alrededor de seis rectangulos que se calculan en cadena, cada uno a partir
- * del anterior: {@link #focusRect} es el componente menos sus margenes;
- * {@link #contentRect} es ese menos el aire del foco; {@link #trackRect} es la franja por donde
- * corre el pulgar; {@link #tickRect} y {@link #labelRect} son las dos franjas de abajo, que miden
- * cero si el deslizador no muestra marcas ni etiquetas; y {@link #thumbRect} es el pulgar.
+ * <p>The whole class turns around six rectangles that are computed in a chain, each one from
+ * the previous: {@link #focusRect} is the component minus its margins; {@link #contentRect} is
+ * that minus the focus's air; {@link #trackRect} is the strip the thumb runs along;
+ * {@link #tickRect} and {@link #labelRect} are the two strips at the bottom, which measure zero
+ * if the slider shows neither ticks nor labels; and {@link #thumbRect} is the thumb.
  *
- * <p>La cadena se recalcula entera cada vez que cambia algo que la afecta -- el tamano, la
- * orientacion, los margenes, si muestra marcas --, y no de a partes: recalcular la mitad seria mas
- * rapido y dejaria pares de rectangulos que no se corresponden.
+ * <p>The chain is recomputed entirely every time something that affects it changes -- the size,
+ * the orientation, the margins, whether it shows ticks --, and not piecemeal: recomputing half
+ * of it would be faster and would leave pairs of rectangles that do not match.
  *
- * <h2>Los rectangulos pueden tener ancho negativo, y esta bien</h2>
+ * <h2>The rectangles may have a negative width, and that is right</h2>
  *
- * <p>Un deslizador que todavia no tiene tamano da un {@code trackRect} de ancho -10: el buffer de
- * cinco pixeles de cada lado se resta de un contenido que mide cero. Esta medido, y no se corrige:
- * corregirlo escondiendo el negativo daria posiciones de pulgar distintas de las del JDK apenas el
- * deslizador tenga tamano.
+ * <p>A slider that does not have a size yet gives a {@code trackRect} of width -10: the buffer
+ * of five pixels on each side is subtracted from a content that measures zero. It is measured,
+ * and it is not corrected: correcting it by hiding the negative would give thumb positions
+ * different from the JDK's as soon as the slider had a size.
  *
- * <h2>De valor a pixel y de vuelta</h2>
+ * <h2>From value to pixel and back</h2>
  *
- * <p>{@link #xPositionForValue} y {@link #yPositionForValue} son una regla de tres entre el rango
- * del modelo y el largo de la franja, con los dos extremos recortados. El recorte es lo que hace
- * que el pulgar no se salga cuando el rango es raro, y es tambien lo que hace que en un deslizador
- * sin tamano las tres posiciones den el mismo numero.
+ * <p>{@link #xPositionForValue} and {@link #yPositionForValue} are a rule of three between the
+ * model's range and the strip's length, with both ends clipped. The clipping is what keeps the
+ * thumb from going outside when the range is odd, and it is also what makes the three positions
+ * give the same number in a slider with no size.
  *
- * <h2>El reloj del desplazamiento</h2>
+ * <h2>The scrolling timer</h2>
  *
- * <p>Apretar en la franja --no en el pulgar-- lo hace avanzar de a un bloque, y seguir apretando lo
- * repite: {@link #scrollTimer} es lo que repite. La direccion sale de que lado del pulgar se
- * apreto.
+ * <p>Pressing on the strip -- not on the thumb -- makes it advance one block at a time, and
+ * going on pressing repeats it: {@link #scrollTimer} is what repeats. The direction comes from
+ * which side of the thumb was pressed.
  *
- * <h2>Lo que queda dicho</h2>
+ * <h2>What is left said</h2>
  *
- * <p>El dibujo del pulgar y de la franja es el del aspecto de verdad; el basico dibuja rectangulos
- * planos. Las etiquetas son componentes del programa y se pintan como estan.
+ * <p>The drawing of the thumb and of the strip belongs to the real look and feel; the basic one
+ * draws flat rectangles. The labels are the program's components and are painted as they are.
  */
 public class BasicSliderUI extends SliderUI {
 
-    /** Un bloque hacia adelante. */
+    /** One block forwards. */
     public static final int POSITIVE_SCROLL = +1;
 
-    /** Un bloque hacia atras. */
+    /** One block backwards. */
     public static final int NEGATIVE_SCROLL = -1;
 
-    /** Hasta el minimo. */
+    /** As far as the minimum. */
     public static final int MIN_SCROLL = -2;
 
-    /** Hasta el maximo. */
+    /** As far as the maximum. */
     public static final int MAX_SCROLL = +2;
 
     protected Timer scrollTimer;
@@ -100,7 +100,7 @@ public class BasicSliderUI extends SliderUI {
     protected Rectangle trackRect = null;
     protected Rectangle thumbRect = null;
 
-    /** El aire que se le deja al pulgar en cada punta de la franja. */
+    /** The air left for the thumb at each end of the strip. */
     protected int trackBuffer = 0;
 
     protected ChangeListener changeListener;
@@ -115,14 +115,14 @@ public class BasicSliderUI extends SliderUI {
     private Color focusColor;
     private boolean dragging;
 
-    private static final ColorUIResource FONDO = new ColorUIResource(238, 238, 238);
-    private static final ColorUIResource FRENTE = new ColorUIResource(163, 184, 204);
-    private static final ColorUIResource FOCO = new ColorUIResource(163, 184, 204);
-    private static final ColorUIResource BRILLO = new ColorUIResource(255, 255, 255);
-    private static final ColorUIResource SOMBRA = new ColorUIResource(184, 207, 229);
-    private static final FontUIResource FUENTE = new FontUIResource("Dialog", Font.BOLD, 12);
+    private static final ColorUIResource BACKGROUND = new ColorUIResource(238, 238, 238);
+    private static final ColorUIResource FOREGROUND = new ColorUIResource(163, 184, 204);
+    private static final ColorUIResource FOCUS = new ColorUIResource(163, 184, 204);
+    private static final ColorUIResource HIGHLIGHT = new ColorUIResource(255, 255, 255);
+    private static final ColorUIResource SHADOW = new ColorUIResource(184, 207, 229);
+    private static final FontUIResource FONT = new FontUIResource("Dialog", Font.BOLD, 12);
 
-    /** Para ese deslizador; los rectangulos se arman vacios y los llena {@code installUI}. */
+    /** For that slider; the rectangles are built empty and filled in by {@code installUI}. */
     public BasicSliderUI(JSlider b) {
         focusRect = new Rectangle();
         contentRect = new Rectangle();
@@ -134,7 +134,7 @@ public class BasicSliderUI extends SliderUI {
         focusInsets = new Insets(0, 0, 0, 0);
     }
 
-    /** Uno nuevo por deslizador: guarda los seis rectangulos. */
+    /** A new one per slider: it keeps the six rectangles. */
     public static ComponentUI createUI(JComponent b) {
         return new BasicSliderUI((JSlider) b);
     }
@@ -173,28 +173,28 @@ public class BasicSliderUI extends SliderUI {
         slider = null;
     }
 
-    /** Colores y fuente; los valores son los de {@code Slider.*} en Metal. */
+    /** Colours and typeface; the values are those of {@code Slider.*} in Metal. */
     protected void installDefaults(JSlider slider) {
-        Color fondo = slider.getBackground();
-        if (fondo == null || fondo instanceof UIResource) {
-            slider.setBackground(FONDO);
+        Color background = slider.getBackground();
+        if (background == null || background instanceof UIResource) {
+            slider.setBackground(BACKGROUND);
         }
-        Color frente = slider.getForeground();
-        if (frente == null || frente instanceof UIResource) {
-            slider.setForeground(FRENTE);
+        Color foreground = slider.getForeground();
+        if (foreground == null || foreground instanceof UIResource) {
+            slider.setForeground(FOREGROUND);
         }
-        Font fuente = slider.getFont();
-        if (fuente == null || fuente instanceof UIResource) {
-            slider.setFont(FUENTE);
+        Font font = slider.getFont();
+        if (font == null || font instanceof UIResource) {
+            slider.setFont(FONT);
         }
         LookAndFeel.installProperty(slider, "opaque", Boolean.TRUE);
         focusInsets = new Insets(0, 0, 0, 0);
-        focusColor = FOCO;
-        highlightColor = BRILLO;
-        shadowColor = SOMBRA;
+        focusColor = FOCUS;
+        highlightColor = HIGHLIGHT;
+        shadowColor = SHADOW;
     }
 
-    /** No saca nada; ver {@link BasicPanelUI#uninstallDefaults}. */
+    /** It removes nothing; see {@link BasicPanelUI#uninstallDefaults}. */
     protected void uninstallDefaults(JSlider slider) {
     }
 
@@ -232,7 +232,7 @@ public class BasicSliderUI extends SliderUI {
         propertyChangeListener = null;
     }
 
-    /** Sin atajos propios: las flechas las ata la tabla del aspecto. */
+    /** With no shortcuts of its own: the arrows are tied by the look and feel's table. */
     protected void installKeyboardActions(JSlider slider) {
     }
 
@@ -275,12 +275,12 @@ public class BasicSliderUI extends SliderUI {
         return focusColor;
     }
 
-    /** Si el pulgar se esta arrastrando. */
+    /** Whether the thumb is being dragged. */
     protected boolean isDragging() {
         return dragging;
     }
 
-    /** Si el deslizador esta dado vuelta -- el maximo del lado del minimo --. */
+    /** Whether the slider is turned around -- the maximum on the minimum's side --. */
     protected boolean drawInverted() {
         if (slider.getOrientation() == SwingConstants.HORIZONTAL) {
             if (leftToRightCache) {
@@ -291,7 +291,7 @@ public class BasicSliderUI extends SliderUI {
         return slider.getInverted();
     }
 
-    /** El valor mas chico de la tabla de etiquetas, o {@code null} si no hay tabla. */
+    /** The smallest value of the label table, or {@code null} if there is no table. */
     protected Integer getLowestValue() {
         Dictionary<?, ?> dictionary = slider.getLabelTable();
         if (dictionary == null) {
@@ -311,7 +311,7 @@ public class BasicSliderUI extends SliderUI {
         return min;
     }
 
-    /** Y el mas grande. */
+    /** And the largest. */
     protected Integer getHighestValue() {
         Dictionary<?, ?> dictionary = slider.getLabelTable();
         if (dictionary == null) {
@@ -331,7 +331,7 @@ public class BasicSliderUI extends SliderUI {
         return max;
     }
 
-    /** La etiqueta del valor mas chico, o {@code null}. */
+    /** The smallest value's label, or {@code null}. */
     protected Component getLowestValueLabel() {
         Integer min = getLowestValue();
         if (min == null) {
@@ -341,7 +341,7 @@ public class BasicSliderUI extends SliderUI {
         return (o instanceof Component) ? (Component) o : null;
     }
 
-    /** Y la del mas grande. */
+    /** And the largest one's. */
     protected Component getHighestValueLabel() {
         Integer max = getHighestValue();
         if (max == null) {
@@ -372,19 +372,19 @@ public class BasicSliderUI extends SliderUI {
     }
 
     /**
-     * Si todas las etiquetas apoyan el texto a la misma altura.
+     * Whether every label rests its text at the same height.
      *
-     * <p>Sirve para una sola cosa, y es la que justifica el metodo: si comparten linea de base, la
-     * fila de etiquetas se puede alinear por ella y los numeros quedan derechos aunque una etiqueta
-     * sea mas alta que otra. Si no la comparten -- una etiqueta es un icono, o tiene dos renglones
-     * -- hay que centrarlas verticalmente, que es lo unico que queda.
+     * <p>It serves a single purpose, and it is the one that justifies the method: if they share a
+     * baseline, the row of labels can be aligned by it and the numbers come out straight even
+     * though one label is taller than another. If they do not share it -- one label is an icon, or
+     * has two lines -- they have to be centred vertically, which is the only thing left.
      *
-     * <p>Sin tabla de etiquetas la respuesta es que no, aunque suene al reves: no hay etiquetas que
-     * alinear, asi que no hay linea de base compartida de la cual colgarlas. Una tabla vacia, en
-     * cambio, contesta que si -- no hay ninguna que desmienta --. Las dos, medidas.
+     * <p>With no label table the answer is no, even though it sounds the other way round: there
+     * are no labels to align, so there is no shared baseline to hang them from. An empty table, on
+     * the other hand, answers yes -- there is none to contradict it --. Both measured.
      *
-     * <p>El JDK guarda el resultado y lo recalcula cuando cambia la tabla; aca se calcula cada vez.
-     * Es la misma respuesta y no puede quedar vieja.
+     * <p>The JDK keeps the result and recomputes it when the table changes; here it is computed
+     * each time. It is the same answer and it cannot go stale.
      */
     protected boolean labelsHaveSameBaselines() {
         Dictionary<?, ?> dictionary = slider.getLabelTable();
@@ -400,42 +400,42 @@ public class BasicSliderUI extends SliderUI {
             }
             Component label = (Component) o;
             Dimension pref = label.getPreferredSize();
-            int suya = label.getBaseline(pref.width, pref.height);
-            if (suya < 0) {
+            int its = label.getBaseline(pref.width, pref.height);
+            if (its < 0) {
                 return false;
             }
             if (base == -1) {
-                base = suya;
-            } else if (base != suya) {
+                base = its;
+            } else if (base != its) {
                 return false;
             }
         }
         return true;
     }
 
-    /** El alto de la etiqueta mas alta; cero si no hay ninguna. */
+    /** The tallest label's height; zero if there is none. */
     protected int getHeightOfTallestLabel() {
         Dictionary<?, ?> dictionary = slider.getLabelTable();
         if (dictionary == null) {
             return 0;
         }
-        int alto = 0;
+        int height = 0;
         Enumeration<?> elements = dictionary.elements();
         while (elements.hasMoreElements()) {
             Object o = elements.nextElement();
             if (o instanceof Component) {
-                alto = Math.max(alto, ((Component) o).getPreferredSize().height);
+                height = Math.max(height, ((Component) o).getPreferredSize().height);
             }
         }
-        return alto;
+        return height;
     }
 
-    /** Ocho pixeles; es lo que miden las marcas grandes. */
+    /** Eight pixels; it is what the big ticks measure. */
     protected int getTickLength() {
         return 8;
     }
 
-    /** El tamano del pulgar; el basico lo hace de 11 x 20, y de 20 x 11 acostado. */
+    /** The thumb's size; the basic one makes it 11 x 20, and 20 x 11 lying down. */
     protected Dimension getThumbSize() {
         if (slider.getOrientation() == SwingConstants.HORIZONTAL) {
             return new Dimension(11, 20);
@@ -459,7 +459,7 @@ public class BasicSliderUI extends SliderUI {
         return new Dimension(21, 36);
     }
 
-    /** El de referencia, con el alto --o el ancho-- que piden las tres franjas. */
+    /** The reference one, with the height -- or the width -- the three strips ask for. */
     public Dimension getPreferredSize(JComponent c) {
         recalculateIfInsetsChanged();
         Dimension d;
@@ -477,7 +477,7 @@ public class BasicSliderUI extends SliderUI {
         return d;
     }
 
-    /** Idem, a partir del minimo de referencia. */
+    /** The same, from the reference minimum. */
     public Dimension getMinimumSize(JComponent c) {
         recalculateIfInsetsChanged();
         Dimension d;
@@ -495,7 +495,7 @@ public class BasicSliderUI extends SliderUI {
         return d;
     }
 
-    /** Se estira a lo largo y nada a lo ancho. */
+    /** It stretches lengthwise and not at all widthwise. */
     public Dimension getMaximumSize(JComponent c) {
         Dimension d = getPreferredSize(c);
         if (slider.getOrientation() == SwingConstants.VERTICAL) {
@@ -506,8 +506,8 @@ public class BasicSliderUI extends SliderUI {
         return d;
     }
 
-    /** Rehace la cadena entera de rectangulos; ver la nota de la clase. */
-    private void calculateGeometry() {
+    /** It rebuilds the whole chain of rectangles; see the class note. */
+    protected void calculateGeometry() {
         calculateFocusRect();
         calculateContentRect();
         calculateThumbSize();
@@ -537,7 +537,7 @@ public class BasicSliderUI extends SliderUI {
         thumbRect.setSize(size.width, size.height);
     }
 
-    /** La mitad del pulgar de cada lado, para que no se salga en los extremos. */
+    /** Half the thumb on each side, so that it does not go outside at the ends. */
     protected void calculateTrackBuffer() {
         if (slider.getPaintLabels() && slider.getLabelTable() != null) {
             Component highLabel = getHighestValueLabel();
@@ -603,15 +603,15 @@ public class BasicSliderUI extends SliderUI {
         if (dictionary == null) {
             return 0;
         }
-        int ancho = 0;
+        int width = 0;
         Enumeration<?> elements = dictionary.elements();
         while (elements.hasMoreElements()) {
             Object o = elements.nextElement();
             if (o instanceof Component) {
-                ancho = Math.max(ancho, ((Component) o).getPreferredSize().width);
+                width = Math.max(width, ((Component) o).getPreferredSize().width);
             }
         }
-        return ancho;
+        return width;
     }
 
     private void calculateTickRect() {
@@ -670,7 +670,7 @@ public class BasicSliderUI extends SliderUI {
 
     protected void calculateThumbLocation() {
         if (slider.getSnapToTicks()) {
-            // Con marcas, el pulgar salta de una a la otra en vez de quedar en el medio.
+            // With ticks, the thumb jumps from one to the other instead of staying in the middle.
             int sliderValue = slider.getValue();
             int snappedValue = sliderValue;
             int tickSpacing = getTickSpacing();
@@ -708,7 +708,7 @@ public class BasicSliderUI extends SliderUI {
         return 0;
     }
 
-    /** Pone el pulgar ahi y redibuja lo que hace falta. */
+    /** It puts the thumb there and redraws what is needed. */
     public void setThumbLocation(int x, int y) {
         Rectangle unionRect = new Rectangle();
         unionRect.setBounds(thumbRect);
@@ -718,7 +718,7 @@ public class BasicSliderUI extends SliderUI {
         slider.repaint(unionRect.x, unionRect.y, unionRect.width, unionRect.height);
     }
 
-    /** El pixel que le toca a ese valor; ver la nota de la clase. */
+    /** The pixel that falls to that value; see the class note. */
     protected int xPositionForValue(int value) {
         int min = slider.getMinimum();
         int max = slider.getMaximum();
@@ -740,12 +740,12 @@ public class BasicSliderUI extends SliderUI {
         return xPosition;
     }
 
-    /** Idem en el otro eje. */
+    /** The same on the other axis. */
     protected int yPositionForValue(int value) {
         return yPositionForValue(value, trackRect.y, trackRect.height);
     }
 
-    /** Idem, con una franja dada; util para dibujar en un rectangulo prestado. */
+    /** The same, with a given strip; useful for drawing in a borrowed rectangle. */
     protected int yPositionForValue(int value, int trackY, int trackHeight) {
         int min = slider.getMinimum();
         int max = slider.getMaximum();
@@ -765,7 +765,7 @@ public class BasicSliderUI extends SliderUI {
         return yPosition;
     }
 
-    /** Rehace la geometria si cambiaron los margenes. */
+    /** It rebuilds the geometry if the margins changed. */
     protected void recalculateIfInsetsChanged() {
         Insets newInsets = slider.getInsets();
         if (!newInsets.equals(insetCache)) {
@@ -774,7 +774,7 @@ public class BasicSliderUI extends SliderUI {
         }
     }
 
-    /** Idem si cambio la orientacion del idioma. */
+    /** The same if the language's orientation changed. */
     protected void recalculateIfOrientationChanged() {
         boolean ltr = slider.getComponentOrientation().isLeftToRight();
         if (ltr != leftToRightCache) {
@@ -783,7 +783,7 @@ public class BasicSliderUI extends SliderUI {
         }
     }
 
-    /** Avanza un bloque en ese sentido. */
+    /** It advances one block in that direction. */
     public void scrollByBlock(int direction) {
         synchronized (slider) {
             int blockIncrement = (slider.getMaximum() - slider.getMinimum()) / 10;
@@ -801,7 +801,7 @@ public class BasicSliderUI extends SliderUI {
         }
     }
 
-    /** Y una unidad. */
+    /** And one unit. */
     public void scrollByUnit(int direction) {
         synchronized (slider) {
             int delta = ((direction > 0) ? POSITIVE_SCROLL : NEGATIVE_SCROLL);
@@ -812,7 +812,7 @@ public class BasicSliderUI extends SliderUI {
         }
     }
 
-    /** Apretar en la franja: avanza un bloque hacia donde se apreto. */
+    /** Pressing on the strip: it advances one block towards where it was pressed. */
     protected void scrollDueToClickInTrack(int dir) {
         scrollByBlock(dir);
     }
@@ -838,13 +838,13 @@ public class BasicSliderUI extends SliderUI {
         }
     }
 
-    /** Un rectangulo punteado alrededor; ver la nota de la clase. */
+    /** A dotted rectangle around it; see the class note. */
     public void paintFocus(Graphics g) {
         g.setColor(getFocusColor());
         g.drawRect(focusRect.x, focusRect.y, focusRect.width - 1, focusRect.height - 1);
     }
 
-    /** La franja: una hendidura fina en el medio del alto disponible. */
+    /** The strip: a thin dent in the middle of the available height. */
     public void paintTrack(Graphics g) {
         Rectangle trackBounds = trackRect;
         if (slider.getOrientation() == SwingConstants.HORIZONTAL) {
@@ -872,7 +872,7 @@ public class BasicSliderUI extends SliderUI {
         }
     }
 
-    /** Las marcas grandes y chicas. */
+    /** The big and small ticks. */
     public void paintTicks(Graphics g) {
         Rectangle tickBounds = tickRect;
         g.setColor(getShadowColor());
@@ -945,7 +945,7 @@ public class BasicSliderUI extends SliderUI {
         g.drawLine(0, y, tickBounds.width - 2, y);
     }
 
-    /** Las etiquetas, cada una centrada en su valor. */
+    /** The labels, each one centred on its value. */
     public void paintLabels(Graphics g) {
         Rectangle labelBounds = labelRect;
         Dictionary<?, ?> dictionary = slider.getLabelTable();
@@ -998,7 +998,7 @@ public class BasicSliderUI extends SliderUI {
         g.translate(0, -labelTop);
     }
 
-    /** El pulgar: un rectangulo plano; ver la nota de la clase. */
+    /** The thumb: a flat rectangle; see the class note. */
     public void paintThumb(Graphics g) {
         Rectangle knobBounds = thumbRect;
         g.translate(knobBounds.x, knobBounds.y);
@@ -1010,10 +1010,10 @@ public class BasicSliderUI extends SliderUI {
     }
 
     /**
-     * Donde apoya el texto de las etiquetas.
+     * Where the labels' text rests.
      *
-     * @throws NullPointerException si el componente es nulo
-     * @throws IllegalArgumentException si el ancho o el alto son negativos
+     * @throws NullPointerException if the component is null
+     * @throws IllegalArgumentException if the width or the height are negative
      */
     public int getBaseline(JComponent c, int width, int height) {
         super.getBaseline(c, width, height);
@@ -1023,7 +1023,7 @@ public class BasicSliderUI extends SliderUI {
         return 0;
     }
 
-    /** El que sigue el mouse sobre la franja y sobre el pulgar. */
+    /** The one that follows the mouse over the strip and over the thumb. */
     public class TrackListener extends MouseInputAdapter {
 
         private final BasicSliderUI ui;
@@ -1031,7 +1031,7 @@ public class BasicSliderUI extends SliderUI {
         protected transient int currentMouseX;
         protected transient int currentMouseY;
 
-        /** El parametro es el UI; ver el hallazgo #518. */
+        /** The parameter is the look and feel; see finding #518. */
         public TrackListener(BasicSliderUI ui) {
             this.ui = ui;
         }
@@ -1053,7 +1053,7 @@ public class BasicSliderUI extends SliderUI {
                 return;
             }
             ui.dragging = false;
-            int direction = direccion();
+            int direction = currentDirection();
             if (direction != 0) {
                 ui.scrollDueToClickInTrack(direction);
                 if (ui.scrollTimer != null) {
@@ -1063,7 +1063,7 @@ public class BasicSliderUI extends SliderUI {
             }
         }
 
-        private int direccion() {
+        private int currentDirection() {
             if (ui.slider.getOrientation() == SwingConstants.HORIZONTAL) {
                 if (currentMouseX < ui.thumbRect.x) {
                     return ui.drawInverted() ? POSITIVE_SCROLL : NEGATIVE_SCROLL;
@@ -1113,13 +1113,13 @@ public class BasicSliderUI extends SliderUI {
         public void mouseMoved(MouseEvent e) {
         }
 
-        /** Si ese punto cae en el pulgar. */
+        /** Whether that point falls on the thumb. */
         public boolean shouldScroll(int direction) {
             return true;
         }
     }
 
-    /** El valor que corresponde a ese pixel; la vuelta de {@link #xPositionForValue}. */
+    /** The value that corresponds to that pixel; the way back from {@link #xPositionForValue}. */
     int valueForXPosition(int xPos) {
         int trackLength = trackRect.width;
         int trackLeft = trackRect.x;
@@ -1145,7 +1145,7 @@ public class BasicSliderUI extends SliderUI {
         return value;
     }
 
-    /** Idem en el otro eje. */
+    /** The same on the other axis. */
     int valueForYPosition(int yPos) {
         int trackLength = trackRect.height;
         int trackTop = trackRect.y;
@@ -1171,14 +1171,14 @@ public class BasicSliderUI extends SliderUI {
         return value;
     }
 
-    /** El reloj que repite el avance mientras se mantiene apretado; ver la nota de la clase. */
+    /** The timer that repeats the advance while it is held down; see the class note. */
     public class ScrollListener implements ActionListener {
 
         private final BasicSliderUI ui;
         private int direction = POSITIVE_SCROLL;
         private boolean useBlockIncrement = true;
 
-        /** El parametro es el UI; ver el hallazgo #518. */
+        /** The parameter is the look and feel; see finding #518. */
         public ScrollListener(BasicSliderUI ui) {
             this.ui = ui;
         }
@@ -1201,9 +1201,10 @@ public class BasicSliderUI extends SliderUI {
     }
 
     /**
-     * El que escucha el modelo, el foco, el tamano y las propiedades.
+     * The one that listens to the model, the focus, the size and the properties.
      *
-     * <p>Estatico y con el UI como campo, por lo mismo que en todo el paquete.
+     * <p>Static and with the look and feel as a field, for the same reason as everywhere in the
+     * package.
      */
     private static class Handler implements ChangeListener, ComponentListener, FocusListener,
             PropertyChangeListener {
@@ -1244,23 +1245,23 @@ public class BasicSliderUI extends SliderUI {
         }
 
         public void propertyChange(PropertyChangeEvent e) {
-            String nombre = e.getPropertyName();
-            if ("orientation".equals(nombre) || "inverted".equals(nombre)
-                    || "labelTable".equals(nombre) || "majorTickSpacing".equals(nombre)
-                    || "minorTickSpacing".equals(nombre) || "paintTicks".equals(nombre)
-                    || "paintLabels".equals(nombre) || "paintTrack".equals(nombre)
-                    || "font".equals(nombre) || "componentOrientation".equals(nombre)) {
+            String name = e.getPropertyName();
+            if ("orientation".equals(name) || "inverted".equals(name)
+                    || "labelTable".equals(name) || "majorTickSpacing".equals(name)
+                    || "minorTickSpacing".equals(name) || "paintTicks".equals(name)
+                    || "paintLabels".equals(name) || "paintTrack".equals(name)
+                    || "font".equals(name) || "componentOrientation".equals(name)) {
                 ui.calculateGeometry();
                 ui.slider.repaint();
-            } else if ("model".equals(nombre)) {
-                Object viejo = e.getOldValue();
-                Object nuevo = e.getNewValue();
-                if (viejo instanceof javax.swing.BoundedRangeModel) {
-                    ((javax.swing.BoundedRangeModel) viejo)
+            } else if ("model".equals(name)) {
+                Object old = e.getOldValue();
+                Object newValue = e.getNewValue();
+                if (old instanceof javax.swing.BoundedRangeModel) {
+                    ((javax.swing.BoundedRangeModel) old)
                             .removeChangeListener(ui.changeListener);
                 }
-                if (nuevo instanceof javax.swing.BoundedRangeModel) {
-                    ((javax.swing.BoundedRangeModel) nuevo).addChangeListener(ui.changeListener);
+                if (newValue instanceof javax.swing.BoundedRangeModel) {
+                    ((javax.swing.BoundedRangeModel) newValue).addChangeListener(ui.changeListener);
                 }
                 ui.calculateThumbLocation();
                 ui.slider.repaint();
@@ -1268,7 +1269,7 @@ public class BasicSliderUI extends SliderUI {
         }
     }
 
-    /** La que tira {@link #uninstallUI} si le dan otro componente. */
+    /** The one {@link #uninstallUI} throws if it is given another component. */
     private static class IllegalComponentStateException extends IllegalStateException {
 
         IllegalComponentStateException(String s) {

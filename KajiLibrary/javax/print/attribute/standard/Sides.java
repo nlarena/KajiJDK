@@ -7,14 +7,15 @@ import javax.print.attribute.PrintJobAttribute;
 import javax.print.attribute.PrintRequestAttribute;
 
 /**
- * Si se imprime de un lado o de los dos, y por que borde se da vuelta la hoja.
+ * Whether it prints on one side or on both, and along which edge the sheet is turned.
  *
- * <p>El borde importa porque decide para que lado hay que girar la hoja al leerla: por el largo la
- * segunda cara queda derecha como en un libro, por el corto queda cabeza abajo como en un anotador.
+ * <p>The edge matters because it decides which way the sheet has to be turned to read it: along the
+ * long edge the second side comes out upright as in a book, along the short one it comes out upside
+ * down as in a notepad.
  *
- * <p>{@code DUPLEX} y {@code TUMBLE} son <b>alias</b>, no valores nuevos: son el mismo objeto que
- * {@code TWO_SIDED_LONG_EDGE} y {@code TWO_SIDED_SHORT_EDGE}, asi que {@code DUPLEX ==
- * TWO_SIDED_LONG_EDGE} da true y la tabla de nombres tiene tres filas, no cinco.
+ * <p>{@code DUPLEX} and {@code TUMBLE} are <b>aliases</b>, not new values: they are the same object
+ * as {@code TWO_SIDED_LONG_EDGE} and {@code TWO_SIDED_SHORT_EDGE}, so {@code DUPLEX ==
+ * TWO_SIDED_LONG_EDGE} gives true and the name table has three rows, not five.
  */
 public final class Sides extends EnumSyntax implements DocAttribute, PrintRequestAttribute, PrintJobAttribute {
 
@@ -26,10 +27,10 @@ public final class Sides extends EnumSyntax implements DocAttribute, PrintReques
 
     public static final Sides TWO_SIDED_SHORT_EDGE = new Sides(2);
 
-    /** Alias de {@link #TWO_SIDED_LONG_EDGE}: el mismo objeto, no un valor nuevo. */
+    /** Alias of {@link #TWO_SIDED_LONG_EDGE}: the same object, not a new value. */
     public static final Sides DUPLEX = TWO_SIDED_LONG_EDGE;
 
-    /** Alias de {@link #TWO_SIDED_SHORT_EDGE}: el mismo objeto, no un valor nuevo. */
+    /** Alias of {@link #TWO_SIDED_SHORT_EDGE}: the same object, not a new value. */
     public static final Sides TUMBLE = TWO_SIDED_SHORT_EDGE;
 
     private static final String[] myStringTable = {

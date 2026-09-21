@@ -19,52 +19,52 @@ import javax.xml.crypto.dsig.spec.SignatureMethodParameterSpec;
 import javax.xml.crypto.dsig.spec.TransformParameterSpec;
 
 /**
- * KajiLibrary's javax.xml.crypto.dsig.XMLSignatureFactory -- fabrica todas las piezas de una firma.
+ * KajiLibrary's javax.xml.crypto.dsig.XMLSignatureFactory -- makes all the pieces of a signature.
  *
- * <p>Las interfaces de este paquete no tienen constructor: se arman desde aca. La fabrica se pide por
- * <b>mecanismo</b> --el modelo de objetos, tipicamente {@code "DOM"}-- porque las estructuras que
- * produce estan atadas a como se representa el XML.
+ * <p>The interfaces of this package have no constructor: they are built from here. The factory is
+ * asked for by <b>mechanism</b> --the object model, typically {@code "DOM"}-- because the
+ * structures it produces are tied to how the XML is represented.
  *
- * <h2>Armar una firma, en orden</h2>
+ * <h2>Building a signature, in order</h2>
  *
- * <p>El orden de los {@code new*} no es arbitrario: se construye de adentro hacia afuera. Primero las
- * {@link Reference} con sus transformaciones, despues el {@link SignedInfo} que las agrupa con los
- * algoritmos, despues la {@link XMLSignature}. Recien ahi se llama a {@code sign}.
+ * <p>The order of the {@code new*}s is not arbitrary: it is built from the inside out. First the
+ * {@link Reference}s with their transforms, then the {@link SignedInfo} that groups them with the
+ * algorithms, then the {@link XMLSignature}. Only then is {@code sign} called.
  *
- * <p>{@link #unmarshalXMLSignature} hace el camino inverso: lee una firma de un documento para
- * validarla.
+ * <p>{@link #unmarshalXMLSignature} goes the other way: it reads a signature from a document to
+ * validate it.
  *
- * <p>{@link #getKeyInfoFactory} devuelve la fabrica de informacion de clave del <b>mismo</b>
- * mecanismo. Es importante que salga de aca y no de {@code KeyInfoFactory.getInstance}: mezclar
- * estructuras de dos mecanismos distintos falla al escribir.
+ * <p>{@link #getKeyInfoFactory} returns the key information factory of the <b>same</b> mechanism.
+ * It matters that it comes from here and not from {@code KeyInfoFactory.getInstance}: mixing
+ * structures of two different mechanisms fails when writing.
  *
  * <h2>A KajiLibrary subset</h2>
  *
- * <p>Esta biblioteca no trae un mecanismo de firma XML --pide canonicalizacion, un DOM vivo y un
- * motor de transformaciones-- asi que los cuatro {@code getInstance} lanzan
- * {@link NoSuchMechanismException}. Es la excepcion que ya declaran para "no hay implementacion", y no
- * es comprobada porque es un problema de despliegue. La busqueda entre proveedores esta implementada:
- * registrando un servicio {@code XMLSignatureFactory}, esto funciona sin cambios.
+ * <p>This library comes with no XML signature mechanism --it needs canonicalization, a live DOM and
+ * a transform engine-- so the four {@code getInstance}s throw {@link NoSuchMechanismException}. It
+ * is the exception they already declare for "no implementation", and it is unchecked because it is
+ * a deployment problem. The search among providers is implemented: registering an {@code
+ * XMLSignatureFactory} service, this works unchanged.
  */
 public abstract class XMLSignatureFactory {
 
-    /** El tipo de servicio con el que se registra un proveedor. */
+    /** The service type a provider registers with. */
     private static final String SERVICE = "XMLSignatureFactory";
 
-    /** El mecanismo con el que se pidio. */
+    /** The mechanism it was asked for with. */
     private String mechanismType;
 
-    /** De donde salio. */
+    /** Where it came from. */
     private Provider provider;
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected XMLSignatureFactory() {
     }
 
     /**
-     * La fabrica de ese mecanismo, del primer proveedor que la tenga.
+     * The factory of that mechanism, from the first provider that has it.
      *
-     * @throws NoSuchMechanismException si ninguno la tiene
+     * @throws NoSuchMechanismException if none has it
      */
     public static XMLSignatureFactory getInstance(String mechanismType) {
         if (mechanismType == null) {
@@ -83,7 +83,7 @@ public abstract class XMLSignatureFactory {
             "No XMLSignatureFactory implementation for mechanism type " + mechanismType);
     }
 
-    /** Idem, de un proveedor concreto. */
+    /** Likewise, from a concrete provider. */
     public static XMLSignatureFactory getInstance(String mechanismType, Provider provider) {
         if (mechanismType == null) {
             throw new NullPointerException("mechanismType cannot be null");
@@ -100,9 +100,9 @@ public abstract class XMLSignatureFactory {
     }
 
     /**
-     * Idem, nombrando el proveedor.
+     * Likewise, naming the provider.
      *
-     * @throws NoSuchProviderException si no hay proveedor con ese nombre
+     * @throws NoSuchProviderException if there is no provider with that name
      */
     public static XMLSignatureFactory getInstance(String mechanismType, String provider)
         throws NoSuchProviderException {
@@ -119,134 +119,134 @@ public abstract class XMLSignatureFactory {
         return getInstance(mechanismType, p);
     }
 
-    /** La del mecanismo por omision, que es {@code "DOM"}. */
+    /** The one of the default mechanism, which is {@code "DOM"}. */
     public static XMLSignatureFactory getInstance() {
         return getInstance("DOM");
     }
 
-    /** El mecanismo con el que se pidio. */
+    /** The mechanism it was asked for with. */
     public final String getMechanismType() {
         return this.mechanismType;
     }
 
-    /** El proveedor de donde salio. */
+    /** The provider it came from. */
     public final Provider getProvider() {
         return this.provider;
     }
 
-    /** Una firma con ese contenido firmado y esa informacion de clave. */
+    /** A signature with that signed content and that key information. */
     public abstract XMLSignature newXMLSignature(SignedInfo si, KeyInfo ki);
 
-    /** Idem, con objetos adentro e identificadores. */
+    /** Likewise, with objects inside and identifiers. */
     public abstract XMLSignature newXMLSignature(SignedInfo si, KeyInfo ki,
                                                  List<? extends XMLObject> objects, String id,
                                                  String signatureValueId);
 
-    /** Una referencia a ese URI, resumida con ese algoritmo. */
+    /** A reference to that URI, digested with that algorithm. */
     public abstract Reference newReference(String uri, DigestMethod dm);
 
-    /** Idem, con transformaciones, tipo e identificador. */
+    /** Likewise, with transforms, type and identifier. */
     public abstract Reference newReference(String uri, DigestMethod dm,
                                            List<? extends Transform> transforms, String type,
                                            String id);
 
-    /** Idem, con el resumen ya calculado: para leer una firma existente. */
+    /** Likewise, with the digest already computed: to read an existing signature. */
     public abstract Reference newReference(String uri, DigestMethod dm,
                                            List<? extends Transform> transforms, String type,
                                            String id, byte[] digestValue);
 
-    /** Idem, con datos ya resueltos y transformaciones de aplicacion. */
+    /** Likewise, with data already resolved and application transforms. */
     public abstract Reference newReference(String uri, DigestMethod dm,
                                            List<? extends Transform> appliedTransforms,
                                            Data result, List<? extends Transform> transforms,
                                            String type, String id);
 
-    /** El bloque que de verdad se firma. */
+    /** The block that is really signed. */
     public abstract SignedInfo newSignedInfo(CanonicalizationMethod cm, SignatureMethod sm,
                                              List<? extends Reference> references);
 
-    /** Idem, con identificador. */
+    /** Likewise, with an identifier. */
     public abstract SignedInfo newSignedInfo(CanonicalizationMethod cm, SignatureMethod sm,
                                              List<? extends Reference> references, String id);
 
-    /** Un contenedor de contenido dentro de la firma. */
+    /** A content container inside the signature. */
     public abstract XMLObject newXMLObject(List<? extends XMLStructure> content, String id,
                                            String mimeType, String encoding);
 
-    /** Un manifiesto. */
+    /** A manifest. */
     public abstract Manifest newManifest(List<? extends Reference> references);
 
-    /** Idem, con identificador. */
+    /** Likewise, with an identifier. */
     public abstract Manifest newManifest(List<? extends Reference> references, String id);
 
-    /** Una propiedad sobre la firma. */
+    /** A property about the signature. */
     public abstract SignatureProperty newSignatureProperty(List<? extends XMLStructure> content,
                                                            String target, String id);
 
-    /** Un grupo de propiedades. */
+    /** A group of properties. */
     public abstract SignatureProperties newSignatureProperties(
         List<? extends SignatureProperty> properties, String id);
 
     /**
-     * Un algoritmo de resumen.
+     * A digest algorithm.
      *
-     * @throws NoSuchAlgorithmException si el mecanismo no lo soporta
-     * @throws InvalidAlgorithmParameterException si los parametros no le sirven
+     * @throws NoSuchAlgorithmException if the mechanism does not support it
+     * @throws InvalidAlgorithmParameterException if the parameters do not suit it
      */
     public abstract DigestMethod newDigestMethod(String algorithm, DigestMethodParameterSpec params)
         throws NoSuchAlgorithmException, InvalidAlgorithmParameterException;
 
-    /** Un algoritmo de firma. */
+    /** A signature algorithm. */
     public abstract SignatureMethod newSignatureMethod(String algorithm,
                                                        SignatureMethodParameterSpec params)
         throws NoSuchAlgorithmException, InvalidAlgorithmParameterException;
 
-    /** Una transformacion. */
+    /** A transform. */
     public abstract Transform newTransform(String algorithm, TransformParameterSpec params)
         throws NoSuchAlgorithmException, InvalidAlgorithmParameterException;
 
-    /** Idem, con los parametros como XML ya armado. */
+    /** Likewise, with the parameters as XML already built. */
     public abstract Transform newTransform(String algorithm, XMLStructure params)
         throws NoSuchAlgorithmException, InvalidAlgorithmParameterException;
 
-    /** Una canonicalizacion. */
+    /** A canonicalization. */
     public abstract CanonicalizationMethod newCanonicalizationMethod(String algorithm,
                                                                      C14NMethodParameterSpec params)
         throws NoSuchAlgorithmException, InvalidAlgorithmParameterException;
 
-    /** Idem, con los parametros como XML ya armado. */
+    /** Likewise, with the parameters as XML already built. */
     public abstract CanonicalizationMethod newCanonicalizationMethod(String algorithm,
                                                                      XMLStructure params)
         throws NoSuchAlgorithmException, InvalidAlgorithmParameterException;
 
     /**
-     * La fabrica de informacion de clave del <b>mismo</b> mecanismo.
+     * The key information factory of the <b>same</b> mechanism.
      *
-     * <p>Ver la nota de la clase sobre por que no hay que pedirla por otro lado.
+     * <p>See the class note on why it should not be asked for elsewhere.
      */
     public final KeyInfoFactory getKeyInfoFactory() {
         return KeyInfoFactory.getInstance(getMechanismType(), getProvider());
     }
 
     /**
-     * Lee la firma que el contexto apunta.
+     * Reads the signature the context points to.
      *
-     * @throws MarshalException si no es una firma bien formada
+     * @throws MarshalException if it is not a well-formed signature
      */
     public abstract XMLSignature unmarshalXMLSignature(XMLValidateContext context)
         throws MarshalException;
 
-    /** Idem, desde una estructura ya analizada. */
+    /** Likewise, from an already parsed structure. */
     public abstract XMLSignature unmarshalXMLSignature(XMLStructure xmlStructure)
         throws MarshalException;
 
-    /** Si esta implementacion soporta esa caracteristica. */
+    /** Whether this implementation supports that feature. */
     public abstract boolean isFeatureSupported(String feature);
 
-    /** Como esta fabrica resuelve las referencias por omision. */
+    /** How this factory resolves the references by default. */
     public abstract URIDereferencer getURIDereferencer();
 
-    /** El armado comun de los {@code getInstance} con busqueda. */
+    /** What the {@code getInstance}s with a search build in common. */
     private static XMLSignatureFactory build(Provider.Service s, String mechanismType) {
         Object made;
         try {

@@ -10,21 +10,22 @@ import javax.swing.text.EditorKit;
 import javax.swing.text.JTextComponent;
 
 /**
- * El aspecto basico de un panel de edicion.
+ * The basic look and feel of an editor pane.
  *
- * <h2>El juego de edicion no lo elige el aspecto</h2>
+ * <h2>The editor kit is not chosen by the look and feel</h2>
  *
- * <p>Es la unica diferencia de fondo con los otros UI de texto: un campo o un area tienen siempre
- * el mismo juego de edicion, y un {@link JEditorPane} lo cambia segun el tipo de contenido --texto
- * plano, HTML, RTF--. Por eso {@link #getEditorKit} no devuelve una constante: le pregunta al
- * componente. Y por eso hace falta escuchar {@code "editorKit"}: cuando cambia, hay que rehacer el
- * arbol de vistas entero, porque las vistas viejas son las del juego viejo.
+ * <p>It is the only deep difference with the other text look and feels: a field or an area
+ * always have the same editor kit, and a {@link JEditorPane} changes it according to the content
+ * type -- plain text, HTML, RTF --. That is why {@link #getEditorKit} does not return a
+ * constant: it asks the component. And that is why {@code "editorKit"} has to be listened to:
+ * when it changes, the whole view tree has to be rebuilt, because the old views are the old
+ * kit's.
  *
- * <h2>Lo que se reinstala al cambiar de juego</h2>
+ * <h2>What is reinstalled on changing kit</h2>
  *
- * <p>El color y la fuente. Un juego de edicion trae sus propios estilos, y si el que estaba puesto
- * venia del aspecto hay que volver a ponerlo encima; si lo puso el usuario, no. Es la misma regla
- * de {@link UIResource} de siempre, aplicada en un momento raro.
+ * <p>The colour and the typeface. An editor kit brings styles of its own, and if the one that
+ * was set came from the look and feel it has to be put on top again; if the user set it, no. It
+ * is the same {@link UIResource} rule as always, applied at an odd moment.
  */
 public class BasicEditorPaneUI extends BasicTextUI {
 
@@ -32,7 +33,7 @@ public class BasicEditorPaneUI extends BasicTextUI {
         super();
     }
 
-    /** Uno nuevo por panel: un UI de texto guarda el componente. */
+    /** A new one per pane: a text look and feel keeps the component. */
     public static ComponentUI createUI(JComponent c) {
         return new BasicEditorPaneUI();
     }
@@ -43,7 +44,7 @@ public class BasicEditorPaneUI extends BasicTextUI {
 
     public void installUI(JComponent c) {
         super.installUI(c);
-        actualizarEstilo((JTextComponent) c);
+        updateStyle((JTextComponent) c);
     }
 
     public void uninstallUI(JComponent c) {
@@ -51,35 +52,38 @@ public class BasicEditorPaneUI extends BasicTextUI {
         super.uninstallUI(c);
     }
 
-    /** El del componente, no uno fijo; ver la nota de la clase. */
+    /** The component's, not a fixed one; see the class note. */
     public EditorKit getEditorKit(JTextComponent tc) {
         JEditorPane pane = (JEditorPane) tc;
         return pane.getEditorKit();
     }
 
-    /** Rehace las vistas y el estilo cuando cambia el juego de edicion. */
+    /** It rebuilds the views and the style when the editor kit changes. */
     protected void propertyChange(PropertyChangeEvent evt) {
         super.propertyChange(evt);
-        String nombre = evt.getPropertyName();
-        if ("editorKit".equals(nombre)) {
-            actualizarEstilo((JTextComponent) evt.getSource());
-        } else if ("editable".equals(nombre) || "foreground".equals(nombre)
-                || "font".equals(nombre) || "document".equals(nombre)) {
-            actualizarEstilo((JTextComponent) evt.getSource());
+        String name = evt.getPropertyName();
+        if ("editorKit".equals(name)) {
+            updateStyle((JTextComponent) evt.getSource());
+        } else if ("editable".equals(name) || "foreground".equals(name)
+                || "font".equals(name) || "document".equals(name)) {
+            updateStyle((JTextComponent) evt.getSource());
         }
     }
 
-    /** Deja el color y la fuente del aspecto encima de los del juego; ver la nota de la clase. */
-    private void actualizarEstilo(JTextComponent editor) {
+    /**
+     * It leaves the look and feel's colour and typeface on top of the kit's; see the class note.
+     */
+    private void updateStyle(JTextComponent editor) {
         if (editor.getForeground() instanceof UIResource
                 || editor.getFont() instanceof UIResource) {
-            // Los valores del aspecto se vuelven a aplicar tal cual: ya estan puestos en el
-            // componente y el juego de edicion los lee de ahi. No hay nada que copiar.
+            // The look and feel's values are applied again as they are: they are already set in the
+                        // component and the editor kit reads them from there. There is nothing to
+                        // copy.
             editor.repaint();
         }
     }
 
-    /** Saca lo que este UI dejo puesto en el componente. */
+    /** It removes what this look and feel left set in the component. */
     private void cleanDisplayProperties(JTextComponent editor) {
     }
 }

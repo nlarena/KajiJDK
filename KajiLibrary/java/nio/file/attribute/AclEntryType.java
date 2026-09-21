@@ -1,17 +1,17 @@
 package java.nio.file.attribute;
 
-// Que hace una entrada de ACL cuando coincide: permite, niega, o solo deja rastro.
+// What an ACL entry does when it matches: it allows, denies, or only leaves a trace.
 public enum AclEntryType {
 
-    /** Da acceso. */
+    /** It gives access. */
     ALLOW,
 
-    /** Niega acceso. */
+    /** It denies access. */
     DENY,
 
-    /** No cambia el acceso: registra el intento en la auditoria. */
+    /** It does not change the access: it records the attempt in the audit log. */
     AUDIT,
 
-    /** No cambia el acceso: dispara una alarma. */
+    /** It does not change the access: it raises an alarm. */
     ALARM
 }

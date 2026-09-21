@@ -2,29 +2,29 @@ package java.nio.file.attribute;
 
 import java.io.IOException;
 
-// El servicio que traduce un nombre a un `UserPrincipal` o a un `GroupPrincipal`.
+// The service that turns a name into a `UserPrincipal` or a `GroupPrincipal`.
 //
-// Abstracta y **sin implementacion en KajiJDK**: no hay nativo que consulte la base de usuarios del
-// sistema. Por eso `FileSystem.getUserPrincipalLookupService()` de `KajiFileSystem` levanta
-// `UnsupportedOperationException` --que es lo que la spec ya contempla para un sistema de archivos
-// que no soporta principals-- en vez de devolver un servicio que conteste nombres inventados.
+// Abstract and **without an implementation in KajiJDK**: there is no native that queries the system's
+// user database. That is why `KajiFileSystem`'s `FileSystem.getUserPrincipalLookupService()` throws
+// `UnsupportedOperationException` --which is what the spec already provides for a filesystem that
+// does not support principals-- rather than return a service that answers with invented names.
 public abstract class UserPrincipalLookupService {
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected UserPrincipalLookupService() {
     }
 
     /**
-     * Busca un usuario por nombre.
+     * It looks a user up by name.
      *
-     * @throws UserPrincipalNotFoundException si no existe
+     * @throws UserPrincipalNotFoundException if it does not exist
      */
     public abstract UserPrincipal lookupPrincipalByName(String name) throws IOException;
 
     /**
-     * Busca un grupo por nombre.
+     * It looks a group up by name.
      *
-     * @throws UserPrincipalNotFoundException si no existe
+     * @throws UserPrincipalNotFoundException if it does not exist
      */
     public abstract GroupPrincipal lookupPrincipalByGroupName(String group) throws IOException;
 }

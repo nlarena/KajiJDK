@@ -1,17 +1,17 @@
 package javax.management;
 
-/** Disyuncion. De paquete: se fabrica con {@link Query#or}. */
+/** Disjunction. Package-private: it is made with {@link Query#or}. */
 class OrQueryExp extends QueryEval implements QueryExp {
 
     private static final long serialVersionUID = 2962973084421716523L;
 
     /**
-     * @serial la primera
+     * @serial the first one
      */
     private QueryExp exp1;
 
     /**
-     * @serial la segunda
+     * @serial the second one
      */
     private QueryExp exp2;
 
@@ -31,7 +31,7 @@ class OrQueryExp extends QueryEval implements QueryExp {
         return exp2;
     }
 
-    /** En corto: si la primera es verdadera, la segunda no se evalua. */
+    /** Short-circuit: if the first is true, the second is not evaluated. */
     public boolean apply(ObjectName name) throws BadStringOperationException,
             BadBinaryOpValueExpException, BadAttributeValueExpException,
             InvalidApplicationException {

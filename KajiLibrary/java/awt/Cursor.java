@@ -1,26 +1,26 @@
 package java.awt;
 
 /**
- * La forma del puntero del mouse: la flecha, la manito, el reloj, las ocho flechas de redimension.
+ * The shape of the mouse pointer: the arrow, the little hand, the clock, the eight resize arrows.
  *
- * <p>Un Cursor no es un dibujo sino un pedido: guarda un tipo y un nombre, y quien lo pinta es el
- * sistema. Por eso la clase se puede escribir sin sistema de ventanas: lo que hay es la tabla de
- * los catorce tipos predefinidos y el cache que los comparte.
+ * <p>A Cursor is not a drawing but a request: it keeps a type and a name, and the one that paints
+ * it is the system. That is why the class can be written without a windowing system: what there is
+ * here is the table of the fourteen predefined types and the cache that shares them.
  *
- * <p>{@code CUSTOM_CURSOR} vale -1 y no 14 a proposito: no es un tipo mas de la serie sino la
- * marca de "esto no es ninguno de los predefinidos", y estar fuera del rango 0..13 es justo lo que
- * hace que la validacion de tipo lo rechace sin un caso especial.
+ * <p>{@code CUSTOM_CURSOR} is -1 and not 14 on purpose: it is not one more type of the series but
+ * the mark meaning "this is none of the predefined ones", and being outside the range 0..13 is
+ * exactly what makes the type check reject it with no special case.
  *
- * <h2>Lo que falta y por que</h2>
+ * <h2>What is missing and why</h2>
  *
- * <p>{@code getSystemCustomCursor(String)} esta, y **tira**. Busca el cursor en un archivo de
- * descriptores del escritorio, y esta biblioteca no trae ninguno. Devolver null diria "se busco y no
- * estaba", que no es cierto; la {@code AWTException} que el propio metodo declara dice "no se pudo
- * encontrar", que si lo es.
+ * <p>{@code getSystemCustomCursor(String)} is here, and it **throws**. It looks the cursor up in a
+ * file of desktop descriptors, and this library ships none. Returning null would say "it was looked
+ * up and was not there", which is not true; the {@code AWTException} the method itself declares
+ * says "it could not be found", which is.
  *
- * <p>Los nombres de los predefinidos son los que el JDK usa cuando no encuentra el paquete de
- * recursos traducido, que es el caso aca: no hay traduccion que buscar, asi que el valor por
- * defecto es la respuesta correcta y no un relleno.
+ * <p>The names of the predefined ones are those the JDK uses when it does not find the translated
+ * resource bundle, which is the case here: there is no translation to look for, so the default
+ * value is the right answer and not filler.
  */
 public class Cursor implements java.io.Serializable {
 
@@ -54,18 +54,19 @@ public class Cursor implements java.io.Serializable {
 
     public static final int MOVE_CURSOR = 13;
 
-    /** Fuera de la serie: -1 no es un tipo, es "ninguno de los de arriba". */
+    /** Outside the series: -1 is not a type, it is "none of the above". */
     public static final int CUSTOM_CURSOR = -1;
 
     /**
-     * El cache de los predefinidos. Es {@code protected} porque estaba asi en 1.1 y quedo; se
-     * llena a medida que se piden, no de entrada, para no fabricar catorce objetos que nadie use.
+     * The cache of the predefined ones. It is {@code protected} because it was like that in 1.1 and
+     * stayed; it fills up as they are asked for, not up front, so as not to build fourteen objects
+     * nobody uses.
      */
     protected static Cursor[] predefined = new Cursor[14];
 
     /**
-     * Clave del paquete de recursos y nombre por defecto de cada tipo. Sin Toolkit se usa siempre
-     * la segunda columna, que es lo que el JDK devuelve cuando no hay traduccion.
+     * Resource bundle key and default name of each type. Without a Toolkit the second column is
+     * always used, which is what the JDK returns when there is no translation.
      */
     static final String[][] cursorProperties = {
         {"AWT.DefaultCursor", "Default Cursor"},
@@ -97,8 +98,8 @@ public class Cursor implements java.io.Serializable {
     }
 
     /**
-     * Para las subclases que representan un cursor hecho a medida. No valida el tipo porque el
-     * suyo es CUSTOM_CURSOR, que esta fuera del rango a proposito.
+     * For the subclasses that stand for a custom cursor. It does not validate the type because
+     * theirs is CUSTOM_CURSOR, which is outside the range on purpose.
      */
     protected Cursor(String name) {
         this.type = Cursor.CUSTOM_CURSOR;
@@ -106,9 +107,9 @@ public class Cursor implements java.io.Serializable {
     }
 
     /**
-     * Los predefinidos se comparten: dos llamadas con el mismo tipo devuelven el mismo objeto. Un
-     * cursor es inmutable, asi que no hay nada que se pueda romper compartiendolo, y en cambio
-     * evita fabricar uno por cada componente de una ventana.
+     * The predefined ones are shared: two calls with the same type return the same object. A cursor
+     * is immutable, so there is nothing that sharing it can break, and it avoids building one per
+     * component of a window.
      */
     public static Cursor getPredefinedCursor(int type) {
         if (type < Cursor.DEFAULT_CURSOR || type > Cursor.MOVE_CURSOR) {
@@ -139,13 +140,13 @@ public class Cursor implements java.io.Serializable {
     }
 
     /**
-     * Un cursor definido por el escritorio, buscado por nombre.
+     * A cursor defined by the desktop, looked up by name.
      *
-     * @throws AWTException siempre: no hay descriptores donde buscar. Los cursores predefinidos si
-     *     estan, en {@link #getPredefinedCursor}.
+     * @throws AWTException always: there are no descriptors to look in. The predefined cursors are
+     *     there, in {@link #getPredefinedCursor}.
      */
     public static Cursor getSystemCustomCursor(String name) throws AWTException {
-        throw new AWTException("Cursor de sistema no encontrado: " + name
-                + " (esta biblioteca no trae los descriptores de cursor del escritorio)");
+        throw new AWTException("System cursor not found: " + name
+                + " (this library ships no desktop cursor descriptors)");
     }
 }

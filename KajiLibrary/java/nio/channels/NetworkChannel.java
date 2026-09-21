@@ -6,38 +6,38 @@ import java.net.SocketOption;
 import java.util.Set;
 
 /**
- * KajiLibrary's java.nio.channels.NetworkChannel — un canal atado a un socket de red.
+ * KajiLibrary's java.nio.channels.NetworkChannel — a channel tied to a network socket.
  *
- * <p>Lo que agrega sobre un canal comun son las dos cosas que solo un socket tiene: una **direccion
- * local** a la que estar atado, y **opciones** que ajustan como se comporta.
+ * <p>What it adds over an ordinary channel are the two things only a socket has: a **local
+ * address** to be tied to, and **options** that adjust how it behaves.
  *
- * <p>Las opciones estan tipadas ({@link SocketOption}) y no son pares de cadenas, y eso es lo que
- * permite que {@link #setOption} verifique en compilacion que el valor corresponde a la opcion.
- * {@link #supportedOptions()} existe porque el juego de opciones depende del sistema: preguntar es la
- * unica forma correcta de saber, en vez de probar y atajar.
+ * <p>The options are typed ({@link SocketOption}) and are not pairs of strings, and that is what
+ * allows {@link #setOption} to check at compile time that the value corresponds to the option.
+ * {@link #supportedOptions()} exists because the set of options depends on the system: asking is
+ * the only right way of knowing, instead of trying and catching.
  *
- * <p><strong>Esta biblioteca no trae implementaciones.</strong> Las harian `SocketChannel`,
- * `ServerSocketChannel` y `DatagramChannel`, y esta VM no tiene nativos de red. La interfaz esta
- * completa: es una declaracion, y su contrato no depende de que haya quien lo cumpla.
+ * <p><strong>The implementations are here.</strong> This note used to say that the library brought
+ * none because this VM had no network natives; it has them, and `SocketChannel`,
+ * `ServerSocketChannel` and `DatagramChannel` are implemented over that seam.
  */
 public interface NetworkChannel extends Channel {
 
     /**
-     * Ata el canal a una direccion local.
+     * Ties the channel to a local address.
      *
-     * @param local la direccion, o `null` para que el sistema elija
+     * @param local the address, or `null` for the system to choose
      */
     NetworkChannel bind(SocketAddress local) throws IOException;
 
-    /** La direccion a la que esta atado, o `null` si no lo esta. */
+    /** The address it is tied to, or `null` if it is not tied. */
     SocketAddress getLocalAddress() throws IOException;
 
-    /** Fija una opcion. */
+    /** Sets an option. */
     <T> NetworkChannel setOption(SocketOption<T> name, T value) throws IOException;
 
-    /** El valor de una opcion. */
+    /** The value of an option. */
     <T> T getOption(SocketOption<T> name) throws IOException;
 
-    /** Las opciones que este canal admite. */
+    /** The options this channel admits. */
     Set<SocketOption<?>> supportedOptions();
 }

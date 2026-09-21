@@ -1,41 +1,42 @@
 package javax.swing.undo;
 
 /**
- * La base de casi toda edicion: lleva la cuenta de si esta hecha y si sigue viva.
+ * The base of almost every edit: it keeps track of whether it is done and whether it is still
+ * alive.
  *
- * <h2>Dos banderas, cuatro estados</h2>
+ * <h2>Two flags, four states</h2>
  *
- * <p>{@code alive} y {@code hasBeenDone} parecen redundantes y no lo son: una edicion muerta
- * contesta {@code false} a {@link #canUndo} y a {@link #canRedo} a la vez, cosa que una sola bandera
- * no puede expresar. Muerta es distinto de deshecha — de lo segundo se vuelve.
+ * <p>{@code alive} and {@code hasBeenDone} look redundant and are not: a dead edit answers
+ * {@code false} to {@link #canUndo} and to {@link #canRedo} at the same time, which a single flag
+ * cannot express. Dead is different from undone -- from the second one there is a way back.
  *
- * <p>Toda la clase es esa maquina de estados. Lo que la edicion concreta <em>hace</em> lo pone la
- * subclase sobrescribiendo {@link #undo} y {@link #redo}, siempre llamando a {@code super} primero
- * para que el chequeo corra antes que el trabajo.
+ * <p>The whole class is that state machine. What the concrete edit <em>does</em> is put there by
+ * the subclass overriding {@link #undo} and {@link #redo}, always calling {@code super} first so
+ * that the check runs before the work.
  *
- * <h2>Los tres nombres</h2>
+ * <h2>The three names</h2>
  *
- * <p>{@link #getPresentationName} es el de la edicion; los otros dos son el texto del menu, y salen
- * de pegarle "Undo" o "Redo" adelante. Estan separados porque en un menu el nombre completo es lo
- * que se muestra, y una edicion sin nombre igual necesita que el item diga algo.
+ * <p>{@link #getPresentationName} is the edit's; the other two are the menu's text, and come from
+ * sticking "Undo" or "Redo" in front. They are separate because in a menu the complete name is
+ * what is shown, and an edit with no name still needs the item to say something.
  */
 public class AbstractUndoableEdit implements UndoableEdit, java.io.Serializable {
 
     private static final long serialVersionUID = 580150227676302096L;
 
-    /** El prefijo del comando de deshacer. */
+    /** The undo command's prefix. */
     protected static final String UndoName = "Undo";
 
-    /** El prefijo del comando de rehacer. */
+    /** The redo command's prefix. */
     protected static final String RedoName = "Redo";
 
-    /** Si la edicion esta aplicada. Arranca en {@code true}: una edicion nace hecha. */
+    /** Whether the edit is applied. It starts at {@code true}: an edit is born done. */
     boolean hasBeenDone;
 
-    /** Si todavia se puede usar. {@link #die} la apaga y no se vuelve a prender. */
+    /** Whether it can still be used. {@link #die} turns it off and it never comes back on. */
     boolean alive;
 
-    /** Una edicion nueva: viva y ya hecha. */
+    /** A new edit: alive and already done. */
     public AbstractUndoableEdit() {
         super();
         this.hasBeenDone = true;
@@ -43,17 +44,17 @@ public class AbstractUndoableEdit implements UndoableEdit, java.io.Serializable 
     }
 
     /**
-     * La saca de juego para siempre.
+     * Takes it out of play for good.
      *
-     * <p>No deshace nada: matar y deshacer son cosas distintas. Quien quiera las dos tiene que
-     * pedirlas en orden.
+     * <p>It undoes nothing: killing and undoing are different things. Whoever wants both has to ask
+     * for them in order.
      */
     public void die() {
         this.alive = false;
     }
 
     /**
-     * @throws CannotUndoException si {@link #canUndo} es {@code false}
+     * @throws CannotUndoException if {@link #canUndo} is {@code false}
      */
     public void undo() throws CannotUndoException {
         if (!canUndo()) {
@@ -62,13 +63,13 @@ public class AbstractUndoableEdit implements UndoableEdit, java.io.Serializable 
         this.hasBeenDone = false;
     }
 
-    /** Se puede deshacer si esta viva y hecha. */
+    /** It can be undone if it is alive and done. */
     public boolean canUndo() {
         return this.alive && this.hasBeenDone;
     }
 
     /**
-     * @throws CannotRedoException si {@link #canRedo} es {@code false}
+     * @throws CannotRedoException if {@link #canRedo} is {@code false}
      */
     public void redo() throws CannotRedoException {
         if (!canRedo()) {
@@ -77,47 +78,47 @@ public class AbstractUndoableEdit implements UndoableEdit, java.io.Serializable 
         this.hasBeenDone = true;
     }
 
-    /** Se puede rehacer si esta viva y deshecha. */
+    /** It can be redone if it is alive and undone. */
     public boolean canRedo() {
         return this.alive && !this.hasBeenDone;
     }
 
-    /** No absorbe nada: la fusion la deciden las subclases que sepan como. */
+    /** It absorbs nothing: merging is decided by the subclasses that know how. */
     public boolean addEdit(UndoableEdit anEdit) {
         return false;
     }
 
-    /** No reemplaza nada. */
+    /** It replaces nothing. */
     public boolean replaceEdit(UndoableEdit anEdit) {
         return false;
     }
 
-    /** Significativa por omision, que es lo seguro: se ve como un paso propio. */
+    /** Significant by default, which is the safe thing: it shows up as a step of its own. */
     public boolean isSignificant() {
         return true;
     }
 
-    /** Cadena vacia: una edicion generica no tiene nombre que mostrar. */
+    /** The empty string: a generic edit has no name to show. */
     public String getPresentationName() {
         return "";
     }
 
-    /** El prefijo de deshacer seguido del nombre, si lo hay. */
+    /** The undo prefix followed by the name, if there is one. */
     public String getUndoPresentationName() {
-        String nombre = getPresentationName();
-        if (nombre.isEmpty()) {
+        String name = getPresentationName();
+        if (name.isEmpty()) {
             return UndoName;
         }
-        return UndoName + " " + nombre;
+        return UndoName + " " + name;
     }
 
-    /** El prefijo de rehacer seguido del nombre, si lo hay. */
+    /** The redo prefix followed by the name, if there is one. */
     public String getRedoPresentationName() {
-        String nombre = getPresentationName();
-        if (nombre.isEmpty()) {
+        String name = getPresentationName();
+        if (name.isEmpty()) {
             return RedoName;
         }
-        return RedoName + " " + nombre;
+        return RedoName + " " + name;
     }
 
     public String toString() {

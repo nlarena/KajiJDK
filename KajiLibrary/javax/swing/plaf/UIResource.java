@@ -1,15 +1,16 @@
 package javax.swing.plaf;
 
 /**
- * Marca "esto lo puso el aspecto, no el usuario".
+ * Marks "this was set by the look and feel, not by the user".
  *
- * <p>Es la respuesta a una pregunta que todo aspecto tiene que hacerse al instalarse: si un boton
- * ya tiene un borde, ¿lo eligio el programador o lo dejo el aspecto anterior? Un valor que
- * implementa esta interfaz es del aspecto y se puede pisar; uno que no, es del usuario y se
- * respeta. No tiene metodos porque no hace nada: es una etiqueta en el tipo, no en el valor.
+ * <p>It is the answer to a question every look and feel has to ask itself when installing
+ * itself: if a button already has a border, did the programmer choose it or did the previous look
+ * and feel leave it? A value that implements this interface belongs to the look and feel and can
+ * be overwritten; one that does not belongs to the user and is respected. It has no methods
+ * because it does nothing: it is a label on the type, not on the value.
  *
- * <p>Las clases {@code ColorUIResource}, {@code FontUIResource}, {@code InsetsUIResource} y
- * {@code BorderUIResource} son exactamente eso: el valor de siempre, con la etiqueta puesta.
+ * <p>The classes {@code ColorUIResource}, {@code FontUIResource}, {@code InsetsUIResource} and
+ * {@code BorderUIResource} are exactly that: the usual value, with the label put on.
  */
 public interface UIResource {
 }

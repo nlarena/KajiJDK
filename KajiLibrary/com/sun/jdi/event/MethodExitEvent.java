@@ -4,26 +4,26 @@ import com.sun.jdi.Method;
 import com.sun.jdi.Value;
 
 /**
- * Se salio de un metodo.
+ * A method was left.
  *
- * <p>{@link #returnValue} da lo que devolvio, que es lo unico que permite ver el resultado de una
- * llamada sin modificar el programa.
+ * <p>{@link #returnValue} gives what it returned, which is the only thing that allows a call's
+ * result to be seen without modifying the program.
  *
  * @since 1.3
  */
 public interface MethodExitEvent extends LocatableEvent {
 
     /**
-     * El method.
+     * The method.
      *
-     * @return el resultado
+     * @return the result
      */
     Method method();
 
     /**
-     * El return value.
+     * The return value.
      *
-     * @return el resultado
+     * @return the result
      */
     Value returnValue();
 }

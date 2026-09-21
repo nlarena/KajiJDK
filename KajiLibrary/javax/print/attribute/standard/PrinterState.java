@@ -5,11 +5,11 @@ import javax.print.attribute.EnumSyntax;
 import javax.print.attribute.PrintServiceAttribute;
 
 /**
- * El estado grueso de la impresora.
+ * The printer's coarse state.
  *
- * <p>Son tres estados utiles y {@code UNKNOWN}; el detalle de por que esta parada lo lleva {@link
- * PrinterStateReasons}. Los valores 1 y 2 estan reservados en IPP, de ahi los {@code null} de la
- * tabla.
+ * <p>There are three useful states and {@code UNKNOWN}; the detail of why it is stopped is carried
+ * by {@link PrinterStateReasons}. Values 1 and 2 are reserved in IPP, hence the table's {@code
+ * null}s.
  */
 public final class PrinterState extends EnumSyntax implements PrintServiceAttribute {
 

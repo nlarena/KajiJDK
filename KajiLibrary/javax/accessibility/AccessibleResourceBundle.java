@@ -3,24 +3,24 @@ package javax.accessibility;
 import java.util.ListResourceBundle;
 
 /**
- * El catálogo de nombres traducibles de roles, estados y relaciones.
+ * The catalogue of translatable names of roles, states and relations.
  *
- * <p>Está **vacío**, y eso es lo correcto acá: esta biblioteca no trae traducciones, así que
- * {@link AccessibleBundle#toDisplayString()} devuelve la clave. Un catálogo con las claves en inglés
- * mapeadas a sí mismas sería el mismo resultado con más ceremonia y con la falsa apariencia de estar
- * traducido.
+ * <p>It is **empty**, and that is right here: this library ships no translations, so
+ * {@link AccessibleBundle#toDisplayString()} returns the key. A catalogue with the English keys
+ * mapped to themselves would be the same result with more ceremony and with the false appearance of
+ * being translated.
  *
- * @deprecated el JDK dejó de usarla; las traducciones se buscan por otro camino. Se mantiene porque
- *     está en la API pública.
+ * @deprecated the JDK stopped using it; translations are looked up another way. It is kept because
+ *     it is in the public API.
  */
 @Deprecated
 public class AccessibleResourceBundle extends ListResourceBundle {
 
-    /** Un catálogo vacío. */
+    /** An empty catalogue. */
     public AccessibleResourceBundle() {
     }
 
-    /** Sin entradas. */
+    /** No entries. */
     public Object[][] getContents() {
         return new Object[0][];
     }

@@ -69,7 +69,7 @@ public class Statement {
             if (!(this.target instanceof Class)) {
                 throw new NoSuchMethodException("\"new\" needs a Class target");
             }
-            result = this.construir((Class<?>) this.target);
+            result = this.construct((Class<?>) this.target);
         } else if (this.target instanceof Class) {
             // A Class target may mean either "call a static of that class" or "call a method of
             // the Class instance". The static is tried first, which is what whoever wrote the
@@ -80,21 +80,21 @@ public class Statement {
             } else {
                 Method mc = this.findFor(this.target.getClass(), false);
                 if (mc == null) {
-                    throw new NoSuchMethodException(this.descripcion());
+                    throw new NoSuchMethodException(this.description());
                 }
                 result = mc.invoke(this.target, this.arguments);
             }
         } else {
             Method m = this.findFor(this.target.getClass(), false);
             if (m == null) {
-                throw new NoSuchMethodException(this.descripcion());
+                throw new NoSuchMethodException(this.description());
             }
             result = m.invoke(this.target, this.arguments);
         }
         return result;
     }
 
-    private Object construir(Class<?> c) throws Exception {
+    private Object construct(Class<?> c) throws Exception {
         // Character is the only wrapper with no constructor from a String. Persistence describes
         // every wrapper the same way --`new Integer("7")`, `new Boolean("true")`-- so instead of
         // giving Character a delegate of its own, that non-existent constructor is faked here. It is
@@ -111,12 +111,12 @@ public class Statement {
         Constructor<?>[] cs = c.getConstructors();
         Constructor<?> chosen = null;
         for (int i = 0; i < cs.length; i++) {
-            if (chosen == null && aceptan(cs[i].getParameterTypes(), this.arguments)) {
+            if (chosen == null && accept(cs[i].getParameterTypes(), this.arguments)) {
                 chosen = cs[i];
             }
         }
         if (chosen == null) {
-            throw new NoSuchMethodException(this.descripcion());
+            throw new NoSuchMethodException(this.description());
         }
         return chosen.newInstance(this.arguments);
     }
@@ -130,14 +130,14 @@ public class Statement {
             if (chosen == null
                     && m.getName().equals(this.methodName)
                     && Modifier.isStatic(m.getModifiers()) == staticsOnly
-                    && aceptan(m.getParameterTypes(), this.arguments)) {
+                    && accept(m.getParameterTypes(), this.arguments)) {
                 chosen = m;
             }
         }
         return chosen;
     }
 
-    private String descripcion() {
+    private String description() {
         StringBuilder sb = new StringBuilder();
         sb.append(this.methodName).append('(');
         for (int i = 0; i < this.arguments.length; i++) {
@@ -151,17 +151,17 @@ public class Statement {
     }
 
     // Whether those declared parameters admit those arguments.
-    static boolean aceptan(Class<?>[] params, Object[] args) {
+    static boolean accept(Class<?>[] params, Object[] args) {
         boolean ok = params.length == args.length;
         for (int i = 0; ok && i < params.length; i++) {
-            ok = acepta(params[i], args[i]);
+            ok = accepts(params[i], args[i]);
         }
         return ok;
     }
 
     // A primitive parameter accepts its wrapper and nothing else --not even null; a reference
     // parameter accepts null and any instance of itself.
-    static boolean acepta(Class<?> param, Object arg) {
+    static boolean accepts(Class<?> param, Object arg) {
         boolean ok;
         if (param.isPrimitive()) {
             ok = arg != null && wrapperOf(param) == arg.getClass();
@@ -234,16 +234,16 @@ public class Statement {
         return r;
     }
 
-    static Class<?> wrapperOf(Class<?> primitivo) {
+    static Class<?> wrapperOf(Class<?> primitive) {
         Class<?> r = null;
-        if (primitivo == int.class) { r = Integer.class; }
-        else if (primitivo == boolean.class) { r = Boolean.class; }
-        else if (primitivo == long.class) { r = Long.class; }
-        else if (primitivo == double.class) { r = Double.class; }
-        else if (primitivo == float.class) { r = Float.class; }
-        else if (primitivo == short.class) { r = Short.class; }
-        else if (primitivo == byte.class) { r = Byte.class; }
-        else if (primitivo == char.class) { r = Character.class; }
+        if (primitive == int.class) { r = Integer.class; }
+        else if (primitive == boolean.class) { r = Boolean.class; }
+        else if (primitive == long.class) { r = Long.class; }
+        else if (primitive == double.class) { r = Double.class; }
+        else if (primitive == float.class) { r = Float.class; }
+        else if (primitive == short.class) { r = Short.class; }
+        else if (primitive == byte.class) { r = Byte.class; }
+        else if (primitive == char.class) { r = Character.class; }
         return r;
     }
 

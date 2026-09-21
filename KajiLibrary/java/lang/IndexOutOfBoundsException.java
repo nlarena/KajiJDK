@@ -12,7 +12,7 @@ public class IndexOutOfBoundsException extends RuntimeException {
         super(message);
     }
 
-    // Se construye directamente a partir del índice ofensor; el mensaje es el del JDK.
+    // It is built straight from the offending index; the message is the JDK's.
     public IndexOutOfBoundsException(int index) {
         super("Index out of range: " + index);
     }

@@ -8,33 +8,35 @@ import javax.lang.model.SourceVersion;
 import javax.tools.Diagnostic;
 
 /**
- * El complemento que genera el HTML de javadoc, y que es un complemento como cualquier otro.
+ * The plug-in that generates the HTML of javadoc, and which is a plug-in like any other.
  *
- * <h2>Por que esta clase es publica</h2>
+ * <h2>Why this class is public</h2>
  *
- * <p>Para poder extenderla. Quien quiera el HTML de siempre mas una cosa propia no tiene que
- * reimplementar nada: hereda de aca, delega en {@code super} lo que no cambia y agrega sus opciones
- * a las que {@link #getSupportedOptions} devuelve. {@link #getLocale} y {@link #getReporter} existen
- * justamente para eso — son lo que {@link #init} guardo, expuesto para la subclase.
+ * <p>So that it can be extended. Whoever wants the usual HTML plus something of their own does not
+ * have to reimplement anything: they inherit from here, delegate to {@code super} what does not
+ * change and add their options to the ones {@link #getSupportedOptions} returns. {@link #getLocale}
+ * and {@link #getReporter} exist precisely for that -- they are what {@link #init} saved, exposed
+ * for the subclass.
  *
- * <p>Que el generador por omision sea un complemento normal, sin acceso privilegiado, es lo que
- * hace creible la separacion: si necesitara algo que la interfaz no da, la interfaz estaria mal.
+ * <p>That the default generator is an ordinary plug-in, with no privileged access, is what makes
+ * the separation credible: if it needed something the interface does not give, the interface would
+ * be wrong.
  *
- * <h2>Estado en esta VM</h2>
+ * <h2>State in this VM</h2>
  *
- * <p>La estructura esta completa: {@link #init} guarda lo que recibe, los accesores lo devuelven,
- * {@link #getName} y {@link #getSupportedSourceVersion} contestan lo que corresponde. Lo que no
- * hay es el <strong>generador de HTML</strong>, que en el JDK son decenas de clases internas y no
- * es API — no se puede escribir mirando la firma.
+ * <p>The structure is complete: {@link #init} saves what it receives, the accessors return it,
+ * {@link #getName} and {@link #getSupportedSourceVersion} answer what corresponds. What there is
+ * not is the <strong>HTML generator</strong>, which in the JDK is dozens of internal classes and is
+ * not API -- it cannot be written by looking at the signature.
  *
- * <p>Por eso {@link #run} informa el problema por el {@link Reporter} que le dieron y devuelve
- * {@code false}, que es la forma que el contrato tiene para decir que no se pudo. No tira una
- * excepcion: una subclase que herede de aca y haga su propio trabajo antes de llamar a
- * {@code super.run} no deberia perder lo que ya hizo.
+ * <p>That is why {@link #run} reports the problem through the {@link Reporter} it was given and
+ * returns {@code false}, which is the way the contract has of saying that it could not be done. It
+ * does not throw an exception: a subclass that inherits from here and does its own work before
+ * calling {@code super.run} should not lose what it has already done.
  *
- * <p>{@link #getSupportedOptions} devuelve el conjunto vacio, y eso tambien es la verdad: no hay
- * generador, asi que no hay opciones que lo configuren. Anunciar {@code -d} o {@code -windowtitle}
- * seria prometer que hacen algo.
+ * <p>{@link #getSupportedOptions} returns the empty set, and that is also the truth: there is no
+ * generator, so there are no options that configure it. Announcing {@code -d} or
+ * {@code -windowtitle} would be promising that they do something.
  *
  * @since 9
  */
@@ -43,7 +45,7 @@ public class StandardDoclet implements Doclet {
     private Locale locale;
     private Reporter reporter;
 
-    /** Para javadoc, que lo instancia por reflexion, y para las subclases. */
+    /** For javadoc, which instantiates it by reflection, and for the subclasses. */
     public StandardDoclet() {
     }
 
@@ -61,11 +63,12 @@ public class StandardDoclet implements Doclet {
     /**
      * {@inheritDoc}
      *
-     * <p>Vacio: sin generador de HTML no hay opciones que lo configuren.
+     * <p>Empty: with no HTML generator there are no options that configure it.
      */
     public Set<? extends Option> getSupportedOptions() {
-        // El testigo <Option> es el rodeo de #502: con `--emit`, un `Collections.emptySet()`
-        // inferido hacia un destino con comodin acotado se rechaza. Sacarlo cuando se cierre.
+        // The <Option> witness is the way round #502: with `--emit`, a `Collections.emptySet()`
+        // inferred towards a destination with a bounded wildcard is rejected. Take it out when it
+        // closes.
         return Collections.<Option>emptySet();
     }
 
@@ -77,31 +80,31 @@ public class StandardDoclet implements Doclet {
     /**
      * {@inheritDoc}
      *
-     * <p>Informa que el generador de HTML no esta y devuelve {@code false}.
+     * <p>It reports that the HTML generator is not there and returns {@code false}.
      */
     public boolean run(final DocletEnvironment environment) {
         if (reporter != null) {
             reporter.print(Diagnostic.Kind.ERROR,
-                    "el generador de HTML de StandardDoclet no esta implementado en esta "
-                    + "biblioteca; un complemento propio que herede de esta clase tiene que "
-                    + "generar su salida sin llamar a super.run");
+                    "the HTML generator of StandardDoclet is not implemented in this "
+                    + "library; a plug-in of one's own that inherits from this class has "
+                    + "to generate its output without calling super.run");
         }
         return false;
     }
 
     /**
-     * El idioma que {@link #init} recibio, para las subclases.
+     * The language {@link #init} received, for the subclasses.
      *
-     * @return el idioma, o {@code null} si no se dio ninguno o {@code init} no corrio todavia
+     * @return the language, or {@code null} if none was given or {@code init} has not run yet
      */
     public Locale getLocale() {
         return locale;
     }
 
     /**
-     * El destino de diagnosticos que {@link #init} recibio, para las subclases.
+     * The destination of diagnostics {@link #init} received, for the subclasses.
      *
-     * @return el reporter, o {@code null} si {@code init} no corrio todavia
+     * @return the reporter, or {@code null} if {@code init} has not run yet
      */
     public Reporter getReporter() {
         return reporter;

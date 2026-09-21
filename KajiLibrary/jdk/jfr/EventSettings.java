@@ -3,90 +3,92 @@ package jdk.jfr;
 import java.time.Duration;
 
 /**
- * Los ajustes de un evento dentro de una grabacion, con una interfaz encadenable.
+ * The settings of an event inside a recording, with a chainable interface.
  *
- * <h2>Por que es una clase abstracta con metodos {@code final}</h2>
+ * <h2>Why it is an abstract class with {@code final} methods</h2>
  *
- * <p>Porque todos los metodos comodos —{@link #withThreshold}, {@link #withStackTrace} y
- * companeros— son lo mismo: una llamada a {@link #with} con el nombre del ajuste y su valor
- * formateado. Lo unico que cambia entre implementaciones es {@code with}, y es el unico abstracto.
+ * <p>Because every convenient method --{@link #withThreshold}, {@link #withStackTrace} and
+ * company-- is the same thing: a call to {@link #with} with the name of the setting and its
+ * formatted value. The only thing that changes between implementations is {@code with}, and it is
+ * the only abstract one.
  *
- * <p>Que los demas sean {@code final} no es rigidez: es lo que garantiza que
- * {@code withThreshold(Duration.ofMillis(20))} signifique exactamente
- * {@code with("threshold", "20 ms")} en cualquier implementacion. Si una subclase pudiera
- * redefinirlos, dos grabaciones configuradas igual podrian comportarse distinto.
+ * <p>That the others are {@code final} is not rigidity: it is what guarantees that
+ * {@code withThreshold(Duration.ofMillis(20))} means exactly
+ * {@code with("threshold", "20 ms")} in any implementation. If a subclass could redefine them, two
+ * recordings configured the same could behave differently.
  *
- * <h2>Se encadena y se aplica al final</h2>
+ * <h2>It is chained and applied at the end</h2>
  *
- * <p>Cada metodo devuelve el mismo objeto, asi que se escribe
- * {@code r.enable("jdk.CPULoad").withPeriod(Duration.ofSeconds(1)).withStackTrace()}. Los ajustes
- * se van acumulando y la grabacion los toma cuando arranca.
+ * <p>Each method returns the same object, so one writes
+ * {@code r.enable("jdk.CPULoad").withPeriod(Duration.ofSeconds(1)).withStackTrace()}. The settings
+ * go on accumulating and the recording takes them when it starts.
  *
  * @since 9
  */
 public abstract class EventSettings {
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected EventSettings() {
     }
 
     /**
-     * Graba la pila de llamadas.
+     * It records the stack of calls.
      *
-     * @return este mismo objeto
+     * @return this same object
      */
     public final EventSettings withStackTrace() {
         return with(StackTrace.NAME, "true");
     }
 
     /**
-     * No graba la pila de llamadas.
+     * It does not record the stack of calls.
      *
-     * @return este mismo objeto
+     * @return this same object
      */
     public final EventSettings withoutStackTrace() {
         return with(StackTrace.NAME, "false");
     }
 
     /**
-     * Saca el umbral: se graban todos los eventos, duren lo que duren.
+     * It takes the threshold away: every event is recorded, however long it lasts.
      *
-     * <p>Es {@code "0 ns"} y no una cadena vacia: el ajuste sigue existiendo con un valor que no
-     * descarta nada, que es distinto de no tener ajuste.
+     * <p>It is {@code "0 ns"} and not an empty string: the setting goes on existing with a value
+     * that discards nothing, which is different from having no setting.
      *
-     * @return este mismo objeto
+     * @return this same object
      */
     public final EventSettings withoutThreshold() {
         return with(Threshold.NAME, "0 ns");
     }
 
     /**
-     * Cada cuanto se emite un evento periodico.
+     * How often a periodic event is emitted.
      *
-     * @param duration el periodo
-     * @return este mismo objeto
-     * @throws NullPointerException si es {@code null}
+     * @param duration the period
+     * @return this same object
+     * @throws NullPointerException if it is {@code null}
      */
     public final EventSettings withPeriod(final Duration duration) {
         return with(Period.NAME, nanos(duration));
     }
 
     /**
-     * La duracion minima para grabar el evento.
+     * The minimum duration for recording the event.
      *
-     * @param duration el umbral
-     * @return este mismo objeto
-     * @throws NullPointerException si es {@code null}
+     * @param duration the threshold
+     * @return this same object
+     * @throws NullPointerException if it is {@code null}
      */
     public final EventSettings withThreshold(final Duration duration) {
         return with(Threshold.NAME, nanos(duration));
     }
 
     /**
-     * En nanosegundos, que es la unidad que JFR entiende sin ambiguedad.
+     * In nanoseconds, which is the unit JFR understands with no ambiguity.
      *
-     * <p>Se formatea aca y no en cada llamador para que el formato sea uno solo: un archivo de
-     * configuracion escrito por esta API y uno escrito a mano tienen que poder leerse igual.
+     * <p>It is formatted here and not in each caller so that the format is a single one: a
+     * configuration file written by this API and one written by hand have to be able to be read the
+     * same.
      */
     private static String nanos(final Duration d) {
         if (d == null) {
@@ -96,14 +98,14 @@ public abstract class EventSettings {
     }
 
     /**
-     * Un ajuste cualquiera, por nombre.
+     * Any setting, by name.
      *
-     * <p>Es el unico metodo que una implementacion tiene que escribir, y el unico camino para los
-     * ajustes propios de un evento, que por definicion no tienen un metodo comodo.
+     * <p>It is the only method an implementation has to write, and the only road for the settings
+     * of an event's own, which by definition have no convenient method.
      *
-     * @param name el nombre del ajuste
-     * @param value el valor
-     * @return este mismo objeto
+     * @param name the name of the setting
+     * @param value the value
+     * @return this same object
      */
     public abstract EventSettings with(String name, String value);
 }

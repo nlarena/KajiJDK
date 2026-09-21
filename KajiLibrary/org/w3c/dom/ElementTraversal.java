@@ -1,38 +1,40 @@
 package org.w3c.dom;
 
 /**
- * KajiLibrary's org.w3c.dom.ElementTraversal -- recorrer el arbol viendo **solo** elementos.
+ * KajiLibrary's org.w3c.dom.ElementTraversal -- walking the tree seeing **only** elements.
  *
- * <p>Es la mas joven del paquete y la unica que no viene del DOM Core: es una recomendacion aparte
- * del W3C, "Element Traversal". Responde a una molestia concreta de todos los dias: en un XML con
- * sangria, entre dos elementos hermanos hay un nodo {@link Text} de espacios, asi que
- * {@link Node#getFirstChild} casi nunca devuelve el elemento que uno queria y todo el mundo termina
- * escribiendo el mismo bucle de saltear texto y comentarios.
+ * <p>It is the youngest of the package and the only one that does not come from DOM Core: it is a
+ * separate W3C recommendation, "Element Traversal". It answers a concrete everyday annoyance: in an
+ * indented XML, between two sibling elements there is a {@link Text} node of spaces, so
+ * {@link Node#getFirstChild} almost never returns the element one wanted and everybody ends up
+ * writing the same loop of skipping text and comments.
  *
- * <p>Notar que **no** extiende {@link Node} ni {@link Element}: es una interfaz suelta que una
- * implementacion le agrega a sus nodos elemento. Por eso puede aparecer en un {@code instanceof}
- * sobre algo que ya se sabe que es un {@link Element}, y por eso no todo {@code Element} la tiene.
+ * <p>Note that it does **not** extend {@link Node} nor {@link Element}: it is a loose interface an
+ * implementation adds to its element nodes. That is why it may appear in an {@code instanceof} on
+ * something already known to be an {@link Element}, and why not every {@code Element} has it.
  *
- * <p>Los cinco metodos son la vista filtrada de los cinco de navegacion de {@link Node}, y
- * {@link #getChildElementCount} es lo que seria {@code getChildNodes().getLength()} contando solo
- * elementos.
+ * <p>Four of its five methods are the filtered view of four of the navigation methods of {@link
+ * Node} --the parent has no counterpart, since the parent of an element is always an element or the
+ * document--, and {@link #getChildElementCount} is what {@code getChildNodes().getLength()} would
+ * be counting only elements. The note said "the five methods are the filtered view of the five of
+ * Node", which counts the count as navigation.
  *
- * <p>Interfaz declarada entera.
+ * <p>The interface is declared whole.
  */
 public interface ElementTraversal {
 
-    /** El primer hijo que sea elemento, o {@code null}. */
+    /** The first child that is an element, or {@code null}. */
     public Element getFirstElementChild();
 
-    /** El ultimo hijo que sea elemento, o {@code null}. */
+    /** The last child that is an element, or {@code null}. */
     public Element getLastElementChild();
 
-    /** El hermano anterior que sea elemento, o {@code null}. */
+    /** The previous sibling that is an element, or {@code null}. */
     public Element getPreviousElementSibling();
 
-    /** El hermano siguiente que sea elemento, o {@code null}. */
+    /** The next sibling that is an element, or {@code null}. */
     public Element getNextElementSibling();
 
-    /** Cuantos hijos son elementos. */
+    /** How many children are elements. */
     public int getChildElementCount();
 }

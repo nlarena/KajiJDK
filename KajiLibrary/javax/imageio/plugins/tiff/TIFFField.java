@@ -6,18 +6,18 @@ import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
 /**
- * KajiLibrary's javax.imageio.plugins.tiff.TIFFField -- una etiqueta con su valor.
+ * KajiLibrary's javax.imageio.plugins.tiff.TIFFField -- a tag with its value.
  *
- * <p>{@link TIFFTag} describe una etiqueta; esto es una <b>instancia</b> de esa etiqueta en un
- * archivo concreto, ya con los datos.
+ * <p>{@link TIFFTag} describes a tag; this is an <b>instance</b> of that tag in a concrete file,
+ * with the data.
  *
- * <h2>El dato es un {@link Object} y su clase depende del tipo</h2>
+ * <h2>The data is an {@link Object} and its class depends on the type</h2>
  *
- * <p>Es lo que hay que entender antes de tocar {@link #getData}:
+ * <p>It is what has to be understood before touching {@link #getData}:
  *
  * <table border="1">
- * <caption>Que arreglo lleva cada tipo</caption>
- * <tr><th>tipo</th><th>clase del dato</th></tr>
+ * <caption>Which array each type carries</caption>
+ * <tr><th>type</th><th>class of the data</th></tr>
  * <tr><td>BYTE, SBYTE, UNDEFINED</td><td>{@code byte[]}</td></tr>
  * <tr><td>ASCII</td><td>{@code String[]}</td></tr>
  * <tr><td>SHORT</td><td>{@code char[]}</td></tr>
@@ -30,64 +30,64 @@ import org.w3c.dom.NodeList;
  * <tr><td>DOUBLE</td><td>{@code double[]}</td></tr>
  * </table>
  *
- * <p>Las dos que sorprenden son SHORT en {@code char[]} --porque un short de TIFF es <b>sin
- * signo</b>, y {@code char} es el unico entero sin signo de Java-- y LONG en {@code long[]}, por lo
- * mismo: un long de TIFF son 32 bits sin signo, que no entran en un {@code int}.
+ * <p>The two that surprise are SHORT in {@code char[]} --because a TIFF short is <b>unsigned</b>,
+ * and {@code char} is Java's only unsigned integer-- and LONG in {@code long[]}, for the same
+ * reason: a TIFF long is 32 unsigned bits, which do not fit in an {@code int}.
  *
- * <h2>Los {@code getAsXxx()} en plural son casts, no conversiones</h2>
+ * <h2>The plural {@code getAsXxx()} are casts, not conversions</h2>
  *
- * <p>Salvo {@link #getAsInts}, que si convierte desde {@code char[]} y {@code short[]}, los metodos
- * que devuelven el arreglo entero son <b>casts</b>: {@link #getAsDoubles} sobre un RATIONAL tira
- * {@link ClassCastException}, no divide.
+ * <p>Except {@link #getAsInts}, which does convert from {@code char[]} and {@code short[]}, the
+ * methods that return the whole array are <b>casts</b>: {@link #getAsDoubles} on a RATIONAL throws
+ * {@link ClassCastException}, it does not divide.
  *
- * <p>Los que toman un indice --{@link #getAsLong}, {@link #getAsDouble}-- si convierten, y son la
- * forma segura de leer un valor sin saber de que tipo vino.
+ * <p>The ones that take an index --{@link #getAsLong}, {@link #getAsDouble}-- do convert, and are
+ * the safe way to read a value without knowing what type it came in.
  *
- * <h2>Los racionales</h2>
+ * <h2>Rationals</h2>
  *
- * <p>Un RATIONAL son <b>dos</b> enteros: numerador y denominador. {@link #getAsRational} devuelve el
- * par; {@link #getAsDouble} hace la division. La resolucion de un TIFF se guarda asi, y por eso 300
- * puntos por pulgada aparece como {@code 300/1}.
+ * <p>A RATIONAL is <b>two</b> integers: numerator and denominator. {@link #getAsRational} returns
+ * the pair; {@link #getAsDouble} does the division. A TIFF's resolution is stored that way, which
+ * is why 300 dots per inch shows up as {@code 300/1}.
  *
- * <p>{@link #getValueAsString} de un racional devuelve {@code "72/1"}, no {@code "72.0"}: es la forma
- * textual del formato, no el resultado de la cuenta.
+ * <p>{@link #getValueAsString} of a rational returns {@code "72/1"}, not {@code "72.0"}: it is
+ * the format's textual form, not the result of the division.
  */
 public final class TIFFField implements Cloneable {
 
-    /** Como se llama cada tipo. La posicion 0 no se usa. */
+    /** What each type is called. Position 0 is not used. */
     private static final String[] TYPE_NAMES = {
         null, "Byte", "Ascii", "Short", "Long", "Rational", "SByte", "Undefined", "SShort",
         "SLong", "SRational", "Float", "Double", "IFDPointer",
     };
 
-    /** Que etiqueta es. */
+    /** Which tag it is. */
     private final TIFFTag tag;
 
-    /** De que tipo son los datos. */
+    /** What type the data is. */
     private final int type;
 
-    /** Cuantos valores. */
+    /** How many values. */
     private final int count;
 
-    /** El arreglo; su clase depende del tipo. Ver la nota de la clase. */
+    /** The array; its class depends on the type. See the class note. */
     private Object data;
 
-    /** El directorio al que apunta, si es una etiqueta puntero. */
+    /** The directory it points to, if it is a pointer tag. */
     private TIFFDirectory dir = null;
 
     /**
-     * Una etiqueta con sus datos.
+     * A tag with its data.
      *
-     * <p>El arreglo <b>no</b> se copia, pero si se valida: tiene que ser de la clase que el tipo pide
-     * y de largo exactamente {@code count}.
+     * <p>The array is <b>not</b> copied, but it is validated: it has to be of the class the type
+     * asks for and exactly {@code count} long.
      *
-     * @param type uno de los {@code TIFF_} de {@link TIFFTag}
-     * @param count cuantos valores
-     * @param data el arreglo de la clase que corresponde al tipo
-     * @throws NullPointerException si la etiqueta o los datos son null
-     * @throws IllegalArgumentException si el tipo no existe, si no sirve para esa etiqueta, si la
-     *     cantidad es negativa, si el tipo es un puntero y la cantidad no es uno, o si el arreglo no
-     *     es de la clase o el largo que el tipo pide
+     * @param type one of the {@code TIFF_} constants of {@link TIFFTag}
+     * @param count how many values
+     * @param data the array of the class that corresponds to the type
+     * @throws NullPointerException if the tag or the data are null
+     * @throws IllegalArgumentException if the type does not exist, if it does not work for that
+     *     tag, if the count is negative, if the type is a pointer and the count is not one, or if
+     *     the array is not of the class or length the type asks for
      */
     public TIFFField(TIFFTag tag, int type, int count, Object data) {
         if (tag == null) {
@@ -119,25 +119,26 @@ public final class TIFFField implements Cloneable {
     }
 
     /**
-     * Una etiqueta sin datos: un arreglo vacio del tipo, del largo pedido.
+     * A tag without data: an empty array of the type, of the requested length.
      *
-     * @throws NullPointerException si la etiqueta es null
-     * @throws IllegalArgumentException si el tipo no sirve o la cantidad es negativa
+     * @throws NullPointerException if the tag is null
+     * @throws IllegalArgumentException if the type does not work or the count is negative
      */
     public TIFFField(TIFFTag tag, int type, int count) {
         this(tag, type, count, createArrayForType(type, count));
     }
 
     /**
-     * Un solo valor entero, con el tipo mas chico que lo aguante.
+     * A single integer value, with the smallest type that holds it.
      *
-     * <p>Elige SHORT si el valor entra en 16 bits sin signo y LONG si no. Ojo: elige <b>antes</b> de
-     * mirar que tipos acepta la etiqueta, asi que un 7 en una etiqueta que solo acepta LONG no
-     * termina en LONG sino en un {@link IllegalArgumentException}. Es asi tambien en el JDK.
+     * <p>It picks SHORT if the value fits in 16 unsigned bits and LONG otherwise. Careful: it picks
+     * <b>before</b> looking at which types the tag accepts, so a 7 in a tag that only accepts LONG
+     * does not end up as LONG but as an {@link IllegalArgumentException}. It is like that in the
+     * JDK too.
      *
-     * @throws NullPointerException si la etiqueta es null
-     * @throws IllegalArgumentException si el valor es negativo, si no entra en 32 bits sin signo, o
-     *     si el tipo elegido no sirve para esa etiqueta
+     * @throws NullPointerException if the tag is null
+     * @throws IllegalArgumentException if the value is negative, or if the chosen type does not
+     *     work for that tag
      */
     public TIFFField(TIFFTag tag, long value) {
         if (tag == null) {
@@ -165,13 +166,13 @@ public final class TIFFField implements Cloneable {
     }
 
     /**
-     * Una etiqueta puntero, con el directorio al que apunta.
+     * A pointer tag, with the directory it points to.
      *
-     * @param type tiene que ser {@link TIFFTag#TIFF_LONG} o {@link TIFFTag#TIFF_IFD_POINTER}
-     * @param offset la posicion del directorio en el archivo; tiene que ser positiva
-     * @throws NullPointerException si la etiqueta o el directorio son null
-     * @throws IllegalArgumentException si el tipo no es uno de esos dos, si no sirve para la
-     *     etiqueta, o si el desplazamiento no es positivo
+     * @param type it has to be {@link TIFFTag#TIFF_LONG} or {@link TIFFTag#TIFF_IFD_POINTER}
+     * @param offset the position of the directory in the file; it has to be positive
+     * @throws NullPointerException if the tag or the directory are null
+     * @throws IllegalArgumentException if the type is not one of those two, if it does not work for
+     *     the tag, or if the offset is not positive
      */
     public TIFFField(TIFFTag tag, int type, long offset, TIFFDirectory dir) {
         if (type != TIFFTag.TIFF_LONG && type != TIFFTag.TIFF_IFD_POINTER) {
@@ -185,8 +186,8 @@ public final class TIFFField implements Cloneable {
             throw new IllegalArgumentException("Illegal data type " + type + " for "
                 + tag.getName() + " tag");
         }
-        // Un desplazamiento cero o negativo no es una posicion posible: los primeros ocho bytes de un
-        // TIFF son la cabecera, asi que ningun directorio empieza ahi.
+        // A zero or negative offset is not a possible position: the first eight bytes of a TIFF are
+        // the header, so no directory starts at 0.
         if (offset <= 0) {
             throw new IllegalArgumentException("offset " + offset + " is non-positive");
         }
@@ -200,25 +201,25 @@ public final class TIFFField implements Cloneable {
         this.dir = dir;
     }
 
-    /** Que etiqueta es. */
+    /** Which tag it is. */
     public TIFFTag getTag() {
         return this.tag;
     }
 
-    /** Su numero. */
+    /** Its number. */
     public int getTagNumber() {
         return this.tag.getNumber();
     }
 
-    /** De que tipo son los datos. */
+    /** What type the data is. */
     public int getType() {
         return this.type;
     }
 
     /**
-     * Como se llama ese tipo: {@code "Rational"}, {@code "SLong"}...
+     * What that type is called: {@code "Rational"}, {@code "SLong"}...
      *
-     * @throws IllegalArgumentException si no es uno de los trece
+     * @throws IllegalArgumentException if it is not one of the thirteen
      */
     public static String getTypeName(int dataType) {
         if (dataType < TIFFTag.MIN_DATATYPE || dataType > TIFFTag.MAX_DATATYPE) {
@@ -228,9 +229,9 @@ public final class TIFFField implements Cloneable {
     }
 
     /**
-     * El numero de ese tipo, o -1 si no existe.
+     * The number of that type, or -1 if it does not exist.
      *
-     * <p>Distingue mayusculas: {@code "SRational"} si, {@code "SRATIONAL"} no.
+     * <p>Case-sensitive: {@code "SRational"} yes, {@code "SRATIONAL"} no.
      */
     public static int getTypeByName(String typeName) {
         int i = TIFFTag.MIN_DATATYPE;
@@ -244,16 +245,16 @@ public final class TIFFField implements Cloneable {
     }
 
     /**
-     * Un arreglo vacio de la clase que ese tipo pide. Ver la nota de la clase.
+     * An empty array of the class that type asks for. See the class note.
      *
-     * @throws IllegalArgumentException si el tipo no es uno de los trece, si la cantidad es negativa,
-     *     o si el tipo es un puntero y la cantidad no es uno
+     * @throws IllegalArgumentException if the type is not one of the thirteen, if the count is
+     *     negative, or if the type is a pointer and the count is not one
      */
     public static Object createArrayForType(int dataType, int count) {
         if (count < 0) {
             throw new IllegalArgumentException("count < 0!");
         }
-        // Un puntero apunta a un directorio, no a varios: la cantidad es siempre uno.
+        // A pointer points to one directory, not several: the count is always one.
         if (dataType == TIFFTag.TIFF_IFD_POINTER && count != 1) {
             throw new IllegalArgumentException("Type is TIFF_IFD_POINTER and count != 1");
         }
@@ -292,16 +293,17 @@ public final class TIFFField implements Cloneable {
     }
 
     /**
-     * Este campo como arbol del formato nativo de TIFF.
+     * This field as a tree of the TIFF native format.
      *
-     * <p>La forma normal es un {@code TIFFField} con el numero y el nombre, un hijo con el
-     * <b>plural</b> del tipo --{@code TIFFLongs}-- y un nieto por valor. La pluralizacion no es
-     * cosmetica: es como el formato nativo distingue el campo de sus valores.
+     * <p>The normal shape is a {@code TIFFField} with the number and the name, a child with the
+     * <b>plural</b> of the type --{@code TIFFLongs}-- and one grandchild per value. The
+     * pluralization is not cosmetic: it is how the native format tells the field apart from its
+     * values.
      *
-     * <p>UNDEFINED es la excepcion: no tiene plural ni un nodo por valor, sino un unico
-     * {@code TIFFUndefined} con todos los bytes separados por comas y <b>sin signo</b>. Tiene sentido
-     * --un UNDEFINED puede tener miles de bytes y no vale la pena un elemento por cada uno-- pero hay
-     * que tenerlo presente al recorrer el arbol.
+     * <p>UNDEFINED is the exception: it has no plural and no node per value, but a single {@code
+     * TIFFUndefined} with all the bytes comma-separated and <b>unsigned</b>. It makes sense --an
+     * UNDEFINED can have thousands of bytes and an element for each is not worth it-- but it has to
+     * be kept in mind when walking the tree.
      */
     public Node getAsNativeNode() {
         IIOMetadataNode field = new IIOMetadataNode("TIFFField");
@@ -340,21 +342,22 @@ public final class TIFFField implements Cloneable {
     }
 
     /**
-     * Lee un campo de un arbol del formato nativo. La inversa de {@link #getAsNativeNode}.
+     * Reads a field from a native format tree. The inverse of {@link #getAsNativeNode}.
      *
-     * <p>El atributo {@code name} del nodo se ignora: el nombre sale de resolver el numero contra
-     * {@code tagSet}. Si no hay conjunto, o el numero no esta en el, la etiqueta queda anonima --
-     * {@link TIFFTag#UNKNOWN_TAG_NAME}, cantidad -1 y el tipo que traiga el arbol como unico tipo
-     * aceptado--.
+     * <p>The node's {@code name} attribute is ignored: the name comes from resolving the number
+     * against {@code tagSet}. If there is no set, or the number is not in it, the tag is left
+     * anonymous -- {@link TIFFTag#UNKNOWN_TAG_NAME}, count -1 and the type the tree carries as the
+     * only accepted type.
      *
-     * @param tagSet contra que conjunto resolver el numero; null lo deja anonimo
-     * @throws IllegalArgumentException si el nodo es null o no tiene la forma esperada
-     * @throws NullPointerException si falta el atributo {@code number} o el {@code value} de un valor
+     * @param tagSet which set to resolve the number against; null leaves it anonymous
+     * @throws IllegalArgumentException if the node is null or does not have the expected shape
+     * @throws NullPointerException if the {@code number} attribute or a value's {@code value} is
+     *     missing
      */
     public static TIFFField createFromMetadataNode(TIFFTagSet tagSet, Node node) {
         if (node == null) {
-            // Envuelto a proposito: el metodo esta especificado para tirar IllegalArgumentException,
-            // pero el JDK deja el NullPointerException adentro como causa y esto lo copia.
+            // Wrapped on purpose: the method is specified to throw IllegalArgumentException,
+            // but the JDK keeps the NullPointerException inside as the cause and this copies that.
             throw new IllegalArgumentException(new NullPointerException("node == null!"));
         }
         String name = node.getNodeName();
@@ -382,8 +385,8 @@ public final class TIFFField implements Cloneable {
             }
             data = bytes;
         } else {
-            // El JDK recorta cuatro por delante y uno por detras sin mirar; un nombre que no sea
-            // "TIFF<tipo>s" cae despues en getTypeByName, con el recorte a la vista en el mensaje.
+            // The JDK trims four in front and one behind without looking; a name that is not
+            // "TIFF<type>s" then falls into getTypeByName, with the trim visible in the message.
             String typeName = container.substring(4, container.length() - 1);
             type = getTypeByName(typeName);
             if (type == -1) {
@@ -413,16 +416,16 @@ public final class TIFFField implements Cloneable {
         try {
             return new TIFFField(tag, type, count, data);
         } catch (NullPointerException e) {
-            // Un contenedor sin valores deja los datos en null; ahi el constructor tira un
-            // NullPointerException que este metodo tiene que presentar como argumento invalido.
+            // A container without values leaves the data null; the constructor then throws a
+            // NullPointerException that this method has to present as an invalid argument.
             throw new IllegalArgumentException(e);
         }
     }
 
     /**
-     * Si los valores son enteros.
+     * Whether the values are integers.
      *
-     * <p>Los racionales, los flotantes y el texto no lo son; UNDEFINED si, porque son bytes.
+     * <p>Rationals, floating point and text are not; UNDEFINED is, because it is bytes.
      */
     public boolean isIntegral() {
         return this.type != TIFFTag.TIFF_ASCII && this.type != TIFFTag.TIFF_RATIONAL
@@ -430,50 +433,50 @@ public final class TIFFField implements Cloneable {
             && this.type != TIFFTag.TIFF_DOUBLE;
     }
 
-    /** Cuantos valores. */
+    /** How many values. */
     public int getCount() {
         return this.count;
     }
 
-    /** El arreglo, sin copiar. Ver la nota de la clase sobre su clase. */
+    /** The array, not copied. See the class note about its class. */
     public Object getData() {
         return this.data;
     }
 
     /**
-     * Los datos como bytes. Es un cast.
+     * The data as bytes. It is a cast.
      *
-     * @throws ClassCastException si el tipo no guarda bytes
+     * @throws ClassCastException if the type does not store bytes
      */
     public byte[] getAsBytes() {
         return (byte[]) this.data;
     }
 
     /**
-     * Como caracteres; es el tipo SHORT. Es un cast. Ver la nota de la clase.
+     * As chars; it is the SHORT type. It is a cast. See the class note.
      *
-     * @throws ClassCastException si el tipo no es SHORT
+     * @throws ClassCastException if the type is not SHORT
      */
     public char[] getAsChars() {
         return (char[]) this.data;
     }
 
     /**
-     * Como shorts con signo. Es un cast.
+     * As signed shorts. It is a cast.
      *
-     * @throws ClassCastException si el tipo no es SSHORT
+     * @throws ClassCastException if the type is not SSHORT
      */
     public short[] getAsShorts() {
         return (short[]) this.data;
     }
 
     /**
-     * Como enteros.
+     * As ints.
      *
-     * <p>El unico en plural que convierte: acepta {@code char[]} y {@code short[]} ademas de
-     * {@code int[]}. LONG no entra en un int y hay que pedir {@link #getAsLongs}.
+     * <p>The only plural one that converts: it accepts {@code char[]} and {@code short[]} as well
+     * as {@code int[]}. LONG does not fit in an int and you have to ask for {@link #getAsLongs}.
      *
-     * @throws ClassCastException si los datos no son char[], short[] ni int[]
+     * @throws ClassCastException if the data is not char[], short[] or int[]
      */
     public int[] getAsInts() {
         if (this.data instanceof int[]) {
@@ -503,69 +506,69 @@ public final class TIFFField implements Cloneable {
     }
 
     /**
-     * Como enteros largos. Es un cast.
+     * As longs. It is a cast.
      *
-     * @throws ClassCastException si el tipo no es LONG ni IFD_POINTER
+     * @throws ClassCastException if the type is not LONG or IFD_POINTER
      */
     public long[] getAsLongs() {
         return (long[]) this.data;
     }
 
     /**
-     * Como coma flotante de cuatro bytes. Es un cast.
+     * As four-byte floating point. It is a cast.
      *
-     * @throws ClassCastException si el tipo no es FLOAT
+     * @throws ClassCastException if the type is not FLOAT
      */
     public float[] getAsFloats() {
         return (float[]) this.data;
     }
 
     /**
-     * Como coma flotante de ocho bytes. Es un cast: no divide racionales.
+     * As eight-byte floating point. It is a cast: it does not divide rationals.
      *
-     * @throws ClassCastException si el tipo no es DOUBLE
+     * @throws ClassCastException if the type is not DOUBLE
      */
     public double[] getAsDoubles() {
         return (double[]) this.data;
     }
 
     /**
-     * Como pares con signo. Es un cast.
+     * As signed pairs. It is a cast.
      *
-     * @throws ClassCastException si el tipo no es SRATIONAL
+     * @throws ClassCastException if the type is not SRATIONAL
      */
     public int[][] getAsSRationals() {
         return (int[][]) this.data;
     }
 
     /**
-     * Como pares sin signo. Es un cast.
+     * As unsigned pairs. It is a cast.
      *
-     * @throws ClassCastException si el tipo no es RATIONAL
+     * @throws ClassCastException if the type is not RATIONAL
      */
     public long[][] getAsRationals() {
         return (long[][]) this.data;
     }
 
     /**
-     * El valor numero {@code index} como entero, convirtiendo lo que haga falta.
+     * Value number {@code index} as an int, converting whatever is needed.
      *
-     * @throws ClassCastException si el tipo no se puede convertir
+     * @throws ClassCastException if the type cannot be converted
      */
     public int getAsInt(int index) {
         return (int) getAsLong(index);
     }
 
     /**
-     * Como entero largo, convirtiendo: un byte se lee sin signo, un flotante se trunca, un racional
-     * se divide y se trunca, y un texto se parsea.
+     * As a long, converting: a byte is read unsigned, a float is truncated, a rational is divided
+     * and truncated, and a text is parsed.
      *
-     * @throws ClassCastException si el tipo no se puede convertir
-     * @throws NumberFormatException si es texto y no es un numero
+     * @throws ClassCastException if the type cannot be converted
+     * @throws NumberFormatException if it is text and not a number
      */
     public long getAsLong(int index) {
         if (this.data instanceof byte[]) {
-            // SBYTE es el unico byte con signo del formato; BYTE y UNDEFINED se leen sin el.
+            // SBYTE is the format's only signed byte; BYTE and UNDEFINED are read without sign.
             byte value = ((byte[]) this.data)[index];
             return this.type == TIFFTag.TIFF_SBYTE ? value : value & 0xFF;
         }
@@ -588,20 +591,19 @@ public final class TIFFField implements Cloneable {
     }
 
     /**
-     * Como coma flotante, convirtiendo.
+     * As floating point, converting.
      *
-     * @throws ClassCastException si el tipo no se puede convertir
+     * @throws ClassCastException if the type cannot be converted
      */
     public float getAsFloat(int index) {
         return (float) getAsDouble(index);
     }
 
     /**
-     * Como coma flotante de ocho bytes, convirtiendo: un racional se divide aca, y un texto se
-     * parsea.
+     * As eight-byte floating point, converting: a rational is divided here, and a text is parsed.
      *
-     * @throws ClassCastException si el tipo no se puede convertir
-     * @throws NumberFormatException si es texto y no es un numero
+     * @throws ClassCastException if the type cannot be converted
+     * @throws NumberFormatException if it is text and not a number
      */
     public double getAsDouble(int index) {
         if (this.data instanceof float[]) {
@@ -625,37 +627,37 @@ public final class TIFFField implements Cloneable {
     }
 
     /**
-     * El texto numero {@code index}.
+     * Text number {@code index}.
      *
-     * @throws ClassCastException si el tipo no es ASCII
+     * @throws ClassCastException if the type is not ASCII
      */
     public String getAsString(int index) {
         return ((String[]) this.data)[index];
     }
 
     /**
-     * El par con signo numero {@code index}.
+     * Signed pair number {@code index}.
      *
-     * @throws ClassCastException si el tipo no es SRATIONAL
+     * @throws ClassCastException if the type is not SRATIONAL
      */
     public int[] getAsSRational(int index) {
         return ((int[][]) this.data)[index];
     }
 
     /**
-     * El par sin signo numero {@code index}.
+     * Unsigned pair number {@code index}.
      *
-     * @throws ClassCastException si el tipo no es RATIONAL
+     * @throws ClassCastException if the type is not RATIONAL
      */
     public long[] getAsRational(int index) {
         return ((long[][]) this.data)[index];
     }
 
     /**
-     * El valor numero {@code index} en la forma textual del formato.
+     * Value number {@code index} in the format's textual form.
      *
-     * <p>Un racional sale como {@code "72/1"}, sin dividir; un byte sale sin signo. Ver la nota de la
-     * clase.
+     * <p>A rational comes out as {@code "72/1"}, undivided; a byte comes out unsigned. See the
+     * class note.
      */
     public String getValueAsString(int index) {
         if (this.data instanceof String[]) {
@@ -678,22 +680,21 @@ public final class TIFFField implements Cloneable {
         return Long.toString(getAsLong(index));
     }
 
-    /** Si esta etiqueta apunta a otro directorio. */
+    /** Whether this tag points to another directory. */
     public boolean hasDirectory() {
         return this.dir != null;
     }
 
-    /** El directorio al que apunta, o null si no es un puntero. */
+    /** The directory it points to, or null if it is not a pointer. */
     public TIFFDirectory getDirectory() {
         return this.dir;
     }
 
     /**
-     * Una copia con su propio arreglo.
+     * A copy with its own array.
      *
-     * <p>Los datos se copian de verdad --incluidos los pares de un racional, elemento por elemento--:
-     * una copia que compartiera el arreglo no seria una copia. La etiqueta si se comparte, porque es
-     * inmutable.
+     * <p>The data is really copied --including the pairs of a rational, element by element--: a
+     * copy that shared the array would not be a copy. The tag is shared, because it is immutable.
      */
     @Override
     public TIFFField clone() throws CloneNotSupportedException {
@@ -702,7 +703,7 @@ public final class TIFFField implements Cloneable {
         return copy;
     }
 
-    /** Copia el arreglo, en profundidad si es de pares. */
+    /** Copies the array, deeply if it is one of pairs. */
     private static Object cloneData(Object data) {
         if (data instanceof long[][]) {
             long[][] source = (long[][]) data;
@@ -752,10 +753,10 @@ public final class TIFFField implements Cloneable {
     }
 
     /**
-     * Si el arreglo es de la clase y del largo que el tipo pide.
+     * Whether the array is of the class and length the type asks for.
      *
-     * <p>El largo se mira igual que la clase: un {@code char[5]} con {@code count} 1 miente sobre
-     * cuantos valores hay, y el campo quedaria describiendo mal su propio contenido.
+     * <p>The length is checked just like the class: a {@code char[5]} with {@code count} 1 lies
+     * about how many values there are, and the field would describe its own content wrongly.
      */
     private static boolean isDataOK(int type, int count, Object data) {
         if (type == TIFFTag.TIFF_BYTE || type == TIFFTag.TIFF_SBYTE
@@ -818,16 +819,16 @@ public final class TIFFField implements Cloneable {
     }
 
     /**
-     * El valor de ese atributo.
+     * The value of that attribute.
      *
-     * @throws NullPointerException si el atributo no esta, como en el JDK
+     * @throws NullPointerException if the attribute is not there, as in the JDK
      */
     private static String attribute(Node node, String name) {
         NamedNodeMap attrs = node.getAttributes();
         return attrs.getNamedItem(name).getNodeValue();
     }
 
-    /** El primer hijo que sea un elemento, o null. */
+    /** The first child that is an element, or null. */
     private static Node firstElement(Node node) {
         NodeList children = node.getChildNodes();
         int i = 0;
@@ -840,7 +841,7 @@ public final class TIFFField implements Cloneable {
         return null;
     }
 
-    /** Cuantos elementos hay en la lista. */
+    /** How many elements there are in the list. */
     private static int countElements(NodeList children) {
         int total = 0;
         int i = 0;
@@ -853,7 +854,7 @@ public final class TIFFField implements Cloneable {
         return total;
     }
 
-    /** Mete un valor leido del arbol en la posicion que le toca. */
+    /** Puts a value read from the tree in the position it belongs to. */
     private static void setFromString(Object data, int index, String value) {
         if (data instanceof String[]) {
             ((String[]) data)[index] = value;

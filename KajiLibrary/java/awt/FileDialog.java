@@ -4,18 +4,20 @@ import java.io.File;
 import java.io.FilenameFilter;
 
 /**
- * El cuadro de "abrir" o "guardar" del sistema.
+ * The system's "open" or "save" box.
  *
- * <p>Es **modal**: {@link #setVisible setVisible(true)} no vuelve hasta que el usuario elige o
- * cancela, y recién ahí {@link #getFile} tiene la respuesta. Un `null` ahí quiere decir que canceló.
+ * <p>It is **modal**: {@link #setVisible setVisible(true)} does not come back until the user
+ * chooses or cancels, and only then does {@link #getFile} have the answer. A `null` there means
+ * they cancelled.
  *
- * <p>Sin pantalla no hay cuadro del sistema que mostrar, así que nunca se elige nada y el archivo
- * queda como lo dejó {@link #setFile}. El resto de la clase --el modo, el directorio, el filtro, la
- * selección múltiple-- funciona entero: es estado, no interfaz.
+ * <p>Without a screen there is no system box to show, so nothing ever gets chosen and the file
+ * stays as {@link #setFile} left it. The rest of the class --the mode, the directory, the filter,
+ * the multiple selection-- works in full: it is state, not interface.
  *
- * <p>El {@link FilenameFilter} tiene una advertencia que viene del JDK y no de acá: en Windows
- * **no se usa**, porque el cuadro nativo filtra por extensión y no admite un predicado. Lo que se
- * fije se guarda y {@link #getFilenameFilter} lo devuelve, pero no cambia lo que el usuario ve.
+ * <p>The {@link FilenameFilter} carries a warning that comes from the JDK and not from here: on
+ * Windows it **is not used**, because the native box filters by extension and takes no predicate.
+ * Whatever is set is kept and {@link #getFilenameFilter} returns it, but it does not change what
+ * the user sees.
  */
 public class FileDialog extends Dialog {
 
@@ -23,44 +25,44 @@ public class FileDialog extends Dialog {
 
     private static int fileDialogCounter = 0;
 
-    /** El cuadro es para abrir. */
+    /** The box is for opening. */
     public static final int LOAD = 0;
 
-    /** Es para guardar. */
+    /** It is for saving. */
     public static final int SAVE = 1;
 
-    /** Cuál de los dos. */
+    /** Which of the two. */
     int mode;
 
-    /** En qué directorio arranca. */
+    /** Which directory it starts in. */
     String dir;
 
-    /** Qué archivo quedó elegido, o `null` si ninguno. */
+    /** Which file ended up chosen, or `null` if none. */
     String file;
 
-    /** El filtro, o `null`. */
+    /** The filter, or `null`. */
     FilenameFilter filter;
 
-    /** Si deja elegir varios. */
+    /** Whether it lets several be chosen. */
     private boolean multipleMode = false;
 
-    /** Los archivos elegidos. */
+    /** The chosen files. */
     private File[] files = new File[0];
 
-    /** Un cuadro de apertura sin título, colgado de ese marco. */
+    /** An open box with no title, hanging from that frame. */
     public FileDialog(Frame parent) {
         this(parent, "", LOAD);
     }
 
-    /** Un cuadro de apertura con ese título. */
+    /** An open box with that title. */
     public FileDialog(Frame parent, String title) {
         this(parent, title, LOAD);
     }
 
     /**
-     * Un cuadro con ese título y ese modo.
+     * A box with that title and that mode.
      *
-     * @throws IllegalArgumentException si el modo no es {@link #LOAD} ni {@link #SAVE}
+     * @throws IllegalArgumentException if the mode is neither {@link #LOAD} nor {@link #SAVE}
      */
     public FileDialog(Frame parent, String title, int mode) {
         super(parent, title, true);
@@ -68,20 +70,20 @@ public class FileDialog extends Dialog {
         this.setLayout(null);
     }
 
-    /** Un cuadro de apertura sin título, colgado de ese diálogo. */
+    /** An open box with no title, hanging from that dialog. */
     public FileDialog(Dialog parent) {
         this(parent, "", LOAD);
     }
 
-    /** Un cuadro de apertura con ese título, colgado de ese diálogo. */
+    /** An open box with that title, hanging from that dialog. */
     public FileDialog(Dialog parent, String title) {
         this(parent, title, LOAD);
     }
 
     /**
-     * Un cuadro con ese título y ese modo, colgado de ese diálogo.
+     * A box with that title and that mode, hanging from that dialog.
      *
-     * @throws IllegalArgumentException si el modo no es {@link #LOAD} ni {@link #SAVE}
+     * @throws IllegalArgumentException if the mode is neither {@link #LOAD} nor {@link #SAVE}
      */
     public FileDialog(Dialog parent, String title, int mode) {
         super(parent, title, true);
@@ -90,9 +92,9 @@ public class FileDialog extends Dialog {
     }
 
     /**
-     * Cambia el título.
+     * Changes the title.
      *
-     * <p>Un `null` se toma como cadena vacía: el cuadro del sistema no admite quedarse sin título.
+     * <p>A `null` is taken as the empty string: the system box cannot be left with no title.
      */
     public void setTitle(String title) {
         super.setTitle(title == null ? "" : title);
@@ -106,20 +108,20 @@ public class FileDialog extends Dialog {
         }
     }
 
-    /** Lo declara mostrable. */
+    /** Declares it showable. */
     public void addNotify() {
         super.addNotify();
     }
 
-    /** Si es de apertura o de guardado. */
+    /** Whether it is for opening or for saving. */
     public int getMode() {
         return this.mode;
     }
 
     /**
-     * Cambia el modo.
+     * Changes the mode.
      *
-     * @throws IllegalArgumentException si no es {@link #LOAD} ni {@link #SAVE}
+     * @throws IllegalArgumentException if it is neither {@link #LOAD} nor {@link #SAVE}
      */
     public void setMode(int mode) {
         if (mode != LOAD && mode != SAVE) {
@@ -129,37 +131,37 @@ public class FileDialog extends Dialog {
     }
 
     /**
-     * En qué directorio arranca.
+     * Which directory it starts in.
      *
-     * @return el directorio, o `null` si no se fijó ninguno
+     * @return the directory, or `null` if none was set
      */
     public String getDirectory() {
         return this.dir;
     }
 
     /**
-     * Cambia el directorio de arranque.
+     * Changes the starting directory.
      *
-     * <p>Una cadena vacía cuenta como `null`, que es como el JDK distingue "sin preferencia" de un
-     * directorio de verdad.
+     * <p>An empty string counts as `null`, which is how the JDK tells "no preference" from a real
+     * directory.
      */
     public void setDirectory(String dir) {
         this.dir = dir != null && dir.isEmpty() ? null : dir;
     }
 
     /**
-     * Qué archivo quedó elegido.
+     * Which file ended up chosen.
      *
-     * @return el nombre, o `null` si el usuario canceló o el cuadro no llegó a mostrarse
+     * @return the name, or `null` if the user cancelled or the box never got to be shown
      */
     public String getFile() {
         return this.file;
     }
 
     /**
-     * Los archivos elegidos.
+     * The chosen files.
      *
-     * @return los archivos; un arreglo vacío si no se eligió ninguno. Nunca `null`.
+     * @return the files; an empty array if none was chosen. Never `null`.
      */
     public File[] getFiles() {
         synchronized (this.getObjectLock()) {
@@ -170,10 +172,10 @@ public class FileDialog extends Dialog {
     }
 
     /**
-     * Fija el archivo que el cuadro muestra de entrada.
+     * Sets the file the box shows to begin with.
      *
-     * <p>También es lo que {@link #getFile} devuelve mientras nadie elija otra cosa. Una cadena vacía
-     * cuenta como `null`, igual que en {@link #setDirectory}.
+     * <p>It is also what {@link #getFile} returns while nobody chooses anything else. An empty
+     * string counts as `null`, just as in {@link #setDirectory}.
      */
     public void setFile(String file) {
         this.file = file != null && file.isEmpty() ? null : file;
@@ -187,14 +189,14 @@ public class FileDialog extends Dialog {
         }
     }
 
-    /** Deja elegir varios archivos o uno solo. */
+    /** Lets several files be chosen, or only one. */
     public void setMultipleMode(boolean enable) {
         synchronized (this.getObjectLock()) {
             this.multipleMode = enable;
         }
     }
 
-    /** Si deja elegir varios. */
+    /** Whether it lets several be chosen. */
     public boolean isMultipleMode() {
         synchronized (this.getObjectLock()) {
             return this.multipleMode;
@@ -202,15 +204,15 @@ public class FileDialog extends Dialog {
     }
 
     /**
-     * El filtro.
+     * The filter.
      *
-     * @return el filtro, o `null` si no se fijó ninguno
+     * @return the filter, or `null` if none was set
      */
     public FilenameFilter getFilenameFilter() {
         return this.filter;
     }
 
-    /** Cambia el filtro; ver la advertencia de la clase sobre Windows. */
+    /** Changes the filter; see the warning of the class about Windows. */
     public synchronized void setFilenameFilter(FilenameFilter filter) {
         this.filter = filter;
     }

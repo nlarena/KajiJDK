@@ -26,30 +26,29 @@ import javax.swing.text.View;
 import javax.swing.text.ViewFactory;
 
 /**
- * El juego de edicion para HTML.
+ * The editor kit for HTML.
  *
- * <h2>Que junta</h2>
+ * <h2>What it joins</h2>
  *
- * <p>Un analizador que convierte texto HTML en un {@link HTMLDocument}, una fabrica de vistas que
- * sabe dibujar cada etiqueta, una hoja de estilos con las reglas por omision, y las acciones que
- * editan.
+ * <p>A parser that turns HTML text into an {@link HTMLDocument}, a view factory that knows how
+ * to draw each tag, a style sheet with the default rules, and the actions that edit.
  *
- * <h2>El analizador no viene de fabrica</h2>
+ * <h2>The parser does not come built in</h2>
  *
- * <p>{@link #getParser} lo busca en {@code javax.swing.text.html.parser.ParserDelegator}, por
- * reflexion y no por una referencia directa. Es a proposito: el juego de edicion no depende de que
- * exista un analizador concreto, y quien quiera otro solo tiene que darle un
+ * <p>{@link #getParser} looks for it in {@code javax.swing.text.html.parser.ParserDelegator}, by
+ * reflection and not by a direct reference. It is on purpose: the editor kit does not depend on
+ * a concrete parser existing, and whoever wants another only has to give it an
  * {@link HTMLDocument#setParser}.
  *
- * <h2>La hoja de estilos se comparte</h2>
+ * <h2>The style sheet is shared</h2>
  *
- * <p>Todos los juegos de edicion que no pidan la suya usan la misma. Es lo que permite que una
- * regla puesta una vez valga para todos los paneles del programa; y es tambien por lo que
- * {@link #setStyleSheet} conviene usarlo con cuidado, porque cambia la de todos.
+ * <p>Every editor kit that does not ask for its own uses the same one. It is what allows a rule
+ * set once to hold for every pane in the program; and it is also why {@link #setStyleSheet}
+ * should be used with care, because it changes everybody's.
  */
 public class HTMLEditorKit extends StyledEditorKit implements Accessible {
 
-    /** El nombre del recurso con la hoja de estilos por omision. */
+    /** The name of the resource with the default style sheet. */
     public static final String DEFAULT_CSS = "default.css";
 
     public static final String BOLD_ACTION = "html-bold-action";
@@ -78,11 +77,11 @@ public class HTMLEditorKit extends StyledEditorKit implements Accessible {
     private LinkController linkHandler = new LinkController();
     private AccessibleContext accessibleContext;
 
-    /** Un juego de edicion listo para usar. */
+    /** An editor kit ready to use. */
     public HTMLEditorKit() {
     }
 
-    /** Siempre {@code text/html}. */
+    /** Always {@code text/html}. */
     public String getContentType() {
         return "text/html";
     }
@@ -91,7 +90,7 @@ public class HTMLEditorKit extends StyledEditorKit implements Accessible {
         return defaultFactory;
     }
 
-    /** Un documento vacio, ya atado a la hoja de estilos de este juego. */
+    /** An empty document, already tied to this kit's style sheet. */
     public Document createDefaultDocument() {
         StyleSheet styles = getStyleSheet();
         StyleSheet ss = new StyleSheet();
@@ -104,9 +103,9 @@ public class HTMLEditorKit extends StyledEditorKit implements Accessible {
     }
 
     /**
-     * Lee HTML y lo mete en el documento en esa posicion.
+     * It reads HTML and puts it into the document at that position.
      *
-     * @throws IOException si no hay analizador o falla la lectura.
+     * @throws IOException if there is no parser or the reading fails.
      */
     public void read(Reader in, Document doc, int pos) throws IOException, BadLocationException {
         if (doc instanceof HTMLDocument) {
@@ -128,11 +127,12 @@ public class HTMLEditorKit extends StyledEditorKit implements Accessible {
     }
 
     /**
-     * Mete un fragmento de HTML dentro de una etiqueta del documento.
+     * It puts a fragment of HTML inside a tag of the document.
      *
-     * <p>Los dos numeros {@code popDepth} y {@code pushDepth} son los que hacen que el fragmento
-     * caiga en el lugar correcto del arbol: cuantos elementos hay que cerrar antes y cuantos abrir
-     * despues. Sin ellos, insertar un <code>&lt;li&gt;</code> lo dejaria fuera de su lista.
+     * <p>The two numbers {@code popDepth} and {@code pushDepth} are what make the fragment fall in
+     * the right place of the tree: how many elements have to be closed before and how many opened
+     * afterwards. Without them, inserting a <code>&lt;li&gt;</code> would leave it outside its
+     * list.
      */
     public void insertHTML(HTMLDocument doc, int offset, String html, int popDepth, int pushDepth,
             HTML.Tag insertTag) throws BadLocationException, IOException {
@@ -150,7 +150,7 @@ public class HTMLEditorKit extends StyledEditorKit implements Accessible {
         receiver.flush();
     }
 
-    /** Escribe el documento como HTML. */
+    /** It writes the document as HTML. */
     public void write(Writer out, Document doc, int pos, int len) throws IOException,
             BadLocationException {
         if (doc instanceof HTMLDocument) {
@@ -165,7 +165,7 @@ public class HTMLEditorKit extends StyledEditorKit implements Accessible {
         }
     }
 
-    /** Se engancha al panel y le pone el vigilante de enlaces. */
+    /** It hooks itself to the pane and puts the link watcher on it. */
     public void install(JEditorPane c) {
         c.addMouseListener(linkHandler);
         c.addMouseMotionListener(linkHandler);
@@ -178,7 +178,7 @@ public class HTMLEditorKit extends StyledEditorKit implements Accessible {
         super.deinstall(c);
     }
 
-    /** La hoja de estilos de este juego; ver la nota de la clase. */
+    /** This kit's style sheet; see the class note. */
     public void setStyleSheet(StyleSheet s) {
         defaultStyles = s;
     }
@@ -186,7 +186,7 @@ public class HTMLEditorKit extends StyledEditorKit implements Accessible {
     public StyleSheet getStyleSheet() {
         if (defaultStyles == null) {
             defaultStyles = new StyleSheet();
-            defaultStyles.addRule(REGLAS_BASE);
+            defaultStyles.addRule(BASE_RULES);
         }
         return defaultStyles;
     }
@@ -208,7 +208,7 @@ public class HTMLEditorKit extends StyledEditorKit implements Accessible {
         return input;
     }
 
-    /** El cursor que se ve sobre el texto comun. */
+    /** The cursor seen over ordinary text. */
     public void setDefaultCursor(Cursor cursor) {
         defaultCursor = cursor;
     }
@@ -217,7 +217,7 @@ public class HTMLEditorKit extends StyledEditorKit implements Accessible {
         return defaultCursor;
     }
 
-    /** El cursor que se ve sobre un enlace. */
+    /** The cursor seen over a link. */
     public void setLinkCursor(Cursor cursor) {
         linkCursor = cursor;
     }
@@ -227,11 +227,11 @@ public class HTMLEditorKit extends StyledEditorKit implements Accessible {
     }
 
     /**
-     * Si al enviar un formulario el juego mismo carga la respuesta.
+     * Whether on submitting a form the kit itself loads the answer.
      *
-     * <p>Apagarlo hace que el envio llegue como un {@link FormSubmitEvent} y nada mas: quien
-     * escucha decide que hacer. Es lo que hay que hacer si el documento puede venir de afuera,
-     * porque si no cualquier pagina puede hacer que el programa pida una direccion.
+     * <p>Turning it off makes the submission arrive as a {@link FormSubmitEvent} and nothing else:
+     * whoever listens decides what to do. It is what has to be done if the document may come from
+     * outside, because otherwise any page can make the program request an address.
      */
     public boolean isAutoFormSubmission() {
         return isAutoFormSubmission;
@@ -251,10 +251,11 @@ public class HTMLEditorKit extends StyledEditorKit implements Accessible {
     }
 
     /**
-     * El analizador de HTML.
+     * The HTML parser.
      *
-     * <p>Se busca por reflexion; ver la nota de la clase. Si no esta, se devuelve nulo y quien lo
-     * pidio va a fallar al leer, que es mejor que fallar al construir el juego de edicion.
+     * <p>It is looked for by reflection; see the class note. If it is not there, null is returned
+     * and whoever asked for it will fail when reading, which is better than failing when building
+     * the editor kit.
      */
     protected Parser getParser() {
         if (defaultParser == null) {
@@ -274,8 +275,8 @@ public class HTMLEditorKit extends StyledEditorKit implements Accessible {
         return accessibleContext;
     }
 
-    /** Lo minimo de CSS que hace que un documento sin hoja se vea como HTML. */
-    private static final String REGLAS_BASE =
+    /** The minimum CSS that makes a document with no sheet look like HTML. */
+    private static final String BASE_RULES =
             "body { margin-top: 8; margin-bottom: 8; margin-left: 8; margin-right: 8 }"
             + "p { margin-top: 5 }"
             + "h1 { font-size: 36pt; font-weight: bold; margin-top: 8; margin-bottom: 8 }"
@@ -320,10 +321,10 @@ public class HTMLEditorKit extends StyledEditorKit implements Accessible {
     };
 
     /**
-     * Lo que un analizador de HTML tiene que saber hacer.
+     * What an HTML parser has to know how to do.
      *
-     * <p>Es abstracta y de un solo metodo. Que sea una clase y no una interfaz es de 1998 y se
-     * conserva porque {@link HTMLDocument#setParser} la recibe.
+     * <p>It is abstract and has a single method. That it is a class and not an interface is from
+     * 1998 and is kept because {@link HTMLDocument#setParser} takes it.
      */
     public abstract static class Parser {
 
@@ -331,39 +332,38 @@ public class HTMLEditorKit extends StyledEditorKit implements Accessible {
         }
 
         /**
-         * Analiza el texto y le avisa a quien escucha.
+         * It parses the text and tells whoever listens.
          *
-         * @param ignoreCharSet si hay que ignorar la codificacion que declare el documento.
+         * @param ignoreCharSet whether the encoding the document declares has to be ignored.
          */
         public abstract void parse(Reader r, ParserCallback cb, boolean ignoreCharSet)
                 throws IOException;
     }
 
     /**
-     * Quien escucha lo que el analizador va encontrando.
+     * Whoever listens to what the parser finds.
      *
-     * <p>Todos los metodos no hacen nada: se sobrescriben los que interesan. Que sea una clase con
-     * cuerpos vacios y no una interfaz es lo que permite escuchar solo el texto sin escribir seis
-     * metodos vacios.
+     * <p>Every method does nothing: the ones that matter are overridden. That it is a class with
+     * empty bodies and not an interface is what allows listening only to the text without writing
+     * six empty methods.
      *
-     * <p>El numero que llega en cada metodo es la posicion en el texto de entrada, no en el
-     * documento. Sirve para senalar donde estaba un error.
+     * <p>The number that arrives in each method is the position in the input text, not in the
+     * document. It serves for pointing at where an error was.
      */
     public static class ParserCallback {
 
         /**
-         * Marca los atributos de un elemento que el analizador invento.
+         * It marks the attributes of an element the parser invented.
          *
-         * <p>Va como clave en el conjunto de atributos, con valor {@link Boolean#TRUE}. Quien
-         * vuelva a escribir el documento la mira para no escribir etiquetas que el autor nunca
-         * puso.
+         * <p>It goes as a key in the attribute set, with the value {@link Boolean#TRUE}. Whoever
+         * writes the document back looks at it so as not to write tags the author never put in.
          */
         public static final Object IMPLIED = "_implied_";
 
         public ParserCallback() {
         }
 
-        /** Se llama al terminar; es donde conviene volcar lo que se junto. */
+        /** It is called on finishing; it is where what was gathered should be flushed. */
         public void flush() throws BadLocationException {
         }
 
@@ -379,24 +379,24 @@ public class HTMLEditorKit extends StyledEditorKit implements Accessible {
         public void handleEndTag(HTML.Tag t, int pos) {
         }
 
-        /** Una etiqueta sin cierre, como {@code br} o {@code img}. */
+        /** A tag with no closing, such as {@code br} or {@code img}. */
         public void handleSimpleTag(HTML.Tag t, MutableAttributeSet a, int pos) {
         }
 
         public void handleError(String errorMsg, int pos) {
         }
 
-        /** El fin de linea que usaba el documento, para poder escribirlo igual. */
+        /** The line ending the document used, so as to be able to write it back the same. */
         public void handleEndOfLineString(String eol) {
         }
     }
 
     /**
-     * La fabrica de vistas: una vista por etiqueta.
+     * The view factory: one view per tag.
      *
-     * <p>El reparto no es arbitrario. Lo que arma bloque va a un {@link BlockView}, lo que va en la
-     * linea a un {@link InlineView}, y las etiquetas que no tienen texto propio -- una imagen, un
-     * campo de formulario -- a vistas que dibujan otra cosa.
+     * <p>The sharing out is not arbitrary. What makes a block goes to a {@link BlockView}, what
+     * goes on the line to an {@link InlineView}, and the tags that have no text of their own -- an
+     * image, a form field -- to views that draw something else.
      */
     public static class HTMLFactory implements ViewFactory {
 
@@ -441,11 +441,12 @@ public class HTMLEditorKit extends StyledEditorKit implements Accessible {
                         || kind == HTML.Tag.SCRIPT || kind == HTML.Tag.AREA
                         || kind == HTML.Tag.MAP || kind == HTML.Tag.PARAM
                         || kind == HTML.Tag.APPLET) {
-                    // Lo que no se ve igual ocupa un lugar en el arbol: una vista de cero tamano.
+                    // What is not seen takes up a place in the tree all the same: a view of zero
+                    // size.
                     return new InvisibleView(elem);
                 }
             }
-            // Un elemento que no se conoce: si tiene hijos es un bloque, si no es texto.
+            // An element that is not known: if it has children it is a block, if not it is text.
             String nm = elem.getName();
             if (nm != null && nm.equals(javax.swing.text.AbstractDocument.ContentElementName)) {
                 return new javax.swing.text.LabelView(elem);
@@ -457,7 +458,7 @@ public class HTMLEditorKit extends StyledEditorKit implements Accessible {
         }
     }
 
-    /** Una vista que ocupa cero: la de las etiquetas que no se muestran. */
+    /** A view that takes up zero: the one for the tags that are not shown. */
     static class InvisibleView extends View {
 
         InvisibleView(Element elem) {
@@ -484,11 +485,11 @@ public class HTMLEditorKit extends StyledEditorKit implements Accessible {
     }
 
     /**
-     * Atiende los clics sobre enlaces.
+     * It attends to clicks on links.
      *
-     * <p>Cambia el cursor al pasar por encima y dispara el evento al hacer clic. Que sea una clase
-     * aparte y no codigo del juego de edicion permite que un panel tenga otro comportamiento sin
-     * reemplazar todo el juego.
+     * <p>It changes the cursor when passing over and fires the event on clicking. That it is a
+     * separate class and not code of the editor kit's allows a pane to have another behaviour
+     * without replacing the whole kit.
      */
     public static class LinkController extends MouseAdapter implements MouseMotionListener,
             Serializable {
@@ -513,17 +514,17 @@ public class HTMLEditorKit extends StyledEditorKit implements Accessible {
         public void mouseMoved(MouseEvent e) {
         }
 
-        /** Dispara el evento del enlace que esta en esa posicion. */
+        /** It fires the event of the link at that position. */
         protected void activateLink(int pos, JEditorPane editor) {
         }
     }
 
     /**
-     * La base de las acciones que editan HTML.
+     * The base of the actions that edit HTML.
      *
-     * <p>Trae lo que todas necesitan: llegar al documento y al juego, y buscar hacia arriba en el
-     * arbol el elemento de una etiqueta dada. Eso ultimo es lo que permite escribir una accion como
-     * "insertar una fila" sin saber donde esta la tabla.
+     * <p>It brings what all of them need: getting to the document and to the kit, and looking up
+     * the tree for the element of a given tag. That last thing is what allows writing an action
+     * such as "insert a row" without knowing where the table is.
      */
     public abstract static class HTMLTextAction extends StyledEditorKit.StyledTextAction {
 
@@ -547,7 +548,7 @@ public class HTMLEditorKit extends StyledEditorKit implements Accessible {
             throw new IllegalArgumentException("EditorKit must be HTMLEditorKit");
         }
 
-        /** El camino de elementos desde la raiz hasta esa posicion. */
+        /** The path of elements from the root to that position. */
         protected Element[] getElementsAt(HTMLDocument doc, int offset) {
             return getElementsAt(doc.getDefaultRootElement(), offset, 0);
         }
@@ -565,10 +566,10 @@ public class HTMLEditorKit extends StyledEditorKit implements Accessible {
         }
 
         /**
-         * Cuantos elementos hay que cerrar para llegar a esa etiqueta.
+         * How many elements have to be closed to get to that tag.
          *
-         * <p>Devuelve -1 si la etiqueta no esta en el camino. Es el numero que
-         * {@link HTMLEditorKit#insertHTML} llama {@code popDepth}.
+         * <p>It returns -1 if the tag is not on the path. It is the number
+         * {@link HTMLEditorKit#insertHTML} calls {@code popDepth}.
          */
         protected int elementCountToTag(HTMLDocument doc, int offset, HTML.Tag tag) {
             int depth = -1;
@@ -584,7 +585,7 @@ public class HTMLEditorKit extends StyledEditorKit implements Accessible {
             return depth;
         }
 
-        /** El elemento mas cercano hacia arriba que tenga esa etiqueta. */
+        /** The nearest element upwards that has that tag. */
         protected Element findElementMatchingTag(HTMLDocument doc, int offset, HTML.Tag tag) {
             Element e = doc.getDefaultRootElement();
             Element lastMatch = null;
@@ -599,37 +600,37 @@ public class HTMLEditorKit extends StyledEditorKit implements Accessible {
     }
 
     /**
-     * Inserta un fragmento de HTML en el lugar que corresponda.
+     * It inserts a fragment of HTML in the place that corresponds.
      *
-     * <p>Los dos pares de etiquetas son el motivo de que esta accion exista. El primero dice donde
-     * se puede insertar y que se inserta; el segundo es el plan alternativo. Insertar un
-     * <code>&lt;li&gt;</code> adentro de un <code>&lt;ul&gt;</code> agrega un renglon; si no hay
-     * lista, el plan alternativo crea la lista entera.
+     * <p>The two pairs of tags are the reason this action exists. The first says where it can be
+     * inserted and what is inserted; the second is the fallback plan. Inserting a
+     * <code>&lt;li&gt;</code> inside a <code>&lt;ul&gt;</code> adds a row; if there is no list, the
+     * fallback plan creates the whole list.
      */
     public static class InsertHTMLTextAction extends HTMLTextAction {
 
-        /** El HTML que se inserta. */
+        /** The HTML that is inserted. */
         protected String html;
 
-        /** La etiqueta que tiene que contener a la insercion. */
+        /** The tag that has to contain the insertion. */
         protected HTML.Tag parentTag;
 
-        /** La etiqueta que se agrega. */
+        /** The tag that is added. */
         protected HTML.Tag addTag;
 
-        /** El contenedor del plan alternativo. */
+        /** The fallback plan's container. */
         protected HTML.Tag alternateParentTag;
 
-        /** Lo que se agrega en el plan alternativo. */
+        /** What is added in the fallback plan. */
         protected HTML.Tag alternateAddTag;
 
-        /** Una accion sin plan alternativo. */
+        /** An action with no fallback plan. */
         public InsertHTMLTextAction(String name, String html, HTML.Tag parentTag,
                 HTML.Tag addTag) {
             this(name, html, parentTag, addTag, null, null);
         }
 
-        /** Una accion con plan alternativo. */
+        /** An action with a fallback plan. */
         public InsertHTMLTextAction(String name, String html, HTML.Tag parentTag, HTML.Tag addTag,
                 HTML.Tag alternateParentTag, HTML.Tag alternateAddTag) {
             super(name);
@@ -640,7 +641,7 @@ public class HTMLEditorKit extends StyledEditorKit implements Accessible {
             this.alternateAddTag = alternateAddTag;
         }
 
-        /** Hace la insercion; ver {@link HTMLEditorKit#insertHTML}. */
+        /** It does the insertion; see {@link HTMLEditorKit#insertHTML}. */
         protected void insertHTML(JEditorPane editor, HTMLDocument doc, int offset, String html,
                 int popDepth, int pushDepth, HTML.Tag addTag) {
             try {
@@ -654,10 +655,10 @@ public class HTMLEditorKit extends StyledEditorKit implements Accessible {
         }
 
         /**
-         * Inserta cuando la posicion cae justo en el borde de un elemento.
+         * It inserts when the position falls right at an element's edge.
          *
-         * <p>Es el caso molesto: en el borde, la posicion pertenece a dos elementos y hay que
-         * elegir. Se elige el de adentro, que es lo que espera quien esta escribiendo.
+         * <p>It is the awkward case: at the edge, the position belongs to two elements and one has
+         * to be chosen. The inner one is chosen, which is what whoever is typing expects.
          */
         protected void insertAtBoundary(JEditorPane editor, HTMLDocument doc, int offset,
                 Element insertElement, String html, HTML.Tag parentTag, HTML.Tag addTag) {
@@ -665,9 +666,9 @@ public class HTMLEditorKit extends StyledEditorKit implements Accessible {
         }
 
         /**
-         * El nombre viejo de {@link #insertAtBoundary}.
+         * The old name of {@link #insertAtBoundary}.
          *
-         * @deprecated Usar {@link #insertAtBoundary}, que esta bien escrito.
+         * @deprecated Use {@link #insertAtBoundary}, which is spelled right.
          */
         @Deprecated
         protected void insertAtBoundry(JEditorPane editor, HTMLDocument doc, int offset,

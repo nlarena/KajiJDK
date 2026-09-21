@@ -38,8 +38,8 @@ public class Inflater implements AutoCloseable {
     private boolean finished;
     private boolean headerDone;
     private boolean underflow;
-    // Se quedo sin bits a mitad de un simbolo. Distinto de "no queda input": pueden sobrar bytes
-    // y aun asi no alcanzar para el simbolo siguiente.
+    // It ran out of bits halfway through a symbol. Different from "no input left": there can be
+    // bytes to spare and still not enough for the next symbol.
     private boolean stalled;
 
     // Set while a block is being decoded, so a resumed call does not re-read its header.
@@ -90,9 +90,10 @@ public class Inflater implements AutoCloseable {
     }
 
     /**
-     * Toma como entrada los bytes que quedan en `input`, y lo deja consumido.
+     * It takes as input the bytes left in `input`, and leaves it consumed.
      *
-     * <p>Se copia, igual que en `Deflater`: ver la nota de alla sobre la diferencia con el JDK.
+     * <p>It is copied, just as in `Deflater`: see the note over there on the difference from the
+     * JDK.
      */
     public void setInput(java.nio.ByteBuffer input) {
         int n = input.remaining();
@@ -103,7 +104,7 @@ public class Inflater implements AutoCloseable {
         this.setInput(tmp, 0, n);
     }
 
-    /** El diccionario de precarga, desde los bytes que quedan en `dictionary`. */
+    /** The preset dictionary, from the bytes left in `dictionary`. */
     public void setDictionary(java.nio.ByteBuffer dictionary) {
         int n = dictionary.remaining();
         byte[] tmp = new byte[n];
@@ -113,14 +114,14 @@ public class Inflater implements AutoCloseable {
         this.setDictionary(tmp, 0, n);
     }
 
-    /** Descomprime en el espacio que queda en `output`, avanzando su posicion por lo escrito. */
+    /** It decompresses into the room left in `output`, advancing its position by what was written. */
     public int inflate(java.nio.ByteBuffer output) throws DataFormatException {
-        int espacio = output.remaining();
-        if (espacio <= 0) {
+        int room = output.remaining();
+        if (room <= 0) {
             return 0;
         }
-        byte[] tmp = new byte[espacio];
-        int n = this.inflate(tmp, 0, espacio);
+        byte[] tmp = new byte[room];
+        int n = this.inflate(tmp, 0, room);
         if (n > 0) {
             output.put(tmp, 0, n);
         }
@@ -167,9 +168,9 @@ public class Inflater implements AutoCloseable {
     }
 
     public boolean needsInput() {
-        // El `stalled` es lo que evita que el consumidor gire en falso: sin el, un decodificador
-        // frenado por medio simbolo reporta que todavia tiene input, el llamador no alimenta mas
-        // y `inflate` devuelve 0 para siempre. Lo encontro el self-test colgandose.
+        // The `stalled` is what keeps the consumer from spinning: without it, a decoder stopped by
+        // half a symbol reports that it still has input, the caller feeds no more and `inflate`
+        // returns 0 forever. The self-test found it by hanging.
         return getRemaining() == 0 || stalled;
     }
 
@@ -427,8 +428,8 @@ public class Inflater implements AutoCloseable {
             }
             s = s + 1;
         }
-        // Devuelve un objeto y no un `int[][]`: el emisor todavia no soporta la creacion de un
-        // array escalonado (`new int[2][]`), que es como estaba escrito primero.
+        // It returns an object and not an `int[][]`: the emitter does not support creating a jagged
+        // array (`new int[2][]`) yet, which is how it was written first.
         return new HuffTable(counts, symbols);
     }
 
@@ -606,9 +607,9 @@ public class Inflater implements AutoCloseable {
     }
 }
 
-// Un par (counts, symbols) de decodificacion canonica. Clase top-level package-private en el
-// mismo archivo, el idioma del proyecto para un tipo auxiliar; el gate la saltea porque el JDK
-// no tiene contraparte.
+// A (counts, symbols) pair for canonical decoding. A top-level package-private class in the same
+// file, the project's idiom for a helper type; the gate skips it because the JDK has no
+// counterpart.
 class HuffTable {
 
     final int[] counts;

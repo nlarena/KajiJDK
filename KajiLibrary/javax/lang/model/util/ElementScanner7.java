@@ -5,10 +5,10 @@ import javax.lang.model.SourceVersion;
 import javax.lang.model.element.VariableElement;
 
 /**
- * El escaner de elementos de Java 7. Ver {@link ElementScanner6} por el mecanismo del recorrido.
+ * The element scanner for Java 7. See {@link ElementScanner6} for the walk mechanism.
  *
- * <p>Con `RESOURCE_VARIABLE` ya en el lenguaje, `visitVariable` deja de apartarla y la recorre como a
- * cualquier otra variable.
+ * <p>With `RESOURCE_VARIABLE` in the language, `visitVariable` stops setting it aside and walks it
+ * like any other variable.
  */
 @SupportedSourceVersion(SourceVersion.RELEASE_7)
 public class ElementScanner7<R, P> extends ElementScanner6<R, P> {

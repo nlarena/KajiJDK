@@ -3,28 +3,31 @@ package javax.security.auth.x500;
 import java.util.Map;
 
 /**
- * KajiLibrary's javax.security.auth.x500.Formato -- escribe un nombre en los tres formatos.
+ * KajiLibrary's javax.security.auth.x500.NameFormat -- writes a name in the three formats.
  *
- * <p>Los tres recorren los mismos pasos en el mismo orden y difieren en cuatro decisiones: como se
- * nombra el tipo, como se escribe el valor, que separa un paso del siguiente, y que separa dos pares
- * dentro de un paso. Estan juntos por eso: separarlos daria tres recorridos que se pueden
- * desincronizar, y un nombre que se escribe distinto segun el formato deja de ser el mismo nombre.
+ * <p>The three walk the same steps in the same order and differ in four decisions: how the type is
+ * named, how the value is written, what separates one step from the next, and what separates two
+ * pairs within a step. They are together because of that: separating them would give three walks
+ * that can drift out of sync, and a name that is written differently depending on the format stops
+ * being the same name.
  *
- * <h2>Las tres reglas que no son obvias</h2>
+ * <p>(The note called the class {@code Formato}, an earlier name.)
  *
- * <p>Todas salidas de preguntarle al JDK 25, no de leer el RFC -- que en los tres casos deja lugar a
- * mas de una lectura:
+ * <h2>The three rules that are not obvious</h2>
+ *
+ * <p>All taken from asking JDK 25, not from reading the RFC -- which in the three cases leaves room
+ * for more than one reading:
  *
  * <ol>
- *   <li><b>Un tipo sin palabra clave fuerza el valor a hexadecimal</b> en RFC 2253 y en canonico:
- *       `1.2.3.4=#1304616c676f` y no `1.2.3.4=algo`. La razon es que sin palabra clave tampoco hay
- *       una forma de texto acordada para el valor, asi que se escribe el DER crudo. Si el llamador
- *       pasa un diccionario que **si** nombra ese OID, vuelve a escribirse como texto.
- *   <li><b>RFC 1779 cita en vez de escapar</b>: `CN="Perez, Juan"` donde RFC 2253 pone
- *       `CN=Perez\, Juan`. Y cita tambien un valor con **dos espacios seguidos**, que es el caso que
- *       se olvida.
- *   <li><b>RFC 1779 separa los pares de un paso con ` + `</b>, con espacios, mientras que RFC 2253
- *       usa `+` pelado.
+ *   <li><b>A type without a keyword forces the value to hexadecimal</b> in RFC 2253 and in
+ *       canonical: `1.2.3.4=#1304616c676f` and not `1.2.3.4=algo`. The reason is that without a
+ *       keyword there is no agreed text form for the value either, so the raw DER is written. If
+ *       the caller passes a dictionary that **does** name that OID, it is written as text again.
+ *   <li><b>RFC 1779 quotes instead of escaping</b>: `CN="Perez, Juan"` where RFC 2253 puts
+ *       `CN=Perez\, Juan`. And it also quotes a value with **two spaces in a row**, which is the
+ *       case that gets forgotten.
+ *   <li><b>RFC 1779 separates the pairs of a step with ` + `</b>, with spaces, while RFC 2253 uses
+ *       a bare `+`.
  * </ol>
  */
 final class NameFormat {
@@ -33,8 +36,8 @@ final class NameFormat {
     }
 
     /**
-     * @param viejo    RFC 1779: cita en vez de escapar, `OID.x.y`, `, ` y ` + ` como separadores
-     * @param canonico todo en minusculas, espacios colapsados, sin traducciones
+     * @param legacy RFC 1779: quotes instead of escaping, `OID.x.y`, `, ` and ` + ` as separators
+     * @param canonical all in lower case, spaces collapsed, no translations
      */
     static String write(X500Principal.Rdn[] rdns, Map<String, String> oidMap,
             boolean legacy, boolean canonical) {
@@ -65,9 +68,9 @@ final class NameFormat {
         }
     }
 
-    // La palabra clave de ese OID, o `null` si no tiene ninguna. El diccionario del llamador gana
-    // sobre las del estandar: para eso lo pasa. En canonico no hay diccionario -- ver
-    // `X500Principal.getName`, que rechaza uno no vacio.
+    // The keyword of that OID, or `null` if it has none. The caller's dictionary wins over the
+    // standard's: that is what it is passed for. In canonical there is no dictionary -- see
+    // `X500Principal.getName`, which rejects a non-empty one.
     private static String wordFor(String oid, Map<String, String> oidMap, boolean canonical) {
         if (!canonical) {
             String own = oidMap.get(oid);
@@ -81,8 +84,9 @@ final class NameFormat {
     private static String typeLabel(String oid, String word, boolean legacy,
             boolean canonical) {
         if (word == null) {
-            // Sin palabra clave se escribe el OID. RFC 1779 le pone el prefijo `OID.`; RFC 2253 no,
-            // y el canonico tampoco -- ahi el OID pelado es justamente la forma estable.
+            // Without a keyword the OID is written. RFC 1779 gives it the `OID.` prefix; RFC 2253
+            // does not, and neither does canonical -- there the bare OID is precisely the stable
+            // form.
             return legacy ? ("OID." + oid) : oid;
         }
         return canonical ? word.toLowerCase() : word;
@@ -90,7 +94,7 @@ final class NameFormat {
 
     private static String valueText(String value, boolean hasWord, boolean legacy,
             boolean canonical) {
-        // Sin palabra clave y sin RFC 1779: el valor va en hexadecimal. Ver la regla 1 de arriba.
+        // Without a keyword and without RFC 1779: the value goes in hexadecimal. See rule 1 above.
         if (!hasWord && !legacy) {
             return "#" + Der.toHex(Der.writeValue(value)).toLowerCase();
         }
@@ -103,8 +107,8 @@ final class NameFormat {
         return AttrValue.write(value);
     }
 
-    // Lo que RFC 1779 cita. Un valor con caracteres de sintaxis, con espacios en los bordes, o con
-    // dos espacios seguidos, va entre comillas; adentro solo hay que escapar la comilla y la barra.
+    // What RFC 1779 quotes. A value with syntax characters, with spaces at the edges, or with two
+    // spaces in a row, goes in quotes; inside, only the quote and the backslash have to be escaped.
     private static String quotedLegacy(String value) {
         if (!needsQuotes(value)) {
             return value;

@@ -3,139 +3,138 @@ package javax.script;
 import java.io.Reader;
 
 /**
- * KajiLibrary's javax.script.ScriptEngine -- el que evalua texto y devuelve un objeto.
+ * KajiLibrary's javax.script.ScriptEngine -- the one that evaluates text and returns an object.
  *
- * <p>La interfaz que implementa cada lenguaje que se quiera hospedar. Todo lo demas del paquete
- * gira alrededor de esta: el manager la encuentra, la fabrica la construye, el contexto le dice
- * que ve, y los `Bindings` son por donde entran y salen los valores.
+ * <p>The interface each language to be hosted implements. Everything else in the package revolves
+ * around this one: the manager finds it, the factory builds it, the context tells it what it sees,
+ * and the `Bindings` are where values go in and out.
  *
- * <p>Los seis `eval` son tres decisiones cruzadas: **de donde sale el texto** ({@code String} o
- * {@link Reader}) y **contra que mundo se evalua** (el contexto que ya tiene el motor, un
- * {@link Bindings} suelto, o un {@link ScriptContext} entero). La version con `Bindings` no
- * reemplaza el contexto del motor: arma uno nuevo con ese ambito de motor y deja el resto, asi que
- * lo que el script defina ahi no queda pegado al motor. Ver
- * {@link AbstractScriptEngine#getScriptContext(Bindings)}, que es donde eso esta escrito.
+ * <p>The six `eval`s are two crossed decisions: **where the text comes from** ({@code String} or
+ * {@link Reader}) and **against which world it is evaluated** (the context the engine already has,
+ * a loose {@link Bindings}, or a whole {@link ScriptContext}). The version with `Bindings` does not
+ * replace the engine's context: it builds a new one with that engine scope and leaves the rest, so
+ * what the script defines there does not stick to the engine. See {@link
+ * AbstractScriptEngine#getScriptContext(Bindings)}, which is where that is written.
  *
- * <p>Las siete constantes son claves reservadas de `Bindings`: el que hospeda las lee para saber
- * contra que esta hablando, y {@link #FILENAME} y {@link #ARGV} las escribe para que el motor las
- * use. Todas empiezan con `javax.script.` justamente para no chocar con un nombre de variable del
- * script.
+ * <p>The seven constants are reserved `Bindings` keys: the host reads them to know what it is
+ * talking to, and writes {@link #FILENAME} and {@link #ARGV} for the engine to use. They all start
+ * with `javax.script.` precisely so as not to clash with a script variable name.
  */
 public interface ScriptEngine {
 
-    /** Clave reservada: los argumentos del script, un arreglo. */
+    /** Reserved key: the script's arguments, an array. */
     String ARGV = "javax.script.argv";
 
-    /** Clave reservada: el nombre del archivo del que salio el script. */
+    /** Reserved key: the name of the file the script came from. */
     String FILENAME = "javax.script.filename";
 
-    /** Clave reservada: el nombre del motor. */
+    /** Reserved key: the engine's name. */
     String ENGINE = "javax.script.engine";
 
-    /** Clave reservada: la version del motor. */
+    /** Reserved key: the engine's version. */
     String ENGINE_VERSION = "javax.script.engine_version";
 
-    /** Clave reservada: el nombre corto con el que se pide el motor. */
+    /** Reserved key: the short name the engine is asked for by. */
     String NAME = "javax.script.name";
 
-    /** Clave reservada: el nombre del lenguaje. */
+    /** Reserved key: the language's name. */
     String LANGUAGE = "javax.script.language";
 
-    /** Clave reservada: la version del lenguaje. */
+    /** Reserved key: the language's version. */
     String LANGUAGE_VERSION = "javax.script.language_version";
 
     /**
-     * Evalua `script` contra `context`.
+     * Evaluates `script` against `context`.
      *
-     * @throws ScriptException si el script no compila o explota
-     * @throws NullPointerException si algun argumento es nulo
+     * @throws ScriptException if the script does not compile or blows up
+     * @throws NullPointerException if any argument is null
      */
     Object eval(String script, ScriptContext context) throws ScriptException;
 
     /**
-     * Evalua lo que salga de `reader` contra `context`.
+     * Evaluates whatever comes out of `reader` against `context`.
      *
-     * @throws ScriptException si el script no compila o explota
-     * @throws NullPointerException si algun argumento es nulo
+     * @throws ScriptException if the script does not compile or blows up
+     * @throws NullPointerException if any argument is null
      */
     Object eval(Reader reader, ScriptContext context) throws ScriptException;
 
     /**
-     * Evalua `script` contra el contexto que ya tiene el motor.
+     * Evaluates `script` against the context the engine already has.
      *
-     * @throws ScriptException si el script no compila o explota
-     * @throws NullPointerException si `script` es nulo
+     * @throws ScriptException if the script does not compile or blows up
+     * @throws NullPointerException if `script` is null
      */
     Object eval(String script) throws ScriptException;
 
     /**
-     * Evalua lo que salga de `reader` contra el contexto que ya tiene el motor.
+     * Evaluates whatever comes out of `reader` against the context the engine already has.
      *
-     * @throws ScriptException si el script no compila o explota
-     * @throws NullPointerException si `reader` es nulo
+     * @throws ScriptException if the script does not compile or blows up
+     * @throws NullPointerException if `reader` is null
      */
     Object eval(Reader reader) throws ScriptException;
 
     /**
-     * Evalua `script` con `n` como ambito de motor, sin tocar el contexto del motor.
+     * Evaluates `script` with `n` as engine scope, without touching the engine's context.
      *
-     * @throws ScriptException si el script no compila o explota
-     * @throws NullPointerException si algun argumento es nulo
+     * @throws ScriptException if the script does not compile or blows up
+     * @throws NullPointerException if any argument is null
      */
     Object eval(String script, Bindings n) throws ScriptException;
 
     /**
-     * Evalua lo que salga de `reader` con `n` como ambito de motor.
+     * Evaluates whatever comes out of `reader` with `n` as engine scope.
      *
-     * @throws ScriptException si el script no compila o explota
-     * @throws NullPointerException si algun argumento es nulo
+     * @throws ScriptException if the script does not compile or blows up
+     * @throws NullPointerException if any argument is null
      */
     Object eval(Reader reader, Bindings n) throws ScriptException;
 
     /**
-     * Define `key` en el ambito de motor del contexto del motor.
+     * Defines `key` in the engine scope of the engine's context.
      *
-     * @throws NullPointerException si `key` es nulo
-     * @throws IllegalArgumentException si `key` es vacio
+     * @throws NullPointerException if `key` is null
+     * @throws IllegalArgumentException if `key` is empty
      */
     void put(String key, Object value);
 
     /**
-     * Lo que valga `key` en el ambito de motor, o nulo.
+     * Whatever `key` is worth in the engine scope, or null.
      *
-     * @throws NullPointerException si `key` es nulo
-     * @throws IllegalArgumentException si `key` es vacio
+     * @throws NullPointerException if `key` is null
+     * @throws IllegalArgumentException if `key` is empty
      */
     Object get(String key);
 
     /**
-     * El {@link Bindings} de ese ambito, o nulo si no tiene ninguno puesto.
+     * The {@link Bindings} of that scope, or null if it has none set.
      *
-     * @throws IllegalArgumentException si `scope` no es un ambito valido
+     * @throws IllegalArgumentException if `scope` is not a valid scope
      */
     Bindings getBindings(int scope);
 
     /**
-     * Pone `bindings` como ese ambito.
+     * Sets `bindings` as that scope.
      *
-     * @throws IllegalArgumentException si `scope` no es valido
-     * @throws NullPointerException si `bindings` es nulo y el ambito no lo admite
+     * @throws IllegalArgumentException if `scope` is not valid
+     * @throws NullPointerException if `bindings` is null and the scope does not admit it
      */
     void setBindings(Bindings bindings, int scope);
 
-    /** Un {@link Bindings} vacio del tipo que este motor prefiera. */
+    /** An empty {@link Bindings} of whatever type this engine prefers. */
     Bindings createBindings();
 
-    /** El contexto contra el que se evalua cuando no se pasa otro. */
+    /** The context evaluated against when no other is passed. */
     ScriptContext getContext();
 
     /**
-     * Cambia ese contexto.
+     * Changes that context.
      *
-     * @throws NullPointerException si `context` es nulo
+     * @throws NullPointerException if `context` is null
      */
     void setContext(ScriptContext context);
 
-    /** La fabrica de la que salio este motor. */
+    /** The factory this engine came out of. */
     ScriptEngineFactory getFactory();
 }

@@ -4,259 +4,260 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 
-// KajiLibrary's java.util.prefs.Preferences -- un arbol de claves y valores por usuario y por
-// aplicacion, con persistencia.
+// KajiLibrary's java.util.prefs.Preferences -- a tree of keys and values per user and per
+// application, with persistence.
 //
-// LA IDEA. Hay dos arboles: el del usuario y el del sistema. Cada nodo del arbol tiene un nombre,
-// hijos, y su propia tabla de claves a cadenas. La ruta se escribe con barras como la de un
-// archivo, y por convencion cada paquete Java se queda con el nodo que le corresponde a su nombre
-// --`com.acme.db` vive en `/com/acme/db`-- que es lo que hacen {@link #userNodeForPackage} y
-// {@link #systemNodeForPackage}. Asi dos bibliotecas distintas no se pisan sin tener que acordar
-// nada.
+// THE IDEA. There are two trees: the user's and the system's. Each node of the tree has a name,
+// children, and its own table of keys to strings. The path is written with slashes like a file's,
+// and by convention each Java package keeps the node matching its name --`com.acme.db` lives at
+// `/com/acme/db`-- which is what {@link #userNodeForPackage} and {@link #systemNodeForPackage} do.
+// That way two different libraries do not step on each other without having to agree on anything.
 //
-// LOS VALORES SON CADENAS Y NADA MAS. Los `putInt`, `putDouble`, `putByteArray` son todos azucar
-// sobre `put(String, String)`: guardan la representacion textual y punto. Eso explica la regla mas
-// facil de implementar mal del paquete: **un valor mal tipado se comporta como una clave ausente**.
-// `getInt("k", 7)` sobre un valor `"hola"` devuelve `7`; no tira. Es deliberado -- una preferencia
-// corrupta la puede haber escrito una version vieja del programa, o un usuario editando el archivo
-// a mano, y volcarle una excepcion al programa por eso lo dejaria sin arrancar.
+// THE VALUES ARE STRINGS AND NOTHING ELSE. `putInt`, `putDouble`, `putByteArray` are all sugar over
+// `put(String, String)`: they store the textual representation and that is that. That explains the
+// rule of this package that is easiest to implement wrong: **a badly typed value behaves like a
+// missing key**. `getInt("k", 7)` over a value `"hello"` returns `7`; it does not throw. It is
+// deliberate -- a corrupt preference may have been written by an old version of the program, or by
+// a user editing the file by hand, and dumping an exception on the program over that would leave it
+// unable to start.
 //
-// POR LA MISMA RAZON NINGUN `get` NI NINGUN `put` TIRA `BackingStoreException`. Solo la tiran las
-// operaciones que no tienen respuesta por omision: enumerar (`keys`, `childrenNames`,
-// `nodeExists`), borrar (`removeNode`, `clear`) y forzar la escritura (`flush`, `sync`).
+// FOR THE SAME REASON NO `get` AND NO `put` THROWS `BackingStoreException`. It is thrown only by the
+// operations that have no default answer: enumerating (`keys`, `childrenNames`, `nodeExists`),
+// deleting (`removeNode`, `clear`) and forcing the write (`flush`, `sync`).
 //
-// LOS LIMITES SON PARTE DEL CONTRATO, no de la implementacion: una clave no puede pasar de
-// {@link #MAX_KEY_LENGTH} caracteres, un nombre de nodo de {@link #MAX_NAME_LENGTH}, un valor de
-// {@link #MAX_VALUE_LENGTH}. Estan fijados justamente para que un programa pueda escribirse una vez
-// y funcionar sobre cualquier deposito, incluido el registro de Windows.
+// THE LIMITS ARE PART OF THE CONTRACT, not of the implementation: a key cannot exceed
+// {@link #MAX_KEY_LENGTH} characters, a node name {@link #MAX_NAME_LENGTH}, a value
+// {@link #MAX_VALUE_LENGTH}. They are fixed precisely so that a program can be written once and work
+// over any store, the Windows registry included.
 //
 // ---------------------------------------------------------------------------------------------
-// DONDE GUARDA ESTO. En este JDK `user.home`, `user.dir` y `java.io.tmpdir` valen `null` y
-// `System.getenv` no devuelve nada, asi que no hay un directorio del usuario al que apuntar. Lo que
-// si funciona es el sistema de archivos por rutas **relativas** al directorio de trabajo del
-// proceso. Por eso el deposito por omision --{@link AlmacenDeArchivos}, via
-// {@link FabricaDeArchivos}-- vive en `.java/.userPrefs` y `.java/.systemPrefs` colgando del
-// directorio de trabajo, que es la misma estructura que usa el JDK bajo POSIX menos el prefijo del
-// hogar. Se puede mover con las propiedades `java.util.prefs.userRoot` y
-// `java.util.prefs.systemRoot`, igual que en el JDK. Nada se crea en disco hasta que algo se
-// escribe: pedir `userRoot()` y leer no ensucia el directorio.
+// WHERE THIS IS STORED. In this JDK `user.home`, `user.dir` and `java.io.tmpdir` are `null` and
+// `System.getenv` returns nothing, so there is no user directory to point at. What does work is the
+// filesystem through paths **relative** to the process's working directory. That is why the default
+// store --{@link FilePreferences}, via {@link FilePreferencesFactory}-- lives at `.java/.userPrefs`
+// and `.java/.systemPrefs` hanging off the working directory, which is the same structure the JDK
+// uses under POSIX minus the home prefix. It can be moved with the properties
+// `java.util.prefs.userRoot` and `java.util.prefs.systemRoot`, just as in the JDK. Nothing is created
+// on disk until something is written: asking for `userRoot()` and reading does not dirty the
+// directory.
 //
-// Dos consecuencias honestas de eso, porque no son las del JDK. La primera: el arbol del usuario y
-// el del sistema son dos directorios y no dos ambitos de permisos, asi que
-// {@link AbstractPreferences#isUserNode} distingue de cual arbol venis pero no implica ningun
-// privilegio distinto. La segunda: "el usuario" es en los hechos "el directorio desde el que se
-// lanzo la VM"; dos usuarios que corran desde el mismo directorio comparten las preferencias.
-// Ninguna de las dos es una mentira del contrato --el contrato no promete permisos-- pero conviene
-// saberlas.
+// Two honest consequences of that, because they are not the JDK's. The first: the user tree and the
+// system tree are two directories and not two permission scopes, so
+// {@link AbstractPreferences#isUserNode} tells which tree you came from but implies no different
+// privilege. The second: "the user" is in fact "the directory the VM was launched from"; two users
+// running from the same directory share the preferences. Neither of the two is a lie about the
+// contract --the contract promises no permissions-- but they are worth knowing.
 //
-// Si el directorio no se puede crear (por ejemplo, un directorio de trabajo de solo lectura) el
-// arbol igual funciona en memoria y son `flush()` y `sync()` los que tiran
-// {@link BackingStoreException} diciendo cual directorio fallo. Es la unica forma honesta de
-// degradar: lo que no se puede hacer se cuenta por donde el contrato deja contarlo.
+// If the directory cannot be created (a read-only working directory, for instance) the tree still
+// works in memory and it is `flush()` and `sync()` that throw {@link BackingStoreException} saying
+// which directory failed. It is the only honest way to degrade: what cannot be done is reported
+// through the place the contract leaves for reporting it.
 // ---------------------------------------------------------------------------------------------
 //
-// LO QUE NO ESTA. Nada: los 42 miembros publicos de la clase estan. `importPreferences` incluido --
-// ver {@link Xml}, que trae un analizador de XML propio porque en este arbol no hay ni
-// `org.w3c.dom` ni `org.xml.sax` ni `javax.xml.parsers`.
+// WHAT IS NOT HERE. Nothing: the class's 42 public members are all here. `importPreferences`
+// included -- see {@link Xml}, which brings a parser of its own because this tree has neither
+// `org.w3c.dom` nor `org.xml.sax` nor `javax.xml.parsers`.
 public abstract class Preferences {
 
-    /** El largo maximo de una clave, en caracteres. */
+    /** The maximum length of a key, in characters. */
     public static final int MAX_KEY_LENGTH = 80;
 
-    /** El largo maximo del nombre de un nodo, en caracteres. */
+    /** The maximum length of a node's name, in characters. */
     public static final int MAX_NAME_LENGTH = 80;
 
-    /** El largo maximo de un valor, en caracteres. */
+    /** The maximum length of a value, in characters. */
     public static final int MAX_VALUE_LENGTH = 8192;
 
-    // Se resuelve una sola vez y se guarda: `isUserNode()` compara la raiz por identidad, asi que
-    // una fabrica que devolviera un objeto nuevo en cada llamada romperia esa comparacion.
-    private static final PreferencesFactory FABRICA = elegirFabrica();
+    // It is resolved once and kept: `isUserNode()` compares the root by identity, so a factory that
+    // returned a new object on every call would break that comparison.
+    private static final PreferencesFactory FACTORY = chooseFactory();
 
-    private static PreferencesFactory elegirFabrica() {
-        String nombre = System.getProperty("java.util.prefs.PreferencesFactory");
-        if (nombre != null && nombre.length() != 0) {
+    private static PreferencesFactory chooseFactory() {
+        String name = System.getProperty("java.util.prefs.PreferencesFactory");
+        if (name != null && name.length() != 0) {
             try {
-                Class<?> c = Class.forName(nombre, true, ClassLoader.getSystemClassLoader());
+                Class<?> c = Class.forName(name, true, ClassLoader.getSystemClassLoader());
                 return (PreferencesFactory) c.getDeclaredConstructor().newInstance();
             } catch (Exception e) {
-                // Si pediste una fabrica por nombre y no se pudo, callarse y usar otra seria
-                // peor que fallar: las preferencias irian a un lado que no elegiste.
+                // If a factory was asked for by name and could not be had, keeping quiet and using
+                // another would be worse than failing: the preferences would go somewhere that was
+                // not chosen.
                 throw new InternalError(
-                        "no se pudo instanciar java.util.prefs.PreferencesFactory=" + nombre, e);
+                        "could not instantiate java.util.prefs.PreferencesFactory=" + name, e);
             }
         }
-        return new FabricaDeArchivos();
+        return new FilePreferencesFactory();
     }
 
-    /** Para las subclases; no hay nada que inicializar. */
+    /** For the subclasses; there is nothing to initialise. */
     protected Preferences() {
     }
 
-    // ---- las raices ------------------------------------------------------------------------
+    // ---- the roots  ------------------------------------------------------------------------
 
-    /** La raiz del arbol del usuario. */
+    /** The root of the user tree. */
     public static Preferences userRoot() {
-        return FABRICA.userRoot();
+        return FACTORY.userRoot();
     }
 
-    /** La raiz del arbol del sistema. */
+    /** The root of the system tree. */
     public static Preferences systemRoot() {
-        return FABRICA.systemRoot();
+        return FACTORY.systemRoot();
     }
 
     /**
-     * El nodo del arbol del usuario que le corresponde al paquete de `c`.
+     * The node of the user tree that matches `c`'s package.
      *
-     * <p>`com.acme.Db` da `/com/acme`. Una clase del paquete por omision da `/<unnamed>`, que no es
-     * un nombre de nodo que se pueda escribir a mano y por eso no colisiona con nada.
+     * <p>`com.acme.Db` gives `/com/acme`. A class of the default package gives `/<unnamed>`, which is
+     * not a node name that can be written by hand and therefore collides with nothing.
      */
     public static Preferences userNodeForPackage(Class<?> c) {
-        return nodoDePaquete(c, true);
+        return packageNode(c, true);
     }
 
-    /** El nodo del arbol del sistema que le corresponde al paquete de `c`. */
+    /** The node of the system tree that matches `c`'s package. */
     public static Preferences systemNodeForPackage(Class<?> c) {
-        return nodoDePaquete(c, false);
+        return packageNode(c, false);
     }
 
-    private static Preferences nodoDePaquete(Class<?> c, boolean deUsuario) {
+    private static Preferences packageNode(Class<?> c, boolean isUser) {
         if (c.isArray()) {
-            // Un arreglo no pertenece a ningun paquete que uno haya escrito: `int[]` no tiene
-            // dueño, y `String[]` daria el nodo de `java.lang`, que no es de nadie.
+            // An array belongs to no package anyone wrote: `int[]` has no owner, and `String[]`
+            // would give `java.lang`'s node, which is nobody's.
             throw new IllegalArgumentException("Arrays have no associated preferences node.");
         }
-        String nombreDeClase = c.getName();
-        int punto = nombreDeClase.lastIndexOf('.');
-        String paquete = (punto < 0) ? "" : nombreDeClase.substring(0, punto);
-        String ruta = paquete.length() == 0 ? "/<unnamed>" : "/" + paquete.replace('.', '/');
-        return deUsuario ? userRoot().node(ruta) : systemRoot().node(ruta);
+        String className = c.getName();
+        int dot = className.lastIndexOf('.');
+        String pkg = (dot < 0) ? "" : className.substring(0, dot);
+        String path = pkg.length() == 0 ? "/<unnamed>" : "/" + pkg.replace('.', '/');
+        return isUser ? userRoot().node(path) : systemRoot().node(path);
     }
 
-    // ---- claves y valores ------------------------------------------------------------------
+    // ---- keys and values  ------------------------------------------------------------------
 
-    /** Asocia `value` a `key` en este nodo. */
+    /** It associates `value` with `key` in this node. */
     public abstract void put(String key, String value);
 
-    /** El valor de `key`, o `def` si no esta (o si el deposito no se pudo consultar). */
+    /** `key`'s value, or `def` if it is not there (or if the store could not be consulted). */
     public abstract String get(String key, String def);
 
-    /** Borra `key` de este nodo. */
+    /** It removes `key` from this node. */
     public abstract void remove(String key);
 
-    /** Borra todas las claves de este nodo. No toca a los hijos. */
+    /** It removes every key of this node. It does not touch the children. */
     public abstract void clear() throws BackingStoreException;
 
-    /** Guarda `value` como su representacion decimal. */
+    /** It stores `value` as its decimal representation. */
     public abstract void putInt(String key, int value);
 
-    /** El `int` guardado en `key`, o `def` si falta o no es un `int`. */
+    /** The `int` stored at `key`, or `def` if it is missing or is not an `int`. */
     public abstract int getInt(String key, int def);
 
-    /** Guarda `value` como su representacion decimal. */
+    /** It stores `value` as its decimal representation. */
     public abstract void putLong(String key, long value);
 
-    /** El `long` guardado en `key`, o `def` si falta o no es un `long`. */
+    /** The `long` stored at `key`, or `def` if it is missing or is not a `long`. */
     public abstract long getLong(String key, long def);
 
-    /** Guarda `"true"` o `"false"`. */
+    /** It stores `"true"` or `"false"`. */
     public abstract void putBoolean(String key, boolean value);
 
-    /** El `boolean` guardado en `key`, o `def` si falta o no es `"true"`/`"false"`. */
+    /** The `boolean` stored at `key`, or `def` if it is missing or is not `"true"`/`"false"`. */
     public abstract boolean getBoolean(String key, boolean def);
 
-    /** Guarda `value` con {@link Float#toString}. */
+    /** It stores `value` with {@link Float#toString}. */
     public abstract void putFloat(String key, float value);
 
-    /** El `float` guardado en `key`, o `def` si falta o no es un `float`. */
+    /** The `float` stored at `key`, or `def` if it is missing or is not a `float`. */
     public abstract float getFloat(String key, float def);
 
-    /** Guarda `value` con {@link Double#toString}. */
+    /** It stores `value` with {@link Double#toString}. */
     public abstract void putDouble(String key, double value);
 
-    /** El `double` guardado en `key`, o `def` si falta o no es un `double`. */
+    /** The `double` stored at `key`, or `def` if it is missing or is not a `double`. */
     public abstract double getDouble(String key, double def);
 
-    /** Guarda `value` en Base64: es la unica forma de meter bytes en un deposito de cadenas. */
+    /** It stores `value` in Base64: it is the only way to put bytes into a store of strings. */
     public abstract void putByteArray(String key, byte[] value);
 
-    /** Los bytes guardados en `key`, o `def` si falta o no es Base64 valido. */
+    /** The bytes stored at `key`, or `def` if it is missing or is not valid Base64. */
     public abstract byte[] getByteArray(String key, byte[] def);
 
-    /** Las claves de este nodo, en cualquier orden. */
+    /** This node's keys, in any order. */
     public abstract String[] keys() throws BackingStoreException;
 
-    /** Los nombres simples de los hijos de este nodo. */
+    /** The simple names of this node's children. */
     public abstract String[] childrenNames() throws BackingStoreException;
 
-    /** El padre, o `null` si este es la raiz. */
+    /** The parent, or `null` if this is the root. */
     public abstract Preferences parent();
 
     /**
-     * El nodo en `pathName`, creandolo --y a los ancestros que falten-- si no existia.
+     * The node at `pathName`, creating it --and any missing ancestors-- if it did not exist.
      *
-     * <p>Una ruta que empieza con `/` se resuelve desde la raiz de **este** arbol; cualquier otra,
-     * desde este nodo. `""` es este mismo nodo.
+     * <p>A path that starts with `/` resolves from the root of **this** tree; any other, from this
+     * node. `""` is this very node.
      */
     public abstract Preferences node(String pathName);
 
-    /** Si el nodo en `pathName` existe. `""` pregunta por este nodo y no tira aunque este borrado. */
+    /** Whether the node at `pathName` exists. `""` asks about this node and does not throw even if it has been removed. */
     public abstract boolean nodeExists(String pathName) throws BackingStoreException;
 
-    /** Borra este nodo y todos sus descendientes. */
+    /** It removes this node and all its descendants. */
     public abstract void removeNode() throws BackingStoreException;
 
-    /** El nombre simple de este nodo; `""` para la raiz. */
+    /** This node's simple name; `""` for the root. */
     public abstract String name();
 
-    /** La ruta absoluta de este nodo dentro de su arbol. */
+    /** This node's absolute path within its tree. */
     public abstract String absolutePath();
 
-    /** Si este nodo esta en el arbol del usuario. */
+    /** Whether this node is in the user tree. */
     public abstract boolean isUserNode();
 
-    /** `"User Preference Node: <ruta>"` o `"System Preference Node: <ruta>"`. */
+    /** `"User Preference Node: <path>"` or `"System Preference Node: <path>"`. */
     public abstract String toString();
 
-    // ---- deposito --------------------------------------------------------------------------
+    // ---- backing store --------------------------------------------------------------------------
 
-    /** Empuja al deposito los cambios de este nodo y de los descendientes que esten en memoria. */
+    /** It pushes to the store the changes of this node and of whichever descendants are in memory. */
     public abstract void flush() throws BackingStoreException;
 
-    /** Como {@link #flush}, y ademas trae los cambios que hizo otra VM. */
+    /** Like {@link #flush}, and it also brings in the changes another VM made. */
     public abstract void sync() throws BackingStoreException;
 
-    // ---- avisos ----------------------------------------------------------------------------
+    // ---- notifications --------------------------------------------------------------------------
 
-    /** Empieza a avisarle a `pcl` de los cambios de clave de **este** nodo. */
+    /** It starts telling `pcl` about **this** node's key changes. */
     public abstract void addPreferenceChangeListener(PreferenceChangeListener pcl);
 
-    /** Deja de avisarle a `pcl`. */
+    /** It stops telling `pcl`. */
     public abstract void removePreferenceChangeListener(PreferenceChangeListener pcl);
 
-    /** Empieza a avisarle a `ncl` de las altas y bajas de hijos de **este** nodo. */
+    /** It starts telling `ncl` about **this** node's children being added and removed. */
     public abstract void addNodeChangeListener(NodeChangeListener ncl);
 
-    /** Deja de avisarle a `ncl`. */
+    /** It stops telling `ncl`. */
     public abstract void removeNodeChangeListener(NodeChangeListener ncl);
 
     // ---- XML -------------------------------------------------------------------------------
 
-    /** Escribe en `os` un documento XML con las claves de este nodo y ningun hijo. */
+    /** It writes to `os` an XML document with this node's keys and no children. */
     public abstract void exportNode(OutputStream os) throws IOException, BackingStoreException;
 
-    /** Escribe en `os` un documento XML con este nodo y todo su subarbol. */
+    /** It writes to `os` an XML document with this node and its whole subtree. */
     public abstract void exportSubtree(OutputStream os) throws IOException, BackingStoreException;
 
     /**
-     * Lee un documento como los que escriben {@link #exportNode} y {@link #exportSubtree} y aplica
-     * lo que dice.
+     * It reads a document like the ones {@link #exportNode} and {@link #exportSubtree} write and
+     * applies what it says.
      *
-     * <p>El documento elige solo a que arbol va --el atributo `type` de `<root>`-- y por eso el
-     * metodo es estatico y no de instancia: no hay un nodo "sobre el cual" importar.
+     * <p>The document chooses by itself which tree it goes to --`<root>`'s `type` attribute-- and
+     * that is why the method is static and not an instance one: there is no node "on which" to
+     * import.
      */
     public static void importPreferences(InputStream is)
             throws IOException, InvalidPreferencesFormatException {
-        Xml.importar(is);
+        Xml.doImport(is);
     }
 }

@@ -13,103 +13,103 @@ import org.w3c.dom.TypeInfo;
 import org.w3c.dom.UserDataHandler;
 
 /**
- * KajiLibrary's javax.imageio.metadata.IIOMetadataNode -- un nodo de arbol de metadatos de imagen.
+ * KajiLibrary's javax.imageio.metadata.IIOMetadataNode -- a node of an image metadata tree.
  *
- * <p>Implementa {@link org.w3c.dom.Element} para que los metadatos se puedan recorrer con las
- * herramientas de DOM de siempre, sin obligar a nadie a aprender una API nueva.
+ * <p>It implements {@link org.w3c.dom.Element} so that metadata can be walked with the usual DOM
+ * tools, without forcing anyone to learn a new API.
  *
- * <p>Pero <b>no es un DOM completo</b>, y conviene saber en que se queda corto:
+ * <p>But it is <b>not a full DOM</b>, and it is worth knowing where it falls short:
  *
  * <ul>
- *   <li>no hay espacios de nombres. Los metodos {@code xxxNS} existen y se comportan como los que no
- *       lo son; {@link #getNamespaceURI} devuelve null;
- *   <li>no hay documento duenio: {@link #getOwnerDocument} devuelve null. Un arbol de metadatos flota
- *       solo;
- *   <li>todo el nivel 3 --tipos de esquema, datos de usuario, comparacion de posicion, contenido de
- *       texto-- lanza {@link DOMException} con {@code NOT_SUPPORTED_ERR}.
+ *   <li>there are no namespaces. The {@code xxxNS} methods exist and behave like the ones that are
+ *       not; {@link #getNamespaceURI} returns null;
+ *   <li>there is no owner document: {@link #getOwnerDocument} returns null. A metadata tree floats
+ *       on its own;
+ *   <li>all of level 3 --schema types, user data, position comparison, text content-- throws
+ *       {@link DOMException} with {@code NOT_SUPPORTED_ERR}.
  * </ul>
  *
- * <h2>El objeto de usuario</h2>
+ * <h2>The user object</h2>
  *
- * <p>{@link #getUserObject} es lo que hace util a esta clase frente a un DOM de verdad. Un arbol de
- * metadatos a veces necesita llevar un dato que no es texto --una tabla de cuantizacion, un perfil de
- * color, un arreglo de bytes-- y meterlo como cadena seria absurdo.
+ * <p>{@link #getUserObject} is what makes this class useful compared with a real DOM. A metadata
+ * tree sometimes needs to carry a piece of data that is not text --a quantization table, a colour
+ * profile, a byte array-- and putting it in as a string would be absurd.
  *
- * <p>Cuando hay objeto de usuario, los atributos y los hijos suelen sobrar: el nodo <b>es</b> ese
- * objeto.
+ * <p>When there is a user object, the attributes and children are usually superfluous: the node
+ * <b>is</b> that object.
  *
- * <h2>El nodo es su propia lista de hijos</h2>
+ * <h2>The node is its own child list</h2>
  *
- * <p>Implementa tambien {@link NodeList}, y {@link #getChildNodes} se devuelve a si mismo. Es un
- * atajo de implementacion del JDK que se nota: {@code n.getChildNodes() == n} es cierto.
+ * <p>It also implements {@link NodeList}, and {@link #getChildNodes} returns itself. It is a JDK
+ * implementation shortcut that shows: {@code n.getChildNodes() == n} is true.
  *
- * <h2>{@link #cloneNode} no copia los atributos</h2>
+ * <h2>{@link #cloneNode} does not copy the attributes</h2>
  *
- * <p>Ni siquiera en modo profundo. Copia el nombre, el objeto de usuario y --si es profundo-- los
- * hijos, y nada mas. Se comprobo contra el JDK 25 y es asi; parece un descuido de 1999 que ya no se
- * puede arreglar sin romper a quien dependa de ello.
+ * <p>Not even in deep mode. It copies the name, the user object and --if deep-- the children, and
+ * nothing else. It was checked against the JDK 25 and that is how it is; it looks like a 1999
+ * oversight that can no longer be fixed without breaking whoever depends on it.
  */
 public class IIOMetadataNode implements Element, NodeList {
 
-    /** Como se llama. */
+    /** What it is called. */
     private String nodeName;
 
-    /** El valor de texto, casi siempre null. */
+    /** The text value, almost always null. */
     private String nodeValue;
 
-    /** Los atributos. */
+    /** The attributes. */
     private final List<Node> attributes = new ArrayList<Node>();
 
-    /** Los hijos, en orden. */
+    /** The children, in order. */
     private final List<Node> children = new ArrayList<Node>();
 
-    /** De quien es hijo, o null. */
+    /** Whose child it is, or null. */
     private Node parent;
 
-    /** El dato que no es texto. Ver la nota de la clase. */
+    /** The data that is not text. See the class note. */
     private Object userObject;
 
-    /** Sin nombre; el nombre queda en null. */
+    /** Without a name; the name stays null. */
     public IIOMetadataNode() {
         this.nodeName = null;
     }
 
-    /** @param nodeName como se llama */
+    /** @param nodeName what it is called */
     public IIOMetadataNode(String nodeName) {
         this.nodeName = nodeName;
     }
 
-    /** Como se llama. */
+    /** What it is called. */
     public String getNodeName() {
         return this.nodeName;
     }
 
-    /** El valor de texto, o null. */
+    /** The text value, or null. */
     public String getNodeValue() {
         return this.nodeValue;
     }
 
-    /** Lo cambia. */
+    /** Changes it. */
     public void setNodeValue(String nodeValue) {
         this.nodeValue = nodeValue;
     }
 
-    /** Siempre {@link Node#ELEMENT_NODE}. */
+    /** Always {@link Node#ELEMENT_NODE}. */
     public short getNodeType() {
         return ELEMENT_NODE;
     }
 
-    /** De quien es hijo, o null. */
+    /** Whose child it is, or null. */
     public Node getParentNode() {
         return this.parent;
     }
 
-    /** Se devuelve a si mismo. Ver la nota de la clase. */
+    /** Returns itself. See the class note. */
     public NodeList getChildNodes() {
         return this;
     }
 
-    /** El primer hijo, o null. */
+    /** The first child, or null. */
     public Node getFirstChild() {
         if (this.children.isEmpty()) {
             return null;
@@ -117,7 +117,7 @@ public class IIOMetadataNode implements Element, NodeList {
         return this.children.get(0);
     }
 
-    /** El ultimo, o null. */
+    /** The last one, or null. */
     public Node getLastChild() {
         if (this.children.isEmpty()) {
             return null;
@@ -125,31 +125,36 @@ public class IIOMetadataNode implements Element, NodeList {
         return this.children.get(this.children.size() - 1);
     }
 
-    /** El hermano anterior, o null. */
+    /** The previous sibling, or null. */
     public Node getPreviousSibling() {
         return siblingAt(-1);
     }
 
-    /** El siguiente, o null. */
+    /** The next one, or null. */
     public Node getNextSibling() {
         return siblingAt(1);
     }
 
-    /** Los atributos, de solo lectura. Ver {@link IIONamedNodeMap}. */
+    /**
+     * The attributes, read-only. See {@link IIONamedNodeMap}.
+     *
+     * <p>Here it is a copy taken now; the JDK wraps the node's own attribute list, so its map sees
+     * later changes.
+     */
     public NamedNodeMap getAttributes() {
         return new IIONamedNodeMap(new ArrayList<Node>(this.attributes));
     }
 
-    /** Null: un arbol de metadatos no tiene documento. Ver la nota de la clase. */
+    /** Null: a metadata tree has no document. See the class note. */
     public Document getOwnerDocument() {
         return null;
     }
 
     /**
-     * Inserta antes de ese hijo; con {@code refChild} null, agrega al final.
+     * Inserts before that child; with {@code refChild} null, appends at the end.
      *
-     * @throws IllegalArgumentException si el nuevo hijo es null
-     * @throws DOMException si el de referencia no es hijo de este nodo
+     * @throws IllegalArgumentException if the new child is null
+     * @throws DOMException if the reference one is not a child of this node
      */
     public Node insertBefore(Node newChild, Node refChild) {
         if (newChild == null) {
@@ -170,10 +175,10 @@ public class IIOMetadataNode implements Element, NodeList {
     }
 
     /**
-     * Reemplaza un hijo por otro.
+     * Replaces one child with another.
      *
-     * @throws IllegalArgumentException si el nuevo es null
-     * @throws DOMException si el viejo no es hijo de este nodo
+     * @throws IllegalArgumentException if the new one is null
+     * @throws DOMException if the old one is not a child of this node
      */
     public Node replaceChild(Node newChild, Node oldChild) {
         if (newChild == null) {
@@ -191,10 +196,10 @@ public class IIOMetadataNode implements Element, NodeList {
     }
 
     /**
-     * Saca un hijo.
+     * Removes a child.
      *
-     * @throws IllegalArgumentException si es null
-     * @throws DOMException si no es hijo de este nodo
+     * @throws IllegalArgumentException if it is null
+     * @throws DOMException if it is not a child of this node
      */
     public Node removeChild(Node oldChild) {
         if (oldChild == null) {
@@ -210,9 +215,9 @@ public class IIOMetadataNode implements Element, NodeList {
     }
 
     /**
-     * Agrega al final.
+     * Appends at the end.
      *
-     * @throws IllegalArgumentException si es null
+     * @throws IllegalArgumentException if it is null
      */
     public Node appendChild(Node newChild) {
         if (newChild == null) {
@@ -221,17 +226,17 @@ public class IIOMetadataNode implements Element, NodeList {
         return insertBefore(newChild, null);
     }
 
-    /** Si tiene alguno. */
+    /** Whether it has any. */
     public boolean hasChildNodes() {
         return !this.children.isEmpty();
     }
 
     /**
-     * Una copia.
+     * A copy.
      *
-     * <p>Ver la nota de la clase: <b>no</b> copia los atributos, ni siquiera en modo profundo.
+     * <p>See the class note: it does <b>not</b> copy the attributes, not even in deep mode.
      *
-     * @param deep si copiar tambien los hijos
+     * @param deep whether to copy the children too
      */
     public Node cloneNode(boolean deep) {
         IIOMetadataNode cloned = new IIOMetadataNode(this.nodeName);
@@ -246,40 +251,40 @@ public class IIOMetadataNode implements Element, NodeList {
         return cloned;
     }
 
-    /** No hace nada: no hay nodos de texto que juntar. */
+    /** Does nothing: there are no text nodes to merge. */
     public void normalize() {
     }
 
-    /** Siempre false: no se declara soporte de ninguna caracteristica del DOM. */
+    /** Always false: no DOM feature support is declared. */
     public boolean isSupported(String feature, String version) {
         return false;
     }
 
-    /** Null: no hay espacios de nombres. Ver la nota de la clase. */
+    /** Null: there are no namespaces. See the class note. */
     public String getNamespaceURI() {
         return null;
     }
 
-    /** Null, por lo mismo. */
+    /** Null, for the same reason. */
     public String getPrefix() {
         return null;
     }
 
-    /** No hace nada, por lo mismo. */
+    /** Does nothing, for the same reason. */
     public void setPrefix(String prefix) {
     }
 
-    /** El nombre; sin espacios de nombres, local y completo son el mismo. */
+    /** The name; without namespaces, local and qualified are the same. */
     public String getLocalName() {
         return this.nodeName;
     }
 
-    /** El nombre. */
+    /** The name. */
     public String getTagName() {
         return this.nodeName;
     }
 
-    /** El valor de ese atributo, o la cadena vacia si no esta. */
+    /** The value of that attribute, or the empty string if it is not there. */
     public String getAttribute(String name) {
         Attr attr = getAttributeNode(name);
         if (attr == null) {
@@ -288,15 +293,15 @@ public class IIOMetadataNode implements Element, NodeList {
         return attr.getValue();
     }
 
-    /** Idem; el espacio de nombres se ignora. */
+    /** Same; the namespace is ignored. */
     public String getAttributeNS(String namespaceURI, String localName) {
         return getAttribute(localName);
     }
 
     /**
-     * Fija un atributo.
+     * Sets an attribute.
      *
-     * @throws IllegalArgumentException si el nombre es null
+     * @throws IllegalArgumentException if the name is null
      */
     public void setAttribute(String name, String value) {
         if (name == null) {
@@ -310,37 +315,37 @@ public class IIOMetadataNode implements Element, NodeList {
         this.attributes.add(new IIOAttr(this, name, value));
     }
 
-    /** Idem; el espacio de nombres se ignora. */
+    /** Same; the namespace is ignored. */
     public void setAttributeNS(String namespaceURI, String qualifiedName, String value) {
         setAttribute(qualifiedName, value);
     }
 
-    /** Lo saca; si no estaba, no hace nada. */
+    /** Removes it; if it was not there, does nothing. */
     public void removeAttribute(String name) {
         removeAttributeByName(name);
     }
 
-    /** Idem. */
+    /** Same. */
     public void removeAttributeNS(String namespaceURI, String localName) {
         removeAttribute(localName);
     }
 
-    /** El atributo como nodo, o null. */
+    /** The attribute as a node, or null. */
     public Attr getAttributeNode(String name) {
         Node node = getAttributes().getNamedItem(name);
         return (Attr) node;
     }
 
-    /** Idem. */
+    /** Same. */
     public Attr getAttributeNodeNS(String namespaceURI, String localName) {
         return getAttributeNode(localName);
     }
 
     /**
-     * Pone ese atributo.
+     * Sets that attribute.
      *
-     * @return el que estaba con ese nombre, o null
-     * @throws DOMException si el atributo ya pertenece a otro elemento
+     * @return the one that was there with that name, or null
+     * @throws DOMException if the attribute already belongs to another element
      */
     public Attr setAttributeNode(Attr newAttr) throws DOMException {
         Element owner = newAttr.getOwnerElement();
@@ -359,15 +364,15 @@ public class IIOMetadataNode implements Element, NodeList {
         return old;
     }
 
-    /** Idem. */
+    /** Same. */
     public Attr setAttributeNodeNS(Attr newAttr) {
         return setAttributeNode(newAttr);
     }
 
     /**
-     * Lo saca.
+     * Removes it.
      *
-     * @throws DOMException si no es un atributo de este elemento
+     * @throws DOMException if it is not an attribute of this element
      */
     public Attr removeAttributeNode(Attr oldAttr) {
         int at = this.attributes.indexOf(oldAttr);
@@ -382,9 +387,9 @@ public class IIOMetadataNode implements Element, NodeList {
     }
 
     /**
-     * Los descendientes con ese nombre, en orden de recorrido.
+     * The descendants with that name, in traversal order.
      *
-     * <p>Es una foto, no una vista viva; ver {@link IIONodeList}.
+     * <p>It is a snapshot, not a live view; see {@link IIONodeList}.
      */
     public NodeList getElementsByTagName(String name) {
         List<Node> found = new ArrayList<Node>();
@@ -392,32 +397,32 @@ public class IIOMetadataNode implements Element, NodeList {
         return new IIONodeList(found);
     }
 
-    /** Idem. */
+    /** Same. */
     public NodeList getElementsByTagNameNS(String namespaceURI, String localName) {
         return getElementsByTagName(localName);
     }
 
-    /** Si tiene alguno. */
+    /** Whether it has any. */
     public boolean hasAttributes() {
         return !this.attributes.isEmpty();
     }
 
-    /** Si tiene ese. */
+    /** Whether it has that one. */
     public boolean hasAttribute(String name) {
         return getAttributeNode(name) != null;
     }
 
-    /** Idem. */
+    /** Same. */
     public boolean hasAttributeNS(String namespaceURI, String localName) {
         return hasAttribute(localName);
     }
 
-    /** Cuantos hijos. Es la parte de {@link NodeList}. */
+    /** How many children. It is the {@link NodeList} part. */
     public int getLength() {
         return this.children.size();
     }
 
-    /** El hijo numero {@code index}, o null si no existe. Nunca lanza. */
+    /** Child number {@code index}, or null if it does not exist. Never throws. */
     public Node item(int index) {
         if (index < 0 || index >= this.children.size()) {
             return null;
@@ -425,97 +430,97 @@ public class IIOMetadataNode implements Element, NodeList {
         return this.children.get(index);
     }
 
-    /** El dato que no es texto, o null. Ver la nota de la clase. */
+    /** The data that is not text, or null. See the class note. */
     public Object getUserObject() {
         return this.userObject;
     }
 
-    /** Lo cambia. */
+    /** Changes it. */
     public void setUserObject(Object userObject) {
         this.userObject = userObject;
     }
 
-    /** No soportado; ver la nota de la clase. */
+    /** Not supported; see the class note. */
     public void setIdAttribute(String name, boolean isId) {
         throw new DOMException(DOMException.NOT_SUPPORTED_ERR, "Method not supported");
     }
 
-    /** No soportado. */
+    /** Not supported. */
     public void setIdAttributeNS(String namespaceURI, String localName, boolean isId) {
         throw new DOMException(DOMException.NOT_SUPPORTED_ERR, "Method not supported");
     }
 
-    /** No soportado. */
+    /** Not supported. */
     public void setIdAttributeNode(Attr idAttr, boolean isId) {
         throw new DOMException(DOMException.NOT_SUPPORTED_ERR, "Method not supported");
     }
 
-    /** No soportado. */
+    /** Not supported. */
     public TypeInfo getSchemaTypeInfo() {
         throw new DOMException(DOMException.NOT_SUPPORTED_ERR, "Method not supported");
     }
 
-    /** No soportado. */
+    /** Not supported. */
     public Object setUserData(String key, Object data, UserDataHandler handler) {
         throw new DOMException(DOMException.NOT_SUPPORTED_ERR, "Method not supported");
     }
 
-    /** No soportado. */
+    /** Not supported. */
     public Object getUserData(String key) {
         throw new DOMException(DOMException.NOT_SUPPORTED_ERR, "Method not supported");
     }
 
-    /** No soportado. */
+    /** Not supported. */
     public Object getFeature(String feature, String version) {
         throw new DOMException(DOMException.NOT_SUPPORTED_ERR, "Method not supported");
     }
 
-    /** No soportado. */
+    /** Not supported. */
     public boolean isSameNode(Node node) {
         throw new DOMException(DOMException.NOT_SUPPORTED_ERR, "Method not supported");
     }
 
-    /** No soportado. */
+    /** Not supported. */
     public boolean isEqualNode(Node node) {
         throw new DOMException(DOMException.NOT_SUPPORTED_ERR, "Method not supported");
     }
 
-    /** No soportado. */
+    /** Not supported. */
     public String lookupNamespaceURI(String prefix) {
         throw new DOMException(DOMException.NOT_SUPPORTED_ERR, "Method not supported");
     }
 
-    /** No soportado. */
+    /** Not supported. */
     public boolean isDefaultNamespace(String namespaceURI) {
         throw new DOMException(DOMException.NOT_SUPPORTED_ERR, "Method not supported");
     }
 
-    /** No soportado. */
+    /** Not supported. */
     public String lookupPrefix(String namespaceURI) {
         throw new DOMException(DOMException.NOT_SUPPORTED_ERR, "Method not supported");
     }
 
-    /** No soportado. */
+    /** Not supported. */
     public String getTextContent() {
         throw new DOMException(DOMException.NOT_SUPPORTED_ERR, "Method not supported");
     }
 
-    /** No soportado. */
+    /** Not supported. */
     public void setTextContent(String textContent) {
         throw new DOMException(DOMException.NOT_SUPPORTED_ERR, "Method not supported");
     }
 
-    /** No soportado. */
+    /** Not supported. */
     public short compareDocumentPosition(Node other) {
         throw new DOMException(DOMException.NOT_SUPPORTED_ERR, "Method not supported");
     }
 
-    /** No soportado. */
+    /** Not supported. */
     public String getBaseURI() {
         throw new DOMException(DOMException.NOT_SUPPORTED_ERR, "Method not supported");
     }
 
-    /** El hermano que esta a esa distancia, o null. */
+    /** The sibling at that distance, or null. */
     private Node siblingAt(int delta) {
         if (this.parent == null) {
             return null;
@@ -531,7 +536,7 @@ public class IIOMetadataNode implements Element, NodeList {
         return null;
     }
 
-    /** Lo saca de donde estuviera antes de meterlo aca. */
+    /** Removes it from wherever it was before putting it here. */
     private void detach(Node node) {
         Node oldParent = node.getParentNode();
         if (oldParent != null && oldParent != this) {
@@ -541,21 +546,21 @@ public class IIOMetadataNode implements Element, NodeList {
         }
     }
 
-    /** Le anota que este es su padre. */
+    /** Records that this is its parent. */
     private void adopt(Node node) {
         if (node instanceof IIOMetadataNode) {
             ((IIOMetadataNode) node).parent = this;
         }
     }
 
-    /** Le borra el padre. */
+    /** Clears its parent. */
     private void orphan(Node node) {
         if (node instanceof IIOMetadataNode) {
             ((IIOMetadataNode) node).parent = null;
         }
     }
 
-    /** Saca el atributo con ese nombre, si esta. */
+    /** Removes the attribute with that name, if it is there. */
     private void removeAttributeByName(String name) {
         int i = 0;
         while (i < this.attributes.size()) {
@@ -570,7 +575,7 @@ public class IIOMetadataNode implements Element, NodeList {
         }
     }
 
-    /** Junta los descendientes con ese nombre, en orden de recorrido. */
+    /** Collects the descendants with that name, in traversal order. */
     private static void collectByName(IIOMetadataNode node, String name, List<Node> into) {
         if (name.equals(node.getNodeName())) {
             into.add(node);

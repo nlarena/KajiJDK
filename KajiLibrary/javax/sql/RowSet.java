@@ -1,26 +1,27 @@
 package javax.sql;
 
 /**
- * KajiLibrary's javax.sql.RowSet -- un {@link java.sql.ResultSet} que se sabe cuidar solo.
+ * KajiLibrary's javax.sql.RowSet -- a {@link java.sql.ResultSet} that can look after itself.
  *
- * <p>Un `ResultSet` comun muere con su conexion; un `RowSet` guarda **como** obtener sus datos --la
- * URL, la consulta, los parametros-- y puede volver a buscarlos con {@link #execute}. Eso es lo que
- * lo hace serializable y transportable: se puede mandar a otra maquina, editar sin conexion y
- * sincronizar despues.
+ * <p>An ordinary `ResultSet` dies with its connection; a `RowSet` keeps **how** to get its data
+ * --the URL, the query, the parameters-- and can go and fetch it again with {@link #execute}. That
+ * is what makes it serializable and transportable: it can be sent to another machine, edited
+ * without a connection and synchronized later.
  *
- * <p>Que sea un JavaBean --propiedades con `get`/`set` y oyentes-- no es casualidad: se penso para
- * que una herramienta visual pudiera configurarlo sin escribir codigo.
+ * <p>Being a JavaBean --properties with `get`/`set` and listeners-- is no accident: it was designed
+ * so that a visual tool could configure it without writing code.
  *
- * <p><strong>Subconjunto declarado.</strong> Estan la configuracion, la ejecucion, los oyentes y los
- * `setXxx` de parametros de los tipos que esta biblioteca tiene. Quedan afuera las familias de tipos
- * SQL propios, por la misma razon que en {@link java.sql.ResultSet}.
+ * <p><strong>Declared subset.</strong> The configuration, the execution, the listeners and the
+ * parameter `setXxx`s of the types this library has are here. The families of SQL-specific types
+ * are left out, for the same reason as in {@link java.sql.ResultSet}.
  */
 public interface RowSet extends java.sql.ResultSet {
 
-    // ---- de donde salen los datos ---------------------------------------------------------------------
+    // ---- where the data comes from --------------------------------------------------------------
     //
-    // Dos caminos alternativos y excluyentes: una URL de JDBC, o el nombre de un `DataSource` en un
-    // directorio. El segundo es el que permite mover la aplicacion de base sin tocarla.
+    // Two alternative, mutually exclusive routes: a JDBC URL, or the name of a `DataSource` in a
+    // directory. The second is what allows moving the application to another database without
+    // touching it.
 
     String getUrl() throws java.sql.SQLException;
 
@@ -38,15 +39,15 @@ public interface RowSet extends java.sql.ResultSet {
 
     void setPassword(String password) throws java.sql.SQLException;
 
-    /** La consulta que llena este conjunto. */
+    /** The query that fills this set. */
     String getCommand();
 
     void setCommand(String cmd) throws java.sql.SQLException;
 
-    /** Va a buscar los datos. */
+    /** Goes and fetches the data. */
     void execute() throws java.sql.SQLException;
 
-    // ---- configuracion -------------------------------------------------------------------------------
+    // ---- configuration --------------------------------------------------------------------------
 
     boolean isReadOnly();
 
@@ -80,13 +81,13 @@ public interface RowSet extends java.sql.ResultSet {
 
     void setTypeMap(java.util.Map<String, Class<?>> map) throws java.sql.SQLException;
 
-    // ---- oyentes -------------------------------------------------------------------------------------
+    // ---- listeners ------------------------------------------------------------------------------
 
     void addRowSetListener(RowSetListener listener);
 
     void removeRowSetListener(RowSetListener listener);
 
-    // ---- parametros de la consulta -------------------------------------------------------------------
+    // ---- query parameters -----------------------------------------------------------------------
 
     void setNull(int parameterIndex, int sqlType) throws java.sql.SQLException;
 
@@ -112,15 +113,15 @@ public interface RowSet extends java.sql.ResultSet {
 
     void setObject(int parameterIndex, Object x) throws java.sql.SQLException;
 
-    /** Olvida los parametros puestos. */
+    /** Forgets the parameters that were set. */
     void clearParameters() throws java.sql.SQLException;
 
-    // ---- el resto de los parametros ------------------------------------------------------------------
+    // ---- the rest of the parameters -------------------------------------------------------------
     //
-    // Los mismos de `PreparedStatement` y ademas **por nombre**: un `RowSet` se configura desde afuera
-    // --de un archivo, de una herramienta visual-- y ahi un numero de posicion no le dice nada a
-    // nadie. Por eso cada `setXxx(int, ...)` tiene su gemelo `setXxx(String, ...)`, cosa que la
-    // sentencia preparada no necesita.
+    // The same as `PreparedStatement`'s and also **by name**: a `RowSet` is configured from outside
+    // --from a file, from a visual tool-- and there a position number tells nobody anything. That
+    // is why each `setXxx(int, ...)` has its twin `setXxx(String, ...)`, which the prepared
+    // statement does not need.
 
     void setArray(int parameterIndex, java.sql.Array x) throws java.sql.SQLException;
 

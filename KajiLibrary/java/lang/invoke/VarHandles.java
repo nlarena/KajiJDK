@@ -1,26 +1,26 @@
 package java.lang.invoke;
 
 /**
- * KajiLibrary's java.lang.invoke.VarHandles -- la puerta por la que `java.lang.foreign` fabrica sus
- * {@link VarHandle}.
+ * KajiLibrary's java.lang.invoke.VarHandles -- the door through which `java.lang.foreign` builds its
+ * {@link VarHandle}s.
  *
- * <p>Existe por una razon de visibilidad y no de diseno: el constructor de {@link VarHandle} es
- * package-private, asi que su subclase tiene que vivir en `java.lang.invoke`, y `java.lang.foreign`
- * --que es quien la fabrica-- no puede nombrarla.
+ * <p>It exists for a reason of visibility and not of design: {@link VarHandle}'s constructor is
+ * package-private, so its subclass has to live in `java.lang.invoke`, and `java.lang.foreign`
+ * --which is what builds it-- cannot name it.
  *
- * <h2>Una divergencia, dicha de frente</h2>
+ * <h2>A divergence, said to your face</h2>
  *
- * <p>El JDK tiene una clase con **este mismo nombre y en este mismo paquete**, y la tiene
- * package-private: `final class java.lang.invoke.VarHandles`. Puede darse ese lujo porque resuelve la
- * costura con **modulos** -- `jdk.internal.foreign` la alcanza por un `opens` calificado--. Sin
- * modulos, la unica forma de que un paquete llegue a otro es que el miembro sea publico.
+ * <p>The JDK has a class with **this same name in this same package**, and has it package-private:
+ * `final class java.lang.invoke.VarHandles`. It can afford that because it solves the seam with
+ * **modules** -- `jdk.internal.foreign` reaches it through a qualified `opens`--. Without modules,
+ * the only way for one package to reach another is for the member to be public.
  *
- * <p>Asi que esto es API que el JDK real no tiene, y conviene saberlo: codigo escrito contra
- * `VarHandles.deSegmento` compila aca y **no** compila contra un JDK de verdad. No es un miembro que
- * miente --hace exactamente lo que dice-- pero es un miembro de mas, que es la otra forma de no
- * coincidir. Se elige esto sobre las alternativas porque las dos que hay son peores: abrir el
- * constructor de `VarHandle` cambiaria una clase que **si** es API, y fabricar el objeto desde un
- * `native` esconderia en la VM una decision que merece leerse en el fuente.
+ * <p>So this is API the real JDK does not have, and it is worth knowing: code written against
+ * `VarHandles.ofSegment` compiles here and does **not** compile against a real JDK. It is not a
+ * member that lies --it does exactly what it says-- but it is a member too many, which is the other
+ * way of not matching. It is chosen over the alternatives because both of those are worse: opening
+ * `VarHandle`'s constructor would change a class that **is** API, and building the object from a
+ * `native` would hide inside the VM a decision that deserves to be read in the source.
  */
 public final class VarHandles {
 
@@ -28,37 +28,37 @@ public final class VarHandles {
     }
 
     /**
-     * Un `VarHandle` sobre un segmento: el layout del valor, el desplazamiento fijo del camino, y
-     * cuanto mide cada paso abierto.
+     * A `VarHandle` over a segment: the value's layout, the path's fixed displacement, and how much
+     * each open step measures.
      */
-    public static VarHandle deSegmento(java.lang.foreign.MemoryLayout distribucion,
-            long desplazamientoFijo, long[] pasos) {
-        return new VarHandleDeSegmento(distribucion, desplazamientoFijo, pasos);
+    public static VarHandle ofSegment(java.lang.foreign.MemoryLayout layout,
+            long fixedOffset, long[] strides) {
+        return new SegmentVarHandle(layout, fixedOffset, strides);
     }
 
-    /** `scaleHandle()`: `(long base, long indice) -> long`. */
-    public static MethodHandle escala(java.lang.foreign.MemoryLayout raiz) {
-        return new MethodHandleDeLayout(
+    /** `scaleHandle()`: `(long base, long index) -> long`. */
+    public static MethodHandle scale(java.lang.foreign.MemoryLayout root) {
+        return new LayoutMethodHandle(
                 MethodType.methodType(Long.TYPE, new Class<?>[] {Long.TYPE, Long.TYPE}),
-                MethodHandleDeLayout.ESCALA, raiz, raiz, 0L, new long[0]);
+                LayoutMethodHandle.SCALE, root, root, 0L, new long[0]);
     }
 
-    /** `byteOffsetHandle(camino)`: `(long base, long… indices) -> long`. */
-    public static MethodHandle offsetDeCamino(java.lang.foreign.MemoryLayout raiz,
-            java.lang.foreign.MemoryLayout destino, long desplazamientoFijo, long[] pasos) {
-        return new MethodHandleDeLayout(tipoLong(pasos.length), MethodHandleDeLayout.OFFSET,
-                raiz, destino, desplazamientoFijo, pasos);
+    /** `byteOffsetHandle(path)`: `(long base, long... indices) -> long`. */
+    public static MethodHandle pathOffsetHandle(java.lang.foreign.MemoryLayout root,
+            java.lang.foreign.MemoryLayout target, long fixedOffset, long[] strides) {
+        return new LayoutMethodHandle(longType(strides.length), LayoutMethodHandle.OFFSET,
+                root, target, fixedOffset, strides);
     }
 
-    /** `sliceHandle(camino)`: `(MemorySegment, long base, long… indices) -> MemorySegment`. */
-    public static MethodHandle rebanadaDeCamino(java.lang.foreign.MemoryLayout raiz,
-            java.lang.foreign.MemoryLayout destino, long desplazamientoFijo, long[] pasos) {
-        return new MethodHandleDeLayout(tipoRebanada(pasos.length), MethodHandleDeLayout.REBANADA,
-                raiz, destino, desplazamientoFijo, pasos);
+    /** `sliceHandle(path)`: `(MemorySegment, long base, long... indices) -> MemorySegment`. */
+    public static MethodHandle pathSliceHandle(java.lang.foreign.MemoryLayout root,
+            java.lang.foreign.MemoryLayout target, long fixedOffset, long[] strides) {
+        return new LayoutMethodHandle(sliceType(strides.length), LayoutMethodHandle.SLICE,
+                root, target, fixedOffset, strides);
     }
 
     // `(long, long…n) -> long`
-    private static MethodType tipoLong(int n) {
+    private static MethodType longType(int n) {
         Class<?>[] ps = new Class<?>[1 + n];
         int i = 0;
         while (i < ps.length) {
@@ -69,7 +69,7 @@ public final class VarHandles {
     }
 
     // `(MemorySegment, long, long…n) -> MemorySegment`
-    private static MethodType tipoRebanada(int n) {
+    private static MethodType sliceType(int n) {
         Class<?>[] ps = new Class<?>[2 + n];
         ps[0] = java.lang.foreign.MemorySegment.class;
         int i = 1;

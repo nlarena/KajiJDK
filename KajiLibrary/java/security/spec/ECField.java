@@ -1,13 +1,13 @@
 package java.security.spec;
 
-// El cuerpo finito sobre el que vive una curva eliptica.
+// The finite field an elliptic curve lives over.
 //
-// La interfaz tiene un solo metodo y aun asi es la que decide todo: los dos cuerpos que la
-// implementan —`ECFieldFp` (primo) y `ECFieldF2m` (binario)— no comparten nada mas que el tamano,
-// porque la aritmetica de uno no se parece a la del otro. Lo que este tipo permite es que
-// `EllipticCurve` pueda nombrar a cualquiera de los dos sin saber cual es.
+// The interface has a single method and even so it is the one that decides everything: the two
+// fields that implement it —`ECFieldFp` (prime) and `ECFieldF2m` (binary)— share nothing but the
+// size, because the arithmetic of one looks nothing like the other's. What this type allows is for
+// `EllipticCurve` to name either of the two without knowing which one it is.
 public interface ECField {
 
-    // La cantidad de bits que hace falta para escribir un elemento del cuerpo.
+    // The number of bits needed to write an element of the field.
     int getFieldSize();
 }

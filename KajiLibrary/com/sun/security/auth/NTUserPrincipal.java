@@ -4,12 +4,12 @@ import java.io.Serializable;
 import java.security.Principal;
 
 /**
- * El nombre de usuario de Windows.
+ * The Windows user name.
  *
- * <p>Como todo principal de este paquete: inmutable, comparado por nombre y por clase exacta. Lo
- * segundo importa mas de lo que parece — un {@code UnixPrincipal} y un {@code NTUserPrincipal} con
- * el mismo texto <strong>no</strong> son la misma identidad, y compararlos solo por nombre haria que
- * una politica escrita para uno se aplicara al otro.
+ * <p>Like every principal of this package: immutable, compared by name and by exact class. The
+ * second matters more than it seems -- a {@code UnixPrincipal} and an {@code NTUserPrincipal} with
+ * the same text are <strong>not</strong> the same identity, and comparing them only by name would
+ * make a policy written for one apply to the other.
  */
 public final class NTUserPrincipal implements Principal, Serializable {
 
@@ -18,16 +18,16 @@ public final class NTUserPrincipal implements Principal, Serializable {
     private final String name;
 
     /**
-     * @throws NullPointerException si el nombre es {@code null}
+     * @throws NullPointerException if the name is {@code null}
      */
     public NTUserPrincipal(String name) {
         if (name == null) {
-            throw new NullPointerException("el nombre no puede ser null");
+            throw new NullPointerException("the name cannot be null");
         }
         this.name = name;
     }
 
-    /** El nombre. */
+    /** The name. */
     public String getName() {
         return this.name;
     }
@@ -36,7 +36,7 @@ public final class NTUserPrincipal implements Principal, Serializable {
         return "NTUserPrincipal:  " + this.name;
     }
 
-    /** Por clase exacta y nombre; ver la nota de la clase. */
+    /** By exact class and name; see the class note. */
     public boolean equals(Object o) {
         if (o == this) {
             return true;

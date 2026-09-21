@@ -9,10 +9,10 @@ import javax.swing.plaf.ComponentUI;
 import javax.swing.text.JTextComponent;
 
 /**
- * El panel de edicion de Synth, del que sale {@link SynthTextPaneUI}.
+ * Synth's editor pane, which {@link SynthTextPaneUI} comes from.
  *
- * <p>Un panel de edicion muestra contenido con estilos propios -- HTML, RTF --, asi que el estilo
- * de Synth le pone el marco y los colores de base, y el documento decide el resto adentro.
+ * <p>An editor pane shows content with styles of its own -- HTML, RTF --, so Synth's style gives
+ * it the frame and the base colours, and the document decides the rest inside.
  */
 public class SynthEditorPaneUI extends javax.swing.plaf.basic.BasicEditorPaneUI implements SynthUI, PropertyChangeListener {
 
@@ -23,32 +23,33 @@ public class SynthEditorPaneUI extends javax.swing.plaf.basic.BasicEditorPaneUI 
     }
 
     public SynthContext getContext(JComponent c) {
-        return getContext(c, SynthLookAndFeel.estadoDe(c));
+        return getContext(c, SynthLookAndFeel.stateOf(c));
     }
 
     /**
-     * El contexto con ese estado.
+     * The context with that state.
      *
-     * <p>La region sale del componente y no de una constante fija, y eso importa en las cadenas de
-     * herencia: {@code SynthCheckBoxUI} hereda este metodo de {@code SynthButtonUI} y tiene que
-     * contestar {@code CheckBox}, no {@code Button}. Medido.
+     * <p>The region comes from the component and not from a fixed constant, and that matters in the
+     * chains of inheritance: {@code SynthCheckBoxUI} inherits this method from {@code
+     * SynthButtonUI} and has to answer {@code CheckBox}, not {@code Button}. Measured.
      */
     private SynthContext getContext(JComponent c, int state) {
         Region r = SynthLookAndFeel.getRegion(c);
         return new SynthContext(c, (r != null) ? r : Region.EDITOR_PANE, style, state, true);
     }
 
-    /** Le pide el estilo a la fabrica; revienta si no hay, y esta medido. */
+    /** It asks the factory for the style; it blows up if there is none, and it is measured. */
     private void updateStyle(JComponent c) {
-        style = SynthLookAndFeel.actualizar(getContext(c, SynthConstants.ENABLED));
+        style = SynthLookAndFeel.update(getContext(c, SynthConstants.ENABLED));
     }
 
     /**
-     * Dibuja el fondo y despues el contenido.
+     * It draws the background and then the content.
      *
-     * <p>Synth separa las dos cosas: el fondo lo pinta el estilo -- que sabe en que estado esta el
-     * componente -- y el contenido lo pinta el aspecto basico. Por eso {@code update} no es
-     * {@code paint} con un relleno adelante, como en el basico, sino dos pasos distintos.
+     * <p>Synth separates the two things: the background is painted by the style -- which knows what
+     * state the component is in -- and the content is painted by the basic look and feel. That is
+     * why {@code update} is not {@code paint} with a fill in front, as in the basic one, but two
+     * different steps.
      */
     public void update(Graphics g, JComponent c) {
         SynthContext context = getContext(c);
@@ -67,7 +68,7 @@ public class SynthEditorPaneUI extends javax.swing.plaf.basic.BasicEditorPaneUI 
         super.paint(g, context.getComponent());
     }
 
-    /** El borde lo dibuja el estilo, no un {@code Border}; ver {@link SynthUI}. */
+    /** The border is drawn by the style, not by a {@code Border}; see {@link SynthUI}. */
     public void paintBorder(SynthContext context, Graphics g, int x, int y, int w, int h) {
         if (context != null && context.getStyle() != null) {
             context.getStyle().getPainter(context)
@@ -75,7 +76,7 @@ public class SynthEditorPaneUI extends javax.swing.plaf.basic.BasicEditorPaneUI 
         }
     }
 
-    /** Cualquier cambio puede querer otro estilo; ver {@link SynthLookAndFeel#actualizar}. */
+    /** Any change may want another style; see {@link SynthLookAndFeel#update}. */
     public void propertyChange(PropertyChangeEvent e) {
         Object o = e.getSource();
         if (o instanceof JComponent) {
@@ -91,10 +92,10 @@ public class SynthEditorPaneUI extends javax.swing.plaf.basic.BasicEditorPaneUI 
     }
 
     /**
-     * Instala los valores del estilo.
+     * It installs the style's values.
      *
-     * <p>El componente se pide con {@code getComponent()} y no se guarda: es el mismo que el
-     * basico ya tiene, y tenerlo dos veces seria una copia que se puede desincronizar.
+     * <p>The component is asked for with {@code getComponent()} and is not kept: it is the same one
+     * the basic one already has, and having it twice would be a copy that can get out of step.
      */
     protected void installDefaults() {
         super.installDefaults();

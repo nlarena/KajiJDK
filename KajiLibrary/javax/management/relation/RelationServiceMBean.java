@@ -7,97 +7,97 @@ import javax.management.InstanceNotFoundException;
 import javax.management.ObjectName;
 
 /**
- * La interfaz de gestion del {@link RelationService}: todo lo que se puede hacer con el desde una
- * consola.
+ * The {@link RelationService}'s management interface: everything that can be done with it from a
+ * console.
  *
- * <h2>Las tres familias de operaciones</h2>
+ * <h2>The three families of operations</h2>
  *
  * <ul>
- * <li><strong>tipos</strong> — declarar el esquema: {@code createRelationType},
- *     {@code addRelationType}, {@code removeRelationType}. Es lo primero, porque una relacion se
- *     valida contra su tipo;</li>
- * <li><strong>relaciones</strong> — crearlas, borrarlas, leer y escribir sus roles;</li>
- * <li><strong>consultas</strong> — {@code findReferencingRelations},
- *     {@code findAssociatedMBeans}, {@code findRelationsOfType}. Son lo que hace util al servicio:
- *     recorrer los vinculos <em>al reves</em>, que es exactamente lo que no se puede hacer cuando
- *     cada MBean guarda las referencias por su cuenta.</li>
+ * <li><b>types</b> -- declaring the schema: {@code createRelationType}, {@code addRelationType},
+ *     {@code removeRelationType}. It comes first, because a relation is validated against its
+ *     type;</li>
+ * <li><b>relations</b> -- creating them, removing them, reading and writing their roles;</li>
+ * <li><b>queries</b> -- {@code findReferencingRelations}, {@code findAssociatedMBeans},
+ *     {@code findRelationsOfType}. They are what makes the service useful: walking the links
+ *     <em>backwards</em>, which is exactly what cannot be done when each MBean keeps the references
+ *     on its own.</li>
  * </ul>
  *
- * <h2>Los dos {@code create} y {@code add}</h2>
+ * <h2>The two {@code create} and {@code add}</h2>
  *
- * <p>{@code createRelation} y {@code createRelationType} arman el objeto adentro del servicio;
- * {@code addRelation} y {@code addRelationType} toman uno ya construido. La diferencia importa
- * porque solo la segunda forma permite una relacion que sea un MBean registrado.
+ * <p>{@code createRelation} and {@code createRelationType} build the object inside the service;
+ * {@code addRelation} and {@code addRelationType} take one already built. The difference matters
+ * because only the second form allows a relation that is a registered MBean.
  *
- * <h2>La bandera de purga, que es la decision de diseno mas visible</h2>
+ * <h2>The purge flag, which is the most visible design decision</h2>
  *
- * <p>Cuando un MBean referenciado se desregistra, sus relaciones quedan inconsistentes. Con la purga
- * automatica el servicio las limpia enseguida; sin ella hay que llamar a {@link #purgeRelations} a
- * mano. La opcion existe porque limpiar es caro y porque hay sistemas donde un MBean se desregistra
- * y se vuelve a registrar como parte de su operacion normal.
+ * <p>When a referenced MBean is unregistered, its relations are left inconsistent. With automatic
+ * purging the service cleans them right away; without it {@link #purgeRelations} has to be called
+ * by hand. The option exists because cleaning is expensive and because there are systems where an
+ * MBean is unregistered and registered again as part of its normal operation.
  */
 public interface RelationServiceMBean {
 
     /**
-     * @throws RelationServiceNotRegisteredException si el servicio no esta registrado en ningun
-     *     servidor de MBeans — sin servidor no puede verificar nada
+     * @throws RelationServiceNotRegisteredException if the service is not registered in any MBean
+     *     server -- without a server it cannot verify anything
      */
     void isActive() throws RelationServiceNotRegisteredException;
 
-    /** Si se limpian solas las relaciones que quedan inconsistentes. */
+    /** Whether the relations left inconsistent are cleaned up on their own. */
     boolean getPurgeFlag();
 
-    /** Cambia esa politica; ver la nota de la interfaz. */
+    /** Changes that policy; see the interface note. */
     void setPurgeFlag(boolean purgeFlag);
 
     /**
-     * Declara un tipo con esos roles.
+     * Declares a type with those roles.
      *
-     * @throws InvalidRelationTypeException si ya hay uno con ese nombre, o si los roles son
-     *     inconsistentes
+     * @throws InvalidRelationTypeException if there is already one with that name, or if the roles
+     *     are inconsistent
      */
     void createRelationType(String relationTypeName, RoleInfo[] roleInfoArray)
             throws IllegalArgumentException, InvalidRelationTypeException;
 
-    /** Agrega un tipo ya construido. */
+    /** Adds an already built type. */
     void addRelationType(RelationType relationTypeObj)
             throws IllegalArgumentException, InvalidRelationTypeException;
 
-    /** Los nombres de los tipos declarados. */
+    /** The names of the declared types. */
     List<String> getAllRelationTypeNames();
 
     /**
-     * Los roles que declara ese tipo.
+     * The roles that type declares.
      *
-     * @throws RelationTypeNotFoundException si no existe
+     * @throws RelationTypeNotFoundException if it does not exist
      */
     List<RoleInfo> getRoleInfos(String relationTypeName)
             throws IllegalArgumentException, RelationTypeNotFoundException;
 
     /**
-     * La descripcion de un rol de ese tipo.
+     * The description of a role of that type.
      *
-     * @throws RoleInfoNotFoundException si el tipo no lo declara
+     * @throws RoleInfoNotFoundException if the type does not declare it
      */
     RoleInfo getRoleInfo(String relationTypeName, String roleInfoName)
             throws IllegalArgumentException, RelationTypeNotFoundException,
             RoleInfoNotFoundException;
 
     /**
-     * Saca el tipo, y con el <strong>todas las relaciones de ese tipo</strong>.
+     * Removes the type, and with it <b>all the relations of that type</b>.
      *
-     * <p>No es una limpieza cortes: dejarlas seria dejar relaciones sin esquema contra el cual
-     * validarse.
+     * <p>It is not a polite cleanup: leaving them would leave relations with no schema to validate
+     * against.
      */
     void removeRelationType(String relationTypeName)
             throws RelationServiceNotRegisteredException, IllegalArgumentException,
             RelationTypeNotFoundException;
 
     /**
-     * Crea una relacion administrada internamente.
+     * Creates an internally managed relation.
      *
-     * @throws InvalidRelationIdException si ya hay una con ese identificador
-     * @throws InvalidRoleValueException si algun rol no cumple lo que su descripcion exige
+     * @throws InvalidRelationIdException if there is already one with that identifier
+     * @throws InvalidRoleValueException if some role does not meet what its description requires
      */
     void createRelation(String relationId, String relationTypeName, RoleList roleList)
             throws RelationServiceNotRegisteredException, IllegalArgumentException,
@@ -105,10 +105,10 @@ public interface RelationServiceMBean {
             InvalidRoleValueException;
 
     /**
-     * Toma una relacion que ya es un MBean registrado.
+     * Takes a relation that is already a registered MBean.
      *
-     * @throws NoSuchMethodException si el MBean no implementa {@link Relation}
-     * @throws InstanceNotFoundException si no esta registrado
+     * @throws NoSuchMethodException if the MBean does not implement {@link Relation}
+     * @throws InstanceNotFoundException if it is not registered
      */
     void addRelation(ObjectName relationObjectName)
             throws IllegalArgumentException, RelationServiceNotRegisteredException,
@@ -116,127 +116,127 @@ public interface RelationServiceMBean {
             InvalidRelationServiceException, RelationTypeNotFoundException,
             RoleNotFoundException, InvalidRoleValueException;
 
-    /** El nombre del MBean de esa relacion, o {@code null} si es interna. */
+    /** The name of that relation's MBean, or {@code null} if it is internal. */
     ObjectName isRelationMBean(String relationId)
             throws IllegalArgumentException, RelationNotFoundException;
 
-    /** El identificador de la relacion que es ese MBean, o {@code null}. */
+    /** The identifier of the relation that is that MBean, or {@code null}. */
     String isRelation(ObjectName objectName) throws IllegalArgumentException;
 
-    /** Si hay una relacion con ese identificador. */
+    /** Whether there is a relation with that identifier. */
     Boolean hasRelation(String relationId) throws IllegalArgumentException;
 
-    /** Los identificadores de todas las relaciones. */
+    /** The identifiers of all the relations. */
     List<String> getAllRelationIds();
 
     /**
-     * Si ese rol se puede leer.
+     * Whether that role can be read.
      *
-     * @return {@code null} si se puede, o un codigo de {@link RoleStatus} si no
+     * @return {@code null} if it can, or a {@link RoleStatus} code if not
      */
     Integer checkRoleReading(String roleName, String relationTypeName)
             throws IllegalArgumentException, RelationTypeNotFoundException;
 
     /**
-     * Si ese rol se puede escribir con ese valor.
+     * Whether that role can be written with that value.
      *
-     * @param initFlag si la escritura es la inicial, donde la cardinalidad minima todavia no se
-     *     exige — una relacion se crea vacia y se llena despues
-     * @return {@code null} si se puede, o un codigo de {@link RoleStatus}
+     * @param initFlag whether the write is the initial one, where the minimum cardinality is not
+     *     yet required -- a relation is created empty and filled in afterwards
+     * @return {@code null} if it can, or a {@link RoleStatus} code
      */
     Integer checkRoleWriting(Role role, String relationTypeName, Boolean initFlag)
             throws IllegalArgumentException, RelationTypeNotFoundException;
 
-    /** Emite la notificacion de creacion. */
+    /** Emits the creation notification. */
     void sendRelationCreationNotification(String relationId)
             throws IllegalArgumentException, RelationNotFoundException;
 
-    /** Emite la notificacion de actualizacion de un rol. */
+    /** Emits the role update notification. */
     void sendRoleUpdateNotification(String relationId, Role newRole,
             List<ObjectName> oldRoleValue)
             throws IllegalArgumentException, RelationNotFoundException;
 
-    /** Emite la notificacion de borrado. */
+    /** Emits the removal notification. */
     void sendRelationRemovalNotification(String relationId, List<ObjectName> unregMBeanList)
             throws IllegalArgumentException, RelationNotFoundException;
 
     /**
-     * Actualiza el indice inverso de MBean a relaciones.
+     * Updates the reverse index from MBean to relations.
      *
-     * <p>Lo llama la relacion despues de cambiar un rol. Es lo que mantiene util a
-     * {@link #findReferencingRelations}: sin esto, la consulta al reves tendria que recorrer todas
-     * las relaciones.
+     * <p>The relation calls it after changing a role. It is what keeps {@link
+     * #findReferencingRelations} useful: without this, the backwards query would have to walk all
+     * the relations.
      */
     void updateRoleMap(String relationId, Role newRole, List<ObjectName> oldRoleValue)
             throws IllegalArgumentException, RelationServiceNotRegisteredException,
             RelationNotFoundException;
 
-    /** Saca la relacion. */
+    /** Removes the relation. */
     void removeRelation(String relationId)
             throws RelationServiceNotRegisteredException, IllegalArgumentException,
             RelationNotFoundException;
 
-    /** Limpia las relaciones que quedaron inconsistentes; ver la bandera de purga. */
+    /** Cleans up the relations left inconsistent; see the purge flag. */
     void purgeRelations()
             throws RelationServiceNotRegisteredException;
 
     /**
-     * Que relaciones referencian a ese MBean, y en que roles.
+     * Which relations reference that MBean, and in which roles.
      *
-     * @param relationTypeName filtra por tipo, o {@code null} para todos
-     * @param roleName filtra por rol, o {@code null} para todos
+     * @param relationTypeName filters by type, or {@code null} for all
+     * @param roleName filters by role, or {@code null} for all
      */
     Map<String, List<String>> findReferencingRelations(ObjectName mbeanName,
             String relationTypeName, String roleName) throws IllegalArgumentException;
 
     /**
-     * Que MBeans estan asociados a ese, y por que relaciones.
+     * Which MBeans are associated with that one, and through which relations.
      *
-     * <p>Es la consulta que justifica todo el servicio: "que depende de esto" no se puede contestar
-     * cuando cada MBean guarda sus propias referencias.
+     * <p>It is the query that justifies the whole service: "what depends on this" cannot be
+     * answered when each MBean keeps its own references.
      */
     Map<ObjectName, List<String>> findAssociatedMBeans(ObjectName mbeanName,
             String relationTypeName, String roleName) throws IllegalArgumentException;
 
-    /** Los identificadores de las relaciones de ese tipo. */
+    /** The identifiers of the relations of that type. */
     List<String> findRelationsOfType(String relationTypeName)
             throws IllegalArgumentException, RelationTypeNotFoundException;
 
-    /** El valor de un rol de esa relacion. */
+    /** The value of a role of that relation. */
     List<ObjectName> getRole(String relationId, String roleName)
             throws RelationServiceNotRegisteredException, IllegalArgumentException,
             RelationNotFoundException, RoleNotFoundException;
 
-    /** Varios roles a la vez. */
+    /** Several roles at once. */
     RoleResult getRoles(String relationId, String[] roleNameArray)
             throws RelationServiceNotRegisteredException, IllegalArgumentException,
             RelationNotFoundException;
 
-    /** Todos los roles legibles. */
+    /** All the readable roles. */
     RoleResult getAllRoles(String relationId)
             throws IllegalArgumentException, RelationNotFoundException,
             RelationServiceNotRegisteredException;
 
-    /** Cuantos MBeans tiene ese rol. */
+    /** How many MBeans that role has. */
     Integer getRoleCardinality(String relationId, String roleName)
             throws IllegalArgumentException, RelationNotFoundException, RoleNotFoundException;
 
-    /** Cambia un rol. */
+    /** Changes a role. */
     void setRole(String relationId, Role role)
             throws RelationServiceNotRegisteredException, IllegalArgumentException,
             RelationNotFoundException, RoleNotFoundException, InvalidRoleValueException,
             RelationTypeNotFoundException;
 
-    /** Cambia varios. */
+    /** Changes several. */
     RoleResult setRoles(String relationId, RoleList roleList)
             throws RelationServiceNotRegisteredException, IllegalArgumentException,
             RelationNotFoundException;
 
-    /** Los MBeans que referencia esa relacion, y en que roles. */
+    /** The MBeans that relation references, and in which roles. */
     Map<ObjectName, List<String>> getReferencedMBeans(String relationId)
             throws IllegalArgumentException, RelationNotFoundException;
 
-    /** El tipo de esa relacion. */
+    /** That relation's type. */
     String getRelationTypeName(String relationId)
             throws IllegalArgumentException, RelationNotFoundException;
 }

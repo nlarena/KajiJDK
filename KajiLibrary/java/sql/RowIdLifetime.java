@@ -1,26 +1,27 @@
 package java.sql;
 
 /**
- * KajiLibrary's java.sql.RowIdLifetime -- cuanto vale un {@link RowId} en esta base.
+ * KajiLibrary's java.sql.RowIdLifetime -- how long a {@link RowId} is valid in this database.
  *
- * <p>Es lo que hace usable a `RowId`: la interfaz no promete nada sobre su duracion, y sin poder
- * preguntarlo no habria manera de saber si guardar uno es razonable. La respuesta va de
- * "no los soporto" a "valen para siempre", y casi todas las bases estan en el medio.
+ * <p>It is what makes `RowId` usable: the interface promises nothing about its duration, and
+ * without being able to ask there would be no way to know whether storing one is reasonable. The
+ * answer ranges from "I do not support them" to "they are valid forever", and almost every database
+ * is in between.
  */
 public enum RowIdLifetime {
 
-    /** Esta base no tiene identificadores de fila. */
+    /** This database has no row identifiers. */
     ROWID_UNSUPPORTED,
 
-    /** Valen, pero la duracion no es ninguna de las otras. */
+    /** They are valid, but for none of the other durations. */
     ROWID_VALID_OTHER,
 
-    /** Valen mientras dure la sesion. */
+    /** Valid for the duration of the session. */
     ROWID_VALID_SESSION,
 
-    /** Valen mientras dure la transaccion. */
+    /** Valid for the duration of the transaction. */
     ROWID_VALID_TRANSACTION,
 
-    /** Valen para siempre. */
+    /** Valid forever. */
     ROWID_VALID_FOREVER
 }

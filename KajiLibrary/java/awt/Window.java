@@ -21,43 +21,43 @@ import javax.accessibility.AccessibleState;
 import javax.accessibility.AccessibleStateSet;
 
 /**
- * Una ventana sin borde ni barra de título: el contenedor de más arriba del árbol.
+ * A window with no border and no title bar: the topmost container of the tree.
  *
- * <p>Es la raíz de todo lo que se muestra. Un {@link Frame} es una ventana con decoración y un
- * {@link Dialog} es una ventana subordinada; ésta, tal cual, es la que sirve para un menú emergente o
- * una pantalla de bienvenida — lo que tiene que aparecer sin marco.
+ * <p>It is the root of everything that gets shown. A {@link Frame} is a window with decoration and
+ * a {@link Dialog} is a subordinate window; this one, as it is, is the one good for a popup menu or
+ * a splash screen — whatever has to appear with no frame.
  *
- * <p>La **propiedad** de una ventana sobre otra es lo que ata su suerte: una ventana con dueño se
- * minimiza, se cierra y se pone al frente con él. Es lo que hace que un diálogo no quede huérfano
- * flotando cuando se cierra la ventana que lo abrió.
+ * <p>The **ownership** of one window over another is what ties their fates: a window with an owner
+ * is minimised, closed and brought to the front with it. It is what keeps a dialog from being left
+ * orphaned and floating when the window that opened it closes.
  *
- * <p>Es raíz de ciclo de foco de manera irrevocable —{@link #setFocusCycleRoot} no hace nada— porque
- * el foco no puede salirse de una ventana con el tabulador: no hay a dónde ir.
+ * <p>It is a focus cycle root irrevocably —{@link #setFocusCycleRoot} does nothing— because the
+ * focus cannot leave a window with the tab key: there is nowhere to go.
  *
- * <p><strong>Nada de esto aparece en pantalla.</strong> Esta biblioteca no trae sistema de ventanas.
- * A diferencia del modo sin cabeza del JDK real, que **se niega a construir** una ventana, acá se
- * construye: negarse dejaría muerto todo el árbol de componentes, y así en cambio la jerarquía, el
- * maquetado, los oyentes y el reparto de eventos se pueden usar y probar. Lo que no pasa es la
- * aparición, y los métodos que dependen de ella lo dicen cada uno.
+ * <p><strong>None of this appears on a screen.</strong> This library ships no windowing system.
+ * Unlike the headless mode of the real JDK, which **refuses to build** a window, here it is built:
+ * refusing would leave the whole component tree dead, and this way the hierarchy, the layout, the
+ * listeners and the event dispatching can be used and tested. What does not happen is the
+ * appearing, and the methods that depend on it say so one by one.
  */
 public class Window extends Container implements Accessible {
 
     private static final long serialVersionUID = 4497834738069338734L;
 
-    /** Para qué se usa una ventana; el escritorio la decora según esto. */
+    /** What a window is used for; the desktop decorates it according to this. */
     public static enum Type {
 
-        /** Una ventana común. */
+        /** An ordinary window. */
         NORMAL,
 
-        /** Una paleta de herramientas: barra de título más chica, no aparece en la barra de tareas. */
+        /** A tool palette: smaller title bar, does not show in the taskbar. */
         UTILITY,
 
-        /** Un menú emergente o una ayudita: sin decoración y efímera. */
+        /** A popup menu or a tooltip: no decoration and short-lived. */
         POPUP
     }
 
-    private static final List<Window> todas = new ArrayList<Window>();
+    private static final List<Window> allWindows = new ArrayList<Window>();
 
     private final Window owner;
     private final List<Window> ownedWindows = new ArrayList<Window>();
@@ -77,102 +77,102 @@ public class Window extends Container implements Accessible {
     private transient WindowStateListener windowStateListener;
     private transient WindowFocusListener windowFocusListener;
 
-    /** Con la ventana dueña, que puede ser `null`. */
-    private Window(Window owner, GraphicsConfiguration gc, boolean marcaInterna) {
+    /** With the owner window, which may be `null`. */
+    private Window(Window owner, GraphicsConfiguration gc, boolean internalMarker) {
         this.owner = owner;
         this.graphicsConfig = gc;
-        this.setFocusableWindowStateInterno();
+        this.setFocusableWindowStateInternal();
         if (owner != null) {
             synchronized (owner.ownedWindows) {
                 owner.ownedWindows.add(this);
             }
         }
-        synchronized (todas) {
-            todas.add(this);
+        synchronized (allWindows) {
+            allWindows.add(this);
         }
     }
 
-    /** Deja la ventana como raíz de ciclo de foco, que es lo único que puede ser. */
-    private void setFocusableWindowStateInterno() {
+    /** Leaves the window as a focus cycle root, which is the only thing it can be. */
+    private void setFocusableWindowStateInternal() {
         super.setFocusCycleRoot(true);
     }
 
     /**
-     * Una ventana que pertenece a ese marco.
+     * A window that belongs to that frame.
      *
-     * @throws HeadlessException si no hay pantalla
+     * @throws HeadlessException if there is no screen
      */
     public Window(Frame owner) {
         this(owner, owner == null ? null : owner.getGraphicsConfiguration(), true);
     }
 
     /**
-     * Una ventana que pertenece a esa ventana.
+     * A window that belongs to that window.
      *
-     * @throws HeadlessException si no hay pantalla
+     * @throws HeadlessException if there is no screen
      */
     public Window(Window owner) {
         this(owner, owner == null ? null : owner.getGraphicsConfiguration(), true);
     }
 
     /**
-     * Como la anterior, con la configuración gráfica dada.
+     * Like the previous one, with the given graphics configuration.
      *
-     * @throws IllegalArgumentException si la configuración no es de una pantalla
+     * @throws IllegalArgumentException if the configuration is not a screen one
      */
     public Window(Window owner, GraphicsConfiguration gc) {
         this(owner, gc, true);
     }
 
-    /** Las imágenes que el escritorio usa como ícono, de varios tamaños. */
+    /** The images the desktop uses as an icon, in several sizes. */
     public List<Image> getIconImages() {
         return new ArrayList<Image>(this.icons);
     }
 
     /**
-     * Le pone íconos.
+     * Gives it icons.
      *
-     * <p>Se dan **varios tamaños** y el escritorio elige: uno chico para la barra de tareas, uno
-     * grande para el conmutador de ventanas. Dar uno solo obliga a escalar y se ve mal.
+     * <p>**Several sizes** are given and the desktop picks: a small one for the taskbar, a big one
+     * for the window switcher. Giving only one forces scaling and looks bad.
      */
     public synchronized void setIconImages(List<? extends Image> icons) {
-        List<Image> nuevos = new ArrayList<Image>();
+        List<Image> fresh = new ArrayList<Image>();
         if (icons != null) {
             java.util.Iterator<? extends Image> it = icons.iterator();
             while (it.hasNext()) {
                 Image i = it.next();
                 if (i != null) {
-                    nuevos.add(i);
+                    fresh.add(i);
                 }
             }
         }
-        this.icons = nuevos;
+        this.icons = fresh;
     }
 
-    /** Le pone un solo ícono. */
+    /** Gives it a single icon. */
     public void setIconImage(Image image) {
-        List<Image> uno = new ArrayList<Image>();
+        List<Image> one = new ArrayList<Image>();
         if (image != null) {
-            uno.add(image);
+            one.add(image);
         }
-        this.setIconImages(uno);
+        this.setIconImages(one);
     }
 
-    /** Avisa que puede mostrarse. */
+    /** Notifies that it can be shown. */
     public void addNotify() {
         super.addNotify();
     }
 
-    /** Avisa que dejó de poder mostrarse. */
+    /** Notifies that it can no longer be shown. */
     public void removeNotify() {
         super.removeNotify();
     }
 
     /**
-     * Ajusta la ventana al tamaño que sus hijos necesitan.
+     * Fits the window to the size its children need.
      *
-     * <p>Es lo que evita tener que calcular a mano cuánto mide una interfaz: se arma el árbol, se
-     * llama a esto, y la ventana queda del tamaño de su contenido.
+     * <p>It is what saves working out by hand how much an interface measures: the tree is built,
+     * this is called, and the window ends up the size of its content.
      */
     public void pack() {
         Dimension d = this.getPreferredSize();
@@ -181,41 +181,41 @@ public class Window extends Container implements Accessible {
         this.validate();
     }
 
-    /** Le fija la medida mínima. */
+    /** Sets its minimum size. */
     public void setMinimumSize(Dimension minimumSize) {
         super.setMinimumSize(minimumSize);
     }
 
-    /** La redimensiona. */
+    /** Resizes it. */
     public void setSize(Dimension d) {
         super.setSize(d);
     }
 
-    /** La redimensiona. */
+    /** Resizes it. */
     public void setSize(int width, int height) {
         super.setSize(width, height);
     }
 
     /**
-     * La mueve.
+     * Moves it.
      *
-     * <p>Mover una ventana a mano apaga {@link #setLocationByPlatform}: quien dice dónde va ya no
-     * quiere que la ubique el escritorio.
+     * <p>Moving a window by hand switches {@link #setLocationByPlatform} off: whoever says where it
+     * goes no longer wants the desktop to place it.
      */
     public void setLocation(int x, int y) {
         this.locationByPlatform = false;
         super.setLocation(x, y);
     }
 
-    /** La mueve. */
+    /** Moves it. */
     public void setLocation(Point p) {
         this.setLocation(p.x, p.y);
     }
 
     /**
-     * La mueve y la redimensiona.
+     * Moves it and resizes it.
      *
-     * @deprecated es del modelo de 1.0. Usar {@link #setBounds(int, int, int, int)}.
+     * @deprecated it is from the 1.0 model. Use {@link #setBounds(int, int, int, int)}.
      */
     @Deprecated
     public void reshape(int x, int y, int width, int height) {
@@ -223,21 +223,21 @@ public class Window extends Container implements Accessible {
         super.reshape(x, y, width, height);
     }
 
-    /** La mueve y la redimensiona. */
+    /** Moves it and resizes it. */
     public void setBounds(int x, int y, int width, int height) {
         this.reshape(x, y, width, height);
     }
 
-    /** La mueve y la redimensiona. */
+    /** Moves it and resizes it. */
     public void setBounds(Rectangle r) {
         this.setBounds(r.x, r.y, r.width, r.height);
     }
 
     /**
-     * La muestra o la esconde.
+     * Shows it or hides it.
      *
-     * <p>Mostrarla por primera vez dispara {@code WINDOW_OPENED}, y sólo la primera: es el aviso de
-     * que la ventana nació, no de que se hizo visible.
+     * <p>Showing it for the first time fires {@code WINDOW_OPENED}, and only the first time: it is
+     * the notice that the window was born, not that it became visible.
      */
     public void setVisible(boolean b) {
         if (b) {
@@ -247,27 +247,27 @@ public class Window extends Container implements Accessible {
         }
     }
 
-    private boolean seAbrioAlgunaVez;
+    private boolean everShown;
 
     /**
-     * La muestra.
+     * Shows it.
      *
-     * @deprecated es del modelo de 1.0. Usar {@link #setVisible}.
+     * @deprecated it is from the 1.0 model. Use {@link #setVisible}.
      */
     @Deprecated
     public void show() {
-        boolean primera = !this.seAbrioAlgunaVez;
+        boolean first = !this.everShown;
         super.show();
-        if (primera) {
-            this.seAbrioAlgunaVez = true;
-            this.dispararVentana(WindowEvent.WINDOW_OPENED);
+        if (first) {
+            this.everShown = true;
+            this.fireWindowEvent(WindowEvent.WINDOW_OPENED);
         }
     }
 
     /**
-     * La esconde.
+     * Hides it.
      *
-     * @deprecated es del modelo de 1.0. Usar {@link #setVisible}.
+     * @deprecated it is from the 1.0 model. Use {@link #setVisible}.
      */
     @Deprecated
     public void hide() {
@@ -280,10 +280,10 @@ public class Window extends Container implements Accessible {
     }
 
     /**
-     * Suelta los recursos de la ventana y de las que le pertenecen.
+     * Releases the resources of the window and of the ones that belong to it.
      *
-     * <p>Una ventana desechada se puede volver a mostrar: {@code dispose} suelta los recursos del
-     * sistema, no destruye el objeto. Es la diferencia con cerrar.
+     * <p>A disposed window can be shown again: {@code dispose} releases the system resources, it
+     * does not destroy the object. That is the difference from closing.
      */
     public void dispose() {
         synchronized (this.ownedWindows) {
@@ -293,11 +293,11 @@ public class Window extends Container implements Accessible {
         }
         this.hide();
         this.removeNotify();
-        this.dispararVentana(WindowEvent.WINDOW_CLOSED);
+        this.fireWindowEvent(WindowEvent.WINDOW_CLOSED);
     }
 
-    /** Dispara un evento de ventana si alguien lo pidió. */
-    private void dispararVentana(int id) {
+    /** Fires a window event if anyone asked for them. */
+    private void fireWindowEvent(int id) {
         if (this.windowListener != null || this.windowStateListener != null
                 || this.windowFocusListener != null
                 || (this.eventMask & AWTEvent.WINDOW_EVENT_MASK) != 0) {
@@ -305,35 +305,35 @@ public class Window extends Container implements Accessible {
         }
     }
 
-    /** La pone adelante de las demás; sin escritorio, no hay orden que cambiar. */
+    /** Puts it in front of the others; with no desktop, there is no order to change. */
     public void toFront() {
     }
 
-    /** La manda atrás. */
+    /** Sends it to the back. */
     public void toBack() {
     }
 
-    /** El juego de herramientas de la plataforma. */
+    /** The platform's toolkit. */
     public Toolkit getToolkit() {
         return Toolkit.getDefaultToolkit();
     }
 
     /**
-     * El aviso que el sistema dibuja sobre una ventana de código no confiable.
+     * The warning the system draws over a window of untrusted code.
      *
-     * @return `null`: esta ventana no es de código no confiable
+     * @return `null`: this window is not of untrusted code
      */
     public final String getWarningString() {
         return null;
     }
 
-    /** El idioma; el de la máquina si no tiene propio, porque una ventana no tiene padre. */
+    /** The locale; the machine's if it has none of its own, because a window has no parent. */
     public Locale getLocale() {
         Locale l = null;
         try {
             l = super.getLocale();
         } catch (IllegalComponentStateException e) {
-            // Una ventana no tiene padre del que heredarlo: se cae en el de la maquina.
+            // A window has no parent to inherit it from: it falls back to the machine's.
             l = null;
         }
         if (l != null) {
@@ -342,42 +342,42 @@ public class Window extends Container implements Accessible {
         return Locale.getDefault();
     }
 
-    /** El estado de escritura de esta ventana. */
+    /** The write state of this window. */
     public InputContext getInputContext() {
         return InputContext.getInstance();
     }
 
-    /** Le pone cursor. */
+    /** Gives it a cursor. */
     public void setCursor(Cursor cursor) {
         super.setCursor(cursor);
     }
 
-    /** La ventana a la que pertenece, o `null` si no pertenece a ninguna. */
+    /** The window it belongs to, or `null` if it belongs to none. */
     public Window getOwner() {
         return this.owner;
     }
 
-    /** Las ventanas que le pertenecen. */
+    /** The windows that belong to it. */
     public Window[] getOwnedWindows() {
         synchronized (this.ownedWindows) {
             return this.ownedWindows.toArray(new Window[this.ownedWindows.size()]);
         }
     }
 
-    /** Todas las ventanas de esta aplicación. */
+    /** Every window of this application. */
     public static Window[] getWindows() {
-        synchronized (todas) {
-            return todas.toArray(new Window[todas.size()]);
+        synchronized (allWindows) {
+            return allWindows.toArray(new Window[allWindows.size()]);
         }
     }
 
-    /** Las que no pertenecen a ninguna otra. */
+    /** The ones that belong to no other. */
     public static Window[] getOwnerlessWindows() {
-        synchronized (todas) {
+        synchronized (allWindows) {
             List<Window> out = new ArrayList<Window>();
-            for (int i = 0; i < todas.size(); i++) {
-                if (todas.get(i).getOwner() == null) {
-                    out.add(todas.get(i));
+            for (int i = 0; i < allWindows.size(); i++) {
+                if (allWindows.get(i).getOwner() == null) {
+                    out.add(allWindows.get(i));
                 }
             }
             return out.toArray(new Window[out.size()]);
@@ -385,9 +385,9 @@ public class Window extends Container implements Accessible {
     }
 
     /**
-     * Declara que esta ventana no se bloquee con los diálogos modales.
+     * Declares that this window is not blocked by modal dialogs.
      *
-     * @throws NullPointerException si el tipo es `null`
+     * @throws NullPointerException if the type is `null`
      */
     public void setModalExclusionType(Dialog.ModalExclusionType exclusionType) {
         if (exclusionType == null) {
@@ -397,12 +397,12 @@ public class Window extends Container implements Accessible {
         }
     }
 
-    /** De qué modales queda excluida. */
+    /** Which modal dialogs it is excluded from. */
     public Dialog.ModalExclusionType getModalExclusionType() {
         return this.modalExclusionType;
     }
 
-    /** Suma un oyente de ventana; un `null` se ignora. */
+    /** Adds a window listener; a `null` is ignored. */
     public synchronized void addWindowListener(WindowListener l) {
         if (l == null) {
             return;
@@ -411,7 +411,7 @@ public class Window extends Container implements Accessible {
         this.enableEvents(AWTEvent.WINDOW_EVENT_MASK);
     }
 
-    /** Suma un oyente de estado; un `null` se ignora. */
+    /** Adds a state listener; a `null` is ignored. */
     public synchronized void addWindowStateListener(WindowStateListener l) {
         if (l == null) {
             return;
@@ -420,7 +420,7 @@ public class Window extends Container implements Accessible {
         this.enableEvents(AWTEvent.WINDOW_STATE_EVENT_MASK);
     }
 
-    /** Suma un oyente de foco de ventana; un `null` se ignora. */
+    /** Adds a window focus listener; a `null` is ignored. */
     public synchronized void addWindowFocusListener(WindowFocusListener l) {
         if (l == null) {
             return;
@@ -429,7 +429,7 @@ public class Window extends Container implements Accessible {
         this.enableEvents(AWTEvent.WINDOW_FOCUS_EVENT_MASK);
     }
 
-    /** Saca a ese oyente. */
+    /** Removes that listener. */
     public synchronized void removeWindowListener(WindowListener l) {
         if (l == null) {
             return;
@@ -437,7 +437,7 @@ public class Window extends Container implements Accessible {
         this.windowListener = AWTEventMulticaster.remove(this.windowListener, l);
     }
 
-    /** Saca a ese oyente. */
+    /** Removes that listener. */
     public synchronized void removeWindowStateListener(WindowStateListener l) {
         if (l == null) {
             return;
@@ -445,7 +445,7 @@ public class Window extends Container implements Accessible {
         this.windowStateListener = AWTEventMulticaster.remove(this.windowStateListener, l);
     }
 
-    /** Saca a ese oyente. */
+    /** Removes that listener. */
     public synchronized void removeWindowFocusListener(WindowFocusListener l) {
         if (l == null) {
             return;
@@ -453,27 +453,28 @@ public class Window extends Container implements Accessible {
         this.windowFocusListener = AWTEventMulticaster.remove(this.windowFocusListener, l);
     }
 
-    /** Los oyentes de ventana. */
+    /** The window listeners. */
     public synchronized WindowListener[] getWindowListeners() {
         return AWTEventMulticaster.getListeners(this.windowListener, WindowListener.class);
     }
 
-    /** Los oyentes de foco de ventana. */
+    /** The window focus listeners. */
     public synchronized WindowFocusListener[] getWindowFocusListeners() {
         return AWTEventMulticaster.getListeners(this.windowFocusListener,
                 WindowFocusListener.class);
     }
 
-    /** Los oyentes de estado. */
+    /** The state listeners. */
     public synchronized WindowStateListener[] getWindowStateListeners() {
         return AWTEventMulticaster.getListeners(this.windowStateListener,
                 WindowStateListener.class);
     }
 
     /**
-     * Los oyentes de esa clase.
+     * The listeners of that class.
      *
-     * @throws ClassCastException si la clase no es de oyente
+     * <p>The {@code T extends EventListener} bound is what keeps the question well posed: a class
+     * that is not a listener one cannot be passed without raw types.
      */
     public <T extends EventListener> T[] getListeners(Class<T> listenerType) {
         if (listenerType == WindowListener.class) {
@@ -489,10 +490,10 @@ public class Window extends Container implements Accessible {
     }
 
     /**
-     * Clasifica el evento.
+     * Sorts the event out.
      *
-     * <p>Los tres tipos de evento de ventana comparten la clase {@link WindowEvent} y se distinguen
-     * por el identificador; por eso hay que repartirlos acá y no por el tipo.
+     * <p>The three kinds of window event share the {@link WindowEvent} class and are told apart by
+     * the identifier; that is why they have to be dispatched here and not by type.
      */
     protected void processEvent(AWTEvent e) {
         if (e instanceof WindowEvent) {
@@ -509,7 +510,7 @@ public class Window extends Container implements Accessible {
         super.processEvent(e);
     }
 
-    /** Les avisa a los oyentes de ventana. */
+    /** Tells the window listeners. */
     protected void processWindowEvent(WindowEvent e) {
         WindowListener l = this.windowListener;
         if (l == null) {
@@ -533,7 +534,7 @@ public class Window extends Container implements Accessible {
         }
     }
 
-    /** Les avisa a los oyentes de foco de ventana. */
+    /** Tells the window focus listeners. */
     protected void processWindowFocusEvent(WindowEvent e) {
         WindowFocusListener l = this.windowFocusListener;
         if (l == null) {
@@ -546,7 +547,7 @@ public class Window extends Container implements Accessible {
         }
     }
 
-    /** Les avisa a los oyentes de estado. */
+    /** Tells the state listeners. */
     protected void processWindowStateEvent(WindowEvent e) {
         WindowStateListener l = this.windowStateListener;
         if (l != null && e.getID() == WindowEvent.WINDOW_STATE_CHANGED) {
@@ -554,102 +555,102 @@ public class Window extends Container implements Accessible {
         }
     }
 
-    /** Declara que la ventana quede siempre por encima de las demás. */
+    /** Declares that the window stays above all the others. */
     public final void setAlwaysOnTop(boolean alwaysOnTop) {
-        boolean viejo;
+        boolean old;
         synchronized (this) {
-            viejo = this.alwaysOnTop;
+            old = this.alwaysOnTop;
             this.alwaysOnTop = alwaysOnTop;
         }
-        this.firePropertyChange("alwaysOnTop", viejo, alwaysOnTop);
+        this.firePropertyChange("alwaysOnTop", old, alwaysOnTop);
     }
 
     /**
-     * Si el escritorio admite ventanas siempre arriba.
+     * Whether the desktop supports always-on-top windows.
      *
-     * @return `false`: no hay escritorio
+     * @return `false`: there is no desktop
      */
     public boolean isAlwaysOnTopSupported() {
         return false;
     }
 
-    /** Si se pidió que quede siempre arriba. */
+    /** Whether it was asked to stay always on top. */
     public final boolean isAlwaysOnTop() {
         return this.alwaysOnTop;
     }
 
     /**
-     * Qué componente de esta ventana tiene el foco.
+     * Which component of this window has the focus.
      *
-     * @return `null`: no hay gestor de foco que se lo haya dado a nadie
+     * @return `null`: there is no focus manager that has given it to anybody
      */
     public Component getFocusOwner() {
         return null;
     }
 
     /**
-     * Quién tenía el foco la última vez que la ventana estuvo activa.
+     * Who had the focus the last time the window was active.
      *
-     * @return `null` por el mismo motivo
+     * @return `null` for the same reason
      */
     public Component getMostRecentFocusOwner() {
         return null;
     }
 
     /**
-     * Si es la ventana activa.
+     * Whether it is the active window.
      *
-     * @return `false`: sin escritorio ninguna ventana está activa
+     * @return `false`: with no desktop no window is active
      */
     public boolean isActive() {
         return false;
     }
 
     /**
-     * Si tiene el foco del teclado.
+     * Whether it has the keyboard focus.
      *
-     * @return `false` por el mismo motivo
+     * @return `false` for the same reason
      */
     public boolean isFocused() {
         return false;
     }
 
     /**
-     * Las teclas de recorrido en ese sentido.
+     * The traversal keys in that direction.
      *
-     * @throws IllegalArgumentException si el sentido no es uno de los cuatro
+     * @throws IllegalArgumentException if the direction is not one of the four
      */
     public Set<AWTKeyStroke> getFocusTraversalKeys(int id) {
         return super.getFocusTraversalKeys(id);
     }
 
     /**
-     * No hace nada.
+     * It does nothing.
      *
-     * <p>Una ventana **siempre** es raíz de ciclo de foco: el tabulador no tiene a dónde salir.
+     * <p>A window is **always** a focus cycle root: the tab key has nowhere to leave to.
      */
     public final void setFocusCycleRoot(boolean focusCycleRoot) {
     }
 
-    /** Siempre `true`. */
+    /** Always `true`. */
     public final boolean isFocusCycleRoot() {
         return true;
     }
 
     /**
-     * La raíz del ciclo que la contiene.
+     * The root of the cycle that contains it.
      *
-     * @return `null`: una ventana es la raíz, no está adentro de otra
+     * @return `null`: a window is the root, it is not inside another
      */
     public final Container getFocusCycleRootAncestor() {
         return null;
     }
 
     /**
-     * Si puede recibir el foco.
+     * Whether it can receive the focus.
      *
-     * <p>No alcanza con quererlo: una ventana sin dueño y sin nada que enfocar adentro tampoco
-     * puede.
+     * <p>Wanting to is not enough: a window with no owner and nothing to focus inside cannot
+     * either.
      */
     public final boolean isFocusableWindow() {
         if (!this.getFocusableWindowState()) {
@@ -658,60 +659,60 @@ public class Window extends Container implements Accessible {
         return true;
     }
 
-    /** Si se declaró que puede recibir el foco. */
+    /** Whether it was declared able to receive the focus. */
     public boolean getFocusableWindowState() {
         return this.focusableWindowState;
     }
 
     /**
-     * Declara si puede recibir el foco.
+     * Declares whether it can receive the focus.
      *
-     * <p>Apagarlo es lo que hace una barra de herramientas flotante: se puede clickear sin que la
-     * ventana de trabajo pierda el foco.
+     * <p>Switching it off is what a floating toolbar does: it can be clicked without the working
+     * window losing the focus.
      */
     public void setFocusableWindowState(boolean focusableWindowState) {
-        boolean viejo;
+        boolean old;
         synchronized (this) {
-            viejo = this.focusableWindowState;
+            old = this.focusableWindowState;
             this.focusableWindowState = focusableWindowState;
         }
-        this.firePropertyChange("focusableWindowState", viejo, focusableWindowState);
+        this.firePropertyChange("focusableWindowState", old, focusableWindowState);
     }
 
-    /** Declara si la ventana pide el foco sola al mostrarse. */
+    /** Declares whether the window asks for the focus by itself when shown. */
     public void setAutoRequestFocus(boolean autoRequestFocus) {
         this.autoRequestFocus = autoRequestFocus;
     }
 
-    /** Si pide el foco sola al mostrarse. */
+    /** Whether it asks for the focus by itself when shown. */
     public boolean isAutoRequestFocus() {
         return this.autoRequestFocus;
     }
 
-    /** Suma alguien a quien avisarle de los cambios de propiedad. */
+    /** Adds someone to tell about the property changes. */
     public void addPropertyChangeListener(PropertyChangeListener listener) {
         super.addPropertyChangeListener(listener);
     }
 
-    /** Suma un oyente para una propiedad concreta. */
+    /** Adds a listener for one particular property. */
     public void addPropertyChangeListener(String propertyName, PropertyChangeListener listener) {
         super.addPropertyChangeListener(propertyName, listener);
     }
 
     /**
-     * Si al validar hay que parar acá.
+     * Whether validating has to stop here.
      *
-     * <p>Siempre `true`: una ventana tiene tamaño propio, así que revalidar hacia arriba no tiene
-     * sentido. Es lo que evita que tocar un botón revalide la aplicación entera.
+     * <p>Always `true`: a window has a size of its own, so revalidating upwards makes no sense. It
+     * is what keeps touching a button from revalidating the whole application.
      */
     public boolean isValidateRoot() {
         return true;
     }
 
     /**
-     * Le manda un evento del modelo viejo.
+     * Sends it an event of the old model.
      *
-     * @deprecated es del modelo de 1.0. Usar {@link #dispatchEvent}.
+     * @deprecated it is from the 1.0 model. Use {@link #dispatchEvent}.
      */
     @Deprecated
     public boolean postEvent(Event e) {
@@ -723,27 +724,27 @@ public class Window extends Container implements Accessible {
     }
 
     /**
-     * Si se ve de verdad.
+     * Whether it is really seen.
      *
-     * @return `false`: la ventana nunca llega a la pantalla
+     * @return `false`: the window never reaches the screen
      */
     public boolean isShowing() {
         return this.isVisible() && this.isDisplayable();
     }
 
     /**
-     * Le aplica los textos de un catálogo de recursos.
+     * Applies to it the texts of a resource bundle.
      *
-     * @deprecated no funcionaba bien con los contenedores anidados y se dejó sin reemplazo.
+     * @deprecated it did not work properly with nested containers and was left with no replacement.
      */
     @Deprecated
     public void applyResourceBundle(ResourceBundle rb) {
     }
 
     /**
-     * Lo mismo, buscando el catálogo por nombre.
+     * The same, looking the bundle up by name.
      *
-     * @deprecated por el mismo motivo.
+     * @deprecated for the same reason.
      */
     @Deprecated
     public void applyResourceBundle(String rbName) {
@@ -751,11 +752,12 @@ public class Window extends Container implements Accessible {
     }
 
     /**
-     * Declara para qué se usa la ventana.
+     * Declares what the window is used for.
      *
-     * <p>Sólo tiene efecto **antes** de mostrarla: la decoración la elige el escritorio al crearla.
+     * <p>It only has an effect **before** showing it: the decoration is chosen by the desktop when
+     * it creates it.
      *
-     * @throws NullPointerException si el tipo es `null`
+     * @throws NullPointerException if the type is `null`
      */
     public void setType(Type type) {
         if (type == null) {
@@ -764,16 +766,16 @@ public class Window extends Container implements Accessible {
         this.type = type;
     }
 
-    /** Para qué se usa. */
+    /** What it is used for. */
     public Type getType() {
         return this.type;
     }
 
     /**
-     * La centra respecto de ese componente.
+     * Centres it with respect to that component.
      *
-     * <p>Con `null`, o con un componente que no esté en pantalla, la centra en el origen: es lo que
-     * corresponde cuando no hay pantalla respecto de la cual centrar.
+     * <p>With `null`, or with a component that is not on a screen, it centres it at the origin:
+     * that is what is right when there is no screen to centre with respect to.
      */
     public void setLocationRelativeTo(Component c) {
         if (c == null || !c.isShowing()) {
@@ -786,26 +788,27 @@ public class Window extends Container implements Accessible {
     }
 
     /**
-     * Arma una estrategia de buffers para dibujar sin parpadeo.
+     * Builds a buffer strategy for drawing without flicker.
      *
-     * @throws IllegalArgumentException si se piden menos de dos buffers
-     * @throws IllegalStateException siempre: una estrategia de buffers necesita una superficie del
-     *     sistema, y esta ventana no tiene ninguna
+     * @throws IllegalArgumentException if fewer than one buffer is asked for
+     * @throws IllegalStateException always: a buffer strategy needs a surface of the system, and
+     *     this window has none
      */
     public void createBufferStrategy(int numBuffers) {
         if (numBuffers < 1) {
             throw new IllegalArgumentException("Number of buffers must be at least 1");
         }
-        throw new IllegalStateException("la ventana no tiene superficie del sistema: esta "
-                + "biblioteca no trae sistema de ventanas");
+        throw new IllegalStateException("the window has no surface of the system: this "
+                + "library ships no windowing system");
     }
 
     /**
-     * Como la anterior, con las capacidades pedidas.
+     * Like the previous one, with the capabilities asked for.
      *
-     * @throws IllegalArgumentException si se piden menos de dos buffers o faltan las capacidades
-     * @throws AWTException si las capacidades no se pueden cumplir
-     * @throws IllegalStateException siempre, por el mismo motivo
+     * @throws IllegalArgumentException if fewer than one buffer is asked for or the capabilities
+     *     are missing
+     * @throws AWTException if the capabilities cannot be met
+     * @throws IllegalStateException always, for the same reason
      */
     public void createBufferStrategy(int numBuffers, BufferCapabilities caps)
             throws AWTException {
@@ -815,39 +818,40 @@ public class Window extends Container implements Accessible {
         if (caps == null) {
             throw new IllegalArgumentException("No capabilities specified");
         }
-        throw new IllegalStateException("la ventana no tiene superficie del sistema: esta "
-                + "biblioteca no trae sistema de ventanas");
+        throw new IllegalStateException("the window has no surface of the system: this "
+                + "library ships no windowing system");
     }
 
     /**
-     * La estrategia de buffers.
+     * The buffer strategy.
      *
-     * @return `null`: nunca se pudo crear ninguna
+     * @return `null`: none could ever be created
      */
     public BufferStrategy getBufferStrategy() {
         return null;
     }
 
-    /** Declara que la ubique el escritorio en vez de ponerla en una posición fija. */
+    /** Declares that the desktop places it instead of putting it at a fixed position. */
     public void setLocationByPlatform(boolean locationByPlatform) {
         this.locationByPlatform = locationByPlatform;
     }
 
-    /** Si se pidió que la ubique el escritorio. */
+    /** Whether the desktop was asked to place it. */
     public boolean isLocationByPlatform() {
         return this.locationByPlatform;
     }
 
-    /** Cuán opaca es, de 0 a 1. */
+    /** How opaque it is, from 0 to 1. */
     public float getOpacity() {
         return this.opacity;
     }
 
     /**
-     * Le cambia la opacidad.
+     * Changes its opacity.
      *
-     * @throws IllegalArgumentException si el valor no está entre 0 y 1
-     * @throws IllegalComponentStateException si la ventana está decorada y se pide translucidez
+     * @throws IllegalArgumentException if the value is not between 0 and 1
+     * @throws IllegalComponentStateException if the window is decorated and translucency is asked
+     *     for
      */
     public void setOpacity(float opacity) {
         if (opacity < 0.0f || opacity > 1.0f) {
@@ -857,36 +861,37 @@ public class Window extends Container implements Accessible {
         this.opacity = opacity;
     }
 
-    /** La forma recortada de la ventana, o `null` si es rectangular. */
+    /** The clipped shape of the window, or `null` if it is rectangular. */
     public Shape getShape() {
         return this.shape;
     }
 
     /**
-     * Le recorta la forma.
+     * Clips its shape.
      *
-     * <p>Con `null` vuelve a ser rectangular. Es lo que permite una ventana redonda o con un agujero.
+     * <p>With `null` it goes back to being rectangular. It is what allows a round window or one
+     * with a hole.
      */
     public void setShape(Shape shape) {
         this.shape = shape;
     }
 
-    /** El color de fondo. */
+    /** The background colour. */
     public Color getBackground() {
         return super.getBackground();
     }
 
     /**
-     * Le cambia el color de fondo.
+     * Changes its background colour.
      *
-     * <p>Un fondo con alfa menor que 255 pide transparencia por píxel, que el escritorio puede no
-     * admitir.
+     * <p>A background with an alpha below 255 asks for per-pixel transparency, which the desktop
+     * may not support.
      */
     public void setBackground(Color bgColor) {
         super.setBackground(bgColor);
     }
 
-    /** Si pinta todos sus píxeles: sólo si su fondo es opaco. */
+    /** Whether it paints all of its pixels: only if its background is opaque. */
     public boolean isOpaque() {
         Color c = this.getBackground();
         if (c == null) {
@@ -895,12 +900,12 @@ public class Window extends Container implements Accessible {
         return c.getAlpha() == 255;
     }
 
-    /** Se dibuja y dibuja a sus hijos. */
+    /** It draws itself and draws its children. */
     public void paint(Graphics g) {
         super.paint(g);
     }
 
-    /** La configuración gráfica con la que se creó, o `null`. */
+    /** The graphics configuration it was created with, or `null`. */
     public GraphicsConfiguration getGraphicsConfiguration() {
         if (this.graphicsConfig != null) {
             return this.graphicsConfig;
@@ -908,7 +913,7 @@ public class Window extends Container implements Accessible {
         return super.getGraphicsConfiguration();
     }
 
-    /** La información de accesibilidad de esta ventana. */
+    /** The accessibility information of this window. */
     public AccessibleContext getAccessibleContext() {
         if (this.accessibleContext == null) {
             this.accessibleContext = new AccessibleAWTWindow();
@@ -916,19 +921,19 @@ public class Window extends Container implements Accessible {
         return this.accessibleContext;
     }
 
-    /** La accesibilidad de una ventana. */
+    /** The accessibility of a window. */
     protected class AccessibleAWTWindow extends AccessibleAWTContainer {
 
-        /** Para las subclases. */
+        /** For the subclasses. */
         protected AccessibleAWTWindow() {
         }
 
-        /** Es una ventana. */
+        /** It is a window. */
         public AccessibleRole getAccessibleRole() {
             return AccessibleRole.WINDOW;
         }
 
-        /** Los de un contenedor, más si está activa. */
+        /** The ones of a container, plus one more if it is active. */
         public AccessibleStateSet getAccessibleStateSet() {
             AccessibleStateSet s = super.getAccessibleStateSet();
             if (Window.this.isActive()) {

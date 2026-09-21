@@ -5,10 +5,10 @@ import javax.lang.model.SourceVersion;
 import javax.lang.model.element.RecordComponentElement;
 
 /**
- * El visitante simple de elementos de Java 14 en adelante. Ver {@link SimpleElementVisitor6} por el
- * mecanismo.
+ * The simple element visitor for Java 14 onwards. See {@link SimpleElementVisitor6} for the
+ * mechanism.
  *
- * <p>Los componentes de registro entran al embudo: `visitRecordComponent` deja de tirar y pasa a
+ * <p>Record components enter the funnel: `visitRecordComponent` stops throwing and goes to
  * `defaultAction`.
  */
 @SupportedSourceVersion(SourceVersion.RELEASE_25)

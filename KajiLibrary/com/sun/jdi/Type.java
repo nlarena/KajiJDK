@@ -1,27 +1,27 @@
 package com.sun.jdi;
 
 /**
- * Un tipo de la maquina depurada.
+ * A type of the debugged machine.
  *
- * <p>{@link PrimitiveType} para los ocho primitivos y {@link ReferenceType} para todo lo demas. La
- * diferencia importa porque solo un {@code ReferenceType} tiene miembros, codigo y un cargador de
- * clases detras.
+ * <p>{@link PrimitiveType} for the eight primitives and {@link ReferenceType} for everything
+ * else. The difference matters because only a {@code ReferenceType} has members, code and a
+ * class loader behind it.
  *
  * @since 1.3
  */
 public interface Type extends Mirror {
 
     /**
-     * El signature.
+     * The signature.
      *
-     * @return el resultado
+     * @return the result
      */
     String signature();
 
     /**
-     * El nombre.
+     * The name.
      *
-     * @return el resultado
+     * @return the result
      */
     String name();
 }

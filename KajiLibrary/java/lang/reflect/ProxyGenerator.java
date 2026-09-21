@@ -4,66 +4,73 @@ import java.util.ArrayList;
 import java.util.HashMap;
 
 /**
- * KajiLibrary's java.lang.reflect.ProxyGenerator -- el escritor de archivos de clase que hay
- * detras de {@link Proxy}. Package-private, igual que en el JDK: nadie fuera de `Proxy` tiene por
- * que saber que un proxy es, literalmente, un `.class` fabricado en memoria.
+ * KajiLibrary's java.lang.reflect.ProxyGenerator -- the class file writer behind {@link Proxy}.
+ * Package-private, just as in the JDK: nobody outside `Proxy` has any business knowing that a proxy
+ * is, literally, a `.class` built in memory.
  *
- * <h2>Por que este generador y no `java.lang.classfile`</h2>
+ * <h2>Why this generator and not `java.lang.classfile`</h2>
  *
- * <p>`java.lang.classfile` esta en KajiLibrary como fuente, pero solo del lado de la LECTURA:
- * escribir codigo con el exige el paquete `java.lang.classfile.instruction` entero y un generador
- * de `StackMapTable`, y ninguna de las dos cosas existe. Un proxy no necesita nada de eso, asi
- * que este archivo emite el subconjunto exacto que un proxy usa y nada mas.
+ * <p>`java.lang.classfile` is in KajiLibrary as source, but only on the READING side: writing code
+ * with it demands the whole `java.lang.classfile.instruction` package and a `StackMapTable`
+ * generator, and neither exists. A proxy needs none of that, so this file emits the exact subset a
+ * proxy uses and nothing else.
  *
- * <h2>Por que la version 49 del archivo de clase</h2>
+ * <h2>Why class file version 49</h2>
  *
- * <p>La `StackMapTable` es obligatoria a partir de la version 50 (Java 6) y es, con diferencia,
- * la parte cara de generar bytecode: hay que calcular el estado de tipos en cada destino de
- * salto. La version 49 (Java 5) usa el verificador viejo, el de INFERENCIA, que deduce esos tipos
- * solo -- y el verificador de KajiJDK implementa las dos formas (ver `src/jvm/verifier.rs`), asi
- * que emitir 49 es legal aca y ahorra el generador de mapas de pila entero.
+ * <p>The `StackMapTable` is mandatory from version 50 (Java 6) on and is, by a distance, the
+ * expensive part of generating bytecode: the type state at every jump target has to be computed.
+ * Version 49 (Java 5) uses the old verifier, the INFERENCE one, which works those types out by
+ * itself -- and KajiJDK's verifier implements both forms (see `src/jvm/verifier.rs`), so emitting
+ * 49 is legal here and saves the entire stack map generator.
  *
- * <p>El costo de esa eleccion es cero en la practica: los metodos que este generador emite no
- * tienen NI UN salto. Son rectos de punta a punta -- armar el arreglo, llamar al despachador,
- * castear el retorno --, y un metodo sin saltos no necesita mapa de pila ni siquiera en la
- * version 69. La version 49 es lo que hace que eso sea ademas *legal*, no solo suficiente.
+ * <p>The cost of that choice is zero in practice: the methods this generator emits have NOT ONE
+ * jump. They are straight from end to end -- build the array, call the dispatcher, cast the return
+ * --, and a method with no jumps needs no stack map even in version 69. Version 49 is what makes
+ * that *legal* as well, not merely sufficient.
  *
- * <h2>Que emite cada metodo</h2>
+ * <h2>What each method emits</h2>
  *
- * <p>La segunda decision que ahorra la mitad del trabajo: el bytecode NO busca el {@link Method}
- * ni lee el campo `h`. Cada metodo generado empuja `this`, un `int` con su indice en la tabla de
- * metodos de esa clase, y un `Object[]` con los argumentos ya boxeados; despues llama a un solo
- * metodo estatico, `jdk.internal.reflect.ProxyDispatcher.despachar`, que hace todo el resto EN
- * JAVA: busca el `Method`, saca el manejador, lo llama y traduce las excepciones. Lo que queda en
- * bytecode es lo unico que no se puede escribir en Java -- una firma que no existe en el fuente.
+ * <p>The second decision that saves half the work: the bytecode does NOT look the {@link Method} up
+ * nor read the `h` field. Each generated method pushes `this`, an `int` with its index in that
+ * class's method table, and an `Object[]` with the arguments already boxed; then it calls one
+ * single static method, `jdk.internal.reflect.ProxyDispatcher.dispatch`, which does all the rest
+ * IN JAVA: it looks the `Method` up, gets the handler, calls it and translates the exceptions. What
+ * is left in bytecode is the only thing that cannot be written in Java -- a signature that does not
+ * exist in the source.
  *
- * <p>El castear/desboxear del retorno tampoco es adorno: es lo que le da al proxy la semantica
- * que el JDK documenta, y gratis. `checkcast Integer` sobre un `null` pasa, y el `intValue()` que
- * viene despues tira `NullPointerException` -- que es exactamente lo que el JDK promete para un
- * `null` devuelto por un metodo de retorno primitivo. Un valor del tipo equivocado muere en el
- * `checkcast` con `ClassCastException`, que es la otra mitad de la promesa. Ninguna de las dos
- * esta programada; las dos caen solas de elegir estas dos instrucciones.
+ * <p><strong>That method's name travels as a string literal</strong> into the constant pool of every
+ * proxy this generator emits, so the name here and the name on `ProxyDispatcher` have to match
+ * character for character. Renaming it on one side alone would produce proxies that compile, load,
+ * and fail at the first call. The two moved together when the class was translated, and they have
+ * to keep moving together.
+ *
+ * <p>The cast/unbox of the return is no decoration either: it is what gives the proxy the semantics
+ * the JDK documents, and for free. `checkcast Integer` over a `null` passes, and the `intValue()`
+ * that comes after throws `NullPointerException` -- which is exactly what the JDK promises for a
+ * `null` returned by a method with a primitive return. A value of the wrong type dies at the
+ * `checkcast` with `ClassCastException`, which is the other half of the promise. Neither is
+ * programmed; both fall out of choosing these two instructions.
  */
 final class ProxyGenerator {
 
-    /** Ver la nota de la clase: 49 es la ultima version sin `StackMapTable` obligatoria. */
-    private static final int VERSION_MAYOR = 49;
-    private static final int VERSION_MENOR = 0;
+    /** See the class's note: 49 is the last version without a mandatory `StackMapTable`. */
+    private static final int VERSION_MAJOR = 49;
+    private static final int VERSION_MINOR = 0;
 
     static final int ACC_PUBLIC = 0x0001;
     static final int ACC_FINAL = 0x0010;
     static final int ACC_SUPER = 0x0020;
 
-    // Etiquetas del pool de constantes (JVMS 4.4). Solo estas cinco: sin invokedynamic, sin
-    // literales de String y sin constantes de 8 bytes, el pool de un proxy es minusculo.
+    // Constant pool tags (JVMS 4.4). Only these five: with no invokedynamic, no String literals and
+    // no 8-byte constants, a proxy's pool is tiny.
     private static final int TAG_UTF8 = 1;
     private static final int TAG_INTEGER = 3;
     private static final int TAG_CLASS = 7;
     private static final int TAG_METHODREF = 10;
     private static final int TAG_NAMEANDTYPE = 12;
 
-    // Los opcodes que se usan. Estan como constantes con nombre porque un `0x2a` suelto en el
-    // medio de un emisor es indistinguible de un error de tipeo.
+    // The opcodes that get used. They are named constants because a loose `0x2a` in the middle of
+    // an emitter is indistinguishable from a typo.
     private static final int OP_ACONST_NULL = 0x01;
     private static final int OP_ICONST_0 = 0x03;
     private static final int OP_BIPUSH = 0x10;
@@ -95,15 +102,15 @@ final class ProxyGenerator {
     private static final int OP_CHECKCAST = 0xc0;
 
     private static final String PROXY = "java/lang/reflect/Proxy";
-    private static final String MANEJADOR = "Ljava/lang/reflect/InvocationHandler;";
-    private static final String DESPACHADOR = "jdk/internal/reflect/ProxyDispatcher";
-    private static final String FIRMA_DESPACHO =
+    private static final String HANDLER = "Ljava/lang/reflect/InvocationHandler;";
+    private static final String DISPATCHER = "jdk/internal/reflect/ProxyDispatcher";
+    private static final String DISPATCH_SIGNATURE =
             "(Ljava/lang/Object;I[Ljava/lang/Object;)Ljava/lang/Object;";
 
-    /** Las entradas del pool, ya serializadas, en orden; el indice de una es su posicion + 1. */
+    /** The pool's entries, already serialised, in order; an entry's index is its position + 1. */
     private final ArrayList<byte[]> pool = new ArrayList<byte[]>();
 
-    /** De clave (ver {@link #agregar}) a indice, para que una constante repetida entre una vez. */
+    /** From key (see {@link #intern}) to index, so a repeated constant goes in once. */
     private final HashMap<String, Integer> indices = new HashMap<String, Integer>();
 
     private ProxyGenerator() {
@@ -112,18 +119,18 @@ final class ProxyGenerator {
     // ------------------------------------------------------------------ buffer
 
     /**
-     * Un arreglo de bytes que crece. No se usa `ByteArrayOutputStream` porque este generador vive
-     * en `java.lang.reflect` y arrastrar `java.io` hasta aca para escribir cuatro enteros grandes
-     * no compra nada.
+     * A growing array of bytes. `ByteArrayOutputStream` is not used because this generator lives in
+     * `java.lang.reflect` and dragging `java.io` in here to write four large integers
+     * buys nothing.
      */
     private static final class Buf {
-        private byte[] datos = new byte[128];
-        private int largo;
+        private byte[] data = new byte[128];
+        private int length;
 
         void u1(int v) {
-            this.espacio(1);
-            this.datos[this.largo] = (byte) v;
-            this.largo = this.largo + 1;
+            this.ensure(1);
+            this.data[this.length] = (byte) v;
+            this.length = this.length + 1;
         }
 
         void u2(int v) {
@@ -136,140 +143,141 @@ final class ProxyGenerator {
             this.u2(v);
         }
 
-        void crudo(byte[] otros) {
-            this.espacio(otros.length);
-            System.arraycopy(otros, 0, this.datos, this.largo, otros.length);
-            this.largo = this.largo + otros.length;
+        void raw(byte[] others) {
+            this.ensure(others.length);
+            System.arraycopy(others, 0, this.data, this.length, others.length);
+            this.length = this.length + others.length;
         }
 
-        private void espacio(int n) {
-            if (this.largo + n <= this.datos.length) {
+        private void ensure(int n) {
+            if (this.length + n <= this.data.length) {
                 return;
             }
-            int nuevo = this.datos.length * 2;
-            if (nuevo < this.largo + n) {
-                nuevo = this.largo + n;
+            int grown = this.data.length * 2;
+            if (grown < this.length + n) {
+                grown = this.length + n;
             }
-            byte[] mas = new byte[nuevo];
-            System.arraycopy(this.datos, 0, mas, 0, this.largo);
-            this.datos = mas;
+            byte[] bigger = new byte[grown];
+            System.arraycopy(this.data, 0, bigger, 0, this.length);
+            this.data = bigger;
         }
 
-        byte[] listo() {
-            byte[] salida = new byte[this.largo];
-            System.arraycopy(this.datos, 0, salida, 0, this.largo);
-            return salida;
+        byte[] bytes() {
+            byte[] out = new byte[this.length];
+            System.arraycopy(this.data, 0, out, 0, this.length);
+            return out;
         }
 
-        int tamanio() {
-            return this.largo;
+        int size() {
+            return this.length;
         }
     }
 
     /**
-     * El cuerpo de un metodo, con la altura de la pila contada mientras se emite.
+     * A method's body, with the stack height counted as it is emitted.
      *
-     * <p>Se cuenta en vez de estimarse porque `max_stack` no es un adorno: el interprete
-     * dimensiona el marco con el, y un valor bajo es corrupcion silenciosa mientras que uno alto
-     * es desperdicio. Como no hay saltos, la altura en cada punto es una sola -- contarla es
-     * sumar un delta por instruccion, y da el maximo exacto.
+     * <p>It is counted rather than estimated because `max_stack` is no decoration: the interpreter
+     * sizes the frame with it, and a low value is silent corruption while a high one is waste.
+     * Since there are no jumps, the height at each point is a single number -- counting it is
+     * adding one delta per instruction, and it gives the exact maximum.
      */
-    private static final class Codigo {
+    private static final class Code {
         final Buf b = new Buf();
-        private int pila;
-        private int pilaMax;
+        private int stack;
+        private int maxStack;
 
-        void mover(int delta) {
-            this.pila = this.pila + delta;
-            if (this.pila > this.pilaMax) {
-                this.pilaMax = this.pila;
+        void shift(int delta) {
+            this.stack = this.stack + delta;
+            if (this.stack > this.maxStack) {
+                this.maxStack = this.stack;
             }
         }
 
         void op(int opcode, int delta) {
             this.b.u1(opcode);
-            this.mover(delta);
+            this.shift(delta);
         }
 
-        int pilaMax() {
-            return this.pilaMax;
+        int maxStack() {
+            return this.maxStack;
         }
     }
 
-    // ------------------------------------------------------------ pool de constantes
+    // ------------------------------------------------------------ the constant pool
 
     /**
-     * Devuelve el indice de una constante, agregandola si no estaba.
+     * It returns a constant's index, adding it if it was not there.
      *
-     * <p>`clave` lleva un prefijo por etiqueta porque los espacios de nombres se cruzan: el Utf8
-     * "java/lang/Object" y la Class "java/lang/Object" son entradas distintas con el mismo texto.
+     * <p>The key carries a per-tag prefix because the name spaces cross: the Utf8
+     * "java/lang/Object" and the Class "java/lang/Object" are different entries with the same
+     * text.
      */
-    private int agregar(String clave, byte[] entrada) {
-        Integer ya = this.indices.get(clave);
-        if (ya != null) {
-            return ya.intValue();
+    private int intern(String key, byte[] entry) {
+        Integer already = this.indices.get(key);
+        if (already != null) {
+            return already.intValue();
         }
-        this.pool.add(entrada);
-        int indice = this.pool.size();
-        this.indices.put(clave, Integer.valueOf(indice));
-        return indice;
+        this.pool.add(entry);
+        int index = this.pool.size();
+        this.indices.put(key, Integer.valueOf(index));
+        return index;
     }
 
-    private int utf(String texto) {
-        byte[] codificado = ProxyGenerator.utf8Modificado(texto);
+    private int utf(String text) {
+        byte[] encoded = ProxyGenerator.modifiedUtf8(text);
         Buf b = new Buf();
         b.u1(TAG_UTF8);
-        b.u2(codificado.length);
-        b.crudo(codificado);
-        return this.agregar("u:" + texto, b.listo());
+        b.u2(encoded.length);
+        b.raw(encoded);
+        return this.intern("u:" + text, b.bytes());
     }
 
-    private int clase(String interno) {
-        int nombre = this.utf(interno);
+    private int clazz(String internalName) {
+        int name = this.utf(internalName);
         Buf b = new Buf();
         b.u1(TAG_CLASS);
-        b.u2(nombre);
-        return this.agregar("c:" + interno, b.listo());
+        b.u2(name);
+        return this.intern("c:" + internalName, b.bytes());
     }
 
-    private int nombreYTipo(String nombre, String descriptor) {
-        int n = this.utf(nombre);
+    private int nameAndType(String name, String descriptor) {
+        int n = this.utf(name);
         int d = this.utf(descriptor);
         Buf b = new Buf();
         b.u1(TAG_NAMEANDTYPE);
         b.u2(n);
         b.u2(d);
-        return this.agregar("n:" + nombre + " " + descriptor, b.listo());
+        return this.intern("n:" + name + " " + descriptor, b.bytes());
     }
 
-    private int metodoRef(String duenio, String nombre, String descriptor) {
-        int c = this.clase(duenio);
-        int nt = this.nombreYTipo(nombre, descriptor);
+    private int methodRef(String owner, String name, String descriptor) {
+        int c = this.clazz(owner);
+        int nt = this.nameAndType(name, descriptor);
         Buf b = new Buf();
         b.u1(TAG_METHODREF);
         b.u2(c);
         b.u2(nt);
-        return this.agregar("m:" + duenio + " " + nombre + " " + descriptor, b.listo());
+        return this.intern("m:" + owner + " " + name + " " + descriptor, b.bytes());
     }
 
-    private int enteroConstante(int valor) {
+    private int intConstant(int value) {
         Buf b = new Buf();
         b.u1(TAG_INTEGER);
-        b.u4(valor);
-        return this.agregar("I:" + valor, b.listo());
+        b.u4(value);
+        return this.intern("I:" + value, b.bytes());
     }
 
     /**
-     * UTF-8 modificado (JVMS 4.4.7): igual al UTF-8 real salvo que el cero se codifica en dos
-     * bytes y los pares suplentes se codifican por separado. Se implementa a mano y no con
-     * `String.getBytes` porque `getBytes` produce UTF-8 real, que para esos dos casos es otro
-     * arreglo de bytes y un archivo de clase que el parser rechaza.
+     * Modified UTF-8 (JVMS 4.4.7): the same as real UTF-8 except that zero is encoded in two bytes
+     * and surrogate pairs are encoded separately. It is implemented by hand and not with
+     * `String.getBytes` because `getBytes` produces real UTF-8, which for those two cases is a
+     * different array of bytes and a class file the parser rejects.
      */
-    private static byte[] utf8Modificado(String texto) {
+    private static byte[] modifiedUtf8(String text) {
         Buf b = new Buf();
         int i = 0;
-        while (i < texto.length()) {
-            char c = texto.charAt(i);
+        while (i < text.length()) {
+            char c = text.charAt(i);
             if (c >= 0x0001 && c <= 0x007F) {
                 b.u1(c);
             } else if (c <= 0x07FF) {
@@ -282,375 +290,376 @@ final class ProxyGenerator {
             }
             i = i + 1;
         }
-        return b.listo();
+        return b.bytes();
     }
 
-    // ------------------------------------------------------------------ descriptores
+    // ------------------------------------------------------------------ descriptors
 
-    /** El nombre interno de un tipo: `java.util.List` -> `java/util/List`. */
-    static String interno(Class<?> tipo) {
-        return tipo.getName().replace('.', '/');
+    /** A type's internal name: `java.util.List` -> `java/util/List`. */
+    static String internalName(Class<?> type) {
+        return type.getName().replace('.', '/');
     }
 
-    /** El descriptor de campo de un tipo (JVMS 4.3.2). */
-    static String descriptor(Class<?> tipo) {
-        if (tipo.isPrimitive()) {
-            return ProxyGenerator.descriptorPrimitivo(tipo);
+    /** A type's field descriptor (JVMS 4.3.2). */
+    static String descriptor(Class<?> type) {
+        if (type.isPrimitive()) {
+            return ProxyGenerator.primitiveDescriptor(type);
         }
-        if (tipo.isArray()) {
-            return "[" + ProxyGenerator.descriptor(tipo.getComponentType());
+        if (type.isArray()) {
+            return "[" + ProxyGenerator.descriptor(type.getComponentType());
         }
-        return "L" + ProxyGenerator.interno(tipo) + ";";
+        return "L" + ProxyGenerator.internalName(type) + ";";
     }
 
-    private static String descriptorPrimitivo(Class<?> tipo) {
-        if (tipo == Void.TYPE) {
+    private static String primitiveDescriptor(Class<?> type) {
+        if (type == Void.TYPE) {
             return "V";
         }
-        if (tipo == Boolean.TYPE) {
+        if (type == Boolean.TYPE) {
             return "Z";
         }
-        if (tipo == Byte.TYPE) {
+        if (type == Byte.TYPE) {
             return "B";
         }
-        if (tipo == Character.TYPE) {
+        if (type == Character.TYPE) {
             return "C";
         }
-        if (tipo == Short.TYPE) {
+        if (type == Short.TYPE) {
             return "S";
         }
-        if (tipo == Integer.TYPE) {
+        if (type == Integer.TYPE) {
             return "I";
         }
-        if (tipo == Long.TYPE) {
+        if (type == Long.TYPE) {
             return "J";
         }
-        if (tipo == Float.TYPE) {
+        if (type == Float.TYPE) {
             return "F";
         }
         return "D";
     }
 
-    /** El descriptor de metodo de una firma: `(params)retorno`. */
-    static String descriptorDeMetodo(Class<?>[] parametros, Class<?> retorno) {
+    /** A signature's method descriptor: `(params)return`. */
+    static String methodDescriptor(Class<?>[] params, Class<?> returnType) {
         StringBuilder out = new StringBuilder("(");
         int i = 0;
-        while (i < parametros.length) {
-            out.append(ProxyGenerator.descriptor(parametros[i]));
+        while (i < params.length) {
+            out.append(ProxyGenerator.descriptor(params[i]));
             i = i + 1;
         }
         out.append(")");
-        out.append(ProxyGenerator.descriptor(retorno));
+        out.append(ProxyGenerator.descriptor(returnType));
         return out.toString();
     }
 
-    /** Cuantas ranuras ocupa un tipo en el marco: dos para `long` y `double`, una para el resto. */
-    private static int ranuras(Class<?> tipo) {
-        if (tipo == Long.TYPE || tipo == Double.TYPE) {
+    /** How many frame slots a type takes: two for `long` and `double`, one for the rest. */
+    private static int slotsOf(Class<?> type) {
+        if (type == Long.TYPE || type == Double.TYPE) {
             return 2;
         }
         return 1;
     }
 
-    /** La clase envoltorio de un primitivo, en forma interna; `null` si `tipo` no es primitivo. */
-    private static String envoltorio(Class<?> tipo) {
-        if (tipo == Boolean.TYPE) {
+    /** A primitive's wrapper class, in internal form; `null` if the type is not primitive. */
+    private static String wrapperOf(Class<?> type) {
+        if (type == Boolean.TYPE) {
             return "java/lang/Boolean";
         }
-        if (tipo == Byte.TYPE) {
+        if (type == Byte.TYPE) {
             return "java/lang/Byte";
         }
-        if (tipo == Character.TYPE) {
+        if (type == Character.TYPE) {
             return "java/lang/Character";
         }
-        if (tipo == Short.TYPE) {
+        if (type == Short.TYPE) {
             return "java/lang/Short";
         }
-        if (tipo == Integer.TYPE) {
+        if (type == Integer.TYPE) {
             return "java/lang/Integer";
         }
-        if (tipo == Long.TYPE) {
+        if (type == Long.TYPE) {
             return "java/lang/Long";
         }
-        if (tipo == Float.TYPE) {
+        if (type == Float.TYPE) {
             return "java/lang/Float";
         }
-        if (tipo == Double.TYPE) {
+        if (type == Double.TYPE) {
             return "java/lang/Double";
         }
         return null;
     }
 
-    /** El nombre del metodo que saca el primitivo de su envoltorio: `intValue`, `charValue`... */
-    private static String desboxeador(Class<?> tipo) {
-        if (tipo == Boolean.TYPE) {
+    /** The name of the method that gets the primitive out of its wrapper: `intValue`,
+     * `charValue`... */
+    private static String unboxerOf(Class<?> type) {
+        if (type == Boolean.TYPE) {
             return "booleanValue";
         }
-        if (tipo == Byte.TYPE) {
+        if (type == Byte.TYPE) {
             return "byteValue";
         }
-        if (tipo == Character.TYPE) {
+        if (type == Character.TYPE) {
             return "charValue";
         }
-        if (tipo == Short.TYPE) {
+        if (type == Short.TYPE) {
             return "shortValue";
         }
-        if (tipo == Integer.TYPE) {
+        if (type == Integer.TYPE) {
             return "intValue";
         }
-        if (tipo == Long.TYPE) {
+        if (type == Long.TYPE) {
             return "longValue";
         }
-        if (tipo == Float.TYPE) {
+        if (type == Float.TYPE) {
             return "floatValue";
         }
         return "doubleValue";
     }
 
-    // ------------------------------------------------------------------ emision
+    // ------------------------------------------------------------------ emission
 
     /**
-     * Fabrica el archivo de clase de un proxy.
+     * It builds a proxy's class file.
      *
-     * @param nombreBinario el nombre con puntos de la clase a generar
-     * @param interfaces las interfaces que implementa, en orden
-     * @param publica si la clase lleva `ACC_PUBLIC`
-     * @param metodos la tabla de metodos, en el mismo orden en que el despachador la va a indexar
-     * @return los bytes del `.class`
+     * @param binaryName the dotted name of the class to generate
+     * @param interfaces the interfaces it implements, in order
+     * @param isPublic whether the class carries `ACC_PUBLIC`
+     * @param methods the method table, in the same order the dispatcher will index it
+     * @return the `.class` bytes
      */
-    static byte[] generar(String nombreBinario, Class<?>[] interfaces, boolean publica,
-            Method[] metodos) {
+    static byte[] generate(String binaryName, Class<?>[] interfaces, boolean isPublic,
+            Method[] methods) {
         ProxyGenerator gen = new ProxyGenerator();
-        return gen.armar(nombreBinario, interfaces, publica, metodos);
+        return gen.build(binaryName, interfaces, isPublic, methods);
     }
 
-    private byte[] armar(String nombreBinario, Class<?>[] interfaces, boolean publica,
-            Method[] metodos) {
-        String estaClase = nombreBinario.replace('.', '/');
+    private byte[] build(String binaryName, Class<?>[] interfaces, boolean isPublic,
+            Method[] methods) {
+        String thisClass = binaryName.replace('.', '/');
 
-        // Los metodos se serializan PRIMERO: cada uno mete constantes en el pool, y el pool solo
-        // se puede escribir cuando ya nadie le va a agregar nada.
-        ArrayList<byte[]> cuerpos = new ArrayList<byte[]>();
-        cuerpos.add(this.constructor());
+        // The methods are serialised FIRST: each one puts constants into the pool, and the pool can
+        // only be written once nobody is going to add anything more to it.
+        ArrayList<byte[]> bodies = new ArrayList<byte[]>();
+        bodies.add(this.constructor());
         int i = 0;
-        while (i < metodos.length) {
-            cuerpos.add(this.metodoProxy(estaClase, metodos[i], i));
+        while (i < methods.length) {
+            bodies.add(this.proxyMethod(thisClass, methods[i], i));
             i = i + 1;
         }
 
-        int indiceEsta = this.clase(estaClase);
-        int indiceSuper = this.clase(PROXY);
-        int[] indicesInterfaces = new int[interfaces.length];
+        int thisIndex = this.clazz(thisClass);
+        int superIndex = this.clazz(PROXY);
+        int[] interfaceIndices = new int[interfaces.length];
         i = 0;
         while (i < interfaces.length) {
-            indicesInterfaces[i] = this.clase(ProxyGenerator.interno(interfaces[i]));
+            interfaceIndices[i] = this.clazz(ProxyGenerator.internalName(interfaces[i]));
             i = i + 1;
         }
 
         Buf out = new Buf();
         out.u4(0xCAFEBABE);
-        out.u2(VERSION_MENOR);
-        out.u2(VERSION_MAYOR);
-        // constant_pool_count es "la cantidad + 1": la entrada 0 no existe y se cuenta igual.
+        out.u2(VERSION_MINOR);
+        out.u2(VERSION_MAJOR);
+        // constant_pool_count is "the count + 1": entry 0 does not exist and is counted anyway.
         out.u2(this.pool.size() + 1);
         i = 0;
         while (i < this.pool.size()) {
-            out.crudo(this.pool.get(i));
+            out.raw(this.pool.get(i));
             i = i + 1;
         }
-        int acceso = ACC_FINAL | ACC_SUPER;
-        if (publica) {
-            acceso = acceso | ACC_PUBLIC;
+        int access = ACC_FINAL | ACC_SUPER;
+        if (isPublic) {
+            access = access | ACC_PUBLIC;
         }
-        out.u2(acceso);
-        out.u2(indiceEsta);
-        out.u2(indiceSuper);
-        out.u2(indicesInterfaces.length);
+        out.u2(access);
+        out.u2(thisIndex);
+        out.u2(superIndex);
+        out.u2(interfaceIndices.length);
         i = 0;
-        while (i < indicesInterfaces.length) {
-            out.u2(indicesInterfaces[i]);
+        while (i < interfaceIndices.length) {
+            out.u2(interfaceIndices[i]);
             i = i + 1;
         }
-        out.u2(0); // fields_count: el unico campo que un proxy tiene es `h`, y lo hereda
-        out.u2(cuerpos.size());
+        out.u2(0); // fields_count: the only field a proxy has is `h`, and it inherits it
+        out.u2(bodies.size());
         i = 0;
-        while (i < cuerpos.size()) {
-            out.crudo(cuerpos.get(i));
+        while (i < bodies.size()) {
+            out.raw(bodies.get(i));
             i = i + 1;
         }
         out.u2(0); // attributes_count
-        return out.listo();
+        return out.bytes();
     }
 
     /**
      * `public $Proxy0(InvocationHandler h) { super(h); }`.
      *
-     * <p>Es publico y no protegido a proposito: `Proxy.newProxyInstance` lo busca por reflexion y
-     * lo invoca desde otro paquete, que es exactamente lo que hace el JDK.
+     * <p>It is public and not protected on purpose: `Proxy.newProxyInstance` looks it up by
+     * reflection and invokes it from another package, which is exactly what the JDK does.
      */
     private byte[] constructor() {
-        Codigo c = new Codigo();
+        Code c = new Code();
         c.op(OP_ALOAD_0, 1);
-        c.op(OP_ALOAD_0 + 1, 1); // aload_1: el manejador
+        c.op(OP_ALOAD_0 + 1, 1); // aload_1: the handler
         c.b.u1(OP_INVOKESPECIAL);
-        c.b.u2(this.metodoRef(PROXY, "<init>", "(" + MANEJADOR + ")V"));
-        c.mover(-2);
+        c.b.u2(this.methodRef(PROXY, "<init>", "(" + HANDLER + ")V"));
+        c.shift(-2);
         c.op(OP_RETURN, 0);
-        return this.metodoInfo(ACC_PUBLIC, "<init>", "(" + MANEJADOR + ")V",
-                c.b.listo(), c.pilaMax(), 2, null);
+        return this.methodInfo(ACC_PUBLIC, "<init>", "(" + HANDLER + ")V",
+                c.b.bytes(), c.maxStack(), 2, null);
     }
 
     /**
-     * Un metodo del proxy: empaquetar, despachar, castear.
+     * One of the proxy's methods: pack, dispatch, cast.
      *
-     * <p>`indice` es la posicion del metodo en la tabla que `ProxyDispatcher` tiene registrada
-     * para esta clase. Numerar en vez de nombrar es lo que deja el bytecode sin ninguna busqueda:
-     * el despachador indexa un arreglo y ya tiene el {@link Method}.
+     * <p>The index is the method's position in the table `ProxyDispatcher` has registered for this
+     * class. Numbering instead of naming is what leaves the bytecode with no lookup at all: the
+     * dispatcher indexes an array and has the {@link Method} already.
      */
-    private byte[] metodoProxy(String estaClase, Method metodo, int indice) {
-        Class<?>[] parametros = metodo.getParameterTypes();
-        Class<?> retorno = metodo.getReturnType();
-        Codigo c = new Codigo();
+    private byte[] proxyMethod(String thisClass, Method method, int index) {
+        Class<?>[] params = method.getParameterTypes();
+        Class<?> returnType = method.getReturnType();
+        Code c = new Code();
 
-        c.op(OP_ALOAD_0, 1); // el proxy, primer argumento del despachador
-        this.empujarEntero(c, indice);
+        c.op(OP_ALOAD_0, 1); // the proxy, the dispatcher's first argument
+        this.pushInt(c, index);
 
-        if (parametros.length == 0) {
-            // `null` y no un arreglo vacio: es lo que el JDK le pasa al manejador cuando el
-            // metodo no toma nada, y hay codigo escrito contra eso.
+        if (params.length == 0) {
+            // `null` and not an empty array: it is what the JDK passes the handler when the
+            // method takes nothing, and there is code written against that.
             c.op(OP_ACONST_NULL, 1);
         } else {
-            this.empujarEntero(c, parametros.length);
+            this.pushInt(c, params.length);
             c.b.u1(OP_ANEWARRAY);
-            c.b.u2(this.clase("java/lang/Object"));
-            c.mover(0); // consume el largo, deja la referencia
-            int ranura = 1; // 0 es `this`
+            c.b.u2(this.clazz("java/lang/Object"));
+            c.shift(0); // it consumes the length, leaves the reference
+            int slot = 1; // 0 is `this`
             int i = 0;
-            while (i < parametros.length) {
+            while (i < params.length) {
                 c.op(OP_DUP, 1);
-                this.empujarEntero(c, i);
-                this.cargar(c, parametros[i], ranura);
-                this.boxear(c, parametros[i]);
+                this.pushInt(c, i);
+                this.loadArg(c, params[i], slot);
+                this.boxArg(c, params[i]);
                 c.op(OP_AASTORE, -3);
-                ranura = ranura + ProxyGenerator.ranuras(parametros[i]);
+                slot = slot + ProxyGenerator.slotsOf(params[i]);
                 i = i + 1;
             }
         }
 
         c.b.u1(OP_INVOKESTATIC);
-        c.b.u2(this.metodoRef(DESPACHADOR, "despachar", FIRMA_DESPACHO));
-        c.mover(-2); // entran tres, sale uno
+        c.b.u2(this.methodRef(DISPATCHER, "dispatch", DISPATCH_SIGNATURE));
+        c.shift(-2); // three go in, one comes out
 
-        this.retornar(c, retorno);
+        this.returnOpcode(c, returnType);
 
-        int localesMax = 1;
+        int maxLocals = 1;
         int i2 = 0;
-        while (i2 < parametros.length) {
-            localesMax = localesMax + ProxyGenerator.ranuras(parametros[i2]);
+        while (i2 < params.length) {
+            maxLocals = maxLocals + ProxyGenerator.slotsOf(params[i2]);
             i2 = i2 + 1;
         }
-        String descriptor = ProxyGenerator.descriptorDeMetodo(parametros, retorno);
-        return this.metodoInfo(ACC_PUBLIC | ACC_FINAL, metodo.getName(), descriptor,
-                c.b.listo(), c.pilaMax(), localesMax, metodo.getExceptionTypes());
+        String descriptor = ProxyGenerator.methodDescriptor(params, returnType);
+        return this.methodInfo(ACC_PUBLIC | ACC_FINAL, method.getName(), descriptor,
+                c.b.bytes(), c.maxStack(), maxLocals, method.getExceptionTypes());
     }
 
-    /** El literal entero mas corto que sirva: `iconst_N`, `bipush`, `sipush` o `ldc_w`. */
-    private void empujarEntero(Codigo c, int valor) {
-        if (valor >= 0 && valor <= 5) {
-            c.op(OP_ICONST_0 + valor, 1);
-        } else if (valor >= -128 && valor <= 127) {
+    /** The shortest integer literal that will serve: `iconst_N`, `bipush`, `sipush` or `ldc_w`. */
+    private void pushInt(Code c, int value) {
+        if (value >= 0 && value <= 5) {
+            c.op(OP_ICONST_0 + value, 1);
+        } else if (value >= -128 && value <= 127) {
             c.b.u1(OP_BIPUSH);
-            c.b.u1(valor);
-            c.mover(1);
-        } else if (valor >= -32768 && valor <= 32767) {
+            c.b.u1(value);
+            c.shift(1);
+        } else if (value >= -32768 && value <= 32767) {
             c.b.u1(OP_SIPUSH);
-            c.b.u2(valor);
-            c.mover(1);
+            c.b.u2(value);
+            c.shift(1);
         } else {
             c.b.u1(OP_LDC_W);
-            c.b.u2(this.enteroConstante(valor));
-            c.mover(1);
+            c.b.u2(this.intConstant(value));
+            c.shift(1);
         }
     }
 
-    /** Carga el parametro de la ranura `ranura` con la instruccion que su tipo pide. */
-    private void cargar(Codigo c, Class<?> tipo, int ranura) {
+    /** It loads the parameter in that slot with the instruction its type calls for. */
+    private void loadArg(Code c, Class<?> type, int slot) {
         int base;
-        int ancho;
-        if (tipo == Long.TYPE) {
+        int width;
+        if (type == Long.TYPE) {
             base = OP_LLOAD_0;
-            ancho = OP_LLOAD;
-        } else if (tipo == Float.TYPE) {
+            width = OP_LLOAD;
+        } else if (type == Float.TYPE) {
             base = OP_FLOAD_0;
-            ancho = OP_FLOAD;
-        } else if (tipo == Double.TYPE) {
+            width = OP_FLOAD;
+        } else if (type == Double.TYPE) {
             base = OP_DLOAD_0;
-            ancho = OP_DLOAD;
-        } else if (tipo.isPrimitive()) {
+            width = OP_DLOAD;
+        } else if (type.isPrimitive()) {
             base = OP_ILOAD_0;
-            ancho = OP_ILOAD;
+            width = OP_ILOAD;
         } else {
             base = OP_ALOAD_0;
-            ancho = OP_ALOAD;
+            width = OP_ALOAD;
         }
-        int delta = ProxyGenerator.ranuras(tipo);
-        if (ranura <= 3) {
-            c.op(base + ranura, delta);
+        int delta = ProxyGenerator.slotsOf(type);
+        if (slot <= 3) {
+            c.op(base + slot, delta);
         } else {
-            // Sin forma `wide`: mas de 255 ranuras de parametros no lo emite ni javac, porque el
-            // descriptor de metodo tampoco lo admite (JVMS 4.3.3).
-            c.b.u1(ancho);
-            c.b.u1(ranura);
-            c.mover(delta);
+            // No `wide` form: not even javac emits more than 255 parameter slots, because a method
+            // descriptor does not admit them either (JVMS 4.3.3).
+            c.b.u1(width);
+            c.b.u1(slot);
+            c.shift(delta);
         }
     }
 
-    /** Envuelve el primitivo que quedo arriba de la pila; un no-primitivo ya esta listo. */
-    private void boxear(Codigo c, Class<?> tipo) {
-        String caja = ProxyGenerator.envoltorio(tipo);
-        if (caja == null) {
+    /** It wraps the primitive left on top of the stack; a non-primitive is ready already. */
+    private void boxArg(Code c, Class<?> type) {
+        String box = ProxyGenerator.wrapperOf(type);
+        if (box == null) {
             return;
         }
-        String firma = "(" + ProxyGenerator.descriptor(tipo) + ")L" + caja + ";";
+        String signature = "(" + ProxyGenerator.descriptor(type) + ")L" + box + ";";
         c.b.u1(OP_INVOKESTATIC);
-        c.b.u2(this.metodoRef(caja, "valueOf", firma));
-        c.mover(1 - ProxyGenerator.ranuras(tipo));
+        c.b.u2(this.methodRef(box, "valueOf", signature));
+        c.shift(1 - ProxyGenerator.slotsOf(type));
     }
 
     /**
-     * Cierra el metodo con el retorno que su tipo pide.
+     * It closes the method with the return its type calls for.
      *
-     * <p>Aca es donde caen solas dos clausulas del contrato: sobre `null`, el `checkcast` pasa y
-     * el desboxeo tira `NullPointerException`; sobre un valor de otro tipo, el `checkcast` tira
-     * `ClassCastException`. Ninguna de las dos esta escrita en ningun lado.
+     * <p>This is where two clauses of the contract fall out by themselves: over `null` the
+     * `checkcast` passes and the unboxing throws `NullPointerException`; over a value of another
+     * type the `checkcast` throws `ClassCastException`. Neither is written anywhere.
      */
-    private void retornar(Codigo c, Class<?> retorno) {
-        if (retorno == Void.TYPE) {
-            // Lo que el manejador haya devuelto se descarta, incluso si no es `null`.
+    private void returnOpcode(Code c, Class<?> returnType) {
+        if (returnType == Void.TYPE) {
+            // Whatever the handler returned is discarded, even if it is not `null`.
             c.op(OP_POP, -1);
             c.op(OP_RETURN, 0);
             return;
         }
-        String caja = ProxyGenerator.envoltorio(retorno);
-        if (caja == null) {
+        String box = ProxyGenerator.wrapperOf(returnType);
+        if (box == null) {
             c.b.u1(OP_CHECKCAST);
-            c.b.u2(this.clase(ProxyGenerator.interno(retorno)));
-            c.mover(0);
+            c.b.u2(this.clazz(ProxyGenerator.internalName(returnType)));
+            c.shift(0);
             c.op(OP_ARETURN, -1);
             return;
         }
         c.b.u1(OP_CHECKCAST);
-        c.b.u2(this.clase(caja));
-        c.mover(0);
-        String nombre = ProxyGenerator.desboxeador(retorno);
+        c.b.u2(this.clazz(box));
+        c.shift(0);
+        String name = ProxyGenerator.unboxerOf(returnType);
         c.b.u1(OP_INVOKEVIRTUAL);
-        c.b.u2(this.metodoRef(caja, nombre, "()" + ProxyGenerator.descriptor(retorno)));
-        c.mover(ProxyGenerator.ranuras(retorno) - 1);
-        if (retorno == Long.TYPE) {
+        c.b.u2(this.methodRef(box, name, "()" + ProxyGenerator.descriptor(returnType)));
+        c.shift(ProxyGenerator.slotsOf(returnType) - 1);
+        if (returnType == Long.TYPE) {
             c.op(OP_LRETURN, -2);
-        } else if (retorno == Float.TYPE) {
+        } else if (returnType == Float.TYPE) {
             c.op(OP_FRETURN, -1);
-        } else if (retorno == Double.TYPE) {
+        } else if (returnType == Double.TYPE) {
             c.op(OP_DRETURN, -2);
         } else {
             c.op(OP_IRETURN, -1);
@@ -658,43 +667,43 @@ final class ProxyGenerator {
     }
 
     /**
-     * Un `method_info` entero: el encabezado, el `Code` y -- si el metodo declara alguna -- el
-     * atributo `Exceptions`.
+     * A whole `method_info`: the header, the `Code` and -- if the method declares any -- the
+     * `Exceptions` attribute.
      *
-     * <p>El `Exceptions` no lo lee ni el verificador ni el interprete: es para que
-     * `getDeclaredMethods()` sobre la clase generada diga la verdad sobre lo que sus metodos
-     * declaran. Un proxy que miente sobre eso es un proxy que no reemplaza a la interfaz.
+     * <p>Neither the verifier nor the interpreter reads the `Exceptions`: it is so
+     * `getDeclaredMethods()` over the generated class tells the truth about what its methods
+     * declare. A proxy that lies about that is a proxy that does not stand in for the interface.
      */
-    private byte[] metodoInfo(int acceso, String nombre, String descriptor, byte[] codigo,
-            int pilaMax, int localesMax, Class<?>[] excepciones) {
-        int cantidadExcepciones = excepciones == null ? 0 : excepciones.length;
+    private byte[] methodInfo(int access, String name, String descriptor, byte[] code,
+            int maxStack, int maxLocals, Class<?>[] exceptions) {
+        int exceptionCount = exceptions == null ? 0 : exceptions.length;
         Buf b = new Buf();
-        b.u2(acceso);
-        b.u2(this.utf(nombre));
+        b.u2(access);
+        b.u2(this.utf(name));
         b.u2(this.utf(descriptor));
-        b.u2(cantidadExcepciones > 0 ? 2 : 1);
+        b.u2(exceptionCount > 0 ? 2 : 1);
 
         b.u2(this.utf("Code"));
-        // max_stack + max_locals + code_length + el codigo + exception_table_length +
+        // max_stack + max_locals + code_length + the code + exception_table_length +
         // attributes_count = 2 + 2 + 4 + n + 2 + 2.
-        b.u4(12 + codigo.length);
-        b.u2(pilaMax);
-        b.u2(localesMax);
-        b.u4(codigo.length);
-        b.crudo(codigo);
-        b.u2(0); // sin manejadores: la traduccion de excepciones la hace el despachador, en Java
-        b.u2(0); // sin LineNumberTable ni StackMapTable
+        b.u4(12 + code.length);
+        b.u2(maxStack);
+        b.u2(maxLocals);
+        b.u4(code.length);
+        b.raw(code);
+        b.u2(0); // no handlers: the dispatcher translates exceptions, in Java
+        b.u2(0); // no LineNumberTable and no StackMapTable
 
-        if (cantidadExcepciones > 0) {
+        if (exceptionCount > 0) {
             b.u2(this.utf("Exceptions"));
-            b.u4(2 + 2 * cantidadExcepciones);
-            b.u2(cantidadExcepciones);
+            b.u4(2 + 2 * exceptionCount);
+            b.u2(exceptionCount);
             int i = 0;
-            while (i < cantidadExcepciones) {
-                b.u2(this.clase(ProxyGenerator.interno(excepciones[i])));
+            while (i < exceptionCount) {
+                b.u2(this.clazz(ProxyGenerator.internalName(exceptions[i])));
                 i = i + 1;
             }
         }
-        return b.listo();
+        return b.bytes();
     }
 }

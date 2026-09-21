@@ -1,90 +1,92 @@
 package com.sun.security.auth.module;
 
 /**
- * Quien es el usuario del proceso, segun Unix: nombre, uid, gid y grupos.
+ * Who the process's user is, according to Unix: name, uid, gid and groups.
  *
- * <h2>Por que no se puede escribir en Java</h2>
+ * <h2>Why it cannot be written in Java</h2>
  *
- * <p>Porque los identificadores numericos vienen de {@code getuid}, {@code getgid} y
- * {@code getgroups}, que son llamadas al sistema. No hay propiedad ni variable de entorno que los
- * tenga: {@code user.name} da el nombre, y el nombre no determina el uid — un mismo nombre puede
- * tener uid distinto en dos maquinas, y un uid puede no tener nombre.
+ * <p>Because the numeric identifiers come from {@code getuid}, {@code getgid} and
+ * {@code getgroups}, which are system calls. There is neither a property nor an environment
+ * variable that has them: {@code user.name} gives the name, and the name does not determine the
+ * uid -- one same name may have a different uid on two machines, and a uid may have no name.
  *
- * <h2>Por que el constructor falla en vez de contestar algo</h2>
+ * <h2>Why the constructor fails instead of answering something</h2>
  *
- * <p>Porque lo que devuelve esta clase se usa para decidir permisos, y ahi un valor inventado es
- * peor que ningun valor. {@code getUid()} devolviendo {@code 0} no significa "no se": significa
- * <strong>root</strong>. Un programa que consulte esta clase para saber si esta corriendo como
- * administrador recibiria un si.
+ * <p>Because what this class returns is used in order to decide permissions, and there an
+ * invented value is worse than none. {@code getUid()} returning {@code 0} does not mean "I do
+ * not know": it means <strong>root</strong>. A program that consults this class in order to
+ * know whether it is running as an administrator would receive a yes.
  *
- * <p>Ese es exactamente el caso que la casa evita: un miembro que falta es un subconjunto legal y
- * no compila del otro lado; uno que miente compila y revienta despues. Aca revienta con permisos de
- * mas, asi que fallar de entrada es la unica opcion defendible.
+ * <p>That is exactly the case the house avoids: a member that is missing is a legal subset and
+ * does not compile on the other side; one that lies compiles and blows up afterwards. Here it
+ * blows up with permissions to spare, so failing from the start is the only defensible
+ * option.
  *
- * <p>El dia que la VM tenga como hacer las tres llamadas, lo unico que cambia es el cuerpo del
- * constructor: los cuatro campos ya estan declarados como en el JDK, {@code protected}, para que una
- * subclase pueda llenarlos por su cuenta si consigue los datos de otro lado.
+ * <p>The day the VM has a way of making the three calls, the only thing that changes is the
+ * constructor's body: the four fields are already declared as in the JDK, {@code protected}, so
+ * that a subclass may fill them on its own if it gets the data from somewhere else.
  *
  * @since 1.4
  */
 public class UnixSystem {
 
-    /** El nombre del usuario. */
+    /** The user's name. */
     protected String username;
 
-    /** El identificador numerico del usuario. */
+    /** The user's numeric identifier. */
     protected long uid;
 
-    /** El identificador numerico del grupo principal. */
+    /** The primary group's numeric identifier. */
     protected long gid;
 
-    /** Los identificadores de todos los grupos a los que pertenece. */
+    /** The identifiers of all the groups it belongs to. */
     protected long[] groups;
 
     /**
-     * Consulta al sistema operativo quien es el usuario del proceso.
+     * It asks the operating system who the process's user is.
      *
-     * @throws UnsupportedOperationException siempre, en esta biblioteca: los datos vienen de
-     *     {@code getuid}, {@code getgid} y {@code getgroups}, y esta VM no tiene como llamarlas
+     * @throws UnsupportedOperationException always, in this library: the data come from
+     *     {@code getuid}, {@code getgid} and {@code getgroups}, and this VM has no way of calling
+     *     them
      */
     public UnixSystem() {
         throw new UnsupportedOperationException(
-                "los datos de UnixSystem vienen de getuid/getgid/getgroups, que esta VM no puede "
-                + "llamar; devolver un uid inventado en una decision de permisos seria peor que "
-                + "fallar");
+                "UnixSystem's data come from getuid/getgid/getgroups, which this VM cannot call; "
+                + "returning an invented uid in a permissions decision would be worse than "
+                + "failing");
     }
 
     /**
-     * El nombre del usuario.
+     * The user's name.
      *
-     * @return el nombre
+     * @return the name
      */
     public String getUsername() {
         return username;
     }
 
     /**
-     * El identificador numerico del usuario.
+     * The user's numeric identifier.
      *
-     * @return el uid
+     * @return the uid
      */
     public long getUid() {
         return uid;
     }
 
     /**
-     * El identificador numerico del grupo principal.
+     * The primary group's numeric identifier.
      *
-     * @return el gid
+     * @return the gid
      */
     public long getGid() {
         return gid;
     }
 
     /**
-     * Los grupos a los que pertenece.
+     * The groups it belongs to.
      *
-     * @return los identificadores; es el arreglo interno, como en el JDK
+     * @return the identifiers; it is the internal array, as in the JDK
      */
     public long[] getGroups() {
         return groups;

@@ -5,77 +5,77 @@ import java.util.List;
 import java.util.Optional;
 import jdk.internal.classfile.impl.Signatures;
 
-// Una firma genérica (JVMS §4.7.9.1): lo que dice el atributo `Signature` y que el descriptor no
-// puede decir, porque el descriptor no tiene genéricos. `Ljava/util/List<Ljava/lang/String;>;` es
-// una firma; `Ljava/util/List;` es su descriptor.
+// A generic signature (JVMS §4.7.9.1): what the `Signature` attribute says and the descriptor cannot,
+// because the descriptor has no generics. `Ljava/util/List<Ljava/lang/String;>;` is a signature;
+// `Ljava/util/List;` is its descriptor.
 //
-// El árbol es cerrado por construcción: toda firma es un `BaseTypeSig`, un `ClassTypeSig`, un
-// `ArrayTypeSig` o un `TypeVarSig`. Las interfaces NO se declaran `sealed` —el JDK sí las sella—
-// por la misma razón que en `PoolEntry`: sellar hacia un paquete que no exporta nada no agrega
-// garantía y sí agrega una forma de no compilar.
+// The tree is closed by construction: every signature is a `BaseTypeSig`, a `ClassTypeSig`, an
+// `ArrayTypeSig` or a `TypeVarSig`. The interfaces are NOT declared `sealed` --the JDK does seal
+// them-- for the same reason as in `PoolEntry`: sealing towards a package that exports nothing adds
+// no guarantee and does add a way of failing to compile.
 public interface Signature {
 
-    /** El texto de la firma, tal como iría en el `Utf8` del atributo. */
+    /** The signature's text, just as it would go into the attribute's `Utf8`. */
     String signatureString();
 
-    /** Parsea una firma de tipo. Tira `IllegalArgumentException` si no es una. */
+    /** It parses a type signature. It throws `IllegalArgumentException` if it is not one. */
     public static Signature parseFrom(String signature) {
-        return Signatures.parseTipo(signature);
+        return Signatures.parseType(signature);
     }
 
-    /** La firma de un tipo sin genéricos. */
+    /** The signature of a type with no generics. */
     public static Signature of(ClassDesc classDesc) {
         return Signatures.ofDescriptor(classDesc);
     }
 
-    /** Una firma que denota un tipo de referencia: clase, arreglo o variable de tipo. */
+    /** A signature denoting a reference type: class, array or type variable. */
     public interface RefTypeSig extends Signature {
     }
 
-    /** Una firma que puede aparecer detrás de un `^` en un `throws`. */
+    /** A signature that can appear after a `^` in a `throws`. */
     public interface ThrowableSig extends Signature {
     }
 
-    /** Un tipo primitivo, o `void` en la posición de resultado. */
+    /** A primitive type, or `void` in the result position. */
     public interface BaseTypeSig extends Signature {
 
-        /** La letra del descriptor: `B`, `C`, `D`, `F`, `I`, `J`, `S`, `Z` o `V`. */
+        /** The descriptor's letter: `B`, `C`, `D`, `F`, `I`, `J`, `S`, `Z` or `V`. */
         char baseType();
 
-        /** La firma del primitivo que describe `classDesc`. */
+        /** The signature of the primitive `classDesc` describes. */
         public static BaseTypeSig of(ClassDesc classDesc) {
             if (classDesc == null) {
                 throw new NullPointerException("classDesc");
             }
             if (!classDesc.isPrimitive()) {
-                throw new IllegalArgumentException("no es primitivo: " + classDesc.descriptorString());
+                throw new IllegalArgumentException("not a primitive: " + classDesc.descriptorString());
             }
             return Signatures.baseTypeSig(classDesc.descriptorString().charAt(0));
         }
 
-        /** La firma del primitivo cuya letra de descriptor es `baseType`. */
+        /** The signature of the primitive whose descriptor letter is `baseType`. */
         public static BaseTypeSig of(char baseType) {
             return Signatures.baseTypeSig(baseType);
         }
     }
 
-    /** Una clase o interfaz, con sus argumentos de tipo y su tipo externo si es anidada. */
+    /** A class or interface, with its type arguments and its outer type if it is nested. */
     public interface ClassTypeSig extends RefTypeSig, ThrowableSig {
 
-        /** El tipo externo, si esta firma escribió el anidamiento con un punto. */
+        /** The outer type, if this signature wrote the nesting with a dot. */
         Optional<ClassTypeSig> outerType();
 
         /**
-         * El nombre. Si `outerType()` está, es sólo el nombre simple de la clase anidada; si no, es
-         * el nombre interno completo. Es la misma división que hace el formato: `Lp/Outer<*>.Inner;`
-         * parte el nombre en dos y `Lp/Outer$Inner;` no.
+         * The name. If `outerType()` is there, it is only the nested class's simple name; if not, it
+         * is the full internal name. It is the same split the format makes: `Lp/Outer<*>.Inner;`
+         * breaks the name in two and `Lp/Outer$Inner;` does not.
          */
         String className();
 
-        /** Los argumentos de tipo, vacíos si la firma no tiene `<...>`. */
+        /** The type arguments, empty if the signature has no `<...>`. */
         List<TypeArg> typeArgs();
 
-        /** El tipo sin genéricos, con el anidamiento resuelto a `$`. */
+        /** The type with no generics, with the nesting resolved to `$`. */
         default ClassDesc classDesc() {
             Optional<ClassTypeSig> ext = outerType();
             if (ext.isPresent()) {
@@ -87,12 +87,12 @@ public interface Signature {
             return ClassDesc.ofDescriptor("L" + className() + ";");
         }
 
-        /** La firma de `classDesc`, con estos argumentos de tipo. */
+        /** `classDesc`'s signature, with these type arguments. */
         public static ClassTypeSig of(ClassDesc classDesc, TypeArg... typeArgs) {
             return of(null, classDesc, typeArgs);
         }
 
-        /** Como la anterior, anidada dentro de `outerType`. */
+        /** Like the previous one, nested inside `outerType`. */
         public static ClassTypeSig of(ClassTypeSig outerType, ClassDesc classDesc,
                 TypeArg... typeArgs) {
             if (classDesc == null) {
@@ -100,129 +100,129 @@ public interface Signature {
             }
             if (!classDesc.isClassOrInterface()) {
                 throw new IllegalArgumentException(
-                        "no es clase ni interfaz: " + classDesc.descriptorString());
+                        "neither class nor interface: " + classDesc.descriptorString());
             }
             String d = classDesc.descriptorString();
             return of(outerType, d.substring(1, d.length() - 1), typeArgs);
         }
 
-        /** La firma de la clase de nombre interno `className`, con estos argumentos de tipo. */
+        /** The signature of the class with internal name `className`, with these type arguments. */
         public static ClassTypeSig of(String className, TypeArg... typeArgs) {
             return of(null, className, typeArgs);
         }
 
-        /** Como la anterior, anidada dentro de `outerType`. */
+        /** Like the previous one, nested inside `outerType`. */
         public static ClassTypeSig of(ClassTypeSig outerType, String className,
                 TypeArg... typeArgs) {
             return Signatures.classTypeSig(outerType, className, typeArgs);
         }
     }
 
-    /** Un arreglo. */
+    /** An array. */
     public interface ArrayTypeSig extends RefTypeSig {
 
-        /** La firma del componente. */
+        /** The component's signature. */
         Signature componentSignature();
 
-        /** Un arreglo de `componentSignature`. */
+        /** An array of `componentSignature`. */
         public static ArrayTypeSig of(Signature componentSignature) {
             return of(1, componentSignature);
         }
 
-        /** Un arreglo de `dims` dimensiones sobre `componentSignature`. */
+        /** An array of `dims` dimensions over `componentSignature`. */
         public static ArrayTypeSig of(int dims, Signature componentSignature) {
             return Signatures.arrayTypeSig(dims, componentSignature);
         }
     }
 
-    /** Una variable de tipo, o sea una `T` declarada por una clase o un método. */
+    /** A type variable, that is, a `T` declared by a class or a method. */
     public interface TypeVarSig extends RefTypeSig, ThrowableSig {
 
-        /** El nombre de la variable. */
+        /** The variable's name. */
         String identifier();
 
-        /** La firma de la variable de tipo `identifier`. */
+        /** The signature of the type variable `identifier`. */
         public static TypeVarSig of(String identifier) {
             return Signatures.typeVarSig(identifier);
         }
     }
 
-    /** La declaración de una variable de tipo: su nombre y sus cotas. */
+    /** A type variable's declaration: its name and its bounds. */
     public interface TypeParam {
 
-        /** El nombre de la variable. */
+        /** The variable's name. */
         String identifier();
 
-        /** La cota de clase; vacía si la declaración escribió `T::…`. */
+        /** The class bound; empty if the declaration wrote `T::...`. */
         Optional<RefTypeSig> classBound();
 
-        /** Las cotas de interfaz, en orden. */
+        /** The interface bounds, in order. */
         List<RefTypeSig> interfaceBounds();
 
-        /** Una declaración con esta cota de clase y estas cotas de interfaz. */
+        /** A declaration with this class bound and these interface bounds. */
         public static TypeParam of(String identifier, RefTypeSig classBound,
                 RefTypeSig... interfaceBounds) {
             return Signatures.typeParam(identifier, Optional.ofNullable(classBound), interfaceBounds);
         }
 
-        /** Como la anterior, con la cota de clase ya envuelta. */
+        /** Like the previous one, with the class bound already wrapped. */
         public static TypeParam of(String identifier, Optional<RefTypeSig> classBound,
                 RefTypeSig... interfaceBounds) {
             return Signatures.typeParam(identifier, classBound, interfaceBounds);
         }
     }
 
-    /** Un argumento de tipo: un tipo, un comodín acotado, o `*`. */
+    /** A type argument: a type, a bounded wildcard, or `*`. */
     public interface TypeArg {
 
-        /** El argumento exacto `refTypeSig`. */
+        /** The exact argument `refTypeSig`. */
         public static Bounded of(RefTypeSig refTypeSig) {
             return bounded(Bounded.WildcardIndicator.NONE, refTypeSig);
         }
 
-        /** El argumento `*`. */
+        /** The `*` argument. */
         public static Unbounded unbounded() {
             return Signatures.unbounded();
         }
 
-        /** El argumento `? extends refTypeSig`. */
+        /** The `? extends refTypeSig` argument. */
         public static Bounded extendsOf(RefTypeSig refTypeSig) {
             return bounded(Bounded.WildcardIndicator.EXTENDS, refTypeSig);
         }
 
-        /** El argumento `? super refTypeSig`. */
+        /** The `? super refTypeSig` argument. */
         public static Bounded superOf(RefTypeSig refTypeSig) {
             return bounded(Bounded.WildcardIndicator.SUPER, refTypeSig);
         }
 
-        /** El argumento con este comodín sobre este tipo. */
+        /** The argument with this wildcard over this type. */
         public static Bounded bounded(Bounded.WildcardIndicator wildcardIndicator,
                 RefTypeSig boundType) {
             return Signatures.bounded(wildcardIndicator, boundType);
         }
 
-        /** Un argumento que nombra un tipo, con o sin comodín. */
+        /** An argument naming a type, with or without a wildcard. */
         public interface Bounded extends TypeArg {
 
-            /** Qué comodín lleva. */
+            /** Which wildcard it carries. */
             WildcardIndicator wildcardIndicator();
 
-            /** El tipo acotado. */
+            /** The bounded type. */
             RefTypeSig boundType();
 
-            /** El comodín de un argumento acotado. */
+            /** A bounded argument's wildcard. */
             public enum WildcardIndicator {
 
-                /** Sin comodín: el argumento es el tipo mismo. */
+                /** No wildcard: the argument is the type itself. */
                 NONE,
-                /** `? extends`, que en la firma se escribe `+`. */
+                /** `? extends`, written `+` in the signature. */
                 EXTENDS,
-                /** `? super`, que en la firma se escribe `-`. */
+                /** `? super`, written `-` in the signature. */
                 SUPER
             }
         }
 
-        /** El argumento `*`, o sea `?` a secas. */
+        /** The `*` argument, that is, a bare `?`. */
         public interface Unbounded extends TypeArg {
         }
     }

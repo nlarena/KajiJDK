@@ -1,42 +1,43 @@
 package java.lang.foreign;
 
 /**
- * KajiLibrary's java.lang.foreign.SequenceLayout -- N copias de un layout, una detras de la otra.
+ * KajiLibrary's java.lang.foreign.SequenceLayout -- N copies of a layout, one after the other.
  *
- * <p>Es el arreglo de C. El tamanio es `N * elemento`, y el alineamiento **es el del elemento**: la
- * secuencia no impone uno propio porque, si cada elemento cae alineado, la secuencia entera tambien.
+ * <p>It is C's array. The size is `N * element`, and the alignment **is the element's**: the
+ * sequence imposes none of its own because, if each element falls aligned, so does the whole
+ * sequence.
  */
 public interface SequenceLayout extends MemoryLayout {
 
-    /** El layout que se repite. */
+    /** The layout being repeated. */
     MemoryLayout elementLayout();
 
-    /** Cuantas veces. */
+    /** How many times. */
     long elementCount();
 
     /**
-     * La misma secuencia con otra cantidad de elementos.
+     * The same sequence with another number of elements.
      *
-     * @throws IllegalArgumentException si es negativa, o si el tamanio total se pasa de `long`
+     * @throws IllegalArgumentException if it is negative, or if the total size overflows a `long`
      */
     SequenceLayout withElementCount(long elementCount);
 
     /**
-     * Una secuencia de una sola dimension con los mismos elementos.
+     * A single-dimension sequence with the same elements.
      *
-     * <p>Aplana los niveles anidados: una secuencia de 3 secuencias de 4 `int` se vuelve una de 12.
-     * Sirve para recorrer una matriz como si fuera plana, que es como esta en memoria.
+     * <p>It flattens the nested levels: a sequence of 3 sequences of 4 `int` becomes one of 12. It
+     * is for walking a matrix as though it were flat, which is how it sits in memory.
      */
     SequenceLayout flatten();
 
     /**
-     * La misma cantidad de elementos, repartida en las dimensiones que se pidan.
+     * The same number of elements, spread over the dimensions asked for.
      *
-     * <p>Una de las dimensiones puede ser `-1`: se deduce de las otras. Es la inversa de
+     * <p>One of the dimensions may be `-1`: it is worked out from the others. It is the inverse of
      * {@link #flatten()}.
      *
-     * @throws IllegalArgumentException si hay mas de un `-1`, si alguna no es positiva, o si el
-     *     producto no da la cantidad de elementos que hay
+     * @throws IllegalArgumentException if there is more than one `-1`, if some dimension is not
+     *     positive, or if the product does not give the number of elements there are
      */
     SequenceLayout reshape(long... elementCounts);
 

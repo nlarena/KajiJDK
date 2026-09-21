@@ -12,88 +12,89 @@ class ReentrantCondition implements Condition {
 
     private final ReentrantLock lock;
     private final Object cvar = new Object();
-    // Quienes estan esperando en esta condicion. Se guarda la lista y no un contador porque
-    // `getWaitingThreads` pide los hilos; el contador saldria de esta igual.
-    private final java.util.ArrayList<Thread> esperando = new java.util.ArrayList<Thread>();
+    // Those waiting on this condition. The list is kept and not a counter because
+    // `getWaitingThreads` asks for the threads; the count would come out of it anyway.
+    private final java.util.ArrayList<Thread> waiting = new java.util.ArrayList<Thread>();
 
     ReentrantCondition(ReentrantLock lock) {
         this.lock = lock;
     }
 
-    // Declara `throws InterruptedException`, como el JDK. La nota que estaba aca decia que no lo
-    // hacia para esquivar el #104 --el lector de clases del javac congelado ignoraba el atributo
-    // `Exceptions` de un metodo del classpath, asi que un `throws` igual se leia como **mas ancho** y
-    // se rechazaba--. Ese finding se cerro, y de paso `Object.wait()` paso a verse como lo que es:
-    // una espera **interrumpible**. Tragarse esa interrupcion seria quitarle al que llama la unica
-    // forma de sacar a un hilo de una espera.
+    // It declares `throws InterruptedException`, as the JDK does. The note that used to be here
+    // said it did not, to dodge #104 --the frozen javac's class reader ignored the `Exceptions`
+    // attribute of a classpath method, so an identical `throws` read as **wider** and was rejected.
+    // That finding is closed, and along the way `Object.wait()` came to be seen as what it is: an
+    // **interruptible** wait. Swallowing that interruption would take from the caller the only way
+    // of getting a thread out of a wait.
     public void await() throws InterruptedException {
         int holds;
         synchronized (cvar) {
-            esperando.add(Thread.currentThread());
+            waiting.add(Thread.currentThread());
             holds = lock.fullyRelease();
             cvar.wait();
-            esperando.remove(Thread.currentThread());
+            waiting.remove(Thread.currentThread());
         }
         lock.reacquire(holds);
     }
 
     /**
-     * Espera **sin** poder ser interrumpida.
+     * It waits **without** being interruptible.
      *
-     * <p>La interrupcion no se pierde: se atrapa, se sigue esperando, y al final se vuelve a marcar
-     * el hilo como interrumpido. Es la diferencia entre "no me interrumpe" y "me trago la
-     * interrupcion" -- lo segundo deja al hilo sin saber que alguien le pidio parar.
+     * <p>The interruption is not lost: it is caught, the wait goes on, and at the end the thread is
+     * marked interrupted again. It is the difference between "it does not interrupt me" and "I
+     * swallow the interruption" -- the second leaves the thread not knowing somebody asked it to
+     * stop.
      */
     public void awaitUninterruptibly() {
         int holds;
-        boolean interrumpido = false;
+        boolean wasInterrupted = false;
         synchronized (cvar) {
-            esperando.add(Thread.currentThread());
+            waiting.add(Thread.currentThread());
             holds = lock.fullyRelease();
-            boolean listo = false;
-            while (!listo) {
+            boolean done = false;
+            while (!done) {
                 try {
                     cvar.wait();
-                    listo = true;
+                    done = true;
                 } catch (InterruptedException e) {
-                    interrumpido = true;
+                    wasInterrupted = true;
                 }
             }
-            esperando.remove(Thread.currentThread());
+            waiting.remove(Thread.currentThread());
         }
         lock.reacquire(holds);
-        if (interrumpido) {
+        if (wasInterrupted) {
             Thread.currentThread().interrupt();
         }
     }
 
     /**
-     * Espera con plazo, en nanosegundos, y devuelve **lo que sobro**.
+     * It waits with a deadline, in nanoseconds, and returns **what was left over**.
      *
-     * <p>El plazo se mide con `System.nanoTime()` y no con el reloj de pared: es el unico que no
-     * salta si alguien cambia la hora del sistema, y una espera que se acorta o se alarga porque
-     * corrieron el reloj es un error muy dificil de encontrar.
+     * <p>The deadline is measured with `System.nanoTime()` and not with the wall clock: it is the
+     * only one that does not jump if somebody changes the system time, and a wait that shortens or
+     * lengthens because the clock was moved is a very hard error to find.
      */
     public long awaitNanos(long nanosTimeout) throws InterruptedException {
         int holds;
-        long sobrante;
+        long leftOver;
         synchronized (cvar) {
-            long arranque = System.nanoTime();
-            esperando.add(Thread.currentThread());
+            long startedAt = System.nanoTime();
+            waiting.add(Thread.currentThread());
             holds = lock.fullyRelease();
             long millis = nanosTimeout / 1000000L;
             int nanos = (int) (nanosTimeout % 1000000L);
             if (millis > 0L || nanos > 0) {
                 cvar.wait(millis, nanos);
             }
-            esperando.remove(Thread.currentThread());
-            sobrante = nanosTimeout - (System.nanoTime() - arranque);
+            waiting.remove(Thread.currentThread());
+            leftOver = nanosTimeout - (System.nanoTime() - startedAt);
         }
         lock.reacquire(holds);
-        return sobrante;
+        return leftOver;
     }
 
-    /** Espera con plazo; `false` si el plazo se agoto. */
+    /** It waits with a deadline; `false` if the deadline ran out. */
     public boolean await(long time, java.util.concurrent.TimeUnit unit)
             throws InterruptedException {
         if (unit == null) {
@@ -103,52 +104,52 @@ class ReentrantCondition implements Condition {
     }
 
     /**
-     * Espera hasta una fecha.
+     * It waits until a date.
      *
-     * <p>Aca **si** se usa el reloj de pared, y tiene que ser asi: el plazo esta expresado como un
-     * momento del calendario, no como una duracion. La consecuencia es la del contrato -- si alguien
-     * corre el reloj del sistema, esta espera se mueve con el.
+     * <p>Here the wall clock **is** used, and it has to be: the deadline is expressed as a moment on
+     * the calendar, not as a duration. The consequence is the contract's -- if somebody moves the
+     * system clock, this wait moves with it.
      */
     public boolean awaitUntil(java.util.Date deadline) throws InterruptedException {
         if (deadline == null) {
             throw new NullPointerException("deadline");
         }
-        long falta = deadline.getTime() - System.currentTimeMillis();
-        if (falta <= 0L) {
+        long remaining = deadline.getTime() - System.currentTimeMillis();
+        if (remaining <= 0L) {
             return false;
         }
-        this.awaitNanos(falta * 1000000L);
+        this.awaitNanos(remaining * 1000000L);
         return System.currentTimeMillis() < deadline.getTime();
     }
 
-    // ---- lo que el lock necesita para contestar sus consultas de inspeccion -----------------------
+    // ---- what the lock needs in order to answer its inspection queries ---------------------------
 
-    boolean perteneceA(ReentrantLock otro) {
-        return this.lock == otro;
+    boolean belongsTo(ReentrantLock other) {
+        return this.lock == other;
     }
 
-    boolean hayEsperando() {
-        boolean hay;
+    boolean anyWaiting() {
+        boolean any;
         synchronized (cvar) {
-            hay = !esperando.isEmpty();
+            any = !waiting.isEmpty();
         }
-        return hay;
+        return any;
     }
 
-    int cuantosEsperan() {
+    int waitingCount() {
         int n;
         synchronized (cvar) {
-            n = esperando.size();
+            n = waiting.size();
         }
         return n;
     }
 
-    java.util.Collection<Thread> losQueEsperan() {
-        java.util.ArrayList<Thread> copia;
+    java.util.Collection<Thread> theWaiters() {
+        java.util.ArrayList<Thread> copy;
         synchronized (cvar) {
-            copia = new java.util.ArrayList<Thread>(esperando);
+            copy = new java.util.ArrayList<Thread>(waiting);
         }
-        return copia;
+        return copy;
     }
 
     public void signal() {

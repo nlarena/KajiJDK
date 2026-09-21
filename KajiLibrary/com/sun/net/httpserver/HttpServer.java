@@ -7,61 +7,61 @@ import java.util.concurrent.Executor;
 import com.sun.net.httpserver.spi.HttpServerProvider;
 
 /**
- * Un servidor HTTP chico, que viene con el JDK.
+ * A small HTTP server, which comes with the JDK.
  *
- * <h2>Que es y que no</h2>
+ * <h2>What it is and what it is not</h2>
  *
- * <p>Es lo suficiente para exponer un endpoint, servir unos archivos o levantar un mock en una
- * prueba, sin traer un contenedor entero. No pretende ser eso: no tiene servlets, ni sesiones, ni
- * pool de conexiones configurable.
+ * <p>It is enough to expose an endpoint, serve a few files or raise a mock in a test, without
+ * bringing a whole container. It does not claim to be that: it has no servlets, no sessions, no
+ * configurable connection pool.
  *
- * <h2>El ejecutor, que es la decision que mas importa</h2>
+ * <h2>The executor, which is the decision that matters most</h2>
  *
- * <p>Por omision es {@code null}, y eso significa que <strong>todos los pedidos se atienden en un
- * solo hilo</strong>, uno detras de otro. Anda para una prueba y es una trampa en cualquier otro
- * lado: un manejador lento bloquea a todos los demas. Ponerle un pool con
- * {@link #setExecutor} es lo primero que hay que hacer para uso real.
+ * <p>By default it is {@code null}, and that means that <strong>every request is attended on a
+ * single thread</strong>, one after another. It works for a test and it is a trap anywhere
+ * else: one slow handler blocks all the others. Giving it a pool with {@link #setExecutor} is
+ * the first thing to do for real use.
  *
- * <h2>Como se resuelven los contextos</h2>
+ * <h2>How the contexts are resolved</h2>
  *
- * <p>Por prefijo mas largo. Con {@code /} y {@code /api} registrados, un pedido a {@code /api/x} va
- * al segundo. Es lo que permite tener un manejador general y excepciones mas especificas sin
- * ordenarlos a mano.
+ * <p>By longest prefix. With {@code /} and {@code /api} registered, a request to {@code /api/x}
+ * goes to the second. It is what allows one to have a general handler and more specific
+ * exceptions without ordering them by hand.
  *
- * <h2>Sin proveedor instalado</h2>
+ * <h2>With no provider installed</h2>
  *
- * <p>Los {@link #create} delegan en {@link HttpServerProvider}, que se busca por
- * {@link java.util.ServiceLoader}. Esta VM no trae ninguno, asi que tiran
- * {@link UnsupportedOperationException} con el motivo. El mecanismo esta entero: lo que falta es
- * alguien que se registre en el.
+ * <p>The {@link #create}s delegate to {@link HttpServerProvider}, which is looked up by
+ * {@link java.util.ServiceLoader}. This VM brings none, so they throw
+ * {@link UnsupportedOperationException} with the reason. The mechanism is complete: what is
+ * missing is somebody to register in it.
  */
 public abstract class HttpServer {
 
-    /** Para las implementaciones. */
+    /** For the implementations. */
     protected HttpServer() {
     }
 
-    /** Un servidor sin ligar; hay que llamarle {@link #bind}. */
+    /** An unbound server; {@link #bind} has to be called on it. */
     public static HttpServer create() throws IOException {
         return HttpServerProvider.provider().createHttpServer(null, 0);
     }
 
     /**
-     * Ligado a {@code addr}, con esa cantidad de conexiones en espera.
+     * Bound to {@code addr}, with that number of connections waiting.
      *
-     * @param backlog {@code 0} o menos deja el valor del sistema
+     * @param backlog {@code 0} or less leaves the system's value
      */
     public static HttpServer create(InetSocketAddress addr, int backlog) throws IOException {
         return HttpServerProvider.provider().createHttpServer(addr, backlog);
     }
 
     /**
-     * Ligado, con un contexto y sus filtros ya puestos.
+     * Bound, with a context and its filters already set.
      *
-     * <p>El atajo para el caso comun: crear, registrar una ruta y arrancar en una sola linea.
+     * <p>The shortcut for the common case: create, register a path and start in a single line.
      *
-     * @throws NullPointerException si falta la ruta o el manejador
-     * @throws IllegalArgumentException si la ruta no es absoluta
+     * @throws NullPointerException if the path or the handler are missing
+     * @throws IllegalArgumentException if the path is not absolute
      */
     public static HttpServer create(InetSocketAddress addr, int backlog, String path,
             HttpHandler handler, Filter... filters) throws IOException {
@@ -75,7 +75,7 @@ public abstract class HttpServer {
         HttpContext c = s.createContext(path, handler);
         for (int i = 0; i < filters.length; i++) {
             if (filters[i] == null) {
-                throw new NullPointerException("un filtro es null");
+                throw new NullPointerException("a filter is null");
             }
             c.getFilters().add(filters[i]);
         }
@@ -83,65 +83,67 @@ public abstract class HttpServer {
     }
 
     /**
-     * Liga el servidor a una direccion.
+     * It binds the server to an address.
      *
-     * @throws java.net.BindException si el puerto ya esta tomado
+     * @throws java.net.BindException if the port is already taken
      */
     public abstract void bind(InetSocketAddress addr, int backlog) throws IOException;
 
     /**
-     * Arranca a atender, en un hilo aparte.
+     * It starts attending, on a separate thread.
      *
-     * <p>No bloquea, que es la otra mitad de por que el ejecutor importa: quien llama sigue con lo
-     * suyo y no se entera de si hay un hilo o veinte atendiendo.
+     * <p>It does not block, which is the other half of why the executor matters: the caller goes
+     * on with its own business and does not learn whether there is one thread or twenty
+     * attending.
      */
     public abstract void start();
 
     /**
-     * Quien corre los manejadores; {@code null} vuelve al hilo unico.
+     * Who runs the handlers; {@code null} goes back to the single thread.
      *
-     * <p>Ver la nota de la clase: dejarlo en {@code null} es la configuracion por omision y casi
-     * nunca la que se quiere.
+     * <p>See the class note: leaving it at {@code null} is the default configuration and almost
+     * never the one that is wanted.
      */
     public abstract void setExecutor(Executor executor);
 
-    /** El ejecutor puesto, o {@code null}. */
+    /** The executor that was set, or {@code null}. */
     public abstract Executor getExecutor();
 
     /**
-     * Deja de atender, esperando hasta {@code delay} segundos a los pedidos en curso.
+     * It stops attending, waiting up to {@code delay} seconds for the requests under way.
      *
-     * <p>Los pedidos que sigan abiertos despues de ese plazo se cortan. Un {@code 0} corta todo
-     * enseguida.
+     * <p>The requests that are still open after that term are cut off. A {@code 0} cuts
+     * everything off at once.
      */
     public abstract void stop(int delay);
 
     /**
-     * Registra una ruta con su manejador.
+     * It registers a path with its handler.
      *
-     * @throws IllegalArgumentException si la ruta es invalida o ya estaba registrada
+     * @throws IllegalArgumentException if the path is invalid or was already registered
      */
     public abstract HttpContext createContext(String path, HttpHandler handler);
 
     /**
-     * Registra una ruta sin manejador todavia.
+     * It registers a path with no handler yet.
      *
-     * <p>Sirve para configurar filtros y autenticador primero y poner el manejador despues, con
-     * {@link HttpContext#setHandler}. Un pedido que llegue antes de eso da error.
+     * <p>It serves in order to configure filters and authenticator first and set the handler
+     * afterwards, with {@link HttpContext#setHandler}. A request that arrives before that gives
+     * an error.
      */
     public abstract HttpContext createContext(String path);
 
-    /** Saca la ruta. */
+    /** It removes the path. */
     public abstract void removeContext(String path) throws IllegalArgumentException;
 
-    /** Saca ese contexto. */
+    /** It removes that context. */
     public abstract void removeContext(HttpContext context);
 
     /**
-     * La direccion donde escucha.
+     * The address it listens at.
      *
-     * <p>Vale consultarla aunque uno haya elegido el puerto: con el puerto {@code 0} lo elige el
-     * sistema, y esta es la unica forma de saber cual toco.
+     * <p>It is worth consulting even though one has chosen the port: with port {@code 0} the
+     * system chooses it, and this is the only way of knowing which one it got.
      */
     public abstract InetSocketAddress getAddress();
 }

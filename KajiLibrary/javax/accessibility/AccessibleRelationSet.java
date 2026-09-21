@@ -3,27 +3,27 @@ package javax.accessibility;
 import java.util.Vector;
 
 /**
- * Las relaciones de un objeto con otros.
+ * An object's relations with others.
  *
- * <p>A diferencia de {@link AccessibleStateSet}, es un conjunto **por clave**: agregar una relación
- * cuya clave ya está no la duplica sino que le **suma destinos** a la que había. Es lo que se quiere:
- * un objeto puede ser la etiqueta de tres campos, y eso es una relación con tres destinos, no tres
- * relaciones.
+ * <p>Unlike {@link AccessibleStateSet}, it is a set **by key**: adding a relation whose key is
+ * already there does not duplicate it but **adds targets** to the one there was. It is what is
+ * wanted: an object may be the label of three fields, and that is one relation with three targets,
+ * not three relations.
  */
 public class AccessibleRelationSet {
 
-    /** Las relaciones. Es un {@code Vector} por herencia de la API, no por elección. */
+    /** The relations. It is a {@code Vector} because of the API's inheritance, not by choice. */
     protected Vector<AccessibleRelation> relations = null;
 
-    /** Un conjunto vacío. */
+    /** An empty set. */
     public AccessibleRelationSet() {
         this.relations = null;
     }
 
     /**
-     * Con esas relaciones.
+     * With those relations.
      *
-     * @throws NullPointerException si el arreglo es `null`
+     * @throws NullPointerException if the array is `null`
      */
     public AccessibleRelationSet(AccessibleRelation[] relations) {
         if (relations.length != 0) {
@@ -35,30 +35,30 @@ public class AccessibleRelationSet {
     }
 
     /**
-     * Agrega una relación, o le suma destinos a la que ya había con esa clave.
+     * Adds a relation, or adds targets to the one there already was with that key.
      *
-     * @return `true` siempre
+     * @return `true` always
      */
     public boolean add(AccessibleRelation relation) {
         if (this.relations == null) {
             this.relations = new Vector<AccessibleRelation>();
         }
-        AccessibleRelation existente = this.get(relation.getKey());
-        if (existente == null) {
+        AccessibleRelation existing = this.get(relation.getKey());
+        if (existing == null) {
             this.relations.addElement(relation);
             return true;
         }
-        // Misma clave: se juntan los destinos en vez de tener dos relaciones iguales.
-        Object[] viejos = existente.getTarget();
-        Object[] nuevos = relation.getTarget();
-        Object[] juntos = new Object[viejos.length + nuevos.length];
-        System.arraycopy(viejos, 0, juntos, 0, viejos.length);
-        System.arraycopy(nuevos, 0, juntos, viejos.length, nuevos.length);
-        existente.setTarget(juntos);
+        // Same key: the targets are merged instead of having two equal relations.
+        Object[] oldTargets = existing.getTarget();
+        Object[] newTargets = relation.getTarget();
+        Object[] merged = new Object[oldTargets.length + newTargets.length];
+        System.arraycopy(oldTargets, 0, merged, 0, oldTargets.length);
+        System.arraycopy(newTargets, 0, merged, oldTargets.length, newTargets.length);
+        existing.setTarget(merged);
         return true;
     }
 
-    /** Agrega varias relaciones. */
+    /** Adds several relations. */
     public void addAll(AccessibleRelation[] relations) {
         if (relations.length != 0) {
             if (this.relations == null) {
@@ -71,9 +71,9 @@ public class AccessibleRelationSet {
     }
 
     /**
-     * Saca una relación.
+     * Removes a relation.
      *
-     * @return `true` si estaba
+     * @return `true` if it was there
      */
     public boolean remove(AccessibleRelation relation) {
         if (this.relations == null) {
@@ -82,14 +82,14 @@ public class AccessibleRelationSet {
         return this.relations.removeElement(relation);
     }
 
-    /** Deja el conjunto vacío. */
+    /** Leaves the set empty. */
     public void clear() {
         if (this.relations != null) {
             this.relations.removeAllElements();
         }
     }
 
-    /** Cuántas relaciones hay. */
+    /** How many relations there are. */
     public int size() {
         if (this.relations == null) {
             return 0;
@@ -97,15 +97,15 @@ public class AccessibleRelationSet {
         return this.relations.size();
     }
 
-    /** Si hay una relación con esa clave. */
+    /** Whether there is a relation with that key. */
     public boolean contains(String key) {
         return this.get(key) != null;
     }
 
     /**
-     * La relación con esa clave.
+     * The relation with that key.
      *
-     * @return la relación, o `null` si no hay
+     * @return the relation, or `null` if there is none
      */
     public AccessibleRelation get(String key) {
         if (this.relations == null) {
@@ -120,7 +120,7 @@ public class AccessibleRelationSet {
         return null;
     }
 
-    /** Las relaciones, como arreglo. */
+    /** The relations, as an array. */
     public AccessibleRelation[] toArray() {
         if (this.relations == null) {
             return new AccessibleRelation[0];

@@ -20,51 +20,52 @@ import javax.accessibility.AccessibleRole;
 import javax.accessibility.AccessibleStateSet;
 
 /**
- * Le pone una fachada accesible a un componente que no la tiene.
+ * It puts an accessible facade on a component that does not have one.
  *
- * <h2>El problema que resuelve</h2>
+ * <h2>The problem it resolves</h2>
  *
- * <p>La accesibilidad es opcional: un componente colabora implementando {@link Accessible}. Los de
- * Swing lo hacen; los de AWT antiguos y los escritos por terceros, muchas veces no — y entonces un
- * lector de pantalla no ve nada de ellos.
+ * <p>Accessibility is optional: a component collaborates by implementing {@link Accessible}.
+ * Swing's do; the old AWT ones and those written by third parties, many times do not -- and
+ * then a screen reader sees nothing of them.
  *
- * <p>Esta clase envuelve uno de esos y deriva lo que puede a partir de lo que <em>si</em> tiene: la
- * posicion, el tamano, si esta habilitado, si se ve. Es informacion pobre comparada con la que da un
- * componente que colabora, y es infinitamente mejor que nada.
+ * <p>This class wraps one of those and derives what it can from what it <em>does</em> have: the
+ * position, the size, whether it is enabled, whether it is seen. It is poor information
+ * compared with the one a component that collaborates gives, and it is infinitely better than
+ * nothing.
  *
- * <h2>Como se elige la traduccion</h2>
+ * <h2>How the translation is chosen</h2>
  *
- * <p>{@link #getAccessible} devuelve el objeto tal cual si ya es {@link Accessible} —no hay nada que
- * traducir— y lo envuelve solo si no lo es. {@link #getTranslatorClass} busca si hay una subclase
- * especializada para ese tipo, que es como se agrega soporte para un componente conocido sin tocar
- * esta clase.
+ * <p>{@link #getAccessible} returns the object just as it is if it is already
+ * {@link Accessible} -- there is nothing to translate -- and wraps it only if it is not.
+ * {@link #getTranslatorClass} looks for whether there is a subclass specialized for that type,
+ * which is how support for a known component is added without touching this class.
  *
- * <h2>Lo que no puede inventar</h2>
+ * <h2>What it cannot invent</h2>
  *
- * <p>{@link #getAccessibleRole} devuelve {@link AccessibleRole#UNKNOWN} y
- * {@link #getAccessibleName} sale del nombre del componente. No hay forma de deducir que un
- * rectangulo gris es un boton, y decir que lo es seria peor que decir que no se sabe: un lector de
- * pantalla anunciaria un control que no se puede activar.
+ * <p>{@link #getAccessibleRole} returns {@link AccessibleRole#UNKNOWN} and
+ * {@link #getAccessibleName} comes out of the component's name. There is no way of deducing
+ * that a grey rectangle is a button, and saying that it is would be worse than saying that it
+ * is not known: a screen reader would announce a control that cannot be activated.
  */
 public class Translator extends AccessibleContext implements Accessible, AccessibleComponent {
 
-    /** El objeto envuelto. */
+    /** The wrapped object. */
     protected Object source;
 
-    /** Sin fuente todavia; hay que ponersela con {@link #setSource}. */
+    /** With no source yet; it has to be given one with {@link #setSource}. */
     public Translator() {
     }
 
-    /** Envolviendo ese objeto. */
+    /** Wrapping that object. */
     public Translator(Object o) {
         this.source = o;
     }
 
     /**
-     * La subclase de {@code Translator} especializada para ese tipo, o {@code null}.
+     * The subclass of {@code Translator} specialized for that type, or {@code null}.
      *
-     * <p>Busca por convencion de nombre en este mismo paquete. Devolver {@code null} —lo normal—
-     * significa que se usa esta clase generica.
+     * <p>It looks by a convention of name in this very package. Returning {@code null} -- the
+     * normal thing -- means that this generic class is used.
      */
     protected static Class<?> getTranslatorClass(Class<?> c) {
         if (c == null) {
@@ -79,9 +80,9 @@ public class Translator extends AccessibleContext implements Accessible, Accessi
     }
 
     /**
-     * El objeto visto como {@link Accessible}: el mismo si ya lo era, o envuelto si no.
+     * The object seen as {@link Accessible}: the same one if it already was, or wrapped if not.
      *
-     * @return {@code null} si {@code o} es {@code null}
+     * @return {@code null} if {@code o} is {@code null}
      */
     public static Accessible getAccessible(Object o) {
         if (o == null) {
@@ -90,36 +91,36 @@ public class Translator extends AccessibleContext implements Accessible, Accessi
         if (o instanceof Accessible) {
             return (Accessible) o;
         }
-        Class<?> especializado = getTranslatorClass(o.getClass());
-        if (especializado != null) {
+        Class<?> specialized = getTranslatorClass(o.getClass());
+        if (specialized != null) {
             try {
-                Translator t = (Translator) especializado.getDeclaredConstructor().newInstance();
+                Translator t = (Translator) specialized.getDeclaredConstructor().newInstance();
                 t.setSource(o);
                 return t;
             } catch (Exception e) {
-                // Una traduccion especializada que no se puede construir no invalida la generica:
-                // peor que una fachada pobre es ninguna.
+                // A specialized translation that cannot be built does not invalidate the generic
+                                // one: worse than a poor facade is none.
                 return new Translator(o);
             }
         }
         return new Translator(o);
     }
 
-    /** El objeto envuelto. */
+    /** The wrapped object. */
     public Object getSource() {
         return this.source;
     }
 
-    /** Cambia el objeto envuelto. */
+    /** It changes the wrapped object. */
     public void setSource(Object o) {
         this.source = o;
     }
 
     /**
-     * Por la fuente envuelta, no por identidad.
+     * By the wrapped source, not by identity.
      *
-     * <p>Dos traductores del mismo componente representan lo mismo, y como se crean al vuelo en cada
-     * consulta, compararlos por identidad daria siempre distinto.
+     * <p>Two translators of the same component represent the same thing, and since they are
+     * created on the fly on each query, comparing them by identity would always give different.
      */
     public boolean equals(Object o) {
         if (o == this) {
@@ -128,55 +129,55 @@ public class Translator extends AccessibleContext implements Accessible, Accessi
         if (!(o instanceof Translator)) {
             return false;
         }
-        Object otra = ((Translator) o).getSource();
-        return this.source == null ? otra == null : this.source.equals(otra);
+        Object other = ((Translator) o).getSource();
+        return this.source == null ? other == null : this.source.equals(other);
     }
 
     public int hashCode() {
         return this.source == null ? 0 : this.source.hashCode();
     }
 
-    /** Esta misma clase: es a la vez la fachada y su contexto. */
+    /** This very class: it is at once the facade and its context. */
     public AccessibleContext getAccessibleContext() {
         return this;
     }
 
-    private Component componente() {
+    private Component component() {
         return this.source instanceof Component ? (Component) this.source : null;
     }
 
-    /** El nombre del componente, que es lo unico que hay de donde sacarlo. */
+    /** The component's name, which is the only thing there is to take it from. */
     public String getAccessibleName() {
-        Component c = componente();
+        Component c = component();
         return c == null ? null : c.getName();
     }
 
-    /** Cambia el nombre del componente. */
+    /** It changes the component's name. */
     public void setAccessibleName(String s) {
-        Component c = componente();
+        Component c = component();
         if (c != null) {
             c.setName(s);
         }
     }
 
-    /** {@code null}: un componente que no colabora no tiene descripcion que dar. */
+    /** {@code null}: a component that does not collaborate has no description to give. */
     public String getAccessibleDescription() {
         return null;
     }
 
-    /** No hace nada: no hay donde guardarla. */
+    /** It does nothing: there is nowhere to keep it. */
     public void setAccessibleDescription(String s) {
     }
 
-    /** {@link AccessibleRole#UNKNOWN}; ver la nota de la clase sobre por que no se adivina. */
+    /** {@link AccessibleRole#UNKNOWN}; see the class note about why it is not guessed. */
     public AccessibleRole getAccessibleRole() {
         return AccessibleRole.UNKNOWN;
     }
 
-    /** El estado que se puede derivar del componente: habilitado, visible, con foco. */
+    /** The state that may be derived from the component: enabled, visible, with focus. */
     public AccessibleStateSet getAccessibleStateSet() {
         AccessibleStateSet s = new AccessibleStateSet();
-        Component c = componente();
+        Component c = component();
         if (c == null) {
             return s;
         }
@@ -195,35 +196,35 @@ public class Translator extends AccessibleContext implements Accessible, Accessi
         return s;
     }
 
-    /** El padre, tambien traducido si hace falta. */
+    /** The parent, also translated if it is needed. */
     public Accessible getAccessibleParent() {
-        Component c = componente();
+        Component c = component();
         return c == null ? null : getAccessible(c.getParent());
     }
 
-    /** La posicion entre los hermanos, o {@code -1}. */
+    /** The position among the siblings, or {@code -1}. */
     public int getAccessibleIndexInParent() {
-        Component c = componente();
+        Component c = component();
         if (c == null || c.getParent() == null) {
             return -1;
         }
-        Component[] hermanos = c.getParent().getComponents();
-        for (int i = 0; i < hermanos.length; i++) {
-            if (hermanos[i] == c) {
+        Component[] siblings = c.getParent().getComponents();
+        for (int i = 0; i < siblings.length; i++) {
+            if (siblings[i] == c) {
                 return i;
             }
         }
         return -1;
     }
 
-    /** Cuantos hijos tiene, si es un contenedor. */
+    /** How many children it has, if it is a container. */
     public int getAccessibleChildrenCount() {
         return this.source instanceof java.awt.Container
                 ? ((java.awt.Container) this.source).getComponentCount()
                 : 0;
     }
 
-    /** El hijo {@code i}, traducido. */
+    /** The child {@code i}, translated. */
     public Accessible getAccessibleChild(int i) {
         if (!(this.source instanceof java.awt.Container)) {
             return null;
@@ -236,212 +237,213 @@ public class Translator extends AccessibleContext implements Accessible, Accessi
     }
 
     /**
-     * El locale del componente.
+     * The component's locale.
      *
-     * @throws IllegalComponentStateException si el componente no tiene uno todavia
+     * @throws IllegalComponentStateException if the component does not have one yet
      */
     public Locale getLocale() throws IllegalComponentStateException {
-        Component c = componente();
+        Component c = component();
         return c == null ? Locale.getDefault() : c.getLocale();
     }
 
-    /** No hace nada: un componente que no colabora no emite cambios de propiedad accesible. */
+    /** It does nothing: a component that does not collaborate emits no accessible property
+         * changes. */
     public void addPropertyChangeListener(PropertyChangeListener l) {
     }
 
-    /** No hace nada, por lo mismo. */
+    /** It does nothing, for the same reason. */
     public void removePropertyChangeListener(PropertyChangeListener l) {
     }
 
-    /** El color de fondo. */
+    /** The background colour. */
     public Color getBackground() {
-        Component c = componente();
+        Component c = component();
         return c == null ? null : c.getBackground();
     }
 
-    /** Cambia el color de fondo. */
+    /** It changes the background colour. */
     public void setBackground(Color color) {
-        Component c = componente();
+        Component c = component();
         if (c != null) {
             c.setBackground(color);
         }
     }
 
-    /** El color de frente. */
+    /** The foreground colour. */
     public Color getForeground() {
-        Component c = componente();
+        Component c = component();
         return c == null ? null : c.getForeground();
     }
 
-    /** Cambia el color de frente. */
+    /** It changes the foreground colour. */
     public void setForeground(Color color) {
-        Component c = componente();
+        Component c = component();
         if (c != null) {
             c.setForeground(color);
         }
     }
 
-    /** El cursor. */
+    /** The cursor. */
     public Cursor getCursor() {
-        Component c = componente();
+        Component c = component();
         return c == null ? null : c.getCursor();
     }
 
-    /** Cambia el cursor. */
+    /** It changes the cursor. */
     public void setCursor(Cursor cursor) {
-        Component c = componente();
+        Component c = component();
         if (c != null) {
             c.setCursor(cursor);
         }
     }
 
-    /** La tipografia. */
+    /** The font. */
     public Font getFont() {
-        Component c = componente();
+        Component c = component();
         return c == null ? null : c.getFont();
     }
 
-    /** Cambia la tipografia. */
+    /** It changes the font. */
     public void setFont(Font f) {
-        Component c = componente();
+        Component c = component();
         if (c != null) {
             c.setFont(f);
         }
     }
 
-    /** Las metricas de esa tipografia. */
+    /** That font's metrics. */
     public FontMetrics getFontMetrics(Font f) {
-        Component c = componente();
+        Component c = component();
         return c == null ? null : c.getFontMetrics(f);
     }
 
-    /** Si esta habilitado. */
+    /** Whether it is enabled. */
     public boolean isEnabled() {
-        Component c = componente();
+        Component c = component();
         return c != null && c.isEnabled();
     }
 
-    /** Lo habilita o deshabilita. */
+    /** It enables or disables it. */
     public void setEnabled(boolean b) {
-        Component c = componente();
+        Component c = component();
         if (c != null) {
             c.setEnabled(b);
         }
     }
 
-    /** Si esta marcado como visible. */
+    /** Whether it is marked as visible. */
     public boolean isVisible() {
-        Component c = componente();
+        Component c = component();
         return c != null && c.isVisible();
     }
 
-    /** Lo muestra o lo oculta. */
+    /** It shows it or hides it. */
     public void setVisible(boolean b) {
-        Component c = componente();
+        Component c = component();
         if (c != null) {
             c.setVisible(b);
         }
     }
 
     /**
-     * Si de verdad se ve.
+     * Whether it is really seen.
      *
-     * <p>Distinto de {@link #isVisible}: un componente visible dentro de una ventana cerrada no se
-     * muestra, y para una tecnologia de asistencia esa es la diferencia entre leerlo y no.
+     * <p>Different from {@link #isVisible}: a visible component inside a closed window is not
+     * shown, and for an assistive technology that is the difference between reading it and not.
      */
     public boolean isShowing() {
-        Component c = componente();
+        Component c = component();
         return c != null && c.isShowing();
     }
 
-    /** Si ese punto, relativo al componente, cae adentro. */
+    /** Whether that point, relative to the component, falls inside. */
     public boolean contains(Point p) {
-        Component c = componente();
+        Component c = component();
         return c != null && c.contains(p);
     }
 
-    /** Donde esta en la pantalla. */
+    /** Where it is on the screen. */
     public Point getLocationOnScreen() {
-        Component c = componente();
+        Component c = component();
         return c == null ? null : c.getLocationOnScreen();
     }
 
-    /** Donde esta dentro de su contenedor. */
+    /** Where it is inside its container. */
     public Point getLocation() {
-        Component c = componente();
+        Component c = component();
         return c == null ? null : c.getLocation();
     }
 
-    /** Lo mueve. */
+    /** It moves it. */
     public void setLocation(Point p) {
-        Component c = componente();
+        Component c = component();
         if (c != null) {
             c.setLocation(p);
         }
     }
 
-    /** Su rectangulo. */
+    /** Its rectangle. */
     public Rectangle getBounds() {
-        Component c = componente();
+        Component c = component();
         return c == null ? null : c.getBounds();
     }
 
-    /** Cambia su rectangulo. */
+    /** It changes its rectangle. */
     public void setBounds(Rectangle r) {
-        Component c = componente();
+        Component c = component();
         if (c != null) {
             c.setBounds(r);
         }
     }
 
-    /** Su tamano. */
+    /** Its size. */
     public Dimension getSize() {
-        Component c = componente();
+        Component c = component();
         return c == null ? null : c.getSize();
     }
 
-    /** Cambia su tamano. */
+    /** It changes its size. */
     public void setSize(Dimension d) {
-        Component c = componente();
+        Component c = component();
         if (c != null) {
             c.setSize(d);
         }
     }
 
-    /** El hijo accesible que esta en ese punto. */
+    /** The accessible child that is at that point. */
     public Accessible getAccessibleAt(Point p) {
         if (!(this.source instanceof java.awt.Container)) {
             return null;
         }
-        Component hijo = ((java.awt.Container) this.source).getComponentAt(p);
-        return hijo == null || hijo == this.source ? null : getAccessible(hijo);
+        Component child = ((java.awt.Container) this.source).getComponentAt(p);
+        return child == null || child == this.source ? null : getAccessible(child);
     }
 
-    /** Si puede recibir el foco con el tabulador. */
+    /** Whether it may receive the focus with the tab key. */
     public boolean isFocusTraversable() {
-        Component c = componente();
+        Component c = component();
         return c != null && c.isFocusable();
     }
 
-    /** Le pide el foco. */
+    /** It asks for the focus. */
     public void requestFocus() {
-        Component c = componente();
+        Component c = component();
         if (c != null) {
             c.requestFocus();
         }
     }
 
-    /** Escucha los cambios de foco del componente. */
+    /** It listens to the component's focus changes. */
     public synchronized void addFocusListener(FocusListener l) {
-        Component c = componente();
+        Component c = component();
         if (c != null) {
             c.addFocusListener(l);
         }
     }
 
-    /** Deja de escucharlos. */
+    /** It stops listening to them. */
     public synchronized void removeFocusListener(FocusListener l) {
-        Component c = componente();
+        Component c = component();
         if (c != null) {
             c.removeFocusListener(l);
         }

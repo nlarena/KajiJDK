@@ -110,50 +110,50 @@ public class SecurityManager {
     }
 
     /**
-     * Las clases de la pila de llamadas, de la mas reciente a la mas vieja.
+     * The call stack's classes, from the most recent to the oldest.
      *
-     * <p>Estuvo afuera mientras la VM no expuso la pila a Java, y no por olvido: cualquier valor que
-     * se hubiera devuelto --`null`, un arreglo vacio, uno inventado-- habria sido falso, y este
-     * metodo tiene que devolver **un valor**, a diferencia de los `check*`, donde un cuerpo vacio
-     * **es** la respuesta permisiva completa. Ahora la VM expone la pila
-     * ({@link jdk.internal.vm.Stack}) y el metodo sale de ahi.
+     * <p>It was left out while the VM did not expose the stack to Java, and not through oversight:
+     * any value that might have been returned --`null`, an empty array, an invented one-- would have
+     * been false, and this method has to return **a value**, unlike the `check*` ones, where an empty
+     * body **is** the complete permissive answer. Now the VM exposes the stack
+     * ({@link jdk.internal.vm.Stack}) and the method comes out of there.
      *
-     * <p>Se saltean los cuadros de esta misma llamada --el de `Stack.frames()` y el de este metodo--
-     * porque el contrato es la pila **del que pregunta**, y los cuadros del mecanismo que responde no
-     * son parte de ella.
+     * <p>This very call's frames --`Stack.frames()`'s and this method's-- are skipped, because the
+     * contract is **the asker's** stack, and the frames of the mechanism that answers are no part of
+     * it.
      *
-     * <p>Una clase cuyo nombre no se puede resolver se **omite** en vez de meter un `null` en el
-     * arreglo. El contrato dice "las clases de la pila", y un hueco obligaria a todo el que lo
-     * recorra a chequear contra nulo por un caso que no deberia poder pasar; si pasa, es que la clase
-     * se descargo, y entonces ya no esta en la pila en ningun sentido util.
+     * <p>A class whose name cannot be resolved is **left out** rather than putting a `null` into the
+     * array. The contract says "the stack's classes", and a hole would force everyone walking it to
+     * check against null for a case that should not be able to happen; if it does happen, the class
+     * was unloaded, and then it is no longer on the stack in any useful sense.
      *
-     * <p><strong>Hoy es inalcanzable</strong>, y eso es una divergencia aparte: el constructor de
-     * esta clase tira, asi que no puede existir una instancia desde la cual llamarlo. Se declara
-     * igual porque una subclase que compile contra esta biblioteca tiene que compilar como contra el
-     * JDK, y porque el cuerpo **es correcto** -- se puede verificar por el mismo camino que lo
-     * alimenta ({@link jdk.internal.vm.Stack#frames()}), que es lo que hace `java/StackCtxTest.java`.
+     * <p><strong>Today it is unreachable</strong>, and that is a separate divergence: this class's
+     * constructor throws, so no instance can exist from which to call it. It is declared all the same
+     * because a subclass compiling against this library has to compile as it would against the JDK,
+     * and because the body **is correct** -- it can be verified by the same path that feeds it
+     * ({@link jdk.internal.vm.Stack#frames()}), which is what `java/StackCtxTest.java` does.
      */
     protected Class[] getClassContext() {
-        String[] cuadros = jdk.internal.vm.Stack.frames();
-        if (cuadros == null) {
+        String[] frames = jdk.internal.vm.Stack.frames();
+        if (frames == null) {
             return new Class[0];
         }
-        // Se cuenta primero y se copia despues: el resultado es un arreglo de largo exacto, y no uno
-        // con huecos al final que el llamador tendria que interpretar.
-        Class[] tmp = new Class[cuadros.length];
+        // It counts first and copies after: the result is an array of exact length, and not one with
+        // holes at the end the caller would have to interpret.
+        Class[] tmp = new Class[frames.length];
         int n = 0;
-        for (int i = 0; i < cuadros.length; i++) {
-            // Los dos primeros son `Stack.frames` y este mismo metodo.
+        for (int i = 0; i < frames.length; i++) {
+            // The first two are `Stack.frames` and this very method.
             if (i < 2) {
                 continue;
             }
-            int barra = cuadros[i].indexOf('|');
-            String binario = barra < 0 ? cuadros[i] : cuadros[i].substring(0, barra);
+            int bar = frames[i].indexOf('|');
+            String binary = bar < 0 ? frames[i] : frames[i].substring(0, bar);
             try {
-                tmp[n] = Class.forName(binario.replace('/', '.'));
+                tmp[n] = Class.forName(binary.replace('/', '.'));
                 n = n + 1;
             } catch (ClassNotFoundException e) {
-                // Se omite, ver el javadoc.
+                // Left out, see the javadoc.
             }
         }
         Class[] out = new Class[n];

@@ -12,173 +12,174 @@ import jdk.jfr.Event;
 import jdk.jfr.EventSettings;
 
 /**
- * Una grabacion y su consumo, en el mismo objeto y en el mismo proceso.
+ * A recording and its consumption, in the same object and in the same process.
  *
- * <h2>Que junta</h2>
+ * <h2>What it joins</h2>
  *
- * <p>Una {@link jdk.jfr.Recording} y un {@link EventStream}. Se configura que grabar como en la
- * primera —{@link #enable}, {@link #setMaxAge}— y se consume como en el segundo —{@link #onEvent}—,
- * sin archivo de por medio.
+ * <p>A {@link jdk.jfr.Recording} and an {@link EventStream}. What to record is configured as in the
+ * first one --{@link #enable}, {@link #setMaxAge}-- and it is consumed as in the second one
+ * --{@link #onEvent}--, with no file in between.
  *
- * <p>Es la forma de que un programa reaccione a sus propios eventos. Un servidor que quiera loguear
- * cada pausa de recoleccion mayor a 100 ms lo escribe asi, en cinco lineas y sin escribir nada a
- * disco.
+ * <p>It is the way for a program to react to its own events. A server that wants to log every
+ * collection pause longer than 100 ms writes it like this, in five lines and without writing
+ * anything to disk.
  *
- * <h2>La trampa de {@code setReuse}</h2>
+ * <h2>The trap of {@code setReuse}</h2>
  *
- * <p>Heredada de {@link EventStream}: por omision el objeto {@link RecordedEvent} se reutiliza en
- * cada entrega, asi que guardarlo en una lista para mirarlo despues no funciona — todos los
- * elementos terminan siendo el mismo objeto con el ultimo valor. Con {@code setReuse(false)} se
- * puede guardar, y cuesta una asignacion por evento.
+ * <p>Inherited from {@link EventStream}: by default the {@link RecordedEvent} object is reused on
+ * each delivery, so keeping it in a list in order to look at it later does not work -- every
+ * element ends up being the same object with the last value. With {@code setReuse(false)} it can be
+ * kept, and it costs one allocation per event.
  *
- * <h2>Estado en esta VM</h2>
+ * <h2>State in this VM</h2>
  *
- * <p>El constructor falla con {@link IllegalStateException}, que es exactamente lo que hace el del
- * JDK cuando JFR no esta disponible: por dentro pide el grabador, y pedirlo sin JFR es esa
- * excepcion. No es un agregado de esta biblioteca — es el comportamiento definido para este caso.
+ * <p>The constructor fails with {@link IllegalStateException}, which is exactly what the one of the
+ * JDK does when JFR is not available: underneath it asks for the recorder, and asking for it with
+ * no JFR is that exception. It is not an addition of this library -- it is the behaviour defined
+ * for this case.
  *
  * @since 14
  */
 public final class RecordingStream implements AutoCloseable, EventStream {
 
-    private static final String NO_DISPONIBLE = "Flight Recorder no esta disponible en esta VM";
+    private static final String NOT_AVAILABLE = "Flight Recorder is not available in this VM";
 
     /**
-     * Un flujo con la configuracion por omision.
+     * A stream with the default configuration.
      *
-     * @throws IllegalStateException si JFR no esta disponible, que es el caso en esta VM
+     * @throws IllegalStateException if JFR is not available, which is the case in this VM
      */
     public RecordingStream() {
-        throw new IllegalStateException(NO_DISPONIBLE);
+        throw new IllegalStateException(NOT_AVAILABLE);
     }
 
     /**
-     * Un flujo con esa configuracion.
+     * A stream with that configuration.
      *
-     * @param configuration la configuracion
-     * @throws IllegalStateException si JFR no esta disponible, que es el caso en esta VM
+     * @param configuration the configuration
+     * @throws IllegalStateException if JFR is not available, which is the case in this VM
      */
     public RecordingStream(final Configuration configuration) {
-        throw new IllegalStateException(NO_DISPONIBLE);
+        throw new IllegalStateException(NOT_AVAILABLE);
     }
 
     /**
-     * Habilita un evento por nombre.
+     * It enables an event by name.
      *
-     * @param name el nombre
-     * @return los ajustes de ese evento
+     * @param name the name
+     * @return the settings of that event
      */
     public EventSettings enable(final String name) {
-        throw new IllegalStateException(NO_DISPONIBLE);
+        throw new IllegalStateException(NOT_AVAILABLE);
     }
 
     /**
-     * Reemplaza los ajustes.
+     * It replaces the settings.
      *
-     * @param settings los ajustes
+     * @param settings the settings
      */
     public void setSettings(final Map<String, String> settings) {
-        throw new IllegalStateException(NO_DISPONIBLE);
+        throw new IllegalStateException(NOT_AVAILABLE);
     }
 
     /**
-     * Habilita un evento por su clase.
+     * It enables an event by its class.
      *
-     * @param eventClass la clase
-     * @return los ajustes de ese evento
+     * @param eventClass the class
+     * @return the settings of that event
      */
     public EventSettings enable(final Class<? extends Event> eventClass) {
-        throw new IllegalStateException(NO_DISPONIBLE);
+        throw new IllegalStateException(NOT_AVAILABLE);
     }
 
     /**
-     * Deshabilita un evento por nombre.
+     * It disables an event by name.
      *
-     * @param name el nombre
-     * @return los ajustes de ese evento
+     * @param name the name
+     * @return the settings of that event
      */
     public EventSettings disable(final String name) {
-        throw new IllegalStateException(NO_DISPONIBLE);
+        throw new IllegalStateException(NOT_AVAILABLE);
     }
 
     /**
-     * Deshabilita un evento por su clase.
+     * It disables an event by its class.
      *
-     * @param eventClass la clase
-     * @return los ajustes de ese evento
+     * @param eventClass the class
+     * @return the settings of that event
      */
     public EventSettings disable(final Class<? extends Event> eventClass) {
-        throw new IllegalStateException(NO_DISPONIBLE);
+        throw new IllegalStateException(NOT_AVAILABLE);
     }
 
     /**
-     * La antiguedad maxima de los datos.
+     * The maximum age of the data.
      *
-     * @param maxAge la duracion
+     * @param maxAge the duration
      */
     public void setMaxAge(final Duration maxAge) {
-        throw new IllegalStateException(NO_DISPONIBLE);
+        throw new IllegalStateException(NOT_AVAILABLE);
     }
 
     /**
-     * El tamano maximo.
+     * The maximum size.
      *
-     * @param maxSize los bytes
+     * @param maxSize the bytes
      */
     public void setMaxSize(final long maxSize) {
-        throw new IllegalStateException(NO_DISPONIBLE);
+        throw new IllegalStateException(NOT_AVAILABLE);
     }
 
     /** {@inheritDoc} */
     public void setReuse(final boolean reuse) {
-        throw new IllegalStateException(NO_DISPONIBLE);
+        throw new IllegalStateException(NOT_AVAILABLE);
     }
 
     /** {@inheritDoc} */
     public void setOrdered(final boolean ordered) {
-        throw new IllegalStateException(NO_DISPONIBLE);
+        throw new IllegalStateException(NOT_AVAILABLE);
     }
 
     /** {@inheritDoc} */
     public void setStartTime(final Instant startTime) {
-        throw new IllegalStateException(NO_DISPONIBLE);
+        throw new IllegalStateException(NOT_AVAILABLE);
     }
 
     /** {@inheritDoc} */
     public void setEndTime(final Instant endTime) {
-        throw new IllegalStateException(NO_DISPONIBLE);
+        throw new IllegalStateException(NOT_AVAILABLE);
     }
 
     /** {@inheritDoc} */
     public void onEvent(final String eventName, final Consumer<RecordedEvent> action) {
-        throw new IllegalStateException(NO_DISPONIBLE);
+        throw new IllegalStateException(NOT_AVAILABLE);
     }
 
     /** {@inheritDoc} */
     public void onEvent(final Consumer<RecordedEvent> action) {
-        throw new IllegalStateException(NO_DISPONIBLE);
+        throw new IllegalStateException(NOT_AVAILABLE);
     }
 
     /** {@inheritDoc} */
     public void onFlush(final Runnable action) {
-        throw new IllegalStateException(NO_DISPONIBLE);
+        throw new IllegalStateException(NOT_AVAILABLE);
     }
 
     /** {@inheritDoc} */
     public void onClose(final Runnable action) {
-        throw new IllegalStateException(NO_DISPONIBLE);
+        throw new IllegalStateException(NOT_AVAILABLE);
     }
 
     /** {@inheritDoc} */
     public void onError(final Consumer<Throwable> action) {
-        throw new IllegalStateException(NO_DISPONIBLE);
+        throw new IllegalStateException(NOT_AVAILABLE);
     }
 
     /**
-     * Cierra el flujo.
+     * It closes the stream.
      *
-     * <p>No falla: cerrar algo que nunca arranco es legitimo, y hacerlo fallar romperia cualquier
-     * {@code try}-con-recursos.
+     * <p>It does not fail: closing something that never started is legitimate, and making it fail
+     * would break any {@code try}-with-resources.
      */
     public void close() {
     }
@@ -190,45 +191,45 @@ public final class RecordingStream implements AutoCloseable, EventStream {
 
     /** {@inheritDoc} */
     public void start() {
-        throw new IllegalStateException(NO_DISPONIBLE);
+        throw new IllegalStateException(NOT_AVAILABLE);
     }
 
     /** {@inheritDoc} */
     public void startAsync() {
-        throw new IllegalStateException(NO_DISPONIBLE);
+        throw new IllegalStateException(NOT_AVAILABLE);
     }
 
     /**
-     * Detiene la grabacion.
+     * It stops the recording.
      *
-     * @return si estaba grabando
+     * @return whether it was recording
      */
     public boolean stop() {
-        throw new IllegalStateException(NO_DISPONIBLE);
+        throw new IllegalStateException(NOT_AVAILABLE);
     }
 
     /**
-     * Vuelca los datos a un archivo.
+     * It dumps the data to a file.
      *
-     * @param destination el archivo
-     * @throws IOException si no se pudo escribir
+     * @param destination the file
+     * @throws IOException if it could not be written
      */
     public void dump(final Path destination) throws IOException {
-        throw new IllegalStateException(NO_DISPONIBLE);
+        throw new IllegalStateException(NOT_AVAILABLE);
     }
 
     /** {@inheritDoc} */
     public void awaitTermination(final Duration timeout) throws InterruptedException {
-        throw new IllegalStateException(NO_DISPONIBLE);
+        throw new IllegalStateException(NOT_AVAILABLE);
     }
 
     /** {@inheritDoc} */
     public void awaitTermination() throws InterruptedException {
-        throw new IllegalStateException(NO_DISPONIBLE);
+        throw new IllegalStateException(NOT_AVAILABLE);
     }
 
     /** {@inheritDoc} */
     public void onMetadata(final Consumer<MetadataEvent> action) {
-        throw new IllegalStateException(NO_DISPONIBLE);
+        throw new IllegalStateException(NOT_AVAILABLE);
     }
 }

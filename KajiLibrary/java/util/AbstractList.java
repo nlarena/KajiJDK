@@ -52,21 +52,21 @@ public abstract class AbstractList<E> extends AbstractCollection<E> implements L
         return new AbstractListItr<E>(this);
     }
 
-    // ---- lo que List agrega sobre Collection, derivado del indice ---------------------------
+    // ---- what List adds over Collection, derived from the index   ---------------------------
 
     /**
-     * Cuantas veces se modifico estructuralmente esta lista.
+     * How many times this list has been structurally modified.
      *
-     * <p>Lo lleva el JDK para que un iterador pueda detectar que la lista cambio debajo suyo y
-     * tirar ConcurrentModificationException. Aca se declara porque es API protegida —una subclase
-     * de otro paquete puede leerlo— pero **todavia no lo consulta nadie**: los iteradores de la
-     * biblioteca no detectan modificacion concurrente. Queda dicho para que nadie lo suponga.
+     * <p>The JDK keeps it so an iterator can detect that the list changed underneath it and throw
+     * ConcurrentModificationException. Here it is declared because it is protected API —a subclass
+     * from another package can read it— but **nobody consults it yet**: this library's iterators do
+     * not detect concurrent modification. It is said so nobody assumes otherwise.
      */
     protected transient int modCount = 0;
 
-    // El indice de la ULTIMA aparicion de `o`, o -1. Se recorre desde el final, que es lo que lo
-    // distingue de indexOf: la primera coincidencia yendo hacia atras es la ultima yendo hacia
-    // adelante, y asi se corta antes en el caso tipico.
+    // The index of the LAST occurrence of `o`, or -1. It walks from the end, which is what tells it
+    // from indexOf: the first match going backwards is the last going forwards, and that way it stops
+    // sooner in the typical case.
     public int lastIndexOf(Object o) {
         int i = this.size() - 1;
         while (i >= 0) {
@@ -83,43 +83,43 @@ public abstract class AbstractList<E> extends AbstractCollection<E> implements L
         return -1;
     }
 
-    // Un cursor bidireccional desde el principio.
+    // A two-way cursor from the start.
     public ListIterator<E> listIterator() {
         return new AbstractListLitr<E>(this, 0);
     }
 
-    // Un cursor bidireccional desde `index`.
+    // A two-way cursor from `index`.
     public ListIterator<E> listIterator(int index) {
         return new AbstractListLitr<E>(this, index);
     }
 
-    // Una **vista** de [fromIndex, toIndex): escribir en ella escribe en esta lista.
+    // A **view** of [fromIndex, toIndex): writing into it writes into this list.
     public List<E> subList(int fromIndex, int toIndex) {
         return new SubList<E>(this, fromIndex, toIndex);
     }
 
-    // Inserta todos los de `c` a partir de `index`, en el orden de su iterador.
+    // It inserts all of `c`'s from `index` on, in its iterator's order.
     public boolean addAll(int index, Collection<? extends E> c) {
         if (index < 0 || index > this.size()) {
             throw new IndexOutOfBoundsException();
         }
-        boolean cambio = false;
+        boolean changed = false;
         int at = index;
         Iterator<? extends E> it = c.iterator();
         while (it.hasNext()) {
             this.add(at, it.next());
             at = at + 1;
-            cambio = true;
+            changed = true;
         }
-        return cambio;
+        return changed;
     }
 
     /**
-     * Borra [fromIndex, toIndex).
+     * It removes [fromIndex, toIndex).
      *
-     * <p>Protegido y no publico a proposito, igual que en el JDK: es el gancho que una subclase
-     * usa para dar una implementacion barata del borrado por rango — `SubList.clear()` pasa por
-     * aca — sin ofrecerselo a un llamador cualquiera, que tiene `subList(a, b).clear()`.
+     * <p>Protected and not public on purpose, just as in the JDK: it is the hook a subclass uses to
+     * give a cheap implementation of removal by range — `SubList.clear()` goes through here —
+     * without offering it to any old caller, who has `subList(a, b).clear()`.
      */
     protected void removeRange(int fromIndex, int toIndex) {
         int i = toIndex;
@@ -130,18 +130,18 @@ public abstract class AbstractList<E> extends AbstractCollection<E> implements L
     }
 
     /**
-     * Igualdad por contenido: dos listas son iguales si tienen los mismos elementos en el mismo
-     * orden, sin importar de que clase sean.
+     * Equality by content: two lists are equal if they have the same elements in the same order, no
+     * matter which class they are.
      *
-     * <p>Faltaba, y es de las ausencias que no se ven midiendo firmas: `equals` y `hashCode`
-     * figuran como heredados de Object, asi que ninguna cuenta de miembros los marca. Lo que se
-     * heredaba de Object es la igualdad por **identidad**, y con eso
-     * `new ArrayList(...).equals(new ArrayList(...))` daba false con el mismo contenido, ningun
-     * `List` servia de clave de un mapa, y `List.of("x").equals(List.of("x"))` tambien era false.
+     * <p>It was missing, and it is one of the absences that do not show by measuring signatures:
+     * `equals` and `hashCode` appear as inherited from Object, so no member count marks them. What
+     * was inherited from Object is equality by **identity**, and with that
+     * `new ArrayList(...).equals(new ArrayList(...))` gave false with the same content, no `List`
+     * worked as a map key, and `List.of("x").equals(List.of("x"))` was false too.
      *
-     * <p>Va aca y no en cada lista porque la especificacion lo exige simetrico entre
-     * implementaciones distintas: un ArrayList tiene que ser igual a un LinkedList con los mismos
-     * elementos. Un `equals` por clase concreta romperia justamente eso.
+     * <p>It goes here and not in each list because the specification requires it symmetric across
+     * different implementations: an ArrayList has to be equal to a LinkedList with the same elements.
+     * An `equals` by concrete class would break precisely that.
      */
     public boolean equals(Object o) {
         if (o == this) {
@@ -158,16 +158,16 @@ public abstract class AbstractList<E> extends AbstractCollection<E> implements L
                 return false;
             }
         }
-        // Se comparan los dos iteradores en vez de los dos size(): asi la igualdad no depende de
-        // que size() sea barato, y no se recorre nada de mas cuando difieren en el primer
-        // elemento.
+        // The two iterators are compared instead of the two size()s: that way equality does not
+        // depend on size() being cheap, and nothing extra is walked when they differ at the first
+        // element.
         return !a.hasNext() && !b.hasNext();
     }
 
     /**
-     * El hash que exige el contrato de List: 31 por el acumulado mas el hash del elemento, en
-     * orden. La formula esta especificada al detalle, y no es negociable -- dos listas iguales de
-     * clases distintas tienen que dar el mismo numero, y eso solo se logra fijando la cuenta.
+     * The hash List's contract demands: 31 times the accumulator plus the element's hash, in order.
+     * The formula is specified in detail, and it is not negotiable -- two equal lists of different
+     * classes have to give the same number, and that is only achieved by fixing the sum.
      */
     public int hashCode() {
         int h = 1;

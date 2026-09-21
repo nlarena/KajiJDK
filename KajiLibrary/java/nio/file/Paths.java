@@ -2,25 +2,25 @@ package java.nio.file;
 
 import java.net.URI;
 
-// Las dos fabricas de rutas que existian antes de `Path.of`.
+// The two path factories that existed before `Path.of`.
 //
-// **Estan obsoletas en el JDK y aca tambien**, y conviene decir por que existen igual: desde Java 11
-// `Path.of(...)` hace exactamente lo mismo, y tener la fabrica en la interfaz que devuelve evita
-// tener que importar dos tipos. `Paths` queda para el codigo anterior, y por eso las dos delegan sin
-// agregar nada -- que haya **una sola** implementacion es lo que garantiza que las dos formas den
-// siempre lo mismo.
+// **They are deprecated in the JDK and here too**, and it is worth saying why they exist all the
+// same: since Java 11 `Path.of(...)` does exactly the same, and having the factory on the interface
+// it returns saves importing two types. `Paths` is left for the older code, and that is why both
+// delegate without adding anything -- that there be **one** implementation is what guarantees the
+// two forms always give the same.
 public final class Paths {
 
-    // Solo fabricas: no hay nada que instanciar.
+    // Factories only: there is nothing to instantiate.
     private Paths() {
     }
 
-    /** Igual que `Path.of(first, more)`. */
+    /** The same as `Path.of(first, more)`. */
     public static Path get(String first, String... more) {
         return Path.of(first, more);
     }
 
-    /** Igual que `Path.of(uri)`. */
+    /** The same as `Path.of(uri)`. */
     public static Path get(URI uri) {
         return Path.of(uri);
     }

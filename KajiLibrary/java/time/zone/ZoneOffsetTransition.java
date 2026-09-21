@@ -15,9 +15,10 @@ import java.time.ZoneOffset;
 // `isGap()` and `isOverlap()` are the whole point of the class: they are what a caller needs to
 // know before pretending a LocalDateTime names one instant.
 //
-// Implementa `Comparable`, que es lo que corresponde: la clase ya declaraba `compareTo`, y sin la
-// interfaz ese metodo no le sirve a nadie que ordene por la via generica --un `TreeSet`, un
-// `Collections.sort`-- porque el puente `compareTo(Object)` no se emitia. Ordena por instante.
+// It implements `Comparable`, which is what it should: the class already declared `compareTo`, and
+// without the interface that method is no use to anybody ordering through the generic path --a
+// `TreeSet`, a `Collections.sort`-- because the `compareTo(Object)` bridge was not emitted. It
+// orders by instant.
 public final class ZoneOffsetTransition implements Comparable<ZoneOffsetTransition> {
 
     private final long epochSecond;

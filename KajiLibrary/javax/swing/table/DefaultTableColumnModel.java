@@ -17,51 +17,50 @@ import javax.swing.event.TableColumnModelEvent;
 import javax.swing.event.TableColumnModelListener;
 
 /**
- * Las columnas de una tabla: cuales hay, en que orden y cuanto miden.
+ * A table's columns: which ones there are, in what order and how much they measure.
  *
- * <h2>Las columnas de la vista no son las del modelo</h2>
+ * <h2>The view's columns are not the model's</h2>
  *
- * <p>Este modelo guarda las columnas <em>como se ven</em>: se pueden mover, sacar y repetir sin que
- * el modelo de datos se entere. Cada {@link TableColumn} sabe de que columna del modelo saca sus
- * valores, y por eso mover una columna de lugar no mueve ningun dato.
+ * <p>This model keeps the columns <em>as they are seen</em>: they can be moved, removed and
+ * repeated without the data model finding out. Each {@link TableColumn} knows which model column
+ * it takes its values from, and that is why moving a column around moves no data.
  *
- * <h2>El ancho total se guarda</h2>
+ * <h2>The total width is kept</h2>
  *
- * <p>Sumar los anchos en cada repintado seria caro con muchas columnas, asi que el total se guarda y
- * se recalcula cuando algo cambia. De ahi que este modelo escuche los cambios de propiedad de cada
- * columna: una columna que cambia de ancho tiene que avisar, y el que suma es este.
+ * <p>Adding the widths up on every repaint would be expensive with many columns, so the total is
+ * kept and recomputed when something changes. Hence this model listens to each column's property
+ * changes: a column that changes width has to report it, and the one that adds up is this one.
  *
- * <h2>Tambien lleva la seleccion de columnas</h2>
+ * <h2>It also keeps the column selection</h2>
  *
- * <p>Con un {@link ListSelectionModel}, el mismo tipo que usa una lista. Que la seleccion de
- * columnas viva aca y no en la tabla es lo que permite que dos tablas compartan columnas y
- * seleccion.
+ * <p>With a {@link ListSelectionModel}, the same type a list uses. That the column selection
+ * lives here and not in the table is what allows two tables to share columns and selection.
  */
 public class DefaultTableColumnModel implements TableColumnModel, PropertyChangeListener,
         ListSelectionListener, Serializable {
 
-    /** Las columnas, en el orden en que se ven. */
+    /** The columns, in the order they are seen. */
     protected Vector<TableColumn> tableColumns;
 
-    /** La seleccion de columnas. */
+    /** The column selection. */
     protected ListSelectionModel selectionModel;
 
-    /** El espacio entre una columna y la siguiente. */
+    /** The space between one column and the next. */
     protected int columnMargin;
 
-    /** Los oyentes, por tipo. */
+    /** The listeners, by type. */
     protected EventListenerList listenerList = new EventListenerList();
 
-    /** El evento de cambio de margen, armado una vez. */
+    /** The margin change event, built once. */
     protected transient ChangeEvent changeEvent = null;
 
-    /** Si se pueden elegir columnas. */
+    /** Whether columns can be chosen. */
     protected boolean columnSelectionAllowed;
 
-    /** La suma de los anchos, guardada; ver la nota de la clase. */
+    /** The sum of the widths, kept; see the class note. */
     protected int totalColumnWidth;
 
-    /** Sin columnas, con margen de uno y sin seleccion de columnas. */
+    /** With no columns, a margin of one and no column selection. */
     public DefaultTableColumnModel() {
         super();
         tableColumns = new Vector<TableColumn>();
@@ -72,9 +71,9 @@ public class DefaultTableColumnModel implements TableColumnModel, PropertyChange
     }
 
     /**
-     * Agrega una columna al final.
+     * Adds a column at the end.
      *
-     * @throws IllegalArgumentException si es nula
+     * @throws IllegalArgumentException if it is null
      */
     public void addColumn(TableColumn aColumn) {
         if (aColumn == null) {
@@ -87,10 +86,10 @@ public class DefaultTableColumnModel implements TableColumnModel, PropertyChange
     }
 
     /**
-     * Saca esa columna.
+     * Removes that column.
      *
-     * <p>Una columna que no esta se ignora en silencio: sacar algo que no estaba deja el modelo
-     * igual, que es lo que el llamador queria.
+     * <p>A column that is not there is ignored silently: removing something that was not there
+     * leaves the model the same, which is what the caller wanted.
      */
     public void removeColumn(TableColumn column) {
         int columnIndex = tableColumns.indexOf(column);
@@ -106,12 +105,12 @@ public class DefaultTableColumnModel implements TableColumnModel, PropertyChange
     }
 
     /**
-     * Mueve una columna a otra posicion.
+     * Moves a column to another position.
      *
-     * <p>La seleccion se mueve con ella: si no, arrastrar una columna elegida dejaria elegida a la
-     * que quedo en su lugar.
+     * <p>The selection moves with it: otherwise, dragging a chosen column would leave the one that
+     * took its place chosen.
      *
-     * @throws IllegalArgumentException si algun indice esta fuera de rango
+     * @throws IllegalArgumentException if some index is out of range
      */
     public void moveColumn(int columnIndex, int newIndex) {
         if ((columnIndex < 0) || (columnIndex >= getColumnCount())
@@ -136,7 +135,7 @@ public class DefaultTableColumnModel implements TableColumnModel, PropertyChange
         fireColumnMoved(new TableColumnModelEvent(this, columnIndex, newIndex));
     }
 
-    /** El espacio entre columnas; cambia el ancho total. */
+    /** The space between columns; it changes the total width. */
     public void setColumnMargin(int newMargin) {
         if (newMargin != columnMargin) {
             columnMargin = newMargin;
@@ -153,9 +152,9 @@ public class DefaultTableColumnModel implements TableColumnModel, PropertyChange
     }
 
     /**
-     * La primera columna con ese identificador.
+     * The first column with that identifier.
      *
-     * @throws IllegalArgumentException si el identificador es nulo o no hay ninguna
+     * @throws IllegalArgumentException if the identifier is null or there is none
      */
     public int getColumnIndex(Object identifier) {
         if (identifier == null) {
@@ -182,10 +181,11 @@ public class DefaultTableColumnModel implements TableColumnModel, PropertyChange
     }
 
     /**
-     * La columna que ocupa ese pixel.
+     * The column that occupies that pixel.
      *
-     * <p>Un pixel a la izquierda de la primera o a la derecha de la ultima devuelve -1: no hay
-     * columna ahi, y devolver la mas cercana haria que un clic afuera de la tabla eligiera algo.
+     * <p>A pixel to the left of the first or to the right of the last returns -1: there is no
+     * column there, and returning the nearest one would make a click outside the table choose
+     * something.
      */
     public int getColumnIndexAtX(int x) {
         if (x < 0) {
@@ -201,7 +201,7 @@ public class DefaultTableColumnModel implements TableColumnModel, PropertyChange
         return -1;
     }
 
-    /** La suma de los anchos, mas los margenes. */
+    /** The sum of the widths, plus the margins. */
     public int getTotalColumnWidth() {
         if (totalColumnWidth == -1) {
             recalcWidthCache();
@@ -210,9 +210,9 @@ public class DefaultTableColumnModel implements TableColumnModel, PropertyChange
     }
 
     /**
-     * Cambia el modelo de seleccion de columnas.
+     * Changes the column selection model.
      *
-     * @throws IllegalArgumentException si es nulo
+     * @throws IllegalArgumentException if it is null
      */
     public void setSelectionModel(ListSelectionModel newModel) {
         if (newModel == null) {
@@ -240,7 +240,7 @@ public class DefaultTableColumnModel implements TableColumnModel, PropertyChange
         return columnSelectionAllowed;
     }
 
-    /** Las columnas elegidas; arreglo vacio si no hay o si no se pueden elegir. */
+    /** The chosen columns; an empty array if there are none or they cannot be chosen. */
     public int[] getSelectedColumns() {
         if (selectionModel != null) {
             int iMin = selectionModel.getMinSelectionIndex();
@@ -326,7 +326,7 @@ public class DefaultTableColumnModel implements TableColumnModel, PropertyChange
         }
     }
 
-    /** El evento se arma una vez y se reusa: no dice que cambio, solo que cambio. */
+    /** The event is built once and reused: it does not say what changed, only that it did. */
     protected void fireColumnMarginChanged() {
         Object[] listeners = listenerList.getListenerList();
         for (int i = listeners.length - 2; i >= 0; i = i - 2) {
@@ -339,16 +339,16 @@ public class DefaultTableColumnModel implements TableColumnModel, PropertyChange
         }
     }
 
-    /** Los oyentes de ese tipo anotados en este modelo. */
+    /** The listeners of that type registered on this model. */
     public <T extends EventListener> T[] getListeners(Class<T> listenerType) {
         return listenerList.getListeners(listenerType);
     }
 
     /**
-     * Una columna cambio de ancho: hay que volver a sumar.
+     * A column changed width: it has to be added up again.
      *
-     * <p>Solo el ancho y el ancho preferido cambian el total; los demas cambios de una columna --
-     * su titulo, su dibujante -- no.
+     * <p>Only the width and the preferred width change the total; a column's other changes -- its
+     * title, its renderer -- do not.
      */
     public void propertyChange(PropertyChangeEvent evt) {
         String name = evt.getPropertyName();
@@ -362,12 +362,12 @@ public class DefaultTableColumnModel implements TableColumnModel, PropertyChange
         fireColumnSelectionChanged(e);
     }
 
-    /** El modelo de seleccion que se usa si nadie da otro. */
+    /** The selection model used if nobody gives another. */
     protected ListSelectionModel createSelectionModel() {
         return new DefaultListSelectionModel();
     }
 
-    /** Vuelve a sumar los anchos; ver la nota de la clase. */
+    /** Adds the widths up again; see the class note. */
     protected void recalcWidthCache() {
         Enumeration<TableColumn> e = getColumns();
         totalColumnWidth = 0;

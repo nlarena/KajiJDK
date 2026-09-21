@@ -5,10 +5,10 @@ import javax.lang.model.SourceVersion;
 import javax.lang.model.type.IntersectionType;
 
 /**
- * El visitante por kind de tipo de Java 8. Ver {@link TypeKindVisitor6} por el mecanismo.
+ * The type-kind visitor for Java 8. See {@link TypeKindVisitor6} for the mechanism.
  *
- * <p>`visitIntersection` entra al embudo, por la misma razon de rama que explica {@link TypeKindVisitor7}
- * para el union.
+ * <p>`visitIntersection` enters the funnel, for the same branch reason {@link TypeKindVisitor7}
+ * explains for the union.
  */
 @SupportedSourceVersion(SourceVersion.RELEASE_8)
 public class TypeKindVisitor8<R, P> extends TypeKindVisitor7<R, P> {

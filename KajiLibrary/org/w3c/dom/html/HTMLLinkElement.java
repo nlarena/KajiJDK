@@ -1,61 +1,61 @@
 package org.w3c.dom.html;
 
 /**
- * Un `<link>`.
+ * A `<link>`.
  */
 public interface HTMLLinkElement extends HTMLElement {
 
-    /** Si esta deshabilitado. */
+    /** Whether it is disabled. */
     boolean getDisabled();
 
-    /** Fija si esta deshabilitado. */
+    /** It sets whether it is disabled. */
     void setDisabled(boolean disabled);
 
-    /** La codificacion del destino. */
+    /** The encoding of the destination. */
     String getCharset();
 
-    /** Fija la codificacion del destino. */
+    /** It sets the encoding of the destination. */
     void setCharset(String charset);
 
-    /** El destino. */
+    /** The destination. */
     String getHref();
 
-    /** Fija el destino. */
+    /** It sets the destination. */
     void setHref(String href);
 
-    /** El idioma del destino. */
+    /** The language of the destination. */
     String getHreflang();
 
-    /** Fija el idioma del destino. */
+    /** It sets the language of the destination. */
     void setHreflang(String hreflang);
 
-    /** El atributo `media`. */
+    /** The `media` attribute. */
     String getMedia();
 
-    /** Fija el atributo `media`. */
+    /** It sets the `media` attribute. */
     void setMedia(String media);
 
-    /** La relacion con el destino. */
+    /** The relationship with the destination. */
     String getRel();
 
-    /** Fija la relacion con el destino. */
+    /** It sets the relationship with the destination. */
     void setRel(String rel);
 
-    /** La relacion inversa. */
+    /** The reverse relationship. */
     String getRev();
 
-    /** Fija la relacion inversa. */
+    /** It sets the reverse relationship. */
     void setRev(String rev);
 
-    /** El marco de destino. */
+    /** The target frame. */
     String getTarget();
 
-    /** Fija el marco de destino. */
+    /** It sets the target frame. */
     void setTarget(String target);
 
-    /** El tipo del control. */
+    /** The type of the control. */
     String getType();
 
-    /** Fija el tipo del control. */
+    /** It sets the type of the control. */
     void setType(String type);
 }

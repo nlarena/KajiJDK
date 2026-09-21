@@ -15,35 +15,39 @@ import com.sun.security.auth.UnixNumericUserPrincipal;
 import com.sun.security.auth.UnixPrincipal;
 
 /**
- * El modulo JAAS que toma la identidad que el sistema Unix ya establecio.
+ * The JAAS module that takes the identity the Unix system has already established.
  *
- * <h2>Que no hace: preguntar una contrasena</h2>
+ * <h2>What it does not do: ask for a password</h2>
  *
- * <p>Este modulo no autentica a nadie. El usuario ya se autentico cuando entro al sistema, y lo que
- * hace este modulo es <strong>importar</strong> ese hecho al {@link Subject}: lee quien es el
- * dueno del proceso y agrega los principales que lo representan.
+ * <p>This module authenticates nobody. The user already authenticated when it entered the
+ * system, and what this module does is <strong>import</strong> that fact into the
+ * {@link Subject}: it reads who the process's owner is and adds the principals that represent
+ * it.
  *
- * <p>Por eso {@link #login} no usa el {@code CallbackHandler}. Si falla no es porque la contrasena
- * este mal, sino porque no se pudo averiguar quien es el usuario.
+ * <p>That is why {@link #login} does not use the {@code CallbackHandler}. If it fails it is not
+ * because the password is wrong, but because who the user is could not be found out.
  *
- * <h2>Las dos fases, y por que no es una sola</h2>
+ * <h2>The two phases, and why it is not a single one</h2>
  *
- * <p>JAAS separa {@link #login} de {@link #commit} porque una configuracion tiene varios modulos y
- * el resultado depende de todos. Primero corre el {@code login} de cada uno, y solo si el conjunto
- * es aceptable corre el {@code commit} de cada uno. Asi el {@code Subject} nunca queda a medio
- * llenar: o entran los principales de todos los modulos que debian entrar, o no entra ninguno.
+ * <p>JAAS separates {@link #login} from {@link #commit} because a configuration has several
+ * modules and the result depends on them all. First each one's {@code login} runs, and only if
+ * the whole is acceptable does each one's {@code commit} run. That way the {@code Subject} is
+ * never left half filled: either the principals of all the modules that were due to go in go
+ * in, or none does.
  *
- * <p>{@link #abort} es la otra rama: alguien fallo, y este modulo tiene que deshacer. Por eso
- * distingue si ya habia hecho {@code commit} — si no lo hizo, alcanza con olvidar; si lo hizo, hay
- * que sacar del {@code Subject} lo que puso, y para eso llama a {@link #logout}.
+ * <p>{@link #abort} is the other branch: somebody failed, and this module has to undo. That is
+ * why it tells whether it had already done {@code commit} -- if it did not, forgetting is
+ * enough; if it did, what it put has to be taken out of the {@code Subject}, and for that it
+ * calls {@link #logout}.
  *
- * <h2>Estado en esta VM</h2>
+ * <h2>State on this VM</h2>
  *
- * <p>La maquina de estados de arriba esta completa y es la del JDK. Lo que falla es el unico paso
- * que necesita al sistema operativo: construir el {@link UnixSystem}, que sale de {@code getuid} y
- * companeras. {@link #login} lo convierte en {@link FailedLoginException} con la causa encadenada,
- * que es lo que el contrato pide — y es ademas el resultado correcto, porque no poder establecer
- * quien es el usuario tiene que ser un fallo de autenticacion y no un exito silencioso.
+ * <p>The state machine above is complete and is the JDK's. What fails is the only step that
+ * needs the operating system: building the {@link UnixSystem}, which comes out of
+ * {@code getuid} and companions. {@link #login} turns it into {@link FailedLoginException}
+ * with the cause chained, which is what the contract asks -- and it is besides the right
+ * result, because not being able to establish who the user is has to be an authentication
+ * failure and not a silent success.
  *
  * @since 1.4
  */
@@ -60,13 +64,13 @@ public class UnixLoginModule implements LoginModule {
     private UnixPrincipal userPrincipal;
     private UnixNumericUserPrincipal uidPrincipal;
     private UnixNumericGroupPrincipal gidPrincipal;
-    private final List<UnixNumericGroupPrincipal> gruposExtra =
+    private final List<UnixNumericGroupPrincipal> extraGroups =
             new LinkedList<UnixNumericGroupPrincipal>();
 
     private boolean succeeded;
     private boolean commitSucceeded;
 
-    /** Para la configuracion de JAAS, que lo instancia por reflexion. */
+    /** For the JAAS configuration, which instantiates it by reflection. */
     public UnixLoginModule() {
     }
 
@@ -81,12 +85,12 @@ public class UnixLoginModule implements LoginModule {
     }
 
     /**
-     * Averigua quien es el usuario del proceso y arma sus principales.
+     * It finds out who the process's user is and builds its principals.
      *
-     * <p>Todavia no los pone en el {@link Subject}: eso es {@link #commit}.
+     * <p>It does not put them in the {@link Subject} yet: that is {@link #commit}.
      *
-     * @return {@code true} si se pudo
-     * @throws FailedLoginException si no se pudo averiguar quien es el usuario
+     * @return {@code true} if it could be done
+     * @throws FailedLoginException if who the user is could not be found out
      */
     public boolean login() throws LoginException {
         try {
@@ -101,15 +105,15 @@ public class UnixLoginModule implements LoginModule {
 
         userPrincipal = new UnixPrincipal(ss.getUsername());
         uidPrincipal = new UnixNumericUserPrincipal(ss.getUid());
-        // gid 0 es el grupo root; el JDK no lo agrega como principal principal, y esta clase
-        // reproduce esa decision.
+        // gid 0 is the root group; the JDK does not add it as a principal principal, and this
+                // class reproduces that decision.
         if (ss.getGid() != 0) {
             gidPrincipal = new UnixNumericGroupPrincipal(ss.getGid(), true);
         }
-        final long[] grupos = ss.getGroups();
-        if (grupos != null) {
-            for (int i = 0; i < grupos.length; i++) {
-                gruposExtra.add(new UnixNumericGroupPrincipal(grupos[i], false));
+        final long[] groups = ss.getGroups();
+        if (groups != null) {
+            for (int i = 0; i < groups.length; i++) {
+                extraGroups.add(new UnixNumericGroupPrincipal(groups[i], false));
             }
         }
         if (debug) {
@@ -120,93 +124,93 @@ public class UnixLoginModule implements LoginModule {
     }
 
     /**
-     * Pone los principales en el {@link Subject}.
+     * It puts the principals in the {@link Subject}.
      *
-     * @return {@code true} si este modulo habia tenido exito en {@link #login}
-     * @throws LoginException si el {@code Subject} es de solo lectura
+     * @return {@code true} if this module had had success in {@link #login}
+     * @throws LoginException if the {@code Subject} is read-only
      */
     public boolean commit() throws LoginException {
         if (!succeeded) {
             return false;
         }
         if (subject.isReadOnly()) {
-            limpiar();
+            reset();
             throw new LoginException("Subject is ReadOnly");
         }
-        agregar(userPrincipal);
-        agregar(uidPrincipal);
-        agregar(gidPrincipal);
-        for (final UnixNumericGroupPrincipal g : gruposExtra) {
-            agregar(g);
+        addPrincipal(userPrincipal);
+        addPrincipal(uidPrincipal);
+        addPrincipal(gidPrincipal);
+        for (final UnixNumericGroupPrincipal g : extraGroups) {
+            addPrincipal(g);
         }
         commitSucceeded = true;
         return true;
     }
 
-    private void agregar(final java.security.Principal p) {
-        // El contains es necesario: el Subject puede traer principales de otro modulo o de una
-        // autenticacion anterior, y agregar dos veces el mismo dejaria duplicados que despues
-        // habria que sacar dos veces en el logout.
+    private void addPrincipal(final java.security.Principal p) {
+        // The contains is necessary: the Subject may bring principals of another module or of
+                // a previous authentication, and adding the same one twice would leave duplicates
+                // that afterwards would have to be taken out twice in the logout.
         if (p != null && !subject.getPrincipals().contains(p)) {
             subject.getPrincipals().add(p);
         }
     }
 
     /**
-     * Deshace lo que este modulo hizo, porque la autenticacion en conjunto fallo.
+     * It undoes what this module did, because the authentication as a whole failed.
      *
-     * @return {@code true} si este modulo habia tenido exito en {@link #login}
-     * @throws LoginException si el {@code Subject} es de solo lectura
+     * @return {@code true} if this module had had success in {@link #login}
+     * @throws LoginException if the {@code Subject} is read-only
      */
     public boolean abort() throws LoginException {
         if (!succeeded) {
             return false;
         }
         if (!commitSucceeded) {
-            // Nunca llego a tocar el Subject: alcanza con olvidar lo que averiguo.
+            // It never got to touch the Subject: forgetting what it found out is enough.
             succeeded = false;
-            limpiar();
+            reset();
         } else {
-            // Ya habia puesto los principales; sacarlos es exactamente lo que hace logout.
+            // It had already put the principals in; taking them out is exactly what logout does.
             logout();
         }
         return true;
     }
 
     /**
-     * Saca del {@link Subject} los principales que este modulo habia puesto.
+     * It takes out of the {@link Subject} the principals this module had put in.
      *
-     * @return {@code true} siempre
-     * @throws LoginException si el {@code Subject} es de solo lectura
+     * @return {@code true} always
+     * @throws LoginException if the {@code Subject} is read-only
      */
     public boolean logout() throws LoginException {
         if (subject.isReadOnly()) {
-            limpiar();
+            reset();
             throw new LoginException("Subject is ReadOnly");
         }
-        sacar(userPrincipal);
-        sacar(uidPrincipal);
-        sacar(gidPrincipal);
-        for (final UnixNumericGroupPrincipal g : gruposExtra) {
-            sacar(g);
+        removePrincipal(userPrincipal);
+        removePrincipal(uidPrincipal);
+        removePrincipal(gidPrincipal);
+        for (final UnixNumericGroupPrincipal g : extraGroups) {
+            removePrincipal(g);
         }
         succeeded = false;
         commitSucceeded = false;
-        limpiar();
+        reset();
         return true;
     }
 
-    private void sacar(final java.security.Principal p) {
+    private void removePrincipal(final java.security.Principal p) {
         if (p != null) {
             subject.getPrincipals().remove(p);
         }
     }
 
-    private void limpiar() {
+    private void reset() {
         ss = null;
         userPrincipal = null;
         uidPrincipal = null;
         gidPrincipal = null;
-        gruposExtra.clear();
+        extraGroups.clear();
     }
 }

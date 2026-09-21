@@ -1,7 +1,7 @@
 package com.sun.source.tree;
 
 /**
- * La directiva `uses` de un modulo.
+ * A module's `uses` directive.
  */
 public interface UsesTree extends DirectiveTree {
 

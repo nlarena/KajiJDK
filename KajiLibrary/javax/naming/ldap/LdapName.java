@@ -9,107 +9,109 @@ import javax.naming.InvalidNameException;
 import javax.naming.Name;
 
 /**
- * Un nombre distinguido de LDAP: {@code cn=Juan,ou=Ventas,dc=ejemplo,dc=com}.
+ * An LDAP distinguished name: {@code cn=John,ou=Sales,dc=example,dc=com}.
  *
- * <h2>El orden, que es lo primero que confunde</h2>
+ * <h2>The order, which is the first thing that confuses</h2>
  *
- * <p>Un DN se <strong>escribe</strong> del mas especifico al mas general —la persona primero, el
- * dominio al final— y {@link Name} numera los componentes al reves: el indice {@code 0} es el
- * <em>menos</em> significativo, o sea el ultimo escrito.
+ * <p>A DN is <strong>written</strong> from the most specific to the most general --the person
+ * first, the domain last-- and {@link Name} numbers the components the other way round: index
+ * {@code 0} is the <em>most</em> significant one, the one closest to the root, that is, the last
+ * one written. (An earlier note called it the least significant, which inverts the meaning of
+ * "significant" used by {@link Name} and the JDK; the index was right, the word was not.)
  *
- * <p>No es un capricho de esta clase: es la convencion de {@link Name}, que existe para que
- * {@code /a/b/c} y {@code cn=x,dc=y} se puedan recorrer con la misma API pese a escribirse en
- * sentidos opuestos. La consecuencia practica es que {@code getRdn(0)} de
- * {@code "cn=Juan,dc=com"} devuelve {@code dc=com}, no {@code cn=Juan}.
+ * <p>It is not a whim of this class: it is the {@link Name} convention, which exists so that
+ * {@code /a/b/c} and {@code cn=x,dc=y} can be walked with the same API despite being written in
+ * opposite directions. The practical consequence is that {@code getRdn(0)} of
+ * {@code "cn=John,dc=com"} returns {@code dc=com}, not {@code cn=John}.
  *
- * <h2>Es mutable, a diferencia de casi todo lo demas</h2>
+ * <h2>It is mutable, unlike almost everything else</h2>
  *
- * <p>{@link #add} y {@link #remove} cambian este objeto y devuelven {@code this}. Lo hereda de
- * {@link Name}, que se diseno asi antes de que la inmutabilidad fuera el reflejo por omision.
- * Consecuencia: <strong>no se comparte entre hilos</strong>, y guardarlo en un mapa despues de
- * haberlo modificado deja la clave rota.
+ * <p>{@link #add} and {@link #remove} change this object and return {@code this}. It inherits that
+ * from {@link Name}, which was designed that way before immutability was the default reflex.
+ * Consequence: <strong>do not share it between threads</strong>, and putting it in a map and then
+ * modifying it leaves the key broken.
  */
 public class LdapName implements Name {
 
     private static final long serialVersionUID = -1595520034788997356L;
 
-    /** Del menos significativo al mas; ver la nota de la clase sobre el orden. */
+    /** From the most significant (index 0) to the least; see the class note about the order. */
     private final List<Rdn> rdns;
 
     /**
-     * Desde su forma en texto.
+     * From its text form.
      *
-     * @throws InvalidNameException si no es un DN valido
+     * @throws InvalidNameException if it is not a valid DN
      */
     public LdapName(String name) throws InvalidNameException {
-        this.rdns = parsear(name);
+        this.rdns = parse(name);
     }
 
     /**
-     * Desde una lista de RDN, del menos significativo al mas.
+     * From a list of RDNs, the most significant first.
      *
-     * @throws NullPointerException si la lista es {@code null}
+     * @throws NullPointerException if the list is {@code null}
      */
     public LdapName(List<Rdn> rdns) {
         this.rdns = new ArrayList<Rdn>(rdns);
     }
 
-    private LdapName(List<Rdn> rdns, boolean interno) {
+    private LdapName(List<Rdn> rdns, boolean internal) {
         this.rdns = rdns;
     }
 
     /**
-     * Parte el texto en RDN y los invierte.
+     * Splits the text into RDNs and reverses them.
      *
-     * <p>La coma se busca <strong>fuera de comillas y sin contar las escapadas</strong>, por lo
-     * mismo que en {@link Rdn}: un {@code cn=Perez\, Juan} es un solo componente, y partirlo por
-     * cualquier coma produce un nombre distinto que igual parsea bien.
+     * <p>The comma is looked for <strong>outside quotes and skipping escaped ones</strong>, for the
+     * same reason as in {@link Rdn}: a {@code cn=Smith\, John} is a single component, and splitting
+     * on every comma produces a different name that still parses fine.
      */
-    private static List<Rdn> parsear(String name) throws InvalidNameException {
+    private static List<Rdn> parse(String name) throws InvalidNameException {
         List<Rdn> out = new ArrayList<Rdn>();
         if (name == null) {
-            throw new InvalidNameException("el nombre no puede ser null");
+            throw new InvalidNameException("the name cannot be null");
         }
         String s = name.trim();
         if (s.isEmpty()) {
             return out;
         }
-        int desde = 0;
-        boolean comillas = false;
+        int from = 0;
+        boolean inQuotes = false;
         for (int i = 0; i <= s.length(); i++) {
             if (i == s.length()) {
-                out.add(new Rdn(s.substring(desde).trim()));
+                out.add(new Rdn(s.substring(from).trim()));
                 break;
             }
             char c = s.charAt(i);
             if (c == '\\') {
                 i++;
             } else if (c == '"') {
-                comillas = !comillas;
-            } else if ((c == ',' || c == ';') && !comillas) {
-                out.add(new Rdn(s.substring(desde, i).trim()));
-                desde = i + 1;
+                inQuotes = !inQuotes;
+            } else if ((c == ',' || c == ';') && !inQuotes) {
+                out.add(new Rdn(s.substring(from, i).trim()));
+                from = i + 1;
             }
         }
-        if (comillas) {
-            throw new InvalidNameException("comillas sin cerrar en: " + name);
+        if (inQuotes) {
+            throw new InvalidNameException("unclosed quote in: " + name);
         }
-        // Del texto salen del mas significativo al menos; `Name` los quiere al reves.
+        // The text yields them least significant first; `Name` wants them the other way round.
         Collections.reverse(out);
         return out;
     }
 
-    /** Cuantos componentes tiene. */
+    /** How many components it has. */
     public int size() {
         return this.rdns.size();
     }
 
-    /** Si no tiene ninguno. */
+    /** Whether it has none. */
     public boolean isEmpty() {
         return this.rdns.isEmpty();
     }
 
-    /** Los componentes como texto, del menos significativo al mas. */
+    /** The components as text, from the most significant (index 0) to the least. */
     public Enumeration<String> getAll() {
         List<String> out = new ArrayList<String>(this.rdns.size());
         for (int i = 0; i < this.rdns.size(); i++) {
@@ -118,32 +120,32 @@ public class LdapName implements Name {
         return Collections.enumeration(out);
     }
 
-    /** El componente {@code posn} como texto. */
+    /** Component {@code posn} as text. */
     public String get(int posn) {
         return this.rdns.get(posn).toString();
     }
 
-    /** El componente {@code posn}. */
+    /** Component {@code posn}. */
     public Rdn getRdn(int posn) {
         return this.rdns.get(posn);
     }
 
     /**
-     * Los primeros {@code posn} componentes.
+     * The first {@code posn} components.
      *
-     * <p>"Prefijo" en el orden de {@link Name}, o sea la parte <em>mas general</em> del nombre —
-     * el sufijo en la escritura. Es la fuente clasica de confusion de esta API.
+     * <p>"Prefix" in {@link Name}'s order, that is, the <em>most general</em> part of the name --
+     * the suffix in writing. It is the classic source of confusion in this API.
      */
     public Name getPrefix(int posn) {
         return new LdapName(new ArrayList<Rdn>(this.rdns.subList(0, posn)), true);
     }
 
-    /** Los componentes desde {@code posn} en adelante. */
+    /** The components from {@code posn} onwards. */
     public Name getSuffix(int posn) {
         return new LdapName(new ArrayList<Rdn>(this.rdns.subList(posn, this.rdns.size())), true);
     }
 
-    /** Si {@code n} es prefijo de este nombre. */
+    /** Whether {@code n} is a prefix of this name. */
     public boolean startsWith(Name n) {
         if (!(n instanceof LdapName)) {
             return false;
@@ -151,7 +153,7 @@ public class LdapName implements Name {
         return startsWith(((LdapName) n).rdns);
     }
 
-    /** Si esos RDN son prefijo de este nombre. */
+    /** Whether those RDNs are a prefix of this name. */
     public boolean startsWith(List<Rdn> rdns) {
         if (rdns.size() > this.rdns.size()) {
             return false;
@@ -164,7 +166,7 @@ public class LdapName implements Name {
         return true;
     }
 
-    /** Si {@code n} es sufijo de este nombre. */
+    /** Whether {@code n} is a suffix of this name. */
     public boolean endsWith(Name n) {
         if (!(n instanceof LdapName)) {
             return false;
@@ -172,7 +174,7 @@ public class LdapName implements Name {
         return endsWith(((LdapName) n).rdns);
     }
 
-    /** Si esos RDN son sufijo de este nombre. */
+    /** Whether those RDNs are a suffix of this name. */
     public boolean endsWith(List<Rdn> rdns) {
         int d = this.rdns.size() - rdns.size();
         if (d < 0) {
@@ -186,74 +188,74 @@ public class LdapName implements Name {
         return true;
     }
 
-    /** Agrega esos componentes al final. */
+    /** Appends those components at the end. */
     public Name addAll(Name suffix) throws InvalidNameException {
         if (!(suffix instanceof LdapName)) {
-            throw new InvalidNameException("no es un LdapName: " + String.valueOf(suffix));
+            throw new InvalidNameException("not an LdapName: " + String.valueOf(suffix));
         }
         return addAll(((LdapName) suffix).rdns);
     }
 
-    /** Agrega esos componentes al final. */
+    /** Appends those components at the end. */
     public Name addAll(List<Rdn> suffixRdns) {
         this.rdns.addAll(suffixRdns);
         return this;
     }
 
-    /** Los inserta en esa posicion. */
+    /** Inserts them at that position. */
     public Name addAll(int posn, Name n) throws InvalidNameException {
         if (!(n instanceof LdapName)) {
-            throw new InvalidNameException("no es un LdapName: " + String.valueOf(n));
+            throw new InvalidNameException("not an LdapName: " + String.valueOf(n));
         }
         return addAll(posn, ((LdapName) n).rdns);
     }
 
-    /** Los inserta en esa posicion. */
+    /** Inserts them at that position. */
     public Name addAll(int posn, List<Rdn> rdns) {
         this.rdns.addAll(posn, rdns);
         return this;
     }
 
-    /** Agrega un componente al final. */
+    /** Appends a component at the end. */
     public Name add(String comp) throws InvalidNameException {
         this.rdns.add(new Rdn(comp));
         return this;
     }
 
-    /** Agrega un componente al final. */
+    /** Appends a component at the end. */
     public Name add(Rdn comp) {
         this.rdns.add(comp);
         return this;
     }
 
-    /** Lo inserta en esa posicion. */
+    /** Inserts it at that position. */
     public Name add(int posn, String comp) throws InvalidNameException {
         this.rdns.add(posn, new Rdn(comp));
         return this;
     }
 
-    /** Lo inserta en esa posicion. */
+    /** Inserts it at that position. */
     public Name add(int posn, Rdn comp) {
         this.rdns.add(posn, comp);
         return this;
     }
 
-    /** Saca el componente {@code posn} y lo devuelve como texto. */
+    /** Removes component {@code posn} and returns it as text. */
     public Object remove(int posn) throws InvalidNameException {
         return this.rdns.remove(posn).toString();
     }
 
-    /** Los componentes, en una lista inmodificable. */
+    /** The components, in an unmodifiable list. */
     public List<Rdn> getRdns() {
         return Collections.unmodifiableList(this.rdns);
     }
 
-    /** Una copia independiente: modificarla no toca a esta. */
+    /** An independent copy: modifying it does not touch this one. */
     public Object clone() {
         return new LdapName(new ArrayList<Rdn>(this.rdns), true);
     }
 
-    /** La forma en texto, del mas significativo al menos — o sea al reves que los indices. */
+    /** The text form, least significant first -- that is, the reverse of the indices. */
     public String toString() {
         StringBuilder sb = new StringBuilder();
         for (int i = this.rdns.size() - 1; i >= 0; i--) {
@@ -265,7 +267,7 @@ public class LdapName implements Name {
         return sb.toString();
     }
 
-    /** Componente por componente, sin distinguir mayusculas. */
+    /** Component by component, case-insensitive. */
     public boolean equals(Object obj) {
         if (obj == this) {
             return true;
@@ -277,16 +279,18 @@ public class LdapName implements Name {
     }
 
     /**
-     * Compara componente por componente, empezando por el <strong>mas significativo</strong>.
+     * Compares component by component, starting from the <strong>last index</strong>, the least
+     * significant component (the leftmost one written).
      *
-     * <p>Ese orden es el que hace util al resultado: ordenar una lista de DN asi los agrupa por
-     * subarbol, que es lo que uno espera ver.
+     * <p>This differs from the JDK, which starts from index 0, the most significant component, so
+     * that sorting a list of DNs groups them by subtree. Sorted with this one, they group by their
+     * leaf RDN instead. (An earlier note described the JDK's order as this method's.)
      *
-     * @throws ClassCastException si {@code obj} no es un {@link LdapName}
+     * @throws ClassCastException if {@code obj} is not an {@link LdapName}
      */
     public int compareTo(Object obj) {
         if (!(obj instanceof LdapName)) {
-            throw new ClassCastException("no es un LdapName: " + String.valueOf(obj));
+            throw new ClassCastException("not an LdapName: " + String.valueOf(obj));
         }
         LdapName o = (LdapName) obj;
         int i = this.rdns.size() - 1;
@@ -302,7 +306,7 @@ public class LdapName implements Name {
         return this.rdns.size() - o.rdns.size();
     }
 
-    /** Sobre los componentes, coherente con {@link #equals}. */
+    /** Over the components, consistent with {@link #equals}. */
     public int hashCode() {
         int h = 0;
         for (int i = 0; i < this.rdns.size(); i++) {

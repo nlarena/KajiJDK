@@ -5,106 +5,107 @@ import java.io.Serializable;
 import javax.xml.XMLConstants;
 
 /**
- * KajiLibrary's javax.xml.namespace.QName -- un nombre calificado de XML: espacio de nombres mas
- * nombre local, y un prefijo que viene de acompaniante.
+ * KajiLibrary's javax.xml.namespace.QName -- an XML qualified name: namespace plus local name, and
+ * a prefix that comes along for the ride.
  *
- * <p>Es la clase mas chica de toda la pila de XML y la que aparece en todas: la usan DOM, SAX, StAX,
- * XPath, la validacion y JAXB. Lo unico que hace es juntar dos cadenas, pero **cuales dos** es
- * exactamente la pregunta que XML Namespaces vino a contestar, y de ahi sale toda la sutileza.
+ * <p>It is the smallest class of the whole XML stack and the one that appears in all of it: DOM,
+ * SAX, StAX, XPath, validation and JAXB use it. All it does is put two strings together, but
+ * **which two** is exactly the question XML Namespaces came to answer, and all the subtlety comes
+ * from there.
  *
- * <h2>El prefijo no es parte de la identidad</h2>
+ * <h2>The prefix is not part of the identity</h2>
  *
- * <p>Esta es la regla que hay que tener presente y la que mas sorprende: {@link #equals} y
- * {@link #hashCode} miran el espacio de nombres y el nombre local, y **no** el prefijo. Los dos
- * documentos
+ * <p>This is the rule to keep in mind and the one that surprises most: {@link #equals} and
+ * {@link #hashCode} look at the namespace and the local name, and **not** at the prefix. The two
+ * documents
  *
  * <pre>{@code
- * <a:precio xmlns:a="http://tienda"/>
- * <b:precio xmlns:b="http://tienda"/>
+ * <a:price xmlns:a="http://shop"/>
+ * <b:price xmlns:b="http://shop"/>
  * }</pre>
  *
- * <p>dicen lo mismo: el prefijo es una abreviatura local del documento, elegida por quien lo
- * escribio, y dos documentos que eligieron distinto no por eso hablan de cosas distintas. Si el
- * prefijo contara, un {@code Map<QName, ?>} fallaria segun quien haya serializado la entrada, que es
- * la clase de bug que no se encuentra nunca.
+ * <p>say the same thing: the prefix is a local abbreviation of the document, chosen by whoever
+ * wrote it, and two documents that chose differently are not talking about different things because
+ * of that. If the prefix counted, a {@code Map<QName, ?>} would fail depending on who serialized
+ * the entry, which is the kind of bug that is never found.
  *
- * <p>El prefijo igual se guarda --y por eso {@link #getPrefix} existe-- porque quien vuelve a
- * escribir el documento lo necesita para no inventar prefijos nuevos en cada elemento. O sea: el
- * prefijo es informacion, no identidad. Los dos metodos son {@code final} justamente para que
- * ninguna subclase pueda cambiar esa regla por abajo.
+ * <p>The prefix is still kept --and that is why {@link #getPrefix} exists-- because whoever writes
+ * the document back needs it so as not to invent new prefixes on every element. That is: the prefix
+ * is information, not identity. Both methods are {@code final} precisely so that no subclass can
+ * change that rule underneath.
  *
- * <h2>El formato {@code {uri}local}</h2>
+ * <h2>The {@code {uri}local} format</h2>
  *
- * <p>{@link #toString} y {@link #valueOf} son inversas y usan la notacion de James Clark: un nombre
- * con espacio de nombres se escribe <code>{http://tienda}precio</code>, y uno sin espacio de nombres
- * se escribe pelado, {@code precio}. Es un formato de ida y vuelta para configuraciones y mensajes
- * de error, no una sintaxis de XML: no aparece en ningun documento.
+ * <p>{@link #toString} and {@link #valueOf} are inverses and use James Clark's notation: a name
+ * with a namespace is written <code>{http://shop}price</code>, and one without a namespace is
+ * written bare, {@code price}. It is a round-trip format for configurations and error messages, not
+ * an XML syntax: it appears in no document.
  *
- * <p>La ida y vuelta pierde el prefijo a proposito --{@code valueOf} siempre devuelve
- * {@link XMLConstants#DEFAULT_NS_PREFIX}-- y es coherente con lo de arriba: el prefijo no es parte
- * del nombre, asi que no se transporta.
+ * <p>The round trip loses the prefix on purpose --{@code valueOf} always returns {@link
+ * XMLConstants#DEFAULT_NS_PREFIX}-- and that is coherent with the above: the prefix is not part of
+ * the name, so it is not carried.
  *
- * <h2>Que hay aca</h2>
+ * <h2>What is here</h2>
  *
- * <p>La clase esta completa: los tres constructores, los tres accesores, {@code equals},
- * {@code hashCode}, {@code toString} y {@code valueOf}, con las mismas validaciones y los mismos
- * mensajes de error que el JDK --hay codigo que compara esos textos--. Es {@link Serializable} y
- * declara el mismo {@code serialVersionUID} que la clase original, para que una instancia escrita
- * por una biblioteca se pueda leer con la otra.
+ * <p>The class is complete: the three constructors, the three accessors, {@code equals}, {@code
+ * hashCode}, {@code toString} and {@code valueOf}, with the same validations and the same error
+ * messages as the JDK --there is code that compares those texts--. It is {@link Serializable} and
+ * declares the same {@code serialVersionUID} as the original class, so that an instance written by
+ * one library can be read with the other.
  */
 public class QName implements Serializable {
 
-    /** El mismo de la clase original: dos instancias equivalentes tienen que ser intercambiables. */
+    /** The same as the original class's: two equivalent instances have to be interchangeable. */
     private static final long serialVersionUID = -9120448754896609940L;
 
-    /** El espacio de nombres; nunca null, la cadena vacia cuando no hay. */
+    /** The namespace; never null, the empty string when there is none. */
     private final String namespaceURI;
 
-    /** El nombre local; nunca null, y lo unico que un nombre no puede no tener. */
+    /** The local name; never null, and the only thing a name cannot lack. */
     private final String localPart;
 
-    /** El prefijo con que se escribio; nunca null, y ajeno a {@link #equals}. */
+    /** The prefix it was written with; never null, and not part of {@link #equals}. */
     private final String prefix;
 
     /**
-     * Un nombre sin espacio de nombres.
+     * A name without a namespace.
      *
-     * <p>Atajo de {@code QName(NULL_NS_URI, localPart, DEFAULT_NS_PREFIX)}: el espacio de nombres
-     * queda en la cadena vacia, que es como se representa "no tiene", y no en null.
+     * <p>A shortcut for {@code QName(NULL_NS_URI, localPart, DEFAULT_NS_PREFIX)}: the namespace is
+     * left as the empty string, which is how "it has none" is represented, and not as null.
      *
-     * @param localPart el nombre local
-     * @throws IllegalArgumentException si {@code localPart} es null
+     * @param localPart the local name
+     * @throws IllegalArgumentException if {@code localPart} is null
      */
     public QName(String localPart) {
         this(XMLConstants.NULL_NS_URI, localPart, XMLConstants.DEFAULT_NS_PREFIX);
     }
 
     /**
-     * Un nombre calificado sin prefijo asociado.
+     * A qualified name without an associated prefix.
      *
-     * <p>El caso normal cuando el nombre se construye a mano: se sabe de que vocabulario es, no de
-     * como se abreviaba en un documento que quiza no existe.
+     * <p>The normal case when the name is built by hand: one knows which vocabulary it belongs to,
+     * not how it was abbreviated in a document that may not exist.
      *
-     * @param namespaceURI el espacio de nombres; null se toma como la cadena vacia
-     * @param localPart el nombre local
-     * @throws IllegalArgumentException si {@code localPart} es null
+     * @param namespaceURI the namespace; null is taken as the empty string
+     * @param localPart the local name
+     * @throws IllegalArgumentException if {@code localPart} is null
      */
     public QName(String namespaceURI, String localPart) {
         this(namespaceURI, localPart, XMLConstants.DEFAULT_NS_PREFIX);
     }
 
     /**
-     * Un nombre calificado con el prefijo con que aparecio.
+     * A qualified name with the prefix it appeared with.
      *
-     * <p>Las tres validaciones son asimetricas y vale entender por que: el espacio de nombres
-     * ausente **es** un caso valido --un nombre sin calificar-- asi que null se normaliza a la
-     * cadena vacia; el nombre local y el prefijo ausentes son errores del llamador, porque no hay
-     * nada sensato que significar con ellos, asi que revientan.
+     * <p>The three validations are asymmetric and it is worth understanding why: an absent
+     * namespace **is** a valid case --an unqualified name-- so null is normalized to the empty
+     * string; an absent local name or prefix are caller errors, because there is nothing sensible
+     * to mean with them, so they blow up.
      *
-     * @param namespaceURI el espacio de nombres; null se toma como la cadena vacia
-     * @param localPart el nombre local
-     * @param prefix el prefijo; la cadena vacia si no hay
-     * @throws IllegalArgumentException si {@code localPart} o {@code prefix} son null
+     * @param namespaceURI the namespace; null is taken as the empty string
+     * @param localPart the local name
+     * @param prefix the prefix; the empty string if there is none
+     * @throws IllegalArgumentException if {@code localPart} or {@code prefix} is null
      */
     public QName(String namespaceURI, String localPart, String prefix) {
         if (namespaceURI == null) {
@@ -123,44 +124,44 @@ public class QName implements Serializable {
     }
 
     /**
-     * El espacio de nombres, o la cadena vacia si el nombre no esta calificado.
+     * The namespace, or the empty string if the name is not qualified.
      *
-     * @return nunca null
+     * @return never null
      */
     public String getNamespaceURI() {
         return namespaceURI;
     }
 
     /**
-     * El nombre local, que es la unica parte obligatoria.
+     * The local name, which is the only mandatory part.
      *
-     * @return nunca null
+     * @return never null
      */
     public String getLocalPart() {
         return localPart;
     }
 
     /**
-     * El prefijo con que se escribio este nombre, o la cadena vacia.
+     * The prefix this name was written with, or the empty string.
      *
-     * <p>No participa de {@link #equals} ni de {@link #hashCode}; ver el encabezado de la clase.
+     * <p>It takes no part in {@link #equals} nor in {@link #hashCode}; see the class header.
      *
-     * @return nunca null
+     * @return never null
      */
     public String getPrefix() {
         return prefix;
     }
 
     /**
-     * Dos nombres son el mismo si coinciden espacio de nombres y nombre local.
+     * Two names are the same if namespace and local name match.
      *
-     * <p>Es {@code final} para que la regla no se pueda relajar en una subclase: si un
-     * {@code QName} derivado hiciera entrar el prefijo en la comparacion, romperia la simetria con
-     * los {@code QName} de la biblioteca --{@code a.equals(b)} y {@code b.equals(a)} darian
-     * distinto-- y con ella cualquier tabla que los use de clave.
+     * <p>It is {@code final} so that the rule cannot be relaxed in a subclass: if a derived {@code
+     * QName} brought the prefix into the comparison, it would break the symmetry with the library's
+     * {@code QName}s --{@code a.equals(b)} and {@code b.equals(a)} would differ-- and with it any
+     * table that uses them as keys.
      *
-     * @param objectToTest el otro objeto
-     * @return true si es un {@code QName} con el mismo espacio de nombres y nombre local
+     * @param objectToTest the other object
+     * @return true if it is a {@code QName} with the same namespace and local name
      */
     public final boolean equals(Object objectToTest) {
         if (objectToTest == this) {
@@ -174,25 +175,25 @@ public class QName implements Serializable {
     }
 
     /**
-     * El o exclusivo de los dos hashes que importan.
+     * The exclusive or of the two hashes that matter.
      *
-     * <p>Tampoco mira el prefijo, que es lo que hace falta para que sea coherente con
-     * {@link #equals}. Tambien {@code final}, y por el mismo motivo.
+     * <p>It does not look at the prefix either, which is what is needed for it to be coherent with
+     * {@link #equals}. Also {@code final}, and for the same reason.
      *
-     * @return el hash
+     * @return the hash
      */
     public final int hashCode() {
         return namespaceURI.hashCode() ^ localPart.hashCode();
     }
 
     /**
-     * El nombre en notacion {@code {uri}local}, o pelado si no tiene espacio de nombres.
+     * The name in {@code {uri}local} notation, or bare if it has no namespace.
      *
-     * <p>Sin cache: se calcula cada vez. Guardarlo ahorraria concatenaciones en un camino que casi
-     * siempre es un mensaje de error o una traza, y a cambio agregaria un campo que no participa de
-     * la identidad y que habria que excluir a mano de la serializacion.
+     * <p>Without a cache: it is computed each time. Keeping it would save concatenations on a path
+     * that is almost always an error message or a trace, and in exchange would add a field that
+     * takes no part in the identity and would have to be excluded by hand from serialization.
      *
-     * @return la representacion textual, que {@link #valueOf} sabe deshacer
+     * @return the textual representation, which {@link #valueOf} knows how to undo
      */
     public String toString() {
         if (namespaceURI.equals(XMLConstants.NULL_NS_URI)) {
@@ -202,28 +203,29 @@ public class QName implements Serializable {
     }
 
     /**
-     * Deshace {@link #toString}: de {@code {uri}local} sale el nombre calificado.
+     * Undoes {@link #toString}: the qualified name comes out of {@code {uri}local}.
      *
-     * <p>El prefijo del resultado es siempre {@link XMLConstants#DEFAULT_NS_PREFIX}, porque el
-     * formato no lo transporta.
+     * <p>The prefix of the result is always {@link XMLConstants#DEFAULT_NS_PREFIX}, because the
+     * format does not carry it.
      *
-     * <p>Los casos de borde no son arbitrarios y conviene leerlos juntos:
+     * <p>The edge cases are not arbitrary and are worth reading together:
      *
      * <ul>
-     *   <li>la cadena vacia da un nombre con nombre local vacio, que es legal aunque no sea un
-     *       nombre de XML valido: se acepta por compatibilidad con la version 1.0 de esta clase;
-     *   <li><code>{}local</code> **falla**, y es el unico caso que sorprende: pedir explicitamente
-     *       el espacio de nombres vacio es un error, porque la forma de decir eso es escribir
-     *       {@code local} a secas, y quien escribio las llaves vacias casi seguro creia estar
-     *       diciendo otra cosa;
-     *   <li>una llave que abre y no cierra falla;
-     *   <li>una llave que cierra sin abrir es nombre local, no error: {@code }x} es un nombre local
-     *       raro pero es un nombre local.
+     *   <li>the empty string gives a name with an empty local name, which is legal even though it
+     *       is not a valid XML name: it is accepted for compatibility with version 1.0 of this
+     *       class;
+     *   <li><code>{}local</code> **fails**, and it is the only surprising case: asking explicitly
+     *       for the empty namespace is an error, because the way of saying that is writing {@code
+     *       local} alone, and whoever wrote the empty braces almost certainly thought they were
+     *       saying something else;
+     *   <li>a brace that opens and does not close fails;
+     *   <li>a closing brace without an opening one is a local name, not an error: {@code }x} is an
+     *       odd local name but it is a local name.
      * </ul>
      *
-     * @param qNameAsString la cadena a interpretar
-     * @return el nombre calificado
-     * @throws IllegalArgumentException si es null o si el formato esta mal
+     * @param qNameAsString the string to interpret
+     * @return the qualified name
+     * @throws IllegalArgumentException if it is null or the format is wrong
      */
     public static QName valueOf(String qNameAsString) {
         if (qNameAsString == null) {

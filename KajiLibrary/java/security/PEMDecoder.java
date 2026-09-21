@@ -27,9 +27,9 @@ import javax.crypto.EncryptedPrivateKeyInfo;
  *
  * <h2>What comes before the block</h2>
  *
- * <p>It is kept, in {@link PEMRecord#leadingData}. A PEM file usually carries comments or the output
- * of the tool that produced it before the {@code -----BEGIN}, and sometimes that is signed along
- * with the rest. Throwing it away would lose data.
+ * <p>It is kept, in {@link PEMRecord#leadingData}. A PEM file usually carries comments or the
+ * output of the tool that produced it before the {@code -----BEGIN}, and sometimes that is signed
+ * along with the rest. Throwing it away would lose data.
  *
  * <h2>It is immutable</h2>
  *
@@ -40,10 +40,10 @@ import javax.crypto.EncryptedPrivateKeyInfo;
  *
  * <p>Reading the format -- finding the block, splitting off the label, decoding the base64 -- works
  * in full, and with it {@link PEMRecord} and {@code ENCRYPTED PRIVATE KEY}, which is the only label
- * whose object can be built without providers. The rest need a {@link KeyFactory} or a
- * {@link CertificateFactory}, and none is registered: the lookup happens all the same and what fails
- * is wrapped in {@link IllegalArgumentException}, which is what the JDK does when it finds nothing
- * to build with. {@link #withDecryption} also needs password-based encryption, which is not there
+ * whose object can be built without providers. The rest need a {@link KeyFactory} or a {@link
+ * CertificateFactory}, and none is registered: the lookup happens all the same and what fails is
+ * wrapped in {@link IllegalArgumentException}, which is what the JDK does when it finds nothing to
+ * build with. {@link #withDecryption} also needs password-based encryption, which is not there
  * either.
  *
  * @since 25
@@ -267,7 +267,8 @@ public final class PEMDecoder {
      * Builds the key with the factory of the algorithm the encoding names.
      *
      * <p>The algorithm does not come in the label -- the PEM says "PUBLIC KEY" and nothing else --
-     * so it has to be taken from inside: it is the object identifier of the structure's first field.
+     * so it has to be taken from inside: it is the object identifier of the structure's first
+     * field.
      */
     private DEREncodable key(PEMRecord r, boolean isPublic) {
         final byte[] data = content(r);

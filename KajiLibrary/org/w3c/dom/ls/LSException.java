@@ -1,33 +1,34 @@
 package org.w3c.dom.ls;
 
 /**
- * KajiLibrary's org.w3c.dom.ls.LSException -- fallo cargar o guardar.
+ * KajiLibrary's org.w3c.dom.ls.LSException -- loading or saving failed.
  *
- * <p>Es de las excepciones del W3C, con el mismo diseno que {@code DOMException}: un codigo numerico
- * en un campo <b>publico</b> en vez de una jerarquia de subclases. Viene de que la especificacion
- * esta escrita en IDL y tiene que poder traducirse a lenguajes sin herencia de excepciones.
+ * <p>It is one of the W3C exceptions, with the same design as {@code DOMException}: a numeric code
+ * in a <b>public</b> field instead of a hierarchy of subclasses. It comes from the specification
+ * being written in IDL and having to be translatable into languages with no inheritance of
+ * exceptions.
  *
- * <p>Solo dos codigos, y separan las dos direcciones: {@link #PARSE_ERR} al leer,
- * {@link #SERIALIZE_ERR} al escribir. Es poca informacion a proposito -- el detalle de <b>que</b>
- * estaba mal no va aca sino al manejador de errores, que lo recibe mientras el analisis todavia esta
- * parado en el punto malo y puede decir en que linea fue.
+ * <p>Only two codes, and they separate the two directions: {@link #PARSE_ERR} when reading,
+ * {@link #SERIALIZE_ERR} when writing. It is little information on purpose -- the detail of
+ * <b>what</b> was wrong does not go here but to the error handler, which receives it while the
+ * analysis is still standing at the bad point and can say on which line it was.
  */
 public class LSException extends RuntimeException {
 
     private static final long serialVersionUID = 5371691160978884690L;
 
-    /** El codigo; publico por la traduccion del IDL. Ver la nota de la clase. */
+    /** The code; public because of the translation of the IDL. See the note of the class. */
     public short code;
 
-    /** El documento no se pudo leer. */
+    /** The document could not be read. */
     public static final short PARSE_ERR = 81;
 
-    /** El documento no se pudo escribir. */
+    /** The document could not be written. */
     public static final short SERIALIZE_ERR = 82;
 
     /**
-     * @param code uno de los dos de arriba
-     * @param message que paso
+     * @param code one of the two above
+     * @param message what happened
      */
     public LSException(short code, String message) {
         super(message);

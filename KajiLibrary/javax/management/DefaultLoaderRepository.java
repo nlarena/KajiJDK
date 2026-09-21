@@ -5,16 +5,16 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Busca una clase entre los cargadores registrados como MBeans, en <b>todos</b> los agentes.
+ * Looks for a class among the class loaders registered as MBeans, in <b>all</b> the agents.
  *
- * <p>Esta obsoleta desde 1.2 y conviene entender por que, porque el motivo es el diseno y no la
- * edad: "todos los agentes" es exactamente el problema. Dos aplicaciones que comparten maquina
- * virtual y cada una con su agente terminan viendo los cargadores de la otra, y una clase que se
- * pidio para una se resuelve con el cargador de la otra. La sucesora,
- * {@code javax.management.loading.ClassLoaderRepository}, es <b>por agente</b> justamente para
- * cerrar eso.
+ * <p>It has been deprecated since JMX 1.2 and it is worth understanding why, because the reason is
+ * the design and not the age: "all the agents" is exactly the problem. Two applications sharing a
+ * virtual machine, each with its own agent, end up seeing each other's loaders, and a class asked
+ * for by one is resolved with the other's loader. The successor,
+ * {@code javax.management.loading.ClassLoaderRepository}, is <b>per agent</b> precisely to close
+ * that.
  *
- * @deprecated Usar el repositorio por agente. Esta clase busca en todos.
+ * @deprecated Use the per-agent repository. This class searches all of them.
  */
 @Deprecated
 public class DefaultLoaderRepository {
@@ -23,71 +23,72 @@ public class DefaultLoaderRepository {
     }
 
     /**
-     * @throws ClassNotFoundException si ningun cargador la conoce
+     * @throws ClassNotFoundException if no loader knows it
      */
     public static Class<?> loadClass(String className) throws ClassNotFoundException {
-        return buscar(className, null, false);
+        return find(className, null, false);
     }
 
     /**
-     * Igual, salteando un cargador.
+     * The same, skipping one loader.
      *
-     * <p>Existe para romper la recursion: un cargador que no encuentra una clase consulta al
-     * repositorio, y si el repositorio le volviera a preguntar a el, el ciclo no termina.
+     * <p>It exists to break the recursion: a loader that does not find a class consults the
+     * repository, and if the repository asked it again, the cycle would not end.
      *
-     * @param loader el que <b>no</b> se consulta; `null` no saltea a ninguno
+     * @param loader the one <b>not</b> consulted; {@code null} skips none
      */
     public static Class<?> loadClassWithout(ClassLoader loader, String className)
             throws ClassNotFoundException {
-        return buscar(className, loader, true);
+        return find(className, loader, true);
     }
 
-    private static Class<?> buscar(String className, ClassLoader excluido, boolean excluyendo)
+    private static Class<?> find(String className, ClassLoader excluded, boolean excluding)
             throws ClassNotFoundException {
-        for (ClassLoader cl : cargadores()) {
-            if (excluyendo && cl == excluido) {
+        for (ClassLoader cl : loaders()) {
+            if (excluding && cl == excluded) {
                 continue;
             }
             try {
                 return Class.forName(className, false, cl);
             } catch (ClassNotFoundException e) {
-                // Normal: el repositorio es una busqueda, no una resolucion. Se sigue.
+                // Normal: the repository is a search, not a resolution. Carry on.
             }
         }
         throw new ClassNotFoundException(className);
     }
 
     /**
-     * Los cargadores visibles: los MBeans que <b>son</b> cargadores, en cada agente encontrable.
+     * The visible loaders: the MBeans that <b>are</b> loaders, in each findable agent.
      *
-     * <p>Se descubren por la API publica --`queryNames` y despues `getClassLoader`-- y no por una
-     * tabla interna, porque tienen que salir tambien de un {@link MBeanServer} escrito por otro.
-     * Al final va el cargador de esta clase, que es el que resuelve todo lo que este en el
-     * classpath: sin el, un repositorio sin cargadores registrados no encontraria nada.
+     * <p>They are discovered through the public API --{@code queryNames} and then {@code
+     * getClassLoader}-- and not through an internal table, because they also have to come out of an
+     * {@link MBeanServer} written by someone else. At the end goes this class's loader, which is
+     * the one that resolves everything on the class path: without it, a repository with no
+     * registered loaders would find nothing.
      */
-    private static List<ClassLoader> cargadores() {
+    private static List<ClassLoader> loaders() {
         List<ClassLoader> r = new ArrayList<ClassLoader>();
         for (MBeanServer s : MBeanServerFactory.findMBeanServer(null)) {
-            Set<ObjectName> nombres;
+            Set<ObjectName> names;
             try {
-                nombres = s.queryNames(null, null);
+                names = s.queryNames(null, null);
             } catch (Exception e) {
                 continue;
             }
-            for (ObjectName n : nombres) {
+            for (ObjectName n : names) {
                 try {
                     ClassLoader cl = s.getClassLoader(n);
                     if (cl != null && !r.contains(cl)) {
                         r.add(cl);
                     }
                 } catch (Exception e) {
-                    // Ese MBean no es un cargador: es el caso normal, no un error.
+                    // That MBean is not a loader: it is the normal case, not an error.
                 }
             }
         }
-        ClassLoader propio = DefaultLoaderRepository.class.getClassLoader();
-        if (propio != null && !r.contains(propio)) {
-            r.add(propio);
+        ClassLoader own = DefaultLoaderRepository.class.getClassLoader();
+        if (own != null && !r.contains(own)) {
+            r.add(own);
         }
         return r;
     }

@@ -9,33 +9,33 @@ import java.awt.Shape;
 import javax.swing.SwingConstants;
 
 /**
- * Las cuentas de texto que comparten todas las vistas: medir, dibujar y buscar limites de palabra.
+ * The text computations every view shares: measuring, drawing and finding word bounds.
  *
- * <h2>Por que las tabulaciones complican todo</h2>
+ * <h2>Why the tabs complicate everything</h2>
  *
- * <p>Sin tabulaciones, medir un texto es sumar anchos de caracteres y se puede hacer de a pedazos.
- * Con tabulaciones no: una tabulacion salta hasta la proxima parada, asi que cuanto ocupa un tramo
- * depende de <em>donde empieza</em>. Por eso todos los metodos de aca reciben la posicion de
- * partida {@code x} y un {@link TabExpander}, y por eso hay tantas variantes.
+ * <p>Without tabs, measuring a text is adding up character widths and it can be done piece by
+ * piece. With tabs it cannot: a tab jumps to the next stop, so how much a stretch takes up
+ * depends on <em>where it starts</em>. That is why every method here takes the starting position
+ * {@code x} and a {@link TabExpander}, and why there are so many variants.
  *
- * <p>Las tres operaciones son la misma recorrida con distinto final: dibujar, sumar el ancho, o
- * parar cuando se paso de una posicion. Estan separadas porque el dibujado no puede darse el lujo
- * de medir dos veces.
+ * <p>The three operations are the same walk with a different ending: drawing, adding up the
+ * width, or stopping when a position has been passed. They are separate because drawing cannot
+ * afford to measure twice.
  *
- * <h2>Lo que necesita un componente</h2>
+ * <h2>What needs a component</h2>
  *
- * <p>{@code getRowStart}, {@code getPositionAbove} y las de palabras trabajan sobre un
- * {@link JTextComponent}: las primeras necesitan su arbol de vistas —donde empieza la <em>fila
- * visible</em> no se puede saber del texto solo— y las de palabras necesitan el idioma del
- * componente. Las de fila devuelven {@code -1} si el componente no tiene aspecto instalado, que
- * en esta biblioteca es siempre: no hay {@code BasicTextUI}.
+ * <p>{@code getRowStart}, {@code getPositionAbove} and the word ones work on a
+ * {@link JTextComponent}: the first ones need its view tree --where the <em>visible row</em>
+ * starts cannot be known from the text alone-- and the word ones need the component's language.
+ * The row ones return {@code -1} if the component has no look and feel installed, which in this
+ * library is always: there is no {@code BasicTextUI}.
  */
 public class Utilities {
 
     public Utilities() {
     }
 
-    /** El componente Swing donde vive esa vista, o {@code null}. */
+    /** The Swing component that view lives in, or {@code null}. */
     static javax.swing.JComponent getJComponent(View view) {
         if (view != null) {
             java.awt.Component component = view.getContainer();
@@ -47,17 +47,17 @@ public class Utilities {
     }
 
     /**
-     * Dibuja el texto expandiendo las tabulaciones; devuelve donde termino.
+     * It draws the text expanding the tabs; it returns where it ended.
      *
-     * <p>Dibuja de a tramos entre tabulaciones: cada tramo va de una sola vez al contexto grafico,
-     * que es mucho mas barato que dibujar caracter por caracter.
+     * <p>It draws in stretches between tabs: each stretch goes in one go to the graphics context,
+     * which is much cheaper than drawing character by character.
      */
     public static final int drawTabbedText(Segment s, int x, int y, Graphics g,
             TabExpander e, int startOffset) {
         return (int) drawTabbedText(null, s, x, y, g, e, startOffset, null);
     }
 
-    /** Como la anterior, con coordenadas fraccionarias. */
+    /** Like the previous one, with fractional coordinates. */
     public static final float drawTabbedText(Segment s, float x, float y, Graphics2D g,
             TabExpander e, int startOffset) {
         return drawTabbedText(null, s, x, y, g, e, startOffset, null, true);
@@ -73,7 +73,7 @@ public class Utilities {
         return (int) drawTabbedText(view, s, x, y, g, e, startOffset, justificationData, true);
     }
 
-    /** La version que hace el trabajo; las demas la llaman. */
+    /** The version that does the work; the others call it. */
     static final float drawTabbedText(View view, Segment s, float x, float y, Graphics g,
             TabExpander e, int startOffset, int[] justificationData, boolean useFPAPI) {
         FontMetrics metrics = g.getFontMetrics();
@@ -99,7 +99,7 @@ public class Utilities {
                         nextX = nextX + metrics.charWidth(' ');
                     }
                 }
-                // Un fin de linea dentro de un tramo no dibuja nada: la vista ya lo corto.
+                // A line ending inside a stretch draws nothing: the view already cut it.
             } else {
                 flushLen = flushLen + 1;
             }
@@ -111,7 +111,7 @@ public class Utilities {
         return nextX;
     }
 
-    /** Cuanto ocupa ese texto empezando en {@code x}, con las tabulaciones expandidas. */
+    /** How much that text takes up starting at {@code x}, with the tabs expanded. */
     public static final int getTabbedTextWidth(Segment s, FontMetrics metrics, int x,
             TabExpander e, int startOffset) {
         return (int) getTabbedTextWidth(null, s, metrics, x, e, startOffset, null);
@@ -133,7 +133,7 @@ public class Utilities {
         return getTabbedTextWidth(view, s, metrics, x, e, startOffset, justificationData, true);
     }
 
-    /** La version que hace el trabajo. */
+    /** The version that does the work. */
     static final float getTabbedTextWidth(View view, Segment s, FontMetrics metrics, float x,
             TabExpander e, int startOffset, int[] justificationData, boolean useFPAPI) {
         float nextX = x;
@@ -163,10 +163,10 @@ public class Utilities {
     }
 
     /**
-     * Que caracter cae en esa posicion horizontal.
+     * Which character falls at that horizontal position.
      *
-     * <p>Devuelve el desplazamiento dentro del segmento, no del documento. Es la operacion que
-     * convierte un clic en una posicion del texto.
+     * <p>It returns the offset within the segment, not within the document. It is the operation
+     * that turns a click into a position in the text.
      */
     public static final int getTabbedTextOffset(Segment s, FontMetrics metrics, int x0, int x,
             TabExpander e, int startOffset) {
@@ -197,11 +197,11 @@ public class Utilities {
     }
 
     /**
-     * La version que hace el trabajo.
+     * The version that does the work.
      *
-     * <p>{@code round} decide que pasa cuando el punto cae en el medio de un caracter: con
-     * {@code true} se elige el borde mas cercano, que es lo que hace que el cursor caiga donde uno
-     * apunto y no siempre a la izquierda.
+     * <p>{@code round} decides what happens when the point falls in the middle of a character: with
+     * {@code true} the nearest edge is chosen, which is what makes the cursor fall where one
+     * pointed and not always to the left.
      */
     static final int getTabbedTextOffset(View view, Segment s, FontMetrics metrics, float x0,
             float x, TabExpander e, int startOffset, boolean round, int[] justificationData,
@@ -240,10 +240,11 @@ public class Utilities {
     }
 
     /**
-     * Donde cortar el texto para que entre en ese ancho.
+     * Where to break the text so that it fits that width.
      *
-     * <p>Corta en el ultimo espacio antes del limite, no en el caracter exacto: cortar palabras
-     * por el medio se ve mal y es lo que distingue este metodo de {@link #getTabbedTextOffset}.
+     * <p>It breaks at the last space before the limit, not at the exact character: breaking words
+     * in the middle looks wrong and it is what tells this method apart from
+     * {@link #getTabbedTextOffset}.
      */
     public static final int getBreakLocation(Segment s, FontMetrics metrics, int x0, int x,
             TabExpander e, int startOffset) {
@@ -271,7 +272,7 @@ public class Utilities {
             char ch = txt[i];
             if (ch < 256) {
                 if (ch == ' ' || ch == '\t') {
-                    // Corta despues del espacio: el espacio se queda en la linea de arriba.
+                    // It breaks after the space: the space stays on the line above.
                     index = i - txtOffset + 1;
                     return index;
                 }
@@ -284,12 +285,12 @@ public class Utilities {
     }
 
     /**
-     * Donde empieza la fila visible que contiene esa posicion.
+     * Where the visible row that contains that position starts.
      *
-     * <p>{@code -1} sin aspecto instalado; ver la nota de la clase.
+     * <p>{@code -1} with no look and feel installed; see the class note.
      */
     public static final int getRowStart(JTextComponent c, int offs) throws BadLocationException {
-        Rectangle r = ubicacion(c, offs);
+        Rectangle r = allocation(c, offs);
         if (r == null) {
             return -1;
         }
@@ -298,14 +299,14 @@ public class Utilities {
         while ((r != null) && (y == r.y)) {
             offs = lastOffs;
             lastOffs = lastOffs - 1;
-            r = (lastOffs >= 0) ? ubicacion(c, lastOffs) : null;
+            r = (lastOffs >= 0) ? allocation(c, lastOffs) : null;
         }
         return offs;
     }
 
-    /** Donde termina la fila visible que contiene esa posicion. */
+    /** Where the visible row that contains that position ends. */
     public static final int getRowEnd(JTextComponent c, int offs) throws BadLocationException {
-        Rectangle r = ubicacion(c, offs);
+        Rectangle r = allocation(c, offs);
         if (r == null) {
             return -1;
         }
@@ -315,13 +316,13 @@ public class Utilities {
         while ((r != null) && (y == r.y)) {
             offs = lastOffs;
             lastOffs = lastOffs + 1;
-            r = (lastOffs <= n) ? ubicacion(c, lastOffs) : null;
+            r = (lastOffs <= n) ? allocation(c, lastOffs) : null;
         }
         return offs;
     }
 
-    /** Donde cae esa posicion, o {@code null} si el componente no tiene aspecto. */
-    private static Rectangle ubicacion(JTextComponent c, int offs) throws BadLocationException {
+    /** Where that position falls, or {@code null} if the component has no look and feel. */
+    private static Rectangle allocation(JTextComponent c, int offs) throws BadLocationException {
         javax.swing.plaf.TextUI ui = c.getUI();
         if (ui == null) {
             return null;
@@ -329,7 +330,7 @@ public class Utilities {
         return ui.modelToView(c, offs);
     }
 
-    /** La posicion que queda justo arriba, a la misma altura horizontal. */
+    /** The position right above, at the same horizontal height. */
     public static final int getPositionAbove(JTextComponent c, int offs, int x)
             throws BadLocationException {
         return getPositionAbove(c, offs, (float) x, true);
@@ -346,7 +347,7 @@ public class Utilities {
         if (lastOffs < 0) {
             return -1;
         }
-        return posicionEnFila(c, lastOffs, x);
+        return positionInRow(c, lastOffs, x);
     }
 
     public static final int getPositionBelow(JTextComponent c, int offs, int x)
@@ -365,33 +366,33 @@ public class Utilities {
         if (lastOffs <= 0 || lastOffs > c.getDocument().getLength()) {
             return -1;
         }
-        return posicionEnFila(c, lastOffs, x);
+        return positionInRow(c, lastOffs, x);
     }
 
-    /** La posicion de esa fila que queda mas cerca de esa columna. */
-    private static int posicionEnFila(JTextComponent c, int offsEnFila, float x)
+    /** The position of that row that comes closest to that column. */
+    private static int positionInRow(JTextComponent c, int offsetInRow, float x)
             throws BadLocationException {
-        int inicio = getRowStart(c, offsEnFila);
-        int fin = getRowEnd(c, offsEnFila);
-        if (inicio < 0 || fin < 0) {
+        int start = getRowStart(c, offsetInRow);
+        int end = getRowEnd(c, offsetInRow);
+        if (start < 0 || end < 0) {
             return -1;
         }
-        int mejor = inicio;
-        float mejorDist = Float.MAX_VALUE;
-        for (int i = inicio; i <= fin; i++) {
-            Rectangle r = ubicacion(c, i);
+        int best = start;
+        float bestDist = Float.MAX_VALUE;
+        for (int i = start; i <= end; i++) {
+            Rectangle r = allocation(c, i);
             if (r != null) {
                 float d = Math.abs(r.x - x);
-                if (d < mejorDist) {
-                    mejorDist = d;
-                    mejor = i;
+                if (d < bestDist) {
+                    bestDist = d;
+                    best = i;
                 }
             }
         }
-        return mejor;
+        return best;
     }
 
-    /** Donde empieza la palabra que contiene esa posicion. */
+    /** Where the word that contains that position starts. */
     public static final int getWordStart(JTextComponent c, int offs) throws BadLocationException {
         Document doc = c.getDocument();
         Element line = getParagraphElement(c, offs);
@@ -407,7 +408,7 @@ public class Utilities {
             if (i >= seg.count) {
                 i = seg.count - 1;
             }
-            while (i > 0 && !esSeparador(seg.array[seg.offset + i - 1])) {
+            while (i > 0 && !isSeparator(seg.array[seg.offset + i - 1])) {
                 i = i - 1;
             }
             return lineStart + i;
@@ -415,7 +416,7 @@ public class Utilities {
         return offs;
     }
 
-    /** Donde termina la palabra que contiene esa posicion. */
+    /** Where the word that contains that position ends. */
     public static final int getWordEnd(JTextComponent c, int offs) throws BadLocationException {
         Document doc = c.getDocument();
         Element line = getParagraphElement(c, offs);
@@ -428,7 +429,7 @@ public class Utilities {
         doc.getText(lineStart, lineEnd - lineStart, seg);
         if (seg.count > 0) {
             int i = offs - lineStart;
-            while (i < seg.count && !esSeparador(seg.array[seg.offset + i])) {
+            while (i < seg.count && !isSeparator(seg.array[seg.offset + i])) {
                 i = i + 1;
             }
             return lineStart + i;
@@ -436,18 +437,18 @@ public class Utilities {
         return offs;
     }
 
-    /** El principio de la palabra siguiente. */
+    /** The beginning of the next word. */
     public static final int getNextWord(JTextComponent c, int offs) throws BadLocationException {
         Document doc = c.getDocument();
         int n = doc.getLength();
         Segment seg = new Segment();
         doc.getText(offs, n - offs, seg);
-        boolean vistoSeparador = false;
+        boolean sawSeparator = false;
         for (int i = 0; i < seg.count; i++) {
             char ch = seg.array[seg.offset + i];
-            if (esSeparador(ch)) {
-                vistoSeparador = true;
-            } else if (vistoSeparador) {
+            if (isSeparator(ch)) {
+                sawSeparator = true;
+            } else if (sawSeparator) {
                 return offs + i;
             }
         }
@@ -459,7 +460,7 @@ public class Utilities {
         return getNextWord(c, offs);
     }
 
-    /** El principio de la palabra anterior. */
+    /** The beginning of the previous word. */
     public static final int getPreviousWord(JTextComponent c, int offs)
             throws BadLocationException {
         if (offs <= 0) {
@@ -469,10 +470,10 @@ public class Utilities {
         Segment seg = new Segment();
         doc.getText(0, offs, seg);
         int i = seg.count - 1;
-        while (i >= 0 && esSeparador(seg.array[seg.offset + i])) {
+        while (i >= 0 && isSeparator(seg.array[seg.offset + i])) {
             i = i - 1;
         }
-        while (i > 0 && !esSeparador(seg.array[seg.offset + i - 1])) {
+        while (i > 0 && !isSeparator(seg.array[seg.offset + i - 1])) {
             i = i - 1;
         }
         if (i < 0) {
@@ -486,12 +487,12 @@ public class Utilities {
         return getPreviousWord(c, offs);
     }
 
-    /** Que separa una palabra de otra. */
-    private static boolean esSeparador(char ch) {
+    /** What separates one word from another. */
+    private static boolean isSeparator(char ch) {
         return Character.isWhitespace(ch) || (!Character.isLetterOrDigit(ch) && ch != '_');
     }
 
-    /** El parrafo que contiene esa posicion, segun el documento del componente. */
+    /** The paragraph that contains that position, according to the component's document. */
     public static final Element getParagraphElement(JTextComponent c, int offs) {
         Document doc = c.getDocument();
         if (doc instanceof StyledDocument) {
@@ -506,7 +507,7 @@ public class Utilities {
         return null;
     }
 
-    /** Si ese tramo es texto en composicion de un metodo de entrada; nunca, aca. */
+    /** Whether that stretch is an input method's text being composed; never, here. */
     static boolean isComposedTextElement(Document doc, int offset) {
         return false;
     }
@@ -519,7 +520,7 @@ public class Utilities {
         return false;
     }
 
-    /** Sin metodos de entrada no hay texto en composicion que dibujar. */
+    /** Without input methods there is no text being composed to draw. */
     static int drawComposedText(View view, AttributeSet attr, Graphics g, int x, int y, int p0,
             int p1) throws BadLocationException {
         return x;
@@ -538,15 +539,15 @@ public class Utilities {
     static void paintComposedText(Graphics g, Rectangle alloc, GlyphView v) {
     }
 
-    /** Si ese componente se lee de izquierda a derecha. */
+    /** Whether that component reads from left to right. */
     static boolean isLeftToRight(java.awt.Component c) {
         return c.getComponentOrientation().isLeftToRight();
     }
 
     /**
-     * La proxima posicion visual dentro de una vista con hijos.
+     * The next visual position inside a view with children.
      *
-     * <p>Le pide al hijo que tiene la posicion y, si se le acaba, al de al lado; ver
+     * <p>It asks the child that has the position and, if it runs out, the one beside it; see
      * {@link CompositeView}.
      */
     static int getNextVisualPositionFrom(View v, int pos, Position.Bias b, Shape alloc,

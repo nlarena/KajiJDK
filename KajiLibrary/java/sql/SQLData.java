@@ -1,23 +1,24 @@
 package java.sql;
 
 /**
- * KajiLibrary's java.sql.SQLData -- una clase Java que sabe leerse y escribirse como tipo SQL propio.
+ * KajiLibrary's java.sql.SQLData -- a Java class that knows how to read and write itself as an SQL
+ * type of its own.
  *
- * <p>Es la alternativa a recibir un {@link Struct} con un `Object[]` y desarmarlo a mano: la clase se
- * registra en el mapa de tipos de la conexion y el driver la construye sola.
+ * <p>It is the alternative to receiving a {@link Struct} with an `Object[]` and taking it apart by
+ * hand: the class is registered in the connection's type map and the driver builds it by itself.
  *
- * <p>El orden manda: {@link #readSQL} tiene que leer los atributos en el **mismo orden** en que
- * {@link #writeSQL} los escribe, que es el de la declaracion del tipo SQL. No hay nombres, y por eso
- * un cambio en el tipo de la base rompe esto en silencio.
+ * <p>Order rules: {@link #readSQL} has to read the attributes in the **same order** in which
+ * {@link #writeSQL} writes them, which is the order of the SQL type's declaration. There are no
+ * names, and that is why a change in the database's type breaks this silently.
  */
 public interface SQLData {
 
-    /** El nombre del tipo SQL que esta clase representa. */
+    /** The name of the SQL type this class represents. */
     String getSQLTypeName() throws SQLException;
 
-    /** Se llena leyendo los atributos de `stream`, en orden. */
+    /** It fills itself by reading the attributes from `stream`, in order. */
     void readSQL(SQLInput stream, String typeName) throws SQLException;
 
-    /** Se escribe en `stream`, en el mismo orden. */
+    /** It writes itself to `stream`, in the same order. */
     void writeSQL(SQLOutput stream) throws SQLException;
 }

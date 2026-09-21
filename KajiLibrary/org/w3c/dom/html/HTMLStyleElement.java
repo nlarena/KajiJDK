@@ -1,25 +1,25 @@
 package org.w3c.dom.html;
 
 /**
- * Un `<style>`.
+ * A `<style>`.
  */
 public interface HTMLStyleElement extends HTMLElement {
 
-    /** Si esta deshabilitado. */
+    /** Whether it is disabled. */
     boolean getDisabled();
 
-    /** Fija si esta deshabilitado. */
+    /** It sets whether it is disabled. */
     void setDisabled(boolean disabled);
 
-    /** El atributo `media`. */
+    /** The `media` attribute. */
     String getMedia();
 
-    /** Fija el atributo `media`. */
+    /** It sets the `media` attribute. */
     void setMedia(String media);
 
-    /** El tipo del control. */
+    /** The type of the control. */
     String getType();
 
-    /** Fija el tipo del control. */
+    /** It sets the type of the control. */
     void setType(String type);
 }

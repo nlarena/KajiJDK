@@ -9,82 +9,82 @@ import java.util.Collection;
 import java.util.List;
 import jdk.internal.classfile.impl.TypedAttributes;
 
-// Una cláusula `opens` del atributo `Module` (JVMS §4.7.25): el paquete queda accesible por
-// reflexión profunda. `opensTo()` vacío significa abrir a TODOS — la lista vacía y la ausencia de
-// destinatarios son la misma cosa en este formato.
+// An `opens` clause of the `Module` attribute (JVMS §4.7.25): the package becomes reachable by deep
+// reflection. An empty `opensTo()` means opening to EVERYONE -- the empty list and the absence of
+// recipients are the same thing in this format.
 //
-// Un módulo declarado `open` no lleva ninguna de estas cláusulas: el bit `ACC_OPEN` del atributo
-// `Module` abre todos sus paquetes de una, y mezclar las dos cosas es un error de estructura.
+// A module declared `open` carries none of these clauses: the `Module` attribute's `ACC_OPEN` bit
+// opens all of its packages at once, and mixing the two is a structural error.
 public interface ModuleOpenInfo {
 
-    /** El paquete abierto. */
+    /** The opened package. */
     PackageEntry openedPackage();
 
-    /** Las banderas, como máscara. */
+    /** The flags, as a mask. */
     int opensFlagsMask();
 
-    /** Las banderas, como conjunto. */
+    /** The flags, as a set. */
     default java.util.Set<AccessFlag> opensFlags() {
         return AccessFlag.maskToAccessFlags(opensFlagsMask(), AccessFlag.Location.MODULE_OPENS);
     }
 
-    /** Si esta bandera está puesta. */
+    /** Whether this flag is set. */
     default boolean has(AccessFlag flag) {
         return (opensFlagsMask() & flag.mask()) != 0;
     }
 
-    /** A qué módulos se exporta; vacío quiere decir a todos. */
+    /** Which modules it is opened to; empty means to all of them. */
     List<ModuleEntry> opensTo();
 
-    /** La cláusula con estos valores. */
+    /** The clause with these values. */
     public static ModuleOpenInfo of(PackageEntry opens, int openFlags,
             List<ModuleEntry> opensTo) {
         return TypedAttributes.moduleOpenInfo(opens, openFlags, opensTo);
     }
 
-    /** La cláusula con estos valores. */
+    /** The clause with these values. */
     public static ModuleOpenInfo of(PackageEntry opens, Collection<AccessFlag> openFlags,
             List<ModuleEntry> opensTo) {
         return TypedAttributes.moduleOpenInfo(opens, TypedAttributes.mask(openFlags),
                 opensTo);
     }
 
-    /** La cláusula con estos valores. */
+    /** The clause with these values. */
     public static ModuleOpenInfo of(PackageEntry opens, int openFlags,
             ModuleEntry... opensTo) {
         return TypedAttributes.moduleOpenInfo(opens, openFlags,
                 TypedAttributes.listOfModules(opensTo));
     }
 
-    /** La cláusula con estos valores. */
+    /** The clause with these values. */
     public static ModuleOpenInfo of(PackageEntry opens, Collection<AccessFlag> openFlags,
             ModuleEntry... opensTo) {
         return TypedAttributes.moduleOpenInfo(opens, TypedAttributes.mask(openFlags),
                 TypedAttributes.listOfModules(opensTo));
     }
 
-    /** La cláusula con estos valores. */
+    /** The clause with these values. */
     public static ModuleOpenInfo of(PackageDesc opens, int openFlags,
             List<ModuleDesc> opensTo) {
         return TypedAttributes.moduleOpenInfo(TypedAttributes.packageEntry(opens), openFlags,
                 TypedAttributes.moduleEntries(opensTo));
     }
 
-    /** La cláusula con estos valores. */
+    /** The clause with these values. */
     public static ModuleOpenInfo of(PackageDesc opens, Collection<AccessFlag> openFlags,
             List<ModuleDesc> opensTo) {
         return TypedAttributes.moduleOpenInfo(TypedAttributes.packageEntry(opens),
                 TypedAttributes.mask(openFlags), TypedAttributes.moduleEntries(opensTo));
     }
 
-    /** La cláusula con estos valores. */
+    /** The clause with these values. */
     public static ModuleOpenInfo of(PackageDesc opens, int openFlags,
             ModuleDesc... opensTo) {
         return TypedAttributes.moduleOpenInfo(TypedAttributes.packageEntry(opens), openFlags,
                 TypedAttributes.moduleEntries(opensTo));
     }
 
-    /** La cláusula con estos valores. */
+    /** The clause with these values. */
     public static ModuleOpenInfo of(PackageDesc opens, Collection<AccessFlag> openFlags,
             ModuleDesc... opensTo) {
         return TypedAttributes.moduleOpenInfo(TypedAttributes.packageEntry(opens),

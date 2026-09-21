@@ -1,28 +1,28 @@
 package javax.sound.midi;
 
 /**
- * KajiLibrary's javax.sound.midi.Transmitter -- produce mensajes MIDI y se los da a un
+ * KajiLibrary's javax.sound.midi.Transmitter -- produces MIDI messages and gives them to a
  * {@link Receiver}.
  *
- * <p>El otro extremo: un teclado, un puerto de entrada, un secuenciador reproduciendo. No tiene metodo
- * para "leer" -- se le conecta un receptor y el transmisor empuja.
+ * <p>The other end: a keyboard, an input port, a sequencer playing. It has no method to "read" -- a
+ * receiver is connected to it and the transmitter pushes.
  *
- * <p>Es empuje y no tiro porque MIDI es en tiempo real: si el programa tuviera que preguntar, la
- * latencia dependeria de cada cuanto pregunta.
+ * <p>It is push and not pull because MIDI is real time: if the program had to ask, the latency
+ * would depend on how often it asks.
  *
- * <p>Un transmisor tiene <b>un solo</b> receptor. {@link #setReceiver} reemplaza al anterior, no
- * agrega. Para repartir a varios hay que poner un receptor propio que reenvie.
+ * <p>A transmitter has <b>a single</b> receiver. {@link #setReceiver} replaces the previous one, it
+ * does not add. To fan out to several, a receiver of one's own that forwards has to be put in.
  *
- * <p>Es {@link AutoCloseable}, y hay que cerrarlo.
+ * <p>It is {@link AutoCloseable}, and it has to be closed.
  */
 public interface Transmitter extends AutoCloseable {
 
-    /** A quien entregarle. Reemplaza al anterior; ver la nota de la clase. */
+    /** Whom to deliver to. It replaces the previous one; see the class note. */
     void setReceiver(Receiver receiver);
 
-    /** A quien le entrega, o null. */
+    /** Whom it delivers to, or null. */
     Receiver getReceiver();
 
-    /** Cierra. Se puede llamar mas de una vez. */
+    /** Closes. It can be called more than once. */
     void close();
 }

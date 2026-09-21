@@ -12,15 +12,15 @@ import javax.accessibility.AccessibleStateSet;
 import javax.accessibility.AccessibleValue;
 
 /**
- * Una casilla con dos estados: marcada o no.
+ * A box with two states: ticked or not.
  *
- * <p>Sola es una casilla de verificación. Metida en un {@link CheckboxGroup} se transforma en un
- * botón de radio, porque el grupo se encarga de desmarcar a las hermanas. Es el mismo widget
- * haciendo dos trabajos distintos, que es una de las rarezas de AWT.
+ * <p>On its own it is a check box. Put into a {@link CheckboxGroup} it turns into a radio button,
+ * because the group takes care of unticking its sisters. It is the same widget doing two different
+ * jobs, which is one of the oddities of AWT.
  *
- * <p>Cambiar el estado con {@link #setState} **no dispara** ningún evento. Los eventos son de la
- * interacción del usuario, no del programa: si un `setState` avisara, el oyente que responde
- * poniendo otra casilla armaría una cascada.
+ * <p>Changing the state with {@link #setState} fires **no** event. The events belong to the user's
+ * interaction, not to the program: if a `setState` reported, a listener that answers by setting
+ * another box would build a cascade.
  */
 public class Checkbox extends Component implements ItemSelectable, Accessible {
 
@@ -28,44 +28,44 @@ public class Checkbox extends Component implements ItemSelectable, Accessible {
 
     private static int checkboxCounter = 0;
 
-    /** La leyenda. */
+    /** The caption. */
     String label;
 
-    /** Si está marcada. */
+    /** Whether it is ticked. */
     boolean state;
 
-    /** El grupo al que pertenece, o `null` si es una casilla suelta. */
+    /** The group it belongs to, or `null` if it is a loose box. */
     CheckboxGroup group;
 
-    /** Los oyentes, encadenados. */
+    /** The listeners, chained. */
     transient ItemListener itemListener;
 
     /**
-     * Cambia el estado sin pasar por el grupo.
+     * Changes the state without going through the group.
      *
-     * <p>Es lo que usa {@link CheckboxGroup} para desmarcar a la hermana: si llamara a
-     * {@link #setState} volvería a entrar al grupo y se quedaría dando vueltas.
+     * <p>It is what {@link CheckboxGroup} uses to untick the sister: if it called {@link #setState}
+     * it would come back into the group and keep going round.
      */
     void setStateInternal(boolean state) {
         this.state = state;
     }
 
-    /** Una casilla sin leyenda, sin marcar y sin grupo. */
+    /** A box without a caption, unticked and with no group. */
     public Checkbox() throws HeadlessException {
         this("", false, null);
     }
 
-    /** Una casilla con esa leyenda, sin marcar. */
+    /** A box with that caption, unticked. */
     public Checkbox(String label) throws HeadlessException {
         this(label, false, null);
     }
 
-    /** Una casilla con esa leyenda y ese estado. */
+    /** A box with that caption and that state. */
     public Checkbox(String label, boolean state) throws HeadlessException {
         this(label, state, null);
     }
 
-    /** Una casilla con esa leyenda y ese estado, dentro de ese grupo. */
+    /** A box with that caption and that state, inside that group. */
     public Checkbox(String label, boolean state, CheckboxGroup group) throws HeadlessException {
         this.label = label;
         this.state = state;
@@ -76,9 +76,9 @@ public class Checkbox extends Component implements ItemSelectable, Accessible {
     }
 
     /**
-     * Lo mismo, con los dos últimos argumentos al revés.
+     * The same, with the last two arguments the other way round.
      *
-     * <p>Los dos constructores existen porque nadie se acuerda de cuál va primero.
+     * <p>Both constructors exist because nobody remembers which one goes first.
      */
     public Checkbox(String label, CheckboxGroup group, boolean state) throws HeadlessException {
         this(label, state, group);
@@ -92,46 +92,46 @@ public class Checkbox extends Component implements ItemSelectable, Accessible {
         }
     }
 
-    /** La declara mostrable. */
+    /** Declares it showable. */
     public void addNotify() {
         super.addNotify();
     }
 
     /**
-     * La leyenda.
+     * The caption.
      *
-     * @return la leyenda, o `null` si no tiene
+     * @return the caption, or `null` if it has none
      */
     public String getLabel() {
         return this.label;
     }
 
-    /** Cambia la leyenda. */
+    /** Changes the caption. */
     public void setLabel(String label) {
-        boolean cambio;
+        boolean changed;
         synchronized (this) {
-            cambio = label != this.label && (this.label == null || !this.label.equals(label));
-            if (cambio) {
+            changed = label != this.label && (this.label == null || !this.label.equals(label));
+            if (changed) {
                 this.label = label;
             }
         }
-        if (cambio) {
+        if (changed) {
             this.invalidate();
         }
     }
 
-    /** Si está marcada. */
+    /** Whether it is ticked. */
     public boolean getState() {
         return this.state;
     }
 
     /**
-     * La marca o la desmarca.
+     * Ticks it or unticks it.
      *
-     * <p>Desmarcar la casilla **marcada de un grupo no hace nada**: el grupo no puede quedar vacío
-     * desde acá, igual que no puede quedar vacío desde la interfaz. La única forma de vaciarlo es
-     * {@link CheckboxGroup#setSelectedCheckbox CheckboxGroup.setSelectedCheckbox(null)}, que es el
-     * método del grupo y no el de la casilla.
+     * <p>Unticking the **ticked box of a group does nothing**: the group cannot be left empty from
+     * here, just as it cannot be left empty from the interface. The only way to empty it is {@link
+     * CheckboxGroup#setSelectedCheckbox CheckboxGroup.setSelectedCheckbox(null)}, which is the
+     * group's method and not the box's.
      */
     public void setState(boolean state) {
         CheckboxGroup g = this.group;
@@ -148,9 +148,9 @@ public class Checkbox extends Component implements ItemSelectable, Accessible {
     }
 
     /**
-     * Lo que está seleccionado.
+     * What is selected.
      *
-     * @return un arreglo con la leyenda si está marcada, o `null` si no
+     * @return an array with the caption if it is ticked, or `null` if not
      */
     public Object[] getSelectedObjects() {
         if (!this.state) {
@@ -162,31 +162,31 @@ public class Checkbox extends Component implements ItemSelectable, Accessible {
     }
 
     /**
-     * El grupo al que pertenece.
+     * The group it belongs to.
      *
-     * @return el grupo, o `null` si es una casilla suelta
+     * @return the group, or `null` if it is a loose box
      */
     public CheckboxGroup getCheckboxGroup() {
         return this.group;
     }
 
     /**
-     * La cambia de grupo.
+     * Moves it to another group.
      *
-     * <p>Al entrar a un grupo la casilla se **desmarca**, salvo que el grupo no tuviera nada marcado.
-     * Si no, entrar rompería la única regla del grupo.
+     * <p>On entering a group the box is **unticked**, unless the group had nothing ticked.
+     * Otherwise, entering would break the group's only rule.
      */
     public void setCheckboxGroup(CheckboxGroup g) {
-        CheckboxGroup anterior;
+        CheckboxGroup previous;
         synchronized (this) {
-            anterior = this.group;
-            if (anterior == g) {
+            previous = this.group;
+            if (previous == g) {
                 return;
             }
             this.group = g;
         }
-        if (anterior != null && anterior.getSelectedCheckbox() == this) {
-            anterior.setSelectedCheckbox(null);
+        if (previous != null && previous.getSelectedCheckbox() == this) {
+            previous.setSelectedCheckbox(null);
         }
         if (g != null) {
             if (g.getSelectedCheckbox() != null) {
@@ -197,7 +197,7 @@ public class Checkbox extends Component implements ItemSelectable, Accessible {
         }
     }
 
-    /** Agrega un oyente; `null` no hace nada. */
+    /** Adds a listener; `null` does nothing. */
     public synchronized void addItemListener(ItemListener l) {
         if (l == null) {
             return;
@@ -206,7 +206,7 @@ public class Checkbox extends Component implements ItemSelectable, Accessible {
         this.enableEvents(AWTEvent.ITEM_EVENT_MASK);
     }
 
-    /** Saca un oyente. */
+    /** Removes a listener. */
     public synchronized void removeItemListener(ItemListener l) {
         if (l == null) {
             return;
@@ -214,7 +214,7 @@ public class Checkbox extends Component implements ItemSelectable, Accessible {
         this.itemListener = AWTEventMulticaster.remove(this.itemListener, l);
     }
 
-    /** Los oyentes puestos. */
+    /** The listeners that are set. */
     public synchronized ItemListener[] getItemListeners() {
         return AWTEventMulticaster.getListeners(this.itemListener, ItemListener.class);
     }
@@ -234,7 +234,7 @@ public class Checkbox extends Component implements ItemSelectable, Accessible {
         super.processEvent(e);
     }
 
-    /** Les avisa a los oyentes de selección. */
+    /** Tells the selection listeners. */
     protected void processItemEvent(ItemEvent e) {
         ItemListener l = this.itemListener;
         if (l != null) {
@@ -250,7 +250,7 @@ public class Checkbox extends Component implements ItemSelectable, Accessible {
         return s;
     }
 
-    /** La accesibilidad de la casilla. */
+    /** The accessibility information of this box. */
     public AccessibleContext getAccessibleContext() {
         if (this.accessibleContext == null) {
             this.accessibleContext = new AccessibleAWTCheckbox();
@@ -259,15 +259,15 @@ public class Checkbox extends Component implements ItemSelectable, Accessible {
     }
 
     /**
-     * La accesibilidad de una casilla.
+     * The accessibility of a box.
      *
-     * <p>Informa el estado `CHECKED` y ofrece la acción de marcarla, que es lo que un lector de
-     * pantalla necesita para operarla. El valor accesible es 1 marcada y 0 sin marcar.
+     * <p>It reports the `CHECKED` state and offers the action of ticking it, which is what a screen
+     * reader needs to operate it. The accessible value is 1 ticked and 0 unticked.
      */
     protected class AccessibleAWTCheckbox extends AccessibleAWTComponent
             implements AccessibleAction, AccessibleValue {
 
-        /** Para las subclases. */
+        /** For the subclasses. */
         protected AccessibleAWTCheckbox() {
         }
 
@@ -287,11 +287,11 @@ public class Checkbox extends Component implements ItemSelectable, Accessible {
         }
 
         /**
-         * Una casilla, tenga grupo o no.
+         * A check box, group or no group.
          *
-         * <p>Sería tentador informar `RADIO_BUTTON` cuando está en un grupo, porque es lo que
-         * parece. El JDK informa `CHECK_BOX` siempre, y se comprobó: cambiarlo haría que un lector
-         * de pantalla anunciara distinto que con AWT de verdad.
+         * <p>It would be tempting to report `RADIO_BUTTON` when it is in a group, because that is
+         * what it looks like. The JDK reports `CHECK_BOX` always, and it was checked: changing it
+         * would make a screen reader announce it differently than with real AWT.
          */
         public AccessibleRole getAccessibleRole() {
             return AccessibleRole.CHECK_BOX;
@@ -305,7 +305,7 @@ public class Checkbox extends Component implements ItemSelectable, Accessible {
             return s;
         }
 
-        /** Una sola: darla vuelta. */
+        /** Just one: flipping it. */
         public int getAccessibleActionCount() {
             return 1;
         }
@@ -325,15 +325,15 @@ public class Checkbox extends Component implements ItemSelectable, Accessible {
             return true;
         }
 
-        /** 1 si está marcada, 0 si no. */
+        /** 1 if it is ticked, 0 if not. */
         public Number getCurrentAccessibleValue() {
             return Integer.valueOf(Checkbox.this.getState() ? 1 : 0);
         }
 
         /**
-         * La marca si el valor no es cero.
+         * Ticks it if the value is not zero.
          *
-         * @return `true` si el valor no era `null`
+         * @return `true` if the value was not `null`
          */
         public boolean setCurrentAccessibleValue(Number n) {
             if (n == null) {
@@ -343,12 +343,12 @@ public class Checkbox extends Component implements ItemSelectable, Accessible {
             return true;
         }
 
-        /** Cero: sin marcar. */
+        /** Zero: unticked. */
         public Number getMinimumAccessibleValue() {
             return Integer.valueOf(0);
         }
 
-        /** Uno: marcada. */
+        /** One: ticked. */
         public Number getMaximumAccessibleValue() {
             return Integer.valueOf(1);
         }

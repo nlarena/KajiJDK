@@ -1,18 +1,18 @@
 package javax.management.relation;
 
 /**
- * El servicio de relaciones que se nombro no es valido, o no esta registrado donde se dijo.
+ * The named relation service is not valid, or is not registered where it was said to be.
  */
 public class InvalidRelationServiceException extends RelationException {
 
     private static final long serialVersionUID = 3400722103759507241L;
 
-    /** Sin detalle. */
+    /** Without detail. */
     public InvalidRelationServiceException() {
         super();
     }
 
-    /** Con un mensaje. */
+    /** With a message. */
     public InvalidRelationServiceException(String message) {
         super(message);
     }

@@ -1,30 +1,30 @@
 package javax.sound.sampled;
 
 /**
- * KajiLibrary's javax.sound.sampled.BooleanControl -- una perilla de dos posiciones.
+ * KajiLibrary's javax.sound.sampled.BooleanControl -- a two-position knob.
  *
- * <p>Silencio, reverberacion prendida o apagada. Ademas del valor lleva las <b>etiquetas</b> de cada
- * estado, para que una interfaz pueda mostrar "Silencio"/"Sonido" en lugar de "true"/"false" -- y
- * traducidas, si el proveedor las trae asi.
+ * <p>Mute, reverb on or off. Besides the value it carries the <b>labels</b> of each state, so that
+ * an interface can show "Mute"/"Sound" instead of "true"/"false" -- and translated, if the provider
+ * brings them that way.
  *
- * <p>El constructor corto usa {@code "true"} y {@code "false"} como etiquetas, que es lo que se ve
- * cuando el proveedor no se tomo el trabajo.
+ * <p>The short constructor uses {@code "true"} and {@code "false"} as labels, which is what shows
+ * when the provider did not take the trouble.
  */
 public abstract class BooleanControl extends Control {
 
-    /** Como se llama el estado verdadero. */
+    /** What the true state is called. */
     private final String trueStateLabel;
 
-    /** Como se llama el falso. */
+    /** What the false one is called. */
     private final String falseStateLabel;
 
-    /** En que esta. */
+    /** Which state it is in. */
     private boolean value;
 
     /**
-     * @param initialValue en que arranca
-     * @param trueStateLabel como mostrar el estado verdadero
-     * @param falseStateLabel como mostrar el falso
+     * @param initialValue which state it starts in
+     * @param trueStateLabel how to show the true state
+     * @param falseStateLabel how to show the false one
      */
     protected BooleanControl(Type type, boolean initialValue, String trueStateLabel,
                              String falseStateLabel) {
@@ -34,22 +34,22 @@ public abstract class BooleanControl extends Control {
         this.falseStateLabel = falseStateLabel;
     }
 
-    /** Idem, con las etiquetas {@code "true"} y {@code "false"}. */
+    /** Likewise, with the labels {@code "true"} and {@code "false"}. */
     protected BooleanControl(Type type, boolean initialValue) {
         this(type, initialValue, "true", "false");
     }
 
-    /** Cambia el estado. */
+    /** Changes the state. */
     public void setValue(boolean value) {
         this.value = value;
     }
 
-    /** En que esta. */
+    /** Which state it is in. */
     public boolean getValue() {
         return this.value;
     }
 
-    /** Como se muestra ese estado. */
+    /** How that state is shown. */
     public String getStateLabel(boolean state) {
         if (state) {
             return this.trueStateLabel;
@@ -57,27 +57,27 @@ public abstract class BooleanControl extends Control {
         return this.falseStateLabel;
     }
 
-    /** El del control, mas el valor actual con su etiqueta. */
+    /** The control's, plus the current value with its label. */
     @Override
     public String toString() {
         return super.toString() + " with current value: " + getStateLabel(getValue());
     }
 
     /**
-     * Los tipos de perilla booleana que la plataforma nombra.
+     * The kinds of boolean knob the platform names.
      *
-     * <p>Son dos y hay muchas mas en la practica: un proveedor puede definir las suyas, y por eso el
-     * constructor es protegido en lugar de que esto sea un enum.
+     * <p>There are two and many more in practice: a provider can define its own, and that is why
+     * the constructor is protected instead of this being an enum.
      */
     public static class Type extends Control.Type {
 
         /** Silenciar. */
         public static final Type MUTE = new Type("Mute");
 
-        /** Aplicar reverberacion. */
+        /** Apply reverb. */
         public static final Type APPLY_REVERB = new Type("Apply Reverb");
 
-        /** Protegido: los tipos los define quien provee el mezclador. */
+        /** Protected: the types are defined by whoever provides the mixer. */
         protected Type(String name) {
             super(name);
         }

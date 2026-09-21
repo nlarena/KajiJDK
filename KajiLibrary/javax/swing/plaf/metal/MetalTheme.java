@@ -5,79 +5,84 @@ import javax.swing.plaf.ColorUIResource;
 import javax.swing.plaf.FontUIResource;
 
 /**
- * Los colores y las tipografias de Metal.
+ * Metal's colours and typefaces.
  *
- * <h2>Ocho colores y nada mas</h2>
+ * <h2>Eight colours and nothing else</h2>
  *
- * <p>Un tema define ocho colores -- tres primarios, tres secundarios, blanco y negro -- y de ahi
- * sale <em>todo</em> lo demas. Los cuarenta y pico de metodos publicos de esta clase no guardan
- * nada: son nombres para combinaciones de esos ocho.
+ * <p>A theme defines eight colours -- three primary, three secondary, white and black -- and from
+ * there comes <em>everything</em> else. This class's forty-odd public methods keep nothing: they
+ * are names for combinations of those eight.
  *
- * <p>La division entre primarios y secundarios es la que hace que un tema se pueda escribir en
- * veinte lineas. Los <strong>secundarios</strong> son los grises de la chapa: el fondo de un boton,
- * su sombra, su sombra oscura. Los <strong>primarios</strong> son el color con el que ese tema
- * marca lo que esta elegido o tiene el foco -- azul en Steel, celeste en Ocean --. Dentro de cada
- * terna el 1 es el mas oscuro y el 3 el mas claro, siempre, y de eso depende que un boton dibujado
- * con {@code getControlDarkShadow} y {@code getControlHighlight} salga con relieve y no hundido.
+ * <p>The division between primary and secondary is what makes a theme writable in twenty lines.
+ * The <strong>secondary</strong> ones are the greys of the metal sheet: a button's background,
+ * its shadow, its dark shadow. The <strong>primary</strong> ones are the colour with which that
+ * theme marks what is chosen or has the focus -- blue in Steel, light blue in Ocean --. Within
+ * each triple, 1 is the darkest and 3 the lightest, always, and on that depends that a button
+ * drawn with {@code getControlDarkShadow} and {@code getControlHighlight} comes out with relief
+ * and not sunken.
  *
- * <p>Por eso los ocho son {@code protected} y los demas no: quien escribe un tema propio da los
- * ocho, y hereda gratis que el resto del aspecto quede coherente. Redefinir un derivado se puede y
- * es lo que hace {@link OceanTheme} en cinco casos donde la derivacion no daba lo que queria.
+ * <p>That is why the eight are {@code protected} and the rest are not: whoever writes a theme of
+ * their own gives the eight, and inherits for free that the rest of the look and feel stays
+ * coherent. Redefining a derived one is possible and is what {@link OceanTheme} does in five
+ * cases where the derivation did not give what it wanted.
  *
- * <h2>Negro no es negro</h2>
+ * <h2>Black is not black</h2>
  *
- * <p>{@link #getBlack} devuelve el negro en Steel y {@code (51,51,51)} en Ocean. Es el mismo lugar
- * en la estructura -- el color del texto y de los detalles -- y por eso se llama asi; que sea
- * literalmente negro es cosa del tema, no de la clase.
+ * <p>{@link #getBlack} returns black in Steel and {@code (51,51,51)} in Ocean. It is the same
+ * place in the structure -- the colour of the text and of the details -- and that is why it is
+ * called that; that it is literally black is the theme's business, not the class's.
  *
- * <h2>Lo que queda dicho</h2>
+ * <h2>What is said</h2>
  *
- * <p>{@link #addCustomEntriesToTable} no agrega nada. Un tema que solo cambia los ocho colores no
- * necesita agregar entradas; el que quiera degradados o iconos propios redefine el metodo, y es lo
- * que hace {@link OceanTheme}.
+ * <p>{@link #addCustomEntriesToTable} adds nothing. A theme that only changes the eight colours
+ * does not need to add entries; the one that wants gradients or icons of its own redefines the
+ * method, and that is what {@link OceanTheme} does.
  */
 public abstract class MetalTheme {
 
-    private static final ColorUIResource BLANCO = new ColorUIResource(255, 255, 255);
-    private static final ColorUIResource NEGRO = new ColorUIResource(0, 0, 0);
+    private static final ColorUIResource WHITE = new ColorUIResource(255, 255, 255);
+    private static final ColorUIResource BLACK = new ColorUIResource(0, 0, 0);
 
     public MetalTheme() {
     }
 
-    /** Como se llama; es lo que sale por {@code MetalLookAndFeel.getCurrentTheme().getName()}. */
+    /**
+     * What it is called; it is what comes out through {@code
+     * MetalLookAndFeel.getCurrentTheme().getName()}.
+     */
     public abstract String getName();
 
-    // ---- los ocho ----
+    // ---- the eight ----
 
-    /** El primario mas oscuro. */
+    /** The darkest primary. */
     protected abstract ColorUIResource getPrimary1();
 
-    /** El primario del medio. */
+    /** The middle primary. */
     protected abstract ColorUIResource getPrimary2();
 
-    /** El primario mas claro. */
+    /** The lightest primary. */
     protected abstract ColorUIResource getPrimary3();
 
-    /** El secundario mas oscuro. */
+    /** The darkest secondary. */
     protected abstract ColorUIResource getSecondary1();
 
-    /** El secundario del medio. */
+    /** The middle secondary. */
     protected abstract ColorUIResource getSecondary2();
 
-    /** El secundario mas claro; es el fondo de casi todo. */
+    /** The lightest secondary; it is the background of almost everything. */
     protected abstract ColorUIResource getSecondary3();
 
-    /** El blanco; ningun tema del JDK lo cambia. */
+    /** The white; no JDK theme changes it. */
     protected ColorUIResource getWhite() {
-        return BLANCO;
+        return WHITE;
     }
 
-    /** El negro, que no siempre es negro; ver la nota de la clase. */
+    /** The black, which is not always black; see the class note. */
     protected ColorUIResource getBlack() {
-        return NEGRO;
+        return BLACK;
     }
 
-    // ---- las tipografias ----
+    // ---- the typefaces ----
 
     public abstract FontUIResource getControlTextFont();
 
@@ -91,9 +96,9 @@ public abstract class MetalTheme {
 
     public abstract FontUIResource getSubTextFont();
 
-    // ---- lo derivado: los controles ----
+    // ---- the derived ones: the controls ----
 
-    /** El fondo de un boton, un panel, una barra. */
+    /** The background of a button, a panel, a bar. */
     public ColorUIResource getControl() {
         return getSecondary3();
     }
@@ -110,7 +115,7 @@ public abstract class MetalTheme {
         return getWhite();
     }
 
-    /** El color de las lineas que dibuja un control: la flecha, la tilde, el punto. */
+    /** The colour of the lines a control draws: the arrow, the tick, the dot. */
     public ColorUIResource getControlInfo() {
         return getBlack();
     }
@@ -119,7 +124,7 @@ public abstract class MetalTheme {
         return getSecondary2();
     }
 
-    // ---- lo derivado: lo elegido y lo que tiene el foco ----
+    // ---- the derived ones: what is chosen and what has the focus ----
 
     public ColorUIResource getPrimaryControl() {
         return getPrimary3();
@@ -141,7 +146,7 @@ public abstract class MetalTheme {
         return getBlack();
     }
 
-    // ---- lo derivado: los textos ----
+    // ---- the derived ones: the texts ----
 
     public ColorUIResource getSystemTextColor() {
         return getBlack();
@@ -171,7 +176,7 @@ public abstract class MetalTheme {
         return getPrimaryControl();
     }
 
-    // ---- lo derivado: el fondo ----
+    // ---- the derived ones: the background ----
 
     public ColorUIResource getWindowBackground() {
         return getWhite();
@@ -185,7 +190,7 @@ public abstract class MetalTheme {
         return getPrimary2();
     }
 
-    // ---- lo derivado: los menues ----
+    // ---- the derived ones: the menus ----
 
     public ColorUIResource getMenuBackground() {
         return getSecondary3();
@@ -215,9 +220,9 @@ public abstract class MetalTheme {
         return getBlack();
     }
 
-    // ---- lo derivado: separadores y titulos ----
+    // ---- the derived ones: separators and titles ----
 
-    /** El separador se dibuja con dos lineas, una clara y una oscura, y de ahi el relieve. */
+    /** The separator is drawn with two lines, one light and one dark, and from there the relief. */
     public ColorUIResource getSeparatorBackground() {
         return getWhite();
     }
@@ -242,7 +247,7 @@ public abstract class MetalTheme {
         return getBlack();
     }
 
-    /** Nada; ver la nota de la clase. */
+    /** Nothing; see the class note. */
     public void addCustomEntriesToTable(UIDefaults table) {
     }
 }

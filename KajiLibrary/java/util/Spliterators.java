@@ -29,17 +29,17 @@ public final class Spliterators {
     private Spliterators() {
     }
 
-    // Cuantos elementos toma el primer split de un iterador, y cuanto crece despues. Los numeros
-    // son los del JDK. El crecimiento es lo que importa: sin el, partir un millon de elementos de
-    // a mil serian mil splits, y cada uno cuesta una copia.
+    // How many elements an iterator's first split takes, and how much it grows afterwards. The
+    // numbers are the JDK's. The growth is what matters: without it, splitting a million elements a
+    // thousand at a time would be a thousand splits, and each one costs a copy.
     private static final int BATCH_UNIT = 1 << 10;
 
     private static final int MAX_BATCH = 1 << 25;
 
-    // SIZED y SUBSIZED se agregan solos a un spliterator de tamano conocido... salvo cuando la
-    // fuente es CONCURRENT. Ahi el tamano puede cambiar debajo del recorrido, y prometer SIZED
-    // seria prometer algo que nadie sostiene: el que reparte trabajo dimensionaria buffers con
-    // un numero que ya vencio.
+    // SIZED and SUBSIZED add themselves to a spliterator of known size... except when the source is
+    // CONCURRENT. There the size can change underneath the traversal, and promising SIZED would be
+    // promising something nobody holds up: whoever shares out the work would size buffers with a
+    // number that has already expired.
     private static int sizedUnlessConcurrent(int characteristics) {
         if ((characteristics & Spliterator.CONCURRENT) == 0) {
             return characteristics | Spliterator.SIZED | Spliterator.SUBSIZED;
@@ -71,8 +71,9 @@ public final class Spliterators {
 
     // ---- over an array ----
     //
-    // SIZED y SUBSIZED se agregan siempre y no se le preguntan al llamador: son verdad de un
-    // array, y dejar que alguien las omitiera solo serviria para que un consumidor haga de mas.
+    // SIZED and SUBSIZED are always added and the caller is not asked about them: they are true of an
+    // array, and letting anyone leave them out would only serve to make a consumer do more work than
+    // it has to.
 
     /**
      * A spliterator over all of {@code array}.
@@ -291,8 +292,8 @@ public final class Spliterators {
 
     // ---- back the other way ----
     //
-    // Un spliterator sabe hacer de iterador y no al reves: `tryAdvance` hace la prueba y la
-    // busqueda de una, y para partirlo en `hasNext` + `next` hay que guardarse el elemento.
+    // A spliterator can act as an iterator and not the other way round: `tryAdvance` does the test
+    // and the fetch in one, and to split it into `hasNext` + `next` the element has to be kept.
 
     /**
      * An iterator over what {@code spliterator} would yield.
@@ -330,10 +331,10 @@ public final class Spliterators {
         return new DoubleSpliteratorIterator(spliterator);
     }
 
-    // ---- forma 1: sobre un array ----
+    // ---- shape 1: over an array ----
     //
-    // Partir es aritmetica: la mitad del rango de indices. Exacto, barato, y por eso reporta
-    // SIZED y SUBSIZED -- las dos mitades saben su tamano antes de que nadie las recorra.
+    // Splitting is arithmetic: half of the index range. Exact, cheap, and that is why it reports
+    // SIZED and SUBSIZED -- the two halves know their size before anyone walks them.
 
     static final class ArraySpliterator<T> implements Spliterator<T> {
 
@@ -345,9 +346,9 @@ public final class Spliterators {
 
         private final int flags;
 
-        // Si es >= 0, una estimacion heredada: este spliterator salio de partir uno cuyo tamano
-        // NO se conocia, y contar los elementos del pedazo seria mentir sobre el recorrido que
-        // el pedazo representa. Si es -1, el tamano es exactamente `fence - index`.
+        // If it is >= 0, an inherited estimate: this spliterator came out of splitting one whose
+        // size was NOT known, and counting the chunk's elements would be lying about the traversal
+        // the chunk stands for. If it is -1, the size is exactly `fence - index`.
         private long estimatedSize;
 
         ArraySpliterator(Object[] array, int origin, int fence, int additional) {
@@ -358,8 +359,8 @@ public final class Spliterators {
             this.estimatedSize = -1L;
         }
 
-        // El pedazo de un reparto sin tamano: SIZED y SUBSIZED se caen, porque una
-        // parte de algo que nadie midio tampoco esta medida.
+        // The chunk of a split with no size: SIZED and SUBSIZED fall away, because a part of
+        // something nobody measured is not measured either.
         ArraySpliterator(Object[] array, int origin, int fence, int characteristics,
                 long estimatedSize) {
             this.array = array;
@@ -433,9 +434,9 @@ public final class Spliterators {
 
         private final int flags;
 
-        // Si es >= 0, una estimacion heredada: este spliterator salio de partir uno cuyo tamano
-        // NO se conocia, y contar los elementos del pedazo seria mentir sobre el recorrido que
-        // el pedazo representa. Si es -1, el tamano es exactamente `fence - index`.
+        // If it is >= 0, an inherited estimate: this spliterator came out of splitting one whose
+        // size was NOT known, and counting the chunk's elements would be lying about the traversal
+        // the chunk stands for. If it is -1, the size is exactly `fence - index`.
         private long estimatedSize;
 
         IntArraySpliterator(int[] array, int origin, int fence, int additional) {
@@ -446,8 +447,8 @@ public final class Spliterators {
             this.estimatedSize = -1L;
         }
 
-        // El pedazo de un reparto sin tamano: SIZED y SUBSIZED se caen, porque una
-        // parte de algo que nadie midio tampoco esta medida.
+        // The chunk of a split with no size: SIZED and SUBSIZED fall away, because a part of
+        // something nobody measured is not measured either.
         IntArraySpliterator(int[] array, int origin, int fence, int characteristics,
                 long estimatedSize) {
             this.array = array;
@@ -521,9 +522,9 @@ public final class Spliterators {
 
         private final int flags;
 
-        // Si es >= 0, una estimacion heredada: este spliterator salio de partir uno cuyo tamano
-        // NO se conocia, y contar los elementos del pedazo seria mentir sobre el recorrido que
-        // el pedazo representa. Si es -1, el tamano es exactamente `fence - index`.
+        // If it is >= 0, an inherited estimate: this spliterator came out of splitting one whose
+        // size was NOT known, and counting the chunk's elements would be lying about the traversal
+        // the chunk stands for. If it is -1, the size is exactly `fence - index`.
         private long estimatedSize;
 
         LongArraySpliterator(long[] array, int origin, int fence, int additional) {
@@ -534,8 +535,8 @@ public final class Spliterators {
             this.estimatedSize = -1L;
         }
 
-        // El pedazo de un reparto sin tamano: SIZED y SUBSIZED se caen, porque una
-        // parte de algo que nadie midio tampoco esta medida.
+        // The chunk of a split with no size: SIZED and SUBSIZED fall away, because a part of
+        // something nobody measured is not measured either.
         LongArraySpliterator(long[] array, int origin, int fence, int characteristics,
                 long estimatedSize) {
             this.array = array;
@@ -609,9 +610,9 @@ public final class Spliterators {
 
         private final int flags;
 
-        // Si es >= 0, una estimacion heredada: este spliterator salio de partir uno cuyo tamano
-        // NO se conocia, y contar los elementos del pedazo seria mentir sobre el recorrido que
-        // el pedazo representa. Si es -1, el tamano es exactamente `fence - index`.
+        // If it is >= 0, an inherited estimate: this spliterator came out of splitting one whose
+        // size was NOT known, and counting the chunk's elements would be lying about the traversal
+        // the chunk stands for. If it is -1, the size is exactly `fence - index`.
         private long estimatedSize;
 
         DoubleArraySpliterator(double[] array, int origin, int fence, int additional) {
@@ -622,8 +623,8 @@ public final class Spliterators {
             this.estimatedSize = -1L;
         }
 
-        // El pedazo de un reparto sin tamano: SIZED y SUBSIZED se caen, porque una
-        // parte de algo que nadie midio tampoco esta medida.
+        // The chunk of a split with no size: SIZED and SUBSIZED fall away, because a part of
+        // something nobody measured is not measured either.
         DoubleArraySpliterator(double[] array, int origin, int fence, int characteristics,
                 long estimatedSize) {
             this.array = array;
@@ -687,15 +688,14 @@ public final class Spliterators {
         }
     }
 
-    // ---- forma 2: sobre un iterador ----
+    // ---- shape 2: over an iterator ----
     //
-    // Un iterador no se puede preguntar donde esta su mitad, asi que partir no es aritmetica:
-    // es SACAR un lote de elementos a un array y entregar ese array. El primer split cuesta una
-    // copia, y el resultado es un spliterator de array -- o sea que la forma 1 es adonde todo
-    // termina yendo.
+    // An iterator cannot be asked where its middle is, so splitting is not arithmetic: it is PULLING
+    // a batch of elements into an array and handing that array over. The first split costs a copy,
+    // and the result is an array spliterator -- that is, shape 1 is where everything ends up going.
     //
-    // El lote crece en cada split (1024, 2048, ...), y ese crecimiento es lo que evita que
-    // partir un millon de elementos sean mil splits de mil.
+    // The batch grows on each split (1024, 2048, ...), and that growth is what stops splitting a
+    // million elements from being a thousand splits of a thousand.
 
     static final class IteratorSpliterator<T> implements Spliterator<T> {
 
@@ -727,14 +727,14 @@ public final class Spliterators {
             this.collection = null;
             this.iterator = iterator;
             this.estimate = Long.MAX_VALUE;
-            // Sin tamano no se puede prometer SIZED, y prometerlo haria que un consumidor
-            // dimensionara un buffer con Long.MAX_VALUE.
+            // With no size SIZED cannot be promised, and promising it would make a consumer size a
+            // buffer with Long.MAX_VALUE.
             this.flags = characteristics & ~(Spliterator.SIZED | Spliterator.SUBSIZED);
         }
 
-        // El iterador, sacado de la coleccion la primera vez que hace falta. Tarde a proposito:
-        // tomarlo en el constructor fijaria el momento en que la coleccion se congela, y la
-        // especificacion dice que eso pasa en el primer recorrido.
+        // The iterator, taken out of the collection the first time it is needed. Late on purpose:
+        // taking it in the constructor would pin down the moment the collection freezes, and the
+        // specification says that happens on the first traversal.
         private Iterator<? extends T> iterator() {
             if (this.iterator == null) {
                 this.iterator = this.collection.iterator();
@@ -766,8 +766,8 @@ public final class Spliterators {
                 this.estimate = this.estimate - (long) taking;
                 return new ArraySpliterator<T>(taken, 0, taking, this.flags);
             }
-            // Sin tamano conocido, el pedazo no dice cuantos elementos se llevo sino que
-            // representa la mitad de lo que falta, que es todo lo que se puede afirmar.
+            // With no known size, the chunk does not say how many elements it took but that it
+            // stands for half of what is left, which is all that can be asserted.
             return new ArraySpliterator<T>(taken, 0, taking, this.flags, Long.MAX_VALUE / 2L);
         }
 
@@ -848,8 +848,8 @@ public final class Spliterators {
                 this.estimate = this.estimate - (long) taking;
                 return new IntArraySpliterator(taken, 0, taking, this.flags);
             }
-            // Sin tamano conocido, el pedazo no dice cuantos elementos se llevo sino que
-            // representa la mitad de lo que falta, que es todo lo que se puede afirmar.
+            // With no known size, the chunk does not say how many elements it took but that it
+            // stands for half of what is left, which is all that can be asserted.
             return new IntArraySpliterator(taken, 0, taking, this.flags, Long.MAX_VALUE / 2L);
         }
 
@@ -921,8 +921,8 @@ public final class Spliterators {
                 this.estimate = this.estimate - (long) taking;
                 return new LongArraySpliterator(taken, 0, taking, this.flags);
             }
-            // Sin tamano conocido, el pedazo no dice cuantos elementos se llevo sino que
-            // representa la mitad de lo que falta, que es todo lo que se puede afirmar.
+            // With no known size, the chunk does not say how many elements it took but that it
+            // stands for half of what is left, which is all that can be asserted.
             return new LongArraySpliterator(taken, 0, taking, this.flags, Long.MAX_VALUE / 2L);
         }
 
@@ -994,8 +994,8 @@ public final class Spliterators {
                 this.estimate = this.estimate - (long) taking;
                 return new DoubleArraySpliterator(taken, 0, taking, this.flags);
             }
-            // Sin tamano conocido, el pedazo no dice cuantos elementos se llevo sino que
-            // representa la mitad de lo que falta, que es todo lo que se puede afirmar.
+            // With no known size, the chunk does not say how many elements it took but that it
+            // stands for half of what is left, which is all that can be asserted.
             return new DoubleArraySpliterator(taken, 0, taking, this.flags, Long.MAX_VALUE / 2L);
         }
 
@@ -1022,10 +1022,10 @@ public final class Spliterators {
         }
     }
 
-    // ---- forma 3: vacio ----
+    // ---- shape 3: empty ----
     //
-    // No es un caso degenerado que se pueda saltear: es lo que le permite a todo consumidor
-    // asumir que TIENE un spliterator, en vez de probar contra null en cada uso.
+    // It is not a degenerate case that can be skipped: it is what lets every consumer assume it HAS a
+    // spliterator, instead of testing against null on every use.
 
     static final class EmptySpliterator<T> implements Spliterator<T> {
 
@@ -1115,12 +1115,11 @@ public final class Spliterators {
         }
     }
 
-    // ---- de vuelta a iterador ----
+    // ---- back to an iterator ----
     //
-    // `tryAdvance` hace la prueba y la busqueda de una sola vez, y un iterador las quiere
-    // separadas -- asi que para partirlas hay que guardarse el elemento entre las dos llamadas.
-    // Ese `holder` es toda la diferencia, y es por lo que la conversion va en esta direccion y
-    // no al reves.
+    // `tryAdvance` does the test and the fetch in one go, and an iterator wants them separate -- so
+    // to split them the element has to be kept between the two calls. That `holder` is the whole
+    // difference, and it is why the conversion goes in this direction and not the other.
 
     static final class SpliteratorIterator<T> implements Iterator<T> {
 

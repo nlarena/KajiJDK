@@ -7,46 +7,46 @@ import java.util.NavigableMap;
 import java.util.Set;
 import java.util.TreeMap;
 
-// KajiLibrary's java.time.zone.ZoneRulesProvider -- la busqueda de "de este id de zona, cuales son
-// las reglas".
+// KajiLibrary's java.time.zone.ZoneRulesProvider -- the lookup of "for this zone id, what are the
+// rules".
 //
-// **Es un SPI, no un accesor**, y esa es la diferencia que esta version arregla. Antes era una clase
-// abstracta con dos estaticos que leian la tabla embebida directo: la forma de un SPI sin el
-// mecanismo. Un `provideRules` sobrescrito no lo llamaba nadie, porque no habia registro.
+// **It is an SPI, not an accessor**, and that is the difference this version fixes. It used to be an
+// abstract class with two statics that read the embedded table directly: the shape of an SPI without
+// the mechanism. An overridden `provideRules` was called by nobody, because there was no registry.
 //
-// Ahora si: hay una lista de proveedores, `registerProvider` la extiende, y los dos estaticos
-// recorren la lista. El proveedor de la tabla embebida (`TzData`) es simplemente el primero que se
-// registra, y deja de ser un caso especial.
+// Now there is: there is a list of providers, `registerProvider` extends it, and the two statics walk
+// the list. The embedded table's provider (`TzData`) is simply the first one registered, and stops
+// being a special case.
 //
-// Por que importa aunque hoy solo haya uno: es la unica manera de que el dia que se pueda leer la
-// base IANA en tiempo de ejecucion, se la enchufe **sin tocar esta clase**. Y mientras tanto, el
-// codigo que registra un proveedor propio --una zona de prueba, una zona historica-- funciona.
+// Why it matters even though there is only one today: it is the only way for the day the IANA
+// database can be read at run time to plug it in **without touching this class**. And in the
+// meantime, code that registers a provider of its own --a test zone, a historical zone-- works.
 //
-// Los proveedores se buscan **del ultimo registrado al primero**, para que uno agregado despues
-// pueda tapar a la tabla embebida y no al reves.
+// The providers are searched **from the last registered to the first**, so that one added later can
+// cover the embedded table and not the other way round.
 public abstract class ZoneRulesProvider {
 
-    // La lista de proveedores. Arranca con el de la tabla embebida.
-    private static final List<ZoneRulesProvider> PROVEEDORES = crearLista();
+    // The list of providers. It starts with the embedded table's.
+    private static final List<ZoneRulesProvider> PROVIDERS = buildList();
 
-    private static List<ZoneRulesProvider> crearLista() {
-        List<ZoneRulesProvider> lista = new ArrayList<ZoneRulesProvider>();
-        lista.add(new TzDataProvider());
-        return lista;
+    private static List<ZoneRulesProvider> buildList() {
+        List<ZoneRulesProvider> list = new ArrayList<ZoneRulesProvider>();
+        list.add(new TzDataProvider());
+        return list;
     }
 
     protected ZoneRulesProvider() {
     }
 
-    // ---- los dos estaticos de consulta -------------------------------------------------------------
+    // ---- the two static lookups --------------------------------------------------------------------
 
-    /** Todos los ids que algun proveedor conoce. */
+    /** Every id some provider knows. */
     public static Set<String> getAvailableZoneIds() {
         Set<String> ids = new HashSet<String>();
-        synchronized (PROVEEDORES) {
+        synchronized (PROVIDERS) {
             int i = 0;
-            while (i < PROVEEDORES.size()) {
-                ZoneRulesProvider p = PROVEEDORES.get(i);
+            while (i < PROVIDERS.size()) {
+                ZoneRulesProvider p = PROVIDERS.get(i);
                 ids.addAll(p.provideZoneIds());
                 i = i + 1;
             }
@@ -55,23 +55,23 @@ public abstract class ZoneRulesProvider {
     }
 
     /**
-     * Las reglas de esa zona.
+     * That zone's rules.
      *
-     * <p>`forCaching` se acepta y **se ignora**: las reglas de esta biblioteca son valores inmutables
-     * de una tabla que no cambia, asi que no hay nada que cachear ni que invalidar. El parametro
-     * existe en el JDK para que un proveedor dinamico pueda devolver un objeto que no se deba
-     * guardar.
+     * <p>`forCaching` is accepted and **ignored**: this library's rules are immutable values out of a
+     * table that does not change, so there is nothing to cache and nothing to invalidate. The
+     * parameter exists in the JDK so that a dynamic provider can return an object that must not be
+     * stored.
      *
-     * @throws ZoneRulesException si ningun proveedor conoce esa zona
+     * @throws ZoneRulesException if no provider knows that zone
      */
     public static ZoneRules getRules(String zoneId, boolean forCaching) {
         if (zoneId == null) {
             throw new NullPointerException("zoneId");
         }
-        synchronized (PROVEEDORES) {
-            int i = PROVEEDORES.size() - 1;
+        synchronized (PROVIDERS) {
+            int i = PROVIDERS.size() - 1;
             while (i >= 0) {
-                ZoneRulesProvider p = PROVEEDORES.get(i);
+                ZoneRulesProvider p = PROVIDERS.get(i);
                 ZoneRules r = p.provideRules(zoneId, forCaching);
                 if (r != null) {
                     return r;
@@ -83,22 +83,22 @@ public abstract class ZoneRulesProvider {
     }
 
     /**
-     * Las versiones de las reglas de esa zona, de la mas vieja a la mas nueva.
+     * That zone's rule versions, from the oldest to the newest.
      *
-     * <p>Existe porque las reglas de una zona **cambian con el tiempo** --un pais mueve su horario de
-     * verano-- y una fecha guardada hace cinco anios puede haberse calculado con reglas que ya no
-     * son. El mapa las tiene todas, con la version de tzdb como clave.
+     * <p>It exists because a zone's rules **change over time** --a country moves its daylight
+     * saving-- and a date stored five years ago may have been computed with rules that no longer
+     * hold. The map has them all, keyed by the tzdb version.
      *
-     * @throws ZoneRulesException si ningun proveedor conoce esa zona
+     * @throws ZoneRulesException if no provider knows that zone
      */
     public static NavigableMap<String, ZoneRules> getVersions(String zoneId) {
         if (zoneId == null) {
             throw new NullPointerException("zoneId");
         }
-        synchronized (PROVEEDORES) {
-            int i = PROVEEDORES.size() - 1;
+        synchronized (PROVIDERS) {
+            int i = PROVIDERS.size() - 1;
             while (i >= 0) {
-                ZoneRulesProvider p = PROVEEDORES.get(i);
+                ZoneRulesProvider p = PROVIDERS.get(i);
                 NavigableMap<String, ZoneRules> v = p.provideVersions(zoneId);
                 if (v != null && !v.isEmpty()) {
                     return v;
@@ -110,81 +110,80 @@ public abstract class ZoneRulesProvider {
     }
 
     /**
-     * Registra un proveedor.
+     * It registers a provider.
      *
-     * <p>Queda **al final** de la lista y por lo tanto se consulta **primero**: un proveedor agregado
-     * despues tapa a los anteriores para los ids que conozca, que es lo que uno quiere de un
-     * agregado.
+     * <p>It ends up **at the end** of the list and is therefore consulted **first**: a provider added
+     * later covers the earlier ones for the ids it knows, which is what one wants from an addition.
      *
-     * @throws NullPointerException si `provider` es `null`
+     * @throws NullPointerException if `provider` is `null`
      */
     public static void registerProvider(ZoneRulesProvider provider) {
         if (provider == null) {
             throw new NullPointerException("provider");
         }
-        synchronized (PROVEEDORES) {
-            PROVEEDORES.add(provider);
+        synchronized (PROVIDERS) {
+            PROVIDERS.add(provider);
         }
     }
 
     /**
-     * Le pide a cada proveedor que recargue sus datos.
+     * It asks every provider to reload its data.
      *
-     * @return si alguno cambio
+     * @return whether any of them changed
      */
     public static boolean refresh() {
-        boolean cambio = false;
-        synchronized (PROVEEDORES) {
+        boolean change = false;
+        synchronized (PROVIDERS) {
             int i = 0;
-            while (i < PROVEEDORES.size()) {
-                ZoneRulesProvider p = PROVEEDORES.get(i);
+            while (i < PROVIDERS.size()) {
+                ZoneRulesProvider p = PROVIDERS.get(i);
                 if (p.provideRefresh()) {
-                    cambio = true;
+                    change = true;
                 }
                 i = i + 1;
             }
         }
-        return cambio;
+        return change;
     }
 
-    // ---- lo que un proveedor implementa ------------------------------------------------------------
+    // ---- what a provider implements ----------------------------------------------------------------
 
-    /** Los ids que **este** proveedor conoce. */
+    /** The ids **this** provider knows. */
     protected abstract Set<String> provideZoneIds();
 
-    /** Las reglas de esa zona segun **este** proveedor, o `null` si no la conoce. */
+    /** That zone's rules according to **this** provider, or `null` if it does not know it. */
     protected abstract ZoneRules provideRules(String zoneId, boolean forCaching);
 
-    /** Las versiones de esa zona segun **este** proveedor, o vacio si no la conoce. */
+    /** That zone's versions according to **this** provider, or empty if it does not know it. */
     protected abstract NavigableMap<String, ZoneRules> provideVersions(String zoneId);
 
     /**
-     * Recarga los datos de este proveedor.
+     * It reloads this provider's data.
      *
-     * <p>No es abstracto porque la respuesta correcta para un proveedor de datos **fijos** es "no
-     * cambio nada", y ese es el caso comun. Solo lo sobrescribe uno que lea de afuera.
+     * <p>It is not abstract because the right answer for a provider of **fixed** data is "nothing
+     * changed", and that is the common case. Only one that reads from outside overrides it.
      *
-     * @return si algo cambio
+     * @return whether anything changed
      */
     protected boolean provideRefresh() {
         return false;
     }
 }
 
-// El proveedor de la tabla embebida. Es el primero de la lista y no tiene nada de especial: la unica
-// diferencia con uno que alguien escriba es que este viene registrado.
+// The embedded table's provider. It is the first on the list and has nothing special about it: the
+// only difference from one somebody writes is that this one comes registered.
 //
-// `provideVersions` devuelve una sola entrada porque la tabla **es** una sola version: no se guardan
-// las reglas historicas de cada zona, solo las vigentes. Decirlo asi --una version, con nombre-- es
-// mas honesto que devolver vacio, que significaria "no conozco esta zona".
+// `provideVersions` returns a single entry because the table **is** a single version: the historical
+// rules of each zone are not kept, only the ones in force. Saying so --one version, with a name-- is
+// more honest than returning empty, which would mean "I do not know this zone".
 final class TzDataProvider extends ZoneRulesProvider {
 
     protected Set<String> provideZoneIds() {
         Set<String> ids = new HashSet<String>();
-        String[] todas = TzData.zoneIds();
+        String[] all = TzData.zoneIds();
         int i = 0;
-        while (i < todas.length) {
-            ids.add(todas[i]);
+        while (i < all.length) {
+            ids.add(all[i]);
             i = i + 1;
         }
         return ids;
@@ -199,11 +198,11 @@ final class TzDataProvider extends ZoneRulesProvider {
     }
 
     protected NavigableMap<String, ZoneRules> provideVersions(String zoneId) {
-        TreeMap<String, ZoneRules> versiones = new TreeMap<String, ZoneRules>();
+        TreeMap<String, ZoneRules> versions = new TreeMap<String, ZoneRules>();
         ZoneRules r = this.provideRules(zoneId, false);
         if (r != null) {
-            versiones.put("KajiTzData", r);
+            versions.put("KajiTzData", r);
         }
-        return versiones;
+        return versions;
     }
 }

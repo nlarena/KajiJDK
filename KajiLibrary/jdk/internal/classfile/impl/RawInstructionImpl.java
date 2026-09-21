@@ -3,24 +3,22 @@ package jdk.internal.classfile.impl;
 import java.lang.classfile.Instruction;
 import java.lang.classfile.Opcode;
 
-// Una instrucción decodificada del arreglo `code`: su opcode, su tamaño real y dónde empieza.
+// An instruction decoded from the `code` array: its opcode, its real size and where it starts.
 //
-// ALCANCE: el JDK devuelve, para cada instrucción, una de las cuarenta y pico de interfaces de
-// `java.lang.classfile.instruction` —`LoadInstruction`, `BranchInstruction`, …— con sus operandos ya
-// interpretados. KajiLibrary no tiene ese paquete, así que devuelve esto: un `Instruction` de verdad,
-// con el opcode de verdad y el tamaño de verdad, pero sin los operandos. No es lo mismo, y no
-// pretende serlo; lo que NO hace es saltearse instrucciones ni inventar tamaños, que es lo que haría
-// que un recorrido del cuerpo del método mintiera.
+// The note said this is what KajiLibrary returns for each instruction, for lack of the
+// `java.lang.classfile.instruction` package. **That is no longer so**: the package is here, and
+// `Instructions.decode` returns its typed instructions -- `LoadInstruction`, `BranchInstruction`,
+// ... -- with their operands interpreted. Nothing constructs this class any more.
 public final class RawInstructionImpl implements Instruction {
 
     private final Opcode opcode;
     private final int bci;
-    private final int tamanio;
+    private final int size;
 
-    RawInstructionImpl(Opcode opcode, int bci, int tamanio) {
+    RawInstructionImpl(Opcode opcode, int bci, int size) {
         this.opcode = opcode;
         this.bci = bci;
-        this.tamanio = tamanio;
+        this.size = size;
     }
 
     public Opcode opcode() {
@@ -28,10 +26,10 @@ public final class RawInstructionImpl implements Instruction {
     }
 
     public int sizeInBytes() {
-        return this.tamanio;
+        return this.size;
     }
 
-    /** El offset de esta instrucción dentro del arreglo `code`. */
+    /** The offset of this instruction within the `code` array. */
     public int bci() {
         return this.bci;
     }

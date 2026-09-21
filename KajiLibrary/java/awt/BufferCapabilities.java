@@ -1,13 +1,13 @@
 package java.awt;
 
 /**
- * Que puede hacer una cadena de buffers de dibujo: si se puede intercambiar paginas y que queda en
- * el buffer de atras despues de intercambiar.
+ * What a chain of drawing buffers can do: whether pages can be flipped, and what is left in the
+ * back buffer after flipping.
  *
- * <p>{@code isPageFlipping()} no guarda un booleano propio: es {@code getFlipContents() != null}.
- * La razon es que las dos cosas no pueden contradecirse. Si hubiera un campo aparte, alguien podria
- * construir una capacidad que dice que intercambia paginas pero no dice que queda despues, y eso no
- * significa nada.
+ * <p>{@code isPageFlipping()} keeps no boolean of its own: it is {@code getFlipContents() != null}.
+ * The reason is that the two cannot contradict each other. With a separate field, someone could
+ * build a capability that says it flips pages but not what is left afterwards, and that means
+ * nothing.
  */
 public class BufferCapabilities implements Cloneable {
 
@@ -18,8 +18,8 @@ public class BufferCapabilities implements Cloneable {
     private FlipContents flipContents;
 
     /**
-     * Los dos {@code ImageCapabilities} son obligatorios; el {@code FlipContents} no, y su
-     * ausencia es la forma de decir "esta cadena no intercambia paginas, copia".
+     * The two {@code ImageCapabilities} are required; the {@code FlipContents} is not, and its
+     * absence is the way of saying "this chain does not flip pages, it copies".
      */
     public BufferCapabilities(ImageCapabilities frontCaps, ImageCapabilities backCaps,
             FlipContents flipContents) {
@@ -48,8 +48,8 @@ public class BufferCapabilities implements Cloneable {
     }
 
     /**
-     * Falso en la clase base. Quien de verdad sabe si hace falta pantalla completa es la
-     * implementacion concreta del dispositivo, y esta clase solo describe.
+     * False in the base class. What really knows whether full screen is needed is the concrete
+     * implementation of the device, and this class only describes.
      */
     public boolean isFullScreenRequired() {
         return false;
@@ -68,12 +68,13 @@ public class BufferCapabilities implements Cloneable {
     }
 
     /**
-     * Que queda en el buffer de atras despues de intercambiar.
+     * What is left in the back buffer after flipping.
      *
-     * <p>Es una enumeracion anterior a {@code enum} --por eso hereda de {@code AttributeValue}-- y
-     * la diferencia importa: {@code PRIOR} y {@code COPIED} son las dos utiles y son opuestas. Con
-     * PRIOR el buffer de atras queda con lo que se estaba mostrando (sirve para animar sobre lo
-     * anterior); con COPIED queda con lo que se acaba de mostrar.
+     * <p>It is an enumeration that predates {@code enum} --that is why it inherits from {@code
+     * AttributeValue}-- and the difference matters: {@code PRIOR} and {@code COPIED} are the two
+     * useful ones and they are opposites. With PRIOR the back buffer is left with what was being
+     * shown (useful for animating over the previous frame); with COPIED it is left with what was
+     * just shown.
      */
     public static final class FlipContents extends AttributeValue {
 
@@ -87,10 +88,10 @@ public class BufferCapabilities implements Cloneable {
 
         private static final String[] NAMES = {"undefined", "background", "prior", "copied"};
 
-        /** No se sabe que queda: hay que redibujar todo. */
+        /** What is left is not known: everything has to be redrawn. */
         public static final FlipContents UNDEFINED = new FlipContents(I_UNDEFINED);
 
-        /** Queda pintado con el color de fondo. */
+        /** It is left painted with the background colour. */
         public static final FlipContents BACKGROUND = new FlipContents(I_BACKGROUND);
 
         public static final FlipContents PRIOR = new FlipContents(I_PRIOR);

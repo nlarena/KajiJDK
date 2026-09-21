@@ -1,117 +1,120 @@
 package java.awt;
 
 /**
- * La barra de tareas o el dock: donde el sistema muestra el programa mientras corre.
+ * The taskbar or the dock: where the system shows the program while it runs.
  *
- * <p>Sirve para tres cosas: cambiar el ícono, mostrar progreso, y pedir la atención del usuario
- * —el rebote del dock en macOS, el parpadeo en Windows—.
+ * <p>It serves three things: changing the icon, showing progress, and asking for the user's
+ * attention —the bouncing of the dock on macOS, the flashing on Windows—.
  *
- * <p><strong>Cada cosa se admite o no por separado</strong>, y de ahí sale {@link #isSupported}: no
- * hay una barra de tareas sino tres o cuatro implementaciones que hacen cosas distintas. Windows
- * tiene progreso en la ventana y no en el ícono del programa; macOS al revés. Preguntar antes es
- * obligatorio, y los métodos tiran si se los llama sin preguntar.
+ * <p><strong>Each thing is supported or not on its own</strong>, and that is where
+ * {@link #isSupported} comes from: there is not one taskbar but three or four implementations that
+ * do different things. Windows has progress on the window and not on the program's icon; macOS the
+ * other way round. Asking first is mandatory, and the methods throw if they are called without
+ * asking.
  *
- * <p>Acá no se admite ninguna: {@link #isTaskbarSupported} da `false` y {@link #getTaskbar} tira,
- * que es lo que hace el JDK sin escritorio.
+ * <p>Here none of it is supported: {@link #isTaskbarSupported} gives `false` and
+ * {@link #getTaskbar} throws, which is what the JDK does without a desktop.
  */
 public class Taskbar {
 
-    /** Cada cosa que una barra de tareas puede saber hacer. */
+    /** Each thing a taskbar may know how to do. */
     public static enum Feature {
 
-        /** Un texto chico encima del ícono del programa. */
+        /** A small text over the program's icon. */
         ICON_BADGE_TEXT,
 
-        /** Un número encima del ícono del programa. */
+        /** A number over the program's icon. */
         ICON_BADGE_NUMBER,
 
-        /** Una imagen encima del ícono de una ventana. */
+        /** An image over a window's icon. */
         ICON_BADGE_IMAGE_WINDOW,
 
-        /** Cambiar el ícono del programa. */
+        /** Change the program's icon. */
         ICON_IMAGE,
 
-        /** Un menú propio en el ícono del programa. */
+        /** A menu of its own on the program's icon. */
         MENU,
 
-        /** El estado de la barra de progreso de una ventana. */
+        /** The state of a window's progress bar. */
         PROGRESS_STATE_WINDOW,
 
-        /** El valor de progreso del programa. */
+        /** The progress value of the program. */
         PROGRESS_VALUE,
 
-        /** El valor de progreso de una ventana. */
+        /** The progress value of a window. */
         PROGRESS_VALUE_WINDOW,
 
-        /** Pedir la atención del usuario sobre el programa. */
+        /** Ask for the user's attention about the program. */
         USER_ATTENTION,
 
-        /** Pedirla sobre una ventana. */
+        /** Ask for it about a window. */
         USER_ATTENTION_WINDOW
     }
 
-    /** En qué estado está una barra de progreso. */
+    /** What state a progress bar is in. */
     public static enum State {
 
-        /** Sin barra. */
+        /** No bar. */
         OFF,
 
-        /** Avanzando normalmente. */
+        /** Advancing normally. */
         NORMAL,
 
-        /** Pausada: se ve pero no avanza. */
+        /** Paused: it is seen but does not move. */
         PAUSED,
 
-        /** Sin porcentaje conocido: la barra se mueve sola. */
+        /** With no known percentage: the bar moves by itself. */
         INDETERMINATE,
 
-        /** Algo falló: la barra se ve en rojo. */
+        /** Something failed: the bar is seen in red. */
         ERROR
     }
 
-    /** La única barra, si alguna vez se llega a pedir. */
-    private static Taskbar unica;
+    /** The only taskbar, if it ever gets asked for. */
+    private static Taskbar instance;
 
-    /** El menú propio del ícono. */
+    /** The icon's own menu. */
     private PopupMenu menu;
 
-    /** El ícono del programa. */
-    private Image icono;
+    /** The program's icon. */
+    private Image icon;
 
-    /** No se instancia desde afuera. */
+    /** Not instantiated from outside. */
     private Taskbar() {
     }
 
     /**
-     * La barra de tareas de esta sesión.
+     * The taskbar of this session.
      *
-     * @throws UnsupportedOperationException siempre acá: no hay escritorio
-     * @throws HeadlessException si no hay pantalla
+     * <p>The JDK checks for a screen first and throws {@link HeadlessException} there; here the
+     * answer comes earlier, because no taskbar is supported at all.
+     *
+     * @throws UnsupportedOperationException always here: there is no desktop
      */
     public static synchronized Taskbar getTaskbar() {
         if (!isTaskbarSupported()) {
             throw new UnsupportedOperationException("Taskbar API is not supported on the current platform");
         }
-        if (unica == null) {
-            unica = new Taskbar();
+        if (instance == null) {
+            instance = new Taskbar();
         }
-        return unica;
+        return instance;
     }
 
     /**
-     * Si esta plataforma tiene barra de tareas manejable.
+     * Whether this platform has a taskbar that can be driven.
      *
-     * @return `false` siempre
+     * @return `false` always
      */
     public static boolean isTaskbarSupported() {
         return false;
     }
 
     /**
-     * Si admite esa función.
+     * Whether it supports that feature.
      *
-     * @return `false` para todas: no hay barra que las haga
-     * @throws NullPointerException si la función es `null`
+     * @return `false` for all of them: there is no taskbar to do them
+     * @throws NullPointerException if the feature is `null`
      */
     public boolean isSupported(Feature feature) {
         if (feature == null) {
@@ -121,73 +124,74 @@ public class Taskbar {
     }
 
     /**
-     * Pide la atención del usuario sobre el programa.
+     * Asks for the user's attention about the program.
      *
-     * @param enabled si prender el aviso o apagarlo
-     * @param critical si el aviso es insistente
-     * @throws UnsupportedOperationException si no se admite {@link Feature#USER_ATTENTION}
+     * @param enabled whether to turn the notice on or off
+     * @param critical whether the notice is insistent
+     * @throws UnsupportedOperationException if {@link Feature#USER_ATTENTION} is not supported
      */
     public void requestUserAttention(boolean enabled, boolean critical) {
-        this.exigir(Feature.USER_ATTENTION);
+        this.require(Feature.USER_ATTENTION);
     }
 
     /**
-     * Pide la atención sobre esa ventana.
+     * Asks for attention about that window.
      *
-     * @throws UnsupportedOperationException si no se admite {@link Feature#USER_ATTENTION_WINDOW}
-     * @throws IllegalArgumentException si la ventana es `null`
+     * @throws UnsupportedOperationException if {@link Feature#USER_ATTENTION_WINDOW} is not
+     *     supported
+     * @throws IllegalArgumentException if the window is `null`
      */
     public void requestWindowUserAttention(Window w) {
-        this.comprobarVentana(w);
-        this.exigir(Feature.USER_ATTENTION_WINDOW);
+        this.checkWindow(w);
+        this.require(Feature.USER_ATTENTION_WINDOW);
     }
 
     /**
-     * Le pone un menú propio al ícono del programa.
+     * Gives the program's icon a menu of its own.
      *
-     * @throws UnsupportedOperationException si no se admite {@link Feature#MENU}
+     * @throws UnsupportedOperationException if {@link Feature#MENU} is not supported
      */
     public void setMenu(PopupMenu menu) {
-        this.exigir(Feature.MENU);
+        this.require(Feature.MENU);
         this.menu = menu;
     }
 
     /**
-     * El menú propio del ícono.
+     * The icon's own menu.
      *
-     * @throws UnsupportedOperationException si no se admite {@link Feature#MENU}
+     * @throws UnsupportedOperationException if {@link Feature#MENU} is not supported
      */
     public PopupMenu getMenu() {
-        this.exigir(Feature.MENU);
+        this.require(Feature.MENU);
         return this.menu;
     }
 
     /**
-     * Cambia el ícono del programa.
+     * Changes the program's icon.
      *
-     * @throws UnsupportedOperationException si no se admite {@link Feature#ICON_IMAGE}
+     * @throws UnsupportedOperationException if {@link Feature#ICON_IMAGE} is not supported
      */
     public void setIconImage(Image image) {
-        this.exigir(Feature.ICON_IMAGE);
-        this.icono = image;
+        this.require(Feature.ICON_IMAGE);
+        this.icon = image;
     }
 
     /**
-     * El ícono del programa.
+     * The program's icon.
      *
-     * @throws UnsupportedOperationException si no se admite {@link Feature#ICON_IMAGE}
+     * @throws UnsupportedOperationException if {@link Feature#ICON_IMAGE} is not supported
      */
     public Image getIconImage() {
-        this.exigir(Feature.ICON_IMAGE);
-        return this.icono;
+        this.require(Feature.ICON_IMAGE);
+        return this.icon;
     }
 
     /**
-     * Pone un texto encima del ícono del programa.
+     * Puts a text over the program's icon.
      *
-     * @param badge el texto, o `null` para sacarlo
-     * @throws UnsupportedOperationException si no se admite ni {@link Feature#ICON_BADGE_TEXT} ni
-     *     {@link Feature#ICON_BADGE_NUMBER}
+     * @param badge the text, or `null` to take it away
+     * @throws UnsupportedOperationException if neither {@link Feature#ICON_BADGE_TEXT} nor
+     *     {@link Feature#ICON_BADGE_NUMBER} is supported
      */
     public void setIconBadge(String badge) {
         if (!this.isSupported(Feature.ICON_BADGE_TEXT)
@@ -197,63 +201,66 @@ public class Taskbar {
     }
 
     /**
-     * Pone una imagen encima del ícono de una ventana.
+     * Puts an image over a window's icon.
      *
-     * @throws UnsupportedOperationException si no se admite {@link Feature#ICON_BADGE_IMAGE_WINDOW}
-     * @throws IllegalArgumentException si la ventana es `null`
+     * @throws UnsupportedOperationException if {@link Feature#ICON_BADGE_IMAGE_WINDOW} is not
+     *     supported
+     * @throws IllegalArgumentException if the window is `null`
      */
     public void setWindowIconBadge(Window w, Image badge) {
-        this.comprobarVentana(w);
-        this.exigir(Feature.ICON_BADGE_IMAGE_WINDOW);
+        this.checkWindow(w);
+        this.require(Feature.ICON_BADGE_IMAGE_WINDOW);
     }
 
     /**
-     * Muestra el progreso del programa.
+     * Shows the progress of the program.
      *
-     * @param value de 0 a 100; fuera de ese rango, la barra se apaga
-     * @throws UnsupportedOperationException si no se admite {@link Feature#PROGRESS_VALUE}
+     * @param value from 0 to 100; outside that range, the bar goes off
+     * @throws UnsupportedOperationException if {@link Feature#PROGRESS_VALUE} is not supported
      */
     public void setProgressValue(int value) {
-        this.exigir(Feature.PROGRESS_VALUE);
+        this.require(Feature.PROGRESS_VALUE);
     }
 
     /**
-     * Muestra el progreso de una ventana.
+     * Shows the progress of a window.
      *
-     * @param value de 0 a 100; fuera de ese rango, la barra se apaga
-     * @throws UnsupportedOperationException si no se admite {@link Feature#PROGRESS_VALUE_WINDOW}
-     * @throws IllegalArgumentException si la ventana es `null`
+     * @param value from 0 to 100; outside that range, the bar goes off
+     * @throws UnsupportedOperationException if {@link Feature#PROGRESS_VALUE_WINDOW} is not
+     *     supported
+     * @throws IllegalArgumentException if the window is `null`
      */
     public void setWindowProgressValue(Window w, int value) {
-        this.comprobarVentana(w);
-        this.exigir(Feature.PROGRESS_VALUE_WINDOW);
+        this.checkWindow(w);
+        this.require(Feature.PROGRESS_VALUE_WINDOW);
     }
 
     /**
-     * Cambia el estado de la barra de progreso de una ventana.
+     * Changes the state of a window's progress bar.
      *
-     * @throws UnsupportedOperationException si no se admite {@link Feature#PROGRESS_STATE_WINDOW}
-     * @throws IllegalArgumentException si la ventana es `null`
-     * @throws NullPointerException si el estado es `null`
+     * @throws UnsupportedOperationException if {@link Feature#PROGRESS_STATE_WINDOW} is not
+     *     supported
+     * @throws IllegalArgumentException if the window is `null`
+     * @throws NullPointerException if the state is `null`
      */
     public void setWindowProgressState(Window w, State state) {
-        this.comprobarVentana(w);
+        this.checkWindow(w);
         if (state == null) {
             throw new NullPointerException("state");
         }
-        this.exigir(Feature.PROGRESS_STATE_WINDOW);
+        this.require(Feature.PROGRESS_STATE_WINDOW);
     }
 
-    /** Tira si esa función no se admite. */
-    private void exigir(Feature f) {
+    /** Throws if that feature is not supported. */
+    private void require(Feature f) {
         if (!this.isSupported(f)) {
             throw new UnsupportedOperationException("The " + f.name()
                     + " feature is not supported on the current platform");
         }
     }
 
-    /** Que la ventana no sea `null`. */
-    private void comprobarVentana(Window w) {
+    /** That the window is not `null`. */
+    private void checkWindow(Window w) {
         if (w == null) {
             throw new IllegalArgumentException("Window must not be null");
         }

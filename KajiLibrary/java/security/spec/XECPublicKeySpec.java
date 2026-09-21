@@ -2,15 +2,15 @@ package java.security.spec;
 
 import java.math.BigInteger;
 
-// Una clave publica de curva de Montgomery (X25519, X448): la coordenada u.
+// A Montgomery-curve public key (X25519, X448): the u coordinate.
 //
-// Solo u, sin v. No es una compresion como la de Edwards: la escalera de Montgomery que usa X25519
-// nunca necesita la otra coordenada, asi que directamente no se transmite. Una clave publica X25519
-// son 32 bytes y no hay bit de signo que agregar.
+// Only u, without v. It is not a compression like Edwards': the Montgomery ladder X25519 uses never
+// needs the other coordinate, so it is simply not transmitted. An X25519 public key is 32 bytes and
+// there is no sign bit to add.
 //
-// Los parametros son un `AlgorithmParameterSpec` y no un `NamedParameterSpec` como en Edwards. La
-// diferencia es del API real y hay que respetarla: aca entra tanto un `NamedParameterSpec` como
-// otra cosa.
+// The parameters are an `AlgorithmParameterSpec` and not a `NamedParameterSpec` as in Edwards. The
+// difference is the real API's and has to be respected: here a `NamedParameterSpec` fits as well as
+// something else.
 public class XECPublicKeySpec implements KeySpec {
 
     private final AlgorithmParameterSpec params;
@@ -31,7 +31,7 @@ public class XECPublicKeySpec implements KeySpec {
         return this.params;
     }
 
-    // La coordenada u del punto publico.
+    // The u coordinate of the public point.
     public BigInteger getU() {
         return this.u;
     }

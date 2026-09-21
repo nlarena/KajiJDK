@@ -5,41 +5,41 @@ import java.lang.reflect.AccessFlag;
 import java.lang.reflect.AccessFlag.Location;
 import java.util.Set;
 
-// La máscara `access_flags` de una ubicación concreta. El conjunto de banderas se arma una sola vez,
-// con `AccessFlag.maskToAccessFlags`, que es quien sabe desambiguar los bits compartidos.
+// The `access_flags` mask of a concrete location. The set of flags is built once, with
+// `AccessFlag.maskToAccessFlags`, which is the one that knows how to disambiguate the shared bits.
 public final class AccessFlagsImpl implements AccessFlags {
 
-    private final int mascara;
-    private final Location ubicacion;
-    private final Set<AccessFlag> banderas;
+    private final int mask;
+    private final Location location;
+    private final Set<AccessFlag> flags;
 
-    public AccessFlagsImpl(int mascara, Location ubicacion) {
-        this.mascara = mascara;
-        this.ubicacion = ubicacion;
-        this.banderas = AccessFlag.maskToAccessFlags(mascara, ubicacion);
+    public AccessFlagsImpl(int mask, Location location) {
+        this.mask = mask;
+        this.location = location;
+        this.flags = AccessFlag.maskToAccessFlags(mask, location);
     }
 
     public int flagsMask() {
-        return this.mascara;
+        return this.mask;
     }
 
     public Set<AccessFlag> flags() {
-        return this.banderas;
+        return this.flags;
     }
 
     public Location location() {
-        return this.ubicacion;
+        return this.location;
     }
 
     public boolean has(AccessFlag flag) {
-        if (!flag.locations().contains(this.ubicacion)) {
+        if (!flag.locations().contains(this.location)) {
             throw new IllegalArgumentException(
-                    "la bandera " + flag.name() + " no vale en " + this.ubicacion);
+                    "flag " + flag.name() + " is not valid in " + this.location);
         }
-        return (this.mascara & flag.mask()) != 0;
+        return (this.mask & flag.mask()) != 0;
     }
 
     public String toString() {
-        return "AccessFlags[0x" + Integer.toHexString(this.mascara) + " " + this.ubicacion + "]";
+        return "AccessFlags[0x" + Integer.toHexString(this.mask) + " " + this.location + "]";
     }
 }

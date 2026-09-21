@@ -4,28 +4,28 @@ import java.nio.ByteOrder;
 import java.util.Optional;
 
 /**
- * KajiLibrary's java.lang.foreign.AddressLayout -- el layout de un **puntero**.
+ * KajiLibrary's java.lang.foreign.AddressLayout -- a **pointer**'s layout.
  *
- * <p>Es un {@link ValueLayout} mas una cosa: puede declarar **a que apunta**
- * ({@link #withTargetLayout}). Sin esa declaracion, un puntero es un numero y no se puede seguir;
- * con ella, `PathElement.dereferenceElement()` puede bajar al otro lado.
+ * <p>It is a {@link ValueLayout} plus one thing: it can declare **what it points at**
+ * ({@link #withTargetLayout}). Without that declaration a pointer is a number and cannot be
+ * followed; with it, `PathElement.dereferenceElement()` can go down to the other side.
  *
- * <p>Que el destino sea opcional y no obligatorio es fiel al C que este paquete describe: ahi los
- * punteros a `void` existen, y forzar un destino obligaria a inventar uno.
+ * <p>That the target is optional and not mandatory is faithful to the C this package describes:
+ * there, pointers to `void` exist, and forcing a target would mean inventing one.
  */
 public interface AddressLayout extends ValueLayout {
 
-    /** El layout al que apunta, si se declaro. */
+    /** The layout it points at, if one was declared. */
     Optional<MemoryLayout> targetLayout();
 
     /**
-     * El mismo puntero, declarando a que apunta.
+     * The same pointer, declaring what it points at.
      *
-     * @throws IllegalArgumentException si el destino es `null`
+     * @throws IllegalArgumentException if the target is `null`
      */
     AddressLayout withTargetLayout(MemoryLayout layout);
 
-    /** El mismo puntero, sin declarar destino. */
+    /** The same pointer, with no target declared. */
     AddressLayout withoutTargetLayout();
 
     AddressLayout withName(String name);

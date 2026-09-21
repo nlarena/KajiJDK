@@ -6,38 +6,38 @@ import java.util.Optional;
 import java.util.Set;
 import jdk.internal.classfile.impl.TypedAttributes;
 
-// Una fila de `MethodParameters` (JVMS §4.7.24): el nombre y las banderas de un parámetro formal. El
-// nombre es opcional aunque la fila exista — el formato permite guardar las banderas de un parámetro
-// sin nombrarlo, que es lo que pasa con los parámetros sintéticos.
+// A row of `MethodParameters` (JVMS §4.7.24): the name and the flags of a formal parameter. The name
+// is optional even though the row exists -- the format allows storing a parameter's flags without
+// naming it, which is what happens with synthetic parameters.
 public interface MethodParameterInfo {
 
-    /** El nombre del parámetro, si está. */
+    /** The parameter's name, if it is there. */
     Optional<Utf8Entry> name();
 
-    /** Las banderas, como máscara. */
+    /** The flags, as a mask. */
     int flagsMask();
 
-    /** Las banderas, como conjunto. */
+    /** The flags, as a set. */
     default Set<AccessFlag> flags() {
         return AccessFlag.maskToAccessFlags(flagsMask(), AccessFlag.Location.METHOD_PARAMETER);
     }
 
-    /** Si esta bandera está puesta. */
+    /** Whether this flag is set. */
     default boolean has(AccessFlag flag) {
         return (flagsMask() & flag.mask()) != 0;
     }
 
-    /** La fila con estos valores. */
+    /** The row with these values. */
     public static MethodParameterInfo of(Optional<Utf8Entry> name, int flags) {
         return TypedAttributes.methodParameterInfo(name, flags);
     }
 
-    /** La fila con estos valores. */
+    /** The row with these values. */
     public static MethodParameterInfo of(Optional<String> name, AccessFlag... flags) {
         return TypedAttributes.methodParameterInfoOfNames(name, TypedAttributes.mask(flags));
     }
 
-    /** La fila con estos valores. */
+    /** The row with these values. */
     public static MethodParameterInfo ofParameter(Optional<String> name, int flags) {
         return TypedAttributes.methodParameterInfoOfNames(name, flags);
     }

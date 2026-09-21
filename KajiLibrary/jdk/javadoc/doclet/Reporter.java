@@ -9,61 +9,63 @@ import javax.tools.FileObject;
 import com.sun.source.util.DocTreePath;
 
 /**
- * Por donde un complemento informa problemas, para que salgan como los de la herramienta.
+ * Where a plug-in reports problems, so that they come out like those of the tool.
  *
- * <h2>Por que no alcanza con imprimir</h2>
+ * <h2>Why printing is not enough</h2>
  *
- * <p>Porque un diagnostico tiene un lugar. Escribir en la salida "falta @param" no le sirve a nadie;
- * lo que sirve es que salga con el archivo y la linea, en el mismo formato que los demas mensajes,
- * de modo que un editor pueda saltar hasta ahi. Las sobrecargas de {@code print} se distinguen
- * justamente por cuanta precision hay disponible sobre el lugar.
+ * <p>Because a diagnostic has a place. Writing "@param missing" on the output is of use to nobody;
+ * what is of use is that it comes out with the file and the line, in the same format as the other
+ * messages, so that an editor can jump there. The overloads of {@code print} are told apart
+ * precisely by how much precision there is available about the place.
  *
- * <p>Ademas cuenta: la herramienta sabe cuantos errores hubo y termina en consecuencia. Un
- * complemento que imprime por su cuenta no participa de eso.
+ * <p>It also counts: the tool knows how many errors there were and finishes accordingly. A plug-in
+ * that prints on its own takes no part in that.
  *
- * <h2>Las dos salidas</h2>
+ * <h2>The two outputs</h2>
  *
- * <p>{@link #getStandardWriter} es para lo que el complemento produce; {@link #getDiagnosticWriter}
- * para lo que sale mal. Estan separadas para que la salida se pueda redirigir sin llevarse los
- * errores puestos.
+ * <p>{@link #getStandardWriter} is for what the plug-in produces; {@link #getDiagnosticWriter} for
+ * what goes wrong. They are separated so that the output can be redirected without taking the
+ * errors along with it.
  *
  * @since 9
  */
 public interface Reporter {
 
     /**
-     * Un diagnostico sin lugar.
+     * A diagnostic with no place.
      *
-     * @param kind la severidad
-     * @param msg el mensaje
+     * @param kind the severity
+     * @param msg the message
      */
     void print(Diagnostic.Kind kind, String msg);
 
     /**
-     * Un diagnostico ubicado en un nodo de la documentacion.
+     * A diagnostic located at a node of the documentation.
      *
-     * @param kind la severidad
-     * @param path donde, dentro del comentario
-     * @param msg el mensaje
+     * @param kind the severity
+     * @param path where, inside the comment
+     * @param msg the message
      */
     void print(Diagnostic.Kind kind, DocTreePath path, String msg);
 
     /**
-     * Un diagnostico ubicado en un rango dentro de un nodo de la documentacion.
+     * A diagnostic located at a range inside a node of the documentation.
      *
-     * <p>Las tres posiciones son las de un diagnostico del compilador: donde empieza lo senalado,
-     * donde esta el caracter que se marca, y donde termina. El del medio no es redundante — es el
-     * que decide adonde apunta la flecha cuando el rango abarca varias lineas.
+     * <p>The three positions are those of a diagnostic of the compiler: where what is pointed at
+     * begins, where the character that is marked is, and where it ends. The middle one is not
+     * redundant -- it is the one that decides where the arrow points when the range spans several
+     * lines.
      *
-     * <p>Por omision descarta las posiciones y delega en la version sin ellas: una implementacion
-     * que no las sepa usar no deberia por eso perder el mensaje.
+     * <p>By default it discards the positions and delegates to the version without them: an
+     * implementation that does not know how to use them should not lose the message because of
+     * that.
      *
-     * @param kind la severidad
-     * @param path donde, dentro del comentario
-     * @param start donde empieza
-     * @param pos donde apunta
-     * @param end donde termina
-     * @param msg el mensaje
+     * @param kind the severity
+     * @param path where, inside the comment
+     * @param start where it begins
+     * @param pos where it points
+     * @param end where it ends
+     * @param msg the message
      */
     default void print(Diagnostic.Kind kind, DocTreePath path, int start, int pos, int end,
             String msg) {
@@ -71,26 +73,26 @@ public interface Reporter {
     }
 
     /**
-     * Un diagnostico ubicado en un elemento del programa.
+     * A diagnostic located at an element of the program.
      *
-     * @param kind la severidad
-     * @param e el elemento
-     * @param msg el mensaje
+     * @param kind the severity
+     * @param e the element
+     * @param msg the message
      */
     void print(Diagnostic.Kind kind, Element e, String msg);
 
     /**
-     * Un diagnostico ubicado en un rango de un archivo cualquiera.
+     * A diagnostic located at a range of any file.
      *
-     * <p>Sirve para lo que no es codigo Java: un archivo de recursos, una plantilla. Por omision
-     * pierde el lugar y emite solo el mensaje.
+     * <p>It serves for what is not Java code: a resource file, a template. By default it loses the
+     * place and emits only the message.
      *
-     * @param kind la severidad
-     * @param file el archivo
-     * @param start donde empieza
-     * @param pos donde apunta
-     * @param end donde termina
-     * @param msg el mensaje
+     * @param kind the severity
+     * @param file the file
+     * @param start where it begins
+     * @param pos where it points
+     * @param end where it ends
+     * @param msg the message
      */
     default void print(Diagnostic.Kind kind, FileObject file, int start, int pos, int end,
             String msg) {
@@ -98,23 +100,24 @@ public interface Reporter {
     }
 
     /**
-     * Por donde escribir la salida normal del complemento.
+     * Where to write the normal output of the plug-in.
      *
-     * @return el escritor
-     * @throws UnsupportedOperationException si esta implementacion no lo ofrece
+     * @return the writer
+     * @throws UnsupportedOperationException if this implementation does not offer it
      */
     default PrintWriter getStandardWriter() {
-        throw new UnsupportedOperationException("este Reporter no expone la salida estandar");
+        throw new UnsupportedOperationException(
+                "this Reporter does not expose the standard output");
     }
 
     /**
-     * Por donde escribir los diagnosticos.
+     * Where to write the diagnostics.
      *
-     * @return el escritor
-     * @throws UnsupportedOperationException si esta implementacion no lo ofrece
+     * @return the writer
+     * @throws UnsupportedOperationException if this implementation does not offer it
      */
     default PrintWriter getDiagnosticWriter() {
         throw new UnsupportedOperationException(
-                "este Reporter no expone la salida de diagnosticos");
+                "this Reporter does not expose the diagnostics output");
     }
 }

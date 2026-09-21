@@ -4,27 +4,27 @@ import com.sun.jdi.ReferenceType;
 import com.sun.jdi.ThreadReference;
 
 /**
- * Una clase termino de prepararse en la maquina depurada.
+ * A class finished preparing itself in the debugged machine.
  *
- * <p>Es el momento en que se le pueden poner puntos de interrupcion: antes de prepararla no hay
- * codigo al que apuntar. Un depurador que quiere romper en una clase que todavia no se cargo pide
- * este evento y espera.
+ * <p>It is the moment when breakpoints may be put on it: before preparing it there is no code to
+ * point at. A debugger that wants to break in a class that has not been loaded yet asks for this
+ * event and waits.
  *
  * @since 1.3
  */
 public interface ClassPrepareEvent extends Event {
 
     /**
-     * El thread.
+     * The thread.
      *
-     * @return el resultado
+     * @return the result
      */
     ThreadReference thread();
 
     /**
-     * El reference type.
+     * The reference type.
      *
-     * @return el resultado
+     * @return the result
      */
     ReferenceType referenceType();
 }

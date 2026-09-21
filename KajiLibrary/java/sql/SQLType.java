@@ -1,19 +1,20 @@
 package java.sql;
 
 /**
- * KajiLibrary's java.sql.SQLType -- un tipo de dato SQL, con nombre.
+ * KajiLibrary's java.sql.SQLType -- an SQL data type, with a name.
  *
- * <p>Es una interfaz y no un enum a proposito: los tipos estandar son un enum (`JDBCType`), pero un
- * proveedor puede tener los suyos, y sin esta interfaz no habria como nombrarlos en una firma.
+ * <p>It is an interface and not an enum on purpose: the standard types are an enum (`JDBCType`),
+ * but a vendor can have its own, and without this interface there would be no way to name them in a
+ * signature.
  */
 public interface SQLType {
 
-    /** El nombre del tipo, tal como el proveedor lo llama. */
+    /** The name of the type, as the vendor calls it. */
     String getName();
 
-    /** El proveedor que lo define; para los estandar, `"java.sql"`. */
+    /** The vendor that defines it; for the standard ones, `"java.sql"`. */
     String getVendor();
 
-    /** El numero con el que ese proveedor lo identifica. */
+    /** The number with which that vendor identifies it. */
     Integer getVendorTypeNumber();
 }

@@ -1,7 +1,7 @@
 package com.sun.source.tree;
 
 /**
- * `return`, con expresion o sin ella.
+ * `return`, with an expression or without one.
  */
 public interface ReturnTree extends StatementTree {
 

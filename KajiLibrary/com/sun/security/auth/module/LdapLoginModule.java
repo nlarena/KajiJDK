@@ -26,41 +26,43 @@ import javax.security.auth.x500.X500Principal;
 import com.sun.security.auth.UserPrincipal;
 
 /**
- * El modulo JAAS que autentica contra un directorio LDAP.
+ * The JAAS module that authenticates against an LDAP directory.
  *
- * <h2>Como se autentica contra LDAP: atandose, no comparando</h2>
+ * <h2>How one authenticates against LDAP: by binding, not by comparing</h2>
  *
- * <p>No se lee la contrasena del directorio para compararla — eso ni siquiera es posible, porque el
- * directorio devuelve el atributo cifrado o directamente no lo devuelve. Lo que se hace es
- * <strong>atarse</strong> (bind) al directorio con el nombre y la contrasena del usuario: si el
- * servidor acepta la atadura, la contrasena era buena; si la rechaza, no.
+ * <p>The password is not read from the directory in order to compare it -- that is not even
+ * possible, because the directory returns the attribute encrypted or does not return it at
+ * all. What is done is to <strong>bind</strong> to the directory with the user's name and
+ * password: if the server accepts the binding, the password was good; if it rejects it, no.
  *
- * <p>La consecuencia es que el algoritmo de cifrado de contrasenas es problema del servidor y no de
- * este codigo, y que la contrasena nunca se compara aca.
+ * <p>The consequence is that the password encryption algorithm is the server's problem and not
+ * this code's, and that the password is never compared here.
  *
- * <h2>Los dos modos</h2>
+ * <h2>The two modes</h2>
  *
- * <p><strong>Autenticacion con busqueda</strong>: primero una atadura con una cuenta de servicio
- * para <em>encontrar</em> el DN del usuario a partir de su nombre, y despues la atadura de verdad
- * con ese DN. Hace falta cuando el nombre que escribe el usuario no es su DN, que es lo habitual.
+ * <p><strong>Authentication with a search</strong>: first a binding with a service account in
+ * order to <em>find</em> the user's DN from its name, and afterwards the real binding with
+ * that DN. It is needed when the name the user writes is not its DN, which is the usual
+ * thing.
  *
- * <p><strong>Autenticacion directa</strong>: el DN se arma con una plantilla
- * ({@code userDNPattern}), sin busqueda previa. Es una atadura en vez de tres operaciones, pero
- * exige que todos los usuarios esten bajo la misma rama.
+ * <p><strong>Direct authentication</strong>: the DN is built with a template
+ * ({@code userDNPattern}), with no previous search. It is one binding instead of three
+ * operations, but it demands that all the users should be under the same branch.
  *
- * <h2>Estado en esta VM</h2>
+ * <h2>State on this VM</h2>
  *
- * <p>El codigo de aca es el real y completo: arma el entorno JNDI, hace la busqueda si corresponde,
- * se ata con las credenciales del usuario y traduce el rechazo a
- * {@link FailedLoginException}. Lo que hace falta debajo es un <strong>proveedor JNDI de
- * LDAP</strong>, que es quien habla el protocolo; sin el, {@link InitialDirContext} falla con
- * {@link NamingException} y {@link #login} la envuelve en {@link LoginException} con la causa.
+ * <p>The code here is the real and complete one: it builds the JNDI environment, does the
+ * search if it is called for, binds with the user's credentials and translates the rejection
+ * into {@link FailedLoginException}. What is needed underneath is an <strong>LDAP JNDI
+ * provider</strong>, which is who talks the protocol; without it, {@link InitialDirContext}
+ * fails with {@link NamingException} and {@link #login} wraps it in {@link LoginException}
+ * with the cause.
  *
  * @since 1.6
  */
 public class LdapLoginModule implements LoginModule {
 
-    private static final String FABRICA_LDAP = "com.sun.jndi.ldap.LdapCtxFactory";
+    private static final String LDAP_FACTORY = "com.sun.jndi.ldap.LdapCtxFactory";
 
     private Subject subject;
     private CallbackHandler callbackHandler;
@@ -75,7 +77,7 @@ public class LdapLoginModule implements LoginModule {
     private String authzIdentity;
     private String userDNPattern;
 
-    private String nombreUsuario;
+    private String userName;
     private UserPrincipal userPrincipal;
     private X500Principal dnPrincipal;
     private UserPrincipal authzPrincipal;
@@ -83,7 +85,7 @@ public class LdapLoginModule implements LoginModule {
     private boolean succeeded;
     private boolean commitSucceeded;
 
-    /** Para la configuracion de JAAS, que lo instancia por reflexion. */
+    /** For the JAAS configuration, which instantiates it by reflection. */
     public LdapLoginModule() {
     }
 
@@ -106,45 +108,45 @@ public class LdapLoginModule implements LoginModule {
     }
 
     /**
-     * Pide nombre y contrasena, y se ata al directorio con ellos.
+     * It asks for a name and a password, and binds to the directory with them.
      *
-     * @return {@code true} si la atadura fue aceptada
-     * @throws FailedLoginException si el directorio rechazo las credenciales
-     * @throws LoginException si falta configuracion o no se pudo hablar con el directorio
+     * @return {@code true} if the binding was accepted
+     * @throws FailedLoginException if the directory rejected the credentials
+     * @throws LoginException if configuration is missing or the directory could not be talked to
      */
     public boolean login() throws LoginException {
         if (userProvider == null) {
-            throw new LoginException("falta la opcion userProvider");
+            throw new LoginException("the userProvider option is missing");
         }
         if (userFilter == null && userDNPattern == null) {
-            throw new LoginException("hace falta userFilter o userDNPattern");
+            throw new LoginException("userFilter or userDNPattern is needed");
         }
 
-        final NameCallback nc = new NameCallback("Nombre de usuario: ");
+        final NameCallback nc = new NameCallback("User name: ");
         final PasswordCallback pc = new PasswordCallback("Contrasena: ", false);
-        preguntar(new Callback[] { nc, pc });
-        nombreUsuario = nc.getName();
+        ask(new Callback[] { nc, pc });
+        userName = nc.getName();
         final char[] pass = pc.getPassword();
         pc.clearPassword();
-        if (nombreUsuario == null || nombreUsuario.length() == 0 || pass == null) {
-            throw new FailedLoginException("faltan el nombre o la contrasena");
+        if (userName == null || userName.length() == 0 || pass == null) {
+            throw new FailedLoginException("the name or the password is missing");
         }
 
         try {
             final String dn = userDNPattern != null
-                    ? userDNPattern.replace("{USERNAME}", nombreUsuario)
-                    : buscarDN(nombreUsuario);
-            atarse(dn, pass);
+                    ? userDNPattern.replace("{USERNAME}", userName)
+                    : findDN(userName);
+            bind(dn, pass);
 
-            userPrincipal = new UserPrincipal(nombreUsuario);
+            userPrincipal = new UserPrincipal(userName);
             dnPrincipal = new X500Principal(dn);
             if (authzIdentity != null) {
                 authzPrincipal = new UserPrincipal(authzIdentity);
             }
         } catch (final NamingException e) {
-            limpiar();
+            reset();
             final LoginException le =
-                    new LoginException("no se pudo hablar con el directorio " + userProvider);
+                    new LoginException("the directory could not be talked to: " + userProvider);
             le.initCause(e);
             throw le;
         } finally {
@@ -152,20 +154,21 @@ public class LdapLoginModule implements LoginModule {
         }
 
         if (debug) {
-            System.out.println("\t\t[LdapLoginModule]: entro " + nombreUsuario);
+            System.out.println("\t\t[LdapLoginModule]: entro " + userName);
         }
         succeeded = true;
         return true;
     }
 
     /**
-     * El DN del usuario, buscandolo con una cuenta de servicio.
+     * The user's DN, looking it up with a service account.
      *
-     * <p>Hacen falta dos ataduras: esta, con la identidad de servicio o anonima, sirve solo para
-     * <em>encontrar</em> al usuario. La que autentica es la de despues, con su DN y su contrasena.
+     * <p>Two bindings are needed: this one, with the service or anonymous identity, serves only
+     * in order to <em>find</em> the user. The one that authenticates is the one afterwards, with
+     * its DN and its password.
      */
-    private String buscarDN(final String usuario) throws NamingException, LoginException {
-        final Hashtable<String, Object> env = entorno();
+    private String findDN(final String user) throws NamingException, LoginException {
+        final Hashtable<String, Object> env = environment();
         if (authIdentity != null) {
             env.put(Context.SECURITY_PRINCIPAL, authIdentity);
         }
@@ -176,28 +179,28 @@ public class LdapLoginModule implements LoginModule {
             sc.setReturningAttributes(new String[0]);
             sc.setCountLimit(2);
             final NamingEnumeration<SearchResult> r =
-                    ctx.search("", userFilter.replace("{USERNAME}", usuario), sc);
+                    ctx.search("", userFilter.replace("{USERNAME}", user), sc);
             if (!r.hasMore()) {
-                throw new FailedLoginException("no se encontro al usuario " + usuario);
+                throw new FailedLoginException("the user was not found: " + user);
             }
-            final SearchResult primero = r.next();
+            final SearchResult first = r.next();
             if (r.hasMore()) {
-                // Dos coincidencias no es "elegir la primera": el filtro no identifica a nadie en
-                // particular, y atarse con cualquiera de las dos seria autenticar al usuario
-                // equivocado.
+                // Two matches is not "to choose the first": the filter identifies nobody in
+                                // particular, and binding with either of the two would be
+                                // authenticating the wrong user.
                 throw new FailedLoginException(
-                        "el filtro encontro mas de un usuario para " + usuario);
+                        "the filter found more than one user for " + user);
             }
-            final String dn = primero.getNameInNamespace();
-            return dn != null && dn.length() > 0 ? dn : primero.getName();
+            final String dn = first.getNameInNamespace();
+            return dn != null && dn.length() > 0 ? dn : first.getName();
         } finally {
             ctx.close();
         }
     }
 
-    /** La atadura que autentica: con el DN del usuario y su contrasena. */
-    private void atarse(final String dn, final char[] pass) throws NamingException, LoginException {
-        final Hashtable<String, Object> env = entorno();
+    /** The binding that authenticates: with the user's DN and its password. */
+    private void bind(final String dn, final char[] pass) throws NamingException, LoginException {
+        final Hashtable<String, Object> env = environment();
         env.put(Context.SECURITY_AUTHENTICATION, "simple");
         env.put(Context.SECURITY_PRINCIPAL, dn);
         env.put(Context.SECURITY_CREDENTIALS, new String(pass));
@@ -210,9 +213,9 @@ public class LdapLoginModule implements LoginModule {
         }
     }
 
-    private Hashtable<String, Object> entorno() {
+    private Hashtable<String, Object> environment() {
         final Hashtable<String, Object> env = new Hashtable<String, Object>();
-        env.put(Context.INITIAL_CONTEXT_FACTORY, FABRICA_LDAP);
+        env.put(Context.INITIAL_CONTEXT_FACTORY, LDAP_FACTORY);
         env.put(Context.PROVIDER_URL, userProvider);
         if (useSSL) {
             env.put(Context.SECURITY_PROTOCOL, "ssl");
@@ -220,56 +223,56 @@ public class LdapLoginModule implements LoginModule {
         return env;
     }
 
-    private void preguntar(final Callback[] cbs) throws LoginException {
+    private void ask(final Callback[] cbs) throws LoginException {
         if (callbackHandler == null) {
-            throw new LoginException("hace falta un CallbackHandler");
+            throw new LoginException("a CallbackHandler is needed");
         }
         try {
             callbackHandler.handle(cbs);
         } catch (final IOException e) {
-            final LoginException le = new LoginException("fallo el CallbackHandler");
+            final LoginException le = new LoginException("the CallbackHandler failed");
             le.initCause(e);
             throw le;
         } catch (final UnsupportedCallbackException e) {
             final LoginException le =
-                    new LoginException("el CallbackHandler no soporta " + e.getCallback());
+                    new LoginException("the CallbackHandler does not support " + e.getCallback());
             le.initCause(e);
             throw le;
         }
     }
 
     /**
-     * Pone los principales en el {@link Subject}.
+     * It puts the principals in the {@link Subject}.
      *
-     * @return {@code true} si este modulo habia tenido exito en {@link #login}
-     * @throws LoginException si el {@code Subject} es de solo lectura
+     * @return {@code true} if this module had had success in {@link #login}
+     * @throws LoginException if the {@code Subject} is read-only
      */
     public boolean commit() throws LoginException {
         if (!succeeded) {
             return false;
         }
         if (subject.isReadOnly()) {
-            limpiar();
+            reset();
             throw new LoginException("Subject is ReadOnly");
         }
-        agregar(userPrincipal);
-        agregar(dnPrincipal);
-        agregar(authzPrincipal);
+        addPrincipal(userPrincipal);
+        addPrincipal(dnPrincipal);
+        addPrincipal(authzPrincipal);
         commitSucceeded = true;
         return true;
     }
 
-    private void agregar(final java.security.Principal p) {
+    private void addPrincipal(final java.security.Principal p) {
         if (p != null && !subject.getPrincipals().contains(p)) {
             subject.getPrincipals().add(p);
         }
     }
 
     /**
-     * Deshace lo que este modulo hizo, porque la autenticacion en conjunto fallo.
+     * It undoes what this module did, because the authentication as a whole failed.
      *
-     * @return {@code true} si este modulo habia tenido exito en {@link #login}
-     * @throws LoginException si el {@code Subject} es de solo lectura
+     * @return {@code true} if this module had had success in {@link #login}
+     * @throws LoginException if the {@code Subject} is read-only
      */
     public boolean abort() throws LoginException {
         if (!succeeded) {
@@ -277,7 +280,7 @@ public class LdapLoginModule implements LoginModule {
         }
         if (!commitSucceeded) {
             succeeded = false;
-            limpiar();
+            reset();
         } else {
             logout();
         }
@@ -285,33 +288,33 @@ public class LdapLoginModule implements LoginModule {
     }
 
     /**
-     * Saca del {@link Subject} los principales que este modulo habia puesto.
+     * It takes out of the {@link Subject} the principals this module had put in.
      *
-     * @return {@code true} siempre
-     * @throws LoginException si el {@code Subject} es de solo lectura
+     * @return {@code true} always
+     * @throws LoginException if the {@code Subject} is read-only
      */
     public boolean logout() throws LoginException {
         if (subject.isReadOnly()) {
-            limpiar();
+            reset();
             throw new LoginException("Subject is ReadOnly");
         }
-        sacar(userPrincipal);
-        sacar(dnPrincipal);
-        sacar(authzPrincipal);
+        removePrincipal(userPrincipal);
+        removePrincipal(dnPrincipal);
+        removePrincipal(authzPrincipal);
         succeeded = false;
         commitSucceeded = false;
-        limpiar();
+        reset();
         return true;
     }
 
-    private void sacar(final java.security.Principal p) {
+    private void removePrincipal(final java.security.Principal p) {
         if (p != null) {
             subject.getPrincipals().remove(p);
         }
     }
 
-    private void limpiar() {
-        nombreUsuario = null;
+    private void reset() {
+        userName = null;
         userPrincipal = null;
         dnPrincipal = null;
         authzPrincipal = null;

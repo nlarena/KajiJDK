@@ -6,11 +6,12 @@ import javax.print.attribute.PrintJobAttribute;
 import javax.print.attribute.PrintRequestAttribute;
 
 /**
- * Como se acomodan en el papel los varios documentos de un mismo trabajo.
+ * How the several documents of the same job are laid out on the paper.
  *
- * <p>Decide dos cosas de una vez: si los documentos comparten hoja --las variantes {@code
- * SINGLE_DOCUMENT} pueden imprimir el final de uno y el principio del otro en la misma cara-- y si
- * las copias salen intercaladas o de a tandas. Solo tiene sentido con {@link Copies} mayor que uno.
+ * <p>It decides two things at once: whether the documents share a sheet --the {@code
+ * SINGLE_DOCUMENT} variants may print the end of one and the start of the other on the same side--
+ * and whether the copies come out collated or in batches. It only makes sense with {@link Copies}
+ * greater than one.
  */
 public class MultipleDocumentHandling extends EnumSyntax implements PrintRequestAttribute, PrintJobAttribute {
 

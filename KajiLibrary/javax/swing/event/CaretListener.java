@@ -3,10 +3,10 @@ package javax.swing.event;
 import java.util.EventListener;
 
 /**
- * Quien quiere enterarse de que el cursor de texto se movio.
+ * Whoever wants to hear that the text cursor moved.
  */
 public interface CaretListener extends EventListener {
 
-    /** El cursor se movio o cambio la seleccion. */
+    /** The cursor moved or the selection changed. */
     void caretUpdate(CaretEvent e);
 }

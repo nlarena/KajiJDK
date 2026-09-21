@@ -1,25 +1,25 @@
 package javax.swing.text;
 
 /**
- * Una vista que sabe medirse teniendo en cuenta las tabulaciones.
+ * A view that knows how to measure itself taking the tabs into account.
  *
- * <p>Sin esto, una vista mide su texto y listo. Con tabulaciones no alcanza: cuanto ocupa un
- * tramo depende de <em>donde empieza</em>, porque una tabulacion salta hasta la proxima parada.
- * De ahi que {@link #getTabbedSpan} reciba la posicion de partida y quien sabe donde caen las
- * paradas.
+ * <p>Without this, a view measures its text and that is that. With tabs it is not enough: how
+ * much a stretch takes up depends on <em>where it starts</em>, because a tab jumps to the next
+ * stop. Hence {@link #getTabbedSpan} takes the starting position and whoever knows where the
+ * stops fall.
  */
 public interface TabableView {
 
     /**
-     * Cuanto ocupa empezando en {@code x}, expandiendo las tabulaciones con ese expansor.
+     * How much it takes up starting at {@code x}, expanding the tabs with that expander.
      */
     float getTabbedSpan(float x, TabExpander e);
 
     /**
-     * Cuanto ocupa ese tramo suyo, sin tabulaciones de por medio.
+     * How much that stretch of its own takes up, with no tabs in between.
      *
-     * <p>Lo usa quien tiene que partir la vista: para saber donde cortar hay que poder medir
-     * pedazos.
+     * <p>Whoever has to split the view uses it: to know where to break one has to be able to
+     * measure pieces.
      */
     float getPartialSpan(int p0, int p1);
 }

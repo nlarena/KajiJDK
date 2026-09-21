@@ -5,67 +5,68 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * KajiLibrary's javax.sound.sampled.AudioFormat -- como estan codificados los datos de audio.
+ * KajiLibrary's javax.sound.sampled.AudioFormat -- how the audio data is encoded.
  *
- * <p>Describe una tira de bytes de sonido: con que codificacion, a que frecuencia, con cuantos bits
- * por muestra, cuantos canales, y en que orden de bytes.
+ * <p>It describes a strip of sound bytes: with which encoding, at which rate, with how many bits
+ * per sample, how many channels, and in which byte order.
  *
- * <h2>Muestra, cuadro, y por que son dos cosas</h2>
+ * <h2>Sample, frame, and why they are two things</h2>
  *
- * <p>Una <b>muestra</b> es un valor de un canal; un <b>cuadro</b> son todas las muestras de un
- * instante. En estereo de 16 bits, la muestra son 2 bytes y el cuadro son 4.
+ * <p>A <b>sample</b> is one value of one channel; a <b>frame</b> is all the samples of one instant.
+ * In 16-bit stereo, the sample is 2 bytes and the frame is 4.
  *
- * <p>La distincion importa porque las posiciones y los largos de este paquete se miden en cuadros, no
- * en bytes ni en muestras. Confundirlos da audio a doble velocidad o con los canales cruzados.
+ * <p>The distinction matters because the positions and lengths of this package are measured in
+ * frames, not in bytes nor in samples. Confusing them gives audio at double speed or with the
+ * channels crossed.
  *
- * <h2>{@link #matches} no es simetrico</h2>
+ * <h2>{@link #matches} is not symmetric</h2>
  *
- * <p>Es la parte que sorprende. {@code a.matches(b)} pregunta si <b>b</b> describe algo compatible con
- * a, tratando los {@link AudioSystem#NOT_SPECIFIED} <b>de b</b> como comodines.
+ * <p>It is the surprising part. {@code a.matches(b)} asks whether <b>b</b> describes something
+ * compatible with a, treating the {@link AudioSystem#NOT_SPECIFIED}s <b>of b</b> as wildcards.
  *
- * <p>Asi que un formato concreto coincide con uno subespecificado, y no al reves. Es lo correcto para
- * lo que se usa --preguntarle a una linea si acepta lo que tengo-- y hay que leerlo en el orden
- * correcto.
+ * <p>So a concrete format matches an underspecified one, and not the other way round. It is right
+ * for what it is used for --asking a line whether it accepts what I have-- and it has to be read in
+ * the right order.
  *
- * <p>El orden de bytes solo se compara cuando hay mas de 8 bits por muestra: con un byte por muestra
- * no hay orden que discutir.
+ * <p>The byte order is only compared when there are more than 8 bits per sample: with one byte per
+ * sample there is no order to argue about.
  *
- * <h2>Las propiedades</h2>
+ * <h2>The properties</h2>
  *
- * <p>El mapa opcional lleva lo que no entra en los campos fijos: la tasa de bits de un formato
- * comprimido, la calidad, si es de tasa variable. Las claves estan definidas por convencion y una
- * implementacion puede agregar las suyas.
+ * <p>The optional map carries what does not fit in the fixed fields: the bit rate of a compressed
+ * format, the quality, whether it is variable-rate. The keys are defined by convention and an
+ * implementation can add its own.
  */
 public class AudioFormat {
 
-    /** La codificacion. */
+    /** The encoding. */
     protected AudioFormat.Encoding encoding;
 
-    /** Muestras por segundo, o {@link AudioSystem#NOT_SPECIFIED}. */
+    /** Samples per second, or {@link AudioSystem#NOT_SPECIFIED}. */
     protected float sampleRate;
 
-    /** Bits por muestra, o {@link AudioSystem#NOT_SPECIFIED}. */
+    /** Bits per sample, or {@link AudioSystem#NOT_SPECIFIED}. */
     protected int sampleSizeInBits;
 
-    /** Cuantos canales. */
+    /** How many channels. */
     protected int channels;
 
-    /** Bytes por cuadro. Ver la nota de la clase. */
+    /** Bytes per frame. See the class note. */
     protected int frameSize;
 
-    /** Cuadros por segundo. */
+    /** Frames per second. */
     protected float frameRate;
 
-    /** Si el byte mas significativo va primero. */
+    /** Whether the most significant byte goes first. */
     protected boolean bigEndian;
 
-    /** Lo que no entra en los campos fijos; de solo lectura. */
+    /** What does not fit in the fixed fields; read-only. */
     private HashMap<String, Object> properties;
 
     /**
-     * El constructor completo.
+     * The full constructor.
      *
-     * @param frameSize bytes por cuadro; ver la nota de la clase
+     * @param frameSize bytes per frame; see the class note
      */
     public AudioFormat(AudioFormat.Encoding encoding, float sampleRate, int sampleSizeInBits,
                        int channels, int frameSize, float frameRate, boolean bigEndian) {
@@ -80,10 +81,10 @@ public class AudioFormat {
     }
 
     /**
-     * Idem, con propiedades.
+     * Likewise, with properties.
      *
-     * @param properties se copia; los cambios posteriores al mapa no afectan al formato
-     * @throws NullPointerException si el mapa es null
+     * @param properties it is copied; later changes to the map do not affect the format
+     * @throws NullPointerException if the map is null
      */
     public AudioFormat(AudioFormat.Encoding encoding, float sampleRate, int sampleSizeInBits,
                        int channels, int frameSize, float frameRate, boolean bigEndian,
@@ -93,11 +94,11 @@ public class AudioFormat {
     }
 
     /**
-     * El atajo para PCM lineal, que es el caso normal.
+     * The shortcut for linear PCM, which is the normal case.
      *
-     * <p>Deduce la codificacion del booleano de signo, y calcula el tamano y la tasa de cuadro:
-     * {@code (bits + 7) / 8 * canales} bytes por cuadro, y la tasa de cuadro igual a la de muestreo.
-     * Es lo unico coherente en PCM.
+     * <p>It deduces the encoding from the signed boolean, and computes the frame size and rate:
+     * {@code (bits + 7) / 8 * channels} bytes per frame, and the frame rate equal to the sample
+     * rate. It is the only coherent thing in PCM.
      */
     public AudioFormat(float sampleRate, int sampleSizeInBits, int channels, boolean signed,
                        boolean bigEndian) {
@@ -110,42 +111,42 @@ public class AudioFormat {
              sampleRate, bigEndian);
     }
 
-    /** La codificacion. */
+    /** The encoding. */
     public AudioFormat.Encoding getEncoding() {
         return this.encoding;
     }
 
-    /** Muestras por segundo. */
+    /** Samples per second. */
     public float getSampleRate() {
         return this.sampleRate;
     }
 
-    /** Bits por muestra. */
+    /** Bits per sample. */
     public int getSampleSizeInBits() {
         return this.sampleSizeInBits;
     }
 
-    /** Cuantos canales. */
+    /** How many channels. */
     public int getChannels() {
         return this.channels;
     }
 
-    /** Bytes por cuadro. Ver la nota de la clase. */
+    /** Bytes per frame. See the class note. */
     public int getFrameSize() {
         return this.frameSize;
     }
 
-    /** Cuadros por segundo. */
+    /** Frames per second. */
     public float getFrameRate() {
         return this.frameRate;
     }
 
-    /** Si el byte mas significativo va primero. */
+    /** Whether the most significant byte goes first. */
     public boolean isBigEndian() {
         return this.bigEndian;
     }
 
-    /** Las propiedades, de solo lectura; vacio si no hay. */
+    /** The properties, read-only; empty if there are none. */
     public Map<String, Object> properties() {
         Map<String, Object> ret;
         if (this.properties == null) {
@@ -156,7 +157,7 @@ public class AudioFormat {
         return Collections.unmodifiableMap(ret);
     }
 
-    /** Una propiedad, o null. */
+    /** A property, or null. */
     public Object getProperty(String key) {
         if (this.properties == null) {
             return null;
@@ -165,9 +166,9 @@ public class AudioFormat {
     }
 
     /**
-     * Si ese formato es compatible con este.
+     * Whether that format is compatible with this one.
      *
-     * <p>Ver la nota de la clase: no es simetrico, y los comodines son los <b>del argumento</b>.
+     * <p>See the class note: it is not symmetric, and the wildcards are <b>the argument's</b>.
      */
     public boolean matches(AudioFormat format) {
         if (format.getEncoding() == null || getEncoding() == null) {
@@ -196,17 +197,19 @@ public class AudioFormat {
             && format.getFrameSize() != getFrameSize()) {
             return false;
         }
-        // Con un byte por muestra no hay orden de bytes que discutir.
+        // With one byte per sample there is no byte order to argue about.
         return getSampleSizeInBits() <= 8
             || format.isBigEndian() == isBigEndian();
     }
 
     /**
-     * Una descripcion legible.
+     * A readable description.
      *
-     * <p>La codificacion, y despues las partes que se sepan separadas por coma. La tasa de cuadro solo
-     * aparece si difiere de la de muestreo --en PCM son iguales y repetirla seria ruido-- y el orden de
-     * bytes solo si hay mas de 8 bits por muestra.
+     * <p>The encoding, and then the parts that are known, separated by commas. The frame rate only
+     * appears if it differs from the sample rate --in PCM they are equal and repeating it would be
+     * noise-- and the byte order only for PCM with more than 8 bits per sample or an unknown sample
+     * size. (The note said the byte order shows whenever there are more than 8 bits; the code, like
+     * JDK 25, leaves it out for a 16-bit ULAW format.)
      */
     @Override
     public String toString() {
@@ -230,7 +233,7 @@ public class AudioFormat {
         return sb.append(parts).toString();
     }
 
-    /** Agrega una parte, con la coma que corresponda. */
+    /** Adds a part, with the comma that goes with it. */
     private static void appendPart(StringBuilder sb, String part) {
         if (sb.length() > 0) {
             sb.append(", ");
@@ -272,7 +275,7 @@ public class AudioFormat {
         return getFrameSize() + " bytes/frame";
     }
 
-    /** Solo si difiere de la tasa de muestreo; null si no hay nada que decir. */
+    /** Only if it differs from the sample rate; null if there is nothing to say. */
     private String frameRateText() {
         if (Math.abs(getSampleRate() - getFrameRate()) <= 0.00001) {
             return null;
@@ -283,7 +286,7 @@ public class AudioFormat {
         return getFrameRate() + " frames/second";
     }
 
-    /** Solo para PCM de mas de 8 bits; null si no aplica. */
+    /** Only for PCM of more than 8 bits, or of unknown size; null if it does not apply. */
     private String endianText() {
         if (getEncoding() == null) {
             return null;
@@ -303,40 +306,40 @@ public class AudioFormat {
     }
 
     /**
-     * Una codificacion de audio.
+     * An audio encoding.
      *
-     * <p>No es un enum a proposito: el constructor es publico para que un proveedor pueda declarar
-     * codificaciones que la plataforma no conoce. Las cinco constantes son las que el JDK nombra.
+     * <p>It is not an enum on purpose: the constructor is public so that a provider can declare
+     * encodings the platform does not know. The five constants are the ones the JDK names.
      *
-     * <p>La igualdad es por nombre, asi que una codificacion propia que se llame igual que una
-     * estandar <b>es</b> la estandar.
+     * <p>Equality is by name, so a custom encoding with the same name as a standard one <b>is</b>
+     * the standard one.
      */
     public static class Encoding {
 
-        /** PCM lineal con signo. Lo mas comun. */
+        /** Signed linear PCM. The most common. */
         public static final Encoding PCM_SIGNED = new Encoding("PCM_SIGNED");
 
-        /** PCM lineal sin signo; lo habitual en 8 bits. */
+        /** Unsigned linear PCM; the usual one in 8 bits. */
         public static final Encoding PCM_UNSIGNED = new Encoding("PCM_UNSIGNED");
 
-        /** PCM en coma flotante. */
+        /** Floating-point PCM. */
         public static final Encoding PCM_FLOAT = new Encoding("PCM_FLOAT");
 
-        /** Compresion logaritmica mu-law, de telefonia. */
+        /** Mu-law logarithmic compression, from telephony. */
         public static final Encoding ULAW = new Encoding("ULAW");
 
-        /** Compresion logaritmica A-law, de telefonia. */
+        /** A-law logarithmic compression, from telephony. */
         public static final Encoding ALAW = new Encoding("ALAW");
 
-        /** El nombre, que es la identidad. */
+        /** The name, which is the identity. */
         private final String name;
 
-        /** @param name el nombre; es lo unico que distingue una codificacion de otra */
+        /** @param name the name; it is the only thing that tells one encoding from another */
         public Encoding(String name) {
             this.name = name;
         }
 
-        /** Por nombre. */
+        /** By name. */
         @Override
         public final boolean equals(Object obj) {
             if (this == obj) {
@@ -352,7 +355,7 @@ public class AudioFormat {
             return this.name.equals(other.name);
         }
 
-        /** El del nombre. */
+        /** The name's. */
         @Override
         public final int hashCode() {
             if (this.name == null) {
@@ -361,7 +364,7 @@ public class AudioFormat {
             return this.name.hashCode();
         }
 
-        /** El nombre. */
+        /** The name. */
         @Override
         public final String toString() {
             return this.name;

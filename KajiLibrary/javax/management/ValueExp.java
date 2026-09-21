@@ -3,23 +3,24 @@ package javax.management;
 import java.io.Serializable;
 
 /**
- * Un valor dentro de una consulta: constante, atributo de un MBean, o cuenta entre dos.
+ * A value inside a query: a constant, an MBean attribute, or an operation between two.
  *
- * <p>La firma que la define es {@link #apply}: devuelve **otro** `ValueExp`, no un `Object`. Eso es
- * lo que hace que una expresion se resuelva en pasos --`a + b` aplica a los dos lados, cada uno
- * devuelve una constante, y la suma devuelve una constante-- sin salirse nunca del tipo.
+ * <p>The signature that defines it is {@link #apply}: it returns <b>another</b> {@code ValueExp},
+ * not an {@code Object}. That is what makes an expression resolve in steps --{@code a + b} applies
+ * to both sides, each returns a constant, and the sum returns a constant-- without ever leaving the
+ * type.
  */
 public interface ValueExp extends Serializable {
 
     /**
-     * Resuelve la expresion para el MBean dado y devuelve el valor, ya constante.
+     * Resolves the expression for the given MBean and returns the value, already constant.
      */
     ValueExp apply(ObjectName name)
             throws BadStringOperationException, BadBinaryOpValueExpException,
                    BadAttributeValueExpException, InvalidApplicationException;
 
     /**
-     * @deprecated el servidor lo lleva {@link QueryEval}
+     * @deprecated the server is carried by {@link QueryEval}
      */
     @Deprecated
     void setMBeanServer(MBeanServer s);

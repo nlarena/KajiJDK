@@ -2,10 +2,10 @@ package java.security.cert;
 
 import java.security.GeneralSecurityException;
 
-// Algo salio mal codificando o decodificando una lista de revocacion.
+// Something went wrong encoding or decoding a revocation list.
 //
-// Es la hermana de `CertificateException` del lado de las CRLs: mismo lugar en la jerarquia, mismo
-// motivo para existir.
+// It is the sister of `CertificateException` on the CRL side: the same place in the hierarchy, the
+// same reason to exist.
 public class CRLException extends GeneralSecurityException {
 
     private static final long serialVersionUID = -6694728944094197147L;

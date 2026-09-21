@@ -6,32 +6,32 @@ import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.chrono.Chronology;
 
-// KajiLibrary's java.time.temporal.TemporalQueries -- las consultas estandar.
+// KajiLibrary's java.time.temporal.TemporalQueries -- the standard queries.
 //
-// **Son singletons, y eso no es una optimizacion: es el contrato.** Un temporal reconoce que le
-// preguntaron comparando `query == TemporalQueries.zone()` por identidad --asi esta escrito en el
-// JDK y asi esta escrito en toda esta biblioteca-- porque una `TemporalQuery` no tiene ningun otro
-// dato con el que identificarse. Si cada llamada devolviera un objeto nuevo, ninguna de esas
-// comparaciones acertaria nunca: `query()` caeria siempre al `queryFrom` generico, que para las
-// consultas marcadoras devuelve `null`.
+// **They are singletons, and that is not an optimisation: it is the contract.** A temporal
+// recognises what it was asked by comparing `query == TemporalQueries.zone()` by identity --that is
+// how it is written in the JDK and how it is written throughout this library-- because a
+// `TemporalQuery` has no other datum to identify itself by. If every call returned a fresh object,
+// none of those comparisons would ever hit: `query()` would always fall through to the generic
+// `queryFrom`, which for the marker queries returns `null`.
 //
-// Eso es exactamente lo que pasaba, y es un buen ejemplo de un error que **no rompe nada
-// visiblemente**: todo compilaba, `zonedDateTime.query(zone())` devolvia `null` en vez de la zona, y
-// el sintoma aparecia tres capas mas arriba como un "Unable to obtain ZonedDateTime" al parsear. Lo
-// encontro `FmtTest`.
+// That is exactly what was happening, and it is a good example of a mistake that **breaks nothing
+// visibly**: everything compiled, `zonedDateTime.query(zone())` returned `null` instead of the zone,
+// and the symptom appeared three layers up as an "Unable to obtain ZonedDateTime" when parsing.
+// `FmtTest` found it.
 //
-// `zoneId()` y `zone()` devuelven **la misma** instancia: en el JDK son dos consultas distintas --la
-// segunda acepta un desplazamiento cuando no hay zona de region-- pero aca las zonas son siempre de
-// desplazamiento fijo, con lo cual las dos respuestas coinciden siempre. Se comparte la instancia en
-// vez de tener dos para que un temporal que reconozca una reconozca las dos.
+// `zoneId()` and `zone()` return **the same** instance: in the JDK they are two different queries
+// --the second accepts an offset when there is no region zone-- but here the zones are always
+// fixed-offset, so the two answers always coincide. The instance is shared instead of having two so
+// that a temporal recognising one recognises both.
 //
-// `localDate`/`localTime` son las unicas que hacen trabajo de verdad: sacan la fecha o la hora de
-// cualquier temporal que lleve los campos. Las demas son marcadoras: sin un `query()` que las
-// reconozca, la respuesta correcta es `null`.
+// `localDate`/`localTime` are the only ones that do real work: they take the date or the time out of
+// any temporal carrying the fields. The rest are markers: without a `query()` that recognises them,
+// the right answer is `null`.
 public final class TemporalQueries {
 
-    // Instancias unicas. Un campo `static final` de tipo referencia se lee bien en tiempo de
-    // ejecucion; lo que no se puede es un `static final` primitivo (finding #112).
+    // Single instances. A `static final` field of reference type reads back correctly at run time;
+    // what cannot be done is a primitive `static final` (finding #112).
     private static final ZoneIdQuery ZONE = new ZoneIdQuery();
     private static final ChronologyQuery CHRONOLOGY = new ChronologyQuery();
     private static final PrecisionQuery PRECISION = new PrecisionQuery();
@@ -82,9 +82,9 @@ final class LocalDateQuery implements TemporalQuery<LocalDate> {
 
 final class LocalTimeQuery implements TemporalQuery<LocalTime> {
     public LocalTime queryFrom(TemporalAccessor temporal) {
-        // Por `NANO_OF_DAY` y no por los cuatro campos sueltos: es el campo que **cualquier**
-        // portador de una hora tiene, y el que `LocalTime.from` usa. Preguntar por
-        // `NANO_OF_SECOND` dejaba afuera a los que llevan la hora entera en un solo numero.
+        // By `NANO_OF_DAY` and not by the four loose fields: it is the field **any** carrier of a
+        // time has, and the one `LocalTime.from` uses. Asking for `NANO_OF_SECOND` left out the ones
+        // that carry the whole time in a single number.
         if (temporal.isSupported(ChronoField.NANO_OF_DAY)) {
             return LocalTime.ofNanoOfDay(temporal.getLong(ChronoField.NANO_OF_DAY));
         }

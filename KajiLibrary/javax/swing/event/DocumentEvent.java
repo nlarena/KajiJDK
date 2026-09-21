@@ -4,78 +4,78 @@ import javax.swing.text.Document;
 import javax.swing.text.Element;
 
 /**
- * Un cambio en un documento.
+ * A change in a document.
  *
- * <h2>Por que es una interfaz y no una clase</h2>
+ * <h2>Why it is an interface and not a class</h2>
  *
- * <p>Porque el documento lo emite <strong>mientras</strong> aplica el cambio, y armar un objeto con
- * todos los datos por adelantado seria trabajo tirado si nadie escucha. Siendo interfaz, la
- * implementacion puede calcular {@link #getChange} recien cuando alguien lo pide.
+ * <p>Because the document emits it <strong>while</strong> it applies the change, and building an
+ * object with all the data up front would be wasted work if nobody listens. Being an interface,
+ * the implementation can compute {@link #getChange} only when somebody asks for it.
  *
- * <h2>{@link ElementChange}, que es la parte cara</h2>
+ * <h2>{@link ElementChange}, which is the expensive part</h2>
  *
- * <p>Insertar texto no solo cambia caracteres: puede partir un parrafo en dos, o unir dos en uno. El
- * cambio estructural se describe por elemento, y solo para los que efectivamente cambiaron — de ahi
- * que {@code getChange} devuelva {@code null} para los que no.
+ * <p>Inserting text does not only change characters: it may split a paragraph in two, or join two
+ * into one. The structural change is described per element, and only for those that actually
+ * changed -- hence {@code getChange} returns {@code null} for those that did not.
  */
 public interface DocumentEvent {
 
-    /** Donde empezo el cambio. */
+    /** Where the change started. */
     int getOffset();
 
-    /** Cuantos caracteres abarca. */
+    /** How many characters it spans. */
     int getLength();
 
-    /** El documento que cambio. */
+    /** The document that changed. */
     Document getDocument();
 
-    /** Si fue insercion, borrado o cambio de atributos. */
+    /** Whether it was an insertion, a removal or a change of attributes. */
     EventType getType();
 
-    /** Como cambio la estructura debajo de {@code elem}, o {@code null} si no cambio. */
+    /** How the structure under {@code elem} changed, or {@code null} if it did not. */
     ElementChange getChange(Element elem);
 
-    /** Como cambiaron los hijos de un elemento. */
+    /** How an element's children changed. */
     public interface ElementChange {
 
-        /** El elemento cuyos hijos cambiaron. */
+        /** The element whose children changed. */
         Element getElement();
 
-        /** Desde que hijo. */
+        /** From which child. */
         int getIndex();
 
-        /** Los hijos que se fueron. */
+        /** The children that left. */
         Element[] getChildrenRemoved();
 
-        /** Los hijos que llegaron. */
+        /** The children that arrived. */
         Element[] getChildrenAdded();
     }
 
     /**
-     * Que clase de cambio fue.
+     * What kind of change it was.
      *
-     * <p>Constantes con nombre y no un enum, y asi es en el JDK: la clase es anterior a que Java
-     * tuviera enums, y cambiarla ahora romperia la serializacion de quien la guardo.
+     * <p>Named constants and not an enum, and so it is in the JDK: the class predates Java having
+     * enums, and changing it now would break the serialization of whoever stored it.
      */
     public static final class EventType {
 
-        /** Se inserto texto. */
+        /** Text was inserted. */
         public static final EventType INSERT = new EventType("INSERT");
 
-        /** Se borro texto. */
+        /** Text was removed. */
         public static final EventType REMOVE = new EventType("REMOVE");
 
-        /** Cambiaron atributos, sin cambiar el texto. */
+        /** Attributes changed, without the text changing. */
         public static final EventType CHANGE = new EventType("CHANGE");
 
-        private String tipo;
+        private String type;
 
-        private EventType(String tipo) {
-            this.tipo = tipo;
+        private EventType(String type) {
+            this.type = type;
         }
 
         public String toString() {
-            return this.tipo;
+            return this.type;
         }
     }
 }

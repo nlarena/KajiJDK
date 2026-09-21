@@ -7,84 +7,86 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.function.Consumer;
 
-// La fábrica de la API: de acá salen los `ClassModel`, acá se escriben los `.class` nuevos, y acá
-// viven las constantes del formato.
+// The API's factory: `ClassModel`s come out of here, new `.class` files are written here, and the
+// format's constants live here.
 //
-// ALCANCE, y conviene leerlo antes de usar `build`: lo que se escribe es **exactamente lo que se le
-// dijo**. El `Code` sale con su `max_stack` calculado --recorriendo el grafo de flujo, no sumando--,
-// su `max_locals`, su tabla de excepciones y sus atributos de depuración; lo que NO sale es un
-// `StackMapTable` sintetizado. Si el llamador agrega uno, se escribe; si no, el método queda sin él.
+// SCOPE, and it is worth reading before using `build`: what gets written is **exactly what it was
+// told**. The `Code` comes out with its `max_stack` computed --by walking the flow graph, not by
+// adding up--, its `max_locals`, its exception table and its debug attributes; what does NOT come out
+// is a synthesised `StackMapTable`. If the caller adds one, it is written; if not, the method is left
+// without it.
 //
-// La consecuencia es concreta: una clase de versión 50 o mayor, con saltos y sin `StackMapTable`,
-// **no pasa el verificador de una JVM**. El JDK lo calcula solo. Calcularlo no es un detalle que
-// falte por descuido -- es una inferencia de tipos sobre todo el grafo, que necesita el supertipo
-// común de cada unión, que es justamente para lo que existe `ClassHierarchyResolver`. Mientras eso
-// no esté, esto lo dice acá en vez de devolver bytes que parecen buenos.
+// The consequence is concrete: a class of version 50 or greater, with jumps and without a
+// `StackMapTable`, **does not pass a JVM's verifier**. The JDK computes it by itself. Computing it is
+// not a detail missing out of carelessness -- it is a type inference over the whole graph, needing the
+// common supertype of each join, which is precisely what `ClassHierarchyResolver` exists for. Until
+// that is in place, this says so here instead of handing back bytes that look good.
 //
-// Las opciones (`ClassFile.Option` y sus enums anidados) no están, salvo la interfaz marcadora:
-// gobiernan al escritor y ninguna tiene hoy un comportamiento que prender o apagar.
+// The options (`ClassFile.Option` and its nested enums) are not here, apart from the marker
+// interface: they govern the writer and none of them has a behaviour to turn on or off today.
 public interface ClassFile {
 
-    /** Una instancia con las opciones por omisión. */
+    /** An instance with the default options. */
     public static ClassFile of() {
         return new jdk.internal.classfile.impl.ClassFileImpl();
     }
 
-    /** Una instancia con estas opciones. */
+    /** An instance with these options. */
     public static ClassFile of(Option... options) {
         return new jdk.internal.classfile.impl.ClassFileImpl().withOptions(options);
     }
 
-    /** La misma instancia con estas opciones encima. */
+    /** The same instance with these options on top. */
     ClassFile withOptions(Option... options);
 
     /**
-     * Lee un `.class`. Valida el magic, las versiones, el pool entero y la estructura de campos,
-     * métodos y atributos; si algo no cierra tira `IllegalArgumentException` (o la
-     * `ConstantPoolException` que hereda de ella) en vez de devolver un modelo a medio armar.
+     * It reads a `.class`. It validates the magic, the versions, the whole pool and the structure of
+     * fields, methods and attributes; if something does not add up it throws
+     * `IllegalArgumentException` (or the `ConstantPoolException` inheriting from it) instead of
+     * handing back a half-built model.
      */
     ClassModel parse(byte[] bytes);
 
-    /** Lee el `.class` que está en `path`. */
+    /** It reads the `.class` sitting at `path`. */
     default ClassModel parse(Path path) throws IOException {
         return parse(Files.readAllBytes(path));
     }
 
-    /** La versión mayor más nueva que esta implementación conoce. */
+    /** The newest major version this implementation knows. */
     public static int latestMajorVersion() {
         return JAVA_25_VERSION;
     }
 
-    /** La versión menor más nueva que esta implementación conoce. */
+    /** The newest minor version this implementation knows. */
     public static int latestMinorVersion() {
         return 0;
     }
 
-    // ---- escritura ------------------------------------------------------------------------------
+    // ---- writing --------------------------------------------------------------------------------
 
     /**
-     * Escribe una clase con ese nombre, ese pool y lo que el `handler` le diga.
+     * It writes a class with that name, that pool and whatever the `handler` tells it.
      *
-     * <p>Ver la nota de alcance del encabezado: el `StackMapTable` no se sintetiza.
+     * <p>See the scope note in the header: the `StackMapTable` is not synthesised.
      */
     byte[] build(java.lang.classfile.constantpool.ClassEntry thisClassEntry,
             java.lang.classfile.constantpool.ConstantPoolBuilder constantPool,
             Consumer<ClassBuilder> handler);
 
-    /** Lo mismo, con un pool nuevo. */
+    /** The same, with a new pool. */
     default byte[] build(ClassDesc thisClassDesc, Consumer<ClassBuilder> handler) {
         java.lang.classfile.constantpool.ConstantPoolBuilder cp =
                 java.lang.classfile.constantpool.ConstantPoolBuilder.of();
         return build(cp.classEntry(thisClassDesc), cp, handler);
     }
 
-    /** Escribe la clase en ese archivo. */
+    /** It writes the class into that file. */
     default void buildTo(Path path, ClassDesc thisClassDesc, Consumer<ClassBuilder> handler)
             throws IOException {
         Files.write(path, build(thisClassDesc, handler));
     }
 
-    /** Escribe la clase en ese archivo. */
+    /** It writes the class into that file. */
     default void buildTo(Path path, java.lang.classfile.constantpool.ClassEntry thisClassEntry,
             java.lang.classfile.constantpool.ConstantPoolBuilder constantPool,
             Consumer<ClassBuilder> handler) throws IOException {
@@ -92,46 +94,46 @@ public interface ClassFile {
     }
 
     /**
-     * Escribe un `module-info.class` con ese atributo `Module`.
+     * It writes a `module-info.class` with that `Module` attribute.
      *
-     * <p>Un descriptor de módulo es una clase con una forma fija: se llama `module-info`, es
-     * `ACC_MODULE` y no tiene ni superclase ni miembros. Lo único propio es el atributo, y por eso
-     * es lo único que este método pide.
+     * <p>A module descriptor is a class with a fixed shape: it is called `module-info`, it is
+     * `ACC_MODULE` and it has neither a superclass nor members. The only thing of its own is the
+     * attribute, and that is why it is the only thing this method asks for.
      */
     default byte[] buildModule(java.lang.classfile.attribute.ModuleAttribute moduleAttribute) {
         return buildModule(moduleAttribute, new NoExtraModuleElements());
     }
 
-    /** Lo mismo, más lo que el `handler` agregue (otros atributos del módulo). */
+    /** The same, plus whatever the `handler` adds (other module attributes). */
     default byte[] buildModule(java.lang.classfile.attribute.ModuleAttribute moduleAttribute,
             Consumer<ClassBuilder> handler) {
         return build(ClassDesc.of("module-info"),
                 new ModuleClassHandler(moduleAttribute, handler));
     }
 
-    /** Escribe el `module-info.class` en ese archivo. */
+    /** It writes the `module-info.class` into that file. */
     default void buildModuleTo(Path path,
             java.lang.classfile.attribute.ModuleAttribute moduleAttribute) throws IOException {
         Files.write(path, buildModule(moduleAttribute));
     }
 
-    /** Escribe el `module-info.class` en ese archivo. */
+    /** It writes the `module-info.class` into that file. */
     default void buildModuleTo(Path path,
             java.lang.classfile.attribute.ModuleAttribute moduleAttribute,
             Consumer<ClassBuilder> handler) throws IOException {
         Files.write(path, buildModule(moduleAttribute, handler));
     }
 
-    /** Copia esa clase a través de esa transformación, con ese nombre y ese pool. */
+    /** It copies that class through that transformation, with that name and that pool. */
     byte[] transformClass(ClassModel model,
             java.lang.classfile.constantpool.ClassEntry newClassName, ClassTransform transform);
 
-    /** Copia esa clase a través de esa transformación, conservando su nombre. */
+    /** It copies that class through that transformation, keeping its name. */
     default byte[] transformClass(ClassModel model, ClassTransform transform) {
         return transformClass(model, model.thisClass(), transform);
     }
 
-    /** Copia esa clase a través de esa transformación, con otro nombre. */
+    /** It copies that class through that transformation, under another name. */
     default byte[] transformClass(ClassModel model, ClassDesc newClassName,
             ClassTransform transform) {
         java.lang.classfile.constantpool.ConstantPoolBuilder cp =
@@ -139,39 +141,38 @@ public interface ClassFile {
         return transformClass(model, cp.classEntry(newClassName), transform);
     }
 
-    // ---- verificación ---------------------------------------------------------------------------
+    // ---- verification ---------------------------------------------------------------------------
 
     /**
-     * Los errores que se le encuentran a esa clase.
+     * The errors found in that class.
      *
-     * <p><strong>Comprueba la ESTRUCTURA, no el flujo de tipos.</strong> Eso hay que leerlo al
-     * derecho: una lista vacía significa "no se encontró ningún error estructural", **no** "esta
-     * clase pasa el verificador de la JVM". El verificador de §4.10 --el que comprueba que la pila
-     * tenga el tipo que cada instrucción espera-- es otra cosa y no está acá.
+     * <p><strong>It checks the STRUCTURE, not the type flow.</strong> That has to be read straight:
+     * an empty list means "no structural error was found", **not** "this class passes the JVM's
+     * verifier". The §4.10 verifier --the one checking that the stack holds the type each instruction
+     * expects-- is another thing and it is not here.
      *
-     * <p>Lo que sí encuentra: un magic o una versión que no son, un pool inconsistente, un índice
-     * fuera de rango, un largo de atributo que no entra en el archivo, un descriptor mal formado.
-     * Es lo que el parseo ya valida; este método lo expone como lista en vez de como excepción.
+     * <p>What it does find: a magic or a version that are not right, an inconsistent pool, an index
+     * out of range, an attribute length that does not fit in the file, a malformed descriptor. It is
+     * what parsing already validates; this method exposes it as a list instead of as an exception.
      */
     List<VerifyError> verify(byte[] bytes);
 
-    /** Lo mismo sobre un modelo ya leído. */
+    /** The same over an already read model. */
     List<VerifyError> verify(ClassModel model);
 
-    /** Lo mismo sobre el archivo de esa ruta. */
+    /** The same over the file at that path. */
     default List<VerifyError> verify(Path path) throws IOException {
         return verify(Files.readAllBytes(path));
     }
 
     /**
-     * Una opción de lectura o de escritura. Es una interfaz marcadora; en el JDK sus
-     * implementaciones son los enums anidados de `ClassFile`, que acá no están porque todos
-     * gobiernan al escritor.
+     * A reading or writing option. It is a marker interface; in the JDK its implementations are
+     * `ClassFile`'s nested enums, which are not here because they all govern the writer.
      */
     public interface Option {
     }
 
-    /** `0xCAFEBABE`, los primeros cuatro bytes de todo `.class` (JVMS §4.1). */
+    /** `0xCAFEBABE`, the first four bytes of every `.class` (JVMS §4.1). */
     public static final int MAGIC_NUMBER = 0xCAFEBABE;
 
     /** `ACC_PUBLIC`. */
@@ -184,23 +185,23 @@ public interface ClassFile {
     public static final int ACC_STATIC = 0x0008;
     /** `ACC_FINAL`. */
     public static final int ACC_FINAL = 0x0010;
-    /** `ACC_SUPER` en una clase. */
+    /** `ACC_SUPER` on a class. */
     public static final int ACC_SUPER = 0x0020;
-    /** `ACC_OPEN` en un módulo: el mismo bit que `ACC_SUPER`. */
+    /** `ACC_OPEN` on a module: the same bit as `ACC_SUPER`. */
     public static final int ACC_OPEN = 0x0020;
-    /** `ACC_TRANSITIVE` en un `requires`: el mismo bit otra vez. */
+    /** `ACC_TRANSITIVE` on a `requires`: the same bit again. */
     public static final int ACC_TRANSITIVE = 0x0020;
-    /** `ACC_SYNCHRONIZED` en un método: el mismo bit otra vez. */
+    /** `ACC_SYNCHRONIZED` on a method: the same bit again. */
     public static final int ACC_SYNCHRONIZED = 0x0020;
-    /** `ACC_STATIC_PHASE` en un `requires`. */
+    /** `ACC_STATIC_PHASE` on a `requires`. */
     public static final int ACC_STATIC_PHASE = 0x0040;
-    /** `ACC_VOLATILE` en un campo. */
+    /** `ACC_VOLATILE` on a field. */
     public static final int ACC_VOLATILE = 0x0040;
-    /** `ACC_BRIDGE` en un método: el mismo bit que `ACC_VOLATILE`. */
+    /** `ACC_BRIDGE` on a method: the same bit as `ACC_VOLATILE`. */
     public static final int ACC_BRIDGE = 0x0040;
-    /** `ACC_TRANSIENT` en un campo. */
+    /** `ACC_TRANSIENT` on a field. */
     public static final int ACC_TRANSIENT = 0x0080;
-    /** `ACC_VARARGS` en un método: el mismo bit que `ACC_TRANSIENT`. */
+    /** `ACC_VARARGS` on a method: the same bit as `ACC_TRANSIENT`. */
     public static final int ACC_VARARGS = 0x0080;
     /** `ACC_NATIVE`. */
     public static final int ACC_NATIVE = 0x0100;
@@ -218,69 +219,69 @@ public interface ClassFile {
     public static final int ACC_ENUM = 0x4000;
     /** `ACC_MANDATED`. */
     public static final int ACC_MANDATED = 0x8000;
-    /** `ACC_MODULE`: el mismo bit que `ACC_MANDATED`, pero sólo válido en una clase. */
+    /** `ACC_MODULE`: the same bit as `ACC_MANDATED`, but only valid on a class. */
     public static final int ACC_MODULE = 0x8000;
 
-    /** Versión mayor de Java 1.0/1.1. */
+    /** Java 1.0/1.1's major version. */
     public static final int JAVA_1_VERSION = 45;
-    /** Versión mayor de Java 1.2. */
+    /** Java 1.2's major version. */
     public static final int JAVA_2_VERSION = 46;
-    /** Versión mayor de Java 1.3. */
+    /** Java 1.3's major version. */
     public static final int JAVA_3_VERSION = 47;
-    /** Versión mayor de Java 1.4. */
+    /** Java 1.4's major version. */
     public static final int JAVA_4_VERSION = 48;
-    /** Versión mayor de Java 5. */
+    /** Java 5's major version. */
     public static final int JAVA_5_VERSION = 49;
-    /** Versión mayor de Java 6. */
+    /** Java 6's major version. */
     public static final int JAVA_6_VERSION = 50;
-    /** Versión mayor de Java 7. */
+    /** Java 7's major version. */
     public static final int JAVA_7_VERSION = 51;
-    /** Versión mayor de Java 8. */
+    /** Java 8's major version. */
     public static final int JAVA_8_VERSION = 52;
-    /** Versión mayor de Java 9. */
+    /** Java 9's major version. */
     public static final int JAVA_9_VERSION = 53;
-    /** Versión mayor de Java 10. */
+    /** Java 10's major version. */
     public static final int JAVA_10_VERSION = 54;
-    /** Versión mayor de Java 11. */
+    /** Java 11's major version. */
     public static final int JAVA_11_VERSION = 55;
-    /** Versión mayor de Java 12. */
+    /** Java 12's major version. */
     public static final int JAVA_12_VERSION = 56;
-    /** Versión mayor de Java 13. */
+    /** Java 13's major version. */
     public static final int JAVA_13_VERSION = 57;
-    /** Versión mayor de Java 14. */
+    /** Java 14's major version. */
     public static final int JAVA_14_VERSION = 58;
-    /** Versión mayor de Java 15. */
+    /** Java 15's major version. */
     public static final int JAVA_15_VERSION = 59;
-    /** Versión mayor de Java 16. */
+    /** Java 16's major version. */
     public static final int JAVA_16_VERSION = 60;
-    /** Versión mayor de Java 17. */
+    /** Java 17's major version. */
     public static final int JAVA_17_VERSION = 61;
-    /** Versión mayor de Java 18. */
+    /** Java 18's major version. */
     public static final int JAVA_18_VERSION = 62;
-    /** Versión mayor de Java 19. */
+    /** Java 19's major version. */
     public static final int JAVA_19_VERSION = 63;
-    /** Versión mayor de Java 20. */
+    /** Java 20's major version. */
     public static final int JAVA_20_VERSION = 64;
-    /** Versión mayor de Java 21. */
+    /** Java 21's major version. */
     public static final int JAVA_21_VERSION = 65;
-    /** Versión mayor de Java 22. */
+    /** Java 22's major version. */
     public static final int JAVA_22_VERSION = 66;
-    /** Versión mayor de Java 23. */
+    /** Java 23's major version. */
     public static final int JAVA_23_VERSION = 67;
-    /** Versión mayor de Java 24. */
+    /** Java 24's major version. */
     public static final int JAVA_24_VERSION = 68;
-    /** Versión mayor de Java 25. */
+    /** Java 25's major version. */
     public static final int JAVA_25_VERSION = 69;
 
-    /** El `minor_version` que marca una clase de vista previa: `0xFFFF`. */
+    /** The `minor_version` marking a preview class: `0xFFFF`. */
     public static final int PREVIEW_MINOR_VERSION = 0xFFFF;
 }
 
-// El `handler` que arma un `module-info`: el atributo del modulo, la bandera que el formato le
-// exige, y despues lo que el llamador quiera agregar.
+// The `handler` building a `module-info`: the module's attribute, the flag the format demands of it,
+// and then whatever the caller wants to add.
 //
-// Con nombre y no lambda: ver la nota de `ClassBuilder` sobre por que estas interfaces no pueden
-// depender de `LambdaMetafactory`.
+// Named and not a lambda: see the note on `ClassBuilder` about why these interfaces cannot depend on
+// `LambdaMetafactory`.
 final class ModuleClassHandler implements Consumer<ClassBuilder> {
 
     private final java.lang.classfile.attribute.ModuleAttribute attr;
@@ -293,15 +294,15 @@ final class ModuleClassHandler implements Consumer<ClassBuilder> {
     }
 
     public void accept(ClassBuilder cb) {
-        // ACC_MODULE. Un `module-info` no es una clase que alguien pueda instanciar ni extender, y
-        // esta bandera es lo que se lo dice a la JVM.
+        // ACC_MODULE. A `module-info` is not a class anyone can instantiate or extend, and this
+        // flag is what tells the JVM so.
         cb.withFlags(0x8000);
         cb.with(this.attr);
         this.extra.accept(cb);
     }
 }
 
-// El `handler` vacio de `buildModule(ModuleAttribute)`.
+// `buildModule(ModuleAttribute)`'s empty `handler`.
 final class NoExtraModuleElements implements Consumer<ClassBuilder> {
 
     public void accept(ClassBuilder cb) {

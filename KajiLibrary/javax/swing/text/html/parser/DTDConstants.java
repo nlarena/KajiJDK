@@ -1,22 +1,22 @@
 package javax.swing.text.html.parser;
 
 /**
- * Los numeros con los que la DTD nombra tipos y modificadores.
+ * The numbers the DTD names types and modifiers with.
  *
- * <h2>Tres familias de numeros en una sola lista</h2>
+ * <h2>Three families of numbers in a single list</h2>
  *
- * <p>Los valores se repiten a proposito: {@code CDATA} y {@code FIXED} valen los dos 1, y
- * {@code ENTITY} y {@code REQUIRED} valen los dos 2. No es un descuido: son familias distintas que
- * nunca se comparan entre si. Los primeros diecinueve son <em>tipos</em> de atributo o de
- * contenido; {@code FIXED} a {@code IMPLIED} son <em>modificadores</em> de un atributo; y de
- * {@code PUBLIC} a {@code SYSTEM} son tipos de <em>entidad</em>.
+ * <p>The values repeat on purpose: {@code CDATA} and {@code FIXED} are both worth 1, and
+ * {@code ENTITY} and {@code REQUIRED} are both worth 2. It is not an oversight: they are
+ * different families that are never compared with each other. The first nineteen are attribute or
+ * content <em>types</em>; {@code FIXED} to {@code IMPLIED} are an attribute's <em>modifiers</em>;
+ * and from {@code PUBLIC} to {@code SYSTEM} they are <em>entity</em> types.
  *
- * <p>Los tres ultimos son banderas de bit, no numeros de una lista: se combinan con un
- * {@code |} con el tipo de entidad para decir si es general o de parametro.
+ * <p>The last three are bit flags, not numbers from a list: they are combined with a {@code |}
+ * with the entity type to say whether it is general or a parameter one.
  *
- * <p>Es una interfaz sin metodos y las clases del paquete la implementan para nombrar las
- * constantes sin calificarlas. Es una forma que hoy no se usa, pero cambiarla cambiaria la firma
- * publica de {@link Element}, {@link Entity} y {@link AttributeList}.
+ * <p>It is an interface with no methods and the package's classes implement it so as to name the
+ * constants without qualifying them. It is a form that is not used today, but changing it would
+ * change the public signature of {@link Element}, {@link Entity} and {@link AttributeList}.
  */
 public interface DTDConstants {
 

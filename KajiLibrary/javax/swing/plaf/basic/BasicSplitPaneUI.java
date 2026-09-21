@@ -24,40 +24,41 @@ import javax.swing.plaf.SplitPaneUI;
 import javax.swing.plaf.UIResource;
 
 /**
- * El aspecto basico de un panel dividido.
+ * The basic look and feel of a split pane.
  *
- * <h2>Tres componentes y un acomodador con memoria</h2>
+ * <h2>Three components and a layout with a memory</h2>
  *
- * <p>El panel tiene dos hijos y un divisor en el medio, y el reparto no se recalcula de cero cada
- * vez: el acomodador se acuerda de cuanto le dio a cada uno --{@link BasicHorizontalLayoutManager}
- * y su tabla {@code sizes}-- y al cambiar el tamano del panel reparte la diferencia. Sin esa
- * memoria, agrandar la ventana devolveria el divisor al medio y se perderia donde lo dejo el
- * usuario.
+ * <p>The pane has two children and a divider in the middle, and the sharing out is not
+ * recomputed from scratch each time: the layout remembers how much it gave each one
+ * -- {@link BasicHorizontalLayoutManager} and its table {@code sizes} -- and on changing the
+ * pane's size it hands out the difference. Without that memory, enlarging the window would
+ * return the divider to the middle and where the user left it would be lost.
  *
- * <h2>Arrastre continuo o con sombra</h2>
+ * <h2>Continuous dragging or with a shadow</h2>
  *
- * <p>Ver la nota de {@link BasicSplitPaneDivider}. Aca esta la otra mitad: el "divisor no continuo"
- * ({@link #getNonContinuousLayoutDivider}) es el rectangulo que se dibuja mientras se arrastra y que
- * desaparece al soltar. Se agrega a la capa de arriba del panel para que tape a los dos hijos.
+ * <p>See {@link BasicSplitPaneDivider}'s note. Here is the other half: the "non-continuous
+ * divider" ({@link #getNonContinuousLayoutDivider}) is the rectangle that is drawn while
+ * dragging and that disappears on releasing. It is added to the pane's top layer so that it
+ * covers the two children.
  *
- * <h2>Los doce campos que quedaron en nulo</h2>
+ * <h2>The twelve fields that were left null</h2>
  *
- * <p>Siete {@link KeyStroke} y cinco {@link ActionListener}, todos protegidos, todos en
- * {@code null}. Son de cuando el UI ataba las teclas a mano; ahora las ata la tabla del aspecto.
- * Esta medido, y es la misma historia que {@code shadow} y {@code highlight} en
- * {@link BasicSeparatorUI}.
+ * <p>Seven {@link KeyStroke}s and five {@link ActionListener}s, all protected, all
+ * {@code null}. They are from when the look and feel tied the keys by hand; now they are tied
+ * by the look and feel's table. It is measured, and it is the same story as {@code shadow} and
+ * {@code highlight} in {@link BasicSeparatorUI}.
  *
- * <h2>Sin insets</h2>
+ * <h2>No insets</h2>
  *
- * <p>{@link #getInsets} devuelve {@code null}, no un {@code Insets} en cero: deja que conteste el
- * borde del componente. Medido.
+ * <p>{@link #getInsets} returns {@code null}, not an {@code Insets} at zero: it lets the
+ * component's border answer. Measured.
  */
 public class BasicSplitPaneUI extends SplitPaneUI {
 
-    /** El nombre con el que se agrega el divisor de arrastre a la capa de arriba. */
+    /** The name the drag divider is added to the top layer with. */
     protected static final String NON_CONTINUOUS_DIVIDER = "nonContinuousDivider";
 
-    /** Cuanto se mueve el divisor con una flecha del teclado. */
+    /** How much the divider moves with a keyboard arrow. */
     protected static int KEYBOARD_DIVIDER_MOVE_OFFSET = 3;
 
     protected JSplitPane splitPane;
@@ -70,52 +71,52 @@ public class BasicSplitPaneUI extends SplitPaneUI {
     protected boolean draggingHW;
     protected int beginDragDividerLocation;
 
-    /** Sin uso; ver la nota de la clase. */
+    /** Unused; see the class note. */
     protected KeyStroke upKey;
 
-    /** Sin uso; ver la nota de la clase. */
+    /** Unused; see the class note. */
     protected KeyStroke downKey;
 
-    /** Sin uso; ver la nota de la clase. */
+    /** Unused; see the class note. */
     protected KeyStroke leftKey;
 
-    /** Sin uso; ver la nota de la clase. */
+    /** Unused; see the class note. */
     protected KeyStroke rightKey;
 
-    /** Sin uso; ver la nota de la clase. */
+    /** Unused; see the class note. */
     protected KeyStroke homeKey;
 
-    /** Sin uso; ver la nota de la clase. */
+    /** Unused; see the class note. */
     protected KeyStroke endKey;
 
-    /** Sin uso; ver la nota de la clase. */
+    /** Unused; see the class note. */
     protected KeyStroke dividerResizeToggleKey;
 
-    /** Sin uso; ver la nota de la clase. */
+    /** Unused; see the class note. */
     protected ActionListener keyboardUpLeftListener;
 
-    /** Sin uso; ver la nota de la clase. */
+    /** Unused; see the class note. */
     protected ActionListener keyboardDownRightListener;
 
-    /** Sin uso; ver la nota de la clase. */
+    /** Unused; see the class note. */
     protected ActionListener keyboardHomeListener;
 
-    /** Sin uso; ver la nota de la clase. */
+    /** Unused; see the class note. */
     protected ActionListener keyboardEndListener;
 
-    /** Sin uso; ver la nota de la clase. */
+    /** Unused; see the class note. */
     protected ActionListener keyboardResizeToggleListener;
 
     private int lastDragLocation = -1;
     private boolean continuousLayout;
     private int orientation;
 
-    private static final ColorUIResource FONDO = new ColorUIResource(238, 238, 238);
+    private static final ColorUIResource BACKGROUND = new ColorUIResource(238, 238, 238);
 
     public BasicSplitPaneUI() {
     }
 
-    /** Uno nuevo por panel: guarda el panel, su divisor y el reparto. */
+    /** A new one per pane: it keeps the pane, its divider and the sharing out. */
     public static ComponentUI createUI(JComponent x) {
         return new BasicSplitPaneUI();
     }
@@ -134,7 +135,9 @@ public class BasicSplitPaneUI extends SplitPaneUI {
         splitPane = null;
     }
 
-    /** Colores, borde, divisor y acomodador; los valores son los de {@code SplitPane.*} en Metal. */
+    /**
+     * Colours, border, divider and layout; the values are those of {@code SplitPane.*} in Metal.
+     */
     protected void installDefaults() {
         orientation = splitPane.getOrientation();
         continuousLayout = splitPane.isContinuousLayout();
@@ -145,9 +148,9 @@ public class BasicSplitPaneUI extends SplitPaneUI {
         }
         divider.setBasicSplitPaneUI(this);
 
-        Color fondo = splitPane.getBackground();
-        if (fondo == null || fondo instanceof UIResource) {
-            splitPane.setBackground(FONDO);
+        Color background = splitPane.getBackground();
+        if (background == null || background instanceof UIResource) {
+            splitPane.setBackground(BACKGROUND);
         }
         Border b = splitPane.getBorder();
         if (b == null || b instanceof UIResource) {
@@ -171,7 +174,7 @@ public class BasicSplitPaneUI extends SplitPaneUI {
         setNonContinuousLayoutDivider(createDefaultNonContinuousLayoutDivider(), true);
     }
 
-    /** Saca el divisor y el borde que puso este UI. */
+    /** It removes the divider and the border this look and feel set. */
     protected void uninstallDefaults() {
         if (splitPane.getLayout() == layoutManager) {
             splitPane.setLayout(null);
@@ -203,7 +206,7 @@ public class BasicSplitPaneUI extends SplitPaneUI {
         focusListener = null;
     }
 
-    /** Sin atajos propios; ver la nota de la clase sobre los campos en nulo. */
+    /** With no shortcuts of its own; see the class note about the null fields. */
     protected void installKeyboardActions() {
     }
 
@@ -218,27 +221,27 @@ public class BasicSplitPaneUI extends SplitPaneUI {
         return new Handler();
     }
 
-    /** Ninguno; ver la nota de la clase. */
+    /** None; see the class note. */
     protected ActionListener createKeyboardUpLeftListener() {
         return null;
     }
 
-    /** Ninguno; ver la nota de la clase. */
+    /** None; see the class note. */
     protected ActionListener createKeyboardDownRightListener() {
         return null;
     }
 
-    /** Ninguno; ver la nota de la clase. */
+    /** None; see the class note. */
     protected ActionListener createKeyboardHomeListener() {
         return null;
     }
 
-    /** Ninguno; ver la nota de la clase. */
+    /** None; see the class note. */
     protected ActionListener createKeyboardEndListener() {
         return null;
     }
 
-    /** Ninguno; ver la nota de la clase. */
+    /** None; see the class note. */
     protected ActionListener createKeyboardResizeToggleListener() {
         return null;
     }
@@ -247,7 +250,7 @@ public class BasicSplitPaneUI extends SplitPaneUI {
         return orientation;
     }
 
-    /** Cambia el eje y rehace el acomodador. */
+    /** It changes the axis and rebuilds the layout. */
     public void setOrientation(int orientation) {
         this.orientation = orientation;
         resetLayoutManager();
@@ -277,14 +280,14 @@ public class BasicSplitPaneUI extends SplitPaneUI {
         return splitPane;
     }
 
-    /** El divisor: uno por panel. */
+    /** The divider: one per pane. */
     public BasicSplitPaneDivider createDefaultDivider() {
         return new BasicSplitPaneDivider(this);
     }
 
-    /** El rectangulo que se dibuja mientras se arrastra; ver la nota de la clase. */
+    /** The rectangle that is drawn while dragging; see the class note. */
     protected Component createDefaultNonContinuousLayoutDivider() {
-        return new SombraDeArrastre(this);
+        return new DragShadow(this);
     }
 
     protected void setNonContinuousLayoutDivider(Component newDivider) {
@@ -302,12 +305,12 @@ public class BasicSplitPaneUI extends SplitPaneUI {
         return nonContinuousLayoutDivider;
     }
 
-    /** Un pixel: lo que ocupa la linea del borde del divisor. */
+    /** One pixel: what the line of the divider's border takes up. */
     protected int getDividerBorderSize() {
         return 1;
     }
 
-    /** Vuelve a armar el acomodador que corresponde al eje. */
+    /** It builds again the layout that corresponds to the axis. */
     protected void resetLayoutManager() {
         if (orientation == JSplitPane.HORIZONTAL_SPLIT) {
             layoutManager = new BasicHorizontalLayoutManager(this);
@@ -320,7 +323,7 @@ public class BasicSplitPaneUI extends SplitPaneUI {
         splitPane.repaint();
     }
 
-    /** Vuelve a repartir segun los tamanos preferidos de los hijos. */
+    /** It shares out again according to the children's preferred sizes. */
     public void resetToPreferredSizes(JSplitPane jc) {
         if (layoutManager != null) {
             layoutManager.resetToPreferredSizes();
@@ -328,7 +331,7 @@ public class BasicSplitPaneUI extends SplitPaneUI {
         }
     }
 
-    /** Empieza un arrastre; guarda donde estaba el divisor por si hay que volver. */
+    /** It begins a drag; it keeps where the divider was in case it has to go back. */
     protected void startDragging() {
         beginDragDividerLocation = getDividerLocation(splitPane);
         draggingHW = false;
@@ -337,7 +340,7 @@ public class BasicSplitPaneUI extends SplitPaneUI {
         }
     }
 
-    /** Mueve el divisor, o la sombra si el arrastre no es continuo. */
+    /** It moves the divider, or the shadow if the drag is not continuous. */
     protected void dragDividerTo(int location) {
         setLastDragLocation(location);
         if (isContinuousLayout()) {
@@ -351,7 +354,7 @@ public class BasicSplitPaneUI extends SplitPaneUI {
         }
     }
 
-    /** Termina: saca la sombra y deja el divisor donde quedo. */
+    /** It ends: it removes the shadow and leaves the divider where it ended up. */
     protected void finishDraggingTo(int location) {
         dragDividerTo(location);
         setLastDragLocation(-1);
@@ -363,7 +366,7 @@ public class BasicSplitPaneUI extends SplitPaneUI {
         }
     }
 
-    /** Donde esta el divisor, en pixeles desde el borde. */
+    /** Where the divider is, in pixels from the edge. */
     public int getDividerLocation(JSplitPane jc) {
         if (divider == null) {
             return 0;
@@ -372,7 +375,7 @@ public class BasicSplitPaneUI extends SplitPaneUI {
                 ? divider.getLocation().x : divider.getLocation().y;
     }
 
-    /** Y hasta donde se puede llevar sin achicar el primer hijo por debajo de su minimo. */
+    /** And how far it can be taken without shrinking the first child below its minimum. */
     public int getMinimumDividerLocation(JSplitPane jc) {
         int minLoc = 0;
         Component leftC = splitPane.getLeftComponent();
@@ -390,10 +393,10 @@ public class BasicSplitPaneUI extends SplitPaneUI {
     }
 
     /**
-     * Y del otro lado.
+     * And on the other side.
      *
-     * <p>Nunca menos que el minimo: en un panel que todavia no tiene tamano la cuenta da negativo,
-     * y un maximo por debajo del minimo no le sirve a nadie.
+     * <p>Never less than the minimum: in a pane that does not have a size yet the arithmetic gives
+     * a negative, and a maximum below the minimum is of use to nobody.
      */
     public int getMaximumDividerLocation(JSplitPane jc) {
         Dimension splitPaneSize = splitPane.getSize();
@@ -421,7 +424,7 @@ public class BasicSplitPaneUI extends SplitPaneUI {
         return Math.max(getMinimumDividerLocation(splitPane), maxLoc);
     }
 
-    /** Pone el divisor ahi. */
+    /** It puts the divider there. */
     public void setDividerLocation(JSplitPane jc, int location) {
         if (layoutManager != null) {
             layoutManager.setDividerLocation(location);
@@ -430,7 +433,7 @@ public class BasicSplitPaneUI extends SplitPaneUI {
         }
     }
 
-    /** {@code null}; ver la nota de la clase. */
+    /** {@code null}; see the class note. */
     public Insets getInsets(JComponent jc) {
         return null;
     }
@@ -449,7 +452,7 @@ public class BasicSplitPaneUI extends SplitPaneUI {
         return layoutManager.minimumLayoutSize(splitPane);
     }
 
-    /** Sin tope: un panel dividido se estira todo lo que le den. */
+    /** No cap: a split pane stretches as far as it is given. */
     public Dimension getMaximumSize(JComponent jc) {
         if (splitPane == null || layoutManager == null) {
             return new Dimension(0, 0);
@@ -457,11 +460,11 @@ public class BasicSplitPaneUI extends SplitPaneUI {
         return layoutManager.maximumLayoutSize(splitPane);
     }
 
-    /** Nada: los hijos y el divisor se pintan solos. */
+    /** Nothing: the children and the divider paint themselves. */
     public void paint(Graphics g, JComponent jc) {
     }
 
-    /** Despues de los hijos: aca se dibujaria la sombra de arrastre por hardware. */
+    /** After the children: here the drag shadow would be drawn by hardware. */
     public void finishedPaintingChildren(JSplitPane jc, Graphics g) {
         if (jc == splitPane && getLastDragLocation() != -1
                 && !isContinuousLayout() && !draggingHW) {
@@ -476,73 +479,73 @@ public class BasicSplitPaneUI extends SplitPaneUI {
     }
 
     /**
-     * El reparto horizontal, con memoria; ver la nota de la clase.
+     * The horizontal sharing out, with a memory; see the class note.
      *
-     * <p>{@link #sizes} guarda tres numeros: lo que ocupa el primer hijo, lo que ocupa el divisor y
-     * lo que ocupa el segundo. Es la unica manera de que agrandar el panel no le devuelva el
-     * divisor al medio.
+     * <p>{@link #sizes} keeps three numbers: what the first child takes up, what the divider takes
+     * up and what the second takes up. It is the only way for enlarging the pane not to return the
+     * divider to the middle.
      */
     public static class BasicHorizontalLayoutManager implements LayoutManager2 {
 
-        /** El UI dueno; ver el hallazgo #518 sobre por que va como parametro. */
+        /** The owning look and feel; see finding #518 about why it goes as a parameter. */
         final BasicSplitPaneUI ui;
 
-        /** El primer hijo, el segundo y el divisor, en ese orden. */
+        /** The first child, the second and the divider, in that order. */
         protected Component[] components = new Component[3];
 
-        /** Lo que ocupa cada uno; ver la nota de la clase. */
+        /** What each one takes up; see the class note. */
         protected int[] sizes = new int[3];
 
-        private final int eje;
+        private final int axis;
 
         BasicHorizontalLayoutManager(BasicSplitPaneUI ui) {
             this(ui, JSplitPane.HORIZONTAL_SPLIT);
         }
 
-        BasicHorizontalLayoutManager(BasicSplitPaneUI ui, int eje) {
+        BasicHorizontalLayoutManager(BasicSplitPaneUI ui, int axis) {
             this.ui = ui;
-            this.eje = eje;
+            this.axis = axis;
         }
 
-        /** Lo que mide ese componente en el eje que reparte. */
+        /** How much that component measures on the axis that is shared out. */
         protected int getSizeOfComponent(Component comp) {
             Dimension d = comp.getSize();
-            return (eje == JSplitPane.HORIZONTAL_SPLIT) ? d.width : d.height;
+            return (axis == JSplitPane.HORIZONTAL_SPLIT) ? d.width : d.height;
         }
 
         protected int getPreferredSizeOfComponent(Component comp) {
             Dimension d = comp.getPreferredSize();
-            return (eje == JSplitPane.HORIZONTAL_SPLIT) ? d.width : d.height;
+            return (axis == JSplitPane.HORIZONTAL_SPLIT) ? d.width : d.height;
         }
 
         private int getMinimumSizeOfComponent(Component comp) {
             Dimension d = comp.getMinimumSize();
-            return (eje == JSplitPane.HORIZONTAL_SPLIT) ? d.width : d.height;
+            return (axis == JSplitPane.HORIZONTAL_SPLIT) ? d.width : d.height;
         }
 
-        /** Cuanto lugar hay para repartir, sacando los margenes. */
+        /** How much room there is to share out, taking away the margins. */
         protected int getAvailableSize(Dimension containerSize, Insets insets) {
             if (insets == null) {
-                return (eje == JSplitPane.HORIZONTAL_SPLIT)
+                return (axis == JSplitPane.HORIZONTAL_SPLIT)
                         ? containerSize.width : containerSize.height;
             }
-            return (eje == JSplitPane.HORIZONTAL_SPLIT)
+            return (axis == JSplitPane.HORIZONTAL_SPLIT)
                     ? (containerSize.width - insets.left - insets.right)
                     : (containerSize.height - insets.top - insets.bottom);
         }
 
-        /** Donde empieza el reparto. */
+        /** Where the sharing out begins. */
         protected int getInitialLocation(Insets insets) {
             if (insets == null) {
                 return 0;
             }
-            return (eje == JSplitPane.HORIZONTAL_SPLIT) ? insets.left : insets.top;
+            return (axis == JSplitPane.HORIZONTAL_SPLIT) ? insets.left : insets.top;
         }
 
         protected int[] getSizes() {
-            int[] copia = new int[3];
-            System.arraycopy(sizes, 0, copia, 0, 3);
-            return copia;
+            int[] copy = new int[3];
+            System.arraycopy(sizes, 0, copy, 0, 3);
+            return copy;
         }
 
         protected void setSizes(int[] newSizes) {
@@ -553,7 +556,7 @@ public class BasicSplitPaneUI extends SplitPaneUI {
             sizes[index] = 0;
         }
 
-        /** Vuelve a leer que componente ocupa cada lugar. */
+        /** It reads again which component takes up each place. */
         protected void updateComponents() {
             Component comp = ui.splitPane.getLeftComponent();
             if (components[0] != comp) {
@@ -582,13 +585,13 @@ public class BasicSplitPaneUI extends SplitPaneUI {
             }
         }
 
-        /** Pone el divisor en esa posicion y reparte lo que queda. */
+        /** It puts the divider at that position and shares out what is left. */
         void setDividerLocation(int location) {
             updateComponents();
             Insets insets = ui.splitPane.getInsets();
-            int inicio = getInitialLocation(insets);
+            int start = getInitialLocation(insets);
             int total = getAvailableSize(ui.splitPane.getSize(), insets);
-            sizes[0] = Math.max(0, location - inicio);
+            sizes[0] = Math.max(0, location - start);
             sizes[2] = (ui.divider != null) ? ui.divider.getDividerSize() : 0;
             sizes[1] = Math.max(0, total - sizes[0] - sizes[2]);
         }
@@ -621,33 +624,33 @@ public class BasicSplitPaneUI extends SplitPaneUI {
             return 0.0f;
         }
 
-        private Dimension medir(Container container, boolean minimo) {
+        private Dimension measure(Container container, boolean min) {
             updateComponents();
-            int largo = 0;
-            int grueso = 0;
+            int length = 0;
+            int thick = 0;
             for (int i = 0; i < 3; i++) {
                 Component c = components[i];
                 if (c == null || !c.isVisible()) {
                     continue;
                 }
-                Dimension d = minimo ? c.getMinimumSize() : c.getPreferredSize();
-                if (eje == JSplitPane.HORIZONTAL_SPLIT) {
-                    largo += d.width;
-                    grueso = Math.max(grueso, d.height);
+                Dimension d = min ? c.getMinimumSize() : c.getPreferredSize();
+                if (axis == JSplitPane.HORIZONTAL_SPLIT) {
+                    length += d.width;
+                    thick = Math.max(thick, d.height);
                 } else {
-                    largo += d.height;
-                    grueso = Math.max(grueso, d.width);
+                    length += d.height;
+                    thick = Math.max(thick, d.width);
                 }
             }
             Insets insets = container.getInsets();
             int w;
             int h;
-            if (eje == JSplitPane.HORIZONTAL_SPLIT) {
-                w = largo;
-                h = grueso;
+            if (axis == JSplitPane.HORIZONTAL_SPLIT) {
+                w = length;
+                h = thick;
             } else {
-                w = grueso;
-                h = largo;
+                w = thick;
+                h = length;
             }
             if (insets != null) {
                 w += insets.left + insets.right;
@@ -657,37 +660,37 @@ public class BasicSplitPaneUI extends SplitPaneUI {
         }
 
         public Dimension preferredLayoutSize(Container container) {
-            return medir(container, false);
+            return measure(container, false);
         }
 
         public Dimension minimumLayoutSize(Container container) {
-            return medir(container, true);
+            return measure(container, true);
         }
 
-        /** Sin tope. */
+        /** No cap. */
         public Dimension maximumLayoutSize(Container target) {
             return new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE);
         }
 
-        /** Le da a cada uno lo que dice la tabla, repartiendo la diferencia. */
+        /** It gives each one what the table says, handing out the difference. */
         public void layoutContainer(Container container) {
             updateComponents();
             Insets insets = container.getInsets();
             int total = getAvailableSize(container.getSize(), insets);
-            int inicio = getInitialLocation(insets);
+            int start = getInitialLocation(insets);
             int divisor = (ui.divider != null) ? ui.divider.getDividerSize() : 0;
             sizes[2] = divisor;
-            int ocupado = sizes[0] + sizes[1] + divisor;
-            if (ocupado <= 0) {
-                // Primera vez: la mitad para cada uno.
+            int busy = sizes[0] + sizes[1] + divisor;
+            if (busy <= 0) {
+                // The first time: half for each.
                 sizes[0] = Math.max(0, (total - divisor) / 2);
                 sizes[1] = Math.max(0, total - divisor - sizes[0]);
-            } else if (ocupado != total) {
-                // Toda la diferencia va al segundo, que es lo que hace que el divisor se quede
-                // donde el usuario lo dejo.
+            } else if (busy != total) {
+                // The whole difference goes to the second one, which is what makes the divider stay
+                                // where the user left it.
                 sizes[1] = Math.max(0, total - divisor - sizes[0]);
             }
-            int pos = inicio;
+            int pos = start;
             for (int i = 0; i < 3; i++) {
                 int idx = (i == 0) ? 0 : ((i == 1) ? 2 : 1);
                 Component c = components[idx];
@@ -699,13 +702,13 @@ public class BasicSplitPaneUI extends SplitPaneUI {
             }
         }
 
-        /** Le da a un componente ese tamano en el eje que reparte, y todo el otro. */
+        /** It gives a component that size on the axis that is shared out, and all of the other. */
         protected void setComponentToSize(Component c, int size, int location, Insets insets,
                 Dimension containerSize) {
             if (insets == null) {
                 insets = new Insets(0, 0, 0, 0);
             }
-            if (eje == JSplitPane.HORIZONTAL_SPLIT) {
+            if (axis == JSplitPane.HORIZONTAL_SPLIT) {
                 c.setBounds(location, insets.top, size,
                         containerSize.height - insets.top - insets.bottom);
             } else {
@@ -715,7 +718,7 @@ public class BasicSplitPaneUI extends SplitPaneUI {
         }
     }
 
-    /** Lo mismo en el otro eje; ver {@link BasicHorizontalLayoutManager}. */
+    /** The same on the other axis; see {@link BasicHorizontalLayoutManager}. */
     public static class BasicVerticalLayoutManager extends BasicHorizontalLayoutManager {
 
         public BasicVerticalLayoutManager(BasicSplitPaneUI ui) {
@@ -724,16 +727,16 @@ public class BasicSplitPaneUI extends SplitPaneUI {
     }
 
     /**
-     * La sombra que se ve mientras se arrastra sin acomodar; ver la nota de la clase.
+     * The shadow that is seen while dragging without laying out; see the class note.
      *
-     * <p>Es un componente opaco de color oscuro y nada mas: lo unico que tiene que hacer es taparse
-     * a si mismo y moverse.
+     * <p>It is an opaque component of a dark colour and nothing else: the only thing it has to do
+     * is cover itself and move.
      */
-    private static class SombraDeArrastre extends java.awt.Canvas {
+    private static class DragShadow extends java.awt.Canvas {
 
         private final BasicSplitPaneUI ui;
 
-        SombraDeArrastre(BasicSplitPaneUI ui) {
+        DragShadow(BasicSplitPaneUI ui) {
             this.ui = ui;
             setBackground(Color.darkGray);
         }
@@ -746,35 +749,35 @@ public class BasicSplitPaneUI extends SplitPaneUI {
         }
     }
 
-    /** Reacciona a los cambios del panel: eje, divisor, hijos, y modo de arrastre. */
+    /** It reacts to the pane's changes: axis, divider, children, and dragging mode. */
     private class Handler implements PropertyChangeListener, FocusListener {
 
         public void propertyChange(PropertyChangeEvent e) {
             if (e.getSource() != splitPane) {
                 return;
             }
-            String nombre = e.getPropertyName();
-            if (JSplitPane.ORIENTATION_PROPERTY.equals(nombre)) {
+            String name = e.getPropertyName();
+            if (JSplitPane.ORIENTATION_PROPERTY.equals(name)) {
                 orientation = splitPane.getOrientation();
                 resetLayoutManager();
-            } else if (JSplitPane.CONTINUOUS_LAYOUT_PROPERTY.equals(nombre)) {
+            } else if (JSplitPane.CONTINUOUS_LAYOUT_PROPERTY.equals(name)) {
                 setContinuousLayout(splitPane.isContinuousLayout());
-            } else if (JSplitPane.DIVIDER_SIZE_PROPERTY.equals(nombre)) {
+            } else if (JSplitPane.DIVIDER_SIZE_PROPERTY.equals(name)) {
                 divider.setDividerSize(splitPane.getDividerSize());
                 dividerSize = divider.getDividerSize();
                 splitPane.revalidate();
                 splitPane.repaint();
-            } else if (JSplitPane.LEFT.equals(nombre) || JSplitPane.RIGHT.equals(nombre)
-                    || JSplitPane.TOP.equals(nombre) || JSplitPane.BOTTOM.equals(nombre)) {
+            } else if (JSplitPane.LEFT.equals(name) || JSplitPane.RIGHT.equals(name)
+                    || JSplitPane.TOP.equals(name) || JSplitPane.BOTTOM.equals(name)) {
                 if (layoutManager != null) {
                     layoutManager.updateComponents();
                 }
                 splitPane.revalidate();
                 splitPane.repaint();
-            } else if (JSplitPane.DIVIDER_LOCATION_PROPERTY.equals(nombre)) {
-                Object nuevo = e.getNewValue();
-                if (nuevo instanceof Number && layoutManager != null) {
-                    layoutManager.setDividerLocation(((Number) nuevo).intValue());
+            } else if (JSplitPane.DIVIDER_LOCATION_PROPERTY.equals(name)) {
+                Object newValue = e.getNewValue();
+                if (newValue instanceof Number && layoutManager != null) {
+                    layoutManager.setDividerLocation(((Number) newValue).intValue());
                     splitPane.revalidate();
                     splitPane.repaint();
                 }

@@ -3,28 +3,28 @@ package javax.naming.ldap;
 import javax.naming.NamingException;
 
 /**
- * La operacion extendida que convierte una conexion LDAP en claro en una cifrada.
+ * The extended operation that turns a cleartext LDAP connection into an encrypted one.
  *
- * <h2>StartTLS contra LDAPS</h2>
+ * <h2>StartTLS versus LDAPS</h2>
  *
- * <p>Hay dos formas de cifrar LDAP y no son la misma. <strong>LDAPS</strong> abre TLS desde el
- * primer byte, en un puerto propio. <strong>StartTLS</strong> —esto— empieza en claro en el puerto
- * de siempre y negocia el cambio a mitad de camino.
+ * <p>There are two ways to encrypt LDAP and they are not the same. <strong>LDAPS</strong> opens TLS
+ * from the first byte, on a port of its own. <strong>StartTLS</strong> --this-- starts in cleartext
+ * on the usual port and negotiates the switch halfway.
  *
- * <p>La ventaja de StartTLS es que usa un solo puerto y deja que el cliente decida; la desventaja es
- * exactamente eso, y hay que tenerla presente: un atacante en el medio puede <em>quitar</em> el
- * anuncio de que StartTLS esta disponible, y un cliente que solo cifra "si el servidor lo ofrece"
- * termina hablando en claro sin enterarse. Por eso la decision de exigirlo tiene que ser del
- * cliente y no depender de lo que el servidor diga.
+ * <p>StartTLS's advantage is that it uses a single port and lets the client decide; the
+ * disadvantage is exactly that, and it has to be kept in mind: an attacker in the middle can
+ * <em>strip</em> the announcement that StartTLS is available, and a client that only encrypts "if
+ * the server offers it" ends up talking in cleartext without noticing. That is why the decision
+ * to require it has to be the client's and not depend on what the server says.
  *
- * <p>Que no lleve valor —{@link #getEncodedValue} devuelve {@code null}— es correcto: el pedido es
- * solo el OID.
+ * <p>That it carries no value --{@link #getEncodedValue} returns {@code null}-- is correct: the
+ * request is just the OID.
  */
 public class StartTlsRequest implements ExtendedRequest {
 
     private static final long serialVersionUID = 4441679576360753397L;
 
-    /** El OID de la operacion, del RFC 2830. */
+    /** The operation's OID, from RFC 2830. */
     public static final String OID = "1.3.6.1.4.1.1466.20037";
 
     public StartTlsRequest() {
@@ -34,24 +34,24 @@ public class StartTlsRequest implements ExtendedRequest {
         return OID;
     }
 
-    /** {@code null}: este pedido no lleva datos. */
+    /** {@code null}: this request carries no data. */
     public byte[] getEncodedValue() {
         return null;
     }
 
     /**
-     * Busca una implementacion de {@link StartTlsResponse} por {@link java.util.ServiceLoader}.
+     * Looks up a {@link StartTlsResponse} implementation through {@link java.util.ServiceLoader}.
      *
-     * <p>No la construye directamente porque negociar TLS depende del proveedor: cada uno sabe
-     * envolver <em>su</em> socket. En esta VM no hay ninguno registrado, asi que declina — el
-     * mecanismo esta y lo que falta es quien se registre.
+     * <p>It does not build one directly because negotiating TLS depends on the provider: each one
+     * knows how to wrap <em>its</em> socket. In this VM none is registered, so it declines -- the
+     * mechanism is there and what is missing is someone who registers.
      *
-     * @throws NamingException si no hay implementacion
+     * @throws NamingException if there is no implementation
      */
     public ExtendedResponse createExtendedResponse(String id, byte[] berValue, int offset,
             int length) throws NamingException {
         if (id != null && !id.equals(OID)) {
-            throw new NamingException("la respuesta no es de StartTLS: " + id);
+            throw new NamingException("the response is not StartTLS: " + id);
         }
         java.util.Iterator<StartTlsResponse> it =
                 java.util.ServiceLoader.load(StartTlsResponse.class).iterator();
@@ -59,6 +59,6 @@ public class StartTlsRequest implements ExtendedRequest {
             return it.next();
         }
         throw new NamingException(
-                "no hay ninguna implementacion de StartTlsResponse registrada");
+                "no StartTlsResponse implementation is registered");
     }
 }

@@ -8,63 +8,75 @@ import javax.management.MBeanParameterInfo;
 import javax.management.RuntimeOperationsException;
 
 /**
- * KajiLibrary's javax.management.modelmbean.ModelMBeanConstructorInfo -- un constructor de un model MBean.
+ * KajiLibrary's javax.management.modelmbean.ModelMBeanConstructorInfo -- a constructor of a
+ * model MBean.
  *
- * <p>Su tipo de descriptor es {@code operation} y no {@code constructor}, que sorprende y es lo
- * que dice la especificacion: para el modelo, construir es una operacion mas. El campo
- * {@code role} del descriptor es el que la distingue, con el valor {@code constructor}.
+ * <p>Its descriptor type is {@code operation} and not {@code constructor}, which is surprising
+ * and is what the specification says: for the model, constructing is one more operation. In
+ * the JDK what distinguishes it is the descriptor's {@code role} field, with the value
+ * {@code constructor}: it puts it in the default descriptor and rejects a descriptor whose
+ * {@code role} says something else.
  *
- * <h2>El descriptor es mutable, y el {@code Info} deja de serlo</h2>
+ * <p>Here neither thing happens: the default descriptor built by this class carries
+ * {@code name}, {@code descriptorType} and {@code displayName}, and nothing looks at
+ * {@code role}.
  *
- * <p>{@code MBeanFeatureInfo} es inmutable a proposito: es lo que un agente publica y lo que los
- * clientes se guardan. Esta subclase agrega {@link #setDescriptor}, que lo rompe.
+ * <h2>The descriptor is mutable, and the {@code Info} stops being so</h2>
  *
- * <p>Esta bien que lo rompa --un model MBean se configura en tiempo de ejecucion y para eso hace
- * falta poder cambiar el descriptor-- y hay que saberlo: cambiar el descriptor de un
- * {@code Info} que ya se publico cambia lo que ven los clientes que se lo guardaron.
+ * <p>{@code MBeanFeatureInfo} is immutable on purpose: it is what an agent publishes and what the
+ * clients keep. This subclass adds {@link #setDescriptor}, which breaks that.
  *
- * <p>Por eso {@link #getDescriptor} devuelve una <b>copia</b>: leerlo no da forma de escribirlo.
+ * <p>It is right that it breaks it --a model MBean is configured at run time and for that the
+ * descriptor has to be changeable-- and it has to be known: changing the descriptor of an
+ * {@code Info} that was already published changes what the clients who kept it see.
+ *
+ * <p>That is why {@link #getDescriptor} returns a <b>copy</b>: reading it gives no way of writing
+ * it.
+ *
+ * <p>What {@link #setDescriptor} checks is only {@link Descriptor#isValid}: a {@code name} and a
+ * {@code descriptorType}, both with a value. The JDK also demands that the type be the one that
+ * matches the feature; here a descriptor of the wrong type goes through.
  */
 public class ModelMBeanConstructorInfo extends MBeanConstructorInfo implements DescriptorAccess {
 
     private static final long serialVersionUID = 3862947819818064362L;
 
-    /** El descriptor; nunca null. */
+    /** The descriptor; never null. */
     private Descriptor modelDescriptor;
 
-    /** Desde el constructor real, sin descriptor. */
+    /** From the real constructor, without a descriptor. */
     public ModelMBeanConstructorInfo(String description, Constructor<?> constructorElement) {
         super(description, constructorElement);
     }
 
-    /** Idem, con descriptor. */
+    /** The same, with a descriptor. */
     public ModelMBeanConstructorInfo(String description, Constructor<?> constructorElement,
                                      Descriptor descriptor) {
         super(description, constructorElement);
         setDescriptor(descriptor);
     }
 
-    /** Declarando la firma a mano. */
+    /** Declaring the signature by hand. */
     public ModelMBeanConstructorInfo(String name, String description,
                                      MBeanParameterInfo[] signature) {
         super(name, description, signature);
     }
 
-    /** Idem, con descriptor. */
+    /** The same, with a descriptor. */
     public ModelMBeanConstructorInfo(String name, String description,
                                      MBeanParameterInfo[] signature, Descriptor descriptor) {
         super(name, description, signature);
         setDescriptor(descriptor);
     }
 
-    /** Una copia. */
+    /** A copy. */
     public ModelMBeanConstructorInfo(ModelMBeanConstructorInfo inInfo) {
         super(inInfo.getName(), inInfo.getDescription(), inInfo.getSignature());
         setDescriptor(inInfo.getDescriptor());
     }
 
 
-    /** Una copia del descriptor. Ver la nota de la clase. */
+    /** A copy of the descriptor. See the class note. */
     public Descriptor getDescriptor() {
         if (this.modelDescriptor == null) {
             this.modelDescriptor = defaultDescriptor();
@@ -73,10 +85,11 @@ public class ModelMBeanConstructorInfo extends MBeanConstructorInfo implements D
     }
 
     /**
-     * Lo reemplaza.
+     * Replaces it.
      *
-     * @param inDescriptor null vuelve al descriptor por omision
-     * @throws RuntimeOperationsException si el descriptor no es valido para esta clase
+     * @param inDescriptor {@code null} goes back to the default descriptor
+     * @throws RuntimeOperationsException if the descriptor is not {@link Descriptor#isValid
+     *     valid}
      */
     public void setDescriptor(Descriptor inDescriptor) {
         if (inDescriptor == null) {
@@ -90,22 +103,22 @@ public class ModelMBeanConstructorInfo extends MBeanConstructorInfo implements D
         this.modelDescriptor = (Descriptor) inDescriptor.clone();
     }
 
-    /** Una copia. */
+    /** A copy. */
     public Object clone() {
         return new ModelMBeanConstructorInfo(this);
     }
 
-    /** El nombre, la descripcion y el descriptor. */
+    /** The name, the description and the descriptor. */
     public String toString() {
         return getClass().getName() + "(name=" + getName() + ",descriptor=" + getDescriptor() + ")";
     }
 
     /**
-     * El descriptor por omision: nombre, tipo y {@code displayName}.
+     * The default descriptor: name, type and {@code displayName}.
      *
-     * <p>Los tres campos son los que {@code isValid} exige mas el que toda herramienta muestra. Sin
-     * ellos, un {@code Info} recien construido tendria un descriptor invalido, que es justo lo que
-     * {@link #setDescriptor} rechaza.
+     * <p>The three fields are the ones {@code isValid} demands plus the one every tool shows.
+     * Without them a freshly built {@code Info} would have an invalid descriptor, which is
+     * exactly what {@link #setDescriptor} rejects.
      */
     private Descriptor defaultDescriptor() {
         return new DescriptorSupport(new String[] {"name", "descriptorType", "displayName"},

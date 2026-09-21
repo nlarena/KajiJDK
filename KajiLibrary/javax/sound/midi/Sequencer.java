@@ -4,258 +4,259 @@ import java.io.IOException;
 import java.io.InputStream;
 
 /**
- * KajiLibrary's javax.sound.midi.Sequencer -- reproduce y graba secuencias MIDI.
+ * KajiLibrary's javax.sound.midi.Sequencer -- plays and records MIDI sequences.
  *
- * <p>Un {@link MidiDevice} que sabe recorrer una {@link Sequence} en el tiempo y mandar sus eventos a
- * quien tenga conectado.
+ * <p>A {@link MidiDevice} that knows how to walk a {@link Sequence} in time and send its events to
+ * whoever it has connected.
  *
- * <h2>No hace ruido por si mismo</h2>
+ * <h2>It makes no noise by itself</h2>
  *
- * <p>Es lo primero que confunde. Un secuenciador <b>manda mensajes</b>; para oir algo hay que conectar
- * su transmisor al receptor de un {@link Synthesizer}. El secuenciador que devuelve
- * {@code MidiSystem.getSequencer()} viene conectado al sintetizador por omision, y por eso parece que
- * suena solo.
+ * <p>It is the first thing that confuses. A sequencer <b>sends messages</b>; to hear something its
+ * transmitter has to be connected to the receiver of a {@link Synthesizer}. The sequencer that
+ * {@code MidiSystem.getSequencer()} returns comes connected to the default synthesizer, and that is
+ * why it seems to sound on its own.
  *
- * <h2>{@link #start} no bloquea</h2>
+ * <h2>{@link #start} does not block</h2>
  *
- * <p>Vuelve enseguida y la reproduccion sigue en otro hilo. Para saber cuando termino hay que
- * registrar un {@link MetaEventListener} y esperar el meta evento 0x2F. Dormir un rato es lo que hace
- * casi todo el mundo y siempre queda mal.
+ * <p>It returns right away and playback goes on in another thread. To know when it finished a
+ * {@link MetaEventListener} has to be registered and the meta event 0x2F awaited. Sleeping a while
+ * is what almost everybody does and it always comes out wrong.
  *
- * <h2>Las tres formas de cambiar la velocidad</h2>
+ * <h2>The three ways of changing the speed</h2>
  *
  * <ul>
- *   <li>{@link #setTempoInBPM} y {@link #setTempoInMPQ} son la misma cosa en dos unidades: negras por
- *       minuto, o microsegundos por negra. Son inversas;
- *   <li>{@link #setTempoFactor} es <b>un multiplicador</b> sobre lo que la obra pida. Se mantiene
- *       aunque la obra tenga cambios de tempo escritos.
+ *   <li>{@link #setTempoInBPM} and {@link #setTempoInMPQ} are the same thing in two units: quarter
+ *       notes per minute, or microseconds per quarter note. They are inverses;
+ *   <li>{@link #setTempoFactor} is <b>a multiplier</b> over whatever the piece asks for. It holds
+ *       even if the piece has tempo changes written in it.
  * </ul>
  *
- * <p>La diferencia importa: fijar el tempo se pierde en cuanto la obra llegue a su proximo cambio de
- * tempo; el factor no. Para "reproducir a la mitad de velocidad" se quiere el factor.
+ * <p>The difference matters: setting the tempo is lost as soon as the piece reaches its next tempo
+ * change; the factor is not. For "play at half speed" the factor is wanted.
  *
- * <p>Nada de esto tiene efecto en una secuencia SMPTE; ver {@link Sequence}.
+ * <p>None of this has any effect on an SMPTE sequence; see {@link Sequence}.
  *
- * <h2>La repeticion</h2>
+ * <h2>Looping</h2>
  *
- * <p>{@link #setLoopCount} con {@link #LOOP_CONTINUOUSLY} repite para siempre el tramo entre
- * {@link #setLoopStartPoint} y {@link #setLoopEndPoint}. El punto final -1 significa el final de la
- * obra.
+ * <p>{@link #setLoopCount} with {@link #LOOP_CONTINUOUSLY} repeats forever the stretch between
+ * {@link #setLoopStartPoint} and {@link #setLoopEndPoint}. The end point -1 means the end of the
+ * piece.
  */
 public interface Sequencer extends MidiDevice {
 
-    /** Repetir para siempre. */
+    /** Repeat forever. */
     int LOOP_CONTINUOUSLY = -1;
 
     /**
-     * Que reproducir.
+     * What to play.
      *
-     * @throws InvalidMidiDataException si no soporta esa secuencia
+     * @throws InvalidMidiDataException if it does not support that sequence
      */
     void setSequence(Sequence sequence) throws InvalidMidiDataException;
 
     /**
-     * Idem, leyendola de un flujo.
+     * Likewise, reading it from a stream.
      *
-     * @throws IOException si no se pudo leer
-     * @throws InvalidMidiDataException si no es un archivo MIDI valido
+     * @throws IOException if it could not be read
+     * @throws InvalidMidiDataException if it is not a valid MIDI file
      */
     void setSequence(InputStream stream) throws IOException, InvalidMidiDataException;
 
-    /** Que esta cargado, o null. */
+    /** What is loaded, or null. */
     Sequence getSequence();
 
-    /** Arranca. No bloquea; ver la nota de la clase. */
+    /** Starts. It does not block; see the class note. */
     void start();
 
-    /** Para, sin volver al principio. */
+    /** Stops, without going back to the beginning. */
     void stop();
 
-    /** Si esta reproduciendo. */
+    /** Whether it is playing. */
     boolean isRunning();
 
-    /** Empieza a grabar en las pistas habilitadas. */
+    /** Starts recording on the enabled tracks. */
     void startRecording();
 
-    /** Deja de grabar; sigue reproduciendo. */
+    /** Stops recording; it keeps playing. */
     void stopRecording();
 
-    /** Si esta grabando. */
+    /** Whether it is recording. */
     boolean isRecording();
 
     /**
-     * Habilita una pista para grabar.
+     * Enables a track for recording.
      *
-     * @param channel que canal grabar ahi; -1 son todos
+     * @param channel which channel to record there; -1 is all
      */
     void recordEnable(Track track, int channel);
 
-    /** La deshabilita. */
+    /** Disables it. */
     void recordDisable(Track track);
 
-    /** El tempo, en negras por minuto. Ver la nota de la clase. */
+    /** The tempo, in quarter notes per minute. See the class note. */
     float getTempoInBPM();
 
-    /** Lo cambia. Se pierde en el proximo cambio de tempo de la obra. */
+    /** Changes it. It is lost at the piece's next tempo change. */
     void setTempoInBPM(float bpm);
 
-    /** El tempo, en microsegundos por negra. */
+    /** The tempo, in microseconds per quarter note. */
     float getTempoInMPQ();
 
-    /** Lo cambia, en las otras unidades. */
+    /** Changes it, in the other units. */
     void setTempoInMPQ(float mpq);
 
-    /** Un multiplicador sobre lo que la obra pida. Ver la nota de la clase. */
+    /** A multiplier over whatever the piece asks for. See the class note. */
     void setTempoFactor(float factor);
 
-    /** Cuanto es ese multiplicador. */
+    /** How much that multiplier is. */
     float getTempoFactor();
 
-    /** Cuanto dura la obra, en pulsos. */
+    /** How long the piece lasts, in ticks. */
     long getTickLength();
 
-    /** En que pulso va. */
+    /** At which tick it is. */
     long getTickPosition();
 
-    /** Salta a ese pulso. */
+    /** Jumps to that tick. */
     void setTickPosition(long tick);
 
-    /** Cuanto dura, en microsegundos. */
+    /** How long it lasts, in microseconds. */
     long getMicrosecondLength();
 
-    /** En que microsegundo va. */
+    /** At which microsecond it is. */
     long getMicrosecondPosition();
 
-    /** Salta a ese microsegundo. */
+    /** Jumps to that microsecond. */
     void setMicrosecondPosition(long microseconds);
 
     /**
-     * De donde toma el tiempo.
+     * Where it takes its time from.
      *
-     * @throws IllegalArgumentException si no soporta ese modo
+     * @throws IllegalArgumentException if it does not support that mode
      */
     void setMasterSyncMode(SyncMode sync);
 
-    /** De donde lo toma. */
+    /** Where it takes it from. */
     SyncMode getMasterSyncMode();
 
-    /** Los modos que soporta como maestro. */
+    /** The modes it supports as master. */
     SyncMode[] getMasterSyncModes();
 
     /**
-     * Que manda para que otros lo sigan.
+     * What it sends for others to follow.
      *
-     * @throws IllegalArgumentException si no soporta ese modo
+     * @throws IllegalArgumentException if it does not support that mode
      */
     void setSlaveSyncMode(SyncMode sync);
 
-    /** Que manda. */
+    /** What it sends. */
     SyncMode getSlaveSyncMode();
 
-    /** Los modos que soporta como esclavo. */
+    /** The modes it supports as slave. */
     SyncMode[] getSlaveSyncModes();
 
-    /** Silencia una pista. */
+    /** Mutes a track. */
     void setTrackMute(int track, boolean mute);
 
-    /** Si esta silenciada; false tambien si no lo soporta. */
+    /** Whether it is muted; false also if it does not support it. */
     boolean getTrackMute(int track);
 
-    /** Deja sonar solo esa pista. */
+    /** Lets only that track sound. */
     void setTrackSolo(int track, boolean solo);
 
-    /** Si esta en solo; false tambien si no lo soporta. */
+    /** Whether it is soloed; false also if it does not support it. */
     boolean getTrackSolo(int track);
 
     /**
-     * Registra un escucha de meta eventos.
+     * Registers a meta event listener.
      *
-     * @return si se pudo
+     * @return whether it could
      */
     boolean addMetaEventListener(MetaEventListener listener);
 
-    /** Lo da de baja. */
+    /** Unregisters it. */
     void removeMetaEventListener(MetaEventListener listener);
 
     /**
-     * Registra un escucha de esos controladores.
+     * Registers a listener for those controllers.
      *
-     * @return los que quedaron registrados de verdad; ver {@link ControllerEventListener}
+     * @return the ones that really got registered; see {@link ControllerEventListener}
      */
     int[] addControllerEventListener(ControllerEventListener listener, int[] controllers);
 
     /**
-     * Da de baja esos controladores de ese escucha.
+     * Unregisters those controllers from that listener.
      *
-     * @param controllers null los saca todos
-     * @return los que le quedaron
+     * @param controllers null removes them all
+     * @return the ones it has left
      */
     int[] removeControllerEventListener(ControllerEventListener listener, int[] controllers);
 
-    /** Donde empieza el tramo que se repite. */
+    /** Where the stretch that repeats begins. */
     void setLoopStartPoint(long tick);
 
-    /** Donde empieza. */
+    /** Where it begins. */
     long getLoopStartPoint();
 
-    /** Donde termina; -1 es el final de la obra. */
+    /** Where it ends; -1 is the end of the piece. */
     void setLoopEndPoint(long tick);
 
-    /** Donde termina. */
+    /** Where it ends. */
     long getLoopEndPoint();
 
-    /** Cuantas veces repetir, o {@link #LOOP_CONTINUOUSLY}. */
+    /** How many times to repeat, or {@link #LOOP_CONTINUOUSLY}. */
     void setLoopCount(int count);
 
-    /** Cuantas veces. */
+    /** How many times. */
     int getLoopCount();
 
     /**
-     * De donde sale el tiempo de un secuenciador.
+     * Where a sequencer's time comes from.
      *
-     * <p>Se usa en los dos sentidos y por eso hay dos juegos de metodos: como <b>maestro</b> --de donde
-     * este secuenciador toma el tiempo-- y como <b>esclavo</b> --que manda para que otros lo sigan--.
+     * <p>It is used in both directions and that is why there are two sets of methods: as
+     * <b>master</b> --where this sequencer takes its time from-- and as <b>slave</b> --what it
+     * sends for others to follow--.
      *
-     * <p>{@link #NO_SYNC} como esclavo significa que no manda nada, no que no funciona.
+     * <p>{@link #NO_SYNC} as slave means it sends nothing, not that it does not work.
      *
-     * <p>No es un enum, por la misma razon que el resto de estas APIs: son de 1999. La igualdad es por
-     * identidad.
+     * <p>It is not an enum, for the same reason as the rest of these APIs: they are from 1999.
+     * Equality is by identity.
      */
     class SyncMode {
 
-        /** Su propio reloj. Es lo normal. */
+        /** Its own clock. It is the normal one. */
         public static final SyncMode INTERNAL_CLOCK = new SyncMode("Internal Clock");
 
-        /** Los pulsos de reloj MIDI que llegan de afuera. */
+        /** The MIDI clock ticks that arrive from outside. */
         public static final SyncMode MIDI_SYNC = new SyncMode("MIDI Sync");
 
-        /** Codigo de tiempo MIDI, que ademas lleva posicion absoluta. */
+        /** MIDI timecode, which also carries absolute position. */
         public static final SyncMode MIDI_TIME_CODE = new SyncMode("MIDI Time Code");
 
-        /** Nada. Ver la nota de la clase. */
+        /** Nothing. See the class note. */
         public static final SyncMode NO_SYNC = new SyncMode("No Timing");
 
-        /** El nombre, para mostrar. */
+        /** The name, for display. */
         private final String name;
 
-        /** Protegido: los modos los define la plataforma. */
+        /** Protected: the modes are defined by the platform. */
         protected SyncMode(String name) {
             this.name = name;
         }
 
-        /** Por identidad. Ver la nota de la clase. */
+        /** By identity. See the class note. */
         @Override
         public final boolean equals(Object obj) {
             return super.equals(obj);
         }
 
-        /** El de identidad. */
+        /** The identity one. */
         @Override
         public final int hashCode() {
             return super.hashCode();
         }
 
-        /** El nombre. */
+        /** The name. */
         @Override
         public final String toString() {
             return this.name;

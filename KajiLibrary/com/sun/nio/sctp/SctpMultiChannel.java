@@ -10,99 +10,102 @@ import java.nio.channels.spi.SelectorProvider;
 import java.util.Set;
 
 /**
- * Un canal que sostiene <strong>varias</strong> asociaciones a la vez.
+ * A channel that holds <strong>several</strong> associations at once.
  *
- * <h2>Que hace distinto</h2>
+ * <h2>What it does differently</h2>
  *
- * <p>No tiene analogo en TCP. Un {@link SctpChannel} habla con una punta; este habla con muchas por
- * el mismo socket, y las asociaciones se van creando solas: mandarle un mensaje a una direccion con
- * la que todavia no hay asociacion la establece. De ahi que casi todos sus metodos lleven un
- * {@link Association} extra — hay que decir de cual se esta hablando.
+ * <p>It has no analogue in TCP. An {@link SctpChannel} talks to one end; this one talks to
+ * many over the same socket, and the associations go on being created by themselves: sending
+ * a message to an address there is not an association with yet establishes it. Hence almost
+ * all of its methods carry an extra {@link Association} -- which one is being talked about has
+ * to be said.
  *
- * <p>Es la forma util para un servidor que atiende muchos pares sin un socket por cada uno.
+ * <p>It is the useful form for a server that attends to many peers without a socket for each
+ * one.
  *
- * <h2>{@link #branch}, que es lo mas interesante de la clase</h2>
+ * <h2>{@link #branch}, which is the most interesting thing about the class</h2>
  *
- * <p>Saca una asociacion de este canal y la convierte en un {@link SctpChannel} propio. Sirve
- * justamente cuando una de muchas conexiones resulta ser especial y conviene tratarla aparte —sin
- * cortarla y volverla a establecer, que es lo que habria que hacer sin este metodo.
+ * <p>It takes an association out of this channel and turns it into an {@link SctpChannel} of
+ * its own. It serves precisely when one of many connections turns out to be special and it is
+ * convenient to treat it separately -- without cutting it off and establishing it again, which
+ * is what would have to be done without this method.
  *
- * <h2>Lo que esta VM no puede</h2>
+ * <h2>What this VM cannot do</h2>
  *
- * <p>{@link #open} tira {@link UnsupportedOperationException}: no hay pila SCTP. Ver la nota de
- * {@link SctpChannel}.
+ * <p>{@link #open} throws {@link UnsupportedOperationException}: there is no SCTP stack. See
+ * {@link SctpChannel}'s note.
  */
 public abstract class SctpMultiChannel extends AbstractSelectableChannel {
 
-    /** Para las implementaciones de SCTP. */
+    /** For the SCTP implementations. */
     protected SctpMultiChannel(SelectorProvider provider) {
         super(provider);
     }
 
     /**
-     * Un canal nuevo, sin asociaciones.
+     * A new channel, with no associations.
      *
-     * @throws UnsupportedOperationException siempre, en esta VM
+     * @throws UnsupportedOperationException always, on this VM
      */
     public static SctpMultiChannel open() throws IOException {
-        throw new UnsupportedOperationException("esta VM no tiene pila SCTP");
+        throw new UnsupportedOperationException("this VM does not have an SCTP stack");
     }
 
-    /** Las asociaciones abiertas ahora. */
+    /** The associations that are open now. */
     public abstract Set<Association> associations() throws IOException;
 
-    /** Liga el canal a una direccion local, con esa cantidad de conexiones en espera. */
+    /** It binds the channel to a local address, with that number of connections waiting. */
     public abstract SctpMultiChannel bind(SocketAddress local, int backlog) throws IOException;
 
-    /** Liga el canal dejando el {@code backlog} por omision. */
+    /** It binds the channel leaving the {@code backlog} at its default. */
     public final SctpMultiChannel bind(SocketAddress local) throws IOException {
         return bind(local, 0);
     }
 
-    /** Agrega una direccion local a todas las asociaciones. */
+    /** It adds a local address to all the associations. */
     public abstract SctpMultiChannel bindAddress(InetAddress address) throws IOException;
 
-    /** Saca una direccion local de todas las asociaciones. */
+    /** It takes a local address out of all the associations. */
     public abstract SctpMultiChannel unbindAddress(InetAddress address) throws IOException;
 
-    /** Todas las direcciones locales. */
+    /** All the local addresses. */
     public abstract Set<SocketAddress> getAllLocalAddresses() throws IOException;
 
-    /** Las direcciones del par de una asociacion. */
+    /** An association's peer addresses. */
     public abstract Set<SocketAddress> getRemoteAddresses(Association association)
             throws IOException;
 
-    /** Empieza a cerrar una asociacion; las demas siguen. */
+    /** It starts closing an association; the others go on. */
     public abstract SctpMultiChannel shutdown(Association association) throws IOException;
 
-    /** El valor de una opcion, en el ambito de una asociacion. */
+    /** An option's value, in the scope of an association. */
     public abstract <T> T getOption(SctpSocketOption<T> name, Association association)
             throws IOException;
 
-    /** Fija una opcion, en el ambito de una asociacion. */
+    /** It fixes an option, in the scope of an association. */
     public abstract <T> SctpMultiChannel setOption(SctpSocketOption<T> name, T value,
             Association association) throws IOException;
 
-    /** Las opciones que este canal entiende. */
+    /** The options this channel understands. */
     public abstract Set<SctpSocketOption<?>> supportedOptions();
 
     /**
-     * Las operaciones que admite en un selector.
+     * The operations it admits in a selector.
      *
-     * <p>Leer y escribir, no conectar: aca no se conecta explicitamente — mandar a una direccion
-     * nueva establece la asociacion sola.
+     * <p>Read and write, not connect: here one does not connect explicitly -- sending to a new
+     * address establishes the association by itself.
      */
     public final int validOps() {
         return SelectionKey.OP_READ | SelectionKey.OP_WRITE;
     }
 
-    /** Recibe un mensaje de cualquiera de las asociaciones. */
+    /** It receives a message from any of the associations. */
     public abstract <T> MessageInfo receive(ByteBuffer dst, T attachment,
             NotificationHandler<T> handler) throws IOException;
 
-    /** Manda un mensaje; si no hay asociacion con ese destino, se establece una. */
+    /** It sends a message; if there is no association with that destination, one is established. */
     public abstract int send(ByteBuffer src, MessageInfo messageInfo) throws IOException;
 
-    /** Saca una asociacion de este canal y la devuelve como un canal propio. */
+    /** It takes an association out of this channel and returns it as a channel of its own. */
     public abstract SctpChannel branch(Association association) throws IOException;
 }

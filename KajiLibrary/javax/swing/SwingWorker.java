@@ -15,54 +15,57 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 /**
- * Una tarea larga que corre fuera del hilo de la interfaz y va contando como le va.
+ * A long task that runs outside the interface's thread and keeps telling how it is going.
  *
- * <p>Resuelve el problema mas viejo de una interfaz grafica: el hilo que dibuja es uno solo, y
- * cualquier cosa que tarde --leer un archivo, consultar una base-- lo congela. Pero mover la tarea
- * a otro hilo no alcanza, porque **los componentes no se pueden tocar desde otro hilo**. Hacen
- * falta las dos mitades, y eso son los dos parametros de tipo:
+ * <p>It resolves the oldest problem of a graphical interface: the thread that draws is a single
+ * one, and anything that takes a while -- reading a file, querying a database -- freezes it.
+ * But moving the task to another thread is not enough, because **the components cannot be
+ * touched from another thread**. Both halves are needed, and that is what the two type
+ * parameters are:
  *
  * <ul>
- *   <li>`T` es el resultado final: lo devuelve {@link #doInBackground} y lo recoge {@link #get}.
- *   <li>`V` son los avances intermedios: {@link #publish} los manda desde el hilo de fondo y
- *       {@link #process} los recibe --en el JDK, ya en el hilo de la interfaz.
+ *   <li>`T` is the final result: {@link #doInBackground} returns it and {@link #get} picks it
+ *       up.
+ *   <li>`V` are the intermediate advances: {@link #publish} sends them from the background
+ *       thread and {@link #process} receives them -- in the JDK, already on the interface's
+ *       thread.
  * </ul>
  *
- * <p>Y por eso {@link #done} existe aparte de `doInBackground`: es el gancho para tocar la interfaz
- * cuando termino.
+ * <p>And that is why {@link #done} exists separately from `doInBackground`: it is the hook for
+ * touching the interface when it has finished.
  *
- * <p>Un `SwingWorker` **se usa una sola vez**. {@link #execute} llamado dos veces no vuelve a
- * correr nada: el estado va de `PENDING` a `STARTED` a `DONE` y no vuelve.
+ * <p>A `SwingWorker` **is used only once**. {@link #execute} called twice runs nothing again:
+ * the state goes from `PENDING` to `STARTED` to `DONE` and does not come back.
  *
  * <h2>A KajiLibrary subset</h2>
  *
- * <p>Todo lo que es concurrencia esta hecho de verdad: la tarea corre en un pool, el resultado
- * viaja por un {@link FutureTask}, {@link #cancel} y {@link #get} son los de siempre, y el progreso
- * y el estado se avisan por {@link PropertyChangeSupport}.
+ * <p>Everything that is concurrency is really done: the task runs in a pool, the result travels
+ * through a {@link FutureTask}, {@link #cancel} and {@link #get} are the usual ones, and the
+ * progress and the state are given notice of through {@link PropertyChangeSupport}.
  *
- * <p>Lo que **no** esta es el salto al hilo de la interfaz. En el JDK, `process`, `done` y los
- * avisos de propiedad se ejecutan en el EDT, y `publish` ademas acumula los avances para no
- * inundarlo. Esta biblioteca no tiene EDT, asi que `process` y `done` corren **en el hilo de
- * fondo** y cada `publish` llega entero. Esta documentado en cada metodo: quien escriba un
- * `SwingWorker` contra esta biblioteca tiene que saber que no hereda la seguridad de hilo que el
- * nombre promete.
+ * <p>What is **not** there is the jump to the interface's thread. In the JDK, `process`, `done`
+ * and the property notices are executed on the EDT, and `publish` also gathers the advances so
+ * as not to flood it. This library has no EDT, so `process` and `done` run **on the background
+ * thread** and each `publish` arrives whole. It is documented in each method: whoever writes a
+ * `SwingWorker` against this library has to know that it does not inherit the thread safety the
+ * name promises.
  */
 public abstract class SwingWorker<T, V> implements RunnableFuture<T> {
 
-    /** En que anda el trabajo. */
+    /** How the work is going. */
     public enum StateValue {
 
-        /** Creado, todavia no arrancado. */
+        /** Created, not started yet. */
         PENDING,
 
-        /** Corriendo. */
+        /** Running. */
         STARTED,
 
-        /** Terminado, cancelado o roto: en cualquier caso, no va a hacer nada mas. */
+        /** Finished, cancelled or broken: in any case, it is not going to do anything else. */
         DONE
     }
 
-    /** Cuantos trabajos pueden correr a la vez. El mismo numero que usa el JDK. */
+    /** How many jobs may run at a time. The same number the JDK uses. */
     private static final int MAX_WORKER_THREADS = 10;
 
     private static ExecutorService executorService;
@@ -72,192 +75,196 @@ public abstract class SwingWorker<T, V> implements RunnableFuture<T> {
     private final FutureTask<T> future;
     private final PropertyChangeSupport propertyChangeSupport;
 
-    /** Un trabajo sin arrancar. */
+    /** A job that has not been started. */
     public SwingWorker() {
         this.propertyChangeSupport = new PropertyChangeSupport(this);
-        this.future = new Tarea<T>(this, new Cuerpo<T>(this));
+        this.future = new Task<T>(this, new Body<T>(this));
     }
 
     /**
-     * El trabajo largo. Lo escribe la subclase.
+     * The long work. The subclass writes it.
      *
-     * <p>Corre en un hilo de fondo, asi que **no puede tocar componentes**. Lo que tenga que
-     * mostrarse sale por {@link #publish} o se devuelve y se recoge en {@link #done}.
+     * <p>It runs on a background thread, so it **cannot touch components**. Whatever has to be
+     * shown comes out through {@link #publish} or is returned and picked up in {@link #done}.
      *
-     * @return el resultado
-     * @throws Exception lo que sea que falle; sale despues envuelto por {@link #get}
+     * @return the result
+     * @throws Exception whatever fails; it comes out afterwards wrapped by {@link #get}
      */
     protected abstract T doInBackground() throws Exception;
 
-    /** Corre el trabajo en el hilo actual. Lo llama el pool; no se llama a mano. */
+    /** It runs the work on the current thread. The pool calls it; it is not called by hand. */
     public final void run() {
         this.future.run();
     }
 
     /**
-     * Manda avances intermedios a {@link #process}.
+     * It sends intermediate advances to {@link #process}.
      *
-     * <p>Se llama desde {@link #doInBackground}. En el JDK los avances se acumulan y llegan en
-     * lotes al hilo de la interfaz; aca llegan uno por llamada y en el mismo hilo. Ver la nota de
-     * la clase.
+     * <p>It is called from {@link #doInBackground}. In the JDK the advances are gathered and
+     * arrive in batches on the interface's thread; here they arrive one per call and on the same
+     * thread. See the class note.
      */
     @SafeVarargs
     protected final void publish(V... chunks) {
-        // El local intermedio es un rodeo por #285: `new ArrayList<V>(Arrays.asList(chunks))` en
-        // una sola expresion no compila porque `V` es variable de **la clase**. Nombrar el tipo es
-        // justo lo que la inferencia no dedujo. Sacarlo cuando #285 se cierre.
-        List<V> lote = Arrays.asList(chunks);
-        process(new ArrayList<V>(lote));
+        // The intermediate local is a detour around #285: `new ArrayList<V>(Arrays.asList(chunks))`
+                // in a single expression does not compile because `V` is a variable of **the
+                // class**. Naming the type is just what the inference did not deduce. Remove it
+                // when #285 is closed.
+        List<V> chunk = Arrays.asList(chunks);
+        process(new ArrayList<V>(chunk));
     }
 
     /**
-     * Recibe los avances de {@link #publish}. Lo redefine la subclase.
+     * It receives {@link #publish}'s advances. The subclass overrides it.
      *
-     * <p>En el JDK corre en el hilo de la interfaz; aca, en el de fondo. Ver la nota de la clase.
+     * <p>In the JDK it runs on the interface's thread; here, on the background one. See the class
+     * note.
      */
     protected void process(List<V> chunks) {
     }
 
     /**
-     * Se llama cuando {@link #doInBackground} termino --bien, mal o cancelado.
+     * It is called when {@link #doInBackground} has finished -- well, badly or cancelled.
      *
-     * <p>Es donde va lo que toca la interfaz. En el JDK corre en el hilo de la interfaz; aca, en el
-     * de fondo. Ver la nota de la clase.
+     * <p>It is where what touches the interface goes. In the JDK it runs on the interface's
+     * thread; here, on the background one. See the class note.
      */
     protected void done() {
     }
 
     /**
-     * Fija el avance, entre 0 y 100, y avisa a los escuchas de la propiedad {@code "progress"}.
+     * It fixes the progress, between 0 and 100, and gives notice to the listeners of the
+     * {@code "progress"} property.
      *
-     * <p>Si el valor no cambia no se avisa: un trabajo que informa el mismo numero mil veces no
-     * tiene por que despertar a nadie.
+     * <p>If the value does not change no notice is given: a job that reports the same number a
+     * thousand times has no reason to wake anybody up.
      *
-     * @throws IllegalArgumentException si esta fuera de 0..100
+     * @throws IllegalArgumentException if it is outside 0..100
      */
     protected final void setProgress(int progress) {
         if (progress < 0 || progress > 100) {
             throw new IllegalArgumentException("the value should be from 0 to 100");
         }
-        int viejo;
+        int old;
         synchronized (this) {
             if (this.progress == progress) {
                 return;
             }
-            viejo = this.progress;
+            old = this.progress;
             this.progress = progress;
         }
-        firePropertyChange("progress", Integer.valueOf(viejo), Integer.valueOf(progress));
+        firePropertyChange("progress", Integer.valueOf(old), Integer.valueOf(progress));
     }
 
-    /** El avance informado, entre 0 y 100. */
+    /** The reported progress, between 0 and 100. */
     public final int getProgress() {
         return this.progress;
     }
 
     /**
-     * Arranca el trabajo en un hilo de fondo.
+     * It starts the work on a background thread.
      *
-     * <p>Vuelve en el acto. Llamarlo dos veces no arranca nada la segunda.
+     * <p>It returns at once. Calling it twice starts nothing the second time.
      */
     public final void execute() {
         getWorkersExecutorService().execute(this);
     }
 
     /**
-     * Cancela el trabajo.
+     * It cancels the work.
      *
-     * @param mayInterruptIfRunning si se puede interrumpir el hilo que lo esta corriendo
-     * @return `false` si ya habia terminado o ya estaba cancelado
+     * @param mayInterruptIfRunning whether the thread that is running it may be interrupted
+     * @return `false` if it had already finished or was already cancelled
      */
     public final boolean cancel(boolean mayInterruptIfRunning) {
         return this.future.cancel(mayInterruptIfRunning);
     }
 
-    /** Si se cancelo antes de terminar. */
+    /** Whether it was cancelled before finishing. */
     public final boolean isCancelled() {
         return this.future.isCancelled();
     }
 
-    /** Si ya no va a hacer nada mas: termino, se rompio o se cancelo. */
+    /** Whether it is not going to do anything else: it finished, broke or was cancelled. */
     public final boolean isDone() {
         return this.future.isDone();
     }
 
     /**
-     * El resultado, esperando a que este.
+     * The result, waiting for it to be there.
      *
-     * <p><b>Bloquea.</b> Llamarlo desde el hilo de la interfaz la congela, que es exactamente lo
-     * que esta clase existe para evitar: el lugar de `get` es {@link #done}, donde ya se sabe que
-     * el resultado esta.
+     * <p><b>It blocks.</b> Calling it from the interface's thread freezes it, which is exactly
+     * what this class exists in order to avoid: `get`'s place is {@link #done}, where the result
+     * is already known to be there.
      *
-     * @throws InterruptedException si interrumpen la espera
-     * @throws ExecutionException si {@link #doInBackground} lanzo
+     * @throws InterruptedException if the wait is interrupted
+     * @throws ExecutionException if {@link #doInBackground} threw
      */
     public final T get() throws InterruptedException, ExecutionException {
         return this.future.get();
     }
 
     /**
-     * El resultado, esperando a lo sumo ese plazo.
+     * The result, waiting at most that long.
      *
-     * @throws InterruptedException si interrumpen la espera
-     * @throws ExecutionException si {@link #doInBackground} lanzo
-     * @throws TimeoutException si se vence el plazo
+     * @throws InterruptedException if the wait is interrupted
+     * @throws ExecutionException if {@link #doInBackground} threw
+     * @throws TimeoutException if the term runs out
      */
     public final T get(long timeout, TimeUnit unit)
             throws InterruptedException, ExecutionException, TimeoutException {
         return this.future.get(timeout, unit);
     }
 
-    /** Agrega un escucha de las propiedades {@code "state"} y {@code "progress"}. */
+    /** It adds a listener of the {@code "state"} and {@code "progress"} properties. */
     public final void addPropertyChangeListener(PropertyChangeListener listener) {
         this.propertyChangeSupport.addPropertyChangeListener(listener);
     }
 
-    /** Saca un escucha. */
+    /** It removes a listener. */
     public final void removePropertyChangeListener(PropertyChangeListener listener) {
         this.propertyChangeSupport.removePropertyChangeListener(listener);
     }
 
     /**
-     * Avisa un cambio de propiedad.
+     * It gives notice of a property change.
      *
-     * <p>En el JDK el aviso llega en el hilo de la interfaz; aca, en el que lo dispara.
+     * <p>In the JDK the notice arrives on the interface's thread; here, on the one that fires
+     * it.
      */
     public final void firePropertyChange(String propertyName, Object oldValue, Object newValue) {
         getPropertyChangeSupport().firePropertyChange(propertyName, oldValue, newValue);
     }
 
     /**
-     * El soporte de propiedades, para agregar escuchas de una propiedad concreta.
+     * The property support, in order to add listeners of a specific property.
      *
-     * <p>Esta expuesto porque {@link #addPropertyChangeListener} solo agrega escuchas generales, y
-     * un cliente que solo quiere el progreso tiene derecho a no despertarse por el estado.
+     * <p>It is exposed because {@link #addPropertyChangeListener} only adds general listeners, and
+     * a client that only wants the progress has the right not to be woken up by the state.
      */
     public final PropertyChangeSupport getPropertyChangeSupport() {
         return this.propertyChangeSupport;
     }
 
-    /** En que anda el trabajo. */
+    /** How the work is going. */
     public final StateValue getState() {
         return isDone() ? StateValue.DONE : this.state;
     }
 
-    /** Cambia el estado y lo avisa como la propiedad {@code "state"}. */
+    /** It changes the state and gives notice of it as the {@code "state"} property. */
     private void setState(StateValue state) {
-        StateValue viejo = this.state;
+        StateValue old = this.state;
         this.state = state;
-        firePropertyChange("state", viejo, state);
+        firePropertyChange("state", old, state);
     }
 
-    /** Lo llama {@link Tarea} cuando el `FutureTask` termina, sea como sea. */
-    private void alTerminar() {
+    /** {@link Task} calls it when the `FutureTask` finishes, however it finishes. */
+    private void onDone() {
         setState(StateValue.DONE);
         done();
     }
 
-    /** El pool compartido, armado la primera vez que alguien lo necesita. */
+    /** The shared pool, built the first time somebody needs it. */
     private static synchronized ExecutorService getWorkersExecutorService() {
         if (executorService == null) {
             executorService = Executors.newFixedThreadPool(MAX_WORKER_THREADS);
@@ -266,37 +273,37 @@ public abstract class SwingWorker<T, V> implements RunnableFuture<T> {
     }
 
     /**
-     * El cuerpo del trabajo, como {@link Callable}.
+     * The work's body, as a {@link Callable}.
      *
-     * <p>Es una clase con nombre y no anonima --el JDK la tiene anonima-- porque asi se lee: lo
-     * unico que hace es marcar el arranque y delegar.
+     * <p>It is a named class and not anonymous -- the JDK has it anonymous -- because that way it
+     * reads: the only thing it does is mark the start and delegate.
      */
-    private static final class Cuerpo<T> implements Callable<T> {
+    private static final class Body<T> implements Callable<T> {
 
-        private final SwingWorker<T, ?> duenio;
+        private final SwingWorker<T, ?> owner;
 
-        Cuerpo(SwingWorker<T, ?> duenio) {
-            this.duenio = duenio;
+        Body(SwingWorker<T, ?> owner) {
+            this.owner = owner;
         }
 
         public T call() throws Exception {
-            this.duenio.setState(StateValue.STARTED);
-            return this.duenio.doInBackground();
+            this.owner.setState(StateValue.STARTED);
+            return this.owner.doInBackground();
         }
     }
 
-    /** El {@link FutureTask} que avisa al trabajo cuando termina. */
-    private static final class Tarea<T> extends FutureTask<T> {
+    /** The {@link FutureTask} that tells the job when it finishes. */
+    private static final class Task<T> extends FutureTask<T> {
 
-        private final SwingWorker<T, ?> duenio;
+        private final SwingWorker<T, ?> owner;
 
-        Tarea(SwingWorker<T, ?> duenio, Callable<T> cuerpo) {
-            super(cuerpo);
-            this.duenio = duenio;
+        Task(SwingWorker<T, ?> owner, Callable<T> body) {
+            super(body);
+            this.owner = owner;
         }
 
         protected void done() {
-            this.duenio.alTerminar();
+            this.owner.onDone();
         }
     }
 }

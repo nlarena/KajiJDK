@@ -1,68 +1,68 @@
 package java.nio.file.attribute;
 
-// Los permisos de una entrada de ACL, en el modelo NFSv4 que usa Windows.
+// The permissions of an ACL entry, in the NFSv4 model Windows uses.
 //
-// Las tres ultimas --`LIST_DIRECTORY`, `ADD_FILE`, `ADD_SUBDIRECTORY`-- **no son constantes de enum
-// propias**: son alias de `READ_DATA`, `WRITE_DATA` y `APPEND_DATA` con el nombre que corresponde
-// cuando el objeto es un directorio. Van como campos `static final` que apuntan a la misma
-// instancia, igual que en el JDK; por eso `values()` devuelve catorce y no diecisiete.
+// The last three --`LIST_DIRECTORY`, `ADD_FILE`, `ADD_SUBDIRECTORY`-- are **not enum constants of
+// their own**: they are aliases of `READ_DATA`, `WRITE_DATA` and `APPEND_DATA` under the name that
+// fits when the object is a directory. They go as `static final` fields pointing at the same
+// instance, just as in the JDK; that is why `values()` returns fourteen and not seventeen.
 //
-// **Ojo: hoy los tres valen `null` cuando esto se compila con el `javac` propio.** No es un problema
-// del fuente --el `javac` del JDK lo compila bien-- sino de la emision: el `<clinit>` sale con los
-// `putstatic` de estos tres campos **antes** de los `new` que construyen las constantes, al reves de
-// lo que manda la JLS (§12.4.2: primero las constantes del enum, despues los inicializadores
-// estaticos en orden textual). Se deja el fuente correcto y el bug reportado; cuando el emisor
-// ordene bien, esto anda sin tocar nada.
+// **Mind that today the three are `null` when this is compiled with our own `javac`.** It is not a
+// problem in the source --the JDK's `javac` compiles it correctly-- but in the emission: the
+// `<clinit>` comes out with these three fields' `putstatic` **before** the `new`s that build the
+// constants, the other way round from what the JLS requires (§12.4.2: the enum constants first, then
+// the static initialisers in textual order). The source is left correct and the bug reported; when
+// the emitter orders it right, this works without touching anything.
 public enum AclEntryPermission {
 
-    /** Leer el contenido del archivo. */
+    /** Read the file's content. */
     READ_DATA,
 
-    /** Escribir el contenido, pudiendo pisar lo que hay. */
+    /** Write the content, possibly overwriting what is there. */
     WRITE_DATA,
 
-    /** Agregar al final. */
+    /** Append at the end. */
     APPEND_DATA,
 
-    /** Leer los atributos con nombre. */
+    /** Read the named attributes. */
     READ_NAMED_ATTRS,
 
-    /** Escribir los atributos con nombre. */
+    /** Write the named attributes. */
     WRITE_NAMED_ATTRS,
 
-    /** Ejecutar el archivo. */
+    /** Execute the file. */
     EXECUTE,
 
-    /** Borrar un hijo de un directorio. */
+    /** Delete a child of a directory. */
     DELETE_CHILD,
 
-    /** Leer los atributos basicos. */
+    /** Read the basic attributes. */
     READ_ATTRIBUTES,
 
-    /** Escribir los atributos basicos. */
+    /** Write the basic attributes. */
     WRITE_ATTRIBUTES,
 
-    /** Borrar el objeto. */
+    /** Delete the object. */
     DELETE,
 
-    /** Leer la ACL. */
+    /** Read the ACL. */
     READ_ACL,
 
-    /** Escribir la ACL. */
+    /** Write the ACL. */
     WRITE_ACL,
 
-    /** Cambiar el dueño. */
+    /** Change the owner. */
     WRITE_OWNER,
 
-    /** Usar el objeto como sincronizador local. */
+    /** Use the object as a local synchroniser. */
     SYNCHRONIZE;
 
-    /** Listar un directorio: el mismo permiso que `READ_DATA`, con el nombre de directorio. */
+    /** List a directory: the same permission as `READ_DATA`, under the directory name. */
     public static final AclEntryPermission LIST_DIRECTORY = READ_DATA;
 
-    /** Crear un archivo en un directorio: el mismo permiso que `WRITE_DATA`. */
+    /** Create a file in a directory: the same permission as `WRITE_DATA`. */
     public static final AclEntryPermission ADD_FILE = WRITE_DATA;
 
-    /** Crear un subdirectorio: el mismo permiso que `APPEND_DATA`. */
+    /** Create a subdirectory: the same permission as `APPEND_DATA`. */
     public static final AclEntryPermission ADD_SUBDIRECTORY = APPEND_DATA;
 }

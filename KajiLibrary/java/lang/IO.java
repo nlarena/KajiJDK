@@ -7,27 +7,29 @@ import java.io.InputStreamReader;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 
-// La entrada/salida de linea para programas chicos (JEP 512, Java 25): `println`, `print` y
-// `readln` sin tener que nombrar `System.out` ni armar un `BufferedReader` a mano.
+// Line-based input/output for small programs (JEP 512, Java 25): `println`, `print` and `readln`
+// without having to name `System.out` or build a `BufferedReader` by hand.
 //
-// Existe para que el primer programa que alguien escribe no arranque explicando que es un
-// `PrintStream`. De ahi salen sus tres decisiones de forma, que no son arbitrarias:
+// It exists so the first program somebody writes does not start by explaining what a `PrintStream`
+// is. Its three decisions of shape follow from that, and they are not arbitrary:
 //
-//   - No hay `printf`. Un lenguaje de formato cifrado no le sirve a quien recien empieza, y ademas
-//     arrastra el problema del `Locale`. El JDK lo dejo afuera a proposito y aca tambien.
-//   - Todo es `static` y la clase es `final` con constructor privado: no hay instancia que crear ni
-//     estado que configurar.
-//   - `readln` devuelve `null` en fin de entrada, no lanza. Es un `while ((s = readln()) != null)`.
+//   - There is no `printf`. A cryptic format language is no use to somebody just starting, and it
+//     drags the `Locale` problem along as well. The JDK left it out on purpose and so does this.
+//   - Everything is `static` and the class is `final` with a private constructor: there is no
+//     instance to create and no state to configure.
+//   - `readln` returns `null` at end of input, it does not throw. It is a
+//     `while ((s = readln()) != null)`.
 //
-// Cuidado con mezclar: a partir del primer `readln` el decodificador puede haber consumido de
-// `System.in` mas bytes de los que devolvio (el buffer del `InputStreamReader`), asi que leer
-// despues directo de `System.in` da resultados impredecibles. Es el contrato del JDK, no un limite
-// nuestro: la clase esta pensada para ser la unica que toque la entrada estandar.
+// Careful about mixing: from the first `readln` on, the decoder may have consumed more bytes from
+// `System.in` than it returned (the `InputStreamReader`'s buffer), so reading straight from
+// `System.in` afterwards gives unpredictable results. It is the JDK's contract and not a limit of
+// ours: the class is meant to be the only one that touches standard input.
 public final class IO {
 
-    // No hay instancias. Se tira `Error` y no `UnsupportedOperationException` porque llegar aca es
-    // imposible desde codigo compilado —no hay constructor visible— y solo puede pasar por
-    // reflexion forzada, que es un error del programa, no una operacion no soportada.
+    // There are no instances. An `Error` is thrown and not an `UnsupportedOperationException`
+    // because getting here is
+    // impossible from compiled code --there is no visible constructor-- and can only happen through
+    // forced reflection, which is a programming error and not an unsupported operation.
     private IO() {
         throw new Error("no instances");
     }
@@ -40,21 +42,21 @@ public final class IO {
         System.out.println();
     }
 
-    // `print` si vacia el buffer y `println` no. El motivo es el prompt: quien escribe
-    // `print("nombre: ")` y despues `readln()` tiene que ver el prompt **antes** de que le pidan
-    // tipear, y sin salto de linea el autoflush por linea de `System.out` no lo garantiza. Con
-    // `println` ese autoflush ya alcanza.
+    // `print` does flush the buffer and `println` does not. The reason is the prompt: whoever writes
+    // `print("name: ")` and then `readln()` has to see the prompt **before** being asked to type, and
+    // with no line break `System.out`'s per-line autoflush does not guarantee it. With
+    // `println` that autoflush is already enough.
     public static void print(Object obj) {
         java.io.PrintStream out = System.out;
         out.print(obj);
         out.flush();
     }
 
-    // Devuelve la linea sin el separador, o `null` si la entrada se termino sin leer nada.
+    // It returns the line without the separator, or `null` if the input ended with nothing read.
     //
-    // El `IOException` se envuelve en `IOError` en vez de propagarse: el publico de esta clase no
-    // deberia tener que escribir un `try`/`catch` para leer una linea, y una entrada estandar que
-    // falla no es una condicion de la que un programa asi se pueda recuperar.
+    // The `IOException` is wrapped in an `IOError` instead of propagating: this class's audience
+    // should not have to write a `try`/`catch` to read a line, and a standard input that fails is not
+    // a condition a program like that can recover from.
     public static String readln() {
         try {
             return IO.reader().readLine();
@@ -68,15 +70,16 @@ public final class IO {
         return IO.readln();
     }
 
-    // El lector cacheado. Se toca solo desde `reader()`, que esta sincronizado.
+    // The cached reader. It is touched only from `reader()`, which is synchronised.
     private static BufferedReader br;
 
-    // El decodificador se arma tarde, en la primera lectura, y no en un inicializador estatico: si
-    // el programa nunca lee, no se paga el costo ni se roban bytes de `System.in`.
+    // The decoder is built late, on the first read, and not in a static initialiser: if the program
+    // never reads, the cost is not paid and no bytes are stolen from `System.in`.
     //
-    // La codificacion sale de `stdin.encoding` y cae en UTF-8 si la propiedad no esta o nombra algo
-    // que no existe. Se usa la forma indulgente de `forName` justamente por eso: el valor viene de
-    // la configuracion del entorno, y un nombre mal escrito ahi no deberia voltear al programa.
+    // The encoding comes from `stdin.encoding` and falls back to UTF-8 if the property is absent or
+    // names something that does not exist. The lenient form of `forName` is used for exactly that
+    // reason: the value comes from the environment's configuration, and a misspelling there should
+    // not bring the program down.
     static synchronized BufferedReader reader() {
         if (IO.br == null) {
             String enc = System.getProperty("stdin.encoding", "");

@@ -4,28 +4,28 @@ import javax.swing.Action;
 import javax.swing.KeyStroke;
 
 /**
- * Que hace cada tecla: un mapa de combinaciones a acciones.
+ * What each key does: a map from combinations to actions.
  *
- * <p>Los mapas se encadenan por su padre de resolucion, igual que los estilos: uno propio con dos
- * teclas cambiadas cuelga del mapa por omision y hereda las demas. Cambiar un atajo de una
- * aplicacion es agregar un eslabon, no copiar la tabla.
+ * <p>The maps are chained through their resolving parent, just like the styles: one of one's own
+ * with two keys changed hangs from the default map and inherits the rest. Changing an
+ * application's shortcut is adding a link, not copying the table.
  *
- * <p>{@link #getDefaultAction} es la que atiende lo que no coincidio con nada: en un editor, la
- * que inserta el caracter que se escribio.
+ * <p>{@link #getDefaultAction} is the one that attends to what matched nothing: in an editor,
+ * the one that inserts the character that was typed.
  *
- * <p>Swing la reemplazo por {@code InputMap} y {@code ActionMap}, que valen para cualquier
- * componente; esta quedo porque los componentes de texto la siguen exponiendo.
+ * <p>Swing replaced it with {@code InputMap} and {@code ActionMap}, which hold for any component;
+ * this one stayed because the text components still expose it.
  */
 public interface Keymap {
 
     String getName();
 
-    /** La accion para lo que no esta atado; ver la nota de la interfaz. */
+    /** The action for what is not bound; see the interface note. */
     Action getDefaultAction();
 
     void setDefaultAction(Action a);
 
-    /** La accion de esa combinacion, mirando tambien los mapas padres. */
+    /** That combination's action, looking at the parent maps too. */
     Action getAction(KeyStroke key);
 
     KeyStroke[] getBoundKeyStrokes();
@@ -34,7 +34,7 @@ public interface Keymap {
 
     KeyStroke[] getKeyStrokesForAction(Action a);
 
-    /** Si esa combinacion esta atada en <em>este</em> mapa, sin mirar los padres. */
+    /** Whether that combination is bound in <em>this</em> map, without looking at the parents. */
     boolean isLocallyDefined(KeyStroke key);
 
     void addActionForKeyStroke(KeyStroke key, Action a);

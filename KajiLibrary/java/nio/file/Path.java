@@ -132,7 +132,9 @@ public interface Path extends Comparable<Path>, Iterable<Path>, Watchable {
     /** This path made absolute. */
     Path toAbsolutePath();
 
-    /** The real path of an existing file. KajiJDK has no file system, so this normalizes instead. */
+    /**
+     * The real path of an existing file. KajiJDK has no file system, so this normalizes instead.
+     */
     Path toRealPath(LinkOption... options) throws IOException;
 
     /** A {@link File} representing this path. */

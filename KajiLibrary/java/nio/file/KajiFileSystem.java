@@ -8,26 +8,27 @@ import java.util.List;
 import java.util.HashSet;
 import java.util.Set;
 
-// El unico `FileSystem` de KajiJDK: el que hay detras de `Path.getFileSystem()` y de
+// KajiJDK's only `FileSystem`: the one behind `Path.getFileSystem()` and
 // `FileSystems.getDefault()`.
 //
-// **Detras si hay un sistema de archivos de verdad** --los seis nativos de `jdk.internal.io.Fs`
-// llegan al disco-- y por eso esta clase dice `isReadOnly() == false`. Lo que no hay es con que
-// contestar tres preguntas *sobre* ese sistema de archivos: cuales son sus raices, cuales son sus
-// volumenes, y quienes son sus usuarios. Las tres se resuelven distinto y a proposito:
+// **There is a real filesystem behind it** --`jdk.internal.io.Fs`'s natives reach the disk-- and
+// that is why this class says `isReadOnly() == false`. Of the three questions *about* that
+// filesystem that used to have no answer --what its roots are, what its volumes are, and who its
+// users are-- only the last is left:
 //
-//   - (`getRootDirectories()` devolvia vacio y `getFileStores()` levantaba. Los dos ya contestan:
-//     `Fs.roots()` enumera las unidades y `Fs.diskTotal`/`diskUsable`/`diskUnallocated` dan el
-//     espacio, asi que `KajiFileStore` puede existir sin inventar ningun cero.)
-//   - `getUserPrincipalLookupService()` sigue levantando `UnsupportedOperationException`: ahi el
-//     valor de retorno **es** el dato, y un servicio que invente principals afirmaria cosas falsas.
-//   - `supportedFileAttributeViews()` devuelve vacio, y no `{"basic"}`: ver la nota del metodo.
+//   - `getRootDirectories()` used to return empty and `getFileStores()` used to throw. Both answer
+//     now: `Fs.roots()` enumerates the drives and `Fs.diskTotal`/`diskUsable`/`diskUnallocated`
+//     give the space, so `KajiFileStore` can exist without inventing any zero.
+//   - `getUserPrincipalLookupService()` still throws `UnsupportedOperationException`: there the
+//     return value **is** the datum, and a service that invented principals would assert
+//     falsehoods.
+//   - `supportedFileAttributeViews()` returns empty, and not `{"basic"}`: see the method's note.
 //
-// `newWatchService()` falla porque no hay nativo de vigilancia de directorios. `getPathMatcher()`
-// **ya no falla**: la nota anterior decia que `glob:` y `regex:` se podian implementar --son
-// comparaciones de cadenas, no tocan el disco-- y que era deuda y no un techo de la VM. Se pago.
-// El `UnsupportedOperationException` queda para lo que la spec dice que es: una sintaxis que esta
-// implementacion no conoce.
+// `newWatchService()` fails because there is no native for watching directories. `getPathMatcher()`
+// **no longer fails**: the earlier note said `glob:` and `regex:` could be implemented --they are
+// string comparisons, they do not touch the disk-- and that it was debt and not a VM ceiling. It
+// was paid. The `UnsupportedOperationException` is left for what the spec says it is: a syntax this
+// implementation does not know.
 final class KajiFileSystem extends FileSystem {
 
     static final KajiFileSystem INSTANCE = new KajiFileSystem();
@@ -36,7 +37,7 @@ final class KajiFileSystem extends FileSystem {
     }
 
     public FileSystemProvider provider() {
-        return KajiFileSystemProvider.INSTANCIA;
+        return KajiFileSystemProvider.INSTANCE;
     }
 
     public void close() {
@@ -49,9 +50,9 @@ final class KajiFileSystem extends FileSystem {
     /**
      * `false`.
      *
-     * <p>`Files.write`, `createDirectory`, `delete` y `move` funcionan sobre este sistema de
-     * archivos, asi que decir `true` --"solo permite acceso de lectura"-- seria falso, y del tipo
-     * que hace que un programa ni intente escribir.
+     * <p>`Files.write`, `createDirectory`, `delete` and `move` work over this filesystem, so saying
+     * `true` --"permits only read-only access"-- would be false, and of the kind that stops a
+     * program even trying to write.
      */
     public boolean isReadOnly() {
         return false;
@@ -62,66 +63,60 @@ final class KajiFileSystem extends FileSystem {
     }
 
     /**
-     * Las raices del sistema de archivos, una por unidad montada.
+     * The filesystem's roots, one per mounted drive.
      *
-     * <p>Devolvia una lista vacia mientras no hubiera con que enumerarlas. `Fs.roots()` existe, asi
-     * que ahora son las de verdad -- y se preguntan en cada llamada, no se guardan: una unidad que
-     * se conecta agrega una raiz.
+     * <p>It used to return an empty list while there was nothing to enumerate them with.
+     * `Fs.roots()` exists, so now they are the real ones -- and they are asked for on every call,
+     * not kept: a drive being plugged in adds a root.
      */
     public Iterable<Path> getRootDirectories() {
         List<Path> out = new ArrayList<Path>();
-        String[] raices = jdk.internal.io.Fs.roots();
-        for (int i = 0; i < raices.length; i++) {
-            out.add(this.getPath(raices[i]));
+        String[] roots = jdk.internal.io.Fs.roots();
+        for (int i = 0; i < roots.length; i++) {
+            out.add(this.getPath(roots[i]));
         }
         return out;
     }
 
-    // Un conjunto **vacio** y no `{"basic"}`: decir que se soporta la vista basica obligaria a que
-    // `Files.getFileAttributeView(p, BasicFileAttributeView.class)` devolviera algo, y esa vista
-    // tiene `setTimes` -- no hay nativo que escriba metadatos.
+    // An **empty** set and not `{"basic"}`: saying the basic view is supported would oblige
+    // `Files.getFileAttributeView(p, BasicFileAttributeView.class)` to return something, and that
+    // view has `setTimes`, which writes all three timestamps at once -- and only the modification
+    // one has a native.
     //
-    // Ojo con la asimetria, que es real y esta bien: los atributos basicos si se **leen**
-    // (`Files.readAttributes` los saca de `stat` y `size`). Lo que no hay es la **vista**, que es un
-    // objeto de lectura y escritura. Ver `Files.getFileAttributeView`.
+    // Mind the asymmetry, which is real and is right: the basic attributes ARE **read**
+    // (`Files.readAttributes` takes them from `stat`, `size` and `mtime`). What is not there is the
+    // **view**, which is a read-and-write object. See `Files.getFileAttributeView`.
     public Set<String> supportedFileAttributeViews() {
         return new HashSet<String>();
     }
 
     /**
-     * Falla.
+     * The filesystem's volumes: one per root.
      *
-     * <p>No hay nativo de estadisticas de volumen, asi que no hay con que construir un `FileStore`
-     * -- ver la nota de esa clase. Devolver un iterable vacio diria "esta VM no tiene volumenes",
-     * que es falso; fallar dice "no se puede saber", que es lo que pasa.
-     */
-    /**
-     * Los volumenes del sistema de archivos: uno por raiz.
-     *
-     * <p>Levantaba `UnsupportedOperationException` mientras no hubiera con que responder por el
-     * espacio de un volumen. Ahora lo hay, y esto devuelve un {@link FileStore} por cada raiz que
-     * {@link #getRootDirectories} enumera -- que es lo mismo que hace el JDK, salvo que el suyo
-     * ademas lista los montajes que no son raices, y `Fs` no sabe enumerarlos.
+     * <p>It used to throw `UnsupportedOperationException` while there was nothing to answer about a
+     * volume's space with. Now there is, and this returns one {@link FileStore} per root that
+     * {@link #getRootDirectories} enumerates -- which is what the JDK does, except that its own
+     * also lists the mounts that are not roots, and `Fs` does not know how to enumerate those.
      */
     public Iterable<FileStore> getFileStores() {
         java.util.List<FileStore> out = new java.util.ArrayList<FileStore>();
-        for (Path raiz : this.getRootDirectories()) {
-            String ruta = raiz.toString();
-            // Una raiz que no se puede leer se saltea en vez de romper la enumeracion entera: en
-            // Windows hay letras de unidad sin medio adentro, y una disquetera vacia no tiene por
-            // que impedir ver el resto de los volumenes.
-            if (jdk.internal.io.Fs.diskTotal(ruta) >= 0L) {
-                out.add(new KajiFileStore(ruta, KajiFileStore.nombreDeVolumen(ruta)));
+        for (Path root : this.getRootDirectories()) {
+            String pathOf = root.toString();
+            // A root that cannot be read is skipped rather than break the whole enumeration: on
+            // Windows there are drive letters with no medium in them, and an empty floppy drive has
+            // no business stopping the rest of the volumes from being seen.
+            if (jdk.internal.io.Fs.diskTotal(pathOf) >= 0L) {
+                out.add(new KajiFileStore(pathOf, KajiFileStore.volumeName(pathOf)));
             }
         }
         return out;
     }
 
     /**
-     * Falla.
+     * It fails.
      *
-     * <p>No hay nativo que consulte la base de usuarios del sistema, y un servicio que devolviera
-     * un principal por cualquier nombre estaria inventando identidades.
+     * <p>There is no native that queries the system's user database, and a service that returned a
+     * principal for any name would be inventing identities.
      */
     public UserPrincipalLookupService getUserPrincipalLookupService() {
         throw new UnsupportedOperationException("KajiJDK has no principal lookup service");
@@ -132,135 +127,138 @@ final class KajiFileSystem extends FileSystem {
     }
 
     /**
-     * Un comparador de caminos, por `glob:` o por `regex:`.
+     * A path matcher, by `glob:` or by `regex:`.
      *
-     * <p>Los dos terminan en un {@link java.util.regex.Pattern} sobre `path.toString()`. La
-     * diferencia es quien escribe la expresion: en `regex:` la escribe el llamador, y en `glob:` la
-     * traduce {@link #globAExpresion}.
+     * <p>Both end up in a {@link java.util.regex.Pattern} over `path.toString()`. The difference is
+     * who writes the expression: with `regex:` the caller writes it, and with `glob:`
+     * {@link #globToRegex} translates it.
      *
-     * @throws IllegalArgumentException si falta el `:` o el patron esta mal formado
-     * @throws UnsupportedOperationException si la sintaxis no es ninguna de las dos
-     * @throws java.util.regex.PatternSyntaxException si la expresion no compila
+     * @throws IllegalArgumentException if the `:` is missing or the pattern is malformed
+     * @throws UnsupportedOperationException if the syntax is neither of the two
+     * @throws java.util.regex.PatternSyntaxException if the expression does not compile
      */
     public PathMatcher getPathMatcher(String syntaxAndPattern) {
-        int corte = syntaxAndPattern.indexOf(':');
-        if (corte <= 0 || corte == syntaxAndPattern.length() - 1) {
+        int cut = syntaxAndPattern.indexOf(':');
+        if (cut <= 0 || cut == syntaxAndPattern.length() - 1) {
             throw new IllegalArgumentException(syntaxAndPattern);
         }
-        String sintaxis = syntaxAndPattern.substring(0, corte);
-        String patron = syntaxAndPattern.substring(corte + 1);
-        String expresion;
-        if (sintaxis.equalsIgnoreCase("glob")) {
-            expresion = globAExpresion(patron);
-        } else if (sintaxis.equalsIgnoreCase("regex")) {
-            expresion = patron;
+        String syntax = syntaxAndPattern.substring(0, cut);
+        String pattern = syntaxAndPattern.substring(cut + 1);
+        String expression;
+        if (syntax.equalsIgnoreCase("glob")) {
+            expression = globToRegex(pattern);
+        } else if (syntax.equalsIgnoreCase("regex")) {
+            expression = pattern;
         } else {
-            throw new UnsupportedOperationException("sintaxis desconocida: " + sintaxis);
+            throw new UnsupportedOperationException("sintaxis desconocida: " + syntax);
         }
-        final java.util.regex.Pattern compilado = java.util.regex.Pattern.compile(expresion);
+        final java.util.regex.Pattern compiled = java.util.regex.Pattern.compile(expression);
         return new PathMatcher() {
             public boolean matches(Path path) {
-                // Contra el camino **entero** y no contra el nombre: es lo que la spec dice, y es lo
-                // que hace que `**\/*.java` pueda distinguirse de `*.java`. Quien quiera comparar
-                // solo el nombre le pasa `path.getFileName()`, que es lo que hace `Files`.
-                return path != null && compilado.matcher(path.toString()).matches();
+                // Against the **whole** path and not against the name: it is what the spec says,
+                // and it is what makes `**\/*.java` distinguishable from `*.java`. Whoever wants to
+                // compare only the name hands it `path.getFileName()`, which is what `Files` does.
+                return path != null && compiled.matcher(path.toString()).matches();
             }
         };
     }
 
     /**
-     * Traduce un glob a una expresion regular.
+     * It translates a glob into a regular expression.
      *
-     * <p>La regla que define todo el resto: **`*` no cruza separadores y `**` si**. De ahi salen las
-     * dos traducciones distintas, y de ahi que haya que mirar el caracter siguiente antes de decidir.
+     * <p>The rule that defines all the rest: **`*` does not cross separators and `**` does**. That
+     * is where the two different translations come from, and why the next character has to be
+     * looked at before deciding.
      *
-     * <p>Lo demas es mecanico: `?` es un caracter que no es separador, `[...]` pasa casi tal cual
-     * --con `!` en vez de `^` para negar--, `{a,b}` es una alternativa, y `\\` escapa. Todo caracter
-     * que la expresion regular trate especial y el glob no se escapa.
+     * <p>The rest is mechanical: `?` is a character that is not a separator, `[...]` passes through
+     * almost as it stands --with `!` instead of `^` to negate--, `{a,b}` is an alternation, and
+     * `\\` escapes. Every character the regular expression treats specially and the glob does not
+     * is escaped.
      *
-     * <p>En Windows los dos separadores valen, asi que "no es separador" es `[^\\/]` y no `[^/]`.
+     * <p>On Windows both separators count, so "is not a separator" is `[^\\/]` and not `[^/]`.
      */
-    private static String globAExpresion(String glob) {
+    private static String globToRegex(String glob) {
         StringBuilder re = new StringBuilder();
-        // `\Q...\E` no se usa a proposito: hay que intercalar metacaracteres nuestros con texto del
-        // usuario, y las citas anidadas se vuelven ilegibles enseguida. Se escapa caracter por
-        // caracter, que es mas largo de escribir y mucho mas facil de leer.
+        // `\Q...\E` is not used on purpose: metacharacters of ours have to be interleaved with the
+        // user's text, and nested quoting becomes unreadable at once. Escaping is done character by
+        // character, which is longer to write and much easier to read.
         int i = 0;
-        int llaves = 0;
+        int braces = 0;
         while (i < glob.length()) {
             char c = glob.charAt(i);
             i = i + 1;
             if (c == '\\') {
                 if (i >= glob.length()) {
                     throw new java.util.regex.PatternSyntaxException(
-                            "el patron termina en una barra de escape", glob, i - 1);
+                            "the pattern ends in an escape backslash", glob, i - 1);
                 }
                 re.append(java.util.regex.Pattern.quote(String.valueOf(glob.charAt(i))));
                 i = i + 1;
             } else if (c == '/') {
-                re.append(SEPARADOR);
+                re.append(SEPARATOR);
             } else if (c == '*') {
                 if (i < glob.length() && glob.charAt(i) == '*') {
-                    // `**` cruza separadores. Es la unica diferencia con `*`, y es toda la gracia.
+                    // `**` crosses separators. It is the only difference from `*`, and it is the
+                    // whole point.
                     re.append(".*");
                     i = i + 1;
                 } else {
-                    re.append(NO_SEPARADOR).append('*');
+                    re.append(NON_SEPARATOR).append('*');
                 }
             } else if (c == '?') {
-                re.append(NO_SEPARADOR);
+                re.append(NON_SEPARATOR);
             } else if (c == '[') {
-                i = claseDeCaracteres(glob, i, re);
+                i = characterClass(glob, i, re);
             } else if (c == '{') {
-                if (llaves > 0) {
+                if (braces > 0) {
                     throw new java.util.regex.PatternSyntaxException(
-                            "los grupos de un glob no se anidan", glob, i - 1);
+                            "a glob's groups do not nest", glob, i - 1);
                 }
-                llaves = llaves + 1;
+                braces = braces + 1;
                 re.append('(');
-            } else if (c == ',' && llaves > 0) {
+            } else if (c == ',' && braces > 0) {
                 re.append('|');
             } else if (c == '}') {
-                if (llaves == 0) {
+                if (braces == 0) {
                     throw new java.util.regex.PatternSyntaxException(
-                            "cierra un grupo que no abrio", glob, i - 1);
+                            "it closes a group it did not open", glob, i - 1);
                 }
-                llaves = llaves - 1;
+                braces = braces - 1;
                 re.append(')');
             } else {
-                escapar(re, c);
+                escape(re, c);
             }
         }
-        if (llaves > 0) {
+        if (braces > 0) {
             throw new java.util.regex.PatternSyntaxException(
-                    "falta cerrar un grupo", glob, glob.length());
+                    "a group is left unclosed", glob, glob.length());
         }
         return re.toString();
     }
 
-    // La clase `[...]`. Devuelve donde sigue el patron despues del `]`.
-    private static int claseDeCaracteres(String glob, int desde, StringBuilder re) {
-        int i = desde;
+    // The `[...]` class. It returns where the pattern carries on after the `]`.
+    private static int characterClass(String glob, int from, StringBuilder re) {
+        int i = from;
         re.append('[');
         if (i < glob.length() && (glob.charAt(i) == '!' || glob.charAt(i) == '^')) {
-            // El glob niega con `!`; la expresion regular con `^`. Un `^` literal al principio de
-            // una clase de glob **no** niega, pero escribirlo asi es tan raro que el JDK tampoco lo
-            // distingue.
+            // A glob negates with `!`; a regular expression with `^`. A literal `^` at the start of
+            // a glob class does **not** negate, but writing it that way is so unusual that the JDK
+            // does not tell it apart either.
             re.append('^');
             i = i + 1;
         }
-        boolean vacia = true;
-        while (i < glob.length() && (glob.charAt(i) != ']' || vacia)) {
+        boolean empty = true;
+        while (i < glob.length() && (glob.charAt(i) != ']' || empty)) {
             char c = glob.charAt(i);
             i = i + 1;
-            vacia = false;
+            empty = false;
             if (c == '\\' && i < glob.length()) {
                 re.append('\\').append(glob.charAt(i));
                 i = i + 1;
             } else if (c == '-' || c == ']') {
                 re.append('\\').append(c);
             } else if (c == '[' || c == '&' || c == '^') {
-                // `&&` es interseccion en una clase de Java y no significa nada en un glob.
+                // `&&` is intersection in a Java class and means nothing in a glob.
                 re.append('\\').append(c);
             } else {
                 re.append(c);
@@ -268,24 +266,24 @@ final class KajiFileSystem extends FileSystem {
         }
         if (i >= glob.length()) {
             throw new java.util.regex.PatternSyntaxException(
-                    "falta cerrar una clase de caracteres", glob, glob.length());
+                    "a character class is left unclosed", glob, glob.length());
         }
         re.append(']');
         return i + 1;
     }
 
-    private static void escapar(StringBuilder re, char c) {
+    private static void escape(StringBuilder re, char c) {
         if ("\\.[]{}()*+-?^$|".indexOf(c) >= 0) {
             re.append('\\');
         }
         re.append(c);
     }
 
-    // Que cuenta como separador. En Windows valen los dos, y por eso un glob escrito con `/` matchea
-    // un camino que el sistema escribe con `\\`.
-    private static final String SEPARADOR =
+    // What counts as a separator. On Windows both count, which is why a glob written with `/`
+    // matches a path the system writes with `\\`.
+    private static final String SEPARATOR =
             java.io.File.separatorChar == '\\' ? "[\\\\/]" : "/";
-    private static final String NO_SEPARADOR =
+    private static final String NON_SEPARATOR =
             java.io.File.separatorChar == '\\' ? "[^\\\\/]" : "[^/]";
 
     public WatchService newWatchService() {

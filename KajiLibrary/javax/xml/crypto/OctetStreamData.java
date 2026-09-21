@@ -3,42 +3,42 @@ package javax.xml.crypto;
 import java.io.InputStream;
 
 /**
- * KajiLibrary's javax.xml.crypto.OctetStreamData -- un flujo de bytes, como dato a firmar.
+ * KajiLibrary's javax.xml.crypto.OctetStreamData -- a stream of bytes, as data to sign.
  *
- * <p>La otra mitad de {@link Data}. Lo que se firma de verdad son bytes: toda cadena de
- * transformaciones termina convirtiendo nodos en octetos --con una canonicalizacion-- porque un
- * resumen criptografico no sabe de arboles.
+ * <p>The other half of {@link Data}. What is really signed is bytes: every chain of transforms ends
+ * up turning nodes into octets --with a canonicalization-- because a cryptographic digest knows
+ * nothing about trees.
  *
- * <p>Lleva ademas el URI de donde salio y su tipo de contenido, los dos opcionales. Sirven para
- * decidir como interpretarlo cuando el flujo no es XML: una firma puede cubrir una imagen o un
- * archivo binario, y ahi el tipo es lo unico que dice que es.
+ * <p>It also carries the URI it came from and its content type, both optional. They serve to decide
+ * how to interpret it when the stream is not XML: a signature can cover an image or a binary file,
+ * and there the type is the only thing that says what it is.
  *
- * <p>Es un flujo y no un arreglo, asi que <b>se consume</b>: leerlo dos veces no funciona. Es lo
- * correcto para algo que puede ser enorme, y hay que tenerlo presente al depurar una firma que no
- * valida.
+ * <p>It is a stream and not an array, so it <b>gets consumed</b>: reading it twice does not work.
+ * It is right for something that can be huge, and it has to be kept in mind when debugging a
+ * signature that does not validate.
  */
 public class OctetStreamData implements Data {
 
-    /** El flujo. */
+    /** The stream. */
     private final InputStream octetStream;
 
-    /** De donde salio, o null. */
+    /** Where it came from, or null. */
     private final String uri;
 
-    /** Su tipo de contenido, o null. */
+    /** Its content type, or null. */
     private final String mimeType;
 
-    /** Solo el flujo. */
+    /** The stream only. */
     public OctetStreamData(InputStream octetStream) {
         this(octetStream, null, null);
     }
 
     /**
-     * Con el origen y el tipo.
+     * With the origin and the type.
      *
-     * @param uri de donde salio, o null
-     * @param mimeType su tipo de contenido, o null
-     * @throws NullPointerException si el flujo es null
+     * @param uri where it came from, or null
+     * @param mimeType its content type, or null
+     * @throws NullPointerException if the stream is null
      */
     public OctetStreamData(InputStream octetStream, String uri, String mimeType) {
         if (octetStream == null) {
@@ -49,17 +49,17 @@ public class OctetStreamData implements Data {
         this.mimeType = mimeType;
     }
 
-    /** El flujo. Se consume; ver la nota de la clase. */
+    /** The stream. It gets consumed; see the class note. */
     public InputStream getOctetStream() {
         return this.octetStream;
     }
 
-    /** De donde salio, o null. */
+    /** Where it came from, or null. */
     public String getURI() {
         return this.uri;
     }
 
-    /** Su tipo de contenido, o null. */
+    /** Its content type, or null. */
     public String getMimeType() {
         return this.mimeType;
     }

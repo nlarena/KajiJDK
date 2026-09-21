@@ -4,10 +4,10 @@ import java.util.Locale;
 import java.util.regex.Pattern;
 
 /**
- * El matcher que devuelve {@link SNIHostName#createSNIMatcher}.
+ * The matcher {@link SNIHostName#createSNIMatcher} returns.
  *
- * <p>De paquete y no publica: el JDK tampoco la expone. Nadie deberia poder construirla salvo por
- * esa fabrica, que es la que garantiza que la expresion ya fue validada.
+ * <p>Package-private and not public: the JDK does not expose it either. Nobody should be able to
+ * build it except through that factory, which is what guarantees the expression was validated.
  */
 final class SNIHostNameMatcher extends SNIMatcher {
 
@@ -19,10 +19,10 @@ final class SNIHostNameMatcher extends SNIMatcher {
     }
 
     /**
-     * Acepta un nombre de host que case con la expresion.
+     * Accepts a host name that matches the expression.
      *
-     * <p>Un {@link SNIServerName} de otro tipo se rechaza sin mirarlo: este matcher solo entiende
-     * nombres de host, y opinar sobre otra cosa seria inventar.
+     * <p>An {@link SNIServerName} of another type is rejected without looking at it: this matcher
+     * only understands host names, and giving an opinion on something else would be inventing.
      */
     public boolean matches(SNIServerName serverName) {
         if (serverName == null) {
@@ -32,9 +32,9 @@ final class SNIHostNameMatcher extends SNIMatcher {
             if (serverName.getType() != StandardConstants.SNI_HOST_NAME) {
                 return false;
             }
-            SNIHostName reconstruido = new SNIHostName(serverName.getEncoded());
+            SNIHostName rebuilt = new SNIHostName(serverName.getEncoded());
             return this.pattern.matcher(
-                    reconstruido.getAsciiName().toLowerCase(Locale.ENGLISH)).matches();
+                    rebuilt.getAsciiName().toLowerCase(Locale.ENGLISH)).matches();
         }
         SNIHostName h = (SNIHostName) serverName;
         return this.pattern.matcher(h.getAsciiName().toLowerCase(Locale.ENGLISH)).matches();

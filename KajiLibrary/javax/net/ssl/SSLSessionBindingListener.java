@@ -3,18 +3,18 @@ package javax.net.ssl;
 import java.util.EventListener;
 
 /**
- * Se entera cuando un objeto propio entra o sale de una {@link SSLSession}.
+ * Finds out when an own object goes into or out of an {@link SSLSession}.
  *
- * <p>Una sesion puede guardar objetos de la aplicacion con {@link SSLSession#putValue}. Si el objeto
- * guardado implementa esta interfaz, la sesion le avisa — y eso le da la oportunidad de soltar lo
- * que tenga tomado cuando lo sacan o cuando la sesion se invalida. Sin este aviso, un objeto
- * guardado en una sesion que muere no tendria forma de saberlo.
+ * <p>A session can keep application objects with {@link SSLSession#putValue}. If the kept object
+ * implements this interface, the session notifies it — and that gives it the chance to release
+ * whatever it holds when it is removed or when the session is invalidated. Without this notice, an
+ * object kept in a session that dies would have no way of knowing.
  */
 public interface SSLSessionBindingListener extends EventListener {
 
-    /** Lo acaban de guardar en una sesion. */
+    /** It was just kept in a session. */
     void valueBound(SSLSessionBindingEvent event);
 
-    /** Lo acaban de sacar, o la sesion se invalido. */
+    /** It was just removed, or the session was invalidated. */
     void valueUnbound(SSLSessionBindingEvent event);
 }

@@ -16,19 +16,20 @@ import javax.swing.text.StyleContext;
 import javax.swing.text.StyledDocument;
 
 /**
- * El aspecto basico de un panel de texto con estilos.
+ * The basic look and feel of a text pane with styles.
  *
- * <h2>El color y la fuente van al estilo, no al componente</h2>
+ * <h2>The colour and the typeface go to the style, not to the component</h2>
  *
- * <p>Es la unica diferencia con {@link BasicEditorPaneUI}, y no es chica. En un panel sin estilos
- * el color del componente <em>es</em> el color del texto. En uno con estilos, el texto se dibuja
- * con lo que diga su estilo, y el color del componente no lo mira nadie. Asi que lo que instala el
- * aspecto --el frente y la fuente-- hay que meterlo en el estilo de omision del documento, que es
- * de donde heredan todos los demas.
+ * <p>It is the only difference with {@link BasicEditorPaneUI}, and it is not a small one. In a
+ * pane with no styles the component's colour <em>is</em> the text's colour. In one with styles,
+ * the text is drawn with whatever its style says, and nobody looks at the component's colour. So
+ * what the look and feel installs -- the foreground and the typeface -- has to be put into the
+ * document's default style, which is where all the others inherit from.
  *
- * <p>Y solo si lo puso el aspecto: un color que puso el usuario a mano no se toca, que es la regla
- * de {@link UIResource}. Igual que en todos lados, pero acá la consecuencia de equivocarse es
- * peor: pisaria el color de un parrafo que el programa configuro a proposito.
+ * <p>And only if the look and feel put it there: a colour the user set by hand is not touched,
+ * which is {@link UIResource}'s rule. The same as everywhere, but here the consequence of
+ * getting it wrong is worse: it would overwrite the colour of a paragraph the program set on
+ * purpose.
  */
 public class BasicTextPaneUI extends BasicEditorPaneUI {
 
@@ -36,7 +37,7 @@ public class BasicTextPaneUI extends BasicEditorPaneUI {
         super();
     }
 
-    /** Uno nuevo por panel: un UI de texto guarda el componente. */
+    /** A new one per pane: a text look and feel keeps the component. */
     public static ComponentUI createUI(JComponent c) {
         return new BasicTextPaneUI();
     }
@@ -47,61 +48,61 @@ public class BasicTextPaneUI extends BasicEditorPaneUI {
 
     public void installUI(JComponent c) {
         super.installUI(c);
-        actualizarFrente(c.getForeground());
-        actualizarFuente(c.getFont());
+        updateForeground(c.getForeground());
+        updateFont(c.getFont());
     }
 
-    /** Lleva al estilo de omision lo que cambio en el componente. */
+    /** It carries to the default style whatever changed in the component. */
     protected void propertyChange(PropertyChangeEvent evt) {
         super.propertyChange(evt);
-        String nombre = evt.getPropertyName();
-        if ("foreground".equals(nombre)) {
-            actualizarFrente((Color) evt.getNewValue());
-        } else if ("font".equals(nombre)) {
-            actualizarFuente((Font) evt.getNewValue());
-        } else if ("document".equals(nombre)) {
+        String name = evt.getPropertyName();
+        if ("foreground".equals(name)) {
+            updateForeground((Color) evt.getNewValue());
+        } else if ("font".equals(name)) {
+            updateFont((Font) evt.getNewValue());
+        } else if ("document".equals(name)) {
             JComponent comp = (JComponent) evt.getSource();
-            actualizarFrente(comp.getForeground());
-            actualizarFuente(comp.getFont());
+            updateForeground(comp.getForeground());
+            updateFont(comp.getFont());
         }
     }
 
-    /** El color al estilo de omision; ver la nota de la clase. */
-    private void actualizarFrente(Color color) {
-        StyledDocument doc = documento();
+    /** The colour to the default style; see the class note. */
+    private void updateForeground(Color color) {
+        StyledDocument doc = document();
         if (doc == null) {
             return;
         }
-        Style estilo = doc.getStyle(StyleContext.DEFAULT_STYLE);
-        if (estilo == null) {
+        Style style = doc.getStyle(StyleContext.DEFAULT_STYLE);
+        if (style == null) {
             return;
         }
         if (color == null) {
-            estilo.removeAttribute(StyleConstants.Foreground);
+            style.removeAttribute(StyleConstants.Foreground);
             return;
         }
         if (color instanceof UIResource) {
             MutableAttributeSet a = new SimpleAttributeSet();
             StyleConstants.setForeground(a, color);
-            estilo.addAttributes(a);
+            style.addAttributes(a);
         }
     }
 
-    /** La fuente al estilo de omision; ver la nota de la clase. */
-    private void actualizarFuente(Font font) {
-        StyledDocument doc = documento();
+    /** The typeface to the default style; see the class note. */
+    private void updateFont(Font font) {
+        StyledDocument doc = document();
         if (doc == null) {
             return;
         }
-        Style estilo = doc.getStyle(StyleContext.DEFAULT_STYLE);
-        if (estilo == null) {
+        Style style = doc.getStyle(StyleContext.DEFAULT_STYLE);
+        if (style == null) {
             return;
         }
         if (font == null) {
-            estilo.removeAttribute(StyleConstants.FontFamily);
-            estilo.removeAttribute(StyleConstants.FontSize);
-            estilo.removeAttribute(StyleConstants.Bold);
-            estilo.removeAttribute(StyleConstants.Italic);
+            style.removeAttribute(StyleConstants.FontFamily);
+            style.removeAttribute(StyleConstants.FontSize);
+            style.removeAttribute(StyleConstants.Bold);
+            style.removeAttribute(StyleConstants.Italic);
             return;
         }
         if (font instanceof UIResource) {
@@ -110,11 +111,11 @@ public class BasicTextPaneUI extends BasicEditorPaneUI {
             StyleConstants.setFontSize(a, font.getSize());
             StyleConstants.setBold(a, font.isBold());
             StyleConstants.setItalic(a, font.isItalic());
-            estilo.addAttributes(a);
+            style.addAttributes(a);
         }
     }
 
-    private StyledDocument documento() {
+    private StyledDocument document() {
         JTextComponent c = getComponent();
         if (c == null) {
             return null;

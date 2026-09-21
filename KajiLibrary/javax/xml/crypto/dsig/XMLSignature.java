@@ -7,97 +7,97 @@ import javax.xml.crypto.XMLStructure;
 import javax.xml.crypto.dsig.keyinfo.KeyInfo;
 
 /**
- * KajiLibrary's javax.xml.crypto.dsig.XMLSignature -- una firma XML completa.
+ * KajiLibrary's javax.xml.crypto.dsig.XMLSignature -- a complete XML signature.
  *
- * <p>La estructura central del paquete. Tiene tres partes y conviene tenerlas claras:
+ * <p>The central structure of the package. It has three parts and it is as well to have them clear:
  *
  * <ul>
- *   <li>el {@link SignedInfo} -- <b>lo unico que se firma</b>. Contiene las referencias a los datos y
- *       los algoritmos usados;
- *   <li>el {@link SignatureValue} -- la firma criptografica del {@code SignedInfo};
- *   <li>el {@link KeyInfo} -- opcional, y ver su nota: informacion, no autoridad.
+ *   <li>the {@link SignedInfo} -- <b>the only thing that is signed</b>. It contains the references
+ *       to the data and the algorithms used;
+ *   <li>the {@link SignatureValue} -- the cryptographic signature of the {@code SignedInfo};
+ *   <li>the {@link KeyInfo} -- optional, and see its note: information, not authority.
  * </ul>
  *
- * <h2>La firma cubre el SignedInfo, no los datos</h2>
+ * <h2>The signature covers the SignedInfo, not the data</h2>
  *
- * <p>Es la parte que hay que entender de XML-DSig y la que produce todos los malentendidos: la firma
- * se calcula sobre el {@code SignedInfo}, y el {@code SignedInfo} contiene el <b>resumen</b> de cada
- * dato. Los datos en si no se firman directamente.
+ * <p>It is the part of XML-DSig to understand and the one that produces all the misunderstandings:
+ * the signature is computed over the {@code SignedInfo}, and the {@code SignedInfo} contains the
+ * <b>digest</b> of each datum. The data themselves are not signed directly.
  *
- * <p>De ahi salen dos consecuencias. La buena: se puede firmar cualquier cosa, incluso algo externo
- * al documento. La peligrosa: {@link #validate} devuelve true si la firma del {@code SignedInfo}
- * cierra <b>y</b> todos los resumenes cierran, pero eso no dice nada sobre <b>que</b> se firmo. Una
- * firma valida sobre una referencia que apunta a otra cosa es una firma valida.
+ * <p>Two consequences follow. The good one: anything can be signed, even something external to the
+ * document. The dangerous one: {@link #validate} returns true if the {@code SignedInfo}'s signature
+ * checks out <b>and</b> all the digests check out, but that says nothing about <b>what</b> was
+ * signed. A valid signature over a reference that points to something else is a valid signature.
  *
- * <p>Por eso, despues de validar hay que mirar dos cosas mas: con que clave se valido
- * ({@link #getKeySelectorResult}) y que cubren las referencias.
+ * <p>That is why, after validating, two more things have to be looked at: which key it was
+ * validated with ({@link #getKeySelectorResult}) and what the references cover.
  */
 public interface XMLSignature extends XMLStructure {
 
-    /** El espacio de nombres de XML-DSig. */
+    /** The XML-DSig namespace. */
     static final String XMLNS = "http://www.w3.org/2000/09/xmldsig#";
 
     /**
-     * Valida la firma.
+     * Validates the signature.
      *
-     * <p>Ver la nota de la clase: true no significa que se firmo lo que uno cree.
+     * <p>See the class note: true does not mean that what one believes was signed.
      *
-     * @throws XMLSignatureException si la validacion no se pudo hacer
+     * @throws XMLSignatureException if the validation could not be done
      */
     boolean validate(XMLValidateContext validateContext) throws XMLSignatureException;
 
-    /** Lo que la firma dice sobre su clave, o null. */
+    /** What the signature says about its key, or null. */
     KeyInfo getKeyInfo();
 
-    /** Lo que de verdad se firmo. */
+    /** What was really signed. */
     SignedInfo getSignedInfo();
 
-    /** Los objetos que la firma lleva adentro. No modificable. */
+    /** The objects the signature carries inside. Unmodifiable. */
     List<XMLObject> getObjects();
 
-    /** El identificador del elemento, o null. */
+    /** The element's identifier, or null. */
     String getId();
 
-    /** La firma criptografica. */
+    /** The cryptographic signature. */
     SignatureValue getSignatureValue();
 
     /**
-     * Calcula la firma y la deja en el contexto.
+     * Computes the signature and leaves it in the context.
      *
-     * @throws MarshalException si no se pudo escribir el XML
-     * @throws XMLSignatureException si no se pudo firmar
+     * @throws MarshalException if the XML could not be written
+     * @throws XMLSignatureException if it could not be signed
      */
     void sign(XMLSignContext signContext) throws MarshalException, XMLSignatureException;
 
     /**
-     * Con que clave se valido.
+     * Which key it was validated with.
      *
-     * <p>Es lo que hay que comparar contra la lista de confianza; ver la nota de la clase.
+     * <p>It is what has to be compared against the trust list; see the class note.
      *
-     * @return null si todavia no se valido
+     * @return null if it has not been validated yet
      */
     KeySelectorResult getKeySelectorResult();
 
     /**
-     * El valor de la firma.
+     * The value of the signature.
      *
-     * <p>Tiene su propio {@link #validate} porque una firma puede fallar de dos formas distintas: el
-     * valor criptografico no cierra, o alguna referencia no cierra. Poder preguntarlas por separado
-     * es la unica forma de saber cual fallo, y eso cambia el diagnostico -- lo primero es una clave
-     * equivocada o un documento alterado; lo segundo, un dato alterado.
+     * <p>It has its own {@link #validate} because a signature can fail in two different ways: the
+     * cryptographic value does not check out, or some reference does not check out. Being able to
+     * ask them separately is the only way to know which one failed, and that changes the diagnosis
+     * -- the first is a wrong key or an altered document; the second, an altered datum.
      */
     public static interface SignatureValue extends XMLStructure {
 
-        /** El identificador del elemento, o null. */
+        /** The element's identifier, or null. */
         String getId();
 
-        /** Los bytes de la firma. */
+        /** The bytes of the signature. */
         byte[] getValue();
 
         /**
-         * Si el valor criptografico cierra, sin mirar las referencias.
+         * Whether the cryptographic value checks out, without looking at the references.
          *
-         * @throws XMLSignatureException si la validacion no se pudo hacer
+         * @throws XMLSignatureException if the validation could not be done
          */
         boolean validate(XMLValidateContext validateContext) throws XMLSignatureException;
     }

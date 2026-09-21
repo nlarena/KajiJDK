@@ -1,16 +1,16 @@
 package javax.management.loading;
 
 /**
- * KajiLibrary's javax.management.loading.PrivateClassLoader -- un cargador que no se comparte.
+ * KajiLibrary's javax.management.loading.PrivateClassLoader -- a loader that is not shared.
  *
- * <p>Interfaz marcadora, sin metodos: un cargador de clases que la implementa y se registra como
- * MBean <b>no</b> entra en el {@link ClassLoaderRepository} del agente.
+ * <p>A marker interface, with no methods: a class loader that implements it and is registered as an
+ * MBean does <b>not</b> go into the agent's {@link ClassLoaderRepository}.
  *
- * <p>Es un mecanismo de aislamiento y no de seguridad. Lo que evita es que dos MBeans que traen
- * distintas versiones de la misma biblioteca se resuelvan entre si por accidente al buscar una clase
- * por nombre en el repositorio -- que es el problema que aparece justo cuando ya es tarde, porque el
- * primero que se registro le gana al otro y el sintoma es un
- * {@code NoSuchMethodError} en tiempo de ejecucion.
+ * <p>It is an isolation mechanism and not a security one. What it prevents is two MBeans that bring
+ * different versions of the same library resolving each other by accident when looking up a class
+ * by name in the repository -- the problem that shows up just when it is too late, because the
+ * first one registered wins over the other and the symptom is a {@code NoSuchMethodError} at run
+ * time.
  */
 public interface PrivateClassLoader {
 }

@@ -7,10 +7,10 @@ import javax.print.attribute.PrintJobAttribute;
 import javax.print.attribute.PrintRequestAttribute;
 
 /**
- * Hasta cuando retener el trabajo antes de imprimirlo.
+ * Until when to hold the job before printing it.
  *
- * <p>Es el unico de la familia que se <em>pide</em> en vez de reportarse. Un instante ya pasado
- * significa "ahora": el trabajo sale enseguida en vez de fallar.
+ * <p>It is the only one of the family that is <em>requested</em> instead of reported. An
+ * instant already past means "now": the job goes out at once instead of failing.
  */
 public final class JobHoldUntil extends DateTimeSyntax implements PrintRequestAttribute, PrintJobAttribute {
 

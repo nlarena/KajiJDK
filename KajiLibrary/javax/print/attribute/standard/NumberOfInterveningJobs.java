@@ -5,9 +5,9 @@ import javax.print.attribute.IntegerSyntax;
 import javax.print.attribute.PrintJobAttribute;
 
 /**
- * Cuantos trabajos hay adelante de este en la cola.
+ * How many jobs there are ahead of this one in the queue.
  *
- * <p>Cero significa que es el proximo, no que ya esta imprimiendo.
+ * <p>Zero means it is the next one, not that it is already printing.
  */
 public final class NumberOfInterveningJobs extends IntegerSyntax implements PrintJobAttribute {
 
@@ -17,8 +17,10 @@ public final class NumberOfInterveningJobs extends IntegerSyntax implements Prin
         super(value, 0, Integer.MAX_VALUE);
     }
 
-    /** El {@code instanceof} es lo que impide que un NumberOfInterveningJobs de igual a otro atributo
-     * entero con el mismo numero. */
+    /**
+     * The {@code instanceof} is what keeps a NumberOfInterveningJobs from being equal to another
+     * integer attribute with the same number.
+     */
     public boolean equals(Object object) {
         return super.equals(object) && object instanceof NumberOfInterveningJobs;
     }

@@ -3,20 +3,20 @@ package jdk.internal.classfile.impl;
 import java.lang.classfile.Superclass;
 import java.lang.classfile.constantpool.ClassEntry;
 
-// La superclase, como elemento de clase.
+// The superclass, as a class element.
 public final class SuperclassImpl implements Superclass {
 
-    private final ClassEntry entrada;
+    private final ClassEntry entry;
 
-    public SuperclassImpl(ClassEntry entrada) {
-        this.entrada = entrada;
+    public SuperclassImpl(ClassEntry entry) {
+        this.entry = entry;
     }
 
     public ClassEntry superclassEntry() {
-        return this.entrada;
+        return this.entry;
     }
 
     public String toString() {
-        return "Superclass[" + this.entrada.asInternalName() + "]";
+        return "Superclass[" + this.entry.asInternalName() + "]";
     }
 }

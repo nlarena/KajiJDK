@@ -5,7 +5,7 @@ import java.io.Writer;
 
 import javax.xml.stream.events.Comment;
 
-/** Un comentario como evento. */
+/** A comment as an event. */
 final class EvtComment extends EvtBase implements Comment {
 
     private final String text;
@@ -21,7 +21,7 @@ final class EvtComment extends EvtBase implements Comment {
 
     public void writeAsEncodedUnicode(Writer writer) throws XMLStreamException {
         if (writer == null) {
-            throw new XMLStreamException("el escritor no puede ser null");
+            throw new XMLStreamException("the writer cannot be null");
         }
         try {
             writer.write("<!--");

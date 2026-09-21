@@ -2,7 +2,7 @@ package java.security.spec;
 
 import java.security.GeneralSecurityException;
 
-// La spec de clave que se dio no es valida para lo que se pidio hacer con ella.
+// The key spec given is not valid for what was asked to be done with it.
 public class InvalidKeySpecException extends GeneralSecurityException {
 
     public InvalidKeySpecException() {

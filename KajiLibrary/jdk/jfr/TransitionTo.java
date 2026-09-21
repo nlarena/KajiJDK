@@ -6,9 +6,9 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * El campo es el hilo <strong>hacia el cual</strong> se hizo una transicion.
+ * The field is the thread <strong>towards which</strong> a transition was made.
  *
- * <p>Ver {@link TransitionFrom}.
+ * <p>See {@link TransitionFrom}.
  *
  * @since 9
  */

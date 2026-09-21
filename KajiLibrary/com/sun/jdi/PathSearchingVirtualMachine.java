@@ -3,30 +3,30 @@ package com.sun.jdi;
 import java.util.List;
 
 /**
- * Una VM cuyo classpath se puede consultar.
+ * A VM whose classpath can be consulted.
  *
  * @since 1.3
  */
 public interface PathSearchingVirtualMachine extends VirtualMachine {
 
     /**
-     * El class path.
+     * The class path.
      *
-     * @return el resultado
+     * @return the result
      */
     List<String> classPath();
 
     /**
-     * El boot class path.
+     * The boot class path.
      *
-     * @return el resultado
+     * @return the result
      */
     List<String> bootClassPath();
 
     /**
-     * El base directory.
+     * The base directory.
      *
-     * @return el resultado
+     * @return the result
      */
     String baseDirectory();
 }

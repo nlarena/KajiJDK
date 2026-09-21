@@ -3,49 +3,49 @@ package com.sun.source.util;
 import com.sun.source.doctree.*;
 
 /**
- * Un visitante que manda todo a un solo lugar.
+ * A visitor that sends everything to a single place.
  *
- * <h2>Para que sirve</h2>
+ * <h2>What it is for</h2>
  *
- * <p>Para atender <strong>unos pocos</strong> tipos de nodo sin escribir los 40 metodos.
- * Sobrescribiendo solo los que interesan, el resto cae en {@link #defaultAction}.
+ * <p>For attending <strong>a few</strong> kinds of node without writing the 40 methods. By
+ * overriding only those that are of interest, the rest fall into {@link #defaultAction}.
  *
- * <p>Es lo contrario de implementar {@link DocTreeVisitor} directamente, que obliga a escribirlos todos
- * — y esa obligacion tambien tiene su valor: es lo que hace que agregar sintaxis al lenguaje rompa
- * la compilacion de las herramientas en vez de que la ignoren en silencio. Esta clase renuncia a eso
- * a cambio de brevedad.
+ * <p>It is the opposite of implementing {@link DocTreeVisitor} directly, which forces them all to
+ * be written -- and that obligation has its value too: it is what makes adding syntax to the
+ * language break the compilation of the tools instead of their ignoring it silently. This class
+ * gives that up in exchange for brevity.
  *
- * <p><strong>No recorre.</strong> Para eso esta {@link DocTreeScanner}.
+ * <p><strong>It does not walk.</strong> {@link DocTreeScanner} is there for that.
  *
- * @param <R> lo que devuelve cada visita
- * @param <P> el dato que se arrastra
+ * @param <R> what each visit returns
+ * @param <P> the datum that is carried along
  */
 public class SimpleDocTreeVisitor<R, P> implements DocTreeVisitor<R, P> {
 
-    /** Lo que devuelve {@link #defaultAction} si no se lo sobrescribe. */
+    /** What {@link #defaultAction} returns if it is not overridden. */
     protected final R DEFAULT_VALUE;
 
-    /** Con {@code null} como valor por omision. */
+    /** With {@code null} as the default value. */
     protected SimpleDocTreeVisitor() {
         this.DEFAULT_VALUE = null;
     }
 
-    /** Con ese valor por omision. */
+    /** With that default value. */
     protected SimpleDocTreeVisitor(R defaultValue) {
         this.DEFAULT_VALUE = defaultValue;
     }
 
-    /** Lo que se hace con un nodo que no se sobrescribio. */
+    /** What is done with a node that was not overridden. */
     protected R defaultAction(DocTree node, P p) {
         return this.DEFAULT_VALUE;
     }
 
-    /** Visita un nodo. {@code final}: el punto de extension es {@link #defaultAction}. */
+    /** It visits a node. {@code final}: the extension point is {@link #defaultAction}. */
     public final R visit(DocTree node, P p) {
         return node == null ? null : node.accept(this, p);
     }
 
-    /** Visita todos, y devuelve lo del ultimo. */
+    /** It visits them all, and returns the last one's. */
     public final R visit(Iterable<? extends DocTree> nodes, P p) {
         R r = null;
         if (nodes != null) {

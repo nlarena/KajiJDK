@@ -13,7 +13,7 @@ import java.util.Map;
 // nothing.
 public class PropertyEditorManager {
 
-    private static Map<Class<?>, Class<?>> registrados = new HashMap<Class<?>, Class<?>>();
+    private static Map<Class<?>, Class<?>> registered = new HashMap<Class<?>, Class<?>>();
 
     private static String[] searchPath = new String[] { "sun.beans.editors" };
 
@@ -30,14 +30,14 @@ public class PropertyEditorManager {
 
     private static synchronized void syncRegistry(Class<?> targetType, Class<?> editorClass) {
         if (editorClass == null) {
-            registrados.remove(targetType);
+            registered.remove(targetType);
         } else {
-            registrados.put(targetType, editorClass);
+            registered.put(targetType, editorClass);
         }
     }
 
     private static synchronized Class<?> readRegistry(Class<?> targetType) {
-        return registrados.get(targetType);
+        return registered.get(targetType);
     }
 
     // The editor for that type, already instantiated, or null if there is none.
@@ -51,21 +51,21 @@ public class PropertyEditorManager {
         }
         if (ed == null) {
             String simple = EventSetDescriptor.simpleName(targetType);
-            String[] rutas = getEditorSearchPath();
-            for (int i = 0; i < rutas.length; i++) {
+            String[] paths = getEditorSearchPath();
+            for (int i = 0; i < paths.length; i++) {
                 if (ed == null) {
-                    ed = instantiateEditor(byName(rutas[i] + "." + simple + "Editor"));
+                    ed = instantiateEditor(byName(paths[i] + "." + simple + "Editor"));
                 }
             }
         }
         return ed;
     }
 
-    private static Class<?> byName(String nombre) {
+    private static Class<?> byName(String name) {
         Class<?> c = null;
         try {
-            c = Class.forName(nombre);
-        } catch (Throwable noEsta) {
+            c = Class.forName(name);
+        } catch (Throwable notThere) {
             c = null;
         }
         return c;
@@ -82,7 +82,7 @@ public class PropertyEditorManager {
                 if (o instanceof PropertyEditor) {
                     ed = (PropertyEditor) o;
                 }
-            } catch (Throwable noSePudo) {
+            } catch (Throwable couldNotBeDone) {
                 ed = null;
             }
         }

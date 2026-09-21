@@ -4,49 +4,49 @@ import javax.xml.transform.Source;
 import org.w3c.dom.Node;
 
 /**
- * KajiLibrary's javax.xml.transform.dom.DOMSource -- un arbol DOM como fuente de una transformacion.
+ * KajiLibrary's javax.xml.transform.dom.DOMSource -- a DOM tree as the source of a transformation.
  *
- * <p>Lleva un nodo, no necesariamente un documento. Esa es la parte que importa: se puede transformar
- * <b>cualquier subarbol</b> pasando el elemento que lo encabeza, sin copiarlo ni sacarlo del
- * documento donde vive.
+ * <p>It carries a node, not necessarily a document. That is the part that matters: <b>any
+ * subtree</b> can be transformed by passing the element that heads it, without copying it or taking
+ * it out of the document where it lives.
  *
- * <p>El identificador de sistema va aparte del nodo porque un arbol en memoria no sabe de donde
- * salio. Se usa para resolver referencias relativas --un {@code document()} dentro de la hoja de
- * estilo, por ejemplo-- y por eso conviene ponerlo aunque el nodo ya este armado.
+ * <p>The system identifier goes separately from the node because a tree in memory does not know
+ * where it came from. It is used to resolve relative references --a {@code document()} inside the
+ * stylesheet, for example-- and that is why it is worth setting even if the node is already built.
  */
 public class DOMSource implements Source {
 
-    /** Con esto se le pregunta a un {@code TransformerFactory} si acepta esta fuente. */
+    /** With this a {@code TransformerFactory} is asked whether it accepts this source. */
     public static final String FEATURE = "http://javax.xml.transform.dom.DOMSource/feature";
 
     private Node node;
 
     private String systemId;
 
-    /** Vacia, para llenarla con {@link #setNode}. */
+    /** Empty, to be filled with {@link #setNode}. */
     public DOMSource() {
     }
 
     /**
-     * Con un nodo.
+     * With a node.
      *
-     * @param n cualquier nodo, no solo un documento; ver la nota de la clase
+     * @param n any node, not only a document; see the class note
      */
     public DOMSource(Node n) {
         setNode(n);
     }
 
     /**
-     * Con un nodo y de donde salio.
+     * With a node and where it came from.
      *
-     * @param systemId contra el que se resuelve lo relativo
+     * @param systemId what relative things are resolved against
      */
     public DOMSource(Node node, String systemId) {
         setNode(node);
         setSystemId(systemId);
     }
 
-    /** El nodo a transformar. */
+    /** The node to transform. */
     public void setNode(Node node) {
         this.node = node;
     }
@@ -56,7 +56,7 @@ public class DOMSource implements Source {
         return this.node;
     }
 
-    /** De donde salio el arbol. Ver la nota de la clase. */
+    /** Where the tree came from. See the class note. */
     public void setSystemId(String systemId) {
         this.systemId = systemId;
     }
@@ -67,15 +67,16 @@ public class DOMSource implements Source {
     }
 
     /**
-     * Si esta fuente no dice nada.
+     * Whether this source says nothing.
      *
-     * <p>Mira el nodo <b>y</b> el identificador, y hace falta explicarlo porque el resultado
-     * sorprende: una fuente con identificador y sin nodo cuenta como no vacia, aunque esta clase no
-     * sepa ir a buscar nada a ese identificador.
+     * <p>It looks at the node <b>and</b> the identifier, and it needs explaining because the result
+     * surprises: a source with an identifier and without a node counts as not empty, even though
+     * this class does not know how to fetch anything from that identifier.
      *
-     * <p>Tiene sentido igual. La pregunta no es "tengo un arbol" sino "me dieron algo": una fuente
-     * con identificador es una que alguien lleno, y quien la recibe puede resolverla por su cuenta.
-     * Contestar que esta vacia haria que se descartara en silencio lo unico que se le puso.
+     * <p>It makes sense all the same. The question is not "do I have a tree" but "was I given
+     * something": a source with an identifier is one somebody filled in, and whoever receives it
+     * can resolve it on their own. Answering that it is empty would make the only thing put into it
+     * be discarded silently.
      */
     public boolean isEmpty() {
         return getNode() == null && getSystemId() == null;

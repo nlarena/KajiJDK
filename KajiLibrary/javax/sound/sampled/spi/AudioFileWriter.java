@@ -7,30 +7,31 @@ import javax.sound.sampled.AudioFileFormat;
 import javax.sound.sampled.AudioInputStream;
 
 /**
- * KajiLibrary's javax.sound.sampled.spi.AudioFileWriter -- escribe archivos de audio de un formato.
+ * KajiLibrary's javax.sound.sampled.spi.AudioFileWriter -- writes audio files of a format.
  *
- * <p>El espejo de {@link AudioFileReader}. Se registra igual y {@code AudioSystem} lo encuentra igual.
+ * <p>The mirror of {@link AudioFileReader}. It is registered the same way and {@code AudioSystem}
+ * finds it the same way.
  *
- * <h2>Los dos {@code getAudioFileTypes}</h2>
+ * <h2>The two {@code getAudioFileTypes}</h2>
  *
- * <p>El sin argumentos dice que tipos sabe escribir <b>en general</b>; el que toma un flujo dice
- * cuales puede escribir <b>con ese contenido</b>. La diferencia importa: un escritor puede saber hacer
- * WAV y no poder guardar en WAV un flujo de largo desconocido, porque el encabezado WAV lleva el
- * tamano y hay que saberlo antes.
+ * <p>The one without arguments says which types it can write <b>in general</b>; the one that takes
+ * a stream says which it can write <b>with that content</b>. The difference matters: a writer can
+ * know how to do WAV and not be able to save to WAV a stream of unknown length, because the WAV
+ * header carries the size and it has to be known beforehand.
  *
- * <p>Los dos {@code isFileTypeSupported} vienen implementados sobre los anteriores; una subclase no
- * necesita tocarlos.
+ * <p>The two {@code isFileTypeSupported} come implemented over the previous ones; a subclass need
+ * not touch them.
  */
 public abstract class AudioFileWriter {
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected AudioFileWriter() {
     }
 
-    /** Que tipos sabe escribir en general. Ver la nota de la clase. */
+    /** Which types it can write in general. See the class note. */
     public abstract AudioFileFormat.Type[] getAudioFileTypes();
 
-    /** Si sabe escribir ese tipo. */
+    /** Whether it can write that type. */
     public boolean isFileTypeSupported(AudioFileFormat.Type fileType) {
         AudioFileFormat.Type[] types = getAudioFileTypes();
         int i = 0;
@@ -43,10 +44,10 @@ public abstract class AudioFileWriter {
         return false;
     }
 
-    /** Que tipos puede escribir con ese contenido. Ver la nota de la clase. */
+    /** Which types it can write with that content. See the class note. */
     public abstract AudioFileFormat.Type[] getAudioFileTypes(AudioInputStream stream);
 
-    /** Si puede escribir ese tipo con ese contenido. */
+    /** Whether it can write that type with that content. */
     public boolean isFileTypeSupported(AudioFileFormat.Type fileType, AudioInputStream stream) {
         AudioFileFormat.Type[] types = getAudioFileTypes(stream);
         int i = 0;
@@ -60,21 +61,21 @@ public abstract class AudioFileWriter {
     }
 
     /**
-     * Escribe.
+     * Writes.
      *
-     * @return cuantos bytes se escribieron
-     * @throws IOException si no se pudo escribir
-     * @throws IllegalArgumentException si no soporta ese tipo con ese contenido
+     * @return how many bytes were written
+     * @throws IOException if it could not be written
+     * @throws IllegalArgumentException if it does not support that type with that content
      */
     public abstract int write(AudioInputStream stream, AudioFileFormat.Type fileType,
                               OutputStream out) throws IOException;
 
     /**
-     * Idem, a un archivo.
+     * Likewise, to a file.
      *
-     * @return cuantos bytes se escribieron
-     * @throws IOException si no se pudo escribir
-     * @throws IllegalArgumentException si no soporta ese tipo con ese contenido
+     * @return how many bytes were written
+     * @throws IOException if it could not be written
+     * @throws IllegalArgumentException if it does not support that type with that content
      */
     public abstract int write(AudioInputStream stream, AudioFileFormat.Type fileType, File out)
         throws IOException;

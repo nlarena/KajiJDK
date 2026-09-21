@@ -1,92 +1,93 @@
 package org.ietf.jgss;
 
 /**
- * KajiLibrary's org.ietf.jgss.GSSException -- fallo una operacion GSS-API.
+ * KajiLibrary's org.ietf.jgss.GSSException -- a GSS-API operation failed.
  *
- * <p>Lleva <b>dos</b> codigos y esa es su particularidad: un codigo mayor, de esta lista, que es
- * comun a toda implementacion de GSS-API, y uno menor, que lo define el mecanismo de abajo
- * --Kerberos, por ejemplo-- y que no significa nada fuera de el.
+ * <p>It carries <b>two</b> codes and that is its peculiarity: a major code, from this list, which
+ * is common to every implementation of GSS-API, and a minor one, which the mechanism underneath
+ * defines --Kerberos, for example-- and which means nothing outside it.
  *
- * <p>La division viene de que GSS-API es una capa sobre mecanismos distintos: el codigo mayor deja
- * que una aplicacion reaccione sin saber cual esta abajo, y el menor conserva el detalle para el
- * registro. Por eso {@link #getMessage} los junta cuando hay los dos, con el menor entre parentesis.
+ * <p>The division comes from GSS-API being a layer over different mechanisms: the major code lets
+ * an application react without knowing which one is underneath, and the minor one keeps the detail
+ * for the log. That is why {@link #getMessage} joins them when there are both, with the minor one
+ * in parentheses.
  *
- * <p>El codigo mayor es un {@code int} y no un enum porque el API es una traduccion literal del
- * estandar de la IETF, que lo define asi. Un valor que no este en la lista se describe como
- * "failure unspecified": es lo que hace el JDK y evita que un mecanismo nuevo rompa el
- * formateo del mensaje.
+ * <p>The major code is an {@code int} and not an enum because the API is a literal translation of
+ * the IETF standard, which defines it that way. A value that is not in the list is described as
+ * "failure unspecified": it is what the JDK does and it keeps a new mechanism from breaking the
+ * formatting of the message.
  */
 public class GSSException extends Exception {
 
     private static final long serialVersionUID = -2706218945227726672L;
 
-    /** Las etiquetas del canal no coinciden. */
+    /** The labels of the channel do not match. */
     public static final int BAD_BINDINGS = 1;
 
-    /** Se pidio un mecanismo que no esta. */
+    /** A mechanism that is not there was asked for. */
     public static final int BAD_MECH = 2;
 
-    /** El nombre no sirve. */
+    /** The name does not serve. */
     public static final int BAD_NAME = 3;
 
-    /** El tipo de nombre no esta soportado. */
+    /** The type of name is not supported. */
     public static final int BAD_NAMETYPE = 4;
 
-    /** El selector de estado no sirve. */
+    /** The status selector does not serve. */
     public static final int BAD_STATUS = 5;
 
-    /** El token no paso el chequeo de integridad. */
+    /** The token did not pass the integrity check. */
     public static final int BAD_MIC = 6;
 
-    /** El contexto vencio. */
+    /** The context expired. */
     public static final int CONTEXT_EXPIRED = 7;
 
-    /** Las credenciales vencieron. */
+    /** The credentials expired. */
     public static final int CREDENTIALS_EXPIRED = 8;
 
-    /** La credencial esta rota. */
+    /** The credential is broken. */
     public static final int DEFECTIVE_CREDENTIAL = 9;
 
-    /** El token esta roto. */
+    /** The token is broken. */
     public static final int DEFECTIVE_TOKEN = 10;
 
-    /** Falla sin especificar. Es tambien lo que se contesta para cualquier codigo desconocido. */
+    /** Unspecified failure. It is also what is answered for any unknown code. */
     public static final int FAILURE = 11;
 
-    /** No hay contexto, o ya se destruyo. */
+    /** There is no context, or it was already destroyed. */
     public static final int NO_CONTEXT = 12;
 
-    /** No se dieron credenciales validas. */
+    /** No valid credentials were given. */
     public static final int NO_CRED = 13;
 
-    /** La calidad de proteccion pedida no esta soportada. */
+    /** The quality of protection asked for is not supported. */
     public static final int BAD_QOP = 14;
 
-    /** La operacion no esta autorizada. */
+    /** The operation is not authorised. */
     public static final int UNAUTHORIZED = 15;
 
-    /** La operacion no esta disponible. */
+    /** The operation is not available. */
     public static final int UNAVAILABLE = 16;
 
-    /** Se pidio agregar un elemento de credencial que ya estaba. */
+    /** Adding a credential element that was already there was asked for. */
     public static final int DUPLICATE_ELEMENT = 17;
 
-    /** El nombre tiene elementos de varios mecanismos. */
+    /** The name has elements of several mechanisms. */
     public static final int NAME_NOT_MN = 18;
 
-    /** El token es un duplicado de uno anterior. */
+    /** The token is a duplicate of an earlier one. */
     public static final int DUPLICATE_TOKEN = 19;
 
-    /** El token ya vencio. */
+    /** The token has already expired. */
     public static final int OLD_TOKEN = 20;
 
-    /** Ya se proceso un token posterior. */
+    /** A later token has already been processed. */
     public static final int UNSEQ_TOKEN = 21;
 
-    /** Falta un token que se esperaba. */
+    /** A token that was expected is missing. */
     public static final int GAP_TOKEN = 22;
 
-    /** Los textos de los codigos mayores, indexados por el codigo. */
+    /** The texts of the major codes, indexed by the code. */
     private static final String[] MAJOR_TEXT = {
         "Failure unspecified at GSS-API level",
         "Channel binding mismatch",
@@ -119,7 +120,7 @@ public class GSSException extends Exception {
 
     private String minorMessage;
 
-    /** Solo con el codigo mayor. */
+    /** Only with the major code. */
     public GSSException(int majorCode) {
         this.major = majorCode;
         this.minor = 0;
@@ -127,10 +128,10 @@ public class GSSException extends Exception {
     }
 
     /**
-     * Con los dos codigos.
+     * With the two codes.
      *
-     * @param minorCode el del mecanismo de abajo
-     * @param minorString que dice ese mecanismo
+     * @param minorCode the one of the mechanism underneath
+     * @param minorString what that mechanism says
      */
     public GSSException(int majorCode, int minorCode, String minorString) {
         this.major = majorCode;
@@ -138,17 +139,17 @@ public class GSSException extends Exception {
         this.minorMessage = minorString;
     }
 
-    /** El codigo mayor, de la lista de arriba. */
+    /** The major code, from the list above. */
     public int getMajor() {
         return this.major;
     }
 
-    /** El del mecanismo, o 0 si no hay. */
+    /** The one of the mechanism, or 0 if there is none. */
     public int getMinor() {
         return this.minor;
     }
 
-    /** El texto del codigo mayor. Ver la nota de la clase sobre los codigos desconocidos. */
+    /** The text of the major code. See the note of the class on the unknown codes. */
     public String getMajorString() {
         if (this.major > 0 && this.major < MAJOR_TEXT.length) {
             return MAJOR_TEXT[this.major];
@@ -156,38 +157,39 @@ public class GSSException extends Exception {
         return MAJOR_TEXT[0];
     }
 
-    /** Lo que dijo el mecanismo, o null. */
+    /** What the mechanism said, or null. */
     public String getMinorString() {
         return this.minorMessage;
     }
 
     /**
-     * Le pone el codigo del mecanismo despues de construida.
+     * It sets the code of the mechanism after construction.
      *
-     * <p>Existe porque la capa de GSS-API arma la excepcion antes de que el mecanismo termine de
-     * contar lo suyo.
+     * <p>It exists because the GSS-API layer builds the exception before the mechanism finishes
+     * telling its part.
      *
-     * <p>Asigna las dos cosas siempre, incluso con codigo 0. Vale saberlo porque el codigo es el que
-     * manda: con 0, {@link #getMessage} <b>no</b> muestra el texto que se puso aca, aunque
-     * {@link #getMinorString} si lo devuelva.
+     * <p>It always assigns both things, even with code 0. It is worth knowing because the code is
+     * what rules: with 0, {@link #getMessage} does <b>not</b> show the text that was set here, even
+     * though {@link #getMinorString} does return it.
      */
     public void setMinor(int minorCode, String message) {
         this.minor = minorCode;
         this.minorMessage = message;
     }
 
-    /** El mensaje, con el prefijo del tipo. */
+    /** The message, with the prefix of the type. */
     public String toString() {
         return "GSSException: " + getMessage();
     }
 
     /**
-     * El texto del mayor y, si hay codigo menor, el del menor entre parentesis.
+     * The text of the major code and, if there is a minor code, that of the minor one in
+     * parentheses.
      *
-     * <p>Lo que decide es el <b>codigo</b> menor y no el texto: con un codigo distinto de 0 y texto
-     * null, sale {@code "(Mechanism level: null)"}. Es lo que hace el JDK y tiene su logica -- un
-     * codigo sin texto es un mecanismo que fallo y no supo explicarse, y esconderlo perderia el dato
-     * de que fallo.
+     * <p>What decides is the minor <b>code</b> and not the text: with a code different from 0 and a
+     * null text, {@code "(Mechanism level: null)"} comes out. It is what the JDK does and it has
+     * its logic -- a code with no text is a mechanism that failed and could not explain itself, and
+     * hiding it would lose the datum that it failed.
      */
     public String getMessage() {
         if (this.minor == 0) {

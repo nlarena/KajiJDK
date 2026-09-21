@@ -7,35 +7,35 @@ import java.sql.Types;
 import javax.sql.RowSetMetaData;
 
 /**
- * Los metadatos de las columnas de un {@code RowSet}, en su version escribible.
+ * The column metadata of a {@code RowSet}, in its writable version.
  *
- * <h2>Por que hace falta una version escribible</h2>
+ * <h2>Why a writable version is needed</h2>
  *
- * <p>Los metadatos de un {@code ResultSet} son de solo lectura porque los produce el controlador:
- * el que consulta no los inventa, los recibe. Un {@code RowSet} desconectado, en cambio, se puede
- * llenar a mano —sin base de datos de por medio— y ahi <strong>alguien tiene que declarar</strong>
- * cuantas columnas hay, como se llaman y de que tipo son.
+ * <p>The metadata of a {@code ResultSet} is read-only because the driver produces it: whoever
+ * queries does not invent it, they receive it. A disconnected {@code RowSet}, on the other hand,
+ * can be filled by hand —without a database in between— and there <strong>somebody has to
+ * declare</strong> how many columns there are, what they are called and of which type they are.
  *
- * <p>Esta clase es ese alguien. Se le fijan las columnas y despues se la pasa a
+ * <p>This class is that somebody. The columns are set on it and then it is passed to
  * {@link CachedRowSet#setMetaData}.
  *
- * <h2>El orden obligatorio</h2>
+ * <h2>The mandatory order</h2>
  *
- * <p>{@link #setColumnCount} tiene que ir primero. Antes de saber cuantas columnas hay no hay donde
- * guardar nada, y cualquier otro {@code set} falla con un indice fuera de rango. Volver a llamarlo
- * descarta lo que se habia fijado.
+ * <p>{@link #setColumnCount} has to go first. Before knowing how many columns there are there is
+ * nowhere to keep anything, and any other {@code set} fails with an index out of range. Calling it
+ * again discards what had been set.
  *
- * <h2>Las columnas se cuentan desde 1</h2>
+ * <h2>Columns are counted from 1</h2>
  *
- * <p>Es la convencion de todo JDBC y viene de SQL, no de Java. Adentro se guarda en arreglos que
- * empiezan en cero, y esa resta es el unico lugar donde el desfasaje aparece.
+ * <p>It is the convention of all of JDBC and it comes from SQL, not from Java. Inside, it is kept
+ * in arrays that start at zero, and that subtraction is the only place where the offset appears.
  *
- * <h2>Los tres metodos que no se pueden fijar</h2>
+ * <h2>The three methods that cannot be set</h2>
  *
- * <p>{@link #isReadOnly}, {@link #isWritable} y {@link #isDefinitelyWritable} no tienen un
- * {@code set} correspondiente en {@link RowSetMetaData}, asi que contestan lo unico razonable para
- * un conjunto que se lleno a mano: escribible. Es lo que hace el JDK y es coherente — quien armo
- * las columnas puede escribirlas.
+ * <p>{@link #isReadOnly}, {@link #isWritable} and {@link #isDefinitelyWritable} have no
+ * corresponding {@code set} in {@link RowSetMetaData}, so they answer the only reasonable thing for
+ * a set that was filled by hand: writable. It is what the JDK does and it is coherent — whoever set
+ * up the columns can write them.
  *
  * @since 1.5
  */
@@ -46,7 +46,7 @@ public class RowSetMetaDataImpl implements RowSetMetaData, Serializable {
     private int colCount;
     private ColInfo[] colInfo;
 
-    /** Lo que se guarda de cada columna. */
+    /** What is kept for each column. */
     private static class ColInfo implements Serializable {
         private static final long serialVersionUID = 5490834817919311283L;
         boolean autoIncrement;
@@ -67,42 +67,42 @@ public class RowSetMetaDataImpl implements RowSetMetaData, Serializable {
         String colTypeName = "";
     }
 
-    /** Sin columnas; hay que llamar a {@link #setColumnCount} antes de nada. */
+    /** Without columns; {@link #setColumnCount} has to be called before anything else. */
     public RowSetMetaDataImpl() {
     }
 
     /**
-     * Valida el indice y devuelve la posicion del arreglo interno.
+     * Validates the index and returns the position in the internal array.
      *
-     * <p>La validacion esta centralizada a proposito: son treinta y pico de metodos que reciben un
-     * indice, y repetir el chequeo en cada uno garantiza que alguno quede sin el.
+     * <p>The validation is centralized on purpose: there are thirty-odd methods that receive an
+     * index, and repeating the check in each one guarantees that some will be left without it.
      */
     private ColInfo col(final int columnIndex) throws SQLException {
         if (colInfo == null) {
-            throw new SQLException("hay que llamar a setColumnCount antes de usar los metadatos");
+            throw new SQLException("setColumnCount has to be called before using the metadata");
         }
         if (columnIndex < 1 || columnIndex > colCount) {
-            throw new SQLException("indice de columna fuera de rango: " + columnIndex
-                    + " (hay " + colCount + ")");
+            throw new SQLException("column index out of range: " + columnIndex
+                    + " (there are " + colCount + ")");
         }
         return colInfo[columnIndex - 1];
     }
 
     /**
-     * Cuantas columnas va a tener.
+     * How many columns it is going to have.
      *
-     * <p>Descarta lo que se hubiera fijado antes.
+     * <p>It discards whatever had been set before.
      *
-     * @param columnCount la cantidad
-     * @throws SQLException si es negativa
+     * @param columnCount the count
+     * @throws SQLException if it is negative
      */
     public void setColumnCount(final int columnCount) throws SQLException {
         if (columnCount < 0) {
-            throw new SQLException("la cantidad de columnas no puede ser negativa");
+            throw new SQLException("the number of columns cannot be negative");
         }
         this.colCount = columnCount;
-        // Uno de mas, como el JDK. La ultima posicion no se usa: `col` valida el rango y despues
-        // resta uno, asi que el indice mas alto que se alcanza es columnCount - 1.
+        // One too many, like the JDK. The last position is not used: `col` validates the range and
+        // then subtracts one, so the highest index reached is columnCount - 1.
         this.colInfo = new ColInfo[columnCount + 1];
         for (int i = 0; i < colInfo.length; i++) {
             colInfo[i] = new ColInfo();
@@ -110,11 +110,11 @@ public class RowSetMetaDataImpl implements RowSetMetaData, Serializable {
     }
 
     /**
-     * Si la columna se numera sola.
+     * Whether the column numbers itself.
      *
-     * @param columnIndex la columna, desde 1
-     * @param property si es autoincremental
-     * @throws SQLException si el indice no es valido
+     * @param columnIndex the column, from 1
+     * @param property whether it is auto-increment
+     * @throws SQLException if the index is not valid
      */
     public void setAutoIncrement(final int columnIndex, final boolean property)
             throws SQLException {
@@ -122,11 +122,11 @@ public class RowSetMetaDataImpl implements RowSetMetaData, Serializable {
     }
 
     /**
-     * Si al comparar se distinguen mayusculas de minusculas.
+     * Whether upper and lower case are told apart when comparing.
      *
-     * @param columnIndex la columna, desde 1
-     * @param property si distingue
-     * @throws SQLException si el indice no es valido
+     * @param columnIndex the column, from 1
+     * @param property whether it tells them apart
+     * @throws SQLException if the index is not valid
      */
     public void setCaseSensitive(final int columnIndex, final boolean property)
             throws SQLException {
@@ -134,144 +134,144 @@ public class RowSetMetaDataImpl implements RowSetMetaData, Serializable {
     }
 
     /**
-     * Si la columna puede aparecer en un {@code WHERE}.
+     * Whether the column can appear in a {@code WHERE}.
      *
-     * @param columnIndex la columna, desde 1
-     * @param property si es buscable
-     * @throws SQLException si el indice no es valido
+     * @param columnIndex the column, from 1
+     * @param property whether it is searchable
+     * @throws SQLException if the index is not valid
      */
     public void setSearchable(final int columnIndex, final boolean property) throws SQLException {
         col(columnIndex).searchable = property;
     }
 
     /**
-     * Si la columna es un valor monetario.
+     * Whether the column is a monetary value.
      *
-     * @param columnIndex la columna, desde 1
-     * @param property si es moneda
-     * @throws SQLException si el indice no es valido
+     * @param columnIndex the column, from 1
+     * @param property whether it is currency
+     * @throws SQLException if the index is not valid
      */
     public void setCurrency(final int columnIndex, final boolean property) throws SQLException {
         col(columnIndex).currency = property;
     }
 
     /**
-     * Si la columna admite nulos.
+     * Whether the column admits nulls.
      *
-     * @param columnIndex la columna, desde 1
-     * @param property una de las constantes {@code columnNo*} de {@code ResultSetMetaData}
-     * @throws SQLException si el indice no es valido o la constante no lo es
+     * @param columnIndex the column, from 1
+     * @param property one of the {@code columnNo*} constants of {@code ResultSetMetaData}
+     * @throws SQLException if the index is not valid or the constant is not
      */
     public void setNullable(final int columnIndex, final int property) throws SQLException {
         if (property < columnNoNulls || property > columnNullableUnknown) {
-            throw new SQLException("valor de nulabilidad invalido: " + property);
+            throw new SQLException("invalid nullability value: " + property);
         }
         col(columnIndex).nullable = property;
     }
 
     /**
-     * Si el valor tiene signo.
+     * Whether the value is signed.
      *
-     * @param columnIndex la columna, desde 1
-     * @param property si tiene signo
-     * @throws SQLException si el indice no es valido
+     * @param columnIndex the column, from 1
+     * @param property whether it is signed
+     * @throws SQLException if the index is not valid
      */
     public void setSigned(final int columnIndex, final boolean property) throws SQLException {
         col(columnIndex).signed = property;
     }
 
     /**
-     * El ancho normal de la columna, en caracteres.
+     * The normal width of the column, in characters.
      *
-     * @param columnIndex la columna, desde 1
-     * @param size el ancho
-     * @throws SQLException si el indice no es valido o el ancho es negativo
+     * @param columnIndex the column, from 1
+     * @param size the width
+     * @throws SQLException if the index is not valid or the width is negative
      */
     public void setColumnDisplaySize(final int columnIndex, final int size) throws SQLException {
         if (size < 0) {
-            throw new SQLException("el ancho no puede ser negativo");
+            throw new SQLException("the width cannot be negative");
         }
         col(columnIndex).columnDisplaySize = size;
     }
 
     /**
-     * El titulo con el que mostrar la columna.
+     * The title to show the column with.
      *
-     * @param columnIndex la columna, desde 1
-     * @param label el titulo
-     * @throws SQLException si el indice no es valido
+     * @param columnIndex the column, from 1
+     * @param label the title
+     * @throws SQLException if the index is not valid
      */
     public void setColumnLabel(final int columnIndex, final String label) throws SQLException {
         col(columnIndex).columnLabel = label == null ? "" : label;
     }
 
     /**
-     * El nombre de la columna.
+     * The name of the column.
      *
-     * @param columnIndex la columna, desde 1
-     * @param columnName el nombre
-     * @throws SQLException si el indice no es valido
+     * @param columnIndex the column, from 1
+     * @param columnName the name
+     * @throws SQLException if the index is not valid
      */
     public void setColumnName(final int columnIndex, final String columnName) throws SQLException {
         col(columnIndex).columnName = columnName == null ? "" : columnName;
     }
 
     /**
-     * El esquema de la tabla de la columna.
+     * The schema of the column's table.
      *
-     * @param columnIndex la columna, desde 1
-     * @param schemaName el esquema
-     * @throws SQLException si el indice no es valido
+     * @param columnIndex the column, from 1
+     * @param schemaName the schema
+     * @throws SQLException if the index is not valid
      */
     public void setSchemaName(final int columnIndex, final String schemaName) throws SQLException {
         col(columnIndex).schemaName = schemaName == null ? "" : schemaName;
     }
 
     /**
-     * Cuantos digitos significativos tiene.
+     * How many significant digits it has.
      *
-     * @param columnIndex la columna, desde 1
-     * @param precision la precision
-     * @throws SQLException si el indice no es valido o la precision es negativa
+     * @param columnIndex the column, from 1
+     * @param precision the precision
+     * @throws SQLException if the index is not valid or the precision is negative
      */
     public void setPrecision(final int columnIndex, final int precision) throws SQLException {
         if (precision < 0) {
-            throw new SQLException("la precision no puede ser negativa");
+            throw new SQLException("the precision cannot be negative");
         }
         col(columnIndex).colPrecision = precision;
     }
 
     /**
-     * Cuantos digitos hay a la derecha del punto.
+     * How many digits there are to the right of the point.
      *
-     * @param columnIndex la columna, desde 1
-     * @param scale la escala
-     * @throws SQLException si el indice no es valido o la escala es negativa
+     * @param columnIndex the column, from 1
+     * @param scale the scale
+     * @throws SQLException if the index is not valid or the scale is negative
      */
     public void setScale(final int columnIndex, final int scale) throws SQLException {
         if (scale < 0) {
-            throw new SQLException("la escala no puede ser negativa");
+            throw new SQLException("the scale cannot be negative");
         }
         col(columnIndex).colScale = scale;
     }
 
     /**
-     * La tabla de la que sale la columna.
+     * The table the column comes from.
      *
-     * @param columnIndex la columna, desde 1
-     * @param tableName la tabla
-     * @throws SQLException si el indice no es valido
+     * @param columnIndex the column, from 1
+     * @param tableName the table
+     * @throws SQLException if the index is not valid
      */
     public void setTableName(final int columnIndex, final String tableName) throws SQLException {
         col(columnIndex).tableName = tableName == null ? "" : tableName;
     }
 
     /**
-     * El catalogo de la tabla.
+     * The catalog of the table.
      *
-     * @param columnIndex la columna, desde 1
-     * @param catalogName el catalogo
-     * @throws SQLException si el indice no es valido
+     * @param columnIndex the column, from 1
+     * @param catalogName the catalog
+     * @throws SQLException if the index is not valid
      */
     public void setCatalogName(final int columnIndex, final String catalogName)
             throws SQLException {
@@ -279,22 +279,22 @@ public class RowSetMetaDataImpl implements RowSetMetaData, Serializable {
     }
 
     /**
-     * El tipo SQL de la columna.
+     * The SQL type of the column.
      *
-     * @param columnIndex la columna, desde 1
-     * @param SQLType una constante de {@link Types}
-     * @throws SQLException si el indice no es valido
+     * @param columnIndex the column, from 1
+     * @param SQLType a constant of {@link Types}
+     * @throws SQLException if the index is not valid
      */
     public void setColumnType(final int columnIndex, final int SQLType) throws SQLException {
         col(columnIndex).colType = SQLType;
     }
 
     /**
-     * El nombre del tipo, tal como lo llama la base.
+     * The name of the type, as the database calls it.
      *
-     * @param columnIndex la columna, desde 1
-     * @param typeName el nombre del tipo
-     * @throws SQLException si el indice no es valido
+     * @param columnIndex the column, from 1
+     * @param typeName the name of the type
+     * @throws SQLException if the index is not valid
      */
     public void setColumnTypeName(final int columnIndex, final String typeName)
             throws SQLException {
@@ -302,101 +302,102 @@ public class RowSetMetaDataImpl implements RowSetMetaData, Serializable {
     }
 
     /**
-     * Cuantas columnas hay.
+     * How many columns there are.
      *
-     * @return la cantidad
-     * @throws SQLException nunca
+     * @return the count
+     * @throws SQLException never
      */
     public int getColumnCount() throws SQLException {
         return colCount;
     }
 
     /**
-     * Si la columna se numera sola.
+     * Whether the column numbers itself.
      *
-     * @param columnIndex la columna, desde 1
-     * @return si es autoincremental
-     * @throws SQLException si el indice no es valido
+     * @param columnIndex the column, from 1
+     * @return whether it is auto-increment
+     * @throws SQLException if the index is not valid
      */
     public boolean isAutoIncrement(final int columnIndex) throws SQLException {
         return col(columnIndex).autoIncrement;
     }
 
     /**
-     * Si distingue mayusculas de minusculas.
+     * Whether it tells upper and lower case apart.
      *
-     * @param columnIndex la columna, desde 1
-     * @return si distingue
-     * @throws SQLException si el indice no es valido
+     * @param columnIndex the column, from 1
+     * @return whether it tells them apart
+     * @throws SQLException if the index is not valid
      */
     public boolean isCaseSensitive(final int columnIndex) throws SQLException {
         return col(columnIndex).caseSensitive;
     }
 
     /**
-     * Si puede aparecer en un {@code WHERE}.
+     * Whether it can appear in a {@code WHERE}.
      *
-     * @param columnIndex la columna, desde 1
-     * @return si es buscable
-     * @throws SQLException si el indice no es valido
+     * @param columnIndex the column, from 1
+     * @return whether it is searchable
+     * @throws SQLException if the index is not valid
      */
     public boolean isSearchable(final int columnIndex) throws SQLException {
         return col(columnIndex).searchable;
     }
 
     /**
-     * Si es un valor monetario.
+     * Whether it is a monetary value.
      *
-     * @param columnIndex la columna, desde 1
-     * @return si es moneda
-     * @throws SQLException si el indice no es valido
+     * @param columnIndex the column, from 1
+     * @return whether it is currency
+     * @throws SQLException if the index is not valid
      */
     public boolean isCurrency(final int columnIndex) throws SQLException {
         return col(columnIndex).currency;
     }
 
     /**
-     * Si admite nulos.
+     * Whether it admits nulls.
      *
-     * @param columnIndex la columna, desde 1
-     * @return una de las constantes {@code columnNo*}
-     * @throws SQLException si el indice no es valido
+     * @param columnIndex the column, from 1
+     * @return one of the {@code columnNo*} constants
+     * @throws SQLException if the index is not valid
      */
     public int isNullable(final int columnIndex) throws SQLException {
         return col(columnIndex).nullable;
     }
 
     /**
-     * Si el valor tiene signo.
+     * Whether the value is signed.
      *
-     * @param columnIndex la columna, desde 1
-     * @return si tiene signo
-     * @throws SQLException si el indice no es valido
+     * @param columnIndex the column, from 1
+     * @return whether it is signed
+     * @throws SQLException if the index is not valid
      */
     public boolean isSigned(final int columnIndex) throws SQLException {
         return col(columnIndex).signed;
     }
 
     /**
-     * El ancho normal de la columna.
+     * The normal width of the column.
      *
-     * @param columnIndex la columna, desde 1
-     * @return el ancho en caracteres
-     * @throws SQLException si el indice no es valido
+     * @param columnIndex the column, from 1
+     * @return the width in characters
+     * @throws SQLException if the index is not valid
      */
     public int getColumnDisplaySize(final int columnIndex) throws SQLException {
         return col(columnIndex).columnDisplaySize;
     }
 
     /**
-     * El titulo con el que mostrarla.
+     * The title to show it with.
      *
-     * <p>Si no se fijo ninguno devuelve el nombre: es lo que un visor va a querer mostrar, y no
-     * tener titulo no es razon para mostrar una columna sin encabezado.
+     * <p>If none was set it returns the name: it is what a viewer is going to want to show, and not
+     * having a title is no reason to show a column without a header. JDK 25 returns {@code null}
+     * instead.
      *
-     * @param columnIndex la columna, desde 1
-     * @return el titulo
-     * @throws SQLException si el indice no es valido
+     * @param columnIndex the column, from 1
+     * @return the title
+     * @throws SQLException if the index is not valid
      */
     public String getColumnLabel(final int columnIndex) throws SQLException {
         final ColInfo c = col(columnIndex);
@@ -405,11 +406,11 @@ public class RowSetMetaDataImpl implements RowSetMetaData, Serializable {
     }
 
     /**
-     * El nombre de la columna.
+     * The name of the column.
      *
-     * @param columnIndex la columna, desde 1
-     * @return el nombre, o cadena vacia si no se fijo
-     * @throws SQLException si el indice no es valido
+     * @param columnIndex the column, from 1
+     * @return the name, or an empty string if it was not set; JDK 25 returns {@code null}
+     * @throws SQLException if the index is not valid
      */
     public String getColumnName(final int columnIndex) throws SQLException {
         final String n = col(columnIndex).columnName;
@@ -417,91 +418,91 @@ public class RowSetMetaDataImpl implements RowSetMetaData, Serializable {
     }
 
     /**
-     * El esquema de la tabla.
+     * The schema of the table.
      *
-     * @param columnIndex la columna, desde 1
-     * @return el esquema
-     * @throws SQLException si el indice no es valido
+     * @param columnIndex the column, from 1
+     * @return the schema
+     * @throws SQLException if the index is not valid
      */
     public String getSchemaName(final int columnIndex) throws SQLException {
         return col(columnIndex).schemaName;
     }
 
     /**
-     * Los digitos significativos.
+     * The significant digits.
      *
-     * @param columnIndex la columna, desde 1
-     * @return la precision
-     * @throws SQLException si el indice no es valido
+     * @param columnIndex the column, from 1
+     * @return the precision
+     * @throws SQLException if the index is not valid
      */
     public int getPrecision(final int columnIndex) throws SQLException {
         return col(columnIndex).colPrecision;
     }
 
     /**
-     * Los digitos a la derecha del punto.
+     * The digits to the right of the point.
      *
-     * @param columnIndex la columna, desde 1
-     * @return la escala
-     * @throws SQLException si el indice no es valido
+     * @param columnIndex the column, from 1
+     * @return the scale
+     * @throws SQLException if the index is not valid
      */
     public int getScale(final int columnIndex) throws SQLException {
         return col(columnIndex).colScale;
     }
 
     /**
-     * La tabla de la que sale.
+     * The table it comes from.
      *
-     * @param columnIndex la columna, desde 1
-     * @return la tabla
-     * @throws SQLException si el indice no es valido
+     * @param columnIndex the column, from 1
+     * @return the table
+     * @throws SQLException if the index is not valid
      */
     public String getTableName(final int columnIndex) throws SQLException {
         return col(columnIndex).tableName;
     }
 
     /**
-     * El catalogo de la tabla.
+     * The catalog of the table.
      *
-     * @param columnIndex la columna, desde 1
-     * @return el catalogo
-     * @throws SQLException si el indice no es valido
+     * @param columnIndex the column, from 1
+     * @return the catalog
+     * @throws SQLException if the index is not valid
      */
     public String getCatalogName(final int columnIndex) throws SQLException {
         return col(columnIndex).catName;
     }
 
     /**
-     * El tipo SQL.
+     * The SQL type.
      *
-     * @param columnIndex la columna, desde 1
-     * @return una constante de {@link Types}
-     * @throws SQLException si el indice no es valido
+     * @param columnIndex the column, from 1
+     * @return a constant of {@link Types}
+     * @throws SQLException if the index is not valid
      */
     public int getColumnType(final int columnIndex) throws SQLException {
         return col(columnIndex).colType;
     }
 
     /**
-     * El nombre del tipo.
+     * The name of the type.
      *
-     * @param columnIndex la columna, desde 1
-     * @return el nombre
-     * @throws SQLException si el indice no es valido
+     * @param columnIndex the column, from 1
+     * @return the name
+     * @throws SQLException if the index is not valid
      */
     public String getColumnTypeName(final int columnIndex) throws SQLException {
         return col(columnIndex).colTypeName;
     }
 
     /**
-     * Si la columna es de solo lectura.
+     * Whether the column is read-only.
      *
-     * <p>Siempre {@code false}: no hay como declararla de solo lectura, porque
-     * {@link RowSetMetaData} no tiene el {@code set} correspondiente.
+     * <p>Always {@code false}: there is no way of declaring it read-only, because
+     * {@link RowSetMetaData} has no corresponding {@code set}.
      *
-     * @param columnIndex la columna, desde 1
+     * @param columnIndex the column, from 1
      * @return {@code false}
-     * @throws SQLException si el indice no es valido
+     * @throws SQLException if the index is not valid
      */
     public boolean isReadOnly(final int columnIndex) throws SQLException {
         col(columnIndex);
@@ -509,11 +510,11 @@ public class RowSetMetaDataImpl implements RowSetMetaData, Serializable {
     }
 
     /**
-     * Si se puede escribir.
+     * Whether it can be written.
      *
-     * @param columnIndex la columna, desde 1
-     * @return {@code true}, por lo dicho en {@link #isReadOnly}
-     * @throws SQLException si el indice no es valido
+     * @param columnIndex the column, from 1
+     * @return {@code true}, for what was said in {@link #isReadOnly}
+     * @throws SQLException if the index is not valid
      */
     public boolean isWritable(final int columnIndex) throws SQLException {
         col(columnIndex);
@@ -521,11 +522,11 @@ public class RowSetMetaDataImpl implements RowSetMetaData, Serializable {
     }
 
     /**
-     * Si la escritura seguro va a andar.
+     * Whether writing is sure to work.
      *
-     * @param columnIndex la columna, desde 1
-     * @return {@code true}, por lo dicho en {@link #isReadOnly}
-     * @throws SQLException si el indice no es valido
+     * @param columnIndex the column, from 1
+     * @return {@code true}, for what was said in {@link #isReadOnly}
+     * @throws SQLException if the index is not valid
      */
     public boolean isDefinitelyWritable(final int columnIndex) throws SQLException {
         col(columnIndex);
@@ -533,20 +534,24 @@ public class RowSetMetaDataImpl implements RowSetMetaData, Serializable {
     }
 
     /**
-     * La clase Java que {@code getObject} va a devolver para esa columna.
+     * The Java class {@code getObject} is going to return for that column.
      *
-     * <p>El mapeo es el de la especificacion de JDBC. Los tipos que no estan en la tabla caen en
-     * {@code Object}, que es la respuesta correcta para un tipo que la base define y Java no
-     * conoce.
+     * <p>The mapping is JDBC's {@code getObject} table. The types that are not in it fall to {@code
+     * Object}, which is the right answer for a type the database defines and Java does not know.
      *
-     * @param columnIndex la columna, desde 1
-     * @return el nombre completo de la clase
-     * @throws SQLException si el indice no es valido
+     * <p>JDK 25's {@code RowSetMetaDataImpl} does not follow that table: it answers {@code Byte}
+     * for {@code TINYINT}, {@code Short} for {@code SMALLINT}, and {@code java.lang.String} for
+     * everything outside its own list, {@code BOOLEAN}, {@code ARRAY} and {@code STRUCT} included.
+     *
+     * @param columnIndex the column, from 1
+     * @return the fully qualified name of the class
+     * @throws SQLException if the index is not valid
      */
     public String getColumnClassName(final int columnIndex) throws SQLException {
-        // Una cadena de if y no un switch: #503 -- el generador de bytecode no pliega una etiqueta
-        // `case` cuya constante viene de un .class del classpath, y todas estas lo son. Volver al
-        // switch cuando se cierre.
+        // A chain of ifs and not a switch: #503 -- the frozen bin/javac does not fold a `case`
+        // label whose constant comes from a .class on the classpath, and all of these do. #503 is
+        // closed in the compiler source (target/release/javac emits the lookupswitch), but
+        // bin/javac still rejects it; go back to the switch when bin/ is rebuilt.
         final int t = col(columnIndex).colType;
         if (t == Types.BIT || t == Types.BOOLEAN) {
             return "java.lang.Boolean";
@@ -606,30 +611,30 @@ public class RowSetMetaDataImpl implements RowSetMetaData, Serializable {
         if (t == Types.STRUCT) {
             return "java.sql.Struct";
         }
-        // Un tipo que la base define y Java no conoce: Object es la respuesta correcta.
+        // A type the database defines and Java does not know: Object is the right answer.
         return "java.lang.Object";
     }
     /**
-     * Esta instancia, si se la pide como una interfaz que implementa.
+     * This instance, if it is asked for as an interface it implements.
      *
-     * @param <T> el tipo pedido
-     * @param iface la interfaz
-     * @return esta instancia
-     * @throws SQLException si no implementa esa interfaz
+     * @param <T> the requested type
+     * @param iface the interface
+     * @return this instance
+     * @throws SQLException if it does not implement that interface
      */
     public <T> T unwrap(final Class<T> iface) throws SQLException {
         if (iface != null && iface.isInstance(this)) {
             return iface.cast(this);
         }
-        throw new SQLException("esta clase no implementa " + iface);
+        throw new SQLException("this class does not implement " + iface);
     }
 
     /**
-     * Si {@link #unwrap} va a poder con esa interfaz.
+     * Whether {@link #unwrap} is going to manage with that interface.
      *
-     * @param iface la interfaz
-     * @return si la implementa
-     * @throws SQLException nunca
+     * @param iface the interface
+     * @return whether it implements it
+     * @throws SQLException never
      */
     public boolean isWrapperFor(final Class<?> iface) throws SQLException {
         return iface != null && iface.isInstance(this);

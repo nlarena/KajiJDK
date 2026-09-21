@@ -1,12 +1,12 @@
 package javax.swing.text;
 
 /**
- * Se pidio una posicion que el documento no tiene.
+ * A position the document does not have was asked for.
  *
- * <p>Chequeada, a diferencia de {@link IndexOutOfBoundsException}, y la diferencia es de intencion:
- * en un documento la longitud <strong>cambia sola</strong> mientras alguien escribe, asi que un
- * desplazamiento valido cuando se calculo puede no serlo cuando se usa. No es necesariamente un bug
- * del programa, y por eso el compilador obliga a preverla.
+ * <p>Checked, unlike {@link IndexOutOfBoundsException}, and the difference is one of intent: in
+ * a document the length <strong>changes by itself</strong> while somebody types, so an offset
+ * that was valid when it was computed may not be when it is used. It is not necessarily a bug in
+ * the program, and that is why the compiler forces foreseeing it.
  */
 public class BadLocationException extends Exception {
 
@@ -15,15 +15,15 @@ public class BadLocationException extends Exception {
     private int offset;
 
     /**
-     * @param s el mensaje
-     * @param offset la posicion que se habia pedido
+     * @param s the message
+     * @param offset the position that had been asked for
      */
     public BadLocationException(String s, int offset) {
         super(s);
         this.offset = offset;
     }
 
-    /** La posicion que se habia pedido. */
+    /** The position that had been asked for. */
     public int offsetRequested() {
         return this.offset;
     }

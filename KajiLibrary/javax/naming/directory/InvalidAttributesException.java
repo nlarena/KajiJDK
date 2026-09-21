@@ -3,22 +3,23 @@ package javax.naming.directory;
 import javax.naming.NamingException;
 
 /**
- * KajiLibrary's javax.naming.directory.InvalidAttributesException -- faltan atributos obligatorios, o sobran.
+ * KajiLibrary's javax.naming.directory.InvalidAttributesException -- required attributes are
+ * missing, or there are extra ones.
  *
- * <p>Es sobre el <b>conjunto</b> y no sobre uno: crear una entrada sin los atributos que su clase
- * de objeto exige cae aca. Por eso es distinta de las dos de arriba, que hablan de un
- * atributo en particular.
+ * <p>It is about the <b>set</b> and not about one: creating an entry without the attributes its
+ * object class requires lands here. That is why it differs from the two above, which talk about a
+ * particular attribute.
  */
 public class InvalidAttributesException extends NamingException {
 
     private static final long serialVersionUID = 2607612850539889765L;
 
-    /** Sin detalle. */
+    /** With no detail. */
     public InvalidAttributesException() {
         super();
     }
 
-    /** Con un mensaje que diga cual fue el problema. */
+    /** With a message saying what the problem was. */
     public InvalidAttributesException(String explanation) {
         super(explanation);
     }

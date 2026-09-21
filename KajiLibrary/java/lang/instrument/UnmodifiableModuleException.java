@@ -1,26 +1,25 @@
 package java.lang.instrument;
 
 /**
- * KajiLibrary's java.lang.instrument.UnmodifiableModuleException -- ese modulo no se puede
- * redefinir.
+ * KajiLibrary's java.lang.instrument.UnmodifiableModuleException -- that module cannot be redefined.
  *
- * <p>El equivalente de {@link UnmodifiableClassException} para modulos, con una diferencia que vale
- * mirar: esta <b>no es comprobada</b>.
+ * <p>The equivalent of {@link UnmodifiableClassException} for modules, with one difference worth
+ * looking at: this one is <b>not checked</b>.
  *
- * <p>La razon es que se sabe de antemano. Un modulo es modificable o no lo es, y no cambia mientras
- * el programa corre; {@code isModifiableModule} lo contesta sin ambiguedad. Redefinir uno que no lo
- * es es un error de programa, no una condicion que haya que manejar.
+ * <p>The reason is that it is known in advance. A module either is modifiable or is not, and that
+ * does not change while the program runs; {@code isModifiableModule} answers it without ambiguity.
+ * Redefining one that is not is a programming error, not a condition to be handled.
  */
 public class UnmodifiableModuleException extends RuntimeException {
 
     private static final long serialVersionUID = 6912511912351080644L;
 
-    /** Sin detalle. */
+    /** With no detail. */
     public UnmodifiableModuleException() {
         super();
     }
 
-    /** Con un mensaje que diga cual. */
+    /** With a message saying which one. */
     public UnmodifiableModuleException(String msg) {
         super(msg);
     }

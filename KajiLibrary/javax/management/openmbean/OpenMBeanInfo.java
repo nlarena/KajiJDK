@@ -6,33 +6,33 @@ import javax.management.MBeanNotificationInfo;
 import javax.management.MBeanOperationInfo;
 
 /**
- * La descripción de un MBean abierto entero.
+ * The description of a whole open MBean.
  *
- * <p>Es el mismo contenido que un `MBeanInfo` común, con la diferencia de que sus atributos,
- * operaciones y constructores son los abiertos de este paquete. Los tipos de retorno siguen siendo
- * los de `javax.management` por la razón que explica {@link OpenMBeanConstructorInfo}.
+ * <p>It is the same content as an ordinary {@code MBeanInfo}, with the difference that its
+ * attributes, operations and constructors are the open ones of this package. The return types are
+ * still {@code javax.management}'s for the reason {@link OpenMBeanConstructorInfo} explains.
  *
- * <p>Las notificaciones **no** tienen versión abierta: una notificación lleva un `userData` de
- * cualquier clase, así que no hay nada que restringir a tipos abiertos.
+ * <p>Notifications have <b>no</b> open version: a notification carries a {@code userData} of any
+ * class, so there is nothing to restrict to open types.
  */
 public interface OpenMBeanInfo {
 
-    /** El nombre de clase del MBean. */
+    /** The MBean's class name. */
     String getClassName();
 
-    /** La descripción, para una persona. */
+    /** The description, for a person. */
     String getDescription();
 
-    /** Los atributos; cada uno es además un {@link OpenMBeanAttributeInfo}. */
+    /** The attributes; each is also an {@link OpenMBeanAttributeInfo}. */
     MBeanAttributeInfo[] getAttributes();
 
-    /** Las operaciones; cada una es además un {@link OpenMBeanOperationInfo}. */
+    /** The operations; each is also an {@link OpenMBeanOperationInfo}. */
     MBeanOperationInfo[] getOperations();
 
-    /** Los constructores; cada uno es además un {@link OpenMBeanConstructorInfo}. */
+    /** The constructors; each is also an {@link OpenMBeanConstructorInfo}. */
     MBeanConstructorInfo[] getConstructors();
 
-    /** Las notificaciones. Ver la nota de la clase sobre por qué no son abiertas. */
+    /** The notifications. See the class note about why they are not open. */
     MBeanNotificationInfo[] getNotifications();
 
     boolean equals(Object obj);

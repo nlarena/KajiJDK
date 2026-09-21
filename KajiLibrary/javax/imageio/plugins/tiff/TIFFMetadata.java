@@ -10,38 +10,38 @@ import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
 /**
- * Los metadatos que devuelve {@link TIFFDirectory#getAsMetadata}.
+ * The metadata {@link TIFFDirectory#getAsMetadata} returns.
  *
- * <p>No es publica a proposito: el JDK tampoco expone la suya, y el unico modo de conseguir una es por
- * ese metodo. Lo que aporta es traducir en las dos direcciones entre un {@link TIFFDirectory} y los
- * dos formatos de arbol.
+ * <p>It is not public on purpose: the JDK does not expose its own either, and the only way to get
+ * one is through that method. What it contributes is translating both ways between a
+ * {@link TIFFDirectory} and the two tree formats.
  *
- * <h2>El arbol nativo es el directorio</h2>
+ * <h2>The native tree is the directory</h2>
  *
- * <p>{@code javax_imageio_tiff_image_1.0} es una transcripcion directa: la raiz tiene un
- * {@code TIFFIFD} y ahi cuelgan los campos. No se pierde nada.
+ * <p>{@code javax_imageio_tiff_image_1.0} is a direct transcription: the root has a {@code TIFFIFD}
+ * and the fields hang from it. Nothing is lost.
  *
- * <h2>El arbol estandar es una interpretacion</h2>
+ * <h2>The standard tree is an interpretation</h2>
  *
- * <p>{@code javax_imageio_1.0} no tiene campos de TIFF sino conceptos --cuantos canales, si hay alfa,
- * que tan grande es un pixel-- y hay que <b>deducirlos</b>. Las reglas estan en cada
- * {@code getStandardXxxNode} y siguen a las del JDK, incluidas las que sorprenden: una imagen sin
- * {@code BitsPerSample} declara un bit por muestra, salvo que este comprimida con JPEG, donde declara
- * tres muestras de ocho.
+ * <p>{@code javax_imageio_1.0} has no TIFF fields but concepts --how many channels, whether there
+ * is alpha, how big a pixel is-- and they have to be <b>deduced</b>. The rules are in each {@code
+ * getStandardXxxNode} and follow the JDK's, including the surprising ones: an image without {@code
+ * BitsPerSample} declares one bit per sample, unless it is JPEG-compressed, where it declares three
+ * samples of eight.
  *
- * <p>La vuelta --{@link #mergeTree} con el formato estandar-- solo aplica los nodos que se pueden
- * traducir sin inventar; los demas se ignoran, porque el formato estandar dice cosas que un TIFF no
- * tiene donde guardar.
+ * <p>The way back --{@link #mergeTree} with the standard format-- only applies the nodes that can
+ * be translated without making things up; the rest are ignored, because the standard format says
+ * things a TIFF has nowhere to store.
  */
 final class TIFFMetadata extends IIOMetadata {
 
-    /** Los milimetros de una pulgada, para pasar resolucion a tamano de pixel. */
+    /** The millimetres in an inch, to turn resolution into pixel size. */
     private static final float MM_PER_INCH = 25.4f;
 
-    /** Los milimetros de un centimetro. */
+    /** The millimetres in a centimetre. */
     private static final float MM_PER_CM = 10.0f;
 
-    /** Las etiquetas de texto que van al nodo {@code Text}, en el orden en que se escriben. */
+    /** The text tags that go to the {@code Text} node, in the order they are written. */
     private static final int[] TEXT_TAGS = {
         BaselineTIFFTagSet.TAG_DOCUMENT_NAME,
         BaselineTIFFTagSet.TAG_IMAGE_DESCRIPTION,
@@ -55,32 +55,34 @@ final class TIFFMetadata extends IIOMetadata {
         BaselineTIFFTagSet.TAG_COPYRIGHT,
     };
 
-    /** El directorio del que salen todas las respuestas. */
+    /** The directory all the answers come from. */
     private TIFFDirectory dir;
 
-    /** Con ese directorio adentro. */
+    /** With that directory inside. */
     TIFFMetadata(TIFFDirectory dir) {
         super(true, TIFFDirectory.NATIVE_FORMAT, null, null, null);
         this.dir = dir;
     }
 
-    /** El directorio, sin copiar. */
+    /** The directory, not copied. */
     TIFFDirectory getDirectory() {
         return this.dir;
     }
 
-    /** Se pueden modificar. */
+    /** They can be modified. */
     @Override
     public boolean isReadOnly() {
         return false;
     }
 
     /**
-     * El esquema del formato.
+     * The format's schema.
      *
-     * <p>Del estandar hay; del nativo de TIFF no se publica ninguno, igual que en el JDK, y pedirlo es
-     * un {@link IllegalStateException}: el formato existe --{@link #getMetadataFormatNames} lo
-     * lista-- pero no hay objeto que lo describa.
+     * <p>There is one for the standard format; for the TIFF native format none is published, and
+     * asking for it is an {@link IllegalStateException}: the format exists -- {@link
+     * #getMetadataFormatNames} lists it-- but there is no object that describes it. The JDK ends
+     * the same way: its metadata names {@code javax.imageio.plugins.tiff.TIFFImageMetadataFormat},
+     * a class that does not exist (the implementation lives in {@code com.sun.imageio}).
      */
     @Override
     public IIOMetadataFormat getMetadataFormat(String formatName) {
@@ -91,9 +93,9 @@ final class TIFFMetadata extends IIOMetadata {
     }
 
     /**
-     * El arbol en ese formato.
+     * The tree in that format.
      *
-     * @throws IllegalArgumentException si el formato no es ninguno de los dos
+     * @throws IllegalArgumentException if the format is neither of the two
      */
     @Override
     public Node getAsTree(String formatName) {
@@ -109,10 +111,10 @@ final class TIFFMetadata extends IIOMetadata {
     }
 
     /**
-     * Combina ese arbol con lo que ya hay.
+     * Combines that tree with what is already there.
      *
-     * @throws IllegalArgumentException si el formato no es ninguno de los dos
-     * @throws IIOInvalidTreeException si el arbol no cumple el formato
+     * @throws IllegalArgumentException if the format is neither of the two
+     * @throws IIOInvalidTreeException if the tree does not follow the format
      */
     @Override
     public void mergeTree(String formatName, Node root) throws IIOInvalidTreeException {
@@ -149,7 +151,7 @@ final class TIFFMetadata extends IIOMetadata {
         throw new IllegalArgumentException("Not a recognized format!");
     }
 
-    /** Deja el directorio sin campos. Los conjuntos y la etiqueta padre quedan. */
+    /** Leaves the directory without fields. The sets and the parent tag stay. */
     @Override
     public void reset() {
         this.dir.removeTIFFFields();
@@ -174,8 +176,8 @@ final class TIFFMetadata extends IIOMetadata {
         }
         int channels = -1;
         if (photometric == BaselineTIFFTagSet.PHOTOMETRIC_INTERPRETATION_PALETTE_COLOR) {
-            // Una paleta se guarda con una muestra por pixel pero se ve en color: los canales que
-            // declara el formato estandar son los del color, no los del archivo.
+            // A palette is stored with one sample per pixel but seen in colour: the channels the
+            // standard format declares are the colour's, not the file's.
             channels = 3;
         } else {
             int samples = intValue(BaselineTIFFTagSet.TAG_SAMPLES_PER_PIXEL, -1);
@@ -269,8 +271,8 @@ final class TIFFMetadata extends IIOMetadata {
         int unit = intValue(BaselineTIFFTagSet.TAG_RESOLUTION_UNIT,
             BaselineTIFFTagSet.RESOLUTION_UNIT_INCH);
         if (xres != null && yres != null) {
-            // El alto y el ancho de un pixel salen de la resolucion invertida, asi que la proporcion
-            // es la de las resoluciones al reves.
+            // A pixel's height and width come from the inverted resolution, so the ratio is the
+            // resolutions' the other way round.
             IIOMetadataNode aspect = new IIOMetadataNode("PixelAspectRatio");
             aspect.setAttribute("value",
                 Float.toString((float) (yres.getAsDouble(0) / xres.getAsDouble(0))));
@@ -333,7 +335,8 @@ final class TIFFMetadata extends IIOMetadata {
             i = i + 1;
         }
         if (text.getChildNodes().getLength() == 0) {
-            // Sin textos el nodo no va: el formato estandar pide al menos una entrada adentro.
+            // Without texts the node does not go: the standard format asks for at least one entry
+            // inside.
             return null;
         }
         return text;
@@ -358,11 +361,11 @@ final class TIFFMetadata extends IIOMetadata {
     }
 
     /**
-     * Aplica los nodos del arbol estandar que se pueden traducir a campos de TIFF.
+     * Applies the nodes of the standard tree that can be translated into TIFF fields.
      *
-     * <p>Lo que no tiene donde guardarse en un TIFF se ignora en silencio; es la unica salida honesta,
-     * porque inventar una etiqueta para un concepto que el formato no tiene seria escribir un archivo
-     * que dice algo que nadie mas va a poder leer igual.
+     * <p>What has nowhere to be stored in a TIFF is silently ignored; it is the only honest way
+     * out, because making up a tag for a concept the format does not have would be writing a file
+     * that says something nobody else can read the same way.
      */
     private void mergeStandardTree(Node root) throws IIOInvalidTreeException {
         if (!IIOMetadataFormatImpl.standardMetadataFormatName.equals(root.getNodeName())) {
@@ -393,7 +396,7 @@ final class TIFFMetadata extends IIOMetadata {
         }
     }
 
-    /** {@code NumChannels} vuelve a ser {@code SamplesPerPixel}. */
+    /** {@code NumChannels} becomes {@code SamplesPerPixel} again. */
     private void mergeChroma(Node chroma) {
         String channels = childAttribute(chroma, "NumChannels", "value");
         if (channels != null) {
@@ -404,7 +407,7 @@ final class TIFFMetadata extends IIOMetadata {
         }
     }
 
-    /** {@code CompressionTypeName} vuelve a ser el numero de esquema. */
+    /** {@code CompressionTypeName} becomes the scheme number again. */
     private void mergeCompression(Node compression) {
         String name = childAttribute(compression, "CompressionTypeName", "value");
         if (name != null) {
@@ -415,7 +418,7 @@ final class TIFFMetadata extends IIOMetadata {
         }
     }
 
-    /** {@code BitsPerSample} y {@code PlanarConfiguration} vuelven a sus etiquetas. */
+    /** {@code BitsPerSample} and {@code PlanarConfiguration} go back to their tags. */
     private void mergeData(Node data) {
         String planar = childAttribute(data, "PlanarConfiguration", "value");
         if ("PlaneInterleaved".equals(planar)) {
@@ -446,7 +449,7 @@ final class TIFFMetadata extends IIOMetadata {
         }
     }
 
-    /** El tamano de pixel vuelve a ser resolucion; la orientacion, su numero. */
+    /** The pixel size becomes resolution again; the orientation, its number. */
     private void mergeDimension(Node dimension) {
         String horizontal = childAttribute(dimension, "HorizontalPixelSize", "value");
         String vertical = childAttribute(dimension, "VerticalPixelSize", "value");
@@ -469,7 +472,7 @@ final class TIFFMetadata extends IIOMetadata {
         }
     }
 
-    /** Cada {@code TextEntry} vuelve a la etiqueta de texto que se llama igual. */
+    /** Each {@code TextEntry} goes back to the text tag with the same name. */
     private void mergeText(Node text) {
         NodeList entries = text.getChildNodes();
         int i = 0;
@@ -493,7 +496,7 @@ final class TIFFMetadata extends IIOMetadata {
         }
     }
 
-    /** {@code Alpha} vuelve a ser {@code ExtraSamples}. */
+    /** {@code Alpha} becomes {@code ExtraSamples} again. */
     private void mergeTransparency(Node transparency) {
         String alpha = childAttribute(transparency, "Alpha", "value");
         if ("premultiplied".equals(alpha)) {
@@ -505,7 +508,7 @@ final class TIFFMetadata extends IIOMetadata {
         }
     }
 
-    /** Guarda un valor corto en esa etiqueta, si el directorio la conoce. */
+    /** Stores a short value in that tag, if the directory knows it. */
     private void setShort(int tagNumber, int value) {
         TIFFTag tag = this.dir.getTag(tagNumber);
         if (tag != null && tag.isDataTypeOK(TIFFTag.TIFF_SHORT)) {
@@ -514,7 +517,7 @@ final class TIFFMetadata extends IIOMetadata {
         }
     }
 
-    /** Guarda una resolucion en puntos por centimetro, a partir del tamano de pixel en milimetros. */
+    /** Stores a resolution in dots per centimetre, from the pixel size in millimetres. */
     private void setResolution(int tagNumber, String millimetresText) {
         float millimetres;
         try {
@@ -534,7 +537,7 @@ final class TIFFMetadata extends IIOMetadata {
             new long[][] { { perCentimetre, 1L } }));
     }
 
-    /** Cuantos bits tiene cada muestra, con los valores por omision del formato. */
+    /** How many bits each sample has, with the format's defaults. */
     private int[] bitsPerSample() {
         TIFFField field = this.dir.getTIFFField(BaselineTIFFTagSet.TAG_BITS_PER_SAMPLE);
         int[] bits;
@@ -549,10 +552,11 @@ final class TIFFMetadata extends IIOMetadata {
             int compression = intValue(BaselineTIFFTagSet.TAG_COMPRESSION, -1);
             if (compression == BaselineTIFFTagSet.COMPRESSION_JPEG
                 || compression == BaselineTIFFTagSet.COMPRESSION_OLD_JPEG) {
-                // JPEG no lleva BitsPerSample propio: son siempre tres muestras de ocho bits.
+                // JPEG carries no BitsPerSample of its own: it is always three samples of eight
+                // bits.
                 bits = new int[] { 8, 8, 8 };
             } else {
-                // El valor por omision del formato es un bit: un TIFF sin la etiqueta es bitonal.
+                // The format's default is one bit: a TIFF without the tag is bilevel.
                 bits = new int[] { 1 };
             }
         }
@@ -564,10 +568,10 @@ final class TIFFMetadata extends IIOMetadata {
         return bits;
     }
 
-    /** El nodo {@code ImageCreationTime} de un {@code DateTime} de TIFF, o null si no se entiende. */
+    /** The {@code ImageCreationTime} node of a TIFF {@code DateTime}, or null if not understood. */
     private static IIOMetadataNode creationTime(String dateTime) {
-        // El formato es "AAAA:MM:DD hh:mm:ss", de largo fijo; los campos se copian tal cual, con los
-        // ceros por delante que traigan.
+        // The format is "YYYY:MM:DD hh:mm:ss", fixed length; the fields are copied as they are,
+        // with whatever leading zeros they carry.
         if (dateTime == null || dateTime.length() < 19) {
             return null;
         }
@@ -581,7 +585,7 @@ final class TIFFMetadata extends IIOMetadata {
         return created;
     }
 
-    /** El espacio de color que corresponde a esa interpretacion fotometrica, o null. */
+    /** The colour space that corresponds to that photometric interpretation, or null. */
     private static String colorSpaceType(int photometric) {
         if (photometric == BaselineTIFFTagSet.PHOTOMETRIC_INTERPRETATION_WHITE_IS_ZERO
             || photometric == BaselineTIFFTagSet.PHOTOMETRIC_INTERPRETATION_BLACK_IS_ZERO
@@ -604,7 +608,7 @@ final class TIFFMetadata extends IIOMetadata {
         return null;
     }
 
-    /** Como se llama ese esquema de compresion en el formato estandar, o null si no se sabe. */
+    /** What that compression scheme is called in the standard format, or null if unknown. */
     private static String compressionName(int scheme) {
         if (scheme == BaselineTIFFTagSet.COMPRESSION_NONE) {
             return "None";
@@ -639,7 +643,7 @@ final class TIFFMetadata extends IIOMetadata {
         return null;
     }
 
-    /** El numero del esquema que se llama asi, o -1. La inversa de {@link #compressionName}. */
+    /** The number of the scheme with that name, or -1. The inverse of {@link #compressionName}. */
     private static int compressionScheme(String name) {
         int scheme = BaselineTIFFTagSet.COMPRESSION_NONE;
         while (scheme <= BaselineTIFFTagSet.COMPRESSION_DEFLATE) {
@@ -651,13 +655,13 @@ final class TIFFMetadata extends IIOMetadata {
         return -1;
     }
 
-    /** Si ese esquema pierde informacion. */
+    /** Whether that scheme loses information. */
     private static boolean isLossy(int scheme) {
         return scheme == BaselineTIFFTagSet.COMPRESSION_JPEG
             || scheme == BaselineTIFFTagSet.COMPRESSION_OLD_JPEG;
     }
 
-    /** Como se llama ese formato de muestra en el formato estandar, o null. */
+    /** What that sample format is called in the standard format, or null. */
     private static String sampleFormat(int format) {
         if (format == BaselineTIFFTagSet.SAMPLE_FORMAT_UNSIGNED_INTEGER) {
             return "UnsignedIntegral";
@@ -671,13 +675,13 @@ final class TIFFMetadata extends IIOMetadata {
         return null;
     }
 
-    /** Los ocho nombres de orientacion del formato estandar, en el orden de TIFF. */
+    /** The eight orientation names of the standard format, in TIFF order. */
     private static final String[] ORIENTATIONS = {
         "Normal", "FlipH", "Rotate180", "FlipV", "FlipHRotate90", "Rotate270", "FlipVRotate90",
         "Rotate90",
     };
 
-    /** Como se llama esa orientacion, o null si el numero no es uno de los ocho. */
+    /** What that orientation is called, or null if the number is not one of the eight. */
     private static String orientationName(int orientation) {
         if (orientation < 1 || orientation > ORIENTATIONS.length) {
             return null;
@@ -685,7 +689,7 @@ final class TIFFMetadata extends IIOMetadata {
         return ORIENTATIONS[orientation - 1];
     }
 
-    /** El numero de la orientacion que se llama asi, o -1. */
+    /** The number of the orientation with that name, or -1. */
     private static int orientationNumber(String name) {
         int i = 0;
         while (i < ORIENTATIONS.length) {
@@ -697,7 +701,7 @@ final class TIFFMetadata extends IIOMetadata {
         return -1;
     }
 
-    /** El numero de la etiqueta de texto que se llama asi, o -1. */
+    /** The number of the text tag with that name, or -1. */
     private int textTagFor(String keyword) {
         int i = 0;
         while (i < TEXT_TAGS.length) {
@@ -710,7 +714,7 @@ final class TIFFMetadata extends IIOMetadata {
         return -1;
     }
 
-    /** El primer valor de esa etiqueta como entero, o el que se pase si no esta. */
+    /** The first value of that tag as an int, or the one passed if it is not there. */
     private int intValue(int tagNumber, int fallback) {
         TIFFField field = this.dir.getTIFFField(tagNumber);
         if (field == null || field.getCount() == 0) {
@@ -723,7 +727,7 @@ final class TIFFMetadata extends IIOMetadata {
         }
     }
 
-    /** El atributo de ese hijo, o null si el hijo o el atributo no estan. */
+    /** The attribute of that child, or null if the child or the attribute is not there. */
     private static String childAttribute(Node parent, String childName, String attributeName) {
         NodeList children = parent.getChildNodes();
         int i = 0;
@@ -737,7 +741,7 @@ final class TIFFMetadata extends IIOMetadata {
         return null;
     }
 
-    /** El valor de ese atributo, o null si no esta. */
+    /** The value of that attribute, or null if it is not there. */
     private static String attribute(Node node, String name) {
         NamedNodeMap attrs = node.getAttributes();
         if (attrs == null) {
@@ -750,7 +754,7 @@ final class TIFFMetadata extends IIOMetadata {
         return attr.getNodeValue();
     }
 
-    /** El entero que dice ese texto, o el de reserva si no es un entero. */
+    /** The integer that text says, or the fallback if it is not an integer. */
     private static int parseIntOr(String text, int fallback) {
         try {
             return Integer.parseInt(text.trim());
@@ -759,7 +763,7 @@ final class TIFFMetadata extends IIOMetadata {
         }
     }
 
-    /** El primer hijo que sea un elemento, o null. */
+    /** The first child that is an element, or null. */
     private static Node firstElement(Node node) {
         NodeList children = node.getChildNodes();
         int i = 0;

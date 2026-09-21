@@ -4,39 +4,40 @@ import javax.lang.model.element.TypeElement;
 import javax.tools.JavaFileObject;
 
 /**
- * Que fase de la compilacion empezo o termino, y sobre que.
+ * Which phase of the compilation started or finished, and over what.
  *
- * <p>Los cuatro constructores son la misma idea con distinto detalle disponible, y ese detalle
- * <strong>depende de la fase</strong>: al empezar a parsear solo se sabe el archivo; despues de
- * parsear hay unidad de compilacion; en {@code ANALYZE} y {@code GENERATE} hay ademas un tipo, y
- * puede haber varios eventos por archivo — uno por clase.
+ * <p>The four constructors are the same idea with different detail available, and that detail
+ * <strong>depends on the phase</strong>: on starting to parse only the file is known; after
+ * parsing there is a compilation unit; in {@code ANALYZE} and {@code GENERATE} there is also a
+ * type, and there may be several events per file -- one per class.
  *
- * <p>Es inmutable, y por eso es {@code final}: un oyente puede guardarse el evento sin que lo que
- * dice cambie despues.
+ * <p>It is immutable, and that is why it is {@code final}: a listener may keep the event
+ * without what it says changing afterwards.
  */
 public final class TaskEvent {
 
     /**
-     * Las fases.
+     * The phases.
      *
-     * <p>{@link #COMPILATION} envuelve a todas las demas: su {@code started} es el primer evento y
-     * su {@code finished} el ultimo. Sirve para medir el total sin sumar las partes.
+     * <p>{@link #COMPILATION} wraps all the others: its {@code started} is the first event and its
+     * {@code finished} the last. It serves in order to measure the total without adding the
+     * parts up.
      */
     public enum Kind {
 
-        /** Leer y parsear un archivo. */
+        /** Read and parse a file. */
         PARSE,
-        /** Entrar los simbolos en la tabla. */
+        /** Enter the symbols into the table. */
         ENTER,
-        /** Analizar y tipar una clase. */
+        /** Analyse and type a class. */
         ANALYZE,
-        /** Emitir el {@code .class} de una clase. */
+        /** Emit a class's {@code .class}. */
         GENERATE,
-        /** Todo el procesamiento de anotaciones. */
+        /** All the annotation processing. */
         ANNOTATION_PROCESSING,
-        /** Una ronda de procesamiento de anotaciones. */
+        /** One round of annotation processing. */
         ANNOTATION_PROCESSING_ROUND,
-        /** La compilacion entera; envuelve a todas las anteriores. */
+        /** The whole compilation; it wraps all the previous ones. */
         COMPILATION
     }
 
@@ -45,22 +46,22 @@ public final class TaskEvent {
     private final com.sun.source.tree.CompilationUnitTree unit;
     private final TypeElement clazz;
 
-    /** Solo la fase. */
+    /** Only the phase. */
     public TaskEvent(Kind kind) {
         this(kind, null, null, null);
     }
 
-    /** La fase y el archivo. */
+    /** The phase and the file. */
     public TaskEvent(Kind kind, JavaFileObject sourceFile) {
         this(kind, sourceFile, null, null);
     }
 
-    /** La fase y la unidad de compilacion; el archivo sale de ella. */
+    /** The phase and the compilation unit; the file comes from it. */
     public TaskEvent(Kind kind, com.sun.source.tree.CompilationUnitTree unit) {
         this(kind, unit.getSourceFile(), unit, null);
     }
 
-    /** La fase, la unidad y la clase concreta. */
+    /** The phase, the unit and the concrete class. */
     public TaskEvent(Kind kind, com.sun.source.tree.CompilationUnitTree unit, TypeElement clazz) {
         this(kind, unit.getSourceFile(), unit, clazz);
     }
@@ -73,22 +74,22 @@ public final class TaskEvent {
         this.clazz = clazz;
     }
 
-    /** La fase. */
+    /** The phase. */
     public Kind getKind() {
         return this.kind;
     }
 
-    /** El archivo, o {@code null}. */
+    /** The file, or {@code null}. */
     public JavaFileObject getSourceFile() {
         return this.file;
     }
 
-    /** La unidad de compilacion, o {@code null} si la fase es anterior a tenerla. */
+    /** The compilation unit, or {@code null} if the phase is earlier than having it. */
     public com.sun.source.tree.CompilationUnitTree getCompilationUnit() {
         return this.unit;
     }
 
-    /** La clase, o {@code null} si la fase no es por clase. */
+    /** The class, or {@code null} if the phase is not per class. */
     public TypeElement getTypeElement() {
         return this.clazz;
     }

@@ -28,47 +28,47 @@ import javax.security.auth.x500.X500Principal;
 import javax.security.auth.x500.X500PrivateCredential;
 
 /**
- * El modulo JAAS que autentica con un certificado guardado en un almacen de claves.
+ * The JAAS module that authenticates with a certificate kept in a key store.
  *
- * <h2>Que significa autenticarse con un certificado</h2>
+ * <h2>What authenticating with a certificate means</h2>
  *
- * <p>Que el usuario demuestra tener la clave privada que corresponde a un certificado. Este modulo
- * hace la parte facil: abre el almacen y saca la clave. La demostracion criptografica la hace
- * despues quien use la credencial que este modulo deja en el {@link Subject} — firmar algo con ella
- * es lo que prueba la identidad del otro lado.
+ * <p>That the user proves it has the private key that corresponds to a certificate. This
+ * module does the easy part: it opens the store and takes the key out. The cryptographic proof
+ * is done afterwards by whoever uses the credential this module leaves in the
+ * {@link Subject} -- signing something with it is what proves the identity to the other side.
  *
- * <p>Por eso el resultado no es un booleano sino una <strong>credencial privada</strong>: no
- * alcanza con saber quien dice ser, hace falta poder actuar como el.
+ * <p>That is why the result is not a boolean but a <strong>private credential</strong>: it is
+ * not enough to know who it says it is, it has to be possible to act as it.
  *
- * <h2>Las dos contrasenas</h2>
+ * <h2>The two passwords</h2>
  *
- * <p>Una abre el almacen, otra abre la clave privada dentro de el. Son distintas a proposito: el
- * almacen puede tener las claves de varios usuarios, y la contrasena del almacen no deberia dar
- * acceso a la clave de nadie. Cuando no se da la segunda, se usa la primera — que es el caso comun
- * de un almacen de un solo usuario.
+ * <p>One opens the store, the other opens the private key inside it. They are different on
+ * purpose: the store may have the keys of several users, and the store's password should not
+ * give access to anybody's key. When the second is not given, the first is used -- which is
+ * the common case of a store of a single user.
  *
- * <h2>Las opciones</h2>
+ * <h2>The options</h2>
  *
  * <ul>
- *   <li>{@code keyStoreURL} — de donde leer el almacen. {@code "NONE"} para los que no son un
- *       archivo, como un token criptografico.
- *   <li>{@code keyStoreType} — el tipo; por omision el del sistema.
- *   <li>{@code keyStoreProvider} — el proveedor, si se quiere uno en particular.
- *   <li>{@code keyStoreAlias} — el alias de la entrada; si falta, se pregunta.
- *   <li>{@code keyStorePasswordURL} — de donde leer la contrasena del almacen; si falta, se
- *       pregunta.
- *   <li>{@code privateKeyPasswordURL} — idem para la de la clave privada.
- *   <li>{@code protected} — {@code true} cuando el almacen pide la contrasena por su cuenta, por
- *       ejemplo un lector de tarjetas con teclado propio. Entonces no se pregunta nada.
- *   <li>{@code debug} — deja rastro por la salida estandar.
+ *   <li>{@code keyStoreURL} -- where to read the store from. {@code "NONE"} for those that
+ *       are not a file, such as a cryptographic token.
+ *   <li>{@code keyStoreType} -- the type; by default the system's.
+ *   <li>{@code keyStoreProvider} -- the provider, if a particular one is wanted.
+ *   <li>{@code keyStoreAlias} -- the entry's alias; if it is missing, it is asked for.
+ *   <li>{@code keyStorePasswordURL} -- where to read the store's password from; if it is
+ *       missing, it is asked for.
+ *   <li>{@code privateKeyPasswordURL} -- the same for the private key's.
+ *   <li>{@code protected} -- {@code true} when the store asks for the password on its own, for
+ *       example a card reader with a keypad of its own. Then nothing is asked for.
+ *   <li>{@code debug} -- it leaves a trace over the standard output.
  * </ul>
  *
  * @since 1.4
  */
 public class KeyStoreLoginModule implements LoginModule {
 
-    private static final int TIPO_ALMACEN = 0;
-    private static final int TIPO_CLAVE = 1;
+    private static final int STORE_TYPE = 0;
+    private static final int KEY_TYPE = 1;
 
     private Subject subject;
     private CallbackHandler callbackHandler;
@@ -91,7 +91,7 @@ public class KeyStoreLoginModule implements LoginModule {
     private boolean succeeded;
     private boolean commitSucceeded;
 
-    /** Para la configuracion de JAAS, que lo instancia por reflexion. */
+    /** For the JAAS configuration, which instantiates it by reflection. */
     public KeyStoreLoginModule() {
     }
 
@@ -118,65 +118,67 @@ public class KeyStoreLoginModule implements LoginModule {
     }
 
     /**
-     * Abre el almacen y saca el certificado y la clave privada del alias pedido.
+     * It opens the store and takes the certificate and the private key of the asked-for alias
+     * out.
      *
-     * @return {@code true} si se pudo
-     * @throws FailedLoginException si el alias no existe o la contrasena no abre
-     * @throws LoginException si falta configuracion o el almacen no se pudo leer
+     * @return {@code true} if it could be done
+     * @throws FailedLoginException if the alias does not exist or the password does not open it
+     * @throws LoginException if configuration is missing or the store could not be read
      */
     public boolean login() throws LoginException {
         final String alias = alias();
-        final char[] passAlmacen = contrasena(TIPO_ALMACEN, keyStorePasswordURL,
+        final char[] storePassword = password(STORE_TYPE, keyStorePasswordURL,
                 "Keystore password: ");
-        char[] passClave = contrasena(TIPO_CLAVE, privateKeyPasswordURL,
+        char[] keyPassword = password(KEY_TYPE, privateKeyPasswordURL,
                 "Private key password (optional): ");
-        // Sin contrasena propia para la clave se usa la del almacen: es el caso de un almacen de
-        // un solo usuario, donde tener dos secretos distintos no protegeria de nada.
-        if (passClave == null || passClave.length == 0) {
-            passClave = passAlmacen;
+        // With no password of its own for the key, the store's is used: it is the case of a
+                // store of a single user, where having two different secrets would protect nothing.
+        if (keyPassword == null || keyPassword.length == 0) {
+            keyPassword = storePassword;
         }
 
         try {
-            final KeyStore ks = abrir(passAlmacen);
-            final Certificate[] cadena = ks.getCertificateChain(alias);
-            if (cadena == null || cadena.length == 0) {
+            final KeyStore ks = open(storePassword);
+            final Certificate[] chain = ks.getCertificateChain(alias);
+            if (chain == null || chain.length == 0) {
                 throw new FailedLoginException(
-                        "no hay una cadena de certificados para el alias " + alias);
+                        "a certificate chain is missing for the alias " + alias);
             }
-            final java.security.Key clave = ks.getKey(alias, passClave);
-            if (!(clave instanceof PrivateKey)) {
+            final java.security.Key key = ks.getKey(alias, keyPassword);
+            if (!(key instanceof PrivateKey)) {
                 throw new FailedLoginException(
-                        "la entrada " + alias + " no tiene una clave privada");
+                        "the entry " + alias + " does not have a private key");
             }
 
-            final List<Certificate> lista = new ArrayList<Certificate>(Arrays.asList(cadena));
-            this.certP = CertificateFactory.getInstance("X.509").generateCertPath(lista);
-            final X509Certificate hoja = (X509Certificate) cadena[0];
-            this.principal = hoja.getSubjectX500Principal();
+            final List<Certificate> list = new ArrayList<Certificate>(Arrays.asList(chain));
+            this.certP = CertificateFactory.getInstance("X.509").generateCertPath(list);
+            final X509Certificate leaf = (X509Certificate) chain[0];
+            this.principal = leaf.getSubjectX500Principal();
             this.privateCredential =
-                    new X500PrivateCredential(hoja, (PrivateKey) clave, alias);
+                    new X500PrivateCredential(leaf, (PrivateKey) key, alias);
         } catch (final LoginException e) {
             throw e;
         } catch (final java.security.GeneralSecurityException e) {
-            limpiar();
-            final LoginException le = new LoginException("no se pudo leer el almacen de claves");
+            reset();
+            final LoginException le = new LoginException("the key store could not be read");
             le.initCause(e);
             throw le;
         } catch (final IOException e) {
-            limpiar();
-            // La contrasena equivocada de un almacen llega como IOException con causa
-            // UnrecoverableKeyException, no como excepcion de seguridad. Distinguirla importa:
-            // para el que llama es un fallo de autenticacion, no un problema de entrada/salida.
+            reset();
+            // The wrong password of a store arrives as an IOException with an
+                        // UnrecoverableKeyException cause, not as a security exception. Telling it
+                        // apart matters: for whoever calls it is an authentication failure, not an
+                        // input/output problem.
             final LoginException le = e.getCause() instanceof java.security.GeneralSecurityException
-                    ? new FailedLoginException("la contrasena no abre el almacen")
-                    : new LoginException("no se pudo leer el almacen de claves");
+                    ? new FailedLoginException("the password does not open the store")
+                    : new LoginException("the key store could not be read");
             le.initCause(e);
             throw le;
         } finally {
-            if (passClave != passAlmacen) {
-                borrar(passClave);
+            if (keyPassword != storePassword) {
+                wipe(keyPassword);
             }
-            borrar(passAlmacen);
+            wipe(storePassword);
         }
 
         if (debug) {
@@ -186,14 +188,15 @@ public class KeyStoreLoginModule implements LoginModule {
         return true;
     }
 
-    private KeyStore abrir(final char[] pass)
+    private KeyStore open(final char[] pass)
             throws java.security.GeneralSecurityException, IOException {
         final KeyStore ks = keyStoreProvider == null
                 ? KeyStore.getInstance(keyStoreType)
                 : KeyStore.getInstance(keyStoreType, keyStoreProvider);
         if (keyStoreURL == null || "NONE".equals(keyStoreURL)) {
-            // "NONE" es lo que se usa con un token criptografico: el almacen no es un archivo y
-            // la carga sin flujo le dice al proveedor que se busque los datos solo.
+            // "NONE" is what is used with a cryptographic token: the store is not a file and
+                        // the load with no stream tells the provider to look for the data by
+                        // itself.
             ks.load(null, protectedPath ? null : pass);
             return ks;
         }
@@ -212,99 +215,100 @@ public class KeyStoreLoginModule implements LoginModule {
         }
         if (callbackHandler == null) {
             throw new LoginException(
-                    "hace falta la opcion keyStoreAlias o un CallbackHandler para preguntarlo");
+                    "the keyStoreAlias option or a CallbackHandler to ask for it is needed");
         }
         final NameCallback cb = new NameCallback("Keystore alias: ");
-        preguntar(new Callback[] { cb });
+        ask(new Callback[] { cb });
         final String n = cb.getName();
         if (n == null || n.length() == 0) {
-            throw new LoginException("no se dio un alias");
+            throw new LoginException("an alias was not given");
         }
         return n;
     }
 
     /**
-     * La contrasena, de la URL configurada o preguntada.
+     * The password, from the configured URL or asked for.
      *
-     * <p>Con {@code protected} en {@code true} no se pregunta ninguna de las dos: el almacen las
-     * pide por su cuenta, y preguntarlas aca ademas seria pedirle al usuario que las escriba donde
-     * no corresponde.
+     * <p>With {@code protected} at {@code true} neither of the two is asked for: the store asks
+     * for them on its own, and asking for them here as well would be asking the user to write
+     * them where they do not belong.
      */
-    private char[] contrasena(final int tipo, final String url, final String prompt)
+    private char[] password(final int type, final String url, final String prompt)
             throws LoginException {
         if (url != null) {
-            return leerDeUrl(url);
+            return readFromUrl(url);
         }
         if (protectedPath || callbackHandler == null) {
             return null;
         }
         final PasswordCallback cb = new PasswordCallback(prompt, false);
-        preguntar(new Callback[] { cb });
+        ask(new Callback[] { cb });
         final char[] p = cb.getPassword();
         cb.clearPassword();
         return p;
     }
 
-    private static char[] leerDeUrl(final String url) throws LoginException {
+    private static char[] readFromUrl(final String url) throws LoginException {
         try {
             final InputStream in = new URL(url).openStream();
             try {
                 final java.io.BufferedReader r = new java.io.BufferedReader(
                         new java.io.InputStreamReader(in, "UTF-8"));
-                final String linea = r.readLine();
-                return linea == null ? new char[0] : linea.toCharArray();
+                final String line = r.readLine();
+                return line == null ? new char[0] : line.toCharArray();
             } finally {
                 in.close();
             }
         } catch (final IOException e) {
-            final LoginException le = new LoginException("no se pudo leer la contrasena de " + url);
+            final LoginException le =
+                    new LoginException("the password could not be read from " + url);
             le.initCause(e);
             throw le;
         }
     }
 
-    private void preguntar(final Callback[] cbs) throws LoginException {
+    private void ask(final Callback[] cbs) throws LoginException {
         try {
             callbackHandler.handle(cbs);
         } catch (final IOException e) {
-            final LoginException le = new LoginException("fallo el CallbackHandler");
+            final LoginException le = new LoginException("the CallbackHandler failed");
             le.initCause(e);
             throw le;
         } catch (final UnsupportedCallbackException e) {
             final LoginException le =
-                    new LoginException("el CallbackHandler no soporta " + e.getCallback());
+                    new LoginException("the CallbackHandler does not support " + e.getCallback());
             le.initCause(e);
             throw le;
         }
     }
 
-    private static void borrar(final char[] p) {
+    private static void wipe(final char[] p) {
         if (p != null) {
-            // Sobrescribir y no confiar en el recolector: un arreglo de char con una contrasena
-            // puede quedar en memoria hasta que alguien lo pise, y un volcado la mostraria.
+            // To overwrite and not to trust the collector: an array of char with a password may
+                    // stay in memory until somebody treads on it, and a dump would show it.
             java.util.Arrays.fill(p, ' ');
         }
     }
 
     /**
-     * Pone en el {@link Subject} el principal, la cadena de certificados y la clave privada.
+     * It puts the principal, the certificate chain and the private key in the {@link Subject}.
      *
-     * @return {@code true} si este modulo habia tenido exito en {@link #login}
-     * @throws LoginException si el {@code Subject} es de solo lectura
+     * @return {@code true} if this module had had success in {@link #login}
+     * @throws LoginException if the {@code Subject} is read-only
      */
     public boolean commit() throws LoginException {
         if (!succeeded) {
             return false;
         }
         if (subject.isReadOnly()) {
-            limpiar();
+            reset();
             throw new LoginException("Subject is ReadOnly");
         }
         if (!subject.getPrincipals().contains(principal)) {
             subject.getPrincipals().add(principal);
         }
-        // La cadena va como credencial publica y la clave como privada: la cadena se le muestra a
-        // cualquiera para que verifique, la clave no sale de aca.
+        // The chain goes as a public credential and the key as a private one: the chain is
+                // shown to anybody so that they should verify, the key does not leave here.
         if (!subject.getPublicCredentials().contains(certP)) {
             subject.getPublicCredentials().add(certP);
         }
@@ -316,10 +320,10 @@ public class KeyStoreLoginModule implements LoginModule {
     }
 
     /**
-     * Deshace lo que este modulo hizo, porque la autenticacion en conjunto fallo.
+     * It undoes what this module did, because the authentication as a whole failed.
      *
-     * @return {@code true} si este modulo habia tenido exito en {@link #login}
-     * @throws LoginException si el {@code Subject} es de solo lectura
+     * @return {@code true} if this module had had success in {@link #login}
+     * @throws LoginException if the {@code Subject} is read-only
      */
     public boolean abort() throws LoginException {
         if (!succeeded) {
@@ -327,7 +331,7 @@ public class KeyStoreLoginModule implements LoginModule {
         }
         if (!commitSucceeded) {
             succeeded = false;
-            limpiar();
+            reset();
         } else {
             logout();
         }
@@ -335,14 +339,15 @@ public class KeyStoreLoginModule implements LoginModule {
     }
 
     /**
-     * Saca del {@link Subject} lo que este modulo habia puesto, y destruye la clave privada.
+     * It takes out of the {@link Subject} what this module had put in, and destroys the private
+     * key.
      *
-     * @return {@code true} siempre
-     * @throws LoginException si el {@code Subject} es de solo lectura
+     * @return {@code true} always
+     * @throws LoginException if the {@code Subject} is read-only
      */
     public boolean logout() throws LoginException {
         if (subject.isReadOnly()) {
-            limpiar();
+            reset();
             throw new LoginException("Subject is ReadOnly");
         }
         if (principal != null) {
@@ -354,24 +359,25 @@ public class KeyStoreLoginModule implements LoginModule {
         if (privateCredential != null) {
             subject.getPrivateCredentials().remove(privateCredential);
             try {
-                // destroy() suelta las referencias de la credencial; no borra la clave, que
-                // sigue viva si alguien mas la tiene. Igual hay que llamarlo: es lo que marca la
-                // credencial como destruida para quien la consulte, y es lo que el JDK hace aca.
+                // destroy() releases the credential's references; it does not erase the key,
+                                // which goes on living if somebody else has it. It has to be called
+                                // all the same: it is what marks the credential as destroyed for
+                                // whoever consults it, and it is what the JDK does here.
                 privateCredential.destroy();
             } catch (final javax.security.auth.DestroyFailedException e) {
                 final LoginException le =
-                        new LoginException("no se pudo destruir la credencial privada");
+                        new LoginException("the private credential could not be destroyed");
                 le.initCause(e);
                 throw le;
             }
         }
         succeeded = false;
         commitSucceeded = false;
-        limpiar();
+        reset();
         return true;
     }
 
-    private void limpiar() {
+    private void reset() {
         principal = null;
         certP = null;
         privateCredential = null;

@@ -1,10 +1,10 @@
 package javax.naming;
 
 /**
- * Se lanza cuando se quiso atar un nombre que ya esta atado. Es la razon por la que existe
- * `rebind`: `bind` se niega a pisar, `rebind` pisa.
+ * Thrown when trying to bind a name that is already bound. It is the reason `rebind` exists: `bind`
+ * refuses to overwrite, `rebind` overwrites.
  *
- * <p>La jerarquia entera y el estado que arrastra estan explicados en `NamingException`.
+ * <p>The whole hierarchy and the state it carries are explained in `NamingException`.
  */
 public class NameAlreadyBoundException extends NamingException {
 

@@ -5,100 +5,100 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Fabrica tipos de evento en tiempo de ejecucion, sin que exista una clase Java para ellos.
+ * It manufactures types of event at run time, without a Java class existing for them.
  *
- * <h2>Para que sirve</h2>
+ * <h2>What it is for</h2>
  *
- * <p>Para un puente. Un motor de reglas, un lenguaje de scripting o un servidor de aplicaciones
- * sabe en tiempo de ejecucion que eventos quiere emitir, y no puede tener una clase escrita para
- * cada uno: los nombres y los campos salen de una configuracion que se lee al arrancar.
+ * <p>For a bridge. A rules engine, a scripting language or an application server knows at run time
+ * which events it wants to emit, and it cannot have a class written for each one: the names and the
+ * fields come from a configuration that is read on starting.
  *
- * <p>Esta fabrica arma el tipo desde {@link ValueDescriptor} y {@link AnnotationElement} —los
- * mismos metadatos que se sacarian de una clase— y genera la clase por debajo.
+ * <p>This factory puts the type together from {@link ValueDescriptor} and {@link AnnotationElement}
+ * --the same metadata that would be taken out of a class-- and generates the class underneath.
  *
- * <h2>Como se llenan los campos</h2>
+ * <h2>How the fields are filled</h2>
  *
- * <p>Con {@link Event#set(int, Object)}, por indice. Un evento fabricado asi no tiene campos Java a
- * los que asignarles nada, y el indice es el de la lista de descriptores con la que se lo creo. Es
- * la razon de que {@code Event.set} exista.
+ * <p>With {@link Event#set(int, Object)}, by index. An event manufactured like this has no Java
+ * fields to assign anything to, and the index is that of the list of descriptors it was created
+ * with. It is the reason why {@code Event.set} exists.
  *
- * <h2>Estado en esta VM</h2>
+ * <h2>State in this VM</h2>
  *
- * <p>Fabricar el tipo significa <strong>generar una clase</strong> y definirla en tiempo de
- * ejecucion, que necesita soporte de la VM que esta biblioteca no tiene. {@link #create} falla
- * diciendolo, en vez de devolver una fabrica que despues no fabrique eventos.
+ * <p>Manufacturing the type means <strong>generating a class</strong> and defining it at run time,
+ * which needs support from the VM that this library does not have. {@link #create} fails saying so,
+ * instead of returning a factory that afterwards manufactures no events.
  *
  * @since 9
  */
 public final class EventFactory {
 
-    private static final String NO_HAY =
-            "fabricar un tipo de evento genera y define una clase en tiempo de ejecucion, que esta "
-            + "VM no soporta todavia";
+    private static final String NOT_THERE =
+            "manufacturing a type of event generates and defines a class at run time, which "
+            + "this VM does not support yet";
 
     private EventFactory() {
     }
 
     /**
-     * Una fabrica para un tipo de evento con esos campos y esas anotaciones.
+     * A factory for a type of event with those fields and those annotations.
      *
-     * @param annotationElements las anotaciones del tipo
-     * @param fields los campos
-     * @return la fabrica
-     * @throws NullPointerException si alguno de los dos es {@code null}
-     * @throws UnsupportedOperationException en esta VM; ver la nota de la clase
+     * @param annotationElements the annotations of the type
+     * @param fields the fields
+     * @return the factory
+     * @throws NullPointerException if either of the two is {@code null}
+     * @throws UnsupportedOperationException in this VM; see the note of the class
      */
     public static EventFactory create(final List<AnnotationElement> annotationElements,
             final List<ValueDescriptor> fields) {
         Objects.requireNonNull(annotationElements, "annotationElements");
         Objects.requireNonNull(fields, "fields");
-        // Se copian y se validan antes de fallar: si algun dia hay soporte, el error de un campo
-        // repetido tiene que salir aca y no al primer evento emitido.
-        final List<String> vistos = new ArrayList<String>();
+        // They are copied and validated before failing: if some day there is support, the error of
+        // a repeated field has to come out here and not on the first event emitted.
+        final List<String> seen = new ArrayList<String>();
         for (final ValueDescriptor v : fields) {
-            if (vistos.contains(v.getName())) {
-                throw new IllegalArgumentException("hay dos campos llamados " + v.getName());
+            if (seen.contains(v.getName())) {
+                throw new IllegalArgumentException("there are two fields called " + v.getName());
             }
-            vistos.add(v.getName());
+            seen.add(v.getName());
         }
-        throw new UnsupportedOperationException(NO_HAY);
+        throw new UnsupportedOperationException(NOT_THERE);
     }
 
     /**
-     * Un evento nuevo de este tipo.
+     * A new event of this type.
      *
-     * @return el evento
-     * @throws UnsupportedOperationException en esta VM; ver la nota de la clase
+     * @return the event
+     * @throws UnsupportedOperationException in this VM; see the note of the class
      */
     public Event newEvent() {
-        throw new UnsupportedOperationException(NO_HAY);
+        throw new UnsupportedOperationException(NOT_THERE);
     }
 
     /**
-     * El tipo que fabrica esta fabrica.
+     * The type this factory manufactures.
      *
-     * @return el tipo
-     * @throws UnsupportedOperationException en esta VM; ver la nota de la clase
+     * @return the type
+     * @throws UnsupportedOperationException in this VM; see the note of the class
      */
     public EventType getEventType() {
-        throw new UnsupportedOperationException(NO_HAY);
+        throw new UnsupportedOperationException(NOT_THERE);
     }
 
     /**
-     * Registra el tipo, para que JFR pueda grabarlo.
+     * It registers the type, so that JFR can record it.
      *
-     * @throws UnsupportedOperationException en esta VM; ver la nota de la clase
+     * @throws UnsupportedOperationException in this VM; see the note of the class
      */
     public void register() {
-        throw new UnsupportedOperationException(NO_HAY);
+        throw new UnsupportedOperationException(NOT_THERE);
     }
 
     /**
-     * Saca el tipo del registro.
+     * It takes the type out of the register.
      *
-     * @throws UnsupportedOperationException en esta VM; ver la nota de la clase
+     * @throws UnsupportedOperationException in this VM; see the note of the class
      */
     public void unregister() {
-        throw new UnsupportedOperationException(NO_HAY);
+        throw new UnsupportedOperationException(NOT_THERE);
     }
 }

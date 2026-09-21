@@ -4,42 +4,41 @@ import java.io.IOException;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Objects;
 
-// Un `FileVisitor` que no hace nada y sigue de largo, para heredar y sobreescribir solo lo que
-// interesa.
+// A `FileVisitor` that does nothing and carries on, to inherit from and override only what matters.
 //
-// **Las fallas se relanzan, no se tragan.** `visitFileFailed` y `postVisitDirectory` levantan la
-// excepcion que reciben. Es la eleccion prudente para un valor por omision: una subclase que quiera
-// ignorar errores tiene que decirlo, y no al reves -- un recorrido que se saltea archivos en
-// silencio da un resultado incompleto sin avisar.
+// **The failures are rethrown, not swallowed.** `visitFileFailed` and `postVisitDirectory` throw
+// the exception they receive. It is the prudent choice for a default: a subclass that wants to
+// ignore errors has to say so, and not the other way round -- a walk that skips files in silence
+// gives an incomplete result without a word.
 //
-// @param <T> el tipo de las rutas
+// @param <T> the paths' type
 public class SimpleFileVisitor<T> implements FileVisitor<T> {
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected SimpleFileVisitor() {
     }
 
-    /** Entra al directorio. */
+    /** It goes into the directory. */
     public FileVisitResult preVisitDirectory(T dir, BasicFileAttributes attrs) throws IOException {
         Objects.requireNonNull(dir);
         Objects.requireNonNull(attrs);
         return FileVisitResult.CONTINUE;
     }
 
-    /** No hace nada con el archivo. */
+    /** It does nothing with the file. */
     public FileVisitResult visitFile(T file, BasicFileAttributes attrs) throws IOException {
         Objects.requireNonNull(file);
         Objects.requireNonNull(attrs);
         return FileVisitResult.CONTINUE;
     }
 
-    /** Relanza la falla. */
+    /** It rethrows the failure. */
     public FileVisitResult visitFileFailed(T file, IOException exc) throws IOException {
         Objects.requireNonNull(file);
         throw exc;
     }
 
-    /** Relanza la falla si la hubo; si no, sigue. */
+    /** It rethrows the failure if there was one; otherwise it carries on. */
     public FileVisitResult postVisitDirectory(T dir, IOException exc) throws IOException {
         Objects.requireNonNull(dir);
         if (exc != null) {

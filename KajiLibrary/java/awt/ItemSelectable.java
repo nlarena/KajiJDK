@@ -3,19 +3,19 @@ package java.awt;
 import java.awt.event.ItemListener;
 
 /**
- * Algo con elementos que se pueden elegir: una lista, un desplegable, una casilla.
+ * Something with items that can be selected: a list, a drop-down, a check box.
  *
- * <p>Lo que tienen en común no es cómo se ven sino qué anuncian: cuáles de sus elementos están
- * elegidos, y a quién avisarle cuando eso cambia.
+ * <p>What they have in common is not how they look but what they announce: which of their items are
+ * selected, and whom to notify when that changes.
  */
 public interface ItemSelectable {
 
-    /** Los elementos elegidos, o `null` si no hay ninguno. */
+    /** The selected items, or `null` if there are none. */
     Object[] getSelectedObjects();
 
-    /** Suma alguien a quien avisarle de los cambios. */
+    /** Adds someone to notify of the changes. */
     void addItemListener(ItemListener l);
 
-    /** Saca a ese oyente. */
+    /** Removes that listener. */
     void removeItemListener(ItemListener l);
 }

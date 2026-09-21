@@ -1,59 +1,61 @@
 package java.security;
 
-// Los parametros de un generador determinista de bits aleatorios (DRBG), segun NIST SP 800-90Ar1.
+// The parameters of a deterministic random bit generator (DRBG), according to NIST SP 800-90Ar1.
 //
 // ===============================================================================================
-// QUE ES UN DRBG Y POR QUE LOS PARAMETROS SON TRES CLASES
+// WHAT A DRBG IS AND WHY THE PARAMETERS ARE THREE CLASSES
 // ===============================================================================================
 //
-// Un DRBG no produce aleatoriedad: la **estira**. Se lo siembra una vez con entropia de verdad y a
-// partir de ahi genera bits deterministicamente. Toda su seguridad esta en la semilla y en que su
-// estado interno no se filtre.
+// A DRBG does not produce randomness: it **stretches** it. It is seeded once with real entropy and
+// from there it generates bits deterministically. All of its security is in the seed and in its
+// internal state not leaking.
 //
-// De ahi salen los tres momentos que cada clase describe:
+// Out of that come the three moments each class describes:
 //
-//   - `Instantiation` es la creacion: cuanta fuerza se pide, si se va a poder resembrar, y una
-//     "cadena de personalizacion" que separa a este generador de otro sembrado con la misma
-//     entropia. Esa cadena es lo que evita que dos maquinas clonadas —dos VMs de la misma imagen—
-//     produzcan la misma secuencia.
-//   - `NextBytes` es cada pedido de bits.
-//   - `Reseed` es volver a mezclar entropia fresca.
+//   - `Instantiation` is the creation: how much strength is asked for, whether it is going to be
+//     possible to reseed, and a "personalisation string" that separates this generator from another
+//     seeded with the same entropy. That string is what keeps two cloned machines —two VMs of the
+//     same image— from producing the same sequence.
+//   - `NextBytes` is each request for bits.
+//   - `Reseed` is mixing fresh entropy in again.
 //
-// La resistencia a prediccion es la propiedad que mas se malinterpreta: quiere decir que quien vea
-// el estado interno **ahora** no puede predecir los bits que vengan despues, porque antes de
-// generarlos se mezcla entropia nueva. Es cara —pide entropia de verdad en cada llamada— y por eso
-// se pide por operacion y no se deja prendida.
+// Prediction resistance is the property that is most misunderstood: it means that whoever sees the
+// internal state **now** cannot predict the bits that come afterwards, because before generating
+// them new entropy is mixed in. It is expensive —it asks for real entropy at every call— and that
+// is why it is asked for per operation and is not left turned on.
 //
-// Esta clase es un **descriptor** y nada mas: no genera un solo bit. Se pasa a
-// `SecureRandom.getInstance("DRBG", params)`, que en esta biblioteca no existe (ver `Signature`
-// para por que no hay `SecureRandom`). Se declara igual porque es datos puros y porque describir
-// correctamente lo que se pide es independiente de que haya quien lo cumpla.
+// This class is a **descriptor** and nothing else: it does not generate a single bit. It is passed
+// to `SecureRandom.getInstance("DRBG", params)`, which in this library does not exist (see
+// `Signature` for why there is no `SecureRandom`). It is declared all the same because it is pure
+// data and because describing correctly what is asked for is independent of there being somebody to
+// fulfil it.
 public final class DrbgParameters {
 
-    // No se instancia: es solo el techo de las tres clases anidadas y de sus fabricas.
+    // It is not instantiated: it is only the roof of the three nested classes and of their
+    // factories.
     private DrbgParameters() {
     }
 
-    // Que sabe hacer un DRBG mas alla de generar.
+    // What a DRBG knows how to do beyond generating.
     public enum Capability {
 
-        // Resembrar y resistencia a prediccion.
+        // Reseeding and prediction resistance.
         PR_AND_RESEED,
 
-        // Solo resembrar.
+        // Reseeding only.
         RESEED_ONLY,
 
-        // Ninguna de las dos: una vez sembrado, genera hasta agotarse.
+        // Neither of the two: once seeded, it generates until it runs out.
         NONE;
 
-        // El nombre tal como lo escribe la propiedad de seguridad `securerandom.drbg.config`:
-        // "pr_and_reseed", "reseed_only", "none".
+        // The name as the security property `securerandom.drbg.config` writes it: "pr_and_reseed",
+        // "reseed_only", "none".
         @Override
         public String toString() {
             return this.name().toLowerCase(java.util.Locale.ROOT);
         }
 
-        // PR implica reseed: no se puede mezclar entropia por operacion sin poder resembrar.
+        // PR implies reseed: entropy cannot be mixed per operation without being able to reseed.
         public boolean supportsReseeding() {
             return this != NONE;
         }
@@ -63,7 +65,7 @@ public final class DrbgParameters {
         }
     }
 
-    // Lo que se pide al crear el DRBG.
+    // What is asked for when creating the DRBG.
     public static final class Instantiation implements SecureRandomParameters {
 
         private final int strength;
@@ -76,8 +78,8 @@ public final class DrbgParameters {
             this.personalizationString = personalizationString;
         }
 
-        // La fuerza en bits, o -1 para "la que el proveedor prefiera". Un DRBG puede dar **mas** de
-        // lo pedido, nunca menos.
+        // The strength in bits, or -1 for "whichever the provider prefers". A DRBG can give
+        // **more** than what was asked for, never less.
         public int getStrength() {
             return this.strength;
         }
@@ -86,28 +88,29 @@ public final class DrbgParameters {
             return this.capability;
         }
 
-        // Copia de la cadena de personalizacion, o null. Es lo que separa a este generador de otro
-        // sembrado con la misma entropia; puede ser algo tan mundano como el nombre de la maquina.
+        // A copy of the personalisation string, or null. It is what separates this generator from
+        // another seeded with the same entropy; it can be something as mundane as the name of the
+        // machine.
         public byte[] getPersonalizationString() {
-            return copiar(this.personalizationString);
+            return copyOf(this.personalizationString);
         }
 
-        // Imprime la cadena de personalizacion entera, no un resumen. No es un descuido del JDK:
-        // esa cadena **no es secreta** —su unico trabajo es separar dos generadores, no aportar
-        // entropia— asi que verla en un log no debilita nada.
+        // It prints the whole personalisation string, not a summary. It is not an oversight of the
+        // JDK: that string **is not secret** —its only job is to separate two generators, not to
+        // contribute entropy— so seeing it in a log weakens nothing.
         //
-        // El formato se arma a mano en vez de con `java.util.Arrays.toString(byte[])` porque esa
-        // sobrecarga esta rota en esta biblioteca: imprime cada byte como **caracter** en lugar de
-        // como numero, asi que {1} sale como el caracter de control 0x01 y no como "1". Ver el
-        // informe; cuando se arregle, esto se puede reemplazar por la llamada directa.
+        // The format is built by hand instead of with `java.util.Arrays.toString(byte[])` because
+        // that overload is broken in this library: it prints each byte as a **character** instead
+        // of as a number, so {1} comes out as the control character 0x01 and not as "1". See the
+        // report; when it is fixed, this can be replaced by the direct call.
         @Override
         public String toString() {
             return this.strength + "," + this.capability + ","
-                + listar(this.personalizationString);
+                + listOf(this.personalizationString);
         }
     }
 
-    // Lo que se pide en cada generacion de bits.
+    // What is asked for at each generation of bits.
     public static final class NextBytes implements SecureRandomParameters {
 
         private final int strength;
@@ -124,19 +127,19 @@ public final class DrbgParameters {
             return this.strength;
         }
 
-        // Si hay que mezclar entropia fresca antes de generar. Caro, y solo tiene sentido si el
-        // DRBG se creo con `PR_AND_RESEED`.
+        // Whether fresh entropy has to be mixed in before generating. Expensive, and it only makes
+        // sense if the DRBG was created with `PR_AND_RESEED`.
         public boolean getPredictionResistance() {
             return this.predictionResistance;
         }
 
-        // Copia de la entrada adicional, o null. Se mezcla con el estado solo para esta llamada.
+        // A copy of the additional input, or null. It is mixed with the state only for this call.
         public byte[] getAdditionalInput() {
-            return copiar(this.additionalInput);
+            return copyOf(this.additionalInput);
         }
     }
 
-    // Lo que se pide al resembrar.
+    // What is asked for when reseeding.
     public static final class Reseed implements SecureRandomParameters {
 
         private final boolean predictionResistance;
@@ -152,11 +155,11 @@ public final class DrbgParameters {
         }
 
         public byte[] getAdditionalInput() {
-            return copiar(this.additionalInput);
+            return copyOf(this.additionalInput);
         }
     }
 
-    private static byte[] copiar(byte[] b) {
+    private static byte[] copyOf(byte[] b) {
         if (b == null) {
             return null;
         }
@@ -165,8 +168,8 @@ public final class DrbgParameters {
         return c;
     }
 
-    // El mismo formato que `java.util.Arrays.toString(byte[])`: "null", "[]", "[1, 2]".
-    private static String listar(byte[] b) {
+    // The same format as `java.util.Arrays.toString(byte[])`: "null", "[]", "[1, 2]".
+    private static String listOf(byte[] b) {
         if (b == null) {
             return "null";
         }
@@ -184,8 +187,8 @@ public final class DrbgParameters {
         return sb.toString();
     }
 
-    // Los parametros de creacion. `strength` puede ser -1 para dejar elegir al proveedor; cualquier
-    // otro negativo es un error, porque pedir "fuerza -3" no significa nada.
+    // The parameters of creation. `strength` may be -1 to let the provider choose; any other
+    // negative is an error, because asking for "strength -3" means nothing.
     public static Instantiation instantiation(int strength, Capability capability,
                                               byte[] personalizationString) {
         if (strength < -1) {
@@ -194,7 +197,7 @@ public final class DrbgParameters {
         if (capability == null) {
             throw new NullPointerException("Capability is null");
         }
-        return new Instantiation(strength, capability, copiar(personalizationString));
+        return new Instantiation(strength, capability, copyOf(personalizationString));
     }
 
     public static NextBytes nextBytes(int strength, boolean predictionResistance,
@@ -202,10 +205,10 @@ public final class DrbgParameters {
         if (strength < -1) {
             throw new IllegalArgumentException("Invalid strength: " + strength);
         }
-        return new NextBytes(strength, predictionResistance, copiar(additionalInput));
+        return new NextBytes(strength, predictionResistance, copyOf(additionalInput));
     }
 
     public static Reseed reseed(boolean predictionResistance, byte[] additionalInput) {
-        return new Reseed(predictionResistance, copiar(additionalInput));
+        return new Reseed(predictionResistance, copyOf(additionalInput));
     }
 }

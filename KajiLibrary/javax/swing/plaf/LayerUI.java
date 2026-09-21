@@ -22,28 +22,28 @@ import javax.swing.JComponent;
 import javax.swing.JLayer;
 
 /**
- * El aspecto de un {@link JLayer}: donde se escribe lo que se le agrega a un componente.
+ * A {@link JLayer}'s look and feel: where what is added to a component is written.
  *
- * <h2>Decorar sin heredar</h2>
+ * <h2>Decorating without inheriting</h2>
  *
- * <p>Para agregarle algo a un componente -- un velo mientras carga, un resaltado, un contador de
- * caracteres -- la forma vieja es heredar de el. Eso obliga a una subclase por componente y no se
- * puede combinar: un campo de texto con velo y con resaltado necesitaria las dos herencias.
+ * <p>To add something to a component -- a veil while it loads, a highlight, a character counter
+ * -- the old way is to inherit from it. That forces one subclass per component and cannot be
+ * combined: a text field with a veil and a highlight would need both inheritances.
  *
- * <p>Aca no se hereda: se envuelve. El {@link JLayer} contiene al componente y le pide a este
- * objeto que dibuje encima y que mire los eventos. El mismo {@code LayerUI} sirve para cualquier
- * componente, y dos se apilan envolviendo dos veces.
+ * <p>Here nothing is inherited: it is wrapped. The {@link JLayer} contains the component and
+ * asks this object to draw on top and to watch the events. The same {@code LayerUI} serves for
+ * any component, and two are stacked by wrapping twice.
  *
- * <h2>Los eventos hay que pedirlos</h2>
+ * <h2>The events have to be asked for</h2>
  *
- * <p>{@link #eventDispatched} no recibe nada hasta que alguien llame a
- * {@link JLayer#setLayerEventMask}. No es un olvido: mirar todos los eventos de todos los
- * componentes envueltos costaria caro, y casi ninguna decoracion los necesita.
+ * <p>{@link #eventDispatched} receives nothing until somebody calls
+ * {@link JLayer#setLayerEventMask}. It is not an oversight: watching every event of every
+ * wrapped component would be expensive, and almost no decoration needs them.
  *
- * <p>Ademas los eventos llegan <em>antes</em> que al componente. Es lo que permite que una capa se
- * los coma -- consumiendolos -- para deshabilitar lo que envuelve sin tocarlo.
+ * <p>Besides, the events arrive <em>before</em> the component gets them. That is what allows a
+ * layer to eat them -- by consuming them -- so as to disable what it wraps without touching it.
  *
- * @param <V> el tipo del componente que se envuelve.
+ * @param <V> the type of the component that is wrapped.
  */
 public class LayerUI<V extends Component> extends ComponentUI implements Serializable {
 
@@ -54,21 +54,21 @@ public class LayerUI<V extends Component> extends ComponentUI implements Seriali
     }
 
     /**
-     * Dibuja la capa.
+     * Draws the layer.
      *
-     * <p>Por omision dibuja lo que envuelve y nada mas. Una capa que quiera pintar encima llama
-     * primero a {@code super.paint(g, c)} y despues dibuja lo suyo; una que quiera pintar debajo
-     * hace al reves.
+     * <p>By default it draws what it wraps and nothing else. A layer that wants to paint on top
+     * calls {@code super.paint(g, c)} first and then draws its own; one that wants to paint
+     * underneath does the reverse.
      */
     public void paint(Graphics g, JComponent c) {
         c.paint(g);
     }
 
     /**
-     * Un evento del componente envuelto o de sus hijos.
+     * An event of the wrapped component or of its children.
      *
-     * <p>No llega nada hasta que se pida con {@link JLayer#setLayerEventMask}; ver la nota de la
-     * clase. Por omision reparte segun el tipo a los {@code process...} de abajo.
+     * <p>Nothing arrives until it is asked for with {@link JLayer#setLayerEventMask}; see the class
+     * note. By default it hands out by type to the {@code process...} methods below.
      */
     public void eventDispatched(AWTEvent e, JLayer<? extends V> l) {
         if (e instanceof FocusEvent) {
@@ -126,15 +126,17 @@ public class LayerUI<V extends Component> extends ComponentUI implements Seriali
     protected void processHierarchyBoundsEvent(HierarchyEvent e, JLayer<? extends V> l) {
     }
 
-    /** Se llama cuando cambia el aspecto del sistema; propaga al componente envuelto. */
+    /**
+     * It is called when the system's look and feel changes; it propagates to the wrapped component.
+     */
     public void updateUI(JLayer<? extends V> l) {
     }
 
     /**
-     * Se engancha a la capa.
+     * Hooks itself to the layer.
      *
-     * <p>Escucha sus propiedades para poder reaccionar a que cambien la vista o la mascara de
-     * eventos.
+     * <p>It listens to its properties so as to be able to react to the view or the event mask
+     * being changed.
      */
     public void installUI(JComponent c) {
         addPropertyChangeListener((JLayer<?>) c);
@@ -171,17 +173,19 @@ public class LayerUI<V extends Component> extends ComponentUI implements Seriali
     }
 
     /**
-     * Avisa que una propiedad del aspecto cambio.
+     * Reports that a property of the look and feel changed.
      *
-     * <p>Un mismo aspecto puede estar puesto en varias capas, asi que el aviso no dice en cual
-     * paso: cada capa lo recibe y decide. De ahi que la reaccion vaya en
-     * {@link #applyPropertyChange}, que si sabe de cual se trata.
+     * <p>One same look and feel may be installed on several layers, so the notice does not say in
+     * which one it happened: each layer receives it and decides. Hence the reaction goes in
+     * {@link #applyPropertyChange}, which does know which one it is about.
      */
     protected void firePropertyChange(String propertyName, Object oldValue, Object newValue) {
         propertyChangeSupport.firePropertyChange(propertyName, oldValue, newValue);
     }
 
-    /** Lo llama la capa cuando el aspecto avisa un cambio; ver {@link #firePropertyChange}. */
+    /**
+     * The layer calls it when the look and feel reports a change; see {@link #firePropertyChange}.
+     */
     public void applyPropertyChange(PropertyChangeEvent e, JLayer<? extends V> l) {
     }
 
@@ -193,7 +197,7 @@ public class LayerUI<V extends Component> extends ComponentUI implements Seriali
         return Component$BaselineResizeBehavior.OTHER;
     }
 
-    /** Acomoda lo que hay adentro de la capa. */
+    /** Arranges what is inside the layer. */
     public void doLayout(JLayer<? extends V> l) {
         Component view = l.getView();
         if (view != null) {
@@ -233,16 +237,16 @@ public class LayerUI<V extends Component> extends ComponentUI implements Seriali
     }
 
     /**
-     * Repinta esa zona de la capa.
+     * Repaints that area of the layer.
      *
-     * <p>Es el gancho que permite a una capa repintarse entera cuando cambia una parte: una
-     * decoracion que rodea al componente no se puede repintar de a pedazos.
+     * <p>It is the hook that lets a layer repaint itself whole when a part changes: a decoration
+     * that surrounds the component cannot be repainted piecemeal.
      */
     public void paintImmediately(int x, int y, int width, int height, JLayer<? extends V> l) {
         l.paintImmediately(x, y, width, height);
     }
 
-    /** Una imagen que se estaba cargando avanzo; devuelve si sigue haciendo falta el aviso. */
+    /** An image that was loading made progress; it returns whether the notice is still needed. */
     public boolean imageUpdate(Image img, int infoflags, int x, int y, int w, int h,
             JLayer<? extends V> l) {
         return l.imageUpdate(img, infoflags, x, y, w, h);

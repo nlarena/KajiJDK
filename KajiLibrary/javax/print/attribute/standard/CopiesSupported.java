@@ -5,36 +5,36 @@ import javax.print.attribute.SetOfIntegerSyntax;
 import javax.print.attribute.SupportedValuesAttribute;
 
 /*
- * CABECERA DE FAMILIA -- los atributos {@code SetOfIntegerSyntax} de este paquete.
+ * FAMILY HEADER -- this package's {@code SetOfIntegerSyntax} attributes.
  *
- * <p>Estos no llevan un numero sino un <b>conjunto</b> de numeros, guardado como lista de rangos.
- * Toda la aritmetica --ordenar, fusionar los rangos que se tocan, descartar los vacios-- esta en
- * {@link javax.print.attribute.SetOfIntegerSyntax SetOfIntegerSyntax}, que canonicaliza en el
- * constructor. Lo unico que agrega cada subclase de aca es <b>que valores son legales</b>, y lo
- * hace despues de llamar a {@code super}, mirando el resultado ya canonico.
+ * <p>These carry not a number but a <b>set</b> of numbers, kept as a list of ranges. All the
+ * arithmetic --sorting, merging the ranges that touch, discarding the empty ones-- is in {@link
+ * javax.print.attribute.SetOfIntegerSyntax SetOfIntegerSyntax}, which canonicalizes in the
+ * constructor. The only thing each subclass here adds is <b>which values are legal</b>, and it does
+ * so after calling {@code super}, looking at the already canonical result.
  *
- * <p>Ese orden importa y es observable: {@code new PageRanges("5-1")} no falla por el 5 ni por el
- * 1 sino porque {@code 5-1} es un rango vacio, la canonicalizacion lo descarta y queda un conjunto
- * sin elementos --que es lo que la subclase rechaza. Por eso el mensaje habla de longitud cero y
- * no de un valor fuera de rango.
+ * <p>That order matters and is observable: {@code new PageRanges("5-1")} does not fail because of
+ * the 5 or the 1 but because {@code 5-1} is an empty range, the canonicalization discards it and a
+ * set with no elements is left --which is what the subclass rejects. That is why the message speaks
+ * of zero length and not of a value out of range.
  *
- * <p>Cinco de las seis son atributos de <em>valores soportados</em>: la respuesta de la impresora a
- * "que numeros puedo pedir", el conjunto que corresponde a un {@code IntegerSyntax} suelto
- * ({@link CopiesSupported} contra {@link Copies}). La sexta, {@link PageRanges}, no: esa es una
- * peticion, y es la unica de la familia que ademas se puede construir desde texto.
+ * <p>Five of the six are <em>supported values</em> attributes: the printer's answer to "which
+ * numbers can I ask for", the set that corresponds to a loose {@code IntegerSyntax} ({@link
+ * CopiesSupported} against {@link Copies}). The sixth, {@link PageRanges}, is not: that one is a
+ * request, and it is the only one in the family that can also be built from text.
  */
 
 /**
- * Que cantidades de {@link Copies} acepta la impresora.
+ * Which quantities of {@link Copies} the printer accepts.
  *
- * <p>Rara vez es un rango corrido de verdad: una impresora que soporta de 1 a 99 lo dice asi, pero
- * el conjunto existe para las que solo aceptan algunos valores sueltos.
+ * <p>It is rarely a truly contiguous range: a printer that supports 1 to 99 says so, but the set
+ * exists for the ones that only accept some loose values.
  */
 public final class CopiesSupported extends SetOfIntegerSyntax implements SupportedValuesAttribute {
 
     private static final long serialVersionUID = 6927711687034846001L;
 
-    /** El conjunto de un solo elemento: la impresora acepta exactamente esa cantidad. */
+    /** The one-element set: the printer accepts exactly that quantity. */
     public CopiesSupported(int member) {
         super(member);
         if (member < 1) {

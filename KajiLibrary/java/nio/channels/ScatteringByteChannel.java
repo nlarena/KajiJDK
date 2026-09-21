@@ -4,28 +4,28 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 
 /**
- * KajiLibrary's java.nio.channels.ScatteringByteChannel — lee repartiendo en varios buffers.
+ * KajiLibrary's java.nio.channels.ScatteringByteChannel — reads spreading into several buffers.
  *
- * <p>"Scattering" es literal: una sola lectura llena el primer buffer, y lo que sobra pasa al
- * siguiente. Sirve para leer de una vez un mensaje con encabezado de largo fijo y cuerpo variable sin
- * copiar despues: un buffer para cada parte, una sola llamada al sistema.
+ * <p>"Scattering" is literal: a single read fills the first buffer, and what is left over goes to
+ * the next. It serves for reading in one go a message with a fixed-length header and a variable
+ * body without copying afterwards: one buffer for each part, a single call to the system.
  *
- * <p>Devuelve `long` y no `int` porque la suma de varios buffers puede pasarse de lo que entra en un
- * `int`.
+ * <p>It returns `long` and not `int` because the sum of several buffers can overshoot what fits in
+ * an `int`.
  */
 public interface ScatteringByteChannel extends ReadableByteChannel {
 
     /**
-     * Lee repartiendo en los buffers indicados.
+     * Reads spreading into the given buffers.
      *
-     * @param dsts los buffers
-     * @param offset el primero a usar
-     * @param length cuantos usar
-     * @return cuantos bytes leyo en total, o -1 si el canal llego a su fin
-     * @throws IOException si falla la lectura
+     * @param dsts the buffers
+     * @param offset the first one to use
+     * @param length how many to use
+     * @return how many bytes it read in total, or -1 if the channel reached its end
+     * @throws IOException if the reading fails
      */
     long read(ByteBuffer[] dsts, int offset, int length) throws IOException;
 
-    /** Lee repartiendo en todos los buffers. */
+    /** Reads spreading into every buffer. */
     long read(ByteBuffer[] dsts) throws IOException;
 }

@@ -1,21 +1,21 @@
 package com.sun.jdi;
 
 /**
- * NativeMethodException de la maquina depurada.
+ * NativeMethodException of the debugged machine.
  *
  * @since 1.3
  */
 public class NativeMethodException extends OpaqueFrameException {
 
-    /** Sin detalle. */
+    /** With no detail. */
     public NativeMethodException() {
         super();
     }
 
     /**
-     * Con un mensaje.
+     * With a message.
      *
-     * @param s el mensaje
+     * @param s the message
      */
     public NativeMethodException(String s) {
         super(s);

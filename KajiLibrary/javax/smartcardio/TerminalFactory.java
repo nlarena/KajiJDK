@@ -9,43 +9,43 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * KajiLibrary's javax.smartcardio.TerminalFactory -- de donde salen los lectores.
+ * KajiLibrary's javax.smartcardio.TerminalFactory -- where the readers come from.
  *
- * <p>{@link #getDefault} da la del sistema; {@link #terminals} da los lectores. Todo el paquete
- * empieza por aca.
+ * <p>{@link #getDefault} gives the system's; {@link #terminals} gives the readers. The whole
+ * package starts here.
  *
- * <h2>El tipo {@code "None"}</h2>
+ * <h2>The {@code "None"} type</h2>
  *
- * <p>El tipo por omision es {@code "PC/SC"} cuando la biblioteca de tarjetas del sistema esta
- * disponible. Cuando no, el tipo es {@code "None"} y {@link #terminals} devuelve una lista
- * <b>vacia</b> en vez de fallar.
+ * <p>The default type is {@code "PC/SC"} when the system's card library is available. When it is
+ * not, the type is {@code "None"} and {@link #terminals} returns an <b>empty</b> list instead of
+ * failing.
  *
- * <p>Es a proposito: un programa que consulte los lectores en una maquina sin lector tiene que
- * enterarse de que no hay ninguno, no recibir un error de instalacion. Lo que si falla es
- * {@link CardTerminals#waitForChange}, con {@link IllegalStateException}, porque esperar un cambio en
- * una lista que nunca va a cambiar seria colgarse para siempre.
+ * <p>It is on purpose: a program that queries the readers on a machine with no reader has to find
+ * out that there is none, not receive an installation error. What does fail is {@link
+ * CardTerminals#waitForChange}, with {@link IllegalStateException}, because waiting for a change in
+ * a list that is never going to change would be hanging forever.
  *
- * <p>KajiJDK no habla con la biblioteca del sistema, asi que el tipo por omision es siempre
- * {@code "None"}. Un proveedor registrado con {@link #getInstance} funciona igual que en el JDK.
+ * <p>KajiJDK does not talk to the system library, so the default type is always {@code "None"}. A
+ * provider registered with {@link #getInstance} works just as in the JDK.
  */
 public final class TerminalFactory {
 
-    /** El tipo que se usa cuando no hay biblioteca de tarjetas. */
+    /** The type used when there is no card library. */
     private static final String NONE_TYPE = "None";
 
-    /** La de por omision, armada la primera vez que se pide. */
+    /** The default one, built the first time it is asked for. */
     private static TerminalFactory defaultFactory = null;
 
-    /** Quien da los lectores. */
+    /** What gives the readers. */
     private final TerminalFactorySpi spi;
 
-    /** De que proveedor salio. */
+    /** Which provider it came from. */
     private final Provider provider;
 
-    /** Como se llama el tipo. */
+    /** What the type is called. */
     private final String type;
 
-    /** Se llega por {@link #getDefault} o {@link #getInstance}. */
+    /** It is reached through {@link #getDefault} or {@link #getInstance}. */
     private TerminalFactory(TerminalFactorySpi spi, Provider provider, String type) {
         this.spi = spi;
         this.provider = provider;
@@ -53,10 +53,10 @@ public final class TerminalFactory {
     }
 
     /**
-     * El tipo por omision.
+     * The default type.
      *
-     * <p>Sale de la propiedad {@code javax.smartcardio.TerminalFactory.DefaultType} si esta puesta.
-     * Ver la nota de la clase.
+     * <p>It comes from the {@code javax.smartcardio.TerminalFactory.DefaultType} property if it is
+     * set. See the class note.
      */
     public static String getDefaultType() {
         String configured = System.getProperty("javax.smartcardio.TerminalFactory.DefaultType");
@@ -66,7 +66,7 @@ public final class TerminalFactory {
         return NONE_TYPE;
     }
 
-    /** La fabrica por omision. Siempre la misma. */
+    /** The default factory. Always the same one. */
     public static synchronized TerminalFactory getDefault() {
         if (defaultFactory == null) {
             String type = getDefaultType();
@@ -75,7 +75,8 @@ public final class TerminalFactory {
                     defaultFactory = getInstance(type, null);
                     return defaultFactory;
                 } catch (NoSuchAlgorithmException e) {
-                    // El tipo configurado no existe: se cae al que siempre esta.
+                    // The configured type does not exist: it falls back to the one that is always
+                    // there.
                 }
             }
             defaultFactory =
@@ -85,11 +86,11 @@ public final class TerminalFactory {
     }
 
     /**
-     * La de ese tipo, del primer proveedor que lo ofrezca.
+     * The one of that type, from the first provider that offers it.
      *
-     * @param params lo que la implementacion necesite para configurarse, o null
-     * @throws NullPointerException si el tipo es null
-     * @throws NoSuchAlgorithmException si ningun proveedor ofrece ese tipo
+     * @param params whatever the implementation needs to configure itself, or null
+     * @throws NullPointerException if the type is null
+     * @throws NoSuchAlgorithmException if no provider offers that type
      */
     public static TerminalFactory getInstance(String type, Object params)
             throws NoSuchAlgorithmException {
@@ -109,12 +110,12 @@ public final class TerminalFactory {
     }
 
     /**
-     * La de ese tipo, de ese proveedor por nombre.
+     * The one of that type, from that provider by name.
      *
-     * @throws NullPointerException si el tipo es null
-     * @throws IllegalArgumentException si el nombre del proveedor esta vacio
-     * @throws NoSuchAlgorithmException si el proveedor no ofrece ese tipo
-     * @throws NoSuchProviderException si no hay un proveedor con ese nombre
+     * @throws NullPointerException if the type is null
+     * @throws IllegalArgumentException if the provider name is empty
+     * @throws NoSuchAlgorithmException if the provider does not offer that type
+     * @throws NoSuchProviderException if there is no provider with that name
      */
     public static TerminalFactory getInstance(String type, Object params, String provider)
             throws NoSuchAlgorithmException, NoSuchProviderException {
@@ -132,10 +133,10 @@ public final class TerminalFactory {
     }
 
     /**
-     * La de ese tipo, de ese proveedor.
+     * The one of that type, from that provider.
      *
-     * @throws NullPointerException si el tipo o el proveedor son null
-     * @throws NoSuchAlgorithmException si el proveedor no ofrece ese tipo
+     * @throws NullPointerException if the type or the provider is null
+     * @throws NoSuchAlgorithmException if the provider does not offer that type
      */
     public static TerminalFactory getInstance(String type, Object params, Provider provider)
             throws NoSuchAlgorithmException {
@@ -153,7 +154,7 @@ public final class TerminalFactory {
         return build(service, provider, type, params);
     }
 
-    /** Arma la fabrica desde el servicio del proveedor. */
+    /** Builds the factory from the provider's service. */
     private static TerminalFactory build(Provider.Service service, Provider provider, String type,
                                          Object params) throws NoSuchAlgorithmException {
         Object instance = service.newInstance(params);
@@ -163,28 +164,28 @@ public final class TerminalFactory {
         return new TerminalFactory((TerminalFactorySpi) instance, provider, type);
     }
 
-    /** De que proveedor salio. */
+    /** Which provider it came from. */
     public Provider getProvider() {
         return this.provider;
     }
 
-    /** Como se llama el tipo. */
+    /** What the type is called. */
     public String getType() {
         return this.type;
     }
 
-    /** Los lectores. Ver la nota de la clase. */
+    /** The readers. See the class note. */
     public CardTerminals terminals() {
         return this.spi.engineTerminals();
     }
 
-    /** El tipo y el proveedor. */
+    /** The type and the provider. */
     @Override
     public String toString() {
         return "TerminalFactory for type " + this.type + " from provider " + this.provider.getName();
     }
 
-    /** El proveedor de mentira del tipo {@code "None"}. Ver la nota de la clase. */
+    /** The make-believe provider of the {@code "None"} type. See the class note. */
     private static final class NoneProvider extends Provider {
 
         private static final long serialVersionUID = 2745808869881593918L;
@@ -194,10 +195,10 @@ public final class TerminalFactory {
         }
     }
 
-    /** La implementacion del tipo {@code "None"}: siempre los mismos cero lectores. */
+    /** The implementation of the {@code "None"} type: always the same zero readers. */
     private static final class NoneFactorySpi extends TerminalFactorySpi {
 
-        /** No hay estado, asi que alcanza con una. */
+        /** There is no state, so one is enough. */
         private final CardTerminals terminals = new NoTerminals();
 
         @Override
@@ -206,7 +207,7 @@ public final class TerminalFactory {
         }
     }
 
-    /** Ningun lector, y esperar un cambio es un error. Ver la nota de la clase. */
+    /** No reader, and waiting for a change is an error. See the class note. */
     private static final class NoTerminals extends CardTerminals {
 
         @Override
@@ -219,7 +220,7 @@ public final class TerminalFactory {
 
         @Override
         public boolean waitForChange(long timeout) throws CardException {
-            // Sin lectores no hay nada que pueda cambiar: esperar seria colgarse para siempre.
+            // With no readers there is nothing that can change: waiting would be hanging forever.
             throw new IllegalStateException("no terminals");
         }
     }

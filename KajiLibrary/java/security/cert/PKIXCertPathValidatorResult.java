@@ -2,21 +2,21 @@ package java.security.cert;
 
 import java.security.PublicKey;
 
-// Lo que queda cuando una validacion PKIX salio bien: en que ancla termino confiando, el arbol de
-// politicas, y la clave publica del sujeto.
+// What is left when a PKIX validation went well: which anchor it ended up trusting, the policy
+// tree, and the public key of the subject.
 //
-// El ancla es el dato que casi siempre se ignora y casi siempre importa. Que la cadena valide dice
-// poco por si solo: lo que hay que mirar es **contra que raiz** valido, porque una cadena que
-// termina en una CA que no esperabas es exactamente el ataque. Por eso el resultado la devuelve en
-// vez de tragarsela.
+// The anchor is the datum that is almost always ignored and almost always matters. That the chain
+// validates says little by itself: what has to be looked at is **against which root** it validated,
+// because a chain that ends in a CA you were not expecting is exactly the attack. That is why the
+// result returns it instead of swallowing it.
 public class PKIXCertPathValidatorResult implements CertPathValidatorResult {
 
     private final TrustAnchor trustAnchor;
     private final PolicyNode policyTree;
     private final PublicKey subjectPublicKey;
 
-    // El arbol de politicas puede ser null —significa que no hay politicas que sostener— pero el
-    // ancla y la clave no: sin ellas el resultado no diria nada.
+    // The policy tree may be null —it means that there are no policies to sustain— but the anchor
+    // and the key may not: without them the result would say nothing.
     public PKIXCertPathValidatorResult(TrustAnchor trustAnchor, PolicyNode policyTree,
                                        PublicKey subjectPublicKey) {
         if (subjectPublicKey == null) {
@@ -30,22 +30,22 @@ public class PKIXCertPathValidatorResult implements CertPathValidatorResult {
         this.subjectPublicKey = subjectPublicKey;
     }
 
-    // El ancla en la que termino la cadena.
+    // The anchor the chain ended in.
     public TrustAnchor getTrustAnchor() {
         return this.trustAnchor;
     }
 
-    // La raiz del arbol de politicas validas, o null si no hay.
+    // The root of the tree of valid policies, or null if there is none.
     public PolicyNode getPolicyTree() {
         return this.policyTree;
     }
 
-    // La clave publica del certificado que se estaba validando.
+    // The public key of the certificate that was being validated.
     public PublicKey getPublicKey() {
         return this.subjectPublicKey;
     }
 
-    // Copia superficial, y alcanza: los tres campos son inmutables o de solo lectura.
+    // A shallow copy, and it is enough: the three fields are immutable or read-only.
     @Override
     public Object clone() {
         try {

@@ -1,23 +1,23 @@
 package java.lang.classfile.constantpool;
 
-// La forma común de `CONSTANT_Fieldref`, `CONSTANT_Methodref` y `CONSTANT_InterfaceMethodref`
-// (JVMS §4.4.2): un dueño (`CONSTANT_Class`) y un `CONSTANT_NameAndType`. Las tres tienen la misma
-// estructura y se distinguen sólo por la etiqueta, que es lo que decide qué instrucción de
-// invocación es legal sobre ellas.
+// The common shape of `CONSTANT_Fieldref`, `CONSTANT_Methodref` and `CONSTANT_InterfaceMethodref`
+// (JVMS §4.4.2): an owner (`CONSTANT_Class`) and a `CONSTANT_NameAndType`. All three have the same
+// structure and are told apart only by the tag, which is what decides which invocation instruction is
+// legal on them.
 public interface MemberRefEntry extends PoolEntry {
 
-    /** La clase que declara —o a través de la cual se busca— el miembro. */
+    /** The class that declares --or through which one looks up-- the member. */
     ClassEntry owner();
 
-    /** El par nombre/descriptor del miembro. */
+    /** The member's name/descriptor pair. */
     NameAndTypeEntry nameAndType();
 
-    /** Atajo a `nameAndType().name()`. */
+    /** A shortcut to `nameAndType().name()`. */
     default Utf8Entry name() {
         return nameAndType().name();
     }
 
-    /** Atajo a `nameAndType().type()`. */
+    /** A shortcut to `nameAndType().type()`. */
     default Utf8Entry type() {
         return nameAndType().type();
     }

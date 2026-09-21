@@ -1,7 +1,7 @@
 package com.sun.jdi;
 
 /**
- * VoidType de la maquina depurada.
+ * VoidType of the debugged machine.
  *
  * @since 1.3
  */

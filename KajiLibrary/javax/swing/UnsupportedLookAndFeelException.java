@@ -1,13 +1,14 @@
 package javax.swing;
 
 /**
- * Ese aspecto grafico no sirve en esta plataforma.
+ * That graphical look and feel does not serve on this platform.
  *
- * <h2>Por que es comprobada y no de ejecucion</h2>
+ * <h2>Why it is checked and not a run-time one</h2>
  *
- * <p>Porque no es un error del programa: el aspecto nativo de Windows existe y esta bien pedirlo, y
- * en Linux no hay forma de darlo. Quien lo pide tiene que tener un plan para ese caso --caer en el
- * multiplataforma-- y una excepcion comprobada es lo que lo obliga a escribirlo.
+ * <p>Because it is not a mistake of the program: Windows' native look and feel exists and it is
+ * right to ask for it, and on Linux there is no way of giving it. Whoever asks for it has to
+ * have a plan for that case -- falling back on the cross-platform one -- and a checked exception
+ * is what forces them to write it.
  *
  * @since 1.2
  */
@@ -16,9 +17,9 @@ public class UnsupportedLookAndFeelException extends Exception {
     private static final long serialVersionUID = -6096987026804165577L;
 
     /**
-     * Con ese motivo.
+     * With that reason.
      *
-     * @param s por que no sirve
+     * @param s why it does not serve
      */
     public UnsupportedLookAndFeelException(String s) {
         super(s);

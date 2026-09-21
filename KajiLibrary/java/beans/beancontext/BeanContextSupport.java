@@ -19,80 +19,87 @@ import java.util.Iterator;
 import java.util.Locale;
 
 /**
- * La implementación reusable de {@link BeanContext}.
+ * The reusable implementation of {@link BeanContext}.
  *
- * <p>Es a la vez la colección de los hijos y un hijo de otro contexto — hereda de
- * {@link BeanContextChildSupport} para no repetir la mitad de arriba de esa relación.
+ * <p>It is at once the collection of the children and a child of another context — it extends
+ * {@link BeanContextChildSupport} so as not to repeat the upper half of that relation.
  *
- * <h2>Por qué los hijos van en un mapa y no en una lista</h2>
+ * <h2>Why the children go in a map and not a list</h2>
  *
- * <p>{@link #children} es un `HashMap` de bean a {@link BCSChild}, y no una lista, por dos cosas que
- * pasan seguido: `contains` y `remove` se llaman una vez por operación de membresía y con una lista
- * serían recorridos completos; y de cada hijo hay que guardar algo más que el hijo — su `BCSChild`
- * lleva quién lo trajo, que es lo que permite distinguir un bean agregado por sí mismo de uno que
- * llegó como delegado de otro.
+ * <p>{@link #children} is a `HashMap` from bean to {@link BCSChild}, not a list, for two things
+ * that happen often: `contains` and `remove` are called once per membership operation, and with a
+ * list they would be full scans; and something more than the child has to be kept for each child,
+ * its `BCSChild`. This note said the `BCSChild` records who brought the child in, telling a bean
+ * added by itself from one that arrived as another's delegate. {@link #add} always passes this
+ * context's peer as that value, so nothing here tells the two apart.
  *
- * <h2>El candado</h2>
+ * <h2>The lock</h2>
  *
- * <p>Todo lo que toca la membresía se sincroniza sobre {@link BeanContext#globalHierarchyLock}, no
- * sobre `this`. Ver la nota de {@link BeanContext}: una operación puede tocar dos contextos, y con
- * un candado por contexto dos mudanzas cruzadas se abrazan.
+ * <p>Everything that touches membership is synchronized on {@link BeanContext#globalHierarchyLock},
+ * not on `this`. See the note in {@link BeanContext}: an operation can touch two contexts, and with
+ * one lock per context two crossed moves deadlock.
  *
- * <h2>La interfaz gráfica</h2>
+ * <h2>The GUI</h2>
  *
- * <p>{@link #needsGui} contesta preguntando a los hijos, uno por uno, en vez de guardar una bandera.
- * Es a propósito: la respuesta cambia cuando entra o sale un hijo, y una bandera obligaría a
- * recalcularla en cada alta y cada baja para contestar lo mismo.
+ * <p>{@link #needsGui} answers by asking the children, one by one, instead of keeping a flag. That
+ * is deliberate: the answer changes when a child comes or goes, and a flag would have to be
+ * recomputed on every add and every remove to answer the same thing.
  */
 public class BeanContextSupport extends BeanContextChildSupport
         implements BeanContext, Serializable, PropertyChangeListener, VetoableChangeListener {
 
-    /** Los hijos, de bean a su {@link BCSChild}. Ver la nota de la clase sobre por qué es un mapa. */
+    /** The children, from bean to its {@link BCSChild}. See the class note on why it is a map. */
     protected transient HashMap children;
 
-    /** Los oyentes de altas y bajas. */
+    /** The listeners for children being added and removed. */
     protected transient ArrayList bcmListeners;
 
-    /** El idioma de este contexto. */
+    /** This context's locale. */
     protected Locale locale;
 
-    /** Si está en modo diseño. */
+    /** Whether it is in design mode. */
     protected boolean designTime;
 
-    /** Si se permite usar interfaz gráfica. */
+    /** Whether using a GUI is allowed. */
     protected boolean okToUseGui;
 
-    // Cuántos hijos serializables quedan por escribir; sólo vale durante `writeChildren`. Es lo que
-    // hace que `isSerializing()` pueda contestar sin una bandera aparte.
+    // How many `writeChildren` calls are in progress; `isSerializing()` is `serializing > 0`. This
+    // comment said it counts the serializable children still to be written; it goes up on entry and
+    // down on exit, whatever the children are.
     private transient int serializing;
 
-    /** Un contexto sin padre, con el idioma por omisión, en modo diseño y con gráfica permitida. */
+    /** A context with no parent, the default locale, in design mode and with GUI allowed. */
     public BeanContextSupport() {
         this(null, null, true, true);
     }
 
-    /** Un contexto hijo de `peer`. */
+    /**
+     * A context acting in the name of `peer`.
+     *
+     * <p>This javadoc said a child of `peer`. `peer` is the context this one acts for —see the
+     * four-argument constructor— not its parent.
+     */
     public BeanContextSupport(BeanContext peer) {
         this(peer, null, true, true);
     }
 
-    /** Con ese idioma. */
+    /** With that locale. */
     public BeanContextSupport(BeanContext peer, Locale lcle) {
         this(peer, lcle, true, true);
     }
 
-    /** Con ese idioma y ese modo de diseño. */
+    /** With that locale and that design mode. */
     public BeanContextSupport(BeanContext peer, Locale lcle, boolean dTime) {
         this(peer, lcle, dTime, true);
     }
 
     /**
-     * El constructor al que llegan todos los demás.
+     * The constructor all the others end up in.
      *
-     * @param peer el contexto a nombre del cual actúa, o `null` para actuar a nombre propio
-     * @param lcle el idioma, o `null` para el del sistema
-     * @param dTime si arranca en modo diseño
-     * @param visible si se permite usar interfaz gráfica
+     * @param peer the context it acts in the name of, or `null` to act in its own name
+     * @param lcle the locale, or `null` for the system's
+     * @param dTime whether it starts in design mode
+     * @param visible whether using a GUI is allowed
      */
     public BeanContextSupport(BeanContext peer, Locale lcle, boolean dTime, boolean visible) {
         super(peer);
@@ -102,40 +109,41 @@ public class BeanContextSupport extends BeanContextChildSupport
         this.initialize();
     }
 
-    /** El contexto a nombre del cual actúa: este mismo, o el que delegó en él. */
+    /** The context it acts in the name of: this one, or the one that delegated to it. */
     public BeanContext getBeanContextPeer() {
         return (BeanContext) this.getBeanContextChildPeer();
     }
 
     /**
-     * Arma las estructuras internas.
+     * Builds the internal structures. Called from the constructor.
      *
-     * <p>Se llama desde el constructor y también al deserializar, que es el motivo de que sea un
-     * método y no dos asignaciones en el constructor: un objeto que vuelve de un flujo no pasa por
-     * ahí, y sin esto sus mapas quedarían nulos.
+     * <p>This javadoc said it is also called on deserialization, and that this is why it is a
+     * method: without it a context read back from a stream would keep null maps. No class in this
+     * package declares `readObject`, so nothing calls it then, and `children` and `bcmListeners`,
+     * being transient, do come back null.
      */
     protected synchronized void initialize() {
         this.children = new HashMap();
         this.bcmListeners = new ArrayList();
     }
 
-    // ---- membresía ----------------------------------------------------------------------------
+    // ---- membership -----------------------------------------------------------------------------
 
-    /** Cuántos hijos tiene. */
+    /** How many children it has. */
     public int size() {
         synchronized (BeanContext.globalHierarchyLock) {
             return this.children.size();
         }
     }
 
-    /** Si no tiene ninguno. */
+    /** Whether it has none. */
     public boolean isEmpty() {
         synchronized (BeanContext.globalHierarchyLock) {
             return this.children.isEmpty();
         }
     }
 
-    /** Si ese objeto es hijo de este contexto. */
+    /** Whether that object is a child of this context. */
     public boolean contains(Object o) {
         synchronized (BeanContext.globalHierarchyLock) {
             return this.children.containsKey(o);
@@ -143,17 +151,15 @@ public class BeanContextSupport extends BeanContextChildSupport
     }
 
     /**
-     * Lo mismo que {@link #contains}.
+     * The same as {@link #contains}.
      *
-     * <p>Existen los dos porque los hijos se guardan en un mapa y `containsKey` es el nombre que esa
-     * estructura usa. No es un alias caprichoso del JDK: quien mira la implementación busca
-     * `containsKey`, y quien mira la colección busca `contains`.
+     * <p>The JDK declares both; `containsKey` is the name the children map uses.
      */
     public boolean containsKey(Object o) {
         return this.contains(o);
     }
 
-    /** Si todos ésos son hijos de este contexto. */
+    /** Whether all of those are children of this context. */
     public boolean containsAll(Collection c) {
         synchronized (BeanContext.globalHierarchyLock) {
             Iterator it = c.iterator();
@@ -166,14 +172,14 @@ public class BeanContextSupport extends BeanContextChildSupport
         }
     }
 
-    /** Los hijos, uno por uno. */
+    /** The children, one by one. */
     public Iterator iterator() {
         synchronized (BeanContext.globalHierarchyLock) {
             return this.children.keySet().iterator();
         }
     }
 
-    /** Los hijos, en un arreglo. */
+    /** The children, as an array. */
     public Object[] toArray() {
         synchronized (BeanContext.globalHierarchyLock) {
             return this.children.keySet().toArray();
@@ -181,14 +187,15 @@ public class BeanContextSupport extends BeanContextChildSupport
     }
 
     /**
-     * Los hijos, en ese arreglo si entran.
+     * The children, in that array if they fit.
      *
-     * <p>El JDK lo declara `Object[] toArray(Object[])` a secas, porque `BeanContext` extiende una
-     * `Collection` **cruda** y ahí los miembros heredados vienen borrados. Acá va con parámetro de
-     * tipo por un bug de nuestro javac: no borra los miembros de un supertipo crudo, así que
-     * rechaza la forma del JDK (ver el informe del compilador). Las dos tienen el mismo borrado
-     * --`Object[] toArray(Object[])`-- así que la firma que queda en el `.class` es la del JDK; lo
-     * que cambia es la firma genérica, que acepta un poco más que la de allá.
+     * <p>The JDK declares it as a plain `Object[] toArray(Object[])`, because `BeanContext` extends
+     * a **raw** `Collection` and there the inherited members come erased. Here it has a type
+     * parameter because of a bug in our javac: it does not erase the members of a raw supertype, so
+     * it rejects the JDK's form (compiler finding #475, still open: its repro still fails to
+     * compile). Both have the same erasure --`Object[] toArray(Object[])`-- so the signature left
+     * in the `.class` is the JDK's; what changes is the generic signature, which accepts a little
+     * more than the JDK's.
      */
     public <T> T[] toArray(T[] arry) {
         synchronized (BeanContext.globalHierarchyLock) {
@@ -196,14 +203,14 @@ public class BeanContextSupport extends BeanContextChildSupport
         }
     }
 
-    /** Los {@link BCSChild} de los hijos, uno por uno. */
+    /** The {@link BCSChild} of each child, one by one. */
     protected Iterator bcsChildren() {
         synchronized (BeanContext.globalHierarchyLock) {
             return this.children.values().iterator();
         }
     }
 
-    /** Una copia del arreglo de hijos, para recorrer sin tener el candado tomado. */
+    /** A copy of the array of children, to walk without holding the lock. */
     protected final Object[] copyChildren() {
         synchronized (BeanContext.globalHierarchyLock) {
             return this.children.keySet().toArray();
@@ -211,40 +218,41 @@ public class BeanContextSupport extends BeanContextChildSupport
     }
 
     /**
-     * Agrega un hijo.
+     * Adds a child.
      *
-     * <p>Lo que hace largo a este método es lo que tiene que pasar **antes** de que el bean quede
-     * adentro: se valida, se le fija el contexto —que el hijo puede vetar— y recién después entra al
-     * mapa. Si el orden fuera el otro, un veto dejaría un bean en la colección que no se cree
-     * miembro.
+     * <p>What makes this method long is what has to happen **before** the bean is inside: it is
+     * validated, its context is set —which the child can veto— and only then does it enter the map.
+     * In the other order, a veto would leave a bean in the collection that does not believe it is a
+     * member.
      *
-     * @return `false` si ya estaba
-     * @throws IllegalStateException si el hijo vetó su mudanza a este contexto
+     * @return `false` if it was already there
+     * @throws IllegalStateException if this context refuses the child, or the child vetoes its move
+     *     into this context
      */
     public boolean add(Object targetChild) {
         if (targetChild == null) {
-            throw new IllegalArgumentException("no se puede agregar null");
+            throw new IllegalArgumentException("cannot add null");
         }
         synchronized (BeanContext.globalHierarchyLock) {
             if (this.children.containsKey(targetChild)) {
                 return false;
             }
             if (!this.validatePendingAdd(targetChild)) {
-                throw new IllegalStateException("el contexto rechaza a " + targetChild);
+                throw new IllegalStateException("the context refuses " + targetChild);
             }
             BeanContextChild cbcc = BeanContextSupport.getChildBeanContextChild(targetChild);
             if (cbcc != null) {
                 try {
                     cbcc.setBeanContext(this.getBeanContextPeer());
                 } catch (PropertyVetoException e) {
-                    throw new IllegalStateException("el hijo vetó su ingreso al contexto", e);
+                    throw new IllegalStateException("the child vetoed joining the context", e);
                 }
             }
             BCSChild bcsc = this.createBCSChild(targetChild, this.getBeanContextPeer());
             this.children.put(targetChild, bcsc);
-            // Los oyentes se enganchan DESPUÉS de que el hijo ya está adentro: el contexto escucha
-            // sus cambios de `beanContext` para enterarse si se muda por su cuenta, y engancharlos
-            // antes haría que la propia mudanza de arriba se reciba como si fuera ajena.
+            // The listeners are attached AFTER the child is inside: the context listens to its
+            // `beanContext` changes to find out if it moves on its own, and attaching them earlier
+            // would make the move above arrive as if it were someone else's.
             if (cbcc != null) {
                 cbcc.addPropertyChangeListener("beanContext", this);
                 cbcc.addVetoableChangeListener("beanContext", this);
@@ -268,46 +276,46 @@ public class BeanContextSupport extends BeanContextChildSupport
     }
 
     /**
-     * <strong>No está soportada.</strong> Siempre tira {@link UnsupportedOperationException}.
+     * <strong>Not supported.</strong> Always throws {@link UnsupportedOperationException}.
      *
-     * <p>Es lo que hace el JDK, y no es una omisión suya: un alta puede fallar por su cuenta --el
-     * hijo veta su mudanza, o el contexto lo rechaza-- y una operación en masa no tiene forma de
-     * decir qué pasó a mitad de camino. Deshacer las que ya entraron dispararía eventos de baja de
-     * cosas que nadie llegó a ver; dejarlas deja al llamador sin saber cuáles quedaron. Tirar es la
-     * única respuesta que no miente.
+     * <p>It is what the JDK does, and not an omission on its part: an add can fail on its own --the
+     * child vetoes its move, or the context refuses it-- and a bulk operation has no way to say
+     * what happened halfway. Undoing the ones already in would fire removal events for things
+     * nobody got to see; leaving them leaves the caller not knowing which ones stayed. Throwing is
+     * the only answer that does not lie.
      *
-     * <p>Quien quiera agregar varios llama a {@link #add} en un bucle y decide él qué hacer con la
-     * que falle.
+     * <p>Whoever wants to add several calls {@link #add} in a loop and decides what to do with the
+     * one that fails.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public boolean addAll(Collection c) {
         throw new UnsupportedOperationException(
-                "un contexto no agrega en masa: ver el javadoc de addAll");
+                "a context does not add in bulk: see the addAll javadoc");
     }
 
-    /** Quita un hijo. `false` si no estaba. */
+    /** Removes a child. `false` if it was not there. */
     public boolean remove(Object targetChild) {
         return this.remove(targetChild, true);
     }
 
     /**
-     * Quita un hijo, avisándole o no.
+     * Removes a child, telling it or not.
      *
-     * <p>`callChildSetBC` en `false` es para cuando **el hijo ya se fue por su cuenta**: se enteró
-     * este contexto por el evento de cambio de `beanContext`, y volver a llamarle `setBeanContext`
-     * sería pisarle el contexto nuevo con un `null`.
+     * <p>`callChildSetBC` is `false` for when **the child already left on its own**: this context
+     * found out through the `beanContext` change event, and calling `setBeanContext` on it again
+     * would overwrite its new context with `null`.
      */
     protected boolean remove(Object targetChild, boolean callChildSetBC) {
         if (targetChild == null) {
-            throw new IllegalArgumentException("no se puede quitar null");
+            throw new IllegalArgumentException("cannot remove null");
         }
         synchronized (BeanContext.globalHierarchyLock) {
             if (!this.children.containsKey(targetChild)) {
                 return false;
             }
             if (!this.validatePendingRemove(targetChild)) {
-                throw new IllegalStateException("el contexto rechaza la baja de " + targetChild);
+                throw new IllegalStateException("the context refuses to remove " + targetChild);
             }
             BCSChild bcsc = (BCSChild) this.children.remove(targetChild);
             BeanContextChild cbcc = BeanContextSupport.getChildBeanContextChild(targetChild);
@@ -318,11 +326,13 @@ public class BeanContextSupport extends BeanContextChildSupport
                     try {
                         cbcc.setBeanContext(null);
                     } catch (PropertyVetoException e) {
-                        // El hijo no puede impedir su baja: ya no está en el mapa. Ver la nota de
-                        // `rejectedSetBCOnce` en BeanContextChildSupport -- es el mismo caso, y por
-                        // eso el veto acá se registra y no se propaga.
+                        // If the child vetoes, it goes back into the map and the veto
+                        // propagates as an IllegalStateException. This comment said the child
+                        // cannot prevent its removal and that the veto is recorded here and not
+                        // propagated; the code does the opposite. The two listeners removed
+                        // just above are not attached again.
                         this.children.put(targetChild, bcsc);
-                        throw new IllegalStateException("el hijo vetó su baja del contexto", e);
+                        throw new IllegalStateException("the child vetoed leaving the context", e);
                     }
                 }
             }
@@ -334,69 +344,75 @@ public class BeanContextSupport extends BeanContextChildSupport
     }
 
     /**
-     * <strong>No está soportada.</strong> Ver {@link #addAll}, que lo explica.
+     * <strong>Not supported.</strong> See {@link #addAll}, which explains it.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public boolean removeAll(Collection c) {
         throw new UnsupportedOperationException(
-                "un contexto no quita en masa: ver el javadoc de addAll");
+                "a context does not remove in bulk: see the addAll javadoc");
     }
 
     /**
-     * <strong>No está soportada.</strong> Ver {@link #addAll}, que lo explica.
+     * <strong>Not supported.</strong> See {@link #addAll}, which explains it.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public boolean retainAll(Collection c) {
         throw new UnsupportedOperationException(
-                "un contexto no filtra en masa: ver el javadoc de addAll");
+                "a context does not retain in bulk: see the addAll javadoc");
     }
 
     /**
-     * <strong>No está soportada.</strong> Ver {@link #addAll}, que lo explica.
+     * <strong>Not supported.</strong> See {@link #addAll}, which explains it.
      *
-     * @throws UnsupportedOperationException siempre
+     * @throws UnsupportedOperationException always
      */
     public void clear() {
         throw new UnsupportedOperationException(
-                "un contexto no se vacía en masa: ver el javadoc de addAll");
+                "a context does not clear in bulk: see the addAll javadoc");
     }
 
-    /** La oportunidad de la subclase de rechazar un alta. Por omisión acepta. */
+    /** The subclass's chance to refuse an add. Accepts by default. */
     protected boolean validatePendingAdd(Object targetChild) {
         return true;
     }
 
-    /** La oportunidad de la subclase de rechazar una baja. Por omisión acepta. */
+    /** The subclass's chance to refuse a removal. Accepts by default. */
     protected boolean validatePendingRemove(Object targetChild) {
         return true;
     }
 
-    /** El {@link BCSChild} de ese hijo. Una subclase lo redefine para guardar más. */
+    /**
+     * The {@link BCSChild} for that child.
+     *
+     * <p>This javadoc said a subclass overrides it to record more. {@code BCSChild}'s constructor
+     * is package-private, so only a class in this package can build one.
+     */
     protected BCSChild createBCSChild(Object targetChild, Object peer) {
         return new BCSChild(targetChild, peer);
     }
 
-    /** Gancho de después del alta. Vacío por omisión. */
+    /** Hook after an add. Empty by default. */
     protected void childJustAddedHook(Object child, BCSChild bcsc) {
     }
 
-    /** Gancho de después de la baja. Vacío por omisión. */
+    /** Hook after a removal. Empty by default. */
     protected void childJustRemovedHook(Object child, BCSChild bcsc) {
     }
 
-    /** Gancho de después de deserializar un hijo. Vacío por omisión. */
+    /** Hook after deserializing a child. Empty by default. */
     protected void childDeserializedHook(Object child, BCSChild bcsc) {
     }
 
-    // ---- los ayudantes de tipo -----------------------------------------------------------------
+    // ---- the type helpers -----------------------------------------------------------------------
     //
-    // Los seis siguen la misma regla y por eso van juntos: si el objeto ES del tipo, se devuelve; si
-    // no, se le pregunta a su `BeanContextProxy` por el delegado y se prueba con ése. Es lo que hace
-    // que un bean que delega participe igual que uno que implementa directo.
+    // They go together because they follow one rule: if the object IS of the type, it is returned;
+    // if not, its `BeanContextProxy` is asked for the delegate and that one is tried. That is what
+    // lets a bean that delegates take part like one that implements directly. This comment said all
+    // six follow it; `getChildSerializable` does not ask the proxy.
 
-    /** Ese objeto como {@link BeanContextChild}, directo o por delegación, o `null`. */
+    /** That object as a {@link BeanContextChild}, directly or through delegation, or `null`. */
     protected static final BeanContextChild getChildBeanContextChild(Object child) {
         if (child instanceof BeanContextChild) {
             return (BeanContextChild) child;
@@ -407,7 +423,7 @@ public class BeanContextSupport extends BeanContextChildSupport
         return null;
     }
 
-    /** Ese objeto como oyente de membresía, o `null`. */
+    /** That object as a membership listener, or `null`. */
     protected static final BeanContextMembershipListener getChildBeanContextMembershipListener(
             Object child) {
         if (child instanceof BeanContextMembershipListener) {
@@ -422,7 +438,7 @@ public class BeanContextSupport extends BeanContextChildSupport
         return null;
     }
 
-    /** Ese objeto como oyente de cambio de propiedad, o `null`. */
+    /** That object as a property change listener, or `null`. */
     protected static final PropertyChangeListener getChildPropertyChangeListener(Object child) {
         if (child instanceof PropertyChangeListener) {
             return (PropertyChangeListener) child;
@@ -436,7 +452,7 @@ public class BeanContextSupport extends BeanContextChildSupport
         return null;
     }
 
-    /** Ese objeto como oyente de veto, o `null`. */
+    /** That object as a veto listener, or `null`. */
     protected static final VetoableChangeListener getChildVetoableChangeListener(Object child) {
         if (child instanceof VetoableChangeListener) {
             return (VetoableChangeListener) child;
@@ -450,7 +466,7 @@ public class BeanContextSupport extends BeanContextChildSupport
         return null;
     }
 
-    /** Ese objeto como {@link Serializable}, o `null`. */
+    /** That object as a {@link Serializable}, or `null`. */
     protected static final Serializable getChildSerializable(Object child) {
         if (child instanceof Serializable) {
             return (Serializable) child;
@@ -458,7 +474,7 @@ public class BeanContextSupport extends BeanContextChildSupport
         return null;
     }
 
-    /** Ese objeto como {@link Visibility}, o `null`. */
+    /** That object as a {@link Visibility}, or `null`. */
     protected static final Visibility getChildVisibility(Object child) {
         if (child instanceof Visibility) {
             return (Visibility) child;
@@ -473,23 +489,25 @@ public class BeanContextSupport extends BeanContextChildSupport
     }
 
     /**
-     * Si las dos clases son la misma.
+     * Whether the two classes are the same.
      *
-     * <p>Compara por nombre y no con `==` porque **dos cargadores distintos dan dos `Class` distintas
-     * para el mismo tipo**, y en una jerarquía de beans es normal que los hijos vengan de cargadores
-     * distintos. Con `==`, un servicio registrado por un hijo no lo encontraría otro.
+     * <p>It also compares by name, not only by `equals`, because **two different loaders give two
+     * different `Class` objects for the same type**, and in a bean hierarchy children commonly come
+     * from different loaders. This javadoc added that with `==` a service registered by one child
+     * would not be found by another; {@link BeanContextServicesSupport} keys its services by the
+     * `Class` object in a `HashMap`, and nothing in this tree calls this method.
      */
     protected static final boolean classEquals(Class first, Class second) {
         return first.equals(second) || first.getName().equals(second.getName());
     }
 
-    // ---- recursos y creación --------------------------------------------------------------------
+    // ---- resources and creation -----------------------------------------------------------------
 
     /**
-     * El recurso, buscado con el cargador del hijo que pregunta.
+     * The resource, looked up with the class loader of the child asking.
      *
-     * <p>Que se use **su** cargador y no el del contexto es lo que hace útil al método: un hijo que
-     * vino de otro `.jar` tiene sus recursos ahí, no acá.
+     * <p>Using **its** loader and not the context's is what makes the method useful: a child that
+     * came from another `.jar` has its resources there, not here.
      */
     public InputStream getResourceAsStream(String name, BeanContextChild bcc) {
         if (name == null || bcc == null) {
@@ -500,7 +518,7 @@ public class BeanContextSupport extends BeanContextChildSupport
                 : cl.getResourceAsStream(name);
     }
 
-    /** La URL del recurso, con el mismo criterio. */
+    /** The resource's URL, by the same rule. */
     public URL getResource(String name, BeanContextChild bcc) {
         if (name == null || bcc == null) {
             throw new NullPointerException();
@@ -510,19 +528,19 @@ public class BeanContextSupport extends BeanContextChildSupport
     }
 
     /**
-     * Instancia ese bean y lo agrega a este contexto.
+     * Instantiates that bean and adds it to this context.
      *
-     * @throws IOException si el bean no se pudo leer
-     * @throws ClassNotFoundException si no se encontró la clase
+     * @throws IOException if the bean could not be read
+     * @throws ClassNotFoundException if the class was not found
      */
     public Object instantiateChild(String beanName) throws IOException, ClassNotFoundException {
         BeanContext bc = this.getBeanContextPeer();
         return Beans.instantiate(bc.getClass().getClassLoader(), beanName, bc);
     }
 
-    // ---- oyentes de membresía -------------------------------------------------------------------
+    // ---- membership listeners -------------------------------------------------------------------
 
-    /** Registra un oyente de altas y bajas. */
+    /** Registers a listener for children being added and removed. */
     public void addBeanContextMembershipListener(BeanContextMembershipListener bcml) {
         if (bcml == null) {
             throw new NullPointerException("bcml");
@@ -534,7 +552,7 @@ public class BeanContextSupport extends BeanContextChildSupport
         }
     }
 
-    /** Lo quita. */
+    /** Removes it. */
     public void removeBeanContextMembershipListener(BeanContextMembershipListener bcml) {
         if (bcml == null) {
             throw new NullPointerException("bcml");
@@ -544,16 +562,16 @@ public class BeanContextSupport extends BeanContextChildSupport
         }
     }
 
-    // Los eventos se reparten sobre una COPIA de la lista de oyentes. Un oyente que se da de baja a
-    // sí mismo mientras lo notifican es lo normal --se entera de la baja de un hijo y se retira-- y
-    // sin la copia eso es una modificación concurrente en el medio del recorrido.
+    // Events are delivered over a COPY of the listener list. A listener that unregisters itself
+    // while being notified is the normal case --it hears of a child's removal and withdraws-- and
+    // without the copy that is a concurrent modification in the middle of the walk.
     private Object[] listenersCopy() {
         synchronized (BeanContext.globalHierarchyLock) {
             return this.bcmListeners.toArray();
         }
     }
 
-    /** Avisa de las altas. */
+    /** Announces the additions. */
     protected final void fireChildrenAdded(BeanContextMembershipEvent bcme) {
         Object[] ls = this.listenersCopy();
         for (int i = 0; i < ls.length; i++) {
@@ -561,7 +579,7 @@ public class BeanContextSupport extends BeanContextChildSupport
         }
     }
 
-    /** Avisa de las bajas. */
+    /** Announces the removals. */
     protected final void fireChildrenRemoved(BeanContextMembershipEvent bcme) {
         Object[] ls = this.listenersCopy();
         for (int i = 0; i < ls.length; i++) {
@@ -569,39 +587,39 @@ public class BeanContextSupport extends BeanContextChildSupport
         }
     }
 
-    // ---- modo diseño, idioma y gráfica ----------------------------------------------------------
+    // ---- design mode, locale and GUI ------------------------------------------------------------
 
-    /** Si está en modo diseño. */
+    /** Whether it is in design mode. */
     public synchronized boolean isDesignTime() {
         return this.designTime;
     }
 
-    /** Fija el modo diseño y se lo propaga a los hijos que lo entiendan. */
+    /** Sets design mode and propagates it to the children that understand it. */
     public synchronized void setDesignTime(boolean dTime) {
         if (this.designTime == dTime) {
             return;
         }
         boolean old = this.designTime;
         this.designTime = dTime;
-        Object[] todos = this.copyChildren();
-        for (int i = 0; i < todos.length; i++) {
-            if (todos[i] instanceof java.beans.DesignMode) {
-                ((java.beans.DesignMode) todos[i]).setDesignTime(dTime);
+        Object[] all = this.copyChildren();
+        for (int i = 0; i < all.length; i++) {
+            if (all[i] instanceof java.beans.DesignMode) {
+                ((java.beans.DesignMode) all[i]).setDesignTime(dTime);
             }
         }
         this.firePropertyChange(java.beans.DesignMode.PROPERTYNAME, Boolean.valueOf(old),
                 Boolean.valueOf(dTime));
     }
 
-    /** El idioma. */
+    /** The locale. */
     public synchronized Locale getLocale() {
         return this.locale;
     }
 
     /**
-     * Fija el idioma.
+     * Sets the locale.
      *
-     * @throws PropertyVetoException si un oyente se opone
+     * @throws PropertyVetoException if a listener objects
      */
     public synchronized void setLocale(Locale newLocale) throws PropertyVetoException {
         if (newLocale == null || newLocale.equals(this.locale)) {
@@ -614,18 +632,19 @@ public class BeanContextSupport extends BeanContextChildSupport
     }
 
     /**
-     * Si algún hijo necesita interfaz gráfica. Ver la nota de la clase.
+     * Whether some child needs a GUI. See the class note.
      *
-     * <p>El JDK contesta `true` además para cualquier hijo que sea un `java.awt.Component`, porque
-     * un componente necesita pantalla por definición. Acá no se puede preguntar eso: `java.awt` en
-     * esta biblioteca llega hasta la geometría y el color, y no hay jerarquía de componentes. La
-     * consecuencia es acotada y conviene tenerla presente -- un hijo que sea un componente y **no**
-     * implemente {@link Visibility} se cuenta como que no necesita gráfica.
+     * <p>The JDK also answers `true` for any child that is a `java.awt.Component` or a
+     * `java.awt.Container`, because a component needs a screen by definition. This javadoc said
+     * that question cannot be asked here because `java.awt` in this library stops at geometry and
+     * colour, with no component hierarchy. Both classes exist in KajiLibrary now; the check is
+     * simply not made, so a child that is a component and does **not** implement {@link Visibility}
+     * counts as not needing a GUI.
      */
     public synchronized boolean needsGui() {
-        Object[] todos = this.copyChildren();
-        for (int i = 0; i < todos.length; i++) {
-            Visibility v = BeanContextSupport.getChildVisibility(todos[i]);
+        Object[] all = this.copyChildren();
+        for (int i = 0; i < all.length; i++) {
+            Visibility v = BeanContextSupport.getChildVisibility(all[i]);
             if (v != null && v.needsGui()) {
                 return true;
             }
@@ -633,65 +652,66 @@ public class BeanContextSupport extends BeanContextChildSupport
         return false;
     }
 
-    /** Prohíbe la gráfica, acá y en los hijos que lo entiendan. */
+    /** Forbids the GUI, here and in the children that understand it. */
     public synchronized void dontUseGui() {
         this.okToUseGui = false;
-        Object[] todos = this.copyChildren();
-        for (int i = 0; i < todos.length; i++) {
-            Visibility v = BeanContextSupport.getChildVisibility(todos[i]);
+        Object[] all = this.copyChildren();
+        for (int i = 0; i < all.length; i++) {
+            Visibility v = BeanContextSupport.getChildVisibility(all[i]);
             if (v != null) {
                 v.dontUseGui();
             }
         }
     }
 
-    /** La permite, acá y en los hijos que lo entiendan. */
+    /** Allows it, here and in the children that understand it. */
     public synchronized void okToUseGui() {
         this.okToUseGui = true;
-        Object[] todos = this.copyChildren();
-        for (int i = 0; i < todos.length; i++) {
-            Visibility v = BeanContextSupport.getChildVisibility(todos[i]);
+        Object[] all = this.copyChildren();
+        for (int i = 0; i < all.length; i++) {
+            Visibility v = BeanContextSupport.getChildVisibility(all[i]);
             if (v != null) {
                 v.okToUseGui();
             }
         }
     }
 
-    /** Si se está evitando la gráfica: se prohibió y además hay quien la necesitaría. */
+    /** Whether the GUI is being avoided: it was forbidden and someone would need it. */
     public synchronized boolean avoidingGui() {
         return !this.okToUseGui && this.needsGui();
     }
 
-    // ---- serialización --------------------------------------------------------------------------
+    // ---- serialization --------------------------------------------------------------------------
 
-    /** Si en este momento se están escribiendo los hijos. */
+    /** Whether the children are being written right now. */
     public boolean isSerializing() {
         return this.serializing > 0;
     }
 
     /**
-     * Escribe los hijos serializables.
+     * Writes the serializable children.
      *
-     * <p>Los que **no** lo son se saltean en silencio, y esa es la decisión de fondo de este método:
-     * un contexto es una colección de beans ajenos y no puede exigir que todos sean serializables.
-     * Romper la escritura entera por un hijo que no lo es haría inservible la de los demás.
+     * <p>Those that are **not** serializable are skipped silently, and that is the underlying
+     * decision of this method: a context is a collection of other people's beans and cannot demand
+     * that all be serializable. Breaking the whole write over one child that is not would make the
+     * others' useless.
      *
-     * @throws IOException si el flujo falla
+     * @throws IOException if the stream fails
      */
     public final void writeChildren(ObjectOutputStream oos) throws IOException {
         synchronized (BeanContext.globalHierarchyLock) {
             this.serializing = this.serializing + 1;
             try {
-                Object[] todos = this.copyChildren();
+                Object[] all = this.copyChildren();
                 int n = 0;
-                for (int i = 0; i < todos.length; i++) {
-                    if (BeanContextSupport.getChildSerializable(todos[i]) != null) {
+                for (int i = 0; i < all.length; i++) {
+                    if (BeanContextSupport.getChildSerializable(all[i]) != null) {
                         n = n + 1;
                     }
                 }
                 oos.writeInt(n);
-                for (int i = 0; i < todos.length; i++) {
-                    Serializable s = BeanContextSupport.getChildSerializable(todos[i]);
+                for (int i = 0; i < all.length; i++) {
+                    Serializable s = BeanContextSupport.getChildSerializable(all[i]);
                     if (s != null) {
                         oos.writeObject(s);
                     }
@@ -703,10 +723,10 @@ public class BeanContextSupport extends BeanContextChildSupport
     }
 
     /**
-     * Lee los hijos que {@link #writeChildren} escribió y los agrega.
+     * Reads the children {@link #writeChildren} wrote and adds them.
      *
-     * @throws IOException si el flujo falla
-     * @throws ClassNotFoundException si falta la clase de algún hijo
+     * @throws IOException if the stream fails
+     * @throws ClassNotFoundException if some child's class is missing
      */
     public final void readChildren(ObjectInputStream ois)
             throws IOException, ClassNotFoundException {
@@ -721,24 +741,24 @@ public class BeanContextSupport extends BeanContextChildSupport
         }
     }
 
-    /** Escribe esa colección, salteando lo que no sea serializable. */
+    /** Writes that collection, skipping what is not serializable. */
     protected final void serialize(ObjectOutputStream oos, Collection coll) throws IOException {
-        Object[] todos = coll.toArray();
+        Object[] all = coll.toArray();
         int n = 0;
-        for (int i = 0; i < todos.length; i++) {
-            if (todos[i] instanceof Serializable) {
+        for (int i = 0; i < all.length; i++) {
+            if (all[i] instanceof Serializable) {
                 n = n + 1;
             }
         }
         oos.writeInt(n);
-        for (int i = 0; i < todos.length; i++) {
-            if (todos[i] instanceof Serializable) {
-                oos.writeObject(todos[i]);
+        for (int i = 0; i < all.length; i++) {
+            if (all[i] instanceof Serializable) {
+                oos.writeObject(all[i]);
             }
         }
     }
 
-    /** Lee en esa colección lo que {@link #serialize} escribió. */
+    /** Reads into that collection what {@link #serialize} wrote. */
     protected final void deserialize(ObjectInputStream ois, Collection coll)
             throws IOException, ClassNotFoundException {
         int n = ois.readInt();
@@ -747,51 +767,52 @@ public class BeanContextSupport extends BeanContextChildSupport
         }
     }
 
-    /** Gancho de antes de escribir. Vacío por omisión. */
+    /** Hook before writing. Empty by default. */
     protected void bcsPreSerializationHook(ObjectOutputStream oos) throws IOException {
     }
 
-    /** Gancho de antes de leer. Vacío por omisión. */
+    /** Hook before reading. Empty by default. */
     protected void bcsPreDeserializationHook(ObjectInputStream ois)
             throws IOException, ClassNotFoundException {
     }
 
-    // ---- lo que este contexto escucha de sus hijos ----------------------------------------------
+    // ---- what this context hears from its children ----------------------------------------------
 
     /**
-     * Un hijo cambió de contexto por su cuenta.
+     * A child changed context on its own.
      *
-     * <p>Si se fue a otro lado, este contexto lo saca de su colección **sin volver a avisarle** —ya
-     * está donde quiere estar, y un `setBeanContext(null)` acá le pisaría el contexto nuevo. Ese es
-     * exactamente el caso para el que existe `remove(Object, boolean)`.
+     * <p>If it went somewhere else, this context removes it from its collection **without telling
+     * it again** —it already is where it wants to be, and a `setBeanContext(null)` here would
+     * overwrite its new context. That is exactly the case `remove(Object, boolean)` exists for.
      */
     public void propertyChange(PropertyChangeEvent pce) {
         if (!"beanContext".equals(pce.getPropertyName())) {
             return;
         }
-        Object nuevo = pce.getNewValue();
-        if (nuevo != this.getBeanContextPeer()) {
+        Object fresh = pce.getNewValue();
+        if (fresh != this.getBeanContextPeer()) {
             this.remove(pce.getSource(), false);
         }
     }
 
     /**
-     * Un hijo pregunta si puede cambiar de contexto.
+     * A child asks whether it may change context.
      *
-     * <p>Este contexto no se opone: un hijo que se quiere ir se va. Está escrito y no heredado
-     * porque la interfaz lo exige, y porque el lugar natural donde alguien buscaría una política de
-     * retención es éste.
+     * <p>This context does not object: a child that wants to leave, leaves. It is written out
+     * rather than inherited because the interface requires it, and because this is the natural
+     * place someone would look for a retention policy.
      */
     public void vetoableChange(PropertyChangeEvent pce) throws PropertyVetoException {
     }
 
     /**
-     * Lo que este contexto guarda de cada hijo.
+     * What this context keeps of each child.
      *
-     * <p>Es más que el hijo: lleva también **quién lo trajo**, y de ahí que el constructor tome dos
-     * cosas. Para un bean que entró por sí mismo los dos son distintos —el segundo es el contexto—;
-     * para uno que llegó como delegado de otro, el `peer` es ese otro. Sin ese dato no habría forma
-     * de deshacer bien la baja de un delegado.
+     * <p>The child, and a second object passed at construction. This javadoc said that object is
+     * **who brought the child in** —the context for a bean that came in by itself, the other object
+     * for one that arrived as its delegate— and that without it a delegate's removal could not be
+     * undone properly. {@link #add} always passes this context's peer, and nothing reads the value
+     * back.
      */
     protected class BCSChild implements Serializable {
 
@@ -803,12 +824,12 @@ public class BeanContextSupport extends BeanContextChildSupport
             this.proxyPeer = peer;
         }
 
-        /** El hijo. */
+        /** The child. */
         Object getChild() {
             return this.child;
         }
 
-        /** Quién lo trajo. */
+        /** The peer passed when it was added; see the class note. */
         Object getProxyPeer() {
             return this.proxyPeer;
         }

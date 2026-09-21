@@ -5,15 +5,15 @@ import java.lang.reflect.AccessFlag.Location;
 import jdk.internal.classfile.impl.AccessFlagsImpl;
 import java.util.function.Consumer;
 
-/** Donde se escribe un método. */
+/** Where a method gets written. */
 public interface MethodBuilder extends ClassFileBuilder<MethodElement, MethodBuilder> {
 
-    /** Las banderas del método, como máscara de bits. */
+    /** The method's flags, as a bit mask. */
     default MethodBuilder withFlags(int flags) {
         return this.with(new AccessFlagsImpl(flags, Location.METHOD));
     }
 
-    /** Las banderas del método. Ver la nota de `FieldBuilder.withFlags`. */
+    /** The method's flags. See the note on `FieldBuilder.withFlags`. */
     default MethodBuilder withFlags(AccessFlag... flags) {
         int m = 0;
         for (int i = 0; i < flags.length; i++) {
@@ -23,12 +23,12 @@ public interface MethodBuilder extends ClassFileBuilder<MethodElement, MethodBui
     }
 
     /**
-     * El cuerpo del método: el `Consumer` recibe un {@link CodeBuilder} y escribe las instrucciones.
+     * The method's body: the `Consumer` gets a {@link CodeBuilder} and writes the instructions.
      *
-     * <p>Un método abstracto o nativo no lo llama; los demás sí, y exactamente una vez.
+     * <p>An abstract or native method does not call it; the others do, and exactly once.
      */
     MethodBuilder withCode(Consumer<CodeBuilder> code);
 
-    /** El cuerpo, copiado de ese modelo a través de esa transformación. */
+    /** The body, copied from that model through that transformation. */
     MethodBuilder transformCode(CodeModel code, CodeTransform transform);
 }

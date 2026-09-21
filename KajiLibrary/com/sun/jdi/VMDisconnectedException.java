@@ -1,24 +1,24 @@
 package com.sun.jdi;
 
 /**
- * Se corto la conexion con la maquina depurada.
+ * The connection with the debugged machine was cut off.
  *
- * <p>No es verificada a proposito: puede pasar en cualquier llamada de JDI, y declararla en todas
- * obligaria a envolver cada linea de un depurador en un {@code try}.
+ * <p>It is unchecked on purpose: it may happen in any JDI call, and declaring it in all of them
+ * would force every line of a debugger to be wrapped in a {@code try}.
  *
  * @since 1.3
  */
 public class VMDisconnectedException extends RuntimeException {
 
-    /** Sin detalle. */
+    /** With no detail. */
     public VMDisconnectedException() {
         super();
     }
 
     /**
-     * Con un mensaje.
+     * With a message.
      *
-     * @param s el mensaje
+     * @param s the message
      */
     public VMDisconnectedException(String s) {
         super(s);

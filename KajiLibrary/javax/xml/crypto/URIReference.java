@@ -1,21 +1,22 @@
 package javax.xml.crypto;
 
 /**
- * KajiLibrary's javax.xml.crypto.URIReference -- algo que apunta a otra cosa por URI.
+ * KajiLibrary's javax.xml.crypto.URIReference -- something that points to something else by URI.
  *
- * <p>Dos metodos: adonde apunta y de que tipo es lo apuntado. Lo implementan las dos estructuras de
- * XML-DSig que referencian datos: {@code Reference} --lo que se firma-- y {@code RetrievalMethod}
- * --de donde se saca una clave--.
+ * <p>Two methods: where it points and of what type the target is. It is implemented by the two
+ * XML-DSig structures that reference data: {@code Reference} --what is signed-- and {@code
+ * RetrievalMethod} --where a key is taken from--.
  *
- * <p>El URI tiene tres formas y conviene distinguirlas: vacio significa <b>el documento entero</b>,
- * uno que empieza con almohadilla apunta adentro del mismo documento, y cualquier otro es externo.
- * Los externos son los peligrosos: resolverlos es ir a buscar algo que eligio quien firmo.
+ * <p>The URI has three forms and it is worth telling them apart: empty means <b>the whole
+ * document</b>, one that starts with a hash points inside the same document, and any other is
+ * external. The external ones are the dangerous ones: resolving them is fetching something whoever
+ * signed chose.
  */
 public interface URIReference {
 
-    /** Adonde apunta. Ver la nota de la clase sobre las tres formas. */
+    /** Where it points. See the class note on the three forms. */
     String getURI();
 
-    /** El tipo de lo apuntado, o null. */
+    /** The type of the target, or null. */
     String getType();
 }

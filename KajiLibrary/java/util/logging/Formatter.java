@@ -1,68 +1,68 @@
 package java.util.logging;
 
 /**
- * KajiLibrary's java.util.logging.Formatter -- convierte un {@link LogRecord} en texto.
+ * KajiLibrary's java.util.logging.Formatter -- it turns a {@link LogRecord} into text.
  *
- * <p>{@link #getHead} y {@link #getTail} existen para los formatos que **envuelven**: un formateador
- * XML necesita abrir y cerrar el documento, y sin estos ganchos tendria que adivinar cuando empieza y
- * termina la sesion. Para un formato de una linea por mensaje devuelven vacio.
+ * <p>{@link #getHead} and {@link #getTail} exist for the formats that **wrap**: an XML formatter
+ * needs to open and close the document, and without these hooks it would have to guess when the
+ * session begins and ends. For a one-line-per-message format they return empty.
  */
 public abstract class Formatter {
 
     protected Formatter() {
     }
 
-    /** El texto de ese registro. */
+    /** That record's text. */
     public abstract String format(LogRecord record);
 
-    /** Lo que va antes del primer registro. */
+    /** What goes before the first record. */
     public String getHead(Handler h) {
         return "";
     }
 
-    /** Lo que va despues del ultimo. */
+    /** What goes after the last. */
     public String getTail(Handler h) {
         return "";
     }
 
     /**
-     * El mensaje del registro, traducido y con sus parametros sustituidos.
+     * The record's message, translated and with its parameters substituted.
      *
-     * <p>Dos pasos, en este orden. Primero, si el registro trae catalogo, el mensaje **es una clave**
-     * y lo que se formatea es lo que el catalogo tenga para ella; una clave ausente no es un error
-     * sino que deja pasar el mensaje crudo, que es lo unico util cuando la traduccion falta.
+     * <p>Two steps, in this order. First, if the record carries a bundle, the message **is a key**
+     * and what is formatted is whatever the bundle has for it; a missing key is not an error but
+     * lets the raw message through, which is the only useful thing when the translation is missing.
      *
-     * <p>Segundo, la sustitucion, que la hace {@link java.text.MessageFormat} y no una pasada a mano
-     * sobre las llaves. La diferencia se ve enseguida: `''` es una comilla, `'{0}'` es texto literal
-     * y `{0}` con un numero lo formatea segun la region. Sustituir a mano daria otra cosa en los tres
-     * casos.
+     * <p>Second, the substitution, which {@link java.text.MessageFormat} does and not a hand-rolled
+     * pass over the braces. The difference shows at once: `''` is one quote, `'{0}'` is literal text
+     * and `{0}` with a number formats it by region. Substituting by hand would give something else
+     * in all three cases.
      *
-     * <p>Y se sustituye **solo si** hay parametros y el texto tiene alguna `{`: sin esa guarda, un
-     * mensaje que hable de comillas se veria alterado sin que nadie haya pedido formatear nada. Si el
-     * patron esta mal armado, el mensaje sale crudo en vez de propagar la excepcion -- fallar al
-     * emitir una traza no puede tumbar al programa que la emite.
+     * <p>And it substitutes **only if** there are parameters and the text has some `{`: without that
+     * guard, a message talking about quotes would be altered without anybody having asked for any
+     * formatting. If the pattern is malformed, the message comes out raw instead of propagating the
+     * exception -- failing to emit a log entry cannot bring down the program emitting it.
      */
     public synchronized String formatMessage(LogRecord record) {
-        String texto = record.getMessage();
-        java.util.ResourceBundle catalogo = record.getResourceBundle();
-        if (catalogo != null && texto != null) {
+        String text = record.getMessage();
+        java.util.ResourceBundle bundle = record.getResourceBundle();
+        if (bundle != null && text != null) {
             try {
-                texto = catalogo.getString(texto);
+                text = bundle.getString(text);
             } catch (java.util.MissingResourceException e) {
-                texto = record.getMessage();
+                text = record.getMessage();
             }
         }
         try {
             Object[] params = record.getParameters();
             if (params == null || params.length == 0) {
-                return texto;
+                return text;
             }
-            if (texto.indexOf('{') >= 0) {
-                return java.text.MessageFormat.format(texto, params);
+            if (text.indexOf('{') >= 0) {
+                return java.text.MessageFormat.format(text, params);
             }
-            return texto;
+            return text;
         } catch (Exception e) {
-            return texto;
+            return text;
         }
     }
 }

@@ -36,11 +36,11 @@ public interface NavigableSet<E> extends SortedSet<E> {
     NavigableSet<E> headSet(E to, boolean inclusive);
 
     /**
-     * La vista dada vuelta, que en un conjunto navegable **es** `descendingSet()`.
+     * The reversed view, which in a navigable set **is** `descendingSet()`.
      *
-     * <p>No es una simplificacion: son el mismo objeto en el JDK tambien. `reversed()` llego con
-     * `SequencedCollection` en Java 21 y `descendingSet()` estaba desde el 6 -- la unica diferencia
-     * es que el nombre nuevo vale para cualquier coleccion con orden y el viejo solo aca.
+     * <p>It is not a simplification: they are the same object in the JDK too. `reversed()` arrived
+     * with `SequencedCollection` in Java 21 and `descendingSet()` had been there since 6 -- the only
+     * difference is that the new name holds for any ordered collection and the old one only here.
      */
     default NavigableSet<E> reversed() {
         return this.descendingSet();

@@ -3,47 +3,47 @@ package javax.xml.xpath;
 import javax.xml.namespace.QName;
 
 /**
- * KajiLibrary's javax.xml.xpath.XPathConstants -- los cinco tipos de resultado de XPath.
+ * KajiLibrary's javax.xml.xpath.XPathConstants -- the five XPath result types.
  *
- * <p>XPath 1.0 tiene exactamente cuatro tipos --booleano, numero, cadena y conjunto de nodos-- y la
- * plataforma agrega {@link #NODE} para el caso comodo de querer uno solo. Se piden por
- * {@link QName} y no por {@code Class} porque el API es de 2004 y los genericos recien llegaban; la
- * via moderna es {@code evaluateExpression} con un {@code Class}.
+ * <p>XPath 1.0 has exactly four types --boolean, number, string and node-set-- and the platform
+ * adds {@link #NODE} for the convenient case of wanting just one. They are requested by {@link
+ * QName} and not by {@code Class} because the API is from 2004 and generics were only just
+ * arriving; the modern way is {@code evaluateExpression} with a {@code Class}.
  *
- * <p>El espacio de nombres de los cinco es el de XSLT y no el de XPath. Es una rareza historica
- * --XPath salio como parte de XSLT-- y hay que respetarla: un {@code QName} armado a mano con el
- * espacio "correcto" no coincide con estos y la evaluacion falla.
+ * <p>The namespace of all five is XSLT's, not XPath's. It is a historical oddity --XPath came out
+ * as part of XSLT-- and it has to be respected: a {@code QName} built by hand with the "right"
+ * namespace does not match these and the evaluation fails.
  *
- * <p>Pedir un tipo distinto del que la expresion produce no es un error: XPath <b>convierte</b>. Una
- * expresion que devuelve un conjunto de nodos pedida como {@link #STRING} da el texto del primer
- * nodo, y pedida como {@link #BOOLEAN} da si el conjunto esta vacio. Eso ultimo es la fuente clasica
- * de confusion: {@code evaluate(expr, doc, BOOLEAN)} sobre {@code //nodo} contesta "existe alguno" y
- * no el contenido del nodo.
+ * <p>Asking for a type other than the one the expression produces is not an error: XPath
+ * <b>converts</b>. An expression that returns a node-set, asked for as {@link #STRING}, gives the
+ * text of the first node, and asked for as {@link #BOOLEAN} gives whether the set is non-empty. The
+ * latter is the classic source of confusion: {@code evaluate(expr, doc, BOOLEAN)} on {@code //node}
+ * answers "is there any" and not the node's content.
  */
 public class XPathConstants {
 
-    /** El espacio de nombres de los cinco tipos; es el de XSLT. Ver la nota de la clase. */
+    /** The namespace of the five types; it is XSLT's. See the class note. */
     private static final String NS = "http://www.w3.org/1999/XSL/Transform";
 
-    /** Un numero. XPath 1.0 no distingue entero de flotante: todo es {@code double}. */
+    /** A number. XPath 1.0 has no integers: everything is a {@code double}. */
     public static final QName NUMBER = new QName(NS, "NUMBER");
 
-    /** Una cadena. */
+    /** A string. */
     public static final QName STRING = new QName(NS, "STRING");
 
-    /** Un booleano. */
+    /** A boolean. */
     public static final QName BOOLEAN = new QName(NS, "BOOLEAN");
 
-    /** Un conjunto de nodos, que llega como {@code org.w3c.dom.NodeList}. */
+    /** A node-set, which arrives as an {@code org.w3c.dom.NodeList}. */
     public static final QName NODESET = new QName(NS, "NODESET");
 
-    /** Un solo nodo, o null si no hay ninguno. */
+    /** A single node, or null if there is none. */
     public static final QName NODE = new QName(NS, "NODE");
 
-    /** El modelo de objetos DOM, que es el unico que la plataforma trae. */
+    /** The DOM object model, which is the only one the platform ships. */
     public static final String DOM_OBJECT_MODEL = "http://java.sun.com/jaxp/xpath/dom";
 
-    /** Privado: la clase es solo constantes. */
+    /** Private: the class is constants only. */
     private XPathConstants() {
     }
 }

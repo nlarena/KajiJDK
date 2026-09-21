@@ -1,26 +1,26 @@
 package javax.sound.sampled;
 
 /**
- * KajiLibrary's javax.sound.sampled.LineUnavailableException -- la linea existe pero no se puede usar
- * ahora.
+ * KajiLibrary's javax.sound.sampled.LineUnavailableException -- the line exists but cannot be used
+ * now.
  *
- * <p>Es la distincion que hace util a esta clase: no significa que el sistema no soporte lo que se
- * pidio --para eso esta {@link IllegalArgumentException}-- sino que en <b>este momento</b> no hay
- * recurso.
+ * <p>It is the distinction that makes this class useful: it does not mean the system does not
+ * support what was asked --that is what {@link IllegalArgumentException} is for-- but that at
+ * <b>this moment</b> there is no resource.
  *
- * <p>La causa habitual es que otro programa se llevo el dispositivo, o que se agotaron las lineas
- * simultaneas del mezclador. Reintentar mas tarde puede funcionar, y por eso es comprobada.
+ * <p>The usual cause is that another program took the device, or that the mixer's simultaneous
+ * lines ran out. Retrying later may work, and that is why it is checked.
  */
 public class LineUnavailableException extends Exception {
 
     private static final long serialVersionUID = -2046718279487432130L;
 
-    /** Sin detalle. */
+    /** Without detail. */
     public LineUnavailableException() {
         super();
     }
 
-    /** Con mensaje. */
+    /** With a message. */
     public LineUnavailableException(String message) {
         super(message);
     }

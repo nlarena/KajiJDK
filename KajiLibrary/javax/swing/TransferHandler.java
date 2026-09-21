@@ -9,38 +9,38 @@ import java.awt.event.ActionListener;
 import java.io.Serializable;
 
 /**
- * Quien sabe copiar, pegar y arrastrar el contenido de un componente.
+ * Who knows how to copy, paste and drag a component's content.
  *
- * <h2>La idea</h2>
+ * <h2>The idea</h2>
  *
- * <p>Un componente no sabe copiarse: sabe {@code TransferHandler}. Eso permite que el mismo
- * componente se copie de una forma en una aplicacion y de otra en otra, y que copiar y arrastrar
- * compartan el mismo codigo, porque los dos terminan en un {@link Transferable}.
+ * <p>A component does not know how to copy itself: {@code TransferHandler} knows. That allows
+ * the same component to be copied one way in one application and another way in another, and
+ * copying and dragging to share the same code, because both end in a {@link Transferable}.
  *
- * <h2>Lo que hay aca</h2>
+ * <h2>What there is here</h2>
  *
- * <p>Esta VM no tiene portapapeles del sistema ni arrastre entre ventanas: no hay pantalla ni
- * gestor de ventanas con quien negociar. Las operaciones que necesitan uno —{@link #exportToClipboard},
- * {@link #importData}, {@link #exportAsDrag}— lo dicen y no hacen nada. Lo que si esta completo es
- * la <em>forma</em>: los tipos, las acciones, el lugar de caida ({@link DropLocation}) y la
- * consulta de si algo se podria importar, que es lo que un componente pregunta para decidir si
- * marca el destino.
+ * <p>This VM has neither a system clipboard nor dragging between windows: there is no screen
+ * nor window manager to negotiate with. The operations that need one --
+ * {@link #exportToClipboard}, {@link #importData}, {@link #exportAsDrag} -- say so and do
+ * nothing. What is complete is the <em>shape</em>: the types, the actions, the drop location
+ * ({@link DropLocation}) and the query of whether something could be imported, which is what a
+ * component asks in order to decide whether it marks the destination.
  */
 public class TransferHandler implements Serializable {
 
-    /** Ninguna operacion. */
+    /** No operation. */
     public static final int NONE = 0;
 
-    /** Copiar: el origen se queda con lo suyo. */
+    /** Copy: the source keeps what is its. */
     public static final int COPY = 1;
 
-    /** Mover: el origen lo pierde. */
+    /** Move: the source loses it. */
     public static final int MOVE = 2;
 
-    /** Cualquiera de las dos; la decide quien recibe. */
+    /** Either of the two; whoever receives decides it. */
     public static final int COPY_OR_MOVE = 3;
 
-    /** Un enlace a lo que hay en el origen. */
+    /** A link to what is in the source. */
     public static final int LINK = 1073741824;
 
     private String propertyName;
@@ -50,10 +50,10 @@ public class TransferHandler implements Serializable {
     private static final Action pasteAction = new TransferAction("paste");
 
     /**
-     * Un manejador que transfiere una sola propiedad del componente por su nombre.
+     * A handler that transfers a single property of the component by its name.
      *
-     * <p>Es la forma barata de que un componente sea copiable: en vez de escribir un manejador,
-     * se dice "lo que se copia de esto es su propiedad texto".
+     * <p>It is the cheap way for a component to be copyable: instead of writing a handler, one
+     * says "what is copied of this is its text property".
      */
     public TransferHandler(String property) {
         propertyName = property;
@@ -63,7 +63,7 @@ public class TransferHandler implements Serializable {
         this(null);
     }
 
-    /** La accion de cortar, para poner en un menu o un boton. */
+    /** The cut action, to put in a menu or a button. */
     public static Action getCutAction() {
         return cutAction;
     }
@@ -77,60 +77,61 @@ public class TransferHandler implements Serializable {
     }
 
     /**
-     * Si alguno de esos tipos se puede importar a ese componente.
+     * Whether any of those types can be imported into that component.
      *
-     * @deprecated es {@link #canImport(TransferSupport)}, que ademas sabe donde va a caer.
+     * @deprecated it is {@link #canImport(TransferSupport)}, which also knows where it is going to
+     *     fall.
      */
     @Deprecated
     public boolean canImport(JComponent comp, DataFlavor[] transferFlavors) {
         return false;
     }
 
-    /** Si lo que se esta arrastrando se puede soltar ahi. */
+    /** Whether what is being dragged can be dropped there. */
     public boolean canImport(TransferSupport support) {
         return false;
     }
 
-    /** Que operaciones admite el origen; ninguna sin manejador propio. */
+    /** Which operations the source admits; none with no handler of its own. */
     public int getSourceActions(JComponent c) {
         return NONE;
     }
 
     /**
-     * Lo que hay que transferir desde ese componente.
+     * What has to be transferred from that component.
      *
-     * <p>{@code null} si no hay nada; con la propiedad por nombre, el valor de esa propiedad.
+     * <p>{@code null} if there is nothing; with the property by name, that property's value.
      */
     protected Transferable createTransferable(JComponent c) {
         return null;
     }
 
-    /** Se termino de exportar; con {@code MOVE} es donde el origen borra lo suyo. */
+    /** The exporting finished; with {@code MOVE} it is where the source erases what is its. */
     protected void exportDone(JComponent source, Transferable data, int action) {
     }
 
-    /** No hay portapapeles del sistema en esta VM; ver la nota de la clase. */
+    /** There is no system clipboard on this VM; see the class note. */
     public void exportToClipboard(JComponent comp, Clipboard clip, int action) {
-        throw new UnsupportedOperationException("esta VM no tiene portapapeles del sistema");
+        throw new UnsupportedOperationException("this VM has no system clipboard");
     }
 
-    /** No hay arrastre en esta VM; ver la nota de la clase. */
+    /** There is no dragging on this VM; see the class note. */
     public void exportAsDrag(JComponent comp, java.awt.event.InputEvent e, int action) {
-        throw new UnsupportedOperationException("esta VM no tiene arrastre");
+        throw new UnsupportedOperationException("this VM has no drag and drop");
     }
 
-    /** @deprecated es {@link #importData(TransferSupport)}. */
+    /** @deprecated it is {@link #importData(TransferSupport)}. */
     @Deprecated
     public boolean importData(JComponent comp, Transferable t) {
         return false;
     }
 
-    /** Nada que importar sin portapapeles ni arrastre; ver la nota de la clase. */
+    /** Nothing to import with neither clipboard nor dragging; see the class note. */
     public boolean importData(TransferSupport support) {
         return false;
     }
 
-    /** La imagen que acompana al cursor mientras se arrastra; ninguna. */
+    /** The image that goes with the cursor while dragging; none. */
     public void setDragImage(java.awt.Image img) {
     }
 
@@ -146,21 +147,21 @@ public class TransferHandler implements Serializable {
     }
 
     /**
-     * Donde va a caer lo que se esta arrastrando.
+     * The image that is dragged under the pointer.
      *
-     * <p>Cada componente define su propia subclase con lo que le importa —una fila, un indice de
-     * texto—; esta solo lleva el punto.
-     */
-    /**
-     * La imagen que se arrastra bajo el puntero.
-     *
-     * <p>Nulo -- que es lo de siempre -- deja que el sistema muestre su cursor de arrastre. Una
-     * subclase devuelve un icono cuando quiere que se vea lo que se esta moviendo.
+     * <p>Null -- which is the usual thing -- lets the system show its dragging cursor. A subclass
+     * returns an icon when it wants what is being moved to be seen.
      */
     public Icon getVisualRepresentation(java.awt.datatransfer.Transferable t) {
         return null;
     }
 
+    /**
+     * Where what is being dragged is going to fall.
+     *
+     * <p>Each component defines its own subclass with what matters to it -- a row, a text
+     * index --; this one only carries the point.
+     */
     public static class DropLocation {
 
         private final Point dropPoint;
@@ -182,11 +183,11 @@ public class TransferHandler implements Serializable {
     }
 
     /**
-     * El contexto de una transferencia: quien la recibe, que trae y donde cae.
+     * A transfer's context: who receives it, what it brings and where it falls.
      *
-     * <p>Se pasa a {@link #canImport(TransferSupport)} y a {@link #importData(TransferSupport)}
-     * en vez de tres argumentos sueltos, para que agregar informacion mas adelante no cambie la
-     * firma.
+     * <p>It is passed to {@link #canImport(TransferSupport)} and to
+     * {@link #importData(TransferSupport)} instead of three loose arguments, so that adding
+     * information later does not change the signature.
      */
     public static final class TransferSupport {
 
@@ -199,7 +200,7 @@ public class TransferHandler implements Serializable {
         private int sourceSupportedActions;
         private Transferable transferable;
 
-        /** Un contexto de pegado —no de arrastre— sobre ese componente. */
+        /** A paste context -- not a dragging one -- over that component. */
         public TransferSupport(java.awt.Component component, Transferable transferable) {
             if (component == null || transferable == null) {
                 throw new NullPointerException("component and transferable must be non-null");
@@ -209,7 +210,7 @@ public class TransferHandler implements Serializable {
             this.isDrop = false;
         }
 
-        /** Si viene de un arrastre; si no, de pegar. */
+        /** Whether it comes from a drag; if not, from pasting. */
         public boolean isDrop() {
             return isDrop;
         }
@@ -218,20 +219,20 @@ public class TransferHandler implements Serializable {
             return component;
         }
 
-        /** Donde cae; solo tiene sentido en un arrastre. */
+        /** Where it falls; it only makes sense in a drag. */
         public DropLocation getDropLocation() {
             assureIsDrop();
             return dropLocation;
         }
 
-        /** Si el componente tiene que marcar el destino mientras se arrastra. */
+        /** Whether the component has to mark the destination while dragging. */
         public void setShowDropLocation(boolean showDropLocation) {
             assureIsDrop();
             this.showDropLocationIsSet = true;
             this.showDropLocation = showDropLocation;
         }
 
-        /** Elige entre copiar y mover cuando el origen admite las dos. */
+        /** It chooses between copying and moving when the source admits both. */
         public void setDropAction(int dropAction) {
             assureIsDrop();
             this.dropAction = dropAction;
@@ -241,7 +242,7 @@ public class TransferHandler implements Serializable {
             return dropAction == -1 ? getUserDropAction() : dropAction;
         }
 
-        /** La que pidio el usuario con los modificadores del teclado. */
+        /** The one the user asked for with the keyboard modifiers. */
         public int getUserDropAction() {
             assureIsDrop();
             return NONE;
@@ -271,7 +272,7 @@ public class TransferHandler implements Serializable {
         }
     }
 
-    /** Las tres acciones de menu; sin portapapeles, no hacen nada. */
+    /** The three menu actions; with no clipboard, they do nothing. */
     static class TransferAction extends AbstractAction implements Serializable {
 
         TransferAction(String name) {
@@ -283,18 +284,19 @@ public class TransferHandler implements Serializable {
     }
 
     /**
-     * Lo implementa lo que tiene un {@link TransferHandler} sin ser un {@link JComponent}.
+     * It is implemented by whatever has a {@link TransferHandler} without being a
+     * {@link JComponent}.
      *
-     * <p>Son las ventanas: {@code JDialog}, {@code JFrame} y {@code JWindow} pueden tener uno y no
-     * heredan de {@code JComponent}. Sin esta interfaz, el codigo que busca el manejador de un
-     * componente tendria que preguntar por cada clase de ventana.
+     * <p>They are the windows: {@code JDialog}, {@code JFrame} and {@code JWindow} may have one
+     * and do not inherit from {@code JComponent}. Without this interface, the code that looks a
+     * component's handler up would have to ask for each window class.
      *
-     * <p>No es publica: es un detalle de como Swing encuentra el manejador, no algo que un programa
-     * deba implementar.
+     * <p>It is not public: it is a detail of how Swing finds the handler, not something a program
+     * should implement.
      */
     interface HasGetTransferHandler {
 
-        /** El manejador, o nulo. */
+        /** The handler, or null. */
         TransferHandler getTransferHandler();
     }
 }

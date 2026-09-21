@@ -5,99 +5,104 @@ import javax.naming.NamingEnumeration;
 import javax.naming.NamingException;
 
 /**
- * KajiLibrary's javax.naming.directory.Attribute -- un atributo de una entrada del directorio.
+ * KajiLibrary's javax.naming.directory.Attribute -- an attribute of a directory entry.
  *
- * <p>Un identificador y <b>cero o mas</b> valores. Que sean varios es lo primero que sorprende: en un
- * directorio, {@code telefono} puede tener tres numeros, y no hay nada que distinga "el atributo" de
- * "la lista de valores del atributo". Por eso {@link #get()} sin indice devuelve <b>alguno</b> y no
- * "el" valor.
+ * <p>An identifier and <b>zero or more</b> values. That there can be several is the first surprise:
+ * in a directory, {@code telephoneNumber} may hold three numbers, and nothing distinguishes "the
+ * attribute" from "the attribute's list of values". That is why {@link #get()} without an index
+ * returns <b>one of them</b> and not "the" value.
  *
- * <h2>Ordenado o no</h2>
+ * <h2>Ordered or not</h2>
  *
- * <p>{@link #isOrdered} parte la interfaz en dos comportamientos:
+ * <p>{@link #isOrdered} splits the interface into two behaviours:
  *
  * <ul>
- *   <li><b>sin orden</b> --lo habitual-- los valores son un conjunto: agregar uno repetido no hace
- *       nada, y las posiciones no significan nada estable;
- *   <li><b>con orden</b> los valores son una lista: se repiten si se los agrega dos veces, y el
- *       indice es parte del dato.
+ *   <li><b>unordered</b> --the usual case-- the values are a set: adding a repeated one does
+ *       nothing, and positions mean nothing stable;
+ *   <li><b>ordered</b> the values are a list: they repeat if added twice, and the index is part of
+ *       the data.
  * </ul>
  *
- * <p>Los metodos con indice existen para el segundo caso. Sobre uno sin orden funcionan igual, pero
- * lo que devuelven no es reproducible entre implementaciones.
+ * <p>The indexed methods exist for the second case. On an unordered one they work the same, but
+ * what they return is not reproducible across implementations.
  *
- * <h2>Los dos metodos de esquema</h2>
+ * <h2>The two schema methods</h2>
  *
- * <p>{@link #getAttributeDefinition} y {@link #getAttributeSyntaxDefinition} devuelven partes del
- * esquema del directorio: que reglas tiene este atributo y que sintaxis tienen sus valores. Casi
- * ninguna implementacion los soporta, y la que no, lanza {@code OperationNotSupportedException}.
+ * <p>{@link #getAttributeDefinition} and {@link #getAttributeSyntaxDefinition} return parts of the
+ * directory schema: what rules this attribute has and what syntax its values have. Hardly any
+ * implementation supports them, and one that does not throws
+ * {@code OperationNotSupportedException}.
  */
 public interface Attribute extends Cloneable, Serializable {
 
-    /** De 1999. Es parte del API: cambiarlo rompe la deserializacion de lo ya guardado. */
+    /**
+     * The JNDI 1.1.1 value, as in the JDK. An earlier note said changing it breaks deserialization;
+     * the JDK marks this field {@code @Deprecated} because a {@code serialVersionUID} in an
+     * interface has no effect.
+     */
     static final long serialVersionUID = 8707690322213556804L;
 
-    /** Todos los valores. */
+    /** All the values. */
     NamingEnumeration<?> getAll() throws NamingException;
 
     /**
-     * Alguno de los valores.
+     * One of the values.
      *
-     * @throws javax.naming.NoSuchElementException si no tiene ninguno
+     * @throws java.util.NoSuchElementException if it has none
      */
     Object get() throws NamingException;
 
-    /** Cuantos valores tiene. */
+    /** How many values it has. */
     int size();
 
-    /** El identificador, por ejemplo {@code "cn"}. */
+    /** The identifier, for example {@code "cn"}. */
     String getID();
 
-    /** Si tiene ese valor. */
+    /** Whether it has that value. */
     boolean contains(Object attrVal);
 
     /**
-     * Agrega un valor.
+     * Adds a value.
      *
-     * @return si el atributo cambio; false en uno sin orden que ya lo tenia
+     * @return whether the attribute changed; false on an unordered one that already had it
      */
     boolean add(Object attrVal);
 
-    /** Saca ese valor. */
+    /** Removes that value. */
     boolean remove(Object attrval);
 
-    /** Saca todos. */
+    /** Removes them all. */
     void clear();
 
     /**
-     * El esquema de la sintaxis de los valores.
+     * The schema of the values' syntax.
      *
-     * @throws javax.naming.OperationNotSupportedException si la implementacion no lo tiene
+     * @throws javax.naming.OperationNotSupportedException if the implementation does not have it
      */
     DirContext getAttributeSyntaxDefinition() throws NamingException;
 
-    /** El esquema del atributo. */
+    /** The attribute's schema. */
     DirContext getAttributeDefinition() throws NamingException;
 
-    /** Una copia. */
+    /** A copy. */
     Object clone();
 
-    /** Si los valores son una lista y no un conjunto. Ver la nota de la clase. */
+    /** Whether the values are a list and not a set. See the class note. */
     boolean isOrdered();
 
     /**
-     * El valor de esa posicion.
+     * The value at that position.
      *
-     * @throws IndexOutOfBoundsException si no existe
+     * @throws IndexOutOfBoundsException if it does not exist
      */
     Object get(int ix) throws NamingException;
 
-    /** Saca el de esa posicion y lo devuelve. */
+    /** Removes the one at that position and returns it. */
     Object remove(int ix);
 
-    /** Inserta en esa posicion. */
+    /** Inserts at that position. */
     void add(int ix, Object attrVal);
 
-    /** Reemplaza el de esa posicion y devuelve el anterior. */
+    /** Replaces the one at that position and returns the previous one. */
     Object set(int ix, Object attrVal);
 }

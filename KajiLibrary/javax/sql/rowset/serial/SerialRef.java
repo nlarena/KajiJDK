@@ -6,29 +6,29 @@ import java.sql.SQLException;
 import java.util.Map;
 
 /**
- * KajiLibrary's javax.sql.rowset.serial.SerialRef -- una copia de una referencia SQL.
+ * KajiLibrary's javax.sql.rowset.serial.SerialRef -- a copy of an SQL reference.
  *
- * <p>Un {@link Ref} apunta a una instancia de un tipo estructurado que vive en el servidor. Esta
- * clase copia el nombre del tipo y el objeto al que apunta, para que la referencia sobreviva a la
- * conexion.
+ * <p>A {@link Ref} points to an instance of a structured type that lives on the server. This class
+ * copies the name of the type and the object it points to, so that the reference survives the
+ * connection.
  *
- * <p>Es la mas debil de las copias de este paquete y hay que decirlo: una referencia <b>solo tiene
- * sentido dentro de su base</b>. Lo que se copia es el valor al que apuntaba en ese momento, no la
- * capacidad de volver a resolverla. {@link #setObject} cambia la copia, no el servidor.
+ * <p>It is the weakest of the copies of this package and it has to be said: a reference <b>only
+ * makes sense within its database</b>. What is copied is the value it pointed to at that moment,
+ * not the ability to resolve it again. {@link #setObject} changes the copy, not the server.
  */
 public class SerialRef implements Ref, Serializable, Cloneable {
 
     private static final long serialVersionUID = -4727123500609662274L;
 
-    /** El nombre del tipo estructurado. */
+    /** The name of the structured type. */
     private final String baseTypeName;
 
-    /** El objeto al que apuntaba. */
+    /** The object it pointed to. */
     private Object object;
 
     /**
-     * @param ref la referencia a copiar
-     * @throws SQLException si es null o no tiene nombre de tipo
+     * @param ref the reference to copy
+     * @throws SQLException if it is null or has no type name
      */
     public SerialRef(Ref ref) throws SerialException, SQLException {
         if (ref == null) {
@@ -42,16 +42,17 @@ public class SerialRef implements Ref, Serializable, Cloneable {
         this.object = ref;
     }
 
-    /** El nombre del tipo estructurado. */
+    /** The name of the structured type. */
     public String getBaseTypeName() throws SerialException {
         return this.baseTypeName;
     }
 
     /**
-     * El objeto, traduciendo el tipo con ese mapa.
+     * The object, translating the type with that map.
      *
-     * <p>El mapa se ignora en esta copia: la traduccion la hace el driver al leer, y aca ya se leyo.
-     * Es lo que hace el JDK.
+     * <p>The map is ignored in this copy: the driver does the translation when reading, and here it
+     * has already been read. The note said that is what the JDK does; JDK 25 returns {@code null}
+     * when given a map, even one keyed by the object.
      */
     public Object getObject(Map<String, Class<?>> map) throws SerialException {
         if (map == null) {
@@ -61,17 +62,17 @@ public class SerialRef implements Ref, Serializable, Cloneable {
         return this.object;
     }
 
-    /** El objeto al que apuntaba. */
+    /** The object it pointed to. */
     public Object getObject() throws SerialException {
         return this.object;
     }
 
-    /** Cambia el objeto de <b>esta copia</b>. Ver la nota de la clase. */
+    /** Changes the object of <b>this copy</b>. See the class note. */
     public void setObject(Object obj) throws SerialException {
         this.object = obj;
     }
 
-    /** Iguales si coinciden el tipo y el objeto. */
+    /** Equal if the type and the object match. */
     public boolean equals(Object obj) {
         if (this == obj) {
             return true;
@@ -86,13 +87,13 @@ public class SerialRef implements Ref, Serializable, Cloneable {
         return this.object == null ? that.object == null : this.object.equals(that.object);
     }
 
-    /** Coherente con {@link #equals}. */
+    /** Consistent with {@link #equals}. */
     public int hashCode() {
         return 31 * this.baseTypeName.hashCode()
             + (this.object == null ? 0 : this.object.hashCode());
     }
 
-    /** Una copia; comparte el objeto. */
+    /** A copy; it shares the object. */
     public Object clone() {
         try {
             SerialRef copy = new SerialRef((Ref) this.object);

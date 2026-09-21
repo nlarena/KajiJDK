@@ -18,7 +18,7 @@ public interface SortedMap<K, V> extends SequencedMap<K, V> {
 
     K lastKey();
 
-    /** Una **vista** de este mapa en orden inverso. Ver `SortedSet.reversed()`. */
+    /** A **view** of this map in reverse order. See `SortedSet.reversed()`. */
     default SortedMap<K, V> reversed() {
         return new ReverseSortedMap<K, V>(this);
     }

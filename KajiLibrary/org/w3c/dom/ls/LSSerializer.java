@@ -5,57 +5,59 @@ import org.w3c.dom.DOMException;
 import org.w3c.dom.Node;
 
 /**
- * KajiLibrary's org.w3c.dom.ls.LSSerializer -- convierte un arbol otra vez en texto.
+ * KajiLibrary's org.w3c.dom.ls.LSSerializer -- it turns a tree back into text.
  *
- * <p>La vuelta de {@link LSParser}. Los tres {@code write} se diferencian en el destino y en una
- * cosa mas importante: {@link #writeToString} tiene que armar toda la salida en memoria, asi que
- * para un documento grande hay que usar alguno de los otros dos.
+ * <p>The way back of {@link LSParser}. The three {@code write} differ in the destination and in one
+ * more important thing: {@link #writeToString} has to build the whole output in memory, so for a
+ * large document one of the other two has to be used.
  *
- * <h2>Serializar no es lo inverso de analizar</h2>
+ * <h2>Serialising is not the inverse of parsing</h2>
  *
- * <p>Vale tenerlo presente porque sorprende: leer y volver a escribir un documento <b>no</b> devuelve
- * los mismos bytes. El orden de los atributos no se conserva --el modelo DOM no lo guarda--, las
- * comillas pueden cambiar, el espacio entre atributos se normaliza y las entidades pueden quedar
- * expandidas. Lo que se conserva es el documento en el sentido de XML, no su forma. Comparar dos XML
- * comparando texto es, por eso, casi siempre el metodo equivocado.
+ * <p>It is worth keeping in mind because it is surprising: reading and writing back a document does
+ * <b>not</b> return the same bytes. The order of the attributes is not kept --the DOM model does
+ * not store it--, the quotes may change, the space between attributes is normalised and the
+ * entities may be left expanded. What is kept is the document in the XML sense, not its form.
+ * Comparing two XMLs by comparing text is, for that reason, almost always the wrong method.
  *
- * <p>{@link #getNewLine} es la excepcion util a eso: es lo unico de la forma que se puede fijar, y
- * existe justamente porque el fin de linea es lo primero que rompe una comparacion entre sistemas.
+ * <p>{@link #getNewLine} is the useful exception to that: it is the only part of the form that can
+ * be fixed, and it exists precisely because the end of line is the first thing that breaks a
+ * comparison between systems.
  */
 public interface LSSerializer {
 
-    /** Los parametros de la salida, por nombre. */
+    /** The parameters of the output, by name. */
     DOMConfiguration getDomConfig();
 
-    /** El fin de linea que se usa, o null para el del sistema. */
+    /** The end of line in use, or null for the system's one. */
     String getNewLine();
 
-    /** Ver {@link #getNewLine}; null vuelve al del sistema. */
+    /** See {@link #getNewLine}; null goes back to the system's one. */
     void setNewLine(String newLine);
 
-    /** El filtro que decide que nodos salen, o null. */
+    /** The filter that decides which nodes go out, or null. */
     LSSerializerFilter getFilter();
 
     /** Ver {@link #getFilter}. */
     void setFilter(LSSerializerFilter filter);
 
     /**
-     * Escribe el nodo en ese destino.
+     * It writes the node to that destination.
      *
-     * @return si se escribio; false cuando el destino no se pudo resolver
-     * @throws LSException con {@link LSException#SERIALIZE_ERR} si algo no se pudo serializar
+     * @return whether it was written; false when the destination could not be resolved
+     * @throws LSException with {@link LSException#SERIALIZE_ERR} if something could not be
+     *     serialised
      */
     boolean write(Node nodeArg, LSOutput destination) throws LSException;
 
-    /** Idem, a un URI. */
+    /** The same, to a URI. */
     boolean writeToURI(Node nodeArg, String uri) throws LSException;
 
     /**
-     * Idem, a una cadena.
+     * The same, to a string.
      *
-     * <p>Arma todo en memoria; ver la nota de la clase.
+     * <p>It builds everything in memory; see the note of the class.
      *
-     * @throws DOMException si el resultado no entra en un {@code String}
+     * @throws DOMException if the result does not fit in a {@code String}
      */
     String writeToString(Node nodeArg) throws DOMException, LSException;
 }

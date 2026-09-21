@@ -12,20 +12,21 @@ import javax.swing.plaf.ComponentUI;
 import javax.swing.plaf.basic.BasicToggleButtonUI;
 
 /**
- * El conmutador de Metal.
+ * Metal's toggle button.
  *
- * <p>Es el gemelo de {@link MetalButtonUI} y no comparte una linea de codigo con el, porque los dos
- * heredan de distinto lado: uno del boton basico y este del conmutador basico. Java no tiene
- * herencia multiple y esta es la clase donde mas se nota: los tres campos de color, los tres
- * {@code getXxx}, {@code installDefaults} y {@code paintText} estan escritos dos veces, iguales.
+ * <p>It is {@link MetalButtonUI}'s twin and shares not a line of code with it, because the two
+ * inherit from different places: one from the basic button and this one from the basic toggle.
+ * Java has no multiple inheritance and this is the class where it shows most: the three colour
+ * fields, the three {@code getXxx}, {@code installDefaults} and {@code paintText} are written
+ * twice, identically.
  *
- * <p>Lo unico que agrega de verdad es {@link #paintIcon}: un conmutador con icono y elegido dibuja
- * el icono sobre el color de seleccion, cosa que un boton comun no necesita porque no se queda
- * elegido.
+ * <p>The only thing it really adds is {@link #paintIcon}: a toggle with an icon and chosen draws
+ * the icon over the selection colour, something an ordinary button does not need because it does
+ * not stay chosen.
  */
 public class MetalToggleButtonUI extends BasicToggleButtonUI {
 
-    private static final MetalToggleButtonUI UNICO = new MetalToggleButtonUI();
+    private static final MetalToggleButtonUI SHARED = new MetalToggleButtonUI();
 
     protected Color focusColor;
     protected Color selectColor;
@@ -35,19 +36,19 @@ public class MetalToggleButtonUI extends BasicToggleButtonUI {
     }
 
     public static ComponentUI createUI(JComponent c) {
-        return UNICO;
+        return SHARED;
     }
 
     protected Color getFocusColor() {
         if (focusColor == null) {
-            focusColor = MetalLookAndFeel.colorDeLaTabla(getPropertyPrefix() + "focus");
+            focusColor = MetalLookAndFeel.tableColor(getPropertyPrefix() + "focus");
         }
         return focusColor;
     }
 
     protected Color getSelectColor() {
         if (selectColor == null) {
-            selectColor = MetalLookAndFeel.colorDeLaTabla(getPropertyPrefix() + "select");
+            selectColor = MetalLookAndFeel.tableColor(getPropertyPrefix() + "select");
         }
         return selectColor;
     }
@@ -55,23 +56,24 @@ public class MetalToggleButtonUI extends BasicToggleButtonUI {
     protected Color getDisabledTextColor() {
         if (disabledTextColor == null) {
             disabledTextColor =
-                    MetalLookAndFeel.colorDeLaTabla(getPropertyPrefix() + "disabledText");
+                    MetalLookAndFeel.tableColor(getPropertyPrefix() + "disabledText");
         }
         return disabledTextColor;
     }
 
     public void installDefaults(AbstractButton b) {
         super.installDefaults(b);
-        focusColor = MetalLookAndFeel.colorDeLaTabla(getPropertyPrefix() + "focus");
-        selectColor = MetalLookAndFeel.colorDeLaTabla(getPropertyPrefix() + "select");
+        focusColor = MetalLookAndFeel.tableColor(getPropertyPrefix() + "focus");
+        selectColor = MetalLookAndFeel.tableColor(getPropertyPrefix() + "select");
         disabledTextColor =
-                MetalLookAndFeel.colorDeLaTabla(getPropertyPrefix() + "disabledText");
+                MetalLookAndFeel.tableColor(getPropertyPrefix() + "disabledText");
     }
 
     protected void uninstallDefaults(AbstractButton b) {
         super.uninstallDefaults(b);
-        // Los tres colores no se sueltan: este UI lo comparten todos los botones del
-        // programa, y soltarlos al desinstalar uno dejaria a los demas sin color. Medido.
+        // The three colours are not released: this UI is shared by every button in the
+                // program, and releasing them when one is uninstalled would leave the rest with no
+                // colour. Measured.
     }
 
     protected void paintButtonPressed(Graphics g, AbstractButton b) {
@@ -96,13 +98,13 @@ public class MetalToggleButtonUI extends BasicToggleButtonUI {
             super.paintText(g, c, textRect, text);
             return;
         }
-        Color antes = g.getColor();
+        Color before = g.getColor();
         g.setColor(getDisabledTextColor());
         super.paintText(g, c, textRect, text);
-        g.setColor(antes);
+        g.setColor(before);
     }
 
-    /** Un conmutador elegido lleva el icono sobre el color de seleccion. */
+    /** A chosen toggle carries the icon over the selection colour. */
     protected void paintIcon(Graphics g, AbstractButton b, Rectangle iconRect) {
         ButtonModel m = b.getModel();
         if (m.isSelected() && !m.isArmed() && b.isContentAreaFilled() && b.isOpaque()) {

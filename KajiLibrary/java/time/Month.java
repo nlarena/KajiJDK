@@ -35,9 +35,9 @@ public enum Month implements java.time.temporal.TemporalAccessor,
     }
 
     /**
-     * El mes que `temporal` tiene.
+     * The month `temporal` holds.
      *
-     * @throws java.time.DateTimeException si no lo tiene
+     * @throws java.time.DateTimeException if it holds none
      */
     public static Month from(java.time.temporal.TemporalAccessor temporal) {
         if (temporal == null) {
@@ -49,20 +49,20 @@ public enum Month implements java.time.temporal.TemporalAccessor,
         return Month.of(temporal.get(java.time.temporal.ChronoField.MONTH_OF_YEAR));
     }
 
-    /** El minimo de dias que puede tener: 28 para febrero, su longitud fija para el resto. */
+    /** The fewest days it can have: 28 for February, its fixed length for the rest. */
     public int minLength() {
         return this.getValue() == 2 ? 28 : this.length(false);
     }
 
-    /** El maximo: 29 para febrero. */
+    /** The most: 29 for February. */
     public int maxLength() {
         return this.getValue() == 2 ? 29 : this.length(false);
     }
 
     /**
-     * El dia del año en que empieza este mes, contando desde 1.
+     * The day of the year this month starts on, counting from 1.
      *
-     * <p>Enero da 1, febrero 32, y de marzo en adelante depende del bisiesto.
+     * <p>January gives 1, February 32, and from March on it depends on the leap year.
      */
     public int firstDayOfYear(boolean leapYear) {
         int extra = leapYear ? 1 : 0;
@@ -103,7 +103,7 @@ public enum Month implements java.time.temporal.TemporalAccessor,
         return 335 + extra;
     }
 
-    /** El primer mes del trimestre al que este pertenece: enero, abril, julio u octubre. */
+    /** The first month of the quarter this one belongs to: January, April, July or October. */
     public Month firstMonthOfQuarter() {
         return Month.of((this.ordinal() / 3) * 3 + 1);
     }
@@ -152,21 +152,21 @@ public enum Month implements java.time.temporal.TemporalAccessor,
         return temporal.with(java.time.temporal.ChronoField.MONTH_OF_YEAR, this.getValue());
     }
 
-    /** El nombre del mes. Ver la nota de `DayOfWeek.getDisplayName`: no depende de la region. */
+    /** The month's name. See `DayOfWeek.getDisplayName`'s note: it does not depend on the region. */
     public String getDisplayName(java.time.format.TextStyle style, java.util.Locale locale) {
         if (style == null || locale == null) {
             throw new NullPointerException();
         }
-        String largo = this.name().charAt(0) + this.name().substring(1).toLowerCase();
+        String length = this.name().charAt(0) + this.name().substring(1).toLowerCase();
         if (style == java.time.format.TextStyle.NARROW
                 || style == java.time.format.TextStyle.NARROW_STANDALONE) {
-            return largo.substring(0, 1);
+            return length.substring(0, 1);
         }
         if (style == java.time.format.TextStyle.SHORT
                 || style == java.time.format.TextStyle.SHORT_STANDALONE) {
-            return largo.substring(0, 3);
+            return length.substring(0, 3);
         }
-        return largo;
+        return length;
     }
 
     public Month plus(long months) {

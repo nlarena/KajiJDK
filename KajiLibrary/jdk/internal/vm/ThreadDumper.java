@@ -9,27 +9,28 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * KajiLibrary's jdk.internal.vm.ThreadDumper — vuelca los hilos vivos, en texto o en JSON.
+ * KajiLibrary's jdk.internal.vm.ThreadDumper -- it dumps the live threads, as text or as JSON.
  *
- * <p>Es lo que hay detrás de `jcmd Thread.dump_to_file`. Las dos formas no son la misma cosa escrita
- * distinto: la de texto está pensada para que la lea una persona, y la de JSON para que la lea una
- * herramienta, con el árbol de contenedores explícito.
+ * <p>It is what is behind `jcmd Thread.dump_to_file`. The two forms are not the same thing written
+ * differently: the text one is meant to be read by a person, and the JSON one by a tool, with the
+ * tree of containers explicit.
  *
- * <p>Los hilos se enumeran recorriendo el `ThreadGroup` raíz, que es lo que hay: esta VM no lleva un
- * registro central de hilos vivos.
+ * <p>The threads are enumerated by walking the root `ThreadGroup`, which is what there is: this VM
+ * keeps no central registry of live threads.
  *
- * <p><strong>Y hoy ese recorrido no encuentra nada.</strong> En esta VM `ThreadGroup` no lleva
- * registro de sus miembros: `activeCount()` devuelve 0 y `enumerate()` no escribe nada, aun con
- * hilos corriendo (repro en `scratchpad/zz350/A5.java`). Así que el volcado trae **sólo el hilo que
- * lo pide**, que se agrega aparte y a mano —igual que en
- * {@link ThreadContainers#root()}, y por la misma razón: un volcado que dice que no hay ningún hilo
- * vivo mientras alguien lo está pidiendo no es un volcado incompleto, es uno equivocado—. El día que
- * `ThreadGroup` lleve registro, esto empieza a traer a todos sin tocar nada.
+ * <p><strong>And today that walk finds nothing.</strong> On this VM `ThreadGroup` keeps no record
+ * of its members: `activeCount()` returns 0 and `enumerate()` writes nothing, even with threads
+ * running. (The note cited a repro at `scratchpad/zz350/A5.java`; that file is not in the tree.) So
+ * the dump brings **only the thread that asks for it**, which is added separately and by hand
+ * --just as in {@link ThreadContainers#root()}, and for the same reason: a dump that says there is
+ * no live thread while somebody is asking for it is not an incomplete dump, it is a wrong one--.
+ * The day `ThreadGroup` keeps a record, this starts bringing all of them without touching anything.
  *
- * <p><strong>Las pilas van vacías.</strong> {@link Thread#getStackTrace} sobre **otro** hilo necesita
- * que la VM lo pare en un punto seguro y lea sus cuadros, y esta VM no expone eso. Cada hilo aparece
- * con su nombre, su estado y su identidad; el arreglo de cuadros queda vacío en vez de traer la pila
- * del hilo equivocado, que es el error que haría inútil al volcado entero.
+ * <p><strong>The stacks go empty.</strong> {@link Thread#getStackTrace} on **another** thread needs
+ * the VM to stop it at a safepoint and read its frames, and this VM does not expose that. Each
+ * thread appears with its name, its state and its identity; the array of frames is left empty
+ * instead of bringing the stack of the wrong thread, which is the error that would make the whole
+ * dump useless.
  */
 public class ThreadDumper {
 
@@ -37,65 +38,66 @@ public class ThreadDumper {
     }
 
     /**
-     * Vuelca en texto a un archivo.
+     * It dumps as text to a file.
      *
-     * @param outputFile a dónde escribir
-     * @param okToOverwrite si se puede pisar un archivo que ya está
-     * @return el mensaje de respuesta, que es lo que `jcmd` le muestra al usuario
+     * @param outputFile where to write
+     * @param okToOverwrite whether a file that is already there may be overwritten
+     * @return the reply message, which is what `jcmd` shows the user
      */
     public static byte[] dumpThreads(String outputFile, boolean okToOverwrite) {
-        return ThreadDumper.aArchivo(outputFile, okToOverwrite, ThreadDumper.textoDeHilos());
+        return ThreadDumper.toFile(outputFile, okToOverwrite, ThreadDumper.threadsAsText());
     }
 
-    /** Vuelca en JSON a un archivo. */
+    /** It dumps as JSON to a file. */
     public static byte[] dumpThreadsToJson(String outputFile, boolean okToOverwrite) {
-        return ThreadDumper.aArchivo(outputFile, okToOverwrite, ThreadDumper.jsonDeHilos());
+        return ThreadDumper.toFile(outputFile, okToOverwrite, ThreadDumper.threadsAsJson());
     }
 
-    /** Vuelca en texto a un flujo. */
+    /** It dumps as text to a stream. */
     public static void dumpThreads(OutputStream out) throws IOException {
-        out.write(ThreadDumper.textoDeHilos().getBytes(StandardCharsets.UTF_8));
+        out.write(ThreadDumper.threadsAsText().getBytes(StandardCharsets.UTF_8));
         out.flush();
     }
 
-    /** Vuelca en JSON a un flujo. */
+    /** It dumps as JSON to a stream. */
     public static void dumpThreadsToJson(OutputStream out) throws IOException {
-        out.write(ThreadDumper.jsonDeHilos().getBytes(StandardCharsets.UTF_8));
+        out.write(ThreadDumper.threadsAsJson().getBytes(StandardCharsets.UTF_8));
         out.flush();
     }
 
-    // El error se devuelve como mensaje y no como excepcion porque el que llama es `jcmd` desde
-    // afuera del proceso: lo unico que puede hacer con una falla es mostrarsela al usuario.
-    private static byte[] aArchivo(String outputFile, boolean okToOverwrite, String contenido) {
+    // The error is returned as a message and not as an exception because the caller is `jcmd` from
+    // outside the process: the only thing it can do with a failure is show it to the user.
+    private static byte[] toFile(String outputFile, boolean okToOverwrite, String content) {
         if (outputFile == null) {
-            return "no se indico archivo de salida".getBytes(StandardCharsets.UTF_8);
+            return "no output file given".getBytes(StandardCharsets.UTF_8);
         }
         Path p = Path.of(outputFile);
         if (!okToOverwrite && Files.exists(p)) {
-            return ("el archivo ya existe: " + outputFile).getBytes(StandardCharsets.UTF_8);
+            return ("file already exists: " + outputFile).getBytes(StandardCharsets.UTF_8);
         }
         try {
-            Files.write(p, contenido.getBytes(StandardCharsets.UTF_8));
+            Files.write(p, content.getBytes(StandardCharsets.UTF_8));
         } catch (IOException e) {
-            return ("no se pudo escribir " + outputFile + ": " + e).getBytes(StandardCharsets.UTF_8);
+            return ("could not write " + outputFile + ": " + e).getBytes(StandardCharsets.UTF_8);
         }
-        return ("volcado escrito en " + outputFile).getBytes(StandardCharsets.UTF_8);
+        return ("dump written to " + outputFile).getBytes(StandardCharsets.UTF_8);
     }
 
-    // Se garantiza al menos el hilo que pregunta, igual que `ThreadContainers.ContenedorRaiz.threads()`
-    // y por la misma razon: en esta VM `ThreadGroup` no lleva registro de sus miembros --`activeCount()`
-    // da 0 y `enumerate()` no devuelve nada aun con hilos corriendo--, asi que sin esta garantia el
-    // recorrido daba una lista **vacia** y el volcado salia sin un solo hilo mientras alguien lo estaba
-    // pidiendo. Un volcado que dice que no hay hilos vivos no es un volcado parcial, es uno que miente.
-    private static List<Thread> vivos() {
+    // At least the asking thread is guaranteed, just like
+    // `ThreadContainers.RootContainer.threads()` and for the same reason: on this VM `ThreadGroup`
+    // keeps no record of its members --`activeCount()` gives 0 and `enumerate()` returns nothing
+    // even with threads running--, so without this guarantee the walk gave an **empty** list and
+    // the dump came out without a single thread while somebody was asking for it. A dump that says
+    // there are no live threads is not a partial dump, it is one that lies.
+    private static List<Thread> liveThreads() {
         ThreadGroup g = Thread.currentThread().getThreadGroup();
         while (g != null && g.getParent() != null) {
             g = g.getParent();
         }
         List<Thread> out = new ArrayList<Thread>();
         if (g != null) {
-            // Con holgura: entre contar y enumerar pueden aparecer hilos, y un arreglo justo los
-            // perderia.
+            // With slack: threads can appear between counting and enumerating, and an exact array
+            // would lose them.
             Thread[] buf = new Thread[g.activeCount() + 16];
             int n = g.enumerate(buf, true);
             for (int i = 0; i < n; i++) {
@@ -104,17 +106,17 @@ public class ThreadDumper {
                 }
             }
         }
-        Thread yo = Thread.currentThread();
-        if (!out.contains(yo)) {
-            out.add(yo);
+        Thread self = Thread.currentThread();
+        if (!out.contains(self)) {
+            out.add(self);
         }
         return out;
     }
 
-    private static String textoDeHilos() {
+    private static String threadsAsText() {
         StringBuilder sb = new StringBuilder();
-        sb.append("Volcado de hilos - ").append(System.currentTimeMillis()).append('\n');
-        for (Thread t : ThreadDumper.vivos()) {
+        sb.append("Thread dump - ").append(System.currentTimeMillis()).append('\n');
+        for (Thread t : ThreadDumper.liveThreads()) {
             sb.append('\n').append('"').append(t.getName()).append('"')
               .append(" #").append(t.threadId())
               .append(t.isDaemon() ? " daemon" : "")
@@ -125,35 +127,37 @@ public class ThreadDumper {
         return sb.toString();
     }
 
-    // JSON escrito a mano y no con una biblioteca: el volcado tiene que poder salir cuando el proceso
-    // ya esta en problemas, y ese no es momento de cargar clases nuevas ni de asignar de mas.
-    private static String jsonDeHilos() {
+    // JSON written by hand and not with a library: the dump has to be able to come out when the
+    // process is already in trouble, and that is no time for loading new classes or allocating more
+    // than needed.
+    private static String threadsAsJson() {
         StringBuilder sb = new StringBuilder();
         sb.append("{\n  \"threadDump\": {\n");
         sb.append("    \"time\": \"").append(System.currentTimeMillis()).append("\",\n");
         sb.append("    \"runtimeVersion\": \"")
-          .append(ThreadDumper.escapar(System.getProperty("java.version", "desconocida")))
+          .append(ThreadDumper.escape(System.getProperty("java.version", "unknown")))
           .append("\",\n");
         sb.append("    \"threadContainers\": [\n      {\n");
         sb.append("        \"container\": \"<root>\",\n");
         sb.append("        \"parent\": null,\n");
         sb.append("        \"threads\": [\n");
-        List<Thread> hilos = ThreadDumper.vivos();
-        for (int i = 0; i < hilos.size(); i++) {
-            Thread t = hilos.get(i);
+        List<Thread> threads = ThreadDumper.liveThreads();
+        for (int i = 0; i < threads.size(); i++) {
+            Thread t = threads.get(i);
             sb.append("          {\n");
             sb.append("            \"tid\": \"").append(t.threadId()).append("\",\n");
-            sb.append("            \"name\": \"").append(ThreadDumper.escapar(t.getName())).append("\",\n");
+            sb.append("            \"name\": \"").append(ThreadDumper.escape(t.getName())).append("\",\n");
             sb.append("            \"state\": \"").append(t.getState()).append("\",\n");
             sb.append("            \"stack\": []\n");
-            sb.append("          }").append(i + 1 < hilos.size() ? "," : "").append('\n');
+            sb.append("          }").append(i + 1 < threads.size() ? "," : "").append('\n');
         }
         sb.append("        ]\n      }\n    ]\n  }\n}\n");
         return sb.toString();
     }
 
-    // Un nombre de hilo lo elige el programa: puede traer comillas o barras y romper el JSON.
-    private static String escapar(String s) {
+    // A thread name is chosen by the program: it may bring quotes or backslashes and break the
+    // JSON.
+    private static String escape(String s) {
         StringBuilder sb = new StringBuilder(s.length() + 8);
         for (int i = 0; i < s.length(); i++) {
             char c = s.charAt(i);

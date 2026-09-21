@@ -5,43 +5,44 @@ import java.io.OutputStream;
 import java.util.ArrayList;
 
 /**
- * KajiLibrary's javax.imageio.stream.MemoryCacheImageOutputStream -- escribe a un flujo cualquiera,
- * juntando en memoria.
+ * KajiLibrary's javax.imageio.stream.MemoryCacheImageOutputStream -- writes to any stream,
+ * collecting in memory.
  *
- * <p>El espejo de {@link MemoryCacheImageInputStream}. Un {@link OutputStream} no se puede
- * reposicionar, y escribir un formato de imagen casi siempre necesita volver a corregir el encabezado;
- * la solucion es juntar todo en memoria y soltarlo cuando se puede.
+ * <p>The mirror of {@link MemoryCacheImageInputStream}. An {@link OutputStream} cannot seek, and
+ * writing an image format almost always needs to go back and fix the header; the solution is to
+ * collect everything in memory and release it when possible.
  *
- * <h2>{@link #flushBefore} es lo que escribe de verdad</h2>
+ * <h2>{@link #flushBefore} is what really writes</h2>
  *
- * <p>Es la parte que se malinterpreta. Mientras no se llame, <b>nada</b> llega al flujo de abajo: todo
- * queda en el monton. {@link #close} llama a {@code flush} y con eso sale todo.
+ * <p>It is the part that gets misread. Until it is called, <b>nothing</b> reaches the underlying
+ * stream: everything stays on the heap. {@link #close} flushes, and with that everything goes
+ * out.
  *
- * <p>Y una vez que un tramo salio, no se puede volver sobre el: {@link #seek} a una posicion anterior
- * lanza {@link IndexOutOfBoundsException}. Es el precio de haberlo soltado.
+ * <p>And once a stretch went out, it cannot be revisited: {@link #seek} to an earlier position
+ * throws {@link IndexOutOfBoundsException}. It is the price of having released it.
  *
- * <p>El flujo de abajo no se cierra al cerrar este.
+ * <p>The underlying stream is not closed when this one is closed.
  */
 public class MemoryCacheImageOutputStream extends ImageOutputStreamImpl {
 
-    /** Cuantos bytes tiene cada bloque. */
+    /** How many bytes each block has. */
     private static final int BLOCK_SIZE = 8192;
 
-    /** A donde va lo que se suelta. */
+    /** Where what is released goes. */
     private OutputStream stream;
 
-    /** Los bloques juntados; el primero corresponde a {@link #cacheStart}. */
+    /** The collected blocks; the first one corresponds to {@link #cacheStart}. */
     private final ArrayList<byte[]> cache = new ArrayList<byte[]>();
 
-    /** A que posicion corresponde el primer bloque. */
+    /** Which position the first block corresponds to. */
     private long cacheStart = 0;
 
-    /** Hasta donde se escribio. */
+    /** How far it was written. */
     private long length = 0;
 
     /**
-     * @param stream a donde escribir
-     * @throws IllegalArgumentException si es null
+     * @param stream where to write
+     * @throws IllegalArgumentException if it is null
      */
     public MemoryCacheImageOutputStream(OutputStream stream) {
         if (stream == null) {
@@ -50,7 +51,7 @@ public class MemoryCacheImageOutputStream extends ImageOutputStreamImpl {
         this.stream = stream;
     }
 
-    /** Un byte de lo ya escrito, o -1 si se paso del final. */
+    /** One byte of what was already written, or -1 past the end. */
     @Override
     public int read() throws IOException {
         checkClosed();
@@ -63,7 +64,7 @@ public class MemoryCacheImageOutputStream extends ImageOutputStreamImpl {
         return value;
     }
 
-    /** Hasta {@code len} bytes de lo ya escrito. */
+    /** Up to {@code len} bytes of what was already written. */
     @Override
     public int read(byte[] b, int off, int len) throws IOException {
         checkClosed();
@@ -90,7 +91,7 @@ public class MemoryCacheImageOutputStream extends ImageOutputStreamImpl {
         return available;
     }
 
-    /** Un byte. */
+    /** One byte. */
     @Override
     public void write(int b) throws IOException {
         flushBits();
@@ -102,7 +103,7 @@ public class MemoryCacheImageOutputStream extends ImageOutputStreamImpl {
         }
     }
 
-    /** Esa parte del arreglo. */
+    /** That part of the array. */
     @Override
     public void write(byte[] b, int off, int len) throws IOException {
         flushBits();
@@ -124,13 +125,13 @@ public class MemoryCacheImageOutputStream extends ImageOutputStreamImpl {
         }
     }
 
-    /** Cuanto se escribio hasta ahora. */
+    /** How much was written so far. */
     @Override
     public long length() {
         return this.length;
     }
 
-    /** Si. */
+    /** Yes. */
     @Override
     public boolean isCached() {
         return true;
@@ -142,16 +143,17 @@ public class MemoryCacheImageOutputStream extends ImageOutputStreamImpl {
         return false;
     }
 
-    /** Si. */
+    /** Yes. */
     @Override
     public boolean isCachedMemory() {
         return true;
     }
 
     /**
-     * Suelta al flujo de abajo todo lo anterior a esa posicion. Ver la nota de la clase.
+     * Releases to the underlying stream everything before that position. See the class note.
      *
-     * @throws IndexOutOfBoundsException si es anterior al descarte actual o posterior a la posicion
+     * @throws IndexOutOfBoundsException if it is before the current flushed position or after the
+     *     position
      */
     @Override
     public void flushBefore(long pos) throws IOException {
@@ -163,7 +165,7 @@ public class MemoryCacheImageOutputStream extends ImageOutputStreamImpl {
             i = i + 1;
         }
         this.stream.flush();
-        // Los bloques que quedaron enteros atras ya no hacen falta.
+        // The blocks left whole behind are no longer needed.
         long firstNeeded = (pos / BLOCK_SIZE) * BLOCK_SIZE;
         while (this.cacheStart + BLOCK_SIZE <= firstNeeded && !this.cache.isEmpty()) {
             this.cache.remove(0);
@@ -171,15 +173,15 @@ public class MemoryCacheImageOutputStream extends ImageOutputStreamImpl {
         }
     }
 
-    /** Suelta todo lo pendiente y cierra. No cierra el flujo de abajo. */
+    /** Releases everything pending and closes. Does not close the underlying stream. */
     @Override
     public void close() throws IOException {
         try {
             flushBits();
         } catch (IOException e) {
-            // Ya se esta cerrando.
+            // It is already closing.
         }
-        // Sin esto, lo escrito despues del ultimo flushBefore se perderia en silencio.
+        // Without this, what was written after the last flushBefore would be silently lost.
         long pos = this.length;
         seek(pos);
         flushBefore(pos);
@@ -188,21 +190,21 @@ public class MemoryCacheImageOutputStream extends ImageOutputStreamImpl {
         this.stream = null;
     }
 
-    /** Agranda la cache hasta poder escribir en esa posicion. */
+    /** Grows the cache until that position can be written. */
     private void ensureCapacity(long pos) {
         while (this.cacheStart + (long) this.cache.size() * BLOCK_SIZE < pos) {
             this.cache.add(new byte[BLOCK_SIZE]);
         }
     }
 
-    /** El byte guardado en esa posicion. */
+    /** The byte kept at that position. */
     private byte byteAt(long pos) {
         long offset = pos - this.cacheStart;
         byte[] block = this.cache.get((int) (offset / BLOCK_SIZE));
         return block[(int) (offset % BLOCK_SIZE)];
     }
 
-    /** Lo escribe. */
+    /** Writes it. */
     private void setByteAt(long pos, byte value) {
         long offset = pos - this.cacheStart;
         byte[] block = this.cache.get((int) (offset / BLOCK_SIZE));

@@ -1,13 +1,14 @@
 package java.nio.channels;
 
 /**
- * KajiLibrary's java.nio.channels.AlreadyConnectedException — Se quiso conectar un canal que ya estaba conectado.
+ * KajiLibrary's java.nio.channels.AlreadyConnectedException — connecting a channel that was
+ * connected already was attempted.
  */
 public class AlreadyConnectedException extends IllegalStateException {
 
     private static final long serialVersionUID = 1000000002L;
 
-    /** Construye una. Sin mensaje: el nombre de la clase **es** el mensaje. */
+    /** Builds one. With no message: the name of the class **is** the message. */
     public AlreadyConnectedException() {
         super();
     }

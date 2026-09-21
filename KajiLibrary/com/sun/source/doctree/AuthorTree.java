@@ -3,8 +3,8 @@ package com.sun.source.doctree;
 import java.util.List;
 
 /**
- * El nodo de `@author`. El nombre viene como lista de nodos y no como texto porque
- * un autor puede llevar un `<a href=...>` adentro.
+ * The node of `@author`. The name comes as a list of nodes and not as text because
+ * an author may carry an `<a href=...>` inside.
  */
 public interface AuthorTree extends BlockTagTree {
 

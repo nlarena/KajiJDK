@@ -1,23 +1,23 @@
 package java.security;
 
-// Permiso sobre el propio subsistema de seguridad: agregar proveedores, tocar la politica, leer o
-// escribir propiedades de `Security`.
+// A permission over the security subsystem itself: adding providers, touching the policy, reading
+// or writing properties of `Security`.
 //
-// Es el permiso que hay que mirar dos veces en una politica, porque casi todos sus nombres son
-// escaleras: `insertProvider` deja meter un proveedor propio y por lo tanto reimplementar
-// cualquier algoritmo; `setPolicy` deja reescribir el resto de los permisos. Darlo equivale a dar
-// `AllPermission` por un camino mas largo.
+// It is the permission to look at twice in a policy, because almost all of its names are ladders:
+// `insertProvider` lets one put in a provider of one's own and therefore reimplement any algorithm;
+// `setPolicy` lets one rewrite the rest of the permissions. Granting it amounts to granting
+// `AllPermission` by a longer road.
 //
-// Sin acciones —hereda el "" de `BasicPermission`— y `final`, como en el JDK: el conjunto de
-// nombres es del sistema y una subclase que lo ampliara estaria inventando autoridad.
+// With no actions —it inherits the "" of `BasicPermission`— and `final`, as in the JDK: the set of
+// names belongs to the system and a subclass that widened it would be inventing authority.
 public final class SecurityPermission extends BasicPermission {
 
     public SecurityPermission(String name) {
         super(name);
     }
 
-    // `actions` se ignora; existe para que el cargador de politicas pueda construirlo por
-    // reflexion con la misma firma que cualquier otro permiso.
+    // `actions` is ignored; it exists so that the policy loader can build it by reflection with the
+    // same signature as any other permission.
     public SecurityPermission(String name, String actions) {
         super(name, actions);
     }

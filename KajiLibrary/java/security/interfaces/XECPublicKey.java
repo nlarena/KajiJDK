@@ -4,13 +4,14 @@ import java.math.BigInteger;
 import java.security.PublicKey;
 import java.security.spec.AlgorithmParameterSpec;
 
-// Una clave publica de curva de Montgomery: la coordenada u, sin v.
+// A Montgomery-curve public key: the u coordinate, without v.
 public interface XECPublicKey extends XECKey, PublicKey {
 
     BigInteger getU();
 
-    // Aca el choque entre `XECKey` y `AsymmetricKey` es entre dos metodos de **la misma firma**, no
-    // covariantes: hay que declararlo igual, porque uno es abstracto y el otro default.
+    // Here the clash between `XECKey` and `AsymmetricKey` is between two methods with **the same
+    // signature**, not covariant ones: it has to be declared anyway, because one is abstract and
+    // the other default.
     @Override
     default AlgorithmParameterSpec getParams() {
         return null;

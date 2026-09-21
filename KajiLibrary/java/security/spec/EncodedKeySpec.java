@@ -1,24 +1,25 @@
 package java.security.spec;
 
-// La clave como un chorro de bytes en algun formato estandar, mas el nombre del algoritmo.
+// The key as a stream of bytes in some standard format, plus the name of the algorithm.
 //
-// Es el `KeySpec` menos transparente de todos —no expone ni un campo de la clave— y aun asi es el
-// que mas se usa, porque es el unico que sirve para un algoritmo que la biblioteca no conoce: si
-// se puede mover el DER de un lado al otro, no hace falta entenderlo.
+// It is the least transparent `KeySpec` of all —it exposes not a single field of the key— and even
+// so it is the most used, because it is the only one that works for an algorithm the library does
+// not know: if the DER can be moved from one side to the other, there is no need to understand it.
 //
-// El arreglo se **copia** al entrar y al salir. No es paranoia de estilo: el que recibe una clave
-// codificada no puede permitir que quien se la dio se la cambie por atras despues de la
-// validacion, y el que la entrega no puede permitir que el receptor mute la copia interna.
+// The array is **copied** on the way in and on the way out. It is not stylistic paranoia: whoever
+// receives an encoded key cannot allow whoever gave it to change it behind its back after
+// validation, and whoever hands it over cannot allow the receiver to mutate the internal copy.
 public abstract class EncodedKeySpec implements KeySpec {
 
     private final byte[] encodedKey;
 
-    // El nombre del algoritmo, o null si quien construyo la spec no lo sabia. Que sea opcional es
-    // del contrato: un DER X.509 lleva el algoritmo adentro, y el llamador puede no haberlo leido.
+    // The name of the algorithm, or null if whoever built the spec did not know it. Its being
+    // optional is part of the contract: an X.509 DER carries the algorithm inside, and the caller
+    // may not have read it.
     private final String algorithmName;
 
     public EncodedKeySpec(byte[] encodedKey) {
-        this.encodedKey = copiar(encodedKey);
+        this.encodedKey = copyOf(encodedKey);
         this.algorithmName = null;
     }
 
@@ -29,11 +30,11 @@ public abstract class EncodedKeySpec implements KeySpec {
         if (algorithm.isEmpty()) {
             throw new IllegalArgumentException("algorithm name may not be empty");
         }
-        this.encodedKey = copiar(encodedKey);
+        this.encodedKey = copyOf(encodedKey);
         this.algorithmName = algorithm;
     }
 
-    private static byte[] copiar(byte[] b) {
+    private static byte[] copyOf(byte[] b) {
         if (b == null) {
             throw new NullPointerException("the encoded key must not be null");
         }
@@ -42,18 +43,18 @@ public abstract class EncodedKeySpec implements KeySpec {
         return c;
     }
 
-    // El nombre del algoritmo, o null si no se dio.
+    // The name of the algorithm, or null if none was given.
     public String getAlgorithm() {
         return this.algorithmName;
     }
 
-    // Una copia de los bytes codificados.
+    // A copy of the encoded bytes.
     public byte[] getEncoded() {
         byte[] c = new byte[this.encodedKey.length];
         System.arraycopy(this.encodedKey, 0, c, 0, this.encodedKey.length);
         return c;
     }
 
-    // El nombre del formato de la codificacion: "X.509", "PKCS#8".
+    // The name of the encoding format: "X.509", "PKCS#8".
     public abstract String getFormat();
 }

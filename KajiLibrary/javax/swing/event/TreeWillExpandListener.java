@@ -5,22 +5,24 @@ import java.util.EventListener;
 import javax.swing.tree.ExpandVetoException;
 
 /**
- * Quien puede <strong>oponerse</strong> a que una rama se abra o se cierre.
+ * Whoever can <strong>object</strong> to a branch being opened or closed.
  *
- * <h2>La diferencia con {@link TreeExpansionListener}</h2>
+ * <h2>The difference from {@link TreeExpansionListener}</h2>
  *
- * <p>Aquel avisa cuando ya paso; este pregunta antes. Y la pregunta es real: tirando una
- * {@link ExpandVetoException} el oyente cancela la operacion, y el arbol se queda como estaba.
+ * <p>That one reports when it has already happened; this one asks beforehand. And the question is
+ * real: by throwing an {@link ExpandVetoException} the listener cancels the operation, and the
+ * tree stays as it was.
  *
- * <p>Que la excepcion sea chequeada es lo que obliga al arbol a preverla en vez de asumir que la
- * expansion siempre ocurre. Sirve, por ejemplo, para una rama que carga sus hijos de la red y quiere
- * negarse si no hay conexion — mejor no abrirla que abrirla vacia.
+ * <p>That the exception is checked is what forces the tree to foresee it instead of assuming that
+ * the expansion always happens. It serves, for instance, for a branch that loads its children
+ * from the network and wants to refuse if there is no connection -- better not to open it than to
+ * open it empty.
  */
 public interface TreeWillExpandListener extends EventListener {
 
-    /** La rama esta por abrirse. */
+    /** The branch is about to open. */
     void treeWillExpand(TreeExpansionEvent event) throws ExpandVetoException;
 
-    /** La rama esta por cerrarse. */
+    /** The branch is about to close. */
     void treeWillCollapse(TreeExpansionEvent event) throws ExpandVetoException;
 }

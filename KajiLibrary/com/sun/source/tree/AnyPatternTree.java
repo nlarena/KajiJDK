@@ -1,7 +1,7 @@
 package com.sun.source.tree;
 
 /**
- * El patron `_`, que matchea cualquier cosa sin ligar nombre.
+ * The `_` pattern, which matches anything without binding a name.
  */
 public interface AnyPatternTree extends PatternTree {
 }

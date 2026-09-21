@@ -9,15 +9,15 @@ import java.security.Provider;
 import java.security.Security;
 
 /**
- * Produce los {@link TrustManager} que deciden en quien confiar.
+ * Produces the {@link TrustManager}s that decide whom to trust.
  *
- * <p>Sirve porque escribir un {@link X509TrustManager} a mano es a la vez innecesario y peligroso:
- * validar una cadena de certificados tiene mas casos de los que uno recuerda —vencimiento, cadena
- * incompleta, revocacion, restricciones de uso— y cada uno omitido es un agujero. Esta fabrica
- * entrega la implementacion del proveedor, que ya los cubre.
+ * <p>It is useful because writing an {@link X509TrustManager} by hand is at once unnecessary and
+ * dangerous: validating a certificate chain has more cases than one remembers --expiry, incomplete
+ * chain, revocation, usage constraints-- and each one left out is a hole. This factory delivers the
+ * provider's implementation, which already covers them.
  *
- * <p>Inicializarla con {@code null} usa el almacen de confianza por omision del sistema, que es lo
- * que se quiere casi siempre.
+ * <p>Initializing it with {@code null} uses the system's default trust store, which is what one
+ * wants almost always.
  */
 public class TrustManagerFactory {
 
@@ -25,13 +25,13 @@ public class TrustManagerFactory {
     private final Provider provider;
     private final String algorithm;
 
-    /** El algoritmo por omision: la propiedad {@code ssl.TrustManagerFactory.algorithm}. */
+    /** The default algorithm: the {@code ssl.TrustManagerFactory.algorithm} property. */
     public static final String getDefaultAlgorithm() {
         String a = Security.getProperty("ssl.TrustManagerFactory.algorithm");
         return a == null ? "PKIX" : a;
     }
 
-    /** Para los proveedores. */
+    /** For providers. */
     protected TrustManagerFactory(TrustManagerFactorySpi factorySpi, Provider provider,
             String algorithm) {
         this.factorySpi = factorySpi;
@@ -39,15 +39,15 @@ public class TrustManagerFactory {
         this.algorithm = algorithm;
     }
 
-    /** El algoritmo de esta fabrica. */
+    /** This factory's algorithm. */
     public final String getAlgorithm() {
         return this.algorithm;
     }
 
     /**
-     * Del primer proveedor que ofrezca ese algoritmo.
+     * From the first provider that offers that algorithm.
      *
-     * @throws NoSuchAlgorithmException si ninguno lo ofrece
+     * @throws NoSuchAlgorithmException if none offers it
      */
     public static final TrustManagerFactory getInstance(String algorithm)
             throws NoSuchAlgorithmException {
@@ -58,16 +58,16 @@ public class TrustManagerFactory {
         for (int i = 0; i < provs.length; i++) {
             Provider.Service s = provs[i].getService("TrustManagerFactory", algorithm);
             if (s != null) {
-                return armar(s, provs[i], algorithm);
+                return build(s, provs[i], algorithm);
             }
         }
         throw new NoSuchAlgorithmException(algorithm + " TrustManagerFactory not available");
     }
 
     /**
-     * De un proveedor nombrado.
+     * From a named provider.
      *
-     * @throws NoSuchProviderException si no hay proveedor con ese nombre
+     * @throws NoSuchProviderException if there is no provider with that name
      */
     public static final TrustManagerFactory getInstance(String algorithm, String provider)
             throws NoSuchAlgorithmException, NoSuchProviderException {
@@ -82,9 +82,9 @@ public class TrustManagerFactory {
     }
 
     /**
-     * De un proveedor concreto.
+     * From a concrete provider.
      *
-     * @throws NoSuchAlgorithmException si ese proveedor no lo ofrece
+     * @throws NoSuchAlgorithmException if that provider does not offer it
      */
     public static final TrustManagerFactory getInstance(String algorithm, Provider provider)
             throws NoSuchAlgorithmException {
@@ -98,16 +98,16 @@ public class TrustManagerFactory {
         if (s == null) {
             throw new NoSuchAlgorithmException(algorithm + " TrustManagerFactory not available");
         }
-        return armar(s, provider, algorithm);
+        return build(s, provider, algorithm);
     }
 
-    private static TrustManagerFactory armar(Provider.Service s, Provider p, String algorithm)
+    private static TrustManagerFactory build(Provider.Service s, Provider p, String algorithm)
             throws NoSuchAlgorithmException {
         try {
             Object spi = s.newInstance(null);
             if (!(spi instanceof TrustManagerFactorySpi)) {
                 throw new NoSuchAlgorithmException(
-                        "el proveedor no devolvio un TrustManagerFactorySpi para " + algorithm);
+                        "the provider did not return a TrustManagerFactorySpi for " + algorithm);
             }
             return new TrustManagerFactory((TrustManagerFactorySpi) spi, p, algorithm);
         } catch (NoSuchAlgorithmException e) {
@@ -118,31 +118,31 @@ public class TrustManagerFactory {
         }
     }
 
-    /** El proveedor que la produjo. */
+    /** The provider that produced it. */
     public final Provider getProvider() {
         return this.provider;
     }
 
     /**
-     * Desde un almacen de certificados de confianza; {@code null} usa el del sistema.
+     * From a store of trusted certificates; {@code null} uses the system's.
      *
-     * <p>Sin contrasena, y no es una omision: un almacen de confianza guarda certificados publicos.
-     * No hay nada secreto que desbloquear.
+     * <p>No password, and that is not an omission: a trust store keeps public certificates. There
+     * is nothing secret to unlock.
      */
     public final void init(KeyStore ks) throws KeyStoreException {
         this.factorySpi.engineInit(ks);
     }
 
-    /** Desde parametros; ver {@link CertPathTrustManagerParameters}. */
+    /** From parameters; see {@link CertPathTrustManagerParameters}. */
     public final void init(ManagerFactoryParameters spec)
             throws InvalidAlgorithmParameterException {
         this.factorySpi.engineInit(spec);
     }
 
     /**
-     * Los manejadores de confianza.
+     * The trust managers.
      *
-     * @throws IllegalStateException si no se llamo antes a {@code init}
+     * @throws IllegalStateException if {@code init} was not called first
      */
     public final TrustManager[] getTrustManagers() {
         return this.factorySpi.engineGetTrustManagers();

@@ -6,14 +6,14 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * El campo es una <strong>duracion</strong>, con su unidad.
+ * The field is a <strong>duration</strong>, with its unit.
  *
- * <p>Sin esto, un {@code long} de valor 1500000000 se muestra tal cual. Con esto, y segun la
- * unidad, se muestra como "1,5 s".
+ * <p>Without this, a {@code long} of value 1500000000 is shown as it is. With this, and according
+ * to the unit, it is shown as "1.5 s".
  *
- * <p>{@link #TICKS} es la unidad del reloj de la maquina y no de tiempo real: el que lee tiene que
- * convertirla con la frecuencia del reloj, y por eso es la unica que no se puede mostrar sin mas
- * contexto.
+ * <p>{@link #TICKS} is the unit of the clock of the machine and not of real time: the one who reads
+ * has to convert it with the frequency of the clock, and that is why it is the only one that cannot
+ * be shown without more context.
  *
  * @since 9
  */
@@ -25,25 +25,25 @@ import java.lang.annotation.Target;
 @Description("A duration, measured in nanoseconds by default")
 public @interface Timespan {
 
-    /** Pulsos del reloj de la maquina; hay que convertirlos con su frecuencia. */
+    /** Ticks of the clock of the machine; they have to be converted with its frequency. */
     String TICKS = "TICKS";
 
-    /** Segundos. */
+    /** Seconds. */
     String SECONDS = "SECONDS";
 
-    /** Milisegundos. */
+    /** Milliseconds. */
     String MILLISECONDS = "MILLISECONDS";
 
-    /** Nanosegundos. */
+    /** Nanoseconds. */
     String NANOSECONDS = "NANOSECONDS";
 
-    /** Microsegundos. */
+    /** Microseconds. */
     String MICROSECONDS = "MICROSECONDS";
 
     /**
-     * El valor de la anotacion.
+     * The value of the annotation.
      *
-     * @return el valor
+     * @return the value
      */
     String value() default NANOSECONDS;
 }

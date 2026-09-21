@@ -1,16 +1,17 @@
 package com.sun.nio.sctp;
 
 /**
- * Quien atiende las {@link Notification} que llegan durante un {@code receive}.
+ * Who attends to the {@link Notification}s that arrive during a {@code receive}.
  *
- * <p>Devolver {@link HandlerResult} es lo que le deja decidir si el {@code receive} sigue esperando
- * un mensaje o vuelve. Ver {@link AbstractNotificationHandler} para la forma comoda de escribir uno.
+ * <p>Returning {@link HandlerResult} is what lets it decide whether the {@code receive} goes on
+ * waiting for a message or comes back. See {@link AbstractNotificationHandler} for the
+ * comfortable way of writing one.
  *
- * @param <T> el objeto de contexto que se le pasa al {@code receive} y llega hasta aca sin que el
- *     canal lo mire
+ * @param <T> the context object that is passed to the {@code receive} and arrives here without
+ *     the channel looking at it
  */
 public interface NotificationHandler<T> {
 
-    /** Atiende una notificacion y dice si el {@code receive} sigue. */
+    /** It attends to a notification and says whether the {@code receive} goes on. */
     HandlerResult handleNotification(Notification notification, T attachment);
 }

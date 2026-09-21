@@ -3,18 +3,19 @@ package javax.naming.ldap;
 import javax.naming.NamingException;
 
 /**
- * Lo implementa un resultado de busqueda que ademas trae controles del servidor.
+ * Implemented by a search result that also carries controls from the server.
  *
- * <h2>Por que es una interfaz aparte y no un metodo de {@code SearchResult}</h2>
+ * <h2>Why it is a separate interface and not a method of {@code SearchResult}</h2>
  *
- * <p>Porque {@code javax.naming} es neutral respecto del protocolo: sirve para LDAP, para DNS, para
- * un directorio de archivos. Los controles son de LDAP, asi que meterlos en el tipo comun ataria la
- * API general a un protocolo particular.
+ * <p>Because {@code javax.naming} is protocol-neutral: it serves LDAP, DNS, a file directory.
+ * Controls are LDAP's, so putting them in the common type would tie the general API to a
+ * particular protocol.
  *
- * <p>La consecuencia practica es que hay que preguntar con {@code instanceof} antes de leerlos.
+ * <p>The practical consequence is that you have to ask with {@code instanceof} before reading
+ * them.
  */
 public interface HasControls {
 
-    /** Los controles que vinieron con este resultado, o {@code null} si no vino ninguno. */
+    /** The controls that came with this result, or {@code null} if none came. */
     Control[] getControls() throws NamingException;
 }

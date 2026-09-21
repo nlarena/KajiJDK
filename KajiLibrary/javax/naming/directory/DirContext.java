@@ -6,156 +6,158 @@ import javax.naming.NamingEnumeration;
 import javax.naming.NamingException;
 
 /**
- * KajiLibrary's javax.naming.directory.DirContext -- un contexto que ademas tiene atributos.
+ * KajiLibrary's javax.naming.directory.DirContext -- a context that also has attributes.
  *
- * <p>Extiende {@link Context} con lo que distingue a un <b>directorio</b> de un servicio de nombres:
- * cada entrada no solo tiene un nombre y un objeto, sino un conjunto de atributos que se pueden leer,
- * modificar y buscar.
+ * <p>It extends {@link Context} with what sets a <b>directory</b> apart from a naming service: each
+ * entry has not just a name and an object, but a set of attributes that can be read, modified and
+ * searched.
  *
- * <h2>Las dos formas de modificar</h2>
+ * <h2>The two ways to modify</h2>
  *
- * <p>{@code modifyAttributes} viene en dos sabores. El que recibe un codigo y unos
- * {@link Attributes} aplica <b>la misma</b> operacion a todos; el que recibe un arreglo de
- * {@link ModificationItem} mezcla operaciones distintas. El segundo es el que hay que usar cuando el
- * cambio tiene que ser atomico y no uniforme.
+ * <p>{@code modifyAttributes} comes in two flavours. The one taking a code and some
+ * {@link Attributes} applies <b>the same</b> operation to all of them; the one taking an array of
+ * {@link ModificationItem} mixes different operations. The second is the one to use when the change
+ * has to be atomic and not uniform.
  *
- * <p>Los tres codigos no son simetricos. {@link #ADD_ATTRIBUTE} agrega valores a los que ya hay,
- * {@link #REPLACE_ATTRIBUTE} tira los viejos y pone los nuevos, y {@link #REMOVE_ATTRIBUTE} saca los
- * valores que se le pasen --o el atributo entero si se le pasa sin valores--. Confundir los dos
- * primeros sobre un atributo de varios valores es la forma clasica de borrar datos sin querer.
+ * <p>The three codes are not symmetric. {@link #ADD_ATTRIBUTE} adds values to the existing ones,
+ * {@link #REPLACE_ATTRIBUTE} drops the old ones and puts the new ones, and {@link
+ * #REMOVE_ATTRIBUTE} removes the values given --or the whole attribute if given without values.
+ * Mixing up the first two on a multi-valued attribute is the classic way to delete data by
+ * accident.
  *
- * <h2>Las tres familias de busqueda</h2>
+ * <h2>The three search families</h2>
  *
  * <ul>
- *   <li>por <b>atributos de ejemplo</b>: se pasa un {@link Attributes} y se buscan las entradas que
- *       los tengan. Es comodo y solo hace igualdad;
- *   <li>por <b>filtro</b>, con la sintaxis de RFC 2254: mucho mas expresivo --hay o, y, no,
- *       comodines-- y armado a mano es inyectable;
- *   <li>por filtro con <b>argumentos numerados</b>, donde el filtro lleva {@code {0}}, {@code {1}} y
- *       los valores van aparte. Es la version segura de la anterior y es la que conviene usar
- *       siempre que el filtro dependa de una entrada del usuario.
+ *   <li>by <b>example attributes</b>: you pass an {@link Attributes} and look for the entries that
+ *       have them. It is convenient and only does equality;
+ *   <li>by <b>filter</b>, with RFC 2254 syntax: much more expressive --there are or, and, not,
+ *       wildcards-- and, built by hand, injectable;
+ *   <li>by filter with <b>numbered arguments</b>, where the filter carries {@code {0}}, {@code {1}}
+ *       and the values go separately. It is the safe version of the previous one and the one to use
+ *       whenever the filter depends on user input.
  * </ul>
  *
- * <p>Cada operacion viene con {@link Name} y con {@code String}. La de {@code Name} es la correcta
- * cuando el nombre se compone o se recorre: un {@code String} obliga a pensar en como escapar los
- * separadores del espacio de nombres, y ahi es donde se rompe.
+ * <p>Every operation comes with {@link Name} and with {@code String}. The {@code Name} one is right
+ * when the name is composed or walked: a {@code String} forces thinking about how to escape the
+ * namespace's separators, and that is where it breaks.
  */
 public interface DirContext extends Context {
 
-    /** Agrega valores a los que el atributo ya tiene. */
+    /** Adds values to the ones the attribute already has. */
     public static final int ADD_ATTRIBUTE = 1;
 
-    /** Tira los valores viejos y pone los nuevos. */
+    /** Drops the old values and puts the new ones. */
     public static final int REPLACE_ATTRIBUTE = 2;
 
-    /** Saca los valores dados, o el atributo entero si no se dan valores. */
+    /** Removes the given values, or the whole attribute if no values are given. */
     public static final int REMOVE_ATTRIBUTE = 3;
 
-    /** Todos los atributos de esa entrada. */
+    /** All the attributes of that entry. */
     Attributes getAttributes(Name name) throws NamingException;
 
-    /** Idem, con el nombre como texto. */
+    /** Same, with the name as text. */
     Attributes getAttributes(String name) throws NamingException;
 
     /**
-     * Solo esos atributos.
+     * Only those attributes.
      *
-     * @param attrIds cuales traer; null son todos
+     * @param attrIds which ones to fetch; null means all
      */
     Attributes getAttributes(Name name, String[] attrIds) throws NamingException;
 
-    /** Idem, con el nombre como texto. */
+    /** Same, with the name as text. */
     Attributes getAttributes(String name, String[] attrIds) throws NamingException;
 
     /**
-     * Aplica la misma operacion a todos esos atributos.
+     * Applies the same operation to all those attributes.
      *
-     * @param mod_op una de las tres constantes; ver la nota de la clase
+     * @param mod_op one of the three constants; see the class note
      */
     void modifyAttributes(Name name, int mod_op, Attributes attrs) throws NamingException;
 
-    /** Idem, con el nombre como texto. */
+    /** Same, with the name as text. */
     void modifyAttributes(String name, int mod_op, Attributes attrs) throws NamingException;
 
-    /** Aplica una lista de modificaciones distintas, todas o ninguna. */
+    /** Applies a list of different modifications, all or none. */
     void modifyAttributes(Name name, ModificationItem[] mods) throws NamingException;
 
-    /** Idem, con el nombre como texto. */
+    /** Same, with the name as text. */
     void modifyAttributes(String name, ModificationItem[] mods) throws NamingException;
 
-    /** Ata un objeto a un nombre, con atributos. */
+    /** Binds an object to a name, with attributes. */
     void bind(Name name, Object obj, Attributes attrs) throws NamingException;
 
-    /** Idem, con el nombre como texto. */
+    /** Same, with the name as text. */
     void bind(String name, Object obj, Attributes attrs) throws NamingException;
 
-    /** Igual, pisando lo que hubiera. */
+    /** The same, overwriting whatever was there. */
     void rebind(Name name, Object obj, Attributes attrs) throws NamingException;
 
-    /** Idem, con el nombre como texto. */
+    /** Same, with the name as text. */
     void rebind(String name, Object obj, Attributes attrs) throws NamingException;
 
-    /** Crea un subcontexto con esos atributos. */
+    /** Creates a subcontext with those attributes. */
     DirContext createSubcontext(Name name, Attributes attrs) throws NamingException;
 
-    /** Idem, con el nombre como texto. */
+    /** Same, with the name as text. */
     DirContext createSubcontext(String name, Attributes attrs) throws NamingException;
 
-    /** El esquema que gobierna esa entrada. */
+    /** The schema that governs that entry. */
     DirContext getSchema(Name name) throws NamingException;
 
-    /** Idem, con el nombre como texto. */
+    /** Same, with the name as text. */
     DirContext getSchema(String name) throws NamingException;
 
-    /** Las definiciones de clase de objeto de esa entrada. */
+    /** The object class definitions of that entry. */
     DirContext getSchemaClassDefinition(Name name) throws NamingException;
 
-    /** Idem, con el nombre como texto. */
+    /** Same, with the name as text. */
     DirContext getSchemaClassDefinition(String name) throws NamingException;
 
     /**
-     * Busca por atributos de ejemplo.
+     * Searches by example attributes.
      *
-     * @param matchingAttributes los que la entrada tiene que tener; vacio o null trae todas
-     * @param attributesToReturn cuales traer de cada resultado; null son todos
+     * @param matchingAttributes the ones the entry must have; empty or null returns all
+     * @param attributesToReturn which ones to fetch from each result; null means all
      */
     NamingEnumeration<SearchResult> search(Name name, Attributes matchingAttributes,
                                            String[] attributesToReturn) throws NamingException;
 
-    /** Idem, con el nombre como texto. */
+    /** Same, with the name as text. */
     NamingEnumeration<SearchResult> search(String name, Attributes matchingAttributes,
                                            String[] attributesToReturn) throws NamingException;
 
-    /** Busca por atributos de ejemplo, trayendo todos los atributos. */
+    /** Searches by example attributes, fetching all attributes. */
     NamingEnumeration<SearchResult> search(Name name, Attributes matchingAttributes)
         throws NamingException;
 
-    /** Idem, con el nombre como texto. */
+    /** Same, with the name as text. */
     NamingEnumeration<SearchResult> search(String name, Attributes matchingAttributes)
         throws NamingException;
 
     /**
-     * Busca por filtro.
+     * Searches by filter.
      *
-     * <p>Ver la nota de la clase: si el filtro depende de algo que escribio una persona, va la
-     * version con argumentos numerados.
+     * <p>See the class note: if the filter depends on something a person typed, use the version
+     * with numbered arguments.
      */
     NamingEnumeration<SearchResult> search(Name name, String filter, SearchControls cons)
         throws NamingException;
 
-    /** Idem, con el nombre como texto. */
+    /** Same, with the name as text. */
     NamingEnumeration<SearchResult> search(String name, String filter, SearchControls cons)
         throws NamingException;
 
     /**
-     * Busca por filtro con argumentos numerados.
+     * Searches by filter with numbered arguments.
      *
-     * @param filterArgs los valores de {@code {0}}, {@code {1}}, ...; no pasan por el parser
+     * @param filterArgs the values of {@code {0}}, {@code {1}}, ...; they do not go through the
+     *     parser
      */
     NamingEnumeration<SearchResult> search(Name name, String filterExpr, Object[] filterArgs,
                                            SearchControls cons) throws NamingException;
 
-    /** Idem, con el nombre como texto. */
+    /** Same, with the name as text. */
     NamingEnumeration<SearchResult> search(String name, String filterExpr, Object[] filterArgs,
                                            SearchControls cons) throws NamingException;
 }

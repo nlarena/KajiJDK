@@ -1,18 +1,18 @@
 package java.nio.channels;
 
 /**
- * KajiLibrary's java.nio.channels.IllegalBlockingModeException — La operacion pedida no vale en el modo de bloqueo en que el canal esta.
+ * KajiLibrary's java.nio.channels.IllegalBlockingModeException — the operation asked for is not
+ * valid in the blocking mode the channel is in.
  *
- * <p>Un canal en modo no bloqueante no puede hacer una lectura que espere, y uno en modo
- * bloqueante no se puede registrar en un selector. No son limitaciones arbitrarias: registrar un
- * canal bloqueante haria que el selector se trabara en el, que es exactamente lo que un selector
- * existe para evitar.
+ * <p>A channel in non-blocking mode cannot do a read that waits, and one in blocking mode cannot be
+ * registered in a selector. They are not arbitrary limitations: registering a blocking channel
+ * would make the selector get stuck in it, which is exactly what a selector exists to avoid.
  */
 public class IllegalBlockingModeException extends IllegalStateException {
 
     private static final long serialVersionUID = 1000000010L;
 
-    /** Construye una. Sin mensaje: el nombre de la clase **es** el mensaje. */
+    /** Builds one. With no message: the name of the class **is** the message. */
     public IllegalBlockingModeException() {
         super();
     }

@@ -4,58 +4,62 @@ import java.util.EventObject;
 import javax.naming.Binding;
 
 /**
- * KajiLibrary's javax.naming.event.NamingEvent -- algo cambio en el contexto.
+ * KajiLibrary's javax.naming.event.NamingEvent -- something changed in the context.
  *
- * <p>Un tipo --de los cuatro de abajo-- y hasta dos asociaciones: como estaba la entrada y como
- * quedo. Cuales de las dos vienen depende del tipo, y es lo primero que hay que saber para usarlo:
+ * <p>A type --one of the four below-- and up to two bindings: how the entry was and how it ended
+ * up. Which of the two come depends on the type, and it is the first thing to know to use it:
  *
  * <ul>
- *   <li>{@link #OBJECT_ADDED}: solo la nueva;
- *   <li>{@link #OBJECT_REMOVED}: solo la vieja;
- *   <li>{@link #OBJECT_RENAMED} y {@link #OBJECT_CHANGED}: las dos, salvo que el cambio cruce el
- *       borde del alcance suscrito, y ahi falta la de afuera.
+ *   <li>{@link #OBJECT_ADDED}: only the new one;
+ *   <li>{@link #OBJECT_REMOVED}: only the old one;
+ *   <li>{@link #OBJECT_CHANGED}: both;
+ *   <li>{@link #OBJECT_RENAMED}: both, unless the rename crosses the edge of the subscribed scope,
+ *       and then the one outside is missing.
  * </ul>
  *
- * <p>Los campos son {@code protected} y no privados, igual que en el JDK: la clase es de 1999 y sus
- * subclases del proveedor los tocan directo.
+ * <p>(An earlier note let {@code OBJECT_CHANGED} lose a binding at the scope edge too; the JDK
+ * requires both bindings to be non-null for it.)
  *
- * <p>{@link #getChangeInfo} devuelve lo que el proveedor quiera agregar --un numero de cambio de
- * LDAP, por ejemplo-- y es especifico de cada uno. Depender de el ata el programa a un proveedor.
+ * <p>The fields are {@code protected} and not private, as in the JDK: the class dates from JNDI 1.2
+ * and provider subclasses touch them directly.
+ *
+ * <p>{@link #getChangeInfo} returns whatever the provider wants to add --an LDAP change number, for
+ * example-- and is specific to each one. Depending on it ties the program to a provider.
  */
 public class NamingEvent extends EventObject {
 
     private static final long serialVersionUID = 2716268041038319063L;
 
-    /** Aparecio una entrada. */
+    /** An entry appeared. */
     public static final int OBJECT_ADDED = 0;
 
-    /** Desaparecio una. */
+    /** One disappeared. */
     public static final int OBJECT_REMOVED = 1;
 
-    /** Una cambio de nombre. */
+    /** One was renamed. */
     public static final int OBJECT_RENAMED = 2;
 
-    /** Cambio el contenido de una. */
+    /** The content of one changed. */
     public static final int OBJECT_CHANGED = 3;
 
-    /** Lo que el proveedor quiera agregar; ver la nota de la clase. */
+    /** Whatever the provider wants to add; see the class note. */
     protected Object changeInfo;
 
-    /** Cual de los cuatro. */
+    /** Which of the four. */
     protected int type;
 
-    /** Como estaba, o null. */
+    /** How it was, or null. */
     protected Binding oldBinding;
 
-    /** Como quedo, o null. */
+    /** How it ended up, or null. */
     protected Binding newBinding;
 
     /**
-     * @param source el contexto donde paso
-     * @param type uno de los cuatro de arriba
-     * @param newBd como quedo; null si desaparecio
-     * @param oldBd como estaba; null si es nueva
-     * @param changeInfo lo que el proveedor quiera agregar, o null
+     * @param source the context where it happened
+     * @param type one of the four above
+     * @param newBd how it ended up; null if it disappeared
+     * @param oldBd how it was; null if it is new
+     * @param changeInfo whatever the provider wants to add, or null
      */
     public NamingEvent(EventContext source, int type, Binding newBd, Binding oldBd,
                        Object changeInfo) {
@@ -66,37 +70,38 @@ public class NamingEvent extends EventObject {
         this.newBinding = newBd;
     }
 
-    /** Cual de los cuatro. */
+    /** Which of the four. */
     public int getType() {
         return this.type;
     }
 
-    /** El contexto donde paso. */
+    /** The context where it happened. */
     public EventContext getEventContext() {
         return (EventContext) getSource();
     }
 
-    /** Como estaba, o null. Ver la nota de la clase. */
+    /** How it was, or null. See the class note. */
     public Binding getOldBinding() {
         return this.oldBinding;
     }
 
-    /** Como quedo, o null. */
+    /** How it ended up, or null. */
     public Binding getNewBinding() {
         return this.newBinding;
     }
 
-    /** Lo que el proveedor agrego, o null. */
+    /** What the provider added, or null. */
     public Object getChangeInfo() {
         return this.changeInfo;
     }
 
     /**
-     * Se despacha al metodo que corresponde a su tipo.
+     * Dispatched to the method that matches its type.
      *
-     * <p>Un oyente que no implementa la interfaz del tipo del evento no recibe nada: el
-     * {@code instanceof} lo filtra en vez de tirar. Es lo correcto -- un repartidor puede tener una
-     * lista mezclada de oyentes y no tiene por que saber cual escucha que.
+     * <p>A listener that does not implement the interface for the event's type gets nothing: the
+     * {@code instanceof} filters it out instead of throwing, so a dispatcher can hold a mixed list
+     * of listeners without knowing which listens to what. The JDK does not do this: it casts, and a
+     * listener of the wrong kind gets a {@code ClassCastException}.
      */
     public void dispatch(NamingListener listener) {
         switch (this.type) {

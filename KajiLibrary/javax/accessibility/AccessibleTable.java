@@ -1,85 +1,85 @@
 package javax.accessibility;
 
 /**
- * Lo implementa lo que muestra datos en **filas y columnas**.
+ * Implemented by what shows data in **rows and columns**.
  *
- * <p>Lo que lo separa de una lista de listas son las cabeceras y las descripciones: sin ellas, quien
- * no ve la pantalla escucha un número suelto y no tiene forma de saber de qué columna es. Las
- * cabeceras son a su vez tablas, lo que permite cabeceras de varios niveles.
+ * <p>What separates it from a list of lists are the headers and the descriptions: without them,
+ * whoever does not see the screen hears a loose number and has no way of knowing which column it
+ * belongs to. The headers are tables in turn, which allows multi-level headers.
  *
- * <p>La **extensión** de una celda —{@link #getAccessibleRowExtentAt} y su par— es cuántas filas o
- * columnas ocupa. Es lo que hace que una celda combinada se anuncie como una y no como cuatro
- * celdas repetidas.
+ * <p>The **extent** of a cell --{@link #getAccessibleRowExtentAt} and its pair-- is how many rows
+ * or columns it spans. It is what makes a merged cell be announced as one and not as four repeated
+ * cells.
  */
 public interface AccessibleTable {
 
-    /** El título de la tabla, o `null` si no tiene. */
+    /** The table's caption, or `null` if it has none. */
     Accessible getAccessibleCaption();
 
-    /** Cambia el título. */
+    /** Changes the caption. */
     void setAccessibleCaption(Accessible a);
 
-    /** El resumen de la tabla, o `null` si no tiene. */
+    /** The table's summary, or `null` if it has none. */
     Accessible getAccessibleSummary();
 
-    /** Cambia el resumen. */
+    /** Changes the summary. */
     void setAccessibleSummary(Accessible a);
 
-    /** Cuántas filas hay. */
+    /** How many rows there are. */
     int getAccessibleRowCount();
 
-    /** Cuántas columnas hay. */
+    /** How many columns there are. */
     int getAccessibleColumnCount();
 
     /**
-     * La celda de esa posición.
+     * The cell at that position.
      *
-     * @return la celda, o `null` si la posición no existe
+     * @return the cell, or `null` if the position does not exist
      */
     Accessible getAccessibleAt(int r, int c);
 
-    /** Cuántas filas ocupa esa celda. */
+    /** How many rows that cell spans. */
     int getAccessibleRowExtentAt(int r, int c);
 
-    /** Cuántas columnas ocupa esa celda. */
+    /** How many columns that cell spans. */
     int getAccessibleColumnExtentAt(int r, int c);
 
-    /** La cabecera de filas, ella misma una tabla, o `null` si no hay. */
+    /** The row header, itself a table, or `null` if there is none. */
     AccessibleTable getAccessibleRowHeader();
 
-    /** Cambia la cabecera de filas. */
+    /** Changes the row header. */
     void setAccessibleRowHeader(AccessibleTable table);
 
-    /** La cabecera de columnas, o `null` si no hay. */
+    /** The column header, or `null` if there is none. */
     AccessibleTable getAccessibleColumnHeader();
 
-    /** Cambia la cabecera de columnas. */
+    /** Changes the column header. */
     void setAccessibleColumnHeader(AccessibleTable table);
 
-    /** Qué describe a esa fila, o `null` si nada. */
+    /** What describes that row, or `null` if nothing. */
     Accessible getAccessibleRowDescription(int r);
 
-    /** Cambia la descripción de esa fila. */
+    /** Changes that row's description. */
     void setAccessibleRowDescription(int r, Accessible a);
 
-    /** Qué describe a esa columna, o `null` si nada. */
+    /** What describes that column, or `null` if nothing. */
     Accessible getAccessibleColumnDescription(int c);
 
-    /** Cambia la descripción de esa columna. */
+    /** Changes that column's description. */
     void setAccessibleColumnDescription(int c, Accessible a);
 
-    /** Si esa celda está elegida. */
+    /** Whether that cell is chosen. */
     boolean isAccessibleSelected(int r, int c);
 
-    /** Si esa fila entera está elegida. */
+    /** Whether that whole row is chosen. */
     boolean isAccessibleRowSelected(int r);
 
-    /** Si esa columna entera está elegida. */
+    /** Whether that whole column is chosen. */
     boolean isAccessibleColumnSelected(int c);
 
-    /** Qué filas están elegidas. */
+    /** Which rows are chosen. */
     int[] getSelectedAccessibleRows();
 
-    /** Qué columnas están elegidas. */
+    /** Which columns are chosen. */
     int[] getSelectedAccessibleColumns();
 }

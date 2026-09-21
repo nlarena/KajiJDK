@@ -153,11 +153,11 @@ public class DefaultPersistenceDelegate extends PersistenceDelegate {
             int mod = f.getModifiers();
             if (!Modifier.isFinal(mod) && !Modifier.isStatic(mod) && !Modifier.isTransient(mod)) {
                 try {
-                    Expression viejo = new Expression(f, "get", new Object[] { oldInstance });
+                    Expression old = new Expression(f, "get", new Object[] { oldInstance });
                     Expression fresh = new Expression(f, "get", new Object[] { newInstance });
-                    Object oldValue = viejo.getValue();
+                    Object oldValue = old.getValue();
                     Object newValue = fresh.getValue();
-                    out.writeExpression(viejo);
+                    out.writeExpression(old);
                     if (!Objects.equals(newValue, out.get(oldValue))) {
                         out.writeStatement(new Statement(f, "set", new Object[] { oldInstance, oldValue }));
                     }
@@ -178,15 +178,15 @@ public class DefaultPersistenceDelegate extends PersistenceDelegate {
     private void copyProperty(PropertyDescriptor pd, Object oldInstance, Object newInstance,
                                  Encoder out) throws Exception {
         Method reader = pd.getReadMethod();
-        Method escritor = pd.getWriteMethod();
-        if (reader != null && escritor != null) {
-            Expression viejo = new Expression(oldInstance, reader.getName(), new Object[0]);
+        Method writer = pd.getWriteMethod();
+        if (reader != null && writer != null) {
+            Expression old = new Expression(oldInstance, reader.getName(), new Object[0]);
             Expression fresh = new Expression(newInstance, reader.getName(), new Object[0]);
-            Object oldValue = viejo.getValue();
+            Object oldValue = old.getValue();
             Object newValue = fresh.getValue();
-            out.writeExpression(viejo);
+            out.writeExpression(old);
             if (!Objects.equals(newValue, out.get(oldValue))) {
-                out.writeStatement(new Statement(oldInstance, escritor.getName(),
+                out.writeStatement(new Statement(oldInstance, writer.getName(),
                                                  new Object[] { oldValue }));
             }
         }

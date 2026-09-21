@@ -1,23 +1,23 @@
 package com.sun.jdi.event;
 
 /**
- * Una clase se descargo de la maquina depurada.
+ * A class was unloaded from the debugged machine.
  *
  * @since 1.3
  */
 public interface ClassUnloadEvent extends Event {
 
     /**
-     * El class name.
+     * The class name.
      *
-     * @return el resultado
+     * @return the result
      */
     String className();
 
     /**
-     * El class signature.
+     * The class signature.
      *
-     * @return el resultado
+     * @return the result
      */
     String classSignature();
 }

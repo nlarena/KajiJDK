@@ -8,98 +8,98 @@ import java.awt.ImageCapabilities;
 import java.awt.Transparency;
 
 /**
- * Una imagen que vive en la memoria del dispositivo de video y que **puede desaparecer**.
+ * An image that lives in the memory of the video device and that **may disappear**.
  *
- * <p>Ésa es toda la idea. Guardarla ahí la hace muchísimo más rápida de dibujar, pero esa memoria no
- * es de nadie: el sistema se la puede llevar cuando cambia la resolución, cuando se bloquea la
- * pantalla o cuando otro programa la necesita. La imagen no se corrompe, se **vacía**, y hay que
- * volver a dibujarla.
+ * <p>That is the whole idea. Keeping it there makes it very much faster to draw, but that memory is
+ * nobody's: the system can take it away when the resolution changes, when the screen locks or when
+ * another program needs it. The image is not corrupted, it is **emptied**, and it has to be drawn
+ * again.
  *
- * <p>De ahí el par de métodos que la definen. {@link #validate} se llama antes de usarla y dice si
- * hay que rehacer algo; {@link #contentsLost} se llama después de dibujarla y dice si lo que se
- * dibujó llegó a destino. Hacen falta los dos porque la memoria se puede perder **durante** el
- * dibujado, no sólo entre dos usos, y el bucle correcto es:
+ * <p>Hence the pair of methods that define it. {@link #validate} is called before using it and says
+ * whether anything has to be redone; {@link #contentsLost} is called after drawing it and says
+ * whether what was drawn got there. Both are needed because the memory can be lost **during** the
+ * drawing, not only between two uses, and the right loop is:
  *
  * <pre>do {
- *     if (vi.validate(gc) == IMAGE_INCOMPATIBLE) vi = crearla(gc);
- *     dibujarEnLaImagen(vi);
- *     dibujarLaImagen(vi);
+ *     if (vi.validate(gc) == IMAGE_INCOMPATIBLE) vi = createIt(gc);
+ *     drawIntoTheImage(vi);
+ *     drawTheImage(vi);
  * } while (vi.contentsLost());</pre>
  *
- * <p>Es la clase que hace posible el doble buffer sin parpadeo, y también la razón por la que ese
- * código se ve raro la primera vez: el `do/while` no es paranoia, es la única forma de escribir la
- * secuencia sin una ventana en la que se pierda un cuadro.
+ * <p>It is the class that makes double buffering without flicker possible, and also the reason why
+ * that code looks strange the first time: the `do/while` is not paranoia, it is the only way of
+ * writing the sequence without a window in which a frame is lost.
  */
 public abstract class VolatileImage extends Image implements Transparency {
 
-    /** La imagen está intacta y se puede usar. */
+    /** The image is intact and can be used. */
     public static final int IMAGE_OK = 0;
 
-    /** Se había perdido y se restauró vacía: hay que volver a dibujarla. */
+    /** It had been lost and was restored empty: it has to be drawn again. */
     public static final int IMAGE_RESTORED = 1;
 
-    /** Ya no sirve para este dispositivo: hay que crear otra. */
+    /** It no longer serves for this device: another one has to be created. */
     public static final int IMAGE_INCOMPATIBLE = 2;
 
-    /** `OPAQUE`, `BITMASK` o `TRANSLUCENT`. */
+    /** `OPAQUE`, `BITMASK` or `TRANSLUCENT`. */
     protected int transparency = Transparency.TRANSLUCENT;
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected VolatileImage() {
     }
 
     /**
-     * Una copia **no volátil** de lo que hay ahora.
+     * A **non-volatile** copy of what is there now.
      *
-     * <p>Es la forma de sacar los píxeles de acá: una {@link BufferedImage} está en memoria común y
-     * no se pierde.
+     * <p>It is the way of getting the pixels out of here: a {@link BufferedImage} is in ordinary
+     * memory and is not lost.
      */
     public abstract BufferedImage getSnapshot();
 
-    /** Ancho, en píxeles. */
+    /** Width, in pixels. */
     public abstract int getWidth();
 
-    /** Alto, en píxeles. */
+    /** Height, in pixels. */
     public abstract int getHeight();
 
     /**
-     * Un productor con los píxeles de esta imagen.
+     * A producer with the pixels of this image.
      *
-     * <p>Va por {@link #getSnapshot}: los píxeles que salen son los del momento en que se pidieron,
-     * porque la imagen puede cambiar o perderse mientras se los entrega.
+     * <p>It goes through {@link #getSnapshot}: the pixels that come out are those of the moment
+     * they were asked for, because the image can change or be lost while they are being delivered.
      */
     public ImageProducer getSource() {
         return this.getSnapshot().getSource();
     }
 
-    /** Un contexto para dibujar sobre esta imagen. */
+    /** A context to draw over this image. */
     public Graphics getGraphics() {
         return this.createGraphics();
     }
 
-    /** Un contexto para dibujar sobre esta imagen. */
+    /** A context to draw over this image. */
     public abstract Graphics2D createGraphics();
 
     /**
-     * Comprueba el estado de la imagen y la restaura si hace falta.
+     * Checks the state of the image and restores it if need be.
      *
-     * @return {@link #IMAGE_OK}, {@link #IMAGE_RESTORED} —hay que volver a dibujarla— o
-     *     {@link #IMAGE_INCOMPATIBLE} —hay que crear otra—
+     * @return {@link #IMAGE_OK}, {@link #IMAGE_RESTORED} —it has to be drawn again— or
+     *     {@link #IMAGE_INCOMPATIBLE} —another one has to be created—
      */
     public abstract int validate(GraphicsConfiguration gc);
 
     /**
-     * Si el contenido se perdió desde la última comprobación.
+     * Whether the contents were lost since the last check.
      *
-     * <p>Hay que llamarlo **después** de dibujar: un `false` de antes no dice nada sobre lo que pasó
-     * durante el dibujado.
+     * <p>It has to be called **after** drawing: a `false` from before says nothing about what
+     * happened during the drawing.
      */
     public abstract boolean contentsLost();
 
-    /** Qué se puede acelerar de esta imagen. */
+    /** What can be accelerated about this image. */
     public abstract ImageCapabilities getCapabilities();
 
-    /** `OPAQUE`, `BITMASK` o `TRANSLUCENT`. */
+    /** `OPAQUE`, `BITMASK` or `TRANSLUCENT`. */
     public int getTransparency() {
         return this.transparency;
     }

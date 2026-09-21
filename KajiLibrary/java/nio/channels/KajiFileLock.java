@@ -15,8 +15,8 @@ final class KajiFileLock extends FileLock {
      * The token of a lock that is reserved but not taken yet.
      *
      * <p>An asynchronous `lock` has to refuse an overlap **on the calling thread** -- that is what
-     * the JDK does, and it has to, because the exception is thrown rather than delivered through the
-     * future. So the region is claimed here first and the system lock is taken on the pool
+     * the JDK does, and it has to, because the exception is thrown rather than delivered through
+     * the future. So the region is claimed here first and the system lock is taken on the pool
      * afterwards. Between the two the lock is not valid, but it does block other overlaps: without
      * that the claim would be worth nothing.
      */

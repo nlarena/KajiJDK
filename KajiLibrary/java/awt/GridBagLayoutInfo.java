@@ -3,46 +3,47 @@ package java.awt;
 import java.io.Serializable;
 
 /**
- * La grilla ya calculada de un {@link GridBagLayout}: cuántas filas y columnas hay, cuánto mide cada
- * una y cuánto peso tiene.
+ * The already computed grid of a {@link GridBagLayout}: how many rows and columns there are, how
+ * big each one is and how much weight it has.
  *
- * <p>Existe porque el cálculo de la grilla es caro y se necesita tres veces —para la medida mínima,
- * para la preferida y para ubicar— así que se hace una vez y se guarda.
+ * <p>The last grid laid out is kept, and {@link GridBagLayout#getLayoutOrigin} and company read it.
+ * This note said the grid is computed once and reused for the minimum size, the preferred size and
+ * the layout; here the size queries compute it again on every call.
  *
- * <p>Todos sus campos son de paquete y no tiene ningún miembro público: es un resultado intermedio
- * de {@link GridBagLayout}, no algo con lo que se trabaje desde afuera. La clase es pública sólo
- * porque aparece como tipo de un campo protegido de la distribución, y una subclase tiene que poder
- * nombrarla.
+ * <p>All its fields are package-private and it has no public member: it is an intermediate result
+ * of {@link GridBagLayout}, not something to work with from outside. The class is public only
+ * because it appears as the type of a protected field of the layout, and a subclass has to be able
+ * to name it.
  */
 public final class GridBagLayoutInfo implements Serializable {
 
     private static final long serialVersionUID = -4899416460737170217L;
 
-    /** Cuántas columnas tiene la grilla. */
+    /** How many columns the grid has. */
     int width;
 
-    /** Cuántas filas. */
+    /** How many rows. */
     int height;
 
-    /** Dónde arranca la grilla en X. */
+    /** Where the grid starts in X. */
     int startx;
 
-    /** Dónde arranca en Y. */
+    /** Where it starts in Y. */
     int starty;
 
-    /** Lo que mide cada columna. */
+    /** What each column measures. */
     int[] minWidth;
 
-    /** Lo que mide cada fila. */
+    /** What each row measures. */
     int[] minHeight;
 
-    /** Cuánto del ancho sobrante se lleva cada columna. */
+    /** How much of the spare width each column takes. */
     double[] weightX;
 
-    /** Cuánto del alto sobrante se lleva cada fila. */
+    /** How much of the spare height each row takes. */
     double[] weightY;
 
-    /** Con la grilla de ese tamaño. */
+    /** With a grid of that size. */
     GridBagLayoutInfo(int width, int height) {
         this.width = width;
         this.height = height;

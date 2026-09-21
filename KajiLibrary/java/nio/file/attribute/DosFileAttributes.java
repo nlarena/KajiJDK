@@ -1,21 +1,21 @@
 package java.nio.file.attribute;
 
-// Los cuatro bits heredados de DOS que Windows sigue guardando por archivo.
+// The four bits inherited from DOS that Windows still keeps per file.
 //
-// KajiJDK no los puede leer: `stat` de `jdk.internal.io.Fs` devuelve existe/archivo/directorio/
-// lectura/escritura y nada mas. La interfaz existe --es el tipo que devuelve
-// `DosFileAttributeView.readAttributes()`-- pero no hay implementacion.
+// KajiJDK cannot read them: `jdk.internal.io.Fs`'s `stat` returns
+// exists/file/directory/readable/writable and nothing else. The interface exists --it is the type
+// `DosFileAttributeView.readAttributes()` returns-- but there is no implementation.
 public interface DosFileAttributes extends BasicFileAttributes {
 
-    /** Si esta marcado de solo lectura. */
+    /** Whether it is marked read-only. */
     boolean isReadOnly();
 
-    /** Si esta oculto. */
+    /** Whether it is hidden. */
     boolean isHidden();
 
-    /** Si tiene puesto el bit de archivado. */
+    /** Whether the archive bit is set. */
     boolean isArchive();
 
-    /** Si es un archivo de sistema. */
+    /** Whether it is a system file. */
     boolean isSystem();
 }

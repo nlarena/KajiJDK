@@ -4,34 +4,34 @@ import java.io.IOException;
 import java.util.Set;
 
 /**
- * Todo lo que se le puede pedir a un agente JMX, este donde este.
+ * Everything that can be asked of a JMX agent, wherever it is.
  *
- * <p>Su razon de ser es un `throws`: cada metodo declara `IOException`. {@link MBeanServer}, que es
- * el agente <b>local</b>, redeclara los mismos metodos sin ella. Asi el codigo que solo va a hablar
- * con el agente de su propia maquina no paga el costo de atender una falla de red que no puede
- * ocurrir, y el codigo escrito contra esta interfaz anda con los dos.
+ * <p>Its reason to be is a {@code throws}: every method declares {@code IOException}. {@link
+ * MBeanServer}, which is the <b>local</b> agent, redeclares the same methods without it. That way
+ * code that will only talk to the agent of its own machine does not pay the cost of handling a
+ * network failure that cannot happen, and code written against this interface works with both.
  *
- * <p>De ahi que la relacion sea {@code MBeanServer extends MBeanServerConnection} y no al reves: lo
- * remoto es el caso general y lo local la restriccion.
+ * <p>Hence the relation is {@code MBeanServer extends MBeanServerConnection} and not the other way
+ * round: remote is the general case and local the restriction.
  */
 public interface MBeanServerConnection {
 
-    /** Instancia y registra un MBean de la clase dada. */
+    /** Instantiates and registers an MBean of the given class. */
     ObjectInstance createMBean(String className, ObjectName name)
             throws ReflectionException, InstanceAlreadyExistsException,
                    MBeanRegistrationException, MBeanException,
                    NotCompliantMBeanException, IOException;
 
-    /** Igual, pero cargando la clase con el cargador registrado bajo `loaderName`. */
+    /** The same, but loading the class with the loader registered under {@code loaderName}. */
     ObjectInstance createMBean(String className, ObjectName name, ObjectName loaderName)
             throws ReflectionException, InstanceAlreadyExistsException,
                    MBeanRegistrationException, MBeanException, NotCompliantMBeanException,
                    InstanceNotFoundException, IOException;
 
     /**
-     * Igual, eligiendo constructor.
+     * The same, choosing the constructor.
      *
-     * @param signature los nombres de las clases de los parametros, que es como se elige la firma
+     * @param signature the class names of the parameters, which is how the signature is chosen
      */
     ObjectInstance createMBean(String className, ObjectName name, Object[] params,
                                String[] signature)
@@ -39,114 +39,115 @@ public interface MBeanServerConnection {
                    MBeanRegistrationException, MBeanException,
                    NotCompliantMBeanException, IOException;
 
-    /** Con cargador y constructor elegidos. */
+    /** With loader and constructor chosen. */
     ObjectInstance createMBean(String className, ObjectName name, ObjectName loaderName,
                                Object[] params, String[] signature)
             throws ReflectionException, InstanceAlreadyExistsException,
                    MBeanRegistrationException, MBeanException, NotCompliantMBeanException,
                    InstanceNotFoundException, IOException;
 
-    /** Da de baja un MBean. */
+    /** Unregisters an MBean. */
     void unregisterMBean(ObjectName name)
             throws InstanceNotFoundException, MBeanRegistrationException, IOException;
 
-    /** Nombre y clase de un MBean registrado. */
+    /** Name and class of a registered MBean. */
     ObjectInstance getObjectInstance(ObjectName name)
             throws InstanceNotFoundException, IOException;
 
     /**
-     * Los MBeans que coinciden, con su clase.
+     * The MBeans that match, with their class.
      *
-     * <p>Un `name` nulo equivale a {@link ObjectName#WILDCARD}; un `query` nulo no filtra nada mas.
+     * <p>A null {@code name} is equivalent to {@link ObjectName#WILDCARD}; a null {@code query}
+     * filters nothing more.
      */
     Set<ObjectInstance> queryMBeans(ObjectName name, QueryExp query) throws IOException;
 
-    /** Lo mismo, pero solo los nombres: mas barato si la clase no hace falta. */
+    /** The same, but only the names: cheaper if the class is not needed. */
     Set<ObjectName> queryNames(ObjectName name, QueryExp query) throws IOException;
 
-    /** Si hay un MBean con ese nombre. */
+    /** Whether there is an MBean with that name. */
     boolean isRegistered(ObjectName name) throws IOException;
 
-    /** Cuantos MBeans hay. */
+    /** How many MBeans there are. */
     Integer getMBeanCount() throws IOException;
 
-    /** Lee un atributo. */
+    /** Reads an attribute. */
     Object getAttribute(ObjectName name, String attribute)
             throws MBeanException, AttributeNotFoundException, InstanceNotFoundException,
                    ReflectionException, IOException;
 
     /**
-     * Lee varios de una.
+     * Reads several at once.
      *
-     * <p>La lista devuelta puede ser <b>mas corta</b> que la pedida: los atributos que fallaron
-     * simplemente no estan. No hay forma de saber por cual fallo, y es asi por dise&ntilde;o -- la
-     * operacion es de mejor esfuerzo.
+     * <p>The returned list may be <b>shorter</b> than the requested one: the attributes that failed
+     * are simply not there. There is no way to know which one failed and why, and it is like that
+     * by design -- the operation is best effort.
      */
     AttributeList getAttributes(ObjectName name, String[] attributes)
             throws InstanceNotFoundException, ReflectionException, IOException;
 
-    /** Escribe un atributo. */
+    /** Writes an attribute. */
     void setAttribute(ObjectName name, Attribute attribute)
             throws InstanceNotFoundException, AttributeNotFoundException,
                    InvalidAttributeValueException, MBeanException, ReflectionException, IOException;
 
-    /** Escribe varios; devuelve los que se pudieron escribir. */
+    /** Writes several; returns the ones that could be written. */
     AttributeList setAttributes(ObjectName name, AttributeList attributes)
             throws InstanceNotFoundException, ReflectionException, IOException;
 
     /**
-     * Invoca una operacion.
+     * Invokes an operation.
      *
-     * @param signature los nombres de las clases de los parametros, para desambiguar sobrecargas
+     * @param signature the class names of the parameters, to disambiguate overloads
      */
     Object invoke(ObjectName name, String operationName, Object[] params, String[] signature)
             throws InstanceNotFoundException, MBeanException, ReflectionException, IOException;
 
-    /** El dominio que se usa cuando un nombre no trae ninguno. */
+    /** The domain used when a name does not bring one. */
     String getDefaultDomain() throws IOException;
 
-    /** Los dominios en los que hay algun MBean registrado. */
+    /** The domains in which some MBean is registered. */
     String[] getDomains() throws IOException;
 
-    /** Registra un oyente contra un MBean. */
+    /** Registers a listener against an MBean. */
     void addNotificationListener(ObjectName name, NotificationListener listener,
                                  NotificationFilter filter, Object handback)
             throws InstanceNotFoundException, IOException;
 
     /**
-     * Registra como oyente a <b>otro MBean</b>.
+     * Registers <b>another MBean</b> as a listener.
      *
-     * <p>Es la variante que sirve de verdad sobre una conexion remota: el oyente vive en el agente,
-     * asi que las notificaciones no cruzan la red.
+     * <p>It is the variant that really works over a remote connection: the listener lives in the
+     * agent, so the notifications do not cross the network.
      */
     void addNotificationListener(ObjectName name, ObjectName listener,
                                  NotificationFilter filter, Object handback)
             throws InstanceNotFoundException, IOException;
 
-    /** Saca todos los registros de ese MBean oyente. */
+    /** Removes all the registrations of that listener MBean. */
     void removeNotificationListener(ObjectName name, ObjectName listener)
             throws InstanceNotFoundException, ListenerNotFoundException, IOException;
 
-    /** Saca el registro exacto de ese MBean oyente. */
+    /** Removes the exact registration of that listener MBean. */
     void removeNotificationListener(ObjectName name, ObjectName listener,
                                     NotificationFilter filter, Object handback)
             throws InstanceNotFoundException, ListenerNotFoundException, IOException;
 
-    /** Saca todos los registros de ese oyente. */
+    /** Removes all the registrations of that listener. */
     void removeNotificationListener(ObjectName name, NotificationListener listener)
             throws InstanceNotFoundException, ListenerNotFoundException, IOException;
 
-    /** Saca el registro exacto. */
+    /** Removes the exact registration. */
     void removeNotificationListener(ObjectName name, NotificationListener listener,
                                     NotificationFilter filter, Object handback)
             throws InstanceNotFoundException, ListenerNotFoundException, IOException;
 
-    /** Los metadatos del MBean: la puerta de entrada a todo lo demas. */
+    /** The MBean's metadata: the entry point to everything else. */
     MBeanInfo getMBeanInfo(ObjectName name)
             throws InstanceNotFoundException, IntrospectionException, ReflectionException,
                    IOException;
 
-    /** Si el MBean es de esa clase o de una subclase. */
+    /** Whether the MBean is of that class or of a subclass. */
     boolean isInstanceOf(ObjectName name, String className)
             throws InstanceNotFoundException, IOException;
 }

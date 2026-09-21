@@ -1,44 +1,44 @@
 package com.sun.jdi;
 
 /**
- * Lo que tiene modificadores de acceso: una clase, un campo o un metodo.
+ * What has access modifiers: a class, a field or a method.
  *
  * @since 1.3
  */
 public interface Accessible {
 
     /**
-     * El modifiers.
+     * The modifiers.
      *
-     * @return el resultado
+     * @return the result
      */
     int modifiers();
 
     /**
-     * Si private.
+     * Whether private.
      *
-     * @return el resultado
+     * @return the result
      */
     boolean isPrivate();
 
     /**
-     * Si package private.
+     * Whether package private.
      *
-     * @return el resultado
+     * @return the result
      */
     boolean isPackagePrivate();
 
     /**
-     * Si protected.
+     * Whether protected.
      *
-     * @return el resultado
+     * @return the result
      */
     boolean isProtected();
 
     /**
-     * Si public.
+     * Whether public.
      *
-     * @return el resultado
+     * @return the result
      */
     boolean isPublic();
 }

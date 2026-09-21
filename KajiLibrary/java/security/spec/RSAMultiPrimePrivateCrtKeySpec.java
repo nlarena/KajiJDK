@@ -2,18 +2,18 @@ package java.security.spec;
 
 import java.math.BigInteger;
 
-// Una clave privada RSA con CRT y **mas de dos** primos.
+// An RSA private key with CRT and **more than two** primes.
 //
-// Es `RSAPrivateCrtKeySpec` extendido con la lista de primos del tercero en adelante. A diferencia
-// de las otras specs de RSA, esta si valida contra null los ocho `BigInteger`, y la razon es que
-// aca la lista de primos hace que la estructura tenga una forma que respetar: un arreglo vacio
-// significaria "multi-primo con cero primos extra", que es una contradiccion, y por eso se rechaza.
-// Un arreglo **null** en cambio se acepta —quiere decir que no hay primos extra— y eso queda
-// documentado porque no es lo que uno esperaria de un constructor que rechaza el arreglo vacio.
+// It is `RSAPrivateCrtKeySpec` extended with the list of primes from the third on. Unlike the other
+// RSA key specs, this one does validate the eight `BigInteger`s against null, and here the list of
+// primes gives the structure a shape to respect: an empty array would mean "multi-prime with zero
+// extra primes", which is a contradiction, and so it is rejected. A **null** array, on the other
+// hand, is accepted —it means there are no extra primes— and that is documented because it is not
+// what one would expect from a constructor that rejects the empty array.
 //
-// No hereda de `RSAPrivateCrtKeySpec` sino de `RSAPrivateKeySpec`, y esta bien que asi sea: una
-// clave de k primos no **es** una clave de dos primos, y dejar que se pasara por una haria que
-// codigo que solo mira p y q operara con una factorizacion incompleta.
+// It does not inherit from `RSAPrivateCrtKeySpec` but from `RSAPrivateKeySpec`, and rightly so: a
+// key of k primes **is not** a two-prime key, and letting it pass as one would make code that only
+// looks at p and q operate with an incomplete factorization.
 public class RSAMultiPrimePrivateCrtKeySpec extends RSAPrivateKeySpec {
 
     private final BigInteger publicExponent;
@@ -83,11 +83,11 @@ public class RSAMultiPrimePrivateCrtKeySpec extends RSAPrivateKeySpec {
         } else if (otherPrimeInfo.length == 0) {
             throw new IllegalArgumentException("the otherPrimeInfo parameter must not be empty");
         } else {
-            this.otherPrimeInfo = copiar(otherPrimeInfo);
+            this.otherPrimeInfo = copyOf(otherPrimeInfo);
         }
     }
 
-    private static RSAOtherPrimeInfo[] copiar(RSAOtherPrimeInfo[] a) {
+    private static RSAOtherPrimeInfo[] copyOf(RSAOtherPrimeInfo[] a) {
         RSAOtherPrimeInfo[] c = new RSAOtherPrimeInfo[a.length];
         System.arraycopy(a, 0, c, 0, a.length);
         return c;
@@ -117,12 +117,12 @@ public class RSAMultiPrimePrivateCrtKeySpec extends RSAPrivateKeySpec {
         return this.crtCoefficient;
     }
 
-    // Copia del arreglo, o null si no hay primos extra. La copia es superficial y alcanza porque
-    // `RSAOtherPrimeInfo` es inmutable.
+    // A copy of the array, or null if there are no extra primes. The copy is shallow, and that is
+    // enough because `RSAOtherPrimeInfo` is immutable.
     public RSAOtherPrimeInfo[] getOtherPrimeInfo() {
         if (this.otherPrimeInfo == null) {
             return null;
         }
-        return copiar(this.otherPrimeInfo);
+        return copyOf(this.otherPrimeInfo);
     }
 }

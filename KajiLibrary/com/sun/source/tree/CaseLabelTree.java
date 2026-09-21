@@ -1,8 +1,8 @@
 package com.sun.source.tree;
 
 /**
- * Una etiqueta de `case`, que desde los patrones puede ser mas que una constante:
- * ver {@link ConstantCaseLabelTree}, {@link PatternCaseLabelTree} y
+ * A `case` label, which since the patterns may be more than a constant: see
+ * {@link ConstantCaseLabelTree}, {@link PatternCaseLabelTree} and
  * {@link DefaultCaseLabelTree}.
  */
 public interface CaseLabelTree extends Tree {

@@ -5,34 +5,34 @@ import java.text.ParseException;
 import javax.swing.JFormattedTextField;
 
 /**
- * Un formateador con mascara: el texto tiene que calzar en un molde.
+ * A formatter with a mask: the text has to fit a mould.
  *
- * <h2>El molde</h2>
+ * <h2>The mould</h2>
  *
- * <p>La mascara es una cadena donde cada caracter especial dice que se puede escribir en esa
- * posicion:
+ * <p>The mask is a string where each special character says what may be typed at that position:
  *
  * <table border="1">
- * <caption>Los caracteres de la mascara</caption>
- * <tr><td><code>#</code></td><td>un digito</td></tr>
- * <tr><td><code>'</code></td><td>escape: el siguiente es literal</td></tr>
- * <tr><td><code>U</code></td><td>una letra, que pasa a mayuscula</td></tr>
- * <tr><td><code>L</code></td><td>una letra, que pasa a minuscula</td></tr>
- * <tr><td><code>A</code></td><td>una letra o un digito</td></tr>
- * <tr><td><code>?</code></td><td>una letra</td></tr>
- * <tr><td><code>*</code></td><td>cualquier cosa</td></tr>
- * <tr><td><code>H</code></td><td>un digito hexadecimal</td></tr>
+ * <caption>The mask characters</caption>
+ * <tr><td><code>#</code></td><td>a digit</td></tr>
+ * <tr><td><code>'</code></td><td>escape: the next one is literal</td></tr>
+ * <tr><td><code>U</code></td><td>a letter, turned into upper case</td></tr>
+ * <tr><td><code>L</code></td><td>a letter, turned into lower case</td></tr>
+ * <tr><td><code>A</code></td><td>a letter or a digit</td></tr>
+ * <tr><td><code>?</code></td><td>a letter</td></tr>
+ * <tr><td><code>*</code></td><td>anything</td></tr>
+ * <tr><td><code>H</code></td><td>a hexadecimal digit</td></tr>
  * </table>
  *
- * <p>Todo lo demas es literal y aparece siempre: en <code>###-####</code> el guion esta puesto
- * desde el principio y el usuario no lo escribe ni lo puede borrar.
+ * <p>Everything else is literal and always appears: in <code>###-####</code> the hyphen is there
+ * from the start and the user neither types it nor can remove it.
  *
- * <h2>Los literales y el valor</h2>
+ * <h2>The literals and the value</h2>
  *
- * <p>Que el guion se vea no quiere decir que forme parte del valor. Con
- * {@link #setValueContainsLiteralCharacters} en falso, el valor de <code>123-4567</code> es
- * <code>1234567</code>. Es la diferencia entre lo que el usuario ve y lo que el programa guarda, y
- * conviene decidirla a proposito: guardar los literales obliga a sacarlos despues en cada uso.
+ * <p>That the hyphen is seen does not mean it is part of the value. With
+ * {@link #setValueContainsLiteralCharacters} at false, the value of <code>123-4567</code> is
+ * <code>1234567</code>. It is the difference between what the user sees and what the program
+ * keeps, and it is worth deciding on purpose: keeping the literals forces taking them out
+ * afterwards on every use.
  */
 public class MaskFormatter extends DefaultFormatter {
 
@@ -53,7 +53,7 @@ public class MaskFormatter extends DefaultFormatter {
     private char placeholder;
     private boolean containsLiteralChars;
 
-    /** Un formateador sin mascara; acepta cualquier texto hasta que le pongan una. */
+    /** A formatter with no mask; it accepts any text until one is set on it. */
     public MaskFormatter() {
         setAllowsInvalid(false);
         containsLiteralChars = true;
@@ -61,16 +61,16 @@ public class MaskFormatter extends DefaultFormatter {
         placeholder = ' ';
     }
 
-    /** Un formateador con esa mascara. */
+    /** A formatter with that mask. */
     public MaskFormatter(String mask) throws ParseException {
         this();
         setMask(mask);
     }
 
     /**
-     * La mascara.
+     * The mask.
      *
-     * @throws ParseException si la mascara no se entiende (por ejemplo, termina en un escape).
+     * @throws ParseException if the mask is not understood (for instance, it ends in an escape).
      */
     public void setMask(String mask) throws ParseException {
         this.mask = mask;
@@ -81,7 +81,7 @@ public class MaskFormatter extends DefaultFormatter {
         return mask;
     }
 
-    /** Si esta puesto, solo se aceptan estos caracteres, ademas de lo que diga la mascara. */
+    /** If it is set, only these characters are accepted, besides what the mask says. */
     public void setValidCharacters(String validCharacters) {
         this.validCharacters = validCharacters;
     }
@@ -90,7 +90,7 @@ public class MaskFormatter extends DefaultFormatter {
         return validCharacters;
     }
 
-    /** Si esta puesto, estos caracteres se rechazan aunque la mascara los acepte. */
+    /** If it is set, these characters are rejected even if the mask accepts them. */
     public void setInvalidCharacters(String invalidCharacters) {
         this.invalidCharacters = invalidCharacters;
     }
@@ -100,9 +100,9 @@ public class MaskFormatter extends DefaultFormatter {
     }
 
     /**
-     * El texto que se muestra donde el usuario todavia no escribio.
+     * The text shown where the user has not typed yet.
      *
-     * <p>Si es mas corto que la mascara, lo que falta se llena con
+     * <p>If it is shorter than the mask, what is missing is filled with
      * {@link #getPlaceholderCharacter}.
      */
     public void setPlaceholder(String placeholder) {
@@ -113,7 +113,7 @@ public class MaskFormatter extends DefaultFormatter {
         return placeholderString;
     }
 
-    /** El caracter de relleno; por omision, un espacio. */
+    /** The filler character; by default, a space. */
     public void setPlaceholderCharacter(char placeholder) {
         this.placeholder = placeholder;
     }
@@ -122,7 +122,7 @@ public class MaskFormatter extends DefaultFormatter {
         return placeholder;
     }
 
-    /** Si el valor incluye los literales de la mascara; ver la nota de la clase. */
+    /** Whether the value includes the mask's literals; see the class note. */
     public void setValueContainsLiteralCharacters(boolean containsLiteralChars) {
         this.containsLiteralChars = containsLiteralChars;
     }
@@ -132,9 +132,9 @@ public class MaskFormatter extends DefaultFormatter {
     }
 
     /**
-     * El valor de ese texto.
+     * That text's value.
      *
-     * @throws ParseException si el texto no calza en la mascara.
+     * @throws ParseException if the text does not fit the mask.
      */
     public Object stringToValue(String value) throws ParseException {
         return stringToValue(value, true);
@@ -151,11 +151,11 @@ public class MaskFormatter extends DefaultFormatter {
         throw new ParseException("stringToValue passed invalid value", errorOffset);
     }
 
-    /** La primera posicion que no calza, o -1 si calza toda. */
+    /** The first position that does not fit, or -1 if it all fits. */
     private int getInvalidOffset(String string, boolean completo) {
         int max = string.length();
         if (completo && max != maskChars.length) {
-            // Largo distinto: el texto esta incompleto o sobra.
+            // A different length: the text is incomplete or there is too much.
             return max;
         }
         for (int i = 0; i < max; i++) {
@@ -170,7 +170,7 @@ public class MaskFormatter extends DefaultFormatter {
         return -1;
     }
 
-    /** Saca de la cadena los caracteres literales de la mascara. */
+    /** It takes the mask's literal characters out of the string. */
     private String stripLiteralChars(String string) {
         StringBuilder sb = null;
         int last = 0;
@@ -198,12 +198,13 @@ public class MaskFormatter extends DefaultFormatter {
     }
 
     /**
-     * El texto del valor, con los literales puestos y el relleno donde falta.
+     * The value's text, with the literals put in and the filler where something is missing.
      *
-     * <p>No es solo dar formato: tambien valida. Un caracter que no entra en su posicion es un
-     * error, no algo que se pueda acomodar, porque acomodarlo cambiaria el valor sin avisar.
+     * <p>It is not only formatting: it also validates. A character that does not fit in its
+     * position is an error, not something that can be fixed up, because fixing it up would change
+     * the value without warning.
      *
-     * @throws ParseException si el valor no entra en la mascara.
+     * @throws ParseException if the value does not fit the mask.
      */
     public String valueToString(Object value) throws ParseException {
         String sValue = (value == null) ? "" : value.toString();
@@ -219,7 +220,7 @@ public class MaskFormatter extends DefaultFormatter {
 
     public void install(JFormattedTextField ftf) {
         super.install(ftf);
-        // Si el valor no calza, el campo queda con la mascara vacia y no con basura.
+        // If the value does not fit, the field is left with the empty mask and not with rubbish.
         if (ftf != null) {
             Object value = ftf.getValue();
             try {
@@ -230,7 +231,7 @@ public class MaskFormatter extends DefaultFormatter {
         }
     }
 
-    /** Arma la mascara interna a partir de la cadena. */
+    /** It builds the internal mask from the string. */
     private void updateInternalMask() throws ParseException {
         String mask = getMask();
         java.util.List<MaskCharacter> fixed = new java.util.ArrayList<MaskCharacter>();
@@ -269,7 +270,7 @@ public class MaskFormatter extends DefaultFormatter {
     }
 
     int getInitialVisualPosition() {
-        // El cursor arranca en el primer lugar donde se puede escribir, no sobre un literal.
+        // The cursor starts at the first place where typing is possible, not over a literal.
         for (int i = 0; i < maskChars.length; i++) {
             if (!maskChars[i].isLiteral()) {
                 return i;
@@ -279,52 +280,54 @@ public class MaskFormatter extends DefaultFormatter {
     }
 
     /**
-     * Una posicion de la mascara.
+     * A position of the mask.
      *
-     * <p>O es un literal, y entonces siempre da el mismo caracter, o es un molde, y entonces dice
-     * que caracteres acepta y como los transforma.
+     * <p>Either it is a literal, and then it always gives the same character, or it is a mould, and
+     * then it says which characters it accepts and how it transforms them.
      */
     static class MaskCharacter {
 
         private final MaskFormatter fmt;
-        private final char tipo;
+        private final char type;
         private final char literal;
 
-        MaskCharacter(MaskFormatter fmt, char tipo, char literal) {
+        MaskCharacter(MaskFormatter fmt, char type, char literal) {
             this.fmt = fmt;
-            this.tipo = tipo;
+            this.type = type;
             this.literal = literal;
         }
 
         boolean isLiteral() {
-            return tipo == 0;
+            return type == 0;
         }
 
-        /** El caracter que va en esa posicion. */
+        /** The character that goes at that position. */
         char getChar(char aChar) {
             if (isLiteral()) {
                 return literal;
             }
-            if (tipo == UPPERCASE_KEY || tipo == HEX_KEY) {
-                // El hexadecimal tambien: 'aF' y 'AF' son el mismo numero, y mostrar los dos
-                // estilos mezclados en un mismo campo se lee peor que normalizarlos.
+            if (type == UPPERCASE_KEY || type == HEX_KEY) {
+                // Hexadecimal too: 'aF' and 'AF' are the same number, and showing the two styles
+                // mixed
+                                // in one same field reads worse than normalizing them.
                 return Character.toUpperCase(aChar);
             }
-            if (tipo == LOWERCASE_KEY) {
+            if (type == LOWERCASE_KEY) {
                 return Character.toLowerCase(aChar);
             }
             return aChar;
         }
 
         /**
-         * Escribe en el resultado lo que corresponde a esta posicion.
+         * It writes into the result what corresponds to this position.
          *
-         * <p>Cuatro casos, en este orden: el caracter sirve y se usa; es un literal y se pone solo;
-         * hay caracter pero no sirve, y eso es un error; no hay caracter y se rellena.
+         * <p>Four cases, in this order: the character serves and is used; it is a literal and is
+         * put in by itself; there is a character but it does not serve, and that is an error; there
+         * is no character and the filler goes in.
          *
-         * <p>El primer caso pide que todavia queden caracteres en el valor. Sin esa condicion, un
-         * molde permisivo como <code>*</code> aceptaria el caracter cero del final del valor y
-         * escribiria basura en lugar del relleno.
+         * <p>The first case asks that there still be characters left in the value. Without that
+         * condition, a permissive mould such as <code>*</code> would accept the zero character at
+         * the end of the value and write rubbish instead of the filler.
          */
         void append(StringBuilder buff, String formatting, int[] index, String placeholder)
                 throws ParseException {
@@ -353,15 +356,15 @@ public class MaskFormatter extends DefaultFormatter {
             }
         }
 
-        /** Si ese caracter se puede escribir aca. */
+        /** Whether that character may be typed here. */
         boolean isValidCharacter(char aChar) {
             if (isLiteral()) {
                 return (literal == aChar);
             }
-            if (!fmt.esPermitido(aChar)) {
+            if (!fmt.isAllowed(aChar)) {
                 return false;
             }
-            switch (tipo) {
+            switch (type) {
                 case MaskFormatter.DIGIT_KEY:
                     return Character.isDigit(aChar);
                 case MaskFormatter.UPPERCASE_KEY:
@@ -382,8 +385,8 @@ public class MaskFormatter extends DefaultFormatter {
         }
     }
 
-    /** Si el caracter pasa las listas de permitidos y prohibidos. */
-    boolean esPermitido(char aChar) {
+    /** Whether the character passes the allowed and forbidden lists. */
+    boolean isAllowed(char aChar) {
         String validCharacters = getValidCharacters();
         String invalidCharacters = getInvalidCharacters();
         if (validCharacters != null && validCharacters.indexOf(aChar) == -1) {

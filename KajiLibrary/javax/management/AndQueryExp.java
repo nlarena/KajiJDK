@@ -1,17 +1,17 @@
 package javax.management;
 
-/** Conjuncion. De paquete: se fabrica con {@link Query#and}. */
+/** Conjunction. Package-private: it is made with {@link Query#and}. */
 class AndQueryExp extends QueryEval implements QueryExp {
 
     private static final long serialVersionUID = -1081892073854801359L;
 
     /**
-     * @serial la primera
+     * @serial the first one
      */
     private QueryExp exp1;
 
     /**
-     * @serial la segunda
+     * @serial the second one
      */
     private QueryExp exp2;
 
@@ -31,7 +31,9 @@ class AndQueryExp extends QueryEval implements QueryExp {
         return exp2;
     }
 
-    /** En corto: si la primera es falsa, la segunda no se evalua ni se pregunta al agente. */
+    /**
+     * Short-circuit: if the first is false, the second is neither evaluated nor asked of the agent.
+     */
     public boolean apply(ObjectName name) throws BadStringOperationException,
             BadBinaryOpValueExpException, BadAttributeValueExpException,
             InvalidApplicationException {

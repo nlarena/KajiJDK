@@ -1,26 +1,26 @@
 package java.lang.instrument;
 
 /**
- * KajiLibrary's java.lang.instrument.IllegalClassFormatException -- el transformador devolvio bytes
- * que no son una clase.
+ * KajiLibrary's java.lang.instrument.IllegalClassFormatException -- the transformer was given bytes
+ * that are not a class.
  *
- * <p>La lanza un {@link ClassFileTransformer} para decir que los bytes que <b>recibio</b> no le
- * sirven. Es la unica forma que tiene de negarse sin romper la carga: la maquina virtual la ataja,
- * ignora ese transformador y sigue con los demas.
+ * <p>A {@link ClassFileTransformer} throws it to say that the bytes it <b>received</b> are no good
+ * to it. It is the only way it has of refusing without breaking the load: the virtual machine
+ * catches it, ignores that transformer and carries on with the rest.
  *
- * <p>La otra forma de negarse --devolver null-- significa "no me interesa, no lo toco". La diferencia
- * importa: null es silencioso y esta es el canal para avisar que algo estaba mal.
+ * <p>The other way of refusing --returning null-- means "not interested, I am not touching it". The
+ * difference matters: null is silent, and this is the channel for saying that something was wrong.
  */
 public class IllegalClassFormatException extends Exception {
 
     private static final long serialVersionUID = -3841736710924794009L;
 
-    /** Sin detalle. */
+    /** With no detail. */
     public IllegalClassFormatException() {
         super();
     }
 
-    /** Con un mensaje que diga que estaba mal. */
+    /** With a message saying what was wrong. */
     public IllegalClassFormatException(String s) {
         super(s);
     }

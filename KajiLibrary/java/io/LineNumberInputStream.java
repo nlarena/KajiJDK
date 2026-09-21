@@ -1,22 +1,22 @@
 package java.io;
 
-// KajiLibrary's java.io.LineNumberInputStream -- cuenta lineas sobre un stream de bytes.
+// KajiLibrary's java.io.LineNumberInputStream -- it counts lines over a stream of bytes.
 //
-// **Deprecada desde JDK 1.1**, y por la misma razon que `StringBufferInputStream`: cuenta lineas
-// sobre *bytes*, no sobre caracteres, asi que solo funciona con codificaciones en las que un byte
-// es un caracter. En UTF-16 los ceros intercalados le arruinan la cuenta. El reemplazo es
-// `LineNumberReader`, que hace lo mismo un nivel mas arriba, donde ya hay caracteres.
+// **Deprecated since JDK 1.1**, and for the same reason as `StringBufferInputStream`: it counts
+// lines over *bytes*, not over characters, so it only works with encodings in which one byte is one
+// character. In UTF-16 the interleaved zeros ruin its count. The replacement is `LineNumberReader`,
+// which does the same thing one level up, where there are characters already.
 //
-// Lo que si hace bien es **normalizar los tres finales de linea**: `\r`, `\n` y `\r\n` salen todos
-// como un unico `\n`. Eso obliga a mirar un byte adelante cuando se ve un `\r` --hay que saber si
-// lo que sigue es un `\n` para no contar dos lineas donde hay una-- y ese byte adelantado se guarda
-// en `pushBack`. Es todo el truco de la clase.
+// What it does do well is **normalize the three line endings**: `\r`, `\n` and `\r\n` all come out
+// as a single `\n`. That forces it to look one byte ahead when it sees a `\r` --one has to know
+// whether what follows is a `\n` so as not to count two lines where there is one-- and that
+// look-ahead byte is kept in `pushBack`. That is the class's whole trick.
 //
-// Los campos son de paquete, como en el JDK: no son contrato, pero `mark`/`reset` tienen que poder
-// guardarlos y restaurarlos juntos.
+// The fields are package-private, as in the JDK: they are not contract, but `mark`/`reset` have to
+// be able to store and restore them together.
 public class LineNumberInputStream extends FilterInputStream {
 
-    // El byte que se leyo de mas mirando adelante despues de un `\r`, o -1 si no hay ninguno.
+    // The byte read in excess while looking ahead after a `\r`, or -1 if there is none.
     int pushBack = -1;
 
     int lineNumber;
@@ -29,9 +29,9 @@ public class LineNumberInputStream extends FilterInputStream {
         super(in);
     }
 
-    // Un `\r` suelto y un `\r\n` valen los dos por una linea y salen los dos como `\n`. Para
-    // distinguirlos hay que leer el siguiente byte: si es `\n` se descarta --ya se conto la linea--
-    // y si no, se guarda para la proxima lectura.
+    // A lone `\r` and a `\r\n` are both worth one line and both come out as `\n`. To tell them
+    // apart the next byte has to be read: if it is a `\n` it is discarded --the line has been
+    // counted already-- and if not, it is kept for the next read.
     public int read() throws IOException {
         int c = this.pushBack;
         if (c != -1) {
@@ -54,8 +54,9 @@ public class LineNumberInputStream extends FilterInputStream {
         return c;
     }
 
-    // Byte a byte y no en bloque, porque la traduccion de finales de linea puede consumir dos bytes
-    // de abajo por cada uno que sale. Es lento y es lo que hace el JDK; la clase esta deprecada.
+    // Byte by byte and not in blocks, because the line-ending translation may consume two bytes
+    // from below for each one that comes out. It is slow and it is what the JDK does; the class is
+    // deprecated.
     public int read(byte[] b, int off, int len) throws IOException {
         if (b == null) {
             throw new NullPointerException();
@@ -83,16 +84,16 @@ public class LineNumberInputStream extends FilterInputStream {
         return i;
     }
 
-    // Saltar tambien pasa por `read`: saltar bytes crudos contaria mal las lineas.
+    // Skipping goes through `read` too: skipping raw bytes would count the lines wrongly.
     public long skip(long n) throws IOException {
-        long saltados = 0;
-        while (saltados < n) {
+        long skipped = 0;
+        while (skipped < n) {
             if (this.read() == -1) {
                 break;
             }
-            saltados = saltados + 1;
+            skipped = skipped + 1;
         }
-        return saltados;
+        return skipped;
     }
 
     public void setLineNumber(int lineNumber) {
@@ -103,20 +104,20 @@ public class LineNumberInputStream extends FilterInputStream {
         return this.lineNumber;
     }
 
-    // **La mitad**, y no es un error de calculo: en el peor caso todo lo que viene son `\r\n`, y
-    // cada par de bytes de abajo se convierte en un solo byte de aca. `available` promete un piso,
-    // no una estimacion, asi que tiene que suponer el peor caso. El `+1` es el byte adelantado, que
-    // ya esta leido y sale seguro.
+    // **Half**, and it is no arithmetic slip: in the worst case everything coming is `\r\n`, and
+    // each pair of bytes from below turns into a single byte from here. `available` promises a
+    // floor, not an estimate, so it has to assume the worst case. The `+1` is the look-ahead byte,
+    // which is read already and certainly comes out.
     public int available() throws IOException {
-        int abajo = this.in.available() / 2;
+        int below = this.in.available() / 2;
         if (this.pushBack == -1) {
-            return abajo;
+            return below;
         }
-        return abajo + 1;
+        return below + 1;
     }
 
-    // El numero de linea y el byte adelantado se guardan junto con la marca de abajo: restaurar la
-    // posicion sin restaurar los dos dejaria la cuenta corrida.
+    // The line number and the look-ahead byte are stored together with the mark below: restoring
+    // the position without restoring both would leave the count out of step.
     public void mark(int readlimit) {
         this.markLineNumber = this.lineNumber;
         this.markPushBack = this.pushBack;

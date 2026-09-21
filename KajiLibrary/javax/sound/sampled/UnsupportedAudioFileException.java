@@ -1,24 +1,24 @@
 package javax.sound.sampled;
 
 /**
- * KajiLibrary's javax.sound.sampled.UnsupportedAudioFileException -- ese archivo no se puede leer.
+ * KajiLibrary's javax.sound.sampled.UnsupportedAudioFileException -- that file cannot be read.
  *
- * <p>Ningun lector registrado reconocio el formato. No dice que el archivo este roto: dice que nadie
- * sabe leerlo.
+ * <p>No registered reader recognized the format. It does not say the file is broken: it says nobody
+ * knows how to read it.
  *
- * <p>La diferencia con {@link java.io.IOException} importa al diagnosticar: aquella significa que no
- * se pudo leer el archivo, esta que se leyo y no se entendio.
+ * <p>The difference from {@link java.io.IOException} matters when diagnosing: that one means the
+ * file could not be read, this one that it was read and not understood.
  */
 public class UnsupportedAudioFileException extends Exception {
 
     private static final long serialVersionUID = -139127412623160368L;
 
-    /** Sin detalle. */
+    /** Without detail. */
     public UnsupportedAudioFileException() {
         super();
     }
 
-    /** Con mensaje. */
+    /** With a message. */
     public UnsupportedAudioFileException(String message) {
         super(message);
     }

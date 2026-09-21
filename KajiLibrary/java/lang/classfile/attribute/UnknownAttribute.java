@@ -6,15 +6,15 @@ import java.lang.classfile.CodeElement;
 import java.lang.classfile.FieldElement;
 import java.lang.classfile.MethodElement;
 
-// Un atributo cuyo nombre no está en {@link java.lang.classfile.Attributes} ni entre los mapeadores
-// a medida del lector. El formato obliga a poder saltearlo —el largo está en la cabecera— y esta
-// interfaz permite además conservarlo: el nombre y los bytes salen tal cual entraron.
+// An attribute whose name is neither in {@link java.lang.classfile.Attributes} nor among the reader's
+// custom mappers. The format makes it possible to skip it --the length is in the header-- and this
+// interface also allows keeping it: the name and the bytes come out just as they went in.
 //
-// No tiene fábrica, y no es un olvido: un atributo desconocido sólo aparece al LEER. Para inventar
-// uno está {@link java.lang.classfile.CustomAttribute}, que trae su propio mapeador.
+// It has no factory, and that is no oversight: an unknown attribute only shows up when READING. To
+// invent one there is {@link java.lang.classfile.CustomAttribute}, which brings its own mapper.
 public interface UnknownAttribute extends Attribute<UnknownAttribute>, ClassElement, MethodElement,
         FieldElement, CodeElement {
 
-    /** Una copia del cuerpo del atributo, sin el nombre ni el largo. */
+    /** A copy of the attribute's body, without the name or the length. */
     byte[] contents();
 }

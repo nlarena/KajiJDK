@@ -2,18 +2,18 @@ package java.security.cert;
 
 import java.net.URI;
 
-// Los parametros de un `CertStore` que lee de una URI.
+// The parameters of a `CertStore` that reads from a URI.
 //
-// Es la version moderna de `LDAPCertStoreParameters`: la misma idea sin atarse a un protocolo. En
-// la practica es lo que se usa para seguir la extension AIA de un certificado, que dice por HTTP
-// donde bajar el certificado del emisor.
+// It is the modern version of `LDAPCertStoreParameters`: the same idea without being tied to a
+// protocol. In practice it is what is used for following the AIA extension of a certificate, which
+// says over HTTP where to download the certificate of the issuer from.
 //
-// A diferencia de las otras dos clases de parametros, esta es **inmutable** y tiene `equals` y
-// `hashCode`: una URI es un valor, no una configuracion mutable, asi que se comporta como tal. El
-// tipo de retorno de `clone()` es covariante para que el llamador no tenga que castear.
+// Unlike the other two parameter classes, this one is **immutable** and has `equals` and
+// `hashCode`: a URI is a value, not a mutable configuration, so it behaves as such. The return type
+// of `clone()` is covariant so that the caller does not have to cast.
 //
-// **No abre ninguna conexion.** Esta clase solo guarda la URI; esta biblioteca no trae ningun
-// proveedor de `CertStore` que la sepa resolver.
+// **It opens no connection.** This class only keeps the URI; this library brings no `CertStore`
+// provider that knows how to resolve it.
 public final class URICertStoreParameters implements CertStoreParameters {
 
     private final URI uri;
@@ -29,9 +29,9 @@ public final class URICertStoreParameters implements CertStoreParameters {
         return this.uri;
     }
 
-    // Devuelve una instancia **nueva** aunque la clase sea inmutable y `this` alcanzaria. Se hace
-    // asi porque es lo que hace el JDK, y la identidad del resultado es observable: hay codigo que
-    // compara con `==` para saber si tiene una copia propia.
+    // It returns a **new** instance even though the class is immutable and `this` would be enough.
+    // It is done this way because it is what the JDK does, and the identity of the result is
+    // observable: there is code that compares with `==` to know whether it has a copy of its own.
     @Override
     public URICertStoreParameters clone() {
         return new URICertStoreParameters(this.uri);

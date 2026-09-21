@@ -3,7 +3,7 @@ package com.sun.source.doctree;
 import java.util.List;
 
 /**
- * El nodo de `{@index}`, que agrega un termino al indice de busqueda.
+ * The node of `{@index}`, which adds a term to the search index.
  */
 public interface IndexTree extends InlineTagTree {
 

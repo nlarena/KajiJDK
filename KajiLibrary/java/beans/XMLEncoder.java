@@ -42,11 +42,11 @@ import java.util.Map;
 // lie about the file's contents.
 public class XMLEncoder extends Encoder implements AutoCloseable {
 
-    private static final String SALTO = lineBreak();
+    private static final String LINE_BREAK = lineBreak();
 
     private final OutputStream out2;
     private final String charset;
-    private final boolean declaracion;
+    private final boolean declaration;
 
     private Object owner;
     private int indent;
@@ -55,9 +55,9 @@ public class XMLEncoder extends Encoder implements AutoCloseable {
     // While it is true, the calls arriving come from Encoder's machinery and not from a user's
     // `writeObject`. The distinction matters: a writeObject from outside is a root of the document,
     // one from inside is a part of something already being written.
-    private boolean interno;
+    private boolean inner;
 
-    private final Map<Object, Info> datos = new IdentityHashMap<Object, Info>();
+    private final Map<Object, Info> data = new IdentityHashMap<Object, Info>();
     private final Map<Object, List<Statement>> byTarget = new IdentityHashMap<Object, List<Statement>>();
 
     // The same lists as `byTarget`'s, in an index that can be walked without touching the keys. See
@@ -97,7 +97,7 @@ public class XMLEncoder extends Encoder implements AutoCloseable {
         }
         this.out2 = out;
         this.charset = charset;
-        this.declaracion = declaration;
+        this.declaration = declaration;
         this.indent = indentation;
     }
 
@@ -132,7 +132,7 @@ public class XMLEncoder extends Encoder implements AutoCloseable {
     // A root of the document. It is represented as the call `this.writeObject(o)`, and flush()
     // recognizes it by name so as to print the value and not the call.
     public void writeObject(Object o) {
-        if (this.interno) {
+        if (this.inner) {
             super.writeObject(o);
         } else {
             this.writeStatement(new Statement(this, "writeObject", new Object[] { o }));
@@ -140,8 +140,8 @@ public class XMLEncoder extends Encoder implements AutoCloseable {
     }
 
     public void writeStatement(Statement oldStm) {
-        boolean previous = this.interno;
-        this.interno = true;
+        boolean previous = this.inner;
+        this.inner = true;
         try {
             super.writeStatement(oldStm);
             // The marking goes BEFORE queueing: the call may depend on values established in
@@ -167,12 +167,12 @@ public class XMLEncoder extends Encoder implements AutoCloseable {
             this.getExceptionListener().exceptionThrown(
                 new Exception("XMLEncoder: discarding statement " + oldStm, e));
         }
-        this.interno = previous;
+        this.inner = previous;
     }
 
     public void writeExpression(Expression oldExp) {
-        boolean previous = this.interno;
-        this.interno = true;
+        boolean previous = this.inner;
+        this.inner = true;
         Object value = this.valueOf(oldExp);
         // The condition on the string is on purpose: a string arriving from outside --not from the
         // machinery-- is written even if it already has a link, because the user asked for it as a
@@ -181,7 +181,7 @@ public class XMLEncoder extends Encoder implements AutoCloseable {
             this.dataOf(value).exp = oldExp;
             super.writeExpression(oldExp);
         }
-        this.interno = previous;
+        this.inner = previous;
     }
 
     // It prints everything accumulated and empties the state. The preamble comes out with the first
@@ -189,7 +189,7 @@ public class XMLEncoder extends Encoder implements AutoCloseable {
     // never used leave a file with an unclosed `<java>`.
     public void flush() {
         if (!this.preamble) {
-            if (this.declaracion) {
+            if (this.declaration) {
                 this.line("<?xml version=" + quoted("1.0")
                     + " encoding=" + quoted(this.charset) + "?>");
             }
@@ -212,10 +212,10 @@ public class XMLEncoder extends Encoder implements AutoCloseable {
 
         // Calls left hanging off a target that was never printed. Losing them would be losing state
         // of the graph silently, so they are emitted all the same at the level above.
-        Statement suelta = this.looseCall();
-        while (suelta != null) {
-            this.printCall(suelta, this, false);
-            suelta = this.looseCall();
+        Statement loose = this.looseCall();
+        while (loose != null) {
+            this.printCall(loose, this, false);
+            loose = this.looseCall();
         }
 
         try {
@@ -223,7 +223,7 @@ public class XMLEncoder extends Encoder implements AutoCloseable {
         } catch (IOException e) {
             this.getExceptionListener().exceptionThrown(e);
         }
-        this.limpiar();
+        this.clear();
     }
 
     public void close() {
@@ -246,9 +246,9 @@ public class XMLEncoder extends Encoder implements AutoCloseable {
         return v == null ? "" : v;
     }
 
-    private void limpiar() {
+    private void clear() {
         this.clearLinks();
-        this.datos.clear();
+        this.data.clear();
         this.byTarget.clear();
         this.allLists.clear();
         this.idNames.clear();
@@ -289,10 +289,10 @@ public class XMLEncoder extends Encoder implements AutoCloseable {
 
     private Info dataOf(Object o) {
         Object k = key(o);
-        Info d = this.datos.get(k);
+        Info d = this.data.get(k);
         if (d == null) {
             d = new Info();
-            this.datos.put(k, d);
+            this.data.put(k, d);
         }
         return d;
     }
@@ -362,11 +362,11 @@ public class XMLEncoder extends Encoder implements AutoCloseable {
         // A wrapper remade with `new Integer("7")` is printed as `<int>7</int>`: it is the short
         // form of the same fact, and it is the one that makes the file readable.
         if (exp != null) {
-            Class<?> primitivo = Statement.primitiveOfWrapper(value.getClass());
-            if (primitivo != null && exp.getTarget() == value.getClass()
+            Class<?> primitive = Statement.primitiveOfWrapper(value.getClass());
+            if (primitive != null && exp.getTarget() == value.getClass()
                     && "new".equals(exp.getMethodName())) {
-                String tag = primitivo.getName();
-                String text = primitivo == char.class
+                String tag = primitive.getName();
+                String text = primitive == char.class
                     ? escape(String.valueOf(((Character) value).charValue()))
                     : String.valueOf(value);
                 this.line("<" + tag + ">" + text + "</" + tag + ">");
@@ -541,12 +541,12 @@ public class XMLEncoder extends Encoder implements AutoCloseable {
         for (int i = 0; i < this.indent; i++) {
             sb.append(' ');
         }
-        sb.append(text).append(SALTO);
-        this.emitir(sb.toString());
+        sb.append(text).append(LINE_BREAK);
+        this.emit(sb.toString());
     }
 
     // UTF-8 by hand. See the header: OutputStreamWriter does not encode in this tree.
-    private void emitir(String s) {
+    private void emit(String s) {
         try {
             int n = s.length();
             int i = 0;
@@ -554,9 +554,9 @@ public class XMLEncoder extends Encoder implements AutoCloseable {
                 int cp = s.charAt(i);
                 i++;
                 if (cp >= 0xD800 && cp <= 0xDBFF && i < n) {
-                    char bajo = s.charAt(i);
-                    if (bajo >= 0xDC00 && bajo <= 0xDFFF) {
-                        cp = 0x10000 + ((cp - 0xD800) << 10) + (bajo - 0xDC00);
+                    char lowSurrogate = s.charAt(i);
+                    if (lowSurrogate >= 0xDC00 && lowSurrogate <= 0xDFFF) {
+                        cp = 0x10000 + ((cp - 0xD800) << 10) + (lowSurrogate - 0xDC00);
                         i++;
                     }
                 }

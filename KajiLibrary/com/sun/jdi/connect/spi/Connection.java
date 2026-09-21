@@ -3,62 +3,62 @@ package com.sun.jdi.connect.spi;
 import java.io.IOException;
 
 /**
- * Un canal de paquetes JDWP ya establecido entre el depurador y la VM depurada.
+ * A channel of JDWP packets already established between the debugger and the debugged VM.
  *
- * <h2>Qué es y qué no</h2>
+ * <h2>What it is and what it is not</h2>
  *
- * <p>Es deliberadamente estrecha: cuatro métodos, y ninguno sabe qué dice un paquete. Un
- * {@code Connection} transporta arreglos de bytes y nada más — quién habla primero, qué significa
- * cada campo y cómo se corresponden pedido y respuesta es asunto del protocolo JDWP, que vive una
- * capa más arriba. Esa separación es lo que permite que el mismo depurador funcione sobre un socket
- * TCP, sobre memoria compartida o sobre cualquier transporte que alguien escriba.
+ * <p>It is deliberately narrow: four methods, and none of them knows what a packet says. A
+ * {@code Connection} carries arrays of bytes and nothing more -- who talks first, what each
+ * field means and how request and answer correspond is the business of the JDWP protocol, which
+ * lives one layer above. That separation is what allows the same debugger to work over a TCP
+ * socket, over shared memory or over any transport somebody writes.
  *
- * <h2>El contrato de {@link #readPacket}</h2>
+ * <h2>{@link #readPacket}'s contract</h2>
  *
- * <p>Devuelve <strong>un</strong> paquete completo, no lo que haya llegado. Reensamblar lo que el
- * transporte fragmentó es responsabilidad de quien implementa, y es la parte que hace que esta
- * interfaz valga la pena: sin ella cada usuario tendría que saber que TCP no respeta los límites de
- * mensaje.
+ * <p>It returns <strong>one</strong> complete packet, not whatever has arrived. Reassembling
+ * what the transport fragmented is the responsibility of whoever implements it, and it is the
+ * part that makes this interface worth while: without it every user would have to know that TCP
+ * does not respect message boundaries.
  *
- * <p>Un arreglo de largo cero significa <em>fin de flujo</em>: el otro lado cerró ordenadamente. Es
- * distinto de {@link ClosedConnectionException}, que significa que esta conexión se cerró de este
- * lado o se rompió.
+ * <p>An array of length zero means <em>end of stream</em>: the other side closed in an orderly
+ * way. It is different from {@link ClosedConnectionException}, which means that this connection
+ * closed on this side or broke.
  */
 public abstract class Connection {
 
-    /** Para las implementaciones de transporte. */
+    /** For the transport implementations. */
     public Connection() {
     }
 
     /**
-     * Lee un paquete completo.
+     * It reads a complete packet.
      *
-     * @return los bytes del paquete, o un arreglo vacío si el otro lado cerró
-     * @throws ClosedConnectionException si esta conexión ya está cerrada
-     * @throws IOException si falla el transporte
+     * @return the packet's bytes, or an empty array if the other side closed
+     * @throws ClosedConnectionException if this connection is already closed
+     * @throws IOException if the transport fails
      */
     public abstract byte[] readPacket() throws IOException;
 
     /**
-     * Escribe un paquete completo.
+     * It writes a complete packet.
      *
-     * @throws ClosedConnectionException si esta conexión ya está cerrada
-     * @throws IllegalArgumentException si {@code pkt} no llega a tener un encabezado JDWP, o si el
-     *     largo que declara su encabezado no coincide con el del arreglo
-     * @throws IOException si falla el transporte
+     * @throws ClosedConnectionException if this connection is already closed
+     * @throws IllegalArgumentException if {@code pkt} does not even have a JDWP header, or if the
+     *     length its header declares does not match the array's
+     * @throws IOException if the transport fails
      */
     public abstract void writePacket(byte[] pkt) throws IOException;
 
     /**
-     * Cierra la conexión.
+     * It closes the connection.
      *
-     * <p>Cerrar dos veces no es un error: la segunda no hace nada. Un {@link #readPacket} o
-     * {@link #writePacket} bloqueado en otro hilo se desbloquea con
-     * {@link ClosedConnectionException}, que es la razón de que este método exista en vez de
-     * dejarle el trabajo al recolector.
+     * <p>Closing twice is not an error: the second does nothing. A {@link #readPacket} or
+     * {@link #writePacket} blocked on another thread is unblocked with
+     * {@link ClosedConnectionException}, which is the reason this method exists instead of leaving
+     * the work to the collector.
      */
     public abstract void close() throws IOException;
 
-    /** Si la conexión sigue abierta. */
+    /** Whether the connection is still open. */
     public abstract boolean isOpen();
 }

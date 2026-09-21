@@ -3,73 +3,73 @@ package java.awt;
 import java.awt.event.AdjustmentListener;
 
 /**
- * Algo que representa un valor dentro de un rango y se puede mover: una barra de desplazamiento.
+ * Something that stands for a value inside a range and can be moved: a scrollbar.
  *
- * <p>El modelo tiene cuatro números y conviene distinguirlos. El **valor** es dónde está; el
- * **mínimo** y el **máximo** son los extremos; y la **extensión visible** es cuánto se ve de una
- * vez, que es lo que hace que el pulgar de una barra tenga tamaño en vez de ser un punto.
+ * <p>The model has four numbers and they are worth telling apart. The **value** is where it is; the
+ * **minimum** and the **maximum** are the ends; and the **visible extent** is how much is seen at
+ * once, which is what makes the thumb of a bar have a size instead of being a point.
  *
- * <p>De la extensión sale una regla que sorprende: el valor nunca llega al máximo. Con un rango de 0
- * a 100 y una extensión de 20, el valor máximo posible es 80, porque desde ahí ya se está viendo
- * hasta el 100.
+ * <p>Out of the extent comes a rule that surprises: the value never reaches the maximum. With a
+ * range from 0 to 100 and an extent of 20, the highest possible value is 80, because from there
+ * everything up to 100 is already being seen.
  */
 public interface Adjustable {
 
-    /** Orientación horizontal. */
+    /** Horizontal orientation. */
     int HORIZONTAL = 0;
 
-    /** Orientación vertical. */
+    /** Vertical orientation. */
     int VERTICAL = 1;
 
-    /** Sin orientación definida. */
+    /** No defined orientation. */
     int NO_ORIENTATION = 2;
 
-    /** Horizontal o vertical. */
+    /** Horizontal or vertical. */
     int getOrientation();
 
-    /** Cambia el extremo inferior del rango. */
+    /** Changes the lower end of the range. */
     void setMinimum(int min);
 
-    /** El extremo inferior del rango. */
+    /** The lower end of the range. */
     int getMinimum();
 
-    /** Cambia el extremo superior del rango. */
+    /** Changes the upper end of the range. */
     void setMaximum(int max);
 
-    /** El extremo superior del rango. */
+    /** The upper end of the range. */
     int getMaximum();
 
-    /** Cambia cuánto se mueve con un paso chico. */
+    /** Changes how much it moves with a small step. */
     void setUnitIncrement(int u);
 
-    /** Cuánto se mueve con un paso chico. */
+    /** How much it moves with a small step. */
     int getUnitIncrement();
 
-    /** Cambia cuánto se mueve con un paso grande. */
+    /** Changes how much it moves with a big step. */
     void setBlockIncrement(int b);
 
-    /** Cuánto se mueve con un paso grande. */
+    /** How much it moves with a big step. */
     int getBlockIncrement();
 
-    /** Cambia cuánto se ve de una vez. */
+    /** Changes how much is seen at once. */
     void setVisibleAmount(int v);
 
-    /** Cuánto se ve de una vez. */
+    /** How much is seen at once. */
     int getVisibleAmount();
 
     /**
-     * Cambia dónde está.
+     * Changes where it is.
      *
-     * <p>Un valor fuera de `[mínimo, máximo - extensión]` se recorta a ese rango.
+     * <p>A value outside `[minimum, maximum - extent]` is clamped to that range.
      */
     void setValue(int v);
 
-    /** Dónde está. */
+    /** Where it is. */
     int getValue();
 
-    /** Suma alguien a quien avisarle de los cambios. */
+    /** Adds someone to tell about the changes. */
     void addAdjustmentListener(AdjustmentListener l);
 
-    /** Saca a ese oyente. */
+    /** Removes that listener. */
     void removeAdjustmentListener(AdjustmentListener l);
 }

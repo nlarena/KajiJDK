@@ -3,90 +3,91 @@ package javax.imageio.metadata;
 import org.w3c.dom.Node;
 
 /**
- * KajiLibrary's javax.imageio.metadata.IIOMetadata -- los metadatos de una imagen o de un flujo.
+ * KajiLibrary's javax.imageio.metadata.IIOMetadata -- the metadata of an image or of a stream.
  *
- * <p>Todo lo que un archivo de imagen guarda ademas de los pixeles: resolucion, fecha, autor, perfil
- * de color, comentarios, datos de la camara.
+ * <p>Everything an image file stores besides the pixels: resolution, date, author, colour profile,
+ * comments, camera data.
  *
- * <h2>Los dos formatos, y por que hacen falta los dos</h2>
+ * <h2>The two formats, and why both are needed</h2>
  *
- * <p>Los mismos metadatos se pueden ver de dos maneras:
- *
- * <ul>
- *   <li>el formato <b>nativo</b>, que refleja exactamente como el archivo los guarda. No pierde nada y
- *       no se parece al de ningun otro formato;
- *   <li>el formato <b>estandar</b> {@code javax_imageio_1.0}, comun a todos. Pierde lo que sea
- *       especifico, y a cambio permite escribir codigo que funcione con cualquier formato.
- * </ul>
- *
- * <p>{@link #isStandardMetadataFormatSupported} dice si el estandar esta disponible.
- * {@link #getMetadataFormatNames} lista todos los que este objeto entiende.
- *
- * <p>La conversion entre formatos --que es como se copian metadatos de PNG a JPEG-- pasa por el
- * estandar; ver {@code javax.imageio.ImageTranscoder}.
- *
- * <h2>{@link #mergeTree} contra {@link #setFromTree}</h2>
- *
- * <p>Es la distincion que hay que tener clara antes de tocar metadatos:
+ * <p>The same metadata can be seen in two ways:
  *
  * <ul>
- *   <li>{@code mergeTree} <b>combina</b>: lo que el arbol nuevo dice reemplaza lo que habia, y lo que
- *       no menciona queda como estaba;
- *   <li>{@code setFromTree} <b>reemplaza</b>: primero borra todo y despues aplica el arbol.
+ *   <li>the <b>native</b> format, which reflects exactly how the file stores it. It loses nothing
+ *       and looks like no other format's;
+ *   <li>the <b>standard</b> format {@code javax_imageio_1.0}, common to all. It loses whatever is
+ *       specific, and in exchange allows writing code that works with any format.
  * </ul>
  *
- * <p>Usar el primero creyendo que hace el segundo deja metadatos viejos pegados, y es la causa mas
- * comun de que una imagen reescrita conserve datos que se querian borrar.
+ * <p>{@link #isStandardMetadataFormatSupported} says whether the standard one is available.
+ * {@link #getMetadataFormatNames} lists all the ones this object understands.
  *
- * <h2>Los metadatos pueden ser de solo lectura</h2>
+ * <p>Conversion between formats --which is how metadata is copied from PNG to JPEG-- goes through
+ * the standard one; see {@code javax.imageio.ImageTranscoder}.
  *
- * <p>{@link #isReadOnly} lo dice, y hay que preguntarlo: los de una imagen recien leida suelen serlo.
- * Intentar modificarlos lanza {@link IllegalStateException}.
+ * <h2>{@link #mergeTree} versus {@link #setFromTree}</h2>
  *
- * <h2>Los ocho nodos estandar</h2>
+ * <p>It is the distinction to be clear on before touching metadata:
  *
- * <p>Los ocho {@code getStandardXxxNode} son protegidos y devuelven cada rama del formato estandar.
- * {@link #getStandardTree} los junta en el arbol completo, y es final: una subclase redefine las ramas
- * que sepa llenar y hereda el armado.
+ * <ul>
+ *   <li>{@code mergeTree} <b>combines</b>: what the new tree says replaces what was there, and what
+ *       it does not mention stays as it was;
+ *   <li>{@code setFromTree} <b>replaces</b>: it first clears everything and then applies the tree.
+ * </ul>
  *
- * <p>Por omision los ocho devuelven null, que significa "de esto no se nada". Es lo correcto: un
- * formato que no guarda fecha no deberia inventar una.
+ * <p>Using the first believing it does the second leaves old metadata stuck, and is the most common
+ * reason a rewritten image keeps data that was meant to be deleted.
+ *
+ * <h2>Metadata may be read-only</h2>
+ *
+ * <p>{@link #isReadOnly} says so, and you have to ask: a plug-in may hand out metadata that cannot
+ * be changed. Trying to modify it throws {@link IllegalStateException}.
+ *
+ * <h2>The eight standard nodes</h2>
+ *
+ * <p>The eight {@code getStandardXxxNode} are protected and each returns one branch of the standard
+ * format. {@link #getStandardTree} puts them together into the full tree, and it is final: a
+ * subclass redefines the branches it can fill in and inherits the assembly.
+ *
+ * <p>By default all eight return null, which means "I know nothing about this". It is right: a
+ * format that stores no date should not make one up.
  */
 public abstract class IIOMetadata {
 
-    /** Si el formato estandar esta disponible. */
+    /** Whether the standard format is available. */
     protected boolean standardFormatSupported;
 
-    /** Como se llama el formato nativo, o null si no hay. */
+    /** What the native format is called, or null if there is none. */
     protected String nativeMetadataFormatName = null;
 
-    /** La clase que describe ese formato. */
+    /** The class that describes that format. */
     protected String nativeMetadataFormatClassName = null;
 
-    /** Otros formatos que este objeto entiende. */
+    /** Other formats this object understands. */
     protected String[] extraMetadataFormatNames = null;
 
-    /** Las clases que los describen. */
+    /** The classes that describe them. */
     protected String[] extraMetadataFormatClassNames = null;
 
-    /** El controlador de fabrica, o null. */
+    /** The default controller, or null. */
     protected IIOMetadataController defaultController = null;
 
-    /** El que esta puesto. */
+    /** The one that is set. */
     protected IIOMetadataController controller = null;
 
-    /** Sin formato estandar y sin nativo. */
+    /** Without a standard format and without a native one. */
     protected IIOMetadata() {
     }
 
     /**
-     * Declarando que formatos se entienden.
+     * Declaring which formats are understood.
      *
-     * @param standardMetadataFormatSupported si el estandar esta disponible
-     * @param nativeMetadataFormatName el nativo, o null
-     * @param extraMetadataFormatNames otros, o null
-     * @throws IllegalArgumentException si los arreglos de nombres y de clases no coinciden en largo,
-     *     o si un nombre esta vacio
+     * @param standardMetadataFormatSupported whether the standard one is available
+     * @param nativeMetadataFormatName the native one, or null
+     * @param extraMetadataFormatNames other ones, or null
+     * @throws IllegalArgumentException if the extra names array is empty, or if the extra class
+     *     names are missing or do not match it in length (an earlier note also said "if a name is
+     *     empty"; nothing checks that)
      */
     protected IIOMetadata(boolean standardMetadataFormatSupported,
                           String nativeMetadataFormatName,
@@ -117,31 +118,31 @@ public abstract class IIOMetadata {
         }
     }
 
-    /** Si el formato estandar esta disponible. */
+    /** Whether the standard format is available. */
     public boolean isStandardMetadataFormatSupported() {
         return this.standardFormatSupported;
     }
 
-    /** Si no se pueden modificar. Ver la nota de la clase. */
+    /** Whether it cannot be modified. See the class note. */
     public abstract boolean isReadOnly();
 
-    /** Como se llama el formato nativo, o null. */
+    /** What the native format is called, or null. */
     public String getNativeMetadataFormatName() {
         return this.nativeMetadataFormatName;
     }
 
-    /** Los otros formatos, o null. Es una copia. */
+    /** The other formats, or null. It is a copy. */
     public String[] getExtraMetadataFormatNames() {
         return copy(this.extraMetadataFormatNames);
     }
 
     /**
-     * Todos los formatos que este objeto entiende.
+     * All the formats this object understands.
      *
-     * <p>El nativo primero, despues el estandar si esta, y despues los extra. El orden importa: un
-     * programa que quiera la maxima fidelidad toma el primero.
+     * <p>The native one first, then the standard one if available, and then the extra ones. The
+     * order matters: a program that wants maximum fidelity takes the first.
      *
-     * @return null si no entiende ninguno
+     * @return null if it understands none
      */
     public String[] getMetadataFormatNames() {
         String nativeName = getNativeMetadataFormatName();
@@ -185,14 +186,14 @@ public abstract class IIOMetadata {
     }
 
     /**
-     * El esquema de ese formato.
+     * The schema of that format.
      *
-     * <p>Se carga por reflexion desde el nombre de clase que se declaro, buscando su metodo estatico
-     * {@code getInstance}. Es la convencion que la documentacion pide, y es como un formato definido
-     * por un complemento se hace visible sin que esta clase lo conozca.
+     * <p>It is loaded by reflection from the declared class name, looking for its static
+     * {@code getInstance} method. It is the convention the documentation asks for, and it is how a
+     * format defined by a plug-in becomes visible without this class knowing it.
      *
-     * @throws IllegalArgumentException si el nombre es null o no es uno de los declarados
-     * @throws IllegalStateException si la clase que lo describe no se pudo cargar
+     * @throws IllegalArgumentException if the name is null or not one of the declared ones
+     * @throws IllegalStateException if the class that describes it could not be loaded
      */
     public IIOMetadataFormat getMetadataFormat(String formatName) {
         if (formatName == null) {
@@ -227,67 +228,67 @@ public abstract class IIOMetadata {
     }
 
     /**
-     * El arbol de metadatos en ese formato.
+     * The metadata tree in that format.
      *
-     * @return null si este objeto no tiene nada que decir en ese formato
-     * @throws IllegalArgumentException si el formato no es uno de los declarados
+     * @return null if this object has nothing to say in that format
+     * @throws IllegalArgumentException if the format is not one of the declared ones
      */
     public abstract Node getAsTree(String formatName);
 
     /**
-     * Combina ese arbol con lo que ya hay. Ver la nota de la clase.
+     * Combines that tree with what is already there. See the class note.
      *
-     * @throws IllegalStateException si son de solo lectura
-     * @throws IllegalArgumentException si el formato no es uno de los declarados
-     * @throws IIOInvalidTreeException si el arbol no cumple el formato
+     * @throws IllegalStateException if it is read-only
+     * @throws IllegalArgumentException if the format is not one of the declared ones
+     * @throws IIOInvalidTreeException if the tree does not follow the format
      */
     public abstract void mergeTree(String formatName, Node root) throws IIOInvalidTreeException;
 
-    /** La rama de color del formato estandar, o null si no se sabe. */
+    /** The colour branch of the standard format, or null if unknown. */
     protected IIOMetadataNode getStandardChromaNode() {
         return null;
     }
 
-    /** La de compresion, o null. */
+    /** The compression one, or null. */
     protected IIOMetadataNode getStandardCompressionNode() {
         return null;
     }
 
-    /** La de organizacion de los datos, o null. */
+    /** The data layout one, or null. */
     protected IIOMetadataNode getStandardDataNode() {
         return null;
     }
 
-    /** La de tamano y resolucion, o null. */
+    /** The size and resolution one, or null. */
     protected IIOMetadataNode getStandardDimensionNode() {
         return null;
     }
 
-    /** La de fecha y version, o null. */
+    /** The date and version one, or null. */
     protected IIOMetadataNode getStandardDocumentNode() {
         return null;
     }
 
-    /** La de los textos incrustados, o null. */
+    /** The embedded texts one, or null. */
     protected IIOMetadataNode getStandardTextNode() {
         return null;
     }
 
-    /** La de mosaico, o null. */
+    /** The tiling one, or null. */
     protected IIOMetadataNode getStandardTileNode() {
         return null;
     }
 
-    /** La de transparencia, o null. */
+    /** The transparency one, or null. */
     protected IIOMetadataNode getStandardTransparencyNode() {
         return null;
     }
 
     /**
-     * El arbol estandar completo, armado con las ocho ramas.
+     * The full standard tree, built from the eight branches.
      *
-     * <p>Es final: una subclase redefine las ramas que sepa llenar y hereda el armado. Las que
-     * devuelvan null no aparecen.
+     * <p>It is final: a subclass redefines the branches it can fill in and inherits the assembly.
+     * Those that return null do not appear.
      */
     protected final IIOMetadataNode getStandardTree() {
         IIOMetadataNode root =
@@ -304,14 +305,14 @@ public abstract class IIOMetadata {
     }
 
     /**
-     * Reemplaza todo por ese arbol. Ver la nota de la clase.
+     * Replaces everything with that tree. See the class note.
      *
-     * <p>Esta implementacion es {@link #reset} seguido de {@link #mergeTree}, que es exactamente lo
-     * que significa.
+     * <p>This implementation is {@link #reset} followed by {@link #mergeTree}, which is exactly
+     * what it means.
      *
-     * @throws IllegalStateException si son de solo lectura
-     * @throws IllegalArgumentException si el formato no es uno de los declarados
-     * @throws IIOInvalidTreeException si el arbol no cumple el formato
+     * @throws IllegalStateException if it is read-only
+     * @throws IllegalArgumentException if the format is not one of the declared ones
+     * @throws IIOInvalidTreeException if the tree does not follow the format
      */
     public void setFromTree(String formatName, Node root) throws IIOInvalidTreeException {
         reset();
@@ -319,37 +320,37 @@ public abstract class IIOMetadata {
     }
 
     /**
-     * Vuelve al estado inicial.
+     * Back to the initial state.
      *
-     * @throws IllegalStateException si son de solo lectura
+     * @throws IllegalStateException if it is read-only
      */
     public abstract void reset();
 
-    /** Quien completa estos metadatos; null usa el de fabrica. */
+    /** Who fills in this metadata; null uses the default one. */
     public void setController(IIOMetadataController controller) {
         this.controller = controller;
     }
 
-    /** El que esta puesto. */
+    /** The one that is set. */
     public IIOMetadataController getController() {
         return this.controller;
     }
 
-    /** El de fabrica, o null. */
+    /** The default one, or null. */
     public IIOMetadataController getDefaultController() {
         return this.defaultController;
     }
 
-    /** Si hay alguno. */
+    /** Whether there is one. */
     public boolean hasController() {
         return getController() != null;
     }
 
     /**
-     * Le pide al controlador que los complete.
+     * Asks the controller to fill it in.
      *
-     * @return si el usuario acepto
-     * @throws IllegalStateException si no hay controlador
+     * @return whether the user accepted
+     * @throws IllegalStateException if there is no controller
      */
     public boolean activateController() {
         if (!hasController()) {
@@ -358,14 +359,14 @@ public abstract class IIOMetadata {
         return getController().activate(this);
     }
 
-    /** Agrega la rama si no es null. */
+    /** Appends the branch if it is not null. */
     private static void appendIfPresent(IIOMetadataNode root, IIOMetadataNode node) {
         if (node != null) {
             root.appendChild(node);
         }
     }
 
-    /** Una copia del arreglo, o null. */
+    /** A copy of the array, or null. */
     private static String[] copy(String[] source) {
         if (source == null) {
             return null;

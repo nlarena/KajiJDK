@@ -1,29 +1,29 @@
 package javax.management.relation;
 
 /**
- * La interfaz de gestion de {@link RelationSupport} cuando se lo registra como MBean.
+ * The management interface of {@link RelationSupport} when it is registered as an MBean.
  *
- * <h2>Por que existe y que agrega</h2>
+ * <h2>Why it exists and what it adds</h2>
  *
- * <p>Una relacion puede vivir de dos maneras: administrada internamente por el servicio, o
- * registrada en el servidor de MBeans como un objeto mas. La segunda es la que permite verla y
- * manipularla desde una consola de administracion.
+ * <p>A relation can live in two ways: managed internally by the service, or registered in the MBean
+ * server as one more object. The second is the one that allows seeing and manipulating it from a
+ * management console.
  *
- * <p>Lo que agrega sobre {@link Relation} son los dos metodos que reflejan <em>en cual de las dos
- * formas</em> esta viviendo. Son de uso interno del servicio; el codigo de usuario los lee pero no
- * los escribe.
+ * <p>What it adds over {@link Relation} are the two methods that reflect <em>which of the two
+ * forms</em> it is living in. They are for the service's internal use; user code reads them but
+ * does not write them.
  */
 public interface RelationSupportMBean extends Relation {
 
     /**
-     * Si el servicio de relaciones la esta administrando.
+     * Whether the relation service is managing it.
      *
-     * <p>{@code false} significa que el objeto existe pero todavia no fue agregado al servicio, y
-     * entonces casi ninguna operacion sirve: sin el servicio no hay a quien preguntarle por el tipo
-     * ni con que verificar los MBeans referenciados.
+     * <p>{@code false} means the object exists but has not been added to the service yet, and then
+     * almost no operation works: without the service there is nobody to ask about the type nor
+     * anything to verify the referenced MBeans with.
      */
     Boolean isInRelationService();
 
-    /** Lo llama el servicio al tomarla y al soltarla. */
+    /** The service calls it when taking it and when releasing it. */
     void setRelationServiceManagementFlag(Boolean flag) throws IllegalArgumentException;
 }

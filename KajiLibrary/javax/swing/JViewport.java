@@ -14,6 +14,7 @@ import java.awt.event.ComponentEvent;
 import java.awt.event.ComponentListener;
 import java.io.Serializable;
 
+import javax.accessibility.Accessible;
 import javax.accessibility.AccessibleContext;
 
 import javax.swing.border.Border;
@@ -24,59 +25,60 @@ import javax.swing.plaf.ViewportUI;
 import javax.swing.plaf.basic.BasicViewportUI;
 
 /**
- * Una ventana que muestra un pedazo de algo mas grande.
+ * A viewport that shows a piece of something larger.
  *
- * <h2>Un agujero y una cosa detras</h2>
+ * <h2>A hole and something behind it</h2>
  *
- * <p>La ventana tiene un solo hijo, la <em>vista</em>, y la vista suele ser mas grande que ella.
- * Desplazar no mueve la ventana: mueve la vista, en sentido contrario. Por eso
- * {@link #getViewPosition} devuelve la posicion de la vista <em>cambiada de signo</em>: la
- * posicion es "que punto de la vista queda arriba a la izquierda del agujero", y para que ese
- * punto baje, la vista tiene que subir.
+ * <p>The viewport has a single child, the <em>view</em>, and the view is usually larger than
+ * it. Scrolling does not move the viewport: it moves the view, the other way. That is why
+ * {@link #getViewPosition} returns the view's position <em>with the sign turned round</em>: the
+ * position is "which point of the view ends up at the top left of the hole", and for that
+ * point to go down, the view has to go up.
  *
- * <p>El recorte no lo hace esta clase: lo hace la cadena de pintado, que le da a cada hijo un
- * contexto grafico recortado a su rectangulo. Una vista en (-15, -20) de 80 por 90 dentro de una
- * ventana de 41 por 31 se dibuja entera y se ve el pedazo que cae adentro.
+ * <p>The clipping is not done by this class: it is done by the painting chain, which gives each
+ * child a graphics context clipped to its rectangle. A view at (-15, -20) of 80 by 90 inside a
+ * viewport of 41 by 31 is drawn whole and the piece that falls inside is seen.
  *
- * <h2>Sin borde, y sin trucos de pantalla</h2>
+ * <h2>With no border, and with no screen tricks</h2>
  *
- * <p>{@link #setBorder} lanza excepcion: un borde correria el contenido y la cuenta de que se ve
- * dejaria de cerrar. Es de las pocas veces que Swing prefiere prohibir a acomodar.
+ * <p>{@link #setBorder} throws an exception: a border would shift the content and the
+ * arithmetic of what is seen would stop adding up. It is one of the few times Swing prefers to
+ * forbid rather than to settle.
  *
- * <p>Los tres modos de desplazamiento existen como constantes y como propiedad, pero el unico que
- * se puede cumplir aca es {@link #SIMPLE_SCROLL_MODE}: {@link #BLIT_SCROLL_MODE} copia pixeles ya
- * dibujados <em>en la pantalla</em> y {@link #BACKINGSTORE_SCROLL_MODE} guarda una imagen de
- * respaldo del componente en pantalla. Sin pantalla, {@link #paint} siempre redibuja, que es
- * exactamente lo que el JDK hace cuando el blit no se puede usar. El campo
- * {@link #backingStoreImage} queda siempre en {@code null} por lo mismo.
+ * <p>The three scrolling modes exist as constants and as a property, but the only one that can
+ * be kept here is {@link #SIMPLE_SCROLL_MODE}: {@link #BLIT_SCROLL_MODE} copies pixels already
+ * drawn <em>on the screen</em> and {@link #BACKINGSTORE_SCROLL_MODE} keeps a backing image of
+ * the component on the screen. With no screen, {@link #paint} always redraws, which is exactly
+ * what the JDK does when the blit cannot be used. The field {@link #backingStoreImage} is
+ * always left at {@code null} for the same reason.
  */
 public class JViewport extends JComponent implements Accessible {
 
     private static final String uiClassID = "ViewportUI";
 
-    /** Si alguien fijo el tamano de la vista a mano; ver {@link #setViewSize}. */
+    /** Whether somebody fixed the view's size by hand; see {@link #setViewSize}. */
     protected boolean isViewSizeSet = false;
 
-    /** Donde estaba la vista la ultima vez que se pinto. */
+    /** Where the view was the last time it was painted. */
     protected Point lastPaintPosition = null;
 
-    /** @deprecated el modo de respaldo necesita pantalla; ver la nota de la clase. */
+    /** @deprecated the backing store mode needs a screen; see the class note. */
     @Deprecated
     protected boolean backingStore = false;
 
-    /** Siempre {@code null}; ver la nota de la clase. */
+    /** Always {@code null}; see the class note. */
     protected transient Image backingStoreImage = null;
 
-    /** Si el ultimo cambio de posicion vino de un desplazamiento y todavia no se acomodo. */
+    /** Whether the last change of position came from a scroll and has not been laid out yet. */
     protected boolean scrollUnderway = false;
 
-    /** Copia lo ya dibujado y redibuja solo la franja nueva; necesita pantalla. */
+    /** It copies what is already drawn and redraws only the new strip; it needs a screen. */
     public static final int BLIT_SCROLL_MODE = 1;
 
-    /** Guarda una imagen de respaldo del componente; necesita pantalla. */
+    /** It keeps a backing image of the component; it needs a screen. */
     public static final int BACKINGSTORE_SCROLL_MODE = 2;
 
-    /** Redibuja todo; es lo que hace esta VM siempre. */
+    /** It redraws everything; it is what this VM always does. */
     public static final int SIMPLE_SCROLL_MODE = 3;
 
     private int scrollMode = BLIT_SCROLL_MODE;
@@ -85,7 +87,7 @@ public class JViewport extends JComponent implements Accessible {
     private transient ChangeEvent changeEvent = null;
     private boolean hasHadValidView = false;
 
-    /** Una ventana vacia, opaca y con la distribucion de {@link ViewportLayout}. */
+    /** An empty viewport, opaque and with {@link ViewportLayout}'s layout. */
     public JViewport() {
         super();
         setLayout(createLayoutManager());
@@ -101,7 +103,7 @@ public class JViewport extends JComponent implements Accessible {
         super.setUI(ui);
     }
 
-    /** Instala el aspecto basico; ver {@code JButton#updateUI}. */
+    /** It installs the basic look and feel; see {@code JButton#updateUI}. */
     public void updateUI() {
         setUI((ViewportUI) BasicViewportUI.createUI(this));
     }
@@ -110,23 +112,23 @@ public class JViewport extends JComponent implements Accessible {
         return uiClassID;
     }
 
-    /** Agregar un componente a una ventana es ponerlo de vista; ver {@link #setView}. */
+    /** Adding a component to a viewport is setting it as the view; see {@link #setView}. */
     protected void addImpl(Component child, Object constraints, int index) {
         setView(child);
     }
 
-    /** Quita la vista, y con ella el escucha que avisaba de sus cambios de tamano. */
+    /** It removes the view, and with it the listener that gave notice of its changes of size. */
     public void remove(Component child) {
         child.removeComponentListener(viewListener);
         super.remove(child);
     }
 
     /**
-     * Desplaza lo justo para que ese rectangulo de la vista quede a la vista.
+     * It scrolls just enough for that rectangle of the view to be in sight.
      *
-     * <p>"Lo justo" es literal: si ya se ve entero no mueve nada, y si no entra lo alinea por el
-     * borde mas cercano en vez de centrarlo. Es lo que evita que ir a un elemento salte de golpe
-     * cuando ya estaba casi visible.
+     * <p>"Just enough" is literal: if it is already seen whole it moves nothing, and if it does
+     * not fit it aligns it by the nearest edge instead of centring it. It is what keeps going to
+     * an element from jumping suddenly when it was already almost visible.
      */
     public void scrollRectToVisible(Rectangle contentRect) {
         Component view = getView();
@@ -149,11 +151,12 @@ public class JViewport extends JComponent implements Accessible {
             viewPosition.x = viewPosition.x - dx;
             viewPosition.y = viewPosition.y - dy;
 
-            // El recorte contra los bordes solo corre si la vista esta maquetada: una vista sin
-            // maquetar suele medir cero por cero, y recortar contra ese cero mandaria todo al
-            // origen. En esta VM nada llega a estar maquetado —`validate` necesita una ventana—,
-            // asi que este recorte no corre nunca y la posicion puede quedar fuera de rango. Es
-            // lo mismo que hace el JDK sin ventana.
+            // The clipping against the edges only runs if the view is laid out: a view that is not
+                        // laid out usually measures zero by zero, and clipping against that zero
+                        // would send everything to the origin. On this VM nothing gets as far as
+                        // being laid out -- `validate` needs a window --, so this clipping never
+                        // runs and the position may end up out of range. It is the same as the JDK
+                        // does with no window.
             if (view.isValid()) {
                 if (getParent() == null || getParent().getComponentOrientation().isLeftToRight()) {
                     if (viewPosition.x + extent.width > viewSize.width) {
@@ -183,27 +186,28 @@ public class JViewport extends JComponent implements Accessible {
     }
 
     /**
-     * Maqueta el subarbol antes de calcular, para no medir sobre un tamano viejo.
+     * It lays the subtree out before computing, so as not to measure over a stale size.
      *
-     * <p>Sin ventana no maqueta nada —{@code validate} lo dice— y por eso el recorte de
-     * {@link #scrollRectToVisible} no llega a correr; ver la nota de ahi.
+     * <p>With no window it lays nothing out -- {@code validate} says so -- and that is why
+     * {@link #scrollRectToVisible}'s clipping does not get to run; see the note there.
      */
     private void validateView() {
-        Container raiz = getParent();
-        while (raiz != null && !raiz.isValidateRoot()) {
-            raiz = raiz.getParent();
+        Container root = getParent();
+        while (root != null && !root.isValidateRoot()) {
+            root = root.getParent();
         }
-        if (raiz != null) {
-            raiz.validate();
+        if (root != null) {
+            root.validate();
         }
     }
 
     /**
-     * Cuanto hay que correr para que un hijo de ese ancho, en esa posicion, entre en ese padre.
+     * How much it has to shift for a child of that width, at that position, to fit into that
+     * parent.
      *
-     * <p>Seis casos, y en todos gana el borde mas cercano: si ya entra, cero; si sobresale de un
-     * lado, lo justo para pegarlo a ese lado; si es mas grande que el padre, se alinea el borde
-     * por el que se lo pidio.
+     * <p>Six cases, and in all of them the nearest edge wins: if it already fits, zero; if it
+     * sticks out on one side, just enough to stick it to that side; if it is larger than the
+     * parent, the edge it was asked for is aligned.
      */
     private int positionAdjustment(int parentWidth, int childWidth, int childAt) {
         if (childAt >= 0 && childWidth + childAt <= parentWidth) {
@@ -227,19 +231,22 @@ public class JViewport extends JComponent implements Accessible {
         return 0;
     }
 
-    /** Un {@link IllegalArgumentException}: una ventana no lleva borde; ver la nota de la clase. */
+    /** An {@link IllegalArgumentException}: a viewport carries no border; see the class note. */
     public final void setBorder(Border border) {
         if (border != null) {
             throw new IllegalArgumentException("JViewport.setBorder() not supported");
         }
     }
 
-    /** Cero por los cuatro lados, siempre. */
+    /** Zero on the four sides, always. */
     public final Insets getInsets() {
         return new Insets(0, 0, 0, 0);
     }
 
-    /** Cero por los cuatro lados; escribe en el que le pasan y lo devuelve, sin reservar. */
+    /**
+     * Zero on the four sides; it writes into the one it is passed and returns it, reserving
+     * nothing.
+     */
     public final Insets getInsets(Insets insets) {
         insets.left = 0;
         insets.top = 0;
@@ -248,17 +255,17 @@ public class JViewport extends JComponent implements Accessible {
         return insets;
     }
 
-    /** No: la vista puede ser transparente y dejar ver el fondo de la ventana. */
+    /** No: the view may be transparent and let the viewport's background be seen. */
     public boolean isOptimizedDrawingEnabled() {
         return false;
     }
 
-    /** Si, cuando hay un desplazamiento en curso: el repintado tiene que empezar por aca. */
+    /** Yes, when a scroll is under way: the repainting has to start here. */
     protected boolean isPaintingOrigin() {
         return scrollMode == BACKINGSTORE_SCROLL_MODE;
     }
 
-    /** Donde esta la vista, en coordenadas de la ventana y sin cambiar de signo. */
+    /** Where the view is, in the viewport's coordinates and without turning the sign round. */
     private Point getViewLocation() {
         Component view = getView();
         if (view != null) {
@@ -267,7 +274,7 @@ public class JViewport extends JComponent implements Accessible {
         return new Point(0, 0);
     }
 
-    /** Redibuja; ver la nota de la clase sobre por que no hay blit ni respaldo. */
+    /** It redraws; see the class note about why there is neither blit nor backing store. */
     public void paint(Graphics g) {
         int width = getWidth();
         int height = getHeight();
@@ -278,7 +285,7 @@ public class JViewport extends JComponent implements Accessible {
         lastPaintPosition = getViewLocation();
     }
 
-    /** Cambiar de tamano cambia lo que se ve, y eso es un cambio de estado. */
+    /** Changing size changes what is seen, and that is a change of state. */
     public void reshape(int x, int y, int w, int h) {
         boolean sizeChanged = (getWidth() != w) || (getHeight() != h);
         if (sizeChanged) {
@@ -290,7 +297,7 @@ public class JViewport extends JComponent implements Accessible {
         }
     }
 
-    /** El modo de desplazamiento; los tres se guardan, uno solo se cumple. */
+    /** The scrolling mode; all three are kept, only one is honoured. */
     public void setScrollMode(int mode) {
         scrollMode = mode;
         backingStore = mode == BACKINGSTORE_SCROLL_MODE;
@@ -300,13 +307,13 @@ public class JViewport extends JComponent implements Accessible {
         return scrollMode;
     }
 
-    /** @deprecated es {@code getScrollMode() == BACKINGSTORE_SCROLL_MODE}. */
+    /** @deprecated it is {@code getScrollMode() == BACKINGSTORE_SCROLL_MODE}. */
     @Deprecated
     public boolean isBackingStoreEnabled() {
         return scrollMode == BACKINGSTORE_SCROLL_MODE;
     }
 
-    /** @deprecated es {@link #setScrollMode}. */
+    /** @deprecated it is {@link #setScrollMode}. */
     @Deprecated
     public void setBackingStoreEnabled(boolean enabled) {
         if (enabled) {
@@ -316,16 +323,16 @@ public class JViewport extends JComponent implements Accessible {
         }
     }
 
-    /** La vista, o {@code null}. */
+    /** The view, or {@code null}. */
     public Component getView() {
         return (getComponentCount() > 0) ? getComponent(0) : null;
     }
 
     /**
-     * Pone la vista, sacando la anterior.
+     * It sets the view, removing the previous one.
      *
-     * <p>No usa {@code removeAll}: el JDK tampoco, porque {@code removeAll} no pasa por
-     * {@link #remove} y el escucha de la vista vieja quedaria puesto.
+     * <p>It does not use {@code removeAll}: the JDK does not either, because {@code removeAll}
+     * does not go through {@link #remove} and the old view's listener would be left set.
      */
     public void setView(Component view) {
         int n = getComponentCount();
@@ -348,10 +355,10 @@ public class JViewport extends JComponent implements Accessible {
     }
 
     /**
-     * El tamano de la vista: el que le fijaron, o el que ella prefiere.
+     * The view's size: the one it was given, or the one it prefers.
      *
-     * <p>La distincion importa: mientras nadie lo fije, agrandar la ventana puede agrandar la
-     * vista; una vez fijado, manda lo fijado.
+     * <p>The distinction matters: while nobody fixes it, enlarging the viewport may enlarge the
+     * view; once fixed, what was fixed rules.
      */
     public Dimension getViewSize() {
         Component view = getView();
@@ -377,7 +384,7 @@ public class JViewport extends JComponent implements Accessible {
         }
     }
 
-    /** Que punto de la vista queda arriba a la izquierda; ver la nota de la clase. */
+    /** Which point of the view ends up at the top left; see the class note. */
     public Point getViewPosition() {
         Component view = getView();
         if (view != null) {
@@ -389,7 +396,7 @@ public class JViewport extends JComponent implements Accessible {
         return new Point(0, 0);
     }
 
-    /** Lleva ese punto de la vista a la esquina de la ventana, moviendo la vista al reves. */
+    /** It takes that point of the view to the viewport's corner, moving the view the other way. */
     public void setViewPosition(Point p) {
         Component view = getView();
         if (view == null) {
@@ -414,17 +421,18 @@ public class JViewport extends JComponent implements Accessible {
         }
     }
 
-    /** Lo que se ve de la vista: la posicion mas el tamano del agujero. */
+    /** What is seen of the view: the position plus the hole's size. */
     public Rectangle getViewRect() {
         return new Rectangle(getViewPosition(), getExtentSize());
     }
 
     /**
-     * Que parte se puede copiar y que parte hay que redibujar al desplazar {@code dx, dy}.
+     * Which part can be copied and which part has to be redrawn on scrolling by {@code dx, dy}.
      *
-     * <p>Solo sirve cuando el movimiento es en una sola direccion y menor que la ventana: si se
-     * salto mas de una pantalla no queda nada aprovechable, y contesta {@code false}. El calculo
-     * es aritmetica pura y esta completo aunque el blit que lo usaria necesite pantalla.
+     * <p>It only serves when the movement is in a single direction and smaller than the viewport:
+     * if more than a screenful was jumped there is nothing left worth using, and it answers
+     * {@code false}. The computation is pure arithmetic and is complete even though the blit that
+     * would use it needs a screen.
      */
     protected boolean computeBlit(int dx, int dy, Point blitFrom, Point blitTo, Dimension blitSize,
             Rectangle blitPaint) {
@@ -483,27 +491,28 @@ public class JViewport extends JComponent implements Accessible {
         }
     }
 
-    /** El tamano del agujero: el de la ventana misma. */
+    /** The hole's size: the viewport's own. */
     public Dimension getExtentSize() {
         return getSize();
     }
 
     /**
-     * Ese tamano en coordenadas de la vista: el mismo.
+     * That size in the view's coordinates: the same.
      *
-     * <p>El JDK lo usa para ventanas con transformacion —una lupa—, que aca no existen. Devolver
-     * una copia y no el mismo objeto es parte del contrato: quien lo recibe puede modificarlo.
+     * <p>The JDK uses it for viewports with a transformation -- a magnifier --, which do not exist
+     * here. Returning a copy and not the same object is part of the contract: whoever receives it
+     * may modify it.
      */
     public Dimension toViewCoordinates(Dimension size) {
         return new Dimension(size);
     }
 
-    /** Ese punto en coordenadas de la vista: el mismo. */
+    /** That point in the view's coordinates: the same. */
     public Point toViewCoordinates(Point p) {
         return new Point(p);
     }
 
-    /** Cambia el tamano del agujero; es {@code setSize} mas el aviso. */
+    /** It changes the hole's size; it is {@code setSize} plus the notice. */
     public void setExtentSize(Dimension newExtent) {
         Dimension oldExtent = getExtentSize();
         if (!newExtent.equals(oldExtent)) {
@@ -512,12 +521,12 @@ public class JViewport extends JComponent implements Accessible {
         }
     }
 
-    /** El escucha que avisa cuando la vista cambia de tamano. */
+    /** The listener that gives notice when the view changes size. */
     protected ViewListener createViewListener() {
         return new ViewListener();
     }
 
-    /** La distribucion de una ventana: la compartida de {@link ViewportLayout}. */
+    /** A viewport's layout: {@link ViewportLayout}'s shared one. */
     protected LayoutManager createLayoutManager() {
         return ViewportLayout.SHARED_INSTANCE;
     }
@@ -535,10 +544,10 @@ public class JViewport extends JComponent implements Accessible {
     }
 
     /**
-     * Avisa que cambio lo que se ve.
+     * It gives notice that what is seen changed.
      *
-     * <p>Es la unica senal que un {@link JScrollPane} necesita: de aca salen los numeros con los
-     * que sincroniza sus dos barras.
+     * <p>It is the only signal a {@link JScrollPane} needs: from here come the numbers it
+     * synchronizes its two bars with.
      */
     protected void fireStateChanged() {
         Object[] listeners = listenerList.getListenerList();
@@ -552,7 +561,7 @@ public class JViewport extends JComponent implements Accessible {
         }
     }
 
-    /** Le pasa el pedido al padre, corrido a sus coordenadas. */
+    /** It passes the request on to the parent, shifted to its coordinates. */
     public void repaint(long tm, int x, int y, int w, int h) {
         Component parent = getParent();
         if (parent != null) {
@@ -577,16 +586,16 @@ public class JViewport extends JComponent implements Accessible {
         super.firePropertyChange(propertyName, oldValue, newValue);
     }
 
-    /** Sin contexto de accesibilidad: no hay tecnologia asistiva que lo lea en esta VM. */
+    /** With no accessibility context: there is no assistive technology that reads it on this VM. */
     public AccessibleContext getAccessibleContext() {
         return null;
     }
 
     /**
-     * Escucha a la vista: si cambia de tamano, cambia lo que se ve.
+     * It listens to the view: if it changes size, what is seen changes.
      *
-     * <p>Es una clase y no una expresion suelta porque {@link #createViewListener} la devuelve, y
-     * una subclase puede querer la suya.
+     * <p>It is a class and not a loose expression because {@link #createViewListener} returns it,
+     * and a subclass may want its own.
      */
     protected class ViewListener extends ComponentAdapter implements Serializable {
 

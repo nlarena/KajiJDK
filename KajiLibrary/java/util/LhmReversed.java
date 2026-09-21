@@ -2,23 +2,24 @@ package java.util;
 
 // Same-package imports work around the frozen javac's finder (finding #4).
 import java.util.Map;
+import java.util.Set;
 
-// Las vistas secuenciadas de LinkedHashMap: el mapa al reves, y sus tres colecciones (claves,
-// valores, entradas) en cualquiera de los dos sentidos.
+// LinkedHashMap's sequenced views: the map backwards, and its three collections (keys, values,
+// entries) in either direction.
 //
-// **Vistas, no copias.** Es la decision que gobierna todo el archivo. `m.reversed()` devuelve algo
-// que comparte los mismos objetos entrada que `m`: poner un par de un lado se ve del otro, y
-// recorrer una mientras se modifica la otra es tan valido (o tan invalido) como hacerlo sobre el
-// mapa directo. Una copia seria varias veces mas corta de escribir y estaria mal -- el contrato de
-// `reversed()` dice "vista", y un metodo que devuelve una foto cuando promete un espejo miente en el
-// unico punto en el que a alguien le importa.
+// **Views, not copies.** It is the decision that governs the whole file. `m.reversed()` returns
+// something that shares the same entry objects as `m`: putting a pair in on one side is seen on the
+// other, and walking one while the other is modified is as valid (or as invalid) as doing it on the
+// map directly. A copy would be several times shorter to write and would be wrong -- `reversed()`'s
+// contract says "view", and a method that returns a snapshot when it promises a mirror lies at the
+// one point where anyone cares.
 //
-// Que todo esto sea barato lo permite una sola cosa: la lista de orden de LinkedHashMap ya es
-// **doblemente enlazada**. Recorrerla al reves cuesta lo mismo que al derecho, asi que invertir es
-// elegir por cual de los dos punteros se avanza. De ahi el booleano `rev` que atraviesa el archivo:
-// no hay dos implementaciones, hay una con un sentido de marcha.
+// One single thing is what makes all of this cheap: LinkedHashMap's order list is **doubly linked**
+// already. Walking it backwards costs the same as forwards, so reversing is choosing which of the two
+// pointers to advance along. Hence the `rev` boolean that runs through the file: there are not two
+// implementations, there is one with a direction of travel.
 
-/** El mapa visto al reves. */
+/** The map seen backwards. */
 final class LhmReversed<K, V> extends AbstractMap<K, V> implements SequencedMap<K, V> {
 
     private final LinkedHashMap<K, V> base;
@@ -43,9 +44,9 @@ final class LhmReversed<K, V> extends AbstractMap<K, V> implements SequencedMap<
         return this.base.get(key);
     }
 
-    // `put` sobre la vista invertida agrega al **principio del orden de la vista**, que es el final
-    // del orden del mapa de atras. Es lo que hace que la vista sea consistente consigo misma: lo
-    // ultimo agregado se itera primero, igual que en el mapa directo.
+    // A `put` on the reversed view adds at the **front of the view's order**, which is the end of the
+    // order of the map behind. It is what makes the view consistent with itself: the last thing added
+    // is iterated first, just as in the map directly.
     public V put(K key, V value) {
         return this.base.put(key, value);
     }
@@ -58,7 +59,7 @@ final class LhmReversed<K, V> extends AbstractMap<K, V> implements SequencedMap<
         this.base.clear();
     }
 
-    /** Invertir lo invertido es el mapa de atras, no un tercer envoltorio. */
+    /** Reversing the reversed is the map behind, not a third wrapper. */
     public SequencedMap<K, V> reversed() {
         return this.base;
     }
@@ -72,11 +73,11 @@ final class LhmReversed<K, V> extends AbstractMap<K, V> implements SequencedMap<
     }
 
     public Map.Entry<K, V> firstEntry() {
-        return this.base.ultimaEntrada();
+        return this.base.lastEntryOf();
     }
 
     public Map.Entry<K, V> lastEntry() {
-        return this.base.primeraEntrada();
+        return this.base.firstEntryOf();
     }
 
     public Map.Entry<K, V> pollFirstEntry() {
@@ -106,10 +107,19 @@ final class LhmReversed<K, V> extends AbstractMap<K, V> implements SequencedMap<
     public SequencedSet<Map.Entry<K, V>> sequencedEntrySet() {
         return new LhmEntrySet<K, V>(this.base, true);
     }
+
+    // `AbstractMap` leaves `entrySet()` abstract and builds everything else on it --`keySet`,
+    // `values`, `toString`, `equals`-- so without this the class compiled but any of those blew up.
+    // The reversed view exists already: it is the same one `sequencedEntrySet` returns, and a
+    // `SequencedSet` is a `Set`. There is no second implementation, there is one object with two
+    // names.
+    public Set<Map.Entry<K, V>> entrySet() {
+        return this.sequencedEntrySet();
+    }
 }
 
-// El recorrido de la lista de orden en un sentido u otro. Es el unico lugar del archivo que sabe
-// que la lista existe; todo lo demas se apoya en esto.
+// The walk of the order list in one direction or the other. It is the only place in the file that
+// knows the list exists; everything else rests on this.
 final class LhmWalk<K, V> {
 
     private final LinkedHashMap<K, V> base;
@@ -120,46 +130,46 @@ final class LhmWalk<K, V> {
         this.rev = rev;
     }
 
-    LhmEntry<K, V> primera() {
-        return this.rev ? this.base.ultimaEntrada() : this.base.primeraEntrada();
+    LhmEntry<K, V> first() {
+        return this.rev ? this.base.lastEntryOf() : this.base.firstEntryOf();
     }
 
-    LhmEntry<K, V> siguiente(LhmEntry<K, V> e) {
+    LhmEntry<K, V> nextOf(LhmEntry<K, V> e) {
         return this.rev ? this.base.beforeEntry(e) : this.base.afterEntry(e);
     }
 }
 
-// El iterador sobre las entradas, en el sentido que diga `rev`. Los tres iteradores de abajo lo
-// envuelven y proyectan lo que cada uno necesita.
+// The iterator over the entries, in whichever direction `rev` says. The three iterators below wrap
+// it and project what each of them needs.
 final class LhmEntryItr<K, V> implements Iterator<Map.Entry<K, V>> {
 
     private final LhmWalk<K, V> walk;
-    private LhmEntry<K, V> proxima;
-    private boolean arrancado = false;
+    private LhmEntry<K, V> upcoming;
+    private boolean started = false;
 
     LhmEntryItr(LinkedHashMap<K, V> base, boolean rev) {
         this.walk = new LhmWalk<K, V>(base, rev);
     }
 
-    private void arrancar() {
-        if (!this.arrancado) {
-            this.proxima = this.walk.primera();
-            this.arrancado = true;
+    private void startThread() {
+        if (!this.started) {
+            this.upcoming = this.walk.first();
+            this.started = true;
         }
     }
 
     public boolean hasNext() {
-        this.arrancar();
-        return this.proxima != null;
+        this.startThread();
+        return this.upcoming != null;
     }
 
     public Map.Entry<K, V> next() {
-        this.arrancar();
-        if (this.proxima == null) {
+        this.startThread();
+        if (this.upcoming == null) {
             throw new NoSuchElementException();
         }
-        LhmEntry<K, V> e = this.proxima;
-        this.proxima = this.walk.siguiente(e);
+        LhmEntry<K, V> e = this.upcoming;
+        this.upcoming = this.walk.nextOf(e);
         return e;
     }
 }
@@ -198,7 +208,7 @@ final class LhmValueItr<K, V> implements Iterator<V> {
     }
 }
 
-/** Las claves, en el orden del mapa o al reves. */
+/** The keys, in the map's order or backwards. */
 final class LhmKeySet<K, V> extends AbstractSet<K> implements SequencedSet<K> {
 
     private final LinkedHashMap<K, V> base;
@@ -221,11 +231,11 @@ final class LhmKeySet<K, V> extends AbstractSet<K> implements SequencedSet<K> {
         return this.base.containsKey(o);
     }
 
-    // Sacar una clave de la vista la saca del mapa: es lo que "vista" quiere decir.
+    // Taking a key out of the view takes it out of the map: that is what "view" means.
     public boolean remove(Object o) {
-        boolean estaba = this.base.containsKey(o);
+        boolean wasThere = this.base.containsKey(o);
         this.base.remove(o);
-        return estaba;
+        return wasThere;
     }
 
     public void clear() {
@@ -237,7 +247,7 @@ final class LhmKeySet<K, V> extends AbstractSet<K> implements SequencedSet<K> {
     }
 }
 
-/** Los valores, en el orden del mapa o al reves. */
+/** The values, in the map's order or backwards. */
 final class LhmValues<K, V> extends AbstractCollection<V> implements SequencedCollection<V> {
 
     private final LinkedHashMap<K, V> base;
@@ -265,7 +275,7 @@ final class LhmValues<K, V> extends AbstractCollection<V> implements SequencedCo
     }
 }
 
-/** Las entradas, en el orden del mapa o al reves. */
+/** The entries, in the map's order or backwards. */
 final class LhmEntrySet<K, V> extends AbstractSet<Map.Entry<K, V>>
         implements SequencedSet<Map.Entry<K, V>> {
 

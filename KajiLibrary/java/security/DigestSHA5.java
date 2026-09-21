@@ -1,18 +1,18 @@
 package java.security;
 
-// SHA-384 y SHA-512, segun FIPS 180-4. La rama de 64 bits de SHA-2.
+// SHA-384 and SHA-512, according to FIPS 180-4. The 64-bit branch of SHA-2.
 //
-// Misma estructura que SHA-256 con todo escalado: palabras de 64 bits, bloques de 128 bytes, 80
-// rondas, y otras cantidades de rotacion. En maquinas de 64 bits suele ser **mas rapido** que
-// SHA-256 pese a dar el doble de salida, porque procesa el doble de mensaje por ronda.
+// The same structure as SHA-256 with everything scaled up: words of 64 bits, blocks of 128 bytes,
+// 80 rounds, and other rotation amounts. On 64-bit machines it is usually **faster** than SHA-256
+// despite giving twice the output, because it processes twice the message per round.
 //
-// SHA-384 es SHA-512 con otro IV y truncado a 48 bytes; igual que con SHA-224, el truncado es lo
-// que lo hace inmune a la extension de longitud.
+// SHA-384 is SHA-512 with another IV and truncated to 48 bytes; just as with SHA-224, the
+// truncation is what makes it immune to length extension.
 //
-// Verificados contra los vectores de FIPS 180-4 y contra el JDK 25.
-final class DigestSHA5 extends DigestBloque {
+// Checked against the vectors of FIPS 180-4 and against JDK 25.
+final class DigestSHA5 extends BlockDigest {
 
-    // Los primeros 64 bits de la parte fraccionaria de la raiz cubica de los primeros 80 primos.
+    // The first 64 bits of the fractional part of the cube root of the first 80 primes.
     private static final long[] K = {
         0x428a2f98d728ae22L, 0x7137449123ef65cdL,
         0xb5c0fbcfec4d3b2fL, 0xe9b5dba58189dbbcL,
@@ -74,8 +74,8 @@ final class DigestSHA5 extends DigestBloque {
     private final long[] h = new long[8];
     private final long[] w = new long[80];
 
-    private DigestSHA5(String algoritmo, long[] iv, int largo) {
-        super(algoritmo, 128, largo);
+    private DigestSHA5(String algorithmName, long[] iv, int len) {
+        super(algorithmName, 128, len);
         this.iv = iv;
         this.engineReset();
     }
@@ -89,7 +89,7 @@ final class DigestSHA5 extends DigestBloque {
     }
 
     @Override
-    void reiniciarEstado() {
+    void resetState() {
         System.arraycopy(this.iv, 0, this.h, 0, 8);
     }
 
@@ -98,25 +98,25 @@ final class DigestSHA5 extends DigestBloque {
         return true;
     }
 
-    // 16 bytes de contador: la especificacion define el largo como un entero de 128 bits. Los 8
-    // altos van siempre en cero — harian falta 2^61 bytes de mensaje para usarlos.
+    // 16 bytes of counter: the specification defines the length as a 128-bit integer. The high 8 go
+    // always at zero — 2^61 bytes of message would be needed to use them.
     @Override
-    int bytesDeLargo() {
+    int lengthBytes() {
         return 16;
     }
 
     @Override
-    void comprimir(byte[] in, int ofs) {
+    void compress(byte[] in, int ofs) {
         int i = 0;
         while (i < 16) {
-            this.w[i] = leerLongBE(in, ofs + i * 8);
+            this.w[i] = readLongBE(in, ofs + i * 8);
             i = i + 1;
         }
         while (i < 80) {
             long x = this.w[i - 15];
             long y = this.w[i - 2];
-            long s0 = rotDer(x, 1) ^ rotDer(x, 8) ^ (x >>> 7);
-            long s1 = rotDer(y, 19) ^ rotDer(y, 61) ^ (y >>> 6);
+            long s0 = rotRight(x, 1) ^ rotRight(x, 8) ^ (x >>> 7);
+            long s1 = rotRight(y, 19) ^ rotRight(y, 61) ^ (y >>> 6);
             this.w[i] = this.w[i - 16] + s0 + this.w[i - 7] + s1;
             i = i + 1;
         }
@@ -132,10 +132,10 @@ final class DigestSHA5 extends DigestBloque {
 
         int t = 0;
         while (t < 80) {
-            long S1 = rotDer(e, 14) ^ rotDer(e, 18) ^ rotDer(e, 41);
+            long S1 = rotRight(e, 14) ^ rotRight(e, 18) ^ rotRight(e, 41);
             long ch = (e & f) ^ ((~e) & g);
             long t1 = hh + S1 + ch + K[t] + this.w[t];
-            long S0 = rotDer(a, 28) ^ rotDer(a, 34) ^ rotDer(a, 39);
+            long S0 = rotRight(a, 28) ^ rotRight(a, 34) ^ rotRight(a, 39);
             long maj = (a & b) ^ (a & c) ^ (b & c);
             long t2 = S0 + maj;
             hh = g;
@@ -160,7 +160,7 @@ final class DigestSHA5 extends DigestBloque {
     }
 
     @Override
-    void escribirEstado(byte[] out) {
+    void writeState(byte[] out) {
         int i = 0;
         while (i * 8 + 8 <= out.length) {
             long v = this.h[i];
@@ -174,13 +174,13 @@ final class DigestSHA5 extends DigestBloque {
     }
 
     @Override
-    DigestBloque nuevoIgual() {
-        return new DigestSHA5(this.getAlgorithm(), this.iv, this.largoDigest);
+    BlockDigest freshInstance() {
+        return new DigestSHA5(this.getAlgorithm(), this.iv, this.digestLen);
     }
 
     @Override
-    void copiarEstadoDe(DigestBloque otro) {
-        DigestSHA5 o = (DigestSHA5) otro;
+    void copyStateFrom(BlockDigest other) {
+        DigestSHA5 o = (DigestSHA5) other;
         System.arraycopy(o.h, 0, this.h, 0, 8);
     }
 }

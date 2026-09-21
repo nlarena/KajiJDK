@@ -4,24 +4,24 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * KajiLibrary's java.util.spi.CalendarNameProvider -- los nombres de los campos de un calendario.
+ * KajiLibrary's java.util.spi.CalendarNameProvider -- the names of a calendar's fields.
  *
- * <p>Meses, dias de la semana, AM/PM, eras. Lo que devuelve depende de tres cosas a la vez: el campo,
- * el estilo --largo, corto, narrow-- y el local.
+ * <p>Months, weekdays, AM/PM, eras. What it returns depends on three things at once: the field, the
+ * style --long, short, narrow-- and the locale.
  *
- * <h2>El estilo standalone, que es lo que no es obvio</h2>
+ * <h2>The standalone style, which is the part that is not obvious</h2>
  *
- * <p>Varios idiomas escriben el nombre de un mes distinto segun aparezca <b>solo</b> --en el
- * encabezado de un calendario-- o <b>dentro de una fecha</b>. En ruso el genitivo; en checo y en
- * finlandes lo mismo. Por eso los estilos vienen de a pares, con y sin
- * {@code Calendar.STANDALONE_MASK}, y un proveedor que devuelva lo mismo para los dos esta bien en
- * español y mal en ruso.
+ * <p>Several languages write a month's name differently depending on whether it appears <b>alone</b>
+ * --in a calendar's heading-- or <b>inside a date</b>. In Russian the genitive; in Czech and Finnish
+ * the same. That is why the styles come in pairs, with and without
+ * {@code Calendar.STANDALONE_MASK}, and a provider that returns the same for both is right in
+ * Spanish and wrong in Russian.
  *
- * <h2>getDisplayNames es la direccion inversa</h2>
+ * <h2>getDisplayNames is the reverse direction</h2>
  *
- * <p>{@link #getDisplayName} traduce un valor a un nombre; {@link #getDisplayNames} devuelve el mapa
- * <b>nombre a valor</b>, y sirve para <b>parsear</b>. Por eso puede tener mas entradas que valores:
- * varias formas del mismo mes apuntan al mismo numero.
+ * <p>{@link #getDisplayName} translates a value into a name; {@link #getDisplayNames} returns the
+ * <b>name to value</b> map, and it serves for <b>parsing</b>. That is why it can have more entries
+ * than values: several forms of the same month point at the same number.
  */
 public abstract class CalendarNameProvider extends LocaleServiceProvider {
 
@@ -29,21 +29,21 @@ public abstract class CalendarNameProvider extends LocaleServiceProvider {
     }
 
     /**
-     * El nombre de ese valor de ese campo.
+     * The name of that value of that field.
      *
-     * @param calendarType el tipo de calendario: {@code "gregory"}, {@code "buddhist"}, ...
-     * @param field        el campo de {@code Calendar}
-     * @param value        el valor del campo
-     * @param style        el estilo, con o sin {@code STANDALONE_MASK}; ver la nota de la clase
-     * @return null si este proveedor no tiene ese nombre
+     * @param calendarType the calendar's type: {@code "gregory"}, {@code "buddhist"}, ...
+     * @param field        the {@code Calendar} field
+     * @param value        the field's value
+     * @param style        the style, with or without {@code STANDALONE_MASK}; see the class's note
+     * @return null if this provider does not have that name
      */
     public abstract String getDisplayName(String calendarType, int field, int value, int style,
         Locale locale);
 
     /**
-     * El mapa nombre a valor, para parsear. Ver la nota de la clase.
+     * The name-to-value map, for parsing. See the class's note.
      *
-     * @return null si este proveedor no tiene esos nombres
+     * @return null if this provider does not have those names
      */
     public abstract Map<String, Integer> getDisplayNames(String calendarType, int field, int style,
         Locale locale);

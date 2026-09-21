@@ -21,7 +21,7 @@ public final class YearMonth implements Temporal, TemporalAdjuster, Comparable<Y
         this.month = month;
     }
 
-    /** El año y mes que `temporal` tiene. */
+    /** The year and month `temporal` holds. */
     public static YearMonth from(java.time.temporal.TemporalAccessor temporal) {
         if (temporal == null) {
             throw new NullPointerException("temporal");
@@ -33,7 +33,7 @@ public final class YearMonth implements Temporal, TemporalAdjuster, Comparable<Y
                 temporal.get(ChronoField.MONTH_OF_YEAR));
     }
 
-    /** El que marca `clock`. La forma testeable de `now()`. */
+    /** The one `clock` reads. The testable form of `now()`. */
     public static YearMonth now(java.time.Clock clock) {
         if (clock == null) {
             throw new NullPointerException("clock");
@@ -42,7 +42,7 @@ public final class YearMonth implements Temporal, TemporalAdjuster, Comparable<Y
         return YearMonth.of(d.getYear(), d.getMonthValue());
     }
 
-    /** El de esa zona, ahora. */
+    /** That zone's, right now. */
     public static YearMonth now(ZoneId zone) {
         if (zone == null) {
             throw new NullPointerException("zone");
@@ -51,7 +51,7 @@ public final class YearMonth implements Temporal, TemporalAdjuster, Comparable<Y
         return YearMonth.of(d.getYear(), d.getMonthValue());
     }
 
-    /** Con el mes como enum. */
+    /** With the month as an enum. */
     public static YearMonth of(int year, Month month) {
         if (month == null) {
             throw new NullPointerException("month");
@@ -93,21 +93,21 @@ public final class YearMonth implements Temporal, TemporalAdjuster, Comparable<Y
     }
 
     /**
-     * Si ese dia del mes existe en este año y mes.
+     * Whether that day of the month exists in this year and month.
      *
-     * <p>Distingue el 29 de febrero de un año bisiesto del de uno comun, que es para lo que sirve.
+     * <p>It tells a leap year's 29th of February from a common year's, which is what it is for.
      */
     public boolean isValidDay(int dayOfMonth) {
         return dayOfMonth >= 1 && dayOfMonth <= this.lengthOfMonth();
     }
 
-    /** Este año y mes con otro año; el mes queda igual. */
+    /** This year and month with another year; the month is left alone. */
     public YearMonth withYear(int year) {
         ChronoField.YEAR.checkValidValue((long) year);
         return YearMonth.of(year, this.getMonthValue());
     }
 
-    /** Con otro mes; el año queda igual. */
+    /** With another month; the year is left alone. */
     public YearMonth withMonth(int month) {
         ChronoField.MONTH_OF_YEAR.checkValidValue((long) month);
         return YearMonth.of(this.getYear(), month);
@@ -122,9 +122,9 @@ public final class YearMonth implements Temporal, TemporalAdjuster, Comparable<Y
     }
 
     /**
-     * Este año y mes mas `amountToAdd` unidades.
+     * This year and month plus `amountToAdd` units.
      *
-     * @throws java.time.DateTimeException si la unidad no es de mes o de año
+     * @throws java.time.DateTimeException if the unit is not a month- or year-based one
      */
     public YearMonth plus(long amountToAdd, java.time.temporal.TemporalUnit unit) {
         if (unit == null) {
@@ -152,7 +152,7 @@ public final class YearMonth implements Temporal, TemporalAdjuster, Comparable<Y
         return this.plus(-amountToSubtract, unit);
     }
 
-    /** Con `field` puesto en `newValue`. */
+    /** With `field` set to `newValue`. */
     public YearMonth with(java.time.temporal.TemporalField field, long newValue) {
         if (field == null) {
             throw new NullPointerException("field");
@@ -224,11 +224,12 @@ public final class YearMonth implements Temporal, TemporalAdjuster, Comparable<Y
     }
 
     /**
-     * El valor de ese campo.
+     * That field's value.
      *
-     * <p>`PROLEPTIC_MONTH`, `ERA` y `YEAR_OF_ERA` son el mismo anio dicho de otra forma --la era, y la cuenta dentro de
-     * ella-- asi que se deducen sin nada que decidir. Faltaban, y por eso un formateador con `G` o con
-     * `yyyy` en un calendario con eras se topaba con un rechazo donde habia informacion de sobra.
+     * <p>`PROLEPTIC_MONTH`, `ERA` and `YEAR_OF_ERA` are the same year said another way --the era, and
+     * the count within it-- so they are derived with nothing to decide. They used to be missing, and
+     * that is why a formatter with `G` or with `yyyy` in a calendar with eras met a rejection where
+     * there was information to spare.
      */
     public long getLong(TemporalField field) {
         if (field == ChronoField.YEAR) {
@@ -408,21 +409,21 @@ public final class YearMonth implements Temporal, TemporalAdjuster, Comparable<Y
     }
 
     /**
-     * Lee `text` con ese formateador.
+     * It reads `text` with that formatter.
      *
-     * <p>El que decide que campos hay es el formateador; esta clase solo dice **cual de ellos
-     * quiere**, pasando su propio `from`. Por eso un patron que no traiga anio y mes
-     * falla aca y no al usar el resultado.
+     * <p>The one that decides which fields are there is the formatter; this class only says
+     * **which of them it wants**, by passing its own `from`. That is why a pattern that brings no year and month
+     * fails here and not when the result is used.
      *
-     * @throws java.time.format.DateTimeParseException si el texto no encaja con el patron, o si lo
-     *     que encaja no alcanza para un anio y mes
+     * @throws java.time.format.DateTimeParseException if the text does not fit the pattern, or what
+     *     fits is not enough for a year and a month
      */
     public static YearMonth parse(CharSequence text, java.time.format.DateTimeFormatter formatter) {
         if (formatter == null) {
             throw new NullPointerException("formatter");
         }
-        // Ligado a una local: encadenar por un intermedio de tipo interfaz se pierde (#108).
-        java.time.temporal.TemporalQuery<YearMonth> consulta = YearMonth::from;
-        return formatter.parse(text, consulta);
+        // Bound to a local: chaining through an interface-typed intermediate gets lost (#108).
+        java.time.temporal.TemporalQuery<YearMonth> queryOf = YearMonth::from;
+        return formatter.parse(text, queryOf);
     }
 }

@@ -31,7 +31,9 @@ public final class FileDescriptor {
         return this.fd != -1;
     }
 
-    /** Forces buffered data to the device. KajiJDK buffers nothing at this level, so it is a no-op. */
+    /**
+     * Forces buffered data to the device. KajiJDK buffers nothing at this level, so it is a no-op.
+     */
     public void sync() throws SyncFailedException {
     }
 }

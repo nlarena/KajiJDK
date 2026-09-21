@@ -6,36 +6,36 @@ import java.util.Enumeration;
 import javax.swing.event.TreeModelEvent;
 
 /**
- * La cuenta de filas para un arbol donde cada fila mide lo suyo.
+ * The row bookkeeping for a tree where each row measures its own.
  *
- * <h2>Que la distingue de la otra</h2>
+ * <h2>What tells it apart from the other one</h2>
  *
- * <p>{@link FixedHeightLayoutCache} saca la posicion de una fila con una multiplicacion. Esta tiene
- * que preguntarle a cada nodo cuanto mide y sumar desde arriba, lo que la hace mas cara y la unica
- * que sirve cuando las filas tienen iconos de distinto tamano o texto de varias lineas.
+ * <p>{@link FixedHeightLayoutCache} gets a row's position with a multiplication. This one has to
+ * ask each node how much it measures and add up from the top, which makes it more expensive and
+ * the only one that serves when the rows have icons of different sizes or text of several lines.
  *
- * <p>La otra mitad -- que nodos se ven y en que orden -- es identica; ver la nota de
- * {@link AbstractLayoutCache}.
+ * <p>The other half -- which nodes are seen and in what order -- is identical; see
+ * {@link AbstractLayoutCache}'s note.
  *
- * <h2>Sin medidor no hay alturas</h2>
+ * <h2>Without a measurer there are no heights</h2>
  *
- * <p>Si nadie puso un {@link AbstractLayoutCache.NodeDimensions} y no hay altura fija, no hay de
- * donde sacar cuanto mide una fila: {@link #getBounds} devuelve un rectangulo vacio -- y no nulo,
- * que es lo que hace la otra cache -- y las cuentas de filas siguen andando. Se puede traducir entre
- * filas y caminos sin haber dibujado nada.
+ * <p>If nobody set an {@link AbstractLayoutCache.NodeDimensions} and there is no fixed height,
+ * there is nowhere to get how much a row measures from: {@link #getBounds} returns an empty
+ * rectangle -- and not null, which is what the other cache does -- and the row bookkeeping goes
+ * on working. One can translate between rows and paths without having drawn anything.
  */
 public class VariableHeightLayoutCache extends AbstractLayoutCache {
 
-    private final NucleoDeCache nucleo = new NucleoDeCache();
+    private final LayoutCacheCore core = new LayoutCacheCore();
 
-    /** Una cache vacia. */
+    /** An empty cache. */
     public VariableHeightLayoutCache() {
         super();
     }
 
     public void setModel(TreeModel newModel) {
         super.setModel(newModel);
-        nucleo.setModelo(newModel);
+        core.setTreeModel(newModel);
         if (newModel != null && newModel.getRoot() != null) {
             setExpandedState(new TreePath(newModel.getRoot()), true);
         }
@@ -44,7 +44,7 @@ public class VariableHeightLayoutCache extends AbstractLayoutCache {
     public void setRootVisible(boolean rootVisible) {
         if (isRootVisible() != rootVisible) {
             super.setRootVisible(rootVisible);
-            nucleo.setRaizVisible(rootVisible);
+            core.setRootVisible(rootVisible);
         }
     }
 
@@ -61,59 +61,61 @@ public class VariableHeightLayoutCache extends AbstractLayoutCache {
     }
 
     public void setExpandedState(TreePath path, boolean isExpanded) {
-        nucleo.setDesplegado(path, isExpanded);
+        core.setExpanded(path, isExpanded);
     }
 
     public boolean getExpandedState(TreePath path) {
-        return nucleo.desplegadoDeVerdad(path);
+        return core.reallyExpanded(path);
     }
 
     /**
-     * Donde va ese nodo.
+     * Where that node goes.
      *
-     * <p>La posicion vertical se acumula sumando lo que mide cada fila anterior. Con altura fija
-     * puesta se usa esa y no se pregunta.
+     * <p>The vertical position is accumulated by adding up what each previous row measures. With a
+     * fixed height set, that one is used and nothing is asked.
      */
     public Rectangle getBounds(TreePath path, Rectangle placeIn) {
         int row = getRowForPath(path);
         if (row < 0) {
             return null;
         }
-        Rectangle r = medir(row, placeIn);
+        Rectangle r = measure(row, placeIn);
         if (r == null) {
-            // Sin medidor no hay ancho, pero si hay fila: se devuelve un rectangulo vacio y no
-            // nulo. Esta medido, y es distinto de lo que hace la cache de altura fija, que si
-            // devuelve nulo. La asimetria es del JDK.
+            // Without a measurer there is no width, but there is a row: an empty rectangle is
+            // returned
+                        // and not null. It is measured, and it is different from what the
+                        // fixed-height cache does, which does return null. The asymmetry is the
+                        // JDK's.
             r = (placeIn != null) ? placeIn : new Rectangle();
             r.x = 0;
             r.width = 0;
             r.height = 0;
         }
-        r.y = arriba(row);
+        r.y = above(row);
         if (isFixedRowHeight()) {
             r.height = getRowHeight();
         }
         return r;
     }
 
-    /** Lo que ocupa esa fila, preguntandole al medidor. */
-    private Rectangle medir(int row, Rectangle placeIn) {
-        TreePath path = nucleo.caminoDeFila(row);
+    /** What that row takes up, asking the measurer. */
+    private Rectangle measure(int row, Rectangle placeIn) {
+        TreePath path = core.pathForRow(row);
         if (path == null) {
             return null;
         }
         return getNodeDimensions(path.getLastPathComponent(), row, path.getPathCount() - 1,
-                nucleo.estaMarcado(path), placeIn);
+                core.isMarkedExpanded(path), placeIn);
     }
 
-    /** Donde empieza esa fila: la suma de lo que miden las anteriores. */
-    private int arriba(int row) {
+    /** Where that row starts: the sum of what the previous ones measure. */
+    private int above(int row) {
         if (isFixedRowHeight()) {
             return row * getRowHeight();
         }
         int y = 0;
         for (int i = 0; i < row; i++) {
-            Rectangle r = medir(i, null);
+            Rectangle r = measure(i, null);
             if (r != null) {
                 y = y + r.height;
             }
@@ -122,22 +124,22 @@ public class VariableHeightLayoutCache extends AbstractLayoutCache {
     }
 
     public TreePath getPathForRow(int row) {
-        return nucleo.caminoDeFila(row);
+        return core.pathForRow(row);
     }
 
     public int getRowForPath(TreePath path) {
-        return nucleo.filaDeCamino(path);
+        return core.rowForPath(path);
     }
 
     public int getRowCount() {
-        return nucleo.cuantas();
+        return core.howMany();
     }
 
-    /** No guarda medidas: cada consulta vuelve a preguntar. */
+    /** It keeps no measurements: every query asks again. */
     public void invalidatePathBounds(TreePath path) {
     }
 
-    /** Idem; ver {@link #invalidatePathBounds}. */
+    /** The same; see {@link #invalidatePathBounds}. */
     public void invalidateSizes() {
     }
 
@@ -151,7 +153,7 @@ public class VariableHeightLayoutCache extends AbstractLayoutCache {
         }
         int y = 0;
         for (int i = 0; i < n; i++) {
-            Rectangle r = medir(i, null);
+            Rectangle r = measure(i, null);
             if (r != null) {
                 y = y + r.height;
             }
@@ -164,9 +166,9 @@ public class VariableHeightLayoutCache extends AbstractLayoutCache {
     }
 
     /**
-     * El nodo mas cercano a ese punto.
+     * The node nearest that point.
      *
-     * <p>Como en la otra cache, la coordenada horizontal no se mira.
+     * <p>As in the other cache, the horizontal coordinate is not looked at.
      */
     public TreePath getPathClosestTo(int x, int y) {
         int n = getRowCount();
@@ -183,44 +185,44 @@ public class VariableHeightLayoutCache extends AbstractLayoutCache {
             }
             return getPathForRow(row);
         }
-        int acumulado = 0;
+        int accumulated = 0;
         for (int i = 0; i < n; i++) {
-            Rectangle r = medir(i, null);
-            int alto = (r == null) ? 0 : r.height;
-            if (y < acumulado + alto) {
+            Rectangle r = measure(i, null);
+            int height = (r == null) ? 0 : r.height;
+            if (y < accumulated + height) {
                 return getPathForRow(i);
             }
-            acumulado = acumulado + alto;
+            accumulated = accumulated + height;
         }
         return getPathForRow(n - 1);
     }
 
     public Enumeration<TreePath> getVisiblePathsFrom(TreePath path) {
-        return nucleo.desde(path);
+        return core.from(path);
     }
 
     public int getVisibleChildCount(TreePath path) {
-        return nucleo.hijosVisibles(path);
+        return core.visibleChildren(path);
     }
 
     public boolean isExpanded(TreePath path) {
-        return nucleo.estaMarcado(path);
+        return core.isMarkedExpanded(path);
     }
 
-    /** Un nodo que cambia puede cambiar de alto, asi que todo lo de abajo se corre. */
+    /** A node that changes may change height, so everything below it shifts. */
     public void treeNodesChanged(TreeModelEvent e) {
-        nucleo.invalidar();
+        core.invalidate();
     }
 
     public void treeNodesInserted(TreeModelEvent e) {
-        nucleo.invalidar();
+        core.invalidate();
     }
 
     public void treeNodesRemoved(TreeModelEvent e) {
-        nucleo.invalidar();
+        core.invalidate();
     }
 
     public void treeStructureChanged(TreeModelEvent e) {
-        nucleo.invalidar();
+        core.invalidate();
     }
 }

@@ -1,185 +1,190 @@
 package org.w3c.dom;
 
 /**
- * KajiLibrary's org.w3c.dom.Document -- la raiz del arbol y la fabrica de todo lo que va adentro.
+ * KajiLibrary's org.w3c.dom.Document -- the root of the tree and the factory of everything that
+ * goes inside it.
  *
- * <p>Tiene dos papeles distintos que conviene no mezclar. Como **nodo** es la raiz: su unico hijo
- * elemento es el elemento raiz del XML, al que se llega por {@link #getDocumentElement}, y ojo con
- * la diferencia --el documento y el elemento raiz no son el mismo nodo, y al lado del elemento raiz
- * pueden colgar comentarios, instrucciones de procesamiento y el {@link DocumentType}. Como
- * **fabrica** es el unico lugar de donde salen nodos nuevos: no hay constructores en el DOM, todo
- * sale de un {@code createXxx}.
+ * <p>It has two different roles that it is as well not to mix. As a **node** it is the root: its
+ * only element child is the root element of the XML, which is reached through {@link
+ * #getDocumentElement}, and careful with the difference --the document and the root element are not
+ * the same node, and next to the root element there may hang comments, processing instructions and
+ * the {@link DocumentType}. As a **factory** it is the only place new nodes come from: there are no
+ * constructors in the DOM, everything comes out of a {@code createXxx}.
  *
- * <p>Que la fabrica sea el documento y no una clase suelta es lo que sostiene la regla de la que
- * cuelga la mitad de los errores del DOM: cada nodo pertenece **al documento que lo creo**, y meter
- * en un arbol un nodo fabricado por otro documento es {@code WRONG_DOCUMENT_ERR}. Para cruzarlo hay
- * dos caminos y son distintos: {@link #importNode} deja el original donde estaba y trae una copia,
- * {@link #adoptNode} se lo lleva del otro arbol.
+ * <p>That the factory is the document and not a loose class is what holds up the rule half the
+ * errors of the DOM hang from: each node belongs **to the document that created it**, and putting
+ * into a tree a node manufactured by another document is {@code WRONG_DOCUMENT_ERR}. To cross it
+ * there are two roads and they are different: {@link #importNode} leaves the original where it was
+ * and brings a copy, {@link #adoptNode} takes it away from the other tree.
  *
- * <p>Interfaz declarada entera. Los {@code createXxx} estan declarados como corresponde a un
- * contrato: aca no hay implementacion, y declarar la firma no promete un arbol.
+ * <p>The interface is declared whole. The {@code createXxx} are declared as befits a contract:
+ * there is no implementation here, and declaring the signature does not promise a tree.
  */
 public interface Document extends Node {
 
-    /** El {@code <!DOCTYPE>}, o {@code null} si no hay. */
+    /** The {@code <!DOCTYPE>}, or {@code null} if there is none. */
     public DocumentType getDoctype();
 
-    /** El objeto que maneja las preguntas sobre que soporta esta implementacion. */
+    /** The object that handles the questions about what this implementation supports. */
     public DOMImplementation getImplementation();
 
-    /** El elemento raiz. No es el documento: es su hijo. */
+    /** The root element. It is not the document: it is its child. */
     public Element getDocumentElement();
 
     /**
-     * Un elemento nuevo, sin espacio de nombres.
+     * A new element, with no namespace.
      *
-     * @throws DOMException {@code INVALID_CHARACTER_ERR} si el nombre es malformado
+     * @throws DOMException {@code INVALID_CHARACTER_ERR} if the name is malformed
      */
     public Element createElement(String tagName) throws DOMException;
 
-    /** Un fragmento vacio, para juntar nodos antes de insertarlos de una. */
+    /** An empty fragment, for gathering nodes before inserting them at once. */
     public DocumentFragment createDocumentFragment();
 
-    /** Un nodo de texto con ese contenido. */
+    /** A text node with that content. */
     public Text createTextNode(String data);
 
-    /** Un comentario con ese contenido. */
+    /** A comment with that content. */
     public Comment createComment(String data);
 
     /**
-     * Una seccion CDATA con ese contenido.
+     * A CDATA section with that content.
      *
-     * @throws DOMException {@code NOT_SUPPORTED_ERR} en un documento HTML
+     * @throws DOMException {@code NOT_SUPPORTED_ERR} in an HTML document
      */
     public CDATASection createCDATASection(String data) throws DOMException;
 
     /**
-     * Una instruccion de procesamiento.
+     * A processing instruction.
      *
-     * @throws DOMException {@code INVALID_CHARACTER_ERR} o {@code NOT_SUPPORTED_ERR}
+     * @throws DOMException {@code INVALID_CHARACTER_ERR} or {@code NOT_SUPPORTED_ERR}
      */
     public ProcessingInstruction createProcessingInstruction(String target, String data)
             throws DOMException;
 
     /**
-     * Un atributo suelto, sin elemento. Para pegarlo hay que usar {@link Element#setAttributeNode}.
+     * A loose attribute, with no element. To attach it, {@link Element#setAttributeNode} has to be
+     * used.
      *
      * @throws DOMException {@code INVALID_CHARACTER_ERR}
      */
     public Attr createAttribute(String name) throws DOMException;
 
     /**
-     * Una referencia a entidad sin expandir.
+     * An unexpanded entity reference.
      *
-     * @throws DOMException {@code INVALID_CHARACTER_ERR} o {@code NOT_SUPPORTED_ERR}
+     * @throws DOMException {@code INVALID_CHARACTER_ERR} or {@code NOT_SUPPORTED_ERR}
      */
     public EntityReference createEntityReference(String name) throws DOMException;
 
-    /** Los elementos del documento con esa etiqueta, en orden. La lista esta viva. */
+    /** The elements of the document with that tag, in order. The list is live. */
     public NodeList getElementsByTagName(String tagname);
 
     /**
-     * Una copia del nodo, creada por **este** documento, lista para insertar; el original no se
-     * toca. Con {@code deep} en {@code false} viene sin hijos.
+     * A copy of the node, created by **this** document, ready to insert; the original is not
+     * touched. With {@code deep} at {@code false} it comes with no children.
      *
-     * @throws DOMException {@code NOT_SUPPORTED_ERR} si el tipo de nodo no se puede importar
+     * @throws DOMException {@code NOT_SUPPORTED_ERR} if the type of node cannot be imported
      */
     public Node importNode(Node importedNode, boolean deep) throws DOMException;
 
     /**
-     * Un elemento nuevo con espacio de nombres.
+     * A new element with a namespace.
      *
-     * @throws DOMException {@code INVALID_CHARACTER_ERR}, {@code NAMESPACE_ERR} o
+     * @throws DOMException {@code INVALID_CHARACTER_ERR}, {@code NAMESPACE_ERR} or
      *     {@code NOT_SUPPORTED_ERR}
      */
     public Element createElementNS(String namespaceURI, String qualifiedName) throws DOMException;
 
     /**
-     * Un atributo nuevo con espacio de nombres.
+     * A new attribute with a namespace.
      *
-     * @throws DOMException {@code INVALID_CHARACTER_ERR}, {@code NAMESPACE_ERR} o
+     * @throws DOMException {@code INVALID_CHARACTER_ERR}, {@code NAMESPACE_ERR} or
      *     {@code NOT_SUPPORTED_ERR}
      */
     public Attr createAttributeNS(String namespaceURI, String qualifiedName) throws DOMException;
 
-    /** Los elementos con ese espacio de nombres y nombre local, en orden. */
+    /** The elements with that namespace and local name, in order. */
     public NodeList getElementsByTagNameNS(String namespaceURI, String localName);
 
     /**
-     * El elemento cuyo atributo de tipo ID vale asi, o {@code null}.
+     * The element whose ID-type attribute has that value, or {@code null}.
      *
-     * <p>Depende de que **algo** haya declarado ese atributo como ID: el DTD, un esquema, o
-     * {@link Element#setIdAttribute}. Sin eso no encuentra nada, aunque el atributo se llame
-     * {@code "id"}.
+     * <p>It depends on **something** having declared that attribute as an ID: the DTD, a schema, or
+     * {@link Element#setIdAttribute}. Without that it finds nothing, even if the attribute is
+     * called {@code "id"}.
      */
     public Element getElementById(String elementId);
 
-    /** La codificacion detectada al parsear, o {@code null} si el documento no vino de un parser. */
+    /**
+     * The encoding detected when parsing, or {@code null} if the document did not come from a
+     * parser.
+     */
     public String getInputEncoding();
 
-    /** La codificacion declarada en la declaracion XML, o {@code null}. */
+    /** The encoding declared in the XML declaration, or {@code null}. */
     public String getXmlEncoding();
 
-    /** Lo que decia --o dice-- {@code standalone} en la declaracion XML. */
+    /** What {@code standalone} said --or says-- in the XML declaration. */
     public boolean getXmlStandalone();
 
     /**
-     * Fija {@code standalone}.
+     * It sets {@code standalone}.
      *
-     * @throws DOMException {@code NOT_SUPPORTED_ERR} en un documento que no soporta XML
+     * @throws DOMException {@code NOT_SUPPORTED_ERR} in a document that does not support XML
      */
     public void setXmlStandalone(boolean xmlStandalone) throws DOMException;
 
-    /** La version XML, tipicamente {@code "1.0"} o {@code "1.1"}. */
+    /** The XML version, typically {@code "1.0"} or {@code "1.1"}. */
     public String getXmlVersion();
 
     /**
-     * Cambia la version XML.
+     * It changes the XML version.
      *
-     * @throws DOMException {@code NOT_SUPPORTED_ERR} si la version no se soporta
+     * @throws DOMException {@code NOT_SUPPORTED_ERR} if the version is not supported
      */
     public void setXmlVersion(String xmlVersion) throws DOMException;
 
     /**
-     * Si se chequean errores en cada operacion.
+     * Whether errors are checked on each operation.
      *
-     * <p>Apagarlo es una valvula de escape para armar arboles grandes rapido, a cambio de que el
-     * documento pueda quedar invalido sin que nadie avise.
+     * <p>Switching it off is an escape valve for building large trees quickly, in exchange for the
+     * document possibly being left invalid without anybody warning.
      */
     public boolean getStrictErrorChecking();
 
-    /** Prende o apaga el chequeo de errores. */
+    /** It switches the checking of errors on or off. */
     public void setStrictErrorChecking(boolean strictErrorChecking);
 
-    /** La URI del documento, o {@code null} si no se sabe. */
+    /** The URI of the document, or {@code null} if it is not known. */
     public String getDocumentURI();
 
-    /** Fija la URI del documento. */
+    /** It sets the URI of the document. */
     public void setDocumentURI(String documentURI);
 
     /**
-     * Se lleva el nodo de su documento anterior a este, **moviendolo**: el original queda sin ese
-     * subarbol.
+     * It takes the node from its previous document to this one, **moving** it: the original is left
+     * without that subtree.
      *
-     * @throws DOMException {@code NOT_SUPPORTED_ERR} o {@code NO_MODIFICATION_ALLOWED_ERR}
+     * @throws DOMException {@code NOT_SUPPORTED_ERR} or {@code NO_MODIFICATION_ALLOWED_ERR}
      */
     public Node adoptNode(Node source) throws DOMException;
 
-    /** La configuracion que usa {@link #normalizeDocument}. */
+    /** The configuration {@link #normalizeDocument} uses. */
     public DOMConfiguration getDomConfig();
 
     /**
-     * Deja el documento como si se lo hubiera serializado y vuelto a parsear, aplicando lo que diga
-     * {@link #getDomConfig}: junta textos, resuelve espacios de nombres, y valida si se le pidio.
+     * It leaves the document as if it had been serialised and parsed again, applying whatever
+     * {@link #getDomConfig} says: it joins texts, resolves namespaces, and validates if asked to.
      */
     public void normalizeDocument();
 
     /**
-     * Cambia el nombre --y el espacio de nombres-- de un {@link Element} o un {@link Attr},
-     * devolviendo el nodo renombrado, que puede ser otro objeto.
+     * It changes the name --and the namespace-- of an {@link Element} or an {@link Attr}, returning
+     * the renamed node, which may be another object.
      *
      * @throws DOMException {@code NOT_SUPPORTED_ERR}, {@code INVALID_CHARACTER_ERR},
-     *     {@code WRONG_DOCUMENT_ERR} o {@code NAMESPACE_ERR}
+     *     {@code WRONG_DOCUMENT_ERR} or {@code NAMESPACE_ERR}
      */
     public Node renameNode(Node n, String namespaceURI, String qualifiedName) throws DOMException;
 }

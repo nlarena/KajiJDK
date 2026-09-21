@@ -1,27 +1,28 @@
 package javax.naming;
 
 /**
- * Lo que devuelve `Context.list()`: el nombre de una atadura y el nombre de la clase de lo que hay
- * atado, **sin traer el objeto**.
+ * What `Context.list()` returns: the name of a binding and the class name of what is bound,
+ * **without fetching the object**.
  *
- * <p>Esa es toda la razon de que el tipo exista y de que `list` y `listBindings` sean dos metodos
- * distintos. Listar un contexto con mil ataduras y materializar los mil objetos --abrir mil
- * conexiones, deserializar mil grafos-- para despues mirar el nombre de uno solo es exactamente lo
- * que hay que evitar. `list` devuelve estos pares, que son metadatos que el servidor ya tenia; el
- * que quiere el objeto hace un `lookup` puntual, o usa `listBindings` y recibe `Binding`, que es
- * esta misma clase mas el objeto.
+ * <p>That is the whole reason the type exists and that `list` and `listBindings` are two different
+ * methods. Listing a context with a thousand bindings and materializing the thousand objects --
+ * opening a thousand connections, deserializing a thousand graphs-- to then look at the name of a
+ * single one is exactly what must be avoided. `list` returns these pairs, which are metadata the
+ * server already had; whoever wants the object does a targeted `lookup`, or uses `listBindings`
+ * and gets `Binding`, which is this same class plus the object.
  *
- * <h2>El nombre es relativo, salvo cuando no</h2>
+ * <h2>The name is relative, except when it is not</h2>
  *
- * <p>`getName()` devuelve un nombre **relativo al contexto que se listo**, no absoluto: listar
- * `ou=gente` da `cn=juan`, no `cn=juan,ou=gente`. `isRelative()` es `false` en el unico caso donde
- * no se puede: cuando la atadura apunta afuera del contexto y el nombre es una URL. Esa es la
- * razon de que el flag exista, y por eso `toString()` lo marca: un consumidor que arme
- * `contexto + "/" + nombre` a ciegas produciria basura para esas entradas.
+ * <p>`getName()` returns a name **relative to the context that was listed**, not absolute: listing
+ * `ou=people` gives `cn=john`, not `cn=john,ou=people`. `isRelative()` is `false` in the only case
+ * where it cannot be: when the binding points outside the context and the name is a URL. That is
+ * why the flag exists, and why `toString()` marks it: a consumer that blindly builds
+ * `context + "/" + name` would produce garbage for those entries.
  *
- * <p>`getNameInNamespace()` es el nombre absoluto, y es **opcional**: tira
- * `UnsupportedOperationException` si el proveedor no lo lleno. No devuelve `null` porque `null` se
- * confundiria con "el nombre absoluto es vacio", que es lo que vale para la raiz.
+ * <p>`getNameInNamespace()` is the absolute name, and it is **optional**: it throws
+ * `UnsupportedOperationException` if the provider did not fill it in. It does not return `null`
+ * because `null` would be confused with "the absolute name is empty", which is what holds for the
+ * root.
  */
 public class NameClassPair implements java.io.Serializable {
 
@@ -32,7 +33,7 @@ public class NameClassPair implements java.io.Serializable {
     private String fullName;
     private boolean isRel;
 
-    /** Relativo por default, que es el caso normal: casi ninguna atadura apunta afuera. */
+    /** Relative by default, which is the normal case: hardly any binding points outside. */
     public NameClassPair(String name, String className) {
         this(name, className, true);
     }
@@ -52,9 +53,9 @@ public class NameClassPair implements java.io.Serializable {
     }
 
     /**
-     * El nombre absoluto, si el proveedor lo puso.
+     * The absolute name, if the provider set it.
      *
-     * @throws UnsupportedOperationException si no lo puso
+     * @throws UnsupportedOperationException if it did not
      */
     public String getNameInNamespace() {
         if (fullName == null) {
@@ -83,7 +84,10 @@ public class NameClassPair implements java.io.Serializable {
         this.isRel = r;
     }
 
-    /** Marca lo no relativo al frente: es la unica diferencia que cambia como se usa el nombre. */
+    /**
+     * Marks the non-relative ones up front: it is the only difference that changes how the name is
+     * used.
+     */
     @Override
     public String toString() {
         return (isRelative() ? "" : "(not relative)") + getName() + ": " + getClassName();

@@ -3,130 +3,131 @@ package com.sun.nio.sctp;
 import java.net.SocketAddress;
 
 /**
- * Todo lo que acompana a un mensaje SCTP y no son sus bytes.
+ * Everything that accompanies an SCTP message and is not its bytes.
  *
- * <h2>Por que un mensaje necesita esto y un byte de TCP no</h2>
+ * <h2>Why a message needs this and a TCP byte does not</h2>
  *
- * <p>TCP entrega un flujo: el unico dato asociado es cuantos bytes hay. SCTP entrega
- * <strong>mensajes</strong>, y cada uno lleva por que flujo va, si va ordenado, cuanto vale la pena
- * seguir intentandolo, y con que protocolo de aplicacion se lo va a interpretar del otro lado. Nada
- * de eso cabe en el {@code ByteBuffer}.
+ * <p>TCP delivers a stream: the only associated datum is how many bytes there are. SCTP
+ * delivers <strong>messages</strong>, and each one carries which stream it goes by, whether it
+ * goes ordered, how long it is worth going on trying, and with which application protocol it is
+ * going to be interpreted on the other side. None of that fits in the {@code ByteBuffer}.
  *
- * <h2>Los setters devuelven {@code this}</h2>
+ * <h2>The setters return {@code this}</h2>
  *
- * <p>{@link #streamNumber(int)} y sus hermanos devuelven el mismo objeto, no uno nuevo, y eso
- * permite escribir la configuracion en una linea:
+ * <p>{@link #streamNumber(int)} and its siblings return the same object, not a new one, and
+ * that allows the configuration to be written on one line:
  *
  * <pre>{@code
- * MessageInfo.createOutgoing(destino, 3).unordered(true).timeToLive(500)
+ * MessageInfo.createOutgoing(destination, 3).unordered(true).timeToLive(500)
  * }</pre>
  *
- * <p>Vale saber que <strong>muta</strong>: no es un value object. Reusar un {@code MessageInfo}
- * entre dos envios comparte los cambios.
+ * <p>It is worth knowing that it <strong>mutates</strong>: it is not a value object. Reusing a
+ * {@code MessageInfo} between two sends shares the changes.
  */
 public abstract class MessageInfo {
 
-    /** Para las implementaciones de SCTP. */
+    /** For the SCTP implementations. */
     protected MessageInfo() {
     }
 
     /**
-     * Un mensaje para mandar a {@code address} por el flujo {@code streamNumber}.
+     * A message to send to {@code address} over the stream {@code streamNumber}.
      *
-     * <p>La direccion puede ser {@code null} cuando el canal ya sabe adonde va — un
-     * {@link SctpChannel} conectado— y hace falta en un {@link SctpMultiChannel}, que habla con
-     * varias puntas.
+     * <p>The address may be {@code null} when the channel already knows where it is going -- a
+     * connected {@link SctpChannel} -- and it is needed in a {@link SctpMultiChannel}, which talks
+     * to several ends.
      *
-     * @throws IllegalArgumentException si {@code streamNumber} es negativo o pasa de {@code 65536}
+     * @throws IllegalArgumentException if {@code streamNumber} is negative or goes over
+     *     {@code 65536}
      */
     public static MessageInfo createOutgoing(SocketAddress address, int streamNumber) {
-        return new Saliente(null, address, streamNumber);
+        return new Outgoing(null, address, streamNumber);
     }
 
     /**
-     * Igual, pero sobre una asociacion concreta de un {@link SctpMultiChannel}.
+     * The same, but over a concrete association of a {@link SctpMultiChannel}.
      *
-     * @throws IllegalArgumentException si {@code streamNumber} esta fuera de rango
+     * @throws IllegalArgumentException if {@code streamNumber} is out of range
      */
     public static MessageInfo createOutgoing(Association association, SocketAddress address,
             int streamNumber) {
         if (association == null) {
-            throw new IllegalArgumentException("hace falta la asociacion");
+            throw new IllegalArgumentException("the association is needed");
         }
-        return new Saliente(association, address, streamNumber);
+        return new Outgoing(association, address, streamNumber);
     }
 
-    /** De donde vino o adonde va. */
+    /** Where it came from or where it is going. */
     public abstract SocketAddress address();
 
-    /** La asociacion, o {@code null} si todavia no hay una. */
+    /** The association, or {@code null} if there is not one yet. */
     public abstract Association association();
 
-    /** Cuantos bytes tiene el mensaje. */
+    /** How many bytes the message has. */
     public abstract int bytes();
 
     /**
-     * Si el mensaje esta entero.
+     * Whether the message is whole.
      *
-     * <p>Un {@code receive} puede devolver un mensaje incompleto cuando el buffer que le dieron no
-     * alcanzaba. Ignorar esto es la forma mas facil de procesar medio mensaje como si fuera uno.
+     * <p>A {@code receive} may return an incomplete message when the buffer it was given was not
+     * enough. Ignoring this is the easiest way of processing half a message as if it were one.
      */
     public abstract boolean isComplete();
 
-    /** Marca si esta entero. */
+    /** It marks whether it is whole. */
     public abstract MessageInfo complete(boolean complete);
 
-    /** Si va sin orden respecto de los demas de su flujo. */
+    /** Whether it goes with no order with respect to the others of its stream. */
     public abstract boolean isUnordered();
 
     /**
-     * Marca si va sin orden.
+     * It marks whether it goes with no order.
      *
-     * <p>Es la perilla que cambia el trato: un mensaje sin orden se entrega apenas llega, sin
-     * esperar a los que iban antes en su flujo.
+     * <p>It is the knob that changes the treatment: a message with no order is delivered as soon
+     * as it arrives, without waiting for those that went before it in its stream.
      */
     public abstract MessageInfo unordered(boolean unordered);
 
     /**
-     * El identificador del protocolo de aplicacion.
+     * The application protocol's identifier.
      *
-     * <p>SCTP no lo mira: lo lleva y lo entrega. Sirve para que las dos puntas se pongan de acuerdo
-     * sobre como interpretar los bytes sin gastar un encabezado propio.
+     * <p>SCTP does not look at it: it carries it and delivers it. It serves so that the two ends
+     * should agree on how to interpret the bytes without spending a header of their own.
      */
     public abstract int payloadProtocolID();
 
-    /** Fija el identificador de protocolo de aplicacion. */
+    /** It fixes the application protocol identifier. */
     public abstract MessageInfo payloadProtocolID(int ppid);
 
-    /** Por que flujo va o vino. */
+    /** Which stream it goes or came by. */
     public abstract int streamNumber();
 
     /**
-     * Fija el flujo.
+     * It fixes the stream.
      *
-     * @throws IllegalArgumentException si esta fuera de rango
+     * @throws IllegalArgumentException if it is out of range
      */
     public abstract MessageInfo streamNumber(int streamNumber);
 
-    /** Cuantos milisegundos vale la pena seguir intentando; {@code 0} es sin limite. */
+    /** How many milliseconds it is worth going on trying; {@code 0} is with no limit. */
     public abstract long timeToLive();
 
     /**
-     * Fija el tiempo de vida.
+     * It fixes the time to live.
      *
-     * <p>Vencido, el mensaje se descarta y llega un {@link SendFailedNotification}. Es lo que hace
-     * util a SCTP para datos que envejecen —telemetria, audio— donde reintentar para siempre es
-     * peor que perder.
+     * <p>Once it has expired, the message is discarded and a {@link SendFailedNotification}
+     * arrives. It is what makes SCTP useful for data that age -- telemetry, audio -- where
+     * retrying for ever is worse than losing.
      */
     public abstract MessageInfo timeToLive(long millis);
 
     /**
-     * La implementacion de un mensaje saliente.
+     * The implementation of an outgoing message.
      *
-     * <p>Privada porque nadie deberia poder crear una por fuera de las dos fabricas: el JDK hace lo
-     * mismo. Los mensajes <em>entrantes</em> los construye la pila, no esta clase.
+     * <p>Private because nobody should be able to create one outside the two factories: the JDK
+     * does the same. The <em>incoming</em> messages are built by the stack, not by this class.
      */
-    private static final class Saliente extends MessageInfo {
+    private static final class Outgoing extends MessageInfo {
 
         private final Association association;
         private final SocketAddress address;
@@ -136,16 +137,16 @@ public abstract class MessageInfo {
         private int ppid;
         private long timeToLive;
 
-        Saliente(Association association, SocketAddress address, int streamNumber) {
-            revisarFlujo(streamNumber);
+        Outgoing(Association association, SocketAddress address, int streamNumber) {
+            checkStream(streamNumber);
             this.association = association;
             this.address = address;
             this.streamNumber = streamNumber;
         }
 
-        private static void revisarFlujo(int streamNumber) {
+        private static void checkStream(int streamNumber) {
             if (streamNumber < 0 || streamNumber > 65536) {
-                throw new IllegalArgumentException("flujo fuera de rango: "
+                throw new IllegalArgumentException("stream out of range: "
                         + String.valueOf(streamNumber));
             }
         }
@@ -158,8 +159,8 @@ public abstract class MessageInfo {
             return this.association;
         }
 
-        // Un mensaje saliente todavia no tiene bytes: los tiene el `ByteBuffer` que se le pasa al
-        // `send`. El JDK contesta cero por lo mismo.
+        // An outgoing message has no bytes yet: they are held by the `ByteBuffer` that is passed to
+                    // the `send`. The JDK answers zero for the same reason.
         public int bytes() {
             return 0;
         }
@@ -196,7 +197,7 @@ public abstract class MessageInfo {
         }
 
         public MessageInfo streamNumber(int streamNumber) {
-            revisarFlujo(streamNumber);
+            checkStream(streamNumber);
             this.streamNumber = streamNumber;
             return this;
         }

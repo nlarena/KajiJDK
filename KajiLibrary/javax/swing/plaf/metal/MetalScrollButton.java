@@ -7,38 +7,39 @@ import javax.swing.SwingConstants;
 import javax.swing.plaf.basic.BasicArrowButton;
 
 /**
- * Una de las dos flechas de una barra de desplazamiento de Metal.
+ * One of the two arrows of a Metal scroll bar.
  *
- * <h2>El pixel que se cede al vecino</h2>
+ * <h2>The pixel given to the neighbour</h2>
  *
- * <p>Los tamanos de esta clase son asimetricos y a proposito. Una barra <strong>pegada</strong> a
- * un panel no dibuja su borde de afuera -- lo dibuja el panel -- asi que cada boton cede dos
- * pixeles del lado que da al borde. Una barra <strong>suelta</strong> si lo dibuja, y entonces el
- * boton del final cede uno solo.
+ * <p>This class's sizes are asymmetric and on purpose. A bar <strong>attached</strong> to a pane
+ * does not draw its outer border -- the pane draws it -- so each button gives up two pixels on
+ * the side facing that border. A <strong>free standing</strong> bar does draw it, and then the
+ * button at the end gives up only one.
  *
- * <p>La asimetria es exacta y esta medida: con ancho 16, el de arriba mide {@code 16x14} siempre;
- * el de abajo, {@code 16x14} pegado y {@code 16x15} suelto. Acostados, el de la derecha va de
- * {@code 14x16} a {@code 15x16} y el de la izquierda no cambia. Es siempre el boton del extremo
- * lejano el que recupera el pixel, porque el borde que se ahorra es el otro.
+ * <p>The asymmetry is exact and is measured: with width 16, the top one measures {@code 16x14}
+ * always; the bottom one, {@code 16x14} attached and {@code 16x15} free standing. Horizontally,
+ * the right one goes from {@code 14x16} to {@code 15x16} and the left one does not change. It is
+ * always the button at the far end that gets the pixel back, because the border that is saved is
+ * the other one.
  *
- * <p>Una direccion que no sea uno de los cuatro puntos cardinales da tamano cero. No es un error:
- * es lo que hace el JDK, y un boton de tamano cero simplemente no se ve.
+ * <p>A direction that is not one of the four cardinal points gives size zero. It is not an error:
+ * it is what the JDK does, and a button of size zero simply is not seen.
  *
- * <p>El maximo es {@code Integer.MAX_VALUE} en las dos dimensiones, asi que el boton se deja
- * estirar por su contenedor todo lo que haga falta.
+ * <p>The maximum is {@code Integer.MAX_VALUE} in both dimensions, so the button lets its
+ * container stretch it as much as needed.
  */
 public class MetalScrollButton extends BasicArrowButton {
 
-    private static final Dimension MAXIMO =
+    private static final Dimension MAX =
             new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE);
 
     private int buttonWidth;
     private boolean freeStanding;
 
     /**
-     * @param direction uno de los cuatro puntos cardinales
-     * @param width el ancho de la barra a la que pertenece
-     * @param freeStanding si la barra dibuja su propio borde de afuera
+     * @param direction one of the four cardinal points
+     * @param width the width of the bar it belongs to
+     * @param freeStanding whether the bar draws its own outer border
      */
     public MetalScrollButton(int direction, int width, boolean freeStanding) {
         super(direction);
@@ -54,7 +55,7 @@ public class MetalScrollButton extends BasicArrowButton {
         return buttonWidth;
     }
 
-    /** Ver la nota de la clase: la asimetria esta medida. */
+    /** See the class note: the asymmetry is measured. */
     public Dimension getPreferredSize() {
         int d = getDirection();
         if (d == SwingConstants.NORTH) {
@@ -76,9 +77,9 @@ public class MetalScrollButton extends BasicArrowButton {
         return getPreferredSize();
     }
 
-    /** Sin tope: el contenedor lo estira lo que quiera. */
+    /** No cap: the container stretches it as much as it likes. */
     public Dimension getMaximumSize() {
-        return new Dimension(MAXIMO);
+        return new Dimension(MAX);
     }
 
     public void paint(Graphics g) {

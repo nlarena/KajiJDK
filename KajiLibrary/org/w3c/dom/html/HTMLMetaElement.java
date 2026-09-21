@@ -1,31 +1,31 @@
 package org.w3c.dom.html;
 
 /**
- * Un `<meta>`.
+ * A `<meta>`.
  */
 public interface HTMLMetaElement extends HTMLElement {
 
-    /** El atributo `content`. */
+    /** The `content` attribute. */
     String getContent();
 
-    /** Fija el atributo `content`. */
+    /** It sets the `content` attribute. */
     void setContent(String content);
 
-    /** El atributo `httpEquiv`. */
+    /** The `httpEquiv` attribute. */
     String getHttpEquiv();
 
-    /** Fija el atributo `httpEquiv`. */
+    /** It sets the `httpEquiv` attribute. */
     void setHttpEquiv(String httpEquiv);
 
-    /** El atributo `name`. */
+    /** The `name` attribute. */
     String getName();
 
-    /** Fija el atributo `name`. */
+    /** It sets the `name` attribute. */
     void setName(String name);
 
-    /** El atributo `scheme`. */
+    /** The `scheme` attribute. */
     String getScheme();
 
-    /** Fija el atributo `scheme`. */
+    /** It sets the `scheme` attribute. */
     void setScheme(String scheme);
 }

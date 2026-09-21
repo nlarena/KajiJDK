@@ -1,7 +1,7 @@
 package com.sun.source.tree;
 
 /**
- * Un bloque `synchronized`.
+ * A `synchronized` block.
  */
 public interface SynchronizedTree extends StatementTree {
 

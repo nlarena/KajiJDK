@@ -1,24 +1,24 @@
 package com.sun.jdi;
 
 /**
- * La operacion necesita el hilo suspendido y el hilo esta corriendo.
+ * The operation needs the thread suspended and the thread is running.
  *
- * <p>Leer la pila de un hilo en movimiento no da un resultado incompleto: da uno sin significado,
- * porque los marcos cambian mientras se los recorre.
+ * <p>Reading the stack of a moving thread does not give an incomplete result: it gives a
+ * meaningless one, because the frames change while they are being walked.
  *
  * @since 1.3
  */
 public class IncompatibleThreadStateException extends Exception {
 
-    /** Sin detalle. */
+    /** With no detail. */
     public IncompatibleThreadStateException() {
         super();
     }
 
     /**
-     * Con un mensaje.
+     * With a message.
      *
-     * @param s el mensaje
+     * @param s the message
      */
     public IncompatibleThreadStateException(String s) {
         super(s);

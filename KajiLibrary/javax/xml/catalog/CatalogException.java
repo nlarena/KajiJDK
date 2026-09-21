@@ -1,27 +1,27 @@
 package javax.xml.catalog;
 
 /**
- * KajiLibrary's javax.xml.catalog.CatalogException -- fallo la resolucion por catalogo.
+ * KajiLibrary's javax.xml.catalog.CatalogException -- resolution through a catalog failed.
  *
- * <p>Es <b>no comprobada</b>, y esa decision explica como se usa el paquete: un catalogo mal formado o
- * una entrada que no se encuentra en modo estricto son errores de configuracion, no condiciones que un
- * programa deba manejar en cada llamada.
+ * <p>It is <b>unchecked</b>, and that decision explains how the package is used: a malformed
+ * catalog or an entry not found in strict mode are configuration errors, not conditions a program
+ * should handle on every call.
  *
- * <p>Aparece sobre todo con {@link CatalogResolver.NotFoundAction#STRICT}, que es el modo por omision:
- * ahi, no encontrar una entrada es un error y no un "seguí sin ella".
+ * <p>It shows up above all with {@link CatalogResolver.NotFoundAction#STRICT}, which is the default
+ * mode: there, not finding an entry is an error and not a "carry on without it".
  */
 public class CatalogException extends RuntimeException {
 
     private static final long serialVersionUID = 653231525876459057L;
 
-    /** @param message que paso */
+    /** @param message what happened */
     public CatalogException(String message) {
         super(message);
     }
 
     /**
-     * @param message que paso
-     * @param cause la original, tipicamente un error de analisis o de entrada/salida
+     * @param message what happened
+     * @param cause the original, typically a parse or input/output error
      */
     public CatalogException(String message, Throwable cause) {
         super(message, cause);

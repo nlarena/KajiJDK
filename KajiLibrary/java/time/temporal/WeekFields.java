@@ -153,8 +153,8 @@ final class ComputedField implements TemporalField {
         return result;
     }
 
-    // Las cuatro descripciones que `TemporalField` pide. Los cinco campos localizados cuentan dias o
-    // semanas, dentro de la unidad que su nombre dice.
+    // The four descriptions `TemporalField` asks for. The five localized fields count days or weeks,
+    // within the unit their name says.
 
     public TemporalUnit getBaseUnit() {
         if (this.kind == 0) {
@@ -187,7 +187,7 @@ final class ComputedField implements TemporalField {
             return ValueRange.of(1L, 7L);
         }
         if (this.kind == 1) {
-            // La semana 0 existe: los dias iniciales que no llegan al minimo caen en ella.
+            // Week 0 exists: the opening days that do not reach the minimum fall into it.
             return ValueRange.of(0L, 1L, 4L, 6L);
         }
         if (this.kind == 2) {
@@ -207,12 +207,12 @@ final class ComputedField implements TemporalField {
     }
 
     public <R extends Temporal> R adjustInto(R temporal, long newValue) {
-        // Por diferencia, como los campos ISO: se calcula cuanto hay que moverse en la unidad base.
-        // Poner el campo directamente pediria reconstruir la fecha desde el calendario localizado de
-        // semanas, que depende del primer dia y del minimo de dias -- una cuenta aparte.
-        long actual = this.getFrom(temporal);
+        // By difference, like the ISO fields: how far to move in the base unit is computed. Setting
+        // the field directly would call for rebuilding the date from the localized week calendar,
+        // which depends on the first day and on the minimum of days -- a separate sum.
+        long current = this.getFrom(temporal);
         this.range().checkValidValue(newValue, this);
-        return (R) temporal.plus(newValue - actual, this.getBaseUnit());
+        return (R) temporal.plus(newValue - current, this.getBaseUnit());
     }
 
     // The day of the week counted from this locale's first day: 1 = firstDayOfWeek.

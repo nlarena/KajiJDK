@@ -9,45 +9,46 @@ import javax.swing.UIManager;
 import javax.swing.plaf.ComponentUI;
 
 /**
- * El aspecto grafico que no dibuja: reparte cada componente entre el principal y los auxiliares.
+ * The look and feel that does not draw: it shares each component out between the main one and the
+ * auxiliaries.
  *
- * <h2>Para que</h2>
+ * <h2>What for</h2>
  *
- * <p>Para colgarle a Swing observadores que necesitan las mismas llamadas que la interfaz grafica de
- * verdad: un lector de pantalla, un registrador de lo que el usuario hace, una ayuda que sigue al
- * foco. Se los agrega con {@link UIManager#addAuxiliaryLookAndFeel} y a partir de ahi cada
- * componente recibe una interfaz de {@code javax.swing.plaf.multi} en lugar de la simple.
+ * <p>For hanging on Swing observers that need the same calls as the look and feel that does the
+ * real work: a screen reader, a logger of what the user does, a help system that follows the
+ * focus. They are added with {@link UIManager#addAuxiliaryLookAndFeel} and from then on each
+ * component receives a look and feel from {@code javax.swing.plaf.multi} instead of the plain one.
  *
- * <h2>Donde se decide</h2>
+ * <h2>Where it is decided</h2>
  *
- * <p>En {@link #createUIs}, que llaman los treinta {@code createUI} del paquete. Ahi se le pide la
- * interfaz al aspecto principal, despues a cada auxiliar, y se devuelve el multiplexor.
+ * <p>In {@link #createUIs}, which the package's thirty {@code createUI} methods call. There the
+ * main look and feel is asked for its own, then each auxiliary, and the multiplexer is returned.
  *
- * <p>Salvo cuando hay uno solo: en ese caso se devuelve ese, sin envolver. No es una optimizacion
- * cosmetica --es el caso normal, el de una aplicacion sin auxiliares-- y envolverlo costaria una
- * llamada de mas en cada operacion de cada componente de la pantalla.
+ * <p>Except when there is only one: in that case that one is returned, unwrapped. It is not a
+ * cosmetic optimization --it is the normal case, that of an application with no auxiliaries-- and
+ * wrapping it would cost one extra call in every operation of every component on the screen.
  *
- * <h2>Este aspecto no tiene valores propios</h2>
+ * <h2>This look and feel has no values of its own</h2>
  *
- * <p>{@link #getDefaults} devuelve la tabla del que si dibuja. Es coherente con lo que esta clase
- * es: no aporta colores ni tipografias, solo reparte.
+ * <p>{@link #getDefaults} returns the table of the one that does draw. It is consistent with what
+ * this class is: it contributes neither colours nor typefaces, it only shares out.
  *
- * <h2>Estado en esta biblioteca</h2>
+ * <h2>State in this library</h2>
  *
- * <p>Funciona: el registro de auxiliares es real y el reparto tambien. Lo que no hay es ningun
- * aspecto grafico implementado del cual repartir, asi que en la practica no hay nada que
- * multiplexar todavia. La mecanica esta y esta probada.
+ * <p>It works: the registration of auxiliaries is real and so is the sharing out. What there is not
+ * is any implemented look and feel to share out from, so in practice there is nothing to multiplex
+ * yet. The mechanism is there and is tested.
  *
  * @since 1.2
  */
 public class MultiLookAndFeel extends LookAndFeel {
 
-    /** Uno. */
+    /** One. */
     public MultiLookAndFeel() {
     }
 
     /**
-     * El nombre para mostrar.
+     * The name to show.
      *
      * @return {@code "Multiplexing Look and Feel"}
      */
@@ -57,7 +58,7 @@ public class MultiLookAndFeel extends LookAndFeel {
     }
 
     /**
-     * El identificador corto.
+     * The short identifier.
      *
      * @return {@code "Multiplex"}
      */
@@ -67,9 +68,9 @@ public class MultiLookAndFeel extends LookAndFeel {
     }
 
     /**
-     * Que hace.
+     * What it does.
      *
-     * @return la descripcion
+     * @return the description
      */
     @Override
     public String getDescription() {
@@ -77,9 +78,9 @@ public class MultiLookAndFeel extends LookAndFeel {
     }
 
     /**
-     * Si es el aspecto propio de la plataforma.
+     * Whether it is the platform's own look and feel.
      *
-     * @return falso: este no dibuja nada
+     * @return false: this one draws nothing
      */
     @Override
     public boolean isNativeLookAndFeel() {
@@ -87,9 +88,9 @@ public class MultiLookAndFeel extends LookAndFeel {
     }
 
     /**
-     * Si sirve en esta plataforma.
+     * Whether it serves on this platform.
      *
-     * @return cierto: no depende de la plataforma
+     * @return true: it does not depend on the platform
      */
     @Override
     public boolean isSupportedLookAndFeel() {
@@ -97,9 +98,9 @@ public class MultiLookAndFeel extends LookAndFeel {
     }
 
     /**
-     * La tabla de valores.
+     * The table of values.
      *
-     * @return la del aspecto que si dibuja
+     * @return the one of the look and feel that does draw
      */
     @Override
     public UIDefaults getDefaults() {
@@ -107,20 +108,21 @@ public class MultiLookAndFeel extends LookAndFeel {
     }
 
     /**
-     * Arma la lista de interfaces graficas de un componente.
+     * It builds a component's list of looks and feels.
      *
-     * <p>Primero la del aspecto principal y despues la de cada auxiliar, en el orden en que se los
-     * agrego. Ese orden es el que decide quien contesta cuando un metodo devuelve un valor: la
-     * primera, o sea el principal.
+     * <p>First the main look and feel's and then each auxiliary's, in the order in which they were
+     * added. That order is what decides who answers when a method returns a value: the
+     * first one, that is the main one.
      *
-     * <p>Si el principal no dio ninguna, no hay a que agregarle auxiliares y se devuelve
-     * {@code null}: un componente sin interfaz grafica es un problema del aspecto principal, y
-     * taparlo con un multiplexor vacio lo convertiria en un fallo mas tarde y en otro lado.
+     * <p>If the main one gave none, there is nothing to add auxiliaries to and it returns {@code
+     * null}: a component with no look and feel is the main look and feel's problem, and covering it
+     * up with an empty multiplexer would turn it into a failure later and somewhere else.
      *
-     * @param mui el multiplexor que quedaria a cargo
-     * @param uis la lista donde anotarlas; se la modifica
-     * @param target el componente
-     * @return el multiplexor, o la unica interfaz si no hay auxiliares, o {@code null}
+     * @param mui the multiplexer that would be left in charge
+     * @param uis the list to note them in; it is modified
+     * @param target the component
+     * @return the multiplexer, or the only look and feel if there are no auxiliaries, or {@code
+     *     null}
      */
     public static ComponentUI createUIs(ComponentUI mui, Vector<ComponentUI> uis,
             JComponent target) {
@@ -129,14 +131,14 @@ public class MultiLookAndFeel extends LookAndFeel {
             return null;
         }
         uis.addElement(ui);
-        final LookAndFeel[] auxiliares = UIManager.getAuxiliaryLookAndFeels();
-        if (auxiliares != null) {
-            for (int i = 0; i < auxiliares.length; i++) {
-                final UIDefaults tabla = auxiliares[i].getDefaults();
-                if (tabla == null) {
+        final LookAndFeel[] auxiliaries = UIManager.getAuxiliaryLookAndFeels();
+        if (auxiliaries != null) {
+            for (int i = 0; i < auxiliaries.length; i++) {
+                final UIDefaults table = auxiliaries[i].getDefaults();
+                if (table == null) {
                     continue;
                 }
-                ui = tabla.getUI(target);
+                ui = table.getUI(target);
                 if (ui != null) {
                     uis.addElement(ui);
                 }
@@ -146,10 +148,10 @@ public class MultiLookAndFeel extends LookAndFeel {
     }
 
     /**
-     * La lista de interfaces graficas como arreglo.
+     * The list of looks and feels as an array.
      *
-     * @param uis la lista, o {@code null}
-     * @return un arreglo nuevo; vacio si la lista era {@code null}
+     * @param uis the list, or {@code null}
+     * @return a new array; empty if the list was {@code null}
      */
     protected static ComponentUI[] uisToArray(Vector<? extends ComponentUI> uis) {
         if (uis == null) {

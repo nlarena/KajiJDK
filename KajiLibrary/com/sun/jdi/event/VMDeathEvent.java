@@ -1,7 +1,7 @@
 package com.sun.jdi.event;
 
 /**
- * La maquina depurada esta por terminar.
+ * The debugged machine is about to end.
  *
  * @since 1.3
  */

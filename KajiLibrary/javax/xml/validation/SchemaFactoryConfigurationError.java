@@ -1,37 +1,37 @@
 package javax.xml.validation;
 
 /**
- * KajiLibrary's javax.xml.validation.SchemaFactoryConfigurationError -- no hay fabrica de esquemas.
+ * KajiLibrary's javax.xml.validation.SchemaFactoryConfigurationError -- there is no schema factory.
  *
- * <p>Un {@link Error}, igual que {@code FactoryConfigurationError} de {@code javax.xml.parsers} y por
- * la misma razon: la implementacion nombrada en la configuracion no existe o no se pudo cargar, y no
- * hay nada que un {@code catch} local pueda hacer.
+ * <p>An {@link Error}, like {@code javax.xml.parsers}' {@code FactoryConfigurationError} and for
+ * the same reason: the implementation named in the configuration does not exist or could not be
+ * loaded, and there is nothing a local {@code catch} can do.
  *
- * <p>Lo que si cambio es la forma: aca la causa es un {@link Throwable} y va por el mecanismo normal
- * de {@code Throwable}, sin campo propio ni {@code getException}. Es la version limpia -- esta clase
- * llego en Java 8, catorce anos despues que la otra, cuando las causas encadenadas ya existian desde
- * hacia rato.
+ * <p>What did change is the form: here the cause is a {@link Throwable} and goes through {@code
+ * Throwable}'s normal mechanism, without a field of its own nor {@code getException}. It is the
+ * clean version -- this class arrived in Java 8, fourteen years after the other, when chained
+ * causes had long existed.
  */
 public final class SchemaFactoryConfigurationError extends Error {
 
     private static final long serialVersionUID = 3531438703147750126L;
 
-    /** Sin detalle. */
+    /** Without detail. */
     public SchemaFactoryConfigurationError() {
         super();
     }
 
-    /** Con un mensaje. */
+    /** With a message. */
     public SchemaFactoryConfigurationError(String message) {
         super(message);
     }
 
-    /** Envolviendo lo que fallo de verdad. */
+    /** Wrapping what really failed. */
     public SchemaFactoryConfigurationError(Throwable cause) {
         super(cause);
     }
 
-    /** Con las dos cosas. */
+    /** With both things. */
     public SchemaFactoryConfigurationError(String message, Throwable cause) {
         super(message, cause);
     }

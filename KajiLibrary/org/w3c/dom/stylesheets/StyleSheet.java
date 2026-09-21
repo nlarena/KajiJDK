@@ -3,39 +3,40 @@ package org.w3c.dom.stylesheets;
 import org.w3c.dom.Node;
 
 /**
- * Una hoja de estilos, del lenguaje que sea.
+ * A style sheet, of whatever language.
  *
- * <p>Es la parte **independiente del lenguaje**: `type`, si esta deshabilitada, de donde salio y
- * para que medios es. Lo que la hoja dice adentro no esta aca -- eso lo agrega la extension de cada
- * lenguaje, y en el caso de CSS es {@link org.w3c.dom.css.CSSStyleSheet}, que suma las reglas.
+ * <p>It is the **language-independent** part: `type`, whether it is disabled, where it came from
+ * and which media it is for. What the sheet says inside is not here -- the extension of each
+ * language adds that, and in the case of CSS it is {@link org.w3c.dom.css.CSSStyleSheet}, which
+ * adds the rules.
  *
- * <p>`getOwnerNode` y `getParentStyleSheet` son excluyentes: una hoja o esta enlazada desde el
- * documento --y entonces tiene nodo dueno-- o esta importada desde otra hoja --y entonces tiene
- * hoja padre--. La que no aplica devuelve nulo.
+ * <p>`getOwnerNode` and `getParentStyleSheet` are mutually exclusive: a sheet is either linked from
+ * the document --and then it has an owner node-- or imported from another sheet --and then it has a
+ * parent sheet--. The one that does not apply returns null.
  */
 public interface StyleSheet {
 
-    /** El lenguaje de la hoja, por ejemplo `"text/css"`. */
+    /** The language of the sheet, for example `"text/css"`. */
     String getType();
 
-    /** Si esta deshabilitada. Una hoja deshabilitada no afecta al documento. */
+    /** Whether it is disabled. A disabled sheet does not affect the document. */
     boolean getDisabled();
 
-    /** La habilita o la deshabilita. */
+    /** It enables or disables it. */
     void setDisabled(boolean disabled);
 
-    /** El nodo que la enlaza --un `<link>` o un `<style>`--, o nulo si vino importada. */
+    /** The node that links it --a `<link>` or a `<style>`--, or null if it came imported. */
     Node getOwnerNode();
 
-    /** La hoja que la importo, o nulo si esta enlazada desde el documento. */
+    /** The sheet that imported it, or null if it is linked from the document. */
     StyleSheet getParentStyleSheet();
 
-    /** La URI de donde salio, o nulo si esta escrita en el documento. */
+    /** The URI it came from, or null if it is written in the document. */
     String getHref();
 
-    /** El titulo que le puso quien la enlazo, o nulo. */
+    /** The title whoever linked it gave it, or null. */
     String getTitle();
 
-    /** Los medios para los que aplica. Vacia significa todos. */
+    /** The media it applies to. Empty means all. */
     MediaList getMedia();
 }

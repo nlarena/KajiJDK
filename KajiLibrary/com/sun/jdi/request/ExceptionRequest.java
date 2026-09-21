@@ -5,69 +5,69 @@ import com.sun.jdi.ReferenceType;
 import com.sun.jdi.ThreadReference;
 
 /**
- * Pedir aviso cuando se lance una excepcion.
+ * Ask to be told when an exception is thrown.
  *
- * <p>Los dos booleanos del constructor deciden si interesan las atrapadas, las no atrapadas o las
- * dos. Filtrar por "no atrapadas" es lo que convierte a esto en una herramienta usable: un programa
- * normal lanza y atrapa excepciones todo el tiempo.
+ * <p>The constructor's two booleans decide whether the caught ones, the uncaught ones or both
+ * are of interest. Filtering by "uncaught" is what turns this into a usable tool: a normal
+ * program throws and catches exceptions all the time.
  *
  * @since 1.3
  */
 public interface ExceptionRequest extends EventRequest {
 
     /**
-     * El exception.
+     * The exception.
      *
-     * @return el resultado
+     * @return the result
      */
     ReferenceType exception();
 
     /**
-     * El notify caught.
+     * The notify caught.
      *
-     * @return el resultado
+     * @return the result
      */
     boolean notifyCaught();
 
     /**
-     * El notify uncaught.
+     * The notify uncaught.
      *
-     * @return el resultado
+     * @return the result
      */
     boolean notifyUncaught();
 
     /**
-     * Filtra por thread; solo con el pedido deshabilitado.
+     * It filters by thread; only with the request disabled.
      *
-     * @param thread el ThreadReference
+     * @param thread the ThreadReference
      */
     void addThreadFilter(ThreadReference thread);
 
     /**
-     * Filtra por class; solo con el pedido deshabilitado.
+     * It filters by class; only with the request disabled.
      *
-     * @param type el ReferenceType
+     * @param type the ReferenceType
      */
     void addClassFilter(ReferenceType type);
 
     /**
-     * Filtra por class; solo con el pedido deshabilitado.
+     * It filters by class; only with the request disabled.
      *
-     * @param name el String
+     * @param name the String
      */
     void addClassFilter(String name);
 
     /**
-     * Filtra por class exclusion; solo con el pedido deshabilitado.
+     * It filters by class exclusion; only with the request disabled.
      *
-     * @param name el String
+     * @param name the String
      */
     void addClassExclusionFilter(String name);
 
     /**
-     * Filtra por instance; solo con el pedido deshabilitado.
+     * It filters by instance; only with the request disabled.
      *
-     * @param object el ObjectReference
+     * @param object the ObjectReference
      */
     void addInstanceFilter(ObjectReference object);
 }

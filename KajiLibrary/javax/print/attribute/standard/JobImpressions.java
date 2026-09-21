@@ -6,12 +6,11 @@ import javax.print.attribute.PrintJobAttribute;
 import javax.print.attribute.PrintRequestAttribute;
 
 /**
- * Cuantas <em>impresiones</em> tiene el trabajo: una impresion es una cara de una hoja tal como
- * sale.
+ * How many <em>impressions</em> the job has: an impression is one side of a sheet as it comes out.
  *
- * <p>No es lo mismo que paginas ni que hojas. Con {@link NumberUp} de 4 y {@link Sides} a dos
- * caras, ocho paginas son dos impresiones. Sirve para que la impresora estime el trabajo antes de
- * empezarlo.
+ * <p>It is not the same as pages nor as sheets. With a {@link NumberUp} of 4 and two-sided {@link
+ * Sides}, eight pages are two impressions. It serves so that the printer can estimate the job
+ * before starting it.
  */
 public final class JobImpressions extends IntegerSyntax implements PrintRequestAttribute, PrintJobAttribute {
 
@@ -21,8 +20,10 @@ public final class JobImpressions extends IntegerSyntax implements PrintRequestA
         super(value, 0, Integer.MAX_VALUE);
     }
 
-    /** El {@code instanceof} es lo que impide que un JobImpressions de igual a otro atributo
-     * entero con el mismo numero. */
+    /**
+     * The {@code instanceof} is what keeps a JobImpressions from being equal to another
+     * integer attribute with the same number.
+     */
     public boolean equals(Object object) {
         return super.equals(object) && object instanceof JobImpressions;
     }

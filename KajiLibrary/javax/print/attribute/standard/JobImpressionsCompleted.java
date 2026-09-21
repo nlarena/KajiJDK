@@ -5,10 +5,10 @@ import javax.print.attribute.IntegerSyntax;
 import javax.print.attribute.PrintJobAttribute;
 
 /**
- * Cuantas impresiones del trabajo ya salieron.
+ * How many of the job's impressions already came out.
  *
- * <p>Es el avance contra el total que declara {@link JobImpressions}. Empieza en cero, que es por
- * que el rango arranca ahi y no en uno.
+ * <p>It is the progress against the total {@link JobImpressions} declares. It starts at zero, which
+ * is why the range starts there and not at one.
  */
 public final class JobImpressionsCompleted extends IntegerSyntax implements PrintJobAttribute {
 
@@ -18,8 +18,10 @@ public final class JobImpressionsCompleted extends IntegerSyntax implements Prin
         super(value, 0, Integer.MAX_VALUE);
     }
 
-    /** El {@code instanceof} es lo que impide que un JobImpressionsCompleted de igual a otro atributo
-     * entero con el mismo numero. */
+    /**
+     * The {@code instanceof} is what keeps a JobImpressionsCompleted from being equal to another
+     * integer attribute with the same number.
+     */
     public boolean equals(Object object) {
         return super.equals(object) && object instanceof JobImpressionsCompleted;
     }

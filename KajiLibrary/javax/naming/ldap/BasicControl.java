@@ -1,38 +1,39 @@
 package javax.naming.ldap;
 
 /**
- * La implementacion mas simple de {@link Control}: guarda los tres datos y los devuelve.
+ * The simplest implementation of {@link Control}: it stores the three pieces of data and returns
+ * them.
  *
- * <p>Sirve para dos cosas. Para mandar un control que esta biblioteca no modela —basta el OID y los
- * bytes— y como base de los que si modela: {@link SortControl} y compania heredan de aca y lo unico
- * que agregan es armar el valor codificado.
+ * <p>It serves two purposes. To send a control this library does not model --the OID and the bytes
+ * are enough-- and as the base of the ones it does model: {@link SortControl} and company extend
+ * this and all they add is building the encoded value.
  *
- * <p>Los campos son {@code protected} y no privados porque el JDK los expone asi a las subclases,
- * que es justamente como {@link PagedResultsResponseControl} lee lo que llego.
+ * <p>The fields are {@code protected} and not private because the JDK exposes them that way to
+ * subclasses.
  */
 public class BasicControl implements Control {
 
     private static final long serialVersionUID = -4233907508771791687L;
 
-    /** El OID. */
+    /** The OID. */
     protected String id;
 
-    /** Si es critico. */
+    /** Whether it is critical. */
     protected boolean criticality = false;
 
-    /** El valor codificado, o {@code null}. */
+    /** The encoded value, or {@code null}. */
     protected byte[] value = null;
 
-    /** Un control no critico y sin valor. */
+    /** A non-critical control with no value. */
     public BasicControl(String id) {
         this.id = id;
     }
 
     /**
-     * Un control con todo.
+     * A control with everything.
      *
-     * <p>El arreglo se guarda por referencia, no se copia — es lo que hace el JDK, y cambiarlo
-     * despues de construir cambia el control.
+     * <p>The array is kept by reference, not copied -- that is what the JDK does, and changing it
+     * after construction changes the control.
      */
     public BasicControl(String id, boolean criticality, byte[] value) {
         this.id = id;

@@ -8,90 +8,90 @@ import com.sun.jdi.connect.spi.Connection;
 import java.util.List;
 
 /**
- * El punto de entrada a JDI: de donde salen los conectores.
+ * The entry point to JDI: where the connectors come from.
  *
- * <p>Los tres tipos de conector son las tres formas de llegar a una VM. El de
- * <strong>lanzamiento</strong> la arranca; el de <strong>enganche</strong> se conecta a una que ya
- * corre; el de <strong>escucha</strong> espera a que ella se conecte, que es lo que hace falta
- * cuando el cortafuegos deja pasar en un solo sentido.
+ * <p>The three kinds of connector are the three ways of reaching a VM. The
+ * <strong>launching</strong> one starts it; the <strong>attaching</strong> one connects to one
+ * that is already running; the <strong>listening</strong> one waits for it to connect, which is
+ * what is needed when the firewall only lets through in one direction.
  *
  * @since 1.3
  */
 public interface VirtualMachineManager {
 
     /**
-     * El default connector.
+     * The default connector.
      *
-     * @return el resultado
+     * @return the result
      */
     LaunchingConnector defaultConnector();
 
     /**
-     * El launching connectors.
+     * The launching connectors.
      *
-     * @return el resultado
+     * @return the result
      */
     List<LaunchingConnector> launchingConnectors();
 
     /**
-     * El attaching connectors.
+     * The attaching connectors.
      *
-     * @return el resultado
+     * @return the result
      */
     List<AttachingConnector> attachingConnectors();
 
     /**
-     * El listening connectors.
+     * The listening connectors.
      *
-     * @return el resultado
+     * @return the result
      */
     List<ListeningConnector> listeningConnectors();
 
     /**
-     * Todos los connectors, heredados incluidos.
+     * Every connectors, the inherited ones included.
      *
-     * @return el resultado
+     * @return the result
      */
     List<Connector> allConnectors();
 
     /**
-     * El connected virtual machines.
+     * The connected virtual machines.
      *
-     * @return el resultado
+     * @return the result
      */
     List<VirtualMachine> connectedVirtualMachines();
 
     /**
-     * El major interface version.
+     * The major interface version.
      *
-     * @return el resultado
+     * @return the result
      */
     int majorInterfaceVersion();
 
     /**
-     * El minor interface version.
+     * The minor interface version.
      *
-     * @return el resultado
+     * @return the result
      */
     int minorInterfaceVersion();
 
     /**
-     * El create virtual machine.
+     * The create virtual machine.
      *
-     * @param connection el Connection
-     * @param process el Process
-     * @return el resultado
-     * @throws java.io.IOException si corresponde
+     * @param connection the Connection
+     * @param process the Process
+     * @return the result
+     * @throws java.io.IOException if it applies
      */
     VirtualMachine createVirtualMachine(Connection connection, Process process)
             throws java.io.IOException;
 
     /**
-     * El create virtual machine.
+     * The create virtual machine.
      *
-     * @param connection el Connection
-     * @return el resultado
-     * @throws java.io.IOException si corresponde
+     * @param connection the Connection
+     * @return the result
+     * @throws java.io.IOException if it applies
      */
     VirtualMachine createVirtualMachine(Connection connection)
             throws java.io.IOException;

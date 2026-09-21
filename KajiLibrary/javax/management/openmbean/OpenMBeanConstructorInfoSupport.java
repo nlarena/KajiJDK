@@ -6,32 +6,33 @@ import javax.management.MBeanConstructorInfo;
 import javax.management.MBeanParameterInfo;
 
 /**
- * La implementacion de {@link OpenMBeanConstructorInfo}.
+ * The implementation of {@link OpenMBeanConstructorInfo}.
  *
- * <p>El constructor toma `OpenMBeanParameterInfo[]` y se lo pasa a `super` como
- * `MBeanParameterInfo[]`. La copia entre los dos arreglos no es ceremonia: los elementos son los
- * mismos objetos --toda implementacion de `OpenMBeanParameterInfo` que sirva acá extiende
- * `MBeanParameterInfo`--, pero los arreglos son de tipos distintos y Java no los convierte solo.
+ * <p>The constructor takes {@code OpenMBeanParameterInfo[]} and passes it to {@code super} as
+ * {@code MBeanParameterInfo[]}. The copy between the two arrays is not ceremony: the elements are
+ * the same objects --every implementation of {@code OpenMBeanParameterInfo} usable here extends
+ * {@code MBeanParameterInfo}-- but the arrays are of different types and Java does not convert them
+ * on its own.
  */
 public class OpenMBeanConstructorInfoSupport extends MBeanConstructorInfo
         implements OpenMBeanConstructorInfo {
 
     private static final long serialVersionUID = -4400441579007477003L;
 
-    /** Un constructor con esos parametros. */
+    /** A constructor with those parameters. */
     public OpenMBeanConstructorInfoSupport(String name, String description,
             OpenMBeanParameterInfo[] signature) {
         this(name, description, signature, null);
     }
 
-    /** Un constructor con esos parametros y ese descriptor. */
+    /** A constructor with those parameters and that descriptor. */
     public OpenMBeanConstructorInfoSupport(String name, String description,
             OpenMBeanParameterInfo[] signature, Descriptor descriptor) {
         super(Signatures.requireName(name), Signatures.requireDescription(description),
                 Signatures.asParameters(signature), descriptor);
     }
 
-    /** Igualdad contra cualquier {@link OpenMBeanConstructorInfo}: nombre y parametros. */
+    /** Equality against any {@link OpenMBeanConstructorInfo}: name and parameters. */
     public boolean equals(Object obj) {
         if (this == obj) {
             return true;

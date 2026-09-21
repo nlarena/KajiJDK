@@ -1,9 +1,10 @@
 package java.security.cert;
 
-// Los parametros de inicializacion de un `CertStore`: de donde saca los certificados y las CRLs.
+// The initialisation parameters of a `CertStore`: where it takes the certificates and the CRLs
+// from.
 //
-// Igual que `CertPathParameters`, es marcadora con `clone()`, y la copia es por lo mismo: el store
-// se queda con los parametros y no puede permitir que cambien por atras.
+// Just like `CertPathParameters`, it is a marker with `clone()`, and the copy is for the same
+// reason: the store keeps the parameters and cannot allow them to change from behind.
 public interface CertStoreParameters extends Cloneable {
 
     Object clone();

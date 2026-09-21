@@ -1,16 +1,16 @@
 package java.lang.classfile.constantpool;
 
-// `CONSTANT_String_info` (JVMS §4.4.3): una indirección a un `CONSTANT_Utf8`. La indirección importa
-// — el mismo `Utf8` puede ser a la vez el contenido de un `String` y el nombre de un método, y el
-// pool guarda una sola copia.
+// `CONSTANT_String_info` (JVMS §4.4.3): an indirection to a `CONSTANT_Utf8`. The indirection matters
+// -- the same `Utf8` can be at once a `String`'s contents and a method's name, and the pool keeps a
+// single copy.
 public interface StringEntry extends ConstantValueEntry {
 
-    /** La entrada `Utf8` con el contenido. */
+    /** The `Utf8` entry holding the contents. */
     Utf8Entry utf8();
 
-    /** El contenido como `String`. */
+    /** The contents as a `String`. */
     String stringValue();
 
-    /** Si el contenido es exactamente `s`. */
+    /** Whether the contents are exactly `s`. */
     boolean equalsString(String s);
 }

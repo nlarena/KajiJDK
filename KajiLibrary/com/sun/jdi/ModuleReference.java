@@ -1,23 +1,23 @@
 package com.sun.jdi;
 
 /**
- * Un modulo de la maquina depurada.
+ * A module of the debugged machine.
  *
  * @since 1.3
  */
 public interface ModuleReference extends ObjectReference {
 
     /**
-     * El nombre.
+     * The name.
      *
-     * @return el resultado
+     * @return the result
      */
     String name();
 
     /**
-     * El class loader.
+     * The class loader.
      *
-     * @return el resultado
+     * @return the result
      */
     ClassLoaderReference classLoader();
 }

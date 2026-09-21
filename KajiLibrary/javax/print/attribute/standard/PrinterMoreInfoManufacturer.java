@@ -6,10 +6,10 @@ import javax.print.attribute.PrintServiceAttribute;
 import javax.print.attribute.URISyntax;
 
 /**
- * Una pagina web del fabricante sobre el <em>modelo</em>, no sobre esta maquina.
+ * A manufacturer's web page about the <em>model</em>, not about this machine.
  *
- * <p>Es donde estan los drivers y los repuestos; lo especifico de esta impresora esta en {@link
- * PrinterMoreInfo}.
+ * <p>It is where the drivers and the spare parts are; what is specific to this printer is in
+ * {@link PrinterMoreInfo}.
  */
 public final class PrinterMoreInfoManufacturer extends URISyntax implements PrintServiceAttribute {
 

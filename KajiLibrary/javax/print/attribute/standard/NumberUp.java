@@ -7,10 +7,10 @@ import javax.print.attribute.PrintJobAttribute;
 import javax.print.attribute.PrintRequestAttribute;
 
 /**
- * Cuantas paginas del documento entran en una cara de la hoja.
+ * How many of the document's pages fit on one side of the sheet.
  *
- * <p>En que orden se llenan esas celdas lo dice {@link PresentationDirection}. Arranca en 1 porque
- * cero paginas por cara no significa nada.
+ * <p>In which order those cells are filled is said by {@link PresentationDirection}. It starts at 1
+ * because zero pages per side means nothing.
  */
 public final class NumberUp extends IntegerSyntax implements DocAttribute, PrintRequestAttribute, PrintJobAttribute {
 
@@ -20,8 +20,10 @@ public final class NumberUp extends IntegerSyntax implements DocAttribute, Print
         super(value, 1, Integer.MAX_VALUE);
     }
 
-    /** El {@code instanceof} es lo que impide que un NumberUp de igual a otro atributo
-     * entero con el mismo numero. */
+    /**
+     * The {@code instanceof} is what keeps a NumberUp from being equal to another
+     * integer attribute with the same number.
+     */
     public boolean equals(Object object) {
         return super.equals(object) && object instanceof NumberUp;
     }

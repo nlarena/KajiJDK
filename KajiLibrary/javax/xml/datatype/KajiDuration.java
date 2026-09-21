@@ -8,74 +8,74 @@ import java.util.GregorianCalendar;
 import java.util.TimeZone;
 
 /**
- * La {@link Duration} concreta de esta biblioteca.
+ * This library's concrete {@link Duration}.
  *
- * <p>Interna: no es parte de la API, no es publica, y quien la use la ve como {@code Duration}. Lo
- * que esta clase aporta es que las duraciones de esta biblioteca <b>calculan de verdad</b> --parsean
- * su forma lexica, suman, multiplican, normalizan y comparan-- sin que haga falta ningun parser de
- * XML: una duracion es aritmetica sobre seis numeros.
+ * <p>Internal: it is not part of the API, it is not public, and whoever uses it sees it as a {@code
+ * Duration}. What this class contributes is that this library's durations <b>really compute</b>
+ * --they parse their lexical form, add, multiply, normalize and compare-- without any XML parser
+ * being needed: a duration is arithmetic over six numbers.
  *
- * <h2>Como se guarda</h2>
+ * <h2>How it is stored</h2>
  *
- * <p>Un signo y seis magnitudes no negativas, cada una de las cuales puede ser null --el campo no
- * esta puesto--. Es la representacion que pide la API: {@link Duration#getField} devuelve null para
- * un campo ausente y {@link Duration#getSign} da el signo aparte, asi que guardar seis numeros con
- * signo obligaria a reconstruir esa forma en cada consulta.
+ * <p>A sign and six non-negative magnitudes, each of which can be null --the field is not set--. It
+ * is the representation the API asks for: {@link Duration#getField} returns null for an absent
+ * field and {@link Duration#getSign} gives the sign separately, so storing six signed numbers would
+ * force rebuilding that form on every query.
  *
- * <h2>La comparacion, que es lo mas delicado</h2>
+ * <h2>The comparison, which is the most delicate part</h2>
  *
- * <p>{@link #compare} implementa el algoritmo normativo de XML Schema, que es indirecto y vale
- * conocerlo: se le suman las dos duraciones a <b>cuatro instantes de referencia</b> fijados por la
- * especificacion --1696-09-01, 1697-02-01, 1903-03-01 y 1903-07-01-- y, si las cuatro comparaciones
- * coinciden, ese es el resultado; si no, es {@link DatatypeConstants#INDETERMINATE}.
+ * <p>{@link #compare} implements XML Schema's normative algorithm, which is indirect and worth
+ * knowing: both durations are added to <b>four reference instants</b> fixed by the specification
+ * --1696-09-01, 1697-02-01, 1903-03-01 and 1903-07-01-- and, if the four comparisons agree, that is
+ * the result; if not, it is {@link DatatypeConstants#INDETERMINATE}.
  *
- * <p>Los cuatro no son arbitrarios: entre ellos cubren un febrero de 28 dias y uno de 29, y un mes
- * de 30 y uno de 31. O sea que son un contraejemplo para cada forma en que un mes puede medir
- * distinto. Si las cuatro dan lo mismo, ninguna eleccion de mes cambia el resultado, y ahi el orden
- * si existe.
+ * <p>The four are not arbitrary: between them they cover a February of 28 days and one of 29, and a
+ * month of 30 and one of 31. That is, they are a counterexample for each way a month can measure
+ * differently. If the four give the same, no choice of month changes the result, and there the
+ * order does exist.
  *
- * <p>Por eso {@code P1M} contra {@code P30D} da indeterminado --en un febrero de 28 dias es mas
- * corta y en marzo es mas larga-- y {@code PT60S} contra {@code PT1M} da igual.
+ * <p>That is why {@code P1M} against {@code P30D} gives indeterminate --in a 28-day February it is
+ * shorter and in March it is longer-- and {@code PT60S} against {@code PT1M} gives equal.
  */
 final class KajiDuration extends Duration {
 
-    /** Los cuatro instantes de referencia de la especificacion, como {@code aaaammdd}. */
+    /** The specification's four reference instants, as {@code yyyymmdd}. */
     private static final int[][] REFERENCES = {
         {1696, 9, 1}, {1697, 2, 1}, {1903, 3, 1}, {1903, 7, 1},
     };
 
-    /** -1, 0 o 1. Cero solo si todos los campos puestos valen cero. */
+    /** -1, 0 or 1. Zero only if all the fields set are zero. */
     private final int sign;
 
-    /** Los anios, no negativos, o null si el campo no esta. */
+    /** The years, non-negative, or null if the field is not there. */
     private final BigInteger years;
 
-    /** Los meses, no negativos, o null. */
+    /** The months, non-negative, or null. */
     private final BigInteger months;
 
-    /** Los dias, no negativos, o null. */
+    /** The days, non-negative, or null. */
     private final BigInteger days;
 
-    /** Las horas, no negativas, o null. */
+    /** The hours, non-negative, or null. */
     private final BigInteger hours;
 
-    /** Los minutos, no negativos, o null. */
+    /** The minutes, non-negative, or null. */
     private final BigInteger minutes;
 
-    /** Los segundos, no negativos y con fraccion, o null. */
+    /** The seconds, non-negative and with fraction, or null. */
     private final BigDecimal seconds;
 
     /**
-     * Campo por campo, que es el constructor que todos los demas terminan usando.
+     * Field by field, which is the constructor all the others end up using.
      *
-     * @param positiva el signo pedido
-     * @param anios los anios, o null
-     * @param meses los meses, o null
-     * @param dias los dias, o null
-     * @param horas las horas, o null
-     * @param minutos los minutos, o null
-     * @param segundos los segundos, o null
-     * @throws IllegalArgumentException si estan los seis en null o si alguno es negativo
+     * @param positive the requested sign
+     * @param years the years, or null
+     * @param months the months, or null
+     * @param days the days, or null
+     * @param hours the hours, or null
+     * @param minutes the minutes, or null
+     * @param seconds the seconds, or null
+     * @throws IllegalArgumentException if all six are null or if some is negative
      */
     KajiDuration(boolean positive, BigInteger years, BigInteger months, BigInteger days,
             BigInteger hours, BigInteger minutes, BigDecimal seconds) {
@@ -100,9 +100,9 @@ final class KajiDuration extends Duration {
             throw new IllegalArgumentException("seconds is negative: " + seconds);
         }
 
-        // El signo cero no se pide: se deduce. Una duracion de todos ceros es la misma la pidan
-        // positiva o negativa, y que `getSign()` contestara 1 para `-P0D` seria una diferencia
-        // observable entre dos objetos que representan lo mismo.
+        // The zero sign is not requested: it is deduced. A duration of all zeros is the same
+        // whether asked for positive or negative, and `getSign()` answering 1 for `-P0D` would be
+        // an observable difference between two objects that represent the same thing.
         if (isAllZero()) {
             this.sign = 0;
         } else {
@@ -110,40 +110,40 @@ final class KajiDuration extends Duration {
         }
     }
 
-    /** Un campo entero tiene que ser no negativo: el signo va aparte. */
+    /** An integer field has to be non-negative: the sign goes separately. */
     private static void requireNonNegative(BigInteger v, String fieldName) {
         if (v != null && v.signum() < 0) {
             throw new IllegalArgumentException(fieldName + " is negative: " + v);
         }
     }
 
-    /** Si todos los campos puestos valen cero. */
+    /** Whether all the fields set are zero. */
     private boolean isAllZero() {
         return isZero(years) && isZero(months) && isZero(days)
                 && isZero(hours) && isZero(minutes)
                 && (seconds == null || seconds.signum() == 0);
     }
 
-    /** Null cuenta como cero para decidir el signo. */
+    /** Null counts as zero for deciding the sign. */
     private static boolean isZero(BigInteger v) {
         return v == null || v.signum() == 0;
     }
 
-    // ---- las tres formas de construir ---------------------------------------------------------
+    // ---- the three ways of building -------------------------------------------------------------
 
     /**
-     * A partir de la forma lexica {@code -?PnYnMnDTnHnMnS}.
+     * From the lexical form {@code -?PnYnMnDTnHnMnS}.
      *
-     * <p>El parseo es a mano y no con una expresion regular, por dos motivos concretos. El primero
-     * es que hacen falta mensajes de error que digan <b>que</b> esta mal --una expresion que no
-     * casa solo puede decir que no casa--. El segundo es que dos de las reglas no se expresan
-     * comodo en una expresion: que tiene que haber al menos un campo, y que la {@code T} no puede
-     * estar sola.
+     * <p>The parsing is by hand and not with a regular expression, for two concrete reasons. The
+     * first is that error messages that say <b>what</b> is wrong are needed --an expression that
+     * does not match can only say that it does not match--. The second is that two of the rules are
+     * not comfortable to express in an expression: that there has to be at least one field, and
+     * that the {@code T} cannot be alone.
      *
-     * @param lexica la forma lexica; no puede ser null
-     * @return la duracion
-     * @throws IllegalArgumentException si la forma esta mal
-     * @throws NullPointerException si es null
+     * @param lexical the lexical form; cannot be null
+     * @return the duration
+     * @throws IllegalArgumentException if the form is wrong
+     * @throws NullPointerException if it is null
      */
     static KajiDuration parse(String lexical) {
         if (lexical == null) {
@@ -165,7 +165,7 @@ final class KajiDuration extends Duration {
         BigInteger[] hourValue = new BigInteger[2];    // H, M
         BigDecimal[] secs = new BigDecimal[1];
 
-        // La parte de fecha: los designadores tienen que venir en orden y no repetirse.
+        // The date part: the designators have to come in order and not repeat.
         String dateDesignators = "YMD";
         int next = 0;
         boolean sawSomething = false;
@@ -192,8 +192,8 @@ final class KajiDuration extends Duration {
         if (i < n && lexical.charAt(i) == 'T') {
             i++;
             if (i >= n) {
-                // La `T` anuncia que viene una parte de tiempo; sin nada detras es una forma
-                // invalida y no una parte de tiempo vacia.
+                // The `T` announces that a time part follows; with nothing after it, it is an
+                // invalid form and not an empty time part.
                 throw new IllegalArgumentException(badFormat(lexical, "'T' without a time part"));
             }
             String timeDesignators = "HMS";
@@ -218,7 +218,7 @@ final class KajiDuration extends Duration {
                     secs[0] = decimalOf(text, lexical);
                 } else {
                     if (text.indexOf('.') >= 0) {
-                        // Solo los segundos pueden tener fraccion; media hora se escribe `PT30M`.
+                        // Only the seconds can have a fraction; half an hour is written `PT30M`.
                         throw new IllegalArgumentException(
                                 badFormat(lexical, "only seconds may have a fraction"));
                     }
@@ -237,7 +237,7 @@ final class KajiDuration extends Duration {
                 positive, datePart[0], datePart[1], datePart[2], hourValue[0], hourValue[1], secs[0]);
     }
 
-    /** Hasta donde llega el numero que empieza en {@code i} (digitos y a lo sumo un punto). */
+    /** Where the number that starts at {@code i} ends (digits and at most one point). */
     private static int endOfNumber(String s, int i) {
         int j = i;
         while (j < s.length()) {
@@ -251,7 +251,7 @@ final class KajiDuration extends Duration {
         return j;
     }
 
-    /** Un campo entero, con el error del contrato si no lo es. */
+    /** An integer field, with the contract's error if it is not one. */
     private static BigInteger intOf(String text, String lexical) {
         try {
             return new BigInteger(text);
@@ -260,7 +260,7 @@ final class KajiDuration extends Duration {
         }
     }
 
-    /** El campo de segundos, que si puede tener fraccion. */
+    /** The seconds field, which can have a fraction. */
     private static BigDecimal decimalOf(String text, String lexical) {
         try {
             return new BigDecimal(text);
@@ -269,27 +269,27 @@ final class KajiDuration extends Duration {
         }
     }
 
-    /** El mensaje de forma lexica invalida, con el motivo concreto. */
+    /** The invalid lexical form message, with the concrete reason. */
     private static String badFormat(String lexical, String reason) {
         return "\"" + lexical + "\" is not a valid representation of an XML Schema duration: "
                 + reason;
     }
 
     /**
-     * A partir de una cantidad de milisegundos, con los seis campos puestos.
+     * From a number of milliseconds, with the six fields set.
      *
-     * <p>Los anios y los meses no salen de dividir: salen de <b>contar sobre el calendario</b>
-     * desde la epoca. Es la unica forma correcta, porque un mes no tiene un largo fijo y cualquier
-     * divisor que se elija --30 dias, 30,44 dias-- da un resultado que no corresponde a ninguna
-     * fecha real.
+     * <p>The years and months do not come from dividing: they come from <b>counting on the
+     * calendar</b> from the epoch. It is the only right way, because a month has no fixed length
+     * and any divisor chosen --30 days, 30.44 days-- gives a result that corresponds to no real
+     * date.
      *
-     * <p>El truco que hace la cuenta simple: la epoca es el <b>1</b> de enero, asi que el dia del
-     * mes de destino siempre es mayor o igual que 1 y el mes siempre es mayor o igual que enero. La
-     * resta campo a campo nunca pide prestado, y no hace falta el ajuste que normalmente lleva una
-     * diferencia de fechas.
+     * <p>The trick that makes the calculation simple: the epoch is <b>1</b> January, so the day of
+     * the target month is always greater than or equal to 1 and the month always greater than or
+     * equal to January. The field-by-field subtraction never borrows, and the adjustment a date
+     * difference normally needs is not required.
      *
-     * @param milisegundos los milisegundos, con signo
-     * @return la duracion
+     * @param milliseconds the milliseconds, signed
+     * @return the duration
      */
     static KajiDuration fromMillis(long milliseconds) {
         boolean positive = milliseconds >= 0;
@@ -306,7 +306,7 @@ final class KajiDuration extends Duration {
 
         Calendar cal = new GregorianCalendar(TimeZone.getTimeZone("UTC"));
         cal.setTimeInMillis(0L);
-        // `Calendar.add` toma un `int`; para valores enormes se suma de a tramos.
+        // `Calendar.add` takes an `int`; for huge values it is added in stretches.
         long pending = totalDays;
         while (pending > 0L) {
             int segment = pending > (long) Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) pending;
@@ -325,23 +325,23 @@ final class KajiDuration extends Duration {
                 BigInteger.valueOf((long) days),
                 BigInteger.valueOf(hrs),
                 BigInteger.valueOf(min),
-                // Escala tres: los milisegundos son la fraccion, y guardarla asi hace que
-                // `toString` escriba `1.000S` como el original y no `1S`.
+                // Scale three: the milliseconds are the fraction, and keeping it that way makes
+                // `toString` write `1.000S` like the original and not `1S`.
                 BigDecimal.valueOf(secs * 1000L + millis, 3));
     }
 
-    // ---- los seis accesores enteros, que la implementacion de referencia redefine ------------
+    // ---- the six integer accessors, which the reference implementation redefines ----------------
 
-    // La clase abstracta documenta que `getYears()` y sus hermanos contestan FIELD_UNDEFINED
-    // cuando el campo no esta, y asi esta escrita en `Duration`. La implementacion de referencia
-    // --Xerces, la que trae el JDK-- los redefine y contesta **cero**: comprobado contra
-    // `H:/jdk-25.0.2`, donde `newDuration("P1M").getDays()` da 0 y no -2147483648, mientras que
-    // `getField(DAYS)` da null y `isSet(DAYS)` da false en las dos.
+    // The abstract class documents that `getYears()` and its siblings answer FIELD_UNDEFINED when
+    // the field is not there, and that is how it is written in `Duration`. The reference
+    // implementation --Xerces, the one the JDK brings-- redefines them and answers **zero**:
+    // checked against `H:/jdk-25.0.2`, where `newDuration("P1M").getDays()` gives 0 and not
+    // -2147483648, while `getField(DAYS)` gives null and `isSet(DAYS)` gives false in both.
     //
-    // O sea que el JDK se aparta ahi de su propio contrato. Se replica el comportamiento de la
-    // implementacion de referencia y no el del javadoc, por una razon concreta: el codigo que se
-    // escribio contra el JDK anda contra esto, y el que quiera distinguir "ausente" de "cero"
-    // tiene `isSet` y `getField`, que si dicen la verdad en las dos.
+    // That is, the JDK departs from its own contract there. The reference implementation's
+    // behaviour is replicated and not the javadoc's, for a concrete reason: code written against
+    // the JDK works against this, and whoever wants to tell "absent" from "zero" has `isSet` and
+    // `getField`, which do tell the truth in both.
 
     /** {@inheritDoc} */
     public int getYears() {
@@ -373,13 +373,13 @@ final class KajiDuration extends Duration {
         return intOrZero(DatatypeConstants.SECONDS);
     }
 
-    /** El campo como entero, o cero si no esta puesto. */
+    /** The field as an integer, or zero if it is not set. */
     private int intOrZero(javax.xml.datatype.DatatypeConstants.Field fieldId) {
         Number n = getField(fieldId);
         return n == null ? 0 : n.intValue();
     }
 
-    // ---- lo que pide la clase abstracta -------------------------------------------------------
+    // ---- what the abstract class asks for -------------------------------------------------------
 
     /** {@inheritDoc} */
     public int getSign() {
@@ -420,12 +420,13 @@ final class KajiDuration extends Duration {
     /**
      * {@inheritDoc}
      *
-     * <p>Suma campo a campo con los signos aplicados, y despues exige que todos los resultados
-     * tengan el mismo signo. Esa exigencia es lo que hace que {@code P1M + (-P30D)} levante: daria
-     * un mes positivo y treinta dias negativos, y no hay forma de escribir eso como una duracion
-     * --que es un signo y seis magnitudes-- ni de saber cual seria su signo sin elegir un mes.
+     * <p>It adds field by field with the signs applied, and then requires all the results to have
+     * the same sign. That requirement is what makes {@code P1M + (-P30D)} throw: it would give a
+     * positive month and thirty negative days, and there is no way of writing that as a duration
+     * --which is a sign and six magnitudes-- nor of knowing what its sign would be without choosing
+     * a month.
      *
-     * <p>Un campo queda puesto en el resultado si estaba puesto en alguno de los dos sumandos.
+     * <p>A field is set in the result if it was set in either of the two addends.
      */
     public Duration add(Duration rhs) {
         if (rhs == null) {
@@ -441,7 +442,7 @@ final class KajiDuration extends Duration {
             wasSet[i] = isSet(fieldId) || rhs.isSet(fieldId);
         }
 
-        // Todos los campos no nulos del resultado tienen que apuntar para el mismo lado.
+        // All the non-null fields of the result have to point the same way.
         int resultSign = 0;
         for (int i = 0; i < 6; i++) {
             int s = sum[i].signum();
@@ -468,7 +469,7 @@ final class KajiDuration extends Duration {
                 wasSet[5] ? sum[5].abs() : null);
     }
 
-    /** El campo con el signo de la duracion aplicado; cero si no esta puesto. */
+    /** The field with the duration's sign applied; zero if it is not set. */
     private static BigDecimal withSign(Duration d, javax.xml.datatype.DatatypeConstants.Field fieldId) {
         Number n = d.getField(fieldId);
         if (n == null) {
@@ -478,7 +479,7 @@ final class KajiDuration extends Duration {
         return d.getSign() < 0 ? v.negate() : v;
     }
 
-    /** El campo que corresponde al indice 0..5. */
+    /** The field corresponding to index 0..5. */
     private static javax.xml.datatype.DatatypeConstants.Field fieldByIndex(int i) {
         switch (i) {
             case 0: return DatatypeConstants.YEARS;
@@ -493,9 +494,10 @@ final class KajiDuration extends Duration {
     /**
      * {@inheritDoc}
      *
-     * <p>El orden --anios, meses, dias, horas, minutos, segundos-- lo fija la especificacion y no
-     * es intercambiable: sumarle un mes y un dia al 31 de enero da el 29 de febrero, y sumarle un
-     * dia y un mes da el 1 de marzo. Un orden fijo es lo unico que hace la operacion reproducible.
+     * <p>The order --years, months, days, hours, minutes, seconds-- is fixed by the specification
+     * and is not interchangeable: adding a month and a day to 31 January gives 29 February, and
+     * adding a day and a month gives 1 March. A fixed order is the only thing that makes the
+     * operation reproducible.
      */
     public void addTo(Calendar calendar) {
         if (calendar == null) {
@@ -511,14 +513,14 @@ final class KajiDuration extends Duration {
         addField(calendar, Calendar.HOUR_OF_DAY, hours, s);
         addField(calendar, Calendar.MINUTE, minutes, s);
         if (seconds != null) {
-            // Los segundos se suman en milisegundos para no perder la fraccion, que es justamente
-            // lo que distingue `PT0.5S` de `PT0S`.
+            // The seconds are added in milliseconds so as not to lose the fraction, which is
+            // precisely what tells `PT0.5S` from `PT0S`.
             long millis = seconds.movePointRight(3).setScale(0, RoundingMode.DOWN).longValue();
             calendar.setTimeInMillis(calendar.getTimeInMillis() + (long) s * millis);
         }
     }
 
-    /** Suma un campo entero al calendario, respetando el signo de la duracion. */
+    /** Adds an integer field to the calendar, respecting the duration's sign. */
     private static void addField(Calendar cal, int fieldId, BigInteger value, int sign) {
         if (value == null || value.signum() == 0) {
             return;
@@ -534,10 +536,10 @@ final class KajiDuration extends Duration {
     /**
      * {@inheritDoc}
      *
-     * <p>La fraccion que quede en un campo baja al siguiente --medio anio son seis meses, medio dia
-     * son doce horas-- con una sola excepcion: de los meses no se puede bajar a los dias, porque no
-     * hay una equivalencia fija. Multiplicar {@code P1M} por {@code 0.5} levanta, y esa es la misma
-     * ambigüedad que hace falta {@link DatatypeConstants#INDETERMINATE}.
+     * <p>The fraction left in a field goes down to the next one --half a year is six months, half a
+     * day is twelve hours-- with a single exception: from months one cannot go down to days,
+     * because there is no fixed equivalence. Multiplying {@code P1M} by {@code 0.5} throws, and
+     * that is the same ambiguity that makes {@link DatatypeConstants#INDETERMINATE} necessary.
      */
     public Duration multiply(BigDecimal factor) {
         if (factor == null) {
@@ -558,14 +560,14 @@ final class KajiDuration extends Duration {
             }
         }
 
-        // Las fracciones bajan de un campo al siguiente, de arriba hacia abajo.
+        // Fractions go down from one field to the next, from top to bottom.
         BigInteger[] ints = new BigInteger[6];
         BigDecimal carry = BigDecimal.ZERO;
         for (int i = 0; i < 5; i++) {
             if (v[i] == null) {
                 if (carry.signum() != 0) {
-                    // El arrastre no tiene donde ir: el campo de destino no existe en esta
-                    // duracion, asi que se lo empuja al siguiente que si exista.
+                    // The carry has nowhere to go: the target field does not exist in this
+                    // duration, so it is pushed to the next one that does.
                     carry = carry.multiply(BigDecimal.valueOf(factorTo(i + 1)));
                 }
                 continue;
@@ -590,8 +592,8 @@ final class KajiDuration extends Duration {
         if (secs != null) {
             secs = secs.add(carry);
         } else if (carry.signum() != 0) {
-            // Lo mismo que arriba: si no hay campo de segundos, la fraccion se pierde. No se
-            // inventa un campo que la duracion no tenia.
+            // The same as above: if there is no seconds field, the fraction is lost. A field the
+            // duration did not have is not invented.
             carry = BigDecimal.ZERO;
         }
 
@@ -599,14 +601,14 @@ final class KajiDuration extends Duration {
                 positive, ints[0], ints[1], ints[2], ints[3], ints[4], secs);
     }
 
-    /** Cuantas unidades del campo {@code i} entran en una del campo {@code i-1}. */
+    /** How many units of field {@code i} fit into one of field {@code i-1}. */
     private static long factorTo(int i) {
         switch (i) {
-            case 1: return 12L;   // meses en un anio
-            case 3: return 24L;   // horas en un dia
-            case 4: return 60L;   // minutos en una hora
-            case 5: return 60L;   // segundos en un minuto
-            default: return 1L;   // de meses a dias no hay factor: ese caso levanta antes
+            case 1: return 12L;   // months in a year
+            case 3: return 24L;   // hours in a day
+            case 4: return 60L;   // minutes in an hour
+            case 5: return 60L;   // seconds in a minute
+            default: return 1L;   // no factor from months to days: that case throws earlier
         }
     }
 
@@ -619,10 +621,10 @@ final class KajiDuration extends Duration {
     /**
      * {@inheritDoc}
      *
-     * <p>Fijado el punto de partida, un mes ya tiene una cantidad de dias: se le suman los anios y
-     * los meses al calendario, se mide cuantos dias se movio, y esos dias reemplazan a los dos
-     * campos. El resultado no tiene meses, asi que se puede comparar con cualquier otro sin dar
-     * indeterminado.
+     * <p>Once the starting point is fixed, a month has a number of days: the years and months are
+     * added to the calendar, how many days it moved is measured, and those days replace the two
+     * fields. The result has no months, so it can be compared with any other without giving
+     * indeterminate.
      */
     public Duration normalizeWith(Calendar startTimeInstant) {
         if (startTimeInstant == null) {
@@ -647,7 +649,7 @@ final class KajiDuration extends Duration {
     /**
      * {@inheritDoc}
      *
-     * <p>El algoritmo de los cuatro instantes de referencia; ver el encabezado de la clase.
+     * <p>The algorithm of the four reference instants; see the class header.
      */
     public int compare(Duration duration) {
         if (duration == null) {
@@ -677,11 +679,11 @@ final class KajiDuration extends Duration {
         return accumulated;
     }
 
-    /** El instante que resulta de sumarle {@code d} a la fecha de referencia, en milisegundos. */
+    /** The instant resulting from adding {@code d} to the reference date, in milliseconds. */
     private static long instantPlus(int[] ref, Duration d) {
         Calendar cal = new GregorianCalendar(TimeZone.getTimeZone("UTC"));
         cal.clear();
-        // Los meses de REFERENCIAS van de 1 a 12 y los de `Calendar` desde `JANUARY`, que es cero.
+        // The months of REFERENCES go from 1 to 12 and `Calendar`'s from `JANUARY`, which is zero.
         cal.set(ref[0], Calendar.JANUARY + ref[1] - 1, ref[2], 0, 0, 0);
         cal.set(Calendar.MILLISECOND, 0);
         d.addTo(cal);
@@ -691,13 +693,13 @@ final class KajiDuration extends Duration {
     /**
      * {@inheritDoc}
      *
-     * <p>Se hashea el instante que resulta de sumarle la duracion al primero de los cuatro
-     * instantes de referencia. Es lo unico coherente con {@link Duration#equals}, que esta definido
-     * por {@link #compare}: dos duraciones iguales dan el mismo instante en <b>los cuatro</b>
-     * --por definicion de la comparacion-- asi que en particular dan el mismo en ese.
+     * <p>It hashes the instant resulting from adding the duration to the first of the four
+     * reference instants. It is the only thing coherent with {@link Duration#equals}, which is
+     * defined by {@link #compare}: two equal durations give the same instant in <b>all four</b>
+     * --by definition of the comparison-- so in particular they give the same one in that one.
      *
-     * <p>Dos duraciones que no son iguales pueden coincidir en ese instante y colisionar, que es lo
-     * que un hash puede hacer. Lo que no puede pasar es lo contrario, que es lo que importa.
+     * <p>Two durations that are not equal can coincide at that instant and collide, which is
+     * something a hash may do. What cannot happen is the opposite, which is what matters.
      */
     public int hashCode() {
         long instant = instantPlus(REFERENCES[0], this);

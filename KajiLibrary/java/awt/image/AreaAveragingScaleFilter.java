@@ -1,23 +1,25 @@
 package java.awt.image;
 
 /**
- * Escala una imagen **promediando** los píxeles del origen que caen en cada píxel del destino.
+ * Scales an image by **averaging** the source pixels that fall on each destination pixel.
  *
- * <p>Es el escalado bueno, y la diferencia con {@link ReplicateScaleFilter} se nota sobre todo al
- * achicar: repetir y saltear puede hacer desaparecer una línea fina entera, promediar la deja como
- * un gris tenue. Cuesta una multiplicación y una suma por cada solapamiento.
+ * <p>It is the good scaling, and the difference from {@link ReplicateScaleFilter} shows above all
+ * when shrinking: repeating and skipping can make a whole thin line disappear, averaging leaves it
+ * as a faint grey. It costs one multiplication and one addition per overlap.
  *
- * <p>El reparto se hace en aritmética entera y sin errores de redondeo acumulados, trabajando en
- * unidades donde la imagen entera mide `srcWidth * destWidth` de ancho: ahí un píxel de origen ocupa
- * exactamente `destWidth` unidades y uno de destino, `srcWidth`. Cada solapamiento es el mínimo de
- * los dos restos, y no hay divisiones hasta el final.
+ * <p>The split is done in integer arithmetic and with no accumulated rounding errors, working in
+ * units where the whole image is `srcWidth * destWidth` wide: there a source pixel takes exactly
+ * `destWidth` units and a destination one, `srcWidth`. Each overlap is the minimum of the two
+ * remainders, and there are no divisions until the end.
  *
- * <p>Los colores se promedian **premultiplicados por el alfa**, y por eso hay que deshacerlo al
- * cerrar cada fila. Sin premultiplicar, un píxel transparente aportaría su color al promedio: al
- * achicar un logo sobre fondo transparente aparecería una orla del color del fondo invisible.
+ * <p>The colours are averaged **premultiplied by the alpha**, and that is why it has to be undone
+ * when closing each row. Without premultiplying, a transparent pixel would contribute its colour to
+ * the average: shrinking a logo over a transparent background would show a fringe of the colour of
+ * the invisible background.
  *
- * <p>Necesita recibir las filas en orden y completas. Si el productor avisa que no las va a mandar
- * así, el filtro se resigna y se comporta como su clase base, que puede trabajar en cualquier orden.
+ * <p>It needs to receive the rows in order and whole. If the producer warns that it is not going to
+ * send them that way, the filter gives up and behaves like its base class, which can work in any
+ * order.
  */
 public class AreaAveragingScaleFilter extends ReplicateScaleFilter {
 
@@ -31,42 +33,43 @@ public class AreaAveragingScaleFilter extends ReplicateScaleFilter {
     private float[] blues;
     private float[] alphas;
 
-    /** La fila de destino que se está armando. */
+    /** The destination row that is being built. */
     private int savedy;
 
-    /** Cuántas unidades le faltan a esa fila para estar completa. */
+    /** How many units that row is still short of being complete. */
     private int savedyrem;
 
     /**
-     * Con el tamaño de destino.
+     * With the destination size.
      *
-     * @throws IllegalArgumentException si alguna de las dos medidas es cero
+     * @throws IllegalArgumentException if either of the two measures is zero
      */
     public AreaAveragingScaleFilter(int width, int height) {
         super(width, height);
     }
 
     /**
-     * Anota si se van a poder promediar los píxeles.
+     * Records whether the pixels are going to be averageable.
      *
-     * <p>Sin filas completas y en orden no se puede: el promedio de una fila de destino necesita
-     * todas las de origen que la tocan, y sin garantía de orden habría que guardar la imagen entera.
+     * <p>Without whole rows and in order it cannot be done: the average of a destination row needs
+     * all the source ones that touch it, and with no guarantee of order the whole image would have
+     * to be kept.
      */
     public void setHints(int hints) {
         this.passthrough = (hints & neededHints) != neededHints;
         super.setHints(hints);
     }
 
-    /** Reserva los acumuladores de una fila de destino. */
-    private void crearAcumuladores() {
+    /** Reserves the accumulators of one destination row. */
+    private void createAccumulators() {
         this.reds = new float[this.destWidth];
         this.greens = new float[this.destWidth];
         this.blues = new float[this.destWidth];
         this.alphas = new float[this.destWidth];
     }
 
-    /** Pone los acumuladores en cero para empezar otra fila. */
-    private void limpiarAcumuladores() {
+    /** Sets the accumulators to zero to start another row. */
+    private void clearAccumulators() {
         for (int i = 0; i < this.destWidth; i++) {
             this.alphas[i] = 0.0f;
             this.reds[i] = 0.0f;
@@ -76,27 +79,27 @@ public class AreaAveragingScaleFilter extends ReplicateScaleFilter {
     }
 
     /**
-     * Cierra la fila de destino: divide por el área y deshace la premultiplicación.
+     * Closes the destination row: divides by the area and undoes the premultiplication.
      *
-     * <p>Con alfa cero no hay color que recuperar y el píxel sale transparente y negro; con alfa
-     * lleno no hace falta dividir dos veces y basta el promedio.
+     * <p>With alpha zero there is no colour to recover and the pixel comes out transparent and
+     * black; with full alpha there is no need to divide twice and the average is enough.
      */
-    private int[] cerrarFila() {
-        float areaTotal = ((float) this.srcWidth) * this.srcHeight;
+    private int[] closeRow() {
+        float totalArea = ((float) this.srcWidth) * this.srcHeight;
         if (this.outpixbuf == null || !(this.outpixbuf instanceof int[])) {
             this.outpixbuf = new int[this.destWidth];
         }
         int[] outpix = (int[]) this.outpixbuf;
         for (int x = 0; x < this.destWidth; x++) {
-            float mult = areaTotal;
+            float mult = totalArea;
             int a = Math.round(this.alphas[x] / mult);
             if (a <= 0) {
                 a = 0;
             } else if (a >= 255) {
                 a = 255;
             } else {
-                // Dividir por este otro factor hace la division por el area y la de deshacer la
-                // premultiplicacion en un solo paso.
+                // Dividing by this other factor does the division by the area and the one that
+                // undoes the premultiplication in a single step.
                 mult = this.alphas[x] / 255;
             }
             int r = Math.round(this.reds[x] / mult);
@@ -123,14 +126,14 @@ public class AreaAveragingScaleFilter extends ReplicateScaleFilter {
     }
 
     /**
-     * Reparte una tanda de píxeles entre las filas de destino que toca.
+     * Hands a batch of pixels out among the destination rows it touches.
      *
-     * <p>`pixels` es un `byte[]` o un `int[]`; el modelo de color dice cómo interpretarlo.
+     * <p>`pixels` is a `byte[]` or an `int[]`; the colour model says how to read it.
      */
-    private void acumular(int x, int y, int w, int h, ColorModel model, Object pixels, int off,
+    private void accumulate(int x, int y, int w, int h, ColorModel model, Object pixels, int off,
             int scansize) {
         if (this.reds == null) {
-            this.crearAcumuladores();
+            this.createAccumulators();
         }
         int sy = y;
         int syrem = this.destHeight;
@@ -143,18 +146,18 @@ public class AreaAveragingScaleFilter extends ReplicateScaleFilter {
             dy = this.savedy;
             dyrem = this.savedyrem;
         }
-        int fila = off;
+        int row = off;
         while (sy < y + h) {
             if (dyrem == 0) {
-                this.limpiarAcumuladores();
+                this.clearAccumulators();
                 dyrem = this.srcHeight;
             }
             int amty = syrem < dyrem ? syrem : dyrem;
-            this.acumularFila(model, pixels, fila, w, amty);
+            this.accumulateRow(model, pixels, row, w, amty);
             syrem = syrem - amty;
             dyrem = dyrem - amty;
             if (dyrem == 0 && dy < this.destHeight) {
-                int[] outpix = this.cerrarFila();
+                int[] outpix = this.closeRow();
                 this.consumer.setPixels(0, dy, this.destWidth, 1, rgbmodel, outpix, 0,
                         this.destWidth);
                 dy = dy + 1;
@@ -162,34 +165,34 @@ public class AreaAveragingScaleFilter extends ReplicateScaleFilter {
             if (syrem == 0) {
                 sy = sy + 1;
                 syrem = this.destHeight;
-                fila = fila + scansize;
+                row = row + scansize;
             }
         }
         this.savedy = dy;
         this.savedyrem = dyrem;
     }
 
-    /** Suma una fila de origen a los acumuladores, con el peso vertical dado. */
-    private void acumularFila(ColorModel model, Object pixels, int off, int w, int amty) {
+    /** Adds a source row to the accumulators, with the given vertical weight. */
+    private void accumulateRow(ColorModel model, Object pixels, int off, int w, int amty) {
         int dx = 0;
         int dxrem = this.srcWidth;
         for (int sx = 0; sx < w; sx++) {
-            int crudo;
+            int raw;
             if (pixels instanceof byte[]) {
-                crudo = ((byte[]) pixels)[off + sx] & 0xFF;
+                raw = ((byte[]) pixels)[off + sx] & 0xFF;
             } else {
-                crudo = ((int[]) pixels)[off + sx];
+                raw = ((int[]) pixels)[off + sx];
             }
-            int rgb = model.getRGB(crudo);
+            int rgb = model.getRGB(raw);
             float a = rgb >>> 24;
             float r = (rgb >> 16) & 0xFF;
             float g = (rgb >> 8) & 0xFF;
             float b = rgb & 0xFF;
             if (a != 255.0f) {
-                float escala = a / 255.0f;
-                r = r * escala;
-                g = g * escala;
-                b = b * escala;
+                float scaleBy = a / 255.0f;
+                r = r * scaleBy;
+                g = g * scaleBy;
+                b = b * scaleBy;
             }
             int sxrem = this.destWidth;
             while (sxrem > 0 && dx < this.destWidth) {
@@ -209,23 +212,23 @@ public class AreaAveragingScaleFilter extends ReplicateScaleFilter {
         }
     }
 
-    /** Promedia, o se resigna a repetir si el productor no garantiza el orden. */
+    /** Averages, or gives up and repeats if the producer does not guarantee the order. */
     public void setPixels(int x, int y, int w, int h, ColorModel model, byte[] pixels, int off,
             int scansize) {
         if (this.passthrough) {
             super.setPixels(x, y, w, h, model, pixels, off, scansize);
         } else {
-            this.acumular(x, y, w, h, model, pixels, off, scansize);
+            this.accumulate(x, y, w, h, model, pixels, off, scansize);
         }
     }
 
-    /** Lo mismo para píxeles de un `int`. */
+    /** The same for pixels of one `int`. */
     public void setPixels(int x, int y, int w, int h, ColorModel model, int[] pixels, int off,
             int scansize) {
         if (this.passthrough) {
             super.setPixels(x, y, w, h, model, pixels, off, scansize);
         } else {
-            this.acumular(x, y, w, h, model, pixels, off, scansize);
+            this.accumulate(x, y, w, h, model, pixels, off, scansize);
         }
     }
 }

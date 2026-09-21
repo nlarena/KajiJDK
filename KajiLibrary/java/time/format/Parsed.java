@@ -340,7 +340,7 @@ final class Parsed implements TemporalAccessor {
         return v == null ? 0L : v.longValue();
     }
 
-    // It resolves over a **copy**: the resolver consumes the map it is handed, and the raw fields
+    // It resolves over a **copy**: the resolveWith consumes the map it is handed, and the raw fields
     // have to stay for whoever reads them directly.
     private static ChronoLocalDate resolveDateFields(Map<TemporalField, Long> fields,
             ResolverStyle style, Chronology chronology, boolean yearWithoutEra) {

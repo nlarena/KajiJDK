@@ -1,23 +1,23 @@
 package javax.accessibility;
 
 /**
- * Un proveedor de tecnología de asistencia que se enchufa por servicio.
+ * An assistive-technology provider that plugs in as a service.
  *
- * <p>Se descubre con el mecanismo de servicios de la plataforma, así que una ayuda técnica se instala
- * poniéndose en el camino de clases y no tocando la aplicación.
+ * <p>It is discovered with the platform's service mechanism, so an assistive technology is
+ * installed by putting itself on the class path and not by touching the application.
  *
- * <p>El constructor es protegido a propósito: la clase se instancia por el cargador de servicios, no
- * por quien la use.
+ * <p>The constructor is protected on purpose: the class is instantiated by the service loader, not
+ * by whoever uses it.
  */
 public abstract class AccessibilityProvider {
 
-    /** Para las subclases. */
+    /** For subclasses. */
     protected AccessibilityProvider() {
     }
 
-    /** Cómo se llama este proveedor. */
+    /** What this provider is called. */
     public abstract String getName();
 
-    /** Lo pone en funcionamiento. */
+    /** Puts it to work. */
     public abstract void activate();
 }

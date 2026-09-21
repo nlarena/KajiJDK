@@ -1,9 +1,9 @@
 package java.security.cert;
 
-// Un criterio para elegir certificados de un `CertStore`.
+// A criterion for choosing certificates of a `CertStore`.
 //
-// La contraparte de `CRLSelector`, y redeclara `clone()` por lo mismo: el selector es estado
-// mutable del que el store se apropia, y tiene que poder copiarlo.
+// The counterpart of `CRLSelector`, and it redeclares `clone()` for the same reason: the selector
+// is mutable state the store appropriates, and it has to be able to copy it.
 public interface CertSelector extends Cloneable {
 
     boolean match(Certificate cert);

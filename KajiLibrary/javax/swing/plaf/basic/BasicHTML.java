@@ -21,48 +21,51 @@ import javax.swing.text.html.HTMLEditorKit;
 import javax.swing.text.html.StyleSheet;
 
 /**
- * Lo que convierte el texto de una etiqueta o un boton en HTML dibujable.
+ * What turns a label's or a button's text into drawable HTML.
  *
- * <h2>Por que existe</h2>
+ * <h2>Why it exists</h2>
  *
- * <p>Un {@code JLabel} pinta su texto con {@code drawString} y se acabo. Pero si el texto empieza
- * con {@code <html>}, Swing lo pinta con negritas, saltos de linea y colores. Esa segunda forma no
- * la sabe la etiqueta: la sabe el motor de {@code javax.swing.text.html}, y esta clase es el puente.
+ * <p>A {@code JLabel} paints its text with {@code drawString} and that is that. But if the text
+ * starts with {@code <html>}, Swing paints it with bold, line breaks and colours. That second
+ * way is not known by the label: it is known by the {@code javax.swing.text.html} engine, and
+ * this class is the bridge.
  *
- * <p>El puente son dos llamadas. {@link #updateRenderer} arma una vista y la guarda en el
- * componente bajo la clave {@link #propertyKey}; cada UI que dibuja texto la busca ahi, y si esta,
- * mide y pinta con ella en vez de con la fuente. Si el texto deja de ser HTML, la vista se borra.
+ * <p>The bridge is two calls. {@link #updateRenderer} builds a view and keeps it in the
+ * component under the key {@link #propertyKey}; each look and feel that draws text looks it up
+ * there, and if it is there, it measures and paints with it instead of with the typeface. If
+ * the text stops being HTML, the view is erased.
  *
- * <h2>Que cuenta como HTML</h2>
+ * <h2>What counts as HTML</h2>
  *
- * <p>{@link #isHTMLString} es deliberadamente tonta: el texto tiene que arrancar <em>exactamente</em>
- * con {@code <html>} --seis caracteres, sin espacio adelante, sin atributos--. {@code "  <html>x"}
- * no cuenta, y {@code "<html"} tampoco. Esta medido, y la razon es que la prueba corre en cada
- * cambio de texto de cada etiqueta de la pantalla: tiene que costar cinco comparaciones y nada mas.
+ * <p>{@link #isHTMLString} is deliberately dim: the text has to start <em>exactly</em> with
+ * {@code <html>} -- six characters, with no space in front, with no attributes --.
+ * {@code "  <html>x"} does not count, and neither does {@code "<html"}. It is measured, and
+ * the reason is that the test runs on every change of text of every label on the screen: it has
+ * to cost five comparisons and nothing more.
  *
- * <h2>La vista de arriba de todo</h2>
+ * <h2>The view at the very top</h2>
  *
- * <p>La vista que se guarda no es la del documento: es un envoltorio ({@code Renderer}) que le da
- * un ancho de trabajo y traduce las preguntas de tamano. Hace falta porque el motor de texto espera
- * estar dentro de un {@code JTextComponent} con un {@code Container} de verdad, y aca no hay
- * ninguno: solo la etiqueta que pidio dibujar.
+ * <p>The view that is kept is not the document's: it is a wrapper ({@code Renderer}) that gives
+ * it a working width and translates the size questions. It is needed because the text engine
+ * expects to be inside a {@code JTextComponent} with a real {@code Container}, and here there
+ * is none: only the label that asked to draw.
  */
 public class BasicHTML {
 
-    /** Donde queda guardada la vista dentro del componente. */
+    /** Where the view is kept inside the component. */
     public static final String propertyKey = "html";
 
-    /** Donde el componente puede dejar la {@link URL} contra la que se resuelven los enlaces. */
+    /** Where the component may leave the {@link URL} the links are resolved against. */
     public static final String documentBaseKey = "html.base";
 
     public BasicHTML() {
     }
 
     /**
-     * Arma la vista para ese texto.
+     * It builds the view for that text.
      *
-     * <p>La fuente y el color del componente entran como estilo del cuerpo, para que el HTML sin
-     * estilo propio se vea como el resto del componente.
+     * <p>The component's typeface and colour go in as the body's style, so that HTML with no style
+     * of its own looks like the rest of the component.
      */
     public static View createHTMLView(JComponent c, String html) {
         HTMLEditorKit kit = new HTMLEditorKit();
@@ -73,43 +76,44 @@ public class BasicHTML {
             if (base instanceof URL) {
                 hdoc.setBase((URL) base);
             }
-            estilar(hdoc.getStyleSheet(), c.getFont(), c.getForeground());
+            style(hdoc.getStyleSheet(), c.getFont(), c.getForeground());
         }
         Reader r = new StringReader(html);
         try {
             kit.read(r, doc, 0);
         } catch (Exception e) {
-            // Un HTML roto no rompe la etiqueta: se dibuja lo que se haya podido leer. Es lo que
-            // hace el JDK, y es lo unico razonable -- el texto lo escribio quien programo la
-            // pantalla, y una excepcion acá aparecería al pintar, lejos del error.
+            // Broken HTML does not break the label: whatever could be read is drawn. It is what the
+                        // JDK does, and it is the only reasonable thing -- the text was written by
+                        // whoever programmed the screen, and an exception here would show up while
+                        // painting, far from the mistake.
         }
         ViewFactory f = kit.getViewFactory();
         View hview = f.create(doc.getDefaultRootElement());
         return new Renderer(c, f, hview);
     }
 
-    /** Mete la fuente y el color del componente en la hoja de estilo. */
-    private static void estilar(StyleSheet hoja, Font fuente, Color color) {
-        if (hoja == null || fuente == null) {
+    /** It puts the component's typeface and colour into the style sheet. */
+    private static void style(StyleSheet leaf, Font font, Color color) {
+        if (leaf == null || font == null) {
             return;
         }
-        StringBuilder regla = new StringBuilder("body {font-family:");
-        regla.append(fuente.getFamily()).append(";font-size:").append(fuente.getSize()).append("pt");
-        if (fuente.isBold()) {
-            regla.append(";font-weight:700");
+        StringBuilder rule = new StringBuilder("body {font-family:");
+        rule.append(font.getFamily()).append(";font-size:").append(font.getSize()).append("pt");
+        if (font.isBold()) {
+            rule.append(";font-weight:700");
         }
-        if (fuente.isItalic()) {
-            regla.append(";font-style:italic");
+        if (font.isItalic()) {
+            rule.append(";font-style:italic");
         }
         if (color != null) {
-            regla.append(";color:#").append(hex(color));
+            rule.append(";color:#").append(hex(color));
         }
-        regla.append("}");
+        rule.append("}");
         try {
-            hoja.addRule(regla.toString());
+            leaf.addRule(rule.toString());
         } catch (Exception e) {
-            // Una hoja que no acepta la regla deja el HTML con sus valores de siempre, que es
-            // peor pero no es un error: se sigue viendo.
+            // A sheet that does not accept the rule leaves the HTML with its usual values, which is
+                        // worse but is not an error: it goes on being seen.
         }
     }
 
@@ -122,9 +126,9 @@ public class BasicHTML {
     }
 
     /**
-     * Si ese texto es HTML; ver la nota de la clase.
+     * Whether that text is HTML; see the class note.
      *
-     * @return `false` si es nulo, corto, o no arranca con {@code <html>}
+     * @return `false` if it is null, short, or does not start with {@code <html>}
      */
     public static boolean isHTMLString(String s) {
         if (s != null) {
@@ -137,10 +141,10 @@ public class BasicHTML {
     }
 
     /**
-     * Pone o saca la vista del componente segun el texto.
+     * It puts the view into the component or takes it out according to the text.
      *
-     * <p>Es lo que hay que llamar cada vez que cambia el texto: si dejo de ser HTML, la vista
-     * vieja se borra y el componente vuelve a pintar con {@code drawString}.
+     * <p>It is what has to be called every time the text changes: if it stopped being HTML, the
+     * old view is erased and the component goes back to painting with {@code drawString}.
      */
     public static void updateRenderer(JComponent c, String text) {
         View value = null;
@@ -157,40 +161,42 @@ public class BasicHTML {
     }
 
     /**
-     * La linea de base de una vista de HTML.
+     * An HTML view's baseline.
      *
-     * <p>Solo la tiene si el HTML es un solo parrafo; si no, -1. La pregunta la hace
-     * {@code JLabel.getBaseline} para alinear una etiqueta con el campo de al lado, y con dos
-     * parrafos no hay ninguna respuesta que sirva.
+     * <p>It only has one if the HTML is a single paragraph; otherwise, -1. The question is asked
+     * by {@code JLabel.getBaseline} in order to line a label up with the field beside it, and with
+     * two paragraphs there is no answer that serves.
      *
-     * @throws IllegalArgumentException si el ancho o el alto son negativos
+     * @throws IllegalArgumentException if the width or the height are negative
      */
     public static int getHTMLBaseline(View view, int w, int h) {
         if (w < 0 || h < 0) {
             throw new IllegalArgumentException("Width and height must be >= 0");
         }
         if (view instanceof Renderer) {
-            return lineaDeBase(view.getView(0), w, h);
+            return baseline(view.getView(0), w, h);
         }
         return -1;
     }
 
-    private static int lineaDeBase(View view, int w, int h) {
-        if (!hayUnSoloParrafo(view)) {
+    private static int baseline(View view, int w, int h) {
+        if (!singleParagraph(view)) {
             return -1;
         }
         view.setSize(w, h);
-        return lineaDeBase(view, new Rectangle(0, 0, w, h));
+        return baseline(view, new Rectangle(0, 0, w, h));
     }
 
-    /** Baja hasta el parrafo y ahi si mide: arriba de el todo es caja, no texto. */
-    private static int lineaDeBase(View view, Shape bounds) {
+    /**
+     * It goes down to the paragraph and only there measures: above it everything is box, not text.
+     */
+    private static int baseline(View view, Shape bounds) {
         if (view.getViewCount() == 0) {
             return -1;
         }
         int index = 0;
-        if (esEtiqueta(view, "html") && view.getViewCount() > 1) {
-            // La cabecera es la primera hija y no ocupa lugar; lo que se ve es el cuerpo.
+        if (isLabel(view, "html") && view.getViewCount() > 1) {
+            // The head is the first child and takes up no room; what is seen is the body.
             index = 1;
         }
         Shape hija = view.getChildAllocation(index, bounds);
@@ -203,28 +209,28 @@ public class BasicHTML {
             return rect.y + (int) (child.getPreferredSpan(View.Y_AXIS)
                     * child.getAlignment(View.Y_AXIS));
         }
-        return lineaDeBase(child, hija);
+        return baseline(child, hija);
     }
 
-    /** Si hay exactamente un parrafo: dos ya no tienen una linea de base comun. */
-    private static boolean hayUnSoloParrafo(View view) {
+    /** Whether there is exactly one paragraph: two no longer have a common baseline. */
+    private static boolean singleParagraph(View view) {
         if (view instanceof javax.swing.text.ParagraphView) {
             return true;
         }
         int n = view.getViewCount();
-        int parrafos = 0;
+        int paragraphs = 0;
         for (int i = 0; i < n; i++) {
-            if (hayUnSoloParrafo(view.getView(i))) {
-                parrafos++;
+            if (singleParagraph(view.getView(i))) {
+                paragraphs++;
             }
-            if (parrafos > 1) {
+            if (paragraphs > 1) {
                 return false;
             }
         }
-        return parrafos == 1;
+        return paragraphs == 1;
     }
 
-    private static boolean esEtiqueta(View view, String nombre) {
+    private static boolean isLabel(View view, String name) {
         Element e = view.getElement();
         if (e == null) {
             return false;
@@ -234,14 +240,15 @@ public class BasicHTML {
             return false;
         }
         Object n = a.getAttribute(javax.swing.text.StyleConstants.NameAttribute);
-        return n != null && nombre.equalsIgnoreCase(n.toString());
+        return n != null && name.equalsIgnoreCase(n.toString());
     }
 
     /**
-     * La vista de arriba de todo; ver la nota de la clase.
+     * The view at the very top; see the class note.
      *
-     * <p>No hereda de {@code javax.swing.text.View} por comodidad: tiene que serlo porque es lo que
-     * se guarda en el componente y lo que los UI van a usar para medir y pintar.
+     * <p>It does not inherit from {@code javax.swing.text.View} out of convenience: it has to be
+     * one because it is what is kept in the component and what the looks and feels are going to
+     * use in order to measure and paint.
      */
     private static class Renderer extends View {
 
@@ -256,12 +263,12 @@ public class BasicHTML {
             factory = f;
             view = v;
             view.setParent(this);
-            // El ancho de trabajo arranca en el preferido: sin nadie que lo acomode, la vista se
-            // mide a si misma antes de que alguien le diga cuanto lugar tiene.
+            // The working width starts at the preferred one: with nobody to lay it out, the view
+                        // measures itself before anybody tells it how much room it has.
             setSize(view.getPreferredSpan(X_AXIS), view.getPreferredSpan(Y_AXIS));
         }
 
-        /** El ancho manda: el alto sale de como se parte el texto en ese ancho. */
+        /** The width rules: the height comes out of how the text is split at that width. */
         public void setSize(float width, float height) {
             this.width = (int) width;
             view.setSize(width, height);
@@ -273,8 +280,10 @@ public class BasicHTML {
 
         public float getPreferredSpan(int axis) {
             if (axis == X_AXIS) {
-                // Se devuelve el ancho de trabajo y no el natural: es lo que hace que una etiqueta
-                // que ya se acomodo no cambie de opinion al medirla de nuevo.
+                // The working width is returned and not the natural one: it is what makes a label
+                // that
+                                // has already been laid out not change its mind when measured
+                                // again.
                 return width;
             }
             return view.getPreferredSpan(axis);
@@ -285,7 +294,7 @@ public class BasicHTML {
         }
 
         public float getMaximumSpan(int axis) {
-            // Sin tope horizontal: el HTML se estira todo lo que le den.
+            // With no horizontal cap: HTML stretches as far as it is given.
             if (axis == X_AXIS) {
                 return Integer.MAX_VALUE;
             }

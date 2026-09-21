@@ -7,29 +7,29 @@ import java.lang.constant.ClassDesc;
 import java.util.List;
 import jdk.internal.classfile.impl.TypedAttributes;
 
-// `NestMembers` (JVMS §4.7.29): los miembros del nido que esta clase encabeza. Ver la nota de
-// {@link NestHostAttribute}: una clase lleva este atributo o el otro, nunca los dos.
+// `NestMembers` (JVMS §4.7.29): the members of the nest this class heads. See the note on
+// {@link NestHostAttribute}: a class carries this attribute or the other one, never both.
 public interface NestMembersAttribute extends Attribute<NestMembersAttribute>, ClassElement {
 
-    /** Los miembros del nido. */
+    /** The nest's members. */
     List<ClassEntry> nestMembers();
 
-    /** El atributo con estos miembros. */
+    /** The attribute with these members. */
     public static NestMembersAttribute of(List<ClassEntry> nestMembers) {
         return TypedAttributes.nestMembers(nestMembers);
     }
 
-    /** El atributo con estos miembros. */
+    /** The attribute with these members. */
     public static NestMembersAttribute of(ClassEntry... nestMembers) {
         return TypedAttributes.nestMembers(TypedAttributes.listOfClasses(nestMembers));
     }
 
-    /** El atributo con estos miembros. */
+    /** The attribute with these members. */
     public static NestMembersAttribute ofSymbols(List<ClassDesc> nestMembers) {
         return TypedAttributes.nestMembers(TypedAttributes.classEntries(nestMembers));
     }
 
-    /** El atributo con estos miembros. */
+    /** The attribute with these members. */
     public static NestMembersAttribute ofSymbols(ClassDesc... nestMembers) {
         return TypedAttributes.nestMembers(TypedAttributes.classEntries(nestMembers));
     }

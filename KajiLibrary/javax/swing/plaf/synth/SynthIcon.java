@@ -6,60 +6,61 @@ import java.awt.Graphics;
 import javax.swing.Icon;
 
 /**
- * Un icono que sabe en que estado esta lo que lo lleva.
+ * An icon that knows what state whatever carries it is in.
  *
- * <h2>Por que un icono necesita el contexto</h2>
+ * <h2>Why an icon needs the context</h2>
  *
- * <p>Un {@link Icon} comun se dibuja siempre igual. Uno de Synth no: la tilde de una casilla
- * apagada, apretada o con el cursor encima son tres imagenes distintas, y hasta el
- * <strong>tamano</strong> puede cambiar entre estados. Por eso las tres operaciones de {@code Icon}
- * tienen aca una version que toma un {@link SynthContext}.
+ * <p>An ordinary {@link Icon} is always drawn the same. A Synth one is not: the tick of a check
+ * box that is off, pressed or with the cursor over it are three different images, and even the
+ * <strong>size</strong> may change between states. That is why the three {@code Icon} operations
+ * have here a version that takes a {@link SynthContext}.
  *
- * <p>Las tres viejas siguen andando: son {@code default} y llaman a las nuevas con un contexto
- * nulo. Un icono que dependa del estado devolvera algo generico; uno que no, lo mismo de siempre.
- * Eso es lo que permite pasarle un {@code SynthIcon} a cualquier cosa que espere un {@code Icon}.
+ * <p>The three old ones go on working: they are {@code default} and call the new ones with a null
+ * context. An icon that depends on the state will return something generic; one that does not,
+ * the usual thing. That is what allows passing a {@code SynthIcon} to anything that expects an
+ * {@code Icon}.
  */
 public interface SynthIcon extends Icon {
 
     /**
-     * El ancho en ese contexto.
+     * The width in that context.
      *
-     * @param context el contexto, o {@code null}
-     * @return el ancho
+     * @param context the context, or {@code null}
+     * @return the width
      */
     int getIconWidth(SynthContext context);
 
     /**
-     * El alto en ese contexto.
+     * The height in that context.
      *
-     * @param context el contexto, o {@code null}
-     * @return el alto
+     * @param context the context, or {@code null}
+     * @return the height
      */
     int getIconHeight(SynthContext context);
 
     /**
-     * Dibuja el icono en ese contexto.
+     * It draws the icon in that context.
      *
-     * @param context el contexto, o {@code null}
-     * @param g donde dibujar
-     * @param x la esquina
-     * @param y la esquina
-     * @param w el ancho pedido
-     * @param h el alto pedido
+     * @param context the context, or {@code null}
+     * @param g where to draw
+     * @param x the corner
+     * @param y the corner
+     * @param w the requested width
+     * @param h the requested height
      */
     void paintIcon(SynthContext context, Graphics g, int x, int y, int w, int h);
 
-    /** Sin contexto; ver la nota de la interfaz. */
+    /** With no context; see the interface note. */
     default int getIconWidth() {
         return getIconWidth(null);
     }
 
-    /** Sin contexto. */
+    /** With no context. */
     default int getIconHeight() {
         return getIconHeight(null);
     }
 
-    /** Sin contexto, y con el tamano que el icono diga. */
+    /** With no context, and with the size the icon says. */
     default void paintIcon(Component c, Graphics g, int x, int y) {
         paintIcon(null, g, x, y, getIconWidth(null), getIconHeight(null));
     }

@@ -1,30 +1,31 @@
 package java.lang.management;
 
 /**
- * KajiLibrary's java.lang.management.BufferPoolMXBean -- los buferes de {@code java.nio}.
+ * KajiLibrary's java.lang.management.BufferPoolMXBean -- {@code java.nio}'s buffers.
  *
- * <p>Hay dos: {@code "direct"} y {@code "mapped"}. Son memoria que <b>no esta en el monton</b>, asi
- * que no aparece en {@link MemoryMXBean#getHeapMemoryUsage} y el recolector no la ve directamente.
+ * <p>There are two: {@code "direct"} and {@code "mapped"}. They are memory that is <b>not on the
+ * heap</b>, so it does not show up in {@link MemoryMXBean#getHeapMemoryUsage} and the collector does
+ * not see it directly.
  *
- * <p>Eso los hace la causa de una clase entera de problemas: un programa que agota la memoria de la
- * maquina mientras el monton se ve tranquilo casi siempre esta perdiendo buferes directos. Se liberan
- * cuando el objeto Java que los referencia se recolecta, y eso puede tardar arbitrariamente.
+ * <p>That makes them the cause of a whole class of problems: a program exhausting the machine's
+ * memory while the heap looks calm is nearly always leaking direct buffers. They are freed when the
+ * Java object referencing them is collected, and that can take arbitrarily long.
  *
- * <p>{@link #getTotalCapacity} es lo que los buferes dicen tener; {@link #getMemoryUsed} es lo que el
- * sistema operativo reservo de verdad, y puede ser -1 si no se sabe. Los dos juntos dicen si hay
- * fragmentacion.
+ * <p>{@link #getTotalCapacity} is what the buffers say they have; {@link #getMemoryUsed} is what the
+ * operating system genuinely reserved, and it can be -1 if it is not known. The two together say
+ * whether there is fragmentation.
  */
 public interface BufferPoolMXBean extends PlatformManagedObject {
 
     /** {@code "direct"} o {@code "mapped"}. */
     String getName();
 
-    /** Cuantos buferes hay en el conjunto. */
+    /** How many buffers there are in the pool. */
     long getCount();
 
-    /** Cuanto dicen ocupar, en bytes. */
+    /** How much they say they take up, in bytes. */
     long getTotalCapacity();
 
-    /** Cuanto ocupan de verdad, o -1. Ver la nota de la clase. */
+    /** How much they genuinely take up, or -1. See the class's note. */
     long getMemoryUsed();
 }

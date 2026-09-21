@@ -4,24 +4,24 @@ import java.io.IOException;
 import java.io.Writer;
 
 /**
- * El escapado de texto, en un solo lugar.
+ * Escaping of text, in a single place.
  *
- * <p>Lo usan el escritor de cursor y el {@code writeAsEncodedUnicode} de cada evento, que tienen
- * que producir exactamente lo mismo.
+ * <p>It is used by the cursor writer and by each event's {@code writeAsEncodedUnicode}, which have
+ * to produce exactly the same.
  *
- * <p>Las reglas no son las mismas adentro y afuera de un atributo, y por eso hay dos metodos. En
- * contenido hay que escapar {@code &} y {@code <} --y {@code >} solo por la secuencia {@code ]]>},
- * aunque se escapa siempre, que es lo que hace todo el mundo y es mas simple que detectarla--. En
- * un valor de atributo hay que escapar ademas las comillas con que se lo delimita, y los tabuladores
- * y saltos de linea: sin eso la normalizacion de valores de atributo los convertiria en espacios al
- * volver a leer, o sea que el documento no diria lo mismo.
+ * <p>The rules are not the same inside and outside an attribute, and that is why there are two
+ * methods. In content {@code &} and {@code <} have to be escaped --and {@code >} only because of
+ * the sequence {@code ]]>}, although it is always escaped, which is what everybody does and is
+ * simpler than detecting it--. In an attribute value the quotes it is delimited with also have to
+ * be escaped, and tabs and line breaks: without that, attribute value normalization would turn them
+ * into spaces when reading back, that is, the document would not say the same.
  */
 final class Escapes {
 
     private Escapes() {
     }
 
-    /** Escapa texto de contenido. */
+    /** Escapes content text. */
     static void content(Writer w, String s) throws IOException {
         int n = s.length();
         for (int i = 0; i < n; i++) {
@@ -38,7 +38,7 @@ final class Escapes {
         }
     }
 
-    /** Escapa texto de contenido, desde un arreglo. */
+    /** Escapes content text, from an array. */
     static void content(Writer w, char[] b, int from, int len) throws IOException {
         int end = from + len;
         for (int i = from; i < end; i++) {
@@ -55,7 +55,7 @@ final class Escapes {
         }
     }
 
-    /** Escapa un valor de atributo, que va entre comillas dobles. */
+    /** Escapes an attribute value, which goes in double quotes. */
     static void attribute(Writer w, String s) throws IOException {
         int n = s.length();
         for (int i = 0; i < n; i++) {

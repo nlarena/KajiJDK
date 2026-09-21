@@ -5,20 +5,20 @@ import java.awt.geom.Point2D;
 import java.awt.geom.Rectangle2D;
 
 /**
- * Combina las bandas de un ráster con una matriz: cada banda de salida es una suma pesada de las de
- * entrada.
+ * Combines the bands of a raster with a matrix: each output band is a weighted sum of the input
+ * ones.
  *
- * <p>Es lo que hace posible pasar de RGB a gris con los pesos correctos, intercambiar canales,
- * separar luminancia y crominancia, o cualquier mezcla lineal de bandas en una sola pasada.
+ * <p>It is what makes it possible to go from RGB to grey with the right weights, to swap channels,
+ * to separate luminance and chrominance, or any linear mix of bands in a single pass.
  *
- * <p>La matriz tiene una fila por banda de salida. Si además tiene **una columna de más**, esa
- * última se multiplica por un 1 implícito y funciona como término constante: es el truco de
- * coordenadas homogéneas, y permite escribir un corrimiento —brillo— dentro de la misma matriz.
+ * <p>The matrix has one row per output band. If it also has **one column too many**, that last one
+ * is multiplied by an implicit 1 and works as a constant term: it is the homogeneous coordinates
+ * trick, and it allows writing a shift —brightness— inside the same matrix.
  *
- * <p>Es la única de las operaciones de este paquete que **no** trabaja sobre imágenes. Mezclar
- * bandas es una operación sobre números sin interpretar: la banda 0 de una imagen es roja y la de
- * otra es cian, y una matriz que las combine no sabría qué está produciendo. Por eso implementa
- * {@link RasterOp} y no {@link BufferedImageOp}.
+ * <p>It is the only one of the operations of this package that does **not** work over images.
+ * Mixing bands is an operation over uninterpreted numbers: band 0 of one image is red and that of
+ * another is cyan, and a matrix that combined them would not know what it is producing. That is why
+ * it implements {@link RasterOp} and not {@link BufferedImageOp}.
  */
 public class BandCombineOp implements RasterOp {
 
@@ -28,9 +28,9 @@ public class BandCombineOp implements RasterOp {
     private final RenderingHints hints;
 
     /**
-     * Con la matriz dada.
+     * With the given matrix.
      *
-     * @throws NullPointerException si la matriz es `null`
+     * @throws NullPointerException if the matrix is `null`
      */
     public BandCombineOp(float[][] matrix, RenderingHints hints) {
         this.nrows = matrix.length;
@@ -44,7 +44,7 @@ public class BandCombineOp implements RasterOp {
         this.hints = hints;
     }
 
-    /** Una copia de la matriz. */
+    /** A copy of the matrix. */
     public final float[][] getMatrix() {
         float[][] out = new float[this.nrows][];
         for (int i = 0; i < this.nrows; i++) {
@@ -55,11 +55,12 @@ public class BandCombineOp implements RasterOp {
     }
 
     /**
-     * Aplica la matriz.
+     * Applies the matrix.
      *
-     * @param dst el destino, o `null` para que se cree
-     * @throws IllegalArgumentException si la matriz no tiene tantas columnas como bandas de entrada
-     *     —o una más—, o si el destino no tiene tantas bandas como filas la matriz
+     * @param dst the destination, or `null` for it to be created
+     * @throws IllegalArgumentException if the matrix does not have as many columns as there are
+     *     input bands —or one more—, or if the destination does not have as many bands as the
+     *     matrix has rows
      */
     public WritableRaster filter(Raster src, WritableRaster dst) {
         int nBands = src.getNumBands();
@@ -67,10 +68,10 @@ public class BandCombineOp implements RasterOp {
             throw new IllegalArgumentException("Number of columns in the  matrix (" + this.ncols
                     + ") must be equal to the number of bands ([+1]) in src (" + nBands + ").");
         }
-        WritableRaster destino = dst;
-        if (destino == null) {
-            destino = this.createCompatibleDestRaster(src);
-        } else if (this.nrows != destino.getNumBands()) {
+        WritableRaster dest = dst;
+        if (dest == null) {
+            dest = this.createCompatibleDestRaster(src);
+        } else if (this.nrows != dest.getNumBands()) {
             throw new IllegalArgumentException("Number of rows in the  matrix (" + this.nrows
                     + ") must be equal to the number of bands ([+1]) in dst (" + nBands + ").");
         }
@@ -78,45 +79,45 @@ public class BandCombineOp implements RasterOp {
         int h = src.getHeight();
         int sx = src.getMinX();
         int sy = src.getMinY();
-        int dx = destino.getMinX();
-        int dy = destino.getMinY();
-        // La columna de mas se multiplica por un 1 implicito: es el termino constante.
-        boolean constante = this.ncols == nBands + 1;
-        int[] entrada = new int[nBands];
-        int[] salida = new int[this.nrows];
-        int[] maximos = new int[this.nrows];
+        int dx = dest.getMinX();
+        int dy = dest.getMinY();
+        // The extra column is multiplied by an implicit 1: it is the constant term.
+        boolean constant = this.ncols == nBands + 1;
+        int[] in = new int[nBands];
+        int[] out = new int[this.nrows];
+        int[] maxima = new int[this.nrows];
         for (int b = 0; b < this.nrows; b++) {
-            maximos[b] = (1 << destino.getSampleModel().getSampleSize(b)) - 1;
+            maxima[b] = (1 << dest.getSampleModel().getSampleSize(b)) - 1;
         }
         for (int y = 0; y < h; y++) {
             for (int x = 0; x < w; x++) {
-                entrada = src.getPixel(sx + x, sy + y, entrada);
+                in = src.getPixel(sx + x, sy + y, in);
                 for (int b = 0; b < this.nrows; b++) {
-                    float acum = 0.0f;
+                    float sum = 0.0f;
                     for (int c = 0; c < nBands; c++) {
-                        acum = acum + this.matrix[b][c] * entrada[c];
+                        sum = sum + this.matrix[b][c] * in[c];
                     }
-                    if (constante) {
-                        acum = acum + this.matrix[b][nBands];
+                    if (constant) {
+                        sum = sum + this.matrix[b][nBands];
                     }
-                    int v = (int) (acum + 0.5f);
+                    int v = (int) (sum + 0.5f);
                     if (v < 0) {
                         v = 0;
-                    } else if (v > maximos[b]) {
-                        v = maximos[b];
+                    } else if (v > maxima[b]) {
+                        v = maxima[b];
                     }
-                    salida[b] = v;
+                    out[b] = v;
                 }
-                destino.setPixel(dx + x, dy + y, salida);
+                dest.setPixel(dx + x, dy + y, out);
             }
         }
-        return destino;
+        return dest;
     }
 
     /**
-     * Un ráster vacío con tantas bandas como filas tenga la matriz.
+     * An empty raster with as many bands as the matrix has rows.
      *
-     * @throws IllegalArgumentException si la matriz no encaja con las bandas del origen
+     * @throws IllegalArgumentException if the matrix does not fit the bands of the source
      */
     public WritableRaster createCompatibleDestRaster(Raster src) {
         int nBands = src.getNumBands();
@@ -128,23 +129,23 @@ public class BandCombineOp implements RasterOp {
             return src.createCompatibleWritableRaster();
         }
         SampleModel sm = src.getSampleModel();
-        int[] bandas = new int[this.nrows];
+        int[] bands = new int[this.nrows];
         for (int i = 0; i < this.nrows; i++) {
-            // Un destino con mas bandas que el origen repite la ultima disposicion: no hay de donde
-            // sacar la de una banda que en el origen no existe.
-            bandas[i] = Math.min(i, sm.getNumBands() - 1);
+            // A destination with more bands than the source repeats the last layout: there is
+            // nowhere to take the one of a band that does not exist in the source from.
+            bands[i] = Math.min(i, sm.getNumBands() - 1);
         }
-        SampleModel nsm = sm.createSubsetSampleModel(bandas);
+        SampleModel nsm = sm.createSubsetSampleModel(bands);
         return Raster.createWritableRaster(nsm, nsm.createDataBuffer(),
                 new java.awt.Point(src.getMinX(), src.getMinY()));
     }
 
-    /** El mismo rectángulo: esta operación no mueve nada de lugar. */
+    /** The same rectangle: this operation moves nothing about. */
     public final Rectangle2D getBounds2D(Raster src) {
         return src.getBounds();
     }
 
-    /** El mismo punto. */
+    /** The same point. */
     public final Point2D getPoint2D(Point2D srcPt, Point2D dstPt) {
         Point2D out = dstPt;
         if (out == null) {
@@ -154,7 +155,7 @@ public class BandCombineOp implements RasterOp {
         return out;
     }
 
-    /** Las pistas de dibujo, o `null` si no hay. */
+    /** The rendering hints, or `null` if there are none. */
     public final RenderingHints getRenderingHints() {
         return this.hints;
     }

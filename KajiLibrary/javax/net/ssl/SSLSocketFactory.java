@@ -7,78 +7,78 @@ import java.net.Socket;
 import javax.net.SocketFactory;
 
 /**
- * Fabrica de {@link SSLSocket}.
+ * Factory of {@link SSLSocket}s.
  *
- * <h2>Por que una fabrica y no un constructor</h2>
+ * <h2>Why a factory and not a constructor</h2>
  *
- * <p>Para que el codigo que abre conexiones no sepa si son seguras. Un metodo que recibe una
- * {@link SocketFactory} y llama a {@code createSocket} sirve igual para TLS que para texto plano, y
- * elegir cual es una decision de configuracion en otro lado. Ese desacople es todo el motivo de que
- * {@code javax.net} exista.
+ * <p>So that the code that opens connections does not know whether they are secure. A method that
+ * receives a {@link SocketFactory} and calls {@code createSocket} serves TLS just as well as plain
+ * text, and choosing which is a configuration decision somewhere else. That decoupling is the whole
+ * reason {@code javax.net} exists.
  *
- * <h2>El {@code createSocket} que envuelve otro socket</h2>
+ * <h2>The {@code createSocket} that wraps another socket</h2>
  *
- * <p>{@link #createSocket(Socket, String, int, boolean)} no abre nada: toma una conexion ya abierta
- * y le pone TLS encima. Es lo que permite <strong>empezar en claro y despues cifrar</strong>, que es
- * como funcionan {@code STARTTLS} y los proxies HTTP con {@code CONNECT}.
+ * <p>{@link #createSocket(Socket, String, int, boolean)} opens nothing: it takes an already open
+ * connection and puts TLS on top. It is what allows <strong>starting in the clear and encrypting
+ * later</strong>, which is how {@code STARTTLS} and HTTP proxies with {@code CONNECT} work.
  *
- * <h2>Sin proveedor instalado</h2>
+ * <h2>Without a provider installed</h2>
  *
- * <p>{@link #getDefault} no falla: devuelve una fabrica cuyos {@code createSocket} tiran
- * {@link SocketException}. Es exactamente lo que hace el JDK, y la razon es que esta firma no puede
- * declarar excepcion — asi que el error se aplaza hasta el momento en que alguien intente usarla, y
- * ahi si tiene donde salir.
+ * <p>{@link #getDefault} does not fail: it returns a factory whose {@code createSocket} methods
+ * throw {@link SocketException}. It is exactly what the JDK does, and the reason is that this
+ * signature cannot declare an exception — so the error is postponed until the moment somebody tries
+ * to use it, and there it does have somewhere to come out.
  */
 public abstract class SSLSocketFactory extends SocketFactory {
 
-    private static SSLSocketFactory laDefault;
+    private static SSLSocketFactory theDefault;
 
     public SSLSocketFactory() {
     }
 
     /**
-     * La fabrica por omision.
+     * The default factory.
      *
-     * <p>Sale del {@link SSLContext} por omision. Sin proveedor de TLS instalado —el caso de esta
-     * VM— devuelve una que falla al usarse; ver la nota de la clase.
+     * <p>It comes from the default {@link SSLContext}. Without a TLS provider installed --this VM's
+     * case-- it returns one that fails when used; see the class note.
      */
     public static synchronized SocketFactory getDefault() {
-        if (laDefault == null) {
+        if (theDefault == null) {
             try {
-                laDefault = (SSLSocketFactory) SSLContext.getDefault().getSocketFactory();
+                theDefault = (SSLSocketFactory) SSLContext.getDefault().getSocketFactory();
             } catch (Exception e) {
-                laDefault = new DefaultSSLSocketFactory(e);
+                theDefault = new DefaultSSLSocketFactory(e);
             }
         }
-        return laDefault;
+        return theDefault;
     }
 
-    /** Las suites habilitadas por omision en lo que fabrique. */
+    /** The suites enabled by default in what it makes. */
     public abstract String[] getDefaultCipherSuites();
 
-    /** Todas las suites que se podrian habilitar. */
+    /** All the suites that could be enabled. */
     public abstract String[] getSupportedCipherSuites();
 
     /**
-     * Le pone TLS a una conexion ya abierta.
+     * Puts TLS on an already open connection.
      *
-     * @param s la conexion existente
-     * @param host el nombre del par, para verificarlo y para SNI
-     * @param autoClose si cerrar {@code s} al cerrar el socket devuelto
+     * @param s the existing connection
+     * @param host the peer's name, to check it and for SNI
+     * @param autoClose whether to close {@code s} when closing the returned socket
      */
     public abstract Socket createSocket(Socket s, String host, int port, boolean autoClose)
             throws IOException;
 
     /**
-     * Igual, pero devolviendo primero unos bytes que ya se habian leido.
+     * The same, but first handing back some bytes that had already been read.
      *
-     * <p>Resuelve un problema de multiplexado: quien mira el primer byte para decidir si la conexion
-     * es TLS ya lo saco del flujo, y el handshake necesita verlo. Este metodo lo vuelve a poner
-     * adelante.
+     * <p>It solves a multiplexing problem: whoever looks at the first byte to decide whether the
+     * connection is TLS already took it out of the stream, and the handshake needs to see it. This
+     * method puts it back in front.
      */
     public Socket createSocket(Socket s, InputStream consumed, boolean autoClose)
             throws IOException {
         throw new UnsupportedOperationException(
-                "esta fabrica no sabe reinyectar los bytes ya consumidos");
+                "this factory cannot re-inject bytes already consumed");
     }
 }

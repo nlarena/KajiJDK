@@ -1,28 +1,28 @@
 package javax.management;
 
 /**
- * "El valor esta entre estos dos", con los dos extremos incluidos.
+ * "The value is between these two", with both ends included.
  *
- * <p>De paquete: se fabrica con {@link Query#between}. No es azucar sobre dos comparaciones aunque
- * lo parezca: evalua el valor del medio <b>una sola vez</b>, y eso importa cuando ese valor es la
- * lectura de un atributo del MBean.
+ * <p>Package-private: it is made with {@link Query#between}. It is not sugar over two comparisons
+ * although it looks like it: it evaluates the middle value <b>only once</b>, and that matters when
+ * that value is the reading of an MBean attribute.
  */
 class BetweenQueryExp extends QueryEval implements QueryExp {
 
     private static final long serialVersionUID = -2933597532866307444L;
 
     /**
-     * @serial el valor a revisar
+     * @serial the value to check
      */
     private ValueExp exp1;
 
     /**
-     * @serial la cota de abajo
+     * @serial the lower bound
      */
     private ValueExp exp2;
 
     /**
-     * @serial la cota de arriba
+     * @serial the upper bound
      */
     private ValueExp exp3;
 

@@ -3,12 +3,12 @@ package java.net.http;
 import java.io.IOException;
 
 /**
- * El servidor rechazo el cambio a WebSocket.
+ * The server refused the switch to WebSocket.
  *
- * <p>Lo notable es {@link #getResponse}: <strong>lleva la respuesta HTTP adentro</strong>. Un
- * handshake de WebSocket empieza siendo un pedido HTTP normal, y cuando falla el servidor contesta
- * con un codigo y un cuerpo que suelen explicar por que — un {@code 401}, un {@code 404}, un
- * subprotocolo no soportado. Sin la respuesta, todo eso se perderia y quedaria "no se pudo".
+ * <p>What is notable is {@link #getResponse}: <strong>it carries the HTTP response inside</strong>.
+ * A WebSocket handshake starts out as a normal HTTP request, and when it fails the server answers
+ * with a status and a body that usually explain why — a {@code 401}, a {@code 404}, an unsupported
+ * subprotocol. Without the response all of that would be lost, leaving only "it could not".
  *
  * @since 11
  */
@@ -18,22 +18,22 @@ public final class WebSocketHandshakeException extends IOException {
 
     private final transient HttpResponse<?> response;
 
-    /** Con la respuesta que dio el servidor. */
+    /** With the response the server gave. */
     public WebSocketHandshakeException(HttpResponse<?> response) {
         this.response = response;
     }
 
-    /** La respuesta HTTP del rechazo. */
+    /** The HTTP response of the refusal. */
     public HttpResponse<?> getResponse() {
         return this.response;
     }
 
     /**
-     * Fija la causa y devuelve <strong>esta</strong> clase, no {@link Throwable}.
+     * Sets the cause and returns <strong>this</strong> class, not {@link Throwable}.
      *
-     * <p>Es un tipo de retorno covariante y sirve para encadenar sin castear:
-     * {@code throw new WebSocketHandshakeException(r).initCause(e);} compila porque el tipo que
-     * vuelve ya es el correcto.
+     * <p>It is a covariant return type, and it is for chaining without casting: {@code throw new
+     * WebSocketHandshakeException(r).initCause(e);} compiles because the type that comes back is
+     * already the right one.
      */
     public WebSocketHandshakeException initCause(Throwable cause) {
         super.initCause(cause);

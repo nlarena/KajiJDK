@@ -6,11 +6,7 @@ import javax.swing.JComponent;
 import javax.swing.plaf.ComponentUI;
 
 /**
- * El conmutador de Synth.
- *
- * <p>Hereda todo de {@link SynthButtonUI} y cambia el prefijo, que es de donde salen sus valores en
- * el archivo de estilos. Un conmutador se dibuja igual que un boton; lo que lo distingue es que se
- * queda elegido, y eso ya lo dice el estado del contexto.
+ * Synth's toggle button, one step below {@link SynthButtonUI} in the chain.
  */
 public class SynthToggleButtonUI extends SynthButtonUI {
 

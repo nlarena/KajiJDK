@@ -5,18 +5,19 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * El tipo de un {@link TabularData}: filas de un {@link CompositeType} dado, indexadas por algunos
- * de sus items.
+ * The type of a {@link TabularData}: rows of a given {@link CompositeType}, indexed by some of
+ * their items.
  *
- * <p>Es un `Map` descrito de forma que se pueda transmitir: el tipo de la fila dice qué columnas
- * hay, y los nombres de índice dicen cuáles de esas columnas forman la clave. La consecuencia que
- * conviene tener presente es que **la clave sale de la fila**, no se pasa aparte: por eso
- * {@link TabularData#put} toma un solo argumento y {@link TabularData#calculateIndex} existe.
+ * <p>It is a {@code Map} described in a way that can be transmitted: the row type says which
+ * columns there are, and the index names say which of those columns make up the key. The
+ * consequence worth keeping in mind is that <b>the key comes from the row</b>, it is not passed
+ * separately: that is why {@link TabularData#put} takes a single argument and
+ * {@link TabularData#calculateIndex} exists.
  *
- * <p>Los nombres de índice se guardan en el **orden en que se pasaron** y ese orden es parte del
- * tipo: es el orden en que hay que dar los valores en {@link TabularData#get}. Es la diferencia con
- * {@link CompositeType}, donde el orden de los items no cuenta para nada -- ahí no hay nada que
- * ordenar, acá sí.
+ * <p>The index names are kept in the <b>order they were passed</b> and that order is part of the
+ * type: it is the order the values have to be given in to {@link TabularData#get}. It is the
+ * difference from {@link CompositeType}, where the order of the items counts for nothing -- there
+ * there is nothing to order, here there is.
  */
 public class TabularType extends OpenType<TabularData> {
 
@@ -28,36 +29,36 @@ public class TabularType extends OpenType<TabularData> {
     private transient int hash;
 
     /**
-     * Un tipo tabular con esas filas y esa clave.
+     * A tabular type with those rows and that key.
      *
-     * @throws OpenDataException si algún nombre de índice no es un item del tipo de fila
-     * @throws IllegalArgumentException si el tipo de fila o el arreglo son nulos, si el arreglo
-     *     está vacío, o si alguno de sus elementos está en blanco
+     * @throws OpenDataException if some index name is not an item of the row type
+     * @throws IllegalArgumentException if the row type or the array are null, if the array is
+     *     empty, or if one of its elements is blank
      */
     public TabularType(String typeName, String description, CompositeType rowType,
             String[] indexNames) throws OpenDataException {
         super(TabularData.class.getName(), typeName, description);
 
         if (rowType == null) {
-            throw new IllegalArgumentException("el tipo de fila no puede ser nulo");
+            throw new IllegalArgumentException("the row type cannot be null");
         }
         if (indexNames == null || indexNames.length == 0) {
-            throw new IllegalArgumentException("hacen falta uno o más names de índice");
+            throw new IllegalArgumentException("one or more index names are required");
         }
         List<String> names = new ArrayList<String>();
         for (int i = 0; i < indexNames.length; i++) {
             String n = indexNames[i];
             if (n == null || n.trim().length() == 0) {
                 throw new IllegalArgumentException(
-                        "el nombre de índice " + i + " está en blanco");
+                        "the index name " + i + " is blank");
             }
             n = n.trim();
-            // Un índice que no es un item del tipo de fila describiría una clave que ninguna fila
-            // puede tener. Se comprueba acá y no al poner la primera fila porque el tipo tiene que
-            // ser válido por sí solo -- es lo que se transmite.
+            // An index that is not an item of the row type would describe a key no row can have. It
+            // is checked here and not when putting the first row because the type has to be valid
+            // on its own -- it is what gets transmitted.
             if (!rowType.containsKey(n)) {
                 throw new OpenDataException(
-                        "el índice " + n + " no es un item del tipo de fila");
+                        "the index " + n + " is not an item of the row type");
             }
             names.add(n);
         }
@@ -65,17 +66,17 @@ public class TabularType extends OpenType<TabularData> {
         this.indexNames = Collections.unmodifiableList(names);
     }
 
-    /** El tipo de las filas. */
+    /** The type of the rows. */
     public CompositeType getRowType() {
         return this.rowType;
     }
 
-    /** Los items que forman la clave, en orden y de sólo lectura. */
+    /** The items that make up the key, in order and read-only. */
     public List<String> getIndexNames() {
         return this.indexNames;
     }
 
-    /** Si `obj` es un {@link TabularData} cuyo tipo es éste. */
+    /** Whether {@code obj} is a {@link TabularData} whose type is this one. */
     public boolean isValue(Object obj) {
         if (!(obj instanceof TabularData)) {
             return false;
@@ -83,7 +84,7 @@ public class TabularType extends OpenType<TabularData> {
         return this.equals(((TabularData) obj).getTabularType());
     }
 
-    /** Igualdad por nombre de tipo, tipo de fila y nombres de índice **en orden**. */
+    /** Equality by type name, row type and index names <b>in order</b>. */
     public boolean equals(Object obj) {
         if (this == obj) {
             return true;

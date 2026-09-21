@@ -2,37 +2,37 @@ package org.xml.sax.helpers;
 
 import org.xml.sax.Parser;
 
-// KajiLibrary's org.xml.sax.helpers.ParserFactory -- "dame el parser SAX1 que nombra la propiedad
-// de sistema", y nada mas.
+// KajiLibrary's org.xml.sax.helpers.ParserFactory -- "give me the SAX1 parser the system property
+// names", and nothing else.
 //
-// Es la forma que tenia SAX1 de evitar una dependencia en tiempo de compilacion con un parser
-// concreto: el nombre de la clase vive en la propiedad de sistema `org.xml.sax.parser`, esta
-// clase la carga por reflexion y la castea a Parser. Cada manera de fallar es una excepcion
-// chequeada distinta, y estan todas en la clausula throws en vez de envueltas:
+// It was SAX1's way of avoiding a compile-time dependency on a concrete parser: the name of the
+// class lives in the system property `org.xml.sax.parser`, this class loads it by reflection and
+// casts it to Parser. Each way of failing is a different checked exception, and they are all in
+// the throws clause instead of wrapped:
 //
-//   NullPointerException      la propiedad ni siquiera esta seteada
-//   ClassNotFoundException    nombra una clase que no esta en el classpath
-//   IllegalAccessException    la clase o su constructor sin argumentos no es accesible
-//   InstantiationException    es abstracta, o no tiene constructor sin argumentos
-//   ClassCastException        cargo, pero no es un org.xml.sax.Parser
+//   NullPointerException      the property is not even set
+//   ClassNotFoundException    it names a class that is not on the classpath
+//   IllegalAccessException    the class or its no-argument constructor is not accessible
+//   InstantiationException    it is abstract, or has no no-argument constructor
+//   ClassCastException        it loaded, but it is not an org.xml.sax.Parser
 //
-// Ojo que NullPointerException en una clausula throws es raro y es a proposito: SAX1 eligio
-// indicar "sin configurar" con una excepcion no chequeada y documentarla. Tenerla en la clausula
-// es parte del contrato, no adorno.
+// Note that a NullPointerException in a throws clause is odd and is on purpose: SAX1 chose to
+// signal "not configured" with an unchecked exception and to document it. Having it in the clause
+// is part of the contract, not an ornament.
 //
-// Esta clase esta deprecada en el JDK junto con el resto de SAX1; XMLReaderFactory es su
-// reemplazo de SAX2. En esta biblioteca, igual que en un JDK de fabrica sin parser configurado,
-// las dos son mecanismos que no tienen nada que encontrar: KajiLibrary no trae ningun parser XML,
-// asi que makeParser() tira NullPointerException salvo que quien llama apunte la propiedad a una
-// clase propia. Esa es la respuesta correcta y no un stub -- el trabajo de la fabrica es
-// encontrar el parser de otro, y buscar, busca.
+// This class is deprecated in the JDK together with the rest of SAX1; XMLReaderFactory is its
+// SAX2 replacement. In this library, just as in a stock JDK with no parser configured, both are
+// mechanisms that have nothing to find: KajiLibrary brings no XML parser, so makeParser() throws
+// NullPointerException unless the caller points the property at a class of their own. That is the
+// right answer and not a stub -- the job of the factory is finding somebody else's parser, and
+// search, it does.
 public class ParserFactory {
 
-    // No se instancia: aca todo es estatico.
+    // Not instantiated: everything here is static.
     private ParserFactory() {
     }
 
-    // El parser que nombra la propiedad de sistema `org.xml.sax.parser`.
+    // The parser the system property `org.xml.sax.parser` names.
     public static Parser makeParser()
             throws ClassNotFoundException, IllegalAccessException,
                    InstantiationException, NullPointerException,
@@ -45,8 +45,8 @@ public class ParserFactory {
         }
     }
 
-    // El parser con exactamente este nombre de clase, cargado con el propio loader de esta clase
-    // para que se encuentre un driver que este al lado de SAX mismo.
+    // The parser with exactly this class name, loaded with this class's own loader so that a driver
+    // sitting next to SAX itself is found.
     public static Parser makeParser(String className)
             throws ClassNotFoundException, IllegalAccessException,
                    InstantiationException, ClassCastException {
@@ -57,8 +57,8 @@ public class ParserFactory {
         } else {
             c = loader.loadClass(className);
         }
-        // El cast es lo que convierte "cargue algo" en "cargue un Parser", y que falle es uno de
-        // los resultados documentados.
+        // The cast is what turns "I loaded something" into "I loaded a Parser", and its failing is
+        // one of the documented outcomes.
         return (Parser) c.newInstance();
     }
 }

@@ -3,7 +3,7 @@ package com.sun.source.doctree;
 import java.util.List;
 
 /**
- * El nodo de `@version`.
+ * The node of `@version`.
  */
 public interface VersionTree extends BlockTagTree {
 

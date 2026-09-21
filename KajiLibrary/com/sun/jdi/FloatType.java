@@ -1,7 +1,7 @@
 package com.sun.jdi;
 
 /**
- * FloatType de la maquina depurada.
+ * FloatType of the debugged machine.
  *
  * @since 1.3
  */

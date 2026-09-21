@@ -1,24 +1,24 @@
 package com.sun.jdi;
 
 /**
- * La clase no trae la informacion de depuracion que se pidio.
+ * The class does not carry the debugging information that was asked for.
  *
- * <p>Los nombres de las variables locales y los numeros de linea son opcionales: se emiten solo si
- * se compilo pidiendolos. Recibir esto no significa que el programa este mal.
+ * <p>The local variables' names and the line numbers are optional: they are emitted only if it
+ * was compiled asking for them. Receiving this does not mean that the program is wrong.
  *
  * @since 1.3
  */
 public class AbsentInformationException extends Exception {
 
-    /** Sin detalle. */
+    /** With no detail. */
     public AbsentInformationException() {
         super();
     }
 
     /**
-     * Con un mensaje.
+     * With a message.
      *
-     * @param s el mensaje
+     * @param s the message
      */
     public AbsentInformationException(String s) {
         super(s);

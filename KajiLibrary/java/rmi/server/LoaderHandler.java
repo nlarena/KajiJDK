@@ -4,24 +4,24 @@ import java.net.MalformedURLException;
 import java.net.URL;
 
 /**
- * La carga de clases de RMI, en su forma vieja.
+ * RMI's class loading, in its old form.
  *
- * @deprecated reemplazado por {@link RMIClassLoader} y su {@link RMIClassLoaderSpi}. Nunca fue algo
- *     que el codigo de usuario tuviera que implementar.
+ * @deprecated replaced by {@link RMIClassLoader} and its {@link RMIClassLoaderSpi}. It was never
+ *     something user code had to implement.
  */
 @Deprecated(since = "1.2")
 public interface LoaderHandler {
 
-    /** El paquete donde vive la implementacion. */
+    /** The package the implementation lives in. */
     static final String packagePrefix = "sun.rmi.server";
 
-    /** Carga una clase desde el codebase por omision. */
+    /** It loads a class from the default codebase. */
     Class<?> loadClass(String name) throws MalformedURLException, ClassNotFoundException;
 
-    /** Carga una clase desde ese codebase. */
+    /** It loads a class from that codebase. */
     Class<?> loadClass(URL codebase, String name)
             throws MalformedURLException, ClassNotFoundException;
 
-    /** El contexto de seguridad de ese cargador. */
+    /** That loader's security context. */
     Object getSecurityContext(ClassLoader loader);
 }

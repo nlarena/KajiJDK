@@ -3,38 +3,38 @@ package javax.naming.ldap;
 import java.io.Serializable;
 
 /**
- * Un modificador que viaja pegado a una operacion LDAP.
+ * A modifier that travels attached to an LDAP operation.
  *
- * <h2>Para que sirve el mecanismo</h2>
+ * <h2>What the mechanism is for</h2>
  *
- * <p>LDAP tiene pocas operaciones —buscar, agregar, modificar, borrar— y una forma de extenderlas
- * sin cambiar el protocolo: los <em>controles</em>. Cada uno se identifica por un OID y lleva sus
- * datos codificados en BER; el servidor que lo entiende cambia su comportamiento, y el que no, lo
- * mira y sigue.
+ * <p>LDAP has few operations --search, add, modify, delete-- and one way to extend them without
+ * changing the protocol: <em>controls</em>. Each one is identified by an OID and carries its data
+ * BER-encoded; a server that understands it changes its behaviour, and one that does not looks at
+ * it and carries on.
  *
- * <p>Asi es como se pide paginacion ({@link PagedResultsControl}) u ordenamiento
- * ({@link SortControl}) sin que existan operaciones "buscar paginado" y "buscar ordenado".
+ * <p>That is how paging ({@link PagedResultsControl}) or sorting ({@link SortControl}) are asked
+ * for without there being "paged search" and "sorted search" operations.
  *
- * <h2>{@link #isCritical}, que es lo importante</h2>
+ * <h2>{@link #isCritical}, which is what matters</h2>
  *
- * <p>Un control critico que el servidor no entiende hace que la operacion <strong>falle</strong>;
- * uno no critico se ignora en silencio. La eleccion no es de estilo: pedir ordenamiento no critico y
- * recibir resultados sin ordenar, sin enterarse, es peor que un error.
+ * <p>A critical control the server does not understand makes the operation <strong>fail</strong>;
+ * a non-critical one is silently ignored. The choice is not one of style: asking for non-critical
+ * sorting and getting unsorted results without noticing is worse than an error.
  */
 public interface Control extends Serializable {
 
-    /** Que la operacion falle si el servidor no entiende el control. */
+    /** The operation fails if the server does not understand the control. */
     boolean CRITICAL = true;
 
-    /** Que el servidor lo ignore si no lo entiende. */
+    /** The server ignores it if it does not understand it. */
     boolean NONCRITICAL = false;
 
-    /** El OID que identifica al control. */
+    /** The OID that identifies the control. */
     String getID();
 
-    /** Si es critico; ver la nota de la clase. */
+    /** Whether it is critical; see the class note. */
     boolean isCritical();
 
-    /** Los datos del control, codificados en BER, o {@code null} si no lleva. */
+    /** The control's data, BER-encoded, or {@code null} if it carries none. */
     byte[] getEncodedValue();
 }

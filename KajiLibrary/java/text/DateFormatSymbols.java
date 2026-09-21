@@ -22,13 +22,13 @@ import java.util.Locale;
  *           Some of those escapes matter more than they look: Spanish am/pm contains {@code U+00A0},
  *           a NO-BREAK SPACE, not an ordinary one.
  *
- * @implNote La superficie está completa. {@code getZoneStrings}/{@code setZoneStrings} estuvieron
- *           afuera mientras se pensó que hacía falta una tabla propia de nombres de zona; no hace
- *           falta: los nombres se piden a {@code java.util.TimeZone}, que es de donde salen también
- *           en el JDK. Lo que sigue siendo corto son los DATOS — la tabla de locales cubre seis
- *           filas y un locale desconocido cae en ROOT, y la base de zonas de esta biblioteca es
- *           mínima, así que {@code getZoneStrings} devuelve pocas filas y con nombres de
- *           desplazamiento. Es lo que la biblioteca sabe; decirlo así es el punto.
+ * @implNote The surface is complete. {@code getZoneStrings}/{@code setZoneStrings} were left out
+ *           while a zone-name table of our own was thought to be needed; it is not: the names are
+ *           asked of {@code java.util.TimeZone}, which is where they come from in the JDK as well.
+ *           What is still short is the DATA -- the locale table covers six rows and an unknown locale
+ *           falls back to ROOT, and this library's zone database is minimal, so
+ *           {@code getZoneStrings} returns few rows and with offset names. It is what the library
+ *           knows; saying so is the point.
  */
 public class DateFormatSymbols implements Cloneable, Serializable {
 
@@ -161,8 +161,9 @@ public class DateFormatSymbols implements Cloneable, Serializable {
     private String[] shortWeekdays;
     private String[] amPmStrings;
     private String localPatternChars;
-    // null mientras nadie las haya fijado a mano: en ese caso se derivan de java.util.TimeZone al
-    // pedirlas. Guardar la tabla derivada sería guardar una copia de datos que viven en otro lado.
+    // null while nobody has set them by hand: in that case they are derived from java.util.TimeZone
+    // when asked for. Storing the derived table would be storing a copy of data that lives
+    // elsewhere.
     private String[][] zoneStrings;
 
     /**
@@ -272,9 +273,9 @@ public class DateFormatSymbols implements Cloneable, Serializable {
             if (dash > 0) {
                 out[i] = new Locale(tag.substring(0, dash), tag.substring(dash + 1, tag.length()));
             } else if (tag.equals("und")) {
-                // `und` es el tag BCP-47 de "sin determinar", y el locale que le corresponde es
-                // ROOT --no uno cuyo idioma se llame literalmente "und"--. Es lo que devuelve
-                // `Locale.forLanguageTag("und")`, y lo que el JDK pone en esta lista.
+                // `und` is BCP-47's tag for "undetermined", and the locale it corresponds to is
+                // ROOT --not one whose language is literally called "und"--. It is what
+                // `Locale.forLanguageTag("und")` returns, and what the JDK puts in this list.
                 out[i] = Locale.ROOT;
             } else {
                 out[i] = new Locale(tag);
@@ -414,51 +415,51 @@ public class DateFormatSymbols implements Cloneable, Serializable {
     }
 
     /**
-     * Los nombres de las zonas horarias, una fila por zona.
+     * The time zones' names, one row per zone.
      *
-     * <p>Cada fila es {@code {id, largo estándar, corto estándar, largo de verano, corto de
-     * verano}}. El javadoc pide al menos cinco columnas y define esas cinco; acá se devuelven
-     * exactamente cinco, sin las de nombre "genérico" que el JDK agrega, porque
-     * {@code java.util.TimeZone} no tiene de dónde sacarlas y rellenarlas con el nombre estándar
-     * sería presentar un dato como otro.
+     * <p>Each row is {@code {id, long standard, short standard, long daylight, short daylight}}. The
+     * javadoc asks for at least five columns and defines those five; exactly five are returned here,
+     * without the "generic" name ones the JDK adds, because {@code java.util.TimeZone} has nowhere to
+     * take them from and filling them with the standard name would be presenting one datum as
+     * another.
      *
-     * <p><b>De dónde salen los nombres.</b> Si nadie llamó a {@link #setZoneStrings}, de
-     * {@code TimeZone.getDisplayName()} para cada ID que {@code TimeZone.getAvailableIDs()}
-     * declare. No hay una tabla propia: sería una segunda copia de los mismos datos, y las dos se
-     * separarían. Con la base de zonas reducida que trae esta biblioteca la tabla sale corta y con
-     * nombres de desplazamiento en vez de nombres traducidos — que es lo que la biblioteca sabe, y
-     * decirlo así es lo correcto; inventar "Hora Estándar del Este" cuando no hay tzdb detrás sería
-     * lo contrario.
+     * <p><b>Where the names come from.</b> If nobody called {@link #setZoneStrings}, from
+     * {@code TimeZone.getDisplayName()} for every ID {@code TimeZone.getAvailableIDs()} declares.
+     * There is no table of our own: it would be a second copy of the same data, and the two would
+     * drift apart. With the reduced zone database this library carries, the table comes out short and
+     * with offset names instead of translated ones -- which is what the library knows, and saying so
+     * is the right thing; inventing "Eastern Standard Time" with no tzdb behind it would be the
+     * opposite.
      *
-     * @return los nombres de zona
+     * @return the zone names
      */
     public String[][] getZoneStrings() {
         if (this.zoneStrings != null) {
-            return DateFormatSymbols.copiar(this.zoneStrings);
+            return DateFormatSymbols.copyOf(this.zoneStrings);
         }
         String[] ids = java.util.TimeZone.getAvailableIDs();
         String[][] out = new String[ids.length][];
         for (int i = 0; i < ids.length; i = i + 1) {
             java.util.TimeZone z = java.util.TimeZone.getTimeZone(ids[i]);
-            String[] fila = new String[5];
-            fila[0] = ids[i];
-            fila[1] = z.getDisplayName(false, java.util.TimeZone.LONG, this.locale);
-            fila[2] = z.getDisplayName(false, java.util.TimeZone.SHORT, this.locale);
-            fila[3] = z.getDisplayName(true, java.util.TimeZone.LONG, this.locale);
-            fila[4] = z.getDisplayName(true, java.util.TimeZone.SHORT, this.locale);
-            out[i] = fila;
+            String[] row = new String[5];
+            row[0] = ids[i];
+            row[1] = z.getDisplayName(false, java.util.TimeZone.LONG, this.locale);
+            row[2] = z.getDisplayName(false, java.util.TimeZone.SHORT, this.locale);
+            row[3] = z.getDisplayName(true, java.util.TimeZone.LONG, this.locale);
+            row[4] = z.getDisplayName(true, java.util.TimeZone.SHORT, this.locale);
+            out[i] = row;
         }
         return out;
     }
 
     /**
-     * Reemplaza los nombres de zona.
+     * It replaces the zone names.
      *
-     * <p>Lo que se fije acá lo usa de verdad {@link SimpleDateFormat} para las letras {@code z} y
-     * {@code zzzz}: un setter que no cambiara la salida sería peor que no tenerlo.
+     * <p>What is set here is genuinely used by {@link SimpleDateFormat} for the letters {@code z} and
+     * {@code zzzz}: a setter that did not change the output would be worse than not having one.
      *
-     * @param newZoneStrings las filas, cada una con al menos cinco entradas
-     * @throws IllegalArgumentException si alguna fila tiene menos de cinco
+     * @param newZoneStrings the rows, each with at least five entries
+     * @throws IllegalArgumentException if some row has fewer than five
      */
     public void setZoneStrings(String[][] newZoneStrings) {
         if (newZoneStrings == null) {
@@ -470,12 +471,12 @@ public class DateFormatSymbols implements Cloneable, Serializable {
                         + " of the input array does not have a length of at least 5");
             }
         }
-        this.zoneStrings = DateFormatSymbols.copiar(newZoneStrings);
+        this.zoneStrings = DateFormatSymbols.copyOf(newZoneStrings);
     }
 
-    // La fila de una zona, o null si no está. La usa SimpleDateFormat; devuelve null en vez de una
-    // fila vacía para que el llamador pueda distinguir "no hay" de "se llama así".
-    String[] filaDeZona(String id) {
+    // A zone's row, or null if it is not there. It is used by SimpleDateFormat; it returns null
+    // instead of an empty row so the caller can tell "there is none" from "that is its name".
+    String[] zoneRow(String id) {
         if (this.zoneStrings == null) {
             return null;
         }
@@ -487,14 +488,14 @@ public class DateFormatSymbols implements Cloneable, Serializable {
         return null;
     }
 
-    private static String[][] copiar(String[][] in) {
+    private static String[][] copyOf(String[][] in) {
         String[][] out = new String[in.length][];
         for (int i = 0; i < in.length; i = i + 1) {
-            String[] fila = new String[in[i].length];
+            String[] row = new String[in[i].length];
             for (int k = 0; k < in[i].length; k = k + 1) {
-                fila[k] = in[i][k];
+                row[k] = in[i][k];
             }
-            out[i] = fila;
+            out[i] = row;
         }
         return out;
     }
@@ -532,7 +533,7 @@ public class DateFormatSymbols implements Cloneable, Serializable {
         out.amPmStrings = DateFormatSymbols.copy(this.amPmStrings);
         out.localPatternChars = this.localPatternChars;
         if (this.zoneStrings != null) {
-            out.zoneStrings = DateFormatSymbols.copiar(this.zoneStrings);
+            out.zoneStrings = DateFormatSymbols.copyOf(this.zoneStrings);
         }
         return out;
     }

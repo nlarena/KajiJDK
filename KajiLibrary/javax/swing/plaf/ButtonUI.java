@@ -1,10 +1,10 @@
 package javax.swing.plaf;
 
 /**
- * El aspecto de un boton: el tipo por el que {@code AbstractButton} habla con su UI.
+ * A button's look and feel: the type through which {@code AbstractButton} talks to its UI.
  *
- * <p>No agrega nada a {@link ComponentUI}; existe para que cada familia de componentes tenga su
- * tipo de UI y un aspecto no pueda, por error, instalarle a un boton el UI de una etiqueta.
+ * <p>It adds nothing to {@link ComponentUI}; it exists so that each family of components has its
+ * own UI type and a look and feel cannot, by mistake, install a label's UI on a button.
  */
 public abstract class ButtonUI extends ComponentUI {
 

@@ -4,60 +4,60 @@ import java.awt.geom.Rectangle2D;
 import java.awt.image.RenderedImage;
 
 /**
- * KajiLibrary's java.awt.image.renderable.ContextualRenderedImageFactory -- una operacion que sabe
- * cuanto necesita de sus fuentes.
+ * KajiLibrary's java.awt.image.renderable.ContextualRenderedImageFactory -- an operation that knows
+ * how much it needs from its sources.
  *
- * <p>Agrega a {@link RenderedImageFactory} lo que hace falta para que una cadena de operaciones se
- * pueda evaluar <b>por partes</b>. La pieza clave es {@link #mapRenderContext}: dado lo que se
- * quiere de la salida, dice que hace falta de la entrada.
+ * <p>It adds to {@link RenderedImageFactory} what is needed for a chain of operations to be
+ * evaluated <b>in parts</b>. The key piece is {@link #mapRenderContext}: given what is wanted from
+ * the output, it says what is needed from the input.
  *
- * <p>Sin eso, pedir un recorte de mil pixeles del final de una cadena de diez filtros obligaria a
- * calcular las diez imagenes enteras. Con eso, cada operacion traduce el pedido hacia atras y solo
- * se calcula la region que de verdad se usa. Es la diferencia entre poder trabajar con una imagen de
- * gigapixeles y no poder.
+ * <p>Without it, asking for a thousand-pixel crop from the end of a chain of ten filters would
+ * force computing the ten whole images. With it, each operation translates the request backwards
+ * and only the region actually used is computed. It is the difference between being able to work
+ * with a gigapixel image and not.
  *
- * <p>La traduccion casi nunca es la identidad. Un desenfoque de radio cinco necesita cinco pixeles
- * <b>de mas</b> en cada borde para que el borde del recorte no salga mal, y una rotacion necesita un
- * cuadrilatero y no un rectangulo. Por eso el metodo devuelve un {@link RenderContext} nuevo y no un
- * rectangulo.
+ * <p>The translation is almost never the identity. A blur of radius five needs five <b>extra</b>
+ * pixels on each edge so that the edge of the crop does not come out wrong, and a rotation needs a
+ * quadrilateral and not a rectangle. That is why the method returns a new {@link RenderContext} and
+ * not a rectangle.
  *
- * <p>{@link #isDynamic} avisa si la operacion puede dar resultados distintos con los mismos
- * argumentos --porque lee de una fuente viva, por ejemplo--. Es lo que le dice al sistema si puede
- * guardarse el resultado en cache.
+ * <p>{@link #isDynamic} tells whether the operation can give different results with the same
+ * arguments --because it reads from a live source, for example--. It is what tells the system
+ * whether the result can be cached.
  */
 public interface ContextualRenderedImageFactory extends RenderedImageFactory {
 
     /**
-     * Que hace falta de una fuente para poder producir lo que se pide.
+     * What is needed from a source to be able to produce what is asked.
      *
-     * @param i cual de las fuentes
-     * @param renderContext lo que se quiere de la salida
-     * @return lo que hay que pedirle a esa fuente; ver la nota de la clase
+     * @param i which of the sources
+     * @param renderContext what is wanted from the output
+     * @return what has to be asked of that source; see the class note
      */
     RenderContext mapRenderContext(int i, RenderContext renderContext, ParameterBlock paramBlock,
                                    RenderableImage image);
 
-    /** La imagen concreta para ese contexto. */
+    /** The concrete image for that context. */
     RenderedImage create(RenderContext renderContext, ParameterBlock paramBlock);
 
     /**
-     * El rectangulo que ocupa la salida, en coordenadas <b>reales</b>.
+     * The rectangle the output occupies, in <b>real</b> coordinates.
      *
-     * <p>Reales y no enteras porque una imagen renderizable no tiene resolucion; ver
+     * <p>Real and not integer because a renderable image has no resolution; see
      * {@link RenderedImageFactory}.
      */
     Rectangle2D getBounds2D(ParameterBlock paramBlock);
 
     /**
-     * Una propiedad de la salida, calculada sin renderizar.
+     * A property of the output, computed without rendering.
      *
-     * @return {@code java.awt.Image.UndefinedProperty} si no la tiene
+     * @return {@code java.awt.Image.UndefinedProperty} if it does not have it
      */
     Object getProperty(ParameterBlock paramBlock, String name);
 
-    /** Los nombres de las propiedades que sabe contestar, o null si no tiene ninguna. */
+    /** The names of the properties it can answer, or null if it has none. */
     String[] getPropertyNames();
 
-    /** Si dos renderizaciones iguales pueden dar resultados distintos. Ver la nota de la clase. */
+    /** Whether two equal renderings can give different results. See the class note. */
     boolean isDynamic();
 }

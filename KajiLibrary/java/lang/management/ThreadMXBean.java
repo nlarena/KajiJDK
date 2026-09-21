@@ -1,194 +1,196 @@
 package java.lang.management;
 
 /**
- * KajiLibrary's java.lang.management.ThreadMXBean -- los hilos de esta maquina virtual.
+ * KajiLibrary's java.lang.management.ThreadMXBean -- this virtual machine's threads.
  *
- * <p>La interfaz mas grande del paquete, y la unica que puede <b>detectar interbloqueos</b>. Eso
- * ultimo es lo que la hace valiosa: es informacion que un programa no puede calcular por si mismo.
+ * <p>The package's largest interface, and the only one that can <b>detect deadlocks</b>. That last
+ * point is what makes it valuable: it is information a program cannot work out for itself.
  *
- * <h2>Los dos buscadores de interbloqueo</h2>
+ * <h2>The two deadlock finders</h2>
  *
- * <p>{@link #findMonitorDeadlockedThreads} mira solo los monitores de {@code synchronized};
- * {@link #findDeadlockedThreads} mira ademas los candados de {@code java.util.concurrent}. Casi
- * siempre se quiere el segundo -- el primero es de una epoca en que el otro tipo de candado no
- * existia--.
+ * <p>{@link #findMonitorDeadlockedThreads} looks only at {@code synchronized} monitors;
+ * {@link #findDeadlockedThreads} looks at {@code java.util.concurrent}'s locks as well. The second
+ * is nearly always the one wanted -- the first is from a time when the other kind of lock did not
+ * exist--.
  *
- * <p>Los dos devuelven <b>null</b> cuando no hay ninguno bloqueado, no un arreglo vacio. Es la trampa
- * mas comun de esta interfaz.
+ * <p>Both return <b>null</b> when none is blocked, not an empty array. It is this interface's
+ * commonest trap.
  *
- * <h2>Lo que hay que activar antes</h2>
+ * <h2>What has to be switched on first</h2>
  *
- * <p>Dos cosas estan apagadas por omision porque cuestan:
+ * <p>Two things are off by default because they cost:
  *
  * <ul>
- *   <li>el seguimiento de <b>contencion</b> ({@link #setThreadContentionMonitoringEnabled}), sin el
- *       cual {@code getBlockedTime} y {@code getWaitedTime} devuelven -1;
- *   <li>el de <b>tiempo de procesador</b> ({@link #setThreadCpuTimeEnabled}), sin el cual
- *       {@code getThreadCpuTime} devuelve -1.
+ *   <li><b>contention</b> tracking ({@link #setThreadContentionMonitoringEnabled}), without which
+ *       {@code getBlockedTime} and {@code getWaitedTime} return -1;
+ *   <li><b>processor time</b> tracking ({@link #setThreadCpuTimeEnabled}), without which
+ *       {@code getThreadCpuTime} returns -1.
  * </ul>
  *
- * <p>Y no todas las maquinas virtuales los soportan; hay que preguntar con los {@code isXxxSupported}
- * antes, porque activarlos sin soporte lanza {@link UnsupportedOperationException}.
+ * <p>And not every virtual machine supports them; they have to be asked about with the
+ * {@code isXxxSupported} first, because switching them on without support throws
+ * {@link UnsupportedOperationException}.
  *
- * <h2>Los identificadores se reusan</h2>
+ * <h2>The identifiers get reused</h2>
  *
- * <p>Un identificador de hilo vale mientras ese hilo vive. Cuando muere, la maquina virtual lo puede
- * volver a dar. Guardar identificadores y consultarlos mas tarde puede devolver informacion de otro
- * hilo, o null.
+ * <p>A thread's identifier is good while that thread lives. When it dies, the virtual machine may
+ * hand the number out again. Keeping identifiers and asking about them later can return another
+ * thread's information, or null.
  */
 public interface ThreadMXBean extends PlatformManagedObject {
 
-    /** Cuantos hilos vivos hay, incluidos los demonio. */
+    /** How many live threads there are, the daemon ones included. */
     int getThreadCount();
 
-    /** El maximo desde que arranco, o desde el ultimo {@link #resetPeakThreadCount}. */
+    /** The peak since it started, or since the last {@link #resetPeakThreadCount}. */
     int getPeakThreadCount();
 
-    /** Cuantos se crearon en total. */
+    /** How many were created in all. */
     long getTotalStartedThreadCount();
 
-    /** Cuantos de los vivos son demonio. */
+    /** How many of the live ones are daemons. */
     int getDaemonThreadCount();
 
-    /** Los identificadores de los vivos. Ver la nota de la clase: se reusan. */
+    /** The live ones' identifiers. See the class's note: they get reused. */
     long[] getAllThreadIds();
 
     /**
-     * La informacion de ese hilo, sin pila.
+     * That thread's information, with no stack.
      *
-     * @return null si no hay hilo vivo con ese identificador
-     * @throws IllegalArgumentException si el identificador no es positivo
+     * @return null if there is no live thread with that identifier
+     * @throws IllegalArgumentException if the identifier is not positive
      */
     ThreadInfo getThreadInfo(long id);
 
-    /** Idem, de varios; la posicion que no exista queda en null. */
+    /** The same, for several; a position that does not exist is left null. */
     ThreadInfo[] getThreadInfo(long[] ids);
 
     /**
-     * Idem, con hasta esa cantidad de marcos de pila.
+     * The same, with up to that many stack frames.
      *
-     * @param maxDepth cuantos marcos como maximo; {@link Integer#MAX_VALUE} para todos
-     * @throws IllegalArgumentException si la profundidad es negativa
+     * @param maxDepth how many frames at most; {@link Integer#MAX_VALUE} for all of them
+     * @throws IllegalArgumentException if the depth is negative
      */
     ThreadInfo getThreadInfo(long id, int maxDepth);
 
-    /** Idem, de varios. */
+    /** The same, for several. */
     ThreadInfo[] getThreadInfo(long[] ids, int maxDepth);
 
-    /** Si esta maquina virtual sabe medir contencion. */
+    /** Whether this virtual machine knows how to measure contention. */
     boolean isThreadContentionMonitoringSupported();
 
     /**
-     * Si esta activado.
+     * Whether it is switched on.
      *
-     * @throws UnsupportedOperationException si no lo soporta
+     * @throws UnsupportedOperationException if it does not support it
      */
     boolean isThreadContentionMonitoringEnabled();
 
     /**
-     * Lo activa o lo apaga. Ver la nota de la clase.
+     * It switches it on or off. See the class's note.
      *
-     * @throws UnsupportedOperationException si no lo soporta
+     * @throws UnsupportedOperationException if it does not support it
      */
     void setThreadContentionMonitoringEnabled(boolean enable);
 
     /**
-     * Nanosegundos de procesador del hilo actual, o -1 si esta apagado.
+     * Processor nanoseconds of the current thread, or -1 if it is switched off.
      *
-     * @throws UnsupportedOperationException si no lo soporta
+     * @throws UnsupportedOperationException if it does not support it
      */
     long getCurrentThreadCpuTime();
 
     /**
-     * Idem, solo el tiempo en modo usuario.
+     * The same, user-mode time only.
      *
-     * @throws UnsupportedOperationException si no lo soporta
+     * @throws UnsupportedOperationException if it does not support it
      */
     long getCurrentThreadUserTime();
 
     /**
-     * Nanosegundos de procesador de ese hilo, o -1.
+     * Processor nanoseconds of that thread, or -1.
      *
-     * @throws UnsupportedOperationException si no lo soporta
+     * @throws UnsupportedOperationException if it does not support it
      */
     long getThreadCpuTime(long id);
 
     /**
-     * Idem, en modo usuario.
+     * The same, in user mode.
      *
-     * @throws UnsupportedOperationException si no lo soporta
+     * @throws UnsupportedOperationException if it does not support it
      */
     long getThreadUserTime(long id);
 
-    /** Si sabe medir el tiempo de procesador de cualquier hilo. */
+    /** Whether it can measure any thread's processor time. */
     boolean isThreadCpuTimeSupported();
 
-    /** Si sabe medirlo al menos del hilo actual. */
+    /** Whether it can measure at least the current thread's. */
     boolean isCurrentThreadCpuTimeSupported();
 
     /**
-     * Si la medicion esta activada.
+     * Whether the measurement is switched on.
      *
-     * @throws UnsupportedOperationException si no lo soporta
+     * @throws UnsupportedOperationException if it does not support it
      */
     boolean isThreadCpuTimeEnabled();
 
     /**
-     * La activa o la apaga.
+     * It switches it on or off.
      *
-     * @throws UnsupportedOperationException si no lo soporta
+     * @throws UnsupportedOperationException if it does not support it
      */
     void setThreadCpuTimeEnabled(boolean enable);
 
     /**
-     * Los hilos bloqueados en un ciclo de monitores.
+     * The threads blocked in a cycle of monitors.
      *
-     * @return null si no hay ninguno. Ver la nota de la clase.
+     * @return null if there is none. See the class's note.
      */
     long[] findMonitorDeadlockedThreads();
 
-    /** Pone el pico en la cantidad actual. */
+    /** It sets the peak to the current count. */
     void resetPeakThreadCount();
 
     /**
-     * Los hilos bloqueados en un ciclo, contando tambien los candados de
-     * {@code java.util.concurrent}.
+     * The threads blocked in a cycle, counting {@code java.util.concurrent}'s locks as well.
      *
-     * @return null si no hay ninguno
-     * @throws UnsupportedOperationException si esta maquina virtual no sabe mirar esos candados
+     * @return null if there is none
+     * @throws UnsupportedOperationException if this virtual machine cannot look at those locks
      */
     long[] findDeadlockedThreads();
 
-    /** Si sabe informar que monitores tiene tomados un hilo. */
+    /** Whether it can report which monitors a thread holds. */
     boolean isObjectMonitorUsageSupported();
 
-    /** Si sabe informar que candados de {@code java.util.concurrent} tiene tomados. */
+    /** Whether it can report which {@code java.util.concurrent} locks it holds. */
     boolean isSynchronizerUsageSupported();
 
     /**
-     * La informacion de esos hilos, con la pila entera y opcionalmente los candados.
+     * Those threads' information, with the whole stack and optionally the locks.
      *
-     * @param lockedMonitors si incluir los monitores tomados
-     * @param lockedSynchronizers si incluir los candados de {@code java.util.concurrent}
-     * @throws UnsupportedOperationException si se pide algo que esta maquina virtual no soporta
+     * @param lockedMonitors whether to include the held monitors
+     * @param lockedSynchronizers whether to include {@code java.util.concurrent}'s locks
+     * @throws UnsupportedOperationException if something this virtual machine does not support is
+     *     asked for
      */
     ThreadInfo[] getThreadInfo(long[] ids, boolean lockedMonitors, boolean lockedSynchronizers);
 
     /**
-     * Idem, limitando la profundidad de pila.
+     * The same, limiting the stack depth.
      *
-     * <p>Por omision ignora el limite y delega en la version sin el; una maquina virtual que sepa
-     * cortar la pila redefine esto para no pagar por marcos que se van a descartar.
+     * <p>By default it ignores the limit and delegates to the version without it; a virtual machine
+     * that knows how to cut the stack overrides this so as not to pay for frames that are going to
+     * be discarded.
      */
     default ThreadInfo[] getThreadInfo(long[] ids, boolean lockedMonitors,
                                        boolean lockedSynchronizers, int maxDepth) {
         throw new UnsupportedOperationException();
     }
 
-    /** La informacion de <b>todos</b> los hilos vivos. */
+    /** <b>Every</b> live thread's information. */
     ThreadInfo[] dumpAllThreads(boolean lockedMonitors, boolean lockedSynchronizers);
 
-    /** Idem, limitando la profundidad. */
+    /** The same, limiting the depth. */
     default ThreadInfo[] dumpAllThreads(boolean lockedMonitors, boolean lockedSynchronizers,
                                         int maxDepth) {
         throw new UnsupportedOperationException();

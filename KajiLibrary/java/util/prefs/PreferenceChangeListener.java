@@ -2,13 +2,13 @@ package java.util.prefs;
 
 import java.util.EventListener;
 
-// Quien quiera enterarse de que una clave de un nodo cambio de valor.
+// Whoever wants to learn that a node's key changed value.
 //
-// Se escucha **un nodo**, no un subarbol: los cambios de los hijos no llegan aca. Es deliberado --
-// propagar hacia arriba obligaria a notificar la raiz por cualquier cambio en cualquier lado.
+// **One node** is listened to, not a subtree: the children's changes do not arrive here. It is
+// deliberate -- propagating upwards would force notifying the root for any change anywhere.
 public interface PreferenceChangeListener extends EventListener {
 
-    // Una clave de `evt.getNode()` se agrego, cambio o se borro. En el borrado
-    // {@link PreferenceChangeEvent#getNewValue} devuelve `null`.
+    // A key of `evt.getNode()` was added, changed or removed. On a removal
+    // {@link PreferenceChangeEvent#getNewValue} returns `null`.
     void preferenceChange(PreferenceChangeEvent evt);
 }

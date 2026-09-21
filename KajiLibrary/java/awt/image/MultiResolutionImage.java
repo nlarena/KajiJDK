@@ -4,21 +4,21 @@ import java.awt.Image;
 import java.util.List;
 
 /**
- * Una imagen que existe en **varias resoluciones** y elige cuál usar.
+ * An image that exists in **several resolutions** and chooses which one to use.
  *
- * <p>Es lo que hace que un ícono se vea nítido en una pantalla de alta densidad: la misma imagen
- * lógica guarda una versión de 16 píxeles y otra de 32, y quien la dibuja pide la que le sirve para
- * el tamaño en el que la va a mostrar.
+ * <p>It is what makes an icon look sharp on a high density screen: the same logical image keeps a
+ * version of 16 pixels and another of 32, and whoever draws it asks for the one that serves for the
+ * size it is going to be shown at.
  */
 public interface MultiResolutionImage {
 
     /**
-     * La versión que mejor sirve para dibujar a ese tamaño.
+     * The version that best serves for drawing at that size.
      *
-     * @throws IllegalArgumentException si alguna de las dos medidas no es positiva
+     * @throws IllegalArgumentException if either of the two measures is not positive
      */
     Image getResolutionVariant(double destImageWidth, double destImageHeight);
 
-    /** Todas las versiones, de menor a mayor. */
+    /** Every version, from smallest to largest. */
     List<Image> getResolutionVariants();
 }

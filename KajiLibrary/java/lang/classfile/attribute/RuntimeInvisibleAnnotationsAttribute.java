@@ -8,22 +8,21 @@ import java.lang.classfile.MethodElement;
 import java.util.List;
 import jdk.internal.classfile.impl.TypedAttributes;
 
-// `RuntimeInvisibleAnnotations` (JVMS §4.7.16/§4.7.17): las anotaciones NO visibles
-// por reflexión. La diferencia entre las dos
-// tablas es sólo esa: el formato de la anotación es el mismo, y quién la ve lo decide en qué
-// atributo está, no la anotación.
+// `RuntimeInvisibleAnnotations` (JVMS §4.7.16/§4.7.17): the annotations NOT visible by reflection.
+// That is the only difference between the two tables: the annotation's format is the same, and who
+// sees it is decided by which attribute it is in, not by the annotation.
 public interface RuntimeInvisibleAnnotationsAttribute
         extends Attribute<RuntimeInvisibleAnnotationsAttribute>, ClassElement, MethodElement, FieldElement {
 
-    /** Las anotaciones, en el orden del archivo. */
+    /** The annotations, in file order. */
     List<Annotation> annotations();
 
-    /** El atributo con estas anotaciones. */
+    /** The attribute with these annotations. */
     public static RuntimeInvisibleAnnotationsAttribute of(List<Annotation> annotations) {
         return TypedAttributes.runtimeInvisibleAnnotations(annotations);
     }
 
-    /** El atributo con estas anotaciones. */
+    /** The attribute with these annotations. */
     public static RuntimeInvisibleAnnotationsAttribute of(Annotation... annotations) {
         return TypedAttributes.runtimeInvisibleAnnotations(TypedAttributes.listOfAnnotations(annotations));
     }

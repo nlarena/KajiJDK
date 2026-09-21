@@ -1,10 +1,10 @@
 package java.lang.classfile;
 
-// Una posición dentro del cuerpo de un método, tratada como una identidad y no como un número. Es lo
-// que hace que se pueda insertar código sin recalcular saltos: los destinos se nombran, y el offset
-// se resuelve recién al escribir.
+// A position inside a method's body, treated as an identity and not as a number. It is what makes
+// inserting code possible without recomputing jumps: the targets are named, and the offset is only
+// resolved when writing.
 //
-// No declara ningún miembro a propósito — el JDK tampoco. Una etiqueta sólo se compara por identidad
-// y se resuelve contra el `CodeModel` o el `CodeBuilder` que la creó.
+// It declares no member on purpose -- neither does the JDK. A label is only compared by identity and
+// is resolved against the `CodeModel` or the `CodeBuilder` that created it.
 public interface Label {
 }

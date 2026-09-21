@@ -6,41 +6,43 @@ import java.util.Map;
 import java.util.TreeMap;
 
 /**
- * Un {@link Descriptor} que no cambia nunca.
+ * A {@link Descriptor} that never changes.
  *
- * <p>Los cuatro mutadores de la interfaz --{@code setField}, {@code setFields},
- * {@code removeField}-- estan y tiran {@link RuntimeOperationsException}. Podria parecer que
- * mentir, pero es lo contrario: el contrato de `Descriptor` dice que esos metodos tiran
- * `RuntimeOperationsException` cuando el descriptor es inmutable, asi que cumplirlo <b>es</b>
- * tirar. Y por eso {@link #clone()} se devuelve a si mismo: copiar lo que no cambia no sirve para
- * nada.
+ * <p>The three mutators of the interface --{@code setField}, {@code setFields},
+ * {@code removeField}-- are there and throw {@link RuntimeOperationsException}. It might look like
+ * lying, but it is the opposite: the {@code Descriptor} contract says those methods throw
+ * {@code RuntimeOperationsException} when the descriptor is immutable, so fulfilling it <b>is</b>
+ * throwing. And that is why {@link #clone()} returns itself: copying what does not change serves
+ * no purpose. (An earlier note said four mutators.)
  *
- * <p>Los nombres se guardan <b>ordenados</b> y se comparan <b>sin distinguir mayusculas</b>. Lo
- * primero permite buscar por biseccion; lo segundo es la regla de JMX, y hace que un descriptor no
- * pueda llevar {@code Units} y {@code units} a la vez.
+ * <p>Names are kept <b>sorted</b> and compared <b>case-insensitively</b>. The first allows binary
+ * search; the second is the JMX rule, and it means a descriptor cannot carry {@code Units} and
+ * {@code units} at once.
  */
 public class ImmutableDescriptor implements Descriptor {
 
     private static final long serialVersionUID = 8853308591080540165L;
 
-    /** El descriptor sin campos. Se comparte porque no hay nada que se le pueda hacer. */
+    /**
+     * The descriptor without fields. It is shared because there is nothing that can be done to it.
+     */
     public static final ImmutableDescriptor EMPTY_DESCRIPTOR = new ImmutableDescriptor();
 
     /**
-     * @serial los nombres, ordenados sin distinguir mayusculas
+     * @serial the names, sorted case-insensitively
      */
     private final String[] names;
 
     /**
-     * @serial los valores, en el orden de los nombres
+     * @serial the values, in the order of the names
      */
     private final Object[] values;
 
     private transient int hashCode = -1;
 
     /**
-     * @throws IllegalArgumentException si los arreglos no miden lo mismo, si un nombre es nulo o
-     *     vacio, o si un nombre se repite con otro valor
+     * @throws IllegalArgumentException if the arrays do not have the same length, if a name is null
+     *     or empty, or if a name is repeated with another value
      */
     public ImmutableDescriptor(String[] fieldNames, Object[] fieldValues) {
         if (fieldNames == null || fieldValues == null) {
@@ -49,12 +51,12 @@ public class ImmutableDescriptor implements Descriptor {
         if (fieldNames.length != fieldValues.length) {
             throw new IllegalArgumentException("Different size arrays");
         }
-        Map<String, Object> mapa = ordenar(fieldNames, fieldValues);
-        int n = mapa.size();
+        Map<String, Object> map = sort(fieldNames, fieldValues);
+        int n = map.size();
         names = new String[n];
         values = new Object[n];
         int i = 0;
-        Iterator<Map.Entry<String, Object>> it = mapa.entrySet().iterator();
+        Iterator<Map.Entry<String, Object>> it = map.entrySet().iterator();
         while (it.hasNext()) {
             Map.Entry<String, Object> e = it.next();
             names[i] = e.getKey();
@@ -64,10 +66,10 @@ public class ImmutableDescriptor implements Descriptor {
     }
 
     /**
-     * Cada cadena es {@code "nombre=valor"}, cortada en el <b>primer</b> {@code =}.
+     * Each string is {@code "name=value"}, cut at the <b>first</b> {@code =}.
      *
-     * <p>Que el corte sea en el primero y no en el ultimo importa: un valor puede llevar `=` y un
-     * nombre no.
+     * <p>That the cut is at the first and not the last matters: a value may contain {@code =} and a
+     * name may not.
      */
     public ImmutableDescriptor(String... fields) {
         if (fields == null) {
@@ -76,23 +78,23 @@ public class ImmutableDescriptor implements Descriptor {
         String[] ns = new String[fields.length];
         Object[] vs = new Object[fields.length];
         for (int i = 0; i < fields.length; i++) {
-            String campo = fields[i];
-            if (campo == null || campo.length() == 0) {
+            String field = fields[i];
+            if (field == null || field.length() == 0) {
                 throw new IllegalArgumentException("Empty field name");
             }
-            int eq = campo.indexOf('=');
+            int eq = field.indexOf('=');
             if (eq < 0) {
-                throw new IllegalArgumentException("Missing = character: " + campo);
+                throw new IllegalArgumentException("Missing = character: " + field);
             }
-            ns[i] = campo.substring(0, eq);
-            vs[i] = campo.substring(eq + 1);
+            ns[i] = field.substring(0, eq);
+            vs[i] = field.substring(eq + 1);
         }
-        Map<String, Object> mapa = ordenar(ns, vs);
-        int n = mapa.size();
+        Map<String, Object> map = sort(ns, vs);
+        int n = map.size();
         names = new String[n];
         values = new Object[n];
         int i = 0;
-        Iterator<Map.Entry<String, Object>> it = mapa.entrySet().iterator();
+        Iterator<Map.Entry<String, Object>> it = map.entrySet().iterator();
         while (it.hasNext()) {
             Map.Entry<String, Object> e = it.next();
             names[i] = e.getKey();
@@ -101,12 +103,12 @@ public class ImmutableDescriptor implements Descriptor {
         }
     }
 
-    /** Desde un mapa; el orden del mapa no importa, se reordena igual. */
+    /** From a map; the map's order does not matter, it is sorted anyway. */
     public ImmutableDescriptor(Map<String, ?> fields) {
         if (fields == null) {
             throw new IllegalArgumentException("Null Map");
         }
-        TreeMap<String, Object> mapa = new TreeMap<String, Object>(String.CASE_INSENSITIVE_ORDER);
+        TreeMap<String, Object> map = new TreeMap<String, Object>(String.CASE_INSENSITIVE_ORDER);
         Iterator<? extends Map.Entry<String, ?>> it = fields.entrySet().iterator();
         while (it.hasNext()) {
             Map.Entry<String, ?> e = it.next();
@@ -114,13 +116,13 @@ public class ImmutableDescriptor implements Descriptor {
             if (k == null || k.length() == 0) {
                 throw new IllegalArgumentException("Empty or null key");
             }
-            mapa.put(k, e.getValue());
+            map.put(k, e.getValue());
         }
-        int n = mapa.size();
+        int n = map.size();
         names = new String[n];
         values = new Object[n];
         int i = 0;
-        Iterator<Map.Entry<String, Object>> it2 = mapa.entrySet().iterator();
+        Iterator<Map.Entry<String, Object>> it2 = map.entrySet().iterator();
         while (it2.hasNext()) {
             Map.Entry<String, Object> e = it2.next();
             names[i] = e.getKey();
@@ -129,30 +131,30 @@ public class ImmutableDescriptor implements Descriptor {
         }
     }
 
-    private static Map<String, Object> ordenar(String[] ns, Object[] vs) {
-        TreeMap<String, Object> mapa = new TreeMap<String, Object>(String.CASE_INSENSITIVE_ORDER);
+    private static Map<String, Object> sort(String[] ns, Object[] vs) {
+        TreeMap<String, Object> map = new TreeMap<String, Object>(String.CASE_INSENSITIVE_ORDER);
         for (int i = 0; i < ns.length; i++) {
             if (ns[i] == null || ns[i].length() == 0) {
                 throw new IllegalArgumentException("Empty or null field name");
             }
-            Object previo = mapa.put(ns[i], vs[i]);
-            if (previo != null && !previo.equals(vs[i])) {
+            Object previous = map.put(ns[i], vs[i]);
+            if (previous != null && !previous.equals(vs[i])) {
                 throw new IllegalArgumentException("Duplicate field name: " + ns[i]);
             }
         }
-        return mapa;
+        return map;
     }
 
     /**
-     * Junta varios descriptores en uno.
+     * Merges several descriptors into one.
      *
-     * <p>Gana el <b>primero</b> que define cada campo; si dos definen el mismo con valores
-     * distintos, es un error y no una eleccion silenciosa.
+     * <p>The <b>first</b> that defines each field wins; if two define the same one with different
+     * values, it is an error and not a silent choice.
      *
-     * @throws IllegalArgumentException ante un campo repetido con valores distintos
+     * @throws IllegalArgumentException on a field repeated with different values
      */
     public static ImmutableDescriptor union(Descriptor... descriptors) {
-        TreeMap<String, Object> mapa = new TreeMap<String, Object>(String.CASE_INSENSITIVE_ORDER);
+        TreeMap<String, Object> map = new TreeMap<String, Object>(String.CASE_INSENSITIVE_ORDER);
         for (int i = 0; i < descriptors.length; i++) {
             Descriptor d = descriptors[i];
             if (d == null) {
@@ -161,35 +163,35 @@ public class ImmutableDescriptor implements Descriptor {
             String[] ns = d.getFieldNames();
             Object[] vs = d.getFieldValues(ns);
             for (int j = 0; j < ns.length; j++) {
-                if (mapa.containsKey(ns[j])) {
-                    Object viejo = mapa.get(ns[j]);
-                    if (viejo == null ? vs[j] != null : !viejo.equals(vs[j])) {
+                if (map.containsKey(ns[j])) {
+                    Object old = map.get(ns[j]);
+                    if (old == null ? vs[j] != null : !old.equals(vs[j])) {
                         throw new IllegalArgumentException("Inconsistent values for descriptor "
                                 + "field " + ns[j]);
                     }
                 } else {
-                    mapa.put(ns[j], vs[j]);
+                    map.put(ns[j], vs[j]);
                 }
             }
         }
-        if (mapa.isEmpty()) {
+        if (map.isEmpty()) {
             return EMPTY_DESCRIPTOR;
         }
-        return new ImmutableDescriptor(mapa);
+        return new ImmutableDescriptor(map);
     }
 
-    /** Biseccion sobre los nombres ordenados, sin distinguir mayusculas. */
-    private int indice(String name) {
+    /** Binary search over the sorted names, case-insensitively. */
+    private int index(String name) {
         return Arrays.binarySearch(names, name, String.CASE_INSENSITIVE_ORDER);
     }
 
     public final Object getFieldValue(String fieldName) {
-        revisarNombre(fieldName);
-        int i = indice(fieldName);
+        checkName(fieldName);
+        int i = index(fieldName);
         return i < 0 ? null : values[i];
     }
 
-    /** Cada campo como {@code "nombre=valor"}. */
+    /** Each field as {@code "name=value"}. */
     public final String[] getFields() {
         String[] r = new String[names.length];
         for (int i = 0; i < names.length; i++) {
@@ -200,10 +202,12 @@ public class ImmutableDescriptor implements Descriptor {
     }
 
     /**
-     * Los valores pedidos. Sin argumentos --o con `null`-- devuelve <b>todos</b>.
+     * The requested values. With a {@code null} argument it returns <b>all</b> of them; with no
+     * arguments the varargs array is empty and so is the result. (An earlier note said the
+     * no-argument call also returns all.)
      *
-     * <p>Un nombre que no esta da `null` en su posicion, no un hueco: la respuesta siempre mide lo
-     * mismo que el pedido.
+     * <p>A name that is not there gives {@code null} in its position, not a gap: the answer always
+     * has the same length as the request.
      */
     public final Object[] getFieldValues(String... fieldNames) {
         if (fieldNames == null) {
@@ -214,20 +218,20 @@ public class ImmutableDescriptor implements Descriptor {
         Object[] r = new Object[fieldNames.length];
         for (int i = 0; i < fieldNames.length; i++) {
             String n = fieldNames[i];
-            int j = (n == null || n.length() == 0) ? -1 : indice(n);
+            int j = (n == null || n.length() == 0) ? -1 : index(n);
             r[i] = j < 0 ? null : values[j];
         }
         return r;
     }
 
-    /** Los nombres, ya ordenados. */
+    /** The names, already sorted. */
     public final String[] getFieldNames() {
         String[] r = new String[names.length];
         System.arraycopy(names, 0, r, 0, names.length);
         return r;
     }
 
-    /** Contra cualquier {@link Descriptor}, no solo contra otro inmutable. */
+    /** Against any {@link Descriptor}, not only against another immutable one. */
     public boolean equals(Object o) {
         if (o == this) {
             return true;
@@ -235,32 +239,32 @@ public class ImmutableDescriptor implements Descriptor {
         if (!(o instanceof Descriptor)) {
             return false;
         }
-        String[] otros;
-        Object[] otrosVal;
+        String[] others;
+        Object[] otherVals;
         if (o instanceof ImmutableDescriptor) {
-            otros = ((ImmutableDescriptor) o).names;
-            otrosVal = ((ImmutableDescriptor) o).values;
+            others = ((ImmutableDescriptor) o).names;
+            otherVals = ((ImmutableDescriptor) o).values;
         } else {
-            otros = ((Descriptor) o).getFieldNames();
-            Arrays.sort(otros, String.CASE_INSENSITIVE_ORDER);
-            otrosVal = ((Descriptor) o).getFieldValues(otros);
+            others = ((Descriptor) o).getFieldNames();
+            Arrays.sort(others, String.CASE_INSENSITIVE_ORDER);
+            otherVals = ((Descriptor) o).getFieldValues(others);
         }
-        if (names.length != otros.length) {
+        if (names.length != others.length) {
             return false;
         }
         for (int i = 0; i < names.length; i++) {
-            if (!names[i].equalsIgnoreCase(otros[i])) {
+            if (!names[i].equalsIgnoreCase(others[i])) {
                 return false;
             }
         }
-        return Arrays.deepEquals(values, otrosVal);
+        return Arrays.deepEquals(values, otherVals);
     }
 
     /**
-     * Se calcula una vez y se guarda: el objeto es inmutable, asi que el valor tampoco cambia.
+     * Computed once and kept: the object is immutable, so the value does not change either.
      *
-     * <p>Los nombres entran en minusculas para que dos descriptores que solo difieren en la caja de
-     * los nombres --y que por lo tanto son iguales-- den el mismo numero.
+     * <p>Names go in lower case so that two descriptors that differ only in the case of the names
+     * --and are therefore equal-- give the same number.
      */
     public int hashCode() {
         if (hashCode == -1) {
@@ -295,45 +299,47 @@ public class ImmutableDescriptor implements Descriptor {
     }
 
     /**
-     * Siempre `true`.
-     *
-     * <p>El JDK solo valida aca los campos que <b>el</b> conoce, y un descriptor de este paquete no
-     * lleva ninguno de esos: los que se validan viven en `modelmbean`.
+     * Always {@code true}, as in the JDK, whose {@code ImmutableDescriptor.isValid} also just
+     * returns {@code true}; the fields that get validated are checked in {@code modelmbean}. (An
+     * earlier note gave another reason: that the JDK validates only the fields it knows.)
      */
     public boolean isValid() {
         return true;
     }
 
-    /** Se devuelve a si mismo: no cambia, asi que no hay nada que copiar. */
+    /** Returns itself: it does not change, so there is nothing to copy. */
     public Descriptor clone() {
         return this;
     }
 
-    /** @throws RuntimeOperationsException siempre: el descriptor es inmutable */
+    /** @throws RuntimeOperationsException always: the descriptor is immutable */
     public final void setFields(String[] fieldNames, Object[] fieldValues)
             throws RuntimeOperationsException {
-        noSePuede();
+        unsupported();
     }
 
-    /** @throws RuntimeOperationsException siempre: el descriptor es inmutable */
+    /** @throws RuntimeOperationsException always: the descriptor is immutable */
     public final void setField(String fieldName, Object fieldValue)
             throws RuntimeOperationsException {
-        noSePuede();
+        unsupported();
     }
 
-    /** No hace nada si el campo no esta; si esta, tira, porque el descriptor es inmutable. */
+    /**
+     * Does nothing if the field is not there; if it is, throws, because the descriptor is
+     * immutable.
+     */
     public final void removeField(String fieldName) {
-        if (fieldName != null && indice(fieldName) >= 0) {
-            noSePuede();
+        if (fieldName != null && index(fieldName) >= 0) {
+            unsupported();
         }
     }
 
-    private static void noSePuede() {
+    private static void unsupported() {
         throw new RuntimeOperationsException(
                 new UnsupportedOperationException("Descriptor is read-only"));
     }
 
-    private static void revisarNombre(String fieldName) {
+    private static void checkName(String fieldName) {
         if (fieldName == null || fieldName.length() == 0) {
             throw new RuntimeOperationsException(
                     new IllegalArgumentException("Null or empty field name"));

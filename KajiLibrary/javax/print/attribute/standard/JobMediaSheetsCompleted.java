@@ -5,9 +5,9 @@ import javax.print.attribute.IntegerSyntax;
 import javax.print.attribute.PrintJobAttribute;
 
 /**
- * Cuantas hojas del trabajo ya salieron.
+ * How many of the job's sheets already came out.
  *
- * <p>El avance contra {@link JobMediaSheets}.
+ * <p>The progress against {@link JobMediaSheets}.
  */
 public final class JobMediaSheetsCompleted extends IntegerSyntax implements PrintJobAttribute {
 
@@ -17,8 +17,10 @@ public final class JobMediaSheetsCompleted extends IntegerSyntax implements Prin
         super(value, 0, Integer.MAX_VALUE);
     }
 
-    /** El {@code instanceof} es lo que impide que un JobMediaSheetsCompleted de igual a otro atributo
-     * entero con el mismo numero. */
+    /**
+     * The {@code instanceof} is what keeps a JobMediaSheetsCompleted from being equal to another
+     * integer attribute with the same number.
+     */
     public boolean equals(Object object) {
         return super.equals(object) && object instanceof JobMediaSheetsCompleted;
     }

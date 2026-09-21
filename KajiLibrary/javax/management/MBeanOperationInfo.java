@@ -4,13 +4,13 @@ import java.lang.reflect.Method;
 import java.util.Arrays;
 
 /**
- * Una operacion que el MBean expone.
+ * An operation the MBean exposes.
  *
- * <p>Lo distintivo es {@link #getImpact()}: el modelo declara si la operacion <b>lee</b>
- * ({@link #INFO}), <b>modifica</b> ({@link #ACTION}) o las dos cosas ({@link #ACTION_INFO}). No es
- * decoracion -- una consola puede ofrecer las de solo lectura sin pedir confirmacion y pedirla para
- * las otras, y un cliente automatico puede reintentar sin miedo una operacion que declara ser
- * `INFO`. {@link #UNKNOWN} es lo que queda cuando nadie se molesto en decirlo.
+ * <p>What sets it apart is {@link #getImpact()}: the model declares whether the operation
+ * <b>reads</b> ({@link #INFO}), <b>modifies</b> ({@link #ACTION}) or both ({@link #ACTION_INFO}).
+ * It is not decoration -- a console can offer the read-only ones without asking for confirmation
+ * and ask for it for the others, and an automatic client can retry without fear an operation that
+ * declares itself {@code INFO}. {@link #UNKNOWN} is what is left when nobody bothered to say.
  */
 public class MBeanOperationInfo extends MBeanFeatureInfo implements Cloneable {
 
@@ -18,39 +18,39 @@ public class MBeanOperationInfo extends MBeanFeatureInfo implements Cloneable {
 
     static final MBeanOperationInfo[] NO_OPERATIONS = new MBeanOperationInfo[0];
 
-    /** La operacion solo lee: {@value}. */
+    /** The operation only reads: {@value}. */
     public static final int INFO = 0;
 
-    /** La operacion modifica el MBean: {@value}. */
+    /** The operation modifies the MBean: {@value}. */
     public static final int ACTION = 1;
 
-    /** Modifica y ademas devuelve informacion: {@value}. */
+    /** Modifies and also returns information: {@value}. */
     public static final int ACTION_INFO = 2;
 
-    /** No se declaro: {@value}. */
+    /** Not declared: {@value}. */
     public static final int UNKNOWN = 3;
 
     /**
-     * @serial el nombre de la clase que devuelve
+     * @serial the name of the class it returns
      */
     private final String type;
 
     /**
-     * @serial los parametros
+     * @serial the parameters
      */
     private final MBeanParameterInfo[] signature;
 
     /**
-     * @serial INFO, ACTION, ACTION_INFO o UNKNOWN
+     * @serial INFO, ACTION, ACTION_INFO or UNKNOWN
      */
     private final int impact;
 
     /**
-     * Desde un metodo por reflexion. El impacto queda en {@link #UNKNOWN}: la reflexion puede leer
-     * la firma pero no puede saber si el metodo cambia algo.
+     * From a method by reflection. The impact is left at {@link #UNKNOWN}: reflection can read the
+     * signature but cannot know whether the method changes anything.
      */
     public MBeanOperationInfo(String description, Method method) {
-        this(method.getName(), description, firmaDe(method),
+        this(method.getName(), description, signatureOf(method),
              method.getReturnType().getName(),
              method.getReturnType() == Void.TYPE ? ACTION : UNKNOWN, null);
     }
@@ -66,16 +66,16 @@ public class MBeanOperationInfo extends MBeanFeatureInfo implements Cloneable {
         this.type = type;
         this.impact = impact;
         this.signature = signature == null || signature.length == 0
-                ? MBeanParameterInfo.NO_PARAMS : copia(signature);
+                ? MBeanParameterInfo.NO_PARAMS : copy(signature);
     }
 
-    private static MBeanParameterInfo[] copia(MBeanParameterInfo[] s) {
+    private static MBeanParameterInfo[] copy(MBeanParameterInfo[] s) {
         MBeanParameterInfo[] r = new MBeanParameterInfo[s.length];
         System.arraycopy(s, 0, r, 0, s.length);
         return r;
     }
 
-    private static MBeanParameterInfo[] firmaDe(Method m) {
+    private static MBeanParameterInfo[] signatureOf(Method m) {
         Class<?>[] p = m.getParameterTypes();
         MBeanParameterInfo[] r = new MBeanParameterInfo[p.length];
         for (int i = 0; i < p.length; i++) {
@@ -85,14 +85,15 @@ public class MBeanOperationInfo extends MBeanFeatureInfo implements Cloneable {
     }
 
     /**
-     * Copia superficial.
+     * Shallow copy.
      *
-     * <p>No devuelve `this` aunque la clase sea inmutable: se comprobo contra el JDK y ahi la
-     * copia es un objeto <b>distinto</b>. Igual por `equals`, distinto por identidad.
+     * <p>It does not return {@code this} even though the class is immutable: it was checked against
+     * the JDK and there the copy is a <b>different</b> object. Equal by {@code equals}, different
+     * by identity.
      *
-     * <p>Traga la `CloneNotSupportedException` y devuelve `null` en vez de propagarla, como el
-     * JDK: la clase implementa `Cloneable`, asi que no puede ocurrir, y declararla obligaria a
-     * atajarla a todo el que llame.
+     * <p>It swallows the {@code CloneNotSupportedException} and returns {@code null} instead of
+     * propagating it, as the JDK does: the class implements {@code Cloneable}, so it cannot happen,
+     * and declaring it would force every caller to catch it.
      */
     public Object clone() {
         try {
@@ -102,17 +103,17 @@ public class MBeanOperationInfo extends MBeanFeatureInfo implements Cloneable {
         }
     }
 
-    /** El nombre de la clase que devuelve la operacion. */
+    /** The name of the class the operation returns. */
     public String getReturnType() {
         return type;
     }
 
-    /** Copia nueva en cada llamada. */
+    /** A fresh copy on every call. */
     public MBeanParameterInfo[] getSignature() {
-        return copia(signature);
+        return copy(signature);
     }
 
-    /** {@link #INFO}, {@link #ACTION}, {@link #ACTION_INFO} o {@link #UNKNOWN}. */
+    /** {@link #INFO}, {@link #ACTION}, {@link #ACTION_INFO} or {@link #UNKNOWN}. */
     public int getImpact() {
         return impact;
     }
@@ -137,7 +138,7 @@ public class MBeanOperationInfo extends MBeanFeatureInfo implements Cloneable {
         }
         return getClass().getName() + "[description=" + getDescription() + ", name=" + getName()
                 + ", returnType=" + getReturnType()
-                + ", signature=" + MBeanInfo.aTexto(signature)
+                + ", signature=" + MBeanInfo.asText(signature)
                 + ", impact=" + i
                 + ", descriptor=" + getDescriptor() + "]";
     }
@@ -150,9 +151,9 @@ public class MBeanOperationInfo extends MBeanFeatureInfo implements Cloneable {
             return false;
         }
         MBeanOperationInfo p = (MBeanOperationInfo) o;
-        return igual(p.getName(), getName())
-                && igual(p.getReturnType(), getReturnType())
-                && igual(p.getDescription(), getDescription())
+        return same(p.getName(), getName())
+                && same(p.getReturnType(), getReturnType())
+                && same(p.getDescription(), getDescription())
                 && p.getImpact() == getImpact()
                 && p.getDescriptor().equals(getDescriptor())
                 && Arrays.equals(p.signature, signature);

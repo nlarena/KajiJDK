@@ -6,10 +6,10 @@ import javax.print.attribute.PrintRequestAttribute;
 import javax.print.attribute.TextSyntax;
 
 /**
- * Quien dice el cliente que esta mandando el trabajo.
+ * Who the client says is sending the job.
  *
- * <p>Es una <em>peticion</em>, no una identidad: la impresora puede ignorarla y poner la que
- * autentico, que es la que termina en {@link JobOriginatingUserName}.
+ * <p>It is a <em>request</em>, not an identity: the printer may ignore it and put the one it
+ * authenticated, which is the one that ends up in {@link JobOriginatingUserName}.
  */
 public final class RequestingUserName extends TextSyntax implements PrintRequestAttribute {
 

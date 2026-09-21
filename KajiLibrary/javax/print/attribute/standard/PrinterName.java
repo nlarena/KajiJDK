@@ -6,9 +6,10 @@ import javax.print.attribute.PrintServiceAttribute;
 import javax.print.attribute.TextSyntax;
 
 /**
- * El nombre corto de la impresora, el que se usa para elegirla.
+ * The printer's short name, the one used to choose it.
  *
- * <p>No tiene por que ser unico en el mundo; el identificador que si lo es es {@link PrinterURI}.
+ * <p>It does not have to be unique in the world; the identifier that is unique is {@link
+ * PrinterURI}.
  */
 public final class PrinterName extends TextSyntax implements PrintServiceAttribute {
 

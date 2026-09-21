@@ -5,61 +5,62 @@ import java.nio.ByteBuffer;
 import java.util.Arrays;
 
 /**
- * KajiLibrary's javax.smartcardio.CommandAPDU -- una orden para la tarjeta.
+ * KajiLibrary's javax.smartcardio.CommandAPDU -- a command for the card.
  *
- * <p>Toda orden empieza con cuatro bytes: clase, instruccion y dos parametros. Despues puede llevar
- * datos y puede pedir una respuesta de cierto tamano, y de esas dos opciones salen los cuatro casos
- * de la norma ISO 7816-4:
+ * <p>Every command starts with four bytes: class, instruction and two parameters. After that it may
+ * carry data and may ask for an answer of a certain size, and from those two options come the four
+ * cases of the ISO 7816-4 standard:
  *
  * <table border="1">
- * <caption>Los cuatro casos</caption>
- * <tr><th>caso</th><th>datos (Nc)</th><th>respuesta (Ne)</th><th>largo</th></tr>
+ * <caption>The four cases</caption>
+ * <tr><th>case</th><th>data (Nc)</th><th>answer (Ne)</th><th>length</th></tr>
  * <tr><td>1</td><td>no</td><td>no</td><td>4</td></tr>
- * <tr><td>2</td><td>no</td><td>si</td><td>5 o 7</td></tr>
- * <tr><td>3</td><td>si</td><td>no</td><td>4 + 1 + Nc, o 4 + 3 + Nc</td></tr>
- * <tr><td>4</td><td>si</td><td>si</td><td>4 + 1 + Nc + 1, o 4 + 3 + Nc + 2</td></tr>
+ * <tr><td>2</td><td>no</td><td>yes</td><td>5 or 7</td></tr>
+ * <tr><td>3</td><td>yes</td><td>no</td><td>4 + 1 + Nc, or 4 + 3 + Nc</td></tr>
+ * <tr><td>4</td><td>yes</td><td>yes</td><td>4 + 1 + Nc + 1, or 4 + 3 + Nc + 2</td></tr>
  * </table>
  *
- * <h2>Corto y extendido</h2>
+ * <h2>Short and extended</h2>
  *
- * <p>Un byte no alcanza para decir 300, asi que la norma tiene dos codificaciones. En la corta el
- * largo va en un byte; en la extendida va en tres --un cero y despues dos bytes-- y la orden entera
- * cambia de forma.
+ * <p>One byte is not enough to say 300, so the standard has two encodings. In the short one the
+ * length goes in one byte; in the extended one it goes in three --a zero and then two bytes-- and
+ * the whole command changes shape.
  *
- * <p>La regla del cero es la que hay que tener presente: un byte de largo en cero <b>no</b> significa
- * cero. Como Le significa 256, y como marca del principio de un largo extendido significa que siguen
- * dos bytes mas. Un cero literal no se puede escribir, y por eso pedir Ne igual a cero es lo mismo
- * que no pedir respuesta.
+ * <p>The zero rule is the one to keep in mind: a length byte of zero does <b>not</b> mean zero. As
+ * Le it means 256, and as the mark at the start of an extended length it means that two more bytes
+ * follow. A literal zero cannot be written, and that is why asking for Ne equal to zero is the same
+ * as asking for no answer.
  *
- * <p>Esta clase elige la codificacion sola: usa la corta mientras entre, y pasa a la extendida cuando
- * los datos pasan de 255 bytes o la respuesta pedida pasa de 256. Al construir desde bytes ya
- * armados, en cambio, {@link #getBytes} devuelve exactamente los que se le dieron, sin recodificar.
+ * <p>This class chooses the encoding by itself: it uses the short one while it fits, and moves to
+ * the extended one when the data goes past 255 bytes or the answer asked for goes past 256. When
+ * built from bytes already put together, on the other hand, {@link #getBytes} returns exactly the
+ * ones it was given, without re-encoding.
  */
 public final class CommandAPDU implements Serializable {
 
     private static final long serialVersionUID = 398698301286670877L;
 
-    /** El maximo que entra en la codificacion corta de los datos. */
+    /** The maximum that fits in the short encoding of the data. */
     private static final int MAX_APDU_SIZE_SHORT = 255;
 
-    /** La orden completa, tal como va al lector. */
+    /** The whole command, as it goes to the reader. */
     private byte[] apdu;
 
-    /** Donde empiezan los datos dentro de {@link #apdu}. */
+    /** Where the data starts within {@link #apdu}. */
     private transient int dataOffset;
 
-    /** Cuantos bytes de datos lleva. */
+    /** How many data bytes it carries. */
     private transient int nc;
 
-    /** Cuantos bytes de respuesta pide. */
+    /** How many answer bytes it asks for. */
     private transient int ne;
 
     /**
-     * Desde una orden ya armada. Los bytes se copian y se interpretan para sacar Nc y Ne.
+     * From a command already put together. The bytes are copied and interpreted to get Nc and Ne.
      *
-     * @throws NullPointerException si es null
-     * @throws IllegalArgumentException si mide menos de cuatro bytes o no es ninguno de los cuatro
-     *     casos
+     * @throws NullPointerException if it is null
+     * @throws IllegalArgumentException if it measures less than four bytes or is none of the four
+     *     cases
      */
     public CommandAPDU(byte[] apdu) {
         this.apdu = apdu.clone();
@@ -67,9 +68,9 @@ public final class CommandAPDU implements Serializable {
     }
 
     /**
-     * Desde un pedazo de un arreglo.
+     * From a piece of an array.
      *
-     * @throws IndexOutOfBoundsException si el pedazo se sale del arreglo
+     * @throws IndexOutOfBoundsException if the piece goes outside the array
      */
     public CommandAPDU(byte[] apdu, int apduOffset, int apduLength) {
         checkRange(apdu.length, apduOffset, apduLength);
@@ -79,9 +80,9 @@ public final class CommandAPDU implements Serializable {
     }
 
     /**
-     * Desde lo que quede por leer de un buffer.
+     * From whatever is left to read in a buffer.
      *
-     * <p>Consume el buffer: al volver, su posicion queda en el limite.
+     * <p>It consumes the buffer: on return, its position is at the limit.
      */
     public CommandAPDU(ByteBuffer apdu) {
         this.apdu = new byte[apdu.remaining()];
@@ -89,38 +90,39 @@ public final class CommandAPDU implements Serializable {
         parse();
     }
 
-    /** Caso 1: sin datos y sin respuesta. */
+    /** Case 1: no data and no answer. */
     public CommandAPDU(int cla, int ins, int p1, int p2) {
         this(cla, ins, p1, p2, null, 0, 0, 0);
     }
 
-    /** Caso 2: pide {@code ne} bytes de respuesta. */
+    /** Case 2: asks for {@code ne} answer bytes. */
     public CommandAPDU(int cla, int ins, int p1, int p2, int ne) {
         this(cla, ins, p1, p2, null, 0, 0, ne);
     }
 
-    /** Caso 3: manda datos y no espera respuesta. */
+    /** Case 3: sends data and expects no answer. */
     public CommandAPDU(int cla, int ins, int p1, int p2, byte[] data) {
         this(cla, ins, p1, p2, data, 0, arrayLength(data), 0);
     }
 
-    /** Caso 3, con los datos en un pedazo del arreglo. */
+    /** Case 3, with the data in a piece of the array. */
     public CommandAPDU(int cla, int ins, int p1, int p2, byte[] data, int dataOffset,
                        int dataLength) {
         this(cla, ins, p1, p2, data, dataOffset, dataLength, 0);
     }
 
-    /** Caso 4: manda datos y pide respuesta. */
+    /** Case 4: sends data and asks for an answer. */
     public CommandAPDU(int cla, int ins, int p1, int p2, byte[] data, int ne) {
         this(cla, ins, p1, p2, data, 0, arrayLength(data), ne);
     }
 
     /**
-     * Caso 4, con los datos en un pedazo del arreglo. Es el constructor al que van a parar todos.
+     * Case 4, with the data in a piece of the array. It is the constructor all the others end up
+     * in.
      *
-     * @throws IllegalArgumentException si {@code ne} es negativo o pasa de 65536, o si los datos
-     *     pasan de 65535 bytes
-     * @throws IndexOutOfBoundsException si el pedazo se sale del arreglo
+     * @throws IllegalArgumentException if {@code ne} is negative or goes past 65536, or if the data
+     *     goes past 65535 bytes
+     * @throws IndexOutOfBoundsException if the piece goes outside the array
      */
     public CommandAPDU(int cla, int ins, int p1, int p2, byte[] data, int dataOffset,
                        int dataLength, int ne) {
@@ -146,7 +148,7 @@ public final class CommandAPDU implements Serializable {
         build(cla, ins, p1, p2, data, dataOffset);
     }
 
-    /** Arma los bytes eligiendo codificacion. Ver la nota de la clase. */
+    /** Puts the bytes together choosing the encoding. See the class note. */
     private void build(int cla, int ins, int p1, int p2, byte[] data, int dataOffset) {
         boolean extended = this.nc > MAX_APDU_SIZE_SHORT || this.ne > 256;
         int length = 4;
@@ -188,8 +190,8 @@ public final class CommandAPDU implements Serializable {
                     this.apdu[at] = 0;
                     at = at + 1;
                 }
-                // 65536 se escribe como dos ceros: el cero literal no hace falta, porque pedir cero
-                // bytes es lo mismo que no pedir nada.
+                // 65536 is written as two zeros: the literal zero is not needed, because asking for
+                // zero bytes is the same as asking for nothing.
                 this.apdu[at] = (byte) (this.ne >> 8);
                 this.apdu[at + 1] = (byte) this.ne;
             } else {
@@ -198,7 +200,7 @@ public final class CommandAPDU implements Serializable {
         }
     }
 
-    /** Interpreta unos bytes ya armados para sacar Nc y Ne. Ver la nota de la clase. */
+    /** Interprets some bytes already put together to get Nc and Ne. See the class note. */
     private void parse() {
         if (this.apdu.length < 4) {
             throw new IllegalArgumentException("apdu must be at least 4 bytes long");
@@ -266,57 +268,57 @@ public final class CommandAPDU implements Serializable {
             + ", b1=" + first);
     }
 
-    /** El byte de clase. */
+    /** The class byte. */
     public int getCLA() {
         return this.apdu[0] & 0xFF;
     }
 
-    /** El de instruccion. */
+    /** The instruction byte. */
     public int getINS() {
         return this.apdu[1] & 0xFF;
     }
 
-    /** El primer parametro. */
+    /** The first parameter. */
     public int getP1() {
         return this.apdu[2] & 0xFF;
     }
 
-    /** El segundo. */
+    /** The second. */
     public int getP2() {
         return this.apdu[3] & 0xFF;
     }
 
-    /** Cuantos bytes de datos lleva. */
+    /** How many data bytes it carries. */
     public int getNc() {
         return this.nc;
     }
 
-    /** Los datos. Una copia; vacia si no lleva. */
+    /** The data. A copy; empty if it carries none. */
     public byte[] getData() {
         byte[] data = new byte[this.nc];
         System.arraycopy(this.apdu, this.dataOffset, data, 0, this.nc);
         return data;
     }
 
-    /** Cuantos bytes de respuesta pide; cero si no pide. */
+    /** How many answer bytes it asks for; zero if it asks for none. */
     public int getNe() {
         return this.ne;
     }
 
-    /** La orden completa. Una copia. */
+    /** The whole command. A copy. */
     public byte[] getBytes() {
         return this.apdu.clone();
     }
 
-    /** El tamano, Nc y Ne. */
+    /** The size, Nc and Ne. */
     @Override
     public String toString() {
-        // El JDK escribe "CommmandAPDU" con tres emes; se copia tal cual para que un programa que
-        // compare esta salida siga viendo lo mismo.
+        // The JDK writes "CommmandAPDU" with three m's; it is copied as it is so that a program
+        // that compares this output keeps seeing the same.
         return "CommmandAPDU: " + this.apdu.length + " bytes, nc=" + this.nc + ", ne=" + this.ne;
     }
 
-    /** Dos ordenes son iguales si tienen los mismos bytes. */
+    /** Two commands are equal if they have the same bytes. */
     @Override
     public boolean equals(Object obj) {
         if (this == obj) {
@@ -333,19 +335,21 @@ public final class CommandAPDU implements Serializable {
         return Arrays.hashCode(this.apdu);
     }
 
-    /** El largo del arreglo, o cero si es null. */
+    /** The length of the array, or zero if it is null. */
     private static int arrayLength(byte[] data) {
         return data == null ? 0 : data.length;
     }
 
-    /** Que el pedazo entre en el arreglo. */
+    /** That the piece fits in the array. */
     private static void checkRange(int arrayLength, int offset, int length) {
         if ((offset < 0) || (length < 0) || (offset > arrayLength - length)) {
             throw new IllegalArgumentException("Offset or length invalid");
         }
     }
 
-    /** Al leerse de un flujo hay que volver a interpretar los bytes: Nc y Ne no se serializan. */
+    /**
+     * When read from a stream the bytes have to be interpreted again: Nc and Ne are not serialised.
+     */
     private void readObject(java.io.ObjectInputStream in)
             throws java.io.IOException, ClassNotFoundException {
         in.defaultReadObject();

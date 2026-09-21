@@ -1,16 +1,16 @@
 package javax.xml.stream.events;
 
 /**
- * KajiLibrary's javax.xml.stream.events.EndDocument -- el final del documento.
+ * KajiLibrary's javax.xml.stream.events.EndDocument -- the end of the document.
  *
- * <p>No declara ningun miembro propio, y eso es lo unico interesante que tiene: es un evento cuya
- * informacion se agota en existir. Se emite una sola vez, despues del cierre del elemento raiz y de
- * lo que haya en el epilogo, y despues de el {@link javax.xml.stream.XMLEventReader#hasNext()}
- * devuelve false.
+ * <p>It declares no member of its own, and that is the only interesting thing about it: it is an
+ * event whose information ends at existing. It is emitted only once, after the end of the root
+ * element and of whatever there is in the epilogue, and after it {@link
+ * javax.xml.stream.XMLEventReader#hasNext()} returns false.
  *
- * <p>Vale la pena que sea un evento y no simplemente el fin del bucle: quien acumula eventos en una
- * lista para reescribirlos necesita poder representar "aca terminaba", y quien escribe con
- * {@link javax.xml.stream.XMLEventWriter} lo usa para cerrar lo que quede abierto.
+ * <p>It is worth it being an event and not simply the end of the loop: whoever accumulates events
+ * in a list to rewrite them needs to be able to represent "it ended here", and whoever writes with
+ * {@link javax.xml.stream.XMLEventWriter} uses it to close whatever is left open.
  */
 public interface EndDocument extends XMLEvent {
 }

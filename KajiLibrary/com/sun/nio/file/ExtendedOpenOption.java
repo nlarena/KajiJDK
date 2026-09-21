@@ -3,28 +3,28 @@ package com.sun.nio.file;
 import java.nio.file.OpenOption;
 
 /**
- * Opciones de apertura de archivo que el JDK ofrece fuera del conjunto estandar.
+ * File opening options the JDK offers outside the standard set.
  *
- * <p>Estan aca y no en {@link java.nio.file.StandardOpenOption} porque **no todas las plataformas
- * las pueden honrar**: las tres {@code NOSHARE_*} son un modo de bloqueo obligatorio que Windows
- * tiene y POSIX no, y {@link #DIRECT} depende de que el sistema de archivos admita saltear su
- * cache. Poner en el conjunto estandar algo que en media plataforma tira
- * {@link UnsupportedOperationException} seria prometer de mas.
+ * <p>They are here and not in {@link java.nio.file.StandardOpenOption} because **not every
+ * platform can honour them**: the three {@code NOSHARE_*} are a mode of mandatory locking that
+ * Windows has and POSIX does not, and {@link #DIRECT} depends on the file system's admitting
+ * that its cache should be skipped. To put in the standard set something that on half the
+ * platforms throws {@link UnsupportedOperationException} would be promising too much.
  */
 public enum ExtendedOpenOption implements OpenOption {
 
-    /** Nadie mas puede abrir el archivo para leer mientras este canal lo tenga. */
+    /** Nobody else may open the file to read while this channel has it. */
     NOSHARE_READ,
-    /** Nadie mas puede abrirlo para escribir. */
+    /** Nobody else may open it to write. */
     NOSHARE_WRITE,
-    /** Nadie mas puede borrarlo. */
+    /** Nobody else may delete it. */
     NOSHARE_DELETE,
     /**
-     * Saltear la cache del sistema de archivos.
+     * To skip the file system's cache.
      *
-     * <p>No es una optimizacion gratis: obliga a que las lecturas y escrituras esten alineadas al
-     * tamano de bloque del dispositivo. Sirve para quien administra su propia cache —una base de
-     * datos— y estorba a todos los demas.
+     * <p>It is not a free optimization: it forces the reads and writes to be aligned to the
+     * device's block size. It serves whoever administers a cache of their own --a database-- and
+     * gets in the way of everybody else.
      */
     DIRECT
 }

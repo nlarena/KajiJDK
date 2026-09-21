@@ -4,130 +4,132 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 /**
- * KajiLibrary's javax.imageio.stream.ImageOutputStream -- un flujo de escritura para formatos de
- * imagen.
+ * KajiLibrary's javax.imageio.stream.ImageOutputStream -- a write stream for image formats.
  *
- * <p>Extiende {@link ImageInputStream} y no solo {@link DataOutput}, y eso llama la atencion: un flujo
- * de <b>escritura</b> que ademas se puede leer.
+ * <p>It extends {@link ImageInputStream} and not just {@link DataOutput}, and that draws attention:
+ * a <b>write</b> stream that can also be read.
  *
- * <p>No es un descuido. Escribir un formato de imagen casi siempre necesita volver: se escribe un
- * encabezado con un largo que todavia no se conoce, se escribe la imagen, y se vuelve a corregir el
- * encabezado. Sin poder leer y posicionarse, eso obliga a armar el archivo entero en memoria.
+ * <p>It is not an oversight. Writing an image format almost always needs to go back: a header is
+ * written with a length not yet known, the image is written, and the header is corrected. Without
+ * being able to read and seek, that forces building the whole file in memory.
  *
- * <p>Hereda el orden de bytes configurable, y lo aplica al escribir.
+ * <p>It inherits the configurable byte order, and applies it when writing.
  *
- * <h2>Los bits pendientes</h2>
+ * <h2>Pending bits</h2>
  *
- * <p>{@link #writeBit} y {@link #writeBits} dejan bits a medio byte. Cualquier escritura de byte o
- * mayor <b>cierra</b> ese byte rellenando con ceros, igual que la lectura limpia el desplazamiento.
+ * <p>{@link #writeBit} and {@link #writeBits} leave bits in a half-filled byte. Any write of a byte
+ * or more <b>closes</b> that byte by padding with zeros, just as reading clears the offset.
  *
- * <p>La trampa esta al final: cerrar el flujo con bits pendientes los descarta si no se escribio nada
- * mas. Hay que forzar el cierre del byte escribiendo algo, o llamar {@link #flush}.
+ * <p>The half-filled byte is already in the stream: each bit write reads the byte, sets the bit and
+ * writes it back. So closing the stream with pending bits does not lose them; the byte goes out
+ * with its remaining bits at zero. (An earlier note said they are discarded unless something else
+ * is written or {@link #flush} is called. Checked on the JDK 25 and on this VM: three bits written
+ * and closed come out as one byte, 160 for {@code 101}.)
  */
 public interface ImageOutputStream extends ImageInputStream, DataOutput {
 
     /**
-     * Escribe el byte bajo.
+     * Writes the low byte.
      *
-     * @throws IOException si fallo
+     * @throws IOException if it failed
      */
     void write(int b) throws IOException;
 
     /**
-     * Escribe el arreglo.
+     * Writes the array.
      *
-     * @throws IOException si fallo
+     * @throws IOException if it failed
      */
     void write(byte[] b) throws IOException;
 
     /**
-     * Escribe esa parte del arreglo.
+     * Writes that part of the array.
      *
-     * @throws IOException si fallo
+     * @throws IOException if it failed
      */
     void write(byte[] b, int off, int len) throws IOException;
 
-    /** Un byte: 1 o 0. */
+    /** One byte: 1 or 0. */
     void writeBoolean(boolean v) throws IOException;
 
-    /** El byte bajo. */
+    /** The low byte. */
     void writeByte(int v) throws IOException;
 
-    /** Dos bytes, en el orden configurado. */
+    /** Two bytes, in the configured order. */
     void writeShort(int v) throws IOException;
 
     /** Dos bytes. */
     void writeChar(int v) throws IOException;
 
-    /** Cuatro bytes. */
+    /** Four bytes. */
     void writeInt(int v) throws IOException;
 
-    /** Ocho bytes. */
+    /** Eight bytes. */
     void writeLong(long v) throws IOException;
 
-    /** Cuatro bytes. */
+    /** Four bytes. */
     void writeFloat(float v) throws IOException;
 
-    /** Ocho bytes. */
+    /** Eight bytes. */
     void writeDouble(double v) throws IOException;
 
     /**
-     * Un byte por caracter.
+     * One byte per character.
      *
-     * <p>Se lleva el byte alto de cada uno; solo sirve para ASCII.
+     * <p>The high byte of each is lost; it only works for ASCII.
      */
     void writeBytes(String s) throws IOException;
 
-    /** Dos bytes por caracter, en el orden configurado. */
+    /** Two bytes per character, in the configured order. */
     void writeChars(String s) throws IOException;
 
     /**
-     * En UTF modificado.
+     * In modified UTF-8.
      *
-     * <p>Siempre en orden de red, como {@link ImageInputStream#readUTF}.
+     * <p>Always in network order, like {@link ImageInputStream#readUTF}.
      *
-     * @throws java.io.UTFDataFormatException si la cadena codificada pasa de 65535 bytes
+     * @throws java.io.UTFDataFormatException if the encoded string is longer than 65535 bytes
      */
     void writeUTF(String s) throws IOException;
 
-    /** Esa parte del arreglo, dos bytes por elemento. */
+    /** That part of the array, two bytes per element. */
     void writeShorts(short[] s, int off, int len) throws IOException;
 
-    /** Idem, con caracteres. */
+    /** Same, with chars. */
     void writeChars(char[] c, int off, int len) throws IOException;
 
-    /** Idem, cuatro bytes por elemento. */
+    /** Same, four bytes per element. */
     void writeInts(int[] i, int off, int len) throws IOException;
 
-    /** Idem, ocho bytes. */
+    /** Same, eight bytes. */
     void writeLongs(long[] l, int off, int len) throws IOException;
 
-    /** Idem, coma flotante de cuatro bytes. */
+    /** Same, four-byte floating point. */
     void writeFloats(float[] f, int off, int len) throws IOException;
 
-    /** Idem, de ocho bytes. */
+    /** Same, eight-byte. */
     void writeDoubles(double[] d, int off, int len) throws IOException;
 
     /**
-     * Un bit; se toma el bit bajo del argumento. Ver la nota de la clase.
+     * One bit; the low bit of the argument is taken. See the class note.
      *
-     * @throws IOException si fallo
+     * @throws IOException if it failed
      */
     void writeBit(int bit) throws IOException;
 
     /**
-     * Los {@code numBits} bits bajos del valor.
+     * The {@code numBits} low bits of the value.
      *
-     * @param numBits de 0 a 64
-     * @throws IllegalArgumentException si se piden mas de 64
+     * @param numBits from 0 to 64
+     * @throws IllegalArgumentException if more than 64 are asked for
      */
     void writeBits(long bits, int numBits) throws IOException;
 
     /**
-     * Escribe de verdad todo lo anterior a esa posicion y promete no volver antes.
+     * Really writes everything before that position and promises not to go back before it.
      *
-     * @throws IndexOutOfBoundsException si es anterior a la posicion de descarte, o posterior a la
-     *     actual
+     * @throws IndexOutOfBoundsException if it is before the flushed position, or after the current
+     *     one
      */
     void flushBefore(long pos) throws IOException;
 }

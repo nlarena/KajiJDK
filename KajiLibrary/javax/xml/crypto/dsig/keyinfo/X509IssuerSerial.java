@@ -4,25 +4,25 @@ import java.math.BigInteger;
 import javax.xml.crypto.XMLStructure;
 
 /**
- * KajiLibrary's javax.xml.crypto.dsig.keyinfo.X509IssuerSerial -- un certificado, nombrado por
- * emisor y numero de serie.
+ * KajiLibrary's javax.xml.crypto.dsig.keyinfo.X509IssuerSerial -- a certificate, named by issuer
+ * and serial number.
  *
- * <p>El par que identifica <b>univocamente</b> a un certificado X.509: el nombre distinguido de quien
- * lo emitio y el numero de serie que ese emisor le dio. Un numero de serie solo no alcanza --cada
- * emisor lleva su propia numeracion-- y por eso los dos van juntos.
+ * <p>The pair that <b>uniquely</b> identifies an X.509 certificate: the distinguished name of
+ * whoever issued it and the serial number that issuer gave it. A serial number alone is not enough
+ * --each issuer keeps its own numbering-- and that is why both go together.
  *
- * <p>Es la forma segura de referirse a un certificado adentro de un {@link KeyInfo}: no lo trae, lo
- * nombra. Quien valida lo busca en su propio almacen, con la misma inversion de confianza que
- * {@link KeyName}.
+ * <p>It is the safe way of referring to a certificate inside a {@link KeyInfo}: it does not bring
+ * it, it names it. Whoever validates looks it up in their own store, with the same inversion of
+ * trust as {@link KeyName}.
  *
- * <p>El nombre del emisor va en el formato de RFC 2253. Compararlo como texto es fragil --el mismo
- * nombre admite varias escrituras-- y por eso conviene parsearlo antes de buscar.
+ * <p>The issuer's name goes in RFC 2253 format. Comparing it as text is fragile --the same name
+ * admits several spellings-- and that is why it is advisable to parse it before looking it up.
  */
 public interface X509IssuerSerial extends XMLStructure {
 
-    /** El nombre distinguido del emisor, en formato RFC 2253. */
+    /** The issuer's distinguished name, in RFC 2253 format. */
     String getIssuerName();
 
-    /** El numero de serie que ese emisor le dio. */
+    /** The serial number that issuer gave it. */
     BigInteger getSerialNumber();
 }

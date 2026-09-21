@@ -5,28 +5,28 @@ import java.security.KeyStore;
 import java.security.KeyStoreException;
 
 /**
- * Lo que un proveedor implementa para que exista una {@link TrustManagerFactory}.
+ * What a provider implements for a {@link TrustManagerFactory} to exist.
  *
- * <p>El espejo de {@link KeyManagerFactorySpi}, del lado de la confianza. Notar que
- * {@link #engineInit(KeyStore)} no lleva contrasena: un almacen de confianza guarda certificados
- * publicos, no claves privadas, y no hay nada que desbloquear.
+ * <p>The mirror of {@link KeyManagerFactorySpi}, on the trust side. Note that
+ * {@link #engineInit(KeyStore)} takes no password: a trust store keeps public certificates, not
+ * private keys, and there is nothing to unlock.
  */
 public abstract class TrustManagerFactorySpi {
 
     public TrustManagerFactorySpi() {
     }
 
-    /** Inicializa desde un almacen de certificados de confianza. */
+    /** Initializes from a store of trusted certificates. */
     protected abstract void engineInit(KeyStore ks) throws KeyStoreException;
 
-    /** Inicializa desde parametros; ver {@link CertPathTrustManagerParameters}. */
+    /** Initializes from parameters; see {@link CertPathTrustManagerParameters}. */
     protected abstract void engineInit(ManagerFactoryParameters spec)
             throws InvalidAlgorithmParameterException;
 
     /**
-     * Los manejadores de confianza.
+     * The trust managers.
      *
-     * @throws IllegalStateException si no se inicializo antes
+     * @throws IllegalStateException if it was not initialized first
      */
     protected abstract TrustManager[] engineGetTrustManagers();
 }

@@ -7,11 +7,11 @@ import javax.print.attribute.PrintJobAttribute;
 import javax.print.attribute.PrintRequestAttribute;
 
 /**
- * Si las copias de un mismo documento salen intercaladas (1,2,3,1,2,3) o de a tandas por pagina
+ * Whether the copies of the same document come out collated (1,2,3,1,2,3) or in batches per page
  * (1,1,2,2,3,3).
  *
- * <p>Es a nivel de hoja; el equivalente entre documentos distintos lo decide {@link
- * MultipleDocumentHandling}.
+ * <p>It is at the sheet level; the equivalent between different documents is decided by
+ * {@link MultipleDocumentHandling}.
  */
 public final class SheetCollate extends EnumSyntax implements DocAttribute, PrintRequestAttribute, PrintJobAttribute {
 

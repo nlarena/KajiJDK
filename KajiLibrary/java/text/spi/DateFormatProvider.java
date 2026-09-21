@@ -5,13 +5,13 @@ import java.util.Locale;
 import java.util.spi.LocaleServiceProvider;
 
 /**
- * KajiLibrary's java.text.spi.DateFormatProvider -- como se escribe una fecha o una hora.
+ * KajiLibrary's java.text.spi.DateFormatProvider -- how a date or a time is written.
  *
- * <p>Los estilos --{@code FULL}, {@code LONG}, {@code MEDIUM}, {@code SHORT}-- no son "mas o menos
- * largo": son <b>cuatro formatos distintos</b> que cada cultura define por su cuenta. El corto de
- * Estados Unidos es mes/dia/año y el de casi todo el resto es dia/mes/año, asi que la misma cadena
- * {@code "03/04/2026"} son dos fechas distintas segun quien la lea. No hay forma de acertar sin
- * saber el local, y ese es todo el punto de esta clase.
+ * <p>The styles --{@code FULL}, {@code LONG}, {@code MEDIUM}, {@code SHORT}-- are not "more or less
+ * long": they are <b>four different formats</b> that each culture defines for itself. The United
+ * States' short one is month/day/year and almost everywhere else's is day/month/year, so the same
+ * string {@code "03/04/2026"} is two different dates depending on who reads it. There is no way of
+ * getting it right without knowing the locale, and that is the whole point of this class.
  */
 public abstract class DateFormatProvider extends LocaleServiceProvider {
 
@@ -19,15 +19,15 @@ public abstract class DateFormatProvider extends LocaleServiceProvider {
     }
 
     /**
-     * Solo la hora.
+     * The time alone.
      *
-     * @param style uno de los cuatro de {@code DateFormat}
+     * @param style one of {@code DateFormat}'s four
      */
     public abstract DateFormat getTimeInstance(int style, Locale locale);
 
-    /** Solo la fecha. */
+    /** The date alone. */
     public abstract DateFormat getDateInstance(int style, Locale locale);
 
-    /** Las dos, cada una con su estilo. */
+    /** Both, each with its own style. */
     public abstract DateFormat getDateTimeInstance(int dateStyle, int timeStyle, Locale locale);
 }

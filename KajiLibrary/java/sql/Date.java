@@ -1,33 +1,34 @@
 package java.sql;
 
 /**
- * KajiLibrary's java.sql.Date -- una fecha **sin hora**, para una columna `DATE`.
+ * KajiLibrary's java.sql.Date -- a date **with no time**, for a `DATE` column.
  *
- * <p>Hereda de `java.util.Date`, que si tiene hora, y por eso el contrato pide que los milisegundos
- * de la hora esten en **cero** en la zona horaria por omision. Un `java.sql.Date` con hora adentro no
- * es un error que salte: es un valor que compara mal contra el mismo dia guardado bien.
+ * <p>It inherits from `java.util.Date`, which does have a time, and that is why the contract asks
+ * that the time's milliseconds be **zero** in the default time zone. A `java.sql.Date` with a time
+ * inside is not an error that jumps out: it is a value that compares wrong against the same day
+ * stored properly.
  *
- * <p>De ahi que {@link #getHours} y compania **fallen** en vez de devolver cero. Cero seria una
- * respuesta, y la respuesta correcta es que la pregunta no aplica -- una fecha SQL no tiene hora, y
- * decir "medianoche" invitaria a hacer cuentas con eso.
+ * <p>Hence {@link #getHours} and company **fail** rather than return zero. Zero would be an answer,
+ * and the correct answer is that the question does not apply -- an SQL date has no time, and saying
+ * "midnight" would invite doing arithmetic with it.
  *
- * <p>Lo mismo {@link #toInstant}: un instante es un punto en la linea del tiempo y una fecha no lo
- * es; para convertir hace falta una zona horaria, que esta clase no tiene. El JDK tambien falla aca,
- * por la misma razon.
+ * <p>The same for {@link #toInstant}: an instant is a point on the time line and a date is not one;
+ * converting needs a time zone, which this class does not have. The JDK fails here too, for the
+ * same reason.
  */
 public class Date extends java.util.Date {
 
     /**
-     * La fecha de ese anio (desde 1900), mes (desde cero) y dia.
+     * The date of that year (from 1900), month (from zero) and day.
      *
-     * @deprecated usar {@link #Date(long)} o {@link #valueOf(java.time.LocalDate)}
+     * @deprecated use {@link #Date(long)} or {@link #valueOf(java.time.LocalDate)}
      */
     @Deprecated
     public Date(int year, int month, int day) {
         super(year, month, day);
     }
 
-    /** La fecha de ese instante en milisegundos. */
+    /** The date of that instant in milliseconds. */
     public Date(long date) {
         super(date);
     }
@@ -37,95 +38,95 @@ public class Date extends java.util.Date {
     }
 
     /**
-     * La fecha escrita `yyyy-[m]m-[d]d`.
+     * The date written `yyyy-[m]m-[d]d`.
      *
-     * @throws IllegalArgumentException si no tiene esa forma
+     * @throws IllegalArgumentException if it is not in that shape
      */
     public static Date valueOf(String s) {
         if (s == null) {
             throw new IllegalArgumentException("null");
         }
-        int primera = s.indexOf('-');
-        int segunda = primera < 0 ? -1 : s.indexOf('-', primera + 1);
-        if (primera <= 0 || segunda <= primera + 1 || segunda == s.length() - 1) {
+        int firstDash = s.indexOf('-');
+        int secondDash = firstDash < 0 ? -1 : s.indexOf('-', firstDash + 1);
+        if (firstDash <= 0 || secondDash <= firstDash + 1 || secondDash == s.length() - 1) {
             throw new IllegalArgumentException(s);
         }
-        int anio;
-        int mes;
-        int dia;
+        int year;
+        int month;
+        int day;
         try {
-            anio = Integer.parseInt(s.substring(0, primera));
-            mes = Integer.parseInt(s.substring(primera + 1, segunda));
-            dia = Integer.parseInt(s.substring(segunda + 1, s.length()));
+            year = Integer.parseInt(s.substring(0, firstDash));
+            month = Integer.parseInt(s.substring(firstDash + 1, secondDash));
+            day = Integer.parseInt(s.substring(secondDash + 1, s.length()));
         } catch (NumberFormatException e) {
             throw new IllegalArgumentException(s);
         }
-        return new Date(anio - 1900, mes - 1, dia);
+        return new Date(year - 1900, month - 1, day);
     }
 
-    /** La fecha de ese {@link java.time.LocalDate}. */
+    /** That {@link java.time.LocalDate}'s date. */
     public static Date valueOf(java.time.LocalDate date) {
         return new Date(date.getYear() - 1900, date.getMonthValue() - 1, date.getDayOfMonth());
     }
 
-    /** Esta fecha como {@link java.time.LocalDate}. */
+    /** This date as a {@link java.time.LocalDate}. */
     public java.time.LocalDate toLocalDate() {
         return java.time.LocalDate.of(this.getYear() + 1900, this.getMonth() + 1, this.getDate());
     }
 
-    /** `yyyy-mm-dd`, con ceros a la izquierda. */
+    /** `yyyy-mm-dd`, with leading zeros. */
     public String toString() {
-        int anio = this.getYear() + 1900;
-        int mes = this.getMonth() + 1;
-        int dia = this.getDate();
+        int year = this.getYear() + 1900;
+        int month = this.getMonth() + 1;
+        int day = this.getDate();
         StringBuilder sb = new StringBuilder();
-        sb.append(anio);
+        sb.append(year);
         sb.append('-');
-        if (mes < 10) {
+        if (month < 10) {
             sb.append('0');
         }
-        sb.append(mes);
+        sb.append(month);
         sb.append('-');
-        if (dia < 10) {
+        if (day < 10) {
             sb.append('0');
         }
-        sb.append(dia);
+        sb.append(day);
         return sb.toString();
     }
 
-    // ---- lo que no aplica ----------------------------------------------------------------------------
+    // ---- what does not apply --------------------------------------------------------------------
 
-    /** @throws IllegalArgumentException siempre: una fecha SQL no tiene hora */
+    /** @throws IllegalArgumentException always: an SQL date has no time */
     public int getHours() {
         throw new IllegalArgumentException();
     }
 
-    /** @throws IllegalArgumentException siempre */
+    /** @throws IllegalArgumentException always */
     public int getMinutes() {
         throw new IllegalArgumentException();
     }
 
-    /** @throws IllegalArgumentException siempre */
+    /** @throws IllegalArgumentException always */
     public int getSeconds() {
         throw new IllegalArgumentException();
     }
 
-    /** @throws IllegalArgumentException siempre */
+    /** @throws IllegalArgumentException always */
     public void setHours(int i) {
         throw new IllegalArgumentException();
     }
 
-    /** @throws IllegalArgumentException siempre */
+    /** @throws IllegalArgumentException always */
     public void setMinutes(int i) {
         throw new IllegalArgumentException();
     }
 
-    /** @throws IllegalArgumentException siempre */
+    /** @throws IllegalArgumentException always */
     public void setSeconds(int i) {
         throw new IllegalArgumentException();
     }
 
-    /** @throws UnsupportedOperationException siempre: falta la zona horaria */
+    /** @throws UnsupportedOperationException always: the time zone is missing */
     public java.time.Instant toInstant() {
         throw new UnsupportedOperationException();
     }

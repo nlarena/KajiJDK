@@ -1,43 +1,43 @@
 package jdk.internal.vm;
 
 /**
- * KajiLibrary's jdk.internal.vm.StackChunk — un pedazo de pila guardado en el montón.
+ * KajiLibrary's jdk.internal.vm.StackChunk -- a piece of stack kept in the heap.
  *
- * <p>Es el objeto donde la VM copia los cuadros de una continuación cuando la suspende. Se encadenan
- * hacia atrás con {@link #parent()}, de modo que una pila profunda queda partida en varios.
+ * <p>It is the object into which the VM copies the frames of a continuation when it suspends it.
+ * They chain backwards with {@link #parent()}, so a deep stack ends up split into several.
  *
- * <p><strong>La VM es la única que los llena.</strong> No hay campos que Java pueda escribir: los
- * cuadros los copia el runtime con conocimiento del marco de pila, y por eso en el JDK todos los
- * accesos van por intrínsecos. Esta VM no tiene continuaciones --ver
- * {@link ContinuationSupport}--, así que ninguno de estos objetos se llena nunca.
+ * <p><strong>The VM is the only one that fills them.</strong> There are no fields Java can write:
+ * the runtime copies the frames with knowledge of the frame layout, and that is why in the JDK all
+ * the accesses go through intrinsics. This VM has no continuations --see {@link
+ * ContinuationSupport}--, so none of these objects is ever filled.
  *
- * <p>De ahí que {@link #isEmpty()} devuelva `true` y {@link #parent()} `null`. **No es una
- * simulación: es la verdad sobre este objeto.** Un `StackChunk` recién construido está vacío también
- * en el JDK; lo que allá cambia es que después la VM lo llena, y acá no.
+ * <p>Hence {@link #isEmpty()} returns `true` and {@link #parent()} `null`. **It is not a
+ * simulation: it is the truth about this object.** A freshly built `StackChunk` is empty in the JDK
+ * too; what changes over there is that the VM fills it afterwards, and here it does not.
  */
 public final class StackChunk {
 
-    private final StackChunk padre;
+    private final StackChunk parent;
 
     public StackChunk() {
-        this.padre = null;
+        this.parent = null;
     }
 
     /**
-     * Prepara la clase.
+     * It prepares the class.
      *
-     * <p>En el JDK deja los offsets de los campos donde el runtime los va a buscar. Acá no hay nada
-     * que preparar; existe porque la VM la nombra en el arranque.
+     * <p>In the JDK it leaves the offsets of the fields where the runtime is going to look for
+     * them. Here there is nothing to prepare; it exists because the VM names it at start-up.
      */
     public static void init() {
     }
 
-    /** El pedazo anterior de la cadena, o `null` si éste es el último. */
+    /** The previous piece of the chain, or `null` if this one is the last. */
     public StackChunk parent() {
-        return this.padre;
+        return this.parent;
     }
 
-    /** Si no tiene cuadros. */
+    /** Whether it has no frames. */
     public boolean isEmpty() {
         return true;
     }

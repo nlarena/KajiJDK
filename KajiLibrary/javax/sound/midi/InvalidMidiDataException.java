@@ -1,24 +1,24 @@
 package javax.sound.midi;
 
 /**
- * KajiLibrary's javax.sound.midi.InvalidMidiDataException -- esos bytes no son MIDI valido.
+ * KajiLibrary's javax.sound.midi.InvalidMidiDataException -- those bytes are not valid MIDI.
  *
- * <p>La lanzan los constructores y los {@code setMessage} de los mensajes, y los lectores de archivo.
+ * <p>The constructors and {@code setMessage}s of the messages throw it, and so do the file readers.
  *
- * <p>Es comprobada, y por eso armar un mensaje MIDI obliga a un {@code try}. Es incomodo y esta bien
- * asi: un byte de estado invalido silenciosamente aceptado se convierte en un dispositivo que se
- * cuelga o en un archivo que nadie mas puede leer.
+ * <p>It is checked, and so building a MIDI message forces a {@code try}. It is awkward and rightly
+ * so: an invalid status byte silently accepted turns into a device that hangs or a file nobody else
+ * can read.
  */
 public class InvalidMidiDataException extends Exception {
 
     private static final long serialVersionUID = 2780771756789932067L;
 
-    /** Sin detalle. */
+    /** Without detail. */
     public InvalidMidiDataException() {
         super();
     }
 
-    /** Con mensaje. */
+    /** With a message. */
     public InvalidMidiDataException(String message) {
         super(message);
     }

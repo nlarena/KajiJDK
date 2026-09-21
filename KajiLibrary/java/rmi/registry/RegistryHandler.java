@@ -4,33 +4,36 @@ import java.rmi.RemoteException;
 import java.rmi.UnknownHostException;
 
 /**
- * El enganche viejo con el que {@link LocateRegistry} conseguia sus talones.
+ * The old hook through which {@link LocateRegistry} got its stubs.
  *
- * @deprecated No lo usa nadie desde JDK 1.2, y no hay sustituto. Era el punto de extension para
- *     que una implementacion de RMI aportara su propio talon de registro; hoy {@link LocateRegistry}
- *     lo resuelve por dentro y no consulta ningun `RegistryHandler`. Queda declarado porque el tipo
- *     sigue en la API y algo compilado contra el todavia lo nombra.
+ * @deprecated Nobody has used it since JDK 1.2, and there is no replacement. It was the extension
+ *     point for an RMI implementation to supply its own registry stub; {@link LocateRegistry}
+ *     consults no `RegistryHandler`. This note used to say that {@link LocateRegistry} nowadays
+ *     resolves it internally; in this library it resolves nothing: its seven methods always throw
+ *     the `RemoteException` they declare, because this library has no RMI transport (checked in
+ *     `LocateRegistry.java`, whose class note and method bodies say so). It stays declared because
+ *     the type is still in the API and something compiled against it may still name it.
  */
 @Deprecated
 public interface RegistryHandler {
 
     /**
-     * El talon con el que hablarle al registro de esa maquina y puerto.
+     * The stub with which to talk to the registry on that host and port.
      *
-     * @deprecated No lo usa nadie desde JDK 1.2; su sustituto es
+     * @deprecated Nobody has used it since JDK 1.2; its replacement is
      *     {@link LocateRegistry#getRegistry(String, int)}.
-     * @throws RemoteException si falla la construccion del talon
-     * @throws UnknownHostException si no se resuelve la maquina
+     * @throws RemoteException if building the stub fails
+     * @throws UnknownHostException if the host does not resolve
      */
     @Deprecated
     Registry registryStub(String host, int port) throws RemoteException, UnknownHostException;
 
     /**
-     * Construye y exporta un registro en ese puerto.
+     * It builds and exports a registry on that port.
      *
-     * @deprecated No lo usa nadie desde JDK 1.2; su sustituto es
+     * @deprecated Nobody has used it since JDK 1.2; its replacement is
      *     {@link LocateRegistry#createRegistry(int)}.
-     * @throws RemoteException si falla la exportacion
+     * @throws RemoteException if the export fails
      */
     @Deprecated
     Registry registryImpl(int port) throws RemoteException;

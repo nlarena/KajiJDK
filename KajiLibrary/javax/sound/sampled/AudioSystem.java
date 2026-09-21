@@ -15,56 +15,55 @@ import javax.sound.sampled.spi.FormatConversionProvider;
 import javax.sound.sampled.spi.MixerProvider;
 
 /**
- * KajiLibrary's javax.sound.sampled.AudioSystem -- el punto de entrada del audio muestreado.
+ * KajiLibrary's javax.sound.sampled.AudioSystem -- the entry point to sampled audio.
  *
- * <p>Solo metodos estaticos. Todo lo que hace es <b>preguntarles a los proveedores</b> registrados
- * --mezcladores, lectores de archivo, escritores, conversores-- y quedarse con el primero que sepa
- * hacer lo que se pide. La clase en si no sabe nada de audio.
+ * <p>Only static methods. All it does is <b>ask the registered providers</b> --mixers, file
+ * readers, writers, converters-- and keep the first one that knows how to do what is asked. The
+ * class itself knows nothing about audio.
  *
- * <h2>Los cuatro tipos de proveedor</h2>
+ * <h2>The four kinds of provider</h2>
  *
  * <ul>
- *   <li>{@link MixerProvider} trae dispositivos;
- *   <li>{@link AudioFileReader} lee archivos;
- *   <li>{@link AudioFileWriter} los escribe;
- *   <li>{@link FormatConversionProvider} convierte de un formato a otro.
+ *   <li>{@link MixerProvider} provides devices;
+ *   <li>{@link AudioFileReader} reads files;
+ *   <li>{@link AudioFileWriter} writes them;
+ *   <li>{@link FormatConversionProvider} converts from one format to another.
  * </ul>
  *
- * <p>Se encuentran con {@link ServiceLoader}. Es lo que permite agregar soporte para un formato nuevo
- * poniendo un jar en la ruta de clases, sin tocar codigo.
+ * <p>They are found with {@link ServiceLoader}. It is what allows adding support for a new format
+ * by putting a jar on the class path, without touching code.
  *
- * <h2>Un proveedor roto no tumba la busqueda</h2>
+ * <h2>A broken provider does not bring the search down</h2>
  *
- * <p>Si uno falla al cargarse o al responder, se lo saltea y se sigue con los demas. Es la decision
- * correcta: un formato exotico mal implementado no puede impedir que se reproduzca un WAV.
+ * <p>If one fails to load or to answer, it is skipped and the others are tried. It is the right
+ * decision: a badly implemented exotic format cannot stop a WAV from playing.
  *
  * <h2>{@link #NOT_SPECIFIED}</h2>
  *
- * <p>Vale -1 y significa "no se sabe" o "cualquiera", segun donde aparezca. Es el comodin de todo el
- * paquete y conviene reconocerlo: un {@code getFrameLength()} de -1 no es un error, es un flujo sin
- * final conocido.
+ * <p>It is -1 and means "not known" or "any", depending on where it appears. It is the wildcard of
+ * the whole package and it is worth recognizing: a {@code getFrameLength()} of -1 is not an error,
+ * it is a stream with no known end.
  *
  * <h2>A KajiLibrary subset</h2>
  *
- * <p>Esta biblioteca no trae ningun proveedor: hablar con una placa de sonido pide codigo nativo, y
- * decodificar WAV o AIFF pide los decodificadores. La busqueda esta implementada de verdad y todo
- * funciona sobre el conjunto vacio -- arreglos vacios donde corresponde,
- * {@link IllegalArgumentException} cuando se pide una linea que nadie provee, y
- * {@link UnsupportedAudioFileException} cuando nadie sabe leer un archivo. Es exactamente lo que hace
- * el JDK en una maquina sin dispositivos de audio.
+ * <p>This library comes with no provider: talking to a sound card needs native code, and decoding
+ * WAV or AIFF needs the decoders. The search is really implemented and everything works over the
+ * empty set -- empty arrays where they belong, {@link IllegalArgumentException} when a line nobody
+ * provides is asked for, and {@link UnsupportedAudioFileException} when nobody knows how to read a
+ * file. It is exactly what the JDK does on a machine without audio devices.
  *
- * <p>Registrando proveedores como servicios, esto anda sin cambios.
+ * <p>Registering providers as services, this works unchanged.
  */
 public class AudioSystem {
 
-    /** El comodin del paquete. Ver la nota de la clase. */
+    /** The wildcard of the package. See the class note. */
     public static final int NOT_SPECIFIED = -1;
 
-    /** No tiene estado; el constructor publico es el que el JDK dejo. */
+    /** It has no state; the public constructor is the one the JDK left. */
     public AudioSystem() {
     }
 
-    /** Los mezcladores que hay. */
+    /** The mixers there are. */
     public static Mixer.Info[] getMixerInfo() {
         List<Mixer.Info> found = new ArrayList<Mixer.Info>();
         Iterator<MixerProvider> it = providers(MixerProvider.class);
@@ -80,10 +79,10 @@ public class AudioSystem {
     }
 
     /**
-     * El mezclador de ese nombre.
+     * The mixer with that name.
      *
-     * @param info cual, o null para el que el sistema prefiera
-     * @throws IllegalArgumentException si no hay ninguno asi
+     * @param info which one, or null for the one the system prefers
+     * @throws IllegalArgumentException if there is none like that
      */
     public static Mixer getMixer(Mixer.Info info) {
         Iterator<MixerProvider> it = providers(MixerProvider.class);
@@ -94,14 +93,14 @@ public class AudioSystem {
                     return p.getMixer(info);
                 }
             } catch (Throwable e) {
-                // Un proveedor roto no tumba la busqueda; ver la nota de la clase.
+                // A broken provider does not bring the search down; see the class note.
             }
         }
         throw new IllegalArgumentException("Mixer not supported: "
             + (info == null ? "null" : info.toString()));
     }
 
-    /** Los descriptores de lineas de entrada al mezclador que coinciden con ese. */
+    /** The descriptors of lines into the mixer that match that one. */
     public static Line.Info[] getSourceLineInfo(Line.Info info) {
         List<Line.Info> found = new ArrayList<Line.Info>();
         Mixer.Info[] mixers = getMixerInfo();
@@ -113,7 +112,7 @@ public class AudioSystem {
         return found.toArray(new Line.Info[found.size()]);
     }
 
-    /** Idem, de salida. */
+    /** Likewise, out of it. */
     public static Line.Info[] getTargetLineInfo(Line.Info info) {
         List<Line.Info> found = new ArrayList<Line.Info>();
         Mixer.Info[] mixers = getMixerInfo();
@@ -125,7 +124,7 @@ public class AudioSystem {
         return found.toArray(new Line.Info[found.size()]);
     }
 
-    /** Si algun mezclador puede dar una linea asi. */
+    /** Whether some mixer can give a line like that. */
     public static boolean isLineSupported(Line.Info info) {
         Mixer.Info[] mixers = getMixerInfo();
         int i = 0;
@@ -135,7 +134,7 @@ public class AudioSystem {
                     return true;
                 }
             } catch (Throwable e) {
-                // Ver la nota de la clase.
+                // See the class note.
             }
             i = i + 1;
         }
@@ -143,10 +142,10 @@ public class AudioSystem {
     }
 
     /**
-     * Una linea de ese tipo, sin abrir.
+     * A line of that type, not opened.
      *
-     * @throws LineUnavailableException si el recurso esta ocupado
-     * @throws IllegalArgumentException si ningun mezclador la provee
+     * @throws LineUnavailableException if the resource is busy
+     * @throws IllegalArgumentException if no mixer provides it
      */
     public static Line getLine(Line.Info info) throws LineUnavailableException {
         Mixer.Info[] mixers = getMixerInfo();
@@ -156,7 +155,7 @@ public class AudioSystem {
             try {
                 m = getMixer(mixers[i]);
             } catch (Throwable e) {
-                // Ver la nota de la clase.
+                // See the class note.
             }
             if (m != null && m.isLineSupported(info)) {
                 return m.getLine(info);
@@ -167,9 +166,9 @@ public class AudioSystem {
     }
 
     /**
-     * Un clip del mezclador por omision.
+     * A clip of the default mixer.
      *
-     * @throws LineUnavailableException si no hay ninguno disponible
+     * @throws LineUnavailableException if there is none available
      */
     public static Clip getClip() throws LineUnavailableException {
         AudioFormat format = new AudioFormat(AudioFormat.Encoding.PCM_SIGNED,
@@ -179,9 +178,9 @@ public class AudioSystem {
     }
 
     /**
-     * Un clip de ese mezclador.
+     * A clip of that mixer.
      *
-     * @throws LineUnavailableException si no hay ninguno disponible
+     * @throws LineUnavailableException if there is none available
      */
     public static Clip getClip(Mixer.Info mixerInfo) throws LineUnavailableException {
         AudioFormat format = new AudioFormat(AudioFormat.Encoding.PCM_SIGNED,
@@ -191,9 +190,9 @@ public class AudioSystem {
     }
 
     /**
-     * Una linea de salida para ese formato.
+     * An output line for that format.
      *
-     * @throws LineUnavailableException si no hay ninguna disponible
+     * @throws LineUnavailableException if there is none available
      */
     public static SourceDataLine getSourceDataLine(AudioFormat format)
         throws LineUnavailableException {
@@ -201,9 +200,9 @@ public class AudioSystem {
     }
 
     /**
-     * Idem, de ese mezclador.
+     * Likewise, of that mixer.
      *
-     * @throws LineUnavailableException si no hay ninguna disponible
+     * @throws LineUnavailableException if there is none available
      */
     public static SourceDataLine getSourceDataLine(AudioFormat format, Mixer.Info mixerinfo)
         throws LineUnavailableException {
@@ -212,9 +211,9 @@ public class AudioSystem {
     }
 
     /**
-     * Una linea de captura para ese formato.
+     * A capture line for that format.
      *
-     * @throws LineUnavailableException si no hay ninguna disponible
+     * @throws LineUnavailableException if there is none available
      */
     public static TargetDataLine getTargetDataLine(AudioFormat format)
         throws LineUnavailableException {
@@ -222,9 +221,9 @@ public class AudioSystem {
     }
 
     /**
-     * Idem, de ese mezclador.
+     * Likewise, of that mixer.
      *
-     * @throws LineUnavailableException si no hay ninguna disponible
+     * @throws LineUnavailableException if there is none available
      */
     public static TargetDataLine getTargetDataLine(AudioFormat format, Mixer.Info mixerinfo)
         throws LineUnavailableException {
@@ -232,7 +231,7 @@ public class AudioSystem {
             .getLine(new DataLine.Info(TargetDataLine.class, format));
     }
 
-    /** A que codificaciones se puede convertir desde esa. */
+    /** Which encodings that one can be converted to. */
     public static AudioFormat.Encoding[] getTargetEncodings(AudioFormat.Encoding sourceEncoding) {
         List<AudioFormat.Encoding> found = new ArrayList<AudioFormat.Encoding>();
         Iterator<FormatConversionProvider> it = providers(FormatConversionProvider.class);
@@ -243,13 +242,13 @@ public class AudioSystem {
                     addAll(found, p.getTargetEncodings());
                 }
             } catch (Throwable e) {
-                // Ver la nota de la clase.
+                // See the class note.
             }
         }
         return found.toArray(new AudioFormat.Encoding[found.size()]);
     }
 
-    /** Idem, partiendo de un formato completo. */
+    /** Likewise, starting from a complete format. */
     public static AudioFormat.Encoding[] getTargetEncodings(AudioFormat sourceFormat) {
         List<AudioFormat.Encoding> found = new ArrayList<AudioFormat.Encoding>();
         Iterator<FormatConversionProvider> it = providers(FormatConversionProvider.class);
@@ -257,13 +256,13 @@ public class AudioSystem {
             try {
                 addAll(found, it.next().getTargetEncodings(sourceFormat));
             } catch (Throwable e) {
-                // Ver la nota de la clase.
+                // See the class note.
             }
         }
         return found.toArray(new AudioFormat.Encoding[found.size()]);
     }
 
-    /** Si alguien sabe convertir de ese formato a esa codificacion. */
+    /** Whether somebody knows how to convert from that format to that encoding. */
     public static boolean isConversionSupported(AudioFormat.Encoding targetEncoding,
                                                 AudioFormat sourceFormat) {
         Iterator<FormatConversionProvider> it = providers(FormatConversionProvider.class);
@@ -273,16 +272,16 @@ public class AudioSystem {
                     return true;
                 }
             } catch (Throwable e) {
-                // Ver la nota de la clase.
+                // See the class note.
             }
         }
         return false;
     }
 
     /**
-     * Convierte ese flujo a esa codificacion.
+     * Converts that stream to that encoding.
      *
-     * @throws IllegalArgumentException si nadie sabe hacer esa conversion
+     * @throws IllegalArgumentException if nobody knows how to do that conversion
      */
     public static AudioInputStream getAudioInputStream(AudioFormat.Encoding targetEncoding,
                                                        AudioInputStream sourceStream) {
@@ -294,14 +293,14 @@ public class AudioSystem {
                     return p.getAudioInputStream(targetEncoding, sourceStream);
                 }
             } catch (Throwable e) {
-                // Ver la nota de la clase.
+                // See the class note.
             }
         }
         throw new IllegalArgumentException("Unsupported conversion: " + targetEncoding
             + " from " + sourceStream.getFormat());
     }
 
-    /** Los formatos concretos a los que se puede convertir. */
+    /** The concrete formats it can be converted to. */
     public static AudioFormat[] getTargetFormats(AudioFormat.Encoding targetEncoding,
                                                  AudioFormat sourceFormat) {
         List<AudioFormat> found = new ArrayList<AudioFormat>();
@@ -315,13 +314,13 @@ public class AudioSystem {
                     i = i + 1;
                 }
             } catch (Throwable e) {
-                // Ver la nota de la clase.
+                // See the class note.
             }
         }
         return found.toArray(new AudioFormat[found.size()]);
     }
 
-    /** Si alguien sabe convertir entre esos dos formatos. */
+    /** Whether somebody knows how to convert between those two formats. */
     public static boolean isConversionSupported(AudioFormat targetFormat,
                                                 AudioFormat sourceFormat) {
         Iterator<FormatConversionProvider> it = providers(FormatConversionProvider.class);
@@ -331,16 +330,16 @@ public class AudioSystem {
                     return true;
                 }
             } catch (Throwable e) {
-                // Ver la nota de la clase.
+                // See the class note.
             }
         }
         return false;
     }
 
     /**
-     * Convierte ese flujo a ese formato.
+     * Converts that stream to that format.
      *
-     * @throws IllegalArgumentException si nadie sabe hacer esa conversion
+     * @throws IllegalArgumentException if nobody knows how to do that conversion
      */
     public static AudioInputStream getAudioInputStream(AudioFormat targetFormat,
                                                        AudioInputStream sourceStream) {
@@ -355,7 +354,7 @@ public class AudioSystem {
                     return p.getAudioInputStream(targetFormat, sourceStream);
                 }
             } catch (Throwable e) {
-                // Ver la nota de la clase.
+                // See the class note.
             }
         }
         throw new IllegalArgumentException("Unsupported conversion: " + targetFormat
@@ -363,12 +362,12 @@ public class AudioSystem {
     }
 
     /**
-     * Que hay en ese flujo.
+     * What there is in that stream.
      *
-     * <p>El flujo tiene que soportar marcas: los lectores prueban de a uno y rebobinan.
+     * <p>The stream has to support marks: the readers try one at a time and rewind.
      *
-     * @throws UnsupportedAudioFileException si nadie lo reconoce
-     * @throws IOException si no se pudo leer
+     * @throws UnsupportedAudioFileException if nobody recognizes it
+     * @throws IOException if it could not be read
      */
     public static AudioFileFormat getAudioFileFormat(InputStream stream)
         throws UnsupportedAudioFileException, IOException {
@@ -377,17 +376,17 @@ public class AudioSystem {
             try {
                 return it.next().getAudioFileFormat(stream);
             } catch (UnsupportedAudioFileException e) {
-                // Ese lector no lo reconoce; se prueba con el siguiente.
+                // That reader does not recognize it; try the next one.
             }
         }
         throw new UnsupportedAudioFileException("file is not a supported file type");
     }
 
     /**
-     * Idem, desde una direccion.
+     * Likewise, from a URL.
      *
-     * @throws UnsupportedAudioFileException si nadie lo reconoce
-     * @throws IOException si no se pudo leer
+     * @throws UnsupportedAudioFileException if nobody recognizes it
+     * @throws IOException if it could not be read
      */
     public static AudioFileFormat getAudioFileFormat(URL url)
         throws UnsupportedAudioFileException, IOException {
@@ -396,17 +395,17 @@ public class AudioSystem {
             try {
                 return it.next().getAudioFileFormat(url);
             } catch (UnsupportedAudioFileException e) {
-                // Ver arriba.
+                // See above.
             }
         }
         throw new UnsupportedAudioFileException("file is not a supported file type");
     }
 
     /**
-     * Idem, desde un archivo.
+     * Likewise, from a file.
      *
-     * @throws UnsupportedAudioFileException si nadie lo reconoce
-     * @throws IOException si no se pudo leer
+     * @throws UnsupportedAudioFileException if nobody recognizes it
+     * @throws IOException if it could not be read
      */
     public static AudioFileFormat getAudioFileFormat(File file)
         throws UnsupportedAudioFileException, IOException {
@@ -415,17 +414,17 @@ public class AudioSystem {
             try {
                 return it.next().getAudioFileFormat(file);
             } catch (UnsupportedAudioFileException e) {
-                // Ver arriba.
+                // See above.
             }
         }
         throw new UnsupportedAudioFileException("file is not a supported file type");
     }
 
     /**
-     * Un flujo de audio desde ese flujo de bytes.
+     * An audio stream from that byte stream.
      *
-     * @throws UnsupportedAudioFileException si nadie lo reconoce
-     * @throws IOException si no se pudo leer
+     * @throws UnsupportedAudioFileException if nobody recognizes it
+     * @throws IOException if it could not be read
      */
     public static AudioInputStream getAudioInputStream(InputStream stream)
         throws UnsupportedAudioFileException, IOException {
@@ -434,17 +433,17 @@ public class AudioSystem {
             try {
                 return it.next().getAudioInputStream(stream);
             } catch (UnsupportedAudioFileException e) {
-                // Ver arriba.
+                // See above.
             }
         }
         throw new UnsupportedAudioFileException("could not get audio input stream from input stream");
     }
 
     /**
-     * Idem, desde una direccion.
+     * Likewise, from a URL.
      *
-     * @throws UnsupportedAudioFileException si nadie lo reconoce
-     * @throws IOException si no se pudo leer
+     * @throws UnsupportedAudioFileException if nobody recognizes it
+     * @throws IOException if it could not be read
      */
     public static AudioInputStream getAudioInputStream(URL url)
         throws UnsupportedAudioFileException, IOException {
@@ -453,17 +452,17 @@ public class AudioSystem {
             try {
                 return it.next().getAudioInputStream(url);
             } catch (UnsupportedAudioFileException e) {
-                // Ver arriba.
+                // See above.
             }
         }
         throw new UnsupportedAudioFileException("could not get audio input stream from input URL");
     }
 
     /**
-     * Idem, desde un archivo.
+     * Likewise, from a file.
      *
-     * @throws UnsupportedAudioFileException si nadie lo reconoce
-     * @throws IOException si no se pudo leer
+     * @throws UnsupportedAudioFileException if nobody recognizes it
+     * @throws IOException if it could not be read
      */
     public static AudioInputStream getAudioInputStream(File file)
         throws UnsupportedAudioFileException, IOException {
@@ -472,13 +471,13 @@ public class AudioSystem {
             try {
                 return it.next().getAudioInputStream(file);
             } catch (UnsupportedAudioFileException e) {
-                // Ver arriba.
+                // See above.
             }
         }
         throw new UnsupportedAudioFileException("could not get audio input stream from input file");
     }
 
-    /** Que tipos de archivo se pueden escribir. */
+    /** Which file types can be written. */
     public static AudioFileFormat.Type[] getAudioFileTypes() {
         List<AudioFileFormat.Type> found = new ArrayList<AudioFileFormat.Type>();
         Iterator<AudioFileWriter> it = providers(AudioFileWriter.class);
@@ -493,13 +492,13 @@ public class AudioSystem {
                     i = i + 1;
                 }
             } catch (Throwable e) {
-                // Ver la nota de la clase.
+                // See the class note.
             }
         }
         return found.toArray(new AudioFileFormat.Type[found.size()]);
     }
 
-    /** Si ese tipo se puede escribir. */
+    /** Whether that type can be written. */
     public static boolean isFileTypeSupported(AudioFileFormat.Type fileType) {
         AudioFileFormat.Type[] all = getAudioFileTypes();
         int i = 0;
@@ -512,7 +511,7 @@ public class AudioSystem {
         return false;
     }
 
-    /** Que tipos se pueden escribir con ese contenido. */
+    /** Which types can be written with that content. */
     public static AudioFileFormat.Type[] getAudioFileTypes(AudioInputStream stream) {
         List<AudioFileFormat.Type> found = new ArrayList<AudioFileFormat.Type>();
         Iterator<AudioFileWriter> it = providers(AudioFileWriter.class);
@@ -527,13 +526,13 @@ public class AudioSystem {
                     i = i + 1;
                 }
             } catch (Throwable e) {
-                // Ver la nota de la clase.
+                // See the class note.
             }
         }
         return found.toArray(new AudioFileFormat.Type[found.size()]);
     }
 
-    /** Si ese tipo se puede escribir con ese contenido. */
+    /** Whether that type can be written with that content. */
     public static boolean isFileTypeSupported(AudioFileFormat.Type fileType,
                                               AudioInputStream stream) {
         AudioFileFormat.Type[] all = getAudioFileTypes(stream);
@@ -548,11 +547,11 @@ public class AudioSystem {
     }
 
     /**
-     * Escribe el flujo a ese destino con ese tipo de archivo.
+     * Writes the stream to that destination with that file type.
      *
-     * @return cuantos bytes se escribieron
-     * @throws IOException si no se pudo escribir
-     * @throws IllegalArgumentException si nadie sabe escribir ese tipo
+     * @return how many bytes were written
+     * @throws IOException if it could not be written
+     * @throws IllegalArgumentException if nobody knows how to write that type
      */
     public static int write(AudioInputStream stream, AudioFileFormat.Type fileType,
                             OutputStream out) throws IOException {
@@ -568,11 +567,11 @@ public class AudioSystem {
     }
 
     /**
-     * Idem, a un archivo.
+     * Likewise, to a file.
      *
-     * @return cuantos bytes se escribieron
-     * @throws IOException si no se pudo escribir
-     * @throws IllegalArgumentException si nadie sabe escribir ese tipo
+     * @return how many bytes were written
+     * @throws IOException if it could not be written
+     * @throws IllegalArgumentException if nobody knows how to write that type
      */
     public static int write(AudioInputStream stream, AudioFileFormat.Type fileType, File out)
         throws IOException {
@@ -588,10 +587,10 @@ public class AudioSystem {
     }
 
     /**
-     * Los proveedores de ese tipo, saltandose los que no cargan.
+     * The providers of that kind, skipping the ones that do not load.
      *
-     * <p>Se materializa la lista en lugar de devolver el iterador perezoso del {@link ServiceLoader}
-     * para que un proveedor que falle al construirse no rompa el recorrido; ver la nota de la clase.
+     * <p>The list is materialized instead of returning the {@link ServiceLoader}'s lazy iterator so
+     * that a provider that fails to construct does not break the walk; see the class note.
      */
     private static <T> Iterator<T> providers(Class<T> type) {
         List<T> all = new ArrayList<T>();
@@ -601,16 +600,16 @@ public class AudioSystem {
                 try {
                     all.add(it.next());
                 } catch (Throwable e) {
-                    // Ese proveedor no carga; se sigue con los demas.
+                    // That provider does not load; carry on with the others.
                 }
             }
         } catch (Throwable e) {
-            // Ni siquiera se pudo abrir el cargador de servicios.
+            // Not even the service loader could be opened.
         }
         return all.iterator();
     }
 
-    /** Los descriptores de ese mezclador, o null si el mezclador falla. */
+    /** That mixer's descriptors, or null if the mixer fails. */
     private static Line.Info[] sourceInfoOf(Mixer.Info mixerInfo, Line.Info info) {
         try {
             return getMixer(mixerInfo).getSourceLineInfo(info);
@@ -619,7 +618,7 @@ public class AudioSystem {
         }
     }
 
-    /** Idem, de salida. */
+    /** Likewise, output. */
     private static Line.Info[] targetInfoOf(Mixer.Info mixerInfo, Line.Info info) {
         try {
             return getMixer(mixerInfo).getTargetLineInfo(info);
@@ -628,7 +627,7 @@ public class AudioSystem {
         }
     }
 
-    /** Los descriptores de un mezclador, o nada si fallo. */
+    /** A mixer's descriptors, or nothing if it failed. */
     private static void collect(List<Line.Info> into, Line.Info[] some) {
         int i = 0;
         while (some != null && i < some.length) {
@@ -637,7 +636,7 @@ public class AudioSystem {
         }
     }
 
-    /** Los mezcladores de un proveedor, o null si falla. */
+    /** A provider's mixers, or null if it fails. */
     private static Mixer.Info[] quietMixerInfo(MixerProvider p) {
         try {
             return p.getMixerInfo();
@@ -646,7 +645,7 @@ public class AudioSystem {
         }
     }
 
-    /** Agrega los que no esten repetidos. */
+    /** Adds the ones that are not repeated. */
     private static void addAll(List<AudioFormat.Encoding> into, AudioFormat.Encoding[] some) {
         int i = 0;
         while (some != null && i < some.length) {

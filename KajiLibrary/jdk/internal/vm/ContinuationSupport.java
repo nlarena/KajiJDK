@@ -1,21 +1,23 @@
 package jdk.internal.vm;
 
 /**
- * KajiLibrary's jdk.internal.vm.ContinuationSupport — si esta VM sabe suspender y reanudar pilas.
+ * KajiLibrary's jdk.internal.vm.ContinuationSupport -- whether this VM knows how to suspend and
+ * resume stacks.
  *
- * <p>Las continuaciones son el sustrato de los hilos virtuales: la VM levanta la pila de un hilo,
- * la guarda en el montón y la vuelve a poner después, quizás en otro hilo del sistema. Eso es soporte
- * de VM, no biblioteca — no hay manera de escribirlo en Java.
+ * <p>Continuations are the substrate of virtual threads: the VM lifts the stack of a thread, keeps
+ * it in the heap and puts it back later, perhaps on another system thread. That is VM support, not
+ * library -- there is no way of writing it in Java.
  *
- * <p>Esta VM no lo tiene, y las cuatro respuestas son consistentes con eso:
+ * <p>This VM does not have it, and the four answers are consistent with that:
  *
  * <ul>
- * <li>{@link #isSupported()} da `false`.</li>
- * <li>{@link #ensureSupported()} **tira**, porque su razón de ser es cortar antes de que el que llama
- *     construya sobre algo que no está.</li>
- * <li>{@link #pinIfSupported()} y {@link #unpinIfSupported()} no hacen nada, y eso es lo correcto y no
- *     un atajo: "clavar" una continuación quiere decir *impedir que se suspenda mientras dura esta
- *     sección*. Donde nada se suspende, no hay nada que impedir. El nombre lo dice: `ifSupported`.</li>
+ * <li>{@link #isSupported()} gives `false`.</li>
+ * <li>{@link #ensureSupported()} **throws**, because its reason for being is to cut before the
+ *     caller builds on something that is not there.</li>
+ * <li>{@link #pinIfSupported()} and {@link #unpinIfSupported()} do nothing, and that is the right
+ *     thing and not a shortcut: "pinning" a continuation means *preventing it from being suspended
+ *     while this section lasts*. Where nothing is suspended, there is nothing to prevent. The name
+ *     says it: `ifSupported`.</li>
  * </ul>
  */
 public class ContinuationSupport {
@@ -23,26 +25,31 @@ public class ContinuationSupport {
     private ContinuationSupport() {
     }
 
-    /** Si la VM soporta continuaciones. Acá, `false`. */
+    /** Whether the VM supports continuations. Here, `false`. */
     public static boolean isSupported() {
         return false;
     }
 
     /**
-     * Corta si no hay soporte.
+     * It cuts if there is no support.
      *
-     * @throws UnsupportedOperationException siempre, en esta VM
+     * @throws UnsupportedOperationException always, on this VM
      */
     public static void ensureSupported() {
         throw new UnsupportedOperationException(
-                "esta VM no soporta continuaciones: no puede levantar ni restaurar pilas");
+                "this VM does not support continuations: it cannot lift nor restore stacks");
     }
 
-    /** Clava la continuación en curso, si hay. Acá no hay ninguna, así que no hace nada. */
+    /**
+     * It pins the current continuation, if there is one. Here there is none, so it does nothing.
+     */
     public static void pinIfSupported() {
     }
 
-    /** La desclava. Simétrico del anterior, y por lo mismo tampoco hace nada. */
+    /**
+     * It unpins it. The symmetric of the previous one, and for the same reason it does nothing
+     * either.
+     */
     public static void unpinIfSupported() {
     }
 }

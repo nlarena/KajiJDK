@@ -5,7 +5,7 @@ import java.time.ZoneOffset;
 import java.time.temporal.TemporalQueries;
 import java.util.Set;
 
-// The zone's NAME: "Pacific Standard Time", "hora estandar del Pacifico".
+// The zone's NAME: "Pacific Standard Time", or in Spanish "hora estandar del Pacifico".
 //
 // ===============================================================================================
 // WHY THIS IS POSSIBLE AND THE NAME TABLE IS NOT NEEDED

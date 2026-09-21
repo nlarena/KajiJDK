@@ -1,44 +1,45 @@
 package java.awt;
 
 /**
- * Lo que se le pide a un trabajo de impresión: cuántas copias, qué páginas, a qué impresora.
+ * What is asked of a print job: how many copies, which pages, to which printer.
  *
- * <p>Es un objeto de configuración y nada más — no imprime, no habla con el sistema, no valida
- * contra ninguna impresora real. Lo que sí hace, y es su razón de ser, es **rechazar
- * configuraciones imposibles en el momento de armarlas**: cero copias, una página inicial mayor que
- * la final, un rango de páginas que retrocede. Sin eso, el error aparecería recién al imprimir y
- * lejos de donde se cometió.
+ * <p>It is a configuration object and nothing more — it does not print, it does not talk to the
+ * system, it validates against no real printer. What it does do, and it is its reason for being, is
+ * **reject impossible configurations at the moment they are built**: zero copies, a first page
+ * higher than the last, a page range that goes backwards. Without that, the mistake would show up
+ * only at printing time and far from where it was made.
  *
- * <h2>Las páginas se pueden decir de dos formas</h2>
+ * <h2>The pages can be said in two ways</h2>
  *
- * <p>Y conviene entenderlo porque es lo único de esta clase que sorprende. Están
- * `fromPage`/`toPage` por un lado y `pageRanges` por el otro, y **son campos independientes**: fijar
- * uno no borra el otro. Lo que los une son los accesores, que responden con esta preferencia:
+ * <p>And it is worth understanding, because it is the only thing about this class that surprises.
+ * There are `fromPage`/`toPage` on one side and `pageRanges` on the other, and **they are
+ * independent fields**: setting one does not erase the other. What joins them are the accessors,
+ * which answer with this preference:
  *
  * <ul>
- * <li>{@link #getFromPage} da `fromPage` si se fijó; si no, el comienzo del primer rango; si
- *     tampoco hay rangos, {@link #getMinPage}.</li>
- * <li>{@link #getToPage} da `toPage` si se fijó; si no, `fromPage`; si no, el final del último
- *     rango; si tampoco, {@link #getMinPage}.</li>
- * <li>{@link #getPageRanges} da los rangos si se fijaron; si no, **sintetiza** uno solo con lo que
- *     contesten los dos anteriores — nunca devuelve nulo.</li>
+ * <li>{@link #getFromPage} gives `fromPage` if it was set; if not, the start of the first range; if
+ *     there are no ranges either, {@link #getMinPage}.</li>
+ * <li>{@link #getToPage} gives `toPage` if it was set; if not, `fromPage`; if not, the end of the
+ *     last range; if not that either, {@link #getMinPage}.</li>
+ * <li>{@link #getPageRanges} gives the ranges if they were set; if not, it **synthesises** a single
+ *     one out of what the two above answer — it never returns null.</li>
  * </ul>
  *
- * <p>La asimetría entre los dos primeros no es un descuido: `getToPage` mira `fromPage` antes que
- * los rangos y `getFromPage` no mira `toPage`. Comprobado contra el JDK 25, que es de donde salen
- * estas reglas — un `setFromPage(3)` seguido de `setPageRanges({{8,9}})` deja `from=3` y `to=3`,
- * con los rangos intactos y sin participar.
+ * <p>The asymmetry between the first two is not an oversight: `getToPage` looks at `fromPage`
+ * before the ranges and `getFromPage` does not look at `toPage`. Checked against JDK 25, which is
+ * where these rules come from — a `setFromPage(3)` followed by `setPageRanges({{8,9}})` leaves
+ * `from=3` and `to=3`, with the ranges untouched and taking no part.
  *
- * <h2>Los tipos anidados</h2>
+ * <h2>The nested types</h2>
  *
- * <p>Son cinco clases con constantes en vez de `enum` porque esta API es anterior a `enum` y
- * cambiarlas rompería la compatibilidad. Heredan de {@link AttributeValue}, que les da el
- * `toString()` en minúsculas con guiones (`separate-documents-collated-copies`) y el `hashCode()`
- * por índice.
+ * <p>They are five classes with constants instead of `enum` because this API is older than `enum`
+ * and changing them would break compatibility. They inherit from {@link AttributeValue}, which
+ * gives them the lower-case `toString()` with hyphens (`separate-documents-collated-copies`) and
+ * the `hashCode()` by index.
  */
 public final class JobAttributes implements Cloneable {
 
-    /** Qué se imprime por omisión cuando el usuario no elige. */
+    /** What is printed by default when the user chooses nothing. */
     public static final class DefaultSelectionType extends AttributeValue {
 
         private static final int I_ALL = 0;
@@ -47,11 +48,11 @@ public final class JobAttributes implements Cloneable {
 
         private static final String[] NAMES = { "all", "range", "selection" };
 
-        /** Todo el documento. */
+        /** The whole document. */
         public static final DefaultSelectionType ALL = new DefaultSelectionType(I_ALL);
-        /** El rango de páginas configurado. */
+        /** The page range that is configured. */
         public static final DefaultSelectionType RANGE = new DefaultSelectionType(I_RANGE);
-        /** Lo que el usuario haya seleccionado. */
+        /** Whatever the user has selected. */
         public static final DefaultSelectionType SELECTION =
                 new DefaultSelectionType(I_SELECTION);
 
@@ -60,7 +61,7 @@ public final class JobAttributes implements Cloneable {
         }
     }
 
-    /** A dónde va la salida. */
+    /** Where the output goes. */
     public static final class DestinationType extends AttributeValue {
 
         private static final int I_FILE = 0;
@@ -68,9 +69,9 @@ public final class JobAttributes implements Cloneable {
 
         private static final String[] NAMES = { "file", "printer" };
 
-        /** A un archivo, el que diga {@link JobAttributes#getFileName}. */
+        /** To a file, the one {@link JobAttributes#getFileName} says. */
         public static final DestinationType FILE = new DestinationType(I_FILE);
-        /** A la impresora. */
+        /** To the printer. */
         public static final DestinationType PRINTER = new DestinationType(I_PRINTER);
 
         private DestinationType(int type) {
@@ -78,7 +79,7 @@ public final class JobAttributes implements Cloneable {
         }
     }
 
-    /** Qué diálogo se le muestra al usuario antes de imprimir. */
+    /** Which dialog is shown to the user before printing. */
     public static final class DialogType extends AttributeValue {
 
         private static final int I_COMMON = 0;
@@ -87,11 +88,11 @@ public final class JobAttributes implements Cloneable {
 
         private static final String[] NAMES = { "common", "native", "none" };
 
-        /** El diálogo multiplataforma. */
+        /** The cross-platform dialog. */
         public static final DialogType COMMON = new DialogType(I_COMMON);
-        /** El del sistema operativo. */
+        /** The operating system's one. */
         public static final DialogType NATIVE = new DialogType(I_NATIVE);
-        /** Ninguno: se imprime directo. */
+        /** None: it prints straight away. */
         public static final DialogType NONE = new DialogType(I_NONE);
 
         private DialogType(int type) {
@@ -100,10 +101,10 @@ public final class JobAttributes implements Cloneable {
     }
 
     /**
-     * Cómo se agrupan las copias de un documento de varias páginas.
+     * How the copies of a document of several pages are grouped.
      *
-     * <p>La diferencia se ve con dos copias de un documento de tres páginas: **intercaladas** salen
-     * 1,2,3,1,2,3 y **sin intercalar** salen 1,1,2,2,3,3.
+     * <p>The difference shows with two copies of a document of three pages: **collated** they come
+     * out 1,2,3,1,2,3 and **uncollated** they come out 1,1,2,2,3,3.
      */
     public static final class MultipleDocumentHandlingType extends AttributeValue {
 
@@ -113,10 +114,10 @@ public final class JobAttributes implements Cloneable {
         private static final String[] NAMES = {
             "separate-documents-collated-copies", "separate-documents-uncollated-copies" };
 
-        /** Intercaladas: cada copia completa antes de la siguiente. */
+        /** Collated: each copy complete before the next one. */
         public static final MultipleDocumentHandlingType SEPARATE_DOCUMENTS_COLLATED_COPIES =
                 new MultipleDocumentHandlingType(I_COLLATED);
-        /** Sin intercalar: todas las copias de cada página juntas. */
+        /** Uncollated: all the copies of each page together. */
         public static final MultipleDocumentHandlingType SEPARATE_DOCUMENTS_UNCOLLATED_COPIES =
                 new MultipleDocumentHandlingType(I_UNCOLLATED);
 
@@ -125,7 +126,7 @@ public final class JobAttributes implements Cloneable {
         }
     }
 
-    /** Si se imprime de un lado o de los dos, y por qué borde se da vuelta la hoja. */
+    /** Whether it prints on one side or on both, and which edge the sheet is turned on. */
     public static final class SidesType extends AttributeValue {
 
         private static final int I_ONE_SIDED = 0;
@@ -135,12 +136,12 @@ public final class JobAttributes implements Cloneable {
         private static final String[] NAMES = {
             "one-sided", "two-sided-long-edge", "two-sided-short-edge" };
 
-        /** De un solo lado. */
+        /** On one side only. */
         public static final SidesType ONE_SIDED = new SidesType(I_ONE_SIDED);
-        /** De los dos, dando vuelta por el borde largo — como un libro. */
+        /** On both, turning on the long edge — like a book. */
         public static final SidesType TWO_SIDED_LONG_EDGE =
                 new SidesType(I_TWO_SIDED_LONG_EDGE);
-        /** De los dos, dando vuelta por el borde corto — como un anotador. */
+        /** On both, turning on the short edge — like a notepad. */
         public static final SidesType TWO_SIDED_SHORT_EDGE =
                 new SidesType(I_TWO_SIDED_SHORT_EDGE);
 
@@ -163,7 +164,7 @@ public final class JobAttributes implements Cloneable {
     private SidesType sides;
     private int toPage;
 
-    /** Los valores por omisión: una copia, todo el documento, a la impresora, diálogo nativo. */
+    /** The default values: one copy, the whole document, to the printer, native dialog. */
     public JobAttributes() {
         this.setCopiesToDefault();
         this.setDefaultSelection(DefaultSelectionType.ALL);
@@ -176,19 +177,19 @@ public final class JobAttributes implements Cloneable {
     }
 
     /**
-     * Una copia de `obj`.
+     * A copy of `obj`.
      *
-     * @throws NullPointerException si `obj` es nulo
+     * @throws NullPointerException if `obj` is null
      */
     public JobAttributes(JobAttributes obj) {
         this.set(obj);
     }
 
     /**
-     * Con todos los valores dados.
+     * With every value given.
      *
-     * @throws IllegalArgumentException si alguno no es válido — ver los setters, que aplican las
-     *     mismas reglas
+     * @throws IllegalArgumentException if any of them is not valid — see the setters, which apply
+     *     the same rules
      */
     public JobAttributes(int copies, DefaultSelectionType defaultSelection,
             DestinationType destination, DialogType dialog, String fileName, int maxPage,
@@ -208,10 +209,10 @@ public final class JobAttributes implements Cloneable {
     }
 
     /**
-     * Una copia.
+     * A copy.
      *
-     * <p>Superficial en todo salvo los rangos, que se copian de verdad: son el único campo mutable
-     * —un `int[][]`— y compartirlo dejaría que cambiar la copia cambiara el original.
+     * <p>Shallow in everything but the ranges, which are really copied: they are the only mutable
+     * field —an `int[][]`— and sharing it would let changing the copy change the original.
      */
     public Object clone() {
         JobAttributes copy = new JobAttributes(this);
@@ -219,9 +220,9 @@ public final class JobAttributes implements Cloneable {
     }
 
     /**
-     * Toma todos los valores de `obj`.
+     * Takes every value from `obj`.
      *
-     * @throws NullPointerException si `obj` es nulo
+     * @throws NullPointerException if `obj` is null
      */
     public void set(JobAttributes obj) {
         this.copies = obj.copies;
@@ -251,13 +252,13 @@ public final class JobAttributes implements Cloneable {
         return out;
     }
 
-    /** Cuántas copias. */
+    /** How many copies. */
     public int getCopies() {
         return this.copies;
     }
 
     /**
-     * @throws IllegalArgumentException si `copies` es menor que 1
+     * @throws IllegalArgumentException if `copies` is less than 1
      */
     public void setCopies(int copies) {
         if (copies <= 0) {
@@ -266,18 +267,18 @@ public final class JobAttributes implements Cloneable {
         this.copies = copies;
     }
 
-    /** Vuelve a una copia. */
+    /** Goes back to one copy. */
     public void setCopiesToDefault() {
         this.setCopies(1);
     }
 
-    /** Qué se imprime por omisión. */
+    /** What is printed by default. */
     public DefaultSelectionType getDefaultSelection() {
         return this.defaultSelection;
     }
 
     /**
-     * @throws IllegalArgumentException si es nulo
+     * @throws IllegalArgumentException if it is null
      */
     public void setDefaultSelection(DefaultSelectionType defaultSelection) {
         if (defaultSelection == null) {
@@ -286,13 +287,13 @@ public final class JobAttributes implements Cloneable {
         this.defaultSelection = defaultSelection;
     }
 
-    /** A dónde va la salida. */
+    /** Where the output goes. */
     public DestinationType getDestination() {
         return this.destination;
     }
 
     /**
-     * @throws IllegalArgumentException si es nulo
+     * @throws IllegalArgumentException if it is null
      */
     public void setDestination(DestinationType destination) {
         if (destination == null) {
@@ -301,13 +302,13 @@ public final class JobAttributes implements Cloneable {
         this.destination = destination;
     }
 
-    /** Qué diálogo se muestra. */
+    /** Which dialog is shown. */
     public DialogType getDialog() {
         return this.dialog;
     }
 
     /**
-     * @throws IllegalArgumentException si es nulo
+     * @throws IllegalArgumentException if it is null
      */
     public void setDialog(DialogType dialog) {
         if (dialog == null) {
@@ -316,17 +317,17 @@ public final class JobAttributes implements Cloneable {
         this.dialog = dialog;
     }
 
-    /** El archivo de salida, o nulo si no se fijó. */
+    /** The output file, or null if none was set. */
     public String getFileName() {
         return this.fileName;
     }
 
-    /** Fija el archivo de salida. El nulo es válido y significa "sin archivo". */
+    /** Sets the output file. Null is valid and means "no file". */
     public void setFileName(String fileName) {
         this.fileName = fileName;
     }
 
-    /** La primera página. Ver la nota de la clase sobre cómo se resuelve. */
+    /** The first page. See the note of the class about how it is resolved. */
     public int getFromPage() {
         if (this.fromPage != 0) {
             return this.fromPage;
@@ -338,8 +339,8 @@ public final class JobAttributes implements Cloneable {
     }
 
     /**
-     * @throws IllegalArgumentException si es menor que 1, menor que {@link #getMinPage}, mayor que
-     *     {@link #getMaxPage}, o mayor que `toPage` si ése ya se fijó
+     * @throws IllegalArgumentException if it is less than 1, less than {@link #getMinPage}, greater
+     *     than {@link #getMaxPage}, or greater than `toPage` if that one was already set
      */
     public void setFromPage(int fromPage) {
         if (fromPage <= 0
@@ -351,13 +352,13 @@ public final class JobAttributes implements Cloneable {
         this.fromPage = fromPage;
     }
 
-    /** La página más alta que se puede pedir. */
+    /** The highest page that can be asked for. */
     public int getMaxPage() {
         return this.maxPage;
     }
 
     /**
-     * @throws IllegalArgumentException si es menor que 1 o menor que {@link #getMinPage}
+     * @throws IllegalArgumentException if it is less than 1 or less than {@link #getMinPage}
      */
     public void setMaxPage(int maxPage) {
         if (maxPage <= 0 || maxPage < this.minPage) {
@@ -366,13 +367,13 @@ public final class JobAttributes implements Cloneable {
         this.maxPage = maxPage;
     }
 
-    /** La página más baja que se puede pedir. */
+    /** The lowest page that can be asked for. */
     public int getMinPage() {
         return this.minPage;
     }
 
     /**
-     * @throws IllegalArgumentException si es menor que 1 o mayor que {@link #getMaxPage}
+     * @throws IllegalArgumentException if it is less than 1 or greater than {@link #getMaxPage}
      */
     public void setMinPage(int minPage) {
         if (minPage <= 0 || minPage > this.maxPage) {
@@ -381,13 +382,13 @@ public final class JobAttributes implements Cloneable {
         this.minPage = minPage;
     }
 
-    /** Cómo se agrupan las copias. */
+    /** How the copies are grouped. */
     public MultipleDocumentHandlingType getMultipleDocumentHandling() {
         return this.multipleDocumentHandling;
     }
 
     /**
-     * @throws IllegalArgumentException si es nulo
+     * @throws IllegalArgumentException if it is null
      */
     public void setMultipleDocumentHandling(
             MultipleDocumentHandlingType multipleDocumentHandling) {
@@ -398,17 +399,17 @@ public final class JobAttributes implements Cloneable {
         this.multipleDocumentHandling = multipleDocumentHandling;
     }
 
-    /** Vuelve a copias sin intercalar, que es la omisión. */
+    /** Goes back to uncollated copies, which is the default. */
     public void setMultipleDocumentHandlingToDefault() {
         this.setMultipleDocumentHandling(
                 MultipleDocumentHandlingType.SEPARATE_DOCUMENTS_UNCOLLATED_COPIES);
     }
 
     /**
-     * Los rangos de páginas.
+     * The page ranges.
      *
-     * <p>**Nunca devuelve nulo**: sin rangos explícitos sintetiza uno solo con
-     * {@link #getFromPage} y {@link #getToPage}. El arreglo es una copia.
+     * <p>**It never returns null**: with no explicit ranges it synthesises a single one out of
+     * {@link #getFromPage} and {@link #getToPage}. The array is a copy.
      */
     public int[][] getPageRanges() {
         if (this.pageRanges != null) {
@@ -421,16 +422,16 @@ public final class JobAttributes implements Cloneable {
     }
 
     /**
-     * Fija los rangos.
+     * Sets the ranges.
      *
-     * <p>Cada elemento es `{desde, hasta}` o `{página}`. Los rangos tienen que ir **en orden y sin
-     * solaparse**, que es lo que hace que la impresión sea reproducible: dos rangos que se pisan
-     * imprimirían la misma página dos veces sin que quien los escribió lo pidiera.
+     * <p>Each element is `{from, to}` or `{page}`. The ranges have to go **in order and without
+     * overlapping**, which is what makes the printing reproducible: two ranges that step on each
+     * other would print the same page twice without whoever wrote them asking for it.
      *
-     * @throws NullPointerException si el arreglo es nulo
-     * @throws IllegalArgumentException si está vacío, si algún elemento no tiene uno o dos
-     *     números, si un rango retrocede, si dos se solapan o van desordenados, o si alguno cae
-     *     fuera de {@link #getMinPage}..{@link #getMaxPage}
+     * @throws NullPointerException if the array is null
+     * @throws IllegalArgumentException if it is empty, if some element does not have one or two
+     *     numbers, if a range goes backwards, if two overlap or go out of order, or if any falls
+     *     outside {@link #getMinPage}..{@link #getMaxPage}
      */
     public void setPageRanges(int[][] pageRanges) {
         if (pageRanges == null) {
@@ -439,45 +440,45 @@ public final class JobAttributes implements Cloneable {
         if (pageRanges.length == 0) {
             throw new IllegalArgumentException("Invalid value for attribute pageRanges");
         }
-        int previo = 0;
-        int[][] copia = new int[pageRanges.length][2];
+        int previous = 0;
+        int[][] copy = new int[pageRanges.length][2];
         for (int i = 0; i < pageRanges.length; i++) {
             int[] r = pageRanges[i];
             if (r == null || r.length < 1 || r.length > 2) {
                 throw new IllegalArgumentException("Invalid value for attribute pageRanges");
             }
-            int desde = r[0];
-            int hasta = r.length == 2 ? r[1] : r[0];
-            if (desde <= 0 || hasta < desde || desde <= previo) {
+            int from = r[0];
+            int to = r.length == 2 ? r[1] : r[0];
+            if (from <= 0 || to < from || from <= previous) {
                 throw new IllegalArgumentException("Invalid value for attribute pageRanges");
             }
-            copia[i][0] = desde;
-            copia[i][1] = hasta;
-            previo = hasta;
+            copy[i][0] = from;
+            copy[i][1] = to;
+            previous = to;
         }
-        if (copia[0][0] < this.minPage || copia[copia.length - 1][1] > this.maxPage) {
+        if (copy[0][0] < this.minPage || copy[copy.length - 1][1] > this.maxPage) {
             throw new IllegalArgumentException("Invalid value for attribute pageRanges");
         }
-        this.pageRanges = copia;
+        this.pageRanges = copy;
     }
 
-    /** La impresora, o nulo si no se fijó. */
+    /** The printer, or null if none was set. */
     public String getPrinter() {
         return this.printer;
     }
 
-    /** Fija la impresora. El nulo es válido y significa "la que sea". */
+    /** Sets the printer. Null is valid and means "whichever". */
     public void setPrinter(String printer) {
         this.printer = printer;
     }
 
-    /** De uno o de los dos lados. */
+    /** On one side or on both. */
     public SidesType getSides() {
         return this.sides;
     }
 
     /**
-     * @throws IllegalArgumentException si es nulo
+     * @throws IllegalArgumentException if it is null
      */
     public void setSides(SidesType sides) {
         if (sides == null) {
@@ -486,12 +487,12 @@ public final class JobAttributes implements Cloneable {
         this.sides = sides;
     }
 
-    /** Vuelve a un solo lado. */
+    /** Goes back to one side only. */
     public void setSidesToDefault() {
         this.setSides(SidesType.ONE_SIDED);
     }
 
-    /** La última página. Ver la nota de la clase sobre cómo se resuelve. */
+    /** The last page. See the note of the class about how it is resolved. */
     public int getToPage() {
         if (this.toPage != 0) {
             return this.toPage;
@@ -506,8 +507,8 @@ public final class JobAttributes implements Cloneable {
     }
 
     /**
-     * @throws IllegalArgumentException si es menor que 1, menor que `fromPage` si ése ya se fijó,
-     *     o fuera de {@link #getMinPage}..{@link #getMaxPage}
+     * @throws IllegalArgumentException if it is less than 1, less than `fromPage` if that one was
+     *     already set, or outside {@link #getMinPage}..{@link #getMaxPage}
      */
     public void setToPage(int toPage) {
         if (toPage <= 0
@@ -519,7 +520,7 @@ public final class JobAttributes implements Cloneable {
         this.toPage = toPage;
     }
 
-    /** Igualdad por todos los campos, con los rangos comparados por contenido. */
+    /** Equality by every field, with the ranges compared by content. */
     public boolean equals(Object obj) {
         if (this == obj) {
             return true;
@@ -583,17 +584,17 @@ public final class JobAttributes implements Cloneable {
         return h;
     }
 
-    /** El mismo formato que el JDK: los atributos separados por comas, en orden alfabético. */
+    /** The same format as the JDK: the attributes separated by commas, in alphabetical order. */
     public String toString() {
-        StringBuilder rangos = new StringBuilder("[");
+        StringBuilder ranges = new StringBuilder("[");
         int[][] rs = this.getPageRanges();
         for (int i = 0; i < rs.length; i++) {
             if (i > 0) {
-                rangos.append(",");
+                ranges.append(",");
             }
-            rangos.append(rs[i][0]).append(":").append(rs[i][1]);
+            ranges.append(rs[i][0]).append(":").append(rs[i][1]);
         }
-        rangos.append("]");
+        ranges.append("]");
         return "copies=" + this.getCopies()
                 + ",defaultSelection=" + this.getDefaultSelection()
                 + ",destination=" + this.getDestination()
@@ -603,7 +604,7 @@ public final class JobAttributes implements Cloneable {
                 + ",maxPage=" + this.getMaxPage()
                 + ",minPage=" + this.getMinPage()
                 + ",multiple-document-handling=" + this.getMultipleDocumentHandling()
-                + ",page-ranges=" + rangos.toString()
+                + ",page-ranges=" + ranges.toString()
                 + ",printer=" + this.getPrinter()
                 + ",sides=" + this.getSides()
                 + ",toPage=" + this.getToPage();

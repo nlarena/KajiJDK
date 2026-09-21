@@ -4,15 +4,16 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
-// Las restricciones de un parametro abierto --valor por omision, valores legales, minimo y maximo--
-// con su validacion y su comportamiento.
+// The constraints of an open parameter --default value, legal values, minimum and maximum-- with
+// their validation and their behaviour.
 //
-// Existe porque `OpenMBeanParameterInfoSupport` y `OpenMBeanAttributeInfoSupport` necesitan
-// exactamente lo mismo y **no pueden compartir una superclase**: cada uno hereda de su
-// `MBeanXxxInfo` de `javax.management`, y Java no tiene herencia multiple. Delegar en un objeto es
-// la unica forma de que la regla viva escrita una sola vez.
+// It exists because `OpenMBeanParameterInfoSupport` and `OpenMBeanAttributeInfoSupport` need
+// exactly the same thing and **cannot share a superclass**: each extends its own `MBeanXxxInfo`
+// from `javax.management`, and Java has no multiple inheritance. Delegating to an object is the
+// only way for the rule to live written once.
 //
-// De paquete a proposito: es un detalle de como estan implementados esos dos, no parte del contrato.
+// Package-private on purpose: it is a detail of how those two are implemented, not part of the
+// contract.
 final class Constraints {
 
     private final OpenType<?> openType;
@@ -24,76 +25,75 @@ final class Constraints {
     Constraints(OpenType<?> openType, Object defaultValue, Object[] legalValues,
             Comparable<?> minValue, Comparable<?> maxValue) throws OpenDataException {
         if (openType == null) {
-            throw new IllegalArgumentException("el tipo abierto no puede ser nulo");
+            throw new IllegalArgumentException("the open type cannot be null");
         }
         this.openType = openType;
 
-        // Las dos formas de restringir se excluyen: una lista de valores legales ya dice cuales
-        // valen, y un rango sobre esa lista o es redundante o la contradice. Aceptar las dos
-        // obligaria a decidir cual gana, y cualquier eleccion sorprenderia a alguien.
+        // The two ways of constraining exclude each other: a list of legal values already says
+        // which ones are valid, and a range over that list is either redundant or contradicts it.
+        // Accepting both would force deciding which wins, and any choice would surprise someone.
         boolean hasLegalList = legalValues != null && legalValues.length > 0;
         boolean hasRange = minValue != null || maxValue != null;
         if (hasLegalList && hasRange) {
             throw new OpenDataException(
-                    "no se pueden dar valores legales y un rango a la vez");
+                    "legal values and a range cannot be given at the same time");
         }
-        // Un `ArrayType` y un `TabularType` no admiten NINGUNA de las cuatro restricciones. Un
-        // `CompositeType` si las admite, y ese reparto sorprende: uno esperaria que el compuesto
-        // fuera el mas restringido de los tres. Esta comprobado contra el JDK 25 --la primera
-        // version de esta clase lo tenia justo al reves-- y la razon es que un valor compuesto es
-        // un valor con identidad por contenido, mientras que un arreglo o una tabla no se comparan
-        // de forma util con `equals`.
+        // An `ArrayType` and a `TabularType` admit NONE of the four constraints. A `CompositeType`
+        // does admit them, and that split surprises: one would expect the composite to be the most
+        // restricted of the three. It was checked against the JDK 25 --the first version of this
+        // class had it exactly backwards-- and the reason is that a composite value is a value with
+        // identity by content, while an array or a table do not compare usefully with `equals`.
         if (openType instanceof ArrayType || openType instanceof TabularType) {
             if (hasLegalList || hasRange || defaultValue != null) {
                 throw new OpenDataException(
-                        "un " + openType.getClass().getSimpleName()
-                                + " no admite valor por omision ni restricciones");
+                        "a " + openType.getClass().getSimpleName()
+                                + " admits no default value or constraints");
             }
         }
 
         if (defaultValue != null && !openType.isValue(defaultValue)) {
-            throw new OpenDataException("el valor por omision no es de tipo "
+            throw new OpenDataException("the default value is not of type "
                     + openType.getTypeName());
         }
 
         Set<Object> ls = null;
         if (hasLegalList) {
-            // `LinkedHashSet` y no `HashSet`: `getLegalValues` se imprime en `toString` y una
-            // salida que cambia de orden entre corridas es un dolor para comparar contra el JDK.
+            // `LinkedHashSet` and not `HashSet`: `getLegalValues` is printed in `toString` and an
+            // output that changes order between runs is a pain to compare against the JDK.
             ls = new LinkedHashSet<Object>();
             for (int i = 0; i < legalValues.length; i++) {
                 Object v = legalValues[i];
                 if (v == null) {
-                    throw new OpenDataException("un valor legal es nulo");
+                    throw new OpenDataException("a legal value is null");
                 }
                 if (!openType.isValue(v)) {
-                    throw new OpenDataException("el valor legal " + v + " no es de tipo "
+                    throw new OpenDataException("the legal value " + v + " is not of type "
                             + openType.getTypeName());
                 }
                 ls.add(v);
             }
             if (defaultValue != null && !ls.contains(defaultValue)) {
                 throw new OpenDataException(
-                        "el valor por omision no esta entre los valores legales");
+                        "the default value is not among the legal values");
             }
         }
 
         if (minValue != null && !openType.isValue(minValue)) {
-            throw new OpenDataException("el minimo no es de tipo " + openType.getTypeName());
+            throw new OpenDataException("the minimum is not of type " + openType.getTypeName());
         }
         if (maxValue != null && !openType.isValue(maxValue)) {
-            throw new OpenDataException("el maximo no es de tipo " + openType.getTypeName());
+            throw new OpenDataException("the maximum is not of type " + openType.getTypeName());
         }
         if (minValue != null && maxValue != null && compare(minValue, maxValue) > 0) {
-            throw new OpenDataException("el minimo es mayor que el maximo");
+            throw new OpenDataException("the minimum is greater than the maximum");
         }
         if (defaultValue != null && minValue != null
                 && compare(minValue, defaultValue) > 0) {
-            throw new OpenDataException("el valor por omision es menor que el minimo");
+            throw new OpenDataException("the default value is less than the minimum");
         }
         if (defaultValue != null && maxValue != null
                 && compare(maxValue, defaultValue) < 0) {
-            throw new OpenDataException("el valor por omision es mayor que el maximo");
+            throw new OpenDataException("the default value is greater than the maximum");
         }
 
         this.defaultValue = defaultValue;
@@ -102,9 +102,9 @@ final class Constraints {
         this.maxValue = maxValue;
     }
 
-    // El `unchecked` esta acotado a este metodo: los dos valores ya pasaron por `isValue` del mismo
-    // tipo abierto, asi que son de la misma clase y esa clase es comparable -- todos los tipos
-    // simples lo son. El comodin de `Comparable<?>` es lo que impide decirlo sin el cast.
+    // The `unchecked` is confined to this method: both values already went through `isValue` of the
+    // same open type, so they are of the same class and that class is comparable -- all the simple
+    // types are. The wildcard of `Comparable<?>` is what prevents saying so without the cast.
     @SuppressWarnings("unchecked")
     static int compare(Object a, Object b) {
         Comparable<Object> c = (Comparable<Object>) a;
@@ -147,7 +147,7 @@ final class Constraints {
         return this.maxValue != null;
     }
 
-    /** Si el valor es del tipo abierto **y** cumple las restricciones. */
+    /** Whether the value is of the open type <b>and</b> meets the constraints. */
     boolean isValue(Object obj) {
         if (obj == null) {
             return false;
@@ -167,7 +167,9 @@ final class Constraints {
         return true;
     }
 
-    /** La igualdad que los dos `Support` comparten: tipo, omision, legales, minimo y maximo. */
+    /**
+     * The equality both {@code Support} classes share: type, default, legal, minimum and maximum.
+     */
     boolean sameAs(Constraints other) {
         return sameValue(this.openType, other.openType)
                 && sameValue(this.defaultValue, other.defaultValue)
@@ -189,12 +191,13 @@ final class Constraints {
                 + hash(this.minValue) + hash(this.maxValue);
     }
 
-    /** El tramo de `toString` que describe las restricciones. */
+    /** The stretch of {@code toString} that describes the constraints. */
     void describe(StringBuilder sb) {
         sb.append(",openType=").append(this.openType.toString());
-        // El orden es el del JDK 25 --omision, minimo, maximo, legales--, comprobado contra su
-        // salida. Un `toString` es texto para una persona y nadie deberia parsearlo, pero coincidir
-        // con el original hace que comparar las dos corridas sea leer una diferencia y no traducir.
+        // The order is the JDK 25's --default, minimum, maximum, legal--, checked against its
+        // output. A `toString` is text for a person and nobody should parse it, but matching the
+        // original makes comparing the two runs a matter of reading a difference and not of
+        // translating.
         sb.append(",default=").append(String.valueOf(this.defaultValue));
         sb.append(",minValue=").append(String.valueOf(this.minValue));
         sb.append(",maxValue=").append(String.valueOf(this.maxValue));

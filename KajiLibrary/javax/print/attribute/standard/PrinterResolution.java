@@ -7,22 +7,22 @@ import javax.print.attribute.PrintRequestAttribute;
 import javax.print.attribute.ResolutionSyntax;
 
 /**
- * Con cuantos puntos por unidad de longitud se imprime.
+ * With how many dots per unit of length it prints.
  *
- * <p>Son dos numeros, no uno, porque las impresoras no tienen por que ser cuadradas: la resolucion
- * a lo ancho del papel --<em>cross feed</em>, la que depende del cabezal-- y la del sentido en que
- * avanza el papel --<em>feed</em>, la que depende del motor-- se fijan por separado. Todo el
- * manejo de unidades esta en {@link javax.print.attribute.ResolutionSyntax ResolutionSyntax}, que
- * guarda en puntos por cien pulgadas para que DPI y DPCM entren exactos en un entero.
+ * <p>They are two numbers, not one, because printers do not have to be square: the resolution
+ * across the paper --<em>cross feed</em>, which depends on the head-- and along the direction the
+ * paper advances --<em>feed</em>, which depends on the motor-- are set separately. All the handling
+ * of units is in {@link javax.print.attribute.ResolutionSyntax ResolutionSyntax}, which keeps dots
+ * per hundred inches so that DPI and DPCM fit exactly in an integer.
  *
- * <p>Es la peticion precisa; la vaga es {@link PrintQuality}.
+ * <p>It is the precise request; the vague one is {@link PrintQuality}.
  */
 public final class PrinterResolution extends ResolutionSyntax
     implements DocAttribute, PrintRequestAttribute, PrintJobAttribute {
 
     private static final long serialVersionUID = 13090306561090558L;
 
-    /** {@code units} es {@link ResolutionSyntax#DPI} o {@link ResolutionSyntax#DPCM}. */
+    /** {@code units} is {@link ResolutionSyntax#DPI} or {@link ResolutionSyntax#DPCM}. */
     public PrinterResolution(int crossFeedResolution, int feedResolution, int units) {
         super(crossFeedResolution, feedResolution, units);
     }

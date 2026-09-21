@@ -1,24 +1,24 @@
 package com.sun.jdi;
 
 /**
- * La maquina depurada esta en modo de solo lectura.
+ * The debugged machine is in read-only mode.
  *
- * <p>Se puede conectar un depurador que solo observa, y ahi todo lo que cambie el estado del otro
- * lado --escribir un campo, invocar un metodo-- falla con esto.
+ * <p>A debugger that only observes may be connected, and there everything that changes the
+ * other side's state -- writing a field, invoking a method -- fails with this.
  *
  * @since 1.3
  */
 public class VMCannotBeModifiedException extends UnsupportedOperationException {
 
-    /** Sin detalle. */
+    /** With no detail. */
     public VMCannotBeModifiedException() {
         super();
     }
 
     /**
-     * Con un mensaje.
+     * With a message.
      *
-     * @param s el mensaje
+     * @param s the message
      */
     public VMCannotBeModifiedException(String s) {
         super(s);

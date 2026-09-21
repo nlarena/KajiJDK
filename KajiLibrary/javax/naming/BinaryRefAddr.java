@@ -1,21 +1,20 @@
 package javax.naming;
 
 /**
- * Una direccion que son bytes opacos: un identificador de objeto de CORBA, un handle binario.
+ * An address made of opaque bytes: a CORBA object identifier, a binary handle.
  *
- * <h2>Por que copia el arreglo y por que redefine las tres</h2>
+ * <h2>Why it copies the array and why it redefines all three</h2>
  *
- * <p>El constructor **copia**. Un `byte[]` es mutable y la direccion se guarda dentro de una
- * `Reference` que puede quedar atada por tiempo indefinido: quedarse con el arreglo del que llama
- * dejaria que le cambien la direccion por debajo. Es la misma razon por la que `NamingException`
- * clona los nombres.
+ * <p>The constructor **copies**. A `byte[]` is mutable and the address is kept inside a
+ * `Reference` that may stay bound indefinitely: keeping the caller's array would let the address be
+ * changed from under it. It is the same reason `NamingException` clones names.
  *
- * <p>Y redefine `equals`/`hashCode`/`toString` porque los de `RefAddr` comparan el contenido con
- * `equals`, y el `equals` de un arreglo es identidad. Sin esto, dos direcciones con los mismos
- * bytes serian distintas, que es justo lo contrario de lo que dice el contrato de `RefAddr`.
+ * <p>And it redefines `equals`/`hashCode`/`toString` because the `RefAddr` ones compare the content
+ * with `equals`, and an array's `equals` is identity. Without this, two addresses with the same
+ * bytes would be different, which is exactly the opposite of what the `RefAddr` contract says.
  *
- * <p>El `toString` corta a los primeros 32 bytes: es un volcado de diagnostico, y una direccion
- * binaria puede ser de kilobytes.
+ * <p>`toString` cuts at the first 32 bytes: it is a diagnostic dump, and a binary address can be
+ * kilobytes long.
  */
 public class BinaryRefAddr extends RefAddr {
 
@@ -27,7 +26,7 @@ public class BinaryRefAddr extends RefAddr {
         this(addrType, src, 0, src.length);
     }
 
-    /** Copia `count` bytes desde `offset`: el arreglo del que llama no queda referenciado. */
+    /** Copies `count` bytes from `offset`: the caller's array is not kept referenced. */
     public BinaryRefAddr(String addrType, byte[] src, int offset, int count) {
         super(addrType);
         buf = new byte[count];
@@ -39,7 +38,7 @@ public class BinaryRefAddr extends RefAddr {
         return buf;
     }
 
-    /** Byte a byte: el `equals` heredado usaria la identidad del arreglo. */
+    /** Byte by byte: the inherited `equals` would use the array's identity. */
     @Override
     public boolean equals(Object obj) {
         if (obj instanceof BinaryRefAddr) {
@@ -72,7 +71,7 @@ public class BinaryRefAddr extends RefAddr {
         return hash;
     }
 
-    /** Corta a 32 bytes: esto es diagnostico, no un volcado completo. */
+    /** Cuts at 32 bytes: this is diagnostic, not a full dump. */
     @Override
     public String toString() {
         StringBuilder str = new StringBuilder("Address Type: ");

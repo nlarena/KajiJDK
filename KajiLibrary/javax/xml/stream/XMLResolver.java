@@ -1,36 +1,38 @@
 package javax.xml.stream;
 
 /**
- * KajiLibrary's javax.xml.stream.XMLResolver -- quien decide de donde sale una entidad externa.
+ * KajiLibrary's javax.xml.stream.XMLResolver -- who decides where an external entity comes from.
  *
- * <p>Un documento puede referirse a otro archivo --un DTD, una entidad externa-- por una URI, y el
- * parser tiene que ir a buscarlo. Este es el punto donde la aplicacion se mete en esa busqueda, y
- * las dos razones para hacerlo son distintas:
+ * <p>A document can refer to another file --a DTD, an external entity-- by a URI, and the parser
+ * has to fetch it. This is the point where the application steps into that search, and the two
+ * reasons for doing so are different:
  *
  * <ul>
- *   <li><b>servir de un catalogo local</b>, para no salir a la red a bajar un DTD que ya se tiene, y
- *   <li><b>no servir nada</b>, que es la defensa contra XXE: un documento hostil que declara una
- *       entidad apuntando a un archivo del servidor se la hace leer al parser y se la lleva en la
- *       respuesta. Un resolver que devuelve vacio para todo lo que no reconozca corta eso de raiz.
+ *   <li><b>serving from a local catalog</b>, so as not to go out to the network to download a DTD
+ *       one already has, and
+ *   <li><b>serving nothing</b>, which is the defence against XXE: a hostile document that declares
+ *       an entity pointing to a server file makes the parser read it and carries it off in the
+ *       response. A resolver that returns empty for everything it does not recognize cuts that off
+ *       at the root.
  * </ul>
  *
- * <p>El valor de retorno es {@code Object} y no un tipo util porque las implementaciones aceptan
- * varias formas de lo mismo --un {@link java.io.InputStream}, un {@link java.io.Reader}, un
- * {@link javax.xml.stream.XMLStreamReader}, un {@link javax.xml.transform.Source}-- y la spec no
- * quiso elegir. Que tipos acepta cada parser es cosa suya.
+ * <p>The return value is {@code Object} and not a useful type because implementations accept
+ * several forms of the same thing --an {@link java.io.InputStream}, a {@link java.io.Reader}, a
+ * {@link javax.xml.stream.XMLStreamReader}, a {@link javax.xml.transform.Source}-- and the spec did
+ * not want to choose. Which types each parser accepts is its own business.
  */
 public interface XMLResolver {
 
     /**
-     * Resuelve una entidad externa.
+     * Resolves an external entity.
      *
-     * @param publicID el identificador publico declarado, o null si no hay
-     * @param systemID el identificador de sistema declarado
-     * @param baseURI la URI del documento que la referencia, para resolver la relativa
-     * @param namespace el espacio de nombres de la entidad, si aplica
-     * @return el contenido, en alguna de las formas que acepte el parser, o null para que resuelva
-     *     el por omision
-     * @throws XMLStreamException si la entidad no se puede resolver y eso tiene que cortar
+     * @param publicID the declared public identifier, or null if there is none
+     * @param systemID the declared system identifier
+     * @param baseURI the URI of the document that references it, to resolve the relative one
+     * @param namespace the namespace of the entity, if it applies
+     * @return the content, in one of the forms the parser accepts, or null for it to resolve the
+     *     default one
+     * @throws XMLStreamException if the entity cannot be resolved and that has to cut
      */
     Object resolveEntity(String publicID, String systemID, String baseURI, String namespace)
             throws XMLStreamException;

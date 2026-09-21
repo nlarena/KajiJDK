@@ -1,11 +1,11 @@
 package java.security.cert;
 
-// El resultado de validar un camino, cuando la validacion salio bien.
+// The result of validating a path, when the validation went well.
 //
-// Que exista un resultado y no un boolean es lo importante: una validacion exitosa produce datos
-// que hacen falta despues —el ancla en la que termino confiando, la clave publica del sujeto— y
-// tirarlos obligaria a recalcularlos. Una validacion **fallida** no devuelve esto: lanza
-// `CertPathValidatorException`.
+// That there is a result and not a boolean is the important thing: a successful validation produces
+// data that are needed afterwards —the anchor it ended up trusting, the public key of the subject—
+// and throwing them away would force them to be recomputed. A **failed** validation does not return
+// this: it throws `CertPathValidatorException`.
 public interface CertPathValidatorResult extends Cloneable {
 
     Object clone();

@@ -4,27 +4,28 @@ import java.util.List;
 import javax.xml.crypto.XMLStructure;
 
 /**
- * KajiLibrary's javax.xml.crypto.dsig.Manifest -- una lista de referencias con validacion propia.
+ * KajiLibrary's javax.xml.crypto.dsig.Manifest -- a list of references with its own validation.
  *
- * <p>Un grupo de {@link Reference} que la firma cubre <b>como conjunto</b>: el {@code SignedInfo}
- * tiene una sola referencia al manifiesto, y el manifiesto tiene el resto.
+ * <p>A group of {@link Reference}s the signature covers <b>as a set</b>: the {@code SignedInfo} has
+ * a single reference to the manifest, and the manifest has the rest.
  *
- * <p>La diferencia que lo justifica es de <b>politica de fallo</b>. Una referencia del
- * {@code SignedInfo} que no cierra invalida la firma entera. Una referencia de un manifiesto no: la
- * biblioteca la valida y reporta, y quien usa el API decide que hacer.
+ * <p>The difference that justifies it is one of <b>failure policy</b>. A reference of the
+ * {@code SignedInfo} that does not check out invalidates the whole signature. A reference of a
+ * manifest does not: the library validates it and reports, and whoever uses the API decides what to
+ * do.
  *
- * <p>Eso sirve cuando se firman muchos archivos y falten algunos es aceptable -- un paquete de
- * documentos donde cada uno se verifica por separado. Y es una trampa si nadie mira los resultados:
- * la firma valida y las referencias del manifiesto pueden estar todas rotas.
+ * <p>That serves when many files are signed and some being missing is acceptable -- a package of
+ * documents where each one is verified separately. And it is a trap if nobody looks at the results:
+ * the signature validates and the manifest's references can all be broken.
  */
 public interface Manifest extends XMLStructure {
 
-    /** El URI de tipo de este elemento. */
+    /** The type URI of this element. */
     static final String TYPE = "http://www.w3.org/2000/09/xmldsig#Manifest";
 
-    /** El identificador; es lo que la referencia del {@code SignedInfo} apunta. */
+    /** The identifier; it is what the {@code SignedInfo}'s reference points to. */
     String getId();
 
-    /** Las referencias del manifiesto. No modificable y nunca vacia. */
+    /** The manifest's references. Unmodifiable and never empty. */
     List<Reference> getReferences();
 }

@@ -7,11 +7,11 @@ import javax.swing.MenuElement;
 import javax.swing.MenuSelectionManager;
 
 /**
- * Se uso el teclado con un menu abierto.
+ * The keyboard was used with an open menu.
  *
- * <p>El gemelo de {@link MenuDragMouseEvent} para las teclas, y con la misma razon de ser: navegar
- * un menu con las flechas necesita saber en que rama se esta, y eso lo dice el camino, no el
- * elemento suelto.
+ * <p>{@link MenuDragMouseEvent}'s twin for keys, and with the same reason for being: navigating a
+ * menu with the arrows needs to know which branch one is in, and that is said by the path, not by
+ * the element on its own.
  */
 public class MenuKeyEvent extends KeyEvent {
 
@@ -27,12 +27,12 @@ public class MenuKeyEvent extends KeyEvent {
         this.manager = m;
     }
 
-    /** El camino desde la barra hasta el elemento. */
+    /** The path from the bar to the element. */
     public MenuElement[] getPath() {
         return this.path;
     }
 
-    /** Quien administra la seleccion del menu. */
+    /** Who manages the menu's selection. */
     public MenuSelectionManager getMenuSelectionManager() {
         return this.manager;
     }

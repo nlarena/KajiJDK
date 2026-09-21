@@ -1,25 +1,25 @@
 package org.w3c.dom.html;
 
 /**
- * Una `<ol>`.
+ * An `<ol>`.
  */
 public interface HTMLOListElement extends HTMLElement {
 
-    /** El atributo `compact`. */
+    /** The `compact` attribute. */
     boolean getCompact();
 
-    /** Fija el atributo `compact`. */
+    /** It sets the `compact` attribute. */
     void setCompact(boolean compact);
 
-    /** El atributo `start`. */
+    /** The `start` attribute. */
     int getStart();
 
-    /** Fija el atributo `start`. */
+    /** It sets the `start` attribute. */
     void setStart(int start);
 
-    /** El tipo del control. */
+    /** The type of the control. */
     String getType();
 
-    /** Fija el tipo del control. */
+    /** It sets the type of the control. */
     void setType(String type);
 }

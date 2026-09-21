@@ -1,25 +1,25 @@
 package java.awt.image;
 
 /**
- * Varios píxeles dentro de **un** elemento del buffer: el modelo de las imágenes de 1, 2 y 4 bits.
+ * Several pixels inside **one** element of the buffer: the model of the 1-, 2- and 4-bit images.
  *
- * <p>Es el inverso de {@link SinglePixelPackedSampleModel}, donde un píxel ocupa un elemento
- * entero. Acá un `byte` puede contener ocho píxeles de un bit — un mapa en blanco y negro — o dos
- * de cuatro. Tiene **una sola banda** por construcción: si hubiera más de una no serían píxeles
- * empaquetados sino campos de bits, que es el otro modelo.
+ * <p>It is the inverse of {@link SinglePixelPackedSampleModel}, where one pixel takes a whole
+ * element. Here a `byte` can hold eight one-bit pixels — a black-and-white map — or two of four
+ * bits. It has **a single band** by construction: if there were more than one they would not be
+ * packed pixels but bit fields, which is the other model.
  *
- * <p>La cuenta es la misma dos veces, una para el elemento y otra para el bit dentro de él:
+ * <p>The sum is the same one twice, once for the element and once for the bit inside it:
  *
  * <pre>bit = x * pixelBitStride + dataBitOffset
- * elemento = y * scanlineStride + bit / bitsPorElemento
- * corrimiento = bit % bitsPorElemento</pre>
+ * element = y * scanlineStride + bit / bitsPerElement
+ * shift = bit % bitsPerElement</pre>
  *
- * <p>El primer píxel se cuenta **desde la izquierda**, o sea desde el bit más significativo: en un
- * byte con cuatro píxeles de dos bits, el píxel 0 está en los bits 7-6. Es lo que dice el formato y
- * es lo contrario de lo que uno escribiría por reflejo.
+ * <p>The first pixel is counted **from the left**, that is, from the most significant bit: in a
+ * byte with four two-bit pixels, pixel 0 is in bits 7-6. It is what the format says and it is the
+ * opposite of what one would write by reflex.
  *
- * <p>`dataBitOffset` corre el comienzo de la primera fila. Sirve para describir un recorte cuyo
- * borde izquierdo cae en medio de un elemento, sin tener que copiar la imagen.
+ * <p>`dataBitOffset` shifts the start of the first row. It serves to describe a crop whose left
+ * edge falls in the middle of an element, without having to copy the image.
  */
 public class MultiPixelPackedSampleModel extends SampleModel {
 
@@ -30,9 +30,9 @@ public class MultiPixelPackedSampleModel extends SampleModel {
     private final int bitMask;
 
     /**
-     * Con el paso de fila mínimo y sin desplazamiento inicial.
+     * With the minimum row stride and no initial offset.
      *
-     * @throws IllegalArgumentException si el tipo no admite empaquetado
+     * @throws IllegalArgumentException if the type does not admit packing
      */
     public MultiPixelPackedSampleModel(int dataType, int w, int h, int numberOfBits) {
         this(dataType, w, h, numberOfBits,
@@ -42,10 +42,10 @@ public class MultiPixelPackedSampleModel extends SampleModel {
     }
 
     /**
-     * Con todo dado.
+     * With everything given.
      *
-     * @throws IllegalArgumentException si el tipo no es `byte`, `ushort` ni `int`, si los bits por
-     *     píxel no dividen al tamaño del elemento, o si algún parámetro es negativo
+     * @throws IllegalArgumentException if the type is neither `byte`, `ushort` nor `int`, if the
+     *     bits per pixel do not divide the size of the element, or if some parameter is negative
      */
     public MultiPixelPackedSampleModel(int dataType, int w, int h, int numberOfBits,
             int scanlineStride, int dataBitOffset) {
@@ -59,8 +59,9 @@ public class MultiPixelPackedSampleModel extends SampleModel {
             throw new RasterFormatException("Number of bits must be > 0 and <= "
                     + this.dataElementSize);
         }
-        // Que un pixel no cruce la frontera de un elemento es lo que permite leerlo con un solo
-        // acceso. Sin esa condicion habria que juntar dos elementos, y el formato no lo contempla.
+        // That a pixel does not cross the boundary of an element is what makes it possible to read
+        // it with a single access. Without that condition two elements would have to be joined, and
+        // the format does not provide for it.
         if (this.dataElementSize % numberOfBits != 0) {
             throw new RasterFormatException("MultiPixelPackedSampleModel does not allow pixels to "
                     + "span data element boundaries");
@@ -74,15 +75,15 @@ public class MultiPixelPackedSampleModel extends SampleModel {
         this.bitMask = (1 << numberOfBits) - 1;
     }
 
-    /** Otro igual del tamaño pedido, sin desplazamiento inicial. */
+    /** Another one just like it of the size asked for, with no initial offset. */
     public SampleModel createCompatibleSampleModel(int w, int h) {
         return new MultiPixelPackedSampleModel(this.dataType, w, h, this.pixelBitStride);
     }
 
     /**
-     * Un buffer del tamaño necesario.
+     * A buffer of the size needed.
      *
-     * @throws IllegalArgumentException si el tipo no es `byte`, `ushort` ni `int`
+     * @throws IllegalArgumentException if the type is neither `byte`, `ushort` nor `int`
      */
     public DataBuffer createDataBuffer() {
         int size = (this.scanlineStride * (this.height - 1))
@@ -100,52 +101,52 @@ public class MultiPixelPackedSampleModel extends SampleModel {
         throw new IllegalArgumentException("Unsupported data type " + this.dataType);
     }
 
-    /** Siempre 1. */
+    /** Always 1: the model has a single band. */
     public int getNumDataElements() {
         return 1;
     }
 
-    /** Los bits de la única banda. */
+    /** The bits of the only band. */
     public int[] getSampleSize() {
         return new int[] { this.pixelBitStride };
     }
 
-    /** Los bits de esa banda. */
+    /** The bits of that band. */
     public int getSampleSize(int band) {
         return this.pixelBitStride;
     }
 
-    /** El elemento del buffer donde está ese píxel. */
+    /** The element of the buffer where that pixel is. */
     public int getOffset(int x, int y) {
         return y * this.scanlineStride
                 + (x * this.pixelBitStride + this.dataBitOffset) / this.dataElementSize;
     }
 
-    /** El bit dentro del elemento donde empieza ese píxel, contado desde la izquierda. */
+    /** The bit inside the element where that pixel starts, counted from the left. */
     public int getBitOffset(int x) {
         return (x * this.pixelBitStride + this.dataBitOffset) % this.dataElementSize;
     }
 
-    /** El paso de fila, en elementos. */
+    /** The row stride, in elements. */
     public int getScanlineStride() {
         return this.scanlineStride;
     }
 
-    /** Cuántos bits ocupa un píxel. */
+    /** How many bits a pixel takes. */
     public int getPixelBitStride() {
         return this.pixelBitStride;
     }
 
-    /** Cuántos bits se saltean al principio. */
+    /** How many bits are skipped at the start. */
     public int getDataBitOffset() {
         return this.dataBitOffset;
     }
 
     /**
-     * El tipo con el que se transfiere un píxel.
+     * The type a pixel is transferred with.
      *
-     * <p>No es el del buffer: acá lo que viaja es **un píxel**, que entra en el tipo más chico que
-     * lo contenga. Una imagen de un bit guardada en `int` transfiere en `byte`.
+     * <p>It is not the buffer's: what travels here is **one pixel**, which fits in the smallest
+     * type that holds it. A one-bit image stored in `int` transfers in `byte`.
      */
     public int getTransferType() {
         if (this.pixelBitStride > 16) {
@@ -158,9 +159,9 @@ public class MultiPixelPackedSampleModel extends SampleModel {
     }
 
     /**
-     * Uno con esa banda.
+     * One with that band.
      *
-     * @throws RasterFormatException si se pide más de una banda, o una que no sea la 0
+     * @throws RasterFormatException if more than one band is asked for, or one that is not band 0
      */
     public SampleModel createSubsetSampleModel(int[] bands) {
         if (bands != null && (bands.length != 1 || bands[0] != 0)) {
@@ -170,36 +171,36 @@ public class MultiPixelPackedSampleModel extends SampleModel {
     }
 
     public int getSample(int x, int y, int b, DataBuffer data) {
-        // El corrimiento se cuenta desde la izquierda: el pixel 0 esta en los bits mas altos.
-        int corrimiento = this.dataElementSize - this.getBitOffset(x) - this.pixelBitStride;
-        return (data.getElem(this.getOffset(x, y)) >> corrimiento) & this.bitMask;
+        // The shift is counted from the left: pixel 0 is in the highest bits.
+        int shift = this.dataElementSize - this.getBitOffset(x) - this.pixelBitStride;
+        return (data.getElem(this.getOffset(x, y)) >> shift) & this.bitMask;
     }
 
     public void setSample(int x, int y, int b, int s, DataBuffer data) {
         int off = this.getOffset(x, y);
-        int corrimiento = this.dataElementSize - this.getBitOffset(x) - this.pixelBitStride;
+        int shift = this.dataElementSize - this.getBitOffset(x) - this.pixelBitStride;
         int v = data.getElem(off);
-        v = v & ~(this.bitMask << corrimiento);
-        v = v | ((s & this.bitMask) << corrimiento);
+        v = v & ~(this.bitMask << shift);
+        v = v | ((s & this.bitMask) << shift);
         data.setElem(off, v);
     }
 
     /**
-     * El píxel crudo, en el tipo de {@link #getTransferType}.
+     * The raw pixel, in the type of {@link #getTransferType}.
      *
-     * <p>Ya viene **desempaquetado**: un píxel de dos bits llega como un byte con valor 0..3, no
-     * como el byte del buffer con los otros tres píxeles adentro. Es la diferencia con
-     * {@link SinglePixelPackedSampleModel}, donde el elemento crudo es el píxel entero empaquetado.
+     * <p>It comes **unpacked** already: a two-bit pixel arrives as a byte with value 0..3, not as
+     * the byte of the buffer with the other three pixels inside. That is the difference from {@link
+     * SinglePixelPackedSampleModel}, where the raw element is the whole packed pixel.
      */
     public Object getDataElements(int x, int y, Object obj, DataBuffer data) {
         int v = this.getSample(x, y, 0, data);
-        int tipo = this.getTransferType();
-        if (tipo == DataBuffer.TYPE_BYTE) {
+        int type = this.getTransferType();
+        if (type == DataBuffer.TYPE_BYTE) {
             byte[] out = obj == null ? new byte[1] : (byte[]) obj;
             out[0] = (byte) v;
             return out;
         }
-        if (tipo == DataBuffer.TYPE_USHORT) {
+        if (type == DataBuffer.TYPE_USHORT) {
             short[] out = obj == null ? new short[1] : (short[]) obj;
             out[0] = (short) v;
             return out;
@@ -209,13 +210,13 @@ public class MultiPixelPackedSampleModel extends SampleModel {
         return out;
     }
 
-    /** Escribe el píxel crudo. */
+    /** Writes the raw pixel. */
     public void setDataElements(int x, int y, Object obj, DataBuffer data) {
-        int tipo = this.getTransferType();
+        int type = this.getTransferType();
         int v;
-        if (tipo == DataBuffer.TYPE_BYTE) {
+        if (type == DataBuffer.TYPE_BYTE) {
             v = ((byte[]) obj)[0] & 0xFF;
-        } else if (tipo == DataBuffer.TYPE_USHORT) {
+        } else if (type == DataBuffer.TYPE_USHORT) {
             v = ((short[]) obj)[0] & 0xFFFF;
         } else {
             v = ((int[]) obj)[0];
@@ -223,19 +224,19 @@ public class MultiPixelPackedSampleModel extends SampleModel {
         this.setSample(x, y, 0, v, data);
     }
 
-    /** La única banda del píxel. */
+    /** The only band of the pixel. */
     public int[] getPixel(int x, int y, int[] iArray, DataBuffer data) {
         int[] out = iArray == null ? new int[1] : iArray;
         out[0] = this.getSample(x, y, 0, data);
         return out;
     }
 
-    /** Escribe la única banda del píxel. */
+    /** Writes the only band of the pixel. */
     public void setPixel(int x, int y, int[] iArray, DataBuffer data) {
         this.setSample(x, y, 0, iArray[0], data);
     }
 
-    /** Igualdad por tamaño, tipo y los tres parámetros de empaquetado. */
+    /** Equality by size, type and the three packing parameters. */
     public boolean equals(Object o) {
         if (o == null || o.getClass() != this.getClass()) {
             return false;

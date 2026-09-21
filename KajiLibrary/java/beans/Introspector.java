@@ -97,11 +97,11 @@ public class Introspector {
         if (clz == null) {
             throw new NullPointerException();
         }
-        String prefijo = clz.getName() + "|";
+        String prefix = clz.getName() + "|";
         Object[] keys = cache.keySet().toArray();
         for (int i = 0; i < keys.length; i++) {
             String c = (String) keys[i];
-            if (c.startsWith(prefijo)) {
+            if (c.startsWith(prefix)) {
                 cache.remove(c);
             }
         }
@@ -182,8 +182,8 @@ public class Introspector {
     // each level are taken and filtered down to the public instance ones; that way an overridden
     // method appears once only, with the most derived version.
     private static List<Method> visibleMethods(Class<?> beanClass, Class<?> stopClass) {
-        List<Method> salida = new ArrayList<Method>();
-        List<String> vistos = new ArrayList<String>();
+        List<Method> out = new ArrayList<Method>();
+        List<String> seen = new ArrayList<String>();
         Class<?> c = beanClass;
         while (c != null && c != stopClass) {
             Method[] ms = c.getDeclaredMethods();
@@ -191,16 +191,16 @@ public class Introspector {
                 Method m = ms[i];
                 int mods = m.getModifiers();
                 if (Modifier.isPublic(mods) && !Modifier.isStatic(mods) && !m.isSynthetic()) {
-                    String firma = signatureOf(m);
-                    if (!vistos.contains(firma)) {
-                        vistos.add(firma);
-                        salida.add(m);
+                    String signature = signatureOf(m);
+                    if (!seen.contains(signature)) {
+                        seen.add(signature);
+                        out.add(m);
                     }
                 }
             }
             c = c.getSuperclass();
         }
-        return salida;
+        return out;
     }
 
     private static String signatureOf(Method m) {
@@ -233,32 +233,32 @@ public class Introspector {
             Class<?> ret = m.getReturnType();
 
             String prop = null;
-            int rol = -1;   // 0 lector, 1 escritor, 2 lector indexado, 3 escritor indexado
+            int role = -1;   // 0 reader, 1 writer, 2 indexed reader, 3 indexed writer
 
             if (methodName.startsWith("get") && methodName.length() > 3) {
                 if (args.length == 0 && ret != void.class) {
                     prop = decapitalize(methodName.substring(3));
-                    rol = 0;
+                    role = 0;
                 } else if (args.length == 1 && args[0] == int.class && ret != void.class) {
                     prop = decapitalize(methodName.substring(3));
-                    rol = 2;
+                    role = 2;
                 }
             } else if (methodName.startsWith("is") && methodName.length() > 2) {
                 // Only the primitive boolean. `Boolean` does NOT qualify: checked against the
                 // real JDK.
                 if (args.length == 0 && ret == boolean.class) {
                     prop = decapitalize(methodName.substring(2));
-                    rol = 0;
+                    role = 0;
                 }
             } else if (methodName.startsWith("set") && methodName.length() > 3) {
                 // The writer has to return void: checked against the real JDK.
                 if (ret == void.class) {
                     if (args.length == 1) {
                         prop = decapitalize(methodName.substring(3));
-                        rol = 1;
+                        role = 1;
                     } else if (args.length == 2 && args[0] == int.class) {
                         prop = decapitalize(methodName.substring(3));
-                        rol = 3;
+                        role = 3;
                     }
                 }
             }
@@ -273,43 +273,43 @@ public class Introspector {
                     indexedWriters.add(null);
                     idx = names.size() - 1;
                 }
-                if (rol == 0 && readers.get(idx) == null) {
+                if (role == 0 && readers.get(idx) == null) {
                     readers.set(idx, m);
-                } else if (rol == 1 && writers.get(idx) == null) {
+                } else if (role == 1 && writers.get(idx) == null) {
                     writers.set(idx, m);
-                } else if (rol == 2 && indexedReaders.get(idx) == null) {
+                } else if (role == 2 && indexedReaders.get(idx) == null) {
                     indexedReaders.set(idx, m);
-                } else if (rol == 3 && indexedWriters.get(idx) == null) {
+                } else if (role == 3 && indexedWriters.get(idx) == null) {
                     indexedWriters.set(idx, m);
                 }
             }
         }
 
-        boolean ligadas = PropertyDescriptor.findMethod(beanClass, "addPropertyChangeListener", 1) != null;
+        boolean bound = PropertyDescriptor.findMethod(beanClass, "addPropertyChangeListener", 1) != null;
 
-        List<PropertyDescriptor> salida = new ArrayList<PropertyDescriptor>();
+        List<PropertyDescriptor> out = new ArrayList<PropertyDescriptor>();
         for (int i = 0; i < names.size(); i++) {
             PropertyDescriptor pd = buildDescriptor(names.get(i), readers.get(i), writers.get(i),
                                           indexedReaders.get(i), indexedWriters.get(i));
             if (pd != null) {
-                pd.setBound(ligadas);
-                salida.add(pd);
+                pd.setBound(bound);
+                out.add(pd);
             }
         }
-        sortByName(salida);
-        return salida;
+        sortByName(out);
+        return out;
     }
 
     // It builds a property's descriptor by reconciling the four possible accessors. The pairing
     // rules live here, which are the ones that decide whether something is a property and of what
     // type.
-    private static PropertyDescriptor buildDescriptor(String propName, Method lector, Method escritor,
+    private static PropertyDescriptor buildDescriptor(String propName, Method reader, Method writer,
                                             Method indexedReader, Method indexedWriter) {
         PropertyDescriptor pd = null;
 
         // The non-indexed type is set by the reader if it is there; if not, by the writer.
-        Method l = lector;
-        Method e = escritor;
+        Method l = reader;
+        Method e = writer;
         if (l != null && e != null) {
             // Types that do not add up: the writer is discarded and the reader wins. Checked
             // against the real JDK with getMismatched():String / setMismatched(int).
@@ -318,8 +318,8 @@ public class Introspector {
             }
         }
 
-        boolean hayIdx = indexedReader != null || indexedWriter != null;
-        if (hayIdx) {
+        boolean hasIndexed = indexedReader != null || indexedWriter != null;
+        if (hasIndexed) {
             Class<?> indexedType = null;
             Method li = indexedReader;
             Method ei = indexedWriter;
@@ -411,18 +411,18 @@ public class Introspector {
             }
         }
 
-        List<EventSetDescriptor> salida = new ArrayList<EventSetDescriptor>();
+        List<EventSetDescriptor> out = new ArrayList<EventSetDescriptor>();
         for (int i = 0; i < names.size(); i++) {
             // Both are needed: being able to subscribe and not being able to unsubscribe is not a
             // usable event set.
             if (adds.get(i) != null && removes.get(i) != null) {
                 Class<?> kind = kinds.get(i);
-                Method[] delOyente = methodsOfListener(kind);
-                salida.add(new EventSetDescriptor(names.get(i), kind, delOyente,
+                Method[] listenerMethods = methodsOfListener(kind);
+                out.add(new EventSetDescriptor(names.get(i), kind, listenerMethods,
                                                   adds.get(i), removes.get(i)));
             }
         }
-        return salida;
+        return out;
     }
 
     private static Method[] methodsOfListener(Class<?> kind) {
@@ -455,7 +455,7 @@ public class Introspector {
                 if (o instanceof BeanInfo) {
                     bi = (BeanInfo) o;
                 }
-            } catch (Throwable noHay) {
+            } catch (Throwable notThere) {
                 bi = null;
             }
         }

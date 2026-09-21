@@ -5,127 +5,127 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.concurrent.TimeUnit;
 
-// El armazon sobre el que el JDK construye casi todos sus sincronizadores. La subclase guarda su
-// significado en un `int state` --que solo toca por los tres accesores de aca-- e implementa los
-// metodos `try*`; este da todo lo demas: la cola de espera, el bloqueo, el despertar, la
-// interrupcion y el plazo. Dos modos:
+// The frame the JDK builds almost all of its synchronizers on. The subclass keeps its meaning in
+// an `int state` --which it touches only through the three accessors here-- and implements the
+// `try*` methods; this gives everything else: the wait queue, the blocking, the waking, the
+// interruption and the deadline. Two modes:
 //
-//   exclusivo  (`acquire`/`release`)             — un dueno a la vez, como un `ReentrantLock`.
-//   compartido (`acquireShared`/`releaseShared`) — varios a la vez, como un `Semaphore` o un
-//                                                  `CountDownLatch`.
-//
-// ---------------------------------------------------------------------------------------------
-// LA DECISION: `ReentrantLock` y `ReentrantReadWriteLock` NO se reconstruyeron sobre esta clase
-// ---------------------------------------------------------------------------------------------
-//
-// En el JDK los dos se apoyan en AQS. Aca no, y sigue siendo asi a proposito. Las razones, en
-// orden de peso:
-//
-//  1. **La relacion es invisible desde el contrato.** En el JDK, AQS entra a `ReentrantLock` por
-//     una clase anidada `private static class Sync extends AbstractQueuedSynchronizer`. Ningun
-//     miembro `public` ni `protected` de `ReentrantLock` la menciona, ni la devuelve, ni la toma.
-//     O sea que "estar construido sobre AQS" no es parte de lo que el paquete promete: es una
-//     eleccion de implementacion, y la regla de la casa dice que los internos son libres.
-//
-//  2. **Lo que hay hoy anda, y anda medido.** `ReentrantLock` esta 20/20 y
-//     `ReentrantReadWriteLock` 22/22, y de ellos cuelga media `java.util.concurrent`:
-//     `CountDownLatch`, `CyclicBarrier`, `ArrayBlockingQueue`, `DelayQueue`, `Semaphore`. Son
-//     cinco pruebas de comportamiento que hoy pasan con las tres substancias de hilos, la
-//     paralela real incluida. Reescribirlas sobre una clase recien nacida arriesga las cinco
-//     **sin mover el numero ni un miembro**: el contrato de los dos locks ya esta completo.
-//
-//  3. **Esta clase no queda como andamio sin probar por eso.** `java/AqsLockTest.java` construye
-//     el mutex del propio javadoc de AQS (`tryAcquire` con `compareAndSetState`, `tryRelease` con
-//     `setState`) y hace 300 incrementos no atomicos guardados; `java/AqsSharedTest.java` cubre el
-//     modo compartido, el plazo, la interrupcion y las consultas de la cola. Las dos corren con
-//     las dos VMs. La `ConditionObject` se prueba en `scratchpad/zzlocks/AqsCondProbe.java`, que
-//     esta ahi y no en `java/` porque el javac congelado no sabe instanciar una clase interna
-//     heredada (repro con ablacion en `scratchpad/zzlocks/InnerHer.java`); se compila con el
-//     javac del JDK y el `.class` se corre con las dos VMs igual que las otras.
-//
-//     Y hay una comprobacion mas fuerte que las tres: los `.class` de este paquete se pueden
-//     meter en la JVM real con `--patch-module java.base=<dir>`, y las tres pruebas dan lo mismo
-//     ahi -- o sea que este AQS corre tambien con hilos del sistema operativo y paralelismo de
-//     verdad, no solo con nuestro planificador.
-//
-// El argumento del otro lado --que reconstruirlos seria mas fiel-- es cierto y no alcanza: la
-// fidelidad que se gana no se puede observar desde afuera, y la que se arriesga si.
+//   exclusive (`acquire`/`release`)          — one owner at a time, like a `ReentrantLock`.
+//   shared    (`acquireShared`/`releaseShared`) — several at once, like a `Semaphore` or a
+//                                                `CountDownLatch`.
 //
 // ---------------------------------------------------------------------------------------------
-// COMO BLOQUEA, Y POR QUE NO CON `LockSupport.park`
+// THE DECISION: `ReentrantLock` and `ReentrantReadWriteLock` were NOT rebuilt on this class
 // ---------------------------------------------------------------------------------------------
 //
-// El JDK estaciona a sus esperantes con `LockSupport.park`. Aca cada nodo de la cola es **su
-// propio monitor**: el hilo duerme en `nodo.wait()` y quien lo libera hace
-// `synchronized (nodo) { nodo.liberado = true; nodo.notifyAll(); }`. El permiso del nodo
-// (`liberado`) da la misma garantia que el de `park` --una senial que llega antes de que el hilo
-// se duerma no se pierde, porque las dos cosas pasan adentro del mismo monitor-- y ademas da las
-// dos que `park` no puede dar en esta VM:
+// In the JDK both lean on AQS. Here they do not, and it stays that way on purpose. The reasons, in
+// order of weight:
 //
-//   - **plazo**: `Object.wait(ms)` existe; un `park` con deadline no. Sin esto no habria
-//     `tryAcquireNanos` ni `tryAcquireSharedNanos`.
-//   - **interrupcion con la forma correcta**: `wait` lanza `InterruptedException`, que es lo que
-//     `acquireInterruptibly` necesita. Nuestro `park`, interrumpido, lanza tambien -- pero lanza
-//     *siempre*, incluso donde el contrato dice que tiene que retornar, y sin declararlo
-//     (ver el encabezado de `LockSupport`). Un `acquire(int)` no interrumpible construido sobre
-//     el moriria con una `InterruptedException` indeclarada.
+//  1. **The relationship is invisible from the contract.** In the JDK, AQS enters `ReentrantLock`
+//     through a nested `private static class Sync extends AbstractQueuedSynchronizer`. No `public`
+//     or `protected` member of `ReentrantLock` mentions it, returns it, or takes it. Which is to
+//     say that "being built on AQS" is not part of what the package promises: it is an
+//     implementation choice, and the house rule says the internals are free.
 //
-// `LockSupport` queda igual como lo que es --la primitiva de la VM, completa y probada-- y esta
-// clase no se apoya en ella. Es un detalle interno; el contrato no dice con que se duerme.
+//  2. **What is there today works, and works measured.** `ReentrantLock` is 20/20 and
+//     `ReentrantReadWriteLock` 22/22, and half of `java.util.concurrent` hangs off them:
+//     `CountDownLatch`, `CyclicBarrier`, `ArrayBlockingQueue`, `DelayQueue`, `Semaphore`. That is
+//     five behavioural tests that pass today with all three thread substrates, the real parallel
+//     one included. Rewriting them on a newborn class risks all five **without moving the number
+//     or a member**: both locks' contracts are already complete.
+//
+//  3. **That does not leave this class as untested scaffolding.** `java/AqsLockTest.java` builds
+//     the mutex from AQS's own javadoc (`tryAcquire` with `compareAndSetState`, `tryRelease` with
+//     `setState`) and does 300 guarded non-atomic increments; `java/AqsSharedTest.java` covers the
+//     shared mode, the deadline, the interruption and the queue queries. Both run on both VMs. The
+//     `ConditionObject` is tested in `scratchpad/zzlocks/AqsCondProbe.java`, which is there and not
+//     in `java/` because the frozen javac cannot instantiate an inherited inner class (repro with
+//     ablation in `scratchpad/zzlocks/InnerHer.java`); it is compiled with the JDK's javac and the
+//     `.class` is run on both VMs like the others.
+//
+//     And there is a stronger check than those three: this package's `.class` files can be put into
+//     the real JVM with `--patch-module java.base=<dir>`, and the three tests give the same thing
+//     there -- which is to say this AQS also runs on operating-system threads and real parallelism,
+//     not only on our scheduler.
+//
+// The argument on the other side --that rebuilding them would be more faithful-- is true and is not
+// enough: the fidelity gained cannot be observed from outside, and the fidelity risked can.
 //
 // ---------------------------------------------------------------------------------------------
-// LA COLA
+// HOW IT BLOCKS, AND WHY NOT WITH `LockSupport.park`
 // ---------------------------------------------------------------------------------------------
 //
-// FIFO doblemente enlazada, guardada por un monitor interno (`sync`), y **solo el primero de la
-// cola intenta adquirir**. Eso hace que `getFirstQueuedThread`, `hasQueuedPredecessors` y
-// `getQueueLength` digan la verdad: sobre una pila de Treiber --que seria mas corta de escribir--
-// "el primero" no significa nada. Que un hilo **recien llegado** pueda colarse antes que la cola
-// no es un defecto sino el comportamiento del JDK: `acquire` prueba `tryAcquire` antes de
-// encolarse, y la subclase que quiera ser justa lo evita consultando `hasQueuedPredecessors`.
+// The JDK parks its waiters with `LockSupport.park`. Here each queue node is **its own monitor**:
+// the thread sleeps in `node.wait()` and whoever releases it does
+// `synchronized (node) { node.released = true; node.notifyAll(); }`. The node's permit
+// (`released`) gives the same guarantee as `park`'s --a signal arriving before the thread falls
+// asleep is not lost, because both things happen inside the same monitor-- and it also gives the
+// two `park` cannot give on this VM:
 //
-// Nota de estilo, la misma que en `ReentrantLock`: **ningun `return` adentro de un bloque
-// `synchronized`** (finding #105 -- el javac congelado no emite el `monitorexit` de esa salida y
-// el monitor queda filtrado). Todo se calcula en un local adentro y se devuelve afuera. Un
-// `throw` adentro si es seguro: el manejador que genera el compilador lo suelta.
+//   - **a deadline**: `Object.wait(ms)` exists; a `park` with a deadline does not. Without this
+//     there would be neither `tryAcquireNanos` nor `tryAcquireSharedNanos`.
+//   - **interruption with the right shape**: `wait` throws `InterruptedException`, which is what
+//     `acquireInterruptibly` needs. Our `park`, interrupted, throws too -- but it throws *always*,
+//     including where the contract says it has to return, and without declaring it (see
+//     `LockSupport`'s header). A non-interruptible `acquire(int)` built on it would die with an
+//     undeclared `InterruptedException`.
+//
+// `LockSupport` stays exactly what it is --the VM's primitive, complete and tested-- and this class
+// does not lean on it. It is an internal detail; the contract does not say what one sleeps with.
+//
+// ---------------------------------------------------------------------------------------------
+// THE QUEUE
+// ---------------------------------------------------------------------------------------------
+//
+// A doubly linked FIFO, guarded by an internal monitor (`sync`), and **only the queue's first tries
+// to acquire**. That is what makes `getFirstQueuedThread`, `hasQueuedPredecessors` and
+// `getQueueLength` tell the truth: over a Treiber stack --which would be shorter to write-- "the
+// first" means nothing. That a **newly arrived** thread can cut in ahead of the queue is not a
+// defect but the JDK's behaviour: `acquire` tries `tryAcquire` before queueing, and a subclass that
+// wants to be fair avoids it by consulting `hasQueuedPredecessors`.
+//
+// A note on style, the same as in `ReentrantLock`: **no `return` inside a `synchronized` block**
+// (finding #105 -- the frozen javac does not emit that exit's `monitorexit` and the monitor is
+// leaked). Everything is computed into a local inside and returned outside. A `throw` inside IS
+// safe: the handler the compiler generates releases it.
 public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchronizer
         implements Serializable {
 
-    // Los resultados posibles de una espera en la cola. Un `int` y no tres `boolean` porque la
-    // espera tiene exactamente cuatro finales y nombrarlos evita la combinacion imposible.
-    private static final int LOGRADO = 0;
-    private static final int LOGRADO_CON_INTERRUPCION = 1;
-    private static final int INTERRUMPIDO = 2;
-    private static final int VENCIO = 3;
+    // A queue wait's possible outcomes. An `int` and not three `boolean`s because the wait has
+    // exactly four endings, and naming them rules out the impossible combination.
+    private static final int ACQUIRED = 0;
+    private static final int ACQUIRED_INTERRUPTED = 1;
+    private static final int INTERRUPTED = 2;
+    private static final int TIMED_OUT = 3;
 
-    // El monitor interno. Guarda `state` y los enlaces de la cola, y nada mas.
+    // The internal monitor. It guards `state` and the queue's links, and nothing else.
     //
-    // Dos reglas que lo hacen seguro, y que valen para cada linea de esta clase:
-    //   - **nunca** se lo tiene tomado mientras corre un `try*` de la subclase (que va a llamar a
-    //     `compareAndSetState`, o sea a tomarlo de nuevo, y que puede hacer cualquier cosa);
-    //   - **nunca** se lo tiene tomado mientras un hilo duerme.
-    // Con esas dos, el unico orden de toma que existe es `sync` y despues el monitor de un nodo,
-    // nunca al reves, asi que no hay abrazo mortal posible entre los dos.
+    // Two rules make it safe, and they hold for every line of this class:
+    //   - it is **never** held while a subclass's `try*` runs (which is going to call
+    //     `compareAndSetState`, that is, take it again, and which may do anything at all);
+    //   - it is **never** held while a thread sleeps.
+    // With those two, the only lock order that exists is `sync` and then a node's monitor, never
+    // the other way round, so no deadlock between the two is possible.
     private final Object sync = new Object();
 
-    // El estado de sincronizacion. Su significado lo pone la subclase.
+    // The synchronization state. Its meaning is set by the subclass.
     private int state;
 
-    // La cola FIFO de esperantes, y su largo (para no recorrerla al preguntarlo).
-    private SyncWaiter primero;
-    private SyncWaiter ultimo;
-    private int encolados;
+    // The FIFO queue of waiters, and its length (so as not to walk it when asked).
+    private SyncWaiter first;
+    private SyncWaiter last;
+    private int queuedThreads;
 
-    // Si alguna vez alguien tuvo que encolarse. Es exactamente `hasContended()`.
-    private boolean hubo;
+    // Whether anybody ever had to queue. It is exactly `hasContended()`.
+    private boolean was;
 
-    /** Un `state` inicial de cero. Solo para uso de las subclases. */
+    /** An initial `state` of zero. For subclasses' use only. */
     protected AbstractQueuedSynchronizer() {
     }
 
-    // ---- el estado -------------------------------------------------------------------------
+    // ---- the state -------------------------------------------------------------------------
 
-    /** El valor actual del estado de sincronizacion. */
+    /** The synchronization state's current value. */
     protected final int getState() {
         int s;
         synchronized (sync) {
@@ -134,7 +134,7 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
         return s;
     }
 
-    /** Fija el estado de sincronizacion. */
+    /** It sets the synchronization state. */
     protected final void setState(int newState) {
         synchronized (sync) {
             state = newState;
@@ -142,9 +142,9 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
     }
 
     /**
-     * Fija el estado a `update` **si y solo si** vale `expect`, en un solo paso indivisible.
+     * It sets the state to `update` **if and only if** it holds `expect`, in one indivisible step.
      *
-     * @return `true` si lo cambio
+     * @return `true` if it changed it
      */
     protected final boolean compareAndSetState(int expect, int update) {
         boolean ok;
@@ -157,77 +157,77 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
         return ok;
     }
 
-    // ---- lo que la subclase implementa -------------------------------------------------------
+    // ---- what the subclass implements --------------------------------------------------------
     //
-    // Concretos y no abstractos, como en el JDK: una subclase implementa solo el modo que usa, y
-    // el otro par tiene que seguir siendo instanciable. Lanzan `UnsupportedOperationException`
-    // porque llegar aca significa que alguien pidio un modo que la subclase no soporta -- y esa
-    // es la respuesta correcta, no `false`, que se veria como "no pude todavia" y encolaria al
-    // hilo para siempre.
+    // Concrete and not abstract, as in the JDK: a subclass implements only the mode it uses, and the
+    // other pair has to remain instantiable. They throw `UnsupportedOperationException` because
+    // getting here means somebody asked for a mode the subclass does not support -- and that is the
+    // right answer, not `false`, which would read as "I could not yet" and would queue the thread
+    // forever.
 
-    /** Intenta adquirir en modo exclusivo. */
+    /** It tries to acquire in exclusive mode. */
     protected boolean tryAcquire(int arg) {
         throw new UnsupportedOperationException();
     }
 
-    /** Intenta soltar en modo exclusivo; `true` si el sincronizador quedo libre. */
+    /** It tries to release in exclusive mode; `true` if the synchronizer was left free. */
     protected boolean tryRelease(int arg) {
         throw new UnsupportedOperationException();
     }
 
-    /** Intenta adquirir en modo compartido; negativo si hay que esperar. */
+    /** It tries to acquire in shared mode; negative if one has to wait. */
     protected int tryAcquireShared(int arg) {
         throw new UnsupportedOperationException();
     }
 
-    /** Intenta soltar en modo compartido; `true` si puede dejar pasar a algun esperante. */
+    /** It tries to release in shared mode; `true` if it may let some waiter through. */
     protected boolean tryReleaseShared(int arg) {
         throw new UnsupportedOperationException();
     }
 
-    /** Si el hilo actual lo tiene tomado en exclusiva. Solo lo necesita `ConditionObject`. */
+    /** Whether the current thread holds it exclusively. Only `ConditionObject` needs it. */
     protected boolean isHeldExclusively() {
         throw new UnsupportedOperationException();
     }
 
-    // ---- modo exclusivo ----------------------------------------------------------------------
+    // ---- exclusive mode ---------------------------------------------------------------------
 
     /**
-     * Adquiere en modo exclusivo, **sin** atender interrupciones.
+     * It acquires in exclusive mode, **without** honouring interruptions.
      *
-     * <p>Si llega una interrupcion mientras espera no se pierde ni corta la adquisicion: se anota
-     * y se le vuelve a poner la bandera al hilo antes de volver. Abortar aca dejaria al llamador
-     * sin el lock y creyendo que lo tiene.
+     * <p>If an interruption arrives while waiting it is neither lost nor does it cut the
+     * acquisition short: it is noted and the thread's flag is set again before returning. Aborting
+     * here would leave the caller without the lock and believing it holds it.
      */
     public final void acquire(int arg) {
         if (!tryAcquire(arg)) {
-            if (esperar(arg, false, false, false, 0L) == LOGRADO_CON_INTERRUPCION) {
+            if (awaitOn(arg, false, false, false, 0L) == ACQUIRED_INTERRUPTED) {
                 Thread.currentThread().interrupt();
             }
         }
     }
 
     /**
-     * Adquiere en modo exclusivo, abortando si interrumpen al hilo.
+     * It acquires in exclusive mode, aborting if the thread is interrupted.
      *
-     * @throws InterruptedException si interrumpen al hilo
+     * @throws InterruptedException if the thread is interrupted
      */
     public final void acquireInterruptibly(int arg) throws InterruptedException {
         if (Thread.interrupted()) {
             throw new InterruptedException();
         }
         if (!tryAcquire(arg)) {
-            if (esperar(arg, false, true, false, 0L) == INTERRUMPIDO) {
+            if (awaitOn(arg, false, true, false, 0L) == INTERRUPTED) {
                 throw new InterruptedException();
             }
         }
     }
 
     /**
-     * Adquiere en modo exclusivo esperando como mucho `nanosTimeout`.
+     * It acquires in exclusive mode, waiting at most `nanosTimeout`.
      *
-     * @return `false` si el plazo se agoto sin adquirir
-     * @throws InterruptedException si interrumpen al hilo mientras espera
+     * @return `false` if the deadline ran out without acquiring
+     * @throws InterruptedException if the thread is interrupted while waiting
      */
     public final boolean tryAcquireNanos(int arg, long nanosTimeout) throws InterruptedException {
         if (Thread.interrupted()) {
@@ -235,61 +235,61 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
         }
         boolean ok = tryAcquire(arg);
         if (!ok) {
-            int r = esperar(arg, false, true, true, System.nanoTime() + nanosTimeout);
-            if (r == INTERRUMPIDO) {
+            int r = awaitOn(arg, false, true, true, System.nanoTime() + nanosTimeout);
+            if (r == INTERRUPTED) {
                 throw new InterruptedException();
             }
-            ok = r != VENCIO;
+            ok = r != TIMED_OUT;
         }
         return ok;
     }
 
     /**
-     * Suelta en modo exclusivo y, si el sincronizador quedo libre, le cede el turno al primero de
-     * la cola.
+     * It releases in exclusive mode and, if the synchronizer was left free, hands the turn to the
+     * queue's first.
      *
-     * @return lo que devolvio `tryRelease`
+     * @return whatever `tryRelease` returned
      */
     public final boolean release(int arg) {
-        boolean libre = tryRelease(arg);
-        if (libre) {
-            senialarPrimero();
+        boolean free = tryRelease(arg);
+        if (free) {
+            signalFirst();
         }
-        return libre;
+        return free;
     }
 
-    // ---- modo compartido ---------------------------------------------------------------------
+    // ---- shared mode ---------------------------------------------------------------------
 
-    /** Adquiere en modo compartido, sin atender interrupciones. */
+    /** It acquires in shared mode, without honouring interruptions. */
     public final void acquireShared(int arg) {
         if (tryAcquireShared(arg) < 0) {
-            if (esperar(arg, true, false, false, 0L) == LOGRADO_CON_INTERRUPCION) {
+            if (awaitOn(arg, true, false, false, 0L) == ACQUIRED_INTERRUPTED) {
                 Thread.currentThread().interrupt();
             }
         }
     }
 
     /**
-     * Adquiere en modo compartido, abortando si interrumpen al hilo.
+     * It acquires in shared mode, aborting if the thread is interrupted.
      *
-     * @throws InterruptedException si interrumpen al hilo
+     * @throws InterruptedException if the thread is interrupted
      */
     public final void acquireSharedInterruptibly(int arg) throws InterruptedException {
         if (Thread.interrupted()) {
             throw new InterruptedException();
         }
         if (tryAcquireShared(arg) < 0) {
-            if (esperar(arg, true, true, false, 0L) == INTERRUMPIDO) {
+            if (awaitOn(arg, true, true, false, 0L) == INTERRUPTED) {
                 throw new InterruptedException();
             }
         }
     }
 
     /**
-     * Adquiere en modo compartido esperando como mucho `nanosTimeout`.
+     * It acquires in shared mode, waiting at most `nanosTimeout`.
      *
-     * @return `false` si el plazo se agoto sin adquirir
-     * @throws InterruptedException si interrumpen al hilo mientras espera
+     * @return `false` if the deadline ran out without acquiring
+     * @throws InterruptedException if the thread is interrupted while waiting
      */
     public final boolean tryAcquireSharedNanos(int arg, long nanosTimeout)
             throws InterruptedException {
@@ -298,340 +298,343 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
         }
         boolean ok = tryAcquireShared(arg) >= 0;
         if (!ok) {
-            int r = esperar(arg, true, true, true, System.nanoTime() + nanosTimeout);
-            if (r == INTERRUMPIDO) {
+            int r = awaitOn(arg, true, true, true, System.nanoTime() + nanosTimeout);
+            if (r == INTERRUPTED) {
                 throw new InterruptedException();
             }
-            ok = r != VENCIO;
+            ok = r != TIMED_OUT;
         }
         return ok;
     }
 
-    /** Suelta en modo compartido y despierta al primero de la cola. */
+    /** It releases in shared mode and wakes the queue's first. */
     public final boolean releaseShared(int arg) {
-        boolean paso = tryReleaseShared(arg);
-        if (paso) {
-            senialarPrimero();
+        boolean step = tryReleaseShared(arg);
+        if (step) {
+            signalFirst();
         }
-        return paso;
+        return step;
     }
 
-    // ---- el motor: encolarse, dormir, reintentar ---------------------------------------------
+    // ---- the engine: queue up, sleep, retry --------------------------------------------------
 
     /**
-     * El unico lugar donde esta clase espera. Encola al hilo actual y no vuelve hasta que
-     * adquirio, lo interrumpieron (y se pidio que eso corte) o vencio el plazo.
+     * The only place this class waits. It queues the current thread and does not return until it
+     * has acquired, been interrupted (and that was asked to cut the wait short), or the deadline has
+     * expired.
      *
-     * <p>El `try*` de la subclase se llama **sin** el monitor interno tomado -- si no, un
-     * `compareAndSetState` de adentro lo volveria a tomar y, peor, se estaria corriendo codigo
-     * ajeno con un lock del sincronizador en la mano.
+     * <p>The subclass's `try*` is called **without** the internal monitor held -- otherwise a
+     * `compareAndSetState` inside it would take it again and, worse, foreign code would be running
+     * with one of the synchronizer's locks in hand.
      */
-    private int esperar(int arg, boolean compartido, boolean interrumpible, boolean conPlazo,
-                        long finNanos) {
-        SyncWaiter nodo = encolar(compartido);
-        int resultado = -1;
-        boolean interrumpido = false;
-        while (resultado < 0) {
+    private int awaitOn(int arg, boolean shared, boolean interruptible, boolean timedWait,
+                        long endNanos) {
+        SyncWaiter node = enqueue(shared);
+        int result = -1;
+        boolean wasInterrupted = false;
+        while (result < 0) {
             boolean logrado = false;
-            if (esPrimero(nodo)) {
-                logrado = compartido ? tryAcquireShared(arg) >= 0 : tryAcquire(arg);
+            if (isFirst(node)) {
+                logrado = shared ? tryAcquireShared(arg) >= 0 : tryAcquire(arg);
             }
             if (logrado) {
-                desencolar(nodo);
-                resultado = interrumpido ? LOGRADO_CON_INTERRUPCION : LOGRADO;
-            } else if (conPlazo && finNanos - System.nanoTime() <= 0L) {
-                desencolar(nodo);
-                resultado = VENCIO;
-            } else if (dormir(nodo, conPlazo, finNanos)) {
-                if (interrumpible) {
-                    desencolar(nodo);
-                    resultado = INTERRUMPIDO;
+                dequeue(node);
+                result = wasInterrupted ? ACQUIRED_INTERRUPTED : ACQUIRED;
+            } else if (timedWait && endNanos - System.nanoTime() <= 0L) {
+                dequeue(node);
+                result = TIMED_OUT;
+            } else if (sleepOn(node, timedWait, endNanos)) {
+                if (interruptible) {
+                    dequeue(node);
+                    result = INTERRUPTED;
                 } else {
-                    // No interrumpible: se anota y se sigue esperando. La bandera se repone
-                    // arriba, cuando la adquisicion termine.
-                    interrumpido = true;
+                    // Non-interruptible: it is noted and the wait goes on. The flag is set again
+                    // above, when the acquisition finishes.
+                    wasInterrupted = true;
                 }
             }
         }
-        return resultado;
+        return result;
     }
 
     /**
-     * Duerme en el monitor del nodo hasta que lo liberen (o venza el plazo, o lo interrumpan).
+     * It sleeps on the node's monitor until it is released (or the deadline expires, or it is
+     * interrupted).
      *
-     * @return `true` si lo corto una interrupcion
+     * @return `true` if an interruption cut it short
      */
-    private boolean dormir(SyncWaiter nodo, boolean conPlazo, long finNanos) {
-        boolean cortado = false;
-        synchronized (nodo) {
-            // La comprobacion del permiso y el dormirse pasan adentro del mismo monitor que usa
-            // el que libera: por eso no hay despertar perdido.
-            if (!nodo.liberado) {
+    private boolean sleepOn(SyncWaiter node, boolean timedWait, long endNanos) {
+        boolean cutShort = false;
+        synchronized (node) {
+            // Checking the permit and falling asleep happen inside the same monitor the releaser
+            // uses: that is why there is no lost wake-up.
+            if (!node.released) {
                 try {
-                    if (conPlazo) {
-                        long restan = finNanos - System.nanoTime();
-                        if (restan > 0L) {
-                            long ms = restan / 1000000L;
-                            // Un `wait(0)` espera para siempre; un plazo de menos de un
-                            // milisegundo se redondea al minimo que se puede pedir.
+                    if (timedWait) {
+                        long remain = endNanos - System.nanoTime();
+                        if (remain > 0L) {
+                            long ms = remain / 1000000L;
+                            // A `wait(0)` waits forever; a deadline of less than a millisecond is
+                            // rounded up to the smallest that can be asked for.
                             if (ms <= 0L) {
                                 ms = 1L;
                             }
-                            nodo.wait(ms);
+                            node.wait(ms);
                         }
                     } else {
-                        nodo.wait();
+                        node.wait();
                     }
                 } catch (InterruptedException e) {
-                    cortado = true;
+                    cutShort = true;
                 }
             }
-            nodo.liberado = false;
+            node.released = false;
         }
-        return cortado;
+        return cutShort;
     }
 
-    // ---- la cola ------------------------------------------------------------------------------
+    // ---- the queue ----------------------------------------------------------------------------
 
-    private SyncWaiter encolar(boolean compartido) {
-        SyncWaiter nodo = new SyncWaiter();
-        nodo.hilo = Thread.currentThread();
-        nodo.compartido = compartido;
+    private SyncWaiter enqueue(boolean shared) {
+        SyncWaiter node = new SyncWaiter();
+        node.thread = Thread.currentThread();
+        node.shared = shared;
         synchronized (sync) {
-            nodo.encolado = true;
-            nodo.anterior = ultimo;
-            if (ultimo == null) {
-                primero = nodo;
+            node.inQueue = true;
+            node.prev = last;
+            if (last == null) {
+                first = node;
             } else {
-                ultimo.siguiente = nodo;
+                last.next = node;
             }
-            ultimo = nodo;
-            encolados++;
-            hubo = true;
+            last = node;
+            queuedThreads++;
+            was = true;
         }
-        return nodo;
+        return node;
     }
 
-    private boolean esPrimero(SyncWaiter nodo) {
+    private boolean isFirst(SyncWaiter node) {
         boolean r;
         synchronized (sync) {
-            r = primero == nodo;
+            r = first == node;
         }
         return r;
     }
 
     /**
-     * Saca el nodo de la cola y le cede el turno al que quede primero.
+     * It takes the node out of the queue and hands the turn to whoever is left first.
      *
-     * <p>Se llama tanto cuando el nodo **logro** adquirir como cuando **abandona** (plazo o
-     * interrupcion), y en los dos casos hay que senialar al nuevo primero: en el primero porque
-     * en modo compartido puede quedar cupo para el siguiente, y en el segundo porque el que se va
-     * podia ser el unico que tenia derecho a intentar. No senialar en el caso de abandono deja la
-     * cola clavada -- es el error clasico de este armazon.
+     * <p>It is called both when the node **managed** to acquire and when it **gives up** (deadline
+     * or interruption), and in both cases the new first has to be signalled: in the first because in
+     * shared mode there may be room left for the next, and in the second because the one leaving may
+     * have been the only one entitled to try. Not signalling in the give-up case leaves the queue
+     * stuck -- it is this frame's classic mistake.
      */
-    private void desencolar(SyncWaiter nodo) {
-        SyncWaiter nuevoPrimero = null;
+    private void dequeue(SyncWaiter node) {
+        SyncWaiter newFirst = null;
         synchronized (sync) {
-            if (nodo.encolado) {
-                nodo.encolado = false;
-                if (nodo.anterior == null) {
-                    primero = nodo.siguiente;
+            if (node.inQueue) {
+                node.inQueue = false;
+                if (node.prev == null) {
+                    first = node.next;
                 } else {
-                    nodo.anterior.siguiente = nodo.siguiente;
+                    node.prev.next = node.next;
                 }
-                if (nodo.siguiente == null) {
-                    ultimo = nodo.anterior;
+                if (node.next == null) {
+                    last = node.prev;
                 } else {
-                    nodo.siguiente.anterior = nodo.anterior;
+                    node.next.prev = node.prev;
                 }
-                nodo.siguiente = null;
-                nodo.anterior = null;
-                nodo.hilo = null;
-                encolados--;
-                nuevoPrimero = primero;
+                node.next = null;
+                node.prev = null;
+                node.thread = null;
+                queuedThreads--;
+                newFirst = first;
             }
         }
-        if (nuevoPrimero != null) {
-            senialar(nuevoPrimero);
+        if (newFirst != null) {
+            signalOne(newFirst);
         }
     }
 
-    private void senialarPrimero() {
+    private void signalFirst() {
         SyncWaiter n;
         synchronized (sync) {
-            n = primero;
+            n = first;
         }
         if (n != null) {
-            senialar(n);
+            signalOne(n);
         }
     }
 
-    // Le deja el permiso al nodo y lo despierta. `notifyAll` y no `notify` porque el mismo
-    // monitor lo usa la `ConditionObject` para su propia espera.
-    private void senialar(SyncWaiter nodo) {
-        synchronized (nodo) {
-            nodo.liberado = true;
-            nodo.notifyAll();
+    // It leaves the permit on the node and wakes it. `notifyAll` and not `notify` because the same
+    // monitor is used by the `ConditionObject` for its own wait.
+    private void signalOne(SyncWaiter node) {
+        synchronized (node) {
+            node.released = true;
+            node.notifyAll();
         }
     }
 
-    // ---- inspeccion de la cola ---------------------------------------------------------------
+    // ---- queue inspection --------------------------------------------------------------------
     //
-    // Todas son **fotos**, y el javadoc del JDK insiste en eso: sirven para diagnosticar y para
-    // heuristicas, nunca para decidir. Para cuando la respuesta llegue, la cola puede ser otra.
+    // They are all **snapshots**, and the JDK's javadoc insists on it: they serve for diagnostics
+    // and for heuristics, never for deciding. By the time the answer arrives, the queue may be
+    // another.
 
-    /** Si hay algun hilo esperando para adquirir. */
+    /** Whether some thread is waiting to acquire. */
     public final boolean hasQueuedThreads() {
-        boolean hay;
+        boolean any;
         synchronized (sync) {
-            hay = primero != null;
+            any = first != null;
         }
-        return hay;
+        return any;
     }
 
-    /** Si alguna vez **alguien** tuvo que encolarse. Nunca vuelve a `false`. */
+    /** Whether **anybody** ever had to queue. It never goes back to `false`. */
     public final boolean hasContended() {
         boolean h;
         synchronized (sync) {
-            h = hubo;
+            h = was;
         }
         return h;
     }
 
-    /** El primero de la cola, o `null` si esta vacia. */
+    /** The queue's first, or `null` if it is empty. */
     public final Thread getFirstQueuedThread() {
         Thread t;
         synchronized (sync) {
-            t = primero == null ? null : primero.hilo;
+            t = first == null ? null : first.thread;
         }
         return t;
     }
 
     /**
-     * Si ese hilo esta en la cola.
+     * Whether that thread is in the queue.
      *
-     * @throws NullPointerException si `thread` es `null`
+     * @throws NullPointerException if `thread` is `null`
      */
     public final boolean isQueued(Thread thread) {
         if (thread == null) {
             throw new NullPointerException("thread");
         }
-        boolean esta = false;
+        boolean present = false;
         synchronized (sync) {
-            SyncWaiter n = primero;
-            while (n != null && !esta) {
-                esta = n.hilo == thread;
-                n = n.siguiente;
+            SyncWaiter n = first;
+            while (n != null && !present) {
+                present = n.thread == thread;
+                n = n.next;
             }
         }
-        return esta;
+        return present;
     }
 
     /**
-     * Si hay algun hilo esperando **por delante** del actual.
+     * Whether some thread is waiting **ahead of** the current one.
      *
-     * <p>Es la consulta que una subclase justa hace adentro de su `tryAcquire`: adquirir solo si
-     * devuelve `false` convierte la politica de "el que llega se cuela" en FIFO estricta.
+     * <p>It is the query a fair subclass makes inside its `tryAcquire`: acquiring only if it
+     * returns `false` turns the "whoever arrives cuts in" policy into strict FIFO.
      */
     public final boolean hasQueuedPredecessors() {
-        Thread yo = Thread.currentThread();
-        boolean hay;
+        Thread self = Thread.currentThread();
+        boolean any;
         synchronized (sync) {
-            hay = primero != null && primero.hilo != yo;
+            any = first != null && first.thread != self;
         }
-        return hay;
+        return any;
     }
 
-    /** Cuantos esperan para adquirir. */
+    /** How many are waiting to acquire. */
     public final int getQueueLength() {
         int n;
         synchronized (sync) {
-            n = encolados;
+            n = queuedThreads;
         }
         return n;
     }
 
-    /** Los hilos que esperan para adquirir. Una copia; la cola interna no sale de aca. */
+    /** The threads waiting to acquire. A copy; the internal queue does not leave here. */
     public final Collection<Thread> getQueuedThreads() {
-        return this.recolectar(false, false);
+        return this.collect(false, false);
     }
 
-    /** Los que esperan en modo exclusivo. */
+    /** Those waiting in exclusive mode. */
     public final Collection<Thread> getExclusiveQueuedThreads() {
-        return this.recolectar(true, false);
+        return this.collect(true, false);
     }
 
-    /** Los que esperan en modo compartido. */
+    /** Those waiting in shared mode. */
     public final Collection<Thread> getSharedQueuedThreads() {
-        return this.recolectar(true, true);
+        return this.collect(true, true);
     }
 
-    private Collection<Thread> recolectar(boolean filtrar, boolean compartido) {
+    private Collection<Thread> collect(boolean filterBy, boolean shared) {
         ArrayList<Thread> out = new ArrayList<Thread>();
         synchronized (sync) {
-            SyncWaiter n = primero;
+            SyncWaiter n = first;
             while (n != null) {
-                if ((!filtrar || n.compartido == compartido) && n.hilo != null) {
-                    out.add(n.hilo);
+                if ((!filterBy || n.shared == shared) && n.thread != null) {
+                    out.add(n.thread);
                 }
-                n = n.siguiente;
+                n = n.next;
             }
         }
         return out;
     }
 
-    // ---- inspeccion de las condiciones -------------------------------------------------------
+    // ---- condition inspection ----------------------------------------------------------------
     //
-    // Las cuatro piden que la condicion sea **de este** sincronizador. Preguntarle a uno por una
-    // condicion ajena no tiene respuesta correcta, y devolver "ninguno" seria peor que fallar.
+    // All four demand that the condition belong to **this** synchronizer. Asking one about a
+    // foreign condition has no right answer, and returning "none" would be worse than failing.
 
     /**
-     * Si esa condicion se creo sobre este sincronizador.
+     * Whether that condition was created on this synchronizer.
      *
-     * @throws NullPointerException si `condition` es `null`
+     * @throws NullPointerException if `condition` is `null`
      */
     public final boolean owns(ConditionObject condition) {
         if (condition == null) {
             throw new NullPointerException("condition");
         }
-        return condition.perteneceA(this);
+        return condition.belongsTo(this);
     }
 
     /**
-     * Si alguien espera en esa condicion.
+     * Whether anybody is waiting on that condition.
      *
-     * @throws IllegalMonitorStateException si el hilo actual no tiene la exclusiva
-     * @throws IllegalArgumentException si la condicion no es de este sincronizador
+     * @throws IllegalMonitorStateException if the current thread does not hold it exclusively
+     * @throws IllegalArgumentException if the condition does not belong to this synchronizer
      */
     public final boolean hasWaiters(ConditionObject condition) {
-        return this.mia(condition).hayEsperando();
+        return this.ownCondition(condition).anyWaiting();
     }
 
     /**
-     * Cuantos esperan en esa condicion.
+     * How many are waiting on that condition.
      *
-     * @throws IllegalMonitorStateException si el hilo actual no tiene la exclusiva
-     * @throws IllegalArgumentException si la condicion no es de este sincronizador
+     * @throws IllegalMonitorStateException if the current thread does not hold it exclusively
+     * @throws IllegalArgumentException if the condition does not belong to this synchronizer
      */
     public final int getWaitQueueLength(ConditionObject condition) {
-        return this.mia(condition).cuantosEsperan();
+        return this.ownCondition(condition).waitingCount();
     }
 
     /**
-     * Los hilos que esperan en esa condicion.
+     * The threads waiting on that condition.
      *
-     * @throws IllegalMonitorStateException si el hilo actual no tiene la exclusiva
-     * @throws IllegalArgumentException si la condicion no es de este sincronizador
+     * @throws IllegalMonitorStateException if the current thread does not hold it exclusively
+     * @throws IllegalArgumentException if the condition does not belong to this synchronizer
      */
     public final Collection<Thread> getWaitingThreads(ConditionObject condition) {
-        return this.mia(condition).losQueEsperan();
+        return this.ownCondition(condition).theWaiters();
     }
 
-    private ConditionObject mia(ConditionObject condition) {
+    private ConditionObject ownCondition(ConditionObject condition) {
         if (condition == null) {
             throw new NullPointerException("condition");
         }
-        if (!condition.perteneceA(this)) {
+        if (!condition.belongsTo(this)) {
             throw new IllegalArgumentException("not owner");
         }
         if (!isHeldExclusively()) {
@@ -640,68 +643,67 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
         return condition;
     }
 
-    // El `this` del sincronizador, visto desde la clase interna. Existe porque la
-    // `ConditionObject` necesita comparar su dueno y llamar a `acquire`/`release`, y una llamada
-    // sin calificar desde adentro de la interna ya resuelve al externo.
-    AbstractQueuedSynchronizer esteSincronizador() {
+    // The synchronizer's `this`, seen from the inner class. It exists because the
+    // `ConditionObject` needs to compare its owner and to call `acquire`/`release`, and an
+    // unqualified call from inside the inner class already resolves to the outer one.
+    AbstractQueuedSynchronizer thisSynchronizer() {
         return this;
     }
 
     // =========================================================================================
-    // La condicion
+    // The condition
     // =========================================================================================
 
     /**
-     * Una {@link Condition} sobre un sincronizador en modo exclusivo.
+     * A {@link Condition} over a synchronizer in exclusive mode.
      *
-     * <p>El protocolo es el de siempre: `await` **suelta el sincronizador entero** --sea cual sea
-     * la profundidad reentrante, guardando el `state` para reponerlo-- y duerme; `signal`
-     * despierta a uno, que vuelve a adquirir antes de retornar. Cada esperante duerme en su
-     * propio nodo, igual que en la cola de adquisicion, con la misma garantia contra el despertar
-     * perdido.
+     * <p>The protocol is the usual one: `await` **releases the whole synchronizer** --whatever the
+     * reentrant depth, saving the `state` to restore it-- and sleeps; `signal` wakes one, which
+     * acquires again before returning. Each waiter sleeps on its own node, just as in the
+     * acquisition queue, with the same guarantee against the lost wake-up.
      */
     public class ConditionObject implements Condition, Serializable {
 
-        // Los que esperan en esta condicion, en orden de llegada. Lo guarda el monitor de la
-        // lista (`cola`), que es distinto del monitor interno del sincronizador y del de cada
-        // nodo -- y nunca se toma teniendo alguno de esos dos.
-        private final ArrayList<SyncWaiter> cola = new ArrayList<SyncWaiter>();
+        // Those waiting on this condition, in arrival order. It is guarded by the list's monitor
+        // (`queue`), which is different from the synchronizer's internal monitor and from each
+        // node's -- and it is never taken while holding either of those two.
+        private final ArrayList<SyncWaiter> queue = new ArrayList<SyncWaiter>();
 
         public ConditionObject() {
         }
 
         /**
-         * Suelta el sincronizador y espera hasta que la senialen.
+         * It releases the synchronizer and waits until it is signalled.
          *
-         * @throws InterruptedException si interrumpen al hilo mientras espera
+         * @throws InterruptedException if the thread is interrupted while waiting
          */
         public final void await() throws InterruptedException {
             if (Thread.interrupted()) {
                 throw new InterruptedException();
             }
-            SyncWaiter nodo = this.agregar();
-            int guardado = this.soltarTodo();
-            boolean cortado = false;
-            boolean senialado = false;
-            while (!senialado && !cortado) {
-                synchronized (nodo) {
-                    if (!nodo.liberado) {
+            SyncWaiter node = this.addTo();
+            int savedState = this.releaseAllState();
+            boolean cutShort = false;
+            boolean signalled = false;
+            while (!signalled && !cutShort) {
+                synchronized (node) {
+                    if (!node.released) {
                         try {
-                            nodo.wait();
+                            node.wait();
                         } catch (InterruptedException e) {
-                            cortado = true;
+                            cutShort = true;
                         }
                     }
-                    senialado = nodo.liberado;
+                    signalled = node.released;
                 }
             }
-            this.quitar(nodo);
-            esteSincronizador().acquire(guardado);
-            if (cortado) {
-                // Si tambien llego la senial, la interrupcion no se puede lanzar sin perderla:
-                // se repone la bandera y el que llama la vera en su proxima espera. Es el
-                // reparto que hace el JDK entre THROW_IE y REINTERRUPT.
-                if (senialado) {
+            this.removeFrom(node);
+            thisSynchronizer().acquire(savedState);
+            if (cutShort) {
+                // If the signal also arrived, the interruption cannot be thrown without losing it:
+                // the flag is set again and the caller will see it at their next wait. It is the
+                // split the JDK makes between THROW_IE and REINTERRUPT.
+                if (signalled) {
                     Thread.currentThread().interrupt();
                 } else {
                     throw new InterruptedException();
@@ -710,95 +712,95 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
         }
 
         /**
-         * Espera **sin** poder ser interrumpida.
+         * It waits **without** being interruptible.
          *
-         * <p>La interrupcion no se pierde: se atrapa, se sigue esperando, y al final se le repone
-         * la bandera al hilo.
+         * <p>The interruption is not lost: it is caught, the wait goes on, and at the end the
+         * thread's flag is set again.
          */
         public final void awaitUninterruptibly() {
-            SyncWaiter nodo = this.agregar();
-            int guardado = this.soltarTodo();
-            boolean interrumpido = false;
-            boolean senialado = false;
-            while (!senialado) {
-                synchronized (nodo) {
-                    if (!nodo.liberado) {
+            SyncWaiter node = this.addTo();
+            int savedState = this.releaseAllState();
+            boolean wasInterrupted = false;
+            boolean signalled = false;
+            while (!signalled) {
+                synchronized (node) {
+                    if (!node.released) {
                         try {
-                            nodo.wait();
+                            node.wait();
                         } catch (InterruptedException e) {
-                            interrumpido = true;
+                            wasInterrupted = true;
                         }
                     }
-                    senialado = nodo.liberado;
+                    signalled = node.released;
                 }
             }
-            this.quitar(nodo);
-            esteSincronizador().acquire(guardado);
-            if (interrumpido) {
+            this.removeFrom(node);
+            thisSynchronizer().acquire(savedState);
+            if (wasInterrupted) {
                 Thread.currentThread().interrupt();
             }
         }
 
         /**
-         * Espera con plazo en nanosegundos y devuelve **lo que sobro**.
+         * It waits with a deadline in nanoseconds and returns **what was left over**.
          *
-         * <p>Devolver el sobrante y no un `boolean` es lo que la hace util en un bucle: una espera
-         * puede despertar sin senial y hay que volver a esperar, pero solo por el resto.
+         * <p>Returning the remainder and not a `boolean` is what makes it useful in a loop: a wait
+         * can wake with no signal and has to wait again, but only for the rest.
          *
-         * @return los nanosegundos que sobraron; cero o menos si el plazo se agoto
-         * @throws InterruptedException si interrumpen al hilo mientras espera
+         * @return the nanoseconds left over; zero or less if the deadline ran out
+         * @throws InterruptedException if the thread is interrupted while waiting
          */
         public final long awaitNanos(long nanosTimeout) throws InterruptedException {
             if (Thread.interrupted()) {
                 throw new InterruptedException();
             }
-            long fin = System.nanoTime() + nanosTimeout;
-            SyncWaiter nodo = this.agregar();
-            int guardado = this.soltarTodo();
-            boolean cortado = false;
-            boolean senialado = false;
-            boolean vencio = false;
-            while (!senialado && !cortado && !vencio) {
-                synchronized (nodo) {
-                    if (!nodo.liberado) {
-                        long restan = fin - System.nanoTime();
-                        if (restan <= 0L) {
-                            vencio = true;
+            long end = System.nanoTime() + nanosTimeout;
+            SyncWaiter node = this.addTo();
+            int savedState = this.releaseAllState();
+            boolean cutShort = false;
+            boolean signalled = false;
+            boolean expired = false;
+            while (!signalled && !cutShort && !expired) {
+                synchronized (node) {
+                    if (!node.released) {
+                        long remain = end - System.nanoTime();
+                        if (remain <= 0L) {
+                            expired = true;
                         } else {
-                            long ms = restan / 1000000L;
+                            long ms = remain / 1000000L;
                             if (ms <= 0L) {
                                 ms = 1L;
                             }
                             try {
-                                nodo.wait(ms);
+                                node.wait(ms);
                             } catch (InterruptedException e) {
-                                cortado = true;
+                                cutShort = true;
                             }
                         }
                     }
-                    senialado = nodo.liberado;
+                    signalled = node.released;
                 }
-                if (!senialado && !cortado && fin - System.nanoTime() <= 0L) {
-                    vencio = true;
+                if (!signalled && !cutShort && end - System.nanoTime() <= 0L) {
+                    expired = true;
                 }
             }
-            this.quitar(nodo);
-            esteSincronizador().acquire(guardado);
-            if (cortado) {
-                if (senialado) {
+            this.removeFrom(node);
+            thisSynchronizer().acquire(savedState);
+            if (cutShort) {
+                if (signalled) {
                     Thread.currentThread().interrupt();
                 } else {
                     throw new InterruptedException();
                 }
             }
-            return fin - System.nanoTime();
+            return end - System.nanoTime();
         }
 
         /**
-         * Espera con plazo.
+         * It waits with a deadline.
          *
-         * @return `false` si el plazo se agoto antes de la senial
-         * @throws InterruptedException si interrumpen al hilo mientras espera
+         * @return `false` if the deadline ran out before the signal
+         * @throws InterruptedException if the thread is interrupted while waiting
          */
         public final boolean await(long time, TimeUnit unit) throws InterruptedException {
             if (unit == null) {
@@ -808,130 +810,130 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
         }
 
         /**
-         * Espera hasta una fecha.
+         * It waits until a date.
          *
-         * <p>Aca **si** se usa el reloj de pared, y tiene que ser asi: el plazo esta expresado
-         * como un momento del calendario, no como una duracion. La consecuencia es la del
-         * contrato: si alguien corre el reloj del sistema, esta espera se mueve con el.
+         * <p>Here the wall clock **is** used, and it has to be: the deadline is expressed as a
+         * moment on the calendar, not as a duration. The consequence is the contract's: if somebody
+         * moves the system clock, this wait moves with it.
          *
-         * @return `false` si la fecha llego antes de la senial
-         * @throws InterruptedException si interrumpen al hilo mientras espera
+         * @return `false` if the date arrived before the signal
+         * @throws InterruptedException if the thread is interrupted while waiting
          */
         public final boolean awaitUntil(java.util.Date deadline) throws InterruptedException {
             if (deadline == null) {
                 throw new NullPointerException("deadline");
             }
-            long falta = deadline.getTime() - System.currentTimeMillis();
-            if (falta <= 0L) {
+            long remaining = deadline.getTime() - System.currentTimeMillis();
+            if (remaining <= 0L) {
                 return false;
             }
-            this.awaitNanos(falta * 1000000L);
+            this.awaitNanos(remaining * 1000000L);
             return System.currentTimeMillis() < deadline.getTime();
         }
 
         /**
-         * Despierta al que lleva mas tiempo esperando.
+         * It wakes whoever has been waiting longest.
          *
-         * @throws IllegalMonitorStateException si el hilo actual no tiene la exclusiva
+         * @throws IllegalMonitorStateException if the current thread does not hold it exclusively
          */
         public final void signal() {
             if (!isHeldExclusively()) {
                 throw new IllegalMonitorStateException();
             }
             SyncWaiter n = null;
-            synchronized (cola) {
-                if (!cola.isEmpty()) {
-                    n = cola.get(0);
+            synchronized (queue) {
+                if (!queue.isEmpty()) {
+                    n = queue.get(0);
                 }
             }
             if (n != null) {
                 synchronized (n) {
-                    n.liberado = true;
+                    n.released = true;
                     n.notifyAll();
                 }
             }
         }
 
         /**
-         * Despierta a todos los que esperan.
+         * It wakes everyone waiting.
          *
-         * @throws IllegalMonitorStateException si el hilo actual no tiene la exclusiva
+         * @throws IllegalMonitorStateException if the current thread does not hold it exclusively
          */
         public final void signalAll() {
             if (!isHeldExclusively()) {
                 throw new IllegalMonitorStateException();
             }
-            ArrayList<SyncWaiter> copia;
-            synchronized (cola) {
-                copia = new ArrayList<SyncWaiter>(cola);
+            ArrayList<SyncWaiter> copy;
+            synchronized (queue) {
+                copy = new ArrayList<SyncWaiter>(queue);
             }
-            for (int i = 0; i < copia.size(); i++) {
-                SyncWaiter n = copia.get(i);
+            for (int i = 0; i < copy.size(); i++) {
+                SyncWaiter n = copy.get(i);
                 synchronized (n) {
-                    n.liberado = true;
+                    n.released = true;
                     n.notifyAll();
                 }
             }
         }
 
-        // ---- la maquinaria ------------------------------------------------------------------
+        // ---- the machinery ------------------------------------------------------------------
 
-        private SyncWaiter agregar() {
-            SyncWaiter nodo = new SyncWaiter();
-            nodo.hilo = Thread.currentThread();
-            synchronized (cola) {
-                cola.add(nodo);
+        private SyncWaiter addTo() {
+            SyncWaiter node = new SyncWaiter();
+            node.thread = Thread.currentThread();
+            synchronized (queue) {
+                queue.add(node);
             }
-            return nodo;
+            return node;
         }
 
-        private void quitar(SyncWaiter nodo) {
-            synchronized (cola) {
-                cola.remove(nodo);
+        private void removeFrom(SyncWaiter node) {
+            synchronized (queue) {
+                queue.remove(node);
             }
-            nodo.hilo = null;
+            node.thread = null;
         }
 
         /**
-         * Suelta el sincronizador **entero**, guardando el `state` para reponerlo despues.
+         * It releases the **whole** synchronizer, saving the `state` to restore it afterwards.
          *
-         * @throws IllegalMonitorStateException si el hilo actual no lo tiene tomado
+         * @throws IllegalMonitorStateException if the current thread does not hold it
          */
-        private int soltarTodo() {
-            int guardado = getState();
-            if (!esteSincronizador().release(guardado)) {
+        private int releaseAllState() {
+            int savedState = getState();
+            if (!thisSynchronizer().release(savedState)) {
                 throw new IllegalMonitorStateException();
             }
-            return guardado;
+            return savedState;
         }
 
-        // ---- lo que el sincronizador necesita para contestar sus consultas -------------------
+        // ---- what the synchronizer needs in order to answer its queries ---------------------
 
-        boolean perteneceA(AbstractQueuedSynchronizer otro) {
-            return esteSincronizador() == otro;
+        boolean belongsTo(AbstractQueuedSynchronizer other) {
+            return thisSynchronizer() == other;
         }
 
-        boolean hayEsperando() {
-            boolean hay;
-            synchronized (cola) {
-                hay = !cola.isEmpty();
+        boolean anyWaiting() {
+            boolean any;
+            synchronized (queue) {
+                any = !queue.isEmpty();
             }
-            return hay;
+            return any;
         }
 
-        int cuantosEsperan() {
+        int waitingCount() {
             int n;
-            synchronized (cola) {
-                n = cola.size();
+            synchronized (queue) {
+                n = queue.size();
             }
             return n;
         }
 
-        Collection<Thread> losQueEsperan() {
+        Collection<Thread> theWaiters() {
             ArrayList<Thread> out = new ArrayList<Thread>();
-            synchronized (cola) {
-                for (int i = 0; i < cola.size(); i++) {
-                    Thread t = cola.get(i).hilo;
+            synchronized (queue) {
+                for (int i = 0; i < queue.size(); i++) {
+                    Thread t = queue.get(i).thread;
                     if (t != null) {
                         out.add(t);
                     }

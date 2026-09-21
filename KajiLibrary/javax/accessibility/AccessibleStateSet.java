@@ -3,28 +3,28 @@ package javax.accessibility;
 import java.util.Vector;
 
 /**
- * Los estados que tiene un objeto **en este momento**.
+ * The states an object has **at this moment**.
  *
- * <p>Existe porque los estados hay que leerlos todos juntos: preguntar de a uno dejaría ver un
- * objeto a medio cambiar, con el foco ya puesto y la selección todavía no.
+ * <p>It exists because the states have to be read all together: asking one at a time would show an
+ * object halfway through changing, with the focus already set and the selection not yet.
  *
- * <p>Es un conjunto: agregar dos veces el mismo estado no lo duplica, y {@link #add} devuelve si
- * cambió algo.
+ * <p>It is a set: adding the same state twice does not duplicate it, and {@link #add} returns
+ * whether anything changed.
  */
 public class AccessibleStateSet {
 
-    /** Los estados. Es un {@code Vector} por herencia de la API, no por elección. */
+    /** The states. It is a {@code Vector} because of the API's inheritance, not by choice. */
     protected Vector<AccessibleState> states = null;
 
-    /** Un conjunto vacío. */
+    /** An empty set. */
     public AccessibleStateSet() {
         this.states = null;
     }
 
     /**
-     * Con esos estados.
+     * With those states.
      *
-     * @throws NullPointerException si el arreglo es `null`
+     * @throws NullPointerException if the array is `null`
      */
     public AccessibleStateSet(AccessibleState[] states) {
         if (states.length != 0) {
@@ -38,9 +38,9 @@ public class AccessibleStateSet {
     }
 
     /**
-     * Agrega un estado.
+     * Adds a state.
      *
-     * @return `true` si no estaba
+     * @return `true` if it was not there
      */
     public boolean add(AccessibleState state) {
         if (this.states == null) {
@@ -53,7 +53,7 @@ public class AccessibleStateSet {
         return false;
     }
 
-    /** Agrega varios estados. */
+    /** Adds several states. */
     public void addAll(AccessibleState[] states) {
         if (states.length != 0) {
             if (this.states == null) {
@@ -68,9 +68,9 @@ public class AccessibleStateSet {
     }
 
     /**
-     * Saca un estado.
+     * Removes a state.
      *
-     * @return `true` si estaba
+     * @return `true` if it was there
      */
     public boolean remove(AccessibleState state) {
         if (this.states == null) {
@@ -79,14 +79,14 @@ public class AccessibleStateSet {
         return this.states.removeElement(state);
     }
 
-    /** Deja el conjunto vacío. */
+    /** Leaves the set empty. */
     public void clear() {
         if (this.states != null) {
             this.states.removeAllElements();
         }
     }
 
-    /** Si el objeto tiene ese estado. */
+    /** Whether the object has that state. */
     public boolean contains(AccessibleState state) {
         if (this.states == null) {
             return false;
@@ -94,7 +94,7 @@ public class AccessibleStateSet {
         return this.states.contains(state);
     }
 
-    /** Los estados, como arreglo. */
+    /** The states, as an array. */
     public AccessibleState[] toArray() {
         if (this.states == null) {
             return new AccessibleState[0];

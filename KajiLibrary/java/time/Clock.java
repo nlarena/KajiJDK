@@ -1,8 +1,9 @@
 package java.time;
 
-// KajiLibrary's java.time.Clock — a supplier of the current instant. A KajiLibrary subset: the
-// La superficie esta completa: instant()/millis(), la zona (getZone/withZone) y las seis fabricas
-// (system/systemUTC/systemDefaultZone/fixed/offset/tick y sus tres variantes de tick).
+// KajiLibrary's java.time.Clock — a supplier of the current instant.
+//
+// The surface is complete: instant()/millis(), the zone (getZone/withZone) and the six factories
+// (system/systemUTC/systemDefaultZone/fixed/offset/tick, plus tick's three variants).
 public abstract class Clock implements InstantSource {
 
     protected Clock() {
@@ -11,18 +12,18 @@ public abstract class Clock implements InstantSource {
     public abstract Instant instant();
 
     /**
-     * La zona de este reloj.
+     * This clock's zone.
      *
-     * <p>Es lo unico que un `Clock` agrega sobre un `InstantSource`: aquel sabe **cuando**, este sabe
-     * ademas **donde**. `LocalDate.now(clock)` necesita las dos cosas -- el mismo instante es un dia
-     * distinto en Tokio y en Buenos Aires.
+     * <p>It is the only thing a `Clock` adds over an `InstantSource`: that one knows **when**, this
+     * one knows **where** as well. `LocalDate.now(clock)` needs both -- the same instant is a
+     * different day in Tokyo and in Buenos Aires.
      */
     public abstract ZoneId getZone();
 
-    /** Este reloj con otra zona. El instante no cambia; cambia como se lo interpreta. */
+    /** This clock with another zone. The instant does not change; how it is read does. */
     public abstract Clock withZone(ZoneId zone);
 
-    /** El reloj del sistema en esa zona. */
+    /** The system clock in that zone. */
     public static Clock system(ZoneId zone) {
         if (zone == null) {
             throw new NullPointerException("zone");
@@ -30,16 +31,16 @@ public abstract class Clock implements InstantSource {
         return new SystemClock(zone);
     }
 
-    /** El reloj del sistema en la zona por defecto. */
+    /** The system clock in the default zone. */
     public static Clock systemDefaultZone() {
         return Clock.system(ZoneId.systemDefault());
     }
 
     /**
-     * Un reloj **detenido**.
+     * A **stopped** clock.
      *
-     * <p>Es el que hace testeable el codigo que mira la hora: "ahora" pasa a ser un valor que la
-     * prueba elige, y el resultado deja de depender de cuando se corra.
+     * <p>It is what makes code that looks at the time testable: "now" becomes a value the test
+     * chooses, and the result stops depending on when it is run.
      */
     public static Clock fixed(Instant fixedInstant, ZoneId zone) {
         if (fixedInstant == null || zone == null) {
@@ -48,7 +49,7 @@ public abstract class Clock implements InstantSource {
         return new SourceClock(InstantSource.fixed(fixedInstant), zone);
     }
 
-    /** El mismo reloj, corrido `offsetDuration`. */
+    /** The same clock, shifted by `offsetDuration`. */
     public static Clock offset(Clock baseClock, Duration offsetDuration) {
         if (baseClock == null || offsetDuration == null) {
             throw new NullPointerException();
@@ -60,9 +61,9 @@ public abstract class Clock implements InstantSource {
     }
 
     /**
-     * El mismo reloj, avanzando **a saltos** de `tickDuration`.
+     * The same clock, advancing **in jumps** of `tickDuration`.
      *
-     * @throws IllegalArgumentException si la duracion es negativa o no divide un dia
+     * @throws IllegalArgumentException if the duration is negative or does not divide a day
      */
     public static Clock tick(Clock baseClock, Duration tickDuration) {
         if (baseClock == null || tickDuration == null) {
@@ -74,17 +75,17 @@ public abstract class Clock implements InstantSource {
         return new SourceClock(InstantSource.tick(baseClock, tickDuration), baseClock.getZone());
     }
 
-    /** Un reloj que avanza de a milisegundos enteros. */
+    /** A clock that advances in whole milliseconds. */
     public static Clock tickMillis(ZoneId zone) {
         return Clock.tick(Clock.system(zone), Duration.ofMillis(1L));
     }
 
-    /** De a segundos enteros. */
+    /** In whole seconds. */
     public static Clock tickSeconds(ZoneId zone) {
         return Clock.tick(Clock.system(zone), Duration.ofSeconds(1L));
     }
 
-    /** De a minutos enteros. */
+    /** In whole minutes. */
     public static Clock tickMinutes(ZoneId zone) {
         return Clock.tick(Clock.system(zone), Duration.ofMinutes(1L));
     }
@@ -101,14 +102,14 @@ public abstract class Clock implements InstantSource {
 // The system clock, reading the VM's wall time. Package-private (the JDK nests it inside Clock;
 // the API-shape gate skips it since there is no java.time.SystemClock in the JDK).
 //
-// Lleva la zona porque un `Clock` la tiene: el mismo instante es un dia distinto en Tokio y en Buenos
-// Aires, y `LocalDate.now(clock)` necesita las dos cosas.
+// It carries the zone because a `Clock` has one: the same instant is a different day in Tokyo and in
+// Buenos Aires, and `LocalDate.now(clock)` needs both.
 final class SystemClock extends Clock {
 
-    private final ZoneId zona;
+    private final ZoneId zone;
 
-    SystemClock(ZoneId zona) {
-        this.zona = zona;
+    SystemClock(ZoneId zone) {
+        this.zone = zone;
     }
 
     public Instant instant() {
@@ -116,13 +117,13 @@ final class SystemClock extends Clock {
     }
 
     public ZoneId getZone() {
-        return this.zona;
+        return this.zone;
     }
 
     public Clock withZone(ZoneId zone) {
         if (zone == null) {
             throw new NullPointerException("zone");
         }
-        return zone.equals(this.zona) ? this : new SystemClock(zone);
+        return zone.equals(this.zone) ? this : new SystemClock(zone);
     }
 }

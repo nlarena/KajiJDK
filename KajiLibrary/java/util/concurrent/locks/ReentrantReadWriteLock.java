@@ -6,8 +6,11 @@ import java.util.concurrent.TimeUnit;
 // A reentrant read/write lock: any number of readers may hold it at once, but a writer
 // holds it alone. The JDK packs both counts into one AbstractQueuedSynchronizer word;
 // KajiJDK keeps them as plain fields guarded by the intrinsic monitor of a private `sync`
-// object, with `Thread.currentThread()` for owner identity — faithful on a runtime whose
-// threads interleave between opcodes.
+// object, with `Thread.currentThread()` for owner identity. This header used to add "faithful on a
+// runtime whose threads interleave between opcodes"; that is no longer the whole story, since
+// `JVM_THREADS=os` is a real OS-thread substrate. The guard holds there too --an intrinsic monitor
+// is a real mutex-- and the tests built on this lock pass on all three substrates. See
+// `ReentrantLock`'s header, which carries the same correction.
 //
 // Reentrancy: a reader may re-acquire the read lock; a writer may re-acquire the write
 // lock, and while holding it may also take the read lock (**downgrading**: take the read
@@ -32,12 +35,12 @@ public class ReentrantReadWriteLock implements ReadWriteLock, Serializable {
     private Thread[] readOwners = new Thread[4];
     private int[] readCounts = new int[4];
     private int readOwnerCount;
-    // Los hilos bloqueados en una adquisicion, **separados por rol**. La separacion no es un lujo:
-    // un lector y un escritor esperando el mismo lock estan esperando cosas distintas --el lector
-    // que se libere el escritor, el escritor que se vayan todos-- y un diagnostico que los mezcle no
-    // dice cual de los dos es el que no avanza.
-    private final java.util.ArrayList<Thread> encoladosLectores = new java.util.ArrayList<Thread>();
-    private final java.util.ArrayList<Thread> encoladosEscritores = new java.util.ArrayList<Thread>();
+    // The threads blocked in an acquisition, **separated by role**. The separation is not a luxury:
+    // a reader and a writer waiting on the same lock are waiting for different things --the reader
+    // for the writer to release, the writer for everybody to leave-- and a diagnostic that mixes
+    // them does not say which of the two is the one not making progress.
+    private final java.util.ArrayList<Thread> queuedReaders = new java.util.ArrayList<Thread>();
+    private final java.util.ArrayList<Thread> queuedWriters = new java.util.ArrayList<Thread>();
     private int queued;
     // Fairness flag. Acquisition is already near-FIFO through the monitor's wait-set, so
     // the flag is stored and reported but does not change policy.
@@ -58,10 +61,11 @@ public class ReentrantReadWriteLock implements ReadWriteLock, Serializable {
         this.writerLock = new WriteLock(this);
     }
 
-    // Devuelven el **tipo anidado**, como el JDK, y no la interfaz `Lock`. La nota que estaba aca
-    // decia que no se podia por el finding #108 --el buscador de clases no resolvia un anidado de
-    // otro paquete-- y ese finding se cerro. La diferencia es concreta: con el retorno estrechado,
-    // `rwl.writeLock().getHoldCount()` compila; con `Lock` habia que pasar por el lock entero.
+    // They return the **nested type**, as the JDK does, and not the `Lock` interface. The note that
+    // used to be here said it could not be done because of finding #108 --the class finder did not
+    // resolve a nested type from another package-- and that finding is closed. The difference is
+    // concrete: with the narrowed return, `rwl.writeLock().getHoldCount()` compiles; with `Lock` one
+    // had to go through the whole lock.
     public ReadLock readLock() {
         return readerLock;
     }
@@ -131,55 +135,55 @@ public class ReentrantReadWriteLock implements ReadWriteLock, Serializable {
     }
 
     /**
-     * Si ese hilo espera para adquirir alguno de los dos locks.
+     * Whether that thread is waiting to acquire either of the two locks.
      *
-     * <p>Como todas las de este bloque, es una **foto**: para cuando la respuesta llegue el hilo
-     * puede haber adquirido o abandonado. Sirven para diagnosticar, no para decidir.
+     * <p>Like all of this block's, it is a **snapshot**: by the time the answer arrives the thread
+     * may have acquired or given up. They serve for diagnostics, not for deciding.
      *
-     * @throws NullPointerException si `thread` es `null`
+     * @throws NullPointerException if `thread` is `null`
      */
     public final boolean hasQueuedThread(Thread thread) {
         if (thread == null) {
             throw new NullPointerException("thread");
         }
-        boolean esta;
+        boolean present;
         synchronized (sync) {
-            esta = encoladosLectores.contains(thread) || encoladosEscritores.contains(thread);
+            present = queuedReaders.contains(thread) || queuedWriters.contains(thread);
         }
-        return esta;
+        return present;
     }
 
-    /** Todos los hilos que esperan, lectores y escritores. */
+    /** Every waiting thread, readers and writers. */
     protected java.util.Collection<Thread> getQueuedThreads() {
-        java.util.ArrayList<Thread> copia;
+        java.util.ArrayList<Thread> copy;
         synchronized (sync) {
-            copia = new java.util.ArrayList<Thread>(encoladosLectores);
-            copia.addAll(encoladosEscritores);
+            copy = new java.util.ArrayList<Thread>(queuedReaders);
+            copy.addAll(queuedWriters);
         }
-        return copia;
+        return copy;
     }
 
-    /** Los que esperan para **leer**. */
+    /** Those waiting to **read**. */
     protected java.util.Collection<Thread> getQueuedReaderThreads() {
-        java.util.ArrayList<Thread> copia;
+        java.util.ArrayList<Thread> copy;
         synchronized (sync) {
-            copia = new java.util.ArrayList<Thread>(encoladosLectores);
+            copy = new java.util.ArrayList<Thread>(queuedReaders);
         }
-        return copia;
+        return copy;
     }
 
-    /** Los que esperan para **escribir**. */
+    /** Those waiting to **write**. */
     protected java.util.Collection<Thread> getQueuedWriterThreads() {
-        java.util.ArrayList<Thread> copia;
+        java.util.ArrayList<Thread> copy;
         synchronized (sync) {
-            copia = new java.util.ArrayList<Thread>(encoladosEscritores);
+            copy = new java.util.ArrayList<Thread>(queuedWriters);
         }
-        return copia;
+        return copy;
     }
 
-    // Las tres de condicion piden que la condicion sea **de este lock**: preguntarle a un lock por
-    // una condicion ajena no tiene respuesta correcta, y "ninguno" seria peor que fallar.
-    private WriteCondition mia(Condition condition) {
+    // The three condition ones demand that the condition belong to **this lock**: asking a lock
+    // about a foreign condition has no right answer, and "none" would be worse than failing.
+    private WriteCondition ownCondition(Condition condition) {
         if (condition == null) {
             throw new NullPointerException("condition");
         }
@@ -187,25 +191,25 @@ public class ReentrantReadWriteLock implements ReadWriteLock, Serializable {
             throw new IllegalArgumentException("not owner");
         }
         WriteCondition c = (WriteCondition) condition;
-        if (!c.perteneceA(this)) {
+        if (!c.belongsTo(this)) {
             throw new IllegalArgumentException("not owner");
         }
         return c;
     }
 
-    /** Si alguien espera en esa condicion de este lock. */
+    /** Whether anybody is waiting on that condition of this lock. */
     public boolean hasWaiters(Condition condition) {
-        return this.mia(condition).hayEsperando();
+        return this.ownCondition(condition).anyWaiting();
     }
 
-    /** Cuantos esperan en esa condicion de este lock. */
+    /** How many are waiting on that condition of this lock. */
     public int getWaitQueueLength(Condition condition) {
-        return this.mia(condition).cuantosEsperan();
+        return this.ownCondition(condition).waitingCount();
     }
 
-    /** Los hilos que esperan en esa condicion de este lock. */
+    /** The threads waiting on that condition of this lock. */
     protected java.util.Collection<Thread> getWaitingThreads(Condition condition) {
-        return this.mia(condition).losQueEsperan();
+        return this.ownCondition(condition).theWaiters();
     }
 
     public final int getQueueLength() {
@@ -269,32 +273,33 @@ public class ReentrantReadWriteLock implements ReadWriteLock, Serializable {
 
     void acquireRead() {
         Thread me = Thread.currentThread();
-        boolean interrumpido = false;
+        boolean wasInterrupted = false;
         synchronized (sync) {
             // Only a write lock held by *another* thread blocks a reader; the writer
             // itself may take the read lock (that is what makes downgrading work).
             if (writer != null && writer != me) {
                 queued++;
-                encoladosLectores.add(me);
+                queuedReaders.add(me);
                 try {
                     while (writer != null && writer != me) {
-                        // No interrumpible (contrato de `Lock.lock()`): se atrapa y se remarca al
-                        // final. El `finally` saca al hilo de la cola pase lo que pase.
+                        // Non-interruptible (`Lock.lock()`'s contract): it is caught and re-marked
+                        // at the end. The `finally` takes the thread out of the queue whatever
+                        // happens.
                         try {
                             sync.wait();
                         } catch (InterruptedException e) {
-                            interrumpido = true;
+                            wasInterrupted = true;
                         }
                     }
                 } finally {
                     queued--;
-                    encoladosLectores.remove(me);
+                    queuedReaders.remove(me);
                 }
             }
             readers++;
             addReadHold(me, 1);
         }
-        if (interrumpido) {
+        if (wasInterrupted) {
             Thread.currentThread().interrupt();
         }
     }
@@ -302,32 +307,33 @@ public class ReentrantReadWriteLock implements ReadWriteLock, Serializable {
     boolean tryAcquireRead(long ms, boolean timed) {
         Thread me = Thread.currentThread();
         boolean acquired;
-        boolean interrumpidoT = false;
+        boolean interruptedFlag = false;
         synchronized (sync) {
             if (writer == null || writer == me) {
                 readers++;
                 addReadHold(me, 1);
                 acquired = true;
             } else if (timed && ms > 0L) {
-                // Con **plazo restante**, no un solo intento: una espera que despierta por otro
-                // motivo devolveria `false` con el plazo entero por delante. `System.nanoTime()` es
-                // el reloj que corresponde -- no salta si alguien cambia la hora del sistema.
-                long finNanos = System.nanoTime() + ms * 1000000L;
+                // With the **remaining deadline**, not a single attempt: a wait that wakes for
+                // another reason would return `false` with the whole deadline still ahead.
+                // `System.nanoTime()` is the right clock -- it does not jump if somebody changes the
+                // system time.
+                long endNanos = System.nanoTime() + ms * 1000000L;
                 queued++;
-                encoladosLectores.add(me);
+                queuedReaders.add(me);
                 try {
-                    long restan = finNanos - System.nanoTime();
-                    while (!(writer == null || writer == me) && restan > 0L) {
+                    long remain = endNanos - System.nanoTime();
+                    while (!(writer == null || writer == me) && remain > 0L) {
                         try {
-                            sync.wait(restan / 1000000L, (int) (restan % 1000000L));
+                            sync.wait(remain / 1000000L, (int) (remain % 1000000L));
                         } catch (InterruptedException e) {
-                            interrumpidoT = true;
+                            interruptedFlag = true;
                         }
-                        restan = finNanos - System.nanoTime();
+                        remain = endNanos - System.nanoTime();
                     }
                 } finally {
                     queued--;
-                    encoladosLectores.remove(me);
+                    queuedReaders.remove(me);
                 }
                 if (writer == null || writer == me) {
                     readers++;
@@ -360,32 +366,32 @@ public class ReentrantReadWriteLock implements ReadWriteLock, Serializable {
 
     void acquireWrite() {
         Thread me = Thread.currentThread();
-        boolean interrumpido = false;
+        boolean wasInterrupted = false;
         synchronized (sync) {
             if (writer == me) {
                 writeHolds++;
             } else {
                 if (writer != null || readers > 0) {
                     queued++;
-                    encoladosEscritores.add(me);
+                    queuedWriters.add(me);
                     try {
                         while (writer != null || readers > 0) {
                             try {
                                 sync.wait();
                             } catch (InterruptedException e) {
-                                interrumpido = true;
+                                wasInterrupted = true;
                             }
                         }
                     } finally {
                         queued--;
-                        encoladosEscritores.remove(me);
+                        queuedWriters.remove(me);
                     }
                 }
                 writer = me;
                 writeHolds = 1;
             }
         }
-        if (interrumpido) {
+        if (wasInterrupted) {
             Thread.currentThread().interrupt();
         }
     }
@@ -393,7 +399,7 @@ public class ReentrantReadWriteLock implements ReadWriteLock, Serializable {
     boolean tryAcquireWrite(long ms, boolean timed) {
         Thread me = Thread.currentThread();
         boolean acquired;
-        boolean interrumpidoT = false;
+        boolean interruptedFlag = false;
         synchronized (sync) {
             if (writer == me) {
                 writeHolds++;
@@ -403,23 +409,23 @@ public class ReentrantReadWriteLock implements ReadWriteLock, Serializable {
                 writeHolds = 1;
                 acquired = true;
             } else if (timed && ms > 0L) {
-                // Con plazo restante, igual que en `tryAcquireRead`. Ver la nota de alla.
-                long finNanos = System.nanoTime() + ms * 1000000L;
+                // With the remaining deadline, as in `tryAcquireRead`. See the note over there.
+                long endNanos = System.nanoTime() + ms * 1000000L;
                 queued++;
-                encoladosEscritores.add(me);
+                queuedWriters.add(me);
                 try {
-                    long restan = finNanos - System.nanoTime();
-                    while (!(writer == null && readers == 0) && restan > 0L) {
+                    long remain = endNanos - System.nanoTime();
+                    while (!(writer == null && readers == 0) && remain > 0L) {
                         try {
-                            sync.wait(restan / 1000000L, (int) (restan % 1000000L));
+                            sync.wait(remain / 1000000L, (int) (remain % 1000000L));
                         } catch (InterruptedException e) {
-                            interrumpidoT = true;
+                            interruptedFlag = true;
                         }
-                        restan = finNanos - System.nanoTime();
+                        remain = endNanos - System.nanoTime();
                     }
                 } finally {
                     queued--;
-                    encoladosEscritores.remove(me);
+                    queuedWriters.remove(me);
                 }
                 if (writer == null && readers == 0) {
                     writer = me;
@@ -470,19 +476,19 @@ public class ReentrantReadWriteLock implements ReadWriteLock, Serializable {
     // Re-acquire the write lock after an await, restoring the saved depth.
     void reacquireWrite(int holds) {
         Thread me = Thread.currentThread();
-        boolean interrumpido = false;
+        boolean wasInterrupted = false;
         synchronized (sync) {
             while (writer != null || readers > 0) {
                 try {
                     sync.wait();
                 } catch (InterruptedException e) {
-                    interrumpido = true;
+                    wasInterrupted = true;
                 }
             }
             writer = me;
             writeHolds = holds;
         }
-        if (interrumpido) {
+        if (wasInterrupted) {
             Thread.currentThread().interrupt();
         }
     }

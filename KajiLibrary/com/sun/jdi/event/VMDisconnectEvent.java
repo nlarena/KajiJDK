@@ -1,9 +1,9 @@
 package com.sun.jdi.event;
 
 /**
- * Se corto la conexion.
+ * The connection was cut off.
  *
- * <p>Es siempre el ultimo evento. Despues de el, la cola tira {@link VMDisconnectedException}.
+ * <p>It is always the last event. After it, the queue throws {@link VMDisconnectedException}.
  *
  * @since 1.3
  */

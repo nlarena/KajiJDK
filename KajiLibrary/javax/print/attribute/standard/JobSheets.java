@@ -6,11 +6,11 @@ import javax.print.attribute.PrintJobAttribute;
 import javax.print.attribute.PrintRequestAttribute;
 
 /**
- * Si el trabajo lleva hojas separadoras --la caratula con el nombre del duenio-- entre un trabajo y
- * el siguiente.
+ * Whether the job carries separator sheets --the cover with the owner's name-- between one job and
+ * the next.
  *
- * <p>{@code STANDARD} deja que el sitio decida como es esa hoja; la clase no es final justamente
- * para que un sitio agregue las suyas.
+ * <p>{@code STANDARD} lets the site decide what that sheet is like; the class is not final
+ * precisely so that a site can add its own.
  */
 public class JobSheets extends EnumSyntax implements PrintRequestAttribute, PrintJobAttribute {
 

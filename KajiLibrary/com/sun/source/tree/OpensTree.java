@@ -3,7 +3,7 @@ package com.sun.source.tree;
 import java.util.List;
 
 /**
- * La directiva `opens` de un modulo, que habilita reflexion en vez de compilacion.
+ * A module's `opens` directive, which enables reflection instead of compilation.
  */
 public interface OpensTree extends DirectiveTree {
 

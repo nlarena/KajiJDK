@@ -1,47 +1,47 @@
 package java.nio.file.attribute;
 
-// El juego de atributos que todo sistema de archivos deberia poder contestar: tres marcas de
-// tiempo, cuatro preguntas de tipo, el tamaño y una clave de identidad.
+// The set of attributes every filesystem ought to be able to answer: three timestamps, four
+// questions of type, the size and an identity key.
 //
-// **KajiJDK declara la interfaz pero no la implementa, y conviene decir por que.** De los nueve
-// miembros, `stat` de `jdk.internal.io.Fs` solo puede contestar tres --`isRegularFile`,
-// `isDirectory` y (con `size`) `size`--. Los otros seis no tienen de donde salir: no hay nativo que
-// devuelva fecha de modificacion, de acceso ni de creacion, ni que distinga un enlace simbolico, ni
-// que entregue el numero de inodo que seria `fileKey()`. Una implementacion tendria que devolver
-// `FileTime.fromMillis(0)` y `false`, que son respuestas plausibles y **falsas** -- justo lo que
-// esta biblioteca no hace. Asi que `Files.readAttributes` no existe, y esta interfaz queda como el
-// tipo que la firma necesita nombrar.
+// **KajiJDK implements it.** This note used to say it did not, and that `Files.readAttributes`
+// therefore did not exist: `Files.BasicAttrs` implements this interface and that method reads
+// it. Five of the nine are real --`isRegularFile`, `isDirectory`, `isOther`, `size` and
+// `lastModifiedTime`, out of `stat`, `size` and `mtime`. The other four are answered by the
+// contract rather than invented: `lastAccessTime` and `creationTime` are the epoch, which is what
+// the spec below requires when the filesystem does not keep the stamp; `fileKey()` is `null`, which
+// the spec declares valid where there is no inode; and `isSymbolicLink()` is `false`, which
+// `Files.isSymbolicLink` makes the answer for "cannot be determined".
 public interface BasicFileAttributes {
 
-    /** La ultima vez que se modifico el contenido. */
+    /** The last time the content was modified. */
     FileTime lastModifiedTime();
 
-    /** La ultima vez que se leyo. */
+    /** The last time it was read. */
     FileTime lastAccessTime();
 
-    /** Cuando se creo. */
+    /** When it was created. */
     FileTime creationTime();
 
-    /** Si es un archivo comun. */
+    /** Whether it is a regular file. */
     boolean isRegularFile();
 
-    /** Si es un directorio. */
+    /** Whether it is a directory. */
     boolean isDirectory();
 
-    /** Si es un enlace simbolico. */
+    /** Whether it is a symbolic link. */
     boolean isSymbolicLink();
 
-    /** Si no es ninguna de las tres cosas anteriores. */
+    /** Whether it is none of the three above. */
     boolean isOther();
 
-    /** El tamaño en bytes. */
+    /** The size in bytes. */
     long size();
 
     /**
-     * Una clave que identifica al archivo, o `null` si el sistema no puede darla.
+     * A key that identifies the file, or `null` if the system cannot give one.
      *
-     * <p>`null` es una respuesta **valida** por spec, no un hueco: es lo que corresponde cuando no
-     * hay algo como el inodo de POSIX.
+     * <p>`null` is a **valid** answer by spec, not a hole: it is what fits when there is nothing like
+     * POSIX's inode.
      */
     Object fileKey();
 }

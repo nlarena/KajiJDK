@@ -5,45 +5,45 @@ import org.ietf.jgss.GSSCredential;
 import org.ietf.jgss.GSSName;
 
 /**
- * El puente entre GSS-API y JAAS.
+ * The bridge between GSS-API and JAAS.
  *
- * <p>Un solo metodo, y hace una sola cosa: pasar una identidad del mundo de GSS --un
- * {@link GSSName} y una {@link GSSCredential}-- al mundo de {@link Subject}, que es donde la espera
- * todo lo que autoriza en Java. Sin el, un programa que autentica por GSS-API no tiene con que
- * llamar a {@code Subject.doAs}.
+ * <p>A single method, and it does a single thing: to pass an identity of the GSS world --a
+ * {@link GSSName} and a {@link GSSCredential}-- to the world of {@link Subject}, which is where
+ * everything that authorizes in Java expects it. Without it, a program that authenticates by
+ * GSS-API has nothing with which to call {@code Subject.doAs}.
  *
  * <h2>A KajiLibrary subset</h2>
  *
- * <p>{@link #createSubject} no esta implementado. La conversion **no es generica**: hay que
- * traducir el `GSSName` al `KerberosPrincipal` correspondiente y la `GSSCredential` a los
- * {@code KerberosTicket} y {@code KerberosKey} que lleva adentro, y eso pide el proveedor de
- * Kerberos entero --que esta biblioteca no tiene. Lanza
- * {@link UnsupportedOperationException} con el motivo.
+ * <p>{@link #createSubject} is not implemented. The conversion **is not generic**: the
+ * `GSSName` has to be translated into the corresponding `KerberosPrincipal` and the
+ * `GSSCredential` into the {@code KerberosTicket} and {@code KerberosKey} it carries inside,
+ * and that asks for the whole Kerberos provider --which this library does not have. It throws
+ * {@link UnsupportedOperationException} with the reason.
  *
- * <p>La alternativa seria devolver un `Subject` vacio, o con el nombre metido como principal
- * generico. Seria peor: un `Subject` sin las credenciales de Kerberos **parece** una identidad
- * valida, pasa por `Subject.doAs`, y falla mucho despues --en la primera llamada que necesite el
- * ticket-- sin ninguna pista de que la identidad venia mal armada desde aca.
+ * <p>The alternative would be to return an empty `Subject`, or one with the name put in as a
+ * generic principal. It would be worse: a `Subject` without the Kerberos credentials **seems**
+ * a valid identity, passes through `Subject.doAs`, and fails much later --on the first call
+ * that needs the ticket-- with no clue that the identity came badly built from here.
  */
 public class GSSUtil {
 
-    /** No se instancia: es una clase de utilidad. */
+    /** It is not instantiated: it is a utility class. */
     private GSSUtil() {
     }
 
     /**
-     * El {@link Subject} que corresponde a esa identidad GSS.
+     * The {@link Subject} that corresponds to that GSS identity.
      *
-     * <p><b>No implementado en esta biblioteca.</b> Ver la nota de la clase.
+     * <p><b>Not implemented in this library.</b> See the class note.
      *
-     * @param principals el nombre, o `null`
-     * @param credentials las credenciales, o `null`
-     * @throws UnsupportedOperationException siempre, en esta biblioteca
+     * @param principals the name, or `null`
+     * @param credentials the credentials, or `null`
+     * @throws UnsupportedOperationException always, in this library
      */
     public static Subject createSubject(GSSName principals, GSSCredential credentials) {
         throw new UnsupportedOperationException(
                 "cannot build a Subject from GSS identities: the conversion is Kerberos-specific "
-                + "(KerberosPrincipal, KerberosTicket, KerberosKey) and no Kerberos mechanism is "
-                + "present in this library");
+                + "(KerberosPrincipal, KerberosTicket, KerberosKey) and this library does "
+                + "not have a Kerberos mechanism");
     }
 }

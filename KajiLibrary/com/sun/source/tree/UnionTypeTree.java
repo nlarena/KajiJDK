@@ -3,7 +3,7 @@ package com.sun.source.tree;
 import java.util.List;
 
 /**
- * El tipo union de un `catch` multiple, `A | B`.
+ * The union type of a multiple `catch`, `A | B`.
  */
 public interface UnionTypeTree extends Tree {
 

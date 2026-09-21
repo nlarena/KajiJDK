@@ -4,54 +4,53 @@ import java.io.File;
 import java.util.Locale;
 
 /**
- * Un {@link FileFilter} por extension, que es el caso que cubre casi todos.
+ * A {@link FileFilter} by extension, which is the case that covers almost all of them.
  *
- * <p>Ejemplo: {@code new FileNameExtensionFilter("Imagenes", "jpg", "png")}.
+ * <p>Example: {@code new FileNameExtensionFilter("Images", "jpg", "png")}.
  *
- * <h2>Tres decisiones que no se ven en la firma</h2>
+ * <h2>Three decisions that are not visible in the signature</h2>
  *
- * <p><strong>Los directorios siempre pasan</strong>, sin mirar su nombre. Sin eso el usuario no
- * podria navegar hasta la carpeta donde estan sus imagenes — el filtro le habria escondido el
- * camino. Es la trampa contra la que advierte {@link FileFilter#accept}.
+ * <p><strong>Directories always pass</strong>, without looking at their name. Without that the
+ * user could not navigate to the folder where their images are -- the filter would have hidden
+ * the way there. It is the trap {@link FileFilter#accept} warns about.
  *
- * <p><strong>La comparacion ignora mayusculas</strong>, y se hace pasando los dos lados a minusculas
- * con {@link Locale#ENGLISH} y no con la del sistema. No es un detalle: en turco, {@code "I"} en
- * minuscula no es {@code "i"}, asi que un archivo {@code FOTO.JPG} dejaria de coincidir con
- * {@code "jpg"} en una maquina turca. Un nombre de archivo no es texto de idioma.
+ * <p><strong>The comparison ignores case</strong>, and is done by lowercasing both sides with
+ * {@link Locale#ENGLISH} and not with the system's. It is not a detail: in Turkish, {@code "I"}
+ * in lower case is not {@code "i"}, so a file {@code FOTO.JPG} would stop matching
+ * {@code "jpg"} on a Turkish machine. A file name is not language text.
  *
- * <p><strong>Las extensiones se copian</strong> en el constructor. Sin la copia, quien construyo el
- * filtro podria cambiar el arreglo despues y el filtro cambiaria de significado sin que nadie lo
- * toque — y lo mismo devuelve {@link #getExtensions}.
+ * <p><strong>The extensions are copied</strong> in the constructor. Without the copy, whoever
+ * built the filter could change the array afterwards and the filter would change meaning without
+ * anybody touching it -- and {@link #getExtensions} returns a copy for the same reason.
  */
 public final class FileNameExtensionFilter extends FileFilter {
 
     private final String description;
     private final String[] extensions;
-    private final String[] enMinuscula;
+    private final String[] lowercase;
 
     /**
-     * @param description el texto para la lista de filtros
-     * @param extensions las extensiones, sin el punto
-     * @throws IllegalArgumentException si no hay ninguna extension, o si alguna es {@code null} o
-     *     vacia
+     * @param description the text for the filter list
+     * @param extensions the extensions, without the dot
+     * @throws IllegalArgumentException if there is no extension, or if one is {@code null} or empty
      */
     public FileNameExtensionFilter(String description, String... extensions) {
         if (extensions == null || extensions.length == 0) {
-            throw new IllegalArgumentException("Hace falta al menos una extension");
+            throw new IllegalArgumentException("At least one extension is needed");
         }
         this.description = description;
         this.extensions = new String[extensions.length];
-        this.enMinuscula = new String[extensions.length];
+        this.lowercase = new String[extensions.length];
         for (int i = 0; i < extensions.length; i++) {
             if (extensions[i] == null || extensions[i].isEmpty()) {
-                throw new IllegalArgumentException("Una extension no puede ser null ni vacia");
+                throw new IllegalArgumentException("An extension cannot be null or empty");
             }
             this.extensions[i] = extensions[i];
-            this.enMinuscula[i] = extensions[i].toLowerCase(Locale.ENGLISH);
+            this.lowercase[i] = extensions[i].toLowerCase(Locale.ENGLISH);
         }
     }
 
-    /** Si {@code f} es un directorio, o si su nombre termina en una de las extensiones. */
+    /** Whether {@code f} is a directory, or its name ends in one of the extensions. */
     public boolean accept(File f) {
         if (f == null) {
             return false;
@@ -59,14 +58,14 @@ public final class FileNameExtensionFilter extends FileFilter {
         if (f.isDirectory()) {
             return true;
         }
-        String nombre = f.getName();
-        int punto = nombre.lastIndexOf('.');
-        // Un nombre que empieza con punto y no tiene otro —`.gitignore`— no tiene extension: es un
-        // nombre oculto. De ahi que el punto tenga que estar despues del primer caracter.
-        if (punto > 0 && punto < nombre.length() - 1) {
-            String ext = nombre.substring(punto + 1).toLowerCase(Locale.ENGLISH);
-            for (int i = 0; i < this.enMinuscula.length; i++) {
-                if (this.enMinuscula[i].equals(ext)) {
+        String name = f.getName();
+        int dot = name.lastIndexOf('.');
+        // A name that starts with a dot and has no other one --`.gitignore`-- has no extension: it
+        // is a hidden name. Hence the dot has to be after the first character.
+        if (dot > 0 && dot < name.length() - 1) {
+            String ext = name.substring(dot + 1).toLowerCase(Locale.ENGLISH);
+            for (int i = 0; i < this.lowercase.length; i++) {
+                if (this.lowercase[i].equals(ext)) {
                     return true;
                 }
             }
@@ -74,18 +73,18 @@ public final class FileNameExtensionFilter extends FileFilter {
         return false;
     }
 
-    /** El texto para la lista de filtros. */
+    /** The text for the filter list. */
     public String getDescription() {
         return this.description;
     }
 
-    /** Las extensiones, tal como se pasaron, en un arreglo nuevo. */
+    /** The extensions, just as they were passed, in a new array. */
     public String[] getExtensions() {
-        String[] copia = new String[this.extensions.length];
+        String[] copy = new String[this.extensions.length];
         for (int i = 0; i < this.extensions.length; i++) {
-            copia[i] = this.extensions[i];
+            copy[i] = this.extensions[i];
         }
-        return copia;
+        return copy;
     }
 
     public String toString() {

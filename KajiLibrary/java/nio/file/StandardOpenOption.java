@@ -1,45 +1,47 @@
 package java.nio.file;
 
-// Las opciones estandar para abrir un archivo.
+// The standard options for opening a file.
 //
-// **Cuales entiende KajiJDK.** El modelo de archivo de esta VM es "todo de una": `Fs.readAllBytes`
-// y `Fs.writeAllBytes(path, bytes, append)`. Sobre eso, `Files.newOutputStream` y compania honran
-// `READ`, `WRITE`, `APPEND`, `CREATE`, `CREATE_NEW` y `TRUNCATE_EXISTING`, que son las que se
-// pueden expresar con ese unico parametro `append` mas un `stat` previo.
+// **Which ones KajiJDK understands.** This VM's file model is "all at once": `Fs.readAllBytes` and
+// `Fs.writeAllBytes(path, bytes, append)`. Over that, `Files.newOutputStream` and company honour
+// `READ`, `WRITE`, `APPEND`, `CREATE`, `CREATE_NEW` and `TRUNCATE_EXISTING`, which are the ones
+// that can be expressed with that single `append` parameter plus a prior `stat`.
 //
-// Las otras cuatro --`DELETE_ON_CLOSE`, `SPARSE`, `SYNC`, `DSYNC`-- **no se pueden honrar y se
-// rechazan** con `UnsupportedOperationException` en vez de ignorarse: `SYNC` sin sincronizar de
-// verdad es exactamente la clase de promesa falsa que hace perder datos, y aceptarla en silencio
-// seria peor que no ofrecerla. Las constantes existen igual porque son parte del enum.
+// The other four --`DELETE_ON_CLOSE`, `SPARSE`, `SYNC`, `DSYNC`-- **cannot be honoured there and
+// are rejected** with `UnsupportedOperationException` rather than ignored: a `SYNC` that does not
+// really synchronise is exactly the kind of false promise that loses data, and accepting it in
+// silence would be worse than not offering it. `newByteChannel` is the exception and accepts three
+// of the four, because `FileChannel` writes to disk on every write -- see `Files`'s header.
 public enum StandardOpenOption implements OpenOption {
 
-    /** Abrir para leer. */
+    /** Open for reading. */
     READ,
 
-    /** Abrir para escribir. */
+    /** Open for writing. */
     WRITE,
 
-    /** Escribir siempre al final de lo que ya hay. */
+    /** Always write at the end of what is already there. */
     APPEND,
 
-    /** Si ya existe y se abre para escribir, dejarlo en cero bytes. */
+    /** If it exists already and is opened for writing, leave it at zero bytes. */
     TRUNCATE_EXISTING,
 
-    /** Crearlo si no existe. */
+    /** Create it if it does not exist. */
     CREATE,
 
-    /** Crearlo, y fallar si ya existia. */
+    /** Create it, and fail if it was already there. */
     CREATE_NEW,
 
-    /** Borrarlo al cerrar. KajiJDK no la soporta. */
+    /** Delete it on closing. KajiJDK's stream forms do not support it. */
     DELETE_ON_CLOSE,
 
-    /** Pedirle al sistema que lo guarde disperso. KajiJDK no la soporta. */
+    /** Ask the system to store it sparsely. KajiJDK does not support it. */
     SPARSE,
 
-    /** Sincronizar contenido y metadatos con el disco en cada escritura. KajiJDK no la soporta. */
+    /** Synchronise content and metadata with the disk on every write. KajiJDK's stream forms do not
+     *  support it. */
     SYNC,
 
-    /** Sincronizar solo el contenido. KajiJDK no la soporta. */
+    /** Synchronise only the content. KajiJDK's stream forms do not support it. */
     DSYNC
 }

@@ -4,53 +4,54 @@ import java.util.Iterator;
 import java.util.ServiceLoader;
 
 /**
- * KajiLibrary's javax.xml.xpath.XPathFactory -- de donde salen los {@link XPath}.
+ * KajiLibrary's javax.xml.xpath.XPathFactory -- where {@link XPath} objects come from.
  *
- * <p>Se pide por <b>modelo de objetos</b>: el URI de la representacion del documento sobre la que se
- * va a evaluar. La plataforma trae uno solo, {@link #DEFAULT_OBJECT_MODEL_URI}, que es DOM. La
- * indireccion existe porque XPath no depende de DOM en principio -- se puede evaluar sobre otras
- * representaciones-- y este es el punto donde eso se elige.
+ * <p>It is requested by <b>object model</b>: the URI of the document representation the evaluation
+ * will run on. The platform ships only one, {@link #DEFAULT_OBJECT_MODEL_URI}, which is DOM. The
+ * indirection exists because XPath does not depend on DOM in principle -- it can be evaluated on
+ * other representations-- and this is the point where that is chosen.
  *
- * <p>La propiedad de sistema que la configura no es un nombre fijo: es
- * {@link #DEFAULT_PROPERTY_NAME} <b>mas dos puntos y el URI del modelo</b>, asi que cada modelo se
- * configura por separado. Ese detalle no se adivina.
+ * <p>The system property that configures it is not a fixed name: it is {@link
+ * #DEFAULT_PROPERTY_NAME} <b>plus a colon and the model's URI</b>, so each model is configured
+ * separately. That detail cannot be guessed.
  *
- * <h2>Tres formas de fallar, y son distintas</h2>
+ * <h2>Three ways to fail, and they are different</h2>
  *
  * <ul>
- *   <li>{@link #newInstance(String)} con un modelo que nadie soporta lanza
- *       {@link XPathFactoryConfigurationException}, que es <b>comprobada</b>: no hay soporte para eso
- *       en particular y el programa puede probar otra cosa;
- *   <li>con null lanza {@link NullPointerException} y con la cadena vacia
- *       {@link IllegalArgumentException}: no son modelos, son argumentos mal formados;
- *   <li>{@link #newInstance()} --el que no toma modelo-- lanza una {@link RuntimeException} si no
- *       encuentra DOM, porque no tiene forma de declarar una comprobada.
+ *   <li>{@link #newInstance(String)} with a model nobody supports throws {@link
+ *       XPathFactoryConfigurationException}, which is <b>checked</b>: there is no support for that
+ *       particular thing and the program can try something else;
+ *   <li>with null it throws {@link NullPointerException} and with the empty string
+ *       {@link IllegalArgumentException}: those are not models, they are malformed arguments;
+ *   <li>{@link #newInstance()} --the one that takes no model-- throws a {@link RuntimeException} if
+ *       it does not find DOM, because it has no way to declare a checked one.
  * </ul>
  *
  * <h2>A KajiLibrary subset</h2>
  *
- * <p>Esta biblioteca no trae un evaluador de XPath: hacerlo pide un parser de expresiones, un motor
- * de ejes y una implementacion de DOM viva, y ninguna de las tres esta. Sin una fabrica registrada,
- * {@link #newDefaultInstance} y {@link #newInstance()} lanzan, y {@link #newInstance(String)} lanza
- * la comprobada que ya declara. La busqueda por propiedad de sistema y por servicio esta
- * implementada de verdad, asi que registrar una implementacion alcanza.
+ * <p>This library ships no XPath evaluator: that takes an expression parser, an axis engine and a
+ * live DOM implementation, and none of the three is here. Without a registered factory,
+ * {@link #newDefaultInstance} and {@link #newInstance()} throw, and {@link #newInstance(String)}
+ * throws the checked exception it already declares. The lookup by system property and by service is
+ * really implemented, so registering an implementation is enough. Unlike the JDK, the lookup does
+ * not read {@code jaxp.properties} (the same gap as in {@code javax.xml.parsers}).
  */
 public abstract class XPathFactory {
 
-    /** El prefijo de la propiedad de sistema; se le pega {@code ":"} y el URI del modelo. */
+    /** The prefix of the system property; {@code ":"} and the model's URI are appended to it. */
     public static final String DEFAULT_PROPERTY_NAME = "javax.xml.xpath.XPathFactory";
 
-    /** El modelo DOM, que es el que trae la plataforma. */
+    /** The DOM model, which is the one the platform ships. */
     public static final String DEFAULT_OBJECT_MODEL_URI = "http://java.sun.com/jaxp/xpath/dom";
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected XPathFactory() {
     }
 
     /**
-     * La implementacion incluida en la plataforma.
+     * The implementation built into the platform.
      *
-     * @throws RuntimeException siempre en KajiLibrary; ver la nota de la clase
+     * @throws RuntimeException always in KajiLibrary; see the class note
      */
     public static XPathFactory newDefaultInstance() {
         throw new RuntimeException(
@@ -60,15 +61,15 @@ public abstract class XPathFactory {
     }
 
     /**
-     * La fabrica para DOM.
+     * The factory for DOM.
      *
-     * @throws RuntimeException si no hay ninguna
+     * @throws RuntimeException if there is none
      */
     public static XPathFactory newInstance() {
         try {
             return newInstance(DEFAULT_OBJECT_MODEL_URI);
         } catch (XPathFactoryConfigurationException e) {
-            // El metodo no declara comprobadas: se envuelve, que es lo que hace el JDK.
+            // The method declares no checked exceptions: wrap it, which is what the JDK does.
             throw new RuntimeException(
                 "XPathFactory#newInstance() failed to create an XPathFactory for the default "
                     + "object model: " + DEFAULT_OBJECT_MODEL_URI, e);
@@ -76,15 +77,15 @@ public abstract class XPathFactory {
     }
 
     /**
-     * La fabrica para ese modelo de objetos.
+     * The factory for that object model.
      *
-     * <p>Busca en orden: la propiedad de sistema de ese modelo, los proveedores registrados como
-     * servicio --quedandose con el primero que <b>diga que soporta</b> el modelo-- y la
-     * implementacion de la plataforma.
+     * <p>It looks, in order, at: that model's system property, the providers registered as a
+     * service --keeping the first one that <b>says it supports</b> the model-- and the platform
+     * implementation. It does not read {@code jaxp.properties}; see the class note.
      *
-     * @throws NullPointerException si el URI es null
-     * @throws IllegalArgumentException si es la cadena vacia
-     * @throws XPathFactoryConfigurationException si nadie soporta ese modelo
+     * @throws NullPointerException if the URI is null
+     * @throws IllegalArgumentException if it is the empty string
+     * @throws XPathFactoryConfigurationException if nobody supports that model
      */
     public static XPathFactory newInstance(String uri) throws XPathFactoryConfigurationException {
         if (uri == null) {
@@ -99,7 +100,7 @@ public abstract class XPathFactory {
         try {
             configured = System.getProperty(DEFAULT_PROPERTY_NAME + ":" + uri);
         } catch (SecurityException e) {
-            // Sin permiso para leerla: se sigue con los servicios.
+            // No permission to read it: carry on with the services.
         }
         if (configured != null && configured.length() > 0) {
             return newInstance(uri, configured, null);
@@ -117,11 +118,11 @@ public abstract class XPathFactory {
     }
 
     /**
-     * Esa clase y ninguna otra, para ese modelo.
+     * That class and no other, for that model.
      *
-     * @param classLoader con el que se carga; null significa el del contexto o el de esta clase
-     * @throws XPathFactoryConfigurationException si no se puede construir, o si la construida no
-     *     soporta ese modelo
+     * @param classLoader the one to load it with; null means the context one or this class's
+     * @throws XPathFactoryConfigurationException if it cannot be built, or if the built one does
+     *     not support that model
      */
     public static XPathFactory newInstance(String uri, String factoryClassName,
                                            ClassLoader classLoader)
@@ -159,36 +160,36 @@ public abstract class XPathFactory {
         return made;
     }
 
-    /** Si esta fabrica trabaja sobre ese modelo de objetos. */
+    /** Whether this factory works on that object model. */
     public abstract boolean isObjectModelSupported(String objectModel);
 
     /**
-     * Cambia una bandera.
+     * Sets a feature.
      *
-     * <p>La que toda implementacion tiene que reconocer es
-     * {@code javax.xml.XMLConstants.FEATURE_SECURE_PROCESSING}, que entre otras cosas apaga las
-     * funciones de extension.
+     * <p>The one every implementation must recognize is
+     * {@code javax.xml.XMLConstants.FEATURE_SECURE_PROCESSING}, which among other things turns off
+     * extension functions.
      */
     public abstract void setFeature(String name, boolean value)
         throws XPathFactoryConfigurationException;
 
-    /** El valor de una bandera. */
+    /** The value of a feature. */
     public abstract boolean getFeature(String name) throws XPathFactoryConfigurationException;
 
-    /** El resolvedor de variables que llevaran los {@link XPath} que salgan de aca. */
+    /** The variable resolver the {@link XPath} objects made here will carry. */
     public abstract void setXPathVariableResolver(XPathVariableResolver resolver);
 
-    /** Idem para las funciones. */
+    /** Same for the functions. */
     public abstract void setXPathFunctionResolver(XPathFunctionResolver resolver);
 
-    /** Un evaluador con la configuracion que tiene ahora la fabrica. */
+    /** An evaluator with the factory's current configuration. */
     public abstract XPath newXPath();
 
     /**
-     * Una propiedad de la implementacion.
+     * An implementation property.
      *
-     * @throws UnsupportedOperationException por omision: llego despues que la clase, y una
-     *     implementacion vieja no la conoce
+     * @throws UnsupportedOperationException by default: it arrived after the class, and an old
+     *     implementation does not know it
      */
     public void setProperty(String name, String value) {
         throw new UnsupportedOperationException(
@@ -196,9 +197,9 @@ public abstract class XPathFactory {
     }
 
     /**
-     * El valor de una propiedad.
+     * The value of a property.
      *
-     * @throws UnsupportedOperationException por omision
+     * @throws UnsupportedOperationException by default
      */
     public String getProperty(String name) {
         throw new UnsupportedOperationException(

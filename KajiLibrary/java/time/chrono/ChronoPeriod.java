@@ -64,13 +64,12 @@ public interface ChronoPeriod extends TemporalAmount {
     }
 
     /**
-     * El periodo que va de `startDateInclusive` a `endDateExclusive`, en el calendario **de la
-     * primera**.
+     * The period from `startDateInclusive` to `endDateExclusive`, in **the first one's** calendar.
      *
-     * <p>Que mande la primera no es una convencion arbitraria: un periodo de "1 mes" solo quiere
-     * decir algo dentro de un calendario, y el resultado se va a sumar a la fecha de partida. Si la
-     * segunda es de otro calendario se la convierte antes; lo que se conserva es el dia, que es lo
-     * unico que las dos comparten.
+     * <p>That the first one rules is not an arbitrary convention: a period of "1 month" only means
+     * something within a calendar, and the result is going to be added to the starting date. If the
+     * second belongs to another calendar it is converted first; what is kept is the day, the only
+     * thing the two share.
      */
     static ChronoPeriod between(ChronoLocalDate startDateInclusive, ChronoLocalDate endDateExclusive) {
         if (startDateInclusive == null) {

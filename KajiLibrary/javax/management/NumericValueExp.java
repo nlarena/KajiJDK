@@ -1,18 +1,19 @@
 package javax.management;
 
 /**
- * Una constante numerica.
+ * A numeric constant.
  *
- * <p>Guarda un `Number` y recuerda si era entero o de punto flotante ({@link #isLong()}). La
- * distincion importa al comparar: {@code 1} y {@code 1.0} tienen que dar iguales, y por eso las
- * comparaciones se hacen en `long` cuando **los dos** lados son enteros y en `double` si no.
+ * <p>It keeps a {@code Number} and remembers whether it was an integer or floating point
+ * ({@link #isLong()}). The distinction matters when comparing: {@code 1} and {@code 1.0} have to
+ * come out equal, which is why comparisons are done as {@code long} when <b>both</b> sides are
+ * integers and as {@code double} otherwise.
  */
 class NumericValueExp extends QueryEval implements ValueExp {
 
     private static final long serialVersionUID = -4679739485102359104L;
 
     /**
-     * @serial el valor
+     * @serial the value
      */
     private Number val = Double.valueOf(0.0);
 
@@ -23,7 +24,7 @@ class NumericValueExp extends QueryEval implements ValueExp {
         this.val = val;
     }
 
-    /** El valor como `double`. */
+    /** The value as a {@code double}. */
     public double doubleValue() {
         if (val instanceof Long || val instanceof Integer) {
             return (double) val.longValue();
@@ -31,7 +32,7 @@ class NumericValueExp extends QueryEval implements ValueExp {
         return val.doubleValue();
     }
 
-    /** El valor como `long`. */
+    /** The value as a {@code long}. */
     public long longValue() {
         if (val instanceof Long || val instanceof Integer) {
             return val.longValue();
@@ -39,7 +40,7 @@ class NumericValueExp extends QueryEval implements ValueExp {
         return (long) val.doubleValue();
     }
 
-    /** Si el numero es entero. */
+    /** Whether the number is an integer. */
     public boolean isLong() {
         return val instanceof Long || val instanceof Integer;
     }
@@ -61,7 +62,7 @@ class NumericValueExp extends QueryEval implements ValueExp {
         return String.valueOf(d);
     }
 
-    /** Se devuelve a si misma. */
+    /** Returns itself. */
     public ValueExp apply(ObjectName name) throws BadStringOperationException,
             BadBinaryOpValueExpException, BadAttributeValueExpException,
             InvalidApplicationException {

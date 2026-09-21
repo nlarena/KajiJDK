@@ -1,10 +1,10 @@
 package java.security;
 
-// Lo mismo que `PrivilegedAction`, pero para acciones que pueden tirar una excepcion chequeada.
+// The same as `PrivilegedAction`, but for actions that can throw a checked exception.
 //
-// Son dos interfaces y no una con `throws Exception` porque el caso comun —una accion que no tira
-// nada— no tiene por que obligar a su llamador a escribir un `catch` vacio. La que tira se envuelve
-// en `PrivilegedActionException`; la que no, no necesita envoltorio.
+// They are two interfaces and not one with `throws Exception` because the common case —an action
+// that throws nothing— has no reason to force its caller to write an empty `catch`. The one that
+// throws is wrapped in `PrivilegedActionException`; the one that does not needs no wrapping.
 @FunctionalInterface
 @Deprecated
 public interface PrivilegedExceptionAction<T> {

@@ -6,44 +6,45 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * KajiLibrary's org.ietf.jgss.Oid -- un identificador de objeto, del mundo ASN.1.
+ * KajiLibrary's org.ietf.jgss.Oid -- an object identifier, from the world of ASN.1.
  *
- * <p>Una lista de numeros que nombra algo de forma unica y global: {@code 1.2.840.113554.1.2.2} es
- * Kerberos v5. El arbol lo reparten organismos de registro, y por eso no hacen falta acuerdos entre
- * las partes para que dos implementaciones se refieran a lo mismo.
+ * <p>A list of numbers that names something uniquely and globally: {@code 1.2.840.113554.1.2.2} is
+ * Kerberos v5. Registration bodies share out the tree, and that is why no agreements between the
+ * parties are needed for two implementations to refer to the same thing.
  *
- * <h2>Dos reglas que no se adivinan</h2>
+ * <h2>Two rules that are not guessed</h2>
  *
- * <p>Hacen falta <b>al menos dos</b> arcos, y el primero solo puede ser 0, 1 o 2. No es capricho: la
- * codificacion DER mete los dos primeros arcos en un solo byte como {@code 40 * primero + segundo},
- * y eso solo cierra si el primero es chico. Por eso {@code "1"} y {@code "3.1"} se rechazan y
- * {@code "0.0"} se acepta.
+ * <p>At least <b>two</b> arcs are needed, and the first one can only be 0, 1 or 2. It is not a
+ * whim: the DER encoding puts the first two arcs into a single subidentifier as {@code 40 * first +
+ * second}, and that only works out if the first one is small. That is why {@code "1"} and {@code
+ * "3.1"} are rejected and {@code "0.0"} is accepted.
  *
- * <h2>La codificacion</h2>
+ * <h2>The encoding</h2>
  *
- * <p>{@link #getDER} devuelve el TLV <b>completo</b> --etiqueta {@code 0x06}, largo, y contenido--
- * y no solo el contenido. Cada arco a partir del tercero va en base 128, con el bit alto prendido en
- * todos los bytes menos el ultimo; asi un arco grande ocupa lo que necesita y no hay largo fijo.
+ * <p>{@link #getDER} returns the <b>complete</b> TLV --tag {@code 0x06}, length, and contents-- and
+ * not only the contents. Each subidentifier goes in base 128, with the high bit on in every byte
+ * but the last; that way a large arc takes up what it needs and there is no fixed length.
  *
- * <p>{@link #hashCode} sale de esos bytes. El valor concreto no es el mismo que el del JDK --el suyo
- * viene de una clase interna suya-- y no tiene por que serlo: lo unico que el contrato pide es que
- * dos iguales coincidan, y eso se cumple porque dos OID iguales tienen la misma codificacion.
+ * <p>{@link #hashCode} comes from those bytes. The concrete value is not the same as the JDK's
+ * --its own comes from an internal class of its own-- and it does not have to be: the only thing
+ * the contract asks is that two equal ones coincide, and that holds because two equal OIDs have the
+ * same encoding.
  */
 public class Oid {
 
-    /** La etiqueta ASN.1 de un identificador de objeto. */
+    /** The ASN.1 tag of an object identifier. */
     private static final byte TAG = 0x06;
 
-    /** Los arcos, en orden. */
+    /** The arcs, in order. */
     private final int[] arcs;
 
-    /** El TLV completo, calculado una vez al construir. */
+    /** The complete TLV, calculated once on construction. */
     private final byte[] der;
 
     /**
-     * Desde la forma con puntos.
+     * From the dotted form.
      *
-     * @throws GSSException con {@link GSSException#FAILURE} si no es un OID valido
+     * @throws GSSException with {@link GSSException#FAILURE} if it is not a valid OID
      */
     public Oid(String strOid) throws GSSException {
         if (strOid == null) {
@@ -60,9 +61,9 @@ public class Oid {
     }
 
     /**
-     * Desde un flujo con la codificacion DER.
+     * From a stream with the DER encoding.
      *
-     * @throws GSSException si los bytes no son un OID
+     * @throws GSSException if the bytes are not an OID
      */
     public Oid(InputStream derOid) throws GSSException {
         if (derOid == null) {
@@ -80,9 +81,9 @@ public class Oid {
     }
 
     /**
-     * Desde la codificacion DER completa.
+     * From the complete DER encoding.
      *
-     * @throws GSSException si los bytes no son un OID
+     * @throws GSSException if the bytes are not an OID
      */
     public Oid(byte[] data) throws GSSException {
         if (data == null) {
@@ -94,7 +95,7 @@ public class Oid {
         this.der = copy;
     }
 
-    /** La forma con puntos. */
+    /** The dotted form. */
     public String toString() {
         StringBuilder sb = new StringBuilder();
         int i = 0;
@@ -108,7 +109,7 @@ public class Oid {
         return sb.toString();
     }
 
-    /** Igualdad por arcos. */
+    /** Equality by arcs. */
     public boolean equals(Object other) {
         if (this == other) {
             return true;
@@ -131,10 +132,10 @@ public class Oid {
     }
 
     /**
-     * El TLV completo. Copia, para que nadie lo modifique.
+     * The complete TLV. A copy, so that nobody modifies it.
      *
-     * @throws GSSException nunca en esta implementacion; esta en la firma porque el JDK codifica
-     *     de forma perezosa y ahi si puede fallar
+     * @throws GSSException never in this implementation; it is in the signature because the JDK
+     *     encodes lazily and there it can fail
      */
     public byte[] getDER() throws GSSException {
         byte[] copy = new byte[this.der.length];
@@ -143,10 +144,11 @@ public class Oid {
     }
 
     /**
-     * Si este OID esta en ese conjunto.
+     * Whether this OID is in that set.
      *
-     * <p>Es lo que se usa para preguntar "soporta este mecanismo", que es la operacion mas comun del
-     * tipo y la razon de que este metodo exista en vez de dejar el bucle a quien llama.
+     * <p>It is what is used to ask "does it support this mechanism", which is the most common
+     * operation of the type and the reason why this method exists instead of leaving the loop to
+     * the caller.
      */
     public boolean containedIn(Oid[] oids) {
         int i = 0;
@@ -159,7 +161,7 @@ public class Oid {
         return false;
     }
 
-    /** Sobre los bytes codificados; ver la nota de la clase. */
+    /** Over the encoded bytes; see the note of the class. */
     public int hashCode() {
         int result = 1;
         int i = 0;
@@ -171,13 +173,15 @@ public class Oid {
     }
 
     /**
-     * Como el constructor de cadena, pero sin excepcion comprobada.
+     * Like the string constructor, but with no checked exception.
      *
-     * <p>Existe para las constantes {@code NT_*} de {@link GSSName}: un inicializador de campo de
-     * interfaz no puede atajar nada, y esos OID son literales de esta biblioteca que no pueden
-     * fallar. Es paquete-privado a proposito -- no es parte del API y nadie de afuera lo ve.
+     * <p>It exists for the {@code NT_*} constants of {@link GSSName}: a field initialiser of an
+     * interface cannot catch anything, and those OIDs are literals of this library that cannot
+     * fail. It is package-private on purpose -- it is not part of the API and nobody outside sees
+     * it.
      *
-     * @return null si la cadena no es un OID, que para un literal de aca significa un error de tipeo
+     * @return null if the string is not an OID, which for a literal from here means a typing
+     *     mistake
      */
     static Oid literal(String strOid) {
         try {
@@ -187,9 +191,9 @@ public class Oid {
         }
     }
 
-    // ---- adentro ---------------------------------------------------------------------------
+    // ---- inside ----------------------------------------------------------------------------
 
-    /** Los arcos de una cadena con puntos, o null si no es valida. Ver las dos reglas de la clase. */
+    /** The arcs of a dotted string, or null if it is not valid. See the two rules of the class. */
     private static int[] parse(String text) {
         if (text.length() == 0) {
             return null;
@@ -213,7 +217,7 @@ public class Oid {
                 }
                 value = value * 10 + (c - '0');
                 if (value < 0) {
-                    return null; // se paso de int
+                    return null; // it overflowed int
                 }
                 j = j + 1;
             }
@@ -223,14 +227,14 @@ public class Oid {
         if (out[0] > 2) {
             return null;
         }
-        // Con primer arco 0 o 1, el segundo no puede pasar de 39: los dos van en un solo byte.
+        // With a first arc of 0 or 1, the second cannot go past 39: the two go into one byte.
         if (out[0] < 2 && out[1] > 39) {
             return null;
         }
         return out;
     }
 
-    /** El TLV de esos arcos. */
+    /** The TLV of those arcs. */
     private static byte[] encode(int[] arcs) {
         List<Byte> content = new ArrayList<Byte>();
         appendBase128(content, arcs[0] * 40 + arcs[1]);
@@ -241,7 +245,8 @@ public class Oid {
         }
         byte[] out = new byte[2 + content.size()];
         out[0] = TAG;
-        // El largo cabe en un byte mientras sea menor a 128, que es el caso de cualquier OID real.
+        // The length fits in one byte as long as it is under 128, which is the case of any real
+        // OID.
         out[1] = (byte) content.size();
         int j = 0;
         while (j < content.size()) {
@@ -251,7 +256,7 @@ public class Oid {
         return out;
     }
 
-    /** Un arco en base 128, con el bit alto prendido salvo en el ultimo byte. */
+    /** An arc in base 128, with the high bit on except in the last byte. */
     private static void appendBase128(List<Byte> out, int value) {
         int shift = 28;
         boolean started = false;
@@ -266,7 +271,7 @@ public class Oid {
         out.add(Byte.valueOf((byte) (value & 0x7f)));
     }
 
-    /** Los arcos de un TLV. */
+    /** The arcs of a TLV. */
     private static int[] decode(byte[] tlv) throws GSSException {
         if (tlv.length < 3 || tlv[0] != TAG) {
             throw new GSSException(GSSException.FAILURE, 0, "Not a DER Object Identifier");
@@ -277,7 +282,7 @@ public class Oid {
         }
         List<Integer> arcs = new ArrayList<Integer>();
         int i = 2;
-        // El primer byte lleva los dos primeros arcos; ver la nota de la clase.
+        // The first subidentifier carries the first two arcs; see the note of the class.
         int first = readBase128(tlv, i);
         int consumed = base128Length(tlv, i);
         if (consumed < 0) {
@@ -309,7 +314,7 @@ public class Oid {
         return out;
     }
 
-    /** El valor del arco que empieza en `from`. */
+    /** The value of the arc that starts at `from`. */
     private static int readBase128(byte[] data, int from) {
         int value = 0;
         int i = from;
@@ -323,7 +328,7 @@ public class Oid {
         return value;
     }
 
-    /** Cuantos bytes ocupa ese arco, o -1 si se corta antes de terminar. */
+    /** How many bytes that arc takes up, or -1 if it is cut short before finishing. */
     private static int base128Length(byte[] data, int from) {
         int i = from;
         while (i < data.length) {
@@ -335,7 +340,7 @@ public class Oid {
         return -1;
     }
 
-    /** Lee un TLV completo del flujo: etiqueta, largo y contenido. */
+    /** It reads a complete TLV from the stream: tag, length and contents. */
     private static byte[] readTlv(InputStream in) throws IOException {
         int tag = in.read();
         int length = in.read();

@@ -1,10 +1,10 @@
 package javax.naming;
 
 /**
- * Se lanza cuando la operacion tardo mas que el limite de tiempo. Distinta de
- * `InterruptedNamingException`: aca no interrumpio nadie, se cumplio un plazo.
+ * Thrown when the operation took longer than the time limit. Different from
+ * `InterruptedNamingException`: here nobody interrupted, a deadline was met.
  *
- * <p>La jerarquia entera y el estado que arrastra estan explicados en `NamingException`.
+ * <p>The whole hierarchy and the state it carries are explained in `NamingException`.
  */
 public class TimeLimitExceededException extends LimitExceededException {
 

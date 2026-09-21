@@ -1,46 +1,46 @@
 package javax.accessibility;
 
 /**
- * Un enlace dentro de un texto.
+ * A link within a text.
  *
- * <p>Es una {@link AccessibleAction} porque un enlace es, sobre todo, algo que se puede **hacer**.
- * Lo que agrega es dónde está: el tramo de texto que ocupa, para que quien lea pueda anunciarlo en
- * su lugar y no al final.
+ * <p>It is an {@link AccessibleAction} because a link is, above all, something that can be
+ * **done**. What it adds is where it is: the stretch of text it occupies, so that whoever reads can
+ * announce it in its place and not at the end.
  *
- * <p>{@link #isValid} existe porque el documento puede cambiar debajo: un enlace que se obtuvo antes
- * de una edición puede estar apuntando a un tramo que ya no existe.
+ * <p>{@link #isValid} exists because the document may change underneath: a link obtained before an
+ * edit may be pointing at a stretch that no longer exists.
  */
 public abstract class AccessibleHyperlink implements AccessibleAction {
 
-    /** Para las subclases. */
+    /** For subclasses. */
     protected AccessibleHyperlink() {
     }
 
-    /** Si el enlace sigue apuntando a un tramo que existe. */
+    /** Whether the link still points at a stretch that exists. */
     public abstract boolean isValid();
 
-    /** Cuántas acciones tiene; para un enlace, normalmente una. */
+    /** How many actions it has; for a link, normally one. */
     public abstract int getAccessibleActionCount();
 
     /**
-     * Sigue el enlace.
+     * Follows the link.
      *
-     * @return `true` si se pudo
+     * @return `true` if it could
      */
     public abstract boolean doAccessibleAction(int i);
 
-    /** El texto del enlace. */
+    /** The text of the link. */
     public abstract String getAccessibleActionDescription(int i);
 
-    /** A dónde apunta: normalmente una `URL`. */
+    /** Where it points: normally a `URL`. */
     public abstract Object getAccessibleActionObject(int i);
 
-    /** Lo que se muestra como enlace: un texto o una imagen. */
+    /** What is shown as a link: a text or an image. */
     public abstract Object getAccessibleActionAnchor(int i);
 
-    /** Dónde empieza el tramo del enlace. */
+    /** Where the link's stretch starts. */
     public abstract int getStartIndex();
 
-    /** Dónde termina. */
+    /** Where it ends. */
     public abstract int getEndIndex();
 }

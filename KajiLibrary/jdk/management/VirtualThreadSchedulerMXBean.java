@@ -3,43 +3,43 @@ package jdk.management;
 import java.lang.management.PlatformManagedObject;
 
 /**
- * La vista de administracion del planificador de hilos virtuales.
+ * The administration view of the scheduler of virtual threads.
  *
- * <p>Un hilo virtual no tiene un hilo del sistema operativo propio: corre <em>montado</em> sobre uno
- * de un pool de hilos portadores, y se desmonta cuando se bloquea. Este MXBean expone las cuatro
- * cantidades que describen ese pool en un momento dado —cuantos portadores hay, cuantos hilos
- * virtuales estan montados, cuantos esperan en cola— y la unica perilla: el paralelismo.
+ * <p>A virtual thread has no operating system thread of its own: it runs <em>mounted</em> on one of
+ * a pool of carrier threads, and it is unmounted when it blocks. This MXBean exposes the four
+ * quantities that describe that pool at a given moment --how many carriers there are, how many
+ * virtual threads are mounted, how many wait in the queue-- and the only knob: the parallelism.
  *
- * <p>Es una interfaz de <em>lectura mas una escritura</em>, y la asimetria es deliberada: el tamano
- * del pool y la cantidad de montados son consecuencias, no decisiones. Lo unico que se elige es
- * cuantos portadores puede usar el planificador a la vez.
+ * <p>It is an interface of <em>reading plus one writing</em>, and the asymmetry is deliberate: the
+ * size of the pool and the number of mounted ones are consequences, not decisions. The only thing
+ * that is chosen is how many carriers the scheduler can use at a time.
  *
  * @since 24
  */
 public interface VirtualThreadSchedulerMXBean extends PlatformManagedObject {
 
-    /** Cuantos hilos portadores puede usar el planificador a la vez. */
+    /** How many carrier threads the scheduler can use at a time. */
     int getParallelism();
 
     /**
-     * Cambia el paralelismo.
+     * It changes the parallelism.
      *
-     * @throws IllegalArgumentException si el valor no es positivo, o excede el maximo del
-     *     planificador
+     * @throws IllegalArgumentException if the value is not positive, or exceeds the maximum of the
+     *     scheduler
      */
     void setParallelism(int size);
 
     /**
-     * Cuantos hilos portadores existen ahora.
+     * How many carrier threads exist now.
      *
-     * <p>No tiene por que coincidir con {@link #getParallelism}: el pool crece bajo demanda y puede
-     * quedar por encima del paralelismo mientras hay portadores bloqueados.
+     * <p>It does not have to coincide with {@link #getParallelism}: the pool grows on demand and
+     * may stay above the parallelism while there are blocked carriers.
      */
     int getPoolSize();
 
-    /** Cuantos hilos virtuales estan montados sobre un portador en este momento. */
+    /** How many virtual threads are mounted on a carrier at this moment. */
     int getMountedVirtualThreadCount();
 
-    /** Cuantos hilos virtuales estan encolados esperando un portador. */
+    /** How many virtual threads are queued waiting for a carrier. */
     long getQueuedVirtualThreadCount();
 }

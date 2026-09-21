@@ -5,17 +5,17 @@ import javax.lang.model.SourceVersion;
 import javax.lang.model.element.ModuleElement;
 
 /**
- * El visitante de elementos de Java 9. Ver {@link AbstractElementVisitor6} por el mecanismo.
+ * The element visitor for Java 9. See {@link AbstractElementVisitor6} for the mechanism.
  *
- * <p>Java 9 trajo los **modulos**, la primera clase de declaracion nueva desde que existe el modelo. Por
- * eso aca `visitModule` deja de tener un cuerpo que tira y pasa a ser **abstracto**: extender esta clase
- * en vez de la de 8 es exactamente la manera de que el compilador te obligue a decidir que hacer con un
- * modulo, en lugar de descubrirlo en tiempo de ejecucion con una excepcion.
+ * <p>Java 9 brought **modules**, the first new kind of declaration since the model exists. That is
+ * why here `visitModule` stops having a body that throws and becomes **abstract**: extending this
+ * class instead of the 8 one is exactly the way for the compiler to force you to decide what to do
+ * with a module, instead of discovering it at run time with an exception.
  */
-// RELEASE_14 y no RELEASE_9: la anotacion dice la ultima version del lenguaje que este visitante
-// **soporta**, no aquella en la que aparecio. Entre 9 y 14 no llego ninguna construccion que este
-// no sepa tratar, asi que sigue siendo adecuado para las dos. Es el mismo valor que llevan
-// `TypeKindVisitor9` y `ElementScanner9` en el JDK.
+// RELEASE_14 and not RELEASE_9: the annotation states the latest language version this visitor
+// **supports**, not the one in which it appeared. Between 9 and 14 no construct arrived that it
+// cannot handle, so it is still adequate for both. It is the same value `TypeKindVisitor9` and
+// `ElementScanner9` carry in the JDK.
 @SupportedSourceVersion(SourceVersion.RELEASE_14)
 public abstract class AbstractElementVisitor9<R, P> extends AbstractElementVisitor8<R, P> {
 

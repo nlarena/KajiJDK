@@ -6,48 +6,50 @@ import javax.naming.directory.DirContext;
 import javax.naming.directory.SearchControls;
 
 /**
- * KajiLibrary's javax.naming.event.EventDirContext -- escuchar el resultado de una <b>busqueda</b>.
+ * KajiLibrary's javax.naming.event.EventDirContext -- listening to the result of a <b>search</b>.
  *
- * <p>Junta {@link EventContext} y {@link DirContext}, y lo que agrega de propio es lo interesante: en
- * vez de escuchar un nombre, se escucha un <b>filtro</b>. El oyente recibe eventos por las entradas
- * que coinciden, incluidas las que pasan a coincidir despues.
+ * <p>It joins {@link EventContext} and {@link DirContext}, and what it adds of its own is the
+ * interesting part: instead of listening to a name, you listen to a <b>filter</b>. The listener
+ * gets events for the entries that match, including the ones that start matching later.
  *
- * <p>Eso es mucho mas util que escuchar un nombre para lo que se usan los directorios: "avisame
- * cuando alguien entre al grupo de administradores" es un filtro, no un nombre. Con un nombre habria
- * que escuchar el grupo entero y filtrar del lado del cliente.
+ * <p>That is much more useful than listening to a name for what directories are used for: "tell me
+ * when someone joins the administrators group" is a filter, not a name. With a name you would have
+ * to listen to the whole group and filter on the client side.
  *
- * <p>Las cuatro sobrecargas son las mismas dos combinaciones que en {@code DirContext#search}:
- * nombre como {@link Name} o como texto, y filtro directo o con argumentos numerados. Vale la misma
- * advertencia: un filtro armado concatenando texto es inyectable, y la version con argumentos es la
- * que hay que usar cuando el filtro depende de una entrada del usuario.
+ * <p>The four overloads are the same two combinations as in {@code DirContext#search}: the name as
+ * a {@link Name} or as text, and a direct filter or one with numbered arguments. The same warning
+ * applies: a filter built by concatenating text is injectable, and the version with arguments is
+ * the one to use when the filter depends on user input.
  *
- * <p>El {@link SearchControls} de aca controla el alcance y que atributos vienen en los eventos, no
- * cuantos resultados: una suscripcion no tiene un tope de resultados que tenga sentido.
+ * <p>The {@link SearchControls} here are there for the scope and for which attributes come in the
+ * events; a subscription has no meaningful result cap. The JDK's javadoc does not say which fields
+ * a provider must honour, so this is the intent, not a guarantee.
  */
 public interface EventDirContext extends EventContext, DirContext {
 
     /**
-     * Escucha las entradas que coincidan con el filtro.
+     * Listens to the entries that match the filter.
      *
-     * @param filter con la sintaxis de RFC 2254
-     * @param ctls el alcance y que atributos traer
+     * @param filter with RFC 2254 syntax
+     * @param ctls the scope and which attributes to fetch
      */
     void addNamingListener(Name target, String filter, SearchControls ctls, NamingListener l)
         throws NamingException;
 
-    /** Idem, con el nombre como texto. */
+    /** Same, with the name as text. */
     void addNamingListener(String target, String filter, SearchControls ctls, NamingListener l)
         throws NamingException;
 
     /**
-     * Idem, con argumentos numerados.
+     * Same, with numbered arguments.
      *
-     * @param filterArgs los valores de {@code {0}}, {@code {1}}, ...; no pasan por el parser
+     * @param filterArgs the values of {@code {0}}, {@code {1}}, ...; they do not go through the
+     *     parser
      */
     void addNamingListener(Name target, String filter, Object[] filterArgs, SearchControls ctls,
                            NamingListener l) throws NamingException;
 
-    /** Idem, con el nombre como texto. */
+    /** Same, with the name as text. */
     void addNamingListener(String target, String filter, Object[] filterArgs, SearchControls ctls,
                            NamingListener l) throws NamingException;
 }

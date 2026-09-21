@@ -16,39 +16,39 @@ import javax.swing.JSplitPane;
 import javax.swing.border.Border;
 
 /**
- * La barra que separa las dos mitades de un {@link JSplitPane}.
+ * The bar that separates a {@link JSplitPane}'s two halves.
  *
- * <h2>Es un contenedor, no un componente pintado</h2>
+ * <h2>It is a container, not a painted component</h2>
  *
- * <p>Hereda de {@link Container} porque puede tener hijos: los dos botoncitos de "un toque" que
- * pliegan el panel de golpe hacia un lado. Sin esa opcion prendida no tiene ninguno, y ahi si es
- * solo un rectangulo con borde.
+ * <p>It inherits from {@link Container} because it may have children: the two "one touch"
+ * little buttons that fold the pane to one side in one go. With that option not switched on it
+ * has none, and there it is just a rectangle with a border.
  *
- * <h2>El arrastre en dos formas</h2>
+ * <h2>Dragging in two forms</h2>
  *
- * <p>Arrastrar el divisor puede acomodar los dos hijos en cada movimiento --"continuo"-- o dibujar
- * una sombra y acomodar recien al soltar. La segunda existe porque acomodar dos arboles de
- * componentes sesenta veces por segundo es caro; la primera porque se ve mucho mejor. Quien decide
- * es {@code JSplitPane.setContinuousLayout}, y {@link DragController} implementa las dos: mueve la
- * sombra o mueve el divisor, y avisa al UI.
+ * <p>Dragging the divider may lay the two children out on every movement -- "continuous" --
+ * or draw a shadow and lay them out only on releasing. The second exists because laying out two
+ * trees of components sixty times a second is expensive; the first because it looks much
+ * better. Who decides is {@code JSplitPane.setContinuousLayout}, and {@link DragController}
+ * implements both: it moves the shadow or it moves the divider, and tells the look and feel.
  *
- * <h2>El borde se pone y no se cambia</h2>
+ * <h2>The border is set and not changed</h2>
  *
- * <p>{@link #setBorder} acepta cualquiera, pero el que importa es el que pone el UI: dibuja la linea
- * de cada lado, y de el salen los insets que hacen que el divisor tenga un pixel de aire. Medido:
- * insets (0, 1, 0, 1) en horizontal.
+ * <p>{@link #setBorder} accepts any, but the one that matters is the one the look and feel
+ * sets: it draws the line on each side, and the insets that give the divider a pixel of air
+ * come from it. Measured: insets (0, 1, 0, 1) horizontally.
  *
- * <h2>Tamano</h2>
+ * <h2>Size</h2>
  *
- * <p>El grueso es {@link #getDividerSize} y el largo es cero: lo estira el acomodador del panel. Un
- * divisor horizontal mide 10 x 1 y uno vertical 1 x 10.
+ * <p>The thickness is {@link #getDividerSize} and the length is zero: it is stretched by the
+ * pane's layout. A horizontal divider measures 10 x 1 and a vertical one 1 x 10.
  */
 public class BasicSplitPaneDivider extends Container implements PropertyChangeListener {
 
-    /** Cuanto miden los botoncitos de un toque. */
+    /** How much the one-touch little buttons measure. */
     protected static final int ONE_TOUCH_SIZE = 6;
 
-    /** Cuanto se corren del borde. */
+    /** How far they shift from the edge. */
     protected static final int ONE_TOUCH_OFFSET = 2;
 
     protected DragController dragger;
@@ -64,7 +64,7 @@ public class BasicSplitPaneDivider extends Container implements PropertyChangeLi
     private Border border;
     private boolean mouseOver;
 
-    /** Para ese UI; se queda con su panel y su orientacion. */
+    /** For that look and feel; it keeps its pane and its orientation. */
     public BasicSplitPaneDivider(BasicSplitPaneUI ui) {
         setLayout(null);
         setBasicSplitPaneUI(ui);
@@ -75,7 +75,10 @@ public class BasicSplitPaneDivider extends Container implements PropertyChangeLi
         setBackground(ui.getSplitPane().getBackground());
     }
 
-    /** Cambia de UI; deja de escuchar al panel anterior y empieza con el nuevo. */
+    /**
+     * It changes look and feel; it stops listening to the previous pane and starts with the new
+     * one.
+     */
     public void setBasicSplitPaneUI(BasicSplitPaneUI newUI) {
         if (splitPane != null) {
             splitPane.removePropertyChangeListener(this);
@@ -112,7 +115,7 @@ public class BasicSplitPaneDivider extends Container implements PropertyChangeLi
         return splitPaneUI;
     }
 
-    /** El grueso; menor que cero se toma como cero. */
+    /** The thickness; less than zero is taken as zero. */
     public void setDividerSize(int newSize) {
         dividerSize = newSize;
     }
@@ -131,7 +134,7 @@ public class BasicSplitPaneDivider extends Container implements PropertyChangeLi
         return border;
     }
 
-    /** Los del borde, o cero si no hay borde. */
+    /** The border's, or zero if there is no border. */
     public Insets getInsets() {
         Border b = getBorder();
         if (b != null) {
@@ -140,7 +143,7 @@ public class BasicSplitPaneDivider extends Container implements PropertyChangeLi
         return super.getInsets();
     }
 
-    /** Si el mouse esta encima; un aspecto puede dibujarlo distinto. */
+    /** Whether the mouse is over it; a look and feel may draw it differently. */
     protected void setMouseOver(boolean mouseOver) {
         this.mouseOver = mouseOver;
     }
@@ -149,7 +152,7 @@ public class BasicSplitPaneDivider extends Container implements PropertyChangeLi
         return mouseOver;
     }
 
-    /** El grueso a lo ancho y nada a lo largo; ver la nota de la clase. */
+    /** The thickness across and nothing lengthwise; see the class note. */
     public Dimension getPreferredSize() {
         if (orientation == JSplitPane.HORIZONTAL_SPLIT) {
             return new Dimension(getDividerSize(), 1);
@@ -157,7 +160,7 @@ public class BasicSplitPaneDivider extends Container implements PropertyChangeLi
         return new Dimension(1, getDividerSize());
     }
 
-    /** El mismo que el preferido: el divisor no se achica. */
+    /** The same as the preferred one: the divider does not shrink. */
     public Dimension getMinimumSize() {
         return getPreferredSize();
     }
@@ -177,24 +180,24 @@ public class BasicSplitPaneDivider extends Container implements PropertyChangeLi
                 : java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.DEFAULT_CURSOR));
     }
 
-    /** Reacciona a la orientacion, al tamano y a la opcion de un toque. */
+    /** It reacts to the orientation, to the size and to the one-touch option. */
     public void propertyChange(PropertyChangeEvent e) {
         if (e.getSource() == splitPane) {
-            String nombre = e.getPropertyName();
-            if (JSplitPane.ORIENTATION_PROPERTY.equals(nombre)) {
+            String name = e.getPropertyName();
+            if (JSplitPane.ORIENTATION_PROPERTY.equals(name)) {
                 orientation = splitPane.getOrientation();
                 setCursor((orientation == JSplitPane.HORIZONTAL_SPLIT)
                         ? java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.E_RESIZE_CURSOR)
                         : java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.S_RESIZE_CURSOR));
                 invalidate();
                 validate();
-            } else if (JSplitPane.ONE_TOUCH_EXPANDABLE_PROPERTY.equals(nombre)) {
+            } else if (JSplitPane.ONE_TOUCH_EXPANDABLE_PROPERTY.equals(name)) {
                 oneTouchExpandableChanged();
             }
         }
     }
 
-    /** El fondo, el borde, y los botoncitos si estan. */
+    /** The background, the border, and the little buttons if they are there. */
     public void paint(Graphics g) {
         super.paint(g);
         Border b = getBorder();
@@ -205,12 +208,12 @@ public class BasicSplitPaneDivider extends Container implements PropertyChangeLi
     }
 
     /**
-     * Pone los dos botoncitos de un toque la primera vez que hacen falta.
+     * It puts the two one-touch little buttons in the first time they are needed.
      *
-     * <p>Y no los saca nunca: apagar la opcion no los quita del divisor. Parece un descuido y esta
-     * medido -- con la opcion apagada el divisor sigue teniendo dos hijos --, y tiene su logica:
-     * volver a prenderla no cuesta nada, y los botones no se dibujan si el acomodador no les da
-     * lugar.
+     * <p>And it never takes them out: switching the option off does not remove them from the
+     * divider. It looks like an oversight and it is measured -- with the option off the divider
+     * goes on having two children --, and it has its logic: switching it on again costs nothing,
+     * and the buttons are not drawn if the layout gives them no room.
      */
     protected void oneTouchExpandableChanged() {
         if (splitPane.isOneTouchExpandable() && leftButton == null && rightButton == null) {
@@ -225,40 +228,40 @@ public class BasicSplitPaneDivider extends Container implements PropertyChangeLi
         validate();
     }
 
-    /** El botoncito que pliega hacia arriba o hacia la izquierda. */
+    /** The little button that folds upwards or to the left. */
     protected JButton createLeftOneTouchButton() {
-        return new BotonDeUnToque(this, true);
+        return new OneTouchButton(this, true);
     }
 
-    /** Y el que pliega hacia el otro lado. */
+    /** And the one that folds the other way. */
     protected JButton createRightOneTouchButton() {
-        return new BotonDeUnToque(this, false);
+        return new OneTouchButton(this, false);
     }
 
-    /** Avisa al UI que empieza el arrastre. */
+    /** It tells the look and feel that the drag begins. */
     protected void prepareForDragging() {
         splitPaneUI.startDragging();
     }
 
-    /** Y que va por ahi. */
+    /** And that it is going along. */
     protected void dragDividerTo(int location) {
         splitPaneUI.dragDividerTo(location);
     }
 
-    /** Y que termino. */
+    /** And that it ended. */
     protected void finishDraggingTo(int location) {
         splitPaneUI.finishDraggingTo(location);
     }
 
     /**
-     * El que sigue un arrastre horizontal.
+     * The one that follows a horizontal drag.
      *
-     * <p>Guarda cuanto hay entre donde se apreto y donde empieza el divisor, para que el divisor no
-     * salte al agarrarlo del medio. Y guarda los topes: hasta donde se puede llevar sin achicar un
-     * hijo por debajo de su minimo.
+     * <p>It keeps how much there is between where it was pressed and where the divider begins, so
+     * that the divider does not jump on being grabbed by the middle. And it keeps the caps: how
+     * far it can be taken without shrinking a child below its minimum.
      *
-     * <p>Es estatica y toma el divisor como primer parametro. Esa es la firma que el JDK genera
-     * para una clase interna, y es la unica que compila aca; ver el hallazgo #518.
+     * <p>It is static and takes the divider as the first parameter. That is the signature the JDK
+     * generates for an inner class, and it is the only one that compiles here; see finding #518.
      */
     protected static class DragController {
 
@@ -290,18 +293,18 @@ public class BasicSplitPaneDivider extends Container implements PropertyChangeLi
             }
         }
 
-        /** Si el arrastre tiene sentido; si no, se ignora. */
+        /** Whether the drag makes sense; if not, it is ignored. */
         protected boolean isValid() {
             return maxX > 0;
         }
 
-        /** A que posicion corresponde ese evento. */
+        /** Which position that event corresponds to. */
         protected int positionForMouseEvent(MouseEvent e) {
             int newX = (e.getSource() == divisor) ? (e.getX() + divisor.getLocation().x) : e.getX();
             return Math.min(maxX, Math.max(minX, newX - offset));
         }
 
-        /** Lo mismo con coordenadas sueltas. */
+        /** The same with loose coordinates. */
         protected int getNeededLocation(int x, int y) {
             return Math.min(maxX, Math.max(minX, x - offset));
         }
@@ -323,7 +326,7 @@ public class BasicSplitPaneDivider extends Container implements PropertyChangeLi
         }
     }
 
-    /** Lo mismo para el otro eje; ver {@link DragController}. */
+    /** The same for the other axis; see {@link DragController}. */
     protected static class VerticalDragController extends DragController {
 
         protected VerticalDragController(BasicSplitPaneDivider divisor, MouseEvent e) {
@@ -358,7 +361,7 @@ public class BasicSplitPaneDivider extends Container implements PropertyChangeLi
         }
     }
 
-    /** El que traduce los eventos del mouse en arrastre; ver la nota de la clase. */
+    /** The one that translates the mouse events into dragging; see the class note. */
     protected static class MouseHandler extends MouseAdapter implements MouseMotionListener {
 
         private final BasicSplitPaneDivider divisor;
@@ -431,38 +434,38 @@ public class BasicSplitPaneDivider extends Container implements PropertyChangeLi
     }
 
     /**
-     * Un botoncito de un toque.
+     * A one-touch little button.
      *
-     * <p>No pinta borde ni fondo: lo unico que se ve es la flechita, y la dibuja el aspecto. El
-     * basico no dibuja ninguna, y esta dicho: sin ella el boton es un cuadradito invisible que
-     * igual funciona.
+     * <p>It paints neither border nor background: the only thing seen is the little arrow, and it
+     * is drawn by the look and feel. The basic one draws none, and it is said: without it the
+     * button is an invisible little square that works all the same.
      */
-    private static class BotonDeUnToque extends JButton {
+    private static class OneTouchButton extends JButton {
 
         private final BasicSplitPaneDivider divisor;
-        private final boolean haciaElPrincipio;
+        private final boolean towardsStart;
 
-        BotonDeUnToque(BasicSplitPaneDivider divisor, boolean haciaElPrincipio) {
+        OneTouchButton(BasicSplitPaneDivider divisor, boolean towardsStart) {
             this.divisor = divisor;
-            this.haciaElPrincipio = haciaElPrincipio;
+            this.towardsStart = towardsStart;
             setMinimumSize(new Dimension(ONE_TOUCH_SIZE, ONE_TOUCH_SIZE));
             setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.DEFAULT_CURSOR));
             setFocusPainted(false);
             setBorderPainted(false);
             setRequestFocusEnabled(false);
-            addActionListener(new EscuchaDeUnToque(this));
+            addActionListener(new OneTouchListener(this));
         }
 
-        void plegar() {
+        void collapse() {
             JSplitPane splitPane = divisor.splitPane;
             Insets insets = splitPane.getInsets();
-            if (haciaElPrincipio) {
-                int borde = 0;
+            if (towardsStart) {
+                int border = 0;
                 if (insets != null) {
-                    borde = (divisor.orientation == JSplitPane.HORIZONTAL_SPLIT)
+                    border = (divisor.orientation == JSplitPane.HORIZONTAL_SPLIT)
                             ? insets.left : insets.top;
                 }
-                splitPane.setDividerLocation(borde);
+                splitPane.setDividerLocation(border);
             } else {
                 splitPane.setDividerLocation(
                         divisor.getBasicSplitPaneUI().getMaximumDividerLocation(splitPane));
@@ -474,21 +477,21 @@ public class BasicSplitPaneDivider extends Container implements PropertyChangeLi
         }
 
         public void setBorder(Border b) {
-            // Ningun borde: ver la nota de la clase.
+            // No border: see the class note.
         }
     }
 
-    /** El disparo del botoncito; aparte por lo mismo que las otras anidadas. */
-    private static class EscuchaDeUnToque implements java.awt.event.ActionListener {
+    /** The little button's firing; separate for the same reason as the other nested ones. */
+    private static class OneTouchListener implements java.awt.event.ActionListener {
 
-        private final BotonDeUnToque boton;
+        private final OneTouchButton button;
 
-        EscuchaDeUnToque(BotonDeUnToque boton) {
-            this.boton = boton;
+        OneTouchListener(OneTouchButton button) {
+            this.button = button;
         }
 
         public void actionPerformed(java.awt.event.ActionEvent e) {
-            boton.plegar();
+            button.collapse();
         }
     }
 }

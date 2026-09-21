@@ -19,51 +19,51 @@ import javax.swing.plaf.ComponentUI;
 import javax.swing.plaf.basic.BasicFileChooserUI;
 
 /**
- * El selector de archivos de Metal.
+ * Metal's file chooser.
  *
- * <h2>Un tamano fijo de 500 x 326</h2>
+ * <h2>A fixed size of 500 x 326</h2>
  *
- * <p>El preferido y el minimo son el mismo numero y no dependen de nada: ni del contenido, ni de la
- * carpeta, ni de la fuente. Medido. Un selector que se achicara para caber en su contenido seria
- * inservible -- la lista de archivos entra en cualquier tamano, cortando -- y uno que creciera con
- * el nombre mas largo cambiaria de tamano al navegar.
+ * <p>The preferred and the minimum are the same number and depend on nothing: not on the
+ * content, not on the folder, not on the font. Measured. A chooser that shrank to fit its
+ * content would be useless -- the file list fits any size, by cutting -- and one that grew with
+ * the longest name would change size while navigating.
  *
- * <p>El maximo, en cambio, es {@code Integer.MAX_VALUE}: agrandarlo si sirve.
+ * <p>The maximum, on the other hand, is {@code Integer.MAX_VALUE}: growing it does serve.
  *
- * <h2>Dos desplegables con modelo propio</h2>
+ * <h2>Two combo boxes with models of their own</h2>
  *
- * <p>{@link DirectoryComboBoxModel} es el de arriba -- la ruta, de la raiz a la carpeta actual --
- * y {@link FilterComboBoxModel} el de abajo, con los filtros. Los dos son modelos y no listas
- * porque su contenido cambia solo: el primero cada vez que se navega, el segundo cuando el
- * programa agrega un filtro.
+ * <p>{@link DirectoryComboBoxModel} is the top one -- the path, from the root to the current
+ * folder -- and {@link FilterComboBoxModel} the bottom one, with the filters. Both are models
+ * and not lists because their content changes by itself: the first every time one navigates, the
+ * second when the program adds a filter.
  *
- * <h2>Un campo de archivo y ningun campo de carpeta</h2>
+ * <h2>A file field and no folder field</h2>
  *
- * <p>Metal tiene un campo donde se escribe el nombre del archivo, y de ahi que
- * {@link #getFileName} conteste la cadena vacia donde el basico contesta {@code null}. Carpeta no
- * tiene: la ruta se elige en el desplegable de arriba, no se escribe. Por eso
- * {@link #getDirectoryName} es {@code null} <em>siempre</em> y {@link #setDirectoryName} no hace
- * nada. Las dos cosas, medidas.
+ * <p>Metal has a field where the file's name is typed, and hence {@link #getFileName} answers
+ * the empty string where the basic one answers {@code null}. A folder field it does not have:
+ * the path is chosen in the top combo box, it is not typed. That is why
+ * {@link #getDirectoryName} is {@code null} <em>always</em> and {@link #setDirectoryName} does
+ * nothing. Both things, measured.
  *
- * <h2>Lo que queda dicho y no tapado</h2>
+ * <h2>What is said and not covered up</h2>
  *
- * <p>Los componentes no se arman. {@link #installComponents} deja el selector como lo dejo el
- * basico; la lista, los dos desplegables y los botones necesitan una tabla de aspecto con once
- * iconos que no estan. Lo que si contesta bien es todo lo que no dibuja: los tres tamanos, los
- * modelos, el mapa de acciones y los nombres.
+ * <p>The components are not assembled. {@link #installComponents} leaves the chooser as the
+ * basic one left it; the list, the two combo boxes and the buttons need a look and feel table
+ * with eleven icons that are not there. What does answer correctly is everything that does not
+ * draw: the three sizes, the models, the action map and the names.
  */
 public class MetalFileChooserUI extends BasicFileChooserUI {
 
-    private static final Dimension FIJO = new Dimension(500, 326);
-    private static final Dimension MAXIMO =
+    private static final Dimension FIXED = new Dimension(500, 326);
+    private static final Dimension MAX =
             new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE);
 
-    /** El campo de archivo; ver la nota de la clase. */
-    private final JTextField campoDeNombre = new JTextField();
+    /** The file field; see the class note. */
+    private final JTextField nameField = new JTextField();
 
-    private JPanel panelDeBotones;
-    private JPanel panelDeAbajo;
-    private ActionMap acciones;
+    private JPanel buttonPanel;
+    private JPanel bottomPanel;
+    private ActionMap actions;
 
     public MetalFileChooserUI(JFileChooser filechooser) {
         super(filechooser);
@@ -97,40 +97,40 @@ public class MetalFileChooserUI extends BasicFileChooserUI {
         super.uninstallComponents(fc);
     }
 
-    /** Quinientos por trescientos veintiseis; ver la nota de la clase. */
+    /** Five hundred by three hundred and twenty-six; see the class note. */
     public Dimension getPreferredSize(JComponent c) {
-        return new Dimension(FIJO);
+        return new Dimension(FIXED);
     }
 
     public Dimension getMinimumSize(JComponent c) {
-        return new Dimension(FIJO);
+        return new Dimension(FIXED);
     }
 
     public Dimension getMaximumSize(JComponent c) {
-        return new Dimension(MAXIMO);
+        return new Dimension(MAX);
     }
 
-    /** El panel con los botones de aprobar y cancelar. */
+    /** The panel with the approve and cancel buttons. */
     protected JPanel getButtonPanel() {
-        if (panelDeBotones == null) {
-            panelDeBotones = new JPanel();
+        if (buttonPanel == null) {
+            buttonPanel = new JPanel();
         }
-        return panelDeBotones;
+        return buttonPanel;
     }
 
-    /** El de abajo, que lo contiene. */
+    /** The bottom one, which contains it. */
     protected JPanel getBottomPanel() {
-        if (panelDeAbajo == null) {
-            panelDeAbajo = new JPanel();
+        if (bottomPanel == null) {
+            bottomPanel = new JPanel();
         }
-        return panelDeAbajo;
+        return bottomPanel;
     }
 
     /**
-     * Pone los dos botones -- aprobar y cancelar -- en su panel.
+     * It puts the two buttons -- approve and cancel -- in their panel.
      *
-     * <p>Son de Metal y no del basico: el basico no arma botones. Sin la tabla de aspecto el panel
-     * queda vacio; ver la nota de la clase.
+     * <p>They are Metal's and not the basic one's: the basic one does not assemble buttons. Without
+     * the look and feel table the panel is left empty; see the class note.
      */
     protected void addControlButtons() {
         getBottomPanel().add(getButtonPanel());
@@ -153,13 +153,13 @@ public class MetalFileChooserUI extends BasicFileChooserUI {
     }
 
     protected ActionMap getActionMap() {
-        if (acciones == null) {
-            acciones = createActionMap();
+        if (actions == null) {
+            actions = createActionMap();
         }
-        return acciones;
+        return actions;
     }
 
-    /** Sin la lista armada no hay panel que devolver; ver la nota de la clase. */
+    /** Without the list assembled there is no panel to return; see the class note. */
     protected JPanel createList(JFileChooser fc) {
         return new JPanel();
     }
@@ -191,21 +191,21 @@ public class MetalFileChooserUI extends BasicFileChooserUI {
         return new FilterComboBoxRenderer();
     }
 
-    /** La cadena vacia mientras nadie escriba; ver la nota de la clase. */
+    /** The empty string while nobody types; see the class note. */
     public String getFileName() {
-        return campoDeNombre.getText();
+        return nameField.getText();
     }
 
     public void setFileName(String filename) {
-        campoDeNombre.setText((filename == null) ? "" : filename);
+        nameField.setText((filename == null) ? "" : filename);
     }
 
-    /** Nulo siempre; ver la nota de la clase. */
+    /** Null always; see the class note. */
     public String getDirectoryName() {
         return null;
     }
 
-    /** No hace nada; ver {@link #getDirectoryName}. */
+    /** It does nothing; see {@link #getDirectoryName}. */
     public void setDirectoryName(String dirname) {
     }
 
@@ -221,45 +221,45 @@ public class MetalFileChooserUI extends BasicFileChooserUI {
         super.setDirectorySelected(directorySelected);
     }
 
-    /** La ruta de la raiz a la carpeta actual, del desplegable de arriba. */
+    /** The path from the root to the current folder, from the top combo box. */
     protected class DirectoryComboBoxModel extends javax.swing.AbstractListModel<Object>
             implements ComboBoxModel<Object> {
 
-        private final java.util.List<File> ruta = new java.util.ArrayList<File>();
-        private Object elegido;
+        private final java.util.List<File> path = new java.util.ArrayList<File>();
+        private Object chosen;
 
         public DirectoryComboBoxModel() {
         }
 
         public int getSize() {
-            return ruta.size();
+            return path.size();
         }
 
         public Object getElementAt(int index) {
-            return (index >= 0 && index < ruta.size()) ? ruta.get(index) : null;
+            return (index >= 0 && index < path.size()) ? path.get(index) : null;
         }
 
         public void setSelectedItem(Object anItem) {
-            elegido = anItem;
+            chosen = anItem;
             fireContentsChanged(this, -1, -1);
         }
 
         public Object getSelectedItem() {
-            return elegido;
+            return chosen;
         }
 
-        /** La profundidad de esa entrada dentro de la ruta; es lo que la sangra. */
+        /** That entry's depth within the path; it is what indents it. */
         public int getDepth(int i) {
             return i;
         }
     }
 
     /**
-     * Los filtros que el selector acepta.
+     * The filters the chooser accepts.
      *
-     * <p>El selector viene por parametro y no se pide con {@code getFileChooser()}: ese metodo lo
-     * hereda la clase de afuera, y llamarlo desde adentro de una clase interna revienta con
-     * {@code NoSuchMethodError}. Ver el hallazgo #522.
+     * <p>The chooser arrives as a parameter and is not asked for with {@code getFileChooser()}:
+     * that method is inherited by the outer class, and calling it from inside an inner class blows
+     * up with {@code NoSuchMethodError}. See finding #522.
      */
     protected class FilterComboBoxModel extends javax.swing.AbstractListModel<Object>
             implements ComboBoxModel<Object>, java.beans.PropertyChangeListener {
@@ -304,7 +304,7 @@ public class MetalFileChooserUI extends BasicFileChooserUI {
         }
     }
 
-    /** Un filtro se muestra por su descripcion, no por su {@code toString}. */
+    /** A filter is shown by its description, not by its {@code toString}. */
     public class FilterComboBoxRenderer extends javax.swing.DefaultListCellRenderer {
 
         public FilterComboBoxRenderer() {
@@ -322,9 +322,10 @@ public class MetalFileChooserUI extends BasicFileChooserUI {
     }
 
     /**
-     * El que se entera de que se eligio otro archivo en la lista.
+     * The one that hears that another file was chosen in the list.
      *
-     * <p>Estatica y con el UI por parametro, por lo mismo que {@link FilterComboBoxModel}.
+     * <p>Static and with the UI as a parameter, for the same reason as
+     * {@link FilterComboBoxModel}.
      */
     private static class SelectionListener implements ListSelectionListener {
 

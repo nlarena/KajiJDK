@@ -4,20 +4,20 @@ import java.io.Serializable;
 import java.security.Principal;
 
 /**
- * Un identificador de seguridad de Windows: el {@code S-1-5-21-...} que identifica de verdad a una
- * cuenta o a un grupo.
+ * A Windows security identifier: the {@code S-1-5-21-...} that really identifies an account or
+ * a group.
  *
- * <h2>Por que el SID y no el nombre</h2>
+ * <h2>Why the SID and not the name</h2>
  *
- * <p>Porque el nombre <strong>se puede reusar</strong>. Borrar la cuenta {@code juan} y crear otra
- * con el mismo nombre da una cuenta distinta, y una politica escrita contra el nombre se le
- * aplicaria a la persona equivocada. El SID no se reusa nunca.
+ * <p>Because the name <strong>may be reused</strong>. Deleting the account {@code john} and
+ * creating another with the same name gives a different account, and a policy written against
+ * the name would apply to the wrong person. The SID is never reused.
  *
- * <p>Es tambien por lo que las subclases existen: {@link NTSidUserPrincipal},
- * {@link NTSidGroupPrincipal}, {@link NTSidDomainPrincipal} y
- * {@link NTSidPrimaryGroupPrincipal} son todas SIDs, y lo que las distingue es <em>que</em>
- * identifican. Como la comparacion es por clase exacta, un SID de grupo nunca satisface una politica
- * escrita para un usuario aunque el texto coincida.
+ * <p>It is also why the subclasses exist: {@link NTSidUserPrincipal},
+ * {@link NTSidGroupPrincipal}, {@link NTSidDomainPrincipal} and
+ * {@link NTSidPrimaryGroupPrincipal} are all SIDs, and what tells them apart is <em>what</em>
+ * they identify. Since the comparison is by exact class, a group SID never satisfies a policy
+ * written for a user even though the text should coincide.
  */
 public class NTSid implements Principal, Serializable {
 
@@ -26,21 +26,21 @@ public class NTSid implements Principal, Serializable {
     private final String sid;
 
     /**
-     * @throws NullPointerException si es {@code null}
-     * @throws IllegalArgumentException si esta vacio — un SID vacio no identifica nada, y aceptarlo
-     *     produciria un principal que iguala a cualquier otro vacio
+     * @throws NullPointerException if it is {@code null}
+     * @throws IllegalArgumentException if it is empty -- an empty SID identifies nothing, and
+     *     accepting it would produce a principal that equals any other empty one
      */
     public NTSid(String stringSid) {
         if (stringSid == null) {
-            throw new NullPointerException("el SID no puede ser null");
+            throw new NullPointerException("the SID cannot be null");
         }
         if (stringSid.isEmpty()) {
-            throw new IllegalArgumentException("el SID no puede estar vacio");
+            throw new IllegalArgumentException("the SID cannot be empty");
         }
         this.sid = stringSid;
     }
 
-    /** El SID en su forma de texto. */
+    /** The SID in its text form. */
     public String getName() {
         return this.sid;
     }
@@ -49,7 +49,7 @@ public class NTSid implements Principal, Serializable {
         return "NTSid:  " + this.sid;
     }
 
-    /** Por clase exacta y SID. */
+    /** By exact class and SID. */
     public boolean equals(Object o) {
         if (o == this) {
             return true;

@@ -14,63 +14,64 @@ import javax.swing.plaf.ComponentUI;
 import javax.swing.plaf.basic.BasicToolTipUI;
 
 /**
- * El globo de ayuda de Metal, que ademas muestra el atajo.
+ * Metal's tooltip, which also shows the shortcut.
  *
- * <p>Un globo de Metal no dice solo el texto: si el componente que lo pide tiene una tecla
- * mnemonica o un acelerador, lo agrega a la derecha separado por {@value #padSpaceBetweenStrings}
- * pixeles. Es la unica forma que tiene un programa de Swing de ensenar sus atajos sin escribirlos
- * a mano en cada texto de ayuda.
+ * <p>A Metal tooltip does not say only the text: if the component that asks for it has a
+ * mnemonic key or an accelerator, it adds it on the right separated by
+ * {@value #padSpaceBetweenStrings} pixels. It is the only way a Swing program has of teaching
+ * its shortcuts without writing them by hand in every tooltip text.
  *
- * <p>El acelerador se busca en dos lados y en este orden: primero el {@code KeyStroke} registrado,
- * y si no hay, la letra mnemonica del boton. Un boton con {@code setMnemonic('x')} muestra
- * {@code "Alt-X"}.
+ * <p>The accelerator is looked for in two places and in this order: first the registered
+ * {@code KeyStroke}, and if there is none, the button's mnemonic letter. A button with
+ * {@code setMnemonic('x')} shows {@code "Alt-X"}.
  *
- * <h2>Lo que queda dicho</h2>
+ * <h2>What is said</h2>
  *
- * <p>{@link #isAcceleratorHidden} lee {@code "ToolTip.hideAccelerator"} de la tabla del aspecto.
- * Sin tabla contesta que no, que es lo mismo que contesta el JDK con la tabla de Metal.
+ * <p>{@link #isAcceleratorHidden} reads {@code "ToolTip.hideAccelerator"} from the look and
+ * feel's table. With no table it answers no, which is the same as the JDK answers with Metal's
+ * table.
  */
 public class MetalToolTipUI extends BasicToolTipUI {
 
-    /** Los pixeles entre el texto y el atajo. */
+    /** The pixels between the text and the shortcut. */
     public static final int padSpaceBetweenStrings = 12;
 
-    private static final MetalToolTipUI UNICO = new MetalToolTipUI();
+    private static final MetalToolTipUI SHARED = new MetalToolTipUI();
 
     private JToolTip tip;
-    private Font fuenteChica;
+    private Font smallFont;
 
     public MetalToolTipUI() {
     }
 
-    /** Comparte instancia, como la etiqueta. */
+    /** It shares its instance, like the label. */
     public static ComponentUI createUI(JComponent c) {
-        return UNICO;
+        return SHARED;
     }
 
     public void installUI(JComponent c) {
         super.installUI(c);
         tip = (JToolTip) c;
         Font f = c.getFont();
-        fuenteChica = (f == null) ? null : new Font(f.getName(), Font.PLAIN, f.getSize() - 2);
+        smallFont = (f == null) ? null : new Font(f.getName(), Font.PLAIN, f.getSize() - 2);
     }
 
     public void uninstallUI(JComponent c) {
         super.uninstallUI(c);
         tip = null;
-        fuenteChica = null;
+        smallFont = null;
     }
 
-    /** No; ver la nota de la clase. */
+    /** No; see the class note. */
     protected boolean isAcceleratorHidden() {
         Object o = javax.swing.UIManager.get("ToolTip.hideAccelerator");
         return Boolean.TRUE.equals(o);
     }
 
     /**
-     * El atajo del componente que pidio el globo, listo para dibujar.
+     * The shortcut of the component that asked for the tooltip, ready to draw.
      *
-     * @return el texto, o vacio si no hay atajo o esta escondido
+     * @return the text, or empty if there is no shortcut or it is hidden
      */
     public String getAcceleratorString() {
         if (tip == null || isAcceleratorHidden()) {
@@ -80,63 +81,63 @@ public class MetalToolTipUI extends BasicToolTipUI {
         if (comp == null) {
             return "";
         }
-        KeyStroke[] teclas = comp.getRegisteredKeyStrokes();
-        int condicion = comp.getConditionForKeyStroke(null);
-        for (int i = 0; teclas != null && i < teclas.length; i++) {
-            if (comp.getConditionForKeyStroke(teclas[i])
+        KeyStroke[] keyStrokes = comp.getRegisteredKeyStrokes();
+        int condition = comp.getConditionForKeyStroke(null);
+        for (int i = 0; keyStrokes != null && i < keyStrokes.length; i++) {
+            if (comp.getConditionForKeyStroke(keyStrokes[i])
                     == JComponent.WHEN_IN_FOCUSED_WINDOW) {
-                return texto(teclas[i]);
+                return text(keyStrokes[i]);
             }
         }
         if (comp instanceof AbstractButton) {
             int mnem = ((AbstractButton) comp).getMnemonic();
             if (mnem != 0) {
-                return texto(KeyStroke.getKeyStroke(mnem, java.awt.event.InputEvent.ALT_MASK));
+                return text(KeyStroke.getKeyStroke(mnem, java.awt.event.InputEvent.ALT_MASK));
             }
         }
-        if (condicion == JComponent.UNDEFINED_CONDITION) {
+        if (condition == JComponent.UNDEFINED_CONDITION) {
             return "";
         }
         return "";
     }
 
-    /** {@code "Alt-X"}, con guion y no con mas, que es como lo escribe Metal. */
-    private static String texto(KeyStroke k) {
+    /** {@code "Alt-X"}, with a hyphen and not with a plus, which is how Metal writes it. */
+    private static String text(KeyStroke k) {
         if (k == null) {
             return "";
         }
         String mods = java.awt.event.KeyEvent.getKeyModifiersText(k.getModifiers());
-        String tecla = java.awt.event.KeyEvent.getKeyText(k.getKeyCode());
+        String keyStroke = java.awt.event.KeyEvent.getKeyText(k.getKeyCode());
         if (mods == null || mods.length() == 0) {
-            return tecla;
+            return keyStroke;
         }
-        return mods + "-" + tecla;
+        return mods + "-" + keyStroke;
     }
 
     public void paint(Graphics g, JComponent c) {
         super.paint(g, c);
-        String atajo = getAcceleratorString();
-        if (atajo.length() == 0) {
+        String accelerator = getAcceleratorString();
+        if (accelerator.length() == 0) {
             return;
         }
-        Font antes = g.getFont();
-        if (fuenteChica != null) {
-            g.setFont(fuenteChica);
+        Font before = g.getFont();
+        if (smallFont != null) {
+            g.setFont(smallFont);
         }
         FontMetrics fm = c.getFontMetrics(g.getFont());
         Insets i = c.getInsets();
         Dimension s = c.getSize();
         g.setColor(MetalLookAndFeel.getPrimaryControlDarkShadow());
-        g.drawString(atajo, s.width - i.right - fm.stringWidth(atajo) - 3,
+        g.drawString(accelerator, s.width - i.right - fm.stringWidth(accelerator) - 3,
                 i.top + fm.getAscent() + 3);
-        g.setFont(antes);
+        g.setFont(before);
     }
 
     public Dimension getPreferredSize(JComponent c) {
         Dimension d = super.getPreferredSize(c);
-        String atajo = getAcceleratorString();
-        if (atajo.length() > 0 && fuenteChica != null) {
-            d.width += c.getFontMetrics(fuenteChica).stringWidth(atajo)
+        String accelerator = getAcceleratorString();
+        if (accelerator.length() > 0 && smallFont != null) {
+            d.width += c.getFontMetrics(smallFont).stringWidth(accelerator)
                     + padSpaceBetweenStrings;
         }
         return d;

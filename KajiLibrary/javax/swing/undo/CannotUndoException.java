@@ -1,11 +1,11 @@
 package javax.swing.undo;
 
 /**
- * Se pidio deshacer algo que no se puede deshacer.
+ * An undo was asked for on something that cannot be undone.
  *
- * <p>No tiene mensaje ni constructor con detalle, y asi es en el JDK: la unica informacion util es
- * cual era la edicion, y esa la tiene quien llamo. Que sea no chequeada es coherente con eso — la
- * pregunta {@code canUndo} existe justamente para no llegar aca.
+ * <p>It has no message and no constructor with detail, and so it is in the JDK: the only useful
+ * information is which edit it was, and the caller has that. That it is unchecked is consistent
+ * with it -- the {@code canUndo} question exists precisely so as not to get here.
  */
 public class CannotUndoException extends RuntimeException {
 

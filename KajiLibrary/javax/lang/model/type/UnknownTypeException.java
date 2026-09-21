@@ -10,8 +10,9 @@ public class UnknownTypeException extends UnknownEntityException {
     private transient Object parameter;
 
     public UnknownTypeException(TypeMirror t, Object p) {
-        // NOTA: el `+ t` directo del JDK real se compila a nada en silencio
-        // (concat String+Object sin StringBuilder.append(Object)); de ahí el valueOf.
+        // The JDK's plain `+ t` works now: the note said a String+Object concat compiled to nothing
+        // because StringBuilder.append(Object) was missing; it exists and #114 is closed. The
+        // valueOf gives the same message.
         super("Unknown type: \"" + String.valueOf(t) + "\"");
         type = t;
         parameter = p;

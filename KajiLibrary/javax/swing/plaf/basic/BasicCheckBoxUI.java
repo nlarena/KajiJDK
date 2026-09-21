@@ -6,8 +6,9 @@ import javax.swing.plaf.ComponentUI;
 import javax.swing.plaf.metal.MetalIconFactory;
 
 /**
- * El aspecto basico de una casilla: {@link BasicRadioButtonUI} con otro prefijo, y por lo tanto
- * otro icono por omision, el cuadrado con tilde de {@link MetalIconFactory#getCheckBoxIcon}.
+ * The basic look and feel of a check box: {@link BasicRadioButtonUI} with another prefix, and
+ * therefore another default icon, the ticked square of
+ * {@link MetalIconFactory#getCheckBoxIcon}.
  */
 public class BasicCheckBoxUI extends BasicRadioButtonUI {
 
@@ -18,7 +19,7 @@ public class BasicCheckBoxUI extends BasicRadioButtonUI {
     public BasicCheckBoxUI() {
     }
 
-    /** El aspecto compartido. */
+    /** The shared look and feel. */
     public static ComponentUI createUI(JComponent b) {
         return checkboxUI;
     }
@@ -27,7 +28,7 @@ public class BasicCheckBoxUI extends BasicRadioButtonUI {
         return propertyPrefix;
     }
 
-    Icon iconoPorOmision() {
+    Icon defaultIcon() {
         return MetalIconFactory.getCheckBoxIcon();
     }
 }

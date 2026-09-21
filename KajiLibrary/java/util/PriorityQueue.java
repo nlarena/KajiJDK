@@ -68,11 +68,11 @@ public class PriorityQueue<E> extends AbstractQueue<E> implements Serializable {
     }
 
     /**
-     * Copia otra cola, **con su comparador**.
+     * It copies another queue, **with its comparator**.
      *
-     * <p>Que herede el comparador es lo que distingue a este constructor de
-     * `PriorityQueue(Collection)`: con aquel, copiar una cola ordenada al reves daria una ordenada
-     * al derecho, con los mismos elementos y otra cabeza.
+     * <p>That it inherits the comparator is what tells this constructor from
+     * `PriorityQueue(Collection)`: with that one, copying a reverse-ordered queue would give a
+     * forward-ordered one, with the same elements and a different head.
      */
     public PriorityQueue(PriorityQueue<? extends E> c) {
         this(11, (Comparator<? super E>) c.comparator());
@@ -82,7 +82,7 @@ public class PriorityQueue<E> extends AbstractQueue<E> implements Serializable {
         }
     }
 
-    // Idem desde un conjunto ordenado: tambien trae su comparador.
+    // The same from a sorted set: it brings its comparator too.
     public PriorityQueue(SortedSet<? extends E> c) {
         this(11, (Comparator<? super E>) c.comparator());
         Iterator<E> it = ((SortedSet<E>) c).iterator();
@@ -283,11 +283,11 @@ public class PriorityQueue<E> extends AbstractQueue<E> implements Serializable {
     /**
      * A spliterator over these elements.
      *
-     *  <p>Sin ORDERED, y esa ausencia es informacion: una cola de prioridad recorre en el orden del
-     * monticulo, que no es el orden de prioridad. Solo `poll` respeta la prioridad.
+     *  <p>Without ORDERED, and that absence is information: a priority queue walks in heap order,
+     * which is not priority order. Only `poll` respects the priority.
      *
      */
-    public Spliterator<E> spliterator() {
+    public final Spliterator<E> spliterator() {
         return Spliterators.spliterator(this,
                 Spliterator.SIZED | Spliterator.SUBSIZED | Spliterator.NONNULL);
     }

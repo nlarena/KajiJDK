@@ -19,23 +19,24 @@ import javax.swing.plaf.UIResource;
 import javax.swing.plaf.basic.BasicBorders$MarginBorder;
 
 /**
- * Los bordes del aspecto Metal; por ahora, el del boton.
+ * The borders of the Metal look and feel; for now, the button's.
  *
- * <p>Metal tiene dos temas, Steel y Ocean, y desde el JDK 6 el que se ve es Ocean. Este borde pinta
- * lo que pinta Ocean, medido en el JDK 25: un rectangulo de un pixel en la sombra oscura del tema
- * (122, 138, 153); hundido, ese mismo color en dos pixeles arriba y a la izquierda y uno abajo y a
- * la derecha; deshabilitado, el gris del texto inactivo (153, 153, 153). Los colores estan aca como
- * constantes porque {@code MetalLookAndFeel}, que los tendria como tema, no esta.
+ * <p>Metal has two themes, Steel and Ocean, and since JDK 6 the one seen is Ocean. This border
+ * paints what Ocean paints, measured in JDK 25: a one-pixel rectangle in the theme's dark
+ * shadow (122, 138, 153); pressed, that same colour two pixels at the top and on the left and
+ * one at the bottom and on the right; disabled, the inactive text grey (153, 153, 153). The
+ * colours are here as constants because {@code MetalLookAndFeel}, which would have them as a
+ * theme, is not.
  *
- * <p>Lo que Ocean pinta ademas —el degradado del fondo del boton— no es del borde sino de
- * {@code MetalButtonUI.update}, y no esta: el fondo es plano.
+ * <p>What Ocean also paints --the gradient of the button's background-- does not belong to the
+ * border but to {@code MetalButtonUI.update}, and is not there: the background is flat.
  */
 public class MetalBorders {
 
-    private static final Color SOMBRA_OSCURA = new Color(122, 138, 153);
-    private static final Color CONTROL_PRIMARIO = new Color(184, 207, 229);
-    private static final Color TEXTO_INACTIVO = new Color(153, 153, 153);
-    private static final Color BRILLO = new Color(255, 255, 255);
+    private static final Color DARK_SHADOW = new Color(122, 138, 153);
+    private static final Color PRIMARY_CONTROL = new Color(184, 207, 229);
+    private static final Color INACTIVE_TEXT = new Color(153, 153, 153);
+    private static final Color HIGHLIGHT = new Color(255, 255, 255);
     private static final Color CONTROL = new Color(238, 238, 238);
 
     private static Border buttonBorder;
@@ -44,10 +45,10 @@ public class MetalBorders {
     public MetalBorders() {
     }
 
-    /** El borde de un boton en Ocean; ver la nota de la clase. */
+    /** A button's border in Ocean; see the class note. */
     public static class ButtonBorder extends AbstractBorder implements UIResource {
 
-        /** Tres pixeles por lado; el margen del boton va adentro de estos. */
+        /** Three pixels per side; the button's margin goes inside these. */
         protected static Insets borderInsets = new Insets(3, 3, 3, 3);
 
         public ButtonBorder() {
@@ -57,33 +58,33 @@ public class MetalBorders {
             if (!(c instanceof AbstractButton)) {
                 return;
             }
-            AbstractButton boton = (AbstractButton) c;
-            ButtonModel modelo = boton.getModel();
+            AbstractButton button = (AbstractButton) c;
+            ButtonModel model = button.getModel();
             g.translate(x, y);
-            if (modelo.isEnabled()) {
-                boolean porOmision = (c instanceof JButton) && ((JButton) c).isDefaultButton();
-                if (porOmision) {
-                    g.setColor(SOMBRA_OSCURA);
+            if (model.isEnabled()) {
+                boolean byDefault = (c instanceof JButton) && ((JButton) c).isDefaultButton();
+                if (byDefault) {
+                    g.setColor(DARK_SHADOW);
                     g.drawRect(0, 0, w - 1, h - 1);
                     g.drawRect(1, 1, w - 3, h - 3);
-                } else if (modelo.isPressed()) {
-                    g.setColor(SOMBRA_OSCURA);
+                } else if (model.isPressed()) {
+                    g.setColor(DARK_SHADOW);
                     g.fillRect(0, 0, w, 2);
                     g.fillRect(0, 2, 2, h - 2);
                     g.fillRect(w - 1, 1, 1, h - 1);
                     g.fillRect(1, h - 1, w - 2, 1);
-                } else if (modelo.isRollover() && boton.isRolloverEnabled()) {
-                    g.setColor(CONTROL_PRIMARIO);
+                } else if (model.isRollover() && button.isRolloverEnabled()) {
+                    g.setColor(PRIMARY_CONTROL);
                     g.drawRect(0, 0, w - 1, h - 1);
                     g.drawRect(1, 1, w - 3, h - 3);
-                    g.setColor(SOMBRA_OSCURA);
+                    g.setColor(DARK_SHADOW);
                     g.drawRect(0, 0, w - 1, h - 1);
                 } else {
-                    g.setColor(SOMBRA_OSCURA);
+                    g.setColor(DARK_SHADOW);
                     g.drawRect(0, 0, w - 1, h - 1);
                 }
             } else {
-                g.setColor(TEXTO_INACTIVO);
+                g.setColor(INACTIVE_TEXT);
                 g.drawRect(0, 0, w - 1, h - 1);
                 if ((c instanceof JButton) && ((JButton) c).isDefaultButton()) {
                     g.drawRect(1, 1, w - 3, h - 3);
@@ -102,11 +103,11 @@ public class MetalBorders {
     }
 
     /**
-     * El borde de un boton con estado en Ocean.
+     * The border of a button with state in Ocean.
      *
-     * <p>Es el mismo trazo que {@link ButtonBorder}, medido: seleccionado sin apretar se ve como
-     * en reposo, y apretado se hunde igual que un boton comun. Lo que distingue a un boton con
-     * estado seleccionado es el fondo, que lo pinta su UI, no el borde.
+     * <p>It is the same stroke as {@link ButtonBorder}, measured: selected without being pressed it
+     * looks as at rest, and pressed it sinks just like an ordinary button. What distinguishes a
+     * selected stateful button is the background, painted by its UI, not the border.
      */
     public static class ToggleButtonBorder extends ButtonBorder {
 
@@ -115,16 +116,16 @@ public class MetalBorders {
     }
 
     /**
-     * El borde de un panel con barras de desplazamiento.
+     * The border of a pane with scroll bars.
      *
-     * <p>Un rectangulo oscuro, dos lineas de brillo por fuera abajo y a la derecha —blancas, o sea
-     * invisibles sobre un fondo blanco— y <strong>dos pixeles sueltos</strong> del color del
-     * control: uno arriba a la derecha y otro abajo a la izquierda, donde terminan las cabeceras.
-     * Esos dos pixeles son los que hacen que el marco no se cierre justo donde una cabecera de
-     * fila o de columna se apoya contra el, y estan medidos igual que el resto.
+     * <p>A dark rectangle, two highlight lines outside it at the bottom and on the right --white,
+     * that is invisible over a white background-- and <strong>two loose pixels</strong> of the
+     * control's colour: one at the top right and another at the bottom left, where the headers
+     * end. Those two pixels are what keeps the frame from closing right where a row or column
+     * header rests against it, and they are measured like the rest.
      *
-     * <p>Los insets son asimetricos —(1, 1, 2, 2)— porque las lineas de brillo van por fuera del
-     * rectangulo, abajo y a la derecha.
+     * <p>The insets are asymmetric --(1, 1, 2, 2)-- because the highlight lines go outside the
+     * rectangle, at the bottom and on the right.
      */
     public static class ScrollPaneBorder extends AbstractBorder implements UIResource {
 
@@ -151,9 +152,9 @@ public class MetalBorders {
 
             g.translate(x, y);
 
-            g.setColor(SOMBRA_OSCURA);
+            g.setColor(DARK_SHADOW);
             g.drawRect(0, 0, w - 2, h - 2);
-            g.setColor(BRILLO);
+            g.setColor(HIGHLIGHT);
             g.drawLine(w - 1, 1, w - 1, h - 1);
             g.drawLine(1, h - 1, w - 1, h - 1);
 
@@ -174,8 +175,8 @@ public class MetalBorders {
     }
 
     /**
-     * El borde que Metal instala en un {@code JButton}: el de Ocean por fuera y el margen del boton
-     * por dentro. Compartido: no guarda nada del boton.
+     * The border Metal installs on a {@code JButton}: Ocean's on the outside and the button's
+     * margin inside. Shared: it keeps nothing of the button.
      */
     public static Border getButtonBorder() {
         if (buttonBorder == null) {
@@ -185,7 +186,7 @@ public class MetalBorders {
         return buttonBorder;
     }
 
-    /** El borde que Metal instala en un {@code JToggleButton}, con el margen adentro. */
+    /** The border Metal installs on a {@code JToggleButton}, with the margin inside. */
     public static Border getToggleButtonBorder() {
         if (toggleButtonBorder == null) {
             toggleButtonBorder = new BorderUIResource$CompoundBorderUIResource(
@@ -195,26 +196,25 @@ public class MetalBorders {
     }
 
     /**
-     * El marco de una ventana interna.
+     * An internal frame's frame.
      *
-     * <p>Cuatro pixeles de grueso, y el color depende de si la ventana esta activa: el primario
-     * oscuro del tema cuando lo esta y la sombra cuando no. Es lo unico que distingue a simple
-     * vista la ventana con la que se esta trabajando de las de atras, porque las dos tienen barra
-     * de titulo.
+     * <p>Four pixels thick, and the colour depends on whether the window is active: the theme's
+     * dark primary when it is and the shadow when it is not. It is the only thing that tells at a
+     * glance the window being worked in from those behind, because both have a title bar.
      */
     public static class InternalFrameBorder extends AbstractBorder implements UIResource {
 
-        private static final Insets MARGENES = new Insets(4, 4, 4, 4);
+        private static final Insets MARGINS = new Insets(4, 4, 4, 4);
 
         public void paintBorder(Component c, Graphics g, int x, int y, int w, int h) {
-            boolean activa = (c instanceof javax.swing.JInternalFrame)
+            boolean active = (c instanceof javax.swing.JInternalFrame)
                     && ((javax.swing.JInternalFrame) c).isSelected();
-            g.setColor(activa
+            g.setColor(active
                     ? MetalLookAndFeel.getPrimaryControlDarkShadow()
                     : MetalLookAndFeel.getControlDarkShadow());
             g.drawRect(x, y, w - 1, h - 1);
             g.drawRect(x + 1, y + 1, w - 3, h - 3);
-            g.setColor(activa
+            g.setColor(active
                     ? MetalLookAndFeel.getPrimaryControlShadow()
                     : MetalLookAndFeel.getControlShadow());
             g.drawRect(x + 2, y + 2, w - 5, h - 5);
@@ -222,20 +222,20 @@ public class MetalBorders {
         }
 
         public Insets getBorderInsets(Component c, Insets insets) {
-            insets.set(MARGENES.top, MARGENES.left, MARGENES.bottom, MARGENES.right);
+            insets.set(MARGINS.top, MARGINS.left, MARGINS.bottom, MARGINS.right);
             return insets;
         }
     }
 
     /**
-     * El marco de una ventana interna en modo paleta: un solo pixel.
+     * An internal frame's frame in palette mode: a single pixel.
      *
-     * <p>Cuatro pixeles serian la cuarta parte del alto de una paleta chica. Que sea uno es lo que
-     * hace que una paleta se vea como una ventanita y no como un marco con algo adentro.
+     * <p>Four pixels would be a quarter of a small palette's height. That it is one is what makes
+     * a palette look like a little window and not like a frame with something inside.
      */
     public static class PaletteBorder extends AbstractBorder implements UIResource {
 
-        private static final Insets MARGENES = new Insets(1, 1, 1, 1);
+        private static final Insets MARGINS = new Insets(1, 1, 1, 1);
 
         public void paintBorder(Component c, Graphics g, int x, int y, int w, int h) {
             g.setColor(MetalLookAndFeel.getControlDarkShadow());
@@ -243,14 +243,14 @@ public class MetalBorders {
         }
 
         public Insets getBorderInsets(Component c, Insets insets) {
-            insets.set(MARGENES.top, MARGENES.left, MARGENES.bottom, MARGENES.right);
+            insets.set(MARGINS.top, MARGINS.left, MARGINS.bottom, MARGINS.right);
             return insets;
         }
     }
 
     private static Border paletteBorder;
 
-    /** El marco de una paleta; ver {@link PaletteBorder}. */
+    /** A palette's frame; see {@link PaletteBorder}. */
     public static Border getPaletteBorder() {
         if (paletteBorder == null) {
             paletteBorder = new PaletteBorder();
@@ -260,7 +260,7 @@ public class MetalBorders {
 
     private static Border internalFrameBorder;
 
-    /** El marco de una ventana interna; ver {@link InternalFrameBorder}. */
+    /** An internal frame's frame; see {@link InternalFrameBorder}. */
     public static Border getInternalFrameBorder() {
         if (internalFrameBorder == null) {
             internalFrameBorder = new InternalFrameBorder();
@@ -273,13 +273,13 @@ public class MetalBorders {
     private static Border desktopIconBorder;
 
     /**
-     * El borde de un componente de texto: un pixel de marco y un pixel de aire.
+     * A text component's border: one pixel of frame and one pixel of air.
      *
-     * <p>Los margenes son {@code (2,2,2,2)} y no {@code (1,1,1,1)}, y ese pixel de mas es lo que
-     * hace que el cursor no quede pegado a la linea del marco. Medido.
+     * <p>The margins are {@code (2,2,2,2)} and not {@code (1,1,1,1)}, and that extra pixel is what
+     * keeps the cursor from being stuck to the frame's line. Measured.
      *
-     * <p>Es el mismo objeto que devuelve {@link #getTextFieldBorder}: los dos existen porque el
-     * JDK los declara distintos, pero valen lo mismo.
+     * <p>It is the same object {@link #getTextFieldBorder} returns: both exist because the JDK
+     * declares them separately, but they are worth the same.
      */
     public static Border getTextBorder() {
         if (textBorder == null) {
@@ -289,7 +289,7 @@ public class MetalBorders {
         return textBorder;
     }
 
-    /** El de un {@code JTextField}; ver {@link #getTextBorder}. */
+    /** The one for a {@code JTextField}; see {@link #getTextBorder}. */
     public static Border getTextFieldBorder() {
         if (textFieldBorder == null) {
             textFieldBorder = new BorderUIResource$CompoundBorderUIResource(
@@ -299,11 +299,11 @@ public class MetalBorders {
     }
 
     /**
-     * El de una ventana interna minimizada.
+     * The one for a minimized internal frame.
      *
-     * <p>Los margenes son {@code (3,3,2,3)}: uno menos abajo. La asimetria es del JDK y esta
-     * medida; el icono de escritorio se dibuja como una ventanita apoyada, y la base lleva menos
-     * aire que los costados.
+     * <p>The margins are {@code (3,3,2,3)}: one less at the bottom. The asymmetry is the JDK's and
+     * is measured; the desktop icon is drawn as a little window resting, and the base carries less
+     * air than the sides.
      */
     public static Border getDesktopIconBorder() {
         if (desktopIconBorder == null) {
@@ -314,10 +314,10 @@ public class MetalBorders {
         return desktopIconBorder;
     }
 
-    /** Un marco de un pixel en la sombra del tema, con un pixel de aire adentro. */
+    /** A one-pixel frame in the theme's shadow, with one pixel of air inside. */
     public static class Flush3DBorder extends AbstractBorder implements UIResource {
 
-        private static final Insets MARGENES = new Insets(2, 2, 2, 2);
+        private static final Insets MARGINS = new Insets(2, 2, 2, 2);
 
         public void paintBorder(Component c, Graphics g, int x, int y, int w, int h) {
             g.setColor(MetalLookAndFeel.getControlDarkShadow());
@@ -325,7 +325,7 @@ public class MetalBorders {
         }
 
         public Insets getBorderInsets(Component c, Insets insets) {
-            insets.set(MARGENES.top, MARGENES.left, MARGENES.bottom, MARGENES.right);
+            insets.set(MARGINS.top, MARGINS.left, MARGINS.bottom, MARGINS.right);
             return insets;
         }
     }

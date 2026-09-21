@@ -3,30 +3,30 @@ package java.awt.dnd;
 import java.util.EventListener;
 
 /**
- * Quien atiende el arrastre **desde el lado del origen**.
+ * Whoever attends the drag **from the source's side**.
  *
- * <p>Es el espejo de {@link DropTargetListener}: los mismos momentos, vistos desde quien soltó el
- * dato en vez de quien lo recibe. Sirve sobre todo para dar realimentación —cambiar el cursor según
- * el destino acepte o no— y para enterarse, en {@link #dragDropEnd}, de si hubo que borrar el
- * original.
+ * <p>It is the mirror of {@link DropTargetListener}: the same moments, seen from whoever let go of
+ * the datum instead of whoever receives it. It serves above all for giving feedback —changing the
+ * cursor according to whether the destination accepts or not— and for hearing, in
+ * {@link #dragDropEnd}, whether the original had to be deleted.
  *
- * <p>{@link #dragDropEnd} es el único que **siempre** llega, se haya soltado o cancelado, y es el
- * lugar donde va la limpieza.
+ * <p>{@link #dragDropEnd} is the only one that **always** arrives, whether it was dropped or
+ * cancelled, and it is the place where the cleaning up goes.
  */
 public interface DragSourceListener extends EventListener {
 
-    /** El arrastre entró a un destino que lo acepta. */
+    /** The drag entered a destination that accepts it. */
     void dragEnter(DragSourceDragEvent dsde);
 
-    /** El arrastre se mueve sobre un destino. */
+    /** The drag is moving over a destination. */
     void dragOver(DragSourceDragEvent dsde);
 
-    /** Cambió la acción elegida. */
+    /** The chosen action changed. */
     void dropActionChanged(DragSourceDragEvent dsde);
 
-    /** El arrastre salió del destino. */
+    /** The drag left the destination. */
     void dragExit(DragSourceEvent dse);
 
-    /** Terminó, con o sin soltado. */
+    /** It finished, with or without a drop. */
     void dragDropEnd(DragSourceDropEvent dsde);
 }

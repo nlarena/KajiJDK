@@ -1,22 +1,22 @@
 package org.w3c.dom.html;
 
 /**
- * Un `<label>`.
+ * A `<label>`.
  */
 public interface HTMLLabelElement extends HTMLElement {
 
-    /** El formulario que lo contiene, o nulo si no esta en ninguno. */
+    /** The form that contains it, or null if it is in none. */
     HTMLFormElement getForm();
 
-    /** El atajo de teclado. */
+    /** The keyboard shortcut. */
     String getAccessKey();
 
-    /** Fija el atajo de teclado. */
+    /** It sets the keyboard shortcut. */
     void setAccessKey(String accessKey);
 
-    /** El atributo `htmlFor`. */
+    /** The `htmlFor` attribute. */
     String getHtmlFor();
 
-    /** Fija el atributo `htmlFor`. */
+    /** It sets the `htmlFor` attribute. */
     void setHtmlFor(String htmlFor);
 }

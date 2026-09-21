@@ -4,53 +4,53 @@ import javax.swing.event.UndoableEditEvent;
 import javax.swing.event.UndoableEditListener;
 
 /**
- * La pila de deshacer y rehacer.
+ * The undo and redo stack.
  *
- * <h2>Un {@link CompoundEdit} que se lee distinto</h2>
+ * <h2>A {@link CompoundEdit} that is read differently</h2>
  *
- * <p>Hereda la lista de ediciones pero no su semantica: un {@code CompoundEdit} deshace
- * <em>todas</em> sus partes de un golpe, y este deshace <strong>una por vez</strong>. Lo que lo
- * consigue es un solo campo, {@link #indexOfNextAdd}: el cursor que parte la lista en lo hecho y lo
- * deshecho. Todo lo demas de la clase es mover ese cursor.
+ * <p>It inherits the list of edits but not its meaning: a {@code CompoundEdit} undoes
+ * <em>all</em> its parts in one go, and this one undoes <strong>one at a time</strong>. What
+ * achieves that is a single field, {@link #indexOfNextAdd}: the cursor that splits the list into
+ * what is done and what is undone. Everything else in the class is moving that cursor.
  *
- * <p>Y por eso {@code UndoManager} sigue estando "en curso" para siempre: nunca se cierra, porque
- * siempre puede llegar otra edicion.
+ * <p>And that is why {@code UndoManager} stays "in progress" for ever: it never closes, because
+ * another edit can always arrive.
  *
- * <h2>Agregar tira lo rehacible, y tiene que hacerlo</h2>
+ * <h2>Adding throws away what was redoable, and it has to</h2>
  *
- * <p>Si el usuario deshizo tres pasos y despues hace algo nuevo, esos tres dejan de tener sentido:
- * rehacerlos aplicaria cambios sobre un estado que ya no es el que tenian delante. {@link #addEdit}
- * los mata explicitamente en vez de dejarlos colgando.
+ * <p>If the user undid three steps and then does something new, those three stop making sense:
+ * redoing them would apply changes over a state that is no longer the one they had in front of
+ * them. {@link #addEdit} kills them explicitly instead of leaving them hanging.
  *
- * <h2>El limite</h2>
+ * <h2>The limit</h2>
  *
- * <p>{@link #setLimit} acota cuantas ediciones se recuerdan, porque una pila sin limite crece con la
- * sesion entera. Al podar se sacan <strong>las de los extremos</strong>, conservando las vecinas al
- * cursor: son las que el usuario tiene mas cerca de deshacer o rehacer.
+ * <p>{@link #setLimit} bounds how many edits are remembered, because a stack with no limit grows
+ * with the whole session. When pruning, <strong>the ones at the ends</strong> are removed,
+ * keeping those next to the cursor: they are the ones the user is closest to undoing or redoing.
  */
 public class UndoManager extends CompoundEdit implements UndoableEditListener {
 
     private static final long serialVersionUID = -2077529998244066750L;
 
-    /** El cursor: cuantas ediciones de la lista estan hechas. */
+    /** The cursor: how many edits in the list are done. */
     int indexOfNextAdd;
 
-    /** Cuantas ediciones se recuerdan como maximo. */
+    /** How many edits are remembered at most. */
     int limit;
 
-    /** Una pila nueva, con capacidad para cien ediciones. */
+    /** A new stack, with room for a hundred edits. */
     public UndoManager() {
         super();
         this.indexOfNextAdd = 0;
         this.limit = 100;
     }
 
-    /** El limite actual. */
+    /** The current limit. */
     public synchronized int getLimit() {
         return this.limit;
     }
 
-    /** Tira todo lo que recordaba y vuelve al estado inicial. */
+    /** Throws away everything it remembered and goes back to the initial state. */
     public synchronized void discardAllEdits() {
         for (int i = 0; i < this.edits.size(); i++) {
             this.edits.elementAt(i).die();
@@ -59,41 +59,41 @@ public class UndoManager extends CompoundEdit implements UndoableEditListener {
         this.indexOfNextAdd = 0;
     }
 
-    /** Poda hasta cumplir el limite, sacando de los extremos. */
+    /** Prunes until the limit is met, removing from the ends. */
     protected void trimForLimit() {
         if (this.limit < 0) {
             return;
         }
-        int tamano = this.edits.size();
-        if (tamano <= this.limit) {
+        int size = this.edits.size();
+        if (size <= this.limit) {
             return;
         }
-        // El cursor es el centro de interes: se conservan las `limit` ediciones mas cercanas a el,
-        // repartidas a los dos lados. Podar solo por un extremo dejaria al usuario sin rehacer
-        // justo despues de deshacer mucho.
-        int mitad = this.limit / 2;
-        int desde = this.indexOfNextAdd - mitad;
-        int hasta = this.indexOfNextAdd + (this.limit - mitad) - 1;
-        if (desde < 0) {
-            hasta = hasta - desde;
-            desde = 0;
+        // The cursor is the centre of interest: the `limit` edits closest to it are kept, spread
+        // over both sides. Pruning from one end only would leave the user with nothing to redo
+        // right after undoing a lot.
+        int half = this.limit / 2;
+        int from = this.indexOfNextAdd - half;
+        int to = this.indexOfNextAdd + (this.limit - half) - 1;
+        if (from < 0) {
+            to = to - from;
+            from = 0;
         }
-        if (hasta >= tamano) {
-            desde = desde - (hasta - tamano + 1);
-            hasta = tamano - 1;
-            if (desde < 0) {
-                desde = 0;
+        if (to >= size) {
+            from = from - (to - size + 1);
+            to = size - 1;
+            if (from < 0) {
+                from = 0;
             }
         }
-        trimEdits(hasta + 1, tamano - 1);
-        trimEdits(0, desde - 1);
+        trimEdits(to + 1, size - 1);
+        trimEdits(0, from - 1);
     }
 
     /**
-     * Mata y saca las ediciones del rango, inclusive.
+     * Kills and removes the edits in the range, inclusive.
      *
-     * <p>De atras para adelante, porque sacar corre los indices: hacerlo al reves saltearia
-     * elementos, que es el error clasico de borrar mientras se recorre.
+     * <p>From the back to the front, because removing shifts the indices: doing it the other way
+     * round would skip elements, which is the classic mistake of deleting while walking.
      */
     protected void trimEdits(int from, int to) {
         if (from > to) {
@@ -110,16 +110,16 @@ public class UndoManager extends CompoundEdit implements UndoableEditListener {
         }
     }
 
-    /** Cambia el limite y poda enseguida si hace falta. */
+    /** Changes the limit and prunes right away if needed. */
     public synchronized void setLimit(int l) {
         if (!isInProgress()) {
-            throw new RuntimeException("La pila ya se cerro");
+            throw new RuntimeException("The stack is already closed");
         }
         this.limit = l;
         trimForLimit();
     }
 
-    /** La proxima edicion que se deshara, o {@code null}. */
+    /** The next edit that will be undone, or {@code null}. */
     protected UndoableEdit editToBeUndone() {
         int i = this.indexOfNextAdd;
         while (i > 0) {
@@ -132,11 +132,11 @@ public class UndoManager extends CompoundEdit implements UndoableEditListener {
         return null;
     }
 
-    /** La proxima edicion que se rehara, o {@code null}. */
+    /** The next edit that will be redone, or {@code null}. */
     protected UndoableEdit editToBeRedone() {
-        int contador = this.edits.size();
+        int count = this.edits.size();
         int i = this.indexOfNextAdd;
-        while (i < contador) {
+        while (i < count) {
             UndoableEdit e = this.edits.elementAt(i);
             if (e.isSignificant()) {
                 return e;
@@ -146,33 +146,33 @@ public class UndoManager extends CompoundEdit implements UndoableEditListener {
         return null;
     }
 
-    /** Deshace hacia atras hasta pasar {@code edit}, inclusive. */
+    /** Undoes backwards until past {@code edit}, inclusive. */
     protected void undoTo(UndoableEdit edit) throws CannotUndoException {
-        boolean seguir = true;
-        while (seguir) {
+        boolean keepGoing = true;
+        while (keepGoing) {
             this.indexOfNextAdd = this.indexOfNextAdd - 1;
-            UndoableEdit siguiente = this.edits.elementAt(this.indexOfNextAdd);
-            siguiente.undo();
-            seguir = siguiente != edit;
+            UndoableEdit next = this.edits.elementAt(this.indexOfNextAdd);
+            next.undo();
+            keepGoing = next != edit;
         }
     }
 
-    /** Rehace hacia adelante hasta pasar {@code edit}, inclusive. */
+    /** Redoes forwards until past {@code edit}, inclusive. */
     protected void redoTo(UndoableEdit edit) throws CannotRedoException {
-        boolean seguir = true;
-        while (seguir) {
-            UndoableEdit siguiente = this.edits.elementAt(this.indexOfNextAdd);
+        boolean keepGoing = true;
+        while (keepGoing) {
+            UndoableEdit next = this.edits.elementAt(this.indexOfNextAdd);
             this.indexOfNextAdd = this.indexOfNextAdd + 1;
-            siguiente.redo();
-            seguir = siguiente != edit;
+            next.redo();
+            keepGoing = next != edit;
         }
     }
 
     /**
-     * Deshace o rehace, lo que corresponda.
+     * Undoes or redoes, whichever applies.
      *
-     * <p>Para un boton unico. Cual de las dos depende de donde este el cursor, no de un estado
-     * aparte.
+     * <p>For a single button. Which of the two depends on where the cursor is, not on a separate
+     * state.
      */
     public void undoOrRedo() throws CannotRedoException, CannotUndoException {
         if (this.indexOfNextAdd == this.edits.size()) {
@@ -182,7 +182,7 @@ public class UndoManager extends CompoundEdit implements UndoableEditListener {
         }
     }
 
-    /** Si alguna de las dos se puede. */
+    /** Whether either of the two can be done. */
     public synchronized boolean canUndoOrRedo() {
         if (this.indexOfNextAdd == this.edits.size()) {
             return canUndo();
@@ -190,7 +190,7 @@ public class UndoManager extends CompoundEdit implements UndoableEditListener {
         return canRedo();
     }
 
-    /** Deshace la ultima edicion significativa. */
+    /** Undoes the last significant edit. */
     public synchronized void undo() throws CannotUndoException {
         if (isInProgress()) {
             UndoableEdit e = editToBeUndone();
@@ -203,7 +203,7 @@ public class UndoManager extends CompoundEdit implements UndoableEditListener {
         super.undo();
     }
 
-    /** Si hay algo que deshacer. */
+    /** Whether there is anything to undo. */
     public synchronized boolean canUndo() {
         if (isInProgress()) {
             UndoableEdit e = editToBeUndone();
@@ -212,7 +212,7 @@ public class UndoManager extends CompoundEdit implements UndoableEditListener {
         return super.canUndo();
     }
 
-    /** Rehace la proxima edicion significativa. */
+    /** Redoes the next significant edit. */
     public synchronized void redo() throws CannotRedoException {
         if (isInProgress()) {
             UndoableEdit e = editToBeRedone();
@@ -225,7 +225,7 @@ public class UndoManager extends CompoundEdit implements UndoableEditListener {
         super.redo();
     }
 
-    /** Si hay algo que rehacer. */
+    /** Whether there is anything to redo. */
     public synchronized boolean canRedo() {
         if (isInProgress()) {
             UndoableEdit e = editToBeRedone();
@@ -235,10 +235,10 @@ public class UndoManager extends CompoundEdit implements UndoableEditListener {
     }
 
     /**
-     * Agrega una edicion, tirando lo que quedaba por rehacer.
+     * Adds an edit, throwing away what was left to redo.
      *
-     * <p>Ver la nota de la clase: rehacer despues de una edicion nueva aplicaria cambios sobre un
-     * estado que ya no es el que tenian delante.
+     * <p>See the class note: redoing after a new edit would apply changes over a state that is no
+     * longer the one they had in front of them.
      */
     public synchronized boolean addEdit(UndoableEdit anEdit) {
         boolean retVal;
@@ -252,13 +252,13 @@ public class UndoManager extends CompoundEdit implements UndoableEditListener {
         return retVal;
     }
 
-    /** Cierra la pila: a partir de ahi se comporta como un {@link CompoundEdit} comun. */
+    /** Closes the stack: from there on it behaves like an ordinary {@link CompoundEdit}. */
     public synchronized void end() {
         super.end();
         trimEdits(this.indexOfNextAdd, this.edits.size() - 1);
     }
 
-    /** El nombre del comando para un boton unico de deshacer o rehacer. */
+    /** The command's name for a single undo-or-redo button. */
     public synchronized String getUndoOrRedoPresentationName() {
         if (this.indexOfNextAdd == this.edits.size()) {
             return getUndoPresentationName();
@@ -266,7 +266,7 @@ public class UndoManager extends CompoundEdit implements UndoableEditListener {
         return getRedoPresentationName();
     }
 
-    /** El nombre del comando de deshacer. */
+    /** The undo command's name. */
     public synchronized String getUndoPresentationName() {
         if (!isInProgress()) {
             return super.getUndoPresentationName();
@@ -277,7 +277,7 @@ public class UndoManager extends CompoundEdit implements UndoableEditListener {
         return UndoName;
     }
 
-    /** El nombre del comando de rehacer. */
+    /** The redo command's name. */
     public synchronized String getRedoPresentationName() {
         if (!isInProgress()) {
             return super.getRedoPresentationName();
@@ -289,10 +289,10 @@ public class UndoManager extends CompoundEdit implements UndoableEditListener {
     }
 
     /**
-     * Recibe una edicion de quien la produjo y la agrega.
+     * Takes an edit from whoever produced it and adds it.
      *
-     * <p>Implementar {@link UndoableEditListener} es lo que permite conectar la pila a un documento
-     * con una linea, sin que el documento sepa que existe una pila.
+     * <p>Implementing {@link UndoableEditListener} is what allows connecting the stack to a
+     * document in one line, without the document knowing that a stack exists.
      */
     public void undoableEditHappened(UndoableEditEvent e) {
         addEdit(e.getEdit());

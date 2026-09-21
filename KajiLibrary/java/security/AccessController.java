@@ -1,33 +1,34 @@
 package java.security;
 
-// Correr un bloque de codigo con los privilegios de quien lo escribio, no con los de quien lo
-// llamo.
+// Running a block of code with the privileges of whoever wrote it, not with those of whoever called
+// it.
 //
 // ===============================================================================================
-// QUE SIGNIFICABA `doPrivileged`, Y QUE HACE HOY
+// WHAT `doPrivileged` USED TO MEAN, AND WHAT IT DOES TODAY
 // ===============================================================================================
 //
-// El chequeo de acceso normal exige que **todos** los dominios de la pila tengan el permiso. Eso
-// deja a una biblioteca confiable sin poder abrir su propio archivo de configuracion si la llamo
-// un applet. `doPrivileged` cortaba la pila ahi: de ese marco para arriba no se miraba mas, asi
-// que la biblioteca podia hacer lo suyo aunque su llamador no pudiera.
+// The normal access check demands that **every** domain of the stack have the permission. That
+// leaves a trusted library unable to open its own configuration file if an applet called it.
+// `doPrivileged` cut the stack there: from that frame upwards nothing more was looked at, so the
+// library could do its own thing even though its caller could not.
 //
-// Era la construccion mas delicada del modelo, porque un `doPrivileged` que ademas usa un dato que
-// vino del llamador —un nombre de archivo, por ejemplo— le presta sus privilegios a quien mando el
-// dato. Ese es el "diputado confundido" clasico.
+// It was the most delicate construction of the model, because a `doPrivileged` that also uses a
+// datum that came from the caller —a file name, for example— lends its privileges to whoever sent
+// the datum. That is the classic "confused deputy".
 //
-// Hoy no corta nada: desde JDK 24 no hay `SecurityManager` y nunca hubo control de acceso en
-// KajiJDK. `doPrivileged` **ejecuta la accion y devuelve lo que devuelva**, que es exactamente lo
-// que hace el JDK 25 —verificado contra el— y lo unico honesto: no hay privilegios que elevar
-// porque no hay ninguno que restringir.
+// Today it cuts nothing: since JDK 24 there is no `SecurityManager` and there was never access
+// control in KajiJDK. `doPrivileged` **runs the action and returns whatever it returns**, which is
+// exactly what JDK 25 does —checked against it— and the only honest thing: there are no privileges
+// to elevate because there are none to restrict.
 //
-// `checkPermission`, en cambio, **tira**. Es la asimetria importante: correr codigo sin control es
-// lo mismo que correrlo, pero preguntar "¿tengo este permiso?" y contestar que si sin haberlo
-// mirado seria fabricar una autorizacion. El JDK 25 tira `AccessControlException` y aca tambien.
+// `checkPermission`, on the other hand, **throws**. It is the important asymmetry: running code
+// without control is the same as running it, but asking "do I have this permission?" and answering
+// yes without having looked would be manufacturing an authorisation. JDK 25 throws
+// `AccessControlException` and here so does this.
 @Deprecated
 public final class AccessController {
 
-    // Estatica pura: no se instancia.
+    // Purely static: it is not instantiated.
     private AccessController() {
     }
 
@@ -54,10 +55,11 @@ public final class AccessController {
         return action.run();
     }
 
-    // La variante para acciones que tiran chequeadas: lo que salga se envuelve.
+    // The variant for actions that throw checked ones: whatever comes out is wrapped.
     //
-    // Solo las **chequeadas** se envuelven. Una `RuntimeException` sale tal cual, y esa distincion
-    // es del contrato: envolver todo obligaria a desenvolver hasta los errores de programacion.
+    // Only the **checked** ones are wrapped. A `RuntimeException` comes out as it is, and that
+    // distinction is of the contract: wrapping everything would force even programming errors to be
+    // unwrapped.
     public static <T> T doPrivileged(PrivilegedExceptionAction<T> action)
             throws PrivilegedActionException {
         try {
@@ -93,17 +95,17 @@ public final class AccessController {
         return doPrivileged(action);
     }
 
-    // El contexto de la ejecucion actual.
+    // The context of the current execution.
     //
-    // Devuelve uno **vacio** y no null: la VM no expone los dominios de la pila, asi que no hay
-    // dominios que enumerar. Un contexto vacio es la verdad —"no hay nada anotado aca"— y ademas
-    // es lo que evita que quien lo guarde para usarlo despues se encuentre con un null.
+    // It returns an **empty** one and not null: the VM does not expose the domains of the stack, so
+    // there are no domains to enumerate. An empty context is the truth —"there is nothing noted
+    // here"— and it is also what keeps whoever keeps it to use it later from meeting a null.
     public static AccessControlContext getContext() {
         return new AccessControlContext(new ProtectionDomain[0]);
     }
 
-    // Siempre tira. Ver la cabecera: contestar que si sin haber mirado nada seria fabricar una
-    // autorizacion.
+    // It always throws. See the header: answering yes without having looked at anything would be
+    // manufacturing an authorisation.
     public static void checkPermission(Permission perm) throws AccessControlException {
         if (perm == null) {
             throw new NullPointerException("permission can't be null");

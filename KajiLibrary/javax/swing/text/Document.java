@@ -4,85 +4,85 @@ import javax.swing.event.DocumentListener;
 import javax.swing.event.UndoableEditListener;
 
 /**
- * El modelo de un texto editable: contenido, estructura y avisos de cambio.
+ * The model of an editable text: content, structure and change notices.
  *
- * <h2>Las tres cosas que junta</h2>
+ * <h2>The three things it joins</h2>
  *
- * <p>Un {@code Document} es a la vez la <strong>secuencia de caracteres</strong>, el
- * <strong>arbol de elementos</strong> que la estructura, y el <strong>emisor</strong> que avisa
- * cuando algo cambia. Juntarlas no es pereza: las tres tienen que moverse a la vez o el arbol
- * quedaria describiendo un texto que ya no es.
+ * <p>A {@code Document} is at the same time the <strong>sequence of characters</strong>, the
+ * <strong>element tree</strong> that structures it, and the <strong>broadcaster</strong> that
+ * reports when something changes. Joining them is not laziness: the three have to move together
+ * or the tree would be left describing a text that no longer is.
  *
- * <h2>{@link #render}, que es donde vive la concurrencia</h2>
+ * <h2>{@link #render}, which is where the concurrency lives</h2>
  *
- * <p>Un editor lee el documento desde el hilo que pinta y lo escribe desde el que atiende el
- * teclado. {@code render} corre codigo con la garantia de que nadie modifica mientras tanto — es la
- * unica forma segura de recorrer el texto para dibujarlo. Sin el, un repintado podria leer el
- * documento a mitad de una insercion.
+ * <p>An editor reads the document from the thread that paints and writes it from the one that
+ * attends to the keyboard. {@code render} runs code with the guarantee that nobody modifies
+ * meanwhile -- it is the only safe way of walking the text to draw it. Without it, a repaint
+ * could read the document in the middle of an insertion.
  *
- * <p>De ahi tambien que las posiciones se pidan como {@link Position} y no como enteros: un numero
- * guardado entre dos ediciones apunta a otro lado.
+ * <p>Hence too the positions are asked for as {@link Position}s and not as integers: a number
+ * kept between two edits points somewhere else.
  */
 public interface Document {
 
-    /** La clave de la propiedad que describe de donde salio el texto. */
+    /** The key of the property that describes where the text came from. */
     public static final String StreamDescriptionProperty = "stream";
 
-    /** La clave de la propiedad del titulo. */
+    /** The key of the title property. */
     public static final String TitleProperty = "title";
 
-    /** Cuantos caracteres tiene. */
+    /** How many characters it has. */
     int getLength();
 
-    /** Agrega un oyente de cambios de contenido. */
+    /** It adds a listener of content changes. */
     void addDocumentListener(DocumentListener listener);
 
-    /** Saca un oyente de cambios de contenido. */
+    /** It removes a listener of content changes. */
     void removeDocumentListener(DocumentListener listener);
 
-    /** Agrega un oyente de ediciones deshacibles. */
+    /** It adds a listener of undoable edits. */
     void addUndoableEditListener(UndoableEditListener listener);
 
-    /** Saca un oyente de ediciones deshacibles. */
+    /** It removes a listener of undoable edits. */
     void removeUndoableEditListener(UndoableEditListener listener);
 
-    /** El valor de una propiedad del documento. */
+    /** The value of a document property. */
     Object getProperty(Object key);
 
-    /** Fija una propiedad del documento. */
+    /** It sets a document property. */
     void putProperty(Object key, Object value);
 
-    /** Borra {@code length} caracteres desde {@code offs}. */
+    /** It removes {@code length} characters from {@code offs}. */
     void remove(int offs, int len) throws BadLocationException;
 
-    /** Inserta {@code str} en {@code offset}, con esos atributos. */
+    /** It inserts {@code str} at {@code offset}, with those attributes. */
     void insertString(int offset, String str, AttributeSet a) throws BadLocationException;
 
-    /** El texto de un tramo, como {@link String}. */
+    /** A stretch's text, as a {@link String}. */
     String getText(int offset, int length) throws BadLocationException;
 
     /**
-     * El texto de un tramo, sin copiar: ver {@link Segment}.
+     * A stretch's text, without copying: see {@link Segment}.
      *
-     * <p>La version que hay que usar en un camino caliente. La otra aloca.
+     * <p>The version to use on a hot path. The other one allocates.
      */
     void getText(int offset, int length, Segment txt) throws BadLocationException;
 
-    /** Una marca en el principio, que se queda ahi. */
+    /** A mark at the beginning, which stays there. */
     Position getStartPosition();
 
-    /** Una marca en el final, que sigue al final. */
+    /** A mark at the end, which follows the end. */
     Position getEndPosition();
 
-    /** Una marca en {@code offs}, que se movera con las ediciones. */
+    /** A mark at {@code offs}, which will move with the edits. */
     Position createPosition(int offs) throws BadLocationException;
 
-    /** Las raices de los arboles de estructura; ver {@link Element}. */
+    /** The roots of the structure trees; see {@link Element}. */
     Element[] getRootElements();
 
-    /** La raiz del arbol principal. */
+    /** The main tree's root. */
     Element getDefaultRootElement();
 
-    /** Corre {@code r} con la garantia de que nadie modifica mientras tanto. */
+    /** It runs {@code r} with the guarantee that nobody modifies meanwhile. */
     void render(Runnable r);
 }

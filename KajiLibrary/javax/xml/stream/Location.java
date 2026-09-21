@@ -1,56 +1,55 @@
 package javax.xml.stream;
 
 /**
- * KajiLibrary's javax.xml.stream.Location -- donde, en el texto de entrada, paso lo que acaba de
- * pasar.
+ * KajiLibrary's javax.xml.stream.Location -- where, in the input text, what just happened happened.
  *
- * <p>Existe por una sola razon: un error de XML sin numero de linea es inutil. Todo evento y toda
- * {@link XMLStreamException} pueden llevar una ubicacion, y es lo que convierte un "elemento mal
- * cerrado" en algo que se puede arreglar.
+ * <p>It exists for one reason only: an XML error without a line number is useless. Every event and
+ * every {@link XMLStreamException} can carry a location, and it is what turns a "badly closed
+ * element" into something that can be fixed.
  *
- * <p>Las tres coordenadas numericas se solapan a proposito y sirven para cosas distintas: linea y
- * columna son para que las lea una persona, y el desplazamiento en caracteres es para que un editor
- * pueda posicionar el cursor sin volver a contar renglones. Las tres devuelven -1 cuando la
- * implementacion no las lleva; los dos identificadores devuelven null.
+ * <p>The three numeric coordinates overlap on purpose and serve different things: line and column
+ * are for a person to read, and the character offset is for an editor to position the cursor
+ * without counting lines again. All three return -1 when the implementation does not keep them; the
+ * two identifiers return null.
  *
- * <p>Que una implementacion no lleve la cuenta es legitimo y comun: mantener linea y columna cuesta
- * en el bucle mas caliente del parser, y hay usos --leer un documento que ya se sabe correcto-- que
- * no la pagan.
+ * <p>An implementation not keeping count is legitimate and common: maintaining line and column
+ * costs in the parser's hottest loop, and there are uses --reading a document already known to be
+ * correct-- that do not pay for it.
  */
 public interface Location {
 
     /**
-     * La linea, contando desde 1, o -1 si no se lleva la cuenta.
+     * The line, counting from 1, or -1 if not kept.
      *
-     * @return el numero de linea
+     * @return the line number
      */
     int getLineNumber();
 
     /**
-     * La columna, contando desde 1, o -1 si no se lleva la cuenta.
+     * The column, counting from 1, or -1 if not kept.
      *
-     * @return el numero de columna
+     * @return the column number
      */
     int getColumnNumber();
 
     /**
-     * Cuantos caracteres van leidos desde el principio de la entrada, o -1.
+     * How many characters have been read since the start of the input, or -1.
      *
-     * @return el desplazamiento en caracteres
+     * @return the character offset
      */
     int getCharacterOffset();
 
     /**
-     * El identificador publico de la entidad de donde salio esto, o null.
+     * The public identifier of the entity this came from, or null.
      *
-     * @return el identificador publico
+     * @return the public identifier
      */
     String getPublicId();
 
     /**
-     * El identificador de sistema --tipicamente la URI del archivo-- o null.
+     * The system identifier --typically the file's URI-- or null.
      *
-     * @return el identificador de sistema
+     * @return the system identifier
      */
     String getSystemId();
 }

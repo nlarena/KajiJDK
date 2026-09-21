@@ -10,41 +10,42 @@ import javax.lang.model.element.TypeParameterElement;
 import javax.lang.model.element.VariableElement;
 
 /**
- * KajiLibrary's javax.lang.model.util.ElementKindVisitor6 — el visitante que reparte por
- * {@link ElementKind} y no solo por interfaz.
+ * KajiLibrary's javax.lang.model.util.ElementKindVisitor6 — the visitor that dispatches by
+ * {@link ElementKind} and not only by interface.
  *
- * <h2>Que problema resuelve</h2>
+ * <h2>What problem it solves</h2>
  *
- * <p>Las interfaces del modelo son mas gruesas que las declaraciones del lenguaje. Una clase, un enum,
- * una interfaz, un registro y un tipo de anotacion son **los cinco** un `TypeElement`, asi que a
- * {@link SimpleElementVisitor6#visitType} le llegan todos juntos y el que quiera tratarlos distinto
- * tiene que escribir el `if` sobre `getKind()` a mano. Lo mismo con las variables — un campo, un
- * parametro y una constante de enum son todos `VariableElement` — y con los ejecutables, donde un
- * metodo, un constructor y un inicializador comparten `ExecutableElement`.
+ * <p>The model's interfaces are coarser than the language's declarations. A class, an enum, an
+ * interface, a record and an annotation type are **all five** a `TypeElement`, so {@link
+ * SimpleElementVisitor6#visitType} receives them all together and whoever wants to treat them
+ * differently has to write the `if` on `getKind()` by hand. The same with variables — a field, a
+ * parameter and an enum constant are all `VariableElement`s — and with executables, where a method,
+ * a constructor and an initializer share `ExecutableElement`.
  *
- * <p>Esta clase escribe ese reparto una sola vez. `visitType` mira el kind y llama a
- * `visitTypeAsClass`, `visitTypeAsEnum` y demas; `visitVariable` y `visitExecutable` hacen lo mismo con
- * los suyos. Los `visitXxxAsYyy` caen a su vez en `defaultAction`, asi que sigue siendo un
- * {@link SimpleElementVisitor6} — se puede redefinir el embudo, o un `visitXxxAsYyy` puntual, o los dos.
+ * <p>This class writes that dispatch once. `visitType` looks at the kind and calls
+ * `visitTypeAsClass`, `visitTypeAsEnum` and so on; `visitVariable` and `visitExecutable` do the
+ * same with theirs. The `visitXxxAsYyy` methods fall in turn into `defaultAction`, so it is still a
+ * {@link SimpleElementVisitor6} — one can override the funnel, or a particular `visitXxxAsYyy`, or
+ * both.
  *
- * <h2>El `default` que tira `AssertionError`</h2>
+ * <h2>The `default` that throws `AssertionError`</h2>
  *
- * <p>Cada reparto termina en un caso que tira. No es un `visitUnknown` disfrazado: significa que llego
- * un `TypeElement` cuyo kind **no es ninguno de los cinco que declaran un tipo**, y eso no es una
- * construccion nueva del lenguaje sino un modelo roto. `visitUnknown` es para lo que el lenguaje agrego
- * despues; `AssertionError` es para lo que nunca pudo ser.
+ * <p>Each dispatch ends in a case that throws. It is not a disguised `visitUnknown`: it means a
+ * `TypeElement` arrived whose kind **is none of the five that declare a type**, and that is not a
+ * new language construct but a broken model. `visitUnknown` is for what the language added later;
+ * `AssertionError` is for what never could be.
  *
- * <h2>Los tres kinds que este visitante no puede haber previsto</h2>
+ * <h2>The three kinds this visitor cannot have foreseen</h2>
  *
- * <p>`RESOURCE_VARIABLE` (Java 7), `RECORD` y `BINDING_VARIABLE` (Java 14+) tienen su `visitXxxAsYyy`
- * declarado — hace falta, porque el reparto tiene que poder nombrarlos — pero su cuerpo cae en
- * `visitUnknown` en vez de en `defaultAction`. Es la misma regla de toda la familia: un kind posterior a
- * la version del visitante no se contesta en silencio. Las clases de 7 y de 14 los van pasando al
- * embudo a medida que el lenguaje los incorpora.
+ * <p>`RESOURCE_VARIABLE` (Java 7), `RECORD` and `BINDING_VARIABLE` (Java 14+) have their
+ * `visitXxxAsYyy` declared — it is needed, because the dispatch has to be able to name them — but
+ * their body falls into `visitUnknown` instead of `defaultAction`. It is the rule of the whole
+ * family: a kind later than the visitor's version is not answered silently. The 7 and 14 classes
+ * pass them to the funnel as the language takes them in.
  *
- * <p>Notar que el reparto **si** los enumera desde la version 6: si no lo hiciera, una variable de
- * recurso caeria en el `AssertionError` del `default`, que dice algo distinto y equivocado — "modelo
- * roto" en vez de "esto es mas nuevo que yo".
+ * <p>Note that the dispatch **does** enumerate them from version 6: if it did not, a resource
+ * variable would fall into the `default`'s `AssertionError`, which says something different and
+ * wrong — "broken model" instead of "this is newer than me".
  */
 @SupportedSourceVersion(SourceVersion.RELEASE_6)
 public class ElementKindVisitor6<R, P> extends SimpleElementVisitor6<R, P> {
@@ -59,9 +60,12 @@ public class ElementKindVisitor6<R, P> extends SimpleElementVisitor6<R, P> {
         super(defaultValue);
     }
 
-    // El reparto va con `if` encadenados y no con `switch`: nuestro generador de bytecode todavia no
-    // baja un `switch` cuyo selector no es `int` (COMPILER_FINDINGS #401). Es la misma semantica, porque
-    // en el original ninguna rama cae en la siguiente — todas devuelven.
+    // The dispatch goes with chained `if`s and not with a `switch`: the frozen javac that builds
+    // this library does not lower a `switch` on an enum read from the class path. The note blamed
+    // COMPILER_FINDINGS #401; #401 is closed, and the case that remained was #538, closed too --
+    // the source-built javac compiles such a switch, the frozen one does not (checked 2026-09-18).
+    // It is the same semantics, because in the original no branch falls into the next — they all
+    // return.
 
     public R visitPackage(PackageElement e, P p) {
         assert e.getKind() == ElementKind.PACKAGE : "Bad kind on PackageElement";
@@ -104,7 +108,7 @@ public class ElementKindVisitor6<R, P> extends SimpleElementVisitor6<R, P> {
         return this.defaultAction(e, p);
     }
 
-    /** Los registros son de Java 14: ver el encabezado. */
+    /** Records are from Java 14: see the header. */
     public R visitTypeAsRecord(TypeElement e, P p) {
         return this.visitUnknown(e, p);
     }
@@ -155,12 +159,12 @@ public class ElementKindVisitor6<R, P> extends SimpleElementVisitor6<R, P> {
         return this.defaultAction(e, p);
     }
 
-    /** Las variables de recurso son de Java 7: ver el encabezado. */
+    /** Resource variables are from Java 7: see the header. */
     public R visitVariableAsResourceVariable(VariableElement e, P p) {
         return this.visitUnknown(e, p);
     }
 
-    /** Las variables de vinculo, las de `instanceof` con patron, son de Java 16: ver el encabezado. */
+    /** Binding variables, those of pattern `instanceof`, are from Java 16: see the header. */
     public R visitVariableAsBindingVariable(VariableElement e, P p) {
         return this.visitUnknown(e, p);
     }
@@ -198,8 +202,8 @@ public class ElementKindVisitor6<R, P> extends SimpleElementVisitor6<R, P> {
         return this.defaultAction(e, p);
     }
 
-    // Un parametro de tipo tiene un solo kind, asi que no hay nada que repartir: es el unico `visitXxx`
-    // de esta clase que no se abre en `visitXxxAsYyy`.
+    // A type parameter has a single kind, so there is nothing to dispatch: it is the only
+    // `visitXxx` of this class that does not open into `visitXxxAsYyy`.
     public R visitTypeParameter(TypeParameterElement e, P p) {
         assert e.getKind() == ElementKind.TYPE_PARAMETER : "Bad kind on TypeParameterElement";
         return this.defaultAction(e, p);

@@ -14,80 +14,83 @@ import com.sun.source.tree.CompilationUnitTree;
 import com.sun.source.tree.Tree;
 
 /**
- * Una compilacion que se puede correr <strong>por fases</strong>.
+ * A compilation that may be run <strong>by phases</strong>.
  *
- * <h2>Que agrega sobre {@code CompilationTask}</h2>
+ * <h2>What it adds over {@code CompilationTask}</h2>
  *
- * <p>Un {@link JavaCompiler.CompilationTask} tiene un solo verbo: {@code call}, que compila todo.
- * Esta clase parte eso en tres — {@link #parse}, {@link #analyze}, {@link #generate} — y ahi esta
- * todo su valor: una herramienta que solo quiere el arbol de sintaxis para analizarlo llama a
- * {@code parse} y para, sin pagar el tipado ni la emision de bytecode.
+ * <p>A {@link JavaCompiler.CompilationTask} has a single verb: {@code call}, which compiles
+ * everything. This class splits that into three -- {@link #parse}, {@link #analyze},
+ * {@link #generate} -- and there is all of its value: a tool that only wants the syntax tree in
+ * order to analyse it calls {@code parse} and stops, without paying for the typing or the
+ * bytecode emission.
  *
- * <p>Son acumulativas: {@code analyze} parsea si hace falta, {@code generate} analiza. Llamarlas en
- * orden no repite trabajo.
+ * <p>They are cumulative: {@code analyze} parses if it is needed, {@code generate} analyses.
+ * Calling them in order does not repeat work.
  *
- * <h2>Y por que declina en esta VM</h2>
+ * <h2>And why it declines on this VM</h2>
  *
- * <p>Igual que {@link Trees}: el compilador de este proyecto esta escrito en Rust y no expone una
- * implementacion de esto. {@link #instance} declina en vez de devolver algo que no compilaria nada.
+ * <p>The same as {@link Trees}: this project's compiler is written in Rust and does not expose
+ * an implementation of this. {@link #instance} declines instead of returning something that
+ * would compile nothing.
  */
 public abstract class JavacTask implements JavaCompiler.CompilationTask {
 
-    /** Para las implementaciones. */
+    /** For the implementations. */
     protected JavacTask() {
     }
 
     /**
-     * La tarea asociada a un entorno de procesamiento de anotaciones.
+     * The task associated with an annotation processing environment.
      *
-     * @throws IllegalArgumentException si el entorno no es de {@code javac} — que es siempre, en
-     *     esta VM
+     * @throws IllegalArgumentException if the environment is not {@code javac}'s -- which is
+     *     always, on this VM
      */
     public static JavacTask instance(ProcessingEnvironment processingEnvironment) {
         throw new IllegalArgumentException(
-                "el javac de este proyecto no expone una implementacion de JavacTask");
+                "this project's javac does not expose an implementation of JavacTask");
     }
 
-    /** Parsea, y devuelve un arbol por archivo. */
+    /** It parses, and returns one tree per file. */
     public abstract Iterable<? extends CompilationUnitTree> parse() throws IOException;
 
-    /** Parsea si hace falta, analiza, y devuelve los elementos que quedaron. */
+    /** It parses if it is needed, analyses, and returns the elements that were left. */
     public abstract Iterable<? extends Element> analyze() throws IOException;
 
-    /** Analiza si hace falta, emite, y devuelve los archivos escritos. */
+    /** It analyses if it is needed, emits, and returns the files that were written. */
     public abstract Iterable<? extends JavaFileObject> generate() throws IOException;
 
     /**
-     * Pone el unico oyente de fases, reemplazando al que hubiera.
+     * It sets the only phase listener, replacing whichever there was.
      *
-     * @throws IllegalStateException si ya se agregaron oyentes con {@link #addTaskListener} — los
-     *     dos mecanismos no se mezclan, porque este borraria a los otros sin avisar
+     * @throws IllegalStateException if listeners were already added with {@link #addTaskListener}
+     *     -- the two mechanisms do not mix, because this one would erase the others without saying
+     *     so
      */
     public abstract void setTaskListener(TaskListener taskListener);
 
-    /** Agrega un oyente mas, sin sacar los que haya. */
+    /** It adds one more listener, without taking out those there may be. */
     public abstract void addTaskListener(TaskListener taskListener);
 
-    /** Saca un oyente. */
+    /** It takes a listener out. */
     public abstract void removeTaskListener(TaskListener taskListener);
 
-    /** De donde salen los nombres de parametros que el {@code .class} no trae. */
+    /** Where the parameter names the {@code .class} does not bring come from. */
     public void setParameterNameProvider(ParameterNameProvider provider) {
         throw new UnsupportedOperationException(
-                "esta tarea no soporta un proveedor de nombres de parametros");
+                "this task does not support a parameter name provider");
     }
 
     /**
-     * El tipo de la expresion que hay al final de ese camino de nodos.
+     * The type of the expression there is at the end of that path of nodes.
      *
-     * <p>Recibe un {@code Iterable} y no un nodo suelto por lo mismo que {@link Trees}: un nodo no
-     * dice donde esta, y su tipo depende de eso.
+     * <p>It receives an {@code Iterable} and not a loose node for the same reason as {@link Trees}:
+     * a node does not say where it is, and its type depends on that.
      */
     public abstract TypeMirror getTypeMirror(Iterable<? extends Tree> path);
 
-    /** Las utilidades del modelo de elementos. */
+    /** The element model's utilities. */
     public abstract Elements getElements();
 
-    /** Las utilidades del modelo de tipos. */
+    /** The type model's utilities. */
     public abstract Types getTypes();
 }

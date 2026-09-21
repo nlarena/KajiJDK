@@ -3,29 +3,29 @@ package javax.swing.plaf;
 import javax.swing.JOptionPane;
 
 /**
- * El aspecto de un {@link JOptionPane}.
+ * A {@link JOptionPane}'s look and feel.
  *
- * <h2>Dos metodos nada mas</h2>
+ * <h2>Only two methods</h2>
  *
- * <p>Casi todo lo que hace un panel de opciones -- armar los botones, medir el mensaje, elegir el
- * icono -- lo resuelve el aspecto desde {@code installUI}. Lo unico que hace falta pedirle despues
- * son estas dos cosas, y las dos existen por el mismo motivo: el panel no sabe que componentes
- * armo el aspecto.
+ * <p>Almost everything an option pane does -- assembling the buttons, measuring the message,
+ * choosing the icon -- is resolved by the look and feel from {@code installUI}. The only things
+ * that have to be asked for afterwards are these two, and both exist for the same reason: the
+ * pane does not know which components the look and feel assembled.
  *
- * <p>{@link #selectInitialValue} le da el foco al boton que corresponde -- el panel no tiene los
- * botones, los tiene el aspecto. {@link #containsCustomComponents} dice si el mensaje trajo
- * componentes propios, que es lo que decide si al cerrar hay que sacarlos para que se los pueda
- * reusar.
+ * <p>{@link #selectInitialValue} gives the focus to the button that corresponds -- the pane does
+ * not have the buttons, the look and feel has them. {@link #containsCustomComponents} says
+ * whether the message brought components of its own, which is what decides whether on closing
+ * they have to be taken out so that they can be reused.
  */
 public abstract class OptionPaneUI extends ComponentUI {
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected OptionPaneUI() {
     }
 
-    /** Le da el foco al valor inicial; ver la nota de la clase. */
+    /** It gives the focus to the initial value; see the class note. */
     public abstract void selectInitialValue(JOptionPane op);
 
-    /** Si el mensaje trajo componentes propios; ver la nota de la clase. */
+    /** Whether the message brought components of its own; see the class note. */
     public abstract boolean containsCustomComponents(JOptionPane op);
 }

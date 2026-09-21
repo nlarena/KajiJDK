@@ -1,12 +1,12 @@
 package java.sql;
 
 /**
- * KajiLibrary's java.sql.SQLFeatureNotSupportedException -- el driver no implementa eso.
+ * KajiLibrary's java.sql.SQLFeatureNotSupportedException -- the driver does not implement that.
  *
- * <p>Es la excepcion que hace vivible una API tan grande como JDBC: ningun driver implementa las
- * ochocientas y pico de operaciones, y esta es la manera declarada de decir "esta no". Que herede de
- * {@link SQLNonTransientException} es la parte util -- avisa de entrada que reintentar no va a
- * cambiar nada.
+ * <p>It is the exception that makes an API as large as JDBC livable: no driver implements all of
+ * its hundreds of operations, and this is the declared way of saying "not this one". That it
+ * inherits from {@link SQLNonTransientException} is the useful part -- it warns up front that
+ * retrying will change nothing.
  */
 public class SQLFeatureNotSupportedException extends SQLNonTransientException {
 

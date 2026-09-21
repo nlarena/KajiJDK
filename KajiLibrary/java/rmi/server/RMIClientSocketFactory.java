@@ -4,21 +4,21 @@ import java.io.IOException;
 import java.net.Socket;
 
 /**
- * Como el cliente abre la conexion hacia un objeto remoto.
+ * How the client opens the connection to a remote object.
  *
- * <h2>Por que esto viaja con el objeto</h2>
+ * <h2>Why this travels with the object</h2>
  *
- * <p>Es la parte que sorprende de RMI: cuando un objeto remoto se exporta con una fabrica propia,
- * <strong>la fabrica se serializa junto con el stub</strong> y llega al cliente. Ahi corre, y es lo
- * que decide como se abre el socket.
+ * <p>This is the surprising part of RMI: when a remote object is exported with its own factory,
+ * <strong>the factory is serialised along with the stub</strong> and reaches the client. It runs
+ * there, and it is what decides how the socket is opened.
  *
- * <p>Eso es lo que permite que un objeto exija TLS sin que el cliente configure nada — ver
- * {@code javax.rmi.ssl.SslRMIClientSocketFactory}. Y es tambien por que tiene que implementar
- * {@code equals} y {@code hashCode}: RMI las usa para reusar conexiones, y dos fabricas
- * equivalentes que no se declaren iguales abren un socket cada una.
+ * <p>That is what lets an object demand TLS without the client configuring anything — see
+ * {@code javax.rmi.ssl.SslRMIClientSocketFactory}. It is also why it has to implement
+ * {@code equals} and {@code hashCode}: RMI uses them to reuse connections, and two equivalent
+ * factories that do not declare themselves equal open a socket each.
  */
 public interface RMIClientSocketFactory {
 
-    /** Abre una conexion al servidor. */
+    /** It opens a connection to the server. */
     Socket createSocket(String host, int port) throws IOException;
 }

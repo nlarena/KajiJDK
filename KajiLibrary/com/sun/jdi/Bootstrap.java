@@ -1,27 +1,28 @@
 package com.sun.jdi;
 
 /**
- * De donde se saca el {@link VirtualMachineManager}: todo el arranque de JDI.
+ * Where the {@link VirtualMachineManager} is got from: the whole start-up of JDI.
  *
  * @since 1.3
  */
 public class Bootstrap {
 
-    /** Para quien la instancie; la clase no tiene estado. */
+    /** For whoever instantiates it; the class has no state. */
     public Bootstrap() {
     }
 
     /**
-     * El gestor de maquinas virtuales, de donde salen todos los conectores.
+     * The virtual machine manager, where every connector comes from.
      *
-     * @return el gestor
-     * @throws UnsupportedOperationException en esta biblioteca: JDI necesita una implementacion del
-     * protocolo de depuracion (JDWP) y del transporte, que son decenas de clases internas y no
-     * forman parte de esta API
+     * @return the manager
+     * @throws UnsupportedOperationException in this library: JDI needs an implementation of the
+     * debugging protocol (JDWP) and of the transport, which are dozens of internal classes and are
+     * not part of this API
      */
     public static synchronized VirtualMachineManager virtualMachineManager() {
         throw new UnsupportedOperationException(
-                "JDI necesita una implementacion de JDWP y de su transporte, que esta biblioteca no "
-                + "trae; lo que si esta es la API entera, contra la que un depurador compila");
+                "JDI needs an implementation of JDWP and of its transport, which this library "
+                + "does not bring; what is here is the whole API, against which a debugger "
+                + "compiles");
     }
 }

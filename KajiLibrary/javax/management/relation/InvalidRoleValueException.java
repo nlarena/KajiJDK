@@ -1,21 +1,22 @@
 package javax.management.relation;
 
 /**
- * El valor de un rol no cumple lo que su descripcion exige.
+ * A role's value does not meet what its description requires.
  *
- * <p>Cuantos MBeans hay, de que clase son, si estan registrados: cualquiera de las condiciones de
- * {@link RoleInfo} que no se cumpla llega por aca. El motivo preciso esta en {@link RoleStatus}.
+ * <p>How many MBeans there are, which class they are, whether they are registered: any of the
+ * {@link RoleInfo} conditions that is not met comes through here. The precise reason is in
+ * {@link RoleStatus}.
  */
 public class InvalidRoleValueException extends RelationException {
 
     private static final long serialVersionUID = -2066091747301983721L;
 
-    /** Sin detalle. */
+    /** Without detail. */
     public InvalidRoleValueException() {
         super();
     }
 
-    /** Con un mensaje. */
+    /** With a message. */
     public InvalidRoleValueException(String message) {
         super(message);
     }

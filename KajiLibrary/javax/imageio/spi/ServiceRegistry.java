@@ -9,49 +9,52 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * KajiLibrary's javax.imageio.spi.ServiceRegistry -- un registro de proveedores, por categoria.
+ * KajiLibrary's javax.imageio.spi.ServiceRegistry -- a registry of providers, by category.
  *
- * <p>Es un {@link java.util.ServiceLoader} con dos cosas que aquel no tiene, y las dos importan:
+ * <p>It is a {@link java.util.ServiceLoader} with two things that one lacks, and both matter:
  *
  * <ul>
- *   <li><b>se puede modificar en caliente</b>: registrar y dar de baja proveedores mientras el
- *       programa corre;
- *   <li><b>tiene orden parcial</b>: {@link #setOrdering} declara que un proveedor va antes que otro, y
- *       {@link #getServiceProviders} con {@code useOrdering} respeta esa relacion.
+ *   <li><b>it can be modified at run time</b>: registering and deregistering providers while the
+ *       program runs;
+ *   <li><b>it has a partial order</b>: {@link #setOrdering} declares that one provider goes before
+ *       another, and {@link #getServiceProviders} with {@code useOrdering} respects that relation.
  * </ul>
  *
- * <h2>El orden es parcial, no total</h2>
+ * <h2>The order is partial, not total</h2>
  *
- * <p>Es la parte que se malinterpreta. No se declara una posicion sino <b>pares</b>: "A antes que B".
- * Los proveedores sin ninguna relacion entre si salen en cualquier orden.
+ * <p>It is the part that gets misread. You do not declare a position but <b>pairs</b>: "A before
+ * B". Providers with no relation between them come out in any order.
  *
- * <p>Sirve exactamente para lo que hace falta --que un lector especializado de TIFF gane sobre el
- * generico-- sin obligar a nadie a inventar prioridades numericas.
+ * <p>It serves exactly what is needed --a specialized TIFF reader winning over the generic one--
+ * without forcing anyone to invent numeric priorities.
  *
- * <p>Un ciclo en las relaciones lanza {@link IllegalArgumentException} al pedir el recorrido ordenado.
+ * <p>A cycle in the relations throws {@link IllegalArgumentException} when the ordered traversal is
+ * asked for. The JDK does not throw: its iterator simply leaves out the providers caught in the
+ * cycle.
  *
- * <h2>Un proveedor por clase y por categoria</h2>
+ * <h2>One provider per class and per category</h2>
  *
- * <p>{@link #registerServiceProvider} reemplaza al que hubiera de la <b>misma clase</b> en esa
- * categoria. No es igualdad por {@code equals}: es la clase. Dos instancias distintas del mismo
- * proveedor no conviven, y eso evita que cargar el mismo complemento dos veces lo duplique.
+ * <p>{@link #registerServiceProvider} replaces whatever there was of the <b>same class</b> in that
+ * category. It is not equality by {@code equals}: it is the class. Two different instances of the
+ * same provider do not coexist, and that prevents loading the same plug-in twice from duplicating
+ * it.
  */
 public class ServiceRegistry {
 
-    /** Los proveedores de cada categoria, por clase. */
+    /** The providers of each category, by class. */
     private final Map<Class<?>, Map<Class<?>, Object>> categoryMap =
         new HashMap<Class<?>, Map<Class<?>, Object>>();
 
-    /** Las categorias, en el orden en que se declararon. */
+    /** The categories, in the order they were declared. */
     private final List<Class<?>> categories = new ArrayList<Class<?>>();
 
-    /** Las relaciones "va antes que", por categoria. */
+    /** The "goes before" relations, per category. */
     private final Map<Class<?>, Map<Object, Set<Object>>> orderings =
         new HashMap<Class<?>, Map<Object, Set<Object>>>();
 
     /**
-     * @param categories las categorias que va a manejar
-     * @throws IllegalArgumentException si es null
+     * @param categories the categories it will handle
+     * @throws IllegalArgumentException if it is null
      */
     public ServiceRegistry(Iterator<Class<?>> categories) {
         if (categories == null) {
@@ -66,32 +69,32 @@ public class ServiceRegistry {
     }
 
     /**
-     * Los proveedores de ese tipo declarados como servicio.
+     * The providers of that type declared as services.
      *
-     * <p>Es {@link java.util.ServiceLoader} y nada mas; no toca este registro.
+     * <p>It is {@link java.util.ServiceLoader} and nothing more; it does not touch this registry.
      */
     public static <T> Iterator<T> lookupProviders(Class<T> providerClass, ClassLoader loader) {
         return java.util.ServiceLoader.load(providerClass, loader).iterator();
     }
 
-    /** Idem, con el cargador del contexto. */
+    /** Same, with the context class loader. */
     public static <T> Iterator<T> lookupProviders(Class<T> providerClass) {
         return java.util.ServiceLoader.load(providerClass).iterator();
     }
 
-    /** Las categorias que maneja. */
+    /** The categories it handles. */
     public Iterator<Class<?>> getCategories() {
         return new ArrayList<Class<?>>(this.categories).iterator();
     }
 
     /**
-     * Registra un proveedor en esa categoria.
+     * Registers a provider in that category.
      *
-     * <p>Ver la nota de la clase: reemplaza al de la misma clase si lo habia, y en ese caso al
-     * reemplazado se le avisa con {@code onDeregistration}.
+     * <p>See the class note: it replaces the one of the same class if there was one, and in that
+     * case the replaced one is notified with {@code onDeregistration}.
      *
-     * @return si no habia ninguno de esa clase
-     * @throws IllegalArgumentException si el proveedor es null o la categoria no esta declarada
+     * @return whether there was none of that class
+     * @throws IllegalArgumentException if the provider is null or the category is not declared
      */
     public <T> boolean registerServiceProvider(T provider, Class<T> category) {
         if (provider == null) {
@@ -112,9 +115,9 @@ public class ServiceRegistry {
     }
 
     /**
-     * Idem, en <b>todas</b> las categorias que le correspondan.
+     * Same, in <b>all</b> the categories it belongs to.
      *
-     * @throws IllegalArgumentException si es null
+     * @throws IllegalArgumentException if it is null
      */
     public void registerServiceProvider(Object provider) {
         if (provider == null) {
@@ -131,9 +134,9 @@ public class ServiceRegistry {
     }
 
     /**
-     * Registra varios.
+     * Registers several.
      *
-     * @throws IllegalArgumentException si el iterador es null o trae un null
+     * @throws IllegalArgumentException if the iterator is null or yields a null
      */
     public void registerServiceProviders(Iterator<?> providers) {
         if (providers == null) {
@@ -145,10 +148,10 @@ public class ServiceRegistry {
     }
 
     /**
-     * Lo da de baja de esa categoria.
+     * Deregisters it from that category.
      *
-     * @return si estaba
-     * @throws IllegalArgumentException si es null o la categoria no esta declarada
+     * @return whether it was there
+     * @throws IllegalArgumentException if it is null or the category is not declared
      */
     public <T> boolean deregisterServiceProvider(T provider, Class<T> category) {
         if (provider == null) {
@@ -167,9 +170,9 @@ public class ServiceRegistry {
     }
 
     /**
-     * Lo da de baja de todas.
+     * Deregisters it from all of them.
      *
-     * @throws IllegalArgumentException si es null
+     * @throws IllegalArgumentException if it is null
      */
     public void deregisterServiceProvider(Object provider) {
         if (provider == null) {
@@ -185,7 +188,7 @@ public class ServiceRegistry {
         }
     }
 
-    /** Si ese proveedor esta registrado en alguna categoria. Por identidad, no por {@code equals}. */
+    /** Whether that provider is registered in some category. By identity, not by {@code equals}. */
     public boolean contains(Object provider) {
         if (provider == null) {
             return false;
@@ -202,19 +205,20 @@ public class ServiceRegistry {
     }
 
     /**
-     * Los proveedores de esa categoria.
+     * The providers of that category.
      *
-     * @param useOrdering si respetar las relaciones de {@link #setOrdering}
-     * @throws IllegalArgumentException si la categoria no esta declarada, o si el orden tiene un ciclo
+     * @param useOrdering whether to respect the relations of {@link #setOrdering}
+     * @throws IllegalArgumentException if the category is not declared, or if the order has a cycle
+     *     (the JDK does not throw for a cycle; see the class note)
      */
     public <T> Iterator<T> getServiceProviders(Class<T> category, boolean useOrdering) {
         return getServiceProviders(category, null, useOrdering);
     }
 
     /**
-     * Idem, quedandose solo con los que pasen el filtro.
+     * Same, keeping only those that pass the filter.
      *
-     * @throws IllegalArgumentException si la categoria no esta declarada, o si el orden tiene un ciclo
+     * @throws IllegalArgumentException if the category is not declared, or if the order has a cycle
      */
     public <T> Iterator<T> getServiceProviders(Class<T> category, Filter filter,
                                                boolean useOrdering) {
@@ -236,12 +240,12 @@ public class ServiceRegistry {
     }
 
     /**
-     * El proveedor de esa clase exacta, o null.
+     * The provider of that exact class, or null.
      *
-     * <p>Es por <b>clase</b> y no por categoria: sirve para encontrar un proveedor concreto del que se
-     * sabe el nombre, que es como {@code ImageReaderSpi.getImageWriterSpiNames} se resuelve.
+     * <p>It is by <b>class</b> and not by category: it serves to find a specific provider whose
+     * name is known, which is how {@code ImageReaderSpi.getImageWriterSpiNames} is resolved.
      *
-     * @throws IllegalArgumentException si es null
+     * @throws IllegalArgumentException if it is null
      */
     public <T> T getServiceProviderByClass(Class<T> providerClass) {
         if (providerClass == null) {
@@ -263,10 +267,10 @@ public class ServiceRegistry {
     }
 
     /**
-     * Declara que el primero va antes que el segundo. Ver la nota de la clase.
+     * Declares that the first goes before the second. See the class note.
      *
-     * @return si la relacion no estaba ya
-     * @throws IllegalArgumentException si alguno es null o son el mismo objeto
+     * @return whether the relation was not there already
+     * @throws IllegalArgumentException if either is null or they are the same object
      */
     public <T> boolean setOrdering(Class<T> category, T firstProvider, T secondProvider) {
         checkPair(firstProvider, secondProvider);
@@ -280,10 +284,10 @@ public class ServiceRegistry {
     }
 
     /**
-     * Borra esa relacion.
+     * Removes that relation.
      *
-     * @return si estaba
-     * @throws IllegalArgumentException si alguno es null o son el mismo objeto
+     * @return whether it was there
+     * @throws IllegalArgumentException if either is null or they are the same object
      */
     public <T> boolean unsetOrdering(Class<T> category, T firstProvider, T secondProvider) {
         checkPair(firstProvider, secondProvider);
@@ -296,9 +300,9 @@ public class ServiceRegistry {
     }
 
     /**
-     * Da de baja todos los de esa categoria.
+     * Deregisters all the ones of that category.
      *
-     * @throws IllegalArgumentException si la categoria no esta declarada
+     * @throws IllegalArgumentException if the category is not declared
      */
     public void deregisterAll(Class<?> category) {
         Map<Class<?>, Object> map = map(category);
@@ -312,7 +316,7 @@ public class ServiceRegistry {
         }
     }
 
-    /** Vacia el registro entero. */
+    /** Empties the whole registry. */
     public void deregisterAll() {
         int i = 0;
         while (i < this.categories.size()) {
@@ -322,10 +326,11 @@ public class ServiceRegistry {
     }
 
     /**
-     * Vacia el registro al recolectarse.
+     * Empties the registry when collected.
      *
-     * <p>Es publico, que para un {@code finalize} es raro, y viene asi del JDK. La finalizacion quedo
-     * obsoleta y no hay que apoyarse en esto: un registro se vacia con {@link #deregisterAll}.
+     * <p>It is public, which is odd for a {@code finalize}, and comes that way from the JDK, where
+     * it is {@code @Deprecated(since="9", forRemoval=true)} (not marked here). Finalization is
+     * obsolete and nothing should rely on this: a registry is emptied with {@link #deregisterAll}.
      */
     @Override
     public void finalize() throws Throwable {
@@ -333,14 +338,14 @@ public class ServiceRegistry {
         super.finalize();
     }
 
-    /** Con que quedarse de un recorrido de proveedores. */
+    /** What to keep from a traversal of providers. */
     public interface Filter {
 
-        /** Si ese proveedor sirve. */
+        /** Whether that provider will do. */
         boolean filter(Object provider);
     }
 
-    /** El mapa de esa categoria, o falla. */
+    /** The map of that category, or fails. */
     private Map<Class<?>, Object> map(Class<?> category) {
         Map<Class<?>, Object> map = this.categoryMap.get(category);
         if (map == null) {
@@ -349,7 +354,7 @@ public class ServiceRegistry {
         return map;
     }
 
-    /** Las relaciones de esa categoria, o falla. */
+    /** The relations of that category, or fails. */
     private Map<Object, Set<Object>> ordering(Class<?> category) {
         Map<Object, Set<Object>> order = this.orderings.get(category);
         if (order == null) {
@@ -358,7 +363,7 @@ public class ServiceRegistry {
         return order;
     }
 
-    /** Registra sin comprobar la categoria, que ya se sabe buena. */
+    /** Registers without checking the category, which is already known to be good. */
     private void registerUnchecked(Object provider, Class<?> category) {
         Map<Class<?>, Object> map = this.categoryMap.get(category);
         Object previous = map.put(provider.getClass(), provider);
@@ -370,7 +375,7 @@ public class ServiceRegistry {
         }
     }
 
-    /** Da de baja sin comprobar. */
+    /** Deregisters without checking. */
     private void deregisterUnchecked(Object provider, Class<?> category) {
         Map<Class<?>, Object> map = this.categoryMap.get(category);
         if (map.get(provider.getClass()) == provider) {
@@ -379,14 +384,14 @@ public class ServiceRegistry {
         }
     }
 
-    /** Le avisa al proveedor, si le interesa. */
+    /** Notifies the provider, if it cares. */
     private void deregisterFromCategory(Object provider, Class<?> category) {
         if (provider instanceof RegisterableService) {
             ((RegisterableService) provider).onDeregistration(this, category);
         }
     }
 
-    /** Que los dos existan y sean distintos. */
+    /** That both exist and are different. */
     private static void checkPair(Object first, Object second) {
         if (first == null || second == null) {
             throw new IllegalArgumentException("provider is null!");
@@ -397,13 +402,13 @@ public class ServiceRegistry {
     }
 
     /**
-     * Ordena respetando las relaciones declaradas.
+     * Sorts respecting the declared relations.
      *
-     * <p>Es un orden topologico por eliminacion repetida de los que no tienen a nadie delante. Los que
-     * no tienen ninguna relacion salen en el orden en que se registraron, que es lo unico estable que
-     * se puede prometer.
+     * <p>It is a topological sort by repeatedly removing the ones with nobody in front. The ones
+     * with no relation come out in the order they were registered, which is the only stable thing
+     * that can be promised.
      *
-     * @throws IllegalArgumentException si hay un ciclo
+     * @throws IllegalArgumentException if there is a cycle
      */
     private static List<Object> topologicalSort(List<Object> providers,
                                                 Map<Object, Set<Object>> orderings) {
@@ -431,7 +436,7 @@ public class ServiceRegistry {
         return sorted;
     }
 
-    /** Si alguno de los pendientes tiene que ir antes que ese. */
+    /** Whether any of the pending ones has to go before that one. */
     private static boolean hasPredecessorIn(Object candidate, List<Object> pending,
                                             Map<Object, Set<Object>> orderings) {
         int i = 0;

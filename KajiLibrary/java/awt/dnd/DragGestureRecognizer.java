@@ -9,48 +9,50 @@ import java.util.List;
 import java.util.TooManyListenersException;
 
 /**
- * Decide **cuándo** un movimiento del ratón deja de ser un clic torpe y pasa a ser un arrastre.
+ * Decides **when** a movement of the mouse stops being a clumsy click and becomes a drag.
  *
- * <p>La pregunta parece tonta hasta que hay que contestarla: apretar el botón y moverse dos píxeles
- * no es arrastrar, moverse veinte sí, y el umbral depende de la plataforma y hasta del dispositivo.
- * Poner ese criterio acá, y no en cada aplicación, es lo que hace que arrastrar se sienta igual en
- * todos lados.
+ * <p>The question looks silly until it has to be answered: pressing the button and moving two
+ * pixels is not dragging, moving twenty is, and the threshold depends on the platform and even on
+ * the device. Putting that criterion here, and not in each application, is what makes dragging feel
+ * the same everywhere.
  *
- * <p>La clase junta los eventos del gesto mientras lo va reconociendo, y cuando se convence dispara
- * un {@link DragGestureEvent} con **todos** ellos. Por eso guarda la lista en vez de sólo el último:
- * quien decida qué se arrastra suele necesitar dónde arrancó el gesto y no dónde está ahora.
+ * <p>The class gathers the events of the gesture while it recognises it, and when it is convinced
+ * it fires a {@link DragGestureEvent} with **all** of them. That is why it keeps the list instead
+ * of only the last one: whoever decides what is dragged usually needs where the gesture started and
+ * not where it is now.
  *
- * <p>Como {@link DropTarget}, admite **un solo** oyente: dos podrían empezar dos arrastres con el
- * mismo gesto.
+ * <p>Like {@link DropTarget}, it admits **a single** listener: two could start two drags with the
+ * same gesture.
  */
 public abstract class DragGestureRecognizer implements Serializable {
 
     private static final long serialVersionUID = 8996673345831063337L;
 
-    /** Quién va a llevar adelante el arrastre. */
+    /** Who is going to carry the drag through. */
     protected DragSource dragSource;
 
-    /** Sobre qué componente se vigila el gesto. */
+    /** Over which component the gesture is watched for. */
     protected Component component;
 
-    /** A quién avisarle cuando el gesto se reconozca. */
+    /** Who to tell when the gesture is recognised. */
     protected transient DragGestureListener dragGestureListener;
 
-    /** Qué acciones acepta el origen. */
+    /** Which actions the source accepts. */
     protected int sourceActions;
 
-    /** Los eventos que se juntaron del gesto en curso. */
     /**
-     * El tipo declarado es `ArrayList` y no `List`, contra lo que uno escribiria hoy: es un campo
-     * **protegido** desde 1.2, asi que su tipo forma parte de la API y una subclase puede depender
-     * de el.
+     * The events gathered from the gesture under way.
+     *
+     * <p>The declared type is `ArrayList` and not `List`, against what one would write today: it is
+     * a **protected** field since 1.2, so its type is part of the API and a subclass can depend on
+     * it.
      */
     protected ArrayList<InputEvent> events = new ArrayList<InputEvent>(1);
 
     /**
-     * Con todo dado.
+     * With everything given.
      *
-     * @throws IllegalArgumentException si el origen de arrastre es `null`
+     * @throws IllegalArgumentException if the drag source is `null`
      */
     protected DragGestureRecognizer(DragSource ds, Component c, int sa, DragGestureListener dgl) {
         if (ds == null) {
@@ -63,7 +65,7 @@ public abstract class DragGestureRecognizer implements Serializable {
             try {
                 this.addDragGestureListener(dgl);
             } catch (TooManyListenersException e) {
-                // No puede pasar: acabamos de construirlo y no tiene oyentes.
+                // It cannot happen: we have just built it and it has no listeners.
                 throw new InternalError(e.toString());
             }
         }
@@ -73,53 +75,53 @@ public abstract class DragGestureRecognizer implements Serializable {
     }
 
     /**
-     * Sin oyente.
+     * With no listener.
      *
-     * @throws IllegalArgumentException si el origen de arrastre es `null`
+     * @throws IllegalArgumentException if the drag source is `null`
      */
     protected DragGestureRecognizer(DragSource ds, Component c, int sa) {
         this(ds, c, sa, null);
     }
 
     /**
-     * Aceptando cualquier acción.
+     * Accepting any action.
      *
-     * @throws IllegalArgumentException si el origen de arrastre es `null`
+     * @throws IllegalArgumentException if the drag source is `null`
      */
     protected DragGestureRecognizer(DragSource ds, Component c) {
         this(ds, c, DnDConstants.ACTION_NONE);
     }
 
     /**
-     * Sin componente todavía.
+     * With no component yet.
      *
-     * @throws IllegalArgumentException si el origen de arrastre es `null`
+     * @throws IllegalArgumentException if the drag source is `null`
      */
     protected DragGestureRecognizer(DragSource ds) {
         this(ds, null);
     }
 
-    /** Empieza a escuchar al componente; lo escribe cada reconocedor concreto. */
+    /** Starts listening to the component; each concrete recogniser writes it. */
     protected abstract void registerListeners();
 
-    /** Deja de escucharlo. */
+    /** Stops listening to it. */
     protected abstract void unregisterListeners();
 
-    /** Quién va a llevar adelante el arrastre. */
+    /** Who is going to carry the drag through. */
     public DragSource getDragSource() {
         return this.dragSource;
     }
 
-    /** Sobre qué componente vigila. */
+    /** Which component it watches over. */
     public synchronized Component getComponent() {
         return this.component;
     }
 
     /**
-     * Cambia el componente que vigila.
+     * Changes the component it watches.
      *
-     * <p>Deja de escuchar al anterior y empieza con el nuevo: es lo que hace que el reconocedor no
-     * siga colgado de un componente que ya no se usa.
+     * <p>It stops listening to the previous one and starts with the new one: it is what keeps the
+     * recogniser from staying hooked to a component that is no longer used.
      */
     public synchronized void setComponent(Component c) {
         if (this.component != null && this.dragGestureListener != null) {
@@ -131,21 +133,21 @@ public abstract class DragGestureRecognizer implements Serializable {
         }
     }
 
-    /** Qué acciones acepta el origen. */
+    /** Which actions the source accepts. */
     public synchronized int getSourceActions() {
         return this.sourceActions;
     }
 
-    /** Cambia qué acciones acepta. */
+    /** Changes which actions it accepts. */
     public synchronized void setSourceActions(int actions) {
         this.sourceActions = actions
                 & (DnDConstants.ACTION_COPY_OR_MOVE | DnDConstants.ACTION_LINK);
     }
 
     /**
-     * El evento que empezó el gesto.
+     * The event that started the gesture.
      *
-     * @return el primero, o `null` si todavía no hay gesto
+     * @return the first one, or `null` if there is no gesture yet
      */
     public InputEvent getTriggerEvent() {
         if (this.events.isEmpty()) {
@@ -154,15 +156,15 @@ public abstract class DragGestureRecognizer implements Serializable {
         return this.events.get(0);
     }
 
-    /** Descarta el gesto a medio reconocer y vuelve a empezar. */
+    /** Discards the half-recognised gesture and starts again. */
     public void resetRecognizer() {
         this.events.clear();
     }
 
     /**
-     * Registra el oyente.
+     * Registers the listener.
      *
-     * @throws TooManyListenersException si ya hay uno
+     * @throws TooManyListenersException if there is one already
      */
     public synchronized void addDragGestureListener(DragGestureListener dgl)
             throws TooManyListenersException {
@@ -176,9 +178,9 @@ public abstract class DragGestureRecognizer implements Serializable {
     }
 
     /**
-     * Saca al oyente.
+     * Removes the listener.
      *
-     * @throws IllegalArgumentException si no es el que estaba registrado
+     * @throws IllegalArgumentException if it is not the one that was registered
      */
     public synchronized void removeDragGestureListener(DragGestureListener dgl) {
         if (this.dragGestureListener != dgl) {
@@ -191,10 +193,10 @@ public abstract class DragGestureRecognizer implements Serializable {
     }
 
     /**
-     * Dispara el aviso de que el gesto se reconoció.
+     * Fires the notice that the gesture was recognised.
      *
-     * <p>Vacía la lista de eventos después de avisar: el gesto ya se consumió, y dejarlos haría que
-     * el siguiente arrastre arrancara con la basura del anterior.
+     * <p>It empties the list of events after giving notice: the gesture has been consumed, and
+     * leaving them would make the next drag start with the rubbish of the previous one.
      */
     protected synchronized void fireDragGestureRecognized(int dragAction, Point p) {
         try {
@@ -207,7 +209,7 @@ public abstract class DragGestureRecognizer implements Serializable {
         }
     }
 
-    /** Suma un evento al gesto en curso. */
+    /** Adds an event to the gesture under way. */
     protected synchronized void appendEvent(InputEvent awtie) {
         this.events.add(awtie);
     }

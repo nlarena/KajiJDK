@@ -1,56 +1,56 @@
 package javax.xml.parsers;
 
 /**
- * KajiLibrary's javax.xml.parsers.FactoryConfigurationError -- no hay fabrica.
+ * KajiLibrary's javax.xml.parsers.FactoryConfigurationError -- there is no factory.
  *
- * <p>Es un {@link Error} y no una excepcion, lo que parece desmedido y no lo es: significa que la
- * implementacion de XML que se nombro en la configuracion <b>no existe</b> o no se pudo cargar. No
- * es un pedido que fallo, es la plataforma armada mal, y no hay nada que un {@code catch} alrededor
- * de la llamada pueda hacer al respecto.
+ * <p>It is an {@link Error} and not an exception, which seems excessive and is not: it means the
+ * XML implementation named in the configuration <b>does not exist</b> or could not be loaded. It is
+ * not a request that failed, it is the platform put together wrong, and there is nothing a {@code
+ * catch} around the call can do about it.
  *
- * <h2>Los dos accesos a la causa</h2>
+ * <h2>The two ways to the cause</h2>
  *
- * <p>{@link #getException} y {@link #getCause} devuelven lo mismo. La primera es de 2000, anterior a
- * que {@code Throwable} tuviera causa encadenada; la segunda llego con Java 1.4 y es la que ve un
- * {@code printStackTrace}. Se conservan las dos, y la segunda esta implementada en terminos de la
- * primera para que no puedan discrepar.
+ * <p>{@link #getException} and {@link #getCause} return the same. The first is from 2000, before
+ * {@code Throwable} had a chained cause; the second arrived with Java 1.4 and is the one a {@code
+ * printStackTrace} sees. Both are kept, and the second is implemented in terms of the first so that
+ * they cannot disagree.
  *
- * <p>{@link #getMessage} tambien tiene una vuelta: si no se dio mensaje propio, devuelve el de la
- * causa. Sin eso, el error mas comun de este paquete --una clase mal escrita en una propiedad-- se
- * imprimiria sin decir cual.
+ * <p>{@link #getMessage} also has a twist: if no message of its own was given, it returns the
+ * cause's. Without that, the commonest error of this package --a misspelt class in a property--
+ * would print without saying which.
  */
 public class FactoryConfigurationError extends Error {
 
     private static final long serialVersionUID = -827108682472263355L;
 
-    /** La causa; ver la nota de la clase sobre por que no se usa la de {@code Throwable}. */
+    /** The cause; see the class note on why {@code Throwable}'s is not used. */
     private Exception exception;
 
-    /** Sin detalle. */
+    /** Without detail. */
     public FactoryConfigurationError() {
         super();
         this.exception = null;
     }
 
-    /** Con un mensaje. */
+    /** With a message. */
     public FactoryConfigurationError(String msg) {
         super(msg);
         this.exception = null;
     }
 
-    /** Envolviendo lo que fallo de verdad. */
+    /** Wrapping what really failed. */
     public FactoryConfigurationError(Exception e) {
         super(e.toString());
         this.exception = e;
     }
 
-    /** Con las dos cosas. */
+    /** With both things. */
     public FactoryConfigurationError(Exception e, String msg) {
         super(msg);
         this.exception = e;
     }
 
-    /** El mensaje propio, o el de la causa si no hay. Ver la nota de la clase. */
+    /** Its own message, or the cause's if there is none. See the class note. */
     public String getMessage() {
         String message = super.getMessage();
         if (message == null && this.exception != null) {
@@ -59,12 +59,12 @@ public class FactoryConfigurationError extends Error {
         return message;
     }
 
-    /** La causa, en la forma vieja. */
+    /** The cause, the old way. */
     public Exception getException() {
         return this.exception;
     }
 
-    /** La causa, en la forma que entiende {@code Throwable}. Es la misma. */
+    /** The cause, in the form {@code Throwable} understands. It is the same one. */
     public Throwable getCause() {
         return this.exception;
     }

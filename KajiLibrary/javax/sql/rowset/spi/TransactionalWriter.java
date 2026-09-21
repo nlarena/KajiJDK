@@ -6,46 +6,46 @@ import java.sql.Savepoint;
 import javax.sql.RowSetWriter;
 
 /**
- * Un escritor que ademas sabe confirmar y deshacer.
+ * A writer that also knows how to commit and roll back.
  *
- * <h2>Por que no esta en {@link RowSetWriter}</h2>
+ * <h2>Why it is not in {@link RowSetWriter}</h2>
  *
- * <p>Porque no todo origen tiene transacciones. Un escritor contra un archivo XML puede escribir y
- * no puede deshacer; obligarlo a declarar {@code rollback} lo forzaria a tener un metodo que miente
- * o que falla siempre.
+ * <p>Because not every source has transactions. A writer against an XML file can write and cannot
+ * undo; forcing it to declare {@code rollback} would force it to have a method that lies or always
+ * fails.
  *
- * <p>Separando la capacidad en su propia interfaz, un {@code CachedRowSet} pregunta con
- * {@code instanceof} si el escritor que le toco puede, en vez de intentarlo y ver que pasa.
+ * <p>By separating the capability into its own interface, a {@code CachedRowSet} asks with
+ * {@code instanceof} whether the writer it got can, instead of trying it and seeing what happens.
  *
- * <h2>Los puntos de resguardo</h2>
+ * <h2>Savepoints</h2>
  *
- * <p>{@link #rollback(Savepoint)} deshace hasta una marca en vez de deshacer todo. Sirve cuando un
- * lote de filas se escribe junto y una sola falla: se vuelve hasta antes de esa fila y el resto del
- * lote se conserva.
+ * <p>{@link #rollback(Savepoint)} rolls back to a mark instead of rolling back everything. It
+ * serves when a batch of rows is written together and a single one fails: it goes back to before
+ * that row and the rest of the batch is kept.
  *
  * @since 1.5
  */
 public interface TransactionalWriter extends RowSetWriter {
 
     /**
-     * Confirma lo escrito.
+     * Commits what was written.
      *
-     * @throws SQLException si no se pudo confirmar
+     * @throws SQLException if it could not be committed
      */
     void commit() throws SQLException;
 
     /**
-     * Deshace todo lo escrito desde la ultima confirmacion.
+     * Rolls back everything written since the last commit.
      *
-     * @throws SQLException si no se pudo deshacer
+     * @throws SQLException if it could not be rolled back
      */
     void rollback() throws SQLException;
 
     /**
-     * Deshace hasta el punto de resguardo dado.
+     * Rolls back to the given savepoint.
      *
-     * @param s el punto de resguardo
-     * @throws SQLException si no se pudo deshacer
+     * @param s the savepoint
+     * @throws SQLException if it could not be rolled back
      */
     void rollback(Savepoint s) throws SQLException;
 }

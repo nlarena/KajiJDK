@@ -17,118 +17,119 @@ import javax.management.remote.JMXConnectorServer;
 import javax.security.auth.Subject;
 
 /**
- * La parte del servidor que no depende del transporte.
+ * The part of the server that does not depend on the transport.
  *
- * <h2>Que queda de este lado de la linea</h2>
+ * <h2>What stays on this side of the line</h2>
  *
- * <p>Lleva la lista de clientes conectados, el {@link MBeanServer} contra el que se trabaja, el
- * cargador de clases por omision y el ciclo de vida. Nada de eso cambia segun como se llegue hasta
- * aca, y por eso esta escrito una sola vez.
+ * <p>It keeps the list of connected clients, the {@link MBeanServer} that is worked against, the
+ * default class loader and the life cycle. None of that changes according to how one gets here,
+ * and that is why it is written only once.
  *
- * <p>Lo que deja abstracto es exactamente lo que si cambia: {@link #export} y {@link #toStub}
- * publican el objeto por el transporte concreto, y {@link #makeClient} fabrica la conexion. Es la
- * separacion entre "que hace un servidor JMX" y "como se lo alcanza".
+ * <p>What it leaves abstract is exactly what does change: {@link #export} and {@link #toStub}
+ * publish the object over the concrete transport, and {@link #makeClient} builds the connection.
+ * It is the separation between "what a JMX server does" and "how it is reached".
  *
- * <h2>{@link #newClient} es la puerta</h2>
+ * <h2>{@link #newClient} is the door</h2>
  *
- * <p>Autentica --si hay un {@link JMXAuthenticator} en el entorno--, arma el identificador de la
- * conexion, la crea con {@link #makeClient} y la anota. Cada cliente recibe la suya, que es lo que
- * permite cerrarle la puerta a uno sin tocar a los demas.
+ * <p>It authenticates --if there is a {@link JMXAuthenticator} in the environment--, builds the
+ * connection's identifier, creates it with {@link #makeClient} and notes it down. Each client
+ * gets its own, which is what allows shutting the door on one without touching the others.
  *
- * <p>{@link #close} cierra todas: primero el transporte para que no entren mas, despues cada
- * conexion viva. El orden importa, porque al reves entraria un cliente nuevo mientras se cierran los
- * viejos.
+ * <p>{@link #close} closes them all: first the transport so that no more come in, then each live
+ * connection. The order matters, because the other way round a new client would come in while
+ * the old ones are being closed.
  *
- * <h2>Estado en esta biblioteca</h2>
+ * <h2>State in this library</h2>
  *
- * <p>Todo lo de esta clase funciona de verdad: la autenticacion, la lista de clientes, los
- * identificadores, el cierre en cascada. Lo que no puede funcionar es lo abstracto, y eso lo decide
- * la subclase: {@link RMIJRMPServerImpl} necesita exportar por RMI, y esta VM no tiene ese
- * transporte.
+ * <p>Everything in this class really works: the authentication, the client list, the
+ * identifiers, the cascading close. What cannot work is the abstract part, and that is decided
+ * by the subclass: {@link RMIJRMPServerImpl} needs to export over RMI, and this VM does not have
+ * that transport.
  *
  * @since 1.5
  */
 public abstract class RMIServerImpl implements Closeable, RMIServer {
 
     private final Map<String, ?> env;
-    private final List<RMIConnection> clientes = new ArrayList<RMIConnection>();
+    private final List<RMIConnection> clients = new ArrayList<RMIConnection>();
 
     private ClassLoader cl;
     private MBeanServer mbeanServer;
-    private boolean cerrado;
-    private int numeroDeConexion;
+    private boolean closed;
+    private int connectionCount;
 
     /**
-     * Un servidor con ese entorno.
+     * A server with that environment.
      *
-     * @param env las propiedades de configuracion, o {@code null}
+     * @param env the configuration properties, or {@code null}
      */
     public RMIServerImpl(Map<String, ?> env) {
         this.env = env == null ? Collections.<String, Object>emptyMap() : env;
     }
 
     /**
-     * Publica este objeto por el transporte concreto.
+     * Publishes this object over the concrete transport.
      *
-     * @throws IOException si no se pudo publicar
+     * @throws IOException if it could not be published
      */
     protected abstract void export() throws IOException;
 
     /**
-     * El objeto remoto que hay que mandarle al cliente para que llegue hasta aca.
+     * The remote object that has to be sent to the client so that it reaches here.
      *
-     * @return el stub
-     * @throws IOException si no se pudo obtener
+     * @return the stub
+     * @throws IOException if it could not be obtained
      */
     public abstract Remote toStub() throws IOException;
 
     /**
-     * Fija el cargador con el que se deserializa lo que mandan los clientes.
+     * Sets the loader with which what the clients send is deserialized.
      *
-     * <p>Es una decision de seguridad y no de comodidad: define que clases puede hacer aparecer un
-     * cliente dentro de este proceso.
+     * <p>It is a security decision and not a convenience one: it defines which classes a client can
+     * make appear inside this process.
      *
-     * @param cl el cargador
+     * @param cl the loader
      */
     public synchronized void setDefaultClassLoader(ClassLoader cl) {
         this.cl = cl;
     }
 
     /**
-     * El cargador por omision.
+     * The default loader.
      *
-     * @return el cargador, o {@code null}
+     * @return the loader, or {@code null}
      */
     public synchronized ClassLoader getDefaultClassLoader() {
         return cl;
     }
 
     /**
-     * Fija el {@link MBeanServer} contra el que trabajan las conexiones.
+     * Sets the {@link MBeanServer} the connections work against.
      *
-     * @param mbs el servidor de MBeans
+     * @param mbs the MBean server
      */
     public synchronized void setMBeanServer(MBeanServer mbs) {
         this.mbeanServer = mbs;
     }
 
     /**
-     * El {@link MBeanServer} configurado.
+     * The configured {@link MBeanServer}.
      *
-     * @return el servidor de MBeans, o {@code null}
+     * @return the MBean server, or {@code null}
      */
     public synchronized MBeanServer getMBeanServer() {
         return mbeanServer;
     }
 
     /**
-     * La version del protocolo y del proveedor.
+     * The protocol's and the provider's version.
      *
-     * <p>El formato es la version del protocolo, un espacio, y el nombre de la implementacion. La
-     * segunda mitad sale de {@code java.runtime.version}: es a proposito que diga que runtime esta
-     * corriendo, porque es lo que el cliente mira cuando algo no se entiende entre las dos puntas.
+     * <p>The format is the protocol's version, a space, and the implementation's name. The second
+     * half comes from {@code java.runtime.version}: it is on purpose that it says which runtime is
+     * running, because it is what the client looks at when the two ends do not understand each
+     * other.
      *
-     * @return la version
+     * @return the version
      */
     public String getVersion() {
         try {
@@ -139,49 +140,57 @@ public abstract class RMIServerImpl implements Closeable, RMIServer {
     }
 
     /**
-     * Autentica al cliente y le abre su conexion.
+     * Authenticates the client and opens its connection.
      *
-     * @param credentials la credencial, o {@code null}
-     * @return la conexion del cliente
-     * @throws IOException si el servidor esta cerrado o no se pudo crear la conexion
-     * @throws IllegalStateException si todavia no se le puso un {@link MBeanServer}
-     * @throws SecurityException si la credencial no sirve
+     * @param credentials the credential, or {@code null}
+     * @return the client's connection
+     * @throws IOException if the server is closed or the connection could not be created
+     * @throws IllegalStateException if no {@link MBeanServer} has been set on it yet
+     * @throws SecurityException if the credential does not serve
      */
     public RMIConnection newClient(Object credentials) throws IOException {
-        // El orden es el del JDK y no da lo mismo: primero se comprueba que haya MBeanServer y
-        // recien despues se autentica. Al reves, un servidor mal armado le pediria la credencial al
-        // cliente para despues decirle que no estaba listo -- o sea, le haria mandar un secreto a
-        // algo que no puede atenderlo.
+        // The order is the JDK's and it does matter: first it is checked that there is an
+        // MBeanServer and only then is the client authenticated. The other way round, a badly
+        // assembled server would ask the client for the credential only to tell it afterwards that
+        // it was not ready -- that is, it would make it send a secret to something that cannot
+        // serve it.
         synchronized (this) {
-            if (cerrado) {
+            if (closed) {
                 throw new IOException("The server has been closed");
             }
             if (mbeanServer == null) {
                 throw new IllegalStateException("Not attached to an MBean server");
             }
         }
-        final Subject subject = autenticar(credentials);
+        final Subject subject = authenticate(credentials);
         final String id;
         synchronized (this) {
-            id = idDeConexion(getProtocol(), subject);
+            id = newConnectionId(getProtocol(), subject);
         }
-        // makeClient queda fuera del bloque sincronizado a proposito: es de la subclase, puede
-        // tardar --exportar abre un puerto-- y tenerlo adentro dejaria al servidor entero trabado
-        // mientras un solo cliente se conecta.
+        // makeClient is left outside the synchronized block on purpose: it belongs to the subclass,
+        // it may take a while --exporting opens a port-- and having it inside would leave the whole
+        // server blocked while a single client connects.
         final RMIConnection c = makeClient(id, subject);
         synchronized (this) {
-            clientes.add(c);
+            clients.add(c);
         }
         return c;
     }
 
     /**
-     * Autentica con el {@link JMXAuthenticator} del entorno, si hay alguno.
+     * Authenticates with the environment's {@link JMXAuthenticator}, if there is one.
      *
-     * <p>Sin autenticador la conexion se acepta sin sujeto: es la configuracion por omision, y es
-     * la razon por la que un servidor JMX no se publica en una red que no sea de confianza.
+     * <p>Without an authenticator the connection is accepted with no subject: it is the default
+     * configuration, and it is the reason a JMX server is not published on a network that is not
+     * trusted.
+     *
+     * <p>The JDK looks one step further: if there is no authenticator but
+     * {@code jmx.remote.x.password.file} or {@code jmx.remote.x.login.config} is set, it builds a
+     * {@code JMXPluggableAuthenticator} from the file. This one does not: only
+     * {@code jmx.remote.authenticator} is looked at, so those two properties authenticate nobody
+     * here.
      */
-    private Subject autenticar(Object credentials) {
+    private Subject authenticate(Object credentials) {
         final Object a = env.get(JMXConnectorServer.AUTHENTICATOR);
         if (a == null) {
             return null;
@@ -190,137 +199,139 @@ public abstract class RMIServerImpl implements Closeable, RMIServer {
     }
 
     /**
-     * El identificador que le toca a la conexion que se esta abriendo.
+     * The identifier the connection being opened gets.
      *
-     * <p>Lleva el protocolo, la maquina del cliente, quien se autentico y un numero que no se
-     * repite. Sirve para que el registro del servidor diga algo util: sin el protocolo y sin el
-     * numero, dos conexiones del mismo usuario serian indistinguibles en el archivo de registro.
+     * <p>It carries the protocol, the client's machine, who authenticated and a number that does
+     * not repeat. It serves so that the server's log says something useful: without the protocol
+     * and without the number, two connections of the same user would be indistinguishable in the
+     * log file.
      *
-     * <p>La maquina del cliente solo se sabe <strong>durante</strong> una llamada remota, asi que
-     * cuando no hay ninguna en curso se omite. Aca nunca la hay, porque no hay transporte.
+     * <p>The client's machine is known only <strong>during</strong> a remote call, so when there is
+     * none in progress it is left out. Here there never is one, because there is no transport.
      */
-    private String idDeConexion(String protocolo, Subject subject) {
-        numeroDeConexion++;
-        String maquina = "";
+    private String newConnectionId(String protocol, Subject subject) {
+        connectionCount++;
+        String host = "";
         try {
-            maquina = RemoteServer.getClientHost();
+            host = RemoteServer.getClientHost();
         } catch (ServerNotActiveException e) {
-            maquina = "";
+            host = "";
         }
         final StringBuilder b = new StringBuilder();
-        b.append(protocolo).append(':');
-        if (maquina.length() > 0) {
-            b.append("//").append(maquina);
+        b.append(protocol).append(':');
+        if (host.length() > 0) {
+            b.append("//").append(host);
         }
         b.append(' ');
         if (subject != null) {
             final Set<java.security.Principal> ps = subject.getPrincipals();
             String sep = "";
             for (final java.security.Principal p : ps) {
-                final String nombre = p.getName().replace(' ', '_').replace(';', ':');
-                b.append(sep).append(nombre);
+                final String name = p.getName().replace(' ', '_').replace(';', ':');
+                b.append(sep).append(name);
                 sep = ";";
             }
         }
-        b.append(' ').append(numeroDeConexion);
+        b.append(' ').append(connectionCount);
         return b.toString();
     }
 
     /**
-     * Fabrica la conexion de un cliente.
+     * Builds a client's connection.
      *
-     * @param connectionId el identificador que le toca
-     * @param subject quien se autentico, o {@code null}
-     * @return la conexion
-     * @throws IOException si no se pudo crear
+     * @param connectionId the identifier it gets
+     * @param subject who authenticated, or {@code null}
+     * @return the connection
+     * @throws IOException if it could not be created
      */
     protected abstract RMIConnection makeClient(String connectionId, Subject subject)
             throws IOException;
 
     /**
-     * Cierra la conexion de un cliente.
+     * Closes a client's connection.
      *
-     * @param client la conexion
-     * @throws IOException si no se pudo cerrar
+     * @param client the connection
+     * @throws IOException if it could not be closed
      */
     protected abstract void closeClient(RMIConnection client) throws IOException;
 
     /**
-     * El nombre del protocolo de este transporte, como {@code "rmi"}.
+     * The name of this transport's protocol, such as {@code "rmi"}.
      *
-     * @return el protocolo
+     * @return the protocol
      */
     protected abstract String getProtocol();
 
     /**
-     * Aviso de que una conexion se cerro sola.
+     * Notice that a connection closed by itself.
      *
-     * <p>Lo llama la propia conexion. Sacarla de la lista aca --y no solo en {@link #close}-- es lo
-     * que evita que un servidor de larga vida acumule conexiones muertas.
+     * <p>The connection itself calls it. Removing it from the list here --and not only in
+     * {@link #close}-- is what keeps a long-lived server from piling up dead connections.
      *
-     * @param client la conexion que se cerro
-     * @throws IOException si no se pudo procesar
-     * @throws NullPointerException si {@code client} es {@code null}
+     * @param client the connection that closed
+     * @throws IOException if it could not be processed
+     * @throws NullPointerException if {@code client} is {@code null}
      */
     protected void clientClosed(RMIConnection client) throws IOException {
         if (client == null) {
             throw new NullPointerException("Null client");
         }
         synchronized (this) {
-            clientes.remove(client);
+            clients.remove(client);
         }
         closeClient(client);
     }
 
     /**
-     * Cierra el servidor y todas las conexiones vivas.
+     * Closes the server and all the live connections.
      *
-     * <p>Primero deja de aceptar y despues cierra las que hay: al reves entraria un cliente nuevo
-     * mientras se cierran los viejos.
+     * <p>First it stops accepting and then it closes the ones there are: the other way round a new
+     * client would come in while the old ones are being closed.
      *
-     * @throws IOException si algo no se pudo cerrar
+     * @throws IOException if something could not be closed
      */
     public void close() throws IOException {
-        final List<RMIConnection> copia;
+        final List<RMIConnection> copy;
         synchronized (this) {
-            if (cerrado) {
+            if (closed) {
                 return;
             }
-            cerrado = true;
-            copia = new ArrayList<RMIConnection>(clientes);
-            clientes.clear();
+            closed = true;
+            copy = new ArrayList<RMIConnection>(clients);
+            clients.clear();
         }
-        IOException primera = null;
+        IOException first = null;
         try {
             closeServer();
         } catch (IOException e) {
-            primera = e;
+            first = e;
         }
-        for (final RMIConnection c : copia) {
+        for (final RMIConnection c : copy) {
             try {
                 closeClient(c);
             } catch (IOException e) {
-                // Una conexion que no cierra no puede impedir que cierren las demas: se guarda la
-                // primera falla, se siguen cerrando todas, y recien al final se la lanza.
-                if (primera == null) {
-                    primera = e;
+                // A connection that does not close cannot keep the others from closing: the first
+                // failure is kept, all of them go on being closed, and only at the end is it
+                // thrown.
+                if (first == null) {
+                    first = e;
                 }
             }
         }
-        if (primera != null) {
-            throw primera;
+        if (first != null) {
+            throw first;
         }
     }
 
     /**
-     * Cierra el transporte.
+     * Closes the transport.
      *
-     * @throws IOException si no se pudo cerrar
+     * @throws IOException if it could not be closed
      */
     protected abstract void closeServer() throws IOException;
 
-    /** El entorno con el que se construyo; nunca {@code null}. Para las subclases del paquete. */
-    Map<String, ?> entorno() {
+    /** The environment it was built with; never {@code null}. For the package's subclasses. */
+    Map<String, ?> environment() {
         return env;
     }
 }

@@ -32,27 +32,28 @@ public class Date implements Comparable<Date>, Serializable, Cloneable {
     }
 
     /**
-     * La fecha con esos campos, en la **zona local**, con la hora en cero.
+     * The date with those fields, in the **local zone**, with the time at zero.
      *
-     * <p>Todos estos constructores y los get/set de abajo estan **desaconsejados desde Java 1.1**, y
-     * la razon esta a la vista en la firma: el `year` es el año menos 1900 y el `month` va de 0 a 11.
-     * Dos convenciones distintas en la misma llamada, y las dos sorprenden. `new Date(99, 11, 31)` es
-     * el 31 de diciembre de 1999.
+     * <p>All these constructors and the get/set below are **deprecated since Java 1.1**, and the
+     * reason is in plain sight in the signature: `year` is the year minus 1900 and `month` runs from
+     * 0 to 11. Two different conventions in the same call, and both surprise. `new Date(99, 11, 31)`
+     * is 31 December 1999.
      *
-     * <p>Se implementan igual porque son parte del contrato y hay codigo que los usa. Se apoyan en
-     * `GregorianCalendar`, que es donde vive el calendario de verdad -- reescribir la aritmetica de
-     * fechas aca seria tener dos, y que se contradigan.
+     * <p>They are implemented all the same because they are part of the contract and there is code
+     * that uses them. They lean on `GregorianCalendar`, which is where the inner calendar lives --
+     * rewriting the date arithmetic here would mean having two, and having them contradict each
+     * other.
      */
     public Date(int year, int month, int date) {
         this(year, month, date, 0, 0, 0);
     }
 
-    /** Idem, con hora y minuto. */
+    /** The same, with hour and minute. */
     public Date(int year, int month, int date, int hrs, int min) {
         this(year, month, date, hrs, min, 0);
     }
 
-    /** Idem, con segundos. */
+    /** The same, with seconds. */
     public Date(int year, int month, int date, int hrs, int min, int sec) {
         GregorianCalendar cal = new GregorianCalendar();
         cal.clear();
@@ -61,16 +62,16 @@ public class Date implements Comparable<Date>, Serializable, Cloneable {
     }
 
     /**
-     * La fecha que representa `s`.
+     * The date `s` stands for.
      *
-     * @deprecated Depende del formato del texto, que nunca estuvo bien especificado. Se delega en
-     *             {@link #parse(String)}, que documenta que reconoce.
+     * @deprecated It depends on the text's format, which was never properly specified. It delegates
+     *             to {@link #parse(String)}, which documents what it recognises.
      */
     public Date(String s) {
         this.fastTime = Date.parse(s);
     }
 
-    /** La fecha equivalente a `instant`. */
+    /** The date equivalent to `instant`. */
     public static Date from(java.time.Instant instant) {
         if (instant == null) {
             throw new NullPointerException();
@@ -78,17 +79,18 @@ public class Date implements Comparable<Date>, Serializable, Cloneable {
         return new Date(instant.toEpochMilli());
     }
 
-    /** Este instante, como `Instant`. */
+    /** This instant, as an `Instant`. */
     public java.time.Instant toInstant() {
         return java.time.Instant.ofEpochMilli(this.fastTime);
     }
 
-    // ---- los campos, en la zona local -----------------------------------------------------------
+    // ---- the fields, in the local zone ----------------------------------------------------------
     //
-    // Cada uno arma un `GregorianCalendar` sobre el instante y lee el campo. Es lo que hace el JDK, y
-    // es caro: seis llamadas seguidas construyen seis calendarios. La alternativa --cachear uno-- lo
-    // volveria mutable compartido, que es peor en una clase que ya es mutable. Estos metodos estan
-    // desaconsejados desde 1997; optimizarlos seria invitar a usarlos.
+    // Each one builds a `GregorianCalendar` over the instant and reads the field. It is what the JDK
+    // does, and it is expensive: six calls in a row build six calendars. The alternative --caching
+    // one-- would make it shared mutable state, which is worse in a class that is already mutable.
+    // These methods have been deprecated since 1997; optimising them would be an invitation to use
+    // them.
 
     private GregorianCalendar cal() {
         GregorianCalendar c = new GregorianCalendar();
@@ -96,57 +98,57 @@ public class Date implements Comparable<Date>, Serializable, Cloneable {
         return c;
     }
 
-    private void setCampo(int campo, int valor) {
+    private void setField(int field, int value) {
         GregorianCalendar c = this.cal();
-        c.set(campo, valor);
+        c.set(field, value);
         this.fastTime = c.getTimeInMillis();
     }
 
-    /** El año menos 1900. */
+    /** The year minus 1900. */
     public int getYear() {
         return this.cal().get(Calendar.YEAR) - 1900;
     }
 
-    /** Pone el año, dado como año menos 1900. */
+    /** It sets the year, given as the year minus 1900. */
     public void setYear(int year) {
-        this.setCampo(Calendar.YEAR, year + 1900);
+        this.setField(Calendar.YEAR, year + 1900);
     }
 
-    /** El mes, de 0 (enero) a 11. */
+    /** The month, from 0 (January) to 11. */
     public int getMonth() {
         return this.cal().get(Calendar.MONTH);
     }
 
     public void setMonth(int month) {
-        this.setCampo(Calendar.MONTH, month);
+        this.setField(Calendar.MONTH, month);
     }
 
-    /** El dia del mes, de 1 a 31. */
+    /** The day of the month, from 1 to 31. */
     public int getDate() {
         return this.cal().get(Calendar.DAY_OF_MONTH);
     }
 
     public void setDate(int date) {
-        this.setCampo(Calendar.DAY_OF_MONTH, date);
+        this.setField(Calendar.DAY_OF_MONTH, date);
     }
 
     /**
-     * El dia de la semana, de 0 (domingo) a 6.
+     * The day of the week, from 0 (Sunday) to 6.
      *
-     * <p>Ojo con la resta: `Calendar.DAY_OF_WEEK` numera desde 1 y este metodo desde 0. Es la clase
-     * de descuido que da un dia corrido en produccion y no en la prueba.
+     * <p>Mind the subtraction: `Calendar.DAY_OF_WEEK` numbers from 1 and this method from 0. It is
+     * the kind of oversight that gives a day out in production and not in the test.
      */
     public int getDay() {
         return this.cal().get(Calendar.DAY_OF_WEEK) - Calendar.SUNDAY;
     }
 
-    /** La hora, de 0 a 23. */
+    /** The hour, from 0 to 23. */
     public int getHours() {
         return this.cal().get(Calendar.HOUR_OF_DAY);
     }
 
     public void setHours(int hours) {
-        this.setCampo(Calendar.HOUR_OF_DAY, hours);
+        this.setField(Calendar.HOUR_OF_DAY, hours);
     }
 
     public int getMinutes() {
@@ -154,7 +156,7 @@ public class Date implements Comparable<Date>, Serializable, Cloneable {
     }
 
     public void setMinutes(int minutes) {
-        this.setCampo(Calendar.MINUTE, minutes);
+        this.setField(Calendar.MINUTE, minutes);
     }
 
     public int getSeconds() {
@@ -162,14 +164,14 @@ public class Date implements Comparable<Date>, Serializable, Cloneable {
     }
 
     public void setSeconds(int seconds) {
-        this.setCampo(Calendar.SECOND, seconds);
+        this.setField(Calendar.SECOND, seconds);
     }
 
     /**
-     * Los minutos que hay que **restarle** a UTC para llegar a la hora local de este instante.
+     * The minutes that have to be **subtracted** from UTC to reach this instant's local time.
      *
-     * <p>El signo esta al reves de lo que uno diria: para UTC-3 devuelve **180**, no -180. Es asi
-     * desde 1995 y no se puede arreglar sin romper a todo el que lo use.
+     * <p>The sign is the other way round from what one would say: for UTC-3 it returns **180**, not
+     * -180. It has been so since 1995 and cannot be fixed without breaking everyone who uses it.
      */
     public int getTimezoneOffset() {
         GregorianCalendar c = this.cal();
@@ -177,10 +179,10 @@ public class Date implements Comparable<Date>, Serializable, Cloneable {
     }
 
     /**
-     * Los milisegundos desde la epoca para esa fecha **en UTC**.
+     * The milliseconds since the epoch for that date **in UTC**.
      *
-     * <p>Es el hermano UTC de los constructores de arriba, con las mismas dos convenciones raras
-     * (año menos 1900, mes desde 0).
+     * <p>It is the UTC sibling of the constructors above, with the same two odd conventions (year
+     * minus 1900, month from 0).
      */
     public static long UTC(int year, int month, int date, int hrs, int min, int sec) {
         GregorianCalendar cal = new GregorianCalendar(TimeZone.getTimeZone("UTC"));
@@ -190,114 +192,114 @@ public class Date implements Comparable<Date>, Serializable, Cloneable {
     }
 
     /**
-     * Interpreta `s` como fecha y devuelve los milisegundos desde la epoca.
+     * It reads `s` as a date and returns the milliseconds since the epoch.
      *
-     * <p>Reconoce la forma que produce {@link #toString()} --`EEE MMM d HH:mm:ss zzz yyyy`-- y la de
-     * {@link #toGMTString()}. **No** intenta cubrir las decenas de formas sueltas que acepta el JDK:
-     * su javadoc las describe en prosa, y una descripcion en prosa no es una especificacion. Antes
-     * que adivinar mal en silencio, lo que no encaja se rechaza.
+     * <p>It recognises the form {@link #toString()} produces --`EEE MMM d HH:mm:ss zzz yyyy`-- and
+     * {@link #toGMTString()}'s. It does **not** try to cover the dozens of loose forms the JDK
+     * accepts: its javadoc describes them in prose, and a description in prose is not a
+     * specification. Rather than guess wrong in silence, what does not fit is rejected.
      *
-     * @throws IllegalArgumentException si no se reconoce el formato
+     * @throws IllegalArgumentException if the format is not recognised
      */
     public static long parse(String s) {
         if (s == null) {
             throw new NullPointerException();
         }
-        String[] partes = s.trim().split(" +");
-        // `EEE MMM d HH:mm:ss zzz yyyy` -- lo que devuelve toString().
-        if (partes.length == 6 && partes[3].indexOf(':') >= 0) {
-            int mes = mesPorNombre(partes[1]);
-            int dia = Integer.parseInt(partes[2]);
-            String[] hms = partes[3].split(":");
-            int anio = Integer.parseInt(partes[5]);
-            GregorianCalendar cal = new GregorianCalendar(TimeZone.getTimeZone(partes[4]));
+        String[] parts = s.trim().split(" +");
+        // `EEE MMM d HH:mm:ss zzz yyyy` -- what toString() returns.
+        if (parts.length == 6 && parts[3].indexOf(':') >= 0) {
+            int monthNum = monthByName(parts[1]);
+            int day = Integer.parseInt(parts[2]);
+            String[] hms = parts[3].split(":");
+            int yearNum = Integer.parseInt(parts[5]);
+            GregorianCalendar cal = new GregorianCalendar(TimeZone.getTimeZone(parts[4]));
             cal.clear();
-            cal.set(anio, mes, dia, Integer.parseInt(hms[0]), Integer.parseInt(hms[1]),
+            cal.set(yearNum, monthNum, day, Integer.parseInt(hms[0]), Integer.parseInt(hms[1]),
                     Integer.parseInt(hms[2]));
             return cal.getTimeInMillis();
         }
-        // `d MMM yyyy HH:mm:ss GMT` -- lo que devuelve toGMTString().
-        if (partes.length == 5 && "GMT".equals(partes[4])) {
-            int dia = Integer.parseInt(partes[0]);
-            int mes = mesPorNombre(partes[1]);
-            int anio = Integer.parseInt(partes[2]);
-            String[] hms = partes[3].split(":");
+        // `d MMM yyyy HH:mm:ss GMT` -- what toGMTString() returns.
+        if (parts.length == 5 && "GMT".equals(parts[4])) {
+            int day = Integer.parseInt(parts[0]);
+            int monthNum = monthByName(parts[1]);
+            int yearNum = Integer.parseInt(parts[2]);
+            String[] hms = parts[3].split(":");
             GregorianCalendar cal = new GregorianCalendar(TimeZone.getTimeZone("UTC"));
             cal.clear();
-            cal.set(anio, mes, dia, Integer.parseInt(hms[0]), Integer.parseInt(hms[1]),
+            cal.set(yearNum, monthNum, day, Integer.parseInt(hms[0]), Integer.parseInt(hms[1]),
                     Integer.parseInt(hms[2]));
             return cal.getTimeInMillis();
         }
         throw new IllegalArgumentException(s);
     }
 
-    private static int mesPorNombre(String nombre) {
-        String[] meses = new String[] {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    private static int monthByName(String name) {
+        String[] months = new String[] {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
                                        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
         int i = 0;
-        while (i < meses.length) {
-            if (meses[i].equalsIgnoreCase(nombre)) {
+        while (i < months.length) {
+            if (months[i].equalsIgnoreCase(name)) {
                 return i;
             }
             i = i + 1;
         }
-        throw new IllegalArgumentException(nombre);
+        throw new IllegalArgumentException(name);
     }
 
     /**
      * `d MMM yyyy HH:mm:ss GMT`.
      *
-     * @deprecated El nombre miente por partida doble: no es GMT sino UTC, y el formato no es el de
-     *             ningun estandar. Se conserva porque {@link #parse(String)} lo tiene que leer.
+     * @deprecated The name lies twice over: it is not GMT but UTC, and the format is no standard's.
+     *             It is kept because {@link #parse(String)} has to read it.
      */
     public String toGMTString() {
         GregorianCalendar cal = new GregorianCalendar(TimeZone.getTimeZone("UTC"));
         cal.setTimeInMillis(this.fastTime);
-        String[] meses = new String[] {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
+        String[] months = new String[] {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
                                        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
         StringBuilder sb = new StringBuilder();
         sb.append(cal.get(Calendar.DAY_OF_MONTH));
         sb.append(' ');
-        sb.append(meses[cal.get(Calendar.MONTH)]);
+        sb.append(months[cal.get(Calendar.MONTH)]);
         sb.append(' ');
         sb.append(cal.get(Calendar.YEAR));
         sb.append(' ');
-        dosDigitos(sb, cal.get(Calendar.HOUR_OF_DAY));
+        twoDigits(sb, cal.get(Calendar.HOUR_OF_DAY));
         sb.append(':');
-        dosDigitos(sb, cal.get(Calendar.MINUTE));
+        twoDigits(sb, cal.get(Calendar.MINUTE));
         sb.append(':');
-        dosDigitos(sb, cal.get(Calendar.SECOND));
+        twoDigits(sb, cal.get(Calendar.SECOND));
         sb.append(" GMT");
         return sb.toString();
     }
 
     /**
-     * La fecha en el formato de la region por defecto.
+     * The date in the default locale's format.
      *
-     * @deprecated En esta biblioteca devuelve la misma forma que {@link #toGMTString()} pero en hora
-     *             local, porque no hay un formateador sensible a la region al que delegarle. Se
-     *             documenta en vez de fingir: el JDK usa `DateFormat`, que aca no existe.
+     * @deprecated In this library it returns the same form as {@link #toGMTString()} but in local
+     *             time, because there is no locale-sensitive formatter to delegate to. It is
+     *             documented rather than faked: the JDK uses `DateFormat`, which is not here.
      */
     public String toLocaleString() {
         GregorianCalendar cal = this.cal();
-        String[] meses = new String[] {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
+        String[] months = new String[] {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
                                        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
         StringBuilder sb = new StringBuilder();
         sb.append(cal.get(Calendar.DAY_OF_MONTH));
         sb.append(' ');
-        sb.append(meses[cal.get(Calendar.MONTH)]);
+        sb.append(months[cal.get(Calendar.MONTH)]);
         sb.append(' ');
         sb.append(cal.get(Calendar.YEAR));
         sb.append(' ');
-        dosDigitos(sb, cal.get(Calendar.HOUR_OF_DAY));
+        twoDigits(sb, cal.get(Calendar.HOUR_OF_DAY));
         sb.append(':');
-        dosDigitos(sb, cal.get(Calendar.MINUTE));
+        twoDigits(sb, cal.get(Calendar.MINUTE));
         sb.append(':');
-        dosDigitos(sb, cal.get(Calendar.SECOND));
+        twoDigits(sb, cal.get(Calendar.SECOND));
         return sb.toString();
     }
 
-    private static void dosDigitos(StringBuilder sb, int n) {
+    private static void twoDigits(StringBuilder sb, int n) {
         if (n < 10) {
             sb.append('0');
         }

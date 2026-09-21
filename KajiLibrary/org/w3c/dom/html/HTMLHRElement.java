@@ -1,31 +1,31 @@
 package org.w3c.dom.html;
 
 /**
- * Un `<hr>`.
+ * A `<hr>`.
  */
 public interface HTMLHRElement extends HTMLElement {
 
-    /** La alineacion (presentacion; HTML 4 la desaconseja). */
+    /** The alignment (presentational; HTML 4 deprecates it). */
     String getAlign();
 
-    /** Fija la alineacion (presentacion; HTML 4 la desaconseja). */
+    /** It sets the alignment (presentational; HTML 4 deprecates it). */
     void setAlign(String align);
 
-    /** El atributo `noShade`. */
+    /** The `noShade` attribute. */
     boolean getNoShade();
 
-    /** Fija el atributo `noShade`. */
+    /** It sets the `noShade` attribute. */
     void setNoShade(boolean noShade);
 
-    /** El tamanio visible. */
+    /** The visible size. */
     String getSize();
 
-    /** Fija el tamanio visible. */
+    /** It sets the visible size. */
     void setSize(String size);
 
-    /** El ancho. */
+    /** The width. */
     String getWidth();
 
-    /** Fija el ancho. */
+    /** It sets the width. */
     void setWidth(String width);
 }

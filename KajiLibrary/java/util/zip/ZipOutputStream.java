@@ -17,7 +17,8 @@ import java.util.List;
 // entries out and append the directory last. It is also why a truncated zip is often still
 // partially recoverable.
 //
-// The `throws IOException` clauses are omitted throughout (finding #104).
+// This header used to end by saying the `throws IOException` clauses were omitted throughout because
+// of finding #104. #104 is closed and every method that should declare the clause declares it.
 public class ZipOutputStream extends DeflaterOutputStream {
 
     public static final int STORED = ZipEntry.STORED;
@@ -43,18 +44,18 @@ public class ZipOutputStream extends DeflaterOutputStream {
     private long entrySize;
     private boolean finished;
 
-    // El charset con el que se codifican los **nombres de entrada**. Ver la nota de `ZipInputStream`.
+    // The charset the **entry names** are encoded with. See `ZipInputStream`'s note.
     private final java.nio.charset.Charset charset;
 
-    /** Escribe el archivo, codificando los nombres en UTF-8. */
+    /** It writes the archive, encoding the names in UTF-8. */
     public ZipOutputStream(OutputStream out) {
         this(out, java.nio.charset.StandardCharsets.UTF_8);
     }
 
     /**
-     * Escribe el archivo, codificando los nombres con `charset`.
+     * It writes the archive, encoding the names with `charset`.
      *
-     * @throws NullPointerException si `charset` es `null`
+     * @throws NullPointerException if `charset` is `null`
      */
     public ZipOutputStream(OutputStream out, java.nio.charset.Charset charset) {
         super(out, new Deflater(Deflater.DEFAULT_COMPRESSION, true));
@@ -100,11 +101,11 @@ public class ZipOutputStream extends DeflaterOutputStream {
                 // Flush the compressed stream for this entry, then start a fresh deflater: each
                 // entry is an independent deflate stream inside the archive.
                 //
-                // El delta de `getBytesWritten` alrededor del flush NO es opcional: `deflate()`
-                // escribe directo a `out` sin pasar por los `write*` de esta clase, asi que sin
-                // esto los bytes del bloque final quedan fuera de `position` y el tamano
-                // comprimido del descriptor sale corto. El lector del JDK lo caza al instante
-                // ("invalid entry compressed size, expected 15 but got 20"); el gate jamas.
+                // The `getBytesWritten` delta around the flush is NOT optional: `deflate()` writes
+                // straight to `out` without going through this class's `write*`, so without this the
+                // final block's bytes fall outside `position` and the descriptor's compressed size
+                // comes out short. The JDK's reader catches it at once ("invalid entry compressed
+                // size, expected 15 but got 20"); the gate never does.
                 long before = def.getBytesWritten();
                 def.finish();
                 deflate();
@@ -121,7 +122,7 @@ public class ZipOutputStream extends DeflaterOutputStream {
         }
     }
 
-    public void write(byte[] b, int off, int len) throws java.io.IOException {
+    public synchronized void write(byte[] b, int off, int len) throws java.io.IOException {
         if (current.getMethod() == STORED) {
             // A stored entry goes out untouched — no deflater in the path at all.
             out.write(b, off, len);
@@ -157,10 +158,10 @@ public class ZipOutputStream extends DeflaterOutputStream {
         out.close();
     }
 
-    // ---- el formato, campo por campo ----
+    // ---- the format, field by field ----
 
     private int localHeaderSize(ZipEntry entry) {
-        return 30 + this.bytesDelNombre(entry).length;
+        return 30 + this.nameBytes(entry).length;
     }
 
     private void writeLocalHeader(ZipEntry entry) throws java.io.IOException {
@@ -170,9 +171,9 @@ public class ZipOutputStream extends DeflaterOutputStream {
         writeShort(entry.getMethod());
         writeInt((int) dosTimeOf(entry));
         writeInt(0);                       // crc, filled in by the data descriptor
-        writeInt(0);                       // compressed size, idem
-        writeInt(0);                       // uncompressed size, idem
-        writeShort(this.bytesDelNombre(entry).length);
+        writeInt(0);                       // compressed size, ditto
+        writeInt(0);                       // uncompressed size, ditto
+        writeShort(this.nameBytes(entry).length);
         writeShort(0);                     // no extra field
         writeName(entry.getName());
     }
@@ -194,7 +195,7 @@ public class ZipOutputStream extends DeflaterOutputStream {
         writeInt((int) entry.getCrc());
         writeInt((int) entry.getCompressedSize());
         writeInt((int) entry.getSize());
-        writeShort(this.bytesDelNombre(entry).length);
+        writeShort(this.nameBytes(entry).length);
         writeShort(0);                     // extra length
         writeShort(0);                     // comment length
         writeShort(0);                     // disk number
@@ -223,11 +224,11 @@ public class ZipOutputStream extends DeflaterOutputStream {
     }
 
     private long dosTimeOf(ZipEntry entry) {
-        long dos = 0;
+        long dosStamp = 0;
         if (entry.getTime() != -1) {
-            dos = entry.getTime();
+            dosStamp = entry.getTime();
         }
-        return dos;
+        return dosStamp;
     }
 
     // Everything in the zip format is LITTLE-endian — the opposite of the class file, and of
@@ -247,10 +248,10 @@ public class ZipOutputStream extends DeflaterOutputStream {
         position = position + 2;
     }
 
-    // Los **bytes** del nombre en el charset elegido. Antes se escribia caracter a caracter con
-    // `charAt(i) & 0xff`, que trunca a Latin-1: un nombre con acentos salia mal escrito **y** con un
-    // largo declarado que no coincidia con los bytes, o sea un archivo corrupto.
-    private byte[] bytesDelNombre(ZipEntry entry) {
+    // The name's **bytes** in the chosen charset. It used to be written character by character with
+    // `charAt(i) & 0xff`, which truncates to Latin-1: a name with accents came out misspelled **and**
+    // with a declared length that did not match the bytes, that is, a corrupt archive.
+    private byte[] nameBytes(ZipEntry entry) {
         return entry.getName().getBytes(this.charset);
     }
 

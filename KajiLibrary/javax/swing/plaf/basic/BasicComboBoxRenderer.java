@@ -12,29 +12,30 @@ import javax.swing.border.Border;
 import javax.swing.border.EmptyBorder;
 
 /**
- * El dibujante de los items de un combo: una etiqueta con el texto del valor.
+ * The renderer of a combo box's items: a label with the value's text.
  *
- * <h2>Un solo objeto para todos los items</h2>
+ * <h2>A single object for every item</h2>
  *
- * <p>{@link #getListCellRendererComponent} devuelve {@code this}: se le cambian los colores y el
- * texto y se lo dibuja, item por item. Es el patron de todos los dibujantes de Swing, y es lo que
- * hace que una lista de diez mil items no cree diez mil etiquetas.
+ * <p>{@link #getListCellRendererComponent} returns {@code this}: its colours and its text are
+ * changed and it is drawn, item by item. It is the pattern of every renderer in Swing, and it
+ * is what makes a list of ten thousand items not create ten thousand labels.
  *
- * <h2>El renglon vacio que igual mide</h2>
+ * <h2>The empty line that measures all the same</h2>
  *
- * <p>{@link #getPreferredSize} le pone un espacio al texto cuando esta vacio, mide, y lo saca. Sin
- * eso, un combo cuyo item elegido es la cadena vacia mediria cero de alto y se veria como una linea.
- * El truco es del JDK y se copia tal cual; el alto medido de un renglon vacio es 18.
+ * <p>{@link #getPreferredSize} puts a space into the text when it is empty, measures, and takes
+ * it out. Without that, a combo box whose chosen item is the empty string would measure zero in
+ * height and would look like a line. The trick is the JDK's and it is copied as it is; the
+ * measured height of an empty line is 18.
  *
- * <h2>Un valor que es un icono</h2>
+ * <h2>A value that is an icon</h2>
  *
- * <p>Si el valor es un {@link Icon} se pone como icono y <em>no</em> se toca el texto. Suena a
- * descuido y no lo es: un combo de iconos con nombre pone el nombre por otro lado, y borrarlo aca lo
- * perderia.
+ * <p>If the value is an {@link Icon} it is set as the icon and the text is <em>not</em> touched.
+ * It sounds like an oversight and it is not: a combo box of named icons puts the name somewhere
+ * else, and erasing it here would lose it.
  */
 public class BasicComboBoxRenderer extends JLabel implements ListCellRenderer, Serializable {
 
-    /** El borde de un item que no tiene el foco: un pixel de aire por lado. */
+    /** The border of an item that does not have the focus: a pixel of air on each side. */
     protected static Border noFocusBorder = new EmptyBorder(1, 1, 1, 1);
 
     public BasicComboBoxRenderer() {
@@ -43,7 +44,7 @@ public class BasicComboBoxRenderer extends JLabel implements ListCellRenderer, S
         setBorder(noFocusBorder);
     }
 
-    /** Ver la nota de la clase. */
+    /** See the class note. */
     public Dimension getPreferredSize() {
         Dimension size;
         if ((this.getText() == null) || (this.getText().equals(""))) {
@@ -56,7 +57,7 @@ public class BasicComboBoxRenderer extends JLabel implements ListCellRenderer, S
         return size;
     }
 
-    /** Se prepara y se devuelve a si mismo; ver la nota de la clase. */
+    /** It gets itself ready and returns itself; see the class note. */
     public Component getListCellRendererComponent(JList list, Object value, int index,
             boolean isSelected, boolean cellHasFocus) {
         if (isSelected) {
@@ -77,10 +78,10 @@ public class BasicComboBoxRenderer extends JLabel implements ListCellRenderer, S
     }
 
     /**
-     * El mismo dibujante, marcado como puesto por el aspecto.
+     * The same renderer, marked as set by the look and feel.
      *
-     * <p>La marca es lo que deja que cambiar de aspecto lo reemplace; uno que puso el programa se
-     * respeta. Ver {@link javax.swing.plaf.UIResource}.
+     * <p>The mark is what lets changing the look and feel replace it; one the program set is
+     * respected. See {@link javax.swing.plaf.UIResource}.
      */
     public static class UIResource extends BasicComboBoxRenderer
             implements javax.swing.plaf.UIResource {

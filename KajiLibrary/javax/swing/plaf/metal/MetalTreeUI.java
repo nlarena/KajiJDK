@@ -11,41 +11,41 @@ import javax.swing.plaf.basic.BasicTreeUI;
 import javax.swing.tree.TreePath;
 
 /**
- * El arbol de Metal.
+ * Metal's tree.
  *
- * <h2>Tres estilos de linea, elegidos por el programa</h2>
+ * <h2>Three line styles, chosen by the program</h2>
  *
- * <p>Metal es el unico aspecto que deja elegir como se dibujan las lineas que unen las ramas, y no
- * por una propiedad del arbol sino por una <em>propiedad de cliente</em>:
- * {@code tree.putClientProperty("JTree.lineStyle", "Angled")}. Los tres valores son
- * {@code "Angled"} -- la escalera de siempre --, {@code "Horizontal"} -- una raya entre nodos de
- * primer nivel, sin verticales -- y {@code "None"}.
+ * <p>Metal is the only look and feel that lets one choose how the lines joining the branches are
+ * drawn, and not through a property of the tree's but through a <em>client property</em>:
+ * {@code tree.putClientProperty("JTree.lineStyle", "Angled")}. The three values are
+ * {@code "Angled"} -- the usual staircase --, {@code "Horizontal"} -- a line between
+ * first-level nodes, with no verticals -- and {@code "None"}.
  *
- * <p>Que sea una propiedad de cliente y no una propiedad normal es lo que permite que exista sin
- * ensuciar la API de {@code JTree} con algo que solo un aspecto entiende. El precio es que no hay
- * como descubrirla mirando los metodos.
+ * <p>That it is a client property and not a normal property is what allows it to exist without
+ * dirtying {@code JTree}'s API with something only a look and feel understands. The price is
+ * that there is no way of discovering it by looking at the methods.
  *
- * <h2>La zona sensible de la manija es mas ancha que la manija</h2>
+ * <h2>The handle's sensitive area is wider than the handle</h2>
  *
- * <p>{@link #isLocationInExpandControl} acepta veinticinco columnas para un icono de dieciocho: el
- * ancho del icono mas dos veces {@link #getHorizontalLegBuffer}, que en Metal vale tres. Medido, y
- * es deliberado: la manija es chica y errarle por dos pixeles no deberia significar seleccionar el
- * nodo en vez de abrirlo.
+ * <p>{@link #isLocationInExpandControl} accepts twenty-five columns for an eighteen-pixel icon:
+ * the icon's width plus twice {@link #getHorizontalLegBuffer}, which in Metal is worth three.
+ * Measured, and it is deliberate: the handle is small and missing it by two pixels should not
+ * mean selecting the node instead of opening it.
  *
- * <p>Notar que este metodo tiene <em>cuatro</em> parametros y no coincide con el del basico: toma
- * la fila y su nivel ya calculados, en vez del camino. No lo redefine -- lo agrega --, asi que las
- * dos versiones conviven.
+ * <p>Note that this method has <em>four</em> parameters and does not match the basic one's: it
+ * takes the row and its level already computed, instead of the path. It does not override it --
+ * it adds it --, so the two versions coexist.
  */
 public class MetalTreeUI extends BasicTreeUI {
 
-    /** Los tres estilos; ver la nota de la clase. */
-    private static final int ANGULADO = 1;
+    /** The three styles; see the class note. */
+    private static final int ANGLED = 1;
     private static final int HORIZONTAL = 2;
-    private static final int NINGUNO = 3;
+    private static final int NONE = 3;
 
-    private static final String CLAVE = "JTree.lineStyle";
+    private static final String LINE_STYLE_KEY = "JTree.lineStyle";
 
-    private int estilo = ANGULADO;
+    private int style = ANGLED;
 
     public MetalTreeUI() {
     }
@@ -56,10 +56,10 @@ public class MetalTreeUI extends BasicTreeUI {
 
     public void installUI(JComponent c) {
         super.installUI(c);
-        decodeLineStyle(c.getClientProperty(CLAVE));
-        // Las manijas: el basico las deja en nulo porque salen de la tabla del aspecto, y Metal
-        // las dibuja. De su ancho -- dieciocho -- depende la zona sensible; ver la nota de la
-        // clase.
+        decodeLineStyle(c.getClientProperty(LINE_STYLE_KEY));
+        // The handles: the basic one leaves them null because they come from the look and feel's
+                // table, and Metal draws them. On their width -- eighteen -- depends the sensitive
+                // area; see the class note.
         if (getExpandedIcon() == null) {
             setExpandedIcon(MetalIconFactory.getTreeControlIcon(false));
         }
@@ -73,71 +73,71 @@ public class MetalTreeUI extends BasicTreeUI {
     }
 
     /**
-     * Traduce el valor de la propiedad de cliente.
+     * It translates the client property's value.
      *
-     * <p>Cualquier cosa que no sea uno de los tres textos deja el estilo en {@code "Angled"}, que
-     * es el de omision. No tira: una propiedad de cliente la escribe cualquiera y romper el arbol
-     * por un texto mal escrito seria peor que ignorarlo.
+     * <p>Anything that is not one of the three texts leaves the style at {@code "Angled"}, which is
+     * the default one. It does not throw: a client property is written by anybody and breaking the
+     * tree over a mistyped text would be worse than ignoring it.
      */
     protected void decodeLineStyle(Object lineStyleFlag) {
         if ("Horizontal".equals(lineStyleFlag)) {
-            estilo = HORIZONTAL;
+            style = HORIZONTAL;
         } else if ("None".equals(lineStyleFlag)) {
-            estilo = NINGUNO;
+            style = NONE;
         } else {
-            estilo = ANGULADO;
+            style = ANGLED;
         }
     }
 
-    /** Tres; ver la nota de la clase. */
+    /** Three; see the class note. */
     protected int getHorizontalLegBuffer() {
         return 3;
     }
 
     /**
-     * Si ese punto cae en la manija de esa fila.
+     * Whether that point falls on that row's handle.
      *
-     * @param row la fila
-     * @param rowLevel su nivel en el arbol
-     * @param mouseX la coordenada horizontal
-     * @param mouseY la vertical, que no se mira
+     * @param row the row
+     * @param rowLevel its level in the tree
+     * @param mouseX the horizontal coordinate
+     * @param mouseY the vertical one, which is not looked at
      */
     protected boolean isLocationInExpandControl(int row, int rowLevel, int mouseX, int mouseY) {
         if (tree == null || isLeaf(row)) {
             return false;
         }
-        int ancho = ((getExpandedIcon() != null) ? getExpandedIcon().getIconWidth() : 8)
+        int width = ((getExpandedIcon() != null) ? getExpandedIcon().getIconWidth() : 8)
                 + 2 * getHorizontalLegBuffer();
         Insets i = tree.getInsets();
-        int izquierda = ((i != null) ? i.left : 0)
+        int left = ((i != null) ? i.left : 0)
                 + (((rowLevel + depthOffset - 1) * totalChildIndent) + getLeftChildIndent())
-                - ancho / 2;
-        return mouseX >= izquierda && mouseX <= izquierda + ancho;
+                - width / 2;
+        return mouseX >= left && mouseX <= left + width;
     }
 
     public void paint(Graphics g, JComponent c) {
         super.paint(g, c);
-        if (estilo == HORIZONTAL) {
+        if (style == HORIZONTAL) {
             paintHorizontalSeparators(g, c);
         }
     }
 
-    /** La raya entre nodos de primer nivel del estilo {@code "Horizontal"}. */
+    /** The line between first-level nodes of the {@code "Horizontal"} style. */
     protected void paintHorizontalSeparators(Graphics g, JComponent c) {
         g.setColor(MetalLookAndFeel.getPrimaryControl());
         Rectangle clip = g.getClipBounds();
         if (clip == null) {
             return;
         }
-        TreePath desde = getClosestPathForLocation(tree, 0, clip.y);
-        TreePath hasta = getClosestPathForLocation(tree, 0, clip.y + clip.height);
-        if (desde == null || hasta == null) {
+        TreePath from = getClosestPathForLocation(tree, 0, clip.y);
+        TreePath to = getClosestPathForLocation(tree, 0, clip.y + clip.height);
+        if (from == null || to == null) {
             return;
         }
-        int primera = getRowForPath(tree, desde);
-        int ultima = getRowForPath(tree, hasta);
-        for (int fila = primera; fila <= ultima; fila++) {
-            TreePath p = getPathForRow(tree, fila);
+        int first = getRowForPath(tree, from);
+        int last = getRowForPath(tree, to);
+        for (int row = first; row <= last; row++) {
+            TreePath p = getPathForRow(tree, row);
             if (p != null && p.getPathCount() == 2) {
                 Rectangle b = getPathBounds(tree, p);
                 if (b != null) {
@@ -149,7 +149,7 @@ public class MetalTreeUI extends BasicTreeUI {
 
     protected void paintVerticalPartOfLeg(Graphics g, Rectangle clipBounds, Insets insets,
             TreePath path) {
-        if (estilo == ANGULADO) {
+        if (style == ANGLED) {
             super.paintVerticalPartOfLeg(g, clipBounds, insets, path);
         }
     }
@@ -157,7 +157,7 @@ public class MetalTreeUI extends BasicTreeUI {
     protected void paintHorizontalPartOfLeg(Graphics g, Rectangle clipBounds, Insets insets,
             Rectangle bounds, TreePath path, int row, boolean isExpanded,
             boolean hasBeenExpanded, boolean isLeaf) {
-        if (estilo == ANGULADO) {
+        if (style == ANGLED) {
             super.paintHorizontalPartOfLeg(g, clipBounds, insets, bounds, path, row,
                     isExpanded, hasBeenExpanded, isLeaf);
         }

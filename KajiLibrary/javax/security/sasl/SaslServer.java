@@ -1,49 +1,49 @@
 package javax.security.sasl;
 
 /**
- * KajiLibrary's javax.security.sasl.SaslServer -- el lado que autentica.
+ * KajiLibrary's javax.security.sasl.SaslServer -- the side that authenticates.
  *
- * <p>El espejo de {@link SaslClient}, con dos diferencias que valen:
+ * <p>The mirror of {@link SaslClient}, with two differences worth noting:
  *
  * <ul>
- *   <li>no tiene {@code hasInitialResponse}: es el cliente el que sabe si su mecanismo empieza
- *       hablando, y el servidor se entera de lo que llega;
- *   <li>tiene {@link #getAuthorizationID}, que es <b>el resultado</b> de todo esto. Terminada la
- *       negociacion, ese es el identificador en cuyo nombre hay que actuar -- ya pasado por el
- *       {@link AuthorizeCallback}, con el reescrito si el manejador lo reescribio.
+ *   <li>it has no {@code hasInitialResponse}: it is the client that knows whether its mechanism
+ *       starts by speaking, and the server learns from what arrives;
+ *   <li>it has {@link #getAuthorizationID}, which is <b>the result</b> of all this. Once the
+ *       negotiation is over, that is the identifier on whose behalf to act -- already passed
+ *       through the {@link AuthorizeCallback}, with the rewritten one if the handler rewrote it.
  * </ul>
  *
- * <p>Leer {@code getAuthorizationID} antes de que {@link #isComplete} de true no tiene sentido: la
- * negociacion todavia puede fallar.
+ * <p>Reading {@code getAuthorizationID} before {@link #isComplete} gives true makes no sense: the
+ * negotiation can still fail.
  */
 public interface SaslServer {
 
-    /** El nombre del mecanismo. */
+    /** The mechanism's name. */
     String getMechanismName();
 
     /**
-     * Procesa una respuesta del cliente y produce el proximo desafio.
+     * Processes a response from the client and produces the next challenge.
      *
-     * @return el desafio a mandar, o null si no hay mas
-     * @throws SaslException si la respuesta no sirve; la autenticacion fallo
+     * @return the challenge to send, or null if there are no more
+     * @throws SaslException if the response is no good; the authentication failed
      */
     byte[] evaluateResponse(byte[] response) throws SaslException;
 
-    /** Si la negociacion termino. */
+    /** Whether the negotiation ended. */
     boolean isComplete();
 
-    /** En nombre de quien actuar. Ver la nota de la clase: recien vale al terminar. */
+    /** On whose behalf to act. See the class note: it only holds at the end. */
     String getAuthorizationID();
 
-    /** Deshace la proteccion de un mensaje recibido. */
+    /** Undoes the protection of a received message. */
     byte[] unwrap(byte[] incoming, int offset, int len) throws SaslException;
 
-    /** Protege un mensaje a enviar. */
+    /** Protects a message to be sent. */
     byte[] wrap(byte[] outgoing, int offset, int len) throws SaslException;
 
-    /** Que se negocio de verdad; ver {@link SaslClient#getNegotiatedProperty}. */
+    /** What was really negotiated; see {@link SaslClient#getNegotiatedProperty}. */
     Object getNegotiatedProperty(String propName);
 
-    /** Libera lo que tenga guardado. */
+    /** Releases whatever it has kept. */
     void dispose() throws SaslException;
 }

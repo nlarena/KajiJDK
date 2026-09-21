@@ -1,30 +1,30 @@
 package java.sql;
 
 /**
- * KajiLibrary's java.sql.DriverPropertyInfo -- una propiedad que un driver acepta.
+ * KajiLibrary's java.sql.DriverPropertyInfo -- a property a driver accepts.
  *
- * <p>Es lo que permite escribir una herramienta de conexion **generica**: se le pregunta al driver
- * que propiedades quiere, se arma el formulario con eso, y se le devuelven llenas. Sin esto habria
- * que conocer cada driver.
+ * <p>It is what allows writing a **generic** connection tool: the driver is asked which properties
+ * it wants, the form is built from that, and they are handed back filled in. Without it each driver
+ * would have to be known.
  *
- * <p>Campos publicos y no accesores. Es de 1997 y es una estructura de datos; cambiarlo ahora
- * romperia a todos sus usuarios sin arreglarle nada a nadie.
+ * <p>Public fields and not accessors. It is from 1997 and it is a data structure; changing it now
+ * would break all its users without fixing anything for anyone.
  */
 public class DriverPropertyInfo {
 
-    /** El nombre de la propiedad. */
+    /** The name of the property. */
     public String name;
 
-    /** Para que sirve; puede ser `null`. */
+    /** What it is for; may be `null`. */
     public String description;
 
-    /** Si hay que darla si o si para conectar. */
+    /** Whether it must be given to connect. */
     public boolean required;
 
-    /** El valor actual, o el que el driver sugiere. */
+    /** The current value, or the one the driver suggests. */
     public String value;
 
-    /** Los valores admitidos, si son un conjunto cerrado; `null` si es libre. */
+    /** The allowed values, if they are a closed set; `null` if free. */
     public String[] choices;
 
     public DriverPropertyInfo(String name, String value) {

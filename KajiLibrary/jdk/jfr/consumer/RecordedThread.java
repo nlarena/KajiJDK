@@ -5,87 +5,87 @@ import java.util.List;
 import jdk.jfr.ValueDescriptor;
 
 /**
- * Un hilo, tal como quedo grabado.
+ * A thread, as it was recorded.
  *
- * <h2>Por que hay dos nombres y dos identificadores</h2>
+ * <h2>Why there are two names and two identifiers</h2>
  *
- * <p>Un hilo Java es dos cosas a la vez: un objeto {@code Thread} y un hilo del sistema operativo.
- * {@link #getJavaName} y {@link #getJavaThreadId} son del primero; {@link #getOSName} y
- * {@link #getOSThreadId} del segundo.
+ * <p>A Java thread is two things at a time: a {@code Thread} object and a thread of the operating
+ * system. {@link #getJavaName} and {@link #getJavaThreadId} are of the first one; {@link
+ * #getOSName} and {@link #getOSThreadId} of the second.
  *
- * <p>No coinciden y hacen falta los dos. El identificador del sistema es el que permite cruzar la
- * grabacion con lo que vio una herramienta de afuera —un perfilador nativo, {@code top}—; el de
- * Java es el que aparece en un volcado de hilos.
+ * <p>They do not coincide and both are needed. The identifier of the system is the one that allows
+ * one to cross the recording with what a tool from outside saw --a native profiler, {@code top}--;
+ * the Java one is the one that appears in a thread dump.
  *
- * <p>Un hilo virtual no tiene hilo del sistema propio: {@link #isVirtual} lo dice, y ahi los campos
- * del sistema operativo no significan nada.
+ * <p>A virtual thread has no system thread of its own: {@link #isVirtual} says so, and there the
+ * fields of the operating system mean nothing.
  *
  * @since 9
  */
 public final class RecordedThread extends RecordedObject {
 
-    RecordedThread(List<ValueDescriptor> descriptores, Object[] valores) {
-        super(descriptores, valores);
+    RecordedThread(List<ValueDescriptor> descriptors, Object[] values) {
+        super(descriptors, values);
     }
 
     /**
-     * El nombre del hilo en el sistema operativo.
+     * The name of the thread in the operating system.
      *
-     * @return el nombre, o {@code null}
+     * @return the name, or {@code null}
      */
     public String getOSName() {
         return getString("osName");
     }
 
     /**
-     * El identificador del hilo en el sistema operativo.
+     * The identifier of the thread in the operating system.
      *
-     * @return el identificador, o {@code -1} si es un hilo virtual
+     * @return the identifier, or {@code -1} if it is a virtual thread
      */
     public long getOSThreadId() {
         return getLong("osThreadId");
     }
 
     /**
-     * El grupo al que pertenece.
+     * The group it belongs to.
      *
-     * @return el grupo, o {@code null}
+     * @return the group, or {@code null}
      */
     public RecordedThreadGroup getThreadGroup() {
         return getValue("group");
     }
 
     /**
-     * El nombre del objeto {@code Thread}.
+     * The name of the {@code Thread} object.
      *
-     * @return el nombre, o {@code null}
+     * @return the name, or {@code null}
      */
     public String getJavaName() {
         return getString("javaName");
     }
 
     /**
-     * El identificador del objeto {@code Thread}.
+     * The identifier of the {@code Thread} object.
      *
-     * @return el identificador, o {@code 0} si el hilo no es de Java
+     * @return the identifier, or {@code 0} if the thread is not of Java
      */
     public long getJavaThreadId() {
         return getLong("javaThreadId");
     }
 
     /**
-     * El identificador que la VM que grabo le dio a este hilo.
+     * The identifier the VM that recorded gave this thread.
      *
-     * @return el identificador
+     * @return the identifier
      */
     public long getId() {
         return getLong("javaThreadId");
     }
 
     /**
-     * Si es un hilo virtual.
+     * Whether it is a virtual thread.
      *
-     * @return si lo es
+     * @return whether it is
      */
     public boolean isVirtual() {
         return hasField("virtual") && getBoolean("virtual");

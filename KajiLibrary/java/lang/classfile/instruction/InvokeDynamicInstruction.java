@@ -13,47 +13,47 @@ import java.util.Collections;
 import java.util.List;
 import jdk.internal.classfile.impl.Instructions;
 
-// `invokedynamic`. No nombra un método: nombra un sitio de llamada que se resuelve la primera vez
-// que se ejecuta, llamando al método de arranque que la entrada del pool señala. Por eso los
-// accesores `default` de acá bajan a la tabla `BootstrapMethods` de la clase, y por eso una entrada
-// `CONSTANT_InvokeDynamic` sólo tiene sentido dentro del archivo que la lleva.
+// `invokedynamic`. It does not name a method: it names a call site that is resolved the first time
+// it runs, by calling the bootstrap method the pool entry points at. That is why the `default`
+// accessors here climb down into the class's `BootstrapMethods` table, and why a
+// `CONSTANT_InvokeDynamic` entry only makes sense inside the file that carries it.
 public interface InvokeDynamicInstruction extends Instruction {
 
-    /** La entrada del pool con el sitio de llamada. */
+    /** The pool entry holding the call site. */
     InvokeDynamicEntry invokedynamic();
 
-    /** El nombre del sitio de llamada. */
+    /** The call site's name. */
     default Utf8Entry name() {
         return invokedynamic().nameAndType().name();
     }
 
-    /** El descriptor del sitio de llamada, como `Utf8`. */
+    /** The call site's descriptor, as a `Utf8`. */
     default Utf8Entry type() {
         return invokedynamic().nameAndType().type();
     }
 
-    /** El descriptor del sitio de llamada. */
+    /** The call site's descriptor. */
     default MethodTypeDesc typeSymbol() {
         return MethodTypeDesc.ofDescriptor(type().stringValue());
     }
 
-    /** El método de arranque. */
+    /** The bootstrap method. */
     default DirectMethodHandleDesc bootstrapMethod() {
         return invokedynamic().bootstrap().bootstrapMethod().asSymbol();
     }
 
-    /** Los argumentos estáticos del método de arranque, ya resueltos a descriptores nominales. */
+    /** The bootstrap method's static arguments, already resolved to nominal descriptors. */
     default List<ConstantDesc> bootstrapArgs() {
         BootstrapMethodEntry bsm = invokedynamic().bootstrap();
-        List<LoadableConstantEntry> crudos = bsm.arguments();
-        List<ConstantDesc> salida = new ArrayList<ConstantDesc>();
-        for (int i = 0; i < crudos.size(); i++) {
-            salida.add(crudos.get(i).constantValue());
+        List<LoadableConstantEntry> raw = bsm.arguments();
+        List<ConstantDesc> out = new ArrayList<ConstantDesc>();
+        for (int i = 0; i < raw.size(); i++) {
+            out.add(raw.get(i).constantValue());
         }
-        return Collections.unmodifiableList(salida);
+        return Collections.unmodifiableList(out);
     }
 
-    /** El `invokedynamic` de esta entrada. */
+    /** This entry's `invokedynamic`. */
     public static InvokeDynamicInstruction of(InvokeDynamicEntry invokedynamic) {
         return Instructions.invokeDynamic(invokedynamic);
     }

@@ -15,23 +15,23 @@ package java.lang.reflect;
  * no way to write one generic accessor over them. {@link #get} and {@link #set} paper over that by
  * boxing, at the cost of allocating on every element access.
  *
- * <h2>Como esta implementada aca</h2>
+ * <h2>How it is implemented here</h2>
  *
- * <p>Los diecisiete accesores publicos <b>ya no son nativos</b>: son Java sobre cinco puertas
- * internas --{@code getInt0}, {@code getLong0}, {@code getFloat0}, {@code getDouble0},
- * {@code getRef0} y sus simetricas-- que leen y escriben crudo. Antes estaban declarados
- * {@code native} sin puente en la VM, o sea que <b>todos tiraban {@code UnsatisfiedLinkError}</b>:
- * una clase que medía completa y no servia para nada.
+ * <p>The seventeen public accessors are <b>no longer native</b>: they are Java over five internal
+ * ones --{@code getInt0}, {@code getLong0}, {@code getFloat0}, {@code getDouble0},
+ * {@code getRef0} and their mirrors-- that read and write raw. They used to be declared
+ * {@code native} with no bridge in the VM, meaning <b>every one of them threw
+ * {@code UnsatisfiedLinkError}</b>: a class that measured complete and was good for nothing.
  *
- * <p>Que sean cinco y no diecisiete sale de que el <b>ancho</b> de un elemento lo decide el tipo del
- * arreglo, que la VM ya conoce; lo que elige quien llama es la <b>forma</b> en que quiere el valor.
- * Un {@code getInt0} sobre un {@code byte[]} lee un byte y lo extiende con signo, sobre un
- * {@code char[]} lee dos sin signo.
+ * <p>That there are five and not seventeen follows from the element's <b>width</b> being decided by
+ * the array's type, which the VM already knows; what the caller chooses is the <b>shape</b> they want
+ * the value in. A {@code getInt0} over a {@code byte[]} reads a byte and sign-extends it, over a
+ * {@code char[]} reads two unsigned.
  *
- * <p>Y los <b>chequeos viven de este lado</b>: el nulo, el indice fuera de rango, el tipo que no
- * corresponde y las conversiones de ensanchamiento. Cada uno tiene su excepcion con su mensaje, y
- * escribirlas en Java es lo que hace que se lean. Las puertas internas solo ven pedidos bien
- * formados -- la misma decision que ya estaba tomada para {@code newArray}.
+ * <p>And the <b>checks live on this side</b>: the null, the out-of-range index, the type that does
+ * not match and the widening conversions. Each has its own exception with its own message, and
+ * writing them in Java is what makes them readable. The internal doors only ever see well-formed
+ * requests -- the same decision that had already been taken for {@code newArray}.
  */
 public final class Array {
 
@@ -49,9 +49,9 @@ public final class Array {
      * @throws NegativeArraySizeException if {@code length} is negative
      */
     public static Object newInstance(Class<?> componentType, int length) throws NegativeArraySizeException {
-        // El chequeo va aca y no en la puerta interna, como todos los demas de esta clase. El
-        // comentario de esa puerta ya decia que este chequeo existia; no existia, y un largo
-        // negativo devolvia un arreglo vacio en silencio.
+        // The check goes here and not in the internal door, like all the others in this class. That
+        // door's comment already said this check existed; it did not, and a negative length silently
+        // returned an empty array.
         if (length < 0) {
             throw new NegativeArraySizeException(Integer.toString(length));
         }
@@ -79,8 +79,8 @@ public final class Array {
         if (dimensions.length == 0 || dimensions.length > 255) {
             throw new IllegalArgumentException("wrong number of array dimensions");
         }
-        // Y ninguna negativa: se chequean **todas antes** de alocar nada, para que una dimension
-        // interior mal dada no deje medio arreglo construido en el heap.
+        // And none negative: they are **all checked before** anything is allocated, so a badly given
+        // inner dimension does not leave half an array built on the heap.
         for (int d : dimensions) {
             if (d < 0) {
                 throw new NegativeArraySizeException(Integer.toString(d));
@@ -99,8 +99,8 @@ public final class Array {
     public static int getLength(Object array) throws IllegalArgumentException {
         int n = length0(array);
         if (n < 0) {
-            // El -1 de la puerta interna es "no es un arreglo"; el nulo se separa antes porque su
-            // excepcion es otra.
+            // The internal door's -1 means "not an array"; the null is separated out first because
+            // its exception is another.
             if (array == null) {
                 throw new NullPointerException();
             }
@@ -109,9 +109,9 @@ public final class Array {
         return n;
     }
 
-    // El componente del arreglo, ya validado. Todo accesor empieza por aca: es donde se deciden de
-    // una vez el nulo, el "no es un arreglo" y el rango.
-    private static Class<?> componente(Object array, int index) {
+    // The array's component, already validated. Every accessor starts here: it is where the null,
+    // the "not an array" and the range are settled once.
+    private static Class<?> component(Object array, int index) {
         if (array == null) {
             throw new NullPointerException();
         }
@@ -138,7 +138,7 @@ public final class Array {
      */
     public static Object get(Object array, int index)
             throws IllegalArgumentException, ArrayIndexOutOfBoundsException {
-        Class<?> c = componente(array, index);
+        Class<?> c = component(array, index);
         if (!c.isPrimitive()) {
             return getRef0(array, index);
         }
@@ -169,48 +169,48 @@ public final class Array {
     /** Returns the {@code boolean} at {@code index}. @see #get */
     public static boolean getBoolean(Object array, int index)
             throws IllegalArgumentException, ArrayIndexOutOfBoundsException {
-        exigir(componente(array, index) == Boolean.TYPE, "boolean");
+        require(component(array, index) == Boolean.TYPE, "boolean");
         return getInt0(array, index) != 0;
     }
 
     /** Returns the {@code byte} at {@code index}. @see #get */
     public static byte getByte(Object array, int index)
             throws IllegalArgumentException, ArrayIndexOutOfBoundsException {
-        exigir(componente(array, index) == Byte.TYPE, "byte");
+        require(component(array, index) == Byte.TYPE, "byte");
         return (byte) getInt0(array, index);
     }
 
     /** Returns the {@code char} at {@code index}. @see #get */
     public static char getChar(Object array, int index)
             throws IllegalArgumentException, ArrayIndexOutOfBoundsException {
-        exigir(componente(array, index) == Character.TYPE, "char");
+        require(component(array, index) == Character.TYPE, "char");
         return (char) getInt0(array, index);
     }
 
     /** Returns the {@code short} at {@code index}, widening if needed. @see #get */
     public static short getShort(Object array, int index)
             throws IllegalArgumentException, ArrayIndexOutOfBoundsException {
-        Class<?> c = componente(array, index);
-        exigir(c == Byte.TYPE || c == Short.TYPE, "short");
+        Class<?> c = component(array, index);
+        require(c == Byte.TYPE || c == Short.TYPE, "short");
         return (short) getInt0(array, index);
     }
 
     /** Returns the {@code int} at {@code index}, widening if needed. @see #get */
     public static int getInt(Object array, int index)
             throws IllegalArgumentException, ArrayIndexOutOfBoundsException {
-        Class<?> c = componente(array, index);
-        exigir(c == Byte.TYPE || c == Character.TYPE || c == Short.TYPE || c == Integer.TYPE, "int");
+        Class<?> c = component(array, index);
+        require(c == Byte.TYPE || c == Character.TYPE || c == Short.TYPE || c == Integer.TYPE, "int");
         return getInt0(array, index);
     }
 
     /** Returns the {@code long} at {@code index}, widening if needed. @see #get */
     public static long getLong(Object array, int index)
             throws IllegalArgumentException, ArrayIndexOutOfBoundsException {
-        Class<?> c = componente(array, index);
+        Class<?> c = component(array, index);
         if (c == Long.TYPE) {
             return getLong0(array, index);
         }
-        exigir(c == Byte.TYPE || c == Character.TYPE || c == Short.TYPE || c == Integer.TYPE,
+        require(c == Byte.TYPE || c == Character.TYPE || c == Short.TYPE || c == Integer.TYPE,
                "long");
         return getInt0(array, index);
     }
@@ -218,14 +218,14 @@ public final class Array {
     /** Returns the {@code float} at {@code index}, widening if needed. @see #get */
     public static float getFloat(Object array, int index)
             throws IllegalArgumentException, ArrayIndexOutOfBoundsException {
-        Class<?> c = componente(array, index);
+        Class<?> c = component(array, index);
         if (c == Float.TYPE) {
             return getFloat0(array, index);
         }
         if (c == Long.TYPE) {
             return getLong0(array, index);
         }
-        exigir(c == Byte.TYPE || c == Character.TYPE || c == Short.TYPE || c == Integer.TYPE,
+        require(c == Byte.TYPE || c == Character.TYPE || c == Short.TYPE || c == Integer.TYPE,
                "float");
         return getInt0(array, index);
     }
@@ -233,7 +233,7 @@ public final class Array {
     /** Returns the {@code double} at {@code index}, widening if needed. @see #get */
     public static double getDouble(Object array, int index)
             throws IllegalArgumentException, ArrayIndexOutOfBoundsException {
-        Class<?> c = componente(array, index);
+        Class<?> c = component(array, index);
         if (c == Double.TYPE) {
             return getDouble0(array, index);
         }
@@ -243,7 +243,7 @@ public final class Array {
         if (c == Long.TYPE) {
             return getLong0(array, index);
         }
-        exigir(c == Byte.TYPE || c == Character.TYPE || c == Short.TYPE || c == Integer.TYPE,
+        require(c == Byte.TYPE || c == Character.TYPE || c == Short.TYPE || c == Integer.TYPE,
                "double");
         return getInt0(array, index);
     }
@@ -260,7 +260,7 @@ public final class Array {
      */
     public static void set(Object array, int index, Object value)
             throws IllegalArgumentException, ArrayIndexOutOfBoundsException {
-        Class<?> c = componente(array, index);
+        Class<?> c = component(array, index);
         if (!c.isPrimitive()) {
             if (value != null && !c.isInstance(value)) {
                 throw new IllegalArgumentException("argument type mismatch");
@@ -269,8 +269,8 @@ public final class Array {
             return;
         }
         if (value == null) {
-            // Un nulo no se puede desenvolver en un primitivo, y el contrato lo llama un argumento
-            // equivocado y no un `NullPointerException`.
+            // A null cannot be unwrapped into a primitive, and the contract calls that a wrong
+            // argument and not a `NullPointerException`.
             throw new IllegalArgumentException("argument type mismatch");
         }
         if (value instanceof Boolean) {
@@ -297,58 +297,58 @@ public final class Array {
     /** Stores a {@code boolean} at {@code index}. @see #set */
     public static void setBoolean(Object array, int index, boolean z)
             throws IllegalArgumentException, ArrayIndexOutOfBoundsException {
-        exigir(componente(array, index) == Boolean.TYPE, "boolean");
+        require(component(array, index) == Boolean.TYPE, "boolean");
         setInt0(array, index, z ? 1 : 0);
     }
 
     /** Stores a {@code byte} at {@code index}, widening if needed. @see #set */
     public static void setByte(Object array, int index, byte b)
             throws IllegalArgumentException, ArrayIndexOutOfBoundsException {
-        Class<?> c = componente(array, index);
+        Class<?> c = component(array, index);
         if (c == Byte.TYPE || c == Short.TYPE || c == Integer.TYPE) {
             setInt0(array, index, b);
         } else {
-            anchos(array, index, c, b, b, b);
+            widths(array, index, c, b, b, b);
         }
     }
 
     /** Stores a {@code char} at {@code index}, widening if needed. @see #set */
     public static void setChar(Object array, int index, char ch)
             throws IllegalArgumentException, ArrayIndexOutOfBoundsException {
-        Class<?> c = componente(array, index);
+        Class<?> c = component(array, index);
         if (c == Character.TYPE || c == Integer.TYPE) {
             setInt0(array, index, ch);
         } else {
-            anchos(array, index, c, ch, ch, ch);
+            widths(array, index, c, ch, ch, ch);
         }
     }
 
     /** Stores a {@code short} at {@code index}, widening if needed. @see #set */
     public static void setShort(Object array, int index, short s)
             throws IllegalArgumentException, ArrayIndexOutOfBoundsException {
-        Class<?> c = componente(array, index);
+        Class<?> c = component(array, index);
         if (c == Short.TYPE || c == Integer.TYPE) {
             setInt0(array, index, s);
         } else {
-            anchos(array, index, c, s, s, s);
+            widths(array, index, c, s, s, s);
         }
     }
 
     /** Stores an {@code int} at {@code index}, widening if needed. @see #set */
     public static void setInt(Object array, int index, int i)
             throws IllegalArgumentException, ArrayIndexOutOfBoundsException {
-        Class<?> c = componente(array, index);
+        Class<?> c = component(array, index);
         if (c == Integer.TYPE) {
             setInt0(array, index, i);
         } else {
-            anchos(array, index, c, i, i, i);
+            widths(array, index, c, i, i, i);
         }
     }
 
     /** Stores a {@code long} at {@code index}, widening if needed. @see #set */
     public static void setLong(Object array, int index, long l)
             throws IllegalArgumentException, ArrayIndexOutOfBoundsException {
-        Class<?> c = componente(array, index);
+        Class<?> c = component(array, index);
         if (c == Long.TYPE) {
             setLong0(array, index, l);
         } else if (c == Float.TYPE) {
@@ -363,7 +363,7 @@ public final class Array {
     /** Stores a {@code float} at {@code index}, widening if needed. @see #set */
     public static void setFloat(Object array, int index, float f)
             throws IllegalArgumentException, ArrayIndexOutOfBoundsException {
-        Class<?> c = componente(array, index);
+        Class<?> c = component(array, index);
         if (c == Float.TYPE) {
             setFloat0(array, index, f);
         } else if (c == Double.TYPE) {
@@ -376,37 +376,37 @@ public final class Array {
     /** Stores a {@code double} at {@code index}. @see #set */
     public static void setDouble(Object array, int index, double d)
             throws IllegalArgumentException, ArrayIndexOutOfBoundsException {
-        exigir(componente(array, index) == Double.TYPE, "double");
+        require(component(array, index) == Double.TYPE, "double");
         setDouble0(array, index, d);
     }
 
-    // Los tres destinos anchos --`long`, `float`, `double`-- que aceptan cualquiera de los cuatro
-    // tipos enteros angostos. Los destinos de ancho de `int` los decide cada `set`, porque ahi si se
-    // diferencian: un `char` entra en un `int[]` pero no en un `short[]`.
-    private static void anchos(Object array, int index, Class<?> c, long comoLong, float comoFloat,
-                               double comoDouble) {
+    // The three wide destinations --`long`, `float`, `double`-- that accept any of the four narrow
+    // integer types. The int-width destinations are decided by each `set`, because there they do
+    // differ: a `char` fits in an `int[]` but not in a `short[]`.
+    private static void widths(Object array, int index, Class<?> c, long asLong, float asFloat,
+                               double asDouble) {
         if (c == Long.TYPE) {
-            setLong0(array, index, comoLong);
+            setLong0(array, index, asLong);
         } else if (c == Float.TYPE) {
-            setFloat0(array, index, comoFloat);
+            setFloat0(array, index, asFloat);
         } else if (c == Double.TYPE) {
-            setDouble0(array, index, comoDouble);
+            setDouble0(array, index, asDouble);
         } else {
             throw new IllegalArgumentException("argument type mismatch");
         }
     }
 
-    private static void exigir(boolean ok, String tipo) {
+    private static void require(boolean ok, String type) {
         if (!ok) {
-            throw new IllegalArgumentException("Argument is not an array of type " + tipo);
+            throw new IllegalArgumentException("Argument is not an array of type " + type);
         }
     }
 
-    // ---- las puertas internas ----------------------------------------------------------------
+    // ---- the internal doors ------------------------------------------------------------------
     //
-    // Sin chequeos: los hace todo lo de arriba. Ver la nota de la clase.
+    // No checks: everything above does them. See the class's note.
 
-    /** El largo, o -1 si no es un arreglo. */
+    /** The length, or -1 if it is not an array. */
     private static native int length0(Object array);
 
     private static native int getInt0(Object array, int index);

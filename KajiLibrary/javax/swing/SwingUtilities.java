@@ -15,47 +15,48 @@ import java.awt.event.MouseEvent;
 import java.lang.reflect.InvocationTargetException;
 
 /**
- * Las utilidades sueltas de Swing: geometria entre componentes, el hilo de eventos, y el algoritmo
- * que ubica texto e icono.
+ * Swing's loose utilities: geometry between components, the event thread, and the algorithm
+ * that places text and icon.
  *
- * <h2>{@link #layoutCompoundLabel} es la pieza que importa</h2>
+ * <h2>{@link #layoutCompoundLabel} is the piece that matters</h2>
  *
- * <p>Toda etiqueta, boton, casilla y celda de Swing coloca su texto y su icono con este metodo, y
- * por eso todos se ven igual entre si: la alineacion, la separacion, el recorte con puntos
- * suspensivos cuando no entra, salen de un solo lugar. Devuelve el texto <em>posiblemente
- * recortado</em> y deja las tres cajas —vista, icono, texto— en los rectangulos que le pasan.
+ * <p>Every label, button, check box and cell in Swing places its text and its icon with this
+ * method, and that is why they all look alike: the alignment, the gap, the clipping with an
+ * ellipsis when it does not fit, all come from a single place. It returns the text
+ * <em>possibly clipped</em> and leaves the three boxes -- view, icon, text -- in the rectangles
+ * it is passed.
  *
- * <p>Esta escrito para coincidir pixel por pixel con el JDK, que es lo que se verifica contra el:
- * el orden de las operaciones enteras, la division por dos que redondea hacia cero, y que
- * {@code CENTER} en el texto apile en vez de poner al lado, son todos casos que un "parecido" no
- * cubre.
+ * <p>It is written so as to agree pixel by pixel with the JDK, which is what is verified
+ * against it: the order of the integer operations, the division by two that rounds towards
+ * zero, and that {@code CENTER} in the text stacks instead of putting side by side, are all
+ * cases a "near enough" does not cover.
  *
- * <h2>Lo que no esta</h2>
+ * <h2>What is not there</h2>
  *
- * <p>Las acciones por teclado ({@code notifyAction}, los mapas de entrada), lo que nombra
- * {@code JRootPane}, {@code JViewport} o {@code TransferHandler}, y las conversiones a coordenadas
- * de <em>pantalla</em>: no hay pantalla. Cada uno es una clase que no existe todavia, no un metodo
- * que se olvido.
+ * <p>The keyboard actions ({@code notifyAction}, the input maps), what names
+ * {@code JRootPane}, {@code JViewport} or {@code TransferHandler}, and the conversions to
+ * <em>screen</em> coordinates: there is no screen. Each one is a class that does not exist yet,
+ * not a method that was forgotten.
  */
 public class SwingUtilities implements SwingConstants {
 
     private SwingUtilities() {
     }
 
-    // -- geometria --------------------------------------------------------------------------------
+    // -- geometry ---------------------------------------------------------------------------------
 
-    /** Si {@code a} contiene a {@code b} por completo. */
+    /** Whether {@code a} contains {@code b} completely. */
     public static final boolean isRectangleContainingRectangle(Rectangle a, Rectangle b) {
         return b.x >= a.x && (b.x + b.width) <= (a.x + a.width)
                 && b.y >= a.y && (b.y + b.height) <= (a.y + a.height);
     }
 
-    /** El rectangulo del componente en sus propias coordenadas: {@code (0, 0, ancho, alto)}. */
+    /** The component's rectangle in its own coordinates: {@code (0, 0, width, height)}. */
     public static Rectangle getLocalBounds(Component aComponent) {
         return new Rectangle(0, 0, aComponent.getWidth(), aComponent.getHeight());
     }
 
-    /** La primera {@link Window} entre los ancestros, o {@code null}. */
+    /** The first {@link Window} among the ancestors, or {@code null}. */
     public static Window getWindowAncestor(Component c) {
         for (Container p = c.getParent(); p != null; p = p.getParent()) {
             if (p instanceof Window) {
@@ -66,11 +67,11 @@ public class SwingUtilities implements SwingConstants {
     }
 
     /**
-     * Traduce un punto del sistema de coordenadas de un componente al de otro.
+     * It translates a point from one component's coordinate system to another's.
      *
-     * <p>Pasa por la raiz comun: primero sube de {@code source} hasta su ventana, despues baja
-     * hasta {@code destination}. Cualquiera de los dos puede ser {@code null}, que significa "la
-     * raiz misma".
+     * <p>It goes through the common root: first it goes up from {@code source} to its window, then
+     * it goes down to {@code destination}. Either of the two may be {@code null}, which means "the
+     * root itself".
      */
     public static Point convertPoint(Component source, Point aPoint, Component destination) {
         Point p;
@@ -86,7 +87,7 @@ public class SwingUtilities implements SwingConstants {
             return null;
         }
         if (source != null) {
-            // Sube hasta la raiz sumando los origenes.
+            // It goes up to the root adding the origins.
             for (Component c = source; c != null; c = c.getParent()) {
                 p.x = p.x + c.getX();
                 p.y = p.y + c.getY();
@@ -112,14 +113,14 @@ public class SwingUtilities implements SwingConstants {
         return convertPoint(source, new Point(x, y), destination);
     }
 
-    /** Traduce un rectangulo entre sistemas de coordenadas; el tamano no cambia. */
+    /** It translates a rectangle between coordinate systems; the size does not change. */
     public static Rectangle convertRectangle(Component source, Rectangle aRectangle,
             Component destination) {
         Point p = convertPoint(source, new Point(aRectangle.x, aRectangle.y), destination);
         return new Rectangle(p.x, p.y, aRectangle.width, aRectangle.height);
     }
 
-    /** El primer ancestro que sea instancia de {@code c}, o {@code null}. */
+    /** The first ancestor that is an instance of {@code c}, or {@code null}. */
     public static Container getAncestorOfClass(Class<?> c, Component comp) {
         if (comp == null || c == null) {
             return null;
@@ -131,7 +132,7 @@ public class SwingUtilities implements SwingConstants {
         return parent;
     }
 
-    /** El primer ancestro con ese nombre, o {@code null}. */
+    /** The first ancestor with that name, or {@code null}. */
     public static Container getAncestorNamed(String name, Component comp) {
         if (comp == null || name == null) {
             return null;
@@ -144,10 +145,11 @@ public class SwingUtilities implements SwingConstants {
     }
 
     /**
-     * El componente mas profundo bajo el punto, o {@code null} si el punto cae afuera.
+     * The deepest component under the point, or {@code null} if the point falls outside.
      *
-     * <p>Baja por los hijos <em>visibles</em> y en orden de agregado, que es el z-order: el
-     * primero que contiene el punto gana, aunque otro hermano tambien lo contenga.
+     * <p>It goes down through the <em>visible</em> children and in the order they were added,
+     * which is the z-order: the first that contains the point wins, even though another sibling
+     * also contains it.
      */
     public static Component getDeepestComponentAt(Component parent, int x, int y) {
         if (!parent.contains(x, y)) {
@@ -157,11 +159,12 @@ public class SwingUtilities implements SwingConstants {
             Container c = (Container) parent;
             int n = c.getComponentCount();
             for (int i = 0; i < n; i++) {
-                Component hijo = c.getComponent(i);
-                if (hijo != null && hijo.isVisible()) {
-                    Component hondo = getDeepestComponentAt(hijo, x - hijo.getX(), y - hijo.getY());
-                    if (hondo != null) {
-                        return hondo;
+                Component child = c.getComponent(i);
+                if (child != null && child.isVisible()) {
+                    Component deep =
+                            getDeepestComponentAt(child, x - child.getX(), y - child.getY());
+                    if (deep != null) {
+                        return deep;
                     }
                 }
             }
@@ -169,23 +172,23 @@ public class SwingUtilities implements SwingConstants {
         return parent;
     }
 
-    /** El mismo evento de mouse, con su posicion traducida al sistema de {@code destination}. */
+    /** The same mouse event, with its position translated to {@code destination}'s system. */
     public static MouseEvent convertMouseEvent(Component source, MouseEvent sourceEvent,
             Component destination) {
         Point p = convertPoint(source, new Point(sourceEvent.getX(), sourceEvent.getY()),
                 destination);
-        Component nuevoOrigen = destination != null ? destination : source;
-        return new MouseEvent(nuevoOrigen, sourceEvent.getID(), sourceEvent.getWhen(),
+        Component newOrigin = destination != null ? destination : source;
+        return new MouseEvent(newOrigin, sourceEvent.getID(), sourceEvent.getWhen(),
                 sourceEvent.getModifiersEx(), p.x, p.y, sourceEvent.getClickCount(),
                 sourceEvent.isPopupTrigger(), sourceEvent.getButton());
     }
 
-    /** La ventana que contiene al componente, o {@code null}. */
+    /** The window that contains the component, or {@code null}. */
     public static Window windowForComponent(Component c) {
         return getWindowAncestor(c);
     }
 
-    /** Si {@code a} es {@code b} o esta debajo de {@code b}. */
+    /** Whether {@code a} is {@code b} or is below {@code b}. */
     public static boolean isDescendingFrom(Component a, Component b) {
         if (a == b) {
             return true;
@@ -198,7 +201,7 @@ public class SwingUtilities implements SwingConstants {
         return false;
     }
 
-    /** La interseccion, escrita en {@code dest}. Vacia si no se tocan. */
+    /** The intersection, written into {@code dest}. Empty if they do not touch. */
     public static Rectangle computeIntersection(int x, int y, int width, int height, Rectangle dest) {
         int x1 = Math.max(x, dest.x);
         int x2 = Math.min(x + width, dest.x + dest.width);
@@ -217,7 +220,7 @@ public class SwingUtilities implements SwingConstants {
         return dest;
     }
 
-    /** La union, escrita en {@code dest}. */
+    /** The union, written into {@code dest}. */
     public static Rectangle computeUnion(int x, int y, int width, int height, Rectangle dest) {
         int x1 = Math.min(x, dest.x);
         int x2 = Math.max(x + width, dest.x + dest.width);
@@ -231,51 +234,53 @@ public class SwingUtilities implements SwingConstants {
     }
 
     /**
-     * Lo que queda de {@code rectA} al sacarle {@code rectB}, como hasta cuatro rectangulos.
+     * What is left of {@code rectA} on taking {@code rectB} away, as up to four rectangles.
      *
-     * <p>Es lo que un componente repinta cuando algo lo tapa parcialmente: las franjas de arriba,
-     * abajo, izquierda y derecha que no quedaron cubiertas. Sin superposicion, devuelve
-     * {@code rectA} entero.
+     * <p>It is what a component repaints when something partly covers it: the top, bottom, left
+     * and right strips that were not covered. With no overlap, it returns {@code rectA} whole.
      */
     public static Rectangle[] computeDifference(Rectangle rectA, Rectangle rectB) {
         if (rectB == null || !rectA.intersects(rectB) || isRectangleContainingRectangle(rectB, rectA)) {
             return new Rectangle[0];
         }
-        Rectangle[] partes = new Rectangle[4];
+        Rectangle[] parts = new Rectangle[4];
         int n = 0;
-        // Arriba
+        // Top
         if (rectB.y > rectA.y) {
-            partes[n] = new Rectangle(rectA.x, rectA.y, rectA.width, rectB.y - rectA.y);
+            parts[n] = new Rectangle(rectA.x, rectA.y, rectA.width, rectB.y - rectA.y);
             n = n + 1;
         }
-        // Abajo
-        int fondoB = rectB.y + rectB.height;
-        int fondoA = rectA.y + rectA.height;
-        if (fondoB < fondoA) {
-            partes[n] = new Rectangle(rectA.x, fondoB, rectA.width, fondoA - fondoB);
+        // Bottom
+        int backgroundB = rectB.y + rectB.height;
+        int backgroundA = rectA.y + rectA.height;
+        if (backgroundB < backgroundA) {
+            parts[n] = new Rectangle(rectA.x, backgroundB, rectA.width, backgroundA - backgroundB);
             n = n + 1;
         }
-        // Izquierda y derecha, solo en la franja del medio
-        int medioY = Math.max(rectA.y, rectB.y);
-        int medioH = Math.min(fondoA, fondoB) - medioY;
+        // Left and right, only in the middle strip
+        int midY = Math.max(rectA.y, rectB.y);
+        int midH = Math.min(backgroundA, backgroundB) - midY;
         if (rectB.x > rectA.x) {
-            partes[n] = new Rectangle(rectA.x, medioY, rectB.x - rectA.x, medioH);
+            parts[n] = new Rectangle(rectA.x, midY, rectB.x - rectA.x, midH);
             n = n + 1;
         }
-        int ladoB = rectB.x + rectB.width;
-        int ladoA = rectA.x + rectA.width;
-        if (ladoB < ladoA) {
-            partes[n] = new Rectangle(ladoB, medioY, ladoA - ladoB, medioH);
+        int sideB = rectB.x + rectB.width;
+        int sideA = rectA.x + rectA.width;
+        if (sideB < sideA) {
+            parts[n] = new Rectangle(sideB, midY, sideA - sideB, midH);
             n = n + 1;
         }
-        Rectangle[] resultado = new Rectangle[n];
+        Rectangle[] result = new Rectangle[n];
         for (int i = 0; i < n; i++) {
-            resultado[i] = partes[i];
+            result[i] = parts[i];
         }
-        return resultado;
+        return result;
     }
 
-    /** El area interior: el componente menos sus insets, escrita en {@code r} si no es {@code null}. */
+    /**
+     * The inner area: the component minus its insets, written into {@code r} if it is not {@code
+     * null}.
+     */
     public static Rectangle calculateInnerArea(JComponent c, Rectangle r) {
         if (c == null) {
             return null;
@@ -292,7 +297,7 @@ public class SwingUtilities implements SwingConstants {
         return rect;
     }
 
-    /** La raiz de la jerarquia: la ventana o el applet de mas arriba, o el ultimo ancestro. */
+    /** The hierarchy's root: the topmost window or applet, or the last ancestor. */
     public static Component getRoot(Component c) {
         Component applet = null;
         for (Component p = c; p != null; p = p.getParent()) {
@@ -308,62 +313,65 @@ public class SwingUtilities implements SwingConstants {
 
     // -- mouse ------------------------------------------------------------------------------------
 
-    /** Si el evento es del boton izquierdo. */
+    /** Whether the event is the left button's. */
     public static boolean isLeftMouseButton(MouseEvent anEvent) {
         return (anEvent.getModifiersEx() & InputEvent.BUTTON1_DOWN_MASK) != 0
                 || anEvent.getButton() == MouseEvent.BUTTON1;
     }
 
-    /** Si el evento es del boton del medio. */
+    /** Whether the event is the middle button's. */
     public static boolean isMiddleMouseButton(MouseEvent anEvent) {
         return (anEvent.getModifiersEx() & InputEvent.BUTTON2_DOWN_MASK) != 0
                 || anEvent.getButton() == MouseEvent.BUTTON2;
     }
 
-    /** Si el evento es del boton derecho. */
+    /** Whether the event is the right button's. */
     public static boolean isRightMouseButton(MouseEvent anEvent) {
         return (anEvent.getModifiersEx() & InputEvent.BUTTON3_DOWN_MASK) != 0
                 || anEvent.getButton() == MouseEvent.BUTTON3;
     }
 
-    // -- texto e icono ----------------------------------------------------------------------------
+    // -- text and icon ----------------------------------------------------------------------------
 
-    /** El ancho de una cadena con esas metricas. */
+    /** A string's width with those metrics. */
     public static int computeStringWidth(FontMetrics fm, String str) {
         return fm.stringWidth(str);
     }
 
     /**
-     * Ubica texto e icono dentro de {@code viewR}, resolviendo {@code LEADING} y {@code TRAILING}
-     * con la orientacion de {@code c}.
+     * It places text and icon inside {@code viewR}, resolving {@code LEADING} and
+     * {@code TRAILING} with {@code c}'s orientation.
      *
-     * <p>Sin componente ({@code null}) se asume de izquierda a derecha.
+     * <p>With no component ({@code null}) left to right is assumed.
      */
     public static String layoutCompoundLabel(JComponent c, FontMetrics fm, String text, Icon icon,
             int verticalAlignment, int horizontalAlignment, int verticalTextPosition,
             int horizontalTextPosition, Rectangle viewR, Rectangle iconR, Rectangle textR,
             int textIconGap) {
-        boolean izqADer = true;
+        boolean leftToRight = true;
         if (c != null) {
-            izqADer = c.getComponentOrientation().isLeftToRight();
+            leftToRight = c.getComponentOrientation().isLeftToRight();
         }
         int hAlign = horizontalAlignment;
         int hText = horizontalTextPosition;
         if (hText == LEADING) {
-            hText = izqADer ? LEFT : RIGHT;
+            hText = leftToRight ? LEFT : RIGHT;
         } else if (hText == TRAILING) {
-            hText = izqADer ? RIGHT : LEFT;
+            hText = leftToRight ? RIGHT : LEFT;
         }
         if (hAlign == LEADING) {
-            hAlign = izqADer ? LEFT : RIGHT;
+            hAlign = leftToRight ? LEFT : RIGHT;
         } else if (hAlign == TRAILING) {
-            hAlign = izqADer ? RIGHT : LEFT;
+            hAlign = leftToRight ? RIGHT : LEFT;
         }
-        return ubicar(fm, text, icon, verticalAlignment, hAlign, verticalTextPosition, hText,
+        return place(fm, text, icon, verticalAlignment, hAlign, verticalTextPosition, hText,
                 viewR, iconR, textR, textIconGap);
     }
 
-    /** Ver la otra forma; esta trata {@code LEADING} como {@code LEFT} y {@code TRAILING} como {@code RIGHT}. */
+    /**
+     * See the other form; this one treats {@code LEADING} as {@code LEFT} and {@code TRAILING} as
+     * {@code RIGHT}.
+     */
     public static String layoutCompoundLabel(FontMetrics fm, String text, Icon icon,
             int verticalAlignment, int horizontalAlignment, int verticalTextPosition,
             int horizontalTextPosition, Rectangle viewR, Rectangle iconR, Rectangle textR,
@@ -373,21 +381,22 @@ public class SwingUtilities implements SwingConstants {
     }
 
     /**
-     * El algoritmo, ya con las posiciones resueltas a {@code LEFT}/{@code CENTER}/{@code RIGHT}.
+     * The algorithm, with the positions already resolved to
+     * {@code LEFT}/{@code CENTER}/{@code RIGHT}.
      *
-     * <p>Tres pasos: medir texto e icono; ubicar el texto <em>relativo al icono en el origen</em>
-     * segun las dos posiciones del texto; y mover el par entero para alinearlo en la vista. Que el
-     * texto se ubique relativo al icono antes de alinear es lo que hace que "texto a la derecha del
-     * icono, todo centrado" salga bien sin casos especiales.
+     * <p>Three steps: measure text and icon; place the text <em>relative to the icon at the
+     * origin</em> according to the two text positions; and move the whole pair in order to align
+     * it in the view. That the text is placed relative to the icon before aligning is what makes
+     * "text to the right of the icon, everything centred" come out right with no special cases.
      *
-     * <p>Un detalle que el JDK aplica y aca no hace falta: corregir el margen izquierdo negativo de
-     * un glifo (una {@code f} italica que sobresale a la izquierda). La fuente de esta VM es un mapa
-     * de bits sin margenes negativos, asi que esa correccion es siempre cero.
+     * <p>A detail the JDK applies and is not needed here: correcting a glyph's negative left
+     * bearing (an italic {@code f} that sticks out on the left). This VM's typeface is a bitmap
+     * with no negative bearings, so that correction is always zero.
      */
-    private static String ubicar(FontMetrics fm, String text, Icon icon, int verticalAlignment,
+    private static String place(FontMetrics fm, String text, Icon icon, int verticalAlignment,
             int horizontalAlignment, int verticalTextPosition, int horizontalTextPosition,
             Rectangle viewR, Rectangle iconR, Rectangle textR, int textIconGap) {
-        // El icono en el origen; su tamano es el suyo o cero.
+        // The icon at the origin; its size is its own or zero.
         iconR.x = 0;
         iconR.y = 0;
         if (icon != null) {
@@ -398,48 +407,51 @@ public class SwingUtilities implements SwingConstants {
             iconR.height = 0;
         }
 
-        boolean sinTexto = text == null || text.isEmpty();
-        String texto = text;
-        if (sinTexto) {
+        boolean noText = text == null || text.isEmpty();
+        String clippedText = text;
+        if (noText) {
             textR.width = 0;
             textR.height = 0;
-            texto = "";
+            clippedText = "";
         } else {
-            textR.width = computeStringWidth(fm, texto);
+            textR.width = computeStringWidth(fm, clippedText);
             textR.height = fm.getHeight();
         }
 
-        // Sin texto o sin icono no hay separacion que respetar.
-        int gap = (sinTexto || icon == null) ? 0 : textIconGap;
+        // With no text or no icon there is no gap to respect.
+        int gap = (noText || icon == null) ? 0 : textIconGap;
 
-        if (!sinTexto) {
-            // Cuanto ancho le queda al texto: si va apilado con el icono, toda la vista; si va al
-            // lado, la vista menos el icono y la separacion.
-            int disponible;
+        if (!noText) {
+            // How much width is left for the text: if it goes stacked with the icon, the whole
+            // view;
+                        // if it goes beside it, the view minus the icon and the gap.
+            int available;
             if (horizontalTextPosition == CENTER) {
-                disponible = viewR.width;
+                available = viewR.width;
             } else {
-                disponible = viewR.width - (iconR.width + gap);
+                available = viewR.width - (iconR.width + gap);
             }
-            if (textR.width > disponible) {
-                // No entra: se recorta con puntos suspensivos, dejando tantos caracteres como quepan
-                // junto con los puntos. El bucle suma de a un caracter y se detiene en el primero
-                // que se pasa, que es exactamente lo que hace el JDK.
-                String puntos = "...";
-                int total = computeStringWidth(fm, puntos);
+            if (textR.width > available) {
+                // It does not fit: it is clipped with an ellipsis, leaving as many characters as
+                // fit
+                                // along with the dots. The loop adds one character at a time and
+                                // stops at the first that goes over, which is exactly what the JDK
+                                // does.
+                String points = "...";
+                int total = computeStringWidth(fm, points);
                 int n;
-                for (n = 0; n < texto.length(); n++) {
-                    total = total + fm.charWidth(texto.charAt(n));
-                    if (total > disponible) {
+                for (n = 0; n < clippedText.length(); n++) {
+                    total = total + fm.charWidth(clippedText.charAt(n));
+                    if (total > available) {
                         break;
                     }
                 }
-                texto = texto.substring(0, n) + puntos;
-                textR.width = computeStringWidth(fm, texto);
+                clippedText = clippedText.substring(0, n) + points;
+                textR.width = computeStringWidth(fm, clippedText);
             }
         }
 
-        // El texto relativo al icono, que esta en el origen.
+        // The text relative to the icon, which is at the origin.
         if (verticalTextPosition == TOP) {
             textR.y = (horizontalTextPosition == CENTER) ? -(textR.height + gap) : 0;
         } else if (verticalTextPosition == CENTER) {
@@ -456,70 +468,71 @@ public class SwingUtilities implements SwingConstants {
             textR.x = iconR.width + gap;
         }
 
-        // La caja que abarca a los dos, y su desplazamiento para alinearla en la vista.
-        int cajaX = Math.min(iconR.x, textR.x);
-        int cajaAncho = Math.max(iconR.x + iconR.width, textR.x + textR.width) - cajaX;
-        int cajaY = Math.min(iconR.y, textR.y);
-        int cajaAlto = Math.max(iconR.y + iconR.height, textR.y + textR.height) - cajaY;
+        // The box that spans both, and its shift in order to align it in the view.
+        int boxX = Math.min(iconR.x, textR.x);
+        int boxWidth = Math.max(iconR.x + iconR.width, textR.x + textR.width) - boxX;
+        int boxY = Math.min(iconR.y, textR.y);
+        int boxHeight = Math.max(iconR.y + iconR.height, textR.y + textR.height) - boxY;
 
         int dx;
         int dy;
         if (verticalAlignment == TOP) {
-            dy = viewR.y - cajaY;
+            dy = viewR.y - boxY;
         } else if (verticalAlignment == CENTER) {
-            dy = (viewR.y + (viewR.height / 2)) - (cajaY + (cajaAlto / 2));
+            dy = (viewR.y + (viewR.height / 2)) - (boxY + (boxHeight / 2));
         } else {
-            dy = (viewR.y + viewR.height) - (cajaY + cajaAlto);
+            dy = (viewR.y + viewR.height) - (boxY + boxHeight);
         }
         if (horizontalAlignment == LEFT) {
-            dx = viewR.x - cajaX;
+            dx = viewR.x - boxX;
         } else if (horizontalAlignment == RIGHT) {
-            dx = (viewR.x + viewR.width) - (cajaX + cajaAncho);
+            dx = (viewR.x + viewR.width) - (boxX + boxWidth);
         } else {
-            dx = (viewR.x + (viewR.width / 2)) - (cajaX + (cajaAncho / 2));
+            dx = (viewR.x + (viewR.width / 2)) - (boxX + (boxWidth / 2));
         }
 
         textR.x = textR.x + dx;
         textR.y = textR.y + dy;
         iconR.x = iconR.x + dx;
         iconR.y = iconR.y + dy;
-        return texto;
+        return clippedText;
     }
 
     /**
-     * El indice del caracter que se subraya como mnemonico, o {@code -1}.
+     * The index of the character that is underlined as the mnemonic, or {@code -1}.
      *
-     * <p>Primero la mayuscula, despues la minuscula: es el orden del JDK, y hace que en
-     * {@code "Save As"} con mnemonico {@code A} se subraye la {@code A} de {@code As} y no la de
-     * {@code Save}.
+     * <p>First the upper-case one, then the lower-case one: it is the JDK's order, and it makes
+     * {@code "Save As"} with mnemonic {@code A} underline the {@code A} of {@code As} and not the
+     * one of {@code Save}.
      */
     public static int findDisplayedMnemonicIndex(String text, int mnemonic) {
         if (text == null || mnemonic == '\0') {
             return -1;
         }
-        char mayus = Character.toUpperCase((char) mnemonic);
+        char shift = Character.toUpperCase((char) mnemonic);
         char minus = Character.toLowerCase((char) mnemonic);
-        int indice = text.indexOf(mayus);
-        if (indice == -1) {
-            indice = text.indexOf(minus);
+        int index = text.indexOf(shift);
+        if (index == -1) {
+            index = text.indexOf(minus);
         }
-        return indice;
+        return index;
     }
 
-    /** Si el componente se lee de izquierda a derecha. */
+    /** Whether the component is read left to right. */
     static boolean isLeftToRight(Component c) {
         return c.getComponentOrientation().isLeftToRight();
     }
 
-    // -- pintar un componente ajeno ----------------------------------------------------------------
+    // -- painting somebody else's component
+    // --------------------------------------------------------
 
     /**
-     * Pinta {@code c} dentro de {@code p}, en ese rectangulo, sin agregarlo de verdad.
+     * It paints {@code c} inside {@code p}, in that rectangle, without really adding it.
      *
-     * <p>Es como una tabla pinta su dibujante de celdas: el mismo componente se coloca y se pinta
-     * una vez por celda. Aca se hace directo —posicionar, trasladar el contexto, pintar— sin el
-     * {@code CellRendererPane} intermedio del JDK, que existe para que el componente tenga un padre
-     * mientras se pinta y aca no hace falta.
+     * <p>It is how a table paints its cell renderer: the same component is placed and painted once
+     * per cell. Here it is done directly -- position, translate the context, paint -- without the
+     * JDK's intermediate {@code CellRendererPane}, which exists so that the component has a parent
+     * while it is painted and is not needed here.
      */
     public static void paintComponent(Graphics g, Component c, Container p, int x, int y, int w,
             int h) {
@@ -540,7 +553,7 @@ public class SwingUtilities implements SwingConstants {
         paintComponent(g, c, p, r.x, r.y, r.width, r.height);
     }
 
-    /** Le pide a cada {@link JComponent} del arbol que renueve su aspecto. */
+    /** It asks each {@link JComponent} of the tree to renew its look and feel. */
     public static void updateComponentTreeUI(Component c) {
         if (c instanceof JComponent) {
             ((JComponent) c).updateUI();
@@ -554,33 +567,35 @@ public class SwingUtilities implements SwingConstants {
         }
     }
 
-    // -- el hilo de eventos -----------------------------------------------------------------------
+    // -- the event thread
+    // ---------------------------------------------------------------------------
 
-    /** Encola {@code doRun} en el hilo de eventos de AWT. */
+    /** It queues {@code doRun} on AWT's event thread. */
     public static void invokeLater(Runnable doRun) {
         EventQueue.invokeLater(doRun);
     }
 
-    /** Encola {@code doRun} y espera a que termine. */
+    /** It queues {@code doRun} and waits for it to finish. */
     public static void invokeAndWait(final Runnable doRun)
             throws InterruptedException, InvocationTargetException {
         EventQueue.invokeAndWait(doRun);
     }
 
-    /** Si el hilo actual es el de eventos. */
+    /** Whether the current thread is the event one. */
     public static boolean isEventDispatchThread() {
         return EventQueue.isDispatchThread();
     }
 
-    // -- coordenadas de pantalla -----------------------------------------------------------------
+    // -- screen coordinates
+    // ------------------------------------------------------------------------
 
     /**
-     * Pasa ese punto de las coordenadas del componente a las de la pantalla.
+     * It takes that point from the component's coordinates to the screen's.
      *
-     * <p>Modifica el punto que se le da; no devuelve uno nuevo. Es la forma vieja de Swing y se
-     * conserva porque cambiarla romperia a quien la usa.
+     * <p>It modifies the point it is given; it does not return a new one. It is Swing's old way
+     * and it is kept because changing it would break whoever uses it.
      *
-     * @throws java.awt.IllegalComponentStateException si el componente no esta en pantalla
+     * @throws java.awt.IllegalComponentStateException if the component is not on the screen
      */
     public static void convertPointToScreen(Point p, Component c) {
         Component comp = c;
@@ -600,11 +615,11 @@ public class SwingUtilities implements SwingConstants {
     }
 
     /**
-     * Pasa ese punto de las coordenadas de la pantalla a las del componente.
+     * It takes that point from the screen's coordinates to the component's.
      *
-     * <p>Modifica el punto; ver {@link #convertPointToScreen}.
+     * <p>It modifies the point; see {@link #convertPointToScreen}.
      *
-     * @throws java.awt.IllegalComponentStateException si el componente no esta en pantalla
+     * @throws java.awt.IllegalComponentStateException if the component is not on the screen
      */
     public static void convertPointFromScreen(Point p, Component c) {
         Component comp = c;
@@ -623,9 +638,9 @@ public class SwingUtilities implements SwingConstants {
         p.y = p.y - y;
     }
 
-    // -- buscar hacia arriba ---------------------------------------------------------------------
+    // -- looking upwards -------------------------------------------------------------------------
 
-    /** El panel raiz que contiene a ese componente, o nulo. */
+    /** The root pane that contains that component, or null. */
     public static JRootPane getRootPane(Component c) {
         if (c instanceof RootPaneContainer) {
             return ((RootPaneContainer) c).getRootPane();
@@ -639,10 +654,11 @@ public class SwingUtilities implements SwingConstants {
     }
 
     /**
-     * El padre, salteando el panel de un {@link JViewport}.
+     * The parent, skipping a {@link JViewport}'s pane.
      *
-     * <p>Un componente adentro de un panel con barras tiene por padre a un {@code JViewport}, que es
-     * una pieza de plomeria y no lo que uno considera "el contenedor". Este metodo salta ese paso.
+     * <p>A component inside a pane with bars has a {@code JViewport} as its parent, which is a
+     * piece of plumbing and not what one considers "the container". This method skips that
+     * step.
      */
     public static Container getUnwrappedParent(Component component) {
         Container parent = component.getParent();
@@ -652,7 +668,7 @@ public class SwingUtilities implements SwingConstants {
         return parent;
     }
 
-    /** Lo que hay adentro de ese viewport, salteando otro viewport si lo hubiera. */
+    /** What there is inside that viewport, skipping another viewport if there were one. */
     public static Component getUnwrappedView(JViewport viewport) {
         Component view = viewport.getView();
         while (view instanceof JViewport) {
@@ -662,10 +678,10 @@ public class SwingUtilities implements SwingConstants {
     }
 
     /**
-     * El componente con el foco adentro de esa ventana, o nulo.
+     * The component with the focus inside that window, or null.
      *
-     * @deprecated Como en el JDK: usar {@code KeyboardFocusManager.getFocusOwner()}, que sabe la
-     *     respuesta sin recorrer nada.
+     * @deprecated As in the JDK: use {@code KeyboardFocusManager.getFocusOwner()}, which knows
+     *     the answer without walking through anything.
      */
     @Deprecated
     public static Component findFocusOwner(Component c) {
@@ -679,15 +695,16 @@ public class SwingUtilities implements SwingConstants {
         return null;
     }
 
-    // -- mapas del aspecto ------------------------------------------------------------------------
+    // -- the look and feel's maps
+    // --------------------------------------------------------------------
 
     /**
-     * Reemplaza el mapa de acciones que puso el aspecto, dejando el del programa.
+     * It replaces the action map the look and feel set, leaving the program's.
      *
-     * <p>Los mapas se encadenan: el del programa arriba y el del aspecto abajo. Cambiar de aspecto
-     * tiene que cambiar solo el de abajo, y para eso hay que recorrer la cadena hasta encontrar el
-     * primero que sea un recurso de aspecto. Es lo que hacen estos cuatro metodos, y es la razon de
-     * que existan.
+     * <p>The maps are chained: the program's above and the look and feel's below. Changing the
+     * look and feel has to change only the lower one, and for that the chain has to be walked
+     * until the first that is a look and feel resource is found. It is what these four methods do,
+     * and it is the reason they exist.
      */
     public static void replaceUIActionMap(JComponent component, ActionMap uiActionMap) {
         ActionMap map = component.getActionMap();
@@ -701,7 +718,7 @@ public class SwingUtilities implements SwingConstants {
         }
     }
 
-    /** El mapa de acciones que puso el aspecto, o nulo. */
+    /** The action map the look and feel set, or null. */
     public static ActionMap getUIActionMap(JComponent component) {
         ActionMap map = component.getActionMap();
         while (map != null) {
@@ -713,7 +730,7 @@ public class SwingUtilities implements SwingConstants {
         return null;
     }
 
-    /** Reemplaza el mapa de teclas del aspecto; ver {@link #replaceUIActionMap}. */
+    /** It replaces the look and feel's key map; see {@link #replaceUIActionMap}. */
     public static void replaceUIInputMap(JComponent component, int type, InputMap uiInputMap) {
         InputMap map = component.getInputMap(type);
         while (map != null) {
@@ -726,7 +743,7 @@ public class SwingUtilities implements SwingConstants {
         }
     }
 
-    /** El mapa de teclas que puso el aspecto, o nulo. */
+    /** The key map the look and feel set, or null. */
     public static InputMap getUIInputMap(JComponent component, int condition) {
         InputMap map = component.getInputMap(condition);
         while (map != null) {
@@ -739,11 +756,11 @@ public class SwingUtilities implements SwingConstants {
     }
 
     /**
-     * Le da esa tecla a esa accion, si la accion esta prendida.
+     * It gives that key to that action, if the action is switched on.
      *
-     * <p>Una accion apagada no se ejecuta y devuelve falso, y eso es lo que hace que una atadura a
-     * una accion apagada cuente como si no existiera -- que es como Swing deja que una atadura de
-     * un componente le gane a la de su contenedor.
+     * <p>A switched-off action is not executed and returns false, and that is what makes a binding
+     * to a switched-off action count as though it did not exist -- which is how Swing lets a
+     * component's binding beat its container's.
      */
     public static boolean notifyAction(Action action, KeyStroke ks, java.awt.event.KeyEvent event,
             Object sender, int modifiers) {
@@ -762,11 +779,11 @@ public class SwingUtilities implements SwingConstants {
     }
 
     /**
-     * Le ofrece esa tecla a los componentes de la ventana donde ocurrio.
+     * It offers that key to the components of the window where it happened.
      *
-     * <p>Es el ultimo paso del reparto de teclas: el que atiende las ataduras de tipo
-     * "cuando la ventana tiene el foco", que son las que hacen andar los atajos de menu sin que el
-     * menu tenga el foco.
+     * <p>It is the last step of the handing out of keys: the one that attends the bindings of the
+     * "when the window has the focus" kind, which are the ones that make the menu shortcuts work
+     * without the menu having the focus.
      */
     public static boolean processKeyBindings(java.awt.event.KeyEvent event) {
         if (event == null) {
@@ -786,14 +803,15 @@ public class SwingUtilities implements SwingConstants {
         return false;
     }
 
-    // -- accesibilidad -----------------------------------------------------------------------------
+    // -- accessibility 
+    // -----------------------------------------------------------------------------
 
     /**
-     * Cuantos hijos accesibles tiene ese componente.
+     * How many accessible children that component has.
      *
-     * <p>No son los mismos que los hijos de AWT: un componente puede exponer como accesibles cosas
-     * que no son componentes -- las filas de una tabla, por ejemplo -- y esconder las que son puro
-     * andamiaje.
+     * <p>They are not the same as AWT's children: a component may expose as accessible things that
+     * are not components -- a table's rows, for instance -- and hide those that are pure
+     * scaffolding.
      */
     public static int getAccessibleChildrenCount(Component c) {
         javax.accessibility.AccessibleContext ac = c.getAccessibleContext();
@@ -803,7 +821,7 @@ public class SwingUtilities implements SwingConstants {
         return 0;
     }
 
-    /** El hijo accesible numero {@code i}; ver {@link #getAccessibleChildrenCount}. */
+    /** Accessible child number {@code i}; see {@link #getAccessibleChildrenCount}. */
     public static javax.accessibility.Accessible getAccessibleChild(Component c, int i) {
         javax.accessibility.AccessibleContext ac = c.getAccessibleContext();
         if (ac != null) {
@@ -812,7 +830,7 @@ public class SwingUtilities implements SwingConstants {
         return null;
     }
 
-    /** Que lugar ocupa entre los hijos accesibles de su padre, o -1. */
+    /** What place it takes among its parent's accessible children, or -1. */
     public static int getAccessibleIndexInParent(Component c) {
         javax.accessibility.AccessibleContext ac = c.getAccessibleContext();
         if (ac != null) {
@@ -821,7 +839,7 @@ public class SwingUtilities implements SwingConstants {
         return -1;
     }
 
-    /** El objeto accesible que cae en ese punto, o nulo. */
+    /** The accessible object that falls at that point, or null. */
     public static javax.accessibility.Accessible getAccessibleAt(Component c, Point p) {
         javax.accessibility.AccessibleContext ac = c.getAccessibleContext();
         if (ac != null) {
@@ -833,7 +851,7 @@ public class SwingUtilities implements SwingConstants {
         return null;
     }
 
-    /** El estado accesible del componente -- visible, habilitado, elegido --, o nulo. */
+    /** The component's accessible state -- visible, enabled, chosen --, or null. */
     public static javax.accessibility.AccessibleStateSet getAccessibleStateSet(Component c) {
         javax.accessibility.AccessibleContext ac = c.getAccessibleContext();
         if (ac != null) {
@@ -842,15 +860,17 @@ public class SwingUtilities implements SwingConstants {
         return null;
     }
 
-    // -- la ventana duena compartida ---------------------------------------------------------------
+    // -- the shared owner window
+    // ---------------------------------------------------------------------
 
     /**
-     * La ventana escondida de la que cuelgan los dialogos y ventanas sin dueno.
+     * The hidden window the dialogs and windows with no owner hang from.
      *
-     * <p>No es publica -- en el JDK tampoco --: es plomeria. Una ventana del sistema necesita
-     * depender de otra, y crear una por cada dialogo sin dueno gastaria una ventana real cada vez.
+     * <p>It is not public -- not in the JDK either --: it is plumbing. A system window needs to
+     * depend on another, and creating one for each ownerless dialog would spend a real window each
+     * time.
      *
-     * @throws java.awt.HeadlessException si no hay pantalla
+     * @throws java.awt.HeadlessException if there is no screen
      */
     static java.awt.Frame getSharedOwnerFrame() {
         if (ownerFrame == null) {

@@ -10,268 +10,276 @@ import java.util.Map;
 import java.util.TreeMap;
 
 /**
- * Convierte un MBean estandar --un objeto mas su interfaz-- en un {@link DynamicMBean}.
+ * Turns a standard MBean --an object plus its interface-- into a {@link DynamicMBean}.
  *
- * <p>Sirve para dos cosas distintas que conviene no mezclar. La primera es <b>romper la convencion
- * de nombres</b>: un MBean estandar comun obliga a que `Foo` implemente `FooMBean`, y con esta
- * clase cualquier objeto se expone bajo cualquier interfaz que implemente, se llame como se llame.
- * La segunda es <b>retocar los metadatos</b>: la reflexion sabe la firma pero no sabe la
- * descripcion ni el impacto, y para eso estan los ganchos `getDescription`/`getImpact`, que se
- * redefinen en una subclase.
+ * <p>It serves two different purposes worth not mixing. The first is <b>breaking the naming
+ * convention</b>: an ordinary standard MBean requires {@code Foo} to implement {@code FooMBean},
+ * and with this class any object is exposed under any interface it implements, whatever it is
+ * called. The second is <b>touching up the metadata</b>: reflection knows the signature but not the
+ * description or the impact, and that is what the {@code getDescription}/{@code getImpact} hooks
+ * are for, redefined in a subclass.
  *
- * <h2>Como se introspecciona</h2>
+ * <h2>How it introspects</h2>
  *
- * <p>Se mira la <b>interfaz</b>, nunca la clase de la implementacion. Los metodos se reparten asi:
+ * <p>The <b>interface</b> is looked at, never the implementation's class. The methods are sorted
+ * like this:
  *
  * <ul>
- *   <li>{@code T getX()} sin parametros y con `T` distinto de `void` -- atributo `X` de lectura;
- *   <li>{@code boolean isX()} sin parametros -- atributo `X` de lectura, con la forma `is`;
- *   <li>{@code void setX(T)} con un parametro -- atributo `X` de escritura;
- *   <li>todo lo demas -- operacion.
+ *   <li>{@code T getX()} with no parameters and {@code T} other than {@code void} -- readable
+ *       attribute {@code X};
+ *   <li>{@code boolean isX()} with no parameters -- readable attribute {@code X}, in the
+ *       {@code is} form;
+ *   <li>{@code void setX(T)} with one parameter -- writable attribute {@code X};
+ *   <li>everything else -- an operation.
  * </ul>
  *
- * <p>La regla se aplica al pie de la letra y por eso {@code String getX(int)} es una operacion y no
- * un atributo indexado: JMX no tiene atributos indexados, y tratarlo como atributo obligaria a
- * inventar un indice.
+ * <p>The rule is applied to the letter, and that is why {@code String getX(int)} is an operation
+ * and not an indexed attribute: JMX has no indexed attributes, and treating it as an attribute
+ * would mean inventing an index.
  *
- * <h2>El impacto queda en `UNKNOWN`</h2>
+ * <h2>The impact stays at {@code UNKNOWN}</h2>
  *
- * <p>Y no puede ser de otra manera desde la reflexion: saber si una operacion lee o escribe exige
- * leer el cuerpo. `UNKNOWN` es el valor que la especificacion reserva justamente para "no se sabe";
- * poner `ACTION` o `INFO` a ojo seria afirmar algo que no se midio. Quien lo sepa lo declara
- * redefiniendo {@link #getImpact}.
+ * <p>And it cannot be otherwise from reflection: knowing whether an operation reads or writes
+ * requires reading the body. {@code UNKNOWN} is the value the specification reserves precisely for
+ * "not known"; putting {@code ACTION} or {@code INFO} by eye would be asserting something that
+ * was not measured. Whoever knows declares it by redefining {@link #getImpact}.
  *
- * <h2>Lo que esta clase <b>no</b> hace: MXBean</h2>
+ * <h2>What this class does <b>not</b> do: MXBean</h2>
  *
- * <p>Los constructores con `isMXBean` aceptan `false` --que es exactamente el MBean estandar-- y
- * <b>rechazan `true`</b>. La razon ya no es la que decia esta nota: `javax.management.openmbean`
- * <b>si</b> esta, completo, y la conversion de tipos existe --la escribe {@code MXMapeo}, y de ella
- * vive {@link JMX#newMXBeanProxy}, que es el lado <b>cliente</b>--.
+ * <p>The constructors with {@code isMXBean} accept {@code false} --which is exactly the standard
+ * MBean-- and <b>reject {@code true}</b>. The reason is no longer the one this note used to give:
+ * {@code javax.management.openmbean} <b>is</b> here, complete, and the type conversion exists --
+ * {@code MXMapping} writes it, and {@link JMX#newMXBeanProxy}, which is the <b>client</b> side,
+ * lives off it.
  *
- * <p>Lo que falta es el lado <b>servidor</b>, que es otra cosa y mas trabajo: un
- * `StandardMBean(x, I.class, true)` tiene que publicar un {@code MBeanInfo} cuyos atributos y
- * operaciones esten declarados con los tipos <b>abiertos</b>, y convertir en cada `getAttribute`,
- * `setAttribute` e `invoke`. Mientras eso no este escrito, construir uno igual dejaria un objeto que
- * dice ser MXBean y publica tipos Java crudos: una mentira que recien se descubre del lado del
- * cliente. Rechazar en el constructor la deja donde se puede ver.
+ * <p>What is missing is the <b>server</b> side, which is another thing and more work: a
+ * {@code StandardMBean(x, I.class, true)} has to publish an {@code MBeanInfo} whose attributes and
+ * operations are declared with the <b>open</b> types, and convert on every {@code getAttribute},
+ * {@code setAttribute} and {@code invoke}. Until that is written, building one anyway would leave
+ * an object that claims to be an MXBean and publishes raw Java types: a lie discovered only on the
+ * client side. Rejecting it in the constructor leaves it where it can be seen.
  */
 public class StandardMBean implements DynamicMBean, MBeanRegistration {
 
-    private Object implementacion;
-    private final Class<?> interfaz;
+    private Object implementation;
+    private final Class<?> iface;
 
-    /** Se arma una vez y se guarda: la interfaz no cambia, y la reflexion no es gratis. */
+    /** Built once and kept: the interface does not change, and reflection is not free. */
     private MBeanInfo cache;
 
-    /** Nombre de atributo a metodo, resueltos al construir para no buscar en cada llamada. */
+    /** Attribute name to method, resolved at construction so as not to search on every call. */
     private final Map<String, Method> getters = new TreeMap<String, Method>();
     private final Map<String, Method> setters = new TreeMap<String, Method>();
 
-    /** Operaciones indexadas por nombre; puede haber varias sobrecargas con el mismo nombre. */
-    private final Map<String, List<Method>> operaciones = new LinkedHashMap<String, List<Method>>();
+    /** Operations indexed by name; there may be several overloads with the same name. */
+    private final Map<String, List<Method>> operations = new LinkedHashMap<String, List<Method>>();
 
     /**
-     * El metodo de la interfaz, resuelto contra la clase de la implementacion.
+     * The interface's method, resolved against the implementation's class.
      *
-     * <p>Se cachea porque `getMethod` no es barato y el despacho pasa por aca en cada llamada. Se
-     * vacia en {@link #setImplementation}, que es lo unico que puede cambiar la respuesta.
+     * <p>It is cached because {@code getMethod} is not cheap and dispatch goes through here on
+     * every call. It is emptied in {@link #setImplementation}, which is the only thing that can
+     * change the answer.
      */
-    private final Map<Method, Method> resueltos = new java.util.HashMap<Method, Method>();
+    private final Map<Method, Method> resolved = new java.util.HashMap<Method, Method>();
 
     /**
-     * Envuelve `implementation` para exponerlo bajo `mbeanInterface`.
+     * Wraps {@code implementation} to expose it under {@code mbeanInterface}.
      *
-     * @throws NotCompliantMBeanException si el objeto no implementa esa interfaz, o si la interfaz
-     *         no es coherente --por ejemplo un `getX`/`setX` que no hablan del mismo tipo--
+     * @throws NotCompliantMBeanException if the object does not implement that interface, or if the
+     *         interface is not coherent --for example a {@code getX}/{@code setX} that do not talk
+     *         about the same type
      */
     public <T> StandardMBean(T implementation, Class<T> mbeanInterface)
             throws NotCompliantMBeanException {
         if (implementation == null) {
-            throw new IllegalArgumentException("La implementacion no puede ser null");
+            throw new IllegalArgumentException("The implementation cannot be null");
         }
-        this.interfaz = elegirInterfaz(implementation, mbeanInterface);
-        revisarImplementa(implementation, this.interfaz);
-        this.implementacion = implementation;
-        introspeccionar();
+        this.iface = chooseInterface(implementation, mbeanInterface);
+        checkImplements(implementation, this.iface);
+        this.implementation = implementation;
+        introspect();
     }
 
     /**
-     * Para subclasear: la implementacion es `this`.
+     * For subclassing: the implementation is {@code this}.
      *
-     * <p>El orden importa y es distinto del otro constructor: aca no se puede revisar que `this`
-     * implemente la interfaz hasta que la subclase termine de construirse... pero `this` ya es de
-     * la clase final, asi que la comprobacion es valida ahora mismo.
+     * <p>The order matters and is different from the other constructor: here it is not possible to
+     * check that {@code this} implements the interface until the subclass finishes constructing...
+     * but {@code this} is already of the final class, so the check is valid right now.
      */
     protected StandardMBean(Class<?> mbeanInterface) throws NotCompliantMBeanException {
-        this.interfaz = elegirInterfaz(this, mbeanInterface);
-        revisarImplementa(this, this.interfaz);
-        this.implementacion = this;
-        introspeccionar();
+        this.iface = chooseInterface(this, mbeanInterface);
+        checkImplements(this, this.iface);
+        this.implementation = this;
+        introspect();
     }
 
     /**
-     * @param isMXBean tiene que ser `false`; ver la nota sobre MXBean en la clase
-     * @throws UnsupportedOperationException si es `true`
-     * @throws IllegalArgumentException si el objeto o la interfaz no sirven. Este constructor no
-     *         declara `NotCompliantMBeanException` --el del JDK tampoco-- y por eso el
-     *         incumplimiento sale envuelto en una excepcion no chequeada.
+     * @param isMXBean has to be {@code false}; see the MXBean note in the class
+     * @throws UnsupportedOperationException if it is {@code true}
+     * @throws IllegalArgumentException if the object or the interface are not valid. This
+     *         constructor does not declare {@code NotCompliantMBeanException} --the JDK's does not
+     *         either-- and that is why non-compliance comes out wrapped in an unchecked exception.
      */
     public <T> StandardMBean(T implementation, Class<T> mbeanInterface, boolean isMXBean) {
-        revisarNoMXBean(isMXBean);
+        checkNotMXBean(isMXBean);
         if (implementation == null) {
-            throw new IllegalArgumentException("La implementacion no puede ser null");
+            throw new IllegalArgumentException("The implementation cannot be null");
         }
-        this.interfaz = elegirInterfaz(implementation, mbeanInterface);
+        this.iface = chooseInterface(implementation, mbeanInterface);
         try {
-            revisarImplementa(implementation, this.interfaz);
-            this.implementacion = implementation;
-            introspeccionar();
+            checkImplements(implementation, this.iface);
+            this.implementation = implementation;
+            introspect();
         } catch (NotCompliantMBeanException e) {
             throw new IllegalArgumentException(e);
         }
     }
 
     /**
-     * @param isMXBean tiene que ser `false`
-     * @throws UnsupportedOperationException si es `true`
+     * @param isMXBean has to be {@code false}
+     * @throws UnsupportedOperationException if it is {@code true}
      */
     protected StandardMBean(Class<?> mbeanInterface, boolean isMXBean) {
-        revisarNoMXBean(isMXBean);
-        this.interfaz = elegirInterfaz(this, mbeanInterface);
+        checkNotMXBean(isMXBean);
+        this.iface = chooseInterface(this, mbeanInterface);
         try {
-            revisarImplementa(this, this.interfaz);
-            this.implementacion = this;
-            introspeccionar();
+            checkImplements(this, this.iface);
+            this.implementation = this;
+            introspect();
         } catch (NotCompliantMBeanException e) {
             throw new IllegalArgumentException(e);
         }
     }
 
-    private static void revisarNoMXBean(boolean isMXBean) {
+    private static void checkNotMXBean(boolean isMXBean) {
         if (isMXBean) {
             throw new UnsupportedOperationException(
-                "Esta biblioteca no tiene javax.management.openmbean, sin el cual un MXBean no "
-                + "puede convertir sus tipos. Se acepta isMXBean=false.");
+                "StandardMBean does not support MXBeans in this library, so an MXBean cannot "
+                + "be wrapped here. Only isMXBean=false is accepted.");
         }
     }
 
     /**
-     * Si no se dio interfaz, se busca la unica que sirve por convencion de nombre.
+     * If no interface was given, the only one that fits by naming convention is looked for.
      *
-     * <p>Se acepta `null` porque el JDK lo acepta: significa "descubrila". La convencion es que la
-     * clase `p.Foo` se expone por `p.FooMBean`.
+     * <p>{@code null} is accepted because the JDK accepts it: it means "discover it". The
+     * convention is that the class {@code p.Foo} is exposed through {@code p.FooMBean}.
      */
-    private static Class<?> elegirInterfaz(Object impl, Class<?> declarada) {
-        if (declarada != null) {
-            return declarada;
+    private static Class<?> chooseInterface(Object impl, Class<?> declared) {
+        if (declared != null) {
+            return declared;
         }
         Class<?> c = impl.getClass();
         while (c != null) {
-            String esperada = c.getName() + "MBean";
+            String expected = c.getName() + "MBean";
             for (Class<?> i : c.getInterfaces()) {
-                if (i.getName().equals(esperada)) {
+                if (i.getName().equals(expected)) {
                     return i;
                 }
             }
             c = c.getSuperclass();
         }
         throw new IllegalArgumentException(
-            "No se dio interfaz y no hay ninguna que siga la convencion <Clase>MBean");
+            "No interface was given and none follows the <Class>MBean convention");
     }
 
-    private static void revisarImplementa(Object impl, Class<?> iface)
+    private static void checkImplements(Object impl, Class<?> iface)
             throws NotCompliantMBeanException {
         if (!iface.isInterface()) {
-            throw new NotCompliantMBeanException(iface.getName() + " no es una interfaz");
+            throw new NotCompliantMBeanException(iface.getName() + " is not an interface");
         }
         if (!iface.isInstance(impl)) {
             throw new NotCompliantMBeanException(
-                impl.getClass().getName() + " no implementa " + iface.getName());
+                impl.getClass().getName() + " does not implement " + iface.getName());
         }
     }
 
-    /** Reparte los metodos de la interfaz en atributos y operaciones. */
-    private void introspeccionar() throws NotCompliantMBeanException {
-        for (Method m : interfaz.getMethods()) {
-            String nombre = m.getName();
+    /** Sorts the interface's methods into attributes and operations. */
+    private void introspect() throws NotCompliantMBeanException {
+        for (Method m : iface.getMethods()) {
+            String name = m.getName();
             Class<?>[] args = m.getParameterTypes();
             Class<?> ret = m.getReturnType();
 
-            if (args.length == 0 && ret != Void.TYPE && nombre.startsWith("get")
-                    && nombre.length() > 3) {
-                ponerGetter(nombre.substring(3), m);
-            } else if (args.length == 0 && ret == Boolean.TYPE && nombre.startsWith("is")
-                    && nombre.length() > 2) {
-                ponerGetter(nombre.substring(2), m);
-            } else if (args.length == 1 && ret == Void.TYPE && nombre.startsWith("set")
-                    && nombre.length() > 3) {
-                ponerSetter(nombre.substring(3), m);
+            if (args.length == 0 && ret != Void.TYPE && name.startsWith("get")
+                    && name.length() > 3) {
+                setGetter(name.substring(3), m);
+            } else if (args.length == 0 && ret == Boolean.TYPE && name.startsWith("is")
+                    && name.length() > 2) {
+                setGetter(name.substring(2), m);
+            } else if (args.length == 1 && ret == Void.TYPE && name.startsWith("set")
+                    && name.length() > 3) {
+                setSetter(name.substring(3), m);
             } else {
-                List<Method> l = operaciones.get(nombre);
+                List<Method> l = operations.get(name);
                 if (l == null) {
                     l = new ArrayList<Method>();
-                    operaciones.put(nombre, l);
+                    operations.put(name, l);
                 }
                 l.add(m);
             }
         }
-        // Se revisa recien al final porque un `setX` puede aparecer antes que su `getX`.
+        // It is checked only at the end because a `setX` may appear before its `getX`.
         for (Map.Entry<String, Method> e : getters.entrySet()) {
             Method set = setters.get(e.getKey());
             if (set != null && !set.getParameterTypes()[0].equals(e.getValue().getReturnType())) {
                 throw new NotCompliantMBeanException(
-                    "El atributo " + e.getKey() + " tiene getter y setter de tipos distintos");
+                    "The attribute " + e.getKey()
+                        + " has a getter and a setter of different types");
             }
         }
     }
 
-    private void ponerGetter(String atributo, Method m) throws NotCompliantMBeanException {
-        Method previo = getters.get(atributo);
-        if (previo != null && !previo.getReturnType().equals(m.getReturnType())) {
-            // Pasa con `getX()` y `isX()` juntos, o heredando de dos interfaces distintas.
+    private void setGetter(String attribute, Method m) throws NotCompliantMBeanException {
+        Method previous = getters.get(attribute);
+        if (previous != null && !previous.getReturnType().equals(m.getReturnType())) {
+            // Happens with `getX()` and `isX()` together, or inheriting from two different
+            // interfaces.
             throw new NotCompliantMBeanException(
-                "El atributo " + atributo + " tiene dos getters de tipos distintos");
+                "The attribute " + attribute + " has two getters of different types");
         }
-        getters.put(atributo, m);
+        getters.put(attribute, m);
     }
 
-    private void ponerSetter(String atributo, Method m) throws NotCompliantMBeanException {
-        Method previo = setters.get(atributo);
-        if (previo != null && !previo.getParameterTypes()[0].equals(m.getParameterTypes()[0])) {
+    private void setSetter(String attribute, Method m) throws NotCompliantMBeanException {
+        Method previous = setters.get(attribute);
+        if (previous != null && !previous.getParameterTypes()[0].equals(m.getParameterTypes()[0])) {
             throw new NotCompliantMBeanException(
-                "El atributo " + atributo + " tiene dos setters de tipos distintos");
+                "The attribute " + attribute + " has two setters of different types");
         }
-        setters.put(atributo, m);
+        setters.put(attribute, m);
     }
 
     /**
-     * Cambia el objeto que hay atras sin rehacer la introspeccion: la interfaz es la misma, asi que
-     * los metadatos tambien.
+     * Changes the object behind without redoing the introspection: the interface is the same, so
+     * the metadata is too.
      *
-     * @throws NotCompliantMBeanException si el objeto nuevo no implementa la interfaz
+     * @throws NotCompliantMBeanException if the new object does not implement the interface
      */
     public void setImplementation(Object implementation) throws NotCompliantMBeanException {
         if (implementation == null) {
-            throw new IllegalArgumentException("La implementacion no puede ser null");
+            throw new IllegalArgumentException("The implementation cannot be null");
         }
-        revisarImplementa(implementation, interfaz);
-        this.implementacion = implementation;
-        synchronized (resueltos) {
-            resueltos.clear();
+        checkImplements(implementation, iface);
+        this.implementation = implementation;
+        synchronized (resolved) {
+            resolved.clear();
         }
     }
 
     public Object getImplementation() {
-        return implementacion;
+        return implementation;
     }
 
-    /** Final: cambiar la interfaz invalidaria los metadatos ya publicados. */
+    /** Final: changing the interface would invalidate the already published metadata. */
     public final Class<?> getMBeanInterface() {
-        return interfaz;
+        return iface;
     }
 
     public Class<?> getImplementationClass() {
-        return implementacion.getClass();
+        return implementation.getClass();
     }
 
     // ---- DynamicMBean -------------------------------------------------------------------------
@@ -280,9 +288,9 @@ public class StandardMBean implements DynamicMBean, MBeanRegistration {
             throws AttributeNotFoundException, MBeanException, ReflectionException {
         Method g = getters.get(attribute);
         if (g == null) {
-            throw new AttributeNotFoundException("No hay atributo de lectura: " + attribute);
+            throw new AttributeNotFoundException("No readable attribute: " + attribute);
         }
-        return llamar(g, new Object[0]);
+        return call(g, new Object[0]);
     }
 
     public void setAttribute(Attribute attribute)
@@ -291,85 +299,85 @@ public class StandardMBean implements DynamicMBean, MBeanRegistration {
         Method s = setters.get(attribute.getName());
         if (s == null) {
             throw new AttributeNotFoundException(
-                "No hay atributo de escritura: " + attribute.getName());
+                "No writable attribute: " + attribute.getName());
         }
         try {
-            llamar(s, new Object[] { attribute.getValue() });
+            call(s, new Object[] { attribute.getValue() });
         } catch (ReflectionException e) {
-            // La reflexion tira `IllegalArgumentException` cuando el valor no es del tipo del
-            // parametro; en JMX ese caso tiene su propia excepcion y hay que traducirlo.
+            // Reflection throws `IllegalArgumentException` when the value is not of the parameter's
+            // type; in JMX that case has its own exception and has to be translated.
             if (e.getTargetException() instanceof IllegalArgumentException) {
                 throw new InvalidAttributeValueException(
-                    "Valor invalido para " + attribute.getName() + ": " + attribute.getValue());
+                    "Invalid value for " + attribute.getName() + ": " + attribute.getValue());
             }
             throw e;
         }
     }
 
     /**
-     * Lee varios, <b>al mejor esfuerzo</b>: los que fallan simplemente no aparecen en el resultado.
+     * Reads several, <b>best effort</b>: the ones that fail simply do not appear in the result.
      *
-     * <p>Es lo que manda la especificacion y no es un descuido. Este metodo existe para ahorrar
-     * viajes de red al leer un tablero entero; si un atributo roto tumbara la llamada, un solo
-     * MBean con un problema dejaria ciego a todo el tablero.
+     * <p>It is what the specification dictates and it is not an oversight. This method exists to
+     * save network round trips when reading a whole dashboard; if one broken attribute brought the
+     * call down, a single MBean with a problem would blind the entire dashboard.
      */
     public AttributeList getAttributes(String[] attributes) {
-        AttributeList salida = new AttributeList();
+        AttributeList result = new AttributeList();
         if (attributes == null) {
-            return salida;
+            return result;
         }
-        for (String nombre : attributes) {
+        for (String name : attributes) {
             try {
-                salida.add(new Attribute(nombre, getAttribute(nombre)));
+                result.add(new Attribute(name, getAttribute(name)));
             } catch (Exception e) {
-                // Se omite a proposito: ver el javadoc.
+                // Left out on purpose: see the javadoc.
             }
         }
-        return salida;
+        return result;
     }
 
-    /** Escribe varios al mejor esfuerzo; devuelve solo los que efectivamente se escribieron. */
+    /** Writes several best effort; returns only the ones actually written. */
     public AttributeList setAttributes(AttributeList attributes) {
-        AttributeList salida = new AttributeList();
+        AttributeList result = new AttributeList();
         if (attributes == null) {
-            return salida;
+            return result;
         }
         for (Attribute a : attributes.asList()) {
             try {
                 setAttribute(a);
-                salida.add(new Attribute(a.getName(), a.getValue()));
+                result.add(new Attribute(a.getName(), a.getValue()));
             } catch (Exception e) {
-                // Idem.
+                // Same.
             }
         }
-        return salida;
+        return result;
     }
 
     public Object invoke(String actionName, Object[] params, String[] signature)
             throws MBeanException, ReflectionException {
-        List<Method> candidatos = operaciones.get(actionName);
-        if (candidatos == null) {
+        List<Method> candidates = operations.get(actionName);
+        if (candidates == null) {
             throw new ReflectionException(
-                new NoSuchMethodException(actionName), "No hay operacion " + actionName);
+                new NoSuchMethodException(actionName), "No operation " + actionName);
         }
-        String[] firma = (signature == null) ? new String[0] : signature;
-        for (Method m : candidatos) {
-            if (coincideFirma(m, firma)) {
-                return llamar(m, params == null ? new Object[0] : params);
+        String[] sig = (signature == null) ? new String[0] : signature;
+        for (Method m : candidates) {
+            if (signatureMatches(m, sig)) {
+                return call(m, params == null ? new Object[0] : params);
             }
         }
         throw new ReflectionException(
             new NoSuchMethodException(actionName),
-            "Ninguna sobrecarga de " + actionName + " coincide con la firma dada");
+            "No overload of " + actionName + " matches the given signature");
     }
 
-    private static boolean coincideFirma(Method m, String[] firma) {
+    private static boolean signatureMatches(Method m, String[] sig) {
         Class<?>[] args = m.getParameterTypes();
-        if (args.length != firma.length) {
+        if (args.length != sig.length) {
             return false;
         }
         for (int i = 0; i < args.length; i++) {
-            if (!args[i].getName().equals(firma[i])) {
+            if (!args[i].getName().equals(sig[i])) {
                 return false;
             }
         }
@@ -377,156 +385,156 @@ public class StandardMBean implements DynamicMBean, MBeanRegistration {
     }
 
     /**
-     * Llama y traduce lo que salga.
+     * Calls and translates whatever comes out.
      *
-     * <p>La traduccion no es decorativa: JMX distingue <b>de quien es la culpa</b>. Lo que tira el
-     * MBean va en {@link MBeanException} --es una falla del recurso administrado--; lo que falla al
-     * intentar llamarlo va en {@link ReflectionException} --es una falla del agente--. Un cliente
-     * remoto que recibe una u otra sabe si reintentar o avisar.
+     * <p>The translation is not decorative: JMX distinguishes <b>whose fault it is</b>. What the
+     * MBean throws goes in {@link MBeanException} --it is a failure of the managed resource--; what
+     * fails while trying to call it goes in {@link ReflectionException} --it is a failure of the
+     * agent. A remote client that receives one or the other knows whether to retry or to report.
      */
-    private Object llamar(Method m, Object[] args) throws MBeanException, ReflectionException {
+    private Object call(Method m, Object[] args) throws MBeanException, ReflectionException {
         try {
-            return resolver(m).invoke(implementacion, args);
+            return resolver(m).invoke(implementation, args);
         } catch (InvocationTargetException e) {
-            Throwable causa = e.getTargetException();
-            if (causa instanceof RuntimeException) {
-                throw new RuntimeMBeanException((RuntimeException) causa,
-                        "El MBean tiro " + causa);
+            Throwable cause = e.getTargetException();
+            if (cause instanceof RuntimeException) {
+                throw new RuntimeMBeanException((RuntimeException) cause,
+                        "The MBean threw " + cause);
             }
-            if (causa instanceof Error) {
-                throw new RuntimeErrorException((Error) causa, "El MBean tiro " + causa);
+            if (cause instanceof Error) {
+                throw new RuntimeErrorException((Error) cause, "The MBean threw " + cause);
             }
-            throw new MBeanException((Exception) causa, "El MBean tiro " + causa);
+            throw new MBeanException((Exception) cause, "The MBean threw " + cause);
         } catch (IllegalAccessException e) {
-            throw new ReflectionException(e, "No se pudo llamar a " + m.getName());
+            throw new ReflectionException(e, "Could not call " + m.getName());
         } catch (IllegalArgumentException e) {
-            throw new ReflectionException(e, "Argumentos invalidos para " + m.getName());
+            throw new ReflectionException(e, "Invalid arguments for " + m.getName());
         }
     }
 
     /**
-     * Baja el metodo de la interfaz a la clase que de verdad lo implementa.
+     * Lowers the interface's method to the class that really implements it.
      *
-     * <p>Semanticamente da lo mismo --es el mismo override-- pero hace falta igual: si la
-     * implementacion es de una clase no publica, el {@code Method} de esa clase no se puede invocar
-     * sin {@code setAccessible}, mientras que el de la interfaz publica si. El JDK necesita esta
-     * bajada por ese motivo y por eso se hace aca tambien.
+     * <p>Semantically it is the same --it is the same override-- but it is needed anyway: if the
+     * implementation is of a non-public class, that class's {@code Method} cannot be invoked
+     * without {@code setAccessible}, while the public interface's can. The JDK needs this lowering
+     * for that reason and so it is done here too.
      *
-     * <p>Hubo una segunda razon, que ya no aplica: la VM de KajiJDK no redespachaba en
-     * {@code Method.invoke} --corria el cuerpo del metodo declarado-- asi que invocar el
-     * {@code Method} de la interfaz reventaba cuando era abstracto. Eso esta arreglado (finding
-     * #466); esta bajada quedo porque la primera razon sigue en pie.
+     * <p>There was a second reason, which no longer applies: KajiJDK's VM did not re-dispatch in
+     * {@code Method.invoke} --it ran the body of the declared method-- so invoking the interface's
+     * {@code Method} blew up when it was abstract. That is fixed (finding #466); this lowering
+     * stayed because the first reason still holds.
      */
     private Method resolver(Method m) {
-        synchronized (resueltos) {
-            Method ya = resueltos.get(m);
-            if (ya != null) {
-                return ya;
+        synchronized (resolved) {
+            Method already = resolved.get(m);
+            if (already != null) {
+                return already;
             }
         }
-        Method elegido = m;
+        Method chosen = m;
         try {
-            Method concreto = implementacion.getClass().getMethod(m.getName(),
+            Method concrete = implementation.getClass().getMethod(m.getName(),
                                                                   m.getParameterTypes());
-            if (java.lang.reflect.Modifier.isPublic(concreto.getDeclaringClass().getModifiers())) {
-                elegido = concreto;
+            if (java.lang.reflect.Modifier.isPublic(concrete.getDeclaringClass().getModifiers())) {
+                chosen = concrete;
             }
         } catch (NoSuchMethodException e) {
-            // No deberia pasar --la implementacion cumple la interfaz-- pero si pasa, el de la
-            // interfaz sigue siendo la mejor apuesta.
+            // It should not happen --the implementation follows the interface-- but if it does, the
+            // interface's one is still the best bet.
         }
-        synchronized (resueltos) {
-            resueltos.put(m, elegido);
+        synchronized (resolved) {
+            resolved.put(m, chosen);
         }
-        return elegido;
+        return chosen;
     }
 
     /**
-     * Los metadatos, con la cache al medio.
+     * The metadata, with the cache in the middle.
      *
-     * <p>Se arman una vez y se guardan. Una subclase que quiera metadatos que cambien redefine
-     * {@link #getCachedMBeanInfo} para devolver `null`.
+     * <p>It is built once and kept. A subclass that wants changing metadata redefines
+     * {@link #getCachedMBeanInfo} to return {@code null}.
      */
     public MBeanInfo getMBeanInfo() {
         MBeanInfo mi = getCachedMBeanInfo();
         if (mi != null) {
             return mi;
         }
-        mi = construirMBeanInfo();
+        mi = buildMBeanInfo();
         cacheMBeanInfo(mi);
         return mi;
     }
 
-    private MBeanInfo construirMBeanInfo() {
-        // Primera pasada: lo que la reflexion sabe, sin descripciones ni impacto.
+    private MBeanInfo buildMBeanInfo() {
+        // First pass: what reflection knows, without descriptions or impact.
         List<MBeanAttributeInfo> atrs = new ArrayList<MBeanAttributeInfo>();
-        List<String> nombres = new ArrayList<String>(getters.keySet());
+        List<String> names = new ArrayList<String>(getters.keySet());
         for (String n : setters.keySet()) {
-            if (!nombres.contains(n)) {
-                nombres.add(n);
+            if (!names.contains(n)) {
+                names.add(n);
             }
         }
-        java.util.Collections.sort(nombres);
-        for (String n : nombres) {
+        java.util.Collections.sort(names);
+        for (String n : names) {
             try {
-                atrs.add(new MBeanAttributeInfo(n, "Atributo expuesto para administracion",
+                atrs.add(new MBeanAttributeInfo(n, "Attribute exposed for management",
                                                 getters.get(n), setters.get(n)));
             } catch (IntrospectionException e) {
-                // No puede pasar: `introspeccionar` ya rechazo los pares incoherentes.
+                // Cannot happen: `introspect` already rejected the incoherent pairs.
                 throw new IllegalStateException(e);
             }
         }
 
         List<MBeanOperationInfo> ops = new ArrayList<MBeanOperationInfo>();
-        for (List<Method> l : operaciones.values()) {
+        for (List<Method> l : operations.values()) {
             for (Method m : l) {
-                ops.add(new MBeanOperationInfo("Operacion expuesta para administracion", m));
+                ops.add(new MBeanOperationInfo("Operation exposed for management", m));
             }
         }
 
-        MBeanConstructorInfo[] ctors = constructoresCrudos();
+        MBeanConstructorInfo[] ctors = rawConstructors();
 
-        MBeanInfo crudo = new MBeanInfo(
+        MBeanInfo raw = new MBeanInfo(
             getImplementationClass().getName(),
-            interfaz.getName(),
+            iface.getName(),
             atrs.toArray(new MBeanAttributeInfo[0]),
             ctors,
             ops.toArray(new MBeanOperationInfo[0]),
-            notificacionesDe(implementacion));
+            notificationsOf(implementation));
 
-        // Segunda pasada: los ganchos. La subclase ve el crudo y decide que cambia. Hacerlo en dos
-        // pasadas y no llamando a los ganchos mientras se recorre la reflexion es lo que permite
-        // que el gancho reciba un `MBeanInfo` completo, con contexto.
-        return aplicarGanchos(crudo);
+        // Second pass: the hooks. The subclass sees the raw version and decides what changes. Doing
+        // it in two passes and not calling the hooks while walking the reflection is what lets the
+        // hook receive a complete `MBeanInfo`, with context.
+        return applyHooks(raw);
     }
 
-    private MBeanConstructorInfo[] constructoresCrudos() {
+    private MBeanConstructorInfo[] rawConstructors() {
         Constructor<?>[] cs = getImplementationClass().getConstructors();
         MBeanConstructorInfo[] r = new MBeanConstructorInfo[cs.length];
         for (int i = 0; i < cs.length; i++) {
-            r[i] = new MBeanConstructorInfo("Constructor publico de la clase", cs[i]);
+            r[i] = new MBeanConstructorInfo("Public constructor of the class", cs[i]);
         }
-        return getConstructors(r, implementacion);
+        return getConstructors(r, implementation);
     }
 
-    private static MBeanNotificationInfo[] notificacionesDe(Object impl) {
+    private static MBeanNotificationInfo[] notificationsOf(Object impl) {
         if (impl instanceof NotificationBroadcaster) {
             return ((NotificationBroadcaster) impl).getNotificationInfo();
         }
         return new MBeanNotificationInfo[0];
     }
 
-    private MBeanInfo aplicarGanchos(MBeanInfo crudo) {
-        MBeanAttributeInfo[] atrs = crudo.getAttributes();
-        MBeanAttributeInfo[] atrs2 = new MBeanAttributeInfo[atrs.length];
+    private MBeanInfo applyHooks(MBeanInfo raw) {
+        MBeanAttributeInfo[] atrs = raw.getAttributes();
+        MBeanAttributeInfo[] attrs2 = new MBeanAttributeInfo[atrs.length];
         for (int i = 0; i < atrs.length; i++) {
             MBeanAttributeInfo a = atrs[i];
-            atrs2[i] = new MBeanAttributeInfo(a.getName(), a.getType(), getDescription(a),
+            attrs2[i] = new MBeanAttributeInfo(a.getName(), a.getType(), getDescription(a),
                                               a.isReadable(), a.isWritable(), a.isIs(),
                                               a.getDescriptor());
         }
 
-        MBeanOperationInfo[] ops = crudo.getOperations();
+        MBeanOperationInfo[] ops = raw.getOperations();
         MBeanOperationInfo[] ops2 = new MBeanOperationInfo[ops.length];
         for (int i = 0; i < ops.length; i++) {
             MBeanOperationInfo o = ops[i];
@@ -535,7 +543,7 @@ public class StandardMBean implements DynamicMBean, MBeanRegistration {
                                              getImpact(o), o.getDescriptor());
         }
 
-        MBeanConstructorInfo[] cs = crudo.getConstructors();
+        MBeanConstructorInfo[] cs = raw.getConstructors();
         MBeanConstructorInfo[] cs2 = new MBeanConstructorInfo[cs.length];
         for (int i = 0; i < cs.length; i++) {
             MBeanConstructorInfo c = cs[i];
@@ -543,8 +551,8 @@ public class StandardMBean implements DynamicMBean, MBeanRegistration {
                                               params(c, c.getSignature()), c.getDescriptor());
         }
 
-        return new MBeanInfo(getClassName(crudo), getDescription(crudo), atrs2, cs2, ops2,
-                             crudo.getNotifications(), crudo.getDescriptor());
+        return new MBeanInfo(getClassName(raw), getDescription(raw), attrs2, cs2, ops2,
+                             raw.getNotifications(), raw.getDescriptor());
     }
 
     private MBeanParameterInfo[] params(MBeanOperationInfo op, MBeanParameterInfo[] ps) {
@@ -565,7 +573,7 @@ public class StandardMBean implements DynamicMBean, MBeanRegistration {
         return r;
     }
 
-    // ---- ganchos: por omision devuelven lo que ya venia -----------------------------------------
+    // ---- hooks: by default they return what already came --------------------------------------
 
     protected String getClassName(MBeanInfo info) {
         return info == null ? null : info.getClassName();
@@ -601,7 +609,7 @@ public class StandardMBean implements DynamicMBean, MBeanRegistration {
         return getDescription((MBeanFeatureInfo) info);
     }
 
-    /** `UNKNOWN` salvo que la subclase sepa mas; ver la nota sobre el impacto en la clase. */
+    /** {@code UNKNOWN} unless the subclass knows more; see the note about impact in the class. */
     protected int getImpact(MBeanOperationInfo info) {
         return info == null ? MBeanOperationInfo.UNKNOWN : info.getImpact();
     }
@@ -617,13 +625,13 @@ public class StandardMBean implements DynamicMBean, MBeanRegistration {
     }
 
     /**
-     * Que constructores se publican.
+     * Which constructors are published.
      *
-     * <p>Por omision, ninguno si el objeto administrado es <b>otro</b>. Es intencional: publicar
-     * los constructores sirve para que un cliente instancie el MBean a traves del agente, y eso
-     * solo tiene sentido cuando esta clase <b>es</b> el MBean. Al envolver a un tercero, sus
-     * constructores construirian el objeto envuelto y no el envoltorio, que no es lo que el cliente
-     * pediria.
+     * <p>By default, none if the managed object is <b>another</b>. It is intentional: publishing
+     * the constructors serves so that a client can instantiate the MBean through the agent, and
+     * that only makes sense when this class <b>is</b> the MBean. When wrapping a third party, its
+     * constructors would build the wrapped object and not the wrapper, which is not what the client
+     * would be asking for.
      */
     protected MBeanConstructorInfo[] getConstructors(MBeanConstructorInfo[] ctors, Object impl) {
         if (ctors == null) {
@@ -635,7 +643,7 @@ public class StandardMBean implements DynamicMBean, MBeanRegistration {
         return ctors;
     }
 
-    /** Lo guardado, o `null` si todavia no se armo. */
+    /** What is stored, or {@code null} if it has not been built yet. */
     protected MBeanInfo getCachedMBeanInfo() {
         return cache;
     }
@@ -644,30 +652,30 @@ public class StandardMBean implements DynamicMBean, MBeanRegistration {
         cache = info;
     }
 
-    // ---- MBeanRegistration: se delega si el objeto administrado sabe del tema -------------------
+    // ---- MBeanRegistration: delegated if the managed object knows about it ---------------------
 
     public ObjectName preRegister(MBeanServer server, ObjectName name) throws Exception {
-        if (implementacion instanceof MBeanRegistration) {
-            return ((MBeanRegistration) implementacion).preRegister(server, name);
+        if (implementation instanceof MBeanRegistration) {
+            return ((MBeanRegistration) implementation).preRegister(server, name);
         }
         return name;
     }
 
     public void postRegister(Boolean registrationDone) {
-        if (implementacion instanceof MBeanRegistration) {
-            ((MBeanRegistration) implementacion).postRegister(registrationDone);
+        if (implementation instanceof MBeanRegistration) {
+            ((MBeanRegistration) implementation).postRegister(registrationDone);
         }
     }
 
     public void preDeregister() throws Exception {
-        if (implementacion instanceof MBeanRegistration) {
-            ((MBeanRegistration) implementacion).preDeregister();
+        if (implementation instanceof MBeanRegistration) {
+            ((MBeanRegistration) implementation).preDeregister();
         }
     }
 
     public void postDeregister() {
-        if (implementacion instanceof MBeanRegistration) {
-            ((MBeanRegistration) implementacion).postDeregister();
+        if (implementation instanceof MBeanRegistration) {
+            ((MBeanRegistration) implementation).postDeregister();
         }
     }
 }

@@ -1,28 +1,28 @@
 package javax.xml.stream;
 
 /**
- * KajiLibrary's javax.xml.stream.StreamFilter -- el criterio con que
- * {@link XMLInputFactory#createFilteredReader(XMLStreamReader, StreamFilter)} decide que eventos
- * dejar pasar.
+ * KajiLibrary's javax.xml.stream.StreamFilter -- the criterion with which {@link
+ * XMLInputFactory#createFilteredReader(XMLStreamReader, StreamFilter)} decides which events to let
+ * through.
  *
- * <p>Filtrar del lado del que tira es la ventaja concreta de StAX sobre SAX: el lector filtrado
- * **saltea** los eventos rechazados sin devolverlos, asi que el codigo de la aplicacion no ve nunca
- * lo que no pidio y tampoco paga por descartarlo. En SAX el filtro tiene que estar en el handler,
- * que igual se llama para todo.
+ * <p>Filtering on the pulling side is StAX's concrete advantage over SAX: the filtered reader
+ * **skips** the rejected events without returning them, so the application's code never sees what
+ * it did not ask for and does not pay to discard it either. In SAX the filter has to be in the
+ * handler, which is called for everything anyway.
  *
- * <p>El filtro se llama con el lector **parado** en el evento a juzgar, no con una copia: puede
- * mirar {@code getLocalName()}, los atributos, la profundidad. Eso es lo que lo hace util y lo que
- * obliga a la unica regla que tiene: <b>no puede avanzar el lector</b>. Un {@code accept} que llame
- * a {@code next()} le come eventos al recorrido de afuera y el resultado depende de cuando se
- * evalue el filtro, que es la definicion de un bug que no se reproduce.
+ * <p>The filter is called with the reader **standing** on the event to judge, not with a copy: it
+ * can look at {@code getLocalName()}, the attributes, the depth. That is what makes it useful and
+ * what forces the only rule it has: <b>it cannot advance the reader</b>. An {@code accept} that
+ * calls {@code next()} eats events from the outer walk and the result depends on when the filter is
+ * evaluated, which is the definition of a bug that does not reproduce.
  */
 public interface StreamFilter {
 
     /**
-     * Decide si el evento en que esta parado el lector se deja pasar.
+     * Decides whether the event the reader is standing on is let through.
      *
-     * @param reader el lector, posicionado en el evento a juzgar; no se debe avanzar
-     * @return true para que el evento llegue al llamador, false para saltearlo
+     * @param reader the reader, positioned on the event to judge; it must not be advanced
+     * @return true for the event to reach the caller, false to skip it
      */
     boolean accept(XMLStreamReader reader);
 }

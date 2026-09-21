@@ -4,8 +4,8 @@ import java.util.List;
 import javax.lang.model.element.Name;
 
 /**
- * La declaracion de un metodo o de un constructor. {@link #getBody} es `null` en un
- * abstracto o nativo, y {@link #getDefaultValue} solo aparece en un miembro de anotacion.
+ * The declaration of a method or of a constructor. {@link #getBody} is `null` in an
+ * abstract or native one, and {@link #getDefaultValue} only appears in an annotation member.
  */
 public interface MethodTree extends Tree {
 
@@ -23,9 +23,9 @@ public interface MethodTree extends Tree {
 
     List<? extends ExpressionTree> getThrows();
 
-    /** El cuerpo, o `null` si es abstracto o nativo. */
+    /** The body, or `null` if it is abstract or native. */
     BlockTree getBody();
 
-    /** El `default` de un miembro de anotacion, o `null`. */
+    /** The `default` of an annotation member, or `null`. */
     Tree getDefaultValue();
 }

@@ -4,19 +4,19 @@ import java.lang.classfile.Attribute;
 import java.lang.classfile.BootstrapMethodEntry;
 import java.util.List;
 
-// `BootstrapMethods` (JVMS §4.7.23): la tabla que resuelven `invokedynamic` y `CONSTANT_Dynamic`.
-// Es medio pool y medio atributo: las entradas dinámicas del pool la indexan, así que sin ella el
-// pool no se puede resolver del todo.
+// `BootstrapMethods` (JVMS §4.7.23): the table `invokedynamic` and `CONSTANT_Dynamic` resolve
+// against. It is half pool and half attribute: the pool's dynamic entries index it, so without it the
+// pool cannot be fully resolved.
 //
-// No tiene fábrica, y en el JDK tampoco: la tabla la administra el
-// {@link java.lang.classfile.constantpool.ConstantPoolBuilder} —cada `bsmEntry` le agrega una fila y
-// devuelve su índice—, así que armar una a mano dejaría al pool y al atributo diciendo cosas
-// distintas.
+// It has no factory, and it has none in the JDK either: the table is managed by
+// {@link java.lang.classfile.constantpool.ConstantPoolBuilder} --each `bsmEntry` adds a row to it and
+// returns its index--, so building one by hand would leave the pool and the attribute saying
+// different things.
 public interface BootstrapMethodsAttribute extends Attribute<BootstrapMethodsAttribute> {
 
-    /** Las filas, en el orden del archivo. */
+    /** The rows, in file order. */
     List<BootstrapMethodEntry> bootstrapMethods();
 
-    /** Cuántas filas hay. */
+    /** How many rows there are. */
     int bootstrapMethodsSize();
 }

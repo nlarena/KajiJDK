@@ -3,13 +3,13 @@ package javax.sound.sampled;
 import java.security.BasicPermission;
 
 /**
- * KajiLibrary's javax.sound.sampled.AudioPermission -- permiso para usar el audio.
+ * KajiLibrary's javax.sound.sampled.AudioPermission -- permission to use audio.
  *
- * <p>Dos nombres: {@code "play"} para reproducir y {@code "record"} para capturar. El segundo era el
- * que importaba -- un applet que pudiera abrir el microfono sin permiso es un problema evidente.
+ * <p>Two names: {@code "play"} to play and {@code "record"} to capture. The second was the one that
+ * mattered -- an applet that could open the microphone without permission is an evident problem.
  *
- * <p>Marcada para eliminacion junto con todo el mecanismo de {@code SecurityManager}, que ya no
- * controla nada. Se mantiene para que el codigo viejo compile.
+ * <p>Marked for removal together with the whole {@code SecurityManager} mechanism, which no longer
+ * controls anything. It is kept so that old code compiles.
  */
 @Deprecated(since = "24", forRemoval = true)
 public class AudioPermission extends BasicPermission {
@@ -17,18 +17,18 @@ public class AudioPermission extends BasicPermission {
     private static final long serialVersionUID = -5518053473477801126L;
 
     /**
-     * @param name {@code "play"}, {@code "record"} o {@code "*"}
-     * @throws NullPointerException si es null
-     * @throws IllegalArgumentException si esta vacio
+     * @param name {@code "play"}, {@code "record"} or {@code "*"}
+     * @throws NullPointerException if it is null
+     * @throws IllegalArgumentException if it is empty
      */
     public AudioPermission(String name) {
         super(name);
     }
 
     /**
-     * Idem; las acciones no se usan.
+     * Likewise; the actions are not used.
      *
-     * @param actions se ignora
+     * @param actions it is ignored
      */
     public AudioPermission(String name, String actions) {
         super(name, actions);

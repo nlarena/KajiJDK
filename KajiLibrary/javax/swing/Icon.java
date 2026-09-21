@@ -4,31 +4,32 @@ import java.awt.Component;
 import java.awt.Graphics;
 
 /**
- * Algo que sabe dibujarse en un tamano fijo.
+ * Something that knows how to draw itself at a fixed size.
  *
- * <h2>Por que no es simplemente una imagen</h2>
+ * <h2>Why it is not simply an image</h2>
  *
- * <p>Una {@link java.awt.Image} son pixeles ya decididos. Un icono es <strong>una instruccion de
- * dibujo</strong>: se le pide que se pinte en un lugar, y puede resolverlo como quiera —con una
- * imagen, con trazos, o mirando al componente que se lo pide para elegir un color acorde al tema—.
- * De ahi que {@link #paintIcon} reciba el {@link Component}: no es decoracion, es lo que permite que
- * un mismo icono se vea distinto en un boton habilitado y en uno deshabilitado.
+ * <p>A {@link java.awt.Image} is pixels already decided. An icon is <strong>a drawing
+ * instruction</strong>: it is asked to paint itself somewhere, and it may resolve that however
+ * it likes -- with an image, with strokes, or by looking at the component that asks in order to
+ * choose a colour that suits the theme --. Hence {@link #paintIcon} receives the
+ * {@link Component}: it is not decoration, it is what allows one and the same icon to look
+ * different on an enabled button and on a disabled one.
  *
- * <p>El tamano se declara aparte y por adelantado, porque quien hace el layout necesita saber cuanto
- * ocupa <em>antes</em> de que se dibuje nada.
+ * <p>The size is declared separately and in advance, because whoever does the layout needs to
+ * know how much room it takes <em>before</em> anything is drawn.
  */
 public interface Icon {
 
     /**
-     * Se dibuja con su esquina superior izquierda en {@code (x, y)}.
+     * It is drawn with its top left corner at {@code (x, y)}.
      *
-     * @param c el componente que lo pide, que el icono puede consultar; puede ser {@code null}
+     * @param c the component that asks for it, which the icon may consult; it may be {@code null}
      */
     void paintIcon(Component c, Graphics g, int x, int y);
 
-    /** Cuanto mide de ancho. */
+    /** How much it measures in width. */
     int getIconWidth();
 
-    /** Cuanto mide de alto. */
+    /** How much it measures in height. */
     int getIconHeight();
 }

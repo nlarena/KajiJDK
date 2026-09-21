@@ -7,20 +7,20 @@ import java.lang.classfile.constantpool.MethodHandleEntry;
 import java.util.Collections;
 import java.util.List;
 
-// Una fila de la tabla del atributo `BootstrapMethods`.
+// A row of the `BootstrapMethods` attribute's table.
 public final class BootstrapMethodEntryImpl implements BootstrapMethodEntry {
 
     private final ConstantPool pool;
-    private final int indice;
+    private final int index;
     private final MethodHandleEntry handle;
-    private final List<LoadableConstantEntry> argumentos;
+    private final List<LoadableConstantEntry> arguments;
 
-    public BootstrapMethodEntryImpl(ConstantPool pool, int indice, MethodHandleEntry handle,
-            List<LoadableConstantEntry> argumentos) {
+    public BootstrapMethodEntryImpl(ConstantPool pool, int index, MethodHandleEntry handle,
+            List<LoadableConstantEntry> arguments) {
         this.pool = pool;
-        this.indice = indice;
+        this.index = index;
         this.handle = handle;
-        this.argumentos = Collections.unmodifiableList(argumentos);
+        this.arguments = Collections.unmodifiableList(arguments);
     }
 
     public ConstantPool constantPool() {
@@ -28,7 +28,7 @@ public final class BootstrapMethodEntryImpl implements BootstrapMethodEntry {
     }
 
     public int bsmIndex() {
-        return this.indice;
+        return this.index;
     }
 
     public MethodHandleEntry bootstrapMethod() {
@@ -36,10 +36,10 @@ public final class BootstrapMethodEntryImpl implements BootstrapMethodEntry {
     }
 
     public List<LoadableConstantEntry> arguments() {
-        return this.argumentos;
+        return this.arguments;
     }
 
     public String toString() {
-        return "BootstrapMethod#" + this.indice + " " + this.handle.toString();
+        return "BootstrapMethod#" + this.index + " " + this.handle.toString();
     }
 }

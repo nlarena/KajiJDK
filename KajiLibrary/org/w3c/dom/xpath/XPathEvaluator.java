@@ -4,31 +4,33 @@ import org.w3c.dom.DOMException;
 import org.w3c.dom.Node;
 
 /**
- * KajiLibrary's org.w3c.dom.xpath.XPathEvaluator -- evalua XPath sobre un documento.
+ * KajiLibrary's org.w3c.dom.xpath.XPathEvaluator -- it evaluates XPath over a document.
  *
- * <p>La implementa el {@code Document}. Tiene los dos caminos: compilar una vez y evaluar muchas
- * ({@link #createExpression}), o evaluar de una sola vez ({@link #evaluate}). El segundo es comodo y
- * el primero es el que hay que usar en un bucle.
+ * <p>The {@code Document} implements it. It has both roads: compiling once and evaluating many
+ * times ({@link #createExpression}), or evaluating in one go ({@link #evaluate}). The second is
+ * convenient and the first is the one to use in a loop.
  */
 public interface XPathEvaluator {
 
     /**
-     * Compila la expresion.
+     * It compiles the expression.
      *
-     * @throws XPathException {@code INVALID_EXPRESSION_ERR} si no es XPath valido
-     * @throws DOMException {@code NAMESPACE_ERR} si usa un prefijo que el resolvedor no conoce
+     * @throws XPathException {@code INVALID_EXPRESSION_ERR} if it is not valid XPath
+     * @throws DOMException {@code NAMESPACE_ERR} if it uses a prefix the resolver does not know
      */
     XPathExpression createExpression(String expression, XPathNSResolver resolver)
         throws XPathException, DOMException;
 
     /**
-     * Un resolvedor que usa los prefijos <b>declarados en ese nodo</b> y sus antepasados.
+     * A resolver that uses the prefixes <b>declared on that node</b> and its ancestors.
      *
-     * <p>Es el atajo para el caso comun: consultar un documento con sus propios prefijos.
+     * <p>It is the shortcut for the common case: querying a document with its own prefixes.
      */
     XPathNSResolver createNSResolver(Node nodeResolver);
 
-    /** Compila y evalua de una vez. Ver {@link XPathExpression#evaluate} para los argumentos. */
+    /**
+     * It compiles and evaluates in one go. See {@link XPathExpression#evaluate} for the arguments.
+     */
     Object evaluate(String expression, Node contextNode, XPathNSResolver resolver, short type,
         Object result) throws XPathException, DOMException;
 }

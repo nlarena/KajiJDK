@@ -3,22 +3,23 @@ package javax.naming.directory;
 import javax.naming.NamingException;
 
 /**
- * KajiLibrary's javax.naming.directory.InvalidAttributeIdentifierException -- el nombre del atributo no sirve.
+ * KajiLibrary's javax.naming.directory.InvalidAttributeIdentifierException -- the attribute's name
+ * is not valid.
  *
- * <p>El nombre, no el valor. Un directorio LDAP tiene reglas sobre que puede llamarse atributo, y
- * un identificador con caracteres que no corresponden se rechaza antes de mirar que hay
- * adentro.
+ * <p>The name, not the value. An LDAP directory has rules about what can be called an attribute,
+ * and an identifier with characters that do not belong is rejected before looking at what is
+ * inside.
  */
 public class InvalidAttributeIdentifierException extends NamingException {
 
     private static final long serialVersionUID = -9036920266322999923L;
 
-    /** Sin detalle. */
+    /** With no detail. */
     public InvalidAttributeIdentifierException() {
         super();
     }
 
-    /** Con un mensaje que diga cual fue el problema. */
+    /** With a message saying what the problem was. */
     public InvalidAttributeIdentifierException(String explanation) {
         super(explanation);
     }

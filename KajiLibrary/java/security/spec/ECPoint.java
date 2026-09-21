@@ -2,27 +2,28 @@ package java.security.spec;
 
 import java.math.BigInteger;
 
-// Un punto de una curva eliptica en coordenadas afines.
+// A point of an elliptic curve in affine coordinates.
 //
-// Deliberadamente **no** sabe a que curva pertenece: el par (x, y) solo tiene sentido junto a un
-// `EllipticCurve`, y separarlos es lo que permite que la misma clase sirva para el generador de un
-// `ECParameterSpec` y para la clave publica de un `ECPublicKeySpec` sin duplicar el tipo.
+// It deliberately does **not** know which curve it belongs to: the pair (x, y) only makes sense
+// next to an `EllipticCurve`, and keeping them apart is what lets the same class serve for the
+// generator of an `ECParameterSpec` and for the public key of an `ECPublicKeySpec` without
+// duplicating the type.
 //
-// Esta clase no hace aritmetica de curva —no suma puntos ni multiplica por escalares— y eso es a
-// proposito: es un descriptor, no una implementacion de ECC. Sumar dos puntos requiere conocer la
-// curva, que aca no esta.
+// This class does no curve arithmetic —it neither adds points nor multiplies by scalars— and that
+// is on purpose: it is a descriptor, not an ECC implementation. Adding two points requires knowing
+// the curve, which is not here.
 public class ECPoint {
 
-    // El punto en el infinito: el neutro del grupo. Se representa con las dos coordenadas en null
-    // porque **no tiene** coordenadas afines; no es un (0, 0) ni ningun otro par concreto. Esa
-    // ausencia es lo que obliga a que `equals` y `hashCode` lo traten aparte.
+    // The point at infinity: the identity of the group. It is represented with both coordinates
+    // null because it **has no** affine coordinates; it is not (0, 0) nor any other concrete pair.
+    // That absence is what forces `equals` and `hashCode` to treat it separately.
     public static final ECPoint POINT_INFINITY = new ECPoint();
 
     private final BigInteger x;
     private final BigInteger y;
 
-    // Constructor privado, solo para POINT_INFINITY: es la unica forma legitima de tener un ECPoint
-    // con coordenadas nulas.
+    // Private constructor, only for POINT_INFINITY: it is the only legitimate way to have an
+    // ECPoint with null coordinates.
     private ECPoint() {
         this.x = null;
         this.y = null;
@@ -36,19 +37,19 @@ public class ECPoint {
         this.y = y;
     }
 
-    // La coordenada x, o null si este es el punto en el infinito.
+    // The x coordinate, or null if this is the point at infinity.
     public BigInteger getAffineX() {
         return this.x;
     }
 
-    // La coordenada y, o null si este es el punto en el infinito.
+    // The y coordinate, or null if this is the point at infinity.
     public BigInteger getAffineY() {
         return this.y;
     }
 
-    // El infinito solo es igual a si mismo. El chequeo va primero porque comparar sus coordenadas
-    // nulas contra las de otro punto seria un NPE, y porque dos infinitos siempre son la misma
-    // instancia: la constante.
+    // Infinity is only equal to itself. The check goes first because comparing its null coordinates
+    // against another point's would be an NPE, and because two infinities are always the same
+    // instance: the constant.
     @Override
     public boolean equals(Object obj) {
         if (this == obj) {
@@ -58,8 +59,8 @@ public class ECPoint {
             return false;
         }
         if (obj instanceof ECPoint) {
-            ECPoint otro = (ECPoint) obj;
-            return this.x.equals(otro.x) && this.y.equals(otro.y);
+            ECPoint other = (ECPoint) obj;
+            return this.x.equals(other.x) && this.y.equals(other.y);
         }
         return false;
     }

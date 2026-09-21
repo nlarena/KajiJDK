@@ -1,7 +1,7 @@
 package com.sun.source.tree;
 
 /**
- * `if`, con o sin `else`.
+ * `if`, with or without `else`.
  */
 public interface IfTree extends StatementTree {
 

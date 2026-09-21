@@ -1,12 +1,12 @@
 package java.security;
 
-// Fallo en una operacion de firma.
+// A failure in a signature operation.
 //
-// Ojo con el matiz, porque es la fuente clasica de agujeros: esta excepcion significa que la
-// operacion **no se pudo llevar a cabo** —estado equivocado, datos corruptos, proveedor roto— y
-// **no** significa "la firma no valida". Una firma que no valida es un `verify()` que devuelve
-// `false`, sin excepcion. El codigo que trata a las dos cosas igual, o que atrapa esto y sigue de
-// largo, termina aceptando firmas invalidas.
+// Careful with the nuance, because it is the classic source of holes: this exception means that the
+// operation **could not be carried out** —wrong state, corrupt data, broken provider— and does
+// **not** mean "the signature does not validate". A signature that does not validate is a
+// `verify()` that returns `false`, with no exception. Code that treats the two things alike, or
+// that catches this and carries on, ends up accepting invalid signatures.
 public class SignatureException extends GeneralSecurityException {
 
     public SignatureException() {

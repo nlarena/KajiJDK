@@ -4,316 +4,316 @@ import java.lang.classfile.AttributeMapper.AttributeStability;
 import jdk.internal.classfile.impl.AttributeMapperImpl;
 import jdk.internal.classfile.impl.RawAttribute;
 
-// El registro de los atributos que el JVMS define (§4.7): su nombre y el mapeador que los lee y los
-// escribe. Un lector busca acá por nombre; lo que no encuentra es un atributo a medida.
+// The register of the attributes the JVMS defines (§4.7): their name and the mapper reading and
+// writing them. A reader looks here by name; what it does not find is a custom attribute.
 //
-// ALCANCE, y es la divergencia más grande de este paquete: en el JDK cada mapeador produce un
-// atributo TIPADO —`CodeAttribute`, `SourceFileAttribute`, …— del paquete
-// `java.lang.classfile.attribute`, que KajiLibrary no tiene. Acá todos producen un
-// {@link jdk.internal.classfile.impl.RawAttribute}: el nombre correcto, la entrada de pool correcta,
-// el cuerpo en bytes, y nada más. Es un subconjunto —no se puede preguntar por el `sourceFile()` de
-// un `SourceFile`— pero no es una mentira: el atributo que devuelve ES ese atributo, con sus bytes.
-// Por eso los métodos de acá devuelven `AttributeMapper<RawAttribute>` en vez del tipo del JDK; el
-// tipo borrado, que es lo que compara el medidor, es el mismo.
+// SCOPE, and it is this package's largest divergence: in the JDK each mapper produces a TYPED
+// attribute --`CodeAttribute`, `SourceFileAttribute`, ...-- of the `java.lang.classfile.attribute`
+// package. Those interfaces do exist in KajiLibrary, but nothing here builds them: every mapper
+// produces a {@link jdk.internal.classfile.impl.RawAttribute} instead -- the right name, the right
+// pool entry, the body in bytes, and nothing else. It is a subset --a `SourceFile`'s `sourceFile()`
+// cannot be asked for-- but it is not a lie: the attribute it returns IS that attribute, with its
+// bytes. That is why the methods here return `AttributeMapper<RawAttribute>` instead of the JDK's
+// type; the erased type, which is what the meter compares, is the same.
 //
-// `writeAttribute` de estos mapeadores sí funciona: escribe nombre, largo y cuerpo tal cual se
-// leyeron, que es lo que hace falta para copiar un atributo de un archivo a otro sin entenderlo.
+// These mappers' `writeAttribute` does work: it writes name, length and body just as they were read,
+// which is what is needed to copy an attribute from one file to another without understanding it.
 public final class Attributes {
 
     private Attributes() {
     }
 
-    /** El nombre del atributo `AnnotationDefault`. */
+    /** The `AnnotationDefault` attribute's name. */
     public static final String NAME_ANNOTATION_DEFAULT = "AnnotationDefault";
 
-    /** El nombre del atributo `BootstrapMethods`. */
+    /** The `BootstrapMethods` attribute's name. */
     public static final String NAME_BOOTSTRAP_METHODS = "BootstrapMethods";
 
-    /** El nombre del atributo `CharacterRangeTable`. */
+    /** The `CharacterRangeTable` attribute's name. */
     public static final String NAME_CHARACTER_RANGE_TABLE = "CharacterRangeTable";
 
-    /** El nombre del atributo `Code`. */
+    /** The `Code` attribute's name. */
     public static final String NAME_CODE = "Code";
 
-    /** El nombre del atributo `CompilationID`. */
+    /** The `CompilationID` attribute's name. */
     public static final String NAME_COMPILATION_ID = "CompilationID";
 
-    /** El nombre del atributo `ConstantValue`. */
+    /** The `ConstantValue` attribute's name. */
     public static final String NAME_CONSTANT_VALUE = "ConstantValue";
 
-    /** El nombre del atributo `Deprecated`. */
+    /** The `Deprecated` attribute's name. */
     public static final String NAME_DEPRECATED = "Deprecated";
 
-    /** El nombre del atributo `EnclosingMethod`. */
+    /** The `EnclosingMethod` attribute's name. */
     public static final String NAME_ENCLOSING_METHOD = "EnclosingMethod";
 
-    /** El nombre del atributo `Exceptions`. */
+    /** The `Exceptions` attribute's name. */
     public static final String NAME_EXCEPTIONS = "Exceptions";
 
-    /** El nombre del atributo `InnerClasses`. */
+    /** The `InnerClasses` attribute's name. */
     public static final String NAME_INNER_CLASSES = "InnerClasses";
 
-    /** El nombre del atributo `LineNumberTable`. */
+    /** The `LineNumberTable` attribute's name. */
     public static final String NAME_LINE_NUMBER_TABLE = "LineNumberTable";
 
-    /** El nombre del atributo `LocalVariableTable`. */
+    /** The `LocalVariableTable` attribute's name. */
     public static final String NAME_LOCAL_VARIABLE_TABLE = "LocalVariableTable";
 
-    /** El nombre del atributo `LocalVariableTypeTable`. */
+    /** The `LocalVariableTypeTable` attribute's name. */
     public static final String NAME_LOCAL_VARIABLE_TYPE_TABLE = "LocalVariableTypeTable";
 
-    /** El nombre del atributo `MethodParameters`. */
+    /** The `MethodParameters` attribute's name. */
     public static final String NAME_METHOD_PARAMETERS = "MethodParameters";
 
-    /** El nombre del atributo `Module`. */
+    /** The `Module` attribute's name. */
     public static final String NAME_MODULE = "Module";
 
-    /** El nombre del atributo `ModuleHashes`. */
+    /** The `ModuleHashes` attribute's name. */
     public static final String NAME_MODULE_HASHES = "ModuleHashes";
 
-    /** El nombre del atributo `ModuleMainClass`. */
+    /** The `ModuleMainClass` attribute's name. */
     public static final String NAME_MODULE_MAIN_CLASS = "ModuleMainClass";
 
-    /** El nombre del atributo `ModulePackages`. */
+    /** The `ModulePackages` attribute's name. */
     public static final String NAME_MODULE_PACKAGES = "ModulePackages";
 
-    /** El nombre del atributo `ModuleResolution`. */
+    /** The `ModuleResolution` attribute's name. */
     public static final String NAME_MODULE_RESOLUTION = "ModuleResolution";
 
-    /** El nombre del atributo `ModuleTarget`. */
+    /** The `ModuleTarget` attribute's name. */
     public static final String NAME_MODULE_TARGET = "ModuleTarget";
 
-    /** El nombre del atributo `NestHost`. */
+    /** The `NestHost` attribute's name. */
     public static final String NAME_NEST_HOST = "NestHost";
 
-    /** El nombre del atributo `NestMembers`. */
+    /** The `NestMembers` attribute's name. */
     public static final String NAME_NEST_MEMBERS = "NestMembers";
 
-    /** El nombre del atributo `PermittedSubclasses`. */
+    /** The `PermittedSubclasses` attribute's name. */
     public static final String NAME_PERMITTED_SUBCLASSES = "PermittedSubclasses";
 
-    /** El nombre del atributo `Record`. */
+    /** The `Record` attribute's name. */
     public static final String NAME_RECORD = "Record";
 
-    /** El nombre del atributo `RuntimeInvisibleAnnotations`. */
+    /** The `RuntimeInvisibleAnnotations` attribute's name. */
     public static final String NAME_RUNTIME_INVISIBLE_ANNOTATIONS = "RuntimeInvisibleAnnotations";
 
-    /** El nombre del atributo `RuntimeInvisibleParameterAnnotations`. */
+    /** The `RuntimeInvisibleParameterAnnotations` attribute's name. */
     public static final String NAME_RUNTIME_INVISIBLE_PARAMETER_ANNOTATIONS = "RuntimeInvisibleParameterAnnotations";
 
-    /** El nombre del atributo `RuntimeInvisibleTypeAnnotations`. */
+    /** The `RuntimeInvisibleTypeAnnotations` attribute's name. */
     public static final String NAME_RUNTIME_INVISIBLE_TYPE_ANNOTATIONS = "RuntimeInvisibleTypeAnnotations";
 
-    /** El nombre del atributo `RuntimeVisibleAnnotations`. */
+    /** The `RuntimeVisibleAnnotations` attribute's name. */
     public static final String NAME_RUNTIME_VISIBLE_ANNOTATIONS = "RuntimeVisibleAnnotations";
 
-    /** El nombre del atributo `RuntimeVisibleParameterAnnotations`. */
+    /** The `RuntimeVisibleParameterAnnotations` attribute's name. */
     public static final String NAME_RUNTIME_VISIBLE_PARAMETER_ANNOTATIONS = "RuntimeVisibleParameterAnnotations";
 
-    /** El nombre del atributo `RuntimeVisibleTypeAnnotations`. */
+    /** The `RuntimeVisibleTypeAnnotations` attribute's name. */
     public static final String NAME_RUNTIME_VISIBLE_TYPE_ANNOTATIONS = "RuntimeVisibleTypeAnnotations";
 
-    /** El nombre del atributo `Signature`. */
+    /** The `Signature` attribute's name. */
     public static final String NAME_SIGNATURE = "Signature";
 
-    /** El nombre del atributo `SourceDebugExtension`. */
+    /** The `SourceDebugExtension` attribute's name. */
     public static final String NAME_SOURCE_DEBUG_EXTENSION = "SourceDebugExtension";
 
-    /** El nombre del atributo `SourceFile`. */
+    /** The `SourceFile` attribute's name. */
     public static final String NAME_SOURCE_FILE = "SourceFile";
 
-    /** El nombre del atributo `SourceID`. */
+    /** The `SourceID` attribute's name. */
     public static final String NAME_SOURCE_ID = "SourceID";
 
-    /** El nombre del atributo `StackMapTable`. */
+    /** The `StackMapTable` attribute's name. */
     public static final String NAME_STACK_MAP_TABLE = "StackMapTable";
 
-    /** El nombre del atributo `Synthetic`. */
+    /** The `Synthetic` attribute's name. */
     public static final String NAME_SYNTHETIC = "Synthetic";
 
 
-    /** El mapeador de `AnnotationDefault`. */
+    /** `AnnotationDefault`'s mapper. */
     public static AttributeMapper<RawAttribute> annotationDefault() {
         return M_ANNOTATION_DEFAULT;
     }
 
-    /** El mapeador de `BootstrapMethods`. */
+    /** `BootstrapMethods`'s mapper. */
     public static AttributeMapper<RawAttribute> bootstrapMethods() {
         return M_BOOTSTRAP_METHODS;
     }
 
-    /** El mapeador de `CharacterRangeTable`. */
+    /** `CharacterRangeTable`'s mapper. */
     public static AttributeMapper<RawAttribute> characterRangeTable() {
         return M_CHARACTER_RANGE_TABLE;
     }
 
-    /** El mapeador de `Code`. */
+    /** `Code`'s mapper. */
     public static AttributeMapper<RawAttribute> code() {
         return M_CODE;
     }
 
-    /** El mapeador de `CompilationID`. */
+    /** `CompilationID`'s mapper. */
     public static AttributeMapper<RawAttribute> compilationId() {
         return M_COMPILATION_ID;
     }
 
-    /** El mapeador de `ConstantValue`. */
+    /** `ConstantValue`'s mapper. */
     public static AttributeMapper<RawAttribute> constantValue() {
         return M_CONSTANT_VALUE;
     }
 
-    /** El mapeador de `Deprecated`. */
+    /** `Deprecated`'s mapper. */
     public static AttributeMapper<RawAttribute> deprecated() {
         return M_DEPRECATED;
     }
 
-    /** El mapeador de `EnclosingMethod`. */
+    /** `EnclosingMethod`'s mapper. */
     public static AttributeMapper<RawAttribute> enclosingMethod() {
         return M_ENCLOSING_METHOD;
     }
 
-    /** El mapeador de `Exceptions`. */
+    /** `Exceptions`'s mapper. */
     public static AttributeMapper<RawAttribute> exceptions() {
         return M_EXCEPTIONS;
     }
 
-    /** El mapeador de `InnerClasses`. */
+    /** `InnerClasses`'s mapper. */
     public static AttributeMapper<RawAttribute> innerClasses() {
         return M_INNER_CLASSES;
     }
 
-    /** El mapeador de `LineNumberTable`. */
+    /** `LineNumberTable`'s mapper. */
     public static AttributeMapper<RawAttribute> lineNumberTable() {
         return M_LINE_NUMBER_TABLE;
     }
 
-    /** El mapeador de `LocalVariableTable`. */
+    /** `LocalVariableTable`'s mapper. */
     public static AttributeMapper<RawAttribute> localVariableTable() {
         return M_LOCAL_VARIABLE_TABLE;
     }
 
-    /** El mapeador de `LocalVariableTypeTable`. */
+    /** `LocalVariableTypeTable`'s mapper. */
     public static AttributeMapper<RawAttribute> localVariableTypeTable() {
         return M_LOCAL_VARIABLE_TYPE_TABLE;
     }
 
-    /** El mapeador de `MethodParameters`. */
+    /** `MethodParameters`'s mapper. */
     public static AttributeMapper<RawAttribute> methodParameters() {
         return M_METHOD_PARAMETERS;
     }
 
-    /** El mapeador de `Module`. */
+    /** `Module`'s mapper. */
     public static AttributeMapper<RawAttribute> module() {
         return M_MODULE;
     }
 
-    /** El mapeador de `ModuleHashes`. */
+    /** `ModuleHashes`'s mapper. */
     public static AttributeMapper<RawAttribute> moduleHashes() {
         return M_MODULE_HASHES;
     }
 
-    /** El mapeador de `ModuleMainClass`. */
+    /** `ModuleMainClass`'s mapper. */
     public static AttributeMapper<RawAttribute> moduleMainClass() {
         return M_MODULE_MAIN_CLASS;
     }
 
-    /** El mapeador de `ModulePackages`. */
+    /** `ModulePackages`'s mapper. */
     public static AttributeMapper<RawAttribute> modulePackages() {
         return M_MODULE_PACKAGES;
     }
 
-    /** El mapeador de `ModuleResolution`. */
+    /** `ModuleResolution`'s mapper. */
     public static AttributeMapper<RawAttribute> moduleResolution() {
         return M_MODULE_RESOLUTION;
     }
 
-    /** El mapeador de `ModuleTarget`. */
+    /** `ModuleTarget`'s mapper. */
     public static AttributeMapper<RawAttribute> moduleTarget() {
         return M_MODULE_TARGET;
     }
 
-    /** El mapeador de `NestHost`. */
+    /** `NestHost`'s mapper. */
     public static AttributeMapper<RawAttribute> nestHost() {
         return M_NEST_HOST;
     }
 
-    /** El mapeador de `NestMembers`. */
+    /** `NestMembers`'s mapper. */
     public static AttributeMapper<RawAttribute> nestMembers() {
         return M_NEST_MEMBERS;
     }
 
-    /** El mapeador de `PermittedSubclasses`. */
+    /** `PermittedSubclasses`'s mapper. */
     public static AttributeMapper<RawAttribute> permittedSubclasses() {
         return M_PERMITTED_SUBCLASSES;
     }
 
-    /** El mapeador de `Record`. */
+    /** `Record`'s mapper. */
     public static AttributeMapper<RawAttribute> record() {
         return M_RECORD;
     }
 
-    /** El mapeador de `RuntimeInvisibleAnnotations`. */
+    /** `RuntimeInvisibleAnnotations`'s mapper. */
     public static AttributeMapper<RawAttribute> runtimeInvisibleAnnotations() {
         return M_RUNTIME_INVISIBLE_ANNOTATIONS;
     }
 
-    /** El mapeador de `RuntimeInvisibleParameterAnnotations`. */
+    /** `RuntimeInvisibleParameterAnnotations`'s mapper. */
     public static AttributeMapper<RawAttribute> runtimeInvisibleParameterAnnotations() {
         return M_RUNTIME_INVISIBLE_PARAMETER_ANNOTATIONS;
     }
 
-    /** El mapeador de `RuntimeInvisibleTypeAnnotations`. */
+    /** `RuntimeInvisibleTypeAnnotations`'s mapper. */
     public static AttributeMapper<RawAttribute> runtimeInvisibleTypeAnnotations() {
         return M_RUNTIME_INVISIBLE_TYPE_ANNOTATIONS;
     }
 
-    /** El mapeador de `RuntimeVisibleAnnotations`. */
+    /** `RuntimeVisibleAnnotations`'s mapper. */
     public static AttributeMapper<RawAttribute> runtimeVisibleAnnotations() {
         return M_RUNTIME_VISIBLE_ANNOTATIONS;
     }
 
-    /** El mapeador de `RuntimeVisibleParameterAnnotations`. */
+    /** `RuntimeVisibleParameterAnnotations`'s mapper. */
     public static AttributeMapper<RawAttribute> runtimeVisibleParameterAnnotations() {
         return M_RUNTIME_VISIBLE_PARAMETER_ANNOTATIONS;
     }
 
-    /** El mapeador de `RuntimeVisibleTypeAnnotations`. */
+    /** `RuntimeVisibleTypeAnnotations`'s mapper. */
     public static AttributeMapper<RawAttribute> runtimeVisibleTypeAnnotations() {
         return M_RUNTIME_VISIBLE_TYPE_ANNOTATIONS;
     }
 
-    /** El mapeador de `Signature`. */
+    /** `Signature`'s mapper. */
     public static AttributeMapper<RawAttribute> signature() {
         return M_SIGNATURE;
     }
 
-    /** El mapeador de `SourceDebugExtension`. */
+    /** `SourceDebugExtension`'s mapper. */
     public static AttributeMapper<RawAttribute> sourceDebugExtension() {
         return M_SOURCE_DEBUG_EXTENSION;
     }
 
-    /** El mapeador de `SourceFile`. */
+    /** `SourceFile`'s mapper. */
     public static AttributeMapper<RawAttribute> sourceFile() {
         return M_SOURCE_FILE;
     }
 
-    /** El mapeador de `SourceID`. */
+    /** `SourceID`'s mapper. */
     public static AttributeMapper<RawAttribute> sourceId() {
         return M_SOURCE_ID;
     }
 
-    /** El mapeador de `StackMapTable`. */
+    /** `StackMapTable`'s mapper. */
     public static AttributeMapper<RawAttribute> stackMapTable() {
         return M_STACK_MAP_TABLE;
     }
 
-    /** El mapeador de `Synthetic`. */
+    /** `Synthetic`'s mapper. */
     public static AttributeMapper<RawAttribute> synthetic() {
         return M_SYNTHETIC;
     }
 
-    // Los mapeadores, uno por atributo. Son constantes: la identidad de cada uno es lo que
-    // `findAttribute` compara, así que tienen que ser siempre el mismo objeto.
+    // The mappers, one per attribute. They are constants: each one's identity is what
+    // `findAttribute` compares, so they have to be the same object every time.
     private static final AttributeMapper<RawAttribute> M_ANNOTATION_DEFAULT =
             new AttributeMapperImpl(NAME_ANNOTATION_DEFAULT, AttributeStability.CP_REFS, false);
     private static final AttributeMapper<RawAttribute> M_BOOTSTRAP_METHODS =

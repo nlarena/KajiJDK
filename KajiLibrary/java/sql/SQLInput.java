@@ -1,14 +1,14 @@
 package java.sql;
 
 /**
- * KajiLibrary's java.sql.SQLInput -- el flujo del que un {@link SQLData} lee sus atributos.
+ * KajiLibrary's java.sql.SQLInput -- the stream an {@link SQLData} reads its attributes from.
  *
- * <p>Es un cursor sobre los atributos de **un** valor estructurado: cada `readXxx` consume el
- * siguiente y avanza. No hay como retroceder ni saltear, y no hace falta -- quien lee es la clase que
- * conoce el tipo.
+ * <p>It is a cursor over the attributes of **one** structured value: each `readXxx` consumes the
+ * next one and advances. There is no way to go back or skip, and there is no need -- whoever reads
+ * is the class that knows the type.
  *
- * <p>{@link #wasNull} esta por lo mismo que en {@link ResultSet}: un `readInt` que devuelve cero no
- * distingue el cero del nulo.
+ * <p>{@link #wasNull} is there for the same reason as in {@link ResultSet}: a `readInt` that
+ * returns zero does not tell zero from null.
  */
 public interface SQLInput {
 
@@ -44,12 +44,12 @@ public interface SQLInput {
 
     java.io.InputStream readBinaryStream() throws SQLException;
 
-    /** El siguiente atributo como objeto, resolviendo tipos propios por el mapa de la conexion. */
+    /** The next attribute as an object, resolving types of its own through the connection's map. */
     Object readObject() throws SQLException;
 
-    /** El siguiente atributo convertido a `type`; la forma con tipo, que evita el molde. */
+    /** The next attribute converted to `type`; the typed form, which avoids the cast. */
     default <T> T readObject(Class<T> type) throws SQLException {
-        throw new SQLFeatureNotSupportedException("readObject(Class) no esta implementado");
+        throw new SQLFeatureNotSupportedException("readObject(Class) not implemented");
     }
 
     Ref readRef() throws SQLException;
@@ -70,6 +70,6 @@ public interface SQLInput {
 
     RowId readRowId() throws SQLException;
 
-    /** Si el ultimo valor leido era nulo. */
+    /** Whether the last value read was null. */
     boolean wasNull() throws SQLException;
 }

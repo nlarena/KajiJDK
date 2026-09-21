@@ -7,42 +7,42 @@ import javax.xml.crypto.dsig.XMLSignContext;
 import org.w3c.dom.Node;
 
 /**
- * KajiLibrary's javax.xml.crypto.dsig.dom.DOMSignContext -- donde y con que firmar, sobre DOM.
+ * KajiLibrary's javax.xml.crypto.dsig.dom.DOMSignContext -- where and with what to sign, over DOM.
  *
- * <p>Lleva dos cosas: la clave, y <b>en que lugar del arbol</b> escribir el elemento de firma.
+ * <p>It carries two things: the key, and <b>where in the tree</b> to write the signature element.
  *
- * <h2>Padre y hermano siguiente</h2>
+ * <h2>Parent and next sibling</h2>
  *
- * <p>El padre es obligatorio y dice bajo que elemento cuelga la firma. El hermano siguiente es
- * opcional y decide la posicion exacta: la firma se inserta <b>antes</b> de el, y sin el se agrega al
- * final.
+ * <p>The parent is mandatory and says under which element the signature hangs. The next sibling is
+ * optional and decides the exact position: the signature is inserted <b>before</b> it, and without
+ * it it is appended at the end.
  *
- * <p>Importa mas de lo que parece. Hay esquemas que fijan el orden de los hijos, y una firma agregada
- * al final rompe la validacion del esquema aunque la firma en si sea correcta.
+ * <p>It matters more than it seems. There are schemas that fix the order of the children, and a
+ * signature appended at the end breaks schema validation even if the signature itself is correct.
  *
- * <h2>Clave o selector</h2>
+ * <h2>Key or selector</h2>
  *
- * <p>Los constructores vienen de a pares. Con una {@link Key} se firma con esa y punto; con un
- * {@link KeySelector} la clave se elige durante la operacion, mirando el {@code KeyInfo}. Para firmar
- * lo normal es la clave directa -- el selector tiene mas sentido al validar.
+ * <p>The constructors come in pairs. With a {@link Key} it signs with that one, full stop; with a
+ * {@link KeySelector} the key is chosen during the operation, by looking at the {@code KeyInfo}.
+ * For signing the direct key is the normal thing -- the selector makes more sense when validating.
  *
- * <h2>El arbol se modifica</h2>
+ * <h2>The tree is modified</h2>
  *
- * <p>Firmar <b>inserta</b> el elemento de firma en el documento que se paso. No es una operacion de
- * solo lectura, y el documento tiene que ser modificable.
+ * <p>Signing <b>inserts</b> the signature element in the document that was passed. It is not a
+ * read-only operation, and the document has to be modifiable.
  */
 public class DOMSignContext extends DOMCryptoContext implements XMLSignContext {
 
-    /** Bajo que elemento cuelga la firma. */
+    /** Under which element the signature hangs. */
     private Node parent;
 
-    /** Antes de cual insertarla, o null para el final. */
+    /** Before which one to insert it, or null for the end. */
     private Node nextSibling;
 
     /**
-     * Firma con esa clave, colgando del final de ese elemento.
+     * Signs with that key, hanging from the end of that element.
      *
-     * @throws NullPointerException si alguno de los dos es null
+     * @throws NullPointerException if either of the two is null
      */
     public DOMSignContext(Key signingKey, Node parent) {
         if (signingKey == null) {
@@ -56,9 +56,9 @@ public class DOMSignContext extends DOMCryptoContext implements XMLSignContext {
     }
 
     /**
-     * Idem, insertando antes de ese hermano. Ver la nota de la clase.
+     * Likewise, inserting before that sibling. See the class note.
      *
-     * @throws NullPointerException si la clave, el padre o el hermano son null
+     * @throws NullPointerException if the key, the parent or the sibling is null
      */
     public DOMSignContext(Key signingKey, Node parent, Node nextSibling) {
         this(signingKey, parent);
@@ -69,9 +69,9 @@ public class DOMSignContext extends DOMCryptoContext implements XMLSignContext {
     }
 
     /**
-     * Firma con la clave que elija ese selector.
+     * Signs with the key that selector chooses.
      *
-     * @throws NullPointerException si alguno de los dos es null
+     * @throws NullPointerException if either of the two is null
      */
     public DOMSignContext(KeySelector ks, Node parent) {
         if (ks == null) {
@@ -85,9 +85,9 @@ public class DOMSignContext extends DOMCryptoContext implements XMLSignContext {
     }
 
     /**
-     * Idem, insertando antes de ese hermano.
+     * Likewise, inserting before that sibling.
      *
-     * @throws NullPointerException si alguno de los tres es null
+     * @throws NullPointerException if any of the three is null
      */
     public DOMSignContext(KeySelector ks, Node parent, Node nextSibling) {
         this(ks, parent);
@@ -98,9 +98,9 @@ public class DOMSignContext extends DOMCryptoContext implements XMLSignContext {
     }
 
     /**
-     * Cambia bajo que elemento cuelga.
+     * Changes under which element it hangs.
      *
-     * @throws NullPointerException si es null; el padre no es opcional
+     * @throws NullPointerException if it is null; the parent is not optional
      */
     public void setParent(Node parent) {
         if (parent == null) {
@@ -110,20 +110,20 @@ public class DOMSignContext extends DOMCryptoContext implements XMLSignContext {
     }
 
     /**
-     * Cambia antes de cual insertarla.
+     * Changes before which one to insert it.
      *
-     * <p>Null es valido aca y significa "al final"; ver la nota de la clase.
+     * <p>Null is valid here and means "at the end"; see the class note.
      */
     public void setNextSibling(Node nextSibling) {
         this.nextSibling = nextSibling;
     }
 
-    /** Bajo que elemento cuelga. */
+    /** Under which element it hangs. */
     public Node getParent() {
         return this.parent;
     }
 
-    /** Antes de cual se inserta, o null. */
+    /** Before which one it is inserted, or null. */
     public Node getNextSibling() {
         return this.nextSibling;
     }

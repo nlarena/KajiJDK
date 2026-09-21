@@ -16,9 +16,9 @@ import java.util.StringTokenizer;
 // parsing "foo=bar" gives version 0, but `new HttpCookie("foo","bar")` gives version 1.
 //
 // The other consequence of the mixture: the separator between cookies. In the RFC format several
-// cookies come in one header separated by commas, and in Netscape's the comma is a legal part of the
-// `Expires` date. That is why `parse` only splits on commas when it guessed version 1 -- and even
-// there it respects the quotes.
+// cookies come in one header separated by commas, and in Netscape's the comma is a legal part of
+// the `Expires` date. That is why `parse` only splits on commas when it guessed version 1 -- and
+// even there it respects the quotes.
 //
 // ===========================================================================================
 // THE ONE THING THAT IS NOT IDENTICAL TO THE JDK: PARSING `Expires`
@@ -154,7 +154,7 @@ public final class HttpCookie implements Cloneable {
         return this.commentURL;
     }
 
-    /** Si el cliente deberia tirarla al cerrarse, ignorando su vencimiento. Solo version 1. */
+    /** Whether the client should throw it away on closing, ignoring its expiry. Version 1 only. */
     public void setDiscard(boolean discard) {
         this.toDiscard = discard;
     }
@@ -230,7 +230,7 @@ public final class HttpCookie implements Cloneable {
     }
 
     /**
-     * @throws IllegalArgumentException si no es 0 ni 1
+     * @throws IllegalArgumentException if it is neither 0 nor 1
      */
     public void setVersion(int v) {
         if (v != 0 && v != 1) {
@@ -252,9 +252,9 @@ public final class HttpCookie implements Cloneable {
      * Whether {@code host} gets {@code domain}'s cookies, per RFC 2965.
      *
      * <p>The odd rules here are all defensive and are worth reading backwards: they exist so that
-     * ".com" does **not** match "bank.com". A domain has to have an internal dot, the host's leftover
-     * cannot have dots --so ".foo.com" covers "x.foo.com" but not "a.b.foo.com"-- and ".foo.com"
-     * covers bare "foo.com" as a special case.
+     * ".com" does **not** match "bank.com". A domain has to have an internal dot, the host's
+     * leftover cannot have dots --so ".foo.com" covers "x.foo.com" but not "a.b.foo.com"-- and
+     * ".foo.com" covers bare "foo.com" as a special case.
      */
     public static boolean domainMatches(String domain, String host) {
         if (domain == null || host == null) {
@@ -310,8 +310,8 @@ public final class HttpCookie implements Cloneable {
         return sb.toString();
     }
 
-    // Two cookies are the same if name, domain and path match -- **not** the value. It comes from RFC
-    // 2965 and it is what makes storing a new cookie overwrite the previous one instead of
+    // Two cookies are the same if name, domain and path match -- **not** the value. It comes from
+    // RFC 2965 and it is what makes storing a new cookie overwrite the previous one instead of
     // accumulating them: those three fields are the identity, the value is the content.
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -345,7 +345,7 @@ public final class HttpCookie implements Cloneable {
         return this.whenCreated;
     }
 
-    // ---- parseo ---------------------------------------------------------------------------------
+    // ---- parsing --------------------------------------------------------------------------------
 
     // The version comes out of the text, not out of an attribute: see the header.
     private static int guessVersion(String header) {
@@ -449,7 +449,7 @@ public final class HttpCookie implements Cloneable {
                 cookie.setMaxAge(delta > 0 ? delta : 0);
             }
         }
-        // Cualquier otro atributo se ignora: ver el javadoc de `parse`.
+        // Any other attribute is ignored: see the javadoc of `parse`.
     }
 
     // Turns an absolute `Expires` date into the seconds of life it has left, counted from when this
@@ -526,8 +526,8 @@ public final class HttpCookie implements Cloneable {
                 }
                 continue;
             }
-            // Day of the week, "GMT", time offsets: they are ignored. Every form the JDK accepts has
-            // the time in GMT.
+            // Day of the week, "GMT", time offsets: they are ignored. Every form the JDK accepts
+            // has the time in GMT.
         }
         if (day == -1 || month == -1 || year == -1 || hh == -1) {
             return Long.MIN_VALUE;
@@ -594,8 +594,9 @@ public final class HttpCookie implements Cloneable {
         return d[month0];
     }
 
-    // Days since 1970-01-01. The trick is to shift the year so that it starts in March: that way the
-    // leap day falls at the end and the count of days per month becomes a formula with no table.
+    // Days since 1970-01-01. The trick is to shift the year so that it starts in March: that way
+    // the leap day falls at the end and the count of days per month becomes a formula with no
+    // table.
     private static long daysFromCivil(int y, int m, int d) {
         long yy = y;
         yy = yy - (m <= 2 ? 1 : 0);
@@ -606,7 +607,7 @@ public final class HttpCookie implements Cloneable {
         return era * 146097 + doe - 719468;
     }
 
-    // ---- utilidades de texto --------------------------------------------------------------------
+    // ---- text helpers ----------------------------------------------------------------------------
 
     private static boolean isToken(String value) {
         int i = 0;

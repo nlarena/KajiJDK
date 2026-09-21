@@ -6,22 +6,23 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 
-// Una coleccion **heterogenea** de permisos: la de arriba de todo.
+// A **heterogeneous** collection of permissions: the one at the very top.
 //
-// Las `PermissionCollection` de cada clase son homogeneas a proposito, porque su `implies` sabe
-// de la forma de esa clase. Esta las junta: guarda una coleccion por clase de permiso y le
-// delega. `implies` busca la coleccion de la clase del permiso pedido y le pregunta a ella — no
-// recorre las demas, porque dos permisos de clases distintas nunca se implican.
+// The `PermissionCollection`s of each class are homogeneous on purpose, because their `implies`
+// knows about the shape of that class. This one joins them: it keeps one collection per class of
+// permission and delegates to it. `implies` looks for the collection of the class of the permission
+// asked for and asks it — it does not walk the others, because two permissions of different classes
+// never imply each other.
 //
-// El `AllPermission` es la excepcion y por eso se guarda aparte: si hay alguno, `implies`
-// devuelve true sin consultar nada mas.
+// `AllPermission` is the exception and that is why it is kept apart: if there is one, `implies`
+// returns true without consulting anything else.
 public final class Permissions extends PermissionCollection implements Serializable {
 
-    // Clase de permiso -> su coleccion homogenea.
-    private final HashMap<Class<?>, PermissionCollection> porClase =
+    // Class of permission -> its homogeneous collection.
+    private final HashMap<Class<?>, PermissionCollection> byClass =
         new HashMap<Class<?>, PermissionCollection>();
 
-    // La coleccion de AllPermission, si se agrego alguno. Package-private como en el JDK.
+    // The collection of AllPermission, if any was added. Package-private as in the JDK.
     PermissionCollection allPermission;
 
     public Permissions() {
@@ -32,7 +33,7 @@ public final class Permissions extends PermissionCollection implements Serializa
             throw new SecurityException(
                 "attempt to add a Permission to a readonly Permissions object");
         }
-        PermissionCollection pc = this.coleccionPara(permission);
+        PermissionCollection pc = this.collectionFor(permission);
         pc.add(permission);
         if (permission instanceof AllPermission) {
             this.allPermission = pc;
@@ -40,11 +41,11 @@ public final class Permissions extends PermissionCollection implements Serializa
     }
 
     public boolean implies(Permission permission) {
-        // Un AllPermission guardado corta la busqueda.
+        // A stored AllPermission cuts the search short.
         if (this.allPermission != null && this.allPermission.implies(permission)) {
             return true;
         }
-        PermissionCollection pc = this.porClase.get(permission.getClass());
+        PermissionCollection pc = this.byClass.get(permission.getClass());
         if (pc == null) {
             return false;
         }
@@ -52,58 +53,58 @@ public final class Permissions extends PermissionCollection implements Serializa
     }
 
     public Enumeration<Permission> elements() {
-        java.util.ArrayList<Permission> todos = new java.util.ArrayList<Permission>();
-        Iterator<Class<?>> clases = this.porClase.keySet().iterator();
-        while (clases.hasNext()) {
-            PermissionCollection pc = this.porClase.get(clases.next());
+        java.util.ArrayList<Permission> all = new java.util.ArrayList<Permission>();
+        Iterator<Class<?>> classes = this.byClass.keySet().iterator();
+        while (classes.hasNext()) {
+            PermissionCollection pc = this.byClass.get(classes.next());
             Enumeration<Permission> e = pc.elements();
             while (e.hasMoreElements()) {
-                todos.add(e.nextElement());
+                all.add(e.nextElement());
             }
         }
-        return new ListaPermEnum(todos);
+        return new PermListEnum(all);
     }
 
-    // La coleccion de la clase del permiso, creandola si hace falta.
+    // The collection of the class of the permission, creating it if need be.
     //
-    // Se le pide a la propia clase de permiso (`newPermissionCollection`) porque solo ella sabe
-    // si tiene una implementacion mas rapida. Si dice `null` —no tengo nada mejor— se usa una
-    // generica que compara de a uno.
-    private PermissionCollection coleccionPara(Permission p) {
+    // It is asked of the class of permission itself (`newPermissionCollection`) because only it
+    // knows whether it has a faster implementation. If it says `null` —I have nothing better— a
+    // generic one that compares one at a time is used.
+    private PermissionCollection collectionFor(Permission p) {
         Class<?> c = p.getClass();
-        PermissionCollection pc = this.porClase.get(c);
+        PermissionCollection pc = this.byClass.get(c);
         if (pc != null) {
             return pc;
         }
         pc = p.newPermissionCollection();
         if (pc == null) {
-            pc = new PermisosGenericos();
+            pc = new GenericPermissions();
         }
-        this.porClase.put(c, pc);
+        this.byClass.put(c, pc);
         return pc;
     }
 }
 
-// La coleccion de ultimo recurso: guarda los permisos en una lista y pregunta de a uno.
+// The collection of last resort: it keeps the permissions in a list and asks one at a time.
 //
-// Es correcta para cualquier clase de permiso, y por eso sirve de respaldo; lo que no es, es
-// rapida. Una clase que se use mucho deberia devolver la suya en `newPermissionCollection`.
-final class PermisosGenericos extends PermissionCollection {
+// It is right for any class of permission, and that is why it serves as a fallback; what it is not,
+// is fast. A class that is used a lot should return its own in `newPermissionCollection`.
+final class GenericPermissions extends PermissionCollection {
 
-    private final java.util.ArrayList<Permission> permisos = new java.util.ArrayList<Permission>();
+    private final java.util.ArrayList<Permission> perms = new java.util.ArrayList<Permission>();
 
     public void add(Permission permission) {
         if (this.isReadOnly()) {
             throw new SecurityException(
                 "attempt to add a Permission to a readonly PermissionCollection");
         }
-        this.permisos.add(permission);
+        this.perms.add(permission);
     }
 
     public boolean implies(Permission permission) {
         int i = 0;
-        while (i < this.permisos.size()) {
-            if (this.permisos.get(i).implies(permission)) {
+        while (i < this.perms.size()) {
+            if (this.perms.get(i).implies(permission)) {
                 return true;
             }
             i = i + 1;
@@ -112,29 +113,29 @@ final class PermisosGenericos extends PermissionCollection {
     }
 
     public Enumeration<Permission> elements() {
-        return new ListaPermEnum(this.permisos);
+        return new PermListEnum(this.perms);
     }
 }
 
-// Enumeracion sobre una lista de permisos.
-final class ListaPermEnum implements Enumeration<Permission> {
+// An enumeration over a list of permissions.
+final class PermListEnum implements Enumeration<Permission> {
 
-    private final java.util.List<Permission> lista;
+    private final java.util.List<Permission> list;
     private int cursor;
 
-    ListaPermEnum(java.util.List<Permission> lista) {
-        this.lista = lista;
+    PermListEnum(java.util.List<Permission> list) {
+        this.list = list;
     }
 
     public boolean hasMoreElements() {
-        return this.cursor < this.lista.size();
+        return this.cursor < this.list.size();
     }
 
     public Permission nextElement() {
-        if (this.cursor >= this.lista.size()) {
+        if (this.cursor >= this.list.size()) {
             throw new NoSuchElementException();
         }
-        Permission p = this.lista.get(this.cursor);
+        Permission p = this.list.get(this.cursor);
         this.cursor = this.cursor + 1;
         return p;
     }

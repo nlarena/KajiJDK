@@ -3,37 +3,38 @@ package javax.management;
 import java.security.Permission;
 
 /**
- * Permiso sobre <b>una operacion concreta contra un MBean concreto</b>.
+ * Permission for <b>a specific operation against a specific MBean</b>.
  *
- * <p>El nombre tiene tres partes, {@code clase#miembro[nombreDeObjeto]}, y cualquiera puede faltar
- * o ser `*`, que significa "cualquiera". Las tres se comparan distinto, y esa es toda la clase:
+ * <p>The name has three parts, {@code class#member[objectName]}, and any of them may be missing or
+ * be {@code *}, which means "any". The three are compared differently, and that is the whole
+ * class:
  *
  * <ul>
- *   <li><b>la clase</b> admite comodin de sufijo --{@code com.foo.*} cubre todo el paquete--,
- *       porque los nombres de clase son jerarquicos por prefijo;
- *   <li><b>el miembro</b> no: un atributo `Count` y otro `CountTotal` no tienen relacion, asi que
- *       solo hay igualdad o `*`;
- *   <li><b>el nombre de objeto</b> se compara con {@link ObjectName#apply}, que ya sabe de
- *       comodines de dominio y de propiedades. Reimplementarlo aca seria tener dos definiciones de
- *       lo mismo.
+ *   <li><b>the class</b> admits a suffix wildcard --{@code com.foo.*} covers the whole package--,
+ *       because class names are hierarchical by prefix;
+ *   <li><b>the member</b> does not: an attribute {@code Count} and another {@code CountTotal} are
+ *       unrelated, so there is only equality or {@code *};
+ *   <li><b>the object name</b> is compared with {@link ObjectName#apply}, which already knows about
+ *       domain and property wildcards. Reimplementing it here would mean two definitions of the
+ *       same thing.
  * </ul>
  *
- * <p>Las acciones van en mascara, y una implica a otra: {@code queryMBeans} implica
- * {@code queryNames}, porque quien puede traerse las instancias ya vio los nombres. Igual que en
- * {@link MBeanServerPermission}, esa implicacion se cierra al construir la mascara y no en
- * `implies`.
+ * <p>The actions go in a mask, and one implies another: {@code queryMBeans} implies
+ * {@code queryNames}, because whoever can fetch the instances has already seen the names. As in
+ * {@link MBeanServerPermission}, that implication is closed when the mask is built and not in
+ * {@code implies}.
  *
- * <p>Un detalle que rompe la intuicion y esta en la especificacion: un permiso <b>otorgado</b> con
- * la parte vacia significa "cualquiera", pero el permiso que se <b>chequea</b> con la parte vacia
- * significa "no se de cual", y entonces solo lo cubre un otorgado que tambien acepte cualquiera.
- * Es la asimetria correcta: en la duda, no alcanza.
+ * <p>A detail that breaks intuition and is in the specification: a <b>granted</b> permission with
+ * an empty part means "any", but the permission being <b>checked</b> with an empty part means "I do
+ * not know which", and then only a granted one that also accepts any covers it. It is the right
+ * asymmetry: when in doubt, it is not enough.
  */
 public class MBeanPermission extends Permission {
 
     private static final long serialVersionUID = -2416928705275160661L;
 
-    /** Las acciones que existen, en el orden en que se reconstruye la cadena canonica. */
-    private static final String[] ACCIONES = {
+    /** The actions that exist, in the order the canonical string is rebuilt in. */
+    private static final String[] ACTIONS = {
         "addNotificationListener", "getAttribute", "getClassLoader", "getClassLoaderFor",
         "getClassLoaderRepository", "getDomains", "getMBeanInfo", "getObjectInstance",
         "instantiate", "invoke", "isInstanceOf", "queryMBeans", "queryNames", "registerMBean",
@@ -42,41 +43,43 @@ public class MBeanPermission extends Permission {
 
     private static final int BIT_QUERY_MBEANS = 1 << 11;
     private static final int BIT_QUERY_NAMES = 1 << 12;
-    private static final int TODAS = (1 << ACCIONES.length) - 1;
-
-    /** Todo lo de abajo se deriva del nombre y de las acciones, que es lo unico que se serializa. */
-    private transient String patronClase;
-    private transient boolean claseComodinDeSufijo;
-    private transient String patronMiembro;
-    private transient ObjectName patronNombre;
-    private transient int mascara;
+    private static final int ALL = (1 << ACTIONS.length) - 1;
 
     /**
-     * @param name {@code clase#miembro[nombreDeObjeto]}, o `*`
-     * @param actions lista separada por comas, o `*`
-     * @throws IllegalArgumentException si el nombre o las acciones no parsean
+     * Everything below derives from the name and the actions, which is the only thing serialized.
+     */
+    private transient String classPattern;
+    private transient boolean classSuffixWildcard;
+    private transient String memberPattern;
+    private transient ObjectName namePattern;
+    private transient int mask;
+
+    /**
+     * @param name {@code class#member[objectName]}, or {@code *}
+     * @param actions comma-separated list, or {@code *}
+     * @throws IllegalArgumentException if the name or the actions do not parse
      */
     public MBeanPermission(String name, String actions) {
         super(name);
-        parsearNombre(name);
-        this.mascara = mascaraDe(actions);
+        parseName(name);
+        this.mask = maskOf(actions);
     }
 
     /**
-     * Arma el nombre a partir de las partes, para no obligar a concatenar a mano.
+     * Builds the name from the parts, so as not to force concatenating by hand.
      *
-     * @param className `null` significa "cualquiera"
-     * @param member `null` significa "cualquiera"
-     * @param objectName `null` significa "cualquiera"
+     * @param className {@code null} means "any"
+     * @param member {@code null} means "any"
+     * @param objectName {@code null} means "any"
      */
     public MBeanPermission(String className, String member, ObjectName objectName, String actions) {
-        this(armarNombre(className, member, objectName), actions);
+        this(buildName(className, member, objectName), actions);
     }
 
-    private static String armarNombre(String className, String member, ObjectName objectName) {
-        // El guion, y no el asterisco, es como la especificacion escribe "cualquiera" en una parte
-        // que se armo desde `null`. Importa para el nombre del objeto, donde `*` no es un
-        // `ObjectName` legal y seria un nombre invalido.
+    private static String buildName(String className, String member, ObjectName objectName) {
+        // The dash, and not the asterisk, is how the specification writes "any" in a part built
+        // from `null`. It matters for the object name, where `*` is not a legal `ObjectName` and
+        // would be an invalid name.
         StringBuilder sb = new StringBuilder();
         sb.append(className == null ? "-" : className);
         sb.append('#');
@@ -87,88 +90,88 @@ public class MBeanPermission extends Permission {
         return sb.toString();
     }
 
-    /** Las tres formas de escribir "cualquiera" en una parte del nombre. */
-    private static boolean cualquiera(String parte) {
-        return parte.length() == 0 || parte.equals("*") || parte.equals("-");
+    /** The three ways of writing "any" in a part of the name. */
+    private static boolean anything(String part) {
+        return part.length() == 0 || part.equals("*") || part.equals("-");
     }
 
-    private void parsearNombre(String name) {
+    private void parseName(String name) {
         if (name == null) {
-            throw new NullPointerException("El nombre no puede ser null");
+            throw new NullPointerException("The name cannot be null");
         }
         if (name.length() == 0) {
-            throw new IllegalArgumentException("El nombre no puede estar vacio");
+            throw new IllegalArgumentException("The name cannot be empty");
         }
         if (name.equals("*")) {
-            return; // los tres quedan en null, o sea "cualquiera"
+            return; // all three stay null, that is, "any"
         }
 
-        String resto = name;
-        // El corchete se busca desde el final: un ObjectName puede traer '#' adentro de un valor
-        // citado, pero el '[' que abre la parte del nombre de objeto es el ultimo del texto.
-        int abre = resto.indexOf('[');
-        if (abre >= 0) {
-            if (!resto.endsWith("]")) {
-                throw new IllegalArgumentException("Falta cerrar el corchete: " + name);
+        String rest = name;
+        // The bracket is looked for from the end: an ObjectName may carry '#' inside a quoted
+        // value, but the '[' that opens the object name part is the last one in the text.
+        int opens = rest.indexOf('[');
+        if (opens >= 0) {
+            if (!rest.endsWith("]")) {
+                throw new IllegalArgumentException("Missing closing bracket: " + name);
             }
-            String on = resto.substring(abre + 1, resto.length() - 1);
-            resto = resto.substring(0, abre);
-            // Aca `*` NO significa "cualquiera": la parte se parsea como `ObjectName`, y `*` solo
-            // no es uno. Para "cualquiera" van el vacio o el guion. Es asi en la especificacion y
-            // conviene respetarlo: `[*]` tiene que fallar, porque quien lo escribio cree estar
-            // pidiendo todos los MBeans y en realidad escribio un nombre invalido.
+            String on = rest.substring(opens + 1, rest.length() - 1);
+            rest = rest.substring(0, opens);
+            // Here `*` does NOT mean "any": the part is parsed as an `ObjectName`, and a lone `*`
+            // is not one. For "any" there are the empty part or the dash. It is like that in the
+            // specification and worth respecting: `[*]` has to fail, because whoever wrote it
+            // believes they are asking for all MBeans and actually wrote an invalid name.
             if (on.length() > 0 && !on.equals("-")) {
                 try {
-                    patronNombre = new ObjectName(on);
+                    namePattern = new ObjectName(on);
                 } catch (MalformedObjectNameException e) {
                     throw new IllegalArgumentException("ObjectName invalido: " + on, e);
                 }
             }
         }
 
-        int num = resto.indexOf('#');
-        String clase;
+        int num = rest.indexOf('#');
+        String cls;
         if (num >= 0) {
-            clase = resto.substring(0, num);
-            String miembro = resto.substring(num + 1);
-            if (!cualquiera(miembro)) {
-                patronMiembro = miembro;
+            cls = rest.substring(0, num);
+            String member = rest.substring(num + 1);
+            if (!anything(member)) {
+                memberPattern = member;
             }
         } else {
-            clase = resto;
+            cls = rest;
         }
 
-        if (cualquiera(clase)) {
+        if (anything(cls)) {
             return;
         }
-        if (clase.endsWith(".*")) {
-            claseComodinDeSufijo = true;
-            patronClase = clase.substring(0, clase.length() - 1); // se queda el punto
-        } else if (clase.endsWith("*")) {
-            claseComodinDeSufijo = true;
-            patronClase = clase.substring(0, clase.length() - 1);
+        if (cls.endsWith(".*")) {
+            classSuffixWildcard = true;
+            classPattern = cls.substring(0, cls.length() - 1); // the dot stays
+        } else if (cls.endsWith("*")) {
+            classSuffixWildcard = true;
+            classPattern = cls.substring(0, cls.length() - 1);
         } else {
-            patronClase = clase;
+            classPattern = cls;
         }
     }
 
-    private static int mascaraDe(String actions) {
+    private static int maskOf(String actions) {
         if (actions == null) {
-            throw new IllegalArgumentException("Las acciones no pueden ser null");
+            throw new IllegalArgumentException("The actions cannot be null");
         }
         String a = actions.trim();
         if (a.equals("*")) {
-            return TODAS;
+            return ALL;
         }
         if (a.length() == 0) {
-            throw new IllegalArgumentException("Las acciones no pueden estar vacias");
+            throw new IllegalArgumentException("The actions cannot be empty");
         }
         int m = 0;
-        for (String parte : a.split(",", -1)) {
-            String p = parte.trim();
+        for (String part : a.split(",", -1)) {
+            String p = part.trim();
             int bit = 0;
-            for (int i = 0; i < ACCIONES.length; i++) {
-                if (ACCIONES[i].equals(p)) {
+            for (int i = 0; i < ACTIONS.length; i++) {
+                if (ACTIONS[i].equals(p)) {
                     bit = 1 << i;
                     break;
                 }
@@ -184,15 +187,15 @@ public class MBeanPermission extends Permission {
         return m;
     }
 
-    /** La lista canonica: mismas acciones, siempre el mismo texto y el mismo orden. */
+    /** The canonical list: same actions, always the same text and the same order. */
     public String getActions() {
         StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < ACCIONES.length; i++) {
-            if ((mascara & (1 << i)) != 0) {
+        for (int i = 0; i < ACTIONS.length; i++) {
+            if ((mask & (1 << i)) != 0) {
                 if (sb.length() > 0) {
                     sb.append(',');
                 }
-                sb.append(ACCIONES[i]);
+                sb.append(ACTIONS[i]);
             }
         }
         return sb.toString();
@@ -203,8 +206,8 @@ public class MBeanPermission extends Permission {
     }
 
     /**
-     * Cubre a `p` si sus acciones son un subconjunto de las de este y si las tres partes del nombre
-     * coinciden.
+     * Covers {@code p} if its actions are a subset of this one's and if the three parts of the name
+     * match.
      */
     public boolean implies(Permission p) {
         if (!(p instanceof MBeanPermission)) {
@@ -212,29 +215,30 @@ public class MBeanPermission extends Permission {
         }
         MBeanPermission q = (MBeanPermission) p;
 
-        if ((mascara & q.mascara) != q.mascara) {
+        if ((mask & q.mask) != q.mask) {
             return false;
         }
 
-        if (patronClase != null) {
-            if (q.patronClase == null) {
-                return false; // el pedido no dice de que clase: no alcanza un permiso restringido
+        if (classPattern != null) {
+            if (q.classPattern == null) {
+                // the request does not say which class: a restricted permission is not enough
+                return false;
             }
-            if (claseComodinDeSufijo) {
-                if (!q.patronClase.startsWith(patronClase)) {
+            if (classSuffixWildcard) {
+                if (!q.classPattern.startsWith(classPattern)) {
                     return false;
                 }
-            } else if (!patronClase.equals(q.patronClase) || q.claseComodinDeSufijo) {
+            } else if (!classPattern.equals(q.classPattern) || q.classSuffixWildcard) {
                 return false;
             }
         }
 
-        if (patronMiembro != null && !patronMiembro.equals(q.patronMiembro)) {
+        if (memberPattern != null && !memberPattern.equals(q.memberPattern)) {
             return false;
         }
 
-        if (patronNombre != null) {
-            if (q.patronNombre == null || !patronNombre.apply(q.patronNombre)) {
+        if (namePattern != null) {
+            if (q.namePattern == null || !namePattern.apply(q.namePattern)) {
                 return false;
             }
         }
@@ -249,6 +253,6 @@ public class MBeanPermission extends Permission {
             return false;
         }
         MBeanPermission q = (MBeanPermission) obj;
-        return mascara == q.mascara && getName().equals(q.getName());
+        return mask == q.mask && getName().equals(q.getName());
     }
 }

@@ -12,78 +12,80 @@ import javax.swing.plaf.ComponentUI;
 import javax.swing.plaf.ProgressBarUI;
 
 /**
- * Una barra que muestra cuanto falta.
+ * A bar that shows how much is left.
  *
- * <h2>Determinada e indeterminada</h2>
+ * <h2>Determinate and indeterminate</h2>
  *
- * <p>La barra normal muestra una proporcion: hace falta saber cuanto es el total. Cuando no se
- * sabe -- se esta esperando una respuesta, se esta leyendo algo de largo desconocido --
- * {@link #setIndeterminate} la pasa a un rebote continuo, que dice "sigo trabajando" sin decir
- * cuanto falta. Es una decision honesta: una barra que avanza inventando el total miente.
+ * <p>The ordinary bar shows a proportion: the total has to be known. When it is not -- an answer
+ * is being waited for, something of unknown length is being read --
+ * {@link #setIndeterminate} turns it into a continuous bounce, which says "I am still working"
+ * without saying how much is left. It is an honest decision: a bar that advances by inventing
+ * the total lies.
  *
- * <h2>El texto</h2>
+ * <h2>The text</h2>
  *
- * <p>{@link #getString} devuelve el porcentaje si nadie puso otra cosa, y lo que se haya puesto si
- * se puso. Que el texto se dibuje o no es aparte ({@link #setStringPainted}), asi que se puede
- * dejar preparado y prenderlo despues.
+ * <p>{@link #getString} returns the percentage if nobody set anything else, and whatever was
+ * set if it was set. Whether the text is drawn or not is separate
+ * ({@link #setStringPainted}), so it can be left ready and switched on afterwards.
  *
- * <h2>El modelo es el mismo del deslizante</h2>
+ * <h2>The model is the slider's</h2>
  *
- * <p>Un {@link BoundedRangeModel}, con extension cero. {@link #getPercentComplete} es la unica
- * cuenta propia: la posicion dentro del rango, entre cero y uno. Con el rango vacio da
- * {@code NaN}, que es lo que el JDK devuelve y lo que la division dice.
+ * <p>A {@link BoundedRangeModel}, with an extent of zero. {@link #getPercentComplete} is the
+ * only piece of arithmetic of its own: the position within the range, between zero and one.
+ * With the range empty it gives {@code NaN}, which is what the JDK returns and what the
+ * division says.
  */
 public class JProgressBar extends JComponent implements SwingConstants, Accessible {
 
     private static final String uiClassID = "ProgressBarUI";
 
-    /** Horizontal o vertical. */
+    /** Horizontal or vertical. */
     protected int orientation;
 
-    /** Si se dibuja el borde. */
+    /** Whether the border is drawn. */
     protected boolean paintBorder;
 
-    /** El rango. */
+    /** The range. */
     protected BoundedRangeModel model;
 
-    /** El texto puesto a mano, o nulo para el porcentaje. */
+    /** The text set by hand, or null for the percentage. */
     protected String progressString;
 
-    /** Si el texto se dibuja. */
+    /** Whether the text is drawn. */
     protected boolean paintString;
 
-    /** El evento, armado una vez y reusado. */
+    /** The event, built once and reused. */
     protected transient ChangeEvent changeEvent = null;
 
-    /** El puente entre el modelo y esta barra. */
+    /** The bridge between the model and this bar. */
     protected ChangeListener changeListener;
 
     private transient Format format;
     private boolean indeterminate;
 
-    /** De 0 a 100, horizontal. */
+    /** From 0 to 100, horizontal. */
     public JProgressBar() {
         this(HORIZONTAL, 0, 100);
     }
 
     /**
-     * De 0 a 100, con esa orientacion.
+     * From 0 to 100, with that orientation.
      *
-     * @throws IllegalArgumentException si la orientacion no es horizontal ni vertical.
+     * @throws IllegalArgumentException if the orientation is neither horizontal nor vertical.
      */
     public JProgressBar(int orient) {
         this(orient, 0, 100);
     }
 
-    /** Horizontal, en ese rango. */
+    /** Horizontal, in that range. */
     public JProgressBar(int min, int max) {
         this(HORIZONTAL, min, max);
     }
 
     /**
-     * Con orientacion y rango.
+     * With orientation and range.
      *
-     * @throws IllegalArgumentException si la orientacion no es horizontal ni vertical.
+     * @throws IllegalArgumentException if the orientation is neither horizontal nor vertical.
      */
     public JProgressBar(int orient, int min, int max) {
         model = new DefaultBoundedRangeModel(min, 0, min, max);
@@ -98,9 +100,9 @@ public class JProgressBar extends JComponent implements SwingConstants, Accessib
     }
 
     /**
-     * Con ese modelo, horizontal.
+     * With that model, horizontal.
      *
-     * @throws NullPointerException si el modelo es nulo.
+     * @throws NullPointerException if the model is null.
      */
     public JProgressBar(BoundedRangeModel newModel) {
         model = newModel;
@@ -119,9 +121,9 @@ public class JProgressBar extends JComponent implements SwingConstants, Accessib
     }
 
     /**
-     * Horizontal o vertical.
+     * Horizontal or vertical.
      *
-     * @throws IllegalArgumentException si no es una de las dos.
+     * @throws IllegalArgumentException if it is not one of the two.
      */
     public void setOrientation(int newOrientation) {
         if (orientation != newOrientation) {
@@ -151,10 +153,10 @@ public class JProgressBar extends JComponent implements SwingConstants, Accessib
     }
 
     /**
-     * El texto: el que se haya puesto, y si no el porcentaje.
+     * The text: the one that was set, and otherwise the percentage.
      *
-     * <p>El porcentaje sale del formato de porcentajes del idioma, asi que un rango vacio -- cuya
-     * proporcion es {@code NaN} -- se escribe como lo escriba ese formato, no como un cero.
+     * <p>The percentage comes from the language's percentage format, so an empty range -- whose
+     * proportion is {@code NaN} -- is written as that format writes it, not as a zero.
      */
     public String getString() {
         if (progressString != null) {
@@ -176,11 +178,12 @@ public class JProgressBar extends JComponent implements SwingConstants, Accessib
     }
 
     /**
-     * Que parte del rango se lleva el valor, de cero a uno.
+     * What part of the range the value takes, from zero to one.
      *
-     * <p><strong>Un rango vacio da {@code NaN}</strong>, no cero: la cuenta es una division y el JDK
-     * no la protege. Esta medido. Devolver cero seria mas comodo y diria que la barra esta al
-     * principio, que no es lo mismo que decir que la pregunta no tiene respuesta.
+     * <p><strong>An empty range gives {@code NaN}</strong>, not zero: the arithmetic is a division
+     * and the JDK does not guard it. It is measured. Returning zero would be more comfortable and
+     * would say that the bar is at the beginning, which is not the same as saying that the
+     * question has no answer.
      */
     public double getPercentComplete() {
         long span = model.getMaximum() - model.getMinimum();
@@ -201,7 +204,7 @@ public class JProgressBar extends JComponent implements SwingConstants, Accessib
         }
     }
 
-    /** Dibuja el borde solo si esta prendido. */
+    /** It draws the border only if it is switched on. */
     protected void paintBorder(Graphics g) {
         if (isBorderPainted()) {
             super.paintBorder(g);
@@ -223,7 +226,7 @@ public class JProgressBar extends JComponent implements SwingConstants, Accessib
         return uiClassID;
     }
 
-    /** El puente entre el modelo y esta barra. */
+    /** The bridge between the model and this bar. */
     protected ChangeListener createChangeListener() {
         return new ModelListener(this);
     }
@@ -240,7 +243,7 @@ public class JProgressBar extends JComponent implements SwingConstants, Accessib
         return listenerList.getListeners(ChangeListener.class);
     }
 
-    /** Reparte un aviso de cambio con esta barra como origen. */
+    /** It hands out a change notice with this bar as the source. */
     protected void fireStateChanged() {
         Object[] listeners = listenerList.getListenerList();
         for (int i = listeners.length - 2; i >= 0; i = i - 2) {
@@ -257,7 +260,7 @@ public class JProgressBar extends JComponent implements SwingConstants, Accessib
         return model;
     }
 
-    /** Cambia el rango; el oyente se muda del modelo viejo al nuevo. */
+    /** It changes the range; the listener moves from the old model to the new one. */
     public void setModel(BoundedRangeModel newModel) {
         BoundedRangeModel oldModel = getModel();
         if (newModel != oldModel) {
@@ -310,7 +313,7 @@ public class JProgressBar extends JComponent implements SwingConstants, Accessib
         getModel().setMaximum(n);
     }
 
-    /** Pasa a la barra que rebota; ver la nota de la clase. */
+    /** It turns into the bar that bounces; see the class note. */
     public void setIndeterminate(boolean newValue) {
         boolean oldValue = indeterminate;
         indeterminate = newValue;
@@ -329,17 +332,17 @@ public class JProgressBar extends JComponent implements SwingConstants, Accessib
         return accessibleContext;
     }
 
-    /** Convierte el aviso del modelo en uno de la barra. */
+    /** It turns the model's notice into one of the bar's. */
     private static class ModelListener implements ChangeListener, java.io.Serializable {
 
-        private final JProgressBar barra;
+        private final JProgressBar bar;
 
-        ModelListener(JProgressBar barra) {
-            this.barra = barra;
+        ModelListener(JProgressBar bar) {
+            this.bar = bar;
         }
 
         public void stateChanged(ChangeEvent e) {
-            barra.fireStateChanged();
+            bar.fireStateChanged();
         }
     }
 }

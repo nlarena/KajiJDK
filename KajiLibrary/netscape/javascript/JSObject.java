@@ -1,53 +1,54 @@
 package netscape.javascript;
 
 /**
- * Un objeto de JavaScript, visto desde Java.
+ * A JavaScript object, seen from Java.
  *
- * <p>Toda la clase es <strong>abstracta</strong> y eso es lo que hay que entender de ella: no
- * representa datos sino una <em>referencia a algo que vive del otro lado</em>. Quien la implementa
- * es el puente del navegador, que sabe hablar con su motor de JavaScript; desde Java lo unico que
- * se ve es que un nombre en texto se resuelve alla y vuelve un {@link Object}.
+ * <p>The whole class is <strong>abstract</strong> and that is what one has to understand about it:
+ * it does not represent data but a <em>reference to something that lives on the other side</em>.
+ * Whoever implements it is the bridge of the browser, which knows how to talk to its JavaScript
+ * engine; from Java the only thing one sees is that a name in text is resolved over there and an
+ * {@link Object} comes back.
  *
- * <p>De ahi que todas las firmas devuelvan {@code Object} y todas puedan tirar
- * {@link JSException}: JavaScript no tiene los tipos de Java, asi que lo que vuelve solo se conoce
- * en tiempo de ejecucion, y un nombre que no existe alla es un error que aca no se puede prever.
+ * <p>Hence every signature returns {@code Object} and every one can throw {@link JSException}:
+ * JavaScript does not have the types of Java, so what comes back is only known at run time, and a
+ * name that does not exist over there is an error that cannot be foreseen here.
  *
- * <p>La distincion entre <em>miembro</em> y <em>slot</em> es la misma que hace JavaScript entre una
- * propiedad con nombre y un indice de arreglo.
+ * <p>The distinction between <em>member</em> and <em>slot</em> is the same one JavaScript makes
+ * between a named property and an array index.
  *
- * @deprecated el modelo de applets, que es lo unico que instanciaba esto, esta en desuso desde
- *     Java 9 y marcado para borrarse desde 17.
+ * @deprecated the applet model, which is the only thing that instantiated this, has been deprecated
+ *     since Java 9 and marked for removal since 17.
  */
 @Deprecated(since = "9", forRemoval = true)
 public abstract class JSObject {
 
     /**
-     * Para las subclases del puente.
+     * For the subclasses of the bridge.
      *
-     * <p>Es {@code protected} y no publico porque nadie fabrica un {@code JSObject}: se recibe uno
-     * que el motor ya tenia.
+     * <p>It is {@code protected} and not public because nobody manufactures a {@code JSObject}: one
+     * receives one the engine already had.
      */
     protected JSObject() {
     }
 
-    /** Llama al metodo {@code methodName} de este objeto con esos argumentos. */
+    /** It calls the method {@code methodName} of this object with those arguments. */
     public abstract Object call(String methodName, Object... args) throws JSException;
 
-    /** Evalua {@code s} como codigo JavaScript, en el contexto de este objeto. */
+    /** It evaluates {@code s} as JavaScript code, in the context of this object. */
     public abstract Object eval(String s) throws JSException;
 
-    /** El valor de la propiedad {@code name}. */
+    /** The value of the property {@code name}. */
     public abstract Object getMember(String name) throws JSException;
 
-    /** Le pone {@code value} a la propiedad {@code name}, creandola si no estaba. */
+    /** It sets {@code value} on the property {@code name}, creating it if it was not there. */
     public abstract void setMember(String name, Object value) throws JSException;
 
-    /** Borra la propiedad {@code name}. */
+    /** It deletes the property {@code name}. */
     public abstract void removeMember(String name) throws JSException;
 
-    /** El valor en el indice {@code index}, para los objetos que JavaScript trata como arreglos. */
+    /** The value at the index {@code index}, for the objects JavaScript treats as arrays. */
     public abstract Object getSlot(int index) throws JSException;
 
-    /** Le pone {@code value} al indice {@code index}. */
+    /** It sets {@code value} at the index {@code index}. */
     public abstract void setSlot(int index, Object value) throws JSException;
 }

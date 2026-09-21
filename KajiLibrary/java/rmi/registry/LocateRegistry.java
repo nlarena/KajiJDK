@@ -7,107 +7,108 @@ import java.rmi.server.RMIClientSocketFactory;
 import java.rmi.server.RMIServerSocketFactory;
 
 /**
- * Consigue el talon de un registro remoto, o crea uno local.
+ * It gets the stub of a remote registry, or creates a local one.
  *
- * <p>Las dos mitades de la clase no se parecen en nada aunque compartan nombre:
+ * <p>The two halves of the class have nothing in common even though they share a name:
  *
  * <ul>
- *   <li>{@code getRegistry(...)} **no habla con nadie**. Fabrica un talon a partir de la maquina y
- *       el puerto, y punto: el registro puede no existir, y no se va a enterar hasta la primera
- *       llamada de verdad. Por eso ninguna de sus formas falla por "no esta ahi".
- *   <li>{@code createRegistry(...)} si tiene efecto: exporta un registro **en esta VM** y lo deja
- *       escuchando. El objeto queda referenciado mientras la VM viva.
+ *   <li>{@code getRegistry(...)} **talks to nobody**. It builds a stub out of the host and the
+ *       port, and that is it: the registry may not exist, and nobody finds out until the first
+ *       real call. That is why none of its forms fails with "it is not there".
+ *   <li>{@code createRegistry(...)} does have an effect: it exports a registry **in this VM** and
+ *       leaves it listening. The object stays referenced for as long as the VM lives.
  * </ul>
  *
  * <h2>A KajiLibrary subset</h2>
  *
- * <p>Esta biblioteca no tiene transporte RMI --ni JRMP, ni talones, ni serializacion con anotacion
- * de ubicacion-- asi que no hay forma honesta de devolver un {@link Registry}: cualquier objeto que
- * devolvieramos seria un talon que no habla con nada, y el programa lo descubriria recien en el
- * primer `lookup`, lejos de aca.
+ * <p>This library has no RMI transport --no JRMP, no stubs, no serialisation with location
+ * annotation-- so there is no honest way to return a {@link Registry}: any object we returned would
+ * be a stub that talks to nothing, and the program would only discover it at the first `lookup`,
+ * far from here.
  *
- * <p>Los siete metodos lanzan entonces la excepcion que ya declaran, con el motivo adentro:
- * {@link ConnectException} los `getRegistry` --que en el JDK es lo que sale cuando no se llega al
- * otro lado-- y {@link ExportException} los `createRegistry`, que es lo que sale cuando la
- * exportacion no se puede hacer. Las dos son {@link RemoteException}, que es lo declarado.
+ * <p>The seven methods therefore throw the exception they already declare, with the reason inside:
+ * {@link ConnectException} for the `getRegistry` ones --which in the JDK is what comes out when the
+ * other side cannot be reached-- and {@link ExportException} for the `createRegistry` ones, which
+ * is what comes out when the export cannot be done. Both are {@link RemoteException}, which is
+ * what is declared.
  *
  * @see java.rmi.Naming
  */
 public final class LocateRegistry {
 
-    /** No se instancia. */
+    /** It is not instantiated. */
     private LocateRegistry() {
     }
 
     /**
-     * El talon del registro de la maquina local, en el puerto de siempre.
+     * The stub of the local host's registry, on the usual port.
      *
-     * @throws RemoteException siempre en esta biblioteca; ver la nota de la clase
+     * @throws RemoteException always in this library; see the class note
      */
     public static Registry getRegistry() throws RemoteException {
         return getRegistry(null, Registry.REGISTRY_PORT, null);
     }
 
     /**
-     * El talon del registro de la maquina local, en ese puerto.
+     * The stub of the local host's registry, on that port.
      *
-     * @throws RemoteException siempre en esta biblioteca; ver la nota de la clase
+     * @throws RemoteException always in this library; see the class note
      */
     public static Registry getRegistry(int port) throws RemoteException {
         return getRegistry(null, port, null);
     }
 
     /**
-     * El talon del registro de esa maquina, en el puerto de siempre.
+     * The stub of that host's registry, on the usual port.
      *
-     * @throws RemoteException siempre en esta biblioteca; ver la nota de la clase
+     * @throws RemoteException always in this library; see the class note
      */
     public static Registry getRegistry(String host) throws RemoteException {
         return getRegistry(host, Registry.REGISTRY_PORT, null);
     }
 
     /**
-     * El talon del registro de esa maquina y ese puerto.
+     * The stub of the registry at that host and port.
      *
-     * @throws RemoteException siempre en esta biblioteca; ver la nota de la clase
+     * @throws RemoteException always in this library; see the class note
      */
     public static Registry getRegistry(String host, int port) throws RemoteException {
         return getRegistry(host, port, null);
     }
 
     /**
-     * El talon del registro de esa maquina y ese puerto, hablando por los sockets que da la
-     * fabrica.
+     * The stub of the registry at that host and port, talking through the sockets the factory
+     * gives.
      *
-     * @param host la maquina, o `null` para la local
-     * @param port el puerto, o 0 para {@link Registry#REGISTRY_PORT}
-     * @param csf la fabrica de sockets del cliente, o `null` para la de siempre
-     * @throws RemoteException siempre en esta biblioteca; ver la nota de la clase
+     * @param host the host, or `null` for the local one
+     * @param port the port, or 0 for {@link Registry#REGISTRY_PORT}
+     * @param csf the client socket factory, or `null` for the usual one
+     * @throws RemoteException always in this library; see the class note
      */
     public static Registry getRegistry(String host, int port, RMIClientSocketFactory csf)
             throws RemoteException {
-        String donde = (host == null ? "localhost" : host)
+        String where = (host == null ? "localhost" : host)
                 + ":" + (port <= 0 ? Registry.REGISTRY_PORT : port);
-        throw new ConnectException("Connection refused to host: " + donde
+        throw new ConnectException("Connection refused to host: " + where
                 + "; no RMI transport in this library");
     }
 
     /**
-     * Exporta un registro en esta VM, escuchando en ese puerto.
+     * It exports a registry in this VM, listening on that port.
      *
-     * @throws RemoteException siempre en esta biblioteca; ver la nota de la clase
+     * @throws RemoteException always in this library; see the class note
      */
     public static Registry createRegistry(int port) throws RemoteException {
         return createRegistry(port, null, null);
     }
 
     /**
-     * Exporta un registro en esta VM que habla por los sockets que dan esas fabricas.
+     * It exports a registry in this VM that talks through the sockets those factories give.
      *
-     * @param port el puerto en el que escucha
-     * @param csf la fabrica de sockets del cliente, o `null` para la de siempre
-     * @param ssf la fabrica de sockets del servidor, o `null` para la de siempre
-     * @throws RemoteException siempre en esta biblioteca; ver la nota de la clase
+     * @param port the port it listens on
+     * @param csf the client socket factory, or `null` for the usual one
+     * @param ssf the server socket factory, or `null` for the usual one
+     * @throws RemoteException always in this library; see the class note
      */
     public static Registry createRegistry(int port, RMIClientSocketFactory csf,
             RMIServerSocketFactory ssf) throws RemoteException {

@@ -7,50 +7,49 @@ import java.util.Properties;
 import java.util.Vector;
 
 /**
- * La maquinaria de nombres que comparten `CompositeName` y `CompoundName`. No es publica.
+ * The naming machinery shared by `CompositeName` and `CompoundName`. It is not public.
  *
- * <h2>Por que existe una sola clase para las dos</h2>
+ * <h2>Why there is a single class for both</h2>
  *
- * <p>`CompositeName` y `CompoundName` hacen lo mismo con distintos parametros: una lista de
- * componentes, un parseo y un armado de cadena gobernados por una sintaxis. `CompositeName` fija
- * esa sintaxis --barra, comilla doble, comilla simple, contrabarra, de izquierda a derecha-- y
- * `CompoundName` la recibe en un `Properties`. Poner la logica dos veces habria garantizado que
- * las dos se separaran; poniendola aca, `CompositeName` es literalmente `CompoundName` con la
- * sintaxis por default de esta clase, que es exactamente lo que los valores iniciales de los
- * campos de abajo describen.
+ * <p>`CompositeName` and `CompoundName` do the same thing with different parameters: a list of
+ * components, a parse and a string build governed by a syntax. `CompositeName` fixes that syntax
+ * --slash, double quote, single quote, backslash, left to right-- and `CompoundName` receives it in
+ * a `Properties`. Writing the logic twice would have guaranteed the two drifting apart; with it
+ * here, `CompositeName` is literally `CompoundName` with this class's default syntax, which is
+ * exactly what the initial values of the fields below describe.
  *
- * <h2>Las tres direcciones</h2>
+ * <h2>The three directions</h2>
  *
- * <p>`jndi.syntax.direction` vale `left_to_right`, `right_to_left` o `flat`, y no es cosmetico:
+ * <p>`jndi.syntax.direction` is `left_to_right`, `right_to_left` or `flat`, and it is not cosmetic:
  *
  * <ul>
- *   <li>De izquierda a derecha el componente 0 es el que esta mas a la izquierda de la cadena.
- *   <li>De derecha a izquierda --LDAP-- el 0 es el de **mas a la derecha**: en `cn=juan,o=acme`,
- *       `get(0)` es `o=acme`. Por eso el parseo inserta al frente y `toString` recorre al reves.
- *   <li>Plano no tiene separador: la cadena entera es un solo componente, y agregar un segundo
- *       falla con `InvalidNameException`.
+ *   <li>Left to right, component 0 is the leftmost one in the string.
+ *   <li>Right to left --LDAP--, 0 is the **rightmost** one: in `cn=john,o=acme`, `get(0)` is
+ *       `o=acme`. That is why parsing inserts at the front and `toString` walks backwards.
+ *   <li>Flat has no separator: the whole string is a single component, and adding a second one
+ *       fails with `InvalidNameException`.
  * </ul>
  *
- * <h2>La invariante que manda: `toString` tiene que volver a parsearse</h2>
+ * <h2>The invariant in charge: `toString` must parse back</h2>
  *
- * <p>Todo lo raro del citado y el escape sale de sostener eso. Si un componente contiene el
- * separador, `stringifyComp` lo **cita** cuando la sintaxis tiene comillas y lo **escapa** cuando
- * no; si contiene una comilla al principio la escapa, porque una comilla al principio de
- * componente es lo que **abre** una cita al parsear; y si contiene una contrabarra delante de un
- * metacaracter la duplica, porque si no el parseo se la comeria. En el otro sentido,
- * `extractComp` deshace exactamente eso.
+ * <p>Everything odd about quoting and escaping comes from upholding that. If a component contains
+ * the separator, `stringifyComp` **quotes** it when the syntax has quotes and **escapes** it when
+ * not; if it contains a quote at the start it escapes it, because a quote at the start of a
+ * component is what **opens** a quote when parsing; and if it contains a backslash before a
+ * metacharacter it doubles it, because otherwise parsing would swallow it. In the other direction,
+ * `extractComp` undoes exactly that.
  *
- * <p>La regla mas facil de perder es la de la cita: una cita solo cuenta si abre **al principio**
- * del componente, y su cierre tiene que caer en un separador o en el fin de la cadena. Una comilla
- * en el medio es un caracter comun; una cita que cierra antes de que termine el componente es un
- * error de sintaxis y no un componente raro.
+ * <p>The rule easiest to lose is the quoting one: a quote only counts if it opens **at the start**
+ * of the component, and its close has to fall on a separator or at the end of the string. A quote
+ * in the middle is an ordinary character; a quote that closes before the component ends is a
+ * syntax error and not an odd component.
  *
- * <h2>Componentes vacios</h2>
+ * <h2>Empty components</h2>
  *
- * <p>Un separador al final agrega un componente vacio --`"a/"` son dos componentes-- pero solo si
- * lo que hay antes no es todo vacio; por eso `"/"` es **un** componente vacio y no dos. Y al
- * revez, un nombre cuyos componentes son todos vacios se imprime con un separador de mas, para
- * que `""` (cero componentes) y `{""}` (uno vacio) no se confundan al ida y vuelta.
+ * <p>A trailing separator adds an empty component --`"a/"` is two components-- but only if what
+ * comes before is not all empty; that is why `"/"` is **one** empty component and not two. And
+ * conversely, a name whose components are all empty is printed with an extra separator, so that
+ * `""` (zero components) and `{""}` (one empty) are not confused on the round trip.
  */
 class NameImpl {
 
@@ -60,8 +59,8 @@ class NameImpl {
 
     private Vector<String> components;
 
-    // Los valores iniciales **son** la sintaxis de `CompositeName`: cuando el `Properties` es null
-    // no se toca ninguno y queda esto. Cambiar un default de aca cambia `CompositeName`.
+    // The initial values **are** `CompositeName`'s syntax: when the `Properties` is null none is
+    // touched and this is what remains. Changing a default here changes `CompositeName`.
     private byte syntaxDirection = LEFT_TO_RIGHT;
     private String syntaxSeparator = "/";
     private String syntaxSeparator2 = null;
@@ -99,9 +98,9 @@ class NameImpl {
 
             if (i < len) {
                 i = skipSeparator(n, i);
-                // Separador final: hay un componente vacio despues. Pero solo si algo de lo que
-                // vino antes no era vacio -- si no, `"/"` daria dos vacios en vez de uno, y
-                // `toString` ya no podria distinguir `{""}` de `{"", ""}`.
+                // Trailing separator: there is an empty component after it. But only if something
+                // that came before was not empty -- otherwise `"/"` would give two empties instead
+                // of one, and `toString` could no longer tell `{""}` from `{"", ""}`.
                 if ((i == len) && !compsAllEmpty) {
                     if (rToL) {
                         components.insertElementAt("", 0);
@@ -115,14 +114,15 @@ class NameImpl {
 
     NameImpl(Properties syntax, Enumeration<String> comps) {
         this(syntax);
-        // Los componentes vienen ya partidos: no se parsean ni se validan. Es la puerta por la que
-        // `getPrefix`/`getSuffix`/`clone` arman nombres sin volver a pasar por la sintaxis.
+        // The components come already split: they are neither parsed nor validated. It is the door
+        // through which `getPrefix`/`getSuffix`/`clone` build names without going through the
+        // syntax.
         while (comps.hasMoreElements()) {
             components.addElement(comps.nextElement());
         }
     }
 
-    // ---- lectura de la sintaxis ---------------------------------------------------------------------
+    // ---- reading the syntax ---------------------------------------------------------------------
 
     private void recordNamingConvention(Properties p) {
         String dir = p.getProperty("jndi.syntax.direction", "flat");
@@ -133,8 +133,8 @@ class NameImpl {
         } else if (dir.equals("flat")) {
             syntaxDirection = FLAT;
         } else {
-            // No chequeada a proposito: una sintaxis con una direccion inventada es un error del
-            // programador, no un nombre mal escrito.
+            // Deliberately unchecked: a syntax with a made-up direction is a programmer error, not
+            // a misspelled name.
             throw new IllegalArgumentException(dir +
                 " is not a valid value for the jndi.syntax.direction property");
         }
@@ -147,8 +147,8 @@ class NameImpl {
                     "jndi.syntax.separator property required for non-flat syntax");
             }
         } else {
-            // Plano no separa nada, y que quede en null es lo que hace que `toString` no meta
-            // separadores y que `isSeparator` diga siempre que no.
+            // Flat separates nothing, and leaving it null is what makes `toString` add no
+            // separators and `isSeparator` always say no.
             syntaxSeparator = null;
         }
         syntaxEscape = p.getProperty("jndi.syntax.escape");
@@ -156,8 +156,8 @@ class NameImpl {
         syntaxCaseInsensitive = getBoolean(p, "jndi.syntax.ignorecase");
         syntaxTrimBlanks = getBoolean(p, "jndi.syntax.trimblanks");
 
-        // Dar solo una de las dos puntas de una cita significa que abre y cierra igual, que es el
-        // caso normal (`"`); poner las dos permite citas asimetricas del estilo `<`...`>`.
+        // Giving only one of the two ends of a quote means it opens and closes the same, which is
+        // the normal case (`"`); giving both allows asymmetric quotes like `<`...`>`.
         syntaxBeginQuote1 = p.getProperty("jndi.syntax.beginquote");
         syntaxEndQuote1 = p.getProperty("jndi.syntax.endquote");
         if (syntaxEndQuote1 == null && syntaxBeginQuote1 != null) {
@@ -173,8 +173,8 @@ class NameImpl {
             syntaxBeginQuote2 = syntaxEndQuote2;
         }
 
-        // Las dos de LDAP: `,` entre atributos de un mismo componente y `=` entre tipo y valor.
-        // La segunda es la unica que el parseo mira, y solo para dejar pasar `cn="con,coma"`.
+        // LDAP's two: `,` between attributes of the same component and `=` between type and value.
+        // The second is the only one parsing looks at, and only to let `cn="with,comma"` through.
         syntaxAvaSeparator = p.getProperty("jndi.syntax.separator.ava");
         syntaxTypevalSeparator = p.getProperty("jndi.syntax.separator.typeval");
     }
@@ -184,9 +184,12 @@ class NameImpl {
         return (v != null) && v.toLowerCase(Locale.ENGLISH).equals("true");
     }
 
-    // ---- reconocimiento de metacaracteres -----------------------------------------------------------
+    // ---- recognizing metacharacters -------------------------------------------------------------
 
-    /** `true` si `match` no es null y aparece en `n` justo en `i`. El null-check es la mitad del punto. */
+    /**
+     * `true` if `match` is not null and appears in `n` right at `i`. The null check is half the
+     * point.
+     */
     private boolean isA(String n, int i, String match) {
         return (match != null && n.startsWith(match, i));
     }
@@ -211,11 +214,11 @@ class NameImpl {
         return i;
     }
 
-    // ---- parseo -------------------------------------------------------------------------------------
+    // ---- parsing --------------------------------------------------------------------------------
 
     /**
-     * Saca un componente de `name` empezando en `i`, lo mete en `comps` y devuelve donde quedo
-     * --parado en el separador, o en `len`--.
+     * Extracts a component from `name` starting at `i`, puts it in `comps` and returns where it
+     * stopped --on the separator, or at `len`.
      */
     private int extractComp(String name, int i, int len, Vector<String> comps)
             throws InvalidNameException {
@@ -229,16 +232,16 @@ class NameImpl {
 
             if (start && ((one = isA(name, i, syntaxBeginQuote1))
                           || isA(name, i, syntaxBeginQuote2))) {
-                // Cita: solo cuenta si abre al **principio** del componente. `start` es lo que
-                // hace que la comilla del medio de `a"b` sea un caracter y no una cita.
+                // Quote: it only counts if it opens at the **start** of the component. `start` is
+                // what makes the quote in the middle of `a"b` a character and not a quote.
                 beginQuote = one ? syntaxBeginQuote1 : syntaxBeginQuote2;
                 endQuote = one ? syntaxEndQuote1 : syntaxEndQuote2;
 
                 for (i += beginQuote.length();
                      (i < len) && !name.startsWith(endQuote, i);
                      i++) {
-                    // Adentro de la cita el escape solo significa algo si esta tapando la comilla
-                    // de cierre; delante de cualquier otra cosa se copia tal cual.
+                    // Inside the quote the escape only means something if it covers the closing
+                    // quote; before anything else it is copied as is.
                     if (isA(name, i, syntaxEscape) && isA(name, i + syntaxEscape.length(), endQuote)) {
                         i += syntaxEscape.length();
                     }
@@ -251,8 +254,8 @@ class NameImpl {
 
                 i += endQuote.length();
 
-                // Cerrar la cita en el medio del componente es error: si no, `"a"b` seria
-                // ambiguo -- el resultado no se podria volver a imprimir.
+                // Closing the quote in the middle of the component is an error: otherwise `"a"b`
+                // would be ambiguous -- the result could not be printed back.
                 if (i == len || isSeparator(name, i)) {
                     break;
                 }
@@ -263,21 +266,23 @@ class NameImpl {
 
             } else if (isA(name, i, syntaxEscape)) {
                 if (isMeta(name, i + syntaxEscape.length())) {
-                    // El escape se consume y el metacaracter que sigue entra como texto comun.
+                    // The escape is consumed and the metacharacter that follows goes in as plain
+                    // text.
                     i += syntaxEscape.length();
                 } else if (i + syntaxEscape.length() >= len) {
-                    // Un escape colgando al final no puede escapar nada.
+                    // A dangling escape at the end cannot escape anything.
                     throw new InvalidNameException(
                         name + ": unescaped " + syntaxEscape + " at end of component");
                 }
-                // Delante de algo que no es meta, el escape es un caracter mas: cae al append.
+                // Before something that is not a meta, the escape is one more character: falls to
+                // append.
 
             } else if (isA(name, i, syntaxTypevalSeparator)
                        && ((one = isA(name, i + syntaxTypevalSeparator.length(), syntaxBeginQuote1))
                            || isA(name, i + syntaxTypevalSeparator.length(), syntaxBeginQuote2))) {
-                // El caso LDAP `cn="Perez, Juan"`: la cita arranca **despues** del `=`, no al
-                // principio del componente. Se consume igual que una cita normal, pero las
-                // comillas se **conservan** en el resultado: son parte del valor del atributo.
+                // The LDAP case `cn="Smith, John"`: the quote starts **after** the `=`, not at the
+                // start of the component. It is consumed like a normal quote, but the quotes are
+                // **kept** in the result: they are part of the attribute value.
                 beginQuote = one ? syntaxBeginQuote1 : syntaxBeginQuote2;
                 endQuote = one ? syntaxEndQuote1 : syntaxEndQuote2;
 
@@ -311,7 +316,7 @@ class NameImpl {
             start = false;
         }
 
-        // De derecha a izquierda el primero que se lee es el ultimo componente.
+        // Right to left, the first one read is the last component.
         if (syntaxDirection == RIGHT_TO_LEFT) {
             comps.insertElementAt(answer.toString(), 0);
         } else {
@@ -320,9 +325,9 @@ class NameImpl {
         return i;
     }
 
-    // ---- armado de la cadena ------------------------------------------------------------------------
+    // ---- building the string --------------------------------------------------------------------
 
-    /** Un componente, escapado o citado de manera que `extractComp` lo devuelva igual. */
+    /** A component, escaped or quoted so that `extractComp` returns it unchanged. */
     private String stringifyComp(String comp) {
         int len = comp.length();
         boolean escapeSeparator = false;
@@ -331,8 +336,8 @@ class NameImpl {
         String endQuote = null;
         StringBuilder strbuf = new StringBuilder(len);
 
-        // Un separador adentro del componente es lo unico que obliga a hacer algo. Se prefiere
-        // citar --es mas legible-- y solo se escapa cuando la sintaxis no tiene comillas.
+        // A separator inside the component is the only thing that forces doing something. Quoting
+        // is preferred --it is more readable-- and it only escapes when the syntax has no quotes.
         if (syntaxSeparator != null && comp.contains(syntaxSeparator)) {
             if (syntaxBeginQuote1 != null) {
                 beginQuote = syntaxBeginQuote1;
@@ -361,7 +366,7 @@ class NameImpl {
         }
 
         if (beginQuote != null) {
-            // Citado: adentro de una cita lo unico que hay que tapar es la comilla de cierre.
+            // Quoted: inside a quote the only thing to cover is the closing quote.
             strbuf.append(beginQuote);
             for (int i = 0; i < len; ) {
                 if (comp.startsWith(endQuote, i)) {
@@ -374,9 +379,9 @@ class NameImpl {
             strbuf.append(endQuote);
 
         } else {
-            // Sin citar hay cuatro cosas que tapar, y cada una porque el parseo la leeria como
-            // otra cosa: la comilla que abre (solo si esta al principio), el escape que quedaria
-            // pegado a un meta, el escape al final, y el separador cuando no hay comillas.
+            // Unquoted there are four things to cover, each one because parsing would read it as
+            // something else: the opening quote (only at the start), an escape that would end up
+            // next to a meta, the escape at the end, and the separator when there are no quotes.
             boolean start = true;
             for (int i = 0; i < len; ) {
                 if (start && isA(comp, i, syntaxBeginQuote1)) {
@@ -429,21 +434,21 @@ class NameImpl {
             }
             answer.append(comp);
         }
-        // Todo vacio: sin este separador de mas, un nombre de un componente vacio se imprimiria
-        // igual que el nombre sin componentes, y el ida y vuelta se rompe.
+        // All empty: without this extra separator, a name with one empty component would print the
+        // same as the name with no components, and the round trip breaks.
         if (compsAllEmpty && (size >= 1) && (syntaxSeparator != null)) {
             answer.append(syntaxSeparator);
         }
         return answer.toString();
     }
 
-    // ---- comparacion --------------------------------------------------------------------------------
+    // ---- comparison -----------------------------------------------------------------------------
     //
-    // Las cuatro que comparan --`equals`, `compareTo`, `startsWith`, `endsWith`-- normalizan igual
-    // y con la sintaxis **de este** nombre, no la del otro. Es asimetrico y es del contrato: el
-    // que pregunta pone las reglas.
+    // The four that compare --`equals`, `compareTo`, `startsWith`, `endsWith`-- normalize the same
+    // way and with **this** name's syntax, not the other's. It is asymmetric and it is part of the
+    // contract: whoever asks sets the rules.
 
-    private boolean igual(String a, String b) {
+    private boolean compEquals(String a, String b) {
         if (syntaxTrimBlanks) {
             a = a.trim();
             b = b.trim();
@@ -459,7 +464,7 @@ class NameImpl {
                 Enumeration<String> mycomps = getAll();
                 Enumeration<String> comps = target.getAll();
                 while (mycomps.hasMoreElements()) {
-                    if (!igual(mycomps.nextElement(), comps.nextElement())) {
+                    if (!compEquals(mycomps.nextElement(), comps.nextElement())) {
                         return false;
                     }
                 }
@@ -499,7 +504,7 @@ class NameImpl {
             }
         }
 
-        // Prefijo comun: gana el mas corto. Devuelve la diferencia de largos, no -1/1.
+        // Common prefix: the shorter one wins. Returns the difference in lengths, not -1/1.
         return len1 - len2;
     }
 
@@ -514,14 +519,14 @@ class NameImpl {
             if (syntaxCaseInsensitive) {
                 comp = comp.toLowerCase(Locale.ENGLISH);
             }
-            // Suma y no el 31*h+x de siempre: tiene que dar igual que `equals`, y `equals` no
-            // mira el orden mas alla de componente a componente. Es el hash del JDK real.
+            // A sum and not the usual 31*h+x: it must agree with `equals`, and `equals` looks at
+            // order no further than component by component. It is the real JDK's hash.
             hash += comp.hashCode();
         }
         return hash;
     }
 
-    // ---- acceso -------------------------------------------------------------------------------------
+    // ---- access ---------------------------------------------------------------------------------
 
     public int size() {
         return components.size();
@@ -555,11 +560,11 @@ class NameImpl {
     }
 
     /**
-     * `posn` es cuantos componentes tiene el prefijo que se prueba.
+     * `posn` is how many components the prefix being tested has.
      *
-     * <p>El `catch` no es paranoia: la enumeracion viene del **otro** nombre y puede quedarse sin
-     * elementos antes que la nuestra si alguien lo modifico en el medio. Ahi la respuesta correcta
-     * es "no empieza asi", no una excepcion.
+     * <p>The `catch` is not paranoia: the enumeration comes from the **other** name and may run out
+     * of elements before ours if someone modified it midway. There the right answer is "it does
+     * not start like that", not an exception.
      */
     public boolean startsWith(int posn, Enumeration<String> prefix) {
         if (posn < 0 || posn > size()) {
@@ -568,7 +573,7 @@ class NameImpl {
         try {
             Enumeration<String> mycomps = getPrefix(posn);
             while (mycomps.hasMoreElements()) {
-                if (!igual(mycomps.nextElement(), prefix.nextElement())) {
+                if (!compEquals(mycomps.nextElement(), prefix.nextElement())) {
                     return false;
                 }
             }
@@ -586,7 +591,7 @@ class NameImpl {
         try {
             Enumeration<String> mycomps = getSuffix(startIndex);
             while (mycomps.hasMoreElements()) {
-                if (!igual(mycomps.nextElement(), suffix.nextElement())) {
+                if (!compEquals(mycomps.nextElement(), suffix.nextElement())) {
                     return false;
                 }
             }
@@ -596,11 +601,11 @@ class NameImpl {
         return true;
     }
 
-    // ---- modificacion -------------------------------------------------------------------------------
+    // ---- modification ---------------------------------------------------------------------------
     //
-    // El chequeo de plano se hace **por componente** y mirando el tamano actual, asi que un nombre
-    // plano vacio acepta uno y recien el segundo falla; y un `addAll` de varios sobre uno vacio
-    // agrega el primero y falla en el segundo, dejando el nombre modificado a medias. Es del JDK.
+    // The flat check is done **per component** and against the current size, so an empty flat
+    // name accepts one and only the second fails; and an `addAll` of several onto an empty one adds
+    // the first and fails on the second, leaving the name half modified. It is the JDK's way.
 
     public boolean addAll(Enumeration<String> comps) throws InvalidNameException {
         boolean added = false;
@@ -657,7 +662,7 @@ class NameImpl {
     }
 }
 
-/** Una vista de un tramo `[start, lim)` del vector, sin copiarlo. */
+/** A view of a stretch `[start, lim)` of the vector, without copying it. */
 final class NameImplEnumerator implements Enumeration<String> {
 
     Vector<String> vector;

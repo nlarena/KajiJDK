@@ -3,7 +3,7 @@ package com.sun.source.doctree;
 import java.util.List;
 
 /**
- * El nodo de `@deprecated`, con el texto que explica por que.
+ * The node of `@deprecated`, with the text that explains why.
  */
 public interface DeprecatedTree extends BlockTagTree {
 

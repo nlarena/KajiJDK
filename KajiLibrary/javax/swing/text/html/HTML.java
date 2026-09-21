@@ -6,44 +6,44 @@ import java.util.Hashtable;
 import javax.swing.text.AttributeSet;
 
 /**
- * Las etiquetas y los atributos de HTML, como constantes.
+ * HTML's tags and attributes, as constants.
  *
- * <h2>Por que constantes y no cadenas</h2>
+ * <h2>Why constants and not strings</h2>
  *
- * <p>Un documento HTML se guarda como atributos de un {@link javax.swing.text.Document}, y las
- * claves de esos atributos son estos objetos. Que sean objetos unicos y no cadenas tiene dos
- * consecuencias que se usan en todas partes: se comparan con <code>==</code>, que es barato y no
- * confunde mayusculas, y llevan colgada informacion que una cadena no podria llevar.
+ * <p>An HTML document is kept as attributes of a {@link javax.swing.text.Document}, and those
+ * attributes' keys are these objects. That they are unique objects and not strings has two
+ * consequences used everywhere: they are compared with <code>==</code>, which is cheap and does
+ * not confuse case, and they carry information hanging from them that a string could not carry.
  *
- * <p>Esa informacion es lo que hace {@link Tag#isBlock} y {@link Tag#breaksFlow}: saber si una
- * etiqueta arma un bloque o corta la linea no se deduce de su nombre, hay que saberlo. Aca esta
- * anotado etiqueta por etiqueta, con los mismos valores que el JDK.
+ * <p>That information is what {@link Tag#isBlock} and {@link Tag#breaksFlow} do: knowing whether
+ * a tag makes a block or breaks the line is not deduced from its name, it has to be known. Here it
+ * is noted tag by tag, with the same values as the JDK.
  *
- * <h2>Las etiquetas que no existen en HTML</h2>
+ * <h2>The tags that do not exist in HTML</h2>
  *
- * <p>Tres de las constantes no son etiquetas de verdad: {@link Tag#IMPLIED} es el parrafo que el
- * analizador inventa cuando hay texto suelto, {@link Tag#CONTENT} marca el texto mismo y
- * {@link Tag#COMMENT} un comentario. No aparecen en {@link #getAllTags} justamente porque no se
- * pueden escribir en un documento; existen porque el arbol de elementos las necesita.
+ * <p>Three of the constants are not real tags: {@link Tag#IMPLIED} is the paragraph the parser
+ * invents when there is loose text, {@link Tag#CONTENT} marks the text itself and
+ * {@link Tag#COMMENT} a comment. They do not appear in {@link #getAllTags} precisely because they
+ * cannot be written in a document; they exist because the element tree needs them.
  */
 public class HTML {
 
-    /** El valor que se le pone a un atributo escrito sin valor, como <code>checked</code>. */
+    /** The value given to an attribute written with no value, such as <code>checked</code>. */
     public static final String NULL_ATTRIBUTE_VALUE = "#DEFAULT";
 
     private static final Hashtable<String, Tag> tagHashtable = new Hashtable<String, Tag>();
     private static final Hashtable<String, Attribute> attHashtable =
             new Hashtable<String, Attribute>();
 
-    /** Nada que construir: la clase es solo un lugar donde viven las constantes. */
+    /** Nothing to build: the class is only a place where the constants live. */
     public HTML() {
     }
 
     /**
-     * Todas las etiquetas que se pueden escribir en un documento.
+     * Every tag that can be written in a document.
      *
-     * <p>Devuelve una copia: si devolviera el arreglo interno, quien lo recibiera podria cambiar
-     * las etiquetas de todos los documentos del programa.
+     * <p>It returns a copy: if it returned the internal array, whoever received it could change the
+     * tags of every document in the program.
      */
     public static Tag[] getAllTags() {
         Tag[] tags = new Tag[Tag.allTags.length];
@@ -51,17 +51,17 @@ public class HTML {
         return tags;
     }
 
-    /** La etiqueta con ese nombre, o nulo si no se conoce. */
+    /** The tag with that name, or null if it is not known. */
     public static Tag getTag(String tagName) {
         Object t = tagHashtable.get(tagName);
         return (t == null ? null : (Tag) t);
     }
 
     /**
-     * El valor entero de un atributo, o el de reserva si no esta o no es un numero.
+     * An attribute's integer value, or the fallback if it is not there or is not a number.
      *
-     * <p>Devolver el de reserva y no fallar es a proposito: un HTML mal escrito es lo normal, y un
-     * <code>width="tres"</code> no deberia impedir mostrar la pagina.
+     * <p>Returning the fallback and not failing is on purpose: badly written HTML is normal, and a
+     * <code>width="three"</code> should not keep the page from being shown.
      */
     public static int getIntegerAttributeValue(AttributeSet attr, Attribute key, int def) {
         int value = def;
@@ -76,7 +76,7 @@ public class HTML {
         return value;
     }
 
-    /** Todos los nombres de atributo conocidos; tambien es una copia. */
+    /** Every known attribute name; it is a copy too. */
     public static Attribute[] getAllAttributeKeys() {
         Attribute[] attributes = new Attribute[Attribute.allAttributes.length];
         System.arraycopy(Attribute.allAttributes, 0, attributes, 0,
@@ -84,7 +84,7 @@ public class HTML {
         return attributes;
     }
 
-    /** El atributo con ese nombre, o nulo si no se conoce. */
+    /** The attribute with that name, or null if it is not known. */
     public static Attribute getAttributeKey(String attName) {
         Object a = attHashtable.get(attName);
         if (a == null) {
@@ -94,12 +94,12 @@ public class HTML {
     }
 
     /**
-     * Una etiqueta de HTML.
+     * An HTML tag.
      *
-     * <p>Las constantes de aca son las unicas instancias que hay de cada etiqueta, asi que
-     * compararlas con <code>==</code> es correcto y es lo que hace toda la biblioteca. La excepcion
-     * es {@link UnknownTag}, que se crea una por cada etiqueta desconocida y por eso si define
-     * {@code equals}.
+     * <p>The constants here are the only instances there are of each tag, so comparing them with
+     * <code>==</code> is right and is what the whole library does. The exception is
+     * {@link UnknownTag}, of which one is created for each unknown tag and which therefore does
+     * define {@code equals}.
      */
     public static class Tag {
 
@@ -108,43 +108,46 @@ public class HTML {
         boolean blockTag;
         boolean unknown;
 
-        /** Una etiqueta sin nombre; la usan las subclases que lo ponen despues. */
+        /** A tag with no name; the subclasses that set it afterwards use it. */
         public Tag() {
         }
 
-        /** Una etiqueta con ese nombre, que no arma bloque ni corta la linea. */
+        /** A tag with that name, which neither makes a block nor breaks the line. */
         protected Tag(String id) {
             name = id;
         }
 
-        /** Una etiqueta con ese nombre y ese comportamiento. */
+        /** A tag with that name and that behaviour. */
         protected Tag(String id, boolean causesBreak, boolean isBlock) {
             name = id;
             breakTag = causesBreak;
             blockTag = isBlock;
         }
 
-        /** Si la etiqueta arma un bloque, como <code>p</code> o <code>div</code>. */
+        /** Whether the tag makes a block, such as <code>p</code> or <code>div</code>. */
         public boolean isBlock() {
             return blockTag;
         }
 
-        /** Si corta la linea. Un bloque siempre corta; <code>br</code> corta sin ser bloque. */
+        /**
+         * Whether it breaks the line. A block always breaks; <code>br</code> breaks without being
+         * one.
+         */
         public boolean breaksFlow() {
             return breakTag;
         }
 
         /**
-         * Si adentro se respetan los espacios y los fines de linea.
+         * Whether inside it the spaces and the line endings are respected.
          *
-         * <p>Se pregunta por identidad y no por un campo: son exactamente dos etiquetas, y una
-         * etiqueta que alguien defina con el mismo nombre no cambia como se muestra el texto.
+         * <p>It is asked by identity and not by a field: they are exactly two tags, and a tag
+         * somebody defines with the same name does not change how the text is shown.
          */
         public boolean isPreformatted() {
             return (this == PRE || this == TEXTAREA);
         }
 
-        /** Si la etiqueta hace de parrafo en el arbol de elementos. */
+        /** Whether the tag acts as a paragraph in the element tree. */
         boolean isParagraph() {
             return (this == P || this == IMPLIED || this == DT || this == H1 || this == H2
                     || this == H3 || this == H4 || this == H5 || this == H6);
@@ -229,13 +232,13 @@ public class HTML {
         public static final Tag UL = new Tag("ul", true, true);
         public static final Tag VAR = new Tag("var");
 
-        /** El parrafo que el analizador inventa cuando encuentra texto suelto. */
+        /** The paragraph the parser invents when it finds loose text. */
         public static final Tag IMPLIED = new Tag("p-implied");
 
-        /** El texto mismo. */
+        /** The text itself. */
         public static final Tag CONTENT = new Tag("content");
 
-        /** Un comentario. */
+        /** A comment. */
         public static final Tag COMMENT = new Tag("comment");
 
         static final Tag[] allTags = {
@@ -253,15 +256,15 @@ public class HTML {
     }
 
     /**
-     * Una etiqueta que no esta en la lista.
+     * A tag that is not in the list.
      *
-     * <p>Se crea una por cada nombre desconocido que aparezca, asi que dos etiquetas desconocidas
-     * con el mismo nombre son objetos distintos. Por eso define {@code equals} y {@code hashCode}:
-     * sin ellos, la comparacion por identidad que sirve para las conocidas fallaria justo aca.
+     * <p>One is created for each unknown name that appears, so two unknown tags with the same name
+     * are different objects. That is why it defines {@code equals} and {@code hashCode}: without
+     * them, the comparison by identity that serves for the known ones would fail right here.
      */
     public static class UnknownTag extends Tag implements Serializable {
 
-        /** Una etiqueta desconocida con ese nombre. */
+        /** An unknown tag with that name. */
         public UnknownTag(String id) {
             super(id);
         }
@@ -279,10 +282,10 @@ public class HTML {
     }
 
     /**
-     * El nombre de un atributo de HTML.
+     * An HTML attribute's name.
      *
-     * <p>Es final y su constructor no es publico: la lista de atributos es cerrada. Un atributo que
-     * no este aca se guarda con su nombre como cadena, no como uno de estos.
+     * <p>It is final and its constructor is not public: the attribute list is closed. An attribute
+     * that is not here is kept with its name as a string, not as one of these.
      */
     public static final class Attribute {
 
@@ -376,10 +379,10 @@ public class HTML {
         public static final Attribute NORESIZE = new Attribute("noresize");
         public static final Attribute MEDIA = new Attribute("media");
 
-        /** Marca que un elemento del documento es una etiqueta de cierre. */
+        /** Marks that a document element is a closing tag. */
         public static final Attribute ENDTAG = new Attribute("endtag");
 
-        /** Guarda el texto de un comentario. */
+        /** Keeps a comment's text. */
         public static final Attribute COMMENT = new Attribute("comment");
 
         static final Attribute[] allAttributes = {

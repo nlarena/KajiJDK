@@ -8,45 +8,47 @@ import java.net.URL;
 import java.util.Collection;
 
 /**
- * Un contenedor de beans: la colección de sus hijos, más el entorno que les ofrece.
+ * A container of beans: the collection of its children, plus the environment it offers them.
  *
- * <p>Es una {@link Collection} y hay que leerlo así --agregar un bean al contexto **es** `add`-arlo--
- * pero además es un {@link BeanContextChild}, y de ahí sale lo que da forma a toda la API: los
- * contextos se anidan. Un contexto tiene hijos y a la vez es hijo de otro, y por eso las búsquedas
- * de recursos y de servicios suben por la cadena hasta que alguien contesta.
+ * <p>It is a {@link Collection} and should be read as one --adding a bean to the context **is**
+ * `add`-ing it-- but it is also a {@link BeanContextChild}, and that is what shapes the whole API:
+ * contexts nest. A context has children and is at the same time the child of another, which is why
+ * service lookups climb the chain until someone answers. (This note said resource lookups climb it
+ * too; {@link BeanContextSupport} resolves those with the asking child's class loader, and never
+ * asks the parent.)
  *
- * <h2>El candado global</h2>
+ * <h2>The global lock</h2>
  *
- * <p>{@link #globalHierarchyLock} es **uno solo para toda la jerarquía**, no uno por contexto, y la
- * razón es que una operación puede tocar varios contextos a la vez: mudar un hijo lo saca de uno y
- * lo mete en otro. Con un candado por contexto, dos mudanzas cruzadas se abrazarían. Con uno solo no
- * hay orden que respetar porque no hay dos candados que tomar.
+ * <p>{@link #globalHierarchyLock} is **one for the whole hierarchy**, not one per context, because
+ * an operation can touch several contexts at once: moving a child takes it out of one and puts it
+ * into another. With one lock per context, two crossed moves would deadlock. With a single lock
+ * there is no order to respect, because there are never two locks to take.
  */
 public interface BeanContext extends BeanContextChild, Collection, DesignMode, Visibility {
 
     /**
-     * El candado que serializa toda operación sobre la jerarquía. Ver la nota de la interfaz sobre
-     * por qué es uno y no uno por contexto.
+     * The lock that serializes every operation on the hierarchy. See the interface note on why it
+     * is one and not one per context.
      */
     public static final Object globalHierarchyLock = new Object();
 
     /**
-     * Instancia ese bean **dentro de este contexto**, por su nombre.
+     * Instantiates that bean **inside this context**, by name.
      *
-     * @throws IOException si el bean no se pudo leer
-     * @throws ClassNotFoundException si no se encontró la clase
+     * @throws IOException if the bean could not be read
+     * @throws ClassNotFoundException if the class was not found
      */
     Object instantiateChild(String beanName) throws IOException, ClassNotFoundException;
 
-    /** El recurso, buscado como lo vería ese hijo. */
+    /** The resource, looked up as that child would see it. */
     InputStream getResourceAsStream(String name, BeanContextChild bcc);
 
-    /** La URL del recurso, buscada como la vería ese hijo. */
+    /** The resource's URL, looked up as that child would see it. */
     URL getResource(String name, BeanContextChild bcc);
 
-    /** Registra un oyente de altas y bajas de hijos. */
+    /** Registers a listener for children being added and removed. */
     void addBeanContextMembershipListener(BeanContextMembershipListener bcml);
 
-    /** Lo quita. */
+    /** Removes it. */
     void removeBeanContextMembershipListener(BeanContextMembershipListener bcml);
 }

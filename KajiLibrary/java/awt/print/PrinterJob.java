@@ -12,57 +12,61 @@ import javax.print.attribute.standard.MediaSizeName;
 import javax.print.attribute.standard.OrientationRequested;
 
 /**
- * KajiLibrary's java.awt.print.PrinterJob -- un trabajo de impresion del sistema viejo.
+ * KajiLibrary's java.awt.print.PrinterJob -- a print job of the old system.
  *
- * <p>El punto de entrada de {@code java.awt.print}: se pide uno con {@link #getPrinterJob}, se le dice
- * que imprimir con {@link #setPrintable} o {@link #setPageable}, y se llama {@link #print}.
+ * <p>The entry point of {@code java.awt.print}: one is requested with {@link #getPrinterJob}, told
+ * what to print with {@link #setPrintable} or {@link #setPageable}, and {@link #print} is called.
  *
- * <h2>Los dos sistemas de impresion</h2>
+ * <h2>The two printing systems</h2>
  *
- * <p>Este paquete y {@code javax.print} conviven y no son lo mismo. Este esta orientado a
- * <b>dibujar</b> --se le da un objeto que pinta paginas--; el otro esta orientado a <b>documentos</b>
- * --se le da un PDF o un PostScript ya hecho--.
+ * <p>This package and {@code javax.print} coexist and are not the same. This one is oriented to
+ * <b>drawing</b> --it is given an object that paints pages--; the other is oriented to
+ * <b>documents</b> --it is given a ready-made PDF or PostScript--.
  *
- * <p>Se cruzan en un punto: {@link #setPrintService} y {@link #lookupPrintServices} usan los
- * {@link PrintService} del sistema nuevo. Asi que se puede elegir la impresora con la API nueva y
- * dibujar con la vieja, que es lo que hace la mayoria del codigo que imprime graficos.
+ * <p>They meet at one point: {@link #setPrintService} and {@link #lookupPrintServices} use the new
+ * system's {@link PrintService}. So in the JDK a printer can be chosen with the new API and drawn
+ * to with the old one, which is what most code that prints graphics does.
  *
- * <h2>{@link #print} bloquea</h2>
+ * <h2>{@link #print} blocks</h2>
  *
- * <p>Vuelve cuando el trabajo se entrego, y mientras tanto llama a {@code Printable.print} muchas
- * veces --varias por pagina; ver {@link Printable}--. Hay que llamarla fuera del hilo de la interfaz.
+ * <p>It returns when the job has been delivered, and meanwhile it calls {@code Printable.print}
+ * many times --several per page; see {@link Printable}--. It has to be called off the UI thread.
  *
  * <h2>A KajiLibrary subset</h2>
  *
- * <p>Esta biblioteca no habla con el sistema de impresion del sistema operativo, que pide codigo
- * nativo. {@link #getPrinterJob} devuelve un trabajo de verdad --lleva su nombre, sus copias, se deja
- * cancelar-- que al imprimir lanza {@link PrinterException} con "No print service found", que es lo
- * mismo que hace el JDK en una maquina sin impresoras. Los dialogos lanzan {@link HeadlessException},
- * que es lo que ya declaran y lo que corresponde sin pantalla.
+ * <p>This library does not talk to the operating system's printing system, which requires native
+ * code. {@link #getPrinterJob} returns a real job --it keeps its name and its copies, and accepts
+ * {@code cancel}, which outside a print does nothing, as in the JDK-- that throws
+ * {@link PrinterException} with "No print service found." when printing, which is what the JDK does
+ * on a machine with no printers. The dialogs throw {@link HeadlessException}, which is what they
+ * already declare and what fits with no screen.
  *
- * <p>Todo lo que no depende del sistema esta implementado de verdad, incluido
- * {@link #getPageFormat(PrintRequestAttributeSet)}, que traduce atributos a un {@link PageFormat}.
+ * <p>Everything that does not depend on the system is really implemented, including
+ * {@link #getPageFormat(PrintRequestAttributeSet)}, which translates attributes into a
+ * {@link PageFormat}. This note left out that the job has no print service here: it inherits
+ * {@link #setPrintService}, which always throws, so no printer can be chosen with the new API, and
+ * {@code getPageFormat} therefore always returns the default page.
  */
 public abstract class PrinterJob {
 
-    /** Para las subclases. */
+    /** For subclasses. */
     public PrinterJob() {
     }
 
     /**
-     * Un trabajo nuevo, asociado a la impresora por omision.
+     * A new job, associated with the default printer.
      *
-     * <p>Nunca devuelve null. Ver la nota de la clase sobre que puede hacer el que devuelve aca.
+     * <p>It never returns null. See the class note on what the one returned here can do.
      */
     public static PrinterJob getPrinterJob() {
         return new ServicelessPrinterJob();
     }
 
     /**
-     * Las impresoras que aceptan dibujos de este sistema.
+     * The printers that accept drawings from this system.
      *
-     * <p>Es un atajo de {@code PrintServiceLookup.lookupPrintServices} filtrando por el formato
-     * {@code SERVICE_FORMATTED.PAGEABLE}, que es el que corresponde a dibujar.
+     * <p>It is a shortcut for {@code PrintServiceLookup.lookupPrintServices} filtering by the
+     * {@code SERVICE_FORMATTED.PAGEABLE} flavor, which is the one that corresponds to drawing.
      */
     public static PrintService[] lookupPrintServices() {
         return PrintServiceLookup.lookupPrintServices(
@@ -70,56 +74,57 @@ public abstract class PrinterJob {
     }
 
     /**
-     * Las fabricas que convierten dibujos a ese tipo MIME.
+     * The factories that convert drawings to that MIME type.
      *
-     * @param mimeType que escribir, o null para todas
+     * @param mimeType what to write, or null for all
      */
     public static StreamPrintServiceFactory[] lookupStreamPrintServices(String mimeType) {
         return StreamPrintServiceFactory.lookupStreamPrintServiceFactories(
             javax.print.DocFlavor.SERVICE_FORMATTED.PAGEABLE, mimeType);
     }
 
-    /** A que impresora va, o null si no se eligio ninguna. */
+    /** Which printer it goes to, or null if none was chosen. */
     public PrintService getPrintService() {
         return null;
     }
 
     /**
-     * Elige la impresora.
+     * Chooses the printer.
      *
-     * @throws PrinterException si esa impresora no sirve para este trabajo
+     * @throws PrinterException if that printer is not suitable for this job; this base
+     *     implementation always throws, as the JDK's does
      */
     public void setPrintService(PrintService service) throws PrinterException {
         throw new PrinterException("Setting a service is not supported on this class");
     }
 
-    /** Que dibujar, con el formato por omision. */
+    /** What to draw, with the default format. */
     public abstract void setPrintable(Printable painter);
 
-    /** Que dibujar, con ese formato para todas las paginas. */
+    /** What to draw, with that format for every page. */
     public abstract void setPrintable(Printable painter, PageFormat format);
 
     /**
-     * Que dibujar, con formato por pagina.
+     * What to draw, with a format per page.
      *
-     * @throws NullPointerException si es null
+     * @throws NullPointerException if it is null
      */
     public abstract void setPageable(Pageable document) throws NullPointerException;
 
     /**
-     * Muestra el dialogo de impresion.
+     * Shows the print dialog.
      *
-     * @return si el usuario acepto
-     * @throws HeadlessException si no hay pantalla
+     * @return whether the user accepted
+     * @throws HeadlessException if there is no screen
      */
     public abstract boolean printDialog() throws HeadlessException;
 
     /**
-     * Idem, rellenando desde esos atributos y devolviendo en ellos lo elegido.
+     * The same, filled in from those attributes and returning what was chosen in them.
      *
-     * <p>Igual que en {@code javax.print.ServiceUI}, el conjunto es de entrada <b>y</b> de salida.
+     * <p>As in {@code javax.print.ServiceUI}, the set is for input <b>and</b> output.
      *
-     * @throws HeadlessException si no hay pantalla
+     * @throws HeadlessException if there is no screen
      */
     public boolean printDialog(PrintRequestAttributeSet attributes) throws HeadlessException {
         if (attributes == null) {
@@ -129,17 +134,17 @@ public abstract class PrinterJob {
     }
 
     /**
-     * Muestra el dialogo de configuracion de pagina.
+     * Shows the page setup dialog.
      *
-     * @return el formato elegido, o el mismo que se paso si se cancelo
-     * @throws HeadlessException si no hay pantalla
+     * @return the chosen format, or the same one that was passed if it was cancelled
+     * @throws HeadlessException if there is no screen
      */
     public abstract PageFormat pageDialog(PageFormat page) throws HeadlessException;
 
     /**
-     * Idem, partiendo de atributos.
+     * The same, starting from attributes.
      *
-     * @throws HeadlessException si no hay pantalla
+     * @throws HeadlessException if there is no screen
      */
     public PageFormat pageDialog(PrintRequestAttributeSet attributes) throws HeadlessException {
         if (attributes == null) {
@@ -148,23 +153,23 @@ public abstract class PrinterJob {
         return pageDialog(defaultPage());
     }
 
-    /** Una copia de ese formato ajustada a lo que la impresora puede. */
+    /** A copy of that format adjusted to what the printer can do. */
     public abstract PageFormat defaultPage(PageFormat page);
 
-    /** El formato por omision de la impresora. */
+    /** The printer's default format. */
     public PageFormat defaultPage() {
         return defaultPage(new PageFormat());
     }
 
     /**
-     * El {@link PageFormat} que describen esos atributos.
+     * The {@link PageFormat} those attributes describe.
      *
-     * <p>Mira tres: {@link Media} para el tamano de hoja, {@link MediaPrintableArea} para el area
-     * imprimible y {@link OrientationRequested} para la orientacion. Los que no esten quedan como en
-     * {@link #defaultPage}.
+     * <p>It looks at three: {@link Media} for the sheet size, {@link MediaPrintableArea} for the
+     * imageable area and {@link OrientationRequested} for the orientation. The ones not present
+     * stay as in {@link #defaultPage}.
      *
-     * <p>Solo aplica los que la impresora elegida soporte, asi que sin impresora devuelve el formato
-     * por omision tal cual.
+     * <p>It only applies the ones the chosen printer supports, so with no printer it returns the
+     * default format as is.
      */
     public PageFormat getPageFormat(PrintRequestAttributeSet attributes) {
         PrintService service = getPrintService();
@@ -228,52 +233,52 @@ public abstract class PrinterJob {
     }
 
     /**
-     * Una copia de ese formato con el area imprimible acotada a lo que la impresora puede.
+     * A copy of that format with the imageable area narrowed to what the printer can do.
      *
-     * <p>Es lo que corrige un {@link Paper} armado a mano, que no valida nada.
+     * <p>It is what corrects a {@link Paper} put together by hand, which validates nothing.
      */
     public abstract PageFormat validatePage(PageFormat page);
 
     /**
-     * Imprime. Bloquea; ver la nota de la clase.
+     * Prints. It blocks; see the class note.
      *
-     * @throws PrinterException si fallo
+     * @throws PrinterException if it failed
      */
     public abstract void print() throws PrinterException;
 
     /**
-     * Idem, con esos atributos.
+     * The same, with those attributes.
      *
-     * @throws PrinterException si fallo
+     * @throws PrinterException if it failed
      */
     public void print(PrintRequestAttributeSet attributes) throws PrinterException {
         print();
     }
 
-    /** Cuantas copias. */
+    /** How many copies. */
     public abstract void setCopies(int copies);
 
-    /** Cuantas copias. */
+    /** How many copies. */
     public abstract int getCopies();
 
-    /** A nombre de quien va el trabajo. */
+    /** In whose name the job goes. */
     public abstract String getUserName();
 
-    /** El nombre que se ve en la cola. */
+    /** The name seen in the queue. */
     public abstract void setJobName(String jobName);
 
-    /** El nombre que se ve en la cola. */
+    /** The name seen in the queue. */
     public abstract String getJobName();
 
     /**
-     * Pide cancelar.
+     * Requests cancellation.
      *
-     * <p>Es asincronico y se llama desde otro hilo: el que llamo {@link #print} esta bloqueado. Lo que
-     * pasa es que la proxima llamada a {@code Printable.print} no ocurre y {@code print} sale con
-     * {@link PrinterAbortException}.
+     * <p>It is asynchronous and called from another thread: the one that called {@link #print} is
+     * blocked. What happens is that the next call to {@code Printable.print} does not occur and
+     * {@code print} exits with {@link PrinterAbortException}.
      */
     public abstract void cancel();
 
-    /** Si se pidio cancelar. */
+    /** Whether a print in progress is going to be cancelled. */
     public abstract boolean isCancelled();
 }

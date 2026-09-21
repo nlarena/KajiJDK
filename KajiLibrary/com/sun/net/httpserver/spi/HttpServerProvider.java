@@ -9,61 +9,61 @@ import com.sun.net.httpserver.HttpServer;
 import com.sun.net.httpserver.HttpsServer;
 
 /**
- * Quien fabrica los servidores; el punto de extension detras de {@link HttpServer#create}.
+ * Who makes the servers; the extension point behind {@link HttpServer#create}.
  *
- * <h2>Como se elige</h2>
+ * <h2>How it is chosen</h2>
  *
- * <p>Tres lugares, en orden: la propiedad del sistema
- * {@code com.sun.net.httpserver.HttpServerProvider}, despues los proveedores que encuentre
- * {@link ServiceLoader}, y por ultimo el proveedor por omision de la plataforma.
+ * <p>Three places, in order: the system property
+ * {@code com.sun.net.httpserver.HttpServerProvider}, then the providers
+ * {@link ServiceLoader} finds, and last the platform's default provider.
  *
- * <p><strong>Esta VM no trae el tercero</strong>, asi que sin ninguno registrado
- * {@link #provider()} tira {@link UnsupportedOperationException} con el motivo. No es un stub: los
- * dos primeros mecanismos funcionan, y registrar un proveedor hace andar todo `com.sun.net.httpserver`
- * sin tocar una linea de aca.
+ * <p><strong>This VM does not bring the third</strong>, so with none registered
+ * {@link #provider()} throws {@link UnsupportedOperationException} with the reason. It is not
+ * a stub: the first two mechanisms work, and registering a provider makes the whole of
+ * `com.sun.net.httpserver` work without touching a line of this.
  */
 public abstract class HttpServerProvider {
 
-    private static HttpServerProvider elegido;
+    private static HttpServerProvider chosen;
 
-    /** Para las implementaciones. */
+    /** For the implementations. */
     protected HttpServerProvider() {
     }
 
-    /** Un servidor HTTP; {@code addr} puede ser {@code null} para no ligarlo todavia. */
+    /** An HTTP server; {@code addr} may be {@code null} so as not to bind it yet. */
     public abstract HttpServer createHttpServer(InetSocketAddress addr, int backlog)
             throws IOException;
 
-    /** Un servidor HTTPS, al que despues hay que ponerle su configurador de TLS. */
+    /** An HTTPS server, which afterwards has to be given its TLS configurator. */
     public abstract HttpsServer createHttpsServer(InetSocketAddress addr, int backlog)
             throws IOException;
 
     /**
-     * El proveedor a usar, buscado una sola vez.
+     * The provider to use, looked up only once.
      *
-     * @throws UnsupportedOperationException si no hay ninguno — ver la nota de la clase
+     * @throws UnsupportedOperationException if there is none -- see the class note
      */
     public static synchronized HttpServerProvider provider() {
-        if (elegido != null) {
-            return elegido;
+        if (chosen != null) {
+            return chosen;
         }
-        String nombre = System.getProperty("com.sun.net.httpserver.HttpServerProvider");
-        if (nombre != null) {
+        String name = System.getProperty("com.sun.net.httpserver.HttpServerProvider");
+        if (name != null) {
             try {
-                Class<?> c = Class.forName(nombre, true, ClassLoader.getSystemClassLoader());
-                elegido = (HttpServerProvider) c.getDeclaredConstructor().newInstance();
-                return elegido;
+                Class<?> c = Class.forName(name, true, ClassLoader.getSystemClassLoader());
+                chosen = (HttpServerProvider) c.getDeclaredConstructor().newInstance();
+                return chosen;
             } catch (Exception e) {
-                throw new ServiceConfigurationErrorLocal(nombre, e);
+                throw new ServiceConfigurationErrorLocal(name, e);
             }
         }
         Iterator<HttpServerProvider> it =
                 ServiceLoader.load(HttpServerProvider.class).iterator();
         if (it.hasNext()) {
-            elegido = it.next();
-            return elegido;
+            chosen = it.next();
+            return chosen;
         }
         throw new UnsupportedOperationException(
-                "no hay ningun HttpServerProvider: esta VM no trae el proveedor por omision");
+                "there is no HttpServerProvider: this VM does not bring the default provider");
     }
 }

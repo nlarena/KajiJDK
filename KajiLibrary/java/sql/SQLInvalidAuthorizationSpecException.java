@@ -1,7 +1,7 @@
 package java.sql;
 
 /**
- * KajiLibrary's java.sql.SQLInvalidAuthorizationSpecException -- Las credenciales no sirven.
+ * KajiLibrary's java.sql.SQLInvalidAuthorizationSpecException -- the credentials are not valid.
  */
 public class SQLInvalidAuthorizationSpecException extends SQLNonTransientException {
 

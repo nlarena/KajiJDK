@@ -11,78 +11,78 @@ import java.util.TimeZone;
 import javax.xml.namespace.QName;
 
 /**
- * La {@link XMLGregorianCalendar} concreta de esta biblioteca.
+ * This library's concrete {@link XMLGregorianCalendar}.
  *
- * <p>Interna: no es API y quien la use la ve como {@code XMLGregorianCalendar}. Hace de verdad las
- * tres cosas que hacen falta --parsear y escribir las ocho formas lexicas de XML Schema, comparar
- * con normalizacion a UTC, y sumar duraciones-- sin ningun parser de XML de por medio: una fecha
- * lexica es una cadena con digitos, guiones y dos puntos.
+ * <p>Internal: it is not API and whoever uses it sees it as an {@code XMLGregorianCalendar}. It
+ * really does the three things needed --parsing and writing the eight XML Schema lexical forms,
+ * comparing with normalization to UTC, and adding durations-- without any XML parser involved: a
+ * lexical date is a string of digits, hyphens and colons.
  *
- * <h2>Los ocho tipos, y como se distinguen</h2>
+ * <h2>The eight types, and how they are told apart</h2>
  *
- * <p>La clase no tiene un campo que diga de que tipo es: el tipo <b>es</b> el conjunto de campos que
- * estan puestos, y {@link #getXMLSchemaType} lo deduce. Un {@code gMonth} es una instancia con el
- * mes puesto y todo lo demas en {@link DatatypeConstants#FIELD_UNDEFINED}.
+ * <p>The class has no field saying which type it is: the type <b>is</b> the set of fields that are
+ * set, and {@link #getXMLSchemaType} deduces it. A {@code gMonth} is an instance with the month set
+ * and everything else at {@link DatatypeConstants#FIELD_UNDEFINED}.
  *
- * <p>Es lo que permite que los ocho tipos entren en una sola clase, y tambien lo que hace que
- * armarla a mano con los setters pueda dejarla en un estado que no es ninguno de los ocho. Ahi
- * {@code getXMLSchemaType} y {@link #toXMLFormat} levantan {@link IllegalStateException}, que es lo
- * unico honesto: no hay forma lexica que escribir.
+ * <p>It is what lets the eight types fit in a single class, and also what makes building it by hand
+ * with the setters able to leave it in a state that is none of the eight. There {@code
+ * getXMLSchemaType} and {@link #toXMLFormat} raise {@link IllegalStateException}, which is the only
+ * honest thing: there is no lexical form to write.
  *
- * <h2>La comparacion y la zona horaria</h2>
+ * <h2>The comparison and the time zone</h2>
  *
- * <p>Dos fechas con zona se llevan a UTC y se comparan campo a campo. Dos sin zona se comparan como
- * estan. Una con y una sin es el caso interesante: la que no tiene zona podria estar en cualquier
- * lugar del intervalo de 28 horas que va de {@code +14:00} a {@code -14:00}, asi que se la compara
- * contra los dos extremos y, si los dos dan lo mismo, ese es el resultado; si no, es
- * {@link DatatypeConstants#INDETERMINATE}.
+ * <p>Two dates with a zone are taken to UTC and compared field by field. Two without a zone are
+ * compared as they are. One with and one without is the interesting case: the one without a zone
+ * could be anywhere in the 28-hour interval from {@code +14:00} to {@code -14:00}, so it is
+ * compared against both ends and, if both give the same, that is the result; if not, it is {@link
+ * DatatypeConstants#INDETERMINATE}.
  *
- * <p>Por eso {@code 2024-05-25T12:00:00} contra {@code 2024-05-25T12:00:00Z} da indeterminado --las
- * 12 en Auckland ya pasaron y las 12 en Honolulu no llegaron-- y contra {@code 2030-...} da menor,
- * porque seis anios son mas que 28 horas.
+ * <p>That is why {@code 2024-05-25T12:00:00} against {@code 2024-05-25T12:00:00Z} gives
+ * indeterminate --12 o'clock in Auckland has already passed and 12 o'clock in Honolulu has not
+ * arrived-- and against {@code 2030-...} gives lesser, because six years are more than 28 hours.
  */
 final class KajiXMLGregorianCalendar extends XMLGregorianCalendar {
 
-    /** Un minuto en milisegundos. */
+    /** One minute in milliseconds. */
     private static final long MS_PER_MINUTE = 60000L;
 
-    /** Los miles de millones del anio, o null. Siempre multiplo de mil millones. */
+    /** The billions of the year, or null. Always a multiple of a billion. */
     private BigInteger eon;
 
-    /** El anio sin el eon, o {@link DatatypeConstants#FIELD_UNDEFINED}. */
+    /** The year without the eon, or {@link DatatypeConstants#FIELD_UNDEFINED}. */
     private int yearValue;
 
-    /** El mes de 1 a 12, o {@link DatatypeConstants#FIELD_UNDEFINED}. */
+    /** The month from 1 to 12, or {@link DatatypeConstants#FIELD_UNDEFINED}. */
     private int monthValue;
 
-    /** El dia de 1 a 31, o {@link DatatypeConstants#FIELD_UNDEFINED}. */
+    /** The day from 1 to 31, or {@link DatatypeConstants#FIELD_UNDEFINED}. */
     private int dayValue;
 
-    /** La hora de 0 a 24, o {@link DatatypeConstants#FIELD_UNDEFINED}. */
+    /** The hour from 0 to 24, or {@link DatatypeConstants#FIELD_UNDEFINED}. */
     private int hourValue;
 
-    /** El minuto de 0 a 59, o {@link DatatypeConstants#FIELD_UNDEFINED}. */
+    /** The minute from 0 to 59, or {@link DatatypeConstants#FIELD_UNDEFINED}. */
     private int minuteValue;
 
-    /** El segundo de 0 a 60, o {@link DatatypeConstants#FIELD_UNDEFINED}. */
+    /** The second from 0 to 60, or {@link DatatypeConstants#FIELD_UNDEFINED}. */
     private int secondValue;
 
-    /** La fraccion de segundo, de 0 inclusive a 1 exclusive, o null. */
+    /** The fraction of a second, from 0 inclusive to 1 exclusive, or null. */
     private BigDecimal fractionValue;
 
-    /** La zona en minutos, de -840 a 840, o {@link DatatypeConstants#FIELD_UNDEFINED}. */
+    /** The zone in minutes, from -840 to 840, or {@link DatatypeConstants#FIELD_UNDEFINED}. */
     private int timezoneValue;
 
-    /** Los valores con que la dejo {@link #reset}: los del momento de construirla. */
+    /** The values {@link #reset} leaves it with: the ones it was built with. */
     private final int[] initial;
 
-    /** El eon inicial, aparte porque no es un {@code int}. */
+    /** The initial eon, separate because it is not an {@code int}. */
     private final BigInteger initialEon;
 
-    /** La fraccion inicial, idem. */
+    /** The initial fraction, likewise. */
     private final BigDecimal initialFraction;
 
-    /** Una fecha con todos los campos sin definir. */
+    /** A date with all the fields undefined. */
     KajiXMLGregorianCalendar() {
         clearAll();
         this.initial = snapshot();
@@ -91,9 +91,9 @@ final class KajiXMLGregorianCalendar extends XMLGregorianCalendar {
     }
 
     /**
-     * Campo por campo, validando.
+     * Field by field, validating.
      *
-     * @throws IllegalArgumentException si algun campo esta fuera de rango o la fecha no existe
+     * @throws IllegalArgumentException if some field is out of range or the date does not exist
      */
     KajiXMLGregorianCalendar(BigInteger yearValue, int monthValue, int dayValue, int hourValue, int minuteValue, int secondValue,
             BigDecimal fractionValue, int timezoneValue) {
@@ -121,7 +121,7 @@ final class KajiXMLGregorianCalendar extends XMLGregorianCalendar {
         this.initialFraction = this.fractionValue;
     }
 
-    /** Copia de otro calendario gregoriano; todos los campos quedan definidos. */
+    /** A copy of another Gregorian calendar; all the fields end up defined. */
     KajiXMLGregorianCalendar(GregorianCalendar cal) {
         clearAll();
         if (cal == null) {
@@ -134,9 +134,9 @@ final class KajiXMLGregorianCalendar extends XMLGregorianCalendar {
         setMinute(cal.get(Calendar.MINUTE));
         setSecond(cal.get(Calendar.SECOND));
         setMillisecond(cal.get(Calendar.MILLISECOND));
-        // Un `GregorianCalendar` siempre tiene zona, asi que el resultado siempre es un dateTime
-        // completo. El desplazamiento se toma del calendario y no de la zona, para que un momento
-        // en horario de verano quede con el desplazamiento que de verdad tenia.
+        // A `GregorianCalendar` always has a zone, so the result is always a complete dateTime. The
+        // offset is taken from the calendar and not from the zone, so that a moment in daylight
+        // saving time keeps the offset it really had.
         int offsetMs = cal.getTimeZone().getOffset(cal.getTimeInMillis());
         setTimezone((int) (((long) offsetMs) / MS_PER_MINUTE));
         this.initial = snapshot();
@@ -144,7 +144,7 @@ final class KajiXMLGregorianCalendar extends XMLGregorianCalendar {
         this.initialFraction = this.fractionValue;
     }
 
-    /** Deja todos los campos sin definir, sin tocar los valores iniciales. */
+    /** Leaves all the fields undefined, without touching the initial values. */
     private void clearAll() {
         eon = null;
         yearValue = DatatypeConstants.FIELD_UNDEFINED;
@@ -157,25 +157,25 @@ final class KajiXMLGregorianCalendar extends XMLGregorianCalendar {
         timezoneValue = DatatypeConstants.FIELD_UNDEFINED;
     }
 
-    /** Los siete campos enteros, para {@link #reset}. */
+    /** The seven integer fields, for {@link #reset}. */
     private int[] snapshot() {
         return new int[] {yearValue, monthValue, dayValue, hourValue, minuteValue, secondValue, timezoneValue};
     }
 
-    // ---- parseo de las ocho formas lexicas ----------------------------------------------------
+    // ---- parsing of the eight lexical forms -----------------------------------------------------
 
     /**
-     * A partir de una de las ocho formas lexicas de XML Schema.
+     * From one of the eight XML Schema lexical forms.
      *
-     * <p>Cual es se decide por la forma y no por un parametro, que es como funciona el tipo: dos
-     * guiones al principio anuncian que no hay anio, tres que tampoco hay mes, y una {@code T}
-     * separa la fecha de la hora. Una cadena que empieza con digitos y tiene dos puntos antes que
-     * guiones es una hora suelta.
+     * <p>Which one it is is decided by the form and not by a parameter, which is how the type
+     * works: two hyphens at the start announce that there is no year, three that there is no month
+     * either, and a {@code T} separates the date from the time. A string that starts with digits
+     * and has colons before hyphens is a loose time.
      *
-     * @param lexica la forma lexica; no puede ser null
-     * @return la fecha
-     * @throws IllegalArgumentException si no es ninguna de las ocho formas
-     * @throws NullPointerException si es null
+     * @param lexical the lexical form; cannot be null
+     * @return the date
+     * @throws IllegalArgumentException if it is none of the eight forms
+     * @throws NullPointerException if it is null
      */
     static KajiXMLGregorianCalendar parse(String lexical) {
         if (lexical == null) {
@@ -217,8 +217,8 @@ final class KajiXMLGregorianCalendar extends XMLGregorianCalendar {
             }
             a.requireEnd();
             if (c.nextDay) {
-                // `24:00:00` es medianoche del dia siguiente: recien aca, con la fecha completa,
-                // se puede correr el dia.
+                // `24:00:00` is midnight of the next day: only here, with the complete date, can
+                // the day be moved.
                 c.nextDay = false;
                 c.shiftDays(1);
             }
@@ -235,7 +235,7 @@ final class KajiXMLGregorianCalendar extends XMLGregorianCalendar {
         return c;
     }
 
-    /** Un cursor sobre la cadena lexica; existe solo para que el parseo se lea de arriba abajo. */
+    /** A cursor over the lexical string; it exists only so that the parsing reads top to bottom. */
     private static final class Parser {
 
         private final String s;
@@ -257,13 +257,13 @@ final class KajiXMLGregorianCalendar extends XMLGregorianCalendar {
             i += p.length();
         }
 
-        /** Si lo que viene es una hora suelta: dos digitos y dos puntos. */
+        /** Whether what follows is a loose time: two digits and a colon. */
         boolean hasLooseTime() {
             return i + 2 < s.length() && isDigit(s.charAt(i)) && isDigit(s.charAt(i + 1))
                     && s.charAt(i + 2) == ':';
         }
 
-        /** El anio, que puede tener signo y mas de cuatro digitos. */
+        /** The year, which can have a sign and more than four digits. */
         BigInteger yearValue() {
             int from = i;
             if (i < s.length() && s.charAt(i) == '-') {
@@ -280,7 +280,7 @@ final class KajiXMLGregorianCalendar extends XMLGregorianCalendar {
             return new BigInteger(s.substring(from, i));
         }
 
-        /** Un entero de exactamente {@code n} digitos. */
+        /** An integer of exactly {@code n} digits. */
         int fixedInt(int n) {
             if (i + n > s.length()) {
                 throw new IllegalArgumentException("expected " + n + " digits");
@@ -297,7 +297,7 @@ final class KajiXMLGregorianCalendar extends XMLGregorianCalendar {
             return v;
         }
 
-        /** {@code hh:mm:ss} con fraccion opcional. */
+        /** {@code hh:mm:ss} with optional fraction. */
         void readTime(KajiXMLGregorianCalendar c) {
             int h = fixedInt(2);
             consume(":");
@@ -318,9 +318,9 @@ final class KajiXMLGregorianCalendar extends XMLGregorianCalendar {
                 c.setFractionalSecond(new BigDecimal("0" + s.substring(from, i)));
             }
             if (h == 24) {
-                // `24:00:00` es medianoche del dia siguiente y la unica forma en que la hora puede
-                // valer 24. Se normaliza aca en vez de guardarla, porque un 24 guardado se filtra
-                // despues a la comparacion y a `toXMLFormat`.
+                // `24:00:00` is midnight of the next day and the only way the hour can be 24. It is
+                // normalized here instead of being stored, because a stored 24 leaks later into the
+                // comparison and `toXMLFormat`.
                 if (c.minuteValue != 0 || c.secondValue != 0
                         || (c.fractionValue != null && c.fractionValue.signum() != 0)) {
                     throw new IllegalArgumentException("hour 24 is only valid as 24:00:00");
@@ -332,7 +332,7 @@ final class KajiXMLGregorianCalendar extends XMLGregorianCalendar {
             }
         }
 
-        /** {@code Z} o {@code (+|-)hh:mm}, si hay. */
+        /** {@code Z} or {@code (+|-)hh:mm}, if there is one. */
         void optionalTimezone(KajiXMLGregorianCalendar c) {
             if (i >= s.length()) {
                 return;
@@ -365,7 +365,7 @@ final class KajiXMLGregorianCalendar extends XMLGregorianCalendar {
         }
     }
 
-    /** Marca de {@code 24:00:00}: hay que correr un dia despues de tener la fecha completa. */
+    /** Marker of {@code 24:00:00}: a day has to be moved once the date is complete. */
     private transient boolean nextDay;
 
     // ---- setters -------------------------------------------------------------------------------
@@ -395,9 +395,9 @@ final class KajiXMLGregorianCalendar extends XMLGregorianCalendar {
             yearValue = DatatypeConstants.FIELD_UNDEFINED;
             return;
         }
-        // El anio se parte en dos: lo que entra en un `int` --el resto de dividir por mil
-        // millones-- y el resto, que se guarda aparte. Es como lo hace el original, y lo que
-        // permite que `getYear()` siga siendo un `int` sin ponerle tope al anio.
+        // The year is split in two: what fits in an `int` --the remainder of dividing by a
+        // billion-- and the rest, which is kept apart. It is how the original does it, and what
+        // lets `getYear()` stay an `int` without capping the year.
         BigInteger ONE_BILLION = BigInteger.valueOf(1000000000L);
         BigInteger[] parts = year.divideAndRemainder(ONE_BILLION);
         BigInteger high = parts[0];
@@ -443,7 +443,8 @@ final class KajiXMLGregorianCalendar extends XMLGregorianCalendar {
         if (offset != DatatypeConstants.FIELD_UNDEFINED
                 && (offset < DatatypeConstants.MAX_TIMEZONE_OFFSET
                         || offset > DatatypeConstants.MIN_TIMEZONE_OFFSET)) {
-            // Los nombres de las constantes estan al reves de los numeros; ver DatatypeConstants.
+            // The names of the constants are the other way round from the numbers; see
+            // DatatypeConstants.
             throw new IllegalArgumentException("invalid timezone: " + offset);
         }
         timezoneValue = offset;
@@ -467,7 +468,7 @@ final class KajiXMLGregorianCalendar extends XMLGregorianCalendar {
 
     /** {@inheritDoc} */
     public void setSecond(int second) {
-        // Sesenta y no cincuenta y nueve: XML Schema deja lugar al segundo intercalar.
+        // Sixty and not fifty-nine: XML Schema leaves room for the leap second.
         if (second != DatatypeConstants.FIELD_UNDEFINED && (second < 0 || second > 60)) {
             throw new IllegalArgumentException("invalid second: " + second);
         }
@@ -554,12 +555,12 @@ final class KajiXMLGregorianCalendar extends XMLGregorianCalendar {
         return fractionValue;
     }
 
-    // ---- comparacion ---------------------------------------------------------------------------
+    // ---- comparison ----------------------------------------------------------------------------
 
     /**
      * {@inheritDoc}
      *
-     * <p>Ver el encabezado de la clase para el caso de una con zona y una sin.
+     * <p>See the class header for the case of one with a zone and one without.
      */
     public int compare(XMLGregorianCalendar rhs) {
         if (rhs == null) {
@@ -574,8 +575,8 @@ final class KajiXMLGregorianCalendar extends XMLGregorianCalendar {
             return fieldByField(a, b);
         }
 
-        // Una tiene zona y la otra no: la que no tiene puede estar en cualquier punto del
-        // intervalo de 28 horas que va de +14:00 a -14:00. Se la compara contra los dos extremos.
+        // One has a zone and the other does not: the one without can be at any point of the 28-hour
+        // interval from +14:00 to -14:00. It is compared against both ends.
         XMLGregorianCalendar withTimezone = thisHasTimezone ? this : rhs;
         XMLGregorianCalendar withoutTimezone = thisHasTimezone ? rhs : this;
         XMLGregorianCalendar fixed = withTimezone.normalize();
@@ -598,7 +599,7 @@ final class KajiXMLGregorianCalendar extends XMLGregorianCalendar {
         return DatatypeConstants.INDETERMINATE;
     }
 
-    /** Una copia de {@code c} con la zona puesta en {@code offset}. */
+    /** A copy of {@code c} with the zone set to {@code offset}. */
     private static XMLGregorianCalendar withOffset(XMLGregorianCalendar c, int offset) {
         XMLGregorianCalendar copy = (XMLGregorianCalendar) c.clone();
         copy.setTimezone(offset);
@@ -606,11 +607,11 @@ final class KajiXMLGregorianCalendar extends XMLGregorianCalendar {
     }
 
     /**
-     * Compara campo a campo dos fechas ya normalizadas.
+     * Compares two already normalized dates field by field.
      *
-     * <p>Un campo que este en una y no en la otra da {@link DatatypeConstants#INDETERMINATE}: no es
-     * que sean distintas, es que no son del mismo tipo y no hay orden entre un {@code gYear} y un
-     * {@code gMonth}.
+     * <p>A field that is in one and not in the other gives {@link DatatypeConstants#INDETERMINATE}:
+     * it is not that they are different, it is that they are not of the same type and there is no
+     * order between a {@code gYear} and a {@code gMonth}.
      */
     private static int fieldByField(XMLGregorianCalendar a, XMLGregorianCalendar b) {
         BigInteger yearA = a.getEonAndYear();
@@ -658,7 +659,7 @@ final class KajiXMLGregorianCalendar extends XMLGregorianCalendar {
         return DatatypeConstants.EQUAL;
     }
 
-    /** Compara dos campos enteros; uno definido y el otro no da indeterminado. */
+    /** Compares two integer fields; one defined and the other not gives indeterminate. */
     private static int compareInt(int a, int b) {
         boolean da = a != DatatypeConstants.FIELD_UNDEFINED;
         boolean db = b != DatatypeConstants.FIELD_UNDEFINED;
@@ -680,8 +681,8 @@ final class KajiXMLGregorianCalendar extends XMLGregorianCalendar {
     /**
      * {@inheritDoc}
      *
-     * <p>Sin zona no hay nada que normalizar y se devuelve una copia: suponerle UTC seria inventar
-     * el dato que falta, que es justamente el que hace indeterminada la comparacion.
+     * <p>Without a zone there is nothing to normalize and a copy is returned: assuming UTC would be
+     * inventing the missing datum, which is precisely what makes the comparison indeterminate.
      */
     public XMLGregorianCalendar normalize() {
         if (timezoneValue == DatatypeConstants.FIELD_UNDEFINED) {
@@ -689,16 +690,16 @@ final class KajiXMLGregorianCalendar extends XMLGregorianCalendar {
         }
         KajiXMLGregorianCalendar c = (KajiXMLGregorianCalendar) clone();
         if (timezoneValue != 0) {
-            // Para ir a UTC se le resta el desplazamiento a la hora local. Se hace sobre los
-            // campos y no sobre un instante porque la fecha puede no tener anio: un `gMonthDay`
-            // con zona no corresponde a ningun instante y sin embargo se normaliza igual.
+            // To go to UTC the offset is subtracted from the local time. It is done on the fields
+            // and not on an instant because the date may have no year: a `gMonthDay` with a zone
+            // corresponds to no instant and yet it is normalized all the same.
             c.shiftMinutes(-timezoneValue);
         }
         c.timezoneValue = 0;
         return c;
     }
 
-    /** Corre la fecha tantos minutos, arrastrando entre los campos que esten definidos. */
+    /** Moves the date that many minutes, carrying between the fields that are defined. */
     private void shiftMinutes(int minutes) {
         if (minutes == 0 || hourValue == DatatypeConstants.FIELD_UNDEFINED) {
             return;
@@ -715,15 +716,18 @@ final class KajiXMLGregorianCalendar extends XMLGregorianCalendar {
         }
     }
 
-    /** Corre la fecha tantos dias; sin anio y sin mes no hay a donde arrastrar y se deja igual. */
+    /**
+     * Moves the date that many days; without year and month there is nowhere to carry and it stays.
+     */
     private void shiftDays(int days) {
         if (days == 0) {
             return;
         }
         if (yearValue == DatatypeConstants.FIELD_UNDEFINED || monthValue == DatatypeConstants.FIELD_UNDEFINED
                 || dayValue == DatatypeConstants.FIELD_UNDEFINED) {
-            // Un `xs:time` con zona no tiene fecha que correr: la hora da la vuelta y ya. Es lo que
-            // hace la especificacion, que define la normalizacion de `time` modulo 24 horas.
+            // An `xs:time` with a zone has no date to move: the hour wraps around and that is it.
+            // It is what the specification does, which defines the normalization of `time` modulo
+            // 24 hours.
             return;
         }
         Calendar cal = new GregorianCalendar(TimeZone.getTimeZone("UTC"));
@@ -735,7 +739,7 @@ final class KajiXMLGregorianCalendar extends XMLGregorianCalendar {
         dayValue = cal.get(Calendar.DAY_OF_MONTH);
     }
 
-    /** El anio del calendario, conservando el eon que ya hubiera. */
+    /** The calendar's year, keeping whatever eon there already was. */
     private void setYearFromCalendar(Calendar cal) {
         int fresh = cal.get(Calendar.YEAR);
         if (cal.get(Calendar.ERA) == GregorianCalendar.BC) {
@@ -744,7 +748,7 @@ final class KajiXMLGregorianCalendar extends XMLGregorianCalendar {
         yearValue = fresh;
     }
 
-    // ---- forma lexica ---------------------------------------------------------------------------
+    // ---- lexical form ---------------------------------------------------------------------------
 
     /** {@inheritDoc} */
     public String toXMLFormat() {
@@ -795,13 +799,13 @@ final class KajiXMLGregorianCalendar extends XMLGregorianCalendar {
         b.append(':');
         twoDigits(b, secondValue);
         if (fractionValue != null && fractionValue.signum() != 0) {
-            // La fraccion se escribe sin el cero de adelante: `.500`, no `0.500`.
+            // The fraction is written without the leading zero: `.500`, not `0.500`.
             String t = fractionValue.toPlainString();
             b.append(t.substring(t.indexOf('.')));
         }
     }
 
-    /** El anio con al menos cuatro digitos, y el signo adelante si es negativo. */
+    /** The year with at least four digits, and the sign in front if it is negative. */
     private void writeYear(StringBuilder b) {
         BigInteger full = getEonAndYear();
         boolean negative = full.signum() < 0;
@@ -882,12 +886,12 @@ final class KajiXMLGregorianCalendar extends XMLGregorianCalendar {
                         + " time set = " + hasHour);
     }
 
-    // ---- validez y aritmetica ------------------------------------------------------------------
+    // ---- validity and arithmetic ----------------------------------------------------------------
 
     /** {@inheritDoc} */
     public boolean isValid() {
-        // El anio cero no existe en XML Schema 1.0 y si en 1.1; se sigue a 1.0, que es lo que hace
-        // el original: `0000` no es una fecha.
+        // Year zero does not exist in XML Schema 1.0 and does in 1.1; 1.0 is followed, which is
+        // what the original does: `0000` is not a date.
         if (yearValue == 0 && eon == null) {
             return false;
         }
@@ -899,8 +903,8 @@ final class KajiXMLGregorianCalendar extends XMLGregorianCalendar {
             if (dayValue < 1) {
                 return false;
             }
-            // El control que ningun setter puede hacer por su cuenta: el 31 de febrero pasa los dos
-            // rangos por separado y no existe.
+            // The check no setter can do on its own: 31 February passes both ranges separately and
+            // does not exist.
             int limit = monthValue == DatatypeConstants.FIELD_UNDEFINED
                     ? 31
                     : daysInMonth(monthValue, yearValue == DatatypeConstants.FIELD_UNDEFINED ? 2000 : yearValue);
@@ -909,20 +913,21 @@ final class KajiXMLGregorianCalendar extends XMLGregorianCalendar {
             }
         }
         if (secondValue == 60) {
-            // El segundo intercalar solo vale a las 23:59:60 UTC. No se valida mas fino que eso
-            // porque cuando hubo un segundo intercalar es una tabla historica que esta biblioteca
-            // no tiene, y rechazar los que si existieron seria peor que aceptar de mas.
+            // The leap second is only valid at 23:59:60 UTC. It is not validated more finely than
+            // that because when there was a leap second is a historical table this library does not
+            // have, and rejecting the ones that did exist would be worse than accepting too much.
             return true;
         }
         return true;
     }
 
     /**
-     * Cuantos dias tiene ese mes de ese anio.
+     * How many days that month of that year has.
      *
-     * <p>Con {@code if} y no con {@code switch} porque el generador de bytecode de esta VM todavia
-     * no acepta un {@code case} cuya etiqueta sea una constante con nombre --pide un literal
-     * entero-- y las de {@link DatatypeConstants} lo son.
+     * <p>With {@code if} and not with {@code switch} because the frozen {@code bin/javac} still
+     * does not fold a {@code case} whose label is a named constant read from a {@code .class}
+     * --finding #503, closed in the compiler source but not in that binary-- and the ones of {@link
+     * DatatypeConstants} are.
      */
     private static int daysInMonth(int monthValue, int yearValue) {
         if (monthValue == DatatypeConstants.FEBRUARY) {
@@ -935,7 +940,7 @@ final class KajiXMLGregorianCalendar extends XMLGregorianCalendar {
         return 31;
     }
 
-    /** La regla gregoriana. */
+    /** The Gregorian rule. */
     private static boolean isLeapYear(int yearValue) {
         return (yearValue % 4 == 0 && yearValue % 100 != 0) || yearValue % 400 == 0;
     }
@@ -943,10 +948,10 @@ final class KajiXMLGregorianCalendar extends XMLGregorianCalendar {
     /**
      * {@inheritDoc}
      *
-     * <p>El ajuste que sorprende: cuando sumar meses deja un dia que no existe en el mes de
-     * destino, el dia se <b>recorta</b> al ultimo del mes. El 31 de enero mas un mes es el 28 de
-     * febrero. Lo dice la especificacion y es lo que hace que sumar un mes nunca cambie de mes dos
-     * veces.
+     * <p>The adjustment that surprises: when adding months leaves a day that does not exist in the
+     * target month, the day is <b>clipped</b> to the last of the month. 31 January plus one month
+     * is 28 February. The specification says so and it is what makes adding a month never change
+     * month twice.
      */
     public void add(Duration duration) {
         if (duration == null) {
@@ -957,8 +962,8 @@ final class KajiXMLGregorianCalendar extends XMLGregorianCalendar {
             return;
         }
 
-        // Anios y meses juntos, que es como los define la especificacion: se suman en meses y
-        // recien despues se recorta el dia.
+        // Years and months together, which is how the specification defines them: they are added in
+        // months and only afterwards is the day clipped.
         long monthsToAdd = 0L;
         BigInteger a = (BigInteger) duration.getField(DatatypeConstants.YEARS);
         if (a != null) {
@@ -985,9 +990,10 @@ final class KajiXMLGregorianCalendar extends XMLGregorianCalendar {
             }
         }
 
-        // Dias, horas, minutos y segundos: todo eso si tiene largo fijo, asi que se junta en un
-        // solo numero de segundos --con la fraccion incluida-- y se suma de una. Separarlo por
-        // campo obligaria a arrastrar a mano cuatro veces y es donde se cuelan los errores.
+        // Days, hours, minutes and seconds: all of those do have a fixed length, so they are
+        // gathered into a single number of seconds --the fraction included-- and added at once.
+        // Splitting it by field would force carrying by hand four times and it is where the
+        // mistakes creep in.
         BigDecimal secondsToAdd = BigDecimal.ZERO;
         BigInteger d = (BigInteger) duration.getField(DatatypeConstants.DAYS);
         if (d != null) {
@@ -1012,8 +1018,8 @@ final class KajiXMLGregorianCalendar extends XMLGregorianCalendar {
             return;
         }
 
-        // La hora actual del dia, en segundos. Un campo sin definir cuenta como cero: en un
-        // `xs:date` no hay hora que mover y lo unico que sobrevive es el arrastre a dias.
+        // The current time of day, in seconds. An undefined field counts as zero: in an `xs:date`
+        // there is no time to move and the only thing that survives is the carry into days.
         BigDecimal withinDay = BigDecimal.ZERO;
         if (hourValue != DatatypeConstants.FIELD_UNDEFINED) {
             withinDay = withinDay.add(BigDecimal.valueOf((long) hourValue * 3600L));
@@ -1052,7 +1058,7 @@ final class KajiXMLGregorianCalendar extends XMLGregorianCalendar {
         shiftDaysLong(wholeDays.longValue());
     }
 
-    /** Como {@link #correrMinutos} pero para valores que no entran en un {@code int}. */
+    /** Like {@link #shiftMinutes} but for values that do not fit in an {@code int}. */
     private void shiftMinutesLong(long minutes) {
         if (hourValue == DatatypeConstants.FIELD_UNDEFINED) {
             long days = Math.floorDiv(minutes, 1440L);
@@ -1071,7 +1077,7 @@ final class KajiXMLGregorianCalendar extends XMLGregorianCalendar {
         shiftDaysLong(days);
     }
 
-    /** Corre tantos dias, de a tramos que entren en un {@code int}. */
+    /** Moves that many days, in stretches that fit in an {@code int}. */
     private void shiftDaysLong(long days) {
         long pending = days;
         while (pending != 0L) {
@@ -1088,7 +1094,7 @@ final class KajiXMLGregorianCalendar extends XMLGregorianCalendar {
         }
     }
 
-    // ---- conversiones --------------------------------------------------------------------------
+    // ---- conversions ---------------------------------------------------------------------------
 
     /** {@inheritDoc} */
     public GregorianCalendar toGregorianCalendar() {
@@ -1133,7 +1139,7 @@ final class KajiXMLGregorianCalendar extends XMLGregorianCalendar {
         return cal;
     }
 
-    /** El campo, o el del calendario de omision, o el de la epoca. */
+    /** The field, or the one of the default calendar, or the one of the epoch. */
     private static int fieldOrDefault(int own, int defaultOf, int fromEpoch) {
         if (own != DatatypeConstants.FIELD_UNDEFINED) {
             return own;

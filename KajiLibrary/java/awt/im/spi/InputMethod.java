@@ -5,142 +5,147 @@ import java.awt.Rectangle;
 import java.util.Locale;
 
 /**
- * Un metodo de entrada: lo que convierte teclas en texto cuando una tecla no alcanza.
+ * An input method: what turns keystrokes into text when one key is not enough.
  *
- * <p>Escribir japones, chino o coreano no es una tecla por caracter: el usuario teclea una lectura
- * fonetica, el metodo de entrada le ofrece candidatos, y recien cuando elige uno se produce el
- * texto. Todo lo de esta interfaz sale de ahi.
+ * <p>Writing Japanese, Chinese or Korean is not one key per character: the user types a phonetic
+ * reading, the input method offers candidates, and only when one is chosen is the text produced.
+ * Everything in this interface comes from that.
  *
- * <h2>El texto en composicion</h2>
+ * <h2>The composed text</h2>
  *
- * <p>Entre la primera tecla y la eleccion hay un estado intermedio --el **texto en composicion**--
- * que el cliente muestra pero que todavia no es parte del documento. Es lo que se ve subrayado
- * mientras se elige. El metodo de entrada lo va reportando por
- * {@link InputMethodContext#dispatchInputMethodEvent}, y el texto pasa a ser definitivo cuando se
- * lo *compromete*.
+ * <p>Between the first keystroke and the choice there is an intermediate state --the **composed
+ * text**-- that the client shows but that is not yet part of the document. It is what is seen
+ * underlined while choosing. The input method reports it through
+ * {@link InputMethodContext#dispatchInputMethodEvent}, and the text becomes final when it is
+ * *committed*.
  *
- * <p>Por eso {@link #endComposition} aparece en tantos lugares: cada vez que el foco se va, o que
- * el cliente necesita el texto de verdad, hay que decidir que hacer con lo que estaba a medio
- * componer.
+ * <p>That is why {@link #endComposition} shows up in so many places: every time focus leaves, or
+ * the client needs the real text, something has to be decided about what was half composed.
  *
- * <h2>Activo y desactivado</h2>
+ * <h2>Active and inactive</h2>
  *
- * <p>Un metodo de entrada se {@link #activate activa} cuando el cliente que lo usa toma el foco y
- * se {@link #deactivate desactiva} cuando lo pierde. Entre medio puede seguir vivo: la
- * desactivacion no libera nada, para eso esta {@link #dispose}.
+ * <p>An input method is {@link #activate activated} when the client using it takes focus and
+ * {@link #deactivate deactivated} when it loses it. In between it can stay alive: deactivation
+ * releases nothing; that is what {@link #dispose} is for.
  *
  * @see InputMethodDescriptor
  */
 public interface InputMethod {
 
     /**
-     * Le da al metodo de entrada el contexto por el que se comunica con el cliente.
+     * Gives the input method the context through which it communicates with the client.
      *
-     * <p>Se llama una sola vez, apenas creado y antes que cualquier otra cosa.
+     * <p>It is called only once, right after creation and before anything else.
      */
     void setInputMethodContext(InputMethodContext context);
 
     /**
-     * Cambia el idioma que se esta escribiendo.
+     * Changes the locale being written.
      *
-     * @return `true` si lo pudo hacer; `false` si no soporta ese idioma
+     * @return `true` if it could; `false` if it does not support that locale
      */
     boolean setLocale(Locale locale);
 
-    /** El idioma que se esta escribiendo, o `null` si no hay ninguno todavia. */
+    /** The locale being written, or `null` if there is none yet. */
     Locale getLocale();
 
     /**
-     * Restringe los caracteres que se pueden producir a esos subconjuntos.
+     * Restricts the characters that can be produced to those subsets.
      *
-     * <p>Con `null` o un arreglo vacio no hay restriccion.
+     * <p>With `null` there is no restriction. (This javadoc said an empty array means the same; the
+     * contract only says so of `null`.)
      */
     void setCharacterSubsets(Character.Subset[] subsets);
 
     /**
-     * Prende o apaga la composicion.
+     * Turns composition on or off.
      *
-     * <p>Apagada, las teclas pasan directo. Es como se alterna entre escribir japones y escribir
-     * caracteres latinos sin cambiar de metodo de entrada.
+     * <p>When off, keystrokes pass straight through. It is how one switches between writing
+     * Japanese and writing Latin characters without changing input method.
      *
-     * @throws UnsupportedOperationException si este metodo de entrada no se puede apagar
+     * @throws UnsupportedOperationException if this input method cannot be turned off
      */
     void setCompositionEnabled(boolean enable);
 
     /**
-     * Si la composicion esta prendida.
+     * Whether composition is on.
      *
-     * @throws UnsupportedOperationException si este metodo de entrada no sabe responderlo
+     * @throws UnsupportedOperationException if this input method cannot answer it
      */
     boolean isCompositionEnabled();
 
     /**
-     * Vuelve a poner en composicion el texto ya comprometido que rodea al cursor.
+     * Puts the already committed text around the cursor back into composition.
      *
-     * <p>Sirve para corregir: el usuario eligio mal el candidato, y en vez de borrar y volver a
-     * teclear pide reconvertir lo que ya escribio.
+     * <p>It is for correcting: the user chose the wrong candidate, and instead of deleting and
+     * typing again asks to reconvert what was already written.
      *
-     * @throws UnsupportedOperationException si este metodo de entrada no sabe reconvertir
+     * @throws UnsupportedOperationException if this input method cannot reconvert
      */
     void reconvert();
 
     /**
-     * Le entrega un evento al metodo de entrada.
+     * Hands an event to the input method.
      *
-     * <p>Solo llegan los eventos que el metodo pidio; el que consuma el evento se queda con el, y
-     * el cliente no lo ve.
+     * <p>What arrives is every {@code InputEvent}, key and mouse events included; whichever event
+     * the input method consumes stays with it, and the client does not see it. (This javadoc said
+     * only the events the method asked for arrive.)
      */
     void dispatchEvent(AWTEvent event);
 
     /**
-     * Avisa que la ventana del cliente se movio, cambio de tamanio o de visibilidad.
+     * Tells that the client's window moved, changed size or visibility.
      *
-     * <p>Sirve para reubicar la ventana de candidatos, que tiene que seguir al texto. Solo llega si
-     * el metodo lo pidio con {@link InputMethodContext#enableClientWindowNotification}.
+     * <p>It serves to relocate the candidate window, which has to follow the text. It only arrives
+     * if the method asked for it with {@link InputMethodContext#enableClientWindowNotification}.
      *
-     * @param bounds la nueva posicion en pantalla, o `null` si la ventana ya no se ve
+     * @param bounds the new position on screen, or `null` if the window is no longer visible
      */
     void notifyClientWindowChange(Rectangle bounds);
 
-    /** Lo activa: su cliente acaba de tomar el foco. */
+    /** Activates it: its client has just taken focus. */
     void activate();
 
     /**
-     * Lo desactiva: su cliente perdio el foco.
+     * Deactivates it: its client lost focus.
      *
-     * @param isTemporary si el foco se fue por poco tiempo --un menu, un dialogo-- en cuyo caso
-     *     conviene conservar el estado de composicion en vez de tirarlo
+     * @param isTemporary whether focus left only briefly --a menu, a dialog-- in which case the
+     *     composition state is worth keeping instead of throwing it away
      */
     void deactivate(boolean isTemporary);
 
-    /** Esconde las ventanas que haya abierto: la de candidatos, la de estado. */
+    /** Hides the windows it opened: the candidate window, the status window. */
     void hideWindows();
 
     /**
-     * Avisa que el cliente se va: hay que soltar el texto en composicion sin comprometerlo.
+     * Tells that a client component was removed from its containment hierarchy, or that input
+     * method support was disabled for it. It is only called while the input method is inactive.
+     * (This javadoc said the composed text has to be dropped without committing it; the contract
+     * says nothing of the kind.)
      */
     void removeNotify();
 
     /**
-     * Termina la composicion en curso comprometiendo lo que haya.
+     * Ends the composition in progress.
      *
-     * <p>El texto sale por el evento de siempre, asi que el cliente se entera por el mismo camino
-     * que si el usuario lo hubiera elegido.
+     * <p>Depending on the platform and possibly on user preferences, the uncommitted text is
+     * committed or deleted; this javadoc said it is always committed. Any change goes out through
+     * the usual event, so the client learns of it the same way as if the user had chosen it.
      */
     void endComposition();
 
     /**
-     * Suelta los recursos del metodo de entrada.
+     * Releases the input method's resources.
      *
-     * <p>Se llama con el metodo ya desactivado, y despues de esto no se lo usa mas.
+     * <p>It is called with the method already deactivated, and after this it is not used again.
      */
     void dispose();
 
     /**
-     * Un objeto de control especifico de esta implementacion, o `null` si no hay.
+     * A control object specific to this implementation, or `null` if there is none.
      *
-     * <p>Es la valvula de escape: lo que un metodo de entrada quiera exponer y esta interfaz no
-     * cubra sale por aca, y el cliente que lo entienda lo castea.
+     * <p>It is the escape hatch: whatever an input method wants to expose that this interface does
+     * not cover goes out here, and the client that understands it casts it.
      */
     Object getControlObject();
 }

@@ -1,38 +1,38 @@
 package javax.imageio.stream;
 
 /**
- * KajiLibrary's javax.imageio.stream.IIOByteBuffer -- un arreglo, un desplazamiento y un largo.
+ * KajiLibrary's javax.imageio.stream.IIOByteBuffer -- an array, an offset and a length.
  *
- * <p>Existe por una razon de rendimiento y no de diseno. {@code ImageInputStream.readBytes} le
- * entrega al que llama <b>el bufer interno del flujo</b>, sin copiar: para un lector de imagenes que
- * recorre megabytes, esa copia es medible.
+ * <p>It exists for a performance reason and not a design one. {@code ImageInputStream.readBytes}
+ * hands the caller <b>the stream's internal buffer</b>, without copying: for an image reader that
+ * walks megabytes, that copy is measurable.
  *
- * <p>Eso trae dos cosas que hay que tener presentes:
+ * <p>That brings two things to keep in mind:
  *
  * <ul>
- *   <li>el arreglo <b>no es de quien lo recibe</b>. La proxima lectura del flujo lo puede pisar. Hay
- *       que consumirlo antes de seguir leyendo, o copiarlo;
- *   <li>los tres campos son mutables y se escriben desde afuera, porque el flujo los rellena.
+ *   <li>the array <b>does not belong to whoever receives it</b>. The stream's next read may
+ *       overwrite it. It has to be consumed before reading on, or copied;
+ *   <li>the three fields are mutable and written from outside, because the stream fills them in.
  * </ul>
  *
- * <p>Es la unica clase de la API de imagenes que expone un bufer prestado, y por eso conviene tratarla
- * con cuidado en lugar de guardarla.
+ * <p>It is the only class of the image API that exposes a borrowed buffer, which is why it is worth
+ * handling with care instead of keeping it.
  */
 public class IIOByteBuffer {
 
-    /** El arreglo prestado. Ver la nota de la clase. */
+    /** The borrowed array. See the class note. */
     private byte[] data;
 
-    /** Desde donde valen los datos. */
+    /** From where the data is valid. */
     private int offset;
 
-    /** Cuantos bytes valen. */
+    /** How many bytes are valid. */
     private int length;
 
     /**
-     * @param data el arreglo; no se copia
-     * @param offset desde donde
-     * @param length cuantos
+     * @param data the array; not copied
+     * @param offset from where
+     * @param length how many
      */
     public IIOByteBuffer(byte[] data, int offset, int length) {
         this.data = data;
@@ -40,32 +40,32 @@ public class IIOByteBuffer {
         this.length = length;
     }
 
-    /** El arreglo. Ver la nota de la clase: puede no ser tuyo. */
+    /** The array. See the class note: it may not be yours. */
     public byte[] getData() {
         return this.data;
     }
 
-    /** Lo cambia. */
+    /** Changes it. */
     public void setData(byte[] data) {
         this.data = data;
     }
 
-    /** Desde donde valen los datos. */
+    /** From where the data is valid. */
     public int getOffset() {
         return this.offset;
     }
 
-    /** Lo cambia. */
+    /** Changes it. */
     public void setOffset(int offset) {
         this.offset = offset;
     }
 
-    /** Cuantos bytes valen. */
+    /** How many bytes are valid. */
     public int getLength() {
         return this.length;
     }
 
-    /** Lo cambia. */
+    /** Changes it. */
     public void setLength(int length) {
         this.length = length;
     }

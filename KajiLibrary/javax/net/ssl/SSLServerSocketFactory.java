@@ -3,37 +3,37 @@ package javax.net.ssl;
 import javax.net.ServerSocketFactory;
 
 /**
- * Fabrica de {@link SSLServerSocket}.
+ * Factory of {@link SSLServerSocket}s.
  *
- * <p>El espejo de {@link SSLSocketFactory} del lado servidor, y con el mismo proposito: que el
- * codigo que abre el puerto no tenga que saber si lo que acepta va cifrado.
+ * <p>The server-side mirror of {@link SSLSocketFactory}, with the same purpose: that the code that
+ * opens the port does not have to know whether what it accepts goes encrypted.
  *
- * <p>Sin proveedor de TLS instalado, {@link #getDefault} devuelve una fabrica que falla al usarse en
- * vez de {@code null} — ver la nota de {@link SSLSocketFactory}.
+ * <p>Without a TLS provider installed, {@link #getDefault} returns a factory that fails when used
+ * instead of {@code null} — see the note of {@link SSLSocketFactory}.
  */
 public abstract class SSLServerSocketFactory extends ServerSocketFactory {
 
-    private static SSLServerSocketFactory laDefault;
+    private static SSLServerSocketFactory theDefault;
 
     protected SSLServerSocketFactory() {
     }
 
-    /** La fabrica por omision, sacada del {@link SSLContext} por omision. */
+    /** The default factory, taken from the default {@link SSLContext}. */
     public static synchronized ServerSocketFactory getDefault() {
-        if (laDefault == null) {
+        if (theDefault == null) {
             try {
-                laDefault =
+                theDefault =
                         (SSLServerSocketFactory) SSLContext.getDefault().getServerSocketFactory();
             } catch (Exception e) {
-                laDefault = new DefaultSSLServerSocketFactory(e);
+                theDefault = new DefaultSSLServerSocketFactory(e);
             }
         }
-        return laDefault;
+        return theDefault;
     }
 
-    /** Las suites habilitadas por omision en lo que fabrique. */
+    /** The suites enabled by default in what it makes. */
     public abstract String[] getDefaultCipherSuites();
 
-    /** Todas las suites que se podrian habilitar. */
+    /** All the suites that could be enabled. */
     public abstract String[] getSupportedCipherSuites();
 }

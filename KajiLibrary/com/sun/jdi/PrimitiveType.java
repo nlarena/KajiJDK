@@ -1,7 +1,7 @@
 package com.sun.jdi;
 
 /**
- * El tipo de uno de los ocho primitivos.
+ * The type of one of the eight primitives.
  *
  * @since 1.3
  */

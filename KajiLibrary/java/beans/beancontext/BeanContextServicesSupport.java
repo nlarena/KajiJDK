@@ -12,75 +12,88 @@ import java.util.Locale;
 import java.util.TooManyListenersException;
 
 /**
- * La implementación reusable de {@link BeanContextServices}.
+ * The reusable implementation of {@link BeanContextServices}.
  *
- * <p>Agrega los servicios sobre lo que {@link BeanContextSupport} ya hace con la membresía. La idea
- * de fondo es una sola y explica casi todo el archivo: **un servicio se busca hacia arriba**. Si
- * este contexto no lo tiene, se le pregunta al padre, y así hasta la raíz.
+ * <p>It adds services on top of what {@link BeanContextSupport} already does with membership. One
+ * idea explains almost the whole file: **a service is looked up upwards**. If this context does not
+ * have it, the parent is asked, and so on up to the root.
  *
- * <h2>El proveedor delegado</h2>
+ * <h2>The delegating provider</h2>
  *
- * <p>Cuando un servicio viene de más arriba, este contexto no reenvía el pedido cada vez: registra
- * un {@link BCSSProxyServiceProvider} que se hace pasar por proveedor local y por dentro habla con
- * el contexto padre. Así los hijos de acá ven un proveedor como cualquier otro, y la revocación de
- * arriba llega igual — el proxy es también el oyente que la recibe.
+ * <p>The first time a service comes from further up, this context registers a {@link
+ * BCSSProxyServiceProvider} under that class: it poses as a local provider and forwards to the
+ * parent context. From then on the children here see a provider like any other, and a revocation
+ * from above still arrives, because the proxy is also the listener that receives it.
  *
- * <h2>Qué se anota de cada pedido</h2>
+ * <p>This note said that, with the proxy registered, the request is no longer forwarded each time.
+ * It is: the proxy's {@code getService} calls the parent's on every request. What the proxy saves
+ * is finding the service, not the trip up.
  *
- * <p>De cada instancia entregada se guarda **quién la pidió** y **con qué oyente de revocación**.
- * Sin eso, `releaseService` no podría saber qué está soltando, y una revocación no sabría a quién
- * avisar. Es la razón de que {@link BCSSServiceProvider} lleve más que el proveedor.
+ * <h2>What is not recorded</h2>
+ *
+ * <p>This note also said that each handed-out instance is recorded with **who asked for it** and
+ * **with which revocation listener**, and that this is why {@link BCSSServiceProvider} carries more
+ * than the provider. Nothing here records either: {@code BCSSServiceProvider} holds only the
+ * provider, {@code releaseService} hands the instance to every registered provider, and this class
+ * never registers the listener a requestor passes to {@code getService} (on the way up it hands it
+ * to the parent, which may). In the JDK that bookkeeping lives in {@code BCSSChild}, which this
+ * tree does not have; see {@link #createBCSChild}.
  */
 public class BeanContextServicesSupport extends BeanContextSupport implements BeanContextServices {
 
-    /** Los servicios registrados acá, de clase de servicio a su {@link BCSSServiceProvider}. */
+    /** The services registered here, from service class to its {@link BCSSServiceProvider}. */
     protected transient HashMap services;
 
-    /** Los oyentes de altas y bajas de servicios. */
+    /** The listeners for services being added and revoked. */
     protected transient ArrayList bcsListeners;
 
-    /** Cuántos servicios de este contexto son serializables. */
+    /** How many of the providers registered here are serializable. */
     protected transient int serializable;
 
-    /** El proveedor que representa a los servicios que vienen del contexto padre. */
+    /** The provider that stands for the services coming from the parent context. */
     protected transient BCSSProxyServiceProvider proxy;
 
-    /** Un contexto de servicios sin padre. */
+    /** A services context with no parent. */
     public BeanContextServicesSupport() {
         this(null, null, true, true);
     }
 
-    /** Hijo de `peer`. */
+    /**
+     * A context acting in the name of `peer`.
+     *
+     * <p>This javadoc said a child of `peer`. `peer` is the context this one acts for —see the
+     * four-argument constructor of {@link BeanContextSupport}— not its parent.
+     */
     public BeanContextServicesSupport(BeanContextServices peer) {
         this(peer, null, true, true);
     }
 
-    /** Con ese idioma. */
+    /** With that locale. */
     public BeanContextServicesSupport(BeanContextServices peer, Locale lcle) {
         this(peer, lcle, true, true);
     }
 
-    /** Con ese idioma y ese modo de diseño. */
+    /** With that locale and that design mode. */
     public BeanContextServicesSupport(BeanContextServices peer, Locale lcle, boolean dTime) {
         this(peer, lcle, dTime, true);
     }
 
-    /** El constructor al que llegan los demás. */
+    /** The constructor the others end up in. */
     public BeanContextServicesSupport(BeanContextServices peer, Locale lcle, boolean dTime,
             boolean visible) {
         super(peer, lcle, dTime, visible);
     }
 
-    /** El contexto de servicios a nombre del cual actúa. */
+    /** The services context it acts in the name of. */
     public BeanContextServices getBeanContextServicesPeer() {
         return (BeanContextServices) this.getBeanContextChildPeer();
     }
 
     /**
-     * Arma las estructuras internas.
+     * Builds the internal structures.
      *
-     * <p>Llama a la de la superclase primero: los hijos tienen que existir antes que los servicios,
-     * porque un servicio se le puede ofrecer a un hijo apenas se registra.
+     * <p>It calls the superclass's first: the children have to exist before the services, because a
+     * service can be offered to a child as soon as it is registered.
      */
     public void initialize() {
         super.initialize();
@@ -88,19 +101,20 @@ public class BeanContextServicesSupport extends BeanContextSupport implements Be
         this.bcsListeners = new ArrayList();
     }
 
-    // ---- alta y baja de servicios ---------------------------------------------------------------
+    // ---- adding and revoking services -----------------------------------------------------------
 
-    /** Da de alta un proveedor. `false` si ya había uno para esa clase. */
+    /** Registers a provider. `false` if there already was one for that class. */
     public boolean addService(Class serviceClass, BeanContextServiceProvider bcsp) {
         return this.addService(serviceClass, bcsp, true);
     }
 
     /**
-     * Da de alta un proveedor, avisando o no.
+     * Registers a provider, announcing it or not.
      *
-     * <p>`fireEvent` en `false` es para el alta que hace el propio contexto al descubrir un servicio
-     * del padre: los hijos ya se van a enterar por el evento que viene de arriba, y avisar de nuevo
-     * les llegaría dos veces.
+     * <p>`fireEvent` is `false` for the registration the context itself makes when it discovers a
+     * service of the parent's: the listeners already hear of it through the event coming from
+     * above, and announcing it again would reach them twice. {@link #bcsPreDeserializationHook}
+     * also passes `false` when it registers again the providers it reads back.
      */
     protected boolean addService(Class serviceClass, BeanContextServiceProvider bcsp,
             boolean fireEvent) {
@@ -123,10 +137,10 @@ public class BeanContextServicesSupport extends BeanContextSupport implements Be
     }
 
     /**
-     * Da de baja un servicio.
+     * Revokes a service.
      *
-     * <p>Sólo lo puede revocar **el proveedor que lo registró**. No es burocracia: si cualquiera
-     * pudiera revocar el servicio de otro, un hijo podría dejar sin servicio a todos sus hermanos.
+     * <p>Only **the provider that registered it** can revoke it. It is not red tape: if anyone
+     * could revoke another's service, one child could leave all its siblings without it.
      */
     public void revokeService(Class serviceClass, BeanContextServiceProvider bcsp,
             boolean revokeCurrentServicesNow) {
@@ -134,13 +148,13 @@ public class BeanContextServicesSupport extends BeanContextSupport implements Be
             throw new NullPointerException();
         }
         synchronized (BeanContext.globalHierarchyLock) {
-            BCSSServiceProvider registrado = (BCSSServiceProvider) this.services.get(serviceClass);
-            if (registrado == null) {
+            BCSSServiceProvider registered = (BCSSServiceProvider) this.services.get(serviceClass);
+            if (registered == null) {
                 return;
             }
-            if (registrado.getServiceProvider() != bcsp) {
+            if (registered.getServiceProvider() != bcsp) {
                 throw new IllegalArgumentException(
-                        "sólo el proveedor que registró el servicio puede revocarlo");
+                        "only the provider that registered the service can revoke it");
             }
             this.services.remove(serviceClass);
             if (bcsp instanceof Serializable) {
@@ -150,7 +164,7 @@ public class BeanContextServicesSupport extends BeanContextSupport implements Be
         }
     }
 
-    /** Si el servicio está acá o más arriba. */
+    /** Whether the service is here or further up. */
     public synchronized boolean hasService(Class serviceClass) {
         if (serviceClass == null) {
             throw new NullPointerException("serviceClass");
@@ -159,27 +173,31 @@ public class BeanContextServicesSupport extends BeanContextSupport implements Be
             if (this.services.containsKey(serviceClass)) {
                 return true;
             }
-            BeanContextServices arriba = this.parentServices();
-            return arriba != null && arriba.hasService(serviceClass);
+            BeanContextServices above = this.parentServices();
+            return above != null && above.hasService(serviceClass);
         }
     }
 
-    // El contexto padre, si es de servicios. Un padre que sea un `BeanContext` a secas no reparte
-    // servicios, y ahí la búsqueda hacia arriba se corta -- que es lo correcto y no una omisión.
+    // The parent context, if it is a services context. A parent that is a plain `BeanContext` hands
+    // out no services, and there the upward lookup stops -- which is right and not an omission.
     private BeanContextServices parentServices() {
-        BeanContext padre = this.getBeanContext();
-        return padre instanceof BeanContextServices ? (BeanContextServices) padre : null;
+        BeanContext parent = this.getBeanContext();
+        return parent instanceof BeanContextServices ? (BeanContextServices) parent : null;
     }
 
-    // ---- pedir y soltar ---------------------------------------------------------------------
+    // ---- requesting and releasing ---------------------------------------------------------------
 
     /**
-     * Consigue una instancia del servicio para ese hijo.
+     * Gets an instance of the service for that child.
      *
-     * <p>Si el servicio no está acá, se lo pide al padre y **se registra un proxy local** para que
-     * los próximos pedidos no vuelvan a subir. Ver la nota de la clase.
+     * <p>If the service is not here, it is requested from the parent and **a local proxy is
+     * registered** under that class. This javadoc said the proxy keeps later requests from going up
+     * again; they still go up, through the proxy. See the class note.
      *
-     * @throws TooManyListenersException si el oyente de revocación no se pudo registrar
+     * <p>{@code bcsrl} only reaches the parent on that first upward request. A provider registered
+     * here never sees it, and later requests through the proxy pass the proxy instead.
+     *
+     * @throws TooManyListenersException if the revocation listener could not be registered
      */
     public Object getService(BeanContextChild child, Object requestor, Class serviceClass,
             Object serviceSelector, BeanContextServiceRevokedListener bcsrl)
@@ -190,27 +208,27 @@ public class BeanContextServicesSupport extends BeanContextSupport implements Be
         synchronized (BeanContext.globalHierarchyLock) {
             BCSSServiceProvider bcsssp = (BCSSServiceProvider) this.services.get(serviceClass);
             if (bcsssp == null) {
-                BeanContextServices arriba = this.parentServices();
-                if (arriba == null) {
+                BeanContextServices above = this.parentServices();
+                if (above == null) {
                     return null;
                 }
-                Object servicio = arriba.getService(this.getBeanContextServicesPeer(), requestor,
+                Object service = above.getService(this.getBeanContextServicesPeer(), requestor,
                         serviceClass, serviceSelector, bcsrl);
-                if (servicio == null) {
+                if (service == null) {
                     return null;
                 }
                 if (this.proxy == null) {
-                    this.proxy = new BCSSProxyServiceProvider(arriba);
+                    this.proxy = new BCSSProxyServiceProvider(above);
                 }
                 this.addService(serviceClass, this.proxy, false);
-                return servicio;
+                return service;
             }
             return bcsssp.getServiceProvider().getService(this.getBeanContextServicesPeer(),
                     requestor, serviceClass, serviceSelector);
         }
     }
 
-    /** El hijo ya no necesita esa instancia. */
+    /** The child no longer needs that instance. */
     public void releaseService(BeanContextChild child, Object requestor, Object service) {
         if (child == null || requestor == null || service == null) {
             throw new NullPointerException();
@@ -225,19 +243,19 @@ public class BeanContextServicesSupport extends BeanContextSupport implements Be
         }
     }
 
-    /** Las clases de servicio registradas acá. */
+    /** The service classes registered here. */
     public Iterator getCurrentServiceClasses() {
         synchronized (BeanContext.globalHierarchyLock) {
-            List<Object> copia = new ArrayList<Object>();
+            List<Object> copy = new ArrayList<Object>();
             Iterator it = this.services.keySet().iterator();
             while (it.hasNext()) {
-                copia.add(it.next());
+                copy.add(it.next());
             }
-            return copia.iterator();
+            return copy.iterator();
         }
     }
 
-    /** Los selectores que acepta ese servicio, o `null`. */
+    /** The selectors that service accepts, or `null`. */
     public Iterator getCurrentServiceSelectors(Class serviceClass) {
         synchronized (BeanContext.globalHierarchyLock) {
             BCSSServiceProvider bcsssp = (BCSSServiceProvider) this.services.get(serviceClass);
@@ -249,9 +267,9 @@ public class BeanContextServicesSupport extends BeanContextSupport implements Be
         }
     }
 
-    // ---- oyentes -------------------------------------------------------------------------------
+    // ---- listeners ------------------------------------------------------------------------------
 
-    /** Registra un oyente de altas y bajas de servicios. */
+    /** Registers a listener for services being added and revoked. */
     public void addBeanContextServicesListener(BeanContextServicesListener bcsl) {
         if (bcsl == null) {
             throw new NullPointerException("bcsl");
@@ -263,7 +281,7 @@ public class BeanContextServicesSupport extends BeanContextSupport implements Be
         }
     }
 
-    /** Lo quita. */
+    /** Removes it. */
     public void removeBeanContextServicesListener(BeanContextServicesListener bcsl) {
         if (bcsl == null) {
             throw new NullPointerException("bcsl");
@@ -273,21 +291,21 @@ public class BeanContextServicesSupport extends BeanContextSupport implements Be
         }
     }
 
-    // Copia, por lo mismo que en `BeanContextSupport`: un oyente puede darse de baja mientras lo
-    // notifican.
+    // A copy, for the same reason as in `BeanContextSupport`: a listener can unregister while being
+    // notified.
     private Object[] serviceListenersCopy() {
         synchronized (BeanContext.globalHierarchyLock) {
             return this.bcsListeners.toArray();
         }
     }
 
-    /** Avisa de un servicio nuevo. */
+    /** Announces a new service. */
     protected final void fireServiceAdded(Class serviceClass) {
         this.fireServiceAdded(new BeanContextServiceAvailableEvent(
                 this.getBeanContextServicesPeer(), serviceClass));
     }
 
-    /** Avisa de un servicio nuevo. */
+    /** Announces a new service. */
     protected final void fireServiceAdded(BeanContextServiceAvailableEvent bcssae) {
         Object[] ls = this.serviceListenersCopy();
         for (int i = 0; i < ls.length; i++) {
@@ -295,36 +313,37 @@ public class BeanContextServicesSupport extends BeanContextSupport implements Be
         }
     }
 
-    /** Avisa de una revocación. */
+    /** Announces a revocation. */
     protected final void fireServiceRevoked(Class serviceClass, boolean revokeNow) {
         this.fireServiceRevoked(new BeanContextServiceRevokedEvent(
                 this.getBeanContextServicesPeer(), serviceClass, revokeNow));
     }
 
     /**
-     * Avisa de una revocación.
+     * Announces a revocation.
      *
-     * <p>Le llega a los oyentes de servicios **y** a los hijos que sean oyentes de revocación sin
-     * serlo de altas. Los dos grupos se recorren por separado a propósito: un hijo puede querer
-     * enterarse sólo de que algo dejó de estar, y obligarlo a implementar también `serviceAvailable`
-     * para eso sería pedirle un método vacío.
+     * <p>It reaches the services listeners, and then the children that are themselves services
+     * listeners, directly or through a {@link BeanContextProxy}, skipping those already registered
+     * so none hears it twice. This javadoc said the second group is the children that listen for
+     * revocations without listening for additions, so they need not write an empty {@code
+     * serviceAvailable}. The check is for {@link BeanContextServicesListener}, which declares both.
      */
     protected final void fireServiceRevoked(BeanContextServiceRevokedEvent bcsre) {
         Object[] ls = this.serviceListenersCopy();
         for (int i = 0; i < ls.length; i++) {
             ((BeanContextServicesListener) ls[i]).serviceRevoked(bcsre);
         }
-        Object[] hijos = this.copyChildren();
-        for (int i = 0; i < hijos.length; i++) {
+        Object[] children = this.copyChildren();
+        for (int i = 0; i < children.length; i++) {
             BeanContextServicesListener l =
-                    BeanContextServicesSupport.getChildBeanContextServicesListener(hijos[i]);
+                    BeanContextServicesSupport.getChildBeanContextServicesListener(children[i]);
             if (l != null && !this.bcsListeners.contains(l)) {
                 l.serviceRevoked(bcsre);
             }
         }
     }
 
-    /** Ese objeto como oyente de servicios, directo o por delegación, o `null`. */
+    /** That object as a services listener, directly or through delegation, or `null`. */
     protected static final BeanContextServicesListener getChildBeanContextServicesListener(
             Object child) {
         if (child instanceof BeanContextServicesListener) {
@@ -339,9 +358,13 @@ public class BeanContextServicesSupport extends BeanContextSupport implements Be
         return null;
     }
 
-    // ---- lo que este contexto escucha de su padre -----------------------------------------------
+    // ---- what this context hears from its parent ------------------------------------------------
 
-    /** Un servicio apareció más arriba: se lo reenvía a los hijos. */
+    /**
+     * A service appeared further up: it is passed on to this context's services listeners, unless a
+     * service of that class is already registered here. This javadoc said it is passed on to the
+     * children; only the listeners get it.
+     */
     public void serviceAvailable(BeanContextServiceAvailableEvent bcssae) {
         synchronized (BeanContext.globalHierarchyLock) {
             if (this.services.containsKey(bcssae.getServiceClass())) {
@@ -352,10 +375,10 @@ public class BeanContextServicesSupport extends BeanContextSupport implements Be
     }
 
     /**
-     * Un servicio fue revocado más arriba.
+     * A service was revoked further up.
      *
-     * <p>Si este contexto lo tenía registrado por proxy, lo saca: seguir ofreciéndolo sería prometer
-     * algo que ya no se puede conseguir.
+     * <p>If this context had it registered through the proxy, it removes it: going on offering it
+     * would promise something that can no longer be obtained.
      */
     public void serviceRevoked(BeanContextServiceRevokedEvent bcsre) {
         synchronized (BeanContext.globalHierarchyLock) {
@@ -368,64 +391,64 @@ public class BeanContextServicesSupport extends BeanContextSupport implements Be
         }
     }
 
-    /**
-     * El {@link BCSSServiceProvider} de ese servicio. Una subclase lo redefine para guardar más.
-     */
+    /** The {@link BCSSServiceProvider} for that service. */
     protected BCSSServiceProvider createBCSSServiceProvider(Class serviceClass,
             BeanContextServiceProvider bcsp) {
         return new BCSSServiceProvider(bcsp);
     }
 
     /**
-     * El {@link BCSChild} de ese hijo.
+     * The {@link BCSChild} for that child.
      *
-     * <p>El JDK devuelve acá un `BCSSChild`, una subclase interna que agrega lo que los servicios
-     * necesitan anotar de cada hijo. **KajiLibrary no la trae**, y el motivo es concreto: nuestro
-     * javac no emite bien un `super(...)` de una clase interna al constructor de la interna de su
-     * superclase --le come la instancia envolvente, y el `.class` sale con un descriptor que no
-     * existe (ver el informe del compilador)--. La clase compilaba y moría al cargarse en una JVM
-     * real con `NoSuchMethodError`.
+     * <p>The JDK returns a {@code BCSSChild} here, a nested subclass that records, per child, the
+     * services it requested, by class and by requestor, with their revocation listeners.
+     * **KajiLibrary does not have it.** This javadoc gave as the reason a javac defect: a {@code
+     * super(...)} from an inner class to the inner class of its superclass lost the enclosing
+     * instance and emitted a constructor descriptor that does not exist. That is compiler finding
+     * #480, closed on 2026-09-07: its repro now compiles and runs, though the finding notes the
+     * repro does not capture the larger original shape from this file.
      *
-     * <p>Qué se pierde: nada de lo que esta implementación use. `BCSSChild` no es parte de la
-     * superficie medida --no aparece en ninguna firma pública-- y lo único que agrega en el JDK es
-     * espacio para anotar los servicios que ese hijo pidió, que acá lleva el propio proveedor. El
-     * día que el compilador emita ese `super`, son cinco líneas.
+     * <p>It also said nothing this implementation uses is lost, because the provider carries that
+     * bookkeeping here, and that the class would be five lines. Nothing carries the bookkeeping
+     * (see the class note), and the JDK's {@code BCSSChild} has nested reference classes of its own
+     * and the methods that release a departed child's services and revoke them.
      */
     protected BCSChild createBCSChild(Object targetChild, Object peer) {
         return super.createBCSChild(targetChild, peer);
     }
 
     /**
-     * Cuando un hijo se va, se le sueltan los servicios que tenía.
+     * Called when a child leaves.
      *
-     * <p>Es lo que evita la fuga que este diseño tiene si nadie la corta: un proveedor guarda
-     * referencias a las instancias que entregó, así que un hijo que se va sin soltarlas queda vivo
-     * en el proveedor para siempre.
+     * <p>This javadoc said the services the child held are released here, which is what stops a
+     * provider from keeping a departed child alive through the instances it handed out. Nothing is
+     * released: the method only calls the superclass hook, which is empty, and nothing here records
+     * which instances a child holds (see the class note).
      */
     protected void childJustRemovedHook(Object child, BCSChild bcsc) {
         super.childJustRemovedHook(child, bcsc);
     }
 
-    /** Toma los recursos del contexto nuevo: se engancha como oyente de sus servicios. */
+    /** Takes the new context's resources: it registers as a listener of its services. */
     protected synchronized void initializeBeanContextResources() {
         super.initializeBeanContextResources();
-        BeanContextServices arriba = this.parentServices();
-        if (arriba != null) {
-            arriba.addBeanContextServicesListener(this);
+        BeanContextServices above = this.parentServices();
+        if (above != null) {
+            above.addBeanContextServicesListener(this);
         }
     }
 
-    /** Los suelta. */
+    /** Releases them, and drops the proxy. */
     protected synchronized void releaseBeanContextResources() {
-        BeanContextServices arriba = this.parentServices();
-        if (arriba != null) {
-            arriba.removeBeanContextServicesListener(this);
+        BeanContextServices above = this.parentServices();
+        if (above != null) {
+            above.removeBeanContextServicesListener(this);
         }
         this.proxy = null;
         super.releaseBeanContextResources();
     }
 
-    /** Gancho de antes de escribir: deja anotado cuántos proveedores serializables hay. */
+    /** Hook before writing: writes how many serializable providers there are, then each one. */
     protected synchronized void bcsPreSerializationHook(ObjectOutputStream oos)
             throws IOException {
         oos.writeInt(this.serializable);
@@ -440,7 +463,7 @@ public class BeanContextServicesSupport extends BeanContextSupport implements Be
         }
     }
 
-    /** Gancho de antes de leer: vuelve a registrar los proveedores que se escribieron. */
+    /** Hook before reading: registers again the providers that were written. */
     protected synchronized void bcsPreDeserializationHook(ObjectInputStream ois)
             throws IOException, ClassNotFoundException {
         int n = ois.readInt();
@@ -452,29 +475,31 @@ public class BeanContextServicesSupport extends BeanContextSupport implements Be
     }
 
     /**
-     * Lo que el contexto guarda de un servicio: el proveedor, y lugar para lo que una subclase
-     * quiera anotarle.
+     * What the context keeps for a service: its provider.
+     *
+     * <p>This note also offered it as room for whatever a subclass wants to record. Its constructor
+     * is package-private, so no class outside this package can extend it.
      */
     protected class BCSSServiceProvider implements Serializable {
 
-        /** El proveedor. */
+        /** The provider. */
         protected BeanContextServiceProvider serviceProvider;
 
         BCSSServiceProvider(BeanContextServiceProvider bcsp) {
             this.serviceProvider = bcsp;
         }
 
-        /** El proveedor. */
+        /** The provider. */
         protected BeanContextServiceProvider getServiceProvider() {
             return this.serviceProvider;
         }
     }
 
     /**
-     * El proveedor que representa a los servicios del contexto padre.
+     * The provider that stands for the parent context's services.
      *
-     * <p>Ver la nota de la clase: existe para que un servicio heredado se vea, desde acá para abajo,
-     * como uno local.
+     * <p>See the class note: it exists so an inherited service looks, from here down, like a local
+     * one.
      */
     protected class BCSSProxyServiceProvider
             implements BeanContextServiceProvider, BeanContextServiceRevokedListener {
@@ -485,7 +510,9 @@ public class BeanContextServicesSupport extends BeanContextSupport implements Be
             this.delegate = bcs;
         }
 
-        /** Le pide la instancia al contexto de arriba. */
+        /**
+         * Asks the context above for the instance, registering itself as the revocation listener.
+         */
         public Object getService(BeanContextServices bcs, Object requestor, Class serviceClass,
                 Object serviceSelector) {
             try {
@@ -493,25 +520,25 @@ public class BeanContextServicesSupport extends BeanContextSupport implements Be
                         .getBeanContextServicesPeer(), requestor, serviceClass, serviceSelector,
                         this);
             } catch (TooManyListenersException e) {
-                // El de arriba no admitió el oyente de revocación. Devolver la instancia igual
-                // sería peor que no darla: quien la reciba no se enteraría nunca de que dejó de
-                // valer, que es justamente lo que ese oyente garantiza.
+                // The context above did not accept the revocation listener. Returning the instance
+                // anyway would be worse than not giving it: whoever got it would never learn that
+                // it stopped being valid, which is exactly what that listener guarantees.
                 return null;
             }
         }
 
-        /** Le avisa al de arriba. */
+        /** Tells the context above. */
         public void releaseService(BeanContextServices bcs, Object requestor, Object service) {
             this.delegate.releaseService(BeanContextServicesSupport.this
                     .getBeanContextServicesPeer(), requestor, service);
         }
 
-        /** Los del de arriba. */
+        /** The context above's selectors. */
         public Iterator getCurrentServiceSelectors(BeanContextServices bcs, Class serviceClass) {
             return this.delegate.getCurrentServiceSelectors(serviceClass);
         }
 
-        /** El de arriba revocó: se propaga hacia abajo. */
+        /** The context above revoked it: it is passed on downwards. */
         public void serviceRevoked(BeanContextServiceRevokedEvent bcsre) {
             BeanContextServicesSupport.this.serviceRevoked(bcsre);
         }

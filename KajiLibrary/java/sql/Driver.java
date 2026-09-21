@@ -1,29 +1,30 @@
 package java.sql;
 
 /**
- * KajiLibrary's java.sql.Driver -- lo que implementa quien sabe hablar con una base concreta.
+ * KajiLibrary's java.sql.Driver -- what someone who knows how to talk to a concrete database
+ * implements.
  *
- * <p>{@link #acceptsURL} es la pieza que hace funcionar todo el esquema: el {@link DriverManager} le
- * pregunta a cada driver registrado si entiende la URL y usa el primero que dice que si. Por eso una
- * aplicacion puede cambiar de base cambiando una cadena -- nadie nombra al driver.
+ * <p>{@link #acceptsURL} is the piece that makes the whole scheme work: {@link DriverManager} asks
+ * each registered driver in turn and uses the first one that takes the URL. That is why an
+ * application can change database by changing a string -- nobody names the driver.
  *
- * <p>Y por eso mismo {@link #connect} devuelve `null` en vez de fallar cuando la URL no es suya:
- * `null` significa "no es mia, segui preguntando", que es distinto de "es mia y no pude conectar".
- * Confundir las dos haria que un driver ajeno abortara la busqueda.
+ * <p>And for the same reason {@link #connect} returns `null` instead of failing when the URL is not
+ * its own: `null` means "not mine, keep asking", which is different from "it is mine and I could
+ * not connect". Confusing the two would make a foreign driver abort the search.
  */
 public interface Driver {
 
     /**
-     * Una conexion a esa URL, o `null` si la URL no es de este driver.
+     * A connection to that URL, or `null` if the URL is not this driver's.
      *
-     * @throws SQLException si la URL **si** es suya y la conexion fallo
+     * @throws SQLException if the URL **is** its own and the connection failed
      */
     Connection connect(String url, java.util.Properties info) throws SQLException;
 
-    /** Si este driver entiende esa URL. */
+    /** Whether this driver understands that URL. */
     boolean acceptsURL(String url) throws SQLException;
 
-    /** Que propiedades hacen falta para conectar a esa URL con lo que ya se sabe. */
+    /** Which properties are needed to connect to that URL with what is already known. */
     DriverPropertyInfo[] getPropertyInfo(String url, java.util.Properties info) throws SQLException;
 
     int getMajorVersion();
@@ -31,17 +32,17 @@ public interface Driver {
     int getMinorVersion();
 
     /**
-     * Si el driver cumple el estandar.
+     * Whether the driver complies with the standard.
      *
-     * <p>Solo puede devolver `true` si pasa las pruebas de conformidad, que exigen soportar SQL-92
-     * Entry Level entero. Casi ningun driver puede.
+     * <p>It may only return `true` if it passes the conformance tests, which require full support
+     * of SQL-92 Entry Level.
      */
     boolean jdbcCompliant();
 
     /**
-     * El logger del que cuelgan los de este driver.
+     * The logger this driver's loggers hang from.
      *
-     * @throws SQLFeatureNotSupportedException si el driver no usa `java.util.logging`
+     * @throws SQLFeatureNotSupportedException if the driver does not use `java.util.logging`
      */
     java.util.logging.Logger getParentLogger() throws SQLFeatureNotSupportedException;
 }

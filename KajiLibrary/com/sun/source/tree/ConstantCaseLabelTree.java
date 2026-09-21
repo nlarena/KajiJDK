@@ -1,7 +1,7 @@
 package com.sun.source.tree;
 
 /**
- * Una etiqueta de `case` que es una constante, o sea el `case` clasico.
+ * A `case` label that is a constant, that is, the classic `case`.
  */
 public interface ConstantCaseLabelTree extends CaseLabelTree {
 

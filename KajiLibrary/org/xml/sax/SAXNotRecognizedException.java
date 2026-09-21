@@ -2,12 +2,11 @@ package org.xml.sax;
 
 import org.xml.sax.SAXException;
 
-// KajiLibrary's org.xml.sax.SAXNotRecognizedException -- la lanzan getFeature/setFeature/
-// getProperty/setProperty cuando el lector nunca *oyo hablar* del nombre por el que se le
-// pregunta. La distincion con SAXNotSupportedException es toda la razon de tener dos clases:
-// "no reconocida" quiere decir que el URI es desconocido, "no soportada" quiere decir que se lo
-// conoce pero ahora mismo no se le puede dar el valor pedido (tipicamente porque el analisis ya
-// esta en marcha).
+// KajiLibrary's org.xml.sax.SAXNotRecognizedException -- getFeature/setFeature/getProperty/
+// setProperty throw it when the reader never *heard of* the name it is asked about. The
+// distinction with SAXNotSupportedException is the whole reason for having two classes: "not
+// recognised" means the URI is unknown, "not supported" means it is known but right now the value
+// asked for cannot be given (typically because the analysis is already under way).
 public class SAXNotRecognizedException extends SAXException {
 
     static final long serialVersionUID = 5440506620509557213L;

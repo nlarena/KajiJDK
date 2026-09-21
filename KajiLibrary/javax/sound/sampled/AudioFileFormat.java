@@ -5,41 +5,41 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * KajiLibrary's javax.sound.sampled.AudioFileFormat -- que hay en un archivo de audio.
+ * KajiLibrary's javax.sound.sampled.AudioFileFormat -- what there is in an audio file.
  *
- * <p>Junta dos cosas que se confunden: el <b>tipo de archivo</b> --WAVE, AU, AIFF-- y el
- * {@link AudioFormat} de los datos que lleva adentro. Son independientes: un WAVE puede contener PCM
- * de 16 bits o mu-law de 8.
+ * <p>It puts together two things that get confused: the <b>file type</b> --WAVE, AU, AIFF-- and the
+ * {@link AudioFormat} of the data it carries inside. They are independent: a WAVE can contain
+ * 16-bit PCM or 8-bit mu-law.
  *
- * <p>{@link #getFrameLength} y {@link #getByteLength} pueden valer {@link AudioSystem#NOT_SPECIFIED}
- * cuando el largo no se sabe -- un flujo que llega por red, o un archivo cuyo encabezado no lo dice.
- * El de bytes ademas es -1 salvo que se use el constructor protegido, asi que no hay que contar con
- * el.
+ * <p>{@link #getFrameLength} and {@link #getByteLength} can be {@link AudioSystem#NOT_SPECIFIED}
+ * when the length is not known -- a stream arriving over the network, or a file whose header does
+ * not say it. The byte one is also -1 unless the protected constructor is used, so it should not be
+ * counted on.
  *
- * <p>Es inmutable.
+ * <p>It is immutable.
  */
 public class AudioFileFormat {
 
-    /** El tipo de archivo. */
+    /** The file type. */
     private final Type type;
 
-    /** El formato de los datos. */
+    /** The format of the data. */
     private final AudioFormat format;
 
-    /** Cuantos cuadros, o {@link AudioSystem#NOT_SPECIFIED}. */
+    /** How many frames, or {@link AudioSystem#NOT_SPECIFIED}. */
     private final int frameLength;
 
-    /** Cuantos bytes en total, o {@link AudioSystem#NOT_SPECIFIED}. */
+    /** How many bytes in total, or {@link AudioSystem#NOT_SPECIFIED}. */
     private final int byteLength;
 
-    /** Lo que no entra en los campos fijos. */
+    /** What does not fit in the fixed fields. */
     private HashMap<String, Object> properties;
 
     /**
-     * El constructor con largo en bytes, para quien lea el archivo.
+     * The constructor with a length in bytes, for whoever reads the file.
      *
-     * <p>Protegido porque solo tiene sentido para un lector: quien arma un formato a mano no sabe
-     * cuantos bytes va a ocupar.
+     * <p>Protected because it only makes sense for a reader: whoever builds a format by hand does
+     * not know how many bytes it is going to take.
      */
     protected AudioFileFormat(Type type, int byteLength, AudioFormat format, int frameLength) {
         this.type = type;
@@ -49,15 +49,15 @@ public class AudioFileFormat {
         this.properties = null;
     }
 
-    /** El habitual; el largo en bytes queda sin especificar. */
+    /** The usual one; the byte length stays unspecified. */
     public AudioFileFormat(Type type, AudioFormat format, int frameLength) {
         this(type, AudioSystem.NOT_SPECIFIED, format, frameLength);
     }
 
     /**
-     * Idem, con propiedades.
+     * Likewise, with properties.
      *
-     * @throws NullPointerException si el mapa es null
+     * @throws NullPointerException if the map is null
      */
     public AudioFileFormat(Type type, AudioFormat format, int frameLength,
                            Map<String, Object> properties) {
@@ -65,27 +65,27 @@ public class AudioFileFormat {
         this.properties = new HashMap<String, Object>(properties);
     }
 
-    /** El tipo de archivo. */
+    /** The file type. */
     public Type getType() {
         return this.type;
     }
 
-    /** Cuantos bytes, o {@link AudioSystem#NOT_SPECIFIED}. Ver la nota de la clase. */
+    /** How many bytes, or {@link AudioSystem#NOT_SPECIFIED}. See the class note. */
     public int getByteLength() {
         return this.byteLength;
     }
 
-    /** El formato de los datos. */
+    /** The format of the data. */
     public AudioFormat getFormat() {
         return this.format;
     }
 
-    /** Cuantos cuadros, o {@link AudioSystem#NOT_SPECIFIED}. */
+    /** How many frames, or {@link AudioSystem#NOT_SPECIFIED}. */
     public int getFrameLength() {
         return this.frameLength;
     }
 
-    /** Las propiedades, de solo lectura. */
+    /** The properties, read-only. */
     public Map<String, Object> properties() {
         Map<String, Object> ret;
         if (this.properties == null) {
@@ -96,7 +96,7 @@ public class AudioFileFormat {
         return Collections.unmodifiableMap(ret);
     }
 
-    /** Una propiedad, o null. */
+    /** A property, or null. */
     public Object getProperty(String key) {
         if (this.properties == null) {
             return null;
@@ -104,7 +104,7 @@ public class AudioFileFormat {
         return this.properties.get(key);
     }
 
-    /** El tipo con su extension, el formato de datos, y el largo si se sabe. */
+    /** The type with its extension, the data format, and the length if known. */
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
@@ -124,47 +124,47 @@ public class AudioFileFormat {
     }
 
     /**
-     * Un tipo de archivo de audio.
+     * A type of audio file.
      *
-     * <p>No es un enum, por lo mismo que {@link AudioFormat.Encoding}: un proveedor puede traer tipos
-     * propios. Cada uno lleva ademas su extension habitual.
+     * <p>It is not an enum, for the same reason as {@link AudioFormat.Encoding}: a provider can
+     * bring its own types. Each one also carries its usual extension.
      *
-     * <p>{@link #AIFC} tiene una particularidad que se ve en su {@code toString}: se llama
-     * {@code "AIFF-C"} y no {@code "AIFC"}. Es AIFF con compresion, y el nombre lo dice.
+     * <p>{@link #AIFC} has a peculiarity that shows in its {@code toString}: it is called {@code
+     * "AIFF-C"} and not {@code "AIFC"}. It is AIFF with compression, and the name says so.
      */
     public static class Type {
 
-        /** WAV de Microsoft. */
+        /** Microsoft's WAV. */
         public static final Type WAVE = new Type("WAVE", "wav");
 
-        /** AU de Sun. */
+        /** Sun's AU. */
         public static final Type AU = new Type("AU", "au");
 
-        /** AIFF de Apple. */
+        /** Apple's AIFF. */
         public static final Type AIFF = new Type("AIFF", "aif");
 
-        /** AIFF con compresion. Ver la nota de la clase. */
+        /** AIFF with compression. See the class note. */
         public static final Type AIFC = new Type("AIFF-C", "aifc");
 
-        /** El mismo formato que {@link #AU}, con otra extension. */
+        /** The same format as {@link #AU}, with another extension. */
         public static final Type SND = new Type("SND", "snd");
 
-        /** El nombre, que es la identidad. */
+        /** The name, which is the identity. */
         private final String name;
 
-        /** La extension habitual, sin punto. */
+        /** The usual extension, without the dot. */
         private final String extension;
 
         /**
-         * @param name el nombre; es lo unico que distingue un tipo de otro
-         * @param extension la extension habitual, sin el punto
+         * @param name the name; it is the only thing that tells one type from another
+         * @param extension the usual extension, without the dot
          */
         public Type(String name, String extension) {
             this.name = name;
             this.extension = extension;
         }
 
-        /** Por nombre; la extension no entra. */
+        /** By name; the extension does not count. */
         @Override
         public final boolean equals(Object obj) {
             if (this == obj) {
@@ -180,7 +180,7 @@ public class AudioFileFormat {
             return this.name.equals(other.name);
         }
 
-        /** El del nombre. */
+        /** The name's. */
         @Override
         public final int hashCode() {
             if (this.name == null) {
@@ -189,13 +189,13 @@ public class AudioFileFormat {
             return this.name.hashCode();
         }
 
-        /** El nombre. */
+        /** The name. */
         @Override
         public final String toString() {
             return this.name;
         }
 
-        /** La extension habitual, sin punto. */
+        /** The usual extension, without the dot. */
         public String getExtension() {
             return this.extension;
         }

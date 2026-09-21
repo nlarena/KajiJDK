@@ -3,24 +3,24 @@ package javax.swing;
 import java.io.Serializable;
 
 /**
- * Una secuencia de numeros para un {@link JSpinner}.
+ * A sequence of numbers for a {@link JSpinner}.
  *
- * <h2>El tipo lo manda el valor, no los limites</h2>
+ * <h2>The type is ruled by the value, not by the bounds</h2>
  *
- * <p>Si el valor es un {@link Integer}, sumar el paso da un {@code Integer}; si es un
- * {@link Double}, da un {@code Double}. Los limites y el paso pueden ser de otro tipo -- se los
- * consulta con {@code compareTo} y con {@code doubleValue}/{@code longValue} --, pero el que sale
- * por {@link #getNextValue} tiene el tipo del valor de ahora.
+ * <p>If the value is an {@link Integer}, adding the step gives an {@code Integer}; if it is a
+ * {@link Double}, it gives a {@code Double}. The bounds and the step may be of another type --
+ * they are consulted with {@code compareTo} and with {@code doubleValue}/{@code longValue} --,
+ * but the one that comes out of {@link #getNextValue} has the current value's type.
  *
- * <p>Eso importa mas de lo que parece: un modelo que arranca en {@code Integer.valueOf(0)} con paso
- * {@code Double.valueOf(0.5)} avanza de a cero, porque {@code longValue()} de 0.5 es 0. No es un
- * error del modelo; es que el tipo del valor decide la aritmetica.
+ * <p>That matters more than it seems: a model that starts at {@code Integer.valueOf(0)} with a
+ * step of {@code Double.valueOf(0.5)} advances by zero, because {@code longValue()} of 0.5 is 0.
+ * It is not a mistake of the model; it is that the value's type decides the arithmetic.
  *
- * <h2>Los limites no recortan</h2>
+ * <h2>The bounds do not clip</h2>
  *
- * <p>{@link #setValue} acepta cualquier numero, incluso fuera de rango. Los limites solo se usan
- * para decidir si hay siguiente o anterior: al pasarse, la flecha devuelve nulo y el control la
- * apaga. Ver la nota de {@link SpinnerModel}.
+ * <p>{@link #setValue} accepts any number, even out of range. The bounds are only used in order
+ * to decide whether there is a next or a previous one: on going past, the arrow returns null and
+ * the control switches it off. See {@link SpinnerModel}'s note.
  */
 public class SpinnerNumberModel extends AbstractSpinnerModel implements Serializable {
 
@@ -30,20 +30,20 @@ public class SpinnerNumberModel extends AbstractSpinnerModel implements Serializ
     private Comparable<?> maximum;
 
     /**
-     * Con valor, limites y paso.
+     * With value, bounds and step.
      *
-     * <p>Los limites pueden ser nulos, que es como decir "sin tope".
+     * <p>The bounds may be null, which is like saying "no cap".
      *
-     * @throws IllegalArgumentException si el valor o el paso son nulos, o si no se cumple
-     *     minimo &lt;= valor &lt;= maximo.
+     * @throws IllegalArgumentException if the value or the step are null, or if
+     *     minimum &lt;= value &lt;= maximum does not hold.
      */
     public SpinnerNumberModel(Number value, Comparable<?> minimum, Comparable<?> maximum,
             Number stepSize) {
         if (!(value != null && stepSize != null)) {
             throw new IllegalArgumentException("value and stepSize must be non-null");
         }
-        if (!((minimum == null || comparar(minimum, value) <= 0)
-                && (maximum == null || comparar(maximum, value) >= 0))) {
+        if (!((minimum == null || compare(minimum, value) <= 0)
+                && (maximum == null || compare(maximum, value) >= 0))) {
             throw new IllegalArgumentException("(minimum <= value <= maximum) is false");
         }
         this.value = value;
@@ -52,39 +52,39 @@ public class SpinnerNumberModel extends AbstractSpinnerModel implements Serializ
         this.stepSize = stepSize;
     }
 
-    /** Con enteros; el valor sale como {@link Integer}. */
+    /** With integers; the value comes out as an {@link Integer}. */
     public SpinnerNumberModel(int value, int minimum, int maximum, int stepSize) {
         this(Integer.valueOf(value), Integer.valueOf(minimum), Integer.valueOf(maximum),
                 Integer.valueOf(stepSize));
     }
 
-    /** Con dobles; el valor sale como {@link Double}. */
+    /** With doubles; the value comes out as a {@link Double}. */
     public SpinnerNumberModel(double value, double minimum, double maximum, double stepSize) {
         this(Double.valueOf(value), Double.valueOf(minimum), Double.valueOf(maximum),
                 Double.valueOf(stepSize));
     }
 
-    /** Desde cero, de a uno, sin topes. */
+    /** From zero, one at a time, with no caps. */
     public SpinnerNumberModel() {
         this(Integer.valueOf(0), null, null, Integer.valueOf(1));
     }
 
     /**
-     * Compara un limite con un valor.
+     * It compares a bound with a value.
      *
-     * <p>Concentra el descarte de generico en un solo lugar: el limite se declara
-     * {@code Comparable<?>} y solo se lo puede llamar tratandolo como crudo.
+     * <p>It concentrates the generic discard in a single place: the bound is declared
+     * {@code Comparable<?>} and it can only be called by treating it as raw.
      */
     @SuppressWarnings("unchecked")
-    private static int comparar(Comparable<?> limite, Object valor) {
-        return ((Comparable<Object>) limite).compareTo(valor);
+    private static int compare(Comparable<?> limit, Object value) {
+        return ((Comparable<Object>) limit).compareTo(value);
     }
 
     /**
-     * El piso; nulo quita el tope.
+     * The floor; null removes the cap.
      *
-     * <p>No se comprueba contra el valor de ahora: se puede poner un piso por encima del valor, y
-     * lo que pasa entonces es que la flecha de bajar se apaga.
+     * <p>It is not checked against the current value: a floor may be set above the value, and what
+     * happens then is that the down arrow is switched off.
      */
     public void setMinimum(Comparable<?> minimum) {
         if ((minimum == null) ? (this.minimum != null) : !minimum.equals(this.minimum)) {
@@ -97,7 +97,7 @@ public class SpinnerNumberModel extends AbstractSpinnerModel implements Serializ
         return minimum;
     }
 
-    /** El techo; nulo quita el tope. */
+    /** The ceiling; null removes the cap. */
     public void setMaximum(Comparable<?> maximum) {
         if ((maximum == null) ? (this.maximum != null) : !maximum.equals(this.maximum)) {
             this.maximum = maximum;
@@ -110,9 +110,9 @@ public class SpinnerNumberModel extends AbstractSpinnerModel implements Serializ
     }
 
     /**
-     * Cuanto avanza cada flecha.
+     * How much each arrow advances by.
      *
-     * @throws IllegalArgumentException si es nulo.
+     * @throws IllegalArgumentException if it is null.
      */
     public void setStepSize(Number stepSize) {
         if (stepSize == null) {
@@ -129,52 +129,52 @@ public class SpinnerNumberModel extends AbstractSpinnerModel implements Serializ
     }
 
     /**
-     * Suma el paso en esa direccion.
+     * It adds the step in that direction.
      *
-     * <p>El tipo del resultado es el del valor de ahora; ver la nota de la clase. Si el resultado
-     * se sale de los limites devuelve nulo, que es como el modelo dice "no hay mas".
+     * <p>The result's type is the current value's; see the class note. If the result goes outside
+     * the bounds it returns null, which is how the model says "there is no more".
      */
-    private Number correr(int dir) {
-        Number nuevo;
+    private Number run(int dir) {
+        Number newValue;
         if ((value instanceof Float) || (value instanceof Double)) {
             double v = value.doubleValue() + (stepSize.doubleValue() * (double) dir);
             if (value instanceof Double) {
-                nuevo = Double.valueOf(v);
+                newValue = Double.valueOf(v);
             } else {
-                nuevo = Float.valueOf((float) v);
+                newValue = Float.valueOf((float) v);
             }
         } else {
             long v = value.longValue() + (stepSize.longValue() * (long) dir);
             if (value instanceof Long) {
-                nuevo = Long.valueOf(v);
+                newValue = Long.valueOf(v);
             } else if (value instanceof Integer) {
-                nuevo = Integer.valueOf((int) v);
+                newValue = Integer.valueOf((int) v);
             } else if (value instanceof Short) {
-                nuevo = Short.valueOf((short) v);
+                newValue = Short.valueOf((short) v);
             } else {
-                nuevo = Byte.valueOf((byte) v);
+                newValue = Byte.valueOf((byte) v);
             }
         }
-        if ((maximum != null) && comparar(maximum, nuevo) < 0) {
+        if ((maximum != null) && compare(maximum, newValue) < 0) {
             return null;
         }
-        if ((minimum != null) && comparar(minimum, nuevo) > 0) {
+        if ((minimum != null) && compare(minimum, newValue) > 0) {
             return null;
         }
-        return nuevo;
+        return newValue;
     }
 
-    /** El siguiente, o nulo si pasa el techo. */
+    /** The next one, or null if it goes past the ceiling. */
     public Object getNextValue() {
-        return correr(1);
+        return run(1);
     }
 
-    /** El anterior, o nulo si pasa el piso. */
+    /** The previous one, or null if it goes past the floor. */
     public Object getPreviousValue() {
-        return correr(-1);
+        return run(-1);
     }
 
-    /** El valor, ya como numero. */
+    /** The value, already as a number. */
     public Number getNumber() {
         return value;
     }
@@ -184,11 +184,11 @@ public class SpinnerNumberModel extends AbstractSpinnerModel implements Serializ
     }
 
     /**
-     * Cambia el valor.
+     * It changes the value.
      *
-     * <p>No recorta contra los limites; ver la nota de la clase.
+     * <p>It does not clip against the bounds; see the class note.
      *
-     * @throws IllegalArgumentException si no es un numero.
+     * @throws IllegalArgumentException if it is not a number.
      */
     public void setValue(Object value) {
         if ((value == null) || !(value instanceof Number)) {

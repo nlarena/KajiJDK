@@ -6,7 +6,7 @@ import java.io.Writer;
 import javax.xml.stream.events.EntityDeclaration;
 import javax.xml.stream.events.EntityReference;
 
-/** Una referencia a entidad sin expandir, como evento. */
+/** An unexpanded entity reference, as an event. */
 final class EvtEntityRef extends EvtBase implements EntityReference {
 
     private final String name;
@@ -28,7 +28,7 @@ final class EvtEntityRef extends EvtBase implements EntityReference {
 
     public void writeAsEncodedUnicode(Writer writer) throws XMLStreamException {
         if (writer == null) {
-            throw new XMLStreamException("el escritor no puede ser null");
+            throw new XMLStreamException("the writer cannot be null");
         }
         try {
             writer.write('&');

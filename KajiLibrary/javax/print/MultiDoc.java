@@ -3,30 +3,31 @@ package javax.print;
 import java.io.IOException;
 
 /**
- * KajiLibrary's javax.print.MultiDoc -- varios documentos en un solo trabajo.
+ * KajiLibrary's javax.print.MultiDoc -- several documents in a single job.
  *
- * <p>Es una lista enlazada y no una coleccion, y eso llama la atencion. La razon es que los documentos
- * pueden llegar de a poco: {@link #next} puede <b>bloquear</b> esperando el siguiente, y la cantidad
- * puede no saberse de antemano. Con una {@code List} habria que tenerlos todos antes de empezar.
+ * <p>It is a linked list and not a collection, and that draws attention. The reason is that the
+ * documents may arrive little by little: {@link #next} may <b>block</b> waiting for the next one,
+ * and the count may not be known beforehand. With a {@code List} one would have to have them all
+ * before starting.
  *
- * <p>{@link #next} devuelve null cuando no hay mas.
+ * <p>{@link #next} returns null when there are no more.
  *
- * <p>Igual que {@link Doc}, los dos metodos tienen que devolver siempre lo mismo: recorrerlo dos veces
- * tiene que dar los mismos objetos.
+ * <p>Like {@link Doc}, both methods have to return always the same: walking it twice has to give
+ * the same objects.
  */
 public interface MultiDoc {
 
     /**
-     * El documento actual.
+     * The current document.
      *
-     * @throws IOException si no se pudo obtener
+     * @throws IOException if it could not be obtained
      */
     Doc getDoc() throws IOException;
 
     /**
-     * El resto, o null si este era el ultimo. Puede bloquear.
+     * The rest, or null if this was the last one. It may block.
      *
-     * @throws IOException si no se pudo obtener
+     * @throws IOException if it could not be obtained
      */
     MultiDoc next() throws IOException;
 }

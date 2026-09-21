@@ -7,19 +7,20 @@ import java.util.Map;
 import javax.management.openmbean.CompositeData;
 
 /**
- * Una {@link jdk.jfr.Recording} vista desde el otro lado de una conexion JMX.
+ * A {@link jdk.jfr.Recording} seen from the other side of a JMX connection.
  *
- * <h2>Los tiempos y las duraciones son numeros</h2>
+ * <h2>The times and the durations are numbers</h2>
  *
- * <p>{@link #getStartTime} devuelve un {@code long} en milisegundos y no un {@code Instant};
- * {@link #getMaxAge} un {@code long} y no un {@code Duration}. No es descuido: los tipos abiertos
- * de JMX son los primitivos, {@code String} y poco mas, y un {@code Instant} no esta entre ellos.
+ * <p>{@link #getStartTime} returns a {@code long} in milliseconds and not an {@code Instant};
+ * {@link #getMaxAge} a {@code long} and not a {@code Duration}. It is not carelessness: the open
+ * types of JMX are the primitives, {@code String} and little else, and an {@code Instant} is not
+ * among them.
  *
- * <p>Lo mismo con {@link #getState}, que es el <strong>nombre</strong> de la constante de
- * {@link jdk.jfr.RecordingState} y no la constante: una enumeracion tampoco viaja.
+ * <p>The same with {@link #getState}, which is the <strong>name</strong> of the constant of
+ * {@link jdk.jfr.RecordingState} and not the constant: an enumeration does not travel either.
  *
- * <p>Convertirlos del lado del cliente es trabajo de quien consume esto, y es la contrapartida de
- * que el protocolo no dependa de que las dos puntas tengan las mismas clases.
+ * <p>Converting them on the client's side is the job of whoever consumes this, and it is the
+ * counterpart of the protocol not depending on the two ends having the same classes.
  *
  * @since 9
  */
@@ -59,139 +60,140 @@ public final class RecordingInfo {
     }
 
     /**
-     * El nombre de la grabacion.
+     * The name of the recording.
      *
-     * @return el valor
+     * @return the value
      */
     public String getName() {
         return name;
     }
 
     /**
-     * El identificador de la grabacion.
+     * The identifier of the recording.
      *
-     * @return el valor
+     * @return the value
      */
     public long getId() {
         return id;
     }
 
     /**
-     * Si vuelca al terminar la VM.
+     * Whether it dumps when the VM ends.
      *
-     * @return el valor
+     * @return the value
      */
     public boolean getDumpOnExit() {
         return dumpOnExit;
     }
 
     /**
-     * La antiguedad maxima de los datos, en milisegundos; cero es sin limite.
+     * The maximum age of the data, in milliseconds; zero is no limit.
      *
-     * @return el valor
+     * @return the value
      */
     public long getMaxAge() {
         return maxAge;
     }
 
     /**
-     * El tamano maximo en bytes; cero es sin limite.
+     * The maximum size in bytes; zero is no limit.
      *
-     * @return el valor
+     * @return the value
      */
     public long getMaxSize() {
         return maxSize;
     }
 
     /**
-     * El estado, con el nombre de la constante de {@link jdk.jfr.RecordingState}.
+     * The state, with the name of the constant of
+     * {@link jdk.jfr.RecordingState}.
      *
-     * @return el valor
+     * @return the value
      */
     public String getState() {
         return state;
     }
 
     /**
-     * Cuando arranco, en milisegundos desde la epoca; cero si no arranco.
+     * When it started, in milliseconds since the epoch; zero if it did not start.
      *
-     * @return el valor
+     * @return the value
      */
     public long getStartTime() {
         return startTime;
     }
 
     /**
-     * Cuando se detuvo, en milisegundos desde la epoca; cero si no se detuvo.
+     * When it stopped, in milliseconds since the epoch; zero if it did not stop.
      *
-     * @return el valor
+     * @return the value
      */
     public long getStopTime() {
         return stopTime;
     }
 
     /**
-     * Los ajustes de la grabacion.
+     * The settings of the recording.
      *
-     * @return el valor
+     * @return the value
      */
     public Map<String, String> getSettings() {
         return settings;
     }
 
     /**
-     * Adonde vuelca, o {@code null}.
+     * Where it dumps, or {@code null}.
      *
-     * @return el valor
+     * @return the value
      */
     public String getDestination() {
         return destination;
     }
 
     /**
-     * Cuanto ocupa, en bytes.
+     * How much it takes up, in bytes.
      *
-     * @return el valor
+     * @return the value
      */
     public long getSize() {
         return size;
     }
 
     /**
-     * Si escribe a disco mientras graba.
+     * Whether it writes to disk while it records.
      *
-     * @return el valor
+     * @return the value
      */
     public boolean isToDisk() {
         return toDisk;
     }
 
     /**
-     * Cuanto va a durar, en milisegundos; cero es sin limite.
+     * How long it is going to last, in milliseconds; zero is no limit.
      *
-     * @return el valor
+     * @return the value
      */
     public long getDuration() {
         return duration;
     }
 
     /**
-     * Reconstruye el objeto desde su forma abierta.
+     * It rebuilds the object from its open form.
      *
-     * <p>Es el camino por el que este dato llega de una VM remota: lo que viaja por JMX es un
-     * {@link CompositeData} generico y esto lo vuelve a convertir.
+     * <p>It is the road by which this datum arrives from a remote VM: what travels over JMX is a
+     * generic {@link CompositeData} and this turns it back.
      *
-     * @param cd la forma abierta, o {@code null}
-     * @return el objeto, o {@code null} si {@code cd} era {@code null}
-     * @throws IllegalArgumentException si no tiene la forma esperada
+     * @param cd the open form, or {@code null}
+     * @return the object, or {@code null} if {@code cd} was {@code null}
+     * @throws IllegalArgumentException if it does not have the expected shape
      */
     public static RecordingInfo from(final CompositeData cd) {
         if (cd == null) {
             return null;
         }
         throw new IllegalArgumentException(
-                "reconstruir un RecordingInfo necesita el soporte de tipos abiertos de JFR, que"
-                + " esta biblioteca no implementa");
+                "rebuilding a RecordingInfo needs the support of open types of JFR, which"
+                + " this library does not implement");
     }
 
     /** {@inheritDoc} */

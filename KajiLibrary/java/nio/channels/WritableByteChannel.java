@@ -4,21 +4,22 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 
 /**
- * KajiLibrary's java.nio.channels.WritableByteChannel — un canal donde se pueden escribir bytes.
+ * KajiLibrary's java.nio.channels.WritableByteChannel — a channel bytes can be written into.
  *
- * <p>La contraparte de {@link ReadableByteChannel}. Un solo metodo, y su contrato tiene una parte que
- * sorprende a quien viene de los flujos: **puede escribir menos bytes de los que hay en el buffer**, y
- * por eso devuelve cuantos escribio. Un canal no bloqueante escribe lo que entra ahora y vuelve.
+ * <p>The counterpart of {@link ReadableByteChannel}. A single method, and its contract has a part
+ * that surprises whoever comes from streams: **it may write fewer bytes than there are in the
+ * buffer**, and that is why it returns how many it wrote. A non-blocking channel writes what fits
+ * now and returns.
  *
- * <p>De ahi que el patron correcto sea un bucle mientras `buf.hasRemaining()`, y no una sola llamada.
+ * <p>Hence the right pattern is a loop while `buf.hasRemaining()`, and not a single call.
  */
 public interface WritableByteChannel extends Channel {
 
     /**
-     * Escribe bytes del buffer, desde su posicion actual.
+     * Writes bytes from the buffer, from its current position.
      *
-     * @return cuantos escribio, que puede ser cero
-     * @throws IOException si falla la escritura
+     * @return how many it wrote, which may be zero
+     * @throws IOException if the writing fails
      */
     int write(ByteBuffer src) throws IOException;
 }

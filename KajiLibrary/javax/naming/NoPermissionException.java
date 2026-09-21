@@ -1,10 +1,10 @@
 package javax.naming;
 
 /**
- * Se lanza cuando la identidad es valida y aun asi la operacion no esta permitida. Es la
- * diferencia entre "no se quien sos" y "se quien sos y no podes".
+ * Thrown when the identity is valid and even so the operation is not allowed. It is the
+ * difference between "I don't know who you are" and "I know who you are and you can't".
  *
- * <p>La jerarquia entera y el estado que arrastra estan explicados en `NamingException`.
+ * <p>The whole hierarchy and the state it carries are explained in `NamingException`.
  */
 public class NoPermissionException extends NamingSecurityException {
 

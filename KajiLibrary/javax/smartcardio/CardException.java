@@ -1,26 +1,27 @@
 package javax.smartcardio;
 
 /**
- * KajiLibrary's javax.smartcardio.CardException -- algo salio mal con la tarjeta o el lector.
+ * KajiLibrary's javax.smartcardio.CardException -- something went wrong with the card or the
+ * reader.
  *
- * <p>Es comprobada a proposito: una tarjeta se saca en cualquier momento, y el codigo que la usa
- * tiene que decir que hace cuando eso pasa.
+ * <p>It is checked on purpose: a card can be pulled out at any moment, and the code that uses it
+ * has to say what it does when that happens.
  */
 public class CardException extends Exception {
 
     private static final long serialVersionUID = 7787607144922050628L;
 
-    /** Con ese mensaje. */
+    /** With that message. */
     public CardException(String message) {
         super(message);
     }
 
-    /** Envolviendo esa causa. */
+    /** Wrapping that cause. */
     public CardException(Throwable cause) {
         super(cause);
     }
 
-    /** Con mensaje y causa. */
+    /** With a message and a cause. */
     public CardException(String message, Throwable cause) {
         super(message, cause);
     }

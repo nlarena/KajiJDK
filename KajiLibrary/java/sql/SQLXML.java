@@ -1,45 +1,46 @@
 package java.sql;
 
 /**
- * KajiLibrary's java.sql.SQLXML -- un valor XML de la base.
+ * KajiLibrary's java.sql.SQLXML -- an XML value from the database.
  *
- * <p>Se lee y se escribe **una sola vez**: en cuanto se pidio el contenido de una forma, las otras
- * quedan cerradas. Es lo que permite que la implementacion lo transmita en vez de guardarlo entero.
+ * <p>It is read and written **only once**: as soon as the content has been asked for in one form,
+ * the others are closed. That is what lets the implementation stream it instead of keeping it
+ * whole.
  */
 public interface SQLXML {
 
-    /** El contenido como texto. */
+    /** The content as text. */
     String getString() throws SQLException;
 
-    /** Fija el contenido desde un texto. */
+    /** Sets the content from a text. */
     void setString(String value) throws SQLException;
 
-    /** El contenido como flujo de bytes. */
+    /** The content as a byte stream. */
     java.io.InputStream getBinaryStream() throws SQLException;
 
-    /** Un flujo para escribirlo. */
+    /** A stream to write it. */
     java.io.OutputStream setBinaryStream() throws SQLException;
 
-    /** El contenido como lector. */
+    /** The content as a reader. */
     java.io.Reader getCharacterStream() throws SQLException;
 
-    /** Un escritor para escribirlo. */
+    /** A writer to write it. */
     java.io.Writer setCharacterStream() throws SQLException;
 
     /**
-     * El contenido como la clase de {@link javax.xml.transform.Source} que se pida.
+     * The content as whichever {@link javax.xml.transform.Source} class is asked for.
      *
-     * <p>Recibe la clase en vez de tener una sobrecarga por representacion, y devuelve **esa** clase
-     * y no la interfaz: es lo que evita el molde en el llamador, que es justo donde un molde seria
-     * un error de ejecucion y no de compilacion.
+     * <p>It receives the class instead of having one overload per representation, and it returns
+     * **that** class and not the interface: that is what avoids the cast in the caller, which is
+     * exactly where a cast would be a run-time error and not a compile-time one.
      *
-     * @param sourceClass la clase pedida, o `null` para la que el driver prefiera
+     * @param sourceClass the class asked for, or `null` for whichever the driver prefers
      */
     <T extends javax.xml.transform.Source> T getSource(Class<T> sourceClass) throws SQLException;
 
-    /** El espejo del anterior para escribir. */
+    /** The mirror of the previous one, for writing. */
     <T extends javax.xml.transform.Result> T setResult(Class<T> resultClass) throws SQLException;
 
-    /** Suelta los recursos del puntero. */
+    /** Releases the pointer's resources. */
     void free() throws SQLException;
 }

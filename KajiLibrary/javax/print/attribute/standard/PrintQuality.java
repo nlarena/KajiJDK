@@ -7,10 +7,10 @@ import javax.print.attribute.PrintJobAttribute;
 import javax.print.attribute.PrintRequestAttribute;
 
 /**
- * El compromiso entre velocidad, tinta y calidad con el que se imprime.
+ * The compromise between speed, ink and quality with which it prints.
  *
- * <p>Es deliberadamente vago: cada impresora traduce los tres escalones a sus propios ajustes. La
- * peticion concreta de puntos por pulgada es {@link PrinterResolution}.
+ * <p>It is deliberately vague: each printer translates the three steps to its own settings. The
+ * concrete request of dots per inch is {@link PrinterResolution}.
  */
 public class PrintQuality extends EnumSyntax implements DocAttribute, PrintRequestAttribute, PrintJobAttribute {
 
@@ -46,7 +46,7 @@ public class PrintQuality extends EnumSyntax implements DocAttribute, PrintReque
         return myEnumValueTable;
     }
 
-    /** IPP numera esta categoria desde 3; la fila 0 de las tablas es ese 3. */
+    /** IPP numbers this category from 3; row 0 of the tables is that 3. */
     protected int getOffset() {
         return 3;
     }

@@ -17,8 +17,9 @@ public class MirroredTypesException extends RuntimeException {
     }
 
     public MirroredTypesException(List<? extends TypeMirror> types) {
-        // NOTA: el `+ types` directo del JDK real no se puede usar acá — el concat
-        // String+Object se compila a nada en silencio (falta StringBuilder.append(Object)).
+        // The JDK's plain `+ types` works now: the note said a String+Object concat compiled to
+        // nothing because StringBuilder.append(Object) was missing; it exists and #114 is closed.
+        // The valueOf gives the same message.
         super("Attempt to access Class objects for TypeMirrors " + String.valueOf(types));
         this.types = types;
     }

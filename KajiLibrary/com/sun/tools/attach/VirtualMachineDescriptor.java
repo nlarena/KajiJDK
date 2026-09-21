@@ -3,19 +3,19 @@ package com.sun.tools.attach;
 import com.sun.tools.attach.spi.AttachProvider;
 
 /**
- * La descripcion de una VM que se puede ver desde afuera: quien la vio, como se llama y como se la
- * nombra.
+ * The description of a VM that may be seen from outside: who saw it, what it is called and how
+ * it is named.
  *
- * <h2>Por que el proveedor forma parte de la identidad</h2>
+ * <h2>Why the provider is part of the identity</h2>
  *
- * <p>El {@link #id} no es unico por si solo: es una cadena que <em>solo significa algo dentro del
- * proveedor que la genero</em>. Dos proveedores distintos pueden usar el mismo texto para VMs
- * distintas. De ahi que {@link #equals} compare las dos cosas, y de ahi que
- * {@link AttachProvider#attachVirtualMachine(VirtualMachineDescriptor)} rechace un descriptor
- * ajeno en vez de intentarlo igual.
+ * <p>The {@link #id} is not unique by itself: it is a string that <em>only means something
+ * inside the provider that generated it</em>. Two different providers may use the same text for
+ * different VMs. Hence {@link #equals} compares the two things, and hence
+ * {@link AttachProvider#attachVirtualMachine(VirtualMachineDescriptor)} rejects another's
+ * descriptor instead of trying it all the same.
  *
- * <p>Es inmutable, y eso importa: es una <strong>foto</strong>. La VM que describe puede haber
- * terminado hace rato, y el descriptor seguiria diciendo lo mismo.
+ * <p>It is immutable, and that matters: it is a <strong>snapshot</strong>. The VM it describes
+ * may have finished a while ago, and the descriptor would go on saying the same.
  */
 public class VirtualMachineDescriptor {
 
@@ -24,7 +24,7 @@ public class VirtualMachineDescriptor {
     private final String displayName;
 
     /**
-     * @throws NullPointerException si el proveedor o el identificador son {@code null}
+     * @throws NullPointerException if the provider or the identifier is {@code null}
      */
     public VirtualMachineDescriptor(AttachProvider provider, String id, String displayName) {
         if (provider == null) {
@@ -38,29 +38,30 @@ public class VirtualMachineDescriptor {
         this.displayName = displayName;
     }
 
-    /** Sin nombre para mostrar: se usa el identificador, que es lo que hay. */
+    /** With no name to show: the identifier is used, which is what there is. */
     public VirtualMachineDescriptor(AttachProvider provider, String id) {
         this(provider, id, id);
     }
 
-    /** Quien vio esta VM. */
+    /** Who saw this VM. */
     public AttachProvider provider() {
         return this.provider;
     }
 
-    /** Como la nombra su proveedor. */
+    /** How its provider names it. */
     public String id() {
         return this.id;
     }
 
-    /** Un nombre para mostrarle a una persona; puede ser el identificador mismo. */
+    /** A name to show a person; it may be the identifier itself. */
     public String displayName() {
         return this.displayName;
     }
 
     /**
-     * Sobre el proveedor y el identificador, que son la identidad. El nombre para mostrar queda
-     * afuera a proposito: es decoracion, y dos descriptores de la misma VM podrian traerlo distinto.
+     * Over the provider and the identifier, which are the identity. The name to show is left out
+     * on purpose: it is decoration, and two descriptors of the same VM could bring it
+     * differently.
      */
     public int hashCode() {
         return this.provider.hashCode() * 127 + this.id.hashCode();
@@ -71,8 +72,8 @@ public class VirtualMachineDescriptor {
             return true;
         }
         if (obj instanceof VirtualMachineDescriptor) {
-            VirtualMachineDescriptor otro = (VirtualMachineDescriptor) obj;
-            return otro.provider() == this.provider && otro.id().equals(this.id);
+            VirtualMachineDescriptor other = (VirtualMachineDescriptor) obj;
+            return other.provider() == this.provider && other.id().equals(this.id);
         }
         return false;
     }

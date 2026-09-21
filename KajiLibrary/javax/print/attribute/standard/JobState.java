@@ -5,11 +5,11 @@ import javax.print.attribute.EnumSyntax;
 import javax.print.attribute.PrintJobAttribute;
 
 /**
- * En que punto de su vida esta el trabajo.
+ * At which point of its life the job is.
  *
- * <p>Son tres estados terminales --{@code CANCELED}, {@code ABORTED}, {@code COMPLETED}-- y cuatro
- * en curso; el <em>por que</em> no lo dice esta clase sino {@link JobStateReasons}. Los valores 1 y
- * 2 estan reservados en IPP y por eso la tabla lleva {@code null} ahi.
+ * <p>There are three terminal states --{@code CANCELED}, {@code ABORTED}, {@code COMPLETED}-- and
+ * four in progress; the <em>why</em> is not said by this class but by {@link JobStateReasons}.
+ * Values 1 and 2 are reserved in IPP and that is why the table carries {@code null} there.
  */
 public class JobState extends EnumSyntax implements PrintJobAttribute {
 

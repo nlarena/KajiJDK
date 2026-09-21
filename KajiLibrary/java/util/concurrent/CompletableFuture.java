@@ -1089,13 +1089,16 @@ final class CfDelayedTask extends Thread {
     }
 
     public void run() {
-        // `Thread.sleep` declara `InterruptedException` y `Runnable.run` no puede propagarla, asi que
-        // hay que decidir aca que significa una interrupcion. Significa **cancelacion**: se restaura
-        // la marca de interrumpido --que es lo que espera quien interrumpio, y `sleep` la borra al
-        // lanzar-- y no se ejecuta el cuerpo. Correr la tarea igual seria ignorar la cancelacion; y
-        // tragarse la marca dejaria al hilo sin saber que lo interrumpieron.
+        // `Thread.sleep` declares `InterruptedException` and `Runnable.run` cannot propagate it, so
+        // what an interruption means has to be decided here. It means **cancellation**: the interrupt
+        // flag is restored --which is what whoever interrupted expects, and `sleep` clears it on
+        // throwing-- and the body is not run. Running the task anyway would be ignoring the
+        // cancellation; and swallowing the flag would leave the thread not knowing it was
+        // interrupted.
+        // A negative delay means "now", as in the JDK: clamped, because `Thread.sleep` rejects
+        // it (finding #296).
         try {
-            Thread.sleep(millis);
+            Thread.sleep(Math.max(0L, millis));
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return;
@@ -1125,11 +1128,12 @@ final class CfTimeout extends Thread {
     }
 
     public void run() {
-        // Ver la nota de `CfDelayedTask.run`: una interrupcion es cancelacion. Aca ademas el
-        // temporizador **pierde limpiamente** si lo interrumpen: no se resuelve el futuro, que es lo
-        // correcto -- `orTimeout` promete fallar *si se cumple el plazo*, y el plazo no se cumplio.
+        // See `CfDelayedTask.run`'s note: an interruption is cancellation. Here the timer also
+        // **loses cleanly** if it is interrupted: the future is not completed, which is right --
+        // `orTimeout` promises to fail *if the deadline is met*, and the deadline was not met.
+        // A negative timeout expires at once, as in the JDK; see `CfDelayedTask.run`.
         try {
-            Thread.sleep(millis);
+            Thread.sleep(Math.max(0L, millis));
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return;

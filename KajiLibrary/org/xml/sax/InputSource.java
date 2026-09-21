@@ -4,30 +4,28 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.Reader;
 
-// KajiLibrary's org.xml.sax.InputSource -- "aca esta el XML, y aca esta lo que se puede saber
-// de donde vino".
+// KajiLibrary's org.xml.sax.InputSource -- "here is the XML, and here is what can be known about
+// where it came from".
 //
-// Es una bolsa mutable de cuatro cosas independientes: un identificador publico, un
-// identificador de sistema, y a lo sumo uno de un flujo de bytes o un flujo de caracteres, mas
-// un nombre de codificacion que solo aplica al flujo de bytes. Hay una precedencia entre ellos y
-// es la fuente de casi toda la confusion, asi que:
+// It is a mutable bag of four independent things: a public identifier, a system identifier, and
+// at most one of a byte stream or a character stream, plus an encoding name that only applies to
+// the byte stream. There is a precedence among them and it is the source of almost all the
+// confusion, so:
 //
-//   1. el flujo de caracteres, si esta, gana: los caracteres ya vienen decodificados, y
-//      cualquier codificacion puesta en este objeto se ignora (igual que la de la declaracion
-//      XML);
-//   2. si no, el flujo de bytes, decodificado con getEncoding() si esta puesta, o olfateando la
-//      declaracion si no lo esta;
-//   3. si no, el identificador de sistema se abre como URI.
+//   1. the character stream, if it is there, wins: the characters come already decoded, and any
+//      encoding set on this object is ignored (just like that of the XML declaration);
+//   2. if not, the byte stream, decoded with getEncoding() if it is set, or sniffing the
+//      declaration if it is not;
+//   3. if not, the system identifier is opened as a URI.
 //
-// El identificador de sistema importa incluso cuando se da un flujo: es contra lo que resuelven
-// las referencias relativas de adentro del documento. Darle a un parser un flujo de bytes y
-// ningun identificador de sistema es legal y rutinariamente produce un "cannot resolve relative
-// URI" mas adelante.
+// The system identifier matters even when a stream is given: it is what the relative references
+// inside the document resolve against. Giving a parser a byte stream and no system identifier is
+// legal and routinely produces a "cannot resolve relative URI" later on.
 //
-// isEmpty() es la prueba de "el EntityResolver me devolvio nada?": un InputSource sin
-// identificadores y sin contenido legible, que es la forma convencional de decir "rechaza esta
-// entidad externa". Es conservador a proposito: todo flujo que no pueda rebobinar y probar vacio
-// cuenta como no vacio, y necesita soporte de mark/reset para decir otra cosa.
+// isEmpty() is the test of "did the EntityResolver return me nothing?": an InputSource with no
+// identifiers and no readable content, which is the conventional way of saying "reject this
+// external entity". It is conservative on purpose: every stream it cannot rewind and prove empty
+// counts as non-empty, and it needs mark/reset support to say otherwise.
 public class InputSource {
 
     private String publicId;
@@ -36,22 +34,22 @@ public class InputSource {
     private String encoding;
     private Reader characterStream;
 
-    // Una fuente vacia; se espera que quien llama la complete.
+    // An empty source; the caller is expected to fill it in.
     public InputSource() {
     }
 
-    // Una fuente que nombra un URI que el parser tiene que abrir por su cuenta.
+    // A source that names a URI the parser has to open on its own.
     public InputSource(String systemId) {
         setSystemId(systemId);
     }
 
-    // Una fuente sobre bytes crudos. Poner tambien el identificador de sistema si el documento
-    // tiene referencias relativas, y la codificacion si los bytes no la anuncian.
+    // A source over raw bytes. Also set the system identifier if the document has relative
+    // references, and the encoding if the bytes do not announce it.
     public InputSource(InputStream byteStream) {
         setByteStream(byteStream);
     }
 
-    // Una fuente sobre caracteres ya decodificados; la codificacion no se consulta.
+    // A source over characters already decoded; the encoding is not consulted.
     public InputSource(Reader characterStream) {
         setCharacterStream(characterStream);
     }
@@ -80,9 +78,8 @@ public class InputSource {
         return byteStream;
     }
 
-    // La codificacion de caracteres del flujo de bytes, si se la conoce. Se ignora cuando hay un
-    // flujo de caracteres puesto, y se ignora cuando el parser abre el identificador de sistema
-    // por su cuenta.
+    // The character encoding of the byte stream, if it is known. It is ignored when a character
+    // stream is set, and it is ignored when the parser opens the system identifier on its own.
     public void setEncoding(String encoding) {
         this.encoding = encoding;
     }
@@ -99,17 +96,16 @@ public class InputSource {
         return characterStream;
     }
 
-    // Verdadero cuando esta fuente no nombra nada y no lleva contenido: sin identificador
-    // publico, sin identificador de sistema, y con el flujo que tenga demostrablemente en el
-    // final. Ver la nota de la clase.
+    // True when this source names nothing and carries no content: no public identifier, no system
+    // identifier, and whatever stream it has provably at its end. See the note of the class.
     public boolean isEmpty() {
         return (publicId == null && systemId == null && isStreamEmpty());
     }
 
-    // El "demostrablemente vacio" esta trabajando en serio aca. Un flujo que no se puede
-    // rebobinar tira desde reset(), y uno ilegible tira desde read(); en los dos casos se
-    // contesta false, porque lo unico que no se puede hacer es afirmar que una fuente esta vacia
-    // cuando lo que paso es que no se pudo mirar.
+    // The "provably empty" is working in earnest here. A stream that cannot be rewound throws from
+    // reset(), and an unreadable one throws from read(); in both cases the answer is false, because
+    // the one thing that cannot be done is to assert that a source is empty when what happened is
+    // that it could not be looked at.
     private boolean isStreamEmpty() {
         boolean empty = true;
         try {

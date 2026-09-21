@@ -4,46 +4,49 @@ import java.util.Locale;
 import java.util.ResourceBundle;
 
 /**
- * KajiLibrary's java.util.spi.AbstractResourceBundleProvider -- el proveedor que ya sabe armar el
- * nombre.
+ * KajiLibrary's java.util.spi.AbstractResourceBundleProvider -- the provider that already knows how
+ * to build the name.
  *
- * <p>Implementa {@link ResourceBundleProvider} haciendo lo unico que casi todos necesitan: armar el
- * nombre del recurso a partir del nombre base y el local, y cargarlo. Un proveedor concreto
- * normalmente solo declara <b>que formatos</b> maneja y no escribe nada mas.
+ * <p>It implements {@link ResourceBundleProvider} by doing the one thing almost everybody needs:
+ * building the resource's name out of the base name and the locale, and loading it. A concrete
+ * provider normally only declares <b>which formats</b> it handles and writes nothing else.
  *
- * <h2>El nombre se arma con guiones bajos, y los huecos cuentan</h2>
+ * <h2>The name is built with underscores, and the gaps count</h2>
  *
- * <p>{@link #toBundleName} produce {@code Msg_es_AR} para {@code ("Msg", es-AR)}: idioma, script,
- * pais y variante, en ese orden, separados por {@code _}. Un local raiz da el nombre base pelado.
+ * <p>{@link #toBundleName} produces {@code Msg_es_AR} for {@code ("Msg", es-AR)}: language, script,
+ * country and variant, in that order, separated by {@code _}. A root locale gives the bare base
+ * name.
  *
- * <p>Los dos casos que no son obvios son los <b>huecos</b>. Con script, el idioma se escribe aunque
- * este vacio -- si no, {@code Msg_Latn_AR} seria indistinguible de {@code Msg_es_AR} --. Y una
- * variante sin pais deja el hueco a la vista: {@code Msg_es__POSIX}, con dos guiones bajos.
+ * <p>The two cases that are not obvious are the <b>gaps</b>. With a script, the language is written
+ * even when it is empty -- otherwise {@code Msg_Latn_AR} would be indistinguishable from
+ * {@code Msg_es_AR}. And a variant with no country leaves the gap in plain sight:
+ * {@code Msg_es__POSIX}, with two underscores.
  *
  * <h2>A KajiLibrary subset</h2>
  *
- * <p>{@link #getBundle} <b>no carga nada</b> y devuelve null. Cargar desde un proveedor pide el
- * sistema de modulos: hay que buscar el recurso <b>en el modulo del proveedor</b>, que es justamente
- * lo que distingue esta via de la vieja, y esta biblioteca no lo tiene. Null es lo que el contrato
- * define como "no lo tengo", asi que un llamador cae a la busqueda por convencion sin enterarse de
- * nada raro -- que es mejor que devolver un bundle sacado del classpath y decir que vino del modulo.
+ * <p>{@link #getBundle} <b>loads nothing</b> and returns null. Loading from a provider asks for the
+ * module system: the resource has to be looked for <b>in the provider's module</b>, which is exactly
+ * what distinguishes this route from the old one, and this library does not have it. Null is what
+ * the contract defines as "I do not have it", so a caller falls back to the by-convention search
+ * without finding anything odd -- which is better than returning a bundle taken from the classpath
+ * and saying it came from the module.
  *
- * <p>{@link #toBundleName} si esta implementado de verdad: es aritmetica de cadenas y no depende de
- * nada.
+ * <p>{@link #toBundleName} IS implemented for real: it is string arithmetic and depends on
+ * nothing.
  */
 public abstract class AbstractResourceBundleProvider implements ResourceBundleProvider {
 
     private final String[] formats;
 
-    /** Sin formatos declarados. */
+    /** With no formats declared. */
     protected AbstractResourceBundleProvider() {
         this.formats = new String[0];
     }
 
     /**
-     * Con los formatos que este proveedor maneja: {@code "java.class"}, {@code "java.properties"}.
+     * With the formats this provider handles: {@code "java.class"}, {@code "java.properties"}.
      *
-     * @throws IllegalArgumentException si alguno no es uno de esos dos
+     * @throws IllegalArgumentException if one of them is not one of those two
      */
     protected AbstractResourceBundleProvider(String... formats) {
         if (formats == null) {
@@ -62,9 +65,9 @@ public abstract class AbstractResourceBundleProvider implements ResourceBundlePr
     }
 
     /**
-     * El nombre del recurso para ese nombre base y ese local.
+     * The resource's name for that base name and that locale.
      *
-     * <p>Ver la nota de la clase para el orden de las partes y los dos huecos.
+     * <p>See the class's note for the parts' order and the two gaps.
      */
     protected String toBundleName(String baseName, Locale locale) {
         if (Locale.ROOT.equals(locale)) {
@@ -80,7 +83,7 @@ public abstract class AbstractResourceBundleProvider implements ResourceBundlePr
         StringBuilder sb = new StringBuilder(baseName);
         sb.append("_");
         if (script.length() > 0) {
-            // El idioma va aunque este vacio: ver la nota de la clase.
+            // The language goes in even when it is empty: see the class's note.
             sb.append(language).append("_").append(script);
             if (country.length() > 0) {
                 sb.append("_").append(country);
@@ -102,14 +105,14 @@ public abstract class AbstractResourceBundleProvider implements ResourceBundlePr
         return sb.toString();
     }
 
-    /** Los formatos declarados al construir. Copia. */
+    /** The formats declared on construction. A copy. */
     protected final String[] declaredFormats() {
         String[] copy = new String[this.formats.length];
         System.arraycopy(this.formats, 0, copy, 0, this.formats.length);
         return copy;
     }
 
-    /** Devuelve null: ver la nota de la clase. */
+    /** It returns null: see the class's note. */
     public ResourceBundle getBundle(String baseName, Locale locale) {
         return null;
     }

@@ -23,7 +23,7 @@ import java.io.Serializable;
 //     `words[wordsInUse - 1] != 0`, so `length()` and `equals` never have to scan trailing
 //     zeros. Anything that can clear the top word has to restore it.
 //
-// The set operations (and/or/xor/andNot) are the real payoff: they are one machine instruction
+// The set operations (and/or/xor/andNot) are the inner payoff: they are one machine instruction
 // per 64 elements, which is why bitsets are the standard representation for dataflow analysis,
 // reachability, and any other place a compiler intersects sets in a loop.
 //
@@ -310,7 +310,10 @@ public class BitSet implements Serializable, Cloneable {
         if (u < wordsInUse) {
             // Mask off the bits below fromIndex in the first word; whole words after that.
             long word = words[u] & firstWordMask(fromIndex);
-            while (found < 0) {
+            // The condition is `== -1` and not `< 0` on purpose: -2 is the "ran off the end"
+            // sentinel, and it is negative too, so `< 0` would keep the loop spinning on a word
+            // that never changes. Only the starting -1 means "still looking".
+            while (found == -1) {
                 if (word != 0L) {
                     found = u * 64 + trailingZeros(word);
                 } else {
@@ -516,17 +519,18 @@ public class BitSet implements Serializable, Cloneable {
     }
 
     /**
-     * Los bits como bytes, **little-endian**: el bit 0 es el bit menos significativo del byte 0.
+     * The bits as bytes, **little-endian**: bit 0 is the least significant bit of byte 0.
      *
-     * <p>El orden importa y es facil de invertir. Es el mismo que usa `toLongArray`, un nivel mas
-     * abajo, y el que hace que `BitSet.valueOf(x.toByteArray())` devuelva un conjunto igual a `x`.
+     * <p>The order matters and it is easy to reverse. It is the same one `toLongArray` uses one level
+     * down, and the one that makes `BitSet.valueOf(x.toByteArray())` return a set equal to `x`.
      */
     public byte[] toByteArray() {
         int n = wordsInUse;
         if (n == 0) {
             return new byte[0];
         }
-        // El ultimo word puede aportar menos de 8 bytes: solo los que llegan hasta el bit mas alto.
+        // The last word may contribute fewer than 8 bytes: only those reaching up to the highest
+        // bit.
         int len = 8 * (n - 1) + (64 - leadingZeros(words[n - 1]) + 7) / 8;
         byte[] out = new byte[len];
         int i = 0;
@@ -540,22 +544,22 @@ public class BitSet implements Serializable, Cloneable {
             }
             i = i + 1;
         }
-        long ultimo = words[n - 1];
+        long lastWord = words[n - 1];
         while (b < len) {
-            out[b] = (byte) ((ultimo >>> (8 * (b % 8))) & 0xffL);
+            out[b] = (byte) ((lastWord >>> (8 * (b % 8))) & 0xffL);
             b = b + 1;
         }
         return out;
     }
 
     /**
-     * El indice del ultimo bit **en cero** en `[0, fromIndex]`, o -1.
+     * The index of the last bit **at zero** in `[0, fromIndex]`, or -1.
      *
-     * <p>Nunca devuelve -1 para un `fromIndex` valido, a diferencia de `previousSetBit`: mas alla de
-     * `length()` todo esta en cero, asi que siempre hay un cero que encontrar. El -1 solo aparece si
-     * los bits 0..fromIndex estan todos en uno.
+     * <p>It never returns -1 for a valid `fromIndex`, unlike `previousSetBit`: beyond `length()`
+     * everything is zero, so there is always a zero to find. The -1 only turns up if bits
+     * 0..fromIndex are all ones.
      *
-     * @throws IndexOutOfBoundsException si `fromIndex` es menor que -1
+     * @throws IndexOutOfBoundsException if `fromIndex` is less than -1
      */
     public int previousClearBit(int fromIndex) {
         if (fromIndex < 0) {
@@ -566,9 +570,9 @@ public class BitSet implements Serializable, Cloneable {
         }
         int u = wordIndex(fromIndex);
         if (u >= wordsInUse) {
-            return fromIndex;   // pasado el final no hay nada seteado
+            return fromIndex;   // past the end nothing is set
         }
-        // Se busca sobre el complemento: un cero de `words` es un uno de `~words`.
+        // The search is over the complement: a zero of `words` is a one of `~words`.
         long word = ~words[u] & (-1L >>> -(fromIndex + 1));
         int found = -1;
         while (found < 0 && u >= 0) {
@@ -585,12 +589,12 @@ public class BitSet implements Serializable, Cloneable {
     }
 
     /**
-     * Un `BitSet` nuevo con los bits de `[fromIndex, toIndex)`, **recorridos a la posicion 0**.
+     * A fresh `BitSet` with the bits of `[fromIndex, toIndex)`, **shifted down to position 0**.
      *
-     * <p>El desplazamiento es lo que lo distingue de un `and` con una mascara: `get(64, 66)` de un
-     * conjunto con el bit 64 puesto devuelve un conjunto con el bit **0** puesto, no el 64.
+     * <p>The shift is what tells it from an `and` with a mask: `get(64, 66)` of a set with bit 64 set
+     * returns a set with bit **0** set, not 64.
      *
-     * @throws IndexOutOfBoundsException si algun indice es negativo, o `fromIndex > toIndex`
+     * @throws IndexOutOfBoundsException if any index is negative, or `fromIndex > toIndex`
      */
     public BitSet get(int fromIndex, int toIndex) {
         checkRange(fromIndex, toIndex);
@@ -599,12 +603,12 @@ public class BitSet implements Serializable, Cloneable {
         if (fromIndex >= len || fromIndex == toIndex) {
             return out;
         }
-        int hasta = toIndex;
-        if (hasta > len) {
-            hasta = len;
+        int to = toIndex;
+        if (to > len) {
+            to = len;
         }
         int i = fromIndex;
-        while (i < hasta) {
+        while (i < to) {
             if (get(i)) {
                 out.set(i - fromIndex);
             }
@@ -613,7 +617,7 @@ public class BitSet implements Serializable, Cloneable {
         return out;
     }
 
-    /** Los indices de los bits en uno, en orden creciente. */
+    /** The indices of the bits that are ones, in ascending order. */
     public java.util.stream.IntStream stream() {
         int n = cardinality();
         int[] idx = new int[n];
@@ -628,7 +632,7 @@ public class BitSet implements Serializable, Cloneable {
     }
 
     /**
-     * Un `BitSet` con los bits de `bytes`, en el mismo orden little-endian que `toByteArray`.
+     * A `BitSet` with the bits of `bytes`, in the same little-endian order as `toByteArray`.
      */
     public static BitSet valueOf(byte[] bytes) {
         int n = bytes.length;
@@ -645,32 +649,32 @@ public class BitSet implements Serializable, Cloneable {
     }
 
     /**
-     * Idem, leyendo desde la **posicion actual** del buffer hasta su limite.
+     * The same, reading from the buffer's **current position** to its limit.
      *
-     * <p>El buffer no se toca: ni su posicion ni su limite cambian. Es lo que promete el JDK, y lo
-     * que hace que se lo pueda seguir usando despues de esta llamada.
+     * <p>The buffer is not touched: neither its position nor its limit changes. It is what the JDK
+     * promises, and what makes it usable after this call.
      */
     public static BitSet valueOf(java.nio.ByteBuffer bb) {
         int n = bb.remaining();
-        byte[] copia = new byte[n];
+        byte[] copied = new byte[n];
         int i = 0;
         while (i < n) {
-            copia[i] = bb.get(bb.position() + i);
+            copied[i] = bb.get(bb.position() + i);
             i = i + 1;
         }
-        return BitSet.valueOf(copia);
+        return BitSet.valueOf(copied);
     }
 
-    /** Idem, desde un buffer de `long`. */
+    /** The same, from a buffer of `long`. */
     public static BitSet valueOf(java.nio.LongBuffer lb) {
         int n = lb.remaining();
-        long[] copia = new long[n];
+        long[] copied = new long[n];
         int i = 0;
         while (i < n) {
-            copia[i] = lb.get(lb.position() + i);
+            copied[i] = lb.get(lb.position() + i);
             i = i + 1;
         }
-        return BitSet.valueOf(copia);
+        return BitSet.valueOf(copied);
     }
 
     public static BitSet valueOf(long[] longs) {
@@ -708,11 +712,11 @@ public class BitSet implements Serializable, Cloneable {
      */
     @Override
     public Object clone() {
-        BitSet copia = new BitSet();
-        copia.words = new long[this.words.length];
-        System.arraycopy(this.words, 0, copia.words, 0, this.words.length);
-        copia.wordsInUse = this.wordsInUse;
-        return copia;
+        BitSet copied = new BitSet();
+        copied.words = new long[this.words.length];
+        System.arraycopy(this.words, 0, copied.words, 0, this.words.length);
+        copied.wordsInUse = this.wordsInUse;
+        return copied;
     }
 
     public boolean equals(Object obj) {

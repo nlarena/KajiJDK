@@ -3,33 +3,33 @@ package javax.imageio.spi;
 import javax.imageio.ImageTranscoder;
 
 /**
- * KajiLibrary's javax.imageio.spi.ImageTranscoderSpi -- el proveedor de un traductor de metadatos.
+ * KajiLibrary's javax.imageio.spi.ImageTranscoderSpi -- the provider of a metadata transcoder.
  *
- * <p>Declara que sabe traducir metadatos de <b>un</b> lector a <b>un</b> escritor concretos, nombrados
- * por la clase de sus proveedores.
+ * <p>It declares that it knows how to translate metadata from <b>one</b> specific reader to
+ * <b>one</b> specific writer, named by the class of their providers.
  *
- * <p>Esa especificidad es el punto. Todo escritor ya sabe traducir desde el formato estandar --es
- * {@link ImageTranscoder}, que {@code ImageWriter} implementa--, pero esa traduccion pasa por el
- * comun y pierde lo especifico. Un traductor dedicado entre dos formatos parecidos puede conservar
- * mucho mas.
+ * <p>That specificity is the point. Every writer already knows how to translate from the standard
+ * format --it is {@link ImageTranscoder}, which {@code ImageWriter} implements--, but that
+ * translation goes through the common one and loses what is specific. A dedicated transcoder
+ * between two similar formats can keep much more.
  */
 public abstract class ImageTranscoderSpi extends IIOServiceProvider {
 
-    /** El que exige el cargador de servicios. */
+    /** The one the service loader requires. */
     protected ImageTranscoderSpi() {
     }
 
-    /** Con nombre y version. */
+    /** With a name and a version. */
     public ImageTranscoderSpi(String vendorName, String version) {
         super(vendorName, version);
     }
 
-    /** La clase del proveedor de lectores del que sabe traducir. */
+    /** The class of the reader provider it knows how to translate from. */
     public abstract String getReaderServiceProviderName();
 
-    /** La del proveedor de escritores al que sabe traducir. */
+    /** The one of the writer provider it knows how to translate to. */
     public abstract String getWriterServiceProviderName();
 
-    /** Un traductor nuevo. */
+    /** A new transcoder. */
     public abstract ImageTranscoder createTranscoderInstance();
 }

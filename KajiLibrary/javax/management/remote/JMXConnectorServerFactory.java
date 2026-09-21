@@ -9,73 +9,77 @@ import java.util.ServiceLoader;
 import javax.management.MBeanServer;
 
 /**
- * KajiLibrary's javax.management.remote.JMXConnectorServerFactory -- consigue un servidor de
- * conectores.
+ * KajiLibrary's javax.management.remote.JMXConnectorServerFactory -- gets a connector server.
  *
- * <p>El espejo de {@link JMXConnectorFactory} para el lado servidor, con un metodo solo. El servidor
- * que devuelve <b>no esta arrancado</b>: hay que llamarle {@code start()}, y eso es a proposito, para
- * poder registrarlo como MBean o encadenarle interceptores antes de abrir el puerto.
-
- * <h2>Como se encuentra el proveedor de un protocolo</h2>
+ * <p>{@link JMXConnectorFactory}'s mirror for the server side, with a single method. The server
+ * it returns is <b>not started</b>: {@code start()} has to be called on it, and that is on
+ * purpose, so that it can be registered as an MBean or have interceptors chained to it before
+ * opening the port.
  *
- * <p>Se prueban dos caminos, en orden:
+ * <h2>How a protocol's provider is found</h2>
+ *
+ * <p>Two paths are tried, in order:
  *
  * <ol>
- *   <li>los declarados como servicio y encontrados con {@link java.util.ServiceLoader}. Es la forma
- *       moderna y la que no pide configuracion;
- *   <li>por <b>nombre de clase deducido</b>: para cada paquete de la propiedad
- *       {@link #PROTOCOL_PROVIDER_PACKAGES} se busca la clase
- *       {@code <paquete>.<protocolo>.ServerProvider}. Los paquetes se separan con {@code |}, y el
- *       protocolo se traduce cambiando {@code +} por punto y {@code -} por raya baja, porque un
- *       protocolo puede tener caracteres que un nombre de paquete no admite.
+ *   <li>those declared as a service and found with {@link java.util.ServiceLoader}. It is the
+ *       modern way and the one that asks for no configuration;
+ *   <li>by <b>deduced class name</b>: for each package of the
+ *       {@link #PROTOCOL_PROVIDER_PACKAGES} property, the class
+ *       {@code <package>.<protocol>.ServerProvider} is looked for. The packages are separated with
+ *       {@code |}, and the protocol is translated by turning {@code +} into a dot and
+ *       {@code -} into an underscore, because a protocol may have characters a package name
+ *       does not admit.
  * </ol>
  *
- * <p>Si un proveedor reconoce el protocolo pero no puede con ese entorno, lanza
- * {@link JMXProviderException} y se sigue con el siguiente. Si ninguno lo reconoce, sale
- * {@link java.net.MalformedURLException} con {@code "Unsupported protocol"}.
+ * <p>If a provider recognizes the protocol but cannot cope with that environment, it throws
+ * {@link JMXProviderException} and the next one is tried. If none recognizes it,
+ * {@link java.net.MalformedURLException} comes out with {@code "Unsupported protocol"}.
  *
- * <p>Esa distincion es la que le sirve a quien llama: la primera dice "esta roto", la segunda dice "no
- * existe". Ver {@link JMXProviderException}.
-
+ * <p>That distinction is what is of use to the caller: the first says "it is broken", the
+ * second says "it does not exist". See {@link JMXProviderException}.
+ *
  * <h2>A KajiLibrary subset</h2>
  *
- * <p>Esta biblioteca no trae ningun protocolo. RMI necesita una capa de transporte remota que no esta,
- * y JMXMP nunca estuvo en el JDK. La busqueda esta implementada de verdad --recorre el
- * {@link java.util.ServiceLoader} y prueba los nombres deducidos-- y termina en
- * {@code "Unsupported protocol"}, que es exactamente lo que hace el JDK 25 con un protocolo que nadie
- * provee. Agregando un proveedor, esto funciona sin cambios.
+ * <p>This library ships no protocol. RMI needs a remote transport layer that is not there, and
+ * JMXMP was never in the JDK. The search is really implemented --it walks the
+ * {@link java.util.ServiceLoader} and tries the deduced names-- and ends in
+ * {@code "Unsupported protocol"}, which is exactly what JDK 25 does with a protocol nobody
+ * provides. Adding a provider, this works with no changes.
  */
 public class JMXConnectorServerFactory {
 
-    /** Clave del entorno: con que cargador de clases deserializar lo que llega. */
+    /** Environment key: with what class loader to deserialize what arrives. */
     public static final String DEFAULT_CLASS_LOADER = "jmx.remote.default.class.loader";
 
     /**
-     * Clave del entorno: el {@code ObjectName} del MBean cargador de clases a usar.
+     * Environment key: the {@code ObjectName} of the class loader MBean to use.
      *
-     * <p>Es la alternativa a {@link #DEFAULT_CLASS_LOADER} y son excluyentes: uno da el cargador,
-     * el otro lo nombra para que lo busque en el servidor de MBeans. Dar los dos es un error.
+     * <p>It is the alternative to {@link #DEFAULT_CLASS_LOADER} and they are exclusive: one gives
+     * the loader, the other names it so that it is looked up in the MBean server. Giving both is an
+     * error.
      */
     public static final String DEFAULT_CLASS_LOADER_NAME = "jmx.remote.default.class.loader.name";
 
-    /** Propiedad y clave del entorno: en que paquetes buscar proveedores, separados por {@code |}. */
+    /**
+     * Property and environment key: in what packages to look for providers, separated by {@code |}.
+     */
     public static final String PROTOCOL_PROVIDER_PACKAGES = "jmx.remote.protocol.provider.pkgs";
 
-    /** Clave del entorno: con que cargador buscar la clase del proveedor. */
+    /** Environment key: with what loader to look for the provider's class. */
     public static final String PROTOCOL_PROVIDER_CLASS_LOADER =
         "jmx.remote.protocol.provider.class.loader";
 
-    /** No tiene estado; el constructor publico es el que el JDK dejo. */
+    /** It has no state; the public constructor is the one the JDK left. */
     public JMXConnectorServerFactory() {
     }
 
     /**
-     * Un servidor sin arrancar para esa direccion.
+     * An unstarted server for that address.
      *
-     * @param mbeanServer a que servidor de MBeans expone, o null para atarlo al registrarlo
-     * @throws MalformedURLException si no hay proveedor para ese protocolo
-     * @throws JMXProviderException si lo hay y no pudo
-     * @throws IOException si fallo por otra cosa
+     * @param mbeanServer which MBean server it exposes, or null to tie it when registering it
+     * @throws MalformedURLException if there is no provider for that protocol
+     * @throws JMXProviderException if there is one and it could not
+     * @throws IOException if it failed for something else
      */
     public static JMXConnectorServer newJMXConnectorServer(JMXServiceURL serviceURL,
                                                            Map<String, ?> environment,
@@ -113,7 +117,7 @@ public class JMXConnectorServerFactory {
         throw new MalformedURLException("Unsupported protocol: " + protocol);
     }
 
-    /** Ver {@link JMXConnectorFactory}: un proveedor roto no tumba la busqueda. */
+    /** See {@link JMXConnectorFactory}: a broken provider does not bring the search down. */
     private static boolean hasNextQuietly(Iterator<JMXConnectorServerProvider> it) {
         try {
             return it.hasNext();

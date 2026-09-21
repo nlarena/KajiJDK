@@ -1,58 +1,58 @@
 package jdk.internal.event;
 
 /**
- * La base interna de todo evento de JFR.
+ * The internal base of every event of JFR.
  *
- * <p>No es API publica —{@code jdk.internal.*} no se exporta— y existe para que las clases del JDK
- * que emiten eventos no tengan que depender del modulo {@code jdk.jfr}. {@link jdk.jfr.Event}
- * hereda de esta.
+ * <p>It is not public API --{@code jdk.internal.*} is not exported-- and it exists so that the
+ * classes of the JDK that emit events do not have to depend on the {@code jdk.jfr} module.
+ * {@link jdk.jfr.Event} inherits from this one.
  *
- * <p>Los cuerpos estan vacios a proposito, igual que en el JDK: cuando JFR esta activo, la VM
- * <strong>reescribe</strong> estos metodos al cargar cada subclase, inyectando el codigo que
- * escribe el evento en el buffer. Sin JFR activo no hacen nada, que es exactamente lo que tienen
- * que hacer.
+ * <p>The bodies are empty on purpose, just as in the JDK: when JFR is active, the VM
+ * <strong>rewrites</strong> these methods when it loads each subclass, injecting the code that
+ * writes the event into the buffer. With no JFR active they do nothing, which is exactly what they
+ * have to do.
  */
 public abstract class Event {
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected Event() {
     }
 
-    /** Marca el comienzo del evento. */
+    /** It marks the beginning of the event. */
     public void begin() {
     }
 
-    /** Marca el final del evento. */
+    /** It marks the end of the event. */
     public void end() {
     }
 
-    /** Emite el evento. */
+    /** It emits the event. */
     public void commit() {
     }
 
     /**
-     * Si el evento esta habilitado.
+     * Whether the event is enabled.
      *
-     * @return {@code false} mientras la VM no reescriba este metodo
+     * @return {@code false} as long as the VM does not rewrite this method
      */
     public boolean isEnabled() {
         return false;
     }
 
     /**
-     * Si el evento pasaria los filtros configurados.
+     * Whether the event would pass the configured filters.
      *
-     * @return {@code false} mientras la VM no reescriba este metodo
+     * @return {@code false} as long as the VM does not rewrite this method
      */
     public boolean shouldCommit() {
         return false;
     }
 
     /**
-     * Fija un campo por indice.
+     * It sets a field by index.
      *
-     * @param index el indice del campo
-     * @param value el valor
+     * @param index the index of the field
+     * @param value the value
      */
     public void set(int index, Object value) {
     }

@@ -1,25 +1,27 @@
 package javax.security.cert;
 
 /**
- * KajiLibrary's javax.security.cert.CertificateNotYetValidException -- todavia no empezo a valer.
+ * KajiLibrary's javax.security.cert.CertificateNotYetValidException -- it has not started being
+ * valid yet.
  *
- * <p>Ver {@link CertificateExpiredException} para por que son dos excepciones y no una.
+ * <p>See {@link CertificateExpiredException} for why they are two exceptions and not one.
  *
- * <p>Obsoleta <b>y marcada para remocion</b> desde Java 9. El reemplazo es
- * {@code java.security.cert}, que no es una version mejorada de esto sino otra cosa: soporta la
- * version 3 del formato, con extensiones, que es lo unico que sirve para validar una cadena de hoy.
+ * <p>Deprecated <b>and marked for removal</b> since Java 9. The replacement is {@code
+ * java.security.cert}, which is not an improved version of this but something else: it supports
+ * version 3 of the format, with extensions, which is the only thing that serves to validate a chain
+ * today.
  */
 @Deprecated(since = "9", forRemoval = true)
 public class CertificateNotYetValidException extends CertificateException {
 
     private static final long serialVersionUID = -8976172474266822818L;
 
-    /** Sin detalle. */
+    /** Without detail. */
     public CertificateNotYetValidException() {
         super();
     }
 
-    /** Con un mensaje que diga que paso. */
+    /** With a message that says what happened. */
     public CertificateNotYetValidException(String message) {
         super(message);
     }

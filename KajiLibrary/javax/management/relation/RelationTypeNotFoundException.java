@@ -1,18 +1,18 @@
 package javax.management.relation;
 
 /**
- * No hay ningun tipo de relacion con ese nombre.
+ * There is no relation type with that name.
  */
 public class RelationTypeNotFoundException extends RelationException {
 
     private static final long serialVersionUID = 1274155316303520952L;
 
-    /** Sin detalle. */
+    /** Without detail. */
     public RelationTypeNotFoundException() {
         super();
     }
 
-    /** Con un mensaje. */
+    /** With a message. */
     public RelationTypeNotFoundException(String message) {
         super(message);
     }

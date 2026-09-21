@@ -5,146 +5,149 @@ import java.beans.PropertyChangeSupport;
 import java.util.ArrayList;
 
 /**
- * La bandeja del sistema: la zona de íconos al lado del reloj.
+ * The system tray: the strip of icons next to the clock.
  *
- * <p>Es de la sesión de escritorio, no del programa, así que hay **una sola** y se la pide con
- * {@link #getSystemTray}. Varios programas ponen íconos en la misma bandeja, pero cada uno ve sólo
- * los suyos: {@link #getTrayIcons} devuelve los de este programa y no los del vecino.
+ * <p>It belongs to the desktop session, not to the program, so there is **one only** and it is
+ * asked for with {@link #getSystemTray}. Several programs put icons in the same tray, but each one
+ * sees only its own: {@link #getTrayIcons} returns this program's and not the neighbour's.
  *
- * <p>Antes de usarla hay que preguntar {@link #isSupported}, y no es una formalidad: hay escritorios
- * enteros que no tienen bandeja. <strong>Acá nunca la hay</strong> —no hay sistema de ventanas— así
- * que `isSupported` da `false` y {@link #getSystemTray} tira {@link UnsupportedOperationException},
- * que es exactamente lo que hace el JDK en esa situación.
+ * <p>Before using it one has to ask {@link #isSupported}, and that is not a formality: there are
+ * whole desktops with no tray. <strong>Here there never is one</strong> —there is no windowing
+ * system— so `isSupported` gives `false` and {@link #getSystemTray} throws
+ * {@link UnsupportedOperationException}, which is exactly what the JDK does in that situation.
  */
 public class SystemTray {
 
-    /** La única bandeja, si alguna vez se llega a pedir. */
-    private static SystemTray unica;
+    /** The only tray, if it ever gets asked for. */
+    private static SystemTray instance;
 
-    /** Los íconos de este programa. */
-    private final ArrayList<TrayIcon> iconos = new ArrayList<TrayIcon>();
+    /** This program's icons. */
+    private final ArrayList<TrayIcon> icons = new ArrayList<TrayIcon>();
 
-    /** Los oyentes de cambios. */
-    private final PropertyChangeSupport cambios = new PropertyChangeSupport(this);
+    /** The change listeners. */
+    private final PropertyChangeSupport changeSupport = new PropertyChangeSupport(this);
 
-    /** No se instancia desde afuera: la bandeja es una sola. */
+    /** Not instantiated from outside: there is a single tray. */
     private SystemTray() {
     }
 
     /**
-     * La bandeja del sistema.
+     * The system tray.
      *
-     * @throws UnsupportedOperationException siempre acá: no hay bandeja
-     * @throws HeadlessException si no hay pantalla
+     * <p>The JDK checks for a screen first and throws {@link HeadlessException} there; here the
+     * answer comes earlier, because the tray is not supported at all.
+     *
+     * @throws UnsupportedOperationException always here: there is no tray
      */
     public static SystemTray getSystemTray() {
         if (!isSupported()) {
             throw new UnsupportedOperationException("The system tray is not supported on the current platform.");
         }
         synchronized (SystemTray.class) {
-            if (unica == null) {
-                unica = new SystemTray();
+            if (instance == null) {
+                instance = new SystemTray();
             }
-            return unica;
+            return instance;
         }
     }
 
     /**
-     * Si esta plataforma tiene bandeja.
+     * Whether this platform has a tray.
      *
-     * @return `false` siempre: sin sistema de ventanas no hay ninguna
+     * @return `false` always: without a windowing system there is none
      */
     public static boolean isSupported() {
         return false;
     }
 
     /**
-     * Agrega un ícono a la bandeja.
+     * Adds an icon to the tray.
      *
-     * <p>El mismo ícono no se puede agregar dos veces, ni a dos bandejas: sería el mismo objeto
-     * pretendiendo estar en dos lugares.
+     * <p>The same icon cannot be added twice, nor to two trays: it would be the same object
+     * pretending to be in two places.
      *
-     * @throws AWTException si la bandeja no se puede usar
-     * @throws NullPointerException si el ícono es `null`
-     * @throws IllegalArgumentException si ese ícono ya está en una bandeja
+     * @throws AWTException if the tray cannot be used
+     * @throws NullPointerException if the icon is `null`
+     * @throws IllegalArgumentException if that icon is already in a tray
      */
     public void add(TrayIcon trayIcon) throws AWTException {
         if (trayIcon == null) {
             throw new NullPointerException("adding null TrayIcon");
         }
         synchronized (this) {
-            if (this.iconos.contains(trayIcon)) {
+            if (this.icons.contains(trayIcon)) {
                 throw new IllegalArgumentException("adding TrayIcon that is already added");
             }
-            this.iconos.add(trayIcon);
+            this.icons.add(trayIcon);
         }
-        this.cambios.firePropertyChange("trayIcons", null, this.getTrayIcons());
+        this.changeSupport.firePropertyChange("trayIcons", null, this.getTrayIcons());
     }
 
     /**
-     * Saca un ícono de la bandeja.
+     * Takes an icon out of the tray.
      *
-     * <p>Un ícono que no está, o un `null`, no hacen nada: sacar lo que no está ya dejó el mundo como
-     * se quería.
+     * <p>An icon that is not there, or a `null`, do nothing: taking out what is not there already
+     * left the world the way it was wanted.
      */
     public void remove(TrayIcon trayIcon) {
         if (trayIcon == null) {
             return;
         }
-        boolean saco;
+        boolean removed;
         synchronized (this) {
-            saco = this.iconos.remove(trayIcon);
+            removed = this.icons.remove(trayIcon);
         }
-        if (saco) {
-            this.cambios.firePropertyChange("trayIcons", null, this.getTrayIcons());
+        if (removed) {
+            this.changeSupport.firePropertyChange("trayIcons", null, this.getTrayIcons());
         }
     }
 
     /**
-     * Los íconos que este programa puso.
+     * The icons this program put in.
      *
-     * @return una copia; un arreglo vacío si no puso ninguno. Nunca `null`.
+     * @return a copy; an empty array if it put none in. Never `null`.
      */
     public TrayIcon[] getTrayIcons() {
         synchronized (this) {
-            return this.iconos.toArray(new TrayIcon[0]);
+            return this.icons.toArray(new TrayIcon[0]);
         }
     }
 
     /**
-     * De qué tamaño quiere la bandeja los íconos.
+     * What size the tray wants the icons.
      *
-     * <p>No es un tope sino una recomendación: un ícono de otro tamaño se escala o se recorta según
-     * {@link TrayIcon#setImageAutoSize}.
+     * <p>It is not a limit but a recommendation: an icon of another size is scaled or cropped
+     * according to {@link TrayIcon#setImageAutoSize}.
      *
-     * @throws UnsupportedOperationException nunca se llega acá: no hay instancias
+     * @throws UnsupportedOperationException always —though nothing gets here: there is no way to
+     *     obtain an instance
      */
     public Dimension getTrayIconSize() {
         throw new UnsupportedOperationException("The system tray is not supported on the current platform.");
     }
 
-    /** Agrega un oyente para esa propiedad; `null` no hace nada. */
+    /** Adds a listener for that property; `null` does nothing. */
     public synchronized void addPropertyChangeListener(String propertyName,
             PropertyChangeListener listener) {
         if (listener != null) {
-            this.cambios.addPropertyChangeListener(propertyName, listener);
+            this.changeSupport.addPropertyChangeListener(propertyName, listener);
         }
     }
 
-    /** Saca un oyente de esa propiedad. */
+    /** Removes a listener of that property. */
     public synchronized void removePropertyChangeListener(String propertyName,
             PropertyChangeListener listener) {
         if (listener != null) {
-            this.cambios.removePropertyChangeListener(propertyName, listener);
+            this.changeSupport.removePropertyChangeListener(propertyName, listener);
         }
     }
 
     /**
-     * Los oyentes de esa propiedad.
+     * The listeners of that property.
      *
-     * @return los oyentes; un arreglo vacío si no hay ninguno
+     * @return the listeners; an empty array if there is none
      */
     public synchronized PropertyChangeListener[] getPropertyChangeListeners(String propertyName) {
-        return this.cambios.getPropertyChangeListeners(propertyName);
+        return this.changeSupport.getPropertyChangeListeners(propertyName);
     }
 }

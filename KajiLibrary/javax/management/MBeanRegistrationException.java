@@ -1,10 +1,10 @@
 package javax.management;
 
 /**
- * El MBean se opuso a su propio registro (o a su baja) desde {@link MBeanRegistration}.
+ * The MBean objected to its own registration (or unregistration) from {@link MBeanRegistration}.
  *
- * <p>Hereda de {@link MBeanException} y no de {@link OperationsException} porque quien fallo es el
- * **MBean**, en su codigo de `preRegister`/`preDeregister`, no el agente.
+ * <p>It extends {@link MBeanException} and not {@link OperationsException} because whoever failed
+ * is the <b>MBean</b>, in its {@code preRegister}/{@code preDeregister} code, not the agent.
  */
 public class MBeanRegistrationException extends MBeanException {
 

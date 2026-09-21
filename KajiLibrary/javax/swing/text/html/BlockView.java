@@ -15,25 +15,27 @@ import javax.swing.text.View;
 import javax.swing.text.ViewFactory;
 
 /**
- * La vista de un elemento de HTML que arma bloque.
+ * The view of an HTML element that makes a block.
  *
- * <h2>Que agrega sobre una caja comun</h2>
+ * <h2>What it adds over a plain box</h2>
  *
- * <p>Una {@link BoxView} apila a sus hijos. Esta ademas mira el CSS: toma los margenes y el fondo
- * de la hoja de estilos, y hace caso a un <code>width</code> o un <code>height</code> declarados.
+ * <p>A {@link BoxView} stacks its children. This one also looks at the CSS: it takes the
+ * margins and the background from the style sheet, and obeys a declared <code>width</code> or
+ * <code>height</code>.
  *
- * <p>Los atributos se leen en {@link #setPropertiesFromAttributes}, y eso ocurre al colgarse de un
- * padre y cada vez que el documento cambia los atributos. No se puede hacer en el constructor: sin
- * padre no hay documento, y sin documento no hay hoja de estilos que consultar.
+ * <p>The attributes are read in {@link #setPropertiesFromAttributes}, and that happens when it
+ * is hung from a parent and every time the document changes the attributes. It cannot be done in
+ * the constructor: without a parent there is no document, and without a document there is no
+ * style sheet to consult.
  */
 public class BlockView extends BoxView {
 
     private AttributeSet attr;
     private StyleSheet.BoxPainter painter;
-    private float anchoPedido = -1;
-    private float altoPedido = -1;
+    private float requestedWidth = -1;
+    private float requestedHeight = -1;
 
-    /** Una vista de bloque sobre ese eje. */
+    /** A block view on that axis. */
     public BlockView(Element elem, int axis) {
         super(elem, axis);
     }
@@ -47,27 +49,27 @@ public class BlockView extends BoxView {
 
     protected SizeRequirements calculateMajorAxisRequirements(int axis, SizeRequirements r) {
         SizeRequirements rr = super.calculateMajorAxisRequirements(axis, r);
-        return ajustar(axis, rr);
+        return adjust(axis, rr);
     }
 
     protected SizeRequirements calculateMinorAxisRequirements(int axis, SizeRequirements r) {
         SizeRequirements rr = super.calculateMinorAxisRequirements(axis, r);
-        return ajustar(axis, rr);
+        return adjust(axis, rr);
     }
 
     /**
-     * Impone el tamano declarado en el CSS, si lo hay.
+     * It imposes the size declared in the CSS, if there is one.
      *
-     * <p>Un <code>width</code> declarado fija el minimo, el preferido y el maximo en el mismo
-     * valor. Fijar solo el preferido no alcanzaria: el reparto de la caja de arriba lo estiraria
-     * igual.
+     * <p>A declared <code>width</code> sets the minimum, the preferred and the maximum to the same
+     * value. Setting only the preferred one would not be enough: the sharing out done by the box
+     * above would stretch it all the same.
      */
-    private SizeRequirements ajustar(int axis, SizeRequirements r) {
-        float pedido = (axis == X_AXIS) ? anchoPedido : altoPedido;
-        if (pedido > 0) {
-            r.minimum = (int) pedido;
-            r.preferred = (int) pedido;
-            r.maximum = (int) pedido;
+    private SizeRequirements adjust(int axis, SizeRequirements r) {
+        float requested = (axis == X_AXIS) ? requestedWidth : requestedHeight;
+        if (requested > 0) {
+            r.minimum = (int) requested;
+            r.preferred = (int) requested;
+            r.maximum = (int) requested;
         }
         return r;
     }
@@ -76,7 +78,7 @@ public class BlockView extends BoxView {
         super.layoutMinorAxis(targetSpan, axis, offsets, spans);
     }
 
-    /** Dibuja el fondo del bloque y despues los hijos. */
+    /** It draws the block's background and then the children. */
     public void paint(Graphics g, Shape allocation) {
         Rectangle a = (Rectangle) allocation;
         if (painter != null) {
@@ -86,10 +88,10 @@ public class BlockView extends BoxView {
     }
 
     /**
-     * Los atributos de la vista: los del elemento mas los que aporte la hoja.
+     * The view's attributes: the element's plus whatever the sheet contributes.
      *
-     * <p>Se calculan una vez y se guardan. Volver a resolverlos en cada consulta seria correcto y
-     * seria lento: se consultan a cada linea que se dibuja.
+     * <p>They are computed once and kept. Resolving them again on every query would be right and
+     * would be slow: they are consulted on every line that is drawn.
      */
     public AttributeSet getAttributes() {
         if (attr == null) {
@@ -100,7 +102,7 @@ public class BlockView extends BoxView {
         return attr;
     }
 
-    /** Un bloque se estira en el eje menor y no en el mayor. */
+    /** A block stretches on the minor axis and not on the major one. */
     public int getResizeWeight(int axis) {
         if (axis == X_AXIS) {
             return 1;
@@ -135,7 +137,7 @@ public class BlockView extends BoxView {
         return super.getMaximumSpan(axis);
     }
 
-    /** Lee margenes, fondo y tamano de la hoja de estilos. */
+    /** It reads margins, background and size from the style sheet. */
     protected void setPropertiesFromAttributes() {
         attr = null;
         StyleSheet sheet = getStyleSheet();
@@ -146,13 +148,13 @@ public class BlockView extends BoxView {
         painter = sheet.getBoxPainter(a);
         setInsets((short) painter.getInset(TOP, this), (short) painter.getInset(LEFT, this),
                 (short) painter.getInset(BOTTOM, this), (short) painter.getInset(RIGHT, this));
-        anchoPedido = medida(a, CSS.Attribute.WIDTH);
-        altoPedido = medida(a, CSS.Attribute.HEIGHT);
+        requestedWidth = measured(a, CSS.Attribute.WIDTH);
+        requestedHeight = measured(a, CSS.Attribute.HEIGHT);
     }
 
-    /** Un largo declarado en pixeles, o -1 si no hay o no se entiende. */
-    private static float medida(AttributeSet a, CSS.Attribute clave) {
-        Object o = a.getAttribute(clave);
+    /** A length declared in pixels, or -1 if there is none or it is not understood. */
+    private static float measured(AttributeSet a, CSS.Attribute key) {
+        Object o = a.getAttribute(key);
         if (o == null) {
             return -1;
         }
@@ -163,12 +165,12 @@ public class BlockView extends BoxView {
         try {
             return Float.parseFloat(s);
         } catch (NumberFormatException nfe) {
-            // Un porcentaje o algo raro: se deja que la caja decida.
+            // A percentage or something odd: the box is left to decide.
             return -1;
         }
     }
 
-    /** La hoja de estilos del documento, o nulo si el documento no es de HTML. */
+    /** The document's style sheet, or null if the document is not an HTML one. */
     protected StyleSheet getStyleSheet() {
         Document d = getDocument();
         if (d instanceof HTMLDocument) {

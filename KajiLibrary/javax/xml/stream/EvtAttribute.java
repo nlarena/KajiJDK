@@ -8,11 +8,11 @@ import javax.xml.namespace.QName;
 import javax.xml.stream.events.Attribute;
 
 /**
- * Un atributo como evento.
+ * An attribute as an event.
  *
- * <p>{@link #getDTDType()} devuelve siempre {@code "CDATA"} y {@link #isSpecified()} siempre true:
- * el parser de esta biblioteca no lee el DTD, asi que todo lo que entrega estaba escrito en el
- * documento y no tiene tipo declarado. Las dos respuestas son ciertas, no valores de relleno.
+ * <p>{@link #getDTDType()} always returns {@code "CDATA"} and {@link #isSpecified()} always true:
+ * this library's parser does not read the DTD, so everything it delivers was written in the
+ * document and has no declared type. Both answers are true, not filler values.
  */
 class EvtAttribute extends EvtBase implements Attribute {
 
@@ -51,7 +51,7 @@ class EvtAttribute extends EvtBase implements Attribute {
         return true;
     }
 
-    /** El nombre tal como se escribe: con prefijo si lo tiene. */
+    /** The name as it is written: with a prefix if it has one. */
     String written() {
         String p = name.getPrefix();
         if (p == null || p.equals(XMLConstants.DEFAULT_NS_PREFIX)) {
@@ -62,7 +62,7 @@ class EvtAttribute extends EvtBase implements Attribute {
 
     public void writeAsEncodedUnicode(Writer writer) throws XMLStreamException {
         if (writer == null) {
-            throw new XMLStreamException("el escritor no puede ser null");
+            throw new XMLStreamException("the writer cannot be null");
         }
         try {
             writer.write(written());

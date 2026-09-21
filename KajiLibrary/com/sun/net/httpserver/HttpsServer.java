@@ -6,35 +6,35 @@ import java.net.InetSocketAddress;
 import com.sun.net.httpserver.spi.HttpServerProvider;
 
 /**
- * Un {@link HttpServer} sobre TLS.
+ * An {@link HttpServer} over TLS.
  *
- * <h2>El paso que falta y no se puede olvidar</h2>
+ * <h2>The step that is missing and cannot be forgotten</h2>
  *
- * <p>Crear el servidor no alcanza: sin {@link #setHttpsConfigurator} no hay contexto TLS, y
- * cualquier conexion entrante falla. Es intencional —no hay una configuracion de TLS por omision
- * que sea razonable— pero es tambien el error mas comun con esta clase, porque el servidor arranca
- * sin quejarse y falla recien cuando alguien se conecta.
+ * <p>Creating the server is not enough: with no {@link #setHttpsConfigurator} there is no TLS
+ * context, and any incoming connection fails. It is intentional -- there is no default TLS
+ * configuration that is reasonable -- but it is also the commonest mistake with this class,
+ * because the server starts without complaining and fails only when somebody connects.
  */
 public abstract class HttpsServer extends HttpServer {
 
-    /** Para las implementaciones. */
+    /** For the implementations. */
     protected HttpsServer() {
     }
 
-    /** Un servidor sin ligar; hay que llamarle {@link #bind} y ponerle el configurador. */
+    /** An unbound server; {@link #bind} has to be called on it and the configurator set. */
     public static HttpsServer create() throws IOException {
         return HttpServerProvider.provider().createHttpsServer(null, 0);
     }
 
-    /** Ligado a {@code addr}. */
+    /** Bound to {@code addr}. */
     public static HttpsServer create(InetSocketAddress addr, int backlog) throws IOException {
         return HttpServerProvider.provider().createHttpsServer(addr, backlog);
     }
 
     /**
-     * Ligado, con un contexto y sus filtros ya puestos.
+     * Bound, with a context and its filters already set.
      *
-     * @throws NullPointerException si falta la ruta o el manejador
+     * @throws NullPointerException if the path or the handler are missing
      */
     public static HttpsServer create(InetSocketAddress addr, int backlog, String path,
             HttpHandler handler, Filter... filters) throws IOException {
@@ -48,7 +48,7 @@ public abstract class HttpsServer extends HttpServer {
         HttpContext c = s.createContext(path, handler);
         for (int i = 0; i < filters.length; i++) {
             if (filters[i] == null) {
-                throw new NullPointerException("un filtro es null");
+                throw new NullPointerException("a filter is null");
             }
             c.getFilters().add(filters[i]);
         }
@@ -56,12 +56,12 @@ public abstract class HttpsServer extends HttpServer {
     }
 
     /**
-     * Pone el configurador de TLS.
+     * It sets the TLS configurator.
      *
-     * @throws NullPointerException si es {@code null}
+     * @throws NullPointerException if it is {@code null}
      */
     public abstract void setHttpsConfigurator(HttpsConfigurator config);
 
-    /** El configurador, o {@code null} si todavia no se puso. */
+    /** The configurator, or {@code null} if it has not been set yet. */
     public abstract HttpsConfigurator getHttpsConfigurator();
 }

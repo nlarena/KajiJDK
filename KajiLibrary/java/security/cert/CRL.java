@@ -1,14 +1,15 @@
 package java.security.cert;
 
-// Una lista de certificados revocados.
+// A list of revoked certificates.
 //
-// La clase es minima a proposito: lo unico que toda CRL sabe hacer, sea del formato que sea, es
-// decir si un certificado esta en ella. Todo lo demas —emisor, fechas, extensiones— es especifico
-// de X.509 y vive en `X509CRL`.
+// The class is minimal on purpose: the only thing every CRL knows how to do, whatever its format,
+// is say whether a certificate is in it. Everything else —issuer, dates, extensions— is specific to
+// X.509 and lives in `X509CRL`.
 //
-// El modelo de las CRLs tiene un problema estructural que conviene tener presente: son una foto con
-// fecha. Entre que se emite una y se emite la siguiente, una revocacion no se ve. Esa ventana es la
-// razon por la que existe OCSP, y por la que `PKIXRevocationChecker` deja elegir cual se prefiere.
+// The model of CRLs has a structural problem worth keeping in mind: they are a photograph with a
+// date. Between one being issued and the next being issued, a revocation is not seen. That window
+// is the reason OCSP exists, and the reason `PKIXRevocationChecker` lets one choose which is
+// preferred.
 public abstract class CRL {
 
     private final String type;
@@ -17,8 +18,8 @@ public abstract class CRL {
         this.type = type;
     }
 
-    // El tipo: "X.509". `final` porque lo fija el constructor, y una subclase que mintiera sobre el
-    // haria que el codigo que despacha por tipo eligiera el parser equivocado.
+    // The type: "X.509". `final` because the constructor fixes it, and a subclass that lied about
+    // it would make the code that dispatches by type choose the wrong parser.
     public final String getType() {
         return this.type;
     }
@@ -26,6 +27,6 @@ public abstract class CRL {
     @Override
     public abstract String toString();
 
-    // Si este certificado figura como revocado en esta lista.
+    // Whether this certificate appears as revoked in this list.
     public abstract boolean isRevoked(Certificate cert);
 }

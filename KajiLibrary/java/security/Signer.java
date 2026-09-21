@@ -1,18 +1,18 @@
 package java.security;
 
-// Una identidad que ademas tiene clave **privada**: puede firmar, no solo ser verificada.
+// An identity that also has a **private** key: it can sign, not only be verified.
 //
-// La diferencia con `Identity` es toda la que importa en un sistema de claves. Una `Identity` es
-// publica y se puede repartir; un `Signer` guarda el secreto. Que sean tipos distintos es lo que
-// hace que una API que solo necesita verificar no pueda recibir por accidente un objeto con la
-// clave privada adentro.
+// The difference from `Identity` is all that matters in a system of keys. An `Identity` is public
+// and can be handed round; a `Signer` keeps the secret. That they are different types is what keeps
+// an API that only needs to verify from receiving by accident an object with the private key
+// inside.
 //
-// `setKeyPair` es la unica forma de darle la clave privada, y toma el **par entero** a proposito:
-// setear la privada sin la publica dejaria un firmante cuya firma nadie puede verificar. Ademas
-// pasa por `setPublicKey`, que borra los certificados viejos — la misma invariante que en
-// `Identity`.
+// `setKeyPair` is the only way of giving it the private key, and it takes the **whole pair** on
+// purpose: setting the private one without the public one would leave a signer whose signature
+// nobody can verify. It also goes through `setPublicKey`, which erases the old certificates — the
+// same invariant as in `Identity`.
 //
-// Obsoleto desde 1.2, junto con toda esta API.
+// Obsolete since 1.2, along with this whole API.
 @Deprecated
 public abstract class Signer extends Identity {
 
@@ -34,7 +34,7 @@ public abstract class Signer extends Identity {
         return this.privateKey;
     }
 
-    // El par completo, o nada: un par a medias no sirve para firmar de forma verificable.
+    // The complete pair, or nothing: half a pair does not serve for signing in a verifiable way.
     public final void setKeyPair(KeyPair pair)
             throws InvalidParameterException, KeyException {
         PublicKey pub = pair.getPublic();

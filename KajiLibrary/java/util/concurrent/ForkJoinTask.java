@@ -248,14 +248,16 @@ public abstract class ForkJoinTask<V> implements Future<V>, Serializable {
         return awaitDone(unit.toMillis(timeout));
     }
 
-    // No `throws` on either get: restating a compiled superinterface's clause is rejected
-    // (finding #104), and the descriptor is the same without it.
-    public final V get() {
+    // Los `throws` van escritos, como en el JDK: `ExecutionException` y `TimeoutException` son
+    // **chequeadas** (#276). Antes se omitian por el #104 --restar la clausula de una
+    // superinterfaz ya compilada se rechazaba--, que ya no pasa.
+    public final V get() throws InterruptedException, ExecutionException {
         awaitDone();
         return reportGet();
     }
 
-    public final V get(long timeout, TimeUnit unit) {
+    public final V get(long timeout, TimeUnit unit)
+            throws InterruptedException, ExecutionException, TimeoutException {
         if (!awaitDone(unit.toMillis(timeout))) {
             throw new TimeoutException();
         }
@@ -263,7 +265,7 @@ public abstract class ForkJoinTask<V> implements Future<V>, Serializable {
     }
 
     // Same wait as join(), but the Future spelling of failure: wrapped in ExecutionException.
-    private V reportGet() {
+    private V reportGet() throws ExecutionException {
         V value;
         synchronized (lock) {
             if (cancelled) {

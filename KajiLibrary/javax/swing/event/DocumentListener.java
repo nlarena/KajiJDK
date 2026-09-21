@@ -3,16 +3,16 @@ package javax.swing.event;
 import java.util.EventListener;
 
 /**
- * Quien quiere enterarse de que un documento cambio.
+ * Whoever wants to hear that a document changed.
  */
 public interface DocumentListener extends EventListener {
 
-    /** Se inserto texto. */
+    /** Text was inserted. */
     void insertUpdate(DocumentEvent e);
 
-    /** Se borro texto. */
+    /** Text was removed. */
     void removeUpdate(DocumentEvent e);
 
-    /** Cambio un atributo, sin que cambie el texto. */
+    /** An attribute changed, without the text changing. */
     void changedUpdate(DocumentEvent e);
 }

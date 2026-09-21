@@ -3,53 +3,53 @@ package javax.management;
 import java.util.EventObject;
 
 /**
- * El aviso que un MBean emite cuando pasa algo.
+ * The notice an MBean emits when something happens.
  *
- * <p>Hereda de `EventObject` y por eso lleva `source`, pero con una vuelta que hay que conocer: el
- * emisor pone ahi <b>el objeto</b> MBean, y el servidor de MBeans lo <b>reemplaza por el
- * {@link ObjectName}</b> antes de reenviarlo. Un oyente registrado por el agente ve un `ObjectName`
- * en `getSource()`; uno registrado directo contra el MBean ve el objeto. De ahi que `setSource` sea
- * publico: no es un descuido, es el mecanismo.
+ * <p>It extends {@code EventObject} and therefore carries {@code source}, but with a twist worth
+ * knowing: the emitter puts <b>the MBean object</b> there, and the MBean server <b>replaces it with
+ * the {@link ObjectName}</b> before forwarding it. A listener registered through the agent sees an
+ * {@code ObjectName} in {@code getSource()}; one registered directly against the MBean sees the
+ * object. Hence {@code setSource} being public: it is not an oversight, it is the mechanism.
  *
- * <p>El otro campo que importa es el numero de secuencia. Es del <b>emisor</b>, no global, y sirve
- * para que el que recibe detecte huecos: si le llega el 5 y el 7, sabe que perdio el 6. Vale cero
- * si el emisor no lleva la cuenta.
+ * <p>The other field that matters is the sequence number. It belongs to the <b>emitter</b>, not to
+ * the world, and it serves so the receiver can detect gaps: if it gets 5 and 7, it knows it missed
+ * 6. It is zero if the emitter does not keep count.
  */
 public class Notification extends EventObject {
 
     private static final long serialVersionUID = -7516092053498031989L;
 
     /**
-     * @serial el tipo, con la convencion de puntos
+     * @serial the type, with the dotted convention
      */
     private String type;
 
     /**
-     * @serial numero de secuencia del emisor
+     * @serial the emitter's sequence number
      */
     private long sequenceNumber;
 
     /**
-     * @serial cuando ocurrio, en milisegundos
+     * @serial when it happened, in milliseconds
      */
     private long timeStamp;
 
     /**
-     * @serial datos libres del emisor
+     * @serial free data from the emitter
      */
     private Object userData = null;
 
     /**
-     * @serial texto para leer
+     * @serial text to read
      */
     private String message = "";
 
     /**
-     * @serial la fuente, que el agente puede reemplazar por el ObjectName
+     * @serial the source, which the agent may replace with the ObjectName
      */
     protected Object source = null;
 
-    /** Con la hora tomada del reloj. */
+    /** With the time taken from the clock. */
     public Notification(String type, Object source, long sequenceNumber) {
         super(source);
         this.source = source;
@@ -58,13 +58,13 @@ public class Notification extends EventObject {
         this.timeStamp = System.currentTimeMillis();
     }
 
-    /** Con la hora tomada del reloj y un texto. */
+    /** With the time taken from the clock and a text. */
     public Notification(String type, Object source, long sequenceNumber, String message) {
         this(type, source, sequenceNumber);
         this.message = message;
     }
 
-    /** Con hora explicita: para reproducir eventos que ya ocurrieron. */
+    /** With an explicit time: to replay events that already happened. */
     public Notification(String type, Object source, long sequenceNumber, long timeStamp) {
         super(source);
         this.source = source;
@@ -73,7 +73,7 @@ public class Notification extends EventObject {
         this.timeStamp = timeStamp;
     }
 
-    /** Con hora explicita y texto. */
+    /** With an explicit time and a text. */
     public Notification(String type, Object source, long sequenceNumber, long timeStamp,
                         String message) {
         this(type, source, sequenceNumber, timeStamp);
@@ -81,60 +81,60 @@ public class Notification extends EventObject {
     }
 
     /**
-     * Cambia la fuente.
+     * Changes the source.
      *
-     * <p>Publico porque el servidor de MBeans lo usa para poner el {@link ObjectName} en lugar del
-     * objeto; ver la nota de la clase.
+     * <p>Public because the MBean server uses it to put the {@link ObjectName} in place of the
+     * object; see the class note.
      */
     public void setSource(Object source) {
         super.source = source;
         this.source = source;
     }
 
-    /** El numero de secuencia del emisor. */
+    /** The emitter's sequence number. */
     public long getSequenceNumber() {
         return sequenceNumber;
     }
 
-    /** Lo fija; lo usa quien reenvia. */
+    /** Sets it; whoever forwards uses it. */
     public void setSequenceNumber(long sequenceNumber) {
         this.sequenceNumber = sequenceNumber;
     }
 
     /**
-     * El tipo, por convencion en puntos y de lo general a lo particular
-     * ({@code jmx.attribute.change}), para que un filtro por prefijo tenga sentido.
+     * The type, by convention dotted and from the general to the particular
+     * ({@code jmx.attribute.change}), so that a prefix filter makes sense.
      */
     public String getType() {
         return type;
     }
 
-    /** Cuando ocurrio, en milisegundos desde la epoca. */
+    /** When it happened, in milliseconds since the epoch. */
     public long getTimeStamp() {
         return timeStamp;
     }
 
-    /** La fija. */
+    /** Sets it. */
     public void setTimeStamp(long timeStamp) {
         this.timeStamp = timeStamp;
     }
 
-    /** El texto; cadena vacia si no se dio, nunca `null`. */
+    /** The text; the empty string if none was given, never {@code null}. */
     public String getMessage() {
         return message;
     }
 
-    /** Los datos libres del emisor, o `null`. */
+    /** The emitter's free data, or {@code null}. */
     public Object getUserData() {
         return userData;
     }
 
-    /** Los fija. Si viajan a un cliente remoto tienen que ser serializables. */
+    /** Sets it. If it travels to a remote client it has to be serializable. */
     public void setUserData(Object userData) {
         this.userData = userData;
     }
 
-    /** {@code clase[source=...][type=...][message=...]}. */
+    /** {@code class[source=...][type=...][message=...]}. */
     public String toString() {
         return super.toString() + "[type=" + type + "][message=" + message + "]";
     }

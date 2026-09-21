@@ -1,23 +1,23 @@
 package com.sun.jdi.request;
 
 /**
- * El pedido no esta en el estado que la operacion necesita.
+ * The request is not in the state the operation needs.
  *
- * <p>Casi siempre significa lo mismo: se intento poner un filtro con el pedido ya habilitado.
+ * <p>It almost always means the same: a filter was attempted with the request already enabled.
  *
  * @since 1.3
  */
 public class InvalidRequestStateException extends RuntimeException {
 
-    /** Sin detalle. */
+    /** With no detail. */
     public InvalidRequestStateException() {
         super();
     }
 
     /**
-     * Con un mensaje.
+     * With a message.
      *
-     * @param s el mensaje
+     * @param s the message
      */
     public InvalidRequestStateException(String s) {
         super(s);

@@ -3,11 +3,11 @@ package java.util.jar;
 import java.util.zip.ZipException;
 
 /**
- * Un JAR mal formado.
+ * A malformed JAR.
  *
- * <p>Extiende `ZipException` --y no `IOException` a secas-- porque un JAR **es** un ZIP: lo que rompe
- * al ZIP rompe al JAR, y quien atrapa `ZipException` alrededor de un archivo comprimido tiene que
- * seguir atrapandolo cuando ese archivo resulta ser un JAR.
+ * <p>It extends `ZipException` --and not a plain `IOException`-- because a JAR **is** a ZIP: what
+ * breaks the ZIP breaks the JAR, and whoever catches `ZipException` around a compressed file has to
+ * go on catching it when that file turns out to be a JAR.
  */
 public class JarException extends ZipException {
 

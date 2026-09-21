@@ -1,59 +1,59 @@
 package javax.security.sasl;
 
 /**
- * KajiLibrary's javax.security.sasl.SaslClient -- el lado que se autentica.
+ * KajiLibrary's javax.security.sasl.SaslClient -- the side that authenticates itself.
  *
- * <p>SASL es un marco y no un mecanismo: define como <b>se intercambian</b> los desafios y las
- * respuestas, y deja el contenido a cada mecanismo. Esta interfaz es ese intercambio visto desde el
- * cliente, y por eso todos sus metodos hablan de bytes opacos.
+ * <p>SASL is a framework and not a mechanism: it defines how the challenges and responses <b>are
+ * exchanged</b>, and leaves the content to each mechanism. This interface is that exchange seen
+ * from the client, and that is why all its methods talk about opaque bytes.
  *
- * <p>El uso es un bucle: mientras {@link #isComplete} de false, se le pasa lo que llego del servidor
- * a {@link #evaluateChallenge} y se manda lo que devuelve. {@link #hasInitialResponse} decide como
- * arranca el bucle -- si es true, el cliente habla primero y hay que llamar con un arreglo vacio.
- * Adivinarlo mal cuelga la negociacion: los dos esperando al otro.
+ * <p>The use is a loop: while {@link #isComplete} gives false, what arrived from the server is
+ * passed to {@link #evaluateChallenge} and what it returns is sent. {@link #hasInitialResponse}
+ * decides how the loop starts -- if it is true, the client speaks first and it has to be called
+ * with an empty array. Guessing it wrong hangs the negotiation: both waiting for the other.
  *
- * <p>Terminada la autenticacion, {@link #wrap} y {@link #unwrap} protegen los mensajes que siguen
- * <b>si</b> se negocio una capa de seguridad. Si no se negocio, llamarlos es un error, y la forma de
- * saberlo es {@link #getNegotiatedProperty} con {@link Sasl#QOP}: la negociacion puede terminar en
- * solo autenticacion aunque se haya pedido cifrado.
+ * <p>Once the authentication is over, {@link #wrap} and {@link #unwrap} protect the messages that
+ * follow <b>if</b> a security layer was negotiated. If it was not, calling them is an error, and
+ * the way to know is {@link #getNegotiatedProperty} with {@link Sasl#QOP}: the negotiation can end
+ * in authentication only even though encryption was asked for.
  *
- * <p>{@link #dispose} borra el material secreto; ver la nota equivalente en
+ * <p>{@link #dispose} erases the secret material; see the equivalent note in
  * {@code org.ietf.jgss.GSSCredential}.
  */
 public interface SaslClient {
 
-    /** El nombre del mecanismo, por ejemplo {@code "DIGEST-MD5"}. */
+    /** The mechanism's name, for example {@code "DIGEST-MD5"}. */
     String getMechanismName();
 
-    /** Si el cliente habla primero. Ver la nota de la clase. */
+    /** Whether the client speaks first. See the class note. */
     boolean hasInitialResponse();
 
     /**
-     * Procesa un desafio y produce la respuesta.
+     * Processes a challenge and produces the response.
      *
-     * @param challenge lo que mando el servidor; vacio en la primera vuelta si el cliente empieza
-     * @return lo que hay que mandarle, o null si no hay que mandar nada
-     * @throws SaslException si el desafio no se pudo procesar
+     * @param challenge what the server sent; empty on the first round if the client starts
+     * @return what has to be sent to it, or null if nothing has to be sent
+     * @throws SaslException if the challenge could not be processed
      */
     byte[] evaluateChallenge(byte[] challenge) throws SaslException;
 
-    /** Si la negociacion termino. */
+    /** Whether the negotiation ended. */
     boolean isComplete();
 
-    /** Deshace la proteccion de un mensaje recibido. */
+    /** Undoes the protection of a received message. */
     byte[] unwrap(byte[] incoming, int offset, int len) throws SaslException;
 
-    /** Protege un mensaje a enviar. Ver la nota de la clase sobre cuando se puede. */
+    /** Protects a message to be sent. See the class note on when it can be done. */
     byte[] wrap(byte[] outgoing, int offset, int len) throws SaslException;
 
     /**
-     * Que se negocio de verdad.
+     * What was really negotiated.
      *
-     * @param propName una de las constantes de {@link Sasl}
-     * @return null si esa propiedad no se negocio
+     * @param propName one of the constants of {@link Sasl}
+     * @return null if that property was not negotiated
      */
     Object getNegotiatedProperty(String propName);
 
-    /** Libera lo que tenga guardado. */
+    /** Releases whatever it has kept. */
     void dispose() throws SaslException;
 }

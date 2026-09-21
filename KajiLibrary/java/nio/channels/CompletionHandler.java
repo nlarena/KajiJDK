@@ -1,25 +1,27 @@
 package java.nio.channels;
 
 /**
- * KajiLibrary's java.nio.channels.CompletionHandler — que hacer cuando una operacion asincronica
- * termina.
+ * KajiLibrary's java.nio.channels.CompletionHandler — what to do when an asynchronous operation
+ * finishes.
  *
- * <p>Dos metodos y no uno, y ahi esta todo el diseno: el exito y el fracaso llegan por caminos
- * separados, asi que no hay forma de escribir el caso feliz y olvidarse del otro. Con un solo
- * callback que recibiera "resultado o error", olvidarse de mirar el error seria lo comodo.
+ * <p>Two methods and not one, and there is the whole design: success and failure arrive by separate
+ * roads, so there is no way of writing the happy case and forgetting the other one. With a single
+ * callback that received "result or error", forgetting to look at the error would be the
+ * comfortable thing.
  *
- * <p>El `attachment` es un objeto que el que pidio la operacion entrega y recibe de vuelta sin que
- * nadie lo toque. Existe porque un manejador suele ser compartido por muchas operaciones y necesita
- * saber a cual corresponde cada aviso — sin obligar a crear un manejador nuevo por operacion.
+ * <p>The `attachment` is an object the caller of the operation hands over and receives back without
+ * anybody touching it. It exists because a handler is usually shared by many operations and needs
+ * to know which one each notice corresponds to — without forcing a new handler to be created per
+ * operation.
  *
- * @param <V> el tipo del resultado
- * @param <A> el tipo del objeto adjunto
+ * @param <V> the type of the result
+ * @param <A> the type of the attached object
  */
 public interface CompletionHandler<V, A> {
 
-    /** La operacion termino bien. */
+    /** The operation finished well. */
     void completed(V result, A attachment);
 
-    /** La operacion fallo. */
+    /** The operation failed. */
     void failed(Throwable exc, A attachment);
 }

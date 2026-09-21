@@ -12,93 +12,95 @@ import java.util.function.Supplier;
 import jdk.internal.classfile.impl.ClassHierarchyImpl;
 
 /**
- * Quien contesta de qué hereda una clase y si es una interfaz.
+ * Whoever answers what a class inherits from and whether it is an interface.
  *
- * <p>Hace falta para una sola cosa, y conviene decirla porque explica toda la interfaz: **calcular
- * un `StackMapTable` exige saber el supertipo común de dos tipos**, y eso no se puede deducir del
- * `.class` que se está escribiendo — está en los `.class` de los otros. Un escritor necesita
- * entonces una fuente de esa información, y de dónde sale es una decisión de quien lo usa.
+ * <p>It is needed for a single thing, and saying it is worthwhile because it explains the whole
+ * interface: **computing a `StackMapTable` demands knowing the common supertype of two types**, and
+ * that cannot be worked out from the `.class` being written -- it is in the other `.class` files. A
+ * writer therefore needs a source for that information, and where it comes from is a decision for
+ * whoever uses it.
  *
- * <p>De ahí las cinco fábricas, que son cinco respuestas a "de dónde saco la jerarquía":
+ * <p>Hence the five factories, which are five answers to "where do I get the hierarchy from":
  *
  * <ul>
- * <li>{@link #of} — de una tabla que uno le da. La única que no toca nada de afuera.</li>
- * <li>{@link #ofClassLoading} — **cargando** las clases. Es la más exacta y la más cara, y tiene un
- *     efecto de lado que a veces no se quiere: corre los inicializadores estáticos.</li>
- * <li>{@link #ofResourceParsing} — leyendo los `.class` como recursos, sin cargarlos. Evita el
- *     efecto de lado anterior.</li>
- * <li>{@link #defaultResolver} — la de la plataforma.</li>
+ * <li>{@link #of} -- from a table one hands it. The only one touching nothing outside.</li>
+ * <li>{@link #ofClassLoading} -- by **loading** the classes. It is the most exact and the most
+ *     expensive, and it has a side effect one sometimes does not want: it runs static
+ *     initialisers.</li>
+ * <li>{@link #ofResourceParsing} -- by reading the `.class` files as resources, without loading them.
+ *     It avoids the previous side effect.</li>
+ * <li>{@link #defaultResolver} -- the platform's.</li>
  * </ul>
  *
- * <p>{@link #cached} y {@link #orElse} componen: se encadenan resolvedores y se le pone memoria al
- * resultado.
+ * <p>{@link #cached} and {@link #orElse} compose: resolvers are chained and the result is given a
+ * memory.
  */
 public interface ClassHierarchyResolver {
 
-    /** Lo que se sabe de una clase: si es interfaz, y cuál es su superclase. */
+    /** What is known about a class: whether it is an interface, and what its superclass is. */
     public interface ClassHierarchyInfo {
 
-        /** La superclase, o `null` si es una interfaz o si es `Object`. */
+        /** The superclass, or `null` if it is an interface or if it is `Object`. */
         ClassDesc superClass();
 
-        /** Si es una interfaz. */
+        /** Whether it is an interface. */
         boolean isInterface();
 
-        /** La información de una clase con esa superclase. */
+        /** The information of a class with that superclass. */
         public static ClassHierarchyInfo ofClass(ClassDesc superClass) {
             return ClassHierarchyImpl.infoOfClass(superClass);
         }
 
-        /** La información de una interfaz. */
+        /** An interface's information. */
         public static ClassHierarchyInfo ofInterface() {
             return ClassHierarchyImpl.infoOfInterface();
         }
     }
 
-    /** Lo que se sabe de esa clase, o `null` si este resolvedor no la conoce. */
+    /** What is known about that class, or `null` if this resolver does not know it. */
     ClassHierarchyInfo getClassInfo(ClassDesc classDesc);
 
     /**
-     * Éste, y lo que éste no sepa se lo pregunta a ese otro.
+     * This one, and whatever this one does not know it asks that other one.
      *
-     * <p>Es lo que permite combinar una tabla chica y exacta con una fuente general: se consulta
-     * primero lo que uno declaró y se cae a cargar clases sólo para lo que falte.
+     * <p>It is what allows combining a small, exact table with a general source: what one declared is
+     * consulted first and it falls back to loading classes only for what is missing.
      */
     default ClassHierarchyResolver orElse(ClassHierarchyResolver other) {
         return ClassHierarchyImpl.orElse(this, other);
     }
 
     /**
-     * Éste, con memoria.
+     * This one, with a memory.
      *
-     * <p>Vale la pena casi siempre: calcular un `StackMapTable` pregunta por los mismos tipos muchas
-     * veces, y con `ofClassLoading` u `ofResourceParsing` cada pregunta es trabajo de verdad.
+     * <p>It is nearly always worth it: computing a `StackMapTable` asks about the same types many
+     * times, and with `ofClassLoading` or `ofResourceParsing` each question is real work.
      */
     default ClassHierarchyResolver cached() {
         return ClassHierarchyImpl.cached(this, new HashMapSupplier());
     }
 
-    /** Éste, con memoria en el mapa que dé ese proveedor. */
+    /** This one, with a memory in the map that supplier gives. */
     default ClassHierarchyResolver cached(Supplier<Map<ClassDesc, ClassHierarchyInfo>> cache) {
         return ClassHierarchyImpl.cached(this, cache);
     }
 
     /**
-     * El de la plataforma: lee los `.class` del cargador del sistema sin cargar las clases.
+     * The platform's: it reads the system loader's `.class` files without loading the classes.
      *
-     * <p>Es `ofResourceParsing` del cargador de la plataforma, y no `ofClassLoading`, por lo mismo
-     * que dice la nota de arriba: el que está por omisión no debería correr inicializadores
-     * estáticos de nadie.
+     * <p>It is `ofResourceParsing` on the platform loader, and not `ofClassLoading`, for the same
+     * reason the note above gives: the one in place by default should not run anybody's static
+     * initialisers.
      */
     public static ClassHierarchyResolver defaultResolver() {
         return ClassHierarchyImpl.defaultResolver();
     }
 
     /**
-     * El que contesta con esa tabla y nada más.
+     * The one answering with that table and nothing else.
      *
-     * @param interfaces las que son interfaces
-     * @param classToSuperClass de cada clase, su superclase
+     * @param interfaces the ones that are interfaces
+     * @param classToSuperClass each class's superclass
      */
     public static ClassHierarchyResolver of(Collection<ClassDesc> interfaces,
             Map<ClassDesc, ClassDesc> classToSuperClass) {
@@ -106,33 +108,33 @@ public interface ClassHierarchyResolver {
     }
 
     /**
-     * El que **carga** las clases con ese cargador.
+     * The one **loading** the classes with that loader.
      *
-     * <p>Exacto y con efecto de lado: cargar una clase corre su inicializador estático. Si eso
-     * molesta, {@link #ofResourceParsing}.
+     * <p>Exact and with a side effect: loading a class runs its static initialiser. If that is a
+     * bother, {@link #ofResourceParsing}.
      */
     public static ClassHierarchyResolver ofClassLoading(ClassLoader loader) {
         return ClassHierarchyImpl.ofClassLoading(loader);
     }
 
-    /** El que carga las clases con ese `Lookup`, respetando su acceso. */
+    /** The one loading the classes with that `Lookup`, respecting its access. */
     public static ClassHierarchyResolver ofClassLoading(MethodHandles.Lookup lookup) {
         return ClassHierarchyImpl.ofLookup(lookup);
     }
 
-    /** El que lee los `.class` como recursos de ese cargador, sin cargar las clases. */
+    /** The one reading the `.class` files as resources of that loader, without loading the classes. */
     public static ClassHierarchyResolver ofResourceParsing(ClassLoader loader) {
         return ClassHierarchyImpl.ofResourceParsing(loader);
     }
 
-    /** El que lee los `.class` del flujo que dé esa función. */
+    /** The one reading the `.class` files from the stream that function gives. */
     public static ClassHierarchyResolver ofResourceParsing(
             Function<ClassDesc, InputStream> classStreamResolver) {
         return ClassHierarchyImpl.ofStreams(classStreamResolver);
     }
 }
 
-// El proveedor de mapa por omisión de `cached()`. Clase nombrada y no lambda: ver la nota de
+// `cached()`'s default map supplier. A named class and not a lambda: see the note on
 // `ClassBuilder`.
 final class HashMapSupplier
         implements Supplier<Map<ClassDesc, ClassHierarchyResolver.ClassHierarchyInfo>> {

@@ -7,41 +7,51 @@ import java.io.Serializable;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Un identificador unico dentro de esta VM y su arranque.
+ * An identifier for this VM and its start-up.
  *
- * <h2>Como se consigue la unicidad sin coordinacion</h2>
+ * <h2>How uniqueness is obtained without coordination</h2>
  *
- * <p>Con tres numeros: el momento en que arranco la VM, un discriminante y un contador. La
- * combinacion no se repite <strong>en esta maquina</strong> — que es todo lo que promete, y por eso
- * un {@link ObjID} le agrega el suyo para ser unico entre maquinas.
+ * <p>This note used to say it was unique within this VM, built from three numbers (the moment the
+ * VM started, a discriminant and a counter) whose combination does not repeat <strong>on this
+ * machine</strong>, and that an {@link ObjID} adds its own number to make it unique across
+ * machines. What the code does: {@code unique} is always 0, so there is no discriminant;
+ * {@code time} is the {@code System.currentTimeMillis()} of when this class was initialised, not
+ * of VM start-up; and {@code count} is an {@code int} counter cast to {@code short}, so after
+ * 65,536 UIDs the values repeat within the same VM. Two VMs that initialise this class in the same
+ * millisecond produce the same sequence. {@link ObjID} adds only its own counter, which starts at 0
+ * in every VM, so it does not make the identifier unique across machines either (checked by
+ * reading the constructors here and in {@code ObjID.java}).
  *
- * <p>Que el contador sea atomico no es adorno: dos hilos exportando objetos a la vez pedirian el
- * mismo numero, y dos objetos remotos con el mismo identificador es exactamente la clase de bug que
- * aparece en produccion y no en las pruebas.
+ * <p>That the counter is atomic is not decoration: two threads exporting objects at once would ask
+ * for the same number, and two remote objects with the same identifier is exactly the kind of bug
+ * that shows up in production and not in testing.
  */
 public final class UID implements Serializable {
 
     private static final long serialVersionUID = 1086053664494604050L;
 
-    private static final AtomicInteger PROXIMO = new AtomicInteger(0);
-    private static final long ARRANQUE = System.currentTimeMillis();
+    private static final AtomicInteger NEXT = new AtomicInteger(0);
+    private static final long STARTUP = System.currentTimeMillis();
 
     private final int unique;
     private final long time;
     private final short count;
 
-    /** Uno nuevo, unico en esta VM. */
+    /**
+     * A new one. This note used to call it unique in this VM; its {@code count} is an {@code int}
+     * counter cast to {@code short}, so it repeats after 65,536 of them (see the class note).
+     */
     public UID() {
         this.unique = 0;
-        this.time = ARRANQUE;
-        this.count = (short) PROXIMO.getAndIncrement();
+        this.time = STARTUP;
+        this.count = (short) NEXT.getAndIncrement();
     }
 
     /**
-     * Uno "conocido": el mismo numero da siempre el mismo identificador.
+     * A "well-known" one: the same number always gives the same identifier.
      *
-     * <p>Sirve para los objetos que tienen que ser encontrables sin haberlos anunciado — el
-     * registro, el recolector distribuido. Ver {@link ObjID}.
+     * <p>It serves the objects that have to be findable without having been announced — the
+     * registry, the distributed collector. See {@link ObjID}.
      */
     public UID(short num) {
         this.unique = 0;
@@ -73,14 +83,14 @@ public final class UID implements Serializable {
                 + Integer.toString(this.count, 16);
     }
 
-    /** Lo escribe en el formato que espera {@link #read}. */
+    /** It writes it in the format {@link #read} expects. */
     public void write(DataOutput out) throws IOException {
         out.writeInt(this.unique);
         out.writeLong(this.time);
         out.writeShort(this.count);
     }
 
-    /** Lo lee del formato que escribe {@link #write}. */
+    /** It reads it from the format {@link #write} writes. */
     public static UID read(DataInput in) throws IOException {
         int unique = in.readInt();
         long time = in.readLong();

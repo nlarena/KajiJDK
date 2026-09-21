@@ -3,22 +3,23 @@ package javax.naming;
 import java.util.Hashtable;
 
 /**
- * "Eso no lo tengo yo, preguntale a aquel": una referencia a otro servidor, lanzada como excepcion.
+ * "I don't have that, ask that one": a reference to another server, thrown as an exception.
  *
- * <p>Un referral no es un error, es una **redireccion**. LDAP la usa todo el tiempo: el servidor
- * contesta "esa rama vive en `ldap://otro/...`" y el cliente decide si sigue. Por eso la clase
- * tiene metodos que no tiene ninguna otra excepcion del paquete: `getReferralContext()` devuelve
- * el contexto del otro servidor, `skipReferral()` descarta este y pasa al siguiente, y
- * `retryReferral()` vuelve a intentar el mismo --el caso tipico es reintentar despues de haber
- * cambiado las credenciales--.
+ * <p>A referral is not an error, it is a **redirection**. LDAP uses it all the time: the server
+ * answers "that branch lives at `ldap://other/...`" and the client decides whether to follow.
+ * That is why the class has methods no other exception in the package has: `getReferralContext()`
+ * returns the other server's context, `skipReferral()` discards this one and moves to the next, and
+ * `retryReferral()` tries the same one again --the typical case is retrying after changing the
+ * credentials.
  *
- * <p><strong>Es abstracta, y eso es lo que la hace honesta aca.</strong> Seguir un referral es
- * abrir una conexion a otro servidor, y eso solo lo puede hacer un proveedor. La clase declara la
- * forma del contrato --que es lo que un proveedor tiene que implementar-- y no promete cumplirlo:
- * sin proveedores instalados en este JDK nadie la extiende y nadie la lanza. Un `catch` que la
- * nombre compila y es correcto; simplemente nunca se ejecuta.
+ * <p><strong>It is abstract, and that is what keeps it honest here.</strong> Following a referral
+ * is opening a connection to another server, and only a provider can do that. The class declares
+ * the shape of the contract --which is what a provider has to implement-- and does not promise to
+ * fulfil it: this library ships no provider, and the only subclass is the equally abstract
+ * `javax.naming.ldap.LdapReferralException`, so nothing here throws it. A `catch` naming it
+ * compiles and is correct; it simply never runs. (An earlier note said nobody extends it.)
  *
- * <p>El resto de la jerarquia esta explicado en `NamingException`.
+ * <p>The rest of the hierarchy is explained in `NamingException`.
  */
 public abstract class ReferralException extends NamingException {
 
@@ -32,32 +33,35 @@ public abstract class ReferralException extends NamingException {
         super();
     }
 
-    /** La informacion cruda del referral, en la forma que use el proveedor (una URL, tipicamente). */
+    /** The raw referral information, in whatever form the provider uses (a URL, typically). */
     public abstract Object getReferralInfo();
 
     /**
-     * El contexto por el que se sigue, ya apuntando al otro servidor.
+     * The context to carry on in, already pointing at the other server.
      *
-     * <p>La operacion que fallo hay que volver a pedirla sobre este contexto: la excepcion trae la
-     * redireccion, no el resultado.
+     * <p>The operation that failed has to be requested again on this context: the exception carries
+     * the redirection, not the result.
      */
     public abstract Context getReferralContext() throws NamingException;
 
-    /** Igual que el otro, pero con un entorno propio --el caso de reintentar con otras credenciales--. */
+    /**
+     * Same as the other, but with an environment of its own --the case of retrying with other
+     * credentials.
+     */
     public abstract Context getReferralContext(Hashtable<?, ?> env) throws NamingException;
 
     /**
-     * Descarta este referral y pasa al siguiente si lo hay.
+     * Discards this referral and moves to the next one, if any.
      *
-     * <p>Devuelve si quedan mas. Un servidor puede contestar varios y el cliente probarlos en
-     * orden hasta que uno ande.
+     * <p>Returns whether there are more. A server may answer with several and the client try them
+     * in order until one works.
      */
     public abstract boolean skipReferral();
 
     /**
-     * Deja el mismo referral listo para reintentarse.
+     * Leaves the same referral ready to be retried.
      *
-     * <p>No reintenta: **prepara**. El que llama despues pide de nuevo `getReferralContext()`.
+     * <p>It does not retry: it **prepares**. The caller then asks for `getReferralContext()` again.
      */
     public abstract void retryReferral();
 }

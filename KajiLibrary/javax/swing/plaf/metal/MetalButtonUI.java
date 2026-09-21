@@ -13,28 +13,29 @@ import javax.swing.plaf.basic.BasicButtonListener;
 import javax.swing.plaf.basic.BasicButtonUI;
 
 /**
- * El boton de Metal.
+ * Metal's button.
  *
- * <h2>Tres colores que el basico no tiene</h2>
+ * <h2>Three colours the basic one does not have</h2>
  *
- * <p>{@link #focusColor} es el rectangulo punteado de adentro, {@link #selectColor} el relleno
- * mientras el boton esta apretado y {@link #disabledTextColor} el texto de uno apagado. El basico
- * no los guarda: dibuja el foco con el color de frente y el apretado oscureciendo el fondo. Metal
- * los saca del tema, y por eso un cambio de tema le cambia los tres de golpe.
+ * <p>{@link #focusColor} is the dotted rectangle inside, {@link #selectColor} the fill while the
+ * button is pressed and {@link #disabledTextColor} the text of a disabled one. The basic one
+ * does not keep them: it draws the focus with the foreground colour and the pressed state by
+ * darkening the background. Metal takes them from the theme, and that is why a change of theme
+ * changes all three at once.
  *
- * <p>Los tres campos se leen por su {@code getXxx}, y esos metodos existen para algo concreto:
- * {@link MetalToggleButtonUI} tiene los mismos tres campos y <em>no</em> hereda de esta clase --
- * hereda del conmutador basico -- asi que la unica forma de compartir el dibujo es que cada uno
- * conteste los suyos.
+ * <p>The three fields are read through their {@code getXxx}, and those methods exist for
+ * something concrete: {@link MetalToggleButtonUI} has the same three fields and does
+ * <em>not</em> inherit from this class -- it inherits from the basic toggle -- so the only way
+ * of sharing the drawing is for each to answer with its own.
  *
- * <h2>Comparte instancia</h2>
+ * <h2>It shares its instance</h2>
  *
- * <p>{@link #createUI} devuelve siempre la misma. Los tres colores son del tema y no del boton, asi
- * que no hay nada por boton que guardar.
+ * <p>{@link #createUI} always returns the same one. The three colours belong to the theme and
+ * not to the button, so there is nothing per button to keep.
  */
 public class MetalButtonUI extends BasicButtonUI {
 
-    private static final MetalButtonUI UNICO = new MetalButtonUI();
+    private static final MetalButtonUI SHARED = new MetalButtonUI();
 
     protected Color focusColor;
     protected Color selectColor;
@@ -44,19 +45,19 @@ public class MetalButtonUI extends BasicButtonUI {
     }
 
     public static ComponentUI createUI(JComponent c) {
-        return UNICO;
+        return SHARED;
     }
 
     protected Color getFocusColor() {
         if (focusColor == null) {
-            focusColor = MetalLookAndFeel.colorDeLaTabla(getPropertyPrefix() + "focus");
+            focusColor = MetalLookAndFeel.tableColor(getPropertyPrefix() + "focus");
         }
         return focusColor;
     }
 
     protected Color getSelectColor() {
         if (selectColor == null) {
-            selectColor = MetalLookAndFeel.colorDeLaTabla(getPropertyPrefix() + "select");
+            selectColor = MetalLookAndFeel.tableColor(getPropertyPrefix() + "select");
         }
         return selectColor;
     }
@@ -64,30 +65,31 @@ public class MetalButtonUI extends BasicButtonUI {
     protected Color getDisabledTextColor() {
         if (disabledTextColor == null) {
             disabledTextColor =
-                    MetalLookAndFeel.colorDeLaTabla(getPropertyPrefix() + "disabledText");
+                    MetalLookAndFeel.tableColor(getPropertyPrefix() + "disabledText");
         }
         return disabledTextColor;
     }
 
     public void installDefaults(AbstractButton b) {
         super.installDefaults(b);
-        focusColor = MetalLookAndFeel.colorDeLaTabla(getPropertyPrefix() + "focus");
-        selectColor = MetalLookAndFeel.colorDeLaTabla(getPropertyPrefix() + "select");
+        focusColor = MetalLookAndFeel.tableColor(getPropertyPrefix() + "focus");
+        selectColor = MetalLookAndFeel.tableColor(getPropertyPrefix() + "select");
         disabledTextColor =
-                MetalLookAndFeel.colorDeLaTabla(getPropertyPrefix() + "disabledText");
+                MetalLookAndFeel.tableColor(getPropertyPrefix() + "disabledText");
     }
 
     public void uninstallDefaults(AbstractButton b) {
         super.uninstallDefaults(b);
-        // Los tres colores no se sueltan: este UI lo comparten todos los botones del
-        // programa, y soltarlos al desinstalar uno dejaria a los demas sin color. Medido.
+        // The three colours are not released: this UI is shared by every button in the
+                // program, and releasing them when one is uninstalled would leave the rest with no
+                // colour. Measured.
     }
 
     protected BasicButtonListener createButtonListener(AbstractButton b) {
         return super.createButtonListener(b);
     }
 
-    /** El relleno del boton apretado, en el color de seleccion del tema. */
+    /** The pressed button's fill, in the theme's selection colour. */
     protected void paintButtonPressed(Graphics g, AbstractButton b) {
         if (b.isContentAreaFilled()) {
             Dimension s = b.getSize();
@@ -96,7 +98,7 @@ public class MetalButtonUI extends BasicButtonUI {
         }
     }
 
-    /** Un rectangulo punteado por adentro del borde. */
+    /** A dotted rectangle inside the border. */
     protected void paintFocus(Graphics g, AbstractButton b, Rectangle viewRect,
             Rectangle textRect, Rectangle iconRect) {
         Rectangle f = b.getVisibleRect();
@@ -104,7 +106,7 @@ public class MetalButtonUI extends BasicButtonUI {
         g.drawRect(f.x + 1, f.y + 1, f.width - 3, f.height - 3);
     }
 
-    /** El texto apagado va en el gris del tema, no en el fondo oscurecido. */
+    /** Disabled text goes in the theme's grey, not in a darkened background. */
     protected void paintText(Graphics g, JComponent c, Rectangle textRect, String text) {
         AbstractButton b = (AbstractButton) c;
         ButtonModel m = b.getModel();
@@ -112,10 +114,10 @@ public class MetalButtonUI extends BasicButtonUI {
             super.paintText(g, c, textRect, text);
             return;
         }
-        Color antes = g.getColor();
+        Color before = g.getColor();
         g.setColor(getDisabledTextColor());
         super.paintText(g, c, textRect, text);
-        g.setColor(antes);
+        g.setColor(before);
     }
 
     public void update(Graphics g, JComponent c) {

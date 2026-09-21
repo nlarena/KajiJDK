@@ -3,31 +3,32 @@ package javax.net.ssl;
 import java.io.IOException;
 
 /**
- * Algo fallo en la capa SSL/TLS.
+ * Something failed in the SSL/TLS layer.
  *
- * <p>Es una {@link IOException} y no algo aparte, y eso es una decision de diseno con consecuencia
- * practica: quien escribe sobre un socket seguro no tiene que aprender una jerarquia nueva. Un
- * {@code catch (IOException)} que ya existia sigue sirviendo, y quien quiera distinguir el fallo
- * criptografico del corte de red atrapa esta.
+ * <p>It is an {@link IOException} and not something separate, and that is a design decision with a
+ * practical consequence: whoever writes over a secure socket does not have to learn a new
+ * hierarchy. A {@code catch (IOException)} that already existed keeps working, and whoever wants to
+ * tell the cryptographic failure from the network cut catches this one.
  *
- * <p>Sus tres subclases dicen <em>en que etapa</em> se rompio: ver {@link SSLHandshakeException},
- * {@link SSLKeyException}, {@link SSLPeerUnverifiedException} y {@link SSLProtocolException}.
+ * <p>Its four subclasses say <em>at which stage</em> it broke: see {@link SSLHandshakeException},
+ * {@link SSLKeyException}, {@link SSLPeerUnverifiedException} and {@link SSLProtocolException}.
+ * (The note said three and listed four.)
  */
 public class SSLException extends IOException {
 
     private static final long serialVersionUID = 4511006460650708967L;
 
-    /** Con un mensaje. */
+    /** With a message. */
     public SSLException(String reason) {
         super(reason);
     }
 
-    /** Con un mensaje y la causa de fondo. */
+    /** With a message and the underlying cause. */
     public SSLException(String message, Throwable cause) {
         super(message, cause);
     }
 
-    /** Envolviendo lo que realmente fallo. */
+    /** Wrapping what really failed. */
     public SSLException(Throwable cause) {
         super(cause);
     }

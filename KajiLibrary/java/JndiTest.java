@@ -18,26 +18,26 @@ import javax.naming.Reference;
 import javax.naming.StringRefAddr;
 
 /**
- * Prueba de comportamiento de javax.naming, escrita para correr **igual** en esta VM y en el JDK
- * real.
+ * Behaviour test of javax.naming, written to run **the same** in this VM and in the real JDK.
  *
- * <p>Cada comprobacion tiene un indice. {@code run()} devuelve -1 si pasaron todas, o el indice de
- * la primera que fallo: un solo int alcanza para comparar las dos VMs sin depender de que la salida
- * por consola coincida caracter por caracter.
+ * <p>Each check has an index. {@code run()} returns -1 if they all passed, or the index of the
+ * first one that failed: a single int is enough to compare the two VMs without depending on the
+ * console output matching character by character.
  *
- * <p>El grueso esta en `CompoundName` y `CompositeName`, que son las unicas dos clases del paquete
- * con logica de verdad. Lo que se persigue ahi es una sola invariante --que `toString()` vuelva a
- * parsearse-- y sus tres consecuencias incomodas: el citado, el escape, y los componentes vacios.
- * El resto de las clases son contenedores y se prueban por su igualdad y su forma de cadena.
+ * <p>The bulk is in `CompoundName` and `CompositeName`, which are the only two classes of the
+ * package with real logic. What is pursued there is a single invariant --that `toString()` parse
+ * back-- and its three uncomfortable consequences: the quoting, the escaping, and the empty
+ * components. The rest of the classes are containers and are tested by their equality and their
+ * string form.
  *
- * <p>Nada de esto toca la red ni el disco: sin proveedor instalado, un `InitialContext` falla
- * enseguida, y eso es justamente uno de los casos.
+ * <p>None of this touches the network or the disk: with no installed provider, an `InitialContext`
+ * fails straight away, and that is precisely one of the cases.
  */
 public class JndiTest {
 
-    // ---- sintaxis de ejemplo ------------------------------------------------------------------------
+    // ---- example syntaxes ---------------------------------------------------------------------------
 
-    /** LDAP: coma, de derecha a izquierda, con comillas y contrabarra. */
+    /** LDAP: comma, from right to left, with quotes and backslash. */
     private static Properties ldap() {
         Properties p = new Properties();
         p.put("jndi.syntax.direction", "right_to_left");
@@ -47,8 +47,8 @@ public class JndiTest {
         return p;
     }
 
-    /** Estilo sistema de archivos: barra, de izquierda a derecha. */
-    private static Properties archivo() {
+    /** File system style: slash, from left to right. */
+    private static Properties fileStyle() {
         Properties p = new Properties();
         p.put("jndi.syntax.direction", "left_to_right");
         p.put("jndi.syntax.separator", "/");
@@ -57,15 +57,15 @@ public class JndiTest {
         return p;
     }
 
-    /** Plano: la cadena entera es un componente. */
-    private static Properties plano() {
+    /** Flat: the whole string is one component. */
+    private static Properties flat() {
         Properties p = new Properties();
         p.put("jndi.syntax.direction", "flat");
         return p;
     }
 
-    /** De izquierda a derecha, ignorando mayusculas y recortando blancos. */
-    private static Properties laxa() {
+    /** From left to right, ignoring case and trimming blanks. */
+    private static Properties laxStyle() {
         Properties p = new Properties();
         p.put("jndi.syntax.direction", "left_to_right");
         p.put("jndi.syntax.separator", "/");
@@ -74,12 +74,12 @@ public class JndiTest {
         return p;
     }
 
-    private static boolean mismo(Name n, String[] esperado) {
-        if (n.size() != esperado.length) {
+    private static boolean same(Name n, String[] expected) {
+        if (n.size() != expected.length) {
             return false;
         }
-        for (int i = 0; i < esperado.length; i++) {
-            if (!n.get(i).equals(esperado[i])) {
+        for (int i = 0; i < expected.length; i++) {
+            if (!n.get(i).equals(expected[i])) {
                 return false;
             }
         }
@@ -89,56 +89,59 @@ public class JndiTest {
     public static int run() {
         int i = 0;
         try {
-            // ---- CompositeName: partir y contar ---------------------------------------------------
+            // ---- CompositeName: splitting and counting ---------------------------------------------
 
-            if (!mismo(new CompositeName("a/b/c"), new String[] {"a", "b", "c"})) return i; i++;   // 0
+            if (!same(new CompositeName("a/b/c"), new String[] {"a", "b", "c"})) return i; i++;   // 0
             if (new CompositeName("").size() != 0) return i; i++;                                  // 1
             if (!new CompositeName().isEmpty()) return i; i++;                                     // 2
 
-            // Los vacios, que es donde casi todos se equivocan: "/" es UN componente vacio, no dos.
-            if (!mismo(new CompositeName("/"), new String[] {""})) return i; i++;                   // 3
-            if (!mismo(new CompositeName("a/"), new String[] {"a", ""})) return i; i++;             // 4
-            if (!mismo(new CompositeName("/a"), new String[] {"", "a"})) return i; i++;             // 5
-            if (!mismo(new CompositeName("a//b"), new String[] {"a", "", "b"})) return i; i++;      // 6
-            if (!mismo(new CompositeName("//"), new String[] {"", ""})) return i; i++;              // 7
+            // The empty ones, which is where almost everybody gets it wrong: "/" is ONE empty
+            // component, not two.
+            if (!same(new CompositeName("/"), new String[] {""})) return i; i++;                   // 3
+            if (!same(new CompositeName("a/"), new String[] {"a", ""})) return i; i++;             // 4
+            if (!same(new CompositeName("/a"), new String[] {"", "a"})) return i; i++;             // 5
+            if (!same(new CompositeName("a//b"), new String[] {"a", "", "b"})) return i; i++;      // 6
+            if (!same(new CompositeName("//"), new String[] {"", ""})) return i; i++;              // 7
 
-            // ---- CompositeName: la invariante del ida y vuelta -------------------------------------
+            // ---- CompositeName: the round-trip invariant -------------------------------------------
 
-            String[] casos = {"", "/", "a", "a/b/c", "a/", "/a", "a//b", "//",
+            String[] cases = {"", "/", "a", "a/b/c", "a/", "/a", "a//b", "//",
                               "\"a/b\"", "a\\/b", "x y/z"};
-            for (int k = 0; k < casos.length; k++) {
-                CompositeName n = new CompositeName(casos[k]);
-                CompositeName vuelta = new CompositeName(n.toString());
-                if (!n.equals(vuelta)) return i;
-                if (n.size() != vuelta.size()) return i;
+            for (int k = 0; k < cases.length; k++) {
+                CompositeName n = new CompositeName(cases[k]);
+                CompositeName roundTrip = new CompositeName(n.toString());
+                if (!n.equals(roundTrip)) return i;
+                if (n.size() != roundTrip.size()) return i;
             }
             i++;                                                                                   // 8
 
-            // El vacio y el de un componente vacio NO se imprimen igual: si lo hicieran, el ida y
-            // vuelta de arriba no podria distinguirlos.
+            // The empty one and the one with an empty component are NOT printed the same: if they
+            // were, the round trip above could not tell them apart.
             if (new CompositeName("").toString().equals(new CompositeName("/").toString())) return i; i++; // 9
 
-            // ---- CompositeName: citado y escape ----------------------------------------------------
+            // ---- CompositeName: quoting and escaping ------------------------------------------------
 
-            if (!mismo(new CompositeName("\"a/b\""), new String[] {"a/b"})) return i; i++;         // 10
-            if (!mismo(new CompositeName("a\\/b"), new String[] {"a/b"})) return i; i++;           // 11
-            if (!mismo(new CompositeName("'a/b'"), new String[] {"a/b"})) return i; i++;           // 12
-            // Una comilla en el medio es un caracter comun: solo abre cita al principio.
-            if (!mismo(new CompositeName("a\"b"), new String[] {"a\"b"})) return i; i++;           // 13
+            if (!same(new CompositeName("\"a/b\""), new String[] {"a/b"})) return i; i++;         // 10
+            if (!same(new CompositeName("a\\/b"), new String[] {"a/b"})) return i; i++;           // 11
+            if (!same(new CompositeName("'a/b'"), new String[] {"a/b"})) return i; i++;           // 12
+            // A quote in the middle is an ordinary character: it only opens a quotation at the
+            // start.
+            if (!same(new CompositeName("a\"b"), new String[] {"a\"b"})) return i; i++;           // 13
 
-            // Un componente con separador adentro tiene que salir citado o escapado, y volver.
-            CompositeName conBarra = new CompositeName();
-            conBarra.add("a/b");
-            if (conBarra.size() != 1) return i; i++;                                               // 14
-            if (!mismo(new CompositeName(conBarra.toString()), new String[] {"a/b"})) return i; i++; // 15
+            // A component with a separator inside has to come out quoted or escaped, and come
+            // back.
+            CompositeName withSlash = new CompositeName();
+            withSlash.add("a/b");
+            if (withSlash.size() != 1) return i; i++;                                               // 14
+            if (!same(new CompositeName(withSlash.toString()), new String[] {"a/b"})) return i; i++; // 15
 
-            // ---- CompositeName: prefijos, sufijos y pertenencia ------------------------------------
+            // ---- CompositeName: prefixes, suffixes and membership -----------------------------------
 
             CompositeName abc = new CompositeName("a/b/c");
             if (!abc.getPrefix(0).isEmpty()) return i; i++;                                        // 16
-            if (!mismo(abc.getPrefix(2), new String[] {"a", "b"})) return i; i++;                   // 17
-            if (!mismo(abc.getPrefix(3), new String[] {"a", "b", "c"})) return i; i++;              // 18
-            if (!mismo(abc.getSuffix(1), new String[] {"b", "c"})) return i; i++;                   // 19
+            if (!same(abc.getPrefix(2), new String[] {"a", "b"})) return i; i++;                   // 17
+            if (!same(abc.getPrefix(3), new String[] {"a", "b", "c"})) return i; i++;              // 18
+            if (!same(abc.getSuffix(1), new String[] {"b", "c"})) return i; i++;                   // 19
             if (!abc.getSuffix(3).isEmpty()) return i; i++;                                        // 20
 
             if (!abc.startsWith(new CompositeName("a/b"))) return i; i++;                          // 21
@@ -147,85 +150,86 @@ public class JndiTest {
             if (!abc.endsWith(new CompositeName("b/c"))) return i; i++;                            // 24
             if (abc.endsWith(new CompositeName("a"))) return i; i++;                               // 25
             if (!abc.endsWith(new CompositeName(""))) return i; i++;                               // 26
-            // Un nombre mas largo que este no puede ser prefijo ni sufijo.
+            // A name longer than this one cannot be a prefix or a suffix.
             if (abc.startsWith(new CompositeName("a/b/c/d"))) return i; i++;                       // 27
 
-            // Un CompoundName nunca es prefijo de un CompositeName, tengan lo que tengan adentro.
-            if (abc.startsWith(new CompoundName("a/b", archivo()))) return i; i++;                 // 28
+            // A CompoundName is never a prefix of a CompositeName, whatever they have inside.
+            if (abc.startsWith(new CompoundName("a/b", fileStyle()))) return i; i++;                 // 28
 
             // ---- CompositeName: mutacion ------------------------------------------------------------
 
             CompositeName m = new CompositeName("a/b");
-            // Devuelven `this` ya modificado: la identidad es parte del contrato.
+            // They return `this` already modified: the identity is part of the contract.
             if (m.add("c") != m) return i; i++;                                                    // 29
-            if (!mismo(m, new String[] {"a", "b", "c"})) return i; i++;                             // 30
+            if (!same(m, new String[] {"a", "b", "c"})) return i; i++;                             // 30
             m.add(0, "z");
-            if (!mismo(m, new String[] {"z", "a", "b", "c"})) return i; i++;                        // 31
-            Object sacado = m.remove(1);
-            if (!"a".equals(sacado)) return i; i++;                                                // 32
-            if (!mismo(m, new String[] {"z", "b", "c"})) return i; i++;                             // 33
+            if (!same(m, new String[] {"z", "a", "b", "c"})) return i; i++;                        // 31
+            Object removed = m.remove(1);
+            if (!"a".equals(removed)) return i; i++;                                                // 32
+            if (!same(m, new String[] {"z", "b", "c"})) return i; i++;                             // 33
             m.addAll(new CompositeName("p/q"));
-            if (!mismo(m, new String[] {"z", "b", "c", "p", "q"})) return i; i++;                   // 34
+            if (!same(m, new String[] {"z", "b", "c", "p", "q"})) return i; i++;                   // 34
             m.addAll(1, new CompositeName("w"));
-            if (!mismo(m, new String[] {"z", "w", "b", "c", "p", "q"})) return i; i++;              // 35
+            if (!same(m, new String[] {"z", "w", "b", "c", "p", "q"})) return i; i++;              // 35
 
-            // Pegar algo que no es compuesto es InvalidNameException, no ClassCastException.
+            // Sticking on something that is not composite is InvalidNameException, not
+            // ClassCastException.
             try {
-                new CompositeName("a").addAll(new CompoundName("b", archivo()));
+                new CompositeName("a").addAll(new CompoundName("b", fileStyle()));
                 return i;                                                                          // 36
-            } catch (InvalidNameException esperada) {
+            } catch (InvalidNameException expectedOne) {
                 i++;
             }
 
-            // ---- CompositeName: igualdad, orden y clon ----------------------------------------------
+            // ---- CompositeName: equality, order and clone --------------------------------------------
 
             if (!new CompositeName("a/b").equals(new CompositeName("a/b"))) return i; i++;         // 37
             if (new CompositeName("a/b").equals(new CompositeName("A/b"))) return i; i++;          // 38
             if (new CompositeName("a/b").hashCode() != new CompositeName("a/b").hashCode()) return i; i++; // 39
-            // Mismos componentes pero otro tipo: no son iguales.
-            if (new CompositeName("a/b").equals(new CompoundName("a/b", archivo()))) return i; i++; // 40
+            // The same components but another type: they are not equal.
+            if (new CompositeName("a/b").equals(new CompoundName("a/b", fileStyle()))) return i; i++; // 40
             if (new CompositeName("a").compareTo(new CompositeName("a")) != 0) return i; i++;      // 41
             if (new CompositeName("a").compareTo(new CompositeName("b")) >= 0) return i; i++;      // 42
-            // Prefijo comun: gana el mas corto.
+            // A common prefix: the shorter one wins.
             if (new CompositeName("a").compareTo(new CompositeName("a/b")) >= 0) return i; i++;    // 43
             try {
-                new CompositeName("a").compareTo(new CompoundName("a", archivo()));
+                new CompositeName("a").compareTo(new CompoundName("a", fileStyle()));
                 return i;                                                                          // 44
-            } catch (ClassCastException esperada) {
+            } catch (ClassCastException expectedOne) {
                 i++;
             }
 
-            // El clon es independiente: mutar la copia no toca el original.
+            // The clone is independent: mutating the copy does not touch the original.
             CompositeName orig = new CompositeName("a/b");
-            CompositeName copia = (CompositeName) orig.clone();
-            copia.add("c");
+            CompositeName copy = (CompositeName) orig.clone();
+            copy.add("c");
             if (orig.size() != 2) return i; i++;                                                   // 45
-            if (copia.size() != 3) return i; i++;                                                  // 46
+            if (copy.size() != 3) return i; i++;                                                  // 46
 
-            // getAll recorre en orden.
+            // getAll walks in order.
             Enumeration<String> e = new CompositeName("a/b/c").getAll();
             StringBuilder sb = new StringBuilder();
             while (e.hasMoreElements()) sb.append(e.nextElement());
             if (!"abc".equals(sb.toString())) return i; i++;                                       // 47
 
-            // ---- CompoundName: de izquierda a derecha ------------------------------------------------
+            // ---- CompoundName: from left to right ------------------------------------------------------
 
-            if (!mismo(new CompoundName("a/b/c", archivo()), new String[] {"a", "b", "c"})) return i; i++; // 48
-            if (!"a/b/c".equals(new CompoundName("a/b/c", archivo()).toString())) return i; i++;   // 49
+            if (!same(new CompoundName("a/b/c", fileStyle()), new String[] {"a", "b", "c"})) return i; i++; // 48
+            if (!"a/b/c".equals(new CompoundName("a/b/c", fileStyle()).toString())) return i; i++;   // 49
 
-            // ---- CompoundName: de derecha a izquierda, que es lo que sorprende -----------------------
+            // ---- CompoundName: from right to left, which is what surprises -----------------------------
 
             CompoundName dn = new CompoundName("cn=juan,o=acme", ldap());
-            // El componente 0 es el mas significativo, o sea el de MAS A LA DERECHA.
-            if (!mismo(dn, new String[] {"o=acme", "cn=juan"})) return i; i++;                     // 50
+            // Component 0 is the most significant one, that is, the one FURTHEST RIGHT.
+            if (!same(dn, new String[] {"o=acme", "cn=juan"})) return i; i++;                     // 50
             if (!"cn=juan,o=acme".equals(dn.toString())) return i; i++;                            // 51
-            // El prefijo son los mas significativos, que del lado de la cadena estan a la derecha.
+            // The prefix is the most significant ones, which on the string side are on the right.
             if (!"o=acme".equals(dn.getPrefix(1).toString())) return i; i++;                       // 52
             if (!"cn=juan".equals(dn.getSuffix(1).toString())) return i; i++;                      // 53
 
             CompoundName dn2 = (CompoundName) dn.clone();
             dn2.add("c=ar");
-            if (!mismo(dn2, new String[] {"o=acme", "cn=juan", "c=ar"})) return i; i++;            // 54
+            if (!same(dn2, new String[] {"o=acme", "cn=juan", "c=ar"})) return i; i++;            // 54
             if (!"c=ar,cn=juan,o=acme".equals(dn2.toString())) return i; i++;                      // 55
 
             dn2.add(0, "dc=raiz");
@@ -235,81 +239,83 @@ public class JndiTest {
             if (!dn.endsWith(new CompoundName("cn=juan", ldap()))) return i; i++;                  // 58
             if (dn.startsWith(new CompoundName("cn=juan", ldap()))) return i; i++;                 // 59
 
-            // El ida y vuelta tiene que valer tambien de derecha a izquierda.
+            // The round trip has to hold from right to left as well.
             if (!dn2.equals(new CompoundName(dn2.toString(), ldap()))) return i; i++;              // 60
 
-            // ---- CompoundName: citado y escape con la sintaxis dada ----------------------------------
+            // ---- CompoundName: quoting and escaping with the given syntax -------------------------------
 
-            if (!mismo(new CompoundName("\"a,b\"", ldap()), new String[] {"a,b"})) return i; i++;  // 61
-            if (!mismo(new CompoundName("a\\,b", ldap()), new String[] {"a,b"})) return i; i++;    // 62
+            if (!same(new CompoundName("\"a,b\"", ldap()), new String[] {"a,b"})) return i; i++;  // 61
+            if (!same(new CompoundName("a\\,b", ldap()), new String[] {"a,b"})) return i; i++;    // 62
 
-            // Un componente con el separador adentro sale citado o escapado, y vuelve entero.
-            CompoundName conComa = new CompoundName("x", ldap());
-            conComa.add("a,b");
-            if (conComa.size() != 2) return i; i++;                                                // 63
-            CompoundName vueltaComa = new CompoundName(conComa.toString(), ldap());
-            if (!vueltaComa.equals(conComa)) return i; i++;                                        // 64
-            if (!mismo(vueltaComa, new String[] {"x", "a,b"})) return i; i++;                      // 65
+            // A component with the separator inside comes out quoted or escaped, and comes back
+            // whole.
+            CompoundName withComma = new CompoundName("x", ldap());
+            withComma.add("a,b");
+            if (withComma.size() != 2) return i; i++;                                                // 63
+            CompoundName roundTripComma = new CompoundName(withComma.toString(), ldap());
+            if (!roundTripComma.equals(withComma)) return i; i++;                                        // 64
+            if (!same(roundTripComma, new String[] {"x", "a,b"})) return i; i++;                      // 65
 
-            // Y uno que empieza con la comilla: la comilla se escapa, porque al principio abre cita.
-            CompoundName conComilla = new CompoundName("", ldap());
+            // And one that starts with the quote: the quote is escaped, because at the start it
+            // opens a quotation.
+            CompoundName withQuote = new CompoundName("", ldap());
             CompoundName cc = new CompoundName("z", ldap());
             cc.add("\"raro");
-            if (!mismo(new CompoundName(cc.toString(), ldap()), new String[] {"z", "\"raro"})) return i; i++; // 66
+            if (!same(new CompoundName(cc.toString(), ldap()), new String[] {"z", "\"raro"})) return i; i++; // 66
 
-            // Y uno con contrabarra, que si no se duplica se la come el parseo.
+            // And one with a backslash, which if it is not doubled gets eaten by the parsing.
             CompoundName cb = new CompoundName("z", ldap());
             cb.add("a\\b");
-            if (!mismo(new CompoundName(cb.toString(), ldap()), new String[] {"z", "a\\b"})) return i; i++;   // 67
+            if (!same(new CompoundName(cb.toString(), ldap()), new String[] {"z", "a\\b"})) return i; i++;   // 67
 
-            // ---- CompoundName: plano ------------------------------------------------------------------
+            // ---- CompoundName: flat ------------------------------------------------------------------
 
-            CompoundName pl = new CompoundName("a/b/c", plano());
-            if (!mismo(pl, new String[] {"a/b/c"})) return i; i++;                                 // 68
+            CompoundName pl = new CompoundName("a/b/c", flat());
+            if (!same(pl, new String[] {"a/b/c"})) return i; i++;                                 // 68
             if (!"a/b/c".equals(pl.toString())) return i; i++;                                     // 69
-            // Un nombre plano no puede tener dos componentes.
+            // A flat name cannot have two components.
             try {
                 pl.add("x");
                 return i;                                                                          // 70
-            } catch (InvalidNameException esperada) {
+            } catch (InvalidNameException expectedOne) {
                 i++;
             }
-            // Pero uno vacio si acepta el primero.
-            CompoundName pv = new CompoundName("", plano());
+            // But an empty one does accept the first.
+            CompoundName pv = new CompoundName("", flat());
             pv.add("unico");
-            if (!mismo(pv, new String[] {"unico"})) return i; i++;                                 // 71
+            if (!same(pv, new String[] {"unico"})) return i; i++;                                 // 71
 
-            // ---- CompoundName: ignorar mayusculas y recortar blancos ----------------------------------
+            // ---- CompoundName: ignoring case and trimming blanks -----------------------------------------
 
-            CompoundName lax = new CompoundName("A/B", laxa());
-            if (!lax.equals(new CompoundName("a/b", laxa()))) return i; i++;                       // 72
-            if (lax.hashCode() != new CompoundName("a/b", laxa()).hashCode()) return i; i++;       // 73
-            if (!new CompoundName(" a / b ", laxa()).equals(new CompoundName("a/b", laxa()))) return i; i++; // 74
-            if (new CompoundName("A/B", laxa()).compareTo(new CompoundName("a/b", laxa())) != 0) return i; i++; // 75
-            // Y la asimetria del contrato: la sintaxis que manda es la del que pregunta.
-            if (!lax.startsWith(new CompoundName("a", laxa()))) return i; i++;                     // 76
+            CompoundName lax = new CompoundName("A/B", laxStyle());
+            if (!lax.equals(new CompoundName("a/b", laxStyle()))) return i; i++;                       // 72
+            if (lax.hashCode() != new CompoundName("a/b", laxStyle()).hashCode()) return i; i++;       // 73
+            if (!new CompoundName(" a / b ", laxStyle()).equals(new CompoundName("a/b", laxStyle()))) return i; i++; // 74
+            if (new CompoundName("A/B", laxStyle()).compareTo(new CompoundName("a/b", laxStyle())) != 0) return i; i++; // 75
+            // And the asymmetry of the contract: the syntax that rules is that of whoever asks.
+            if (!lax.startsWith(new CompoundName("a", laxStyle()))) return i; i++;                     // 76
 
-            // ---- CompoundName: sintaxis obligatoria y tipos --------------------------------------------
+            // ---- CompoundName: compulsory syntax and types -----------------------------------------------
 
             try {
                 new CompoundName("a", null);
                 return i;                                                                          // 77
-            } catch (NullPointerException esperada) {
+            } catch (NullPointerException expectedOne) {
                 i++;
             }
             try {
-                new CompoundName("a", archivo()).addAll(new CompositeName("b"));
+                new CompoundName("a", fileStyle()).addAll(new CompositeName("b"));
                 return i;                                                                          // 78
-            } catch (InvalidNameException esperada) {
+            } catch (InvalidNameException expectedOne) {
                 i++;
             }
-            if (new CompoundName("a", archivo()).startsWith(new CompositeName("a"))) return i; i++; // 79
+            if (new CompoundName("a", fileStyle()).startsWith(new CompositeName("a"))) return i; i++; // 79
 
-            // El clon comparte la sintaxis, asi que sigue siendo comparable con el original.
-            CompoundName cl = (CompoundName) new CompoundName("a/b", archivo()).clone();
-            if (!cl.equals(new CompoundName("a/b", archivo()))) return i; i++;                     // 80
+            // The clone shares the syntax, so it goes on being comparable with the original.
+            CompoundName cl = (CompoundName) new CompoundName("a/b", fileStyle()).clone();
+            if (!cl.equals(new CompoundName("a/b", fileStyle()))) return i; i++;                     // 80
 
-            // ---- NameClassPair y Binding ---------------------------------------------------------------
+            // ---- NameClassPair and Binding ---------------------------------------------------------------
 
             NameClassPair ncp = new NameClassPair("juan", "java.lang.String");
             if (!"juan".equals(ncp.getName())) return i; i++;                                      // 81
@@ -321,28 +327,29 @@ public class JndiTest {
             if (abs.isRelative()) return i; i++;                                                   // 85
             if (!abs.toString().startsWith("(not relative)")) return i; i++;                       // 86
 
-            // El nombre absoluto es opcional: sin ponerlo, tira en vez de devolver null.
+            // The absolute name is optional: without setting it, it throws instead of returning
+            // null.
             try {
                 ncp.getNameInNamespace();
                 return i;                                                                          // 87
-            } catch (UnsupportedOperationException esperada) {
+            } catch (UnsupportedOperationException expectedOne) {
                 i++;
             }
             ncp.setNameInNamespace("ou=gente,o=acme");
             if (!"ou=gente,o=acme".equals(ncp.getNameInNamespace())) return i; i++;                // 88
 
-            // Binding deduce el nombre de clase del objeto cuando no se lo declararon.
+            // Binding deduces the class name from the object when it was not declared.
             Binding b = new Binding("x", "hola");
             if (!"java.lang.String".equals(b.getClassName())) return i; i++;                       // 89
             if (!"hola".equals(b.getObject())) return i; i++;                                      // 90
-            // Pero el declarado gana sobre el deducido.
+            // But the declared one wins over the deduced one.
             Binding b2 = new Binding("x", "com.ejemplo.Falso", "hola");
             if (!"com.ejemplo.Falso".equals(b2.getClassName())) return i; i++;                     // 91
-            // Y sin ninguna de las dos cosas es null, no una excepcion.
+            // And with neither of the two things it is null, not an exception.
             if (new Binding("x", null).getClassName() != null) return i; i++;                      // 92
             if (!"x: java.lang.String:hola".equals(b.toString())) return i; i++;                   // 93
 
-            // ---- RefAddr y sus dos formas ---------------------------------------------------------------
+            // ---- RefAddr and its two forms ---------------------------------------------------------------
 
             StringRefAddr sa = new StringRefAddr("URL", "ldap://h/");
             if (!"URL".equals(sa.getType())) return i; i++;                                        // 94
@@ -350,23 +357,24 @@ public class JndiTest {
             if (!sa.equals(new StringRefAddr("URL", "ldap://h/"))) return i; i++;                  // 96
             if (sa.equals(new StringRefAddr("OTRO", "ldap://h/"))) return i; i++;                  // 97
             if (sa.hashCode() != new StringRefAddr("URL", "ldap://h/").hashCode()) return i; i++;  // 98
-            // Contenido nulo: el hash es el del tipo y no explota.
+            // Null contents: the hash is that of the type and it does not blow up.
             if (new StringRefAddr("URL", null).hashCode() != "URL".hashCode()) return i; i++;      // 99
             if (new StringRefAddr("URL", null).equals(sa)) return i; i++;                          // 100
 
-            // El binario compara byte a byte, no por identidad del arreglo.
+            // The binary one compares byte by byte, not by identity of the array.
             byte[] bytes = {1, 2, 3};
             BinaryRefAddr ba = new BinaryRefAddr("bin", bytes);
             if (!ba.equals(new BinaryRefAddr("bin", new byte[] {1, 2, 3}))) return i; i++;         // 101
             if (ba.equals(new BinaryRefAddr("bin", new byte[] {1, 2}))) return i; i++;             // 102
             if (ba.hashCode() != new BinaryRefAddr("bin", new byte[] {1, 2, 3}).hashCode()) return i; i++; // 103
-            // Y el constructor copia: cambiar el arreglo del que llamo no cambia la direccion.
+            // And the constructor copies: changing the array of whoever called does not change the
+            // address.
             bytes[0] = 9;
             if (!ba.equals(new BinaryRefAddr("bin", new byte[] {1, 2, 3}))) return i; i++;         // 104
-            // El de rango copia solo el tramo pedido.
+            // The range one copies only the stretch asked for.
             BinaryRefAddr br = new BinaryRefAddr("bin", new byte[] {0, 1, 2, 3, 4}, 1, 3);
             if (!br.equals(new BinaryRefAddr("bin", new byte[] {1, 2, 3}))) return i; i++;         // 105
-            // Un binario y un texto nunca son iguales aunque compartan tipo.
+            // A binary one and a text one are never equal even if they share a type.
             if (ba.equals(new StringRefAddr("bin", "123"))) return i; i++;                         // 106
 
             // ---- Reference ------------------------------------------------------------------------------
@@ -381,7 +389,7 @@ public class JndiTest {
             r.add(new StringRefAddr("URL", "dos"));
             r.add(new StringRefAddr("user", "juan"));
             if (r.size() != 3) return i; i++;                                                      // 111
-            // get(String) devuelve la PRIMERA de ese tipo: el orden es la preferencia.
+            // get(String) returns the FIRST of that type: the order is the preference.
             if (!"uno".equals(r.get("URL").getContent())) return i; i++;                           // 112
             if (!"juan".equals(r.get("user").getContent())) return i; i++;                         // 113
             if (r.get("nada") != null) return i; i++;                                              // 114
@@ -393,29 +401,31 @@ public class JndiTest {
             if (!(quitada instanceof RefAddr)) return i; i++;                                      // 117
             if (!"uno".equals(r.get("URL").getContent())) return i; i++;                           // 118
 
-            // La igualdad mira clase y direcciones EN ORDEN, y a proposito ignora la fabrica.
+            // The equality looks at class and addresses IN ORDER, and on purpose ignores the
+            // factory.
             Reference r2 = new Reference("com.ejemplo.Ds", "OTRA.Fabrica", "http://x/");
             r2.add(new StringRefAddr("URL", "uno"));
             r2.add(new StringRefAddr("URL", "dos"));
             r2.add(new StringRefAddr("user", "juan"));
             if (!r.equals(r2)) return i; i++;                                                      // 119
             if (r.hashCode() != r2.hashCode()) return i; i++;                                      // 120
-            // Pero el orden si cuenta.
+            // But the order does count.
             Reference r3 = new Reference("com.ejemplo.Ds");
             r3.add(new StringRefAddr("URL", "dos"));
             r3.add(new StringRefAddr("URL", "uno"));
             r3.add(new StringRefAddr("user", "juan"));
             if (r.equals(r3)) return i; i++;                                                       // 121
-            // Y la clase tambien.
+            // And so does the class.
             if (r.equals(new Reference("otra.Clase"))) return i; i++;                              // 122
 
-            // El clon tiene lista propia: agregarle una direccion no toca al original.
+            // The clone has a list of its own: adding an address to it does not touch the
+            // original.
             Reference rc = (Reference) r.clone();
             if (!rc.equals(r)) return i; i++;                                                      // 123
             rc.add(new StringRefAddr("extra", "x"));
             if (r.size() != 3) return i; i++;                                                      // 124
             if (rc.size() != 4) return i; i++;                                                     // 125
-            // Y conserva la fabrica, que equals no mira pero clone si copia.
+            // And it keeps the factory, which equals does not look at but clone does copy.
             if (!"com.ejemplo.DsFactory".equals(rc.getFactoryClassName())) return i; i++;          // 126
 
             r.clear();
@@ -428,54 +438,56 @@ public class JndiTest {
             if (!"javax.naming.LinkRef".equals(lr.getClassName())) return i; i++;                  // 129
             if (lr.size() != 1) return i; i++;                                                     // 130
             if (!"LinkAddress".equals(lr.get(0).getType())) return i; i++;                         // 131
-            // El constructor de Name usa la forma de cadena del nombre.
+            // The Name constructor uses the string form of the name.
             if (!"a/b".equals(new LinkRef(new CompositeName("a/b")).getLinkName())) return i; i++; // 132
-            // Si le sacan la direccion deja de ser un enlace, y lo dice en vez de tirar NPE.
-            LinkRef roto = new LinkRef("a/b");
-            roto.clear();
+            // If the address is taken away it stops being a link, and it says so instead of
+            // throwing an NPE.
+            LinkRef broken = new LinkRef("a/b");
+            broken.clear();
             try {
-                roto.getLinkName();
+                broken.getLinkName();
                 return i;                                                                          // 133
-            } catch (NamingException esperada) {
+            } catch (NamingException expectedOne) {
                 i++;
             }
 
-            // ---- NamingException: el estado que acumula ---------------------------------------------------
+            // ---- NamingException: the state it accumulates -----------------------------------------------
 
             NamingException ne = new NamingException("fallo");
             if (!"fallo".equals(ne.getExplanation())) return i; i++;                               // 134
             if (ne.getResolvedName() != null) return i; i++;                                       // 135
 
-            // Los setters de nombre CLONAN: el nombre es mutable y la excepcion ya viajo.
-            CompositeName resuelto = new CompositeName("a/b");
-            ne.setResolvedName(resuelto);
-            resuelto.add("c");
+            // The name setters CLONE: the name is mutable and the exception has travelled
+            // already.
+            CompositeName resolved = new CompositeName("a/b");
+            ne.setResolvedName(resolved);
+            resolved.add("c");
             if (ne.getResolvedName().size() != 2) return i; i++;                                   // 136
 
-            // appendRemainingComponent va acumulando mientras la excepcion sube.
+            // appendRemainingComponent accumulates while the exception goes up.
             NamingException ne2 = new NamingException("x");
             ne2.appendRemainingComponent("c");
             ne2.appendRemainingComponent("d");
-            if (!mismo(ne2.getRemainingName(), new String[] {"c", "d"})) return i; i++;            // 137
+            if (!same(ne2.getRemainingName(), new String[] {"c", "d"})) return i; i++;            // 137
             ne2.appendRemainingName(new CompositeName("e/f"));
-            if (!mismo(ne2.getRemainingName(), new String[] {"c", "d", "e", "f"})) return i; i++;  // 138
+            if (!same(ne2.getRemainingName(), new String[] {"c", "d", "e", "f"})) return i; i++;  // 138
 
-            // getCause y getRootCause son dos nombres de lo mismo.
+            // getCause and getRootCause are two names for the same thing.
             NamingException ne3 = new NamingException("y");
-            Exception causa = new IllegalStateException("causa");
-            ne3.setRootCause(causa);
-            if (ne3.getRootCause() != causa) return i; i++;                                        // 139
-            if (ne3.getCause() != causa) return i; i++;                                            // 140
-            // Pero la asimetria es real: setRootCause no toca la causa de Throwable.
+            Exception cause = new IllegalStateException("causa");
+            ne3.setRootCause(cause);
+            if (ne3.getRootCause() != cause) return i; i++;                                        // 139
+            if (ne3.getCause() != cause) return i; i++;                                            // 140
+            // But the asymmetry is real: setRootCause does not touch the cause of Throwable.
             NamingException ne4 = new NamingException("z");
-            ne4.initCause(causa);
-            if (ne4.getRootCause() != causa) return i; i++;                                        // 141
-            // Y una causada por si misma no se enlaza, para que imprimirla no cuelgue.
+            ne4.initCause(cause);
+            if (ne4.getRootCause() != cause) return i; i++;                                        // 141
+            // And one caused by itself is not linked, so that printing it does not hang.
             NamingException ne5 = new NamingException("w");
             ne5.setRootCause(ne5);
             if (ne5.getRootCause() != null) return i; i++;                                         // 142
 
-            // ---- La jerarquia de excepciones, que es la mitad del paquete ---------------------------------
+            // ---- The exception hierarchy, which is half the package ---------------------------------------
 
             if (!(new NoInitialContextException() instanceof NamingException)) return i; i++;      // 143
             if (!(new javax.naming.NameNotFoundException() instanceof NamingException)) return i; i++; // 144
@@ -487,73 +499,75 @@ public class JndiTest {
                     instanceof javax.naming.LinkException)) return i; i++;                         // 147
             if (!(new javax.naming.CannotProceedException() instanceof NamingException)) return i; i++; // 148
 
-            // LinkException lleva su propio par de nombres, aparte de los del contexto.
+            // LinkException carries its own pair of names, apart from those of the context.
             javax.naming.LinkException le = new javax.naming.LinkException("link");
             le.setLinkResolvedName(new CompositeName("a"));
             le.setLinkRemainingName(new CompositeName("b/c"));
-            if (!mismo(le.getLinkResolvedName(), new String[] {"a"})) return i; i++;               // 149
-            if (!mismo(le.getLinkRemainingName(), new String[] {"b", "c"})) return i; i++;         // 150
+            if (!same(le.getLinkResolvedName(), new String[] {"a"})) return i; i++;               // 149
+            if (!same(le.getLinkRemainingName(), new String[] {"b", "c"})) return i; i++;         // 150
             if (le.getResolvedName() != null) return i; i++;                                       // 151
 
-            // ---- InitialContext sin proveedor ------------------------------------------------------------
+            // ---- InitialContext with no provider ---------------------------------------------------------
             //
-            // Sin `java.naming.factory.initial` puesto, TODA operacion falla con
-            // NoInitialContextException. No es un agujero de esta implementacion: es lo que hace el
-            // JDK real, y esta declarado en la firma.
+            // With `java.naming.factory.initial` not set, EVERY operation fails with
+            // NoInitialContextException. It is not a hole of this implementation: it is what the
+            // real JDK does, and it is declared in the signature.
 
             InitialContext ic = new InitialContext();
             try {
                 ic.lookup("cualquiera");
                 return i;                                                                          // 152
-            } catch (NoInitialContextException esperada) {
+            } catch (NoInitialContextException expectedOne) {
                 i++;
             }
             try {
                 ic.bind("x", "y");
                 return i;                                                                          // 153
-            } catch (NoInitialContextException esperada) {
+            } catch (NoInitialContextException expectedOne) {
                 i++;
             }
             try {
                 ic.list(new CompositeName("x"));
                 return i;                                                                          // 154
-            } catch (NoInitialContextException esperada) {
+            } catch (NoInitialContextException expectedOne) {
                 i++;
             }
             try {
                 ic.getEnvironment();
                 return i;                                                                          // 155
-            } catch (NoInitialContextException esperada) {
+            } catch (NoInitialContextException expectedOne) {
                 i++;
             }
             try {
                 InitialContext.doLookup("x");
                 return i;                                                                          // 156
-            } catch (NoInitialContextException esperada) {
+            } catch (NoInitialContextException expectedOne) {
                 i++;
             }
 
-            // composeName si anda, porque no necesita proveedor: el contexto inicial es el origen.
+            // composeName does work, because it needs no provider: the initial context is the
+            // origin.
             if (!"a/b".equals(ic.composeName("a/b", ""))) return i; i++;                           // 157
-            Name compuesto = ic.composeName(new CompositeName("a/b"), new CompositeName(""));
-            if (!mismo(compuesto, new String[] {"a", "b"})) return i; i++;                         // 158
+            Name composite = ic.composeName(new CompositeName("a/b"), new CompositeName(""));
+            if (!same(composite, new String[] {"a", "b"})) return i; i++;                         // 158
 
-            // Cerrar sin proveedor no falla, y cerrar dos veces tampoco.
+            // Closing with no provider does not fail, and closing twice does not either.
             ic.close();
             ic.close();
             i++;                                                                                   // 159
 
-            // Nombrar una fabrica que no existe falla en el constructor, no tres llamadas despues.
+            // Naming a factory that does not exist fails in the constructor, not three calls
+            // later.
             java.util.Hashtable<Object, Object> env = new java.util.Hashtable<Object, Object>();
             env.put(Context.INITIAL_CONTEXT_FACTORY, "no.existe.Fabrica");
             try {
                 new InitialContext(env);
                 return i;                                                                          // 160
-            } catch (NamingException esperada) {
+            } catch (NamingException expectedOne) {
                 i++;
             }
 
-            // Las constantes de Context son las claves reales del entorno.
+            // The constants of Context are the real keys of the environment.
             if (!"java.naming.factory.initial".equals(Context.INITIAL_CONTEXT_FACTORY)) return i; i++; // 161
             if (!"java.naming.provider.url".equals(Context.PROVIDER_URL)) return i; i++;           // 162
 

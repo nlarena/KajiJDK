@@ -1,17 +1,17 @@
 package java.nio.file;
 
-// Se pidio `StandardCopyOption.ATOMIC_MOVE` y el sistema no lo puede garantizar.
+// `StandardCopyOption.ATOMIC_MOVE` was asked for and the system cannot guarantee it.
 //
-// **KajiJDK la levanta siempre.** `Files.move` esta hecho de copiar y borrar --no hay nativo de
-// rename-- asi que hay un momento en el que el archivo esta en los dos lados y otro en el que un
-// corte de luz lo dejaria duplicado. Fallar aca es la respuesta honesta: decir que si y mover en dos
-// pasos seria prometer una atomicidad que no existe, y quien pide `ATOMIC_MOVE` la pide justamente
-// porque le importa.
+// **KajiJDK always throws it.** `Files.move` is made of copy and delete --there is no rename
+// native-- so there is a moment when the file is on both sides and another when a power cut would
+// leave it duplicated. Failing here is the honest answer: saying yes and moving in two steps would
+// be promising an atomicity that does not exist, and whoever asks for `ATOMIC_MOVE` asks precisely
+// because it matters to them.
 public class AtomicMoveNotSupportedException extends FileSystemException {
 
     private static final long serialVersionUID = 5402760225333135579L;
 
-    /** @param source el origen; `target` el destino; `reason` el motivo. Pueden ser `null`. */
+    /** @param source the source; `target` the target; `reason` the reason. They may be `null`. */
     public AtomicMoveNotSupportedException(String source, String target, String reason) {
         super(source, target, reason);
     }

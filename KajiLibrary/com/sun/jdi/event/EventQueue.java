@@ -3,33 +3,33 @@ package com.sun.jdi.event;
 import com.sun.jdi.Mirror;
 
 /**
- * De donde se sacan los conjuntos de eventos, uno por vez.
+ * Where the event sets are got from, one at a time.
  *
- * <p>{@link #remove()} bloquea hasta que haya algo. Un depurador tiene un hilo dedicado a este
- * bucle, porque mientras espera no puede hacer nada mas.
+ * <p>{@link #remove()} blocks until there is something. A debugger has a thread dedicated to this
+ * loop, because while it waits it can do nothing else.
  *
- * <p>Cuando la conexion se corta, {@code remove} tira {@link VMDisconnectedException} despues de
- * entregar el {@link VMDisconnectEvent}: primero el aviso ordenado, despues el corte.
+ * <p>When the connection is cut off, {@code remove} throws {@link VMDisconnectedException} after
+ * delivering the {@link VMDisconnectEvent}: first the orderly notice, then the cut.
  *
  * @since 1.3
  */
 public interface EventQueue extends Mirror {
 
     /**
-     * El remove.
+     * The remove.
      *
-     * @return el resultado
-     * @throws InterruptedException si corresponde
+     * @return the result
+     * @throws InterruptedException if it applies
      */
     EventSet remove()
             throws InterruptedException;
 
     /**
-     * El remove.
+     * The remove.
      *
-     * @param index el long
-     * @return el resultado
-     * @throws InterruptedException si corresponde
+     * @param index the long
+     * @return the result
+     * @throws InterruptedException if it applies
      */
     EventSet remove(long index)
             throws InterruptedException;

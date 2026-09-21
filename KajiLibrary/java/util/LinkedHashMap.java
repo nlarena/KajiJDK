@@ -145,7 +145,7 @@ public class LinkedHashMap<K, V> extends AbstractMap<K, V>
         tail = e;
     }
 
-    // El gemelo de `linkAtTail`, para `putFirst`.
+    // `linkAtTail`'s twin, for `putFirst`.
     private void linkAtHead(LhmEntry<K, V> e) {
         e.after = head;
         e.before = null;
@@ -185,13 +185,15 @@ public class LinkedHashMap<K, V> extends AbstractMap<K, V>
 
     // --- Map ------------------------------------------------------------------------
 
-    // Recorre la **lista de orden** (`head` -> `after`), no la tabla: es la que define el orden
-    // de iteracion de un LinkedHashMap (finding #205).
+    // It walks the **order list** (`head` -> `after`), not the table: it is what defines a
+    // LinkedHashMap's iteration order (finding #205).
     //
-    // Divergencia: el JDK devuelve una vista **ordenada por insercion**; este devuelve un HashSet,
-    // que no conserva ese orden. Se recorre en orden, pero el Set resultante no lo promete.
+    // The walk below is in order; the destination has to keep it, which is why this is a
+    // LinkedHashSet. With a HashSet the order was built correctly and then thrown away, so
+    // access-order mode -- whose whole point is that a `get` moves a key to the end -- was
+    // unobservable through `keySet()`.
     public Set<K> keySet() {
-        HashSet<K> out = new HashSet<K>();
+        LinkedHashSet<K> out = new LinkedHashSet<K>();
         LhmEntry<K, V> e = this.head;
         while (e != null) {
             out.add(e.key);
@@ -357,16 +359,16 @@ public class LinkedHashMap<K, V> extends AbstractMap<K, V>
     // the entries themselves rather than a copy is what keeps the walk O(1) per step and
     // allocation-free.
 
-    LhmEntry<K, V> primeraEntrada() {
+    LhmEntry<K, V> firstEntryOf() {
         return head;
     }
 
-    LhmEntry<K, V> ultimaEntrada() {
+    LhmEntry<K, V> lastEntryOf() {
         return tail;
     }
 
-    // La costura hacia atras, que es lo que hace posibles las vistas invertidas sin copiar: la
-    // lista ya es doblemente enlazada, asi que recorrerla al reves cuesta lo mismo que al derecho.
+    // The seam going backwards, which is what makes the reversed views possible without copying: the
+    // list is doubly linked already, so walking it backwards costs the same as forwards.
     LhmEntry<K, V> beforeEntry(LhmEntry<K, V> e) {
         return e.before;
     }
@@ -380,11 +382,11 @@ public class LinkedHashMap<K, V> extends AbstractMap<K, V>
     }
 
     /**
-     * Los valores de este mapa.
+     * This map's values.
      *
-     * <p>**Divergencia deliberada**, la misma que ya declara `keySet()`: la del JDK es una *vista*
-     * respaldada por el mapa; esta es una copia sacada en el momento. Y a diferencia de `keySet()`
-     * es una `Collection` y no un `Set`, porque los valores **si** pueden repetirse.
+     * <p>**A deliberate divergence**, the same one `keySet()` already declares: the JDK's is a *view*
+     * backed by the map; this one is a copy taken at the moment of asking. And unlike `keySet()` this
+     * is a `Collection` and not a `Set`, because values **can** repeat.
      */
     public java.util.Collection<V> values() {
         java.util.ArrayList<V> out = new java.util.ArrayList<V>();
@@ -396,15 +398,21 @@ public class LinkedHashMap<K, V> extends AbstractMap<K, V>
     }
 
     /**
-     * Los pares de este mapa.
+     * This map's pairs.
      *
-     * <p>Misma divergencia que `values()`: copia, no vista. Los pares que devuelve son inmutables,
-     * asi que `setValue` sobre uno de ellos lanza en vez de escribir en el mapa — que es lo
-     * coherente con que sea una copia: escribir en un par que nadie mira seria peor que negarse.
+     * <p>The same divergence as `values()`: a copy, not a view. The pairs it returns are immutable,
+     * so `setValue` on one of them throws instead of writing into the map — which is what is
+     * consistent with it being a copy: writing into a pair nobody looks at would be worse than
+     * refusing.
      */
     public java.util.Set<java.util.Map.Entry<K, V>> entrySet() {
-        java.util.HashSet<java.util.Map.Entry<K, V>> out =
-            new java.util.HashSet<java.util.Map.Entry<K, V>>();
+        // `LinkedHashSet` and not `HashSet`, for the same reason `keySet()`'s comment a few lines
+        // above gives: the walk below goes **in order** and the destination has to keep it. With a
+        // `HashSet` the order was built correctly and then thrown away, so `entrySet()` --and
+        // everything resting on it, starting with `ObjectName.toString()`-- came out unordered while
+        // `keySet()` and `values()` came out right. Finding #468.
+        java.util.LinkedHashSet<java.util.Map.Entry<K, V>> out =
+            new java.util.LinkedHashSet<java.util.Map.Entry<K, V>>();
         java.util.Iterator<K> it = this.keySet().iterator();
         while (it.hasNext()) {
             K k = it.next();
@@ -413,20 +421,20 @@ public class LinkedHashMap<K, V> extends AbstractMap<K, V>
         return out;
     }
 
-    // Los dos publicos de `SequencedMap`. La costura de arriba se llama distinto a proposito:
-    // devuelve `LhmEntry` --el nodo, con sus punteros-- y estos devuelven `Map.Entry`, que es lo que
-    // el contrato promete. Compartir el nombre obligaria a que la costura fuera publica y expondria
-    // el nodo interno.
+    // `SequencedMap`'s two public ones. The seam above is named differently on purpose: it returns
+    // `LhmEntry` --the node, with its pointers-- and these return `Map.Entry`, which is what the
+    // contract promises. Sharing the name would force the seam to be public and would expose the
+    // internal node.
     public Map.Entry<K, V> firstEntry() {
-        return this.primeraEntrada();
+        return this.firstEntryOf();
     }
 
     public Map.Entry<K, V> lastEntry() {
-        return this.ultimaEntrada();
+        return this.lastEntryOf();
     }
 
     public Map.Entry<K, V> pollFirstEntry() {
-        LhmEntry<K, V> e = this.primeraEntrada();
+        LhmEntry<K, V> e = this.firstEntryOf();
         if (e == null) {
             return null;
         }
@@ -435,7 +443,7 @@ public class LinkedHashMap<K, V> extends AbstractMap<K, V>
     }
 
     public Map.Entry<K, V> pollLastEntry() {
-        LhmEntry<K, V> e = this.ultimaEntrada();
+        LhmEntry<K, V> e = this.lastEntryOf();
         if (e == null) {
             return null;
         }
@@ -446,40 +454,40 @@ public class LinkedHashMap<K, V> extends AbstractMap<K, V>
     // ---- SequencedMap ---------------------------------------------------------------------------
 
     /**
-     * Pone el par y lo lleva al **principio** del orden.
+     * It puts the pair and takes it to the **front** of the order.
      *
-     * <p>Si la clave ya estaba, se **mueve**: `putFirst` cambia la posicion, no solo el valor. Esa
-     * es toda la diferencia con `put`, y es la razon de existir del metodo.
+     * <p>If the key was already there, it is **moved**: `putFirst` changes the position, not just the
+     * value. That is the whole difference from `put`, and it is the method's reason to exist.
      *
-     * @return el valor anterior, o null
+     * @return the previous value, or null
      */
     public V putFirst(K key, V value) {
-        V previo = this.put(key, value);
+        V prior = this.put(key, value);
         LhmEntry<K, V> e = this.entryFor(key);
         if (e != null && e != head) {
             unlinkFromOrder(e);
             linkAtHead(e);
         }
-        return previo;
+        return prior;
     }
 
-    /** Idem, al final. */
+    /** The same, at the end. */
     public V putLast(K key, V value) {
-        V previo = this.put(key, value);
+        V prior = this.put(key, value);
         LhmEntry<K, V> e = this.entryFor(key);
         if (e != null && e != tail) {
             unlinkFromOrder(e);
             linkAtTail(e);
         }
-        return previo;
+        return prior;
     }
 
     /**
-     * Una **vista** del mapa en orden inverso.
+     * A **view** of the map in reverse order.
      *
-     * <p>Vista y no copia: las dos comparten los mismos objetos entrada, asi que un cambio de un
-     * lado se ve del otro. Copiar seria mas corto de escribir y mentiria en el unico punto en el que
-     * a alguien le importa -- `m.reversed().put(k, v)` tiene que verse en `m`.
+     * <p>A view and not a copy: the two share the same entry objects, so a change on one side is seen
+     * on the other. Copying would be shorter to write and would lie at the one point where anyone
+     * cares -- `m.reversed().put(k, v)` has to be seen in `m`.
      */
     public SequencedMap<K, V> reversed() {
         return new LhmReversed<K, V>(this);
@@ -498,9 +506,9 @@ public class LinkedHashMap<K, V> extends AbstractMap<K, V>
     }
 
     /**
-     * Un mapa con los pares de `m`, en el orden en que `m` los itera.
+     * A map with `m`'s pairs, in the order `m` iterates them.
      *
-     * @throws NullPointerException si `m` es null
+     * @throws NullPointerException if `m` is null
      */
     public LinkedHashMap(Map<? extends K, ? extends V> m) {
         this();
@@ -511,12 +519,12 @@ public class LinkedHashMap<K, V> extends AbstractMap<K, V>
     }
 
     /**
-     * Un mapa dimensionado para `numMappings` **pares**.
+     * A map sized for `numMappings` **pairs**.
      *
-     * <p>Como en `HashMap.newHashMap`: el constructor con `int` toma **cubetas** y este toma pares.
-     * Java 19 agrego los dos justamente porque el otro se usaba mal.
+     * <p>As in `HashMap.newHashMap`: the `int` constructor takes **buckets** and this one takes
+     * pairs. Java 19 added both precisely because the other was being used wrong.
      *
-     * @throws IllegalArgumentException si `numMappings` es negativo
+     * @throws IllegalArgumentException if `numMappings` is negative
      */
     public static <K, V> LinkedHashMap<K, V> newLinkedHashMap(int numMappings) {
         if (numMappings < 0) {

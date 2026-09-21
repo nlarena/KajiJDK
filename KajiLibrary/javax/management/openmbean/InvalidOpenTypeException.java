@@ -1,21 +1,22 @@
 package javax.management.openmbean;
 
 /**
- * Un valor cuyo tipo abierto no es el que se esperaba en ese lugar.
+ * A value whose open type is not the one expected in that place.
  *
- * <p>De ejecución: quien la provoca ya tenía el valor y su tipo a mano, así que comprobarlo antes
- * estaba a su alcance. Ver la nota de {@link OpenDataException}, que es la verificada de la familia.
+ * <p>Unchecked: whoever causes it already had the value and its type at hand, so checking
+ * beforehand was within reach. See the note in {@link OpenDataException}, which is the checked one
+ * of the family.
  */
 public class InvalidOpenTypeException extends IllegalArgumentException {
 
     private static final long serialVersionUID = -2837312755412327534L;
 
-    /** Sin mensaje. */
+    /** Without a message. */
     public InvalidOpenTypeException() {
         super();
     }
 
-    /** Con ese mensaje. */
+    /** With that message. */
     public InvalidOpenTypeException(String msg) {
         super(msg);
     }

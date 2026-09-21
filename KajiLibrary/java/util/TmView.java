@@ -1,40 +1,40 @@
 package java.util;
 
-// Las vistas de un TreeMap: subMap, headMap, tailMap y descendingMap, todas la misma clase.
+// A TreeMap's views: subMap, headMap, tailMap and descendingMap, all the same class.
 //
-// El JDK tiene tres (`NavigableSubMap` y sus dos subclases `Ascending`/`Descending`); aca hay una
-// sola, con un piso, un techo y un booleano de sentido. Las cinco fabricas de `TreeMap` son cinco
-// combinaciones de esos campos:
+// The JDK has three (`NavigableSubMap` and its two subclasses `Ascending`/`Descending`); here there
+// is a single one, with a floor, a ceiling and a direction boolean. `TreeMap`'s five factories are
+// five combinations of those fields:
 //
-//   headMap(to)        sin piso, techo en `to`,   ascendente
-//   tailMap(from)      piso en `from`, sin techo, ascendente
-//   subMap(from, to)   los dos limites,           ascendente
-//   descendingMap()    sin limites,               descendente
-//   y cualquier corte de un descendente, que combina las dos cosas
+//   headMap(to)        no floor, ceiling at `to`, ascending
+//   tailMap(from)      floor at `from`, no ceiling, ascending
+//   subMap(from, to)   both bounds,               ascending
+//   descendingMap()    no bounds,                 descending
+//   and any slice of a descending one, which combines the two
 //
-// **Es una vista, no una copia**, y ahi esta todo el punto: `mapa.subMap(a, b).clear()` borra ese
-// rango del mapa original, y `mapa.put(...)` dentro del rango se ve por la vista. Una copia haria
-// que la primera linea no borrara nada, en silencio.
+// **It is a view, not a copy**, and that is the whole point: `map.subMap(a, b).clear()` removes that
+// range from the original map, and a `map.put(...)` inside the range is seen through the view. A
+// copy would make the first line remove nothing, in silence.
 //
-// Lo que una vista **no** hace es dejar escribir fuera de su rango: `put` de una clave que no cae
-// entre los limites tira IllegalArgumentException. Sin eso, "la vista de [a, b)" seria mentira.
+// What a view does **not** do is let anyone write outside its range: a `put` of a key that does not
+// fall between the bounds throws IllegalArgumentException. Without that, "the view of [a, b)" would
+// be a lie.
 //
-// El sentido descendente es lo que ahorra la mitad del codigo. Todo se calcula primero en orden
-// **absoluto** -- el del mapa de atras -- con los seis metodos `abs*`, y recien al final se
-// traduce: para una vista al reves, "el primero" es el mayor y `lower(k)` es el `absHigher(k)`.
-// Escribir las dos direcciones por separado seria duplicar catorce metodos para cambiarles el
-// signo.
+// The descending direction is what saves half the code. Everything is computed first in **absolute**
+// order -- the map behind's -- with the six `abs*` methods, and only at the end translated: for a
+// reversed view, "the first" is the largest and `lower(k)` is `absHigher(k)`. Writing the two
+// directions separately would mean duplicating fourteen methods to change their sign.
 //
-// Costo a tener presente: `size()` **cuenta**, O(n). El JDK hace lo mismo con sus submapas, y por
-// la misma razon: el arbol no lleva cuenta de cuantos nodos hay en un rango, y mantenerla saldria
-// mas caro que la cuenta ocasional.
+// A cost to keep in mind: `size()` **counts**, O(n). The JDK does the same with its submaps, and for
+// the same reason: the tree keeps no count of how many nodes are in a range, and maintaining one
+// would cost more than the occasional count.
 class TmView<K, V> extends AbstractMap<K, V> implements NavigableMap<K, V>, TmWalk<K, V> {
 
     private final TreeMap<K, V> m;
 
-    // Los limites, en orden **absoluto**: `lo` siempre es el chico aunque la vista sea
-    // descendente. `fromStart`/`toEnd` dicen que ese lado no tiene limite -- y no se puede usar
-    // null para eso, porque null puede ser una clave.
+    // The bounds, in **absolute** order: `lo` is always the small one even if the view is
+    // descending. `fromStart`/`toEnd` say that side has no bound -- and null cannot be used for
+    // that, because null can be a key.
     private final boolean fromStart;
     private final Object lo;
     private final boolean loInc;
@@ -56,7 +56,7 @@ class TmView<K, V> extends AbstractMap<K, V> implements NavigableMap<K, V>, TmWa
         this.desc = desc;
     }
 
-    // --- el rango ---
+    // --- the range ---
 
     private boolean tooLow(Object key) {
         if (this.fromStart) {
@@ -78,8 +78,8 @@ class TmView<K, V> extends AbstractMap<K, V> implements NavigableMap<K, V>, TmWa
         return !this.tooLow(key) && !this.tooHigh(key);
     }
 
-    // Filtra un nodo por el rango. Todas las busquedas de abajo terminan pasando por aca, que es
-    // lo que hace que una vista no pueda ver ni un nodo de mas.
+    // It filters a node by the range. Every search below ends up going through here, which is what
+    // makes it impossible for a view to see even one node too many.
     private TmNode<K, V> clip(TmNode<K, V> p) {
         if (p == null || !this.inRange(p.key)) {
             return null;
@@ -87,7 +87,7 @@ class TmView<K, V> extends AbstractMap<K, V> implements NavigableMap<K, V>, TmWa
         return p;
     }
 
-    // --- las seis busquedas en orden absoluto ---
+    // --- the six searches in absolute order ---
 
     private TmNode<K, V> absLowest() {
         TmNode<K, V> p;
@@ -113,9 +113,9 @@ class TmView<K, V> extends AbstractMap<K, V> implements NavigableMap<K, V>, TmWa
         return this.clip(p);
     }
 
-    // Ojo con estas cuatro: cuando la clave pedida cae **fuera** del rango, la respuesta no es
-    // null sino el extremo del rango. Pedir el "ceiling" de algo que esta por debajo del piso
-    // tiene que dar el primer elemento de la vista, no nada.
+    // Mind these four: when the key asked for falls **outside** the range, the answer is not null
+    // but the range's end. Asking for the "ceiling" of something below the floor has to give the
+    // view's first element, not nothing.
     private TmNode<K, V> absCeiling(Object key) {
         if (this.tooLow(key)) {
             return this.absLowest();
@@ -144,7 +144,7 @@ class TmView<K, V> extends AbstractMap<K, V> implements NavigableMap<K, V>, TmWa
         return this.clip(this.m.getLowerNode(key));
     }
 
-    // --- la traduccion al sentido de la vista ---
+    // --- the translation into the view's direction ---
 
     private TmNode<K, V> viewFirst() {
         return this.desc ? this.absHighest() : this.absLowest();
@@ -170,7 +170,7 @@ class TmView<K, V> extends AbstractMap<K, V> implements NavigableMap<K, V>, TmWa
         return this.desc ? this.absLower(key) : this.absHigher(key);
     }
 
-    // --- TmWalk: el recorrido, en el sentido de la vista y sin salirse del rango ---
+    // --- TmWalk: the traversal, in the view's direction and without leaving the range ---
 
     public TmNode<K, V> walkFirst() {
         return this.viewFirst();
@@ -188,7 +188,7 @@ class TmView<K, V> extends AbstractMap<K, V> implements NavigableMap<K, V>, TmWa
 
     // --- Map ---
 
-    // Cuenta, O(n). Es el precio de que el arbol no lleve cuenta por rango.
+    // It counts, O(n). It is the price of the tree keeping no count per range.
     public int size() {
         int n = 0;
         TmNode<K, V> p = this.walkFirst();
@@ -214,8 +214,8 @@ class TmView<K, V> extends AbstractMap<K, V> implements NavigableMap<K, V>, TmWa
         return this.m.get(key);
     }
 
-    // Escribir fuera del rango es un error, no un no-op silencioso: la vista prometio ser
-    // exactamente ese rango.
+    // Writing outside the range is an error, not a silent no-op: the view promised to be exactly
+    // that range.
     public V put(K key, V value) {
         if (!this.inRange(key)) {
             throw new IllegalArgumentException("key out of range");
@@ -231,17 +231,17 @@ class TmView<K, V> extends AbstractMap<K, V> implements NavigableMap<K, V>, TmWa
     }
 
     public void clear() {
-        // Se toman las claves primero y se borran despues: borrar mientras se camina el arbol
-        // deja al nodo actual sin enlaces, y el recorrido se pierde.
-        ArrayList<K> claves = new ArrayList<K>();
+        // The keys are taken first and removed afterwards: removing while walking the tree leaves
+        // the current node with no links, and the traversal is lost.
+        ArrayList<K> keyList = new ArrayList<K>();
         TmNode<K, V> p = this.walkFirst();
         while (p != null) {
-            claves.add(p.key);
+            keyList.add(p.key);
             p = this.walkNext(p);
         }
         int i = 0;
-        while (i < claves.size()) {
-            this.m.remove(claves.get(i));
+        while (i < keyList.size()) {
+            this.m.remove(keyList.get(i));
             i = i + 1;
         }
     }
@@ -288,9 +288,9 @@ class TmView<K, V> extends AbstractMap<K, V> implements NavigableMap<K, V>, TmWa
 
     // --- SortedMap ---
 
-    // El comparador de una vista descendente es el del mapa dado vuelta, y tiene que serlo: quien
-    // reciba este mapa y quiera ordenar algo igual que el, necesita el orden que la vista muestra,
-    // no el del mapa de atras.
+    // A descending view's comparator is the map's reversed, and it has to be: whoever receives this
+    // map and wants to sort something the same way needs the order the view shows, not the map
+    // behind's.
     public Comparator<? super K> comparator() {
         if (this.desc) {
             return Collections.reverseOrder(this.m.comparator());
@@ -350,7 +350,7 @@ class TmView<K, V> extends AbstractMap<K, V> implements NavigableMap<K, V>, TmWa
         throw new UnsupportedOperationException();
     }
 
-    // --- NavigableMap: los vecinos ---
+    // --- NavigableMap: the neighbours ---
 
     public Map.Entry<K, V> lowerEntry(K key) {
         return TreeMap.entryOf(this.viewLower(key));
@@ -384,10 +384,10 @@ class TmView<K, V> extends AbstractMap<K, V> implements NavigableMap<K, V>, TmWa
         return TreeMap.keyOf(this.viewHigher(key));
     }
 
-    // --- NavigableMap: cortes de un corte ---
+    // --- NavigableMap: slices of a slice ---
     //
-    // Los limites nuevos se piden en el orden **de la vista**, y hay que guardarlos en orden
-    // absoluto: sobre una vista descendente, el "desde" del que llama es el techo.
+    // The new bounds are asked for in the **view's** order, and they have to be stored in absolute
+    // order: over a descending view, the caller's "from" is the ceiling.
 
     public NavigableMap<K, V> subMap(K from, boolean fromInclusive, K to, boolean toInclusive) {
         if (!this.inRange(from) || !this.inRange(to)) {
@@ -405,7 +405,7 @@ class TmView<K, V> extends AbstractMap<K, V> implements NavigableMap<K, V>, TmWa
             throw new IllegalArgumentException("key out of range");
         }
         if (this.desc) {
-            // "hasta `to` sin incluirlo", vista al reves, es "desde `to` para arriba" en absoluto.
+            // "up to `to` exclusive", reversed, is "from `to` upwards" in absolute terms.
             return new TmView<K, V>(this.m, false, to, inclusive, this.toEnd, this.hi, this.hiInc,
                     true);
         }
@@ -437,8 +437,8 @@ class TmView<K, V> extends AbstractMap<K, V> implements NavigableMap<K, V>, TmWa
         return this.tailMap(from, true);
     }
 
-    // Dar vuelta una vista es la misma vista con el sentido cambiado: los limites no se tocan,
-    // porque siempre estuvieron guardados en orden absoluto.
+    // Reversing a view is the same view with the direction changed: the bounds are not touched,
+    // because they were always stored in absolute order.
     public NavigableMap<K, V> descendingMap() {
         return new TmView<K, V>(this.m, this.fromStart, this.lo, this.loInc, this.toEnd, this.hi,
                 this.hiInc, !this.desc);
@@ -457,12 +457,12 @@ class TmView<K, V> extends AbstractMap<K, V> implements NavigableMap<K, V>, TmWa
     }
 }
 
-// Lo que un TreeMap y una de sus vistas tienen en comun para poder recorrerlos igual: el primer
-// nodo, y el siguiente.
+// What a TreeMap and one of its views have in common so they can be walked the same way: the first
+// node, and the next one.
 //
-// Existe para que haya **un solo** iterador para los dos. Sin esto, `TreeSet` tendria que saber si
-// esta apoyado en el mapa entero o en un corte -- y `TreeSet` esta escrito justamente para no
-// tener que saberlo.
+// It exists so there is **one** iterator for both. Without it, `TreeSet` would have to know whether
+// it is resting on the whole map or on a slice -- and `TreeSet` is written precisely so it does not
+// have to know.
 interface TmWalk<K, V> {
 
     TmNode<K, V> walkFirst();
@@ -470,14 +470,14 @@ interface TmWalk<K, V> {
     TmNode<K, V> walkNext(TmNode<K, V> n);
 }
 
-// El iterador de claves sobre cualquier TmWalk. Sin foto y sin memoria extra: va nodo a nodo por
-// los enlaces del arbol.
+// The key iterator over any TmWalk. With no snapshot and no extra memory: it goes node by node
+// along the tree's links.
 final class TmKeyItr<K, V> implements Iterator<K> {
 
     private final TmWalk<K, V> walk;
     private TmNode<K, V> next;
 
-    // El ultimo devuelto, para que `remove()` sepa sobre cual opera.
+    // The last one returned, so `remove()` knows which one it operates on.
     private TmNode<K, V> last;
     private final Map<K, V> owner;
 
@@ -497,8 +497,8 @@ final class TmKeyItr<K, V> implements Iterator<K> {
         }
         this.last = this.next;
         K key = this.next.key;
-        // Se avanza **antes** de devolver, para que un `remove()` posterior no deje el cursor
-        // apuntando a un nodo ya desenlazado.
+        // It advances **before** returning, so that a later `remove()` does not leave the cursor
+        // pointing at an already unlinked node.
         this.next = this.walk.walkNext(this.next);
         return key;
     }

@@ -21,70 +21,71 @@ import jdk.internal.classfile.impl.ExceptionCatchImpl;
 import jdk.internal.classfile.impl.Instructions;
 
 /**
- * Donde se escribe el cuerpo de un metodo.
+ * Where a method's body gets written.
  *
- * <p>Es la interfaz mas grande del paquete --mas de doscientos miembros-- y toda esa superficie es
- * una sola idea repetida: por cada opcode del JVMS hay un metodo con su nombre, y su cuerpo es
- * `with(...)` del elemento que le corresponde. `aload(3)` es `with(Instructions.load(ALOAD, 3))`.
- * Nada mas.
+ * <p>It is the package's largest interface --more than two hundred members-- and all that surface is
+ * a single idea repeated: for each opcode of the JVMS there is a method with its name, and its body
+ * is `with(...)` of the element that corresponds to it. `aload(3)` is
+ * `with(Instructions.load(ALOAD, 3))`. Nothing else.
  *
- * <p>Lo que si tiene logica propia son seis: {@link #block}, {@link #ifThen}, {@link #ifThenElse},
- * {@link #trying}, {@link #transforming} y {@link #loadConstant}. Los cinco primeros arman
- * etiquetas y las atan solas --que es lo que uno no quiere hacer a mano-- y el ultimo elige el
- * opcode mas corto que sirva para la constante que se le da.
+ * <p>What does have logic of its own is six of them: {@link #block}, {@link #ifThen},
+ * {@link #ifThenElse}, {@link #trying}, {@link #transforming} and {@link #loadConstant}. The first
+ * five build labels and bind them by themselves --which is what one does not want to do by hand--
+ * and the last picks the shortest opcode that will serve for the constant it is given.
  *
- * <h2>Las etiquetas</h2>
+ * <h2>The labels</h2>
  *
- * <p>Una {@link Label} es una incognita hasta que se la ata: {@link #newLabel} la crea y
- * {@link #labelBinding} dice donde cae. Se puede saltar a una etiqueta antes de atarla --es lo
- * normal en un salto hacia adelante-- y el escritor resuelve los offsets al cerrar el metodo.
- * {@link #newBoundLabel} es el atajo para "una etiqueta aca mismo".
+ * <p>A {@link Label} is an unknown until it is bound: {@link #newLabel} creates it and
+ * {@link #labelBinding} says where it falls. A label can be jumped to before being bound --that is
+ * the normal thing in a forward jump-- and the writer resolves the offsets when closing the method.
+ * {@link #newBoundLabel} is the shortcut for "a label right here".
  *
- * <h2>Los slots</h2>
+ * <h2>The slots</h2>
  *
- * <p>{@link #receiverSlot}, {@link #parameterSlot} y {@link #allocateLocal} existen porque el
- * numero de slot de una variable **no** es su posicion entre los parametros: un `long` y un `double`
- * ocupan dos. Calcularlo a mano es la forma mas facil de escribir un metodo que no verifica.
+ * <p>{@link #receiverSlot}, {@link #parameterSlot} and {@link #allocateLocal} exist because a
+ * variable's slot number is **not** its position among the parameters: a `long` and a `double` take
+ * two. Computing it by hand is the easiest way of writing a method that does not verify.
  */
 public interface CodeBuilder extends ClassFileBuilder<CodeElement, CodeBuilder> {
 
-    // ---- etiquetas y slots ---------------------------------------------------------------------
+    // ---- labels and slots ----------------------------------------------------------------------
 
-    /** Una etiqueta nueva, todavia sin atar. */
+    /** A new label, not bound yet. */
     Label newLabel();
 
-    /** La etiqueta del principio del metodo. */
+    /** The label of the method's start. */
     Label startLabel();
 
-    /** La etiqueta del final del metodo. */
+    /** The label of the method's end. */
     Label endLabel();
 
-    /** El slot del receptor (`this`). Tira si el metodo es estatico: ahi no hay receptor. */
+    /** The receiver's slot (`this`). It throws if the method is static: there is no receiver
+     * there. */
     int receiverSlot();
 
-    /** El slot del parametro numero `i`, contando desde cero y sin el receptor. */
+    /** The slot of parameter number `i`, counting from zero and leaving out the receiver. */
     int parameterSlot(int paramNo);
 
-    /** Reserva un slot nuevo para una variable de ese tipo y lo devuelve. */
+    /** It reserves a new slot for a variable of that type and returns it. */
     int allocateLocal(TypeKind typeKind);
 
-    /** Una etiqueta atada en este punto. */
+    /** A label bound at this point. */
     default Label newBoundLabel() {
         Label l = this.newLabel();
         this.labelBinding(l);
         return l;
     }
 
-    /** Ata esa etiqueta a este punto. */
+    /** It binds that label to this point. */
     default CodeBuilder labelBinding(Label label) {
         return this.with(Instructions.labelTarget(label));
     }
 
-    // ---- instrucciones sin operando ------------------------------------------------------
+    // ---- instructions with no operand ----------------------------------------------------
     //
-    // Uno por opcode, todos con el mismo cuerpo. Estan generados a partir de la tabla de
-    // opcodes, no escritos a mano, y el motivo es que a mano son ciento sesenta
-    // oportunidades de equivocarse en uno solo.
+    // One per opcode, all with the same body. They are generated from the opcode table, not
+    // written by hand, and the reason is that by hand they are a hundred and sixty chances of
+    // getting a single one wrong.
 
     /** `nop`. */
     default CodeBuilder nop() {
@@ -621,178 +622,178 @@ public interface CodeBuilder extends ClassFileBuilder<CodeElement, CodeBuilder> 
         return this.with(Instructions.returnInstruction(Opcode.RETURN));
     }
 
-    // ---- con un operando inmediato -------------------------------------------------------
+    // ---- with one immediate operand ------------------------------------------------------
 
-    /** `aload` de ese slot. */
+    /** `aload` of that slot. */
     default CodeBuilder aload(int slot) {
         return this.with(Instructions.load(Opcode.ALOAD, slot));
     }
 
-    /** `dload` de ese slot. */
+    /** `dload` of that slot. */
     default CodeBuilder dload(int slot) {
         return this.with(Instructions.load(Opcode.DLOAD, slot));
     }
 
-    /** `fload` de ese slot. */
+    /** `fload` of that slot. */
     default CodeBuilder fload(int slot) {
         return this.with(Instructions.load(Opcode.FLOAD, slot));
     }
 
-    /** `iload` de ese slot. */
+    /** `iload` of that slot. */
     default CodeBuilder iload(int slot) {
         return this.with(Instructions.load(Opcode.ILOAD, slot));
     }
 
-    /** `lload` de ese slot. */
+    /** `lload` of that slot. */
     default CodeBuilder lload(int slot) {
         return this.with(Instructions.load(Opcode.LLOAD, slot));
     }
 
-    /** `astore` en ese slot. */
+    /** `astore` into that slot. */
     default CodeBuilder astore(int slot) {
         return this.with(Instructions.store(Opcode.ASTORE, slot));
     }
 
-    /** `dstore` en ese slot. */
+    /** `dstore` into that slot. */
     default CodeBuilder dstore(int slot) {
         return this.with(Instructions.store(Opcode.DSTORE, slot));
     }
 
-    /** `fstore` en ese slot. */
+    /** `fstore` into that slot. */
     default CodeBuilder fstore(int slot) {
         return this.with(Instructions.store(Opcode.FSTORE, slot));
     }
 
-    /** `istore` en ese slot. */
+    /** `istore` into that slot. */
     default CodeBuilder istore(int slot) {
         return this.with(Instructions.store(Opcode.ISTORE, slot));
     }
 
-    /** `lstore` en ese slot. */
+    /** `lstore` into that slot. */
     default CodeBuilder lstore(int slot) {
         return this.with(Instructions.store(Opcode.LSTORE, slot));
     }
 
-    /** `bipush` de ese byte. */
+    /** `bipush` of that byte. */
     default CodeBuilder bipush(int b) {
         return this.with(Instructions.argumentConstant(Opcode.BIPUSH, b));
     }
 
-    /** `sipush` de ese short. */
+    /** `sipush` of that short. */
     default CodeBuilder sipush(int s) {
         return this.with(Instructions.argumentConstant(Opcode.SIPUSH, s));
     }
 
-    /** `iinc` de ese slot por esa constante. */
+    /** `iinc` of that slot by that constant. */
     default CodeBuilder iinc(int slot, int val) {
         return this.with(Instructions.increment(slot, val));
     }
 
-    // ---- saltos ---------------------------------------------------------------------------
+    // ---- jumps ----------------------------------------------------------------------------
 
-    /** `goto` a esa etiqueta. */
+    /** `goto` to that label. */
     default CodeBuilder goto_(Label target) {
         return this.with(Instructions.branch(Opcode.GOTO, target));
     }
 
-    /** `goto_w` a esa etiqueta. */
+    /** `goto_w` to that label. */
     default CodeBuilder goto_w(Label target) {
         return this.with(Instructions.branch(Opcode.GOTO_W, target));
     }
 
-    /** `if_acmpeq` a esa etiqueta. */
+    /** `if_acmpeq` to that label. */
     default CodeBuilder if_acmpeq(Label target) {
         return this.with(Instructions.branch(Opcode.IF_ACMPEQ, target));
     }
 
-    /** `if_acmpne` a esa etiqueta. */
+    /** `if_acmpne` to that label. */
     default CodeBuilder if_acmpne(Label target) {
         return this.with(Instructions.branch(Opcode.IF_ACMPNE, target));
     }
 
-    /** `if_icmpeq` a esa etiqueta. */
+    /** `if_icmpeq` to that label. */
     default CodeBuilder if_icmpeq(Label target) {
         return this.with(Instructions.branch(Opcode.IF_ICMPEQ, target));
     }
 
-    /** `if_icmpge` a esa etiqueta. */
+    /** `if_icmpge` to that label. */
     default CodeBuilder if_icmpge(Label target) {
         return this.with(Instructions.branch(Opcode.IF_ICMPGE, target));
     }
 
-    /** `if_icmpgt` a esa etiqueta. */
+    /** `if_icmpgt` to that label. */
     default CodeBuilder if_icmpgt(Label target) {
         return this.with(Instructions.branch(Opcode.IF_ICMPGT, target));
     }
 
-    /** `if_icmple` a esa etiqueta. */
+    /** `if_icmple` to that label. */
     default CodeBuilder if_icmple(Label target) {
         return this.with(Instructions.branch(Opcode.IF_ICMPLE, target));
     }
 
-    /** `if_icmplt` a esa etiqueta. */
+    /** `if_icmplt` to that label. */
     default CodeBuilder if_icmplt(Label target) {
         return this.with(Instructions.branch(Opcode.IF_ICMPLT, target));
     }
 
-    /** `if_icmpne` a esa etiqueta. */
+    /** `if_icmpne` to that label. */
     default CodeBuilder if_icmpne(Label target) {
         return this.with(Instructions.branch(Opcode.IF_ICMPNE, target));
     }
 
-    /** `ifeq` a esa etiqueta. */
+    /** `ifeq` to that label. */
     default CodeBuilder ifeq(Label target) {
         return this.with(Instructions.branch(Opcode.IFEQ, target));
     }
 
-    /** `ifge` a esa etiqueta. */
+    /** `ifge` to that label. */
     default CodeBuilder ifge(Label target) {
         return this.with(Instructions.branch(Opcode.IFGE, target));
     }
 
-    /** `ifgt` a esa etiqueta. */
+    /** `ifgt` to that label. */
     default CodeBuilder ifgt(Label target) {
         return this.with(Instructions.branch(Opcode.IFGT, target));
     }
 
-    /** `ifle` a esa etiqueta. */
+    /** `ifle` to that label. */
     default CodeBuilder ifle(Label target) {
         return this.with(Instructions.branch(Opcode.IFLE, target));
     }
 
-    /** `iflt` a esa etiqueta. */
+    /** `iflt` to that label. */
     default CodeBuilder iflt(Label target) {
         return this.with(Instructions.branch(Opcode.IFLT, target));
     }
 
-    /** `ifne` a esa etiqueta. */
+    /** `ifne` to that label. */
     default CodeBuilder ifne(Label target) {
         return this.with(Instructions.branch(Opcode.IFNE, target));
     }
 
-    /** `ifnonnull` a esa etiqueta. */
+    /** `ifnonnull` to that label. */
     default CodeBuilder ifnonnull(Label target) {
         return this.with(Instructions.branch(Opcode.IFNONNULL, target));
     }
 
-    /** `ifnull` a esa etiqueta. */
+    /** `ifnull` to that label. */
     default CodeBuilder ifnull(Label target) {
         return this.with(Instructions.branch(Opcode.IFNULL, target));
     }
 
-    /** El salto de ese opcode a esa etiqueta. */
+    /** That opcode's jump to that label. */
     default CodeBuilder branch(Opcode op, Label target) {
         return this.with(Instructions.branch(op, target));
     }
 
-    // ---- acceso a campos y llamadas -----------------------------------------------------------
+    // ---- field access and calls ---------------------------------------------------------------
 
-    /** El acceso de ese opcode a ese campo. */
+    /** That opcode's access to that field. */
     default CodeBuilder fieldAccess(Opcode opcode, FieldRefEntry ref) {
         return this.with(Instructions.field(opcode, ref));
     }
 
-    /** El acceso de ese opcode al campo nombrado por su dueño, su nombre y su tipo. */
+    /** That opcode's access to the field named by its owner, its name and its type. */
     default CodeBuilder fieldAccess(Opcode opcode, ClassDesc owner, String name, ClassDesc type) {
         return this.fieldAccess(opcode, this.constantPool().fieldRefEntry(owner, name, type));
     }
@@ -837,24 +838,25 @@ public interface CodeBuilder extends ClassFileBuilder<CodeElement, CodeBuilder> 
         return this.fieldAccess(Opcode.PUTSTATIC, owner, name, type);
     }
 
-    /** La llamada de ese opcode a ese método. */
+    /** That opcode's call to that method. */
     default CodeBuilder invoke(Opcode opcode, MemberRefEntry ref) {
         return this.with(Instructions.invoke(opcode, ref));
     }
 
     /**
-     * La llamada de ese opcode al método nombrado por su dueño, su nombre y su tipo.
+     * That opcode's call to the method named by its owner, its name and its type.
      *
-     * <p>`isInterface` **no** es redundante con el opcode, y es el error clásico de esta API: un
-     * `invokestatic` y un `invokespecial` a un método de una interfaz llevan un
-     * `InterfaceMethodref` y no un `Methodref`, y la JVM rechaza la clase si se le pone el otro. El
-     * opcode no alcanza para decidirlo; por eso el parámetro está.
+     * <p>`isInterface` is **not** redundant with the opcode, and it is this API's classic mistake: an
+     * `invokestatic` and an `invokespecial` to an interface's method carry an `InterfaceMethodref`
+     * and not a `Methodref`, and the JVM rejects the class if it is given the other one. The opcode
+     * is not enough to decide it; that is why the parameter is there.
      */
     default CodeBuilder invoke(Opcode opcode, ClassDesc owner, String name, MethodTypeDesc type,
             boolean isInterface) {
-        // Con `if` y no con un ternario: las dos ramas dan tipos distintos --`InterfaceMethodRefEntry`
-        // y `MethodRefEntry`-- y el supertipo comun lo calcula el compilador; nuestro javac no lo
-        // hace, y con el local escrito no hay nada que calcular.
+        // With an `if` and not with a ternary: the two branches give different types
+        // --`InterfaceMethodRefEntry` and `MethodRefEntry`-- and the common supertype is computed by
+        // the compiler; our javac does not do it, and with the local written out there is nothing to
+        // compute.
         MemberRefEntry ref;
         if (isInterface) {
             ref = this.constantPool().interfaceMethodRefEntry(owner, name, type);
@@ -874,43 +876,43 @@ public interface CodeBuilder extends ClassFileBuilder<CodeElement, CodeBuilder> 
         return this.invoke(Opcode.INVOKEVIRTUAL, owner, name, type, false);
     }
 
-    /** `invokespecial` a un método de clase. */
+    /** `invokespecial` to a class method. */
     default CodeBuilder invokespecial(MethodRefEntry ref) {
         return this.invoke(Opcode.INVOKESPECIAL, ref);
     }
 
-    /** `invokespecial` a un método de interfaz. */
+    /** `invokespecial` to an interface method. */
     default CodeBuilder invokespecial(InterfaceMethodRefEntry ref) {
         return this.invoke(Opcode.INVOKESPECIAL, ref);
     }
 
-    /** `invokespecial` a un método de clase. */
+    /** `invokespecial` to a class method. */
     default CodeBuilder invokespecial(ClassDesc owner, String name, MethodTypeDesc type) {
         return this.invoke(Opcode.INVOKESPECIAL, owner, name, type, false);
     }
 
-    /** `invokespecial`, diciendo si el dueño es una interfaz. Ver la nota de {@link #invoke}. */
+    /** `invokespecial`, saying whether the owner is an interface. See the note on {@link #invoke}. */
     default CodeBuilder invokespecial(ClassDesc owner, String name, MethodTypeDesc type,
             boolean isInterface) {
         return this.invoke(Opcode.INVOKESPECIAL, owner, name, type, isInterface);
     }
 
-    /** `invokestatic` a un método de clase. */
+    /** `invokestatic` to a class method. */
     default CodeBuilder invokestatic(MethodRefEntry ref) {
         return this.invoke(Opcode.INVOKESTATIC, ref);
     }
 
-    /** `invokestatic` a un método de interfaz. */
+    /** `invokestatic` to an interface method. */
     default CodeBuilder invokestatic(InterfaceMethodRefEntry ref) {
         return this.invoke(Opcode.INVOKESTATIC, ref);
     }
 
-    /** `invokestatic` a un método de clase. */
+    /** `invokestatic` to a class method. */
     default CodeBuilder invokestatic(ClassDesc owner, String name, MethodTypeDesc type) {
         return this.invoke(Opcode.INVOKESTATIC, owner, name, type, false);
     }
 
-    /** `invokestatic`, diciendo si el dueño es una interfaz. Ver la nota de {@link #invoke}. */
+    /** `invokestatic`, saying whether the owner is an interface. See the note on {@link #invoke}. */
     default CodeBuilder invokestatic(ClassDesc owner, String name, MethodTypeDesc type,
             boolean isInterface) {
         return this.invoke(Opcode.INVOKESTATIC, owner, name, type, isInterface);
@@ -931,12 +933,12 @@ public interface CodeBuilder extends ClassFileBuilder<CodeElement, CodeBuilder> 
         return this.with(Instructions.invokeDynamic(ref));
     }
 
-    /** `invokedynamic` desde el descriptor del call site. */
+    /** `invokedynamic` from the call site's descriptor. */
     default CodeBuilder invokedynamic(DynamicCallSiteDesc desc) {
         return this.invokedynamic(this.constantPool().invokeDynamicEntry(desc));
     }
 
-    // ---- creación y chequeo de tipos ----------------------------------------------------------
+    // ---- creation and type checking -----------------------------------------------------------
 
     /** `new`. */
     default CodeBuilder new_(ClassEntry clazz) {
@@ -958,7 +960,7 @@ public interface CodeBuilder extends ClassFileBuilder<CodeElement, CodeBuilder> 
         return this.anewarray(this.constantPool().classEntry(clazz));
     }
 
-    /** `newarray` de ese tipo primitivo. */
+    /** `newarray` of that primitive type. */
     default CodeBuilder newarray(TypeKind typeKind) {
         return this.with(Instructions.newPrimitiveArray(typeKind));
     }
@@ -983,7 +985,7 @@ public interface CodeBuilder extends ClassFileBuilder<CodeElement, CodeBuilder> 
         return this.checkcast(this.constantPool().classEntry(type));
     }
 
-    /** `instanceof`. Se llama así y no `instanceof` porque esa palabra está reservada. */
+    /** `instanceof`. It is called this and not `instanceof` because that word is reserved. */
     default CodeBuilder instanceOf(ClassEntry type) {
         return this.with(Instructions.typeCheck(Opcode.INSTANCEOF, type));
     }
@@ -993,25 +995,25 @@ public interface CodeBuilder extends ClassFileBuilder<CodeElement, CodeBuilder> 
         return this.instanceOf(this.constantPool().classEntry(type));
     }
 
-    // ---- constantes -----------------------------------------------------------------------------
+    // ---- constants ------------------------------------------------------------------------------
 
-    /** `ldc` de esa entrada. */
+    /** `ldc` of that entry. */
     default CodeBuilder ldc(LoadableConstantEntry entry) {
         return this.with(Instructions.loadConstant(
                 entry.typeKind().slotSize() == 2 ? Opcode.LDC2_W : Opcode.LDC, entry));
     }
 
-    /** `ldc` de esa constante. */
+    /** `ldc` of that constant. */
     default CodeBuilder ldc(ConstantDesc value) {
         return this.ldc(this.constantPool().loadableConstantEntry(value));
     }
 
     /**
-     * La constante, con el opcode **más corto** que la puede cargar.
+     * The constant, with the **shortest** opcode that can load it.
      *
-     * <p>Es la diferencia con {@link #ldc}, y no es cosmética: un `iconst_1` ocupa un byte y no toca
-     * el pool; un `ldc` ocupa dos y le mete una entrada. Para los valores chicos --que son casi
-     * todos-- la diferencia se multiplica por cada aparición.
+     * <p>It is the difference from {@link #ldc}, and it is not cosmetic: an `iconst_1` takes one byte
+     * and does not touch the pool; an `ldc` takes two and puts an entry into it. For small values
+     * --which are nearly all of them-- the difference multiplies by each appearance.
      */
     default CodeBuilder loadConstant(int value) {
         if (value >= -1 && value <= 5) {
@@ -1026,7 +1028,7 @@ public interface CodeBuilder extends ClassFileBuilder<CodeElement, CodeBuilder> 
         return this.ldc(Integer.valueOf(value));
     }
 
-    /** La constante, con el opcode más corto. */
+    /** The constant, with the shortest opcode. */
     default CodeBuilder loadConstant(long value) {
         if (value == 0L) {
             return this.lconst_0();
@@ -1038,12 +1040,12 @@ public interface CodeBuilder extends ClassFileBuilder<CodeElement, CodeBuilder> 
     }
 
     /**
-     * La constante, con el opcode más corto.
+     * The constant, with the shortest opcode.
      *
-     * <p>La comparación es por **bits** y no con `==` porque `0.0f == -0.0f` es cierto y las dos no
-     * son la misma constante: emitir `fconst_0` para un `-0.0f` cambiaría el signo del valor. Con
-     * `NaN` pasa lo inverso --nunca es igual a nada, ni a sí mismo-- y por bits sí se lo puede
-     * comparar.
+     * <p>The comparison is by **bits** and not with `==` because `0.0f == -0.0f` is true and the two
+     * are not the same constant: emitting `fconst_0` for a `-0.0f` would change the value's sign.
+     * With `NaN` the reverse happens --it is never equal to anything, not even to itself-- and by
+     * bits it can be compared.
      */
     default CodeBuilder loadConstant(float value) {
         int bits = Float.floatToRawIntBits(value);
@@ -1059,7 +1061,7 @@ public interface CodeBuilder extends ClassFileBuilder<CodeElement, CodeBuilder> 
         return this.ldc(Float.valueOf(value));
     }
 
-    /** La constante, con el opcode más corto. Ver la nota de la versión `float` sobre los bits. */
+    /** The constant, with the shortest opcode. See the `float` version's note on the bits. */
     default CodeBuilder loadConstant(double value) {
         long bits = Double.doubleToRawLongBits(value);
         if (bits == Double.doubleToRawLongBits(0.0)) {
@@ -1072,10 +1074,10 @@ public interface CodeBuilder extends ClassFileBuilder<CodeElement, CodeBuilder> 
     }
 
     /**
-     * La constante, con el opcode más corto, sea del tipo que sea.
+     * The constant, with the shortest opcode, whatever its type.
      *
-     * <p>`null` se carga con `aconst_null`: es el único valor que esta forma acepta y que no es un
-     * `ConstantDesc` de verdad.
+     * <p>`null` is loaded with `aconst_null`: it is the only value this form accepts that is not a
+     * real `ConstantDesc`.
      */
     default CodeBuilder loadConstant(ConstantDesc value) {
         if (value == null) {
@@ -1096,9 +1098,9 @@ public interface CodeBuilder extends ClassFileBuilder<CodeElement, CodeBuilder> 
         return this.ldc(value);
     }
 
-    // El `iconst_*` de un valor entre -1 y 5. Estático y no un `switch` en el cuerpo de arriba
-    // porque una interfaz no puede tener campos que no sean constantes, y una tabla sería lo único
-    // más corto.
+    // The `iconst_*` of a value between -1 and 5. A static and not a `switch` in the body above
+    // because an interface cannot have fields that are not constants, and a table would be the only
+    // shorter thing.
     static Opcode iconstOpcode(int value) {
         if (value == -1) {
             return Opcode.ICONST_M1;
@@ -1121,44 +1123,45 @@ public interface CodeBuilder extends ClassFileBuilder<CodeElement, CodeBuilder> 
         return Opcode.ICONST_5;
     }
 
-    // ---- por tipo, en vez de por opcode ---------------------------------------------------------
+    // ---- by type, instead of by opcode ----------------------------------------------------------
     //
-    // Los cuatro de abajo eligen el opcode a partir de un `TypeKind`. Sirven para el código que se
-    // genera a partir de una firma --donde el tipo se sabe y el opcode no-- y evitan la tabla de
-    // cuatro ramas que si no hay que escribir en cada sitio.
+    // The four below pick the opcode from a `TypeKind`. They are for code generated out of a
+    // signature --where the type is known and the opcode is not-- and they avoid the four-branch
+    // table one would otherwise have to write at each site.
 
-    /** La carga de una variable de ese tipo desde ese slot. */
+    /** The load of a variable of that type from that slot. */
     default CodeBuilder loadLocal(TypeKind tk, int slot) {
         return this.with(Instructions.load(tk, slot));
     }
 
-    /** El guardado de una variable de ese tipo en ese slot. */
+    /** The store of a variable of that type into that slot. */
     default CodeBuilder storeLocal(TypeKind tk, int slot) {
         return this.with(Instructions.store(tk, slot));
     }
 
-    /** La carga desde un arreglo de ese tipo. */
+    /** The load from an array of that type. */
     default CodeBuilder arrayLoad(TypeKind tk) {
         return this.with(Instructions.arrayLoad(CodeBuilder.arrayLoadOpcode(tk)));
     }
 
-    /** El guardado en un arreglo de ese tipo. */
+    /** The store into an array of that type. */
     default CodeBuilder arrayStore(TypeKind tk) {
         return this.with(Instructions.arrayStore(CodeBuilder.arrayStoreOpcode(tk)));
     }
 
-    /** El retorno de ese tipo. */
+    /** The return of that type. */
     default CodeBuilder return_(TypeKind tk) {
         return this.with(Instructions.returnInstruction(tk));
     }
 
-    /** La conversión de un tipo primitivo a otro. */
+    /** The conversion from one primitive type to another. */
     default CodeBuilder conversion(TypeKind from, TypeKind to) {
         return this.with(Instructions.convert(from, to));
     }
 
-    // `boolean`, `byte`, `char` y `short` tienen su propio opcode de arreglo --y ahí sí importa la
-    // diferencia, porque el ancho del elemento cambia-- aunque en la pila los cuatro sean `int`.
+    // `boolean`, `byte`, `char` and `short` have their own array opcode --and there the difference
+    // does matter, because the element's width changes-- even though on the stack all four are
+    // `int`.
     static Opcode arrayLoadOpcode(TypeKind tk) {
         if (tk == TypeKind.BYTE || tk == TypeKind.BOOLEAN) {
             return Opcode.BALOAD;
@@ -1184,7 +1187,7 @@ public interface CodeBuilder extends ClassFileBuilder<CodeElement, CodeBuilder> 
         if (tk == TypeKind.REFERENCE) {
             return Opcode.AALOAD;
         }
-        throw new IllegalArgumentException("no hay carga de arreglo para " + tk);
+        throw new IllegalArgumentException("no array load for " + tk);
     }
 
     static Opcode arrayStoreOpcode(TypeKind tk) {
@@ -1212,26 +1215,26 @@ public interface CodeBuilder extends ClassFileBuilder<CodeElement, CodeBuilder> 
         if (tk == TypeKind.REFERENCE) {
             return Opcode.AASTORE;
         }
-        throw new IllegalArgumentException("no hay guardado de arreglo para " + tk);
+        throw new IllegalArgumentException("no array store for " + tk);
     }
 
     // ---- switches --------------------------------------------------------------------------------
 
-    /** `tableswitch` con ese rango. */
+    /** `tableswitch` with that range. */
     default CodeBuilder tableswitch(int low, int high, Label defaultTarget, List<SwitchCase> cases) {
         return this.with(Instructions.tableSwitch(low, high, defaultTarget, cases));
     }
 
     /**
-     * `tableswitch` con el rango deducido de los casos.
+     * `tableswitch` with the range worked out from the cases.
      *
-     * <p>El rango es del menor al mayor de los valores dados. Con casos dispersos eso llena la tabla
-     * de huecos que apuntan al destino por omisión, y ahí `lookupswitch` es más chico -- esta forma
-     * no elige por uno: hace el `tableswitch` que se le pidió.
+     * <p>The range goes from the least to the greatest of the values given. With sparse cases that
+     * fills the table with holes pointing at the default target, and there `lookupswitch` is smaller
+     * -- this form does not choose on one's behalf: it makes the `tableswitch` it was asked for.
      */
     default CodeBuilder tableswitch(Label defaultTarget, List<SwitchCase> cases) {
         if (cases.isEmpty()) {
-            throw new IllegalArgumentException("un tableswitch sin casos no tiene rango");
+            throw new IllegalArgumentException("a tableswitch with no cases has no range");
         }
         int low = cases.get(0).caseValue();
         int high = low;
@@ -1248,75 +1251,75 @@ public interface CodeBuilder extends ClassFileBuilder<CodeElement, CodeBuilder> 
         return this.with(Instructions.lookupSwitch(defaultTarget, cases));
     }
 
-    // ---- pseudo-instrucciones ---------------------------------------------------------------------
+    // ---- pseudo-instructions --------------------------------------------------------------------
 
-    /** Un número de línea para lo que siga. */
+    /** A line number for what follows. */
     default CodeBuilder lineNumber(int line) {
         return this.with(Instructions.lineNumber(line));
     }
 
-    /** Una variable local con nombre, para el depurador. */
+    /** A named local variable, for the debugger. */
     default CodeBuilder localVariable(int slot, Utf8Entry name, Utf8Entry descriptor,
             Label startScope, Label endScope) {
         return this.with(Instructions.localVariable(slot, name, descriptor, startScope, endScope));
     }
 
-    /** Una variable local con nombre. */
+    /** A named local variable. */
     default CodeBuilder localVariable(int slot, String name, ClassDesc descriptor, Label startScope,
             Label endScope) {
         return this.with(Instructions.localVariable(slot, name, descriptor, startScope, endScope));
     }
 
-    /** El tipo genérico de una variable local. */
+    /** A local variable's generic type. */
     default CodeBuilder localVariableType(int slot, Utf8Entry name, Utf8Entry signature,
             Label startScope, Label endScope) {
         return this.with(
                 Instructions.localVariableType(slot, name, signature, startScope, endScope));
     }
 
-    /** El tipo genérico de una variable local. */
+    /** A local variable's generic type. */
     default CodeBuilder localVariableType(int slot, String name, Signature signature,
             Label startScope, Label endScope) {
         return this.with(
                 Instructions.localVariableType(slot, name, signature, startScope, endScope));
     }
 
-    /** Un rango de caracteres del fuente, para las herramientas que los usan. */
+    /** A range of source characters, for the tools that use them. */
     default CodeBuilder characterRange(Label startScope, Label endScope, int characterRangeStart,
             int characterRangeEnd, int flags) {
         return this.with(Instructions.characterRange(startScope, endScope, characterRangeStart,
                 characterRangeEnd, flags));
     }
 
-    /** Un manejador de excepciones para ese rango. */
+    /** An exception handler for that range. */
     default CodeBuilder exceptionCatch(Label start, Label end, Label handler, ClassEntry catchType) {
         return this.with(new ExceptionCatchImpl(handler, start, end, Optional.of(catchType)));
     }
 
-    /** Un manejador de excepciones para ese rango. */
+    /** An exception handler for that range. */
     default CodeBuilder exceptionCatch(Label start, Label end, Label handler, ClassDesc catchType) {
         return this.exceptionCatch(start, end, handler, this.constantPool().classEntry(catchType));
     }
 
-    /** Un manejador de excepciones; sin tipo, atrapa todo. */
+    /** An exception handler; with no type, it catches everything. */
     default CodeBuilder exceptionCatch(Label start, Label end, Label handler,
             Optional<ClassEntry> catchType) {
         return this.with(new ExceptionCatchImpl(handler, start, end, catchType));
     }
 
-    /** Un manejador que atrapa todo, incluido lo que no es `Exception`. */
+    /** A handler catching everything, including what is not an `Exception`. */
     default CodeBuilder exceptionCatchAll(Label start, Label end, Label handler) {
         return this.with(new ExceptionCatchImpl(handler, start, end, Optional.<ClassEntry>empty()));
     }
 
-    // ---- las formas que arman etiquetas solas -----------------------------------------------------
+    // ---- the forms that build labels by themselves ----------------------------------------------
     //
-    // Las cinco de abajo son el motivo por el que esta interfaz es agradable de usar. Todas hacen lo
-    // mismo por dentro --piden etiquetas, escriben el cuerpo, atan las etiquetas donde va-- y lo que
-    // aportan es que uno no tiene que acordarse de atar ninguna. Una etiqueta sin atar es un error
-    // que no se ve hasta que la clase no verifica.
+    // The five below are the reason this interface is pleasant to use. They all do the same thing
+    // inside --they ask for labels, write the body, bind the labels where they go-- and what they
+    // contribute is that one does not have to remember to bind any. An unbound label is an error that
+    // does not show until the class fails to verify.
 
-    /** El cuerpo, entre una etiqueta de inicio y una de fin. */
+    /** The body, between a start label and an end label. */
     default CodeBuilder block(Consumer<CodeBuilder> handler) {
         Label end = this.newLabel();
         handler.accept(this);
@@ -1325,11 +1328,11 @@ public interface CodeBuilder extends ClassFileBuilder<CodeElement, CodeBuilder> 
     }
 
     /**
-     * `if (cond) { ... }`, saltando con ese opcode.
+     * `if (cond) { ... }`, jumping with that opcode.
      *
-     * <p>Ojo con el sentido: el opcode que se pasa es el de **entrar** al cuerpo, así que lo que se
-     * emite es su salto contrario hacia el final. `ifThen(IFEQ, ...)` corre el cuerpo cuando el
-     * valor de la pila es cero.
+     * <p>Mind the direction: the opcode handed in is the one for **entering** the body, so what gets
+     * emitted is its opposite jump towards the end. `ifThen(IFEQ, ...)` runs the body when the
+     * stack's value is zero.
      */
     default CodeBuilder ifThen(Opcode opcode, Consumer<CodeBuilder> thenHandler) {
         Label end = this.newLabel();
@@ -1339,12 +1342,12 @@ public interface CodeBuilder extends ClassFileBuilder<CodeElement, CodeBuilder> 
         return this;
     }
 
-    /** `if (x != 0) { ... }`, que es el caso común. */
+    /** `if (x != 0) { ... }`, which is the common case. */
     default CodeBuilder ifThen(Consumer<CodeBuilder> thenHandler) {
         return this.ifThen(Opcode.IFNE, thenHandler);
     }
 
-    /** `if (cond) { ... } else { ... }`, saltando con ese opcode. */
+    /** `if (cond) { ... } else { ... }`, jumping with that opcode. */
     default CodeBuilder ifThenElse(Opcode opcode, Consumer<CodeBuilder> thenHandler,
             Consumer<CodeBuilder> elseHandler) {
         Label otherwise = this.newLabel();
@@ -1365,11 +1368,11 @@ public interface CodeBuilder extends ClassFileBuilder<CodeElement, CodeBuilder> 
     }
 
     /**
-     * Un `try` con sus `catch`.
+     * A `try` with its `catch`es.
      *
-     * <p>El `catchesHandler` recibe un {@link CodeBuilder.CatchBuilder}, con el que declara un
-     * manejador por tipo. Las etiquetas del rango protegido y los saltos al final los pone esta
-     * forma.
+     * <p>The `catchesHandler` gets a {@link CodeBuilder.CatchBuilder}, with which it declares one
+     * handler per type. The protected range's labels and the jumps to the end are put in by this
+     * form.
      */
     default CodeBuilder trying(Consumer<CodeBuilder> tryHandler,
             Consumer<CatchBuilder> catchesHandler) {
@@ -1383,10 +1386,10 @@ public interface CodeBuilder extends ClassFileBuilder<CodeElement, CodeBuilder> 
         return this;
     }
 
-    /** El constructor de `catch` que usa {@link #trying}. */
+    /** The `catch` builder {@link #trying} uses. */
     CatchBuilder catchBuilder(Label tryStart, Label tryEnd, Label end);
 
-    /** Escribe el cuerpo pasándolo por esa transformación. */
+    /** It writes the body passing it through that transformation. */
     default CodeBuilder transforming(CodeTransform transform, Consumer<CodeBuilder> handler) {
         CodeBuilder inner = this.transformingBuilder(transform);
         transform.atStart(inner);
@@ -1395,14 +1398,14 @@ public interface CodeBuilder extends ClassFileBuilder<CodeElement, CodeBuilder> 
         return this;
     }
 
-    /** El constructor intermedio que usa {@link #transforming}. */
+    /** The intermediate builder {@link #transforming} uses. */
     CodeBuilder transformingBuilder(CodeTransform transform);
 
     /**
-     * El salto contrario a ése.
+     * The jump opposite to that one.
      *
-     * <p>Lo necesitan `ifThen` e `ifThenElse`: uno declara la condición para **entrar** y el
-     * bytecode salta cuando **no** se cumple.
+     * <p>`ifThen` and `ifThenElse` need it: one declares the condition for **entering** and the
+     * bytecode jumps when it does **not** hold.
      */
     static Opcode opposite(Opcode op) {
         if (op == Opcode.IFEQ) {
@@ -1453,26 +1456,26 @@ public interface CodeBuilder extends ClassFileBuilder<CodeElement, CodeBuilder> 
         if (op == Opcode.IF_ACMPNE) {
             return Opcode.IF_ACMPEQ;
         }
-        throw new IllegalArgumentException(op + " no es un salto condicional");
+        throw new IllegalArgumentException(op + " is not a conditional jump");
     }
 
     /**
-     * Los `catch` de un {@link #trying}.
+     * A {@link #trying}'s `catch`es.
      *
-     * <p>Cada llamada a {@link #catching} agrega un manejador para ese tipo; {@link #catchingAll} el
-     * que atrapa todo, y tiene que ir último — un manejador que atrapa todo después del cual hubiera
-     * otro dejaría a ése inalcanzable.
+     * <p>Each call to {@link #catching} adds a handler for that type; {@link #catchingAll} the one
+     * catching everything, and it has to go last -- a catch-all handler with another one after it
+     * would leave that other one unreachable.
      */
     public interface CatchBuilder {
 
-        /** Un manejador para ese tipo. */
+        /** A handler for that type. */
         CatchBuilder catching(ClassDesc exceptionType, Consumer<CodeBuilder> catchHandler);
 
-        /** Un manejador para varios tipos, con el mismo cuerpo. */
+        /** A handler for several types, with the same body. */
         CatchBuilder catchingMulti(List<ClassDesc> exceptionTypes,
                 Consumer<CodeBuilder> catchHandler);
 
-        /** El manejador que atrapa todo. Va último. */
+        /** The handler catching everything. It goes last. */
         void catchingAll(Consumer<CodeBuilder> catchAllHandler);
     }
 }

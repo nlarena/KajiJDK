@@ -58,7 +58,7 @@ public interface ListJoin<Z, E>
      * @return metamodel type representing the {@code List} that is
      *         the target of the join
      */
-    // OMITIDO (subset): ListAttribute<? super Z, E> getModel();  -- finding #123, se hereda de PluralJoin
+    // OMITTED (subset): ListAttribute<? super Z, E> getModel();  -- finding #123, inherited from PluralJoin
 
     /**
      * Create an expression that corresponds to the index of

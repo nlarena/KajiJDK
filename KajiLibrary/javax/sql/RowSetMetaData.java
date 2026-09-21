@@ -1,19 +1,19 @@
 package javax.sql;
 
 /**
- * KajiLibrary's javax.sql.RowSetMetaData -- los metadatos de un {@link RowSet}, **escribibles**.
+ * KajiLibrary's javax.sql.RowSetMetaData -- the metadata of a {@link RowSet}, **writable**.
  *
- * <p>Agrega los `set` a los `get` que hereda, y por una razon concreta: un `RowSet` desconectado
- * puede llenarse de datos que no vinieron de una consulta --de un archivo, de otra fuente-- y
- * entonces alguien tiene que **decirle** que columnas tiene. Con un `ResultSetMetaData` de solo
- * lectura eso seria imposible.
+ * <p>It adds the `set`s to the `get`s it inherits, and for a concrete reason: a disconnected
+ * `RowSet` can be filled with data that did not come from a query --from a file, from another
+ * source-- and then somebody has to **tell** it which columns it has. With a read-only
+ * `ResultSetMetaData` that would be impossible.
  *
- * <p>{@link #setColumnCount} va primero: los demas reciben un indice de columna, y sin saber cuantas
- * hay no hay indice valido.
+ * <p>{@link #setColumnCount} goes first: the others receive a column index, and without knowing how
+ * many there are there is no valid index.
  */
 public interface RowSetMetaData extends java.sql.ResultSetMetaData {
 
-    /** Cuantas columnas hay. Se llama antes que cualquier otro. */
+    /** How many columns there are. It is called before any other. */
     void setColumnCount(int columnCount) throws java.sql.SQLException;
 
     void setAutoIncrement(int columnIndex, boolean property) throws java.sql.SQLException;
@@ -24,7 +24,7 @@ public interface RowSetMetaData extends java.sql.ResultSetMetaData {
 
     void setCurrency(int columnIndex, boolean property) throws java.sql.SQLException;
 
-    /** Uno de los `columnNullable*` de {@link java.sql.ResultSetMetaData}. */
+    /** One of the `columnNullable*` of {@link java.sql.ResultSetMetaData}. */
     void setNullable(int columnIndex, int property) throws java.sql.SQLException;
 
     void setSigned(int columnIndex, boolean property) throws java.sql.SQLException;

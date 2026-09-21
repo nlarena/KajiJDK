@@ -14,62 +14,62 @@ import java.nio.file.StandardOpenOption;
 import jdk.internal.io.Fs;
 
 /**
- * La implementacion de {@link FileChannel} sobre los nativos de archivo de esta VM.
+ * The implementation of {@link FileChannel} over the file natives of this VM.
  *
- * <p>Es lo que {@link FileChannel#open} devuelve, y no es publica a proposito: nadie deberia
- * escribir su nombre. El porque de que cada operacion toque el disco --y el precio que eso tiene--
- * esta explicado en la cabecera de {@link FileChannel}; aca solo esta el como.
+ * <p>It is what {@link FileChannel#open} returns, and it is not public on purpose: nobody should
+ * write its name. The why of each operation touching the disk --and the price that has-- is
+ * explained in the header of {@link FileChannel}; here there is only the how.
  *
- * <p>Las tres reglas que se repiten y conviene leer una sola vez:
+ * <p>The three rules that repeat and are worth reading once:
  *
  * <ul>
- *   <li>toda lectura arranca por {@link #contenido()}, que va al disco. No hay cache, asi que no hay
- *       cache que invalidar ni momento en el que lo que se ve deje de ser lo que hay;
- *   <li>toda escritura es leer-modificar-escribir el archivo entero. Por eso vive en un solo lugar,
- *       {@link #volcar}: repartida en cinco metodos, tarde o temprano uno se olvidaria de conservar
- *       la cola del archivo y truncaria datos ajenos;
- *   <li>escribir mas alla del final rellena con ceros, que es lo que hace un archivo ralo del JDK
- *       cuando se lo lee.
+ *   <li>every read starts with {@link #contents()}, which goes to the disk. There is no cache, so
+ *       there is no cache to invalidate and no moment when what is seen stops being what there is;
+ *   <li>every write is read-modify-write of the whole file. That is why it lives in a single place,
+ *       {@link #writeThrough}: spread over five methods, sooner or later one of them would forget to
+ *       keep the tail of the file and would truncate somebody else's data;
+ *   <li>writing beyond the end fills with zeroes, which is what a sparse file of the JDK does when
+ *       it is read.
  * </ul>
  */
 final class KajiFileChannel extends FileChannel {
 
-    // El limite de un `byte[]`. Un archivo mas grande que esto no entra en un arreglo, y el error
-    // tiene que salir como tal y no como un `NegativeArraySizeException` desde las entranias.
-    private static final long TOPE = 2147483639L;
+    // The limit of a `byte[]`. A file bigger than this does not fit in an array, and the error has
+    // to come out as such and not as a `NegativeArraySizeException` from the innards.
+    private static final long CAP = 2147483639L;
 
-    private final String ruta;
-    private final boolean leer;
-    private final boolean escribir;
-    private final boolean anexar;
-    private final boolean borrarAlCerrar;
+    private final String filePath;
+    private final boolean readable;
+    private final boolean writable;
+    private final boolean appendMode;
+    private final boolean deleteOnClose;
 
     private long pos = 0;
 
-    private KajiFileChannel(String ruta, boolean leer, boolean escribir, boolean anexar,
-            boolean borrarAlCerrar) {
-        this.ruta = ruta;
-        this.leer = leer;
-        this.escribir = escribir;
-        this.anexar = anexar;
-        this.borrarAlCerrar = borrarAlCerrar;
+    private KajiFileChannel(String filePath, boolean readable, boolean writable, boolean appendMode,
+            boolean deleteOnClose) {
+        this.filePath = filePath;
+        this.readable = readable;
+        this.writable = writable;
+        this.appendMode = appendMode;
+        this.deleteOnClose = deleteOnClose;
     }
 
-    // ---- apertura --------------------------------------------------------------------------------
+    // ---- opening --------------------------------------------------------------------------------
 
-    static FileChannel abrir(Path path, OpenOption[] options) throws IOException {
+    static FileChannel openFile(Path path, OpenOption[] options) throws IOException {
         if (path == null) {
             throw new NullPointerException();
         }
         String p = path.toString();
 
-        boolean leer = false;
-        boolean escribir = false;
-        boolean anexar = false;
-        boolean truncar = false;
-        boolean crear = false;
-        boolean crearNuevo = false;
-        boolean borrarAlCerrar = false;
+        boolean readable = false;
+        boolean writable = false;
+        boolean appendMode = false;
+        boolean truncateIt = false;
+        boolean createIt = false;
+        boolean createNew = false;
+        boolean deleteOnClose = false;
 
         int i = 0;
         while (i < options.length) {
@@ -78,137 +78,138 @@ final class KajiFileChannel extends FileChannel {
                 throw new NullPointerException();
             }
             if (o == StandardOpenOption.READ) {
-                leer = true;
+                readable = true;
             } else if (o == StandardOpenOption.WRITE) {
-                escribir = true;
+                writable = true;
             } else if (o == StandardOpenOption.APPEND) {
-                anexar = true;
+                appendMode = true;
             } else if (o == StandardOpenOption.TRUNCATE_EXISTING) {
-                truncar = true;
+                truncateIt = true;
             } else if (o == StandardOpenOption.CREATE) {
-                crear = true;
+                createIt = true;
             } else if (o == StandardOpenOption.CREATE_NEW) {
-                crearNuevo = true;
+                createNew = true;
             } else if (o == StandardOpenOption.DELETE_ON_CLOSE) {
-                borrarAlCerrar = true;
+                deleteOnClose = true;
             } else if (o == StandardOpenOption.SYNC || o == StandardOpenOption.DSYNC) {
-                // Se aceptan porque se cumplen: este canal escribe al disco en cada `write`. No hay
-                // bandera que guardar; lo que piden ya es como funciona.
+                // They are accepted because they are fulfilled: this channel writes to the disk on every
+                // `write`. There is no flag to keep; what they ask for is how it works already.
             } else if (o == LinkOption.NOFOLLOW_LINKS) {
-                // Sin enlaces en el modelo, no seguirlos es lo unico que se puede hacer.
+                // With no links in the model, not following them is the only thing that can be done.
             } else {
-                // `SPARSE` cae aca. Ver la nota de `FileChannel.open`.
+                // `SPARSE` lands here. See the note of `FileChannel.open`.
                 throw new UnsupportedOperationException(String.valueOf(o) + " not supported");
             }
             i = i + 1;
         }
 
-        if (anexar && leer) {
+        if (appendMode && readable) {
             throw new IllegalArgumentException("READ + APPEND not allowed");
         }
-        if (anexar && truncar) {
+        if (appendMode && truncateIt) {
             throw new IllegalArgumentException("APPEND + TRUNCATE_EXISTING not allowed");
         }
-        // Sin ninguna opcion de acceso, se lee. Es lo que dice el JDK y lo que espera cualquiera que
-        // llame `open(path)` a secas.
-        if (!leer && !escribir && !anexar) {
-            leer = true;
+        // With no access option at all, it is read. It is what the JDK says and what anybody who calls
+        // `open(path)` plain expects.
+        if (!readable && !writable && !appendMode) {
+            readable = true;
         }
 
-        boolean existe = (Fs.stat(p) & Fs.EXISTE) != 0;
-        if (crearNuevo && existe) {
+        boolean exists = (Fs.stat(p) & Fs.EXISTS) != 0;
+        if (createNew && exists) {
             throw new FileAlreadyExistsException(p);
         }
-        boolean puedeCrear = (crear || crearNuevo) && (escribir || anexar);
-        if (!existe && !puedeCrear) {
+        boolean mayCreate = (createIt || createNew) && (writable || appendMode);
+        if (!exists && !mayCreate) {
             throw new NoSuchFileException(p);
         }
-        if (!existe) {
+        if (!exists) {
             if (!Fs.writeAllBytes(p, new byte[0], false)) {
-                throw new IOException("no se pudo crear " + p);
+                throw new IOException("could not create " + p);
             }
-        } else if (truncar && (escribir || anexar)) {
+        } else if (truncateIt && (writable || appendMode)) {
             if (!Fs.writeAllBytes(p, new byte[0], false)) {
-                throw new IOException("no se pudo truncar " + p);
+                throw new IOException("could not truncate " + p);
             }
         }
 
-        KajiFileChannel c = new KajiFileChannel(p, leer, escribir || anexar, anexar, borrarAlCerrar);
+        KajiFileChannel c = new KajiFileChannel(p, readable, writable || appendMode, appendMode, deleteOnClose);
         return c;
     }
 
-    // ---- lo de abajo -----------------------------------------------------------------------------
+    // ---- what is underneath ----------------------------------------------------------------------
 
-    private byte[] contenido() throws IOException {
-        byte[] b = Fs.readAllBytes(this.ruta);
+    private byte[] contents() throws IOException {
+        byte[] b = Fs.readAllBytes(this.filePath);
         if (b == null) {
-            // Pasa si el archivo desaparecio despues de abrir. No es un caso raro de laboratorio:
-            // otro proceso puede borrarlo en cualquier momento, y devolver un arreglo vacio lo
-            // haria pasar por un archivo que quedo en cero.
-            throw new IOException("no se pudo leer " + this.ruta);
+            // It happens if the file disappeared after openFile. It is not a rare laboratory case: another
+            // process can delete it at any moment, and returning an empty array would pass it off as a file
+            // that was left at zero.
+            throw new IOException("could not read " + this.filePath);
         }
         return b;
     }
 
-    // Escribe `len` bytes de `datos` a partir de `desde`, conservando todo lo que ya habia antes y
-    // despues de ese tramo. Devuelve `len`.
-    private int volcar(long desde, byte[] datos, int off, int len) throws IOException {
-        byte[] viejo = this.contenido();
-        long fin = desde + len;
-        if (fin > TOPE) {
-            throw new IOException("archivo demasiado grande para esta VM");
+    // It writes `len` bytes of `data` starting at `from`, keeping everything that was there before
+    // and after that stretch. It returns `len`.
+    private int writeThrough(long from, byte[] data, int off, int len) throws IOException {
+        byte[] old = this.contents();
+        long endPos = from + len;
+        if (endPos > CAP) {
+            throw new IOException("file too big for this VM");
         }
-        int nuevoLargo = (int) Math.max((long) viejo.length, fin);
-        byte[] nuevo;
-        if (nuevoLargo == viejo.length) {
-            nuevo = viejo;
+        int newLen = (int) Math.max((long) old.length, endPos);
+        byte[] fresh;
+        if (newLen == old.length) {
+            fresh = old;
         } else {
-            // El relleno intermedio queda en cero solo: `new byte[]` ya los pone, que es justo el
-            // hueco de ceros que corresponde cuando se escribe mas alla del final.
-            nuevo = new byte[nuevoLargo];
-            System.arraycopy(viejo, 0, nuevo, 0, viejo.length);
+            // The intermediate filling is left at zero by itself: `new byte[]` sets them already, which is
+            // just the hole of zeroes that corresponds when writing beyond the end.
+            fresh = new byte[newLen];
+            System.arraycopy(old, 0, fresh, 0, old.length);
         }
-        System.arraycopy(datos, off, nuevo, (int) desde, len);
-        if (!Fs.writeAllBytes(this.ruta, nuevo, false)) {
-            throw new IOException("no se pudo escribir " + this.ruta);
+        System.arraycopy(data, off, fresh, (int) from, len);
+        if (!Fs.writeAllBytes(this.filePath, fresh, false)) {
+            throw new IOException("could not write " + this.filePath);
         }
         return len;
     }
 
-    private void exigirAbierto() throws IOException {
+    private void requireOpen() throws IOException {
         if (!this.isOpen()) {
             throw new ClosedChannelException();
         }
     }
 
-    private void exigirLectura() throws IOException {
-        this.exigirAbierto();
-        if (!this.leer) {
+    private void requireReadable() throws IOException {
+        this.requireOpen();
+        if (!this.readable) {
             throw new NonReadableChannelException();
         }
     }
 
-    private void exigirEscritura() throws IOException {
-        this.exigirAbierto();
-        if (!this.escribir) {
+    private void requireWritable() throws IOException {
+        this.requireOpen();
+        if (!this.writable) {
             throw new NonWritableChannelException();
         }
     }
 
-    // Saca de `src` lo que le quede, como arreglo, y deja la posicion del buffer al final. Todas las
-    // escrituras pasan por aca para que el avance de la posicion del buffer sea uno solo y no cinco.
-    private static byte[] drenar(ByteBuffer src) {
+    // It takes what is left of `src`, as an array, and leaves the position of the buffer at the end.
+    // Every write goes through here so that the advancing of the buffer's position is a single one
+    // and not five.
+    private static byte[] drain(ByteBuffer src) {
         int n = src.remaining();
         byte[] b = new byte[n];
         src.get(b, 0, n);
         return b;
     }
 
-    // ---- lectura ---------------------------------------------------------------------------------
+    // ---- reading ---------------------------------------------------------------------------------
 
     public int read(ByteBuffer dst) throws IOException {
-        this.exigirLectura();
-        int n = this.leerEn(dst, this.pos);
+        this.requireReadable();
+        int n = this.readInto(dst, this.pos);
         if (n > 0) {
             this.pos = this.pos + n;
         }
@@ -219,44 +220,44 @@ final class KajiFileChannel extends FileChannel {
         if (position < 0) {
             throw new IllegalArgumentException("posicion negativa");
         }
-        this.exigirLectura();
-        return this.leerEn(dst, position);
+        this.requireReadable();
+        return this.readInto(dst, position);
     }
 
-    private int leerEn(ByteBuffer dst, long desde) throws IOException {
+    private int readInto(ByteBuffer dst, long from) throws IOException {
         if (dst == null) {
             throw new NullPointerException();
         }
         if (dst.isReadOnly()) {
             throw new java.nio.ReadOnlyBufferException();
         }
-        boolean bien = false;
+        boolean ok = false;
         this.begin();
         try {
-            byte[] datos = this.contenido();
-            if (desde >= datos.length) {
-                bien = true;
-                // Fin de archivo es -1 aunque el buffer estuviera lleno; el que no quede lugar es
-                // otra historia y va abajo.
+            byte[] data = this.contents();
+            if (from >= data.length) {
+                ok = true;
+                // End of file is -1 even if the buffer was full; that there is no room left is another story
+                // and goes below.
                 return -1;
             }
-            int libres = dst.remaining();
-            if (libres == 0) {
-                bien = true;
+            int room = dst.remaining();
+            if (room == 0) {
+                ok = true;
                 return 0;
             }
-            int n = (int) Math.min((long) libres, (long) datos.length - desde);
-            dst.put(datos, (int) desde, n);
-            bien = true;
+            int n = (int) Math.min((long) room, (long) data.length - from);
+            dst.put(data, (int) from, n);
+            ok = true;
             return n;
         } finally {
-            this.end(bien);
+            this.end(ok);
         }
     }
 
     public long read(ByteBuffer[] dsts, int offset, int length) throws IOException {
-        comprobarRango(dsts, offset, length);
-        this.exigirLectura();
+        checkRange(dsts, offset, length);
+        this.requireReadable();
         long total = 0;
         int i = offset;
         while (i < offset + length) {
@@ -264,8 +265,8 @@ final class KajiFileChannel extends FileChannel {
             if (d.remaining() > 0) {
                 int n = this.read(d);
                 if (n < 0) {
-                    // Fin de archivo. Si ya se habia leido algo se devuelve eso; si no, -1. Devolver
-                    // 0 en el segundo caso haria que un lazo de lectura no terminara nunca.
+                    // End of file. If something had been read already that is returned; if not, -1. Returning
+                    // 0 in the second case would make a reading loop never end.
                     if (total == 0) {
                         return -1;
                     }
@@ -273,9 +274,9 @@ final class KajiFileChannel extends FileChannel {
                 }
                 total = total + n;
                 if (d.hasRemaining()) {
-                    // El buffer no se lleno, y este canal nunca devuelve lecturas cortas por otro
-                    // motivo: significa que el archivo se acabo. Seguir con el buffer siguiente
-                    // solo repetiria el -1.
+                    // The buffer was not filled, and this channel never returns short reads for another
+                    // reason: it means the file has run out. Going on with the next buffer would only repeat
+                    // the -1.
                     return total;
                 }
             }
@@ -287,28 +288,28 @@ final class KajiFileChannel extends FileChannel {
     // ---- escritura -------------------------------------------------------------------------------
 
     public int write(ByteBuffer src) throws IOException {
-        this.exigirEscritura();
+        this.requireWritable();
         if (src == null) {
             throw new NullPointerException();
         }
-        boolean bien = false;
+        boolean ok = false;
         this.begin();
         try {
-            // En modo anexar la posicion corriente no manda: el destino es siempre el final vigente
-            // en el momento de escribir, que es lo unico que hace util a `APPEND`.
-            long desde;
-            if (this.anexar) {
-                desde = this.tamanio();
+            // In append mode the current position does not rule: the destination is always the end in
+            // force at the moment of writing, which is the only thing that makes `APPEND` useful.
+            long from;
+            if (this.appendMode) {
+                from = this.sizeOf();
             } else {
-                desde = this.pos;
+                from = this.pos;
             }
-            byte[] b = drenar(src);
-            int n = this.volcar(desde, b, 0, b.length);
-            this.pos = desde + n;
-            bien = true;
+            byte[] b = drain(src);
+            int n = this.writeThrough(from, b, 0, b.length);
+            this.pos = from + n;
+            ok = true;
             return n;
         } finally {
-            this.end(bien);
+            this.end(ok);
         }
     }
 
@@ -316,30 +317,30 @@ final class KajiFileChannel extends FileChannel {
         if (position < 0) {
             throw new IllegalArgumentException("posicion negativa");
         }
-        this.exigirEscritura();
-        if (this.anexar) {
-            // Escribir en una posicion elegida contradice lo unico que `APPEND` promete --que todo
-            // va al final-- y el JDK lo prohibe por eso mismo.
+        this.requireWritable();
+        if (this.appendMode) {
+            // Writing at a chosen position contradicts the one thing `APPEND` promises --that everything
+            // goes to the end-- and the JDK forbids it for exactly that.
             throw new IOException("canal abierto en modo APPEND");
         }
         if (src == null) {
             throw new NullPointerException();
         }
-        boolean bien = false;
+        boolean ok = false;
         this.begin();
         try {
-            byte[] b = drenar(src);
-            int n = this.volcar(position, b, 0, b.length);
-            bien = true;
+            byte[] b = drain(src);
+            int n = this.writeThrough(position, b, 0, b.length);
+            ok = true;
             return n;
         } finally {
-            this.end(bien);
+            this.end(ok);
         }
     }
 
     public long write(ByteBuffer[] srcs, int offset, int length) throws IOException {
-        comprobarRango(srcs, offset, length);
-        this.exigirEscritura();
+        checkRange(srcs, offset, length);
+        this.requireWritable();
         long total = 0;
         int i = offset;
         while (i < offset + length) {
@@ -352,10 +353,10 @@ final class KajiFileChannel extends FileChannel {
         return total;
     }
 
-    // ---- posicion y tamanio ----------------------------------------------------------------------
+    // ---- position and size -----------------------------------------------------------------------
 
     public long position() throws IOException {
-        this.exigirAbierto();
+        this.requireOpen();
         return this.pos;
     }
 
@@ -363,35 +364,35 @@ final class KajiFileChannel extends FileChannel {
         if (newPosition < 0) {
             throw new IllegalArgumentException("posicion negativa");
         }
-        this.exigirAbierto();
+        this.requireOpen();
         this.pos = newPosition;
         return this;
     }
 
     public long size() throws IOException {
-        this.exigirAbierto();
-        return this.tamanio();
+        this.requireOpen();
+        return this.sizeOf();
     }
 
-    private long tamanio() throws IOException {
-        return Fs.size(this.ruta);
+    private long sizeOf() throws IOException {
+        return Fs.size(this.filePath);
     }
 
     public FileChannel truncate(long size) throws IOException {
         if (size < 0) {
             throw new IllegalArgumentException("tamanio negativo");
         }
-        this.exigirEscritura();
-        byte[] viejo = this.contenido();
-        if (size < viejo.length) {
-            byte[] nuevo = new byte[(int) size];
-            System.arraycopy(viejo, 0, nuevo, 0, (int) size);
-            if (!Fs.writeAllBytes(this.ruta, nuevo, false)) {
-                throw new IOException("no se pudo truncar " + this.ruta);
+        this.requireWritable();
+        byte[] old = this.contents();
+        if (size < old.length) {
+            byte[] fresh = new byte[(int) size];
+            System.arraycopy(old, 0, fresh, 0, (int) size);
+            if (!Fs.writeAllBytes(this.filePath, fresh, false)) {
+                throw new IOException("could not truncate " + this.filePath);
             }
         }
-        // La posicion se recorta aunque el archivo no haya cambiado de tama&ntilde;o: el contrato es
-        // que nunca quede apuntando mas alla del final.
+        // The position is cut back even if the file did not change size: the contract is that it never
+        // be left pointing beyond the end.
         if (this.pos > size) {
             this.pos = size;
         }
@@ -399,8 +400,8 @@ final class KajiFileChannel extends FileChannel {
     }
 
     public void force(boolean metaData) throws IOException {
-        this.exigirAbierto();
-        // Nada que forzar; ver la nota de `FileChannel.force`.
+        this.requireOpen();
+        // Nothing to force; see the note of `FileChannel.force`.
     }
 
     // ---- transferencias --------------------------------------------------------------------------
@@ -408,65 +409,65 @@ final class KajiFileChannel extends FileChannel {
     public long transferTo(long position, long count, WritableByteChannel target)
             throws IOException {
         if (position < 0 || count < 0) {
-            throw new IllegalArgumentException("posicion o cuenta negativa");
+            throw new IllegalArgumentException("negative position or count");
         }
         if (target == null) {
             throw new NullPointerException();
         }
-        this.exigirLectura();
+        this.requireReadable();
         if (!target.isOpen()) {
             throw new ClosedChannelException();
         }
-        byte[] datos = this.contenido();
-        if (position >= datos.length) {
+        byte[] data = this.contents();
+        if (position >= data.length) {
             return 0;
         }
-        int n = (int) Math.min(count, (long) datos.length - position);
-        ByteBuffer bb = ByteBuffer.wrap(datos, (int) position, n);
-        long escritos = 0;
+        int n = (int) Math.min(count, (long) data.length - position);
+        ByteBuffer bb = ByteBuffer.wrap(data, (int) position, n);
+        long written = 0;
         while (bb.hasRemaining()) {
             int w = target.write(bb);
             if (w <= 0) {
                 break;
             }
-            escritos = escritos + w;
+            written = written + w;
         }
-        return escritos;
+        return written;
     }
 
     public long transferFrom(ReadableByteChannel src, long position, long count)
             throws IOException {
         if (position < 0 || count < 0) {
-            throw new IllegalArgumentException("posicion o cuenta negativa");
+            throw new IllegalArgumentException("negative position or count");
         }
         if (src == null) {
             throw new NullPointerException();
         }
-        this.exigirEscritura();
+        this.requireWritable();
         if (!src.isOpen()) {
             throw new ClosedChannelException();
         }
-        if (position > this.tamanio()) {
-            // El JDK no agranda el archivo para llegar hasta ahi: si la posicion pasa del final, no
-            // se transfiere nada.
+        if (position > this.sizeOf()) {
+            // The JDK does not grow the file to get there: if the position goes past the end, nothing is
+            // transferred.
             return 0;
         }
-        if (count > TOPE) {
-            throw new IOException("transferencia demasiado grande para esta VM");
+        if (count > CAP) {
+            throw new IOException("transfer too big for this VM");
         }
         ByteBuffer bb = ByteBuffer.allocate((int) count);
-        long leidos = 0;
+        long readCount = 0;
         while (bb.hasRemaining()) {
             int n = src.read(bb);
             if (n <= 0) {
                 break;
             }
-            leidos = leidos + n;
+            readCount = readCount + n;
         }
-        if (leidos == 0) {
+        if (readCount == 0) {
             return 0;
         }
-        return this.volcar(position, bb.array(), 0, (int) leidos);
+        return this.writeThrough(position, bb.array(), 0, (int) readCount);
     }
 
     // ---- locks -----------------------------------------------------------------------------------
@@ -503,9 +504,9 @@ final class KajiFileChannel extends FileChannel {
     /**
      * The same acquisition on behalf of an asynchronous channel wrapped around this one.
      *
-     * <p>The owner matters for {@link FileLock#acquiredBy}, which has to name the channel the caller
-     * asked on: whoever holds an {@link AsynchronousFileChannel} never saw this one and could not
-     * recognise it.
+     * <p>The owner matters for {@link FileLock#acquiredBy}, which has to name the channel the
+     * caller asked on: whoever holds an {@link AsynchronousFileChannel} never saw this one and
+     * could not recognise it.
      */
     FileLock acquireFor(AsynchronousFileChannel owner, long position, long size, boolean shared,
             boolean wait) throws IOException {
@@ -572,14 +573,14 @@ final class KajiFileChannel extends FileChannel {
         if (position < 0 || size < 0) {
             throw new IllegalArgumentException("Negative position or size");
         }
-        if (shared && !this.leer) {
+        if (shared && !this.readable) {
             throw new NonReadableChannelException();
         }
-        if (!shared && !this.escribir && !this.anexar) {
+        if (!shared && !this.writable && !this.appendMode) {
             throw new NonWritableChannelException();
         }
-        final String canonical = Fs.canonical(this.ruta);
-        final String key = canonical == null ? this.ruta : canonical;
+        final String canonical = Fs.canonical(this.filePath);
+        final String key = canonical == null ? this.filePath : canonical;
         FileLockRegistry.check(key, position, size);
         return key;
     }
@@ -593,12 +594,12 @@ final class KajiFileChannel extends FileChannel {
             throws IOException {
         // `Long.MAX_VALUE` is how Java says "everything still to come"; the VM says it with a zero.
         final long count = size == Long.MAX_VALUE ? 0L : size;
-        final int t = Fs.lock(this.ruta, position, count, shared, wait);
+        final int t = Fs.lock(this.filePath, position, count, shared, wait);
         if (t == -2) {
             throw new IOException("this system has no file locks");
         }
         if (t < 0 && wait) {
-            throw new IOException("could not take the lock on " + this.ruta);
+            throw new IOException("could not take the lock on " + this.filePath);
         }
         return t;
     }
@@ -608,8 +609,8 @@ final class KajiFileChannel extends FileChannel {
     /**
      * Maps a region of the file into memory.
      *
-     * <p>The buffer that comes back is not a copy: it reads and writes the file's own pages. That is
-     * the whole reason this method waited for a native, and the reason it is worth the wait -- a
+     * <p>The buffer that comes back is not a copy: it reads and writes the file's own pages. That
+     * is the whole reason this method waited for a native, and the reason it is worth the wait -- a
      * mapping that took writes and dropped them would be the quietest kind of wrong.
      */
     @Override
@@ -644,10 +645,10 @@ final class KajiFileChannel extends FileChannel {
             throw new UnsupportedOperationException("Unsupported map mode: " + mode);
         }
         final boolean readOnly = mode == MapMode.READ_ONLY;
-        if (!this.leer) {
+        if (!this.readable) {
             throw new NonReadableChannelException();
         }
-        if (!readOnly && !this.escribir) {
+        if (!readOnly && !this.writable) {
             // PRIVATE lands here too, and on purpose: its writes never reach the file, but the
             // system still hands out writable pages, and a channel opened for reading alone has no
             // business asking for those.
@@ -659,12 +660,12 @@ final class KajiFileChannel extends FileChannel {
             return MappedBuffers.of(-1, 0, readOnly);
         }
         growTo(position + size);
-        final int token = Fs.mapOpen(this.ruta, mapMode, position, (int) size);
+        final int token = Fs.mapOpen(this.filePath, mapMode, position, (int) size);
         if (token == -2) {
             throw new IOException("this system cannot map files into memory");
         }
         if (token < 0) {
-            throw new IOException("could not map " + this.ruta);
+            throw new IOException("could not map " + this.filePath);
         }
         return MappedBuffers.of(token, (int) size, readOnly);
     }
@@ -677,36 +678,36 @@ final class KajiFileChannel extends FileChannel {
      * what {@link #map} documents by not mentioning it.
      */
     private void growTo(long end) throws IOException {
-        final long have = Fs.size(this.ruta);
+        final long have = Fs.size(this.filePath);
         if (have >= end) {
             return;
         }
-        if (!this.escribir) {
+        if (!this.writable) {
             throw new IOException("Channel not open for writing - cannot extend file to required"
                     + " size");
         }
         final byte[] zeros = new byte[(int) (end - have)];
-        if (!Fs.writeAllBytes(this.ruta, zeros, true)) {
-            throw new IOException("could not extend " + this.ruta);
+        if (!Fs.writeAllBytes(this.filePath, zeros, true)) {
+            throw new IOException("could not extend " + this.filePath);
         }
     }
 
-    // ---- cierre ----------------------------------------------------------------------------------
+    // ---- closing ----------------------------------------------------------------------------------
 
     protected void implCloseChannel() throws IOException {
-        // Closing the channel invalidates its locks. It goes first: if `DELETE_ON_CLOSE` removed the
-        // file while a lock was still held, the descriptor holding it would outlive the file.
+        // Closing the channel invalidates its locks. It goes first: if `DELETE_ON_CLOSE` removed
+        // the file while a lock was still held, the descriptor holding it would outlive the file.
         FileLockRegistry.releaseAllOn(this);
-        if (this.borrarAlCerrar) {
-            // Sin `throws` si falla: `DELETE_ON_CLOSE` es una limpieza, y hacer fallar el cierre
-            // porque no se pudo limpiar convierte un descuido en un error del programa.
-            Fs.delete(this.ruta);
+        if (this.deleteOnClose) {
+            // Without `throws` if it fails: `DELETE_ON_CLOSE` is a cleanup, and making the closing fail
+            // because it could not clean up turns an oversight into an error of the program.
+            Fs.delete(this.filePath);
         }
     }
 
     // ---- comun -----------------------------------------------------------------------------------
 
-    private static void comprobarRango(ByteBuffer[] bufs, int offset, int length) {
+    private static void checkRange(ByteBuffer[] bufs, int offset, int length) {
         if (bufs == null) {
             throw new NullPointerException();
         }

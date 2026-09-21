@@ -3,34 +3,37 @@ package javax.management;
 import java.io.Serializable;
 
 /**
- * Una expresion booleana que se evalua contra un MBean: el filtro de `queryNames`/`queryMBeans`.
+ * A boolean expression evaluated against an MBean: the filter of
+ * {@code queryNames}/{@code queryMBeans}.
  *
- * <p>Los cuatro `throws` de {@link #apply} no son ruido, son el contrato: una consulta puede fallar
- * por cuatro motivos distintos --operacion de cadena desconocida, operador binario mal aplicado,
- * valor de atributo incomparable, MBean de clase equivocada-- y quien la evalua tiene que poder
- * distinguirlos para decidir si el MBean simplemente no coincide o si la consulta esta mal armada.
+ * <p>The four {@code throws} of {@link #apply} are not noise, they are the contract: a query can
+ * fail for four different reasons --unknown string operation, badly applied binary operator,
+ * incomparable attribute value, MBean of the wrong class-- and whoever evaluates it has to be able
+ * to tell them apart to decide whether the MBean simply does not match or the query is badly built.
  *
- * <p>Es `Serializable` porque una consulta viaja al agente remoto y se evalua **alla**, no aca.
+ * <p>It is {@code Serializable} because a query travels to the remote agent and is evaluated
+ * <b>there</b>, not here.
  */
 public interface QueryExp extends Serializable {
 
     /**
-     * Si el MBean llamado `name` satisface la expresion.
+     * Whether the MBean called {@code name} satisfies the expression.
      *
-     * <p>Las expresiones que necesitan leer atributos lo hacen contra el servidor que les fijo
-     * {@link #setMBeanServer}; las que solo miran el nombre --{@link ObjectName} mismo-- lo ignoran.
+     * <p>The expressions that need to read attributes do so against the server {@link
+     * #setMBeanServer} gave them; those that only look at the name --{@link ObjectName} itself--
+     * ignore it.
      */
     boolean apply(ObjectName name)
             throws BadStringOperationException, BadBinaryOpValueExpException,
                    BadAttributeValueExpException, InvalidApplicationException;
 
     /**
-     * Fija el servidor contra el que resolver los atributos.
+     * Sets the server the attributes are resolved against.
      *
-     * <p>Quedo marcado como obsoleto en el JDK: el servidor viaja hoy por un `ThreadLocal` de
-     * {@link QueryEval}, y llamar a esto no hace falta.
+     * <p>It was marked deprecated in the JDK: the server travels today through a {@code
+     * ThreadLocal} of {@link QueryEval}, and calling this is not needed.
      *
-     * @deprecated el servidor lo lleva {@link QueryEval}
+     * @deprecated the server is carried by {@link QueryEval}
      */
     @Deprecated
     void setMBeanServer(MBeanServer s);

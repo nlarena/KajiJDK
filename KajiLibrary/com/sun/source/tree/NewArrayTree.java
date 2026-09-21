@@ -3,8 +3,8 @@ package com.sun.source.tree;
 import java.util.List;
 
 /**
- * `new T[n]` y `{ ... }`. {@link #getDimAnnotations} es una lista de listas
- * porque cada dimension puede llevar sus propias anotaciones de tipo.
+ * `new T[n]` and `{ ... }`. {@link #getDimAnnotations} is a list of lists
+ * because each dimension may carry its own type annotations.
  */
 public interface NewArrayTree extends ExpressionTree {
 
@@ -16,6 +16,6 @@ public interface NewArrayTree extends ExpressionTree {
 
     List<? extends AnnotationTree> getAnnotations();
 
-    /** Las anotaciones de cada dimension, una lista por dimension. */
+    /** Each dimension's annotations, one list per dimension. */
     List<? extends List<? extends AnnotationTree>> getDimAnnotations();
 }

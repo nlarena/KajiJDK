@@ -5,14 +5,14 @@ import javax.management.Descriptor;
 import javax.management.MBeanParameterInfo;
 
 /**
- * La implementación de {@link OpenMBeanParameterInfo}.
+ * The implementation of {@link OpenMBeanParameterInfo}.
  *
- * <p>Hereda de `MBeanParameterInfo` para que un cliente que no sabe de tipos abiertos siga viendo
- * un parámetro normal, y le pasa a `super` el `className` del tipo abierto como `type`. Ésa es la
- * traducción entera entre los dos mundos.
+ * <p>It extends {@code MBeanParameterInfo} so that a client that knows nothing about open types
+ * still sees a normal parameter, and passes {@code super} the open type's {@code className} as
+ * {@code type}. That is the whole translation between the two worlds.
  *
- * <p>Las restricciones viven en un objeto aparte, {@link Constraints}: ver ahí por qué no están
- * heredadas.
+ * <p>The constraints live in a separate object, {@link Constraints}: see there why they are not
+ * inherited.
  */
 public class OpenMBeanParameterInfoSupport extends MBeanParameterInfo
         implements OpenMBeanParameterInfo {
@@ -21,29 +21,29 @@ public class OpenMBeanParameterInfoSupport extends MBeanParameterInfo
 
     private final Constraints constraints;
 
-    /** Un parámetro sin restricciones. */
+    /** A parameter without constraints. */
     public OpenMBeanParameterInfoSupport(String name, String description, OpenType<?> openType) {
         this(name, description, openType, (Descriptor) null);
     }
 
-    /** Un parámetro sin restricciones, con ese descriptor. */
+    /** A parameter without constraints, with that descriptor. */
     public OpenMBeanParameterInfoSupport(String name, String description, OpenType<?> openType,
             Descriptor descriptor) {
         super(requireName(name), requireOpenType(openType), requireDescription(description), descriptor);
         try {
             this.constraints = new Constraints(openType, null, null, null, null);
         } catch (OpenDataException e) {
-            // Sin restricciones no hay nada que validar, así que este camino no se alcanza. Se
-            // envuelve en vez de declararse para no obligar a los dos constructores simples a
-            // declarar una excepción verificada que no pueden tirar -- que es lo que hace el JDK.
+            // Without constraints there is nothing to validate, so this path is never reached. It
+            // is wrapped instead of declared so as not to force the two simple constructors to
+            // declare a checked exception they cannot throw -- which is what the JDK does.
             throw new IllegalArgumentException(e.getMessage(), e);
         }
     }
 
     /**
-     * Un parámetro con valor por omisión.
+     * A parameter with a default value.
      *
-     * @throws OpenDataException si el valor no es del tipo, o si el tipo no admite omisión
+     * @throws OpenDataException if the value is not of the type, or if the type admits no default
      */
     public <T> OpenMBeanParameterInfoSupport(String name, String description,
             OpenType<T> openType, T defaultValue) throws OpenDataException {
@@ -51,10 +51,10 @@ public class OpenMBeanParameterInfoSupport extends MBeanParameterInfo
     }
 
     /**
-     * Un parámetro con valor por omisión y valores legales.
+     * A parameter with a default value and legal values.
      *
-     * @throws OpenDataException si alguno no es del tipo, si el valor por omisión no está entre los
-     *     legales, o si el tipo no admite restricciones
+     * @throws OpenDataException if one is not of the type, if the default value is not among the
+     *     legal ones, or if the type admits no constraints
      */
     public <T> OpenMBeanParameterInfoSupport(String name, String description,
             OpenType<T> openType, T defaultValue, T[] legalValues) throws OpenDataException {
@@ -63,10 +63,10 @@ public class OpenMBeanParameterInfoSupport extends MBeanParameterInfo
     }
 
     /**
-     * Un parámetro con valor por omisión y rango.
+     * A parameter with a default value and a range.
      *
-     * @throws OpenDataException si alguno no es del tipo, si el mínimo supera al máximo, si el
-     *     valor por omisión queda fuera del rango, o si el tipo no admite restricciones
+     * @throws OpenDataException if one is not of the type, if the minimum exceeds the maximum, if
+     *     the default value falls outside the range, or if the type admits no constraints
      */
     public <T> OpenMBeanParameterInfoSupport(String name, String description,
             OpenType<T> openType, T defaultValue, Comparable<T> minValue, Comparable<T> maxValue)
@@ -75,25 +75,25 @@ public class OpenMBeanParameterInfoSupport extends MBeanParameterInfo
         this.constraints = new Constraints(openType, defaultValue, null, minValue, maxValue);
     }
 
-    // Las tres validaciones corren ANTES de `super`, que es donde tienen que correr: si se hicieran
-    // después, un tipo nulo ya habría reventado adentro de `exigirTipo` con un mensaje peor.
+    // The three validations run BEFORE `super`, which is where they have to run: if they ran
+    // after, a null type would already have blown up inside `requireType` with a worse message.
     private static String requireName(String name) {
         if (name == null || name.trim().length() == 0) {
-            throw new IllegalArgumentException("el nombre no puede estar en blanco");
+            throw new IllegalArgumentException("the name cannot be blank");
         }
         return name;
     }
 
     private static String requireDescription(String description) {
         if (description == null || description.trim().length() == 0) {
-            throw new IllegalArgumentException("la descripción no puede estar en blanco");
+            throw new IllegalArgumentException("the description cannot be blank");
         }
         return description;
     }
 
     private static String requireOpenType(OpenType<?> openType) {
         if (openType == null) {
-            throw new IllegalArgumentException("el tipo abierto no puede ser nulo");
+            throw new IllegalArgumentException("the open type cannot be null");
         }
         return openType.getClassName();
     }
@@ -139,10 +139,11 @@ public class OpenMBeanParameterInfoSupport extends MBeanParameterInfo
     }
 
     /**
-     * Igualdad contra cualquier {@link OpenMBeanParameterInfo}, no sólo contra otro `Support`.
+     * Equality against any {@link OpenMBeanParameterInfo}, not only against another {@code
+     * Support}.
      *
-     * <p>Es lo que el contrato pide, y es lo que permite comparar un parámetro que llegó por la red
-     * con uno construido acá.
+     * <p>It is what the contract asks for, and it is what allows comparing a parameter that arrived
+     * over the network with one built here.
      */
     public boolean equals(Object obj) {
         if (this == obj) {

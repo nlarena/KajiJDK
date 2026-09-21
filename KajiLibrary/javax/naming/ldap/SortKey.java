@@ -1,16 +1,16 @@
 package javax.naming.ldap;
 
 /**
- * Por que atributo ordenar, en que sentido y con que regla de comparacion.
+ * Which attribute to sort by, in which direction and with which comparison rule.
  *
- * <h2>Por que hace falta nombrar la regla</h2>
+ * <h2>Why the rule has to be named</h2>
  *
- * <p>Porque comparar dos cadenas no tiene una sola respuesta correcta. En LDAP la comparacion la
- * define una <em>matching rule</em>, y para el mismo atributo puede haber varias: una que distingue
- * mayusculas y otra que no, una que ignora espacios de mas y otra que no.
+ * <p>Because comparing two strings has no single right answer. In LDAP comparison is defined by a
+ * <em>matching rule</em>, and there may be several for the same attribute: one that is
+ * case-sensitive and one that is not, one that ignores extra spaces and one that does not.
  *
- * <p>{@code null} en {@link #getMatchingRuleID} deja elegir al servidor la regla por omision del
- * atributo, que es lo razonable casi siempre y lo que hace el constructor de un argumento.
+ * <p>{@code null} in {@link #getMatchingRuleID} lets the server pick the attribute's default rule,
+ * which is almost always sensible and what the one-argument constructor does.
  */
 public class SortKey {
 
@@ -18,7 +18,7 @@ public class SortKey {
     private final boolean reverseOrder;
     private final String matchingRuleID;
 
-    /** Ascendente, con la regla por omision del atributo. */
+    /** Ascending, with the attribute's default rule. */
     public SortKey(String attrID) {
         this.attrID = attrID;
         this.reverseOrder = false;
@@ -26,8 +26,8 @@ public class SortKey {
     }
 
     /**
-     * @param ascendingOrder {@code true} para ascendente
-     * @param matchingRuleID el OID de la regla, o {@code null} para la del atributo
+     * @param ascendingOrder {@code true} for ascending
+     * @param matchingRuleID the rule's OID, or {@code null} for the attribute's
      */
     public SortKey(String attrID, boolean ascendingOrder, String matchingRuleID) {
         this.attrID = attrID;
@@ -35,17 +35,17 @@ public class SortKey {
         this.matchingRuleID = matchingRuleID;
     }
 
-    /** El atributo por el que ordenar. */
+    /** The attribute to sort by. */
     public String getAttributeID() {
         return this.attrID;
     }
 
-    /** Si es ascendente. */
+    /** Whether it is ascending. */
     public boolean isAscending() {
         return !this.reverseOrder;
     }
 
-    /** El OID de la regla de comparacion, o {@code null}. */
+    /** The OID of the comparison rule, or {@code null}. */
     public String getMatchingRuleID() {
         return this.matchingRuleID;
     }

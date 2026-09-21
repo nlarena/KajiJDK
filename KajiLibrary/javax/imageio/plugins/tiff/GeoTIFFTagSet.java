@@ -4,49 +4,48 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * KajiLibrary's javax.imageio.plugins.tiff.GeoTIFFTagSet -- las seis etiquetas de GeoTIFF.
+ * KajiLibrary's javax.imageio.plugins.tiff.GeoTIFFTagSet -- the six GeoTIFF tags.
  *
- * <p>Georreferenciacion: como se traducen los pixeles a coordenadas del terreno, y en que sistema de
- * referencia.
+ * <p>Georeferencing: how pixels translate to ground coordinates, and in which reference system.
  *
- * <p>Son pocas porque casi todo GeoTIFF vive adentro de una sola: {@code TAG_GEO_KEY_DIRECTORY} es un
- * arreglo de enteros con su propio formato de claves anidadas. Es un formato dentro de una etiqueta, y
- * este conjunto solo declara el envase.
+ * <p>They are few because almost all of GeoTIFF lives inside a single one:
+ * {@code TAG_GEO_KEY_DIRECTORY} is an array of integers with its own format of nested keys. It is a
+ * format inside a tag, and this set only declares the container.
  *
- * <p>Es un singleton: se pide con {@link #getInstance}. Las etiquetas y sus valores nombrados se
- * transcribieron del JDK 25 y no a mano; un numero cambiado produce un TIFF que otros programas leen
- * distinto.
+ * <p>It is a singleton: it is obtained with {@link #getInstance}. The tags and their named values
+ * were transcribed from the JDK 25 and not by hand; a changed number produces a TIFF that other
+ * programs read differently.
  */
 public final class GeoTIFFTagSet extends TIFFTagSet {
 
-    /** El unico, armado la primera vez que se pide. */
+    /** The only one, built the first time it is asked for. */
     private static GeoTIFFTagSet theInstance = null;
 
-    /** El numero de la etiqueta model pixel scale. */
+    /** The number of the model pixel scale tag. */
     public static final int TAG_MODEL_PIXEL_SCALE = 33550;
 
-    /** El numero de la etiqueta model transformation. */
+    /** The number of the model transformation tag. */
     public static final int TAG_MODEL_TRANSFORMATION = 34264;
 
-    /** El numero de la etiqueta model tie point. */
+    /** The number of the model tie point tag. */
     public static final int TAG_MODEL_TIE_POINT = 33922;
 
-    /** El numero de la etiqueta geo key directory. */
+    /** The number of the geo key directory tag. */
     public static final int TAG_GEO_KEY_DIRECTORY = 34735;
 
-    /** El numero de la etiqueta geo double params. */
+    /** The number of the geo double params tag. */
     public static final int TAG_GEO_DOUBLE_PARAMS = 34736;
 
-    /** El numero de la etiqueta geo ascii params. */
+    /** The number of the geo ascii params tag. */
     public static final int TAG_GEO_ASCII_PARAMS = 34737;
 
 
-    /** Se llega por {@link #getInstance}. */
+    /** Reached through {@link #getInstance}. */
     private GeoTIFFTagSet() {
         super(tags());
     }
 
-    /** El conjunto. Ver la nota de la clase. */
+    /** The set. See the class note. */
     public static synchronized GeoTIFFTagSet getInstance() {
         if (theInstance == null) {
             theInstance = new GeoTIFFTagSet();
@@ -54,7 +53,7 @@ public final class GeoTIFFTagSet extends TIFFTagSet {
         return theInstance;
     }
 
-    /** Las etiquetas de este conjunto. */
+    /** The tags of this set. */
     private static List<TIFFTag> tags() {
         List<TIFFTag> tags = new ArrayList<TIFFTag>();
         tags.add(new TIFFTag("ModelPixelScaleTag", 33550, 4096, -1));

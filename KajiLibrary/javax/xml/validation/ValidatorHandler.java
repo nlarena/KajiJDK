@@ -7,60 +7,61 @@ import org.xml.sax.SAXNotRecognizedException;
 import org.xml.sax.SAXNotSupportedException;
 
 /**
- * KajiLibrary's javax.xml.validation.ValidatorHandler -- valida mientras se lee.
+ * KajiLibrary's javax.xml.validation.ValidatorHandler -- validates while reading.
  *
- * <p>Es un {@link ContentHandler} que valida lo que le llega y se lo pasa a otro
- * {@code ContentHandler}. Se enchufa en el medio de una cadena SAX, y de ahi vienen sus dos
- * ventajas sobre {@link Validator}: no necesita el documento entero en memoria, y quien recibe la
- * salida ya la recibe validada.
+ * <p>It is a {@link ContentHandler} that validates what arrives and passes it on to another {@code
+ * ContentHandler}. It plugs into the middle of a SAX chain, and from there come its two advantages
+ * over {@link Validator}: it does not need the whole document in memory, and whoever receives the
+ * output receives it already validated.
  *
- * <h2>Lo que sale no es lo mismo que entro</h2>
+ * <h2>What comes out is not the same as what went in</h2>
  *
- * <p>Al manejador de mas abajo le llegan los atributos con los <b>valores por omision</b> que puso el
- * esquema, no solo los que estaban escritos. Es lo que se quiere --construir el arbol ya completo--
- * y es la razon por la que conviene poner el validador antes y no despues del que construye.
+ * <p>The handler further down receives the attributes with the <b>default values</b> the schema
+ * put, not only the ones that were written. It is what is wanted --building the tree already
+ * complete-- and it is the reason it is advisable to put the validator before and not after the one
+ * that builds.
  *
- * <p>{@link #getTypeInfoProvider} es lo que hace que esto valga la pena de verdad: deja saber, para
- * cada elemento y atributo que pasa, de que tipo era segun el esquema. Ver ahi las reglas de cuando
- * se puede preguntar.
+ * <p>{@link #getTypeInfoProvider} is what makes this really worthwhile: it lets one know, for each
+ * element and attribute that goes by, what type it was according to the schema. See there the rules
+ * on when it can be asked.
  *
- * <h2>Un detalle que muerde</h2>
+ * <h2>A detail that bites</h2>
  *
- * <p>Esta clase implementa {@code ContentHandler} y ademas tiene {@link #setContentHandler}. No es lo
- * mismo: lo que implementa es la <b>entrada</b> --lo que le manda el lector-- y lo que se le pone con
- * el setter es la <b>salida</b>. Pasarse a si mismo como salida arma un lazo infinito.
+ * <p>This class implements {@code ContentHandler} and also has {@link #setContentHandler}. It is
+ * not the same: what it implements is the <b>input</b> --what the reader sends it-- and what is set
+ * with the setter is the <b>output</b>. Passing itself as output builds an infinite loop.
  */
 public abstract class ValidatorHandler implements ContentHandler {
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected ValidatorHandler() {
     }
 
-    /** Adonde va lo validado. Ver la nota de la clase: no es la entrada. */
+    /** Where the validated content goes. See the class note: it is not the input. */
     public abstract void setContentHandler(ContentHandler receiver);
 
     /** Ver {@link #setContentHandler}. */
     public abstract ContentHandler getContentHandler();
 
-    /** Quien recibe los errores y advertencias de validacion. */
+    /** Who receives the validation errors and warnings. */
     public abstract void setErrorHandler(ErrorHandler errorHandler);
 
     /** Ver {@link #setErrorHandler}. */
     public abstract ErrorHandler getErrorHandler();
 
-    /** Quien resuelve los recursos externos que el esquema nombre. */
+    /** Who resolves the external resources the schema names. */
     public abstract void setResourceResolver(LSResourceResolver resourceResolver);
 
     /** Ver {@link #setResourceResolver}. */
     public abstract LSResourceResolver getResourceResolver();
 
-    /** Los tipos de lo que esta pasando ahora mismo; ver {@link TypeInfoProvider}. */
+    /** The types of what is going by right now; see {@link TypeInfoProvider}. */
     public abstract TypeInfoProvider getTypeInfoProvider();
 
     /**
-     * El valor de una bandera.
+     * The value of a flag.
      *
-     * @throws SAXNotRecognizedException si no conoce ese nombre
+     * @throws SAXNotRecognizedException if it does not know that name
      */
     public boolean getFeature(String name)
         throws SAXNotRecognizedException, SAXNotSupportedException {
@@ -71,9 +72,9 @@ public abstract class ValidatorHandler implements ContentHandler {
     }
 
     /**
-     * Cambia una bandera.
+     * Changes a flag.
      *
-     * @throws SAXNotRecognizedException si no conoce ese nombre
+     * @throws SAXNotRecognizedException if it does not know that name
      */
     public void setFeature(String name, boolean value)
         throws SAXNotRecognizedException, SAXNotSupportedException {
@@ -84,9 +85,9 @@ public abstract class ValidatorHandler implements ContentHandler {
     }
 
     /**
-     * Cambia una propiedad.
+     * Changes a property.
      *
-     * @throws SAXNotRecognizedException si no conoce ese nombre
+     * @throws SAXNotRecognizedException if it does not know that name
      */
     public void setProperty(String name, Object object)
         throws SAXNotRecognizedException, SAXNotSupportedException {
@@ -97,9 +98,9 @@ public abstract class ValidatorHandler implements ContentHandler {
     }
 
     /**
-     * El valor de una propiedad.
+     * The value of a property.
      *
-     * @throws SAXNotRecognizedException si no conoce ese nombre
+     * @throws SAXNotRecognizedException if it does not know that name
      */
     public Object getProperty(String name)
         throws SAXNotRecognizedException, SAXNotSupportedException {

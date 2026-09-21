@@ -1,10 +1,10 @@
 package com.sun.jdi;
 
 /**
- * El permiso que guardaba el acceso a JDI.
+ * The permission that guarded the access to JDI.
  *
- * <p>Se conserva porque es API publica, aunque el {@code SecurityManager} este deshabilitado desde
- * JDK 24 y el chequeo ya no ocurra.
+ * <p>It is kept because it is public API, even though the {@code SecurityManager} has been
+ * disabled since JDK 24 and the check no longer happens.
  *
  * @since 1.3
  */
@@ -13,32 +13,32 @@ public final class JDIPermission extends java.security.BasicPermission {
     private static final long serialVersionUID = -6988461416938786271L;
 
     /**
-     * Un permiso con ese nombre.
+     * A permission with that name.
      *
-     * @param name tiene que ser {@code "virtualMachineManager"}
-     * @throws IllegalArgumentException si el nombre es otro
+     * @param name it has to be {@code "virtualMachineManager"}
+     * @throws IllegalArgumentException if the name is another
      */
     public JDIPermission(String name) {
         super(name);
         if (!"virtualMachineManager".equals(name)) {
-            throw new IllegalArgumentException("el unico nombre valido es virtualMachineManager");
+            throw new IllegalArgumentException("the only valid name is virtualMachineManager");
         }
     }
 
     /**
-     * Un permiso con ese nombre y esas acciones.
+     * A permission with that name and those actions.
      *
-     * @param name tiene que ser {@code "virtualMachineManager"}
-     * @param actions tiene que ser {@code null} o vacio; este permiso no tiene acciones
-     * @throws IllegalArgumentException si el nombre es otro o hay acciones
+     * @param name it has to be {@code "virtualMachineManager"}
+     * @param actions it has to be {@code null} or empty; this permission has no actions
+     * @throws IllegalArgumentException if the name is another or there are actions
      */
     public JDIPermission(String name, String actions) throws IllegalArgumentException {
         super(name, actions);
         if (!"virtualMachineManager".equals(name)) {
-            throw new IllegalArgumentException("el unico nombre valido es virtualMachineManager");
+            throw new IllegalArgumentException("the only valid name is virtualMachineManager");
         }
         if (actions != null && actions.length() > 0) {
-            throw new IllegalArgumentException("JDIPermission no tiene acciones");
+            throw new IllegalArgumentException("JDIPermission does not have actions");
         }
     }
 }

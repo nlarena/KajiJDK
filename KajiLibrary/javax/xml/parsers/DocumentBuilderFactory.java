@@ -5,55 +5,58 @@ import java.util.ServiceLoader;
 import javax.xml.validation.Schema;
 
 /**
- * KajiLibrary's javax.xml.parsers.DocumentBuilderFactory -- de donde salen los {@link DocumentBuilder}.
+ * KajiLibrary's javax.xml.parsers.DocumentBuilderFactory -- where the {@link DocumentBuilder}s come
+ * from.
  *
- * <p>Es una fabrica y no un constructor porque la implementacion de XML es reemplazable: quien
- * escribe el programa pide "un analizador DOM" y quien arma el despliegue decide cual. Los seis
- * {@code newInstance} son las variantes de esa eleccion.
+ * <p>It is a factory and not a constructor because the XML implementation is replaceable: whoever
+ * writes the program asks for "a DOM parser" and whoever puts the deployment together decides
+ * which. The six {@code newInstance}s are the variants of that choice.
  *
- * <h2>Las tres formas de elegir</h2>
+ * <h2>The three ways of choosing</h2>
  *
  * <ul>
- *   <li>{@link #newInstance()} <b>busca</b>: primero la propiedad de sistema
- *       {@code javax.xml.parsers.DocumentBuilderFactory}, despues los proveedores registrados como
- *       servicio, y si no hay nada, la implementacion incluida en la plataforma;
- *   <li>{@link #newInstance(String, ClassLoader)} no busca: usa esa clase o falla. Sirve cuando un
- *       programa necesita <b>una</b> implementacion concreta y no quiere que una propiedad de
- *       sistema se la cambie por atras;
- *   <li>{@link #newDefaultInstance()} saltea la busqueda al reves: va derecho a la de la plataforma,
- *       ignorando propiedades y servicios.
+ *   <li>{@link #newInstance()} <b>searches</b>: first the system property {@code
+ *       javax.xml.parsers.DocumentBuilderFactory}, then the providers registered as a service, and
+ *       if there is nothing, the implementation included in the platform. (The JDK also reads
+ *       {@code $java.home/conf/jaxp.properties} between the property and the services; this does
+ *       not.)
+ *   <li>{@link #newInstance(String, ClassLoader)} does not search: it uses that class or fails. It
+ *       serves when a program needs <b>one</b> concrete implementation and does not want a system
+ *       property to swap it behind its back;
+ *   <li>{@link #newDefaultInstance()} skips the search the other way: it goes straight to the
+ *       platform's, ignoring properties and services.
  * </ul>
  *
- * <p>Las variantes {@code NS} son iguales pero devuelven la fabrica ya puesta en
- * {@code namespaceAware}. Existen porque ese valor por omision es <b>false</b> por razones
- * historicas, es casi siempre el equivocado, y olvidarse de cambiarlo da un sintoma confuso: los
- * elementos aparecen con el prefijo pegado al nombre y las busquedas por espacio de nombres no
- * encuentran nada.
+ * <p>The {@code NS} variants are the same but return the factory already set to {@code
+ * namespaceAware}. They exist because that default value is <b>false</b> for historical reasons, it
+ * is almost always the wrong one, and forgetting to change it gives a confusing symptom: the
+ * elements appear with the prefix stuck to the name and the searches by namespace find nothing.
  *
- * <h2>Las banderas y sus valores por omision</h2>
+ * <h2>The flags and their defaults</h2>
  *
- * <p>Todas arrancan en false salvo {@link #isExpandEntityReferences}, que arranca en true. Esa es la
- * que conviene mirar: con entidades expandidas, un documento que declara una entidad externa hace
- * que el analizador la vaya a buscar, y de ahi salen tanto la lectura de archivos locales como los
- * pedidos de red que el programa nunca pidio.
+ * <p>They all start at false except {@link #isExpandEntityReferences}, which starts at true. That
+ * is the one worth looking at: with entities expanded, a document that declares an external entity
+ * makes the parser go and fetch it, and from there come both the reading of local files and the
+ * network requests the program never asked for.
  *
- * <h2>Validar por esquema o por DTD</h2>
+ * <h2>Validating by schema or by DTD</h2>
  *
- * <p>{@link #setSchema} y {@link #setValidating} son dos mecanismos <b>distintos</b> y no hay que
- * mezclarlos: el segundo valida contra la DTD que el documento declara, el primero contra un esquema
- * que elige la aplicacion. Poner los dos es un error de configuracion, y la diferencia de fondo es
- * quien manda: con DTD, el documento; con esquema, quien lo lee.
+ * <p>{@link #setSchema} and {@link #setValidating} are two <b>different</b> mechanisms and they
+ * should not be mixed: the second validates against the DTD the document declares, the first
+ * against a schema the application chooses. Setting both is a configuration error, and the
+ * underlying difference is who is in charge: with DTD, the document; with a schema, whoever reads
+ * it.
  *
  * <h2>A KajiLibrary subset</h2>
  *
- * <p>{@link #newDefaultInstance} lanza {@link FactoryConfigurationError}, porque KajiLibrary no trae
- * una implementacion de XML incluida. Es la salida que ese metodo ya declara para el caso "no hay
- * fabrica", y por eso {@link #newInstance()} funciona igual que en el JDK mientras alguien registre
- * una: solo falla cuando no hay ninguna, que es la verdad.
+ * <p>{@link #newDefaultInstance} throws {@link FactoryConfigurationError}, because KajiLibrary
+ * comes with no included XML implementation. It is the way out that method already declares for the
+ * "no factory" case, and that is why {@link #newInstance()} works just as in the JDK as long as
+ * somebody registers one: it only fails when there is none, which is the truth.
  */
 public abstract class DocumentBuilderFactory {
 
-    /** La propiedad de sistema que nombra la fabrica. */
+    /** The system property that names the factory. */
     private static final String PROPERTY = "javax.xml.parsers.DocumentBuilderFactory";
 
     private boolean namespaceAware = false;
@@ -63,14 +66,14 @@ public abstract class DocumentBuilderFactory {
     private boolean ignoreComments = false;
     private boolean coalescing = false;
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected DocumentBuilderFactory() {
     }
 
     /**
-     * La fabrica incluida en la plataforma, ya puesta en {@code namespaceAware}.
+     * The factory included in the platform, already set to {@code namespaceAware}.
      *
-     * @throws FactoryConfigurationError siempre en KajiLibrary; ver la nota de la clase
+     * @throws FactoryConfigurationError always in KajiLibrary; see the class note
      */
     public static DocumentBuilderFactory newDefaultNSInstance() {
         DocumentBuilderFactory factory = newDefaultInstance();
@@ -78,14 +81,14 @@ public abstract class DocumentBuilderFactory {
         return factory;
     }
 
-    /** Como {@link #newInstance()}, ya puesta en {@code namespaceAware}. */
+    /** Like {@link #newInstance()}, already set to {@code namespaceAware}. */
     public static DocumentBuilderFactory newNSInstance() {
         DocumentBuilderFactory factory = newInstance();
         factory.setNamespaceAware(true);
         return factory;
     }
 
-    /** Como {@link #newInstance(String, ClassLoader)}, ya puesta en {@code namespaceAware}. */
+    /** Like {@link #newInstance(String, ClassLoader)}, already set to {@code namespaceAware}. */
     public static DocumentBuilderFactory newNSInstance(String factoryClassName,
                                                        ClassLoader classLoader) {
         DocumentBuilderFactory factory = newInstance(factoryClassName, classLoader);
@@ -94,9 +97,9 @@ public abstract class DocumentBuilderFactory {
     }
 
     /**
-     * La fabrica incluida en la plataforma, sin mirar propiedades ni servicios.
+     * The factory included in the platform, without looking at properties or services.
      *
-     * @throws FactoryConfigurationError siempre en KajiLibrary; ver la nota de la clase
+     * @throws FactoryConfigurationError always in KajiLibrary; see the class note
      */
     public static DocumentBuilderFactory newDefaultInstance() {
         throw new FactoryConfigurationError(
@@ -105,18 +108,19 @@ public abstract class DocumentBuilderFactory {
     }
 
     /**
-     * La fabrica configurada, buscandola en orden.
+     * The configured factory, searched for in order.
      *
-     * <p>Ver los tres pasos en la nota de la clase.
+     * <p>See the three steps in the class note.
      *
-     * @throws FactoryConfigurationError si no hay ninguna
+     * @throws FactoryConfigurationError if there is none
      */
     public static DocumentBuilderFactory newInstance() {
         String configured = null;
         try {
             configured = System.getProperty(PROPERTY);
         } catch (SecurityException e) {
-            // Sin permiso para leerla: se sigue con los servicios, que es lo mismo que hacer nada.
+            // Without permission to read it: carry on with the services, which is the same as doing
+            // nothing.
         }
         if (configured != null && configured.length() > 0) {
             return newInstance(configured, null);
@@ -131,10 +135,10 @@ public abstract class DocumentBuilderFactory {
     }
 
     /**
-     * Esa fabrica y ninguna otra.
+     * That factory and no other.
      *
-     * @param classLoader con el que se carga; null significa el del contexto o el de esta clase
-     * @throws FactoryConfigurationError si no se puede construir
+     * @param classLoader the one it is loaded with; null means the context one or this class's
+     * @throws FactoryConfigurationError if it cannot be built
      */
     public static DocumentBuilderFactory newInstance(String factoryClassName,
                                                      ClassLoader classLoader) {
@@ -161,50 +165,49 @@ public abstract class DocumentBuilderFactory {
     }
 
     /**
-     * Un analizador con la configuracion que tiene ahora la fabrica.
+     * A parser with the configuration the factory has now.
      *
-     * <p>Los cambios posteriores a la fabrica no lo afectan: lo que se lee al construirlo queda
-     * fijado.
+     * <p>Later changes to the factory do not affect it: what is read when building it stays fixed.
      *
-     * @throws ParserConfigurationException si esta implementacion no puede dar lo que se pidio
+     * @throws ParserConfigurationException if this implementation cannot provide what was asked
      */
     public abstract DocumentBuilder newDocumentBuilder() throws ParserConfigurationException;
 
-    /** Ver la nota de la clase sobre por que casi siempre hay que ponerla en true. */
+    /** See the class note on why it almost always has to be set to true. */
     public void setNamespaceAware(boolean awareness) {
         this.namespaceAware = awareness;
     }
 
-    /** Si los analizadores validan contra la DTD del documento. */
+    /** Whether the parsers validate against the document's DTD. */
     public void setValidating(boolean validating) {
         this.validating = validating;
     }
 
     /**
-     * Si se descarta el espacio en blanco que la DTD declara como relleno.
+     * Whether the whitespace the DTD declares as padding is discarded.
      *
-     * <p>Solo hace algo con validacion prendida: sin DTD no hay forma de saber cual espacio es
-     * significativo y cual es sangria.
+     * <p>It only does something with validation on: without a DTD there is no way of knowing which
+     * space is significant and which is indentation.
      */
     public void setIgnoringElementContentWhitespace(boolean whitespace) {
         this.whitespace = whitespace;
     }
 
-    /** Ver la nota de la clase sobre entidades externas. */
+    /** See the class note on external entities. */
     public void setExpandEntityReferences(boolean expandEntityRef) {
         this.expandEntityRef = expandEntityRef;
     }
 
-    /** Si los comentarios no llegan al arbol. */
+    /** Whether comments do not reach the tree. */
     public void setIgnoringComments(boolean ignoreComments) {
         this.ignoreComments = ignoreComments;
     }
 
     /**
-     * Si las secciones CDATA se funden con el texto que las rodea.
+     * Whether CDATA sections are merged with the text around them.
      *
-     * <p>Conviene: sin esto, un mismo texto puede llegar partido en varios nodos segun donde el
-     * autor haya abierto un CDATA, y hay que juntarlo a mano en cada lectura.
+     * <p>It is advisable: without this, the same text can arrive split into several nodes depending
+     * on where the author opened a CDATA, and it has to be joined by hand on every read.
      */
     public void setCoalescing(boolean coalescing) {
         this.coalescing = coalescing;
@@ -225,7 +228,7 @@ public abstract class DocumentBuilderFactory {
         return this.whitespace;
     }
 
-    /** Ver {@link #setExpandEntityReferences}. Arranca en <b>true</b>. */
+    /** See {@link #setExpandEntityReferences}. It starts at <b>true</b>. */
     public boolean isExpandEntityReferences() {
         return this.expandEntityRef;
     }
@@ -241,33 +244,33 @@ public abstract class DocumentBuilderFactory {
     }
 
     /**
-     * Un atributo especifico de la implementacion.
+     * An implementation-specific attribute.
      *
-     * @throws IllegalArgumentException si no lo reconoce
+     * @throws IllegalArgumentException if it does not recognize it
      */
     public abstract void setAttribute(String name, Object value) throws IllegalArgumentException;
 
-    /** El valor de un atributo especifico de la implementacion. */
+    /** The value of an implementation-specific attribute. */
     public abstract Object getAttribute(String name) throws IllegalArgumentException;
 
     /**
-     * Una bandera especifica de la implementacion.
+     * An implementation-specific flag.
      *
-     * <p>La unica que toda implementacion tiene que reconocer es
+     * <p>The only one every implementation has to recognize is
      * {@code javax.xml.XMLConstants.FEATURE_SECURE_PROCESSING}.
      *
-     * @throws ParserConfigurationException si no la reconoce o no la puede dar
+     * @throws ParserConfigurationException if it does not recognize it or cannot provide it
      */
     public abstract void setFeature(String name, boolean value)
         throws ParserConfigurationException;
 
-    /** El valor de una bandera. */
+    /** The value of a flag. */
     public abstract boolean getFeature(String name) throws ParserConfigurationException;
 
     /**
-     * El esquema con el que validan los analizadores que salgan de aca, o null.
+     * The schema the parsers coming out of here validate with, or null.
      *
-     * @throws UnsupportedOperationException por omision
+     * @throws UnsupportedOperationException by default
      */
     public Schema getSchema() {
         throw new UnsupportedOperationException(
@@ -275,10 +278,10 @@ public abstract class DocumentBuilderFactory {
     }
 
     /**
-     * Pone el esquema. Ver la nota de la clase sobre no mezclarlo con {@link #setValidating}.
+     * Sets the schema. See the class note on not mixing it with {@link #setValidating}.
      *
-     * @param schema null lo quita
-     * @throws UnsupportedOperationException por omision
+     * @param schema null removes it
+     * @throws UnsupportedOperationException by default
      */
     public void setSchema(Schema schema) {
         throw new UnsupportedOperationException(
@@ -286,13 +289,14 @@ public abstract class DocumentBuilderFactory {
     }
 
     /**
-     * Pide resolver XInclude.
+     * Asks for XInclude to be resolved.
      *
-     * <p>Pedirlo en false no hace nada, porque no pedirlo es el estado por omision. Pedirlo en true
-     * lanza si esta implementacion no lo sabe hacer -- que es lo correcto: seguir en silencio
-     * dejaria un documento a medio armar sin que nadie se entere.
+     * <p>Asking for false does nothing, because not asking is the default state. Asking for true
+     * throws if this implementation cannot do it -- which is right: going on silently would leave a
+     * half-built document without anybody finding out.
      *
-     * @throws UnsupportedOperationException al pedir true en una implementacion que no lo soporta
+     * @throws UnsupportedOperationException when asking for true on an implementation that does not
+     *     support it
      */
     public void setXIncludeAware(boolean state) {
         if (state) {
@@ -302,9 +306,9 @@ public abstract class DocumentBuilderFactory {
     }
 
     /**
-     * Si resuelve XInclude.
+     * Whether it resolves XInclude.
      *
-     * @throws UnsupportedOperationException por omision; ver {@link DocumentBuilder#isXIncludeAware}
+     * @throws UnsupportedOperationException by default; see {@link DocumentBuilder#isXIncludeAware}
      */
     public boolean isXIncludeAware() {
         throw new UnsupportedOperationException(

@@ -10,12 +10,12 @@ import java.util.function.Predicate;
 import jdk.jfr.EventType;
 
 /**
- * Lee un archivo de grabacion, evento por evento.
+ * It reads a recording file, event by event.
  *
- * <h2>Como se usa</h2>
+ * <h2>How it is used</h2>
  *
  * <pre>{@code
- * try (RecordingFile f = new RecordingFile(Path.of("grabacion.jfr"))) {
+ * try (RecordingFile f = new RecordingFile(Path.of("recording.jfr"))) {
  *     while (f.hasMoreEvents()) {
  *         RecordedEvent e = f.readEvent();
  *         ...
@@ -23,106 +23,106 @@ import jdk.jfr.EventType;
  * }
  * }</pre>
  *
- * <p>De a un evento y no todos de una: una grabacion de produccion tiene millones y no entra en
- * memoria. {@link #readAllEvents} existe para los archivos chicos y es la que hay que evitar con
- * los grandes.
+ * <p>One event at a time and not all of them at once: a production recording has millions and does
+ * not fit in memory. {@link #readAllEvents} exists for the small files and is the one to avoid with
+ * the large ones.
  *
- * <h2>{@link #write} filtra sin descomprimir a memoria</h2>
+ * <h2>{@link #write} filters without decompressing into memory</h2>
  *
- * <p>Copia a otro archivo solo los eventos que pasen el predicado. Sirve para recortar una
- * grabacion enorme antes de mandarla a alguien, sin abrirla entera.
+ * <p>It copies to another file only the events that pass the predicate. It serves for trimming a
+ * huge recording before sending it to somebody, without opening it whole.
  *
- * <h2>Estado en esta VM</h2>
+ * <h2>State in this VM</h2>
  *
- * <p><strong>No implementado.</strong> Leer un {@code .jfr} es implementar su formato binario:
- * bloques con su propia tabla de constantes, tipos autodescriptos, enteros de longitud variable y
- * una tabla de metadatos por bloque. No es API publica ni esta especificado en ningun lado — se
- * saca del codigo del JDK.
+ * <p><strong>Not implemented.</strong> Reading a {@code .jfr} is implementing its binary format:
+ * blocks with a constant table of their own, self-described types, integers of variable length and
+ * a table of metadata per block. It is not public API nor is it specified anywhere -- it is taken
+ * out of the code of the JDK.
  *
- * <p>El constructor falla con {@link IOException} diciendo esto. Es la excepcion que ya declaraba,
- * asi que el que llama no tiene que manejar nada nuevo; simplemente se entera de que el archivo no
- * se puede abrir.
+ * <p>The constructor fails with {@link IOException} saying this. It is the exception it already
+ * declared, so the caller does not have to handle anything new; they simply find out that the file
+ * cannot be opened.
  *
  * @since 9
  */
 public final class RecordingFile implements Closeable {
 
-    private static final String NO_HAY =
-            "leer un archivo de grabacion necesita el lector del formato binario de JFR, que esta "
-            + "biblioteca no implementa";
+    private static final String NOT_THERE =
+            "reading a recording file needs the reader of the binary format of JFR, which this "
+            + "library does not implement";
 
     /**
-     * Abre un archivo de grabacion.
+     * It opens a recording file.
      *
-     * @param file el archivo
-     * @throws IOException en esta VM siempre; ver la nota de la clase
-     * @throws NullPointerException si es {@code null}
+     * @param file the file
+     * @throws IOException in this VM always; see the note of the class
+     * @throws NullPointerException if it is {@code null}
      */
     public RecordingFile(final Path file) throws IOException {
         Objects.requireNonNull(file, "file");
-        throw new IOException(NO_HAY);
+        throw new IOException(NOT_THERE);
     }
 
     /**
-     * El proximo evento.
+     * The next event.
      *
-     * @return el evento
-     * @throws IOException en esta VM siempre
+     * @return the event
+     * @throws IOException in this VM always
      */
     public RecordedEvent readEvent() throws IOException {
-        throw new IOException(NO_HAY);
+        throw new IOException(NOT_THERE);
     }
 
     /**
-     * Si queda algun evento por leer.
+     * Whether there is any event left to read.
      *
-     * @return si quedan
+     * @return whether there are any left
      */
     public boolean hasMoreEvents() {
         return false;
     }
 
     /**
-     * Los tipos de evento que el archivo declara.
+     * The types of event the file declares.
      *
-     * @return los tipos
-     * @throws IOException en esta VM siempre
+     * @return the types
+     * @throws IOException in this VM always
      */
     public List<EventType> readEventTypes() throws IOException {
-        throw new IOException(NO_HAY);
+        throw new IOException(NOT_THERE);
     }
 
-    /** Cierra el archivo. */
+    /** It closes the file. */
     public void close() throws IOException {
     }
 
     /**
-     * Copia a otro archivo los eventos que pasen el filtro.
+     * It copies to another file the events that pass the filter.
      *
-     * @param destination el archivo destino
-     * @param filter que eventos conservar
-     * @throws IOException en esta VM siempre
-     * @throws NullPointerException si alguno es {@code null}
+     * @param destination the destination file
+     * @param filter which events to keep
+     * @throws IOException in this VM always
+     * @throws NullPointerException if either is {@code null}
      */
     public void write(final Path destination, final Predicate<RecordedEvent> filter)
             throws IOException {
         Objects.requireNonNull(destination, "destination");
         Objects.requireNonNull(filter, "filter");
-        throw new IOException(NO_HAY);
+        throw new IOException(NOT_THERE);
     }
 
     /**
-     * Todos los eventos de un archivo, de una.
+     * Every event of a file, at once.
      *
-     * <p>Solo para archivos chicos: una grabacion de produccion no entra en memoria.
+     * <p>Only for small files: a production recording does not fit in memory.
      *
-     * @param file el archivo
-     * @return los eventos
-     * @throws IOException en esta VM siempre
-     * @throws NullPointerException si es {@code null}
+     * @param file the file
+     * @return the events
+     * @throws IOException in this VM always
+     * @throws NullPointerException if it is {@code null}
      */
     public static List<RecordedEvent> readAllEvents(final Path file) throws IOException {
         Objects.requireNonNull(file, "file");
-        throw new IOException(NO_HAY);
+        throw new IOException(NOT_THERE);
     }
 }

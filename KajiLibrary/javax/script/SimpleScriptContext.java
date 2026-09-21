@@ -8,67 +8,68 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * KajiLibrary's javax.script.SimpleScriptContext -- el {@link ScriptContext} con dos ambitos.
+ * KajiLibrary's javax.script.SimpleScriptContext -- the {@link ScriptContext} with two scopes.
  *
- * <p>Implementa exactamente los dos ambitos que define la interfaz y ni uno mas, con una asimetria
- * que es toda la clase:
+ * <p>It implements exactly the two scopes the interface defines and not one more, with an asymmetry
+ * that is the whole class:
  *
  * <ul>
- *   <li>El de motor **siempre existe**. Arranca en un {@link SimpleBindings} vacio y no se puede
- *       poner en nulo: {@code setBindings(null, ENGINE_SCOPE)} es un
- *       {@link NullPointerException}.
- *   <li>El global **puede no existir**, y de hecho arranca en nulo. Ponerlo en nulo esta
- *       permitido, y con el global ausente escribir en el se ignora en silencio y leerlo devuelve
- *       nulo -- ninguna de las dos cosas es un error.
+ *   <li>The engine one **always exists**. It starts as an empty {@link SimpleBindings} and cannot
+ *       be set to null: {@code setBindings(null, ENGINE_SCOPE)} is a {@link NullPointerException}.
+ *   <li>The global one **may not exist**, and in fact starts as null. Setting it to null is
+ *       allowed, and with the global one absent writing to it is ignored silently and reading it
+ *       returns null -- neither of the two is an error.
  * </ul>
  *
- * <p>De ahi salen las reglas de busqueda. {@link #getAttribute(String)} mira primero el de motor y
- * despues el global, y devuelve lo del primero que **tenga la clave** -- no lo primero que no sea
- * nulo, que es distinto cuando el valor guardado es nulo. {@link #getAttributesScope(String)}
- * hace la misma busqueda pero devuelve el numero, o -1 si no esta en ninguno.
+ * <p>The lookup rules come from there. {@link #getAttribute(String)} looks first at the engine one
+ * and then at the global one, and returns what the first one that **has the key** has -- not the
+ * first that is non-null, which is different when the stored value is null. {@link
+ * #getAttributesScope(String)} does the same search but returns the number, or -1 if it is in none.
  *
- * <p>Un ambito que no sea 100 ni 200 es siempre un {@link IllegalArgumentException}. El mensaje no
- * es siempre el mismo, y lo copiamos como esta: `setBindings` dice "Invalid scope value." y todo
- * el resto dice "Illegal scope value.". Es una inconsistencia del original, pero es observable.
+ * <p>A scope that is neither 100 nor 200 is always an {@link IllegalArgumentException}. The message
+ * is not always the same, and we copy it as it is: `setBindings` says "Invalid scope value." and
+ * all the rest say "Illegal scope value.". It is an inconsistency of the original, but it is
+ * observable.
  *
- * <p>Los nombres de atributo tienen su propia guarda, mas floja que la de {@link SimpleBindings}:
- * nulo es {@link NullPointerException} sin mensaje y vacio es {@link IllegalArgumentException} con
- * "name cannot be empty". Como el parametro ya es `String`, no hay caso de tipo.
+ * <p>Attribute names have their own guard, looser than {@link SimpleBindings}'s: null is a {@link
+ * NullPointerException} with no message and empty is an {@link IllegalArgumentException} with "name
+ * cannot be empty". As the parameter is already a `String`, there is no type case.
  *
- * <p><b>Nota de implementacion.</b> El despacho por ambito se escribe con cadenas de `if/else` y
- * no con `switch`, que es como lo tiene el original. No es una preferencia: nuestro generador de
- * bytecode todavia no pliega como constante de `case` un valor declarado en **otro tipo de primer
- * nivel** --y `ENGINE_SCOPE` vive en {@link ScriptContext}--, asi que `case ScriptContext.ENGINE_SCOPE`
- * no compila. Se comprobo por ablacion: con la constante declarada en la misma unidad de
- * compilacion el `switch` compila, y con ella en otro archivo falla aunque los dos se pasen a la
- * misma invocacion de `javac`. El comportamiento observable es identico -- cada rama terminaba en
- * `return`, `break` o `throw`.
+ * <p><b>Implementation note.</b> The dispatch by scope is written with `if/else` chains and not
+ * with `switch`, which is how the original has it. It is not a preference: the bytecode generator
+ * of the frozen javac that builds this library does not fold as a `case` constant a value declared
+ * in **another top-level type** --and `ENGINE_SCOPE` lives in {@link ScriptContext}--, so `case
+ * ScriptContext.ENGINE_SCOPE` does not compile. It was checked by ablation: with the constant
+ * declared in the same compilation unit the `switch` compiles, and with it in another file it fails
+ * even if both are passed to the same `javac` invocation. It is finding #461; the source-built
+ * javac no longer has it, the frozen `bin/javac.exe` still does (checked 2026-09-18). The
+ * observable behaviour is identical -- each branch ended in `return`, `break` or `throw`.
  */
 public class SimpleScriptContext implements ScriptContext {
 
-    /** Donde escribe el script. */
+    /** Where the script writes. */
     protected Writer writer;
 
-    /** Donde escribe el script sus errores. */
+    /** Where the script writes its errors. */
     protected Writer errorWriter;
 
-    /** De donde lee el script. */
+    /** Where the script reads from. */
     protected Reader reader;
 
-    /** El ambito de motor. Nunca es nulo. */
+    /** The engine scope. Never null. */
     protected Bindings engineScope;
 
-    /** El ambito global. Puede ser nulo, y arranca asi. */
+    /** The global scope. It may be null, and it starts that way. */
     protected Bindings globalScope;
 
-    /** Los dos ambitos, inmutable y compartido: no depende de la instancia. */
+    /** The two scopes, immutable and shared: it does not depend on the instance. */
     private static final List<Integer> scopes =
             List.of(Integer.valueOf(ScriptContext.ENGINE_SCOPE),
                     Integer.valueOf(ScriptContext.GLOBAL_SCOPE));
 
     /**
-     * Un contexto con el ambito de motor vacio, el global ausente, y los tres canales apuntando a
-     * la consola del proceso.
+     * A context with the engine scope empty, the global one absent, and the three streams pointing
+     * at the process's console.
      */
     public SimpleScriptContext() {
         this(new InputStreamReader(System.in),
@@ -76,7 +77,7 @@ public class SimpleScriptContext implements ScriptContext {
              new PrintWriter(System.err, true));
     }
 
-    /** El que hace el trabajo; el publico le pasa la consola. */
+    /** The one that does the work; the public one passes it the console. */
     SimpleScriptContext(Reader reader, Writer writer, Writer errorWriter) {
         this.reader = reader;
         this.writer = writer;
@@ -88,8 +89,9 @@ public class SimpleScriptContext implements ScriptContext {
     /**
      * {@inheritDoc}
      *
-     * @throws NullPointerException si `bindings` es nulo y `scope` es {@link ScriptContext#ENGINE_SCOPE}
-     * @throws IllegalArgumentException si `scope` no es 100 ni 200
+     * @throws NullPointerException if `bindings` is null and `scope` is {@link
+     *     ScriptContext#ENGINE_SCOPE}
+     * @throws IllegalArgumentException if `scope` is neither 100 nor 200
      */
     @Override
     public void setBindings(Bindings bindings, int scope) {
@@ -108,8 +110,8 @@ public class SimpleScriptContext implements ScriptContext {
     /**
      * {@inheritDoc}
      *
-     * <p>El de motor tapa al global, y lo que decide es que el ambito **tenga** la clave, no que
-     * el valor no sea nulo.
+     * <p>The engine one hides the global one, and what decides is that the scope **has** the key,
+     * not that the value be non-null.
      */
     @Override
     public Object getAttribute(String name) {
@@ -125,8 +127,8 @@ public class SimpleScriptContext implements ScriptContext {
     /**
      * {@inheritDoc}
      *
-     * @throws IllegalArgumentException si `name` es vacio o `scope` no es 100 ni 200
-     * @throws NullPointerException si `name` es nulo
+     * @throws IllegalArgumentException if `name` is empty or `scope` is neither 100 nor 200
+     * @throws NullPointerException if `name` is null
      */
     @Override
     public Object getAttribute(String name, int scope) {
@@ -145,8 +147,8 @@ public class SimpleScriptContext implements ScriptContext {
     /**
      * {@inheritDoc}
      *
-     * @throws IllegalArgumentException si `name` es vacio o `scope` no es 100 ni 200
-     * @throws NullPointerException si `name` es nulo
+     * @throws IllegalArgumentException if `name` is empty or `scope` is neither 100 nor 200
+     * @throws NullPointerException if `name` is null
      */
     @Override
     public Object removeAttribute(String name, int scope) {
@@ -168,11 +170,11 @@ public class SimpleScriptContext implements ScriptContext {
     /**
      * {@inheritDoc}
      *
-     * <p>Con el ambito global ausente, escribir en el no hace nada y tampoco se queja: el pedido
-     * era valido, el destino no estaba.
+     * <p>With the global scope absent, writing to it does nothing and does not complain either: the
+     * request was valid, the destination was not there.
      *
-     * @throws IllegalArgumentException si `name` es vacio o `scope` no es 100 ni 200
-     * @throws NullPointerException si `name` es nulo
+     * @throws IllegalArgumentException if `name` is empty or `scope` is neither 100 nor 200
+     * @throws NullPointerException if `name` is null
      */
     @Override
     public void setAttribute(String name, Object value, int scope) {
@@ -228,8 +230,8 @@ public class SimpleScriptContext implements ScriptContext {
     /**
      * {@inheritDoc}
      *
-     * @throws IllegalArgumentException si `name` es vacio
-     * @throws NullPointerException si `name` es nulo
+     * @throws IllegalArgumentException if `name` is empty
+     * @throws NullPointerException if `name` is null
      */
     @Override
     public int getAttributesScope(String name) {
@@ -245,7 +247,7 @@ public class SimpleScriptContext implements ScriptContext {
     /**
      * {@inheritDoc}
      *
-     * @throws IllegalArgumentException si `scope` no es 100 ni 200
+     * @throws IllegalArgumentException if `scope` is neither 100 nor 200
      */
     @Override
     public Bindings getBindings(int scope) {
@@ -263,7 +265,7 @@ public class SimpleScriptContext implements ScriptContext {
         return scopes;
     }
 
-    /** La guarda de nombres: nulo sin mensaje, vacio con mensaje. */
+    /** The name guard: null without a message, empty with a message. */
     private void checkName(String name) {
         Objects.requireNonNull(name);
         if (name.isEmpty()) {

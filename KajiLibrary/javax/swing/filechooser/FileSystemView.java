@@ -9,174 +9,176 @@ import java.util.List;
 import javax.swing.Icon;
 
 /**
- * Lo que el selector de archivos necesita saber del sistema y {@link File} no cuenta.
+ * What the file chooser needs to know about the system and {@link File} does not tell.
  *
- * <h2>Que le falta a {@link File}</h2>
+ * <h2>What {@link File} lacks</h2>
  *
- * <p>{@code File} es una ruta: sabe si existe, si es directorio, que contiene. Lo que no sabe es
- * nada de lo que el <em>escritorio</em> le agrega encima — que {@code C:\} se llama "Disco local",
- * que hay una carpeta "Mis documentos" que no es una ruta fija, que un acceso directo apunta a otro
- * lado, que tal icono corresponde a tal tipo. Esta clase es esa capa.
+ * <p>{@code File} is a path: it knows whether it exists, whether it is a directory, what it
+ * contains. What it does not know is anything the <em>desktop</em> adds on top -- that
+ * {@code C:\} is called "Local disk", that there is a "My documents" folder which is not a
+ * fixed path, that a shortcut points elsewhere, that such an icon corresponds to such a type.
+ * This class is that layer.
  *
- * <p>La division importa porque son dos modelos distintos: el del sistema de archivos y el que el
- * usuario ve. Un selector que mostrara solo el primero seria correcto y ajeno.
+ * <p>The division matters because they are two different models: the file system's and the one
+ * the user sees. A chooser that showed only the first would be correct and alien.
  *
- * <h2>Lo que esta VM contesta</h2>
+ * <h2>What this VM answers</h2>
  *
- * <p>{@link #getFileSystemView} devuelve una vista <strong>generica</strong>, construida sobre lo
- * que {@link File} si sabe. Es honesta y limitada, y conviene tener claro el limite: los nombres
- * para mostrar son los del sistema de archivos, no los del escritorio; {@link #getSystemIcon}
- * devuelve {@code null} porque los iconos del sistema no son cosa de Java; y los accesos directos no
- * se resuelven, porque eso pide hablar con la shell. Cada uno de esos metodos dice que devuelve, en
- * vez de fingir un dato de escritorio que nadie le dio.
+ * <p>{@link #getFileSystemView} returns a <strong>generic</strong> view, built on what
+ * {@link File} does know. It is honest and limited, and the limit is worth being clear about:
+ * the names to show are the file system's, not the desktop's; {@link #getSystemIcon} returns
+ * {@code null} because the system's icons are not Java's business; and shortcuts are not
+ * resolved, because that asks for talking to the shell. Each of those methods says what it
+ * returns, instead of faking a desktop datum nobody gave it.
  */
 public abstract class FileSystemView {
 
-    private static FileSystemView laGenerica;
+    private static FileSystemView generic;
 
     /**
-     * La vista del sistema.
+     * The system's view.
      *
-     * <p>En el JDK real elige entre una implementacion de Windows, una de Unix y una generica. Aca
-     * hay una sola: distinguirlas serviria para dar nombres de escritorio, y esos no estan
-     * disponibles en ninguna de las dos plataformas desde Java puro.
+     * <p>In the real JDK it chooses between a Windows implementation, a Unix one and a generic one.
+     * Here there is only one: telling them apart would serve to give desktop names, and those are
+     * not available on either platform from pure Java.
      */
     public static FileSystemView getFileSystemView() {
-        if (laGenerica == null) {
-            laGenerica = new VistaGenerica();
+        if (generic == null) {
+            generic = new GenericView();
         }
-        return laGenerica;
+        return generic;
     }
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     public FileSystemView() {
     }
 
     /**
-     * Si {@code f} es una raiz del arbol que el usuario ve.
+     * Whether {@code f} is a root of the tree the user sees.
      *
-     * <p>No es lo mismo que no tener padre: en Windows el escritorio es raiz para el usuario y esta
-     * adentro del perfil.
+     * <p>It is not the same as having no parent: on Windows the desktop is a root for the user and
+     * sits inside the profile.
      */
     public boolean isRoot(File f) {
         if (f == null || !f.isAbsolute()) {
             return false;
         }
-        File[] raices = getRoots();
-        for (int i = 0; i < raices.length; i++) {
-            if (raices[i].equals(f)) {
+        File[] roots = getRoots();
+        for (int i = 0; i < roots.length; i++) {
+            if (roots[i].equals(f)) {
                 return true;
             }
         }
         return false;
     }
 
-    /** Si se puede entrar en {@code f}; {@code null} solo si no se puede decidir. */
+    /** Whether {@code f} can be entered; {@code null} only if it cannot be decided. */
     public Boolean isTraversable(File f) {
         return Boolean.valueOf(f.isDirectory());
     }
 
     /**
-     * El nombre para mostrar.
+     * The name to show.
      *
-     * <p>El del sistema de archivos, no el del escritorio: una carpeta que Windows muestra
-     * traducida aparece aca con su nombre real.
+     * <p>The file system's, not the desktop's: a folder Windows shows translated appears here with
+     * its real name.
      */
     public String getSystemDisplayName(File f) {
         if (f == null) {
             return null;
         }
-        String nombre = f.getName();
-        // Una raiz como `C:\` tiene nombre vacio, y mostrar la nada seria peor que mostrar la ruta.
-        if (nombre.isEmpty()) {
+        String name = f.getName();
+        // A root such as `C:\` has an empty name, and showing nothing would be worse than showing
+        // the path.
+        if (name.isEmpty()) {
             return f.getPath();
         }
-        return nombre;
+        return name;
     }
 
-    /** La descripcion del tipo; {@code null} en esta VM, que no habla con el escritorio. */
+    /** The type's description; {@code null} in this VM, which does not talk to the desktop. */
     public String getSystemTypeDescription(File f) {
         return null;
     }
 
-    /** El icono del sistema; {@code null} en esta VM. Ver la nota de la clase. */
+    /** The system icon; {@code null} in this VM. See the class note. */
     public Icon getSystemIcon(File f) {
         return null;
     }
 
-    /** El icono del sistema en el tamano pedido; {@code null} en esta VM. */
+    /** The system icon in the requested size; {@code null} in this VM. */
     public Icon getSystemIcon(File f, int width, int height) {
         return null;
     }
 
-    /** Si {@code folder} es el padre de {@code file}. */
+    /** Whether {@code folder} is {@code file}'s parent. */
     public boolean isParent(File folder, File file) {
         if (folder == null || file == null) {
             return false;
         }
-        File padre = file.getParentFile();
-        return folder.equals(padre);
+        File parent = file.getParentFile();
+        return folder.equals(parent);
     }
 
-    /** El hijo de {@code parent} llamado {@code fileName}. */
+    /** The child of {@code parent} called {@code fileName}. */
     public File getChild(File parent, String fileName) {
         return createFileObject(parent, fileName);
     }
 
     /**
-     * Si {@code f} es un archivo de verdad y no un nodo inventado por el escritorio.
+     * Whether {@code f} is a real file and not a node invented by the desktop.
      *
-     * <p>Lo segundo existe: "Mi PC" aparece en el arbol y no es una ruta. Aca todo lo que llega es
-     * una ruta, asi que la respuesta es siempre {@code true}.
+     * <p>The second thing exists: "My PC" appears in the tree and is not a path. Here everything
+     * that arrives is a path, so the answer is always {@code true}.
      */
     public boolean isFileSystem(File f) {
         return true;
     }
 
-    /** Crea una carpeta nueva; lo unico que las implementaciones tienen que escribir. */
+    /** Creates a new folder; the only thing implementations have to write. */
     public abstract File createNewFolder(File containingDir) throws IOException;
 
-    /** Si esta oculto. */
+    /** Whether it is hidden. */
     public boolean isHiddenFile(File f) {
         return f.isHidden();
     }
 
-    /** Si es una raiz del sistema de archivos. */
+    /** Whether it is a file system root. */
     public boolean isFileSystemRoot(File dir) {
         return dir != null && dir.getParentFile() == null;
     }
 
-    /** Si es una unidad. Sin hablar con el sistema no se puede saber: {@code false}. */
+    /** Whether it is a drive. Without talking to the system it cannot be known: {@code false}. */
     public boolean isDrive(File dir) {
         return false;
     }
 
-    /** Si es una disquetera. {@code false} por lo mismo. */
+    /** Whether it is a floppy drive. {@code false} for the same reason. */
     public boolean isFloppyDrive(File dir) {
         return false;
     }
 
-    /** Si es un nodo de red. {@code false} por lo mismo. */
+    /** Whether it is a network node. {@code false} for the same reason. */
     public boolean isComputerNode(File dir) {
         return false;
     }
 
-    /** Las raices del arbol. */
+    /** The tree's roots. */
     public File[] getRoots() {
         return File.listRoots();
     }
 
-    /** La carpeta del usuario. */
+    /** The user's folder. */
     public File getHomeDirectory() {
         return createFileObject(System.getProperty("user.home"));
     }
 
-    /** Por donde empieza a mostrar un selector recien abierto. */
+    /** Where a freshly opened chooser starts showing. */
     public File getDefaultDirectory() {
         return getHomeDirectory();
     }
 
-    /** Un {@link File} hijo, del tipo que esta vista use. */
+    /** A child {@link File}, of the kind this view uses. */
     public File createFileObject(File dir, String filename) {
         if (dir == null) {
             return new File(filename);
@@ -184,7 +186,7 @@ public abstract class FileSystemView {
         return new File(dir, filename);
     }
 
-    /** Un {@link File} a partir de una ruta. */
+    /** A {@link File} from a path. */
     public File createFileObject(String path) {
         File f = new File(path);
         if (isFileSystemRoot(f)) {
@@ -194,20 +196,21 @@ public abstract class FileSystemView {
     }
 
     /**
-     * Lo que hay adentro de {@code dir}.
+     * What is inside {@code dir}.
      *
-     * @param useFileHiding si se esconden los archivos ocultos
+     * @param useFileHiding whether hidden files are hidden
      */
     public File[] getFiles(File dir, boolean useFileHiding) {
         List<File> visibles = new ArrayList<File>();
-        File[] contenido = dir.listFiles();
-        // `listFiles` devuelve `null` —no un arreglo vacio— cuando no se puede leer el directorio.
-        // Confundir los dos casos es un `NullPointerException` en el peor momento: navegando.
-        if (contenido == null) {
+        File[] contents = dir.listFiles();
+        // `listFiles` returns `null` --not an empty array-- when the directory cannot be read.
+        // Confusing the two cases is a `NullPointerException` at the worst moment: while
+        // navigating.
+        if (contents == null) {
             return new File[0];
         }
-        for (int i = 0; i < contenido.length; i++) {
-            File f = contenido[i];
+        for (int i = 0; i < contents.length; i++) {
+            File f = contents[i];
             if (!useFileHiding || !isHiddenFile(f)) {
                 visibles.add(f);
             }
@@ -215,7 +218,7 @@ public abstract class FileSystemView {
         return visibles.toArray(new File[visibles.size()]);
     }
 
-    /** El padre, o {@code null} si es una raiz. */
+    /** The parent, or {@code null} if it is a root. */
     public File getParentDirectory(File dir) {
         if (dir == null || !dir.exists()) {
             return null;
@@ -223,52 +226,52 @@ public abstract class FileSystemView {
         return dir.getParentFile();
     }
 
-    /** Los lugares que el selector ofrece en su lista desplegable. */
+    /** The places the chooser offers in its drop-down list. */
     public File[] getChooserComboBoxFiles() {
         return getRoots();
     }
 
-    /** Los lugares que el selector ofrece en su panel de atajos. */
+    /** The places the chooser offers in its shortcut panel. */
     public final File[] getChooserShortcutPanelFiles() {
         return new File[0];
     }
 
-    /** Si es un acceso directo. Sin hablar con la shell no se puede saber: {@code false}. */
+    /** Whether it is a shortcut. Without talking to the shell it cannot be known: {@code false}. */
     public boolean isLink(File file) {
         return false;
     }
 
     /**
-     * Adonde apunta un acceso directo.
+     * Where a shortcut points.
      *
-     * @return {@code null} siempre en esta VM, que es lo que corresponde a {@link #isLink} diciendo
-     *     que nada es un enlace
+     * @return {@code null} always in this VM, which is what matches {@link #isLink} saying that
+     *     nothing is a link
      */
     public File getLinkLocation(File file) throws FileNotFoundException {
         return null;
     }
 
-    /** El {@link File} que representa una raiz del sistema de archivos. */
+    /** The {@link File} that represents a file system root. */
     protected File createFileSystemRoot(File f) {
-        return new RaizDelSistema(f);
+        return new FileSystemRoot(f);
     }
 
     /**
-     * Una raiz, que se comporta distinto en dos cosas.
+     * A root, which behaves differently in two things.
      *
-     * <p>{@code C:\} <strong>siempre</strong> es un directorio aunque la unidad este vacia o no
-     * responda, y su nombre no es la cadena vacia que devolveria {@link File#getName} sino su ruta.
-     * Sin esta clase, una unidad sin disco desapareceria del arbol.
+     * <p>{@code C:\} is <strong>always</strong> a directory even if the drive is empty or does not
+     * answer, and its name is not the empty string {@link File#getName} would return but its path.
+     * Without this class, a drive with no disk would disappear from the tree.
      */
-    static class RaizDelSistema extends File {
+    static class FileSystemRoot extends File {
 
         private static final long serialVersionUID = 1L;
 
-        public RaizDelSistema(File f) {
+        public FileSystemRoot(File f) {
             super(f, "");
         }
 
-        public RaizDelSistema(String s) {
+        public FileSystemRoot(String s) {
             super(s);
         }
 
@@ -281,31 +284,33 @@ public abstract class FileSystemView {
         }
     }
 
-    /** La unica implementacion de esta VM; ver la nota de {@link FileSystemView}. */
-    static class VistaGenerica extends FileSystemView {
+    /** The only implementation of this VM; see {@link FileSystemView}'s note. */
+    static class GenericView extends FileSystemView {
 
-        VistaGenerica() {
+        GenericView() {
         }
 
         public File createNewFolder(File containingDir) throws IOException {
             if (containingDir == null) {
-                throw new IOException("Hace falta el directorio que la contiene");
+                throw new IOException("The containing directory is needed");
             }
-            File nueva = createFileObject(containingDir, "NewFolder");
-            // El nombre se numera hasta encontrar uno libre. Crear a ciegas pisaria una carpeta del
-            // usuario, y fallar a la primera obligaria a renombrar antes de poder crear la segunda.
+            File candidate = createFileObject(containingDir, "NewFolder");
+            // The name is numbered until a free one is found. Creating blindly would overwrite a
+            // folder of the user's, and failing at the first try would force a rename before the
+            // second one could be created.
             int i = 2;
-            while (nueva.exists() && i < 100) {
-                nueva = createFileObject(containingDir, "NewFolder." + String.valueOf(i));
+            while (candidate.exists() && i < 100) {
+                candidate = createFileObject(containingDir, "NewFolder." + String.valueOf(i));
                 i = i + 1;
             }
-            if (nueva.exists()) {
-                throw new IOException("El directorio ya existe: " + nueva.getAbsolutePath());
+            if (candidate.exists()) {
+                throw new IOException(
+                    "The directory already exists: " + candidate.getAbsolutePath());
             }
-            if (!nueva.mkdir()) {
-                throw new IOException("No se pudo crear " + nueva.getAbsolutePath());
+            if (!candidate.mkdir()) {
+                throw new IOException("Could not create " + candidate.getAbsolutePath());
             }
-            return nueva;
+            return candidate;
         }
     }
 }

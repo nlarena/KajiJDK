@@ -1,15 +1,16 @@
 package java.nio.channels;
 
 /**
- * KajiLibrary's java.nio.channels.NotYetBoundException — Se uso un canal de servidor que todavia no se ato a ninguna direccion.
+ * KajiLibrary's java.nio.channels.NotYetBoundException — a server channel that has not been tied to
+ * any address yet was used.
  *
- * <p>Aceptar conexiones sin haber dicho en que puerto escuchar no tiene respuesta posible.
+ * <p>Accepting connections without having said which port to listen on has no possible answer.
  */
 public class NotYetBoundException extends IllegalStateException {
 
     private static final long serialVersionUID = 1000000017L;
 
-    /** Construye una. Sin mensaje: el nombre de la clase **es** el mensaje. */
+    /** Builds one. With no message: the name of the class **is** the message. */
     public NotYetBoundException() {
         super();
     }

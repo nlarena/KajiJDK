@@ -3,22 +3,23 @@ package com.sun.source.util;
 import com.sun.source.tree.Tree;
 
 /**
- * Un {@link TreeScanner} que ademas lleva la cuenta de por donde va.
+ * A {@link TreeScanner} that also keeps track of where it is.
  *
- * <h2>Que aporta</h2>
+ * <h2>What it contributes</h2>
  *
- * <p>{@link #getCurrentPath}. Un {@code TreeScanner} pelado ve un nodo por vez y no sabe que lo
- * contiene; con esto, cualquier visita puede preguntar en que clase o en que metodo esta parada.
+ * <p>{@link #getCurrentPath}. A bare {@code TreeScanner} sees one node at a time and does not
+ * know what contains it; with this, any visit may ask which class or which method it is
+ * standing in.
  *
- * <p>Y es barato: el camino se arma mientras se baja, en vez de recorrer el arbol otra vez con
- * {@link TreePath#getPath}. Cualquier consulta que necesite contexto en mas de un nodo conviene
- * hacerla asi.
+ * <p>And it is cheap: the path is built while going down, instead of walking the tree again
+ * with {@link TreePath#getPath}. Any query that needs context at more than one node is best
+ * done this way.
  *
- * <p>La unica regla al extenderlo: si se sobrescribe {@code scan}, hay que llamar al de la clase
- * base — es el que empuja y saca del camino.
+ * <p>The only rule when extending it: if {@code scan} is overridden, the base class's has to be
+ * called -- it is the one that pushes and pops the path.
  *
- * @param <R> lo que devuelve cada visita
- * @param <P> el dato que se arrastra
+ * @param <R> what each visit returns
+ * @param <P> the datum that is carried along
  */
 public class TreePathScanner<R, P> extends TreeScanner<R, P> {
 
@@ -27,7 +28,7 @@ public class TreePathScanner<R, P> extends TreeScanner<R, P> {
     public TreePathScanner() {
     }
 
-    /** Arranca el recorrido desde ese camino, que queda como contexto inicial. */
+    /** It starts the walk from that path, which is left as the initial context. */
     public R scan(TreePath path, P p) {
         this.path = path.getParentPath();
         try {
@@ -38,26 +39,26 @@ public class TreePathScanner<R, P> extends TreeScanner<R, P> {
     }
 
     /**
-     * Visita un nodo, empujandolo al camino mientras dura.
+     * It visits a node, pushing it onto the path while it lasts.
      *
-     * <p>El {@code finally} no es decoracion: una visita puede tirar, y sin restaurar el camino el
-     * scanner quedaria mintiendo sobre donde esta para todo lo que siga.
+     * <p>The {@code finally} is not decoration: a visit may throw, and without restoring the path
+     * the scanner would be left lying about where it is for everything that follows.
      */
     public R scan(Tree tree, P p) {
         if (tree == null) {
             return null;
         }
-        TreePath anterior = this.path;
-        this.path = new TreePath(anterior == null ? new TreePath(
-                (com.sun.source.tree.CompilationUnitTree) tree) : anterior, tree);
+        TreePath previous = this.path;
+        this.path = new TreePath(previous == null ? new TreePath(
+                (com.sun.source.tree.CompilationUnitTree) tree) : previous, tree);
         try {
             return tree.accept(this, p);
         } finally {
-            this.path = anterior;
+            this.path = previous;
         }
     }
 
-    /** Donde esta parado el recorrido ahora. */
+    /** Where the walk is standing now. */
     public TreePath getCurrentPath() {
         return this.path;
     }

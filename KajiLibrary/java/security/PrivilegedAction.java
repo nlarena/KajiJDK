@@ -1,10 +1,10 @@
 package java.security;
 
-// Un bloque de codigo para correr con los privilegios de quien lo define.
+// A block of code to run with the privileges of whoever defines it.
 //
-// Deprecada junto con `AccessController`: desde que el `SecurityManager` esta deshabilitado, correr
-// "con privilegios" y correr normal son lo mismo. Sobrevive como tipo funcional porque hay firmas
-// en varias bibliotecas que lo nombran.
+// Deprecated along with `AccessController`: since the `SecurityManager` is disabled, running "with
+// privileges" and running normally are the same thing. It survives as a functional type because
+// there are signatures in several libraries that name it.
 @FunctionalInterface
 @Deprecated
 public interface PrivilegedAction<T> {

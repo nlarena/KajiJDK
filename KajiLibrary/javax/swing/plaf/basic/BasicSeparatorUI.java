@@ -15,46 +15,47 @@ import javax.swing.plaf.SeparatorUI;
 import javax.swing.plaf.UIResource;
 
 /**
- * El aspecto basico de un separador: dos lineas de un pixel, una encima de la otra.
+ * The basic look and feel of a separator: two one-pixel lines, one on top of the other.
  *
- * <p>La de arriba con el color de frente y la de abajo con el de fondo. Ese par es lo que da la
- * ilusion de hendidura: una linea oscura y una clara pegadas se leen como un surco. Los colores
- * salen de {@code Separator.foreground} y {@code Separator.background}, medidos en Metal (JDK 25):
- * (99, 130, 191) y blanco.
+ * <p>The top one with the foreground colour and the bottom one with the background one. That
+ * pair is what gives the illusion of a dent: a dark line and a light one stuck together read as
+ * a groove. The colours come from {@code Separator.foreground} and
+ * {@code Separator.background}, measured in Metal (JDK 25): (99, 130, 191) and white.
  *
- * <h2>Dos campos que no se usan</h2>
+ * <h2>Two fields that are not used</h2>
  *
- * <p>{@link #shadow} y {@link #highlight} son protegidos, existen, y quedan en {@code null}: nadie
- * los escribe y {@link #paint} no los mira, porque pinta con el frente y el fondo del componente.
- * Son de una version anterior del JDK y quedaron por compatibilidad. Esta medido, y se copia tal
- * cual: una subclase que los lea tiene que ver {@code null} igual que en el JDK.
+ * <p>{@link #shadow} and {@link #highlight} are protected, they exist, and they are left
+ * {@code null}: nobody writes them and {@link #paint} does not look at them, because it paints
+ * with the component's foreground and background. They are from an earlier version of the JDK
+ * and stayed for compatibility. It is measured, and it is copied as it is: a subclass that
+ * reads them has to see {@code null} just as in the JDK.
  *
- * <h2>Un objeto por separador</h2>
+ * <h2>One object per separator</h2>
  *
- * <p>A diferencia de casi todos los demas, {@link #createUI} devuelve una instancia nueva cada vez.
- * Tampoco guarda nada, asi que no hace falta; es asi en el JDK y esta medido.
+ * <p>Unlike almost every other one, {@link #createUI} returns a new instance each time. It does
+ * not keep anything either, so it is not needed; it is like that in the JDK and it is measured.
  *
- * <h2>Sin minimo</h2>
+ * <h2>No minimum</h2>
  *
- * <p>{@link #getMinimumSize} devuelve {@code null}, no un tamano. Es lo que hace el JDK, y quien
- * llama tiene que estar preparado: {@code JComponent.getMinimumSize} lo lee como "no tengo opinion"
- * y contesta lo que diga el acomodador.
+ * <p>{@link #getMinimumSize} returns {@code null}, not a size. It is what the JDK does, and the
+ * caller has to be ready for it: {@code JComponent.getMinimumSize} reads it as "I have no
+ * opinion" and answers whatever the layout says.
  */
 public class BasicSeparatorUI extends SeparatorUI {
 
-    /** Sin uso; ver la nota de la clase. */
+    /** Unused; see the class note. */
     protected Color shadow;
 
-    /** Sin uso; ver la nota de la clase. */
+    /** Unused; see the class note. */
     protected Color highlight;
 
-    private static final ColorUIResource FONDO_POR_OMISION = new ColorUIResource(255, 255, 255);
-    private static final ColorUIResource FRENTE_POR_OMISION = new ColorUIResource(99, 130, 191);
+    private static final ColorUIResource DEFAULT_BACKGROUND = new ColorUIResource(255, 255, 255);
+    private static final ColorUIResource DEFAULT_FOREGROUND = new ColorUIResource(99, 130, 191);
 
     public BasicSeparatorUI() {
     }
 
-    /** Uno nuevo cada vez; ver la nota de la clase. */
+    /** A new one each time; see the class note. */
     public static ComponentUI createUI(JComponent c) {
         return new BasicSeparatorUI();
     }
@@ -69,32 +70,32 @@ public class BasicSeparatorUI extends SeparatorUI {
         uninstallListeners((JSeparator) c);
     }
 
-    /** Los dos colores y la transparencia: un separador no es opaco. */
+    /** The two colours and transparency: a separator is not opaque. */
     protected void installDefaults(JSeparator s) {
-        Color fondo = s.getBackground();
-        if (fondo == null || fondo instanceof UIResource) {
-            s.setBackground(FONDO_POR_OMISION);
+        Color background = s.getBackground();
+        if (background == null || background instanceof UIResource) {
+            s.setBackground(DEFAULT_BACKGROUND);
         }
-        Color frente = s.getForeground();
-        if (frente == null || frente instanceof UIResource) {
-            s.setForeground(FRENTE_POR_OMISION);
+        Color foreground = s.getForeground();
+        if (foreground == null || foreground instanceof UIResource) {
+            s.setForeground(DEFAULT_FOREGROUND);
         }
         LookAndFeel.installProperty(s, "opaque", Boolean.FALSE);
     }
 
-    /** No saca nada; ver {@link BasicPanelUI#uninstallDefaults}. */
+    /** It removes nothing; see {@link BasicPanelUI#uninstallDefaults}. */
     protected void uninstallDefaults(JSeparator s) {
     }
 
-    /** No escucha nada: un separador no cambia solo. */
+    /** It listens to nothing: a separator does not change by itself. */
     protected void installListeners(JSeparator s) {
     }
 
-    /** Idem. */
+    /** The same. */
     protected void uninstallListeners(JSeparator s) {
     }
 
-    /** Las dos lineas; ver la nota de la clase. */
+    /** The two lines; see the class note. */
     public void paint(Graphics g, JComponent c) {
         Dimension s = c.getSize();
         if (((JSeparator) c).getOrientation() == SwingConstants.VERTICAL) {
@@ -110,7 +111,7 @@ public class BasicSeparatorUI extends SeparatorUI {
         }
     }
 
-    /** Dos pixeles de grueso y nada de largo: lo estira el acomodador. */
+    /** Two pixels thick and no length: it is stretched by the layout. */
     public Dimension getPreferredSize(JComponent c) {
         Insets insets = c.getInsets();
         if (((JSeparator) c).getOrientation() == SwingConstants.VERTICAL) {
@@ -119,12 +120,12 @@ public class BasicSeparatorUI extends SeparatorUI {
         return new Dimension(insets.left + insets.right, 2 + insets.top + insets.bottom);
     }
 
-    /** {@code null}; ver la nota de la clase. */
+    /** {@code null}; see the class note. */
     public Dimension getMinimumSize(JComponent c) {
         return null;
     }
 
-    /** Todo lo largo que haga falta, dos pixeles de grueso. */
+    /** As long as it takes, two pixels thick. */
     public Dimension getMaximumSize(JComponent c) {
         if (((JSeparator) c).getOrientation() == SwingConstants.VERTICAL) {
             return new Dimension(2, Short.MAX_VALUE);

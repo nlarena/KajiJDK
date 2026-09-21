@@ -3,41 +3,42 @@ package java.lang.management;
 import java.util.List;
 
 /**
- * KajiLibrary's java.lang.management.PlatformLoggingMXBean -- cambiar niveles de registro desde
- * afuera.
+ * KajiLibrary's java.lang.management.PlatformLoggingMXBean -- changing log levels from outside.
  *
- * <p>Existe para poder subir el detalle de un registro en un programa que ya esta corriendo, sin
- * reiniciarlo ni tocar archivos. Es lo que hace una consola de gestion cuando ofrece un selector de
- * nivel.
+ * <p>It exists so a logger's detail can be turned up in a program that is already running, without
+ * restarting it or touching files. It is what a management console does when it offers a level
+ * selector.
  *
- * <p>Todo se maneja con <b>cadenas</b> y no con los tipos de {@code java.util.logging}, a proposito:
- * asi una consola remota puede usar este MBean sin tener esas clases.
+ * <p>Everything is handled with <b>strings</b> and not with {@code java.util.logging}'s types, on
+ * purpose: that way a remote console can use this MBean without having those classes.
  *
- * <p>Hay dos ausencias que significan cosas distintas, y confundirlas es el error tipico:
+ * <p>There are two absences that mean different things, and confusing them is the typical mistake:
  *
  * <ul>
- *   <li>{@link #getLoggerLevel} devuelve la <b>cadena vacia</b> si el registro no tiene nivel propio y
- *       lo hereda de su padre;
- *   <li>devuelve <b>null</b> si no existe registro con ese nombre.
+ *   <li>{@link #getLoggerLevel} returns the <b>empty string</b> if the logger has no level of its own
+ *       and inherits it from its parent;
+ *   <li>it returns <b>null</b> if no logger with that name exists.
  * </ul>
  *
- * <p>Y {@link #setLoggerLevel} con null vuelve a heredar del padre, que no es lo mismo que apagarlo.
+ * <p>And {@link #setLoggerLevel} with null goes back to inheriting from the parent, which is not the
+ * same as switching it off.
  */
 public interface PlatformLoggingMXBean extends PlatformManagedObject {
 
-    /** Los nombres de los registros que existen ahora. */
+    /** The names of the loggers that exist now. */
     List<String> getLoggerNames();
 
-    /** El nivel de ese registro; vacio si lo hereda, null si no existe. Ver la nota de la clase. */
+    /** That logger's level; empty if it inherits it, null if it does not exist. See the class's
+     * note. */
     String getLoggerLevel(String loggerName);
 
     /**
-     * Le fija el nivel; null lo hace heredar del padre.
+     * It sets its level; null makes it inherit from the parent.
      *
-     * @throws IllegalArgumentException si el nivel no es uno conocido
+     * @throws IllegalArgumentException if the level is not a known one
      */
     void setLoggerLevel(String loggerName, String levelName);
 
-    /** El nombre del padre, o la cadena vacia si es la raiz; null si no existe. */
+    /** The parent's name, or the empty string if it is the root; null if it does not exist. */
     String getParentLoggerName(String loggerName);
 }

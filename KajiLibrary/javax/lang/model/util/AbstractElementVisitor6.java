@@ -9,33 +9,33 @@ import javax.lang.model.element.RecordComponentElement;
 import javax.lang.model.element.UnknownElementException;
 
 /**
- * KajiLibrary's javax.lang.model.util.AbstractElementVisitor6 — la base de la familia de visitantes de
- * elementos, y el lugar donde se resuelve el problema de evolucionar una interfaz de visitante.
+ * KajiLibrary's javax.lang.model.util.AbstractElementVisitor6 — the base of the element visitor
+ * family, and the place where the problem of evolving a visitor interface is solved.
  *
- * <h2>Por que hay una clase por version del lenguaje</h2>
+ * <h2>Why there is one class per language version</h2>
  *
- * <p>{@link ElementVisitor} tiene un metodo por cada clase de declaracion que el lenguaje conoce. Pero
- * el lenguaje crece: los modulos llegaron en 9 y los componentes de registro en 16. Agregarle un metodo
- * abstracto a la interfaz habria roto **todos** los visitantes ya escritos, y darle un `default` que
- * devolviera cualquier cosa habria hecho que un visitante viejo tratara en silencio un modulo como si no
- * fuera nada.
+ * <p>{@link ElementVisitor} has one method per kind of declaration the language knows. But the
+ * language grows: modules arrived in 9 and record components in 16. Adding an abstract method to
+ * the interface would have broken **every** visitor already written, and giving it a `default`
+ * returning anything would have made an old visitor silently treat a module as if it were nothing.
  *
- * <p>La salida es esta familia. Cada `AbstractElementVisitorN` fija el contrato de la version `N` del
- * lenguaje: **lo que existia en `N` es abstracto y hay que implementarlo; lo que llego despues tiene un
- * cuerpo que tira**. Quien extiende `AbstractElementVisitor6` promete manejar lo que habia en Java 6, y
- * si le llega un modulo se entera con una excepcion en vez de recibir un resultado inventado. Quien
- * quiere manejar modulos extiende `AbstractElementVisitor9`, donde `visitModule` es abstracto y el
- * compilador lo obliga a escribirlo.
+ * <p>The way out is this family. Each `AbstractElementVisitorN` fixes the contract of language
+ * version `N`: **what existed in `N` is abstract and has to be implemented; what came later has a
+ * body that throws**. Whoever extends `AbstractElementVisitor6` promises to handle what there was
+ * in Java 6, and if a module reaches it finds out with an exception instead of getting a made-up
+ * result. Whoever wants to handle modules extends `AbstractElementVisitor9`, where `visitModule` is
+ * abstract and the compiler forces them to write it.
  *
- * <h2>Por que `visitUnknown` tirando no es un miembro que miente</h2>
+ * <h2>Why a throwing `visitUnknown` is not a member that lies</h2>
  *
- * <p>Es la unica respuesta honesta. El visitante fue escrito contra un lenguaje que no tenia esa
- * construccion; no hay ningun valor de `R` que signifique "no se que es esto".
- * {@link UnknownElementException} dice exactamente eso, y el que quiera otra cosa redefine
- * `visitUnknown` — que para eso no es final.
+ * <p>It is the only honest answer. The visitor was written against a language that did not have
+ * that construct; there is no value of `R` that means "I do not know what this is". {@link
+ * UnknownElementException} says exactly that, and whoever wants something else overrides
+ * `visitUnknown` — which is why it is not final.
  *
- * <p>{@link #visit(Element, Object)} si es final, y a proposito: es el punto de entrada y su cuerpo es
- * siempre el mismo despacho doble contra {@link Element#accept}. Redefinirlo solo podria romperlo.
+ * <p>{@link #visit(Element, Object)} is final, and on purpose: it is the entry point and its body
+ * is always the same double dispatch against {@link Element#accept}. Overriding it could only break
+ * it.
  */
 @SupportedSourceVersion(SourceVersion.RELEASE_6)
 public abstract class AbstractElementVisitor6<R, P> implements ElementVisitor<R, P> {
@@ -43,12 +43,14 @@ public abstract class AbstractElementVisitor6<R, P> implements ElementVisitor<R,
     protected AbstractElementVisitor6() {
     }
 
-    /** El despacho: la que sabe que clase de elemento es, es la implementacion de `accept`. */
+    /**
+     * The dispatch: the one that knows which kind of element it is, the implementation of `accept`.
+     */
     public final R visit(Element e, P p) {
         return e.accept(this, p);
     }
 
-    /** Igual, con parametro nulo, para los visitantes a los que `P` no les importa. */
+    /** The same, with a null parameter, for visitors that do not care about `P`. */
     public final R visit(Element e) {
         return e.accept(this, null);
     }
@@ -57,10 +59,11 @@ public abstract class AbstractElementVisitor6<R, P> implements ElementVisitor<R,
         throw new UnknownElementException(e, p);
     }
 
-    // Los modulos son de 9 y los componentes de registro de 16: los dos son desconocidos para un
-    // visitante de 6. El cuerpo repite el del `default` de `ElementVisitor` en vez de delegarle con
-    // `ElementVisitor.super`, porque nuestro javac todavia no acepta esa sintaxis (COMPILER_FINDINGS
-    // #400). Es la misma llamada: las dos formas terminan en el `visitUnknown` que la subclase tenga.
+    // Modules are from 9 and record components from 16: both are unknown to a 6 visitor. The body
+    // repeats that of `ElementVisitor`'s `default` instead of delegating to it with
+    // `ElementVisitor.super`, because the frozen javac that builds this library still rejects that
+    // syntax (COMPILER_FINDINGS #400; closed in the source-built javac, which accepts it -- checked
+    // 2026-09-18). It is the same call: both forms end in whatever `visitUnknown` the subclass has.
 
     public R visitModule(ModuleElement e, P p) {
         return this.visitUnknown(e, p);

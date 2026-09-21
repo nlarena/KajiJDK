@@ -11,42 +11,46 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 
-// Un criterio para elegir certificados X.509 de un `CertStore`.
+// A criterion for choosing X.509 certificates of a `CertStore`.
 //
-// Es un objeto de criterios acumulables: se van poniendo condiciones y `match` devuelve true solo
-// si el certificado cumple **todas**. Un selector recien creado no tiene ninguna condicion, asi que
-// acepta cualquier certificado X.509 —y ese es el default correcto, porque un selector es un filtro
-// de busqueda y no un chequeo de seguridad—.
+// It is an object of accumulable criteria: conditions are set one after another and `match` returns
+// true only if the certificate meets **all** of them. A newly created selector has no condition, so
+// it accepts any X.509 certificate —and that is the right default, because a selector is a search
+// filter and not a security check—.
 //
-// Que un certificado pase el selector **no dice nada sobre si es de fiar**. El selector no verifica
-// firmas ni cadenas; solo compara campos. Es el paso previo a la validacion, no un sustituto.
+// That a certificate passes the selector **says nothing about whether it is to be trusted**. The
+// selector verifies no signatures and no chains; it only compares fields. It is the step before the
+// validation, not a substitute for it.
 //
 // ===============================================================================================
-// QUE CRITERIOS ESTAN Y CUALES NO
+// WHICH CRITERIA ARE THERE AND WHICH ARE NOT
 // ===============================================================================================
 //
-// La regla que se siguio es simple: un criterio se declara solo si `match` lo puede aplicar de
-// verdad. Un setter cuyo criterio `match` ignorara seria peor que su ausencia, porque devolveria
-// true para certificados que no lo cumplen —y aca eso significa elegir el certificado equivocado—.
+// The rule that was followed is simple: a criterion is declared only if `match` can really apply
+// it. A setter whose criterion `match` ignored would be worse than its absence, because it would
+// return true for certificates that do not meet it —and here that means choosing the wrong
+// certificate—.
 //
-// **Estan todos**, y `match` los aplica todos: certificado exacto, emisor, sujeto, numero de serie,
-// vigencia en una fecha, vigencia de la clave privada, clave publica exacta, OID del algoritmo de la
-// clave publica, KeyUsage, ExtendedKeyUsage, SubjectKeyIdentifier, AuthorityKeyIdentifier,
-// BasicConstraints, politicas, nombres alternativos, restricciones de nombres y `pathToNames`.
+// **They are all there**, and `match` applies them all: exact certificate, issuer, subject, serial
+// number, currency at a date, currency of the private key, exact public key, OID of the algorithm
+// of the public key, KeyUsage, ExtendedKeyUsage, SubjectKeyIdentifier, AuthorityKeyIdentifier,
+// BasicConstraints, policies, alternative names, name constraints and `pathToNames`.
 //
-// Los tres ultimos llegaron con `GeneralNameValue` y `NameConstraints`, que son las dos piezas que
-// faltaban. Vale la pena decir en que se diferencian los dos que suenan parecido, porque miran cosas
-// opuestas del certificado:
+// The last three arrived with `GeneralNameValue` and `NameConstraints`, which are the two pieces
+// that were missing. It is worth saying how the two that sound similar differ, because they look at
+// opposite things of the certificate:
 //
-//   - **`setNameConstraints`** pone las restricciones **del llamador** y las aplica a los nombres
-//     **del certificado**: "traeme uno cuyo sujeto y cuyos nombres alternativos caigan aca adentro".
-//   - **`setPathToNames`** hace lo contrario: son nombres del llamador que se comprueban contra la
-//     extension NameConstraints **del propio certificado**, o sea "traeme una CA que pueda emitir
-//     para estos nombres". Un certificado sin esa extension no restringe nada y pasa siempre.
+//   - **`setNameConstraints`** puts the constraints **of the caller** and applies them to the names
+//     **of the certificate**: "bring me one whose subject and whose alternative names fall inside
+//     here".
+//   - **`setPathToNames`** does the opposite: they are names of the caller that are checked against
+//     the NameConstraints extension **of the certificate itself**, that is, "bring me a CA that can
+//     issue for these names". A certificate without that extension restricts nothing and always
+//     passes.
 //
-// `setMatchAllSubjectAltNames` gobierna los nombres alternativos y ahora **si** cambia el resultado:
-// en true --el default-- el certificado tiene que traer todos los nombres pedidos; en false le
-// alcanza con traer uno.
+// `setMatchAllSubjectAltNames` governs the alternative names and now it **does** change the result:
+// at true --the default-- the certificate has to bring every name asked for; at false bringing one
+// is enough for it.
 public class X509CertSelector implements CertSelector {
 
     private static final String OID_SUBJECT_KEY_ID = "2.5.29.14";
@@ -55,8 +59,8 @@ public class X509CertSelector implements CertSelector {
     private static final String OID_PRIVATE_KEY_USAGE = "2.5.29.16";
     private static final String OID_SUBJECT_ALT_NAME = "2.5.29.17";
     private static final String OID_NAME_CONSTRAINTS = "2.5.29.30";
-    // El "cualquier uso" de ExtendedKeyUsage: un certificado que lo lleva satisface cualquier
-    // exigencia de uso extendido.
+    // The "any use" of ExtendedKeyUsage: a certificate that carries it satisfies any demand of
+    // extended use.
     private static final String OID_ANY_EXTENDED_KEY_USAGE = "2.5.29.37.0";
 
     private X509Certificate x509Cert;
@@ -65,8 +69,8 @@ public class X509CertSelector implements CertSelector {
     private byte[] authorityKeyID;
     private Date certificateValid;
     private Date privateKeyValid;
-    // Los nombres alternativos se guardan dos veces por lo mismo que los emisores de
-    // `X509CRLSelector`: uno es lo que el llamador puso y el otro es con lo que se compara.
+    // The alternative names are kept twice for the same reason as the issuers of `X509CRLSelector`:
+    // one is what the caller set and the other is what it is compared with.
     private List<List<?>> subjectAlternativeNames;
     private List<GeneralNameValue> subjectAlternativeGeneralNames;
     private List<List<?>> pathToNames;
@@ -81,16 +85,16 @@ public class X509CertSelector implements CertSelector {
     private boolean[] keyUsage;
     private Set<String> keyPurposeSet;
     private boolean matchAllSubjectAltNames = true;
-    // -1 es "no me importa"; -2 es "tiene que ser de entidad final"; >= 0 es el largo minimo.
+    // -1 is "I do not care"; -2 is "it has to be of an end entity"; >= 0 is the minimum length.
     private int basicConstraints = -1;
     private Set<String> policySet;
 
-    // Un selector sin ningun criterio: acepta cualquier certificado X.509.
+    // A selector with no criterion: it accepts any X.509 certificate.
     public X509CertSelector() {
     }
 
-    // Exige **este** certificado exacto. Es el criterio mas fuerte de todos y hace redundantes a
-    // los demas.
+    // It demands **this** exact certificate. It is the strongest criterion of all and makes the
+    // others redundant.
     public void setCertificate(X509Certificate cert) {
         this.x509Cert = cert;
     }
@@ -99,24 +103,25 @@ public class X509CertSelector implements CertSelector {
         return this.x509Cert;
     }
 
-    // Exige este emisor. Null saca el criterio.
+    // It demands this issuer. Null removes the criterion.
     //
-    // Se guarda la **instancia** que se paso, no una copia: `X500Principal` es inmutable, y el JDK
-    // hace lo mismo —`getIssuer()` devuelve el mismo objeto—.
+    // The **instance** that was passed is kept, not a copy: `X500Principal` is immutable, and the
+    // JDK does the same —`getIssuer()` returns the same object—.
     public void setIssuer(javax.security.auth.x500.X500Principal issuer) {
         this.issuer = issuer;
     }
 
-    // Idem, con el nombre escrito en RFC 2253.
+    // The same, with the name written in RFC 2253.
     //
-    // El texto se parsea aca y **no se guarda**: lo que queda es el nombre, y `getIssuerAsString()`
-    // devuelve su forma canonica, no lo que se escribio. Es distinto de `TrustAnchor`, que si
-    // conserva el original; la diferencia es del JDK y conviene tenerla presente.
+    // The text is parsed here and **is not kept**: what is left is the name, and
+    // `getIssuerAsString()` returns its canonical form, not what was written. It is different from
+    // `TrustAnchor`, which does keep the original; the difference is the JDK's and is worth keeping
+    // in mind.
     public void setIssuer(String issuerDN) throws IOException {
         this.issuer = issuerDN == null ? null : principalOf(issuerDN);
     }
 
-    // Idem, con el DER del `Name`.
+    // The same, with the DER of the `Name`.
     public void setIssuer(byte[] issuerDN) throws IOException {
         this.issuer = issuerDN == null ? null : principalOf(issuerDN);
     }
@@ -125,20 +130,20 @@ public class X509CertSelector implements CertSelector {
         return this.issuer;
     }
 
-    // El emisor del criterio en RFC 2253, o null si no hay.
+    // The issuer of the criterion in RFC 2253, or null if there is none.
     public String getIssuerAsString() {
         return this.issuer == null ? null : this.issuer.getName();
     }
 
-    // El emisor del criterio como el DER de su `Name`, o null si no hay. Es una copia.
+    // The issuer of the criterion as the DER of its `Name`, or null if there is none. It is a copy.
     //
-    // Declara `IOException` porque el JDK lo declara —ahi el nombre se guarda en otra forma y hay
-    // que codificarlo—; aca se guarda ya codificado y nunca llega a lanzarse.
+    // It declares `IOException` because the JDK declares it —there the name is kept in another form
+    // and has to be encoded—; here it is kept encoded already and it never gets to be thrown.
     public byte[] getIssuerAsBytes() throws IOException {
         return this.issuer == null ? null : this.issuer.getEncoded();
     }
 
-    // Exige este sujeto. Null saca el criterio. Vale todo lo dicho para el emisor.
+    // It demands this subject. Null removes the criterion. Everything said for the issuer holds.
     public void setSubject(javax.security.auth.x500.X500Principal subject) {
         this.subject = subject;
     }
@@ -163,8 +168,9 @@ public class X509CertSelector implements CertSelector {
         return this.subject == null ? null : this.subject.getEncoded();
     }
 
-    // `X500Principal` rechaza con `IllegalArgumentException` y estos metodos prometen `IOException`.
-    // Los mensajes son los del JDK: distingue el nombre mal escrito del DER que no es un nombre.
+    // `X500Principal` rejects with `IllegalArgumentException` and these methods promise
+    // `IOException`. The messages are the JDK's: it tells the badly written name apart from the DER
+    // that is not a name.
     private static javax.security.auth.x500.X500Principal principalOf(String dn)
             throws IOException {
         try {
@@ -184,25 +190,25 @@ public class X509CertSelector implements CertSelector {
     }
 
     /**
-     * Exige que el certificado traiga este nombre alternativo. Se pueden pedir varios; ver
-     * {@link #setMatchAllSubjectAltNames} para si hacen falta todos o alcanza con uno.
+     * It demands that the certificate bring this alternative name. Several can be asked for; see
+     * {@link #setMatchAllSubjectAltNames} for whether all of them are needed or one is enough.
      *
-     * <p>El tipo es el numero del `CHOICE` de `GeneralName`: 1 rfc822Name, 2 dNSName,
-     * 4 directoryName, 6 URI, 7 iPAddress, 8 registeredID. Los otros tres --0, 3 y 5-- no tienen
-     * forma de texto acordada y se rechazan; para esos esta la sobrecarga que toma el DER.
+     * <p>The type is the number of the `CHOICE` of `GeneralName`: 1 rfc822Name, 2 dNSName, 4
+     * directoryName, 6 URI, 7 iPAddress, 8 registeredID. The other three --0, 3 and 5-- have no
+     * agreed text form and are rejected; for those there is the overload that takes the DER.
      *
-     * @throws IOException si el tipo no tiene forma de texto o el nombre no es valido para el
+     * @throws IOException if the type has no text form or the name is not valid for it
      */
     public void addSubjectAlternativeName(int type, String name) throws IOException {
         addAlternativeName(GeneralNameValue.ofString(type, name), type, name);
     }
 
     /**
-     * Idem, con el DER del nombre.
+     * The same, with the DER of the name.
      *
-     * <p><b>Sin la etiqueta de contexto</b>: un IA5String pelado para los tipos de texto, un `Name`
-     * para directoryName, un OCTET STRING para iPAddress. Es lo que espera el JDK y es facil de
-     * equivocar, porque en un certificado el mismo nombre viaja **con** su etiqueta.
+     * <p><b>Without the context tag</b>: a bare IA5String for the text types, a `Name` for
+     * directoryName, an OCTET STRING for iPAddress. It is what the JDK expects and it is easy to
+     * get wrong, because in a certificate the same name travels **with** its tag.
      */
     public void addSubjectAlternativeName(int type, byte[] name) throws IOException {
         addAlternativeName(GeneralNameValue.ofValueDer(type, name), type, copy(name));
@@ -221,14 +227,14 @@ public class X509CertSelector implements CertSelector {
     }
 
     /**
-     * Exige estos nombres alternativos. Cada elemento es una lista de dos: el tipo como
-     * {@code Integer} y el nombre como {@code String} o {@code byte[]}. Null o vacio saca el
-     * criterio.
+     * It demands these alternative names. Each element is a list of two: the type as an
+     * {@code Integer} and the name as a {@code String} or {@code byte[]}. Null or empty removes the
+     * criterion.
      *
-     * <p>Los dos conjuntos se arman completos antes de asignar ninguno: si un elemento del medio
-     * esta mal, el selector queda como estaba y no a mitad de camino.
+     * <p>Both sets are built complete before either is assigned: if an element in the middle is
+     * wrong, the selector is left as it was and not halfway.
      *
-     * @throws IOException si algun elemento no tiene la forma esperada
+     * @throws IOException if some element does not have the expected shape
      */
     public void setSubjectAlternativeNames(java.util.Collection<List<?>> names) throws IOException {
         if (names == null || names.isEmpty()) {
@@ -267,22 +273,22 @@ public class X509CertSelector implements CertSelector {
     }
 
     /**
-     * Los nombres alternativos del criterio, o null si no hay. Copia: los {@code byte[]} van
-     * clonados, asi que tocar lo que sale de aca no cambia el criterio.
+     * The alternative names of the criterion, or null if there are none. A copy: the {@code
+     * byte[]}s go cloned, so touching what comes out of here does not change the criterion.
      */
     public java.util.Collection<List<?>> getSubjectAlternativeNames() {
         return copyOfNameList(this.subjectAlternativeNames);
     }
 
     /**
-     * Exige que el certificado pueda emitir para estos nombres, segun **su propia** extension
-     * NameConstraints. Null o vacio saca el criterio.
+     * It demands that the certificate be able to issue for these names, according to **its own**
+     * NameConstraints extension. Null or empty removes the criterion.
      *
-     * <p>Es el criterio para buscar una CA, no un certificado de entidad final: la pregunta que
-     * contesta es "¿esta CA tiene derecho a firmar algo llamado asi?". Un certificado sin la
-     * extension no restringe nada y pasa siempre.
+     * <p>It is the criterion for looking for a CA, not an end-entity certificate: the question it
+     * answers is "does this CA have the right to sign something called like this?". A certificate
+     * without the extension restricts nothing and always passes.
      *
-     * @throws IOException si algun elemento no tiene la forma esperada
+     * @throws IOException if some element does not have the expected shape
      */
     public void setPathToNames(java.util.Collection<List<?>> names) throws IOException {
         if (names == null || names.isEmpty()) {
@@ -296,12 +302,12 @@ public class X509CertSelector implements CertSelector {
         this.pathToGeneralNames = tmp.subjectAlternativeGeneralNames;
     }
 
-    /** Agrega un nombre al criterio de {@link #setPathToNames}. */
+    /** It adds a name to the criterion of {@link #setPathToNames}. */
     public void addPathToName(int type, String name) throws IOException {
         addPath(GeneralNameValue.ofString(type, name), type, name);
     }
 
-    /** Idem, con el DER del nombre y sin su etiqueta de contexto. */
+    /** The same, with the DER of the name and without its context tag. */
     public void addPathToName(int type, byte[] name) throws IOException {
         addPath(GeneralNameValue.ofValueDer(type, name), type, copy(name));
     }
@@ -318,19 +324,19 @@ public class X509CertSelector implements CertSelector {
         this.pathToGeneralNames.add(parsed);
     }
 
-    /** Los nombres de {@link #setPathToNames}, o null si no hay. Copia. */
+    /** The names of {@link #setPathToNames}, or null if there are none. A copy. */
     public java.util.Collection<List<?>> getPathToNames() {
         return copyOfNameList(this.pathToNames);
     }
 
     /**
-     * Exige que el sujeto y los nombres alternativos del certificado caigan adentro de estas
-     * restricciones. El argumento es el DER del **valor** de la extension NameConstraints.
+     * It demands that the subject and the alternative names of the certificate fall inside these
+     * constraints. The argument is the DER of the **value** of the NameConstraints extension.
      *
-     * <p>Se parsea aca: unas restricciones mal formadas son un error del llamador, y guardarlas sin
-     * mirar dejaria un criterio que dice restringir y no restringe.
+     * <p>It is parsed here: badly formed constraints are an error of the caller, and keeping them
+     * without looking would leave a criterion that says it restricts and does not.
      *
-     * @throws IOException si el DER no es una extension NameConstraints bien formada
+     * @throws IOException if the DER is not a well formed NameConstraints extension
      */
     public void setNameConstraints(byte[] bytes) throws IOException {
         if (bytes == null) {
@@ -342,7 +348,7 @@ public class X509CertSelector implements CertSelector {
         this.nameConstraintsBytes = copy(bytes);
     }
 
-    /** Copia del DER de las restricciones, o null si no hay. */
+    /** A copy of the DER of the constraints, or null if there are none. */
     public byte[] getNameConstraints() {
         return copy(this.nameConstraintsBytes);
     }
@@ -365,8 +371,9 @@ public class X509CertSelector implements CertSelector {
         return out;
     }
 
-    // Exige este numero de serie. Por si solo **no identifica** un certificado: la serie es unica
-    // por emisor, asi que sin fijar tambien el emisor esto puede traer certificados de otras CAs.
+    // It demands this serial number. By itself it **does not identify** a certificate: the serial
+    // is unique per issuer, so without also fixing the issuer this can bring certificates of other
+    // CAs.
     public void setSerialNumber(BigInteger serial) {
         this.serialNumber = serial;
     }
@@ -375,9 +382,9 @@ public class X509CertSelector implements CertSelector {
         return this.serialNumber;
     }
 
-    // El SubjectKeyIdentifier que tiene que tener, como el **DER del KeyIdentifier** —es decir, un
-    // OCTET STRING completo con su etiqueta y su largo, no los bytes pelados del identificador—.
-    // Es lo que dice el contrato del JDK y es facil de equivocar.
+    // The SubjectKeyIdentifier it has to have, as the **DER of the KeyIdentifier** —that is, a
+    // complete OCTET STRING with its tag and its length, not the bare bytes of the identifier—. It
+    // is what the contract of the JDK says and it is easy to get wrong.
     public void setSubjectKeyIdentifier(byte[] subjectKeyID) {
         this.subjectKeyID = copy(subjectKeyID);
     }
@@ -386,8 +393,8 @@ public class X509CertSelector implements CertSelector {
         return copy(this.subjectKeyID);
     }
 
-    // El AuthorityKeyIdentifier, con el mismo formato: el DER completo de la extension ya
-    // desenvuelta del OCTET STRING exterior.
+    // The AuthorityKeyIdentifier, with the same format: the complete DER of the extension already
+    // unwrapped from the outer OCTET STRING.
     public void setAuthorityKeyIdentifier(byte[] authorityKeyID) {
         this.authorityKeyID = copy(authorityKeyID);
     }
@@ -396,7 +403,7 @@ public class X509CertSelector implements CertSelector {
         return copy(this.authorityKeyID);
     }
 
-    // Exige que el certificado este vigente en esta fecha. Null saca el criterio.
+    // It demands that the certificate be current at this date. Null removes the criterion.
     public void setCertificateValid(Date certValid) {
         if (certValid == null) {
             this.certificateValid = null;
@@ -412,16 +419,17 @@ public class X509CertSelector implements CertSelector {
         return new Date(this.certificateValid.getTime());
     }
 
-    // Exige que la **clave privada** del certificado estuviera vigente en esta fecha, segun la
-    // extension PrivateKeyUsagePeriod. Null saca el criterio.
+    // It demands that the **private key** of the certificate was current at this date, according to
+    // the PrivateKeyUsagePeriod extension. Null removes the criterion.
     //
-    // No es lo mismo que `setCertificateValid`, y la diferencia es el motivo por el que la extension
-    // existe: una clave de firma deja de poder firmar antes de que su certificado venza, para que
-    // las firmas viejas se puedan seguir verificando despues. El certificado sigue siendo valido;
-    // la clave ya no puede producir firmas nuevas.
+    // It is not the same as `setCertificateValid`, and the difference is the reason the extension
+    // exists: a signing key stops being able to sign before its certificate expires, so that the
+    // old signatures can go on being verified afterwards. The certificate goes on being valid; the
+    // key can no longer produce new signatures.
     //
-    // Un certificado **sin** la extension pasa el criterio. Es del JDK y hay que decirlo porque
-    // suena al reves: sin extension no hay periodo declarado, o sea que la clave no se limito.
+    // A certificate **without** the extension passes the criterion. It is the JDK's and it has to
+    // be said because it sounds the wrong way round: with no extension there is no declared period,
+    // that is, the key was not limited.
     public void setPrivateKeyValid(Date privateKeyValid) {
         if (privateKeyValid == null) {
             this.privateKeyValid = null;
@@ -437,8 +445,8 @@ public class X509CertSelector implements CertSelector {
         return new Date(this.privateKeyValid.getTime());
     }
 
-    // El OID del algoritmo de la clave publica: "1.2.840.113549.1.1.1" para RSA. Se valida que sea
-    // un OID bien formado en el momento de ponerlo, no cuando se usa.
+    // The OID of the algorithm of the public key: "1.2.840.113549.1.1.1" for RSA. It is validated
+    // to be a well formed OID at the moment of setting it, not when it is used.
     public void setSubjectPublicKeyAlgID(String oid) throws IOException {
         if (oid == null) {
             this.subjectPublicKeyAlgID = null;
@@ -452,8 +460,8 @@ public class X509CertSelector implements CertSelector {
         return this.subjectPublicKeyAlgID;
     }
 
-    // Exige exactamente esta clave publica. Se compara por la codificacion, no por identidad: dos
-    // objetos distintos con los mismos bytes son la misma clave.
+    // It demands exactly this public key. It is compared by the encoding, not by identity: two
+    // different objects with the same bytes are the same key.
     public void setSubjectPublicKey(PublicKey key) {
         if (key == null) {
             this.subjectPublicKey = null;
@@ -465,15 +473,16 @@ public class X509CertSelector implements CertSelector {
     }
 
     /**
-     * Idem, con la clave en su forma codificada -- un `SubjectPublicKeyInfo` de X.509.
+     * The same, with the key in its encoded form -- a `SubjectPublicKeyInfo` of X.509.
      *
-     * <p>El DER se parsea aca y no cuando se usa: una clave mal formada es un error del llamador y
-     * hay que decirselo en el momento, no dejar un criterio que despues no coincide con nada.
+     * <p>The DER is parsed here and not when it is used: a badly formed key is an error of the
+     * caller and they have to be told at the moment, not left with a criterion that afterwards
+     * matches nothing.
      *
-     * <p>Lo que devuelve {@link #getSubjectPublicKey()} despues de esto no es la misma clase que
-     * devolveria el JDK; ver {@code EncodedPublicKey} para la diferencia y su motivo.
+     * <p>What {@link #getSubjectPublicKey()} returns after this is not the same class the JDK would
+     * return; see {@code EncodedPublicKey} for the difference and its reason.
      *
-     * @throws IOException si el DER no es un SubjectPublicKeyInfo bien formado
+     * @throws IOException if the DER is not a well formed SubjectPublicKeyInfo
      */
     public void setSubjectPublicKey(byte[] key) throws IOException {
         if (key == null) {
@@ -489,12 +498,13 @@ public class X509CertSelector implements CertSelector {
         return this.subjectPublicKey;
     }
 
-    // Los bits de KeyUsage que el certificado tiene que tener **prendidos**. Un false en la
-    // posicion i no exige nada; solo los true son condiciones.
+    // The bits of KeyUsage the certificate has to have **on**. A false at position i demands
+    // nothing; only the trues are conditions.
     //
-    // Y hay una asimetria del JDK que conviene saber: un certificado **sin** extension KeyUsage
-    // pasa siempre, porque no restringe nada. El criterio filtra certificados que declaran usos y
-    // no incluyen los pedidos, no certificados que no declaran nada.
+    // And there is an asymmetry of the JDK worth knowing: a certificate **without** a KeyUsage
+    // extension always passes, because it restricts nothing. The criterion filters certificates
+    // that declare uses and do not include the ones asked for, not certificates that declare
+    // nothing.
     public void setKeyUsage(boolean[] keyUsage) {
         if (keyUsage == null) {
             this.keyUsage = null;
@@ -514,12 +524,12 @@ public class X509CertSelector implements CertSelector {
         return c;
     }
 
-    // Los OIDs de ExtendedKeyUsage que el certificado tiene que tener. Un conjunto **vacio se trata
-    // como null**: quiere decir "sin criterio", no "sin ningun uso".
+    // The OIDs of ExtendedKeyUsage the certificate has to have. An **empty set is treated as
+    // null**: it means "no criterion", not "no use at all".
     //
-    // Igual que con KeyUsage: un certificado sin la extension pasa. Y uno que lleva
-    // anyExtendedKeyUsage (2.5.29.37.0) tambien, porque ese OID significa exactamente "sirvo para
-    // todo".
+    // Just as with KeyUsage: a certificate without the extension passes. And one that carries
+    // anyExtendedKeyUsage (2.5.29.37.0) too, because that OID means exactly "I serve for
+    // everything".
     public void setExtendedKeyUsage(Set<String> keyPurposeSet) throws IOException {
         if (keyPurposeSet == null || keyPurposeSet.isEmpty()) {
             this.keyPurposeSet = null;
@@ -537,11 +547,11 @@ public class X509CertSelector implements CertSelector {
         return this.keyPurposeSet;
     }
 
-    // Si hay que exigir **todos** los nombres alternativos o alcanza con uno.
+    // Whether **all** the alternative names have to be demanded or one is enough.
     //
-    // Ver la nota de la clase: el criterio que esta bandera gobierna no esta implementado aca, asi
-    // que hoy guarda el valor y no cambia lo que `match` devuelve. El default es true, igual que en
-    // el JDK.
+    // This note used to say that the criterion this flag governs was not implemented here and that
+    // the flag was kept without changing what `match` returns. It is implemented: see the note of
+    // the class and `matchSubjectAltNames`. The default is true, just as in the JDK.
     public void setMatchAllSubjectAltNames(boolean matchAllNames) {
         this.matchAllSubjectAltNames = matchAllNames;
     }
@@ -550,14 +560,14 @@ public class X509CertSelector implements CertSelector {
         return this.matchAllSubjectAltNames;
     }
 
-    // La restriccion de BasicConstraints. Los tres rangos significan cosas distintas:
+    // The restriction of BasicConstraints. The three ranges mean different things:
     //
-    //   -1  sin criterio (el default).
-    //   -2  el certificado tiene que ser de **entidad final**, o sea no una CA.
-    //   >=0 tiene que ser una CA cuyo largo maximo de cadena sea al menos este numero.
+    //   -1  no criterion (the default).
+    //   -2  the certificate has to be of an **end entity**, that is, not a CA.
+    //   >=0 it has to be a CA whose maximum chain length is at least this number.
     //
-    // El -2 es el que sirve para "no me traigas CAs", y confundirlo con -1 hace que el filtro no
-    // filtre.
+    // The -2 is the one that serves for "do not bring me CAs", and confusing it with -1 makes the
+    // filter not filter.
     public void setBasicConstraints(int minMaxPathLen) {
         if (minMaxPathLen < -2) {
             throw new IllegalArgumentException("basic constraints less than -2");
@@ -569,11 +579,11 @@ public class X509CertSelector implements CertSelector {
         return this.basicConstraints;
     }
 
-    // Los OIDs de politica que el certificado tiene que declarar. Alcanza con que tenga **uno** de
-    // los del conjunto.
+    // The policy OIDs the certificate has to declare. It is enough for it to have **one** of the
+    // ones in the set.
     //
-    // El conjunto vacio no es lo mismo que null: vacio exige que el certificado tenga la extension
-    // de politicas, sin importar cual; null saca el criterio.
+    // The empty set is not the same as null: empty demands that the certificate have the policy
+    // extension, whichever it is; null removes the criterion.
     public void setPolicy(Set<String> certPolicySet) throws IOException {
         if (certPolicySet == null) {
             this.policySet = null;
@@ -591,10 +601,10 @@ public class X509CertSelector implements CertSelector {
         return this.policySet;
     }
 
-    // Si el certificado cumple **todos** los criterios puestos.
+    // Whether the certificate meets **all** the criteria that were set.
     //
-    // Un objeto que no es un `X509Certificate` no cumple: no hay forma de preguntarle nada de lo
-    // que este selector compara.
+    // An object that is not an `X509Certificate` does not meet them: there is no way of asking it
+    // anything this selector compares.
     @Override
     public boolean match(Certificate cert) {
         if (!(cert instanceof X509Certificate)) {
@@ -608,9 +618,9 @@ public class X509CertSelector implements CertSelector {
         if (this.serialNumber != null && !this.serialNumber.equals(xcert.getSerialNumber())) {
             return false;
         }
-        // Los nombres se comparan por `X500Principal`, o sea por forma canonica. Comparar los textos
-        // aceptaria un certificado ajeno cuyo nombre se escribe distinto pero significa lo mismo, y
-        // rechazaria el propio por un espacio de mas.
+        // The names are compared by `X500Principal`, that is, by canonical form. Comparing the
+        // texts would accept somebody else's certificate whose name is written differently but
+        // means the same, and would reject one's own for one space too many.
         if (this.issuer != null && !this.issuer.equals(xcert.getIssuerX500Principal())) {
             return false;
         }
@@ -651,16 +661,17 @@ public class X509CertSelector implements CertSelector {
             && matchesPolicy(xcert);
     }
 
-    // La extension PrivateKeyUsagePeriod, si esta, tiene que cubrir la fecha pedida.
+    // The PrivateKeyUsagePeriod extension, if it is there, has to cover the date asked for.
     //
     //   PrivateKeyUsagePeriod ::= SEQUENCE {
     //       notBefore [0] GeneralizedTime OPTIONAL,
     //       notAfter  [1] GeneralizedTime OPTIONAL }
     //
-    // Los dos campos son opcionales y pueden faltar los dos —un SEQUENCE vacio, que segun el RFC no
-    // deberia pasar pero se codifica igual—; ahi el periodo no limita nada y el certificado pasa.
-    // Una extension **presente pero ilegible** en cambio no pasa: no se puede afirmar que la clave
-    // estuviera vigente si no se entiende que dice el certificado, y el lado seguro es rechazar.
+    // Both fields are optional and both can be missing —an empty SEQUENCE, which according to the
+    // RFC should not happen but is encoded all the same—; there the period limits nothing and the
+    // certificate passes. An extension **present but unreadable** on the other hand does not pass:
+    // it cannot be asserted that the key was current if what the certificate says is not
+    // understood, and the safe side is to reject.
     private boolean matchesPrivateKeyPeriod(X509Certificate xcert) {
         if (this.privateKeyValid == null) {
             return true;
@@ -697,34 +708,34 @@ public class X509CertSelector implements CertSelector {
         }
     }
 
-    // Los nombres pedidos tienen que estar en el SubjectAltName del certificado.
+    // The names asked for have to be in the SubjectAltName of the certificate.
     //
-    // `matchAllSubjectAltNames` decide si hacen falta todos o alcanza con uno. El default es
-    // **todos**, que es el lado restrictivo: un selector que trae un certificado por coincidir en
-    // uno solo de tres nombres no es lo que quien puso los tres estaba pidiendo.
+    // `matchAllSubjectAltNames` decides whether all of them are needed or one is enough. The
+    // default is **all**, which is the restrictive side: a selector that brings a certificate for
+    // matching only one of three names is not what whoever set the three was asking for.
     private boolean matchesAlternativeNames(X509Certificate xcert) {
         if (this.subjectAlternativeGeneralNames == null) {
             return true;
         }
-        List<GeneralNameValue> delCert;
+        List<GeneralNameValue> certIssuer;
         try {
-            delCert = alternativeNamesOf(xcert);
+            certIssuer = alternativeNamesOf(xcert);
         } catch (IOException e) {
-            // Un SubjectAltName ilegible no se puede afirmar que traiga los nombres pedidos.
+            // An unreadable SubjectAltName cannot be asserted to bring the names asked for.
             return false;
         }
         int i = 0;
         while (i < this.subjectAlternativeGeneralNames.size()) {
-            boolean esta = delCert.contains(this.subjectAlternativeGeneralNames.get(i));
-            if (esta && !this.matchAllSubjectAltNames) {
+            boolean present = certIssuer.contains(this.subjectAlternativeGeneralNames.get(i));
+            if (present && !this.matchAllSubjectAltNames) {
                 return true;
             }
-            if (!esta && this.matchAllSubjectAltNames) {
+            if (!present && this.matchAllSubjectAltNames) {
                 return false;
             }
             i = i + 1;
         }
-        // Con matchAll no fallo ninguno; sin matchAll no acerto ninguno.
+        // With matchAll none failed; without matchAll none hit.
         return this.matchAllSubjectAltNames;
     }
 
@@ -747,7 +758,7 @@ public class X509CertSelector implements CertSelector {
         return out;
     }
 
-    // Los nombres del certificado tienen que caer adentro de las restricciones del criterio.
+    // The names of the certificate have to fall inside the constraints of the criterion.
     private boolean matchesNameConstraints(X509Certificate xcert) {
         if (this.nameConstraints == null) {
             return true;
@@ -755,8 +766,8 @@ public class X509CertSelector implements CertSelector {
         return this.nameConstraints.verify(xcert);
     }
 
-    // Al reves: los nombres del criterio tienen que caer adentro de las restricciones **del
-    // certificado**. Un certificado sin la extension no restringe nada y pasa.
+    // The other way round: the names of the criterion have to fall inside the constraints **of the
+    // certificate**. A certificate without the extension restricts nothing and passes.
     private boolean matchesPathToNames(X509Certificate xcert) {
         if (this.pathToGeneralNames == null) {
             return true;
@@ -779,7 +790,7 @@ public class X509CertSelector implements CertSelector {
         }
         int maxPathLen = xcert.getBasicConstraints();
         if (this.basicConstraints == -2) {
-            // -1 del certificado es "no es CA", que es justo lo que se pide.
+            // -1 of the certificate is "it is not a CA", which is just what is asked for.
             return maxPathLen == -1;
         }
         return maxPathLen >= this.basicConstraints;
@@ -790,7 +801,7 @@ public class X509CertSelector implements CertSelector {
             return true;
         }
         boolean[] certKeyUsage = xcert.getKeyUsage();
-        // Sin extension no hay restriccion que violar: pasa.
+        // With no extension there is no restriction to violate: it passes.
         if (certKeyUsage == null) {
             return true;
         }
@@ -808,24 +819,24 @@ public class X509CertSelector implements CertSelector {
         if (this.keyPurposeSet == null || this.keyPurposeSet.isEmpty()) {
             return true;
         }
-        List<String> usos;
+        List<String> uses;
         try {
-            usos = xcert.getExtendedKeyUsage();
+            uses = xcert.getExtendedKeyUsage();
         } catch (CertificateParsingException e) {
             return false;
         }
-        // Sin extension, el certificado no restringe para que sirve: pasa.
-        if (usos == null) {
+        // With no extension, the certificate does not restrict what it serves for: it passes.
+        if (uses == null) {
             return true;
         }
-        if (usos.contains(OID_ANY_EXTENDED_KEY_USAGE)) {
+        if (uses.contains(OID_ANY_EXTENDED_KEY_USAGE)) {
             return true;
         }
-        return usos.containsAll(this.keyPurposeSet);
+        return uses.containsAll(this.keyPurposeSet);
     }
 
-    // Compara un identificador de clave contra el de la extension. La extension viene envuelta en
-    // un OCTET STRING; lo que se compara es lo de adentro contra lo que se puso en el selector.
+    // It compares a key identifier against that of the extension. The extension comes wrapped in an
+    // OCTET STRING; what is compared is what is inside against what was set in the selector.
     private boolean matchesKeyId(X509Certificate xcert, String oid, byte[] expected) {
         if (expected == null) {
             return true;
@@ -841,11 +852,11 @@ public class X509CertSelector implements CertSelector {
         }
     }
 
-    // Saca el OID del algoritmo del `SubjectPublicKeyInfo` de la clave.
+    // It takes the OID of the algorithm out of the `SubjectPublicKeyInfo` of the key.
     //
-    // La estructura es SEQUENCE { AlgorithmIdentifier SEQUENCE { OID, params OPTIONAL },
-    // BIT STRING }. Solo hace falta llegar al primer OID, que son tres pasos de DER y ninguna
-    // decision de confianza.
+    // The structure is SEQUENCE { AlgorithmIdentifier SEQUENCE { OID, params OPTIONAL }, BIT STRING
+    // }. Only getting as far as the first OID is needed, which is three steps of DER and no
+    // decision of trust.
     private boolean matchesKeyAlgId(X509Certificate xcert) {
         if (this.subjectPublicKeyAlgID == null) {
             return true;
@@ -872,11 +883,12 @@ public class X509CertSelector implements CertSelector {
         }
     }
 
-    // Comprueba las politicas del certificado.
+    // It checks the policies of the certificate.
     //
-    // La extension es SEQUENCE OF PolicyInformation, y cada PolicyInformation es un SEQUENCE cuyo
-    // primer elemento es el OID de la politica. El resto de cada entrada —los calificadores— se
-    // saltea sin mirar, que es lo correcto: aca solo interesa que OIDs declara.
+    // The extension is SEQUENCE OF PolicyInformation, and each PolicyInformation is a SEQUENCE
+    // whose first element is the OID of the policy. The rest of each entry —the qualifiers— is
+    // skipped without being looked at, which is right: here only which OIDs it declares is of
+    // interest.
     private boolean matchesPolicy(X509Certificate xcert) {
         if (this.policySet == null) {
             return true;
@@ -899,7 +911,7 @@ public class X509CertSelector implements CertSelector {
                 int from = info.skip(oidLen);
                 oids.add(info.readOid(from, oidLen));
             }
-            // El conjunto vacio pide solo que la extension exista con alguna politica adentro.
+            // The empty set asks only that the extension exist with some policy inside.
             if (this.policySet.isEmpty()) {
                 return !oids.isEmpty();
             }
@@ -915,8 +927,8 @@ public class X509CertSelector implements CertSelector {
         }
     }
 
-    // Copia con la que el `CertStore` se puede quedar. Los arreglos y la fecha se copian; los
-    // conjuntos ya son inmutables.
+    // A copy the `CertStore` can keep. The arrays and the date are copied; the sets are immutable
+    // already.
     @Override
     public Object clone() {
         try {
@@ -928,8 +940,8 @@ public class X509CertSelector implements CertSelector {
             copyOf.certificateValid = this.getCertificateValid();
             copyOf.privateKeyValid = this.getPrivateKeyValid();
             copyOf.nameConstraintsBytes = copy(this.nameConstraintsBytes);
-            // Las tres listas se copian: el store se queda con el clon, y un `add` posterior sobre
-            // el original no tiene que cambiarle el criterio a mitad de una busqueda.
+            // The three lists are copied: the store keeps the clone, and a later `add` over the
+            // original must not change its criterion halfway through a search.
             if (this.subjectAlternativeNames != null) {
                 copyOf.subjectAlternativeNames =
                     new ArrayList<List<?>>(this.subjectAlternativeNames);
@@ -947,9 +959,9 @@ public class X509CertSelector implements CertSelector {
         }
     }
 
-    // A KajiLibrary subset: el JDK imprime tambien los criterios que aca no existen, y usa su
-    // volcado hexadecimal interno para los arreglos. El formato no esta especificado; se conservan
-    // la estructura y los nombres de los campos que si existen.
+    // A KajiLibrary subset: the JDK also prints the criteria that do not exist here, and uses its
+    // internal hexadecimal dump for the arrays. The format is not specified; the structure and the
+    // names of the fields that do exist are kept.
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();

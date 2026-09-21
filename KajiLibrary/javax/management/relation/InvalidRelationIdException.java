@@ -1,18 +1,19 @@
 package javax.management.relation;
 
 /**
- * El identificador de relacion no sirve: o ya esta en uso, o no existe cuando deberia.
+ * The relation identifier is not valid: either it is already in use, or it does not exist when it
+ * should.
  */
 public class InvalidRelationIdException extends RelationException {
 
     private static final long serialVersionUID = -7115040321202754171L;
 
-    /** Sin detalle. */
+    /** Without detail. */
     public InvalidRelationIdException() {
         super();
     }
 
-    /** Con un mensaje. */
+    /** With a message. */
     public InvalidRelationIdException(String message) {
         super(message);
     }

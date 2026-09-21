@@ -11,26 +11,27 @@ import javax.management.MBeanServer;
 import javax.management.ObjectName;
 
 /**
- * La implementacion de {@link Relation} que trae el JDK: los roles se guardan en un mapa.
+ * The {@link Relation} implementation the JDK ships: the roles are kept in a map.
  *
- * <h2>Las dos formas de vivir</h2>
+ * <h2>The two ways of living</h2>
  *
- * <p>Una relacion puede ser <strong>interna</strong> —el servicio la guarda y nadie mas la ve— o un
- * <strong>MBean registrado</strong>, visible desde una consola. Esta clase sirve para las dos, y de
- * ahi que implemente {@link MBeanRegistration}: cuando se la registra, el servidor le avisa.
+ * <p>A relation can be <b>internal</b> --the service keeps it and nobody else sees it-- or a
+ * <b>registered MBean</b>, visible from a console. This class serves for both, and hence it
+ * implements {@link MBeanRegistration}: when it is registered, the server tells it.
  *
- * <p>{@link #isInRelationService} dice en cual esta. Importa porque casi ninguna operacion sirve
- * antes de que el servicio la tome: sin el no hay a quien preguntarle por el tipo de la relacion ni
- * con que verificar que los MBeans referenciados existan.
+ * <p>{@link #isInRelationService} says which one it is in. It matters because almost no operation
+ * works before the service takes it: without it there is nobody to ask about the relation's type
+ * nor anything to verify that the referenced MBeans exist with.
  *
- * <h2>Por que los metodos delegan en el servicio</h2>
+ * <h2>Why the methods delegate to the service</h2>
  *
- * <p>Se ve en los {@code ...Int} de mas abajo, que reciben el {@link RelationService} como
- * argumento. La razon es que esta clase <strong>no puede validar sola</strong>: para saber si un rol
- * es escribible hay que mirar el {@link RoleInfo} del tipo, y el tipo lo tiene el servicio.
+ * <p>It shows in the {@code ...Int} methods below, which take the {@link RelationService} as an
+ * argument. The reason is that this class <b>cannot validate on its own</b>: to know whether a role
+ * is writable you have to look at the type's {@link RoleInfo}, and the type is held by the
+ * service.
  *
- * <p>La consecuencia es la que sorprende: una relacion recien construida y todavia no agregada al
- * servicio rechaza casi todo con {@link RelationServiceNotRegisteredException}.
+ * <p>The consequence is the surprising one: a relation just built and not yet added to the service
+ * rejects almost everything with {@link RelationServiceNotRegisteredException}.
  */
 public class RelationSupport implements RelationSupportMBean, MBeanRegistration {
 
@@ -43,61 +44,61 @@ public class RelationSupport implements RelationSupportMBean, MBeanRegistration 
     private boolean myInRelServFlg = false;
 
     /**
-     * Una relacion interna.
+     * An internal relation.
      *
-     * @throws IllegalArgumentException si falta algo
-     * @throws InvalidRoleValueException si dos roles se llaman igual
+     * @throws IllegalArgumentException if something is missing
+     * @throws InvalidRoleValueException if two roles have the same name
      */
     public RelationSupport(String relationId, ObjectName relationServiceName,
             String relationTypeName, RoleList list)
             throws InvalidRoleValueException, IllegalArgumentException {
-        revisar(relationId, relationServiceName, relationTypeName);
+        check(relationId, relationServiceName, relationTypeName);
         this.myRelId = relationId;
         this.myRelServiceName = relationServiceName;
         this.myRelTypeName = relationTypeName;
-        cargar(list);
+        load(list);
     }
 
     /**
-     * Una relacion que va a ser un MBean, con el servidor donde vive el servicio.
+     * A relation that will be an MBean, with the server where the service lives.
      *
-     * @throws IllegalArgumentException si falta algo
-     * @throws InvalidRoleValueException si dos roles se llaman igual
+     * @throws IllegalArgumentException if something is missing
+     * @throws InvalidRoleValueException if two roles have the same name
      */
     public RelationSupport(String relationId, ObjectName relationServiceName,
             MBeanServer relationServiceMBeanServer, String relationTypeName, RoleList list)
             throws InvalidRoleValueException, IllegalArgumentException {
         this(relationId, relationServiceName, relationTypeName, list);
         if (relationServiceMBeanServer == null) {
-            throw new IllegalArgumentException("falta el servidor de MBeans");
+            throw new IllegalArgumentException("the MBean server is missing");
         }
         this.myRelServiceMBeanServer = relationServiceMBeanServer;
     }
 
-    private static void revisar(String id, ObjectName svc, String tipo) {
-        if (id == null || svc == null || tipo == null) {
+    private static void check(String id, ObjectName svc, String type) {
+        if (id == null || svc == null || type == null) {
             throw new IllegalArgumentException(
-                    "hacen falta el identificador, el servicio y el tipo");
+                    "the identifier, the service and the type are required");
         }
     }
 
-    private void cargar(RoleList list) throws InvalidRoleValueException {
+    private void load(RoleList list) throws InvalidRoleValueException {
         if (list == null) {
             return;
         }
         for (Role r : list.asList()) {
             if (this.myRoleName2ValueMap.containsKey(r.getRoleName())) {
                 throw new InvalidRoleValueException(
-                        "hay dos roles llamados " + r.getRoleName());
+                        "there are two roles named " + r.getRoleName());
             }
             this.myRoleName2ValueMap.put(r.getRoleName(), (Role) r.clone());
         }
     }
 
-    private void exigirServicio() throws RelationServiceNotRegisteredException {
+    private void requireService() throws RelationServiceNotRegisteredException {
         if (!this.myInRelServFlg) {
             throw new RelationServiceNotRegisteredException(
-                    "la relacion " + this.myRelId + " todavia no esta en el servicio");
+                    "the relation " + this.myRelId + " is not in the service yet");
         }
     }
 
@@ -106,12 +107,12 @@ public class RelationSupport implements RelationSupportMBean, MBeanRegistration 
             throws IllegalArgumentException, RoleNotFoundException,
             RelationServiceNotRegisteredException {
         if (roleName == null) {
-            throw new IllegalArgumentException("falta el nombre del rol");
+            throw new IllegalArgumentException("the role name is missing");
         }
-        exigirServicio();
+        requireService();
         Role r = this.myRoleName2ValueMap.get(roleName);
         if (r == null) {
-            throw new RoleNotFoundException("no hay un rol llamado " + roleName);
+            throw new RoleNotFoundException("there is no role named " + roleName);
         }
         return new ArrayList<ObjectName>(r.getRoleValue());
     }
@@ -120,9 +121,9 @@ public class RelationSupport implements RelationSupportMBean, MBeanRegistration 
     public RoleResult getRoles(String[] roleNameArray)
             throws IllegalArgumentException, RelationServiceNotRegisteredException {
         if (roleNameArray == null) {
-            throw new IllegalArgumentException("falta el arreglo de nombres");
+            throw new IllegalArgumentException("the array of names is missing");
         }
-        exigirServicio();
+        requireService();
         RoleList ok = new RoleList();
         RoleUnresolvedList mal = new RoleUnresolvedList();
         for (int i = 0; i < roleNameArray.length; i++) {
@@ -139,7 +140,7 @@ public class RelationSupport implements RelationSupportMBean, MBeanRegistration 
 
     /** {@inheritDoc} */
     public RoleResult getAllRoles() throws RelationServiceNotRegisteredException {
-        exigirServicio();
+        requireService();
         RoleList ok = new RoleList();
         for (Role r : this.myRoleName2ValueMap.values()) {
             ok.add((Role) r.clone());
@@ -160,11 +161,11 @@ public class RelationSupport implements RelationSupportMBean, MBeanRegistration 
     public Integer getRoleCardinality(String roleName)
             throws IllegalArgumentException, RoleNotFoundException {
         if (roleName == null) {
-            throw new IllegalArgumentException("falta el nombre del rol");
+            throw new IllegalArgumentException("the role name is missing");
         }
         Role r = this.myRoleName2ValueMap.get(roleName);
         if (r == null) {
-            throw new RoleNotFoundException("no hay un rol llamado " + roleName);
+            throw new RoleNotFoundException("there is no role named " + roleName);
         }
         return Integer.valueOf(r.getRoleValue().size());
     }
@@ -175,11 +176,11 @@ public class RelationSupport implements RelationSupportMBean, MBeanRegistration 
             RelationTypeNotFoundException, InvalidRoleValueException,
             RelationServiceNotRegisteredException, RelationNotFoundException {
         if (role == null) {
-            throw new IllegalArgumentException("falta el rol");
+            throw new IllegalArgumentException("the role is missing");
         }
-        exigirServicio();
+        requireService();
         if (!this.myRoleName2ValueMap.containsKey(role.getRoleName())) {
-            throw new RoleNotFoundException("no hay un rol llamado " + role.getRoleName());
+            throw new RoleNotFoundException("there is no role named " + role.getRoleName());
         }
         this.myRoleName2ValueMap.put(role.getRoleName(), (Role) role.clone());
     }
@@ -189,9 +190,9 @@ public class RelationSupport implements RelationSupportMBean, MBeanRegistration 
             throws IllegalArgumentException, RelationServiceNotRegisteredException,
             RelationTypeNotFoundException, RelationNotFoundException {
         if (roleList == null) {
-            throw new IllegalArgumentException("falta la lista de roles");
+            throw new IllegalArgumentException("the role list is missing");
         }
-        exigirServicio();
+        requireService();
         RoleList ok = new RoleList();
         RoleUnresolvedList mal = new RoleUnresolvedList();
         for (Role r : roleList.asList()) {
@@ -212,18 +213,18 @@ public class RelationSupport implements RelationSupportMBean, MBeanRegistration 
             RelationServiceNotRegisteredException, RelationTypeNotFoundException,
             RelationNotFoundException {
         if (objectName == null || roleName == null) {
-            throw new IllegalArgumentException("faltan el MBean o el rol");
+            throw new IllegalArgumentException("the MBean or the role is missing");
         }
-        exigirServicio();
+        requireService();
         Role r = this.myRoleName2ValueMap.get(roleName);
         if (r == null) {
-            throw new RoleNotFoundException("no hay un rol llamado " + roleName);
+            throw new RoleNotFoundException("there is no role named " + roleName);
         }
-        List<ObjectName> quedan = new ArrayList<ObjectName>(r.getRoleValue());
-        quedan.remove(objectName);
-        // Puede quedar por debajo del minimo del RoleInfo, y eso es correcto: la relacion pasa a
-        // estar en falta, que es justamente lo que el servicio detecta al purgar.
-        this.myRoleName2ValueMap.put(roleName, new Role(roleName, quedan));
+        List<ObjectName> remaining = new ArrayList<ObjectName>(r.getRoleValue());
+        remaining.remove(objectName);
+        // It may fall below the RoleInfo's minimum, and that is correct: the relation comes to be
+        // in breach, which is exactly what the service detects when purging.
+        this.myRoleName2ValueMap.put(roleName, new Role(roleName, remaining));
     }
 
     /** {@inheritDoc} */
@@ -257,27 +258,27 @@ public class RelationSupport implements RelationSupportMBean, MBeanRegistration 
         return this.myRelId;
     }
 
-    /** El servidor donde queda registrada; lo llama el servidor de MBeans. */
+    /** The server it gets registered in; the MBean server calls it. */
     public ObjectName preRegister(MBeanServer server, ObjectName name) throws Exception {
         this.myRelServiceMBeanServer = server;
         return name;
     }
 
-    /** Sin nada que hacer despues de registrarse. */
+    /** Nothing to do after registering. */
     public void postRegister(Boolean registrationDone) {
     }
 
     /**
-     * Antes de desregistrarse.
+     * Before unregistering.
      *
-     * <p>No saca la relacion del servicio: el servicio se entera por su propio filtro de
-     * notificaciones, que es lo que lo mantiene consistente aunque a un MBean lo desregistre alguien
-     * que no sabe nada de relaciones.
+     * <p>It does not remove the relation from the service: the service finds out through its own
+     * notification filter, which is what keeps it consistent even when an MBean is unregistered by
+     * someone who knows nothing about relations.
      */
     public void preDeregister() throws Exception {
     }
 
-    /** Sin nada que hacer despues. */
+    /** Nothing to do afterwards. */
     public void postDeregister() {
     }
 
@@ -289,7 +290,7 @@ public class RelationSupport implements RelationSupportMBean, MBeanRegistration 
     /** {@inheritDoc} */
     public void setRelationServiceManagementFlag(Boolean flag) throws IllegalArgumentException {
         if (flag == null) {
-            throw new IllegalArgumentException("la bandera no puede ser null");
+            throw new IllegalArgumentException("the flag cannot be null");
         }
         this.myInRelServFlg = flag.booleanValue();
     }

@@ -4,24 +4,25 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 
-// El certificado de la API vieja de identidades, **obsoleto desde 1.2**.
+// The certificate of the old identity API, **obsolete since 1.2**.
 //
-// No confundir con `java.security.cert.Certificate`, que es el que se usa: son dos tipos distintos
-// con el mismo nombre simple y no tienen nada que ver entre si. Este es una interfaz que
-// acompañaba a `Identity`, con la nocion de "garante" (quien atestigua) y "principal" (sobre
-// quien) explicita; aquel es una clase abstracta que modela un certificado real y delega el
-// formato en sus subclases.
+// Not to be confused with `java.security.cert.Certificate`, which is the one that is used: they are
+// two different types with the same simple name and have nothing to do with each other. This one is
+// an interface that accompanied `Identity`, with the notion of "guarantor" (who attests) and
+// "principal" (about whom) explicit; that one is an abstract class that models a real certificate
+// and leaves the format to its subclasses.
 //
-// Se implementa porque es el tipo que aparece en las firmas de `Identity.addCertificate` y
-// `certificates()`, y no se puede tener una sin la otra. Todos sus metodos son abstractos, asi que
-// no hay nada que pueda mentir aca: quien la implemente decide todo.
+// It is implemented because it is the type that appears in the signatures of
+// `Identity.addCertificate` and `certificates()`, and one cannot be had without the other. All of
+// its methods are abstract, so there is nothing that can lie here: whoever implements it decides
+// everything.
 @Deprecated
 public interface Certificate {
 
-    // Quien garantiza la union entre el principal y su clave.
+    // Who guarantees the union between the principal and their key.
     Principal getGuarantor();
 
-    // De quien es la clave que este certificado certifica.
+    // Whose the key this certificate certifies is.
     Principal getPrincipal();
 
     PublicKey getPublicKey();
@@ -32,6 +33,6 @@ public interface Certificate {
 
     String getFormat();
 
-    // La forma legible; `detailed` pide la version larga.
+    // The readable form; `detailed` asks for the long version.
     String toString(boolean detailed);
 }

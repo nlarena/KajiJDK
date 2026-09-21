@@ -3,38 +3,38 @@ package java.lang.management;
 import javax.management.ObjectName;
 
 /**
- * Las MXBean cuyos datos esta maquina virtual todavia no lleva.
+ * The MXBeans whose data this virtual machine does not keep yet.
  *
- * <p>De acceso de paquete: no es API. Existen para que {@code ManagementFactory} pueda cumplir su
- * contrato de no devolver null en esos metodos.
+ * <p>Package-private: not API. They exist so {@code ManagementFactory} can meet its contract of not
+ * returning null from those methods.
  *
- * <p>La regla que siguen es una sola: <b>lo que no se sabe se declara, no se inventa</b>. Cada metodo
- * que necesitaria un contador de la maquina virtual lanza {@link UnsupportedOperationException}; los
- * que preguntan si algo esta soportado contestan false, que es cierto; y los que tienen un valor
- * documentado para "no disponible" --el -1 de los tiempos-- devuelven ese.
+ * <p>They follow one rule: <b>what is not known is declared, not invented</b>. Every method that
+ * would need a counter from the virtual machine throws {@link UnsupportedOperationException}; the
+ * ones asking whether something is supported answer false, which is true; and the ones with a
+ * documented value for "not available" --the -1 of the timings-- return that.
  *
- * <p>Devolver ceros seria peor que fallar: un cero es una afirmacion, y seria falsa.
+ * <p>Returning zeros would be worse than failing: a zero is a statement, and it would be false.
  */
 final class UninstrumentedBeans {
 
-    /** El de carga de clases. */
+    /** The class-loading one. */
     static final ClassLoadingMXBean CLASS_LOADING = new Loading();
 
-    /** El de hilos. */
+    /** The thread one. */
     static final ThreadMXBean THREADS = new Threads();
 
     private UninstrumentedBeans() {
     }
 
-    /** El mensaje que comparten todos los rechazos. */
+    /** The message every refusal shares. */
     private static UnsupportedOperationException absent(String what) {
         return new UnsupportedOperationException(what + " is not instrumented in this VM");
     }
 
-    /** Contadores de carga de clases. */
+    /** Class-loading counters. */
     private static final class Loading implements ClassLoadingMXBean {
 
-        /** El rastreo; se guarda aunque no haya quien lo emita. */
+        /** The tracking; it is kept even though nothing emits it. */
         private volatile boolean verbose = false;
 
         public long getTotalLoadedClassCount() {
@@ -62,7 +62,7 @@ final class UninstrumentedBeans {
         }
     }
 
-    /** Contadores de hilos. */
+    /** Thread counters. */
     private static final class Threads implements ThreadMXBean {
 
         public int getThreadCount() {
@@ -101,7 +101,7 @@ final class UninstrumentedBeans {
             throw absent("thread information");
         }
 
-        /** No, y decirlo es la respuesta correcta. */
+        /** No, and saying so is the right answer. */
         public boolean isThreadContentionMonitoringSupported() {
             return false;
         }
@@ -149,8 +149,8 @@ final class UninstrumentedBeans {
         }
 
         /**
-         * @throws UnsupportedOperationException no se puede afirmar que no hay interbloqueo sin
-         *     poder mirar los monitores, y null significaria exactamente eso
+         * @throws UnsupportedOperationException there is no stating that no deadlock exists without
+         *     being able to look at the monitors, and null would mean exactly that
          */
         public long[] findMonitorDeadlockedThreads() {
             throw absent("monitor deadlock detection");
@@ -160,7 +160,7 @@ final class UninstrumentedBeans {
             throw absent("thread counts");
         }
 
-        /** @throws UnsupportedOperationException por lo mismo que la anterior */
+        /** @throws UnsupportedOperationException for the same reason as the previous one */
         public long[] findDeadlockedThreads() {
             throw absent("deadlock detection");
         }

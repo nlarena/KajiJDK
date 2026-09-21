@@ -3,36 +3,38 @@ package javax.management.remote;
 import java.io.Serializable;
 
 /**
- * KajiLibrary's javax.management.remote.NotificationResult -- una tanda de notificaciones y donde
- * seguir.
+ * KajiLibrary's javax.management.remote.NotificationResult -- a batch of notifications and where to
+ * go on.
  *
- * <p>Es la respuesta a un pedido de notificaciones pendientes. Trae las notificaciones y <b>dos</b>
- * numeros de secuencia, y la diferencia entre ellos es lo unico que hay que entender de esta clase:
+ * <p>It is the answer to a request for pending notifications. It brings the notifications and
+ * <b>two</b> sequence numbers, and the difference between them is the only thing to understand
+ * about this class:
  *
  * <ul>
- *   <li>{@link #getNextSequenceNumber} es por donde pedir la proxima vez;
- *   <li>{@link #getEarliestSequenceNumber} es la mas vieja que el servidor todavia guarda.
+ *   <li>{@link #getNextSequenceNumber} is where to ask from next time;
+ *   <li>{@link #getEarliestSequenceNumber} is the oldest the server still keeps.
  * </ul>
  *
- * <p>Si el cliente pidio desde un numero <b>menor</b> que ese, perdio notificaciones: el servidor las
- * descarto porque su buffer se lleno mientras el cliente no preguntaba. Es como se detecta la perdida,
- * y es lo que dispara un {@link JMXConnectionNotification#NOTIFS_LOST}.
+ * <p>If the client asked from a number <b>lower</b> than that one, it lost notifications: the
+ * server discarded them because its buffer filled up while the client was not asking. It is how
+ * the loss is detected, and it is what triggers a
+ * {@link JMXConnectionNotification#NOTIFS_LOST}.
  */
 public class NotificationResult implements Serializable {
 
     private static final long serialVersionUID = 1191800228721395279L;
 
-    /** La mas vieja que todavia hay. */
+    /** The oldest one still there. */
     private final long earliestSequenceNumber;
 
-    /** Por donde seguir. */
+    /** Where to go on. */
     private final long nextSequenceNumber;
 
-    /** Las de esta tanda. */
+    /** This batch's. */
     private final TargetedNotification[] targetedNotifications;
 
     /**
-     * @throws IllegalArgumentException si el arreglo es null
+     * @throws IllegalArgumentException if the array is null
      */
     public NotificationResult(long earliestSequenceNumber, long nextSequenceNumber,
                               TargetedNotification[] targetedNotifications) {
@@ -44,22 +46,22 @@ public class NotificationResult implements Serializable {
         this.targetedNotifications = targetedNotifications;
     }
 
-    /** La mas vieja que el servidor todavia guarda. Ver la nota de la clase. */
+    /** The oldest one the server still keeps. See the class note. */
     public long getEarliestSequenceNumber() {
         return this.earliestSequenceNumber;
     }
 
-    /** Por donde pedir la proxima vez. */
+    /** Where to ask from next time. */
     public long getNextSequenceNumber() {
         return this.nextSequenceNumber;
     }
 
-    /** Las de esta tanda. */
+    /** This batch's. */
     public TargetedNotification[] getTargetedNotifications() {
         return this.targetedNotifications;
     }
 
-    /** Los dos numeros y cuantas notificaciones vinieron. */
+    /** The two numbers and how many notifications came. */
     @Override
     public String toString() {
         return "NotificationResult: earliest=" + getEarliestSequenceNumber()

@@ -7,15 +7,15 @@ import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
 
-// El formato de intercambio: lo que escriben `exportNode`/`exportSubtree` y lo que lee
-// `importPreferences`.
+// The interchange format: what `exportNode`/`exportSubtree` write and what `importPreferences`
+// reads.
 //
-// POR QUE HAY UN ANALIZADOR DE XML ACA ADENTRO. Escribir XML es concatenar cadenas; leerlo no. En
-// este arbol no hay `org.w3c.dom`, no hay `org.xml.sax` y no hay `javax.xml.parsers` --lo unico de
-// XML que existe es `javax.xml.transform`, que son interfaces sin implementacion de XSLT-- asi que
-// `importPreferences` o traia su propio analizador o quedaba afuera.
+// WHY THERE IS AN XML PARSER IN HERE. Writing XML is concatenating strings; reading it is not. This
+// tree has no `org.w3c.dom`, no `org.xml.sax` and no `javax.xml.parsers` --the only XML thing that
+// exists is `javax.xml.transform`, which is interfaces with no XSLT implementation-- so
+// `importPreferences` either brought its own parser or stayed out.
 //
-// Trae el suyo, y se puede porque **el DTD de preferencias no tiene contenido de texto**:
+// It brings its own, and it can because **the preferences DTD has no text content**:
 //
 //     <!ELEMENT preferences (root)>      <!ATTLIST preferences EXTERNAL_XML_VERSION CDATA "0.0">
 //     <!ELEMENT root (map, node*)>       <!ATTLIST root type (system|user) #REQUIRED>
@@ -23,25 +23,23 @@ import java.util.HashMap;
 //     <!ELEMENT map (entry*)>
 //     <!ELEMENT entry EMPTY>             <!ATTLIST entry key CDATA #REQUIRED value CDATA #REQUIRED>
 //
-// Todos los elementos son de contenido *solo elementos* o vacios, no hay declaraciones de entidades
-// propias y no hay espacios de nombres. Eso deja la gramatica que hay que cubrir en: declaracion,
-// DOCTYPE, comentarios, instrucciones de proceso, etiquetas con atributos, las cinco entidades
-// predefinidas y las referencias numericas. Es una lista cerrada, y por eso el analizador de abajo
-// es **completo** para este DTD y no una aproximacion que anda con los archivos que escribimos
-// nosotros. Cualquier cosa que caiga fuera --texto suelto donde no puede haberlo, una etiqueta sin
-// cerrar, una entidad desconocida-- sale por `InvalidPreferencesFormatException`, que es
-// exactamente lo que el contrato pide.
+// Every element is of *element only* content or empty, there are no entity declarations of its own
+// and there are no namespaces. That leaves the grammar to be covered at: declaration, DOCTYPE,
+// comments, processing instructions, tags with attributes, the five predefined entities and the
+// numeric references. It is a closed list, and that is why the parser below is **complete** for this
+// DTD and not an approximation that works with the files we write ourselves. Anything falling
+// outside --loose text where there can be none, an unclosed tag, an unknown entity-- comes out as
+// `InvalidPreferencesFormatException`, which is exactly what the contract asks for.
 //
-// LO UNICO QUE NO SE PUEDE EXPORTAR son los valores con caracteres de control C0 distintos de
-// tabulador, salto de linea y retorno: XML 1.0 no los admite **ni siquiera** como referencia
-// numerica, asi que no hay documento valido que los contenga. La implementacion de referencia los
-// escribe igual y produce un archivo que despues nadie puede leer; aca se tira
-// `IllegalArgumentException` al exportar, porque un archivo que no se puede volver a importar es
-// peor que una excepcion.
+// THE ONLY THING THAT CANNOT BE EXPORTED is values with C0 control characters other than tab, line
+// feed and carriage return: XML 1.0 admits them **not even** as a numeric reference, so there is no
+// valid document that contains them. The reference implementation writes them anyway and produces a
+// file nobody can read afterwards; here `IllegalArgumentException` is thrown on export, because a
+// file that cannot be imported back is worse than an exception.
 //
-// Los otros tres si se escriben, pero **como referencia numerica** y no crudos: un tabulador o un
-// salto de linea literales dentro de un atributo los normaliza a espacio cualquier analizador que
-// cumpla la norma, y el valor volveria distinto de como salio.
+// The other three are written, but **as a numeric reference** and not raw: a literal tab or line
+// feed inside an attribute is normalised to a space by any parser that follows the standard, and the
+// value would come back different from how it went out.
 final class Xml {
 
     private static final String VERSION = "1.0";
@@ -50,9 +48,9 @@ final class Xml {
     private Xml() {
     }
 
-    // ---- escribir ---------------------------------------------------------------------------
+    // ---- write ---------------------------------------------------------------------------
 
-    static void exportar(OutputStream os, Preferences p, boolean subarbol)
+    static void export(OutputStream os, Preferences p, boolean subtree)
             throws IOException, BackingStoreException {
         if (((AbstractPreferences) p).isRemoved()) {
             throw new IllegalStateException("Node has been removed");
@@ -63,30 +61,30 @@ final class Xml {
         sb.append("<preferences EXTERNAL_XML_VERSION=\"").append(VERSION).append("\">\n");
         sb.append("  <root type=\"").append(p.isUserNode() ? "user" : "system").append("\">\n");
 
-        // La cadena de ancestros desde la raiz hasta `p` se escribe entera, con el `<map/>` vacio de
-        // cada uno. Es lo que hace que el documento sea autosuficiente: quien lo importa recrea la
-        // ruta completa sin tener que saber de donde salio.
-        ArrayList<Preferences> ancestros = new ArrayList<Preferences>();
-        // Un `while` y no el `for` de dos variables que pedia el caso: nuestro javac no deja en
-        // alcance las variables de un `for` con varios declaradores (ver
+        // The chain of ancestors from the root down to `p` is written whole, with each one's empty
+        // `<map/>`. It is what makes the document self-sufficient: whoever imports it recreates the
+        // full path without having to know where it came from.
+        ArrayList<Preferences> ancestors = new ArrayList<Preferences>();
+        // A `while` and not the two-variable `for` the case asked for: our javac does not keep in
+        // scope the variables of a `for` with several declarators (see
         // scratchpad/zzprefs/ForVariosDeclaradores.java).
-        Preferences trepando = p;
-        while (trepando.parent() != null) {
-            ancestros.add(trepando);
-            trepando = trepando.parent();
+        Preferences climbing = p;
+        while (climbing.parent() != null) {
+            ancestors.add(climbing);
+            climbing = climbing.parent();
         }
-        int sangria = 2;
-        for (int i = ancestros.size() - 1; i >= 0; i--) {
-            indentar(sb, sangria).append("<map/>\n");
-            indentar(sb, sangria).append("<node name=\"");
-            escapar(sb, ancestros.get(i).name());
+        int indentation = 2;
+        for (int i = ancestors.size() - 1; i >= 0; i--) {
+            indent(sb, indentation).append("<map/>\n");
+            indent(sb, indentation).append("<node name=\"");
+            writeEscaped(sb, ancestors.get(i).name());
             sb.append("\">\n");
-            sangria++;
+            indentation++;
         }
-        volcar(sb, p, subarbol, sangria);
-        while (sangria > 2) {
-            sangria--;
-            indentar(sb, sangria).append("</node>\n");
+        dump(sb, p, subtree, indentation);
+        while (indentation > 2) {
+            indentation--;
+            indent(sb, indentation).append("</node>\n");
         }
         sb.append("  </root>\n");
         sb.append("</preferences>\n");
@@ -94,58 +92,58 @@ final class Xml {
         os.flush();
     }
 
-    private static void volcar(StringBuilder sb, Preferences p, boolean subarbol, int sangria)
+    private static void dump(StringBuilder sb, Preferences p, boolean subtree, int indentation)
             throws BackingStoreException {
-        String[] claves;
-        String[] nombresDeHijos = null;
-        Preferences[] hijos = null;
-        // Las claves y la lista de hijos se sacan bajo el candado del nodo para que el documento sea
-        // una foto y no una mezcla de dos momentos; el recorrido recursivo se hace despues, fuera.
+        String[] keyNames;
+        String[] childNames = null;
+        Preferences[] children = null;
+        // The keys and the list of children are taken under the node's lock so the document is a
+        // snapshot and not a mix of two moments; the recursive walk is done afterwards, outside.
         synchronized (((AbstractPreferences) p).lock) {
             if (((AbstractPreferences) p).isRemoved()) {
                 return;
             }
-            claves = p.keys();
-            if (subarbol) {
-                nombresDeHijos = p.childrenNames();
-                hijos = new Preferences[nombresDeHijos.length];
-                for (int i = 0; i < nombresDeHijos.length; i++) {
-                    hijos[i] = p.node(nombresDeHijos[i]);
+            keyNames = p.keys();
+            if (subtree) {
+                childNames = p.childrenNames();
+                children = new Preferences[childNames.length];
+                for (int i = 0; i < childNames.length; i++) {
+                    children[i] = p.node(childNames[i]);
                 }
             }
         }
-        if (claves.length == 0) {
-            indentar(sb, sangria).append("<map/>\n");
+        if (keyNames.length == 0) {
+            indent(sb, indentation).append("<map/>\n");
         } else {
-            indentar(sb, sangria).append("<map>\n");
-            for (int i = 0; i < claves.length; i++) {
-                indentar(sb, sangria + 1).append("<entry key=\"");
-                escapar(sb, claves[i]);
+            indent(sb, indentation).append("<map>\n");
+            for (int i = 0; i < keyNames.length; i++) {
+                indent(sb, indentation + 1).append("<entry key=\"");
+                writeEscaped(sb, keyNames[i]);
                 sb.append("\" value=\"");
-                escapar(sb, p.get(claves[i], ""));
+                writeEscaped(sb, p.get(keyNames[i], ""));
                 sb.append("\"/>\n");
             }
-            indentar(sb, sangria).append("</map>\n");
+            indent(sb, indentation).append("</map>\n");
         }
-        if (subarbol) {
-            for (int i = 0; i < nombresDeHijos.length; i++) {
-                indentar(sb, sangria).append("<node name=\"");
-                escapar(sb, nombresDeHijos[i]);
+        if (subtree) {
+            for (int i = 0; i < childNames.length; i++) {
+                indent(sb, indentation).append("<node name=\"");
+                writeEscaped(sb, childNames[i]);
                 sb.append("\">\n");
-                volcar(sb, hijos[i], true, sangria + 1);
-                indentar(sb, sangria).append("</node>\n");
+                dump(sb, children[i], true, indentation + 1);
+                indent(sb, indentation).append("</node>\n");
             }
         }
     }
 
-    private static StringBuilder indentar(StringBuilder sb, int n) {
+    private static StringBuilder indent(StringBuilder sb, int n) {
         for (int i = 0; i < n; i++) {
             sb.append("  ");
         }
         return sb;
     }
 
-    private static void escapar(StringBuilder sb, String s) {
+    private static void writeEscaped(StringBuilder sb, String s) {
         for (int i = 0; i < s.length(); i++) {
             char c = s.charAt(i);
             if (c == '&') {
@@ -162,31 +160,31 @@ final class Xml {
                 sb.append("&#").append((int) c).append(';');
             } else if (c < 0x20) {
                 throw new IllegalArgumentException(
-                        "XML 1.0 no admite el caracter de control U+"
-                                + Integer.toHexString(c) + ", ni siquiera escapado");
+                        "XML 1.0 does not admit the control character U+"
+                                + Integer.toHexString(c) + ", not even escaped");
             } else {
                 sb.append(c);
             }
         }
     }
 
-    // ---- leer -------------------------------------------------------------------------------
+    // ---- read -------------------------------------------------------------------------------
 
-    static void importar(InputStream is) throws IOException, InvalidPreferencesFormatException {
-        String texto = decodificar(leerTodo(is));
+    static void doImport(InputStream is) throws IOException, InvalidPreferencesFormatException {
+        String text = decodeText(readAll(is));
         Elem doc;
         try {
-            doc = new Analizador(texto).documento();
+            doc = new Parser(text).document();
         } catch (InvalidPreferencesFormatException e) {
             throw e;
         } catch (RuntimeException e) {
-            // Un indice fuera de rango del analizador es un documento roto, no un error nuestro
-            // que el programa deba distinguir.
+            // An index out of range from the parser is a broken document, not an error of ours the
+            // program should have to tell apart.
             throw new InvalidPreferencesFormatException(e);
         }
         if (!doc.tag.equals("preferences")) {
             throw new InvalidPreferencesFormatException(
-                    "el elemento raiz es <" + doc.tag + "> y no <preferences>");
+                    "the root element is <" + doc.tag + "> and not <preferences>");
         }
         String v = doc.attr("EXTERNAL_XML_VERSION");
         if (v.length() != 0 && v.compareTo(VERSION) > 0) {
@@ -195,55 +193,55 @@ final class Xml {
                             + " is not supported. This java installation can read versions "
                             + VERSION + " or older.");
         }
-        if (doc.hijos.size() != 1 || !doc.hijos.get(0).tag.equals("root")) {
-            throw new InvalidPreferencesFormatException("<preferences> debe tener un unico <root>");
+        if (doc.children.size() != 1 || !doc.children.get(0).tag.equals("root")) {
+            throw new InvalidPreferencesFormatException("<preferences> must have exactly one <root>");
         }
-        Elem raiz = doc.hijos.get(0);
-        String tipo = raiz.attr("type");
-        Preferences destino;
-        if (tipo.equals("user")) {
-            destino = Preferences.userRoot();
-        } else if (tipo.equals("system")) {
-            destino = Preferences.systemRoot();
+        Elem root = doc.children.get(0);
+        String type = root.attr("type");
+        Preferences target;
+        if (type.equals("user")) {
+            target = Preferences.userRoot();
+        } else if (type.equals("system")) {
+            target = Preferences.systemRoot();
         } else {
             throw new InvalidPreferencesFormatException(
-                    "<root type> vale \"" + tipo + "\" y tiene que ser \"user\" o \"system\"");
+                    "<root type> is \"" + type + "\" and it has to be \"user\" or \"system\"");
         }
-        importarSubarbol(destino, raiz);
+        importSubtree(target, root);
     }
 
-    private static void importarSubarbol(Preferences destino, Elem xml)
+    private static void importSubtree(Preferences target, Elem xml)
             throws InvalidPreferencesFormatException {
-        if (xml.hijos.isEmpty() || !xml.hijos.get(0).tag.equals("map")) {
+        if (xml.children.isEmpty() || !xml.children.get(0).tag.equals("map")) {
             throw new InvalidPreferencesFormatException(
-                    "<" + xml.tag + "> tiene que empezar con <map>");
+                    "<" + xml.tag + "> has to start with <map>");
         }
-        Elem mapa = xml.hijos.get(0);
-        for (int i = 0; i < mapa.hijos.size(); i++) {
-            Elem e = mapa.hijos.get(i);
+        Elem map = xml.children.get(0);
+        for (int i = 0; i < map.children.size(); i++) {
+            Elem e = map.children.get(i);
             if (!e.tag.equals("entry")) {
                 throw new InvalidPreferencesFormatException(
-                        "<map> solo admite <entry>, no <" + e.tag + ">");
+                        "<map> admits only <entry>, not <" + e.tag + ">");
             }
             if (!e.attrs.containsKey("key") || !e.attrs.containsKey("value")) {
-                throw new InvalidPreferencesFormatException("<entry> necesita `key` y `value`");
+                throw new InvalidPreferencesFormatException("<entry> needs `key` and `value`");
             }
-            destino.put(e.attr("key"), e.attr("value"));
+            target.put(e.attr("key"), e.attr("value"));
         }
-        for (int i = 1; i < xml.hijos.size(); i++) {
-            Elem e = xml.hijos.get(i);
+        for (int i = 1; i < xml.children.size(); i++) {
+            Elem e = xml.children.get(i);
             if (!e.tag.equals("node")) {
                 throw new InvalidPreferencesFormatException(
-                        "despues del <map> solo van <node>, no <" + e.tag + ">");
+                        "after the <map> only <node> goes, not <" + e.tag + ">");
             }
             if (!e.attrs.containsKey("name")) {
-                throw new InvalidPreferencesFormatException("<node> necesita `name`");
+                throw new InvalidPreferencesFormatException("<node> needs `name`");
             }
-            importarSubarbol(destino.node(e.attr("name")), e);
+            importSubtree(target.node(e.attr("name")), e);
         }
     }
 
-    private static byte[] leerTodo(InputStream is) throws IOException {
+    private static byte[] readAll(InputStream is) throws IOException {
         ByteArrayOutputStream bos = new ByteArrayOutputStream();
         byte[] buf = new byte[4096];
         int n;
@@ -253,11 +251,11 @@ final class Xml {
         return bos.toByteArray();
     }
 
-    // El documento dice en que codificacion esta, pero para leer esa declaracion ya hay que
-    // decodificarlo. La salida del circulo es que toda codificacion admitida por XML es o compatible
-    // con ASCII --y entonces la declaracion se lee bien decodificando como UTF-8-- o UTF-16, que se
-    // reconoce por la marca de orden de bytes.
-    private static String decodificar(byte[] b) {
+    // The document says which encoding it is in, but reading that declaration already requires
+    // decoding it. The way out of the circle is that every encoding XML admits is either
+    // ASCII-compatible --and then the declaration reads correctly decoding as UTF-8-- or UTF-16,
+    // which is recognised by the byte order mark.
+    private static String decodeText(byte[] b) {
         if (b.length >= 2 && (b[0] & 0xff) == 0xfe && (b[1] & 0xff) == 0xff) {
             return new String(b, java.nio.charset.StandardCharsets.UTF_16BE).substring(1);
         }
@@ -268,52 +266,52 @@ final class Xml {
         if (s.length() > 0 && s.charAt(0) == '﻿') {
             s = s.substring(1);
         }
-        String enc = codificacionDeclarada(s);
+        String enc = declaredEncoding(s);
         if (enc != null && !enc.equalsIgnoreCase("UTF-8") && !enc.equalsIgnoreCase("UTF8")) {
             try {
                 return new String(b, enc);
             } catch (Exception e) {
-                // Codificacion que la VM no conoce: se sigue con UTF-8 y el analizador dira que el
-                // documento no se entiende, que es la verdad.
+                // An encoding the VM does not know: it carries on with UTF-8 and the parser will
+                // say the document is not understood, which is the truth.
             }
         }
         return s;
     }
 
-    private static String codificacionDeclarada(String s) {
+    private static String declaredEncoding(String s) {
         if (!s.startsWith("<?xml")) {
             return null;
         }
-        int fin = s.indexOf("?>");
-        if (fin < 0) {
+        int end = s.indexOf("?>");
+        if (end < 0) {
             return null;
         }
-        String decl = s.substring(0, fin);
+        String decl = s.substring(0, end);
         int i = decl.indexOf("encoding");
         if (i < 0) {
             return null;
         }
-        int comilla = -1;
+        int quote = -1;
         for (int j = i + 8; j < decl.length(); j++) {
             char c = decl.charAt(j);
             if (c == '"' || c == '\'') {
-                comilla = j;
+                quote = j;
                 break;
             }
         }
-        if (comilla < 0) {
+        if (quote < 0) {
             return null;
         }
-        int cierre = decl.indexOf(decl.charAt(comilla), comilla + 1);
-        return cierre < 0 ? null : decl.substring(comilla + 1, cierre);
+        int closing = decl.indexOf(decl.charAt(quote), quote + 1);
+        return closing < 0 ? null : decl.substring(quote + 1, closing);
     }
 
-    // ---- el arbol que sale del analizador ----------------------------------------------------
+    // ---- the tree the parser produces    ----------------------------------------------------
 
     private static final class Elem {
         final String tag;
         final HashMap<String, String> attrs = new HashMap<String, String>();
-        final ArrayList<Elem> hijos = new ArrayList<Elem>();
+        final ArrayList<Elem> children = new ArrayList<Elem>();
 
         Elem(String tag) {
             this.tag = tag;
@@ -325,45 +323,45 @@ final class Xml {
         }
     }
 
-    // ---- el analizador -----------------------------------------------------------------------
+    // ---- the parser    -----------------------------------------------------------------------
 
-    private static final class Analizador {
+    private static final class Parser {
 
         private final String s;
         private int i;
 
-        Analizador(String s) {
+        Parser(String s) {
             this.s = s;
         }
 
-        Elem documento() throws InvalidPreferencesFormatException {
-            prologo();
-            Elem raiz = elemento();
-            prologo(); // comentarios y espacios despues del elemento raiz
+        Elem document() throws InvalidPreferencesFormatException {
+            prolog();
+            Elem root = element();
+            prolog(); // comments and whitespace after the root element
             if (i < s.length()) {
-                error("sobra texto despues del elemento raiz");
+                error("there is text left over after the root element");
             }
-            return raiz;
+            return root;
         }
 
-        // Todo lo que puede haber alrededor del elemento raiz: espacios, la declaracion XML,
-        // el DOCTYPE, comentarios e instrucciones de proceso.
-        private void prologo() throws InvalidPreferencesFormatException {
+        // Everything there can be around the root element: whitespace, the XML declaration, the
+        // DOCTYPE, comments and processing instructions.
+        private void prolog() throws InvalidPreferencesFormatException {
             while (true) {
-                espacios();
+                skipWhitespace();
                 if (i + 1 >= s.length() || s.charAt(i) != '<') {
                     return;
                 }
                 char c = s.charAt(i + 1);
                 if (c == '?') {
-                    saltarHasta("?>");
+                    skipTo("?>");
                 } else if (c == '!') {
                     if (s.startsWith("<!--", i)) {
-                        saltarHasta("-->");
+                        skipTo("-->");
                     } else if (s.startsWith("<!DOCTYPE", i)) {
                         doctype();
                     } else {
-                        error("no se esperaba `<!` aca");
+                        error("`<!` was not expected here");
                     }
                 } else {
                     return;
@@ -371,44 +369,44 @@ final class Xml {
             }
         }
 
-        // El DOCTYPE se saltea entero: el analizador no valida contra el DTD --de eso se encarga
-        // `importarSubarbol`, que exige la forma exacta que el DTD describe-- pero **si** tiene que
-        // saber donde termina, y eso no es "el proximo `>`": el subconjunto interno entre corchetes
-        // puede tener todos los que quiera.
+        // The DOCTYPE is skipped whole: the parser does not validate against the DTD --that is
+        // `importSubtree`'s job, which demands the exact shape the DTD describes-- but it **does**
+        // have to know where it ends, and that is not "the next `>`": the internal subset between
+        // brackets may hold as many as it likes.
         private void doctype() throws InvalidPreferencesFormatException {
             i += "<!DOCTYPE".length();
-            int corchetes = 0;
+            int brackets = 0;
             while (i < s.length()) {
                 char c = s.charAt(i);
                 if (c == '"' || c == '\'') {
-                    int fin = s.indexOf(c, i + 1);
-                    if (fin < 0) {
-                        error("comilla sin cerrar en el DOCTYPE");
+                    int end = s.indexOf(c, i + 1);
+                    if (end < 0) {
+                        error("unclosed quote in the DOCTYPE");
                     }
-                    i = fin + 1;
+                    i = end + 1;
                     continue;
                 }
                 if (c == '[') {
-                    corchetes++;
+                    brackets++;
                 } else if (c == ']') {
-                    corchetes--;
-                } else if (c == '>' && corchetes == 0) {
+                    brackets--;
+                } else if (c == '>' && brackets == 0) {
                     i++;
                     return;
                 }
                 i++;
             }
-            error("DOCTYPE sin cerrar");
+            error("unclosed DOCTYPE");
         }
 
-        private Elem elemento() throws InvalidPreferencesFormatException {
-            esperar('<');
-            String tag = nombre();
+        private Elem element() throws InvalidPreferencesFormatException {
+            expect('<');
+            String tag = name();
             Elem e = new Elem(tag);
             while (true) {
-                espacios();
+                skipWhitespace();
                 if (i >= s.length()) {
-                    error("etiqueta <" + tag + "> sin cerrar");
+                    error("tag <" + tag + "> is not closed");
                 }
                 char c = s.charAt(i);
                 if (c == '>') {
@@ -417,101 +415,101 @@ final class Xml {
                 }
                 if (c == '/') {
                     i++;
-                    esperar('>');
+                    expect('>');
                     return e; // <tag/>
                 }
-                String n = nombre();
-                espacios();
-                esperar('=');
-                espacios();
-                if (e.attrs.put(n, valorDeAtributo()) != null) {
-                    error("el atributo `" + n + "` esta dos veces en <" + tag + ">");
+                String n = name();
+                skipWhitespace();
+                expect('=');
+                skipWhitespace();
+                if (e.attrs.put(n, attributeValue()) != null) {
+                    error("the attribute `" + n + "` is there twice in <" + tag + ">");
                 }
             }
-            contenido(e);
+            content(e);
             return e;
         }
 
-        private void contenido(Elem e) throws InvalidPreferencesFormatException {
+        private void content(Elem e) throws InvalidPreferencesFormatException {
             while (true) {
                 if (i >= s.length()) {
-                    error("falta </" + e.tag + ">");
+                    error("missing </" + e.tag + ">");
                 }
                 char c = s.charAt(i);
                 if (c == '<') {
                     if (s.startsWith("<!--", i)) {
-                        saltarHasta("-->");
+                        skipTo("-->");
                     } else if (s.startsWith("<![CDATA[", i)) {
-                        int fin = s.indexOf("]]>", i);
-                        if (fin < 0) {
-                            error("CDATA sin cerrar");
+                        int end = s.indexOf("]]>", i);
+                        if (end < 0) {
+                            error("unclosed CDATA");
                         }
-                        exigirEnBlanco(s.substring(i + 9, fin), e.tag);
-                        i = fin + 3;
+                        requireWhitespace(s.substring(i + 9, end), e.tag);
+                        i = end + 3;
                     } else if (s.startsWith("<?", i)) {
-                        saltarHasta("?>");
+                        skipTo("?>");
                     } else if (s.startsWith("</", i)) {
                         i += 2;
-                        String cierre = nombre();
-                        if (!cierre.equals(e.tag)) {
-                            error("se abrio <" + e.tag + "> y se cerro </" + cierre + ">");
+                        String closing = name();
+                        if (!closing.equals(e.tag)) {
+                            error("<" + e.tag + "> was opened and </" + closing + "> closed");
                         }
-                        espacios();
-                        esperar('>');
+                        skipWhitespace();
+                        expect('>');
                         return;
                     } else {
-                        e.hijos.add(elemento());
+                        e.children.add(element());
                     }
                 } else if (c == '&') {
-                    // Una referencia en el contenido tiene que resolver a espacio en blanco: el DTD
-                    // no admite texto en ningun elemento.
+                    // A reference in the content has to resolve to whitespace: the DTD admits text
+                    // in no element.
                     StringBuilder sb = new StringBuilder();
-                    referencia(sb);
-                    exigirEnBlanco(sb.toString(), e.tag);
-                } else if (esEspacio(c)) {
+                    reference(sb);
+                    requireWhitespace(sb.toString(), e.tag);
+                } else if (isWhitespace(c)) {
                     i++;
                 } else {
-                    error("<" + e.tag + "> no admite texto, y hay `" + c + "`");
+                    error("<" + e.tag + "> admits no text, and there is `" + c + "`");
                 }
             }
         }
 
-        private void exigirEnBlanco(String t, String tag) throws InvalidPreferencesFormatException {
+        private void requireWhitespace(String t, String tag) throws InvalidPreferencesFormatException {
             for (int k = 0; k < t.length(); k++) {
-                if (!esEspacio(t.charAt(k))) {
-                    error("<" + tag + "> no admite texto, y hay `" + t.trim() + "`");
+                if (!isWhitespace(t.charAt(k))) {
+                    error("<" + tag + "> admits no text, and there is `" + t.trim() + "`");
                 }
             }
         }
 
-        private String valorDeAtributo() throws InvalidPreferencesFormatException {
+        private String attributeValue() throws InvalidPreferencesFormatException {
             if (i >= s.length()) {
-                error("falta el valor del atributo");
+                error("the attribute value is missing");
             }
-            char comilla = s.charAt(i);
-            if (comilla != '"' && comilla != '\'') {
-                error("el valor de un atributo va entre comillas");
+            char quote = s.charAt(i);
+            if (quote != '"' && quote != '\'') {
+                error("an attribute value goes between quotes");
             }
             i++;
             StringBuilder sb = new StringBuilder();
             while (true) {
                 if (i >= s.length()) {
-                    error("valor de atributo sin cerrar");
+                    error("unclosed attribute value");
                 }
                 char c = s.charAt(i);
-                if (c == comilla) {
+                if (c == quote) {
                     i++;
                     return sb.toString();
                 }
                 if (c == '<') {
-                    error("un `<` crudo no puede estar en el valor de un atributo");
+                    error("a raw `<` cannot be inside an attribute value");
                 }
                 if (c == '&') {
-                    referencia(sb);
+                    reference(sb);
                 } else if (c == '\t' || c == '\n' || c == '\r') {
-                    // Normalizacion de valores de atributo, tal cual la pide XML 1.0. Por eso el
-                    // exportador escribe estos tres como referencia numerica: crudos volverian
-                    // convertidos en espacio.
+                    // Attribute value normalisation, exactly as XML 1.0 asks for it. That is why
+                    // the exporter writes these three as a numeric reference: raw they would come
+                    // back turned into a space.
                     sb.append(' ');
                     i++;
                 } else {
@@ -521,15 +519,15 @@ final class Xml {
             }
         }
 
-        private void referencia(StringBuilder sb) throws InvalidPreferencesFormatException {
-            int fin = s.indexOf(';', i);
-            if (fin < 0) {
-                error("referencia sin `;`");
+        private void reference(StringBuilder sb) throws InvalidPreferencesFormatException {
+            int end = s.indexOf(';', i);
+            if (end < 0) {
+                error("reference with no `;`");
             }
-            String r = s.substring(i + 1, fin);
-            i = fin + 1;
+            String r = s.substring(i + 1, end);
+            i = end + 1;
             if (r.length() == 0) {
-                error("referencia vacia");
+                error("empty reference");
             }
             if (r.charAt(0) == '#') {
                 int cp;
@@ -538,11 +536,11 @@ final class Xml {
                             ? Integer.parseInt(r.substring(2), 16)
                             : Integer.parseInt(r.substring(1));
                 } catch (NumberFormatException e) {
-                    error("referencia numerica invalida `&" + r + ";`");
+                    error("invalid numeric reference `&" + r + ";`");
                     return;
                 }
                 if (cp < 0 || cp > 0x10ffff) {
-                    error("referencia numerica fuera de rango `&" + r + ";`");
+                    error("numeric reference out of range `&" + r + ";`");
                 }
                 sb.appendCodePoint(cp);
                 return;
@@ -558,55 +556,55 @@ final class Xml {
             } else if (r.equals("apos")) {
                 sb.append('\'');
             } else {
-                // Sin declaraciones de entidades no hay forma de saber que vale: inventar un valor
-                // seria peor que decir que no se entiende.
-                error("entidad desconocida `&" + r + ";`");
+                // With no entity declarations there is no way of knowing what it stands for:
+                // inventing a value would be worse than saying it is not understood.
+                error("unknown entity `&" + r + ";`");
             }
         }
 
-        private String nombre() throws InvalidPreferencesFormatException {
-            int inicio = i;
-            while (i < s.length() && esDeNombre(s.charAt(i))) {
+        private String name() throws InvalidPreferencesFormatException {
+            int start = i;
+            while (i < s.length() && isNameChar(s.charAt(i))) {
                 i++;
             }
-            if (i == inicio) {
-                error("se esperaba un nombre");
+            if (i == start) {
+                error("a name was expected");
             }
-            return s.substring(inicio, i);
+            return s.substring(start, i);
         }
 
-        private static boolean esDeNombre(char c) {
+        private static boolean isNameChar(char c) {
             return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
                     || c == '_' || c == '-' || c == '.' || c == ':' || c > 0x7f;
         }
 
-        private static boolean esEspacio(char c) {
+        private static boolean isWhitespace(char c) {
             return c == ' ' || c == '\t' || c == '\n' || c == '\r';
         }
 
-        private void espacios() {
-            while (i < s.length() && esEspacio(s.charAt(i))) {
+        private void skipWhitespace() {
+            while (i < s.length() && isWhitespace(s.charAt(i))) {
                 i++;
             }
         }
 
-        private void esperar(char c) throws InvalidPreferencesFormatException {
+        private void expect(char c) throws InvalidPreferencesFormatException {
             if (i >= s.length() || s.charAt(i) != c) {
-                error("se esperaba `" + c + "`");
+                error("expected `" + c + "`");
             }
             i++;
         }
 
-        private void saltarHasta(String cierre) throws InvalidPreferencesFormatException {
-            int fin = s.indexOf(cierre, i);
-            if (fin < 0) {
-                error("falta `" + cierre + "`");
+        private void skipTo(String closing) throws InvalidPreferencesFormatException {
+            int end = s.indexOf(closing, i);
+            if (end < 0) {
+                error("missing `" + closing + "`");
             }
-            i = fin + cierre.length();
+            i = end + closing.length();
         }
 
         private void error(String m) throws InvalidPreferencesFormatException {
-            throw new InvalidPreferencesFormatException(m + " (posicion " + i + ")");
+            throw new InvalidPreferencesFormatException(m + " (position " + i + ")");
         }
     }
 }

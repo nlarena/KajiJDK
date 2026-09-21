@@ -1,11 +1,11 @@
 package javax.management;
 
 /**
- * Un parametro de una operacion o de un constructor.
+ * A parameter of an operation or of a constructor.
  *
- * <p>El tipo es una <b>cadena</b> con el nombre de la clase, no un `Class`. Es a proposito: un
- * cliente remoto describe MBeans cuyas clases no tiene cargadas, y un `Class` obligaria a cargarlas
- * solo para leer los metadatos.
+ * <p>The type is a <b>string</b> with the class name, not a {@code Class}. It is on purpose: a
+ * remote client describes MBeans whose classes it has not loaded, and a {@code Class} would force
+ * loading them just to read the metadata.
  */
 public class MBeanParameterInfo extends MBeanFeatureInfo implements Cloneable {
 
@@ -14,7 +14,7 @@ public class MBeanParameterInfo extends MBeanFeatureInfo implements Cloneable {
     static final MBeanParameterInfo[] NO_PARAMS = new MBeanParameterInfo[0];
 
     /**
-     * @serial el nombre de la clase del parametro
+     * @serial the class name of the parameter
      */
     private final String type;
 
@@ -29,14 +29,15 @@ public class MBeanParameterInfo extends MBeanFeatureInfo implements Cloneable {
     }
 
     /**
-     * Copia superficial.
+     * Shallow copy.
      *
-     * <p>No devuelve `this` aunque la clase sea inmutable: se comprobo contra el JDK y ahi la
-     * copia es un objeto <b>distinto</b>. Igual por `equals`, distinto por identidad.
+     * <p>It does not return {@code this} even though the class is immutable: it was checked against
+     * the JDK and there the copy is a <b>different</b> object. Equal by {@code equals}, different
+     * by identity.
      *
-     * <p>Traga la `CloneNotSupportedException` y devuelve `null` en vez de propagarla, como el
-     * JDK: la clase implementa `Cloneable`, asi que no puede ocurrir, y declararla obligaria a
-     * atajarla a todo el que llame.
+     * <p>It swallows the {@code CloneNotSupportedException} and returns {@code null} instead of
+     * propagating it, as the JDK does: the class implements {@code Cloneable}, so it cannot happen,
+     * and declaring it would force every caller to catch it.
      */
     public Object clone() {
         try {
@@ -46,7 +47,7 @@ public class MBeanParameterInfo extends MBeanFeatureInfo implements Cloneable {
         }
     }
 
-    /** El nombre de la clase del parametro. */
+    /** The class name of the parameter. */
     public String getType() {
         return type;
     }
@@ -64,9 +65,9 @@ public class MBeanParameterInfo extends MBeanFeatureInfo implements Cloneable {
             return false;
         }
         MBeanParameterInfo p = (MBeanParameterInfo) o;
-        return igual(p.getName(), getName())
-                && igual(p.getType(), getType())
-                && igual(p.getDescription(), getDescription())
+        return same(p.getName(), getName())
+                && same(p.getType(), getType())
+                && same(p.getDescription(), getDescription())
                 && p.getDescriptor().equals(getDescriptor());
     }
 

@@ -5,22 +5,22 @@ import javax.accessibility.AccessibleContext;
 import javax.accessibility.AccessibleRole;
 
 /**
- * El contenedor más simple que hay: un rectángulo donde agrupar otros componentes.
+ * The simplest container there is: a rectangle to group other components in.
  *
- * <p>No dibuja nada, no tiene borde ni título, y su única diferencia con un {@link Container} pelado
- * es que trae una {@link FlowLayout} puesta y que es concreto. Eso alcanza: la mayoría de los
- * armados de interfaz en AWT son paneles anidados, cada uno con su distribución.
+ * <p>It draws nothing, has no border or title, and its only differences from a bare {@link
+ * Container} are that it comes with a {@link FlowLayout} set and that it is concrete. That is
+ * enough: most AWT interface layouts are nested panels, each with its own layout.
  */
 public class Panel extends Container implements Accessible {
 
     private static final long serialVersionUID = -2728009084054400034L;
 
-    /** Un panel con {@link FlowLayout}. */
+    /** A panel with {@link FlowLayout}. */
     public Panel() {
         this(new FlowLayout());
     }
 
-    /** Un panel con esa distribución. */
+    /** A panel with that layout. */
     public Panel(LayoutManager layout) {
         this.setLayout(layout);
     }
@@ -35,12 +35,12 @@ public class Panel extends Container implements Accessible {
 
     private static int panelCounter = 0;
 
-    /** Lo declara mostrable; sin pantalla no hay nada más que hacer. */
+    /** Declares it displayable; without a screen there is nothing more to do. */
     public void addNotify() {
         super.addNotify();
     }
 
-    /** La accesibilidad del panel. */
+    /** The panel's accessibility. */
     public AccessibleContext getAccessibleContext() {
         if (this.accessibleContext == null) {
             this.accessibleContext = new AccessibleAWTPanel();
@@ -48,10 +48,10 @@ public class Panel extends Container implements Accessible {
         return this.accessibleContext;
     }
 
-    /** Un panel, para la accesibilidad, es un panel: agrupa y nada más. */
+    /** A panel, for accessibility, is a panel: it groups and nothing more. */
     protected class AccessibleAWTPanel extends AccessibleAWTContainer {
 
-        /** Para las subclases. */
+        /** For subclasses. */
         protected AccessibleAWTPanel() {
         }
 

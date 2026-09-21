@@ -30,41 +30,41 @@ import javax.swing.plaf.FontUIResource;
 import javax.swing.plaf.UIResource;
 
 /**
- * La barra de titulo de una ventana interna.
+ * An internal frame's title bar.
  *
- * <h2>Un componente, no una parte del dibujo</h2>
+ * <h2>A component, not a part of the drawing</h2>
  *
- * <p>La barra es un {@link JComponent} de verdad, con hijos: el menu de sistema a la izquierda y los
- * tres botones a la derecha. Podria ser un rectangulo pintado por el UI de la ventana, y no lo es
- * por una razon concreta: los botones tienen que recibir clicks, y el menu de sistema tiene que
- * poder desplegarse. Un dibujo no hace ninguna de las dos cosas.
+ * <p>The bar is a real {@link JComponent}, with children: the system menu on the left and the
+ * three buttons on the right. It could be a rectangle painted by the frame's look and feel, and
+ * it is not for a concrete reason: the buttons have to receive clicks, and the system menu has
+ * to be able to drop down. A drawing does neither of the two things.
  *
- * <h2>El titulo se corta, no se achica</h2>
+ * <h2>The title is cut, not shrunk</h2>
  *
- * <p>{@link #getTitle} devuelve el texto entero si entra y, si no, el prefijo mas largo que entre
- * seguido de tres puntos. Un titulo nulo da la cadena vacia, no {@code "null"}. Es lo unico
- * razonable: achicar la letra haria que dos ventanas del mismo escritorio tuvieran titulos de
- * distinto tamano.
+ * <p>{@link #getTitle} returns the whole text if it fits and, if not, the longest prefix that
+ * fits followed by three dots. A null title gives the empty string, not {@code "null"}. It is
+ * the only reasonable thing: shrinking the letters would make two frames on the same desktop
+ * have titles of different sizes.
  *
- * <h2>Seis acciones y siete items</h2>
+ * <h2>Six actions and seven items</h2>
  *
- * <p>Las acciones son restaurar, mover, redimensionar, minimizar, maximizar y cerrar. El menu de
- * sistema tiene esas seis mas un separador antes de cerrar -- siete elementos --, y
- * {@link #enableActions} prende y apaga cada una segun lo que la ventana permita: una ventana que no
- * se puede cerrar tiene el item de cerrar apagado, no ausente.
+ * <p>The actions are restore, move, resize, minimize, maximize and close. The system menu has
+ * those six plus a separator before close -- seven elements --, and {@link #enableActions}
+ * switches each one on and off according to what the frame allows: a frame that cannot be
+ * closed has the close item switched off, not absent.
  *
- * <h2>Lo que queda dicho</h2>
+ * <h2>What is left said</h2>
  *
- * <p>Los cuatro iconos de los botones --maximizar, restaurar, minimizar, cerrar-- vienen de la tabla
- * del aspecto, que esta biblioteca no tiene. Los botones estan y andan; lo que no hay es el dibujo
- * adentro, y por eso la barra mide menos de ancho que la del JDK.
+ * <p>The buttons' four icons -- maximize, restore, minimize, close -- come from the look and
+ * feel's table, which this library does not have. The buttons are there and work; what there is
+ * not is the drawing inside, and that is why the bar measures less in width than the JDK's.
  *
- * <p>Mover y redimensionar con el teclado necesitan un bucle de eventos: las acciones existen y no
- * hacen nada.
+ * <p>Moving and resizing with the keyboard need an event loop: the actions exist and do
+ * nothing.
  */
 public class BasicInternalFrameTitlePane extends JComponent {
 
-    /** Los nombres de los seis comandos; se comparan por nombre en {@code actionPerformed}. */
+    /** The six commands' names; they are compared by name in {@code actionPerformed}. */
     protected static final String CLOSE_CMD = "Close";
 
     /** Ver {@link #CLOSE_CMD}. */
@@ -110,18 +110,18 @@ public class BasicInternalFrameTitlePane extends JComponent {
     protected Action moveAction;
     protected Action sizeAction;
 
-    private static final ColorUIResource TITULO_ELEGIDO = new ColorUIResource(184, 207, 229);
-    private static final ColorUIResource TEXTO = new ColorUIResource(51, 51, 51);
-    private static final ColorUIResource TITULO_NO_ELEGIDO = new ColorUIResource(238, 238, 238);
-    private static final FontUIResource FUENTE = new FontUIResource("Dialog", Font.BOLD, 12);
+    private static final ColorUIResource SELECTED_TITLE = new ColorUIResource(184, 207, 229);
+    private static final ColorUIResource TEXT = new ColorUIResource(51, 51, 51);
+    private static final ColorUIResource UNSELECTED_TITLE = new ColorUIResource(238, 238, 238);
+    private static final FontUIResource FONT = new FontUIResource("Dialog", Font.BOLD, 12);
 
-    /** Para esa ventana; arma acciones, botones y menu de sistema. */
+    /** For that frame; it builds actions, buttons and system menu. */
     public BasicInternalFrameTitlePane(JInternalFrame f) {
         this.frame = f;
         installTitlePane();
     }
 
-    /** El orden importa: las acciones primero, porque los botones las usan. */
+    /** The order matters: the actions first, because the buttons use them. */
     protected void installTitlePane() {
         installDefaults();
         installListeners();
@@ -133,20 +133,20 @@ public class BasicInternalFrameTitlePane extends JComponent {
         addSubComponents();
     }
 
-    /** Colores y fuente; los valores son los de {@code InternalFrame.*} en Metal. */
+    /** Colours and typeface; the values are those of {@code InternalFrame.*} in Metal. */
     protected void installDefaults() {
-        selectedTitleColor = TITULO_ELEGIDO;
-        selectedTextColor = TEXTO;
-        notSelectedTitleColor = TITULO_NO_ELEGIDO;
-        notSelectedTextColor = TEXTO;
-        Font fuente = getFont();
-        if (fuente == null || fuente instanceof UIResource) {
-            setFont(FUENTE);
+        selectedTitleColor = SELECTED_TITLE;
+        selectedTextColor = TEXT;
+        notSelectedTitleColor = UNSELECTED_TITLE;
+        notSelectedTextColor = TEXT;
+        Font font = getFont();
+        if (font == null || font instanceof UIResource) {
+            setFont(FONT);
         }
         setOpaque(false);
     }
 
-    /** No saca nada; ver {@link BasicPanelUI#uninstallDefaults}. */
+    /** It removes nothing; see {@link BasicPanelUI#uninstallDefaults}. */
     protected void uninstallDefaults() {
     }
 
@@ -166,17 +166,19 @@ public class BasicInternalFrameTitlePane extends JComponent {
         return new Handler(this);
     }
 
-    /** Las seis; ver la nota de la clase. */
+    /** The six; see the class note. */
     protected void createActions() {
-        maximizeAction = new AccionDeVentana(this, MAXIMIZE_CMD);
-        iconifyAction = new AccionDeVentana(this, ICONIFY_CMD);
-        closeAction = new AccionDeVentana(this, CLOSE_CMD);
-        restoreAction = new AccionDeVentana(this, RESTORE_CMD);
-        moveAction = new AccionDeVentana(this, MOVE_CMD);
-        sizeAction = new AccionDeVentana(this, SIZE_CMD);
+        maximizeAction = new FrameAction(this, MAXIMIZE_CMD);
+        iconifyAction = new FrameAction(this, ICONIFY_CMD);
+        closeAction = new FrameAction(this, CLOSE_CMD);
+        restoreAction = new FrameAction(this, RESTORE_CMD);
+        moveAction = new FrameAction(this, MOVE_CMD);
+        sizeAction = new FrameAction(this, SIZE_CMD);
     }
 
-    /** Prende y apaga cada accion segun lo que la ventana permita; ver la nota de la clase. */
+    /**
+     * It switches each action on and off according to what the frame allows; see the class note.
+     */
     protected void enableActions() {
         restoreAction.setEnabled(frame.isMaximum() || frame.isIcon());
         maximizeAction.setEnabled((frame.isMaximizable() && !frame.isMaximum() && !frame.isIcon())
@@ -187,7 +189,7 @@ public class BasicInternalFrameTitlePane extends JComponent {
         moveAction.setEnabled(false);
     }
 
-    /** El de sistema; el que se despliega con el icono de la izquierda. */
+    /** The system one; the one that drops down with the icon on the left. */
     protected JMenu createSystemMenu() {
         JMenu menu = new JMenu("    ");
         menu.setName("InternalFrameTitlePane.menuButton");
@@ -200,7 +202,7 @@ public class BasicInternalFrameTitlePane extends JComponent {
         return menuBar;
     }
 
-    /** Arma el menu y le cuelga los items. */
+    /** It builds the menu and hangs the items from it. */
     protected void assembleSystemMenu() {
         menuBar = createSystemMenuBar();
         windowMenu = createSystemMenu();
@@ -209,7 +211,7 @@ public class BasicInternalFrameTitlePane extends JComponent {
         enableActions();
     }
 
-    /** Los siete elementos; ver la nota de la clase. */
+    /** The seven elements; see the class note. */
     protected void addSystemMenuItems(JMenu systemMenu) {
         JMenuItem mi = systemMenu.add(restoreAction);
         mi.setMnemonic('R');
@@ -226,42 +228,42 @@ public class BasicInternalFrameTitlePane extends JComponent {
         mi.setMnemonic('C');
     }
 
-    /** Despliega el menu de sistema. */
+    /** It drops down the system menu. */
     protected void showSystemMenu() {
         if (windowMenu != null) {
             windowMenu.doClick();
         }
     }
 
-    /** Los tres botones de la derecha. */
+    /** The three buttons on the right. */
     protected void createButtons() {
         iconButton = new JButton();
         iconButton.setName("InternalFrameTitlePane.iconifyButton");
         iconButton.setFocusPainted(false);
         iconButton.setOpaque(false);
-        iconButton.addActionListener(new DisparoDeAccion(iconifyAction));
+        iconButton.addActionListener(new ActionTrigger(iconifyAction));
 
         maxButton = new JButton();
         maxButton.setName("InternalFrameTitlePane.maximizeButton");
         maxButton.setFocusPainted(false);
         maxButton.setOpaque(false);
-        maxButton.addActionListener(new DisparoDeAccion(maximizeAction));
+        maxButton.addActionListener(new ActionTrigger(maximizeAction));
 
         closeButton = new JButton();
         closeButton.setName("InternalFrameTitlePane.closeButton");
         closeButton.setFocusPainted(false);
         closeButton.setOpaque(false);
-        closeButton.addActionListener(new DisparoDeAccion(closeAction));
+        closeButton.addActionListener(new ActionTrigger(closeAction));
 
         setButtonIcons();
     }
 
     /**
-     * Les pone a los botones el icono que corresponda al estado.
+     * It gives the buttons the icon that corresponds to the state.
      *
-     * <p>El de maximizar cambia por el de restaurar cuando la ventana ya esta maximizada, y el de
-     * minimizar por el de restaurar cuando esta hecha icono. Sin iconos --ver la nota de la clase--
-     * no hay nada que poner, y los botones quedan vacios.
+     * <p>The maximize one changes for the restore one when the frame is already maximized, and the
+     * minimize one for the restore one when it is turned into an icon. With no icons -- see the
+     * class note -- there is nothing to set, and the buttons are left empty.
      */
     protected void setButtonIcons() {
         if (frame.isIcon()) {
@@ -291,7 +293,7 @@ public class BasicInternalFrameTitlePane extends JComponent {
         }
     }
 
-    /** Cuelga el menu y los botones. */
+    /** It hangs the menu and the buttons. */
     protected void addSubComponents() {
         add(menuBar);
         add(iconButton);
@@ -303,14 +305,14 @@ public class BasicInternalFrameTitlePane extends JComponent {
         return new Handler(this);
     }
 
-    /** El fondo de la barra: el color que corresponda a si la ventana esta elegida. */
+    /** The bar's background: the colour that corresponds to whether the frame is chosen. */
     protected void paintTitleBackground(Graphics g) {
         Color color = frame.isSelected() ? selectedTitleColor : notSelectedTitleColor;
         g.setColor(color);
         g.fillRect(0, 0, getWidth(), getHeight());
     }
 
-    /** El fondo y el titulo. */
+    /** The background and the title. */
     public void paintComponent(Graphics g) {
         paintTitleBackground(g);
         String title = frame.getTitle();
@@ -323,25 +325,25 @@ public class BasicInternalFrameTitlePane extends JComponent {
         g.setColor(frame.isSelected() ? selectedTextColor : notSelectedTextColor);
         int baseline = (getHeight() + fm.getAscent() - fm.getLeading() - fm.getDescent()) / 2;
         int titleX = (menuBar == null) ? 2 : menuBar.getX() + menuBar.getWidth() + 2;
-        int ancho = anchoDisponibleParaTitulo();
-        g.drawString(getTitle(title, fm, ancho), titleX, baseline);
+        int width = availableTitleWidth();
+        g.drawString(getTitle(title, fm, width), titleX, baseline);
     }
 
-    private int anchoDisponibleParaTitulo() {
-        int usado = 0;
+    private int availableTitleWidth() {
+        int used = 0;
         if (menuBar != null) {
-            usado += menuBar.getWidth();
+            used += menuBar.getWidth();
         }
         for (int i = 0; i < getComponentCount(); i++) {
             Component c = getComponent(i);
             if (c instanceof JButton) {
-                usado += c.getWidth();
+                used += c.getWidth();
             }
         }
-        return Math.max(0, getWidth() - usado - 4);
+        return Math.max(0, getWidth() - used - 4);
     }
 
-    /** El titulo entero si entra, y si no cortado con puntos; ver la nota de la clase. */
+    /** The whole title if it fits, and if not cut with dots; see the class note. */
     protected String getTitle(String text, FontMetrics fm, int availTextWidth) {
         if (text == null || text.equals("")) {
             return "";
@@ -363,10 +365,11 @@ public class BasicInternalFrameTitlePane extends JComponent {
     }
 
     /**
-     * Le manda a la ventana el aviso de que se esta cerrando.
+     * It sends the frame the notice that it is closing.
      *
-     * <p>Va como evento y no como llamada directa porque el programa puede vetarlo: quien escucha
-     * {@code internalFrameClosing} tiene la oportunidad de preguntar "queres guardar?" antes.
+     * <p>It goes as an event and not as a direct call because the program may veto it: whoever
+     * listens to {@code internalFrameClosing} has the chance to ask "do you want to save?"
+     * first.
      */
     protected void postClosingEvent(JInternalFrame frame) {
         InternalFrameEvent e = new InternalFrameEvent(frame,
@@ -374,22 +377,22 @@ public class BasicInternalFrameTitlePane extends JComponent {
         try {
             java.awt.Toolkit.getDefaultToolkit().getSystemEventQueue().postEvent(e);
         } catch (Exception ex) {
-            // Sin cola de eventos --headless-- el aviso se pierde; cerrar sigue andando.
+            // With no event queue -- headless -- the notice is lost; closing goes on working.
         }
     }
 
     /**
-     * La barra de menu que contiene el menu de sistema.
+     * The menu bar that contains the system menu.
      *
-     * <p>Es una clase aparte y no un {@code JMenuBar} pelado porque tiene que no pintar borde y no
-     * llevarse el foco: en una barra de titulo, el menu de sistema es un icono, no una barra.
+     * <p>It is a class of its own and not a bare {@code JMenuBar} because it has to paint no
+     * border and not take the focus: in a title bar, the system menu is an icon, not a bar.
      */
     static class SystemMenuBar extends JMenuBar {
 
-        private final BasicInternalFrameTitlePane barra;
+        private final BasicInternalFrameTitlePane bar;
 
-        SystemMenuBar(BasicInternalFrameTitlePane barra) {
-            this.barra = barra;
+        SystemMenuBar(BasicInternalFrameTitlePane bar) {
+            this.bar = bar;
         }
 
         public boolean isFocusTraversable() {
@@ -404,31 +407,31 @@ public class BasicInternalFrameTitlePane extends JComponent {
         }
     }
 
-    /** Cada uno de los seis comandos; el nombre dice cual. */
-    private static class AccionDeVentana extends AbstractAction {
+    /** Each of the six commands; the name says which. */
+    private static class FrameAction extends AbstractAction {
 
-        private final BasicInternalFrameTitlePane barra;
-        private final String comando;
+        private final BasicInternalFrameTitlePane bar;
+        private final String command;
 
-        AccionDeVentana(BasicInternalFrameTitlePane barra, String comando) {
-            super(comando);
-            this.barra = barra;
-            this.comando = comando;
+        FrameAction(BasicInternalFrameTitlePane bar, String command) {
+            super(command);
+            this.bar = bar;
+            this.command = command;
         }
 
         public void actionPerformed(ActionEvent e) {
-            JInternalFrame frame = barra.frame;
+            JInternalFrame frame = bar.frame;
             try {
-                if (CLOSE_CMD.equals(comando)) {
+                if (CLOSE_CMD.equals(command)) {
                     if (frame.isClosable()) {
-                        barra.postClosingEvent(frame);
+                        bar.postClosingEvent(frame);
                         frame.doDefaultCloseAction();
                     }
-                } else if (ICONIFY_CMD.equals(comando)) {
+                } else if (ICONIFY_CMD.equals(command)) {
                     if (frame.isIconifiable() && !frame.isIcon()) {
                         frame.setIcon(true);
                     }
-                } else if (MAXIMIZE_CMD.equals(comando)) {
+                } else if (MAXIMIZE_CMD.equals(command)) {
                     if (frame.isMaximizable()) {
                         if (frame.isIcon()) {
                             frame.setIcon(false);
@@ -437,49 +440,49 @@ public class BasicInternalFrameTitlePane extends JComponent {
                             frame.setMaximum(true);
                         }
                     }
-                } else if (RESTORE_CMD.equals(comando)) {
+                } else if (RESTORE_CMD.equals(command)) {
                     if (frame.isIcon()) {
                         frame.setIcon(false);
                     } else if (frame.isMaximum()) {
                         frame.setMaximum(false);
                     }
                 }
-                // Mover y redimensionar: ver la nota de la clase.
+                // Move and resize: see the class note.
             } catch (PropertyVetoException ex) {
-                // Alguien dijo que no. Es una respuesta valida, no un error.
+                // Somebody said no. It is a valid answer, not an error.
             }
         }
     }
 
-    /** El puente entre un boton y su accion. */
-    private static class DisparoDeAccion implements java.awt.event.ActionListener {
+    /** The bridge between a button and its action. */
+    private static class ActionTrigger implements java.awt.event.ActionListener {
 
-        private final Action accion;
+        private final Action action;
 
-        DisparoDeAccion(Action accion) {
-            this.accion = accion;
+        ActionTrigger(Action action) {
+            this.action = action;
         }
 
         public void actionPerformed(ActionEvent e) {
-            if (accion.isEnabled()) {
-                accion.actionPerformed(e);
+            if (action.isEnabled()) {
+                action.actionPerformed(e);
             }
         }
     }
 
     /**
-     * El acomodador y el escucha de propiedades.
+     * The layout and the property listener.
      *
-     * <p>El menu a la izquierda, los tres botones a la derecha en orden inverso, y el titulo se
-     * queda con lo que sobra. No hay acomodador de los que vienen hechos que haga eso: el titulo no
-     * es un componente, es lo que se pinta en el hueco.
+     * <p>The menu on the left, the three buttons on the right in reverse order, and the title
+     * keeps what is left over. There is no ready-made layout that does that: the title is not a
+     * component, it is what is painted in the gap.
      */
     private static class Handler implements LayoutManager, PropertyChangeListener {
 
-        private final BasicInternalFrameTitlePane barra;
+        private final BasicInternalFrameTitlePane bar;
 
-        Handler(BasicInternalFrameTitlePane barra) {
-            this.barra = barra;
+        Handler(BasicInternalFrameTitlePane bar) {
+            this.bar = bar;
         }
 
         public void addLayoutComponent(String name, Component c) {
@@ -493,51 +496,51 @@ public class BasicInternalFrameTitlePane extends JComponent {
         }
 
         public Dimension minimumLayoutSize(Container c) {
-            int alto = 0;
-            int ancho = 0;
-            if (barra.menuBar != null) {
-                Dimension d = barra.menuBar.getPreferredSize();
-                ancho += d.width;
-                alto = Math.max(alto, d.height);
+            int height = 0;
+            int width = 0;
+            if (bar.menuBar != null) {
+                Dimension d = bar.menuBar.getPreferredSize();
+                width += d.width;
+                height = Math.max(height, d.height);
             }
-            JButton[] botones = {barra.iconButton, barra.maxButton, barra.closeButton};
-            for (int i = 0; i < botones.length; i++) {
-                if (botones[i] != null) {
-                    Dimension d = botones[i].getPreferredSize();
-                    ancho += d.width;
-                    alto = Math.max(alto, d.height);
+            JButton[] buttons = {bar.iconButton, bar.maxButton, bar.closeButton};
+            for (int i = 0; i < buttons.length; i++) {
+                if (buttons[i] != null) {
+                    Dimension d = buttons[i].getPreferredSize();
+                    width += d.width;
+                    height = Math.max(height, d.height);
                 }
             }
-            FontMetrics fm = barra.getFontMetrics(barra.getFont());
-            alto = Math.max(alto, fm.getHeight());
-            // El hueco del titulo: lo que necesite el texto, con un tope razonable.
-            String t = barra.frame.getTitle();
+            FontMetrics fm = bar.getFontMetrics(bar.getFont());
+            height = Math.max(height, fm.getHeight());
+            // The title's gap: whatever the text needs, with a reasonable cap.
+            String t = bar.frame.getTitle();
             if (t != null) {
-                ancho += Math.min(fm.stringWidth(t), 100);
+                width += Math.min(fm.stringWidth(t), 100);
             }
-            Insets in = barra.getInsets();
-            return new Dimension(ancho + in.left + in.right, alto + in.top + in.bottom);
+            Insets in = bar.getInsets();
+            return new Dimension(width + in.left + in.right, height + in.top + in.bottom);
         }
 
         public void layoutContainer(Container c) {
-            Insets in = barra.getInsets();
-            int w = barra.getWidth() - in.left - in.right;
-            int h = barra.getHeight() - in.top - in.bottom;
+            Insets in = bar.getInsets();
+            int w = bar.getWidth() - in.left - in.right;
+            int h = bar.getHeight() - in.top - in.bottom;
             int x = in.left;
-            if (barra.menuBar != null) {
-                int mw = barra.menuBar.getPreferredSize().width;
-                barra.menuBar.setBounds(x, in.top, mw, h);
+            if (bar.menuBar != null) {
+                int mw = bar.menuBar.getPreferredSize().width;
+                bar.menuBar.setBounds(x, in.top, mw, h);
                 x += mw;
             }
-            int derecha = in.left + w;
-            JButton[] botones = {barra.closeButton, barra.maxButton, barra.iconButton};
-            for (int i = 0; i < botones.length; i++) {
-                if (botones[i] == null) {
+            int right = in.left + w;
+            JButton[] buttons = {bar.closeButton, bar.maxButton, bar.iconButton};
+            for (int i = 0; i < buttons.length; i++) {
+                if (buttons[i] == null) {
                     continue;
                 }
-                int bw = botones[i].getPreferredSize().width;
-                derecha -= bw;
-                botones[i].setBounds(derecha, in.top, bw, h);
+                int bw = buttons[i].getPreferredSize().width;
+                right -= bw;
+                buttons[i].setBounds(right, in.top, bw, h);
             }
         }
 
@@ -548,10 +551,10 @@ public class BasicInternalFrameTitlePane extends JComponent {
                     || JInternalFrame.IS_ICON_PROPERTY.equals(prop)
                     || JInternalFrame.IS_CLOSED_PROPERTY.equals(prop)
                     || JInternalFrame.TITLE_PROPERTY.equals(prop)) {
-                barra.enableActions();
-                barra.setButtonIcons();
-                barra.revalidate();
-                barra.repaint();
+                bar.enableActions();
+                bar.setButtonIcons();
+                bar.revalidate();
+                bar.repaint();
             }
         }
     }

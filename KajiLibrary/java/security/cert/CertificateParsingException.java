@@ -1,10 +1,10 @@
 package java.security.cert;
 
-// El certificado no se pudo parsear: los bytes no son un certificado bien formado.
+// The certificate could not be parsed: the bytes are not a well formed certificate.
 //
-// Es distinto de `CertificateException` a secas y la distincion importa: aca el problema es la
-// **sintaxis**, no la validez. Un certificado que no parsea nunca llego a evaluarse; uno que
-// parsea y no vale se rechazo por lo que dice.
+// It is different from a plain `CertificateException` and the distinction matters: here the problem
+// is the **syntax**, not the validity. A certificate that does not parse never got as far as being
+// evaluated; one that parses and is not valid was rejected for what it says.
 public class CertificateParsingException extends CertificateException {
 
     private static final long serialVersionUID = -7989222416793322029L;

@@ -11,44 +11,44 @@ import java.io.PrintStream;
 import java.io.Serializable;
 
 /**
- * Acomoda a los hijos en una sola fila o en una sola columna.
+ * It lays the children out in a single row or in a single column.
  *
- * <h2>Un eje se reparte, el otro se alinea</h2>
+ * <h2>One axis is shared out, the other is aligned</h2>
  *
- * <p>Toda la clase es eso. Sobre el eje elegido los hijos van uno detras de otro y se reparten el
- * largo con {@link SizeRequirements#calculateTiledPositions}; sobre el eje perpendicular se
- * encabalgan y se alinean con {@link SizeRequirements#calculateAlignedPositions}, cada uno por su
- * {@code alignmentX} o {@code alignmentY}. De ahi salen las dos sorpresas clasicas: un hijo puede
- * quedar mas ancho de lo que pidio, porque su maximo se lo permitia, y una columna de botones
- * queda centrada porque la alineacion por omision es 0.5.
+ * <p>The whole class is that. On the chosen axis the children go one after another and share
+ * out the length with {@link SizeRequirements#calculateTiledPositions}; on the perpendicular
+ * axis they overlap and are aligned with {@link SizeRequirements#calculateAlignedPositions},
+ * each one by its {@code alignmentX} or {@code alignmentY}. Hence the two classic surprises: a
+ * child may end up wider than it asked for, because its maximum allowed it, and a column of
+ * buttons ends up centred because the default alignment is 0.5.
  *
- * <h2>Ejes absolutos y ejes del idioma</h2>
+ * <h2>Absolute axes and the language's axes</h2>
  *
- * <p>{@link #X_AXIS} y {@link #Y_AXIS} son direcciones fijas. {@link #LINE_AXIS} y
- * {@link #PAGE_AXIS} son "el sentido en el que avanza una linea" y "el sentido en el que avanzan
- * las lineas", que dependen de la orientacion del contenedor: en un idioma que se lee de derecha a
- * izquierda, una caja de eje de linea llena desde la derecha. Ese es el unico lugar donde esta
- * clase mira la orientacion.
+ * <p>{@link #X_AXIS} and {@link #Y_AXIS} are fixed directions. {@link #LINE_AXIS} and
+ * {@link #PAGE_AXIS} are "the direction a line advances in" and "the direction lines advance
+ * in", which depend on the container's orientation: in a language that is read right to left,
+ * a line-axis box fills from the right. That is the only place where this class looks at the
+ * orientation.
  *
- * <h2>Un layout por contenedor</h2>
+ * <h2>One layout per container</h2>
  *
- * <p>El contenedor se pasa al construir y no se puede cambiar: la clase guarda los pedidos de los
- * hijos entre llamadas, y compartirla seria mezclar los de dos contenedores. Pedirle que acomode
- * otro es un {@link AWTError}, no una excepcion: es un error de programa, no una condicion que un
- * programa pueda manejar.
+ * <p>The container is passed on construction and cannot be changed: the class keeps the
+ * children's requests between calls, and sharing it would be mixing up two containers'. Asking
+ * it to lay another one out is an {@link AWTError}, not an exception: it is a mistake of the
+ * program, not a condition a program may handle.
  */
 public class BoxLayout implements LayoutManager2, Serializable {
 
-    /** De izquierda a derecha. */
+    /** Left to right. */
     public static final int X_AXIS = 0;
 
-    /** De arriba hacia abajo. */
+    /** Top to bottom. */
     public static final int Y_AXIS = 1;
 
-    /** El sentido en el que avanza una linea de texto. */
+    /** The direction a line of text advances in. */
     public static final int LINE_AXIS = 2;
 
-    /** El sentido en el que se apilan las lineas. */
+    /** The direction lines are stacked in. */
     public static final int PAGE_AXIS = 3;
 
     private int axis;
@@ -61,7 +61,7 @@ public class BoxLayout implements LayoutManager2, Serializable {
 
     private transient PrintStream dbg;
 
-    /** Acomoda a los hijos de ese contenedor sobre ese eje. */
+    /** It lays that container's children out on that axis. */
     public BoxLayout(Container target, int axis) {
         if (axis != X_AXIS && axis != Y_AXIS && axis != LINE_AXIS && axis != PAGE_AXIS) {
             throw new AWTError("Invalid axis");
@@ -71,9 +71,9 @@ public class BoxLayout implements LayoutManager2, Serializable {
     }
 
     /**
-     * Como el otro constructor, ademas escribiendo lo que decide en ese flujo.
+     * Like the other constructor, also writing what it decides to that stream.
      *
-     * @deprecated es de depuracion; el JDK lo dejo por compatibilidad.
+     * @deprecated it is for debugging; the JDK left it for compatibility.
      */
     @Deprecated
     BoxLayout(Container target, int axis, PrintStream dbg) {
@@ -81,17 +81,17 @@ public class BoxLayout implements LayoutManager2, Serializable {
         this.dbg = dbg;
     }
 
-    /** El contenedor que acomoda. */
+    /** The container it lays out. */
     public final Container getTarget() {
         return this.target;
     }
 
-    /** El eje tal como se pidio, sin resolver contra la orientacion. */
+    /** The axis just as it was asked for, without resolving it against the orientation. */
     public final int getAxis() {
         return this.axis;
     }
 
-    /** Olvida los pedidos guardados: algo cambio y hay que volver a preguntar. */
+    /** It forgets the kept requests: something changed and they have to be asked for again. */
     public synchronized void invalidateLayout(Container target) {
         checkContainer(target);
         xChildren = null;
@@ -100,7 +100,7 @@ public class BoxLayout implements LayoutManager2, Serializable {
         yTotal = null;
     }
 
-    /** Nada: esta distribucion no usa nombres. */
+    /** Nothing: this arrangement does not use names. */
     public void addLayoutComponent(String name, Component comp) {
         invalidateLayout(comp.getParent());
     }
@@ -109,7 +109,7 @@ public class BoxLayout implements LayoutManager2, Serializable {
         invalidateLayout(comp.getParent());
     }
 
-    /** Nada: esta distribucion no usa restricciones. */
+    /** Nothing: this arrangement does not use constraints. */
     public void addLayoutComponent(Component comp, Object constraints) {
         invalidateLayout(comp.getParent());
     }
@@ -171,7 +171,7 @@ public class BoxLayout implements LayoutManager2, Serializable {
         return yTotal.alignment;
     }
 
-    /** Ubica a los hijos; ver la nota de la clase. */
+    /** It places the children; see the class note. */
     public void layoutContainer(Container target) {
         checkContainer(target);
         int nChildren = target.getComponentCount();
@@ -219,7 +219,7 @@ public class BoxLayout implements LayoutManager2, Serializable {
         }
     }
 
-    /** Un {@link AWTError} si no es su contenedor; ver la nota de la clase. */
+    /** An {@link AWTError} if it is not its container; see the class note. */
     void checkContainer(Container target) {
         if (this.target != target) {
             throw new AWTError("BoxLayout can't be shared");
@@ -227,10 +227,11 @@ public class BoxLayout implements LayoutManager2, Serializable {
     }
 
     /**
-     * Vuelve a preguntarle a cada hijo cuanto quiere medir, si hace falta.
+     * It asks each child again how much it wants to measure, if needed.
      *
-     * <p>Un hijo invisible pide cero en todo pero conserva su alineacion: ocupa un lugar en los
-     * arreglos, para que los indices sigan siendo los del contenedor, pero no ocupa espacio.
+     * <p>An invisible child asks for zero in everything but keeps its alignment: it takes up a
+     * place in the arrays, so that the indices go on being the container's, but it takes up no
+     * space.
      */
     void checkRequests() {
         if (xChildren == null || yChildren == null) {
@@ -264,7 +265,7 @@ public class BoxLayout implements LayoutManager2, Serializable {
         }
     }
 
-    /** El eje del idioma llevado a un eje fijo; ver la nota de la clase. */
+    /** The language's axis taken to a fixed axis; see the class note. */
     private int resolveAxis(int axis, ComponentOrientation o) {
         int absoluteAxis;
         if (axis == LINE_AXIS) {

@@ -8,68 +8,68 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Los pares nombre/valor de una seccion del manifiesto de un JAR.
+ * The name/value pairs of one section of a JAR's manifest.
  *
- * <p>Es un `Map` con dos restricciones que no se ven en la firma: las claves son
- * {@link Attributes.Name} --nunca `String`-- y los valores son `String`. `put` **castea**, asi que
- * meter un `String` como clave tira `ClassCastException`; el atajo para no escribir el `Name` a mano
- * es {@link #putValue}.
+ * <p>It is a `Map` with two restrictions that do not show in the signature: the keys are
+ * {@link Attributes.Name} --never `String`-- and the values are `String`. `put` **casts**, so putting
+ * a `String` in as a key throws `ClassCastException`; the shortcut for not writing the `Name` by
+ * hand is {@link #putValue}.
  *
- * <p>El orden importa y por eso el mapa de abajo es un `LinkedHashMap`: el manifiesto se escribe en
- * el orden en que se cargaron los atributos, y una ida-y-vuelta tiene que dar los mismos bytes. El
- * JDK hace lo mismo desde 9.
+ * <p>Order matters and that is why the map below is a `LinkedHashMap`: the manifest is written in
+ * the order the attributes were loaded in, and a round trip has to give the same bytes. The JDK does
+ * the same since 9.
  *
- * <h2>Lo que queda afuera, y por que</h2>
+ * <h2>What is left out, and why</h2>
  *
- * <p>Nada de la superficie publica. Los cuatro miembros que el JDK declara y aca no estan
- * --`write`, `writeMain` y los dos `read`-- son **de paquete** en el JDK tambien, o sea internos; aca
- * existen los dos primeros con esa misma visibilidad y los `read` viven en `Manifest`, que es quien
- * tiene el lector de lineas. Por la regla del contrato, lo interno es libre.
+ * <p>Nothing of the public surface. The four members the JDK declares and are not here --`write`,
+ * `writeMain` and the two `read`-- are **package-private** in the JDK too, that is, internal; here
+ * the first two exist with that same visibility and the `read` live in `Manifest`, which is the one
+ * with the line reader. By the contract rule, the internals are free.
  */
 public class Attributes implements Map<Object, Object>, Cloneable {
 
-    /** El mapa que guarda los pares. Es `protected` porque el JDK lo expone asi. */
+    /** The map that holds the pairs. It is `protected` because the JDK exposes it that way. */
     protected Map<Object, Object> map;
 
-    /** Un juego de atributos vacio. */
+    /** An empty attribute set. */
     public Attributes() {
         this(11);
     }
 
-    /** Un juego de atributos vacio con lugar para `size` pares. */
+    /** An empty attribute set with room for `size` pairs. */
     public Attributes(int size) {
         this.map = new LinkedHashMap<Object, Object>(size);
     }
 
-    /** Una copia de `attr`. */
+    /** A copy of `attr`. */
     public Attributes(Attributes attr) {
         this.map = new LinkedHashMap<Object, Object>(attr.map);
     }
 
     /**
-     * El valor de ese atributo, o `null`.
+     * That attribute's value, or `null`.
      *
-     * <p>La clave tiene que ser un `Name`: pasarle un `String` devuelve `null`, no el valor. Es la
-     * trampa clasica de esta clase y esta en el JDK igual.
+     * <p>The key has to be a `Name`: handing it a `String` returns `null`, not the value. It is this
+     * class's classic trap and it is in the JDK just the same.
      */
     public Object get(Object name) {
         return this.map.get(name);
     }
 
-    /** El valor de ese atributo, buscado por nombre y **sin distinguir mayusculas**. */
+    /** That attribute's value, looked up by name and **case-insensitively**. */
     public String getValue(String name) {
         return (String) this.map.get(new Name(name));
     }
 
-    /** El valor de ese atributo. */
+    /** That attribute's value. */
     public String getValue(Name name) {
         return (String) this.map.get(name);
     }
 
     /**
-     * Asocia un valor a un atributo.
+     * It associates a value with an attribute.
      *
-     * @throws ClassCastException si `name` no es un `Name` o `value` no es un `String`
+     * @throws ClassCastException if `name` is not a `Name` or `value` is not a `String`
      */
     public Object put(Object name, Object value) {
         Name k = (Name) name;
@@ -77,12 +77,12 @@ public class Attributes implements Map<Object, Object>, Cloneable {
         return this.map.put(k, v);
     }
 
-    /** Como `put`, pero armando el `Name` a partir del texto. */
+    /** Like `put`, but building the `Name` from the text. */
     public String putValue(String name, String value) {
         return (String) put(new Name(name), value);
     }
 
-    /** Saca ese atributo y devuelve el valor que tenia. */
+    /** It removes that attribute and returns the value it had. */
     public Object remove(Object name) {
         return this.map.remove(name);
     }
@@ -96,19 +96,19 @@ public class Attributes implements Map<Object, Object>, Cloneable {
     }
 
     /**
-     * Copia todos los pares de `attr`.
+     * It copies every pair from `attr`.
      *
-     * @throws ClassCastException si `attr` no es un `Attributes`
+     * @throws ClassCastException if `attr` is not an `Attributes`
      */
     public void putAll(Map<?, ?> attr) {
-        // El JDK exige que sea un `Attributes` y no un mapa cualquiera. No es capricho: un mapa
-        // cualquiera puede tener claves `String`, y entonces el `put` de arriba tiraria a mitad de
-        // camino dejando la copia por la mitad. Chequear primero hace que falle entera o no falle.
+        // The JDK demands an `Attributes` and not just any map. It is not a whim: any old map can
+        // have `String` keys, and then the `put` above would throw halfway through leaving the copy
+        // half done. Checking first makes it fail whole or not fail.
         if (!(attr instanceof Attributes)) {
             throw new ClassCastException();
         }
-        Attributes otro = (Attributes) attr;
-        for (Map.Entry<Object, Object> e : otro.map.entrySet()) {
+        Attributes other = (Attributes) attr;
+        for (Map.Entry<Object, Object> e : other.map.entrySet()) {
             put(e.getKey(), e.getValue());
         }
     }
@@ -148,14 +148,14 @@ public class Attributes implements Map<Object, Object>, Cloneable {
         return this.map.hashCode();
     }
 
-    /** Una copia. */
+    /** A copy. */
     public Object clone() {
         return new Attributes(this);
     }
 
-    // ---- escritura ------------------------------------------------------------------------------
+    // ---- writing --------------------------------------------------------------------------------
 
-    /** Escribe esta seccion --sin la linea `Name:`-- y la termina con la linea en blanco. */
+    /** It writes this section --without the `Name:` line-- and ends it with the blank line. */
     void write(DataOutputStream out) throws IOException {
         for (Map.Entry<Object, Object> e : this.map.entrySet()) {
             StringBuilder sb = new StringBuilder();
@@ -168,16 +168,16 @@ public class Attributes implements Map<Object, Object>, Cloneable {
     }
 
     /**
-     * Escribe la seccion **principal**, que tiene dos reglas propias.
+     * It writes the **main** section, which has two rules of its own.
      *
-     * <p>La primera: `Manifest-Version` va **primero** aunque no sea el primero que se cargo, y si no
-     * esta se prueba con `Signature-Version`. Es lo que hace que un manifiesto sea reconocible por
-     * la primera linea.
+     * <p>The first: `Manifest-Version` goes **first** even if it was not the first loaded, and if it
+     * is not there `Signature-Version` is tried. It is what makes a manifest recognisable by its
+     * first line.
      *
-     * <p>La segunda es rara y se replica a proposito: si **ninguna** de las dos esta, el JDK no
-     * escribe **ningun** atributo --solo la linea en blanco--. Se verifico contra el JDK 25 antes de
-     * copiarlo. Un manifiesto sin version no es un manifiesto, asi que perder los atributos es
-     * consistente con eso, pero la razon de fondo es que el bucle esta guardado por `version != null`.
+     * <p>The second is odd and is replicated on purpose: if **neither** is there, the JDK writes
+     * **no** attribute at all --only the blank line--. It was checked against JDK 25 before being
+     * copied. A manifest with no version is not a manifest, so losing the attributes is consistent
+     * with that, but the underlying reason is that the loop is guarded by `version != null`.
      */
     void writeMain(DataOutputStream out) throws IOException {
         String vername = Name.MANIFEST_VERSION.toString();
@@ -187,9 +187,9 @@ public class Attributes implements Map<Object, Object>, Cloneable {
             version = getValue(vername);
         }
         if (version != null) {
-            // El JDK usa `writeBytes`, que se queda con el byte bajo de cada `char` y no pliega.
-            // Aca va por `println72`: para las versiones reales --"1.0"-- sale byte a byte igual, y
-            // para una version larga o con no-ASCII sale bien en vez de mal.
+            // The JDK uses `writeBytes`, which keeps each `char`'s low byte and does not fold. Here
+            // it goes through `println72`: for the real versions --"1.0"-- it comes out byte for byte
+            // the same, and for a long or non-ASCII version it comes out right instead of wrong.
             Manifest.println72(out, vername + ": " + version);
         }
         if (version != null) {
@@ -204,15 +204,15 @@ public class Attributes implements Map<Object, Object>, Cloneable {
     }
 
     /**
-     * El nombre de un atributo del manifiesto.
+     * A manifest attribute's name.
      *
-     * <p>Es una clase aparte y no un `String` por una sola razon, y es la que justifica todo lo
-     * demas: los nombres de atributo **no distinguen mayusculas**. `Class-Path` y `class-path` son el
-     * mismo atributo, y un `String` como clave del mapa no puede expresar eso.
+     * <p>It is a class of its own and not a `String` for a single reason, and it is the one that
+     * justifies everything else: attribute names are **case-insensitive**. `Class-Path` and
+     * `class-path` are the same attribute, and a `String` as the map's key cannot express that.
      *
-     * <p>El juego de caracteres permitido es cerrado --letras, digitos, `-` y `_`-- y el largo va de
-     * 1 a 70. No es decorativo: un nombre con `:` o con un espacio genera un manifiesto que no se
-     * puede volver a leer, asi que se rechaza al construirlo y no al escribirlo.
+     * <p>The allowed character set is closed --letters, digits, `-` and `_`-- and the length runs
+     * from 1 to 70. It is not decorative: a name with a `:` or a space generates a manifest that
+     * cannot be read back, so it is rejected on construction and not on writing.
      */
     public static class Name {
 
@@ -220,23 +220,23 @@ public class Attributes implements Map<Object, Object>, Cloneable {
         private int hash;
 
         /**
-         * Un nombre de atributo.
+         * An attribute name.
          *
-         * @throws NullPointerException si `name` es `null`
-         * @throws IllegalArgumentException si no es un nombre valido de cabecera
+         * @throws NullPointerException if `name` is `null`
+         * @throws IllegalArgumentException if it is not a valid header name
          */
         public Name(String name) {
             if (name == null) {
                 throw new NullPointerException("name");
             }
-            if (!esValido(name)) {
+            if (!isValid(name)) {
                 throw new IllegalArgumentException(name);
             }
             this.name = name;
             this.hash = 0;
         }
 
-        private static boolean esValido(String s) {
+        private static boolean isValid(String s) {
             int n = s.length();
             if (n > 70 || n == 0) {
                 return false;
@@ -256,7 +256,7 @@ public class Attributes implements Map<Object, Object>, Cloneable {
             return true;
         }
 
-        /** Dos nombres son iguales si difieren solo en mayusculas. */
+        /** Two names are equal if they differ only in case. */
         public boolean equals(Object o) {
             if (!(o instanceof Name)) {
                 return false;
@@ -265,11 +265,12 @@ public class Attributes implements Map<Object, Object>, Cloneable {
         }
 
         /**
-         * El hash de la version en minusculas, que es lo unico compatible con el `equals` de arriba.
+         * The hash of the lower-cased version, which is the only thing compatible with the `equals`
+         * above.
          *
-         * <p>Se pliega solo el rango ASCII a mano en vez de llamar a `toLowerCase()`: el
-         * constructor ya garantizo que no hay nada fuera de ASCII, y asi el hash no depende de la
-         * localidad.
+         * <p>Only the ASCII range is folded by hand instead of calling `toLowerCase()`: the
+         * constructor already guaranteed there is nothing outside ASCII, and this way the hash does
+         * not depend on the locale.
          */
         public int hashCode() {
             if (this.hash == 0) {
@@ -288,7 +289,7 @@ public class Attributes implements Map<Object, Object>, Cloneable {
             return this.hash;
         }
 
-        /** El nombre tal cual se escribio. */
+        /** The name exactly as it was written. */
         public String toString() {
             return this.name;
         }

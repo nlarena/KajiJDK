@@ -7,16 +7,17 @@ import java.io.Serializable;
 import java.text.CharacterIterator;
 
 /**
- * Cuánto mide el texto de una {@link Font} en un dispositivo concreto.
+ * How much the text of a {@link Font} measures on a concrete device.
  *
- * <p>La fuente dice cómo son las letras; las métricas dicen cuánto ocupan una vez dibujadas, que
- * depende del dispositivo: en pantalla los avances se redondean a píxeles enteros y en una impresora
- * no. Por eso las métricas se piden a través de un {@link Graphics} y no directamente a la fuente.
+ * <p>The font says what the letters are like; the metrics say how much room they take once drawn,
+ * which depends on the device: on a screen the advances are rounded to whole pixels and on a
+ * printer they are not. That is why the metrics are asked for through a {@link Graphics} and not
+ * from the font directly.
  *
- * <p>Casi todo acá está definido en términos de {@link #charsWidth} y {@link #getWidths}, que se
- * llaman entre sí. <strong>Una subclase tiene que redefinir por lo menos una de las dos</strong>, o
- * la primera medición se va a recursión infinita. Es el diseño del JDK y se mantiene igual: cambiar
- * cuál es la primitiva rompería a cualquiera que ya haya redefinido la otra.
+ * <p>Almost everything here is defined in terms of {@link #charsWidth} and {@link #getWidths},
+ * which call each other. <strong>A subclass has to override at least one of the two</strong>, or
+ * the first measurement goes into infinite recursion. It is the JDK's design and it is kept as it
+ * is: changing which one is the primitive would break anyone who has already overridden the other.
  */
 public abstract class FontMetrics implements Serializable {
 
@@ -25,67 +26,68 @@ public abstract class FontMetrics implements Serializable {
     private static final FontRenderContext DEFAULT_FRC =
             new FontRenderContext(null, false, false);
 
-    /** La fuente que se está midiendo. */
+    /** The font being measured. */
     protected Font font;
 
-    /** Con la fuente dada. */
+    /** With the given font. */
     protected FontMetrics(Font font) {
         this.font = font;
     }
 
-    /** La fuente que se está midiendo. */
+    /** The font being measured. */
     public Font getFont() {
         return this.font;
     }
 
     /**
-     * Las condiciones de dibujo que suponen estas métricas.
+     * The drawing conditions these metrics assume.
      *
-     * <p>La implementación de acá devuelve unas sin transformación, sin suavizado y sin métricas
-     * fraccionarias, que es lo que corresponde a una pantalla común.
+     * <p>The implementation here returns ones with no transform, no antialiasing and no fractional
+     * metrics, which is what an ordinary screen corresponds to.
      */
     public FontRenderContext getFontRenderContext() {
         return DEFAULT_FRC;
     }
 
-    /** El aire entre el fondo de un renglón y el techo del siguiente. */
+    /** The air between the bottom of one line and the top of the next. */
     public int getLeading() {
         return 0;
     }
 
-    /** Cuánto sube el texto por encima de la línea de base. */
+    /** How far the text goes above the baseline. */
     public int getAscent() {
         return 0;
     }
 
-    /** Cuánto baja el texto por debajo de la línea de base. */
+    /** How far the text goes below the baseline. */
     public int getDescent() {
         return 0;
     }
 
-    /** La suma de las tres anteriores: de cuánto en cuánto van los renglones. */
+    /** The sum of the three above: how far apart the lines go. */
     public int getHeight() {
         return this.getLeading() + this.getAscent() + this.getDescent();
     }
 
     /**
-     * Lo máximo que sube cualquier carácter de la fuente.
+     * The most any character of the font goes up.
      *
-     * <p>Puede ser más que {@link #getAscent}: ese es el ascenso típico, éste el peor caso.
+     * <p>It can be more than {@link #getAscent}: that one is the typical ascent, this one the worst
+     * case.
      */
     public int getMaxAscent() {
         return this.getAscent();
     }
 
-    /** Lo máximo que baja cualquier carácter de la fuente. */
+    /** The most any character of the font goes down. */
     public int getMaxDescent() {
         return this.getDescent();
     }
 
     /**
-     * Lo mismo que {@link #getMaxDescent}.
+     * The same as {@link #getMaxDescent}.
      *
-     * @deprecated el nombre está mal escrito. Se mantiene porque está en la API desde 1.0.
+     * @deprecated the name is misspelled. It is kept because it has been in the API since 1.0.
      */
     @Deprecated
     public int getMaxDecent() {
@@ -93,19 +95,21 @@ public abstract class FontMetrics implements Serializable {
     }
 
     /**
-     * El avance del carácter más ancho, o -1 si no se sabe.
+     * The advance of the widest character, or -1 if it is not known.
      *
-     * <p>El -1 es una respuesta y no un error: hay fuentes en las que averiguarlo obligaría a medir
-     * todos los glifos, y decir que no se sabe es más honesto que devolver una cota inventada.
+     * <p>The -1 is an answer and not an error: there are fonts where finding it out would mean
+     * measuring every glyph, and saying it is not known is more honest than returning an invented
+     * bound.
      */
     public int getMaxAdvance() {
         return -1;
     }
 
     /**
-     * El ancho de un carácter dado por su punto de código.
+     * The width of a character given by its code point.
      *
-     * <p>Un punto que no sea válido se mide como el glifo faltante, que es lo que se va a dibujar.
+     * <p>A point that is not valid is measured as the missing glyph, which is what is going to be
+     * drawn.
      */
     public int charWidth(int codePoint) {
         int cp = codePoint;
@@ -121,10 +125,10 @@ public abstract class FontMetrics implements Serializable {
     }
 
     /**
-     * El ancho de un carácter.
+     * The width of a character.
      *
-     * <p>No sirve para los caracteres que se escriben con dos `char`; para ésos está la versión de
-     * punto de código.
+     * <p>It is no good for the characters written with two `char`s; for those there is the code
+     * point version.
      */
     public int charWidth(char ch) {
         if (ch < 256) {
@@ -135,7 +139,7 @@ public abstract class FontMetrics implements Serializable {
         return this.charsWidth(data, 0, 1);
     }
 
-    /** El ancho de una cadena. */
+    /** The width of a string. */
     public int stringWidth(String str) {
         int len = str.length();
         char[] data = new char[len];
@@ -143,23 +147,23 @@ public abstract class FontMetrics implements Serializable {
         return this.charsWidth(data, 0, len);
     }
 
-    /** El ancho de un tramo de un arreglo de caracteres. */
+    /** The width of a stretch of an array of characters. */
     public int charsWidth(char[] data, int off, int len) {
         return this.stringWidth(new String(data, off, len));
     }
 
     /**
-     * El ancho de un tramo de bytes, tomando cada uno como un carácter.
+     * The width of a stretch of bytes, taking each one as a character.
      *
-     * @deprecated no traduce correctamente los bytes a caracteres en ninguna codificación que no sea
-     *     Latin-1. Se mantiene porque está en la API desde 1.0.
+     * @deprecated it does not translate bytes into characters correctly in any encoding other than
+     *     Latin-1. It is kept because it has been in the API since 1.0.
      */
     @Deprecated
     public int bytesWidth(byte[] data, int off, int len) {
         return this.charsWidth(new String(data, off, len).toCharArray(), 0, len);
     }
 
-    /** El ancho de los primeros 256 caracteres. */
+    /** The width of the first 256 characters. */
     public int[] getWidths() {
         int[] widths = new int[256];
         for (char ch = 0; ch < 256; ch++) {
@@ -168,59 +172,59 @@ public abstract class FontMetrics implements Serializable {
         return widths;
     }
 
-    /** Si todos los caracteres de la fuente comparten las mismas medidas de renglón. */
+    /** Whether every character of the font shares the same line measures. */
     public boolean hasUniformLineMetrics() {
         return this.font.hasUniformLineMetrics();
     }
 
-    /** Las medidas verticales de esa cadena. */
+    /** The vertical measures of that string. */
     public LineMetrics getLineMetrics(String str, Graphics context) {
         return this.font.getLineMetrics(str, this.myFRC(context));
     }
 
-    /** Las medidas verticales de un tramo de esa cadena. */
+    /** The vertical measures of a stretch of that string. */
     public LineMetrics getLineMetrics(String str, int beginIndex, int limit, Graphics context) {
         return this.font.getLineMetrics(str, beginIndex, limit, this.myFRC(context));
     }
 
-    /** Las medidas verticales de un tramo de caracteres. */
+    /** The vertical measures of a stretch of characters. */
     public LineMetrics getLineMetrics(char[] chars, int beginIndex, int limit, Graphics context) {
         return this.font.getLineMetrics(chars, beginIndex, limit, this.myFRC(context));
     }
 
-    /** Las medidas verticales de un tramo de un iterador. */
+    /** The vertical measures of a stretch of an iterator. */
     public LineMetrics getLineMetrics(CharacterIterator ci, int beginIndex, int limit,
             Graphics context) {
         return this.font.getLineMetrics(ci, beginIndex, limit, this.myFRC(context));
     }
 
-    /** El rectángulo que ocupa esa cadena. */
+    /** The rectangle that string takes up. */
     public Rectangle2D getStringBounds(String str, Graphics context) {
         return this.font.getStringBounds(str, this.myFRC(context));
     }
 
-    /** El rectángulo que ocupa un tramo de esa cadena. */
+    /** The rectangle a stretch of that string takes up. */
     public Rectangle2D getStringBounds(String str, int beginIndex, int limit, Graphics context) {
         return this.font.getStringBounds(str, beginIndex, limit, this.myFRC(context));
     }
 
-    /** El rectángulo que ocupa un tramo de caracteres. */
+    /** The rectangle a stretch of characters takes up. */
     public Rectangle2D getStringBounds(char[] chars, int beginIndex, int limit, Graphics context) {
         return this.font.getStringBounds(chars, beginIndex, limit, this.myFRC(context));
     }
 
-    /** El rectángulo que ocupa un tramo de un iterador. */
+    /** The rectangle a stretch of an iterator takes up. */
     public Rectangle2D getStringBounds(CharacterIterator ci, int beginIndex, int limit,
             Graphics context) {
         return this.font.getStringBounds(ci, beginIndex, limit, this.myFRC(context));
     }
 
-    /** El rectángulo del carácter más grande de la fuente. */
+    /** The rectangle of the biggest character of the font. */
     public Rectangle2D getMaxCharBounds(Graphics context) {
         return this.font.getMaxCharBounds(this.myFRC(context));
     }
 
-    /** Las condiciones de dibujo del contexto dado, o las de por omisión. */
+    /** The drawing conditions of the given context, or the default ones. */
     private FontRenderContext myFRC(Graphics context) {
         if (context instanceof Graphics2D) {
             return ((Graphics2D) context).getFontRenderContext();

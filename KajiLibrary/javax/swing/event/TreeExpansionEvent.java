@@ -5,18 +5,19 @@ import java.util.EventObject;
 import javax.swing.tree.TreePath;
 
 /**
- * Una rama del arbol se abrio o se cerro.
+ * A branch of the tree was opened or closed.
  *
- * <p>Lleva el camino y no el nodo, por la razon de siempre en un arbol: un mismo objeto puede colgar
- * de dos lugares, y solo el camino dice cual se abrio. Ver {@link TreePath}.
+ * <p>It carries the path and not the node, for the usual reason in a tree: one same object may
+ * hang from two places, and only the path says which one was opened. See {@link TreePath}.
  *
- * <p>Cual de las dos cosas paso lo dice el metodo del {@link TreeExpansionListener} al que llega.
+ * <p>Which of the two things happened is said by the {@link TreeExpansionListener} method it
+ * reaches.
  */
 public class TreeExpansionEvent extends EventObject {
 
     private static final long serialVersionUID = 1L;
 
-    /** El camino de la rama. */
+    /** The branch's path. */
     protected TreePath path;
 
     public TreeExpansionEvent(Object source, TreePath path) {
@@ -24,7 +25,7 @@ public class TreeExpansionEvent extends EventObject {
         this.path = path;
     }
 
-    /** El camino de la rama que se abrio o se cerro. */
+    /** The path of the branch that was opened or closed. */
     public TreePath getPath() {
         return this.path;
     }

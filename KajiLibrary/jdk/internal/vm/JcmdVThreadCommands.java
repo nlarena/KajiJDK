@@ -1,15 +1,17 @@
 package jdk.internal.vm;
 
 /**
- * KajiLibrary's jdk.internal.vm.JcmdVThreadCommands — el registro de comandos de `jcmd` sobre hilos
- * virtuales.
+ * KajiLibrary's jdk.internal.vm.JcmdVThreadCommands -- the registration of the `jcmd` commands
+ * about virtual threads.
  *
- * <p>**No tiene ningún miembro público, y ésa es toda la clase.** En el JDK su trabajo entero lo hace
- * el inicializador estático: registra los comandos `Thread.vthread_scheduler` y `Thread.vthread_dump`
- * que la herramienta `jcmd` después invoca desde afuera del proceso. Nadie la llama desde Java.
+ * <p>**It has no public member at all, and that is the whole class.** In the JDK its entire job is
+ * done by the static initialiser: it registers the `Thread.vthread_scheduler` and
+ * `Thread.vthread_dump` commands that the `jcmd` tool then invokes from outside the process. Nobody
+ * calls it from Java.
  *
- * <p>Acá el inicializador no registra nada, porque no hay canal de diagnóstico al que registrarse ni
- * planificador de hilos virtuales que reportar. El tipo existe con la forma que el JDK declara.
+ * <p>Here the initialiser registers nothing, because there is no diagnostic channel to register
+ * with nor a scheduler of virtual threads to report on. The type exists with the shape the JDK
+ * declares.
  */
 public class JcmdVThreadCommands {
 

@@ -1,50 +1,51 @@
 package org.xml.sax;
 
 /**
- * KajiLibrary's org.xml.sax.Attributes -- los atributos de un elemento, tal como llegan a
+ * KajiLibrary's org.xml.sax.Attributes -- the attributes of an element, as they arrive at
  * `ContentHandler.startElement`.
  *
- * <p>Es una lista con indice **y** un mapa con dos claves distintas a la vez: se puede recorrer por
- * posicion (`getURI(i)`, `getValue(i)`) o buscar por nombre calificado (`getValue(String)`) o por
- * (URI, nombre local) (`getValue(String, String)`). Las tres vistas son sobre lo mismo y estan las
- * tres porque un parser puede estar configurado para reportar solo una de las dos formas de nombre;
- * cual funcione depende de las *features* `namespaces` y `namespace-prefixes` del lector.
+ * <p>It is an indexed list **and** a map with two different keys at the same time: it can be walked
+ * by position (`getURI(i)`, `getValue(i)`) or looked up by qualified name (`getValue(String)`) or
+ * by (URI, local name) (`getValue(String, String)`). The three views are over the same thing and
+ * all three are there because a parser may be configured to report only one of the two forms of
+ * name; which one works depends on the `namespaces` and `namespace-prefixes` *features* of the
+ * reader.
  *
- * <p><strong>El objeto es prestado y vale solo dentro de la llamada.</strong> El parser lo reusa para
- * el elemento siguiente. Guardarlo es el bug clasico de SAX: el manejador se queda con una referencia
- * que despues describe otro elemento. Para conservarlo hay que copiarlo.
+ * <p><strong>The object is lent and is valid only inside the call.</strong> The parser reuses it
+ * for the next element. Keeping it is the classic SAX bug: the handler is left with a reference
+ * that later describes another element. To keep it, it has to be copied.
  *
- * <p><strong>El orden no significa nada.</strong> XML no le da orden a los atributos y un parser
- * puede entregarlos en cualquiera; codigo que dependa del indice para identificar cual es cual se
- * rompe al cambiar de implementacion.
+ * <p><strong>The order means nothing.</strong> XML gives the attributes no order and a parser may
+ * hand them over in any; code that depends on the index to identify which is which breaks on
+ * changing implementation.
  *
- * <p>Los tipos que devuelve `getType` son los de la DTD --`CDATA`, `ID`, `IDREF`, `IDREFS`,
- * `NMTOKEN`, `NMTOKENS`, `ENTITY`, `ENTITIES`, `NOTATION`-- y sin DTD son todos `CDATA`: es lo que
- * dice la norma para "no se sabe", no un tipo averiguado.
+ * <p>The types `getType` returns are those of the DTD --`CDATA`, `ID`, `IDREF`, `IDREFS`,
+ * `NMTOKEN`, `NMTOKENS`, `ENTITY`, `ENTITIES`, `NOTATION`-- and with no DTD they are all `CDATA`:
+ * it is what the standard says for "not known", not a type that was found out.
  */
 public interface Attributes {
 
     int getLength();
 
-    /** Cadena vacia si no tiene espacio de nombres o si el parser no los procesa; nunca `null`. */
+    /** Empty string if it has no namespace or if the parser does not process them; never `null`. */
     String getURI(int index);
 
     String getLocalName(int index);
 
-    /** El nombre tal cual estaba escrito, con prefijo. Vacio si el parser no lo reporta. */
+    /** The name as it was written, with its prefix. Empty if the parser does not report it. */
     String getQName(int index);
 
     String getType(int index);
 
-    /** Las entidades ya expandidas y el blanco ya normalizado, como manda XML. */
+    /** Entities already expanded and white space already normalised, as XML demands. */
     String getValue(int index);
 
-    /** -1 si no esta. Los cuatro `getXxx(int)` devuelven `null` con un indice fuera de rango. */
+    /** -1 if it is not there. The four `getXxx(int)` return `null` with an index out of range. */
     int getIndex(String uri, String localName);
 
     int getIndex(String qName);
 
-    /** `null` si no hay atributo con ese nombre; **no** una excepcion. */
+    /** `null` if there is no attribute with that name; **not** an exception. */
     String getType(String uri, String localName);
 
     String getType(String qName);

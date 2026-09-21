@@ -12,12 +12,14 @@ import javax.accessibility.AccessibleStateSet;
 import javax.accessibility.AccessibleValue;
 
 /**
- * Una entrada de menú con tilde: se prende y se apaga en vez de ejecutar algo.
+ * A menu entry with a tick: it is turned on and off instead of running something.
  *
- * <p>Es lo que se usa para las opciones de "ver esto sí o no": mostrar la barra de herramientas,
- * ajustar el texto al ancho, y demás. A diferencia de un {@link MenuItem} común, que dispara un
- * {@link java.awt.event.ActionEvent} y se olvida, ésta guarda estado y avisa con un
- * {@link ItemEvent}.
+ * <p>It is what the "show this or not" options use: show the toolbar, wrap the text to the width,
+ * and so on. Unlike a plain {@link MenuItem}, which fires a {@link java.awt.event.ActionEvent} and
+ * forgets, this one keeps state and reports with an {@link ItemEvent}.
+ *
+ * <p>Its constructors declare {@link HeadlessException} like the JDK's and never throw it; see
+ * {@link MenuComponent}.
  */
 public class CheckboxMenuItem extends MenuItem implements ItemSelectable, Accessible {
 
@@ -25,23 +27,23 @@ public class CheckboxMenuItem extends MenuItem implements ItemSelectable, Access
 
     private static int checkboxMenuItemCounter = 0;
 
-    /** Si está tildada. */
+    /** Whether it is ticked. */
     private boolean state;
 
-    /** Los oyentes, encadenados. */
+    /** The listeners, chained. */
     private transient ItemListener itemListener;
 
-    /** Una entrada sin leyenda y sin tildar. */
+    /** An entry without a caption and unticked. */
     public CheckboxMenuItem() throws HeadlessException {
         this("", false);
     }
 
-    /** Una entrada con esa leyenda, sin tildar. */
+    /** An entry with that caption, unticked. */
     public CheckboxMenuItem(String label) throws HeadlessException {
         this(label, false);
     }
 
-    /** Una entrada con esa leyenda y ese estado. */
+    /** An entry with that caption and that state. */
     public CheckboxMenuItem(String label, boolean state) throws HeadlessException {
         super(label);
         this.state = state;
@@ -55,25 +57,25 @@ public class CheckboxMenuItem extends MenuItem implements ItemSelectable, Access
         }
     }
 
-    /** La declara mostrable. */
+    /** Declares it showable. */
     public void addNotify() {
         super.addNotify();
     }
 
-    /** Si está tildada. */
+    /** Whether it is ticked. */
     public boolean getState() {
         return this.state;
     }
 
-    /** La tilda o la destilda; no dispara ningún evento. */
+    /** Ticks it or unticks it; it fires no event. */
     public synchronized void setState(boolean b) {
         this.state = b;
     }
 
     /**
-     * Lo que está seleccionado.
+     * What is selected.
      *
-     * @return un arreglo con la leyenda si está tildada, o `null` si no
+     * @return an array with the caption if it is ticked, or `null` if not
      */
     public synchronized Object[] getSelectedObjects() {
         if (!this.state) {
@@ -84,7 +86,7 @@ public class CheckboxMenuItem extends MenuItem implements ItemSelectable, Access
         return items;
     }
 
-    /** Agrega un oyente; `null` no hace nada. */
+    /** Adds a listener; `null` does nothing. */
     public synchronized void addItemListener(ItemListener l) {
         if (l == null) {
             return;
@@ -92,7 +94,7 @@ public class CheckboxMenuItem extends MenuItem implements ItemSelectable, Access
         this.itemListener = AWTEventMulticaster.add(this.itemListener, l);
     }
 
-    /** Saca un oyente. */
+    /** Removes a listener. */
     public synchronized void removeItemListener(ItemListener l) {
         if (l == null) {
             return;
@@ -100,7 +102,7 @@ public class CheckboxMenuItem extends MenuItem implements ItemSelectable, Access
         this.itemListener = AWTEventMulticaster.remove(this.itemListener, l);
     }
 
-    /** Los oyentes puestos. */
+    /** The listeners that are set. */
     public synchronized ItemListener[] getItemListeners() {
         return AWTEventMulticaster.getListeners(this.itemListener, ItemListener.class);
     }
@@ -120,7 +122,7 @@ public class CheckboxMenuItem extends MenuItem implements ItemSelectable, Access
         super.processEvent(e);
     }
 
-    /** Les avisa a los oyentes de selección. */
+    /** Tells the selection listeners. */
     protected void processItemEvent(ItemEvent e) {
         ItemListener l = this.itemListener;
         if (l != null) {
@@ -129,10 +131,10 @@ public class CheckboxMenuItem extends MenuItem implements ItemSelectable, Access
     }
 
     /**
-     * Atiende la elección de la entrada por parte del usuario.
+     * Handles the user choosing the entry.
      *
-     * <p>Acá sí se da vuelta el estado **y** se avisa, porque esto viene de una acción del usuario,
-     * que es exactamente lo que {@link #setState} no es.
+     * <p>Here the state is flipped **and** reported, because this comes from a user action, which
+     * is exactly what {@link #setState} is not.
      */
     void doMenuEvent(long when, int modifiers) {
         this.setState(!this.state);
@@ -144,7 +146,7 @@ public class CheckboxMenuItem extends MenuItem implements ItemSelectable, Access
         return super.paramString() + ",state=" + this.state;
     }
 
-    /** La accesibilidad de la entrada. */
+    /** The accessibility information of this entry. */
     public AccessibleContext getAccessibleContext() {
         if (this.accessibleContext == null) {
             this.accessibleContext = new AccessibleAWTCheckboxMenuItem();
@@ -152,11 +154,11 @@ public class CheckboxMenuItem extends MenuItem implements ItemSelectable, Access
         return this.accessibleContext;
     }
 
-    /** La accesibilidad de una entrada de menú con tilde. */
+    /** The accessibility of a menu entry with a tick. */
     protected class AccessibleAWTCheckboxMenuItem extends AccessibleAWTMenuItem
             implements AccessibleAction, AccessibleValue {
 
-        /** Para las subclases. */
+        /** For the subclasses. */
         protected AccessibleAWTCheckboxMenuItem() {
         }
 
@@ -180,7 +182,7 @@ public class CheckboxMenuItem extends MenuItem implements ItemSelectable, Access
             return s;
         }
 
-        /** Una sola: darla vuelta. */
+        /** Just one: flipping it. */
         public int getAccessibleActionCount() {
             return 1;
         }
@@ -200,7 +202,7 @@ public class CheckboxMenuItem extends MenuItem implements ItemSelectable, Access
             return true;
         }
 
-        /** 1 si está tildada, 0 si no. */
+        /** 1 if it is ticked, 0 if not. */
         public Number getCurrentAccessibleValue() {
             return Integer.valueOf(CheckboxMenuItem.this.getState() ? 1 : 0);
         }

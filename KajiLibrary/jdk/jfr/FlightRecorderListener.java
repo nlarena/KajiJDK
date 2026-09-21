@@ -1,40 +1,39 @@
 package jdk.jfr;
 
 /**
- * Avisos sobre el grabador y sobre los cambios de estado de las grabaciones.
+ * Notices about the recorder and about the changes of state of the recordings.
  *
- * <h2>Para que sirve enterarse de que el grabador arranco</h2>
+ * <h2>What finding out that the recorder started is for</h2>
  *
- * <p>Porque JFR se inicializa perezosamente: puede no existir cuando la aplicacion arranca y
- * aparecer despues, si alguien lo prende desde afuera con {@code jcmd}. Codigo que quiera
- * configurar algo en cuanto exista no puede preguntar una vez y rendirse — tiene que registrarse y
- * esperar.
+ * <p>Because JFR is initialised lazily: it may not exist when the application starts and appear
+ * later, if somebody switches it on from outside with {@code jcmd}. Code that wants to configure
+ * something as soon as it exists cannot ask once and give up -- it has to register itself and wait.
  *
- * <p>{@link #recorderInitialized} es ese aviso. Si el grabador <strong>ya</strong> estaba
- * inicializado al registrarse, el aviso llega igual y enseguida, asi que no hay carrera que
- * manejar.
+ * <p>{@link #recorderInitialized} is that notice. If the recorder was <strong>already</strong>
+ * initialised when one registered, the notice arrives all the same and at once, so there is no race
+ * to handle.
  *
- * <h2>Los dos metodos son {@code default}</h2>
+ * <h2>The two methods are {@code default}</h2>
  *
- * <p>Casi nadie quiere los dos. Dejarlos con cuerpo vacio evita el metodo vacio de compromiso que
- * habria que escribir en cada implementacion.
+ * <p>Almost nobody wants both. Leaving them with an empty body avoids the empty method of
+ * compromise that would have to be written in each implementation.
  *
  * @since 9
  */
 public interface FlightRecorderListener {
 
     /**
-     * El grabador se inicializo.
+     * The recorder was initialised.
      *
-     * @param recorder el grabador
+     * @param recorder the recorder
      */
     default void recorderInitialized(FlightRecorder recorder) {
     }
 
     /**
-     * Una grabacion cambio de estado.
+     * A recording changed state.
      *
-     * @param recording la grabacion, ya con su estado nuevo
+     * @param recording the recording, already with its new state
      */
     default void recordingStateChanged(Recording recording) {
     }

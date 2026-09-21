@@ -2,15 +2,15 @@ package java.nio.file;
 
 import java.io.IOException;
 
-// La base de las excepciones de este paquete: una falla sobre uno o dos archivos.
+// The base of this package's exceptions: a failure over one or two files.
 //
-// **Por que dos archivos y no uno.** `copy` y `move` fallan sobre un par, y saber cual de los dos
-// era el problema es la mitad del diagnostico. `getFile()` es el origen y `getOtherFile()` el
-// destino; en las operaciones de un solo archivo el segundo queda en `null`.
+// **Why two files and not one.** `copy` and `move` fail over a pair, and knowing which of the two
+// was the problem is half the diagnosis. `getFile()` is the source and `getOtherFile()` the target;
+// in single-file operations the second is left `null`.
 //
-// **Por que se guarda la razon aparte del mensaje.** `getMessage()` arma el texto juntando las tres
-// partes, pero quien atrapa la excepcion suele querer la ruta cruda --para reintentar, o para
-// mostrarla en otro idioma-- y sacarla del mensaje formateado seria fragil.
+// **Why the reason is kept apart from the message.** `getMessage()` builds the text by joining the
+// three parts, but whoever catches the exception usually wants the raw path --to retry, or to show
+// it in another language-- and taking it out of the formatted message would be fragile.
 public class FileSystemException extends IOException {
 
     private static final long serialVersionUID = -3055425747967319812L;
@@ -20,9 +20,9 @@ public class FileSystemException extends IOException {
     private final String reason;
 
     /**
-     * Una falla sobre un solo archivo, sin explicacion.
+     * A failure over a single file, with no explanation.
      *
-     * @param file el archivo, o `null` si no se sabe
+     * @param file the file, or `null` if it is not known
      */
     public FileSystemException(String file) {
         super((String) null);
@@ -32,11 +32,11 @@ public class FileSystemException extends IOException {
     }
 
     /**
-     * Una falla con todo el detalle.
+     * A failure with the full detail.
      *
-     * @param file el archivo, o `null`
-     * @param other el otro archivo, o `null`
-     * @param reason por que fallo, o `null`
+     * @param file the file, or `null`
+     * @param other the other file, or `null`
+     * @param reason why it failed, or `null`
      */
     public FileSystemException(String file, String other, String reason) {
         super((String) null);
@@ -45,26 +45,26 @@ public class FileSystemException extends IOException {
         this.reason = reason;
     }
 
-    /** El archivo, o `null`. */
+    /** The file, or `null`. */
     public String getFile() {
         return this.file;
     }
 
-    /** El otro archivo, o `null`. */
+    /** The other file, or `null`. */
     public String getOtherFile() {
         return this.other;
     }
 
-    /** La razon, o `null`. */
+    /** The reason, or `null`. */
     public String getReason() {
         return this.reason;
     }
 
     /**
-     * El mensaje armado: `archivo -> otro: razon`, salteando las partes que falten.
+     * The assembled message: `file -> other: reason`, skipping the parts that are missing.
      *
-     * <p>Se calcula aca y no en el constructor porque las tres partes son finales: el resultado es
-     * siempre el mismo y no hay estado que guardar.
+     * <p>It is computed here and not in the constructor because the three parts are final: the
+     * result is always the same and there is no state to keep.
      */
     public String getMessage() {
         if (this.file == null && this.other == null) {

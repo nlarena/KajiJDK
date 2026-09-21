@@ -4,55 +4,56 @@ import java.lang.classfile.constantpool.ConstantPool;
 import java.lang.classfile.constantpool.ConstantPoolBuilder;
 import java.lang.classfile.constantpool.PoolEntry;
 
-// El buffer donde se arma un `.class`: un arreglo de bytes que crece, más el pool de constantes al
-// que van a parar los índices que se escriben. Es big-endian en todo, como el formato.
+// The buffer where a `.class` is built: a growing array of bytes, plus the constant pool the indices
+// being written point into. It is big-endian throughout, like the format.
 public interface BufWriter {
 
-    /** El pool contra el que se resuelven los índices que se escriben acá. */
+    /** The pool the indices written here are resolved against. */
     ConstantPoolBuilder constantPool();
 
-    /** Si los índices de `constantPool` se pueden escribir tal cual. */
+    /** Whether `constantPool`'s indices can be written as they stand. */
     boolean canWriteDirect(ConstantPool constantPool);
 
-    /** Pide lugar para `freeBytes` bytes más. Es una optimización; no cambia el contenido. */
+    /** It asks for room for `freeBytes` more bytes. It is an optimisation; it changes no content. */
     void reserveSpace(int freeBytes);
 
-    /** Escribe un byte. */
+    /** It writes one byte. */
     void writeU1(int x);
 
-    /** Escribe dos bytes, big-endian. */
+    /** It writes two bytes, big-endian. */
     void writeU2(int x);
 
-    /** Escribe cuatro bytes, big-endian. */
+    /** It writes four bytes, big-endian. */
     void writeInt(int x);
 
-    /** Escribe un `float` en su forma IEEE 754 de cuatro bytes. */
+    /** It writes a `float` in its four-byte IEEE 754 form. */
     void writeFloat(float x);
 
-    /** Escribe ocho bytes, big-endian. */
+    /** It writes eight bytes, big-endian. */
     void writeLong(long x);
 
-    /** Escribe un `double` en su forma IEEE 754 de ocho bytes. */
+    /** It writes a `double` in its eight-byte IEEE 754 form. */
     void writeDouble(double x);
 
-    /** Escribe el arreglo entero. */
+    /** It writes the whole array. */
     void writeBytes(byte[] arr);
 
-    /** Escribe `length` bytes desde `offset`. */
+    /** It writes `length` bytes starting at `offset`. */
     void writeBytes(byte[] arr, int offset, int length);
 
-    /** Pisa `intSize` bytes en `offset` con `value`. Es lo que cierra un `attribute_length`. */
+    /** It overwrites `intSize` bytes at `offset` with `value`. It is what closes an
+     * `attribute_length`. */
     void patchInt(int offset, int intSize, int value);
 
-    /** Escribe los `intSize` bytes bajos de `value`. */
+    /** It writes `value`'s low `intSize` bytes. */
     void writeIntBytes(int intSize, long value);
 
-    /** Escribe el índice de `entry` como u2. */
+    /** It writes `entry`'s index as a u2. */
     void writeIndex(PoolEntry entry);
 
-    /** Como `writeIndex`, pero un `null` se escribe como el índice 0. */
+    /** Like `writeIndex`, but a `null` is written as index 0. */
     void writeIndexOrZero(PoolEntry entry);
 
-    /** Cuántos bytes lleva escritos. */
+    /** How many bytes it has written so far. */
     int size();
 }

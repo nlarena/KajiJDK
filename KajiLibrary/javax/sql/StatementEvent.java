@@ -1,10 +1,10 @@
 package javax.sql;
 
 /**
- * KajiLibrary's javax.sql.StatementEvent -- le paso algo a una sentencia preparada agrupada.
+ * KajiLibrary's javax.sql.StatementEvent -- something happened to a pooled prepared statement.
  *
- * <p>La fuente es la {@link PooledConnection} y no la sentencia, aunque el evento sea sobre ella: es
- * la conexion la que tiene los oyentes, y la sentencia viaja como dato.
+ * <p>The source is the {@link PooledConnection} and not the statement, even though the event is
+ * about it: it is the connection that has the listeners, and the statement travels as data.
  */
 public class StatementEvent extends java.util.EventObject {
 
@@ -24,12 +24,12 @@ public class StatementEvent extends java.util.EventObject {
         this.ex = ex;
     }
 
-    /** La sentencia de la que habla el evento. */
+    /** The statement the event is about. */
     public java.sql.PreparedStatement getStatement() {
         return this.statement;
     }
 
-    /** El error, o `null`. */
+    /** The error, or `null`. */
     public java.sql.SQLException getSQLException() {
         return this.ex;
     }

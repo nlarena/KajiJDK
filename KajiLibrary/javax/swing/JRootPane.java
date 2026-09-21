@@ -14,78 +14,80 @@ import javax.swing.plaf.ComponentUI;
 import javax.swing.plaf.RootPaneUI;
 
 /**
- * El panel que toda ventana de Swing tiene adentro.
+ * The pane every Swing window has inside.
  *
- * <h2>Cuatro piezas apiladas</h2>
+ * <h2>Four stacked pieces</h2>
  *
- * <p>De abajo hacia arriba: el <em>panel de capas</em>, que contiene todo; adentro, la <em>barra de
- * menu</em> y el <em>panel de contenido</em>, uno al lado del otro; y encima de todo, el
- * <em>vidrio</em>, transparente y que atrapa el mouse.
+ * <p>From the bottom up: the <em>layered pane</em>, which holds everything; inside it, the
+ * <em>menu bar</em> and the <em>content pane</em>, one beside the other; and on top of
+ * everything, the <em>glass</em>, transparent and catching the mouse.
  *
- * <p>Es la razon de que a una ventana de Swing no se le agreguen componentes directamente sino a su
- * {@code getContentPane()}. Agregarlos a la ventana los pondria al lado del panel raiz, no adentro.
+ * <p>It is the reason components are not added to a Swing window directly but to its
+ * {@code getContentPane()}. Adding them to the window would put them beside the root pane, not
+ * inside it.
  *
- * <h2>Por que el vidrio</h2>
+ * <h2>Why the glass</h2>
  *
- * <p>Un componente encima de todo, normalmente invisible, sirve para tapar la ventana mientras
- * carga, dibujar encima sin tocar nada, o atrapar el mouse durante un arrastre. Sin el, cada una de
- * esas cosas obligaria a tocar todos los componentes de abajo.
+ * <p>A component on top of everything, normally invisible, serves to cover the window while it
+ * loads, to draw on top without touching anything, or to catch the mouse during a drag.
+ * Without it, each of those things would force every component below to be touched.
  *
- * <h2>El boton por omision</h2>
+ * <h2>The default button</h2>
  *
- * <p>{@link #setDefaultButton} es el que responde al Enter. Vive aca y no en la ventana porque es
- * una propiedad del contenido: cambiar de panel cambia cual es el boton principal.
+ * <p>{@link #setDefaultButton} is the one that answers Enter. It lives here and not in the
+ * window because it is a property of the content: changing pane changes which the main button
+ * is.
  */
 public class JRootPane extends JComponent implements Accessible {
 
     private static final String uiClassID = "RootPaneUI";
 
-    /** Sin adorno propio: lo dibuja el sistema. */
+    /** With no decoration of its own: the system draws it. */
     public static final int NONE = 0;
 
-    /** Adorno de ventana comun. */
+    /** An ordinary window's decoration. */
     public static final int FRAME = 1;
 
-    /** Adorno de dialogo. */
+    /** A dialog's decoration. */
     public static final int PLAIN_DIALOG = 2;
 
-    /** Adorno de dialogo de informacion. */
+    /** An information dialog's decoration. */
     public static final int INFORMATION_DIALOG = 3;
 
-    /** Adorno de dialogo de error. */
+    /** An error dialog's decoration. */
     public static final int ERROR_DIALOG = 4;
 
-    /** Adorno del selector de color. */
+    /** The colour chooser's decoration. */
     public static final int COLOR_CHOOSER_DIALOG = 5;
 
-    /** Adorno del selector de archivos. */
+    /** The file chooser's decoration. */
     public static final int FILE_CHOOSER_DIALOG = 6;
 
-    /** Adorno de dialogo de pregunta. */
+    /** A question dialog's decoration. */
     public static final int QUESTION_DIALOG = 7;
 
-    /** Adorno de dialogo de advertencia. */
+    /** A warning dialog's decoration. */
     public static final int WARNING_DIALOG = 8;
 
-    /** La barra de menu. */
+    /** The menu bar. */
     protected JMenuBar menuBar;
 
-    /** Donde va lo que agrega el programa. */
+    /** Where what the program adds goes. */
     protected Container contentPane;
 
-    /** El que contiene a todos los demas. */
+    /** The one that holds all the others. */
     protected JLayeredPane layeredPane;
 
-    /** El de arriba de todo; ver la nota de la clase. */
+    /** The one on top of everything; see the class note. */
     protected Component glassPane;
 
-    /** El boton que responde al Enter. */
+    /** The button that answers Enter. */
     protected JButton defaultButton;
 
     private int windowDecorationStyle = NONE;
     private AccessibleContext accessibleContext;
 
-    /** Un panel raiz con sus cuatro piezas armadas. */
+    /** A root pane with its four pieces built. */
     public JRootPane() {
         setGlassPane(createGlassPane());
         setLayeredPane(createLayeredPane());
@@ -104,9 +106,9 @@ public class JRootPane extends JComponent implements Accessible {
     }
 
     /**
-     * Si Swing dibuja el marco de la ventana en lugar del sistema.
+     * Whether Swing draws the window's frame instead of the system.
      *
-     * @throws IllegalArgumentException si el valor no es uno de los nueve.
+     * @throws IllegalArgumentException if the value is not one of the nine.
      */
     public void setWindowDecorationStyle(int windowDecorationStyle) {
         if (windowDecorationStyle < 0 || windowDecorationStyle > WARNING_DIALOG) {
@@ -133,14 +135,14 @@ public class JRootPane extends JComponent implements Accessible {
         return uiClassID;
     }
 
-    /** El panel de capas de siempre, con el contenido en la capa mas baja. */
+    /** The usual layered pane, with the content in the lowest layer. */
     protected JLayeredPane createLayeredPane() {
         JLayeredPane p = new JLayeredPane();
         p.setName(this.getName() + ".layeredPane");
         return p;
     }
 
-    /** El panel de contenido de siempre: opaco y con acomodador de bordes. */
+    /** The usual content pane: opaque and with a border layout. */
     protected Container createContentPane() {
         JComponent c = new JPanel();
         c.setName(this.getName() + ".contentPane");
@@ -148,7 +150,7 @@ public class JRootPane extends JComponent implements Accessible {
         return c;
     }
 
-    /** El vidrio de siempre: transparente e invisible. */
+    /** The usual glass: transparent and invisible. */
     protected Component createGlassPane() {
         JComponent c = new JPanel();
         c.setName(this.getName() + ".glassPane");
@@ -157,12 +159,12 @@ public class JRootPane extends JComponent implements Accessible {
         return c;
     }
 
-    /** El acomodador que apila las cuatro piezas; ver la nota de la clase. */
+    /** The layout that stacks the four pieces; see the class note. */
     protected LayoutManager createRootLayout() {
         return new RootLayout(this);
     }
 
-    /** La barra de menu; va adentro del panel de capas, arriba del contenido. */
+    /** The menu bar; it goes inside the layered pane, above the content. */
     public void setJMenuBar(JMenuBar menu) {
         if (menuBar != null && menuBar.getParent() == layeredPane) {
             layeredPane.remove(menuBar);
@@ -174,9 +176,9 @@ public class JRootPane extends JComponent implements Accessible {
     }
 
     /**
-     * La barra de menu.
+     * The menu bar.
      *
-     * @deprecated Usar {@link #setJMenuBar}.
+     * @deprecated Use {@link #setJMenuBar}.
      */
     @Deprecated
     public void setMenuBar(JMenuBar menu) {
@@ -188,9 +190,9 @@ public class JRootPane extends JComponent implements Accessible {
     }
 
     /**
-     * La barra de menu.
+     * The menu bar.
      *
-     * @deprecated Usar {@link #getJMenuBar}.
+     * @deprecated Use {@link #getJMenuBar}.
      */
     @Deprecated
     public JMenuBar getMenuBar() {
@@ -198,9 +200,9 @@ public class JRootPane extends JComponent implements Accessible {
     }
 
     /**
-     * Donde va lo que agrega el programa.
+     * Where what the program adds goes.
      *
-     * @throws IllegalComponentStateException si es nulo.
+     * @throws IllegalComponentStateException if it is null.
      */
     public void setContentPane(Container content) {
         if (content == null) {
@@ -219,9 +221,9 @@ public class JRootPane extends JComponent implements Accessible {
     }
 
     /**
-     * El panel de capas.
+     * The layered pane.
      *
-     * @throws IllegalComponentStateException si es nulo.
+     * @throws IllegalComponentStateException if it is null.
      */
     public void setLayeredPane(JLayeredPane layered) {
         if (layered == null) {
@@ -240,12 +242,12 @@ public class JRootPane extends JComponent implements Accessible {
     }
 
     /**
-     * El vidrio de arriba.
+     * The glass on top.
      *
-     * <p>Se conserva si estaba visible: reemplazarlo mientras tapa la ventana no deberia destapar
-     * lo de abajo.
+     * <p>It is kept if it was visible: replacing it while it covers the window should not uncover
+     * what is below.
      *
-     * @throws NullPointerException si es nulo.
+     * @throws NullPointerException if it is null.
      */
     public void setGlassPane(Component glass) {
         if (glass == null) {
@@ -266,17 +268,17 @@ public class JRootPane extends JComponent implements Accessible {
     }
 
     /**
-     * Siempre cierto.
+     * Always true.
      *
-     * <p>Es el punto donde el reacomodo deja de subir: lo que pase adentro de una ventana no cambia
-     * el tamano de la ventana. Sin este corte, escribir una letra en un campo reacomodaria todo
-     * hasta la raiz.
+     * <p>It is the point where the laying out stops going up: whatever happens inside a window
+     * does not change the window's size. Without this cut, typing a letter in a field would lay
+     * everything out as far as the root.
      */
     public boolean isValidateRoot() {
         return true;
     }
 
-    /** Falso: el vidrio esta encima del contenido, por definicion se pisan. */
+    /** False: the glass is on top of the content, by definition they overlap. */
     public boolean isOptimizedDrawingEnabled() {
         return !glassPane.isVisible();
     }
@@ -289,7 +291,7 @@ public class JRootPane extends JComponent implements Accessible {
         super.removeNotify();
     }
 
-    /** El boton que responde al Enter; ver la nota de la clase. */
+    /** The button that answers Enter; see the class note. */
     public void setDefaultButton(JButton defaultButton) {
         JButton oldDefault = this.defaultButton;
         if (oldDefault != defaultButton) {
@@ -303,10 +305,10 @@ public class JRootPane extends JComponent implements Accessible {
     }
 
     /**
-     * Agrega un hijo; el vidrio queda siempre primero.
+     * It adds a child; the glass always stays first.
      *
-     * <p>Primero en la lista es encima en la pantalla. Sin esta regla, poner el panel de capas
-     * despues del vidrio lo taparia.
+     * <p>First in the list is on top on the screen. Without this rule, putting the layered pane
+     * after the glass would cover it.
      */
     protected void addImpl(Component comp, Object constraints, int index) {
         super.addImpl(comp, constraints, index);
@@ -325,30 +327,30 @@ public class JRootPane extends JComponent implements Accessible {
     }
 
     /**
-     * Apila el vidrio, el panel de capas, la barra y el contenido.
+     * It stacks the glass, the layered pane, the bar and the content.
      *
-     * <p>No es un acomodador comun: los cuatro no van uno al lado del otro sino unos adentro de
-     * otros y con la barra arriba del contenido. Ningun acomodador de los de siempre hace eso.
+     * <p>It is not an ordinary layout: the four do not go one beside the other but some inside
+     * others and with the bar above the content. No usual layout does that.
      */
     static class RootLayout implements LayoutManager2, Serializable {
 
-        private final JRootPane raiz;
+        private final JRootPane root;
 
-        RootLayout(JRootPane raiz) {
-            this.raiz = raiz;
+        RootLayout(JRootPane root) {
+            this.root = root;
         }
 
         public Dimension preferredLayoutSize(Container parent) {
             Dimension rd;
             Dimension mbd;
-            Insets i = raiz.getInsets();
-            if (raiz.contentPane != null) {
-                rd = raiz.contentPane.getPreferredSize();
+            Insets i = root.getInsets();
+            if (root.contentPane != null) {
+                rd = root.contentPane.getPreferredSize();
             } else {
                 rd = parent.getSize();
             }
-            if (raiz.menuBar != null && raiz.menuBar.isVisible()) {
-                mbd = raiz.menuBar.getPreferredSize();
+            if (root.menuBar != null && root.menuBar.isVisible()) {
+                mbd = root.menuBar.getPreferredSize();
             } else {
                 mbd = new Dimension(0, 0);
             }
@@ -359,14 +361,14 @@ public class JRootPane extends JComponent implements Accessible {
         public Dimension minimumLayoutSize(Container parent) {
             Dimension rd;
             Dimension mbd;
-            Insets i = raiz.getInsets();
-            if (raiz.contentPane != null) {
-                rd = raiz.contentPane.getMinimumSize();
+            Insets i = root.getInsets();
+            if (root.contentPane != null) {
+                rd = root.contentPane.getMinimumSize();
             } else {
                 rd = parent.getSize();
             }
-            if (raiz.menuBar != null && raiz.menuBar.isVisible()) {
-                mbd = raiz.menuBar.getMinimumSize();
+            if (root.menuBar != null && root.menuBar.isVisible()) {
+                mbd = root.menuBar.getMinimumSize();
             } else {
                 mbd = new Dimension(0, 0);
             }
@@ -377,14 +379,14 @@ public class JRootPane extends JComponent implements Accessible {
         public Dimension maximumLayoutSize(Container target) {
             Dimension rd;
             Dimension mbd;
-            Insets i = raiz.getInsets();
-            if (raiz.menuBar != null && raiz.menuBar.isVisible()) {
-                mbd = raiz.menuBar.getMaximumSize();
+            Insets i = root.getInsets();
+            if (root.menuBar != null && root.menuBar.isVisible()) {
+                mbd = root.menuBar.getMaximumSize();
             } else {
                 mbd = new Dimension(0, 0);
             }
-            if (raiz.contentPane != null) {
-                rd = raiz.contentPane.getMaximumSize();
+            if (root.contentPane != null) {
+                rd = root.contentPane.getMaximumSize();
             } else {
                 rd = new Dimension(Integer.MAX_VALUE,
                         Integer.MAX_VALUE - i.top - i.bottom - mbd.height - 1);
@@ -394,26 +396,26 @@ public class JRootPane extends JComponent implements Accessible {
         }
 
         public void layoutContainer(Container parent) {
-            Insets i = raiz.getInsets();
+            Insets i = root.getInsets();
             int w = parent.getWidth() - i.right - i.left;
             int h = parent.getHeight() - i.top - i.bottom;
 
-            if (raiz.layeredPane != null) {
-                raiz.layeredPane.setBounds(i.left, i.top, w, h);
+            if (root.layeredPane != null) {
+                root.layeredPane.setBounds(i.left, i.top, w, h);
             }
-            if (raiz.glassPane != null) {
-                raiz.glassPane.setBounds(i.left, i.top, w, h);
+            if (root.glassPane != null) {
+                root.glassPane.setBounds(i.left, i.top, w, h);
             }
-            // La barra y el contenido van adentro del panel de capas, en su propio sistema de
-            // coordenadas: por eso arrancan en cero y no en el margen.
+            // The bar and the content go inside the layered pane, in its own coordinate system:
+                        // that is why they start at zero and not at the margin.
             int contentY = 0;
-            if (raiz.menuBar != null && raiz.menuBar.isVisible()) {
-                Dimension mbd = raiz.menuBar.getPreferredSize();
-                raiz.menuBar.setBounds(0, 0, w, mbd.height);
+            if (root.menuBar != null && root.menuBar.isVisible()) {
+                Dimension mbd = root.menuBar.getPreferredSize();
+                root.menuBar.setBounds(0, 0, w, mbd.height);
                 contentY = mbd.height;
             }
-            if (raiz.contentPane != null) {
-                raiz.contentPane.setBounds(0, contentY, w, h - contentY);
+            if (root.contentPane != null) {
+                root.contentPane.setBounds(0, contentY, w, h - contentY);
             }
         }
 

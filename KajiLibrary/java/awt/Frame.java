@@ -8,151 +8,150 @@ import javax.accessibility.AccessibleState;
 import javax.accessibility.AccessibleStateSet;
 
 /**
- * Una ventana con borde, barra de título y, si se le pone, barra de menús.
+ * A window with a border, a title bar and, if given one, a menu bar.
  *
- * <p>Es la ventana principal de una aplicación de escritorio. Lo que agrega respecto de
- * {@link Window} es todo lo que dibuja el escritorio alrededor del contenido: el marco, el título,
- * los botones de minimizar y cerrar.
+ * <p>It is the main window of a desktop application. What it adds over {@link Window} is everything
+ * the desktop draws around the content: the frame, the title, the minimise and close buttons.
  *
- * <p>El **estado extendido** es una máscara de bits y no un valor, y eso importa: una ventana puede
- * estar maximizada horizontalmente y no verticalmente, o minimizada **y** maximizada a la vez —
- * cuando se restaure vuelve maximizada. Un solo valor no podría expresarlo.
+ * <p>The **extended state** is a bit mask and not a value, and that matters: a window can be
+ * maximised horizontally and not vertically, or minimised **and** maximised at once — when it is
+ * restored it comes back maximised. A single value could not express that.
  *
- * <p>Los márgenes de {@link Container#getInsets} son, en un marco, el grosor de esa decoración. Acá
- * son cero: sin escritorio no hay marco que ocupe lugar.
+ * <p>The insets of {@link Container#getInsets} are, in a frame, the thickness of that decoration.
+ * Here they are zero: with no desktop there is no frame taking up room.
  */
 public class Frame extends Window implements MenuContainer {
 
     private static final long serialVersionUID = 2673458971256075116L;
 
-    /** Ni minimizada ni maximizada. */
+    /** Neither minimized nor maximized. */
     public static final int NORMAL = 0;
 
-    /** Minimizada. */
+    /** Minimized. */
     public static final int ICONIFIED = 1;
 
-    /** Maximizada a lo ancho. */
+    /** Maximised across. */
     public static final int MAXIMIZED_HORIZ = 2;
 
-    /** Maximizada a lo alto. */
+    /** Maximised down. */
     public static final int MAXIMIZED_VERT = 4;
 
-    /** Maximizada en las dos direcciones. */
+    /** Maximised in both directions. */
     public static final int MAXIMIZED_BOTH = MAXIMIZED_VERT | MAXIMIZED_HORIZ;
 
     /**
-     * El cursor de siempre.
+     * The usual cursor.
      *
-     * @deprecated es del modelo de 1.0. Usar {@link Cursor#DEFAULT_CURSOR}.
+     * @deprecated it is from the 1.0 model. Use {@link Cursor#DEFAULT_CURSOR}.
      */
     @Deprecated
     public static final int DEFAULT_CURSOR = Cursor.DEFAULT_CURSOR;
 
     /**
-     * La cruz.
+     * The crosshair.
      *
-     * @deprecated usar {@link Cursor#CROSSHAIR_CURSOR}.
+     * @deprecated use {@link Cursor#CROSSHAIR_CURSOR}.
      */
     @Deprecated
     public static final int CROSSHAIR_CURSOR = Cursor.CROSSHAIR_CURSOR;
 
     /**
-     * La barra de texto.
+     * The text bar.
      *
-     * @deprecated usar {@link Cursor#TEXT_CURSOR}.
+     * @deprecated use {@link Cursor#TEXT_CURSOR}.
      */
     @Deprecated
     public static final int TEXT_CURSOR = Cursor.TEXT_CURSOR;
 
     /**
-     * El reloj de espera.
+     * The waiting clock.
      *
-     * @deprecated usar {@link Cursor#WAIT_CURSOR}.
+     * @deprecated use {@link Cursor#WAIT_CURSOR}.
      */
     @Deprecated
     public static final int WAIT_CURSOR = Cursor.WAIT_CURSOR;
 
     /**
-     * Redimensionar desde el borde inferior izquierdo.
+     * Resizing from the bottom left edge.
      *
-     * @deprecated usar {@link Cursor#SW_RESIZE_CURSOR}.
+     * @deprecated use {@link Cursor#SW_RESIZE_CURSOR}.
      */
     @Deprecated
     public static final int SW_RESIZE_CURSOR = Cursor.SW_RESIZE_CURSOR;
 
     /**
-     * Desde el borde inferior derecho.
+     * From the bottom right edge.
      *
-     * @deprecated usar {@link Cursor#SE_RESIZE_CURSOR}.
+     * @deprecated use {@link Cursor#SE_RESIZE_CURSOR}.
      */
     @Deprecated
     public static final int SE_RESIZE_CURSOR = Cursor.SE_RESIZE_CURSOR;
 
     /**
-     * Desde el borde superior izquierdo.
+     * From the top left edge.
      *
-     * @deprecated usar {@link Cursor#NW_RESIZE_CURSOR}.
+     * @deprecated use {@link Cursor#NW_RESIZE_CURSOR}.
      */
     @Deprecated
     public static final int NW_RESIZE_CURSOR = Cursor.NW_RESIZE_CURSOR;
 
     /**
-     * Desde el borde superior derecho.
+     * From the top right edge.
      *
-     * @deprecated usar {@link Cursor#NE_RESIZE_CURSOR}.
+     * @deprecated use {@link Cursor#NE_RESIZE_CURSOR}.
      */
     @Deprecated
     public static final int NE_RESIZE_CURSOR = Cursor.NE_RESIZE_CURSOR;
 
     /**
-     * Desde el borde de arriba.
+     * From the top edge.
      *
-     * @deprecated usar {@link Cursor#N_RESIZE_CURSOR}.
+     * @deprecated use {@link Cursor#N_RESIZE_CURSOR}.
      */
     @Deprecated
     public static final int N_RESIZE_CURSOR = Cursor.N_RESIZE_CURSOR;
 
     /**
-     * Desde el borde de abajo.
+     * From the bottom edge.
      *
-     * @deprecated usar {@link Cursor#S_RESIZE_CURSOR}.
+     * @deprecated use {@link Cursor#S_RESIZE_CURSOR}.
      */
     @Deprecated
     public static final int S_RESIZE_CURSOR = Cursor.S_RESIZE_CURSOR;
 
     /**
-     * Desde el borde izquierdo.
+     * From the left edge.
      *
-     * @deprecated usar {@link Cursor#W_RESIZE_CURSOR}.
+     * @deprecated use {@link Cursor#W_RESIZE_CURSOR}.
      */
     @Deprecated
     public static final int W_RESIZE_CURSOR = Cursor.W_RESIZE_CURSOR;
 
     /**
-     * Desde el borde derecho.
+     * From the right edge.
      *
-     * @deprecated usar {@link Cursor#E_RESIZE_CURSOR}.
+     * @deprecated use {@link Cursor#E_RESIZE_CURSOR}.
      */
     @Deprecated
     public static final int E_RESIZE_CURSOR = Cursor.E_RESIZE_CURSOR;
 
     /**
-     * La mano.
+     * The hand.
      *
-     * @deprecated usar {@link Cursor#HAND_CURSOR}.
+     * @deprecated use {@link Cursor#HAND_CURSOR}.
      */
     @Deprecated
     public static final int HAND_CURSOR = Cursor.HAND_CURSOR;
 
     /**
-     * La cruz de mover.
+     * The moving cross.
      *
-     * @deprecated usar {@link Cursor#MOVE_CURSOR}.
+     * @deprecated use {@link Cursor#MOVE_CURSOR}.
      */
     @Deprecated
     public static final int MOVE_CURSOR = Cursor.MOVE_CURSOR;
 
-    private static final List<Frame> todos = new ArrayList<Frame>();
+    private static final List<Frame> allFrames = new ArrayList<Frame>();
 
     private String title = "Untitled";
     private MenuBar menuBar;
@@ -162,46 +161,46 @@ public class Frame extends Window implements MenuContainer {
     private Rectangle maximizedBounds;
 
     /**
-     * Un marco sin título.
+     * A frame with no title.
      *
-     * @throws HeadlessException si no hay pantalla
+     * @throws HeadlessException if there is no screen
      */
     public Frame() throws HeadlessException {
         this("");
     }
 
     /**
-     * Con esa configuración gráfica.
+     * With that graphics configuration.
      *
-     * @throws IllegalArgumentException si la configuración no es de una pantalla
+     * @throws IllegalArgumentException if the configuration is not a screen one
      */
     public Frame(GraphicsConfiguration gc) {
         this("", gc);
     }
 
     /**
-     * Con ese título.
+     * With that title.
      *
-     * @throws HeadlessException si no hay pantalla
+     * @throws HeadlessException if there is no screen
      */
     public Frame(String title) throws HeadlessException {
         this(title, null);
     }
 
     /**
-     * Con título y configuración gráfica.
+     * With a title and a graphics configuration.
      *
-     * @throws IllegalArgumentException si la configuración no es de una pantalla
+     * @throws IllegalArgumentException if the configuration is not a screen one
      */
     public Frame(String title, GraphicsConfiguration gc) {
         super(null, gc);
         this.title = title;
-        synchronized (todos) {
-            todos.add(this);
+        synchronized (allFrames) {
+            allFrames.add(this);
         }
     }
 
-    /** Avisa que puede mostrarse, y se lo avisa a la barra de menús. */
+    /** Notifies that it can be shown, and tells the menu bar. */
     public void addNotify() {
         synchronized (this.getTreeLock()) {
             if (this.menuBar != null) {
@@ -211,7 +210,7 @@ public class Frame extends Window implements MenuContainer {
         }
     }
 
-    /** Avisa que dejó de poder mostrarse. */
+    /** Notifies that it can no longer be shown. */
     public void removeNotify() {
         synchronized (this.getTreeLock()) {
             if (this.menuBar != null) {
@@ -221,24 +220,24 @@ public class Frame extends Window implements MenuContainer {
         }
     }
 
-    /** El texto de la barra de título. */
+    /** The text of the title bar. */
     public String getTitle() {
         return this.title;
     }
 
-    /** Le cambia el título; un `null` se toma como vacío. */
+    /** Changes its title; a `null` is taken as empty. */
     public void setTitle(String title) {
-        String viejo = this.title;
+        String old = this.title;
         synchronized (this) {
             this.title = title == null ? "" : title;
         }
-        this.firePropertyChange("title", viejo, this.title);
+        this.firePropertyChange("title", old, this.title);
     }
 
     /**
-     * El ícono de la ventana.
+     * The window's icon.
      *
-     * @return el primero de {@link Window#getIconImages}, o `null` si no hay
+     * @return the first of {@link Window#getIconImages}, or `null` if there is none
      */
     public Image getIconImage() {
         java.util.List<Image> l = this.getIconImages();
@@ -248,24 +247,24 @@ public class Frame extends Window implements MenuContainer {
         return l.get(0);
     }
 
-    /** Le pone ícono. */
+    /** Gives it an icon. */
     public void setIconImage(Image image) {
         super.setIconImage(image);
     }
 
     /**
-     * La barra de menús.
+     * The menu bar.
      *
-     * @return la barra, o `null` si no tiene
+     * @return the bar, or `null` if it has none
      */
     public MenuBar getMenuBar() {
         return this.menuBar;
     }
 
     /**
-     * Le pone barra de menús.
+     * Gives it a menu bar.
      *
-     * <p>Cambia el espacio disponible para el contenido, así que invalida el marco.
+     * <p>It changes the room available for the content, so it invalidates the frame.
      */
     public void setMenuBar(MenuBar mb) {
         synchronized (this.getTreeLock()) {
@@ -286,41 +285,41 @@ public class Frame extends Window implements MenuContainer {
         }
     }
 
-    /** Si el usuario puede cambiarle el tamaño. */
+    /** Whether the user can change its size. */
     public boolean isResizable() {
         return this.resizable;
     }
 
-    /** Declara si el usuario puede cambiarle el tamaño. */
+    /** Declares whether the user can change its size. */
     public void setResizable(boolean resizable) {
-        boolean viejo;
+        boolean old;
         synchronized (this) {
-            viejo = this.resizable;
+            old = this.resizable;
             this.resizable = resizable;
         }
-        this.firePropertyChange("resizable", viejo, resizable);
+        this.firePropertyChange("resizable", old, resizable);
     }
 
     /**
-     * Minimiza o restaura.
+     * Minimises or restores.
      *
-     * @deprecated sólo puede expresar minimizado y normal. Usar {@link #setExtendedState}.
+     * @deprecated it can only express minimised and normal. Use {@link #setExtendedState}.
      */
     @Deprecated
     public synchronized void setState(int state) {
-        int nuevo = this.state;
+        int fresh = this.state;
         if (state == ICONIFIED) {
-            nuevo = nuevo | ICONIFIED;
+            fresh = fresh | ICONIFIED;
         } else {
-            nuevo = nuevo & ~ICONIFIED;
+            fresh = fresh & ~ICONIFIED;
         }
-        this.setExtendedState(nuevo);
+        this.setExtendedState(fresh);
     }
 
     /**
-     * Si está minimizada.
+     * Whether it is minimised.
      *
-     * @deprecated no ve los estados de maximización. Usar {@link #getExtendedState}.
+     * @deprecated it does not see the maximisation states. Use {@link #getExtendedState}.
      */
     @Deprecated
     public synchronized int getState() {
@@ -328,10 +327,10 @@ public class Frame extends Window implements MenuContainer {
     }
 
     /**
-     * Cambia el estado de la ventana.
+     * Changes the state of the window.
      *
-     * <p>Es una máscara: se pueden combinar {@link #ICONIFIED} con los de maximización, y significa
-     * que al restaurarla va a volver maximizada.
+     * <p>It is a mask: {@link #ICONIFIED} can be combined with the maximisation ones, and that
+     * means it will come back maximised when it is restored.
      */
     public void setExtendedState(int state) {
         synchronized (this) {
@@ -339,34 +338,34 @@ public class Frame extends Window implements MenuContainer {
         }
     }
 
-    /** El estado, como máscara de bits. */
+    /** The state, as a bit mask. */
     public int getExtendedState() {
         return this.state;
     }
 
     /**
-     * Hasta dónde se maximiza.
+     * How far it maximises.
      *
-     * @param bounds el rectángulo, o `null` para que sea toda la pantalla
+     * @param bounds the rectangle, or `null` for the whole screen
      */
     public synchronized void setMaximizedBounds(Rectangle bounds) {
         this.maximizedBounds = bounds;
     }
 
     /**
-     * Hasta dónde se maximiza.
+     * How far it maximises.
      *
-     * @return el rectángulo, o `null` si es toda la pantalla
+     * @return the rectangle, or `null` if it is the whole screen
      */
     public Rectangle getMaximizedBounds() {
         return this.maximizedBounds;
     }
 
     /**
-     * Le saca la decoración.
+     * Takes its decoration away.
      *
-     * @throws IllegalComponentStateException si la ventana ya puede mostrarse: la decoración la pone
-     *     el escritorio al crearla, y después ya es tarde
+     * @throws IllegalComponentStateException if the window can already be shown: the decoration is
+     *     put on by the desktop when it creates it, and afterwards it is too late
      */
     public void setUndecorated(boolean undecorated) {
         synchronized (this.getTreeLock()) {
@@ -378,16 +377,16 @@ public class Frame extends Window implements MenuContainer {
         }
     }
 
-    /** Si no tiene decoración. */
+    /** Whether it has no decoration. */
     public boolean isUndecorated() {
         return this.undecorated;
     }
 
     /**
-     * Le cambia la opacidad.
+     * Changes its opacity.
      *
-     * @throws IllegalComponentStateException si la ventana está decorada: el escritorio no puede
-     *     hacer translúcido un marco que dibuja él
+     * @throws IllegalComponentStateException if the window is decorated: the desktop cannot make
+     *     translucent a frame that it draws itself
      */
     public void setOpacity(float opacity) {
         synchronized (this.getTreeLock()) {
@@ -399,9 +398,9 @@ public class Frame extends Window implements MenuContainer {
     }
 
     /**
-     * Le recorta la forma.
+     * Clips its shape.
      *
-     * @throws IllegalComponentStateException si la ventana está decorada, por el mismo motivo
+     * @throws IllegalComponentStateException if the window is decorated, for the same reason
      */
     public void setShape(Shape shape) {
         synchronized (this.getTreeLock()) {
@@ -413,9 +412,9 @@ public class Frame extends Window implements MenuContainer {
     }
 
     /**
-     * Le cambia el fondo.
+     * Changes its background.
      *
-     * @throws IllegalComponentStateException si se pide transparencia sobre una ventana decorada
+     * @throws IllegalComponentStateException if transparency is asked for on a decorated window
      */
     public void setBackground(Color bgColor) {
         synchronized (this.getTreeLock()) {
@@ -426,7 +425,7 @@ public class Frame extends Window implements MenuContainer {
         }
     }
 
-    /** Le saca la barra de menús si es eso lo que se pasa. */
+    /** Takes its menu bar away if that is what is passed in. */
     public void remove(MenuComponent m) {
         if (m == this.menuBar) {
             this.setMenuBar(null);
@@ -436,9 +435,9 @@ public class Frame extends Window implements MenuContainer {
     }
 
     /**
-     * Le pone cursor por número.
+     * Gives it a cursor by number.
      *
-     * @deprecated es del modelo de 1.0. Usar {@link Component#setCursor(Cursor)}.
+     * @deprecated it is from the 1.0 model. Use {@link Component#setCursor(Cursor)}.
      */
     @Deprecated
     public void setCursor(int cursorType) {
@@ -449,19 +448,19 @@ public class Frame extends Window implements MenuContainer {
     }
 
     /**
-     * Qué cursor tiene, por número.
+     * Which cursor it has, by number.
      *
-     * @deprecated es del modelo de 1.0. Usar {@link Component#getCursor}.
+     * @deprecated it is from the 1.0 model. Use {@link Component#getCursor}.
      */
     @Deprecated
     public int getCursorType() {
         return this.getCursor().getType();
     }
 
-    /** Todos los marcos de esta aplicación. */
+    /** Every frame of this application. */
     public static Frame[] getFrames() {
-        synchronized (todos) {
-            return todos.toArray(new Frame[todos.size()]);
+        synchronized (allFrames) {
+            return allFrames.toArray(new Frame[allFrames.size()]);
         }
     }
 
@@ -476,7 +475,7 @@ public class Frame extends Window implements MenuContainer {
         return s;
     }
 
-    /** La información de accesibilidad de este marco. */
+    /** The accessibility information of this frame. */
     public AccessibleContext getAccessibleContext() {
         if (this.accessibleContext == null) {
             this.accessibleContext = new AccessibleAWTFrame();
@@ -484,19 +483,19 @@ public class Frame extends Window implements MenuContainer {
         return this.accessibleContext;
     }
 
-    /** La accesibilidad de un marco. */
+    /** The accessibility of a frame. */
     protected class AccessibleAWTFrame extends AccessibleAWTWindow {
 
-        /** Para las subclases. */
+        /** For the subclasses. */
         protected AccessibleAWTFrame() {
         }
 
-        /** Es un marco. */
+        /** It is a frame. */
         public AccessibleRole getAccessibleRole() {
             return AccessibleRole.FRAME;
         }
 
-        /** Los de una ventana, más si se puede redimensionar y si está minimizado. */
+        /** The ones of a window, plus more if it can be resized and if it is minimised. */
         public AccessibleStateSet getAccessibleStateSet() {
             AccessibleStateSet s = super.getAccessibleStateSet();
             if (Frame.this.isResizable()) {

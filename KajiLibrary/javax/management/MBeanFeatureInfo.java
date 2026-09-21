@@ -3,23 +3,23 @@ package javax.management;
 import java.io.Serializable;
 
 /**
- * Lo que comparten todas las piezas de un {@link MBeanInfo}: un nombre, una descripcion y un
+ * What all the pieces of an {@link MBeanInfo} share: a name, a description and a
  * {@link Descriptor}.
  *
- * <p>La descripcion es para leer, no para programar: nada de JMX la interpreta. El nombre si es
- * significativo -- es por el que se pide el atributo o se invoca la operacion.
+ * <p>The description is for reading, not for programming: nothing in JMX interprets it. The name is
+ * significant -- it is what the attribute is asked for or the operation invoked by.
  */
 public class MBeanFeatureInfo implements Serializable, DescriptorRead {
 
     static final long serialVersionUID = 3952882688968447265L;
 
     /**
-     * @serial el nombre
+     * @serial the name
      */
     protected String name;
 
     /**
-     * @serial el texto para leer
+     * @serial the text to read
      */
     protected String description;
 
@@ -29,24 +29,27 @@ public class MBeanFeatureInfo implements Serializable, DescriptorRead {
         this(name, description, null);
     }
 
-    /** Un `descriptor` nulo se guarda como el vacio: {@link #getDescriptor()} nunca da `null`. */
+    /**
+     * A null {@code descriptor} is kept as the empty one: {@link #getDescriptor()} never gives
+     * {@code null}.
+     */
     public MBeanFeatureInfo(String name, String description, Descriptor descriptor) {
         this.name = name;
         this.description = description;
         this.descriptor = descriptor == null ? ImmutableDescriptor.EMPTY_DESCRIPTOR : descriptor;
     }
 
-    /** El nombre. */
+    /** The name. */
     public String getName() {
         return name;
     }
 
-    /** El texto para leer. */
+    /** The text to read. */
     public String getDescription() {
         return description;
     }
 
-    /** Nunca `null`. */
+    /** Never {@code null}. */
     public Descriptor getDescriptor() {
         return descriptor == null ? ImmutableDescriptor.EMPTY_DESCRIPTOR : descriptor;
     }
@@ -59,12 +62,12 @@ public class MBeanFeatureInfo implements Serializable, DescriptorRead {
             return false;
         }
         MBeanFeatureInfo p = (MBeanFeatureInfo) o;
-        return igual(p.getName(), getName())
-                && igual(p.getDescription(), getDescription())
+        return same(p.getName(), getName())
+                && same(p.getDescription(), getDescription())
                 && p.getDescriptor().equals(getDescriptor());
     }
 
-    static boolean igual(Object a, Object b) {
+    static boolean same(Object a, Object b) {
         return a == null ? b == null : a.equals(b);
     }
 

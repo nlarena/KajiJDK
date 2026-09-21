@@ -5,9 +5,10 @@ import javax.print.attribute.EnumSyntax;
 import javax.print.attribute.PrintServiceAttribute;
 
 /**
- * Si la impresora es capaz de imprimir en color.
+ * Whether the printer can print in colour.
  *
- * <p>Lo reporta el servicio y no se pide: la peticion equivalente es {@link Chromaticity}.
+ * <p>The service reports it and it is not requested: the equivalent request is
+ * {@link Chromaticity}.
  */
 public final class ColorSupported extends EnumSyntax implements PrintServiceAttribute {
 

@@ -88,20 +88,20 @@ public final class JapaneseDate implements ChronoLocalDate {
     }
 
     /**
-     * El periodo entre esta fecha y `endDateExclusive`, en **este** calendario.
+     * The period between this date and `endDateExclusive`, in **this** calendar.
      *
-     * <p>Se calcula sobre las fechas ISO equivalentes y se devuelve como `ChronoPeriod` de este
-     * calendario. La cuenta es la misma --los tres calendarios de esta biblioteca solo renumeran los
-     * años, no cambian la longitud de los meses--, y por eso alcanza con delegar; un calendario con
-     * meses de otra longitud necesitaria su propia cuenta.
+     * <p>It is computed over the equivalent ISO dates and returned as a `ChronoPeriod` of this
+     * calendar. The sum is the same --this library's three calendars only renumber the years, they
+     * do not change the months' lengths-- and that is why delegating is enough; a calendar with
+     * months of another length would need a sum of its own.
      */
     public ChronoPeriod until(ChronoLocalDate endDateExclusive) {
         if (endDateExclusive == null) {
             throw new NullPointerException("endDateExclusive");
         }
-        java.time.LocalDate fin = java.time.LocalDate.ofEpochDay(endDateExclusive.toEpochDay());
+        java.time.LocalDate end = java.time.LocalDate.ofEpochDay(endDateExclusive.toEpochDay());
         java.time.Period p = java.time.Period.between(
-                java.time.LocalDate.ofEpochDay(this.toEpochDay()), fin);
+                java.time.LocalDate.ofEpochDay(this.toEpochDay()), end);
         return new ChronoPeriodImpl(this.getChronology(), p.getYears(), p.getMonths(), p.getDays());
     }
 
@@ -149,28 +149,28 @@ public final class JapaneseDate implements ChronoLocalDate {
         buf.append(Integer.toString(day));
         return buf.toString();
     }
-    // ---- las cuatro entradas que faltaban --------------------------------------------------------
+    // ---- the four entry points that were missing -------------------------------------------------
 
-    /** Hoy, en la zona por defecto del sistema. */
+    /** Today, in the system's default zone. */
     public static JapaneseDate now() {
-        return JapaneseDate.deIso(java.time.LocalDate.now());
+        return JapaneseDate.fromIso(java.time.LocalDate.now());
     }
 
-    /** Hoy en esa zona. */
+    /** Today in that zone. */
     public static JapaneseDate now(java.time.ZoneId zone) {
-        return JapaneseDate.deIso(java.time.LocalDate.now(zone));
+        return JapaneseDate.fromIso(java.time.LocalDate.now(zone));
     }
 
-    /** Hoy **segun ese reloj**, que es la forma que se puede probar con un `Clock.fixed`. */
+    /** Today **according to that clock**, the form that can be tested with a `Clock.fixed`. */
     public static JapaneseDate now(java.time.Clock clock) {
-        return JapaneseDate.deIso(java.time.LocalDate.now(clock));
+        return JapaneseDate.fromIso(java.time.LocalDate.now(clock));
     }
 
     /**
-     * La fecha que `temporal` tiene, leida en el calendario japones.
+     * The date `temporal` holds, read in the Japanese calendar.
      *
-     * @throws java.time.DateTimeException si `temporal` no lleva una fecha, o si cae antes del
-     *     comienzo de la era Meiji
+     * @throws java.time.DateTimeException if `temporal` carries no date, or if it falls before the
+     *     start of the Meiji era
      */
     public static JapaneseDate from(java.time.temporal.TemporalAccessor temporal) {
         if (temporal == null) {
@@ -179,12 +179,12 @@ public final class JapaneseDate implements ChronoLocalDate {
         if (temporal instanceof JapaneseDate) {
             return (JapaneseDate) temporal;
         }
-        return JapaneseDate.deIso(java.time.LocalDate.from(temporal));
+        return JapaneseDate.fromIso(java.time.LocalDate.from(temporal));
     }
 
-    // El anio proleptico japones **es** el ISO --lo unico propio es la capa de eras-- asi que aca no
-    // hay ningun corrimiento que deshacer, a diferencia del minguo o el budista.
-    private static JapaneseDate deIso(java.time.LocalDate iso) {
+    // The Japanese proleptic year **is** the ISO one --the only thing of its own is the era layer--
+    // so there is no shift to undo here, unlike Minguo or Thai Buddhist.
+    private static JapaneseDate fromIso(java.time.LocalDate iso) {
         return JapaneseDate.of(iso.getYear(), iso.getMonthValue(), iso.getDayOfMonth());
     }
 }
@@ -207,8 +207,8 @@ final class EraTable {
     private EraTable() {
     }
 
-    /** Las eras admitidas, de la mas antigua a la mas reciente. */
-    static java.util.List<Era> todas() {
+    /** The eras supported, from the oldest to the most recent. */
+    static java.util.List<Era> all() {
         return java.util.Arrays.asList(new Era[] {
             JapaneseEra.MEIJI, JapaneseEra.TAISHO, JapaneseEra.SHOWA, JapaneseEra.HEISEI,
             JapaneseEra.REIWA,
@@ -216,25 +216,25 @@ final class EraTable {
     }
 
     /**
-     * El rango del campo `ERA`.
+     * The `ERA` field's range.
      *
-     * <p>Los valores de las eras japonesas arrancan en -1 (Meiji) y no en 0, que es la numeracion
-     * del JDK; el maximo es el de la era corriente y **crece cuando hay una era nueva**, que es la
-     * unica parte de este calendario que depende de un hecho del mundo.
+     * <p>The Japanese eras' values start at -1 (Meiji) and not at 0, which is the JDK's numbering;
+     * the maximum is the current era's and **grows when there is a new era**, the only part of this
+     * calendar that depends on a fact of the world.
      */
-    static java.time.temporal.ValueRange rangoDeEras() {
+    static java.time.temporal.ValueRange eraRange() {
         return java.time.temporal.ValueRange.of((long) JapaneseEra.MEIJI.getValue(),
                 (long) JapaneseEra.REIWA.getValue());
     }
 
     /**
-     * El rango del campo `YEAR_OF_ERA`.
+     * The `YEAR_OF_ERA` field's range.
      *
-     * <p>El minimo es 1 --toda era empieza en su anio 1-- y el maximo es el de la era mas larga, que
-     * es Showa con 64 anios. Es un rango **suelto**: dice cuanto puede llegar a valer el campo en
-     * alguna era, no cuanto vale en la de una fecha dada.
+     * <p>The minimum is 1 --every era starts at its year 1-- and the maximum is the longest era's,
+     * which is Showa with 64 years. It is a **loose** range: it says how large the field can get in
+     * some era, not how large it gets in a given date's.
      */
-    static java.time.temporal.ValueRange rangoDeAnioDeEra() {
+    static java.time.temporal.ValueRange yearOfEraRange() {
         return java.time.temporal.ValueRange.of(1L, 64L);
     }
 

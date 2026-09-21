@@ -6,51 +6,53 @@ import java.util.Enumeration;
 import javax.swing.event.TreeModelEvent;
 
 /**
- * La cuenta de que fila corresponde a que nodo del arbol.
+ * The bookkeeping of which row corresponds to which node of the tree.
  *
- * <h2>Filas y caminos son dos numeraciones distintas</h2>
+ * <h2>Rows and paths are two different numberings</h2>
  *
- * <p>Un {@link TreePath} identifica un nodo y no cambia nunca. Una <em>fila</em> es donde ese nodo
- * aparece en pantalla, y cambia cada vez que se despliega o se pliega algo mas arriba. Traducir
- * entre las dos es todo lo que hace esta clase, y es lo que permite que el modelo del arbol no sepa
- * nada de pantallas.
+ * <p>A {@link TreePath} identifies a node and never changes. A <em>row</em> is where that node
+ * appears on the screen, and it changes every time something further up is expanded or
+ * collapsed. Translating between the two is all this class does, and it is what allows the tree's
+ * model to know nothing about screens.
  *
- * <h2>Los nodos plegados no ocupan fila</h2>
+ * <h2>Collapsed nodes take up no row</h2>
  *
- * <p>Un nodo existe en el modelo aunque su padre este plegado; simplemente no tiene fila. De ahi que
- * {@link #getRowForPath} devuelva -1 para lo que no se ve, y no un error: no verse es un estado
- * normal, no una equivocacion.
+ * <p>A node exists in the model even if its parent is collapsed; it simply has no row. Hence
+ * {@link #getRowForPath} returns -1 for what is not seen, and not an error: not being seen is a
+ * normal state, not a mistake.
  *
- * <h2>Dos implementaciones, y la diferencia es una sola</h2>
+ * <h2>Two implementations, and the difference is a single one</h2>
  *
- * <p>{@link FixedHeightLayoutCache} sirve cuando todas las filas miden lo mismo -- entonces la fila
- * de un pixel es una division -- y {@link VariableHeightLayoutCache} cuando no. Todo lo demas es
- * igual, y por eso esta clase existe: para que el arbol no tenga que saber cual le toco.
+ * <p>{@link FixedHeightLayoutCache} serves when every row measures the same -- then the row of a
+ * pixel is a division -- and {@link VariableHeightLayoutCache} when not. Everything else is the
+ * same, and that is why this class exists: so that the tree does not have to know which one it
+ * got.
  *
- * <h2>Quien mide</h2>
+ * <h2>Who measures</h2>
  *
- * <p>Esta clase no sabe dibujar ni medir texto. Le pregunta a un {@link NodeDimensions}, que le pone
- * el aspecto. Sin uno, las medidas salen vacias y las cuentas de filas siguen andando: separar las
- * dos cosas es justamente lo que permite probar la traduccion sin una pantalla.
+ * <p>This class does not know how to draw or to measure text. It asks a {@link NodeDimensions},
+ * which the look and feel sets on it. Without one, the measurements come out empty and the row
+ * bookkeeping goes on working: separating the two things is precisely what allows the translation
+ * to be tested without a screen.
  */
 public abstract class AbstractLayoutCache implements RowMapper {
 
-    /** Quien sabe cuanto ocupa cada nodo; ver la nota de la clase. */
+    /** Who knows how much each node takes up; see the class note. */
     protected NodeDimensions nodeDimensions;
 
-    /** El modelo del arbol. */
+    /** The tree's model. */
     protected TreeModel treeModel;
 
-    /** La seleccion, para que las cuentas de filas la puedan avisar. */
+    /** The selection, so that the row bookkeeping can report to it. */
     protected TreeSelectionModel treeSelectionModel;
 
-    /** Si la raiz ocupa una fila. */
+    /** Whether the root takes up a row. */
     protected boolean rootVisible;
 
-    /** El alto de cada fila, o cero si cada una mide lo suyo. */
+    /** Each row's height, or zero if each one measures its own. */
     protected int rowHeight;
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected AbstractLayoutCache() {
     }
 
@@ -71,10 +73,10 @@ public abstract class AbstractLayoutCache implements RowMapper {
     }
 
     /**
-     * Si la raiz ocupa una fila.
+     * Whether the root takes up a row.
      *
-     * <p>Con la raiz escondida, los hijos de la raiz son las filas de primer nivel. Es como se
-     * muestra un arbol que en realidad es un bosque.
+     * <p>With the root hidden, the root's children are the first-level rows. It is how a tree that
+     * is really a forest is shown.
      */
     public void setRootVisible(boolean rootVisible) {
         this.rootVisible = rootVisible;
@@ -85,10 +87,10 @@ public abstract class AbstractLayoutCache implements RowMapper {
     }
 
     /**
-     * El alto de cada fila.
+     * Each row's height.
      *
-     * <p>Cero o menos significa "cada una mide lo suyo", y es lo que obliga a preguntarle a cada
-     * nodo. Un numero positivo hace que la fila de un pixel sea una division.
+     * <p>Zero or less means "each one measures its own", and it is what forces asking each node. A
+     * positive number makes the row of a pixel a division.
      */
     public void setRowHeight(int rowHeight) {
         this.rowHeight = rowHeight;
@@ -112,7 +114,7 @@ public abstract class AbstractLayoutCache implements RowMapper {
         return treeSelectionModel;
     }
 
-    /** Lo que ocupan todas las filas juntas. */
+    /** What all the rows take up together. */
     public int getPreferredHeight() {
         int rowCount = getRowCount();
         if (rowCount > 0) {
@@ -125,10 +127,11 @@ public abstract class AbstractLayoutCache implements RowMapper {
     }
 
     /**
-     * Lo que ocupa la fila mas ancha de las que caen en ese rectangulo.
+     * What the widest of the rows that fall in that rectangle takes up.
      *
-     * <p>Con un rectangulo nulo mira todas. Mirar solo las visibles es lo que hace que un arbol de
-     * cien mil nodos no tenga que medirlos todos para saber cuanto scroll horizontal hace falta.
+     * <p>With a null rectangle it looks at them all. Looking only at the visible ones is what keeps
+     * a tree of a hundred thousand nodes from having to measure them all to know how much
+     * horizontal scrolling is needed.
      */
     public int getPreferredWidth(Rectangle bounds) {
         int rowCount = getRowCount();
@@ -142,8 +145,8 @@ public abstract class AbstractLayoutCache implements RowMapper {
                 if (i < 0) {
                     i = 0;
                 }
-                TreePath fin = getPathClosestTo(bounds.x, bounds.y + bounds.height);
-                int r = (fin == null) ? rowCount - 1 : getRowForPath(fin);
+                TreePath end = getPathClosestTo(bounds.x, bounds.y + bounds.height);
+                int r = (end == null) ? rowCount - 1 : getRowForPath(end);
                 last = (r < 0) ? rowCount : r + 1;
             }
             while (i < last) {
@@ -158,59 +161,59 @@ public abstract class AbstractLayoutCache implements RowMapper {
         return 0;
     }
 
-    /** Si ese camino esta desplegado. */
+    /** Whether that path is expanded. */
     public abstract boolean isExpanded(TreePath path);
 
-    /** Donde va ese nodo, o nulo si no se ve. */
+    /** Where that node goes, or null if it is not seen. */
     public abstract Rectangle getBounds(TreePath path, Rectangle placeIn);
 
-    /** El nodo de esa fila, o nulo si esa fila no existe. */
+    /** That row's node, or null if that row does not exist. */
     public abstract TreePath getPathForRow(int row);
 
-    /** La fila de ese nodo, o -1 si no se ve; ver la nota de la clase. */
+    /** That node's row, or -1 if it is not seen; see the class note. */
     public abstract int getRowForPath(TreePath path);
 
-    /** El nodo mas cercano a ese punto. */
+    /** The node nearest that point. */
     public abstract TreePath getPathClosestTo(int x, int y);
 
-    /** Los nodos visibles desde ese, hacia abajo. */
+    /** The visible nodes from that one downwards. */
     public abstract Enumeration<TreePath> getVisiblePathsFrom(TreePath path);
 
-    /** Cuantas filas ocupan los descendientes visibles de ese nodo. */
+    /** How many rows that node's visible descendants take up. */
     public abstract int getVisibleChildCount(TreePath path);
 
-    /** Despliega o pliega ese camino. */
+    /** Expands or collapses that path. */
     public abstract void setExpandedState(TreePath path, boolean isExpanded);
 
-    /** Si ese camino esta desplegado y todos sus padres tambien. */
+    /** Whether that path is expanded and so are all its parents. */
     public abstract boolean getExpandedState(TreePath path);
 
-    /** Cuantas filas hay. */
+    /** How many rows there are. */
     public abstract int getRowCount();
 
-    /** Olvida todas las medidas guardadas. */
+    /** It forgets every measurement it had kept. */
     public abstract void invalidateSizes();
 
-    /** Olvida la medida de ese nodo. */
+    /** It forgets that node's measurement. */
     public abstract void invalidatePathBounds(TreePath path);
 
-    /** Cambiaron esos nodos. */
+    /** Those nodes changed. */
     public abstract void treeNodesChanged(TreeModelEvent e);
 
-    /** Se agregaron esos nodos. */
+    /** Those nodes were added. */
     public abstract void treeNodesInserted(TreeModelEvent e);
 
-    /** Se sacaron esos nodos. */
+    /** Those nodes were removed. */
     public abstract void treeNodesRemoved(TreeModelEvent e);
 
-    /** Cambio la estructura debajo de ese nodo. */
+    /** The structure under that node changed. */
     public abstract void treeStructureChanged(TreeModelEvent e);
 
     /**
-     * Las filas de esos caminos.
+     * Those paths' rows.
      *
-     * <p>Es lo que le da un {@link RowMapper} al modelo de seleccion. Un arreglo vacio si no hay
-     * filas, no nulo: el que llama va a recorrerlo.
+     * <p>It is what gives the selection model a {@link RowMapper}. An empty array if there are no
+     * rows, not null: the caller is going to walk it.
      */
     public int[] getRowsForPaths(TreePath[] paths) {
         if (paths == null) {
@@ -224,7 +227,7 @@ public abstract class AbstractLayoutCache implements RowMapper {
         return rows;
     }
 
-    /** Le pregunta al medidor; rectangulo vacio si no hay ninguno puesto. */
+    /** It asks the measurer; an empty rectangle if none is set. */
     protected Rectangle getNodeDimensions(Object value, int row, int depth,
             boolean expanded, Rectangle placeIn) {
         NodeDimensions nd = getNodeDimensions();
@@ -234,28 +237,28 @@ public abstract class AbstractLayoutCache implements RowMapper {
         return null;
     }
 
-    /** Si todas las filas miden lo mismo; ver {@link #setRowHeight}. */
+    /** Whether every row measures the same; see {@link #setRowHeight}. */
     protected boolean isFixedRowHeight() {
         return (rowHeight > 0);
     }
 
     /**
-     * Quien sabe cuanto ocupa un nodo dibujado.
+     * Who knows how much a drawn node takes up.
      *
-     * <p>Lo pone el aspecto, porque medir depende de la tipografia y de los iconos, que son del
-     * aspecto y no del arbol.
+     * <p>The look and feel sets it, because measuring depends on the typeface and on the icons,
+     * which belong to the look and feel and not to the tree.
      */
     public abstract static class NodeDimensions {
 
-        /** Para las subclases. */
+        /** For the subclasses. */
         protected NodeDimensions() {
         }
 
         /**
-         * El rectangulo que ocupa ese nodo.
+         * The rectangle that node takes up.
          *
-         * <p>Se le pasa un rectangulo para llenar y evitar crear uno por nodo; con nulo devuelve
-         * uno nuevo.
+         * <p>It is passed a rectangle to fill so as to avoid creating one per node; with null it
+         * returns a new one.
          */
         public abstract Rectangle getNodeDimensions(Object value, int row, int depth,
                 boolean expanded, Rectangle bounds);

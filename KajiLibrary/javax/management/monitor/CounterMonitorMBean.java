@@ -3,92 +3,93 @@ package javax.management.monitor;
 import javax.management.ObjectName;
 
 /**
- * KajiLibrary's javax.management.monitor.CounterMonitorMBean -- la administracion del monitor de
- * contadores.
+ * KajiLibrary's javax.management.monitor.CounterMonitorMBean -- the management of the counter
+ * monitor.
  *
- * <p>Un contador solo sube. El monitor avisa cuando llega al umbral, y despues tiene que decidir que
- * hacer para no avisar en cada lectura: para eso estan el <b>offset</b> y el <b>modulo</b>, que son
- * las dos piezas que hacen util a esta clase.
+ * <p>A counter only goes up. The monitor notifies when it reaches the threshold, and then it has to
+ * decide what to do so as not to notify on every reading: that is what the <b>offset</b> and the
+ * <b>modulus</b> are for, the two pieces that make this class useful.
  *
  * <ul>
- *   <li>el <b>offset</b> corre el umbral hacia arriba despues de cada disparo. Con umbral 100 y
- *       offset 100 se avisa a las 100, a las 200, a las 300: es la forma de decir "avisame cada
- *       cien" sin reconfigurar nada. Con offset 0 se avisa una sola vez y nunca mas;
- *   <li>el <b>modulo</b> es el valor en el que el contador vuelve a cero. Un contador de 32 bits que
- *       da la vuelta pareceria haber bajado, y sin esto el monitor no distinguiria una vuelta de un
- *       reinicio. Al detectarla, el umbral vuelve a {@link #getInitThreshold}.
+ *   <li>the <b>offset</b> shifts the threshold upwards after each firing. With threshold 100 and
+ *       offset 100 it notifies at 100, at 200, at 300: it is the way to say "tell me every
+ *       hundred" without reconfiguring anything. With offset 0 it notifies once and never again;
+ *   <li>the <b>modulus</b> is the value at which the counter goes back to zero. A 32-bit counter
+ *       that wraps would look as if it had gone down, and without this the monitor could not tell a
+ *       wrap from a reset. On detecting one, the threshold goes back to {@link #getInitThreshold}.
  * </ul>
  *
- * <p>De ahi que haya <b>dos</b> umbrales: el inicial, que es el que se configuro, y el actual, que
- * es el que el offset fue corriendo. {@link #getThreshold} devuelve el actual.
+ * <p>Hence there being <b>two</b> thresholds: the initial one, which is what was configured, and
+ * the current one, which the offset has been shifting. {@link #getThreshold} returns the current
+ * one.
  *
- * <p>El modo diferencia cambia que se compara: en vez del valor, la resta con la lectura anterior.
- * Es lo que convierte un contador acumulado en una tasa.
+ * <p>Difference mode changes what is compared: instead of the value, the subtraction from the
+ * previous reading. It is what turns an accumulated counter into a rate.
  */
 public interface CounterMonitorMBean extends MonitorMBean {
 
-    /** El valor calculado para el primer observado. */
+    /** The value computed for the first observed object. */
     Number getDerivedGauge();
 
-    /** Cuando se calculo. */
+    /** When it was computed. */
     long getDerivedGaugeTimeStamp();
 
-    /** El umbral actual del primer observado. Ver la nota de la clase. */
+    /** The current threshold of the first observed object. See the class note. */
     Number getThreshold();
 
     /**
-     * Cambia el umbral, y con el el inicial.
+     * Changes the threshold, and with it the initial one.
      *
-     * @throws IllegalArgumentException si es null o negativo
+     * @throws IllegalArgumentException if it is null or negative
      */
     void setThreshold(Number value) throws IllegalArgumentException;
 
-    /** El valor calculado para ese observado. */
+    /** The value computed for that observed object. */
     Number getDerivedGauge(ObjectName object);
 
-    /** Cuando se calculo, para ese observado. */
+    /** When it was computed, for that observed object. */
     long getDerivedGaugeTimeStamp(ObjectName object);
 
-    /** El umbral actual de ese observado. */
+    /** The current threshold of that observed object. */
     Number getThreshold(ObjectName object);
 
-    /** El umbral configurado, antes de que el offset lo corriera. */
+    /** The configured threshold, before the offset shifted it. */
     Number getInitThreshold();
 
     /**
-     * Ver {@link #getInitThreshold}.
+     * See {@link #getInitThreshold}.
      *
-     * @throws IllegalArgumentException si es null o negativo
+     * @throws IllegalArgumentException if it is null or negative
      */
     void setInitThreshold(Number value) throws IllegalArgumentException;
 
-    /** Cuanto se corre el umbral tras cada disparo; 0 para no correrlo. */
+    /** How much the threshold shifts after each firing; 0 not to shift it. */
     Number getOffset();
 
     /**
-     * Ver {@link #getOffset}.
+     * See {@link #getOffset}.
      *
-     * @throws IllegalArgumentException si es null o negativo
+     * @throws IllegalArgumentException if it is null or negative
      */
     void setOffset(Number value) throws IllegalArgumentException;
 
-    /** En cuanto da la vuelta el contador; 0 si no da la vuelta. */
+    /** The value at which the counter wraps around; 0 if it does not wrap. */
     Number getModulus();
 
     /**
-     * Ver {@link #getModulus}.
+     * See {@link #getModulus}.
      *
-     * @throws IllegalArgumentException si es null o negativo
+     * @throws IllegalArgumentException if it is null or negative
      */
     void setModulus(Number value) throws IllegalArgumentException;
 
-    /** Si se avisa al llegar al umbral. */
+    /** Whether it notifies on reaching the threshold. */
     boolean getNotify();
 
     /** Ver {@link #getNotify}. */
     void setNotify(boolean value);
 
-    /** Si se compara la diferencia con la lectura anterior. Ver la nota de la clase. */
+    /** Whether the difference with the previous reading is compared. See the class note. */
     boolean getDifferenceMode();
 
     /** Ver {@link #getDifferenceMode}. */

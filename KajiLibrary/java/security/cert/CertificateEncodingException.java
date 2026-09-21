@@ -1,6 +1,6 @@
 package java.security.cert;
 
-// El certificado no se pudo codificar.
+// The certificate could not be encoded.
 public class CertificateEncodingException extends CertificateException {
 
     public CertificateEncodingException() {

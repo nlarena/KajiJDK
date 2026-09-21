@@ -5,53 +5,56 @@ import javax.imageio.ImageReader;
 import javax.imageio.stream.ImageInputStream;
 
 /**
- * KajiLibrary's javax.imageio.spi.ImageReaderSpi -- el proveedor de un lector de imagenes.
+ * KajiLibrary's javax.imageio.spi.ImageReaderSpi -- the provider of an image reader.
  *
- * <p>Lo que se registra para que {@code ImageIO} sepa que existe un lector de cierto formato. El
- * lector en si no se crea hasta que hace falta.
+ * <p>What gets registered so that {@code ImageIO} knows a reader for some format exists. The reader
+ * itself is not created until it is needed.
  *
- * <h2>{@link #canDecodeInput} tiene que dejar el flujo como lo encontro</h2>
+ * <h2>{@link #canDecodeInput} has to leave the stream as it found it</h2>
  *
- * <p>Es la regla que hace posible todo el mecanismo, y la que se rompe seguido. {@code ImageIO} le
- * pregunta a <b>todos</b> los proveedores registrados, con el mismo flujo: si uno mira los primeros
- * bytes y no rebobina, el proveedor siguiente recibe un flujo consumido y ninguno reconoce nada.
+ * <p>It is the rule that makes the whole mechanism possible, and the one broken most often.
+ * {@code ImageIO} asks <b>every</b> registered provider, with the same stream: if one looks at the
+ * first bytes and does not rewind, the next provider gets a consumed stream and none recognizes
+ * anything.
  *
- * <p>La forma correcta es marcar, mirar, y volver -- {@code ImageInputStream} tiene marcas apiladas
- * justamente para esto.
+ * <p>The right way is to mark, look, and go back -- {@code ImageInputStream} has stacked marks
+ * precisely for this.
  *
- * <h2>Los nombres de proveedores hermanos</h2>
+ * <h2>The names of sibling providers</h2>
  *
- * <p>{@link #getImageWriterSpiNames} devuelve los nombres de clase de los <b>escritores</b> del mismo
- * formato. Es como {@code ImageIO.getImageWriter(reader)} encuentra con que volver a escribir lo que
- * se acaba de leer, conservando el formato.
+ * <p>{@link #getImageWriterSpiNames} returns the class names of the <b>writers</b> of the same
+ * format. It is how {@code ImageIO.getImageWriter(reader)} finds what to write back what was just
+ * read with, keeping the format.
  *
- * <p>Son nombres y no objetos a proposito: asi declarar la relacion no obliga a cargar el escritor.
+ * <p>They are names and not objects on purpose: that way declaring the relation does not force
+ * loading the writer.
  */
 public abstract class ImageReaderSpi extends ImageReaderWriterSpi {
 
     /**
-     * El tipo de entrada que casi todos aceptan.
+     * The input type almost all of them accept.
      *
-     * <p>Un arreglo de un elemento con {@code ImageInputStream.class}. Es publico y mutable --es un
-     * arreglo-- lo que es un defecto viejo del JDK; conviene no tocarlo.
+     * <p>A one-element array with {@code ImageInputStream.class}. It is public and mutable --it is
+     * an array--, which is an old JDK defect; better not to touch it. The JDK marks it {@code
+     * @Deprecated} (build the array yourself instead); here it is not marked.
      */
     public static final Class<?>[] STANDARD_INPUT_TYPE = { ImageInputStream.class };
 
-    /** Que tipos de entrada acepta. */
+    /** Which input types it accepts. */
     protected Class<?>[] inputTypes = null;
 
-    /** Los escritores del mismo formato. Ver la nota de la clase. */
+    /** The writers of the same format. See the class note. */
     protected String[] writerSpiNames = null;
 
-    /** El que exige el cargador de servicios. */
+    /** The one the service loader requires. */
     protected ImageReaderSpi() {
     }
 
     /**
-     * El constructor completo.
+     * The full constructor.
      *
-     * @param inputTypes que acepta; tipicamente {@link #STANDARD_INPUT_TYPE}
-     * @throws IllegalArgumentException si los tipos de entrada faltan o estan vacios
+     * @param inputTypes what it accepts; typically {@link #STANDARD_INPUT_TYPE}
+     * @throws IllegalArgumentException if the input types are missing or empty
      */
     public ImageReaderSpi(String vendorName, String version, String[] names, String[] suffixes,
                           String[] MIMETypes, String readerClassName, Class<?>[] inputTypes,
@@ -79,50 +82,50 @@ public abstract class ImageReaderSpi extends ImageReaderWriterSpi {
             throw new IllegalArgumentException("inputTypes.length == 0!");
         }
         this.inputTypes = copyClasses(inputTypes);
-        // Un arreglo vacio de escritores hermanos se guarda como null: los dos significan "ninguno",
-        // y tener una sola representacion evita que quien lea tenga que contemplar las dos.
+        // An empty array of sibling writers is stored as null: both mean "none", and having a
+        // single representation spares whoever reads it from handling both.
         if (writerSpiNames != null && writerSpiNames.length > 0) {
             this.writerSpiNames = copy(writerSpiNames);
         }
     }
 
-    /** Que tipos de entrada acepta. Una copia. */
+    /** Which input types it accepts. A copy. */
     public Class<?>[] getInputTypes() {
         return copyClasses(this.inputTypes);
     }
 
     /**
-     * Si este lector reconoce lo que hay en esa entrada.
+     * Whether this reader recognizes what is in that input.
      *
-     * <p>Ver la nota de la clase: <b>tiene que dejar el flujo como lo encontro</b>.
+     * <p>See the class note: <b>it has to leave the stream as it found it</b>.
      *
-     * @throws IOException si fallo la lectura
+     * @throws IOException if reading failed
      */
     public abstract boolean canDecodeInput(Object source) throws IOException;
 
     /**
-     * Un lector nuevo.
+     * A new reader.
      *
-     * @throws IOException si no se pudo crear
+     * @throws IOException if it could not be created
      */
     public ImageReader createReaderInstance() throws IOException {
         return createReaderInstance(null);
     }
 
     /**
-     * Idem, con un objeto de configuracion propio del complemento.
+     * Same, with a configuration object of the plug-in's own.
      *
-     * @param extension lo que el complemento entienda, o null
-     * @throws IllegalArgumentException si esa extension no sirve
-     * @throws IOException si no se pudo crear
+     * @param extension whatever the plug-in understands, or null
+     * @throws IllegalArgumentException if that extension does not work
+     * @throws IOException if it could not be created
      */
     public abstract ImageReader createReaderInstance(Object extension) throws IOException;
 
     /**
-     * Si ese lector lo creo este proveedor.
+     * Whether this provider created that reader.
      *
-     * <p>Se decide por la <b>clase</b>, no por quien lo creo: dos instancias de la misma clase de
-     * lector son intercambiables para lo que esto sirve.
+     * <p>It is decided by the <b>class</b>, not by who created it: two instances of the same reader
+     * class are interchangeable for what this is for.
      */
     public boolean isOwnReader(ImageReader reader) {
         if (reader == null) {
@@ -132,12 +135,12 @@ public abstract class ImageReaderSpi extends ImageReaderWriterSpi {
         return name.equals(this.pluginClassName);
     }
 
-    /** Los escritores del mismo formato, o null. Ver la nota de la clase. */
+    /** The writers of the same format, or null. See the class note. */
     public String[] getImageWriterSpiNames() {
         return copyOrNull(this.writerSpiNames);
     }
 
-    /** Una copia de un arreglo de clases, o null. */
+    /** A copy of an array of classes, or null. */
     static Class<?>[] copyClasses(Class<?>[] source) {
         if (source == null) {
             return null;

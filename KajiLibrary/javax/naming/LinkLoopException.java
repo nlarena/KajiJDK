@@ -1,10 +1,10 @@
 package javax.naming;
 
 /**
- * Se lanza cuando seguir los enlaces vuelve a pasar por el mismo punto, o cuando se paso el
- * limite de saltos. Sin esto, un enlace que se apunta a si mismo colgaria al que resuelve.
+ * Thrown when following links passes through the same point again, or when the hop limit was
+ * exceeded. Without this, a link pointing to itself would hang whoever resolves it.
  *
- * <p>La jerarquia entera y el estado que arrastra estan explicados en `NamingException`.
+ * <p>The whole hierarchy and the state it carries are explained in `NamingException`.
  */
 public class LinkLoopException extends LinkException {
 

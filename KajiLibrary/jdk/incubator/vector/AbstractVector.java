@@ -1,55 +1,56 @@
 package jdk.incubator.vector;
 
 /**
- * La clase que va entre {@link Vector} y las seis concretas.
+ * The class that goes between {@link Vector} and the six concrete ones.
  *
- * <h2>Por que existe si no la puede nombrar nadie</h2>
+ * <h2>Why it exists if nobody can name it</h2>
  *
- * <p>No es publica, asi que desde afuera del paquete no se la puede escribir. Y sin embargo se la
- * <strong>ve</strong>: cuando {@code IntVector} declara {@code IntVector slice(int)} y arriba hay
- * dos declaraciones con retornos cada vez mas anchos, javac deja en {@code IntVector} un metodo
- * puente por cada una. Uno de esos puentes es {@code public AbstractVector slice(int)}, y es publico
- * y esta en el archivo compilado del JDK.
+ * <p>It is not public, so it cannot be written from outside the package. And yet it is
+ * <strong>seen</strong>: when {@code IntVector} declares {@code IntVector slice(int)} and above
+ * there are two declarations with ever wider returns, javac leaves a bridge method in {@code
+ * IntVector} for each one. One of those bridges is {@code public AbstractVector slice(int)}, and it
+ * is public and is in the JDK's compiled file.
  *
- * <p>Por eso esta clase esta aca. La primera version de este paquete colgaba las seis directamente
- * de {@link Vector}, con el argumento de que una clase vacia en el medio no le daba a nadie un
- * metodo nuevo. Era falso: doce miembros publicos de las seis clases concretas dependen de que este
- * eslabon exista, y sin el no aparecen.
+ * <p>That is why this class is here. The first version of this package hung the six directly from
+ * {@link Vector}, on the argument that an empty class in the middle gave nobody a new method. It
+ * was false: twelve public members of the six concrete classes depend on this link existing, and
+ * without it they do not appear.
  *
- * <p>Declara lo minimo que hace falta para que esos puentes salgan: los dos {@code slice}, que son
- * los unicos que el JDK estrecha aca en vez de estrecharlos recien abajo.
+ * <p>It declares the minimum needed for those bridges to come out: the two {@code slice}s, which
+ * are the only ones the JDK narrows here instead of narrowing them only further down.
  *
- * @param <E> el tipo de la posicion, en su version envuelta
+ * @param <E> the lane type, in its boxed form
  */
 abstract class AbstractVector<E> extends Vector<E> {
 
     /**
-     * Con esa carga util.
+     * With that payload.
      *
-     * <p>Va escrito aunque no haga nada mas que delegar: {@link Vector} no tiene constructor sin
-     * argumentos, y sin este javac generaria uno que llama a un {@code super()} inexistente.
+     * <p>It is written even though it does nothing but delegate: {@link Vector} has no no-argument
+     * constructor, and without this one the implicit default constructor would call a nonexistent
+     * {@code super()}.
      *
-     * @param payload el arreglo de posiciones
+     * @param payload the array of lanes
      */
     AbstractVector(Object payload) {
         super(payload);
     }
 
     /**
-     * Una parte del vector, empezando en esa posicion.
+     * A part of the vector, starting at that lane.
      *
-     * @param origin desde donde
-     * @return el pedazo
+     * @param origin where it starts from
+     * @return the piece
      */
     @Override
     public abstract AbstractVector<E> slice(int origin);
 
     /**
-     * Una parte que arranca en este vector y sigue en el otro.
+     * A part that starts in this vector and continues in the other.
      *
-     * @param origin desde donde
-     * @param v1 el vector que sigue
-     * @return el pedazo
+     * @param origin where it starts from
+     * @param v1 the vector that follows
+     * @return the piece
      */
     @Override
     public abstract AbstractVector<E> slice(int origin, Vector<E> v1);

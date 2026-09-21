@@ -1,8 +1,10 @@
 package java.lang;
 
-// Calificar el tipo en el uso (`java.math.BigInteger`) no resuelve desde java.lang
-// (finding #210); tiene que entrar por import y usarse por su nombre simple.
+import java.lang.constant.ConstantDesc;
+// Qualifying the type at the use site (`java.math.BigInteger`) does not resolve from java.lang
+// (finding #210); it has to come in through an import and be used by its simple name.
 import java.math.BigInteger;
+import java.util.Optional;
 
 // KajiLibrary's java.lang.Double — the boxed-double wrapper (extends Number, implements
 // Comparable). All numeric views except doubleValue are narrowing, so they need a cast.

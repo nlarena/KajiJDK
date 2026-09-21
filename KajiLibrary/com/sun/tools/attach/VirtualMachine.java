@@ -9,36 +9,37 @@ import java.util.Properties;
 import com.sun.tools.attach.spi.AttachProvider;
 
 /**
- * Una VM en marcha, vista desde otro proceso.
+ * A VM under way, seen from another process.
  *
- * <h2>Que es "adjuntarse"</h2>
+ * <h2>What "attaching" is</h2>
  *
- * <p>Es conseguir un canal con una VM que ya esta corriendo y que no se inicio para eso. Lo que
- * habilita es cargar un <strong>agente</strong> adentro suyo — codigo que corre con sus permisos,
- * ve sus clases y puede instrumentarlas. Es como funcionan los perfiladores y los depuradores que se
- * enganchan a un proceso vivo, y es tambien la razon de que haya un {@link AttachPermission}: quien
- * puede adjuntarse puede ejecutar cualquier cosa dentro del destino.
+ * <p>It is getting a channel with a VM that is already running and that was not started for
+ * that. What it enables is loading an <strong>agent</strong> inside it -- code that runs with
+ * its permissions, sees its classes and may instrument them. It is how the profilers and the
+ * debuggers that hook on to a live process work, and it is also the reason there is an
+ * {@link AttachPermission}: whoever can attach can execute anything inside the target.
  *
- * <h2>Los tres cargadores, y en que se diferencian</h2>
+ * <h2>The three loaders, and how they differ</h2>
  *
  * <ul>
- * <li>{@link #loadAgent} — un agente Java: un JAR con {@code Agent-Class} en el manifiesto;</li>
- * <li>{@link #loadAgentLibrary} — una biblioteca nativa, buscada por nombre en la ruta del sistema;</li>
- * <li>{@link #loadAgentPath} — una biblioteca nativa, por ruta absoluta.</li>
+ * <li>{@link #loadAgent} -- a Java agent: a JAR with {@code Agent-Class} in the manifest;</li>
+ * <li>{@link #loadAgentLibrary} -- a native library, looked up by name in the system's
+ *     path;</li>
+ * <li>{@link #loadAgentPath} -- a native library, by absolute path.</li>
  * </ul>
  *
- * <p>Los dos ultimos se diferencian solo en como se encuentra el archivo, y son dos porque quien
- * carga por nombre quiere que el sistema resuelva la convencion de la plataforma
- * ({@code lib*.so}, {@code *.dll}) y quien carga por ruta ya sabe exactamente cual quiere.
+ * <p>The last two differ only in how the file is found, and they are two because whoever loads
+ * by name wants the system to resolve the platform's convention ({@code lib*.so},
+ * {@code *.dll}) and whoever loads by path already knows exactly which one it wants.
  *
- * <h2>Como se resuelve todo esto</h2>
+ * <h2>How all this is resolved</h2>
  *
- * <p>Nada de esto se implementa aca: los tres metodos estaticos delegan en los
- * {@link AttachProvider} instalados, que son quienes conocen el mecanismo del sistema operativo.
- * <strong>Sin proveedores instalados</strong> —el caso de esta VM— {@link #list} devuelve una lista
- * vacia y {@link #attach} tira {@link AttachNotSupportedException}. Es el comportamiento correcto y
- * el mismo que da un JDK al que le sacaron los proveedores: el mecanismo esta entero, lo que falta
- * es alguien que se registre en el.
+ * <p>None of this is implemented here: the three static methods delegate to the installed
+ * {@link AttachProvider}s, which are who know the operating system's mechanism. <strong>With no
+ * providers installed</strong> -- this VM's case -- {@link #list} returns an empty list and
+ * {@link #attach} throws {@link AttachNotSupportedException}. It is the correct behaviour and
+ * the same a JDK whose providers were taken out gives: the mechanism is whole, what is missing
+ * is somebody to register in it.
  */
 public abstract class VirtualMachine {
 
@@ -46,9 +47,9 @@ public abstract class VirtualMachine {
     private final String id;
 
     /**
-     * Para las implementaciones de un proveedor.
+     * For a provider's implementations.
      *
-     * @throws NullPointerException si el proveedor o el identificador son {@code null}
+     * @throws NullPointerException if the provider or the identifier is {@code null}
      */
     protected VirtualMachine(AttachProvider provider, String id) {
         if (provider == null) {
@@ -62,57 +63,59 @@ public abstract class VirtualMachine {
     }
 
     /**
-     * Las VMs que ve cada proveedor instalado, juntas.
+     * The VMs each installed provider sees, together.
      *
-     * <p>Una foto: entre listarlas y adjuntarse, una VM puede haber terminado.
+     * <p>A snapshot: between listing them and attaching, a VM may have finished.
      */
     public static List<VirtualMachineDescriptor> list() {
-        List<VirtualMachineDescriptor> todas = new ArrayList<VirtualMachineDescriptor>();
-        List<AttachProvider> proveedores = AttachProvider.providers();
-        for (int i = 0; i < proveedores.size(); i++) {
-            todas.addAll(proveedores.get(i).listVirtualMachines());
+        List<VirtualMachineDescriptor> all = new ArrayList<VirtualMachineDescriptor>();
+        List<AttachProvider> providers = AttachProvider.providers();
+        for (int i = 0; i < providers.size(); i++) {
+            all.addAll(providers.get(i).listVirtualMachines());
         }
-        return todas;
+        return all;
     }
 
     /**
-     * Se adjunta a la VM identificada por {@code id}, probando cada proveedor hasta que uno pueda.
+     * It attaches to the VM identified by {@code id}, trying each provider until one can.
      *
-     * <p>Probar en orden y no elegir es lo correcto: un identificador solo significa algo dentro de
-     * un proveedor, asi que no hay forma de saber de antemano cual lo entiende. Que uno diga
-     * {@link AttachNotSupportedException} no es un error — es su manera de decir "este no es mio".
+     * <p>To try in order and not to choose is the right thing: an identifier only means something
+     * inside a provider, so there is no way of knowing beforehand which one understands it. That
+     * one should say {@link AttachNotSupportedException} is not an error -- it is its way of saying
+     * "this one is not mine".
      *
-     * @throws AttachNotSupportedException si ningun proveedor lo reconoce, o si no hay ninguno
-     *     instalado
-     * @throws NullPointerException si {@code id} es {@code null}
+     * @throws AttachNotSupportedException if no provider recognizes it, or if there is none
+     *     installed
+     * @throws NullPointerException if {@code id} is {@code null}
      */
     public static VirtualMachine attach(String id)
             throws AttachNotSupportedException, IOException {
         if (id == null) {
             throw new NullPointerException("id");
         }
-        List<AttachProvider> proveedores = AttachProvider.providers();
-        if (proveedores.isEmpty()) {
-            throw new AttachNotSupportedException("no hay ningun proveedor instalado");
+        List<AttachProvider> providers = AttachProvider.providers();
+        if (providers.isEmpty()) {
+            throw new AttachNotSupportedException("there is not a single provider installed");
         }
-        AttachNotSupportedException ultima = null;
-        for (int i = 0; i < proveedores.size(); i++) {
+        AttachNotSupportedException last = null;
+        for (int i = 0; i < providers.size(); i++) {
             try {
-                return proveedores.get(i).attachVirtualMachine(id);
+                return providers.get(i).attachVirtualMachine(id);
             } catch (AttachNotSupportedException e) {
-                // Se guarda la ultima y se sigue: que este proveedor no lo reconozca no dice nada
-                // sobre los que faltan.
-                ultima = e;
+                // The last one is kept and it goes on: that this provider does not recognize it
+                                // says nothing about those that are left.
+                last = e;
             }
         }
-        throw ultima;
+        throw last;
     }
 
     /**
-     * Se adjunta a la VM que describe {@code vmd}, con el proveedor que la vio.
+     * It attaches to the VM {@code vmd} describes, with the provider that saw it.
      *
-     * <p>Aca no se prueba con todos, y no es una inconsistencia con {@link #attach(String)}: un
-     * descriptor <em>ya dice</em> de que proveedor salio, asi que no hay nada que adivinar.
+     * <p>Here it does not try with them all, and it is not an inconsistency with
+     * {@link #attach(String)}: a descriptor <em>already says</em> which provider it came out of,
+     * so there is nothing to guess.
      */
     public static VirtualMachine attach(VirtualMachineDescriptor vmd)
             throws AttachNotSupportedException, IOException {
@@ -123,76 +126,76 @@ public abstract class VirtualMachine {
     }
 
     /**
-     * Suelta la VM destino.
+     * It releases the target VM.
      *
-     * <p>Lo que el agente ya cargo sigue adentro: soltar cierra el canal, no deshace lo hecho.
+     * <p>What the agent has already loaded goes on inside: releasing closes the channel, it does
+     * not undo what was done.
      */
     public abstract void detach() throws IOException;
 
-    /** El proveedor que consiguio este canal. */
+    /** The provider that got this channel. */
     public final AttachProvider provider() {
         return this.provider;
     }
 
-    /** Como nombra su proveedor a esta VM. */
+    /** How its provider names this VM. */
     public final String id() {
         return this.id;
     }
 
-    /** Carga una biblioteca de agente nativa, por nombre, con opciones. */
+    /** It loads a native agent library, by name, with options. */
     public abstract void loadAgentLibrary(String agentLibrary, String options)
             throws AgentLoadException, AgentInitializationException, IOException;
 
-    /** Igual, sin opciones. */
+    /** The same, with no options. */
     public void loadAgentLibrary(String agentLibrary)
             throws AgentLoadException, AgentInitializationException, IOException {
         loadAgentLibrary(agentLibrary, null);
     }
 
-    /** Carga una biblioteca de agente nativa, por ruta absoluta, con opciones. */
+    /** It loads a native agent library, by absolute path, with options. */
     public abstract void loadAgentPath(String agentPath, String options)
             throws AgentLoadException, AgentInitializationException, IOException;
 
-    /** Igual, sin opciones. */
+    /** The same, with no options. */
     public void loadAgentPath(String agentPath)
             throws AgentLoadException, AgentInitializationException, IOException {
         loadAgentPath(agentPath, null);
     }
 
-    /** Carga un agente Java: un JAR con {@code Agent-Class} en su manifiesto. */
+    /** It loads a Java agent: a JAR with {@code Agent-Class} in its manifest. */
     public abstract void loadAgent(String agent, String options)
             throws AgentLoadException, AgentInitializationException, IOException;
 
-    /** Igual, sin opciones. */
+    /** The same, with no options. */
     public void loadAgent(String agent)
             throws AgentLoadException, AgentInitializationException, IOException {
         loadAgent(agent, null);
     }
 
     /**
-     * Las propiedades del sistema de la VM destino.
+     * The target VM's system properties.
      *
-     * <p>Son las suyas, no las de este proceso: es la forma barata de averiguar con que version de
-     * Java corre, en que directorio, y con que classpath.
+     * <p>They are its own, not this process's: it is the cheap way of finding out which version
+     * of Java it runs with, in which directory, and with which classpath.
      */
     public abstract Properties getSystemProperties() throws IOException;
 
-    /** Las propiedades que dejaron los agentes ya cargados en la VM destino. */
+    /** The properties the already loaded agents left in the target VM. */
     public abstract Properties getAgentProperties() throws IOException;
 
-    /** Arranca el agente de administracion de la VM destino con esa configuracion. */
+    /** It starts the target VM's management agent with that configuration. */
     public abstract void startManagementAgent(Properties agentProperties) throws IOException;
 
     /**
-     * Arranca el agente de administracion local y devuelve su direccion JMX.
+     * It starts the local management agent and returns its JMX address.
      *
-     * <p>Local quiere decir que solo se puede conectar algo de la misma maquina. Es lo que permite
-     * a una herramienta como un monitor conectarse a un proceso que arranco sin ninguna opcion de
-     * administracion.
+     * <p>Local means that only something of the same machine may connect. It is what allows a tool
+     * such as a monitor to connect to a process that started with no management option at all.
      */
     public abstract String startLocalManagementAgent() throws IOException;
 
-    /** Sobre el proveedor y el identificador, igual que {@link VirtualMachineDescriptor}. */
+    /** Over the provider and the identifier, the same as {@link VirtualMachineDescriptor}. */
     public int hashCode() {
         return this.provider.hashCode() * 127 + this.id.hashCode();
     }
@@ -202,8 +205,8 @@ public abstract class VirtualMachine {
             return true;
         }
         if (obj instanceof VirtualMachine) {
-            VirtualMachine otra = (VirtualMachine) obj;
-            return otra.provider() == this.provider && otra.id().equals(this.id);
+            VirtualMachine other = (VirtualMachine) obj;
+            return other.provider() == this.provider && other.id().equals(this.id);
         }
         return false;
     }

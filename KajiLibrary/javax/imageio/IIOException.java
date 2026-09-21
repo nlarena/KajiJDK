@@ -3,31 +3,31 @@ package javax.imageio;
 import java.io.IOException;
 
 /**
- * KajiLibrary's javax.imageio.IIOException -- fallo una operacion de lectura o escritura de imagenes.
+ * KajiLibrary's javax.imageio.IIOException -- an image read or write operation failed.
  *
- * <p>Es una {@link IOException} y no una excepcion aparte, y esa decision explica como se usa la API:
- * un metodo que lee una imagen ya declara {@code IOException}, asi que agregar esto no obliga a
- * cambiar ninguna firma.
+ * <p>It is an {@link IOException} and not a separate exception, and that decision explains how the
+ * API is used: a method that reads an image already declares {@code IOException}, so adding this
+ * forces no signature to change.
  *
- * <p>La usan los lectores y escritores para distinguir "el archivo esta roto o el formato no se
- * entiende" de "fallo el disco". Las dos salen como {@code IOException}; solo la primera es una
+ * <p>Readers and writers use it to tell "the file is broken or the format is not understood" from
+ * "the disk failed". Both come out as {@code IOException}; only the first is an
  * {@code IIOException}.
  *
- * <p>El constructor con causa es el importante: un decodificador que falla adentro casi siempre tiene
- * algo mas concreto que decir, y envolverlo conserva esa traza.
+ * <p>The constructor with a cause is the important one: a decoder that fails inside almost always
+ * has something more concrete to say, and wrapping it keeps that trace.
  */
 public class IIOException extends IOException {
 
     private static final long serialVersionUID = -3216210718638985251L;
 
-    /** @param message que paso */
+    /** @param message what happened */
     public IIOException(String message) {
         super(message);
     }
 
     /**
-     * @param message que paso
-     * @param cause la original
+     * @param message what happened
+     * @param cause the original
      */
     public IIOException(String message, Throwable cause) {
         super(message, cause);

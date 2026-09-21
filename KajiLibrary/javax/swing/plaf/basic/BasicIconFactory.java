@@ -10,28 +10,28 @@ import javax.swing.Icon;
 import javax.swing.plaf.UIResource;
 
 /**
- * Los iconos que el aspecto basico le pone a las casillas, los redondeles y los menus.
+ * The icons the basic look and feel gives to check boxes, radio buttons and menus.
  *
- * <h2>Casi todos estan vacios, y es a proposito</h2>
+ * <h2>Almost all of them are empty, and it is on purpose</h2>
  *
- * <p>Cinco de los ocho no dibujan nada: solo ocupan lugar. El aspecto basico no tiene un dibujo
- * propio de casilla ni de flecha de menu --Metal, Windows y GTK lo tienen, y cada uno el suyo--,
- * pero el <em>tamano</em> si tiene que estar, porque de el sale la sangria del texto y la
- * alineacion de una columna de items. Un icono de 13 x 13 que no pinta nada deja el hueco donde el
- * aspecto de verdad va a poner el suyo.
+ * <p>Five of the eight draw nothing: they only take up room. The basic look and feel does not
+ * have a drawing of its own for a check box nor for a menu arrow -- Metal, Windows and GTK have
+ * one, and each its own --, but the <em>size</em> does have to be there, because the text's
+ * indent and the alignment of a column of items come from it. A 13 x 13 icon that paints nothing
+ * leaves the gap where the real look and feel is going to put its own.
  *
- * <p>Los dos que si dibujan son los de menu con estado: el tilde del item marcable y el punto del
- * item de opcion, y solo cuando el item esta elegido.
+ * <p>The two that do draw are the menu ones with state: the tick of the tickable item and the
+ * dot of the option item, and only when the item is chosen.
  *
- * <h2>Los tamanos, medidos</h2>
+ * <h2>The sizes, measured</h2>
  *
- * <p>Casilla y redondel 13 x 13; tilde y punto de menu 9 x 9 y 6 x 6; el hueco del tilde 9 x 9; las
- * dos flechas 4 x 8; el icono vacio de ventana interna 14 x 16. Todos medidos en el JDK 25.
+ * <p>Check box and radio button 13 x 13; menu tick and dot 9 x 9 and 6 x 6; the tick's gap
+ * 9 x 9; the two arrows 4 x 8; an internal frame's empty icon 14 x 16. All measured in JDK 25.
  *
- * <h2>Un objeto por tipo</h2>
+ * <h2>One object per type</h2>
  *
- * <p>Cada metodo devuelve siempre la misma instancia. Un icono sin estado se puede compartir entre
- * todos los componentes de la pantalla, y son varios cientos.
+ * <p>Each method always returns the same instance. A stateless icon can be shared between every
+ * component on the screen, and they are several hundred.
  */
 public class BasicIconFactory implements Serializable {
 
@@ -47,7 +47,7 @@ public class BasicIconFactory implements Serializable {
     public BasicIconFactory() {
     }
 
-    /** El de una casilla de verificacion: 13 x 13 y vacio. */
+    /** A check box's: 13 x 13 and empty. */
     public static Icon getCheckBoxIcon() {
         if (checkBoxIcon == null) {
             checkBoxIcon = new CheckBoxIcon();
@@ -55,7 +55,7 @@ public class BasicIconFactory implements Serializable {
         return checkBoxIcon;
     }
 
-    /** El de un redondel de opcion: 13 x 13 y vacio. */
+    /** An option radio button's: 13 x 13 and empty. */
     public static Icon getRadioButtonIcon() {
         if (radioButtonIcon == null) {
             radioButtonIcon = new RadioButtonIcon();
@@ -63,7 +63,7 @@ public class BasicIconFactory implements Serializable {
         return radioButtonIcon;
     }
 
-    /** El tilde de un item de menu marcable: 9 x 9, dibuja solo si esta marcado. */
+    /** A tickable menu item's tick: 9 x 9, it draws only if it is ticked. */
     public static Icon getCheckBoxMenuItemIcon() {
         if (checkBoxMenuItemIcon == null) {
             checkBoxMenuItemIcon = new CheckBoxMenuItemIcon();
@@ -71,7 +71,7 @@ public class BasicIconFactory implements Serializable {
         return checkBoxMenuItemIcon;
     }
 
-    /** El punto de un item de menu de opcion: 6 x 6, dibuja solo si esta elegido. */
+    /** An option menu item's dot: 6 x 6, it draws only if it is chosen. */
     public static Icon getRadioButtonMenuItemIcon() {
         if (radioButtonMenuItemIcon == null) {
             radioButtonMenuItemIcon = new RadioButtonMenuItemIcon();
@@ -79,7 +79,7 @@ public class BasicIconFactory implements Serializable {
         return radioButtonMenuItemIcon;
     }
 
-    /** El hueco donde va el tilde de un item: 9 x 9 y vacio. */
+    /** The gap where an item's tick goes: 9 x 9 and empty. */
     public static Icon getMenuItemCheckIcon() {
         if (menuItemCheckIcon == null) {
             menuItemCheckIcon = new MenuItemCheckIcon();
@@ -87,7 +87,7 @@ public class BasicIconFactory implements Serializable {
         return menuItemCheckIcon;
     }
 
-    /** El hueco de la flecha de submenu de un item: 4 x 8 y vacio. */
+    /** The gap of an item's submenu arrow: 4 x 8 and empty. */
     public static Icon getMenuItemArrowIcon() {
         if (menuItemArrowIcon == null) {
             menuItemArrowIcon = new MenuItemArrowIcon();
@@ -95,7 +95,7 @@ public class BasicIconFactory implements Serializable {
         return menuItemArrowIcon;
     }
 
-    /** La flecha que dice que un menu tiene submenu: 4 x 8 y vacio. */
+    /** The arrow that says a menu has a submenu: 4 x 8 and empty. */
     public static Icon getMenuArrowIcon() {
         if (menuArrowIcon == null) {
             menuArrowIcon = new MenuArrowIcon();
@@ -103,7 +103,7 @@ public class BasicIconFactory implements Serializable {
         return menuArrowIcon;
     }
 
-    /** El icono de una ventana interna sin icono propio: 14 x 16 y vacio. */
+    /** The icon of an internal frame with no icon of its own: 14 x 16 and empty. */
     public static Icon createEmptyFrameIcon() {
         if (frameIcon == null) {
             frameIcon = new EmptyFrameIcon();
@@ -111,8 +111,8 @@ public class BasicIconFactory implements Serializable {
         return frameIcon;
     }
 
-    // Los nombres de estas clases son los del JDK aunque sean privadas: se ven por getClass() y la
-    // prueba diferencial los compara. Ver la nota de JTable sobre lo mismo.
+    // These classes' names are the JDK's even though they are private: they show through
+        // getClass() and the differential test compares them. See JTable's note on the same thing.
 
     private static class CheckBoxIcon implements Icon, Serializable {
 
@@ -146,7 +146,7 @@ public class BasicIconFactory implements Serializable {
 
     private static class CheckBoxMenuItemIcon implements Icon, UIResource, Serializable {
 
-        /** El tilde: dos trazos, uno corto bajando y uno largo subiendo. */
+        /** The tick: two strokes, a short one going down and a long one going up. */
         public void drawCheck(Component c, Graphics g, int x, int y) {
             int w = getIconWidth();
             int h = getIconHeight();

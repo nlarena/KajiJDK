@@ -4,41 +4,41 @@ import java.io.OutputStream;
 import java.io.Writer;
 
 /**
- * KajiLibrary's org.w3c.dom.ls.LSOutput -- adonde escribir un documento.
+ * KajiLibrary's org.w3c.dom.ls.LSOutput -- where to write a document to.
  *
- * <p>El espejo de {@link LSInput}, con el mismo orden de preferencia:
- * {@link #getCharacterStream}, despues {@link #getByteStream}, y por ultimo {@link #getSystemId}. Se
- * usa el primero que no sea null.
+ * <p>The mirror of {@link LSInput}, with the same order of preference:
+ * {@link #getCharacterStream}, then {@link #getByteStream}, and lastly {@link #getSystemId}. The
+ * first that is not null is used.
  *
- * <p>Hay una asimetria con la entrada que vale notar: no existe {@code stringData}. Tiene sentido --
- * escribir a una cadena no es un destino sino un resultado-- y para eso esta
- * {@link LSSerializer#writeToString}.
+ * <p>There is an asymmetry with the input worth noting: there is no {@code stringData}. It makes
+ * sense -- writing to a string is not a destination but a result-- and
+ * {@link LSSerializer#writeToString} is there for that.
  */
 public interface LSOutput {
 
-    /** El flujo de caracteres, o null. Es el que gana si esta. */
+    /** The character stream, or null. It is the one that wins if it is there. */
     Writer getCharacterStream();
 
     /** Ver {@link #getCharacterStream}. */
     void setCharacterStream(Writer characterStream);
 
-    /** El flujo de bytes, o null. Se codifica con {@link #getEncoding}. */
+    /** The byte stream, or null. It is encoded with {@link #getEncoding}. */
     OutputStream getByteStream();
 
     /** Ver {@link #getByteStream}. */
     void setByteStream(OutputStream byteStream);
 
-    /** El URI adonde escribir, si no se dio ningun flujo. */
+    /** The URI to write to, if no stream was given. */
     String getSystemId();
 
     /** Ver {@link #getSystemId}. */
     void setSystemId(String systemId);
 
     /**
-     * La codificacion de salida.
+     * The output encoding.
      *
-     * <p>Solo aplica al flujo de bytes: un flujo de caracteres ya la tiene fijada por quien lo
-     * abrio, y ponerla aca no lo cambia.
+     * <p>It only applies to the byte stream: a character stream already has it fixed by whoever
+     * opened it, and setting it here does not change it.
      */
     String getEncoding();
 

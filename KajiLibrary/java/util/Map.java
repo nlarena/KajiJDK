@@ -28,32 +28,33 @@ public interface Map<K, V> {
 
     // The keys, as a Set (finding #205).
     //
-    // Se agrega porque `putAll` la necesita: su argumento llega tipado como la **interfaz** `Map`, y
-    // sin una forma de enumerarlo no hay manera de copiarlo. Es API real del JDK, asi que sumarla no
-    // aleja a la biblioteca de la referencia — la acerca.
+    // It is here because `putAll` needs it: its argument arrives typed as the **interface** `Map`,
+    // and with no way of enumerating it there is no way of copying it. It is inner JDK API, so adding
+    // it does not take the library away from the reference — it brings it closer.
     //
-    // **Divergencia deliberada**: la del JDK es una *vista* respaldada por el mapa (quitar del set
-    // quita del mapa, y los cambios del mapa se ven en el set). Estas son **copias**. Una vista pide
-    // una clase por implementacion que delegue de vuelta, y el uso que la biblioteca le da hoy es
-    // recorrer; cuando alguna necesite la vista de verdad, se cambia ahi.
+    // The divergence used to be flat: this note said this library's were all **copies** while the
+    // JDK's is a *view* backed by the map. It is per implementation now. HashMap, TreeMap, TmView and
+    // GuardedMap return live views; AbstractMap, EnumMap, Hashtable, IdentityHashMap, LinkedHashMap
+    // and WeakHashMap still return copies taken at the moment of asking, and each says so where it is
+    // declared.
     Set<K> keySet();
 
-    // Copia todos los pares de `m` en este mapa, sobrescribiendo las claves que ya esten (§Map).
-    // Abstracto como en el JDK: cada implementacion sabe recorrer lo suyo, y varias pueden hacerlo
-    // mas barato que el bucle generico.
+    // It copies every pair of `m` into this map, overwriting the keys already there (§Map). Abstract
+    // as in the JDK: each implementation knows how to walk its own, and several can do it more
+    // cheaply than the generic loop.
     void putAll(Map<? extends K, ? extends V> m);
 
 
-    // ---- los `default` del JDK 8+ ----------------------------------------------------------
+    // ---- the JDK 8+ `default`s -------------------------------------------------------------
     //
-    // Todos se implementan sobre `keySet()`/`get()`/`put()`/`remove()`, que es lo unico que toda
-    // implementacion de esta biblioteca tiene hoy. El JDK los escribe sobre `entrySet()`; el
-    // resultado observable es el mismo, y el cuerpo de un `default` es interno.
+    // All of them are implemented over `keySet()`/`get()`/`put()`/`remove()`, which is the only thing
+    // every implementation in this library has today. The JDK writes them over `entrySet()`; the
+    // observable result is the same, and a `default`'s body is internal.
 
-    // El valor de `key`, o `defaultValue` si no esta.
+    // `key`'s value, or `defaultValue` if it is not there.
     //
-    // La consulta a `containsKey` no es redundante: un mapa que admite valores nulos distingue
-    // "mapeada a null" de "ausente", y solo el segundo caso toma el default.
+    // The `containsKey` query is not redundant: a map that admits null values tells "mapped to null"
+    // from "absent", and only the second case takes the default.
     default V getOrDefault(Object key, V defaultValue) {
         V v = this.get(key);
         if (v != null || this.containsKey(key)) {
@@ -62,7 +63,7 @@ public interface Map<K, V> {
         return defaultValue;
     }
 
-    // Le pasa cada par a `action`.
+    // It hands each pair to `action`.
     default void forEach(BiConsumer<? super K, ? super V> action) {
         Iterator<K> it = this.keySet().iterator();
         while (it.hasNext()) {
@@ -71,7 +72,7 @@ public interface Map<K, V> {
         }
     }
 
-    // Reemplaza cada valor por el que devuelva `function` para su par.
+    // It replaces each value with the one `function` returns for its pair.
     default void replaceAll(BiFunction<? super K, ? super V, ? extends V> function) {
         Iterator<K> it = this.keySet().iterator();
         while (it.hasNext()) {
@@ -80,7 +81,8 @@ public interface Map<K, V> {
         }
     }
 
-    // Asocia `value` a `key` solo si no habia valor; devuelve el que ya estaba, o null.
+    // It associates `value` with `key` only if there was no value; it returns the one that was
+    // already there, or null.
     default V putIfAbsent(K key, V value) {
         V v = this.get(key);
         if (v == null) {
@@ -89,7 +91,7 @@ public interface Map<K, V> {
         return v;
     }
 
-    // Quita el par solo si la clave esta mapeada **a ese valor**.
+    // It removes the pair only if the key is mapped **to that value**.
     default boolean remove(Object key, Object value) {
         V cur = this.get(key);
         if (cur == null && !this.containsKey(key)) {
@@ -106,7 +108,7 @@ public interface Map<K, V> {
         return true;
     }
 
-    // Reemplaza el valor solo si el actual es `oldValue`.
+    // It replaces the value only if the current one is `oldValue`.
     default boolean replace(K key, V oldValue, V newValue) {
         V cur = this.get(key);
         if (cur == null && !this.containsKey(key)) {
@@ -123,7 +125,7 @@ public interface Map<K, V> {
         return true;
     }
 
-    // Reemplaza el valor solo si la clave ya estaba mapeada.
+    // It replaces the value only if the key was already mapped.
     default V replace(K key, V value) {
         V cur = this.get(key);
         if (cur != null || this.containsKey(key)) {
@@ -132,77 +134,80 @@ public interface Map<K, V> {
         return cur;
     }
 
-    // El valor de `key`; si no hay, lo calcula con `mappingFunction` y lo guarda.
+    // `key`'s value; if there is none, it computes it with `mappingFunction` and stores it.
     //
-    // Un resultado null NO se guarda: el contrato es "queda mapeada o no queda nada", y guardar
-    // null dejaria una entrada que `getOrDefault` no puede distinguir de una ausencia.
+    // A null result is NOT stored: the contract is "it ends up mapped or nothing is left", and storing
+    // null would leave an entry `getOrDefault` cannot tell from an absence.
     default V computeIfAbsent(K key, Function<? super K, ? extends V> mappingFunction) {
         V v = this.get(key);
         if (v != null) {
             return v;
         }
-        V nuevo = mappingFunction.apply(key);
-        if (nuevo != null) {
-            this.put(key, nuevo);
+        V updated = mappingFunction.apply(key);
+        if (updated != null) {
+            this.put(key, updated);
         }
-        return nuevo;
+        return updated;
     }
 
-    // Recalcula el valor de `key` **solo si ya estaba**. Un resultado null **borra** la entrada.
+    // It recomputes `key`'s value **only if it was already there**. A null result **removes** the
+    // entry.
     default V computeIfPresent(K key, BiFunction<? super K, ? super V, ? extends V> f) {
         V v = this.get(key);
         if (v == null) {
             return null;
         }
-        V nuevo = f.apply(key, v);
-        if (nuevo != null) {
-            this.put(key, nuevo);
-            return nuevo;
+        V updated = f.apply(key, v);
+        if (updated != null) {
+            this.put(key, updated);
+            return updated;
         }
         this.remove(key);
         return null;
     }
 
-    // Recalcula el valor de `key`, este o no. Un resultado null borra la entrada (o no crea nada).
+    // It recomputes `key`'s value, present or not. A null result removes the entry (or creates
+    // nothing).
     default V compute(K key, BiFunction<? super K, ? super V, ? extends V> f) {
         V v = this.get(key);
-        V nuevo = f.apply(key, v);
-        if (nuevo == null) {
+        V updated = f.apply(key, v);
+        if (updated == null) {
             if (v != null || this.containsKey(key)) {
                 this.remove(key);
             }
             return null;
         }
-        this.put(key, nuevo);
-        return nuevo;
+        this.put(key, updated);
+        return updated;
     }
 
-    // Si no hay valor, guarda `value`; si lo hay, guarda lo que devuelva `f` sobre los dos. Un
-    // resultado null borra la entrada. Es la operacion de acumulacion: contar, sumar, concatenar.
+    // If there is no value, it stores `value`; if there is, it stores whatever `f` returns over the
+    // two. A null result removes the entry. It is the accumulation operation: counting, summing,
+    // concatenating.
     default V merge(K key, V value, BiFunction<? super V, ? super V, ? extends V> f) {
         if (value == null) {
             throw new NullPointerException();
         }
         V v = this.get(key);
-        V nuevo;
+        V updated;
         if (v == null) {
-            nuevo = value;
+            updated = value;
         } else {
-            nuevo = f.apply(v, value);
+            updated = f.apply(v, value);
         }
-        if (nuevo == null) {
+        if (updated == null) {
             this.remove(key);
         } else {
-            this.put(key, nuevo);
+            this.put(key, updated);
         }
-        return nuevo;
+        return updated;
     }
 
-    // ---- las factorias inmutables (JDK 9+) --------------------------------------------------
+    // ---- the immutable factories (JDK 9+) ---------------------------------------------------
     //
-    // Devuelven un mapa **inmutable**, que rechaza claves y valores nulos y las claves repetidas.
-    // Ese rechazo es del contrato, no una decision nuestra: `Map.of("a", 1, "a", 2)` es un
-    // IllegalArgumentException en el JDK, y tragarselo taparia un bug del literal.
+    // They return an **immutable** map, which rejects null keys and values and repeated keys. That
+    // rejection is the contract's, not a decision of ours: `Map.of("a", 1, "a", 2)` is an
+    // IllegalArgumentException in the JDK, and swallowing it would hide a bug in the literal.
 
     static <K, V> Map<K, V> of() {
         return FixedMap.fromPairs(new Object[0], 0);
@@ -285,12 +290,12 @@ public interface Map<K, V> {
         return FixedMap.fromPairs(kv, 20);
     }
 
-    // Un par inmutable suelto, para armar `ofEntries`.
+    // A loose immutable pair, for building `ofEntries`.
     static <K, V> Map.Entry<K, V> entry(K k, V v) {
         return new FixedEntry<K, V>(k, v);
     }
 
-    // El mapa de los pares dados.
+    // The map of the given pairs.
     static <K, V> Map<K, V> ofEntries(Entry<? extends K, ? extends V>... entries) {
         Object[] kv = new Object[entries.length * 2];
         int i = 0;
@@ -303,8 +308,8 @@ public interface Map<K, V> {
         return FixedMap.fromPairs(kv, kv.length);
     }
 
-    // Una copia inmutable de `map`. Se saca en el momento: cambios posteriores del original no
-    // se ven.
+    // An immutable copy of `map`. It is taken at the moment: later changes to the original are not
+    // seen.
     static <K, V> Map<K, V> copyOf(Map<? extends K, ? extends V> map) {
         Object[] kv = new Object[map.size() * 2];
         int i = 0;
@@ -328,10 +333,10 @@ public interface Map<K, V> {
 
         V setValue(V value);
     }
-    // Los valores de este mapa. Collection y no Set: los valores pueden repetirse.
+    // This map's values. A Collection and not a Set: values can repeat.
     Collection<V> values();
 
-    // Los pares de este mapa.
+    // This map's pairs.
     Set<Entry<K, V>> entrySet();
 
 }

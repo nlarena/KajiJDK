@@ -4,18 +4,18 @@ import java.security.PublicKey;
 import java.security.spec.ECParameterSpec;
 import java.security.spec.ECPoint;
 
-// Una clave publica de curva eliptica: el punto W = d*G.
+// An elliptic-curve public key: the point W = d*G.
 public interface ECPublicKey extends PublicKey, ECKey {
 
     long serialVersionUID = -3314988629879632826L;
 
-    // El punto publico.
+    // The public point.
     ECPoint getW();
 
-    // Resuelve el choque entre `ECKey.getParams()` (abstracto, devuelve `ECParameterSpec`) y
-    // `AsymmetricKey.getParams()` (default, devuelve `AlgorithmParameterSpec`), que llegan por
-    // ramas distintas. Devuelve null por lo mismo que el de `AsymmetricKey`: quiere decir "esta
-    // clave no dice cuales son".
+    // Resolves the clash between `ECKey.getParams()` (abstract, returns `ECParameterSpec`) and
+    // `AsymmetricKey.getParams()` (default, returns `AlgorithmParameterSpec`), which arrive through
+    // different branches. Returns null for the same reason as `AsymmetricKey`'s: it means "this key
+    // does not say what they are".
     @Override
     default ECParameterSpec getParams() {
         return null;

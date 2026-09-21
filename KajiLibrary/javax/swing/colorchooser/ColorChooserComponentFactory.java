@@ -3,34 +3,35 @@ package javax.swing.colorchooser;
 import javax.swing.JComponent;
 
 /**
- * Fabrica los componentes con los que viene armado un {@link javax.swing.JColorChooser}.
+ * Builds the components a {@link javax.swing.JColorChooser} comes assembled with.
  *
- * <p>La usa el aspecto instalado, no el programa: es el punto desde el que un `LookAndFeel` arma el
- * selector por omision --las cuatro solapas y el recuadro de vista previa.
+ * <p>The installed look and feel uses it, not the program: it is the point from which a
+ * `LookAndFeel` assembles the default chooser -- the four tabs and the preview box.
  *
  * <h2>A KajiLibrary subset</h2>
  *
- * <p>Los dos metodos lanzan {@link UnsupportedOperationException}. Lo que fabrican son componentes
- * **de interfaz**: deslizadores, campos con formato, un diagrama de color que se pinta pixel por
- * pixel. Nada de eso existe en esta biblioteca, y no es una cuestion de escribir mas codigo sino de
- * que no hay pintado ni eventos donde apoyarlo.
+ * <p>Both methods throw {@link UnsupportedOperationException}. What they build are **interface**
+ * components: sliders, formatted fields, a colour diagram painted pixel by pixel. None of that
+ * exists in this library, and it is not a matter of writing more code but of there being no
+ * painting or events to rest it on.
  *
- * <p>La alternativa mala seria devolver un arreglo vacio de
- * {@link AbstractColorChooserPanel}: el que llama lo leeria como "este aspecto no trae solapas", que
- * es una respuesta valida y falsa, y armaria un selector vacio sin enterarse de nada.
+ * <p>The bad alternative would be returning an empty array of
+ * {@link AbstractColorChooserPanel}: the caller would read it as "this look and feel brings no
+ * tabs", which is a valid and false answer, and would assemble an empty chooser without noticing
+ * anything.
  */
 public class ColorChooserComponentFactory {
 
-    /** No se instancia: es una clase de fabrica. */
+    /** It is not instantiated: it is a factory class. */
     private ColorChooserComponentFactory() {
     }
 
     /**
-     * Las solapas de siempre: RGB, HSV, HSL, CMYK y las muestras.
+     * The usual tabs: RGB, HSV, HSL, CMYK and the swatches.
      *
-     * <p><b>No implementado en esta biblioteca.</b> Ver la nota de la clase.
+     * <p><b>Not implemented in this library.</b> See the class note.
      *
-     * @throws UnsupportedOperationException siempre, en esta biblioteca
+     * @throws UnsupportedOperationException always, in this library
      */
     public static AbstractColorChooserPanel[] getDefaultChooserPanels() {
         throw new UnsupportedOperationException(
@@ -40,11 +41,11 @@ public class ColorChooserComponentFactory {
     }
 
     /**
-     * El recuadro que muestra el color elegido junto al anterior.
+     * The box that shows the chosen colour next to the previous one.
      *
-     * <p><b>No implementado en esta biblioteca.</b> Ver la nota de la clase.
+     * <p><b>Not implemented in this library.</b> See the class note.
      *
-     * @throws UnsupportedOperationException siempre, en esta biblioteca
+     * @throws UnsupportedOperationException always, in this library
      */
     public static JComponent getPreviewPanel() {
         throw new UnsupportedOperationException(

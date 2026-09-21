@@ -7,27 +7,28 @@ import java.util.Date;
 import javax.management.ObjectName;
 
 /**
- * Los quince tipos abiertos que no se componen de nada: los envoltorios, `String`, `Date`,
- * `BigDecimal`, `BigInteger`, `ObjectName` y `Void`.
+ * The fourteen open types that are composed of nothing: the wrappers, {@code String},
+ * {@code Date}, {@code BigDecimal}, {@code BigInteger}, {@code ObjectName} and {@code Void}. (An
+ * earlier note said fifteen.)
  *
- * <p>No hay constructor público y no puede haberlo: las quince constantes de acá **son** todos los
- * tipos simples que existen, y dejar fabricar uno más permitiría dos objetos distintos para
- * `java.lang.Integer`. Eso importa porque el resto del paquete los compara por identidad en los
- * caminos rápidos, aunque {@link #equals} también funcione.
+ * <p>There is no public constructor and there cannot be: the constants here <b>are</b> all the
+ * simple types that exist, and allowing one more to be built would permit two different objects for
+ * {@code java.lang.Integer}. That matters because the rest of the package compares them by identity
+ * on the fast paths, even though {@link #equals} also works.
  *
- * <p>De ahí `readResolve`: al deserializar, una constante volvería como un objeto nuevo y la
- * identidad se rompería en silencio --que es la peor forma de romperse--. `readResolve` devuelve la
- * constante que corresponde y la propiedad se mantiene.
+ * <p>Hence {@code readResolve}: on deserialization a constant would come back as a new object and
+ * identity would break silently --which is the worst way to break. {@code readResolve} returns the
+ * matching constant and the property is kept.
  *
- * <p>`VOID` está por completitud de la enumeración: es el tipo de retorno de una operación que no
- * devuelve nada. Ningún valor es de tipo `VOID`, así que su {@link #isValue} es siempre `false` --lo
- * cual es correcto y no un caso sin implementar--.
+ * <p>{@code VOID} is there for completeness of the enumeration: it is the return type of an
+ * operation that returns nothing. No value is of type {@code VOID}, so its {@link #isValue} is
+ * always {@code false} -- which is correct and not an unimplemented case.
  */
 public final class SimpleType<T> extends OpenType<T> {
 
     private static final long serialVersionUID = 2215577471957694503L;
 
-    /** El tipo de lo que no tiene valor. */
+    /** The type of what has no value. */
     public static final SimpleType<Void> VOID =
             new SimpleType<Void>("java.lang.Void");
 
@@ -83,19 +84,19 @@ public final class SimpleType<T> extends OpenType<T> {
     public static final SimpleType<ObjectName> OBJECTNAME =
             new SimpleType<ObjectName>("javax.management.ObjectName");
 
-    // El orden importa: `readResolve` recorre este arreglo, así que una constante que falte acá
-    // volvería de la deserialización como un objeto distinto del que se serializó.
+    // The order matters: `readResolve` walks this array, so a constant missing here would come back
+    // from deserialization as an object different from the one that was serialized.
     private static final SimpleType<?>[] ALL = new SimpleType<?>[] {
         VOID, BOOLEAN, CHARACTER, BYTE, SHORT, INTEGER, LONG, FLOAT, DOUBLE, STRING,
         BIGDECIMAL, BIGINTEGER, DATE, OBJECTNAME };
 
-    // Los tres nombres de un tipo simple son el mismo: no hay nada que elegir, y por eso el
-    // constructor toma uno solo.
+    // The three names of a simple type are the same one: there is nothing to choose, and that is
+    // why the constructor takes only one.
     private SimpleType(String className) {
         super(className, className, className, false);
     }
 
-    /** Si `obj` es una instancia de la clase de este tipo. Un nulo nunca lo es. */
+    /** Whether {@code obj} is an instance of this type's class. A null never is. */
     public boolean isValue(Object obj) {
         if (obj == null) {
             return false;
@@ -104,9 +105,9 @@ public final class SimpleType<T> extends OpenType<T> {
     }
 
     /**
-     * Igualdad por el nombre de clase.
+     * Equality by class name.
      *
-     * <p>Alcanza con eso porque los otros dos nombres de un tipo simple son iguales al primero.
+     * <p>That is enough because the other two names of a simple type are equal to the first.
      */
     public boolean equals(Object obj) {
         if (this == obj) {
@@ -127,10 +128,10 @@ public final class SimpleType<T> extends OpenType<T> {
     }
 
     /**
-     * Devuelve la constante correspondiente en vez del objeto recién deserializado.
+     * Returns the matching constant instead of the just-deserialized object.
      *
-     * <p>Ver la nota de la clase: sin esto, un `SimpleType` que viaja por serialización deja de ser
-     * idéntico a la constante y las comparaciones por identidad empiezan a fallar en silencio.
+     * <p>See the class note: without this, a {@code SimpleType} that travels through serialization
+     * stops being identical to the constant and identity comparisons start failing silently.
      */
     public Object readResolve() throws ObjectStreamException {
         for (int i = 0; i < ALL.length; i++) {

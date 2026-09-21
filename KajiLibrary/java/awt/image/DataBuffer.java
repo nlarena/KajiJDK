@@ -1,94 +1,95 @@
 package java.awt.image;
 
 /**
- * Los números crudos de una imagen, sin ninguna interpretación.
+ * The raw numbers of an image, with no interpretation at all.
  *
- * <p>Es la capa más baja de `java.awt.image` y la más fácil de malentender, así que conviene decir
- * qué **no** sabe: no sabe de píxeles, ni de ancho, ni de color. Es un arreglo de números y nada
- * más. Quién es un píxel lo dice un {@link SampleModel}; qué color es lo dice un
- * {@link ColorModel}. Separar las tres cosas es lo que permite que la misma memoria se lea como
- * escala de grises o como RGB sin copiarla.
+ * <p>It is the lowest layer of `java.awt.image` and the easiest to misunderstand, so it is worth
+ * saying what it does **not** know: it knows nothing about pixels, or width, or colour. It is an
+ * array of numbers and nothing more. Who a pixel is, is said by a {@link SampleModel}; what colour
+ * it is, by a {@link ColorModel}. Keeping the three things apart is what lets the same memory be
+ * read as greyscale or as RGB without copying it.
  *
- * <h2>Los bancos</h2>
+ * <h2>The banks</h2>
  *
- * <p>Un buffer puede tener varios **bancos**, que son arreglos independientes. Sirven para guardar
- * cada componente por separado --todos los rojos juntos, todos los verdes juntos-- en vez de
- * intercalados. Los métodos que no dicen banco trabajan sobre el banco 0.
+ * <p>A buffer can have several **banks**, which are independent arrays. They serve for keeping each
+ * component separately --all the reds together, all the greens together-- instead of interleaved.
+ * The methods that do not say a bank work on bank 0.
  *
- * <p>Cada banco tiene su propio desplazamiento inicial: {@link #getOffsets} los devuelve todos y
- * {@link #getOffset} el del banco 0. Un buffer de un solo banco tiene un solo desplazamiento, y por
- * eso los dos métodos parecen redundantes hasta que hay más de uno.
+ * <p>Each bank has an initial offset of its own: {@link #getOffsets} returns them all and
+ * {@link #getOffset} the one of bank 0. A buffer of a single bank has a single offset, and that is
+ * why the two methods look redundant until there is more than one.
  *
- * <h2>Los seis tipos y sus rangos</h2>
+ * <h2>The six types and their ranges</h2>
  *
- * <p>{@link #TYPE_USHORT} y {@link #TYPE_SHORT} usan los dos un `short[]` y se diferencian sólo en
- * cómo se lee: el primero como 0..65535 y el segundo como -32768..32767. Es la misma memoria con
- * dos interpretaciones, y confundirlos da imágenes con los tonos claros dados vuelta.
+ * <p>{@link #TYPE_USHORT} and {@link #TYPE_SHORT} both use a `short[]` and differ only in how it is
+ * read: the first as 0..65535 and the second as -32768..32767. It is the same memory with two
+ * interpretations, and confusing them gives images with the light tones turned round.
  *
- * <h2>Los tres pares de accesores</h2>
+ * <h2>The three pairs of accessors</h2>
  *
- * <p>`getElem`, `getElemFloat` y `getElemDouble` leen **el mismo dato** con distinta conversión. Las
- * subclases de enteros redefinen sólo el primero y heredan los otros dos, que convierten; las de
- * punto flotante hacen al revés. Por eso `getElemFloat` sobre un `DataBufferInt` no pierde nada
- * --un `int` entra en un `float` con pérdida sólo por encima de 2^24-- y `getElem` sobre un
- * `DataBufferDouble` **sí** trunca. Está en el contrato y no es un defecto.
+ * <p>`getElem`, `getElemFloat` and `getElemDouble` read **the same datum** with a different
+ * conversion. The integer subclasses override only the first and inherit the other two, which
+ * convert; the floating-point ones do it the other way round. That is why `getElemFloat` on a
+ * `DataBufferInt` loses nothing --an `int` fits in a `float` with loss only above 2^24-- and
+ * `getElem` on a `DataBufferDouble` **does** truncate. It is in the contract and it is not a
+ * defect.
  */
 public abstract class DataBuffer {
 
-    /** Enteros de 8 bits sin signo, guardados en un `byte[]`. */
+    /** Unsigned 8-bit integers, kept in a `byte[]`. */
     public static final int TYPE_BYTE = 0;
-    /** Enteros de 16 bits **sin** signo, en un `short[]`. */
+    /** **Unsigned** 16-bit integers, in a `short[]`. */
     public static final int TYPE_USHORT = 1;
-    /** Enteros de 16 bits **con** signo, en un `short[]`. */
+    /** **Signed** 16-bit integers, in a `short[]`. */
     public static final int TYPE_SHORT = 2;
-    /** Enteros de 32 bits con signo. */
+    /** Signed 32-bit integers. */
     public static final int TYPE_INT = 3;
-    /** Coma flotante de 32 bits. */
+    /** 32-bit floating point. */
     public static final int TYPE_FLOAT = 4;
-    /** Coma flotante de 64 bits. */
+    /** 64-bit floating point. */
     public static final int TYPE_DOUBLE = 5;
-    /** Ninguno de los anteriores. */
+    /** None of the above. */
     public static final int TYPE_UNDEFINED = 32;
 
-    /** El tipo de los datos: una de las constantes `TYPE_`. */
+    /** The type of the data: one of the `TYPE_` constants. */
     protected int dataType;
 
-    /** Cuántos bancos tiene. */
+    /** How many banks it has. */
     protected int banks;
 
-    /** El desplazamiento del banco 0. */
+    /** The offset of bank 0. */
     protected int offset;
 
-    /** Cuántos elementos utiliza cada banco a partir de su desplazamiento. */
+    /** How many elements each bank uses, starting from its offset. */
     protected int size;
 
-    /** El desplazamiento de cada banco. */
+    /** The offset of each bank. */
     protected int[] offsets;
 
     /**
-     * Cuántos bits ocupa un elemento de ese tipo.
+     * How many bits an element of that type takes.
      *
-     * @throws IllegalArgumentException si el tipo no es uno de los seis
+     * @throws IllegalArgumentException if the type is not one of the six
      */
     public static int getDataTypeSize(int type) {
         if (type < TYPE_BYTE || type > TYPE_DOUBLE) {
             throw new IllegalArgumentException("Unknown data type " + type);
         }
-        int[] tamanos = { 8, 16, 16, 32, 32, 64 };
-        return tamanos[type];
+        int[] sizes = { 8, 16, 16, 32, 32, 64 };
+        return sizes[type];
     }
 
-    /** Un banco, sin desplazamiento. */
+    /** One bank, with no offset. */
     protected DataBuffer(int dataType, int size) {
         this(dataType, size, 1, 0);
     }
 
-    /** `numBanks` bancos, sin desplazamiento. */
+    /** `numBanks` banks, with no offset. */
     protected DataBuffer(int dataType, int size, int numBanks) {
         this(dataType, size, numBanks, 0);
     }
 
-    /** `numBanks` bancos, todos con el mismo desplazamiento. */
+    /** `numBanks` banks, all with the same offset. */
     protected DataBuffer(int dataType, int size, int numBanks, int offset) {
         this.dataType = dataType;
         this.size = size;
@@ -101,9 +102,9 @@ public abstract class DataBuffer {
     }
 
     /**
-     * `numBanks` bancos, cada uno con su desplazamiento.
+     * `numBanks` banks, each one with its own offset.
      *
-     * @throws ArrayIndexOutOfBoundsException si hay menos desplazamientos que bancos
+     * @throws ArrayIndexOutOfBoundsException if there are fewer offsets than banks
      */
     protected DataBuffer(int dataType, int size, int numBanks, int[] offsets) {
         if (offsets.length < numBanks) {
@@ -120,85 +121,85 @@ public abstract class DataBuffer {
         this.offset = offsets[0];
     }
 
-    /** El tipo de los datos. */
+    /** The type of the data. */
     public int getDataType() {
         return this.dataType;
     }
 
-    /** Cuántos elementos usa cada banco. */
+    /** How many elements each bank uses. */
     public int getSize() {
         return this.size;
     }
 
-    /** El desplazamiento del banco 0. */
+    /** The offset of bank 0. */
     public int getOffset() {
         return this.offset;
     }
 
-    /** Una copia de los desplazamientos de todos los bancos. */
+    /** A copy of the offsets of every bank. */
     public int[] getOffsets() {
         int[] out = new int[this.offsets.length];
         System.arraycopy(this.offsets, 0, out, 0, this.offsets.length);
         return out;
     }
 
-    /** Cuántos bancos. */
+    /** How many banks. */
     public int getNumBanks() {
         return this.banks;
     }
 
-    /** El elemento `i` del banco 0. */
+    /** Element `i` of bank 0. */
     public int getElem(int i) {
         return this.getElem(0, i);
     }
 
-    /** El elemento `i` del banco dado. */
+    /** Element `i` of the given bank. */
     public abstract int getElem(int bank, int i);
 
-    /** Escribe el elemento `i` del banco 0. */
+    /** Writes element `i` of bank 0. */
     public void setElem(int i, int val) {
         this.setElem(0, i, val);
     }
 
-    /** Escribe el elemento `i` del banco dado. */
+    /** Writes element `i` of the given bank. */
     public abstract void setElem(int bank, int i, int val);
 
-    /** El elemento `i` del banco 0, como `float`. */
+    /** Element `i` of bank 0, as a `float`. */
     public float getElemFloat(int i) {
         return this.getElem(i);
     }
 
-    /** El elemento `i` del banco dado, como `float`. */
+    /** Element `i` of the given bank, as a `float`. */
     public float getElemFloat(int bank, int i) {
         return this.getElem(bank, i);
     }
 
-    /** Escribe un `float` en el banco 0. En un buffer entero se trunca. */
+    /** Writes a `float` into bank 0. In an integer buffer it is truncated. */
     public void setElemFloat(int i, float val) {
         this.setElem(i, (int) val);
     }
 
-    /** Escribe un `float` en el banco dado. En un buffer entero se trunca. */
+    /** Writes a `float` into the given bank. In an integer buffer it is truncated. */
     public void setElemFloat(int bank, int i, float val) {
         this.setElem(bank, i, (int) val);
     }
 
-    /** El elemento `i` del banco 0, como `double`. */
+    /** Element `i` of bank 0, as a `double`. */
     public double getElemDouble(int i) {
         return this.getElem(i);
     }
 
-    /** El elemento `i` del banco dado, como `double`. */
+    /** Element `i` of the given bank, as a `double`. */
     public double getElemDouble(int bank, int i) {
         return this.getElem(bank, i);
     }
 
-    /** Escribe un `double` en el banco 0. En un buffer entero se trunca. */
+    /** Writes a `double` into bank 0. In an integer buffer it is truncated. */
     public void setElemDouble(int i, double val) {
         this.setElem(i, (int) val);
     }
 
-    /** Escribe un `double` en el banco dado. En un buffer entero se trunca. */
+    /** Writes a `double` into the given bank. In an integer buffer it is truncated. */
     public void setElemDouble(int bank, int i, double val) {
         this.setElem(bank, i, (int) val);
     }

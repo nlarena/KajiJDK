@@ -8,33 +8,33 @@ import java.lang.constant.DirectMethodHandleDesc;
 import java.lang.constant.DynamicConstantDesc;
 import java.util.List;
 
-// `CONSTANT_Dynamic_info` (JVMS §4.4.10): una constante que la VM calcula la primera vez que se
-// carga. Su descriptor es de *campo* — el tipo de lo que produce — a diferencia del de
-// `CONSTANT_InvokeDynamic`, que es de método.
+// `CONSTANT_Dynamic_info` (JVMS §4.4.10): a constant the VM works out the first time it is loaded.
+// Its descriptor is a *field* one -- the type of what it produces -- unlike
+// `CONSTANT_InvokeDynamic`'s, which is a method one.
 public interface ConstantDynamicEntry extends DynamicConstantPoolEntry, LoadableConstantEntry {
 
-    /** El tipo de la constante. */
+    /** The constant's type. */
     default ClassDesc typeSymbol() {
         return ClassDesc.ofDescriptor(type().stringValue());
     }
 
-    /** El descriptor nominal de la constante dinámica, con sus argumentos estáticos. */
+    /** The dynamic constant's nominal descriptor, with its static arguments. */
     default DynamicConstantDesc<?> asSymbol() {
         BootstrapMethodEntry bsm = bootstrap();
         DirectMethodHandleDesc handle = bsm.bootstrapMethod().asSymbol();
         List<LoadableConstantEntry> args = bsm.arguments();
-        ConstantDesc[] estaticos = new ConstantDesc[args.size()];
+        ConstantDesc[] staticArgs = new ConstantDesc[args.size()];
         for (int i = 0; i < args.size(); i++) {
-            estaticos[i] = args.get(i).constantValue();
+            staticArgs[i] = args.get(i).constantValue();
         }
-        return DynamicConstantDesc.ofNamed(handle, name().stringValue(), typeSymbol(), estaticos);
+        return DynamicConstantDesc.ofNamed(handle, name().stringValue(), typeSymbol(), staticArgs);
     }
 
     default ConstantDesc constantValue() {
         return asSymbol();
     }
 
-    /** El tipo del valor que `ldc`/`ldc2_w` deja en la pila, derivado del descriptor. */
+    /** The type of the value `ldc`/`ldc2_w` leaves on the stack, derived from the descriptor. */
     default TypeKind typeKind() {
         return TypeKind.fromDescriptor(type());
     }

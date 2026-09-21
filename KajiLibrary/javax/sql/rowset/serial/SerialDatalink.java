@@ -4,26 +4,26 @@ import java.io.Serializable;
 import java.net.URL;
 
 /**
- * KajiLibrary's javax.sql.rowset.serial.SerialDatalink -- una copia de un valor DATALINK.
+ * KajiLibrary's javax.sql.rowset.serial.SerialDatalink -- a copy of a DATALINK value.
  *
- * <p>Un DATALINK de SQL es una columna que guarda un URL a un recurso <b>fuera</b> de la base. Esta
- * clase copia ese URL para que el valor sobreviva a la conexion.
+ * <p>An SQL DATALINK is a column that keeps a URL to a resource <b>outside</b> the database. This
+ * class copies that URL so that the value survives the connection.
  *
- * <p>Lo que copia es el <b>URL, no el recurso</b>. Es lo unico que se puede hacer --el recurso puede
- * ser un archivo de gigabytes en otra maquina-- y tiene una consecuencia que conviene tener presente:
- * un {@code SerialDatalink} serializado y leido en otro lado apunta al mismo lugar, que desde ahi
- * puede no existir.
+ * <p>What it copies is the <b>URL, not the resource</b>. It is the only thing that can be done
+ * --the resource can be a file of gigabytes on another machine-- and it has a consequence worth
+ * keeping in mind: a {@code SerialDatalink} serialized and read elsewhere points to the same place,
+ * which from there may not exist.
  */
 public class SerialDatalink implements Serializable, Cloneable {
 
     private static final long serialVersionUID = 2826907821828733626L;
 
-    /** El URL copiado. */
+    /** The copied URL. */
     private final URL url;
 
     /**
-     * @param url el URL del recurso
-     * @throws SerialException si es null
+     * @param url the URL of the resource
+     * @throws SerialException if it is null
      */
     public SerialDatalink(URL url) throws SerialException {
         if (url == null) {
@@ -32,12 +32,12 @@ public class SerialDatalink implements Serializable, Cloneable {
         this.url = url;
     }
 
-    /** El URL. */
+    /** The URL. */
     public URL getDatalink() throws SerialException {
         return this.url;
     }
 
-    /** Iguales si apuntan al mismo URL. */
+    /** Equal if they point to the same URL. */
     public boolean equals(Object obj) {
         if (this == obj) {
             return true;
@@ -48,12 +48,12 @@ public class SerialDatalink implements Serializable, Cloneable {
         return this.url.equals(((SerialDatalink) obj).url);
     }
 
-    /** Coherente con {@link #equals}. */
+    /** Consistent with {@link #equals}. */
     public int hashCode() {
         return 31 + this.url.hashCode();
     }
 
-    /** Una copia; el URL es inmutable y se comparte. */
+    /** A copy; the URL is immutable and is shared. */
     public Object clone() {
         try {
             return new SerialDatalink(this.url);

@@ -3,7 +3,7 @@ package com.sun.source.tree;
 import java.util.List;
 
 /**
- * La directiva `provides ... with ...` de un modulo.
+ * A module's `provides ... with ...` directive.
  */
 public interface ProvidesTree extends DirectiveTree {
 

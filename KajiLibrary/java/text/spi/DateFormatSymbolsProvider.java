@@ -5,18 +5,18 @@ import java.util.Locale;
 import java.util.spi.LocaleServiceProvider;
 
 /**
- * KajiLibrary's java.text.spi.DateFormatSymbolsProvider -- las palabras de una fecha.
+ * KajiLibrary's java.text.spi.DateFormatSymbolsProvider -- a date's words.
  *
- * <p>Nombres de meses y de dias, AM/PM, eras, nombres de zona. Es la mitad <b>lexica</b> de dar
- * formato a una fecha; la otra --en que orden van y con que separadores-- la da
- * {@link DateFormatProvider}. Estan separadas porque se cambian por separado: alguien puede querer
- * los meses abreviados de otra forma sin tocar el orden.
+ * <p>Month and day names, AM/PM, eras, zone names. It is the <b>lexical</b> half of formatting a
+ * date; the other --what order they go in and with what separators-- is given by
+ * {@link DateFormatProvider}. They are separate because they are changed separately: somebody may
+ * want the months abbreviated differently without touching the order.
  */
 public abstract class DateFormatSymbolsProvider extends LocaleServiceProvider {
 
     protected DateFormatSymbolsProvider() {
     }
 
-    /** Las palabras de ese local. */
+    /** That locale's words. */
     public abstract DateFormatSymbols getInstance(Locale locale);
 }

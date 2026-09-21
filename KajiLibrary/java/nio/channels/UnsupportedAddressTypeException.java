@@ -1,13 +1,14 @@
 package java.nio.channels;
 
 /**
- * KajiLibrary's java.nio.channels.UnsupportedAddressTypeException — La direccion es de un tipo que este canal no soporta.
+ * KajiLibrary's java.nio.channels.UnsupportedAddressTypeException — the address is of a type this
+ * channel does not support.
  */
 public class UnsupportedAddressTypeException extends IllegalArgumentException {
 
     private static final long serialVersionUID = 1000000023L;
 
-    /** Construye una. Sin mensaje: el nombre de la clase **es** el mensaje. */
+    /** Builds one. With no message: the name of the class **is** the message. */
     public UnsupportedAddressTypeException() {
         super();
     }

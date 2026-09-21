@@ -6,11 +6,11 @@ import javax.print.attribute.PrintJobAttribute;
 import javax.print.attribute.PrintRequestAttribute;
 
 /**
- * Con cuanta prioridad se atiende el trabajo en la cola: 1 la mas baja, 100 la mas alta.
+ * With how much priority the job is served in the queue: 1 the lowest, 100 the highest.
  *
- * <p>La escala de cien la fija IPP y es la razon del rango cerrado. Una impresora no tiene por que
- * distinguir cien niveles: puede agrupar. Cuantos distingue de verdad lo dice {@link
- * JobPrioritySupported}.
+ * <p>The scale of a hundred is fixed by IPP and it is the reason for the closed range. A printer
+ * does not have to distinguish a hundred levels: it may group. How many it really distinguishes is
+ * said by {@link JobPrioritySupported}.
  */
 public final class JobPriority extends IntegerSyntax implements PrintRequestAttribute, PrintJobAttribute {
 
@@ -20,8 +20,10 @@ public final class JobPriority extends IntegerSyntax implements PrintRequestAttr
         super(value, 1, 100);
     }
 
-    /** El {@code instanceof} es lo que impide que un JobPriority de igual a otro atributo
-     * entero con el mismo numero. */
+    /**
+     * The {@code instanceof} is what keeps a JobPriority from being equal to another
+     * integer attribute with the same number.
+     */
     public boolean equals(Object object) {
         return super.equals(object) && object instanceof JobPriority;
     }

@@ -6,64 +6,66 @@ import java.util.Iterator;
 import java.util.List;
 
 /**
- * Los hijos que se agregaron o se quitaron de un contexto.
+ * The children added to or removed from a context.
  *
- * <p>Un solo evento lleva **varios** hijos y no uno, y eso es deliberado: `addAll` y `removeAll` son
- * una operación, no N. Un oyente que reacomoda algo al cambiar la membresía quiere hacerlo una vez
- * con la lista completa, no una vez por hijo con estados intermedios que nunca existieron para
- * quien hizo el cambio.
+ * <p>One event can carry **several** children, not just one, so that a bulk change can be announced
+ * once with the complete list instead of once per child, with intermediate states nobody made. This
+ * note gave `addAll` and `removeAll` as the operations that do that; in {@link BeanContextSupport}
+ * both throw {@link UnsupportedOperationException}, and `add` and `remove` fire one event per
+ * child, so no event built there names more than one.
  *
- * <p>La colección se copia al construir. Sin copiar, quien pasó la lista podría cambiarla mientras
- * los oyentes la recorren, y dos oyentes verían cosas distintas del mismo evento.
+ * <p>The collection is copied on construction. Without the copy, whoever passed the list could
+ * change it while the listeners walk it, and two listeners would see different things in the same
+ * event.
  */
 public class BeanContextMembershipEvent extends BeanContextEvent {
 
-    /** Los hijos que el evento nombra. */
+    /** The children the event names. */
     protected Collection children;
 
-    /** El evento con esos hijos. */
+    /** The event with those children. */
     public BeanContextMembershipEvent(BeanContext bc, Collection changes) {
         super(bc);
         if (changes == null) {
             throw new NullPointerException("changes");
         }
-        List<Object> copia = new ArrayList<Object>();
+        List<Object> copy = new ArrayList<Object>();
         Iterator it = changes.iterator();
         while (it.hasNext()) {
-            copia.add(it.next());
+            copy.add(it.next());
         }
-        this.children = copia;
+        this.children = copy;
     }
 
-    /** El evento con esos hijos. */
+    /** The event with those children. */
     public BeanContextMembershipEvent(BeanContext bc, Object[] changes) {
         super(bc);
         if (changes == null) {
             throw new NullPointerException("changes");
         }
-        List<Object> copia = new ArrayList<Object>();
+        List<Object> copy = new ArrayList<Object>();
         for (int i = 0; i < changes.length; i++) {
-            copia.add(changes[i]);
+            copy.add(changes[i]);
         }
-        this.children = copia;
+        this.children = copy;
     }
 
-    /** Cuántos hijos nombra. */
+    /** How many children it names. */
     public int size() {
         return this.children.size();
     }
 
-    /** Si ese objeto es uno de los hijos que nombra. */
+    /** Whether that object is one of the children it names. */
     public boolean contains(Object child) {
         return this.children.contains(child);
     }
 
-    /** Los hijos, en un arreglo. */
+    /** The children, as an array. */
     public Object[] toArray() {
         return this.children.toArray();
     }
 
-    /** Los hijos, uno por uno. */
+    /** The children, one by one. */
     public Iterator iterator() {
         return this.children.iterator();
     }

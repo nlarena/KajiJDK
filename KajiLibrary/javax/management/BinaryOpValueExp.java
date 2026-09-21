@@ -1,32 +1,32 @@
 package javax.management;
 
 /**
- * Una cuenta entre dos valores.
+ * An arithmetic operation between two values.
  *
- * <p>De paquete: se fabrica con {@link Query#plus} y compa&ntilde;ia. El {@code +} sobre dos cadenas
- * concatena, como en Java; sobre numeros suma. Las otras tres solo valen para numeros.
+ * <p>Package-private: it is made with {@link Query#plus} and friends. {@code +} on two strings
+ * concatenates, as in Java; on numbers it adds. The other three only work for numbers.
  *
- * <p>{@link #toString()} pone parentesis <b>solo donde hacen falta</b>, comparando precedencias:
- * {@code a + b * c} se imprime asi y no {@code (a) + ((b) * (c))}. Del lado derecho la condicion es
- * mas estricta que del izquierdo --{@code >=} en vez de {@code >}-- porque las operaciones asocian
- * a izquierda y {@code a - (b - c)} no es {@code a - b - c}.
+ * <p>{@link #toString()} puts parentheses <b>only where they are needed</b>, comparing precedences:
+ * {@code a + b * c} is printed like that and not as {@code (a) + ((b) * (c))}. On the right side
+ * the condition is stricter than on the left --{@code >=} instead of {@code >}-- because the
+ * operations associate to the left and {@code a - (b - c)} is not {@code a - b - c}.
  */
 class BinaryOpValueExp extends QueryEval implements ValueExp {
 
     private static final long serialVersionUID = 1216286847881456786L;
 
     /**
-     * @serial el operador
+     * @serial the operator
      */
     private int op;
 
     /**
-     * @serial el lado izquierdo
+     * @serial the left side
      */
     private ValueExp exp1;
 
     /**
-     * @serial el lado derecho
+     * @serial the right side
      */
     private ValueExp exp2;
 
@@ -39,7 +39,7 @@ class BinaryOpValueExp extends QueryEval implements ValueExp {
         exp2 = v2;
     }
 
-    /** Uno de {@link Query#PLUS}, {@link Query#MINUS}, {@link Query#TIMES}, {@link Query#DIV}. */
+    /** One of {@link Query#PLUS}, {@link Query#MINUS}, {@link Query#TIMES}, {@link Query#DIV}. */
     public int getOperator() {
         return op;
     }
@@ -53,9 +53,10 @@ class BinaryOpValueExp extends QueryEval implements ValueExp {
     }
 
     /**
-     * <p>El despacho va con `if` encadenados y no con un `switch`: nuestro javac todavia no acepta
-     * en una etiqueta `case` una constante que viene de otro archivo, y `Query.PLUS` y
-     * compa&ntilde;ia viven en `Query`. Ver el hallazgo #461.
+     * <p>The dispatch goes with chained {@code if}s and not with a {@code switch}, which would be
+     * the natural thing: our javac does not yet accept in a {@code case} label a constant that
+     * comes from another file, and {@code Query.PLUS} and friends live in {@code Query}. See
+     * finding #461.
      */
     public ValueExp apply(ObjectName name) throws BadStringOperationException,
             BadBinaryOpValueExpException, BadAttributeValueExpException,
@@ -102,7 +103,7 @@ class BinaryOpValueExp extends QueryEval implements ValueExp {
 
         if (val1 instanceof StringValueExp && val2 instanceof StringValueExp) {
             if (op != Query.PLUS) {
-                throw new BadStringOperationException(opTexto());
+                throw new BadStringOperationException(opText());
             }
             return new StringValueExp(((StringValueExp) val1).getValue()
                     + ((StringValueExp) val2).getValue());
@@ -118,14 +119,14 @@ class BinaryOpValueExp extends QueryEval implements ValueExp {
         }
     }
 
-    private String parens(ValueExp exp, boolean izquierda) throws BadBinaryOpValueExpException {
+    private String parens(ValueExp exp, boolean left) throws BadBinaryOpValueExpException {
         boolean paren;
         if (exp instanceof BinaryOpValueExp) {
             int mio = precedence(op);
-            int suyo = precedence(((BinaryOpValueExp) exp).op);
-            // Del lado derecho la condicion es mas dura porque las operaciones asocian a
-            // izquierda: `a - (b - c)` no es `a - b - c`.
-            paren = izquierda ? mio > suyo : mio >= suyo;
+            int theirs = precedence(((BinaryOpValueExp) exp).op);
+            // On the right side the condition is harder because the operations associate to the
+            // left: `a - (b - c)` is not `a - b - c`.
+            paren = left ? mio > theirs : mio >= theirs;
         } else {
             paren = false;
         }
@@ -158,7 +159,7 @@ class BinaryOpValueExp extends QueryEval implements ValueExp {
         throw new BadBinaryOpValueExpException(this);
     }
 
-    private String opTexto() {
+    private String opText() {
         if (op == Query.PLUS) {
             return "+";
         }

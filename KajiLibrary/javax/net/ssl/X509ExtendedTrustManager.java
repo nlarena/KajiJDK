@@ -5,45 +5,46 @@ import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 
 /**
- * Un {@link X509TrustManager} que ademas ve <strong>con quien</strong> se esta hablando.
+ * An {@link X509TrustManager} that also sees <strong>whom</strong> one is talking to.
  *
- * <h2>Por que eso cambia todo</h2>
+ * <h2>Why that changes everything</h2>
  *
- * <p>Los metodos de {@link X509TrustManager} reciben la cadena y el tipo de autenticacion, y nada
- * mas. Con eso se puede verificar que el certificado sea valido y este firmado por alguien de
- * confianza — pero <strong>no</strong> que sea de quien nos conectamos, porque ese dato no llega.
+ * <p>The methods of {@link X509TrustManager} receive the chain and the authentication type, and
+ * nothing more. With that one can check that the certificate is valid and signed by somebody
+ * trusted — but <strong>not</strong> that it belongs to whom we connected to, because that datum
+ * does not arrive.
  *
- * <p>Estos cuatro reciben el {@link Socket} o el {@link SSLEngine}, o sea el nombre que se pidio.
- * Es lo que permite la verificacion de identidad del extremo, la que frena a un atacante con un
- * certificado legitimo de otro dominio. Un manejador que implemente solo la interfaz vieja deja ese
- * agujero abierto, y por eso el JDK usa esta clase siempre que puede.
+ * <p>These four receive the {@link Socket} or the {@link SSLEngine}, that is the name that was
+ * asked for. It is what allows endpoint identity checking, the one that stops an attacker with a
+ * legitimate certificate for another domain. A manager that implements only the old interface
+ * leaves that hole open, and that is why the JDK uses this class whenever it can.
  */
 public abstract class X509ExtendedTrustManager implements X509TrustManager {
 
-    /** Para las subclases. */
+    /** For subclasses. */
     public X509ExtendedTrustManager() {
     }
 
     /**
-     * @throws CertificateException si el cliente no es de fiar
+     * @throws CertificateException if the client is not trustworthy
      */
     public abstract void checkClientTrusted(X509Certificate[] chain, String authType,
             Socket socket) throws CertificateException;
 
     /**
-     * @throws CertificateException si el servidor no es de fiar, incluida la falla de identidad
+     * @throws CertificateException if the server is not trustworthy, identity failure included
      */
     public abstract void checkServerTrusted(X509Certificate[] chain, String authType,
             Socket socket) throws CertificateException;
 
     /**
-     * @throws CertificateException si el cliente no es de fiar
+     * @throws CertificateException if the client is not trustworthy
      */
     public abstract void checkClientTrusted(X509Certificate[] chain, String authType,
             SSLEngine engine) throws CertificateException;
 
     /**
-     * @throws CertificateException si el servidor no es de fiar
+     * @throws CertificateException if the server is not trustworthy
      */
     public abstract void checkServerTrusted(X509Certificate[] chain, String authType,
             SSLEngine engine) throws CertificateException;

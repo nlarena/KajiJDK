@@ -1,43 +1,45 @@
 package java.security;
 
-// El generador que registra `KajiProvider`: un pase directo al del sistema operativo.
+// The generator `KajiProvider` registers: a direct pass to the operating system's.
 //
 // ===============================================================================================
-// POR QUE UN PASE DIRECTO Y NO UN DRBG
+// WHY A DIRECT PASS AND NOT A DRBG
 // ===============================================================================================
 //
-// Un DRBG --el `SHA1PRNG` o el `Hash_DRBG` del JDK-- tiene estado interno: se siembra una vez y
-// despues expande esa semilla con una funcion de hash. Escribir uno bien no es dificil, pero
-// **elegir mal cualquier detalle no se nota**: la salida se ve igual de aleatoria con o sin el
-// error, y nadie lo descubre hasta que alguien la ataca.
+// A DRBG --the `SHA1PRNG` or the `Hash_DRBG` of the JDK-- has internal state: it is seeded once and
+// then expands that seed with a hash function. Writing one properly is not difficult, but
+// **choosing any detail wrongly does not show**: the output looks just as random with or without
+// the mistake, and nobody discovers it until somebody attacks it.
 //
-// Un pase directo no tiene esa clase de error posible. Cada byte que sale es un byte que dio
-// `BCryptGenRandom` o `/dev/urandom`, y la seguridad es exactamente la del sistema -- que ademas es
-// la que el sistema resiembra solo con las fuentes de entropia del hardware. Es lo mismo que hace
-// el proveedor `SunMSCAPI` del JDK con su `Windows-PRNG`.
+// A direct pass does not have that kind of possible mistake. Every byte that comes out is a byte
+// `BCryptGenRandom` or `/dev/urandom` gave, and the security is exactly the system's -- which
+// besides is the one the system reseeds by itself with the entropy sources of the hardware. It is
+// the same thing the `SunMSCAPI` provider of the JDK does with its `Windows-PRNG`.
 //
-// El precio es velocidad: cada llamada baja al sistema. Para lo que hace falta en esta biblioteca
-// --semillas, nonces, identificadores-- no importa.
+// The price is speed: each call goes down to the system. For what is needed in this library
+// --seeds, nonces, identifiers-- it does not matter.
 //
 // ===============================================================================================
-// QUE HACE CON LA SEMILLA QUE LE DAN, Y POR QUE
+// WHAT IT DOES WITH THE SEED IT IS GIVEN, AND WHY
 // ===============================================================================================
 //
-// `engineSetSeed` **la ignora**, y hay que decirlo porque suena a que falta algo.
+// `engineSetSeed` **ignores it**, and it has to be said because it sounds as if something were
+// missing.
 //
-// El contrato de `setSeed` es que la semilla **agrega**, nunca reemplaza: llamarlo no puede dejar
-// al generador mas predecible. Ignorarla lo cumple -- la salida sigue siendo la del sistema, que no
-// depende de lo que el llamador pase. La alternativa seria mezclarla, y ahi habria que inventar la
-// mezcla: derivar un flujo de la semilla y combinarlo con los bytes del sistema. Eso es diseñar una
-// construccion criptografica para no ganar nada, porque los bytes del sistema ya son fuertes.
+// The contract of `setSeed` is that the seed **adds**, it never replaces: calling it cannot leave
+// the generator more predictable. Ignoring it fulfils that -- the output goes on being the
+// system's, which does not depend on what the caller passes. The alternative would be mixing it,
+// and there the mixing would have to be invented: deriving a stream from the seed and combining it
+// with the bytes of the system. That is designing a cryptographic construction for no gain, because
+// the bytes of the system are strong already.
 //
-// `engineReseed` tampoco esta: no hay estado interno que resembrar. Quien lo llame recibe
-// `UnsupportedOperationException`, que es la respuesta correcta y no un no-op silencioso.
+// `engineReseed` is not there either: there is no internal state to reseed. Whoever calls it
+// receives `UnsupportedOperationException`, which is the right answer and not a silent no-op.
 final class OsPrngSpi extends SecureRandomSpi {
 
     private static final long serialVersionUID = 6812298296178204625L;
 
-    /** Ver la nota de la clase: la semilla se acepta y se descarta. */
+    /** See the note of the class: the seed is accepted and discarded. */
     @Override
     protected void engineSetSeed(byte[] seed) {
         if (seed == null) {
@@ -54,11 +56,11 @@ final class OsPrngSpi extends SecureRandomSpi {
     }
 
     /**
-     * Entropia para sembrar a otro generador.
+     * Entropy for seeding another generator.
      *
-     * <p>Sale de la misma fuente que {@code engineNextBytes}, y aca eso <b>si</b> es correcto: la
-     * distincion entre salida y entropia existe porque un DRBG expande una semilla, y expandir no
-     * agrega entropia. Un pase directo no expande nada, asi que las dos son la misma cosa.
+     * <p>It comes from the same source as {@code engineNextBytes}, and here that <b>is</b> right:
+     * the distinction between output and entropy exists because a DRBG expands a seed, and
+     * expanding adds no entropy. A direct pass expands nothing, so the two are the same thing.
      */
     @Override
     protected byte[] engineGenerateSeed(int numBytes) {

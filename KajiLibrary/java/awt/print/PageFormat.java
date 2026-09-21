@@ -1,72 +1,73 @@
 package java.awt.print;
 
 /**
- * KajiLibrary's java.awt.print.PageFormat -- un {@link Paper} mas la orientacion.
+ * KajiLibrary's java.awt.print.PageFormat -- a {@link Paper} plus the orientation.
  *
- * <p>La clase existe porque la orientacion no es una propiedad del papel: la hoja siempre entra en la
- * impresora igual, y lo que rota es el <b>dibujo</b>. Por eso todos los accesores de esta clase
- * traducen: {@link #getWidth} devuelve el ancho <i>tal como lo ve quien dibuja</i>, que en apaisado es
- * el alto de la hoja.
+ * <p>The class exists because orientation is not a property of the paper: the sheet always goes
+ * into the printer the same way, and what rotates is the <b>drawing</b>. That is why every accessor
+ * of this class translates: {@link #getWidth} returns the width <i>as whoever draws sees it</i>,
+ * which in landscape is the height of the sheet.
  *
- * <h2>Las dos orientaciones apaisadas</h2>
+ * <h2>The two landscape orientations</h2>
  *
- * <p>{@link #LANDSCAPE} y {@link #REVERSE_LANDSCAPE} giran para el lado contrario. Existen las dos
- * porque el borde de encuadernado queda en lados opuestos, y eso importa cuando el trabajo se va a
- * abrochar o a imprimir de los dos lados.
+ * <p>{@link #LANDSCAPE} and {@link #REVERSE_LANDSCAPE} rotate in opposite directions. Both exist
+ * because platforms disagree: the JDK documents {@code LANDSCAPE} as the Windows and PostScript
+ * landscape and {@code REVERSE_LANDSCAPE} as the Macintosh one. (This note gave as the reason that
+ * the binding edge ends up on opposite sides.)
  *
- * <p>Los valores sorprenden: {@code LANDSCAPE} vale 0 y {@code PORTRAIT} vale 1. No hay razon, quedo
- * asi, y por eso nunca hay que asumir que el 0 es el vertical.
+ * <p>The values are surprising: {@code LANDSCAPE} is 0 and {@code PORTRAIT} is 1. There is no
+ * reason, it ended up that way, and that is why one must never assume that 0 is portrait.
  *
  * <h2>{@link #getMatrix}</h2>
  *
- * <p>Devuelve los seis numeros de la transformacion que lleva del sistema de coordenadas de quien
- * dibuja al de la hoja. Es lo que un {@code Graphics2D} necesita para que dibujar en apaisado no exija
- * pensar en rotaciones.
+ * <p>It returns the six numbers of the transformation from the coordinate system of whoever draws
+ * to the sheet's. It is what a {@code Graphics2D} needs so that drawing in landscape does not
+ * require thinking about rotations.
  *
- * <h2>Copia lo que entra y lo que sale</h2>
+ * <h2>It copies what goes in and what comes out</h2>
  *
- * <p>{@link #getPaper} devuelve una copia y {@link #setPaper} guarda una copia. Cambiar el papel que
- * devolvio {@code getPaper} no cambia nada; hay que volver a pasarlo con {@code setPaper}. Es un
- * tropiezo clasico y es a proposito: sin eso, el formato de pagina de un trabajo en curso podria
- * cambiar por debajo.
+ * <p>{@link #getPaper} returns a copy and {@link #setPaper} stores a copy. Changing the paper that
+ * {@code getPaper} returned changes nothing; it has to be passed back with {@code setPaper}. It is
+ * a classic stumble and it is on purpose: without it, the page format of a job in progress could
+ * change underneath.
  */
 public class PageFormat implements Cloneable {
 
-    /** Apaisado. Vale 0; ver la nota de la clase. */
+    /** Landscape. Its value is 0; see the class note. */
     public static final int LANDSCAPE = 0;
 
-    /** Vertical. Vale 1. */
+    /** Portrait. It is worth 1. */
     public static final int PORTRAIT = 1;
 
-    /** Apaisado para el otro lado. */
+    /** Landscape the other way. */
     public static final int REVERSE_LANDSCAPE = 2;
 
-    /** La hoja. */
+    /** The sheet. */
     private Paper mPaper;
 
-    /** Cual de las tres. */
+    /** Which of the three. */
     private int mOrientation = PORTRAIT;
 
-    /** Una carta vertical. */
+    /** A portrait letter page. */
     public PageFormat() {
         this.mPaper = new Paper();
     }
 
-    /** Una copia independiente, con su propio papel. */
+    /** An independent copy, with its own paper. */
     @Override
     public Object clone() {
         PageFormat copy;
         try {
             copy = (PageFormat) super.clone();
         } catch (CloneNotSupportedException e) {
-            // PageFormat es Cloneable.
+            // PageFormat is Cloneable.
             throw new InternalError(e);
         }
         copy.mPaper = (Paper) this.mPaper.clone();
         return copy;
     }
 
-    /** El ancho tal como lo ve quien dibuja. Ver la nota de la clase. */
+    /** The width as whoever draws sees it. See the class note. */
     public double getWidth() {
         if (this.mOrientation == PORTRAIT) {
             return this.mPaper.getWidth();
@@ -74,7 +75,7 @@ public class PageFormat implements Cloneable {
         return this.mPaper.getHeight();
     }
 
-    /** El alto tal como lo ve quien dibuja. */
+    /** The height as whoever draws sees it. */
     public double getHeight() {
         if (this.mOrientation == PORTRAIT) {
             return this.mPaper.getHeight();
@@ -82,7 +83,7 @@ public class PageFormat implements Cloneable {
         return this.mPaper.getWidth();
     }
 
-    /** Borde izquierdo del area imprimible, ya rotado. */
+    /** Left edge of the imageable area, already rotated. */
     public double getImageableX() {
         if (this.mOrientation == LANDSCAPE) {
             return this.mPaper.getHeight()
@@ -94,7 +95,7 @@ public class PageFormat implements Cloneable {
         return this.mPaper.getImageableX();
     }
 
-    /** Borde superior, ya rotado. */
+    /** The top edge, already rotated. */
     public double getImageableY() {
         if (this.mOrientation == LANDSCAPE) {
             return this.mPaper.getImageableX();
@@ -106,7 +107,7 @@ public class PageFormat implements Cloneable {
         return this.mPaper.getImageableY();
     }
 
-    /** Ancho del area imprimible, ya rotado. */
+    /** Width of the imageable area, already rotated. */
     public double getImageableWidth() {
         if (this.mOrientation == PORTRAIT) {
             return this.mPaper.getImageableWidth();
@@ -114,7 +115,7 @@ public class PageFormat implements Cloneable {
         return this.mPaper.getImageableHeight();
     }
 
-    /** Alto del area imprimible, ya rotado. */
+    /** Height of the imageable area, already rotated. */
     public double getImageableHeight() {
         if (this.mOrientation == PORTRAIT) {
             return this.mPaper.getImageableHeight();
@@ -122,20 +123,20 @@ public class PageFormat implements Cloneable {
         return this.mPaper.getImageableWidth();
     }
 
-    /** Una copia de la hoja. Ver la nota de la clase. */
+    /** A copy of the sheet. See the class note. */
     public Paper getPaper() {
         return (Paper) this.mPaper.clone();
     }
 
-    /** Guarda una copia de esa hoja. */
+    /** Stores a copy of that sheet. */
     public void setPaper(Paper paper) {
         this.mPaper = (Paper) paper.clone();
     }
 
     /**
-     * Cambia la orientacion.
+     * Changes the orientation.
      *
-     * @throws IllegalArgumentException si no es una de las tres constantes
+     * @throws IllegalArgumentException if it is not one of the three constants
      */
     public void setOrientation(int orientation) throws IllegalArgumentException {
         if (orientation < LANDSCAPE || orientation > REVERSE_LANDSCAPE) {
@@ -144,16 +145,16 @@ public class PageFormat implements Cloneable {
         this.mOrientation = orientation;
     }
 
-    /** Cual de las tres. */
+    /** Which of the three. */
     public int getOrientation() {
         return this.mOrientation;
     }
 
     /**
-     * La transformacion de coordenadas de dibujo a coordenadas de hoja.
+     * The transformation from drawing coordinates to sheet coordinates.
      *
-     * <p>Seis numeros en el orden de {@code AffineTransform}: escala x, sesgo y, sesgo x, escala y,
-     * traslacion x, traslacion y. Ver la nota de la clase.
+     * <p>Six numbers in {@code AffineTransform} order: x scale, y shear, x shear, y scale, x
+     * translation, y translation. See the class note.
      */
     public double[] getMatrix() {
         double[] matrix = new double[6];

@@ -5,732 +5,734 @@ import java.nio.ByteOrder;
 import jdk.internal.vm.vector.VectorSupport;
 
 /**
- * Un vector de valores del mismo tipo, para operar sobre todos a la vez.
+ * A vector of values of the same type, to operate on all of them at once.
  *
- * <h2>Que problema resuelve</h2>
+ * <h2>What problem it solves</h2>
  *
- * <p>Un procesador moderno puede sumar ocho enteros en una sola instruccion. Un bucle Java que suma
- * de a uno desperdicia siete octavos de esa capacidad, y el compilador solo a veces adivina que
- * puede vectorizarlo. Este API es la forma de pedirlo explicitamente.
+ * <p>A modern processor can add eight integers in a single instruction. A Java loop that adds one
+ * at a time wastes seven eighths of that capacity, and the compiler only sometimes guesses that it
+ * can vectorise it. This API is the way of asking for it explicitly.
  *
- * <h2>La forma del vector no la elige el programa</h2>
+ * <h2>The program does not choose the vector's shape</h2>
  *
- * <p>La elige la maquina: un procesador con AVX-512 tiene registros de 512 bits y otro de 128. Por
- * eso el largo no es un numero fijo sino {@link VectorSpecies#length}, y por eso los bucles se
- * escriben con {@link VectorSpecies#loopBound} en vez de con un paso constante.
+ * <p>The machine chooses it: a processor with AVX-512 has 512-bit registers and another one 128.
+ * That is why the length is not a fixed number but {@link VectorSpecies#length}, and why loops are
+ * written with {@link VectorSpecies#loopBound} instead of with a constant step.
  *
- * <p>Escribir el paso a mano es el error que hace que el codigo ande en una maquina y se rompa en
- * otra.
+ * <p>Writing the step by hand is the error that makes code work on one machine and break on
+ * another.
  *
- * <h2>Estado en esta biblioteca</h2>
+ * <h2>State in this library</h2>
  *
- * <p>El API esta declarado entero, con las firmas exactas del JDK 25, y contra el compila cualquier
- * codigo que lo use. Lo que no hay son los <strong>intrinsecos</strong>: cada operacion de vector
- * existe para que la VM la reemplace por una instruccion de la maquina, y sin ese reemplazo no
- * queda nada que ejecutar.
+ * <p>The API is declared whole, with JDK 25's exact signatures, and any code that uses it compiles
+ * against it. What is missing is the <strong>intrinsics</strong>: each vector operation exists for
+ * the VM to replace it with a machine instruction, and without that replacement there is nothing
+ * left to run.
  *
- * <p>Por eso las operaciones lanzan {@link UnsupportedOperationException} en vez de calcular en un
- * bucle escalar. Un fallback escalar seria una mentira util: daria el resultado correcto y mucho
- * mas lento que el bucle que el usuario acaba de reemplazar, o sea lo contrario de lo que este API
- * promete.
+ * <p>That is why the operations throw {@link UnsupportedOperationException} instead of computing in
+ * a scalar loop. A scalar fallback would be a useful lie: it would give the right result, much
+ * slower than the loop the user has just replaced, that is the opposite of what this API promises.
  *
- * <p>Las partes que <strong>si</strong> funcionan son las que no dependen de la maquina:
- * {@link VectorMath}, {@link Float16} y los metadatos de {@link VectorSpecies}.
+ * <p>The parts that <strong>do</strong> work are the ones that do not depend on the machine: {@link
+ * VectorMath}, {@link Float16} and the metadata of {@link VectorSpecies}.
  *
  * @since 16
  */
 public abstract class Vector<E extends Object> extends VectorSupport.Vector<E> {
 
     /**
-     * Con esa carga util.
+     * With that payload.
      *
-     * <p>En el JDK este constructor es de paquete, asi que no aparece en los volcados. Va escrito
-     * igual porque la superclase no tiene uno sin argumentos: sin el, javac genera uno que llama a
-     * un {@code super()} que no existe, y el archivo compilado queda invalido (hallazgo #515).
+     * <p>In the JDK this constructor is package-private, so it does not show up in the dumps. It is
+     * written anyway because the superclass has no no-argument one: without it, the implicit
+     * default constructor would call a {@code super()} that does not exist. The note said javac
+     * then emits an invalid class file (finding #515); that finding is closed in the source javac,
+     * which now rejects the class instead, but the frozen {@code bin/javac.exe} predates the fix.
+     * The constructor is needed either way.
      *
-     * @param payload el arreglo de posiciones
+     * @param payload the array of lanes
      */
     Vector(Object payload) {
         super(payload);
     }
 
     /**
-     * La especie de este vector: su tipo de posicion y su forma.
+     * The species of this vector: its lane type and its shape.
      *
-     * @return el {@code VectorSpecies<E>}
+     * @return the {@code VectorSpecies<E>}
      */
     public abstract VectorSpecies<E> species();
 
     /**
-     * El tipo de las posiciones.
+     * The type of the lanes.
      *
-     * @return el {@code Class<E>}
+     * @return the {@code Class<E>}
      */
     public abstract Class<E> elementType();
 
     /**
-     * El tamano de una posicion, en bits.
+     * The size of a lane, in bits.
      *
-     * @return el numero
+     * @return the number
      */
     public abstract int elementSize();
 
     /**
-     * La forma de este vector.
+     * The shape of this vector.
      *
-     * @return el {@code VectorShape}
+     * @return the {@code VectorShape}
      */
     public abstract VectorShape shape();
 
     /**
-     * Cuantas posiciones tiene.
+     * How many lanes it has.
      *
-     * @return el numero
+     * @return the number
      */
     public abstract int length();
 
     /**
-     * El tamano del vector entero, en bits.
+     * The size of the whole vector, in bits.
      *
-     * @return el numero
+     * @return the number
      */
     public abstract int bitSize();
 
     /**
-     * El tamano del vector entero, en bytes.
+     * The size of the whole vector, in bytes.
      *
-     * @return el numero
+     * @return the number
      */
     public abstract int byteSize();
 
     /**
-     * Aplica ese operador a cada posicion.
+     * Applies that operator to each lane.
      *
-     * @param unary el {@code VectorOperators.Unary}
-     * @return el {@code Vector<E>}
+     * @param unary the {@code VectorOperators.Unary}
+     * @return the {@code Vector<E>}
      */
     public abstract Vector<E> lanewise(VectorOperators.Unary unary);
 
     /**
-     * Aplica ese operador a cada posicion.
+     * Applies that operator to each lane.
      *
-     * @param unary el {@code VectorOperators.Unary}
-     * @param vectorMask el {@code VectorMask<E>}
-     * @return el {@code Vector<E>}
+     * @param unary the {@code VectorOperators.Unary}
+     * @param vectorMask the {@code VectorMask<E>}
+     * @return the {@code Vector<E>}
      */
     public abstract Vector<E> lanewise(VectorOperators.Unary unary, VectorMask<E> vectorMask);
 
     /**
-     * Aplica ese operador a cada posicion.
+     * Applies that operator to each lane.
      *
-     * @param binary el {@code VectorOperators.Binary}
-     * @param vector el {@code Vector<E>}
-     * @return el {@code Vector<E>}
+     * @param binary the {@code VectorOperators.Binary}
+     * @param vector the {@code Vector<E>}
+     * @return the {@code Vector<E>}
      */
     public abstract Vector<E> lanewise(VectorOperators.Binary binary, Vector<E> vector);
 
     /**
-     * Aplica ese operador a cada posicion.
+     * Applies that operator to each lane.
      *
-     * @param binary el {@code VectorOperators.Binary}
-     * @param vector el {@code Vector<E>}
-     * @param vectorMask el {@code VectorMask<E>}
-     * @return el {@code Vector<E>}
+     * @param binary the {@code VectorOperators.Binary}
+     * @param vector the {@code Vector<E>}
+     * @param vectorMask the {@code VectorMask<E>}
+     * @return the {@code Vector<E>}
      */
     public abstract Vector<E> lanewise(VectorOperators.Binary binary, Vector<E> vector,
             VectorMask<E> vectorMask);
 
     /**
-     * Aplica ese operador a cada posicion.
+     * Applies that operator to each lane.
      *
-     * @param binary el {@code VectorOperators.Binary}
-     * @param l el {@code long}
-     * @return el {@code Vector<E>}
+     * @param binary the {@code VectorOperators.Binary}
+     * @param l the {@code long}
+     * @return the {@code Vector<E>}
      */
     public abstract Vector<E> lanewise(VectorOperators.Binary binary, long l);
 
     /**
-     * Aplica ese operador a cada posicion.
+     * Applies that operator to each lane.
      *
-     * @param binary el {@code VectorOperators.Binary}
-     * @param l el {@code long}
-     * @param vectorMask el {@code VectorMask<E>}
-     * @return el {@code Vector<E>}
+     * @param binary the {@code VectorOperators.Binary}
+     * @param l the {@code long}
+     * @param vectorMask the {@code VectorMask<E>}
+     * @return the {@code Vector<E>}
      */
     public abstract Vector<E> lanewise(VectorOperators.Binary binary, long l,
             VectorMask<E> vectorMask);
 
     /**
-     * Aplica ese operador a cada posicion.
+     * Applies that operator to each lane.
      *
-     * @param ternary el {@code VectorOperators.Ternary}
-     * @param vector el {@code Vector<E>}
-     * @param vector2 el {@code Vector<E>}
-     * @return el {@code Vector<E>}
+     * @param ternary the {@code VectorOperators.Ternary}
+     * @param vector the {@code Vector<E>}
+     * @param vector2 the {@code Vector<E>}
+     * @return the {@code Vector<E>}
      */
     public abstract Vector<E> lanewise(VectorOperators.Ternary ternary, Vector<E> vector,
             Vector<E> vector2);
 
     /**
-     * Aplica ese operador a cada posicion.
+     * Applies that operator to each lane.
      *
-     * @param ternary el {@code VectorOperators.Ternary}
-     * @param vector el {@code Vector<E>}
-     * @param vector2 el {@code Vector<E>}
-     * @param vectorMask el {@code VectorMask<E>}
-     * @return el {@code Vector<E>}
+     * @param ternary the {@code VectorOperators.Ternary}
+     * @param vector the {@code Vector<E>}
+     * @param vector2 the {@code Vector<E>}
+     * @param vectorMask the {@code VectorMask<E>}
+     * @return the {@code Vector<E>}
      */
     public abstract Vector<E> lanewise(VectorOperators.Ternary ternary, Vector<E> vector,
             Vector<E> vector2, VectorMask<E> vectorMask);
 
     /**
-     * Suma posicion a posicion.
+     * Adds lane by lane.
      *
-     * @param vector el {@code Vector<E>}
-     * @return el {@code Vector<E>}
+     * @param vector the {@code Vector<E>}
+     * @return the {@code Vector<E>}
      */
     public abstract Vector<E> add(Vector<E> vector);
 
     /**
-     * Suma posicion a posicion.
+     * Adds lane by lane.
      *
-     * @param vector el {@code Vector<E>}
-     * @param vectorMask el {@code VectorMask<E>}
-     * @return el {@code Vector<E>}
+     * @param vector the {@code Vector<E>}
+     * @param vectorMask the {@code VectorMask<E>}
+     * @return the {@code Vector<E>}
      */
     public abstract Vector<E> add(Vector<E> vector, VectorMask<E> vectorMask);
 
     /**
-     * Resta posicion a posicion.
+     * Subtracts lane by lane.
      *
-     * @param vector el {@code Vector<E>}
-     * @return el {@code Vector<E>}
+     * @param vector the {@code Vector<E>}
+     * @return the {@code Vector<E>}
      */
     public abstract Vector<E> sub(Vector<E> vector);
 
     /**
-     * Resta posicion a posicion.
+     * Subtracts lane by lane.
      *
-     * @param vector el {@code Vector<E>}
-     * @param vectorMask el {@code VectorMask<E>}
-     * @return el {@code Vector<E>}
+     * @param vector the {@code Vector<E>}
+     * @param vectorMask the {@code VectorMask<E>}
+     * @return the {@code Vector<E>}
      */
     public abstract Vector<E> sub(Vector<E> vector, VectorMask<E> vectorMask);
 
     /**
-     * Multiplica posicion a posicion.
+     * Multiplies lane by lane.
      *
-     * @param vector el {@code Vector<E>}
-     * @return el {@code Vector<E>}
+     * @param vector the {@code Vector<E>}
+     * @return the {@code Vector<E>}
      */
     public abstract Vector<E> mul(Vector<E> vector);
 
     /**
-     * Multiplica posicion a posicion.
+     * Multiplies lane by lane.
      *
-     * @param vector el {@code Vector<E>}
-     * @param vectorMask el {@code VectorMask<E>}
-     * @return el {@code Vector<E>}
+     * @param vector the {@code Vector<E>}
+     * @param vectorMask the {@code VectorMask<E>}
+     * @return the {@code Vector<E>}
      */
     public abstract Vector<E> mul(Vector<E> vector, VectorMask<E> vectorMask);
 
     /**
-     * Divide posicion a posicion.
+     * Divides lane by lane.
      *
-     * @param vector el {@code Vector<E>}
-     * @return el {@code Vector<E>}
+     * @param vector the {@code Vector<E>}
+     * @return the {@code Vector<E>}
      */
     public abstract Vector<E> div(Vector<E> vector);
 
     /**
-     * Divide posicion a posicion.
+     * Divides lane by lane.
      *
-     * @param vector el {@code Vector<E>}
-     * @param vectorMask el {@code VectorMask<E>}
-     * @return el {@code Vector<E>}
+     * @param vector the {@code Vector<E>}
+     * @param vectorMask the {@code VectorMask<E>}
+     * @return the {@code Vector<E>}
      */
     public abstract Vector<E> div(Vector<E> vector, VectorMask<E> vectorMask);
 
     /**
-     * El opuesto de cada posicion.
+     * The negation of each lane.
      *
-     * @return el {@code Vector<E>}
+     * @return the {@code Vector<E>}
      */
     public abstract Vector<E> neg();
 
     /**
-     * El valor absoluto de cada posicion.
+     * The absolute value of each lane.
      *
-     * @return el {@code Vector<E>}
+     * @return the {@code Vector<E>}
      */
     public abstract Vector<E> abs();
 
     /**
-     * El menor de cada par de posiciones.
+     * The smaller of each pair of lanes.
      *
-     * @param vector el {@code Vector<E>}
-     * @return el {@code Vector<E>}
+     * @param vector the {@code Vector<E>}
+     * @return the {@code Vector<E>}
      */
     public abstract Vector<E> min(Vector<E> vector);
 
     /**
-     * El mayor de cada par de posiciones.
+     * The larger of each pair of lanes.
      *
-     * @param vector el {@code Vector<E>}
-     * @return el {@code Vector<E>}
+     * @param vector the {@code Vector<E>}
+     * @return the {@code Vector<E>}
      */
     public abstract Vector<E> max(Vector<E> vector);
 
     /**
-     * Como {@code reduceLanes}, pero el resultado se devuelve como {@code long}.
+     * Like {@code reduceLanes}, but the result is returned as a {@code long}.
      *
-     * @param associative el {@code VectorOperators.Associative}
-     * @return el numero
+     * @param associative the {@code VectorOperators.Associative}
+     * @return the number
      */
     public abstract long reduceLanesToLong(VectorOperators.Associative associative);
 
     /**
-     * Como {@code reduceLanes}, pero el resultado se devuelve como {@code long}.
+     * Like {@code reduceLanes}, but the result is returned as a {@code long}.
      *
-     * @param associative el {@code VectorOperators.Associative}
-     * @param vectorMask el {@code VectorMask<E>}
-     * @return el numero
+     * @param associative the {@code VectorOperators.Associative}
+     * @param vectorMask the {@code VectorMask<E>}
+     * @return the number
      */
     public abstract long reduceLanesToLong(VectorOperators.Associative associative,
             VectorMask<E> vectorMask);
 
     /**
-     * La mascara de las posiciones que cumplen esa prueba.
+     * The mask of the lanes that pass that test.
      *
-     * @param test el {@code VectorOperators.Test}
-     * @return el {@code VectorMask<E>}
+     * @param test the {@code VectorOperators.Test}
+     * @return the {@code VectorMask<E>}
      */
     public abstract VectorMask<E> test(VectorOperators.Test test);
 
     /**
-     * La mascara de las posiciones que cumplen esa prueba.
+     * The mask of the lanes that pass that test.
      *
-     * @param test el {@code VectorOperators.Test}
-     * @param vectorMask el {@code VectorMask<E>}
-     * @return el {@code VectorMask<E>}
+     * @param test the {@code VectorOperators.Test}
+     * @param vectorMask the {@code VectorMask<E>}
+     * @return the {@code VectorMask<E>}
      */
     public abstract VectorMask<E> test(VectorOperators.Test test, VectorMask<E> vectorMask);
 
     /**
-     * La mascara de las posiciones iguales.
+     * The mask of the equal lanes.
      *
-     * @param vector el {@code Vector<E>}
-     * @return el {@code VectorMask<E>}
+     * @param vector the {@code Vector<E>}
+     * @return the {@code VectorMask<E>}
      */
     public abstract VectorMask<E> eq(Vector<E> vector);
 
     /**
-     * La mascara de las posiciones menores.
+     * The mask of the lanes that are less.
      *
-     * @param vector el {@code Vector<E>}
-     * @return el {@code VectorMask<E>}
+     * @param vector the {@code Vector<E>}
+     * @return the {@code VectorMask<E>}
      */
     public abstract VectorMask<E> lt(Vector<E> vector);
 
     /**
-     * Compara posicion a posicion y devuelve la mascara del resultado.
+     * Compares lane by lane and returns the mask of the result.
      *
-     * @param comparison el {@code VectorOperators.Comparison}
-     * @param vector el {@code Vector<E>}
-     * @return el {@code VectorMask<E>}
+     * @param comparison the {@code VectorOperators.Comparison}
+     * @param vector the {@code Vector<E>}
+     * @return the {@code VectorMask<E>}
      */
     public abstract VectorMask<E> compare(VectorOperators.Comparison comparison, Vector<E> vector);
 
     /**
-     * Compara posicion a posicion y devuelve la mascara del resultado.
+     * Compares lane by lane and returns the mask of the result.
      *
-     * @param comparison el {@code VectorOperators.Comparison}
-     * @param vector el {@code Vector<E>}
-     * @param vectorMask el {@code VectorMask<E>}
-     * @return el {@code VectorMask<E>}
+     * @param comparison the {@code VectorOperators.Comparison}
+     * @param vector the {@code Vector<E>}
+     * @param vectorMask the {@code VectorMask<E>}
+     * @return the {@code VectorMask<E>}
      */
     public abstract VectorMask<E> compare(VectorOperators.Comparison comparison, Vector<E> vector,
             VectorMask<E> vectorMask);
 
     /**
-     * Compara posicion a posicion y devuelve la mascara del resultado.
+     * Compares lane by lane and returns the mask of the result.
      *
-     * @param comparison el {@code VectorOperators.Comparison}
-     * @param l el {@code long}
-     * @return el {@code VectorMask<E>}
+     * @param comparison the {@code VectorOperators.Comparison}
+     * @param l the {@code long}
+     * @return the {@code VectorMask<E>}
      */
     public abstract VectorMask<E> compare(VectorOperators.Comparison comparison, long l);
 
     /**
-     * Compara posicion a posicion y devuelve la mascara del resultado.
+     * Compares lane by lane and returns the mask of the result.
      *
-     * @param comparison el {@code VectorOperators.Comparison}
-     * @param l el {@code long}
-     * @param vectorMask el {@code VectorMask<E>}
-     * @return el {@code VectorMask<E>}
+     * @param comparison the {@code VectorOperators.Comparison}
+     * @param l the {@code long}
+     * @param vectorMask the {@code VectorMask<E>}
+     * @return the {@code VectorMask<E>}
      */
     public abstract VectorMask<E> compare(VectorOperators.Comparison comparison, long l,
             VectorMask<E> vectorMask);
 
     /**
-     * Mezcla dos vectores tomando de uno o del otro segun la mascara.
+     * Blends two vectors, taking from one or the other according to the mask.
      *
-     * @param vector el {@code Vector<E>}
-     * @param vectorMask el {@code VectorMask<E>}
-     * @return el {@code Vector<E>}
+     * @param vector the {@code Vector<E>}
+     * @param vectorMask the {@code VectorMask<E>}
+     * @return the {@code Vector<E>}
      */
     public abstract Vector<E> blend(Vector<E> vector, VectorMask<E> vectorMask);
 
     /**
-     * Mezcla dos vectores tomando de uno o del otro segun la mascara.
+     * Blends two vectors, taking from one or the other according to the mask.
      *
-     * @param l el {@code long}
-     * @param vectorMask el {@code VectorMask<E>}
-     * @return el {@code Vector<E>}
+     * @param l the {@code long}
+     * @param vectorMask the {@code VectorMask<E>}
+     * @return the {@code Vector<E>}
      */
     public abstract Vector<E> blend(long l, VectorMask<E> vectorMask);
 
     /**
-     * Le suma a cada posicion su propio indice multiplicado por ese paso.
+     * Adds to each lane its own index multiplied by that step.
      *
-     * @param i el {@code int}
-     * @return el {@code Vector<E>}
+     * @param i the {@code int}
+     * @return the {@code Vector<E>}
      */
     public abstract Vector<E> addIndex(int i);
 
     /**
-     * Un vector que arranca en esa posicion.
+     * A vector starting at that lane.
      *
-     * @param i el {@code int}
-     * @param vector el {@code Vector<E>}
-     * @return el {@code Vector<E>}
+     * @param i the {@code int}
+     * @param vector the {@code Vector<E>}
+     * @return the {@code Vector<E>}
      */
     public abstract Vector<E> slice(int i, Vector<E> vector);
 
     /**
-     * Un vector que arranca en esa posicion.
+     * A vector starting at that lane.
      *
-     * @param i el {@code int}
-     * @param vector el {@code Vector<E>}
-     * @param vectorMask el {@code VectorMask<E>}
-     * @return el {@code Vector<E>}
+     * @param i the {@code int}
+     * @param vector the {@code Vector<E>}
+     * @param vectorMask the {@code VectorMask<E>}
+     * @return the {@code Vector<E>}
      */
     public abstract Vector<E> slice(int i, Vector<E> vector, VectorMask<E> vectorMask);
 
     /**
-     * Un vector que arranca en esa posicion.
+     * A vector starting at that lane.
      *
-     * @param i el {@code int}
-     * @return el {@code Vector<E>}
+     * @param i the {@code int}
+     * @return the {@code Vector<E>}
      */
     public abstract Vector<E> slice(int i);
 
     /**
-     * La operacion inversa de {@code slice}: devuelve las posiciones a su lugar.
+     * The inverse of {@code slice}: puts the lanes back in their place.
      *
-     * @param i el {@code int}
-     * @param vector el {@code Vector<E>}
-     * @param i2 el {@code int}
-     * @return el {@code Vector<E>}
+     * @param i the {@code int}
+     * @param vector the {@code Vector<E>}
+     * @param i2 the {@code int}
+     * @return the {@code Vector<E>}
      */
     public abstract Vector<E> unslice(int i, Vector<E> vector, int i2);
 
     /**
-     * La operacion inversa de {@code slice}: devuelve las posiciones a su lugar.
+     * The inverse of {@code slice}: puts the lanes back in their place.
      *
-     * @param i el {@code int}
-     * @param vector el {@code Vector<E>}
-     * @param i2 el {@code int}
-     * @param vectorMask el {@code VectorMask<E>}
-     * @return el {@code Vector<E>}
+     * @param i the {@code int}
+     * @param vector the {@code Vector<E>}
+     * @param i2 the {@code int}
+     * @param vectorMask the {@code VectorMask<E>}
+     * @return the {@code Vector<E>}
      */
     public abstract Vector<E> unslice(int i, Vector<E> vector, int i2, VectorMask<E> vectorMask);
 
     /**
-     * La operacion inversa de {@code slice}: devuelve las posiciones a su lugar.
+     * The inverse of {@code slice}: puts the lanes back in their place.
      *
-     * @param i el {@code int}
-     * @return el {@code Vector<E>}
+     * @param i the {@code int}
+     * @return the {@code Vector<E>}
      */
     public abstract Vector<E> unslice(int i);
 
     /**
-     * Reordena las posiciones segun ese barajado.
+     * Rearranges the lanes according to that shuffle.
      *
-     * @param vectorShuffle el {@code VectorShuffle<E>}
-     * @return el {@code Vector<E>}
+     * @param vectorShuffle the {@code VectorShuffle<E>}
+     * @return the {@code Vector<E>}
      */
     public abstract Vector<E> rearrange(VectorShuffle<E> vectorShuffle);
 
     /**
-     * Reordena las posiciones segun ese barajado.
+     * Rearranges the lanes according to that shuffle.
      *
-     * @param vectorShuffle el {@code VectorShuffle<E>}
-     * @param vectorMask el {@code VectorMask<E>}
-     * @return el {@code Vector<E>}
+     * @param vectorShuffle the {@code VectorShuffle<E>}
+     * @param vectorMask the {@code VectorMask<E>}
+     * @return the {@code Vector<E>}
      */
     public abstract Vector<E> rearrange(VectorShuffle<E> vectorShuffle, VectorMask<E> vectorMask);
 
     /**
-     * Reordena las posiciones segun ese barajado.
+     * Rearranges the lanes according to that shuffle.
      *
-     * @param vectorShuffle el {@code VectorShuffle<E>}
-     * @param vector el {@code Vector<E>}
-     * @return el {@code Vector<E>}
+     * @param vectorShuffle the {@code VectorShuffle<E>}
+     * @param vector the {@code Vector<E>}
+     * @return the {@code Vector<E>}
      */
     public abstract Vector<E> rearrange(VectorShuffle<E> vectorShuffle, Vector<E> vector);
 
     /**
-     * Junta las posiciones prendidas al principio.
+     * Gathers the set lanes at the start.
      *
-     * @param vectorMask el {@code VectorMask<E>}
-     * @return el {@code Vector<E>}
+     * @param vectorMask the {@code VectorMask<E>}
+     * @return the {@code Vector<E>}
      */
     public abstract Vector<E> compress(VectorMask<E> vectorMask);
 
     /**
-     * Reparte las posiciones del principio en los lugares que la mascara marca.
+     * Spreads the lanes from the start into the places the mask marks.
      *
-     * @param vectorMask el {@code VectorMask<E>}
-     * @return el {@code Vector<E>}
+     * @param vectorMask the {@code VectorMask<E>}
+     * @return the {@code Vector<E>}
      */
     public abstract Vector<E> expand(VectorMask<E> vectorMask);
 
     /**
-     * Toma de otro vector las posiciones que este indica.
+     * Takes from another vector the lanes this one indicates.
      *
-     * @param vector el {@code Vector<E>}
-     * @return el {@code Vector<E>}
+     * @param vector the {@code Vector<E>}
+     * @return the {@code Vector<E>}
      */
     public abstract Vector<E> selectFrom(Vector<E> vector);
 
     /**
-     * Toma de otro vector las posiciones que este indica.
+     * Takes from another vector the lanes this one indicates.
      *
-     * @param vector el {@code Vector<E>}
-     * @param vector2 el {@code Vector<E>}
-     * @return el {@code Vector<E>}
+     * @param vector the {@code Vector<E>}
+     * @param vector2 the {@code Vector<E>}
+     * @return the {@code Vector<E>}
      */
     public abstract Vector<E> selectFrom(Vector<E> vector, Vector<E> vector2);
 
     /**
-     * Toma de otro vector las posiciones que este indica.
+     * Takes from another vector the lanes this one indicates.
      *
-     * @param vector el {@code Vector<E>}
-     * @param vectorMask el {@code VectorMask<E>}
-     * @return el {@code Vector<E>}
+     * @param vector the {@code Vector<E>}
+     * @param vectorMask the {@code VectorMask<E>}
+     * @return the {@code Vector<E>}
      */
     public abstract Vector<E> selectFrom(Vector<E> vector, VectorMask<E> vectorMask);
 
     /**
-     * Un vector con el mismo valor en todas las posiciones.
+     * A vector with the same value in every lane.
      *
-     * @param l el {@code long}
-     * @return el {@code Vector<E>}
+     * @param l the {@code long}
+     * @return the {@code Vector<E>}
      */
     public abstract Vector<E> broadcast(long l);
 
     /**
-     * Una mascara con todas las posiciones en ese valor.
+     * A mask with every lane at that value.
      *
-     * @param flag el {@code boolean}
-     * @return el {@code VectorMask<E>}
+     * @param flag the {@code boolean}
+     * @return the {@code VectorMask<E>}
      */
     public abstract VectorMask<E> maskAll(boolean flag);
 
     /**
-     * Este vector visto como un barajado.
+     * This vector seen as a shuffle.
      *
-     * @return el {@code VectorShuffle<E>}
+     * @return the {@code VectorShuffle<E>}
      */
     public abstract VectorShuffle<E> toShuffle();
 
     /**
-     * Los mismos bits leidos como otra especie.
+     * The same bits read as another species.
      *
-     * @param <F> el tipo, en su version envuelta
-     * @param vectorSpecies el {@code VectorSpecies<F>}
-     * @param i el {@code int}
-     * @return el {@code Vector<F>}
+     * @param <F> the type, in its boxed form
+     * @param vectorSpecies the {@code VectorSpecies<F>}
+     * @param i the {@code int}
+     * @return the {@code Vector<F>}
      */
     public abstract <F extends Object> Vector<F> reinterpretShape(VectorSpecies<F> vectorSpecies,
             int i);
 
     /**
-     * Los mismos bits leidos como {@code byte}.
+     * The same bits read as {@code byte}.
      *
-     * @return el {@code ByteVector}
+     * @return the {@code ByteVector}
      */
     public abstract ByteVector reinterpretAsBytes();
 
     /**
-     * Los mismos bits leidos como {@code short}.
+     * The same bits read as {@code short}.
      *
-     * @return el {@code ShortVector}
+     * @return the {@code ShortVector}
      */
     public abstract ShortVector reinterpretAsShorts();
 
     /**
-     * Los mismos bits leidos como {@code int}.
+     * The same bits read as {@code int}.
      *
-     * @return el {@code IntVector}
+     * @return the {@code IntVector}
      */
     public abstract IntVector reinterpretAsInts();
 
     /**
-     * Los mismos bits leidos como {@code long}.
+     * The same bits read as {@code long}.
      *
-     * @return el {@code LongVector}
+     * @return the {@code LongVector}
      */
     public abstract LongVector reinterpretAsLongs();
 
     /**
-     * Los mismos bits leidos como {@code float}.
+     * The same bits read as {@code float}.
      *
-     * @return el {@code FloatVector}
+     * @return the {@code FloatVector}
      */
     public abstract FloatVector reinterpretAsFloats();
 
     /**
-     * Los mismos bits leidos como {@code double}.
+     * The same bits read as {@code double}.
      *
-     * @return el {@code DoubleVector}
+     * @return the {@code DoubleVector}
      */
     public abstract DoubleVector reinterpretAsDoubles();
 
     /**
-     * Los mismos bits vistos como el entero del mismo tamano.
+     * The same bits seen as the integral type of the same size.
      *
-     * @return el {@code Vector<?>}
+     * @return the {@code Vector<?>}
      */
     public abstract Vector<?> viewAsIntegralLanes();
 
     /**
-     * Los mismos bits vistos como el flotante del mismo tamano.
+     * The same bits seen as the floating-point type of the same size.
      *
-     * @return el {@code Vector<?>}
+     * @return the {@code Vector<?>}
      */
     public abstract Vector<?> viewAsFloatingLanes();
 
     /**
-     * Convierte las posiciones con ese operador de conversion.
+     * Converts the lanes with that conversion operator.
      *
-     * @param <F> el tipo, en su version envuelta
-     * @param conversion el {@code VectorOperators.Conversion<E, F>}
-     * @param i el {@code int}
-     * @return el {@code Vector<F>}
+     * @param <F> the type, in its boxed form
+     * @param conversion the {@code VectorOperators.Conversion<E, F>}
+     * @param i the {@code int}
+     * @return the {@code Vector<F>}
      */
     public abstract <F extends Object> Vector<F> convert(
             VectorOperators.Conversion<E, F> conversion, int i);
 
     /**
-     * Convierte a otra especie, tomando la parte que se indica.
+     * Converts to another species, taking the part indicated.
      *
-     * @param <F> el tipo, en su version envuelta
-     * @param conversion el {@code VectorOperators.Conversion<E, F>}
-     * @param vectorSpecies el {@code VectorSpecies<F>}
-     * @param i el {@code int}
-     * @return el {@code Vector<F>}
+     * @param <F> the type, in its boxed form
+     * @param conversion the {@code VectorOperators.Conversion<E, F>}
+     * @param vectorSpecies the {@code VectorSpecies<F>}
+     * @param i the {@code int}
+     * @return the {@code Vector<F>}
      */
     public abstract <F extends Object> Vector<F> convertShape(
             VectorOperators.Conversion<E, F> conversion, VectorSpecies<F> vectorSpecies, int i);
 
     /**
-     * Como {@code convertShape}, pero siempre conservando el valor.
+     * Like {@code convertShape}, but always preserving the value.
      *
-     * @param <F> el tipo, en su version envuelta
-     * @param vectorSpecies el {@code VectorSpecies<F>}
-     * @param i el {@code int}
-     * @return el {@code Vector<F>}
+     * @param <F> the type, in its boxed form
+     * @param vectorSpecies the {@code VectorSpecies<F>}
+     * @param i the {@code int}
+     * @return the {@code Vector<F>}
      */
     public abstract <F extends Object> Vector<F> castShape(VectorSpecies<F> vectorSpecies, int i);
 
     /**
-     * Comprueba que el tipo de posicion sea ese y devuelve lo mismo, ya tipado.
+     * Checks that the lane type is that one and returns the same, already typed.
      *
-     * @param <F> el tipo, en su version envuelta
-     * @param classArg el {@code Class<F>}
-     * @return el {@code Vector<F>}
+     * @param <F> the type, in its boxed form
+     * @param classArg the {@code Class<F>}
+     * @return the {@code Vector<F>}
      */
     public abstract <F extends Object> Vector<F> check(Class<F> classArg);
 
     /**
-     * Comprueba que el tipo de posicion sea ese y devuelve lo mismo, ya tipado.
+     * Checks that the lane type is that one and returns the same, already typed.
      *
-     * @param <F> el tipo, en su version envuelta
-     * @param vectorSpecies el {@code VectorSpecies<F>}
-     * @return el {@code Vector<F>}
+     * @param <F> the type, in its boxed form
+     * @param vectorSpecies the {@code VectorSpecies<F>}
+     * @return the {@code Vector<F>}
      */
     public abstract <F extends Object> Vector<F> check(VectorSpecies<F> vectorSpecies);
 
     /**
-     * Escribe el vector en esa zona de memoria.
+     * Writes the vector into that memory segment.
      *
-     * @param memorySegment el {@code java.lang.foreign.MemorySegment}
-     * @param l el {@code long}
-     * @param byteOrder el {@code java.nio.ByteOrder}
+     * @param memorySegment the {@code java.lang.foreign.MemorySegment}
+     * @param l the {@code long}
+     * @param byteOrder the {@code java.nio.ByteOrder}
      */
     public abstract void intoMemorySegment(java.lang.foreign.MemorySegment memorySegment, long l,
             java.nio.ByteOrder byteOrder);
 
     /**
-     * Escribe el vector en esa zona de memoria.
+     * Writes the vector into that memory segment.
      *
-     * @param memorySegment el {@code java.lang.foreign.MemorySegment}
-     * @param l el {@code long}
-     * @param byteOrder el {@code java.nio.ByteOrder}
-     * @param vectorMask el {@code VectorMask<E>}
+     * @param memorySegment the {@code java.lang.foreign.MemorySegment}
+     * @param l the {@code long}
+     * @param byteOrder the {@code java.nio.ByteOrder}
+     * @param vectorMask the {@code VectorMask<E>}
      */
     public abstract void intoMemorySegment(java.lang.foreign.MemorySegment memorySegment, long l,
             java.nio.ByteOrder byteOrder, VectorMask<E> vectorMask);
 
     /**
-     * Las posiciones en un arreglo nuevo.
+     * The lanes in a new array.
      *
-     * @return el {@code Object}
+     * @return the {@code Object}
      */
     public abstract Object toArray();
 
     /**
-     * Las posiciones en un arreglo de {@code int} nuevo.
+     * The lanes in a new {@code int} array.
      *
-     * @return el {@code int[]}
+     * @return the {@code int[]}
      */
     public abstract int[] toIntArray();
 
     /**
-     * Las posiciones en un arreglo de {@code long} nuevo.
+     * The lanes in a new {@code long} array.
      *
-     * @return el {@code long[]}
+     * @return the {@code long[]}
      */
     public abstract long[] toLongArray();
 
     /**
-     * Las posiciones en un arreglo de {@code double} nuevo.
+     * The lanes in a new {@code double} array.
      *
-     * @return el {@code double[]}
+     * @return the {@code double[]}
      */
     public abstract double[] toDoubleArray();
 
     /**
-     * Una representacion legible.
+     * A readable representation.
      *
-     * @return el texto
+     * @return the text
      */
     public abstract String toString();
 
     /**
-     * Si el otro es igual a este.
+     * Whether the other one is equal to this one.
      *
-     * @param obj el {@code Object}
-     * @return cierto o falso, segun corresponda
+     * @param obj the {@code Object}
+     * @return true or false, as the case may be
      */
     public abstract boolean equals(Object obj);
 
     /**
-     * El codigo de dispersion.
+     * The hash code.
      *
-     * @return el numero
+     * @return the number
      */
     public abstract int hashCode();
 }

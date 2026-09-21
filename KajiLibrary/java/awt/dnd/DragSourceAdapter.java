@@ -1,42 +1,41 @@
 package java.awt.dnd;
 
 /**
- * Un oyente del lado del origen que no hace nada, para redefinir sólo lo que interese.
+ * A listener on the source's side that does nothing, for redefining only what is of interest.
  *
- * <p>Implementa las **dos** interfaces del origen —la de estado y la de movimiento— así que un solo
- * objeto puede atender todo el arrastre.
+ * <p>It implements **both** interfaces of the source —the one of state and the one of movement— so
+ * a single object can attend the whole drag.
  *
- * <p>A diferencia de {@link DropTargetAdapter}, acá **todos** los métodos son vacíos: del lado del
- * origen no hay ninguno que sea obligatorio, porque el arrastre funciona igual si nadie da
- * realimentación.
+ * <p>Unlike {@link DropTargetAdapter}, here **all** the methods are empty: on the source's side
+ * there is none that is compulsory, because the drag works just the same if nobody gives feedback.
  */
 public abstract class DragSourceAdapter implements DragSourceListener, DragSourceMotionListener {
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected DragSourceAdapter() {
     }
 
-    /** No hace nada. */
+    /** It does nothing. */
     public void dragEnter(DragSourceDragEvent dsde) {
     }
 
-    /** No hace nada. */
+    /** It does nothing. */
     public void dragOver(DragSourceDragEvent dsde) {
     }
 
-    /** No hace nada. */
+    /** It does nothing. */
     public void dropActionChanged(DragSourceDragEvent dsde) {
     }
 
-    /** No hace nada. */
+    /** It does nothing. */
     public void dragExit(DragSourceEvent dse) {
     }
 
-    /** No hace nada. */
+    /** It does nothing. */
     public void dragDropEnd(DragSourceDropEvent dsde) {
     }
 
-    /** No hace nada. */
+    /** It does nothing. */
     public void dragMouseMoved(DragSourceDragEvent dsde) {
     }
 }

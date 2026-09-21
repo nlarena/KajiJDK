@@ -5,10 +5,10 @@ import javax.lang.model.SourceVersion;
 import javax.lang.model.type.UnionType;
 
 /**
- * El visitante de tipos de Java 7. Ver {@link AbstractTypeVisitor6} por el mecanismo.
+ * The type visitor for Java 7. See {@link AbstractTypeVisitor6} for the mechanism.
  *
- * <p>Java 7 introdujo el tipo **union** con el `catch` multiple, asi que `visitUnion` pasa a abstracto:
- * quien extiende esta clase tiene que decir que hace con `catch (A | B e)`.
+ * <p>Java 7 introduced the **union** type with multi-catch, so `visitUnion` becomes abstract:
+ * whoever extends this class has to say what they do with `catch (A | B e)`.
  */
 @SupportedSourceVersion(SourceVersion.RELEASE_7)
 public abstract class AbstractTypeVisitor7<R, P> extends AbstractTypeVisitor6<R, P> {

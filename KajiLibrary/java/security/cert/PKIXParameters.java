@@ -9,30 +9,32 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 
-// Los parametros de una validacion PKIX: contra que anclas, con que fecha, con que reglas.
+// The parameters of a PKIX validation: against which anchors, with which date, with which rules.
 //
-// Es la clase donde se configura toda la politica de la validacion, y por lo tanto donde se cometen
-// los errores que importan. Los defaults estan elegidos por el lado seguro y desactivarlos es facil
-// y silencioso:
+// It is the class where the whole policy of the validation is configured, and therefore where the
+// mistakes that matter are made. The defaults are chosen on the safe side and turning them off is
+// easy and silent:
 //
-//   - `revocationEnabled` arranca en **true**. Apagarlo hace que un certificado revocado valide
-//     igual. Es la linea que mas aparece en codigo que "arreglo" un problema de conectividad.
-//   - `policyQualifiersRejected` arranca en **true**: un calificador de politica critico que el
-//     validador no procesa hace fallar. Ponerlo en false obliga a que el llamador los procese el
-//     mismo, y casi nadie lo hace.
-//   - `date` en null significa **ahora**. Fijarla sirve para verificar una firma vieja, y ahi es
-//     legitimo; fijarla en el pasado para que un certificado vencido pase es como no validar.
+//   - `revocationEnabled` starts at **true**. Turning it off makes a revoked certificate validate
+//     all the same. It is the line that appears most often in code that "fixed" a connectivity
+//     problem.
+//   - `policyQualifiersRejected` starts at **true**: a critical policy qualifier the validator does
+//     not process makes it fail. Setting it to false forces the caller to process them themselves,
+//     and hardly anybody does.
+//   - `date` at null means **now**. Fixing it serves for verifying an old signature, and there it
+//     is legitimate; fixing it in the past so that an expired certificate passes is like not
+//     validating.
 //
-// La otra cosa que importa es que el objeto es **mutable** y el validador se lo queda: por eso
-// implementa `clone()`, por eso `getTrustAnchors()` devuelve un conjunto inmutable, y por eso las
-// listas se copian al entrar y al salir. Sin eso, cambiar los parametros a mitad de una validacion
-// cambiaria las reglas mientras corre.
+// The other thing that matters is that the object is **mutable** and the validator keeps it: that
+// is why it implements `clone()`, that is why `getTrustAnchors()` returns an immutable set, and
+// that is why the lists are copied on the way in and on the way out. Without that, changing the
+// parameters halfway through a validation would change the rules while it runs.
 //
-// El constructor que toma un `KeyStore` es una comodidad con un filtro que conviene tener presente:
-// solo mira las entradas de **certificado de confianza**, no las de clave privada. Un almacen que
-// tiene la clave del servidor y nada mas no aporta ninguna ancla, y el resultado no es un objeto
-// vacio sino una `InvalidAlgorithmParameterException` —lo que hay que hacer con un conjunto de
-// anclas vacio es fallar, no validar contra nada—.
+// The constructor that takes a `KeyStore` is a convenience with a filter worth keeping in mind: it
+// only looks at the **trusted certificate** entries, not at the private key ones. A store that has
+// the key of the server and nothing else contributes no anchor, and the result is not an empty
+// object but an `InvalidAlgorithmParameterException` —what has to be done with an empty set of
+// anchors is to fail, not to validate against nothing—.
 public class PKIXParameters implements CertPathParameters {
 
     private Set<TrustAnchor> unmodTrustAnchors;
@@ -48,8 +50,8 @@ public class PKIXParameters implements CertPathParameters {
     private List<CertStore> certStores;
     private CertSelector certSelector;
 
-    // El conjunto de anclas no puede estar vacio: sin ancla no hay donde terminar la cadena, y una
-    // validacion que no puede terminar no es una validacion.
+    // The set of anchors cannot be empty: with no anchor there is nowhere to end the chain, and a
+    // validation that cannot end is not a validation.
     public PKIXParameters(Set<TrustAnchor> trustAnchors)
             throws InvalidAlgorithmParameterException {
         setTrustAnchors(trustAnchors);
@@ -58,37 +60,37 @@ public class PKIXParameters implements CertPathParameters {
         this.certStores = new ArrayList<CertStore>();
     }
 
-    // Las anclas salen de las entradas de certificado de confianza del almacen.
+    // The anchors come from the trusted certificate entries of the store.
     //
-    // Las entradas de clave privada se saltean a proposito: el certificado que acompaña a una clave
-    // propia es la identidad de uno, no una CA en la que confiar. Meterlo como ancla es como
-    // firmarse los propios certificados y creerse.
+    // The private key entries are skipped on purpose: the certificate that accompanies a key of
+    // one's own is one's identity, not a CA to trust. Putting it in as an anchor is like signing
+    // one's own certificates and believing oneself.
     public PKIXParameters(java.security.KeyStore keystore)
             throws java.security.KeyStoreException, InvalidAlgorithmParameterException {
         if (keystore == null) {
             throw new NullPointerException("the keystore parameter must be non-null");
         }
-        Set<TrustAnchor> anclas = new HashSet<TrustAnchor>();
+        Set<TrustAnchor> anchors = new HashSet<TrustAnchor>();
         java.util.Enumeration<String> alias = keystore.aliases();
         while (alias.hasMoreElements()) {
             String a = alias.nextElement();
             if (keystore.isCertificateEntry(a)) {
                 java.security.cert.Certificate c = keystore.getCertificate(a);
                 if (c instanceof X509Certificate) {
-                    anclas.add(new TrustAnchor((X509Certificate) c, null));
+                    anchors.add(new TrustAnchor((X509Certificate) c, null));
                 }
             }
         }
-        // Sin `setTrustAnchors` un almacen sin certificados de confianza daria un objeto que parece
-        // valido y no valida nada. Es el que tira si el conjunto quedo vacio.
-        setTrustAnchors(anclas);
+        // Without `setTrustAnchors` a store with no trusted certificates would give an object that
+        // looks valid and validates nothing. It is the one that throws if the set was left empty.
+        setTrustAnchors(anchors);
         this.unmodInitialPolicies = Collections.emptySet();
         this.certPathCheckers = new ArrayList<PKIXCertPathChecker>();
         this.certStores = new ArrayList<CertStore>();
     }
 
-    // Copia inmutable de las anclas. La copia es defensiva en los dos sentidos: quien las paso no
-    // puede sacar una despues, y quien las recibe no puede agregar una.
+    // An immutable copy of the anchors. The copy is defensive in both directions: whoever passed
+    // them cannot take one out afterwards, and whoever receives them cannot add one.
     public Set<TrustAnchor> getTrustAnchors() {
         return this.unmodTrustAnchors;
     }
@@ -103,8 +105,8 @@ public class PKIXParameters implements CertPathParameters {
             throw new InvalidAlgorithmParameterException("the trustAnchors "
                 + "parameter must be non-empty");
         }
-        // El chequeo de tipo es explicito porque el `Set` puede venir crudo: sin esto, un elemento
-        // que no es `TrustAnchor` no explotaria hasta el medio de la validacion.
+        // The type check is explicit because the `Set` can come raw: without this, an element that
+        // is not a `TrustAnchor` would not blow up until the middle of the validation.
         Iterator<TrustAnchor> it = trustAnchors.iterator();
         while (it.hasNext()) {
             Object o = it.next();
@@ -117,7 +119,7 @@ public class PKIXParameters implements CertPathParameters {
             new HashSet<TrustAnchor>(trustAnchors));
     }
 
-    // Los OIDs de las politicas que el llamador acepta. Vacio significa **cualquiera**, no ninguna.
+    // The OIDs of the policies the caller accepts. Empty means **any**, not none.
     public Set<String> getInitialPolicies() {
         return this.unmodInitialPolicies;
     }
@@ -139,7 +141,7 @@ public class PKIXParameters implements CertPathParameters {
         }
     }
 
-    // De donde sacar certificados y CRLs que no vinieron en el camino. Null limpia la lista.
+    // Where to take certificates and CRLs that did not come in the path from. Null clears the list.
     public void setCertStores(List<CertStore> stores) {
         if (stores == null) {
             this.certStores = new ArrayList<CertStore>();
@@ -167,8 +169,8 @@ public class PKIXParameters implements CertPathParameters {
         return Collections.unmodifiableList(new ArrayList<CertStore>(this.certStores));
     }
 
-    // Si se comprueba revocacion. **Arranca en true y apagarlo es una decision de seguridad**: un
-    // certificado revocado valida igual a partir de ahi.
+    // Whether revocation is checked. **It starts at true and turning it off is a security
+    // decision**: a revoked certificate validates all the same from there on.
     public void setRevocationEnabled(boolean val) {
         this.revocationEnabled = val;
     }
@@ -177,7 +179,7 @@ public class PKIXParameters implements CertPathParameters {
         return this.revocationEnabled;
     }
 
-    // Si se exige que la cadena entera sostenga alguna politica explicita.
+    // Whether the whole chain is required to sustain some explicit policy.
     public void setExplicitPolicyRequired(boolean val) {
         this.explicitPolicyRequired = val;
     }
@@ -186,7 +188,7 @@ public class PKIXParameters implements CertPathParameters {
         return this.explicitPolicyRequired;
     }
 
-    // Si se prohibe el mapeo de politicas entre dominios distintos.
+    // Whether the mapping of policies between different domains is forbidden.
     public void setPolicyMappingInhibited(boolean val) {
         this.policyMappingInhibited = val;
     }
@@ -195,8 +197,8 @@ public class PKIXParameters implements CertPathParameters {
         return this.policyMappingInhibited;
     }
 
-    // Si se prohibe que anyPolicy (2.5.29.32.0) satisfaga la exigencia de politica. Con anyPolicy
-    // permitido, "cualquier politica sirve" y el mecanismo entero deja de restringir nada.
+    // Whether anyPolicy (2.5.29.32.0) is forbidden to satisfy the policy requirement. With
+    // anyPolicy permitted, "any policy serves" and the whole mechanism stops restricting anything.
     public void setAnyPolicyInhibited(boolean val) {
         this.anyPolicyInhibited = val;
     }
@@ -205,8 +207,8 @@ public class PKIXParameters implements CertPathParameters {
         return this.anyPolicyInhibited;
     }
 
-    // Si se rechaza un certificado con calificadores de politica que el validador no procesa.
-    // Arranca en true, que es el lado seguro.
+    // Whether a certificate with policy qualifiers the validator does not process is rejected. It
+    // starts at true, which is the safe side.
     public void setPolicyQualifiersRejected(boolean qualifiersRejected) {
         this.policyQualifiersRejected = qualifiersRejected;
     }
@@ -215,12 +217,12 @@ public class PKIXParameters implements CertPathParameters {
         return this.policyQualifiersRejected;
     }
 
-    // La fecha contra la que se valida, o null para "ahora". Se copia en las dos direcciones porque
-    // `Date` es mutable: sin copiar, quien la paso podria correrla despues y mover el momento
-    // contra el que se comprueba la vigencia de la cadena.
+    // The date the validation is made against, or null for "now". It is copied in both directions
+    // because `Date` is mutable: without copying, whoever passed it could move it afterwards and
+    // shift the moment the currency of the chain is checked against.
     //
-    // La copia se hace con `new Date(getTime())` y no con `clone()` porque el `java.util.Date` de
-    // esta biblioteca todavia no implementa `Cloneable`. El efecto es el mismo.
+    // The copy is made with `new Date(getTime())` and not with `clone()` because the
+    // `java.util.Date` of this library does not implement `Cloneable` yet. The effect is the same.
     public Date getDate() {
         if (this.date == null) {
             return null;
@@ -236,8 +238,8 @@ public class PKIXParameters implements CertPathParameters {
         }
     }
 
-    // Los checkers extra. Se copia la lista y **tambien cada checker**: tienen estado mutable, y
-    // compartirlos haria que dos validaciones concurrentes se pisen.
+    // The extra checkers. The list is copied and **so is each checker**: they have mutable state,
+    // and sharing them would make two concurrent validations step on each other.
     public void setCertPathCheckers(List<PKIXCertPathChecker> checkers) {
         if (checkers != null) {
             List<PKIXCertPathChecker> copyOf = new ArrayList<PKIXCertPathChecker>();
@@ -266,7 +268,7 @@ public class PKIXParameters implements CertPathParameters {
         }
     }
 
-    // El proveedor con el que verificar las firmas, o null para el que se encuentre.
+    // The provider to verify the signatures with, or null for whichever is found.
     public String getSigProvider() {
         return this.sigProvider;
     }
@@ -275,7 +277,7 @@ public class PKIXParameters implements CertPathParameters {
         this.sigProvider = sigProvider;
     }
 
-    // El criterio que tiene que cumplir el certificado del final del camino, o null si ninguno.
+    // The criterion the certificate at the end of the path has to meet, or null if none.
     public CertSelector getTargetCertConstraints() {
         if (this.certSelector != null) {
             return (CertSelector) this.certSelector.clone();
@@ -291,8 +293,8 @@ public class PKIXParameters implements CertPathParameters {
         }
     }
 
-    // Copia con la que el validador se puede quedar sin que el llamador pueda cambiarla despues.
-    // Las listas se copian; las anclas ya son inmutables.
+    // A copy the validator can keep without the caller being able to change it afterwards. The
+    // lists are copied; the anchors are immutable already.
     @Override
     public Object clone() {
         try {

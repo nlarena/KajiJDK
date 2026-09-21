@@ -4,21 +4,22 @@ import java.awt.Component;
 import java.awt.Container;
 
 /**
- * Una ventanita que aparece encima de todo.
+ * A little window that appears on top of everything.
  *
- * <h2>Dos formas de aparecer</h2>
+ * <h2>Two ways of appearing</h2>
  *
- * <p>Un desplegable puede dibujarse adentro de la ventana que lo abrio -- rapido, pero no puede
- * salirse de ella -- o en una ventana propia del sistema, que si puede pero cuesta mas y parpadea.
- * Quien decide es {@link PopupFactory} mirando si lo que hay que mostrar entra.
+ * <p>A drop-down may be drawn inside the window that opened it -- fast, but it cannot go outside
+ * it -- or in a system window of its own, which can but costs more and flickers. Who decides is
+ * {@link PopupFactory}, looking at whether what has to be shown fits.
  *
- * <p>Esta clase esconde esa decision: quien la use llama a {@link #show} y {@link #hide} sin saber
- * cual de las dos le toco.
+ * <p>This class hides that decision: whoever uses it calls {@link #show} and {@link #hide}
+ * without knowing which of the two they got.
  *
- * <h2>No se construye a mano</h2>
+ * <h2>It is not built by hand</h2>
  *
- * <p>El constructor es protegido. Las hace {@link PopupFactory}, que es la que sabe elegir. Un
- * {@code Popup} armado a mano no tendria como decidir y quedaria siempre en la forma equivocada.
+ * <p>The constructor is protected. They are made by {@link PopupFactory}, which is the one that
+ * knows how to choose. A {@code Popup} built by hand would have no way of deciding and would
+ * always end up in the wrong form.
  */
 public class Popup {
 
@@ -26,9 +27,9 @@ public class Popup {
     private Component contents;
     private int x;
     private int y;
-    private java.awt.Window ventana;
+    private java.awt.Window window;
 
-    /** Una ventanita con ese contenido, en ese punto de la pantalla. */
+    /** A little window with that content, at that point of the screen. */
     protected Popup(Component owner, Component contents, int x, int y) {
         if (contents == null) {
             throw new IllegalArgumentException("Contents must be non-null");
@@ -39,15 +40,15 @@ public class Popup {
         this.y = y;
     }
 
-    /** Una ventanita sin nada; la usan las subclases que arman el contenido despues. */
+    /** A little window with nothing; the subclasses that build the content afterwards use it. */
     protected Popup() {
     }
 
     /**
-     * La muestra.
+     * It shows it.
      *
-     * <p>Sin pantalla no hay donde mostrarla, asi que aca solo se anota el estado. Lo que falta es
-     * el destinatario, no la logica.
+     * <p>With no screen there is nowhere to show it, so here only the state is noted. What is
+     * missing is the addressee, not the logic.
      */
     public void show() {
         if (contents != null) {

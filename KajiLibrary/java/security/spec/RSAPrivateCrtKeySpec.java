@@ -2,20 +2,20 @@ package java.security.spec;
 
 import java.math.BigInteger;
 
-// Una clave privada RSA con los valores del teorema chino del resto (PKCS#1).
+// An RSA private key with the Chinese remainder theorem values (PKCS#1).
 //
-// Ademas de (n, d) guarda los dos primos p y q, los exponentes reducidos dP = d mod (p-1) y
-// dQ = d mod (q-1), y el coeficiente qInv = q^-1 mod p. Con eso se firma haciendo dos
-// exponenciaciones sobre numeros de la mitad de bits en lugar de una sobre el doble, que sale
-// aproximadamente cuatro veces mas barato.
+// Besides (n, d) it keeps the two primes p and q, the reduced exponents dP = d mod (p-1) and
+// dQ = d mod (q-1), and the coefficient qInv = q^-1 mod p. With those a signature takes two
+// exponentiations on numbers of half the bits instead of one on the full size, which comes out
+// about four times cheaper.
 //
-// El precio de esa optimizacion es historico y vale nombrarlo: si una de las dos mitades del CRT se
-// calcula mal —un bit que se da vuelta por un fallo de hardware o inducido a proposito— la firma
-// resultante permite factorizar n con un solo `gcd`. Es el ataque de Bellcore, y es la razon por la
-// que toda implementacion seria de CRT-RSA verifica la firma antes de devolverla.
+// The price of that optimization is historic and worth naming: if one of the two halves of the CRT
+// is computed wrongly —a bit flipped by a hardware fault, or one induced on purpose— the resulting
+// signature lets n be factored with a single `gcd`. It is the Bellcore attack, and it is why every
+// serious CRT-RSA implementation verifies the signature before returning it.
 //
-// Guardar p y q es tambien la razon por la que esta spec es mas sensible que su clase base: quien la
-// tenga tiene la factorizacion del modulo, que es todo.
+// Keeping p and q is also why this spec is more sensitive than its base class: whoever holds it
+// holds the factorization of the modulus, which is everything.
 public class RSAPrivateCrtKeySpec extends RSAPrivateKeySpec {
 
     private final BigInteger publicExponent;
@@ -55,8 +55,8 @@ public class RSAPrivateCrtKeySpec extends RSAPrivateKeySpec {
         this.crtCoefficient = crtCoefficient;
     }
 
-    // El exponente publico: se guarda tambien en la privada porque hace falta para verificar la
-    // propia firma antes de entregarla, que es la defensa contra el ataque de Bellcore.
+    // The public exponent: it is kept in the private key too because it is needed to verify one's
+    // own signature before handing it over, which is the defence against the Bellcore attack.
     public BigInteger getPublicExponent() {
         return this.publicExponent;
     }

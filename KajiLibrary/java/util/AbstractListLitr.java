@@ -1,25 +1,26 @@
 package java.util;
 
-// El ListIterator que devuelve todo AbstractList. Package-private, como AbstractListItr.
+// The ListIterator every AbstractList returns. Package-private, like AbstractListItr.
 //
-// Hasta ahora `ListIterator` era una interfaz **declarada y sin ningun implementor** en toda la
-// biblioteca: existia el tipo y no habia nada que devolver, asi que `listIterator()` no se podia
-// escribir en ninguna lista. Esta es esa implementacion.
+// Until now `ListIterator` was an interface **declared with no implementor at all** in the whole
+// library: the type existed and there was nothing to return, so `listIterator()` could not be written
+// in any list. This is that implementation.
 //
-// El cursor va **entre** elementos, que es lo que distingue a un ListIterator de un Iterator:
-// `nextIndex()` es el hueco donde esta parado, `previous()` retrocede sobre lo ya recorrido, y
-// `add` inserta en ese hueco. `ultimo` recuerda el indice del elemento que devolvio la ultima
-// llamada a next()/previous(), porque `set` y `remove` operan sobre **ese**, no sobre el cursor.
+// The cursor sits **between** elements, which is what tells a ListIterator from an Iterator:
+// `nextIndex()` is the gap it is standing in, `previous()` steps back over what has been walked, and
+// `add` inserts into that gap. `last` remembers the index of the element the last call to
+// next()/previous() returned, because `set` and `remove` operate on **that** one, not on the
+// cursor.
 final class AbstractListLitr<E> implements ListIterator<E> {
 
     private final List<E> list;
 
-    // El hueco donde esta parado: 0 es antes del primero, size() es despues del ultimo.
+    // The gap it is standing in: 0 is before the first, size() is after the last.
     private int cursor;
 
-    // El indice del ultimo elemento devuelto, o -1 si no hubo next()/previous() desde la ultima
-    // modificacion. Es lo que hace que `set` y `remove` sepan sobre que operar.
-    private int ultimo;
+    // The index of the last element returned, or -1 if there was no next()/previous() since the last
+    // modification. It is what lets `set` and `remove` know what to operate on.
+    private int last;
 
     AbstractListLitr(List<E> list, int index) {
         if (index < 0 || index > list.size()) {
@@ -27,7 +28,7 @@ final class AbstractListLitr<E> implements ListIterator<E> {
         }
         this.list = list;
         this.cursor = index;
-        this.ultimo = -1;
+        this.last = -1;
     }
 
     public boolean hasNext() {
@@ -39,7 +40,7 @@ final class AbstractListLitr<E> implements ListIterator<E> {
             throw new NoSuchElementException();
         }
         E e = this.list.get(this.cursor);
-        this.ultimo = this.cursor;
+        this.last = this.cursor;
         this.cursor = this.cursor + 1;
         return e;
     }
@@ -53,7 +54,7 @@ final class AbstractListLitr<E> implements ListIterator<E> {
             throw new NoSuchElementException();
         }
         this.cursor = this.cursor - 1;
-        this.ultimo = this.cursor;
+        this.last = this.cursor;
         return this.list.get(this.cursor);
     }
 
@@ -65,34 +66,34 @@ final class AbstractListLitr<E> implements ListIterator<E> {
         return this.cursor - 1;
     }
 
-    // Quita el ultimo devuelto. Si venia de next(), el cursor retrocede uno: lo que quedaba
-    // adelante corrio un lugar hacia atras y no hay que saltearselo.
+    // It removes the last one returned. If it came from next(), the cursor steps back one: what was
+    // ahead has moved one place back and must not be skipped.
     public void remove() {
-        if (this.ultimo < 0) {
+        if (this.last < 0) {
             throw new IllegalStateException();
         }
-        this.list.remove(this.ultimo);
-        if (this.ultimo < this.cursor) {
+        this.list.remove(this.last);
+        if (this.last < this.cursor) {
             this.cursor = this.cursor - 1;
         }
-        this.ultimo = -1;
+        this.last = -1;
     }
 
-    // Reemplaza el ultimo devuelto. No mueve el cursor ni invalida `ultimo`: cambiar el valor de
-    // una posicion no cambia por donde va el recorrido.
+    // It replaces the last one returned. It moves neither the cursor nor invalidates `last`:
+    // changing a position's value does not change where the walk is.
     public void set(E e) {
-        if (this.ultimo < 0) {
+        if (this.last < 0) {
             throw new IllegalStateException();
         }
-        this.list.set(this.ultimo, e);
+        this.list.set(this.last, e);
     }
 
-    // Inserta en el hueco actual. El nuevo queda **detras** del cursor, asi que `next()` sigue
-    // devolviendo lo que iba a devolver; y `ultimo` se invalida, porque despues de un add no hay
-    // "ultimo devuelto" sobre el que valga operar.
+    // It inserts into the current gap. The new one is left **behind** the cursor, so `next()` goes on
+    // returning what it was going to return; and `last` is invalidated, because after an add there
+    // is no "last returned" worth operating on.
     public void add(E e) {
         this.list.add(this.cursor, e);
         this.cursor = this.cursor + 1;
-        this.ultimo = -1;
+        this.last = -1;
     }
 }

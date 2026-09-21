@@ -4,30 +4,29 @@ import java.util.Iterator;
 import org.w3c.dom.Node;
 
 /**
- * KajiLibrary's javax.xml.xpath.XPathNodes -- un conjunto de nodos que se puede recorrer con
- * {@code for}.
+ * KajiLibrary's javax.xml.xpath.XPathNodes -- a node-set you can walk with {@code for}.
  *
- * <p>Existe para reemplazar a {@code org.w3c.dom.NodeList} como resultado, y la diferencia es toda
- * de comodidad: {@code NodeList} es de 1998, no es {@code Iterable}, y recorrerla pide un bucle con
- * indice y un cast por elemento. Esta es {@code Iterable<Node>}, asi que entra en un {@code for}
- * mejorado sin ceremonia.
+ * <p>It exists to replace {@code org.w3c.dom.NodeList} as a result, and the difference is all about
+ * convenience: {@code NodeList} is from 1998, is not {@code Iterable}, and walking it takes an
+ * indexed loop and a cast per element. This one is {@code Iterable<Node>}, so it goes into an
+ * enhanced {@code for} without ceremony.
  *
- * <p>{@link #get} lanza en vez de devolver null fuera de rango, al reves que {@code NodeList#item}.
- * Es el criterio moderno y es el correcto: un indice fuera de rango es un error de quien programa, y
- * un null se propaga hasta explotar en otro lado.
+ * <p>{@link #get} throws instead of returning null when out of range, unlike {@code NodeList#item}.
+ * It is the modern criterion and the right one: an out-of-range index is a programmer error, and a
+ * null propagates until it blows up somewhere else.
  */
 public interface XPathNodes extends Iterable<Node> {
 
-    /** Los nodos, en orden de documento. */
+    /** The nodes, in document order. */
     Iterator<Node> iterator();
 
-    /** Cuantos hay. */
+    /** How many there are. */
     int size();
 
     /**
-     * El de esa posicion.
+     * The one at that position.
      *
-     * @throws XPathException si el indice esta fuera de rango; ver la nota de la clase
+     * @throws XPathException if the index is out of range; see the class note
      */
     Node get(int index) throws XPathException;
 }

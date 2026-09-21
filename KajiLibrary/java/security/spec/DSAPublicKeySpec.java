@@ -2,10 +2,11 @@ package java.security.spec;
 
 import java.math.BigInteger;
 
-// Una clave publica DSA en claro: y, mas los parametros p, q, g.
+// A DSA public key in the clear: y, plus the parameters p, q, g.
 //
-// Los parametros van sueltos en vez de venir en un `DSAParameterSpec` por antiguedad del API, no por
-// diseño: esta clase es del JDK 1.2 y `DSAParameterSpec` es hermana, no anterior.
+// The parameters come loose instead of in a `DSAParameterSpec` because of the API's age, not by
+// design: this class is from JDK 1.2, and `DSAParameterSpec` is a sibling from the same release,
+// not an older class it could have used.
 public class DSAPublicKeySpec implements KeySpec {
 
     private final BigInteger y;
@@ -20,7 +21,7 @@ public class DSAPublicKeySpec implements KeySpec {
         this.g = g;
     }
 
-    // El valor publico y = g^x mod p.
+    // The public value y = g^x mod p.
     public BigInteger getY() {
         return this.y;
     }

@@ -69,7 +69,9 @@ public class Console implements Flushable {
         return null;
     }
 
-    /** Reads a password with echoing disabled. Always null in KajiJDK: there is no console input. */
+    /**
+     * Reads a password with echoing disabled. Always null in KajiJDK: there is no console input.
+     */
     public char[] readPassword() {
         return null;
     }

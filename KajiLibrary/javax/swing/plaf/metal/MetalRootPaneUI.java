@@ -8,23 +8,24 @@ import javax.swing.plaf.ComponentUI;
 import javax.swing.plaf.basic.BasicRootPaneUI;
 
 /**
- * El panel raiz de Metal, que es el que sabe decorar una ventana.
+ * Metal's root pane, which is the one that knows how to decorate a window.
  *
- * <p>Metal es el unico aspecto de Java que puede dibujar el marco y la barra de titulo de una
- * ventana <em>del lado de Java</em>, en vez de dejarselos al sistema. Eso es lo que hace
- * {@code JFrame.setDefaultLookAndFeelDecorated(true)}, y lo que lo implementa es esta clase: mira
- * {@link JRootPane#getWindowDecorationStyle} y, cuando no es {@code NONE}, pone una barra de
- * titulo propia como hijo del panel raiz y le cambia el borde.
+ * <p>Metal is the only Java look and feel that can draw a window's frame and title bar
+ * <em>on Java's side</em>, instead of leaving them to the system. That is what
+ * {@code JFrame.setDefaultLookAndFeelDecorated(true)} does, and what implements it is this
+ * class: it looks at {@link JRootPane#getWindowDecorationStyle} and, when it is not
+ * {@code NONE}, puts a title bar of its own as a child of the root pane and changes its border.
  *
- * <p>El estilo puede cambiar en caliente, y por eso {@link #propertyChange} escucha
- * {@code "windowDecorationStyle"}: un dialogo que pasa de normal a de error tiene que cambiar de
- * marco sin volver a crearse.
+ * <p>The style may change on the fly, and that is why {@link #propertyChange} listens to
+ * {@code "windowDecorationStyle"}: a dialog that goes from normal to error has to change its
+ * frame without being created again.
  *
- * <h2>Lo que queda dicho y no tapado</h2>
+ * <h2>What is said and not covered up</h2>
  *
- * <p>La decoracion no se arma. Necesita una ventana de verdad -- para sacarle el borde al sistema,
- * arrastrarla y cambiarle el tamano -- y esta VM no tiene ventanas. Lo que si esta es todo lo que
- * se puede contestar sin una: el UI se instala, escucha el cambio de estilo y se desinstala.
+ * <p>The decoration is not assembled. It needs a real window -- to take the border away from the
+ * system, to drag it and to resize it -- and this VM has no windows. What is there is everything
+ * that can be answered without one: the UI installs itself, listens to the style change and
+ * uninstalls itself.
  */
 public class MetalRootPaneUI extends BasicRootPaneUI {
 

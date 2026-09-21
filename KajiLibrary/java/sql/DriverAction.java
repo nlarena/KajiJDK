@@ -1,14 +1,14 @@
 package java.sql;
 
 /**
- * KajiLibrary's java.sql.DriverAction -- lo que un driver quiere hacer al ser dado de baja.
+ * KajiLibrary's java.sql.DriverAction -- what a driver wants to do when it is deregistered.
  *
- * <p>Existe para que la limpieza no sea publica: si el driver expusiera un metodo para esto,
- * cualquiera podria llamarlo. Registrandolo con {@link DriverManager#registerDriver(Driver,
- * DriverAction)} solo el gestor tiene la referencia, y solo la usa cuando corresponde.
+ * <p>It exists so that the cleanup is not public: if the driver exposed a method for this, anyone
+ * could call it. By registering it with {@link DriverManager#registerDriver(Driver, DriverAction)}
+ * only the manager holds the reference, and it only uses it when appropriate.
  */
 public interface DriverAction {
 
-    /** Lo llama {@link DriverManager} al dar de baja al driver. */
+    /** {@link DriverManager} calls it when deregistering the driver. */
     void deregister();
 }

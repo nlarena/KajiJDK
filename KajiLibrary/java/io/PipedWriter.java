@@ -1,32 +1,32 @@
 package java.io;
 
-// KajiLibrary's java.io.PipedWriter -- la punta de escritura de una tuberia de caracteres.
+// KajiLibrary's java.io.PipedWriter -- the writing end of a pipe of characters.
 //
-// El espejo de `PipedOutputStream`: casi sin estado propio, todo el trabajo del lado del
-// `PipedReader`. Las dos puntas tienen que estar en hilos distintos, por la misma razon de siempre
-// --escribir hasta llenar el buffer desde el mismo hilo que tendria que vaciarlo se cuelga.
+// `PipedOutputStream`'s mirror: almost no state of its own, all the work on the `PipedReader`'s
+// side. The two ends have to be in different threads, for the usual reason -- writing until the
+// buffer fills from the same thread that would have to empty it hangs.
 //
-// Las excepciones son las del JDK y chequeadas, como en `PipedInputStream`; ver la nota de alla
-// por que durante un tiempo no lo fueron.
+// The exceptions are the JDK's and checked, as in `PipedInputStream`; see the note over there for
+// why for a while they were not.
 public class PipedWriter extends Writer {
 
     private PipedReader sink;
 
     private boolean closed = false;
 
-    /** Conecta esta punta al lector dado. */
+    /** Connects this end to the given reader. */
     public PipedWriter(PipedReader snk) throws IOException {
         this.connect(snk);
     }
 
-    /** Sin conectar: hace falta un `connect` antes de escribir. */
+    /** Unconnected: a `connect` is needed before writing. */
     public PipedWriter() {
     }
 
     /**
-     * Conecta esta punta al lector dado y deja la tuberia vacia.
+     * Connects this end to the given reader and leaves the pipe empty.
      *
-     * @throws IOException si alguna de las dos puntas ya estaba conectada
+     * @throws IOException if either of the two ends was already connected
      */
     public synchronized void connect(PipedReader snk) throws IOException {
         if (snk == null) {
@@ -41,7 +41,7 @@ public class PipedWriter extends Writer {
         snk.connected = true;
     }
 
-    /** Escribe un caracter. **Bloquea si la tuberia esta llena.** */
+    /** Writes one character. **It blocks if the pipe is full.** */
     public void write(int c) throws IOException {
         if (this.sink == null) {
             throw new IOException("Pipe not connected");
@@ -49,7 +49,7 @@ public class PipedWriter extends Writer {
         this.sink.receive(c);
     }
 
-    /** Escribe `len` caracteres. **Bloquea hasta que entren todos.** */
+    /** Writes `len` characters. **It blocks until they all fit.** */
     public void write(char[] cbuf, int off, int len) throws IOException {
         if (this.sink == null) {
             throw new IOException("Pipe not connected");
@@ -63,7 +63,7 @@ public class PipedWriter extends Writer {
         this.sink.receive(cbuf, off, len);
     }
 
-    // Despierta al lector; no hay nada guardado de este lado que vaciar.
+    // It wakes the reader; there is nothing stored on this side to flush.
     public synchronized void flush() throws IOException {
         if (this.sink != null) {
             if (this.sink.closedByReader || this.closed) {
@@ -76,9 +76,9 @@ public class PipedWriter extends Writer {
     }
 
     /**
-     * Cierra la punta de escritura.
+     * Closes the writing end.
      *
-     * <p>El lector termina de leer lo que quedo en el buffer antes de ver el fin de stream.
+     * <p>The reader finishes reading whatever was left in the buffer before seeing end of stream.
      */
     public void close() throws IOException {
         this.closed = true;

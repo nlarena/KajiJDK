@@ -1,26 +1,33 @@
 package java.rmi;
 
 /**
- * KajiLibrary's java.rmi.Remote -- esta interfaz se puede llamar desde otra maquina virtual.
+ * KajiLibrary's java.rmi.Remote -- this interface can be called from another virtual machine.
  *
- * <p>No declara nada. Es una <b>marca</b>: lo unico que hace es decirle a RMI que las interfaces que
- * la extienden describen objetos remotos.
+ * <p>It declares nothing. It is a <b>marker</b>: the only thing it does is tell RMI that the
+ * interfaces that extend it describe remote objects.
  *
- * <h2>Por que hace falta marcar</h2>
+ * <h2>Why marking is needed</h2>
  *
- * <p>Porque una llamada remota no se comporta como una local, y el codigo tiene que poder distinguir:
+ * <p>Because a remote call does not behave like a local one, and the code has to be able to tell:
  *
  * <ul>
- *   <li>los argumentos y el resultado se copian por serializacion, no se pasan por referencia --salvo
- *       que sean a su vez objetos remotos--;
- *   <li>cualquier llamada puede fallar por la red, y por eso <b>todos</b> los metodos de una interfaz
- *       remota tienen que declarar {@link RemoteException};
- *   <li>{@code equals}, {@code hashCode} y {@code toString} sobre una referencia remota hablan del
- *       talon local, no del objeto de alla.
+ *   <li>the arguments and the result are copied by serialisation, not passed by reference --unless
+ *       they are remote objects themselves--;
+ *   <li>any call can fail because of the network, and that is why <b>all</b> the methods of a
+ *       remote interface have to declare {@link RemoteException};
+ *   <li>this note used to say that {@code equals}, {@code hashCode} and {@code toString} on a
+ *       remote reference talk about the local stub, not the object over there. It is the other way
+ *       round: {@code java.rmi.server.RemoteObject} delegates them to its {@code RemoteRef} ({@code
+ *       remoteEquals}, {@code remoteHashCode}, {@code remoteToString}), so two stubs for the same
+ *       remote object are equal (checked in {@code RemoteObject.java}).
  * </ul>
  *
- * <p>Una interfaz que no declare {@code RemoteException} en algun metodo no se puede exportar, y ese
- * error se descubre al exportar y no al compilar. Es el tropiezo mas comun de RMI.
+ * <p>This note used to say that an interface with a method that does not declare
+ * {@code RemoteException} cannot be exported, an error found at export time and not at compile
+ * time, and the most common stumble in RMI. Nothing in this library checks that: every
+ * {@code UnicastRemoteObject.exportObject} overload throws {@code UnsupportedOperationException}
+ * whatever the interface declares, because this VM has no RMI transport (checked by reading
+ * {@code UnicastRemoteObject.java} and grepping {@code java/rmi} for such a check).
  */
 public interface Remote {
 }

@@ -1,10 +1,10 @@
 package javax.naming;
 
 /**
- * Se lanza al intentar destruir un contexto que todavia tiene cosas adentro. JNDI no borra en
- * cascada: el que llama tiene que vaciarlo primero.
+ * Thrown when trying to destroy a context that still has things inside. JNDI does not delete in
+ * cascade: the caller has to empty it first.
  *
- * <p>La jerarquia entera y el estado que arrastra estan explicados en `NamingException`.
+ * <p>The whole hierarchy and the state it carries are explained in `NamingException`.
  */
 public class ContextNotEmptyException extends NamingException {
 

@@ -4,100 +4,101 @@ import java.util.NoSuchElementException;
 import java.util.Optional;
 
 /**
- * KajiLibrary's java.lang.foreign.SymbolLookup -- la busqueda de un simbolo nativo por nombre.
+ * KajiLibrary's java.lang.foreign.SymbolLookup -- looking a native symbol up by name.
  *
- * <p>Es la mitad de arriba de una llamada nativa: primero se encuentra la direccion de la funcion,
- * despues {@link Linker} la convierte en algo invocable. Sin enlazador la segunda mitad no existe, y
- * las dos formas que **cargan** una biblioteca tampoco pueden: cargar un dll o un so es una
- * operacion del sistema operativo que esta VM no hace.
+ * <p>It is the top half of a native call: first the function's address is found, then {@link Linker}
+ * turns it into something invocable. Without a linker the second half does not exist, and neither
+ * can the two forms that **load** a library: loading a dll or an so is an operating system operation
+ * this VM does not do.
  *
- * <p>La interfaz esta entera igual, y los dos `default` --{@link #findOrThrow} y {@link #or}-- son
- * reales: se apoyan solo en {@link #find}, asi que una busqueda propia escrita por alguien mas los
- * hereda funcionando. Eso es lo que hace que valga la pena declararla en vez de omitirla.
+ * <p>The interface is here in full all the same, and the two `default` methods --{@link #findOrThrow}
+ * and {@link #or}-- are real: they lean only on {@link #find}, so a lookup of one's own written by
+ * somebody else inherits them working. That is what makes declaring it worthwhile instead of leaving
+ * it out.
  */
 public interface SymbolLookup {
 
-    /** La direccion del simbolo de ese nombre, o vacio si no esta. */
+    /** The address of the symbol with that name, or empty if it is not there. */
     Optional<MemorySegment> find(String name);
 
     /**
-     * El de arriba, exigiendo que este.
+     * The one above, demanding that it be there.
      *
-     * @throws NoSuchElementException si no esta
+     * @throws NoSuchElementException if it is not there
      */
     default MemorySegment findOrThrow(String name) {
-        Optional<MemorySegment> hallado = this.find(name);
-        if (!hallado.isPresent()) {
-            throw new NoSuchElementException("simbolo no encontrado: " + name);
+        Optional<MemorySegment> found = this.find(name);
+        if (!found.isPresent()) {
+            throw new NoSuchElementException("symbol not found: " + name);
         }
-        return hallado.get();
+        return found.get();
     }
 
     /**
-     * Esta busqueda, y si falla la otra.
+     * This lookup, and if it fails the other one.
      *
-     * <p>El orden importa y es el que se lee: **esta** gana. Es lo que permite poner una tabla propia
-     * delante de la de la plataforma.
+     * <p>The order matters and is the one that reads: **this** one wins. It is what allows putting a
+     * table of one's own in front of the platform's.
      */
     default SymbolLookup or(SymbolLookup other) {
         if (other == null) {
             throw new NullPointerException("other");
         }
-        return new BusquedaEncadenada(this, other);
+        return new ChainedLookup(this, other);
     }
 
     /**
-     * Los simbolos que el cargador de clases haya publicado.
+     * The symbols the class loader has published.
      *
-     * <p>Devuelve una busqueda que **no encuentra nada**, y eso es la verdad y no un stub: esta VM no
-     * carga bibliotecas nativas, asi que no hay ningun simbolo publicado. Es la misma respuesta que
-     * da el JDK cuando no se cargo ninguna.
+     * <p>It returns a lookup that **finds nothing**, and that is the truth and not a stub: this VM
+     * loads no native libraries, so there is no published symbol. It is the same answer the JDK gives
+     * when none has been loaded.
      */
     static SymbolLookup loaderLookup() {
-        return new BusquedaVacia();
+        return new EmptyLookup();
     }
 
     /**
-     * Los simbolos de esa biblioteca.
+     * That library's symbols.
      *
-     * @throws UnsupportedOperationException siempre, en esta biblioteca: cargar un dll o un so es una
-     *     operacion del sistema operativo que esta VM no hace. Devolver una busqueda vacia seria
-     *     peor -- diria "la cargue y no tiene simbolos" en vez de "no la puedo cargar".
+     * @throws UnsupportedOperationException always, in this library: loading a dll or an so is an
+     *     operating system operation this VM does not do. Returning an empty lookup would be worse
+     *     -- it would say "I loaded it and it has no symbols" instead of "I cannot load it".
      */
     static SymbolLookup libraryLookup(String name, Arena arena) {
-        throw new UnsupportedOperationException("KajiJDK no carga bibliotecas nativas: " + name);
+        throw new UnsupportedOperationException("KajiJDK loads no native libraries: " + name);
     }
 
-    /** Ver {@link #libraryLookup(String, Arena)}. */
+    /** See {@link #libraryLookup(String, Arena)}. */
     static SymbolLookup libraryLookup(java.nio.file.Path path, Arena arena) {
-        throw new UnsupportedOperationException("KajiJDK no carga bibliotecas nativas: " + path);
+        throw new UnsupportedOperationException("KajiJDK loads no native libraries: " + path);
     }
 }
 
-// Las dos implementaciones que los estaticos devuelven. Son clases con nombre y no anonimas porque
-// las anonimas de este compilador arrastran capturas que aca no hacen falta.
-final class BusquedaVacia implements SymbolLookup {
+// The two implementations the statics return. They are named classes and not anonymous ones because
+// this compiler's anonymous classes drag along captures that are not needed here.
+final class EmptyLookup implements SymbolLookup {
 
     public Optional<MemorySegment> find(String name) {
         return Optional.empty();
     }
 }
 
-final class BusquedaEncadenada implements SymbolLookup {
+final class ChainedLookup implements SymbolLookup {
 
-    private final SymbolLookup primera;
-    private final SymbolLookup segunda;
+    private final SymbolLookup first;
+    private final SymbolLookup second;
 
-    BusquedaEncadenada(SymbolLookup primera, SymbolLookup segunda) {
-        this.primera = primera;
-        this.segunda = segunda;
+    ChainedLookup(SymbolLookup first, SymbolLookup second) {
+        this.first = first;
+        this.second = second;
     }
 
     public Optional<MemorySegment> find(String name) {
-        Optional<MemorySegment> hallado = this.primera.find(name);
-        if (hallado.isPresent()) {
-            return hallado;
+        Optional<MemorySegment> found = this.first.find(name);
+        if (found.isPresent()) {
+            return found;
         }
-        return this.segunda.find(name);
+        return this.second.find(name);
     }
 }

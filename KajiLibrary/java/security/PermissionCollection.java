@@ -4,15 +4,15 @@ import java.io.Serializable;
 import java.util.Enumeration;
 import java.util.stream.Stream;
 
-// Un conjunto homogeneo de permisos, con un `implies` propio.
+// A homogeneous set of permissions, with an `implies` of its own.
 //
-// No es una `Collection` de `java.util`, y no es un descuido: lo que aporta es el `implies` sobre
-// **el conjunto entero**, que una coleccion cualquiera no sabe hacer. Una implementacion puede
-// contestarlo mucho mas rapido que preguntandole a cada permiso de a uno — indexando por nombre,
-// por ejemplo — y ese es todo el motivo de que el tipo exista.
+// It is not a `Collection` of `java.util`, and that is not an oversight: what it contributes is the
+// `implies` over **the whole set**, which just any collection does not know how to do. An
+// implementation can answer it much faster than by asking each permission one at a time — by
+// indexing by name, for example — and that is the whole reason the type exists.
 //
-// El estado de solo lectura es de una sola via: una vez cerrada, no se reabre. Es lo que permite
-// entregar una coleccion de permisos sin miedo a que el receptor se agregue mas.
+// The read-only state is one-way: once closed, it does not reopen. It is what allows a collection
+// of permissions to be handed over without fear of the receiver adding more to themselves.
 public abstract class PermissionCollection implements Serializable {
 
     private volatile boolean readOnly;
@@ -20,42 +20,42 @@ public abstract class PermissionCollection implements Serializable {
     public PermissionCollection() {
     }
 
-    // Agrega un permiso.
+    // It adds a permission.
     public abstract void add(Permission permission);
 
-    // Si los permisos de esta coleccion, tomados en conjunto, implican al dado.
+    // Whether the permissions of this collection, taken together, imply the given one.
     public abstract boolean implies(Permission permission);
 
-    // Los permisos de esta coleccion.
+    // The permissions of this collection.
     public abstract Enumeration<Permission> elements();
 
-    // Los permisos, como stream.
+    // The permissions, as a stream.
     public Stream<Permission> elementsAsStream() {
         Enumeration<Permission> e = this.elements();
-        java.util.ArrayList<Permission> lista = new java.util.ArrayList<Permission>();
+        java.util.ArrayList<Permission> list = new java.util.ArrayList<Permission>();
         while (e.hasMoreElements()) {
-            lista.add(e.nextElement());
+            list.add(e.nextElement());
         }
-        Object[] a = new Object[lista.size()];
+        Object[] a = new Object[list.size()];
         int i = 0;
-        while (i < lista.size()) {
-            a[i] = lista.get(i);
+        while (i < list.size()) {
+            a[i] = list.get(i);
             i = i + 1;
         }
         return (Stream<Permission>) Stream.of(a);
     }
 
-    // Cierra la coleccion. No hay vuelta atras.
+    // It closes the collection. There is no way back.
     public void setReadOnly() {
         this.readOnly = true;
     }
 
-    // Si la coleccion esta cerrada.
+    // Whether the collection is closed.
     public boolean isReadOnly() {
         return this.readOnly;
     }
 
-    // El nombre de la clase seguido de los permisos, uno por linea.
+    // The name of the class followed by the permissions, one per line.
     public String toString() {
         StringBuilder b = new StringBuilder();
         b.append(super.toString());

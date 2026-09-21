@@ -2,12 +2,12 @@ package java.security;
 
 import java.net.URI;
 
-// Los parametros de una `Policy` que viven en una URI: "la politica esta en este archivo".
+// The parameters of a `Policy` that live in a URI: "the policy is in this file".
 //
-// A KajiLibrary subset: en el JDK tambien implementa
-// `javax.security.auth.login.Configuration.Parameters`, porque el mismo objeto sirve para
-// configurar una politica de autorizacion y una de autenticacion. Ese paquete no existe en esta
-// biblioteca, asi que solo se declara la mitad de `java.security`.
+// A KajiLibrary subset: in the JDK it also implements
+// `javax.security.auth.login.Configuration.Parameters`, because the same object serves to configure
+// a policy of authorisation and one of authentication. That package does not exist in this library,
+// so only the `java.security` half is declared.
 public class URIParameter implements Policy.Parameters {
 
     private final URI uri;

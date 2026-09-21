@@ -4,17 +4,17 @@ import java.io.Serializable;
 import java.security.cert.CertPath;
 import java.util.Date;
 
-// Una marca de tiempo firmada: cuando se firmo algo, segun quien lo atestigua.
+// A signed timestamp: when something was signed, according to whoever attests it.
 //
-// Existe por un problema concreto: los certificados vencen y se revocan, y sin marca de tiempo una
-// firma hecha cuando el certificado era valido se vuelve indistinguible de una hecha despues. Con
-// la marca, la pregunta pasa a ser "¿el certificado era valido **en ese momento**?", que si se
-// puede contestar años despues.
+// It exists because of a concrete problem: certificates expire and are revoked, and without a
+// timestamp a signature made when the certificate was valid becomes indistinguishable from one made
+// afterwards. With the stamp, the question becomes "was the certificate valid **at that moment**?",
+// which can be answered years later.
 //
-// Que la fecha venga acompañada de un `CertPath` es lo que la hace util: una fecha sola la escribe
-// cualquiera. El camino es el de la autoridad de sellado de tiempo que la firmo. Esta clase
-// **guarda** los dos datos y no verifica ninguno — verificar la firma del sellado requiere
-// criptografia que esta biblioteca no tiene.
+// That the date comes accompanied by a `CertPath` is what makes it useful: a date alone can be
+// written by anybody. The path is that of the time stamping authority that signed it. This class
+// **keeps** the two data and verifies neither — verifying the signature of the stamping requires
+// cryptography this library does not have.
 public final class Timestamp implements Serializable {
 
     private final Date timestamp;
@@ -24,8 +24,8 @@ public final class Timestamp implements Serializable {
         if (timestamp == null || signerCertPath == null) {
             throw new NullPointerException();
         }
-        // Se copia: `Date` es mutable, y una marca de tiempo que el llamador pueda mover despues
-        // de construirla no sirve para nada.
+        // It is copied: `Date` is mutable, and a timestamp the caller can move after building it is
+        // of no use at all.
         this.timestamp = new Date(timestamp.getTime());
         this.signerCertPath = signerCertPath;
     }

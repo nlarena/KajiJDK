@@ -3,74 +3,74 @@ package java.awt.image;
 import java.util.Hashtable;
 
 /**
- * Quien recibe los píxeles de una imagen a medida que se producen.
+ * Whoever receives the pixels of an image as they are produced.
  *
- * <p>Es el otro extremo de {@link ImageProducer}, y juntos forman la tubería con la que AWT mueve
- * imágenes: el productor empuja, el consumidor recibe. Nada de esto devuelve la imagen entera de una
- * vez; la idea es que una imagen que llega por la red se pueda ir mostrando.
+ * <p>It is the other end of {@link ImageProducer}, and together they form the pipe AWT moves images
+ * with: the producer pushes, the consumer receives. None of this returns the whole image at once;
+ * the idea is that an image arriving over the network can be shown as it comes.
  *
- * <p>El orden de las llamadas importa. Primero las dimensiones y las propiedades, después el modelo
- * de color y las pistas, después los píxeles en una o varias tandas, y al final
- * {@link #imageComplete}, que es la única que dice si salió bien.
+ * <p>The order of the calls matters. First the dimensions and the properties, then the colour model
+ * and the hints, then the pixels in one or more batches, and at the end {@link #imageComplete},
+ * which is the only one that says whether it went well.
  *
- * <p>Las pistas de {@link #setHints} no son adorno: un consumidor que sabe de antemano que los
- * píxeles van a llegar de arriba abajo y con las filas completas puede escribir directo en su
- * destino sin guardar nada, y uno que no lo sabe tiene que estar preparado para recibirlos en
- * cualquier orden.
+ * <p>The hints of {@link #setHints} are not decoration: a consumer that knows beforehand that the
+ * pixels are going to arrive from top to bottom and with whole rows can write straight into its
+ * destination without keeping anything, and one that does not know has to be ready to receive them
+ * in any order.
  */
 public interface ImageConsumer {
 
-    /** Los píxeles pueden llegar en cualquier orden. */
+    /** The pixels may arrive in any order. */
     int RANDOMPIXELORDER = 1;
 
-    /** Los píxeles llegan de arriba abajo y de izquierda a derecha. */
+    /** The pixels arrive from top to bottom and from left to right. */
     int TOPDOWNLEFTRIGHT = 2;
 
-    /** Cada tanda trae filas enteras. */
+    /** Each batch brings whole rows. */
     int COMPLETESCANLINES = 4;
 
-    /** Cada píxel se entrega una sola vez. */
+    /** Each pixel is delivered exactly once. */
     int SINGLEPASS = 8;
 
-    /** La imagen tiene un solo cuadro. */
+    /** The image has a single frame. */
     int SINGLEFRAME = 16;
 
-    /** La producción se abortó. */
+    /** The production was aborted. */
     int IMAGEABORTED = 1;
 
-    /** La producción falló. */
+    /** The production failed. */
     int IMAGEERROR = 2;
 
-    /** Se terminó un cuadro de una imagen de varios. */
+    /** A frame of a multi-frame image is finished. */
     int SINGLEFRAMEDONE = 3;
 
-    /** La imagen está completa y no va a haber más. */
+    /** The image is complete and there will be no more. */
     int STATICIMAGEDONE = 4;
 
-    /** El tamaño de la imagen. */
+    /** The size of the image. */
     void setDimensions(int width, int height);
 
-    /** Las propiedades de la imagen. */
+    /** The properties of the image. */
     void setProperties(Hashtable<?, ?> props);
 
-    /** El modelo de color con el que van a venir la mayoría de los píxeles. */
+    /** The colour model most of the pixels are going to come with. */
     void setColorModel(ColorModel model);
 
-    /** En qué orden y de qué forma van a llegar los píxeles. */
+    /** In which order and in which shape the pixels are going to arrive. */
     void setHints(int hintflags);
 
-    /** Una tanda de píxeles de un byte cada uno. */
+    /** A batch of pixels of one byte each. */
     void setPixels(int x, int y, int w, int h, ColorModel model, byte[] pixels, int off,
             int scansize);
 
-    /** Una tanda de píxeles de un `int` cada uno. */
+    /** A batch of pixels of one `int` each. */
     void setPixels(int x, int y, int w, int h, ColorModel model, int[] pixels, int off,
             int scansize);
 
     /**
-     * Se terminó la entrega.
+     * The delivery is finished.
      *
-     * @param status `STATICIMAGEDONE`, `SINGLEFRAMEDONE`, `IMAGEERROR` o `IMAGEABORTED`
+     * @param status `STATICIMAGEDONE`, `SINGLEFRAMEDONE`, `IMAGEERROR` or `IMAGEABORTED`
      */
     void imageComplete(int status);
 }

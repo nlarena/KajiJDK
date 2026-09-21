@@ -1,15 +1,15 @@
 package com.sun.source.doctree;
 
 /**
- * El nodo de `{@inheritDoc}`, que trae la documentacion del metodo sobrescrito.
+ * The node of `{@inheritDoc}`, which brings the overridden method's documentation.
  *
- * <p>{@link #getSupertype} es `null` en la forma sin argumento —la clasica— y devuelve la
- * referencia cuando se escribio `{@inheritDoc Supertipo}`, que existe para desambiguar cuando hay
- * mas de un supertipo con documentacion.
+ * <p>{@link #getSupertype} is `null` in the form with no argument -- the classic one -- and
+ * returns the reference when `{@inheritDoc Supertype}` was written, which exists in order to
+ * disambiguate when there is more than one supertype with documentation.
  */
 public interface InheritDocTree extends InlineTagTree {
 
-    /** El supertipo del que heredar, o `null` si no se dijo cual. */
+    /** The supertype to inherit from, or `null` if which one was not said. */
     default ReferenceTree getSupertype() {
         return null;
     }

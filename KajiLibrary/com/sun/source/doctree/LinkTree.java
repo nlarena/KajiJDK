@@ -3,8 +3,8 @@ package com.sun.source.doctree;
 import java.util.List;
 
 /**
- * El nodo de `{@link}` y de `{@linkplain}`, que se distinguen por el
- * {@link #getTagName} y no por el tipo — la diferencia es solo tipografica.
+ * The node of `{@link}` and of `{@linkplain}`, which are told apart by the
+ * {@link #getTagName} and not by the type -- the difference is only typographical.
  */
 public interface LinkTree extends InlineTagTree {
 

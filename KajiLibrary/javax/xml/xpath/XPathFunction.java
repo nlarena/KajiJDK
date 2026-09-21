@@ -3,23 +3,23 @@ package javax.xml.xpath;
 import java.util.List;
 
 /**
- * KajiLibrary's javax.xml.xpath.XPathFunction -- una funcion propia, llamable desde la expresion.
+ * KajiLibrary's javax.xml.xpath.XPathFunction -- a custom function, callable from the expression.
  *
- * <p>XPath 1.0 trae unas treinta funciones y no hay forma de escribir una nueva <b>en</b> XPath. Esta
- * interfaz es la salida: una funcion escrita en Java que la expresion llama por nombre.
+ * <p>XPath 1.0 ships some thirty functions and there is no way to write a new one <b>in</b> XPath.
+ * This interface is the way out: a function written in Java that the expression calls by name.
  *
- * <p>Los argumentos llegan como una lista de {@code Object} y el mapeo importa: un numero de XPath
- * llega como {@code Double} --XPath 1.0 no tiene enteros--, un conjunto de nodos como
- * {@code NodeList}, y una cadena como {@code String}. Devolver algo que no sea uno de esos tipos deja
- * el resultado sin definir.
+ * <p>The arguments arrive as a list of {@code Object} and the mapping matters: an XPath number
+ * arrives as a {@code Double} --XPath 1.0 has no integers--, a node-set as a {@code NodeList}, and
+ * a string as a {@code String}. Returning something that is not one of those types leaves the
+ * result undefined.
  */
 public interface XPathFunction {
 
     /**
-     * Corre la funcion.
+     * Runs the function.
      *
-     * @param args los argumentos, ya convertidos a los tipos de XPath
-     * @throws XPathFunctionException si la funcion falla
+     * @param args the arguments, already converted to the XPath types
+     * @throws XPathFunctionException if the function fails
      */
     Object evaluate(List<?> args) throws XPathFunctionException;
 }

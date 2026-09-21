@@ -1,8 +1,8 @@
 package com.sun.source.doctree;
 
 /**
- * Un escape de Markdown, como `\\*`. El {@link #getBody} es lo que el escape
- * representa, ya sin la barra.
+ * A Markdown escape, such as `\\*`. The {@link #getBody} is what the escape
+ * represents, already without the slash.
  */
 public interface EscapeTree extends TextTree {
 

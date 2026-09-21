@@ -5,32 +5,32 @@ import java.lang.classfile.constantpool.ClassEntry;
 import java.lang.classfile.instruction.ExceptionCatch;
 import java.util.Optional;
 
-// Una fila de la `exception_table`.
+// A row of the `exception_table`.
 public final class ExceptionCatchImpl implements ExceptionCatch {
 
-    private final Label manejador;
-    private final Label inicio;
-    private final Label fin;
+    private final Label handler;
+    private final Label start;
+    private final Label end;
     private final Optional<ClassEntry> type;
 
-    public ExceptionCatchImpl(Label manejador, Label inicio, Label fin,
+    public ExceptionCatchImpl(Label handler, Label start, Label end,
             Optional<ClassEntry> type) {
-        this.manejador = manejador;
-        this.inicio = inicio;
-        this.fin = fin;
+        this.handler = handler;
+        this.start = start;
+        this.end = end;
         this.type = type;
     }
 
     public Label handler() {
-        return this.manejador;
+        return this.handler;
     }
 
     public Label tryStart() {
-        return this.inicio;
+        return this.start;
     }
 
     public Label tryEnd() {
-        return this.fin;
+        return this.end;
     }
 
     public Optional<ClassEntry> catchType() {
@@ -38,7 +38,7 @@ public final class ExceptionCatchImpl implements ExceptionCatch {
     }
 
     public String toString() {
-        return "ExceptionCatch[" + this.inicio + ".." + this.fin + " -> " + this.manejador
+        return "ExceptionCatch[" + this.start + ".." + this.end + " -> " + this.handler
                 + " : " + (this.type.isPresent() ? this.type.get().asInternalName() : "any") + "]";
     }
 }

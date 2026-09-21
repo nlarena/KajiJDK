@@ -11,75 +11,75 @@ import javax.xml.crypto.XMLCryptoContext;
 import org.w3c.dom.Element;
 
 /**
- * KajiLibrary's javax.xml.crypto.dom.DOMCryptoContext -- el contexto de una operacion de firma XML
- * sobre DOM.
+ * KajiLibrary's javax.xml.crypto.dom.DOMCryptoContext -- the context of an XML signature operation
+ * over DOM.
  *
- * <p>La implementacion comun de {@link XMLCryptoContext} para el mecanismo DOM.
- * {@code DOMSignContext} y {@code DOMValidateContext} heredan de aca todo lo que comparten.
+ * <p>The common implementation of {@link XMLCryptoContext} for the DOM mechanism.
+ * {@code DOMSignContext} and {@code DOMValidateContext} inherit from here everything they share.
  *
- * <h2>Tres mapas distintos, y se confunden</h2>
+ * <h2>Three different maps, and they get confused</h2>
  *
- * <p>Es lo unico complicado de la clase. Guarda tres cosas separadas:
+ * <p>It is the only complicated thing about the class. It keeps three separate things:
  *
  * <ul>
- *   <li>los <b>prefijos de espacio de nombres</b> ({@link #putNamespacePrefix}): con que prefijo
- *       escribir cada espacio de nombres al generar la firma;
- *   <li>las <b>propiedades</b> ({@link #setProperty}): configuracion de la implementacion;
- *   <li>el mapa de <b>objetos de contexto</b> ({@link #put}): datos que las partes de la operacion se
- *       pasan entre si mientras corre.
+ *   <li>the <b>namespace prefixes</b> ({@link #putNamespacePrefix}): with which prefix to write
+ *       each namespace when generating the signature;
+ *   <li>the <b>properties</b> ({@link #setProperty}): the implementation's configuration;
+ *   <li>the map of <b>context objects</b> ({@link #put}): data the parts of the operation pass each
+ *       other while it runs.
  * </ul>
  *
- * <p>Los tres tienen su par de metodos y <b>no se cruzan</b>: lo que se guarda con {@code setProperty}
- * no sale por {@code get}. Comprobado contra el JDK 25.
+ * <p>Each has its pair of methods and they <b>do not cross</b>: what is kept with {@code
+ * setProperty} does not come out through {@code get}. Checked against JDK 25.
  *
- * <h2>Los identificadores tienen que declararse</h2>
+ * <h2>Identifiers have to be declared</h2>
  *
- * <p>{@link #getElementById} no busca en el documento: busca en un registro que se llena a mano con
- * {@link #setIdAttributeNS}.
+ * <p>{@link #getElementById} does not search the document: it searches a registry filled by hand
+ * with {@link #setIdAttributeNS}.
  *
- * <p>Suena incomodo y es una decision de seguridad. Un DOM sin esquema no sabe que atributos son
- * identificadores, y adivinar --tomar cualquier atributo llamado {@code Id}-- permite que un documento
- * hostil declare un identificador falso y haga que la firma valide contra otro contenido. Registrarlos
- * explicitamente es lo que cierra esa puerta.
+ * <p>It sounds awkward and it is a security decision. A DOM without a schema does not know which
+ * attributes are identifiers, and guessing --taking any attribute called {@code Id}-- lets a
+ * hostile document declare a false identifier and make the signature validate against other
+ * content. Registering them explicitly is what closes that door.
  *
- * <p>{@link #iterator} recorre ese registro, y es de solo lectura: intentar sacar una entrada con el
- * iterador lanza {@link UnsupportedOperationException}.
+ * <p>{@link #iterator} walks that registry, and it is read-only: trying to remove an entry with the
+ * iterator throws {@link UnsupportedOperationException}.
  */
 public class DOMCryptoContext implements XMLCryptoContext {
 
-    /** Espacio de nombres a prefijo. */
+    /** Namespace to prefix. */
     private final HashMap<String, String> nsMap = new HashMap<String, String>();
 
-    /** Identificador a elemento. Ver la nota de la clase. */
+    /** Identifier to element. See the class note. */
     private final HashMap<String, Element> idMap = new HashMap<String, Element>();
 
-    /** Los objetos que las partes de la operacion se pasan. */
+    /** The objects the parts of the operation pass each other. */
     private final HashMap<Object, Object> objMap = new HashMap<Object, Object>();
 
-    /** La base contra la que se resuelven los URI relativos. */
+    /** The base relative URIs are resolved against. */
     private String baseURI;
 
-    /** Con que se eligen las claves. */
+    /** What the keys are chosen with. */
     private KeySelector ks;
 
-    /** Como se resuelven las referencias. */
+    /** How the references are resolved. */
     private URIDereferencer dereferencer;
 
-    /** La configuracion de la implementacion. */
+    /** The implementation's configuration. */
     private final HashMap<String, Object> propMap = new HashMap<String, Object>();
 
-    /** El prefijo para el espacio de nombres por omision. */
+    /** The prefix for the default namespace. */
     private String defaultPrefix;
 
-    /** Para las subclases; no se instancia directo. */
+    /** For the subclasses; it is not instantiated directly. */
     protected DOMCryptoContext() {
     }
 
     /**
-     * Con que prefijo escribir ese espacio de nombres.
+     * With which prefix to write that namespace.
      *
-     * @param defaultPrefix que devolver si no hay ninguno registrado
-     * @throws NullPointerException si el espacio de nombres es null
+     * @param defaultPrefix what to return if none is registered
+     * @throws NullPointerException if the namespace is null
      */
     public String getNamespacePrefix(String namespaceURI, String defaultPrefix) {
         if (namespaceURI == null) {
@@ -93,10 +93,10 @@ public class DOMCryptoContext implements XMLCryptoContext {
     }
 
     /**
-     * Registra un prefijo.
+     * Registers a prefix.
      *
-     * @return el que estaba antes, o null
-     * @throws NullPointerException si el espacio de nombres es null
+     * @return the one that was there before, or null
+     * @throws NullPointerException if the namespace is null
      */
     public String putNamespacePrefix(String namespaceURI, String prefix) {
         if (namespaceURI == null) {
@@ -105,28 +105,28 @@ public class DOMCryptoContext implements XMLCryptoContext {
         return this.nsMap.put(namespaceURI, prefix);
     }
 
-    /** El prefijo para el espacio de nombres por omision, o null. */
+    /** The prefix for the default namespace, or null. */
     public String getDefaultNamespacePrefix() {
         return this.defaultPrefix;
     }
 
-    /** Lo fija; null vuelve al comportamiento por omision. */
+    /** Sets it; null goes back to the default behaviour. */
     public void setDefaultNamespacePrefix(String defaultPrefix) {
         this.defaultPrefix = defaultPrefix;
     }
 
-    /** Contra que se resuelven los URI relativos, o null. */
+    /** What relative URIs are resolved against, or null. */
     public String getBaseURI() {
         return this.baseURI;
     }
 
     /**
-     * La fija.
+     * Sets it.
      *
-     * <p>Se valida al fijarla y no al usarla: un URI mal formado se descubre en el sitio que lo
-     * escribio, no adentro de una firma.
+     * <p>It is validated when set and not when used: a malformed URI is discovered at the place
+     * that wrote it, not inside a signature.
      *
-     * @throws IllegalArgumentException si no es un URI valido
+     * @throws IllegalArgumentException if it is not a valid URI
      */
     public void setBaseURI(String baseURI) {
         if (baseURI != null) {
@@ -139,20 +139,20 @@ public class DOMCryptoContext implements XMLCryptoContext {
         this.baseURI = baseURI;
     }
 
-    /** Como se resuelven las referencias, o null para el de la implementacion. */
+    /** How the references are resolved, or null for the implementation's. */
     public URIDereferencer getURIDereferencer() {
         return this.dereferencer;
     }
 
-    /** Lo cambia; null vuelve al de la implementacion. */
+    /** Changes it; null goes back to the implementation's. */
     public void setURIDereferencer(URIDereferencer dereferencer) {
         this.dereferencer = dereferencer;
     }
 
     /**
-     * Una propiedad de la implementacion. Ver la nota de la clase: no es el mapa de {@link #get}.
+     * A property of the implementation. See the class note: it is not the map of {@link #get}.
      *
-     * @throws NullPointerException si el nombre es null
+     * @throws NullPointerException if the name is null
      */
     public Object getProperty(String name) {
         if (name == null) {
@@ -162,10 +162,10 @@ public class DOMCryptoContext implements XMLCryptoContext {
     }
 
     /**
-     * La fija.
+     * Sets it.
      *
-     * @return la que estaba antes, o null
-     * @throws NullPointerException si el nombre es null
+     * @return the one that was there before, or null
+     * @throws NullPointerException if the name is null
      */
     public Object setProperty(String name, Object value) {
         if (name == null) {
@@ -174,22 +174,22 @@ public class DOMCryptoContext implements XMLCryptoContext {
         return this.propMap.put(name, value);
     }
 
-    /** Con que se eligen las claves, o null. */
+    /** What the keys are chosen with, or null. */
     public KeySelector getKeySelector() {
         return this.ks;
     }
 
-    /** Lo cambia. */
+    /** Changes it. */
     public void setKeySelector(KeySelector ks) {
         this.ks = ks;
     }
 
     /**
-     * El elemento con ese identificador, o null.
+     * The element with that identifier, or null.
      *
-     * <p>Solo encuentra los que se registraron con {@link #setIdAttributeNS}; ver la nota de la clase.
+     * <p>It only finds the ones registered with {@link #setIdAttributeNS}; see the class note.
      *
-     * @throws NullPointerException si el identificador es null
+     * @throws NullPointerException if the identifier is null
      */
     public Element getElementById(String idValue) {
         if (idValue == null) {
@@ -199,14 +199,14 @@ public class DOMCryptoContext implements XMLCryptoContext {
     }
 
     /**
-     * Declara que ese atributo de ese elemento es su identificador.
+     * Declares that attribute of that element to be its identifier.
      *
-     * <p>Ver la nota de la clase sobre por que hace falta declararlo.
+     * <p>See the class note on why it has to be declared.
      *
-     * @param namespaceURI el del atributo, o null si no tiene
-     * @param localName el nombre local del atributo
-     * @throws NullPointerException si el elemento o el nombre local son null
-     * @throws IllegalArgumentException si el elemento no tiene ese atributo
+     * @param namespaceURI the attribute's, or null if it has none
+     * @param localName the local name of the attribute
+     * @throws NullPointerException if the element or the local name is null
+     * @throws IllegalArgumentException if the element does not have that attribute
      */
     public void setIdAttributeNS(Element element, String namespaceURI, String localName) {
         if (element == null) {
@@ -223,28 +223,27 @@ public class DOMCryptoContext implements XMLCryptoContext {
     }
 
     /**
-     * Recorre los identificadores registrados.
+     * Walks the registered identifiers.
      *
-     * <p>De solo lectura: el {@code remove} del iterador lanza
-     * {@link UnsupportedOperationException}.
+     * <p>Read-only: the iterator's {@code remove} throws {@link UnsupportedOperationException}.
      */
     public Iterator<Map.Entry<String, Element>> iterator() {
         return java.util.Collections.unmodifiableMap(this.idMap).entrySet().iterator();
     }
 
     /**
-     * Un objeto del mapa de contexto. Ver la nota de la clase: no es el de las propiedades.
+     * An object of the context map. See the class note: it is not the one of the properties.
      *
-     * <p>Admite clave null, a diferencia de las otras dos.
+     * <p>It admits a null key, unlike the other two.
      */
     public Object get(Object key) {
         return this.objMap.get(key);
     }
 
     /**
-     * Lo guarda.
+     * Keeps it.
      *
-     * @return el que estaba antes, o null
+     * @return the one that was there before, or null
      */
     public Object put(Object key, Object value) {
         return this.objMap.put(key, value);

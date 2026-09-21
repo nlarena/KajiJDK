@@ -1,17 +1,16 @@
 package java.util;
 
-// La vista que devuelve List.subList(from, to). Package-private: el contrato solo promete una
-// List de vuelta.
+// The view List.subList(from, to) returns. Package-private: the contract only promises a List back.
 //
-// Es una **vista**, no una copia, y ahi esta todo el punto: escribir en la sublista escribe en la
-// original, y `list.subList(a, b).clear()` es la forma idiomatica de borrar un rango. Una copia
-// haria que esa linea no borrara nada, en silencio.
+// It is a **view**, not a copy, and that is the whole point: writing into the sublist writes into the
+// original, and `list.subList(a, b).clear()` is the idiomatic way of removing a range. A copy would
+// make that line remove nothing, in silence.
 //
-// El tamano propio (`length`) se ajusta con cada insercion o borrado por la vista. Lo que **no**
-// se detecta es una modificacion hecha directamente sobre la lista de atras mientras la vista
-// existe: el JDK la caza con `modCount` y tira ConcurrentModificationException. Aca no, y queda
-// dicho: usar la vista despues de tocar la original por afuera da resultados sin sentido en vez
-// de una excepcion.
+// Its own size (`length`) is adjusted on each insertion or removal through the view. What is **not**
+// detected is a modification made directly on the list behind while the view exists: the JDK catches
+// that with `modCount` and throws ConcurrentModificationException. Here it does not, and it is said
+// plainly: using the view after touching the original from outside gives meaningless results instead
+// of an exception.
 final class SubList<E> extends AbstractList<E> {
 
     private final List<E> base;
@@ -27,8 +26,8 @@ final class SubList<E> extends AbstractList<E> {
         this.length = toIndex - fromIndex;
     }
 
-    private void checkIndex(int index, int limite) {
-        if (index < 0 || index >= limite) {
+    private void checkIndex(int index, int bound) {
+        if (index < 0 || index >= bound) {
             throw new IndexOutOfBoundsException();
         }
     }
@@ -57,9 +56,9 @@ final class SubList<E> extends AbstractList<E> {
 
     public E remove(int index) {
         this.checkIndex(index, this.length);
-        E viejo = this.base.remove(this.offset + index);
+        E old = this.base.remove(this.offset + index);
         this.length = this.length - 1;
-        return viejo;
+        return old;
     }
 
     public boolean add(E e) {

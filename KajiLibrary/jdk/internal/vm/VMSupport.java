@@ -10,115 +10,121 @@ import java.util.Map;
 import java.util.Properties;
 
 /**
- * KajiLibrary's jdk.internal.vm.VMSupport — el puente por el que la VM le pasa cosas a Java.
+ * KajiLibrary's jdk.internal.vm.VMSupport -- the bridge through which the VM hands things to Java.
  *
- * <p>Junta tres trabajos que no se parecen entre sí y que están acá por la misma razón: los tres
- * cruzan la frontera entre el runtime y la biblioteca. Serializar propiedades para que un agente las
- * lea desde otro proceso, traducir excepciones que nacieron del lado del compilador JIT, y codificar
- * anotaciones para el mismo.
+ * <p>It gathers three jobs that do not look like one another and that are here for the same reason:
+ * the three cross the border between the runtime and the library. Serialising properties so that an
+ * agent reads them from another process, translating exceptions born on the side of the JIT
+ * compiler, and encoding annotations for the same one.
  *
- * <h2>Lo que queda afuera, y por qué</h2>
+ * <h2>What is left out, and why</h2>
  *
- * <p>Cuatro de los diez miembros del JDK no están. No es la misma razón para los cuatro, y conviene
- * separarlas porque no todas envejecen igual.
+ * <p>Four of the JDK's ten members are not here. The reason is not the same for the four, and it is
+ * as well to separate them because not all of them age the same way.
  *
  * <ul>
- * <li><strong>{@code encodeThrowable(Throwable, long, int)}</strong> y
- *     <strong>{@code decodeAndThrowThrowable(int, long, boolean, boolean)}</strong> — el {@code long}
- *     es una **dirección de memoria cruda** donde escribir o de donde leer los bytes. Esta VM no
- *     tiene memoria direccionable desde Java; el buffer no existe y no hay nada que apuntar.</li>
- * <li><strong>{@code encodeAnnotations(Collection)}</strong> — hay que leerle los miembros a cada
- *     anotación. El JDK no los lee por reflexión: usa
- *     {@code sun.reflect.annotation.AnnotationSupport.memberValues(a)}, que castea
- *     {@code Proxy.getInvocationHandler(a)} a {@code AnnotationInvocationHandler} y le pide el mapa
- *     ya armado. **Acá ese camino no existe**: una anotación de esta VM no es un `Proxy` sino una
- *     clase sintética que fabrica el compilador (`Marcada$$Anno$0`; ablación en
- *     `scratchpad/zz350/A3.java`), así que no hay `InvocationHandler` de dónde sacar el mapa. El
- *     único camino portable que queda es invocar los métodos miembro sobre la instancia, y eso
- *     **voltea la VM** (`index out of bounds` en el intérprete). La ablación separa los pasos:
- *     `getAnnotations()` y `annotationType()` andan (`A1`), `getDeclaredMethods()` sobre el tipo anda
- *     y devuelve el miembro (`A2`), y el que mata es `Method.invoke` **sobre la instancia de la
- *     anotación** (`A4`).</li>
- * <li><strong>{@code encodeAnnotations(byte[], Class, ConstantPool, boolean, Class[])}</strong> — su
- *     tipo de parámetro {@link jdk.internal.reflect.ConstantPool} **ya está en esta biblioteca**, así
- *     que ése dejó de ser el motivo. Quedan tres, y alcanza con cualquiera: el cuerpo del JDK es
- *     {@code AnnotationParser.parseSelectAnnotations(raw, cp, ...)}, y `sun.reflect.annotation` no
- *     está acá; ese parseo necesita un `ConstantPool` **con datos**, y el nuestro no puede tener
- *     ninguno porque la VM no expone su pool (está dicho en esa clase); y termina delegando en
- *     {@code encodeAnnotations(Collection)}, que es el bloqueo de arriba. Escribir `ConstantPool` era
- *     necesario para poder siquiera nombrar la firma, pero está lejos de ser suficiente.</li>
+ * <li><strong>{@code encodeThrowable(Throwable, long, int)}</strong> and <strong>{@code
+ *     decodeAndThrowThrowable(int, long, boolean, boolean)}</strong> -- the {@code long} is a **raw
+ *     memory address** where the bytes are written or read from. This VM has no memory addressable
+ *     from Java; the buffer does not exist and there is nothing to point at.</li>
+ * <li><strong>{@code encodeAnnotations(Collection)}</strong> -- the members of each annotation have
+ *     to be read. The JDK does not read them by reflection: it uses {@code
+ *     sun.reflect.annotation.AnnotationSupport.memberValues(a)}, which casts {@code
+ *     Proxy.getInvocationHandler(a)} to {@code AnnotationInvocationHandler} and asks it for the map
+ *     already built. **Here that road does not exist**: an annotation of this VM is not a `Proxy`
+ *     but a synthetic class the compiler makes (`Marked$$Anno$0`), so there is no
+ *     `InvocationHandler` to take the map from. The only portable road left is invoking the member
+ *     methods on the instance, and that **brings the VM down** (`index out of bounds` in the
+ *     interpreter). The ablation separated the steps: `getAnnotations()` and `annotationType()`
+ *     work (`A1`), `getDeclaredMethods()` on the type works and returns the member (`A2`), and the
+ *     one that kills it is `Method.invoke` **on the annotation instance** (`A4`). (The ablation,
+ *     `A1`-`A4` under `scratchpad/zz350/`, is not in the tree.)</li>
+ * <li><strong>{@code encodeAnnotations(byte[], Class, ConstantPool, boolean, Class[])}</strong> --
+ *     its parameter type {@link jdk.internal.reflect.ConstantPool} **is already in this library**,
+ *     so that stopped being the reason. Three remain, and any one is enough: the JDK's body is
+ *     {@code AnnotationParser.parseSelectAnnotations(raw, cp, ...)}, and `sun.reflect.annotation`
+ *     is not here; that parsing needs a `ConstantPool` **with data**, and ours cannot have any
+ *     because the VM does not expose its pool (it is said in that class); and it ends up delegating
+ *     to {@code encodeAnnotations(Collection)}, which is the block above. Writing `ConstantPool`
+ *     was necessary to even name the signature, but it is far from sufficient.</li>
  * </ul>
  *
- * <p>{@link #decodeAnnotations(byte[], AnnotationDecoder)} **sí está, y completo**. Antes figuraba
- * como bloqueado, con la razón de `encodeAnnotations(Collection)` copiada encima; era falsa.
- * Decodificar no toca ninguna anotación ni ninguna clase: lee bytes y le entrega lo que encuentra al
- * {@link AnnotationDecoder} que le pasan, que es quien decide con qué representarlo. No necesita
- * reflexión, ni el pool de constantes, ni memoria nativa — sólo un `DataInputStream`.
+ * <p>{@link #decodeAnnotations(byte[], AnnotationDecoder)} **is here, and complete**. It used to be
+ * listed as blocked, with the reason of `encodeAnnotations(Collection)` copied on top; it was
+ * false. Decoding touches no annotation and no class: it reads bytes and hands what it finds to the
+ * {@link AnnotationDecoder} it is given, which is the one that decides how to represent it. It
+ * needs no reflection, no constant pool, no native memory -- only a `DataInputStream`.
  *
- * <p>La interfaz anidada {@link AnnotationDecoder} es una declaración pura y su contrato no depende
- * de que haya quien la use.
+ * <p>The nested interface {@link AnnotationDecoder} is a pure declaration and its contract does not
+ * depend on there being somebody who uses it.
  */
 public class VMSupport {
 
-    // Las propiedades del agente son un mapa aparte del de sistema: las escribe quien se enchufa al
-    // proceso, no el proceso. Vacio y no `null`, porque "no hay agente" es un estado y no la falta de
-    // respuesta -- el que llama itera el resultado sin preguntar.
-    private static final Properties AGENTE = new Properties();
+    // The agent properties are a map separate from the system one: they are written by whoever
+    // plugs into the process, not by the process. Empty and not `null`, because "there is no agent"
+    // is a state and not the lack of an answer -- the caller iterates the result without asking.
+    private static final Properties AGENT = new Properties();
 
     public VMSupport() {
     }
 
     /**
-     * Las propiedades que dejó un agente enchufado al proceso.
+     * The properties left by an agent plugged into the process.
      *
-     * <p>Vacías: esta VM no acepta agentes. Es `synchronized` como en el JDK porque el mapa lo puede
-     * escribir un hilo de afuera mientras otro lo lee.
+     * <p>Empty: this VM accepts no agents. It is `synchronized` as in the JDK because the map may
+     * be written by an outside thread while another reads it.
      */
     public static synchronized Properties getAgentProperties() {
-        return VMSupport.AGENTE;
+        return VMSupport.AGENT;
     }
 
     /**
-     * Las propiedades de sistema, serializadas.
+     * The system properties, serialised.
      *
-     * <p>El formato es el que el JDK usa acá: pares `clave=valor` separados por saltos de línea, en
-     * UTF-8. Es deliberadamente tonto porque del otro lado lo lee código que puede estar corriendo en
-     * otro proceso y que no va a deserializar objetos de Java.
+     * <p>The format is `key=value` pairs separated by line breaks, in UTF-8, deliberately dumb
+     * because on the other side it is read by code that may be running in another process and that
+     * is not going to deserialise Java objects. The note said this is the format the JDK uses here;
+     * **it is not**. The JDK writes with {@link Properties#store}: ISO 8859-1, with non-Latin-1
+     * characters and the separators escaped, a leading date comment, and only the entries whose key
+     * and value are both `String`. This one writes raw UTF-8 with no escaping and every non-null
+     * entry through `String.valueOf`, so a key or value holding `=` or a line break is ambiguous on
+     * the other side.
      *
-     * @throws IOException si falla al armar el arreglo
+     * @throws IOException if building the array fails
      */
     public static byte[] serializePropertiesToByteArray() throws IOException {
-        return VMSupport.serializar(System.getProperties());
+        return VMSupport.serialize(System.getProperties());
     }
 
-    /** Las del agente, en el mismo formato. */
+    /** The agent's ones, in the same format. */
     public static byte[] serializeAgentPropertiesToByteArray() throws IOException {
-        return VMSupport.serializar(VMSupport.getAgentProperties());
+        return VMSupport.serialize(VMSupport.getAgentProperties());
     }
 
     /**
-     * El directorio temporal de la VM.
+     * The VM's temporary directory.
      *
-     * <p><strong>Acá no es `native`, y el JDK sí lo declara así.</strong> Es la única divergencia de
-     * modificador del archivo y conviene justificarla: en esta VM, un método `native` sin
-     * implementación registrada no tira una excepción — **voltea el proceso**. Así que declararlo
-     * `native` para respetar el modificador daría un miembro que mata al programa que lo llame, y
-     * escribirlo en Java da uno que contesta lo mismo que el del JDK. Entre respetar una palabra y
-     * respetar el comportamiento, gana el comportamiento.
+     * <p><strong>Here it is not `native`, and the JDK does declare it so.</strong> It is the only
+     * modifier divergence of the file and it is as well to justify it: on this VM, a `native`
+     * method with no registered implementation does not throw an exception -- **it brings the
+     * process down**. So declaring it `native` to respect the modifier would give a member that
+     * kills the program that calls it, and writing it in Java gives one that answers. Between
+     * respecting a word and respecting the behaviour, the behaviour wins.
      *
-     * <p>La respuesta sale de `java.io.tmpdir`, que es de donde el nativo del JDK la saca también.
+     * <p>The answer comes from `java.io.tmpdir`. The note said that is where the JDK's native gets
+     * it too; **it is not**: the JDK's comment says this directory must be well known and the same
+     * for all VM instances, so it "cannot be affected by configuration variables such as
+     * java.io.tmpdir". The two coincide only while nobody overrides `java.io.tmpdir`.
      *
-     * <p><strong>Hoy devuelve `null`</strong>, porque esta VM no define esa propiedad ni expone
-     * variables de entorno (`System.getenv("TMP")` también da `null`). Se deja así, y no se inventa
-     * una ruta: un directorio que se nombra y no existe es peor que la ausencia de respuesta —el que
-     * llama descubre el problema recién al escribir, y con un error que no señala la causa. El día
-     * que la VM defina `java.io.tmpdir`, este método empieza a devolverlo sin tocar nada.
+     * <p>The note also said it returns `null` today because this VM did not define that property.
+     * It does now: the VM fills `java.io.tmpdir` from the environment's temporary directory, so
+     * this returns a real path. (`System.getenv` still exposes no variables.)
      */
     public static String getVMTemporaryDirectory() {
         return System.getProperty("java.io.tmpdir");
     }
 
-    private static byte[] serializar(Properties props) throws IOException {
+    private static byte[] serialize(Properties props) throws IOException {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         for (Map.Entry<Object, Object> e : props.entrySet()) {
             Object k = e.getKey();
@@ -135,94 +141,94 @@ public class VMSupport {
     }
 
     /**
-     * Cómo reconstruir una anotación decodificada.
+     * How to rebuild a decoded annotation.
      *
-     * <p>Las cuatro variables de tipo son los cuatro mundos que el que decodifica elige: {@code T} el
-     * tipo, {@code A} la anotación armada, {@code E} un valor de enum, {@code X} un error. La
-     * interfaz no fabrica nada — le dice al decodificador *qué* encontró y deja que él decida con qué
-     * representarlo. Eso es lo que permite que el mismo decodificador sirva para armar anotaciones de
-     * verdad o para armar una descripción de ellas sin cargar sus clases.
+     * <p>The four type variables are the four worlds the decoder chooses: {@code T} the type,
+     * {@code A} the built annotation, {@code E} an enum value, {@code X} an error. The interface
+     * makes nothing -- it tells the decoder *what* it found and lets it decide how to represent it.
+     * That is what allows the same decoder to serve for building real annotations or for building a
+     * description of them without loading their classes.
      *
-     * <p>{@link #newErrorValue} es la parte que suele sorprender: un valor que no se puede resolver
-     * **no es una excepción**, es un valor más. Una anotación que menciona una clase que ya no está
-     * tiene que poder describirse igual, con el error adentro, en vez de hacer fallar la lectura
-     * entera.
+     * <p>{@link #newErrorValue} is the part that tends to surprise: a value that cannot be resolved
+     * **is not an exception**, it is one more value. An annotation that mentions a class that is no
+     * longer there has to be describable all the same, with the error inside, instead of making the
+     * whole read fail.
      */
     public interface AnnotationDecoder<T, A, E, X> {
 
-        /** El tipo que corresponde a ese descriptor. */
+        /** The type that corresponds to that descriptor. */
         T resolveType(String name);
 
-        /** Una anotación de ese tipo con esos miembros. */
+        /** An annotation of that type with those members. */
         A newAnnotation(T type, Map.Entry<String, Object>[] elements);
 
-        /** Un valor de enum de ese tipo y ese nombre. */
+        /** An enum value of that type and that name. */
         E newEnumValue(T enumType, String name);
 
-        /** Un valor que no se pudo resolver, con el motivo. */
+        /** A value that could not be resolved, with the reason. */
         X newErrorValue(String description);
     }
 
     /**
-     * Reconstruye las anotaciones que {@code encodeAnnotations} serializó.
+     * It rebuilds the annotations that {@code encodeAnnotations} serialised.
      *
-     * <p>El formato es el del JDK y no uno nuestro, porque del otro lado puede haber un compilador
-     * JIT escrito aparte: un entero de largo, y después esa cantidad de anotaciones. Cada anotación
-     * es el nombre binario de su tipo, otro largo, y esa cantidad de pares nombre/valor donde el
-     * valor arranca con un byte de etiqueta --las de {@code JVM_SIGNATURE} para los primitivos,
-     * {@code 's'} texto, {@code 'c'} clase, {@code 'e'} constante de enum, {@code '@'} anotación
-     * anidada, {@code '['} arreglo y {@code 'x'} un valor que no se pudo resolver--.
+     * <p>The format is the JDK's and not one of ours, because on the other side there may be a JIT
+     * compiler written separately: a length integer, and then that many annotations. Each
+     * annotation is the binary name of its type, another length, and that many name/value pairs
+     * where the value starts with a tag byte --the {@code JVM_SIGNATURE} ones for the primitives,
+     * {@code 's'} text, {@code 'c'} class, {@code 'e'} enum constant, {@code '@'} nested
+     * annotation, {@code '['} array and {@code 'x'} a value that could not be resolved--.
      *
-     * <p>El largo va **en uno o en cuatro bytes**: si entra en siete bits se escribe uno solo con el
-     * bit alto prendido, y si no, un `int` de cuatro. Por eso al leer se mira el signo del primer
-     * byte, que es la marca de cuál de las dos formas vino. Una anotación típica tiene dos o tres
-     * miembros, así que el caso corto es el que pasa siempre.
+     * <p>The length goes **in one or in four bytes**: if it fits in seven bits a single one is
+     * written with the high bit set, and if not, a four-byte `int`. That is why on reading the sign
+     * of the first byte is looked at, which is the mark of which of the two forms came. A typical
+     * annotation has two or three members, so the short case is the one that always happens.
      *
-     * <p>Este método **no toca ninguna anotación ni carga ninguna clase**: cada tipo que aparece se
-     * lo pasa a {@link AnnotationDecoder#resolveType} y cada valor raro a
-     * {@link AnnotationDecoder#newErrorValue}, así que el que llama puede leer anotaciones que
-     * mencionan clases que no están sin que la lectura se caiga. Es lo que lo hace implementable acá
-     * y lo que lo separa de {@code encodeAnnotations}.
+     * <p>This method **touches no annotation and loads no class**: each type that appears is passed
+     * to {@link AnnotationDecoder#resolveType} and each odd value to {@link
+     * AnnotationDecoder#newErrorValue}, so the caller can read annotations that mention classes
+     * that are not there without the read falling over. It is what makes it implementable here and
+     * what separates it from {@code encodeAnnotations}.
      *
-     * @return una lista inmutable con lo que el decodificador fabricó, en el orden en que vinieron
+     * @return an immutable list with what the decoder made, in the order they came
      */
     @SuppressWarnings("unchecked")
     public static <T, A, E, X> List<A> decodeAnnotations(byte[] encoded,
                                                          AnnotationDecoder<T, A, E, X> decoder) {
         try {
             DataInputStream dis = new DataInputStream(new ByteArrayInputStream(encoded));
-            int n = VMSupport.leerLargo(dis);
+            int n = VMSupport.readLength(dis);
             Object[] out = new Object[n];
             for (int i = 0; i < n; i++) {
-                out[i] = VMSupport.leerAnotacion(dis, decoder);
+                out[i] = VMSupport.readAnnotation(dis, decoder);
             }
             return (List<A>) List.of(out);
         } catch (Exception e) {
-            // Como en el JDK: un arreglo mal formado es un error del que lo produjo, no una
-            // condicion que el que llama pueda manejar.
+            // As in the JDK: a malformed array is an error of whoever produced it, not a condition
+            // the caller can handle.
             throw new InternalError(e);
         }
     }
 
     @SuppressWarnings("unchecked")
-    private static <T, A, E, X> A leerAnotacion(DataInputStream dis,
+    private static <T, A, E, X> A readAnnotation(DataInputStream dis,
                                                 AnnotationDecoder<T, A, E, X> decoder)
             throws IOException {
-        T tipo = decoder.resolveType(dis.readUTF());
-        int n = VMSupport.leerLargo(dis);
-        Map.Entry[] miembros = new Map.Entry[n];
+        T type = decoder.resolveType(dis.readUTF());
+        int n = VMSupport.readLength(dis);
+        Map.Entry[] members = new Map.Entry[n];
         for (int i = 0; i < n; i++) {
-            String nombre = dis.readUTF();
-            byte etiqueta = dis.readByte();
-            miembros[i] = Map.entry(nombre, VMSupport.leerValor(dis, decoder, etiqueta));
+            String name = dis.readUTF();
+            byte tag = dis.readByte();
+            members[i] = Map.entry(name, VMSupport.readValue(dis, decoder, tag));
         }
-        return decoder.newAnnotation(tipo, (Map.Entry<String, Object>[]) miembros);
+        return decoder.newAnnotation(type, (Map.Entry<String, Object>[]) members);
     }
 
-    private static <T, A, E, X> Object leerValor(DataInputStream dis,
+    private static <T, A, E, X> Object readValue(DataInputStream dis,
                                                  AnnotationDecoder<T, A, E, X> decoder,
-                                                 byte etiqueta) throws IOException {
-        switch (etiqueta) {
+                                                 byte tag) throws IOException {
+        switch (tag) {
             case 'B': return Byte.valueOf(dis.readByte());
             case 'C': return Character.valueOf(dis.readChar());
             case 'D': return Double.valueOf(dis.readDouble());
@@ -234,29 +240,29 @@ public class VMSupport {
             case 's': return dis.readUTF();
             case 'c': return decoder.resolveType(dis.readUTF());
             case 'e': {
-                // En dos pasos y no anidado: el orden de las dos lecturas es parte del formato, y
-                // dejarlo a la evaluacion de argumentos lo esconde.
-                T tipoEnum = decoder.resolveType(dis.readUTF());
-                return decoder.newEnumValue(tipoEnum, dis.readUTF());
+                // In two steps and not nested: the order of the two reads is part of the format,
+                // and leaving it to argument evaluation hides it.
+                T enumType = decoder.resolveType(dis.readUTF());
+                return decoder.newEnumValue(enumType, dis.readUTF());
             }
-            case '@': return VMSupport.leerAnotacion(dis, decoder);
-            case '[': return VMSupport.leerArreglo(dis, decoder);
+            case '@': return VMSupport.readAnnotation(dis, decoder);
+            case '[': return VMSupport.readArray(dis, decoder);
             case 'x': return decoder.newErrorValue(dis.readUTF());
-            default: throw new InternalError("etiqueta no soportada: " + etiqueta);
+            default: throw new InternalError("unsupported tag: " + tag);
         }
     }
 
-    // Los arreglos vuelven como `List` inmutable y no como arreglo del tipo componente: el que
-    // decodifica eligio con que representar cada valor, asi que el tipo del elemento es suyo y no
-    // nuestro, y no hay arreglo concreto que podamos fabricar sin adivinarlo.
-    private static <T, A, E, X> Object leerArreglo(DataInputStream dis,
+    // Arrays come back as an immutable `List` and not as an array of the component type: the
+    // decoder chose how to represent each value, so the element type is theirs and not ours, and
+    // there is no concrete array we could make without guessing it.
+    private static <T, A, E, X> Object readArray(DataInputStream dis,
                                                    AnnotationDecoder<T, A, E, X> decoder)
             throws IOException {
         byte comp = dis.readByte();
-        // El enum es el unico que trae su tipo ANTES del largo, porque es uno solo para todo el
-        // arreglo. Por eso se lee aca y no adentro del bucle.
-        T tipoEnum = comp == 'e' ? decoder.resolveType(dis.readUTF()) : null;
-        int n = VMSupport.leerLargo(dis);
+        // The enum is the only one that brings its type BEFORE the length, because it is a single
+        // one for the whole array. That is why it is read here and not inside the loop.
+        T enumType = comp == 'e' ? decoder.resolveType(dis.readUTF()) : null;
+        int n = VMSupport.readLength(dis);
         Object[] out = new Object[n];
         for (int i = 0; i < n; i++) {
             switch (comp) {
@@ -270,24 +276,24 @@ public class VMSupport {
                 case 'Z': out[i] = Boolean.valueOf(dis.readBoolean()); break;
                 case 's': out[i] = dis.readUTF(); break;
                 case 'c': out[i] = decoder.resolveType(dis.readUTF()); break;
-                case 'e': out[i] = decoder.newEnumValue(tipoEnum, dis.readUTF()); break;
-                case '@': out[i] = VMSupport.leerAnotacion(dis, decoder); break;
-                default: throw new InternalError("etiqueta de componente no soportada: " + comp);
+                case 'e': out[i] = decoder.newEnumValue(enumType, dis.readUTF()); break;
+                case '@': out[i] = VMSupport.readAnnotation(dis, decoder); break;
+                default: throw new InternalError("unsupported component tag: " + comp);
             }
         }
         return List.of(out);
     }
 
-    // El largo viene en un byte con el bit alto prendido si entra en siete bits, y si no en cuatro.
-    // El primer byte leido con signo es negativo exactamente en el caso corto, y eso es lo que
-    // distingue las dos formas.
+    // The length comes in one byte with the high bit set if it fits in seven bits, and otherwise in
+    // four. The first byte read as signed is negative exactly in the short case, and that is what
+    // tells the two forms apart.
     //
-    // Los tres bytes de la forma larga se leen con `readUnsignedByte` y no con `read` como en el JDK.
-    // Es la unica diferencia con el original y es a proposito: `read` devuelve -1 al llegar al final
-    // en vez de fallar, asi que un arreglo truncado justo ahi daba un largo enorme armado con esos
-    // -1 y recien reventaba mas adelante, lejos de la causa. `readUnsignedByte` tira `EOFException`
-    // en el byte que falta. Con bytes validos las dos formas dan lo mismo.
-    private static int leerLargo(DataInputStream dis) throws IOException {
+    // The three bytes of the long form are read with `readUnsignedByte` and not with `read` as in
+    // the JDK. It is the only difference with the original and it is on purpose: `read` returns -1
+    // on reaching the end instead of failing, so an array truncated right there gave a huge length
+    // built from those -1s and only blew up further on, far from the cause. `readUnsignedByte`
+    // throws `EOFException` at the missing byte. With valid bytes the two forms give the same.
+    private static int readLength(DataInputStream dis) throws IOException {
         int b1 = dis.readByte();
         if (b1 < 0) {
             return b1 & 0x7F;

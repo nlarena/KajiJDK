@@ -77,37 +77,40 @@ import java.util.Optional;
 import java.util.function.Consumer;
 
 /**
- * Las implementaciones de `java.lang.classfile.attribute` y las fábricas que las arman.
+ * The implementations of `java.lang.classfile.attribute` and the factories that build them.
  *
- * <p>Todas las interfaces de ese paquete son declaraciones puras: sus `of(...)` delegan acá. Está
- * separado en dos por una razón concreta y no por gusto — un atributo que el usuario **construye**
- * y uno que sale de **leer** un `.class` no son la misma cosa:
+ * <p>All the interfaces of that package are pure declarations: their `of(...)` delegate here. It is
+ * split in two for a concrete reason and not for taste -- an attribute the user **builds** and one
+ * that comes out of **reading** a `.class` are not the same thing:
  *
  * <ul>
- * <li>El construido tiene sus componentes ya en la mano. No hay archivo, no hay offsets, no hay
- *     pool de destino: es un objeto de valor y nada más. Eso es lo que hay acá.</li>
- * <li>El leído sale de {@link Mappers} por su nombre, y lo que devuelve hoy es un
- *     {@link RawAttribute} — el nombre, la entrada de pool y el cuerpo en bytes. Ver la nota de
- *     alcance de {@link java.lang.classfile.Attributes}.</li>
+ * <li>The built one has its components already in hand. There is no file, there are no offsets,
+ *     there is no destination pool: it is a value object and nothing more. That is what is
+ *     here.</li>
+ * <li>The read one comes out of {@link Mappers} by its name, and what it returns today is a
+ *     {@link RawAttribute} -- the name, the pool entry and the body in bytes. See the scope note of
+ *     {@link java.lang.classfile.Attributes}.</li>
  * </ul>
  *
- * <p><strong>Las listas se copian y se congelan al entrar.</strong> No es defensa por defensa: un
- * atributo describe algo que ya pasó —las excepciones que este método declara, las clases anidadas
- * que esta clase tiene— y si la lista que se pasó siguiera viva, cambiarla después cambiaría lo que
- * el atributo dice sin que nadie lo haya vuelto a construir. `Collections.unmodifiableList` sobre
- * una copia es lo único que hace que `exceptions()` devuelva siempre lo mismo.
+ * <p><strong>The lists are copied and frozen on the way in.</strong> It is not defence for
+ * defence's sake: an attribute describes something that already happened --the exceptions this
+ * method declares, the nested classes this class has-- and if the list passed stayed alive,
+ * changing it afterwards would change what the attribute says without anybody having rebuilt it.
+ * `Collections.unmodifiableList` over a copy is the only thing that makes `exceptions()` always
+ * return the same.
  *
- * <p><strong>Los `Optional` se guardan como el valor o `null`</strong> y se envuelven al salir. Un
- * campo `Optional` es un objeto más por atributo y por componente, y acá hay tablas con miles de
- * entradas (`LineNumberTable` de un método grande). El contrato hacia afuera es idéntico.
+ * <p><strong>The `Optional`s are kept as the value or `null`</strong> and wrapped on the way out.
+ * An `Optional` field is one more object per attribute and per component, and here there are tables
+ * with thousands of entries (`LineNumberTable` of a big method). The contract outwards is
+ * identical.
  */
 public final class TypedAttributes {
 
     private TypedAttributes() {
     }
 
-    // Los nombres, una vez por atributo y no uno por objeto construido. El pool deduplica igual,
-    // pero con la constante ni siquiera se lo consulta.
+    // The names, once per attribute and not one per built object. The pool deduplicates anyway, but
+    // with the constant it is not even consulted.
     static final Utf8Entry N_ANNOTATION_DEFAULT = TemporaryConstantPool.utf8("AnnotationDefault");
     static final Utf8Entry N_CHARACTER_RANGE_TABLE = TemporaryConstantPool.utf8("CharacterRangeTable");
     static final Utf8Entry N_COMPILATION_ID = TemporaryConstantPool.utf8("CompilationID");
@@ -144,50 +147,50 @@ public final class TypedAttributes {
     static final Utf8Entry N_SYNTHETIC = TemporaryConstantPool.utf8("Synthetic");
 
 
-    // ---- conversiones que las fábricas de la API piden por nombre ------------------------------
+    // ---- conversions the API factories ask for by name ------------------------------------------
     //
-    // Estas existen porque una interfaz de `java.lang.classfile.attribute` no puede llamar a
-    // `TemporaryConstantPool` (es interna y el `of` está en el paquete público), así que pasa por
-    // acá. Son de una línea a propósito: si alguna creciera, la lógica estaría en el lugar
-    // equivocado.
+    // These exist because an interface of `java.lang.classfile.attribute` cannot call
+    // `TemporaryConstantPool` (it is internal and the `of` is in the public package), so it goes
+    // through here. They are one-liners on purpose: if one grew, the logic would be in the wrong
+    // place.
 
-    /** Un `CONSTANT_Utf8` suelto. */
+    /** A loose `CONSTANT_Utf8`. */
     public static Utf8Entry utf8(String s) {
         return TemporaryConstantPool.utf8(s);
     }
 
     /**
-     * Igual que {@link #utf8}, pero `null` pasa como `null` en vez de romper.
+     * Like {@link #utf8}, but `null` passes as `null` instead of breaking.
      *
-     * <p>Lo pide `ModuleRequireInfo`: la versión de un `requires` es opcional en el formato, y quien
-     * llama la tiene como un `String` que puede faltar. Sin esto, cada llamador repetiría el mismo
-     * `if`.
+     * <p>`ModuleRequireInfo` asks for it: the version of a `requires` is optional in the format,
+     * and the caller has it as a `String` that may be missing. Without this, each caller would
+     * repeat the same `if`.
      */
     public static Utf8Entry utf8OrNull(String s) {
         return s == null ? null : TemporaryConstantPool.utf8(s);
     }
 
-    /** Un `CONSTANT_Class` suelto. */
+    /** A loose `CONSTANT_Class`. */
     public static ClassEntry classEntry(ClassDesc d) {
         return TemporaryConstantPool.classEntry(d);
     }
 
-    /** Un `CONSTANT_Package` suelto. */
+    /** A loose `CONSTANT_Package`. */
     public static PackageEntry packageEntry(PackageDesc d) {
         return TemporaryConstantPool.pool().packageEntry(d);
     }
 
-    /** Un `CONSTANT_Module` suelto. */
+    /** A loose `CONSTANT_Module`. */
     public static ModuleEntry moduleEntry(ModuleDesc d) {
         return TemporaryConstantPool.pool().moduleEntry(d);
     }
 
-    /** La entrada de valor constante de `c` (`Integer`, `Long`, `Float`, `Double` o `String`). */
+    /** The constant-value entry of `c` (`Integer`, `Long`, `Float`, `Double` or `String`). */
     public static ConstantValueEntry constantValueEntry(ConstantDesc c) {
         return TemporaryConstantPool.pool().constantValueEntry(c);
     }
 
-    /** Las entradas `CONSTANT_Class` de esos descriptores. */
+    /** The `CONSTANT_Class` entries of those descriptors. */
     public static List<ClassEntry> classEntries(List<ClassDesc> descs) {
         List<ClassEntry> out = new ArrayList<ClassEntry>();
         for (int i = 0; i < descs.size(); i++) {
@@ -196,7 +199,7 @@ public final class TypedAttributes {
         return out;
     }
 
-    /** Las entradas `CONSTANT_Class` de esos descriptores. */
+    /** The `CONSTANT_Class` entries of those descriptors. */
     public static List<ClassEntry> classEntries(ClassDesc[] descs) {
         List<ClassEntry> out = new ArrayList<ClassEntry>();
         for (int i = 0; i < descs.length; i++) {
@@ -205,7 +208,7 @@ public final class TypedAttributes {
         return out;
     }
 
-    /** Las entradas `CONSTANT_Package` de esos descriptores. */
+    /** The `CONSTANT_Package` entries of those descriptors. */
     public static List<PackageEntry> packageEntries(List<PackageDesc> descs) {
         List<PackageEntry> out = new ArrayList<PackageEntry>();
         for (int i = 0; i < descs.size(); i++) {
@@ -214,7 +217,7 @@ public final class TypedAttributes {
         return out;
     }
 
-    /** Las entradas `CONSTANT_Package` de esos descriptores. */
+    /** The `CONSTANT_Package` entries of those descriptors. */
     public static List<PackageEntry> packageEntries(PackageDesc[] descs) {
         List<PackageEntry> out = new ArrayList<PackageEntry>();
         for (int i = 0; i < descs.length; i++) {
@@ -223,7 +226,7 @@ public final class TypedAttributes {
         return out;
     }
 
-    /** Las entradas `CONSTANT_Module` de esos descriptores. */
+    /** The `CONSTANT_Module` entries of those descriptors. */
     public static List<ModuleEntry> moduleEntries(List<ModuleDesc> descs) {
         List<ModuleEntry> out = new ArrayList<ModuleEntry>();
         for (int i = 0; i < descs.size(); i++) {
@@ -232,7 +235,7 @@ public final class TypedAttributes {
         return out;
     }
 
-    /** Las entradas `CONSTANT_Module` de esos descriptores. */
+    /** The `CONSTANT_Module` entries of those descriptors. */
     public static List<ModuleEntry> moduleEntries(ModuleDesc[] descs) {
         List<ModuleEntry> out = new ArrayList<ModuleEntry>();
         for (int i = 0; i < descs.length; i++) {
@@ -242,12 +245,12 @@ public final class TypedAttributes {
     }
 
     /**
-     * Un arreglo variádico como lista.
+     * A varargs array as a list.
      *
-     * <p>Hay además `listOfClasses`, `listOfModules`, `listOfAttributes`, `listOfAnnotations` y
-     * `listOfTypeAnnotations`, que hacen exactamente esto para un tipo fijo. No son redundancia:
-     * nuestro javac no siempre infiere `T` cuando el resultado va derecho como argumento de otra
-     * llamada genérica, y con el nombre concreto no hay nada que inferir.
+     * <p>There are also `listOfClasses`, `listOfModules`, `listOfAttributes`, `listOfAnnotations`
+     * and `listOfTypeAnnotations`, which do exactly this for a fixed type. They are not redundancy:
+     * our javac does not always infer `T` when the result goes straight in as an argument of
+     * another generic call, and with the concrete name there is nothing to infer.
      */
     public static <T> List<T> listOf(T[] items) {
         List<T> out = new ArrayList<T>();
@@ -257,7 +260,7 @@ public final class TypedAttributes {
         return out;
     }
 
-    /** Ver {@link #listOf}. */
+    /** See {@link #listOf}. */
     public static List<ClassEntry> listOfClasses(ClassEntry[] items) {
         List<ClassEntry> out = new ArrayList<ClassEntry>();
         for (int i = 0; i < items.length; i++) {
@@ -266,7 +269,7 @@ public final class TypedAttributes {
         return out;
     }
 
-    /** Ver {@link #listOf}. */
+    /** See {@link #listOf}. */
     public static List<ModuleEntry> listOfModules(ModuleEntry[] items) {
         List<ModuleEntry> out = new ArrayList<ModuleEntry>();
         for (int i = 0; i < items.length; i++) {
@@ -275,7 +278,7 @@ public final class TypedAttributes {
         return out;
     }
 
-    /** Ver {@link #listOf}. */
+    /** See {@link #listOf}. */
     public static List<Attribute<?>> listOfAttributes(Attribute<?>[] items) {
         List<Attribute<?>> out = new ArrayList<Attribute<?>>();
         for (int i = 0; i < items.length; i++) {
@@ -284,7 +287,7 @@ public final class TypedAttributes {
         return out;
     }
 
-    /** Ver {@link #listOf}. */
+    /** See {@link #listOf}. */
     public static List<Annotation> listOfAnnotations(Annotation[] items) {
         List<Annotation> out = new ArrayList<Annotation>();
         for (int i = 0; i < items.length; i++) {
@@ -293,7 +296,7 @@ public final class TypedAttributes {
         return out;
     }
 
-    /** Ver {@link #listOf}. */
+    /** See {@link #listOf}. */
     public static List<TypeAnnotation> listOfTypeAnnotations(TypeAnnotation[] items) {
         List<TypeAnnotation> out = new ArrayList<TypeAnnotation>();
         for (int i = 0; i < items.length; i++) {
@@ -302,7 +305,7 @@ public final class TypedAttributes {
         return out;
     }
 
-    /** La máscara de bits de esas banderas. */
+    /** The bit mask of those flags. */
     public static int mask(AccessFlag[] flags) {
         int m = 0;
         for (int i = 0; i < flags.length; i++) {
@@ -311,7 +314,7 @@ public final class TypedAttributes {
         return m;
     }
 
-    /** La máscara de bits de esas banderas. */
+    /** The bit mask of those flags. */
     public static int mask(Collection<AccessFlag> flags) {
         int m = 0;
         for (AccessFlag f : flags) {
@@ -320,7 +323,7 @@ public final class TypedAttributes {
         return m;
     }
 
-    // Copia congelada: ver la nota de la clase sobre por qué no se guarda la lista viva.
+    // Frozen copy: see the class note on why the live list is not kept.
     private static <T> List<T> frozen(List<T> src) {
         return Collections.unmodifiableList(new ArrayList<T>(src));
     }
@@ -335,67 +338,67 @@ public final class TypedAttributes {
         return out;
     }
 
-    // ---- fábricas -----------------------------------------------------------------------------
+    // ---- factories -----------------------------------------------------------------------------
 
-    /** El atributo `AnnotationDefault` con ese valor. */
+    /** The `AnnotationDefault` attribute with that value. */
     public static AnnotationDefaultAttribute annotationDefault(AnnotationValue v) {
         return new AnnotationDefaultImpl(v);
     }
 
-    /** Un rango del `CharacterRangeTable`. */
+    /** A range of the `CharacterRangeTable`. */
     public static CharacterRangeInfo characterRangeInfo(int startPc, int endPc, int rangeStart,
             int rangeEnd, int flags) {
         return new CharacterRangeInfoImpl(startPc, endPc, rangeStart, rangeEnd, flags);
     }
 
-    /** El atributo `CharacterRangeTable` con esos rangos. */
+    /** The `CharacterRangeTable` attribute with those ranges. */
     public static CharacterRangeTableAttribute characterRangeTable(List<CharacterRangeInfo> r) {
         return new CharacterRangeTableImpl(frozen(r));
     }
 
-    /** El atributo `CompilationID`. */
+    /** The `CompilationID` attribute. */
     public static CompilationIDAttribute compilationId(Utf8Entry id) {
         return new CompilationIDImpl(id);
     }
 
-    /** El atributo `ConstantValue`. */
+    /** The `ConstantValue` attribute. */
     public static ConstantValueAttribute constantValue(ConstantValueEntry v) {
         return new ConstantValueImpl(v);
     }
 
     /**
-     * El atributo `Deprecated`.
+     * The `Deprecated` attribute.
      *
-     * <p>No tiene cuerpo: existir **es** todo lo que dice. Por eso hay una sola instancia y no una
-     * nueva por llamada — dos `Deprecated` no se distinguen en nada.
+     * <p>It has no body: existing **is** all it says. That is why there is a single instance and
+     * not a new one per call -- two `Deprecated`s differ in nothing.
      */
     public static DeprecatedAttribute deprecated() {
         return DeprecatedImpl.INSTANCE;
     }
 
-    /** El atributo `Synthetic`. Sin cuerpo, como `Deprecated`. */
+    /** The `Synthetic` attribute. Without body, like `Deprecated`. */
     public static SyntheticAttribute synthetic() {
         return SyntheticImpl.INSTANCE;
     }
 
-    /** El atributo `EnclosingMethod`. */
+    /** The `EnclosingMethod` attribute. */
     public static EnclosingMethodAttribute enclosingMethod(ClassEntry owner,
             Optional<NameAndTypeEntry> method) {
         return new EnclosingMethodImpl(owner, method.isPresent() ? method.get() : null);
     }
 
     /**
-     * El atributo `EnclosingMethod`, nombrando la clase y el método por sus descriptores.
+     * The `EnclosingMethod` attribute, naming the class and the method by their descriptors.
      *
-     * <p>El nombre y el tipo van juntos o no va ninguno: el formato guarda **un** índice a un
-     * `NameAndType`, no dos campos sueltos. Pedir uno solo describiría un `.class` que no existe, y
-     * por eso es `IllegalArgumentException` y no una interpretación amable.
+     * <p>The name and the type go together or neither goes: the format keeps **one** index to a
+     * `NameAndType`, not two loose fields. Asking for only one would describe a `.class` that does
+     * not exist, and that is why it is `IllegalArgumentException` and not a kind interpretation.
      */
     public static EnclosingMethodAttribute enclosingMethod(ClassDesc owner,
             Optional<String> methodName, Optional<MethodTypeDesc> methodType) {
         if (methodName.isPresent() != methodType.isPresent()) {
             throw new IllegalArgumentException(
-                    "EnclosingMethod lleva el nombre y el tipo juntos, o ninguno de los dos");
+                    "EnclosingMethod carries the name and the type together, or neither");
         }
         NameAndTypeEntry nat = null;
         if (methodName.isPresent()) {
@@ -406,19 +409,19 @@ public final class TypedAttributes {
         return new EnclosingMethodImpl(TemporaryConstantPool.classEntry(owner), nat);
     }
 
-    /** El atributo `Exceptions`. */
+    /** The `Exceptions` attribute. */
     public static ExceptionsAttribute exceptions(List<ClassEntry> exceptions) {
         return new ExceptionsImpl(frozen(exceptions));
     }
 
-    /** Una entrada del `InnerClasses`. */
+    /** An entry of the `InnerClasses`. */
     public static InnerClassInfo innerClassInfo(ClassEntry inner, Optional<ClassEntry> outer,
             Optional<Utf8Entry> innerName, int flags) {
         return new InnerClassInfoImpl(inner, outer.isPresent() ? outer.get() : null,
                 innerName.isPresent() ? innerName.get() : null, flags);
     }
 
-    /** Una entrada del `InnerClasses`, por descriptores. */
+    /** An entry of the `InnerClasses`, by descriptors. */
     public static InnerClassInfo innerClassInfo(ClassDesc inner, Optional<ClassDesc> outer,
             Optional<String> innerName, int flags) {
         return new InnerClassInfoImpl(TemporaryConstantPool.classEntry(inner),
@@ -427,49 +430,49 @@ public final class TypedAttributes {
                 flags);
     }
 
-    /** El atributo `InnerClasses`. */
+    /** The `InnerClasses` attribute. */
     public static InnerClassesAttribute innerClasses(List<InnerClassInfo> classes) {
         return new InnerClassesImpl(frozen(classes));
     }
 
-    /** Una entrada del `LineNumberTable`. */
+    /** An entry of the `LineNumberTable`. */
     public static LineNumberInfo lineNumberInfo(int startPc, int lineNumber) {
         return new LineNumberInfoImpl(startPc, lineNumber);
     }
 
-    /** El atributo `LineNumberTable`. */
+    /** The `LineNumberTable` attribute. */
     public static LineNumberTableAttribute lineNumberTable(List<LineNumberInfo> lines) {
         return new LineNumberTableImpl(frozen(lines));
     }
 
-    /** El atributo `LocalVariableTable`. */
+    /** The `LocalVariableTable` attribute. */
     public static LocalVariableTableAttribute localVariableTable(List<LocalVariableInfo> vars) {
         return new LocalVariableTableImpl(frozen(vars));
     }
 
-    /** El atributo `LocalVariableTypeTable`. */
+    /** The `LocalVariableTypeTable` attribute. */
     public static LocalVariableTypeTableAttribute localVariableTypeTable(
             List<LocalVariableTypeInfo> vars) {
         return new LocalVariableTypeTableImpl(frozen(vars));
     }
 
-    /** Una entrada del `MethodParameters`. */
+    /** An entry of the `MethodParameters`. */
     public static MethodParameterInfo methodParameterInfo(Optional<Utf8Entry> name, int flags) {
         return new MethodParameterInfoImpl(name.isPresent() ? name.get() : null, flags);
     }
 
-    /** Una entrada del `MethodParameters`, con el nombre como texto. */
+    /** An entry of the `MethodParameters`, with the name as text. */
     public static MethodParameterInfo methodParameterInfoOfNames(Optional<String> name, int flags) {
         return new MethodParameterInfoImpl(
                 name.isPresent() ? TemporaryConstantPool.utf8(name.get()) : null, flags);
     }
 
-    /** El atributo `MethodParameters`. */
+    /** The `MethodParameters` attribute. */
     public static MethodParametersAttribute methodParameters(List<MethodParameterInfo> ps) {
         return new MethodParametersImpl(frozen(ps));
     }
 
-    /** El atributo `Module`. */
+    /** The `Module` attribute. */
     public static ModuleAttribute module(ModuleEntry name, int flags, Utf8Entry version,
             Collection<ModuleRequireInfo> requires, Collection<ModuleExportInfo> exports,
             Collection<ModuleOpenInfo> opens, Collection<ClassEntry> uses,
@@ -479,11 +482,11 @@ public final class TypedAttributes {
     }
 
     /**
-     * El atributo `Module` armado por un constructor paso a paso.
+     * The `Module` attribute put together by a step-by-step builder.
      *
-     * <p>El `handler` recibe un constructor mutable y le va agregando directivas; lo que se
-     * devuelve es un atributo ya congelado. Después de esta llamada el constructor no se vuelve a
-     * usar, así que lo que el `handler` se haya guardado no puede cambiar el atributo.
+     * <p>The `handler` receives a mutable builder and keeps adding directives to it; what is
+     * returned is an attribute already frozen. After this call the builder is not used again, so
+     * whatever the `handler` kept cannot change the attribute.
      */
     public static ModuleAttribute buildModule(ModuleEntry name,
             Consumer<ModuleAttributeBuilder> handler) {
@@ -492,126 +495,126 @@ public final class TypedAttributes {
         return b.build();
     }
 
-    /** Una directiva `exports`. */
+    /** An `exports` directive. */
     public static ModuleExportInfo moduleExportInfo(PackageEntry pkg, int flags,
             List<ModuleEntry> to) {
         return new ModuleExportInfoImpl(pkg, flags, frozen(to));
     }
 
-    /** Una directiva `opens`. */
+    /** An `opens` directive. */
     public static ModuleOpenInfo moduleOpenInfo(PackageEntry pkg, int flags,
             List<ModuleEntry> to) {
         return new ModuleOpenInfoImpl(pkg, flags, frozen(to));
     }
 
-    /** Una directiva `provides`. */
+    /** A `provides` directive. */
     public static ModuleProvideInfo moduleProvideInfo(ClassEntry service,
             List<ClassEntry> impls) {
         return new ModuleProvideInfoImpl(service, frozen(impls));
     }
 
-    /** Una directiva `requires`. */
+    /** A `requires` directive. */
     public static ModuleRequireInfo moduleRequireInfo(ModuleEntry module, int flags,
             Utf8Entry version) {
         return new ModuleRequireInfoImpl(module, flags, version);
     }
 
-    /** Una entrada del `ModuleHashes`. */
+    /** An entry of the `ModuleHashes`. */
     public static ModuleHashInfo moduleHashInfo(ModuleEntry module, byte[] hash) {
         return new ModuleHashInfoImpl(module, copy(hash));
     }
 
-    /** El atributo `ModuleHashes`. */
+    /** The `ModuleHashes` attribute. */
     public static ModuleHashesAttribute moduleHashes(Utf8Entry algorithm,
             List<ModuleHashInfo> hashes) {
         return new ModuleHashesImpl(algorithm, frozen(hashes));
     }
 
-    /** El atributo `ModuleMainClass`. */
+    /** The `ModuleMainClass` attribute. */
     public static ModuleMainClassAttribute moduleMainClass(ClassEntry mainClass) {
         return new ModuleMainClassImpl(mainClass);
     }
 
-    /** El atributo `ModulePackages`. */
+    /** The `ModulePackages` attribute. */
     public static ModulePackagesAttribute modulePackages(List<PackageEntry> packages) {
         return new ModulePackagesImpl(frozen(packages));
     }
 
-    /** El atributo `ModuleResolution`. */
+    /** The `ModuleResolution` attribute. */
     public static ModuleResolutionAttribute moduleResolution(int flags) {
         return new ModuleResolutionImpl(flags);
     }
 
-    /** El atributo `ModuleTarget`. */
+    /** The `ModuleTarget` attribute. */
     public static ModuleTargetAttribute moduleTarget(Utf8Entry platform) {
         return new ModuleTargetImpl(platform);
     }
 
-    /** El atributo `NestHost`. */
+    /** The `NestHost` attribute. */
     public static NestHostAttribute nestHost(ClassEntry host) {
         return new NestHostImpl(host);
     }
 
-    /** El atributo `NestMembers`. */
+    /** The `NestMembers` attribute. */
     public static NestMembersAttribute nestMembers(List<ClassEntry> members) {
         return new NestMembersImpl(frozen(members));
     }
 
-    /** El atributo `PermittedSubclasses`. */
+    /** The `PermittedSubclasses` attribute. */
     public static PermittedSubclassesAttribute permittedSubclasses(List<ClassEntry> subs) {
         return new PermittedSubclassesImpl(frozen(subs));
     }
 
-    /** El atributo `Record`. */
+    /** The `Record` attribute. */
     public static RecordAttribute record(List<RecordComponentInfo> components) {
         return new RecordImpl(frozen(components));
     }
 
-    /** Un componente de un `record`. */
+    /** A component of a `record`. */
     public static RecordComponentInfo recordComponentInfo(Utf8Entry name, Utf8Entry descriptor,
             List<Attribute<?>> attributes) {
         return new RecordComponentInfoImpl(name, descriptor, frozen(attributes));
     }
 
-    /** El atributo `RuntimeVisibleAnnotations`. */
+    /** The `RuntimeVisibleAnnotations` attribute. */
     public static RuntimeVisibleAnnotationsAttribute runtimeVisibleAnnotations(
             List<Annotation> annotations) {
         return new RuntimeVisibleAnnotationsImpl(frozen(annotations));
     }
 
-    /** El atributo `RuntimeInvisibleAnnotations`. */
+    /** The `RuntimeInvisibleAnnotations` attribute. */
     public static RuntimeInvisibleAnnotationsAttribute runtimeInvisibleAnnotations(
             List<Annotation> annotations) {
         return new RuntimeInvisibleAnnotationsImpl(frozen(annotations));
     }
 
-    /** El atributo `RuntimeVisibleParameterAnnotations`. */
+    /** The `RuntimeVisibleParameterAnnotations` attribute. */
     public static RuntimeVisibleParameterAnnotationsAttribute runtimeVisibleParameterAnnotations(
             List<List<Annotation>> byParameter) {
         return new RuntimeVisibleParameterAnnotationsImpl(frozenNested(byParameter));
     }
 
-    /** El atributo `RuntimeInvisibleParameterAnnotations`. */
+    /** The `RuntimeInvisibleParameterAnnotations` attribute. */
     public static RuntimeInvisibleParameterAnnotationsAttribute
             runtimeInvisibleParameterAnnotations(List<List<Annotation>> byParameter) {
         return new RuntimeInvisibleParameterAnnotationsImpl(frozenNested(byParameter));
     }
 
-    /** El atributo `RuntimeVisibleTypeAnnotations`. */
+    /** The `RuntimeVisibleTypeAnnotations` attribute. */
     public static RuntimeVisibleTypeAnnotationsAttribute runtimeVisibleTypeAnnotations(
             List<TypeAnnotation> annotations) {
         return new RuntimeVisibleTypeAnnotationsImpl(frozen(annotations));
     }
 
-    /** El atributo `RuntimeInvisibleTypeAnnotations`. */
+    /** The `RuntimeInvisibleTypeAnnotations` attribute. */
     public static RuntimeInvisibleTypeAnnotationsAttribute runtimeInvisibleTypeAnnotations(
             List<TypeAnnotation> annotations) {
         return new RuntimeInvisibleTypeAnnotationsImpl(frozen(annotations));
     }
 
-    // La lista de listas de las anotaciones por parámetro: se congelan las dos capas. Congelar sólo
-    // la de afuera dejaría mutable la de cada parámetro, que es justo la que alguien va a tener a
-    // mano después de construirla.
+    // The list of lists of the per-parameter annotations: both layers are frozen. Freezing only the
+    // outer one would leave each parameter's mutable, which is exactly the one somebody is going to
+    // have at hand after building it.
     private static List<List<Annotation>> frozenNested(List<List<Annotation>> src) {
         List<List<Annotation>> out = new ArrayList<List<Annotation>>();
         for (int i = 0; i < src.size(); i++) {
@@ -620,52 +623,52 @@ public final class TypedAttributes {
         return Collections.unmodifiableList(out);
     }
 
-    /** El atributo `Signature`. */
+    /** The `Signature` attribute. */
     public static SignatureAttribute signature(Utf8Entry signature) {
         return new SignatureImpl(signature);
     }
 
-    /** El atributo `SourceDebugExtension`. */
+    /** The `SourceDebugExtension` attribute. */
     public static SourceDebugExtensionAttribute sourceDebugExtension(byte[] contents) {
         return new SourceDebugExtensionImpl(copy(contents));
     }
 
-    /** El atributo `SourceFile`. */
+    /** The `SourceFile` attribute. */
     public static SourceFileAttribute sourceFile(Utf8Entry sourceFile) {
         return new SourceFileImpl(sourceFile);
     }
 
-    /** El atributo `SourceID`. */
+    /** The `SourceID` attribute. */
     public static SourceIDAttribute sourceId(Utf8Entry sourceId) {
         return new SourceIDImpl(sourceId);
     }
 
-    /** Un frame del `StackMapTable`. */
+    /** A frame of the `StackMapTable`. */
     public static StackMapFrameInfo stackMapFrame(Label target, List<VerificationTypeInfo> locals,
             List<VerificationTypeInfo> stack) {
         return new StackMapFrameImpl(target, frozen(locals), frozen(stack));
     }
 
-    /** El atributo `StackMapTable`. */
+    /** The `StackMapTable` attribute. */
     public static StackMapTableAttribute stackMapTable(List<StackMapFrameInfo> entries) {
         return new StackMapTableImpl(frozen(entries));
     }
 
-    /** El tipo de verificación de una referencia a esa clase. */
+    /** The verification type of a reference to that class. */
     public static ObjectVerificationTypeInfo objectVerificationType(ClassEntry className) {
         return new ObjectVerificationTypeImpl(className);
     }
 
-    /** El tipo de verificación del objeto creado por el `new` de esa etiqueta. */
+    /** The verification type of the object created by the `new` at that label. */
     public static UninitializedVerificationTypeInfo uninitializedVerificationType(Label target) {
         return new UninitializedVerificationTypeImpl(target);
     }
 
-    // ---- implementaciones ---------------------------------------------------------------------
+    // ---- implementations -----------------------------------------------------------------------
     //
-    // Cada una guarda sus componentes y contesta. Todas comparten la misma forma, así que las que
-    // siguen no llevan comentario propio: lo que hay que saber está arriba. Lo que sí se comenta es
-    // lo que se aparta de la forma.
+    // Each one keeps its components and answers. They all share the same shape, so the ones that
+    // follow carry no comment of their own: what has to be known is above. What is commented is
+    // what departs from the shape.
 
     private static final class AnnotationDefaultImpl implements AnnotationDefaultAttribute {
 
@@ -1137,11 +1140,11 @@ public final class TypedAttributes {
         }
     }
 
-    // El constructor paso a paso de `Module`. Es lo único mutable de este archivo, y vive lo que
-    // dura la llamada a `buildModule`: acumula y se lo tira.
+    // The step-by-step builder of `Module`. It is the only mutable thing in this file, and it lives
+    // as long as the call to `buildModule`: it accumulates and is thrown away.
     //
-    // `moduleName` se puede volver a fijar porque la API lo permite (`ModuleAttributeBuilder`
-    // declara el método), no porque tenga sentido llamarlo dos veces.
+    // `moduleName` can be set again because the API allows it (`ModuleAttributeBuilder` declares
+    // the method), not because calling it twice makes sense.
     private static final class ModuleBuilderImpl implements ModuleAttributeBuilder {
 
         private ModuleEntry name;
@@ -1343,8 +1346,8 @@ public final class TypedAttributes {
             return this.module;
         }
 
-        // Se copia al salir además de al entrar: un `byte[]` que se devuelve tal cual es una puerta
-        // abierta para que quien lo reciba cambie el hash de un atributo ya construido.
+        // It is copied on the way out as well as on the way in: a `byte[]` returned as it is is an
+        // open door for whoever receives it to change the hash of an already built attribute.
         public byte[] hash() {
             return copy(this.hash);
         }
@@ -1814,13 +1817,15 @@ public final class TypedAttributes {
         }
 
         /**
-         * Siempre 255, `full_frame`.
+         * Always 255, `full_frame`.
          *
-         * <p>No es una simplificación: el `frame_type` es una **codificación**, no un dato. Las
-         * formas comprimidas (`same_frame`, `chop`, `append`…) sólo se pueden elegir sabiendo qué
-         * frame vino antes, y un frame construido suelto no tiene anterior. `full_frame` describe
-         * cualquier estado y no necesita contexto, así que es la única respuesta correcta acá. Un
-         * frame que sale de **leer** un `.class` conserva el que tenía.
+         * <p>It is not a simplification: the `frame_type` is an **encoding**, not a datum. The
+         * compressed forms (`same_frame`, `chop`, `append`...) can only be chosen knowing which
+         * frame came before, and a frame built loose has no previous one. `full_frame` describes
+         * any state and needs no context, so it is the only right answer here. The note said a
+         * frame that comes from **reading** a `.class` keeps the one it had; it does not -- the
+         * reader builds its frames through this same class, so they report 255 too, where the JDK
+         * reports the frame type read from the file.
          */
         public int frameType() {
             return 255;

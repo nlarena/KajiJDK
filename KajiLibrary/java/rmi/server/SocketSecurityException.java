@@ -1,21 +1,21 @@
 package java.rmi.server;
 
 /**
- * La exportacion fallo porque no se permitio abrir el puerto.
+ * The export failed because opening the port was not permitted.
  *
- * <p>Un caso particular de {@link ExportException}, separado para poder distinguir "no se pudo" de
- * "no se dejo": lo primero se arregla reintentando o cambiando de puerto, lo segundo no.
+ * <p>A particular case of {@link ExportException}, kept separate so "could not" can be told from
+ * "was not allowed": the first is fixed by retrying or changing port, the second is not.
  */
 public class SocketSecurityException extends ExportException {
 
     private static final long serialVersionUID = -7622072999407781979L;
 
-    /** Con un mensaje. */
+    /** With a message. */
     public SocketSecurityException(String s) {
         super(s);
     }
 
-    /** Con un mensaje y la causa. */
+    /** With a message and the cause. */
     public SocketSecurityException(String s, Exception ex) {
         super(s, ex);
     }

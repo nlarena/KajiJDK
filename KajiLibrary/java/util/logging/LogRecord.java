@@ -1,18 +1,18 @@
 package java.util.logging;
 
 /**
- * KajiLibrary's java.util.logging.LogRecord -- un mensaje, con todo lo que se sabe de el.
+ * KajiLibrary's java.util.logging.LogRecord -- a message, with everything known about it.
  *
- * <p>Es un objeto mutable que viaja del `Logger` a cada `Handler`, y ahi esta la unica sutileza:
- * **no se copia**. Un manejador que lo modifique se lo cambia a los que vienen despues, y eso esta
- * documentado como responsabilidad de quien escribe el manejador.
+ * <p>It is a mutable object that travels from the `Logger` to each `Handler`, and that is where the
+ * one subtlety lies: **it is not copied**. A handler that modifies it changes it for the ones that
+ * come after, and that is documented as the responsibility of whoever writes the handler.
  *
- * <p>El numero de secuencia existe para desempatar: dos mensajes del mismo milisegundo no se pueden
- * ordenar por hora, y el orden importa para leer una traza.
+ * <p>The sequence number exists to break ties: two messages of the same millisecond cannot be
+ * ordered by time, and order matters for reading a log.
  */
 public class LogRecord implements java.io.Serializable {
 
-    private static final java.util.concurrent.atomic.AtomicLong PROXIMO =
+    private static final java.util.concurrent.atomic.AtomicLong NEXT_SHORT_ID =
             new java.util.concurrent.atomic.AtomicLong(0);
 
     private Level level;
@@ -28,15 +28,15 @@ public class LogRecord implements java.io.Serializable {
     private java.util.ResourceBundle resourceBundle;
     private String resourceBundleName;
 
-    // Los identificadores cortos que se le dieron a los hilos cuyo identificador largo no entra en un
-    // `int`. Ver `getThreadID`.
-    private static final java.util.HashMap<Long, Integer> CORTOS =
+    // The short identifiers given to the threads whose long identifier does not fit in an `int`.
+    // See `getThreadID`.
+    private static final java.util.HashMap<Long, Integer> SHORT_IDS =
             new java.util.HashMap<Long, Integer>();
 
-    // De donde sale el proximo identificador corto sintetico. Arranca en el negativo mas grande
-    // porque los identificadores reales de esta VM son positivos y chicos: empezar por el otro
-    // extremo hace que un sintetico no pueda chocar con uno real.
-    private static int proximoCorto = Integer.MIN_VALUE;
+    // Where the next synthetic short identifier comes from. It starts at the largest negative
+    // because this VM's real identifiers are positive and small: starting from the other end makes a
+    // synthetic one unable to collide with a real one.
+    private static int nextShortId = Integer.MIN_VALUE;
 
     public LogRecord(Level level, String msg) {
         if (level == null) {
@@ -44,7 +44,7 @@ public class LogRecord implements java.io.Serializable {
         }
         this.level = level;
         this.msg = msg;
-        this.sequenceNumber = PROXIMO.getAndIncrement();
+        this.sequenceNumber = NEXT_SHORT_ID.getAndIncrement();
         this.instant = java.time.Instant.now();
         this.threadID = Thread.currentThread().getId();
     }
@@ -60,7 +60,7 @@ public class LogRecord implements java.io.Serializable {
         this.level = level;
     }
 
-    /** El mensaje **sin** formatear: puede llevar `{0}`, que resuelve el formateador. */
+    /** The **unformatted** message: it may carry `{0}`, which the formatter resolves. */
     public String getMessage() {
         return this.msg;
     }
@@ -69,7 +69,7 @@ public class LogRecord implements java.io.Serializable {
         this.msg = message;
     }
 
-    /** Los valores que reemplazan los `{n}` del mensaje. */
+    /** The values that replace the message's `{n}`. */
     public Object[] getParameters() {
         return this.parameters;
     }
@@ -86,7 +86,7 @@ public class LogRecord implements java.io.Serializable {
         this.loggerName = name;
     }
 
-    /** Quien emitio el mensaje, si se sabe. */
+    /** Who emitted the message, if it is known. */
     public String getSourceClassName() {
         return this.sourceClassName;
     }
@@ -103,7 +103,7 @@ public class LogRecord implements java.io.Serializable {
         this.sourceMethodName = sourceMethodName;
     }
 
-    /** La excepcion asociada, si la hay. */
+    /** The associated exception, if there is one. */
     public Throwable getThrown() {
         return this.thrown;
     }
@@ -112,7 +112,7 @@ public class LogRecord implements java.io.Serializable {
         this.thrown = thrown;
     }
 
-    /** El orden en que se creo; desempata a los del mismo instante. */
+    /** The order it was created in; it breaks ties among those of the same instant. */
     public long getSequenceNumber() {
         return this.sequenceNumber;
     }
@@ -121,7 +121,7 @@ public class LogRecord implements java.io.Serializable {
         this.sequenceNumber = seq;
     }
 
-    /** Cuando se creo, al nanosegundo. */
+    /** When it was created, to the nanosecond. */
     public java.time.Instant getInstant() {
         return this.instant;
     }
@@ -133,7 +133,7 @@ public class LogRecord implements java.io.Serializable {
         this.instant = instant;
     }
 
-    /** Cuando se creo, en milisegundos. */
+    /** When it was created, in milliseconds. */
     public long getMillis() {
         return this.instant.toEpochMilli();
     }
@@ -142,7 +142,7 @@ public class LogRecord implements java.io.Serializable {
         this.instant = java.time.Instant.ofEpochMilli(millis);
     }
 
-    /** El hilo que lo emitio. */
+    /** The thread that emitted it. */
     public long getLongThreadID() {
         return this.threadID;
     }
@@ -153,14 +153,14 @@ public class LogRecord implements java.io.Serializable {
     }
 
     /**
-     * El hilo que lo emitio, estrechado a `int`.
+     * The thread that emitted it, narrowed to an `int`.
      *
-     * <p>Existe de antes de que los identificadores de hilo fueran de 64 bits, y por eso esta
-     * deprecado: para un identificador que no entra en un `int` no hay respuesta correcta, solo
-     * respuestas distinguibles. Lo que se garantiza --y es lo unico que el contrato pide, "un
-     * identificador"-- es que dos hilos distintos no reciban el mismo numero: los que entran se
-     * devuelven tal cual y a los que no se les asigna uno sintetico, estable para ese identificador
-     * largo. **Cual** numero sintetico es cosa de la implementacion, aca y en el JDK.
+     * <p>It dates from before thread identifiers were 64-bit, and that is why it is deprecated: for
+     * an identifier that does not fit in an `int` there is no right answer, only distinguishable
+     * ones. What is guaranteed --and it is all the contract asks for, "an identifier"-- is that two
+     * different threads do not get the same number: the ones that fit are returned as they are and
+     * the ones that do not are assigned a synthetic one, stable for that long identifier. **Which**
+     * synthetic number is the implementation's business, here and in the JDK.
      */
     @Deprecated(since = "16")
     public int getThreadID() {
@@ -168,30 +168,30 @@ public class LogRecord implements java.io.Serializable {
         if (id >= Integer.MIN_VALUE && id <= Integer.MAX_VALUE) {
             return (int) id;
         }
-        synchronized (CORTOS) {
-            Integer ya = CORTOS.get(Long.valueOf(id));
-            if (ya != null) {
-                return ya.intValue();
+        synchronized (SHORT_IDS) {
+            Integer already = SHORT_IDS.get(Long.valueOf(id));
+            if (already != null) {
+                return already.intValue();
             }
-            int nuevo = proximoCorto;
-            proximoCorto = proximoCorto + 1;
-            CORTOS.put(Long.valueOf(id), Integer.valueOf(nuevo));
-            return nuevo;
+            int newOne = nextShortId;
+            nextShortId = nextShortId + 1;
+            SHORT_IDS.put(Long.valueOf(id), Integer.valueOf(newOne));
+            return newOne;
         }
     }
 
-    /** Fija los dos identificadores: el corto **y** el largo, que no pueden quedar en desacuerdo. */
+    /** It sets both identifiers: the short one **and** the long one, which cannot be left disagreeing. */
     @Deprecated(since = "16")
     public void setThreadID(int threadID) {
         this.threadID = threadID;
     }
 
     /**
-     * El catalogo con el que se traduce el mensaje, o `null`.
+     * The bundle the message is translated with, or `null`.
      *
-     * <p>Cuando esta, el mensaje **no es el texto** sino la clave: el formateador busca
-     * {@link #getMessage} en el catalogo y usa lo que encuentra. De ahi que un registro localizado
-     * lleve `"saludo"` como mensaje y no `"hola {0}"`.
+     * <p>When it is there, the message **is not the text** but the key: the formatter looks
+     * {@link #getMessage} up in the bundle and uses what it finds. Hence a localised record carries
+     * `"greeting"` as its message and not `"hello {0}"`.
      */
     public java.util.ResourceBundle getResourceBundle() {
         return this.resourceBundle;
@@ -202,11 +202,11 @@ public class LogRecord implements java.io.Serializable {
     }
 
     /**
-     * El nombre del catalogo, o `null`.
+     * The bundle's name, or `null`.
      *
-     * <p>Es independiente de {@link #getResourceBundle}: se fijan por separado y ninguno arrastra al
-     * otro. Suena raro y no lo es -- un registro serializado viaja con el **nombre**, porque el
-     * catalogo en si no es serializable, y del otro lado se recarga por nombre.
+     * <p>It is independent of {@link #getResourceBundle}: they are set separately and neither drags
+     * the other. It sounds odd and it is not -- a serialised record travels with the **name**,
+     * because the bundle itself is not serialisable, and on the other side it is reloaded by name.
      */
     public String getResourceBundleName() {
         return this.resourceBundleName;

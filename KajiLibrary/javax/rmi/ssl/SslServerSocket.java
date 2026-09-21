@@ -7,49 +7,50 @@ import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
 
 /**
- * El socket de escucha que devuelve {@link SslRMIServerSocketFactory#createServerSocket(int)}.
+ * The listening socket {@link SslRMIServerSocketFactory#createServerSocket(int)} returns.
  *
- * <p>No es una clase del JDK: alla es una clase anonima adentro del `createServerSocket`. Aca tiene
- * nombre y es de paquete, que a los efectos de la API es lo mismo --nadie fuera de `javax.rmi.ssl`
- * la puede nombrar-- y ademas se lee.
+ * <p>It is not a class of the JDK: there it is an anonymous class inside the `createServerSocket`.
+ * Here it has a name and is package-private, which for the purposes of the API is the same --nobody
+ * outside `javax.rmi.ssl` can name it-- and it also reads better.
  *
- * <p>Lo unico que hace es envolver cada conexion aceptada en un {@link SSLSocket} en modo servidor.
- * El TCP lo acepta {@link ServerSocket}; el TLS empieza cuando alguien lee o escribe.
+ * <p>The only thing it does is wrap each accepted connection in an {@link SSLSocket} in server
+ * mode. The TCP is accepted by {@link ServerSocket}; the TLS starts when somebody reads or writes.
  */
 final class SslServerSocket extends ServerSocket {
 
-    private final SSLSocketFactory fabrica;
+    private final SSLSocketFactory factory;
     private final String[] suites;
-    private final String[] protocolos;
-    private final boolean pideCertificado;
+    private final String[] protocols;
+    private final boolean needClientAuth;
 
-    SslServerSocket(int port, SSLSocketFactory fabrica, String[] suites, String[] protocolos,
-            boolean pideCertificado) throws IOException {
+    SslServerSocket(int port, SSLSocketFactory factory, String[] suites, String[] protocols,
+            boolean needClientAuth) throws IOException {
         super(port);
-        this.fabrica = fabrica;
+        this.factory = factory;
         this.suites = suites;
-        this.protocolos = protocolos;
-        this.pideCertificado = pideCertificado;
+        this.protocols = protocols;
+        this.needClientAuth = needClientAuth;
     }
 
     /**
-     * Acepta una conexion y la envuelve en SSL.
+     * It accepts a connection and wraps it in SSL.
      *
-     * <p>El socket TCP se le entrega al {@link SSLSocketFactory} con `autoClose` en `true`: cerrar
-     * el socket SSL tiene que cerrar tambien el de abajo, o la conexion queda a medio soltar.
+     * <p>The TCP socket is handed to the {@link SSLSocketFactory} with `autoClose` at `true`:
+     * closing the SSL socket has to close the one underneath as well, or the connection is left
+     * half released.
      */
     public Socket accept() throws IOException {
-        Socket plano = super.accept();
-        SSLSocket seguro = (SSLSocket) this.fabrica.createSocket(
-                plano, plano.getInetAddress().getHostName(), plano.getPort(), true);
-        seguro.setUseClientMode(false);
+        Socket plain = super.accept();
+        SSLSocket secure = (SSLSocket) this.factory.createSocket(
+                plain, plain.getInetAddress().getHostName(), plain.getPort(), true);
+        secure.setUseClientMode(false);
         if (this.suites != null) {
-            seguro.setEnabledCipherSuites(this.suites);
+            secure.setEnabledCipherSuites(this.suites);
         }
-        if (this.protocolos != null) {
-            seguro.setEnabledProtocols(this.protocolos);
+        if (this.protocols != null) {
+            secure.setEnabledProtocols(this.protocols);
         }
-        seguro.setNeedClientAuth(this.pideCertificado);
-        return seguro;
+        secure.setNeedClientAuth(this.needClientAuth);
+        return secure;
     }
 }

@@ -4,460 +4,460 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * KajiLibrary's javax.imageio.plugins.tiff.BaselineTIFFTagSet -- las etiquetas del TIFF 6.0 basico.
+ * KajiLibrary's javax.imageio.plugins.tiff.BaselineTIFFTagSet -- the baseline TIFF 6.0 tags.
  *
- * <p>El nucleo del formato: tamano, resolucion, compresion, organizacion de las tiras o teselas,
- * paleta, y los campos de descripcion. Todo TIFF las usa.
+ * <p>The core of the format: size, resolution, compression, strip or tile layout, palette, and the
+ * description fields. Every TIFF uses them.
  *
- * <p>Las constantes vienen de a dos familias y conviene distinguirlas: las {@code TAG_} son <b>numeros
- * de etiqueta</b>, y las demas son <b>valores</b> que ciertas etiquetas pueden tomar --por ejemplo
- * {@code COMPRESSION_LZW}, que es un valor de {@code TAG_COMPRESSION} y no una etiqueta--.
+ * <p>The constants come in two families, worth telling apart: the {@code TAG_} ones are <b>tag
+ * numbers</b>, and the rest are <b>values</b> certain tags can take --for example
+ * {@code COMPRESSION_LZW}, which is a value of {@code TAG_COMPRESSION} and not a tag.
  *
- * <p>Es un singleton: se pide con {@link #getInstance}. Las etiquetas y sus valores nombrados se
- * transcribieron del JDK 25 y no a mano; un numero cambiado produce un TIFF que otros programas leen
- * distinto.
+ * <p>It is a singleton: it is obtained with {@link #getInstance}. The tags and their named values
+ * were transcribed from the JDK 25 and not by hand; a changed number produces a TIFF that other
+ * programs read differently.
  */
 public final class BaselineTIFFTagSet extends TIFFTagSet {
 
-    /** El unico, armado la primera vez que se pide. */
+    /** The only one, built the first time it is asked for. */
     private static BaselineTIFFTagSet theInstance = null;
 
-    /** El numero de la etiqueta new subfile type. */
+    /** The number of the new subfile type tag. */
     public static final int TAG_NEW_SUBFILE_TYPE = 254;
 
-    /** Un valor de new. */
+    /** A value of {@link #TAG_NEW_SUBFILE_TYPE}. */
     public static final int NEW_SUBFILE_TYPE_REDUCED_RESOLUTION = 1;
 
-    /** Un valor de new. */
+    /** A value of {@link #TAG_NEW_SUBFILE_TYPE}. */
     public static final int NEW_SUBFILE_TYPE_SINGLE_PAGE = 2;
 
-    /** Un valor de new. */
+    /** A value of {@link #TAG_NEW_SUBFILE_TYPE}. */
     public static final int NEW_SUBFILE_TYPE_TRANSPARENCY = 4;
 
-    /** El numero de la etiqueta subfile type. */
+    /** The number of the subfile type tag. */
     public static final int TAG_SUBFILE_TYPE = 255;
 
-    /** Un valor de subfile. */
+    /** A value of {@link #TAG_SUBFILE_TYPE}. */
     public static final int SUBFILE_TYPE_FULL_RESOLUTION = 1;
 
-    /** Un valor de subfile. */
+    /** A value of {@link #TAG_SUBFILE_TYPE}. */
     public static final int SUBFILE_TYPE_REDUCED_RESOLUTION = 2;
 
-    /** Un valor de subfile. */
+    /** A value of {@link #TAG_SUBFILE_TYPE}. */
     public static final int SUBFILE_TYPE_SINGLE_PAGE = 3;
 
-    /** El numero de la etiqueta image width. */
+    /** The number of the image width tag. */
     public static final int TAG_IMAGE_WIDTH = 256;
 
-    /** El numero de la etiqueta image length. */
+    /** The number of the image length tag. */
     public static final int TAG_IMAGE_LENGTH = 257;
 
-    /** El numero de la etiqueta bits per sample. */
+    /** The number of the bits per sample tag. */
     public static final int TAG_BITS_PER_SAMPLE = 258;
 
-    /** El numero de la etiqueta compression. */
+    /** The number of the compression tag. */
     public static final int TAG_COMPRESSION = 259;
 
-    /** Un valor de compression. */
+    /** A value of {@link #TAG_COMPRESSION}. */
     public static final int COMPRESSION_NONE = 1;
 
-    /** Un valor de compression. */
+    /** A value of {@link #TAG_COMPRESSION}. */
     public static final int COMPRESSION_CCITT_RLE = 2;
 
-    /** Un valor de compression. */
+    /** A value of {@link #TAG_COMPRESSION}. */
     public static final int COMPRESSION_CCITT_T_4 = 3;
 
-    /** Un valor de compression. */
+    /** A value of {@link #TAG_COMPRESSION}. */
     public static final int COMPRESSION_CCITT_T_6 = 4;
 
-    /** Un valor de compression. */
+    /** A value of {@link #TAG_COMPRESSION}. */
     public static final int COMPRESSION_LZW = 5;
 
-    /** Un valor de compression. */
+    /** A value of {@link #TAG_COMPRESSION}. */
     public static final int COMPRESSION_OLD_JPEG = 6;
 
-    /** Un valor de compression. */
+    /** A value of {@link #TAG_COMPRESSION}. */
     public static final int COMPRESSION_JPEG = 7;
 
-    /** Un valor de compression. */
+    /** A value of {@link #TAG_COMPRESSION}. */
     public static final int COMPRESSION_ZLIB = 8;
 
-    /** Un valor de compression. */
+    /** A value of {@link #TAG_COMPRESSION}. */
     public static final int COMPRESSION_PACKBITS = 32773;
 
-    /** Un valor de compression. */
+    /** A value of {@link #TAG_COMPRESSION}. */
     public static final int COMPRESSION_DEFLATE = 32946;
 
-    /** El numero de la etiqueta photometric interpretation. */
+    /** The number of the photometric interpretation tag. */
     public static final int TAG_PHOTOMETRIC_INTERPRETATION = 262;
 
-    /** Un valor de photometric. */
+    /** A value of {@link #TAG_PHOTOMETRIC_INTERPRETATION}. */
     public static final int PHOTOMETRIC_INTERPRETATION_WHITE_IS_ZERO = 0;
 
-    /** Un valor de photometric. */
+    /** A value of {@link #TAG_PHOTOMETRIC_INTERPRETATION}. */
     public static final int PHOTOMETRIC_INTERPRETATION_BLACK_IS_ZERO = 1;
 
-    /** Un valor de photometric. */
+    /** A value of {@link #TAG_PHOTOMETRIC_INTERPRETATION}. */
     public static final int PHOTOMETRIC_INTERPRETATION_RGB = 2;
 
-    /** Un valor de photometric. */
+    /** A value of {@link #TAG_PHOTOMETRIC_INTERPRETATION}. */
     public static final int PHOTOMETRIC_INTERPRETATION_PALETTE_COLOR = 3;
 
-    /** Un valor de photometric. */
+    /** A value of {@link #TAG_PHOTOMETRIC_INTERPRETATION}. */
     public static final int PHOTOMETRIC_INTERPRETATION_TRANSPARENCY_MASK = 4;
 
-    /** Un valor de photometric. */
+    /** A value of {@link #TAG_PHOTOMETRIC_INTERPRETATION}. */
     public static final int PHOTOMETRIC_INTERPRETATION_CMYK = 5;
 
-    /** Un valor de photometric. */
+    /** A value of {@link #TAG_PHOTOMETRIC_INTERPRETATION}. */
     public static final int PHOTOMETRIC_INTERPRETATION_Y_CB_CR = 6;
 
-    /** Un valor de photometric. */
+    /** A value of {@link #TAG_PHOTOMETRIC_INTERPRETATION}. */
     public static final int PHOTOMETRIC_INTERPRETATION_CIELAB = 8;
 
-    /** Un valor de photometric. */
+    /** A value of {@link #TAG_PHOTOMETRIC_INTERPRETATION}. */
     public static final int PHOTOMETRIC_INTERPRETATION_ICCLAB = 9;
 
-    /** El numero de la etiqueta threshholding. */
+    /** The number of the threshholding tag. */
     public static final int TAG_THRESHHOLDING = 263;
 
-    /** Un valor de threshholding. */
+    /** A value of {@link #TAG_THRESHHOLDING}. */
     public static final int THRESHHOLDING_NONE = 1;
 
-    /** Un valor de threshholding. */
+    /** A value of {@link #TAG_THRESHHOLDING}. */
     public static final int THRESHHOLDING_ORDERED_DITHER = 2;
 
-    /** Un valor de threshholding. */
+    /** A value of {@link #TAG_THRESHHOLDING}. */
     public static final int THRESHHOLDING_RANDOMIZED_DITHER = 3;
 
-    /** El numero de la etiqueta cell width. */
+    /** The number of the cell width tag. */
     public static final int TAG_CELL_WIDTH = 264;
 
-    /** El numero de la etiqueta cell length. */
+    /** The number of the cell length tag. */
     public static final int TAG_CELL_LENGTH = 265;
 
-    /** El numero de la etiqueta fill order. */
+    /** The number of the fill order tag. */
     public static final int TAG_FILL_ORDER = 266;
 
-    /** Un valor de fill. */
+    /** A value of {@link #TAG_FILL_ORDER}. */
     public static final int FILL_ORDER_LEFT_TO_RIGHT = 1;
 
-    /** Un valor de fill. */
+    /** A value of {@link #TAG_FILL_ORDER}. */
     public static final int FILL_ORDER_RIGHT_TO_LEFT = 2;
 
-    /** El numero de la etiqueta document name. */
+    /** The number of the document name tag. */
     public static final int TAG_DOCUMENT_NAME = 269;
 
-    /** El numero de la etiqueta image description. */
+    /** The number of the image description tag. */
     public static final int TAG_IMAGE_DESCRIPTION = 270;
 
-    /** El numero de la etiqueta make. */
+    /** The number of the make tag. */
     public static final int TAG_MAKE = 271;
 
-    /** El numero de la etiqueta model. */
+    /** The number of the model tag. */
     public static final int TAG_MODEL = 272;
 
-    /** El numero de la etiqueta strip offsets. */
+    /** The number of the strip offsets tag. */
     public static final int TAG_STRIP_OFFSETS = 273;
 
-    /** El numero de la etiqueta orientation. */
+    /** The number of the orientation tag. */
     public static final int TAG_ORIENTATION = 274;
 
-    /** Un valor de orientation. */
+    /** A value of {@link #TAG_ORIENTATION}. */
     public static final int ORIENTATION_ROW_0_TOP_COLUMN_0_LEFT = 1;
 
-    /** Un valor de orientation. */
+    /** A value of {@link #TAG_ORIENTATION}. */
     public static final int ORIENTATION_ROW_0_TOP_COLUMN_0_RIGHT = 2;
 
-    /** Un valor de orientation. */
+    /** A value of {@link #TAG_ORIENTATION}. */
     public static final int ORIENTATION_ROW_0_BOTTOM_COLUMN_0_RIGHT = 3;
 
-    /** Un valor de orientation. */
+    /** A value of {@link #TAG_ORIENTATION}. */
     public static final int ORIENTATION_ROW_0_BOTTOM_COLUMN_0_LEFT = 4;
 
-    /** Un valor de orientation. */
+    /** A value of {@link #TAG_ORIENTATION}. */
     public static final int ORIENTATION_ROW_0_LEFT_COLUMN_0_TOP = 5;
 
-    /** Un valor de orientation. */
+    /** A value of {@link #TAG_ORIENTATION}. */
     public static final int ORIENTATION_ROW_0_RIGHT_COLUMN_0_TOP = 6;
 
-    /** Un valor de orientation. */
+    /** A value of {@link #TAG_ORIENTATION}. */
     public static final int ORIENTATION_ROW_0_RIGHT_COLUMN_0_BOTTOM = 7;
 
-    /** Un valor de orientation. */
+    /** A value of {@link #TAG_ORIENTATION}. */
     public static final int ORIENTATION_ROW_0_LEFT_COLUMN_0_BOTTOM = 8;
 
-    /** El numero de la etiqueta samples per pixel. */
+    /** The number of the samples per pixel tag. */
     public static final int TAG_SAMPLES_PER_PIXEL = 277;
 
-    /** El numero de la etiqueta rows per strip. */
+    /** The number of the rows per strip tag. */
     public static final int TAG_ROWS_PER_STRIP = 278;
 
-    /** El numero de la etiqueta strip byte counts. */
+    /** The number of the strip byte counts tag. */
     public static final int TAG_STRIP_BYTE_COUNTS = 279;
 
-    /** El numero de la etiqueta min sample value. */
+    /** The number of the min sample value tag. */
     public static final int TAG_MIN_SAMPLE_VALUE = 280;
 
-    /** El numero de la etiqueta max sample value. */
+    /** The number of the max sample value tag. */
     public static final int TAG_MAX_SAMPLE_VALUE = 281;
 
-    /** El numero de la etiqueta x resolution. */
+    /** The number of the x resolution tag. */
     public static final int TAG_X_RESOLUTION = 282;
 
-    /** El numero de la etiqueta y resolution. */
+    /** The number of the y resolution tag. */
     public static final int TAG_Y_RESOLUTION = 283;
 
-    /** El numero de la etiqueta planar configuration. */
+    /** The number of the planar configuration tag. */
     public static final int TAG_PLANAR_CONFIGURATION = 284;
 
-    /** Un valor de planar. */
+    /** A value of {@link #TAG_PLANAR_CONFIGURATION}. */
     public static final int PLANAR_CONFIGURATION_CHUNKY = 1;
 
-    /** Un valor de planar. */
+    /** A value of {@link #TAG_PLANAR_CONFIGURATION}. */
     public static final int PLANAR_CONFIGURATION_PLANAR = 2;
 
-    /** El numero de la etiqueta page name. */
+    /** The number of the page name tag. */
     public static final int TAG_PAGE_NAME = 285;
 
-    /** El numero de la etiqueta x position. */
+    /** The number of the x position tag. */
     public static final int TAG_X_POSITION = 286;
 
-    /** El numero de la etiqueta y position. */
+    /** The number of the y position tag. */
     public static final int TAG_Y_POSITION = 287;
 
-    /** El numero de la etiqueta free offsets. */
+    /** The number of the free offsets tag. */
     public static final int TAG_FREE_OFFSETS = 288;
 
-    /** El numero de la etiqueta free byte counts. */
+    /** The number of the free byte counts tag. */
     public static final int TAG_FREE_BYTE_COUNTS = 289;
 
-    /** El numero de la etiqueta gray response unit. */
+    /** The number of the gray response unit tag. */
     public static final int TAG_GRAY_RESPONSE_UNIT = 290;
 
-    /** Un valor de gray. */
+    /** A value of {@link #TAG_GRAY_RESPONSE_UNIT}. */
     public static final int GRAY_RESPONSE_UNIT_TENTHS = 1;
 
-    /** Un valor de gray. */
+    /** A value of {@link #TAG_GRAY_RESPONSE_UNIT}. */
     public static final int GRAY_RESPONSE_UNIT_HUNDREDTHS = 2;
 
-    /** Un valor de gray. */
+    /** A value of {@link #TAG_GRAY_RESPONSE_UNIT}. */
     public static final int GRAY_RESPONSE_UNIT_THOUSANDTHS = 3;
 
-    /** Un valor de gray. */
+    /** A value of {@link #TAG_GRAY_RESPONSE_UNIT}. */
     public static final int GRAY_RESPONSE_UNIT_TEN_THOUSANDTHS = 4;
 
-    /** Un valor de gray. */
+    /** A value of {@link #TAG_GRAY_RESPONSE_UNIT}. */
     public static final int GRAY_RESPONSE_UNIT_HUNDRED_THOUSANDTHS = 5;
 
-    /** El numero de la etiqueta gray response curve. */
+    /** The number of the gray response curve tag. */
     public static final int TAG_GRAY_RESPONSE_CURVE = 291;
 
-    /** El numero de la etiqueta t4 options. */
+    /** The number of the t4 options tag. */
     public static final int TAG_T4_OPTIONS = 292;
 
-    /** Un valor de t4. */
+    /** A value of {@link #TAG_T4_OPTIONS}. */
     public static final int T4_OPTIONS_2D_CODING = 1;
 
-    /** Un valor de t4. */
+    /** A value of {@link #TAG_T4_OPTIONS}. */
     public static final int T4_OPTIONS_UNCOMPRESSED = 2;
 
-    /** Un valor de t4. */
+    /** A value of {@link #TAG_T4_OPTIONS}. */
     public static final int T4_OPTIONS_EOL_BYTE_ALIGNED = 4;
 
-    /** El numero de la etiqueta t6 options. */
+    /** The number of the t6 options tag. */
     public static final int TAG_T6_OPTIONS = 293;
 
-    /** Un valor de t6. */
+    /** A value of {@link #TAG_T6_OPTIONS}. */
     public static final int T6_OPTIONS_UNCOMPRESSED = 2;
 
-    /** El numero de la etiqueta resolution unit. */
+    /** The number of the resolution unit tag. */
     public static final int TAG_RESOLUTION_UNIT = 296;
 
-    /** Un valor de resolution. */
+    /** A value of {@link #TAG_RESOLUTION_UNIT}. */
     public static final int RESOLUTION_UNIT_NONE = 1;
 
-    /** Un valor de resolution. */
+    /** A value of {@link #TAG_RESOLUTION_UNIT}. */
     public static final int RESOLUTION_UNIT_INCH = 2;
 
-    /** Un valor de resolution. */
+    /** A value of {@link #TAG_RESOLUTION_UNIT}. */
     public static final int RESOLUTION_UNIT_CENTIMETER = 3;
 
-    /** El numero de la etiqueta page number. */
+    /** The number of the page number tag. */
     public static final int TAG_PAGE_NUMBER = 297;
 
-    /** El numero de la etiqueta transfer function. */
+    /** The number of the transfer function tag. */
     public static final int TAG_TRANSFER_FUNCTION = 301;
 
-    /** El numero de la etiqueta software. */
+    /** The number of the software tag. */
     public static final int TAG_SOFTWARE = 305;
 
-    /** El numero de la etiqueta date time. */
+    /** The number of the date time tag. */
     public static final int TAG_DATE_TIME = 306;
 
-    /** El numero de la etiqueta artist. */
+    /** The number of the artist tag. */
     public static final int TAG_ARTIST = 315;
 
-    /** El numero de la etiqueta host computer. */
+    /** The number of the host computer tag. */
     public static final int TAG_HOST_COMPUTER = 316;
 
-    /** El numero de la etiqueta predictor. */
+    /** The number of the predictor tag. */
     public static final int TAG_PREDICTOR = 317;
 
-    /** Un valor de predictor. */
+    /** A value of {@link #TAG_PREDICTOR}. */
     public static final int PREDICTOR_NONE = 1;
 
-    /** Un valor de predictor. */
+    /** A value of {@link #TAG_PREDICTOR}. */
     public static final int PREDICTOR_HORIZONTAL_DIFFERENCING = 2;
 
-    /** El numero de la etiqueta white point. */
+    /** The number of the white point tag. */
     public static final int TAG_WHITE_POINT = 318;
 
-    /** El numero de la etiqueta primary chromaticites. */
+    /** The number of the primary chromaticites tag. */
     public static final int TAG_PRIMARY_CHROMATICITES = 319;
 
-    /** El numero de la etiqueta color map. */
+    /** The number of the color map tag. */
     public static final int TAG_COLOR_MAP = 320;
 
-    /** El numero de la etiqueta halftone hints. */
+    /** The number of the halftone hints tag. */
     public static final int TAG_HALFTONE_HINTS = 321;
 
-    /** El numero de la etiqueta tile width. */
+    /** The number of the tile width tag. */
     public static final int TAG_TILE_WIDTH = 322;
 
-    /** El numero de la etiqueta tile length. */
+    /** The number of the tile length tag. */
     public static final int TAG_TILE_LENGTH = 323;
 
-    /** El numero de la etiqueta tile offsets. */
+    /** The number of the tile offsets tag. */
     public static final int TAG_TILE_OFFSETS = 324;
 
-    /** El numero de la etiqueta tile byte counts. */
+    /** The number of the tile byte counts tag. */
     public static final int TAG_TILE_BYTE_COUNTS = 325;
 
-    /** El numero de la etiqueta ink set. */
+    /** The number of the ink set tag. */
     public static final int TAG_INK_SET = 332;
 
-    /** Un valor de ink. */
+    /** A value of {@link #TAG_INK_SET}. */
     public static final int INK_SET_CMYK = 1;
 
-    /** Un valor de ink. */
+    /** A value of {@link #TAG_INK_SET}. */
     public static final int INK_SET_NOT_CMYK = 2;
 
-    /** El numero de la etiqueta ink names. */
+    /** The number of the ink names tag. */
     public static final int TAG_INK_NAMES = 333;
 
-    /** El numero de la etiqueta number of inks. */
+    /** The number of the number of inks tag. */
     public static final int TAG_NUMBER_OF_INKS = 334;
 
-    /** El numero de la etiqueta dot range. */
+    /** The number of the dot range tag. */
     public static final int TAG_DOT_RANGE = 336;
 
-    /** El numero de la etiqueta target printer. */
+    /** The number of the target printer tag. */
     public static final int TAG_TARGET_PRINTER = 337;
 
-    /** El numero de la etiqueta extra samples. */
+    /** The number of the extra samples tag. */
     public static final int TAG_EXTRA_SAMPLES = 338;
 
-    /** Un valor de extra. */
+    /** A value of {@link #TAG_EXTRA_SAMPLES}. */
     public static final int EXTRA_SAMPLES_UNSPECIFIED = 0;
 
-    /** Un valor de extra. */
+    /** A value of {@link #TAG_EXTRA_SAMPLES}. */
     public static final int EXTRA_SAMPLES_ASSOCIATED_ALPHA = 1;
 
-    /** Un valor de extra. */
+    /** A value of {@link #TAG_EXTRA_SAMPLES}. */
     public static final int EXTRA_SAMPLES_UNASSOCIATED_ALPHA = 2;
 
-    /** El numero de la etiqueta sample format. */
+    /** The number of the sample format tag. */
     public static final int TAG_SAMPLE_FORMAT = 339;
 
-    /** Un valor de sample. */
+    /** A value of {@link #TAG_SAMPLE_FORMAT}. */
     public static final int SAMPLE_FORMAT_UNSIGNED_INTEGER = 1;
 
-    /** Un valor de sample. */
+    /** A value of {@link #TAG_SAMPLE_FORMAT}. */
     public static final int SAMPLE_FORMAT_SIGNED_INTEGER = 2;
 
-    /** Un valor de sample. */
+    /** A value of {@link #TAG_SAMPLE_FORMAT}. */
     public static final int SAMPLE_FORMAT_FLOATING_POINT = 3;
 
-    /** Un valor de sample. */
+    /** A value of {@link #TAG_SAMPLE_FORMAT}. */
     public static final int SAMPLE_FORMAT_UNDEFINED = 4;
 
-    /** El numero de la etiqueta s min sample value. */
+    /** The number of the s min sample value tag. */
     public static final int TAG_S_MIN_SAMPLE_VALUE = 340;
 
-    /** El numero de la etiqueta s max sample value. */
+    /** The number of the s max sample value tag. */
     public static final int TAG_S_MAX_SAMPLE_VALUE = 341;
 
-    /** El numero de la etiqueta transfer range. */
+    /** The number of the transfer range tag. */
     public static final int TAG_TRANSFER_RANGE = 342;
 
-    /** El numero de la etiqueta jpeg tables. */
+    /** The number of the jpeg tables tag. */
     public static final int TAG_JPEG_TABLES = 347;
 
-    /** El numero de la etiqueta jpeg proc. */
+    /** The number of the jpeg proc tag. */
     public static final int TAG_JPEG_PROC = 512;
 
-    /** Un valor de jpeg. */
+    /** A value of {@link #TAG_JPEG_PROC}. */
     public static final int JPEG_PROC_BASELINE = 1;
 
-    /** Un valor de jpeg. */
+    /** A value of {@link #TAG_JPEG_PROC}. */
     public static final int JPEG_PROC_LOSSLESS = 14;
 
-    /** El numero de la etiqueta jpeg interchange format. */
+    /** The number of the jpeg interchange format tag. */
     public static final int TAG_JPEG_INTERCHANGE_FORMAT = 513;
 
-    /** El numero de la etiqueta jpeg interchange format length. */
+    /** The number of the jpeg interchange format length tag. */
     public static final int TAG_JPEG_INTERCHANGE_FORMAT_LENGTH = 514;
 
-    /** El numero de la etiqueta jpeg restart interval. */
+    /** The number of the jpeg restart interval tag. */
     public static final int TAG_JPEG_RESTART_INTERVAL = 515;
 
-    /** El numero de la etiqueta jpeg lossless predictors. */
+    /** The number of the jpeg lossless predictors tag. */
     public static final int TAG_JPEG_LOSSLESS_PREDICTORS = 517;
 
-    /** El numero de la etiqueta jpeg point transforms. */
+    /** The number of the jpeg point transforms tag. */
     public static final int TAG_JPEG_POINT_TRANSFORMS = 518;
 
-    /** El numero de la etiqueta jpeg q tables. */
+    /** The number of the jpeg q tables tag. */
     public static final int TAG_JPEG_Q_TABLES = 519;
 
-    /** El numero de la etiqueta jpeg dc tables. */
+    /** The number of the jpeg dc tables tag. */
     public static final int TAG_JPEG_DC_TABLES = 520;
 
-    /** El numero de la etiqueta jpeg ac tables. */
+    /** The number of the jpeg ac tables tag. */
     public static final int TAG_JPEG_AC_TABLES = 521;
 
-    /** El numero de la etiqueta y cb cr coefficients. */
+    /** The number of the y cb cr coefficients tag. */
     public static final int TAG_Y_CB_CR_COEFFICIENTS = 529;
 
-    /** El numero de la etiqueta y cb cr subsampling. */
+    /** The number of the y cb cr subsampling tag. */
     public static final int TAG_Y_CB_CR_SUBSAMPLING = 530;
 
-    /** El numero de la etiqueta y cb cr positioning. */
+    /** The number of the y cb cr positioning tag. */
     public static final int TAG_Y_CB_CR_POSITIONING = 531;
 
-    /** Un valor de y. */
+    /** A value of {@link #TAG_Y_CB_CR_POSITIONING}. */
     public static final int Y_CB_CR_POSITIONING_CENTERED = 1;
 
-    /** Un valor de y. */
+    /** A value of {@link #TAG_Y_CB_CR_POSITIONING}. */
     public static final int Y_CB_CR_POSITIONING_COSITED = 2;
 
-    /** El numero de la etiqueta reference black white. */
+    /** The number of the reference black white tag. */
     public static final int TAG_REFERENCE_BLACK_WHITE = 532;
 
-    /** El numero de la etiqueta copyright. */
+    /** The number of the copyright tag. */
     public static final int TAG_COPYRIGHT = 33432;
 
-    /** El numero de la etiqueta icc profile. */
+    /** The number of the icc profile tag. */
     public static final int TAG_ICC_PROFILE = 34675;
 
 
-    /** Se llega por {@link #getInstance}. */
+    /** Reached through {@link #getInstance}. */
     private BaselineTIFFTagSet() {
         super(tags());
     }
 
-    /** El conjunto. Ver la nota de la clase. */
+    /** The set. See the class note. */
     public static synchronized BaselineTIFFTagSet getInstance() {
         if (theInstance == null) {
             theInstance = new BaselineTIFFTagSet();
@@ -465,7 +465,7 @@ public final class BaselineTIFFTagSet extends TIFFTagSet {
         return theInstance;
     }
 
-    /** Las etiquetas de este conjunto. */
+    /** The tags of this set. */
     private static List<TIFFTag> tags() {
         List<TIFFTag> tags = new ArrayList<TIFFTag>();
         tags.add(new TagNewSubfileType());
@@ -547,7 +547,7 @@ public final class BaselineTIFFTagSet extends TIFFTagSet {
         return tags;
     }
 
-    /** {@code NewSubfileType}, con los nombres de sus valores. */
+    /** {@code NewSubfileType}, with the names of its values. */
     private static final class TagNewSubfileType extends TIFFTag {
 
         TagNewSubfileType() {
@@ -563,7 +563,7 @@ public final class BaselineTIFFTagSet extends TIFFTagSet {
         }
     }
 
-    /** {@code SubfileType}, con los nombres de sus valores. */
+    /** {@code SubfileType}, with the names of its values. */
     private static final class TagSubfileType extends TIFFTag {
 
         TagSubfileType() {
@@ -574,7 +574,7 @@ public final class BaselineTIFFTagSet extends TIFFTagSet {
         }
     }
 
-    /** {@code Compression}, con los nombres de sus valores. */
+    /** {@code Compression}, with the names of its values. */
     private static final class TagCompression extends TIFFTag {
 
         TagCompression() {
@@ -592,7 +592,7 @@ public final class BaselineTIFFTagSet extends TIFFTagSet {
         }
     }
 
-    /** {@code PhotometricInterpretation}, con los nombres de sus valores. */
+    /** {@code PhotometricInterpretation}, with the names of its values. */
     private static final class TagPhotometricInterpretation extends TIFFTag {
 
         TagPhotometricInterpretation() {
@@ -609,7 +609,7 @@ public final class BaselineTIFFTagSet extends TIFFTagSet {
         }
     }
 
-    /** {@code Threshholding}, con los nombres de sus valores. */
+    /** {@code Threshholding}, with the names of its values. */
     private static final class TagThreshholding extends TIFFTag {
 
         TagThreshholding() {
@@ -620,7 +620,7 @@ public final class BaselineTIFFTagSet extends TIFFTagSet {
         }
     }
 
-    /** {@code FillOrder}, con los nombres de sus valores. */
+    /** {@code FillOrder}, with the names of its values. */
     private static final class TagFillOrder extends TIFFTag {
 
         TagFillOrder() {
@@ -630,7 +630,7 @@ public final class BaselineTIFFTagSet extends TIFFTagSet {
         }
     }
 
-    /** {@code Orientation}, con los nombres de sus valores. */
+    /** {@code Orientation}, with the names of its values. */
     private static final class TagOrientation extends TIFFTag {
 
         TagOrientation() {
@@ -645,7 +645,7 @@ public final class BaselineTIFFTagSet extends TIFFTagSet {
         }
     }
 
-    /** {@code PlanarConfiguration}, con los nombres de sus valores. */
+    /** {@code PlanarConfiguration}, with the names of its values. */
     private static final class TagPlanarConfiguration extends TIFFTag {
 
         TagPlanarConfiguration() {
@@ -655,7 +655,7 @@ public final class BaselineTIFFTagSet extends TIFFTagSet {
         }
     }
 
-    /** {@code GrayResponseUnit}, con los nombres de sus valores. */
+    /** {@code GrayResponseUnit}, with the names of its values. */
     private static final class TagGrayResponseUnit extends TIFFTag {
 
         TagGrayResponseUnit() {
@@ -668,7 +668,7 @@ public final class BaselineTIFFTagSet extends TIFFTagSet {
         }
     }
 
-    /** {@code T4Options}, con los nombres de sus valores. */
+    /** {@code T4Options}, with the names of its values. */
     private static final class TagT4Options extends TIFFTag {
 
         TagT4Options() {
@@ -684,7 +684,7 @@ public final class BaselineTIFFTagSet extends TIFFTagSet {
         }
     }
 
-    /** {@code T6Options}, con los nombres de sus valores. */
+    /** {@code T6Options}, with the names of its values. */
     private static final class TagT6Options extends TIFFTag {
 
         TagT6Options() {
@@ -694,7 +694,7 @@ public final class BaselineTIFFTagSet extends TIFFTagSet {
         }
     }
 
-    /** {@code ResolutionUnit}, con los nombres de sus valores. */
+    /** {@code ResolutionUnit}, with the names of its values. */
     private static final class TagResolutionUnit extends TIFFTag {
 
         TagResolutionUnit() {
@@ -705,7 +705,7 @@ public final class BaselineTIFFTagSet extends TIFFTagSet {
         }
     }
 
-    /** {@code Predictor}, con los nombres de sus valores. */
+    /** {@code Predictor}, with the names of its values. */
     private static final class TagPredictor extends TIFFTag {
 
         TagPredictor() {
@@ -715,7 +715,7 @@ public final class BaselineTIFFTagSet extends TIFFTagSet {
         }
     }
 
-    /** {@code InkSet}, con los nombres de sus valores. */
+    /** {@code InkSet}, with the names of its values. */
     private static final class TagInkSet extends TIFFTag {
 
         TagInkSet() {
@@ -725,7 +725,7 @@ public final class BaselineTIFFTagSet extends TIFFTagSet {
         }
     }
 
-    /** {@code ExtraSamples}, con los nombres de sus valores. */
+    /** {@code ExtraSamples}, with the names of its values. */
     private static final class TagExtraSamples extends TIFFTag {
 
         TagExtraSamples() {
@@ -736,7 +736,7 @@ public final class BaselineTIFFTagSet extends TIFFTagSet {
         }
     }
 
-    /** {@code SampleFormat}, con los nombres de sus valores. */
+    /** {@code SampleFormat}, with the names of its values. */
     private static final class TagSampleFormat extends TIFFTag {
 
         TagSampleFormat() {
@@ -748,7 +748,7 @@ public final class BaselineTIFFTagSet extends TIFFTagSet {
         }
     }
 
-    /** {@code JPEGProc}, con los nombres de sus valores. */
+    /** {@code JPEGProc}, with the names of its values. */
     private static final class TagJPEGProc extends TIFFTag {
 
         TagJPEGProc() {
@@ -758,7 +758,7 @@ public final class BaselineTIFFTagSet extends TIFFTagSet {
         }
     }
 
-    /** {@code JPEGLosslessPredictors}, con los nombres de sus valores. */
+    /** {@code JPEGLosslessPredictors}, with the names of its values. */
     private static final class TagJPEGLosslessPredictors extends TIFFTag {
 
         TagJPEGLosslessPredictors() {
@@ -773,7 +773,7 @@ public final class BaselineTIFFTagSet extends TIFFTagSet {
         }
     }
 
-    /** {@code YCbCrPositioning}, con los nombres de sus valores. */
+    /** {@code YCbCrPositioning}, with the names of its values. */
     private static final class TagYCbCrPositioning extends TIFFTag {
 
         TagYCbCrPositioning() {

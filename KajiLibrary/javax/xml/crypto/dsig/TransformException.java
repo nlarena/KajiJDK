@@ -4,59 +4,59 @@ import java.io.PrintStream;
 import java.io.PrintWriter;
 
 /**
- * KajiLibrary's javax.xml.crypto.dsig.TransformException -- fallo una transformacion.
+ * KajiLibrary's javax.xml.crypto.dsig.TransformException -- a transform failed.
  *
- * <p>Sale de {@link Transform#transform}. Lo que fallo es el <b>camino</b> entre el dato y
- * su resumen: una expresion XPath mal escrita, una hoja de estilo que tira, datos de un
- * tipo que la transformacion no acepta.
+ * <p>It comes out of {@link Transform#transform}. What failed is the <b>path</b> between the datum
+ * and its digest: a badly written XPath expression, a stylesheet that throws, data of a type the
+ * transform does not accept.
  *
- * <p>No es un fallo criptografico. Distinguirla de {@link XMLSignatureException} importa
- * al diagnosticar: aca la firma ni siquiera se llego a comparar.
+ * <p>It is not a cryptographic failure. Telling it apart from {@link XMLSignatureException} matters
+ * when diagnosing: here the signature was not even compared.
  *
- * <p>Redefine {@code getCause} y los tres {@code printStackTrace} por lo mismo que las de
- * {@code javax.xml.crypto}: en el JDK la causa vive en un campo propio, de antes de que
- * {@code Throwable} las tuviera, y aca delega.
+ * <p>It redefines {@code getCause} and the three {@code printStackTrace}s for the same reason as
+ * the ones in {@code javax.xml.crypto}: in the JDK the cause lives in a field of its own, from
+ * before {@code Throwable} had one, and here it delegates.
  */
 public class TransformException extends Exception {
 
     private static final long serialVersionUID = 526117000366604532L;
 
-    /** Sin detalle. */
+    /** Without detail. */
     public TransformException() {
         super();
     }
 
-    /** Con un mensaje. */
+    /** With a message. */
     public TransformException(String message) {
         super(message);
     }
 
-    /** Con un mensaje y la causa de abajo. */
+    /** With a message and the underlying cause. */
     public TransformException(String message, Throwable cause) {
         super(message, cause);
     }
 
-    /** Solo con la causa. */
+    /** With the cause only. */
     public TransformException(Throwable cause) {
         super(cause);
     }
 
-    /** La causa, o null. */
+    /** The cause, or null. */
     public Throwable getCause() {
         return super.getCause();
     }
 
-    /** A la salida de error. */
+    /** To standard error. */
     public void printStackTrace() {
         super.printStackTrace();
     }
 
-    /** A ese flujo. */
+    /** To that stream. */
     public void printStackTrace(PrintStream s) {
         super.printStackTrace(s);
     }
 
-    /** A ese escritor. */
+    /** To that writer. */
     public void printStackTrace(PrintWriter s) {
         super.printStackTrace(s);
     }

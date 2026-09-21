@@ -3,49 +3,49 @@ package java.lang.management;
 import javax.management.openmbean.CompositeData;
 
 /**
- * KajiLibrary's java.lang.management.MemoryNotificationInfo -- un area de memoria paso un umbral.
+ * KajiLibrary's java.lang.management.MemoryNotificationInfo -- a memory pool crossed a threshold.
  *
- * <p>Es lo que viaja como {@code userData} de la notificacion que emite el MBean de memoria. No se
- * manda tal cual: se manda como {@link CompositeData} y de este lado se rearma con {@link #from}, que
- * es por lo que la clase existe.
+ * <p>It is what travels as the {@code userData} of the notification the memory MBean emits. It is
+ * not sent as it stands: it is sent as a {@link CompositeData} and rebuilt on this side with
+ * {@link #from}, which is why the class exists.
  *
- * <h2>Los dos umbrales, que no son lo mismo</h2>
+ * <h2>The two thresholds, which are not the same</h2>
  *
  * <ul>
- *   <li>{@link #MEMORY_THRESHOLD_EXCEEDED} se supero el umbral de <b>uso</b>: hay mas ocupado que lo
- *       que se fijo, en este momento;
- *   <li>{@link #MEMORY_COLLECTION_THRESHOLD_EXCEEDED} se supero el umbral de <b>uso despues de
- *       recolectar</b>: quedo mas ocupado que lo que se fijo <i>una vez que el recolector paso</i>.
+ *   <li>{@link #MEMORY_THRESHOLD_EXCEEDED} the <b>usage</b> threshold was exceeded: there is more
+ *       occupied than was set, at this moment;
+ *   <li>{@link #MEMORY_COLLECTION_THRESHOLD_EXCEEDED} the <b>usage after collection</b> threshold was
+ *       exceeded: more than was set remained occupied <i>once the collector had been through</i>.
  * </ul>
  *
- * <p>La segunda es la que importa para detectar una fuga. La primera se dispara todo el tiempo en un
- * programa sano, porque la memoria sube antes de cada recoleccion; la segunda solo se dispara si algo
- * de verdad no se esta pudiendo liberar.
+ * <p>The second is the one that matters for detecting a leak. The first fires all the time in a
+ * healthy program, because memory rises before each collection; the second only fires if something
+ * genuinely cannot be freed.
  *
- * <p>{@link #getCount} dice cuantas veces se cruzo ese umbral desde que se fijo, no cuantas
- * notificaciones hubo: la maquina virtual no manda una por cada cruce.
+ * <p>{@link #getCount} says how many times that threshold was crossed since it was set, not how many
+ * notifications there were: the virtual machine does not send one per crossing.
  */
 public class MemoryNotificationInfo {
 
-    /** Se supero el umbral de uso. Ver la nota de la clase. */
+    /** The usage threshold was exceeded. See the class's note. */
     public static final String MEMORY_THRESHOLD_EXCEEDED =
         "java.management.memory.threshold.exceeded";
 
-    /** Se supero el umbral de uso despues de recolectar. Ver la nota de la clase. */
+    /** The usage-after-collection threshold was exceeded. See the class's note. */
     public static final String MEMORY_COLLECTION_THRESHOLD_EXCEEDED =
         "java.management.memory.collection.threshold.exceeded";
 
-    /** Cual area. */
+    /** Which pool. */
     private final String poolName;
 
-    /** Como estaba cuando se cruzo. */
+    /** How it stood when it was crossed. */
     private final MemoryUsage usage;
 
-    /** Cuantas veces se cruzo. */
+    /** How many times it was crossed. */
     private final long count;
 
     /**
-     * @throws NullPointerException si el nombre o el uso son null
+     * @throws NullPointerException if the name or the usage is null
      */
     public MemoryNotificationInfo(String poolName, MemoryUsage usage, long count) {
         if (poolName == null) {
@@ -59,26 +59,27 @@ public class MemoryNotificationInfo {
         this.count = count;
     }
 
-    /** Cual area de memoria. */
+    /** Which memory pool. */
     public String getPoolName() {
         return this.poolName;
     }
 
-    /** Como estaba en el momento del cruce. */
+    /** How it stood at the moment of the crossing. */
     public MemoryUsage getUsage() {
         return this.usage;
     }
 
-    /** Cuantas veces se cruzo el umbral. Ver la nota de la clase. */
+    /** How many times the threshold was crossed. See the class's note. */
     public long getCount() {
         return this.count;
     }
 
     /**
-     * Lo mismo, leido de un {@link CompositeData}. Ver la nota de la clase.
+     * The same, read out of a {@link CompositeData}. See the class's note.
      *
-     * @return el objeto, o null si el dato es null
-     * @throws IllegalArgumentException si el dato no describe un {@code MemoryNotificationInfo}
+     * @return the object, or null if the datum is null
+     * @throws IllegalArgumentException if the datum does not describe a
+     *     {@code MemoryNotificationInfo}
      */
     public static MemoryNotificationInfo from(CompositeData cd) {
         if (cd == null) {

@@ -5,176 +5,180 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executor;
 
 /**
- * La implementacion lista para usar de {@link NotificationEmitter}: se hereda o se delega en ella.
+ * The ready-made implementation of {@link NotificationEmitter}: it is extended or delegated to.
  *
- * <p>Tres decisiones de esta clase que no se ven en la firma y que conviene conocer:
+ * <p>Three decisions of this class that are not visible in the signature and are worth knowing:
  *
  * <ul>
- *   <li><b>La lista es copy-on-write.</b> Es lo que permite que `sendNotification` recorra sin
- *       tomar el candado mientras otro hilo registra o saca oyentes. Con una lista comun habria que
- *       elegir entre sostener el candado durante la entrega --y quedar a merced de un oyente lento
- *       o reentrante-- o copiar en cada envio.
- *   <li><b>El filtro se evalua en el hilo que envia, la entrega puede ir en otro.</b> Es a
- *       proposito: filtrar es barato y descarta; despachar es lo caro. Con el `Executor` del
- *       constructor la entrega sale del hilo del emisor, sin el, va en el mismo.
- *   <li><b>La comparacion de filtro y handback es por identidad</b> (`==`), no por `equals`. Es lo
- *       que hace el JDK y hay que respetarlo: dos handbacks iguales pero distintos son dos
- *       registros distintos.
+ *   <li><b>The list is copy-on-write.</b> It is what lets {@code sendNotification} walk it without
+ *       taking the lock while another thread registers or removes listeners. With an ordinary list
+ *       you would have to choose between holding the lock during delivery --and being at the mercy
+ *       of a slow or reentrant listener-- or copying on every send.
+ *   <li><b>The filter is evaluated on the sending thread, delivery may go on another.</b> It is on
+ *       purpose: filtering is cheap and discards; dispatching is the expensive part. With the
+ *       {@code Executor} of the constructor, delivery leaves the emitter's thread; without it, it
+ *       goes on the same one.
+ *   <li><b>Filter and handback are compared by identity</b> ({@code ==}), not by {@code equals}. It
+ *       is what the JDK does and has to be respected: two equal but distinct handbacks are two
+ *       different registrations.
  * </ul>
  */
 public class NotificationBroadcasterSupport implements NotificationEmitter {
 
-    /** Compartido: devolver siempre el mismo arreglo vacio evita una asignacion por consulta. */
-    private static final MBeanNotificationInfo[] SIN_INFO = new MBeanNotificationInfo[0];
+    /** Shared: always returning the same empty array avoids one allocation per query. */
+    private static final MBeanNotificationInfo[] NO_INFO = new MBeanNotificationInfo[0];
 
-    /** Corre la tarea en el hilo que llama; es el comportamiento sin `Executor`. */
-    private static class EnEsteHilo implements Executor {
+    /** Runs the task on the calling thread; it is the behaviour without an {@code Executor}. */
+    private static class SameThread implements Executor {
         public void execute(Runnable r) {
             r.run();
         }
     }
 
-    private static final Executor ESTE_HILO = new EnEsteHilo();
+    private static final Executor SAME_THREAD = new SameThread();
 
-    /** Un registro: el trio oyente/filtro/handback, que es la unidad que se saca. */
-    private static class Registro {
-        final NotificationListener oyente;
-        final NotificationFilter filtro;
+    /** A registration: the listener/filter/handback triple, which is the unit that gets removed. */
+    private static class Registration {
+        final NotificationListener listener;
+        final NotificationFilter filter;
         final Object handback;
 
-        Registro(NotificationListener oyente, NotificationFilter filtro, Object handback) {
-            this.oyente = oyente;
-            this.filtro = filtro;
+        Registration(NotificationListener listener, NotificationFilter filter, Object handback) {
+            this.listener = listener;
+            this.filter = filter;
             this.handback = handback;
         }
     }
 
-    private final List<Registro> registros = new CopyOnWriteArrayList<Registro>();
-    private final Executor ejecutor;
+    private final List<Registration> registrations = new CopyOnWriteArrayList<Registration>();
+    private final Executor executor;
     private final MBeanNotificationInfo[] info;
 
-    /** Entrega en el hilo del emisor y sin declarar que notificaciones emite. */
+    /** Delivers on the emitter's thread and without declaring which notifications it emits. */
     public NotificationBroadcasterSupport() {
         this(null, (MBeanNotificationInfo[]) null);
     }
 
-    /** Entrega a traves del `Executor`; si es `null`, en el hilo del emisor. */
+    /** Delivers through the {@code Executor}; if it is {@code null}, on the emitter's thread. */
     public NotificationBroadcasterSupport(Executor executor) {
         this(executor, (MBeanNotificationInfo[]) null);
     }
 
-    /** Declara que notificaciones emite; entrega en el hilo del emisor. */
+    /** Declares which notifications it emits; delivers on the emitter's thread. */
     public NotificationBroadcasterSupport(MBeanNotificationInfo... info) {
         this(null, info);
     }
 
     /**
-     * El completo.
+     * The full one.
      *
-     * <p>El arreglo se copia al entrar y al salir de {@link #getNotificationInfo}: es la unica
-     * forma de que lo que declara el MBean no cambie a espaldas de quien lo consulto.
+     * <p>The array is copied on the way in and on the way out of {@link #getNotificationInfo}: it
+     * is the only way for what the MBean declares not to change behind the back of whoever queried
+     * it.
      */
     public NotificationBroadcasterSupport(Executor executor, MBeanNotificationInfo... info) {
-        this.ejecutor = (executor == null) ? ESTE_HILO : executor;
+        this.executor = (executor == null) ? SAME_THREAD : executor;
         if (info == null || info.length == 0) {
-            this.info = SIN_INFO;
+            this.info = NO_INFO;
         } else {
-            MBeanNotificationInfo[] copia = new MBeanNotificationInfo[info.length];
-            System.arraycopy(info, 0, copia, 0, info.length);
-            this.info = copia;
+            MBeanNotificationInfo[] copy = new MBeanNotificationInfo[info.length];
+            System.arraycopy(info, 0, copy, 0, info.length);
+            this.info = copy;
         }
     }
 
     /**
-     * @param listener no puede ser `null`
-     * @param filter `null` significa "todas"
-     * @throws IllegalArgumentException si el oyente es `null`
+     * @param listener cannot be {@code null}
+     * @param filter {@code null} means "all"
+     * @throws IllegalArgumentException if the listener is {@code null}
      */
     public void addNotificationListener(NotificationListener listener, NotificationFilter filter,
                                         Object handback) {
         if (listener == null) {
-            throw new IllegalArgumentException("El oyente no puede ser null");
+            throw new IllegalArgumentException("The listener cannot be null");
         }
-        registros.add(new Registro(listener, filter, handback));
+        registrations.add(new Registration(listener, filter, handback));
     }
 
     /**
-     * Saca <b>todos</b> los registros de ese oyente, con cualquier filtro y handback.
+     * Removes <b>all</b> the registrations of that listener, with any filter and handback.
      *
-     * @throws ListenerNotFoundException si no habia ninguno
+     * @throws ListenerNotFoundException if there was none
      */
     public void removeNotificationListener(NotificationListener listener)
             throws ListenerNotFoundException {
-        boolean alguno = false;
-        // Se recorre una copia porque `registros` es copy-on-write y su iterador no soporta remove.
-        for (Registro r : registros.toArray(new Registro[0])) {
-            if (r.oyente == listener) {
-                registros.remove(r);
-                alguno = true;
+        boolean any = false;
+        // A copy is walked because `registrations` is copy-on-write and its iterator has no remove.
+        for (Registration r : registrations.toArray(new Registration[0])) {
+            if (r.listener == listener) {
+                registrations.remove(r);
+                any = true;
             }
         }
-        if (!alguno) {
-            throw new ListenerNotFoundException("El oyente no estaba registrado");
+        if (!any) {
+            throw new ListenerNotFoundException("The listener was not registered");
         }
     }
 
     /**
-     * Saca <b>un</b> registro: el que coincide en los tres por identidad.
+     * Removes <b>one</b> registration: the one that matches on all three by identity.
      *
-     * <p>Si el mismo trio se registro dos veces, esta llamada saca uno solo. Es asi en el JDK y es
-     * coherente con que `add` no deduplique.
+     * <p>If the same triple was registered twice, this call removes only one. It is like that in
+     * the JDK and is consistent with {@code add} not deduplicating.
      *
-     * @throws ListenerNotFoundException si no hay ninguno que coincida
+     * @throws ListenerNotFoundException if there is none that matches
      */
     public void removeNotificationListener(NotificationListener listener, NotificationFilter filter,
                                            Object handback) throws ListenerNotFoundException {
-        for (Registro r : registros) {
-            if (r.oyente == listener && r.filtro == filter && r.handback == handback) {
-                registros.remove(r);
+        for (Registration r : registrations) {
+            if (r.listener == listener && r.filter == filter && r.handback == handback) {
+                registrations.remove(r);
                 return;
             }
         }
-        throw new ListenerNotFoundException("No hay un registro con ese oyente, filtro y handback");
+        throw new ListenerNotFoundException(
+            "No registration with that listener, filter and handback");
     }
 
-    /** Lo que este emisor declara que puede emitir; copia defensiva. */
+    /** What this emitter declares it may emit; defensive copy. */
     public MBeanNotificationInfo[] getNotificationInfo() {
         if (info.length == 0) {
-            return SIN_INFO;
+            return NO_INFO;
         }
-        MBeanNotificationInfo[] copia = new MBeanNotificationInfo[info.length];
-        System.arraycopy(info, 0, copia, 0, info.length);
-        return copia;
+        MBeanNotificationInfo[] copy = new MBeanNotificationInfo[info.length];
+        System.arraycopy(info, 0, copy, 0, info.length);
+        return copy;
     }
 
     /**
-     * Manda la notificacion a los oyentes cuyo filtro la deje pasar.
+     * Sends the notification to the listeners whose filter lets it through.
      *
-     * <p>Si un filtro tira, la excepcion sale de aca sin envolver y sin haber entregado a los
-     * oyentes que faltaban: es lo que hace el JDK, y esconderla haria que un filtro roto pareciera
-     * un filtro que niega.
+     * <p>If a filter throws, the exception comes out of here unwrapped and without having delivered
+     * to the remaining listeners: it is what the JDK does, and hiding it would make a broken filter
+     * look like a filter that denies.
      */
     public void sendNotification(Notification notification) {
         if (notification == null) {
             return;
         }
-        for (final Registro r : registros) {
-            NotificationFilter f = r.filtro;
+        for (final Registration r : registrations) {
+            NotificationFilter f = r.filter;
             if (f != null && !f.isNotificationEnabled(notification)) {
                 continue;
             }
             final Notification n = notification;
-            ejecutor.execute(new Runnable() {
+            executor.execute(new Runnable() {
                 public void run() {
-                    handleNotification(r.oyente, n, r.handback);
+                    handleNotification(r.listener, n, r.handback);
                 }
             });
         }
     }
 
     /**
-     * El punto de extension: por omision llama al oyente, y se redefine para envolver la entrega
-     * --por ejemplo para atajar lo que tire el oyente y que no tumbe al emisor--.
+     * The extension point: by default it calls the listener, and it is redefined to wrap the
+     * delivery --for example to catch whatever the listener throws so that it does not bring the
+     * emitter down.
      */
     protected void handleNotification(NotificationListener listener, Notification notif,
                                       Object handback) {

@@ -4,79 +4,81 @@ import javax.accessibility.AccessibleContext;
 import javax.accessibility.AccessibleRole;
 
 /**
- * Un menú que aparece donde se lo pida, en vez de colgar de una barra.
+ * A menu that shows up where it is asked to, instead of hanging from a bar.
  *
- * <p>Es el menú contextual: se le engancha a un componente con {@code Component.add(PopupMenu)} y se
- * lo muestra desde el manejador del gesto que corresponda en cada plataforma —lo que
- * {@code MouseEvent.isPopupTrigger} contesta.
+ * <p>It is the context menu: it is attached to a component with {@code Component.add(PopupMenu)}
+ * and shown from the handler of whichever gesture corresponds on each platform —what {@code
+ * MouseEvent.isPopupTrigger} answers.
  *
- * <p>Hereda de {@link Menu}, así que se llena igual que cualquier otro; lo único distinto es cómo se
- * muestra.
+ * <p>It inherits from {@link Menu}, so it is filled like any other; the only different thing is how
+ * it is shown.
  *
- * <p><strong>{@link #show} no muestra nada acá.</strong> Un menú emergente lo dibuja el sistema
- * operativo en una ventana propia que flota sobre todo lo demás, y esta biblioteca no tiene sistema
- * de ventanas. Las comprobaciones de argumentos sí se hacen —un origen `null` o ajeno sigue siendo un
- * error— y lo que no pasa es la aparición. El método no devuelve nada, así que no afirma haber
- * mostrado algo que no mostró.
+ * <p><strong>{@link #show} shows nothing here.</strong> A popup menu is drawn by the operating
+ * system in a window of its own that floats above everything else, and this library has no
+ * windowing system. The argument checks are made all the same —a `null` origin is still an error—
+ * and what does not happen is the appearing. The method returns nothing, so it does not claim to
+ * have shown something it did not show.
+ *
+ * <p>Its constructors declare {@link HeadlessException} like the JDK's and never throw it; see
+ * {@link MenuComponent}.
  */
 public class PopupMenu extends Menu {
 
     private static final long serialVersionUID = -4620452533522760060L;
 
     /**
-     * El ícono de bandeja al que pertenece, o `null` si es un menú común.
+     * The tray icon it belongs to, or `null` if it is an ordinary menu.
      *
-     * <p>Existe para que un mismo menú no termine en dos íconos: {@link TrayIcon#setPopupMenu} lo
-     * consulta antes de quedárselo. Es de paquete porque es un detalle de esa negociación, no algo
-     * que quien arma el menú tenga que ver.
+     * <p>It exists so that one same menu does not end up in two icons: {@link
+     * TrayIcon#setPopupMenu} consults it before keeping it. It is package-private because it is a
+     * detail of that negotiation, not something whoever builds the menu has to see.
      */
-    TrayIcon duenoDeBandeja;
+    TrayIcon trayOwner;
 
-    /**
-     * Un menú emergente sin etiqueta.
-     *
-     * @throws HeadlessException si no hay pantalla
-     */
+    /** A popup menu without a label. */
     public PopupMenu() throws HeadlessException {
         this("");
     }
 
     /**
-     * Con esa etiqueta.
+     * With that label.
      *
-     * <p>La etiqueta sólo se ve si el menú se usa como submenú de otro: como menú emergente no tiene
-     * dónde mostrarse.
-     *
-     * @throws HeadlessException si no hay pantalla
+     * <p>The label is only seen if the menu is used as a submenu of another: as a popup menu it has
+     * nowhere to show it.
      */
     public PopupMenu(String label) throws HeadlessException {
         super(label);
     }
 
     /**
-     * De qué cuelga.
+     * What it hangs from.
      *
-     * <p>Puede ser un {@link Component} y no sólo un {@link MenuContainer}, que es la diferencia con
-     * el resto de los menús: éste se engancha a un componente cualquiera.
+     * <p>It may be a {@link Component} and not only a {@link MenuContainer}, which is the
+     * difference with the rest of the menus: this one is attached to any component.
      */
     public MenuContainer getParent() {
         return super.getParent();
     }
 
-    /** Avisa que puede mostrarse. */
+    /** Notifies that it can be shown. */
     public void addNotify() {
         super.addNotify();
     }
 
     /**
-     * Lo muestra en ese punto del componente dado.
+     * Shows it at that point of the given component.
      *
-     * <p>No aparece nada: hace falta una ventana emergente del sistema, que esta biblioteca no
-     * tiene. Las comprobaciones de argumentos se hacen igual.
+     * <p>Nothing appears: a popup window of the system is needed, which this library does not have.
+     * The argument checks are made anyway.
      *
-     * @throws NullPointerException si el origen es `null`
-     * @throws IllegalArgumentException si el origen no está en el árbol del componente al que este
-     *     menú está enganchado
+     * <p>Those checks are not the JDK's. Here a `null` origin is a {@code NullPointerException} and
+     * a menu attached to nothing is an {@code IllegalArgumentException}; the JDK does it the other
+     * way round —an unattached menu is the {@code NullPointerException}— and on top of that it
+     * demands that the origin belong to the hierarchy of the component the menu is attached to,
+     * which is not checked here.
+     *
+     * @throws NullPointerException if the origin is `null`
+     * @throws IllegalArgumentException if this menu is not attached to any component
      */
     public void show(Component origin, int x, int y) {
         if (origin == null) {
@@ -87,10 +89,10 @@ public class PopupMenu extends Menu {
             throw new IllegalArgumentException(
                     "PopupMenu is not attached to any component");
         }
-        // Sin sistema de ventanas no hay nada que mostrar; el estado se comprobó igual.
+        // Without a windowing system there is nothing to show; the state was checked all the same.
     }
 
-    /** La información de accesibilidad de este menú emergente. */
+    /** The accessibility information of this popup menu. */
     public AccessibleContext getAccessibleContext() {
         if (this.accessibleContext == null) {
             this.accessibleContext = new AccessibleAWTPopupMenu();
@@ -98,14 +100,14 @@ public class PopupMenu extends Menu {
         return this.accessibleContext;
     }
 
-    /** La accesibilidad de un menú emergente. */
+    /** The accessibility of a popup menu. */
     protected class AccessibleAWTPopupMenu extends AccessibleAWTMenu {
 
-        /** Para las subclases. */
+        /** For the subclasses. */
         protected AccessibleAWTPopupMenu() {
         }
 
-        /** Es un menú emergente. */
+        /** It is a popup menu. */
         public AccessibleRole getAccessibleRole() {
             return AccessibleRole.POPUP_MENU;
         }

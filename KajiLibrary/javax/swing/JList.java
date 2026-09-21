@@ -20,44 +20,45 @@ import javax.swing.plaf.ListUI;
 import javax.swing.text.Position;
 
 /**
- * Una lista de renglones para elegir.
+ * A list of lines to choose from.
  *
- * <h2>Tres objetos, no uno</h2>
+ * <h2>Three objects, not one</h2>
  *
- * <p>Los datos van en un {@link ListModel}, lo elegido en un {@link ListSelectionModel}, y como se
- * dibuja cada renglon en un {@link ListCellRenderer}. La lista no guarda nada de eso: los junta.
+ * <p>The data go in a {@link ListModel}, what is chosen in a {@link ListSelectionModel}, and
+ * how each line is drawn in a {@link ListCellRenderer}. The list keeps none of that: it brings
+ * them together.
  *
- * <p>Separarlos es lo que permite mostrar un millon de renglones. El modelo puede calcular cada uno
- * al pedirlo, y el dibujante es un solo componente que se usa de sello; ver la nota de
- * {@link ListCellRenderer}.
+ * <p>Separating them is what allows a million lines to be shown. The model may compute each
+ * one on being asked, and the renderer is a single component used as a stamp; see
+ * {@link ListCellRenderer}'s note.
  *
- * <h2>Por que la lista no se desplaza sola</h2>
+ * <h2>Why the list does not scroll by itself</h2>
  *
- * <p>Una {@code JList} no tiene barras. Implementa {@link Scrollable}, que es la interfaz con la
- * que le explica a un {@link JScrollPane} cuanto medir y de a cuanto avanzar. Poner una lista sin
- * meterla en un panel de desplazamiento es el error mas comun con esta clase: se ve entera y sin
- * barras, por mas larga que sea.
+ * <p>A {@code JList} has no bars. It implements {@link Scrollable}, which is the interface it
+ * explains to a {@link JScrollPane} how much to measure and how much to advance by with.
+ * Putting a list in without putting it into a scroll pane is the commonest mistake with this
+ * class: it is seen whole and with no bars, however long it is.
  *
- * <h2>Tamano fijo o medido</h2>
+ * <h2>Fixed or measured size</h2>
  *
- * <p>Medir cada renglon para saber cuanto mide la lista cuesta recorrerlos todos.
- * {@link #setFixedCellHeight} y {@link #setPrototypeCellValue} son dos formas de evitarlo: la
- * primera lo dice, la segunda da un valor de ejemplo del que se deduce. Con una lista larga la
- * diferencia se nota.
+ * <p>Measuring each line in order to know how much the list measures costs walking through them
+ * all. {@link #setFixedCellHeight} and {@link #setPrototypeCellValue} are two ways of avoiding
+ * that: the first says it, the second gives a sample value it is deduced from. With a long list
+ * the difference shows.
  *
- * @param <E> el tipo de los elementos.
+ * @param <E> the elements' type.
  */
 public class JList<E> extends JComponent implements Scrollable, Accessible {
 
     private static final String uiClassID = "ListUI";
 
-    /** Los renglones van uno abajo del otro, en una sola columna. */
+    /** The lines go one below the other, in a single column. */
     public static final int VERTICAL = 0;
 
-    /** Van en columnas, llenando una columna antes de pasar a la siguiente. */
+    /** They go in columns, filling one column before going on to the next. */
     public static final int VERTICAL_WRAP = 1;
 
-    /** Van en filas, llenando una fila antes de pasar a la siguiente. */
+    /** They go in rows, filling one row before going on to the next. */
     public static final int HORIZONTAL_WRAP = 2;
 
     private int fixedCellWidth = -1;
@@ -77,7 +78,7 @@ public class JList<E> extends JComponent implements Scrollable, Accessible {
     private transient DropLocation dropLocation;
     private AccessibleContext accessibleContext;
 
-    /** Una lista sobre ese modelo. */
+    /** A list over that model. */
     public JList(ListModel<E> dataModel) {
         if (dataModel == null) {
             throw new IllegalArgumentException("dataModel must be non null");
@@ -90,65 +91,66 @@ public class JList<E> extends JComponent implements Scrollable, Accessible {
         updateUI();
     }
 
-    /** Una lista con esos elementos, sobre un modelo de solo lectura. */
+    /** A list with those elements, over a read-only model. */
     public JList(final E[] listData) {
-        this(new ArregloModelo<E>(listData));
+        this(new ArrayModel<E>(listData));
     }
 
-    /** Una lista con los elementos de ese vector. */
+    /** A list with that vector's elements. */
     public JList(final Vector<? extends E> listData) {
-        this(new VectorModelo<E>(listData));
+        this(new VectorModel<E>(listData));
     }
 
-    /** Una lista vacia. */
+    /** An empty list. */
     public JList() {
-        this(new VacioModelo<E>());
+        this(new EmptyModel<E>());
     }
 
     /**
-     * Un modelo de solo lectura sobre un arreglo.
+     * A read-only model over an array.
      *
-     * <p>No copia el arreglo. Es lo que hace el JDK y es lo que permite armar una lista sobre datos
-     * grandes sin duplicarlos; el precio es que cambiar el arreglo por afuera deja la lista
-     * mostrando lo viejo, porque el modelo no tiene como enterarse.
+     * <p>It does not copy the array. It is what the JDK does and it is what allows a list to be
+     * built over large data without duplicating them; the price is that changing the array from
+     * outside leaves the list showing the old thing, because the model has no way of learning
+     * about it.
      */
-    static class ArregloModelo<E> extends AbstractListModel<E> {
+    static class ArrayModel<E> extends AbstractListModel<E> {
 
-        private final E[] datos;
+        private final E[] data;
 
-        ArregloModelo(E[] datos) {
-            this.datos = datos;
+        ArrayModel(E[] data) {
+            this.data = data;
         }
 
         public int getSize() {
-            return datos.length;
+            return data.length;
         }
 
         public E getElementAt(int i) {
-            return datos[i];
+            return data[i];
         }
     }
 
-    /** Igual, sobre un vector. */
-    static class VectorModelo<E> extends AbstractListModel<E> {
+    /** The same, over a vector. */
+    static class VectorModel<E> extends AbstractListModel<E> {
 
-        private final Vector<? extends E> datos;
+        private final Vector<? extends E> data;
 
-        VectorModelo(Vector<? extends E> datos) {
-            this.datos = datos;
+        VectorModel(Vector<? extends E> data) {
+            this.data = data;
         }
 
         public int getSize() {
-            return datos.size();
+            return data.size();
         }
 
         public E getElementAt(int i) {
-            return datos.elementAt(i);
+            return data.elementAt(i);
         }
     }
 
-    /** El modelo de una lista vacia. */
-    static class VacioModelo<E> extends AbstractListModel<E> {
+    /** An empty list's model. */
+    static class EmptyModel<E> extends AbstractListModel<E> {
 
         public int getSize() {
             return 0;
@@ -159,7 +161,7 @@ public class JList<E> extends JComponent implements Scrollable, Accessible {
         }
     }
 
-    /** El aspecto que dibuja la lista. */
+    /** The look and feel that draws the list. */
     public ListUI getUI() {
         return (ListUI) ui;
     }
@@ -176,7 +178,7 @@ public class JList<E> extends JComponent implements Scrollable, Accessible {
         return uiClassID;
     }
 
-    /** Un valor de ejemplo del que se deduce el tamano de un renglon; ver la nota de la clase. */
+    /** A sample value a line's size is deduced from; see the class note. */
     public E getPrototypeCellValue() {
         return prototypeCellValue;
     }
@@ -193,7 +195,7 @@ public class JList<E> extends JComponent implements Scrollable, Accessible {
         return fixedCellWidth;
     }
 
-    /** El ancho de todos los renglones; con -1 se mide cada uno. */
+    /** The width of every line; with -1 each one is measured. */
     public void setFixedCellWidth(int width) {
         int oldValue = fixedCellWidth;
         fixedCellWidth = width;
@@ -210,7 +212,7 @@ public class JList<E> extends JComponent implements Scrollable, Accessible {
         firePropertyChange("fixedCellHeight", oldValue, fixedCellHeight);
     }
 
-    /** Quien dibuja cada renglon. */
+    /** Who draws each line. */
     public ListCellRenderer<? super E> getCellRenderer() {
         return cellRenderer;
     }
@@ -227,7 +229,7 @@ public class JList<E> extends JComponent implements Scrollable, Accessible {
         return selectionForeground;
     }
 
-    /** El color de la letra de los renglones elegidos. */
+    /** The colour of the chosen lines' letters. */
     public void setSelectionForeground(Color selectionForeground) {
         Color oldValue = this.selectionForeground;
         this.selectionForeground = selectionForeground;
@@ -244,7 +246,7 @@ public class JList<E> extends JComponent implements Scrollable, Accessible {
         firePropertyChange("selectionBackground", oldValue, selectionBackground);
     }
 
-    /** Cuantos renglones se ven sin desplazar; es lo que la lista le pide al desplazador. */
+    /** How many lines are seen without scrolling; it is what the list asks the scroller for. */
     public int getVisibleRowCount() {
         return visibleRowCount;
     }
@@ -255,15 +257,15 @@ public class JList<E> extends JComponent implements Scrollable, Accessible {
         firePropertyChange("visibleRowCount", oldValue, visibleRowCount);
     }
 
-    /** Si los renglones van en una columna o se acomodan en varias. */
+    /** Whether the lines go in one column or are laid out in several. */
     public int getLayoutOrientation() {
         return layoutOrientation;
     }
 
     /**
-     * Como se acomodan los renglones.
+     * How the lines are laid out.
      *
-     * @throws IllegalArgumentException si no es uno de los tres.
+     * @throws IllegalArgumentException if it is not one of the three.
      */
     public void setLayoutOrientation(int layoutOrientation) {
         int oldValue = this.layoutOrientation;
@@ -276,7 +278,7 @@ public class JList<E> extends JComponent implements Scrollable, Accessible {
         firePropertyChange("layoutOrientation", oldValue, layoutOrientation);
     }
 
-    /** El primer renglon que se ve, o -1 si no se ve ninguno. */
+    /** The first line that is seen, or -1 if none is seen. */
     public int getFirstVisibleIndex() {
         Rectangle r = getVisibleRect();
         int first = (r.width > 0 && r.height > 0) ? locationToIndex(r.getLocation()) : -1;
@@ -288,11 +290,11 @@ public class JList<E> extends JComponent implements Scrollable, Accessible {
         if (r.width <= 0 || r.height <= 0) {
             return -1;
         }
-        Point ultimo = new Point(r.x + r.width - 1, r.y + r.height - 1);
-        return locationToIndex(ultimo);
+        Point last = new Point(r.x + r.width - 1, r.y + r.height - 1);
+        return locationToIndex(last);
     }
 
-    /** Desplaza para que ese renglon se vea. */
+    /** It scrolls so that that line is seen. */
     public void ensureIndexIsVisible(int index) {
         Rectangle cellBounds = getCellBounds(index, index);
         if (cellBounds != null) {
@@ -309,9 +311,9 @@ public class JList<E> extends JComponent implements Scrollable, Accessible {
     }
 
     /**
-     * Como se muestra donde va a caer lo que se esta arrastrando.
+     * How where what is being dragged will fall is shown.
      *
-     * @throws IllegalArgumentException si el modo no sirve para una lista.
+     * @throws IllegalArgumentException if the mode does not serve for a list.
      */
     public final void setDropMode(DropMode dropMode) {
         if (dropMode != null) {
@@ -328,16 +330,16 @@ public class JList<E> extends JComponent implements Scrollable, Accessible {
         return dropMode;
     }
 
-    /** Donde caeria ahora lo que se esta arrastrando, o nulo. */
+    /** Where what is being dragged would fall now, or null. */
     public final DropLocation getDropLocation() {
         return dropLocation;
     }
 
     /**
-     * El proximo renglon cuyo texto empieza con eso.
+     * The next line whose text begins with that.
      *
-     * <p>Es lo que hace que escribir en una lista salte al renglon. La comparacion no distingue
-     * mayusculas y usa el texto que muestra el dibujante, no el objeto: es lo que el usuario ve.
+     * <p>It is what makes typing in a list jump to the line. The comparison ignores case and uses
+     * the text the renderer shows, not the object: it is what the user sees.
      */
     public int getNextMatch(String prefix, int startIndex, Position.Bias bias) {
         ListModel<E> model = getModel();
@@ -366,12 +368,12 @@ public class JList<E> extends JComponent implements Scrollable, Accessible {
         return -1;
     }
 
-    /** El texto de ayuda del renglon que esta bajo el mouse. */
+    /** The tool tip text of the line that is under the mouse. */
     public String getToolTipText(MouseEvent event) {
         return super.getToolTipText(event);
     }
 
-    /** Que renglon cae en ese punto; lo contesta el aspecto. */
+    /** Which line falls at that point; the look and feel answers it. */
     public int locationToIndex(Point location) {
         ListUI ui = getUI();
         return (ui != null) ? ui.locationToIndex(this, location) : -1;
@@ -382,7 +384,7 @@ public class JList<E> extends JComponent implements Scrollable, Accessible {
         return (ui != null) ? ui.indexToLocation(this, index) : null;
     }
 
-    /** El rectangulo que ocupan los renglones entre esos dos indices. */
+    /** The rectangle the lines between those two indices take up. */
     public Rectangle getCellBounds(int index0, int index1) {
         ListUI ui = getUI();
         return (ui != null) ? ui.getCellBounds(this, index0, index1) : null;
@@ -393,10 +395,10 @@ public class JList<E> extends JComponent implements Scrollable, Accessible {
     }
 
     /**
-     * Cambia el modelo de datos.
+     * It changes the data model.
      *
-     * <p>Vacia la seleccion: los indices elegidos se referian a los datos viejos, y conservarlos
-     * dejaria elegidos renglones que no tienen nada que ver.
+     * <p>It empties the selection: the chosen indices referred to the old data, and keeping them
+     * would leave lines chosen that have nothing to do with it.
      */
     public void setModel(ListModel<E> model) {
         if (model == null) {
@@ -408,14 +410,14 @@ public class JList<E> extends JComponent implements Scrollable, Accessible {
         clearSelection();
     }
 
-    /** Reemplaza los datos por ese arreglo. */
+    /** It replaces the data with that array. */
     public void setListData(final E[] listData) {
-        setModel(new ArregloModelo<E>(listData));
+        setModel(new ArrayModel<E>(listData));
     }
 
-    /** Reemplaza los datos por ese vector. */
+    /** It replaces the data with that vector. */
     public void setListData(final Vector<? extends E> listData) {
-        setModel(new VectorModelo<E>(listData));
+        setModel(new VectorModel<E>(listData));
     }
 
     protected ListSelectionModel createSelectionModel() {
@@ -426,7 +428,7 @@ public class JList<E> extends JComponent implements Scrollable, Accessible {
         return selectionModel;
     }
 
-    /** Reenvia el aviso del modelo de seleccion a quien escucha a la lista. */
+    /** It forwards the selection model's notice to whoever listens to the list. */
     protected void fireSelectionValueChanged(int firstIndex, int lastIndex,
             boolean isAdjusting) {
         Object[] listeners = listenerList.getListenerList();
@@ -442,14 +444,14 @@ public class JList<E> extends JComponent implements Scrollable, Accessible {
     }
 
     /**
-     * Agrega quien quiera enterarse de los cambios de seleccion.
+     * It adds whoever wants to learn about the changes of selection.
      *
-     * <p>Se escucha a la lista y no al modelo de seleccion a proposito: cambiar el modelo no
-     * deberia dejar sordo a quien se anoto. La lista se encarga de reengancharse.
+     * <p>The list is listened to and not the selection model on purpose: changing the model should
+     * not leave whoever signed up deaf. The list takes care of hooking itself up again.
      */
     public void addListSelectionListener(ListSelectionListener listener) {
         if (selectionListener == null) {
-            selectionListener = new EscuchaSeleccion(this);
+            selectionListener = new SelectionListenerImpl(this);
             getSelectionModel().addListSelectionListener(selectionListener);
         }
         listenerList.add(ListSelectionListener.class, listener);
@@ -463,22 +465,22 @@ public class JList<E> extends JComponent implements Scrollable, Accessible {
         return listenerList.getListeners(ListSelectionListener.class);
     }
 
-    /** El puente entre el modelo de seleccion y quien escucha a la lista. */
-    static class EscuchaSeleccion implements ListSelectionListener, java.io.Serializable {
+    /** The bridge between the selection model and whoever listens to the list. */
+    static class SelectionListenerImpl implements ListSelectionListener, java.io.Serializable {
 
-        private final JList<?> lista;
+        private final JList<?> list;
 
-        EscuchaSeleccion(JList<?> lista) {
-            this.lista = lista;
+        SelectionListenerImpl(JList<?> list) {
+            this.list = list;
         }
 
         public void valueChanged(ListSelectionEvent e) {
-            lista.fireSelectionValueChanged(e.getFirstIndex(), e.getLastIndex(),
+            list.fireSelectionValueChanged(e.getFirstIndex(), e.getLastIndex(),
                     e.getValueIsAdjusting());
         }
     }
 
-    /** Cambia el modelo de seleccion, llevandose el puente al nuevo. */
+    /** It changes the selection model, taking the bridge along to the new one. */
     public void setSelectionModel(ListSelectionModel selectionModel) {
         if (selectionModel == null) {
             throw new IllegalArgumentException("selectionModel must be non null");
@@ -548,7 +550,7 @@ public class JList<E> extends JComponent implements Scrollable, Accessible {
         return getSelectionModel().getValueIsAdjusting();
     }
 
-    /** Los indices elegidos, ordenados. */
+    /** The chosen indices, sorted. */
     public int[] getSelectedIndices() {
         ListSelectionModel sm = getSelectionModel();
         int iMin = sm.getMinSelectionIndex();
@@ -569,7 +571,7 @@ public class JList<E> extends JComponent implements Scrollable, Accessible {
         return rv;
     }
 
-    /** Elige solo ese renglon; con -1 no queda ninguno. */
+    /** It chooses only that line; with -1 none is left. */
     public void setSelectedIndex(int index) {
         if (index >= getModel().getSize()) {
             return;
@@ -577,7 +579,7 @@ public class JList<E> extends JComponent implements Scrollable, Accessible {
         getSelectionModel().setSelectionInterval(index, index);
     }
 
-    /** Elige esos renglones y ninguno mas. */
+    /** It chooses those lines and no others. */
     public void setSelectedIndices(int[] indices) {
         ListSelectionModel sm = getSelectionModel();
         sm.clearSelection();
@@ -590,9 +592,9 @@ public class JList<E> extends JComponent implements Scrollable, Accessible {
     }
 
     /**
-     * Los elementos elegidos.
+     * The chosen elements.
      *
-     * @deprecated Usar {@link #getSelectedValuesList}, que devuelve una lista con el tipo puesto.
+     * @deprecated Use {@link #getSelectedValuesList}, which returns a list with the type set.
      */
     @Deprecated
     public Object[] getSelectedValues() {
@@ -616,7 +618,7 @@ public class JList<E> extends JComponent implements Scrollable, Accessible {
         return rv;
     }
 
-    /** Los elementos elegidos, en orden. */
+    /** The chosen elements, in order. */
     public List<E> getSelectedValuesList() {
         ListSelectionModel sm = getSelectionModel();
         ListModel<E> dm = getModel();
@@ -634,7 +636,7 @@ public class JList<E> extends JComponent implements Scrollable, Accessible {
         return selectedItems;
     }
 
-    /** El primero de los elegidos, o -1. */
+    /** The first of the chosen ones, or -1. */
     public int getSelectedIndex() {
         return getMinSelectionIndex();
     }
@@ -644,7 +646,7 @@ public class JList<E> extends JComponent implements Scrollable, Accessible {
         return (i == -1) ? null : getModel().getElementAt(i);
     }
 
-    /** Busca ese objeto en el modelo y lo elige. */
+    /** It looks that object up in the model and chooses it. */
     public void setSelectedValue(Object anObject, boolean shouldScroll) {
         if (anObject == null) {
             setSelectedIndex(-1);
@@ -667,10 +669,10 @@ public class JList<E> extends JComponent implements Scrollable, Accessible {
     }
 
     /**
-     * Cuanto pedirle al desplazador.
+     * How much to ask the scroller for.
      *
-     * <p>El alto sale de {@link #getVisibleRowCount} renglones, no de todos: es justamente lo que
-     * distingue "cuanto quiero que se vea" de "cuanto mido".
+     * <p>The height comes from {@link #getVisibleRowCount} lines, not from all of them: it is
+     * precisely what tells "how much I want to be seen" from "how much I measure".
      */
     public Dimension getPreferredScrollableViewportSize() {
         if (getLayoutOrientation() != VERTICAL) {
@@ -701,7 +703,7 @@ public class JList<E> extends JComponent implements Scrollable, Accessible {
         return new Dimension(fixedCellWidth2, fixedCellHeight2 * visibleRowCount);
     }
 
-    /** De a cuanto avanza una rueda del mouse: un renglon. */
+    /** How much a mouse wheel advances by: one line. */
     public int getScrollableUnitIncrement(Rectangle visibleRect, int orientation,
             int direction) {
         if (orientation == SwingConstants.VERTICAL) {
@@ -721,21 +723,21 @@ public class JList<E> extends JComponent implements Scrollable, Accessible {
         return (horizontalScrollIncrement > 0) ? horizontalScrollIncrement : 20;
     }
 
-    /** De a cuanto avanza al hacer clic en la barra: una pantalla menos un renglon. */
+    /** How much it advances by on clicking on the bar: a screenful minus one line. */
     public int getScrollableBlockIncrement(Rectangle visibleRect, int orientation,
             int direction) {
         if (orientation == SwingConstants.VERTICAL) {
             int inc = visibleRect.height;
-            int unidad = getScrollableUnitIncrement(visibleRect, orientation, direction);
-            if (inc > unidad) {
-                inc = inc - unidad;
+            int unit = getScrollableUnitIncrement(visibleRect, orientation, direction);
+            if (inc > unit) {
+                inc = inc - unit;
             }
             return inc;
         }
         return visibleRect.width;
     }
 
-    /** La lista se estira al ancho del desplazador cuando los renglones van en columna. */
+    /** The list stretches to the scroller's width when the lines go in a column. */
     public boolean getScrollableTracksViewportWidth() {
         if (getLayoutOrientation() == VERTICAL_WRAP && getVisibleRowCount() <= 0) {
             return true;
@@ -767,11 +769,11 @@ public class JList<E> extends JComponent implements Scrollable, Accessible {
     }
 
     /**
-     * Donde caeria lo que se esta arrastrando.
+     * Where what is being dragged would fall.
      *
-     * <p>{@link #isInsert} distingue las dos formas: soltar <em>sobre</em> un renglon lo reemplaza,
-     * soltar <em>entre</em> dos inserta. La diferencia se ve en pantalla como una raya entre
-     * renglones en lugar de un renglon resaltado.
+     * <p>{@link #isInsert} tells the two forms apart: dropping <em>over</em> a line replaces it,
+     * dropping <em>between</em> two inserts. The difference is seen on the screen as a line
+     * between lines instead of a highlighted line.
      */
     public static final class DropLocation extends TransferHandler.DropLocation {
 
@@ -784,7 +786,7 @@ public class JList<E> extends JComponent implements Scrollable, Accessible {
             this.isInsert = isInsert;
         }
 
-        /** El renglon sobre el que caeria, o donde se insertaria. */
+        /** The line it would fall over, or where it would be inserted. */
         public int getIndex() {
             return index;
         }

@@ -1,85 +1,85 @@
 package org.w3c.dom.html;
 
 /**
- * Un `<a>`.
+ * An `<a>`.
  */
 public interface HTMLAnchorElement extends HTMLElement {
 
-    /** El atajo de teclado. */
+    /** The keyboard shortcut. */
     String getAccessKey();
 
-    /** Fija el atajo de teclado. */
+    /** It sets the keyboard shortcut. */
     void setAccessKey(String accessKey);
 
-    /** La codificacion del destino. */
+    /** The encoding of the destination. */
     String getCharset();
 
-    /** Fija la codificacion del destino. */
+    /** It sets the encoding of the destination. */
     void setCharset(String charset);
 
-    /** Las coordenadas. */
+    /** The coordinates. */
     String getCoords();
 
-    /** Fija las coordenadas. */
+    /** It sets the coordinates. */
     void setCoords(String coords);
 
-    /** El destino. */
+    /** The destination. */
     String getHref();
 
-    /** Fija el destino. */
+    /** It sets the destination. */
     void setHref(String href);
 
-    /** El idioma del destino. */
+    /** The language of the destination. */
     String getHreflang();
 
-    /** Fija el idioma del destino. */
+    /** It sets the language of the destination. */
     void setHreflang(String hreflang);
 
-    /** El atributo `name`. */
+    /** The `name` attribute. */
     String getName();
 
-    /** Fija el atributo `name`. */
+    /** It sets the `name` attribute. */
     void setName(String name);
 
-    /** La relacion con el destino. */
+    /** The relationship with the destination. */
     String getRel();
 
-    /** Fija la relacion con el destino. */
+    /** It sets the relationship with the destination. */
     void setRel(String rel);
 
-    /** La relacion inversa. */
+    /** The reverse relationship. */
     String getRev();
 
-    /** Fija la relacion inversa. */
+    /** It sets the reverse relationship. */
     void setRev(String rev);
 
-    /** La forma de la region. */
+    /** The shape of the region. */
     String getShape();
 
-    /** Fija la forma de la region. */
+    /** It sets the shape of the region. */
     void setShape(String shape);
 
-    /** La posicion en el orden de tabulacion. */
+    /** The position in the tabbing order. */
     int getTabIndex();
 
-    /** Fija la posicion en el orden de tabulacion. */
+    /** It sets the position in the tabbing order. */
     void setTabIndex(int tabIndex);
 
-    /** El marco de destino. */
+    /** The target frame. */
     String getTarget();
 
-    /** Fija el marco de destino. */
+    /** It sets the target frame. */
     void setTarget(String target);
 
-    /** El tipo del control. */
+    /** The type of the control. */
     String getType();
 
-    /** Fija el tipo del control. */
+    /** It sets the type of the control. */
     void setType(String type);
 
-    /** Le saca el foco. */
+    /** It takes the focus away from it. */
     void blur();
 
-    /** Le da el foco. */
+    /** It gives it the focus. */
     void focus();
 }

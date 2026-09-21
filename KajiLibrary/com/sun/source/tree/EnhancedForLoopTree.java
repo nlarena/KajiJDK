@@ -1,7 +1,7 @@
 package com.sun.source.tree;
 
 /**
- * El `for` sobre una coleccion.
+ * The `for` over a collection.
  */
 public interface EnhancedForLoopTree extends StatementTree {
 

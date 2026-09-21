@@ -8,29 +8,31 @@ import java.awt.LayoutManager2;
 import java.io.Serializable;
 
 /**
- * Acomoda a todos los hijos <em>uno encima de otro</em>, alineados por sus puntos de alineacion.
+ * It lays every child out <em>one on top of another</em>, aligned by their alignment points.
  *
- * <h2>No es "todos en la misma posicion"</h2>
+ * <h2>It is not "everybody at the same position"</h2>
  *
- * <p>La diferencia esta en la alineacion. Cada componente tiene un {@code alignmentX} y un
- * {@code alignmentY} entre cero y uno, que dicen que punto de si mismo quiere alinear. Con
- * {@code 0.5} se alinea por el centro, con {@code 0} por el borde izquierdo o de arriba, con
- * {@code 1} por el derecho o de abajo. Este acomodador busca un punto comun y hace que el punto de
- * alineacion de cada hijo caiga ahi.
+ * <p>The difference is in the alignment. Each component has an {@code alignmentX} and an
+ * {@code alignmentY} between zero and one, which say which point of itself it wants to align.
+ * With {@code 0.5} it aligns by the centre, with {@code 0} by the left or top edge, with
+ * {@code 1} by the right or bottom one. This layout looks for a common point and makes each
+ * child's alignment point fall there.
  *
- * <p>Por eso dos hijos de distinto tamano con la misma alineacion quedan centrados uno sobre otro,
- * y con alineaciones distintas quedan corridos. Con todos en {@code 0} y del mismo tamano queda el
- * caso trivial, que es lo que la mayoria espera y no es lo que la clase hace en general.
+ * <p>That is why two children of different sizes with the same alignment end up centred one
+ * over the other, and with different alignments they end up shifted. With everybody at
+ * {@code 0} and of the same size the trivial case is left, which is what most people expect and
+ * is not what the class does in general.
  *
- * <h2>El orden de dibujo lo decide el contenedor</h2>
+ * <h2>The drawing order is decided by the container</h2>
  *
- * <p>Este acomodador solo pone posiciones y tamanos. Cual se ve arriba lo decide el orden de los
- * hijos, que es del contenedor: el primero se dibuja ultimo y por lo tanto queda encima.
+ * <p>This layout only sets positions and sizes. Which one is seen on top is decided by the
+ * children's order, which belongs to the container: the first is drawn last and therefore ends
+ * up on top.
  *
- * <h2>Las medidas se guardan y hay que invalidarlas</h2>
+ * <h2>The measurements are kept and have to be invalidated</h2>
  *
- * <p>Medir a todos los hijos es caro, asi que el resultado se guarda. {@link #invalidateLayout} lo
- * tira; el contenedor la llama sola cuando algo cambia.
+ * <p>Measuring every child is expensive, so the result is kept. {@link #invalidateLayout}
+ * throws it away; the container calls it by itself when something changes.
  */
 public class OverlayLayout implements LayoutManager2, Serializable {
 
@@ -42,22 +44,22 @@ public class OverlayLayout implements LayoutManager2, Serializable {
     private transient SizeRequirements yTotal;
 
     /**
-     * Para ese contenedor.
+     * For that container.
      *
-     * <p>Se le pasa el contenedor en el constructor y despues no se lo puede cambiar: es lo mismo
-     * que hace {@link BoxLayout}, y por eso un acomodador de estos no se comparte entre dos
-     * contenedores.
+     * <p>It is passed the container in the constructor and afterwards it cannot be changed: it is
+     * the same as {@link BoxLayout} does, and that is why one of these layouts is not shared
+     * between two containers.
      */
     public OverlayLayout(Container target) {
         this.target = target;
     }
 
-    /** El contenedor al que esta atado. */
+    /** The container it is tied to. */
     public final Container getTarget() {
         return this.target;
     }
 
-    /** Tira las medidas guardadas; ver la nota de la clase. */
+    /** It throws away the kept measurements; see the class note. */
     public void invalidateLayout(Container target) {
         checkContainer(target);
         xChildren = null;
@@ -66,7 +68,7 @@ public class OverlayLayout implements LayoutManager2, Serializable {
         yTotal = null;
     }
 
-    /** No hace nada: este acomodador no usa nombres. */
+    /** It does nothing: this layout does not use names. */
     public void addLayoutComponent(String name, Component comp) {
         invalidateLayout(comp.getParent());
     }
@@ -75,15 +77,15 @@ public class OverlayLayout implements LayoutManager2, Serializable {
         invalidateLayout(comp.getParent());
     }
 
-    /** No hace nada: este acomodador no usa restricciones. */
+    /** It does nothing: this layout does not use constraints. */
     public void addLayoutComponent(Component comp, Object constraints) {
         invalidateLayout(comp.getParent());
     }
 
     /**
-     * Lo que el contenedor querria medir.
+     * What the container would like to measure.
      *
-     * @throws AWTError si no es el contenedor al que esta atado
+     * @throws AWTError if it is not the container it is tied to
      */
     public Dimension preferredLayoutSize(Container target) {
         checkContainer(target);
@@ -96,9 +98,9 @@ public class OverlayLayout implements LayoutManager2, Serializable {
     }
 
     /**
-     * Lo minimo con lo que se arregla.
+     * The least it makes do with.
      *
-     * @throws AWTError si no es el contenedor al que esta atado
+     * @throws AWTError if it is not the container it is tied to
      */
     public Dimension minimumLayoutSize(Container target) {
         checkContainer(target);
@@ -111,9 +113,9 @@ public class OverlayLayout implements LayoutManager2, Serializable {
     }
 
     /**
-     * Lo maximo que puede ocupar.
+     * The most it may take up.
      *
-     * @throws AWTError si no es el contenedor al que esta atado
+     * @throws AWTError if it is not the container it is tied to
      */
     public Dimension maximumLayoutSize(Container target) {
         checkContainer(target);
@@ -126,9 +128,9 @@ public class OverlayLayout implements LayoutManager2, Serializable {
     }
 
     /**
-     * La alineacion horizontal del conjunto.
+     * The set's horizontal alignment.
      *
-     * @throws AWTError si no es el contenedor al que esta atado
+     * @throws AWTError if it is not the container it is tied to
      */
     public float getLayoutAlignmentX(Container target) {
         checkContainer(target);
@@ -137,9 +139,9 @@ public class OverlayLayout implements LayoutManager2, Serializable {
     }
 
     /**
-     * La alineacion vertical del conjunto.
+     * The set's vertical alignment.
      *
-     * @throws AWTError si no es el contenedor al que esta atado
+     * @throws AWTError if it is not the container it is tied to
      */
     public float getLayoutAlignmentY(Container target) {
         checkContainer(target);
@@ -148,9 +150,9 @@ public class OverlayLayout implements LayoutManager2, Serializable {
     }
 
     /**
-     * Pone a cada hijo con su punto de alineacion sobre el punto comun.
+     * It puts each child with its alignment point over the common point.
      *
-     * @throws AWTError si no es el contenedor al que esta atado
+     * @throws AWTError if it is not the container it is tied to
      */
     public void layoutContainer(Container target) {
         checkContainer(target);
@@ -175,7 +177,7 @@ public class OverlayLayout implements LayoutManager2, Serializable {
     }
 
     /**
-     * @throws AWTError si no es el contenedor al que esta atado
+     * @throws AWTError if it is not the container it is tied to
      */
     void checkContainer(Container target) {
         if (this.target != target) {
@@ -183,7 +185,7 @@ public class OverlayLayout implements LayoutManager2, Serializable {
         }
     }
 
-    /** Vuelve a medir a los hijos si hace falta; ver la nota de la clase. */
+    /** It measures the children again if needed; see the class note. */
     void checkRequests() {
         if (xChildren == null || yChildren == null) {
             int n = target.getComponentCount();

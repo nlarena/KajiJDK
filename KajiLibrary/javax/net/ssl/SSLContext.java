@@ -8,35 +8,34 @@ import java.security.SecureRandom;
 import java.security.Security;
 
 /**
- * La fabrica de todo lo demas de este paquete.
+ * The factory of everything else in this package.
  *
- * <h2>Que junta un contexto</h2>
+ * <h2>What a context brings together</h2>
  *
- * <p>Tres cosas que hasta ese momento estan sueltas: las credenciales propias ({@link KeyManager}),
- * la politica de confianza ({@link TrustManager}) y la fuente de aleatoriedad. Con las tres
- * configuradas, el contexto produce sockets, motores y fabricas que ya vienen con esa configuracion
- * adentro.
+ * <p>Three things that are loose until then: the own credentials ({@link KeyManager}), the trust
+ * policy ({@link TrustManager}) and the source of randomness. With the three configured, the
+ * context produces sockets, engines and factories that come with that configuration inside.
  *
- * <p>Es lo que permite tener dos politicas distintas en el mismo programa —una conexion a un
- * servicio interno con su CA propia, otra a Internet con las CA publicas— cosa que la configuracion
- * global por propiedades del sistema no permite.
+ * <p>It is what allows two different policies in the same program --a connection to an internal
+ * service with its own CA, another to the Internet with the public CAs-- which the global
+ * configuration through system properties does not allow.
  *
- * <h2>Sin proveedor de TLS instalado</h2>
+ * <h2>Without a TLS provider installed</h2>
  *
- * <p>{@link #getInstance} tira {@link NoSuchAlgorithmException}, que es la respuesta correcta y no
- * una carencia disfrazada: no hay ningun proveedor que ofrezca ese protocolo. Es el mismo criterio
- * que sigue {@code MessageDigest} en esta biblioteca. Quien quiera TLS registra un proveedor con
- * {@link Security#addProvider} y esto empieza a funcionar sin tocar una linea de aca.
+ * <p>{@link #getInstance} throws {@link NoSuchAlgorithmException}, which is the right answer and
+ * not a disguised shortcoming: there is no provider offering that protocol. It is the same
+ * criterion {@code MessageDigest} follows in this library. Whoever wants TLS registers a provider
+ * with {@link Security#addProvider} and this starts working without touching a line here.
  */
 public class SSLContext {
 
-    private static SSLContext laDefault;
+    private static SSLContext theDefault;
 
     private final SSLContextSpi contextSpi;
     private final Provider provider;
     private final String protocol;
 
-    /** Para los proveedores. */
+    /** For providers. */
     protected SSLContext(SSLContextSpi contextSpi, Provider provider, String protocol) {
         this.contextSpi = contextSpi;
         this.provider = provider;
@@ -44,33 +43,33 @@ public class SSLContext {
     }
 
     /**
-     * El contexto por omision, ya inicializado.
+     * The default context, already initialized.
      *
-     * @throws NoSuchAlgorithmException si no hay proveedor que ofrezca el protocolo por omision
+     * @throws NoSuchAlgorithmException if no provider offers the default protocol
      */
     public static synchronized SSLContext getDefault() throws NoSuchAlgorithmException {
-        if (laDefault == null) {
-            laDefault = getInstance("Default");
+        if (theDefault == null) {
+            theDefault = getInstance("Default");
         }
-        return laDefault;
+        return theDefault;
     }
 
     /**
-     * Cambia el contexto por omision.
+     * Changes the default context.
      *
-     * @throws NullPointerException si es {@code null}
+     * @throws NullPointerException if it is {@code null}
      */
     public static synchronized void setDefault(SSLContext context) {
         if (context == null) {
             throw new NullPointerException("context");
         }
-        laDefault = context;
+        theDefault = context;
     }
 
     /**
-     * El contexto de ese protocolo, del primer proveedor que lo ofrezca.
+     * The context of that protocol, from the first provider that offers it.
      *
-     * @throws NoSuchAlgorithmException si ninguno lo ofrece
+     * @throws NoSuchAlgorithmException if none offers it
      */
     public static SSLContext getInstance(String protocol) throws NoSuchAlgorithmException {
         if (protocol == null) {
@@ -80,16 +79,16 @@ public class SSLContext {
         for (int i = 0; i < provs.length; i++) {
             Provider.Service s = provs[i].getService("SSLContext", protocol);
             if (s != null) {
-                return armar(s, provs[i], protocol);
+                return build(s, provs[i], protocol);
             }
         }
         throw new NoSuchAlgorithmException(protocol + " SSLContext not available");
     }
 
     /**
-     * De un proveedor nombrado.
+     * From a named provider.
      *
-     * @throws NoSuchProviderException si no hay proveedor con ese nombre
+     * @throws NoSuchProviderException if there is no provider with that name
      */
     public static SSLContext getInstance(String protocol, String provider)
             throws NoSuchAlgorithmException, NoSuchProviderException {
@@ -104,9 +103,9 @@ public class SSLContext {
     }
 
     /**
-     * De un proveedor concreto.
+     * From a concrete provider.
      *
-     * @throws NoSuchAlgorithmException si ese proveedor no ofrece el protocolo
+     * @throws NoSuchAlgorithmException if that provider does not offer the protocol
      */
     public static SSLContext getInstance(String protocol, Provider provider)
             throws NoSuchAlgorithmException {
@@ -120,16 +119,16 @@ public class SSLContext {
         if (s == null) {
             throw new NoSuchAlgorithmException(protocol + " SSLContext not available");
         }
-        return armar(s, provider, protocol);
+        return build(s, provider, protocol);
     }
 
-    private static SSLContext armar(Provider.Service s, Provider p, String protocol)
+    private static SSLContext build(Provider.Service s, Provider p, String protocol)
             throws NoSuchAlgorithmException {
         try {
             Object spi = s.newInstance(null);
             if (!(spi instanceof SSLContextSpi)) {
                 throw new NoSuchAlgorithmException(
-                        "el proveedor no devolvio un SSLContextSpi para " + protocol);
+                        "the provider did not return an SSLContextSpi for " + protocol);
             }
             return new SSLContext((SSLContextSpi) spi, p, protocol);
         } catch (NoSuchAlgorithmException e) {
@@ -139,64 +138,64 @@ public class SSLContext {
         }
     }
 
-    /** El protocolo de este contexto. */
+    /** This context's protocol. */
     public final String getProtocol() {
         return this.protocol;
     }
 
-    /** El proveedor que lo produjo. */
+    /** The provider that produced it. */
     public final Provider getProvider() {
         return this.provider;
     }
 
     /**
-     * Configura las tres fuentes.
+     * Configures the three sources.
      *
-     * <p>Cualquiera de las tres puede ser {@code null}, y ahi se usa la por omision del proveedor.
-     * Con {@code null} en los manejadores de confianza, eso significa las CA que el sistema ya
-     * tenia — lo cual es lo que se quiere casi siempre, y conviene saber que es lo que pasa.
+     * <p>Any of the three may be {@code null}, and then the provider's default is used. With {@code
+     * null} for the trust managers, that means the CAs the system already had — which is what one
+     * wants almost always, and it is as well to know that is what happens.
      */
     public final void init(KeyManager[] km, TrustManager[] tm, SecureRandom random)
             throws KeyManagementException {
         this.contextSpi.engineInit(km, tm, random);
     }
 
-    /** La fabrica de sockets cliente con esta configuracion. */
+    /** The client socket factory with this configuration. */
     public final SSLSocketFactory getSocketFactory() {
         return this.contextSpi.engineGetSocketFactory();
     }
 
-    /** La fabrica de sockets servidor con esta configuracion. */
+    /** The server socket factory with this configuration. */
     public final SSLServerSocketFactory getServerSocketFactory() {
         return this.contextSpi.engineGetServerSocketFactory();
     }
 
-    /** Un motor sin datos del par. */
+    /** An engine without peer data. */
     public final SSLEngine createSSLEngine() {
         return this.contextSpi.engineCreateSSLEngine();
     }
 
-    /** Un motor con el par sugerido, lo que habilita reanudar sesion y mandar SNI. */
+    /** An engine with the suggested peer, which enables resuming a session and sending SNI. */
     public final SSLEngine createSSLEngine(String peerHost, int peerPort) {
         return this.contextSpi.engineCreateSSLEngine(peerHost, peerPort);
     }
 
-    /** Las sesiones del lado servidor. */
+    /** The server-side sessions. */
     public final SSLSessionContext getServerSessionContext() {
         return this.contextSpi.engineGetServerSessionContext();
     }
 
-    /** Las sesiones del lado cliente. */
+    /** The client-side sessions. */
     public final SSLSessionContext getClientSessionContext() {
         return this.contextSpi.engineGetClientSessionContext();
     }
 
-    /** Los parametros por omision de este contexto. */
+    /** This context's default parameters. */
     public final SSLParameters getDefaultSSLParameters() {
         return this.contextSpi.engineGetDefaultSSLParameters();
     }
 
-    /** Todo lo que este contexto soporta, sin importar que este habilitado. */
+    /** Everything this context supports, whether enabled or not. */
     public final SSLParameters getSupportedSSLParameters() {
         return this.contextSpi.engineGetSupportedSSLParameters();
     }

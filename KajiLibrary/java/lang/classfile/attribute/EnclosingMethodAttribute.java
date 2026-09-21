@@ -10,19 +10,19 @@ import java.lang.constant.MethodTypeDesc;
 import java.util.Optional;
 import jdk.internal.classfile.impl.TypedAttributes;
 
-// `EnclosingMethod` (JVMS §4.7.7): dónde se declaró una clase local o anónima. El método es
-// OPCIONAL y su ausencia no es un dato faltante: significa que la clase se declaró en un
-// inicializador de instancia o de campo, y no dentro de un método.
+// `EnclosingMethod` (JVMS §4.7.7): where a local or anonymous class was declared. The method is
+// OPTIONAL and its absence is not missing data: it means the class was declared in an instance or
+// field initialiser, and not inside a method.
 public interface EnclosingMethodAttribute
         extends Attribute<EnclosingMethodAttribute>, ClassElement {
 
-    /** La clase que la encierra. */
+    /** The class enclosing it. */
     ClassEntry enclosingClass();
 
-    /** El método que la encierra, si hay uno. */
+    /** The method enclosing it, if there is one. */
     Optional<NameAndTypeEntry> enclosingMethod();
 
-    /** El nombre del método que la encierra. */
+    /** The name of the method enclosing it. */
     default Optional<Utf8Entry> enclosingMethodName() {
         Optional<NameAndTypeEntry> m = enclosingMethod();
         if (!m.isPresent()) {
@@ -31,7 +31,7 @@ public interface EnclosingMethodAttribute
         return Optional.of(m.get().name());
     }
 
-    /** El descriptor del método que la encierra. */
+    /** The descriptor of the method enclosing it. */
     default Optional<Utf8Entry> enclosingMethodType() {
         Optional<NameAndTypeEntry> m = enclosingMethod();
         if (!m.isPresent()) {
@@ -40,7 +40,7 @@ public interface EnclosingMethodAttribute
         return Optional.of(m.get().type());
     }
 
-    /** El tipo del método que la encierra. */
+    /** The type of the method enclosing it. */
     default Optional<MethodTypeDesc> enclosingMethodTypeSymbol() {
         Optional<Utf8Entry> t = enclosingMethodType();
         if (!t.isPresent()) {
@@ -49,13 +49,13 @@ public interface EnclosingMethodAttribute
         return Optional.of(MethodTypeDesc.ofDescriptor(t.get().stringValue()));
     }
 
-    /** El atributo con esta clase y este método. */
+    /** The attribute with this class and this method. */
     public static EnclosingMethodAttribute of(ClassEntry className,
             Optional<NameAndTypeEntry> method) {
         return TypedAttributes.enclosingMethod(className, method);
     }
 
-    /** El atributo con esta clase y este método. */
+    /** The attribute with this class and this method. */
     public static EnclosingMethodAttribute of(ClassDesc className, Optional<String> methodName,
             Optional<MethodTypeDesc> methodType) {
         return TypedAttributes.enclosingMethod(className, methodName, methodType);

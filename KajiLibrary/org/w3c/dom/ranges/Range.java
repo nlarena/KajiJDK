@@ -5,145 +5,149 @@ import org.w3c.dom.DocumentFragment;
 import org.w3c.dom.Node;
 
 /**
- * KajiLibrary's org.w3c.dom.ranges.Range -- un tramo del documento, que puede empezar y terminar en
- * el medio de un texto.
+ * KajiLibrary's org.w3c.dom.ranges.Range -- a stretch of the document, which may start and end in
+ * the middle of a text.
  *
- * <p>Es lo que hace falta para representar una <b>seleccion</b>. Un {@code Node} no alcanza: cuando
- * alguien selecciona con el mouse, lo seleccionado empieza a la mitad de un parrafo y termina a la
- * mitad de otro, y no hay ningun nodo que sea eso.
+ * <p>It is what is needed to represent a <b>selection</b>. A {@code Node} is not enough: when
+ * somebody selects with the mouse, what is selected starts halfway through one paragraph and ends
+ * halfway through another, and there is no node that is that.
  *
- * <h2>Un extremo es un par (contenedor, desplazamiento)</h2>
+ * <h2>An end is a (container, offset) pair</h2>
  *
- * <p>Y el desplazamiento significa dos cosas distintas segun el contenedor, que es lo que confunde:
+ * <p>And the offset means two different things according to the container, which is what confuses:
  *
  * <ul>
- *   <li>Si el contenedor es un nodo de <b>texto</b>, es un indice de <b>caracter</b>.
- *   <li>Si es cualquier otro, es un indice de <b>hijo</b>: cuantos hijos quedan antes del extremo.
+ *   <li>If the container is a <b>text</b> node, it is a <b>character</b> index.
+ *   <li>If it is any other, it is a <b>child</b> index: how many children are left before the end.
  * </ul>
  *
- * <p>De ahi sale que un desplazamiento valido llegue hasta {@code length} inclusive y no hasta
- * {@code length - 1}: el extremo puede estar <b>despues</b> del ultimo caracter o del ultimo hijo.
+ * <p>Hence a valid offset goes up to {@code length} inclusive and not up to {@code length - 1}: the
+ * end may be <b>after</b> the last character or the last child.
  *
- * <h2>Extraer no es clonar</h2>
+ * <h2>Extracting is not cloning</h2>
  *
- * <p>Los tres metodos que trabajan sobre el contenido se parecen y hacen cosas distintas:
- * {@link #cloneContents()} copia y no toca el documento, {@link #extractContents()} <b>lo saca</b> y
- * lo devuelve, y {@link #deleteContents()} lo saca y no devuelve nada. Los dos ultimos dejan el
- * rango colapsado donde estaba el contenido.
+ * <p>The three methods that work on the contents look alike and do different things: {@link
+ * #cloneContents()} copies and does not touch the document, {@link #extractContents()} <b>takes it
+ * out</b> and returns it, and {@link #deleteContents()} takes it out and returns nothing. The last
+ * two leave the range collapsed where the contents were.
  *
- * <p>Un rango <b>sigue vivo</b> cuando el documento cambia: se ajusta, igual que un
- * {@link org.w3c.dom.traversal.NodeIterator}. Por eso tambien tiene {@link #detach()}.
+ * <p>A range <b>stays alive</b> when the document changes: it adjusts, just like a
+ * {@link org.w3c.dom.traversal.NodeIterator}. That is why it also has {@link #detach()}.
  */
 public interface Range {
 
-    /** Compara el principio de este rango con el principio del otro. */
+    /** It compares the start of this range with the start of the other. */
     short START_TO_START = 0;
 
-    /** Compara el <b>final</b> de este rango con el <b>principio</b> del otro. */
+    /** It compares the <b>end</b> of this range with the <b>start</b> of the other. */
     short START_TO_END = 1;
 
-    /** Compara el final de este con el final del otro. */
+    /** It compares the end of this one with the end of the other. */
     short END_TO_END = 2;
 
-    /** Compara el <b>principio</b> de este con el <b>final</b> del otro. */
+    /** It compares the <b>start</b> of this one with the <b>end</b> of the other. */
     short END_TO_START = 3;
 
-    /** El nodo donde empieza. */
+    /** The node where it starts. */
     Node getStartContainer() throws DOMException;
 
-    /** Donde empieza adentro de el. Ver la nota de la clase sobre que significa. */
+    /** Where it starts inside it. See the note of the class on what it means. */
     int getStartOffset() throws DOMException;
 
-    /** El nodo donde termina. */
+    /** The node where it ends. */
     Node getEndContainer() throws DOMException;
 
-    /** Donde termina adentro de el. */
+    /** Where it ends inside it. */
     int getEndOffset() throws DOMException;
 
-    /** Si los dos extremos coinciden, o sea si el rango esta vacio. */
+    /** Whether the two ends coincide, that is whether the range is empty. */
     boolean getCollapsed() throws DOMException;
 
-    /** El antepasado comun mas cercano de los dos extremos. */
+    /** The nearest common ancestor of the two ends. */
     Node getCommonAncestorContainer() throws DOMException;
 
     /**
-     * Mueve el principio.
+     * It moves the start.
      *
-     * <p>Si el nuevo principio queda <b>despues</b> del final, el rango se colapsa ahi en vez de
-     * quedar invertido. Es del estandar y evita que exista un rango imposible.
+     * <p>If the new start ends up <b>after</b> the end, the range collapses there instead of being
+     * left inverted. It is from the standard and it keeps an impossible range from existing.
      *
-     * @throws RangeException {@code INVALID_NODE_TYPE_ERR} si ese nodo no puede contener un extremo
-     * @throws DOMException {@code INDEX_SIZE_ERR} si el desplazamiento se pasa
+     * @throws RangeException {@code INVALID_NODE_TYPE_ERR} if that node cannot contain an end
+     * @throws DOMException {@code INDEX_SIZE_ERR} if the offset goes past
      */
     void setStart(Node refNode, int offset) throws RangeException, DOMException;
 
-    /** Mueve el final. Vale lo mismo que para {@link #setStart}, al reves. */
+    /** It moves the end. The same holds as for {@link #setStart}, the other way round. */
     void setEnd(Node refNode, int offset) throws RangeException, DOMException;
 
-    /** Pone el principio justo antes de ese nodo. */
+    /** It puts the start just before that node. */
     void setStartBefore(Node refNode) throws RangeException, DOMException;
 
-    /** Pone el principio justo despues de ese nodo. */
+    /** It puts the start just after that node. */
     void setStartAfter(Node refNode) throws RangeException, DOMException;
 
-    /** Pone el final justo antes de ese nodo. */
+    /** It puts the end just before that node. */
     void setEndBefore(Node refNode) throws RangeException, DOMException;
 
-    /** Pone el final justo despues de ese nodo. */
+    /** It puts the end just after that node. */
     void setEndAfter(Node refNode) throws RangeException, DOMException;
 
     /**
-     * Junta los dos extremos.
+     * It joins the two ends.
      *
-     * @param toStart si se colapsa al principio; si es false, al final
+     * @param toStart whether it collapses to the start; if it is false, to the end
      */
     void collapse(boolean toStart) throws DOMException;
 
-    /** Hace que el rango sea exactamente ese nodo, el nodo mismo incluido. */
+    /** It makes the range exactly that node, the node itself included. */
     void selectNode(Node refNode) throws RangeException, DOMException;
 
-    /** Hace que el rango sea el <b>contenido</b> de ese nodo, sin el nodo. */
+    /** It makes the range the <b>contents</b> of that node, without the node. */
     void selectNodeContents(Node refNode) throws RangeException, DOMException;
 
     /**
-     * Compara un extremo de este rango con uno del otro.
+     * It compares one end of this range with one of the other.
      *
-     * @param how cual con cual: una de las cuatro constantes. Ojo con {@link #START_TO_END} y
-     *     {@link #END_TO_START}, que cruzan los extremos
-     * @return -1, 0 o 1
+     * @param how which with which: one of the four constants. Careful with {@link #START_TO_END}
+     *     and {@link #END_TO_START}, which cross the ends
+     * @return -1, 0 or 1
      */
     short compareBoundaryPoints(short how, Range sourceRange) throws DOMException;
 
-    /** Borra el contenido del documento. El rango queda colapsado ahi. */
+    /** It deletes the contents from the document. The range is left collapsed there. */
     void deleteContents() throws DOMException;
 
-    /** Lo <b>saca</b> del documento y lo devuelve. Ver la nota de la clase. */
+    /** It <b>takes it out</b> of the document and returns it. See the note of the class. */
     DocumentFragment extractContents() throws DOMException;
 
-    /** Lo <b>copia</b> sin tocar el documento. */
+    /** It <b>copies</b> it without touching the document. */
     DocumentFragment cloneContents() throws DOMException;
 
     /**
-     * Mete ese nodo en el principio del rango.
+     * It puts that node at the start of the range.
      *
-     * <p>Si el principio esta a la mitad de un texto, el texto se <b>parte</b> para hacerle lugar.
+     * <p>If the start is halfway through a text, the text is <b>split</b> to make room for it.
      */
     void insertNode(Node newNode) throws DOMException, RangeException;
 
     /**
-     * Envuelve el contenido del rango con ese nodo.
+     * It wraps the contents of the range with that node.
      *
-     * @throws RangeException {@code BAD_BOUNDARYPOINTS_ERR} si el rango parte un nodo por la mitad:
-     *     envolver algo que empieza adentro de un elemento y termina afuera daria un arbol imposible
+     * @throws RangeException {@code BAD_BOUNDARYPOINTS_ERR} if the range splits a node in half:
+     *     wrapping something that starts inside an element and ends outside it would give an
+     *     impossible tree
      */
     void surroundContents(Node newParent) throws DOMException, RangeException;
 
-    /** Una copia independiente de este rango. */
+    /** An independent copy of this range. */
     Range cloneRange() throws DOMException;
 
-    /** El texto del contenido, sin marcas. */
+    /** The text of the contents, with no markup. */
     String toString();
 
-    /** Suelta el rango: el documento deja de tener que ajustarlo. Despues, todo lo demas lanza. */
+    /**
+     * It lets go of the range: the document no longer has to adjust it. After that, everything else
+     * throws.
+     */
     void detach() throws DOMException;
 }

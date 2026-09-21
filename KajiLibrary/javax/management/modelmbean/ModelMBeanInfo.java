@@ -9,79 +9,80 @@ import javax.management.MBeanOperationInfo;
 import javax.management.RuntimeOperationsException;
 
 /**
- * KajiLibrary's javax.management.modelmbean.ModelMBeanInfo -- la descripcion de un model MBean.
+ * KajiLibrary's javax.management.modelmbean.ModelMBeanInfo -- the description of a model MBean.
  *
- * <p>Un {@code MBeanInfo} comun dice <b>que</b> hay: atributos, operaciones, avisos. Este agrega los
- * {@link Descriptor}, que dicen <b>como</b> se comporta cada cosa: de que metodo del objeto sale un
- * atributo, cuantos milisegundos se puede cachear su valor, si se persiste y cada cuanto.
+ * <p>A plain {@code MBeanInfo} says <b>what</b> there is: attributes, operations, notices. This
+ * one adds the {@link Descriptor}s, which say <b>how</b> each thing behaves: from which method
+ * of the object an attribute comes, for how many seconds its value may be cached, whether it is
+ * persisted and how often.
  *
- * <p>Esa segunda mitad es lo que convierte una descripcion en una configuracion. Sin los
- * descriptores, un model MBean no sabria de donde sacar el valor de un atributo.
+ * <p>That second half is what turns a description into a configuration. Without the descriptors,
+ * a model MBean would not know where to take an attribute's value from.
  *
- * <p>Los descriptores se piden por tipo --{@code "attribute"}, {@code "operation"},
- * {@code "notification"}, {@code "mbean"}, o null para todos-- y esa es la clave de casi todos los
- * metodos de aca.
+ * <p>The descriptors are asked for by type --{@code "attribute"}, {@code "operation"},
+ * {@code "notification"}, {@code "mbean"}, or null for all-- and that is the key to almost
+ * every method here.
  */
 public interface ModelMBeanInfo {
 
     /**
-     * Todos los descriptores de ese tipo.
+     * All the descriptors of that type.
      *
      * @param inDescriptorType {@code "mbean"}, {@code "attribute"}, {@code "operation"},
-     *     {@code "constructor"}, {@code "notification"}, o null para todos
+     *     {@code "constructor"}, {@code "notification"}, or null for all
      */
     Descriptor[] getDescriptors(String inDescriptorType)
         throws MBeanException, RuntimeOperationsException;
 
-    /** Los reemplaza; cada uno va al lugar que dice su campo {@code descriptorType}. */
+    /** Replaces them; each one goes where its {@code descriptorType} field says. */
     void setDescriptors(Descriptor[] inDescriptors)
         throws MBeanException, RuntimeOperationsException;
 
-    /** El descriptor de ese nombre y ese tipo. */
+    /** The descriptor with that name and that type. */
     Descriptor getDescriptor(String inDescriptorName, String inDescriptorType)
         throws MBeanException, RuntimeOperationsException;
 
-    /** Lo pone o lo reemplaza. */
+    /** Puts it or replaces it. */
     void setDescriptor(Descriptor inDescriptor, String inDescriptorType)
         throws MBeanException, RuntimeOperationsException;
 
-    /** El descriptor del MBean entero. */
+    /** The descriptor of the whole MBean. */
     Descriptor getMBeanDescriptor() throws MBeanException, RuntimeOperationsException;
 
     /** Ver {@link #getMBeanDescriptor}. */
     void setMBeanDescriptor(Descriptor inDescriptor)
         throws MBeanException, RuntimeOperationsException;
 
-    /** El atributo con ese nombre. */
+    /** The attribute with that name. */
     ModelMBeanAttributeInfo getAttribute(String inName)
         throws MBeanException, RuntimeOperationsException;
 
-    /** La operacion con ese nombre. */
+    /** The operation with that name. */
     ModelMBeanOperationInfo getOperation(String inName)
         throws MBeanException, RuntimeOperationsException;
 
-    /** El aviso con ese nombre. */
+    /** The notice with that name. */
     ModelMBeanNotificationInfo getNotification(String inName)
         throws MBeanException, RuntimeOperationsException;
 
-    /** Una copia. */
+    /** A copy. */
     Object clone();
 
-    /** Los atributos. */
+    /** The attributes. */
     MBeanAttributeInfo[] getAttributes();
 
-    /** El nombre de la clase del MBean. */
+    /** The MBean's class name. */
     String getClassName();
 
-    /** Los constructores. */
+    /** The constructors. */
     MBeanConstructorInfo[] getConstructors();
 
-    /** La descripcion. */
+    /** The description. */
     String getDescription();
 
-    /** Los avisos. */
+    /** The notices. */
     MBeanNotificationInfo[] getNotifications();
 
-    /** Las operaciones. */
+    /** The operations. */
     MBeanOperationInfo[] getOperations();
 }

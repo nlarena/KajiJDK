@@ -4,10 +4,10 @@ import java.security.PrivateKey;
 import java.security.spec.AlgorithmParameterSpec;
 import java.util.Optional;
 
-// Una clave privada de curva de Montgomery: el escalar, si la clave lo deja salir.
+// A Montgomery-curve private key: the scalar, if the key lets it out.
 public interface XECPrivateKey extends XECKey, PrivateKey {
 
-    // El escalar privado, o vacio si no sale de donde esta.
+    // The private scalar, or empty if it does not leave where it is.
     Optional<byte[]> getScalar();
 
     // Ver `XECPublicKey.getParams()`.

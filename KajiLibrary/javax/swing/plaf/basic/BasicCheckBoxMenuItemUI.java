@@ -9,29 +9,31 @@ import javax.swing.MenuSelectionManager;
 import javax.swing.plaf.ComponentUI;
 
 /**
- * El aspecto basico de un item de menu marcable.
+ * The basic look and feel of a check box menu item.
  *
- * <p>Dos cosas propias. La primera es el tilde: {@link BasicMenuItemUI} deja
- * {@link BasicMenuItemUI#checkIcon} en nulo, y aca se pone el de
- * {@link BasicIconFactory#getCheckBoxMenuItemIcon}, que dibuja solo cuando el item esta marcado.
+ * <p>Two things of its own. The first is the tick: {@link BasicMenuItemUI} leaves
+ * {@link BasicMenuItemUI#checkIcon} null, and here the one from
+ * {@link BasicIconFactory#getCheckBoxMenuItemIcon} is put in, which draws only when the item is
+ * ticked.
  *
- * <p>La segunda es {@link #processMouseEvent}: soltar el boton encima de un item marcable lo
- * dispara <em>y</em> cierra el menu, igual que un item comun. Que el item tenga estado no cambia
- * eso; lo que cambia es que despues de cerrarse queda con el tilde puesto.
+ * <p>The second is {@link #processMouseEvent}: releasing the button over a tickable item fires
+ * it <em>and</em> closes the menu, just like an ordinary item. That the item has state does not
+ * change that; what changes is that after closing it is left with the tick on.
  *
- * <h2>El tilde no es del mismo tamano que el de Metal</h2>
+ * <h2>The tick is not the same size as Metal's</h2>
  *
- * <p>El basico mide 9 x 9 y el de Metal 10 x 10, y por eso el ancho preferido de un item marcable
- * no coincide con el del JDK: son dos pixeles. Es el mismo hueco que en todo el paquete --sin tabla
- * de aspecto instalada, los iconos son los del basico y no los del aspecto de verdad--, y esta
- * dicho aca para que no parezca un error de la cuenta.
+ * <p>The basic one measures 9 x 9 and Metal's 10 x 10, and that is why a tickable item's
+ * preferred width does not match the JDK's: it is two pixels. It is the same gap as everywhere
+ * in the package -- with no look and feel table installed, the icons are the basic ones and not
+ * the real look and feel's --, and it is said here so that it does not look like an arithmetic
+ * mistake.
  */
 public class BasicCheckBoxMenuItemUI extends BasicMenuItemUI {
 
     public BasicCheckBoxMenuItemUI() {
     }
 
-    /** Uno nuevo por item: guarda el componente y sus escuchas. */
+    /** A new one per item: it keeps the component and its listeners. */
     public static ComponentUI createUI(JComponent c) {
         return new BasicCheckBoxMenuItemUI();
     }
@@ -40,17 +42,17 @@ public class BasicCheckBoxMenuItemUI extends BasicMenuItemUI {
         return "CheckBoxMenuItem";
     }
 
-    /** Lo de siempre mas el tilde; ver la nota de la clase. */
+    /** The usual plus the tick; see the class note. */
     protected void installDefaults() {
         super.installDefaults();
         checkIcon = BasicIconFactory.getCheckBoxMenuItemIcon();
     }
 
     /**
-     * Dispara el item si el mouse se solto encima, y cierra el menu.
+     * It fires the item if the mouse was released over it, and closes the menu.
      *
-     * <p>Lo llama {@code MenuSelectionManager} mientras el menu esta abierto: en ese momento el
-     * item no recibe eventos propios, porque el que los reparte es el administrador.
+     * <p>{@code MenuSelectionManager} calls it while the menu is open: at that moment the item does
+     * not receive events of its own, because the one that hands them out is the manager.
      */
     public void processMouseEvent(JMenuItem item, MouseEvent e, MenuElement[] path,
             MenuSelectionManager manager) {

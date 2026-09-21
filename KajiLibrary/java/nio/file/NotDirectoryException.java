@@ -1,11 +1,11 @@
 package java.nio.file;
 
-// Se esperaba un directorio y la ruta apunta a otra cosa.
+// A directory was expected and the path points at something else.
 public class NotDirectoryException extends FileSystemException {
 
     private static final long serialVersionUID = -9011457427178200199L;
 
-    /** @param file la ruta que no era un directorio, o `null` */
+    /** @param file the path that was not a directory, or `null` */
     public NotDirectoryException(String file) {
         super(file);
     }

@@ -1,23 +1,23 @@
 package com.sun.jdi.request;
 
 /**
- * Pedir aviso cuando una clase se descargue.
+ * Ask to be told when a class is unloaded.
  *
  * @since 1.3
  */
 public interface ClassUnloadRequest extends EventRequest {
 
     /**
-     * Filtra por class; solo con el pedido deshabilitado.
+     * It filters by class; only with the request disabled.
      *
-     * @param name el String
+     * @param name the String
      */
     void addClassFilter(String name);
 
     /**
-     * Filtra por class exclusion; solo con el pedido deshabilitado.
+     * It filters by class exclusion; only with the request disabled.
      *
-     * @param name el String
+     * @param name the String
      */
     void addClassExclusionFilter(String name);
 }

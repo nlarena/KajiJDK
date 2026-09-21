@@ -3,30 +3,30 @@ package javax.security.sasl;
 import javax.security.auth.callback.TextInputCallback;
 
 /**
- * KajiLibrary's javax.security.sasl.RealmCallback -- preguntar en que dominio.
+ * KajiLibrary's javax.security.sasl.RealmCallback -- asking in which realm.
  *
- * <p>Un {@link TextInputCallback} que no agrega nada mas que su <b>tipo</b>. Eso es todo lo que
- * necesita: un manejador recibe una lista de callbacks y decide que hacer con cada uno mirando de
- * que clase es, asi que "pedir un dominio" y "pedir un texto cualquiera" tienen que ser tipos
- * distintos para poder responderse distinto.
+ * <p>A {@link TextInputCallback} that adds nothing but its <b>type</b>. That is all it needs: a
+ * handler receives a list of callbacks and decides what to do with each one by looking at its
+ * class, so "ask for a realm" and "ask for any text" have to be different types to be answered
+ * differently.
  *
- * <p>El dominio --el <i>realm</i>-- es el espacio de nombres donde vale el usuario. El mismo nombre
- * puede ser dos personas distintas en dos dominios, y por eso el mecanismo lo pregunta aparte en vez
- * de esperar que venga pegado al usuario.
+ * <p>The realm is the namespace where the user is valid. The same name can be two different people
+ * in two realms, and that is why the mechanism asks for it separately instead of expecting it to
+ * come attached to the user.
  */
 public class RealmCallback extends TextInputCallback {
 
     private static final long serialVersionUID = -4342673378785456908L;
 
-    /** Sin sugerencia. */
+    /** Without a suggestion. */
     public RealmCallback(String prompt) {
         super(prompt);
     }
 
     /**
-     * Con una sugerencia.
+     * With a suggestion.
      *
-     * @param defaultRealmInfo el dominio que el servidor propone
+     * @param defaultRealmInfo the realm the server proposes
      */
     public RealmCallback(String prompt, String defaultRealmInfo) {
         super(prompt, defaultRealmInfo);

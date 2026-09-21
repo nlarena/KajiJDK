@@ -4,14 +4,14 @@ import java.lang.classfile.Attribute;
 import java.util.List;
 import jdk.internal.classfile.impl.TypedAttributes;
 
-// `LocalVariableTable` (JVMS §4.7.13): los nombres y tipos de las variables locales. Opcional; sin
-// él un depurador ve las ranuras pero no sabe cómo se llamaban.
+// `LocalVariableTable` (JVMS §4.7.13): the names and types of the local variables. Optional; without
+// it a debugger sees the slots but does not know what they were called.
 public interface LocalVariableTableAttribute extends Attribute<LocalVariableTableAttribute> {
 
-    /** Las filas, en el orden del archivo. */
+    /** The rows, in file order. */
     List<LocalVariableInfo> localVariables();
 
-    /** El atributo con estas filas. */
+    /** The attribute with these rows. */
     public static LocalVariableTableAttribute of(List<LocalVariableInfo> localVariables) {
         return TypedAttributes.localVariableTable(localVariables);
     }

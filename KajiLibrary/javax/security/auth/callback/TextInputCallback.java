@@ -1,11 +1,11 @@
 package javax.security.auth.callback;
 
 /**
- * KajiLibrary's javax.security.auth.callback.TextInputCallback -- pide un texto cualquiera.
+ * KajiLibrary's javax.security.auth.callback.TextInputCallback -- asks for any text.
  *
- * <p>Es el generico: sirve para lo que no tiene callback propio -- un codigo de un solo uso, el
- * nombre de un dominio, la respuesta a una pregunta de seguridad. Vale lo mismo que en
- * {@link NameCallback} sobre el texto por omision: es una sugerencia, no una respuesta.
+ * <p>It is the generic one: it serves for what has no callback of its own -- a one-time code, a
+ * domain's name, the answer to a security question. What was said in {@link NameCallback} about the
+ * default text holds too: it is a suggestion, not an answer.
  */
 public class TextInputCallback implements Callback, java.io.Serializable {
 
@@ -16,7 +16,7 @@ public class TextInputCallback implements Callback, java.io.Serializable {
     private String inputText;
 
     /**
-     * @throws IllegalArgumentException si el prompt es null o vacio
+     * @throws IllegalArgumentException if the prompt is null or empty
      */
     public TextInputCallback(String prompt) {
         if (prompt == null || prompt.length() == 0) {
@@ -27,7 +27,7 @@ public class TextInputCallback implements Callback, java.io.Serializable {
     }
 
     /**
-     * @throws IllegalArgumentException si el prompt o el texto por omision son null o vacios
+     * @throws IllegalArgumentException if the prompt or the default text is null or empty
      */
     public TextInputCallback(String prompt, String defaultText) {
         if (prompt == null || prompt.length() == 0
@@ -42,7 +42,7 @@ public class TextInputCallback implements Callback, java.io.Serializable {
         return this.prompt;
     }
 
-    /** La sugerencia, o null si no hay. */
+    /** The suggestion, or null if there is none. */
     public String getDefaultText() {
         return this.defaultText;
     }
@@ -51,7 +51,7 @@ public class TextInputCallback implements Callback, java.io.Serializable {
         this.inputText = text;
     }
 
-    /** El texto que contestaron, o null si todavia nadie contesto. */
+    /** The text that was answered, or null if nobody answered yet. */
     public String getText() {
         return this.inputText;
     }

@@ -4,19 +4,19 @@ import javax.xml.transform.SourceLocator;
 import org.w3c.dom.Node;
 
 /**
- * KajiLibrary's javax.xml.transform.dom.DOMLocator -- donde fallo, cuando la fuente era un arbol.
+ * KajiLibrary's javax.xml.transform.dom.DOMLocator -- where it failed, when the source was a tree.
  *
- * <p>Extiende {@link SourceLocator} agregando un solo metodo, y ese metodo existe porque lo que el
- * padre ofrece --numero de linea y de columna-- <b>no significa nada</b> en un arbol DOM. Un nodo en
- * memoria no tiene linea: si el documento se construyo a mano nunca la tuvo, y si se leyo de un
- * archivo, el DOM no la guarda.
+ * <p>It extends {@link SourceLocator} adding a single method, and that method exists because what
+ * the parent offers --line and column number-- <b>means nothing</b> in a DOM tree. A node in memory
+ * has no line: if the document was built by hand it never had one, and if it was read from a file,
+ * DOM does not keep it.
  *
- * <p>Asi que un error en una transformacion sobre {@link DOMSource} solo puede senalar el lugar
- * apuntando al nodo mismo, y eso es {@link #getOriginatingNode}. Quien atrapa el error lo usa para
- * mostrar el contexto: el nombre del elemento, sus atributos, su camino hasta la raiz.
+ * <p>So an error in a transformation over {@link DOMSource} can only point out the place by
+ * pointing at the node itself, and that is {@link #getOriginatingNode}. Whoever catches the error
+ * uses it to show the context: the element's name, its attributes, its path up to the root.
  */
 public interface DOMLocator extends SourceLocator {
 
-    /** El nodo donde ocurrio lo que se esta reportando. */
+    /** The node where what is being reported happened. */
     Node getOriginatingNode();
 }

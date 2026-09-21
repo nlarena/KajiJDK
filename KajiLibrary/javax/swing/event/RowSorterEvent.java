@@ -5,14 +5,14 @@ import java.util.EventObject;
 import javax.swing.RowSorter;
 
 /**
- * El orden de las filas cambio.
+ * The rows' order changed.
  *
- * <p>{@link #convertPreviousRowIndexToModel} es lo que justifica esta clase: dice donde estaba cada
- * fila <strong>antes</strong> del reordenamiento. Sin eso, una vista que tenia seleccionada la fila
- * 5 no podria saber que fila del modelo era y perderia la seleccion en cada clic al encabezado.
+ * <p>{@link #convertPreviousRowIndexToModel} is what justifies this class: it says where each row
+ * was <strong>before</strong> the reordering. Without that, a view that had row 5 selected could
+ * not know which model row it was and would lose the selection on every click on the header.
  *
- * <p>Puede devolver {@code -1}: quien reordena no siempre guarda el mapeo anterior, y decirlo es
- * mejor que inventarlo.
+ * <p>It may return {@code -1}: whoever reorders does not always keep the previous mapping, and
+ * saying so is better than inventing it.
  */
 public class RowSorterEvent extends EventObject {
 
@@ -21,35 +21,35 @@ public class RowSorterEvent extends EventObject {
     private Type type;
     private int[] oldViewToModel;
 
-    /** Cambiaron las claves de ordenamiento, sin rehacerse las filas. */
+    /** The sort keys changed, without the rows being redone. */
     public RowSorterEvent(RowSorter<?> source) {
         this(source, Type.SORT_ORDER_CHANGED, null);
     }
 
     /**
-     * @param previousRowIndexToModel donde estaba cada fila antes, o {@code null}
-     * @throws IllegalArgumentException si {@code type} es {@code null}
+     * @param previousRowIndexToModel where each row was before, or {@code null}
+     * @throws IllegalArgumentException if {@code type} is {@code null}
      */
     public RowSorterEvent(RowSorter<?> source, Type type, int[] previousRowIndexToModel) {
         super(source);
         if (type == null) {
-            throw new IllegalArgumentException("El tipo no puede ser null");
+            throw new IllegalArgumentException("The type cannot be null");
         }
         this.type = type;
         this.oldViewToModel = previousRowIndexToModel;
     }
 
-    /** Quien reordeno. */
+    /** Who reordered. */
     public RowSorter<?> getSource() {
         return (RowSorter) super.getSource();
     }
 
-    /** Que clase de cambio fue. */
+    /** What kind of change it was. */
     public Type getType() {
         return this.type;
     }
 
-    /** Que fila del modelo se veia en {@code index} antes del cambio, o {@code -1}. */
+    /** Which model row was seen at {@code index} before the change, or {@code -1}. */
     public int convertPreviousRowIndexToModel(int index) {
         if (this.oldViewToModel != null && index >= 0 && index < this.oldViewToModel.length) {
             return this.oldViewToModel[index];
@@ -57,17 +57,17 @@ public class RowSorterEvent extends EventObject {
         return -1;
     }
 
-    /** Cuantas filas se veian antes del cambio. */
+    /** How many rows were seen before the change. */
     public int getPreviousRowCount() {
         return this.oldViewToModel == null ? 0 : this.oldViewToModel.length;
     }
 
-    /** Que clase de cambio fue. */
+    /** What kind of change it was. */
     public enum Type {
 
-        /** Cambiaron las claves de ordenamiento; las filas todavia no se movieron. */
+        /** The sort keys changed; the rows have not moved yet. */
         SORT_ORDER_CHANGED,
-        /** El contenido se reordeno o se filtro. */
+        /** The contents were reordered or filtered. */
         SORTED
     }
 }

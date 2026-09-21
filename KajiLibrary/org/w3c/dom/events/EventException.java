@@ -1,23 +1,24 @@
 package org.w3c.dom.events;
 
 /**
- * KajiLibrary's org.w3c.dom.events.EventException -- un evento que no se puede despachar.
+ * KajiLibrary's org.w3c.dom.events.EventException -- an event that cannot be dispatched.
  *
- * <p>Tiene un solo codigo, y eso ya dice como esta pensado el modulo: casi todo lo que puede salir
- * mal en el despacho es responsabilidad de los escuchas, no del despachador. Lo unico que el
- * despachador puede rechazar es un evento <b>sin tipo</b> -- sin el no hay a quien entregarselo.
+ * <p>It has one single code, and that already says how the module is conceived: almost everything
+ * that can go wrong in the dispatch is the responsibility of the listeners, not of the dispatcher.
+ * The only thing the dispatcher can reject is an event <b>with no type</b> -- without it there is
+ * nobody to deliver it to.
  *
- * <p>No chequeada y con el codigo en un campo publico, por la misma convencion del DOM que
+ * <p>Unchecked and with the code in a public field, by the same DOM convention as
  * {@code DOMException}.
  */
 public class EventException extends RuntimeException {
 
     private static final long serialVersionUID = 3728411136506952248L;
 
-    /** El tipo del evento es null o vacio: no hay a quien entregarselo. */
+    /** The type of the event is null or empty: there is nobody to deliver it to. */
     public static final short UNSPECIFIED_EVENT_TYPE_ERR = 0;
 
-    /** Cual. Publico por la convencion del DOM. */
+    /** Which one. Public by the DOM convention. */
     public short code;
 
     public EventException(short code, String message) {

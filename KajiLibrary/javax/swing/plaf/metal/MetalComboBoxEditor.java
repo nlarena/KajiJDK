@@ -10,22 +10,23 @@ import javax.swing.plaf.UIResource;
 import javax.swing.plaf.basic.BasicComboBoxEditor;
 
 /**
- * El campo de texto de un desplegable editable, en Metal.
+ * The text field of an editable combo box, in Metal.
  *
- * <p>Todo lo que cambia del basico es el borde, y el borde tiene un detalle que se ve enseguida
- * cuando falta: los margenes son {@code (2,2,2,0)}. <strong>Cero a la derecha.</strong>
+ * <p>All that changes from the basic one is the border, and the border has a detail that shows
+ * at once when it is missing: the margins are {@code (2,2,2,0)}. <strong>Zero on the
+ * right.</strong>
  *
- * <p>La razon es que a la derecha del campo esta la flecha, y las dos piezas comparten una sola
- * linea vertical. Si el campo dejara su pixel de aire, entre el texto y la flecha quedaria un
- * escalon y el desplegable dejaria de leerse como un control unico.
+ * <p>The reason is that to the right of the field is the arrow, and the two pieces share a
+ * single vertical line. If the field left its pixel of air, a step would be left between the
+ * text and the arrow and the combo box would stop reading as a single control.
  *
- * <p>{@link #editorBorderInsets} es {@code protected static}, asi que un aspecto derivado puede
- * cambiarlo -- y se lo cambia a todos los desplegables a la vez, porque es un solo objeto
- * compartido--.
+ * <p>{@link #editorBorderInsets} is {@code protected static}, so a derived look and feel can
+ * change it -- and it changes it for every combo box at once, because it is a single shared
+ * object.
  */
 public class MetalComboBoxEditor extends BasicComboBoxEditor {
 
-    /** Cero a la derecha; ver la nota de la clase. */
+    /** Zero on the right; see the class note. */
     protected static Insets editorBorderInsets = new Insets(2, 2, 2, 0);
 
     public MetalComboBoxEditor() {
@@ -33,7 +34,7 @@ public class MetalComboBoxEditor extends BasicComboBoxEditor {
         editor.setBorder(new EditorBorder());
     }
 
-    /** El marco del campo, sin el lado que da a la flecha. */
+    /** The field's frame, without the side facing the arrow. */
     private static class EditorBorder extends AbstractBorder {
 
         public void paintBorder(Component c, Graphics g, int x, int y, int w, int h) {
@@ -54,10 +55,11 @@ public class MetalComboBoxEditor extends BasicComboBoxEditor {
     }
 
     /**
-     * El mismo editor, marcado como puesto por el aspecto.
+     * The same editor, marked as set by the look and feel.
      *
-     * <p>Existe solo para eso: un editor que es {@code UIResource} lo reemplaza el proximo aspecto,
-     * y uno que el programa puso a mano se queda. Es la unica diferencia entre las dos clases.
+     * <p>It exists only for that: an editor that is a {@code UIResource} is replaced by the next
+     * look and feel, and one the program set by hand stays. It is the only difference between the
+     * two classes.
      */
     public static class UIResource extends MetalComboBoxEditor
             implements javax.swing.plaf.UIResource {

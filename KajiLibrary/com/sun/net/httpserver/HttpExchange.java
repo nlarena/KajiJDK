@@ -7,124 +7,128 @@ import java.net.InetSocketAddress;
 import java.net.URI;
 
 /**
- * Un pedido y su respuesta, vistos como un solo objeto.
+ * A request and its response, seen as a single object.
  *
- * <h2>El orden es un contrato, no una sugerencia</h2>
+ * <h2>The order is a contract, not a suggestion</h2>
  *
- * <p>Leer el cuerpo del pedido, despues {@link #sendResponseHeaders}, despues escribir el cuerpo de
- * la respuesta, despues {@link #close}. Salirse de ese orden no da un error claro: da un encabezado
- * que llega despues del cuerpo, o una conexion que queda colgada.
+ * <p>Read the request's body, then {@link #sendResponseHeaders}, then write the response's
+ * body, then {@link #close}. Going outside that order does not give a clear error: it gives a
+ * header that arrives after the body, or a connection that is left hanging.
  *
- * <h2>Los dos numeros de {@code sendResponseHeaders}</h2>
+ * <h2>{@code sendResponseHeaders}' two numbers</h2>
  *
- * <p>El segundo parametro tiene tres significados distintos segun el valor, y es lo mas facil de
- * equivocar de toda esta API:
+ * <p>The second parameter has three different meanings according to the value, and it is the
+ * easiest thing to get wrong in this whole API:
  *
  * <ul>
- * <li><strong>positivo</strong> — el largo exacto del cuerpo. Escribir mas o menos que eso rompe la
- *     respuesta;</li>
- * <li><strong>cero</strong> — hay cuerpo pero no se sabe cuanto; se manda por trozos;</li>
- * <li><strong>{@code -1}</strong> — no hay cuerpo. Un {@code 204} o un {@code 304} lo necesitan, y
- *     usar cero ahi dejaria al cliente esperando un cuerpo que nunca llega.</li>
+ * <li><strong>positive</strong> -- the body's exact length. Writing more or less than that
+ *     breaks the response;</li>
+ * <li><strong>zero</strong> -- there is a body but how much is not known; it is sent in
+ *     chunks;</li>
+ * <li><strong>{@code -1}</strong> -- there is no body. A {@code 204} or a {@code 304} needs it,
+ *     and using zero there would leave the client waiting for a body that never arrives.</li>
  * </ul>
  *
- * <p>Es {@link AutoCloseable} desde Java 21, asi que la forma correcta es un {@code try} con
- * recursos: cerrar libera las dos corrientes y la conexion, y no cerrar la deja tomada hasta que
- * venza.
+ * <p>It is {@link AutoCloseable} from Java 21 on, so the right form is a {@code try} with
+ * resources: closing releases the two streams and the connection, and not closing leaves it
+ * held until it expires.
  */
 public abstract class HttpExchange implements AutoCloseable, Request {
 
-    /** Para las implementaciones. */
+    /** For the implementations. */
     protected HttpExchange() {
     }
 
-    /** Los encabezados del pedido, de solo lectura. */
+    /** The request's headers, read-only. */
     public abstract Headers getRequestHeaders();
 
     /**
-     * Los encabezados de la respuesta, mutables.
+     * The response's headers, mutable.
      *
-     * <p>Hay que llenarlos <strong>antes</strong> de {@link #sendResponseHeaders}: despues ya
-     * viajaron y modificarlos no hace nada.
+     * <p>They have to be filled in <strong>before</strong> {@link #sendResponseHeaders}:
+     * afterwards they have already travelled and modifying them does nothing.
      */
     public abstract Headers getResponseHeaders();
 
-    /** La URI pedida. */
+    /** The requested URI. */
     public abstract URI getRequestURI();
 
-    /** El metodo HTTP, en mayusculas. */
+    /** The HTTP method, in upper case. */
     public abstract String getRequestMethod();
 
-    /** El contexto que atrapo este pedido. */
+    /** The context that caught this request. */
     public abstract HttpContext getHttpContext();
 
     /**
-     * Cierra el intercambio.
+     * It closes the exchange.
      *
-     * <p>No declara {@code IOException}, y eso es deliberado: cerrar tiene que poder ir en un
-     * {@code finally} sin obligar a anidar otro {@code try}.
+     * <p>It does not declare {@code IOException}, and that is deliberate: closing has to be able
+     * to go in a {@code finally} without forcing another {@code try} to be nested.
      */
     public abstract void close();
 
     /**
-     * El cuerpo del pedido.
+     * The request's body.
      *
-     * <p>Hay que leerlo hasta el final —o cerrarlo— aunque no interese: lo que quede sin leer sigue
-     * en la conexion y descoloca al pedido siguiente si el cliente la reusa.
+     * <p>It has to be read to the end -- or closed -- even though it is of no interest: whatever
+     * is left unread stays in the connection and throws the next request out if the client reuses
+     * it.
      */
     public abstract InputStream getRequestBody();
 
     /**
-     * El cuerpo de la respuesta.
+     * The response's body.
      *
-     * <p>Recien sirve despues de {@link #sendResponseHeaders}.
+     * <p>It only serves after {@link #sendResponseHeaders}.
      */
     public abstract OutputStream getResponseBody();
 
     /**
-     * Manda el codigo y los encabezados; ver la nota de la clase sobre {@code responseLength}.
+     * It sends the code and the headers; see the class note about {@code responseLength}.
      *
-     * @param rCode el codigo HTTP
-     * @param responseLength positivo el largo exacto, {@code 0} desconocido, {@code -1} sin cuerpo
+     * @param rCode the HTTP code
+     * @param responseLength positive the exact length, {@code 0} unknown, {@code -1} no body
      */
     public abstract void sendResponseHeaders(int rCode, long responseLength) throws IOException;
 
-    /** De donde vino el pedido. */
+    /** Where the request came from. */
     public abstract InetSocketAddress getRemoteAddress();
 
-    /** El codigo ya mandado, o {@code -1} si todavia no se mando ninguno. */
+    /** The code already sent, or {@code -1} if none has been sent yet. */
     public abstract int getResponseCode();
 
-    /** La direccion local por la que entro. */
+    /** The local address it came in through. */
     public abstract InetSocketAddress getLocalAddress();
 
-    /** La version del protocolo, como {@code "HTTP/1.1"}. */
+    /** The protocol's version, such as {@code "HTTP/1.1"}. */
     public abstract String getProtocol();
 
     /**
-     * Un atributo de <strong>este</strong> pedido.
+     * An attribute of <strong>this</strong> request.
      *
-     * <p>Distinto de {@link HttpContext#getAttributes}, que es compartido entre todos: esto vive lo
-     * que vive el intercambio, y es donde un filtro le deja algo al manejador.
+     * <p>Different from {@link HttpContext#getAttributes}, which is shared between them all: this
+     * lives as long as the exchange lives, and it is where a filter leaves something for the
+     * handler.
      */
     public abstract Object getAttribute(String name);
 
-    /** Pone un atributo de este pedido. */
+    /** It sets an attribute of this request. */
     public abstract void setAttribute(String name, Object value);
 
     /**
-     * Reemplaza las dos corrientes.
+     * It replaces the two streams.
      *
-     * <p>Es como un filtro envuelve el cuerpo — comprimirlo, contarlo, cifrarlo — sin que el
-     * manejador se entere. Cualquiera de las dos puede ser {@code null} para dejarla como estaba.
+     * <p>It is how a filter wraps the body -- compressing it, counting it, encrypting it --
+     * without the handler learning. Either of the two may be {@code null} to leave it as it
+     * was.
      */
     public abstract void setStreams(InputStream i, OutputStream o);
 
     /**
-     * Quien mando el pedido, o {@code null} si el contexto no tenia autenticador.
+     * Who sent the request, or {@code null} if the context had no authenticator.
      *
-     * <p>Nunca es {@code null} cuando si lo tenia: un pedido que llego al manejador con
-     * autenticador puesto es, por construccion, un pedido autenticado.
+     * <p>It is never {@code null} when it did have one: a request that reached the handler with
+     * an authenticator set is, by construction, an authenticated request.
      */
     public abstract HttpPrincipal getPrincipal();
 }

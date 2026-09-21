@@ -3,24 +3,25 @@ package com.sun.security.jgss;
 import java.security.BasicPermission;
 
 /**
- * El permiso para llamar a {@link ExtendedGSSContext#inquireSecContext}.
+ * The permission to call {@link ExtendedGSSContext#inquireSecContext}.
  *
- * <p>El nombre del permiso es el {@link InquireType} que se autoriza, y admite comodin: por ejemplo
- * {@code "KRB5_GET_SESSION_KEY"} para uno solo, o {@code "*"} para todos.
+ * <p>The permission's name is the {@link InquireType} that is authorized, and it admits a
+ * wildcard: for example {@code "KRB5_GET_SESSION_KEY"} for a single one, or {@code "*"} for
+ * them all.
  *
- * <p>Existe porque `inquireSecContext` entrega material que el contexto normalmente guarda --la
- * clave de sesion, entre otras cosas. Un programa que puede leer la clave de sesion puede fabricar
- * mensajes que parezcan del otro extremo; por eso la consulta se controla aparte del uso del
- * contexto.
+ * <p>It exists because `inquireSecContext` hands over material the context normally keeps --the
+ * session key, among other things. A program that can read the session key can make messages
+ * that look like the other end's; that is why the query is controlled apart from the use of the
+ * context.
  */
 public final class InquireSecContextPermission extends BasicPermission {
 
     private static final long serialVersionUID = -7131173349668647297L;
 
     /**
-     * Un permiso para ese {@link InquireType}, o para todos con {@code "*"}.
+     * A permission for that {@link InquireType}, or for them all with {@code "*"}.
      *
-     * @param name el nombre de la constante, con comodin si se quiere
+     * @param name the constant's name, with a wildcard if it is wanted
      */
     public InquireSecContextPermission(String name) {
         super(name);

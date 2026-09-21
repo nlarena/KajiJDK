@@ -2,14 +2,14 @@ package java.lang.classfile;
 
 import java.lang.classfile.constantpool.ClassEntry;
 
-// El `super_class` de una clase, como elemento. `java.lang.Object` y un `module-info` no tienen: en
-// el archivo el índice es 0, y entonces este elemento simplemente no aparece.
+// A class's `super_class`, as an element. `java.lang.Object` and a `module-info` have none: in the
+// file the index is 0, and then this element simply does not appear.
 public interface Superclass extends ClassElement {
 
-    /** La entrada de pool de la superclase. */
+    /** The superclass's pool entry. */
     ClassEntry superclassEntry();
 
-    /** El elemento para esta superclase. */
+    /** The element for this superclass. */
     public static Superclass of(ClassEntry superclassEntry) {
         return new jdk.internal.classfile.impl.SuperclassImpl(superclassEntry);
     }

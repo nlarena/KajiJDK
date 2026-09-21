@@ -2,15 +2,16 @@ package javax.print.attribute;
 
 import java.io.Serializable;
 
-// La clase de sintaxis de los atributos cuyo valor es un entero.
+// The syntax class of the attributes whose value is an integer.
 //
-// No es un Attribute: es la mitad "valor" que una subclase concreta combina con la mitad
-// "categoria" implementando Attribute. Por eso es abstracta y sus constructores son protected --
-// nadie de afuera arma un IntegerSyntax suelto.
+// It is not an Attribute: it is the "value" half that a concrete subclass combines with the
+// "category" half by implementing Attribute. That is why it is abstract and its constructors are
+// protected -- nobody outside builds a loose IntegerSyntax.
 //
-// Ojo con `equals`: compara por `instanceof IntegerSyntax`, no por clase exacta, asi que dos
-// atributos de **categorias distintas** con el mismo entero salen iguales. Es lo que hace el JDK y
-// se replica tal cual; los conjuntos no se confunden porque indexan por categoria, no por valor.
+// Careful with `equals`: it compares by `instanceof IntegerSyntax`, not by exact class, so two
+// attributes of **different categories** with the same integer come out equal. It is what the JDK
+// does and it is replicated as it is; the sets do not get confused because they index by category,
+// not by value.
 public abstract class IntegerSyntax implements Serializable, Cloneable {
 
     private static final long serialVersionUID = 3644574816328081943L;
@@ -21,7 +22,7 @@ public abstract class IntegerSyntax implements Serializable, Cloneable {
         this.value = value;
     }
 
-    // Con rango: los dos extremos son inclusivos.
+    // With a range: both ends are inclusive.
     protected IntegerSyntax(int value, int lowerBound, int upperBound) {
         if (value < lowerBound || value > upperBound) {
             throw new IllegalArgumentException("Value " + value + " not in range " + lowerBound

@@ -11,50 +11,52 @@ import java.awt.Toolkit;
 import javax.swing.event.DocumentEvent;
 
 /**
- * Un tramo de texto con una sola fuente y un solo color: la vista que de verdad dibuja letras.
+ * A stretch of text with a single font and a single colour: the view that really draws
+ * letters.
  *
- * <h2>El pintor</h2>
+ * <h2>The painter</h2>
  *
- * <p>La vista no dibuja: le pide a un {@link GlyphPainter}. La separacion parece de mas y no lo es:
- * el mismo tramo se dibuja distinto segun la plataforma —con o sin formas complejas, de izquierda a
- * derecha o al reves— y cambiar de pintor es cambiar todo eso sin tocar la vista. Aca hay un solo
- * pintor, el que mide con {@link FontMetrics} y dibuja con {@code drawChars}.
+ * <p>The view does not draw: it asks a {@link GlyphPainter}. The separation looks unnecessary
+ * and is not: the same stretch is drawn differently according to the platform --with or without
+ * complex shapes, left to right or the reverse-- and changing painter is changing all that
+ * without touching the view. Here there is a single painter, the one that measures with
+ * {@link FontMetrics} and draws with {@code drawChars}.
  *
- * <h2>Fragmentos</h2>
+ * <h2>Fragments</h2>
  *
- * <p>Cuando un tramo no entra en una linea, la vista se <em>parte</em>: {@link #breakView} devuelve
- * un fragmento que muestra solo un pedazo del mismo elemento. El fragmento comparte todo con el
- * original salvo dos numeros, {@code offset} y {@code length}, y por eso partir es barato. Esa es
- * la razon de que la clase sea {@code Cloneable}.
+ * <p>When a stretch does not fit on a line, the view <em>splits</em>: {@link #breakView}
+ * returns a fragment that shows only a piece of the same element. The fragment shares everything
+ * with the original except two numbers, {@code offset} and {@code length}, and that is why
+ * splitting is cheap. That is the reason the class is {@code Cloneable}.
  */
 public class GlyphView extends View implements TabableView, Cloneable {
 
     int offset;
     int length;
 
-    /** Si el tramo termina con un fin de linea implicito. */
+    /** Whether the stretch ends with an implicit line ending. */
     boolean impliedCR;
 
-    /** Si el ancho de este tramo no cuenta al medir la linea. */
+    /** Whether this stretch's width does not count when measuring the line. */
     boolean skipWidth;
 
     TabExpander expander;
 
-    /** Donde empieza, para expandir tabulaciones. */
+    /** Where it starts, for expanding tabs. */
     int x;
 
     GlyphPainter painter;
 
     static GlyphPainter defaultPainter;
 
-    /** Una vista de ese elemento, entero. */
+    /** A view of that element, whole. */
     public GlyphView(Element elem) {
         super(elem);
         offset = 0;
         length = 0;
     }
 
-    /** Una copia; la usa {@link #createFragment}. */
+    /** A copy; {@link #createFragment} uses it. */
     protected final Object clone() {
         Object o;
         try {
@@ -73,7 +75,7 @@ public class GlyphView extends View implements TabableView, Cloneable {
         painter = p;
     }
 
-    /** El texto del tramo, sin copiar cuando se puede. */
+    /** The stretch's text, without copying when it can. */
     public Segment getText(int p0, int p1) {
         Segment text = new Segment();
         try {
@@ -85,7 +87,7 @@ public class GlyphView extends View implements TabableView, Cloneable {
         return text;
     }
 
-    /** El color de fondo del tramo, o {@code null} si es transparente. */
+    /** The stretch's background colour, or {@code null} if it is transparent. */
     public Color getBackground() {
         Document doc = getDocument();
         if (doc instanceof StyledDocument) {
@@ -143,16 +145,16 @@ public class GlyphView extends View implements TabableView, Cloneable {
         return StyleConstants.isSuperscript(attr);
     }
 
-    /** Quien sabe donde caen las tabulaciones; el padre, si sabe. */
+    /** Who knows where the tabs fall; the parent, if it knows. */
     public TabExpander getTabExpander() {
         return expander;
     }
 
-    /** Se asegura de que haya pintor; lo crea la primera vez. */
+    /** It makes sure there is a painter; it creates it the first time. */
     protected void checkPainter() {
         if (painter == null) {
             if (defaultPainter == null) {
-                defaultPainter = new PintorSimple();
+                defaultPainter = new SimplePainter();
             }
             setGlyphPainter(defaultPainter.getPainter(this, getStartOffset(), getEndOffset()));
         }
@@ -188,7 +190,7 @@ public class GlyphView extends View implements TabableView, Cloneable {
         return (length > 0) ? e.getStartOffset() + offset + length : e.getEndOffset();
     }
 
-    /** Pinta el fondo si hay, el texto, y las rayas de subrayado o tachado. */
+    /** It paints the background if there is one, the text, and the underline or strike lines. */
     public void paint(Graphics g, Shape a) {
         checkPainter();
 
@@ -219,7 +221,7 @@ public class GlyphView extends View implements TabableView, Cloneable {
         }
 
         if (isUnderline() || isStrikeThrough()) {
-            FontMetrics fm = obtenerMetricas();
+            FontMetrics fm = getMetrics();
             int y = alloc.y + (int) painter.getAscent(this);
             int x0 = alloc.x;
             int x1 = alloc.x + alloc.width;
@@ -234,7 +236,7 @@ public class GlyphView extends View implements TabableView, Cloneable {
         }
     }
 
-    /** Pinta el tramo con ese color; lo usa quien pinta la seleccion. */
+    /** It paints the stretch in that colour; whoever paints the selection uses it. */
     final void paintTextUsingColor(Graphics g, Shape a, Color c, int p0, int p1) {
         g.setColor(c);
         painter.paint(this, g, a, p0, p1);
@@ -243,7 +245,7 @@ public class GlyphView extends View implements TabableView, Cloneable {
     public float getMinimumSpan(int axis) {
         if (axis == View.X_AXIS) {
             checkPainter();
-            // El minimo es la palabra mas larga: menos que eso no se puede cortar.
+            // The minimum is the longest word: less than that cannot be broken.
             return getPartialSpan(getStartOffset(), getEndOffset());
         }
         return getPreferredSpan(axis);
@@ -256,7 +258,8 @@ public class GlyphView extends View implements TabableView, Cloneable {
         checkPainter();
         int p0 = getStartOffset();
         int p1 = getEndOffset();
-        // if/else y no switch: las constantes de View se leen de un `.class` y no se pliegan (#503).
+        // if/else and not switch: View's constants are read from a `.class` and are not folded
+        // (#503).
         if (axis == View.X_AXIS) {
             if (impliedCR) {
                 return 0;
@@ -273,7 +276,7 @@ public class GlyphView extends View implements TabableView, Cloneable {
         throw new IllegalArgumentException("Invalid axis: " + axis);
     }
 
-    /** Se alinea por su linea de base, no por su caja: es lo que hace que el texto se lea. */
+    /** It is aligned by its baseline, not by its box: it is what makes the text readable. */
     public float getAlignment(int axis) {
         checkPainter();
         if (axis == View.Y_AXIS) {
@@ -306,10 +309,10 @@ public class GlyphView extends View implements TabableView, Cloneable {
     }
 
     /**
-     * Que tan bien se corta en ese punto.
+     * How well it breaks at that point.
      *
-     * <p>Excelente si hay un espacio donde cortar, malo si habria que partir una palabra. Es lo
-     * que hace que un parrafo corte por espacios.
+     * <p>Excellent if there is a space to break at, bad if a word would have to be split. It is
+     * what makes a paragraph break at spaces.
      */
     public int getBreakWeight(int axis, float pos, float len) {
         if (axis == View.X_AXIS) {
@@ -327,7 +330,7 @@ public class GlyphView extends View implements TabableView, Cloneable {
         return super.getBreakWeight(axis, pos, len);
     }
 
-    /** Donde hay un espacio para cortar, mirando de atras para adelante. */
+    /** Where there is a space to break at, looking from back to front. */
     private int getBreakSpot(int p0, int p1) {
         Segment s = getText(p0, p1);
         for (int i = s.offset + s.count - 1; i >= s.offset; i--) {
@@ -339,7 +342,7 @@ public class GlyphView extends View implements TabableView, Cloneable {
         return -1;
     }
 
-    /** Se parte para entrar en ese espacio; devuelve el pedazo que entra. */
+    /** It splits to fit in that room; it returns the piece that fits. */
     public View breakView(int axis, int p0, float pos, float len) {
         if (axis == View.X_AXIS) {
             checkPainter();
@@ -356,7 +359,7 @@ public class GlyphView extends View implements TabableView, Cloneable {
         return this;
     }
 
-    /** Un fragmento que muestra ese pedazo; ver la nota de la clase. */
+    /** A fragment that shows that piece; see the class note. */
     public View createFragment(int p0, int p1) {
         checkPainter();
         Element elem = getElement();
@@ -383,7 +386,7 @@ public class GlyphView extends View implements TabableView, Cloneable {
     }
 
     public void changedUpdate(DocumentEvent e, Shape a, ViewFactory f) {
-        // Cambiaron los atributos: puede haber cambiado la fuente, hay que volver a medir.
+        // The attributes changed: the font may have changed, it has to be measured again.
         painter = null;
         preferenceChanged(null, true, true);
     }
@@ -391,13 +394,13 @@ public class GlyphView extends View implements TabableView, Cloneable {
     void updateAfterChange() {
     }
 
-    /** Datos para justificar el texto; sin justificado, ninguno. */
+    /** Data for justifying the text; without justification, none. */
     JustificationInfo getJustificationInfo(int rowStartOffset) {
         return null;
     }
 
-    /** Las metricas de la fuente de este tramo. */
-    private FontMetrics obtenerMetricas() {
+    /** The metrics of this stretch's font. */
+    private FontMetrics getMetrics() {
         Font f = getFont();
         java.awt.Container c = getContainer();
         if (c != null && f != null) {
@@ -410,17 +413,17 @@ public class GlyphView extends View implements TabableView, Cloneable {
     }
 
     /**
-     * Quien dibuja y mide las letras de una {@link GlyphView}.
+     * Who draws and measures a {@link GlyphView}'s letters.
      *
-     * <p>Sin estado propio: recibe la vista en cada llamada. Por eso un mismo pintor puede servir
-     * a miles de tramos, y por eso {@link #getPainter} puede devolverse a si mismo.
+     * <p>With no state of its own: it receives the view on every call. That is why one same painter
+     * can serve thousands of stretches, and why {@link #getPainter} can return itself.
      */
     public abstract static class GlyphPainter {
 
         protected GlyphPainter() {
         }
 
-        /** Cuanto ocupa ese tramo empezando en {@code x}. */
+        /** How much that stretch takes up starting at {@code x}. */
         public abstract float getSpan(GlyphView v, int p0, int p1, TabExpander e, float x);
 
         public abstract float getHeight(GlyphView v);
@@ -437,10 +440,10 @@ public class GlyphView extends View implements TabableView, Cloneable {
         public abstract int viewToModel(GlyphView v, float x, float y, Shape a,
                 Position.Bias[] biasReturn);
 
-        /** Hasta donde llega el texto que entra en {@code len} pixeles. */
+        /** How far the text that fits in {@code len} pixels reaches. */
         public abstract int getBoundedPosition(GlyphView v, int p0, float x, float len);
 
-        /** El pintor que le corresponde a ese fragmento; por omision, este mismo. */
+        /** The painter that corresponds to that fragment; by default, this same one. */
         public GlyphPainter getPainter(GlyphView v, int p0, int p1) {
             return this;
         }
@@ -472,7 +475,7 @@ public class GlyphView extends View implements TabableView, Cloneable {
         }
     }
 
-    /** Datos de justificado; sin justificado, no se usa. */
+    /** Justification data; without justification, it is not used. */
     static class JustificationInfo {
 
         final int start;
@@ -494,13 +497,14 @@ public class GlyphView extends View implements TabableView, Cloneable {
     }
 
     /**
-     * El pintor de esta biblioteca: mide con {@link FontMetrics} y dibuja con {@code drawChars}.
+     * This library's painter: it measures with {@link FontMetrics} and draws with
+     * {@code drawChars}.
      *
-     * <p>Es el equivalente del {@code GlyphPainter1} del JDK, que es el que se usa cuando el texto
-     * no necesita formas complejas. El rasterizador de esta VM no las tiene, asi que este alcanza
-     * para todo.
+     * <p>It is the equivalent of the JDK's {@code GlyphPainter1}, which is the one used when the
+     * text does not need complex shapes. This VM's rasterizer does not have them, so this one is
+     * enough for everything.
      */
-    static class PintorSimple extends GlyphPainter {
+    static class SimplePainter extends GlyphPainter {
 
         private FontMetrics metrics(GlyphView v) {
             Font f = v.getFont();

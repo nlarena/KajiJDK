@@ -1,46 +1,46 @@
 package java.lang.classfile;
 
-// Lo que sabe leer y escribir un atributo con un nombre dado. Un lector encuentra un nombre en el
-// archivo, busca el mapeador, y le pide que interprete el cuerpo; un escritor hace el camino
-// inverso. Los mapeadores de los atributos que el JVMS define están en {@link Attributes}.
+// What knows how to read and write an attribute with a given name. A reader finds a name in the file,
+// looks the mapper up, and asks it to interpret the body; a writer goes the other way round. The
+// mappers of the attributes the JVMS defines are in {@link Attributes}.
 public interface AttributeMapper<A extends Attribute<A>> {
 
-    /** El nombre del atributo, tal como aparece en el `Utf8`. */
+    /** The attribute's name, just as it appears in the `Utf8`. */
     String name();
 
     /**
-     * Lee el atributo. `pos` es el offset del primer byte del **cuerpo**, es decir después del
-     * `attribute_name_index` y del `attribute_length`.
+     * It reads the attribute. `pos` is the offset of the **body**'s first byte, that is, after the
+     * `attribute_name_index` and the `attribute_length`.
      */
     A readAttribute(AttributedElement enclosing, ClassReader cf, int pos);
 
-    /** Escribe el atributo completo —nombre, largo y cuerpo— en `buf`. */
+    /** It writes the whole attribute --name, length and body-- into `buf`. */
     void writeAttribute(BufWriter buf, A attr);
 
-    /** Si el atributo puede aparecer más de una vez en el mismo lugar. Por defecto, no. */
+    /** Whether the attribute may appear more than once at the same place. By default, no. */
     default boolean allowMultiple() {
         return false;
     }
 
-    /** Qué le pasa a este atributo cuando la clase se transforma. */
+    /** What happens to this attribute when the class is transformed. */
     AttributeStability stability();
 
     /**
-     * Cuánto sobrevive un atributo a una transformación de la clase que lo contiene. El orden de las
-     * constantes va de lo más estable a lo menos, y es el criterio con el que una transformación
-     * decide si puede copiar el atributo tal cual o tiene que descartarlo.
+     * How much of an attribute survives a transformation of the class containing it. The constants go
+     * from the most stable to the least, and that is the criterion by which a transformation decides
+     * whether it can copy the attribute as it stands or has to drop it.
      */
     public enum AttributeStability {
 
-        /** No depende del pool ni de las posiciones del código: se copia siempre. */
+        /** It depends neither on the pool nor on the code's positions: it is always copied. */
         STATELESS,
-        /** Depende del pool de constantes, pero no del código. */
+        /** It depends on the constant pool, but not on the code. */
         CP_REFS,
-        /** Depende de las posiciones dentro del arreglo `code`. */
+        /** It depends on the positions inside the `code` array. */
         LABELS,
-        /** El formato no se conoce; se copia byte a byte y puede quedar mal. */
+        /** The format is not known; it is copied byte by byte and may end up wrong. */
         UNKNOWN,
-        /** No se puede trasladar: una transformación lo descarta. */
+        /** It cannot be carried over: a transformation drops it. */
         UNSTABLE;
     }
 }

@@ -3,26 +3,27 @@ package javax.swing;
 import javax.swing.event.ChangeListener;
 
 /**
- * Un valor con un rango y un ancho: lo que hay detras de una barra de desplazamiento, una barra de
- * progreso o un deslizador.
+ * A value with a range and a width: what lies behind a scroll bar, a progress bar or a
+ * slider.
  *
- * <h2>Cuatro numeros con una regla</h2>
+ * <h2>Four numbers with one rule</h2>
  *
- * <p>Minimo, valor, extension y maximo, siempre en ese orden:
+ * <p>Minimum, value, extent and maximum, always in that order:
  *
- * <pre>{@code   minimo <= valor <= valor + extension <= maximo}</pre>
+ * <pre>{@code   minimum <= value <= value + extent <= maximum}</pre>
  *
- * <p>La <em>extension</em> es lo que se ve de una vez: en una barra de desplazamiento es el alto
- * de la ventana sobre el alto del documento, y es por eso que el pulgar tiene tamano. Un
- * deslizador usa extension cero, y entonces el valor puede llegar hasta el maximo.
+ * <p>The <em>extent</em> is what is seen at once: in a scroll bar it is the window's height over
+ * the document's height, and that is why the thumb has a size. A slider uses an extent of zero,
+ * and then the value may reach as far as the maximum.
  *
- * <p>La regla se mantiene sola: quien pone un numero que la rompe no recibe un error, recibe los
- * numeros acomodados. Subir el minimo por encima del valor arrastra al valor; achicar el maximo
- * achica primero la extension y despues el valor. Es deliberado: un modelo que lanzara excepciones
- * obligaria a cada llamador a ordenar sus cambios, y el orden depende de hacia donde se mueva.
+ * <p>The rule keeps itself: whoever puts in a number that breaks it does not get an error, they
+ * get the numbers settled. Raising the minimum above the value drags the value along; shrinking
+ * the maximum shrinks the extent first and the value afterwards. It is deliberate: a model that
+ * threw exceptions would force every caller to order its changes, and the order depends on which
+ * way it moves.
  *
- * <p>{@link #setValueIsAdjusting} marca los cambios de una serie —arrastrar el pulgar— para que
- * quien escucha pueda esperar a que suelte antes de hacer algo caro.
+ * <p>{@link #setValueIsAdjusting} marks the changes of a series -- dragging the thumb -- so that
+ * whoever listens can wait for the release before doing something expensive.
  */
 public interface BoundedRangeModel {
 
@@ -38,17 +39,17 @@ public interface BoundedRangeModel {
 
     void setValue(int newValue);
 
-    /** Marca el comienzo o el final de una serie de cambios; ver la nota de la interfaz. */
+    /** It marks the beginning or the end of a series of changes; see the interface note. */
     void setValueIsAdjusting(boolean b);
 
     boolean getValueIsAdjusting();
 
-    /** Lo que se ve de una vez; ver la nota de la interfaz. */
+    /** What is seen at once; see the interface note. */
     int getExtent();
 
     void setExtent(int newExtent);
 
-    /** Cambia los cuatro numeros de una vez, avisando una sola vez. */
+    /** It changes the four numbers at once, giving notice only once. */
     void setRangeProperties(int value, int extent, int min, int max, boolean adjusting);
 
     void addChangeListener(ChangeListener x);

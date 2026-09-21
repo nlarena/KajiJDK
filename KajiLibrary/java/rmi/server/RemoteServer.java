@@ -4,12 +4,15 @@ import java.io.OutputStream;
 import java.io.PrintStream;
 
 /**
- * La base de las implementaciones de objetos remotos, del lado servidor.
+ * The base of remote object implementations, on the server side.
  *
- * <p>Separada de {@link RemoteObject} porque los dos lados heredan cosas distintas: un stub necesita
- * identidad remota, una implementacion necesita ademas saber a quien esta atendiendo. De ahi
- * {@link #getClientHost}, que solo tiene respuesta durante una llamada — ver
- * {@link ServerNotActiveException}.
+ * <p>Separate from {@link RemoteObject} because the two sides inherit different things: a stub
+ * needs remote identity, an implementation also needs to know whom it is serving. Hence {@link
+ * #getClientHost}, which only has an answer during a call — see {@link ServerNotActiveException}.
+ * This note used to leave it at that; in this library there is never a call in progress, because
+ * there is no RMI transport (`UnicastRemoteObject.exportObject` throws
+ * `UnsupportedOperationException`), so {@link #getClientHost} always throws. Checked in its body
+ * below and in `UnicastRemoteObject.java`.
  */
 public abstract class RemoteServer extends RemoteObject {
 
@@ -17,35 +20,40 @@ public abstract class RemoteServer extends RemoteObject {
 
     private static PrintStream log;
 
-    /** Sin referencia. */
+    /** Without a reference. */
     protected RemoteServer() {
         super();
     }
 
-    /** Con esa referencia. */
+    /** With that reference. */
     protected RemoteServer(RemoteRef ref) {
         super(ref);
     }
 
     /**
-     * El host del cliente que se esta atendiendo.
+     * The host of the client being served.
      *
-     * @throws ServerNotActiveException si no se esta atendiendo ninguna llamada en este hilo
+     * @throws ServerNotActiveException if no call is being served on this thread — always, in
+     *     this library, which serves no remote calls
      */
     public static String getClientHost() throws ServerNotActiveException {
-        throw new ServerNotActiveException("no hay ninguna llamada remota en curso");
+        throw new ServerNotActiveException("no remote call in progress");
     }
 
     /**
-     * Enciende el registro de llamadas; {@code null} lo apaga.
+     * It turns on the call log; {@code null} turns it off.
      *
-     * <p>Es estatico y global: no hay un registro por objeto.
+     * <p>It is static and global: there is no log per object.
+     *
+     * <p>This note used to leave it at turning on a log of calls; in this library it only stores
+     * the stream, and nothing writes to it, since no remote calls are served (a search of
+     * KajiLibrary finds no caller of {@link #getLog} and no other use of the field).
      */
     public static void setLog(OutputStream out) {
         log = out == null ? null : new PrintStream(out, true);
     }
 
-    /** Donde va el registro, o {@code null} si esta apagado. */
+    /** Where the log goes, or {@code null} if it is off. */
     public static PrintStream getLog() {
         return log;
     }

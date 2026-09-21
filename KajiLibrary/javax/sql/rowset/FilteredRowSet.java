@@ -3,38 +3,38 @@ package javax.sql.rowset;
 import java.sql.SQLException;
 
 /**
- * Un {@link WebRowSet} con un filtro puesto: solo se ven las filas que el filtro acepta.
+ * A {@link WebRowSet} with a filter on: only the rows the filter accepts are seen.
  *
- * <h2>Por que filtrar en el cliente y no en la consulta</h2>
+ * <h2>Why filter on the client and not in the query</h2>
  *
- * <p>Porque el conjunto ya esta desconectado. Cambiar el {@code WHERE} obligaria a volver a la base;
- * poner un filtro es inmediato y no cuesta una conexion. Para recorrer los mismos datos con varios
- * criterios —lo que hace una interfaz con columnas ordenables y cajas de busqueda— es la diferencia
- * entre una consulta por interaccion y ninguna.
+ * <p>Because the set is already disconnected. Changing the {@code WHERE} would force going back to
+ * the database; putting a filter on is immediate and does not cost a connection. To walk the same
+ * data with several criteria —what an interface with sortable columns and search boxes does— it is
+ * the difference between one query per interaction and none.
  *
- * <h2>El filtro esconde, no borra</h2>
+ * <h2>The filter hides, it does not delete</h2>
  *
- * <p>Las filas que no pasan siguen ahi. Sacar el filtro las vuelve a mostrar, y
- * {@link CachedRowSet#acceptChanges} sincroniza <strong>todas</strong> las modificadas, incluidas
- * las que el filtro estaba escondiendo. Pensarlo como un borrado lleva a perder cambios de vista y
- * a sorprenderse cuando aparecen en la base.
+ * <p>The rows that do not pass are still there. Removing the filter shows them again, and
+ * {@link CachedRowSet#acceptChanges} synchronizes <strong>all</strong> the modified ones, including
+ * the ones the filter was hiding. Thinking of it as a deletion leads to losing track of changes and
+ * to being surprised when they show up in the database.
  *
  * @since 1.5
  */
 public interface FilteredRowSet extends WebRowSet {
 
     /**
-     * Pone o cambia el filtro.
+     * Puts on or changes the filter.
      *
-     * @param p el filtro, o {@code null} para sacarlo
-     * @throws SQLException si no se pudo aplicar
+     * @param p the filter, or {@code null} to remove it
+     * @throws SQLException if it could not be applied
      */
     void setFilter(Predicate p) throws SQLException;
 
     /**
-     * El filtro puesto.
+     * The filter that is on.
      *
-     * @return el filtro, o {@code null} si no hay
+     * @return the filter, or {@code null} if there is none
      */
     Predicate getFilter();
 }

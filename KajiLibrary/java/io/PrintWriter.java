@@ -38,7 +38,7 @@ public class PrintWriter extends Writer {
     // it; null after close(), which is how a use-after-close is detected.
     protected Writer out;
 
-    private boolean autoFlush;
+    private final boolean autoFlush;
 
     // Latched, never cleared by accident: once something has gone wrong the caller must
     // ask (checkError) or explicitly clear it. A flag that reset itself would be useless
@@ -109,10 +109,10 @@ public class PrintWriter extends Writer {
     }
 
     /**
-     * Vacia lo pendiente.
+     * It flushes what is pending.
      *
-     * <p>Sin `throws IOException`, igual que en el JDK y por la misma razon que en `PrintStream`: la
-     * falla se anota y se consulta con {@link #checkError()}.
+     * <p>No `throws IOException`, just as in the JDK and for the same reason as in `PrintStream`:
+     * the failure is recorded and asked about with {@link #checkError()}.
      */
     public void flush() {
         if (this.open()) {
@@ -124,7 +124,8 @@ public class PrintWriter extends Writer {
         }
     }
 
-    /** Cierra. Sin `throws`, como el JDK: la falla se anota y se consulta con {@link #checkError()}. */
+    /** Closes. No `throws`, like the JDK: the failure is recorded and asked about with
+     * {@link #checkError()}. */
     public void close() {
         if (this.out != null) {
             try {
@@ -158,9 +159,10 @@ public class PrintWriter extends Writer {
 
     // --- the Writer contract, routed through the gate ---
     //
-    // Ninguno declara `throws IOException`, y el JDK tampoco: un `PrintWriter` **no tira** por fallas
-    // de E/S. Las anota y las cuenta por `checkError()`. Ese es todo el punto de la clase --que
-    // escribir no obligue a atrapar-- asi que estos `catch` son el contrato, no un descuido.
+    // None of them declares `throws IOException`, and nor does the JDK: a `PrintWriter` **does not
+    // throw** on I/O failures. It records them and reports them through `checkError()`. That is the
+    // class's whole point --that writing should not force anyone to catch-- so these `catch`es are
+    // the contract, not an oversight.
 
     public void write(int c) {
         if (this.open()) {

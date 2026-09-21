@@ -5,58 +5,59 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * KajiLibrary's java.lang.foreign.FunctionDescriptor -- la **firma** de una funcion nativa: los
- * layouts de sus argumentos y el de su retorno.
+ * KajiLibrary's java.lang.foreign.FunctionDescriptor -- a native function's **signature**: the
+ * layouts of its arguments and that of its return.
  *
- * <p>Como los layouts, es una descripcion y nada mas: no hay ninguna funcion detras. Por eso esta
- * entero aca aunque {@link Linker} --lo unico que sabe hacer algo con el-- no pueda estar.
+ * <p>Like the layouts, it is a description and nothing else: there is no function behind it. That is
+ * why it is here in full even though {@link Linker} --the only thing that knows how to do anything
+ * with it-- cannot be.
  *
- * <p>El retorno es **opcional** y eso no es un detalle: una funcion que no devuelve nada es distinta
- * de una que devuelve algo de tamanio cero. `void` no tiene layout, y modelarlo con un layout vacio
- * confundiria las dos cosas.
+ * <p>The return is **optional** and that is no detail: a function returning nothing is different
+ * from one returning something of size zero. `void` has no layout, and modelling it with an empty
+ * layout would confuse the two.
  */
 public interface FunctionDescriptor {
 
-    /** El layout del retorno, o vacio si la funcion es `void`. */
+    /** The return's layout, or empty if the function is `void`. */
     Optional<MemoryLayout> returnLayout();
 
-    /** Los layouts de los argumentos, en orden. */
+    /** The arguments' layouts, in order. */
     List<MemoryLayout> argumentLayouts();
 
-    /** El mismo descriptor con otro retorno. */
+    /** The same descriptor with another return. */
     FunctionDescriptor changeReturnLayout(MemoryLayout newReturn);
 
-    /** El mismo descriptor sin retorno: la funcion pasa a ser `void`. */
+    /** The same descriptor with no return: the function becomes `void`. */
     FunctionDescriptor dropReturnLayout();
 
-    /** Con esos argumentos agregados al final. */
+    /** With those arguments added at the end. */
     FunctionDescriptor appendArgumentLayouts(MemoryLayout... addedLayouts);
 
     /**
-     * Con esos argumentos insertados en esa posicion.
+     * With those arguments inserted at that position.
      *
-     * @throws IllegalArgumentException si la posicion esta fuera de rango
+     * @throws IllegalArgumentException if the position is out of range
      */
     FunctionDescriptor insertArgumentLayouts(int index, MemoryLayout... addedLayouts);
 
     /**
-     * El {@link MethodType} equivalente: los tipos Java que transportan estos layouts.
+     * The equivalent {@link MethodType}: the Java types these layouts travel in.
      *
-     * <p>Es el puente entre la descripcion de la memoria y la firma del metodo que la manipula. Un
-     * layout compuesto no tiene un tipo Java propio, asi que solo se puede convertir un descriptor
-     * hecho de valores.
+     * <p>It is the bridge between the description of the memory and the signature of the method
+     * handling it. A composite layout has no Java type of its own, so only a descriptor made of
+     * values can be converted.
      *
-     * @throws UnsupportedOperationException si algun layout no es un {@link ValueLayout}
+     * @throws UnsupportedOperationException if some layout is not a {@link ValueLayout}
      */
     MethodType toMethodType();
 
-    /** Un descriptor con retorno. */
+    /** A descriptor with a return. */
     static FunctionDescriptor of(MemoryLayout resLayout, MemoryLayout... argLayouts) {
-        return Descriptor.crear(resLayout, argLayouts);
+        return Descriptor.create(resLayout, argLayouts);
     }
 
-    /** Un descriptor sin retorno. */
+    /** A descriptor with no return. */
     static FunctionDescriptor ofVoid(MemoryLayout... argLayouts) {
-        return Descriptor.crear(null, argLayouts);
+        return Descriptor.create(null, argLayouts);
     }
 }

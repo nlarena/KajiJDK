@@ -1,26 +1,26 @@
 package javax.sound.midi;
 
 /**
- * KajiLibrary's javax.sound.midi.MidiUnavailableException -- el dispositivo existe pero no se puede
- * usar ahora.
+ * KajiLibrary's javax.sound.midi.MidiUnavailableException -- the device exists but cannot be used
+ * now.
  *
- * <p>El equivalente MIDI de {@code javax.sound.sampled.LineUnavailableException}, y la misma
- * distincion: no dice que el sistema no soporte lo que se pide, dice que en este momento el recurso
- * esta tomado.
+ * <p>The MIDI equivalent of {@code javax.sound.sampled.LineUnavailableException}, and the same
+ * distinction: it does not say the system does not support what is asked, it says that right now
+ * the resource is taken.
  *
- * <p>Con MIDI pasa mas seguido que con audio: un puerto MIDI fisico suele admitir un solo programa a
- * la vez.
+ * <p>With MIDI it happens more often than with audio: a physical MIDI port usually admits a single
+ * program at a time.
  */
 public class MidiUnavailableException extends Exception {
 
     private static final long serialVersionUID = 6093809578628944323L;
 
-    /** Sin detalle. */
+    /** Without detail. */
     public MidiUnavailableException() {
         super();
     }
 
-    /** Con mensaje. */
+    /** With a message. */
     public MidiUnavailableException(String message) {
         super(message);
     }

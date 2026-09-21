@@ -4,9 +4,9 @@ import javax.annotation.processing.SupportedSourceVersion;
 import javax.lang.model.SourceVersion;
 
 /**
- * El visitante por kind de elemento de Java 8. Ver {@link ElementKindVisitor6} por el mecanismo.
+ * The element-kind visitor for Java 8. See {@link ElementKindVisitor6} for the mechanism.
  *
- * <p>Java 8 no agrego kinds, asi que no hay nada que pasar al embudo.
+ * <p>Java 8 added no kinds, so there is nothing to pass to the funnel.
  */
 @SupportedSourceVersion(SourceVersion.RELEASE_8)
 public class ElementKindVisitor8<R, P> extends ElementKindVisitor7<R, P> {

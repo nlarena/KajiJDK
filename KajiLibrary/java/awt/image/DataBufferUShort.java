@@ -1,20 +1,20 @@
 package java.awt.image;
 
 /**
- * Como {@link DataBufferByte}, se leen **sin signo**: 0..65535.
+ * Like {@link DataBufferByte}, they are read **unsigned**: 0..65535.
  *
- * <p>Usa el mismo `short[]` que {@link DataBufferShort} y se diferencia solo en eso. Confundirlos
- * da una imagen con los tonos claros dados vuelta.
+ * <p>It uses the same `short[]` as {@link DataBufferShort} and differs only in that. Confusing them
+ * gives an image with the light tones turned round.
  */
 public final class DataBufferUShort extends DataBuffer {
 
-    // Los datos de cada banco. `data` es un atajo al banco 0: se usa en cada lectura
-    // y bajar por `bankdata[0]` cada vez seria una indireccion de mas en el camino
-    // mas caliente de todo el paquete.
+    // The data of each bank. `data` is a shortcut to bank 0: it is used on every read
+    // and going down through `bankdata[0]` every time would be one indirection too many
+    // on the hottest path of the whole package.
     private short[] data;
     private short[][] bankdata;
 
-    /** Un banco de `size` elementos, en cero. */
+    /** One bank of `size` elements, at zero. */
     public DataBufferUShort(int size) {
         super(DataBuffer.TYPE_USHORT, size);
         this.data = new short[size];
@@ -22,7 +22,7 @@ public final class DataBufferUShort extends DataBuffer {
         this.bankdata[0] = this.data;
     }
 
-    /** `numBanks` bancos de `size` elementos, en cero. */
+    /** `numBanks` banks of `size` elements, at zero. */
     public DataBufferUShort(int size, int numBanks) {
         super(DataBuffer.TYPE_USHORT, size, numBanks);
         this.bankdata = new short[numBanks][];
@@ -33,11 +33,11 @@ public final class DataBufferUShort extends DataBuffer {
     }
 
     /**
-     * Un banco sobre ese arreglo, **sin copiarlo**.
+     * One bank over that array, **without copying it**.
      *
-     * <p>El buffer se queda con el arreglo que se le da: escribirle por afuera cambia la
-     * imagen. Es a proposito y es lo que permite armar una imagen sobre memoria que ya
-     * existe sin duplicarla.
+     * <p>The buffer keeps the array it is given: writing to it from outside changes the
+     * image. It is on purpose and it is what makes it possible to build an image over
+     * memory that already exists without duplicating it.
      */
     public DataBufferUShort(short[] dataArray, int size) {
         super(DataBuffer.TYPE_USHORT, size);
@@ -46,7 +46,7 @@ public final class DataBufferUShort extends DataBuffer {
         this.bankdata[0] = this.data;
     }
 
-    /** Como el anterior, empezando en `offset`. */
+    /** Like the previous one, starting at `offset`. */
     public DataBufferUShort(short[] dataArray, int size, int offset) {
         super(DataBuffer.TYPE_USHORT, size, 1, offset);
         this.data = dataArray;
@@ -54,37 +54,37 @@ public final class DataBufferUShort extends DataBuffer {
         this.bankdata[0] = this.data;
     }
 
-    /** Varios bancos sobre esos arreglos, sin copiarlos. */
+    /** Several banks over those arrays, without copying them. */
     public DataBufferUShort(short[][] dataArray, int size) {
         super(DataBuffer.TYPE_USHORT, size, dataArray.length);
         this.bankdata = dataArray;
         this.data = this.bankdata[0];
     }
 
-    /** Varios bancos, cada uno con su desplazamiento. */
+    /** Several banks, each one with its own offset. */
     public DataBufferUShort(short[][] dataArray, int size, int[] offsets) {
         super(DataBuffer.TYPE_USHORT, size, dataArray.length, offsets);
         this.bankdata = dataArray;
         this.data = this.bankdata[0];
     }
 
-    /** El arreglo del banco 0, sin copiar. */
+    /** The array of bank 0, without copying. */
     public short[] getData() {
         return this.data;
     }
 
-    /** El arreglo de ese banco, sin copiar. */
+    /** The array of that bank, without copying. */
     public short[] getData(int bank) {
         return this.bankdata[bank];
     }
 
     /**
-     * Los bancos.
+     * The banks.
      *
-     * <p>El arreglo de afuera es una **copia**; los de adentro no. O sea que agregar o
-     * quitar bancos en lo que devuelve no toca al buffer, pero escribir en un banco si.
-     * Es asimetrico y es lo que hace el JDK -- comprobado, porque la primera version de
-     * esta clase devolvia el arreglo de afuera sin clonar.
+     * <p>The outer array is a **copy**; the inner ones are not. That is, adding or
+     * removing banks in what it returns does not touch the buffer, but writing into a bank
+     * does. It is asymmetric and it is what the JDK does -- checked, because the first
+     * version of this class returned the outer array without cloning it.
      */
     public short[][] getBankData() {
         short[][] out = new short[this.bankdata.length][];
@@ -92,12 +92,12 @@ public final class DataBufferUShort extends DataBuffer {
         return out;
     }
 
-    /** Sin signo: ver la nota de la clase. */
+    /** Unsigned: see the note of the class. */
     public int getElem(int i) {
         return this.data[i + this.offset] & 0xFFFF;
     }
 
-    /** Sin signo: ver la nota de la clase. */
+    /** Unsigned: see the note of the class. */
     public int getElem(int bank, int i) {
         return this.bankdata[bank][i + this.offsets[bank]] & 0xFFFF;
     }

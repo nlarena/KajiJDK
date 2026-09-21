@@ -1,18 +1,18 @@
 package java.nio.file;
 
-// El sistema de archivos que se pidio no existe (todavia).
+// The filesystem asked for does not exist (yet).
 //
-// La levanta `FileSystems.getFileSystem(URI)` para cualquier esquema que no sea `file`: KajiJDK
-// tiene un solo proveedor y ninguno mas se puede instalar.
+// `FileSystems.getFileSystem(URI)` throws it for any scheme that is not `file`: KajiJDK has a
+// single provider and no other can be installed.
 public class FileSystemNotFoundException extends RuntimeException {
 
     private static final long serialVersionUID = 7999581764446402397L;
 
-    /** Sin mensaje. */
+    /** With no message. */
     public FileSystemNotFoundException() {
     }
 
-    /** @param msg el detalle */
+    /** @param msg the detail */
     public FileSystemNotFoundException(String msg) {
         super(msg);
     }

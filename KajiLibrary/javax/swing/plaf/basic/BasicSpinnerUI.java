@@ -20,47 +20,47 @@ import javax.swing.plaf.SpinnerUI;
 import javax.swing.plaf.UIResource;
 
 /**
- * El aspecto basico de un {@link JSpinner}: el editor y las dos flechitas.
+ * The basic look and feel of a {@link JSpinner}: the editor and the two little arrows.
  *
- * <h2>Tres componentes y un acomodador propio</h2>
+ * <h2>Three components and a layout of its own</h2>
  *
- * <p>Un spinner es el editor a la izquierda y dos botones apilados a la derecha: el de arriba sube y
- * el de abajo baja. Ningun acomodador de los que vienen hechos hace eso -- {@code BorderLayout}
- * pondria los botones uno al lado del otro y {@code GridLayout} les daria la mitad del ancho --,
- * asi que {@link #createLayout} devuelve uno escrito para esto.
+ * <p>A spinner is the editor on the left and two buttons stacked on the right: the top one goes
+ * up and the bottom one goes down. None of the ready-made layouts does that --
+ * {@code BorderLayout} would put the buttons side by side and {@code GridLayout} would give
+ * them half the width --, so {@link #createLayout} returns one written for this.
  *
- * <p>El reparto es simple y tiene una sola decision: los botones se llevan lo que pidan de ancho, y
- * el editor todo el resto. Al reves --el editor primero-- las flechitas quedarian de un pixel en un
- * spinner angosto y no se podrian apretar.
+ * <p>The sharing out is simple and has a single decision: the buttons take whatever width they
+ * ask for, and the editor all the rest. The other way round -- the editor first -- the little
+ * arrows would be one pixel wide in a narrow spinner and could not be pressed.
  *
- * <h2>El editor no lo hace el aspecto</h2>
+ * <h2>The editor is not made by the look and feel</h2>
  *
- * <p>{@link #createEditor} devuelve el que ya tiene el spinner, no uno nuevo. Es la unica manera
- * correcta: el editor depende del <em>modelo</em> --numeros, fechas, una lista-- y de eso no sabe
- * nada el aspecto. Lo que el aspecto decide son los botones.
+ * <p>{@link #createEditor} returns the one the spinner already has, not a new one. It is the
+ * only correct way: the editor depends on the <em>model</em> -- numbers, dates, a list -- and
+ * the look and feel knows nothing about that. What the look and feel decides are the buttons.
  *
- * <h2>Sin tamano preferido</h2>
+ * <h2>No preferred size</h2>
  *
- * <p>{@link #getPreferredSize} devuelve {@code null}: contesta el acomodador, que es el unico que
- * sabe cuanto miden el editor y los botones. Medido.
+ * <p>{@link #getPreferredSize} returns {@code null}: the layout answers, which is the only one
+ * that knows how much the editor and the buttons measure. Measured.
  *
- * <h2>La linea de base es la del editor</h2>
+ * <h2>The baseline is the editor's</h2>
  *
- * <p>Y se mueve con el alto, porque el editor va centrado: {@code CENTER_OFFSET}.
+ * <p>And it moves with the height, because the editor goes centred: {@code CENTER_OFFSET}.
  */
 public class BasicSpinnerUI extends SpinnerUI {
 
     protected JSpinner spinner;
     private PropertyChangeListener propertyChangeListener;
 
-    private static final ColorUIResource FONDO = new ColorUIResource(255, 255, 255);
-    private static final ColorUIResource FRENTE = new ColorUIResource(51, 51, 51);
-    private static final FontUIResource FUENTE = new FontUIResource("Dialog", Font.BOLD, 12);
+    private static final ColorUIResource BACKGROUND = new ColorUIResource(255, 255, 255);
+    private static final ColorUIResource FOREGROUND = new ColorUIResource(51, 51, 51);
+    private static final FontUIResource FONT = new FontUIResource("Dialog", Font.BOLD, 12);
 
     public BasicSpinnerUI() {
     }
 
-    /** Uno nuevo por spinner: guarda el componente y sus escuchas. */
+    /** A new one per spinner: it keeps the component and its listeners. */
     public static ComponentUI createUI(JComponent c) {
         return new BasicSpinnerUI();
     }
@@ -89,25 +89,25 @@ public class BasicSpinnerUI extends SpinnerUI {
         }
     }
 
-    /** Colores, fuente, acomodador y opacidad. */
+    /** Colours, typeface, layout and opacity. */
     protected void installDefaults() {
         spinner.setLayout(createLayout());
-        java.awt.Color fondo = spinner.getBackground();
-        if (fondo == null || fondo instanceof UIResource) {
-            spinner.setBackground(FONDO);
+        java.awt.Color background = spinner.getBackground();
+        if (background == null || background instanceof UIResource) {
+            spinner.setBackground(BACKGROUND);
         }
-        java.awt.Color frente = spinner.getForeground();
-        if (frente == null || frente instanceof UIResource) {
-            spinner.setForeground(FRENTE);
+        java.awt.Color foreground = spinner.getForeground();
+        if (foreground == null || foreground instanceof UIResource) {
+            spinner.setForeground(FOREGROUND);
         }
-        Font fuente = spinner.getFont();
-        if (fuente == null || fuente instanceof UIResource) {
-            spinner.setFont(FUENTE);
+        Font font = spinner.getFont();
+        if (font == null || font instanceof UIResource) {
+            spinner.setFont(FONT);
         }
         LookAndFeel.installProperty(spinner, "opaque", Boolean.TRUE);
     }
 
-    /** Saca el acomodador que puso este UI. */
+    /** It removes the layout this look and feel set. */
     protected void uninstallDefaults() {
         spinner.setLayout(null);
     }
@@ -122,7 +122,7 @@ public class BasicSpinnerUI extends SpinnerUI {
         propertyChangeListener = null;
     }
 
-    /** Sin atajos propios: las flechas del teclado las atan los botones. */
+    /** With no shortcuts of its own: the keyboard arrows are tied by the buttons. */
     protected void installKeyboardActions() {
     }
 
@@ -130,41 +130,41 @@ public class BasicSpinnerUI extends SpinnerUI {
         return new Handler();
     }
 
-    /** El acomodador propio; ver la nota de la clase. */
+    /** The layout of its own; see the class note. */
     protected LayoutManager createLayout() {
         return new Handler();
     }
 
-    /** El editor que ya tiene el spinner; ver la nota de la clase. */
+    /** The editor the spinner already has; see the class note. */
     protected JComponent createEditor() {
         return spinner.getEditor();
     }
 
-    /** El boton de abajo. */
+    /** The bottom button. */
     protected Component createPreviousButton() {
         Component c = new BasicArrowButton(SwingConstants.SOUTH);
         installPreviousButtonListeners(c);
         return c;
     }
 
-    /** El de arriba. */
+    /** The top one. */
     protected Component createNextButton() {
         Component c = new BasicArrowButton(SwingConstants.NORTH);
         installNextButtonListeners(c);
         return c;
     }
 
-    /** Ata el boton al valor anterior del modelo. */
+    /** It ties the button to the model's previous value. */
     protected void installPreviousButtonListeners(Component c) {
-        instalarFlecha(c, false);
+        installArrow(c, false);
     }
 
-    /** Ata el boton al valor siguiente. */
+    /** It ties the button to the next value. */
     protected void installNextButtonListeners(Component c) {
-        instalarFlecha(c, true);
+        installArrow(c, true);
     }
 
-    private void instalarFlecha(Component c, final boolean siguiente) {
+    private void installArrow(Component c, final boolean next) {
         if (!(c instanceof javax.swing.AbstractButton)) {
             return;
         }
@@ -174,21 +174,21 @@ public class BasicSpinnerUI extends SpinnerUI {
                         if (spinner == null || !spinner.isEnabled()) {
                             return;
                         }
-                        Object valor = siguiente ? spinner.getNextValue()
+                        Object value = next ? spinner.getNextValue()
                                 : spinner.getPreviousValue();
-                        if (valor != null) {
-                            spinner.setValue(valor);
+                        if (value != null) {
+                            spinner.setValue(value);
                         }
                     }
                 });
     }
 
     /**
-     * Cambia el editor por otro.
+     * It swaps the editor for another one.
      *
-     * <p>Lo llama el spinner cuando el programa le pone un editor nuevo. Saca el viejo del
-     * contenedor y pone el nuevo en su lugar; el orden importa, porque el acomodador identifica a
-     * los tres componentes por lo que ocupan y no por un nombre.
+     * <p>The spinner calls it when the program gives it a new editor. It takes the old one out of
+     * the container and puts the new one in its place; the order matters, because the layout
+     * identifies the three components by what they take up and not by a name.
      */
     protected void replaceEditor(JComponent oldEditor, JComponent newEditor) {
         spinner.remove(oldEditor);
@@ -196,25 +196,25 @@ public class BasicSpinnerUI extends SpinnerUI {
     }
 
     private void updateEnabledState() {
-        boolean prendido = spinner.isEnabled();
+        boolean on = spinner.isEnabled();
         for (int i = 0; i < spinner.getComponentCount(); i++) {
             Component c = spinner.getComponent(i);
             if (c instanceof BasicArrowButton) {
-                c.setEnabled(prendido);
+                c.setEnabled(on);
             }
         }
     }
 
-    /** {@code null}; ver la nota de la clase. */
+    /** {@code null}; see the class note. */
     public Dimension getPreferredSize(JComponent c) {
         return null;
     }
 
     /**
-     * La del editor.
+     * The editor's.
      *
-     * @throws NullPointerException si el componente es nulo
-     * @throws IllegalArgumentException si el ancho o el alto son negativos
+     * @throws NullPointerException if the component is null
+     * @throws IllegalArgumentException if the width or the height are negative
      */
     public int getBaseline(JComponent c, int width, int height) {
         super.getBaseline(c, width, height);
@@ -233,9 +233,9 @@ public class BasicSpinnerUI extends SpinnerUI {
     }
 
     /**
-     * {@code CENTER_OFFSET}: el editor va centrado.
+     * {@code CENTER_OFFSET}: the editor goes centred.
      *
-     * @throws NullPointerException si el componente es nulo
+     * @throws NullPointerException if the component is null
      */
     public Component.BaselineResizeBehavior getBaselineResizeBehavior(JComponent c) {
         super.getBaselineResizeBehavior(c);
@@ -243,10 +243,10 @@ public class BasicSpinnerUI extends SpinnerUI {
     }
 
     /**
-     * El acomodador y el escucha de propiedades, en un objeto.
+     * The layout and the property listener, in one object.
      *
-     * <p>El nombre es el del JDK aunque la clase sea privada, porque se ve por {@code getClass()}:
-     * ver la nota de {@code JTable} sobre lo mismo.
+     * <p>The name is the JDK's even though the class is private, because it shows through
+     * {@code getClass()}: see {@code JTable}'s note on the same thing.
      */
     private class Handler implements LayoutManager, PropertyChangeListener {
 
@@ -274,15 +274,15 @@ public class BasicSpinnerUI extends SpinnerUI {
             }
         }
 
-        private Dimension preferida(Component c) {
+        private Dimension preferred(Component c) {
             return (c == null) ? new Dimension(0, 0) : c.getPreferredSize();
         }
 
         public Dimension preferredLayoutSize(Container parent) {
-            Dimension nextD = preferida(nextButton);
-            Dimension previousD = preferida(previousButton);
-            Dimension editorD = preferida(editor);
-            // El editor y los botones comparten el alto: se lleva el mas alto de los dos lados.
+            Dimension nextD = preferred(nextButton);
+            Dimension previousD = preferred(previousButton);
+            Dimension editorD = preferred(editor);
+            // The editor and the buttons share the height: the taller of the two sides wins.
             editorD.height = ((editorD.height + 1) / 2) * 2;
             Dimension size = new Dimension(editorD.width, editorD.height);
             size.width += Math.max(nextD.width, previousD.width);
@@ -300,8 +300,8 @@ public class BasicSpinnerUI extends SpinnerUI {
             Insets insets = parent.getInsets();
             int availWidth = parent.getWidth() - (insets.left + insets.right);
             int availHeight = parent.getHeight() - (insets.top + insets.bottom);
-            Dimension nextD = preferida(nextButton);
-            Dimension previousD = preferida(previousButton);
+            Dimension nextD = preferred(nextButton);
+            Dimension previousD = preferred(previousButton);
             int nextWidth = Math.max(nextD.width, previousD.width);
             int editorWidth = availWidth - nextWidth;
             int editorX = insets.left;

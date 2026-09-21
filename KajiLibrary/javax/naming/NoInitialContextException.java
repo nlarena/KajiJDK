@@ -1,14 +1,16 @@
 package javax.naming;
 
 /**
- * Se lanza cuando no hay proveedor inicial que pueda atender la operacion.
-
- * <p>En este JDK es la excepcion mas probable de todo el paquete: sin ninguna implementacion de
- * `javax.naming.spi.InitialContextFactory` instalada, **todas** las operaciones de
- * `InitialContext` terminan aca. Eso no es una limitacion de KajiLibrary sino el comportamiento
- * del JDK real en las mismas condiciones; ver la cabecera de `InitialContext`.
+ * Thrown when there is no initial provider that can serve the operation.
  *
- * <p>La jerarquia entera y el estado que arrastra estan explicados en `NamingException`.
+ * <p>In this library it is the most likely exception of the whole package: **every** operation of
+ * `InitialContext` ends here. In the JDK that happens only when no
+ * `javax.naming.spi.InitialContextFactory` is configured; here it happens even when one is, because
+ * `InitialContext` does not call `javax.naming.spi.NamingManager.getInitialContext`. (An earlier
+ * note said this was the JDK's own behaviour under the same conditions; that only holds with no
+ * factory configured.) See the `InitialContext` class header.
+ *
+ * <p>The whole hierarchy and the state it carries are explained in `NamingException`.
  */
 public class NoInitialContextException extends NamingException {
 

@@ -5,139 +5,142 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * La unica via legitima para conseguir un {@link MBeanServer}.
+ * The only legitimate way to get an {@link MBeanServer}.
  *
- * <p>Toda la clase gira alrededor de una distincion de dos palabras que es facil de pasar por alto:
+ * <p>The whole class revolves around a two-word distinction that is easy to overlook:
  *
  * <ul>
- *   <li>{@code createMBeanServer} <b>guarda</b> el agente en una tabla estatica, y por lo tanto
- *       cualquiera en la misma maquina virtual lo encuentra con {@link #findMBeanServer}. Es lo que
- *       hace que un agente de monitoreo cargado despues pueda engancharse con la aplicacion;
- *   <li>{@code newMBeanServer} <b>no</b> lo guarda. Es un agente privado del que lo pidio.
+ *   <li>{@code createMBeanServer} <b>keeps</b> the agent in a static table, and therefore anyone in
+ *       the same virtual machine finds it with {@link #findMBeanServer}. It is what lets a
+ *       monitoring agent loaded later hook onto the application;
+ *   <li>{@code newMBeanServer} does <b>not</b> keep it. It is a private agent of whoever asked for
+ *       it.
  * </ul>
  *
- * <p>Y de esa distincion sale el peligro que explica {@link #releaseMBeanServer}: como la tabla es
- * estatica y guarda referencias fuertes, un agente creado con `createMBeanServer` <b>no se junta
- * nunca</b> aunque nadie lo use. Hay que soltarlo a mano. `newMBeanServer` no tiene ese problema
- * justamente porque no lo guarda nadie.
+ * <p>And from that distinction comes the danger {@link #releaseMBeanServer} explains: since the
+ * table is static and holds strong references, an agent created with {@code createMBeanServer} is
+ * <b>never collected</b> even if nobody uses it. It has to be released by hand.
+ * {@code newMBeanServer} does not have that problem precisely because nobody keeps it.
  *
- * <p>{@link #getClassLoaderRepository} esta: `javax.management.loading` ya existe en esta
- * biblioteca, que era lo unico que faltaba.
+ * <p>{@link #getClassLoaderRepository} is here: {@code javax.management.loading} exists in this
+ * library now, which was the only thing missing.
  */
 public class MBeanServerFactory {
 
-    /** No se instancia: es una fabrica estatica. */
+    /** Not instantiated: it is a static factory. */
     private MBeanServerFactory() {
     }
 
     /**
-     * Los agentes creados con `createMBeanServer`, por `MBeanServerId`.
+     * The agents created with {@code createMBeanServer}, by {@code MBeanServerId}.
      *
-     * <p>Con el orden de creacion conservado porque {@link #findMBeanServer} con `null` los
-     * devuelve todos, y un orden estable es una respuesta reproducible.
+     * <p>With the creation order kept because {@link #findMBeanServer} with {@code null} returns
+     * them all, and a stable order is a reproducible answer.
      */
-    private static final Map<String, MBeanServer> creados =
+    private static final Map<String, MBeanServer> created =
             new LinkedHashMap<String, MBeanServer>();
 
-    /** El constructor de agentes, resuelto una sola vez. */
+    /** The agent builder, resolved only once. */
     private static MBeanServerBuilder constructor = null;
 
     /**
-     * Suelta la referencia que {@code createMBeanServer} dejo.
+     * Releases the reference {@code createMBeanServer} left.
      *
-     * @throws IllegalArgumentException si el agente no estaba en la tabla --nunca se creo con
-     *         `createMBeanServer`, o ya se solto--. Fallar es correcto: soltar dos veces
-     *         normalmente significa que alguien cree tener un agente que ya no existe
+     * @throws IllegalArgumentException if the agent was not in the table --it was never created
+     *         with {@code createMBeanServer}, or it was already released. Failing is right:
+     *         releasing twice usually means someone believes they have an agent that no longer
+     *         exists
      */
     public static void releaseMBeanServer(MBeanServer mbeanServer) {
         synchronized (MBeanServerFactory.class) {
-            for (Map.Entry<String, MBeanServer> e : creados.entrySet()) {
+            for (Map.Entry<String, MBeanServer> e : created.entrySet()) {
                 if (e.getValue() == mbeanServer) {
-                    creados.remove(e.getKey());
+                    created.remove(e.getKey());
                     return;
                 }
             }
         }
-        throw new IllegalArgumentException("Ese MBeanServer no fue creado con createMBeanServer");
+        throw new IllegalArgumentException(
+            "That MBeanServer was not created with createMBeanServer");
     }
 
-    /** Encontrable, con el dominio por omision. */
+    /** Findable, with the default domain. */
     public static MBeanServer createMBeanServer() {
         return createMBeanServer(null);
     }
 
-    /** Encontrable, con el dominio dado. */
+    /** Findable, with the given domain. */
     public static MBeanServer createMBeanServer(String domain) {
-        MBeanServer s = armar(domain);
+        MBeanServer s = build(domain);
         synchronized (MBeanServerFactory.class) {
-            creados.put(idDe(s), s);
+            created.put(idOf(s), s);
         }
         return s;
     }
 
-    /** Privado: no queda registrado y se junta cuando nadie lo referencia. */
+    /** Private: it is not registered and is collected when nobody references it. */
     public static MBeanServer newMBeanServer() {
         return newMBeanServer(null);
     }
 
-    /** Privado, con el dominio dado. */
+    /** Private, with the given domain. */
     public static MBeanServer newMBeanServer(String domain) {
-        return armar(domain);
+        return build(domain);
     }
 
-    private static MBeanServer armar(String domain) {
+    private static MBeanServer build(String domain) {
         MBeanServerBuilder b = builder();
         MBeanServerDelegate d = b.newMBeanServerDelegate();
-        // `outer` va en null: no hay envoltorio, el agente se presenta a si mismo.
+        // `outer` goes as null: there is no wrapper, the agent presents itself.
         return b.newMBeanServer(domain, null, d);
     }
 
     /**
-     * El constructor de agentes, del sistema o el que diga
-     * `javax.management.builder.initial`.
+     * The agent builder, the system's or the one {@code javax.management.builder.initial} names.
      */
     private static synchronized MBeanServerBuilder builder() {
         if (constructor != null) {
             return constructor;
         }
-        String clase = System.getProperty("javax.management.builder.initial");
-        if (clase == null || clase.length() == 0) {
+        String cls = System.getProperty("javax.management.builder.initial");
+        if (cls == null || cls.length() == 0) {
             constructor = new MBeanServerBuilder();
         } else {
             try {
                 constructor = (MBeanServerBuilder)
-                        Class.forName(clase).getDeclaredConstructor().newInstance();
+                        Class.forName(cls).getDeclaredConstructor().newInstance();
             } catch (Exception e) {
-                // La especificacion pide fallar: caer en silencio al constructor del sistema
-                // dejaria al que configuro la propiedad creyendo que su agente esta corriendo.
+                // The specification asks to fail: silently falling back to the system builder would
+                // leave whoever configured the property believing their agent is running.
                 throw new JMRuntimeException(
-                    "No se pudo instanciar el MBeanServerBuilder " + clase + ": " + e);
+                    "Could not instantiate the MBeanServerBuilder " + cls + ": " + e);
             }
         }
         return constructor;
     }
 
-    private static String idDe(MBeanServer s) {
+    private static String idOf(MBeanServer s) {
         try {
             return (String) s.getAttribute(MBeanServerDelegate.DELEGATE_NAME, "MBeanServerId");
         } catch (Exception e) {
-            // Un agente sin delegado no cumple la especificacion, pero la tabla necesita una clave
-            // igual; la identidad del objeto alcanza y no colisiona.
-            return "sin-id-" + System.identityHashCode(s);
+            // An agent without a delegate does not follow the specification, but the table needs a
+            // key anyway; the object's identity is enough and does not collide.
+            return "no-id-" + System.identityHashCode(s);
         }
     }
 
     /**
-     * Los agentes encontrables.
+     * The findable agents.
      *
-     * @param agentId `null` los devuelve todos; si no, el que tenga ese `MBeanServerId`
+     * @param agentId {@code null} returns them all; otherwise, the one with that {@code
+     *     MBeanServerId}
      */
     public static synchronized ArrayList<MBeanServer> findMBeanServer(String agentId) {
         ArrayList<MBeanServer> r = new ArrayList<MBeanServer>();
         if (agentId == null) {
-            r.addAll(creados.values());
+            r.addAll(created.values());
         } else {
-            MBeanServer s = creados.get(agentId);
+            MBeanServer s = created.get(agentId);
             if (s != null) {
                 r.add(s);
             }
@@ -146,15 +149,19 @@ public class MBeanServerFactory {
     }
 
     /**
-     * El repositorio de cargadores de ese agente.
+     * That agent's class loader repository.
      *
-     * <p>Es la lista de cargadores que el agente consulta para cargar una clase cuyo nombre le llego
-     * de afuera. Se arma en cada consulta y no se congela, porque un cargador se registra como
-     * cualquier otro MBean y en cualquier momento.
+     * <p>It is the list of loaders the agent consults to load a class whose name reached it from
+     * outside. It is built on every query and not frozen, because a loader registers like any other
+     * MBean and at any time.
      *
-     * @throws IllegalArgumentException si {@code server} es null, o si no es un agente de esta
-     *     fabrica -- un agente ajeno tiene sus propios cargadores y esta clase no los conoce;
-     *     devolver los de otro seria peor que fallar
+     * <p>Only agents of this factory are accepted. The JDK accepts any {@link MBeanServer} and
+     * simply returns {@code server.getClassLoaderRepository()}; an earlier note justified the
+     * restriction by saying another agent's loaders are unknown here, but the interface itself can
+     * be asked for them.
+     *
+     * @throws IllegalArgumentException if {@code server} is null, or if it is not an agent of this
+     *     factory
      */
     public static javax.management.loading.ClassLoaderRepository getClassLoaderRepository(
             MBeanServer server) {

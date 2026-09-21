@@ -6,15 +6,16 @@ import java.awt.event.MouseListener;
 import java.awt.event.MouseMotionListener;
 
 /**
- * La base de los reconocedores de gesto que escuchan el **ratón**.
+ * The base of the gesture recognisers that listen to the **mouse**.
  *
- * <p>Es donde se conecta el reconocedor con el componente: implementa las dos interfaces de ratón, y
- * {@link #registerListeners} lo enchufa. Lo que **no** hace es decidir cuándo el gesto está
- * reconocido — los siete métodos de ratón están vacíos a propósito.
+ * <p>It is where the recogniser is connected to the component: it implements both mouse interfaces,
+ * and {@link #registerListeners} plugs it in. What it does **not** do is decide when the gesture is
+ * recognised — the seven mouse methods are empty on purpose.
  *
- * <p>Esa decisión depende de la plataforma —cuántos píxeles, qué botón, con qué teclas— y por eso
- * la clase es abstracta aunque no tenga ningún método abstracto propio: hereda los dos de
- * {@link DragGestureRecognizer} y deja el criterio para el reconocedor concreto de cada sistema.
+ * <p>That decision depends on the platform —how many pixels, which button, with which keys— and
+ * that is why the class is abstract although it has no abstract method of its own: it inherits the
+ * two of {@link DragGestureRecognizer} and leaves the criterion to each system's concrete
+ * recogniser.
  */
 public abstract class MouseDragGestureRecognizer extends DragGestureRecognizer
         implements MouseListener, MouseMotionListener {
@@ -22,9 +23,9 @@ public abstract class MouseDragGestureRecognizer extends DragGestureRecognizer
     private static final long serialVersionUID = 6220099344182281120L;
 
     /**
-     * Con todo dado.
+     * With everything given.
      *
-     * @throws IllegalArgumentException si el origen de arrastre es `null`
+     * @throws IllegalArgumentException if the drag source is `null`
      */
     protected MouseDragGestureRecognizer(DragSource ds, Component c, int act,
             DragGestureListener dgl) {
@@ -32,69 +33,69 @@ public abstract class MouseDragGestureRecognizer extends DragGestureRecognizer
     }
 
     /**
-     * Sin oyente.
+     * With no listener.
      *
-     * @throws IllegalArgumentException si el origen de arrastre es `null`
+     * @throws IllegalArgumentException if the drag source is `null`
      */
     protected MouseDragGestureRecognizer(DragSource ds, Component c, int act) {
         this(ds, c, act, null);
     }
 
     /**
-     * Aceptando cualquier acción.
+     * Accepting any action.
      *
-     * @throws IllegalArgumentException si el origen de arrastre es `null`
+     * @throws IllegalArgumentException if the drag source is `null`
      */
     protected MouseDragGestureRecognizer(DragSource ds, Component c) {
         this(ds, c, DnDConstants.ACTION_NONE);
     }
 
     /**
-     * Sin componente todavía.
+     * With no component yet.
      *
-     * @throws IllegalArgumentException si el origen de arrastre es `null`
+     * @throws IllegalArgumentException if the drag source is `null`
      */
     protected MouseDragGestureRecognizer(DragSource ds) {
         this(ds, null);
     }
 
-    /** Se engancha a los eventos de ratón del componente. */
+    /** It hooks itself to the mouse events of the component. */
     protected void registerListeners() {
         this.component.addMouseListener(this);
         this.component.addMouseMotionListener(this);
     }
 
-    /** Se desengancha. */
+    /** It unhooks itself. */
     protected void unregisterListeners() {
         this.component.removeMouseListener(this);
         this.component.removeMouseMotionListener(this);
     }
 
-    /** No hace nada: el criterio lo pone el reconocedor concreto. */
+    /** It does nothing: the criterion is put by the concrete recogniser. */
     public void mouseClicked(MouseEvent e) {
     }
 
-    /** No hace nada. */
+    /** It does nothing. */
     public void mousePressed(MouseEvent e) {
     }
 
-    /** No hace nada. */
+    /** It does nothing. */
     public void mouseReleased(MouseEvent e) {
     }
 
-    /** No hace nada. */
+    /** It does nothing. */
     public void mouseEntered(MouseEvent e) {
     }
 
-    /** No hace nada. */
+    /** It does nothing. */
     public void mouseExited(MouseEvent e) {
     }
 
-    /** No hace nada. */
+    /** It does nothing. */
     public void mouseDragged(MouseEvent e) {
     }
 
-    /** No hace nada. */
+    /** It does nothing. */
     public void mouseMoved(MouseEvent e) {
     }
 }

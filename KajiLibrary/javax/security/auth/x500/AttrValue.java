@@ -1,32 +1,37 @@
 package javax.security.auth.x500;
 
 /**
- * KajiLibrary's javax.security.auth.x500.Valor -- el valor de un `type=value`, leido y escrito.
+ * KajiLibrary's javax.security.auth.x500.AttrValue -- the value of a `type=value`, read and
+ * written.
  *
- * <p>Es la parte con mas reglas de todo el RFC 2253, y la que decide si dos implementaciones se
- * entienden. Se separo en su propia clase porque leer y escribir tienen que ser **inversas exactas**:
- * si no lo son, un nombre pasado por `getName()` y vuelto a parsear no da el mismo nombre, y eso
- * rompe cualquier cosa que guarde DN como texto.
+ * <p>It is the part with the most rules in all of RFC 2253, and the one that decides whether two
+ * implementations understand each other. It was split into its own class because reading and
+ * writing have to be **exact inverses**: if they are not, a name passed through `getName()` and
+ * parsed again does not give the same name, and that breaks anything that stores DNs as text.
+ *
+ * <p>(The note called the class {@code Valor}, an earlier name.)
  */
 final class AttrValue {
 
     private AttrValue() {
     }
 
-    // Los que hay que escapar siempre al escribir (RFC 4514 §2.4). La coma y el `+` separan; el `"` y
-    // la `\` son la sintaxis misma; `<`, `>` y `;` vienen del RFC 2253 viejo; el `#` solo molesta al
-    // principio, porque ahi significa "lo que sigue es hexadecimal".
-    private static final String ESPECIALES = ",+\"\\<>;";
+    // The ones that always have to be escaped when writing (RFC 4514 §2.4). The comma and the `+`
+    // separate; the `"` and the `\` are the syntax itself; `<`, `>` and `;` come from the old RFC
+    // 2253; the `#` only bothers at the start, because there it means "what follows is
+    // hexadecimal".
+    private static final String SPECIALS = ",+\"\\<>;";
 
     /**
-     * El valor **desescapado** que representa ese texto.
+     * The **unescaped** value that text represents.
      *
-     * @throws IllegalArgumentException si el escape esta mal formado
+     * @throws IllegalArgumentException if the escape is malformed
      */
     static String read(String rawBytes) {
         String s = rawBytes;
-        // Los espacios de los bordes no cuentan salvo que esten escapados, y por eso se recortan
-        // **antes** de desescapar: despues ya no se distingue un espacio escrito de uno escapado.
+        // The spaces at the edges do not count unless they are escaped, and that is why they are
+        // trimmed **before** unescaping: afterwards a written space can no longer be told from an
+        // escaped one.
         int from = 0;
         while (from < s.length() && s.charAt(from) == ' ') {
             from = from + 1;
@@ -48,21 +53,21 @@ final class AttrValue {
         return unescape(s);
     }
 
-    // Si el caracter en `i` esta precedido por un numero **impar** de barras: dos barras son una
-    // barra literal, no un escape.
+    // Whether the character at `i` is preceded by an **odd** number of backslashes: two backslashes
+    // are a literal backslash, not an escape.
     private static boolean isEscaped(String s, int i) {
-        int barras = 0;
+        int backslashes = 0;
         int k = i - 1;
         while (k >= 0 && s.charAt(k) == '\\') {
-            barras = barras + 1;
+            backslashes = backslashes + 1;
             k = k - 1;
         }
-        return barras % 2 == 1;
+        return backslashes % 2 == 1;
     }
 
     private static String unquote(String s) {
         if (s.length() < 2 || s.charAt(s.length() - 1) != '"') {
-            throw new IllegalArgumentException("faltan las comillas de cierre: " + s);
+            throw new IllegalArgumentException("missing closing quote: " + s);
         }
         return unescape(s.substring(1, s.length() - 1));
     }
@@ -78,11 +83,11 @@ final class AttrValue {
                 continue;
             }
             if (i + 1 >= s.length()) {
-                throw new IllegalArgumentException("el valor termina en una barra: " + s);
+                throw new IllegalArgumentException("value ends in a backslash: " + s);
             }
             char sig = s.charAt(i + 1);
-            // `\XX` con dos digitos hexadecimales es un **byte**, no un caracter escapado. La
-            // diferencia importa: `\41` es una `A` y no un `4` seguido de un `1`.
+            // `\XX` with two hexadecimal digits is a **byte**, not an escaped character. The
+            // difference matters: `\41` is an `A` and not a `4` followed by a `1`.
             if (isHex(sig) && i + 2 < s.length() && isHex(s.charAt(i + 2))) {
                 out.append((char) ((hexValue(sig) << 4) | hexValue(s.charAt(i + 2))));
                 i = i + 3;
@@ -96,7 +101,7 @@ final class AttrValue {
 
     private static String fromHex(String hex) {
         if (hex.length() == 0 || hex.length() % 2 != 0) {
-            throw new IllegalArgumentException("hexadecimal de largo impar: #" + hex);
+            throw new IllegalArgumentException("hexadecimal of odd length: #" + hex);
         }
         byte[] bytes = new byte[hex.length() / 2];
         int i = 0;
@@ -104,13 +109,13 @@ final class AttrValue {
             char a = hex.charAt(2 * i);
             char b = hex.charAt(2 * i + 1);
             if (!isHex(a) || !isHex(b)) {
-                throw new IllegalArgumentException("no es hexadecimal: #" + hex);
+                throw new IllegalArgumentException("not hexadecimal: #" + hex);
             }
             bytes[i] = (byte) ((hexValue(a) << 4) | hexValue(b));
             i = i + 1;
         }
-        // Los bytes son el DER del valor. Se lee lo que se pueda leer como texto; si no, se guarda la
-        // forma hexadecimal tal cual, que es lo que el JDK muestra para un tipo desconocido.
+        // The bytes are the value's DER. Whatever can be read as text is read; otherwise the
+        // hexadecimal form is kept as is, which is what the JDK shows for an unknown type.
         try {
             return Der.readAttributeValue(bytes);
         } catch (java.io.IOException e) {
@@ -133,16 +138,18 @@ final class AttrValue {
     }
 
     /**
-     * El texto **escapado** de ese valor, listo para ir en un DN.
+     * The **escaped** text of that value, ready to go in a DN.
      *
-     * <p>Inversa exacta de {@link #read}: lo que sale de aca, parseado, vuelve a dar el mismo valor.
+     * <p>The exact inverse of {@link #read}: what comes out of here, parsed, gives the same value
+     * again.
      */
     static String write(String value) {
         if (value.length() == 0) {
             return "";
         }
-        // Un valor que ya viene en forma hexadecimal --porque su tipo no se pudo leer como texto-- se
-        // pasa tal cual: escaparlo lo convertiria en el texto `#30...` en vez del valor.
+        // A value that already comes in hexadecimal form --because its type could not be read as
+        // text-- is passed as is: escaping it would turn it into the text `#30...` instead of the
+        // value.
         if (value.charAt(0) == '#' && looksHex(value)) {
             return value;
         }
@@ -150,11 +157,11 @@ final class AttrValue {
         int i = 0;
         while (i < value.length()) {
             char c = value.charAt(i);
-            boolean borde = i == 0 || i == value.length() - 1;
-            if (ESPECIALES.indexOf(c) >= 0) {
+            boolean atEdge = i == 0 || i == value.length() - 1;
+            if (SPECIALS.indexOf(c) >= 0) {
                 out.append('\\').append(c);
-            } else if (c == ' ' && borde) {
-                // Solo los espacios de los bordes: adentro no hace falta y ensuciaria el nombre.
+            } else if (c == ' ' && atEdge) {
+                // Only the spaces at the edges: inside it is not needed and would clutter the name.
                 out.append("\\ ");
             } else if (c == '#' && i == 0) {
                 out.append("\\#");
@@ -187,12 +194,18 @@ final class AttrValue {
     }
 
     /**
-     * El valor en forma **canonica**: minusculas, sin espacios en los bordes y con los internos
-     * colapsados a uno.
+     * The value in **canonical** form: lower case, no spaces at the edges and the inner ones
+     * collapsed to one.
      *
-     * <p>Es la unica transformacion del formato canonico, y es la que hace que dos nombres escritos
-     * distinto den la misma cadena. Colapsar los espacios internos --no solo recortar los bordes-- es
-     * la parte que se olvida: `CN=Juan  Perez` y `CN=Juan Perez` son el mismo nombre.
+     * <p>It is what makes two names written differently give the same string. Collapsing the inner
+     * spaces --not only trimming the edges-- is the part that gets forgotten: `CN=Juan  Perez` and
+     * `CN=Juan Perez` are the same name.
+     *
+     * <p>The note said this is the only transformation of the canonical format. It is not in the
+     * JDK, which also normalizes the value to NFKD (an A with a ring above gives two characters
+     * after the `=`) and sorts the pairs of a multi-valued RDN ({@code OU=b+CN=a} gives
+     * {@code cn=a+ou=b}). Neither is done here, so those names give a different canonical string
+     * than in the JDK.
      */
     static String canonical(String value) {
         StringBuilder out = new StringBuilder();

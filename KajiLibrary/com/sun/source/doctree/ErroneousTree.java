@@ -4,11 +4,11 @@ import javax.tools.Diagnostic;
 import javax.tools.JavaFileObject;
 
 /**
- * Texto que no se pudo parsear, con el diagnostico que explica por que.
+ * Text that could not be parsed, with the diagnostic that explains why.
  *
- * <p>Extiende {@link TextTree} a proposito: lo que no se entendio sigue estando disponible como
- * texto crudo, asi que una herramienta puede mostrarlo aunque no pueda interpretarlo. Un arbol que
- * simplemente omitiera lo roto perderia informacion que el usuario escribio.
+ * <p>It extends {@link TextTree} on purpose: what was not understood goes on being available as
+ * raw text, so a tool may show it even though it cannot interpret it. A tree that simply left out
+ * what is broken would lose information the user wrote.
  */
 public interface ErroneousTree extends TextTree {
 

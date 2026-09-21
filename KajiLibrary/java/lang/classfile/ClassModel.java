@@ -5,38 +5,38 @@ import java.lang.classfile.constantpool.ConstantPool;
 import java.util.List;
 import java.util.Optional;
 
-// Un archivo `.class` ya leído. Es a la vez una estructura con accesores directos —versión,
-// banderas, nombre, campos, métodos— y un {@link CompoundElement} que se recorre pieza por pieza,
-// que es la forma que usa una transformación.
+// A `.class` file already read. It is at once a structure with direct accessors --version, flags,
+// name, fields, methods-- and a {@link CompoundElement} walked piece by piece, which is the shape a
+// transformation uses.
 public interface ClassModel extends CompoundElement<ClassElement>, AttributedElement {
 
-    /** El pool de constantes de la clase. */
+    /** The class's constant pool. */
     ConstantPool constantPool();
 
-    /** El `access_flags` de la clase. */
+    /** The class's `access_flags`. */
     AccessFlags flags();
 
-    /** La entrada `this_class`. */
+    /** The `this_class` entry. */
     ClassEntry thisClass();
 
-    /** El `major_version`. */
+    /** The `major_version`. */
     int majorVersion();
 
-    /** El `minor_version`. */
+    /** The `minor_version`. */
     int minorVersion();
 
-    /** Los campos, en el orden del archivo. */
+    /** The fields, in file order. */
     List<FieldModel> fields();
 
-    /** Los métodos, en el orden del archivo. */
+    /** The methods, in file order. */
     List<MethodModel> methods();
 
-    /** La superclase; vacío en `java.lang.Object` y en un `module-info`. */
+    /** The superclass; empty on `java.lang.Object` and on a `module-info`. */
     Optional<ClassEntry> superclass();
 
-    /** Las interfaces directas, en el orden del archivo. */
+    /** The direct interfaces, in file order. */
     List<ClassEntry> interfaces();
 
-    /** Si esto es un `module-info.class`: `ACC_MODULE` puesto y nombre `module-info`. */
+    /** Whether this is a `module-info.class`: `ACC_MODULE` set and the name `module-info`. */
     boolean isModuleInfo();
 }

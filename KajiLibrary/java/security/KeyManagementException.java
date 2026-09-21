@@ -1,10 +1,10 @@
 package java.security;
 
-// Fallo en el manejo de claves visto desde afuera de una operacion concreta: un almacen que no se
-// pudo abrir, una clave que no se pudo publicar o revocar.
+// A failure in the handling of keys seen from outside a concrete operation: a store that could not
+// be opened, a key that could not be published or revoked.
 //
-// Cuelga de `KeyException` y no de `GeneralSecurityException` porque el sujeto sigue siendo la
-// clave; lo que cambia es que el problema es de administracion y no de uso.
+// It hangs from `KeyException` and not from `GeneralSecurityException` because the subject is still
+// the key; what changes is that the problem is one of administration and not of use.
 public class KeyManagementException extends KeyException {
 
     public KeyManagementException() {

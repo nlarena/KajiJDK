@@ -1,12 +1,12 @@
 package java.security;
 
-// Un parametro invalido pasado a un metodo del paquete.
+// An invalid parameter passed to a method of the package.
 //
-// Es de las pocas del paquete que **no** hereda de `GeneralSecurityException`: hereda de
-// `IllegalArgumentException`, y eso no es un accidente historico sino la distincion util. Un
-// argumento invalido es un error de quien llama y se arregla cambiando el codigo, asi que no tiene
-// por que ser chequeado. Un algoritmo ausente o una firma que no se puede procesar son estados del
-// mundo, y esos si.
+// It is one of the few of the package that does **not** inherit from `GeneralSecurityException`: it
+// inherits from `IllegalArgumentException`, and that is not a historical accident but the useful
+// distinction. An invalid argument is an error of the caller and is fixed by changing the code, so
+// there is no reason for it to be checked. An absent algorithm or a signature that cannot be
+// processed are states of the world, and those are.
 public class InvalidParameterException extends IllegalArgumentException {
 
     public InvalidParameterException() {

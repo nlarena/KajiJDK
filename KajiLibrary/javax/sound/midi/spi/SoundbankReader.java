@@ -8,45 +8,46 @@ import javax.sound.midi.InvalidMidiDataException;
 import javax.sound.midi.Soundbank;
 
 /**
- * KajiLibrary's javax.sound.midi.spi.SoundbankReader -- lee bancos de sonidos.
+ * KajiLibrary's javax.sound.midi.spi.SoundbankReader -- reads sound banks.
  *
- * <p>SoundFont, DLS, o el formato propio de un fabricante. Se registra como servicio y
- * {@code MidiSystem} lo encuentra solo.
+ * <p>SoundFont, DLS, or a manufacturer's own format. It is registered as a service and
+ * {@code MidiSystem} finds it by itself.
  *
- * <p>A diferencia de {@link MidiFileReader}, aca "no lo reconozco" se avisa devolviendo <b>null</b>, no
- * lanzando. {@code MidiSystem} sigue con el proximo lector y solo lanza si ninguno pudo.
+ * <p>Unlike {@link MidiFileReader}, here "I do not recognize it" is signalled by returning
+ * <b>null</b>, not by throwing. {@code MidiSystem} goes on with the next reader and only throws if
+ * none could.
  *
- * <p>Es una inconsistencia del JDK entre dos interfaces hermanas, y hay que respetarla: un lector que
- * lance en lugar de devolver null corta la busqueda.
+ * <p>It is an inconsistency of the JDK between two sibling interfaces, and it has to be respected:
+ * a reader that throws instead of returning null cuts the search short.
  */
 public abstract class SoundbankReader {
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected SoundbankReader() {
     }
 
     /**
-     * El banco de esa direccion, o null si no lo reconoce. Ver la nota de la clase.
+     * The bank at that URL, or null if it does not recognize it. See the class note.
      *
-     * @throws InvalidMidiDataException si lo reconoce y esta roto
-     * @throws IOException si no se pudo leer
+     * @throws InvalidMidiDataException if it recognizes it and it is broken
+     * @throws IOException if it could not be read
      */
     public abstract Soundbank getSoundbank(URL url) throws InvalidMidiDataException, IOException;
 
     /**
-     * Idem, desde un flujo.
+     * Likewise, from a stream.
      *
-     * @throws InvalidMidiDataException si lo reconoce y esta roto
-     * @throws IOException si no se pudo leer
+     * @throws InvalidMidiDataException if it recognizes it and it is broken
+     * @throws IOException if it could not be read
      */
     public abstract Soundbank getSoundbank(InputStream stream)
         throws InvalidMidiDataException, IOException;
 
     /**
-     * Idem, desde un archivo.
+     * Likewise, from a file.
      *
-     * @throws InvalidMidiDataException si lo reconoce y esta roto
-     * @throws IOException si no se pudo leer
+     * @throws InvalidMidiDataException if it recognizes it and it is broken
+     * @throws IOException if it could not be read
      */
     public abstract Soundbank getSoundbank(File file) throws InvalidMidiDataException, IOException;
 }

@@ -4,20 +4,20 @@ import java.awt.datatransfer.DataFlavor;
 import java.io.InputStream;
 
 /**
- * Lo implementa lo que además de verse se puede **leer como un flujo de bytes**.
+ * Implemented by what, besides being seen, can be **read as a stream of bytes**.
  *
- * <p>Sirve para que una ayuda técnica se lleve el contenido en su formato nativo —una imagen, un
- * documento— en vez de tener que reconstruirlo a partir de la descripción accesible.
+ * <p>It serves so that an assistive technology can take the content in its native format --an
+ * image, a document-- instead of having to rebuild it from the accessible description.
  */
 public interface AccessibleStreamable {
 
-    /** En qué formatos se puede entregar el contenido. */
+    /** In which formats the content can be delivered. */
     DataFlavor[] getMimeTypes();
 
     /**
-     * El contenido en ese formato.
+     * The content in that format.
      *
-     * @return el flujo, o `null` si el formato no se admite
+     * @return the stream, or `null` if the format is not supported
      */
     InputStream getStream(DataFlavor flavor);
 }

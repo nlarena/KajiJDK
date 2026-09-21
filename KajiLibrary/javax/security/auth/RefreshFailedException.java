@@ -1,12 +1,12 @@
 package javax.security.auth;
 
 /**
- * KajiLibrary's javax.security.auth.RefreshFailedException -- no se pudo renovar una credencial.
+ * KajiLibrary's javax.security.auth.RefreshFailedException -- a credential could not be renewed.
  *
- * <p>Es la companera de {@link DestroyFailedException} en el otro extremo de la vida de una
- * credencial: una no se pudo borrar, la otra no se pudo renovar. La renovacion que importa es la de
- * los tickets con vencimiento -- un ticket de Kerberos, por caso -- y fallar ahi no es lo mismo que
- * fallar al usarlo: la credencial vieja puede seguir sirviendo un rato mas.
+ * <p>It is the companion of {@link DestroyFailedException} at the other end of a credential's life:
+ * one could not be erased, the other could not be renewed. The renewal that matters is that of
+ * tickets with an expiry -- a Kerberos ticket, say -- and failing there is not the same as failing
+ * to use it: the old credential may keep serving a while longer.
  */
 public class RefreshFailedException extends Exception {
 

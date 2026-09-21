@@ -6,19 +6,20 @@ import java.security.cert.Certificate;
 import java.util.zip.ZipEntry;
 
 /**
- * Una entrada de un JAR: una entrada de ZIP, mas lo que el manifiesto y la firma dicen de ella.
+ * A JAR's entry: a ZIP entry, plus what the manifest and the signature say about it.
  *
- * <h2>Lo que queda afuera, y por que</h2>
+ * <h2>What is left out, and why</h2>
  *
- * <p>Toda la superficie esta, pero dos metodos devuelven siempre `null` y hay que decirlo aca y no
- * en una nota al pie: <b>{@link #getCertificates()} y {@link #getCodeSigners()} nunca devuelven nada</b>,
- * porque este paquete no verifica firmas. El motivo esta entero en la cabecera de {@link JarFile};
- * lo que importa desde aca es que la consecuencia es **cerrada**, no abierta: un JAR firmado se ve
- * como un JAR sin firmar, asi que quien decide confianza mirando la firma rechaza en vez de aceptar.
+ * <p>The whole surface is here, but two methods always return `null` and that has to be said here
+ * and not in a footnote: <b>{@link #getCertificates()} and {@link #getCodeSigners()} never return
+ * anything</b>, because this package does not verify signatures. The reason is in full in
+ * {@link JarFile}'s header; what matters from here is that the consequence is **closed**, not open:
+ * a signed JAR looks like an unsigned one, so whoever decides trust by looking at the signature
+ * rejects instead of accepting.
  *
- * <p>{@link #getRealName()} devuelve el mismo nombre que `getName()` salvo para las entradas que
- * `JarFile` resuelve por version --las de `META-INF/versions/`--, que son las unicas en las que los
- * dos nombres difieren.
+ * <p>{@link #getRealName()} returns the same name as `getName()` except for the entries `JarFile`
+ * resolves by version --the `META-INF/versions/` ones-- which are the only ones in which the two
+ * names differ.
  */
 public class JarEntry extends ZipEntry {
 
@@ -26,50 +27,50 @@ public class JarEntry extends ZipEntry {
     Certificate[] certs;
     CodeSigner[] signers;
 
-    /** Una entrada nueva con ese nombre. */
+    /** A fresh entry with that name. */
     public JarEntry(String name) {
         super(name);
     }
 
-    /** Una entrada de JAR con los datos de esa entrada de ZIP. */
+    /** A JAR entry with that ZIP entry's data. */
     public JarEntry(ZipEntry ze) {
         super(ze);
     }
 
-    /** Una copia. */
+    /** A copy. */
     public JarEntry(JarEntry je) {
         super(je);
         this.attr = je.attr;
-        this.certs = copiar(je.certs);
-        this.signers = copiarFirmantes(je.signers);
+        this.certs = copyOf(je.certs);
+        this.signers = copySigners(je.signers);
     }
 
     /**
-     * Los atributos que el manifiesto le asigna a esta entrada, o `null` si no tiene seccion propia.
+     * The attributes the manifest assigns to this entry, or `null` if it has no section of its own.
      *
-     * <p>Una entrada suelta --construida con `new JarEntry(nombre)`-- no conoce ningun manifiesto y
-     * devuelve `null`. Las que salen de un {@link JarFile} o de un {@link JarInputStream} si.
+     * <p>A loose entry --built with `new JarEntry(name)`-- knows no manifest and returns `null`. The
+     * ones that come out of a {@link JarFile} or a {@link JarInputStream} do.
      */
     public Attributes getAttributes() throws IOException {
         return this.attr;
     }
 
-    /** Siempre `null`: no se verifican firmas. Ver la cabecera de la clase. */
+    /** Always `null`: signatures are not verified. See the class's header. */
     public Certificate[] getCertificates() {
-        return copiar(this.certs);
+        return copyOf(this.certs);
     }
 
-    /** Siempre `null`: no se verifican firmas. Ver la cabecera de la clase. */
+    /** Always `null`: signatures are not verified. See the class's header. */
     public CodeSigner[] getCodeSigners() {
-        return copiarFirmantes(this.signers);
+        return copySigners(this.signers);
     }
 
-    /** El nombre real de la entrada dentro del archivo. */
+    /** The entry's real name inside the file. */
     public String getRealName() {
         return getName();
     }
 
-    private static Certificate[] copiar(Certificate[] a) {
+    private static Certificate[] copyOf(Certificate[] a) {
         if (a == null) {
             return null;
         }
@@ -78,7 +79,7 @@ public class JarEntry extends ZipEntry {
         return c;
     }
 
-    private static CodeSigner[] copiarFirmantes(CodeSigner[] a) {
+    private static CodeSigner[] copySigners(CodeSigner[] a) {
         if (a == null) {
             return null;
         }

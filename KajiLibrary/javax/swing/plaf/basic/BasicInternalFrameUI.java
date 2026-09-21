@@ -28,37 +28,39 @@ import javax.swing.plaf.InternalFrameUI;
 import javax.swing.plaf.UIResource;
 
 /**
- * El aspecto basico de una ventana interna.
+ * The basic look and feel of an internal frame.
  *
- * <h2>Cuatro paneles alrededor del contenido, y solo uno existe</h2>
+ * <h2>Four panes around the content, and only one exists</h2>
  *
- * <p>La ventana tiene lugar para un panel en cada costado -- norte, sur, este, oeste -- y el basico
- * solo pone el del norte: la barra de titulo. Los otros tres quedan en {@code null} y estan ahi para
- * el aspecto que quiera una barra de estado abajo o una regla al costado. Esta medido.
+ * <p>The frame has room for a pane on each side -- north, south, east, west -- and the basic
+ * one only puts in the north one: the title bar. The other three are left {@code null} and are
+ * there for the look and feel that wants a status bar at the bottom or a ruler at the side. It
+ * is measured.
  *
- * <h2>Quien mueve la ventana no es la ventana</h2>
+ * <h2>Who moves the frame is not the frame</h2>
  *
- * <p>Mover, maximizar, iconizar y cerrar los hace el {@link DesktopManager} del escritorio, no este
- * UI: {@link #getDesktopManager} lo busca en el {@link JDesktopPane} que la contenga y, si no hay
- * ninguno --una ventana interna suelta--, arma uno propio. Eso es lo que hace que dos ventanas del
- * mismo escritorio se comporten igual aunque tengan aspectos distintos.
+ * <p>Moving, maximizing, iconifying and closing are done by the desktop's
+ * {@link DesktopManager}, not by this look and feel: {@link #getDesktopManager} looks it up in
+ * the {@link JDesktopPane} that contains it and, if there is none -- a loose internal frame --,
+ * it builds one of its own. That is what makes two frames on the same desktop behave the same
+ * even though they have different looks and feels.
  *
- * <h2>El desborde de pila del JDK</h2>
+ * <h2>The JDK's stack overflow</h2>
  *
- * <p><strong>{@code getPreferredSize} de una ventana interna suelta desborda la pila en el
- * JDK.</strong> Esta medido: {@code StackOverflowError}, no una excepcion. El acomodador pide el
- * preferido de la ventana, que se lo vuelve a pedir al acomodador. Aca no se copia -- copiar un
- * desborde de pila no le sirve a nadie --: el acomodador mide el panel raiz y la barra de titulo,
- * que es lo que la cuenta queria decir. El minimo y el maximo si coinciden.
+ * <p><strong>A loose internal frame's {@code getPreferredSize} overflows the stack in the
+ * JDK.</strong> It is measured: {@code StackOverflowError}, not an exception. The layout asks
+ * for the frame's preferred size, which asks the layout for it again. Here it is not copied
+ * -- copying a stack overflow is of use to nobody --: the layout measures the root pane and the
+ * title bar, which is what the arithmetic meant to say. The minimum and the maximum do agree.
  *
- * <p>Para un componente que no es su ventana, los tres contestan numeros fijos: 100 x 100 el
- * preferido, cero el minimo, infinito el maximo.
+ * <p>For a component that is not its frame, all three answer fixed numbers: 100 x 100 the
+ * preferred one, zero the minimum, infinite the maximum.
  *
- * <h2>Lo que queda dicho</h2>
+ * <h2>What is left said</h2>
  *
- * <p>Arrastrar el borde para redimensionar necesita el cursor del sistema: el escucha esta y anota
- * de que lado se apreto, pero no cambia el tamano. Y {@link #openMenuKey} queda en {@code null},
- * como los demas campos de tecla del paquete.
+ * <p>Dragging the border in order to resize needs the system cursor: the listener is there and
+ * notes which side was pressed, but it does not change the size. And {@link #openMenuKey} is
+ * left {@code null}, like the package's other key fields.
  */
 public class BasicInternalFrameUI extends InternalFrameUI {
 
@@ -76,20 +78,20 @@ public class BasicInternalFrameUI extends InternalFrameUI {
 
     protected BasicInternalFrameTitlePane titlePane;
 
-    /** Sin uso; ver la nota de la clase. */
+    /** Unused; see the class note. */
     protected KeyStroke openMenuKey;
 
     private boolean keyBindingRegistered;
     private boolean keyBindingActive;
     private DesktopManager sharedDesktopManager;
 
-    private static final ColorUIResource FONDO = new ColorUIResource(238, 238, 238);
+    private static final ColorUIResource BACKGROUND = new ColorUIResource(238, 238, 238);
 
-    /** Para esa ventana. */
+    /** For that frame. */
     public BasicInternalFrameUI(JInternalFrame b) {
     }
 
-    /** Uno nuevo por ventana: guarda sus cuatro paneles y su barra. */
+    /** A new one per frame: it keeps its four panes and its bar. */
     public static ComponentUI createUI(JComponent b) {
         return new BasicInternalFrameUI((JInternalFrame) b);
     }
@@ -105,7 +107,7 @@ public class BasicInternalFrameUI extends InternalFrameUI {
 
     public void uninstallUI(JComponent c) {
         if (c != frame) {
-            throw new IllegalArgumentException(c + " no es la ventana de este aspecto");
+            throw new IllegalArgumentException(c + " is not this look and feel's frame");
         }
         uninstallKeyboardActions();
         uninstallComponents();
@@ -114,11 +116,11 @@ public class BasicInternalFrameUI extends InternalFrameUI {
         frame = null;
     }
 
-    /** Colores y acomodador; los valores son los de {@code InternalFrame.*} en Metal. */
+    /** Colours and layout; the values are those of {@code InternalFrame.*} in Metal. */
     protected void installDefaults() {
-        Color fondo = frame.getBackground();
-        if (fondo == null || fondo instanceof UIResource) {
-            frame.setBackground(FONDO);
+        Color background = frame.getBackground();
+        if (background == null || background instanceof UIResource) {
+            frame.setBackground(BACKGROUND);
         }
         javax.swing.border.Border b = frame.getBorder();
         if (b == null || b instanceof UIResource) {
@@ -129,7 +131,7 @@ public class BasicInternalFrameUI extends InternalFrameUI {
         frame.setLayout(internalFrameLayout);
     }
 
-    /** Saca el acomodador y el borde que puso este UI. */
+    /** It removes the layout and the border this look and feel set. */
     protected void uninstallDefaults() {
         if (frame.getLayout() == internalFrameLayout) {
             frame.setLayout(null);
@@ -138,7 +140,7 @@ public class BasicInternalFrameUI extends InternalFrameUI {
         internalFrameLayout = null;
     }
 
-    /** Pone la barra de titulo como panel norte; ver la nota de la clase. */
+    /** It puts the title bar in as the north pane; see the class note. */
     protected void installComponents() {
         setNorthPane(createNorthPane(frame));
         setSouthPane(createSouthPane(frame));
@@ -177,7 +179,7 @@ public class BasicInternalFrameUI extends InternalFrameUI {
         glassPaneDispatcher = null;
     }
 
-    /** Sin atajos propios; ver la nota de la clase sobre {@link #openMenuKey}. */
+    /** With no shortcuts of its own; see the class note about {@link #openMenuKey}. */
     protected void installKeyboardActions() {
         setupMenuOpenKey();
         setupMenuCloseKey();
@@ -186,11 +188,14 @@ public class BasicInternalFrameUI extends InternalFrameUI {
     protected void uninstallKeyboardActions() {
     }
 
-    /** Gancho para el aspecto que quiera atar una tecla al menu de sistema; el basico no ata. */
+    /**
+     * A hook for the look and feel that wants to tie a key to the system menu; the basic one ties
+     * none.
+     */
     protected void setupMenuOpenKey() {
     }
 
-    /** Idem para cerrarlo. */
+    /** The same for closing it. */
     protected void setupMenuCloseKey() {
     }
 
@@ -223,21 +228,21 @@ public class BasicInternalFrameUI extends InternalFrameUI {
     }
 
     protected MouseInputAdapter createBorderListener(JInternalFrame w) {
-        return new EscuchaDeBorde(this);
+        return new BorderListener(this);
     }
 
     /**
-     * El que reparte los eventos del cristal.
+     * The one that hands out the glass pane's events.
      *
-     * <p>Devuelve uno, pero {@link #installComponents} no lo guarda: el campo
-     * {@link #glassPaneDispatcher} queda en {@code null} despues de instalar. Esta medido, y tiene
-     * sentido -- sin ventana de verdad no hay cristal que despachar --.
+     * <p>It returns one, but {@link #installComponents} does not keep it: the field
+     * {@link #glassPaneDispatcher} is left {@code null} after installing. It is measured, and it
+     * makes sense -- with no real window there is no glass to dispatch --.
      */
     protected MouseInputListener createGlassPaneDispatcher() {
-        return new EscuchaDeBorde(this);
+        return new BorderListener(this);
     }
 
-    /** Gancho: el basico no arma ningun escucha de ventana interna. */
+    /** A hook: the basic one builds no internal frame listener. */
     protected void createInternalFrameListener() {
     }
 
@@ -255,23 +260,23 @@ public class BasicInternalFrameUI extends InternalFrameUI {
         }
     }
 
-    /** La barra de titulo. */
+    /** The title bar. */
     protected JComponent createNorthPane(JInternalFrame w) {
         titlePane = new BasicInternalFrameTitlePane(w);
         return titlePane;
     }
 
-    /** Ninguno; ver la nota de la clase. */
+    /** None; see the class note. */
     protected JComponent createSouthPane(JInternalFrame w) {
         return null;
     }
 
-    /** Ninguno. */
+    /** None. */
     protected JComponent createWestPane(JInternalFrame w) {
         return null;
     }
 
-    /** Ninguno. */
+    /** None. */
     protected JComponent createEastPane(JInternalFrame w) {
         return null;
     }
@@ -318,7 +323,9 @@ public class BasicInternalFrameUI extends InternalFrameUI {
         eastPane = c;
     }
 
-    /** Saca el viejo del contenedor y pone el nuevo, con sus escuchas de mouse. */
+    /**
+     * It takes the old one out of the container and puts the new one in, with its mouse listeners.
+     */
     protected void replacePane(JComponent currentPane, JComponent newPane) {
         if (currentPane != null) {
             deinstallMouseHandlers(currentPane);
@@ -330,7 +337,7 @@ public class BasicInternalFrameUI extends InternalFrameUI {
         }
     }
 
-    /** El del escritorio que la contenga, o uno propio; ver la nota de la clase. */
+    /** The one of the desktop that contains it, or one of its own; see the class note. */
     protected DesktopManager getDesktopManager() {
         JDesktopPane pane = frame.getDesktopPane();
         if (pane != null && pane.getDesktopManager() != null) {
@@ -346,7 +353,7 @@ public class BasicInternalFrameUI extends InternalFrameUI {
         return new DefaultDesktopManager();
     }
 
-    /** Las seis operaciones, todas delegadas al administrador. */
+    /** The six operations, all delegated to the manager. */
     protected void closeFrame(JInternalFrame f) {
         getDesktopManager().closeFrame(f);
     }
@@ -375,7 +382,7 @@ public class BasicInternalFrameUI extends InternalFrameUI {
         getDesktopManager().deactivateFrame(f);
     }
 
-    /** El del acomodador para su ventana, y 100 x 100 para cualquier otro componente. */
+    /** The layout's for its frame, and 100 x 100 for any other component. */
     public Dimension getPreferredSize(JComponent x) {
         if (frame == x && internalFrameLayout != null) {
             return internalFrameLayout.preferredLayoutSize(x);
@@ -383,7 +390,7 @@ public class BasicInternalFrameUI extends InternalFrameUI {
         return new Dimension(100, 100);
     }
 
-    /** El del acomodador para su ventana, y cero para cualquier otro. */
+    /** The layout's for its frame, and zero for any other. */
     public Dimension getMinimumSize(JComponent x) {
         if (frame == x && internalFrameLayout != null) {
             return internalFrameLayout.minimumLayoutSize(x);
@@ -391,17 +398,17 @@ public class BasicInternalFrameUI extends InternalFrameUI {
         return new Dimension(0, 0);
     }
 
-    /** Sin tope, siempre. */
+    /** No cap, always. */
     public Dimension getMaximumSize(JComponent x) {
         return new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE);
     }
 
     /**
-     * El que acomoda los cinco lugares y escucha los cambios de la ventana.
+     * The one that lays the five places out and listens to the frame's changes.
      *
-     * <p>El contenido va en el centro y los cuatro paneles alrededor. Es un {@code BorderLayout}
-     * escrito a mano, y esta escrito porque el de verdad no sabe que el panel raiz de la ventana es
-     * el centro pase lo que pase.
+     * <p>The content goes in the centre and the four panes around it. It is a {@code BorderLayout}
+     * written by hand, and it is written because the real one does not know that the frame's root
+     * pane is the centre whatever happens.
      */
     private static class Handler implements LayoutManager, PropertyChangeListener,
             ComponentListener {
@@ -418,41 +425,41 @@ public class BasicInternalFrameUI extends InternalFrameUI {
         public void removeLayoutComponent(Component c) {
         }
 
-        /** Ver la nota de la clase sobre el desborde de pila del JDK. */
+        /** See the class note about the JDK's stack overflow. */
         public Dimension preferredLayoutSize(Container c) {
-            return medir(c, false);
+            return measure(c, false);
         }
 
         public Dimension minimumLayoutSize(Container c) {
-            return medir(c, true);
+            return measure(c, true);
         }
 
-        private Dimension medir(Container c, boolean minimo) {
+        private Dimension measure(Container c, boolean min) {
             JInternalFrame frame = ui.frame;
             if (frame == null) {
                 return new Dimension(0, 0);
             }
             Dimension d = new Dimension(0, 0);
-            javax.swing.JRootPane raiz = frame.getRootPane();
-            if (raiz != null) {
-                Dimension r = minimo ? raiz.getMinimumSize() : raiz.getPreferredSize();
+            javax.swing.JRootPane root = frame.getRootPane();
+            if (root != null) {
+                Dimension r = min ? root.getMinimumSize() : root.getPreferredSize();
                 d.width = r.width;
                 d.height = r.height;
             }
-            JComponent[] verticales = {ui.northPane, ui.southPane};
-            for (int i = 0; i < verticales.length; i++) {
-                if (verticales[i] != null) {
-                    Dimension p = minimo ? verticales[i].getMinimumSize()
-                            : verticales[i].getPreferredSize();
+            JComponent[] verticals = {ui.northPane, ui.southPane};
+            for (int i = 0; i < verticals.length; i++) {
+                if (verticals[i] != null) {
+                    Dimension p = min ? verticals[i].getMinimumSize()
+                            : verticals[i].getPreferredSize();
                     d.width = Math.max(d.width, p.width);
                     d.height += p.height;
                 }
             }
-            JComponent[] horizontales = {ui.westPane, ui.eastPane};
-            for (int i = 0; i < horizontales.length; i++) {
-                if (horizontales[i] != null) {
-                    Dimension p = minimo ? horizontales[i].getMinimumSize()
-                            : horizontales[i].getPreferredSize();
+            JComponent[] horizontals = {ui.westPane, ui.eastPane};
+            for (int i = 0; i < horizontals.length; i++) {
+                if (horizontals[i] != null) {
+                    Dimension p = min ? horizontals[i].getMinimumSize()
+                            : horizontals[i].getPreferredSize();
                     d.width += p.width;
                     d.height = Math.max(d.height, p.height);
                 }
@@ -496,9 +503,9 @@ public class BasicInternalFrameUI extends InternalFrameUI {
                 ui.eastPane.setBounds(cx + cw - d.width, cy, d.width, ch);
                 cw -= d.width;
             }
-            javax.swing.JRootPane raiz = frame.getRootPane();
-            if (raiz != null) {
-                raiz.setBounds(cx, cy, cw, ch);
+            javax.swing.JRootPane root = frame.getRootPane();
+            if (root != null) {
+                root.setBounds(cx, cy, cw, ch);
             }
         }
 
@@ -547,15 +554,15 @@ public class BasicInternalFrameUI extends InternalFrameUI {
     }
 
     /**
-     * El que anota de que lado del borde se apreto.
+     * The one that notes which side of the border was pressed.
      *
-     * <p>Redimensionar de verdad necesita el cursor del sistema; ver la nota de la clase.
+     * <p>Really resizing needs the system cursor; see the class note.
      */
-    private static class EscuchaDeBorde extends MouseInputAdapter implements MouseInputListener {
+    private static class BorderListener extends MouseInputAdapter implements MouseInputListener {
 
         private final BasicInternalFrameUI ui;
 
-        EscuchaDeBorde(BasicInternalFrameUI ui) {
+        BorderListener(BasicInternalFrameUI ui) {
             this.ui = ui;
         }
 
@@ -566,7 +573,7 @@ public class BasicInternalFrameUI extends InternalFrameUI {
                     try {
                         frame.setSelected(true);
                     } catch (PropertyVetoException ex) {
-                        // Alguien dijo que no. Es una respuesta valida.
+                        // Somebody said no. It is a valid answer.
                     }
                 }
             }

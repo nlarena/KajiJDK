@@ -9,139 +9,139 @@ import java.util.TimeZone;
 import javax.xml.namespace.QName;
 
 /**
- * KajiLibrary's javax.xml.datatype.XMLGregorianCalendar -- una fecha y hora de XML Schema, donde lo
- * caracteristico es que <b>casi cualquier campo puede faltar</b>.
+ * KajiLibrary's javax.xml.datatype.XMLGregorianCalendar -- an XML Schema date and time, where the
+ * characteristic thing is that <b>almost any field can be missing</b>.
  *
- * <h2>Ocho tipos en una clase</h2>
+ * <h2>Eight types in one class</h2>
  *
- * <p>XML Schema no tiene un tipo de fecha sino ocho, y la diferencia entre ellos es exactamente que
- * campos traen: {@code xs:date} no tiene hora, {@code xs:time} no tiene fecha, {@code xs:gMonth} es
- * "mayo" sin anio ni dia, {@code xs:gMonthDay} es "25 de mayo" de cualquier anio. Todos entran aca,
- * y {@link #getXMLSchemaType} contesta cual es mirando que campos estan puestos.
+ * <p>XML Schema has not one date type but eight, and the difference between them is exactly which
+ * fields they carry: {@code xs:date} has no time, {@code xs:time} has no date, {@code xs:gMonth} is
+ * "May" without year or day, {@code xs:gMonthDay} is "25 May" of any year. They all fit here, and
+ * {@link #getXMLSchemaType} answers which it is by looking at which fields are set.
  *
- * <p>Los campos son {@code int}, asi que la ausencia se marca con
- * {@link DatatypeConstants#FIELD_UNDEFINED} y no con null. Es la trampa numero uno de la clase:
- * {@code getYear()} devuelve {@code Integer.MIN_VALUE} para un {@code gMonth} y no levanta ninguna
- * excepcion, asi que quien no compare contra la constante se lleva ese numero adentro de una cuenta.
+ * <p>The fields are {@code int}s, so absence is marked with {@link
+ * DatatypeConstants#FIELD_UNDEFINED} and not with null. It is the number one trap of the class:
+ * {@code getYear()} returns {@code Integer.MIN_VALUE} for a {@code gMonth} and raises no exception,
+ * so whoever does not compare against the constant carries that number into a calculation.
  *
- * <h2>La zona horaria tambien puede faltar, y eso arruina el orden</h2>
+ * <h2>The time zone can also be missing, and that ruins the order</h2>
  *
- * <p>Una fecha sin zona horaria no es un instante: es una fecha "en algun lado". Comparar
- * {@code 2024-05-25T12:00:00} (sin zona) con {@code 2024-05-25T14:00:00Z} no tiene respuesta,
- * porque la primera puede caer antes o despues segun donde se lea. Por eso {@link #compare} tambien
- * puede devolver {@link DatatypeConstants#INDETERMINATE}, y por eso esta clase, igual que
- * {@link Duration}, <b>no</b> implementa {@code Comparable}.
+ * <p>A date without a time zone is not an instant: it is a date "somewhere". Comparing {@code
+ * 2024-05-25T12:00:00} (without zone) with {@code 2024-05-25T14:00:00Z} has no answer, because the
+ * first can fall before or after depending on where it is read. That is why {@link #compare} can
+ * also return {@link DatatypeConstants#INDETERMINATE}, and why this class, like {@link Duration},
+ * does <b>not</b> implement {@code Comparable}.
  *
- * <p>{@link #normalize} es la salida cuando hay zona: lleva todo a UTC y ahi si se puede comparar.
+ * <p>{@link #normalize} is the way out when there is a zone: it takes everything to UTC and there
+ * it can be compared.
  *
- * <h2>El anio no entra en un {@code int}</h2>
+ * <h2>The year does not fit in an {@code int}</h2>
  *
- * <p>XML Schema no le pone tope al anio, asi que hay dos accesores. {@link #getYear} devuelve un
- * {@code int} y alcanza para todo lo que existio; {@link #getEon} devuelve los miles de millones que
- * sobran, y {@link #getEonAndYear} los junta en un {@link BigInteger}. Para fechas normales
- * {@code getEon()} es null y solo hace falta {@code getYear()}.
+ * <p>XML Schema puts no cap on the year, so there are two accessors. {@link #getYear} returns an
+ * {@code int} and is enough for everything that ever existed; {@link #getEon} returns the billions
+ * left over, and {@link #getEonAndYear} puts them together in a {@link BigInteger}. For normal
+ * dates {@code getEon()} is null and only {@code getYear()} is needed.
  *
- * <p>Y el anio cero: en XML Schema 1.0 <b>no existe</b> --se va del -1 al 1--, y esta API lo permite
- * igual porque 1.1 lo agrego. {@link #isValid} es el que decide segun el caso.
+ * <p>And year zero: in XML Schema 1.0 it <b>does not exist</b> --it goes from -1 to 1--, and this
+ * API allows it anyway because 1.1 added it. {@link #isValid} is the one that decides in each case.
  *
- * <h2>Que hay aca</h2>
+ * <h2>What is here</h2>
  *
- * <p>La clase entera, con la misma division que el original: lo abstracto es lo que depende de como
- * se guarden los campos, y lo concreto --los tres {@code setTime}, {@code getMillisecond},
- * {@code equals}, {@code hashCode}, {@code toString}-- esta escrito en terminos de lo abstracto y
- * funciona para cualquier subclase.
+ * <p>The whole class, with the same division as the original: the abstract part is what depends on
+ * how the fields are stored, and the concrete part --the three {@code setTime}s, {@code
+ * getMillisecond}, {@code equals}, {@code hashCode}, {@code toString}-- is written in terms of the
+ * abstract one and works for any subclass.
  *
- * <p>{@link DatatypeFactory#newInstance()} de esta biblioteca devuelve una fabrica que produce
- * instancias reales de esta clase: parseo de las ocho formas lexicas, comparacion con
- * normalizacion, suma de duraciones y conversion a {@link GregorianCalendar}. Nada de eso necesita
- * un parser de XML.
+ * <p>This library's {@link DatatypeFactory#newInstance()} returns a factory that produces real
+ * instances of this class: parsing of the eight lexical forms, comparison with normalization,
+ * adding durations and conversion to {@link GregorianCalendar}. None of that needs an XML parser.
  */
 public abstract class XMLGregorianCalendar implements Cloneable {
 
     /**
-     * Para las subclases.
+     * For the subclasses.
      *
-     * <p>Publico como en el original, aunque la clase sea abstracta.
+     * <p>Public as in the original, even though the class is abstract.
      */
     public XMLGregorianCalendar() {
     }
 
     /**
-     * Deja todos los campos en {@link DatatypeConstants#FIELD_UNDEFINED}.
+     * Sets all the fields to {@link DatatypeConstants#FIELD_UNDEFINED}.
      *
-     * <p>Distinto de {@link #reset}: esto vacia, aquello vuelve a como estaba cuando se creo.
+     * <p>Different from {@link #reset}: this empties, that goes back to how it was when created.
      */
     public abstract void clear();
 
     /**
-     * Vuelve a los valores que tenia recien construida.
+     * Goes back to the values it had when just built.
      *
-     * <p>Existe para reusar la instancia en un bucle sin volver a pedirsela a la fabrica, que es el
-     * tipo de optimizacion que tiene sentido cuando se procesan documentos grandes.
+     * <p>It exists to reuse the instance in a loop without asking the factory for it again, which
+     * is the kind of optimization that makes sense when large documents are processed.
      */
     public abstract void reset();
 
     /**
-     * El anio, sin tope.
+     * The year, unbounded.
      *
-     * <p>Null deja el anio sin definir. Un valor que entre en un {@code int} se guarda en el campo
-     * chico con {@code eon} en null; uno mas grande se parte entre los dos.
+     * <p>Null leaves the year undefined. A value that fits in an {@code int} is kept in the small
+     * field with {@code eon} at null; a larger one is split between the two.
      *
-     * @param year el anio, o null para borrarlo
+     * @param year the year, or null to clear it
      */
     public abstract void setYear(BigInteger year);
 
     /**
-     * El anio, en el rango de un {@code int}.
+     * The year, in the range of an {@code int}.
      *
-     * @param year el anio, o {@link DatatypeConstants#FIELD_UNDEFINED} para borrarlo
+     * @param year the year, or {@link DatatypeConstants#FIELD_UNDEFINED} to clear it
      */
     public abstract void setYear(int year);
 
     /**
-     * El mes, de {@link DatatypeConstants#JANUARY} a {@link DatatypeConstants#DECEMBER}.
+     * The month, from {@link DatatypeConstants#JANUARY} to {@link DatatypeConstants#DECEMBER}.
      *
-     * <p>Contado desde <b>uno</b>. {@code java.util.Calendar} lo cuenta desde cero, y esa
-     * diferencia de uno entre las dos APIs es una fuente clasica de errores.
+     * <p>Counted from <b>one</b>. {@code java.util.Calendar} counts it from zero, and that
+     * difference of one between the two APIs is a classic source of mistakes.
      *
-     * @param month de 1 a 12, o {@link DatatypeConstants#FIELD_UNDEFINED}
-     * @throws IllegalArgumentException si esta fuera de rango
+     * @param month from 1 to 12, or {@link DatatypeConstants#FIELD_UNDEFINED}
+     * @throws IllegalArgumentException if it is out of range
      */
     public abstract void setMonth(int month);
 
     /**
-     * El dia del mes, de 1 a 31.
+     * The day of the month, from 1 to 31.
      *
-     * @param day de 1 a 31, o {@link DatatypeConstants#FIELD_UNDEFINED}
-     * @throws IllegalArgumentException si esta fuera de rango
+     * @param day from 1 to 31, or {@link DatatypeConstants#FIELD_UNDEFINED}
+     * @throws IllegalArgumentException if it is out of range
      */
     public abstract void setDay(int day);
 
     /**
-     * La zona horaria, en minutos y con el mismo signo con que se escribe.
+     * The time zone, in minutes and with the same sign it is written with.
      *
-     * <p>{@code -03:00} son -180 y {@code +05:30} son 330. Para ir a UTC hay que <b>restarlo</b> de
-     * la hora local.
+     * <p>{@code -03:00} is -180 and {@code +05:30} is 330. To go to UTC it has to be
+     * <b>subtracted</b> from the local time.
      *
-     * <p>El rango admitido es de -840 a 840 inclusive, o sea de {@code -14:00} a {@code +14:00}.
-     * Ojo con los nombres de las constantes, que estan al reves de los numeros:
-     * {@link DatatypeConstants#MAX_TIMEZONE_OFFSET} guarda el minimo y
-     * {@link DatatypeConstants#MIN_TIMEZONE_OFFSET} el maximo.
+     * <p>The admitted range is from -840 to 840 inclusive, that is from {@code -14:00} to {@code
+     * +14:00}. Watch the names of the constants, which are the other way round from the numbers:
+     * {@link DatatypeConstants#MAX_TIMEZONE_OFFSET} keeps the minimum and {@link
+     * DatatypeConstants#MIN_TIMEZONE_OFFSET} the maximum.
      *
-     * @param offset de -840 a 840, o {@link DatatypeConstants#FIELD_UNDEFINED}
-     * @throws IllegalArgumentException si esta fuera de rango
+     * @param offset from -840 to 840, or {@link DatatypeConstants#FIELD_UNDEFINED}
+     * @throws IllegalArgumentException if it is out of range
      */
     public abstract void setTimezone(int offset);
 
     /**
-     * Hora, minuto y segundo de una.
+     * Hour, minute and second at once.
      *
-     * <p>Atajo de los tres setters; los segundos fraccionarios quedan como estaban.
+     * <p>A shortcut for the three setters; the fractional seconds stay as they were.
      *
-     * @param hour la hora
-     * @param minute el minuto
-     * @param second el segundo
-     * @throws IllegalArgumentException si alguno esta fuera de rango
+     * @param hour the hour
+     * @param minute the minute
+     * @param second the second
+     * @throws IllegalArgumentException if some is out of range
      */
     public void setTime(int hour, int minute, int second) {
         setHour(hour);
@@ -150,61 +150,61 @@ public abstract class XMLGregorianCalendar implements Cloneable {
     }
 
     /**
-     * La hora, de 0 a 23.
+     * The hour, from 0 to 23.
      *
-     * <p>El 24 se acepta solo en el valor lexico {@code 24:00:00}, que la implementacion normaliza
-     * al dia siguiente; por esta via no.
+     * <p>24 is accepted only in the lexical value {@code 24:00:00}, which the implementation
+     * normalizes to the next day; not through this route.
      *
-     * @param hour de 0 a 23, o {@link DatatypeConstants#FIELD_UNDEFINED}
-     * @throws IllegalArgumentException si esta fuera de rango
+     * @param hour from 0 to 23, or {@link DatatypeConstants#FIELD_UNDEFINED}
+     * @throws IllegalArgumentException if it is out of range
      */
     public abstract void setHour(int hour);
 
     /**
-     * El minuto, de 0 a 59.
+     * The minute, from 0 to 59.
      *
-     * @param minute de 0 a 59, o {@link DatatypeConstants#FIELD_UNDEFINED}
-     * @throws IllegalArgumentException si esta fuera de rango
+     * @param minute from 0 to 59, or {@link DatatypeConstants#FIELD_UNDEFINED}
+     * @throws IllegalArgumentException if it is out of range
      */
     public abstract void setMinute(int minute);
 
     /**
-     * El segundo, de 0 a 60.
+     * The second, from 0 to 60.
      *
-     * <p>Sesenta, no cincuenta y nueve: XML Schema deja lugar al segundo intercalar.
+     * <p>Sixty, not fifty-nine: XML Schema leaves room for the leap second.
      *
-     * @param second de 0 a 60, o {@link DatatypeConstants#FIELD_UNDEFINED}
-     * @throws IllegalArgumentException si esta fuera de rango
+     * @param second from 0 to 60, or {@link DatatypeConstants#FIELD_UNDEFINED}
+     * @throws IllegalArgumentException if it is out of range
      */
     public abstract void setSecond(int second);
 
     /**
-     * Los milisegundos, que son la parte fraccionaria del segundo con tres decimales.
+     * The milliseconds, which are the fractional part of the second with three decimals.
      *
-     * @param millisecond de 0 a 999, o {@link DatatypeConstants#FIELD_UNDEFINED}
-     * @throws IllegalArgumentException si esta fuera de rango
+     * @param millisecond from 0 to 999, or {@link DatatypeConstants#FIELD_UNDEFINED}
+     * @throws IllegalArgumentException if it is out of range
      */
     public abstract void setMillisecond(int millisecond);
 
     /**
-     * La parte fraccionaria del segundo, con la precision que sea.
+     * The fractional part of the second, with whatever precision.
      *
-     * <p>Es la forma general de {@link #setMillisecond}: XML Schema no le pone limite a los
-     * decimales, asi que un {@link BigDecimal} es lo unico que no pierde nada.
+     * <p>It is the general form of {@link #setMillisecond}: XML Schema puts no limit on the
+     * decimals, so a {@link BigDecimal} is the only thing that loses nothing.
      *
-     * @param fractional de 0 inclusive a 1 exclusive, o null para borrarlo
-     * @throws IllegalArgumentException si esta fuera de ese rango
+     * @param fractional from 0 inclusive to 1 exclusive, or null to clear it
+     * @throws IllegalArgumentException if it is outside that range
      */
     public abstract void setFractionalSecond(BigDecimal fractional);
 
     /**
-     * Hora, minuto, segundo y fraccion de segundo.
+     * Hour, minute, second and fraction of a second.
      *
-     * @param hour la hora
-     * @param minute el minuto
-     * @param second el segundo
-     * @param fractional la fraccion, de 0 inclusive a 1 exclusive
-     * @throws IllegalArgumentException si alguno esta fuera de rango
+     * @param hour the hour
+     * @param minute the minute
+     * @param second the second
+     * @param fractional the fraction, from 0 inclusive to 1 exclusive
+     * @throws IllegalArgumentException if some is out of range
      */
     public void setTime(int hour, int minute, int second, BigDecimal fractional) {
         setHour(hour);
@@ -214,13 +214,13 @@ public abstract class XMLGregorianCalendar implements Cloneable {
     }
 
     /**
-     * Hora, minuto, segundo y milisegundo.
+     * Hour, minute, second and millisecond.
      *
-     * @param hour la hora
-     * @param minute el minuto
-     * @param second el segundo
-     * @param millisecond de 0 a 999
-     * @throws IllegalArgumentException si alguno esta fuera de rango
+     * @param hour the hour
+     * @param minute the minute
+     * @param second the second
+     * @param millisecond from 0 to 999
+     * @throws IllegalArgumentException if some is out of range
      */
     public void setTime(int hour, int minute, int second, int millisecond) {
         setHour(hour);
@@ -230,77 +230,77 @@ public abstract class XMLGregorianCalendar implements Cloneable {
     }
 
     /**
-     * Los miles de millones del anio, o null si el anio entra en un {@code int}.
+     * The billions of the year, or null if the year fits in an {@code int}.
      *
-     * <p>Siempre multiplo de mil millones: la parte que no entra en {@link #getYear}.
+     * <p>Always a multiple of a billion: the part that does not fit in {@link #getYear}.
      *
-     * @return el eon, o null
+     * @return the eon, or null
      */
     public abstract BigInteger getEon();
 
     /**
-     * El anio, sin el eon.
+     * The year, without the eon.
      *
-     * @return el anio, o {@link DatatypeConstants#FIELD_UNDEFINED} si no esta puesto
+     * @return the year, or {@link DatatypeConstants#FIELD_UNDEFINED} if it is not set
      */
     public abstract int getYear();
 
     /**
-     * El anio completo, eon incluido.
+     * The complete year, eon included.
      *
-     * @return el anio, o null si no esta puesto
+     * @return the year, or null if it is not set
      */
     public abstract BigInteger getEonAndYear();
 
     /**
-     * El mes, contado desde uno.
+     * The month, counted from one.
      *
-     * @return de 1 a 12, o {@link DatatypeConstants#FIELD_UNDEFINED}
+     * @return from 1 to 12, or {@link DatatypeConstants#FIELD_UNDEFINED}
      */
     public abstract int getMonth();
 
     /**
-     * El dia del mes.
+     * The day of the month.
      *
-     * @return de 1 a 31, o {@link DatatypeConstants#FIELD_UNDEFINED}
+     * @return from 1 to 31, or {@link DatatypeConstants#FIELD_UNDEFINED}
      */
     public abstract int getDay();
 
     /**
-     * La zona horaria en minutos, con el mismo signo con que se escribe; ver {@link #setTimezone}.
+     * The time zone in minutes, with the same sign it is written with; see {@link #setTimezone}.
      *
-     * @return los minutos, o {@link DatatypeConstants#FIELD_UNDEFINED} si la fecha no tiene zona
+     * @return the minutes, or {@link DatatypeConstants#FIELD_UNDEFINED} if the date has no zone
      */
     public abstract int getTimezone();
 
     /**
-     * La hora.
+     * The hour.
      *
-     * @return de 0 a 23, o {@link DatatypeConstants#FIELD_UNDEFINED}
+     * @return from 0 to 23, or {@link DatatypeConstants#FIELD_UNDEFINED}
      */
     public abstract int getHour();
 
     /**
-     * El minuto.
+     * The minute.
      *
-     * @return de 0 a 59, o {@link DatatypeConstants#FIELD_UNDEFINED}
+     * @return from 0 to 59, or {@link DatatypeConstants#FIELD_UNDEFINED}
      */
     public abstract int getMinute();
 
     /**
-     * El segundo entero; la fraccion esta en {@link #getFractionalSecond}.
+     * The whole second; the fraction is in {@link #getFractionalSecond}.
      *
-     * @return de 0 a 60, o {@link DatatypeConstants#FIELD_UNDEFINED}
+     * @return from 0 to 60, or {@link DatatypeConstants#FIELD_UNDEFINED}
      */
     public abstract int getSecond();
 
     /**
-     * Los milisegundos, sacados de la fraccion de segundo.
+     * The milliseconds, taken from the fraction of a second.
      *
-     * <p>Corre la coma tres lugares y trunca: una fraccion con mas de tres decimales pierde lo que
-     * sobra, que es lo que tiene que pasar cuando el que pregunta pide milisegundos.
+     * <p>It moves the point three places and truncates: a fraction with more than three decimals
+     * loses what is left over, which is what has to happen when whoever asks wants milliseconds.
      *
-     * @return de 0 a 999, o {@link DatatypeConstants#FIELD_UNDEFINED} si no hay fraccion
+     * @return from 0 to 999, or {@link DatatypeConstants#FIELD_UNDEFINED} if there is no fraction
      */
     public int getMillisecond() {
         BigDecimal fractionValue = getFractionalSecond();
@@ -311,46 +311,46 @@ public abstract class XMLGregorianCalendar implements Cloneable {
     }
 
     /**
-     * La parte fraccionaria del segundo, con toda su precision.
+     * The fractional part of the second, with all its precision.
      *
-     * @return de 0 inclusive a 1 exclusive, o null si no esta puesta
+     * @return from 0 inclusive to 1 exclusive, or null if it is not set
      */
     public abstract BigDecimal getFractionalSecond();
 
     /**
-     * Compara las dos fechas, y puede contestar que no se pueden comparar.
+     * Compares the two dates, and may answer that they cannot be compared.
      *
-     * <p>Los cuatro resultados son {@link DatatypeConstants#LESSER},
-     * {@link DatatypeConstants#EQUAL}, {@link DatatypeConstants#GREATER} y
-     * {@link DatatypeConstants#INDETERMINATE}. El ultimo aparece cuando una de las dos tiene zona
-     * horaria y la otra no --y la que no la tiene podria caer de los dos lados--, o cuando les
-     * faltan campos distintos.
+     * <p>The four results are {@link DatatypeConstants#LESSER}, {@link DatatypeConstants#EQUAL},
+     * {@link DatatypeConstants#GREATER} and {@link DatatypeConstants#INDETERMINATE}. The last
+     * appears when one of the two has a time zone and the other does not --and the one without
+     * could fall on either side--, or when they are missing different fields.
      *
-     * @param xmlGregorianCalendar la otra; no puede ser null
-     * @return uno de los cuatro
-     * @throws NullPointerException si es null
+     * @param xmlGregorianCalendar the other; cannot be null
+     * @return one of the four
+     * @throws NullPointerException if it is null
      */
     public abstract int compare(XMLGregorianCalendar xmlGregorianCalendar);
 
     /**
-     * La misma fecha llevada a UTC.
+     * The same date taken to UTC.
      *
-     * <p>Es lo que hace comparables dos fechas con zonas distintas. Una fecha <b>sin</b> zona se
-     * devuelve igual: no hay a que normalizarla, y suponerle UTC seria inventar el dato que falta.
+     * <p>It is what makes two dates with different zones comparable. A date <b>without</b> a zone
+     * is returned as is: there is nothing to normalize it to, and assuming UTC would be inventing
+     * the missing datum.
      *
-     * @return una instancia nueva en UTC
+     * @return a new instance in UTC
      */
     public abstract XMLGregorianCalendar normalize();
 
     /**
-     * Dos fechas son iguales si {@link #compare} dice {@link DatatypeConstants#EQUAL}.
+     * Two dates are equal if {@link #compare} says {@link DatatypeConstants#EQUAL}.
      *
-     * <p>O sea que {@code 2024-05-25T12:00:00-03:00} y {@code 2024-05-25T15:00:00Z} <b>son</b>
-     * iguales aunque no tengan un solo campo en comun: son el mismo instante. Y dos fechas que
-     * comparan indeterminado no son iguales.
+     * <p>So {@code 2024-05-25T12:00:00-03:00} and {@code 2024-05-25T15:00:00Z} <b>are</b> equal
+     * even though they do not have a single field in common: they are the same instant. And two
+     * dates that compare indeterminate are not equal.
      *
-     * @param obj el otro objeto
-     * @return true si es un {@code XMLGregorianCalendar} que compara igual
+     * @param obj the other object
+     * @return true if it is an {@code XMLGregorianCalendar} that compares equal
      */
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -363,13 +363,14 @@ public abstract class XMLGregorianCalendar implements Cloneable {
     }
 
     /**
-     * El hash, calculado sobre la fecha normalizada a UTC.
+     * The hash, computed over the date normalized to UTC.
      *
-     * <p>La normalizacion no es un detalle: sin ella {@code 12:00-03:00} y {@code 15:00Z} --que son
-     * iguales por {@link #equals}-- darian hashes distintos, y un {@code HashMap} perderia una de
-     * las dos. Se normaliza solo cuando hay zona y no es cero, para no pagar el costo de mas.
+     * <p>The normalization is not a detail: without it {@code 12:00-03:00} and {@code 15:00Z}
+     * --which are equal by {@link #equals}-- would give different hashes, and a {@code HashMap}
+     * would lose one of the two. It normalizes only when there is a zone and it is not zero, so as
+     * not to pay the cost needlessly.
      *
-     * @return el hash
+     * @return the hash
      */
     public int hashCode() {
         int timezoneValue = getTimezone();
@@ -385,99 +386,99 @@ public abstract class XMLGregorianCalendar implements Cloneable {
     }
 
     /**
-     * La fecha en la forma lexica de XML Schema que corresponda a los campos que tenga.
+     * The date in the XML Schema lexical form that corresponds to the fields it has.
      *
-     * @return el texto, por ejemplo {@code 2024-05-25T12:00:00-03:00}
-     * @throws IllegalStateException si los campos puestos no forman ninguno de los ocho tipos
+     * @return the text, for example {@code 2024-05-25T12:00:00-03:00}
+     * @throws IllegalStateException if the fields set make none of the eight types
      */
     public abstract String toXMLFormat();
 
     /**
-     * Cual de los ocho tipos de fecha de XML Schema es esta, segun que campos tenga.
+     * Which of the eight XML Schema date types this is, according to which fields it has.
      *
-     * @return uno de {@link DatatypeConstants#DATETIME}, {@link DatatypeConstants#DATE},
+     * @return one of {@link DatatypeConstants#DATETIME}, {@link DatatypeConstants#DATE},
      *     {@link DatatypeConstants#TIME}, {@link DatatypeConstants#GYEARMONTH},
      *     {@link DatatypeConstants#GMONTHDAY}, {@link DatatypeConstants#GYEAR},
-     *     {@link DatatypeConstants#GMONTH} o {@link DatatypeConstants#GDAY}
-     * @throws IllegalStateException si los campos puestos no forman ninguno
+     *     {@link DatatypeConstants#GMONTH} or {@link DatatypeConstants#GDAY}
+     * @throws IllegalStateException if the fields set make none
      */
     public abstract QName getXMLSchemaType();
 
     /**
-     * Lo mismo que {@link #toXMLFormat}.
+     * The same as {@link #toXMLFormat}.
      *
-     * @return el texto
-     * @throws IllegalStateException si los campos puestos no forman ninguno de los ocho tipos
+     * @return the text
+     * @throws IllegalStateException if the fields set make none of the eight types
      */
     public String toString() {
         return toXMLFormat();
     }
 
     /**
-     * Si los campos puestos forman una fecha que existe.
+     * Whether the fields set make a date that exists.
      *
-     * <p>Mira lo que los setters no pueden mirar de a uno: el 31 de febrero pasa los dos controles
-     * de rango por separado y no es una fecha. Tambien decide sobre el anio cero, que XML Schema 1.0
-     * no admite.
+     * <p>It looks at what the setters cannot look at one by one: 31 February passes both range
+     * checks separately and is not a date. It also decides about year zero, which XML Schema 1.0
+     * does not admit.
      *
-     * @return true si es valida
+     * @return true if it is valid
      */
     public abstract boolean isValid();
 
     /**
-     * Le suma una duracion, en el lugar.
+     * Adds a duration to it, in place.
      *
-     * <p>El orden de los campos esta fijado por la especificacion --anios, meses, dias, horas,
-     * minutos, segundos-- y hay un ajuste que sorprende: si sumar meses deja un dia que no existe
-     * en el mes de destino, el dia se <b>recorta</b> al ultimo del mes. El 31 de enero mas un mes es
-     * el 28 de febrero, no el 3 de marzo.
+     * <p>The order of the fields is fixed by the specification --years, months, days, hours,
+     * minutes, seconds-- and there is an adjustment that surprises: if adding months leaves a day
+     * that does not exist in the target month, the day is <b>clipped</b> to the last of the month.
+     * 31 January plus one month is 28 February, not 3 March.
      *
-     * @param duration la duracion a sumar; no puede ser null
-     * @throws NullPointerException si es null
+     * @param duration the duration to add; cannot be null
+     * @throws NullPointerException if it is null
      */
     public abstract void add(Duration duration);
 
     /**
-     * La misma fecha como {@link GregorianCalendar}.
+     * The same date as a {@link GregorianCalendar}.
      *
-     * <p>Es una conversion con perdida y hay que saberlo: {@code GregorianCalendar} no tiene campos
-     * ausentes, asi que los que falten se completan con los de la epoca por omision. Un
-     * {@code xs:time} convertido trae una fecha que nadie puso.
+     * <p>It is a lossy conversion and it has to be known: {@code GregorianCalendar} has no absent
+     * fields, so the missing ones are filled in with those of the default epoch. A converted {@code
+     * xs:time} brings a date nobody set.
      *
-     * @return el calendario equivalente
+     * @return the equivalent calendar
      */
     public abstract GregorianCalendar toGregorianCalendar();
 
     /**
-     * Lo mismo, eligiendo con que completar lo que falta.
+     * The same, choosing what to fill in the missing parts with.
      *
-     * <p>Es la version honesta de la anterior: {@code defaults} dice explicitamente que valores
-     * usar para los campos ausentes, en vez de que los invente la implementacion.
+     * <p>It is the honest version of the previous one: {@code defaults} says explicitly which
+     * values to use for the absent fields, instead of the implementation inventing them.
      *
-     * @param timezone la zona a usar si esta fecha no tiene; puede ser null
-     * @param aLocale la region para el calendario; puede ser null
-     * @param defaults de donde sacar los campos que falten; puede ser null
-     * @return el calendario equivalente
+     * @param timezone the zone to use if this date has none; can be null
+     * @param aLocale the locale for the calendar; can be null
+     * @param defaults where to take the missing fields from; can be null
+     * @return the equivalent calendar
      */
     public abstract GregorianCalendar toGregorianCalendar(
             TimeZone timezone, Locale aLocale, XMLGregorianCalendar defaults);
 
     /**
-     * La zona horaria de esta fecha como {@link TimeZone}.
+     * The time zone of this date as a {@link TimeZone}.
      *
-     * @param defaultZoneoffset que usar si esta fecha no tiene zona; puede ser
+     * @param defaultZoneoffset what to use if this date has no zone; can be
      *     {@link DatatypeConstants#FIELD_UNDEFINED}
-     * @return la zona, o null si no hay ninguna ni por omision
+     * @return the zone, or null if there is none, not even by default
      */
     public abstract TimeZone getTimeZone(int defaultZoneoffset);
 
     /**
-     * Una copia independiente.
+     * An independent copy.
      *
-     * <p>Es abstracto y no hereda el de {@link Object} porque la clase es mutable: una copia
-     * superficial compartiria el estado y modificar una cambiaria la otra.
+     * <p>It is abstract and does not inherit {@link Object}'s because the class is mutable: a
+     * shallow copy would share the state and modifying one would change the other.
      *
-     * @return la copia
+     * @return the copy
      */
     public abstract Object clone();
 }

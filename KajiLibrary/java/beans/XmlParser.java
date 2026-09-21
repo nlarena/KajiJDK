@@ -56,14 +56,14 @@ final class XmlParser {
 
     // It reads the whole stream and returns the root element.
     static XmlNode parseDocument(InputStream input) throws IOException {
-        return new XmlParser(readUtf8(input)).raiz();
+        return new XmlParser(readUtf8(input)).root();
     }
 
     // The same reading over a document already in memory. It is the way in for an
     // `org.xml.sax.InputSource` bringing a Reader: there the decoding was already done by someone
     // else.
     static XmlNode parseText(String document) {
-        return new XmlParser(document).raiz();
+        return new XmlParser(document).root();
     }
 
     static String readAll(java.io.Reader source) throws IOException {
@@ -119,86 +119,86 @@ final class XmlParser {
     }
 
     private static byte[] readAllBytes(InputStream input) throws IOException {
-        java.io.ByteArrayOutputStream acum = new java.io.ByteArrayOutputStream();
+        java.io.ByteArrayOutputStream acc = new java.io.ByteArrayOutputStream();
         byte[] buf = new byte[4096];
         int read = input.read(buf);
         while (read > 0) {
-            acum.write(buf, 0, read);
+            acc.write(buf, 0, read);
             read = input.read(buf);
         }
-        return acum.toByteArray();
+        return acc.toByteArray();
     }
 
-    private XmlNode raiz() {
+    private XmlNode root() {
         this.skipPreamble();
-        XmlNode r = this.elemento();
+        XmlNode r = this.element();
         return r;
     }
 
     // The XML declaration, comments, processing instructions and DOCTYPE before the root.
     private void skipPreamble() {
-        boolean sigo = true;
-        while (sigo) {
+        boolean goOn = true;
+        while (goOn) {
             this.skipBlanks();
-            if (this.miraA("<?")) {
+            if (this.looksAt("<?")) {
                 this.skipPast("?>");
-            } else if (this.miraA("<!--")) {
+            } else if (this.looksAt("<!--")) {
                 this.skipPast("-->");
-            } else if (this.miraA("<!")) {
+            } else if (this.looksAt("<!")) {
                 this.skipPast(">");
             } else {
-                sigo = false;
+                goOn = false;
             }
         }
     }
 
-    private XmlNode elemento() {
-        this.exigir("<");
+    private XmlNode element() {
+        this.require("<");
         String name = this.xmlName();
         XmlNode node = new XmlNode(name);
         boolean empty = false;
         boolean selfClosed = false;
         while (!selfClosed) {
             this.skipBlanks();
-            if (this.miraA("/>")) {
+            if (this.looksAt("/>")) {
                 this.i += 2;
                 empty = true;
                 selfClosed = true;
-            } else if (this.miraA(">")) {
+            } else if (this.looksAt(">")) {
                 this.i += 1;
                 selfClosed = true;
             } else {
                 String key = this.xmlName();
                 this.skipBlanks();
-                this.exigir("=");
+                this.require("=");
                 this.skipBlanks();
                 node.attributes.put(key, this.quotedValue());
             }
         }
         if (!empty) {
             this.contents(node);
-            this.exigir("</");
+            this.require("</");
             String closing = this.xmlName();
             if (!closing.equals(name)) {
                 throw this.error("</" + closing + "> closes what <" + name + "> opened");
             }
             this.skipBlanks();
-            this.exigir(">");
+            this.require(">");
         }
         return node;
     }
 
     private void contents(XmlNode node) {
-        boolean sigo = true;
-        while (sigo) {
+        boolean goOn = true;
+        while (goOn) {
             if (this.i >= this.s.length()) {
-                throw this.error("el documento termina dentro de <" + node.name + ">");
+                throw this.error("the document ends inside <" + node.name + ">");
             }
-            if (this.miraA("</")) {
-                sigo = false;
-            } else if (this.miraA("<!--")) {
+            if (this.looksAt("</")) {
+                goOn = false;
+            } else if (this.looksAt("<!--")) {
                 this.skipPast("-->");
-            } else if (this.miraA("<![CDATA[")) {
+            } else if (this.looksAt("<![CDATA[")) {
                 int end = this.s.indexOf("]]>", this.i);
                 if (end < 0) {
                     throw this.error("unclosed CDATA");
@@ -207,10 +207,10 @@ final class XmlParser {
                 node.text.append(cdata);
                 node.content.add(cdata);
                 this.i = end + 3;
-            } else if (this.miraA("<?")) {
+            } else if (this.looksAt("<?")) {
                 this.skipPast("?>");
-            } else if (this.miraA("<")) {
-                XmlNode child = this.elemento();
+            } else if (this.looksAt("<")) {
+                XmlNode child = this.element();
                 node.children.add(child);
                 node.content.add(child);
             } else {
@@ -293,28 +293,28 @@ final class XmlParser {
     }
 
     private String xmlName() {
-        int inicio = this.i;
-        while (this.i < this.s.length() && esNombre(this.s.charAt(this.i))) {
+        int start = this.i;
+        while (this.i < this.s.length() && isNameChar(this.s.charAt(this.i))) {
             this.i++;
         }
-        if (inicio == this.i) {
-            throw this.error("se expected un name");
+        if (start == this.i) {
+            throw this.error("a name was expected");
         }
-        return this.s.substring(inicio, this.i);
+        return this.s.substring(start, this.i);
     }
 
-    private static boolean esNombre(char c) {
+    private static boolean isNameChar(char c) {
         return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
             || c == '_' || c == '-' || c == '.' || c == ':' || c > 127;
     }
 
     private void skipBlanks() {
-        while (this.i < this.s.length() && esBlanco(this.s.charAt(this.i))) {
+        while (this.i < this.s.length() && isBlank(this.s.charAt(this.i))) {
             this.i++;
         }
     }
 
-    private static boolean esBlanco(char c) {
+    private static boolean isBlank(char c) {
         return c == ' ' || c == '\t' || c == '\n' || c == '\r';
     }
 
@@ -325,12 +325,12 @@ final class XmlParser {
         return this.s.charAt(this.i);
     }
 
-    private boolean miraA(String t) {
+    private boolean looksAt(String t) {
         return this.s.startsWith(t, this.i);
     }
 
-    private void exigir(String t) {
-        if (!this.miraA(t)) {
+    private void require(String t) {
+        if (!this.looksAt(t)) {
             throw this.error("se expected `" + t + "`");
         }
         this.i += t.length();

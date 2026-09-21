@@ -5,69 +5,69 @@ import java.awt.Rectangle;
 import javax.swing.text.AttributeSet;
 
 /**
- * Lo implementa lo que muestra texto que se puede recorrer.
+ * Implemented by what shows text that can be walked.
  *
- * <p>Lo distintivo es que el texto se pide **por unidad**: un carácter, una palabra o una oración, y
- * eso lo dicen las tres constantes. Una ayuda técnica que lee en voz alta no quiere el texto entero
- * ni letra por letra; quiere la oración donde está el cursor.
+ * <p>The distinctive thing is that the text is asked for **by unit**: a character, a word or a
+ * sentence, and the three constants say which. An assistive technology that reads aloud wants
+ * neither the whole text nor letter by letter; it wants the sentence where the caret is.
  *
- * <p>Los tres métodos de lectura —{@link #getAtIndex}, {@link #getAfterIndex},
- * {@link #getBeforeIndex}— existen por lo mismo: permiten moverse por el texto en la unidad que le
- * sirva a quien lee, sin traerse todo.
+ * <p>The three reading methods --{@link #getAtIndex}, {@link #getAfterIndex}, {@link
+ * #getBeforeIndex}-- exist for the same reason: they allow moving through the text in the unit that
+ * suits whoever reads, without bringing everything.
  */
 public interface AccessibleText {
 
-    /** La unidad "un carácter". */
+    /** The unit "a character". */
     int CHARACTER = 1;
 
-    /** La unidad "una palabra". */
+    /** The unit "a word". */
     int WORD = 2;
 
-    /** La unidad "una oración". */
+    /** The unit "a sentence". */
     int SENTENCE = 3;
 
     /**
-     * Qué carácter cae en ese punto.
+     * Which character falls at that point.
      *
-     * @return el índice, o -1 si el punto cae fuera del texto
+     * @return the index, or -1 if the point falls outside the text
      */
     int getIndexAtPoint(Point p);
 
     /**
-     * Dónde está ese carácter en la pantalla.
+     * Where that character is on the screen.
      *
-     * @return el rectángulo, o `null` si el índice no existe
+     * @return the rectangle, or `null` if the index does not exist
      */
     Rectangle getCharacterBounds(int i);
 
-    /** Cuántos caracteres hay. */
+    /** How many characters there are. */
     int getCharCount();
 
-    /** Dónde está el cursor. */
+    /** Where the caret is. */
     int getCaretPosition();
 
     /**
-     * La unidad que empieza en ese índice.
+     * The unit that starts at that index.
      *
-     * @param part {@link #CHARACTER}, {@link #WORD} o {@link #SENTENCE}
+     * @param part {@link #CHARACTER}, {@link #WORD} or {@link #SENTENCE}
      */
     String getAtIndex(int part, int index);
 
-    /** La unidad siguiente a la de ese índice. */
+    /** The unit following the one at that index. */
     String getAfterIndex(int part, int index);
 
-    /** La unidad anterior a la de ese índice. */
+    /** The unit preceding the one at that index. */
     String getBeforeIndex(int part, int index);
 
-    /** Con qué atributos se dibuja ese carácter. */
+    /** With which attributes that character is drawn. */
     AttributeSet getCharacterAttribute(int i);
 
-    /** Dónde empieza la selección. */
+    /** Where the selection starts. */
     int getSelectionStart();
 
-    /** Dónde termina la selección. */
+    /** Where the selection ends. */
     int getSelectionEnd();
 
-    /** El texto seleccionado, o `null` si no hay. */
+    /** The selected text, or `null` if there is none. */
     String getSelectedText();
 }

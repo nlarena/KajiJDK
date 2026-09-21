@@ -5,47 +5,47 @@ import java.security.Permission;
 import java.security.PermissionCollection;
 
 /**
- * KajiLibrary's javax.security.auth.kerberos.ServicePermission -- permiso para usar un servicio de
- * Kerberos.
+ * KajiLibrary's javax.security.auth.kerberos.ServicePermission -- permission to use a Kerberos
+ * service.
  *
- * <p>El nombre es el principal del servicio, o {@code "*"} para todos. Las acciones son dos:
- * {@code initiate} --pedir un ticket para ese servicio, o sea actuar de cliente-- y {@code accept}
- * --recibir tickets para ese servicio, o sea ser el servicio--. Un servidor necesita {@code accept}
- * sobre su propio principal; un cliente necesita {@code initiate} sobre el del servidor.
+ * <p>The name is the service's principal, or {@code "*"} for all. There are two actions:
+ * {@code initiate} --asking for a ticket for that service, that is acting as client-- and
+ * {@code accept} --receiving tickets for that service, that is being the service--. A server needs
+ * {@code accept} on its own principal; a client needs {@code initiate} on the server's.
  *
- * <p>La forma canonica es {@code "initiate,accept"}, en ese orden, sin espacios y en minusculas; al
- * construir se aceptan mayusculas y espacios alrededor de cada accion.
+ * <p>The canonical form is {@code "initiate,accept"}, in that order, without spaces and in lower
+ * case; when building, upper case and spaces around each action are accepted.
  *
- * @deprecated el JDK lo marca para remocion junto con el gestor de seguridad; sigue aca porque el
- *     codigo que lo instancia tiene que poder compilar y correr
+ * @deprecated the JDK marks it for removal together with the security manager; it is still here
+ *     because code that instantiates it has to be able to compile and run
  */
 @Deprecated(since = "17", forRemoval = true)
 public final class ServicePermission extends Permission implements Serializable {
 
     private static final long serialVersionUID = -1227585031618624935L;
 
-    /** Actuar de cliente. */
+    /** Act as client. */
     private static final int INITIATE = 0x1;
 
-    /** Actuar de servicio. */
+    /** Act as service. */
     private static final int ACCEPT = 0x2;
 
-    /** Las dos. */
+    /** Both. */
     private static final int ALL = INITIATE | ACCEPT;
 
-    /** Que acciones estan permitidas. */
+    /** Which actions are permitted. */
     private transient int mask;
 
-    /** La forma canonica, armada a pedido. */
+    /** The canonical form, built on demand. */
     private String actions;
 
     /**
-     * Ese permiso sobre ese servicio.
+     * That permission on that service.
      *
-     * @param servicePrincipal el principal del servicio, o {@code "*"}
-     * @param action {@code initiate}, {@code accept} o las dos separadas por coma
-     * @throws NullPointerException si cualquiera es null
-     * @throws IllegalArgumentException si las acciones estan vacias o alguna no existe
+     * @param servicePrincipal the service's principal, or {@code "*"}
+     * @param action {@code initiate}, {@code accept} or both separated by a comma
+     * @throws NullPointerException if either is null
+     * @throws IllegalArgumentException if the actions are empty or one does not exist
      */
     public ServicePermission(String servicePrincipal, String action) {
         super(servicePrincipal);
@@ -55,13 +55,13 @@ public final class ServicePermission extends Permission implements Serializable 
         init(action);
     }
 
-    /** Con la mascara ya armada; para la coleccion. */
+    /** With the mask already built; for the collection. */
     ServicePermission(String servicePrincipal, int mask) {
         super(servicePrincipal);
         this.mask = mask & ALL;
     }
 
-    /** Interpreta las acciones. */
+    /** Interprets the actions. */
     private void init(String action) {
         if (action == null) {
             throw new NullPointerException("action can't be null");
@@ -73,8 +73,8 @@ public final class ServicePermission extends Permission implements Serializable 
     }
 
     /**
-     * Si este permiso alcanza para lo que el otro pide: el mismo servicio o {@code "*"}, y todas sus
-     * acciones.
+     * Whether this permission is enough for what the other asks for: the same service or {@code
+     * "*"}, and all its actions.
      */
     @Override
     public boolean implies(Permission p) {
@@ -85,12 +85,12 @@ public final class ServicePermission extends Permission implements Serializable 
         return (this.mask & that.mask) == that.mask && impliesIgnoreMask(that);
     }
 
-    /** Si el nombre alcanza, sin mirar las acciones. */
+    /** Whether the name is enough, without looking at the actions. */
     boolean impliesIgnoreMask(ServicePermission p) {
         return getName().equals("*") || getName().equals(p.getName());
     }
 
-    /** Iguales si nombran al mismo servicio y permiten las mismas acciones. */
+    /** Equal if they name the same service and permit the same actions. */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -108,7 +108,7 @@ public final class ServicePermission extends Permission implements Serializable 
         return getName().hashCode() ^ this.mask;
     }
 
-    /** La forma canonica de esos bits. */
+    /** The canonical form of those bits. */
     static String getActions(int mask) {
         StringBuilder text = new StringBuilder();
         if ((mask & INITIATE) == INITIATE) {
@@ -123,7 +123,7 @@ public final class ServicePermission extends Permission implements Serializable 
         return text.toString();
     }
 
-    /** Las acciones en forma canonica. Ver la nota de la clase. */
+    /** The actions in canonical form. See the class note. */
     @Override
     public String getActions() {
         if (this.actions == null) {
@@ -132,22 +132,22 @@ public final class ServicePermission extends Permission implements Serializable 
         return this.actions;
     }
 
-    /** Una coleccion que junta los permisos del mismo servicio. */
+    /** A collection that merges the permissions of the same service. */
     @Override
     public PermissionCollection newPermissionCollection() {
         return new KrbServicePermissionCollection();
     }
 
-    /** Los bits. */
+    /** The bits. */
     int getMask() {
         return this.mask;
     }
 
     /**
-     * Los bits de esa lista de acciones.
+     * The bits of that list of actions.
      *
-     * <p>Cada accion se recorta y se compara sin distinguir mayusculas; una vacia --de una coma de
-     * mas-- es tan invalida como una que no existe, y el mensaje repite la lista entera.
+     * <p>Each action is trimmed and compared case-insensitively; an empty one --from an extra
+     * comma-- is as invalid as one that does not exist, and the message repeats the whole list.
      */
     private static int getMask(String action) {
         int mask = 0;
@@ -167,7 +167,9 @@ public final class ServicePermission extends Permission implements Serializable 
         return mask;
     }
 
-    /** Al leerse de un flujo se vuelve a interpretar la forma canonica: la mascara no se serializa. */
+    /**
+     * When read from a stream the canonical form is interpreted again: the mask is not serialized.
+     */
     private void readObject(java.io.ObjectInputStream in)
             throws java.io.IOException, ClassNotFoundException {
         in.defaultReadObject();

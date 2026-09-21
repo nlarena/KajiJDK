@@ -1,22 +1,22 @@
 package java.security;
 
-// SHA-224 y SHA-256, segun FIPS 180-4. La rama de 32 bits de SHA-2.
+// SHA-224 and SHA-256, according to FIPS 180-4. The 32-bit branch of SHA-2.
 //
-// Son **el mismo algoritmo**: identica funcion de compresion, identico schedule, identicas
-// constantes. Lo unico que cambia es el vector inicial y que SHA-224 tira las ultimas cuatro
-// palabras del resultado. Ese truncado no es solo para ahorrar bytes: hace que SHA-224 no sufra
-// la extension de longitud que si afecta a SHA-256, porque el atacante no conoce el estado
-// completo con el que seguiria.
+// They are **the same algorithm**: identical compression function, identical schedule, identical
+// constants. The only thing that changes is the initial vector and that SHA-224 throws away the
+// last four words of the result. That truncation is not only for saving bytes: it makes SHA-224 not
+// suffer the length extension that does affect SHA-256, because the attacker does not know the
+// complete state they would go on with.
 //
-// A diferencia de MD5 y SHA-1, estos no tienen ataques practicos: SHA-256 es la eleccion por
-// defecto razonable hoy.
+// Unlike MD5 and SHA-1, these have no practical attacks: SHA-256 is the reasonable default choice
+// today.
 //
-// Verificados contra los vectores de FIPS 180-4 y contra el JDK 25.
-final class DigestSHA2 extends DigestBloque {
+// Checked against the vectors of FIPS 180-4 and against JDK 25.
+final class DigestSHA2 extends BlockDigest {
 
-    // K[i] = los primeros 32 bits de la parte fraccionaria de la raiz cubica del primo i-esimo.
-    // Igual que en MD5, son "nothing up my sleeve numbers": cualquiera puede recalcularlos y
-    // comprobar que no se eligieron a dedo.
+    // K[i] = the first 32 bits of the fractional part of the cube root of the i-th prime. Just as
+    // in MD5, they are "nothing up my sleeve numbers": anybody can recompute them and check that
+    // they were not hand-picked.
     private static final int[] K = {
         0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5,
         0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
@@ -36,16 +36,15 @@ final class DigestSHA2 extends DigestBloque {
         0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
     };
 
-    // Los primeros 32 bits de la parte fraccionaria de la raiz cuadrada de los ocho primeros
-    // primos.
+    // The first 32 bits of the fractional part of the square root of the first eight primes.
     private static final int[] IV_256 = {
         0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
         0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19
     };
 
-    // El IV de SHA-224 son los **segundos** 32 bits de la raiz cuadrada del noveno al decimosexto
-    // primo. Que sea otro y no el de SHA-256 es lo que evita que SHA-224(m) sea deducible de
-    // SHA-256(m) o al reves.
+    // The IV of SHA-224 is the **second** 32 bits of the square root of the ninth to the sixteenth
+    // prime. That it is another and not that of SHA-256 is what keeps SHA-224(m) from being
+    // deducible from SHA-256(m) or the other way round.
     private static final int[] IV_224 = {
         0xc1059ed8, 0x367cd507, 0x3070dd17, 0xf70e5939,
         0xffc00b31, 0x68581511, 0x64f98fa7, 0xbefa4fa4
@@ -55,8 +54,8 @@ final class DigestSHA2 extends DigestBloque {
     private final int[] h = new int[8];
     private final int[] w = new int[64];
 
-    private DigestSHA2(String algoritmo, int[] iv, int largo) {
-        super(algoritmo, 64, largo);
+    private DigestSHA2(String algorithmName, int[] iv, int len) {
+        super(algorithmName, 64, len);
         this.iv = iv;
         this.engineReset();
     }
@@ -70,7 +69,7 @@ final class DigestSHA2 extends DigestBloque {
     }
 
     @Override
-    void reiniciarEstado() {
+    void resetState() {
         System.arraycopy(this.iv, 0, this.h, 0, 8);
     }
 
@@ -80,22 +79,22 @@ final class DigestSHA2 extends DigestBloque {
     }
 
     @Override
-    int bytesDeLargo() {
+    int lengthBytes() {
         return 8;
     }
 
     @Override
-    void comprimir(byte[] in, int ofs) {
+    void compress(byte[] in, int ofs) {
         int i = 0;
         while (i < 16) {
-            this.w[i] = leerIntBE(in, ofs + i * 4);
+            this.w[i] = readIntBE(in, ofs + i * 4);
             i = i + 1;
         }
         while (i < 64) {
             int x = this.w[i - 15];
             int y = this.w[i - 2];
-            int s0 = rotDer(x, 7) ^ rotDer(x, 18) ^ (x >>> 3);
-            int s1 = rotDer(y, 17) ^ rotDer(y, 19) ^ (y >>> 10);
+            int s0 = rotRight(x, 7) ^ rotRight(x, 18) ^ (x >>> 3);
+            int s1 = rotRight(y, 17) ^ rotRight(y, 19) ^ (y >>> 10);
             this.w[i] = this.w[i - 16] + s0 + this.w[i - 7] + s1;
             i = i + 1;
         }
@@ -111,10 +110,10 @@ final class DigestSHA2 extends DigestBloque {
 
         int t = 0;
         while (t < 64) {
-            int S1 = rotDer(e, 6) ^ rotDer(e, 11) ^ rotDer(e, 25);
+            int S1 = rotRight(e, 6) ^ rotRight(e, 11) ^ rotRight(e, 25);
             int ch = (e & f) ^ ((~e) & g);
             int t1 = hh + S1 + ch + K[t] + this.w[t];
-            int S0 = rotDer(a, 2) ^ rotDer(a, 13) ^ rotDer(a, 22);
+            int S0 = rotRight(a, 2) ^ rotRight(a, 13) ^ rotRight(a, 22);
             int maj = (a & b) ^ (a & c) ^ (b & c);
             int t2 = S0 + maj;
             hh = g;
@@ -138,24 +137,24 @@ final class DigestSHA2 extends DigestBloque {
         this.h[7] = this.h[7] + hh;
     }
 
-    // Escribe solo `largoDigest` bytes: para SHA-224 eso corta la ultima palabra entera.
+    // It writes only `digestLen` bytes: for SHA-224 that cuts the last word whole.
     @Override
-    void escribirEstado(byte[] out) {
+    void writeState(byte[] out) {
         int i = 0;
         while (i * 4 + 4 <= out.length) {
-            escribirIntBE(out, i * 4, this.h[i]);
+            writeIntBE(out, i * 4, this.h[i]);
             i = i + 1;
         }
     }
 
     @Override
-    DigestBloque nuevoIgual() {
-        return new DigestSHA2(this.getAlgorithm(), this.iv, this.largoDigest);
+    BlockDigest freshInstance() {
+        return new DigestSHA2(this.getAlgorithm(), this.iv, this.digestLen);
     }
 
     @Override
-    void copiarEstadoDe(DigestBloque otro) {
-        DigestSHA2 o = (DigestSHA2) otro;
+    void copyStateFrom(BlockDigest other) {
+        DigestSHA2 o = (DigestSHA2) other;
         System.arraycopy(o.h, 0, this.h, 0, 8);
     }
 }

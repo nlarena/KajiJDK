@@ -1,22 +1,22 @@
 package javax.management;
 
 /**
- * Una constante de cadena dentro de una consulta.
+ * A string constant inside a query.
  *
- * <p>Su {@link #toString()} la imprime entre comillas simples y **duplica** las que lleve adentro,
- * a la manera de SQL. No es decoracion: la representacion textual de una consulta tiene que poder
- * volver a leerse, y sin duplicarlas una comilla en el dato cerraria la cadena antes de tiempo.
+ * <p>Its {@link #toString()} prints it between single quotes and <b>doubles</b> the ones it carries
+ * inside, SQL style. It is not decoration: the textual representation of a query has to be readable
+ * back, and without doubling them a quote in the data would close the string too early.
  */
 public class StringValueExp implements ValueExp {
 
     private static final long serialVersionUID = -3256390509806284044L;
 
     /**
-     * @serial el valor
+     * @serial the value
      */
     private String val;
 
-    /** Sin valor; solo para deserializar. */
+    /** Without a value; only for deserialization. */
     public StringValueExp() {
     }
 
@@ -24,12 +24,12 @@ public class StringValueExp implements ValueExp {
         this.val = val;
     }
 
-    /** El valor. */
+    /** The value. */
     public String getValue() {
         return val;
     }
 
-    /** Entre comillas simples, con las internas duplicadas. */
+    /** Between single quotes, with the inner ones doubled. */
     public String toString() {
         if (val == null) {
             return "null";
@@ -46,12 +46,12 @@ public class StringValueExp implements ValueExp {
         return b.append('\'').toString();
     }
 
-    /** No hace nada: una constante no consulta a nadie. */
+    /** Does nothing: a constant asks nobody. */
     @Deprecated
     public void setMBeanServer(MBeanServer s) {
     }
 
-    /** Se devuelve a si misma: una constante ya esta evaluada. */
+    /** Returns itself: a constant is already evaluated. */
     public ValueExp apply(ObjectName name) throws BadStringOperationException,
             BadBinaryOpValueExpException, BadAttributeValueExpException,
             InvalidApplicationException {

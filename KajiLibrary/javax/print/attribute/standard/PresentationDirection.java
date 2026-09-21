@@ -6,14 +6,14 @@ import javax.print.attribute.PrintJobAttribute;
 import javax.print.attribute.PrintRequestAttribute;
 
 /**
- * En que orden se recorren las celdas cuando {@link NumberUp} pone varias paginas por hoja.
+ * In which order the cells are walked when {@link NumberUp} puts several pages per sheet.
  *
- * <p>El nombre dice los dos ejes en orden: {@code TOBOTTOM_TORIGHT} llena una columna hacia abajo y
- * despues salta a la de la derecha. Las direcciones que van a la izquierda existen para las
- * escrituras que se leen de derecha a izquierda.
+ * <p>The name says the two axes in order: {@code TOBOTTOM_TORIGHT} fills a column downwards and
+ * then jumps to the one on the right. The directions going left exist for scripts read right to
+ * left.
  *
- * <p>Es la unica clase de la familia con el constructor {@code private}: no admite valores de
- * sitio, porque las ocho combinaciones de los dos ejes ya estan todas.
+ * <p>It is the only class of the family with a {@code private} constructor: it admits no site
+ * values, because the eight combinations of the two axes are already all there.
  */
 public final class PresentationDirection extends EnumSyntax implements PrintJobAttribute, PrintRequestAttribute {
 

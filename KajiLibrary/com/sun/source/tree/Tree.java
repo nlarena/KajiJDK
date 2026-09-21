@@ -1,39 +1,40 @@
 package com.sun.source.tree;
 
 /**
- * Cualquier nodo del arbol de sintaxis de un archivo fuente de Java.
+ * Any node of the syntax tree of a Java source file.
  *
- * <h2>Que es este paquete</h2>
+ * <h2>What this package is</h2>
  *
- * <p>El arbol de sintaxis tal como lo ve una herramienta externa: un IDE, un analizador de estilo,
- * un procesador de anotaciones que quiere mirar el codigo y no solo las firmas. Es la vista
- * *sintactica*, hermana de {@code javax.lang.model}, que es la vista *semantica* — el mismo programa
- * contado dos veces, una como se escribio y otra como quedo resuelto.
+ * <p>The syntax tree as an external tool sees it: an IDE, a style analyser, an annotation
+ * processor that wants to look at the code and not only at the signatures. It is the
+ * *syntactic* view, sister of {@code javax.lang.model}, which is the *semantic* view -- the same
+ * program told twice, once as it was written and once as it was resolved.
  *
- * <h2>La asimetria que hay que entender: 117 clases de nodo y 76 interfaces</h2>
+ * <h2>The asymmetry that has to be understood: 117 kinds of node and 76 interfaces</h2>
  *
- * <p>{@link Kind} tiene mas constantes que interfaces hay en el paquete, y no es desprolijidad.
- * Todos los operadores binarios comparten {@link BinaryTree} y se distinguen por su {@code Kind}:
- * {@code PLUS}, {@code MULTIPLY}, {@code AND}. Lo mismo los unarios en {@link UnaryTree} —ahi viven
- * {@code PREFIX_INCREMENT} y {@code POSTFIX_INCREMENT}, que tienen la misma forma y significados
- * distintos— y las cinco declaraciones de tipo en {@link ClassTree}.
+ * <p>{@link Kind} has more constants than there are interfaces in the package, and it is not
+ * untidiness. All the binary operators share {@link BinaryTree} and are told apart by their
+ * {@code Kind}: {@code PLUS}, {@code MULTIPLY}, {@code AND}. The same for the unary ones in
+ * {@link UnaryTree} -- there live {@code PREFIX_INCREMENT} and {@code POSTFIX_INCREMENT}, which
+ * have the same shape and different meanings -- and the five type declarations in
+ * {@link ClassTree}.
  *
- * <p>La consecuencia practica: <strong>preguntar por el tipo Java no siempre alcanza</strong>. Un
- * {@code instanceof BinaryTree} no dice que operador es.
+ * <p>The practical consequence: <strong>asking for the Java type is not always enough</strong>.
+ * An {@code instanceof BinaryTree} does not say which operator it is.
  *
- * <h2>Las dos formas de recorrerlo</h2>
+ * <h2>The two ways of walking it</h2>
  *
- * <p>{@link #getKind} para una decision suelta; {@link TreeVisitor} para atender a todos, con el
- * compilador vigilando que no falte ninguno.
+ * <p>{@link #getKind} for a loose decision; {@link TreeVisitor} in order to attend to them all,
+ * with the compiler watching that none is missing.
  */
 public interface Tree {
 
     /**
-     * Que clase de nodo es este.
+     * What kind of node this is.
      *
-     * <p>Cada constante sabe cual es la interfaz que la representa, y {@link #asInterface} la
-     * devuelve. Es lo que permite ir de la constante al tipo sin una tabla escrita a mano — y lo
-     * que hace visible que varias constantes compartan interfaz.
+     * <p>Each constant knows which the interface that represents it is, and {@link #asInterface}
+     * returns it. It is what allows one to go from the constant to the type without a table
+     * written by hand -- and what makes it visible that several constants share an interface.
      */
     enum Kind {
 
@@ -267,38 +268,40 @@ public interface Tree {
 
         USES(UsesTree.class),
 
-        /** Una implementacion propia que no es ninguna de las anteriores. */
+        /** An implementation of one's own that is none of the previous ones. */
         OTHER(null),
 
         YIELD(YieldTree.class);
 
-        // Privado y final: es un dato de la constante, no un calculo. `Class<? extends Tree>` y no
-        // `Class<?>` porque el limite es cierto y decirlo evita un cast en todo uso.
-        private final Class<? extends Tree> interfazAsociada;
+        // Private and final: it is a datum of the constant, not a computation. `Class<? extends
+        // Tree>` and
+                // not `Class<?>` because the bound is true and saying so avoids a cast at every
+                // use.
+        private final Class<? extends Tree> associatedInterface;
 
         Kind(Class<? extends Tree> intf) {
-            this.interfazAsociada = intf;
+            this.associatedInterface = intf;
         }
 
         /**
-         * La interfaz que representa a esta clase de nodo, o {@code null} para {@link #OTHER}.
+         * The interface that represents this kind of node, or {@code null} for {@link #OTHER}.
          *
-         * <p>No es inyectiva: varias constantes devuelven la misma interfaz — ver la nota de
-         * {@link Tree} sobre por que hay 117 constantes y 76 interfaces.
+         * <p>It is not injective: several constants return the same interface -- see {@link Tree}'s
+         * note about why there are 117 constants and 76 interfaces.
          */
         public Class<? extends Tree> asInterface() {
-            return this.interfazAsociada;
+            return this.associatedInterface;
         }
     }
 
-    /** Que clase de nodo es. */
+    /** What kind of node it is. */
     Kind getKind();
 
     /**
-     * Le pasa este nodo al visitante.
+     * It passes this node to the visitor.
      *
-     * @param <R> lo que devuelve el visitante
-     * @param <D> el dato que se le arrastra
+     * @param <R> what the visitor returns
+     * @param <D> the datum that is carried along to it
      */
     <R, D> R accept(TreeVisitor<R, D> visitor, D data);
 }

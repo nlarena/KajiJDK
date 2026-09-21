@@ -12,80 +12,81 @@ import java.util.HashSet;
 import java.util.Set;
 
 /**
- * El {@link SocketChannel} de esta biblioteca, sobre la costura TCP de la VM.
+ * This library's {@link SocketChannel}, over the TCP seam of the VM.
  *
- * <h2>El modo no bloqueante, que es la razon de ser de esta clase</h2>
+ * <h2>The non-blocking mode, which is this class's reason for being</h2>
  *
- * <p>Un canal se distingue de un {@link java.net.Socket} en que puede no esperar, y eso encaja sin
- * fricciones con la VM: sus nativos de red **tampoco esperan** --contestan -3 cuando todavia no hay
- * nada-- porque un nativo que se quedara esperando colgaria el interprete entero. Lo que en la
- * costura es un codigo de error es aca exactamente la semantica que el contrato pide:
+ * <p>A channel is told apart from a {@link java.net.Socket} in that it can not wait, and that fits
+ * the VM without friction: its network natives **do not wait either** --they answer -3 when there is
+ * nothing yet-- because a native that sat waiting would hang the whole interpreter. What in the seam
+ * is an error code is here exactly the semantics the contract asks for:
  *
  * <ul>
- *   <li>en modo no bloqueante, un -3 se traduce a `0` bytes leidos, que es lo que un canal contesta
- *       cuando no hay nada;
- *   <li>en modo bloqueante se reintenta con un `Thread.sleep` corto entre intentos --dormir suelta
- *       el interprete y deja correr a los demas hilos-- hasta que llegue algo.
+ *   <li>in non-blocking mode, a -3 is translated to `0` bytes read, which is what a channel answers
+ *       when there is nothing;
+ *   <li>in blocking mode it is retried with a short `Thread.sleep` between attempts --sleeping
+ *       releases the interpreter and lets the other threads run-- until something arrives.
  * </ul>
  *
- * <p>Las dos ramas salen del mismo `-3`. No hay dos caminos: hay uno, y el modo decide si se insiste.
+ * <p>Both branches come out of the same `-3`. There are not two roads: there is one, and the mode
+ * decides whether to insist.
  *
- * <h2>Conectar sin esperar</h2>
+ * <h2>Connecting without waiting</h2>
  *
- * <p>{@link #connect} en modo no bloqueante devuelve `false` --"arranque, todavia no termino"-- y
- * {@link #finishConnect} lo completa. Eso necesita un `connect` que no bloquee, y el de la costura
- * bloquea: se apoya entonces en `connectFromStart`, que lo corre en un hilo del sistema aparte y
- * deja la respuesta en un casillero. `finishConnect` mira el casillero. Es el mismo mecanismo con el
- * que `InetAddress.isReachable` prueba sin colgar la VM.
+ * <p>{@link #connect} in non-blocking mode returns `false` --"I started, I have not finished yet"--
+ * and {@link #finishConnect} completes it. That needs a `connect` that does not block, and the one
+ * of the seam blocks: it leans then on `connectFromStart`, which runs it in a separate thread of the
+ * system and leaves the answer in a pigeonhole. `finishConnect` looks at the pigeonhole. It is the
+ * same mechanism with which `InetAddress.isReachable` tests without hanging the VM.
  *
- * <h2>Las opciones que se declaran</h2>
+ * <h2>The options that are declared</h2>
  *
- * <p>{@link #supportedOptions} lista **solo** las que la VM puede aplicar de verdad, y las demas
- * tiran {@link UnsupportedOperationException} --que es lo que el contrato manda para una opcion que
- * el canal no sostiene--. Guardar un valor que no llega al sistema y devolverlo desde el getter
- * cumpliria la letra de "lo que se fija es lo que se lee" y mentiria en lo unico que importa: que la
- * opcion tenga efecto.
+ * <p>{@link #supportedOptions} lists **only** the ones the VM can really apply, and the rest throw
+ * {@link UnsupportedOperationException} --which is what the contract requires for an option the
+ * channel does not sustain--. Keeping a value that does not reach the system and returning it from
+ * the getter would fulfil the letter of "what is set is what is read" and would lie about the one
+ * thing that matters: that the option have an effect.
  */
 final class KajiSocketChannel extends SocketChannel {
 
-    /** El socket de la VM, o -1 si todavia no hay conexion. */
+    /** The socket of the VM, or -1 if there is no connection yet. */
     private int handle = -1;
 
-    /** El casillero del connect en curso, o -1. Ver la nota de la clase. */
-    private int pendiente = -1;
+    /** The pigeonhole of the connect under way, or -1. See the note of the class. */
+    private int pending = -1;
 
-    private boolean conectado = false;
+    private boolean connected = false;
 
-    /** Lo que pidio un `bind` previo; la cadena vacia es el comodin. */
+    /** What a previous `bind` asked for; the empty string is the wildcard. */
     private String bindHost = "";
     private int bindPort = 0;
-    private boolean atado = false;
+    private boolean bound = false;
 
     private boolean noDelay = false;
 
-    private static final Set<SocketOption<?>> OPCIONES;
+    private static final Set<SocketOption<?>> OPTIONS;
 
     static {
         Set<SocketOption<?>> s = new HashSet<SocketOption<?>>();
         s.add(StandardSocketOptions.TCP_NODELAY);
-        OPCIONES = Collections.unmodifiableSet(s);
+        OPTIONS = Collections.unmodifiableSet(s);
     }
 
     KajiSocketChannel(SelectorProvider provider) {
         super(provider);
     }
 
-    /** El que fabrica `accept()`: nace ya conectado sobre el socket que acepto el escucha. */
+    /** The one `accept()` makes: it is born connected over the socket the listener accepted. */
     KajiSocketChannel(SelectorProvider provider, int handle) {
         super(provider);
         this.handle = handle;
-        this.conectado = true;
-        this.atado = true;
+        this.connected = true;
+        this.bound = true;
     }
 
-    // ---- direcciones -------------------------------------------------------------------------
+    // ---- addresses -------------------------------------------------------------------------
 
-    private static InetSocketAddress exigirInet(SocketAddress dir) {
+    private static InetSocketAddress requireInet(SocketAddress dir) {
         if (dir == null) {
             throw new IllegalArgumentException("address is null");
         }
@@ -99,108 +100,108 @@ final class KajiSocketChannel extends SocketChannel {
         return d;
     }
 
-    private void exigirAbierto() throws ClosedChannelException {
+    private void requireOpen() throws ClosedChannelException {
         if (!this.isOpen()) {
             throw new ClosedChannelException();
         }
     }
 
-    // ---- ciclo de vida -----------------------------------------------------------------------
+    // ---- life cycle --------------------------------------------------------------------------
 
     public SocketChannel bind(SocketAddress local) throws IOException {
-        this.exigirAbierto();
-        if (this.atado) {
+        this.requireOpen();
+        if (this.bound) {
             throw new AlreadyBoundException();
         }
         if (local == null) {
             this.bindHost = "";
             this.bindPort = 0;
         } else {
-            InetSocketAddress d = KajiSocketChannel.exigirInet(local);
+            InetSocketAddress d = KajiSocketChannel.requireInet(local);
             this.bindHost = d.getAddress() == null || d.getAddress().isAnyLocalAddress()
                     ? "" : d.getAddress().getHostAddress();
             this.bindPort = d.getPort();
         }
-        // Se anota y el `connect` sale por ahi. **No reserva el puerto todavia**, por lo mismo que
-        // `java.net.Socket.bind`: el socket se crea recien al conectar, cuando se sabe la familia
-        // del destino. La diferencia se nota en un solo caso --dos canales atados al mismo puerto
-        // fallan al conectar el segundo y no al atarlo-- y esta dicho aca.
-        this.atado = true;
+        // It is noted and the `connect` goes out through there. **It does not reserve the port yet**,
+        // for the same reason as `java.net.Socket.bind`: the socket is created only on connecting, when
+        // the family of the destination is known. The difference shows in a single case --two channels
+        // tied to the same port fail on connecting the second and not on tying it-- and it is said here.
+        this.bound = true;
         return this;
     }
 
     public boolean connect(SocketAddress remote) throws IOException {
-        this.exigirAbierto();
-        if (this.conectado) {
+        this.requireOpen();
+        if (this.connected) {
             throw new AlreadyConnectedException();
         }
-        if (this.pendiente >= 0) {
+        if (this.pending >= 0) {
             throw new ConnectionPendingException();
         }
-        InetSocketAddress d = KajiSocketChannel.exigirInet(remote);
-        this.pendiente = jdk.internal.net.Net.connectFromStart(
+        InetSocketAddress d = KajiSocketChannel.requireInet(remote);
+        this.pending = jdk.internal.net.Net.connectFromStart(
                 d.getAddress().getHostAddress(), d.getPort(), this.bindHost, this.bindPort);
-        this.atado = true;
-        if (this.pendiente < 0) {
+        this.bound = true;
+        if (this.pending < 0) {
             throw new IOException("connect failed");
         }
         if (this.isBlocking()) {
             return this.finishConnect();
         }
-        // Sin bloquear: puede que ya este listo --una conexion al loopback suele resolverse en el
-        // acto-- y contestar `true` de una es correcto y le ahorra al que llama una vuelta entera
-        // por el selector.
-        return this.completar(false);
+        // Without blocking: it may be ready already --a connection to the loopback is usually resolved
+        // on the spot-- and answering `true` straight away is right and saves the caller a whole round
+        // through the selector.
+        return this.complete(false);
     }
 
     public boolean finishConnect() throws IOException {
-        this.exigirAbierto();
-        if (this.conectado) {
+        this.requireOpen();
+        if (this.connected) {
             return true;
         }
-        if (this.pendiente < 0) {
+        if (this.pending < 0) {
             throw new NoConnectionPendingException();
         }
-        return this.completar(this.isBlocking());
+        return this.complete(this.isBlocking());
     }
 
-    // Mira el casillero. Con `esperar`, insiste hasta que llegue la respuesta.
-    private boolean completar(boolean esperar) throws IOException {
-        int r = jdk.internal.net.Net.answerPoll(this.pendiente);
-        while (r == -3 && esperar) {
+    // It looks at the pigeonhole. With `wait`, it insists until the answer arrives.
+    private boolean complete(boolean wait_) throws IOException {
+        int r = jdk.internal.net.Net.answerPoll(this.pending);
+        while (r == -3 && wait_) {
             try {
                 Thread.sleep(1);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 throw new java.io.InterruptedIOException("connect interrupted");
             }
-            r = jdk.internal.net.Net.answerPoll(this.pendiente);
+            r = jdk.internal.net.Net.answerPoll(this.pending);
         }
         if (r == -3) {
             return false;
         }
-        jdk.internal.net.Net.answerFree(this.pendiente);
-        this.pendiente = -1;
+        jdk.internal.net.Net.answerFree(this.pending);
+        this.pending = -1;
         if (r < 0) {
             throw new java.net.ConnectException("Connection refused");
         }
         this.handle = r;
-        this.conectado = true;
+        this.connected = true;
         jdk.internal.net.Net.setTcpNoDelay(this.handle, this.noDelay);
         return true;
     }
 
     public boolean isConnected() {
-        return this.conectado;
+        return this.connected;
     }
 
     public boolean isConnectionPending() {
-        return this.pendiente >= 0;
+        return this.pending >= 0;
     }
 
     public SocketChannel shutdownInput() throws IOException {
-        this.exigirAbierto();
-        if (!this.conectado) {
+        this.requireOpen();
+        if (!this.connected) {
             throw new NotYetConnectedException();
         }
         jdk.internal.net.Net.shutdownIn(this.handle);
@@ -208,8 +209,8 @@ final class KajiSocketChannel extends SocketChannel {
     }
 
     public SocketChannel shutdownOutput() throws IOException {
-        this.exigirAbierto();
-        if (!this.conectado) {
+        this.requireOpen();
+        if (!this.connected) {
             throw new NotYetConnectedException();
         }
         jdk.internal.net.Net.shutdownOut(this.handle);
@@ -217,7 +218,7 @@ final class KajiSocketChannel extends SocketChannel {
     }
 
     public SocketAddress getLocalAddress() throws IOException {
-        this.exigirAbierto();
+        this.requireOpen();
         if (this.handle < 0) {
             return null;
         }
@@ -230,8 +231,8 @@ final class KajiSocketChannel extends SocketChannel {
     }
 
     public SocketAddress getRemoteAddress() throws IOException {
-        this.exigirAbierto();
-        if (!this.conectado) {
+        this.requireOpen();
+        if (!this.connected) {
             return null;
         }
         String d = jdk.internal.net.Net.remoteAddress(this.handle);
@@ -246,10 +247,10 @@ final class KajiSocketChannel extends SocketChannel {
         return (java.net.Socket) jdk.internal.net.Adoption.tcp(this.handle);
     }
 
-    // ---- opciones ----------------------------------------------------------------------------
+    // ---- options ----------------------------------------------------------------------------
 
     public <T> SocketChannel setOption(SocketOption<T> name, T value) throws IOException {
-        this.exigirAbierto();
+        this.requireOpen();
         if (name == null) {
             throw new NullPointerException("name");
         }
@@ -265,7 +266,7 @@ final class KajiSocketChannel extends SocketChannel {
 
     @SuppressWarnings("unchecked")
     public <T> T getOption(SocketOption<T> name) throws IOException {
-        this.exigirAbierto();
+        this.requireOpen();
         if (name == null) {
             throw new NullPointerException("name");
         }
@@ -276,25 +277,25 @@ final class KajiSocketChannel extends SocketChannel {
     }
 
     public Set<SocketOption<?>> supportedOptions() {
-        return OPCIONES;
+        return OPTIONS;
     }
 
     // ---- mover bytes -------------------------------------------------------------------------
 
     public int read(ByteBuffer dst) throws IOException {
-        this.exigirAbierto();
-        if (!this.conectado) {
+        this.requireOpen();
+        if (!this.connected) {
             throw new NotYetConnectedException();
         }
         if (dst == null) {
             throw new NullPointerException("dst");
         }
-        int cuantos = dst.remaining();
-        if (cuantos == 0) {
+        int count = dst.remaining();
+        if (count == 0) {
             return 0;
         }
-        byte[] buf = new byte[cuantos];
-        int n = jdk.internal.net.Net.read(this.handle, buf, 0, cuantos);
+        byte[] buf = new byte[count];
+        int n = jdk.internal.net.Net.read(this.handle, buf, 0, count);
         while (n == -3 && this.isBlocking()) {
             try {
                 Thread.sleep(1);
@@ -302,11 +303,11 @@ final class KajiSocketChannel extends SocketChannel {
                 Thread.currentThread().interrupt();
                 throw new java.io.InterruptedIOException("read interrupted");
             }
-            n = jdk.internal.net.Net.read(this.handle, buf, 0, cuantos);
+            n = jdk.internal.net.Net.read(this.handle, buf, 0, count);
         }
         if (n == -3) {
-            // Sin bloquear y sin nada que leer: cero. **No es -1**, que significa fin de flujo, y
-            // confundirlos haria que un canal sin trafico se leyera como una conexion cerrada.
+            // Without blocking and with nothing to read: zero. **It is not -1**, which means end of
+            // stream, and confusing them would make a channel with no traffic read as a closed connection.
             return 0;
         }
         if (n <= 0) {
@@ -317,7 +318,7 @@ final class KajiSocketChannel extends SocketChannel {
     }
 
     public long read(ByteBuffer[] dsts, int offset, int length) throws IOException {
-        KajiSocketChannel.exigirRango(dsts, offset, length);
+        KajiSocketChannel.requireRange(dsts, offset, length);
         long total = 0;
         for (int i = 0; i < length; i++) {
             ByteBuffer b = dsts[offset + i];
@@ -330,8 +331,8 @@ final class KajiSocketChannel extends SocketChannel {
             }
             total += n;
             if (n < b.capacity() && total > 0) {
-                // Se leyo menos de lo que entraba: no hay mas por ahora, y seguir con el proximo
-                // buffer solo agregaria una lectura que va a devolver cero.
+                // Less was read than fitted: there is no more for now, and going on with the next buffer
+                // would only add a read that is going to return zero.
                 break;
             }
         }
@@ -339,27 +340,27 @@ final class KajiSocketChannel extends SocketChannel {
     }
 
     public int write(ByteBuffer src) throws IOException {
-        this.exigirAbierto();
-        if (!this.conectado) {
+        this.requireOpen();
+        if (!this.connected) {
             throw new NotYetConnectedException();
         }
         if (src == null) {
             throw new NullPointerException("src");
         }
-        int cuantos = src.remaining();
-        if (cuantos == 0) {
+        int count = src.remaining();
+        if (count == 0) {
             return 0;
         }
-        byte[] buf = new byte[cuantos];
-        src.get(buf, 0, cuantos);
-        if (!jdk.internal.net.Net.write(this.handle, buf, 0, cuantos)) {
+        byte[] buf = new byte[count];
+        src.get(buf, 0, count);
+        if (!jdk.internal.net.Net.write(this.handle, buf, 0, count)) {
             throw new IOException("Connection reset by peer");
         }
-        return cuantos;
+        return count;
     }
 
     public long write(ByteBuffer[] srcs, int offset, int length) throws IOException {
-        KajiSocketChannel.exigirRango(srcs, offset, length);
+        KajiSocketChannel.requireRange(srcs, offset, length);
         long total = 0;
         for (int i = 0; i < length; i++) {
             total += this.write(srcs[offset + i]);
@@ -367,9 +368,9 @@ final class KajiSocketChannel extends SocketChannel {
         return total;
     }
 
-    // La validacion que comparten las dos formas dispersas. Es del contrato y no una comodidad:
-    // un rango malo tiene que salir como `IndexOutOfBoundsException` antes de tocar la red.
-    static void exigirRango(ByteBuffer[] bufs, int offset, int length) {
+    // The check both scattering forms share. It is of the contract and not a convenience: a bad
+    // range has to come out as `IndexOutOfBoundsException` before touching the network.
+    static void requireRange(ByteBuffer[] bufs, int offset, int length) {
         if (bufs == null) {
             throw new NullPointerException("bufs");
         }
@@ -378,23 +379,24 @@ final class KajiSocketChannel extends SocketChannel {
         }
     }
 
-    // ---- cierre ------------------------------------------------------------------------------
+    // ---- closing ------------------------------------------------------------------------------
 
     protected void implCloseSelectableChannel() throws IOException {
-        if (this.pendiente >= 0) {
-            jdk.internal.net.Net.answerFree(this.pendiente);
-            this.pendiente = -1;
+        if (this.pending >= 0) {
+            jdk.internal.net.Net.answerFree(this.pending);
+            this.pending = -1;
         }
         if (this.handle >= 0) {
             jdk.internal.net.Net.close(this.handle);
             this.handle = -1;
         }
-        this.conectado = false;
+        this.connected = false;
     }
 
     protected void implConfigureBlocking(boolean block) throws IOException {
-        // No hay nada que decirle al sistema: **el socket de la VM siempre es no bloqueante**, y el
-        // modo lo decide esta clase al elegir si insiste o no. Ver la nota de la clase.
+        // There is nothing to say to the system: **the socket of the VM is always non-blocking**, and
+        // the mode is decided by this class when it chooses whether to insist. See the note of the
+        // class.
     }
 
     /**

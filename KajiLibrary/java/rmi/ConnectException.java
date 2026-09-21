@@ -1,26 +1,27 @@
 package java.rmi;
 
 /**
- * KajiLibrary's java.rmi.ConnectException -- No se pudo llegar al servidor.
+ * KajiLibrary's java.rmi.ConnectException -- The server could not be reached.
  *
- * <p>La conexion no se pudo <b>establecer</b>: no hay nadie escuchando, o el cortafuegos la corto.
- * Distinta de {@link ConnectIOException}, que es cuando la conexion se establecio y despues fallo.
+ * <p>The connection could not be <b>established</b>: nobody is listening, or the firewall cut it.
+ * Different from {@link ConnectIOException}, which is when the connection was established and then
+ * failed.
  *
- * <p>La diferencia importa para reintentar: esta suele significar que el servidor no esta levantado, y
- * reintentar enseguida no va a cambiar nada.
+ * <p>The difference matters for retrying: this one usually means the server is not up, and retrying
+ * straight away will not change anything.
  */
 public class ConnectException extends RemoteException {
 
     private static final long serialVersionUID = 4863550261346652506L;
 
-    /** @param s el mensaje */
+    /** @param s the message */
     public ConnectException(String s) {
         super(s);
     }
 
     /**
-     * @param s el mensaje
-     * @param ex la causa
+     * @param s the message
+     * @param ex the cause
      */
     public ConnectException(String s, Exception ex) {
         super(s, ex);

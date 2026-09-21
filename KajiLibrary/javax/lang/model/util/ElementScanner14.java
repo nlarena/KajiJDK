@@ -12,19 +12,19 @@ import javax.lang.model.element.TypeElement;
 import javax.lang.model.element.TypeParameterElement;
 
 /**
- * El escaner de elementos de Java 14 en adelante. Ver {@link ElementScanner6} por el mecanismo.
+ * The element scanner for Java 14 onwards. See {@link ElementScanner6} for the mechanism.
  *
- * <p>Trae los componentes de registro al recorrido, como se espera. Pero ademas **arregla un agujero
- * viejo**, y esa es la parte que lo distingue de verdad de las versiones anteriores.
+ * <p>It brings record components into the walk, as expected. But it also **fixes an old hole**, and
+ * that is the part that really sets it apart from the earlier versions.
  *
- * <p>El agujero: los **parametros de tipo** de una clase o de un metodo no estan en
- * `getEnclosedElements()` ni en `getParameters()`. En `&lt;T&gt; void f(T x)`, `T` es un
- * `TypeParameterElement` que ningun escaner anterior a esta version visitaba nunca, aunque el visitante
- * tuviera un `visitTypeParameter` escrito y esperando. Desde aca, `visitType` y `visitExecutable` los
- * anteponen a lo que ya recorrian.
+ * <p>The hole: the **type parameters** of a class or a method are neither in
+ * `getEnclosedElements()` nor in `getParameters()`. In `&lt;T&gt; void f(T x)`, `T` is a
+ * `TypeParameterElement` that no scanner before this version ever visited, even if the visitor had
+ * a `visitTypeParameter` written and waiting. From here on, `visitType` and `visitExecutable` put
+ * them before what they already walked.
  *
- * <p>Van **antes** y no despues porque es el orden en que se declaran y en que hacen falta: el parametro
- * de tipo esta en alcance para los miembros que lo usan.
+ * <p>They go **before** and not after because it is the order in which they are declared and in
+ * which they are needed: the type parameter is in scope for the members that use it.
  */
 @SupportedSourceVersion(SourceVersion.RELEASE_25)
 public class ElementScanner14<R, P> extends ElementScanner9<R, P> {
@@ -45,8 +45,8 @@ public class ElementScanner14<R, P> extends ElementScanner9<R, P> {
         return this.scan(this.createScanningList(e, e.getParameters()), p);
     }
 
-    // Sin parametros de tipo se devuelve la lista original y no una copia: es el caso comun con
-    // diferencia, y copiar por nada seria una asignacion por cada elemento visitado.
+    // Without type parameters the original list is returned and not a copy: it is by far the common
+    // case, and copying for nothing would be one allocation per visited element.
     private List<? extends Element> createScanningList(Parameterizable element,
             List<? extends Element> toBeScanned) {
         List<? extends TypeParameterElement> typeParameters = element.getTypeParameters();

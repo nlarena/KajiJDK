@@ -1,18 +1,18 @@
 package java.util;
 
-// Algo salio mal cargando un proveedor de servicio.
+// Something went wrong loading a service provider.
 //
-// Es un `Error` y no una `Exception`, que es una eleccion fuerte del JDK y esta razonada: una
-// configuracion de servicios rota no es una condicion que el programa pueda manejar, es un
-// despliegue mal armado. Tratarla como recuperable llevaria a programas que arrancan a medias.
+// It is an `Error` and not an `Exception`, which is a strong choice of the JDK's and a reasoned one:
+// a broken service configuration is not a condition the program can handle, it is a badly built
+// deployment. Treating it as recoverable would lead to programs that start up half way.
 public class ServiceConfigurationError extends Error {
 
-    // Con el mensaje dado.
+    // With the given message.
     public ServiceConfigurationError(String msg) {
         super(msg);
     }
 
-    // Con el mensaje dado y `cause` como causa.
+    // With the given message and `cause` as the cause.
     public ServiceConfigurationError(String msg, Throwable cause) {
         super(msg, cause);
     }

@@ -3,11 +3,12 @@ package java.security.interfaces;
 import java.math.BigInteger;
 import java.security.spec.RSAOtherPrimeInfo;
 
-// Una clave privada RSA con CRT y mas de dos primos.
+// An RSA private key with CRT and more than two primes.
 //
-// No extiende `RSAPrivateCrtKey` aunque declare los mismos seis metodos, y la repeticion es
-// deliberada: una clave de k primos no es una clave de dos, y dejarla pasar por una haria que codigo
-// que solo mira p y q creyera tener la factorizacion completa cuando le falta la mitad.
+// It does not extend `RSAPrivateCrtKey` even though it declares the same six methods, and the
+// repetition matters: a key of k primes is not a two-prime key, and letting it pass as one would
+// make code that only looks at p and q believe it has the complete factorization when primes are
+// missing.
 public interface RSAMultiPrimePrivateCrtKey extends RSAPrivateKey {
 
     long serialVersionUID = 618058533534628008L;
@@ -24,6 +25,6 @@ public interface RSAMultiPrimePrivateCrtKey extends RSAPrivateKey {
 
     BigInteger getCrtCoefficient();
 
-    // Los primos del tercero en adelante, o null si no hay.
+    // The primes from the third on, with their CRT values, or null if there are only two.
     RSAOtherPrimeInfo[] getOtherPrimeInfo();
 }

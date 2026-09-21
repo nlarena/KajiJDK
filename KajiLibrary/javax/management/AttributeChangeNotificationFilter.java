@@ -4,72 +4,72 @@ import java.util.List;
 import java.util.Vector;
 
 /**
- * Filtro de {@link AttributeChangeNotification} por <b>nombre de atributo</b>.
+ * Filter of {@link AttributeChangeNotification}s by <b>attribute name</b>.
  *
- * <p>La diferencia con {@link NotificationFilterSupport} es doble: aca la comparacion es por
- * <b>igualdad exacta</b> y no por prefijo --los nombres de atributo no tienen jerarquia--, y ademas
- * el filtro exige que la notificacion sea realmente un `AttributeChangeNotification`. Cualquier
- * otra queda afuera aunque su tipo coincida.
+ * <p>The difference from {@link NotificationFilterSupport} is twofold: here the comparison is by
+ * <b>exact equality</b> and not by prefix --attribute names have no hierarchy--, and the filter
+ * also requires the notification to really be an {@code AttributeChangeNotification}. Any other one
+ * is left out even if its type matches.
  *
- * <p>Igual que el otro, arranca vacio y por lo tanto bloqueando todo.
+ * <p>Like the other one, it starts empty and therefore blocking everything.
  */
 public class AttributeChangeNotificationFilter implements NotificationFilter {
 
     private static final long serialVersionUID = -6347317584796410029L;
 
     /**
-     * @serial los nombres de atributo habilitados
+     * @serial the enabled attribute names
      */
     private List<String> enabledAttributes = new Vector<String>();
 
-    /** Con la lista vacia: no pasa nada hasta que se habilite algun atributo. */
+    /** With the list empty: nothing passes until some attribute is enabled. */
     public AttributeChangeNotificationFilter() {
     }
 
     /**
-     * Deja pasar solo los cambios de atributo cuyo nombre este habilitado.
+     * Lets through only the attribute changes whose name is enabled.
      */
     public synchronized boolean isNotificationEnabled(Notification notification) {
-        String tipo = notification.getType();
-        if (tipo == null
-                || !tipo.equals(AttributeChangeNotification.ATTRIBUTE_CHANGE)
+        String type = notification.getType();
+        if (type == null
+                || !type.equals(AttributeChangeNotification.ATTRIBUTE_CHANGE)
                 || !(notification instanceof AttributeChangeNotification)) {
             return false;
         }
-        String nombre = ((AttributeChangeNotification) notification).getAttributeName();
-        if (nombre == null) {
+        String name = ((AttributeChangeNotification) notification).getAttributeName();
+        if (name == null) {
             return false;
         }
-        return enabledAttributes.contains(nombre);
+        return enabledAttributes.contains(name);
     }
 
     /**
-     * Habilita un nombre de atributo.
+     * Enables an attribute name.
      *
-     * @throws IllegalArgumentException si es `null`, por la misma razon que en
-     *         {@link NotificationFilterSupport#enableType}: fallar aca y no en cada entrega.
+     * @throws IllegalArgumentException if it is {@code null}, for the same reason as in
+     *         {@link NotificationFilterSupport#enableType}: fail here and not on every delivery.
      */
     public synchronized void enableAttribute(String name) throws IllegalArgumentException {
         if (name == null) {
-            throw new IllegalArgumentException("El nombre del atributo no puede ser null");
+            throw new IllegalArgumentException("The attribute name cannot be null");
         }
         if (!enabledAttributes.contains(name)) {
             enabledAttributes.add(name);
         }
     }
 
-    /** Saca ese nombre; si no estaba, no hace nada. */
+    /** Removes that name; if it was not there, does nothing. */
     public synchronized void disableAttribute(String name) {
         enabledAttributes.remove(name);
     }
 
-    /** Vuelve al estado inicial: bloquea todo. */
+    /** Back to the initial state: blocks everything. */
     public synchronized void disableAllAttributes() {
         enabledAttributes.clear();
     }
 
     /**
-     * Los nombres habilitados; es la lista interna, igual que en el JDK.
+     * The enabled names; it is the internal list, as in the JDK.
      */
     public synchronized Vector<String> getEnabledAttributes() {
         return (Vector<String>) enabledAttributes;

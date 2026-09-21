@@ -3,13 +3,13 @@ package com.sun.net.httpserver;
 import java.util.function.Predicate;
 
 /**
- * Dos fabricas para armar manejadores sin escribir una clase.
+ * Two factories for building handlers without writing a class.
  *
- * <p>Cubren los dos casos que aparecen todo el tiempo y no merecen un tipo propio: devolver una
- * respuesta fija, y elegir entre dos manejadores mirando el pedido.
+ * <p>They cover the two cases that appear all the time and do not deserve a type of their own:
+ * returning a fixed response, and choosing between two handlers by looking at the request.
  *
- * <p>{@link #handleOrElse} se compone: el {@code fallback} puede ser otro {@code handleOrElse}, y
- * eso arma un enrutador sin ningun registro ni tabla.
+ * <p>{@link #handleOrElse} composes: the {@code fallback} may be another {@code handleOrElse},
+ * and that builds a router with no registry and no table.
  */
 public final class HttpHandlers {
 
@@ -17,14 +17,14 @@ public final class HttpHandlers {
     }
 
     /**
-     * Si {@code handlerTest} acepta el pedido lo atiende {@code handler}; si no,
+     * If {@code handlerTest} accepts the request it is attended by {@code handler}; if not, by
      * {@code fallbackHandler}.
      *
-     * <p>El predicado recibe un {@link Request} y no el intercambio entero, que es deliberado:
-     * elegir manejador es una decision que solo mira el pedido, y darle acceso a la respuesta
-     * invitaria a escribirla desde ahi.
+     * <p>The predicate receives a {@link Request} and not the whole exchange, which is deliberate:
+     * choosing a handler is a decision that only looks at the request, and giving it access to the
+     * response would be an invitation to write it from there.
      *
-     * @throws NullPointerException si alguno es {@code null}
+     * @throws NullPointerException if any of them is {@code null}
      */
     public static HttpHandler handleOrElse(Predicate<Request> handlerTest, HttpHandler handler,
             HttpHandler fallbackHandler) {
@@ -37,22 +37,22 @@ public final class HttpHandlers {
         if (fallbackHandler == null) {
             throw new NullPointerException("fallbackHandler");
         }
-        return new ManejadorCondicional(handlerTest, handler, fallbackHandler);
+        return new ConditionalHandler(handlerTest, handler, fallbackHandler);
     }
 
     /**
-     * Un manejador que siempre contesta lo mismo.
+     * A handler that always answers the same.
      *
-     * <p>Sirve para un {@code 404}, un {@code 301} o un endpoint de salud. El cuerpo se manda en
-     * UTF-8, y un cuerpo vacio produce una respuesta sin cuerpo — no una de largo cero, que es otra
-     * cosa.
+     * <p>It serves for a {@code 404}, a {@code 301} or a health endpoint. The body is sent in
+     * UTF-8, and an empty body produces a response with no body -- not one of length zero, which
+     * is another thing.
      *
-     * @throws IllegalArgumentException si el codigo no esta entre {@code 100} y {@code 599}
-     * @throws NullPointerException si faltan los encabezados o el cuerpo
+     * @throws IllegalArgumentException if the code is not between {@code 100} and {@code 599}
+     * @throws NullPointerException if the headers or the body are missing
      */
     public static HttpHandler of(int statusCode, Headers headers, String body) {
         if (statusCode < 100 || statusCode > 599) {
-            throw new IllegalArgumentException("codigo fuera de rango: "
+            throw new IllegalArgumentException("code out of range: "
                     + String.valueOf(statusCode));
         }
         if (headers == null) {
@@ -61,6 +61,6 @@ public final class HttpHandlers {
         if (body == null) {
             throw new NullPointerException("body");
         }
-        return new ManejadorFijo(statusCode, Headers.of(headers), body);
+        return new FixedHandler(statusCode, Headers.of(headers), body);
     }
 }

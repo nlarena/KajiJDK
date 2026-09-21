@@ -13,47 +13,48 @@ import javax.xml.crypto.XMLStructure;
 import javax.xml.crypto.dsig.Transform;
 
 /**
- * KajiLibrary's javax.xml.crypto.dsig.keyinfo.KeyInfoFactory -- fabrica las estructuras de
- * informacion de clave.
+ * KajiLibrary's javax.xml.crypto.dsig.keyinfo.KeyInfoFactory -- makes the key information
+ * structures.
  *
- * <p>Todas las interfaces de este paquete se construyen desde aca. Es asi porque son interfaces sin
- * implementacion publica: quien provee el mecanismo decide de que clase concreta son.
+ * <p>All the interfaces of this package are built from here. It is so because they are interfaces
+ * without a public implementation: whoever provides the mechanism decides which concrete class they
+ * are.
  *
- * <p>Se pide por <b>mecanismo</b> --el nombre del modelo de objetos, tipicamente {@code "DOM"}-- y no
- * por algoritmo. Es la misma indireccion que en {@code XMLSignatureFactory}, y las dos fabricas
- * tienen que ser del mismo mecanismo para que sus estructuras se puedan mezclar.
+ * <p>It is asked for by <b>mechanism</b> --the name of the object model, typically {@code "DOM"}--
+ * and not by algorithm. It is the same indirection as in {@code XMLSignatureFactory}, and both
+ * factories have to be of the same mechanism for their structures to be mixable.
  *
  * <h2>A KajiLibrary subset</h2>
  *
- * <p>Esta biblioteca no trae un mecanismo de firma XML: implementarlo pide canonicalizacion, un DOM
- * vivo y un motor de transformaciones, y ninguno de los tres esta. Los cuatro {@code getInstance}
- * lanzan {@link NoSuchMechanismException}, que es la excepcion que ya declaran para "no hay
- * implementacion de ese mecanismo" y que <b>no es comprobada</b> justamente porque es un problema de
- * despliegue.
+ * <p>This library comes with no XML signature mechanism: implementing it needs canonicalization, a
+ * live DOM and a transform engine, and none of the three is here. The four {@code getInstance}s
+ * throw {@link NoSuchMechanismException}, which is the exception they already declare for "no
+ * implementation of that mechanism" and which is <b>unchecked</b> precisely because it is a
+ * deployment problem.
  *
- * <p>La busqueda entre proveedores de seguridad esta implementada de verdad: registrando un servicio
- * {@code KeyInfoFactory}, esto funciona sin cambios.
+ * <p>The search among security providers is really implemented: registering a {@code
+ * KeyInfoFactory} service, this works unchanged.
  */
 public abstract class KeyInfoFactory {
 
-    /** El tipo de servicio con el que se registra un proveedor. */
+    /** The service type a provider registers with. */
     private static final String SERVICE = "KeyInfoFactory";
 
-    /** El mecanismo con el que se pidio. */
+    /** The mechanism it was asked for with. */
     private String mechanismType;
 
-    /** De donde salio. */
+    /** Where it came from. */
     private Provider provider;
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected KeyInfoFactory() {
     }
 
     /**
-     * La fabrica de ese mecanismo, del primer proveedor que la tenga.
+     * The factory of that mechanism, from the first provider that has it.
      *
-     * @throws NoSuchMechanismException si ninguno la tiene
-     * @throws NullPointerException si el mecanismo es null
+     * @throws NoSuchMechanismException if none has it
+     * @throws NullPointerException if the mechanism is null
      */
     public static KeyInfoFactory getInstance(String mechanismType) {
         if (mechanismType == null) {
@@ -73,9 +74,9 @@ public abstract class KeyInfoFactory {
     }
 
     /**
-     * Idem, de un proveedor concreto.
+     * Likewise, from a concrete provider.
      *
-     * @throws NullPointerException si alguno de los dos es null
+     * @throws NullPointerException if either of the two is null
      */
     public static KeyInfoFactory getInstance(String mechanismType, Provider provider) {
         if (mechanismType == null) {
@@ -93,10 +94,11 @@ public abstract class KeyInfoFactory {
     }
 
     /**
-     * Idem, nombrando el proveedor.
+     * Likewise, naming the provider.
      *
-     * @throws NoSuchProviderException si no hay proveedor con ese nombre
-     * @throws IllegalArgumentException si el nombre esta vacio
+     * @throws NoSuchProviderException if there is no provider with that name
+     * @throws IllegalArgumentException if the name is empty; JDK 25 throws {@code
+     *     NoSuchProviderException} there too
      */
     public static KeyInfoFactory getInstance(String mechanismType, String provider)
         throws NoSuchProviderException {
@@ -113,84 +115,84 @@ public abstract class KeyInfoFactory {
         return getInstance(mechanismType, p);
     }
 
-    /** La del mecanismo por omision, que es {@code "DOM"}. */
+    /** The one of the default mechanism, which is {@code "DOM"}. */
     public static KeyInfoFactory getInstance() {
         return getInstance("DOM");
     }
 
-    /** El mecanismo con el que se pidio. */
+    /** The mechanism it was asked for with. */
     public final String getMechanismType() {
         return this.mechanismType;
     }
 
-    /** El proveedor de donde salio. */
+    /** The provider it came from. */
     public final Provider getProvider() {
         return this.provider;
     }
 
     /**
-     * Un {@link KeyInfo} con ese contenido.
+     * A {@link KeyInfo} with that content.
      *
-     * @throws NullPointerException si la lista es null
-     * @throws IllegalArgumentException si esta vacia
+     * @throws NullPointerException if the list is null
+     * @throws IllegalArgumentException if it is empty
      */
     public abstract KeyInfo newKeyInfo(List<? extends XMLStructure> content);
 
-    /** Idem, con identificador. */
+    /** Likewise, with an identifier. */
     public abstract KeyInfo newKeyInfo(List<? extends XMLStructure> content, String id);
 
-    /** Un {@link KeyName}. */
+    /** A {@link KeyName}. */
     public abstract KeyName newKeyName(String name);
 
     /**
-     * Un {@link KeyValue} con esa clave publica.
+     * A {@link KeyValue} with that public key.
      *
-     * @throws KeyException si el algoritmo de la clave no esta soportado
+     * @throws KeyException if the key's algorithm is not supported
      */
     public abstract KeyValue newKeyValue(java.security.PublicKey key) throws KeyException;
 
-    /** Un {@link PGPData} con solo el identificador de clave. */
+    /** A {@link PGPData} with only the key identifier. */
     public abstract PGPData newPGPData(byte[] keyId);
 
-    /** Idem, con el paquete de clave y contenido extra. */
+    /** Likewise, with the key packet and extra content. */
     public abstract PGPData newPGPData(byte[] keyId, byte[] keyPacket,
                                        List<? extends XMLStructure> other);
 
-    /** Idem, con el paquete de clave solo. */
+    /** Likewise, with the key packet only. */
     public abstract PGPData newPGPData(byte[] keyPacket, List<? extends XMLStructure> other);
 
-    /** Un {@link RetrievalMethod} que apunta a ese URI. */
+    /** A {@link RetrievalMethod} pointing to that URI. */
     public abstract RetrievalMethod newRetrievalMethod(String uri);
 
-    /** Idem, con tipo y transformaciones. */
+    /** Likewise, with type and transforms. */
     public abstract RetrievalMethod newRetrievalMethod(String uri, String type,
                                                        List<? extends Transform> transforms);
 
     /**
-     * Un {@link X509Data} con ese contenido.
+     * An {@link X509Data} with that content.
      *
-     * <p>La lista es heterogenea; ver {@link X509Data#getContent}.
+     * <p>The list is heterogeneous; see {@link X509Data#getContent}.
      */
     public abstract X509Data newX509Data(List<?> content);
 
-    /** Un {@link X509IssuerSerial}. */
+    /** An {@link X509IssuerSerial}. */
     public abstract X509IssuerSerial newX509IssuerSerial(String issuerName,
                                                          BigInteger serialNumber);
 
-    /** Si esta implementacion soporta esa caracteristica. */
+    /** Whether this implementation supports that feature. */
     public abstract boolean isFeatureSupported(String feature);
 
-    /** Como esta fabrica resuelve las referencias por omision. */
+    /** How this factory resolves the references by default. */
     public abstract URIDereferencer getURIDereferencer();
 
     /**
-     * Lee un {@link KeyInfo} de una estructura ya analizada.
+     * Reads a {@link KeyInfo} from an already parsed structure.
      *
-     * @throws MarshalException si no es un {@code KeyInfo} bien formado
+     * @throws MarshalException if it is not a well-formed {@code KeyInfo}
      */
     public abstract KeyInfo unmarshalKeyInfo(XMLStructure xmlStructure) throws MarshalException;
 
-    /** El armado comun de los tres {@code getInstance} con busqueda. */
+    /** What the three {@code getInstance}s with a search build in common. */
     private static KeyInfoFactory build(Provider.Service s, String mechanismType) {
         Object made;
         try {

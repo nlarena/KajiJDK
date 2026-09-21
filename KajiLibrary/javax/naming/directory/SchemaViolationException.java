@@ -3,22 +3,24 @@ package javax.naming.directory;
 import javax.naming.NamingException;
 
 /**
- * KajiLibrary's javax.naming.directory.SchemaViolationException -- la operacion contradice el esquema del directorio.
+ * KajiLibrary's javax.naming.directory.SchemaViolationException -- the operation contradicts the
+ * directory schema.
  *
- * <p>La generica de las de esquema, para lo que no cae en las otras: borrar una entrada que tiene
- * hijos, mover algo adonde su clase de objeto no puede vivir, cambiar una clase de objeto
- * por otra incompatible.
+ * <p>The generic one of the schema exceptions, for what does not fall into the others: modifying an
+ * entry's attributes against its object class, moving something where its object class cannot
+ * live, changing an object class for an incompatible one. (An earlier note also listed deleting an
+ * entry that has children; JNDI reports that as {@code javax.naming.ContextNotEmptyException}.)
  */
 public class SchemaViolationException extends NamingException {
 
     private static final long serialVersionUID = -3041762429525049663L;
 
-    /** Sin detalle. */
+    /** With no detail. */
     public SchemaViolationException() {
         super();
     }
 
-    /** Con un mensaje que diga cual fue el problema. */
+    /** With a message saying what the problem was. */
     public SchemaViolationException(String explanation) {
         super(explanation);
     }

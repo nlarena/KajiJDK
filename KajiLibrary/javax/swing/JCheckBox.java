@@ -1,19 +1,21 @@
 package javax.swing;
 
+import javax.accessibility.Accessible;
 import javax.accessibility.AccessibleContext;
 
 import javax.swing.plaf.ButtonUI;
 import javax.swing.plaf.basic.BasicCheckBoxUI;
 
 /**
- * Una casilla: un {@link JToggleButton} cuyo icono es el cuadrado con tilde del aspecto.
+ * A check box: a {@link JToggleButton} whose icon is the look and feel's ticked square.
  *
- * <p>No agrega estado, salvo {@link #setBorderPaintedFlat}, que algunos aspectos usan para
- * dibujar la casilla sin relieve. El texto va a la derecha del icono y todo alineado al
- * principio, que es la diferencia visible con un boton: una casilla no centra.
+ * <p>It adds no state, save {@link #setBorderPaintedFlat}, which some looks and feels use in
+ * order to draw the box with no relief. The text goes to the right of the icon and everything
+ * aligned to the start, which is the visible difference with a button: a check box does not
+ * centre.
  *
- * <p>El icono de una {@link Action} se ignora a proposito: una casilla muestra siempre su
- * cuadrado, y el icono de la accion es para botones y menus.
+ * <p>An {@link Action}'s icon is ignored on purpose: a check box always shows its square, and
+ * the action's icon is for buttons and menus.
  */
 public class JCheckBox extends JToggleButton implements Accessible {
 
@@ -58,12 +60,15 @@ public class JCheckBox extends JToggleButton implements Accessible {
         setHorizontalAlignment(LEADING);
     }
 
-    /** Si el aspecto debe dibujar la casilla plana; el basico no la dibuja distinto. */
+    /**
+     * Whether the look and feel should draw the box flat; the basic one does not draw it
+     * differently.
+     */
     public void setBorderPaintedFlat(boolean b) {
-        boolean viejo = flat;
+        boolean old = flat;
         flat = b;
-        firePropertyChange(BORDER_PAINTED_FLAT_CHANGED_PROPERTY, viejo, flat);
-        if (b != viejo) {
+        firePropertyChange(BORDER_PAINTED_FLAT_CHANGED_PROPERTY, old, flat);
+        if (b != old) {
             revalidate();
             repaint();
         }
@@ -73,7 +78,7 @@ public class JCheckBox extends JToggleButton implements Accessible {
         return flat;
     }
 
-    /** Instala el aspecto basico; ver {@code JButton#updateUI}. */
+    /** It installs the basic look and feel; see {@code JButton#updateUI}. */
     public void updateUI() {
         setUI((ButtonUI) BasicCheckBoxUI.createUI(this));
     }
@@ -82,7 +87,7 @@ public class JCheckBox extends JToggleButton implements Accessible {
         return uiClassID;
     }
 
-    /** Nada: ver la nota de la clase. */
+    /** Nothing: see the class note. */
     void setIconFromAction(Action a) {
     }
 
@@ -90,7 +95,7 @@ public class JCheckBox extends JToggleButton implements Accessible {
         return super.paramString();
     }
 
-    /** Sin contexto de accesibilidad: no hay tecnologia asistiva que lo lea en esta VM. */
+    /** With no accessibility context: there is no assistive technology that reads it on this VM. */
     public AccessibleContext getAccessibleContext() {
         return null;
     }

@@ -1,10 +1,10 @@
 package java.security;
 
-// La base de los problemas con claves: invalida, mal codificada, imposible de administrar.
+// The base of the problems with keys: invalid, badly encoded, impossible to administer.
 //
-// Se conserva como nivel intermedio —y no se colapsa contra `GeneralSecurityException`— porque
-// `InvalidKeyException` y `KeyManagementException` cuelgan de ella, y hay codigo que quiere
-// atrapar "cualquier cosa de claves" sin atrapar tambien un fallo de firma.
+// It is kept as an intermediate level —and is not collapsed against `GeneralSecurityException`—
+// because `InvalidKeyException` and `KeyManagementException` hang from it, and there is code that
+// wants to catch "anything about keys" without also catching a signature failure.
 public class KeyException extends GeneralSecurityException {
 
     public KeyException() {

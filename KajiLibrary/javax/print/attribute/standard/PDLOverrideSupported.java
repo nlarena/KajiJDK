@@ -5,11 +5,11 @@ import javax.print.attribute.EnumSyntax;
 import javax.print.attribute.PrintServiceAttribute;
 
 /**
- * Si la impresora intenta que los atributos del trabajo le ganen a las instrucciones que el propio
- * documento trae adentro.
+ * Whether the printer tries to make the job's attributes win over the instructions the document
+ * itself carries inside.
  *
- * <p>Un PostScript puede pedir dos caras por su cuenta; {@code ATTEMPTED} dice que la impresora va
- * a tratar de imponer lo que diga el trabajo, sin prometer que lo logre.
+ * <p>A PostScript may ask for two sides on its own; {@code ATTEMPTED} says the printer is going to
+ * try to impose what the job says, without promising it succeeds.
  */
 public class PDLOverrideSupported extends EnumSyntax implements PrintServiceAttribute {
 

@@ -11,8 +11,8 @@ import java.util.List;
 
 // KajiLibrary's java.time.chrono.MinguoChronology — the Minguo (Republic of China) calendar system,
 // 1911 years behind ISO. A singleton reachable through INSTANCE. date/dateEpochDay return MinguoDate
-// (covariantly over Chronology's ChronoLocalDate) and eraOf returns MinguoEra. A KajiLibrary subset of
-// the JDK class (same omissions as ThaiBuddhistChronology).
+// (covariantly over Chronology's ChronoLocalDate) and eraOf returns MinguoEra. It carries the same
+// surface as ThaiBuddhistChronology.
 public final class MinguoChronology extends AbstractChronology {
 
     public static final MinguoChronology INSTANCE = new MinguoChronology();
@@ -54,7 +54,7 @@ public final class MinguoChronology extends AbstractChronology {
         return 1 - yearOfEra;
     }
 
-    // ---- lo que el calendario tiene que saber contestar ------------------------------------------
+    // ---- what the calendar has to know how to answer ---------------------------------------------
 
     public MinguoDate date(TemporalAccessor temporal) {
         if (temporal instanceof MinguoDate) {
@@ -80,8 +80,8 @@ public final class MinguoChronology extends AbstractChronology {
         if (clock == null) {
             throw new NullPointerException("clock");
         }
-        LocalDate hoy = LocalDate.now(clock);
-        return this.dateEpochDay(hoy.toEpochDay());
+        LocalDate today = LocalDate.now(clock);
+        return this.dateEpochDay(today.toEpochDay());
     }
 
     public MinguoDate date(Era era, int yearOfEra, int month, int dayOfMonth) {
@@ -92,14 +92,14 @@ public final class MinguoChronology extends AbstractChronology {
         return this.dateYearDay(this.prolepticYear(era, yearOfEra), dayOfYear);
     }
 
-    /** Si: los meses, los dias y los anios bisiestos son exactamente los del ISO. */
+    /** Yes: the months, the days and the leap years are exactly ISO's. */
     public boolean isIsoBased() {
         return true;
     }
 
     public ValueRange range(ChronoField field) {
-        // Los meses y los dias son los del ISO; lo unico que se corre es el anio, y con el los dos
-        // campos que lo cuentan.
+        // The months and the days are ISO's; the only thing shifted is the year, and with it the two
+        // fields that count it.
         if (field == ChronoField.PROLEPTIC_MONTH) {
             ValueRange iso = ChronoField.PROLEPTIC_MONTH.range();
             return ValueRange.of(iso.getMinimum() - (long) YEARS_DIFFERENCE * 12L,
@@ -124,8 +124,8 @@ public final class MinguoChronology extends AbstractChronology {
 
     public MinguoDate resolveDate(java.util.Map<java.time.temporal.TemporalField, Long> fieldValues,
             java.time.format.ResolverStyle resolverStyle) {
-        // Ligado a una local: encadenar por un intermedio de tipo interfaz se pierde (#108).
-        ChronoLocalDate resuelta = super.resolveDate(fieldValues, resolverStyle);
-        return (MinguoDate) resuelta;
+        // Bound to a local: chaining through an interface-typed intermediate gets lost (#108).
+        ChronoLocalDate resolvedOne = super.resolveDate(fieldValues, resolverStyle);
+        return (MinguoDate) resolvedOne;
     }
 }

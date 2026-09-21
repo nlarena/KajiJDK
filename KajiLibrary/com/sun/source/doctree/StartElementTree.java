@@ -4,8 +4,8 @@ import java.util.List;
 import javax.lang.model.element.Name;
 
 /**
- * Una etiqueta HTML de apertura. {@link #isSelfClosing} distingue `<br>` de
- * `<br/>`, que el javadoc trata distinto.
+ * An opening HTML tag. {@link #isSelfClosing} tells `<br>` from
+ * `<br/>`, which javadoc treats differently.
  */
 public interface StartElementTree extends DocTree {
 
@@ -13,6 +13,6 @@ public interface StartElementTree extends DocTree {
 
     List<? extends DocTree> getAttributes();
 
-    /** Si la etiqueta se cierra sola, como `<br/>`. */
+    /** Whether the tag closes itself, such as `<br/>`. */
     boolean isSelfClosing();
 }

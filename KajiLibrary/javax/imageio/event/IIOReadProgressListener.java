@@ -4,59 +4,60 @@ import java.util.EventListener;
 import javax.imageio.ImageReader;
 
 /**
- * KajiLibrary's javax.imageio.event.IIOReadProgressListener -- sigue el avance de una lectura.
+ * KajiLibrary's javax.imageio.event.IIOReadProgressListener -- follows the progress of a read.
  *
- * <p>Existe porque decodificar una imagen grande tarda, y {@code ImageReader.read} no vuelve hasta que
- * termina. Sin esto no hay forma de dibujar una barra de progreso ni de saber que sigue viva.
+ * <p>It exists because decoding a large image takes time, and {@code ImageReader.read} does not
+ * return until it finishes. Without this there is no way to draw a progress bar or to know it is
+ * still alive.
  *
- * <h2>Los tres pares de eventos</h2>
+ * <h2>The three pairs of events</h2>
  *
- * <p>Cada par abre y cierra, y anidan:
+ * <p>Each pair opens and closes, and they nest:
  *
  * <ul>
- *   <li><b>secuencia</b>: solo en una lectura de varias imagenes de una vez. Envuelve a los demas;
- *   <li><b>imagen</b>: una imagen. {@link #imageProgress} llega varias veces en el medio, con un
- *       porcentaje de 0 a 100;
- *   <li><b>miniatura</b>: igual, para las vistas previas incrustadas.
+ *   <li><b>sequence</b>: only in a read of several images at once. It wraps the others;
+ *   <li><b>image</b>: one image. {@link #imageProgress} arrives several times in between, with a
+ *       percentage from 0 to 100;
+ *   <li><b>thumbnail</b>: the same, for embedded previews.
  * </ul>
  *
- * <p>{@link #readAborted} <b>reemplaza</b> al {@code complete} que hubiera correspondido: si alguien
- * llamo {@code ImageReader.abort()}, llega este y no aquel. Un programa que solo escuche
- * {@code imageComplete} para cerrar su barra de progreso la deja abierta para siempre al cancelar.
+ * <p>{@link #readAborted} <b>replaces</b> the {@code complete} that would have come: if someone
+ * called {@code ImageReader.abort()}, this one arrives and not that one. A program that only
+ * listens to {@code imageComplete} to close its progress bar leaves it open forever on cancel.
  *
- * <p>Los avisos llegan en el hilo que esta leyendo, no en el de la interfaz. Bloquearlos frena la
- * decodificacion.
+ * <p>The notifications arrive on the thread that is reading, not on the UI one. Blocking them
+ * slows decoding down.
  */
 public interface IIOReadProgressListener extends EventListener {
 
     /**
-     * Empieza una lectura de varias imagenes.
+     * A read of several images begins.
      *
-     * @param minIndex el indice de la primera
+     * @param minIndex the index of the first one
      */
     void sequenceStarted(ImageReader source, int minIndex);
 
-    /** Termino la secuencia. */
+    /** The sequence finished. */
     void sequenceComplete(ImageReader source);
 
-    /** Empieza una imagen. */
+    /** An image begins. */
     void imageStarted(ImageReader source, int imageIndex);
 
-    /** Va por ese porcentaje, de 0 a 100. */
+    /** It is at that percentage, from 0 to 100. */
     void imageProgress(ImageReader source, float percentageDone);
 
-    /** Termino la imagen. */
+    /** The image finished. */
     void imageComplete(ImageReader source);
 
-    /** Empieza una miniatura. */
+    /** A thumbnail begins. */
     void thumbnailStarted(ImageReader source, int imageIndex, int thumbnailIndex);
 
-    /** Va por ese porcentaje. */
+    /** It is at that percentage. */
     void thumbnailProgress(ImageReader source, float percentageDone);
 
-    /** Termino la miniatura. */
+    /** The thumbnail finished. */
     void thumbnailComplete(ImageReader source);
 
-    /** Se cancelo. Ver la nota de la clase: viene en lugar del {@code complete}. */
+    /** It was cancelled. See the class note: it comes instead of the {@code complete}. */
     void readAborted(ImageReader source);
 }

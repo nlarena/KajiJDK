@@ -1,6 +1,7 @@
 package java.lang;
 
-// Por import y nombre simple: calificar el tipo en el uso no resuelve desde java.lang
+// Through an import and a simple name: qualifying the type at the use site does not resolve from
+// java.lang
 // (finding #210).
 import java.io.InputStream;
 import java.io.IOException;
@@ -40,14 +41,14 @@ public class ClassLoader {
 
     private final String name;
 
-    // El unico cargador que hay. `getSystemClassLoader` y `getPlatformClassLoader` devuelven
-    // este mismo, y eso es exacto: no hay dos.
+    // The only loader there is. `getSystemClassLoader` and `getPlatformClassLoader` return this very
+    // one, and that is exact: there are not two.
     private static final ClassLoader THE_LOADER = new ClassLoader(null, "app");
 
-    // El estado de aserciones, que es lo unico que un cargador de KajiJDK realmente lleva. Vive
-    // acá y no en la VM porque `assert` se desugariza a una lectura de `desiredAssertionStatus`
-    // en el `<clinit>` de cada clase: cambiarlo despues de que una clase se inicializo no la
-    // afecta, y eso es exactamente lo que la especificacion dice.
+    // The assertion state, which is the only thing a KajiJDK loader really keeps. It lives here and
+    // not in the VM because `assert` desugars to a read of `desiredAssertionStatus` in each class's
+    // `<clinit>`: changing it after a class has been initialised does not affect that class, and that
+    // is exactly what the specification says.
     private boolean defaultAssertionStatus;
 
     private String[] assertionClasses = new String[0];
@@ -131,28 +132,30 @@ public class ClassLoader {
 
     // ---- packages ----
     //
-    // El loader **si** lleva un registro de los paquetes que definio. Antes no lo llevaba, y eso
-    // dejaba el par cortado por la mitad: estaban las dos consultas (`getDefinedPackage`,
-    // `getDefinedPackages`) y no estaba lo unico que podria poblarlas (`definePackage`), asi que las
-    // dos contestaban "ninguno" para siempre.
+    // The loader **does** keep a register of the packages it defined. It used to not keep one, and
+    // that left the pair cut in half: both queries were there (`getDefinedPackage`,
+    // `getDefinedPackages`) and the only thing that could populate them was not (`definePackage`), so
+    // both answered "none" for ever.
     //
-    // Lo que **no** cambia es de donde salen: aca nadie lee manifiestos, asi que el registro solo
-    // tiene lo que alguien haya definido a mano. `Class.getPackage()` sigue acuniando un `Package`
-    // al vuelo desde el nombre de la clase, sin pasar por aca -- son dos preguntas distintas.
+    // What does **not** change is where they come from: nobody reads manifests here, so the register
+    // only holds whatever somebody defined by hand. `Class.getPackage()` still mints a `Package` on
+    // the fly from the class's name, without going through here -- they are two different
+    // questions.
 
-    private final java.util.HashMap<String, Package> paquetes =
+    private final java.util.HashMap<String, Package> packages =
             new java.util.HashMap<String, Package>();
 
     /**
-     * Define un paquete en este loader, con los atributos que un manifiesto traeria.
+     * It defines a package in this loader, with the attributes a manifest would bring.
      *
-     * <p>Es `protected` porque es una operacion del loader sobre si mismo: quien define clases es
-     * quien sabe de que JAR vinieron y, por lo tanto, quien puede decir su version y su vendor.
+     * <p>It is `protected` because it is an operation of the loader upon itself: whoever defines
+     * classes is who knows which JAR they came from and, therefore, who can state their version and
+     * their vendor.
      *
-     * @param name el nombre del paquete
-     * @param sealBase la URL contra la que el paquete queda sellado, o `null` para no sellarlo
-     * @throws IllegalArgumentException si el paquete ya estaba definido en este loader
-     * @throws NullPointerException si `name` es `null`
+     * @param name the package's name
+     * @param sealBase the URL the package is sealed against, or `null` not to seal it
+     * @throws IllegalArgumentException if the package was already defined in this loader
+     * @throws NullPointerException if `name` is `null`
      */
     protected Package definePackage(String name, String specTitle, String specVersion,
             String specVendor, String implTitle, String implVersion, String implVendor,
@@ -160,13 +163,13 @@ public class ClassLoader {
         if (name == null) {
             throw new NullPointerException("name");
         }
-        synchronized (this.paquetes) {
-            if (this.paquetes.containsKey(name)) {
-                throw new IllegalArgumentException("el paquete " + name + " ya esta definido");
+        synchronized (this.packages) {
+            if (this.packages.containsKey(name)) {
+                throw new IllegalArgumentException("package " + name + " is already defined");
             }
             Package p = new Package(name, specTitle, specVersion, specVendor,
                     implTitle, implVersion, implVendor, sealBase);
-            this.paquetes.put(name, p);
+            this.packages.put(name, p);
             return p;
         }
     }
@@ -181,32 +184,33 @@ public class ClassLoader {
         if (name == null) {
             throw new NullPointerException("name");
         }
-        synchronized (this.paquetes) {
-            return this.paquetes.get(name);
+        synchronized (this.packages) {
+            return this.packages.get(name);
         }
     }
 
     /** The packages defined by this loader. */
     public final Package[] getDefinedPackages() {
-        synchronized (this.paquetes) {
-            return this.paquetes.values().toArray(new Package[0]);
+        synchronized (this.packages) {
+            return this.packages.values().toArray(new Package[0]);
         }
     }
 
     /**
-     * El paquete de ese nombre, buscando **tambien en los padres**.
+     * The package with that name, searching **the parents as well**.
      *
-     * <p>Es la diferencia con `getDefinedPackage`, que mira solo este loader. Aca hay un solo loader
-     * y por lo tanto ningun padre, asi que las dos respuestas coinciden -- pero la delegacion esta
-     * escrita, porque es la parte del contrato que importa el dia que haya jerarquia.
+     * <p>That is the difference from `getDefinedPackage`, which looks only at this loader. Here there
+     * is one loader and therefore no parent, so both answers coincide -- but the delegation is
+     * written, because it is the part of the contract that matters the day there is a hierarchy.
      *
-     * @deprecated en el JDK, porque no distingue paquetes del mismo nombre en loaders distintos.
-     *     Usar {@link #getDefinedPackage(String)}.
+     * @deprecated in the JDK, because it does not tell apart packages of the same name in different
+     *     loaders.
+     *     Use {@link #getDefinedPackage(String)}.
      */
     protected Package getPackage(String name) {
-        Package propio = this.getDefinedPackage(name);
-        if (propio != null) {
-            return propio;
+        Package own = this.getDefinedPackage(name);
+        if (own != null) {
+            return own;
         }
         if (this.parent != null) {
             return this.parent.getPackage(name);
@@ -215,21 +219,21 @@ public class ClassLoader {
     }
 
     /**
-     * Todos los paquetes visibles desde este loader: los suyos y los de sus padres.
+     * Every package visible from this loader: its own and its parents'.
      *
-     * <p>Los del padre van **primero** y los propios despues, que es el orden en que se los
-     * encuentra al delegar.
+     * <p>The parent's go **first** and its own after, which is the order they are found in when
+     * delegating.
      */
     protected Package[] getPackages() {
-        Package[] propios = this.getDefinedPackages();
+        Package[] own = this.getDefinedPackages();
         if (this.parent == null) {
-            return propios;
+            return own;
         }
-        Package[] delPadre = this.parent.getPackages();
-        Package[] todos = new Package[delPadre.length + propios.length];
-        System.arraycopy(delPadre, 0, todos, 0, delPadre.length);
-        System.arraycopy(propios, 0, todos, delPadre.length, propios.length);
-        return todos;
+        Package[] fromParent = this.parent.getPackages();
+        Package[] all = new Package[fromParent.length + own.length];
+        System.arraycopy(fromParent, 0, all, 0, fromParent.length);
+        System.arraycopy(own, 0, all, fromParent.length, own.length);
+        return all;
     }
 
     // ---- resources ----
@@ -238,17 +242,17 @@ public class ClassLoader {
     // lookup honestly misses: a stream is {@code null}, an enumeration or stream of URLs is empty.
     // This is the same answer the real loader gives for a resource that is simply not present.
 
-    // Los tres `find*` de abajo son **los puntos de extension**, y las tres formas publicas los
-    // llaman. Ese cableado es la parte que faltaba y no era cosmetica: antes `getResource` devolvia
-    // `null` directo, asi que una subclase que sobrescribiera `findResource` --que es la unica forma
-    // documentada de servir recursos propios-- **era ignorada**. El metodo publico no cumplia el
-    // protocolo que su javadoc promete.
+    // The three `find*` below are **the extension points**, and the three public forms call them.
+    // That wiring is the part that was missing and it was not cosmetic: `getResource` used to return
+    // `null` outright, so a subclass overriding `findResource` --which is the only documented way of
+    // serving resources of one's own-- **was ignored**. The public method did not follow the protocol
+    // its javadoc promises.
 
     /**
      * The resource of this name, or {@code null}.
      *
-     * <p>Delega primero en el padre y despues en {@link #findResource(String)}, que es el orden del
-     * JDK: un recurso del padre gana sobre uno propio del mismo nombre.
+     * <p>It delegates to the parent first and then to {@link #findResource(String)}, which is the
+     * JDK's order: a parent's resource wins over one's own of the same name.
      */
     public URL getResource(String name) {
         if (name == null) {
@@ -277,56 +281,56 @@ public class ClassLoader {
         }
     }
 
-    /** Every resource of this name: los del padre y despues los propios. */
+    /** Every resource of this name: the parent's, and then its own. */
     public Enumeration<URL> getResources(String name) throws IOException {
         if (name == null) {
             throw new NullPointerException("name");
         }
-        java.util.ArrayList<URL> todos = new java.util.ArrayList<URL>();
+        java.util.ArrayList<URL> all = new java.util.ArrayList<URL>();
         if (this.parent != null) {
-            Enumeration<URL> delPadre = this.parent.getResources(name);
-            while (delPadre.hasMoreElements()) {
-                todos.add(delPadre.nextElement());
+            Enumeration<URL> fromParent = this.parent.getResources(name);
+            while (fromParent.hasMoreElements()) {
+                all.add(fromParent.nextElement());
             }
         }
-        Enumeration<URL> propios = this.findResources(name);
-        while (propios.hasMoreElements()) {
-            todos.add(propios.nextElement());
+        Enumeration<URL> own = this.findResources(name);
+        while (own.hasMoreElements()) {
+            all.add(own.nextElement());
         }
-        return java.util.Collections.enumeration(todos);
+        return java.util.Collections.enumeration(all);
     }
 
     /** Every resource of this name as a stream. */
     public Stream<URL> resources(String name) {
         try {
             Enumeration<URL> e = this.getResources(name);
-            java.util.ArrayList<URL> todos = new java.util.ArrayList<URL>();
+            java.util.ArrayList<URL> all = new java.util.ArrayList<URL>();
             while (e.hasMoreElements()) {
-                todos.add(e.nextElement());
+                all.add(e.nextElement());
             }
-            return todos.stream();
+            return all.stream();
         } catch (IOException ex) {
             return Stream.empty();
         }
     }
 
-    // ---- los puntos de extension -------------------------------------------------------------------
+    // ---- the extension points ----------------------------------------------------------------------
     //
-    // Los tres devuelven "nada": KajiJDK sirve clases del classpath, no archivos de recursos al lado.
-    // Es la misma respuesta que da el loader real para un recurso que no esta, y es donde una
-    // subclase que quiera servir recursos propios tiene que meter mano.
+    // All three return "nothing": KajiJDK serves classes off the classpath, not resource files
+    // alongside. It is the same answer the real loader gives for a resource that is not there, and it
+    // is where a subclass wanting to serve resources of its own has to step in.
 
-    /** El recurso de ese nombre que **este** loader sirve, o `null`. */
+    /** The resource of that name **this** loader serves, or `null`. */
     protected URL findResource(String name) {
         return null;
     }
 
-    /** El recurso de ese nombre en ese modulo, o `null`. */
+    /** The resource of that name in that module, or `null`. */
     protected URL findResource(String moduleName, String name) throws IOException {
         return null;
     }
 
-    /** Todos los recursos de ese nombre que **este** loader sirve. */
+    /** Every resource of that name **this** loader serves. */
     protected Enumeration<URL> findResources(String name) throws IOException {
         return new EmptyEnumeration();
     }
@@ -372,25 +376,25 @@ public class ClassLoader {
         synchronized (this.getClassLoadingLock(name)) {
             Class<?> found = this.findLoadedClass(name);
             if (found == null) {
-                // Delegacion al padre primero (§5.3.2): el que esta mas arriba gana. Es lo que
-                // impide que un `java.lang.String` puesto en un classpath cualquiera reemplace al
-                // de la plataforma.
+                // Delegation to the parent first (§5.3.2): the one higher up wins. It is what stops
+                // a `java.lang.String` dropped on some classpath replacing the platform's.
                 try {
                     found = this.parent != null
                             ? this.parent.loadClass(name, false)
                             : Class.forName(name);
-                } catch (ClassNotFoundException noEstaArriba) {
+                } catch (ClassNotFoundException notUpThere) {
                     found = null;
                 }
             }
             if (found == null) {
-                // Y recien despues, `findClass`: el gancho que la subclase escribe.
+                // And only then `findClass`: the hook the subclass writes.
                 //
-                // Este paso FALTABA, y su ausencia no se veia porque el `findClass` de esta clase
-                // tira siempre: sin subclases que lo escribieran, delegar y despues no preguntar
-                // daba el mismo resultado. Con `java.net.URLClassLoader` --la primera subclase real
-                // del arbol-- se vio de inmediato: encontraba el archivo con `findResource` y
-                // despues `loadClass` tiraba `ClassNotFoundException` sin haberlo mirado.
+                // This step WAS MISSING, and its absence was invisible because this class's
+                // `findClass` always throws: with no subclasses writing it, delegating and then not
+                // asking gave the same result. With `java.net.URLClassLoader` --the first real
+                // subclass in the tree-- it showed up at once: it found the file with `findResource`
+                // and then `loadClass` threw `ClassNotFoundException` without having looked
+                // at it.
                 found = this.findClass(name);
             }
             if (resolve) {
@@ -442,10 +446,10 @@ public class ClassLoader {
         return null;
     }
 
-    // Lo que ESTE cargador definio. Que sea por instancia y no una consulta a la VM es la
-    // diferencia entre "cargada" y "cargada por mi", y es la que `findLoadedClass` mide: un
-    // cargador propio no ve `java.lang.String` aunque la VM la tenga hace rato, porque no fue el
-    // quien la definio.
+    // What THIS loader defined. That it is per instance and not a query to the VM is the difference
+    // between "loaded" and "loaded by me", and it is the one `findLoadedClass` measures: a loader of
+    // one's own does not see `java.lang.String` even though the VM has had it for ages, because it
+    // was not the one that defined it.
     private String[] definedNames = new String[0];
 
     private Class<?>[] definedClasses = new Class<?>[0];
@@ -601,10 +605,10 @@ public class ClassLoader {
 
     // ---- assertions ----
     //
-    // Lo unico que un cargador de KajiJDK realmente lleva. `assert` se desugariza a una guarda
-    // sobre un campo que el `<clinit>` de cada clase lee de `desiredAssertionStatus`, asi que
-    // estos ajustes afectan a las clases que se inicialicen DESPUES -- que es lo que la
-    // especificacion dice, y no una limitacion nuestra.
+    // The only thing a KajiJDK loader really keeps. `assert` desugars to a guard over a field each
+    // class's `<clinit>` reads from `desiredAssertionStatus`, so these settings affect the classes
+    // initialised AFTERWARDS -- which is what the specification says, and not a limitation of
+    // ours.
 
     /**
      * Sets the assertion status for types this loader initializes from now on.
@@ -665,8 +669,9 @@ public class ClassLoader {
         this.assertionValues = new boolean[0];
     }
 
-    // Si las aserciones corren en `className`. Lo consulta `Class.desiredAssertionStatus`, y por
-    // eso es package-private y no publico: es el canal entre las dos clases, no API.
+    // Whether assertions run in `className`. `Class.desiredAssertionStatus` consults it, and that is
+    // why it is package-private and not public: it is the channel between the two classes, not
+    // API.
     boolean assertionStatusOf(String className) {
         int i = 0;
         while (i < this.assertionClasses.length) {
@@ -675,7 +680,7 @@ public class ClassLoader {
             }
             i = i + 1;
         }
-        // Despues la regla de paquete mas larga que sea prefijo del nombre.
+        // Then the longest package rule that is a prefix of the name.
         String best = null;
         boolean bestValue = this.defaultAssertionStatus;
         i = 0;

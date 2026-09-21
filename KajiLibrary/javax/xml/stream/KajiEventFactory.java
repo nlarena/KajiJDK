@@ -21,10 +21,10 @@ import javax.xml.stream.events.StartDocument;
 import javax.xml.stream.events.StartElement;
 
 /**
- * La fabrica de eventos de esta biblioteca.
+ * This library's event factory.
  *
- * <p>No tiene mas estado que la ubicacion pegajosa que fija {@link #setLocation}; ver
- * {@link XMLEventFactory}.
+ * <p>It has no state beyond the sticky location {@link #setLocation} sets; see {@link
+ * XMLEventFactory}.
  */
 final class KajiEventFactory extends XMLEventFactory {
 
@@ -41,7 +41,7 @@ final class KajiEventFactory extends XMLEventFactory {
         }
     }
 
-    // ---- atributos y espacios de nombres ----------------------------------------------------
+    // ---- attributes and namespaces --------------------------------------------------------------
 
     public Attribute createAttribute(String prefix, String namespaceURI, String localName,
             String value) {
@@ -65,7 +65,7 @@ final class KajiEventFactory extends XMLEventFactory {
         return new EvtNamespace(nonNullPrefix(prefix), namespaceUri, location);
     }
 
-    // ---- elementos --------------------------------------------------------------------------
+    // ---- elements ---------------------------------------------------------------------------
 
     public StartElement createStartElement(QName name, Iterator<? extends Attribute> attributes,
             Iterator<? extends Namespace> namespaces) {
@@ -104,7 +104,7 @@ final class KajiEventFactory extends XMLEventFactory {
                 nsList(namespaces), location);
     }
 
-    // ---- texto ------------------------------------------------------------------------------
+    // ---- text -------------------------------------------------------------------------------
 
     public Characters createCharacters(String content) {
         return new EvtCharacters(XMLStreamConstants.CHARACTERS, content, location);
@@ -122,7 +122,7 @@ final class KajiEventFactory extends XMLEventFactory {
         return new EvtCharacters(XMLStreamConstants.SPACE, content, location);
     }
 
-    // ---- documento --------------------------------------------------------------------------
+    // ---- document ---------------------------------------------------------------------------
 
     public StartDocument createStartDocument() {
         return new EvtStartDocument(null, "UTF-8", false, "1.0", false, false, location);
@@ -147,7 +147,7 @@ final class KajiEventFactory extends XMLEventFactory {
         return new EvtEndDocument(location);
     }
 
-    // ---- los demas --------------------------------------------------------------------------
+    // ---- the rest -------------------------------------------------------------------------------
 
     public EntityReference createEntityReference(String name, EntityDeclaration declaration) {
         return new EvtEntityRef(name, declaration, location);
@@ -165,7 +165,7 @@ final class KajiEventFactory extends XMLEventFactory {
         return new EvtDTD(dtd, location);
     }
 
-    // ---- auxiliares -------------------------------------------------------------------------
+    // ---- helpers ----------------------------------------------------------------------------
 
     private static String nonNullPrefix(String p) {
         if (p == null) {
@@ -185,7 +185,7 @@ final class KajiEventFactory extends XMLEventFactory {
         List<Namespace> nss = nsList(namespaces);
         NamespaceContext ctx = context;
         if (ctx == null) {
-            // Sin contexto dado, el unico alcance que se conoce es el que declara esta etiqueta.
+            // Without a given context, the only scope known is the one this tag declares.
             KajiNsContext own = new KajiNsContext();
             int n = nss.size();
             for (int i = 0; i < n; i++) {

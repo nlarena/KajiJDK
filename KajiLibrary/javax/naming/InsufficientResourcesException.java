@@ -1,11 +1,11 @@
 package javax.naming;
 
 /**
- * Se lanza cuando falta un recurso **del lado del cliente** --memoria, descriptores-- para
- * completar la operacion. No confundir con `LimitExceededException`, que es un limite pactado y
- * no una falta de recursos.
+ * Thrown when a resource **on the client side** --memory, descriptors-- is missing to complete
+ * the operation. Not to be confused with `LimitExceededException`, which is an agreed limit and
+ * not a lack of resources.
  *
- * <p>La jerarquia entera y el estado que arrastra estan explicados en `NamingException`.
+ * <p>The whole hierarchy and the state it carries are explained in `NamingException`.
  */
 public class InsufficientResourcesException extends NamingException {
 

@@ -6,119 +6,120 @@ import java.rmi.Remote;
 import java.rmi.RemoteException;
 
 /**
- * La forma normal de hacer un objeto alcanzable por RMI.
+ * The normal way of making an object reachable through RMI.
  *
- * <h2>Que quiere decir "unicast"</h2>
+ * <h2>What "unicast" means</h2>
  *
- * <p>Que la referencia apunta a <strong>un</strong> objeto, en un proceso, mientras ese proceso
- * viva. Es la unica semantica que quedo: las otras que RMI llego a tener —objetos activables, que se
- * levantaban solos al recibir una llamada— se removieron.
+ * <p>That the reference points at <strong>one</strong> object, in one process, for as long as that
+ * process lives. It is the only semantics left: the others RMI once had —activatable objects, which
+ * started up on their own when a call came in— were removed.
  *
- * <p>Exportar hace dos cosas a la vez: abre el puerto por el que se lo va a alcanzar, y
- * <strong>ancla el objeto</strong> para que el recolector local no se lo lleve mientras haya
- * clientes. De ahi que exista {@link #unexportObject}: sin llamarlo, un objeto exportado no se
- * recolecta nunca.
+ * <p>Exporting does two things at once: it opens the port the object is going to be reached
+ * through, and it <strong>anchors the object</strong> so that the local collector does not take it
+ * away while there are clients. Hence {@link #unexportObject}: without calling it, an exported
+ * object never gets collected.
  *
- * <h2>El filtro de deserializacion</h2>
+ * <h2>The deserialisation filter</h2>
  *
- * <p>Las sobrecargas con {@link ObjectInputFilter} llegaron despues y son las que hay que preferir.
- * Recibir argumentos por la red es deserializar lo que mande otro, y sin filtro eso acepta cualquier
- * grafo de objetos — que es el vector de los ataques de deserializacion. El filtro acota que clases
- * se admiten <em>antes</em> de construirlas.
+ * <p>The overloads with {@link ObjectInputFilter} came later and are the ones to prefer. Receiving
+ * arguments over the network is deserialising whatever somebody else sends, and without a filter
+ * that accepts any object graph — which is the vector of deserialisation attacks. The filter
+ * narrows which classes are admitted <em>before</em> building them.
  *
- * <h2>En esta VM</h2>
+ * <h2>In this VM</h2>
  *
- * <p>Exportar necesita el transporte de RMI, que esta VM no tiene: los {@code exportObject} tiran
- * {@link UnsupportedOperationException} con el motivo, en vez de devolver un stub que no llevaria a
- * ningun lado.
+ * <p>Exporting needs the RMI transport, which this VM does not have: the {@code exportObject}s
+ * throw {@link UnsupportedOperationException} with the reason, instead of returning a stub that
+ * would lead nowhere.
  */
 public class UnicastRemoteObject extends RemoteServer {
 
     private static final long serialVersionUID = 4974527148936298033L;
 
-    /** En un puerto anonimo. */
+    /** On an anonymous port. */
     protected UnicastRemoteObject() throws RemoteException {
         this(0);
     }
 
-    /** En ese puerto; {@code 0} lo elige el sistema. */
+    /** On that port; {@code 0} lets the system choose it. */
     protected UnicastRemoteObject(int port) throws RemoteException {
         super();
     }
 
-    /** En ese puerto y con esas fabricas de sockets. */
+    /** On that port and with those socket factories. */
     protected UnicastRemoteObject(int port, RMIClientSocketFactory csf,
             RMIServerSocketFactory ssf) throws RemoteException {
         super();
     }
 
     /**
-     * Clonar uno de estos exporta la copia.
+     * Cloning one of these exports the copy.
      *
-     * @throws java.rmi.server.ServerCloneException si la copia no se pudo exportar
+     * @throws java.rmi.server.ServerCloneException if the copy could not be exported
      */
     public Object clone() throws CloneNotSupportedException {
-        throw new ServerCloneException("esta VM no exporta objetos remotos");
+        throw new ServerCloneException("this VM does not export remote objects");
     }
 
     /**
-     * Exporta el objeto en un puerto anonimo.
+     * It exports the object on an anonymous port.
      *
-     * @deprecated devuelve un {@link RemoteStub}, que es de la epoca de {@code rmic}; usar
+     * @deprecated it returns a {@link RemoteStub}, which is from the days of {@code rmic}; use
      *     {@link #exportObject(Remote, int)}
-     * @throws UnsupportedOperationException en esta VM
+     * @throws UnsupportedOperationException in this VM
      */
     @Deprecated(since = "1.2")
     public static RemoteStub exportObject(Remote obj) throws RemoteException {
-        throw new UnsupportedOperationException("esta VM no tiene el transporte de RMI");
+        throw new UnsupportedOperationException("this VM does not have the RMI transport");
     }
 
     /**
-     * Exporta el objeto en ese puerto.
+     * It exports the object on that port.
      *
-     * @throws UnsupportedOperationException en esta VM
+     * @throws UnsupportedOperationException in this VM
      */
     public static Remote exportObject(Remote obj, int port) throws RemoteException {
-        throw new UnsupportedOperationException("esta VM no tiene el transporte de RMI");
+        throw new UnsupportedOperationException("this VM does not have the RMI transport");
     }
 
     /**
-     * Exporta con fabricas de sockets propias; asi es como un objeto exige TLS.
+     * It exports with socket factories of its own; that is how an object demands TLS.
      *
-     * @throws UnsupportedOperationException en esta VM
+     * @throws UnsupportedOperationException in this VM
      */
     public static Remote exportObject(Remote obj, int port, RMIClientSocketFactory csf,
             RMIServerSocketFactory ssf) throws RemoteException {
-        throw new UnsupportedOperationException("esta VM no tiene el transporte de RMI");
+        throw new UnsupportedOperationException("this VM does not have the RMI transport");
     }
 
     /**
-     * Exporta con un filtro de deserializacion; ver la nota de la clase.
+     * It exports with a deserialisation filter; see the class note.
      *
-     * @throws UnsupportedOperationException en esta VM
+     * @throws UnsupportedOperationException in this VM
      */
     public static Remote exportObject(Remote obj, int port, ObjectInputFilter filter)
             throws RemoteException {
-        throw new UnsupportedOperationException("esta VM no tiene el transporte de RMI");
+        throw new UnsupportedOperationException("this VM does not have the RMI transport");
     }
 
     /**
-     * Exporta con fabricas propias y filtro.
+     * It exports with factories of its own and a filter.
      *
-     * @throws UnsupportedOperationException en esta VM
+     * @throws UnsupportedOperationException in this VM
      */
     public static Remote exportObject(Remote obj, int port, RMIClientSocketFactory csf,
             RMIServerSocketFactory ssf, ObjectInputFilter filter) throws RemoteException {
-        throw new UnsupportedOperationException("esta VM no tiene el transporte de RMI");
+        throw new UnsupportedOperationException("this VM does not have the RMI transport");
     }
 
     /**
-     * Deja de exportar el objeto, con lo que puede volver a recolectarse.
+     * It stops exporting the object, whereupon it can be collected again.
      *
-     * @param force si desexportar aunque haya llamadas en curso o clientes con referencias
-     * @throws NoSuchObjectException si el objeto no estaba exportado — que es siempre, en esta VM
+     * @param force whether to unexport even when there are calls in progress or clients holding
+     *     references
+     * @throws NoSuchObjectException if the object was not exported — which is always, in this VM
      */
     public static boolean unexportObject(Remote obj, boolean force) throws NoSuchObjectException {
-        throw new NoSuchObjectException("el objeto no esta exportado");
+        throw new NoSuchObjectException("the object is not exported");
     }
 }

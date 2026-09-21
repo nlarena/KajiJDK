@@ -8,34 +8,35 @@ import javax.swing.JButton;
 import javax.swing.SwingConstants;
 
 /**
- * Un boton chico con una flecha: el que va en las puntas de una barra de desplazamiento.
+ * A small button with an arrow: the one that goes at a scroll bar's ends.
  *
- * <h2>Pinta el mismo, sin pasar por su aspecto</h2>
+ * <h2>It paints itself, without going through its look and feel</h2>
  *
- * <p>Redefine {@link #paint} entero, asi que el {@code ButtonUI} que tenga instalado no dibuja
- * nunca. Es deliberado: la flecha tiene que verse igual venga del aspecto que venga, porque su
- * tamano y sus cuatro colores se los da quien lo crea —la barra— y no una tabla de valores.
+ * <p>It redefines {@link #paint} entirely, so the {@code ButtonUI} it has installed never
+ * draws. It is deliberate: the arrow has to look the same whatever look and feel it comes from,
+ * because its size and its four colours are given to it by whoever creates it -- the bar -- and
+ * not by a table of values.
  *
- * <p>El relieve es el mismo del pulgar de la barra, y esta medido en el JDK 25: un marco de un
- * pixel en la sombra oscura del que solo quedan a la vista el lado derecho y el de abajo, el fondo
- * lleno, una linea de brillo por dentro arriba y a la izquierda, y una de sombra por dentro abajo y
- * a la derecha. Apretado, el marco pasa a ser de sombra clara y la flecha se corre un pixel: es
- * todo lo que hace falta para que se vea hundido.
+ * <p>The relief is the same as the bar's thumb, and it is measured in JDK 25: a one-pixel frame
+ * in the dark shadow of which only the right side and the bottom one stay in sight, the
+ * background filled, a highlight line inside at the top and on the left, and a shadow one
+ * inside at the bottom and on the right. Pressed, the frame becomes light shadow and the arrow
+ * shifts one pixel: it is all that is needed for it to look sunken.
  *
- * <p>La flecha es un triangulo de lineas, no una figura rellena: asi queda simetrica pixel a pixel
- * en los cuatro sentidos. Deshabilitada se dibuja dos veces, en sombra y en brillo corrida un
- * pixel, que es el mismo relieve que usa una etiqueta deshabilitada.
+ * <p>The arrow is a triangle of lines, not a filled shape: that way it comes out symmetrical
+ * pixel by pixel in the four directions. Disabled it is drawn twice, in shadow and in highlight
+ * shifted one pixel, which is the same relief a disabled label uses.
  */
 public class BasicArrowButton extends JButton implements SwingConstants {
 
-    /** Hacia donde apunta: {@code NORTH}, {@code SOUTH}, {@code EAST} u {@code WEST}. */
+    /** Which way it points: {@code NORTH}, {@code SOUTH}, {@code EAST} or {@code WEST}. */
     protected int direction;
 
     private Color shadow;
     private Color darkShadow;
     private Color highlight;
 
-    /** Un boton con esos cuatro colores; los da quien lo crea. */
+    /** A button with those four colours; they are given by whoever creates it. */
     public BasicArrowButton(int direction, Color background, Color shadow, Color darkShadow,
             Color highlight) {
         super();
@@ -48,10 +49,11 @@ public class BasicArrowButton extends JButton implements SwingConstants {
     }
 
     /**
-     * Un boton con los colores del aspecto: control, sombra, sombra oscura y brillo claro.
+     * A button with the look and feel's colours: control, shadow, dark shadow and light
+     * highlight.
      *
-     * <p>Los cuatro son los de Metal medidos en el JDK 25: (238, 238, 238), (184, 207, 229),
-     * (122, 138, 153) y blanco. Sin {@code UIManager}, van escritos aca.
+     * <p>The four are Metal's measured in JDK 25: (238, 238, 238), (184, 207, 229),
+     * (122, 138, 153) and white. With no {@code UIManager}, they are written here.
      */
     public BasicArrowButton(int direction) {
         this(direction, new Color(238, 238, 238), new Color(184, 207, 229),
@@ -67,7 +69,7 @@ public class BasicArrowButton extends JButton implements SwingConstants {
         setFocusable(false);
     }
 
-    /** Ver la nota de la clase. */
+    /** See the class note. */
     public void paint(Graphics g) {
         int w = getSize().width;
         int h = getSize().height;
@@ -93,7 +95,7 @@ public class BasicArrowButton extends JButton implements SwingConstants {
             g.drawLine(w - 2, 1, w - 2, h - 2);
         }
 
-        // Sin lugar para la flecha, queda el relieve solo.
+        // With no room for the arrow, the relief is all that is left.
         if (h < 5 || w < 5) {
             g.setColor(origColor);
             return;
@@ -113,12 +115,12 @@ public class BasicArrowButton extends JButton implements SwingConstants {
         g.setColor(origColor);
     }
 
-    /** Dieciseis por dieciseis: el tamano del que la barra saca el largo de sus puntas. */
+    /** Sixteen by sixteen: the size the bar takes the length of its ends from. */
     public Dimension getPreferredSize() {
         return new Dimension(16, 16);
     }
 
-    /** Cinco por cinco: menos que eso y no queda flecha, solo relieve. */
+    /** Five by five: less than that and there is no arrow left, only relief. */
     public Dimension getMinimumSize() {
         return new Dimension(5, 5);
     }
@@ -127,16 +129,17 @@ public class BasicArrowButton extends JButton implements SwingConstants {
         return new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE);
     }
 
-    /** No: el foco va a la barra, no a sus flechas. */
+    /** No: the focus goes to the bar, not to its arrows. */
     public boolean isFocusTraversable() {
         return false;
     }
 
     /**
-     * Dibuja el triangulo en esa caja y en ese sentido.
+     * It draws the triangle in that box and in that direction.
      *
-     * <p>Es publico porque otros aspectos lo usan para dibujar la misma flecha en otro lado —el
-     * boton de un desplegable, la punta de un menu—, y ninguno querria repetir la aritmetica.
+     * <p>It is public because other looks and feels use it in order to draw the same arrow
+     * somewhere else -- a drop-down's button, a menu's tip --, and none of them would want to
+     * repeat the arithmetic.
      */
     public void paintTriangle(Graphics g, int x, int y, int size, int direction,
             boolean isEnabled) {

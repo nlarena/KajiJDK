@@ -5,70 +5,73 @@ import java.awt.image.RenderedImage;
 import java.util.Vector;
 
 /**
- * KajiLibrary's java.awt.image.renderable.RenderableImage -- una imagen sin resolucion.
+ * KajiLibrary's java.awt.image.renderable.RenderableImage -- an image without resolution.
  *
- * <p>El contraste con {@code RenderedImage} es todo el punto del paquete, y esta en los tipos: alla
- * {@code getWidth()} devuelve un {@code int} porque son pixeles, y aca devuelve un {@code float}
- * porque son <b>coordenadas de usuario</b>. Una imagen renderizable describe algo --una elipse
- * desenfocada, un mapa de un pais-- sin comprometerse a un tamano.
+ * <p>The contrast with {@code RenderedImage} is the whole point of the package, and it is in the
+ * types: there {@code getWidth()} returns an {@code int} because they are pixels, and here it
+ * returns a {@code float} because they are <b>user coordinates</b>. A renderable image describes
+ * something --a blurred ellipse, a map of a country-- without committing to a size.
  *
- * <p>La resolucion se elige al pedir la renderizacion, y por eso hay tres formas de pedirla:
- * {@link #createScaledRendering} para un tamano en pixeles, {@link #createDefaultRendering} para el
- * que la imagen considere natural, y {@link #createRendering} para el control completo con un
- * {@link RenderContext}.
+ * <p>The resolution is chosen when asking for the rendering, and that is why there are three ways
+ * to ask for it: {@link #createScaledRendering} for a size in pixels, {@link
+ * #createDefaultRendering} for the one the image considers natural, and {@link #createRendering}
+ * for full control with a {@link RenderContext}.
  *
- * <p>{@link #getSources} devuelve las imagenes de las que esta se calcula: una imagen renderizable es
- * normalmente el nodo de un arbol de operaciones, no un dato suelto.
+ * <p>{@link #getSources} returns the images this one is computed from: a renderable image is
+ * normally the node of an operation tree, not a lone piece of data.
  *
- * <p>{@link #HINTS_OBSERVED} es el nombre de una propiedad, no una bandera: si la renderizacion la
- * tiene, su valor dice cuales de las preferencias que se pidieron se respetaron de verdad. Existe
- * porque las preferencias son <b>preferencias</b> y una implementacion puede ignorarlas todas sin
- * avisar.
+ * <p>{@link #HINTS_OBSERVED} is the name of a property, not a flag: if the rendering has it, its
+ * value says which of the requested hints were really honoured. It exists because hints are
+ * <b>hints</b>, and an implementation can ignore all of them without saying so.
  */
 public interface RenderableImage {
 
-    /** El nombre de la propiedad que dice que preferencias se respetaron. */
+    /** The name of the property that says which hints were honoured. */
     static final String HINTS_OBSERVED = "HINTS_OBSERVED";
 
-    /** Las imagenes de las que esta se calcula; vacio si es una fuente. */
+    /**
+     * The images this one is computed from: empty if it has none, or null if that is not known.
+     * (This javadoc said only "empty if it is a source"; the JDK allows null, and {@link
+     * RenderableImageOp} returns null when it has no renderable source.)
+     */
     Vector<RenderableImage> getSources();
 
     /**
-     * Una propiedad de la imagen.
+     * A property of the image.
      *
-     * @return {@code java.awt.Image.UndefinedProperty} si no la tiene
+     * @return {@code java.awt.Image.UndefinedProperty} if it does not have it
      */
     Object getProperty(String name);
 
-    /** Los nombres de las propiedades, o null. */
+    /** The names of the properties, or null. */
     String[] getPropertyNames();
 
-    /** Si dos renderizaciones iguales pueden dar resultados distintos. */
+    /** Whether two equal renderings can give different results. */
     boolean isDynamic();
 
-    /** El ancho en coordenadas de usuario. Ver la nota de la clase sobre por que no es un entero. */
+    /** The width in user coordinates. See the class note on why it is not an integer. */
     float getWidth();
 
-    /** El alto en coordenadas de usuario. */
+    /** The height in user coordinates. */
     float getHeight();
 
-    /** El borde izquierdo en coordenadas de usuario. */
+    /** The left edge in user coordinates. */
     float getMinX();
 
-    /** El borde superior en coordenadas de usuario. */
+    /** The top edge in user coordinates. */
     float getMinY();
 
     /**
-     * Renderiza a un tamano en pixeles.
+     * Renders to a size in pixels.
      *
-     * <p>Uno de los dos puede ser 0 para decir "el que salga manteniendo la proporcion". Los dos en
-     * 0 no significa nada.
+     * <p>One of the two can be 0 to say "whatever comes out keeping the proportion". Both at 0
+     * means nothing, and the contract makes it an {@link IllegalArgumentException}.
      */
     RenderedImage createScaledRendering(int w, int h, RenderingHints hints);
 
-    /** Renderiza al tamano que la imagen considere natural. */
+    /** Renders at the size the image considers natural. */
     RenderedImage createDefaultRendering();
 
-    /** Renderiza con control completo. */
+    /** Renders with full control. */
     RenderedImage createRendering(RenderContext renderContext);
 }

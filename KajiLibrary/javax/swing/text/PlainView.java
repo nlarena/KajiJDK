@@ -12,30 +12,31 @@ import java.awt.Shape;
 import javax.swing.event.DocumentEvent;
 
 /**
- * La vista de un documento de texto plano: una linea por elemento, sin vistas hijas.
+ * The view of a plain text document: one line per element, with no child views.
  *
- * <h2>Sin hijos, a proposito</h2>
+ * <h2>With no children, on purpose</h2>
  *
- * <p>Un documento de mil lineas tendria mil vistas si cada linea fuera una. Esta clase dibuja las
- * lineas ella misma, recorriendo los elementos: no crea nada por linea. Es lo que hace que un area
- * de texto con un archivo grande no se coma la memoria, y la razon de que herede de {@link View} y
- * no de {@link CompositeView}.
+ * <p>A document of a thousand lines would have a thousand views if each line were one. This
+ * class draws the lines itself, walking the elements: it creates nothing per line. It is what
+ * keeps a text area with a large file from eating the memory, and the reason it inherits from
+ * {@link View} and not from {@link CompositeView}.
  *
- * <p>El precio es que no puede haber estilos por tramo —todo se dibuja con la fuente del
- * componente— ni lineas de distinto alto. Para eso estan las otras vistas.
+ * <p>The price is that there can be no styles per run --everything is drawn with the
+ * component's font-- nor lines of different heights. The other views are there for that.
  *
- * <h2>La linea mas larga</h2>
+ * <h2>The longest line</h2>
  *
- * <p>El ancho preferido es el de la linea mas larga, y encontrarla cuesta recorrer el documento.
- * Se guarda cual era ({@code longLine}) y solo se rehace la busqueda cuando esa linea cambia o
- * aparece una mas larga: es la diferencia entre medir una vez y medir en cada tecla.
+ * <p>The preferred width is that of the longest line, and finding it costs walking the document.
+ * Which one it was is kept ({@code longLine}) and the search is redone only when that line
+ * changes or a longer one appears: it is the difference between measuring once and measuring on
+ * every keystroke.
  */
 public class PlainView extends View implements TabExpander {
 
-    /** Las metricas de la fuente del componente. */
+    /** The metrics of the component's font. */
     protected FontMetrics metrics;
 
-    /** La linea mas larga que se conoce; ver la nota de la clase. */
+    /** The longest line known; see the class note. */
     Element longLine;
 
     Font font;
@@ -48,14 +49,14 @@ public class PlainView extends View implements TabExpander {
     Color unselected;
     Color selected;
 
-    /** Cuanto se corre la primera linea; lo usa {@link FieldView}. */
+    /** How much the first line is shifted; {@link FieldView} uses it. */
     int firstLineOffset;
 
     public PlainView(Element elem) {
         super(elem);
     }
 
-    /** Cuantos espacios ocupa una tabulacion, del documento. */
+    /** How many spaces a tab takes up, from the document. */
     protected int getTabSize() {
         Integer i = (Integer) getDocument().getProperty(PlainDocument.tabSizeAttribute);
         int size = (i != null) ? i.intValue() : 8;
@@ -63,10 +64,10 @@ public class PlainView extends View implements TabExpander {
     }
 
     /**
-     * Dibuja una linea, partida en el tramo seleccionado y los que no.
+     * It draws a line, split into the selected stretch and those that are not.
      *
-     * <p>Tres tramos como mucho: lo de antes de la seleccion, la seleccion, y lo de despues. Cada
-     * uno se dibuja con su color, y de ahi que haya dos metodos de dibujado.
+     * <p>Three stretches at most: what is before the selection, the selection, and what is after.
+     * Each one is drawn in its colour, and hence there are two drawing methods.
      */
     protected void drawLine(int lineIndex, Graphics g, int x, int y) {
         Element line = getElement().getElement(lineIndex);
@@ -97,12 +98,12 @@ public class PlainView extends View implements TabExpander {
         }
     }
 
-    /** Como la anterior, con coordenadas fraccionarias. */
+    /** Like the previous one, with fractional coordinates. */
     protected void drawLine(int lineIndex, Graphics2D g, float x, float y) {
         drawLine(lineIndex, (Graphics) g, (int) x, (int) y);
     }
 
-    /** Dibuja un tramo sin seleccionar y devuelve donde termino. */
+    /** It draws an unselected stretch and returns where it ended. */
     protected int drawUnselectedText(Graphics g, int x, int y, int p0, int p1)
             throws BadLocationException {
         g.setColor(unselected);
@@ -117,7 +118,7 @@ public class PlainView extends View implements TabExpander {
         return drawUnselectedText((Graphics) g, (int) x, (int) y, p0, p1);
     }
 
-    /** Dibuja un tramo seleccionado. */
+    /** It draws a selected stretch. */
     protected int drawSelectedText(Graphics g, int x, int y, int p0, int p1)
             throws BadLocationException {
         g.setColor(selected);
@@ -138,10 +139,10 @@ public class PlainView extends View implements TabExpander {
     }
 
     /**
-     * El segmento de trabajo, uno solo para toda la vista.
+     * The working segment, a single one for the whole view.
      *
-     * <p>Se reusa a proposito: dibujar reserva cero memoria, que es lo que hace que desplazar un
-     * texto largo no genere basura.
+     * <p>It is reused on purpose: drawing allocates zero memory, which is what keeps scrolling a
+     * long text from generating garbage.
      */
     protected final Segment getLineBuffer() {
         if (lineBuffer == null) {
@@ -150,7 +151,7 @@ public class PlainView extends View implements TabExpander {
         return lineBuffer;
     }
 
-    /** Vuelve a tomar la fuente del componente; hay que llamarla si cambio. */
+    /** It takes the component's font again; it has to be called if it changed. */
     protected void updateMetrics() {
         Component host = getContainer();
         Font f = host.getFont();
@@ -172,7 +173,7 @@ public class PlainView extends View implements TabExpander {
         throw new IllegalArgumentException("Invalid axis: " + axis);
     }
 
-    /** La linea mas larga; ver la nota de la clase. */
+    /** The longest line; see the class note. */
     private Element getLongLine() {
         if (longLine == null) {
             Element map = getElement();
@@ -190,7 +191,7 @@ public class PlainView extends View implements TabExpander {
         return longLine;
     }
 
-    /** Cuanto mide esa linea con la fuente actual. */
+    /** How much that line measures with the current font. */
     private float getLineWidth(Element line) {
         if (line == null) {
             return 0;
@@ -206,7 +207,7 @@ public class PlainView extends View implements TabExpander {
         return Utilities.getTabbedTextWidth(s, metrics, 0, this, p0);
     }
 
-    /** Dibuja las lineas que caen dentro del recorte, y solo esas. */
+    /** It draws the lines that fall inside the clip, and only those. */
     public void paint(Graphics g, Shape a) {
         Shape originalA = a;
         a = adjustPaintRegion(a);
@@ -254,7 +255,7 @@ public class PlainView extends View implements TabExpander {
         }
     }
 
-    /** La region donde de verdad se pinta; {@link FieldView} la corre. */
+    /** The region where it really paints; {@link FieldView} shifts it. */
     Shape adjustPaintRegion(Shape a) {
         return a;
     }
@@ -340,7 +341,7 @@ public class PlainView extends View implements TabExpander {
         updateMetrics();
     }
 
-    /** Donde cae la proxima tabulacion, contando desde el borde de la vista. */
+    /** Where the next tab falls, counting from the view's edge. */
     public float nextTabStop(float x, int tabOffset) {
         if (tabSize == 0) {
             return x;
@@ -350,11 +351,11 @@ public class PlainView extends View implements TabExpander {
     }
 
     /**
-     * Marca lo que hay que repintar despues de un cambio.
+     * It marks what has to be repainted after a change.
      *
-     * <p>Si cambio la cantidad de lineas, todo lo de abajo se corrio y hay que repintar de ahi
-     * para abajo; si cambio una sola linea, alcanza con esa. Esa distincion es la que hace que
-     * escribir una letra repinte una linea y no la pantalla.
+     * <p>If the number of lines changed, everything below shifted and has to be repainted from
+     * there down; if a single line changed, that one is enough. That distinction is what makes
+     * typing a letter repaint one line and not the screen.
      */
     protected void updateDamage(DocumentEvent changes, Shape a, ViewFactory f) {
         Component host = getContainer();
@@ -365,7 +366,7 @@ public class PlainView extends View implements TabExpander {
         Element[] removed = (ec != null) ? ec.getChildrenRemoved() : null;
         if (((added != null) && (added.length > 0))
                 || ((removed != null) && (removed.length > 0))) {
-            // Cambio la cantidad de lineas: se rehace todo.
+            // The number of lines changed: everything is redone.
             longLine = null;
             preferenceChanged(null, true, true);
             if (host != null) {
@@ -380,7 +381,7 @@ public class PlainView extends View implements TabExpander {
         }
     }
 
-    /** Manda repintar el rango de lineas. */
+    /** It asks for a repaint of the range of lines. */
     protected void damageLineRange(int line0, int line1, Shape a, Component host) {
         if (a != null) {
             Rectangle area0 = lineToRect(a, line0);
@@ -394,7 +395,7 @@ public class PlainView extends View implements TabExpander {
         }
     }
 
-    /** El rectangulo de esa linea. */
+    /** That line's rectangle. */
     protected Rectangle lineToRect(Shape a, int line) {
         Rectangle r = null;
         updateMetrics();

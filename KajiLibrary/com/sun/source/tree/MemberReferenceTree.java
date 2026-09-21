@@ -5,32 +5,33 @@ import java.util.List;
 import javax.lang.model.element.Name;
 
 /**
- * Una referencia a metodo: `Foo::bar`, `Foo::new`, `expr::metodo`.
+ * A method reference: `Foo::bar`, `Foo::new`, `expr::method`.
  *
- * <p>{@link #getMode} distingue las dos que se escriben parecido y significan cosas distintas:
- * `Foo::bar` invoca y `Foo::new` construye. Sin ese enum habria que mirar si el nombre es
- * `"new"`, que es exactamente la clase de comparacion por cadena que un arbol tipado evita.
+ * <p>{@link #getMode} tells apart the two that are written alike and mean different things:
+ * `Foo::bar` invokes and `Foo::new` constructs. Without that enum one would have to look at
+ * whether the name is `"new"`, which is exactly the kind of comparison by string that a typed
+ * tree avoids.
  */
 public interface MemberReferenceTree extends ExpressionTree {
 
-    /** Si la referencia invoca un metodo o llama a un constructor. */
+    /** Whether the reference invokes a method or calls a constructor. */
     enum ReferenceMode {
 
-        /** `Foo::bar` — invoca el metodo. */
+        /** `Foo::bar` -- it invokes the method. */
         INVOKE,
-        /** `Foo::new` — construye. */
+        /** `Foo::new` -- it constructs. */
         NEW
     }
 
-    /** Si invoca o construye. */
+    /** Whether it invokes or constructs. */
     ReferenceMode getMode();
 
-    /** Lo que va antes del `::`: un tipo o una expresion. */
+    /** What goes before the `::`: a type or an expression. */
     ExpressionTree getQualifierExpression();
 
-    /** El nombre despues del `::`, que es `new` en el modo {@link ReferenceMode#NEW}. */
+    /** The name after the `::`, which is `new` in the {@link ReferenceMode#NEW} mode. */
     Name getName();
 
-    /** Los argumentos de tipo explicitos, si se escribieron. */
+    /** The explicit type arguments, if they were written. */
     List<? extends ExpressionTree> getTypeArguments();
 }

@@ -1,7 +1,7 @@
 package com.sun.source.tree;
 
 /**
- * Un comodin `?`, `? extends T` o `? super T`. Cual de los tres lo dice
+ * A wildcard `?`, `? extends T` or `? super T`. Which of the three it is is said by
  * {@link Tree#getKind}.
  */
 public interface WildcardTree extends Tree {

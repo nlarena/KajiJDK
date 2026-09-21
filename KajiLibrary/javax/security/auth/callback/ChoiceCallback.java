@@ -1,20 +1,21 @@
 package javax.security.auth.callback;
 
 /**
- * KajiLibrary's javax.security.auth.callback.ChoiceCallback -- pide elegir de una lista.
+ * KajiLibrary's javax.security.auth.callback.ChoiceCallback -- asks to choose from a list.
  *
- * <p>Sirve para lo que no se puede escribir a mano: cual de los certificados del almacen usar, con
- * cual de tres dominios autenticarse. La lista la arma el que pregunta, y el que contesta devuelve
- * <b>indices</b>, no textos: asi no hay que volver a buscar cual eligio.
+ * <p>It serves for what cannot be typed by hand: which of the store's certificates to use, which of
+ * three domains to authenticate with. The list is built by whoever asks, and whoever answers
+ * returns <b>indices</b>, not texts: that way there is no need to look up again which one was
+ * chosen.
  *
- * <h2>La seleccion multiple se decide al construir</h2>
+ * <h2>Multiple selection is decided at construction</h2>
  *
- * <p>{@code allowMultipleSelections} es final y no un ruego: si es false,
- * {@link #setSelectedIndexes} lanza {@code UnsupportedOperationException} en vez de quedarse con el
- * primero. Quien pregunto dijo "una sola" y quedarse con una de varias seria elegir por el.
+ * <p>{@code allowMultipleSelections} is final and not a plea: if it is false,
+ * {@link #setSelectedIndexes} throws {@code UnsupportedOperationException} instead of keeping the
+ * first. Whoever asked said "only one" and keeping one of several would be choosing for them.
  *
- * <p>{@link #setSelectedIndex} en cambio anda siempre -- una sola eleccion cabe en las dos formas --
- * y deja un arreglo de un elemento.
+ * <p>{@link #setSelectedIndex}, on the other hand, always works -- a single choice fits both forms
+ * -- and leaves a one-element array.
  */
 public class ChoiceCallback implements Callback, java.io.Serializable {
 
@@ -27,9 +28,9 @@ public class ChoiceCallback implements Callback, java.io.Serializable {
     private int[] selections;
 
     /**
-     * @param defaultChoice el indice sugerido; tiene que caer adentro de la lista
-     * @throws IllegalArgumentException si el prompt es null o vacio, si la lista esta vacia, si
-     *     alguna opcion es null o vacia, o si el default cae fuera
+     * @param defaultChoice the suggested index; it has to fall inside the list
+     * @throws IllegalArgumentException if the prompt is null or empty, if the list is empty, if any
+     *     choice is null or empty, or if the default falls outside
      */
     public ChoiceCallback(String prompt, String[] choices, int defaultChoice,
             boolean multipleSelectionsAllowed) {
@@ -39,8 +40,8 @@ public class ChoiceCallback implements Callback, java.io.Serializable {
         }
         int i = 0;
         while (i < choices.length) {
-            // Una opcion vacia se veria como una linea en blanco en la lista: el usuario no sabria
-            // que esta eligiendo.
+            // An empty choice would look like a blank line in the list: the user would not know
+            // what they are choosing.
             if (choices[i] == null || choices[i].length() == 0) {
                 throw new IllegalArgumentException();
             }
@@ -56,7 +57,9 @@ public class ChoiceCallback implements Callback, java.io.Serializable {
         return this.prompt;
     }
 
-    /** Las opciones. Copia: tocar lo que sale de aca no cambia la lista que se pregunto. */
+    /**
+     * The choices. A copy: touching what comes out of here does not change the list asked about.
+     */
     public String[] getChoices() {
         return copy(this.choices);
     }
@@ -69,16 +72,16 @@ public class ChoiceCallback implements Callback, java.io.Serializable {
         return this.multipleSelectionsAllowed;
     }
 
-    /** Contesta con una sola opcion. Anda con seleccion multiple o sin ella. */
+    /** Answers with a single choice. It works with or without multiple selection. */
     public void setSelectedIndex(int selection) {
         this.selections = new int[] {selection};
     }
 
     /**
-     * Contesta con varias.
+     * Answers with several.
      *
-     * @throws UnsupportedOperationException si se construyo con seleccion simple. Ver la nota de la
-     *     clase: quedarse con una de varias seria elegir por quien pregunto
+     * @throws UnsupportedOperationException if it was built with single selection. See the class
+     *     note: keeping one of several would be choosing for whoever asked
      */
     public void setSelectedIndexes(int[] selections) {
         if (!this.multipleSelectionsAllowed) {
@@ -87,7 +90,7 @@ public class ChoiceCallback implements Callback, java.io.Serializable {
         this.selections = selections == null ? null : copyInts(selections);
     }
 
-    /** Los indices elegidos, o null si todavia nadie contesto. */
+    /** The chosen indices, or null if nobody answered yet. */
     public int[] getSelectedIndexes() {
         return this.selections == null ? null : copyInts(this.selections);
     }

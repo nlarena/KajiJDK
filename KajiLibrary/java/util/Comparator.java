@@ -110,10 +110,9 @@ public interface Comparator<T> {
      */
     static <T extends Comparable<? super T>> Comparator<T> naturalOrder() {
         return (T a, T b) -> {
-            // El local tipado nombra la cota: adentro del cuerpo de una lambda nuestro javac
-            // pierde el `extends Comparable<...>` de la variable de tipo del metodo que la
-            // contiene, y `compareTo` no resuelve. Afuera de la lambda, el mismo codigo
-            // compila (#281).
+            // The typed local names the bound: inside a lambda's body our javac loses the
+            // `extends Comparable<...>` of the enclosing method's type variable, and `compareTo`
+            // does not resolve. Outside the lambda, the same code compiles (#281).
             Comparable<? super T> key = a;
             return key.compareTo(b);
         };
@@ -132,7 +131,7 @@ public interface Comparator<T> {
      *
      * <p>{@code comparator} may itself be null, and that is not an oversight: it asks for
      * "nulls first, everything else equal", which is the ordering you want when null-handling
-     * is the only thing being specified and a real key comes later via
+     * is the only thing being specified and a inner key comes later via
      * {@link #thenComparing(Comparator)}.
      */
     static <T> Comparator<T> nullsFirst(Comparator<? super T> comparator) {
@@ -220,11 +219,11 @@ final class NullComparator<T> implements Comparator<T> {
     // ability to see that. Keeping the wildcard in the field would make `thenComparing` below
     // unwritable — `other` is a `Comparator<? super T>`, which says nothing about the captured
     // supertype the field would be parameterised on.
-    private final Comparator<T> real;
+    private final Comparator<T> inner;
 
-    NullComparator(boolean nullFirst, Comparator<? super T> real) {
+    NullComparator(boolean nullFirst, Comparator<? super T> inner) {
         this.nullFirst = nullFirst;
-        this.real = (Comparator<T>) real;
+        this.inner = (Comparator<T>) inner;
     }
 
     public int compare(T a, T b) {
@@ -243,24 +242,24 @@ final class NullComparator<T> implements Comparator<T> {
             }
             return -1;
         }
-        if (this.real == null) {
+        if (this.inner == null) {
             return 0;
         }
-        return this.real.compare(a, b);
+        return this.inner.compare(a, b);
     }
 
     public Comparator<T> reversed() {
-        if (this.real == null) {
+        if (this.inner == null) {
             return new NullComparator<T>(!this.nullFirst, null);
         }
-        return new NullComparator<T>(!this.nullFirst, this.real.reversed());
+        return new NullComparator<T>(!this.nullFirst, this.inner.reversed());
     }
 
     public Comparator<T> thenComparing(Comparator<? super T> other) {
         Objects.requireNonNull(other);
-        if (this.real == null) {
+        if (this.inner == null) {
             return new NullComparator<T>(this.nullFirst, other);
         }
-        return new NullComparator<T>(this.nullFirst, this.real.thenComparing(other));
+        return new NullComparator<T>(this.nullFirst, this.inner.thenComparing(other));
     }
 }

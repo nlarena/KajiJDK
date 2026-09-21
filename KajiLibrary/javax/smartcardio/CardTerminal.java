@@ -1,59 +1,59 @@
 package javax.smartcardio;
 
 /**
- * KajiLibrary's javax.smartcardio.CardTerminal -- un lector.
+ * KajiLibrary's javax.smartcardio.CardTerminal -- a reader.
  *
- * <p>Se consigue por {@link CardTerminals}. Lo que se hace con el es esperar a que aparezca una
- * tarjeta y conectarse.
+ * <p>It is obtained through {@link CardTerminals}. What is done with it is wait for a card to
+ * appear and connect.
  *
- * <h2>Los dos {@code waitFor}</h2>
+ * <h2>The two {@code waitFor}s</h2>
  *
- * <p>{@link #waitForCardPresent} y {@link #waitForCardAbsent} bloquean hasta que cambie el estado o se
- * acabe el tiempo. Un tiempo de cero significa <b>esperar para siempre</b>, no "no esperar"; es la
- * convencion de {@code Object.wait} y equivocarse cuelga el programa.
+ * <p>{@link #waitForCardPresent} and {@link #waitForCardAbsent} block until the state changes or
+ * the time runs out. A timeout of zero means <b>wait forever</b>, not "do not wait"; it is the
+ * convention of {@code Object.wait} and getting it wrong hangs the program.
  */
 public abstract class CardTerminal {
 
-    /** Para las subclases. */
+    /** For subclasses. */
     protected CardTerminal() {
     }
 
-    /** Como se llama el lector. */
+    /** What the reader is called. */
     public abstract String getName();
 
     /**
-     * Se conecta a la tarjeta que este puesta.
+     * Connects to the card that is inserted.
      *
-     * @param protocol {@code "T=0"}, {@code "T=1"} o {@code "*"} para negociar
-     * @throws CardNotPresentException si no hay tarjeta
-     * @throws CardException si no se pudo conectar
+     * @param protocol {@code "T=0"}, {@code "T=1"} or {@code "*"} to negotiate
+     * @throws CardNotPresentException if there is no card
+     * @throws CardException if it could not connect
      */
     public abstract Card connect(String protocol) throws CardException;
 
     /**
-     * Si hay una tarjeta puesta.
+     * Whether a card is inserted.
      *
-     * @throws CardException si no se pudo averiguar
+     * @throws CardException if it could not be found out
      */
     public abstract boolean isCardPresent() throws CardException;
 
     /**
-     * Espera a que pongan una. Ver la nota de la clase.
+     * Waits for one to be inserted. See the class note.
      *
-     * @param timeout milisegundos, o cero para esperar para siempre
-     * @return si hay tarjeta al volver
-     * @throws IllegalArgumentException si el tiempo es negativo
-     * @throws CardException si no se pudo esperar
+     * @param timeout milliseconds, or zero to wait forever
+     * @return whether there is a card on return
+     * @throws IllegalArgumentException if the time is negative
+     * @throws CardException if it could not wait
      */
     public abstract boolean waitForCardPresent(long timeout) throws CardException;
 
     /**
-     * Espera a que la saquen. Ver la nota de la clase.
+     * Waits for it to be removed. See the class note.
      *
-     * @param timeout milisegundos, o cero para esperar para siempre
-     * @return si no hay tarjeta al volver
-     * @throws IllegalArgumentException si el tiempo es negativo
-     * @throws CardException si no se pudo esperar
+     * @param timeout milliseconds, or zero to wait forever
+     * @return whether there is no card on return
+     * @throws IllegalArgumentException if the time is negative
+     * @throws CardException if it could not wait
      */
     public abstract boolean waitForCardAbsent(long timeout) throws CardException;
 }

@@ -1,17 +1,17 @@
 package com.sun.tools.attach;
 
 /**
- * El agente se cargo pero su {@code agentmain} fallo.
+ * The agent was loaded but its {@code agentmain} failed.
  *
- * <h2>Por que es distinta de {@link AgentLoadException}</h2>
+ * <h2>Why it is different from {@link AgentLoadException}</h2>
  *
- * <p>Porque el agente <strong>ya esta adentro</strong> de la VM destino. Con un
- * {@code AgentLoadException} no paso nada; con esta, el codigo del agente corrio y tiro algo, o
- * devolvio un codigo distinto de cero. La VM destino quedo con lo que ese agente haya alcanzado a
- * hacer antes de fallar, que no es lo mismo que quedar intacta.
+ * <p>Because the agent <strong>is already inside</strong> the target VM. With an
+ * {@code AgentLoadException} nothing happened; with this one, the agent's code ran and threw
+ * something, or returned a code other than zero. The target VM was left with whatever that
+ * agent managed to do before failing, which is not the same as being left intact.
  *
- * <p>{@link #returnValue} es lo que devolvio un agente nativo. Para uno escrito en Java es
- * siempre {@code 0}: alli la falla llega como excepcion y no como codigo.
+ * <p>{@link #returnValue} is what a native agent returned. For one written in Java it is always
+ * {@code 0}: there the failure arrives as an exception and not as a code.
  */
 public class AgentInitializationException extends Exception {
 
@@ -19,25 +19,25 @@ public class AgentInitializationException extends Exception {
 
     private final int returnValue;
 
-    /** Sin detalle. */
+    /** With no detail. */
     public AgentInitializationException() {
         super();
         this.returnValue = 0;
     }
 
-    /** Con un mensaje. */
+    /** With a message. */
     public AgentInitializationException(String s) {
         super(s);
         this.returnValue = 0;
     }
 
-    /** Con un mensaje y el codigo que devolvio un agente nativo. */
+    /** With a message and the code a native agent returned. */
     public AgentInitializationException(String s, int returnValue) {
         super(s);
         this.returnValue = returnValue;
     }
 
-    /** El codigo que devolvio el {@code Agent_OnAttach} nativo; {@code 0} para un agente Java. */
+    /** The code the native {@code Agent_OnAttach} returned; {@code 0} for a Java agent. */
     public int returnValue() {
         return this.returnValue;
     }

@@ -30,43 +30,44 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-// Las implementaciones de `Annotation`, `AnnotationElement`, `AnnotationValue` y `TypeAnnotation`,
-// más el lector que las saca de un `.class` (JVMS §4.7.16 y §4.7.20) y el escritor que las vuelve a
-// poner.
+// The implementations of `Annotation`, `AnnotationElement`, `AnnotationValue` and `TypeAnnotation`,
+// plus the reader that takes them out of a `.class` (JVMS §4.7.16 and §4.7.20) and the writer that
+// puts them back.
 //
-// Las entradas de pool que hacen falta cuando la fábrica pública recibe un `String` o un `int` en
-// vez de una entrada salen de {@link PoolTemporal}; ahí está explicado por qué y qué implica.
+// The pool entries needed when the public factory receives a `String` or an `int` instead of an
+// entry come from {@link TemporaryConstantPool}; why, and what it implies, is explained there. (The
+// note linked `PoolTemporal`, that class's old name.)
 public final class Annotations {
 
     private Annotations() {
     }
 
-    /** Un `Utf8` suelto con este texto. */
+    /** A loose `Utf8` with this text. */
     public static Utf8Entry utf8(String s) {
         return TemporaryConstantPool.utf8(s);
     }
 
-    /** Un `CONSTANT_Integer` suelto. */
+    /** A loose `CONSTANT_Integer`. */
     public static IntegerEntry intEntry(int v) {
         return TemporaryConstantPool.intEntry(v);
     }
 
-    /** Un `CONSTANT_Long` suelto. */
+    /** A loose `CONSTANT_Long`. */
     public static LongEntry longEntry(long v) {
         return TemporaryConstantPool.longEntry(v);
     }
 
-    /** Un `CONSTANT_Float` suelto. */
+    /** A loose `CONSTANT_Float`. */
     public static FloatEntry floatEntry(float v) {
         return TemporaryConstantPool.floatEntry(v);
     }
 
-    /** Un `CONSTANT_Double` suelto. */
+    /** A loose `CONSTANT_Double`. */
     public static DoubleEntry doubleEntry(double v) {
         return TemporaryConstantPool.doubleEntry(v);
     }
 
-    /** Una lista inmutable con estos elementos. */
+    /** An immutable list with these elements. */
     public static List<AnnotationElement> listOf(AnnotationElement[] elems) {
         List<AnnotationElement> list = new ArrayList<AnnotationElement>();
         for (int i = 0; i < elems.length; i++) {
@@ -152,9 +153,9 @@ public final class Annotations {
     }
 
     /**
-     * El `element_value` que corresponde a un objeto de Java. Las cajas, `String` y `ClassDesc`
-     * salen directo; un arreglo se convierte elemento por elemento. Cualquier otra cosa es un
-     * error, y tiene que serlo: `element_value` no tiene forma de guardarla.
+     * The `element_value` that corresponds to a Java object. The boxes, `String` and `ClassDesc`
+     * come out directly; an array is converted element by element. Anything else is an error, and
+     * has to be: `element_value` has no way of keeping it.
      */
     public static AnnotationValue ofObject(Object v) {
         if (v instanceof Integer) {
@@ -202,7 +203,7 @@ public final class Annotations {
             return AnnotationValue.ofArray(values);
         }
         throw new IllegalArgumentException(
-                "no hay element_value para " + (v == null ? "null" : v.getClass().getName()));
+                "there is no element_value for " + (v == null ? "null" : v.getClass().getName()));
     }
 
     // --- TypeAnnotation ---
@@ -233,7 +234,7 @@ public final class Annotations {
     public static EmptyTarget emptyTarget(TargetType t) {
         if (t != TargetType.FIELD && t != TargetType.METHOD_RETURN
                 && t != TargetType.METHOD_RECEIVER) {
-            throw new IllegalArgumentException(t + " no es un empty_target");
+            throw new IllegalArgumentException(t + " is not an empty_target");
         }
         return new EmptyTargetImpl(t);
     }
@@ -266,7 +267,7 @@ public final class Annotations {
     public static OffsetTarget offsetTarget(TargetType t, Label target) {
         if (t != TargetType.INSTANCEOF && t != TargetType.NEW
                 && t != TargetType.CONSTRUCTOR_REFERENCE && t != TargetType.METHOD_REFERENCE) {
-            throw new IllegalArgumentException(t + " no es un offset_target");
+            throw new IllegalArgumentException(t + " is not an offset_target");
         }
         return new OffsetTargetImpl(t, target);
     }
@@ -276,7 +277,7 @@ public final class Annotations {
                 && t != TargetType.METHOD_INVOCATION_TYPE_ARGUMENT
                 && t != TargetType.CONSTRUCTOR_REFERENCE_TYPE_ARGUMENT
                 && t != TargetType.METHOD_REFERENCE_TYPE_ARGUMENT) {
-            throw new IllegalArgumentException(t + " no es un type_argument_target");
+            throw new IllegalArgumentException(t + " is not a type_argument_target");
         }
         return new TypeArgumentTargetImpl(t, target, i);
     }
@@ -288,7 +289,7 @@ public final class Annotations {
     private static void require(TargetType t, TargetType a, TargetType b) {
         if (t != a && t != b) {
             throw new IllegalArgumentException(
-                    t + " no sirve acá; se esperaba " + a + " o " + b);
+                    t + " does not serve here; expected " + a + " or " + b);
         }
     }
 
@@ -300,12 +301,12 @@ public final class Annotations {
         return Collections.unmodifiableList(list);
     }
 
-    // --- Lectura ---
+    // --- Reading ---
 
     /**
-     * Lee un `annotation` que empieza en `c.p` y deja `c.p` justo después. El cursor explícito es
-     * porque el largo de un `element_value` depende de su contenido: no hay forma de saltear una
-     * anotación sin decodificarla entera.
+     * It reads an `annotation` starting at `c.p` and leaves `c.p` right after it. The explicit
+     * cursor is because the length of an `element_value` depends on its contents: there is no way
+     * of skipping an annotation without decoding it whole.
      */
     public static Annotation readAnnotation(ClassReader cf, Cursor c) {
         Utf8Entry className = cf.readEntry(c.p, Utf8Entry.class);
@@ -320,7 +321,7 @@ public final class Annotations {
         return new AnnotationImpl(className, Collections.unmodifiableList(elems));
     }
 
-    /** Lee un `element_value` que empieza en `c.p` y deja `c.p` justo después. */
+    /** It reads an `element_value` starting at `c.p` and leaves `c.p` right after it. */
     public static AnnotationValue readValue(ClassReader cf, Cursor c) {
         int tag = cf.readU1(c.p);
         c.p += 1;
@@ -374,7 +375,7 @@ public final class Annotations {
             }
             default:
                 throw new IllegalArgumentException(
-                        "etiqueta de element_value desconocida: 0x" + Integer.toHexString(tag));
+                        "unknown element_value tag: 0x" + Integer.toHexString(tag));
         }
     }
 
@@ -384,7 +385,7 @@ public final class Annotations {
         return e;
     }
 
-    /** Lee la lista de `annotation` de un `RuntimeXxxAnnotations` a partir del cuerpo. */
+    /** It reads the `annotation` list of a `RuntimeXxxAnnotations` from the body. */
     public static List<Annotation> readAnnotations(ClassReader cf, int pos) {
         Cursor c = new Cursor();
         int n = cf.readU2(pos);
@@ -396,17 +397,20 @@ public final class Annotations {
         return Collections.unmodifiableList(list);
     }
 
-    /** Lee un `type_annotation` que empieza en `c.p`. */
+    /** It reads a `type_annotation` starting at `c.p`. */
     public static TypeAnnotation readTypeAnnotation(ClassReader cf, Cursor c) {
         int tag = cf.readU1(c.p);
         c.p += 1;
         TargetType t = targetTypeOf(tag);
         TargetInfo target;
-        // El reparto va por la etiqueta cruda y no por el `TargetType` porque nuestro javac todavía
-        // no baja un `switch` con selector `enum` (finding #401), y porque el byte es justamente lo
-        // que el formato discrimina. Las etiquetas van como literales y no como
-        // `TargetInfo.TARGET_*` por el finding #461: una constante de otro archivo no se pliega en
-        // un `case`. El comentario al lado de cada una dice cuál es.
+        // The dispatch goes by the raw tag and not by the `TargetType`, and the tags go as literals
+        // and not as `TargetInfo.TARGET_*`, because the frozen javac that builds this library
+        // rejects both other forms: a `switch` on `TargetType` (a nested enum read from the
+        // classpath) and a `case` constant from another file (finding #461). The note blamed #401
+        // for the first; #401 is closed, and so is its follow-up #538 -- the source-built javac
+        // compiles both forms, but `bin/javac.exe` predates those fixes (checked 2026-09-18). The
+        // byte is in any case exactly what the format discriminates. The comment beside each tag
+        // says which one it is.
         switch (tag) {
             case 0x00:  // TARGET_CLASS_TYPE_PARAMETER
             case 0x01:  // TARGET_METHOD_TYPE_PARAMETER
@@ -478,7 +482,7 @@ public final class Annotations {
                 readAnnotation(cf, c));
     }
 
-    /** Lee la lista de `type_annotation` de un `RuntimeXxxTypeAnnotations` a partir del cuerpo. */
+    /** It reads the `type_annotation` list of a `RuntimeXxxTypeAnnotations` from the body. */
     public static List<TypeAnnotation> readTypeAnnotations(ClassReader cf, int pos) {
         Cursor c = new Cursor();
         int n = cf.readU2(pos);
@@ -491,35 +495,35 @@ public final class Annotations {
     }
 
     private static TargetType targetTypeOf(int tag) {
-        TargetType[] todos = TargetType.values();
-        for (int i = 0; i < todos.length; i++) {
-            if (todos[i].targetTypeValue() == tag) {
-                return todos[i];
+        TargetType[] all = TargetType.values();
+        for (int i = 0; i < all.length; i++) {
+            if (all[i].targetTypeValue() == tag) {
+                return all[i];
             }
         }
         throw new IllegalArgumentException(
-                "target_type desconocido: 0x" + Integer.toHexString(tag));
+                "unknown target_type: 0x" + Integer.toHexString(tag));
     }
 
     private static TypePathComponent.Kind pathKindOf(int tag) {
-        TypePathComponent.Kind[] todos = TypePathComponent.Kind.values();
-        for (int i = 0; i < todos.length; i++) {
-            if (todos[i].tag() == tag) {
-                return todos[i];
+        TypePathComponent.Kind[] all = TypePathComponent.Kind.values();
+        for (int i = 0; i < all.length; i++) {
+            if (all[i].tag() == tag) {
+                return all[i];
             }
         }
-        throw new IllegalArgumentException("type_path_kind desconocido: " + tag);
+        throw new IllegalArgumentException("unknown type_path_kind: " + tag);
     }
 
-    /** Un puntero de lectura que avanza. Ver `readAnnotation`. */
+    /** A read pointer that advances. See `readAnnotation`. */
     public static final class Cursor {
 
-        /** El offset actual dentro del archivo. */
+        /** The current offset within the file. */
         public int p;
     }
 }
 
-// --- Implementaciones ---
+// --- Implementations ---
 
 final class AnnotationImpl implements Annotation {
 

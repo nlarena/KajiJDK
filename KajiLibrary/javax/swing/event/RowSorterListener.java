@@ -3,10 +3,10 @@ package javax.swing.event;
 import java.util.EventListener;
 
 /**
- * Quien quiere enterarse de que el orden de las filas cambio.
+ * Whoever wants to hear that the rows' order changed.
  */
 public interface RowSorterListener extends EventListener {
 
-    /** Cambio el orden o las claves de ordenamiento. */
+    /** The order or the sort keys changed. */
     void sorterChanged(RowSorterEvent e);
 }

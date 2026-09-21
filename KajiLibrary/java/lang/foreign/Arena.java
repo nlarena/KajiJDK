@@ -1,84 +1,84 @@
 package java.lang.foreign;
 
 /**
- * KajiLibrary's java.lang.foreign.Arena -- un asignador con **tiempo de vida**.
+ * KajiLibrary's java.lang.foreign.Arena -- an allocator with a **lifetime**.
  *
- * <p>Es la idea central del manejo de memoria de este paquete, y vale entenderla aparte de la
- * implementacion: en vez de liberar cada bloque por su cuenta --que es donde nacen los errores de
- * "usar despues de liberar"-- se agrupan todos en una arena y se cierra la arena entera. Los
- * segmentos que entrego dejan de servir todos juntos, y el intento de usar uno **falla** con una
- * excepcion en vez de leer basura.
+ * <p>It is this package's central idea about handling memory, and it is worth understanding apart
+ * from the implementation: instead of freeing each block on its own --which is where "use after
+ * free" errors are born-- they are all grouped into an arena and the whole arena is closed. The
+ * segments it handed out stop working all together, and the attempt to use one **fails** with an
+ * exception instead of reading garbage.
  *
- * <p>Por eso extiende `AutoCloseable`: la forma normal de usarla es un `try`-con-recursos, donde el
- * cierre no se puede olvidar.
+ * <p>That is why it extends `AutoCloseable`: the normal way of using it is a try-with-resources,
+ * where the close cannot be forgotten.
  *
- * <h2>Lo que cambia en esta biblioteca</h2>
+ * <h2>What changes in this library</h2>
  *
- * <p><strong>Los segmentos que entrega son de heap, no nativos.</strong> Esta VM no reserva memoria
- * del sistema, asi que la arena respalda cada reserva con un arreglo de Java, elegido segun el
- * alineamiento pedido: un `byte[]` para 1, un `short[]` para 2, un `int[]` para 4, un `long[]` para
- * 8. Un alineamiento mayor que 8 **se rechaza** en vez de fingirse.
+ * <p><strong>The segments it hands out are heap ones, not native.</strong> This VM reserves no
+ * system memory, so the arena backs each reservation with a Java array, chosen by the alignment
+ * asked for: a `byte[]` for 1, a `short[]` for 2, an `int[]` for 4, a `long[]` for 8. An alignment
+ * greater than 8 **is rejected** instead of being faked.
  *
- * <p>La consecuencia visible es que {@link MemorySegment#isNative()} da `false` donde el JDK da
- * `true`. Todo lo demas --el tamanio, el alineamiento efectivo, los cortes, la lectura, la escritura,
- * y sobre todo el cierre del ambito-- se comporta igual.
+ * <p>The visible consequence is that {@link MemorySegment#isNative()} gives `false` where the JDK
+ * gives `true`. Everything else --the size, the effective alignment, the slices, the reading, the
+ * writing, and above all the closing of the scope-- behaves the same.
  *
- * <p>Y hay algo que gana: la memoria de una arena que nadie cerro no se pierde. La recoge el
- * recolector como cualquier arreglo, mientras que en el JDK una arena automatica es la unica que se
- * limpia sola.
+ * <p>And there is something it gains: the memory of an arena nobody closed is not lost. The
+ * collector picks it up like any array, whereas in the JDK an automatic arena is the only one that
+ * cleans itself up.
  */
 public interface Arena extends SegmentAllocator, AutoCloseable {
 
-    /** El ambito de los segmentos que entrega. */
+    /** The scope of the segments it hands out. */
     MemorySegment.Scope scope();
 
     /**
-     * Cierra la arena: todos sus segmentos dejan de poder usarse.
+     * It closes the arena: none of its segments can be used any more.
      *
-     * @throws IllegalStateException si ya estaba cerrada
-     * @throws UnsupportedOperationException si es la arena global, que no se cierra
+     * @throws IllegalStateException if it was already closed
+     * @throws UnsupportedOperationException if it is the global arena, which does not close
      */
     void close();
 
     MemorySegment allocate(long byteSize, long byteAlignment);
 
     /**
-     * La arena que **nunca** se cierra.
+     * The arena that **never** closes.
      *
-     * <p>Sus segmentos viven todo el programa. Es la que se usa cuando el tiempo de vida es "para
-     * siempre" y por lo tanto no hay nada que administrar.
+     * <p>Its segments live for the whole program. It is the one used when the lifetime is "for ever"
+     * and there is therefore nothing to manage.
      */
     static Arena global() {
-        return ArenaHeap.laGlobal();
+        return HeapArena.theGlobal();
     }
 
     /**
-     * Una arena que se limpia sola cuando nadie la mira.
+     * An arena that cleans itself up when nobody is looking.
      *
-     * <p>En el JDK es la unica cuyos segmentos los libera el recolector. Aca **todas** son asi --la
-     * memoria son arreglos de Java-- con lo cual esta y las otras se diferencian solo en si se pueden
-     * cerrar a mano. Se sigue distinguiendo porque el codigo que elige una u otra esta diciendo algo
-     * sobre su intencion.
+     * <p>In the JDK it is the only one whose segments the collector frees. Here **all** of them are
+     * like that --the memory is Java arrays-- so this one and the others differ only in whether they
+     * can be closed by hand. The distinction is kept because code choosing one or the other is
+     * saying something about its intent.
      */
     static Arena ofAuto() {
-        return ArenaHeap.nueva();
+        return HeapArena.fresh();
     }
 
     /**
-     * Una arena cerrable, para un solo hilo.
+     * A closeable arena, for a single thread.
      *
-     * <p>En el JDK, "confinada" quiere decir que sus segmentos **solo** se pueden usar desde el hilo
-     * que la creo, y eso es lo que le permite no sincronizar nada. Aca no se confina: los segmentos
-     * son arreglos de Java y usarlos desde otro hilo no rompe nada, asi que
-     * {@link MemorySegment#isAccessibleBy} da `true` siempre. Es una restriccion **menos**, no una
-     * respuesta falsa.
+     * <p>In the JDK, "confined" means its segments can **only** be used from the thread that created
+     * it, and that is what lets it synchronise nothing. Here it does not confine: the segments are
+     * Java arrays and using them from another thread breaks nothing, so
+     * {@link MemorySegment#isAccessibleBy} always gives `true`. It is one restriction **fewer**, not
+     * a false answer.
      */
     static Arena ofConfined() {
-        return ArenaHeap.nueva();
+        return HeapArena.fresh();
     }
 
-    /** Una arena cerrable, compartida entre hilos. */
+    /** A closeable arena, shared between threads. */
     static Arena ofShared() {
-        return ArenaHeap.nueva();
+        return HeapArena.fresh();
     }
 }

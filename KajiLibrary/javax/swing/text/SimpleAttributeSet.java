@@ -5,29 +5,29 @@ import java.util.Enumeration;
 import java.util.Hashtable;
 
 /**
- * El conjunto de atributos mutable de siempre: una tabla de nombre a valor.
+ * The usual mutable attribute set: a table from name to value.
  *
- * <p>Es el que se usa para <em>armar</em> atributos —{@code StyleConstants.setBold(attr, true)}— y
- * pasarselos a un documento. Un documento no lo guarda tal cual: lo pasa por su
- * {@code StyleContext}, que devuelve un conjunto inmutable y compartido. Por eso esta clase puede
- * ser una tabla simple sin preocuparse por la memoria.
+ * <p>It is the one used to <em>build</em> attributes --{@code StyleConstants.setBold(attr,
+ * true)}-- and pass them to a document. A document does not keep it as it is: it passes it
+ * through its {@code StyleContext}, which returns an immutable and shared set. That is why this
+ * class can be a plain table without worrying about memory.
  *
- * <p>El padre de resolucion se guarda como un atributo mas, bajo la clave
- * {@link AttributeSet#ResolveAttribute}. Es un detalle que se nota: {@link #getAttributeCount} lo
- * cuenta, y {@link #getAttributeNames} lo nombra.
+ * <p>The resolving parent is kept as one more attribute, under the key
+ * {@link AttributeSet#ResolveAttribute}. It is a detail that shows: {@link #getAttributeCount}
+ * counts it, and {@link #getAttributeNames} names it.
  */
 public class SimpleAttributeSet implements MutableAttributeSet, Serializable, Cloneable {
 
-    /** Un conjunto vacio e inmutable, para no crear uno cada vez que hace falta "ninguno". */
+    /** An empty and immutable set, so as not to create one every time "none" is needed. */
     public static final AttributeSet EMPTY = new EmptyAttributeSet();
 
     private transient Hashtable<Object, Object> table = new Hashtable<Object, Object>(3);
 
-    /** Un conjunto vacio. */
+    /** An empty set. */
     public SimpleAttributeSet() {
     }
 
-    /** Una copia de ese conjunto. */
+    /** A copy of that set. */
     public SimpleAttributeSet(AttributeSet source) {
         addAttributes(source);
     }
@@ -44,13 +44,13 @@ public class SimpleAttributeSet implements MutableAttributeSet, Serializable, Cl
         return table.get(attrName) != null;
     }
 
-    /** Si los dos tienen la misma cantidad de atributos y este contiene a todos los del otro. */
+    /** Whether both have the same number of attributes and this one contains all of the other's. */
     public boolean isEqual(AttributeSet attr) {
         return ((getAttributeCount() == attr.getAttributeCount())
                 && containsAttributes(attr));
     }
 
-    /** Una copia propia; el que la recibe puede cambiarla sin tocar a esta. */
+    /** A copy of its own; whoever receives it can change it without touching this one. */
     public AttributeSet copyAttributes() {
         return (AttributeSet) clone();
     }
@@ -59,7 +59,7 @@ public class SimpleAttributeSet implements MutableAttributeSet, Serializable, Cl
         return table.keys();
     }
 
-    /** El valor, o el que diga el padre de resolucion; ver {@link MutableAttributeSet}. */
+    /** The value, or whatever the resolving parent says; see {@link MutableAttributeSet}. */
     public Object getAttribute(Object name) {
         Object value = table.get(name);
         if (value == null) {
@@ -107,7 +107,7 @@ public class SimpleAttributeSet implements MutableAttributeSet, Serializable, Cl
         }
     }
 
-    /** Ver la nota de {@link MutableAttributeSet#removeAttributes(AttributeSet)}. */
+    /** See {@link MutableAttributeSet#removeAttributes(AttributeSet)}'s note. */
     public void removeAttributes(AttributeSet attributes) {
         if (attributes == this) {
             table.clear();
@@ -131,7 +131,7 @@ public class SimpleAttributeSet implements MutableAttributeSet, Serializable, Cl
         addAttribute(AttributeSet.ResolveAttribute, parent);
     }
 
-    /** Una copia con su propia tabla. */
+    /** A copy with a table of its own. */
     public Object clone() {
         SimpleAttributeSet attr;
         try {
@@ -147,7 +147,7 @@ public class SimpleAttributeSet implements MutableAttributeSet, Serializable, Cl
         return table.hashCode();
     }
 
-    /** Igual a otro conjunto que tenga exactamente los mismos atributos. */
+    /** Equal to another set that has exactly the same attributes. */
     public boolean equals(Object obj) {
         if (this == obj) {
             return true;
@@ -166,7 +166,7 @@ public class SimpleAttributeSet implements MutableAttributeSet, Serializable, Cl
             Object key = names.nextElement();
             Object value = getAttribute(key);
             if (value instanceof AttributeSet) {
-                // Un padre de resolucion se resume: imprimirlo entero podria no terminar nunca.
+                // A resolving parent is summarized: printing it whole might never end.
                 s = s + key + "=**AttributeSet** ";
             } else {
                 s = s + key + "=" + value + " ";
@@ -176,11 +176,11 @@ public class SimpleAttributeSet implements MutableAttributeSet, Serializable, Cl
     }
 
     /**
-     * El conjunto vacio de {@link SimpleAttributeSet#EMPTY}.
+     * {@link SimpleAttributeSet#EMPTY}'s empty set.
      *
-     * <p>Es una clase aparte, y no un {@code SimpleAttributeSet} sin nada, para que sea de verdad
-     * inmutable: uno vacio pero mutable podria llenarse por accidente y el error aparecerria muy
-     * lejos de donde se cometio.
+     * <p>It is a separate class, and not a {@code SimpleAttributeSet} with nothing in it, so that
+     * it is really immutable: an empty but mutable one could be filled by accident and the error
+     * would appear very far from where it was made.
      */
     static class EmptyAttributeSet implements AttributeSet, Serializable {
 

@@ -7,181 +7,186 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 
 /**
- * Una conexion WebSocket: bidireccional, por mensajes, sobre la misma conexion HTTP.
+ * A WebSocket connection: bidirectional, message-based, over the same HTTP connection.
  *
- * <h2>La contrapresion, que es lo que hay que entender de esta API</h2>
+ * <h2>Backpressure, which is what there is to understand about this API</h2>
  *
- * <p>El cliente <strong>no</strong> entrega mensajes hasta que se los pidan. {@link #request(long)}
- * es como se piden, y hasta que no se pida nada mas, nada llega. Es lo contrario del reflejo de
- * "escuchar eventos".
+ * <p>The client does <strong>not</strong> deliver messages until they are requested. {@link
+ * #request(long)} is how they are requested, and until more is requested, nothing arrives. It is
+ * the opposite of the "listen for events" reflex.
  *
- * <p>Suena incomodo y resuelve un problema real: un servidor que manda mas rapido de lo que el
- * programa procesa haria crecer una cola sin limite hasta agotar la memoria. Con esto, el que no da
- * abasto simplemente no pide, y la presion vuelve por la red hasta el emisor.
+ * <p>It sounds awkward and solves a real problem: a server sending faster than the program
+ * processes would grow a queue without limit until memory ran out. With this, whoever cannot keep
+ * up simply does not ask, and the pressure travels back through the network to the sender.
  *
- * <p>El JDK lo hace comodo: cada metodo de {@link Listener} devuelve un {@link CompletionStage}, y
- * cuando ese se completa el cliente pide uno mas solo. Devolver {@code null} —el valor por omision—
- * significa "ya termine con este".
+ * <p>The {@link CompletionStage} each {@link Listener} method returns says when the WebSocket may
+ * reclaim that message's data; {@code null} means at once. It does not request the next message.
+ * This note said that when the stage completes the client requests one more by itself; what
+ * requests one more in the JDK is the default method bodies, which call {@code request(1)} — and
+ * here only {@link Listener#onOpen}'s does (see {@link Listener}).
  *
- * <h2>Los mensajes vienen partidos</h2>
+ * <h2>Messages come in parts</h2>
  *
- * <p>{@link Listener#onText} recibe un {@code boolean last}: un mensaje puede llegar en varias
- * partes, y solo la ultima lo cierra. Juntarlas es responsabilidad de quien escucha, y el mismo
- * parametro aparece del lado de {@link #sendText} para poder mandar asi.
+ * <p>{@link Listener#onText} receives a {@code boolean last}: a message can arrive in several
+ * parts, and only the last one closes it. Putting them together is the listener's job, and the same
+ * parameter appears on the {@link #sendText} side so messages can be sent that way.
  *
- * <h2>En esta VM</h2>
+ * <h2>In this VM</h2>
  *
- * <p>La interfaz esta entera; lo que no hay es implementacion, porque no hay cliente HTTP que haga
- * el handshake. Ver {@link HttpClient}.
+ * <p>The interface is whole, apart from the listener defaults above; what is missing is an
+ * implementation, because there is no HTTP client to do the handshake. See {@link HttpClient}.
  *
  * @since 11
  */
 public interface WebSocket {
 
     /**
-     * El codigo de cierre normal, {@code 1000}.
+     * The normal closure code, {@code 1000}.
      *
-     * <p>Los codigos son de la especificacion, no del JDK: cerrar con otro numero le dice algo
-     * distinto al otro lado.
+     * <p>The codes are the specification's, not the JDK's: closing with another number tells the
+     * other side something different.
      */
     int NORMAL_CLOSURE = 1000;
 
     /**
-     * Manda texto, o una parte.
+     * Sends text, or a part of it.
      *
-     * @param last si esta parte cierra el mensaje
+     * @param last whether this part closes the message
      */
     CompletableFuture<WebSocket> sendText(CharSequence data, boolean last);
 
-    /** Manda binario, o una parte. */
+    /** Sends binary data, or a part of it. */
     CompletableFuture<WebSocket> sendBinary(ByteBuffer data, boolean last);
 
-    /** Manda un ping; el otro lado debe contestar con un pong. */
+    /** Sends a ping; the other side must answer with a pong. */
     CompletableFuture<WebSocket> sendPing(ByteBuffer message);
 
     /**
-     * Manda un pong.
+     * Sends a pong.
      *
-     * <p>No hace falta mandarlo en respuesta a un ping —el cliente ya lo hace solo—: esto es para
-     * el pong <em>no solicitado</em>, que sirve como latido unidireccional.
+     * <p>It is not needed in answer to a ping —the client already does that by itself—: this is for
+     * the <em>unsolicited</em> pong, which serves as a one-way heartbeat.
      */
     CompletableFuture<WebSocket> sendPong(ByteBuffer message);
 
     /**
-     * Empieza a cerrar.
+     * Starts closing.
      *
-     * <p>Ordenado: el otro lado contesta con su propio cierre y recien ahi la conexion termina. Lo
-     * que ya estaba en vuelo se entrega.
+     * <p>In order: the other side answers with its own close and only then does the connection end.
+     * What was already in flight is delivered.
      *
-     * @param statusCode {@link #NORMAL_CLOSURE} u otro de la especificacion
+     * @param statusCode {@link #NORMAL_CLOSURE} or another from the specification
      */
     CompletableFuture<WebSocket> sendClose(int statusCode, String reason);
 
     /**
-     * Pide {@code n} mensajes mas.
+     * Requests {@code n} more messages.
      *
-     * <p>Sin esto no llega nada; ver la nota de la clase.
+     * <p>Without this nothing arrives; see the class note.
      */
     void request(long n);
 
-    /** El subprotocolo acordado, o la cadena vacia si no se acordo ninguno. */
+    /** The agreed subprotocol, or the empty string if none was agreed. */
     String getSubprotocol();
 
-    /** Si ya no se puede mandar. */
+    /** Whether nothing more can be sent. */
     boolean isOutputClosed();
 
-    /** Si ya no se va a recibir. */
+    /** Whether nothing more will be received. */
     boolean isInputClosed();
 
     /**
-     * Corta sin cierre ordenado.
+     * Cuts off without an orderly close.
      *
-     * <p>Para cuando el cierre normal no es posible o no vale la pena esperarlo. Lo que estuviera en
-     * vuelo se pierde.
+     * <p>For when the normal close is not possible or not worth waiting for. Whatever was in flight
+     * is lost.
      */
     void abort();
 
     /**
-     * Arma un {@link WebSocket}.
+     * Builds a {@link WebSocket}.
      *
-     * <p>Se lo consigue con {@link HttpClient#newWebSocketBuilder}: el WebSocket empieza siendo un
-     * pedido HTTP, asi que hereda del cliente el TLS, el proxy y el ejecutor.
+     * <p>It is obtained with {@link HttpClient#newWebSocketBuilder}: a WebSocket starts out as an
+     * HTTP request, so it inherits the client's TLS, proxy and executor.
      */
     public interface Builder {
 
-        /** Agrega un encabezado al handshake. */
+        /** Adds a header to the handshake. */
         Builder header(String name, String value);
 
-        /** El plazo para completar el handshake. */
+        /** The timeout for completing the handshake. */
         Builder connectTimeout(Duration timeout);
 
         /**
-         * Los subprotocolos a ofrecer, en orden de preferencia.
+         * The subprotocols to offer, in order of preference.
          *
-         * <p>El servidor elige uno o ninguno; cual toco se lee con {@link WebSocket#getSubprotocol}.
+         * <p>The server picks one or none; which one it picked is read with {@link
+         * WebSocket#getSubprotocol}.
          */
         Builder subprotocols(String mostPreferred, String... lesserPreferred);
 
         /**
-         * Conecta.
+         * Connects.
          *
-         * <p>El futuro falla con {@link WebSocketHandshakeException} si el servidor rechazo el
-         * cambio de protocolo — y esa excepcion lleva adentro la respuesta HTTP, que suele explicar
-         * por que.
+         * <p>The future fails with {@link WebSocketHandshakeException} if the server refused the
+         * protocol switch — and that exception carries the HTTP response, which usually explains
+         * why.
          */
         CompletableFuture<WebSocket> buildAsync(URI uri, Listener listener);
     }
 
     /**
-     * Atiende lo que llega por el WebSocket.
+     * Handles what arrives over the WebSocket.
      *
-     * <p>Todos los metodos tienen cuerpo: casi nadie necesita los siete, y los que devuelven
-     * {@link CompletionStage} devuelven {@code null}, que significa "termine con este mensaje, pedi
-     * el siguiente".
+     * <p>Every method has a body: hardly anyone needs all seven. This note said the ones returning
+     * a {@link CompletionStage} return {@code null}, meaning "done with this message, request the
+     * next". {@code null} only says the data may be reclaimed at once, and nothing requests the
+     * next message: in the JDK the defaults of {@code onText}, {@code onBinary}, {@code onPing} and
+     * {@code onPong} call {@code request(1)} first, but in this tree they only return {@code null}.
      */
     public interface Listener {
 
         /**
-         * La conexion se abrio.
+         * The connection opened.
          *
-         * <p>Por omision pide un mensaje. Quien lo sobrescriba <strong>tiene que</strong> llamar a
-         * {@link WebSocket#request} o no va a recibir nada nunca — es el error mas facil de cometer
-         * con esta API.
+         * <p>By default it requests one message. Whoever overrides it <strong>has to</strong> call
+         * {@link WebSocket#request} or will never receive anything — the easiest mistake to make
+         * with this API.
          */
         default void onOpen(WebSocket webSocket) {
             webSocket.request(1);
         }
 
-        /** Llego texto, o una parte. */
+        /** Text arrived, or a part of it. */
         default CompletionStage<?> onText(WebSocket webSocket, CharSequence data, boolean last) {
             return null;
         }
 
-        /** Llego binario, o una parte. */
+        /** Binary data arrived, or a part of it. */
         default CompletionStage<?> onBinary(WebSocket webSocket, ByteBuffer data, boolean last) {
             return null;
         }
 
-        /** Llego un ping; el cliente ya contesto el pong. */
+        /** A ping arrived; the WebSocket answers it with a pong by itself. */
         default CompletionStage<?> onPing(WebSocket webSocket, ByteBuffer message) {
             return null;
         }
 
-        /** Llego un pong. */
+        /** A pong arrived. */
         default CompletionStage<?> onPong(WebSocket webSocket, ByteBuffer message) {
             return null;
         }
 
-        /** El otro lado empezo a cerrar. */
+        /** The other side started closing. */
         default CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) {
             return null;
         }
 
         /**
-         * Algo fallo, y la conexion ya esta cerrada.
+         * Something failed, and the connection is already closed.
          *
-         * <p>No hay nada que reintentar sobre este WebSocket: cuando esto se llama, el
-         * {@code onClose} no va a llegar.
+         * <p>There is nothing to retry on this WebSocket: when this is called, {@code onClose} will
+         * not arrive.
          */
         default void onError(WebSocket webSocket, Throwable error) {
         }

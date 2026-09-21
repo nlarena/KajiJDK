@@ -7,43 +7,42 @@ import java.util.Optional;
 import java.util.ServiceLoader;
 
 /**
- * KajiLibrary's java.util.spi.ToolProvider -- una herramienta de linea de comandos, llamable desde
- * codigo.
+ * KajiLibrary's java.util.spi.ToolProvider -- a command-line tool, callable from code.
  *
- * <p>Es lo que permite correr {@code javac} o {@code jar} sin lanzar un proceso: la herramienta se
- * busca por nombre y corre en la misma maquina virtual, con sus salidas redirigidas a donde uno
- * quiera. Para un build o una prueba eso cambia mucho -- no hay que parsear la salida de un proceso
- * ni pelearse con la codificacion de la consola.
+ * <p>It is what lets {@code javac} or {@code jar} be run without launching a process: the tool is
+ * looked up by name and runs in the same virtual machine, with its outputs redirected wherever one
+ * wants. For a build or a test that changes a great deal -- no parsing a process's output and no
+ * fighting with the console's encoding.
  *
- * <h2>Por que la version de caracteres es la principal</h2>
+ * <h2>Why the character version is the principal one</h2>
  *
- * <p>Las dos sobrecargas de {@code run} hacen lo mismo, y la de {@code PrintStream} <b>envuelve</b> a
- * la de {@code PrintWriter}, no al reves. Tiene que ser en ese orden: un {@code PrintStream} escribe
- * bytes con una codificacion ya fijada, asi que si la herramienta escribiera ahi directamente, un
- * mensaje con acentos saldria mal y no habria forma de arreglarlo desde afuera. Con caracteres,
- * quien llama elige la codificacion al construir el writer.
+ * <p>{@code run}'s two overloads do the same thing, and the {@code PrintStream} one <b>wraps</b> the
+ * {@code PrintWriter} one, not the other way round. It has to be in that order: a
+ * {@code PrintStream} writes bytes with an encoding already fixed, so if the tool wrote there
+ * directly, a message with accents would come out wrong and there would be no way of fixing it from
+ * outside. With characters, the caller chooses the encoding when constructing the writer.
  *
- * <p>El default vacia los dos writers en un {@code finally}: si la herramienta tiro, lo que alcanzo
- * a escribir es justamente lo que hace falta para saber por que.
+ * <p>The default flushes both writers in a {@code finally}: if the tool threw, what it managed to
+ * write is exactly what is needed to know why.
  */
 public interface ToolProvider {
 
-    /** El nombre por el que se la encuentra: {@code "javac"}, {@code "jar"}. */
+    /** The name it is found by: {@code "javac"}, {@code "jar"}. */
     String name();
 
-    /** Una linea de descripcion, o vacio si no la tiene. */
+    /** A line of description, or empty if it has none. */
     default Optional<String> description() {
         return Optional.empty();
     }
 
     /**
-     * Corre la herramienta.
+     * It runs the tool.
      *
-     * @return el codigo de salida; 0 si anduvo
+     * @return the exit code; 0 if it worked
      */
     int run(PrintWriter out, PrintWriter err, String... args);
 
-    /** Idem, con flujos de bytes. Ver la nota de la clase sobre por que esta es la envoltura. */
+    /** The same, with byte streams. See the class's note on why this one is the wrapper. */
     default int run(PrintStream out, PrintStream err, String... args) {
         if (out == null || err == null) {
             throw new NullPointerException();
@@ -59,9 +58,9 @@ public interface ToolProvider {
     }
 
     /**
-     * La primera herramienta con ese nombre, buscada entre las registradas como servicio.
+     * The first tool by that name, looked up among the ones registered as a service.
      *
-     * @return vacio si no hay ninguna
+     * @return empty if there is none
      */
     static Optional<ToolProvider> findFirst(String name) {
         if (name == null) {

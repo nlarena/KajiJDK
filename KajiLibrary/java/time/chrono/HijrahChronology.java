@@ -60,7 +60,7 @@ public final class HijrahChronology extends AbstractChronology {
         return yearOfEra;
     }
 
-    // ---- lo que el calendario tiene que saber contestar ------------------------------------------
+    // ---- what the calendar has to know how to answer ---------------------------------------------
 
     public HijrahDate date(TemporalAccessor temporal) {
         if (temporal instanceof HijrahDate) {
@@ -70,8 +70,8 @@ public final class HijrahChronology extends AbstractChronology {
     }
 
     public HijrahDate dateYearDay(int prolepticYear, int dayOfYear) {
-        // El hijri no es el ISO corrido: sus meses salen de una tabla, asi que el dia del anio se
-        // convierte con la tabla y no con `LocalDate`.
+        // Hijrah is not ISO shifted: its months come from a table, so the day of the year is
+        // converted with the table and not with `LocalDate`.
         return HijrahDate.ofEpochDay(HijrahTable.epochDayOfYearDay(prolepticYear, dayOfYear));
     }
 
@@ -87,8 +87,8 @@ public final class HijrahChronology extends AbstractChronology {
         if (clock == null) {
             throw new NullPointerException("clock");
         }
-        LocalDate hoy = LocalDate.now(clock);
-        return this.dateEpochDay(hoy.toEpochDay());
+        LocalDate today = LocalDate.now(clock);
+        return this.dateEpochDay(today.toEpochDay());
     }
 
     public HijrahDate date(Era era, int yearOfEra, int month, int dayOfMonth) {
@@ -99,15 +99,15 @@ public final class HijrahChronology extends AbstractChronology {
         return this.dateYearDay(this.prolepticYear(era, yearOfEra), dayOfYear);
     }
 
-    /** No: el hijri es lunar, sus meses salen de una tabla y su anio dura 354 o 355 dias. */
+    /** No: Hijrah is lunar, its months come from a table and its year lasts 354 or 355 days. */
     public boolean isIsoBased() {
         return false;
     }
 
     public ValueRange range(ChronoField field) {
-        // Los rangos del hijri son propios: su anio dura 354 o 355 dias, sus meses 29 o 30, y solo
-        // estan definidos dentro de la tabla. Fuera de ella no hay respuesta, y extrapolar seria
-        // inventar un calendario.
+        // Hijrah's ranges are its own: its year lasts 354 or 355 days, its months 29 or 30, and they
+        // are only defined inside the table. Outside it there is no answer, and extrapolating would
+        // be inventing a calendar.
         if (field == ChronoField.DAY_OF_MONTH) {
             return ValueRange.of(1L, 29L, 30L);
         }
@@ -115,14 +115,14 @@ public final class HijrahChronology extends AbstractChronology {
             return ValueRange.of(1L, 354L, 355L);
         }
         if (field == ChronoField.YEAR || field == ChronoField.YEAR_OF_ERA) {
-            return ValueRange.of((long) HijrahTable.primerAnio(), (long) HijrahTable.ultimoAnio());
+            return ValueRange.of((long) HijrahTable.firstYear(), (long) HijrahTable.lastYear());
         }
         if (field == ChronoField.ERA) {
             return ValueRange.of(1L, 1L);
         }
         if (field == ChronoField.PROLEPTIC_MONTH) {
-            return ValueRange.of((long) HijrahTable.primerAnio() * 12L,
-                    (long) HijrahTable.ultimoAnio() * 12L + 11L);
+            return ValueRange.of((long) HijrahTable.firstYear() * 12L,
+                    (long) HijrahTable.lastYear() * 12L + 11L);
         }
         return field.range();
     }
@@ -133,8 +133,8 @@ public final class HijrahChronology extends AbstractChronology {
 
     public HijrahDate resolveDate(java.util.Map<java.time.temporal.TemporalField, Long> fieldValues,
             java.time.format.ResolverStyle resolverStyle) {
-        // Ligado a una local: encadenar por un intermedio de tipo interfaz se pierde (#108).
-        ChronoLocalDate resuelta = super.resolveDate(fieldValues, resolverStyle);
-        return (HijrahDate) resuelta;
+        // Bound to a local: chaining through an interface-typed intermediate gets lost (#108).
+        ChronoLocalDate resolvedOne = super.resolveDate(fieldValues, resolverStyle);
+        return (HijrahDate) resolvedOne;
     }
 }

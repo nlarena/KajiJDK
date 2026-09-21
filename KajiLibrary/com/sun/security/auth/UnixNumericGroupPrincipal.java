@@ -4,18 +4,18 @@ import java.io.Serializable;
 import java.security.Principal;
 
 /**
- * El GID de Unix, con una distincion que el numero solo no lleva: si es el grupo
- * <strong>primario</strong> del usuario.
+ * The Unix GID, with a distinction the number alone does not carry: whether it is the user's
+ * <strong>primary</strong> group.
  *
- * <h2>Por que importa la distincion</h2>
+ * <h2>Why the distinction matters</h2>
  *
- * <p>Un usuario de Unix pertenece a un grupo primario y a cuantos suplementarios haga falta. Para
- * los permisos de lectura y escritura los dos valen igual, pero <strong>los archivos que crea
- * heredan el grupo primario</strong>. Sin este dato no se puede expresar una politica que dependa de
- * eso.
+ * <p>A Unix user belongs to one primary group and to as many supplementary ones as are needed.
+ * For the read and write permissions the two are worth the same, but <strong>the files it
+ * creates inherit the primary group</strong>. Without this datum a policy that depends on that
+ * cannot be expressed.
  *
- * <p>Por eso la bandera forma parte de la identidad y entra en {@link #equals}: el mismo GID como
- * primario y como suplementario son dos principales distintos.
+ * <p>That is why the flag is part of the identity and goes into {@link #equals}: the same GID as
+ * a primary and as a supplementary one are two different principals.
  */
 public class UnixNumericGroupPrincipal implements Principal, Serializable {
 
@@ -25,36 +25,36 @@ public class UnixNumericGroupPrincipal implements Principal, Serializable {
     private final boolean primaryGroup;
 
     /**
-     * @param primaryGroup si es el grupo primario
-     * @throws NullPointerException si el GID es {@code null}
-     * @throws NumberFormatException si no es un numero
+     * @param primaryGroup whether it is the primary group
+     * @throws NullPointerException if the GID is {@code null}
+     * @throws NumberFormatException if it is not a number
      */
     public UnixNumericGroupPrincipal(String name, boolean primaryGroup) {
         if (name == null) {
-            throw new NullPointerException("el GID no puede ser null");
+            throw new NullPointerException("the GID cannot be null");
         }
         Long.parseLong(name);
         this.name = name;
         this.primaryGroup = primaryGroup;
     }
 
-    /** Desde el numero. */
+    /** From the number. */
     public UnixNumericGroupPrincipal(long name, boolean primaryGroup) {
         this.name = Long.toString(name);
         this.primaryGroup = primaryGroup;
     }
 
-    /** El GID como texto. */
+    /** The GID as text. */
     public String getName() {
         return this.name;
     }
 
-    /** El GID como numero. */
+    /** The GID as a number. */
     public long longValue() {
         return Long.parseLong(this.name);
     }
 
-    /** Si es el grupo primario; ver la nota de la clase. */
+    /** Whether it is the primary group; see the class note. */
     public boolean isPrimaryGroup() {
         return this.primaryGroup;
     }
@@ -65,7 +65,7 @@ public class UnixNumericGroupPrincipal implements Principal, Serializable {
                 : "UnixNumericGroupPrincipal [Supplementary Group]: " + this.name;
     }
 
-    /** Por clase exacta, GID <strong>y</strong> la bandera de primario. */
+    /** By exact class, GID <strong>and</strong> the primary flag. */
     public boolean equals(Object o) {
         if (o == this) {
             return true;
@@ -73,8 +73,8 @@ public class UnixNumericGroupPrincipal implements Principal, Serializable {
         if (o == null || !o.getClass().equals(this.getClass())) {
             return false;
         }
-        UnixNumericGroupPrincipal otro = (UnixNumericGroupPrincipal) o;
-        return this.name.equals(otro.getName()) && this.primaryGroup == otro.isPrimaryGroup();
+        UnixNumericGroupPrincipal other = (UnixNumericGroupPrincipal) o;
+        return this.name.equals(other.getName()) && this.primaryGroup == other.isPrimaryGroup();
     }
 
     public int hashCode() {

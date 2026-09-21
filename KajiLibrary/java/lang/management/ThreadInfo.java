@@ -3,31 +3,31 @@ package java.lang.management;
 import javax.management.openmbean.CompositeData;
 
 /**
- * KajiLibrary's java.lang.management.ThreadInfo -- la foto de un hilo.
+ * KajiLibrary's java.lang.management.ThreadInfo -- a snapshot of a thread.
  *
- * <p>Todo lo que se puede saber de un hilo desde afuera: su estado, su pila, que candado espera, quien
- * lo tiene, y --si se pidio-- que candados tiene tomados el.
+ * <p>Everything that can be known about a thread from outside: its state, its stack, which lock it
+ * is waiting for, who holds it, and --if it was asked for-- which locks it holds itself.
  *
- * <h2>No tiene constructor publico</h2>
+ * <h2>It has no public constructor</h2>
  *
- * <p>Y es a proposito: solo la maquina virtual puede armar uno coherente. Se consigue por
- * {@link ThreadMXBean}, o se rearma desde un {@link CompositeData} con {@link #from} cuando vino de
- * otra maquina virtual.
+ * <p>And that is on purpose: only the virtual machine can build a coherent one. It is obtained
+ * through {@link ThreadMXBean}, or rebuilt from a {@link CompositeData} with {@link #from} when it
+ * came from another virtual machine.
  *
- * <h2>Es una foto, no una vista</h2>
+ * <h2>It is a snapshot, not a view</h2>
  *
- * <p>Lo que dice era cierto en el instante en que se tomo. Un hilo que figura {@code BLOCKED} puede
- * estar corriendo cuando se lee. Sirve para diagnosticar, no para decidir.
+ * <p>What it says was true at the instant it was taken. A thread showing as {@code BLOCKED} may be
+ * running by the time it is read. It is for diagnosing, not for deciding.
  *
- * <p>La excepcion util es el interbloqueo: si {@code findDeadlockedThreads} lo reporto, eso no cambia
- * solo -- por definicion.
+ * <p>The useful exception is a deadlock: if {@code findDeadlockedThreads} reported it, that does not
+ * change by itself -- by definition.
  *
- * <h2>Los valores que faltan</h2>
+ * <h2>The missing values</h2>
  *
- * <p>{@link #getStackTrace} devuelve un arreglo <b>vacio</b> si no se pidio pila, no null.
- * {@link #getBlockedTime} y {@link #getWaitedTime} devuelven -1 si el seguimiento de contencion esta
- * apagado, que es lo normal. {@link #getLockOwnerId} devuelve -1 si no lo tiene nadie, y
- * {@link #getLockInfo} null si el hilo no espera nada.
+ * <p>{@link #getStackTrace} returns an <b>empty</b> array if no stack was asked for, not null.
+ * {@link #getBlockedTime} and {@link #getWaitedTime} return -1 if contention tracking is off, which
+ * is the normal case. {@link #getLockOwnerId} returns -1 if nobody holds it, and
+ * {@link #getLockInfo} null if the thread is waiting for nothing.
  */
 public class ThreadInfo {
 
@@ -68,10 +68,10 @@ public class ThreadInfo {
     private final LockInfo[] lockedSynchronizers;
 
     /**
-     * El unico constructor, de acceso de paquete.
+     * The only constructor, package-private.
      *
-     * <p>Lo usan {@link #from} y la implementacion de {@link ThreadMXBean} de esta biblioteca. Ver la
-     * nota de la clase sobre por que no es publico.
+     * <p>{@link #from} and this library's {@link ThreadMXBean} implementation use it. See the
+     * class's note on why it is not public.
      */
     ThreadInfo(long threadId, String threadName, Thread.State threadState, long blockedTime,
                long blockedCount, long waitedTime, long waitedCount, LockInfo lock,
@@ -110,111 +110,112 @@ public class ThreadInfo {
         }
     }
 
-    /** Su identificador. Ver {@link ThreadMXBean}: se reusan. */
+    /** Its identifier. See {@link ThreadMXBean}: they get reused. */
     public long getThreadId() {
         return this.threadId;
     }
 
-    /** Su nombre. */
+    /** Its name. */
     public String getThreadName() {
         return this.threadName;
     }
 
-    /** En que estado estaba. */
+    /** What state it was in. */
     public Thread.State getThreadState() {
         return this.threadState;
     }
 
-    /** Milisegundos bloqueado, o -1. Ver la nota de la clase. */
+    /** Milliseconds blocked, or -1. See the class's note. */
     public long getBlockedTime() {
         return this.blockedTime;
     }
 
-    /** Cuantas veces se bloqueo. */
+    /** How many times it blocked. */
     public long getBlockedCount() {
         return this.blockedCount;
     }
 
-    /** Milisegundos esperando, o -1. */
+    /** Milliseconds waiting, or -1. */
     public long getWaitedTime() {
         return this.waitedTime;
     }
 
-    /** Cuantas veces espero. */
+    /** How many times it waited. */
     public long getWaitedCount() {
         return this.waitedCount;
     }
 
-    /** Que candado esperaba, o null. */
+    /** Which lock it was waiting for, or null. */
     public LockInfo getLockInfo() {
         return this.lock;
     }
 
-    /** Ese candado como texto, o null. */
+    /** That lock as text, or null. */
     public String getLockName() {
         return this.lockName;
     }
 
-    /** Quien lo tenia, o -1. */
+    /** Who held it, or -1. */
     public long getLockOwnerId() {
         return this.lockOwnerId;
     }
 
-    /** El nombre de quien lo tenia, o null. */
+    /** The name of whoever held it, or null. */
     public String getLockOwnerName() {
         return this.lockOwnerName;
     }
 
-    /** La pila, o un arreglo vacio si no se pidio. */
+    /** The stack, or an empty array if none was asked for. */
     public StackTraceElement[] getStackTrace() {
         return this.stackTrace;
     }
 
     /**
-     * Si estaba suspendido.
+     * Whether it was suspended.
      *
-     * <p>Solo puede ser true por {@code Thread.suspend()}, que quedo obsoleto y ya no hace nada.
+     * <p>It can only be true through {@code Thread.suspend()}, which is deprecated and no longer
+     * does anything.
      */
     public boolean isSuspended() {
         return this.suspended;
     }
 
-    /** Si estaba ejecutando codigo nativo. */
+    /** Whether it was running native code. */
     public boolean isInNative() {
         return this.inNative;
     }
 
-    /** Si es un hilo demonio. */
+    /** Whether it is a daemon thread. */
     public boolean isDaemon() {
         return this.daemon;
     }
 
-    /** Su prioridad. */
+    /** Its priority. */
     public int getPriority() {
         return this.priority;
     }
 
-    /** Los monitores que tenia tomados, o un arreglo vacio. */
+    /** The monitors it held, or an empty array. */
     public MonitorInfo[] getLockedMonitors() {
         return this.lockedMonitors;
     }
 
-    /** Los candados de {@code java.util.concurrent} que tenia tomados, o un arreglo vacio. */
+    /** The {@code java.util.concurrent} locks it held, or an empty array. */
     public LockInfo[] getLockedSynchronizers() {
         return this.lockedSynchronizers;
     }
 
-    /** Cuantos marcos como maximo imprime {@link #toString}; el resto sale como puntos suspensivos. */
+    /** How many frames {@link #toString} prints at most; the rest come out as an ellipsis. */
     private static final int MAX_FRAMES = 8;
 
     /**
-     * El encabezado del hilo y hasta ocho marcos de pila.
+     * The thread's header and up to eight stack frames.
      *
-     * <p>Corta a proposito: un volcado de cien hilos con la pila entera de cada uno es ilegible. Para
-     * verla completa esta {@link #getStackTrace}.
+     * <p>It cuts on purpose: a dump of a hundred threads with each one's whole stack is unreadable.
+     * {@link #getStackTrace} is there for the full one.
      *
-     * <p>Anota ademas, en el marco que corresponde, el candado que el hilo espera y los que tiene
-     * tomados. Esa correlacion entre marco y candado es lo que hace legible un volcado.
+     * <p>It also notes, on the frame it belongs to, the lock the thread is waiting for and the ones
+     * it holds. That correlation between frame and lock is what makes a dump readable.
      */
     @Override
     public String toString() {
@@ -277,13 +278,13 @@ public class ThreadInfo {
     }
 
     /**
-     * Lo mismo, leido de un {@link CompositeData}.
+     * The same, read out of a {@link CompositeData}.
      *
-     * <p>Es como llega de otra maquina virtual. Los items de candados tomados aparecieron despues y se
-     * leen si estan.
+     * <p>It is how it arrives from another virtual machine. The held-lock items appeared later and
+     * are read if they are there.
      *
-     * @return el objeto, o null si el dato es null
-     * @throws IllegalArgumentException si el dato no describe un {@code ThreadInfo}
+     * @return the object, or null if the datum is null
+     * @throws IllegalArgumentException if the datum does not describe a {@code ThreadInfo}
      */
     public static ThreadInfo from(CompositeData cd) {
         if (cd == null) {
@@ -316,7 +317,7 @@ public class ThreadInfo {
             synchronizersOf(cd));
     }
 
-    /** El candado esperado; el item existe desde Java 6 y puede faltar. */
+    /** The awaited lock; the item exists since Java 6 and may be missing. */
     private static LockInfo lockOf(CompositeData cd) {
         Object v = CompositeItems.optional(cd, "lockInfo");
         if (v instanceof CompositeData) {
@@ -325,13 +326,13 @@ public class ThreadInfo {
         return null;
     }
 
-    /** Un booleano que puede faltar. */
+    /** A boolean that may be missing. */
     private static boolean boolOrFalse(CompositeData cd, String name) {
         Object v = CompositeItems.optional(cd, name);
         return v instanceof Boolean && ((Boolean) v).booleanValue();
     }
 
-    /** Un entero que puede faltar. */
+    /** An integer that may be missing. */
     private static int intOrDefault(CompositeData cd, String name, int fallback) {
         Object v = CompositeItems.optional(cd, name);
         if (v instanceof Integer) {
@@ -340,7 +341,7 @@ public class ThreadInfo {
         return fallback;
     }
 
-    /** La pila. */
+    /** The stack. */
     private static StackTraceElement[] framesOf(CompositeData cd) {
         Object v = CompositeItems.optional(cd, "stackTrace");
         if (!(v instanceof CompositeData[])) {
@@ -356,7 +357,7 @@ public class ThreadInfo {
         return out;
     }
 
-    /** Los monitores tomados. */
+    /** The held monitors. */
     private static MonitorInfo[] monitorsOf(CompositeData cd) {
         Object v = CompositeItems.optional(cd, "lockedMonitors");
         if (!(v instanceof CompositeData[])) {
@@ -372,7 +373,7 @@ public class ThreadInfo {
         return out;
     }
 
-    /** Los candados de {@code java.util.concurrent} tomados. */
+    /** The held {@code java.util.concurrent} locks. */
     private static LockInfo[] synchronizersOf(CompositeData cd) {
         Object v = CompositeItems.optional(cd, "lockedSynchronizers");
         if (!(v instanceof CompositeData[])) {

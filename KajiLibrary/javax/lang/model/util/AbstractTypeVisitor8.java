@@ -5,10 +5,10 @@ import javax.lang.model.SourceVersion;
 import javax.lang.model.type.IntersectionType;
 
 /**
- * El visitante de tipos de Java 8. Ver {@link AbstractTypeVisitor6} por el mecanismo.
+ * The type visitor for Java 8. See {@link AbstractTypeVisitor6} for the mechanism.
  *
- * <p>Java 8 hizo denotable el tipo **interseccion** — el de `&lt;T extends A &amp; B&gt;` y el de los
- * casts con cotas multiples — asi que `visitIntersection` pasa a abstracto.
+ * <p>Java 8 made the **intersection** type denotable — that of `&lt;T extends A &amp; B&gt;` and
+ * that of casts with multiple bounds — so `visitIntersection` becomes abstract.
  */
 @SupportedSourceVersion(SourceVersion.RELEASE_8)
 public abstract class AbstractTypeVisitor8<R, P> extends AbstractTypeVisitor7<R, P> {

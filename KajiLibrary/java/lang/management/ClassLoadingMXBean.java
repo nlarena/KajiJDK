@@ -1,33 +1,33 @@
 package java.lang.management;
 
 /**
- * KajiLibrary's java.lang.management.ClassLoadingMXBean -- cuantas clases se cargaron.
+ * KajiLibrary's java.lang.management.ClassLoadingMXBean -- how many classes were loaded.
  *
- * <p>Tres contadores, y la relacion entre ellos es lo que hace util al MBean:
- * {@link #getLoadedClassCount} son las que estan cargadas <b>ahora</b>, y es igual a las cargadas en
- * total menos las descargadas.
+ * <p>Three counters, and the relation between them is what makes the MBean useful:
+ * {@link #getLoadedClassCount} is the ones loaded <b>now</b>, and equals the total loaded minus the
+ * unloaded.
  *
- * <p>Que las descargadas crezcan es normal --un cargador que se libera se lleva sus clases--; que las
- * cargadas actuales crezcan sin parar en un programa estable es la firma de una fuga de cargadores,
- * que es la fuga mas dificil de encontrar a mano.
+ * <p>The unloaded growing is normal --a loader being freed takes its classes with it--; the currently
+ * loaded growing without stopping in a stable program is the signature of a class loader leak, which
+ * is the hardest leak to find by hand.
  *
- * <p>{@link #setVerbose} activa el mismo rastreo que la opcion {@code -verbose:class}, y se puede
- * prender y apagar en caliente.
+ * <p>{@link #setVerbose} switches on the same tracking as the {@code -verbose:class} option, and it
+ * can be turned on and off while running.
  */
 public interface ClassLoadingMXBean extends PlatformManagedObject {
 
-    /** Cuantas se cargaron desde que arranco la maquina virtual. */
+    /** How many were loaded since the virtual machine started. */
     long getTotalLoadedClassCount();
 
-    /** Cuantas estan cargadas ahora. Ver la nota de la clase. */
+    /** How many are loaded now. See the class's note. */
     int getLoadedClassCount();
 
-    /** Cuantas se descargaron. */
+    /** How many were unloaded. */
     long getUnloadedClassCount();
 
-    /** Si esta rastreando la carga de clases. */
+    /** Whether it is tracking class loading. */
     boolean isVerbose();
 
-    /** Prende o apaga el rastreo. */
+    /** It switches tracking on or off. */
     void setVerbose(boolean value);
 }

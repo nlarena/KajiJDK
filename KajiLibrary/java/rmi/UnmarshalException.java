@@ -1,26 +1,26 @@
 package java.rmi;
 
 /**
- * KajiLibrary's java.rmi.UnmarshalException -- Fallo al leer lo que llego.
+ * KajiLibrary's java.rmi.UnmarshalException -- A failure reading what arrived.
  *
- * <p>El espejo de {@link MarshalException}: es del lado que <b>recibe</b>. No se pudo deserializar
- * --tipicamente porque falta una clase, o porque la version no coincide--.
+ * <p>The mirror of {@link MarshalException}: it is on the <b>receiving</b> side. Deserialisation
+ * failed --typically because a class is missing, or because the version does not match--.
  *
- * <p>A diferencia de aquella, aca <b>no se sabe</b> si el metodo remoto se ejecuto: si el fallo fue al
- * leer el resultado, ya corrio.
+ * <p>Unlike that one, here it is <b>not known</b> whether the remote method ran: if the failure was
+ * in reading the result, it already ran.
  */
 public class UnmarshalException extends RemoteException {
 
     private static final long serialVersionUID = 594380845140740218L;
 
-    /** @param s el mensaje */
+    /** @param s the message */
     public UnmarshalException(String s) {
         super(s);
     }
 
     /**
-     * @param s el mensaje
-     * @param ex la causa
+     * @param s the message
+     * @param ex the cause
      */
     public UnmarshalException(String s, Exception ex) {
         super(s, ex);

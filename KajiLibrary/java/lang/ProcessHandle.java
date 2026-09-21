@@ -59,17 +59,17 @@ public interface ProcessHandle extends Comparable<ProcessHandle> {
      * <p>KajiJDK has no OS-process subsystem, so there is no handle to return.
      */
     static Optional<ProcessHandle> of(long pid) {
-        throw new UnsupportedOperationException("los procesos del SO no están soportados");
+        throw new UnsupportedOperationException("the OS's processes are not supported");
     }
 
     /** The handle for the current process (unsupported: no OS-process subsystem). */
     static ProcessHandle current() {
-        throw new UnsupportedOperationException("los procesos del SO no están soportados");
+        throw new UnsupportedOperationException("the OS's processes are not supported");
     }
 
     /** Every visible process (unsupported: no OS-process subsystem). */
     static Stream<ProcessHandle> allProcesses() {
-        throw new UnsupportedOperationException("los procesos del SO no están soportados");
+        throw new UnsupportedOperationException("the OS's processes are not supported");
     }
 
     /** A snapshot of information about a process. Every field is optional and may be absent. */

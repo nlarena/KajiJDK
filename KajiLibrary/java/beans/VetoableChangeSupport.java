@@ -89,32 +89,32 @@ public class VetoableChangeSupport implements Serializable {
     }
 
     public synchronized VetoableChangeListener[] getVetoableChangeListeners() {
-        List<VetoableChangeListener> salida = new ArrayList<VetoableChangeListener>();
+        List<VetoableChangeListener> out = new ArrayList<VetoableChangeListener>();
         for (int i = 0; i < this.global.size(); i++) {
-            salida.add(this.global.get(i));
+            out.add(this.global.get(i));
         }
         Object[] names = this.byName.keySet().toArray();
         for (int i = 0; i < names.length; i++) {
             String name = (String) names[i];
             List<VetoableChangeListener> l = this.byName.get(name);
             for (int j = 0; j < l.size(); j++) {
-                salida.add(new VetoableChangeListenerProxy(name, l.get(j)));
+                out.add(new VetoableChangeListenerProxy(name, l.get(j)));
             }
         }
-        return this.asArray(salida);
+        return this.asArray(out);
     }
 
     public synchronized VetoableChangeListener[] getVetoableChangeListeners(String propertyName) {
-        List<VetoableChangeListener> salida = new ArrayList<VetoableChangeListener>();
+        List<VetoableChangeListener> out = new ArrayList<VetoableChangeListener>();
         if (propertyName != null) {
             List<VetoableChangeListener> l = this.byName.get(propertyName);
             if (l != null) {
                 for (int i = 0; i < l.size(); i++) {
-                    salida.add(l.get(i));
+                    out.add(l.get(i));
                 }
             }
         }
-        return this.asArray(salida);
+        return this.asArray(out);
     }
 
     private VetoableChangeListener[] asArray(List<VetoableChangeListener> l) {
@@ -125,29 +125,29 @@ public class VetoableChangeSupport implements Serializable {
         return a;
     }
 
-    private synchronized VetoableChangeListener[] instantanea(String propertyName) {
-        List<VetoableChangeListener> salida = new ArrayList<VetoableChangeListener>();
+    private synchronized VetoableChangeListener[] snapshot(String propertyName) {
+        List<VetoableChangeListener> out = new ArrayList<VetoableChangeListener>();
         for (int i = 0; i < this.global.size(); i++) {
-            salida.add(this.global.get(i));
+            out.add(this.global.get(i));
         }
         if (propertyName != null) {
             List<VetoableChangeListener> l = this.byName.get(propertyName);
             if (l != null) {
                 for (int i = 0; i < l.size(); i++) {
-                    salida.add(l.get(i));
+                    out.add(l.get(i));
                 }
             }
         }
-        return this.asArray(salida);
+        return this.asArray(out);
     }
 
     // It asks the listeners and, if one vetoes, reverts those that had already accepted before
     // letting the exception out.
     public void fireVetoableChange(PropertyChangeEvent evt) throws PropertyVetoException {
-        Object viejo = evt.getOldValue();
+        Object old = evt.getOldValue();
         Object fresh = evt.getNewValue();
-        if (viejo == null || fresh == null || !viejo.equals(fresh)) {
-            VetoableChangeListener[] copy = this.instantanea(evt.getPropertyName());
+        if (old == null || fresh == null || !old.equals(fresh)) {
+            VetoableChangeListener[] copy = this.snapshot(evt.getPropertyName());
             int i = 0;
             PropertyVetoException veto = null;
             while (i < copy.length && veto == null) {
@@ -160,12 +160,12 @@ public class VetoableChangeSupport implements Serializable {
             }
             if (veto != null) {
                 // `i` is left at the one that vetoed: [0, i) have to be undone.
-                PropertyChangeEvent vuelta = new PropertyChangeEvent(
-                    evt.getSource(), evt.getPropertyName(), fresh, viejo);
+                PropertyChangeEvent rollback = new PropertyChangeEvent(
+                    evt.getSource(), evt.getPropertyName(), fresh, old);
                 for (int j = 0; j < i; j++) {
                     try {
-                        copy[j].vetoableChange(vuelta);
-                    } catch (PropertyVetoException ignorada) {
+                        copy[j].vetoableChange(rollback);
+                    } catch (PropertyVetoException ignored) {
                         // Vetoing the reversion has nowhere to go: the change was not made
                         // anyway.
                     }

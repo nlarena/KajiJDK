@@ -6,20 +6,20 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Le pone nombre a los parametros de un constructor para poder reconstruir el objeto.
+ * Names the parameters of a constructor so that the object can be rebuilt.
  *
- * <p>El problema que resuelve: para volver de un `CompositeData` al objeto Java hay que saber que
- * item corresponde a que parametro del constructor, y el bytecode no guarda los nombres de los
- * parametros salvo que se compile con `-parameters`. La anotacion los declara a mano, en el mismo
- * orden que la firma.
+ * <p>The problem it solves: to go back from a {@code CompositeData} to the Java object you need to
+ * know which item corresponds to which constructor parameter, and bytecode does not keep parameter
+ * names unless compiled with {@code -parameters}. The annotation declares them by hand, in the same
+ * order as the signature.
  *
- * <p>Nota de version: es la sucesora de `java.beans.ConstructorProperties` y existe justamente para
- * no arrastrar `java.desktop` dentro de `java.management`.
+ * <p>Version note: it is the successor of {@code java.beans.ConstructorProperties} and exists
+ * precisely so as not to drag {@code java.desktop} into {@code java.management}.
  */
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.CONSTRUCTOR)
 public @interface ConstructorParameters {
 
-    /** Los nombres, en el orden de los parametros del constructor. */
+    /** The names, in the order of the constructor's parameters. */
     String[] value();
 }

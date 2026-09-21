@@ -5,10 +5,10 @@ import javax.print.attribute.EnumSyntax;
 import javax.print.attribute.PrintServiceAttribute;
 
 /**
- * Si la impresora toma trabajos nuevos ahora mismo.
+ * Whether the printer takes new jobs right now.
  *
- * <p>Es independiente de {@link PrinterState}: una impresora {@code STOPPED} puede seguir aceptando
- * y encolando.
+ * <p>It is independent of {@link PrinterState}: a {@code STOPPED} printer may keep accepting and
+ * queueing.
  */
 public final class PrinterIsAcceptingJobs extends EnumSyntax implements PrintServiceAttribute {
 

@@ -5,25 +5,25 @@ import java.awt.Rectangle;
 import javax.swing.JTabbedPane;
 
 /**
- * El aspecto de un {@link JTabbedPane}.
+ * A {@link JTabbedPane}'s look and feel.
  *
- * <h2>Tres preguntas sobre las solapas</h2>
+ * <h2>Three questions about the tabs</h2>
  *
- * <p>Que solapa cae en un punto, donde esta una solapa, y en cuantas filas quedaron. El panel no
- * las puede contestar: el tamano de una solapa depende de la tipografia y del adorno que dibuje el
- * aspecto, y cuantas filas quedan depende de eso y del ancho.
+ * <p>Which tab falls on a point, where a tab is, and how many rows they ended up in. The pane
+ * cannot answer them: a tab's size depends on the typeface and on the decoration the look and
+ * feel draws, and how many rows are left depends on that and on the width.
  */
 public abstract class TabbedPaneUI extends ComponentUI {
 
     protected TabbedPaneUI() {
     }
 
-    /** Que solapa cae en ese punto, o -1. */
+    /** Which tab falls on that point, or -1. */
     public abstract int tabForCoordinate(JTabbedPane pane, int x, int y);
 
-    /** El rectangulo de esa solapa. */
+    /** That tab's rectangle. */
     public abstract Rectangle getTabBounds(JTabbedPane pane, int index);
 
-    /** En cuantas filas quedaron las solapas. */
+    /** How many rows the tabs ended up in. */
     public abstract int getTabRunCount(JTabbedPane pane);
 }

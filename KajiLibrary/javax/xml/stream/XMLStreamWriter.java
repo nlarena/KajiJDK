@@ -3,343 +3,341 @@ package javax.xml.stream;
 import javax.xml.namespace.NamespaceContext;
 
 /**
- * KajiLibrary's javax.xml.stream.XMLStreamWriter -- escribir XML llamando un metodo por pieza, sin
- * armar un arbol.
+ * KajiLibrary's javax.xml.stream.XMLStreamWriter -- writing XML by calling one method per piece,
+ * without building a tree.
  *
- * <p>Es el reverso de {@link XMLStreamReader} y tiene la misma virtud: el documento se escribe a
- * medida que se genera, asi que la memoria no crece con el tamanio de la salida. Un catalogo de un
- * millon de productos se escribe con un bucle; con DOM habria que tener el millon en memoria antes
- * de escribir el primer byte.
+ * <p>It is the reverse of {@link XMLStreamReader} and has the same virtue: the document is written
+ * as it is generated, so memory does not grow with the size of the output. A catalog of a million
+ * products is written with a loop; with DOM the million would have to be in memory before writing
+ * the first byte.
  *
- * <h2>Lo que el escritor no hace por vos</h2>
+ * <h2>What the writer does not do for you</h2>
  *
- * <p>Esto es lo que mas sorprende de la interfaz, y es una decision de diseño explicita: <b>el
- * escritor no verifica que el documento salga bien formado</b>. Nada lo obliga a que cada
- * {@code writeStartElement} tenga su {@code writeEndElement}, y una implementacion tipica no lleva
- * la cuenta. El motivo es el mismo de siempre en StAX: llevarla cuesta en el camino caliente, y
- * quien genera el documento ya sabe que estructura esta generando.
+ * <p>This is what surprises most about the interface, and it is an explicit design decision: <b>the
+ * writer does not check that the document comes out well-formed</b>. Nothing forces each {@code
+ * writeStartElement} to have its {@code writeEndElement}, and a typical implementation does not
+ * keep count. The reason is the usual one in StAX: keeping it costs on the hot path, and whoever
+ * generates the document already knows what structure they are generating.
  *
- * <p>Lo que si hace, y hay que tenerlo presente, es **escapar** el texto: {@link #writeCharacters}
- * convierte {@code &} en {@code &amp;} y {@code <} en {@code &lt;}. Por eso hay metodos separados
- * para el texto y para el marcado, y por eso no hay un "escribir esto crudo".
+ * <p>What it does do, and it has to be kept in mind, is **escape** the text: {@link
+ * #writeCharacters} turns {@code &} into {@code &amp;} and {@code <} into {@code &lt;}. That is why
+ * there are separate methods for text and for markup, and why there is no "write this raw".
  *
- * <h2>Los prefijos, y el modo reparador</h2>
+ * <h2>Prefixes, and repairing mode</h2>
  *
- * <p>Los espacios de nombres son la parte pesada de escribir XML: hay que declarar el prefijo antes
- * de usarlo y no repetir la declaracion en cada elemento. La interfaz da las dos formas de
- * manejarlo:
+ * <p>Namespaces are the heavy part of writing XML: the prefix has to be declared before using it
+ * and the declaration must not be repeated in every element. The interface gives both ways of
+ * handling it:
  *
  * <ul>
- *   <li>a mano, con {@link #setPrefix} y {@link #writeNamespace}, que es lo que hay que hacer por
- *       omision;
- *   <li>automatico, si la fabrica tiene puesto
- *       {@link XMLOutputFactory#IS_REPAIRING_NAMESPACES}: el escritor inventa y declara los prefijos
- *       que hagan falta.
+ *   <li>by hand, with {@link #setPrefix} and {@link #writeNamespace}, which is what has to be done
+ *       by default;
+ *   <li>automatic, if the factory has {@link XMLOutputFactory#IS_REPAIRING_NAMESPACES} set: the
+ *       writer invents and declares the prefixes that are needed.
  * </ul>
  *
- * <p>{@link #setPrefix} tiene una sutileza que se paga cara si se pasa por alto: **declara la
- * intencion, no escribe nada**. La declaracion sale recien con {@link #writeNamespace}. Llamar solo
- * al primero produce un documento con prefijos sin declarar, que es un documento roto.
+ * <p>{@link #setPrefix} has a subtlety that is paid for dearly if overlooked: **it declares the
+ * intention, it writes nothing**. The declaration only comes out with {@link #writeNamespace}.
+ * Calling only the first produces a document with undeclared prefixes, which is a broken document.
  *
- * <h2>Que hay escrito aca y que no</h2>
+ * <h2>What is written here</h2>
  *
- * <p>Los treinta y dos metodos de la interfaz. Implementacion no hay, por lo mismo que en
- * {@link XMLStreamReader}: un escritor de verdad tiene que resolver escapes segun el contexto,
- * codificacion de salida y espacios de nombres, y esta biblioteca no trae ningun proveedor de StAX.
- * Ver {@link XMLOutputFactory}.
+ * <p>The thirty-two methods of the interface. This package's implementation is {@code
+ * KajiStreamWriter}, which {@link XMLOutputFactory} returns. (The note said there is no
+ * implementation because this library has no StAX provider; it has one now.)
  */
 public interface XMLStreamWriter {
 
     /**
-     * Abre un elemento sin calificar.
+     * Opens an unqualified element.
      *
-     * @param localName el nombre
-     * @throws XMLStreamException si falla la escritura
+     * @param localName the name
+     * @throws XMLStreamException if it fails to write
      */
     void writeStartElement(String localName) throws XMLStreamException;
 
     /**
-     * Abre un elemento en un espacio de nombres, con el prefijo que corresponda por contexto.
+     * Opens an element in a namespace, with the prefix that corresponds by context.
      *
-     * @param namespaceURI el espacio de nombres
-     * @param localName el nombre local
-     * @throws XMLStreamException si falla la escritura
+     * @param namespaceURI the namespace
+     * @param localName the local name
+     * @throws XMLStreamException if it fails to write
      */
     void writeStartElement(String namespaceURI, String localName) throws XMLStreamException;
 
     /**
-     * Abre un elemento con prefijo, espacio de nombres y nombre local explicitos.
+     * Opens an element with explicit prefix, namespace and local name.
      *
-     * @param prefix el prefijo
-     * @param localName el nombre local
-     * @param namespaceURI el espacio de nombres
-     * @throws XMLStreamException si falla la escritura
+     * @param prefix the prefix
+     * @param localName the local name
+     * @param namespaceURI the namespace
+     * @throws XMLStreamException if it fails to write
      */
     void writeStartElement(String prefix, String localName, String namespaceURI)
             throws XMLStreamException;
 
     /**
-     * Escribe un elemento vacio, {@code <a/>}, en un espacio de nombres.
+     * Writes an empty element, {@code <a/>}, in a namespace.
      *
-     * <p>No hay que cerrarlo: no abre nivel.
+     * <p>It does not have to be closed: it opens no level.
      *
-     * @param namespaceURI el espacio de nombres
-     * @param localName el nombre local
-     * @throws XMLStreamException si falla la escritura
+     * @param namespaceURI the namespace
+     * @param localName the local name
+     * @throws XMLStreamException if it fails to write
      */
     void writeEmptyElement(String namespaceURI, String localName) throws XMLStreamException;
 
     /**
-     * Escribe un elemento vacio con prefijo explicito.
+     * Writes an empty element with an explicit prefix.
      *
-     * @param prefix el prefijo
-     * @param localName el nombre local
-     * @param namespaceURI el espacio de nombres
-     * @throws XMLStreamException si falla la escritura
+     * @param prefix the prefix
+     * @param localName the local name
+     * @param namespaceURI the namespace
+     * @throws XMLStreamException if it fails to write
      */
     void writeEmptyElement(String prefix, String localName, String namespaceURI)
             throws XMLStreamException;
 
     /**
-     * Escribe un elemento vacio sin calificar.
+     * Writes an unqualified empty element.
      *
-     * @param localName el nombre
-     * @throws XMLStreamException si falla la escritura
+     * @param localName the name
+     * @throws XMLStreamException if it fails to write
      */
     void writeEmptyElement(String localName) throws XMLStreamException;
 
     /**
-     * Cierra el elemento abierto mas reciente.
+     * Closes the most recent open element.
      *
-     * @throws XMLStreamException si falla la escritura
+     * @throws XMLStreamException if it fails to write
      */
     void writeEndElement() throws XMLStreamException;
 
     /**
-     * Cierra todos los elementos que queden abiertos y termina el documento.
+     * Closes all the elements left open and finishes the document.
      *
-     * @throws XMLStreamException si falla la escritura
+     * @throws XMLStreamException if it fails to write
      */
     void writeEndDocument() throws XMLStreamException;
 
     /**
-     * Libera lo que el escritor tenga tomado.
+     * Frees whatever the writer holds.
      *
-     * <p>No cierra el flujo de destino --quien lo abrio lo cierra-- y **no** vuelca lo pendiente:
-     * para eso esta {@link #flush()}.
+     * <p>It does not close the destination stream --whoever opened it closes it-- and it does
+     * **not** flush what is pending: for that there is {@link #flush()}.
      *
-     * @throws XMLStreamException si falla
+     * @throws XMLStreamException if it fails
      */
     void close() throws XMLStreamException;
 
     /**
-     * Vuelca al destino lo que este en el buffer.
+     * Flushes whatever is in the buffer to the destination.
      *
-     * @throws XMLStreamException si falla la escritura
+     * @throws XMLStreamException if it fails to write
      */
     void flush() throws XMLStreamException;
 
     /**
-     * Escribe un atributo sin calificar en el elemento abierto.
+     * Writes an unqualified attribute in the open element.
      *
-     * @param localName el nombre
-     * @param value el valor, que se escapa
-     * @throws XMLStreamException si no hay un elemento abierto o falla la escritura
+     * @param localName the name
+     * @param value the value, which is escaped
+     * @throws XMLStreamException if there is no open element or it fails to write
      */
     void writeAttribute(String localName, String value) throws XMLStreamException;
 
     /**
-     * Escribe un atributo con prefijo y espacio de nombres explicitos.
+     * Writes an attribute with explicit prefix and namespace.
      *
-     * @param prefix el prefijo
-     * @param namespaceURI el espacio de nombres
-     * @param localName el nombre local
-     * @param value el valor, que se escapa
-     * @throws XMLStreamException si no hay un elemento abierto o falla la escritura
+     * @param prefix the prefix
+     * @param namespaceURI the namespace
+     * @param localName the local name
+     * @param value the value, which is escaped
+     * @throws XMLStreamException if there is no open element or it fails to write
      */
     void writeAttribute(String prefix, String namespaceURI, String localName, String value)
             throws XMLStreamException;
 
     /**
-     * Escribe un atributo en un espacio de nombres, con el prefijo que corresponda por contexto.
+     * Writes an attribute in a namespace, with the prefix that corresponds by context.
      *
-     * @param namespaceURI el espacio de nombres
-     * @param localName el nombre local
-     * @param value el valor, que se escapa
-     * @throws XMLStreamException si no hay un elemento abierto o falla la escritura
+     * @param namespaceURI the namespace
+     * @param localName the local name
+     * @param value the value, which is escaped
+     * @throws XMLStreamException if there is no open element or it fails to write
      */
     void writeAttribute(String namespaceURI, String localName, String value)
             throws XMLStreamException;
 
     /**
-     * Escribe una declaracion {@code xmlns:prefijo="uri"} en el elemento abierto.
+     * Writes an {@code xmlns:prefix="uri"} declaration in the open element.
      *
-     * @param prefix el prefijo a declarar
-     * @param namespaceURI el espacio de nombres
-     * @throws XMLStreamException si no hay un elemento abierto o falla la escritura
+     * @param prefix the prefix to declare
+     * @param namespaceURI the namespace
+     * @throws XMLStreamException if there is no open element or it fails to write
      */
     void writeNamespace(String prefix, String namespaceURI) throws XMLStreamException;
 
     /**
-     * Escribe la declaracion del espacio de nombres por omision, {@code xmlns="uri"}.
+     * Writes the declaration of the default namespace, {@code xmlns="uri"}.
      *
-     * @param namespaceURI el espacio de nombres
-     * @throws XMLStreamException si no hay un elemento abierto o falla la escritura
+     * @param namespaceURI the namespace
+     * @throws XMLStreamException if there is no open element or it fails to write
      */
     void writeDefaultNamespace(String namespaceURI) throws XMLStreamException;
 
     /**
-     * Escribe un comentario.
+     * Writes a comment.
      *
-     * @param data el contenido, sin los delimitadores
-     * @throws XMLStreamException si falla la escritura
+     * @param data the content, without the delimiters
+     * @throws XMLStreamException if it fails to write
      */
     void writeComment(String data) throws XMLStreamException;
 
     /**
-     * Escribe una instruccion de proceso sin datos.
+     * Writes a processing instruction without data.
      *
-     * @param target el destino
-     * @throws XMLStreamException si falla la escritura
+     * @param target the target
+     * @throws XMLStreamException if it fails to write
      */
     void writeProcessingInstruction(String target) throws XMLStreamException;
 
     /**
-     * Escribe una instruccion de proceso con datos.
+     * Writes a processing instruction with data.
      *
-     * @param target el destino
-     * @param data los datos
-     * @throws XMLStreamException si falla la escritura
+     * @param target the target
+     * @param data the data
+     * @throws XMLStreamException if it fails to write
      */
     void writeProcessingInstruction(String target, String data) throws XMLStreamException;
 
     /**
-     * Escribe una seccion CDATA.
+     * Writes a CDATA section.
      *
-     * <p>La diferencia con {@link #writeCharacters}: el contenido va **sin escapar**, entre
-     * {@code <![CDATA[} y {@code ]]>}. Sirve para meter texto lleno de {@code <} --codigo fuente,
-     * XML embebido-- sin que quede ilegible.
+     * <p>The difference from {@link #writeCharacters}: the content goes **unescaped**, between
+     * {@code <![CDATA[} and {@code ]]>}. It serves for putting in text full of {@code <} --source
+     * code, embedded XML-- without it becoming unreadable.
      *
-     * @param data el contenido
-     * @throws XMLStreamException si falla la escritura
+     * @param data the content
+     * @throws XMLStreamException if it fails to write
      */
     void writeCData(String data) throws XMLStreamException;
 
     /**
-     * Escribe una declaracion de tipo de documento entera, tal cual se la da.
+     * Writes a whole document type declaration, as given.
      *
-     * @param dtd el texto completo del {@code <!DOCTYPE ...>}
-     * @throws XMLStreamException si falla la escritura
+     * @param dtd the complete text of the {@code <!DOCTYPE ...>}
+     * @throws XMLStreamException if it fails to write
      */
     void writeDTD(String dtd) throws XMLStreamException;
 
     /**
-     * Escribe una referencia a entidad: {@code &nombre;}.
+     * Writes an entity reference: {@code &name;}.
      *
-     * @param name el nombre de la entidad, sin el ampersand ni el punto y coma
-     * @throws XMLStreamException si falla la escritura
+     * @param name the name of the entity, without the ampersand nor
+     *     the semicolon
+     * @throws XMLStreamException if it fails to write
      */
     void writeEntityRef(String name) throws XMLStreamException;
 
     /**
-     * Escribe la declaracion XML con la version 1.0 y sin codificacion.
+     * Writes the XML declaration with version 1.0 and no encoding.
      *
-     * @throws XMLStreamException si falla la escritura
+     * @throws XMLStreamException if it fails to write
      */
     void writeStartDocument() throws XMLStreamException;
 
     /**
-     * Escribe la declaracion XML con una version dada.
+     * Writes the XML declaration with a given version.
      *
-     * @param version la version
-     * @throws XMLStreamException si falla la escritura
+     * @param version the version
+     * @throws XMLStreamException if it fails to write
      */
     void writeStartDocument(String version) throws XMLStreamException;
 
     /**
-     * Escribe la declaracion XML con codificacion y version.
+     * Writes the XML declaration with encoding and version.
      *
-     * <p>Ojo con esto: el nombre de codificacion que se escribe **es solo texto**. No cambia como se
-     * codifica la salida, que quedo fijada cuando se creo el escritor. Escribir {@code UTF-16} en un
-     * escritor que emite UTF-8 produce un documento que ninguna herramienta puede leer, y el
-     * escritor no avisa.
+     * <p>Watch out: the encoding name that is written <b>is only text</b>. It does not change how
+     * the output is encoded, which was fixed when the writer was created. Writing {@code UTF-16} in
+     * a writer that emits UTF-8 produces a document no tool can read, and the writer does not warn.
      *
-     * @param encoding el nombre de la codificacion a declarar
-     * @param version la version
-     * @throws XMLStreamException si falla la escritura
+     * @param encoding the name of the encoding to declare
+     * @param version the version
+     * @throws XMLStreamException if it fails to write
      */
     void writeStartDocument(String encoding, String version) throws XMLStreamException;
 
     /**
-     * Escribe texto, escapando lo que haga falta.
+     * Writes text, escaping what is needed.
      *
-     * @param text el texto
-     * @throws XMLStreamException si falla la escritura
+     * @param text the text
+     * @throws XMLStreamException if it fails to write
      */
     void writeCharacters(String text) throws XMLStreamException;
 
     /**
-     * Escribe texto desde un arreglo, escapando lo que haga falta.
+     * Writes text from an array, escaping what is needed.
      *
-     * @param text el arreglo
-     * @param start desde donde
-     * @param len cuantos caracteres
-     * @throws XMLStreamException si falla la escritura
+     * @param text the array
+     * @param start from where
+     * @param len how many characters
+     * @throws XMLStreamException if it fails to write
      */
     void writeCharacters(char[] text, int start, int len) throws XMLStreamException;
 
     /**
-     * El prefijo ligado a un espacio de nombres en el contexto actual, o null.
+     * The prefix bound to a namespace in the current context, or null.
      *
-     * @param uri el espacio de nombres
-     * @return el prefijo
-     * @throws XMLStreamException si falla
+     * @param uri the namespace
+     * @return the prefix
+     * @throws XMLStreamException if it fails
      */
     String getPrefix(String uri) throws XMLStreamException;
 
     /**
-     * Liga un prefijo a un espacio de nombres para lo que se escriba de aca en mas.
+     * Binds a prefix to a namespace for whatever is written from here on.
      *
-     * <p>No escribe la declaracion; ver el encabezado de la clase.
+     * <p>It does not write the declaration; see the class header.
      *
-     * @param prefix el prefijo
-     * @param uri el espacio de nombres
-     * @throws XMLStreamException si falla
+     * @param prefix the prefix
+     * @param uri the namespace
+     * @throws XMLStreamException if it fails
      */
     void setPrefix(String prefix, String uri) throws XMLStreamException;
 
     /**
-     * Liga el espacio de nombres por omision, sin escribir la declaracion.
+     * Binds the default namespace, without writing the declaration.
      *
-     * @param uri el espacio de nombres
-     * @throws XMLStreamException si falla
+     * @param uri the namespace
+     * @throws XMLStreamException if it fails
      */
     void setDefaultNamespace(String uri) throws XMLStreamException;
 
     /**
-     * Reemplaza el contexto de espacios de nombres entero.
+     * Replaces the whole namespace context.
      *
-     * <p>Solo se puede llamar antes del elemento raiz: cambiar las ligaduras a mitad de camino
-     * invalidaria los prefijos ya escritos.
+     * <p>It can only be called before the root element: changing the bindings halfway would
+     * invalidate the prefixes already written.
      *
-     * @param context el contexto nuevo
-     * @throws XMLStreamException si falla o si ya es tarde
+     * @param context the new context
+     * @throws XMLStreamException if it fails or if it is too late
      */
     void setNamespaceContext(NamespaceContext context) throws XMLStreamException;
 
     /**
-     * Las ligaduras vigentes.
+     * The bindings in force.
      *
-     * @return el contexto; no es modificable por el llamador
+     * @return the context; it cannot be modified by the caller
      */
     NamespaceContext getNamespaceContext();
 
     /**
-     * El valor de una propiedad de la implementacion.
+     * The value of an implementation property.
      *
-     * @param name el nombre de la propiedad; no puede ser null
-     * @return el valor
-     * @throws IllegalArgumentException si la propiedad no existe
+     * @param name the name of the property; cannot be null
+     * @return the value
+     * @throws IllegalArgumentException if the property does not exist
      */
     Object getProperty(String name) throws IllegalArgumentException;
 }

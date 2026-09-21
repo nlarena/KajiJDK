@@ -3,106 +3,106 @@ package com.sun.jdi;
 import java.util.List;
 
 /**
- * Una clase de la maquina depurada.
+ * A class of the debugged machine.
  *
  * @since 1.3
  */
 public interface ClassType extends ReferenceType {
 
     /**
-     * Al invocar, dejar suspendidos los demas hilos.
+     * On invoking, leave the other threads suspended.
      *
-     * <p>Suena seguro y casi siempre es lo contrario: si el metodo que se invoca necesita un
-     * candado que tiene otro hilo, ese hilo esta suspendido y la invocacion no vuelve nunca.
+     * <p>It sounds safe and it is almost always the opposite: if the method that is invoked needs a
+     * lock another thread holds, that thread is suspended and the invocation never returns.
      */
     int INVOKE_SINGLE_THREADED = 1;
 
     /**
-     * El superclass.
+     * The superclass.
      *
-     * @return el resultado
+     * @return the result
      */
     ClassType superclass();
 
     /**
-     * El interfaces.
+     * The interfaces.
      *
-     * @return el resultado
+     * @return the result
      */
     List<InterfaceType> interfaces();
 
     /**
-     * Todos los interfaces, heredados incluidos.
+     * Every interfaces, the inherited ones included.
      *
-     * @return el resultado
+     * @return the result
      */
     List<InterfaceType> allInterfaces();
 
     /**
-     * El subclasses.
+     * The subclasses.
      *
-     * @return el resultado
+     * @return the result
      */
     List<ClassType> subclasses();
 
     /**
-     * Si enum.
+     * Whether enum.
      *
-     * @return el resultado
+     * @return the result
      */
     boolean isEnum();
 
     /**
-     * Fija el value.
+     * It fixes the value.
      *
-     * @param field el Field
-     * @param value el Value
-     * @throws InvalidTypeException si corresponde
-     * @throws ClassNotLoadedException si corresponde
+     * @param field the Field
+     * @param value the Value
+     * @throws InvalidTypeException if it applies
+     * @throws ClassNotLoadedException if it applies
      */
     void setValue(Field field, Value value)
             throws InvalidTypeException, ClassNotLoadedException;
 
     /**
-     * El invoke method.
+     * The invoke method.
      *
-     * @param thread el ThreadReference
-     * @param method el Method
-     * @param values el List<? extends Value>
-     * @param index el int
-     * @return el resultado
-     * @throws InvalidTypeException si corresponde
-     * @throws ClassNotLoadedException si corresponde
-     * @throws IncompatibleThreadStateException si corresponde
-     * @throws InvocationException si corresponde
+     * @param thread the ThreadReference
+     * @param method the Method
+     * @param values the List<? extends Value>
+     * @param index the int
+     * @return the result
+     * @throws InvalidTypeException if it applies
+     * @throws ClassNotLoadedException if it applies
+     * @throws IncompatibleThreadStateException if it applies
+     * @throws InvocationException if it applies
      */
     Value invokeMethod(
             ThreadReference thread, Method method, List<? extends Value> values, int index)
             throws InvalidTypeException, ClassNotLoadedException, IncompatibleThreadStateException, InvocationException;
 
     /**
-     * El new instance.
+     * The new instance.
      *
-     * @param thread el ThreadReference
-     * @param method el Method
-     * @param values el List<? extends Value>
-     * @param index el int
-     * @return el resultado
-     * @throws InvalidTypeException si corresponde
-     * @throws ClassNotLoadedException si corresponde
-     * @throws IncompatibleThreadStateException si corresponde
-     * @throws InvocationException si corresponde
+     * @param thread the ThreadReference
+     * @param method the Method
+     * @param values the List<? extends Value>
+     * @param index the int
+     * @return the result
+     * @throws InvalidTypeException if it applies
+     * @throws ClassNotLoadedException if it applies
+     * @throws IncompatibleThreadStateException if it applies
+     * @throws InvocationException if it applies
      */
     ObjectReference newInstance(
             ThreadReference thread, Method method, List<? extends Value> values, int index)
             throws InvalidTypeException, ClassNotLoadedException, IncompatibleThreadStateException, InvocationException;
 
     /**
-     * El concrete method by name.
+     * The concrete method by name.
      *
-     * @param name el String
-     * @param name2 el String
-     * @return el resultado
+     * @param name the String
+     * @param name2 the String
+     * @return the result
      */
     Method concreteMethodByName(String name, String name2);
 }

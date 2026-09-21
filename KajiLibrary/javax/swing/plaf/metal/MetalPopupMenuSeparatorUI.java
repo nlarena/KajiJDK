@@ -7,14 +7,14 @@ import javax.swing.JComponent;
 import javax.swing.plaf.ComponentUI;
 
 /**
- * El separador de adentro de un menu.
+ * The separator inside a menu.
  *
- * <p>Es el mismo surco de dos lineas que {@link MetalSeparatorUI}, pero pide cuatro pixeles de
- * alto en vez de dos y dibuja las lineas en el medio. Los dos pixeles de aire de cada lado son lo
- * que separa el surco de los items de arriba y de abajo; sin ellos un menu queda apretado y el
- * separador se confunde con el borde de un item.
+ * <p>It is the same two-line groove as {@link MetalSeparatorUI}, but it asks for four pixels of
+ * height instead of two and draws the lines in the middle. The two pixels of air on each side are
+ * what separates the groove from the items above and below; without them a menu is cramped and
+ * the separator is confused with an item's border.
  *
- * <p>La orientacion no se mira: un separador de menu es siempre horizontal.
+ * <p>The orientation is not looked at: a menu separator is always horizontal.
  */
 public class MetalPopupMenuSeparatorUI extends MetalSeparatorUI {
 
@@ -33,7 +33,7 @@ public class MetalPopupMenuSeparatorUI extends MetalSeparatorUI {
         g.drawLine(0, 2, s.width, 2);
     }
 
-    /** Cuatro: dos de linea y dos de aire; ver la nota de la clase. */
+    /** Four: two of line and two of air; see the class note. */
     public Dimension getPreferredSize(JComponent c) {
         return new Dimension(0, 4);
     }

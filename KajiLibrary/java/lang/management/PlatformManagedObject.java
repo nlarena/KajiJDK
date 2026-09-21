@@ -3,19 +3,19 @@ package java.lang.management;
 import javax.management.ObjectName;
 
 /**
- * KajiLibrary's java.lang.management.PlatformManagedObject -- lo que puede publicarse como MBean de la
- * plataforma.
+ * KajiLibrary's java.lang.management.PlatformManagedObject -- what can be published as a platform
+ * MBean.
  *
- * <p>Un solo metodo, y la interfaz existe por lo que <b>permite</b>: como todas las MXBean de la
- * plataforma la extienden, {@code ManagementFactory.getPlatformMXBean(Class)} puede pedir cualquiera
- * de ellas con una sola firma generica.
+ * <p>A single method, and the interface exists for what it <b>allows</b>: since every platform MXBean
+ * extends it, {@code ManagementFactory.getPlatformMXBean(Class)} can ask for any of them with one
+ * generic signature.
  *
- * <p>{@link #getObjectName} devuelve el nombre con el que ese objeto figura en el servidor de MBeans
- * de la plataforma -- por ejemplo {@code java.lang:type=Memory}. Es el puente entre la API tipada de
- * este paquete y la API por nombre de {@code javax.management}.
+ * <p>{@link #getObjectName} returns the name that object appears under in the platform MBean server
+ * -- {@code java.lang:type=Memory}, for instance. It is the bridge between this package's typed API
+ * and {@code javax.management}'s by-name API.
  */
 public interface PlatformManagedObject {
 
-    /** Con que nombre figura en el servidor de MBeans de la plataforma. */
+    /** Under what name it appears in the platform MBean server. */
     ObjectName getObjectName();
 }

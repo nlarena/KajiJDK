@@ -5,27 +5,29 @@ import java.security.cert.X509Certificate;
 import javax.security.auth.Destroyable;
 
 /**
- * KajiLibrary's javax.security.auth.x500.X500PrivateCredential -- una identidad completa: el
- * certificado, la clave privada que le corresponde, y de que entrada del almacen salieron.
+ * KajiLibrary's javax.security.auth.x500.X500PrivateCredential -- a complete identity: the
+ * certificate, the private key that goes with it, and which entry of the store they came from.
  *
- * <p>Es un par, no dos objetos sueltos, y por una razon concreta: un certificado sin su clave sirve
- * para verificar, y una clave sin su certificado no sirve para nada -- nadie sabe a quien pertenece.
- * Lo que se necesita para <b>actuar</b> como alguien son los dos juntos, y esta clase es eso.
+ * <p>It is a pair, not two loose objects, and for a concrete reason: a certificate without its key
+ * serves to verify, and a key without its certificate serves for nothing -- nobody knows whom it
+ * belongs to. What is needed to <b>act</b> as someone is both together, and this class is that.
  *
- * <p>Los cuatro argumentos de los constructores son obligatorios y se rechazan con
- * {@code IllegalArgumentException}, no con {@code NullPointerException}. Es lo que hace el JDK y
- * conviene anotarlo porque no es lo habitual en el resto de la biblioteca.
+ * <p>The arguments of the constructors --certificate, key and alias-- are all mandatory and are
+ * rejected with {@code IllegalArgumentException}, not with {@code NullPointerException}. It is what
+ * the JDK does and it is worth noting because it is not the usual in the rest of the library. (The
+ * note said "the four arguments"; there are three.)
  *
- * <h2>Sobre destroy()</h2>
+ * <h2>About destroy()</h2>
  *
- * <p>{@code destroy()} <b>no borra la clave</b>: pone las tres referencias en null y suelta el
- * objeto. La clave privada en si sigue en memoria hasta que el recolector la levante, y si es un
- * objeto compartido sigue viva en quien la tenga. Es lo mismo que hace el JDK y hay que decirlo,
- * porque el nombre promete mas de lo que el metodo puede dar: quien quiera de verdad borrar el
- * material tiene que llamar al {@code destroy()} de la clave, si es que la clave lo implementa.
+ * <p>{@code destroy()} <b>does not erase the key</b>: it sets the three references to null and lets
+ * go of the object. The private key itself stays in memory until the collector picks it up, and if
+ * it is a shared object it stays alive in whoever holds it. It is the same as the JDK does and it
+ * has to be said, because the name promises more than the method can give: whoever really wants to
+ * erase the material has to call the key's {@code destroy()}, if the key implements it.
  *
- * <p>Un detalle que sorprende: con el constructor de dos argumentos el alias ya arranca en null,
- * pero {@code isDestroyed()} da false igual, porque exige que los <b>tres</b> campos lo esten.
+ * <p>A detail that surprises: with the two-argument constructor the alias already starts as null,
+ * but {@code isDestroyed()} gives false all the same, because it requires the <b>three</b> fields
+ * to be.
  */
 public final class X500PrivateCredential implements Destroyable {
 
@@ -34,7 +36,7 @@ public final class X500PrivateCredential implements Destroyable {
     private String alias;
 
     /**
-     * @throws IllegalArgumentException si alguno es null
+     * @throws IllegalArgumentException if any is null
      */
     public X500PrivateCredential(X509Certificate cert, PrivateKey key) {
         if (cert == null || key == null) {
@@ -46,9 +48,9 @@ public final class X500PrivateCredential implements Destroyable {
     }
 
     /**
-     * Idem, recordando ademas de que entrada del almacen salio el par.
+     * Likewise, also remembering which entry of the store the pair came from.
      *
-     * @throws IllegalArgumentException si alguno es null, el alias incluido
+     * @throws IllegalArgumentException if any is null, the alias included
      */
     public X500PrivateCredential(X509Certificate cert, PrivateKey key, String alias) {
         if (cert == null || key == null || alias == null) {
@@ -59,26 +61,26 @@ public final class X500PrivateCredential implements Destroyable {
         this.alias = alias;
     }
 
-    /** El certificado, o null si ya se llamo a {@link #destroy}. */
+    /** The certificate, or null if {@link #destroy} was already called. */
     public X509Certificate getCertificate() {
         return this.cert;
     }
 
-    /** La clave privada, o null si ya se llamo a {@link #destroy}. */
+    /** The private key, or null if {@link #destroy} was already called. */
     public PrivateKey getPrivateKey() {
         return this.key;
     }
 
-    /** El alias en el almacen, o null si no se dio o si ya se llamo a {@link #destroy}. */
+    /** The alias in the store, or null if none was given or {@link #destroy} was already called. */
     public String getAlias() {
         return this.alias;
     }
 
     /**
-     * Suelta las tres referencias. Ver la nota de la clase sobre lo que esto no hace.
+     * Lets go of the three references. See the class note on what this does not do.
      *
-     * <p>No declara {@code DestroyFailedException}: soltar una referencia no puede fallar. Llamarlo
-     * dos veces tampoco.
+     * <p>It does not declare {@code DestroyFailedException}: letting go of a reference cannot fail.
+     * Calling it twice cannot either.
      */
     public void destroy() {
         this.cert = null;
@@ -86,7 +88,7 @@ public final class X500PrivateCredential implements Destroyable {
         this.alias = null;
     }
 
-    /** Si las tres referencias estan sueltas. */
+    /** Whether the three references have been let go. */
     public boolean isDestroyed() {
         return this.cert == null && this.key == null && this.alias == null;
     }

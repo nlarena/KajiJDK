@@ -88,7 +88,7 @@ public interface Spliterator<T> {
      */
     default void forEachRemaining(Consumer<? super T> action) {
         while (this.tryAdvance(action)) {
-            // el trabajo lo hace tryAdvance
+            // tryAdvance does the work
         }
     }
 
@@ -171,7 +171,7 @@ public interface Spliterator<T> {
          */
         default void forEachRemaining(T_CONS action) {
             while (this.tryAdvance(action)) {
-                // el trabajo lo hace tryAdvance
+                // tryAdvance does the work
             }
         }
     }
@@ -185,7 +185,7 @@ public interface Spliterator<T> {
 
         default void forEachRemaining(IntConsumer action) {
             while (this.tryAdvance(action)) {
-                // el trabajo lo hace tryAdvance
+                // tryAdvance does the work
             }
         }
 
@@ -232,7 +232,7 @@ public interface Spliterator<T> {
 
         default void forEachRemaining(LongConsumer action) {
             while (this.tryAdvance(action)) {
-                // el trabajo lo hace tryAdvance
+                // tryAdvance does the work
             }
         }
 
@@ -275,7 +275,7 @@ public interface Spliterator<T> {
 
         default void forEachRemaining(DoubleConsumer action) {
             while (this.tryAdvance(action)) {
-                // el trabajo lo hace tryAdvance
+                // tryAdvance does the work
             }
         }
 

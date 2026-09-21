@@ -6,22 +6,23 @@ import java.awt.image.ImageProducer;
 import java.awt.image.RGBImageFilter;
 
 /**
- * Convierte una imagen a grises y le sube el brillo: es como se ve un icono apagado.
+ * It turns an image into greys and raises its brightness: it is how a disabled icon looks.
  *
- * <h2>Dos pasos, no uno</h2>
+ * <h2>Two steps, not one</h2>
  *
- * <p>Primero pasa a gris, y despues aclara u oscurece. El gris solo no alcanzaria: un icono en
- * grises con el mismo contraste que el original se sigue leyendo como activo. Lo que dice "esto no
- * se puede tocar" es que ademas este <em>lavado</em>, y de eso se encarga el porcentaje.
+ * <p>First it goes to grey, and afterwards it lightens or darkens. Grey alone would not be
+ * enough: an icon in greys with the same contrast as the original still reads as active. What
+ * says "this cannot be touched" is that it is also <em>washed out</em>, and the percentage
+ * takes care of that.
  *
- * <h2>La conversion a gris no es el promedio</h2>
+ * <h2>The conversion to grey is not the average</h2>
  *
- * <p>Es {@code 0.30 R + 0.59 G + 0.11 B}. Los tres numeros no son arbitrarios: el ojo es mucho mas
- * sensible al verde que al azul, asi que promediar los tres por igual daria un gris que se ve mal
- * -- los verdes salen demasiado oscuros y los azules demasiado claros --.
+ * <p>It is {@code 0.30 R + 0.59 G + 0.11 B}. The three numbers are not arbitrary: the eye is
+ * much more sensitive to green than to blue, so averaging the three equally would give a grey
+ * that looks wrong -- the greens come out too dark and the blues too light --.
  *
- * <p>La transparencia se conserva tal cual: se filtran los tres canales de color y el alfa pasa
- * intacto. Un icono con bordes suavizados sigue teniendolos.
+ * <p>Transparency is kept as it is: the three colour channels are filtered and the alpha passes
+ * untouched. An icon with smoothed edges goes on having them.
  */
 public class GrayFilter extends RGBImageFilter {
 
@@ -29,9 +30,9 @@ public class GrayFilter extends RGBImageFilter {
     private int percent;
 
     /**
-     * La version apagada de esa imagen.
+     * That image's disabled version.
      *
-     * <p>Aclarando al 50%, que es lo que usa Swing para los iconos de los botones apagados.
+     * <p>Lightening by 50%, which is what Swing uses for the icons of disabled buttons.
      */
     public static Image createDisabledImage(Image i) {
         GrayFilter filter = new GrayFilter(true, 50);
@@ -40,24 +41,24 @@ public class GrayFilter extends RGBImageFilter {
     }
 
     /**
-     * Un filtro que aclara u oscurece ese porcentaje.
+     * A filter that lightens or darkens by that percentage.
      *
-     * @param b cierto para aclarar, falso para oscurecer
-     * @param p cuanto, de 0 a 100
+     * @param b true to lighten, false to darken
+     * @param p by how much, from 0 to 100
      */
     public GrayFilter(boolean b, int p) {
         brighter = b;
         percent = p;
-        // El filtro no mira a los vecinos de un pixel, asi que se puede aplicar sobre la tabla de
-        // colores en vez de sobre cada pixel: en una imagen indexada eso es una pasada de 256 en
-        // lugar de una de un millon.
+        // The filter does not look at a pixel's neighbours, so it can be applied to the colour
+                // table instead of to each pixel: in an indexed image that is one pass of 256
+                // instead of one of a million.
         canFilterIndexColorModel = true;
     }
 
     /**
-     * El color de ese pixel, ya en gris y aclarado.
+     * That pixel's colour, already in grey and lightened.
      *
-     * <p>Ver la nota de la clase: los pesos no son iguales, y el alfa pasa sin tocar.
+     * <p>See the class note: the weights are not equal, and the alpha passes untouched.
      */
     public int filterRGB(int x, int y, int rgb) {
         int gray = (int) ((0.30 * ((rgb >> 16) & 0xff)

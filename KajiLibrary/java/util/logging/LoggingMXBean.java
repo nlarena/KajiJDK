@@ -1,82 +1,86 @@
 package java.util.logging;
 
 /**
- * KajiLibrary's java.util.logging.LoggingMXBean -- mirar y mover los niveles desde afuera.
+ * KajiLibrary's java.util.logging.LoggingMXBean -- looking at and moving the levels from outside.
  *
- * <p>Es la vista de administracion del arbol de loggers: que loggers hay, en que nivel esta cada
- * uno, quien es el padre de quien, y --la unica que escribe-- cambiarle el nivel a uno. Sirve para
- * subir el detalle de la traza de un servicio que ya esta corriendo sin reiniciarlo, que es cuando
- * mas falta hace y cuando menos se puede tocar el archivo de configuracion.
+ * <p>It is the management view of the logger tree: which loggers there are, what level each is at,
+ * who is whose parent, and --the only one that writes-- changing one's level. It serves for raising
+ * the logging detail of a service that is already running without restarting it, which is when it is
+ * most needed and when the configuration file can least be touched.
  *
- * <p><strong>Por que esta clase si se puede traer, aunque nombre a JMX.</strong> Su javadoc en el
- * JDK habla de `ManagementFactory` y de `PlatformLoggingMXBean`, y de ahi sale la idea de que
- * depende de `java.lang.management` --que en este arbol no existe--. Pero eso es **como se publica**,
- * no **que declara**: la interfaz son cuatro metodos sobre `String` y `List<String>` y ni uno solo
- * menciona un tipo de `java.lang.management`. Registrarla en un servidor MBean es otra cosa, y esa
- * otra cosa es la que falta; el contrato de estos cuatro metodos se cumple entero contra el
- * {@link LogManager} que ya esta aca. No hay nada que simular, asi que se trae.
+ * <p><strong>Why this class CAN be brought in, even though it names JMX.</strong> Its javadoc in the
+ * JDK speaks of `ManagementFactory` and of `PlatformLoggingMXBean`, and that is where the idea comes
+ * from that it depends on `java.lang.management` --which does not exist in this tree. But that is
+ * **how it is published**, not **what it declares**: the interface is four methods over `String` and
+ * `List<String>` and not one of them mentions a `java.lang.management` type. Registering it in an
+ * MBean server is another matter, and that other matter is what is missing; these four methods'
+ * contract is honoured in full against the {@link LogManager} that is already here. There is nothing
+ * to simulate, so it is brought in.
  *
- * <p><strong>Los tres valores de retorno que hay que no confundir</strong>, porque son tres estados
- * distintos y dos de ellos se parecen:
+ * <p><strong>The three return values not to be confused</strong>, because they are three different
+ * states and two of them look alike:
  *
  * <ul>
- * <li><b>`null`</b> -- **no existe** un logger con ese nombre. Es la respuesta a una pregunta mal
- *     hecha, y por eso se distingue de las otras dos.
- * <li><b>`""`</b> -- el logger existe y **no tiene nivel propio**: hereda el del padre. Vacio y no
- *     `null` justamente para poder reservar `null` al caso de arriba.
- * <li><b>el nombre del nivel</b> -- el logger tiene nivel propio.
+ * <li><b>`null`</b> -- there **is no** logger by that name. It is the answer to a badly asked
+ *     question, and that is why it is told from the other two.
+ * <li><b>`""`</b> -- the logger exists and **has no level of its own**: it inherits its parent's.
+ *     Empty and not `null` precisely so that `null` can be reserved for the case above.
+ * <li><b>the level's name</b> -- the logger has a level of its own.
  * </ul>
  *
- * <p>Lo mismo en {@link #getParentLoggerName}: `""` es la **raiz** --existe y no tiene padre-- y
- * `null` es "no hay tal logger". Un solo valor para los dos casos haria imposible distinguir un
- * nombre mal escrito de la raiz, que es el error que uno comete al escribir la herramienta que
- * consume esto.
+ * <p>The same in {@link #getParentLoggerName}: `""` is the **root** --it exists and has no parent--
+ * and `null` is "there is no such logger". A single value for both cases would make it impossible to
+ * tell a misspelled name from the root, which is the mistake one makes when writing the tool that
+ * consumes this.
  *
- * <p>Esta deprecada desde 9 --lo que la reemplaza es `java.lang.management.PlatformLoggingMXBean`,
- * que vive del otro lado de la frontera--, pero **no** marcada para remocion: el JDK 25 la anota
- * `forRemoval=false`, y por eso la anotacion de aca dice lo mismo. Poner `forRemoval=true` seria
- * avisar de una remocion que la referencia no anuncia, y un aviso de mas es tan mentira como uno de
- * menos.
+ * <p>It has been deprecated since 9 --what replaces it is
+ * `java.lang.management.PlatformLoggingMXBean`, which lives on the other side of the border-- but it
+ * is **not** marked for removal: JDK 25 annotates it `forRemoval=false`, and that is why the
+ * annotation here says the same. Putting `forRemoval=true` would be warning of a removal the
+ * reference does not announce, and a warning too many is as much a lie as one too few.
  */
 @Deprecated(since = "9")
 public interface LoggingMXBean {
 
     /**
-     * Los nombres de todos los loggers registrados.
+     * The names of every registered logger.
      *
-     * <p>Una **foto**, no una vista viva: el que la recorre no se entera de los loggers que se creen
-     * mientras la recorre, y eso es lo que corresponde -- crear un logger es algo que hace cualquier
-     * clase al cargarse, y una lista que cambiara sola bajo el iterador convertiria un listado en una
-     * carrera.
+     * <p>A **snapshot**, not a live view: whoever walks it does not find out about the loggers
+     * created while they walk it, and that is what suits -- creating a logger is something any class
+     * does on being loaded, and a list that changed by itself under the iterator would turn a listing
+     * into a race.
      */
     java.util.List<String> getLoggerNames();
 
     /**
-     * El nombre del nivel propio de ese logger.
+     * The name of that logger's own level.
      *
-     * @return el nombre del nivel, `""` si el logger hereda el nivel, o `null` si no existe
+     * @return the level's name, `""` if the logger inherits its level, or `null` if it does not
+     *     exist
      */
     String getLoggerLevel(String loggerName);
 
     /**
-     * Le pone el nivel a un logger que ya existe.
+     * It sets the level on a logger that already exists.
      *
-     * <p>`levelName` en `null` **no es un error**: es la forma de sacarle el nivel propio y volver a
-     * hacerlo heredar del padre. Es la operacion inversa de ponerselo, y sin ella se podria bajar el
-     * detalle de un servicio en caliente pero no devolverlo a como estaba.
+     * <p>A `null` `levelName` is **not an error**: it is the way of taking its own level away and
+     * making it inherit from its parent again. It is the inverse of setting one, and without it one
+     * could lower a service's detail live but not put it back as it was.
      *
-     * <p>No crea el logger si no existe: mover el nivel de algo que no esta es no hacer nada, y
-     * crearlo aca dejaria un logger sin dueno que nadie escribe.
+     * <p>It does not create the logger if it does not exist: moving the level of something that is
+     * not there is doing nothing, and creating it here would leave an ownerless logger nobody
+     * writes.
      *
-     * @throws IllegalArgumentException si no hay un logger con ese nombre, o si `levelName` no es un
-     *         nivel conocido
+     * @throws IllegalArgumentException if there is no logger by that name, or if `levelName` is not
+     *         a known level
      */
     void setLoggerLevel(String loggerName, String levelName);
 
     /**
-     * El nombre del padre en el arbol.
+     * The parent's name in the tree.
      *
-     * @return el nombre del padre, `""` si es la raiz --que no tiene--, o `null` si no existe
+     * @return the parent's name, `""` if it is the root --which has none-- or `null` if it does not
+     *     exist
      */
     String getParentLoggerName(String loggerName);
 }

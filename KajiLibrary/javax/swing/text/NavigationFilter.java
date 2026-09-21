@@ -1,42 +1,42 @@
 package javax.swing.text;
 
 /**
- * Un filtro que ve cada movimiento del cursor antes de que ocurra.
+ * A filter that sees each movement of the cursor before it happens.
  *
- * <p>Es el hermano de {@link DocumentFilter} para la navegacion: sirve para que el cursor no pueda
- * entrar en un tramo —una plantilla con partes fijas— o para que salte de a palabras. La version
- * de esta clase deja pasar todo.
+ * <p>It is {@link DocumentFilter}'s sibling for navigation: it serves so that the cursor cannot
+ * enter a stretch --a template with fixed parts-- or so that it jumps by words. This class's
+ * version lets everything through.
  *
- * <p>Como alla, el filtro no mueve el cursor llamando al cursor: llama al {@link FilterBypass},
- * que se saltea el filtro y no vuelve a entrar.
+ * <p>As over there, the filter does not move the cursor by calling the cursor: it calls the
+ * {@link FilterBypass}, which skips the filter and does not enter it again.
  */
 public class NavigationFilter {
 
     public NavigationFilter() {
     }
 
-    /** Mover el cursor deshaciendo la seleccion. */
+    /** Moving the cursor undoing the selection. */
     public void setDot(FilterBypass fb, int dot, Position.Bias bias) {
         fb.setDot(dot, bias);
     }
 
-    /** Mover el cursor extendiendo la seleccion. */
+    /** Moving the cursor extending the selection. */
     public void moveDot(FilterBypass fb, int dot, Position.Bias bias) {
         fb.moveDot(dot, bias);
     }
 
     /**
-     * A donde va el cursor desde esa posicion en esa direccion.
+     * Where the cursor goes from that position in that direction.
      *
-     * <p>Se la pasa al aspecto del componente, que es quien conoce el arbol de vistas; un filtro
-     * que quiera saltar de otra forma la redefine.
+     * <p>It is passed to the component's look and feel, which is the one that knows the view tree;
+     * a filter that wants to jump another way redefines it.
      */
     public int getNextVisualPositionFrom(JTextComponent text, int pos, Position.Bias bias,
             int direction, Position.Bias[] biasRet) throws BadLocationException {
         return text.getUI().getNextVisualPositionFrom(text, pos, bias, direction, biasRet);
     }
 
-    /** El atajo para mover el cursor sin volver a pasar por el filtro. */
+    /** The bypass for moving the cursor without going through the filter again. */
     public abstract static class FilterBypass {
 
         protected FilterBypass() {

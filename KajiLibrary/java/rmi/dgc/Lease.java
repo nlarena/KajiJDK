@@ -3,14 +3,15 @@ package java.rmi.dgc;
 import java.io.Serializable;
 
 /**
- * El permiso, con vencimiento, que el servidor le da a un cliente para retener una referencia.
+ * The permission, with an expiry, that the server gives a client to hold on to a reference.
  *
- * <p>Es la pieza que hace que el recolector distribuido tolere que un cliente se muera sin avisar:
- * en vez de esperar un `clean` que quiza nunca llegue, el servidor entrega la referencia por un
- * plazo, y el cliente que la quiere conservar tiene que volver a pedirla antes de que venza. Si el
- * cliente desaparece, la referencia se libera sola cuando pasa el plazo.
+ * <p>It is the piece that lets the distributed collector tolerate a client dying without notice:
+ * instead of waiting for a `clean` that may never arrive, the server hands out the reference for a
+ * term, and a client that wants to keep it has to ask for it again before it expires. If the
+ * client disappears, the reference is released on its own when the term runs out.
  *
- * <p>Es inmutable, y tiene que serlo: viaja serializado y lo leen los dos lados de la conexion.
+ * <p>It is immutable, and it has to be: it travels serialised and both ends of the connection read
+ * it.
  *
  * @see DGC#dirty(java.rmi.server.ObjID[], long, Lease)
  */
@@ -18,29 +19,29 @@ public final class Lease implements Serializable {
 
     private static final long serialVersionUID = -5713411624328831948L;
 
-    /** La VM a la que se le dio el permiso. */
+    /** The VM the permission was given to. */
     private VMID vmid;
 
-    /** Cuanto dura, en milisegundos. */
+    /** How long it lasts, in milliseconds. */
     private long value;
 
     /**
-     * Un permiso para la VM dada, por la duracion dada.
+     * A permission for the given VM, for the given duration.
      *
-     * @param id la VM del cliente; puede ser nulo, y entonces el servidor le asigna uno
-     * @param duration la duracion en milisegundos
+     * @param id the client's VM; it may be null, and then the server assigns one
+     * @param duration the duration in milliseconds
      */
     public Lease(VMID id, long duration) {
         this.vmid = id;
         this.value = duration;
     }
 
-    /** La VM a la que se le dio este permiso, o `null` si no se le asigno ninguna. */
+    /** The VM this permission was given to, or `null` if none was assigned. */
     public VMID getVMID() {
         return this.vmid;
     }
 
-    /** La duracion del permiso, en milisegundos. */
+    /** The duration of the permission, in milliseconds. */
     public long getValue() {
         return this.value;
     }

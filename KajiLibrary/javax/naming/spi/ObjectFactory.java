@@ -5,28 +5,29 @@ import javax.naming.Context;
 import javax.naming.Name;
 
 /**
- * KajiLibrary's javax.naming.spi.ObjectFactory -- convierte lo que hay guardado en un objeto util.
+ * KajiLibrary's javax.naming.spi.ObjectFactory -- turns what is stored into a useful object.
  *
- * <p>Un directorio no guarda objetos Java: guarda una {@code Reference} --el nombre de una clase y
- * unos datos-- o algo del protocolo de abajo. Esta fabrica es la que convierte eso en el objeto que
- * la aplicacion espera recibir de un {@code lookup}.
+ * <p>A directory does not store Java objects: it stores a {@code Reference} --the name of a class
+ * and some data-- or something from the protocol underneath. This factory is what turns that into
+ * the object the application expects to get from a {@code lookup}.
  *
- * <p>Es lo que permite guardar en LDAP algo como una fuente de datos: lo que se guarda es la receta
- * --el driver, el URL, el usuario-- y lo que se recibe es la fuente ya armada.
+ * <p>It is what allows storing something like a data source in LDAP: what is stored is the recipe
+ * --the driver, the URL, the user-- and what is received is the ready-built source.
  *
- * <p>Devolver <b>null</b> es lo normal y no un error: significa "esto no es lo mio", y la plataforma
- * le pregunta a la fabrica que sigue. Una fabrica que devuelve algo para todo rompe la cadena.
+ * <p>Returning <b>null</b> is normal and not an error: it means "this is not mine", and the
+ * platform asks the next factory. A factory that returns something for everything breaks the
+ * chain.
  */
 public interface ObjectFactory {
 
     /**
-     * El objeto que corresponde a esos datos.
+     * The object that corresponds to that data.
      *
-     * @param obj lo que estaba guardado
-     * @param name su nombre relativo a {@code nameCtx}, o null
-     * @param nameCtx contra que contexto es relativo el nombre; null es el inicial
-     * @param environment el ambiente de la operacion
-     * @return null si esta fabrica no reconoce esos datos; ver la nota de la clase
+     * @param obj what was stored
+     * @param name its name relative to {@code nameCtx}, or null
+     * @param nameCtx the context the name is relative to; null is the initial one
+     * @param environment the operation's environment
+     * @return null if this factory does not recognize that data; see the class note
      */
     Object getObjectInstance(Object obj, Name name, Context nameCtx, Hashtable<?, ?> environment)
         throws Exception;

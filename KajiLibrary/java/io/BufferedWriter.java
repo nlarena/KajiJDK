@@ -83,8 +83,8 @@ public class BufferedWriter extends Writer {
         this.out.flush();
     }
 
-    // Declara `throws` porque `out.write` la declara. Todos sus llamadores --`flush`, `close`,
-    // `write`-- ya la declaran a su vez, asi que se propaga sin envolverla.
+    // It declares `throws` because `out.write` declares it. All its callers --`flush`, `close`,
+    // `write`-- declare it in turn already, so it propagates without being wrapped.
     private void flushBuffer() throws IOException {
         if (this.nextChar > 0) {
             this.out.write(this.cb, 0, this.nextChar);

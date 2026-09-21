@@ -3,144 +3,147 @@ package java.io;
 import java.util.function.Predicate;
 
 /**
- * KajiLibrary's java.io.ObjectInputFilter -- la politica que decide que clases puede reconstruir un
- * flujo de objetos.
+ * KajiLibrary's java.io.ObjectInputFilter -- the policy that decides which classes a stream of
+ * objects may rebuild.
  *
- * <p>Existe porque deserializar es, por definicion, dejar que unos bytes de afuera elijan que
- * constructores corren. Un filtro es donde se pone el limite: se lo consulta **antes** de resolver
- * cada clase, y su respuesta es {@code ALLOWED}, {@code REJECTED} o {@code UNDECIDED}.
+ * <p>It exists because deserializing is, by definition, letting bytes from outside choose which
+ * constructors run. A filter is where the limit is put: it is consulted **before** each class is
+ * resolved, and its answer is {@code ALLOWED}, {@code REJECTED} or {@code UNDECIDED}.
  *
- * <p>{@code UNDECIDED} no es "no se": es "no opino, que decida el siguiente". Tener tres respuestas
- * y no dos es lo que permite componer filtros -- uno que solo sabe de una clase puede decir lo suyo
- * y callarse del resto sin autorizar nada por omision.
+ * <p>{@code UNDECIDED} is not "I do not know": it is "I have no opinion, let the next one decide".
+ * Having three answers and not two is what makes filters composable -- one that knows about a
+ * single class can say its piece and keep quiet about the rest without authorizing anything by
+ * default.
  *
- * <h2>Como se instala, y lo unico que falta</h2>
+ * <h2>How it is installed, and the only thing missing</h2>
  *
- * <p>Con {@link ObjectInputStream#setObjectInputFilter}, y desde ahi se lo consulta de verdad: una
- * vez por cada clase que el flujo esta por armar, y con el largo cuando lo que viene es un arreglo.
- * Un {@code REJECTED} corta la lectura con {@link InvalidClassException} **antes** de que se
- * construya nada.
+ * <p>With {@link ObjectInputStream#setObjectInputFilter}, and from there it really is consulted:
+ * once for each class the stream is about to build, and with the length when what comes is an
+ * array. A {@code REJECTED} cuts the reading short with {@link InvalidClassException} **before**
+ * anything is constructed.
  *
- * <p><strong>{@code ObjectInputFilter.Config} no esta.</strong> Esa clase fija el filtro
- * <em>global</em>, el que se consulta cuando el flujo no trae uno propio, y su pieza central es
- * {@code createFilter(String)}: un lenguaje de patrones con comodines de paquete y limites
- * (`maxarray`, `maxdepth`, `maxrefs`, `maxbytes`) cuya semantica exacta es justamente lo que decide
- * que pasa y que no. Un analizador que se equivoque en un comodin deja entrar lo que el que lo
- * escribio creia haber cerrado, y no hay forma de darse cuenta mirando el resultado. Se declara la
- * ausencia en vez de aproximar la gramatica; mientras tanto el filtro por flujo, que es explicito,
- * si esta y si se cumple.
+ * <p><strong>{@code ObjectInputFilter.Config} is not here.</strong> That class sets the
+ * <em>global</em> filter, the one consulted when the stream brings none of its own, and its central
+ * piece is {@code createFilter(String)}: a language of patterns with package wildcards and limits
+ * (`maxarray`, `maxdepth`, `maxrefs`, `maxbytes`) whose exact semantics is precisely what decides
+ * what gets through and what does not. A parser that gets one wildcard wrong lets in what whoever
+ * wrote it believed they had closed off, and there is no way of telling by looking at the result.
+ * The absence is declared instead of approximating the grammar; meanwhile the per-stream filter,
+ * which is explicit, is here and is honoured.
  */
 public interface ObjectInputFilter {
 
     /**
-     * La decision sobre un objeto del flujo.
+     * The decision about an object of the stream.
      *
-     * <p>Se lo llama una vez por clase a resolver y tambien --con {@link FilterInfo#serialClass()}
-     * en {@code null}-- para los limites de tamanio del flujo, que es como un filtro puede cortar un
-     * arreglo de mil millones de elementos sin saber de que clase es.
+     * <p>It is called once per class to be resolved and also --with {@link
+     * FilterInfo#serialClass()} at {@code null}-- for the stream's size limits, which is how a
+     * filter can cut short an array of a thousand million elements without knowing what class it
+     * is.
      */
     Status checkInput(FilterInfo filterInfo);
 
     /**
-     * Un filtro que aprueba lo que cumpla `predicate` y contesta `otherStatus` para el resto.
+     * A filter that approves whatever satisfies `predicate` and answers `otherStatus` for the rest.
      *
-     * <p><strong>El predicado ve la clase tal cual viene, arreglos incluidos.</strong> Un predicado
-     * escrito como {@code c -> c == String.class} **no** deja pasar un {@code String[]}: son clases
-     * distintas y la que llega es la del arreglo. No se desenvuelve por conveniencia porque el largo
-     * de un arreglo es justamente uno de los vectores de ataque, y quien quiera permitirlos tiene
-     * que decirlo.
+     * <p><strong>The predicate sees the class as it comes, arrays included.</strong> A predicate
+     * written as {@code c -> c == String.class} does **not** let a {@code String[]} through: they
+     * are different classes and the one arriving is the array's. It is not unwrapped for
+     * convenience because an array's length is precisely one of the attack vectors, and whoever
+     * wants to allow them has to say so.
      *
-     * <p>Con la clase en `null` --las consultas de tamanio-- devuelve {@code UNDECIDED}: el
-     * predicado habla de clases y ahi no hay ninguna sobre la que opinar.
+     * <p>With the class at `null` --the size queries-- it returns {@code UNDECIDED}: the predicate
+     * talks about classes and there is none there to have an opinion about.
      *
-     * @throws NullPointerException si `predicate` u `otherStatus` son `null`
+     * @throws NullPointerException if `predicate` or `otherStatus` is `null`
      */
     static ObjectInputFilter allowFilter(Predicate<Class<?>> predicate, Status otherStatus) {
         if (predicate == null || otherStatus == null) {
             throw new NullPointerException();
         }
-        return new Filtros.PorPredicado(predicate, Status.ALLOWED, otherStatus);
+        return new Filters.ByPredicate(predicate, Status.ALLOWED, otherStatus);
     }
 
     /**
-     * El espejo de {@link #allowFilter}: rechaza lo que cumpla `predicate`, y contesta `otherStatus`
-     * para el resto.
+     * {@link #allowFilter}'s mirror: it rejects whatever satisfies `predicate`, and answers
+     * `otherStatus` for the rest.
      *
-     * <p>Los dos existen porque una lista blanca y una lista negra no son la misma politica escrita
-     * al reves: con `allowFilter` lo que no se nombro queda fuera, con `rejectFilter` queda dentro.
-     * La diferencia se nota el dia que aparece una clase en la que nadie penso.
+     * <p>Both exist because a whitelist and a blacklist are not the same policy written backwards:
+     * with `allowFilter` what was not named is left out, with `rejectFilter` it is left in. The
+     * difference shows the day a class nobody thought of turns up.
      *
-     * @throws NullPointerException si `predicate` u `otherStatus` son `null`
+     * @throws NullPointerException if `predicate` or `otherStatus` is `null`
      */
     static ObjectInputFilter rejectFilter(Predicate<Class<?>> predicate, Status otherStatus) {
         if (predicate == null || otherStatus == null) {
             throw new NullPointerException();
         }
-        return new Filtros.PorPredicado(predicate, Status.REJECTED, otherStatus);
+        return new Filters.ByPredicate(predicate, Status.REJECTED, otherStatus);
     }
 
     /**
-     * Combina dos filtros: **cualquier** rechazo gana, y si ninguno rechaza alcanza con que uno
-     * apruebe.
+     * It combines two filters: **any** rejection wins, and if neither rejects it is enough for one
+     * to approve.
      *
-     * <p>Que el rechazo gane es lo unico que hace componible a la cosa: si aprobar pudiera anular a
-     * un rechazo, agregar un filtro podria **abrir** lo que otro cerraba, y nadie podria razonar
-     * sobre una politica sin leerla entera.
+     * <p>That rejection wins is the only thing that makes the whole composable: if approving could
+     * annul a rejection, adding a filter could **open** what another was closing, and nobody could
+     * reason about a policy without reading it whole.
      *
-     * @throws NullPointerException si `filter` es `null`
+     * @throws NullPointerException if `filter` is `null`
      */
     static ObjectInputFilter merge(ObjectInputFilter filter, ObjectInputFilter anotherFilter) {
         if (filter == null) {
             throw new NullPointerException();
         }
-        return new Filtros.Union(filter, anotherFilter);
+        return new Filters.Union(filter, anotherFilter);
     }
 
     /**
-     * Convierte en rechazo el {@code UNDECIDED} que quede sobre una clase concreta.
+     * It turns into a rejection whatever {@code UNDECIDED} is left over a concrete class.
      *
-     * <p>Es la tapa de una lista blanca: sin esto, una clase que ningun filtro nombro sale
-     * {@code UNDECIDED}, y el que llama tiene que acordarse de tratar eso como negativo. Envolver la
-     * politica hace que la respuesta por omision quede escrita en un lugar en vez de depender de que
-     * cada uso la interprete igual.
+     * <p>It is a whitelist's lid: without this, a class no filter named comes out {@code
+     * UNDECIDED}, and the caller has to remember to treat that as negative. Wrapping the policy
+     * puts the default answer in writing in one place instead of depending on every use
+     * interpreting it the same way.
      *
-     * <p>Las consultas sin clase --las de tamanio-- pasan sin tocar: ahi {@code UNDECIDED} significa
-     * "este filtro no pone limites", que es una respuesta legitima y no un olvido.
+     * <p>The queries with no class --the size ones-- pass untouched: there {@code UNDECIDED} means
+     * "this filter sets no limits", which is a legitimate answer and not an oversight.
      *
-     * @throws NullPointerException si `filter` es `null`
+     * @throws NullPointerException if `filter` is `null`
      */
     static ObjectInputFilter rejectUndecidedClass(ObjectInputFilter filter) {
         if (filter == null) {
             throw new NullPointerException();
         }
-        return new Filtros.RechazaIndecisos(filter);
+        return new Filters.RejectUndecided(filter);
     }
 
-    /** Lo que se sabe del objeto que esta por leerse cuando se consulta al filtro. */
+    /** What is known about the object about to be read when the filter is consulted. */
     interface FilterInfo {
 
         /**
-         * La clase a resolver, o `null` si esta consulta no es sobre una clase.
+         * The class to resolve, or `null` if this query is not about a class.
          *
-         * <p>El `null` es informacion y no un hueco: es como el flujo pregunta por los limites de
-         * tamanio --cuantas referencias van, cuantos bytes-- que valen sin importar la clase.
+         * <p>The `null` is information and not a gap: it is how the stream asks about the size
+         * limits --how many references have gone by, how many bytes-- which hold whatever the
+         * class.
          */
         Class<?> serialClass();
 
-        /** El largo del arreglo por leer, o -1 si esto no es un arreglo. */
+        /** The length of the array about to be read, or -1 if this is not an array. */
         long arrayLength();
 
-        /** Cuan anidado esta el objeto; el de arriba de todo es 1. */
+        /** How deeply nested the object is; the topmost one is 1. */
         long depth();
 
-        /** Cuantas referencias lleva leidas el flujo. */
+        /** How many references the stream has read so far. */
         long references();
 
-        /** Cuantos bytes lleva consumidos el flujo. */
+        /** How many bytes the stream has consumed so far. */
         long streamBytes();
     }
 
-    /** Las tres respuestas posibles. Ver la nota de {@code UNDECIDED} en la cabecera de la clase. */
+    /** The three possible answers. See {@code UNDECIDED}'s note in the class's header. */
     enum Status {
         UNDECIDED,
         ALLOWED,

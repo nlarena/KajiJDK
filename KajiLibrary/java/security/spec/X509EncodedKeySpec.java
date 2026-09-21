@@ -2,11 +2,12 @@ package java.security.spec;
 
 import java.security.DEREncodable;
 
-// Una clave **publica** codificada segun el `SubjectPublicKeyInfo` de X.509.
+// A **public** key encoded as X.509's `SubjectPublicKeyInfo`.
 //
-// El par con `PKCS8EncodedKeySpec` no es simetrico por casualidad: X.509 es el formato de las
-// claves que se publican y PKCS#8 el de las que no. Que sean tipos distintos y no un solo tipo con
-// un string de formato es lo que impide que una privada entre por donde se espera una publica.
+// The pair with `PKCS8EncodedKeySpec` is not symmetric by accident: X.509 is the format of keys
+// that are published and PKCS#8 that of keys that are not. That they are distinct types and not one
+// type with a format string is what keeps a private key from getting in where a public one is
+// expected.
 public class X509EncodedKeySpec extends EncodedKeySpec implements DEREncodable {
 
     public X509EncodedKeySpec(byte[] encodedKey) {
@@ -22,8 +23,8 @@ public class X509EncodedKeySpec extends EncodedKeySpec implements DEREncodable {
         return super.getEncoded();
     }
 
-    // "X.509", siempre. `final` porque el formato es lo que define a esta clase: una subclase que
-    // lo cambiara estaria mintiendo sobre que contiene.
+    // "X.509", always. `final` because the format is what defines this class: a subclass that
+    // changed it would be lying about what it holds.
     @Override
     public final String getFormat() {
         return "X.509";

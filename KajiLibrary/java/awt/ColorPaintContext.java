@@ -5,14 +5,15 @@ import java.awt.image.Raster;
 import java.awt.image.WritableRaster;
 
 /**
- * El contexto de pintado de un color plano.
+ * The painting context of a flat colour.
  *
- * <p>Es el más simple posible y por eso vale la pena mirarlo: no invierte transformaciones, no mira
- * coordenadas y no calcula nada por píxel. Arma **un** ráster de un píxel del color pedido y para
- * cualquier rectángulo devuelve un hijo suyo estirado a ese tamaño, así que dos pedidos del mismo
- * tamaño no reservan memoria dos veces.
+ * <p>It is the simplest possible and that is why it is worth looking at: it inverts no
+ * transformation, looks at no coordinates and computes nothing per pixel. It builds a raster of the
+ * requested size filled with the colour, keeps it, and for a later request that fits returns a
+ * child of it of that size, so requests of the same size do not allocate twice. (This note said the
+ * kept raster is a single pixel stretched to each size.)
  *
- * <p>No es pública: es cómo está escrito {@link Color#createContext}.
+ * <p>It is not public: it is how {@link Color#createContext} is written.
  */
 class ColorPaintContext implements PaintContext {
 
@@ -20,37 +21,37 @@ class ColorPaintContext implements PaintContext {
     private final ColorModel model = ColorModel.getRGBdefault();
     private WritableRaster cache;
 
-    /** Con el color ARGB que va a devolver siempre. */
+    /** With the ARGB colour it will always return. */
     ColorPaintContext(int color) {
         this.color = color;
     }
 
-    /** No hay nada que soltar más que el ráster guardado. */
+    /** There is nothing to release but the kept raster. */
     public void dispose() {
         this.cache = null;
     }
 
-    /** Siempre ARGB de ocho bits por canal. */
+    /** Always 8-bit-per-channel ARGB. */
     public ColorModel getColorModel() {
         return this.model;
     }
 
     /**
-     * Un ráster del tamaño pedido, todo del mismo color.
+     * A raster of the requested size, all of the same colour.
      *
-     * <p>Se guarda el último y se reusa mientras alcance: quien dibuja pide rectángulos del mismo
-     * tamaño una y otra vez, y reservar uno por pedido sería tirar memoria a la basura.
+     * <p>The last one is kept and reused while it is big enough: whoever draws asks for rectangles
+     * of the same size again and again, and allocating one per request would waste memory.
      */
     public Raster getRaster(int x, int y, int w, int h) {
         WritableRaster r = this.cache;
         if (r == null || r.getWidth() < w || r.getHeight() < h) {
             r = this.model.createCompatibleWritableRaster(w, h);
-            int[] fila = new int[w];
+            int[] row = new int[w];
             for (int i = 0; i < w; i++) {
-                fila[i] = this.color;
+                row[i] = this.color;
             }
             for (int j = 0; j < h; j++) {
-                r.setDataElements(0, j, w, 1, fila);
+                r.setDataElements(0, j, w, 1, row);
             }
             this.cache = r;
             return r;

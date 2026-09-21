@@ -1,19 +1,19 @@
 package org.w3c.dom.html;
 
 /**
- * Un `<li>`.
+ * A `<li>`.
  */
 public interface HTMLLIElement extends HTMLElement {
 
-    /** El tipo del control. */
+    /** The type of the control. */
     String getType();
 
-    /** Fija el tipo del control. */
+    /** It sets the type of the control. */
     void setType(String type);
 
-    /** El valor actual. */
+    /** The current value. */
     int getValue();
 
-    /** Fija el valor actual. */
+    /** It sets the current value. */
     void setValue(int value);
 }

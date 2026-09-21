@@ -1,28 +1,29 @@
 package com.sun.source.tree;
 
 /**
- * Un visitante del arbol de sintaxis.
+ * A visitor of the syntax tree.
  *
- * <h2>Que aporta sobre un {@code switch}</h2>
+ * <h2>What it contributes over a {@code switch}</h2>
  *
- * <p>Que el compilador cuente. Si el JDK agrega un tipo de nodo —y lo hace en cada version que
- * agrega sintaxis: los patrones, los records, los modulos— una implementacion de esta interfaz deja
- * de compilar hasta que alguien decida que hacer con el nodo nuevo. Un {@code switch} sobre
- * {@link Tree.Kind} se queda callado y cae en su rama por defecto.
+ * <p>That the compiler should count. If the JDK adds a kind of node -- and it does so in every
+ * version that adds syntax: the patterns, the records, the modules -- an implementation of this
+ * interface stops compiling until somebody decides what to do with the new node. A
+ * {@code switch} over {@link Tree.Kind} keeps quiet and falls into its default branch.
  *
- * <h2>Todos abstractos, a diferencia de {@link com.sun.source.doctree.DocTreeVisitor}</h2>
+ * <h2>All abstract, unlike {@link com.sun.source.doctree.DocTreeVisitor}</h2>
  *
- * <p>Y la diferencia es una decision, no un descuido de un lado o del otro. El arbol de
- * documentacion privilegia no romper a quien ya lo implementaba, asi que sus metodos nuevos llegan
- * con cuerpo. Este privilegia lo contrario: que agregar sintaxis al lenguaje **obligue** a mirar
- * todas las herramientas que lo recorren. Quien no quiera esa obligacion extiende
- * {@code SimpleTreeVisitor}, que es donde el JDK pone los cuerpos por defecto.
+ * <p>And the difference is a decision, not an oversight on one side or the other. The
+ * documentation tree privileges not breaking whoever was already implementing it, so its new
+ * methods arrive with a body. This one privileges the opposite: that adding syntax to the
+ * language should **force** one to look at all the tools that walk it. Whoever does not want
+ * that obligation extends {@code SimpleTreeVisitor}, which is where the JDK puts the default
+ * bodies.
  *
- * <p>Por eso tambien {@link #visitOther} recibe un {@link Tree} pelado: es para nodos que no son
- * ninguno de los previstos, no para los que este visitante no quiso escribir.
+ * <p>That is also why {@link #visitOther} receives a bare {@link Tree}: it is for nodes that are
+ * none of the foreseen ones, not for those this visitor did not want to write.
  *
- * @param <R> lo que devuelve cada visita
- * @param <P> el dato que se arrastra por el recorrido
+ * @param <R> what each visit returns
+ * @param <P> the datum that is carried along the walk
  */
 public interface TreeVisitor<R, P> {
 
@@ -158,7 +159,7 @@ public interface TreeVisitor<R, P> {
 
     R visitUses(UsesTree node, P p);
 
-    /** Un nodo que no es ninguno de los previstos: una implementacion propia. */
+    /** A node that is none of the foreseen ones: an implementation of one's own. */
     R visitOther(Tree node, P p);
 
     R visitYield(YieldTree node, P p);

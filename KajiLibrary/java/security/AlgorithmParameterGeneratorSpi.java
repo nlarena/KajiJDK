@@ -1,37 +1,38 @@
 package java.security;
 
-// Lo que un proveedor tiene que escribir para **generar** parametros de algoritmo.
+// What a provider has to write in order to **generate** algorithm parameters.
 //
-// Es la contraparte de `AlgorithmParametersSpi`: aquel lee y escribe parametros que ya existen,
-// este los inventa. La diferencia importa porque generar parametros de dominio —los primos p y q de
-// DSA, por ejemplo— es caro y probabilistico, mientras que decodificarlos no.
+// It is the counterpart of `AlgorithmParametersSpi`: that one reads and writes parameters that
+// exist already, this one invents them. The difference matters because generating domain parameters
+// —the primes p and q of DSA, for example— is expensive and probabilistic, while decoding them is
+// not.
 //
-// Los dos `engineInit` reciben la fuente de azar, y esa dependencia es esencial y no incidental:
-// generar un primo grande **es** elegir candidatos al azar hasta que uno pase la prueba de
-// primalidad. Sin azar no hay nada que generar. Por eso el API no deja inicializar sin decir de
-// donde sale.
+// Both `engineInit`s receive the source of randomness, and that dependency is essential and not
+// incidental: generating a big prime **is** choosing candidates at random until one passes the
+// primality test. Without randomness there is nothing to generate. That is why the API does not
+// allow initialising without saying where it comes from.
 public abstract class AlgorithmParameterGeneratorSpi {
 
     public AlgorithmParameterGeneratorSpi() {
     }
 
     /**
-     * Inicializa por tamaño: cuantos bits tienen que tener los parametros.
+     * Initialises by size: how many bits the parameters have to have.
      *
-     * @param random de donde sale el azar. No es opcional -- ver la nota de la clase
+     * @param random where the randomness comes from. It is not optional -- see the note of the
+     *     class
      */
     protected abstract void engineInit(int size, SecureRandom random);
 
     /**
-     * Inicializa con parametros concretos, cuando el tamaño no alcanza para describir lo que se
-     * quiere.
+     * Initialises with concrete parameters, when the size is not enough to describe what is wanted.
      *
-     * @throws java.security.InvalidAlgorithmParameterException si los parametros no le sirven a
-     *     este generador
+     * @throws java.security.InvalidAlgorithmParameterException if the parameters do not serve this
+     *     generator
      */
     protected abstract void engineInit(java.security.spec.AlgorithmParameterSpec genParamSpec,
             SecureRandom random) throws InvalidAlgorithmParameterException;
 
-    // Los parametros generados.
+    // The generated parameters.
     protected abstract AlgorithmParameters engineGenerateParameters();
 }

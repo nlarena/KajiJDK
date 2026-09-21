@@ -1,9 +1,9 @@
 package java.security;
 
-// Marca los parametros de un `SecureRandom`.
+// It marks the parameters of a `SecureRandom`.
 //
-// Vacia, y por el mismo motivo que `AlgorithmParameterSpec`: lo unico que necesita el API es poder
-// pasar "los parametros de este generador" por un tipo comun. El unico juego concreto que trae el
-// JDK son los de `DrbgParameters`.
+// Empty, and for the same reason as `AlgorithmParameterSpec`: the only thing the API needs is to be
+// able to pass "the parameters of this generator" through a common type. The only concrete set the
+// JDK brings is that of `DrbgParameters`.
 public interface SecureRandomParameters {
 }

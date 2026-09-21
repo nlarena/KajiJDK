@@ -4,17 +4,17 @@ import java.io.InvalidObjectException;
 import java.io.ObjectStreamException;
 import java.io.Serializable;
 
-// La clase de sintaxis de los atributos enumerados: un enum anterior a los `enum` del lenguaje.
+// The syntax class of the enumerated attributes: an enum predating the language's `enum`s.
 //
-// Una subclase declara sus valores como constantes `public static final` y le da a la clase base
-// tres tablas por sobreescritura: `getStringTable()` (los nombres), `getEnumValueTable()` (las
-// constantes mismas) y `getOffset()` (con que entero arranca la primera). Ese es todo el
-// mecanismo; la clase base solo indexa.
+// A subclass declares its values as `public static final` constants and gives the base class three
+// tables by overriding: `getStringTable()` (the names), `getEnumValueTable()` (the constants
+// themselves) and `getOffset()` (which integer the first one starts at). That is the whole
+// mechanism; the base class only indexes.
 //
-// Como los valores son singletons, la igualdad es la de Object -- identidad -- y por eso
-// `EnumSyntax` **no** redefine `equals`. Eso obliga a `clone()` a devolver `this` y a que la
-// deserializacion pase por `readResolve()`: sin eso, un valor que viaje por un stream volveria
-// como una copia distinta y `==` dejaria de funcionar, que es como se usa un enum.
+// As the values are singletons, equality is Object's -- identity -- and that is why `EnumSyntax`
+// does **not** override `equals`. That forces `clone()` to return `this` and deserialization to go
+// through `readResolve()`: without that, a value travelling through a stream would come back as a
+// different copy and `==` would stop working, which is how an enum is used.
 public abstract class EnumSyntax implements Serializable, Cloneable {
 
     private static final long serialVersionUID = -2739521845085831642L;
@@ -29,7 +29,7 @@ public abstract class EnumSyntax implements Serializable, Cloneable {
         return this.value;
     }
 
-    // El mismo objeto: clonar un singleton lo dejaria de ser.
+    // The same object: cloning a singleton would stop it being one.
     public Object clone() {
         return this;
     }
@@ -38,8 +38,8 @@ public abstract class EnumSyntax implements Serializable, Cloneable {
         return this.value;
     }
 
-    // El nombre de la tabla si el valor cae adentro; si no, el entero pelado. Una subclase que no
-    // da tabla igual imprime algo util.
+    // The table's name if the value falls inside; otherwise, the bare integer. A subclass that
+    // gives no table still prints something useful.
     public String toString() {
         int i = this.value - getOffset();
         String[] theTable = getStringTable();
@@ -49,13 +49,14 @@ public abstract class EnumSyntax implements Serializable, Cloneable {
         return Integer.toString(this.value);
     }
 
-    // El gancho de la deserializacion: devuelve la constante que le corresponde al entero leido,
-    // no el objeto recien construido. Sin esto, `==` contra la constante fallaria despues de un
-    // viaje de ida y vuelta por un stream.
+    // The deserialization hook: it returns the constant corresponding to the integer read, not the
+    // object just built. Without this, `==` against the constant would fail after a round trip
+    // through a stream.
     //
-    // Aca no hay serializacion que lo llame -- KajiLibrary no tiene ObjectInputStream --, pero el
-    // metodo esta y hace lo que dice: es la traduccion entero -> constante, y se puede llamar
-    // directo.
+    // The note said there is no serialization here to call it because KajiLibrary has no
+    // ObjectInputStream; ObjectInputStream exists now, but its own note says it does not consult
+    // `readResolve`, so it is still not called that way. The method is here and does what it says:
+    // it is the integer -> constant translation, and it can be called directly.
     protected Object readResolve() throws ObjectStreamException {
         EnumSyntax[] theTable = getEnumValueTable();
         if (theTable == null) {
@@ -78,9 +79,9 @@ public abstract class EnumSyntax implements Serializable, Cloneable {
         return result;
     }
 
-    // Los tres ganchos. El default es "no hay tabla", que deja a toString() cayendo al entero y a
-    // readResolve() tirando InvalidObjectException -- que es lo correcto para una subclase que no
-    // se declaro como enum de verdad.
+    // The three hooks. The default is "there is no table", which leaves toString() falling back to
+    // the integer and readResolve() throwing InvalidObjectException -- which is right for a
+    // subclass that did not declare itself as a real enum.
     protected String[] getStringTable() {
         return null;
     }
@@ -89,7 +90,7 @@ public abstract class EnumSyntax implements Serializable, Cloneable {
         return null;
     }
 
-    // El entero de la primera entrada de las tablas. Cero salvo que la subclase diga otra cosa.
+    // The integer of the tables' first entry. Zero unless the subclass says otherwise.
     protected int getOffset() {
         return 0;
     }

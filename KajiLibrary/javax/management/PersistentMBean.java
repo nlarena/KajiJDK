@@ -1,20 +1,20 @@
 package javax.management;
 
 /**
- * Un MBean que sabe guardarse y recuperarse.
+ * An MBean that knows how to store and recover itself.
  *
- * <p>Deliberadamente no dice donde ni como: el contrato es solo "hay un lugar y estas dos
- * operaciones lo usan". Quien lo implementa elige archivo, base o lo que sea.
+ * <p>It deliberately does not say where or how: the contract is only "there is a place and these
+ * two operations use it". Whoever implements it picks a file, a database or whatever.
  */
 public interface PersistentMBean {
 
     /**
-     * Recupera el estado guardado y lo aplica.
+     * Recovers the stored state and applies it.
      *
-     * @throws InstanceNotFoundException si no hay nada guardado para este MBean
+     * @throws InstanceNotFoundException if there is nothing stored for this MBean
      */
     void load() throws MBeanException, RuntimeOperationsException, InstanceNotFoundException;
 
-    /** Guarda el estado actual. */
+    /** Stores the current state. */
     void store() throws MBeanException, RuntimeOperationsException, InstanceNotFoundException;
 }

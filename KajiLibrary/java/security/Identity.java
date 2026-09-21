@@ -3,19 +3,20 @@ package java.security;
 import java.io.Serializable;
 import java.util.ArrayList;
 
-// Una identidad del sistema de gestion de claves **viejo**, obsoleto desde 1.2.
+// An identity of the **old** key management system, obsolete since 1.2.
 //
-// Lo reemplazo `KeyStore` mas `java.security.cert`, y por buenos motivos: esta API mezclaba en un
-// solo objeto el nombre, la clave publica, los certificados que la respaldan y el ambito donde
-// vive, con una nocion de igualdad rara —dos identidades son iguales si tienen el mismo nombre
-// completo **o** el mismo nombre corto y la misma clave— que es facil de leer mal.
+// It was replaced by `KeyStore` plus `java.security.cert`, and for good reasons: this API mixed in
+// a single object the name, the public key, the certificates that back it and the scope where it
+// lives, with an odd notion of equality —two identities are equal if they have the same full name
+// **or** the same short name and the same key— that is easy to read wrongly.
 //
-// Se implementa porque sigue en las firmas del JDK y porque su parte estructural es toda honesta:
-// no hay una sola operacion criptografica en esta clase. Lo que si tiene es una **invariante que
-// vale la pena**: la clave publica y los certificados no pueden contradecirse. `addCertificate`
-// rechaza un certificado cuya clave no sea la de la identidad, y `setPublicKey` tira los
-// certificados viejos en vez de dejarlos hablando de una clave que ya no es. Sin eso, una
-// identidad podria afirmar una clave y exhibir certificados de otra.
+// It is implemented because it is still in the signatures of the JDK and because its structural
+// part is entirely honest: there is not a single cryptographic operation in this class. What it
+// does have is an **invariant worth having**: the public key and the certificates cannot contradict
+// each other. `addCertificate` rejects a certificate whose key is not the identity's, and
+// `setPublicKey` throws the old certificates away instead of leaving them talking about a key that
+// is no longer the one. Without that, an identity could assert one key and exhibit certificates of
+// another.
 @Deprecated
 public abstract class Identity implements Principal, Serializable {
 
@@ -23,22 +24,22 @@ public abstract class Identity implements Principal, Serializable {
 
     private PublicKey publicKey;
 
-    // Informacion libre sobre la identidad. Package-private en el JDK.
+    // Free information about the identity. Package-private in the JDK.
     String info = "No further information available.";
 
-    // El ambito al que pertenece, o null si es de nivel superior.
+    // The scope it belongs to, or null if it is a top-level one.
     IdentityScope scope;
 
-    private final ArrayList<Certificate> certificados = new ArrayList<Certificate>();
+    private final ArrayList<Certificate> certs = new ArrayList<Certificate>();
 
-    // Solo para deserializar. El nombre se sobreescribe al leer el flujo.
+    // Only for deserialising. The name is overwritten when reading the stream.
     protected Identity() {
         this("restoring...");
     }
 
-    // Una identidad dentro de un ambito. Se da de alta en el ambito al construirse: si el ambito
-    // ya tiene una identidad con ese nombre o con esa clave, la alta falla y esta identidad no
-    // llega a existir a medias.
+    // An identity inside a scope. It is registered in the scope when it is built: if the scope has
+    // an identity with that name or with that key already, the registration fails and this identity
+    // does not get as far as existing half-made.
     public Identity(String name, IdentityScope scope) throws KeyManagementException {
         this(name);
         if (scope != null) {
@@ -64,12 +65,12 @@ public abstract class Identity implements Principal, Serializable {
         return this.publicKey;
     }
 
-    // Cambia la clave publica y **borra los certificados**. Ver la cabecera: un certificado habla
-    // de una clave concreta, y dejarlo despues de cambiarla lo convertiria en una afirmacion
-    // falsa.
+    // It changes the public key and **erases the certificates**. See the header: a certificate
+    // talks about a concrete key, and leaving it after changing the key would turn it into a false
+    // assertion.
     public void setPublicKey(PublicKey key) throws KeyManagementException {
         this.publicKey = key;
-        this.certificados.clear();
+        this.certs.clear();
     }
 
     public void setInfo(String info) {
@@ -80,26 +81,26 @@ public abstract class Identity implements Principal, Serializable {
         return this.info;
     }
 
-    // Agrega un certificado. Si la identidad ya tiene clave publica, la del certificado tiene que
-    // ser la misma; si no la tiene, la adopta.
+    // It adds a certificate. If the identity has a public key already, that of the certificate has
+    // to be the same; if it does not have one, it adopts it.
     public void addCertificate(Certificate certificate) throws KeyManagementException {
         if (this.publicKey != null) {
-            if (!clavesIguales(this.publicKey, certificate.getPublicKey())) {
+            if (!sameKey(this.publicKey, certificate.getPublicKey())) {
                 throw new KeyManagementException("public key different from cert public key");
             }
         } else {
             this.publicKey = certificate.getPublicKey();
         }
-        this.certificados.add(certificate);
+        this.certs.add(certificate);
     }
 
-    // Compara dos claves por su codificacion y no por `equals`.
+    // It compares two keys by their encoding and not by `equals`.
     //
-    // Es a proposito: dos implementaciones distintas de `PublicKey` que representan la misma clave
-    // no son `equals` entre si —cada proveedor tiene su clase— pero codifican los mismos bytes. Si
-    // se comparara por identidad de objeto, un certificado emitido por otro proveedor seria
-    // rechazado sin motivo.
-    private static boolean clavesIguales(PublicKey a, PublicKey b) {
+    // It is on purpose: two different implementations of `PublicKey` that represent the same key
+    // are not `equals` to each other —each provider has its class— but they encode the same bytes.
+    // If they were compared by identity of object, a certificate issued by another provider would
+    // be rejected for no reason.
+    private static boolean sameKey(PublicKey a, PublicKey b) {
         if (a == b) {
             return true;
         }
@@ -118,26 +119,26 @@ public abstract class Identity implements Principal, Serializable {
     }
 
     public void removeCertificate(Certificate certificate) throws KeyManagementException {
-        if (!this.certificados.contains(certificate)) {
+        if (!this.certs.contains(certificate)) {
             throw new KeyManagementException("certificate not registered");
         }
-        this.certificados.remove(certificate);
+        this.certs.remove(certificate);
     }
 
-    // Una copia del arreglo de certificados.
+    // A copy of the array of certificates.
     public Certificate[] certificates() {
-        Certificate[] a = new Certificate[this.certificados.size()];
+        Certificate[] a = new Certificate[this.certs.size()];
         int i = 0;
-        while (i < this.certificados.size()) {
-            a[i] = this.certificados.get(i);
+        while (i < this.certs.size()) {
+            a[i] = this.certs.get(i);
             i = i + 1;
         }
         return a;
     }
 
-    // `final` porque el contrato de igualdad de esta clase es raro y no se puede dejar que una
-    // subclase lo cambie: primero prueba nombre completo, y si no coincide delega en
-    // `identityEquals`, que una subclase **si** puede afinar.
+    // `final` because the contract of equality of this class is odd and a subclass cannot be
+    // allowed to change it: first it tries the full name, and if it does not match it delegates to
+    // `identityEquals`, which a subclass **can** refine.
     @Override
     public final boolean equals(Object identity) {
         if (identity == this) {
@@ -153,7 +154,7 @@ public abstract class Identity implements Principal, Serializable {
         return this.identityEquals(other);
     }
 
-    // Igualdad por nombre corto mas clave. Una subclase puede ajustarla; `equals` no.
+    // Equality by short name plus key. A subclass can adjust it; `equals` cannot.
     protected boolean identityEquals(Identity identity) {
         if (!this.name.equalsIgnoreCase(identity.name)) {
             return false;
@@ -167,7 +168,7 @@ public abstract class Identity implements Principal, Serializable {
         return true;
     }
 
-    // El nombre calificado por el ambito. Package-private, como en el JDK.
+    // The name qualified by the scope. Package-private, as in the JDK.
     String fullName() {
         if (this.scope != null) {
             return this.name + "." + this.scope.getName();
@@ -183,7 +184,7 @@ public abstract class Identity implements Principal, Serializable {
         return this.name;
     }
 
-    // La forma larga: clave, certificados e informacion libre.
+    // The long form: key, certificates and free information.
     public String toString(boolean detailed) {
         String out = this.toString();
         if (!detailed) {
@@ -208,18 +209,18 @@ public abstract class Identity implements Principal, Serializable {
     }
 
     String printCertificates() {
-        if (this.certificados.isEmpty()) {
+        if (this.certs.isEmpty()) {
             return "\tno certificates";
         }
         StringBuilder b = new StringBuilder();
         b.append("\tcertificates: \n");
         int i = 1;
         int k = 0;
-        while (k < this.certificados.size()) {
+        while (k < this.certs.size()) {
             b.append("\tcertificate ");
             b.append(i);
             b.append("\t");
-            b.append(this.certificados.get(k).toString());
+            b.append(this.certs.get(k).toString());
             b.append("\n");
             i = i + 1;
             k = k + 1;

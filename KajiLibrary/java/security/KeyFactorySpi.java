@@ -3,10 +3,10 @@ package java.security;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.KeySpec;
 
-// La cara del proveedor para una `KeyFactory`.
+// The provider's face for a `KeyFactory`.
 //
-// Los cuatro metodos son abstractos: convertir entre la forma opaca y la transparente de una clave
-// solo lo puede hacer quien conozca el algoritmo. KajiLibrary no trae ninguna implementacion.
+// The four methods are abstract: converting between the opaque and the transparent form of a key
+// can only be done by whoever knows the algorithm. KajiLibrary brings no implementation.
 public abstract class KeyFactorySpi {
 
     public KeyFactorySpi() {
@@ -21,6 +21,6 @@ public abstract class KeyFactorySpi {
     protected abstract <T extends KeySpec> T engineGetKeySpec(Key key, Class<T> keySpec)
         throws InvalidKeySpecException;
 
-    // Traduce una clave de otro proveedor a una de este.
+    // Translates a key of another provider into one of this one.
     protected abstract Key engineTranslateKey(Key key) throws InvalidKeyException;
 }

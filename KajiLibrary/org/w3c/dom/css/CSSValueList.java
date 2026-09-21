@@ -1,15 +1,15 @@
 package org.w3c.dom.css;
 
 /**
- * Un valor que es una secuencia de valores, como el `font-family` de tres nombres.
+ * A value that is a sequence of values, such as the `font-family` with three names.
  *
- * <p>Es **viva**: si el valor cambia, la lista lo refleja sin volver a pedirla.
+ * <p>It is **live**: if the value changes, the list reflects it without asking for it again.
  */
 public interface CSSValueList extends CSSValue {
 
-    /** Cuantos valores hay. */
+    /** How many values there are. */
     int getLength();
 
-    /** El valor en esa posicion, o nulo si el indice esta fuera de rango. */
+    /** The value at that position, or null if the index is out of range. */
     CSSValue item(int index);
 }

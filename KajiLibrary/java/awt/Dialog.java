@@ -6,60 +6,59 @@ import javax.accessibility.AccessibleState;
 import javax.accessibility.AccessibleStateSet;
 
 /**
- * Una ventana subordinada a otra: un diálogo.
+ * A window subordinate to another one: a dialog.
  *
- * <p>Lo que la distingue de un {@link Frame} es la **modalidad**: un diálogo modal bloquea a las
- * demás ventanas mientras está abierto, y {@link #setVisible} no vuelve hasta que se cierra. Esa
- * llamada que no vuelve es lo que permite escribir un diálogo de confirmación como si fuera una
- * función.
+ * <p>What sets it apart from a {@link Frame} is **modality**: a modal dialog blocks the other
+ * windows while it is open, and {@link #setVisible} does not come back until it is closed. That
+ * call which does not come back is what makes it possible to write a confirmation dialog as though
+ * it were a function.
  *
- * <p>El alcance del bloqueo se declara con {@link ModalityType}, y no es un detalle: bloquear la
- * aplicación entera cuando bastaba con bloquear un documento es la diferencia entre un editor que
- * deja seguir trabajando en las otras pestañas y uno que no.
+ * <p>The scope of the blocking is declared with {@link ModalityType}, and it is not a detail:
+ * blocking the whole application when blocking one document would have been enough is the
+ * difference between an editor that lets one go on working in the other tabs and one that does not.
  *
- * <p>La exclusión es la contracara: {@link ModalExclusionType} le permite a una ventana **no**
- * bloquearse. Es lo que necesita una barra de progreso o una ventana de registro que tiene que seguir
- * actualizándose mientras hay un diálogo abierto.
+ * <p>Exclusion is the other side: {@link ModalExclusionType} lets a window **not** be blocked. It
+ * is what a progress bar or a log window needs, having to go on updating while a dialog is open.
  *
- * <p><strong>Acá no bloquea nada.</strong> Un diálogo modal se implementa apilando un bucle de
- * eventos que filtra la entrada del usuario hacia las demás ventanas, y sin sistema de ventanas no
- * hay entrada que filtrar ni ventanas que bloquear. {@link #setVisible} vuelve enseguida, y el estado
- * de modalidad se guarda y se informa como se pidió.
+ * <p><strong>Here it blocks nothing.</strong> A modal dialog is implemented by stacking an event
+ * loop that filters the user's input towards the other windows, and with no windowing system there
+ * is no input to filter nor windows to block. {@link #setVisible} comes back right away, and the
+ * modality state is kept and reported as it was asked for.
  */
 public class Dialog extends Window {
 
     private static final long serialVersionUID = 5920926903803293709L;
 
-    /** Cuánto bloquea un diálogo modal. */
+    /** How much a modal dialog blocks. */
     public static enum ModalityType {
 
-        /** No bloquea nada. */
+        /** It blocks nothing. */
         MODELESS,
 
-        /** Bloquea las ventanas del mismo documento. */
+        /** It blocks the windows of the same document. */
         DOCUMENT_MODAL,
 
-        /** Bloquea toda la aplicación. */
+        /** It blocks the whole application. */
         APPLICATION_MODAL,
 
-        /** Bloquea todo lo que corra en la misma máquina virtual. */
+        /** It blocks everything running on the same virtual machine. */
         TOOLKIT_MODAL
     }
 
-    /** De qué modales queda excluida una ventana. */
+    /** Which modal dialogs a window is excluded from. */
     public static enum ModalExclusionType {
 
-        /** De ninguno: se bloquea como todas. */
+        /** From none: it is blocked like all the others. */
         NO_EXCLUDE,
 
-        /** De los que bloquean la aplicación. */
+        /** From the ones that block the application. */
         APPLICATION_EXCLUDE,
 
-        /** De todos, incluidos los que bloquean la máquina virtual. */
+        /** From all of them, including the ones that block the virtual machine. */
         TOOLKIT_EXCLUDE
     }
 
-    /** La modalidad que se usa cuando se pide un diálogo "modal" sin decir de qué tipo. */
+    /** The modality used when a "modal" dialog is asked for without saying of which type. */
     public static final ModalityType DEFAULT_MODALITY_TYPE = ModalityType.APPLICATION_MODAL;
 
     private String title;
@@ -68,127 +67,127 @@ public class Dialog extends Window {
     private ModalityType modalityType = ModalityType.MODELESS;
 
     /**
-     * Un diálogo sin título que pertenece a ese marco.
+     * A dialog with no title that belongs to that frame.
      *
-     * @throws HeadlessException si no hay pantalla
+     * @throws HeadlessException if there is no screen
      */
     public Dialog(Frame owner) {
         this(owner, "", false);
     }
 
     /**
-     * Con esa modalidad.
+     * With that modality.
      *
-     * @throws HeadlessException si no hay pantalla
+     * @throws HeadlessException if there is no screen
      */
     public Dialog(Frame owner, boolean modal) {
         this(owner, "", modal);
     }
 
     /**
-     * Con ese título.
+     * With that title.
      *
-     * @throws HeadlessException si no hay pantalla
+     * @throws HeadlessException if there is no screen
      */
     public Dialog(Frame owner, String title) {
         this(owner, title, false);
     }
 
     /**
-     * Con título y modalidad.
+     * With a title and a modality.
      *
-     * @throws HeadlessException si no hay pantalla
+     * @throws HeadlessException if there is no screen
      */
     public Dialog(Frame owner, String title, boolean modal) {
         this(owner, title, modal ? DEFAULT_MODALITY_TYPE : ModalityType.MODELESS, null);
     }
 
     /**
-     * Con título, modalidad y configuración gráfica.
+     * With a title, a modality and a graphics configuration.
      *
-     * @throws IllegalArgumentException si la configuración no es de una pantalla
+     * @throws IllegalArgumentException if the configuration is not a screen one
      */
     public Dialog(Frame owner, String title, boolean modal, GraphicsConfiguration gc) {
         this(owner, title, modal ? DEFAULT_MODALITY_TYPE : ModalityType.MODELESS, gc);
     }
 
     /**
-     * Un diálogo que pertenece a otro diálogo.
+     * A dialog that belongs to another dialog.
      *
-     * @throws HeadlessException si no hay pantalla
+     * @throws HeadlessException if there is no screen
      */
     public Dialog(Dialog owner) {
         this(owner, "", false);
     }
 
     /**
-     * Con ese título.
+     * With that title.
      *
-     * @throws HeadlessException si no hay pantalla
+     * @throws HeadlessException if there is no screen
      */
     public Dialog(Dialog owner, String title) {
         this(owner, title, false);
     }
 
     /**
-     * Con título y modalidad.
+     * With a title and a modality.
      *
-     * @throws HeadlessException si no hay pantalla
+     * @throws HeadlessException if there is no screen
      */
     public Dialog(Dialog owner, String title, boolean modal) {
         this((Window) owner, title, modal ? DEFAULT_MODALITY_TYPE : ModalityType.MODELESS, null);
     }
 
     /**
-     * Con título, modalidad y configuración gráfica.
+     * With a title, a modality and a graphics configuration.
      *
-     * @throws IllegalArgumentException si la configuración no es de una pantalla
+     * @throws IllegalArgumentException if the configuration is not a screen one
      */
     public Dialog(Dialog owner, String title, boolean modal, GraphicsConfiguration gc) {
         this((Window) owner, title, modal ? DEFAULT_MODALITY_TYPE : ModalityType.MODELESS, gc);
     }
 
     /**
-     * Un diálogo que pertenece a esa ventana.
+     * A dialog that belongs to that window.
      *
-     * @throws HeadlessException si no hay pantalla
+     * @throws HeadlessException if there is no screen
      */
     public Dialog(Window owner) {
         this(owner, "", ModalityType.MODELESS, null);
     }
 
     /**
-     * Con esa modalidad.
+     * With that modality.
      *
-     * @throws HeadlessException si no hay pantalla
+     * @throws HeadlessException if there is no screen
      */
     public Dialog(Window owner, ModalityType modalityType) {
         this(owner, "", modalityType, null);
     }
 
     /**
-     * Con ese título.
+     * With that title.
      *
-     * @throws HeadlessException si no hay pantalla
+     * @throws HeadlessException if there is no screen
      */
     public Dialog(Window owner, String title) {
         this(owner, title, ModalityType.MODELESS, null);
     }
 
     /**
-     * Con título y modalidad.
+     * With a title and a modality.
      *
-     * @throws HeadlessException si no hay pantalla
+     * @throws HeadlessException if there is no screen
      */
     public Dialog(Window owner, String title, ModalityType modalityType) {
         this(owner, title, modalityType, null);
     }
 
     /**
-     * El constructor general.
+     * The general constructor.
      *
-     * @throws IllegalArgumentException si el dueño no es un marco, un diálogo o una ventana, o si la
-     *     configuración gráfica no es de una pantalla
+     * @throws IllegalArgumentException if the owner is not a frame, a dialog or a window, or if the
+     *     graphics configuration is not a screen one
      */
     public Dialog(Window owner, String title, ModalityType modalityType,
             GraphicsConfiguration gc) {
@@ -197,36 +196,36 @@ public class Dialog extends Window {
         this.modalityType = modalityType == null ? ModalityType.MODELESS : modalityType;
     }
 
-    /** Avisa que puede mostrarse. */
+    /** Notifies that it can be shown. */
     public void addNotify() {
         super.addNotify();
     }
 
-    /** Si bloquea a las demás ventanas. */
+    /** Whether it blocks the other windows. */
     public boolean isModal() {
         return this.modalityType != ModalityType.MODELESS;
     }
 
     /**
-     * Lo hace modal o no.
+     * Makes it modal or not.
      *
-     * <p>Con `true` usa {@link #DEFAULT_MODALITY_TYPE}; para elegir el alcance está
+     * <p>With `true` it uses {@link #DEFAULT_MODALITY_TYPE}; to choose the scope there is
      * {@link #setModalityType}.
      */
     public void setModal(boolean modal) {
         this.setModalityType(modal ? DEFAULT_MODALITY_TYPE : ModalityType.MODELESS);
     }
 
-    /** Cuánto bloquea. */
+    /** How much it blocks. */
     public ModalityType getModalityType() {
         return this.modalityType;
     }
 
     /**
-     * Cambia cuánto bloquea.
+     * Changes how much it blocks.
      *
-     * <p>Con `null` queda sin modalidad. Cambiarlo mientras el diálogo está abierto no tiene efecto
-     * hasta la próxima vez que se lo muestre.
+     * <p>With `null` it is left with no modality. Changing it while the dialog is open has no
+     * effect until the next time it is shown.
      */
     public void setModalityType(ModalityType type) {
         if (type == null) {
@@ -236,33 +235,33 @@ public class Dialog extends Window {
         }
     }
 
-    /** El texto de la barra de título. */
+    /** The text of the title bar. */
     public String getTitle() {
         return this.title;
     }
 
-    /** Le cambia el título. */
+    /** Changes its title. */
     public void setTitle(String title) {
-        String viejo = this.title;
+        String old = this.title;
         this.title = title;
-        this.firePropertyChange("title", viejo, title);
+        this.firePropertyChange("title", old, title);
     }
 
     /**
-     * Lo muestra o lo esconde.
+     * Shows it or hides it.
      *
-     * <p>Con un diálogo modal, el JDK **no vuelve** de acá hasta que se lo cierre. Acá vuelve
-     * enseguida: bloquear significa apilar un bucle de eventos que filtre la entrada hacia las demás
-     * ventanas, y sin sistema de ventanas no hay entrada ni ventanas que filtrar.
+     * <p>With a modal dialog, the JDK **does not come back** from here until it is closed. Here it
+     * comes back right away: blocking means stacking an event loop that filters the input towards
+     * the other windows, and with no windowing system there is no input nor windows to filter.
      */
     public void setVisible(boolean b) {
         super.setVisible(b);
     }
 
     /**
-     * Lo muestra.
+     * Shows it.
      *
-     * @deprecated es del modelo de 1.0. Usar {@link #setVisible}.
+     * @deprecated it is from the 1.0 model. Use {@link #setVisible}.
      */
     @Deprecated
     public void show() {
@@ -270,9 +269,9 @@ public class Dialog extends Window {
     }
 
     /**
-     * Lo esconde.
+     * Hides it.
      *
-     * @deprecated es del modelo de 1.0. Usar {@link #setVisible}.
+     * @deprecated it is from the 1.0 model. Use {@link #setVisible}.
      */
     @Deprecated
     public void hide() {
@@ -280,10 +279,10 @@ public class Dialog extends Window {
     }
 
     /**
-     * Lo manda atrás.
+     * Sends it to the back.
      *
-     * <p>Un diálogo modal no puede irse atrás de la ventana que bloquea: sería invisible y el usuario
-     * no tendría cómo cerrarlo.
+     * <p>A modal dialog cannot go behind the window it blocks: it would be invisible and the user
+     * would have no way of closing it.
      */
     public void toBack() {
         if (this.isModal()) {
@@ -292,25 +291,25 @@ public class Dialog extends Window {
         super.toBack();
     }
 
-    /** Si el usuario puede cambiarle el tamaño. */
+    /** Whether the user can change its size. */
     public boolean isResizable() {
         return this.resizable;
     }
 
-    /** Declara si el usuario puede cambiarle el tamaño. */
+    /** Declares whether the user can change its size. */
     public void setResizable(boolean resizable) {
-        boolean viejo;
+        boolean old;
         synchronized (this) {
-            viejo = this.resizable;
+            old = this.resizable;
             this.resizable = resizable;
         }
-        this.firePropertyChange("resizable", viejo, resizable);
+        this.firePropertyChange("resizable", old, resizable);
     }
 
     /**
-     * Le saca la decoración.
+     * Takes its decoration away.
      *
-     * @throws IllegalComponentStateException si el diálogo ya puede mostrarse
+     * @throws IllegalComponentStateException if the dialog can already be shown
      */
     public void setUndecorated(boolean undecorated) {
         synchronized (this.getTreeLock()) {
@@ -321,15 +320,15 @@ public class Dialog extends Window {
         }
     }
 
-    /** Si no tiene decoración. */
+    /** Whether it has no decoration. */
     public boolean isUndecorated() {
         return this.undecorated;
     }
 
     /**
-     * Le cambia la opacidad.
+     * Changes its opacity.
      *
-     * @throws IllegalComponentStateException si el diálogo está decorado
+     * @throws IllegalComponentStateException if the dialog is decorated
      */
     public void setOpacity(float opacity) {
         synchronized (this.getTreeLock()) {
@@ -341,9 +340,9 @@ public class Dialog extends Window {
     }
 
     /**
-     * Le recorta la forma.
+     * Clips its shape.
      *
-     * @throws IllegalComponentStateException si el diálogo está decorado
+     * @throws IllegalComponentStateException if the dialog is decorated
      */
     public void setShape(Shape shape) {
         synchronized (this.getTreeLock()) {
@@ -355,9 +354,9 @@ public class Dialog extends Window {
     }
 
     /**
-     * Le cambia el fondo.
+     * Changes its background.
      *
-     * @throws IllegalComponentStateException si se pide transparencia sobre un diálogo decorado
+     * @throws IllegalComponentStateException if transparency is asked for on a decorated dialog
      */
     public void setBackground(Color bgColor) {
         synchronized (this.getTreeLock()) {
@@ -376,7 +375,7 @@ public class Dialog extends Window {
         return s;
     }
 
-    /** La información de accesibilidad de este diálogo. */
+    /** The accessibility information of this dialog. */
     public AccessibleContext getAccessibleContext() {
         if (this.accessibleContext == null) {
             this.accessibleContext = new AccessibleAWTDialog();
@@ -384,19 +383,19 @@ public class Dialog extends Window {
         return this.accessibleContext;
     }
 
-    /** La accesibilidad de un diálogo. */
+    /** The accessibility of a dialog. */
     protected class AccessibleAWTDialog extends AccessibleAWTWindow {
 
-        /** Para las subclases. */
+        /** For the subclasses. */
         protected AccessibleAWTDialog() {
         }
 
-        /** Es un diálogo. */
+        /** It is a dialog. */
         public AccessibleRole getAccessibleRole() {
             return AccessibleRole.DIALOG;
         }
 
-        /** Los de una ventana, más si es modal y si se puede redimensionar. */
+        /** The ones of a window, plus more if it is modal and if it can be resized. */
         public AccessibleStateSet getAccessibleStateSet() {
             AccessibleStateSet s = super.getAccessibleStateSet();
             if (Dialog.this.isResizable()) {

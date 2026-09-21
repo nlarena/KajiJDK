@@ -4,32 +4,32 @@ import org.w3c.dom.DOMException;
 import org.w3c.dom.stylesheets.MediaList;
 
 /**
- * Un `@media`: reglas que solo aplican a ciertos medios.
+ * A `@media`: rules that only apply to certain media.
  *
- * <p>Es la unica regla que contiene otras, y por eso es la unica que tiene `insertRule` y
- * `deleteRule` ademas de la hoja.
+ * <p>It is the only rule that contains others, and that is why it is the only one that has
+ * `insertRule` and `deleteRule` besides the sheet.
  */
 public interface CSSMediaRule extends CSSRule {
 
-    /** Los medios para los que aplican las reglas de adentro. */
+    /** The media the rules inside apply to. */
     MediaList getMedia();
 
-    /** Las reglas de adentro, en una lista viva. */
+    /** The rules inside, in a live list. */
     CSSRuleList getCssRules();
 
     /**
-     * Inserta esa regla en esa posicion y devuelve la posicion donde quedo.
+     * It inserts that rule at that position and returns the position where it ended up.
      *
-     * @throws DOMException `HIERARCHY_REQUEST_ERR` si la regla no puede ir dentro de un `@media`
-     *     --un `@import` o un `@charset`, por ejemplo--; `INDEX_SIZE_ERR` si el indice esta fuera
-     *     de rango; `SYNTAX_ERR` si el texto no parsea
+     * @throws DOMException `HIERARCHY_REQUEST_ERR` if the rule cannot go inside a `@media` --an
+     *     `@import` or a `@charset`, for example--; `INDEX_SIZE_ERR` if the index is out of range;
+     *     `SYNTAX_ERR` if the text does not parse
      */
     int insertRule(String rule, int index) throws DOMException;
 
     /**
-     * Borra la regla de esa posicion.
+     * It deletes the rule at that position.
      *
-     * @throws DOMException `INDEX_SIZE_ERR` si el indice esta fuera de rango
+     * @throws DOMException `INDEX_SIZE_ERR` if the index is out of range
      */
     void deleteRule(int index) throws DOMException;
 }

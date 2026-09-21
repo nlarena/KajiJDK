@@ -6,43 +6,43 @@ import org.xml.sax.InputSource;
 import org.xml.sax.XMLReader;
 
 /**
- * KajiLibrary's javax.xml.transform.sax.SAXSource -- una fuente que se lee por eventos.
+ * KajiLibrary's javax.xml.transform.sax.SAXSource -- a source that is read as events.
  *
- * <p>Junta dos cosas: <b>de donde</b> leer --el {@link InputSource}-- y <b>quien</b> lo lee --el
- * {@link XMLReader}--. El lector es opcional: sin uno, el transformador usa el suyo. Ponerlo sirve
- * para meter un filtro en el medio, o un analizador configurado de una forma particular, sin que el
- * transformador se entere.
+ * <p>It puts together two things: <b>where</b> to read from --the {@link InputSource}-- and
+ * <b>who</b> reads it --the {@link XMLReader}--. The reader is optional: without one, the
+ * transformer uses its own. Setting it serves to put a filter in between, or a parser configured in
+ * a particular way, without the transformer finding out.
  *
- * <p>{@link #sourceToInputSource} es la utilidad interesante y esta aca por comodidad: convierte
- * cualquier {@code Source} en un {@code InputSource} cuando se puede. Puede con este y con
- * {@link StreamSource}; con los demas devuelve <b>null</b> en vez de lanzar, porque un
- * {@code DOMSource} no tiene nada que leer por eventos y eso no es un error sino una respuesta.
+ * <p>{@link #sourceToInputSource} is the interesting utility and is here for convenience: it turns
+ * any {@code Source} into an {@code InputSource} when it can. It can with this one and with {@link
+ * StreamSource}; with the others it returns <b>null</b> instead of throwing, because a {@code
+ * DOMSource} has nothing to read as events and that is not an error but an answer.
  */
 public class SAXSource implements Source {
 
-    /** Con esto se le pregunta a un {@code TransformerFactory} si acepta esta fuente. */
+    /** With this a {@code TransformerFactory} is asked whether it accepts this source. */
     public static final String FEATURE = "http://javax.xml.transform.sax.SAXSource/feature";
 
     private XMLReader reader;
 
     private InputSource inputSource;
 
-    /** Vacia, para llenarla. */
+    /** Empty, to be filled. */
     public SAXSource() {
     }
 
-    /** Con lector propio. */
+    /** With a reader of its own. */
     public SAXSource(XMLReader reader, InputSource inputSource) {
         this.reader = reader;
         this.inputSource = inputSource;
     }
 
-    /** Sin lector: lo pone el transformador. */
+    /** Without a reader: the transformer supplies it. */
     public SAXSource(InputSource inputSource) {
         this.inputSource = inputSource;
     }
 
-    /** El lector, o null para que lo elija el transformador. */
+    /** The reader, or null for the transformer to choose it. */
     public void setXMLReader(XMLReader reader) {
         this.reader = reader;
     }
@@ -52,7 +52,7 @@ public class SAXSource implements Source {
         return this.reader;
     }
 
-    /** De donde leer. */
+    /** Where to read from. */
     public void setInputSource(InputSource inputSource) {
         this.inputSource = inputSource;
     }
@@ -63,10 +63,10 @@ public class SAXSource implements Source {
     }
 
     /**
-     * De donde salio.
+     * Where it came from.
      *
-     * <p>Si todavia no hay {@link InputSource}, <b>lo crea</b> con ese identificador. Es lo que hace
-     * que poner solo el identificador alcance para tener una fuente utilizable.
+     * <p>If there is no {@link InputSource} yet, it <b>creates</b> one with that identifier. It is
+     * what makes setting only the identifier enough to have a usable source.
      */
     public void setSystemId(String systemId) {
         if (this.inputSource == null) {
@@ -76,7 +76,7 @@ public class SAXSource implements Source {
         }
     }
 
-    /** El del {@link InputSource}, o null si no hay. */
+    /** The {@link InputSource}'s, or null if there is none. */
     public String getSystemId() {
         if (this.inputSource == null) {
             return null;
@@ -85,9 +85,9 @@ public class SAXSource implements Source {
     }
 
     /**
-     * Un {@code InputSource} equivalente, si se puede.
+     * An equivalent {@code InputSource}, if possible.
      *
-     * @return null si esa fuente no se puede leer por eventos; ver la nota de la clase
+     * @return null if that source cannot be read as events; see the class note
      */
     public static InputSource sourceToInputSource(Source source) {
         if (source instanceof SAXSource) {
@@ -105,11 +105,11 @@ public class SAXSource implements Source {
     }
 
     /**
-     * Si no hay nada que leer.
+     * Whether there is nothing to read.
      *
-     * <p>No alcanza con tener un {@link InputSource}: uno recien construido esta tan vacio como
-     * ninguno. Lo que cuenta es que tenga alguna de las tres vias --identificador, flujo de bytes o
-     * flujo de caracteres--.
+     * <p>Having an {@link InputSource} is not enough: a newly built one is as empty as none. What
+     * counts is that it has one of the three routes --identifier, byte stream or character
+     * stream--.
      */
     public boolean isEmpty() {
         InputSource where = getInputSource();

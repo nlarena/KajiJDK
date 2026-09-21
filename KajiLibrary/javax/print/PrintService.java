@@ -7,106 +7,107 @@ import javax.print.attribute.PrintServiceAttributeSet;
 import javax.print.event.PrintServiceAttributeListener;
 
 /**
- * KajiLibrary's javax.print.PrintService -- una impresora.
+ * KajiLibrary's javax.print.PrintService -- a printer.
  *
- * <p>Sirve para dos cosas: crear trabajos, y sobre todo <b>preguntarle que sabe hacer</b> antes de
- * mandarle nada. La mitad de la interfaz es eso.
+ * <p>It serves two things: creating jobs, and above all <b>asking it what it can do</b> before
+ * sending it anything. Half of the interface is that.
  *
- * <h2>Los cuatro niveles de pregunta</h2>
+ * <h2>The four levels of question</h2>
  *
- * <p>Se ven parecidos y no lo son, y elegir mal es el error tipico:
+ * <p>They look alike and are not, and choosing wrongly is the typical error:
  *
  * <ul>
- *   <li>{@link #isAttributeCategorySupported} pregunta por la <b>categoria</b>: si la impresora
- *       entiende el concepto de duplex;
- *   <li>{@link #getSupportedAttributeValues} devuelve <b>que valores</b> puede tomar esa categoria,
- *       para un formato y un contexto dados;
- *   <li>{@link #isAttributeValueSupported} pregunta por un valor concreto;
- *   <li>{@link #getDefaultAttributeValue} devuelve el que se usa si no se pide nada.
+ *   <li>{@link #isAttributeCategorySupported} asks about the <b>category</b>: whether the printer
+ *       understands the concept of duplex;
+ *   <li>{@link #getSupportedAttributeValues} returns <b>which values</b> that category can take,
+ *       for a given format and context;
+ *   <li>{@link #isAttributeValueSupported} asks about a concrete value;
+ *   <li>{@link #getDefaultAttributeValue} returns the one used if nothing is asked for.
  * </ul>
  *
- * <p>Que las dos ultimas tomen el {@link DocFlavor} y un {@link AttributeSet} es lo que las hace
- * utiles: una impresora puede hacer duplex en PostScript y no en texto plano, o no poder combinar
- * duplex con cierto tamano de papel. El conjunto que se pasa es el resto de lo que se piensa pedir.
+ * <p>That the last two take the {@link DocFlavor} and an {@link AttributeSet} is what makes them
+ * useful: a printer may do duplex in PostScript and not in plain text, or be unable to combine
+ * duplex with a certain paper size. The set passed is the rest of what one intends to ask for.
  *
- * <h2>{@code getSupportedAttributeValues} devuelve {@code Object}</h2>
+ * <h2>{@code getSupportedAttributeValues} returns {@code Object}</h2>
  *
- * <p>Es incomodo y no hay alternativa: segun la categoria devuelve un arreglo de valores, un valor
- * suelto que representa un rango, o null. La documentacion de cada atributo estandar dice cual.
+ * <p>It is awkward and there is no alternative: depending on the category it returns an array of
+ * values, a single value representing a range, or null. Each standard attribute's documentation
+ * says which.
  *
- * <h2>{@link #equals} y {@link #hashCode} estan declarados</h2>
+ * <h2>{@link #equals} and {@link #hashCode} are declared</h2>
  *
- * <p>Redeclarar los de {@code Object} en una interfaz no cambia nada tecnicamente. Esta puesto para
- * documentar el contrato: dos objetos que representan <b>la misma impresora</b> tienen que ser
- * iguales, aunque sean instancias distintas obtenidas en busquedas distintas.
+ * <p>Redeclaring {@code Object}'s in an interface changes nothing technically. It is there to
+ * document the contract: two objects that represent <b>the same printer</b> have to be equal, even
+ * if they are different instances obtained in different lookups.
  */
 public interface PrintService {
 
-    /** El nombre, para mostrar. */
+    /** The name, for display. */
     String getName();
 
-    /** Un trabajo nuevo. Ver {@link DocPrintJob}: sirve una sola vez. */
+    /** A new job. See {@link DocPrintJob}: it serves only once. */
     DocPrintJob createPrintJob();
 
-    /** Registra un escucha de cambios de la impresora. */
+    /** Registers a listener for the printer's changes. */
     void addPrintServiceAttributeListener(PrintServiceAttributeListener listener);
 
-    /** Lo da de baja. */
+    /** Unregisters it. */
     void removePrintServiceAttributeListener(PrintServiceAttributeListener listener);
 
-    /** Los atributos actuales de la impresora. */
+    /** The printer's current attributes. */
     PrintServiceAttributeSet getAttributes();
 
     /**
-     * Uno solo, por categoria.
+     * A single one, by category.
      *
-     * @throws NullPointerException si la categoria es null
-     * @throws IllegalArgumentException si no es un {@link PrintServiceAttribute}
+     * @throws NullPointerException if the category is null
+     * @throws IllegalArgumentException if it is not a {@link PrintServiceAttribute}
      */
     <T extends PrintServiceAttribute> T getAttribute(Class<T> category);
 
-    /** Los formatos que acepta. */
+    /** The formats it accepts. */
     DocFlavor[] getSupportedDocFlavors();
 
-    /** Si acepta ese formato. */
+    /** Whether it accepts that format. */
     boolean isDocFlavorSupported(DocFlavor flavor);
 
-    /** Las categorias de atributo que entiende. */
+    /** The attribute categories it understands. */
     Class<?>[] getSupportedAttributeCategories();
 
-    /** Si entiende esa categoria. Ver la nota de la clase. */
+    /** Whether it understands that category. See the class note. */
     boolean isAttributeCategorySupported(Class<? extends Attribute> category);
 
-    /** El valor que usa si no se pide nada, o null. */
+    /** The value it uses if nothing is asked for, or null. */
     Object getDefaultAttributeValue(Class<? extends Attribute> category);
 
     /**
-     * Que valores puede tomar esa categoria en ese contexto.
+     * Which values that category can take in that context.
      *
-     * <p>Ver la nota de la clase sobre por que devuelve {@code Object}.
+     * <p>See the class note on why it returns {@code Object}.
      *
-     * @param flavor el formato, o null para preguntar en general
-     * @param attributes el resto de lo que se piensa pedir, o null
+     * @param flavor the format, or null to ask in general
+     * @param attributes the rest of what one intends to ask for, or null
      */
     Object getSupportedAttributeValues(Class<? extends Attribute> category, DocFlavor flavor,
                                        AttributeSet attributes);
 
-    /** Si puede dar ese valor en ese contexto. */
+    /** Whether it can give that value in that context. */
     boolean isAttributeValueSupported(Attribute attrval, DocFlavor flavor, AttributeSet attributes);
 
     /**
-     * Cuales de esos atributos no puede cumplir, o null si puede con todos.
+     * Which of those attributes it cannot meet, or null if it can with all.
      *
-     * <p>Es la forma de preguntar por todo el pedido de una vez en lugar de atributo por atributo.
+     * <p>It is the way of asking about the whole request at once instead of attribute by attribute.
      */
     AttributeSet getUnsupportedAttributes(DocFlavor flavor, AttributeSet attributes);
 
-    /** La fabrica de pantallas propias de esta impresora, o null. */
+    /** The factory of this printer's own screens, or null. */
     ServiceUIFactory getServiceUIFactory();
 
-    /** Igual si es la misma impresora. Ver la nota de la clase. */
+    /** Equal if it is the same printer. See the class note. */
     boolean equals(Object obj);
 
-    /** Coherente con {@link #equals}. */
+    /** Consistent with {@link #equals}. */
     int hashCode();
 }

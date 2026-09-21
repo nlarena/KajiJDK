@@ -2,17 +2,17 @@ package org.xml.sax.helpers;
 
 import org.xml.sax.Locator;
 
-// KajiLibrary's org.xml.sax.helpers.LocatorImpl -- un Locator que se puede guardar.
+// KajiLibrary's org.xml.sax.helpers.LocatorImpl -- a Locator that can be kept.
 //
-// El Locator que el parser entrega en setDocumentLocator() esta vivo: contesta por donde va el
-// analisis en este momento, y preguntarle una vez que el evento ya paso da una respuesta sobre
-// otro lado. Asi que un manejador que quiera recordar donde ocurrio un evento no puede guardarse
-// el Locator; tiene que copiarlo. Justamente para eso esta aca el constructor de copia:
+// The Locator the parser hands over in setDocumentLocator() is alive: it answers where the
+// analysis is at this moment, and asking it once the event has passed gives an answer about
+// somewhere else. So a handler that wants to remember where an event happened cannot keep the
+// Locator; it has to copy it. Precisely for that the copy constructor is here:
 //
 //     locatorForThisEvent = new LocatorImpl(theParsersLocator);
 //
-// Todo lo demas es una bolsa mutable de cuatro campos, que es tambien la razon por la que los
-// parsers lo usan de entrada como el Locator que reparten.
+// Everything else is a mutable bag of four fields, which is also the reason why parsers use it to
+// begin with as the Locator they hand out.
 public class LocatorImpl implements Locator {
 
     private String publicId;
@@ -20,11 +20,11 @@ public class LocatorImpl implements Locator {
     private int lineNumber;
     private int columnNumber;
 
-    // Los cuatro campos sin asignar: ids en null y posiciones en cero.
+    // The four fields unassigned: ids at null and positions at zero.
     public LocatorImpl() {
     }
 
-    // El constructor de copia descrito arriba.
+    // The copy constructor described above.
     public LocatorImpl(Locator locator) {
         setPublicId(locator.getPublicId());
         setSystemId(locator.getSystemId());

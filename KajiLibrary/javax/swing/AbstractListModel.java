@@ -8,28 +8,28 @@ import javax.swing.event.ListDataEvent;
 import javax.swing.event.ListDataListener;
 
 /**
- * La parte de un modelo de lista que siempre es igual: avisar.
+ * The part of a list model that is always the same: giving notice.
  *
- * <h2>Que resuelve</h2>
+ * <h2>What it resolves</h2>
  *
- * <p>Todo modelo tiene que guardar quien escucha y avisarle de tres formas: cambio el contenido,
- * se agregaron renglones, se sacaron renglones. Eso no depende de donde salgan los datos, asi que
- * esta escrito una sola vez.
+ * <p>Every model has to keep who listens and tell them in three ways: the content changed,
+ * lines were added, lines were removed. That does not depend on where the data comes from, so
+ * it is written once.
  *
- * <p>Lo que queda para la subclase son los dos metodos que si dependen: cuantos hay y cual es el
- * numero tal. Un modelo sobre un arreglo, sobre una consulta o sobre un archivo comparten todo lo
- * demas.
+ * <p>What is left for the subclass are the two methods that do depend: how many there are and
+ * which is number such-and-such. A model over an array, over a query or over a file share
+ * everything else.
  *
- * <h2>Los avisos llevan un rango, no un elemento</h2>
+ * <h2>The notices carry a range, not an element</h2>
  *
- * <p>Los tres metodos reciben dos indices. Es lo que permite agregar mil renglones con un solo
- * aviso: si llevaran un elemento, la lista se rearmaria mil veces.
+ * <p>The three methods receive two indices. It is what allows a thousand lines to be added with
+ * a single notice: if they carried an element, the list would rebuild itself a thousand times.
  *
- * @param <E> el tipo de los elementos.
+ * @param <E> the elements' type.
  */
 public abstract class AbstractListModel<E> implements ListModel<E>, Serializable {
 
-    /** Quienes escuchan. */
+    /** Those who listen. */
     protected EventListenerList listenerList = new EventListenerList();
 
     protected AbstractListModel() {
@@ -48,11 +48,11 @@ public abstract class AbstractListModel<E> implements ListModel<E>, Serializable
     }
 
     /**
-     * Avisa que cambio lo que hay entre esos dos indices, inclusive.
+     * It gives notice that what is between those two indices changed, inclusive.
      *
-     * <p>El evento se arma recien cuando hay alguien a quien darselo. Armarlo antes seria mas
-     * simple y reservaria un objeto por aviso aunque nadie escuche, y estos avisos salen de a
-     * miles.
+     * <p>The event is built only when there is somebody to give it to. Building it beforehand
+     * would be simpler and would reserve an object per notice even though nobody listens, and
+     * these notices come out in their thousands.
      */
     protected void fireContentsChanged(Object source, int index0, int index1) {
         Object[] listeners = listenerList.getListenerList();
@@ -67,7 +67,7 @@ public abstract class AbstractListModel<E> implements ListModel<E>, Serializable
         }
     }
 
-    /** Avisa que se agregaron los renglones entre esos dos indices. */
+    /** It gives notice that the lines between those two indices were added. */
     protected void fireIntervalAdded(Object source, int index0, int index1) {
         Object[] listeners = listenerList.getListenerList();
         ListDataEvent e = null;
@@ -82,9 +82,10 @@ public abstract class AbstractListModel<E> implements ListModel<E>, Serializable
     }
 
     /**
-     * Avisa que se sacaron los renglones entre esos dos indices.
+     * It gives notice that the lines between those two indices were removed.
      *
-     * <p>Los indices son los que tenian <em>antes</em> de sacarlos: despues ya no existen.
+     * <p>The indices are the ones they had <em>before</em> removing them: afterwards they no
+     * longer exist.
      */
     protected void fireIntervalRemoved(Object source, int index0, int index1) {
         Object[] listeners = listenerList.getListenerList();

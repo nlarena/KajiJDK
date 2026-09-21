@@ -1,8 +1,8 @@
 package com.sun.source.doctree;
 
 /**
- * El nodo de `{@literal}` y de `{@code}`, que tampoco se distinguen por el tipo:
- * los dos escapan el HTML de adentro y el segundo ademas lo muestra en monoespaciado.
+ * The node of `{@literal}` and of `{@code}`, which are not told apart by the type
+ * either: the two escape the HTML inside and the second one besides shows it in monospace.
  */
 public interface LiteralTree extends InlineTagTree {
 

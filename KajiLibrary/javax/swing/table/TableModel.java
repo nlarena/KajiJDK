@@ -3,42 +3,43 @@ package javax.swing.table;
 import javax.swing.event.TableModelListener;
 
 /**
- * Los datos de una tabla: cuantas filas, cuantas columnas, y que hay en cada celda.
+ * A table's data: how many rows, how many columns, and what is in each cell.
  *
- * <p>La tabla no guarda datos — los pide. Eso permite que una tabla de un millon de filas exista sin
- * que un millon de celdas esten en memoria: el modelo las calcula o las trae cuando se las piden.
+ * <p>The table does not keep data -- it asks for it. That allows a table of a million rows to
+ * exist without a million cells being in memory: the model computes them or fetches them when
+ * they are asked for.
  *
- * <p>{@link #getColumnClass} existe para que la tabla sepa <em>como</em> dibujar cada columna sin
- * mirar los valores: una de booleanos se dibuja con casillas, una de fechas con el formato local. Si
- * dependiera del contenido, una columna con la primera celda vacia se dibujaria distinto que las
- * demas.
+ * <p>{@link #getColumnClass} exists so that the table knows <em>how</em> to draw each column
+ * without looking at the values: one of booleans is drawn with checkboxes, one of dates with the
+ * local format. If it depended on the content, a column with the first cell empty would be drawn
+ * differently from the rest.
  */
 public interface TableModel {
 
-    /** Cuantas filas hay. */
+    /** How many rows there are. */
     int getRowCount();
 
-    /** Cuantas columnas hay. */
+    /** How many columns there are. */
     int getColumnCount();
 
-    /** El nombre de una columna, para el encabezado. */
+    /** A column's name, for the header. */
     String getColumnName(int columnIndex);
 
-    /** El tipo de los valores de una columna; ver la nota de la interfaz. */
+    /** The type of a column's values; see the interface note. */
     Class<?> getColumnClass(int columnIndex);
 
-    /** Si esa celda se puede editar. */
+    /** Whether that cell can be edited. */
     boolean isCellEditable(int rowIndex, int columnIndex);
 
-    /** El valor de esa celda. */
+    /** That cell's value. */
     Object getValueAt(int rowIndex, int columnIndex);
 
-    /** Cambia el valor de esa celda. */
+    /** Changes that cell's value. */
     void setValueAt(Object aValue, int rowIndex, int columnIndex);
 
-    /** Agrega un oyente. */
+    /** Adds a listener. */
     void addTableModelListener(TableModelListener l);
 
-    /** Saca un oyente. */
+    /** Removes a listener. */
     void removeTableModelListener(TableModelListener l);
 }

@@ -5,257 +5,257 @@ import java.beans.PropertyChangeSupport;
 import java.util.Locale;
 
 /**
- * Toda la información de accesibilidad de un objeto, en un solo lugar.
+ * All of an object's accessibility information, in a single place.
  *
- * <p>Es el corazón del paquete y su diseño más discutible a primera vista: una clase con cincuenta
- * miembros, la mitad de los cuales devuelven `null`. La razón es que **no todo objeto es todo**. Un
- * botón no tiene texto que recorrer ni filas; un campo de texto no tiene hijos que elegir. En vez de
- * una jerarquía de interfaces que multiplicara las combinaciones, se pregunta:
- * {@code getAccessibleText()} devuelve `null` si el objeto no muestra texto, y algo si lo muestra.
+ * <p>It is the heart of the package and its most debatable design at first sight: a class with
+ * fifty members, half of which return `null`. The reason is that **not every object is
+ * everything**. A button has no text to walk and no rows; a text field has no children to choose.
+ * Instead of a hierarchy of interfaces that would multiply the combinations, one asks: {@code
+ * getAccessibleText()} returns `null` if the object shows no text, and something if it does.
  *
- * <p>Ese `null` no es un vacío: es la respuesta. "Este objeto no es texto" es información, y es la
- * que le permite a una ayuda técnica saber qué preguntas tienen sentido.
+ * <p>That `null` is not a void: it is the answer. "This object is not text" is information, and it
+ * is what lets an assistive technology know which questions make sense.
  *
- * <p>La otra mitad de la clase son las **notificaciones**. Una ayuda técnica no puede estar
- * consultando el estado todo el tiempo, así que el contexto avisa cuando algo cambia, con el mismo
- * mecanismo de propiedades de JavaBeans. Los nombres de propiedad son las constantes de arriba.
+ * <p>The other half of the class is the **notifications**. An assistive technology cannot be
+ * polling the state all the time, so the context announces when something changes, with the same
+ * property mechanism as JavaBeans. The property names are the constants above.
  */
 public abstract class AccessibleContext {
 
-    /** El nombre de la propiedad <b>accessibleActionProperty</b>. */
+    /** The name of the <b>accessibleActionProperty</b> property. */
     public static final String ACCESSIBLE_ACTION_PROPERTY = "accessibleActionProperty";
 
-    /** El nombre de la propiedad <b>AccessibleActiveDescendant</b>. */
+    /** The name of the <b>AccessibleActiveDescendant</b> property. */
     public static final String ACCESSIBLE_ACTIVE_DESCENDANT_PROPERTY = "AccessibleActiveDescendant";
 
-    /** El nombre de la propiedad <b>AccessibleCaret</b>. */
+    /** The name of the <b>AccessibleCaret</b> property. */
     public static final String ACCESSIBLE_CARET_PROPERTY = "AccessibleCaret";
 
-    /** El nombre de la propiedad <b>AccessibleChild</b>. */
+    /** The name of the <b>AccessibleChild</b> property. */
     public static final String ACCESSIBLE_CHILD_PROPERTY = "AccessibleChild";
 
-    /** El nombre de la propiedad <b>accessibleComponentBoundsChanged</b>. */
+    /** The name of the <b>accessibleComponentBoundsChanged</b> property. */
     public static final String ACCESSIBLE_COMPONENT_BOUNDS_CHANGED = "accessibleComponentBoundsChanged";
 
-    /** El nombre de la propiedad <b>AccessibleDescription</b>. */
+    /** The name of the <b>AccessibleDescription</b> property. */
     public static final String ACCESSIBLE_DESCRIPTION_PROPERTY = "AccessibleDescription";
 
-    /** El nombre de la propiedad <b>AccessibleHypertextOffset</b>. */
+    /** The name of the <b>AccessibleHypertextOffset</b> property. */
     public static final String ACCESSIBLE_HYPERTEXT_OFFSET = "AccessibleHypertextOffset";
 
-    /** El nombre de la propiedad <b>accessibleInvalidateChildren</b>. */
+    /** The name of the <b>accessibleInvalidateChildren</b> property. */
     public static final String ACCESSIBLE_INVALIDATE_CHILDREN = "accessibleInvalidateChildren";
 
-    /** El nombre de la propiedad <b>AccessibleName</b>. */
+    /** The name of the <b>AccessibleName</b> property. */
     public static final String ACCESSIBLE_NAME_PROPERTY = "AccessibleName";
 
-    /** El nombre de la propiedad <b>AccessibleSelection</b>. */
+    /** The name of the <b>AccessibleSelection</b> property. */
     public static final String ACCESSIBLE_SELECTION_PROPERTY = "AccessibleSelection";
 
-    /** El nombre de la propiedad <b>AccessibleState</b>. */
+    /** The name of the <b>AccessibleState</b> property. */
     public static final String ACCESSIBLE_STATE_PROPERTY = "AccessibleState";
 
-    /** El nombre de la propiedad <b>accessibleTableCaptionChanged</b>. */
+    /** The name of the <b>accessibleTableCaptionChanged</b> property. */
     public static final String ACCESSIBLE_TABLE_CAPTION_CHANGED = "accessibleTableCaptionChanged";
 
-    /** El nombre de la propiedad <b>accessibleTableColumnDescriptionChanged</b>. */
+    /** The name of the <b>accessibleTableColumnDescriptionChanged</b> property. */
     public static final String ACCESSIBLE_TABLE_COLUMN_DESCRIPTION_CHANGED = "accessibleTableColumnDescriptionChanged";
 
-    /** El nombre de la propiedad <b>accessibleTableColumnHeaderChanged</b>. */
+    /** The name of the <b>accessibleTableColumnHeaderChanged</b> property. */
     public static final String ACCESSIBLE_TABLE_COLUMN_HEADER_CHANGED = "accessibleTableColumnHeaderChanged";
 
-    /** El nombre de la propiedad <b>accessibleTableModelChanged</b>. */
+    /** The name of the <b>accessibleTableModelChanged</b> property. */
     public static final String ACCESSIBLE_TABLE_MODEL_CHANGED = "accessibleTableModelChanged";
 
-    /** El nombre de la propiedad <b>accessibleTableRowDescriptionChanged</b>. */
+    /** The name of the <b>accessibleTableRowDescriptionChanged</b> property. */
     public static final String ACCESSIBLE_TABLE_ROW_DESCRIPTION_CHANGED = "accessibleTableRowDescriptionChanged";
 
-    /** El nombre de la propiedad <b>accessibleTableRowHeaderChanged</b>. */
+    /** The name of the <b>accessibleTableRowHeaderChanged</b> property. */
     public static final String ACCESSIBLE_TABLE_ROW_HEADER_CHANGED = "accessibleTableRowHeaderChanged";
 
-    /** El nombre de la propiedad <b>accessibleTableSummaryChanged</b>. */
+    /** The name of the <b>accessibleTableSummaryChanged</b> property. */
     public static final String ACCESSIBLE_TABLE_SUMMARY_CHANGED = "accessibleTableSummaryChanged";
 
-    /** El nombre de la propiedad <b>accessibleTextAttributesChanged</b>. */
+    /** The name of the <b>accessibleTextAttributesChanged</b> property. */
     public static final String ACCESSIBLE_TEXT_ATTRIBUTES_CHANGED = "accessibleTextAttributesChanged";
 
-    /** El nombre de la propiedad <b>AccessibleText</b>. */
+    /** The name of the <b>AccessibleText</b> property. */
     public static final String ACCESSIBLE_TEXT_PROPERTY = "AccessibleText";
 
-    /** El nombre de la propiedad <b>AccessibleValue</b>. */
+    /** The name of the <b>AccessibleValue</b> property. */
     public static final String ACCESSIBLE_VALUE_PROPERTY = "AccessibleValue";
 
-    /** El nombre de la propiedad <b>AccessibleVisibleData</b>. */
+    /** The name of the <b>AccessibleVisibleData</b> property. */
     public static final String ACCESSIBLE_VISIBLE_DATA_PROPERTY = "AccessibleVisibleData";
 
-    /** El padre en el árbol de accesibilidad. */
+    /** The parent in the accessibility tree. */
     protected Accessible accessibleParent = null;
 
-    /** El nombre del objeto, si se le puso uno propio. */
+    /** The object's name, if one of its own was set. */
     protected String accessibleName = null;
 
-    /** La descripción del objeto, si se le puso una propia. */
+    /** The object's description, if one of its own was set. */
     protected String accessibleDescription = null;
 
-    /** A quién avisarle de los cambios. */
+    /** Whom to notify of the changes. */
     private PropertyChangeSupport accessibleChangeSupport = null;
 
-    /** Para las subclases. */
+    /** For subclasses. */
     public AccessibleContext() {
     }
 
     /**
-     * El nombre del objeto, corto y para leer en voz alta.
+     * The object's name, short and meant to be read aloud.
      *
-     * @return el nombre, o `null` si no tiene
+     * @return the name, or `null` if it has none
      */
     public String getAccessibleName() {
         return this.accessibleName;
     }
 
-    /** Cambia el nombre y avisa. */
+    /** Changes the name and notifies. */
     public void setAccessibleName(String s) {
-        String viejo = this.accessibleName;
+        String old = this.accessibleName;
         this.accessibleName = s;
-        this.firePropertyChange(ACCESSIBLE_NAME_PROPERTY, viejo, this.accessibleName);
+        this.firePropertyChange(ACCESSIBLE_NAME_PROPERTY, old, this.accessibleName);
     }
 
     /**
-     * Una descripción más larga que el nombre.
+     * A description longer than the name.
      *
-     * @return la descripción, o `null` si no tiene
+     * @return the description, or `null` if it has none
      */
     public String getAccessibleDescription() {
         return this.accessibleDescription;
     }
 
-    /** Cambia la descripción y avisa. */
+    /** Changes the description and notifies. */
     public void setAccessibleDescription(String s) {
-        String viejo = this.accessibleDescription;
+        String old = this.accessibleDescription;
         this.accessibleDescription = s;
-        this.firePropertyChange(ACCESSIBLE_DESCRIPTION_PROPERTY, viejo,
+        this.firePropertyChange(ACCESSIBLE_DESCRIPTION_PROPERTY, old,
                 this.accessibleDescription);
     }
 
-    /** Qué es el objeto. */
+    /** What the object is. */
     public abstract AccessibleRole getAccessibleRole();
 
-    /** En qué condición está, ahora. */
+    /** What condition it is in, now. */
     public abstract AccessibleStateSet getAccessibleStateSet();
 
     /**
-     * El padre en el árbol de accesibilidad.
+     * The parent in the accessibility tree.
      *
-     * @return el padre, o `null` si es la raíz
+     * @return the parent, or `null` if it is the root
      */
     public Accessible getAccessibleParent() {
         return this.accessibleParent;
     }
 
     /**
-     * Cambia el padre.
+     * Changes the parent.
      *
-     * <p>Sólo hace falta cuando el árbol de accesibilidad **no** coincide con el de componentes, que
-     * es justamente el caso que esta propiedad existe para resolver.
+     * <p>It is only needed when the accessibility tree does **not** match the component tree, which
+     * is exactly the case this property exists to solve.
      */
     public void setAccessibleParent(Accessible a) {
         this.accessibleParent = a;
     }
 
-    /** Qué número de hijo es dentro de su padre. */
+    /** Which child number it is within its parent. */
     public abstract int getAccessibleIndexInParent();
 
-    /** Cuántos hijos accesibles tiene. */
+    /** How many accessible children it has. */
     public abstract int getAccessibleChildrenCount();
 
     /**
-     * El `i`-ésimo hijo.
+     * The `i`-th child.
      *
-     * @return el hijo, o `null` si no hay tantos
+     * @return the child, or `null` if there are not that many
      */
     public abstract Accessible getAccessibleChild(int i);
 
-    /** En qué idioma está. */
+    /** What language it is in. */
     public abstract Locale getLocale();
 
     /**
-     * La parte gráfica, si la tiene.
+     * The graphical part, if it has one.
      *
-     * @return el componente, o `null` si el objeto no se dibuja
+     * @return the component, or `null` if the object is not drawn
      */
     public AccessibleComponent getAccessibleComponent() {
         return null;
     }
 
     /**
-     * La selección, si la tiene.
+     * The selection, if it has one.
      *
-     * @return la selección, o `null` si el objeto no tiene hijos que elegir
+     * @return the selection, or `null` if the object has no children to choose
      */
     public AccessibleSelection getAccessibleSelection() {
         return null;
     }
 
     /**
-     * El texto, si lo tiene.
+     * The text, if it has any.
      *
-     * @return el texto, o `null` si el objeto no muestra texto recorrible
+     * @return the text, or `null` if the object shows no walkable text
      */
     public AccessibleText getAccessibleText() {
         return null;
     }
 
     /**
-     * El texto editable, si lo tiene.
+     * The editable text, if it has any.
      *
-     * @return el texto, o `null` si el objeto no se puede editar
+     * @return the text, or `null` if the object cannot be edited
      */
     public AccessibleEditableText getAccessibleEditableText() {
         return null;
     }
 
     /**
-     * El valor, si lo tiene.
+     * The value, if it has one.
      *
-     * @return el valor, o `null` si el objeto no representa un número en un rango
+     * @return the value, or `null` if the object does not represent a number in a range
      */
     public AccessibleValue getAccessibleValue() {
         return null;
     }
 
     /**
-     * Los íconos, si los tiene.
+     * The icons, if it has any.
      *
-     * @return los íconos, o `null` si el objeto no muestra ninguno
+     * @return the icons, or `null` if the object shows none
      */
     public AccessibleIcon[] getAccessibleIcon() {
         return null;
     }
 
     /**
-     * Las acciones, si las tiene.
+     * The actions, if it has any.
      *
-     * @return las acciones, o `null` si el objeto no hace nada
+     * @return the actions, or `null` if the object does nothing
      */
     public AccessibleAction getAccessibleAction() {
         return null;
     }
 
     /**
-     * La tabla, si lo es.
+     * The table, if it is one.
      *
-     * @return la tabla, o `null` si el objeto no muestra filas y columnas
+     * @return the table, or `null` if the object does not show rows and columns
      */
     public AccessibleTable getAccessibleTable() {
         return null;
     }
 
-    /** Las relaciones con otros objetos; vacío si no hay ninguna. */
+    /** The relations with other objects; empty if there are none. */
     public AccessibleRelationSet getAccessibleRelationSet() {
         return new AccessibleRelationSet();
     }
 
-    /** Suma alguien a quien avisarle de los cambios. */
+    /** Adds somebody to notify of the changes. */
     public void addPropertyChangeListener(PropertyChangeListener listener) {
         if (this.accessibleChangeSupport == null) {
             this.accessibleChangeSupport = new PropertyChangeSupport(this);
@@ -263,7 +263,7 @@ public abstract class AccessibleContext {
         this.accessibleChangeSupport.addPropertyChangeListener(listener);
     }
 
-    /** Saca a ese oyente. */
+    /** Removes that listener. */
     public void removePropertyChangeListener(PropertyChangeListener listener) {
         if (this.accessibleChangeSupport != null) {
             this.accessibleChangeSupport.removePropertyChangeListener(listener);
@@ -271,10 +271,10 @@ public abstract class AccessibleContext {
     }
 
     /**
-     * Avisa que cambió una propiedad.
+     * Announces that a property changed.
      *
-     * <p>No avisa si el valor no cambió de verdad: una ayuda técnica que reaccione a cada aviso no
-     * debería tener que filtrar los que no dicen nada.
+     * <p>It does not announce if the value did not really change: an assistive technology that
+     * reacts to every announcement should not have to filter out the ones that say nothing.
      */
     public void firePropertyChange(String propertyName, Object oldValue, Object newValue) {
         if (this.accessibleChangeSupport != null) {

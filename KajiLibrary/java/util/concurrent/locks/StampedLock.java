@@ -3,197 +3,197 @@ package java.util.concurrent.locks;
 import java.io.Serializable;
 import java.util.concurrent.TimeUnit;
 
-// Un lock de lectura/escritura con **tres** modos, y el tercero es el que justifica la clase:
-// ademas de la lectura y la escritura bloqueantes de siempre, ofrece la **lectura optimista**,
-// que no toma nada. `tryOptimisticRead()` devuelve una foto del estado; el lector lee los campos
-// que le interesan y despues pregunta `validate(sello)`. Si no hubo ninguna escritura en el
-// medio, la respuesta es `true` y la lectura valio, sin haber escrito una sola palabra de
-// memoria compartida. Si hubo, es `false` y hay que reintentar --o tomar el lock de verdad--.
+// A read/write lock with **three** modes, and the third is what justifies the class: besides the
+// usual blocking read and write, it offers the **optimistic read**, which takes nothing.
+// `tryOptimisticRead()` returns a snapshot of the state; the reader reads the fields it cares about
+// and then asks `validate(stamp)`. If there was no write in between, the answer is `true` and the
+// read was worth it, without a single word of shared memory having been written. If there was, it is
+// `false` and one has to retry --or take the real lock.
 //
-// Cada operacion devuelve un **sello** (`long`), y ese sello es lo que se le pasa a `unlock`. No
-// es reentrante: pedir dos veces el lock de escritura desde el mismo hilo se traba. Y no tiene
-// condiciones: `newCondition()` de las vistas lanza `UnsupportedOperationException`, igual que en
-// el JDK.
-//
-// ---------------------------------------------------------------------------------------------
-// EL SELLO, QUE ES TODO EL DISENIO
-// ---------------------------------------------------------------------------------------------
-//
-// Hay un solo `long state`, con el mismo reparto de bits que el JDK:
-//
-//     bits 0..6   cuenta de lectores (0..126); el 127 se reserva para la marca de desborde
-//     bit  7      WBIT — hay un escritor
-//     bits 8..63  numero de secuencia: **sube en uno cada vez que se suelta una escritura**
-//
-// De ahi salen las dos operaciones que hacen andar la lectura optimista:
-//
-//     tryOptimisticRead()  ->  state & SBITS      (la secuencia y el bit de escritura, sin lectores)
-//     validate(sello)      ->  (sello & SBITS) == (state & SBITS)
-//
-// Y de ahi sale por que **el sello se puede validar de verdad**, que es lo unico que hace que
-// este metodo sirva para algo: soltar una escritura hace `state += WBIT`, y esa suma apaga el
-// bit 7 y **se lleva uno a la secuencia**. O sea que despues de cualquier escritura completa el
-// `& SBITS` es distinto, y el sello viejo deja de validar. Un `tryOptimisticRead` que devolviera
-// un numero que despues nadie compara con nada seria peor que no tenerlo: quien lo use va a creer
-// que le esta preguntando algo al lock.
-//
-// El sello cero es el "no lo consegui" universal, y no puede colisionar con uno bueno porque el
-// estado arranca en ORIGIN (256) y la secuencia nunca vuelve a cero salvo al dar la vuelta, caso
-// en el que `soltarEscritura` la manda de nuevo a ORIGIN.
+// Every operation returns a **stamp** (`long`), and that stamp is what is handed to `unlock`. It is
+// not reentrant: asking twice for the write lock from the same thread deadlocks. And it has no
+// conditions: the views' `newCondition()` throws `UnsupportedOperationException`, just as in the
+// JDK.
 //
 // ---------------------------------------------------------------------------------------------
-// COMO SE BLOQUEA, Y LO QUE ESO CUESTA
+// THE STAMP, WHICH IS THE WHOLE DESIGN
 // ---------------------------------------------------------------------------------------------
 //
-// El JDK trae su propia cola CLH adentro de esta clase. Aca el estado lo guarda un monitor
-// interno (`sync`) y **la espera no**: quien no puede entrar se anota con un nodo propio
-// (`SyncWaiter`), suelta `sync` y duerme en el monitor **de su nodo**; quien suelta le pone la
-// bandera a todos los nodos anotados y los despierta, y cada uno vuelve a competir. Es correcto y
-// es **no justo** -- que es exactamente lo que el javadoc del JDK promete para esta clase ("this
-// class does not favor readers over writers, nor does it support fairness"). Lo que se pierde
-// frente a la cola CLH es rendimiento bajo contencion, no semantica.
+// There is a single `long state`, with the JDK's bit layout:
 //
-// Que la espera **no** sea un `sync.wait()`/`sync.notifyAll()` sobre el monitor del estado no es
-// gusto: es que asi no anda. Nuestra VM deja al hilo adentro del conjunto de espera de un monitor
-// cuando una espera **con plazo vence**, y entonces un `notifyAll()` posterior de ese mismo hilo
-// sobre ese mismo monitor se despierta a si mismo y la VM se traba sin nadie ejecutable. Un
-// `StampedLock` hace exactamente eso -- `tryReadLock(t, u)` que vence y despues `unlockWrite`--,
-// asi que la primera version de esta clase se colgaba de forma reproducible. Repro minimo con
-// ablacion en `scratchpad/zzlocks/WaitStale.java`. Con un nodo **nuevo por cada episodio de
-// espera**, el monitor donde se duerme no lo vuelve a notificar nunca su propio dueno, y el
-// defecto no se puede tocar.
+//     bits 0..6   reader count (0..126); 127 is reserved for the overflow marker
+//     bit  7      WBIT — there is a writer
+//     bits 8..63  sequence number: **it goes up by one every time a write is released**
 //
-// No se apoya en `AbstractQueuedSynchronizer` a proposito, igual que el JDK: los tres modos y la
-// conversion entre ellos no entran en el contrato `tryAcquire`/`tryRelease`.
+// Out of that come the two operations that make the optimistic read work:
 //
-// Nota de estilo, la de siempre en este paquete: **ningun `return` adentro de un bloque
-// `synchronized`** (finding #105 -- el javac congelado no emite el `monitorexit` de esa salida).
-// Un `throw` adentro si es seguro.
+//     tryOptimisticRead()  ->  state & SBITS      (the sequence and the write bit, no readers)
+//     validate(stamp)      ->  (stamp & SBITS) == (state & SBITS)
+//
+// And out of that comes why **the stamp can genuinely be validated**, which is the only thing that
+// makes this method worth anything: releasing a write does `state += WBIT`, and that sum clears
+// bit 7 and **carries one into the sequence**. Which is to say that after any completed write the
+// `& SBITS` is different, and the old stamp stops validating. A `tryOptimisticRead` that returned a
+// number nobody then compares with anything would be worse than not having it: whoever uses it will
+// believe they are asking the lock something.
+//
+// The zero stamp is the universal "I did not get it", and it cannot collide with a good one because
+// the state starts at ORIGIN (256) and the sequence never returns to zero except on wrap-around, in
+// which case `releaseWriteState` sends it back to ORIGIN.
+//
+// ---------------------------------------------------------------------------------------------
+// HOW IT BLOCKS, AND WHAT THAT COSTS
+// ---------------------------------------------------------------------------------------------
+//
+// The JDK brings its own CLH queue inside this class. Here the state is guarded by an internal
+// monitor (`sync`) and **the wait is not**: whoever cannot get in registers a node of their own
+// (`SyncWaiter`), releases `sync` and sleeps on **their node's** monitor; whoever releases sets the
+// flag on every registered node and wakes them, and each competes again. It is correct and it is
+// **unfair** -- which is exactly what the JDK's javadoc promises for this class ("this class does
+// not favor readers over writers, nor does it support fairness"). What is given up against the CLH
+// queue is performance under contention, not semantics.
+//
+// That the wait is **not** a `sync.wait()`/`sync.notifyAll()` on the state's monitor is not taste:
+// it is that that does not work. Our VM leaves the thread inside a monitor's wait set when a
+// **timed wait expires**, and then a later `notifyAll()` by that same thread on that same monitor
+// wakes itself and the VM deadlocks with nobody runnable. A `StampedLock` does exactly that --a
+// `tryReadLock(t, u)` that expires and then an `unlockWrite`-- so this class's first version hung
+// reproducibly. Minimal repro with ablation in `scratchpad/zzlocks/WaitStale.java`. With a **fresh
+// node per waiting episode**, the monitor one sleeps on is never notified again by its own owner,
+// and the defect cannot be touched.
+//
+// It does not lean on `AbstractQueuedSynchronizer` on purpose, just as the JDK does not: the three
+// modes and the conversions between them do not fit the `tryAcquire`/`tryRelease` contract.
+//
+// A note on style, this package's usual one: **no `return` inside a `synchronized` block**
+// (finding #105 -- the frozen javac does not emit that exit's `monitorexit`). A `throw` inside IS
+// safe.
 public class StampedLock implements Serializable {
 
-    // Un lector.
+    // One reader.
     private static final long RUNIT = 1L;
-    // El bit del escritor.
+    // The writer's bit.
     private static final long WBIT = 128L;
-    // Los bits de la cuenta de lectores.
+    // The reader count's bits.
     private static final long RBITS = 127L;
-    // El maximo de lectores que entran en esos bits; de ahi para arriba va al contador aparte.
+    // The most readers that fit in those bits; past that it goes to the separate counter.
     private static final long RFULL = 126L;
-    // Todos los bits de "esta tomado": lectores y escritor.
+    // Every "it is held" bit: readers and writer.
     private static final long ABITS = 255L;
-    // Los bits que forman el sello: el del escritor y la secuencia, sin la cuenta de lectores.
-    // Es `~RBITS`, escrito como literal para que se vea que son los 57 de arriba mas el bit 7.
+    // The bits that make up the stamp: the writer's and the sequence, without the reader count. It
+    // is `~RBITS`, written as a literal so it can be seen to be the top 57 plus bit 7.
     private static final long SBITS = -128L;
-    // El estado inicial. No es cero para que ningun sello legitimo pueda valer cero.
+    // The initial state. It is not zero so that no legitimate stamp can be zero.
     private static final long ORIGIN = 256L;
 
-    // El monitor interno: guarda `state`, `desborde`, la lista de esperantes y las vistas.
-    // **No** es donde se duerme: cada esperante duerme en el monitor de su propio nodo.
+    // The internal monitor: it guards `state`, `overflow`, the waiter list and the views. It is
+    // **not** where one sleeps: each waiter sleeps on its own node's monitor.
     private final Object sync = new Object();
 
     private long state = ORIGIN;
 
-    // Lectores que no entraron en los siete bits. Con esto la cuenta no tiene techo, que es lo
-    // que hace el JDK con su `readerOverflow`.
-    private int desborde;
+    // Readers that did not fit in the seven bits. With this the count has no ceiling, which is what
+    // the JDK does with its `readerOverflow`.
+    private int overflow;
 
-    // Los que estan esperando para entrar. La guarda `sync`; cada elemento es el nodo de un
-    // hilo dormido (o a punto de dormirse) en su propio monitor.
-    private final java.util.ArrayList<SyncWaiter> esperando = new java.util.ArrayList<SyncWaiter>();
+    // Those waiting to get in. It is guarded by `sync`; each element is the node of a thread asleep
+    // (or about to fall asleep) on its own monitor.
+    private final java.util.ArrayList<SyncWaiter> waiting = new java.util.ArrayList<SyncWaiter>();
 
-    // Las tres vistas, creadas la primera vez que se piden.
-    private Lock vistaLectura;
-    private Lock vistaEscritura;
-    private ReadWriteLock vistaLE;
+    // The three views, created the first time they are asked for.
+    private Lock readView;
+    private Lock writeView;
+    private ReadWriteLock readWriteView;
 
-    /** Un lock nuevo, sin tomar. */
+    /** A fresh lock, not held. */
     public StampedLock() {
     }
 
-    // ---- escritura ---------------------------------------------------------------------------
+    // ---- writing --------------------------------------------------------------------------------
 
     /**
-     * Toma el lock de escritura, esperando lo que haga falta.
+     * It takes the write lock, waiting as long as it takes.
      *
-     * <p>**No** atiende interrupciones: si llega una, se anota y se le repone la bandera al hilo
-     * al volver. Abortar aca dejaria al llamador sin el lock y creyendo que lo tiene.
+     * <p>It does **not** honour interruptions: if one arrives, it is noted and the thread's flag is
+     * set again on return. Aborting here would leave the caller without the lock and believing it
+     * holds it.
      *
-     * @return un sello de escritura (nunca cero)
+     * @return a write stamp (never zero)
      */
     public long writeLock() {
-        long sello = 0L;
-        boolean interrumpido = false;
-        while (sello == 0L) {
-            SyncWaiter nodo = null;
+        long stampValue = 0L;
+        boolean wasInterrupted = false;
+        while (stampValue == 0L) {
+            SyncWaiter node = null;
             synchronized (sync) {
                 if ((state & ABITS) == 0L) {
-                    sello = this.tomarEscritor();
+                    stampValue = this.takeWriter();
                 } else {
-                    nodo = this.anotar();
+                    node = this.register();
                 }
             }
-            if (nodo != null) {
-                if (this.dormir(nodo, false, 0L)) {
-                    interrumpido = true;
+            if (node != null) {
+                if (this.sleepOn(node, false, 0L)) {
+                    wasInterrupted = true;
                 }
-                this.sacar(nodo);
+                this.take(node);
             }
         }
-        if (interrumpido) {
+        if (wasInterrupted) {
             Thread.currentThread().interrupt();
         }
-        return sello;
+        return stampValue;
     }
 
     /**
-     * Toma el lock de escritura, abortando si interrumpen al hilo.
+     * It takes the write lock, aborting if the thread is interrupted.
      *
-     * @return un sello de escritura (nunca cero)
-     * @throws InterruptedException si interrumpen al hilo
+     * @return a write stamp (never zero)
+     * @throws InterruptedException if the thread is interrupted
      */
     public long writeLockInterruptibly() throws InterruptedException {
         if (Thread.interrupted()) {
             throw new InterruptedException();
         }
-        long sello = 0L;
-        while (sello == 0L) {
-            SyncWaiter nodo = null;
+        long stampValue = 0L;
+        while (stampValue == 0L) {
+            SyncWaiter node = null;
             synchronized (sync) {
                 if ((state & ABITS) == 0L) {
-                    sello = this.tomarEscritor();
+                    stampValue = this.takeWriter();
                 } else {
-                    nodo = this.anotar();
+                    node = this.register();
                 }
             }
-            if (nodo != null) {
-                boolean cortado = this.dormir(nodo, false, 0L);
-                this.sacar(nodo);
-                if (cortado) {
+            if (node != null) {
+                boolean cutShort = this.sleepOn(node, false, 0L);
+                this.take(node);
+                if (cutShort) {
                     throw new InterruptedException();
                 }
             }
         }
-        return sello;
+        return stampValue;
     }
 
     /**
-     * Toma el lock de escritura solo si esta libre ahora mismo.
+     * It takes the write lock only if it is free right now.
      *
-     * @return el sello, o **cero** si no lo consiguio
+     * @return the stamp, or **zero** if it did not get it
      */
     public long tryWriteLock() {
-        long sello;
+        long stampValue;
         synchronized (sync) {
-            sello = (state & ABITS) != 0L ? 0L : this.tomarEscritor();
+            stampValue = (state & ABITS) != 0L ? 0L : this.takeWriter();
         }
-        return sello;
+        return stampValue;
     }
 
     /**
-     * Toma el lock de escritura esperando como mucho ese plazo.
+     * It takes the write lock, waiting at most that deadline.
      *
-     * @return el sello, o **cero** si el plazo se agoto
-     * @throws InterruptedException si interrumpen al hilo mientras espera
+     * @return the stamp, or **zero** if the deadline ran out
+     * @throws InterruptedException if the thread is interrupted while waiting
      */
     public long tryWriteLock(long time, TimeUnit unit) throws InterruptedException {
         if (unit == null) {
@@ -202,150 +202,150 @@ public class StampedLock implements Serializable {
         if (Thread.interrupted()) {
             throw new InterruptedException();
         }
-        long fin = System.nanoTime() + unit.toNanos(time);
-        long sello = 0L;
-        boolean seguir = true;
-        while (seguir) {
-            SyncWaiter nodo = null;
+        long end = System.nanoTime() + unit.toNanos(time);
+        long stampValue = 0L;
+        boolean keepGoing = true;
+        while (keepGoing) {
+            SyncWaiter node = null;
             synchronized (sync) {
                 if ((state & ABITS) == 0L) {
-                    sello = this.tomarEscritor();
+                    stampValue = this.takeWriter();
                 } else {
-                    nodo = this.anotar();
+                    node = this.register();
                 }
             }
-            if (nodo == null) {
-                seguir = false;
-            } else if (fin - System.nanoTime() <= 0L) {
-                this.sacar(nodo);
-                seguir = false;
+            if (node == null) {
+                keepGoing = false;
+            } else if (end - System.nanoTime() <= 0L) {
+                this.take(node);
+                keepGoing = false;
             } else {
-                boolean cortado = this.dormir(nodo, true, fin);
-                this.sacar(nodo);
-                if (cortado) {
+                boolean cutShort = this.sleepOn(node, true, end);
+                this.take(node);
+                if (cutShort) {
                     throw new InterruptedException();
                 }
             }
         }
-        return sello;
+        return stampValue;
     }
 
     /**
-     * Suelta el lock de escritura.
+     * It releases the write lock.
      *
-     * @throws IllegalMonitorStateException si el sello no es el de la escritura vigente
+     * @throws IllegalMonitorStateException if the stamp is not the current write's
      */
     public void unlockWrite(long stamp) {
         synchronized (sync) {
             if ((stamp & WBIT) == 0L || state != stamp) {
                 throw new IllegalMonitorStateException();
             }
-            this.soltarEscritura();
-            this.despertar();
+            this.releaseWriteState();
+            this.wakeAll();
         }
     }
 
     /**
-     * Suelta el lock de escritura **sin sello**, si lo tiene alguien.
+     * It releases the write lock **with no stamp**, if anybody holds it.
      *
-     * <p>Es la salida de emergencia que documenta el JDK: sirve para recuperarse de un error, no
-     * para el uso normal, porque no comprueba que quien suelta sea quien tomo.
+     * <p>It is the emergency exit the JDK documents: it serves for recovering from an error, not for
+     * ordinary use, because it does not check that whoever releases is whoever took it.
      *
-     * @return `false` si no habia escritor
+     * @return `false` if there was no writer
      */
     public boolean tryUnlockWrite() {
-        boolean habia;
+        boolean had;
         synchronized (sync) {
-            habia = (state & WBIT) != 0L;
-            if (habia) {
-                this.soltarEscritura();
-                this.despertar();
+            had = (state & WBIT) != 0L;
+            if (had) {
+                this.releaseWriteState();
+                this.wakeAll();
             }
         }
-        return habia;
+        return had;
     }
 
-    // ---- lectura -----------------------------------------------------------------------------
+    // ---- reading --------------------------------------------------------------------------------
 
     /**
-     * Toma el lock de lectura, esperando lo que haga falta. No atiende interrupciones.
+     * It takes the read lock, waiting as long as it takes. It does not honour interruptions.
      *
-     * @return un sello de lectura (nunca cero)
+     * @return a read stamp (never zero)
      */
     public long readLock() {
-        long sello = 0L;
-        boolean interrumpido = false;
-        while (sello == 0L) {
-            SyncWaiter nodo = null;
+        long stampValue = 0L;
+        boolean wasInterrupted = false;
+        while (stampValue == 0L) {
+            SyncWaiter node = null;
             synchronized (sync) {
                 if ((state & WBIT) == 0L) {
-                    sello = this.tomarLector();
+                    stampValue = this.takeReader();
                 } else {
-                    nodo = this.anotar();
+                    node = this.register();
                 }
             }
-            if (nodo != null) {
-                if (this.dormir(nodo, false, 0L)) {
-                    interrumpido = true;
+            if (node != null) {
+                if (this.sleepOn(node, false, 0L)) {
+                    wasInterrupted = true;
                 }
-                this.sacar(nodo);
+                this.take(node);
             }
         }
-        if (interrumpido) {
+        if (wasInterrupted) {
             Thread.currentThread().interrupt();
         }
-        return sello;
+        return stampValue;
     }
 
     /**
-     * Toma el lock de lectura, abortando si interrumpen al hilo.
+     * It takes the read lock, aborting if the thread is interrupted.
      *
-     * @return un sello de lectura (nunca cero)
-     * @throws InterruptedException si interrumpen al hilo
+     * @return a read stamp (never zero)
+     * @throws InterruptedException if the thread is interrupted
      */
     public long readLockInterruptibly() throws InterruptedException {
         if (Thread.interrupted()) {
             throw new InterruptedException();
         }
-        long sello = 0L;
-        while (sello == 0L) {
-            SyncWaiter nodo = null;
+        long stampValue = 0L;
+        while (stampValue == 0L) {
+            SyncWaiter node = null;
             synchronized (sync) {
                 if ((state & WBIT) == 0L) {
-                    sello = this.tomarLector();
+                    stampValue = this.takeReader();
                 } else {
-                    nodo = this.anotar();
+                    node = this.register();
                 }
             }
-            if (nodo != null) {
-                boolean cortado = this.dormir(nodo, false, 0L);
-                this.sacar(nodo);
-                if (cortado) {
+            if (node != null) {
+                boolean cutShort = this.sleepOn(node, false, 0L);
+                this.take(node);
+                if (cutShort) {
                     throw new InterruptedException();
                 }
             }
         }
-        return sello;
+        return stampValue;
     }
 
     /**
-     * Toma el lock de lectura solo si no hay un escritor ahora mismo.
+     * It takes the read lock only if there is no writer right now.
      *
-     * @return el sello, o **cero** si no lo consiguio
+     * @return the stamp, or **zero** if it did not get it
      */
     public long tryReadLock() {
-        long sello;
+        long stampValue;
         synchronized (sync) {
-            sello = (state & WBIT) != 0L ? 0L : this.tomarLector();
+            stampValue = (state & WBIT) != 0L ? 0L : this.takeReader();
         }
-        return sello;
+        return stampValue;
     }
 
     /**
-     * Toma el lock de lectura esperando como mucho ese plazo.
+     * It takes the read lock, waiting at most that deadline.
      *
-     * @return el sello, o **cero** si el plazo se agoto
-     * @throws InterruptedException si interrumpen al hilo mientras espera
+     * @return the stamp, or **zero** if the deadline ran out
+     * @throws InterruptedException if the thread is interrupted while waiting
      */
     public long tryReadLock(long time, TimeUnit unit) throws InterruptedException {
         if (unit == null) {
@@ -354,38 +354,38 @@ public class StampedLock implements Serializable {
         if (Thread.interrupted()) {
             throw new InterruptedException();
         }
-        long fin = System.nanoTime() + unit.toNanos(time);
-        long sello = 0L;
-        boolean seguir = true;
-        while (seguir) {
-            SyncWaiter nodo = null;
+        long end = System.nanoTime() + unit.toNanos(time);
+        long stampValue = 0L;
+        boolean keepGoing = true;
+        while (keepGoing) {
+            SyncWaiter node = null;
             synchronized (sync) {
                 if ((state & WBIT) == 0L) {
-                    sello = this.tomarLector();
+                    stampValue = this.takeReader();
                 } else {
-                    nodo = this.anotar();
+                    node = this.register();
                 }
             }
-            if (nodo == null) {
-                seguir = false;
-            } else if (fin - System.nanoTime() <= 0L) {
-                this.sacar(nodo);
-                seguir = false;
+            if (node == null) {
+                keepGoing = false;
+            } else if (end - System.nanoTime() <= 0L) {
+                this.take(node);
+                keepGoing = false;
             } else {
-                boolean cortado = this.dormir(nodo, true, fin);
-                this.sacar(nodo);
-                if (cortado) {
+                boolean cutShort = this.sleepOn(node, true, end);
+                this.take(node);
+                if (cutShort) {
                     throw new InterruptedException();
                 }
             }
         }
-        return sello;
+        return stampValue;
     }
 
     /**
-     * Suelta el lock de lectura.
+     * It releases the read lock.
      *
-     * @throws IllegalMonitorStateException si el sello no corresponde a una lectura vigente
+     * @throws IllegalMonitorStateException if the stamp does not correspond to a current read
      */
     public void unlockRead(long stamp) {
         synchronized (sync) {
@@ -394,174 +394,176 @@ public class StampedLock implements Serializable {
                     || (state & RBITS) == 0L) {
                 throw new IllegalMonitorStateException();
             }
-            this.soltarLectura();
-            this.despertar();
+            this.releaseReadState();
+            this.wakeAll();
         }
     }
 
     /**
-     * Suelta **una** lectura sin sello, si hay alguna.
+     * It releases **one** read with no stamp, if there is one.
      *
-     * @return `false` si no habia lectores
+     * @return `false` if there were no readers
      */
     public boolean tryUnlockRead() {
-        boolean habia;
+        boolean had;
         synchronized (sync) {
-            habia = (state & RBITS) != 0L;
-            if (habia) {
-                this.soltarLectura();
-                this.despertar();
+            had = (state & RBITS) != 0L;
+            if (had) {
+                this.releaseReadState();
+                this.wakeAll();
             }
         }
-        return habia;
+        return had;
     }
 
-    // ---- lectura optimista -------------------------------------------------------------------
+    // ---- optimistic reading ---------------------------------------------------------------------
 
     /**
-     * Una foto del estado, **sin tomar nada**.
+     * A snapshot of the state, **taking nothing**.
      *
-     * <p>El uso es siempre el mismo: se pide el sello, se leen los datos, y despues se llama a
-     * {@link #validate}. Si devuelve `false` los datos leidos no valen nada y hay que reintentar
-     * o tomar {@link #readLock}.
+     * <p>The use is always the same: the stamp is asked for, the data is read, and then
+     * {@link #validate} is called. If it returns `false` the data read is worth nothing and one has
+     * to retry or take {@link #readLock}.
      *
-     * @return el sello, o **cero** si hay un escritor (en cuyo caso no hay nada que optimizar)
+     * @return the stamp, or **zero** if there is a writer (in which case there is nothing to
+     *     optimise)
      */
     public long tryOptimisticRead() {
-        long sello;
+        long stampValue;
         synchronized (sync) {
-            sello = (state & WBIT) != 0L ? 0L : (state & SBITS);
+            stampValue = (state & WBIT) != 0L ? 0L : (state & SBITS);
         }
-        return sello;
+        return stampValue;
     }
 
     /**
-     * Si desde que se saco `stamp` **no se completo ninguna escritura**.
+     * Whether **no write has completed** since `stamp` was taken.
      *
-     * <p>Un sello cero nunca valida: el estado arranca en `ORIGIN`, asi que `state & SBITS` no
-     * puede valer cero.
+     * <p>A zero stamp never validates: the state starts at `ORIGIN`, so `state & SBITS` cannot be
+     * zero.
      */
     public boolean validate(long stamp) {
-        boolean vale;
+        boolean valid;
         synchronized (sync) {
-            vale = (stamp & SBITS) == (state & SBITS);
+            valid = (stamp & SBITS) == (state & SBITS);
         }
-        return vale;
+        return valid;
     }
 
-    // ---- conversiones ------------------------------------------------------------------------
+    // ---- conversions -------------------------------------------------------------------------
     //
-    // Las tres siguen la misma forma: si el sello sigue siendo valido y el modo actual permite el
-    // paso, se hace en **un solo paso** --sin soltar y volver a tomar, que es donde se colaria un
-    // escritor-- y se devuelve el sello nuevo. Si no, cero, y el sello viejo sigue valiendo lo
-    // que valia.
+    // All three follow the same shape: if the stamp is still valid and the current mode allows the
+    // move, it is done in **one single step** --without releasing and retaking, which is where a
+    // writer would slip in-- and the new stamp is returned. Otherwise zero, and the old stamp is
+    // still worth what it was.
 
     /**
-     * Pasa el sello a uno de escritura, si se puede sin soltar.
+     * It turns the stamp into a write one, if that can be done without releasing.
      *
-     * @return el sello de escritura, o **cero** si no se pudo
+     * @return the write stamp, or **zero** if it could not be done
      */
     public long tryConvertToWriteLock(long stamp) {
-        long resultado = 0L;
+        long result = 0L;
         synchronized (sync) {
             if ((state & SBITS) == (stamp & SBITS)) {
                 long a = stamp & ABITS;
                 long m = state & ABITS;
                 if (m == 0L) {
-                    // Nadie lo tiene y el sello (optimista) sigue valiendo: se toma la escritura.
+                    // Nobody holds it and the (optimistic) stamp is still valid: the write is taken.
                     if (a == 0L) {
-                        resultado = this.tomarEscritor();
+                        result = this.takeWriter();
                     }
                 } else if (m == WBIT) {
-                    // Ya es nuestro.
+                    // It is ours already.
                     if (a == m) {
-                        resultado = stamp;
+                        result = stamp;
                     }
                 } else if (m == RUNIT && a != 0L) {
-                    // Somos el unico lector: se pasa a escritor sin abrir la ventana.
+                    // We are the only reader: it moves to writer without opening the window.
                     state = state - RUNIT + WBIT;
-                    resultado = state;
+                    result = state;
                 }
             }
         }
-        return resultado;
+        return result;
     }
 
     /**
-     * Pasa el sello a uno de lectura, si se puede sin soltar.
+     * It turns the stamp into a read one, if that can be done without releasing.
      *
-     * @return el sello de lectura, o **cero** si no se pudo
+     * @return the read stamp, or **zero** if it could not be done
      */
     public long tryConvertToReadLock(long stamp) {
-        long resultado = 0L;
-        boolean avisar = false;
+        long result = 0L;
+        boolean signalNode = false;
         synchronized (sync) {
             if ((state & SBITS) == (stamp & SBITS)) {
                 long a = stamp & ABITS;
                 long m = state & ABITS;
                 if (m == 0L) {
                     if (a == 0L) {
-                        resultado = this.tomarLector();
+                        result = this.takeReader();
                     }
                 } else if (m == WBIT) {
                     if (a == m) {
-                        // Suelta la escritura y toma la lectura en la misma operacion: el `+WBIT`
-                        // apaga el bit y adelanta la secuencia, el `+RUNIT` cuenta el lector.
+                        // It releases the write and takes the read in the same operation: the
+                        // `+WBIT` clears the bit and advances the sequence, the `+RUNIT` counts the
+                        // reader.
                         state = state + WBIT + RUNIT;
-                        resultado = state;
-                        avisar = true;
+                        result = state;
+                        signalNode = true;
                     }
                 } else if (a != 0L && a < WBIT) {
-                    // Ya es de lectura.
-                    resultado = stamp;
+                    // It is a read one already.
+                    result = stamp;
                 }
             }
-            if (avisar) {
-                this.despertar();
+            if (signalNode) {
+                this.wakeAll();
             }
         }
-        return resultado;
+        return result;
     }
 
     /**
-     * Suelta lo que el sello tenga tomado y devuelve un sello de lectura optimista.
+     * It releases whatever the stamp holds and returns an optimistic read stamp.
      *
-     * @return el sello de observacion, o **cero** si el sello ya no valia
+     * @return the observation stamp, or **zero** if the stamp was no longer valid
      */
     public long tryConvertToOptimisticRead(long stamp) {
-        long resultado = 0L;
-        boolean avisar = false;
+        long result = 0L;
+        boolean signalNode = false;
         synchronized (sync) {
             if ((state & SBITS) == (stamp & SBITS)) {
                 long a = stamp & ABITS;
                 long m = state & ABITS;
                 if (m == 0L) {
                     if (a == 0L) {
-                        resultado = state & SBITS;
+                        result = state & SBITS;
                     }
                 } else if (m == WBIT) {
                     if (a == m) {
-                        this.soltarEscritura();
-                        resultado = state & SBITS;
-                        avisar = true;
+                        this.releaseWriteState();
+                        result = state & SBITS;
+                        signalNode = true;
                     }
                 } else if (a != 0L && a < WBIT) {
-                    this.soltarLectura();
-                    resultado = state & SBITS;
-                    avisar = true;
+                    this.releaseReadState();
+                    result = state & SBITS;
+                    signalNode = true;
                 }
             }
-            if (avisar) {
-                this.despertar();
+            if (signalNode) {
+                this.wakeAll();
             }
         }
-        return resultado;
+        return result;
     }
 
     /**
-     * Suelta lo que sea que el sello tenga tomado.
+     * It releases whatever the stamp holds.
      *
-     * @throws IllegalMonitorStateException si el sello no es de un lock tomado
+     * @throws IllegalMonitorStateException if the stamp is not a held lock's
      */
     public void unlock(long stamp) {
         long a = stamp & ABITS;
@@ -574,11 +576,12 @@ public class StampedLock implements Serializable {
         }
     }
 
-    // ---- consultas de estado -----------------------------------------------------------------
+    // ---- state queries -----------------------------------------------------------------------
     //
-    // Son **fotos**, como todas las de este paquete: sirven para diagnosticar, no para decidir.
+    // They are **snapshots**, like all of this package's: they serve for diagnostics, not for
+    // deciding.
 
-    /** Si hay un escritor. */
+    /** Whether there is a writer. */
     public boolean isWriteLocked() {
         boolean r;
         synchronized (sync) {
@@ -587,7 +590,7 @@ public class StampedLock implements Serializable {
         return r;
     }
 
-    /** Si hay al menos un lector. */
+    /** Whether there is at least one reader. */
     public boolean isReadLocked() {
         boolean r;
         synchronized (sync) {
@@ -596,195 +599,196 @@ public class StampedLock implements Serializable {
         return r;
     }
 
-    /** Cuantos lectores hay, contando los del desborde. */
+    /** How many readers there are, counting the overflow's. */
     public int getReadLockCount() {
         long n;
         synchronized (sync) {
-            n = (state & RBITS) + (long) desborde;
+            n = (state & RBITS) + (long) overflow;
         }
         return (int) n;
     }
 
-    // ---- los sellos, vistos desde afuera -----------------------------------------------------
+    // ---- the stamps, seen from outside -------------------------------------------------------
     //
-    // Las cuatro son estaticas y solo miran los bits: no preguntan nada a ningun lock, asi que un
-    // sello de un `StampedLock` se puede clasificar sin tener el lock a mano.
+    // All four are static and only look at the bits: they ask no lock anything, so a `StampedLock`'s
+    // stamp can be classified without having the lock at hand.
 
-    /** Si el sello es de un lock tomado (lectura o escritura). */
+    /** Whether the stamp is a held lock's (read or write). */
     public static boolean isLockStamp(long stamp) {
         return (stamp & ABITS) != 0L;
     }
 
-    /** Si el sello es de escritura. */
+    /** Whether the stamp is a write one. */
     public static boolean isWriteLockStamp(long stamp) {
         return (stamp & ABITS) == WBIT;
     }
 
-    /** Si el sello es de lectura. */
+    /** Whether the stamp is a read one. */
     public static boolean isReadLockStamp(long stamp) {
         return (stamp & RBITS) != 0L;
     }
 
-    /** Si el sello es de lectura optimista (uno valido que no tiene nada tomado). */
+    /** Whether the stamp is an optimistic read one (a valid one holding nothing). */
     public static boolean isOptimisticReadStamp(long stamp) {
         return (stamp & ABITS) == 0L && stamp != 0L;
     }
 
-    // ---- las vistas `Lock` -------------------------------------------------------------------
+    // ---- the `Lock` views --------------------------------------------------------------------
 
     /**
-     * Una vista {@link Lock} que toma y suelta la lectura.
+     * A {@link Lock} view that takes and releases the read.
      *
-     * <p>Su `newCondition()` lanza `UnsupportedOperationException`: este lock no tiene
-     * condiciones, y devolver una que no funcione seria mentir.
+     * <p>Its `newCondition()` throws `UnsupportedOperationException`: this lock has no conditions,
+     * and returning one that does not work would be lying.
      */
     public Lock asReadLock() {
         Lock v;
         synchronized (sync) {
-            if (vistaLectura == null) {
-                vistaLectura = new VistaLectura();
+            if (readView == null) {
+                readView = new ReadView();
             }
-            v = vistaLectura;
+            v = readView;
         }
         return v;
     }
 
-    /** Una vista {@link Lock} que toma y suelta la escritura. */
+    /** A {@link Lock} view that takes and releases the write. */
     public Lock asWriteLock() {
         Lock v;
         synchronized (sync) {
-            if (vistaEscritura == null) {
-                vistaEscritura = new VistaEscritura();
+            if (writeView == null) {
+                writeView = new WriteView();
             }
-            v = vistaEscritura;
+            v = writeView;
         }
         return v;
     }
 
-    /** Las dos vistas juntas, como un {@link ReadWriteLock}. */
+    /** Both views together, as a {@link ReadWriteLock}. */
     public ReadWriteLock asReadWriteLock() {
         ReadWriteLock v;
         synchronized (sync) {
-            if (vistaLE == null) {
-                vistaLE = new VistaLE();
+            if (readWriteView == null) {
+                readWriteView = new ReadWriteView();
             }
-            v = vistaLE;
+            v = readWriteView;
         }
         return v;
     }
 
-    // ---- la maquinaria del estado ------------------------------------------------------------
+    // ---- the state machinery -----------------------------------------------------------------
     //
-    // Las cuatro suponen que quien llama **ya tiene** `sync`. No lo toman ellas para que la
-    // operacion completa --comprobar y cambiar-- sea un solo paso indivisible.
+    // All four assume the caller **already holds** `sync`. They do not take it themselves so that
+    // the complete operation --check and change-- is one indivisible step.
 
-    private long tomarEscritor() {
+    private long takeWriter() {
         state = state + WBIT;
         return state;
     }
 
-    private void soltarEscritura() {
-        long siguiente = state + WBIT;
-        // La suma apaga el bit 7 y se lleva uno a la secuencia: por eso todo sello anterior deja
-        // de validar. Si la secuencia dio la vuelta se vuelve a ORIGIN, para que ningun sello
-        // legitimo pueda valer cero.
-        state = siguiente == 0L ? ORIGIN : siguiente;
+    private void releaseWriteState() {
+        long next = state + WBIT;
+        // The sum clears bit 7 and carries one into the sequence: that is why every earlier stamp
+        // stops validating. If the sequence wrapped around it goes back to ORIGIN, so that no
+        // legitimate stamp can be zero.
+        state = next == 0L ? ORIGIN : next;
     }
 
-    private long tomarLector() {
+    private long takeReader() {
         if ((state & RBITS) < RFULL) {
             state = state + RUNIT;
         } else {
-            // Ya no entran mas en los siete bits: van al contador aparte, y el sello queda con
-            // los bits de lectores llenos (que sigue siendo distinto de cero, que es lo unico
-            // que `unlockRead` necesita mirar).
-            desborde++;
+            // No more fit in the seven bits: they go to the separate counter, and the stamp is left
+            // with the reader bits full (which is still non-zero, and that is the only thing
+            // `unlockRead` needs to look at).
+            overflow++;
         }
         return state;
     }
 
-    private void soltarLectura() {
-        if (desborde > 0 && (state & RBITS) == RFULL) {
-            desborde--;
+    private void releaseReadState() {
+        if (overflow > 0 && (state & RBITS) == RFULL) {
+            overflow--;
         } else {
             state = state - RUNIT;
         }
     }
 
-    // ---- la espera --------------------------------------------------------------------------
+    // ---- the wait ----------------------------------------------------------------------------
     //
-    // Un nodo **nuevo por cada episodio**: se anota, se suelta `sync`, se duerme en el monitor del
-    // nodo, y al despertar se lo saca. El nodo no se reusa, y esa es la propiedad que esquiva el
-    // defecto de la VM descrito en el encabezado -- un monitor donde una espera con plazo pudo
-    // vencer no lo vuelve a notificar nunca el hilo que espero en el.
+    // A **fresh node per episode**: it registers, releases `sync`, sleeps on the node's monitor, and
+    // on waking is taken out. The node is not reused, and that is the property that dodges the VM
+    // defect described in the header -- a monitor on which a timed wait may have expired is never
+    // notified again by the thread that waited on it.
     //
-    // El orden de toma es siempre `sync` y despues el monitor de un nodo, nunca al reves: quien
-    // espera suelta `sync` **antes** de tomar el suyo. Por eso no hay abrazo mortal.
+    // The lock order is always `sync` and then a node's monitor, never the other way round: the
+    // waiter releases `sync` **before** taking its own. That is why there is no deadlock.
 
-    // Anota un nodo para el hilo actual. Quien llama ya tiene `sync`.
-    private SyncWaiter anotar() {
-        SyncWaiter nodo = new SyncWaiter();
-        nodo.hilo = Thread.currentThread();
-        esperando.add(nodo);
-        return nodo;
+    // It registers a node for the current thread. The caller already holds `sync`.
+    private SyncWaiter register() {
+        SyncWaiter node = new SyncWaiter();
+        node.thread = Thread.currentThread();
+        waiting.add(node);
+        return node;
     }
 
-    // Lo saca de la lista. Toma `sync` el mismo.
-    private void sacar(SyncWaiter nodo) {
+    // It takes it out of the list. It takes `sync` itself.
+    private void take(SyncWaiter node) {
         synchronized (sync) {
-            esperando.remove(nodo);
+            waiting.remove(node);
         }
-        nodo.hilo = null;
+        node.thread = null;
     }
 
     /**
-     * Duerme en el monitor del nodo hasta que lo despierten (o venza el plazo, o lo interrumpan).
+     * It sleeps on the node's monitor until it is woken (or the deadline expires, or it is
+     * interrupted).
      *
-     * @return `true` si lo corto una interrupcion
+     * @return `true` if an interruption cut it short
      */
-    private boolean dormir(SyncWaiter nodo, boolean conPlazo, long finNanos) {
-        boolean cortado = false;
-        synchronized (nodo) {
-            // Comprobar la bandera y dormirse pasan adentro del mismo monitor que usa `despertar`:
-            // por eso una senial que llego antes no se pierde.
-            if (conPlazo) {
-                long restan = finNanos - System.nanoTime();
-                while (!nodo.liberado && !cortado && restan > 0L) {
+    private boolean sleepOn(SyncWaiter node, boolean timedWait, long endNanos) {
+        boolean cutShort = false;
+        synchronized (node) {
+            // Checking the flag and falling asleep happen inside the same monitor `wakeAll` uses:
+            // that is why a signal that arrived earlier is not lost.
+            if (timedWait) {
+                long remain = endNanos - System.nanoTime();
+                while (!node.released && !cutShort && remain > 0L) {
                     try {
-                        nodo.wait(this.enMilis(restan));
+                        node.wait(this.inMillis(remain));
                     } catch (InterruptedException e) {
-                        cortado = true;
+                        cutShort = true;
                     }
-                    restan = finNanos - System.nanoTime();
+                    remain = endNanos - System.nanoTime();
                 }
-            } else if (!nodo.liberado) {
+            } else if (!node.released) {
                 try {
-                    nodo.wait();
+                    node.wait();
                 } catch (InterruptedException e) {
-                    cortado = true;
+                    cutShort = true;
                 }
             }
         }
-        return cortado;
+        return cutShort;
     }
 
-    // Despierta a todos los anotados: cada uno vuelve a competir por el estado. Quien llama ya
-    // tiene `sync`. Despertar a todos y no a uno es lo correcto aca: soltar una escritura puede
-    // dejar pasar a **muchos** lectores, y esta clase no promete justicia.
-    private void despertar() {
-        for (int i = 0; i < esperando.size(); i++) {
-            SyncWaiter nodo = esperando.get(i);
-            synchronized (nodo) {
-                nodo.liberado = true;
-                nodo.notifyAll();
+    // It wakes everyone registered: each competes again for the state. The caller already holds
+    // `sync`. Waking everyone and not one is right here: releasing a write can let **many** readers
+    // through, and this class promises no fairness.
+    private void wakeAll() {
+        for (int i = 0; i < waiting.size(); i++) {
+            SyncWaiter node = waiting.get(i);
+            synchronized (node) {
+                node.released = true;
+                node.notifyAll();
             }
         }
     }
 
-    // Un plazo en nanos, pasado a los milisegundos que pide `Object.wait`. Nunca cero: un
-    // `wait(0)` espera para siempre, y un plazo de menos de un milisegundo se redondea al
-    // minimo que se puede pedir.
-    private long enMilis(long nanos) {
+    // A deadline in nanos, turned into the milliseconds `Object.wait` asks for. Never zero: a
+    // `wait(0)` waits forever, and a deadline of less than a millisecond is rounded up to the
+    // smallest that can be asked for.
+    private long inMillis(long nanos) {
         long ms = nanos / 1000000L;
         if (ms <= 0L) {
             ms = 1L;
@@ -793,10 +797,10 @@ public class StampedLock implements Serializable {
     }
 
     // =========================================================================================
-    // Las vistas
+    // The views
     // =========================================================================================
 
-    final class VistaLectura implements Lock {
+    final class ReadView implements Lock {
 
         public void lock() {
             readLock();
@@ -825,7 +829,7 @@ public class StampedLock implements Serializable {
         }
     }
 
-    final class VistaEscritura implements Lock {
+    final class WriteView implements Lock {
 
         public void lock() {
             writeLock();
@@ -854,7 +858,7 @@ public class StampedLock implements Serializable {
         }
     }
 
-    final class VistaLE implements ReadWriteLock {
+    final class ReadWriteView implements ReadWriteLock {
 
         public Lock readLock() {
             return asReadLock();

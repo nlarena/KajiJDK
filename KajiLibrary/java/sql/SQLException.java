@@ -1,17 +1,17 @@
 package java.sql;
 
 /**
- * KajiLibrary's java.sql.SQLException -- lo que falla al hablar con una base de datos.
+ * KajiLibrary's java.sql.SQLException -- what fails when talking to a database.
  *
- * <p>Lleva **tres** datos y no uno, y esa es toda su forma: el mensaje, un `SQLState` de cinco
- * caracteres --un codigo estandarizado, el mismo para todas las bases-- y un codigo de error
- * **propio del proveedor**. Los tres existen porque el estandar no alcanza: el `SQLState` dice
- * "violacion de restriccion" y el codigo del proveedor dice *cual*.
+ * <p>It carries **three** pieces of data and not one, and that is its whole shape: the message, a
+ * five-character `SQLState` --a standardized code, the same for every database-- and an error code
+ * **of the vendor's own**. The three exist because the standard is not enough: the `SQLState` says
+ * "constraint violation" and the vendor code says *which*.
  *
- * <p>Y son **encadenables** entre si por {@link #setNextException}: una sola operacion puede fallar
- * por varias razones a la vez --un lote de inserciones-- y aplastarlas en una sola perderia todas
- * menos la primera. La cadena es distinta de la de `getCause`, que dice "por que paso esto"; esta
- * dice "y ademas paso esto otro".
+ * <p>And they are **chainable** among themselves through {@link #setNextException}: a single
+ * operation can fail for several reasons at once --a batch of inserts-- and squashing them into one
+ * would lose all but the first. The chain is different from `getCause`'s, which says "why this
+ * happened"; this one says "and this other thing happened too".
  */
 public class SQLException extends Exception implements Iterable<Throwable> {
 
@@ -53,55 +53,56 @@ public class SQLException extends Exception implements Iterable<Throwable> {
         this.vendorCode = vendorCode;
     }
 
-    /** El codigo estandar de cinco caracteres, o `null` si el proveedor no lo dio. */
+    /** The five-character standard code, or `null` if the vendor did not give one. */
     public String getSQLState() {
         return this.sqlState;
     }
 
-    /** El codigo de error **del proveedor**; cero si no dio ninguno. */
+    /** The **vendor's** error code; zero if it gave none. */
     public int getErrorCode() {
         return this.vendorCode;
     }
 
-    /** La siguiente excepcion de la cadena, o `null`. */
+    /** The next exception in the chain, or `null`. */
     public SQLException getNextException() {
         return this.next;
     }
 
     /**
-     * Agrega `ex` **al final** de la cadena.
+     * Adds `ex` **at the end** of the chain.
      *
-     * <p>Al final y no al principio: el orden de la cadena es el orden en que los fallos ocurrieron,
-     * y ponerlos al reves haria que el primer error reportado fuera el ultimo que paso.
+     * <p>At the end and not at the start: the chain's order is the order in which the failures
+     * happened, and putting them the other way round would make the first error reported the last
+     * one to happen.
      */
     public void setNextException(SQLException ex) {
-        SQLException actual = this;
+        SQLException current = this;
         synchronized (this) {
-            while (actual.next != null) {
-                actual = actual.next;
+            while (current.next != null) {
+                current = current.next;
             }
-            actual.next = ex;
+            current.next = ex;
         }
     }
 
     /**
-     * Recorre esta excepcion, su causa, y las que le siguen en la cadena.
+     * Walks this exception, its causes, and the ones that follow it in the chain.
      *
-     * <p>Recorre **las dos** dimensiones --la cadena de `next` y la de `getCause`-- porque las dos
-     * llevan informacion distinta y quien diagnostica quiere ver todo.
+     * <p>It walks **both** dimensions --the `next` chain and the `getCause` chain-- because both
+     * carry different information and whoever diagnoses wants to see everything.
      */
     public java.util.Iterator<Throwable> iterator() {
-        java.util.ArrayList<Throwable> todas = new java.util.ArrayList<Throwable>();
+        java.util.ArrayList<Throwable> all = new java.util.ArrayList<Throwable>();
         SQLException e = this;
         while (e != null) {
-            todas.add(e);
-            Throwable causa = e.getCause();
-            while (causa != null) {
-                todas.add(causa);
-                causa = causa.getCause();
+            all.add(e);
+            Throwable cause = e.getCause();
+            while (cause != null) {
+                all.add(cause);
+                cause = cause.getCause();
             }
             e = e.next;
         }
-        return todas.iterator();
+        return all.iterator();
     }
 }

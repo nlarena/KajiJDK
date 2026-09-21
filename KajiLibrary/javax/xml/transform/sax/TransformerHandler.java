@@ -7,46 +7,47 @@ import org.xml.sax.DTDHandler;
 import org.xml.sax.ext.LexicalHandler;
 
 /**
- * KajiLibrary's javax.xml.transform.sax.TransformerHandler -- transforma lo que le va llegando.
+ * KajiLibrary's javax.xml.transform.sax.TransformerHandler -- transforms what keeps arriving.
  *
- * <p>Es la pieza que hace que una transformacion se pueda poner <b>en el medio de una cadena SAX</b>:
- * recibe el documento por eventos y escribe el resultado en el {@link Result} que se le haya puesto.
- * Con eso, leer, transformar y escribir pasan a la vez y ninguno de los pasos intermedios existe en
- * memoria.
+ * <p>It is the piece that makes it possible to put a transformation <b>in the middle of a SAX
+ * chain</b>: it receives the document as events and writes the result to the {@link Result} it was
+ * given. With that, reading, transforming and writing happen at once and none of the intermediate
+ * steps exists in memory.
  *
- * <p>Implementa las <b>tres</b> interfaces de entrada de SAX --contenido, lexica y DTD-- y eso no es
- * exceso de celo: si solo recibiera contenido, los comentarios y las secciones CDATA del original
- * desaparecerian de la salida, y una hoja de estilo tiene toda la autoridad para decidir que hacer
- * con ellos. Recibir la DTD importa por las notaciones y las entidades no analizadas, que tambien
- * son parte del documento.
+ * <p>It implements the <b>three</b> SAX input interfaces --content, lexical and DTD-- and that is
+ * not excess of zeal: if it only received content, the original's comments and CDATA sections would
+ * disappear from the output, and a stylesheet has every authority to decide what to do with them.
+ * Receiving the DTD matters because of notations and unparsed entities, which are also part of the
+ * document.
  *
- * <p>{@link #setResult} tiene que llamarse <b>antes</b> del primer evento: sin destino no hay adonde
- * escribir, y por eso lanza si el resultado no sirve en vez de esperar a fallar en el medio.
+ * <p>{@link #setResult} has to be called <b>before</b> the first event: without a destination there
+ * is nowhere to write, and that is why it throws if the result is no good instead of waiting to
+ * fail halfway.
  *
- * <p>{@link #getTransformer} devuelve el transformador de adentro, y esta para poder ponerle
- * parametros y propiedades de salida antes de arrancar -- no para transformar algo por separado.
+ * <p>{@link #getTransformer} returns the inner transformer, and it is there to set parameters and
+ * output properties on it before starting -- not to transform something separately.
  */
 public interface TransformerHandler extends ContentHandler, LexicalHandler, DTDHandler {
 
     /**
-     * Adonde va el resultado.
+     * Where the result goes.
      *
-     * <p>Antes del primer evento; ver la nota de la clase.
+     * <p>Before the first event; see the class note.
      *
-     * @throws IllegalArgumentException si ese destino no sirve para esta implementacion
+     * @throws IllegalArgumentException if that destination does not suit this implementation
      */
     void setResult(Result result) throws IllegalArgumentException;
 
     /**
-     * De donde viene el documento.
+     * Where the document comes from.
      *
-     * <p>Contra esto se resuelve lo relativo que aparezca durante la transformacion.
+     * <p>Whatever is relative that appears during the transformation is resolved against this.
      */
     void setSystemId(String systemID);
 
     /** Ver {@link #setSystemId}. */
     String getSystemId();
 
-    /** El transformador de adentro, para configurarlo. Ver la nota de la clase. */
+    /** The inner transformer, to configure it. See the class note. */
     Transformer getTransformer();
 }

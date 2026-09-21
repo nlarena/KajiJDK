@@ -9,45 +9,45 @@ import java.lang.classfile.constantpool.Utf8Entry;
 import java.lang.constant.ClassDesc;
 import jdk.internal.classfile.impl.Instructions;
 
-// Un acceso a campo: `getstatic`, `putstatic`, `getfield` o `putfield`. El operando es un
-// `CONSTANT_Fieldref`, y los accesores `default` de acá son atajos para bajar por él sin escribir la
-// cadena entera.
+// A field access: `getstatic`, `putstatic`, `getfield` or `putfield`. The operand is a
+// `CONSTANT_Fieldref`, and the `default` accessors here are shortcuts for climbing down through it
+// without writing the whole chain.
 public interface FieldInstruction extends Instruction {
 
-    /** La entrada del pool con el campo. */
+    /** The pool entry holding the field. */
     FieldRefEntry field();
 
-    /** La clase que declara el campo. */
+    /** The class that declares the field. */
     default ClassEntry owner() {
         return field().owner();
     }
 
-    /** El nombre del campo. */
+    /** The field's name. */
     default Utf8Entry name() {
         return field().nameAndType().name();
     }
 
-    /** El descriptor del campo, como `Utf8`. */
+    /** The field's descriptor, as a `Utf8`. */
     default Utf8Entry type() {
         return field().nameAndType().type();
     }
 
-    /** El tipo del campo. */
+    /** The field's type. */
     default ClassDesc typeSymbol() {
         return ClassDesc.ofDescriptor(type().stringValue());
     }
 
-    /** El acceso de este opcode a este campo. */
+    /** This opcode's access to this field. */
     public static FieldInstruction of(Opcode op, FieldRefEntry field) {
         return Instructions.field(op, field);
     }
 
-    /** El acceso de este opcode al campo `name` de tipo `type` en `owner`. */
+    /** This opcode's access to the field `name` of type `type` in `owner`. */
     public static FieldInstruction of(Opcode op, ClassEntry owner, Utf8Entry name, Utf8Entry type) {
         return Instructions.field(op, owner, name, type);
     }
 
-    /** El acceso de este opcode al campo que nombra `nameAndType` en `owner`. */
+    /** This opcode's access to the field `nameAndType` names in `owner`. */
     public static FieldInstruction of(Opcode op, ClassEntry owner, NameAndTypeEntry nameAndType) {
         return Instructions.field(op, owner, nameAndType);
     }

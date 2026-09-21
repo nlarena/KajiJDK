@@ -1,10 +1,10 @@
 package java.security.spec;
 
-// Una clave publica EC en claro: el punto W = d*G, mas los parametros de dominio.
+// An EC public key in the clear: the point W = d*G, plus the domain parameters.
 //
-// A diferencia de `X509EncodedKeySpec`, aca la clave esta **abierta**: se ve el punto. Eso la hace
-// util para construir una clave sin pasar por DER, y tambien es la razon por la que los parametros
-// tienen que venir con ella: un punto sin curva no identifica ninguna clave.
+// Unlike `X509EncodedKeySpec`, here the key is **open**: the point can be seen. That makes it
+// useful for building a key without going through DER, and it is also why the parameters have to
+// come with it: a point without a curve identifies no key.
 public class ECPublicKeySpec implements KeySpec {
 
     private final ECPoint w;
@@ -17,9 +17,9 @@ public class ECPublicKeySpec implements KeySpec {
         if (params == null) {
             throw new NullPointerException("params is null");
         }
-        // El infinito es el neutro del grupo: como clave publica significaria d = 0, o sea ninguna
-        // clave. Rechazarlo aca evita que llegue a un protocolo donde el resultado seria un secreto
-        // compartido constante.
+        // Infinity is the identity of the group: as a public key it would mean d = 0, that is, no
+        // key at all. Rejecting it here keeps it from reaching a protocol where the result would be
+        // a constant shared secret.
         if (w == ECPoint.POINT_INFINITY) {
             throw new IllegalArgumentException("w is ECPoint.POINT_INFINITY");
         }
@@ -27,7 +27,7 @@ public class ECPublicKeySpec implements KeySpec {
         this.params = params;
     }
 
-    // El punto publico.
+    // The public point.
     public ECPoint getW() {
         return this.w;
     }

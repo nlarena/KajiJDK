@@ -5,31 +5,33 @@ import java.awt.Graphics;
 import java.awt.Insets;
 
 /**
- * El marco que rodea a un componente.
+ * The frame that surrounds a component.
  *
- * <h2>Por que un objeto y no una propiedad del componente</h2>
+ * <h2>Why an object and not a property of the component</h2>
  *
- * <p>Porque asi los bordes se <strong>componen</strong>: {@link CompoundBorder} mete uno adentro de
- * otro y el resultado es otro {@code Border}, indistinguible de los basicos. Si el marco fuera un
- * puñado de campos en el componente —grosor, color, estilo— esa combinacion no existiria.
+ * <p>Because that way borders <strong>compose</strong>: {@link CompoundBorder} puts one inside
+ * another and the result is another {@code Border}, indistinguishable from the basic ones. If the
+ * frame were a handful of fields in the component --thickness, colour, style-- that combination
+ * would not exist.
  *
- * <p>De ahi tambien que un borde sea normalmente <strong>inmutable y compartible</strong>: no guarda
- * nada del componente que lo usa, asi que una misma instancia sirve para cien botones.
+ * <p>Hence too a border is normally <strong>immutable and shareable</strong>: it keeps nothing of
+ * the component that uses it, so one same instance serves a hundred buttons.
  *
- * <h2>Los tres metodos, y por que {@link #isBorderOpaque} no sobra</h2>
+ * <h2>The three methods, and why {@link #isBorderOpaque} is not redundant</h2>
  *
- * <p>Pintar y declarar cuanto espacio ocupa son los dos obvios. El tercero es una promesa que Swing
- * usa para optimizar: un borde opaco cubre <em>todos</em> los pixeles de su area, asi que lo que
- * haya debajo no hace falta dibujarlo. Mentir ahi no rompe el layout — deja basura en pantalla.
+ * <p>Painting and declaring how much space it takes are the two obvious ones. The third is a
+ * promise Swing uses to optimize: an opaque border covers <em>all</em> the pixels of its area, so
+ * whatever is underneath does not need drawing. Lying there does not break the layout -- it
+ * leaves rubbish on the screen.
  */
 public interface Border {
 
-    /** Se dibuja alrededor de {@code c}, en el rectangulo dado. */
+    /** It is drawn around {@code c}, in the given rectangle. */
     void paintBorder(Component c, Graphics g, int x, int y, int width, int height);
 
-    /** Cuanto espacio se reserva de cada lado. */
+    /** How much space is reserved on each side. */
     Insets getBorderInsets(Component c);
 
-    /** Si cubre todos los pixeles de su area; ver la nota de la interfaz. */
+    /** Whether it covers all the pixels of its area; see the interface note. */
     boolean isBorderOpaque();
 }

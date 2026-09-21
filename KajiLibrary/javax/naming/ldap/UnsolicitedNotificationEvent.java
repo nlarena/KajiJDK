@@ -3,11 +3,11 @@ package javax.naming.ldap;
 import java.util.EventObject;
 
 /**
- * El evento que envuelve una {@link UnsolicitedNotification}.
+ * The event that wraps an {@link UnsolicitedNotification}.
  *
- * <p>{@link #dispatch} esta del lado del evento y no del oyente, y eso es del patron de eventos de
- * {@code javax.naming}: el evento sabe a que metodo del oyente corresponde, asi que quien reparte no
- * necesita un {@code if} por tipo de evento.
+ * <p>{@link #dispatch} is on the event's side and not the listener's, and that is the
+ * {@code javax.naming} event pattern: the event knows which listener method it corresponds to, so
+ * whoever hands it out does not need an {@code if} per event type.
  */
 public class UnsolicitedNotificationEvent extends EventObject {
 
@@ -16,20 +16,20 @@ public class UnsolicitedNotificationEvent extends EventObject {
     private final UnsolicitedNotification notice;
 
     /**
-     * @param src quien la emitio
-     * @param notice la notificacion
+     * @param src who emitted it
+     * @param notice the notification
      */
     public UnsolicitedNotificationEvent(Object src, UnsolicitedNotification notice) {
         super(src);
         this.notice = notice;
     }
 
-    /** La notificacion. */
+    /** The notification. */
     public UnsolicitedNotification getNotification() {
         return this.notice;
     }
 
-    /** Se la entrega al oyente. */
+    /** Hands it to the listener. */
     public void dispatch(UnsolicitedNotificationListener listener) {
         listener.notificationReceived(this);
     }

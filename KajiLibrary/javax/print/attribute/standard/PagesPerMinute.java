@@ -5,10 +5,10 @@ import javax.print.attribute.IntegerSyntax;
 import javax.print.attribute.PrintServiceAttribute;
 
 /**
- * Cuantas paginas por minuto tira la impresora en monocromo.
+ * How many pages per minute the printer puts out in monochrome.
  *
- * <p>Cero es una respuesta legitima: significa que tarda mas de un minuto por pagina, no que no
- * imprime.
+ * <p>Zero is a legitimate answer: it means it takes more than a minute per page, not that it does
+ * not print.
  */
 public final class PagesPerMinute extends IntegerSyntax implements PrintServiceAttribute {
 
@@ -18,8 +18,10 @@ public final class PagesPerMinute extends IntegerSyntax implements PrintServiceA
         super(value, 0, Integer.MAX_VALUE);
     }
 
-    /** El {@code instanceof} es lo que impide que un PagesPerMinute de igual a otro atributo
-     * entero con el mismo numero. */
+    /**
+     * The {@code instanceof} is what keeps a PagesPerMinute from being equal to another
+     * integer attribute with the same number.
+     */
     public boolean equals(Object object) {
         return super.equals(object) && object instanceof PagesPerMinute;
     }

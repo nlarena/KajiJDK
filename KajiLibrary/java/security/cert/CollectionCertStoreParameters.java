@@ -3,13 +3,14 @@ package java.security.cert;
 import java.util.Collection;
 import java.util.Collections;
 
-// Los parametros del `CertStore` mas simple: una coleccion en memoria.
+// The parameters of the simplest `CertStore`: a collection in memory.
 //
-// La coleccion **no se copia**, y no es un descuido —es lo que documenta el JDK y hay que
-// respetarlo—. Es la unica forma de tener un store que crezca: quien lo arma puede seguir
-// agregando certificados a la coleccion despues de crear el store, y aparecen en las consultas
-// siguientes. La contrapartida es que la sincronizacion queda del lado del llamador, y por eso
-// `clone()` tampoco copia: los dos objetos apuntan a la misma coleccion a proposito.
+// The collection **is not copied**, and it is not an oversight —it is what the JDK documents and it
+// has to be respected—. It is the only way of having a store that grows: whoever builds it can go
+// on adding certificates to the collection after creating the store, and they appear in the
+// following queries. The counterpart is that the synchronisation is left on the caller's side, and
+// that is why `clone()` does not copy either: the two objects point at the same collection on
+// purpose.
 public class CollectionCertStoreParameters implements CertStoreParameters {
 
     private final Collection<?> coll;
@@ -21,8 +22,8 @@ public class CollectionCertStoreParameters implements CertStoreParameters {
         this.coll = collection;
     }
 
-    // Un store vacio e inmutable: sirve como punto de partida cuando la fuente real se define
-    // despues.
+    // An empty and immutable store: it serves as a starting point when the real source is defined
+    // afterwards.
     public CollectionCertStoreParameters() {
         this.coll = Collections.emptySet();
     }
@@ -31,13 +32,13 @@ public class CollectionCertStoreParameters implements CertStoreParameters {
         return this.coll;
     }
 
-    // Copia superficial: la coleccion se comparte, ver arriba.
+    // Shallow copy: the collection is shared, see above.
     @Override
     public Object clone() {
         try {
             return super.clone();
         } catch (CloneNotSupportedException e) {
-            // No puede pasar: la clase implementa Cloneable por via de CertStoreParameters.
+            // It cannot happen: the class implements Cloneable by way of CertStoreParameters.
             throw new InternalError(e.toString(), e);
         }
     }

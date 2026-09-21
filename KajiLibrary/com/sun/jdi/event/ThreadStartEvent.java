@@ -3,16 +3,16 @@ package com.sun.jdi.event;
 import com.sun.jdi.ThreadReference;
 
 /**
- * Arranco un hilo.
+ * A thread started.
  *
  * @since 1.3
  */
 public interface ThreadStartEvent extends Event {
 
     /**
-     * El thread.
+     * The thread.
      *
-     * @return el resultado
+     * @return the result
      */
     ThreadReference thread();
 }

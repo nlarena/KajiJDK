@@ -1,24 +1,24 @@
 package java.rmi;
 
 /**
- * KajiLibrary's java.rmi.UnknownHostException -- No se pudo resolver el nombre del servidor.
+ * KajiLibrary's java.rmi.UnknownHostException -- the server's name could not be resolved.
  *
- * <p>El DNS no supo que hacer con el nombre. Es la version de RMI de
- * {@link java.net.UnknownHostException} --y no la misma clase-- porque tiene que ser una
- * {@link RemoteException} para poder salir por la firma de un metodo remoto.
+ * <p>DNS did not know what to do with the name. It is RMI's version of
+ * {@link java.net.UnknownHostException} --and not the same class-- because it has to be a
+ * {@link RemoteException} to be able to come out through a remote method's signature.
  */
 public class UnknownHostException extends RemoteException {
 
     private static final long serialVersionUID = -8152710247442114228L;
 
-    /** @param s el mensaje */
+    /** @param s the message */
     public UnknownHostException(String s) {
         super(s);
     }
 
     /**
-     * @param s el mensaje
-     * @param ex la causa
+     * @param s the message
+     * @param ex the cause
      */
     public UnknownHostException(String s, Exception ex) {
         super(s, ex);

@@ -1,28 +1,27 @@
 package javax.accessibility;
 
 /**
- * Lo implementa lo que representa un **número dentro de un rango**: una barra, un deslizador, una
- * barra de progreso.
+ * Implemented by what represents a **number within a range**: a bar, a slider, a progress bar.
  *
- * <p>Los tres métodos de consulta devuelven {@link Number} y no un tipo concreto porque el rango
- * puede ser entero o de coma flotante según el componente, y forzar uno de los dos obligaría a
- * redondear en la mitad de los casos.
+ * <p>The three query methods return {@link Number} and not a concrete type because the range may be
+ * integral or floating-point depending on the component, and forcing one of the two would mean
+ * rounding in half the cases.
  */
 public interface AccessibleValue {
 
-    /** El valor actual. */
+    /** The current value. */
     Number getCurrentAccessibleValue();
 
     /**
-     * Cambia el valor.
+     * Changes the value.
      *
-     * @return `true` si se pudo
+     * @return `true` if it could
      */
     boolean setCurrentAccessibleValue(Number n);
 
-    /** El menor valor posible. */
+    /** The smallest possible value. */
     Number getMinimumAccessibleValue();
 
-    /** El mayor valor posible. */
+    /** The largest possible value. */
     Number getMaximumAccessibleValue();
 }

@@ -1,6 +1,9 @@
 package javax.sql;
 
-/** KajiLibrary's javax.sql.PooledConnectionBuilder -- {@link java.sql.ConnectionBuilder} para el pool. */
+/**
+ * KajiLibrary's javax.sql.PooledConnectionBuilder -- {@link java.sql.ConnectionBuilder} for the
+ * pool.
+ */
 public interface PooledConnectionBuilder {
 
     PooledConnectionBuilder user(String username);

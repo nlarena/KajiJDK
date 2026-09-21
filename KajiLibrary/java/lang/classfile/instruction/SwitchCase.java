@@ -3,18 +3,18 @@ package java.lang.classfile.instruction;
 import java.lang.classfile.Label;
 import jdk.internal.classfile.impl.Instructions;
 
-// Una rama de un `tableswitch` o de un `lookupswitch`: el valor y a dónde va. NO es una
-// `Instruction` ni un `CodeElement` — es una parte de una, y por eso no aparece sola en el recorrido
-// del cuerpo de un método.
+// A branch of a `tableswitch` or of a `lookupswitch`: the value and where it goes. It is NOT an
+// `Instruction` nor a `CodeElement` -- it is a part of one, and that is why it does not turn up on
+// its own while walking a method's body.
 public interface SwitchCase {
 
-    /** El valor que la elige. */
+    /** The value that selects it. */
     int caseValue();
 
-    /** A dónde salta. */
+    /** Where it jumps to. */
     Label target();
 
-    /** La rama con este valor y este destino. */
+    /** The branch with this value and this destination. */
     public static SwitchCase of(int caseValue, Label target) {
         return Instructions.switchCase(caseValue, target);
     }

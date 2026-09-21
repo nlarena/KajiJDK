@@ -1,14 +1,14 @@
 package java.security.cert;
 
-// Los parametros de un `CertStore` que consulta un directorio LDAP.
+// The parameters of a `CertStore` that queries an LDAP directory.
 //
-// Sobrevive por compatibilidad: la idea de publicar certificados en un LDAP corporativo quedo atras
-// y hoy el mecanismo real es la extension AIA del propio certificado, que dice por HTTP donde esta
-// el emisor. Se implementa igual porque es una clase de datos y su ausencia romperia codigo viejo
-// que la nombra sin llegar a usarla.
+// It survives out of compatibility: the idea of publishing certificates in a corporate LDAP is
+// behind us and today the real mechanism is the AIA extension of the certificate itself, which says
+// over HTTP where the issuer is. It is implemented all the same because it is a data class and its
+// absence would break old code that names it without getting as far as using it.
 //
-// **No abre ninguna conexion**: es solo el par (servidor, puerto). Quien conecta es el proveedor de
-// `CertStore`, y esta biblioteca no trae ninguno que lo haga.
+// **It opens no connection**: it is only the pair (server, port). The one that connects is the
+// provider of `CertStore`, and this library brings none that does.
 public class LDAPCertStoreParameters implements CertStoreParameters {
 
     private static final int PUERTO_LDAP = 389;
@@ -24,12 +24,12 @@ public class LDAPCertStoreParameters implements CertStoreParameters {
         this.port = port;
     }
 
-    // Con el puerto estandar de LDAP.
+    // With the standard port of LDAP.
     public LDAPCertStoreParameters(String serverName) {
         this(serverName, PUERTO_LDAP);
     }
 
-    // Localhost en el puerto estandar.
+    // Localhost on the standard port.
     public LDAPCertStoreParameters() {
         this("localhost", PUERTO_LDAP);
     }

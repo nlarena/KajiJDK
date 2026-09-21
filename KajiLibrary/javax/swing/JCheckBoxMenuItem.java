@@ -4,55 +4,56 @@ import javax.accessibility.Accessible;
 import javax.accessibility.AccessibleContext;
 
 /**
- * Un item de menu que ademas se prende y se apaga.
+ * A menu item that is also switched on and off.
  *
- * <h2>Dos nombres para el mismo estado</h2>
+ * <h2>Two names for the same state</h2>
  *
- * <p>{@link #getState} y {@code isSelected} son lo mismo, y {@link #setState} y {@code setSelected}
- * tambien. El par con "state" existe porque un tilde de menu se piensa como prendido o apagado y no
- * como elegido; los dos escriben en el mismo modelo de boton, asi que no se pueden desincronizar.
+ * <p>{@link #getState} and {@code isSelected} are the same, and so are {@link #setState} and
+ * {@code setSelected}. The pair with "state" exists because a menu tick is thought of as on or
+ * off and not as chosen; both write into the same button model, so they cannot get out of
+ * step.
  *
- * <h2>Se queda prendido solo</h2>
+ * <h2>It stays switched on by itself</h2>
  *
- * <p>A diferencia de un {@link JRadioButtonMenuItem}, nada lo apaga cuando se prende otro: no
- * pertenece a ningun grupo salvo que se lo ponga en uno.
+ * <p>Unlike a {@link JRadioButtonMenuItem}, nothing switches it off when another is switched on:
+ * it belongs to no group unless it is put into one.
  */
 public class JCheckBoxMenuItem extends JMenuItem implements SwingConstants, Accessible {
 
     private static final String uiClassID = "CheckBoxMenuItemUI";
 
-    /** Sin texto ni icono, apagado. */
+    /** With neither text nor icon, switched off. */
     public JCheckBoxMenuItem() {
         this(null, null, false);
     }
 
-    /** Con ese icono, apagado. */
+    /** With that icon, switched off. */
     public JCheckBoxMenuItem(Icon icon) {
         this(null, icon, false);
     }
 
-    /** Con ese texto, apagado. */
+    /** With that text, switched off. */
     public JCheckBoxMenuItem(String text) {
         this(text, null, false);
     }
 
-    /** Tomando texto, icono y demas de esa accion. */
+    /** Taking text, icon and the rest from that action. */
     public JCheckBoxMenuItem(Action a) {
         this();
         setAction(a);
     }
 
-    /** Con texto e icono, apagado. */
+    /** With text and icon, switched off. */
     public JCheckBoxMenuItem(String text, Icon icon) {
         this(text, icon, false);
     }
 
-    /** Con ese texto, prendido o no. */
+    /** With that text, switched on or not. */
     public JCheckBoxMenuItem(String text, boolean b) {
         this(text, null, b);
     }
 
-    /** Con texto, icono y estado. */
+    /** With text, icon and state. */
     public JCheckBoxMenuItem(String text, Icon icon, boolean b) {
         super(text, icon);
         setModel(new JToggleButton.ToggleButtonModel());
@@ -64,7 +65,7 @@ public class JCheckBoxMenuItem extends JMenuItem implements SwingConstants, Acce
         return uiClassID;
     }
 
-    /** Si esta prendido; ver la nota de la clase. */
+    /** Whether it is switched on; see the class note. */
     public boolean getState() {
         return isSelected();
     }
@@ -73,7 +74,10 @@ public class JCheckBoxMenuItem extends JMenuItem implements SwingConstants, Acce
         setSelected(b);
     }
 
-    /** El texto del item si esta prendido, y nulo si no; es lo que pide {@code ItemSelectable}. */
+    /**
+     * The item's text if it is switched on, and null if not; it is what {@code ItemSelectable} asks
+     * for.
+     */
     public Object[] getSelectedObjects() {
         if (!isSelected()) {
             return null;
@@ -87,7 +91,7 @@ public class JCheckBoxMenuItem extends JMenuItem implements SwingConstants, Acce
         return super.paramString();
     }
 
-    /** Un tilde si toma su estado de la accion; ver {@code AbstractButton}. */
+    /** A tick if it takes its state from the action; see {@code AbstractButton}. */
     boolean shouldUpdateSelectedStateFromAction() {
         return true;
     }

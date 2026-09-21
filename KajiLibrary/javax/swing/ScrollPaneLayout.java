@@ -12,42 +12,41 @@ import javax.swing.border.Border;
 import javax.swing.plaf.UIResource;
 
 /**
- * La distribucion de un {@link JScrollPane}: nueve lugares, y la decision de si hace falta una
- * barra.
+ * A {@link JScrollPane}'s layout: nine places, and the decision of whether a bar is needed.
  *
- * <h2>Nueve lugares</h2>
+ * <h2>Nine places</h2>
  *
- * <p>La ventana al centro, dos barras, dos cabeceras —una arriba y otra a la izquierda— y cuatro
- * esquinas. Cada pieza se agrega con una de las constantes de {@link ScrollPaneConstants} como
- * restriccion, igual que en un {@code BorderLayout}, y esta clase se queda con una referencia
- * directa a cada una: son pocas y fijas, y buscarlas por nombre en cada acomodada seria trabajo de
- * mas.
+ * <p>The viewport in the centre, two bars, two headers -- one at the top and another on the
+ * left -- and four corners. Each piece is added with one of {@link ScrollPaneConstants}'
+ * constants as a constraint, just as in a {@code BorderLayout}, and this class keeps a direct
+ * reference to each one: they are few and fixed, and looking them up by name on each layout
+ * would be extra work.
  *
- * <h2>Por que la decision es circular</h2>
+ * <h2>Why the decision is circular</h2>
  *
- * <p>Con la politica "cuando haga falta", saber si hace falta una barra depende de cuanto espacio
- * queda, y cuanto espacio queda depende de si hay barras: poner la horizontal come alto y puede
- * hacer que ahora si haga falta la vertical. Por eso el metodo decide en pasadas —vertical,
- * horizontal, y de nuevo la vertical— y despues, si el contenido es {@link Scrollable}, vuelve a
- * preguntarle con el tamano ya fijado, porque un contenido que sigue al ancho de la ventana puede
- * cambiar de opinion cuando la ventana cambia.
+ * <p>With the "as needed" policy, knowing whether a bar is needed depends on how much space is
+ * left, and how much space is left depends on whether there are bars: putting the horizontal
+ * one in eats height and may make the vertical one needed after all. That is why the method
+ * decides in passes -- vertical, horizontal, and the vertical one again -- and afterwards, if
+ * the content is {@link Scrollable}, it asks it again with the size already fixed, because a
+ * content that follows the viewport's width may change its mind when the viewport changes.
  *
- * <p>El JDK corta ahi y no itera hasta que se estabilice: un contenido malicioso podria no
- * estabilizarse nunca. Dos pasadas alcanzan para todo lo razonable.
+ * <p>The JDK stops there and does not iterate until it settles: a malicious content might never
+ * settle. Two passes are enough for everything reasonable.
  */
 public class ScrollPaneLayout implements LayoutManager, ScrollPaneConstants, Serializable {
 
-    /** La ventana; el centro de todo. */
+    /** The viewport; the centre of everything. */
     protected JViewport viewport;
 
     protected JScrollBar vsb;
 
     protected JScrollBar hsb;
 
-    /** La cabecera de filas: se desplaza con la ventana, pero solo en vertical. */
+    /** The row header: it scrolls with the viewport, but only vertically. */
     protected JViewport rowHead;
 
-    /** La cabecera de columnas: se desplaza con la ventana, pero solo en horizontal. */
+    /** The column header: it scrolls with the viewport, but only horizontally. */
     protected JViewport colHead;
 
     protected Component lowerLeft;
@@ -62,7 +61,7 @@ public class ScrollPaneLayout implements LayoutManager, ScrollPaneConstants, Ser
     public ScrollPaneLayout() {
     }
 
-    /** Toma del panel las nueve piezas y las dos politicas. */
+    /** It takes the nine pieces and the two policies from the pane. */
     public void syncWithScrollPane(JScrollPane sp) {
         viewport = sp.getViewport();
         vsb = sp.getVerticalScrollBar();
@@ -78,9 +77,9 @@ public class ScrollPaneLayout implements LayoutManager, ScrollPaneConstants, Ser
     }
 
     /**
-     * Saca del panel al que ocupaba ese lugar y devuelve al nuevo.
+     * It takes whoever occupied that place off the pane and returns the new one.
      *
-     * <p>Es lo que hace que poner una barra nueva no deje la vieja debajo.
+     * <p>It is what keeps putting a new bar in from leaving the old one underneath.
      */
     protected Component addSingletonComponent(Component oldC, Component newC) {
         if ((oldC != null) && (oldC != newC)) {
@@ -89,7 +88,7 @@ public class ScrollPaneLayout implements LayoutManager, ScrollPaneConstants, Ser
         return newC;
     }
 
-    /** Guarda la pieza en el lugar que nombra la restriccion. */
+    /** It keeps the piece in the place the constraint names. */
     public void addLayoutComponent(String s, Component c) {
         if (s.equals(VIEWPORT)) {
             viewport = (JViewport) addSingletonComponent(viewport, c);
@@ -140,7 +139,10 @@ public class ScrollPaneLayout implements LayoutManager, ScrollPaneConstants, Ser
         return vsbPolicy;
     }
 
-    /** Cambia la politica; el panel la guarda tambien, y es el suyo el que manda al acomodar. */
+    /**
+     * It changes the policy; the pane keeps it too, and it is the pane's that rules when laying
+     * out.
+     */
     public void setVerticalScrollBarPolicy(int x) {
         if (x != VERTICAL_SCROLLBAR_AS_NEEDED && x != VERTICAL_SCROLLBAR_NEVER
                 && x != VERTICAL_SCROLLBAR_ALWAYS) {
@@ -181,7 +183,7 @@ public class ScrollPaneLayout implements LayoutManager, ScrollPaneConstants, Ser
         return colHead;
     }
 
-    /** La pieza de esa esquina; las esquinas "inicial" y "final" dependen del idioma. */
+    /** That corner's piece; the "leading" and "trailing" corners depend on the language. */
     public Component getCorner(String key) {
         if (key.equals(LOWER_LEFT_CORNER)) {
             return lowerLeft;
@@ -196,8 +198,8 @@ public class ScrollPaneLayout implements LayoutManager, ScrollPaneConstants, Ser
     }
 
     /**
-     * Lo que el panel querria medir: la ventana, mas las cabeceras, mas las barras que ya se sabe
-     * que van a hacer falta.
+     * What the pane would like to measure: the viewport, plus the headers, plus the bars that are
+     * already known to be going to be needed.
      */
     public Dimension preferredLayoutSize(Container parent) {
         JScrollPane scrollPane = (JScrollPane) parent;
@@ -273,10 +275,10 @@ public class ScrollPaneLayout implements LayoutManager, ScrollPaneConstants, Ser
     }
 
     /**
-     * Lo minimo: la ventana puede achicarse a nada, pero las barras y las cabeceras no.
+     * The least: the viewport may shrink to nothing, but the bars and the headers may not.
      *
-     * <p>Con la politica "siempre" la barra suma su minimo; con "cuando haga falta" tambien, y no
-     * es un error: si el panel se achica hasta el minimo, la barra seguro hara falta.
+     * <p>With the "always" policy the bar adds its minimum; with "as needed" it does too, and it
+     * is not a mistake: if the pane shrinks to the minimum, the bar will certainly be needed.
      */
     public Dimension minimumLayoutSize(Container parent) {
         JScrollPane scrollPane = (JScrollPane) parent;
@@ -324,7 +326,7 @@ public class ScrollPaneLayout implements LayoutManager, ScrollPaneConstants, Ser
         return new Dimension(minWidth, minHeight);
     }
 
-    /** Ver la nota de la clase sobre por que la decision es circular. */
+    /** See the class note about why the decision is circular. */
     public void layoutContainer(Container parent) {
         JScrollPane scrollPane = (JScrollPane) parent;
         vsbPolicy = scrollPane.getVerticalScrollBarPolicy();
@@ -342,7 +344,7 @@ public class ScrollPaneLayout implements LayoutManager, ScrollPaneConstants, Ser
 
         boolean leftToRight = scrollPane.getComponentOrientation().isLeftToRight();
 
-        // La cabecera de columnas se lleva su alto de arriba de todo.
+        // The column header takes its height off the very top.
         Rectangle colHeadR = new Rectangle(0, availR.y, 0, 0);
         if ((colHead != null) && (colHead.isVisible())) {
             int colHeadHeight = Math.min(availR.height, colHead.getPreferredSize().height);
@@ -351,7 +353,7 @@ public class ScrollPaneLayout implements LayoutManager, ScrollPaneConstants, Ser
             availR.height = availR.height - colHeadHeight;
         }
 
-        // La de filas, su ancho del lado por el que empieza la linea.
+        // The row one, its width off the side the line starts on.
         Rectangle rowHeadR = new Rectangle(0, 0, 0, 0);
         if ((rowHead != null) && (rowHead.isVisible())) {
             int rowHeadWidth = Math.min(availR.width, rowHead.getPreferredSize().width);
@@ -377,10 +379,10 @@ public class ScrollPaneLayout implements LayoutManager, ScrollPaneConstants, Ser
             vpbInsets = new Insets(0, 0, 0, 0);
         }
 
-        // El tamano preferido del contenido, no el que pide como ventana: aca se decide si el
-        // contenido entra, y lo que tiene que entrar es el contenido entero. El
-        // `getPreferredScrollableViewportSize` es para cuanto querria medir el panel, y se usa en
-        // {@link #preferredLayoutSize}.
+        // The content's preferred size, not the one it asks for as a viewport: here it is decided
+                // whether the content fits, and what has to fit is the whole content. The
+                // `getPreferredScrollableViewportSize` is for how much the pane would like to
+                // measure, and it is used in {@link #preferredLayoutSize}.
         Component view = (viewport != null) ? viewport.getView() : null;
         Dimension viewPrefSize = (view != null) ? view.getPreferredSize() : new Dimension(0, 0);
 
@@ -432,7 +434,7 @@ public class ScrollPaneLayout implements LayoutManager, ScrollPaneConstants, Ser
         if ((hsb != null) && hsbNeeded) {
             adjustForHSB(true, availR, hsbR, vpbInsets);
 
-            // Poner la horizontal quito alto: puede que ahora haga falta la vertical.
+            // Putting the horizontal one in took height away: the vertical one may be needed now.
             if ((vsb != null) && !vsbNeeded && (vsbPolicy != VERTICAL_SCROLLBAR_NEVER)) {
                 extentSize = viewport.toViewCoordinates(availR.getSize());
                 vsbNeeded = viewPrefSize.height > extentSize.height;
@@ -442,7 +444,7 @@ public class ScrollPaneLayout implements LayoutManager, ScrollPaneConstants, Ser
             }
         }
 
-        // Con el tamano ya fijado se le vuelve a preguntar al contenido; ver la nota de la clase.
+        // With the size already fixed the content is asked again; see the class note.
         if (viewport != null) {
             viewport.setBounds(availR);
 
@@ -534,7 +536,7 @@ public class ScrollPaneLayout implements LayoutManager, ScrollPaneConstants, Ser
         }
     }
 
-    /** Le saca al espacio disponible lo que ocupa la barra vertical, o se lo devuelve. */
+    /** It takes what the vertical bar occupies off the available space, or gives it back. */
     private void adjustForVSB(boolean wantsVSB, Rectangle available, Rectangle vsbR,
             Insets vpbInsets, boolean leftToRight) {
         int oldWidth = vsbR.width;
@@ -554,7 +556,7 @@ public class ScrollPaneLayout implements LayoutManager, ScrollPaneConstants, Ser
         }
     }
 
-    /** Lo mismo con la horizontal. */
+    /** The same with the horizontal one. */
     private void adjustForHSB(boolean wantsHSB, Rectangle available, Rectangle hsbR,
             Insets vpbInsets) {
         int oldHeight = hsbR.height;
@@ -569,13 +571,13 @@ public class ScrollPaneLayout implements LayoutManager, ScrollPaneConstants, Ser
         }
     }
 
-    /** @deprecated es {@link JScrollPane#getViewportBorderBounds}. */
+    /** @deprecated it is {@link JScrollPane#getViewportBorderBounds}. */
     @Deprecated
     public Rectangle getViewportBorderBounds(JScrollPane scrollpane) {
         return scrollpane.getViewportBorderBounds();
     }
 
-    /** La misma distribucion, marcada como puesta por un aspecto; ver {@link UIResource}. */
+    /** The same layout, marked as set by a look and feel; see {@link UIResource}. */
     public static class UIResource extends ScrollPaneLayout
             implements javax.swing.plaf.UIResource {
 

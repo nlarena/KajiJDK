@@ -3,23 +3,23 @@ package java.security.cert;
 import java.io.IOException;
 import java.io.OutputStream;
 
-// Una extension X.509 vista de a una: su OID, si es critica y su valor.
+// An X.509 extension seen one at a time: its OID, whether it is critical and its value.
 //
-// Es mas nueva que `X509Extension` (Java 7) y la diferencia esta en la unidad: aquella describe al
-// objeto que **tiene** extensiones, esta describe **una** extension suelta. Hizo falta cuando
-// aparecieron APIs que reciben extensiones por separado, como las que se mandan en una consulta
-// OCSP.
+// It is newer than `X509Extension` (Java 7) and the difference is in the unit: that one describes
+// the object that **has** extensions, this one describes **one** loose extension. It was needed
+// when APIs appeared that receive extensions separately, such as the ones sent in an OCSP query.
 public interface Extension {
 
-    // El OID en notacion de puntos.
+    // The OID in dotted notation.
     String getId();
 
-    // Si es critica: quien no la entienda tiene que rechazar el objeto que la lleva.
+    // Whether it is critical: whoever does not understand it has to reject the object that carries
+    // it.
     boolean isCritical();
 
-    // El valor DER de la extension, ya sin el envoltorio del OCTET STRING.
+    // The DER value of the extension, already without the wrapping of the OCTET STRING.
     byte[] getValue();
 
-    // Escribe la extension completa —OID, criticidad y valor— codificada en DER.
+    // Writes the complete extension —OID, criticality and value— encoded in DER.
     void encode(OutputStream out) throws IOException;
 }

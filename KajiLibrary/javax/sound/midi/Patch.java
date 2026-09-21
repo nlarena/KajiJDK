@@ -1,39 +1,39 @@
 package javax.sound.midi;
 
 /**
- * KajiLibrary's javax.sound.midi.Patch -- la direccion de un sonido en un banco.
+ * KajiLibrary's javax.sound.midi.Patch -- the address of a sound in a bank.
  *
- * <p>Dos numeros: el banco y el programa. MIDI define 128 programas, que se quedaron cortos casi
- * enseguida; los bancos son el parche que agrego el estandar para tener 128 veces mas.
+ * <p>Two numbers: the bank and the program. MIDI defines 128 programs, which fell short almost
+ * right away; banks are the patch the standard added to have 128 times more.
  *
- * <p>Por eso hacen falta dos: el numero de programa solo es ambiguo, y un {@code Patch} es lo que
- * identifica un sonido sin ambiguedad dentro de un {@link Soundbank}.
+ * <p>That is why two are needed: the program number alone is ambiguous, and a {@code Patch} is what
+ * identifies a sound unambiguously within a {@link Soundbank}.
  *
- * <p>Es inmutable.
+ * <p>It is immutable.
  */
 public class Patch {
 
-    /** Que banco. */
+    /** Which bank. */
     private final int bank;
 
-    /** Que programa dentro del banco. */
+    /** Which program within the bank. */
     private final int program;
 
     /**
-     * @param bank el banco
-     * @param program el programa dentro del banco
+     * @param bank the bank
+     * @param program the program within the bank
      */
     public Patch(int bank, int program) {
         this.bank = bank;
         this.program = program;
     }
 
-    /** Que banco. */
+    /** Which bank. */
     public int getBank() {
         return this.bank;
     }
 
-    /** Que programa. */
+    /** Which program. */
     public int getProgram() {
         return this.program;
     }

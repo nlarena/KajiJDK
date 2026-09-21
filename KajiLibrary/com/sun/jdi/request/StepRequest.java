@@ -5,80 +5,80 @@ import com.sun.jdi.ReferenceType;
 import com.sun.jdi.ThreadReference;
 
 /**
- * Pedir aviso cuando un hilo avance lo que se indique.
+ * Ask to be told when a thread advances what is indicated.
  *
- * <p>El tamano dice en que unidad --instruccion o linea-- y la profundidad dice si entrar en las
- * llamadas, saltearlas o salir de la actual. Son las tres cosas que en un depurador se llaman "step
- * into", "step over" y "step out".
+ * <p>The size says in what unit -- instruction or line -- and the depth says whether to go into
+ * the calls, skip them or leave the current one. They are the three things that in a debugger
+ * are called "step into", "step over" and "step out".
  *
- * <p>Solo puede haber un pedido de paso por hilo: crear el segundo tira
+ * <p>There may be only one step request per thread: creating the second throws
  * {@link DuplicateRequestException}.
  *
  * @since 1.3
  */
 public interface StepRequest extends EventRequest {
 
-    /** Entrar en las llamadas. */
+    /** Go into the calls. */
     int STEP_INTO = 1;
 
-    /** Saltear las llamadas. */
+    /** Skip the calls. */
     int STEP_OVER = 2;
 
-    /** Salir del metodo actual. */
+    /** Leave the current method. */
     int STEP_OUT = 3;
 
-    /** Avanzar una instruccion de bytecode. */
+    /** Advance one bytecode instruction. */
     int STEP_MIN = -1;
 
-    /** Avanzar una linea de fuente. */
+    /** Advance one source line. */
     int STEP_LINE = -2;
 
     /**
-     * El thread.
+     * The thread.
      *
-     * @return el resultado
+     * @return the result
      */
     ThreadReference thread();
 
     /**
-     * El size.
+     * The size.
      *
-     * @return el resultado
+     * @return the result
      */
     int size();
 
     /**
-     * El depth.
+     * The depth.
      *
-     * @return el resultado
+     * @return the result
      */
     int depth();
 
     /**
-     * Filtra por class; solo con el pedido deshabilitado.
+     * It filters by class; only with the request disabled.
      *
-     * @param type el ReferenceType
+     * @param type the ReferenceType
      */
     void addClassFilter(ReferenceType type);
 
     /**
-     * Filtra por class; solo con el pedido deshabilitado.
+     * It filters by class; only with the request disabled.
      *
-     * @param name el String
+     * @param name the String
      */
     void addClassFilter(String name);
 
     /**
-     * Filtra por class exclusion; solo con el pedido deshabilitado.
+     * It filters by class exclusion; only with the request disabled.
      *
-     * @param name el String
+     * @param name the String
      */
     void addClassExclusionFilter(String name);
 
     /**
-     * Filtra por instance; solo con el pedido deshabilitado.
+     * It filters by instance; only with the request disabled.
      *
-     * @param object el ObjectReference
+     * @param object the ObjectReference
      */
     void addInstanceFilter(ObjectReference object);
 }

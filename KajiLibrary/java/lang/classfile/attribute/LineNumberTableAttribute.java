@@ -4,14 +4,14 @@ import java.lang.classfile.Attribute;
 import java.util.List;
 import jdk.internal.classfile.impl.TypedAttributes;
 
-// `LineNumberTable` (JVMS §4.7.12): el mapa de bci a línea del fuente. Es opcional y sólo sirve para
-// depurar; sin él, una traza de pila no puede decir en qué línea estaba.
+// `LineNumberTable` (JVMS §4.7.12): the map from bci to source line. It is optional and only good
+// for debugging; without it, a stack trace cannot say which line it was on.
 public interface LineNumberTableAttribute extends Attribute<LineNumberTableAttribute> {
 
-    /** Las filas, en el orden del archivo. */
+    /** The rows, in file order. */
     List<LineNumberInfo> lineNumbers();
 
-    /** El atributo con estas filas. */
+    /** The attribute with these rows. */
     public static LineNumberTableAttribute of(List<LineNumberInfo> lines) {
         return TypedAttributes.lineNumberTable(lines);
     }

@@ -6,48 +6,48 @@ import javax.swing.LookAndFeel;
 import javax.swing.UIDefaults;
 
 /**
- * La base de la que heredan todos los aspectos graficos de Swing.
+ * The base every graphical look and feel in Swing inherits from.
  *
- * <h2>Que aporta</h2>
+ * <h2>What it contributes</h2>
  *
- * <p>La tabla de valores por omision: que clase dibuja cada componente, que colores tiene el
- * sistema, y los cientos de valores que un componente consulta al instalarse. Un aspecto concreto
- * hereda de aca y redefine lo que quiere cambiar, que suele ser una fraccion.
+ * <p>The table of default values: which class draws each component, what colours the system has,
+ * and the hundreds of values a component consults on installing itself. A concrete look and feel
+ * inherits from here and redefines what it wants to change, which is usually a fraction.
  *
- * <p>Esta clase no se usa directamente --su constructor es {@code protected}-- porque por si sola no
- * define ningun aspecto completo. Es el andamio.
+ * <p>This class is not used directly -- its constructor is {@code protected} -- because on its
+ * own it defines no complete look and feel. It is the scaffolding.
  *
- * <h2>Los tres pasos de {@link #getDefaults}</h2>
+ * <h2>{@link #getDefaults}' three steps</h2>
  *
- * <p>Primero las clases de las interfaces graficas, despues los colores del sistema, despues todo lo
- * demas. El orden importa: los valores de {@link #initComponentDefaults} se escriben en terminos de
- * los colores del sistema, asi que esos tienen que estar antes.
+ * <p>First the graphical interfaces' classes, then the system's colours, then everything else.
+ * The order matters: {@link #initComponentDefaults}' values are written in terms of the system's
+ * colours, so those have to be there first.
  *
- * <h2>Los sonidos</h2>
+ * <h2>The sounds</h2>
  *
- * <p>Un aspecto grafico puede tener sonidos --el clic de un menu, el aviso de un dialogo-- y
- * {@link #getAudioActionMap} es donde se los declara. Estan aca y no en el aspecto concreto porque
- * el mecanismo de reproducirlos es el mismo para todos.
+ * <p>A graphical look and feel may have sounds -- a menu's click, a dialog's warning -- and
+ * {@link #getAudioActionMap} is where they are declared. They are here and not in the concrete
+ * look and feel because the mechanism for playing them is the same for all.
  *
- * <h2>Estado en esta biblioteca</h2>
+ * <h2>State in this library</h2>
  *
- * <p>La estructura esta y funciona: se puede heredar, poblar la tabla y consultarla. Lo que no hay
- * es contenido: {@link #initClassDefaults} no registra ninguna interfaz grafica porque esta
- * biblioteca todavia no tiene un aspecto concreto que las provea. Un aspecto que herede de aca y
- * llene la tabla anda.
+ * <p>The structure is there and works: it can be inherited from, the table populated and
+ * consulted. What there is not is content: {@link #initClassDefaults} registers no graphical
+ * interface because this library does not yet have a concrete look and feel that provides them.
+ * A look and feel that inherits from here and fills the table works.
  *
  * @since 1.2
  */
 public abstract class BasicLookAndFeel extends LookAndFeel {
 
-    /** Uno; solo para las subclases. */
+    /** One; only for the subclasses. */
     protected BasicLookAndFeel() {
     }
 
     /**
-     * La tabla de valores de este aspecto.
+     * This look and feel's table of values.
      *
-     * @return la tabla, ya poblada
+     * @return the table, already populated
      */
     @Override
     public UIDefaults getDefaults() {
@@ -58,46 +58,47 @@ public abstract class BasicLookAndFeel extends LookAndFeel {
         return table;
     }
 
-    /** Se instala. */
+    /** It installs itself. */
     @Override
     public void initialize() {
     }
 
-    /** Se desinstala. */
+    /** It uninstalls itself. */
     @Override
     public void uninitialize() {
     }
 
     /**
-     * Registra que clase dibuja cada componente.
+     * It registers which class draws each component.
      *
-     * <p>Las claves son los identificadores que devuelve {@code JComponent.getUIClassID}, como
-     * {@code "ButtonUI"}, y los valores son nombres de clase. Van como texto y no como {@code Class}
-     * para no cargar las cien clases de un aspecto al arrancar; ver {@link UIDefaults}.
+     * <p>The keys are the identifiers {@code JComponent.getUIClassID} returns, such as
+     * {@code "ButtonUI"}, and the values are class names. They go as text and not as a
+     * {@code Class} so as not to load a look and feel's hundred classes at start-up; see
+     * {@link UIDefaults}.
      *
-     * @param table la tabla a poblar
+     * @param table the table to populate
      */
     protected void initClassDefaults(UIDefaults table) {
     }
 
     /**
-     * Pone los colores del sistema.
+     * It sets the system's colours.
      *
-     * @param table la tabla a poblar
+     * @param table the table to populate
      */
     protected void initSystemColorDefaults(UIDefaults table) {
     }
 
     /**
-     * Carga los colores del sistema desde una lista de pares nombre-valor.
+     * It loads the system's colours from a list of name-value pairs.
      *
-     * <p>Los valores son enteros en hexadecimal escritos como texto. El interruptor decide si se
-     * usan esos o los que reporte el escritorio: un aspecto que quiere verse igual en todos lados
-     * usa los suyos, y uno que quiere integrarse usa los del sistema.
+     * <p>The values are integers in hexadecimal written as text. The switch decides whether those
+     * are used or the ones the desktop reports: a look and feel that wants to look the same
+     * everywhere uses its own, and one that wants to fit in uses the system's.
      *
-     * @param table la tabla a poblar
-     * @param systemColors los pares, alternados
-     * @param useNative si hay que preferir los del escritorio
+     * @param table the table to populate
+     * @param systemColors the pairs, alternating
+     * @param useNative whether the desktop's are to be preferred
      */
     protected void loadSystemColors(UIDefaults table, String[] systemColors, boolean useNative) {
         for (int i = 0; i < systemColors.length - 1; i += 2) {
@@ -107,40 +108,40 @@ public abstract class BasicLookAndFeel extends LookAndFeel {
     }
 
     /**
-     * Pone todo lo demas: colores, tipografias, bordes, margenes y atajos de teclado.
+     * It sets everything else: colours, typefaces, borders, margins and keyboard shortcuts.
      *
-     * @param table la tabla a poblar
+     * @param table the table to populate
      */
     protected void initComponentDefaults(UIDefaults table) {
     }
 
     /**
-     * Los sonidos de este aspecto.
+     * This look and feel's sounds.
      *
-     * @return el mapa de acciones de sonido, o {@code null} si no tiene
+     * @return the map of sound actions, or {@code null} if it has none
      */
     protected ActionMap getAudioActionMap() {
         return null;
     }
 
     /**
-     * Fabrica la accion que reproduce un sonido.
+     * It makes the action that plays a sound.
      *
-     * @param key la clave del sonido en la tabla
-     * @return la accion, o {@code null} si no hay sonido para esa clave
+     * @param key the sound's key in the table
+     * @return the action, or {@code null} if there is no sound for that key
      */
     protected Action createAudioAction(Object key) {
         return null;
     }
 
     /**
-     * Reproduce el sonido de esa accion.
+     * It plays that action's sound.
      *
-     * <p>No hace nada si la accion es {@code null}: quien llama no tiene por que comprobar si el
-     * aspecto define ese sonido, y hacerlo en cada sitio de llamada seria la misma comprobacion
-     * repetida veinte veces.
+     * <p>It does nothing if the action is {@code null}: the caller has no reason to check whether
+     * the look and feel defines that sound, and doing it at every call site would be the same
+     * check repeated twenty times.
      *
-     * @param audioAction la accion, o {@code null}
+     * @param audioAction the action, or {@code null}
      */
     protected void playSound(Action audioAction) {
     }

@@ -5,112 +5,113 @@ import java.io.Writer;
 import java.util.List;
 
 /**
- * KajiLibrary's javax.script.ScriptContext -- todo lo que un script ve del mundo de afuera.
+ * KajiLibrary's javax.script.ScriptContext -- everything a script sees of the outside world.
  *
- * <p>Dos cosas: los **ambitos**, que son {@link Bindings} apilados y numerados, y los tres canales
- * de texto (entrada, salida, error) que el script usa cuando lee o imprime. Un motor que evalua
- * siempre lo hace contra un contexto; cambiar el contexto es cambiar el mundo sin tocar el motor.
+ * <p>Two things: the **scopes**, which are stacked and numbered {@link Bindings}, and the three
+ * text streams (input, output, error) the script uses when it reads or prints. An engine that
+ * evaluates always does so against a context; changing the context is changing the world without
+ * touching the engine.
  *
- * <p>Los ambitos se buscan **de menor a mayor numero**, y ese es todo el sentido de que sean
- * numeros y no nombres: {@link #ENGINE_SCOPE} vale 100 y {@link #GLOBAL_SCOPE} 200, asi que lo que
- * el motor definio tapa lo que puso el que hospeda, y hay lugar libre entre medio y arriba para
- * que una implementacion meta ambitos propios. {@link #getScopes()} dice cuales existen; pedir uno
- * que no esta es un {@link IllegalArgumentException}, no un nulo.
+ * <p>The scopes are searched **from lower to higher number**, and that is the whole point of their
+ * being numbers and not names: {@link #ENGINE_SCOPE} is 100 and {@link #GLOBAL_SCOPE} 200, so what
+ * the engine defined hides what the host put, and there is free room in between and above for an
+ * implementation to put scopes of its own. {@link #getScopes()} says which exist; asking for one
+ * that is not there is an {@link IllegalArgumentException}, not a null.
  *
- * <p>La diferencia entre los dos ambitos que define esta interfaz importa: el de motor es de un
- * solo motor y siempre existe; el global lo comparten todos los motores que salieron del mismo
- * {@link ScriptEngineManager} y **puede no estar**, en cuyo caso {@link #getBindings(int)}
- * devuelve nulo sin que eso sea un error.
+ * <p>The difference between the two scopes this interface defines matters: the engine one belongs
+ * to a single engine and always exists; the global one is shared by all the engines that came out
+ * of the same {@link ScriptEngineManager} and **may be absent**, in which case {@link
+ * #getBindings(int)} returns null without that being an error.
  */
 public interface ScriptContext {
 
     /**
-     * El ambito del motor: lo que este motor tiene definido, y lo primero que se mira.
+     * The engine scope: what this engine has defined, and the first thing looked at.
      *
-     * <p>Vive lo que vive el motor y no lo comparte con nadie.
+     * <p>It lives as long as the engine and is not shared with anybody.
      */
     int ENGINE_SCOPE = 100;
 
     /**
-     * El ambito global: lo que comparten todos los motores del mismo manager.
+     * The global scope: what all the engines of the same manager share.
      *
-     * <p>Se mira despues del de motor, asi que cualquier definicion del script lo tapa.
+     * <p>It is looked at after the engine one, so any definition of the script hides it.
      */
     int GLOBAL_SCOPE = 200;
 
     /**
-     * Pone `bindings` como el ambito `scope`.
+     * Sets `bindings` as the scope `scope`.
      *
-     * @throws IllegalArgumentException si `scope` no es un ambito de este contexto
-     * @throws NullPointerException si `bindings` es nulo y el ambito no admite estar vacio
+     * @throws IllegalArgumentException if `scope` is not a scope of this context
+     * @throws NullPointerException if `bindings` is null and the scope does not admit being empty
      */
     void setBindings(Bindings bindings, int scope);
 
     /**
-     * El {@link Bindings} de ese ambito, o nulo si el ambito existe pero no tiene ninguno puesto.
+     * The {@link Bindings} of that scope, or null if the scope exists but has none set.
      *
-     * @throws IllegalArgumentException si `scope` no es un ambito de este contexto
+     * @throws IllegalArgumentException if `scope` is not a scope of this context
      */
     Bindings getBindings(int scope);
 
     /**
-     * Define `name` con `value` en ese ambito.
+     * Defines `name` with `value` in that scope.
      *
-     * @throws IllegalArgumentException si `name` es vacio o `scope` no existe
-     * @throws NullPointerException si `name` es nulo
+     * @throws IllegalArgumentException if `name` is empty or `scope` does not exist
+     * @throws NullPointerException if `name` is null
      */
     void setAttribute(String name, Object value, int scope);
 
     /**
-     * El valor de `name` en ese ambito, o nulo.
+     * The value of `name` in that scope, or null.
      *
-     * @throws IllegalArgumentException si `name` es vacio o `scope` no existe
-     * @throws NullPointerException si `name` es nulo
+     * @throws IllegalArgumentException if `name` is empty or `scope` does not exist
+     * @throws NullPointerException if `name` is null
      */
     Object getAttribute(String name, int scope);
 
     /**
-     * Saca `name` de ese ambito y devuelve lo que tenia.
+     * Removes `name` from that scope and returns what it held.
      *
-     * @throws IllegalArgumentException si `name` es vacio o `scope` no existe
-     * @throws NullPointerException si `name` es nulo
+     * @throws IllegalArgumentException if `name` is empty or `scope` does not exist
+     * @throws NullPointerException if `name` is null
      */
     Object removeAttribute(String name, int scope);
 
     /**
-     * El valor de `name` en el ambito de menor numero que lo tenga, o nulo si no esta en ninguno.
+     * The value of `name` in the lowest-numbered scope that has it, or null if it is in none.
      *
-     * @throws IllegalArgumentException si `name` es vacio
-     * @throws NullPointerException si `name` es nulo
+     * @throws IllegalArgumentException if `name` is empty
+     * @throws NullPointerException if `name` is null
      */
     Object getAttribute(String name);
 
     /**
-     * El numero del primer ambito que define `name`, o -1 si no lo define ninguno.
+     * The number of the first scope that defines `name`, or -1 if none defines it.
      *
-     * @throws IllegalArgumentException si `name` es vacio
-     * @throws NullPointerException si `name` es nulo
+     * @throws IllegalArgumentException if `name` is empty
+     * @throws NullPointerException if `name` is null
      */
     int getAttributesScope(String name);
 
-    /** Donde escribe el script su salida. */
+    /** Where the script writes its output. */
     Writer getWriter();
 
-    /** Donde escribe el script sus errores. */
+    /** Where the script writes its errors. */
     Writer getErrorWriter();
 
-    /** Cambia la salida. */
+    /** Changes the output. */
     void setWriter(Writer writer);
 
-    /** Cambia la salida de errores. */
+    /** Changes the error output. */
     void setErrorWriter(Writer writer);
 
-    /** De donde lee el script su entrada. */
+    /** Where the script reads its input from. */
     Reader getReader();
 
-    /** Cambia la entrada. */
+    /** Changes the input. */
     void setReader(Reader reader);
 
-    /** Los numeros de todos los ambitos de este contexto, de menor a mayor. */
+    /** The numbers of all the scopes of this context, from lower to higher. */
     List<Integer> getScopes();
 }

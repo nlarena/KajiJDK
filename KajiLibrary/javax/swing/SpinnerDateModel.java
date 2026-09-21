@@ -5,22 +5,24 @@ import java.util.Calendar;
 import java.util.Date;
 
 /**
- * Una secuencia de fechas para un {@link JSpinner}.
+ * A sequence of dates for a {@link JSpinner}.
  *
- * <h2>El campo decide de cuanto avanza</h2>
+ * <h2>The field decides how much it advances by</h2>
  *
- * <p>{@link #setCalendarField} elige que se suma: {@link Calendar#DAY_OF_MONTH} avanza de a un dia,
- * {@link Calendar#MONTH} de a un mes. No es lo mismo que sumar una cantidad fija de milisegundos --
- * un mes dura distinto segun cual sea, y un dia dura distinto cuando cambia el horario de verano.
- * Por eso avanza {@link Calendar}, que sabe de calendarios, y no una resta de tiempos.
+ * <p>{@link #setCalendarField} chooses what is added: {@link Calendar#DAY_OF_MONTH} advances one
+ * day at a time, {@link Calendar#MONTH} one month at a time. It is not the same as adding a
+ * fixed number of milliseconds -- a month lasts differently according to which it is, and a day
+ * lasts differently when the summer time changes. That is why {@link Calendar} advances, which
+ * knows about calendars, and not a subtraction of times.
  *
- * <p>Ese campo es tambien lo que el control cambia solo mientras se edita: parado sobre el mes, las
- * flechas mueven meses; parado sobre el año, años. De ahi que sea una propiedad y no un parametro.
+ * <p>That field is also what the control changes by itself while editing: standing on the month,
+ * the arrows move months; standing on the year, years. Hence it is a property and not a
+ * parameter.
  *
- * <h2>Los limites y el valor</h2>
+ * <h2>The bounds and the value</h2>
  *
- * <p>Como en {@link SpinnerNumberModel}, los limites no recortan: solo hacen que la flecha devuelva
- * nulo al pasarse.
+ * <p>As in {@link SpinnerNumberModel}, the bounds do not clip: they only make the arrow return
+ * null on going past.
  */
 public class SpinnerDateModel extends AbstractSpinnerModel implements Serializable {
 
@@ -30,11 +32,11 @@ public class SpinnerDateModel extends AbstractSpinnerModel implements Serializab
     private int calendarField;
 
     /**
-     * Los campos de {@link Calendar} que se pueden sumar.
+     * The {@link Calendar} fields that can be added.
      *
-     * <p>Es una tabla y no un {@code switch} porque son constantes de otra clase.
+     * <p>It is a table and not a {@code switch} because they are constants of another class.
      */
-    private static final int[] CAMPOS = {
+    private static final int[] FIELDS = {
         Calendar.ERA,
         Calendar.YEAR,
         Calendar.MONTH,
@@ -52,9 +54,9 @@ public class SpinnerDateModel extends AbstractSpinnerModel implements Serializab
         Calendar.MILLISECOND,
     };
 
-    private static boolean campoValido(int calendarField) {
-        for (int i = 0; i < CAMPOS.length; i++) {
-            if (CAMPOS[i] == calendarField) {
+    private static boolean validField(int calendarField) {
+        for (int i = 0; i < FIELDS.length; i++) {
+            if (FIELDS[i] == calendarField) {
                 return true;
             }
         }
@@ -62,19 +64,19 @@ public class SpinnerDateModel extends AbstractSpinnerModel implements Serializab
     }
 
     /**
-     * Con fecha, limites y campo.
+     * With date, bounds and field.
      *
-     * <p>Los limites pueden ser nulos, que es como decir "sin tope".
+     * <p>The bounds may be null, which is like saying "no cap".
      *
-     * @throws IllegalArgumentException si la fecha es nula, si el campo no es uno de los que se
-     *     pueden sumar, o si no se cumple inicio &lt;= fecha &lt;= fin.
+     * @throws IllegalArgumentException if the date is null, if the field is not one of those that
+     *     can be added, or if start &lt;= date &lt;= end does not hold.
      */
     public SpinnerDateModel(Date value, Comparable<Date> start, Comparable<Date> end,
             int calendarField) {
         if (value == null) {
             throw new IllegalArgumentException("value is null");
         }
-        if (!campoValido(calendarField)) {
+        if (!validField(calendarField)) {
             throw new IllegalArgumentException("invalid calendarField");
         }
         if (!(((start == null) || (start.compareTo(value) <= 0))
@@ -88,12 +90,12 @@ public class SpinnerDateModel extends AbstractSpinnerModel implements Serializab
         this.value.setTime(value);
     }
 
-    /** Desde ahora, de a un dia, sin topes. */
+    /** From now on, one day at a time, with no caps. */
     public SpinnerDateModel() {
         this(new Date(), null, null, Calendar.DAY_OF_MONTH);
     }
 
-    /** La fecha mas temprana; nulo quita el tope. */
+    /** The earliest date; null removes the cap. */
     public void setStart(Comparable<Date> start) {
         if ((start == null) ? (this.start != null) : !start.equals(this.start)) {
             this.start = start;
@@ -105,7 +107,7 @@ public class SpinnerDateModel extends AbstractSpinnerModel implements Serializab
         return start;
     }
 
-    /** La fecha mas tardia; nulo quita el tope. */
+    /** The latest date; null removes the cap. */
     public void setEnd(Comparable<Date> end) {
         if ((end == null) ? (this.end != null) : !end.equals(this.end)) {
             this.end = end;
@@ -118,12 +120,12 @@ public class SpinnerDateModel extends AbstractSpinnerModel implements Serializab
     }
 
     /**
-     * De cuanto avanza cada flecha; ver la nota de la clase.
+     * How much each arrow advances by; see the class note.
      *
-     * @throws IllegalArgumentException si no es un campo que se pueda sumar.
+     * @throws IllegalArgumentException if it is not a field that can be added.
      */
     public void setCalendarField(int calendarField) {
-        if (!campoValido(calendarField)) {
+        if (!validField(calendarField)) {
             throw new IllegalArgumentException("invalid calendarField");
         }
         if (calendarField != this.calendarField) {
@@ -136,27 +138,27 @@ public class SpinnerDateModel extends AbstractSpinnerModel implements Serializab
         return calendarField;
     }
 
-    /** Suma uno del campo elegido, en esa direccion. */
-    private Date correr(int dir) {
+    /** It adds one of the chosen field, in that direction. */
+    private Date run(int dir) {
         Calendar cal = Calendar.getInstance();
         cal.setTime(value.getTime());
         cal.add(calendarField, dir);
         return cal.getTime();
     }
 
-    /** La siguiente, o nulo si pasa el fin. */
+    /** The next one, or null if it goes past the end. */
     public Object getNextValue() {
-        Date next = correr(1);
+        Date next = run(1);
         return ((end == null) || (end.compareTo(next) >= 0)) ? next : null;
     }
 
-    /** La anterior, o nulo si pasa el inicio. */
+    /** The previous one, or null if it goes past the start. */
     public Object getPreviousValue() {
-        Date prev = correr(-1);
+        Date prev = run(-1);
         return ((start == null) || (start.compareTo(prev) <= 0)) ? prev : null;
     }
 
-    /** La fecha, ya como {@link Date}. */
+    /** The date, already as a {@link Date}. */
     public Date getDate() {
         return value.getTime();
     }
@@ -166,9 +168,9 @@ public class SpinnerDateModel extends AbstractSpinnerModel implements Serializab
     }
 
     /**
-     * Cambia la fecha.
+     * It changes the date.
      *
-     * @throws IllegalArgumentException si no es una {@link Date}.
+     * @throws IllegalArgumentException if it is not a {@link Date}.
      */
     public void setValue(Object value) {
         if ((value == null) || !(value instanceof Date)) {

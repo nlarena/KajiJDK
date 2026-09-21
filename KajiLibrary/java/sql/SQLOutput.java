@@ -1,10 +1,11 @@
 package java.sql;
 
 /**
- * KajiLibrary's java.sql.SQLOutput -- el flujo en el que un {@link SQLData} escribe sus atributos.
+ * KajiLibrary's java.sql.SQLOutput -- the stream an {@link SQLData} writes its attributes to.
  *
- * <p>El espejo exacto de {@link SQLInput}, y tiene que serlo: el orden de los `writeXxx` es el que
- * los `readXxx` van a suponer. Un atributo de mas o de menos no da error -- da un valor corrido.
+ * <p>The exact mirror of {@link SQLInput}, and it has to be: the order of the `writeXxx` is the one
+ * the `readXxx` will assume. One attribute too many or too few gives no error -- it gives a shifted
+ * value.
  */
 public interface SQLOutput {
 
@@ -40,12 +41,12 @@ public interface SQLOutput {
 
     void writeBinaryStream(java.io.InputStream x) throws SQLException;
 
-    /** Escribe otro valor estructurado, que se serializa a su vez con su propio `writeSQL`. */
+    /** Writes another structured value, which is serialized in turn with its own `writeSQL`. */
     void writeObject(SQLData x) throws SQLException;
 
-    /** Escribe un objeto cualquiera diciendo con que tipo SQL. */
+    /** Writes any object, saying with which SQL type. */
     default void writeObject(Object x, SQLType targetSqlType) throws SQLException {
-        throw new SQLFeatureNotSupportedException("writeObject(Object, SQLType) no esta implementado");
+        throw new SQLFeatureNotSupportedException("writeObject(Object, SQLType) not implemented");
     }
 
     void writeRef(Ref x) throws SQLException;

@@ -9,14 +9,15 @@ import javax.management.MBeanNotificationInfo;
 import javax.management.MBeanOperationInfo;
 
 /**
- * La implementacion de {@link OpenMBeanInfo}.
+ * The implementation of {@link OpenMBeanInfo}.
  *
- * <p>Convierte los tres arreglos abiertos a los de `javax.management` para pasarselos a `super`.
- * Los objetos son los mismos: toda implementacion util de `OpenMBeanAttributeInfo` extiende
- * `MBeanAttributeInfo`, y lo mismo para las otras dos. Lo unico que cambia es el tipo del arreglo.
+ * <p>It converts the three open arrays to {@code javax.management}'s to pass them to
+ * {@code super}. The objects are the same: every useful implementation of
+ * {@code OpenMBeanAttributeInfo} extends {@code MBeanAttributeInfo}, and the same for the other
+ * two. The only thing that changes is the array's type.
  *
- * <p>Un `null` en cualquiera de los arreglos se toma como "ninguno", igual que en `MBeanInfo`. Es
- * distinto de un arreglo vacio solo en la intencion de quien llama; el resultado es el mismo.
+ * <p>A {@code null} in any of the arrays is taken as "none", as in {@code MBeanInfo}. It differs
+ * from an empty array only in the caller's intention; the result is the same.
  */
 public class OpenMBeanInfoSupport extends MBeanInfo implements OpenMBeanInfo {
 
@@ -24,7 +25,7 @@ public class OpenMBeanInfoSupport extends MBeanInfo implements OpenMBeanInfo {
 
     private transient int hash;
 
-    /** Un MBean abierto con esos miembros. */
+    /** An open MBean with those members. */
     public OpenMBeanInfoSupport(String className, String description,
             OpenMBeanAttributeInfo[] openAttributes, OpenMBeanConstructorInfo[] openConstructors,
             OpenMBeanOperationInfo[] openOperations, MBeanNotificationInfo[] notifications) {
@@ -32,7 +33,7 @@ public class OpenMBeanInfoSupport extends MBeanInfo implements OpenMBeanInfo {
                 notifications, null);
     }
 
-    /** Lo mismo, con ese descriptor. */
+    /** The same, with that descriptor. */
     public OpenMBeanInfoSupport(String className, String description,
             OpenMBeanAttributeInfo[] openAttributes, OpenMBeanConstructorInfo[] openConstructors,
             OpenMBeanOperationInfo[] openOperations, MBeanNotificationInfo[] notifications,
@@ -76,11 +77,11 @@ public class OpenMBeanInfoSupport extends MBeanInfo implements OpenMBeanInfo {
     }
 
     /**
-     * Igualdad contra cualquier {@link OpenMBeanInfo}.
+     * Equality against any {@link OpenMBeanInfo}.
      *
-     * <p>Los arreglos se comparan **sin orden**: dos descripciones del mismo MBean que enumeran los
-     * atributos en distinto orden describen el mismo MBean. Es lo que define el contrato, y es lo
-     * que hace que la comparacion sobreviva a una serializacion que no preserve el orden.
+     * <p>The arrays are compared <b>without order</b>: two descriptions of the same MBean that list
+     * the attributes in a different order describe the same MBean. It is what the contract defines,
+     * and it is what makes the comparison survive a serialization that does not preserve order.
      */
     public boolean equals(Object obj) {
         if (this == obj) {
@@ -103,26 +104,26 @@ public class OpenMBeanInfoSupport extends MBeanInfo implements OpenMBeanInfo {
         if (a.length != b.length) {
             return false;
         }
-        // Con arreglos chicos --y estos lo son: los miembros de un MBean-- la busqueda lineal es
-        // mas barata que armar dos conjuntos, y no exige que los elementos tengan un `hashCode`
-        // consistente con `equals`, que es una suposicion de mas sobre implementaciones ajenas.
-        boolean[] usado = new boolean[b.length];
+        // With small arrays --and these are: an MBean's members-- the linear search is cheaper than
+        // building two sets, and it does not require the elements to have a `hashCode` consistent
+        // with `equals`, which is one more assumption about other people's implementations.
+        boolean[] used = new boolean[b.length];
         for (int i = 0; i < a.length; i++) {
-            boolean encontrado = false;
-            for (int j = 0; j < b.length && !encontrado; j++) {
-                if (!usado[j] && a[i].equals(b[j])) {
-                    usado[j] = true;
-                    encontrado = true;
+            boolean found = false;
+            for (int j = 0; j < b.length && !found; j++) {
+                if (!used[j] && a[i].equals(b[j])) {
+                    used[j] = true;
+                    found = true;
                 }
             }
-            if (!encontrado) {
+            if (!found) {
                 return false;
             }
         }
         return true;
     }
 
-    /** La suma de los hashes, que es lo unico independiente del orden. */
+    /** The sum of the hashes, which is the only order-independent thing. */
     public int hashCode() {
         if (this.hash == 0) {
             int h = this.getClassName().hashCode();

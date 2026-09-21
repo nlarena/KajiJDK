@@ -2,13 +2,13 @@ package java.security.spec;
 
 import java.math.BigInteger;
 
-// Una clave publica RSA en claro: el modulo n y el exponente publico e.
+// An RSA public key in the clear: the modulus n and the public exponent e.
 //
-// **No valida nada**, y no es un olvido: es lo que hace el JDK, hasta el punto de aceptar los dos
-// argumentos en null. La razon es que no hay validacion barata que sirva —comprobar que n sea
-// producto de dos primos es el problema que RSA supone dificil— y una validacion parcial daria una
-// falsa sensacion de que la clave se reviso. Quien construye la clave a partir de esta spec es el
-// que decide si la acepta.
+// It **validates nothing**, and it is not an oversight: it is what the JDK does, to the point of
+// accepting both arguments as null. The reason is that there is no cheap validation that helps
+// —checking that n is a product of two primes is the problem RSA assumes hard— and a partial
+// validation would give a false sense that the key was checked. Whoever builds the key from this
+// spec is the one who decides whether to accept it.
 public class RSAPublicKeySpec implements KeySpec {
 
     private final BigInteger modulus;
@@ -19,8 +19,9 @@ public class RSAPublicKeySpec implements KeySpec {
         this(modulus, publicExponent, null);
     }
 
-    // La sobrecarga con parametros existe por RSASSA-PSS: ahi la clave no es solo (n, e) sino
-    // tambien que hash y que largo de sal se usan, y esa informacion viaja dentro de la clave.
+    // The overload with parameters exists because of RSASSA-PSS: there the key is not only (n, e)
+    // but also which hash and which salt length are used, and that information travels inside the
+    // key.
     public RSAPublicKeySpec(BigInteger modulus, BigInteger publicExponent,
                             AlgorithmParameterSpec params) {
         this.modulus = modulus;
@@ -36,7 +37,7 @@ public class RSAPublicKeySpec implements KeySpec {
         return this.publicExponent;
     }
 
-    // Los parametros del algoritmo, o null si la clave no los lleva.
+    // The algorithm parameters, or null if the key carries none.
     public AlgorithmParameterSpec getParams() {
         return this.params;
     }

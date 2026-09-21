@@ -1,6 +1,6 @@
 package javax.print.attribute;
 
-// Marca de rol: un atributo que describe el estado o las caracteristicas de un trabajo de
-// impresion. Sin miembros propios: el tipo es todo el contenido.
+// Role marker: an attribute that describes the state or the characteristics of a print job. No
+// members of its own: the type is the whole content.
 public interface PrintJobAttribute extends Attribute {
 }

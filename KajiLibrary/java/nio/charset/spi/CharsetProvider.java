@@ -4,39 +4,39 @@ import java.nio.charset.Charset;
 import java.util.Iterator;
 
 /**
- * KajiLibrary's java.nio.charset.spi.CharsetProvider -- codificaciones que no trae la plataforma.
+ * KajiLibrary's java.nio.charset.spi.CharsetProvider -- charsets the platform does not ship.
  *
- * <p>Dos metodos, y son dos preguntas distintas que conviene no confundir:
- * {@link #charsetForName} resuelve <b>una</b> por nombre, y {@link #charsets} enumera las que este
- * proveedor ofrece. La resolucion no se implementa recorriendo la enumeracion, y por eso son dos: un
- * proveedor puede reconocer nombres que no enumera.
+ * <p>Two methods, and they are two different questions worth not confusing: {@link #charsetForName}
+ * resolves <b>one</b> by name, and {@link #charsets} enumerates the ones this provider offers.
+ * Resolution is not implemented by walking the enumeration, and that is why there are two: a
+ * provider can recognize names it does not enumerate.
  *
- * <p>Eso pasa de verdad y no es un detalle. Una codificacion tiene un nombre canonico y una lista de
- * <b>alias</b> --{@code UTF-8} tambien se llama {@code unicode-1-1-utf-8}, y hay decenas de nombres
- * historicos-- y {@code charsetForName} tiene que reconocerlos todos aunque enumere una sola. Al
- * reves seria absurdo: enumerar cada alias como si fuera una codificacion distinta le mostraria a
- * quien pregunta veinte entradas que son la misma.
+ * <p>That really happens and is not a detail. A charset has a canonical name and a list of
+ * <b>aliases</b> --{@code UTF-8} is also called {@code unicode-1-1-utf-8}, and there are dozens of
+ * historical names-- and {@code charsetForName} has to recognize them all even though it enumerates
+ * a single one. The other way round would be absurd: enumerating each alias as if it were a
+ * distinct charset would show whoever asks twenty entries that are the same.
  *
- * <p>La busqueda no distingue mayusculas, y la enumeracion no puede repetir la misma codificacion.
+ * <p>Lookup is case-insensitive, and the enumeration cannot repeat the same charset.
  */
 public abstract class CharsetProvider {
 
-    /** Para las subclases. */
+    /** For subclasses. */
     protected CharsetProvider() {
     }
 
     /**
-     * Las codificaciones de este proveedor.
+     * The charsets of this provider.
      *
-     * <p>Una por codificacion, no una por alias; ver la nota de la clase.
+     * <p>One per charset, not one per alias; see the class note.
      */
     public abstract Iterator<Charset> charsets();
 
     /**
-     * La codificacion con ese nombre o alias.
+     * The charset with that name or alias.
      *
-     * @param charsetName sin distinguir mayusculas de minusculas
-     * @return null si este proveedor no la conoce, que no es un error: se le pregunta al que sigue
+     * @param charsetName case-insensitive
+     * @return null if this provider does not know it, which is not an error: the next one is asked
      */
     public abstract Charset charsetForName(String charsetName);
 }

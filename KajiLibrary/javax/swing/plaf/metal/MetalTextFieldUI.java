@@ -8,15 +8,15 @@ import javax.swing.plaf.basic.BasicTextFieldUI;
 import javax.swing.text.JTextComponent;
 
 /**
- * El campo de texto de Metal.
+ * Metal's text field.
  *
- * <p>Lo unico que agrega es vigilar la propiedad {@code "editable"} y, cuando cambia, poner el
- * fondo que corresponde: el de un campo editable no es el mismo que el de uno de solo lectura, y
- * el basico no distingue.
+ * <p>The only thing it adds is watching the {@code "editable"} property and, when it changes,
+ * setting the background that corresponds: an editable field's is not the same as a read-only
+ * one's, and the basic one does not tell them apart.
  *
- * <p>Lo hace en {@code propertyChange} y no en {@code installDefaults} porque un campo se vuelve
- * de solo lectura en cualquier momento -- un formulario que se congela mientras guarda -- y el
- * color tiene que seguirlo.
+ * <p>It does it in {@code propertyChange} and not in {@code installDefaults} because a field
+ * becomes read-only at any moment -- a form that freezes while saving -- and the colour has to
+ * follow it.
  */
 public class MetalTextFieldUI extends BasicTextFieldUI {
 

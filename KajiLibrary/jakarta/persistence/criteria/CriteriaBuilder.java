@@ -1454,19 +1454,25 @@ public interface CriteriaBuilder {
      * Create expression to return current date.
      * @return expression for current date
      */
-    // OMITIDO (subset): Expression<java.sql.Date> currentDate();  -- requiere java.sql, otro modulo
+    // OMITTED (subset): Expression<java.sql.Date> currentDate();
+    // The note said it needs java.sql, "another module"; java.sql is in KajiLibrary now,
+    // so that reason no longer holds and the member can come back.
 
     /**
      * Create expression to return current timestamp.
      * @return expression for current timestamp
      */	
-    // OMITIDO (subset): Expression<java.sql.Timestamp> currentTimestamp();  -- requiere java.sql, otro modulo
+    // OMITTED (subset): Expression<java.sql.Timestamp> currentTimestamp();
+    // The note said it needs java.sql, "another module"; java.sql is in KajiLibrary now,
+    // so that reason no longer holds and the member can come back.
 
     /**
      * Create expression to return current time.
      * @return expression for current time
      */	
-    // OMITIDO (subset): Expression<java.sql.Time> currentTime();  -- requiere java.sql, otro modulo
+    // OMITTED (subset): Expression<java.sql.Time> currentTime();
+    // The note said it needs java.sql, "another module"; java.sql is in KajiLibrary now,
+    // so that reason no longer holds and the member can come back.
 
     /**
      * Create expression to return current local date.

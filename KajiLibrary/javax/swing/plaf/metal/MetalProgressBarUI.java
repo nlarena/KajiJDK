@@ -10,14 +10,14 @@ import javax.swing.plaf.ComponentUI;
 import javax.swing.plaf.basic.BasicProgressBarUI;
 
 /**
- * La barra de progreso de Metal.
+ * Metal's progress bar.
  *
- * <p>Lo unico que agrega al basico es una linea de sombra: donde termina la parte llena se dibuja
- * un borde del color oscuro del tema. Es lo que evita que el relleno y el fondo se toquen sin nada
- * en el medio, que a mitad de camino se lee como una mancha y no como un progreso.
+ * <p>The only thing it adds to the basic one is a shadow line: where the filled part ends a
+ * border of the theme's dark colour is drawn. It is what keeps the fill and the background from
+ * touching with nothing in between, which halfway along reads as a smudge and not as progress.
  *
- * <p>Los dos metodos son el mismo dibujo para los dos modos: el que sabe cuanto falta y el que
- * anda de un lado al otro sin saberlo.
+ * <p>The two methods are the same drawing for the two modes: the one that knows how much is left
+ * and the one that goes from side to side without knowing.
  */
 public class MetalProgressBarUI extends BasicProgressBarUI {
 
@@ -30,43 +30,43 @@ public class MetalProgressBarUI extends BasicProgressBarUI {
 
     public void paintDeterminate(Graphics g, JComponent c) {
         super.paintDeterminate(g, c);
-        sombra(g, c, cuantoLleva(c));
+        shadow(g, c, amountDone(c));
     }
 
     public void paintIndeterminate(Graphics g, JComponent c) {
         super.paintIndeterminate(g, c);
-        Rectangle caja = getBox(null);
-        if (caja != null) {
+        Rectangle box = getBox(null);
+        if (box != null) {
             g.setColor(MetalLookAndFeel.getControlDarkShadow());
-            g.drawRect(caja.x, caja.y, caja.width - 1, caja.height - 1);
+            g.drawRect(box.x, box.y, box.width - 1, box.height - 1);
         }
     }
 
-    /** La linea donde termina lo lleno. */
-    private void sombra(Graphics g, JComponent c, int lleno) {
-        if (lleno <= 0) {
+    /** The line where the filled part ends. */
+    private void shadow(Graphics g, JComponent c, int filled) {
+        if (filled <= 0) {
             return;
         }
         JProgressBar b = (JProgressBar) c;
         Insets i = b.getInsets();
         g.setColor(MetalLookAndFeel.getControlDarkShadow());
         if (b.getOrientation() == JProgressBar.HORIZONTAL) {
-            int alto = b.getHeight() - i.top - i.bottom;
-            g.drawRect(i.left, i.top, lleno - 1, alto - 1);
+            int height = b.getHeight() - i.top - i.bottom;
+            g.drawRect(i.left, i.top, filled - 1, height - 1);
         } else {
-            int ancho = b.getWidth() - i.left - i.right;
-            int alto = b.getHeight() - i.top - i.bottom;
-            g.drawRect(i.left, i.top + alto - lleno, ancho - 1, lleno - 1);
+            int width = b.getWidth() - i.left - i.right;
+            int height = b.getHeight() - i.top - i.bottom;
+            g.drawRect(i.left, i.top + height - filled, width - 1, filled - 1);
         }
     }
 
-    /** Los pixeles llenos, a lo largo de la barra. */
-    private int cuantoLleva(JComponent c) {
+    /** The filled pixels, along the bar. */
+    private int amountDone(JComponent c) {
         JProgressBar b = (JProgressBar) c;
         Insets i = b.getInsets();
-        int largo = (b.getOrientation() == JProgressBar.HORIZONTAL)
+        int length = (b.getOrientation() == JProgressBar.HORIZONTAL)
                 ? b.getWidth() - i.left - i.right
                 : b.getHeight() - i.top - i.bottom;
-        return getAmountFull(i, largo, largo);
+        return getAmountFull(i, length, length);
     }
 }

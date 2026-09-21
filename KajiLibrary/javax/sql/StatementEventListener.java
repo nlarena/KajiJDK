@@ -1,17 +1,16 @@
 package javax.sql;
 
 /**
- * KajiLibrary's javax.sql.StatementEventListener -- lo escucha un pool de **sentencias**.
+ * KajiLibrary's javax.sql.StatementEventListener -- a **statement** pool listens to it.
  *
- * <p>Misma idea que {@link ConnectionEventListener} un nivel mas abajo: preparar una sentencia
- * cuesta, asi que un pool las guarda tambien a ellas, y necesita enterarse de cuando la aplicacion
- * cerro la suya.
+ * <p>The same idea as {@link ConnectionEventListener} one level down: preparing a statement is
+ * expensive, so a pool keeps them too, and needs to find out when the application closed its own.
  */
 public interface StatementEventListener extends java.util.EventListener {
 
-    /** La aplicacion cerro la sentencia: se puede reutilizar. */
+    /** The application closed the statement: it can be reused. */
     void statementClosed(StatementEvent event);
 
-    /** La sentencia dejo de ser valida: hay que descartarla. */
+    /** The statement stopped being valid: it has to be discarded. */
     void statementErrorOccurred(StatementEvent event);
 }

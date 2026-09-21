@@ -12,78 +12,80 @@ import java.util.function.BiPredicate;
 import java.util.function.Supplier;
 
 /**
- * Un pedido HTTP ya armado. Inmutable, y por lo tanto reusable entre hilos.
+ * An HTTP request already built. Immutable, and therefore reusable between threads.
  *
- * <h2>Por que el cuerpo es un {@code Publisher} y no un arreglo de bytes</h2>
+ * <h2>Why the body is a {@code Publisher} and not a byte array</h2>
  *
- * <p>Porque un cuerpo puede no caber en memoria, o no existir todavia cuando el pedido se arma. Un
- * {@link BodyPublisher} es un {@link Flow.Publisher} de {@link ByteBuffer}: el cliente le pide los
- * datos <em>cuando los va a mandar</em> y al ritmo que la red los acepta.
+ * <p>Because a body may not fit in memory, or may not exist yet when the request is built. A {@link
+ * BodyPublisher} is a {@link Flow.Publisher} of {@link ByteBuffer}: the client asks it for the data
+ * <em>when it is about to send it</em> and at the pace the network accepts it.
  *
- * <p>Eso es contrapresion real, y es lo que permite subir un archivo de gigabytes sin cargarlo. El
- * precio es que un {@code BodyPublisher} puede ser consultado <strong>mas de una vez</strong> —al
- * seguir una redireccion, al reintentar— y por eso {@link BodyPublishers#ofInputStream} recibe un
- * {@link Supplier} y no un flujo: un flujo ya consumido no se puede volver a leer, y un proveedor
- * puede dar otro.
+ * <p>That is real backpressure, and it is what allows uploading a file of gigabytes without loading
+ * it. The price is that a {@code BodyPublisher} can be subscribed to <strong>more than
+ * once</strong> —when following a redirect, when retrying— and that is why {@link
+ * BodyPublishers#ofInputStream} takes a {@link Supplier} and not a stream: a stream already
+ * consumed cannot be read again, and a supplier can give another.
  *
  * @since 11
  */
 public abstract class HttpRequest {
 
-    /** Para las implementaciones. */
+    /** For implementations. */
     protected HttpRequest() {
     }
 
-    /** Un constructor de pedidos con esa URI. */
+    /** A request builder with that URI. */
     public static Builder newBuilder(URI uri) {
         return newBuilder().uri(uri);
     }
 
     /**
-     * Un constructor que arranca copiando otro pedido, con sus encabezados filtrados.
+     * A builder that starts by copying another request, with its headers filtered.
      *
-     * <p>Sirve para reescribir un pedido —sacarle una autorizacion antes de seguir una redireccion
-     * a otro host, por ejemplo— sin volver a armarlo entero.
+     * <p>It is for rewriting a request —removing an authorization before following a redirect to
+     * another host, for example— without building it all again.
      */
     public static Builder newBuilder(HttpRequest request, BiPredicate<String, String> filter) {
         throw new UnsupportedOperationException(
-                "esta VM no trae implementacion del cliente HTTP; ver HttpClient");
+                "this VM has no HTTP client implementation; see HttpClient");
     }
 
-    /** Un constructor vacio. */
+    /** An empty builder. */
     public static Builder newBuilder() {
         throw new UnsupportedOperationException(
-                "esta VM no trae implementacion del cliente HTTP; ver HttpClient");
+                "this VM has no HTTP client implementation; see HttpClient");
     }
 
-    /** El cuerpo, si el pedido lleva uno. */
+    /** The body, if the request carries one. */
     public abstract Optional<BodyPublisher> bodyPublisher();
 
-    /** El metodo, en mayusculas. */
+    /** The request method. */
     public abstract String method();
 
-    /** El plazo total del pedido, si se puso uno. */
+    /** The timeout for the whole request, if one was set. */
     public abstract Optional<Duration> timeout();
 
     /**
-     * Si se pidio {@code Expect: 100-continue}.
+     * Whether {@code Expect: 100-continue} was requested.
      *
-     * <p>Es preguntarle al servidor si va a aceptar el cuerpo <em>antes</em> de mandarlo. Vale la
-     * pena cuando el cuerpo es grande y el rechazo probable —una autorizacion que puede fallar—, y
-     * cuesta un viaje de mas cuando no.
+     * <p>It asks the server whether it will accept the body <em>before</em> sending it. It pays off
+     * when the body is large and a refusal likely —an authorization that may fail—, and costs an
+     * extra round trip when not.
      */
     public abstract boolean expectContinue();
 
-    /** A donde va. */
+    /** Where it goes. */
     public abstract URI uri();
 
-    /** La version pedida, si se fijo una. */
+    /** The requested version, if one was set. */
     public abstract Optional<HttpClient.Version> version();
 
-    /** Los encabezados. */
+    /** The headers. */
     public abstract HttpHeaders headers();
 
-    /** Sobre la URI, el metodo, los encabezados, el plazo, {@code expectContinue} y la version. */
+    /**
+     * Over the URI, the method, the headers, the timeout, {@code expectContinue} and the version.
+     */
     public final boolean equals(Object obj) {
         if (obj == this) {
             return true;
@@ -105,178 +107,186 @@ public abstract class HttpRequest {
     }
 
     /**
-     * Arma un {@link HttpRequest}.
+     * Builds an {@link HttpRequest}.
      *
-     * <p>Todos los metodos devuelven {@code this}, asi que se encadenan. La diferencia entre
-     * {@link #header} y {@link #setHeader} es la de siempre y conviene no confundirla: el primero
-     * <em>agrega</em> un valor mas, el segundo <em>reemplaza</em> los que hubiera.
+     * <p>All methods return {@code this}, so they chain. The difference between {@link #header} and
+     * {@link #setHeader} is the usual one and worth not mixing up: the first <em>adds</em> one more
+     * value, the second <em>replaces</em> whatever there was.
      */
     public interface Builder {
 
-        /** A donde va el pedido. */
+        /** Where the request goes. */
         Builder uri(URI uri);
 
-        /** Pide {@code Expect: 100-continue}; ver {@link HttpRequest#expectContinue}. */
+        /** It asks for {@code Expect: 100-continue}; see {@link HttpRequest#expectContinue}. */
         Builder expectContinue(boolean enable);
 
-        /** Fija la version a pedir. */
+        /** Sets the version to request. */
         Builder version(HttpClient.Version version);
 
-        /** Agrega un valor a ese encabezado, sin sacar los que haya. */
+        /** Adds a value to that header, without removing the existing ones. */
         Builder header(String name, String value);
 
         /**
-         * Agrega varios, como pares nombre/valor.
+         * Adds several, as name/value pairs.
          *
-         * @throws IllegalArgumentException si la cantidad es impar
+         * @throws IllegalArgumentException if the count is odd
          */
         Builder headers(String... headers);
 
-        /** El plazo total; vencerlo da {@link HttpTimeoutException}. */
+        /** The total timeout; running out of it gives {@link HttpTimeoutException}. */
         Builder timeout(Duration duration);
 
-        /** Deja ese encabezado con ese unico valor. */
+        /** Leaves that header with that single value. */
         Builder setHeader(String name, String value);
 
-        /** Metodo {@code GET}, sin cuerpo. */
+        /** Method {@code GET}, with no body. */
         Builder GET();
 
-        /** Metodo {@code POST} con ese cuerpo. */
+        /** Method {@code POST} with that body. */
         Builder POST(BodyPublisher bodyPublisher);
 
-        /** Metodo {@code PUT} con ese cuerpo. */
+        /** Method {@code PUT} with that body. */
         Builder PUT(BodyPublisher bodyPublisher);
 
-        /** Metodo {@code DELETE}, sin cuerpo. */
+        /** Method {@code DELETE}, with no body. */
         Builder DELETE();
 
         /**
-         * Metodo {@code HEAD}, sin cuerpo.
+         * Method {@code HEAD}, with no body.
          *
-         * <p>Llego con cuerpo por omision —es {@code method("HEAD", noBody())}— porque agregarlo
-         * como abstracto habria roto a quien ya implementaba esta interfaz.
+         * <p>It came with a default body —it is {@code method("HEAD", noBody())}— because adding it
+         * as abstract would have broken whoever already implemented this interface.
          */
         default Builder HEAD() {
             return method("HEAD", BodyPublishers.noBody());
         }
 
         /**
-         * Cualquier metodo.
+         * Any method.
          *
-         * @throws IllegalArgumentException si el metodo no es un token HTTP valido, o si es uno de
-         *     los que el cliente no deja mandar por seguridad ({@code CONNECT}, {@code TRACE})
+         * @throws IllegalArgumentException if the method is not a valid HTTP token, or is one the
+         *     implementation restricts. This javadoc named {@code CONNECT} and {@code TRACE}; the
+         *     JDK leaves the choice to the implementation, and its own restricts only {@code
+         *     CONNECT}.
          */
         Builder method(String method, BodyPublisher bodyPublisher);
 
-        /** El pedido armado. */
+        /** The built request. */
         HttpRequest build();
 
         /**
-         * Una copia independiente de este constructor.
+         * An independent copy of this builder.
          *
-         * <p>Sirve para armar varios pedidos que comparten la mayor parte de la configuracion sin
-         * que tocar uno afecte a los otros.
+         * <p>It is for building several requests that share most of the configuration, without
+         * changes to one affecting the others.
          */
         Builder copy();
     }
 
     /**
-     * De donde salen los bytes del cuerpo.
+     * Where the body's bytes come from.
      *
-     * <p>Un {@link Flow.Publisher} con una cosa mas: {@link #contentLength}, que el cliente necesita
-     * <strong>antes</strong> de empezar a publicar para poder mandar {@code Content-Length} en vez
-     * de trocear.
+     * <p>A {@link Flow.Publisher} with one thing more: {@link #contentLength}, which the client
+     * needs <strong>before</strong> it starts publishing so it can send {@code Content-Length}
+     * instead of chunking.
      */
     public interface BodyPublisher extends Flow.Publisher<ByteBuffer> {
 
         /**
-         * Cuantos bytes va a publicar.
+         * How many bytes it will publish.
          *
-         * @return el largo, o un negativo si no se sabe — y ahi el cuerpo va por trozos
+         * @return the length, or a negative if unknown — and then the body goes in chunks
          */
         long contentLength();
     }
 
     /**
-     * Los {@link BodyPublisher} que trae el JDK.
+     * The {@link BodyPublisher}s the JDK provides.
      *
-     * <p>En esta VM declinan: no hay implementacion del cliente HTTP. Ver {@link HttpClient}.
+     * <p>In this VM they refuse: there is no HTTP client implementation. See {@link HttpClient}.
      */
     public static class BodyPublishers {
 
         private BodyPublishers() {
         }
 
-        private static BodyPublisher declinar() {
+        private static BodyPublisher refuse() {
             throw new UnsupportedOperationException(
-                    "esta VM no trae implementacion del cliente HTTP; ver HttpClient");
+                    "this VM has no HTTP client implementation; see HttpClient");
         }
 
-        /** Envuelve un publicador propio, con largo desconocido. */
+        /** Wraps a custom publisher, with unknown length. */
         public static BodyPublisher fromPublisher(
                 Flow.Publisher<? extends ByteBuffer> publisher) {
-            return declinar();
+            return refuse();
         }
 
-        /** Igual, declarando el largo. */
+        /** The same, declaring the length. */
         public static BodyPublisher fromPublisher(
                 Flow.Publisher<? extends ByteBuffer> publisher, long contentLength) {
-            return declinar();
+            return refuse();
         }
 
-        /** El cuerpo es esa cadena, en UTF-8. */
+        /** The body is that string, in UTF-8. */
         public static BodyPublisher ofString(String body) {
-            return declinar();
+            return refuse();
         }
 
-        /** Igual, con ese juego de caracteres. */
+        /** The same, with that charset. */
         public static BodyPublisher ofString(String s, Charset charset) {
-            return declinar();
+            return refuse();
         }
 
         /**
-         * El cuerpo sale de un flujo que da el proveedor.
+         * The body comes from a stream the supplier gives.
          *
-         * <p>Un {@link Supplier} y no un flujo directo: ver la nota de {@link HttpRequest} sobre por
-         * que un cuerpo puede pedirse mas de una vez.
+         * <p>A {@link Supplier} and not a stream directly: see the {@link HttpRequest} note on why
+         * a body can be requested more than once.
          */
         public static BodyPublisher ofInputStream(Supplier<? extends InputStream> streamSupplier) {
-            return declinar();
+            return refuse();
         }
 
-        /** El cuerpo son esos bytes. */
+        /** The body is those bytes. */
         public static BodyPublisher ofByteArray(byte[] buf) {
-            return declinar();
+            return refuse();
         }
 
-        /** Un tramo de esos bytes. */
+        /** A slice of those bytes. */
         public static BodyPublisher ofByteArray(byte[] buf, int offset, int length) {
-            return declinar();
+            return refuse();
         }
 
-        /** El cuerpo es el contenido de ese archivo. */
+        /** The body is the content of that file. */
         public static BodyPublisher ofFile(Path path) throws java.io.FileNotFoundException {
-            return declinar();
+            return refuse();
         }
 
-        /** El cuerpo son esos bloques, uno detras de otro. */
+        /** The body is those blocks, one after another. */
         public static BodyPublisher ofByteArrays(Iterable<byte[]> iter) {
-            return declinar();
-        }
-
-        /** Sin cuerpo. Es lo que usan {@code GET}, {@code DELETE} y {@code HEAD}. */
-        public static BodyPublisher noBody() {
-            return declinar();
+            return refuse();
         }
 
         /**
-         * Varios cuerpos, uno detras de otro.
+         * No body.
          *
-         * <p>El largo total se conoce solo si <strong>todos</strong> lo conocen; con uno solo
-         * desconocido, el resultado tambien lo es.
+         * <p>This javadoc said it is what {@code GET}, {@code DELETE} and {@code HEAD} use. The
+         * JDK's own builder gives those three no publisher at all; only the interface's default
+         * {@code HEAD} uses this.
+         */
+        public static BodyPublisher noBody() {
+            return refuse();
+        }
+
+        /**
+         * Several bodies, one after another.
+         *
+         * <p>The total length is known only if <strong>all</strong> know theirs; with a single
+         * unknown one, the result is unknown too.
          */
         public static BodyPublisher concat(BodyPublisher... publishers) {
-            return declinar();
+            return refuse();
         }
     }
 }

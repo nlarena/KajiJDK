@@ -5,59 +5,60 @@ import java.awt.Image;
 import java.util.Locale;
 
 /**
- * La ficha de un {@link InputMethod}: lo que se puede saber de el **sin cargarlo**.
+ * The record card of an {@link InputMethod}: what can be known about it **without loading it**.
  *
- * <p>Esa es toda la razon de que exista. Un sistema puede tener muchos metodos de entrada
- * instalados, y armar el menu para elegirlos no puede costar cargar y arrancar cada uno: seria
- * pagar por todos para usar uno. El descriptor es liviano --nombre, icono, idiomas-- y el metodo se
- * crea recien cuando alguien lo elige.
+ * <p>That is the whole reason it exists. A system can have many input methods installed, and
+ * building the menu to choose them cannot cost loading and starting each one: that would be paying
+ * for all of them to use one. The descriptor is lightweight --name, icon, locales-- and the method
+ * is created only when someone chooses it.
  *
- * <p>Se descubre por {@link java.util.ServiceLoader}: un metodo de entrada se instala declarando su
- * descriptor como proveedor de este servicio.
+ * <p>It is discovered through {@link java.util.ServiceLoader}: an input method is installed by
+ * declaring its descriptor as a provider of this service.
  */
 public interface InputMethodDescriptor {
 
     /**
-     * Los idiomas que este metodo de entrada soporta.
+     * The locales this input method supports.
      *
-     * <p>Un idioma en la lista no promete que este disponible ahora --puede depender de un
-     * diccionario que se instala aparte-- pero si que
-     * {@link InputMethod#setLocale} tiene sentido para el.
+     * <p>A locale in the list does not promise that it is available right now --it may depend on a
+     * dictionary installed separately-- but it does promise that {@link InputMethod#setLocale}
+     * makes sense for it.
      *
-     * @throws AWTException si no se pudo averiguar
+     * @throws AWTException if it could not be found out
      */
     Locale[] getAvailableLocales() throws AWTException;
 
     /**
-     * Si la lista de idiomas puede cambiar mientras el programa corre.
+     * Whether the list of locales can change while the program runs.
      *
-     * <p>Con `true`, el marco de trabajo vuelve a preguntar en vez de quedarse con lo primero que
-     * le dijeron: es el caso de un metodo cuyos diccionarios se pueden instalar sobre la marcha.
+     * <p>With `true`, the framework asks again instead of keeping the first answer: it is the case
+     * of a method whose dictionaries can be installed on the fly.
      */
     boolean hasDynamicLocaleList();
 
     /**
-     * El nombre a mostrar, en el idioma en que se lo quiere mostrar.
+     * The name to display, in the language it is to be displayed in.
      *
-     * @param inputLocale el idioma que se escribiria con el, o `null` si no importa
-     * @param displayLanguage el idioma en el que se quiere el nombre
+     * @param inputLocale the locale that would be written with it, or `null` if it does not matter
+     * @param displayLanguage the language the name is wanted in
      */
     String getInputMethodDisplayName(Locale inputLocale, Locale displayLanguage);
 
     /**
-     * El icono, de 16x16, o `null` si no tiene.
+     * The icon, 16x16, or `null` if it has none.
      *
-     * @param inputLocale el idioma que se escribiria con el, o `null` si no importa
+     * @param inputLocale the locale that would be written with it, or `null` if it does not matter
      */
     Image getInputMethodIcon(Locale inputLocale);
 
     /**
-     * Crea el metodo de entrada.
+     * Creates the input method.
      *
-     * <p>Es el unico punto caro, y por eso esta separado del resto de la interfaz.
+     * <p>It is the only expensive point, and that is why it is separate from the rest of the
+     * interface.
      *
-     * @throws Exception lo que sea que falle al crearlo; el marco de trabajo lo reporta y sigue con
-     *     los demas metodos instalados
+     * @throws Exception whatever fails when creating it; the framework reports it and goes on with
+     *     the other installed methods
      */
     InputMethod createInputMethod() throws Exception;
 }

@@ -3,64 +3,64 @@ package javax.xml.validation;
 import org.w3c.dom.TypeInfo;
 
 /**
- * KajiLibrary's javax.xml.validation.TypeInfoProvider -- que tipo tenia lo que acaba de pasar.
+ * KajiLibrary's javax.xml.validation.TypeInfoProvider -- what type what just went by had.
  *
- * <p>Es lo que hace que validar con {@link ValidatorHandler} sirva para algo mas que decir si el
- * documento esta bien: mientras la validacion avanza, esto dice de que <b>tipo de esquema</b> es
- * cada elemento y cada atributo. Con eso, quien escucha puede convertir el texto al tipo que
- * corresponde en vez de adivinar por la forma.
+ * <p>It is what makes validating with {@link ValidatorHandler} good for more than saying whether
+ * the document is fine: as validation advances, this says of which <b>schema type</b> each element
+ * and each attribute is. With that, whoever listens can convert the text to the type that
+ * corresponds instead of guessing by its shape.
  *
- * <h2>Solo vale adentro de la llamada</h2>
+ * <h2>It is only valid inside the call</h2>
  *
- * <p>Es la regla que hay que tener presente y la que rompe a quien lo usa mal: los metodos de
- * elemento solo se pueden llamar desde {@code startElement} o {@code endElement}, y los de atributo
- * solo desde {@code startElement}. Guardarse el {@code TypeInfoProvider} y preguntarle despues no da
- * un valor viejo: da un {@code IllegalStateException}.
+ * <p>It is the rule to keep in mind and the one that breaks whoever uses it wrongly: the element
+ * methods can only be called from {@code startElement} or {@code endElement}, and the attribute
+ * ones only from {@code startElement}. Keeping the {@code TypeInfoProvider} and asking it later
+ * does not give an old value: it gives an {@code IllegalStateException}.
  *
- * <p>Tiene sentido -- no hay nada guardado. El proveedor es una ventana al estado del validador en
- * ese instante, y por eso no cuesta nada tenerlo: si tuviera que guardar los tipos de todo el
- * documento para poder contestar mas tarde, seria justamente lo que la via SAX quiere evitar.
+ * <p>It makes sense -- nothing is kept. The provider is a window onto the validator's state at that
+ * instant, and that is why having it costs nothing: if it had to keep the types of the whole
+ * document to be able to answer later, it would be precisely what the SAX route wants to avoid.
  *
- * <p>Los atributos se piden <b>por indice</b>, el mismo del {@code Attributes} que llego a
- * {@code startElement}.
+ * <p>Attributes are asked for <b>by index</b>, the same as in the {@code Attributes} that arrived
+ * at {@code startElement}.
  */
 public abstract class TypeInfoProvider {
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected TypeInfoProvider() {
     }
 
     /**
-     * El tipo del elemento actual.
+     * The type of the current element.
      *
-     * @throws IllegalStateException fuera de {@code startElement} o {@code endElement}
+     * @throws IllegalStateException outside {@code startElement} or {@code endElement}
      */
     public abstract TypeInfo getElementTypeInfo();
 
     /**
-     * El tipo de ese atributo del elemento actual.
+     * The type of that attribute of the current element.
      *
-     * @param index el indice en el {@code Attributes} de {@code startElement}
-     * @throws IllegalStateException fuera de {@code startElement}
-     * @throws IndexOutOfBoundsException si el indice no existe
+     * @param index the index in {@code startElement}'s {@code Attributes}
+     * @throws IllegalStateException outside {@code startElement}
+     * @throws IndexOutOfBoundsException if the index does not exist
      */
     public abstract TypeInfo getAttributeTypeInfo(int index);
 
     /**
-     * Si ese atributo es de tipo identificador.
+     * Whether that attribute is of identifier type.
      *
-     * <p>Es la pregunta que decide si el valor sirve para {@code getElementById}, y no se puede
-     * contestar sin el esquema: en un documento sin DTD ni esquema, ningun atributo es identificador
-     * por mas que se llame {@code id}.
+     * <p>It is the question that decides whether the value serves for {@code getElementById}, and
+     * it cannot be answered without the schema: in a document without DTD or schema, no attribute
+     * is an identifier however much it is called {@code id}.
      */
     public abstract boolean isIdAttribute(int index);
 
     /**
-     * Si el atributo estaba <b>escrito</b> en el documento.
+     * Whether the attribute was <b>written</b> in the document.
      *
-     * <p>False significa que lo puso el esquema como valor por omision. La diferencia importa cuando
-     * hay que reescribir el documento: emitir los valores por omision lo cambia, y emitirlos con otro
-     * esquema puede cambiarle el significado.
+     * <p>False means the schema put it there as a default value. The difference matters when the
+     * document has to be rewritten: emitting the default values changes it, and emitting them with
+     * another schema can change its meaning.
      */
     public abstract boolean isSpecified(int index);
 }

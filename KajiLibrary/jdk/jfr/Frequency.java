@@ -6,9 +6,9 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * El campo es una <strong>frecuencia</strong>, en hercios.
+ * The field is a <strong>frequency</strong>, in hertz.
  *
- * <p>No lleva unidad configurable porque solo hay una.
+ * <p>It carries no configurable unit because there is only one.
  *
  * @since 9
  */

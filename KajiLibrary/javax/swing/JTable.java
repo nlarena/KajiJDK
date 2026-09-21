@@ -41,45 +41,47 @@ import javax.swing.table.TableColumnModel;
 import javax.swing.table.TableModel;
 
 /**
- * Una tabla: filas y columnas de celdas.
+ * A table: rows and columns of cells.
  *
- * <h2>Cuatro modelos, no uno</h2>
+ * <h2>Four models, not one</h2>
  *
- * <p>Los <strong>datos</strong> ({@link TableModel}), las <strong>columnas</strong>
- * ({@link TableColumnModel}), la <strong>seleccion de filas</strong> ({@link ListSelectionModel}) y
- * -- adentro del modelo de columnas -- la seleccion de columnas. Estan separados porque cambian por
- * motivos distintos: mover una columna de lugar no toca los datos, y elegir una fila no toca
- * ninguno de los dos.
+ * <p>The <strong>data</strong> ({@link TableModel}), the <strong>columns</strong>
+ * ({@link TableColumnModel}), the <strong>row selection</strong>
+ * ({@link ListSelectionModel}) and -- inside the column model -- the column selection. They
+ * are separate because they change for different reasons: moving a column somewhere else does
+ * not touch the data, and choosing a row does not touch either of the two.
  *
- * <h2>Indices de vista e indices de modelo</h2>
+ * <h2>View indices and model indices</h2>
  *
- * <p>Es lo que hay que tener presente todo el tiempo. Con un orden puesto o columnas movidas, la
- * fila 0 de la vista no es la fila 0 del modelo, ni la columna 2 de la vista la 2 del modelo.
- * <strong>Casi todos los metodos de esta clase hablan en indices de vista</strong> -- incluidos
- * {@link #getValueAt} y {@link #setValueAt}, que los traducen antes de tocar el modelo -- y los
- * cuatro {@code convertXxx} son el puente.
+ * <p>It is what has to be kept in mind all the time. With a sort set or columns moved, the
+ * view's row 0 is not the model's row 0, nor the view's column 2 the model's 2.
+ * <strong>Almost every method of this class speaks in view indices</strong> --
+ * {@link #getValueAt} and {@link #setValueAt} included, which translate them before touching
+ * the model -- and the four {@code convertXxx} are the bridge.
  *
- * <p>Usar un indice de vista contra el modelo no falla: devuelve otra celda. Es el error clasico con
- * tablas ordenables y no da ninguna senal.
+ * <p>Using a view index against the model does not fail: it returns another cell. It is the
+ * classic mistake with sortable tables and it gives no signal.
  *
- * <h2>Un dibujante por tipo de columna</h2>
+ * <h2>One renderer per column type</h2>
  *
- * <p>La tabla no tiene un componente por celda: tiene uno por <em>tipo</em>, y lo configura y lo
- * dibuja una vez por celda. Cual le toca a cada columna sale de {@code getColumnClass}, y de ahi que
- * un modelo que declara sus tipos se vea bien sin escribir una linea de dibujado.
+ * <p>The table does not have one component per cell: it has one per <em>type</em>, and it
+ * configures it and draws it once per cell. Which one falls to each column comes from
+ * {@code getColumnClass}, and hence a model that declares its types looks right without writing
+ * a line of drawing.
  *
- * <h2>Editar es un estado, no una llamada</h2>
+ * <h2>Editing is a state, not a call</h2>
  *
- * <p>Mientras se edita, la tabla tiene un componente de verdad encima de la celda
- * ({@link #getEditorComponent}), y {@link #isEditing} es cierto. Termina cuando el editor avisa, y
- * la tabla escucha ese aviso: por eso implementa {@link CellEditorListener}.
+ * <p>While editing, the table has a real component over the cell
+ * ({@link #getEditorComponent}), and {@link #isEditing} is true. It ends when the editor gives
+ * notice, and the table listens to that notice: that is why it implements
+ * {@link CellEditorListener}.
  *
- * <h2>Lo que hace falta una pantalla para ver</h2>
+ * <h2>What a screen is needed to see</h2>
  *
- * <p>El dibujado y el acomodado de columnas estan escritos y funcionan sobre cualquier
- * {@code Graphics}; lo que no hay es un aspecto instalado que ponga los colores, la grilla y el
- * encabezado. Con eso, {@link #getCellRenderer} devuelve el dibujante de base y la tabla se ve
- * gris. Es la brecha de siempre y no es de esta clase.
+ * <p>The drawing and the laying out of columns are written and work over any {@code Graphics};
+ * what there is not is an installed look and feel that sets the colours, the grid and the
+ * header. With that, {@link #getCellRenderer} returns the base renderer and the table is seen
+ * grey. It is the usual gap and it does not belong to this class.
  */
 public class JTable extends JComponent implements TableModelListener, Scrollable,
         TableColumnModelListener, ListSelectionListener, CellEditorListener, Accessible,
@@ -87,85 +89,85 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
 
     private static final String uiClassID = "TableUI";
 
-    /** Las columnas no se ajustan solas; aparece una barra horizontal. */
+    /** The columns do not adjust by themselves; a horizontal bar appears. */
     public static final int AUTO_RESIZE_OFF = 0;
 
-    /** Al agrandar una columna se achica la siguiente. */
+    /** On enlarging a column the next one shrinks. */
     public static final int AUTO_RESIZE_NEXT_COLUMN = 1;
 
-    /** Al agrandar una columna se reparte entre todas las que siguen. */
+    /** On enlarging a column it is shared out among all those that follow. */
     public static final int AUTO_RESIZE_SUBSEQUENT_COLUMNS = 2;
 
-    /** Al agrandar una columna se achica la ultima. */
+    /** On enlarging a column the last one shrinks. */
     public static final int AUTO_RESIZE_LAST_COLUMN = 3;
 
-    /** Al agrandar una columna se reparte entre todas. */
+    /** On enlarging a column it is shared out among them all. */
     public static final int AUTO_RESIZE_ALL_COLUMNS = 4;
 
-    /** Los datos. */
+    /** The data. */
     protected TableModel dataModel;
 
-    /** Las columnas de la vista. */
+    /** The view's columns. */
     protected TableColumnModel columnModel;
 
-    /** La seleccion de filas. */
+    /** The row selection. */
     protected ListSelectionModel selectionModel;
 
-    /** La barra de encabezados, o nulo si no se muestra. */
+    /** The header bar, or null if it is not shown. */
     protected JTableHeader tableHeader;
 
-    /** El alto de una fila. */
+    /** A row's height. */
     protected int rowHeight;
 
-    /** El espacio vertical entre filas. */
+    /** The vertical space between rows. */
     protected int rowMargin;
 
-    /** El color de la grilla. */
+    /** The grid's colour. */
     protected Color gridColor;
 
-    /** Si se dibujan las lineas horizontales. */
+    /** Whether the horizontal lines are drawn. */
     protected boolean showHorizontalLines;
 
-    /** Si se dibujan las lineas verticales. */
+    /** Whether the vertical lines are drawn. */
     protected boolean showVerticalLines;
 
-    /** Que hacer cuando cambia el ancho de una columna. */
+    /** What to do when a column's width changes. */
     protected int autoResizeMode;
 
-    /** Si las columnas se arman solas al cambiar el modelo. */
+    /** Whether the columns are built by themselves on changing the model. */
     protected boolean autoCreateColumnsFromModel;
 
-    /** Cuanto pide medir cuando esta adentro de un panel con barras. */
+    /** How much it asks to measure when it is inside a pane with bars. */
     protected Dimension preferredViewportSize;
 
-    /** Si se pueden elegir filas. */
+    /** Whether rows may be chosen. */
     protected boolean rowSelectionAllowed;
 
-    /** Si lo que se elige son celdas y no filas ni columnas enteras. */
+    /** Whether what is chosen are cells and not whole rows or columns. */
     protected boolean cellSelectionEnabled;
 
-    /** El componente con el que se esta editando, o nulo. */
+    /** The component the editing is being done with, or null. */
     protected transient Component editorComp;
 
-    /** El editor en uso, o nulo. */
+    /** The editor in use, or null. */
     protected transient TableCellEditor cellEditor;
 
-    /** La columna que se esta editando, o -1. */
+    /** The column that is being edited, or -1. */
     protected transient int editingColumn;
 
-    /** La fila que se esta editando, o -1. */
+    /** The row that is being edited, or -1. */
     protected transient int editingRow;
 
-    /** Los dibujantes por tipo de columna; ver la nota de la clase. */
+    /** The renderers by column type; see the class note. */
     protected transient Hashtable<Object, Object> defaultRenderersByColumnClass;
 
-    /** Los editores por tipo de columna. */
+    /** The editors by column type. */
     protected transient Hashtable<Object, Object> defaultEditorsByColumnClass;
 
-    /** El color del texto elegido. */
+    /** The chosen text's colour. */
     protected Color selectionForeground;
 
-    /** El fondo de lo elegido. */
+    /** The background of what is chosen. */
     protected Color selectionBackground;
 
     private RowSorter<? extends TableModel> sortManager;
@@ -178,26 +180,26 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
     private transient DropLocation dropLocation;
     private SizeSequence rowModel;
 
-    /** Una tabla vacia, con un modelo por omision. */
+    /** An empty table, with a default model. */
     public JTable() {
         this(null, null, null);
     }
 
-    /** Sobre esos datos. */
+    /** Over those data. */
     public JTable(TableModel dm) {
         this(dm, null, null);
     }
 
-    /** Sobre esos datos y esas columnas. */
+    /** Over those data and those columns. */
     public JTable(TableModel dm, TableColumnModel cm) {
         this(dm, cm, null);
     }
 
     /**
-     * Con los tres modelos.
+     * With the three models.
      *
-     * <p>Cualquiera de los tres en nulo se reemplaza por el de omision. Si no se dan columnas, se
-     * arman a partir del modelo de datos.
+     * <p>Any of the three at null is replaced by the default one. If no columns are given, they
+     * are built from the data model.
      */
     public JTable(TableModel dm, TableColumnModel cm, ListSelectionModel sm) {
         super();
@@ -226,17 +228,17 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
         updateUI();
     }
 
-    /** De ese tamano, con celdas vacias y editables. */
+    /** Of that size, with empty and editable cells. */
     public JTable(int numRows, int numColumns) {
         this(new DefaultTableModel(numRows, numColumns));
     }
 
-    /** Con esos datos y esos nombres de columna. */
+    /** With those data and those column names. */
     public JTable(Vector<? extends Vector> rowData, Vector<?> columnNames) {
         this(new DefaultTableModel(rowData, columnNames));
     }
 
-    /** Idem, con arreglos. */
+    /** The same, with arrays. */
     public JTable(final Object[][] rowData, final Object[] columnNames) {
         this(new AbstractTableModel() {
             public String getColumnName(int column) {
@@ -267,10 +269,10 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
     }
 
     /**
-     * Al entrar en un panel con barras, le pone el encabezado arriba.
+     * On entering a pane with bars, it puts the header on top of it.
      *
-     * <p>Es lo que hace que una tabla adentro de un {@code JScrollPane} muestre los titulos de
-     * columna sin que nadie los agregue a mano.
+     * <p>It is what makes a table inside a {@code JScrollPane} show the column titles without
+     * anybody adding them by hand.
      */
     public void addNotify() {
         super.addNotify();
@@ -293,7 +295,7 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
         }
     }
 
-    /** Al salir, saca el encabezado. */
+    /** On leaving, it removes the header. */
     public void removeNotify() {
         unconfigureEnclosingScrollPane();
         super.removeNotify();
@@ -316,16 +318,16 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
     }
 
     /**
-     * Un panel con barras que contiene esa tabla.
+     * A pane with bars that contains that table.
      *
-     * @deprecated Usar {@code new JScrollPane(tabla)}, que hace lo mismo.
+     * @deprecated Use {@code new JScrollPane(table)}, which does the same.
      */
     @Deprecated
     public static JScrollPane createScrollPaneForTable(JTable aTable) {
         return new JScrollPane(aTable);
     }
 
-    /** La barra de titulos; nulo la saca. */
+    /** The title bar; null removes it. */
     public void setTableHeader(JTableHeader tableHeader) {
         if (this.tableHeader != tableHeader) {
             JTableHeader old = this.tableHeader;
@@ -345,9 +347,9 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
     }
 
     /**
-     * El alto de todas las filas.
+     * The height of every row.
      *
-     * @throws IllegalArgumentException si no es positivo
+     * @throws IllegalArgumentException if it is not positive
      */
     public void setRowHeight(int rowHeight) {
         if (rowHeight <= 0) {
@@ -365,12 +367,12 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
     }
 
     /**
-     * El alto de una fila sola.
+     * The height of a single row.
      *
-     * <p>Una tabla con filas de distinto alto es mas cara de dibujar y de recorrer: hasta que
-     * alguien llama a esto, todas miden lo mismo y la fila de un pixel es una division.
+     * <p>A table with rows of different heights is more expensive to draw and to walk: until
+     * somebody calls this, they all measure the same and the row of a pixel is a division.
      *
-     * @throws IllegalArgumentException si el alto no es positivo o la fila esta fuera de rango
+     * @throws IllegalArgumentException if the height is not positive or the row is out of range
      */
     public void setRowHeight(int row, int rowHeight) {
         if (rowHeight <= 0) {
@@ -384,17 +386,17 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
     }
 
     /**
-     * El alto de esa fila.
+     * That row's height.
      *
-     * <p><strong>No valida el indice</strong>, y esta medido: con alturas por fila puestas, una
-     * fila que no existe devuelve cero en vez de tirar. El aspecto lo pide mientras dibuja y no
-     * tiene como saber donde termina.
+     * <p><strong>It does not validate the index</strong>, and it is measured: with per-row heights
+     * set, a row that does not exist returns zero instead of throwing. The look and feel asks for
+     * it while drawing and has no way of knowing where it ends.
      */
     public int getRowHeight(int row) {
         return (rowModel == null) ? getRowHeight() : rowModel.getSize(row);
     }
 
-    /** El espacio vertical entre filas; sale del alto de la fila, no se suma. */
+    /** The vertical space between rows; it comes out of the row's height, it is not added. */
     public void setRowMargin(int rowMargin) {
         int old = this.rowMargin;
         this.rowMargin = rowMargin;
@@ -406,7 +408,7 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
         return rowMargin;
     }
 
-    /** El espacio entre celdas: el ancho va al modelo de columnas, el alto aca. */
+    /** The space between cells: the width goes to the column model, the height here. */
     public void setIntercellSpacing(Dimension intercellSpacing) {
         setRowMargin(intercellSpacing.height);
         getColumnModel().setColumnMargin(intercellSpacing.width);
@@ -431,7 +433,7 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
         return gridColor;
     }
 
-    /** Prende o apaga las dos direcciones de la grilla a la vez. */
+    /** It switches both directions of the grid on or off at once. */
     public void setShowGrid(boolean showGrid) {
         setShowHorizontalLines(showGrid);
         setShowVerticalLines(showGrid);
@@ -461,9 +463,9 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
     }
 
     /**
-     * Que pasa con las demas columnas cuando una cambia de ancho.
+     * What happens to the other columns when one changes width.
      *
-     * <p>Un modo que no es ninguno de los cinco se ignora en silencio, que es lo que hace el JDK.
+     * <p>A mode that is none of the five is silently ignored, which is what the JDK does.
      */
     public void setAutoResizeMode(int mode) {
         if ((mode == AUTO_RESIZE_OFF) || (mode == AUTO_RESIZE_NEXT_COLUMN)
@@ -483,7 +485,7 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
         return autoResizeMode;
     }
 
-    /** Si cambiar el modelo rearma las columnas. */
+    /** Whether changing the model rebuilds the columns. */
     public void setAutoCreateColumnsFromModel(boolean autoCreateColumnsFromModel) {
         if (this.autoCreateColumnsFromModel != autoCreateColumnsFromModel) {
             boolean old = this.autoCreateColumnsFromModel;
@@ -500,9 +502,9 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
     }
 
     /**
-     * Tira las columnas y arma una por cada columna del modelo.
+     * It throws the columns away and builds one for each column of the model.
      *
-     * <p>Se pierden los anchos ajustados a mano; es lo que hay que saber antes de llamarla.
+     * <p>The widths adjusted by hand are lost; it is what has to be known before calling it.
      */
     public void createDefaultColumnsFromModel() {
         TableModel m = getModel();
@@ -518,7 +520,7 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
         }
     }
 
-    /** El dibujante para ese tipo de columna. */
+    /** The renderer for that column type. */
     public void setDefaultRenderer(Class<?> columnClass, TableCellRenderer renderer) {
         if (renderer != null) {
             defaultRenderersByColumnClass.put(columnClass, renderer);
@@ -528,10 +530,10 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
     }
 
     /**
-     * El dibujante de ese tipo, o el de su superclase si no hay uno propio.
+     * That type's renderer, or its superclass's if there is none of its own.
      *
-     * <p>Sube por la jerarquia: una columna de {@code Integer} sin dibujante propio usa el de
-     * {@code Number}, y si tampoco hay, el de {@code Object}.
+     * <p>It goes up the hierarchy: a column of {@code Integer} with no renderer of its own uses
+     * {@code Number}'s, and if there is none either, {@code Object}'s.
      */
     public TableCellRenderer getDefaultRenderer(Class<?> columnClass) {
         if (columnClass == null) {
@@ -548,7 +550,7 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
         return getDefaultRenderer(c);
     }
 
-    /** El editor para ese tipo de columna. */
+    /** The editor for that column type. */
     public void setDefaultEditor(Class<?> columnClass, TableCellEditor editor) {
         if (editor != null) {
             defaultEditorsByColumnClass.put(columnClass, editor);
@@ -557,7 +559,7 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
         }
     }
 
-    /** El editor de ese tipo, subiendo por la jerarquia como {@link #getDefaultRenderer}. */
+    /** That type's editor, going up the hierarchy like {@link #getDefaultRenderer}. */
     public TableCellEditor getDefaultEditor(Class<?> columnClass) {
         if (columnClass == null) {
             return null;
@@ -582,9 +584,9 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
     }
 
     /**
-     * Como se interpreta una soltada sobre la tabla.
+     * How a drop over the table is interpreted.
      *
-     * @throws IllegalArgumentException si el modo no sirve para una tabla
+     * @throws IllegalArgumentException if the mode does not serve for a table
      */
     public final void setDropMode(DropMode dropMode) {
         if (dropMode != null) {
@@ -604,16 +606,16 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
         return dropMode;
     }
 
-    /** Donde caeria lo que se esta arrastrando, o nulo si no hay nada arrastrandose. */
+    /** Where what is being dragged would fall, or null if nothing is being dragged. */
     public final DropLocation getDropLocation() {
         return dropLocation;
     }
 
     /**
-     * Si cambiar el modelo arma un ordenador de filas solo.
+     * Whether changing the model builds a row sorter by itself.
      *
-     * <p>Apagado por omision: un ordenador cambia la numeracion de las filas, y prenderlo sin querer
-     * rompe el codigo que usa indices de modelo contra la vista.
+     * <p>Switched off by default: a sorter changes the rows' numbering, and switching it on
+     * without meaning to breaks the code that uses model indices against the view.
      */
     public void setAutoCreateRowSorter(boolean autoCreateRowSorter) {
         boolean old = this.autoCreateRowSorter;
@@ -628,7 +630,7 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
         return autoCreateRowSorter;
     }
 
-    /** Si al reordenar se conserva lo elegido; prendido por omision. */
+    /** Whether what is chosen is kept on reordering; switched on by default. */
     public void setUpdateSelectionOnSort(boolean update) {
         if (updateSelectionOnSort != update) {
             updateSelectionOnSort = update;
@@ -640,7 +642,7 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
         return updateSelectionOnSort;
     }
 
-    /** El ordenador de filas; nulo muestra las filas en el orden del modelo. */
+    /** The row sorter; null shows the rows in the model's order. */
     public void setRowSorter(RowSorter<? extends TableModel> sorter) {
         RowSorter<? extends TableModel> oldRowSorter = getRowSorter();
         if (oldRowSorter != null) {
@@ -660,7 +662,7 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
         return sortManager;
     }
 
-    /** Una fila, un tramo, o cualquier cosa; ver {@link ListSelectionModel}. */
+    /** One row, a range, or anything; see {@link ListSelectionModel}. */
     public void setSelectionMode(int selectionMode) {
         clearSelection();
         getSelectionModel().setSelectionMode(selectionMode);
@@ -694,10 +696,10 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
     }
 
     /**
-     * Si lo que se elige son celdas.
+     * Whether what is chosen are cells.
      *
-     * <p>Elegir celdas es tener prendidas las dos selecciones a la vez: una celda esta elegida
-     * cuando su fila y su columna lo estan. No hay un tercer modelo.
+     * <p>Choosing cells is having both selections switched on at once: a cell is chosen when its
+     * row and its column are. There is no third model.
      */
     public void setCellSelectionEnabled(boolean cellSelectionEnabled) {
         setRowSelectionAllowed(cellSelectionEnabled);
@@ -711,7 +713,7 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
         return getRowSelectionAllowed() && getColumnSelectionAllowed();
     }
 
-    /** Elige todo lo que se pueda elegir. */
+    /** It chooses everything that can be chosen. */
     public void selectAll() {
         if (isEditing()) {
             removeEditor();
@@ -723,8 +725,8 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
             int oldAnchorCol = getColumnModel().getSelectionModel().getAnchorSelectionIndex();
             setRowSelectionInterval(0, getRowCount() - 1);
             setColumnSelectionInterval(0, getColumnCount() - 1);
-            // Se restituyen el ancla y la guia: elegir todo no tiene que mover el punto desde el
-            // que el usuario venia extendiendo la seleccion.
+            // The anchor and the lead are restored: choosing everything must not move the point the
+                        // user was extending the selection from.
             restoreSelection(getSelectionModel(), oldAnchor, oldLead);
             restoreSelection(getColumnModel().getSelectionModel(), oldAnchorCol, oldLeadCol);
         }
@@ -744,14 +746,14 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
     }
 
     /**
-     * @throws IllegalArgumentException si algun indice esta fuera de rango
+     * @throws IllegalArgumentException if some index is out of range
      */
     public void setRowSelectionInterval(int index0, int index1) {
         selectionModel.setSelectionInterval(boundRow(index0), boundRow(index1));
     }
 
     /**
-     * @throws IllegalArgumentException si algun indice esta fuera de rango
+     * @throws IllegalArgumentException if some index is out of range
      */
     public void setColumnSelectionInterval(int index0, int index1) {
         columnModel.getSelectionModel().setSelectionInterval(boundColumn(index0),
@@ -759,14 +761,14 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
     }
 
     /**
-     * @throws IllegalArgumentException si algun indice esta fuera de rango
+     * @throws IllegalArgumentException if some index is out of range
      */
     public void addRowSelectionInterval(int index0, int index1) {
         selectionModel.addSelectionInterval(boundRow(index0), boundRow(index1));
     }
 
     /**
-     * @throws IllegalArgumentException si algun indice esta fuera de rango
+     * @throws IllegalArgumentException if some index is out of range
      */
     public void addColumnSelectionInterval(int index0, int index1) {
         columnModel.getSelectionModel().addSelectionInterval(boundColumn(index0),
@@ -774,14 +776,14 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
     }
 
     /**
-     * @throws IllegalArgumentException si algun indice esta fuera de rango
+     * @throws IllegalArgumentException if some index is out of range
      */
     public void removeRowSelectionInterval(int index0, int index1) {
         selectionModel.removeSelectionInterval(boundRow(index0), boundRow(index1));
     }
 
     /**
-     * @throws IllegalArgumentException si algun indice esta fuera de rango
+     * @throws IllegalArgumentException if some index is out of range
      */
     public void removeColumnSelectionInterval(int index0, int index1) {
         columnModel.getSelectionModel().removeSelectionInterval(boundColumn(index0),
@@ -802,25 +804,25 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
         return col;
     }
 
-    /** La primera fila elegida, o -1. */
+    /** The first chosen row, or -1. */
     public int getSelectedRow() {
         return selectionModel.getMinSelectionIndex();
     }
 
-    /** La primera columna elegida, o -1. */
+    /** The first chosen column, or -1. */
     public int getSelectedColumn() {
         return columnModel.getSelectionModel().getMinSelectionIndex();
     }
 
     public int[] getSelectedRows() {
-        return indicesElegidos(selectionModel);
+        return chosenIndices(selectionModel);
     }
 
     public int[] getSelectedColumns() {
         return columnModel.getSelectedColumns();
     }
 
-    private static int[] indicesElegidos(ListSelectionModel m) {
+    private static int[] chosenIndices(ListSelectionModel m) {
         int iMin = m.getMinSelectionIndex();
         int iMax = m.getMaxSelectionIndex();
         if ((iMin == -1) || (iMax == -1)) {
@@ -855,7 +857,7 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
         return columnModel.getSelectionModel().isSelectedIndex(column);
     }
 
-    /** Una celda esta elegida cuando lo estan su fila y su columna; ver {@link #setCellSelectionEnabled}. */
+    /** A cell is chosen when its row and its column are; see {@link #setCellSelectionEnabled}. */
     public boolean isCellSelected(int row, int column) {
         if (!getRowSelectionAllowed() && !getColumnSelectionAllowed()) {
             return false;
@@ -865,11 +867,11 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
     }
 
     /**
-     * Lo que hace un clic sobre una celda.
+     * What a click on a cell does.
      *
-     * <p>Los dos booleanos son las dos teclas: {@code extend} es Mayusculas -- extiende desde el
-     * ancla -- y {@code toggle} es Control -- suma o resta sin tocar el resto --. Con los dos en
-     * falso, un clic limpio: se elige solo esa celda.
+     * <p>The two booleans are the two keys: {@code extend} is Shift -- it extends from the anchor
+     * -- and {@code toggle} is Control -- it adds or subtracts without touching the rest --. With
+     * both at false, a clean click: only that cell is chosen.
      */
     public void changeSelection(int rowIndex, int columnIndex, boolean toggle, boolean extend) {
         ListSelectionModel rsm = getSelectionModel();
@@ -925,9 +927,9 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
     }
 
     /**
-     * La columna con ese identificador.
+     * The column with that identifier.
      *
-     * @throws IllegalArgumentException si no hay ninguna
+     * @throws IllegalArgumentException if there is none
      */
     public TableColumn getColumn(Object identifier) {
         TableColumnModel cm = getColumnModel();
@@ -935,7 +937,7 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
         return cm.getColumn(columnIndex);
     }
 
-    /** De indice de vista a indice de modelo, para columnas. */
+    /** From view index to model index, for columns. */
     public int convertColumnIndexToModel(int viewColumnIndex) {
         if (viewColumnIndex < 0) {
             return viewColumnIndex;
@@ -943,7 +945,7 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
         return getColumnModel().getColumn(viewColumnIndex).getModelIndex();
     }
 
-    /** De indice de modelo a indice de vista; -1 si esa columna no se muestra. */
+    /** From model index to view index; -1 if that column is not shown. */
     public int convertColumnIndexToView(int modelColumnIndex) {
         if (modelColumnIndex < 0) {
             return modelColumnIndex;
@@ -958,9 +960,9 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
     }
 
     /**
-     * De indice de modelo a indice de vista, para filas.
+     * From model index to view index, for rows.
      *
-     * @throws IndexOutOfBoundsException si esta fuera de rango
+     * @throws IndexOutOfBoundsException if it is out of range
      */
     public int convertRowIndexToView(int modelRowIndex) {
         RowSorter<? extends TableModel> sorter = getRowSorter();
@@ -971,9 +973,9 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
     }
 
     /**
-     * De indice de vista a indice de modelo, para filas.
+     * From view index to model index, for rows.
      *
-     * @throws IndexOutOfBoundsException si esta fuera de rango
+     * @throws IndexOutOfBoundsException if it is out of range
      */
     public int convertRowIndexToModel(int viewRowIndex) {
         RowSorter<? extends TableModel> sorter = getRowSorter();
@@ -983,7 +985,7 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
         return viewRowIndex;
     }
 
-    /** Cuantas filas se ven; con un filtro puesto, menos que las del modelo. */
+    /** How many rows are seen; with a filter set, fewer than the model's. */
     public int getRowCount() {
         RowSorter<? extends TableModel> sorter = getRowSorter();
         if (sorter != null) {
@@ -996,23 +998,23 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
         return getColumnModel().getColumnCount();
     }
 
-    /** El nombre de esa columna de la vista. */
+    /** That view column's name. */
     public String getColumnName(int column) {
         return getModel().getColumnName(convertColumnIndexToModel(column));
     }
 
-    /** El tipo de esa columna de la vista. */
+    /** That view column's type. */
     public Class<?> getColumnClass(int column) {
         return getModel().getColumnClass(convertColumnIndexToModel(column));
     }
 
-    /** El valor de esa celda de la vista; traduce los dos indices. */
+    /** That view cell's value; it translates both indices. */
     public Object getValueAt(int row, int column) {
         return getModel().getValueAt(convertRowIndexToModel(row),
                 convertColumnIndexToModel(column));
     }
 
-    /** Cambia esa celda de la vista; traduce los dos indices. */
+    /** It changes that view cell; it translates both indices. */
     public void setValueAt(Object aValue, int row, int column) {
         getModel().setValueAt(aValue, convertRowIndexToModel(row),
                 convertColumnIndexToModel(column));
@@ -1023,7 +1025,7 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
                 convertColumnIndexToModel(column));
     }
 
-    /** Agrega una columna al final de la vista. */
+    /** It adds a column at the end of the view. */
     public void addColumn(TableColumn aColumn) {
         if (aColumn.getHeaderValue() == null) {
             int modelColumn = aColumn.getModelIndex();
@@ -1041,7 +1043,7 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
         getColumnModel().moveColumn(column, targetColumn);
     }
 
-    /** La columna que cae en ese punto, o -1. */
+    /** The column that falls at that point, or -1. */
     public int columnAtPoint(Point point) {
         int x = point.x;
         if (!getComponentOrientation().isLeftToRight()) {
@@ -1050,10 +1052,10 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
         return getColumnModel().getColumnIndexAtX(x);
     }
 
-    /** La fila que cae en ese punto, o -1. */
+    /** The row that falls at that point, or -1. */
     public int rowAtPoint(Point point) {
         int y = point.y;
-        int result = (rowModel == null) ? y / getRowHeight() : filaEn(y);
+        int result = (rowModel == null) ? y / getRowHeight() : rowAt(y);
         if (result < 0) {
             return -1;
         } else if (result >= getRowCount()) {
@@ -1062,16 +1064,16 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
         return result;
     }
 
-    /** La fila que cae en ese pixel cuando las filas miden distinto. */
-    private int filaEn(int y) {
+    /** The row that falls at that pixel when the rows measure differently. */
+    private int rowAt(int y) {
         if (y < 0) {
             return -1;
         }
-        int acumulado = 0;
+        int accumulated = 0;
         int n = getRowCount();
         for (int i = 0; i < n; i++) {
-            acumulado = acumulado + getRowHeight(i);
-            if (y < acumulado) {
+            accumulated = accumulated + getRowHeight(i);
+            if (y < accumulated) {
                 return i;
             }
         }
@@ -1079,10 +1081,10 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
     }
 
     /**
-     * El rectangulo de esa celda de la vista.
+     * That view cell's rectangle.
      *
-     * <p>Con {@code includeSpacing} en falso se le sacan los margenes, que es lo que ocupa el
-     * contenido; con cierto, la celda entera incluida la linea de grilla.
+     * <p>With {@code includeSpacing} at false the margins are taken off it, which is what the
+     * content takes up; with true, the whole cell including the grid line.
      */
     public Rectangle getCellRect(int row, int column, boolean includeSpacing) {
         Rectangle r = new Rectangle();
@@ -1119,7 +1121,7 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
         return r;
     }
 
-    /** Acomoda las columnas segun el modo de ajuste. */
+    /** It lays the columns out according to the adjustment mode. */
     public void doLayout() {
         TableColumn resizingColumn = getResizingColumn();
         if (resizingColumn == null) {
@@ -1165,31 +1167,32 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
             }
             return;
         }
-        // Se reparte proporcionalmente al preferido, que es lo que hace que una columna que pidio
-        // el doble se lleve el doble del espacio de mas.
-        int repartido = 0;
+        // It is shared out in proportion to the preferred one, which is what makes a column that
+                    // asked for twice as much take twice the extra space.
+        int shared = 0;
         for (int i = 0; i < cm.getColumnCount(); i++) {
             TableColumn c = cm.getColumn(i);
             int w;
             if (i == cm.getColumnCount() - 1) {
-                w = totalWidth - repartido;
+                w = totalWidth - shared;
             } else {
                 w = (int) ((long) c.getPreferredWidth() * totalWidth / totalPreferred);
             }
             c.setWidth(w);
-            repartido = repartido + c.getWidth();
+            shared = shared + c.getWidth();
         }
     }
 
     private void accommodateDelta(int resizingColumnIndex, int delta) {
-        // El reparto fino lo hace el aspecto al arrastrar; aca alcanza con volver a acomodar.
+        // The fine sharing out is done by the look and feel while dragging; here laying out again
+        // is enough.
         setWidthsFromPreferredWidths(false);
     }
 
     /**
-     * Ajusta los anchos.
+     * It adjusts the widths.
      *
-     * @deprecated Usar {@link #doLayout}.
+     * @deprecated Use {@link #doLayout}.
      */
     @Deprecated
     public void sizeColumnsToFit(boolean lastColumnOnly) {
@@ -1199,7 +1202,7 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
         setAutoResizeMode(oldAutoResizeMode);
     }
 
-    /** Ajusta los anchos tomando esa columna como la que se esta redimensionando. */
+    /** It adjusts the widths taking that column as the one that is being resized. */
     public void sizeColumnsToFit(int resizingColumn) {
         if (resizingColumn == -1) {
             setWidthsFromPreferredWidths(false);
@@ -1213,7 +1216,7 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
         }
     }
 
-    /** El texto de ayuda de la celda que esta bajo el puntero, si el dibujante da uno. */
+    /** The tool tip text of the cell that is under the pointer, if the renderer gives one. */
     public String getToolTipText(MouseEvent event) {
         String tip = null;
         Point p = event.getPoint();
@@ -1238,7 +1241,7 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
         return tip;
     }
 
-    /** Si al empezar a editar el foco pasa al editor. */
+    /** Whether on starting to edit the focus goes to the editor. */
     public void setSurrendersFocusOnKeystroke(boolean surrendersFocusOnKeystroke) {
         this.surrendersFocusOnKeystroke = surrendersFocusOnKeystroke;
     }
@@ -1247,15 +1250,15 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
         return surrendersFocusOnKeystroke;
     }
 
-    /** Empieza a editar esa celda, sin ningun gesto detras. */
+    /** It starts editing that cell, with no gesture behind it. */
     public boolean editCellAt(int row, int column) {
         return editCellAt(row, column, null);
     }
 
     /**
-     * Empieza a editar esa celda por ese gesto.
+     * It starts editing that cell because of that gesture.
      *
-     * @return si la edicion empezo
+     * @return whether the editing started
      */
     public boolean editCellAt(int row, int column, EventObject e) {
         if (cellEditor != null && !cellEditor.stopCellEditing()) {
@@ -1313,10 +1316,10 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
         }
     }
 
-    /** Vuelve a pedir el aspecto, y les avisa al encabezado y a los editores. */
+    /** It asks for the look and feel again, and tells the header and the editors. */
     public void updateUI() {
-        // El encabezado se actualiza solo; los dibujantes y editores de base se rearman porque sus
-        // colores salen del aspecto.
+        // The header updates itself; the base renderers and editors are rebuilt because their
+                // colours come from the look and feel.
         JTableHeader header = getTableHeader();
         if (header != null) {
             header.updateUI();
@@ -1330,11 +1333,12 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
     }
 
     /**
-     * Cambia los datos.
+     * It changes the data.
      *
-     * <p>Si las columnas se arman solas, se rearman: el modelo nuevo puede tener otras.
+     * <p>If the columns are built by themselves, they are rebuilt: the new model may have
+     * others.
      *
-     * @throws IllegalArgumentException si el modelo es nulo
+     * @throws IllegalArgumentException if the model is null
      */
     public void setModel(TableModel dataModel) {
         if (dataModel == null) {
@@ -1360,7 +1364,7 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
     }
 
     /**
-     * @throws IllegalArgumentException si el modelo es nulo
+     * @throws IllegalArgumentException if the model is null
      */
     public void setColumnModel(TableColumnModel columnModel) {
         if (columnModel == null) {
@@ -1386,7 +1390,7 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
     }
 
     /**
-     * @throws IllegalArgumentException si el modelo es nulo
+     * @throws IllegalArgumentException if the model is null
      */
     public void setSelectionModel(ListSelectionModel newModel) {
         if (newModel == null) {
@@ -1408,11 +1412,11 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
         return selectionModel;
     }
 
-    /** El orden cambio: la seleccion se conserva si asi se pidio. */
+    /** The order changed: the selection is kept if that was asked for. */
     public void sorterChanged(RowSorterEvent e) {
         if (e.getType() == RowSorterEvent.Type.SORT_ORDER_CHANGED) {
             if (getUpdateSelectionOnSort()) {
-                // La seleccion es de indices de vista, y la vista se reordeno.
+                // The selection is of view indices, and the view was reordered.
                 clearSelection();
             }
         }
@@ -1420,10 +1424,10 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
     }
 
     /**
-     * Los datos cambiaron.
+     * The data changed.
      *
-     * <p>Un cambio de estructura -- fila {@link TableModelEvent#HEADER_ROW} -- rearma las columnas
-     * si asi esta pedido, y limpia la seleccion: los indices ya no significan lo mismo.
+     * <p>A change of structure -- row {@link TableModelEvent#HEADER_ROW} -- rebuilds the columns
+     * if that is asked for, and clears the selection: the indices no longer mean the same.
      */
     public void tableChanged(TableModelEvent e) {
         if (e == null || e.getFirstRow() == TableModelEvent.HEADER_ROW) {
@@ -1494,7 +1498,7 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
         repaint();
     }
 
-    /** El editor termino: se guarda el valor y se lo saca. */
+    /** The editor finished: the value is kept and it is removed. */
     public void editingStopped(ChangeEvent e) {
         TableCellEditor editor = getCellEditor();
         if (editor != null) {
@@ -1504,7 +1508,7 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
         }
     }
 
-    /** El editor se cancelo: no se guarda nada. */
+    /** The editor was cancelled: nothing is kept. */
     public void editingCanceled(ChangeEvent e) {
         removeEditor();
     }
@@ -1517,7 +1521,7 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
         return preferredViewportSize;
     }
 
-    /** Un paso de scroll es una fila o una columna, segun la direccion. */
+    /** A scroll step is one row or one column, according to the direction. */
     public int getScrollableUnitIncrement(Rectangle visibleRect, int orientation, int direction) {
         if (orientation == SwingConstants.VERTICAL) {
             int row = rowAtPoint(new Point(0, visibleRect.y));
@@ -1533,7 +1537,7 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
         return getColumnModel().getColumn(col).getWidth();
     }
 
-    /** Un bloque de scroll es lo que se ve. */
+    /** A scroll block is what is seen. */
     public int getScrollableBlockIncrement(Rectangle visibleRect, int orientation,
             int direction) {
         if (orientation == SwingConstants.VERTICAL) {
@@ -1542,16 +1546,16 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
         return visibleRect.width;
     }
 
-    /** Cierto salvo con el ajuste apagado: entonces aparece la barra horizontal. */
+    /** True save with the adjustment switched off: then the horizontal bar appears. */
     public boolean getScrollableTracksViewportWidth() {
         return getAutoResizeMode() != AUTO_RESIZE_OFF;
     }
 
     /**
-     * Si la tabla se estira para llenar el alto visible.
+     * Whether the table stretches to fill the visible height.
      *
-     * <p>Apagado por omision, y por eso una tabla con pocas filas deja ver el fondo del panel
-     * debajo. {@link #setFillsViewportHeight} lo cambia.
+     * <p>Switched off by default, and that is why a table with few rows lets the pane's
+     * background be seen below. {@link #setFillsViewportHeight} changes it.
      */
     public boolean getScrollableTracksViewportHeight() {
         java.awt.Container parent = getParent();
@@ -1571,7 +1575,8 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
     }
 
     /**
-     * Le da la tecla al editor si hay uno abierto, y si no la resuelve como cualquier componente.
+     * It gives the key to the editor if there is one open, and otherwise resolves it like any
+     * component.
      */
     protected boolean processKeyBinding(KeyStroke ks, KeyEvent e, int condition,
             boolean pressed) {
@@ -1583,12 +1588,12 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
     }
 
     /**
-     * Arma los dibujantes de base, uno por tipo.
+     * It builds the base renderers, one per type.
      *
-     * <p>Los cuatro del JDK: texto para {@link Object}, numeros alineados a la derecha, fechas
-     * formateadas y un tilde para los booleanos. Son clases anidadas privadas y llevan los mismos
-     * nombres que en el JDK a proposito: el nombre se ve por {@code getClass()}, asi que cambiarlo
-     * seria una diferencia observable sin ninguna ganancia.
+     * <p>The JDK's four: text for {@link Object}, numbers aligned to the right, formatted dates
+     * and a tick for the booleans. They are private nested classes and carry the same names as in
+     * the JDK on purpose: the name shows through {@code getClass()}, so changing it would be an
+     * observable difference with no gain at all.
      */
     protected void createDefaultRenderers() {
         defaultRenderersByColumnClass = new Hashtable<Object, Object>(8);
@@ -1599,19 +1604,19 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
         defaultRenderersByColumnClass.put(Double.class, new DoubleRenderer());
         defaultRenderersByColumnClass.put(java.util.Date.class, new DateRenderer());
         defaultRenderersByColumnClass.put(Icon.class, new IconRenderer());
-        // El JDK registra tambien `ImageIcon.class`, que esta biblioteca todavia no tiene. No se lo
-        // nombra: un literal de clase de un tipo inexistente compila y da `Object.class` -- ver el
-        // hallazgo #520 --, y esa linea pisaba al dibujante de Object.
+        // The JDK also registers `ImageIcon.class`, which this library does not have yet. It is
+                // not named: a class literal of a non-existent type compiles and gives
+                // `Object.class` -- see finding #520 --, and that line overwrote Object's renderer.
         defaultRenderersByColumnClass.put(Boolean.class, new BooleanRenderer());
     }
 
     /**
-     * Arma los editores de base.
+     * It builds the base editors.
      *
-     * <p>El de {@link Object} no es un editor de texto pelado: es uno que <strong>construye el
-     * valor del tipo de la columna a partir de lo escrito</strong>, buscando su constructor de un
-     * {@code String}. Es lo que hace que escribir 77 en una columna de {@code Integer} devuelva un
-     * {@code Integer} y no la cadena "77", y que escribir "abc" ahi no se guarde.
+     * <p>{@link Object}'s is not a bare text editor: it is one that <strong>builds the value of
+     * the column's type from what is typed</strong>, looking up its {@code String} constructor.
+     * It is what makes typing 77 in a column of {@code Integer} return an {@code Integer} and not
+     * the string "77", and typing "abc" there not be kept.
      */
     protected void createDefaultEditors() {
         defaultEditorsByColumnClass = new Hashtable<Object, Object>(3);
@@ -1620,7 +1625,7 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
         defaultEditorsByColumnClass.put(Boolean.class, new BooleanEditor());
     }
 
-    /** Numeros a la derecha, que es como se leen alineados. */
+    /** Numbers to the right, which is how they are read aligned. */
     private static class NumberRenderer extends DefaultTableCellRenderer.UIResource {
 
         NumberRenderer() {
@@ -1629,7 +1634,7 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
         }
     }
 
-    /** Como el de numeros, pero formateando los decimales del idioma. */
+    /** Like the numbers one, but formatting the language's decimals. */
     private static class DoubleRenderer extends NumberRenderer {
 
         private final java.text.NumberFormat formatter =
@@ -1644,7 +1649,7 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
         }
     }
 
-    /** Fechas con el formato del idioma. */
+    /** Dates with the language's format. */
     private static class DateRenderer extends DefaultTableCellRenderer.UIResource {
 
         private final java.text.DateFormat formatter =
@@ -1659,7 +1664,7 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
         }
     }
 
-    /** Un icono centrado, sin texto. */
+    /** A centred icon, with no text. */
     private static class IconRenderer extends DefaultTableCellRenderer.UIResource {
 
         IconRenderer() {
@@ -1672,7 +1677,7 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
         }
     }
 
-    /** Un tilde centrado; el unico que no es una etiqueta. */
+    /** A centred tick; the only one that is not a label. */
     private static class BooleanRenderer extends JCheckBox implements TableCellRenderer,
             javax.swing.plaf.UIResource {
 
@@ -1697,11 +1702,12 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
     }
 
     /**
-     * El editor de texto que construye el valor del tipo de la columna.
+     * The text editor that builds the value of the column's type.
      *
-     * <p>Busca el constructor que toma un {@code String} y lo llama con lo escrito. Si no hay tal
-     * constructor, no se puede editar esa columna; si lo hay y lo escrito no sirve, la edicion no
-     * termina y el campo se marca en rojo -- que es como el JDK dice "corregilo".
+     * <p>It looks up the constructor that takes a {@code String} and calls it with what was
+     * typed. If there is no such constructor, that column cannot be edited; if there is and what
+     * was typed does not serve, the editing does not finish and the field is marked in red --
+     * which is how the JDK says "fix it".
      */
     private static class GenericEditor extends DefaultCellEditor {
 
@@ -1739,7 +1745,7 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
                     new javax.swing.border.LineBorder(Color.black));
             try {
                 Class<?> type = table.getColumnClass(column);
-                // Una columna de Object acepta un String: un String es un Object.
+                // A column of Object accepts a String: a String is an Object.
                 if (type == Object.class) {
                     type = String.class;
                 }
@@ -1755,7 +1761,7 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
         }
     }
 
-    /** El mismo, con el texto a la derecha. */
+    /** The same, with the text on the right. */
     private static class NumberEditor extends GenericEditor {
 
         NumberEditor() {
@@ -1764,7 +1770,7 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
         }
     }
 
-    /** Un tilde. */
+    /** A tick. */
     private static class BooleanEditor extends DefaultCellEditor {
 
         BooleanEditor() {
@@ -1774,7 +1780,7 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
         }
     }
 
-    /** Los valores de arranque; los llama el constructor. */
+    /** The start-up values; the constructor calls them. */
     protected void initializeLocalVars() {
         setOpaque(true);
         createDefaultRenderers();
@@ -1790,10 +1796,11 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
         setEditingRow(-1);
         setSurrendersFocusOnKeystroke(false);
         setPreferredScrollableViewportSize(new Dimension(450, 400));
-        // Los tres colores que en el JDK pone el aspecto y no el constructor. Aca se ponen
-        // marcados como del aspecto y con los valores medidos en Metal (JDK 25), por dos motivos:
-        // sin ellos una tabla sin aspecto instalado dibujaria con nulos, y marcados los reemplaza
-        // `BasicTableUI.installDefaults` sin pisar los que ponga el programa.
+        // The three colours that in the JDK are set by the look and feel and not by the
+                // constructor. Here they are set marked as the look and feel's and with the values
+                // measured in Metal (JDK 25), for two reasons: without them a table with no look
+                // and feel installed would draw with nulls, and marked they are replaced by
+                // `BasicTableUI.installDefaults` without overwriting those the program sets.
         setGridColor(new javax.swing.plaf.ColorUIResource(122, 138, 153));
         setSelectionForeground(new javax.swing.plaf.ColorUIResource(51, 51, 51));
         setSelectionBackground(new javax.swing.plaf.ColorUIResource(184, 207, 229));
@@ -1815,7 +1822,7 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
         return new JTableHeader(columnModel);
     }
 
-    /** Vuelve a medir y a dibujar. */
+    /** It measures and draws again. */
     protected void resizeAndRepaint() {
         revalidate();
         repaint();
@@ -1840,9 +1847,9 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
     }
 
     /**
-     * El dibujante de esa celda.
+     * That cell's renderer.
      *
-     * <p>Primero el de la columna, si tiene uno propio; si no, el del tipo de la columna.
+     * <p>First the column's, if it has one of its own; otherwise, the column type's.
      */
     public TableCellRenderer getCellRenderer(int row, int column) {
         TableColumn tableColumn = getColumnModel().getColumn(column);
@@ -1853,7 +1860,7 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
         return renderer;
     }
 
-    /** El dibujante ya configurado para esa celda. */
+    /** The renderer already configured for that cell. */
     public Component prepareRenderer(TableCellRenderer renderer, int row, int column) {
         Object value = getValueAt(row, column);
         boolean isSelected = false;
@@ -1869,7 +1876,7 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
                 column);
     }
 
-    /** El editor de esa celda; como {@link #getCellRenderer}, primero el de la columna. */
+    /** That cell's editor; like {@link #getCellRenderer}, the column's first. */
     public TableCellEditor getCellEditor(int row, int column) {
         TableColumn tableColumn = getColumnModel().getColumn(column);
         TableCellEditor editor = tableColumn.getCellEditor();
@@ -1879,7 +1886,7 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
         return editor;
     }
 
-    /** El editor ya cargado con el valor de esa celda. */
+    /** The editor already loaded with that cell's value. */
     public Component prepareEditor(TableCellEditor editor, int row, int column) {
         Object value = getValueAt(row, column);
         boolean isSelected = isCellSelected(row, column);
@@ -1894,7 +1901,7 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
         return comp;
     }
 
-    /** Saca el editor y vuelve al estado de no estar editando. */
+    /** It removes the editor and goes back to the state of not editing. */
     public void removeEditor() {
         TableCellEditor editor = getCellEditor();
         if (editor != null) {
@@ -1916,28 +1923,29 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
     }
 
     /**
-     * Imprime la tabla.
+     * It prints the table.
      *
-     * <p><strong>Sin impresora no hay impresion.</strong> Esta biblioteca corre sin pantalla y sin
-     * servicio de impresion, asi que estos metodos arman el trabajo y fallan al pedir la impresora,
-     * que es lo que hace el JDK en la misma situacion. {@link #getPrintable} si sirve: devuelve algo
-     * que sabe dibujar la tabla en cualquier {@code Graphics}, incluido el de un PDF.
+     * <p><strong>With no printer there is no printing.</strong> This library runs with no screen
+     * and no printing service, so these methods build the job and fail on asking for the printer,
+     * which is what the JDK does in the same situation. {@link #getPrintable} does serve: it
+     * returns something that knows how to draw the table on any {@code Graphics}, a PDF's
+     * included.
      *
-     * @throws PrinterException si no se puede imprimir
+     * @throws PrinterException if it cannot print
      */
     public boolean print() throws PrinterException {
         return print(PrintMode.FIT_WIDTH);
     }
 
     /**
-     * @throws PrinterException si no se puede imprimir
+     * @throws PrinterException if it cannot print
      */
     public boolean print(PrintMode printMode) throws PrinterException {
         return print(printMode, null, null);
     }
 
     /**
-     * @throws PrinterException si no se puede imprimir
+     * @throws PrinterException if it cannot print
      */
     public boolean print(PrintMode printMode, MessageFormat headerFormat,
             MessageFormat footerFormat) throws PrinterException {
@@ -1945,8 +1953,8 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
     }
 
     /**
-     * @throws PrinterException si no se puede imprimir
-     * @throws java.awt.HeadlessException si se pide interaccion y no hay pantalla
+     * @throws PrinterException if it cannot print
+     * @throws java.awt.HeadlessException if interaction is asked for and there is no screen
      */
     public boolean print(PrintMode printMode, MessageFormat headerFormat,
             MessageFormat footerFormat, boolean showPrintDialog,
@@ -1957,8 +1965,8 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
     }
 
     /**
-     * @throws PrinterException si no se puede imprimir
-     * @throws java.awt.HeadlessException si se pide interaccion y no hay pantalla
+     * @throws PrinterException if it cannot print
+     * @throws java.awt.HeadlessException if interaction is asked for and there is no screen
      */
     public boolean print(PrintMode printMode, MessageFormat headerFormat,
             MessageFormat footerFormat, boolean showPrintDialog,
@@ -1978,38 +1986,38 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
     }
 
     /**
-     * Algo que sabe dibujar la tabla, pagina por pagina.
+     * Something that knows how to draw the table, page by page.
      *
-     * @throws NullPointerException si el modo es nulo
+     * @throws NullPointerException if the mode is null
      */
     public Printable getPrintable(PrintMode printMode, MessageFormat headerFormat,
             MessageFormat footerFormat) {
         if (printMode == null) {
             throw new NullPointerException("printMode");
         }
-        return new ImpresionDeTabla(this, printMode, headerFormat, footerFormat);
+        return new TablePrintable(this, printMode, headerFormat, footerFormat);
     }
 
     public AccessibleContext getAccessibleContext() {
         return accessibleContext;
     }
 
-    /** Como se reparte la tabla en paginas. */
+    /** How the table is shared out into pages. */
     public enum PrintMode {
 
-        /** Las columnas que no entran a lo ancho van en paginas aparte. */
+        /** The columns that do not fit across go on separate pages. */
         NORMAL,
 
-        /** Se achica todo para que el ancho entre en una pagina. */
+        /** Everything is shrunk so that the width fits on one page. */
         FIT_WIDTH;
     }
 
     /**
-     * Donde caeria lo que se esta arrastrando.
+     * Where what is being dragged would fall.
      *
-     * <p>Una fila y una columna, y dos banderas que dicen si es <em>sobre</em> esa celda o
-     * <em>entre</em> dos. La diferencia importa: soltar sobre una fila la reemplaza, soltar entre
-     * dos inserta.
+     * <p>A row and a column, and two flags that say whether it is <em>over</em> that cell or
+     * <em>between</em> two. The difference matters: dropping over a row replaces it, dropping
+     * between two inserts.
      */
     public static final class DropLocation extends TransferHandler.DropLocation {
 
@@ -2026,22 +2034,22 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
             this.isInsertCol = isInsertCol;
         }
 
-        /** La fila, en indices de vista; -1 si no hay. */
+        /** The row, in view indices; -1 if there is none. */
         public int getRow() {
             return row;
         }
 
-        /** La columna, en indices de vista; -1 si no hay. */
+        /** The column, in view indices; -1 if there is none. */
         public int getColumn() {
             return col;
         }
 
-        /** Si es entre dos filas y no sobre una. */
+        /** Whether it is between two rows and not over one. */
         public boolean isInsertRow() {
             return isInsertRow;
         }
 
-        /** Si es entre dos columnas y no sobre una. */
+        /** Whether it is between two columns and not over one. */
         public boolean isInsertColumn() {
             return isInsertCol;
         }
@@ -2056,20 +2064,20 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
     }
 
     /**
-     * Dibuja la tabla pagina por pagina.
+     * It draws the table page by page.
      *
-     * <p>Reparte las filas segun lo que entre a lo alto y, en modo {@link PrintMode#NORMAL}, las
-     * columnas segun lo que entre a lo ancho. No dibuja lineas de corte ni encabezados repetidos
-     * mas alla de lo que digan los dos formatos.
+     * <p>It shares the rows out according to what fits down and, in {@link PrintMode#NORMAL}
+     * mode, the columns according to what fits across. It draws no cut lines nor headers repeated
+     * beyond what the two formats say.
      */
-    private static class ImpresionDeTabla implements Printable {
+    private static class TablePrintable implements Printable {
 
         private final JTable table;
         private final PrintMode printMode;
         private final MessageFormat headerFormat;
         private final MessageFormat footerFormat;
 
-        ImpresionDeTabla(JTable table, PrintMode printMode, MessageFormat headerFormat,
+        TablePrintable(JTable table, PrintMode printMode, MessageFormat headerFormat,
                 MessageFormat footerFormat) {
             this.table = table;
             this.printMode = printMode;
@@ -2079,16 +2087,16 @@ public class JTable extends JComponent implements TableModelListener, Scrollable
 
         public int print(java.awt.Graphics graphics, java.awt.print.PageFormat pageFormat,
                 int pageIndex) throws PrinterException {
-            int alto = (int) pageFormat.getImageableHeight();
-            int porPagina = Math.max(1, alto / Math.max(1, table.getRowHeight()));
-            int primera = pageIndex * porPagina;
-            if (primera >= table.getRowCount()) {
+            int height = (int) pageFormat.getImageableHeight();
+            int perPage = Math.max(1, height / Math.max(1, table.getRowHeight()));
+            int first = pageIndex * perPage;
+            if (first >= table.getRowCount()) {
                 return NO_SUCH_PAGE;
             }
             graphics.translate((int) pageFormat.getImageableX(),
                     (int) pageFormat.getImageableY());
             java.awt.Graphics g2 = graphics.create();
-            g2.translate(0, -primera * table.getRowHeight());
+            g2.translate(0, -first * table.getRowHeight());
             table.paint(g2);
             g2.dispose();
             return PAGE_EXISTS;

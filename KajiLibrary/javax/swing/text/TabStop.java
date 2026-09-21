@@ -3,31 +3,31 @@ package javax.swing.text;
 import java.io.Serializable;
 
 /**
- * Una parada de tabulacion: donde se detiene el texto y como se acomoda contra ese punto.
+ * A tab stop: where the text stops and how it is arranged against that point.
  *
- * <p>Inmutable, y por eso se puede compartir entre parrafos. La <em>alineacion</em> dice que parte
- * del texto queda en la posicion: a la izquierda es lo comun, y la decimal es la que alinea una
- * columna de numeros por su coma. El <em>guia</em> es lo que se dibuja en el hueco que queda antes
- * de la parada, esos puntitos de un indice.
+ * <p>Immutable, and that is why it can be shared between paragraphs. The <em>alignment</em> says
+ * which part of the text ends up at the position: to the left is the common one, and the decimal
+ * one is what aligns a column of numbers by their point. The <em>leader</em> is what is drawn in
+ * the gap left before the stop, those little dots of an index.
  */
 public class TabStop implements Serializable {
 
-    /** El texto empieza en la parada. */
+    /** The text starts at the stop. */
     public static final int ALIGN_LEFT = 0;
 
-    /** El texto termina en la parada. */
+    /** The text ends at the stop. */
     public static final int ALIGN_RIGHT = 1;
 
-    /** El texto queda centrado en la parada. */
+    /** The text is centred on the stop. */
     public static final int ALIGN_CENTER = 2;
 
-    /** La coma decimal queda en la parada. */
+    /** The decimal point ends up at the stop. */
     public static final int ALIGN_DECIMAL = 4;
 
-    /** Se dibuja una barra en la parada; el texto sigue de largo. */
+    /** A bar is drawn at the stop; the text carries on. */
     public static final int ALIGN_BAR = 5;
 
-    /** Sin guia. */
+    /** With no leader. */
     public static final int LEAD_NONE = 0;
 
     public static final int LEAD_DOTS = 1;
@@ -44,7 +44,7 @@ public class TabStop implements Serializable {
     private float position;
     private int leader;
 
-    /** Una parada a la izquierda y sin guia en esa posicion. */
+    /** A left stop with no leader at that position. */
     public TabStop(float pos) {
         this(pos, ALIGN_LEFT, LEAD_NONE);
     }
@@ -67,7 +67,7 @@ public class TabStop implements Serializable {
         return leader;
     }
 
-    /** Iguales si coinciden en las tres cosas; se usa al comparar juegos de paradas. */
+    /** Equal if they match in all three things; it is used when comparing sets of stops. */
     public boolean equals(Object other) {
         if (this == other) {
             return true;

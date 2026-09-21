@@ -5,19 +5,19 @@ import java.lang.classfile.Opcode;
 import java.lang.classfile.TypeKind;
 import jdk.internal.classfile.impl.Instructions;
 
-// Un retorno. `typeKind()` es `VOID` para `return` y el tipo devuelto para los otros cinco; los
-// cuatro tipos angostos vuelven con `ireturn`, así que nunca aparecen acá.
+// A return. `typeKind()` is `VOID` for `return` and the returned type for the other five; the four
+// narrow types come back with `ireturn`, so they never turn up here.
 public interface ReturnInstruction extends Instruction {
 
-    /** El tipo que devuelve, o `VOID`. */
+    /** The type it returns, or `VOID`. */
     TypeKind typeKind();
 
-    /** El retorno de este tipo. */
+    /** The return of this type. */
     public static ReturnInstruction of(TypeKind typeKind) {
         return Instructions.returnInstruction(typeKind);
     }
 
-    /** El retorno de este opcode. */
+    /** This opcode's return. */
     public static ReturnInstruction of(Opcode op) {
         return Instructions.returnInstruction(op);
     }

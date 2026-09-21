@@ -4,51 +4,51 @@ import javax.print.attribute.Attribute;
 import javax.print.attribute.PrintRequestAttribute;
 
 /**
- * Quien es la ventana duenia del dialogo de impresion: sobre ella se centra el dialogo y a ella
- * bloquea mientras esta abierto.
+ * Which window owns the print dialog: the dialog is centred on it and blocks it while open.
  *
- * <p>Es el unico atributo del paquete que no es un dato puro. Los demas describen papel, tinta o
- * estado; este apunta a un objeto vivo de la interfaz grafica, y por eso es el unico que no se
- * puede implementar entero aca.
+ * <p>It is the package's only attribute that is not pure data. The others describe paper, ink or
+ * state; this one points at a live object of the graphical interface, and that is why it is the
+ * only one that could not be implemented whole here.
  *
- * <p>Esta clase decia que le faltaban {@code DialogOwner(java.awt.Window)} y {@code getOwner()}
- * porque {@code java.awt.Window} no existia en este arbol --no se puede declarar un metodo cuyo tipo
- * de retorno no existe-- y que el dia que apareciera eran tres lineas. Aparecio, y son estas.
+ * <p>This class used to say it lacked {@code DialogOwner(java.awt.Window)} and {@code getOwner()}
+ * because {@code java.awt.Window} did not exist in this tree --a method whose return type does not
+ * exist cannot be declared-- and that the day it appeared they were three lines. It appeared, and
+ * these are they.
  *
- * <h2>La ventana es {@code transient}, y eso no es un descuido</h2>
+ * <h2>The window is {@code transient}, and that is not an oversight</h2>
  *
- * <p>Un {@link javax.print.attribute.Attribute} es serializable, y una ventana viva no se puede
- * serializar de forma util: lo que se recupere en otra maquina, o en otra corrida, no seria la misma
- * ventana ni podria serlo. Al deserializar el duenio queda en null, que es exactamente lo que
- * significa el constructor sin argumentos --"la duenia es la ventana del propio dialogo"-- y por lo
- * tanto un estado legal y no un agujero.
+ * <p>An {@link javax.print.attribute.Attribute} is serializable, and a live window cannot be
+ * serialized usefully: whatever is recovered on another machine, or in another run, would not be
+ * the same window nor could it be. On deserializing the owner is left null, which is exactly what
+ * the no-argument constructor means --"the owner is the dialog's own window"-- and therefore a
+ * legal state and not a hole.
  *
- * <p>{@code getOwner()} devuelve null tambien cuando se construyo con {@code null}, que el JDK
- * acepta sin quejarse; se comprobo contra el JDK 25.
+ * <p>{@code getOwner()} returns null also when it was built with {@code null}, which the JDK
+ * accepts without complaint; it was checked against JDK 25.
  */
 public final class DialogOwner implements PrintRequestAttribute {
 
     private static final long serialVersionUID = -1901909867156076547L;
 
-    /** La ventana duenia, o null. `transient` por lo que dice la cabecera. */
+    /** The owner window, or null. `transient` for what the header says. */
     private final transient java.awt.Window owner;
 
-    /** Sin ventana explicita: la duenia es la del propio dialogo. */
+    /** Without an explicit window: the owner is the dialog's own. */
     public DialogOwner() {
         this.owner = null;
     }
 
     /**
-     * Con esa ventana como duenia.
+     * With that window as owner.
      *
-     * @param window la ventana; {@code null} vale y equivale al constructor sin argumentos, que es
-     *     lo que hace el JDK
+     * @param window the window; {@code null} is valid and equivalent to the no-argument
+     *     constructor, which is what the JDK does
      */
     public DialogOwner(java.awt.Window window) {
         this.owner = window;
     }
 
-    /** La ventana duenia, o null si no se dio ninguna. */
+    /** The owner window, or null if none was given. */
     public java.awt.Window getOwner() {
         return this.owner;
     }

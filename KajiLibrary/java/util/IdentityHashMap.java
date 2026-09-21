@@ -55,11 +55,11 @@ public class IdentityHashMap<K, V> extends AbstractMap<K, V> implements Map<K, V
     // `expectedMaxSize` is a hint: the table is sized so it will not have to grow before
     // holding that many entries at the 2/3 load factor below.
     /**
-     * Copia los pares de otro mapa.
+     * It copies another map's pairs.
      *
-     * <p>Ojo con lo que significa copiar **aca**: las claves se comparan por identidad, asi que dos
-     * claves iguales-pero-distintas del mapa de origen entran como dos entradas separadas. Copiar un
-     * HashMap a un IdentityHashMap puede agrandar el mapa, y no es un error.
+     * <p>Mind what copying means **here**: keys are compared by identity, so two equal-but-distinct
+     * keys of the source map come in as two separate entries. Copying a HashMap into an
+     * IdentityHashMap can grow the map, and that is not an error.
      */
     public IdentityHashMap(Map<? extends K, ? extends V> m) {
         this();
@@ -124,11 +124,11 @@ public class IdentityHashMap<K, V> extends AbstractMap<K, V> implements Map<K, V
         return i;
     }
 
-    // La tabla alterna clave y valor, asi que se avanza de a dos (finding #205).
+    // The table alternates key and value, so it steps two at a time (finding #205).
     //
-    // Divergencia que importa aca mas que en los otros: este mapa compara por **identidad**, pero
-    // el `HashSet` que se devuelve compara por `equals`. Dos claves distintas-por-identidad pero
-    // iguales-por-equals colapsan en una sola entrada del set.
+    // A divergence that matters here more than in the others: this map compares by **identity**, but
+    // the `HashSet` returned compares by `equals`. Two keys distinct by identity but equal by
+    // `equals` collapse into a single entry of the set.
     public Set<K> keySet() {
         HashSet<K> out = new HashSet<K>();
         int i = 0;
@@ -288,11 +288,11 @@ public class IdentityHashMap<K, V> extends AbstractMap<K, V> implements Map<K, V
     }
 
     /**
-     * Los valores de este mapa.
+     * This map's values.
      *
-     * <p>**Divergencia deliberada**, la misma que ya declara `keySet()`: la del JDK es una *vista*
-     * respaldada por el mapa; esta es una copia sacada en el momento. Y a diferencia de `keySet()`
-     * es una `Collection` y no un `Set`, porque los valores **si** pueden repetirse.
+     * <p>**A deliberate divergence**, the same one `keySet()` already declares: the JDK's is a *view*
+     * backed by the map; this one is a copy taken at the moment of asking. And unlike `keySet()` this
+     * is a `Collection` and not a `Set`, because values **can** repeat.
      */
     public java.util.Collection<V> values() {
         java.util.ArrayList<V> out = new java.util.ArrayList<V>();
@@ -304,11 +304,12 @@ public class IdentityHashMap<K, V> extends AbstractMap<K, V> implements Map<K, V
     }
 
     /**
-     * Los pares de este mapa.
+     * This map's pairs.
      *
-     * <p>Misma divergencia que `values()`: copia, no vista. Los pares que devuelve son inmutables,
-     * asi que `setValue` sobre uno de ellos lanza en vez de escribir en el mapa — que es lo
-     * coherente con que sea una copia: escribir en un par que nadie mira seria peor que negarse.
+     * <p>The same divergence as `values()`: a copy, not a view. The pairs it returns are immutable,
+     * so `setValue` on one of them throws instead of writing into the map — which is what is
+     * consistent with it being a copy: writing into a pair nobody looks at would be worse than
+     * refusing.
      */
     public java.util.Set<java.util.Map.Entry<K, V>> entrySet() {
         java.util.HashSet<java.util.Map.Entry<K, V>> out =

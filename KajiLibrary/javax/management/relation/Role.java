@@ -7,14 +7,14 @@ import java.util.List;
 import javax.management.ObjectName;
 
 /**
- * Un rol con su valor: el nombre, y los MBeans que hoy ocupan esa punta de la relacion.
+ * A role with its value: the name, and the MBeans that occupy that end of the relation today.
  *
- * <p>Es la instancia de lo que {@link RoleInfo} describe. Aquella dice "un dueno, exactamente uno,
- * de clase {@code Persona}"; esta dice "el dueno es <em>este</em> MBean".
+ * <p>It is the instance of what {@link RoleInfo} describes. That one says "an owner, exactly one,
+ * of class {@code Person}"; this one says "the owner is <em>this</em> MBean".
  *
- * <p>Es mutable —tiene setters— porque se usa como <strong>argumento</strong>: se arma uno, se lo
- * pasa a {@code setRole} y se lo puede reusar cambiandole el valor. El servicio de relaciones se
- * queda con una copia, asi que modificarlo despues no cambia la relacion.
+ * <p>It is mutable --it has setters-- because it is used as an <b>argument</b>: you build one, pass
+ * it to {@code setRole} and can reuse it by changing its value. The relation service keeps a copy,
+ * so modifying it afterwards does not change the relation.
  */
 public class Role implements Serializable {
 
@@ -24,42 +24,42 @@ public class Role implements Serializable {
     private List<ObjectName> objectNameList = new ArrayList<ObjectName>();
 
     /**
-     * @throws IllegalArgumentException si falta el nombre o la lista
+     * @throws IllegalArgumentException if the name or the list are missing
      */
     public Role(String roleName, List<ObjectName> roleValue) throws IllegalArgumentException {
         if (roleName == null || roleValue == null) {
-            throw new IllegalArgumentException("hacen falta el nombre y el valor");
+            throw new IllegalArgumentException("the name and the value are required");
         }
         this.name = roleName;
         this.objectNameList = new ArrayList<ObjectName>(roleValue);
     }
 
-    /** El nombre del rol. */
+    /** The role's name. */
     public String getRoleName() {
         return this.name;
     }
 
-    /** Los MBeans que lo ocupan. */
+    /** The MBeans that occupy it. */
     public List<ObjectName> getRoleValue() {
         return this.objectNameList;
     }
 
     /**
-     * @throws IllegalArgumentException si es {@code null}
+     * @throws IllegalArgumentException if it is {@code null}
      */
     public void setRoleName(String roleName) throws IllegalArgumentException {
         if (roleName == null) {
-            throw new IllegalArgumentException("el nombre no puede ser null");
+            throw new IllegalArgumentException("the name cannot be null");
         }
         this.name = roleName;
     }
 
     /**
-     * @throws IllegalArgumentException si es {@code null}
+     * @throws IllegalArgumentException if it is {@code null}
      */
     public void setRoleValue(List<ObjectName> roleValue) throws IllegalArgumentException {
         if (roleValue == null) {
-            throw new IllegalArgumentException("el valor no puede ser null");
+            throw new IllegalArgumentException("the value cannot be null");
         }
         this.objectNameList = new ArrayList<ObjectName>(roleValue);
     }
@@ -70,25 +70,25 @@ public class Role implements Serializable {
     }
 
     /**
-     * Una copia.
+     * A copy.
      *
-     * <p>Copia la lista tambien: una copia que compartiera el valor con el original haria que
-     * cambiar uno cambiara el otro, que es lo contrario de lo que un {@code clone} promete.
+     * <p>It copies the list too: a copy that shared the value with the original would make changing
+     * one change the other, which is the opposite of what a {@code clone} promises.
      */
     public Object clone() {
         try {
             return new Role(this.name, this.objectNameList);
         } catch (IllegalArgumentException e) {
-            // Imposible: los dos ya pasaron la validacion al construir este objeto.
+            // Impossible: both already passed validation when this object was built.
             return null;
         }
     }
 
-    /** Los nombres de MBean, uno por linea. Es como se los muestra en un log. */
+    /** The MBean names, one per line. It is how they are shown in a log. */
     public static String roleValueToString(List<ObjectName> roleValue)
             throws IllegalArgumentException {
         if (roleValue == null) {
-            throw new IllegalArgumentException("el valor no puede ser null");
+            throw new IllegalArgumentException("the value cannot be null");
         }
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < roleValue.size(); i++) {

@@ -1,32 +1,34 @@
 package org.w3c.dom.ls;
 
 /**
- * KajiLibrary's org.w3c.dom.ls.LSResourceResolver -- quien decide de donde sale cada recurso.
+ * KajiLibrary's org.w3c.dom.ls.LSResourceResolver -- the one that decides where each resource comes
+ * from.
  *
- * <p>Un metodo, y es de las piezas mas utiles de todo el XML de la plataforma. Un documento que
- * declara una DTD o importa un esquema nombra un URI, y por omision el analizador va a buscarlo.
- * Poniendo un resolvedor, esos nombres se atienden localmente.
+ * <p>One method, and it is one of the most useful pieces of all the XML of the platform. A document
+ * that declares a DTD or imports a schema names a URI, and by default the parser goes to fetch it.
+ * Setting a resolver, those names are attended to locally.
  *
- * <p>Hay dos motivos y los dos pesan. El primero es que sin esto un XML puede hacer que el programa
- * haga pedidos de red que nadie pidio, o lea archivos locales --el ataque XXE-- solo por nombrarlos.
- * El segundo es mas prosaico: un esquema que se resuelve por red hace que el programa deje de andar
- * el dia que ese servidor se cae, que es lo que pasa cada tanto con los DTD del W3C.
+ * <p>There are two motives and both weigh. The first is that without this an XML can make the
+ * program make network requests nobody asked for, or read local files --the XXE attack-- just by
+ * naming them. The second is more prosaic: a schema resolved over the network makes the program
+ * stop working the day that server goes down, which is what happens every so often with the W3C
+ * DTDs.
  *
- * <p>Devolver null significa "resolvelo vos como siempre", asi que un resolvedor que solo quiere
- * atajar unos pocos nombres es corto de escribir. Uno que devuelve un {@link LSInput} vacio para
- * todo lo desconocido es la forma de <b>prohibir</b> lo externo.
+ * <p>Returning null means "resolve it yourself as usual", so a resolver that only wants to catch a
+ * few names is short to write. One that returns an empty {@link LSInput} for everything unknown is
+ * the way of <b>forbidding</b> the external.
  */
 public interface LSResourceResolver {
 
     /**
-     * De donde sale ese recurso.
+     * Where that resource comes from.
      *
-     * @param type el tipo, por ejemplo el espacio de nombres de XML Schema
-     * @param namespaceURI el espacio de nombres del recurso, o null
-     * @param publicId el identificador publico, o null
-     * @param systemId el identificador de sistema, tal como lo escribio el documento
-     * @param baseURI contra el que se resuelve un {@code systemId} relativo
-     * @return de donde leerlo, o null para dejar que lo resuelva el analizador
+     * @param type the type, for example the namespace of XML Schema
+     * @param namespaceURI the namespace of the resource, or null
+     * @param publicId the public identifier, or null
+     * @param systemId the system identifier, as the document wrote it
+     * @param baseURI what a relative {@code systemId} is resolved against
+     * @return where to read it from, or null to let the parser resolve it
      */
     LSInput resolveResource(String type, String namespaceURI, String publicId, String systemId,
                             String baseURI);

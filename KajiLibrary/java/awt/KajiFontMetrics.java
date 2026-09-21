@@ -3,20 +3,20 @@ package java.awt;
 import java.awt.geom.Rectangle2D;
 import java.awt.geom.Rectangle2D$Double;
 
-import jdk.internal.awt.FuenteBitmap;
+import jdk.internal.awt.BitmapFont;
 
 /**
- * Las metricas de la unica fuente de esta VM; ver {@link FuenteBitmap}.
+ * The metrics of the only font of this VM; see {@link BitmapFont}.
  *
- * <p>{@link FontMetrics} define casi todo en terminos de {@link #charsWidth} y {@link #getWidths},
- * y las dos se definen en circulo entre si a proposito: la subclase tiene que romperlo con la medida
- * real, y esta es la unica que hay. Los dos metodos de aca son los que convierten el circulo en una
- * tabla.
+ * <p>{@link FontMetrics} defines almost everything in terms of {@link #charsWidth} and
+ * {@link #getWidths}, and the two are defined in a circle on purpose: the subclass has to break it
+ * with the real measure, and this is the only one there is. The two methods here are the ones that
+ * turn the circle into a table.
  *
- * <p>Toda {@link Font} da las mismas metricas, sea cual sea su nombre o tamano, porque toda
- * {@code Font} se dibuja con la misma cara. Es la sustitucion de la que habla {@link FuenteBitmap},
- * y lo importante es que sea <strong>la misma</strong> en las dos puntas: lo que esto mide es lo que
- * el rasterizador pinta.
+ * <p>Every {@link Font} gives the same metrics, whatever its name or size, because every {@code
+ * Font} is drawn with the same face. It is the substitution {@link BitmapFont} talks about, and
+ * what matters is that it be <strong>the same</strong> at both ends: what this measures is what the
+ * rasteriser paints.
  */
 class KajiFontMetrics extends FontMetrics {
 
@@ -27,46 +27,49 @@ class KajiFontMetrics extends FontMetrics {
     }
 
     public int getAscent() {
-        return FuenteBitmap.ASCENDENTE;
+        return BitmapFont.ASCENT;
     }
 
     public int getDescent() {
-        return FuenteBitmap.DESCENDENTE;
+        return BitmapFont.DESCENT;
     }
 
     public int getLeading() {
-        return FuenteBitmap.ENTRELINEA;
+        return BitmapFont.LEADING;
     }
 
     public int getMaxAdvance() {
-        return FuenteBitmap.AVANCE_MAX;
+        return BitmapFont.MAX_ADVANCE;
     }
 
-    /** La suma de los avances. Es la primitiva: {@code stringWidth} y {@code charWidth} salen de aca. */
+    /**
+     * The sum of the advances. It is the primitive: {@code stringWidth} and {@code charWidth} come
+     * out of here.
+     */
     public int charsWidth(char[] data, int off, int len) {
         int total = 0;
         for (int i = 0; i < len; i++) {
-            total = total + FuenteBitmap.avance(data[off + i]);
+            total = total + BitmapFont.advance(data[off + i]);
         }
         return total;
     }
 
-    /** Los avances de los 256 primeros caracteres; fuera de ASCII, el de {@code ?}. */
+    /** The advances of the first 256 characters; outside ASCII, the one of {@code ?}. */
     public int[] getWidths() {
-        int[] anchos = new int[256];
+        int[] widths = new int[256];
         for (int c = 0; c < 256; c++) {
-            anchos[c] = FuenteBitmap.avance((char) c);
+            widths[c] = BitmapFont.advance((char) c);
         }
-        return anchos;
+        return widths;
     }
 
     /**
-     * La caja de una cadena, desde la linea de base.
+     * The box of a string, from the baseline.
      *
-     * <p>Sobrescrita porque la de {@link FontMetrics} delega en {@link Font#getStringBounds}, que
-     * necesita el motor tipografico que esta VM no trae. La caja es el ancho medido por
-     * {@link #stringWidth} y el alto del renglon, con el origen en la linea de base — de ahi la
-     * {@code y} negativa: {@code -ascenso}.
+     * <p>Overridden because the one of {@link FontMetrics} delegates to {@link
+     * Font#getStringBounds}, which needs the font engine this VM does not ship. The box is the
+     * width measured by {@link #stringWidth} and the height of the line, with the origin on the
+     * baseline — hence the negative {@code y}: {@code -ascent}.
      */
     public Rectangle2D getStringBounds(String str, Graphics context) {
         return new Rectangle2D$Double(0, -getAscent(), stringWidth(str), getHeight());

@@ -3,71 +3,70 @@ package org.w3c.dom.html;
 import org.w3c.dom.Document;
 
 /**
- * Un `<iframe>`. Vale la nota de `getContentDocument` de
- * {@link HTMLFrameElement}.
+ * An `<iframe>`. The note on `getContentDocument` of {@link HTMLFrameElement} holds.
  */
 public interface HTMLIFrameElement extends HTMLElement {
 
-    /** La alineacion (presentacion; HTML 4 la desaconseja). */
+    /** The alignment (presentational; HTML 4 deprecates it). */
     String getAlign();
 
-    /** Fija la alineacion (presentacion; HTML 4 la desaconseja). */
+    /** It sets the alignment (presentational; HTML 4 deprecates it). */
     void setAlign(String align);
 
-    /** El atributo `frameBorder`. */
+    /** The `frameBorder` attribute. */
     String getFrameBorder();
 
-    /** Fija el atributo `frameBorder`. */
+    /** It sets the `frameBorder` attribute. */
     void setFrameBorder(String frameBorder);
 
-    /** El alto. */
+    /** The height. */
     String getHeight();
 
-    /** Fija el alto. */
+    /** It sets the height. */
     void setHeight(String height);
 
-    /** El atributo `longDesc`. */
+    /** The `longDesc` attribute. */
     String getLongDesc();
 
-    /** Fija el atributo `longDesc`. */
+    /** It sets the `longDesc` attribute. */
     void setLongDesc(String longDesc);
 
-    /** El atributo `marginHeight`. */
+    /** The `marginHeight` attribute. */
     String getMarginHeight();
 
-    /** Fija el atributo `marginHeight`. */
+    /** It sets the `marginHeight` attribute. */
     void setMarginHeight(String marginHeight);
 
-    /** El atributo `marginWidth`. */
+    /** The `marginWidth` attribute. */
     String getMarginWidth();
 
-    /** Fija el atributo `marginWidth`. */
+    /** It sets the `marginWidth` attribute. */
     void setMarginWidth(String marginWidth);
 
-    /** El atributo `name`. */
+    /** The `name` attribute. */
     String getName();
 
-    /** Fija el atributo `name`. */
+    /** It sets the `name` attribute. */
     void setName(String name);
 
-    /** El atributo `scrolling`. */
+    /** The `scrolling` attribute. */
     String getScrolling();
 
-    /** Fija el atributo `scrolling`. */
+    /** It sets the `scrolling` attribute. */
     void setScrolling(String scrolling);
 
-    /** El origen. */
+    /** The source. */
     String getSrc();
 
-    /** Fija el origen. */
+    /** It sets the source. */
     void setSrc(String src);
 
-    /** El ancho. */
+    /** The width. */
     String getWidth();
 
-    /** Fija el ancho. */
+    /** It sets the width. */
     void setWidth(String width);
 
-    /** El documento cargado adentro, o nulo si no hay o es de otro origen. */
+    /** The document loaded inside, or null if there is none or it is from another origin. */
     Document getContentDocument();
 }

@@ -1,7 +1,7 @@
 package java.lang;
 
-// Por import y nombre simple: calificar el tipo en el uso no resuelve
-// desde java.lang (finding #210).
+// Through an import and a simple name: qualifying the type at the use site does not resolve
+// from java.lang (finding #210).
 import java.util.Spliterator;
 import java.util.Spliterators;
 import java.util.function.Consumer;
@@ -15,15 +15,15 @@ public interface Iterable<T> {
     Iterator<T> iterator();
 
     /**
-     * Corre `action` sobre cada elemento, en el orden en que los da el iterador.
+     * It runs `action` over each element, in the order the iterator gives them.
      *
-     * <p>Faltaba, y era el unico miembro publico de `Iterable` que no estaba: sin el, `forEach` no
-     * existia en NINGUNA coleccion de la biblioteca -- lo hereda todo lo que sea `Iterable`, que es
-     * la mitad de `java.util`. `LinkedBlockingDeque` y `LinkedTransferQueue` lo declaraban por su
-     * cuenta, y no estaban sobreescribiendo nada (#291).
+     * <p>It was missing, and it was the only public member of `Iterable` that was not there: without
+     * it, `forEach` existed on NO collection in the library -- everything that is `Iterable` inherits
+     * it, which is half of `java.util`. `LinkedBlockingDeque` and `LinkedTransferQueue` declared it
+     * on their own, and were overriding nothing (#291).
      *
-     * <p>Va como `default` y no como abstracto por la razon de siempre: declararlo abstracto
-     * obligaria a escribirlo en cada implementor, y el cuerpo seria este mismo.
+     * <p>It goes in as a `default` and not as abstract for the usual reason: declaring it abstract
+     * would force writing it in every implementor, and the body would be this very one.
      */
     default void forEach(Consumer<? super T> action) {
         if (action == null) {
@@ -37,8 +37,8 @@ public interface Iterable<T> {
     /**
      * A spliterator over these elements.
      *
-     * <p>Sin tamano y sin orden: un `Iterable` no promete ninguna de las dos cosas, y este default
-     * existe para que toda coleccion tenga un spliterator aunque no sepa nada de si misma.
+     * <p>With no size and no order: an `Iterable` promises neither, and this default exists so every
+     * collection has a spliterator even when it knows nothing about itself.
      */
     default Spliterator<T> spliterator() {
         return Spliterators.spliteratorUnknownSize(this.iterator(), 0);

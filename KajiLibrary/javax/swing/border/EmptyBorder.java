@@ -5,13 +5,14 @@ import java.awt.Graphics;
 import java.awt.Insets;
 
 /**
- * Un borde que solo reserva espacio y no dibuja nada.
+ * A border that only reserves space and draws nothing.
  *
- * <p>Suena a nada y es de los mas usados: es como se le pone margen a un componente en Swing. No hay
- * una propiedad "margen" — hay un borde que ocupa lugar y no pinta.
+ * <p>It sounds like nothing and it is one of the most used: it is how a margin is put on a
+ * component in Swing. There is no "margin" property -- there is a border that takes up room and
+ * does not paint.
  *
- * <p>No es opaco, y eso es lo correcto justamente porque no dibuja: si dijera que si, Swing se
- * saltearia el fondo de abajo y quedarian pixeles sin pintar.
+ * <p>It is not opaque, and that is right precisely because it does not draw: if it said yes,
+ * Swing would skip the background underneath and pixels would be left unpainted.
  */
 public class EmptyBorder extends AbstractBorder implements java.io.Serializable {
 
@@ -22,7 +23,7 @@ public class EmptyBorder extends AbstractBorder implements java.io.Serializable 
     protected int top;
     protected int bottom;
 
-    /** Con los cuatro margenes en pixeles. */
+    /** With the four margins in pixels. */
     public EmptyBorder(int top, int left, int bottom, int right) {
         this.top = top;
         this.right = right;
@@ -30,7 +31,7 @@ public class EmptyBorder extends AbstractBorder implements java.io.Serializable 
         this.left = left;
     }
 
-    /** Con los cuatro margenes que trae un {@link Insets}. */
+    /** With the four margins an {@link Insets} carries. */
     public EmptyBorder(Insets borderInsets) {
         this.top = borderInsets.top;
         this.right = borderInsets.right;
@@ -38,7 +39,7 @@ public class EmptyBorder extends AbstractBorder implements java.io.Serializable 
         this.left = borderInsets.left;
     }
 
-    /** No dibuja nada, que es todo el punto de esta clase. */
+    /** It draws nothing, which is the whole point of this class. */
     public void paintBorder(Component c, Graphics g, int x, int y, int width, int height) {
     }
 
@@ -50,7 +51,7 @@ public class EmptyBorder extends AbstractBorder implements java.io.Serializable 
         return insets;
     }
 
-    /** Los margenes, en un {@link Insets} nuevo. */
+    /** The margins, in a new {@link Insets}. */
     public Insets getBorderInsets() {
         return new Insets(this.top, this.left, this.bottom, this.right);
     }

@@ -14,10 +14,10 @@ public class CheckedOutputStream extends FilterOutputStream {
         this.checksum = checksum;
     }
 
-    // Sin `throws IOException` a proposito (finding #104): el lector de .class ignora el atributo
-    // `Exceptions` del metodo del classpath, asi que ve el override como MAS ANCHO que el original
-    // y lo rechaza por 8.4.8.3. La omision es invisible para el gate — `throws` no va en el
-    // descriptor — y vuelve cuando se arregle #104.
+    // This note used to say the `throws IOException` was omitted on purpose because of finding
+    // #104 --the class reader ignored a classpath method's `Exceptions` attribute, so it saw the
+    // override as WIDER than the original and rejected it by 8.4.8.3. #104 is closed, and the
+    // clause is declared below: the note outlived both the defect and the workaround.
     public void write(int b) throws java.io.IOException {
         out.write(b);
         checksum.update(b);

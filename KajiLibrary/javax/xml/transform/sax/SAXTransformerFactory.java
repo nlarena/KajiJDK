@@ -7,77 +7,77 @@ import javax.xml.transform.TransformerFactory;
 import org.xml.sax.XMLFilter;
 
 /**
- * KajiLibrary's javax.xml.transform.sax.SAXTransformerFactory -- la fabrica de las piezas SAX.
+ * KajiLibrary's javax.xml.transform.sax.SAXTransformerFactory -- the factory of the SAX pieces.
  *
- * <p>Extiende {@link TransformerFactory} con lo que hace falta para transformar <b>por eventos</b>:
- * los {@link TransformerHandler}, los {@link TemplatesHandler} y los filtros.
+ * <p>It extends {@link TransformerFactory} with what is needed to transform <b>by events</b>: the
+ * {@link TransformerHandler}s, the {@link TemplatesHandler}s and the filters.
  *
- * <h2>Como se consigue</h2>
+ * <h2>How it is obtained</h2>
  *
- * <p>No tiene {@code newInstance} propio. Se pide un {@code TransformerFactory} normal, se le
- * pregunta por {@link #FEATURE} y, si dice que si, se lo convierte con un cast. Es incomodo y es
- * deliberado: esta clase llego despues, y agregarle un {@code newInstance} a la jerarquia habria
- * obligado a toda implementacion existente a soportar la parte SAX.
+ * <p>It has no {@code newInstance} of its own. An ordinary {@code TransformerFactory} is asked for,
+ * it is asked about {@link #FEATURE} and, if it says yes, it is converted with a cast. It is
+ * awkward and it is deliberate: this class came later, and adding a {@code newInstance} to the
+ * hierarchy would have forced every existing implementation to support the SAX part.
  *
- * <p>{@link #FEATURE_XMLFILTER} es una segunda pregunta, para los dos {@code newXMLFilter}: una
- * implementacion puede dar los manejadores y no los filtros.
+ * <p>{@link #FEATURE_XMLFILTER} is a second question, for the two {@code newXMLFilter}s: an
+ * implementation can give the handlers and not the filters.
  *
- * <h2>Las dos formas de cada cosa</h2>
+ * <h2>The two forms of each thing</h2>
  *
- * <p>Casi todo viene por duplicado, con {@link Source} y con {@link Templates}, y la diferencia es de
- * costo. Con {@code Source} la hoja de estilo se compila <b>en cada llamada</b>; con
- * {@code Templates} ya esta compilada y se reusa. Para una hoja que se aplica muchas veces, esa es
- * toda la diferencia de rendimiento que hay para ganar.
+ * <p>Almost everything comes in pairs, with {@link Source} and with {@link Templates}, and the
+ * difference is one of cost. With {@code Source} the stylesheet is compiled <b>on every call</b>;
+ * with {@code Templates} it is already compiled and reused. For a stylesheet applied many times,
+ * that is all the performance difference there is to gain.
  *
- * <p>{@link #newTransformerHandler()} sin argumentos da uno que no transforma nada: copia la entrada
- * a la salida. Suena inutil y no lo es -- es la forma de convertir una cadena de eventos en un
- * documento, o de serializarla, usando solo las propiedades de salida del transformador.
+ * <p>{@link #newTransformerHandler()} without arguments gives one that transforms nothing: it
+ * copies the input to the output. It sounds useless and is not -- it is the way to turn a chain of
+ * events into a document, or to serialize it, using only the transformer's output properties.
  */
 public abstract class SAXTransformerFactory extends TransformerFactory {
 
-    /** Con esto se pregunta si una fabrica es de estas. Ver la nota de la clase. */
+    /** With this one asks whether a factory is one of these. See the class note. */
     public static final String FEATURE =
         "http://javax.xml.transform.sax.SAXTransformerFactory/feature";
 
-    /** Y con esto, si ademas sabe hacer filtros. */
+    /** And with this, whether it also knows how to make filters. */
     public static final String FEATURE_XMLFILTER =
         "http://javax.xml.transform.sax.SAXTransformerFactory/feature/xmlfilter";
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected SAXTransformerFactory() {
     }
 
     /**
-     * Un manejador que aplica esa hoja de estilo.
+     * A handler that applies that stylesheet.
      *
-     * <p>La compila en esta llamada; ver la nota de la clase sobre el costo.
+     * <p>It compiles it on this call; see the class note on the cost.
      *
-     * @throws TransformerConfigurationException si la hoja esta mal
+     * @throws TransformerConfigurationException if the stylesheet is wrong
      */
     public abstract TransformerHandler newTransformerHandler(Source src)
         throws TransformerConfigurationException;
 
-    /** Idem, con la hoja ya compilada. */
+    /** Likewise, with the stylesheet already compiled. */
     public abstract TransformerHandler newTransformerHandler(Templates templates)
         throws TransformerConfigurationException;
 
-    /** Uno que copia la entrada a la salida. Ver la nota de la clase sobre para que sirve. */
+    /** One that copies the input to the output. See the class note on what it is for. */
     public abstract TransformerHandler newTransformerHandler()
         throws TransformerConfigurationException;
 
-    /** Un manejador que compila una hoja de estilo que llega por eventos. */
+    /** A handler that compiles a stylesheet arriving as events. */
     public abstract TemplatesHandler newTemplatesHandler()
         throws TransformerConfigurationException;
 
     /**
-     * Un filtro SAX que aplica esa hoja de estilo.
+     * A SAX filter that applies that stylesheet.
      *
-     * <p>Un {@link XMLFilter} se encadena con {@code setParent}, asi que esto deja meter una
-     * transformacion adentro de una cadena de lectura ya armada, sin tocar el resto.
+     * <p>An {@link XMLFilter} is chained with {@code setParent}, so this lets a transformation be
+     * put inside an already built reading chain, without touching the rest.
      */
     public abstract XMLFilter newXMLFilter(Source src) throws TransformerConfigurationException;
 
-    /** Idem, con la hoja ya compilada. */
+    /** Likewise, with the stylesheet already compiled. */
     public abstract XMLFilter newXMLFilter(Templates templates)
         throws TransformerConfigurationException;
 }

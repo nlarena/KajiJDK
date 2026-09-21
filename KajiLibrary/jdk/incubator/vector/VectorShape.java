@@ -1,63 +1,63 @@
 package jdk.incubator.vector;
 
 /**
- * El tamano en bits de un vector, sin decir de que son las posiciones.
+ * The size in bits of a vector, without saying what the lanes are.
  *
- * <h2>Por que el tamano va aparte del tipo</h2>
+ * <h2>Why the size goes apart from the type</h2>
  *
- * <p>Un registro vectorial de 256 bits es 256 bits sea lo que sea que se guarde adentro: pueden ser
- * 32 {@code byte}, 8 {@code int} o 4 {@code double}. El hardware tiene registros de un ancho fijo, y
- * lo que cambia es en cuantos pedazos se lo mira.
+ * <p>A 256-bit vector register is 256 bits whatever is kept inside: it may be 32 {@code byte}s, 8
+ * {@code int}s or 4 {@code double}s. The hardware has registers of a fixed width, and what changes
+ * is into how many pieces it is looked at.
  *
- * <p>Esa es la razon de que la forma y el tipo de posicion sean dos cosas separadas que se combinan:
- * {@link #withLanes(Class)} toma una forma y un tipo y da la especie concreta. Una especie es una
- * forma con las posiciones ya decididas.
+ * <p>That is the reason why the shape and the lane type are two separate things that combine:
+ * {@link #withLanes(Class)} takes a shape and a type and gives the concrete species. A species is a
+ * shape with the lanes already decided.
  *
  * <h2>{@link #S_Max_BIT}</h2>
  *
- * <p>Las otras cuatro constantes nombran un tamano fijo. Esta nombra <strong>el mas grande que esta
- * maquina puede</strong>, que se sabe recien al ejecutar. Sirve para escribir codigo que aproveche
- * el hardware que le toque sin elegir un ancho a mano.
+ * <p>The other four constants name a fixed size. This one names <strong>the largest this machine
+ * can do</strong>, which is known only at run time. It serves to write code that makes the most of
+ * whatever hardware it gets without choosing a width by hand.
  *
- * <h2>Cuanto vale el maximo en esta VM</h2>
+ * <h2>What the maximum is on this VM</h2>
  *
- * <p>Vale 64, el minimo que el API admite. No es una eleccion: el maximo real sale de preguntarle a
- * los intrinsecos de la VM cuantas posiciones entran en un registro, y esta VM no los tiene. Decir
- * 512 seria mentir, y {@link #forBitSize(int)} devolveria una forma que despues no se puede llenar.
+ * <p>It is 64, the minimum the API admits. It is not a choice: the real maximum comes from asking
+ * the VM's intrinsics how many lanes fit in a register, and this VM does not have them. Saying 512
+ * would be lying, and {@link #forBitSize(int)} would return a shape that then cannot be filled.
  *
- * <p>Por eso {@link #preferredShape()} y {@link #largestShapeFor(Class)} devuelven aca
- * {@link #S_64_BIT}. Los tamanos y las cuentas de esta clase son reales y se pueden usar; lo que no
- * hay es con que crear el vector.
+ * <p>That is why {@link #preferredShape()} and {@link #largestShapeFor(Class)} return {@link
+ * #S_64_BIT} here. The sizes and the arithmetic of this class are real and can be used; what there
+ * is not is anything to create the vector with.
  *
  * @since 16
  */
 public enum VectorShape {
 
-    /** Vectores de 64 bits. */
+    /** 64-bit vectors. */
     S_64_BIT(64),
-    /** Vectores de 128 bits. */
+    /** 128-bit vectors. */
     S_128_BIT(128),
-    /** Vectores de 256 bits. */
+    /** 256-bit vectors. */
     S_256_BIT(256),
-    /** Vectores de 512 bits. */
+    /** 512-bit vectors. */
     S_512_BIT(512),
-    /** El vector mas grande que soporta esta maquina; aca, 64 bits. */
-    S_Max_BIT(Limite.MAXIMO);
+    /** The largest vector this machine supports; here, 64 bits. */
+    S_Max_BIT(Limits.MAX_BITS);
 
     /**
-     * El maximo que esta VM puede sostener.
+     * The maximum this VM can sustain.
      *
-     * <p>En el JDK sale de {@code VectorSupport.getMaxLaneCount}, que es un intrinseco. Aca es la
-     * constante que el API pone como piso, porque no hay a quien preguntarle.
+     * <p>In the JDK it comes from {@code VectorSupport.getMaxLaneCount}, which is an intrinsic.
+     * Here it is the constant the API sets as the floor, because there is nobody to ask.
      *
-     * <p>Va en una clase aparte y no como campo de este enum porque el argumento de una constante de
-     * enum no puede leer un campo estatico del mismo enum: cuando se construyen las constantes la
-     * clase todavia no termino de inicializarse, asi que el lenguaje lo prohibe.
+     * <p>It goes in a separate class and not as a field of this enum because the argument of an
+     * enum constant cannot read a static field of the same enum: when the constants are built the
+     * class has not finished initialising yet, so the language forbids it.
      */
-    static final class Limite {
-        static final int MAXIMO = 64;
+    static final class Limits {
+        static final int MAX_BITS = 64;
 
-        private Limite() {
+        private Limits() {
         }
     }
 
@@ -68,37 +68,37 @@ public enum VectorShape {
     }
 
     /**
-     * El tamano del vector en bits.
+     * The size of the vector in bits.
      *
-     * @return los bits
+     * @return the bits
      */
     public int vectorBitSize() {
         return vectorBitSize;
     }
 
     /**
-     * La especie que resulta de llenar esta forma con posiciones de ese tipo.
+     * The species that results from filling this shape with lanes of that type.
      *
-     * @param <E> el tipo de la posicion, en su version envuelta
-     * @param elementType el tipo de la posicion
-     * @return la especie
-     * @throws UnsupportedOperationException en esta biblioteca; ver la nota de la clase
+     * @param <E> the lane type, in its boxed form
+     * @param elementType the lane type
+     * @return the species
+     * @throws UnsupportedOperationException always, in this library; see the class note
      */
     public <E> VectorSpecies<E> withLanes(final Class<E> elementType) {
         return VectorSpecies.of(elementType, this);
     }
 
     /**
-     * La forma de ese tamano en bits.
+     * The shape of that size in bits.
      *
-     * <p>Los cuatro tamanos fijos se reconocen siempre. Cualquier otro solo vale si es un multiplo
-     * de 128 que no pasa de 2048, y entonces la respuesta es {@link #S_Max_BIT}: es el unico caso en
-     * que un tamano que no esta nombrado igual existe, porque el maximo de la maquina puede ser
-     * cualquiera de esos.
+     * <p>The four fixed sizes are always recognised. Any other is valid only if it is a multiple of
+     * 128 that does not exceed 2048, and then the answer is {@link #S_Max_BIT}: it is the only case
+     * in which a size that is not named exists all the same, because the machine's maximum may be
+     * any of those.
      *
-     * @param bitSize el tamano en bits
-     * @return la forma
-     * @throws IllegalArgumentException si no hay forma de ese tamano
+     * @param bitSize the size in bits
+     * @return the shape
+     * @throws IllegalArgumentException if there is no shape of that size
      */
     public static VectorShape forBitSize(final int bitSize) {
         switch (bitSize) {
@@ -119,20 +119,20 @@ public enum VectorShape {
     }
 
     /**
-     * La forma cuyo vector de indices de ese tamano de posicion mide esos bits.
+     * The shape whose index vector, for that lane size, measures those bits.
      *
-     * <p>Un vector de indices acompana a otro vector diciendo de donde sale cada posicion, y sus
-     * indices son siempre {@code int}. Si el vector original tiene posiciones de 8 bits, el de
-     * indices necesita cuatro veces mas espacio para las mismas posiciones. Este metodo hace esa
-     * cuenta al reves: dado el tamano que ocupa el vector de indices, devuelve la forma del otro.
+     * <p>An index vector goes with another vector saying where each lane comes from, and its
+     * indices are always {@code int}. If the original vector has 8-bit lanes, the index one needs
+     * four times more room for the same lanes. This method does that computation backwards: given
+     * the size the index vector takes, it returns the shape of the other.
      *
-     * <p>Por eso 32 y 64 dan los dos {@link #S_64_BIT}: un solo indice de 32 bits ya corresponde al
-     * vector mas chico.
+     * <p>That is why 32 and 64 both give {@link #S_64_BIT}: a single 32-bit index already
+     * corresponds to the smallest vector.
      *
-     * @param bitSize el tamano del vector de indices, en bits
-     * @param elementSize el tamano de la posicion del vector original, en bits
-     * @return la forma
-     * @throws IllegalArgumentException si no hay forma que corresponda
+     * @param bitSize the size of the index vector, in bits
+     * @param elementSize the lane size of the original vector, in bits
+     * @return the shape
+     * @throws IllegalArgumentException if there is no corresponding shape
      */
     public static VectorShape forIndexBitSize(final int bitSize, final int elementSize) {
         switch (bitSize) {
@@ -156,40 +156,39 @@ public enum VectorShape {
     }
 
     /**
-     * La forma mas grande que esta maquina puede con posiciones de ese tipo.
+     * The largest shape this machine can do with lanes of that type.
      *
-     * @param etype el tipo de la posicion
-     * @return la forma mas grande
+     * @param etype the lane type
+     * @return the largest shape
      */
     public static VectorShape largestShapeFor(final Class<?> etype) {
-        return forBitSize(maximoPara(etype));
+        return forBitSize(maxBitsFor(etype));
     }
 
     /**
-     * La forma que conviene usar en esta maquina.
+     * The shape worth using on this machine.
      *
-     * <p>Es la mas grande que sirve para <strong>todos</strong> los tipos de posicion, no la mas
-     * grande a secas: un codigo que mezcla {@code byte} y {@code double} necesita una forma que los
-     * dos puedan.
+     * <p>It is the largest that serves <strong>all</strong> the lane types, not simply the largest:
+     * code that mixes {@code byte} and {@code double} needs a shape both can do.
      *
-     * @return la forma preferida
+     * @return the preferred shape
      */
     public static VectorShape preferredShape() {
-        return forBitSize(Limite.MAXIMO);
+        return forBitSize(Limits.MAX_BITS);
     }
 
     /**
-     * El maximo en bits para ese tipo de posicion.
+     * The maximum in bits for that lane type.
      *
-     * <p>El {@code etype} se valida aunque el resultado no dependa de el: el metodo publico que
-     * llama aca tiene que rechazar un tipo que no es de posicion, y no hacerlo seria aceptar
-     * {@code largestShapeFor(String.class)}.
+     * <p>The {@code etype} is validated even though the result does not depend on it: the public
+     * method that calls here has to reject a type that is not a lane type, and not doing so would
+     * be accepting {@code largestShapeFor(String.class)}.
      */
-    private static int maximoPara(final Class<?> etype) {
+    private static int maxBitsFor(final Class<?> etype) {
         if (etype != byte.class && etype != short.class && etype != int.class
                 && etype != long.class && etype != float.class && etype != double.class) {
             throw new IllegalArgumentException("Bad vector element type: " + etype);
         }
-        return Limite.MAXIMO;
+        return Limits.MAX_BITS;
     }
 }

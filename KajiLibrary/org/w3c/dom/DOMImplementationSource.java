@@ -1,24 +1,25 @@
 package org.w3c.dom;
 
 /**
- * KajiLibrary's org.w3c.dom.DOMImplementationSource -- quien sabe donde hay implementaciones del DOM.
+ * KajiLibrary's org.w3c.dom.DOMImplementationSource -- the one who knows where there are DOM
+ * implementations.
  *
- * <p>Un escalon mas arriba de {@link DOMImplementation}: la implementacion fabrica documentos, y
- * esto encuentra implementaciones. Lo implementa cada proveedor y lo consulta el registro de
- * arranque, que en el JDK es {@code org.w3c.dom.bootstrap.DOMImplementationRegistry}.
+ * <p>One step above {@link DOMImplementation}: the implementation manufactures documents, and this
+ * finds implementations. Each provider implements it and the bootstrap registry consults it, which
+ * in the JDK is {@code org.w3c.dom.bootstrap.DOMImplementationRegistry}.
  *
- * <p>La cadena {@code features} tiene una sintaxis propia: nombres de modulo separados por espacios,
- * cada uno con una version opcional detras --por ejemplo {@code "XML 3.0 Traversal +Events 2.0"}--
- * donde el {@code +} pide que el modulo este disponible aunque sea por
- * {@link DOMImplementation#getFeature} y no directamente en el objeto.
+ * <p>The {@code features} string has a syntax of its own: module names separated by spaces, each
+ * one with an optional version behind --for example {@code "XML 3.0 Traversal +Events 2.0"}-- where
+ * the {@code +} asks for the module to be available even if only through {@link
+ * DOMImplementation#getFeature} and not directly on the object.
  *
- * <p>Interfaz declarada entera.
+ * <p>The interface is declared whole.
  */
 public interface DOMImplementationSource {
 
-    /** Alguna implementacion que cumpla con eso, o {@code null} si no hay ninguna. */
+    /** Some implementation that meets that, or {@code null} if there is none. */
     public DOMImplementation getDOMImplementation(String features);
 
-    /** Todas las que cumplan; la lista puede venir vacia. */
+    /** All the ones that meet it; the list may come empty. */
     public DOMImplementationList getDOMImplementationList(String features);
 }

@@ -4,22 +4,22 @@ import java.lang.classfile.constantpool.ModuleEntry;
 import java.lang.constant.ModuleDesc;
 import jdk.internal.classfile.impl.TypedAttributes;
 
-// Una fila de `ModuleHashes`: el hash de un módulo del que éste depende. Es del JDK, no del JVMS, y
-// lo usa `jlink` para detectar que una imagen se armó con piezas que no van juntas.
+// A row of `ModuleHashes`: the hash of a module this one depends on. It is the JDK's, not the JVMS's,
+// and `jlink` uses it to detect that an image was built out of pieces that do not go together.
 public interface ModuleHashInfo {
 
-    /** El módulo. */
+    /** The module. */
     ModuleEntry moduleName();
 
-    /** Una copia del hash. */
+    /** A copy of the hash. */
     byte[] hash();
 
-    /** La fila con estos valores. */
+    /** The row with these values. */
     public static ModuleHashInfo of(ModuleEntry moduleName, byte[] hash) {
         return TypedAttributes.moduleHashInfo(moduleName, hash);
     }
 
-    /** La fila con estos valores. */
+    /** The row with these values. */
     public static ModuleHashInfo of(ModuleDesc moduleName, byte[] hash) {
         return TypedAttributes.moduleHashInfo(TypedAttributes.moduleEntry(moduleName), hash);
     }

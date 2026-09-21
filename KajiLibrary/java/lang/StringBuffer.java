@@ -93,10 +93,10 @@ public final class StringBuffer extends AbstractStringBuilder
     public synchronized StringBuffer deleteCharAt(int index) { super.deleteCharAt(index); return this; }
     public synchronized StringBuffer replace(int start, int end, String str) { super.replace(start, end, str); return this; }
 
-    // Los inserts que **tocan el buffer** van `synchronized`; los que sólo convierten su argumento y
-    // delegan en uno de ésos (boolean/int/long/float/double/CharSequence) van como overrides
-    // covariantes **sin** `synchronized` —el candado lo toma el sibling—, igual que el JDK. Todos
-    // devuelven `StringBuffer` (covariante) para no romper el encadenado.
+    // The inserts that **touch the buffer** are `synchronized`; the ones that only convert their
+    // argument and delegate to one of those (boolean/int/long/float/double/CharSequence) go in as
+    // covariant overrides **without** `synchronized` --the sibling takes the lock--, just as in the
+    // JDK. They all return `StringBuffer` (covariantly) so as not to break chaining.
     public synchronized StringBuffer insert(int offset, String str) { super.insert(offset, str); return this; }
     public synchronized StringBuffer insert(int offset, char[] str) { super.insert(offset, str); return this; }
     public synchronized StringBuffer insert(int index, char[] str, int strOffset, int len) { super.insert(index, str, strOffset, len); return this; }
@@ -117,9 +117,9 @@ public final class StringBuffer extends AbstractStringBuilder
 
     // ---- searching / reading out ----
 
-    // `indexOf(String)`/`lastIndexOf(String)` sin sincronizar: delegan en el `(String, int)` que sí
-    // lo está. `chars()`/`codePoints()` tampoco (el JDK las hereda). Todo eso lo cubren los
-    // forwarders de #268.
+    // `indexOf(String)`/`lastIndexOf(String)` unsynchronised: they delegate to the `(String, int)`
+    // one, which is. `chars()`/`codePoints()` are not either (the JDK inherits them). The #268
+    // forwarders cover all of that.
     public synchronized int indexOf(String str, int fromIndex) { return super.indexOf(str, fromIndex); }
     public synchronized int lastIndexOf(String str, int fromIndex) { return super.lastIndexOf(str, fromIndex); }
     public synchronized String substring(int start) { return super.substring(start); }

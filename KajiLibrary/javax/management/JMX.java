@@ -1,66 +1,67 @@
 package javax.management;
 
 /**
- * Las constantes de los campos de {@link Descriptor} y la fabrica de proxies.
+ * The constants for the {@link Descriptor} fields and the proxy factory.
  *
- * <p>No se instancia: es un lugar donde poner nombres, no un objeto. Las nueve constantes son las
- * claves con las que un `Descriptor` transporta lo que `MBeanInfo` no sabe expresar --el rango de
- * un atributo, su valor por omision, la lista de valores legales--. Existen como constantes y no
- * como literales sueltos por la razon de siempre: una clave mal escrita en un descriptor no falla,
- * simplemente no la lee nadie.
+ * <p>It is not instantiated: it is a place to put names, not an object. The nine constants are the
+ * keys with which a {@code Descriptor} carries what {@code MBeanInfo} cannot express --an
+ * attribute's range, its default value, the list of legal values. They exist as constants and not
+ * as loose literals for the usual reason: a misspelled key in a descriptor does not fail, nobody
+ * reads it.
  *
- * <h2>Los dos `newMXBeanProxy`</h2>
+ * <h2>The two {@code newMXBeanProxy}</h2>
  *
- * <p>Estaban afuera porque un proxy MXBean se define por convertir entre los tipos Java de la
- * interfaz y los tipos abiertos de `javax.management.openmbean`, y este arbol no tenia ese
- * subpaquete. Ya lo tiene --completo-- y la conversion la hace {@link MXMapeo}.
+ * <p>They were left out because an MXBean proxy is defined by converting between the interface's
+ * Java types and the open types of {@code javax.management.openmbean}, and this tree did not have
+ * that subpackage. It has it now --complete-- and {@link MXMapping} does the conversion.
  *
- * <p>Lo que ese mapeo cubre y lo que no esta escrito en su propia nota, y conviene leerlo antes de
- * usar estos dos metodos: <b>{@code List<E>} y {@code Map<K,V>} quedan afuera</b> porque esta VM no
- * expone los argumentos de tipo, y sin saber quien es E no hay conversion posible. Una interfaz que
- * los mencione se rechaza <b>al crear el proxy</b>, con un mensaje que dice cual es el metodo y por
- * que. Nunca se devuelve un valor inventado.
+ * <p>What that mapping covers and what it does not is written in its own note, and it is worth
+ * reading before using these two methods: <b>{@code List<E>} and {@code Map<K,V>} are left out</b>
+ * because this VM does not expose type arguments ({@code getGenericReturnType} returns the raw
+ * type), and without knowing what E is there is no possible conversion. An interface that mentions
+ * them is rejected <b>when the proxy is created</b>, with a message saying which method and why. A
+ * made-up value is never returned.
  */
 public class JMX {
 
-    /** No se instancia. */
+    /** Not instantiated. */
     private JMX() {
     }
 
-    /** El valor que toma un atributo si no se le asigna otro. */
+    /** The value an attribute takes if it is not assigned another. */
     public static final String DEFAULT_VALUE_FIELD = "defaultValue";
 
-    /** Si el `MBeanInfo` no va a cambiar nunca, y entonces el cliente puede cachearlo. */
+    /** Whether the {@code MBeanInfo} will never change, so the client can cache it. */
     public static final String IMMUTABLE_INFO_FIELD = "immutableInfo";
 
-    /** La interfaz de administracion de un MBean estandar. */
+    /** The management interface of a standard MBean. */
     public static final String INTERFACE_CLASS_NAME_FIELD = "interfaceClassName";
 
-    /** La enumeracion de valores aceptables. */
+    /** The enumeration of acceptable values. */
     public static final String LEGAL_VALUES_FIELD = "legalValues";
 
-    /** Cota superior de un atributo o parametro numerico. */
+    /** Upper bound of a numeric attribute or parameter. */
     public static final String MAX_VALUE_FIELD = "maxValue";
 
-    /** Cota inferior de un atributo o parametro numerico. */
+    /** Lower bound of a numeric attribute or parameter. */
     public static final String MIN_VALUE_FIELD = "minValue";
 
-    /** Si el MBean es un MXBean. */
+    /** Whether the MBean is an MXBean. */
     public static final String MXBEAN_FIELD = "mxbean";
 
-    /** El tipo abierto equivalente, para un MXBean. */
+    /** The equivalent open type, for an MXBean. */
     public static final String OPEN_TYPE_FIELD = "openType";
 
-    /** El tipo Java original, antes de mapearlo al abierto. */
+    /** The original Java type, before mapping it to the open one. */
     public static final String ORIGINAL_TYPE_FIELD = "originalType";
 
     /**
-     * Un proxy local que habla con el MBean registrado bajo `objectName`.
+     * A local proxy that talks to the MBean registered under {@code objectName}.
      *
-     * <p>No comprueba que el MBean exista ni que cumpla la interfaz: es a proposito y esta en la
-     * especificacion. El proxy se puede armar antes de que el MBean se registre, y el error --si lo
-     * hay-- aparece en la primera llamada, con el `ObjectName` adentro, que es mas util que un
-     * fallo en el momento de armarlo.
+     * <p>It does not check that the MBean exists or follows the interface: that is on purpose and
+     * in the specification. The proxy can be built before the MBean is registered, and the error
+     * --if any-- shows up on the first call, with the {@code ObjectName} inside, which is more
+     * useful than a failure when building it.
      */
     public static <T> T newMBeanProxy(MBeanServerConnection connection, ObjectName objectName,
                                       Class<T> interfaceClass) {
@@ -68,7 +69,7 @@ public class JMX {
     }
 
     /**
-     * @param notificationEmitter si el proxy tiene que implementar ademas
+     * @param notificationEmitter whether the proxy also has to implement
      *        {@link NotificationEmitter}
      */
     public static <T> T newMBeanProxy(MBeanServerConnection connection, ObjectName objectName,
@@ -78,30 +79,34 @@ public class JMX {
     }
 
     /**
-     * Si la interfaz es un MXBean.
+     * Whether the interface is an MXBean.
      *
-     * <p>La anotacion {@link MXBean} manda, en los dos sentidos: `@MXBean(false)` sobre una interfaz
-     * llamada `FooMXBean` la saca de la categoria. Solo si no esta la anotacion vale la convencion
-     * del sufijo.
+     * <p>The {@link MXBean} annotation rules, both ways: {@code @MXBean(false)} on an interface
+     * named {@code FooMXBean} takes it out of the category. Only if the annotation is absent does
+     * the suffix convention apply.
      *
-     * @throws IllegalArgumentException si no es una interfaz
+     * <p>Unlike the JDK, which returns {@code false} for a class that is not an interface (or not
+     * public) and throws {@code NullPointerException} for {@code null}, this one throws
+     * {@code IllegalArgumentException} in both cases and does not look at public-ness.
+     *
+     * @throws IllegalArgumentException if it is null or not an interface
      */
     public static boolean isMXBeanInterface(Class<?> interfaceClass) {
         if (interfaceClass == null) {
-            throw new IllegalArgumentException("La clase no puede ser null");
+            throw new IllegalArgumentException("The class cannot be null");
         }
         if (!interfaceClass.isInterface()) {
             throw new IllegalArgumentException(
-                interfaceClass.getName() + " no es una interfaz");
+                interfaceClass.getName() + " is not an interface");
         }
-        MXBean anotacion = interfaceClass.getAnnotation(MXBean.class);
-        if (anotacion != null) {
-            return anotacion.value();
+        MXBean annotation = interfaceClass.getAnnotation(MXBean.class);
+        if (annotation != null) {
+            return annotation.value();
         }
         String simple = interfaceClass.getName();
-        int punto = simple.lastIndexOf('.');
-        if (punto >= 0) {
-            simple = simple.substring(punto + 1);
+        int dot = simple.lastIndexOf('.');
+        if (dot >= 0) {
+            simple = simple.substring(dot + 1);
         }
         int peso = simple.lastIndexOf('$');
         if (peso >= 0) {
@@ -111,12 +116,12 @@ public class JMX {
     }
 
     /**
-     * Un proxy MXBean sobre ese MBean.
+     * An MXBean proxy over that MBean.
      *
-     * <p>La diferencia con {@link #newMBeanProxy} es la conversion de tipos: lo que viaja son tipos
-     * abiertos, y el proxy los traduce en las dos direcciones. Ver la nota de la clase.
+     * <p>The difference from {@link #newMBeanProxy} is the type conversion: what travels are open
+     * types, and the proxy translates them both ways. See the class note.
      *
-     * @throws IllegalArgumentException si algun tipo de la interfaz no se puede mapear
+     * @throws IllegalArgumentException if some type of the interface cannot be mapped
      */
     public static <T> T newMXBeanProxy(MBeanServerConnection connection, ObjectName objectName,
                                        Class<T> interfaceClass) {
@@ -124,9 +129,9 @@ public class JMX {
     }
 
     /**
-     * @param notificationEmitter si el proxy tiene que implementar ademas
+     * @param notificationEmitter whether the proxy also has to implement
      *        {@link NotificationEmitter}
-     * @throws IllegalArgumentException si algun tipo de la interfaz no se puede mapear
+     * @throws IllegalArgumentException if some type of the interface cannot be mapped
      */
     public static <T> T newMXBeanProxy(MBeanServerConnection connection, ObjectName objectName,
                                        Class<T> interfaceClass, boolean notificationEmitter) {

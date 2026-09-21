@@ -1,54 +1,55 @@
 package org.xml.sax;
 
 /**
- * KajiLibrary's org.xml.sax.ContentHandler -- donde caen los eventos del documento.
+ * KajiLibrary's org.xml.sax.ContentHandler -- where the events of the document land.
  *
- * <p>Es el manejador principal de {@link XMLReader}, el que recibe la estructura y el texto. Lo que
- * agrega sobre los otros tres es que sus llamadas estan **anidadas y ordenadas**: todo lo del
- * documento va entre `startDocument` y `endDocument`, y cada `startElement` tiene su `endElement`
- * aunque en el medio haya habido un error recuperable. Un manejador tipico es por eso una maquina de
- * estados con una pila.
+ * <p>It is the main handler of {@link XMLReader}, the one that receives the structure and the text.
+ * What it adds over the other three is that its calls are **nested and ordered**: everything of the
+ * document goes between `startDocument` and `endDocument`, and each `startElement` has its
+ * `endElement` even if a recoverable error happened in between. A typical handler is therefore a
+ * state machine with a stack.
  *
- * <p><strong>Las tres trampas de esta interfaz, que no se ven en las firmas:</strong>
+ * <p><strong>The three traps of this interface, which do not show in the signatures:</strong>
  *
- * <p>Una: `characters` puede llamarse **varias veces para un mismo trozo de texto**. El parser puede
- * cortar donde le convenga --al fin de su buffer, al expandir una entidad-- y no esta obligado a
- * juntar. Quien haga `if (texto.equals("hola"))` adentro de `characters` tiene un bug que aparece con
- * documentos grandes y no con los del test. Lo correcto es acumular en un `StringBuilder` y mirarlo
- * en `endElement`.
+ * <p>One: `characters` may be called **several times for one same piece of text**. The parser may
+ * cut wherever suits it --at the end of its buffer, when expanding an entity-- and is not obliged
+ * to join. Whoever does `if (text.equals("hello"))` inside `characters` has a bug that shows up
+ * with large documents and not with those of the test. The right thing is to accumulate in a
+ * `StringBuilder` and look at it in `endElement`.
  *
- * <p>Dos: el `char[]` que llega **no es del manejador**. El parser lo reusa en la llamada siguiente.
- * Guardarse la referencia en vez de copiar el rango `[start, start+length)` da datos corruptos mas
- * tarde, en otro lado, sin nada que apunte a la causa.
+ * <p>Two: the `char[]` that arrives **does not belong to the handler**. The parser reuses it on the
+ * next call. Keeping the reference instead of copying the range `[start, start+length)` gives
+ * corrupt data later, somewhere else, with nothing pointing to the cause.
  *
- * <p>Tres: el objeto {@link Attributes} de `startElement` **solo vale durante esa llamada**. Para
- * conservarlo hay que copiarlo, que es justamente para lo que existe `AttributesImpl`.
+ * <p>Three: the {@link Attributes} object of `startElement` **is only valid during that call**. To
+ * keep it, it has to be copied, which is precisely what `AttributesImpl` exists for.
  *
- * <p>Los metodos declaran `throws SAXException` porque es la unica manera que tiene un manejador de
- * frenar el parseo: la excepcion sube por `parse`.
+ * <p>The methods declare `throws SAXException` because it is the only way a handler has of stopping
+ * the parse: the exception goes up through `parse`.
  */
 public interface ContentHandler {
 
     /**
-     * Se llama antes que `startDocument`, si es que se llama.
+     * It is called before `startDocument`, if it is called at all.
      *
-     * <p>El objeto que llega **no** hay que guardarlo para consultarlo despues: sus coordenadas
-     * cambian solas a medida que el parser avanza, y fuera del manejador que las lee en el momento no
-     * significan nada.
+     * <p>The object that arrives must **not** be kept in order to consult it later: its coordinates
+     * change by themselves as the parser advances, and outside the handler that reads them at the
+     * moment they mean nothing.
      */
     void setDocumentLocator(Locator locator);
 
     void startDocument() throws SAXException;
 
     /**
-     * La declaracion `&lt;?xml version="1.0" encoding="UTF-8" standalone="yes"?&gt;`, si la habia.
+     * The declaration `&lt;?xml version="1.0" encoding="UTF-8" standalone="yes"?&gt;`, if there was
+     * one.
      *
-     * <p>Es `default` y no abstracta porque se agrego mucho despues que el resto de la interfaz:
-     * hacerla abstracta hubiera roto todos los manejadores escritos hasta ese momento, que son
-     * muchos. El cuerpo por omision no hace nada, que es exactamente lo que hacian antes.
+     * <p>It is `default` and not abstract because it was added long after the rest of the
+     * interface: making it abstract would have broken every handler written until then, which are
+     * many. The default body does nothing, which is exactly what they did before.
      *
-     * @param encoding `null` si la declaracion no lo traia.
-     * @param standalone `null` si no estaba; si no, `"yes"` o `"no"`.
+     * @param encoding `null` if the declaration did not bring it.
+     * @param standalone `null` if it was not there; otherwise, `"yes"` or `"no"`.
      */
     default void declaration(String version, String encoding, String standalone)
             throws SAXException {
@@ -57,48 +58,51 @@ public interface ContentHandler {
     void endDocument() throws SAXException;
 
     /**
-     * Un prefijo empieza a estar atado a un URI.
+     * A prefix starts being bound to a URI.
      *
-     * <p>Va **antes** del `startElement` que lo declara, no adentro, para que el manejador ya tenga
-     * el mapa armado cuando le llegue el elemento. El prefijo por omision (`xmlns="..."`) llega como
-     * cadena vacia, no como `null`.
+     * <p>It goes **before** the `startElement` that declares it, not inside, so that the handler
+     * already has the map built when the element arrives. The default prefix (`xmlns="..."`)
+     * arrives as an empty string, not as `null`.
      */
     void startPrefixMapping(String prefix, String uri) throws SAXException;
 
-    /** Va **despues** del `endElement` correspondiente, en orden inverso al de apertura. */
+    /** It goes **after** the matching `endElement`, in the reverse order of opening. */
     void endPrefixMapping(String prefix) throws SAXException;
 
     /**
-     * @param uri vacio si el elemento no tiene espacio de nombres, o si el parser no los procesa.
-     * @param localName vacio si el parser no procesa espacios de nombres.
-     * @param qName el nombre tal cual estaba escrito; puede venir vacio si el parser no lo reporta.
-     *        Que los tres puedan estar vacios segun la configuracion es lo que obliga a mirar
-     *        `qName` en unos parsers y `localName` en otros.
+     * @param uri empty if the element has no namespace, or if the parser does not process them.
+     * @param localName empty if the parser does not process namespaces.
+     * @param qName the name as it was written; it may come empty if the parser does not report it.
+     *        That the three may be empty depending on the configuration is what forces one to look
+     *        at `qName` in some parsers and at `localName` in others.
      */
     void startElement(String uri, String localName, String qName, Attributes atts)
             throws SAXException;
 
     void endElement(String uri, String localName, String qName) throws SAXException;
 
-    /** Ver arriba: el arreglo se reusa y el texto puede venir partido. */
+    /** See above: the array is reused and the text may come split. */
     void characters(char[] ch, int start, int length) throws SAXException;
 
     /**
-     * Blanco que la DTD dice que no es contenido, tipicamente sangria.
+     * White space the DTD says is not content, typically indentation.
      *
-     * <p>Sin validacion un parser no puede saber cual es y lo manda todo por `characters`. Que este
-     * metodo no se llame nunca no significa que no hubiera sangria.
+     * <p>Without validation a parser cannot know which it is and sends it all through `characters`.
+     * That this method is never called does not mean there was no indentation.
      */
     void ignorableWhitespace(char[] ch, int start, int length) throws SAXException;
 
-    /** La declaracion `&lt;?xml ...?&gt;` no llega por aca: para eso esta `declaration`. */
+    /**
+     * The `&lt;?xml ...?&gt;` declaration does not arrive through here: `declaration` is for that.
+     */
     void processingInstruction(String target, String data) throws SAXException;
 
     /**
-     * El parser se salteo una entidad en vez de expandirla.
+     * The parser skipped an entity instead of expanding it.
      *
-     * <p>Pasa cuando no valida y no leyo la DTD externa, o cuando se le apago la resolucion de
-     * entidades. El nombre de una entidad parametro llega con `%` adelante.
+     * <p>It happens when it does not validate and did not read the external DTD, or when the
+     * resolution of entities was switched off. The name of a parameter entity arrives with a `%` in
+     * front.
      */
     void skippedEntity(String name) throws SAXException;
 }

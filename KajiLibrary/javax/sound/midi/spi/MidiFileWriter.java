@@ -6,57 +6,57 @@ import java.io.OutputStream;
 import javax.sound.midi.Sequence;
 
 /**
- * KajiLibrary's javax.sound.midi.spi.MidiFileWriter -- escribe archivos MIDI.
+ * KajiLibrary's javax.sound.midi.spi.MidiFileWriter -- writes MIDI files.
  *
- * <p>El espejo de {@link MidiFileReader}. Los tipos son numeros --0, 1 o 2-- y no objetos; ver
- * {@code MidiFileFormat} sobre que significa cada uno.
+ * <p>The mirror of {@link MidiFileReader}. The types are numbers --0, 1 or 2-- and not objects; see
+ * {@code MidiFileFormat} on what each one means.
  *
- * <p>Los dos {@code getMidiFileTypes} tienen la misma distincion que en el audio muestreado: el sin
- * argumentos dice que sabe escribir en general, el que toma una obra dice que puede escribir <b>con
- * esa</b>. Una obra de varias pistas no entra en un archivo de tipo 0 sin mezclarlas, y hay
- * implementaciones que se niegan a mezclar.
+ * <p>The two {@code getMidiFileTypes} have the same distinction as in sampled audio: the one
+ * without arguments says what it can write in general, the one that takes a piece says what it can
+ * write <b>with that one</b>. A multi-track piece does not fit in a type 0 file without mixing the
+ * tracks, and there are implementations that refuse to mix.
  */
 public abstract class MidiFileWriter {
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected MidiFileWriter() {
     }
 
-    /** Que tipos sabe escribir en general. */
+    /** Which types it can write in general. */
     public abstract int[] getMidiFileTypes();
 
-    /** Que tipos puede escribir con esa obra. Ver la nota de la clase. */
+    /** Which types it can write with that piece. See the class note. */
     public abstract int[] getMidiFileTypes(Sequence sequence);
 
-    /** Si sabe escribir ese tipo. */
+    /** Whether it can write that type. */
     public boolean isFileTypeSupported(int fileType) {
         return contains(getMidiFileTypes(), fileType);
     }
 
-    /** Si puede escribir ese tipo con esa obra. */
+    /** Whether it can write that type with that piece. */
     public boolean isFileTypeSupported(int fileType, Sequence sequence) {
         return contains(getMidiFileTypes(sequence), fileType);
     }
 
     /**
-     * Escribe.
+     * Writes.
      *
-     * @return cuantos bytes se escribieron
-     * @throws IOException si no se pudo escribir
-     * @throws IllegalArgumentException si no soporta ese tipo con esa obra
+     * @return how many bytes were written
+     * @throws IOException if it could not be written
+     * @throws IllegalArgumentException if it does not support that type with that piece
      */
     public abstract int write(Sequence in, int fileType, OutputStream out) throws IOException;
 
     /**
-     * Idem, a un archivo.
+     * Likewise, to a file.
      *
-     * @return cuantos bytes se escribieron
-     * @throws IOException si no se pudo escribir
-     * @throws IllegalArgumentException si no soporta ese tipo con esa obra
+     * @return how many bytes were written
+     * @throws IOException if it could not be written
+     * @throws IllegalArgumentException if it does not support that type with that piece
      */
     public abstract int write(Sequence in, int fileType, File out) throws IOException;
 
-    /** Si ese valor esta en el arreglo. */
+    /** Whether that value is in the array. */
     private static boolean contains(int[] all, int one) {
         int i = 0;
         while (all != null && i < all.length) {

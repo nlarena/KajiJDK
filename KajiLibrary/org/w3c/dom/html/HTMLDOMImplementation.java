@@ -3,15 +3,15 @@ package org.w3c.dom.html;
 import org.w3c.dom.DOMImplementation;
 
 /**
- * La fabrica de documentos HTML.
+ * The factory of HTML documents.
  *
- * <p>Extiende {@link org.w3c.dom.DOMImplementation} con un solo metodo, y el metodo es la razon de
- * que la interfaz exista: `createHTMLDocument` arma un documento **con su esqueleto puesto**
- * --`html`, `head`, `title` y `body`--, que es lo que distingue a un documento HTML de uno XML
- * vacio.
+ * <p>It extends {@link org.w3c.dom.DOMImplementation} with one single method, and the method is the
+ * reason for the interface existing: `createHTMLDocument` builds a document **with its skeleton in
+ * place** --`html`, `head`, `title` and `body`--, which is what tells an HTML document apart from
+ * an empty XML one.
  */
 public interface HTMLDOMImplementation extends org.w3c.dom.DOMImplementation {
 
-    /** Un documento nuevo con su esqueleto puesto y ese titulo. */
+    /** A new document with its skeleton in place and that title. */
     HTMLDocument createHTMLDocument(String title);
 }

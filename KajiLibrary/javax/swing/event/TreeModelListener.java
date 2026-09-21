@@ -3,19 +3,19 @@ package javax.swing.event;
 import java.util.EventListener;
 
 /**
- * Quien quiere enterarse de que el arbol cambio.
+ * Whoever wants to hear that the tree changed.
  */
 public interface TreeModelListener extends EventListener {
 
-    /** Cambiaron nodos, sin cambiar la estructura. */
+    /** Nodes changed, without the structure changing. */
     void treeNodesChanged(TreeModelEvent e);
 
-    /** Se insertaron nodos. */
+    /** Nodes were inserted. */
     void treeNodesInserted(TreeModelEvent e);
 
-    /** Se sacaron nodos. */
+    /** Nodes were removed. */
     void treeNodesRemoved(TreeModelEvent e);
 
-    /** La estructura cambio por completo. */
+    /** The structure changed completely. */
     void treeStructureChanged(TreeModelEvent e);
 }

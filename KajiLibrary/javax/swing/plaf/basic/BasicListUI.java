@@ -33,67 +33,69 @@ import javax.swing.plaf.ListUI;
 import javax.swing.plaf.UIResource;
 
 /**
- * El aspecto basico de una lista.
+ * The basic look and feel of a list.
  *
- * <h2>La tabla de alturas, y por que no hay una sola altura</h2>
+ * <h2>The table of heights, and why there is not a single height</h2>
  *
- * <p>Una lista puede tener todas sus filas iguales o cada una de un alto distinto, y la diferencia
- * cambia todo lo demas. Con altura fija, saber que fila cae en una coordenada es una division; con
- * alturas distintas hay que recorrer sumando. Por eso hay dos campos y solo uno esta puesto a la
- * vez: {@link #cellHeight} vale cuando todas son iguales y {@link #cellHeights} cuando no, y el otro
- * queda en -1 o en {@code null}.
+ * <p>A list may have all its rows the same or each one of a different height, and the
+ * difference changes everything else. With a fixed height, knowing which row falls at a
+ * coordinate is a division; with different heights one has to walk along adding up. That is why
+ * there are two fields and only one is set at a time: {@link #cellHeight} holds when they are
+ * all the same and {@link #cellHeights} when they are not, and the other is left at -1 or at
+ * {@code null}.
  *
- * <p>Medir cada fila cuesta: hay que armar el dibujante con el valor de la fila y preguntarle cuanto
- * mide. Para una lista de diez mil elementos eso son diez mil mediciones, y por eso no se hacen
- * hasta que hacen falta: {@link #updateLayoutStateNeeded} junta las razones por las que la tabla
- * quedo vieja --cambio el modelo, la fuente, el dibujante-- y {@link #maybeUpdateLayoutState} la
- * rehace una sola vez, justo antes de que alguien pregunte algo que dependa de ella.
+ * <p>Measuring each row costs: the renderer has to be built with the row's value and asked how
+ * much it measures. For a list of ten thousand elements that is ten thousand measurements, and
+ * that is why they are not made until they are needed: {@link #updateLayoutStateNeeded} gathers
+ * the reasons the table went stale -- the model, the typeface, the renderer changed -- and
+ * {@link #maybeUpdateLayoutState} rebuilds it just once, right before somebody asks something
+ * that depends on it.
  *
- * <p>Las razones son banderas de bits porque se acumulan: entre dos dibujados pueden cambiar el
- * modelo y la fuente, y las dos tienen que quedar anotadas.
+ * <p>The reasons are bit flags because they pile up: between two paints the model and the
+ * typeface may change, and both have to be noted.
  *
- * <h2>El panel que no es un panel</h2>
+ * <h2>The pane that is not a pane</h2>
  *
- * <p>{@link #rendererPane} existe porque un dibujante de celda es un componente de verdad que no
- * esta en ninguna ventana. Para pintarlo hay que darle un padre --si no, la cadena de dibujado no
- * funciona-- y ese padre no tiene que participar del acomodado ni del reparto de eventos. Eso es
- * exactamente {@link CellRendererPane}.
+ * <p>{@link #rendererPane} exists because a cell renderer is a real component that is in no
+ * window. In order to paint it, it has to be given a parent -- otherwise the painting chain
+ * does not work -- and that parent must not take part in the layout nor in the handing out of
+ * events. That is exactly {@link CellRendererPane}.
  *
- * <h2>Coordenadas de ida y de vuelta</h2>
+ * <h2>Coordinates there and back</h2>
  *
- * <p>{@link #convertYToRow} y {@link #convertRowToY} son las dos mitades de la misma cuenta, y las
- * dos tienen bordes raros que estan medidos: una coordenada mas abajo del final devuelve la ultima
- * fila, y una mas arriba del principio <em>tambien</em> --el recorrido no encuentra nada y se queda
- * con la ultima--. Es del JDK y se copia.
+ * <p>{@link #convertYToRow} and {@link #convertRowToY} are the two halves of the same
+ * arithmetic, and both have odd edges that are measured: a coordinate below the end returns the
+ * last row, and one above the beginning <em>also</em> does -- the walk finds nothing and keeps
+ * the last one --. It is the JDK's and it is copied.
  *
- * <h2>Lo que queda dicho</h2>
+ * <h2>What is left said</h2>
  *
- * <p>Las dos orientaciones que envuelven --{@code VERTICAL_WRAP} y {@code HORIZONTAL_WRAP}-- se
- * acomodan por columnas de ancho fijo {@link #cellWidth}; el JDK ademas reparte los sobrantes de la
- * ultima columna. La diferencia se ve en una lista envuelta cuyo total no es multiplo del numero de
- * columnas.
+ * <p>The two orientations that wrap -- {@code VERTICAL_WRAP} and {@code HORIZONTAL_WRAP} -- are
+ * laid out in columns of fixed width {@link #cellWidth}; the JDK also hands out the last
+ * column's leftovers. The difference shows in a wrapped list whose total is not a multiple of
+ * the number of columns.
  */
 public class BasicListUI extends ListUI {
 
-    /** Cambio el modelo de datos. */
+    /** The data model changed. */
     protected static final int modelChanged = 1 << 0;
 
-    /** Cambio el modelo de seleccion. */
+    /** The selection model changed. */
     protected static final int selectionModelChanged = 1 << 1;
 
-    /** Cambio la tipografia. */
+    /** The typeface changed. */
     protected static final int fontChanged = 1 << 2;
 
-    /** Cambio el ancho fijo de celda. */
+    /** The fixed cell width changed. */
     protected static final int fixedCellWidthChanged = 1 << 3;
 
-    /** Cambio el alto fijo de celda. */
+    /** The fixed cell height changed. */
     protected static final int fixedCellHeightChanged = 1 << 4;
 
-    /** Cambio el valor de muestra con el que se mide. */
+    /** The prototype value the measuring is done with changed. */
     protected static final int prototypeCellValueChanged = 1 << 5;
 
-    /** Cambio el dibujante de celdas. */
+    /** The cell renderer changed. */
     protected static final int cellRendererChanged = 1 << 6;
 
     protected JList list = null;
@@ -105,30 +107,30 @@ public class BasicListUI extends ListUI {
     protected ListDataListener listDataListener;
     protected PropertyChangeListener propertyChangeListener;
 
-    /** El alto de todas las filas cuando son iguales, o -1; ver la nota de la clase. */
+    /** The height of every row when they are all the same, or -1; see the class note. */
     protected int cellHeight = -1;
 
-    /** El ancho de la fila mas ancha, o -1. */
+    /** The width of the widest row, or -1. */
     protected int cellWidth = -1;
 
-    /** El alto de cada fila cuando no son iguales, o {@code null}; ver la nota de la clase. */
+    /** Each row's height when they are not the same, or {@code null}; see the class note. */
     protected int[] cellHeights = null;
 
-    /** Las razones por las que la tabla de alturas quedo vieja; ver la nota de la clase. */
+    /** The reasons the table of heights went stale; see the class note. */
     protected int updateLayoutStateNeeded = modelChanged;
 
-    private static final ColorUIResource FONDO = new ColorUIResource(255, 255, 255);
-    private static final ColorUIResource FRENTE = new ColorUIResource(51, 51, 51);
-    private static final ColorUIResource SELECCION = new ColorUIResource(184, 207, 229);
-    private static final FontUIResource FUENTE = new FontUIResource("Dialog", Font.BOLD, 12);
+    private static final ColorUIResource BACKGROUND = new ColorUIResource(255, 255, 255);
+    private static final ColorUIResource FOREGROUND = new ColorUIResource(51, 51, 51);
+    private static final ColorUIResource SELECTION = new ColorUIResource(184, 207, 229);
+    private static final FontUIResource FONT = new FontUIResource("Dialog", Font.BOLD, 12);
 
-    /** El dibujante con el que se mide la linea de base; uno solo alcanza para toda la VM. */
-    private static Component dibujanteDeBase;
+    /** The renderer the baseline is measured with; a single one is enough for the whole VM. */
+    private static Component baseRenderer;
 
     public BasicListUI() {
     }
 
-    /** Uno nuevo por lista: guarda la lista, sus escuchas y la tabla de alturas. */
+    /** A new one per list: it keeps the list, its listeners and the table of heights. */
     public static ComponentUI createUI(JComponent list) {
         return new BasicListUI();
     }
@@ -153,20 +155,20 @@ public class BasicListUI extends ListUI {
         list = null;
     }
 
-    /** Colores, fuente, dibujante y opacidad; los valores son los de {@code List.*} en Metal. */
+    /** Colours, typeface, renderer and opacity; the values are those of {@code List.*} in Metal. */
     protected void installDefaults() {
         list.setLayout(null);
-        Color fondo = list.getBackground();
-        if (fondo == null || fondo instanceof UIResource) {
-            list.setBackground(FONDO);
+        Color background = list.getBackground();
+        if (background == null || background instanceof UIResource) {
+            list.setBackground(BACKGROUND);
         }
-        Color frente = list.getForeground();
-        if (frente == null || frente instanceof UIResource) {
-            list.setForeground(FRENTE);
+        Color foreground = list.getForeground();
+        if (foreground == null || foreground instanceof UIResource) {
+            list.setForeground(FOREGROUND);
         }
-        Font fuente = list.getFont();
-        if (fuente == null || fuente instanceof UIResource) {
-            list.setFont(FUENTE);
+        Font font = list.getFont();
+        if (font == null || font instanceof UIResource) {
+            list.setFont(FONT);
         }
         LookAndFeel.installProperty(list, "opaque", Boolean.TRUE);
         if (list.getCellRenderer() == null) {
@@ -174,15 +176,15 @@ public class BasicListUI extends ListUI {
         }
         Color sbg = list.getSelectionBackground();
         if (sbg == null || sbg instanceof UIResource) {
-            list.setSelectionBackground(SELECCION);
+            list.setSelectionBackground(SELECTION);
         }
         Color sfg = list.getSelectionForeground();
         if (sfg == null || sfg instanceof UIResource) {
-            list.setSelectionForeground(FRENTE);
+            list.setSelectionForeground(FOREGROUND);
         }
     }
 
-    /** No saca nada; ver {@link BasicPanelUI#uninstallDefaults}. */
+    /** It removes nothing; see {@link BasicPanelUI#uninstallDefaults}. */
     protected void uninstallDefaults() {
     }
 
@@ -223,7 +225,10 @@ public class BasicListUI extends ListUI {
         propertyChangeListener = null;
     }
 
-    /** Sin atajos propios: la navegacion con flechas la maneja la tabla de acciones del aspecto. */
+    /**
+     * With no shortcuts of its own: arrow navigation is handled by the look and feel's action
+     * table.
+     */
     protected void installKeyboardActions() {
     }
 
@@ -250,7 +255,7 @@ public class BasicListUI extends ListUI {
         return new Handler();
     }
 
-    /** Rehace la tabla si quedo vieja; ver la nota de la clase. */
+    /** It rebuilds the table if it went stale; see the class note. */
     protected void maybeUpdateLayoutState() {
         if (updateLayoutStateNeeded != 0) {
             updateLayoutState();
@@ -259,11 +264,11 @@ public class BasicListUI extends ListUI {
     }
 
     /**
-     * Mide cada fila y arma la tabla; ver la nota de la clase.
+     * It measures each row and builds the table; see the class note.
      *
-     * <p>Si la lista tiene ancho o alto fijo, esa mitad no se mide: se copia el numero. Y si no
-     * tiene dibujante --que puede pasar entre dos llamadas a {@code setCellRenderer}-- todo queda
-     * en cero en vez de reventar.
+     * <p>If the list has a fixed width or height, that half is not measured: the number is copied.
+     * And if it has no renderer -- which may happen between two calls to {@code setCellRenderer} --
+     * everything is left at zero instead of blowing up.
      */
     protected void updateLayoutState() {
         int fixedCellHeight = list.getFixedCellHeight();
@@ -313,7 +318,7 @@ public class BasicListUI extends ListUI {
         list.invalidate();
     }
 
-    /** El alto de esa fila: el fijo, o el de la tabla. */
+    /** That row's height: the fixed one, or the table's. */
     protected int getRowHeight(int row) {
         if (row < 0 || row >= list.getModel().getSize()) {
             return -1;
@@ -322,7 +327,7 @@ public class BasicListUI extends ListUI {
                 : ((row < cellHeights.length) ? cellHeights[row] : -1);
     }
 
-    /** Que fila cae en esa coordenada; ver la nota de la clase sobre los bordes. */
+    /** Which row falls at that coordinate; see the class note about the edges. */
     protected int convertYToRow(int y0) {
         int rowCount = list.getModel().getSize();
         if (rowCount <= 0) {
@@ -348,7 +353,7 @@ public class BasicListUI extends ListUI {
         return row - 1;
     }
 
-    /** Donde arranca esa fila; -1 si no existe. */
+    /** Where that row starts; -1 if it does not exist. */
     protected int convertRowToY(int row) {
         if (row >= list.getModel().getSize() || row < 0) {
             return -1;
@@ -357,8 +362,8 @@ public class BasicListUI extends ListUI {
         return (bounds == null) ? -1 : bounds.y;
     }
 
-    /** El rectangulo de una fila, o {@code null} si no existe. */
-    private Rectangle bandaDeFila(int index) {
+    /** A row's rectangle, or {@code null} if it does not exist. */
+    private Rectangle rowBand(int index) {
         maybeUpdateLayoutState();
         if (index < 0 || index >= list.getModel().getSize()) {
             return null;
@@ -379,9 +384,10 @@ public class BasicListUI extends ListUI {
     }
 
     /**
-     * El rectangulo que abarca de un indice al otro.
+     * The rectangle that spans from one index to the other.
      *
-     * <p>El orden no importa: se ordenan solos. {@code null} si el primero de los dos ya no existe.
+     * <p>The order does not matter: they sort themselves. {@code null} if the first of the two no
+     * longer exists.
      */
     public Rectangle getCellBounds(JList list, int index1, int index2) {
         maybeUpdateLayoutState();
@@ -390,37 +396,37 @@ public class BasicListUI extends ListUI {
         if (minIndex >= list.getModel().getSize()) {
             return null;
         }
-        Rectangle minBounds = bandaDeFila(minIndex);
+        Rectangle minBounds = rowBand(minIndex);
         if (minBounds == null) {
             return null;
         }
         if (minIndex == maxIndex) {
             return minBounds;
         }
-        Rectangle maxBounds = bandaDeFila(maxIndex);
+        Rectangle maxBounds = rowBand(maxIndex);
         if (maxBounds != null) {
             minBounds.add(maxBounds);
         }
         return minBounds;
     }
 
-    /** La esquina de arriba a la izquierda de esa fila, o {@code null}. */
+    /** That row's top left corner, or {@code null}. */
     public Point indexToLocation(JList list, int index) {
         maybeUpdateLayoutState();
-        Rectangle rect = bandaDeFila(index);
+        Rectangle rect = rowBand(index);
         return (rect != null) ? new Point(rect.x, rect.y) : null;
     }
 
-    /** Que fila cae en ese punto; -1 si no hay ninguna. */
+    /** Which row falls at that point; -1 if there is none. */
     public int locationToIndex(JList list, Point location) {
         maybeUpdateLayoutState();
         return convertYToRow(location.y);
     }
 
     /**
-     * El alto de todas las filas mas los margenes; el ancho, el de la mas ancha.
+     * The height of every row plus the margins; the width, that of the widest one.
      *
-     * <p>Una lista vacia mide cero por cero, no los margenes.
+     * <p>An empty list measures zero by zero, not the margins.
      */
     public Dimension getPreferredSize(JComponent c) {
         maybeUpdateLayoutState();
@@ -430,32 +436,32 @@ public class BasicListUI extends ListUI {
         }
         Insets insets = list.getInsets();
         int width = cellWidth + insets.left + insets.right;
-        Rectangle bounds = bandaDeFila(lastRow);
+        Rectangle bounds = rowBand(lastRow);
         int height = (bounds != null) ? bounds.y + bounds.height + insets.bottom : 0;
         return new Dimension(width, height);
     }
 
     /**
-     * Donde apoya el texto de la primera fila.
+     * Where the first row's text rests.
      *
-     * <p>Se mide con el dibujante cargado con una letra, no con el contenido: la respuesta tiene
-     * que ser la misma este la lista llena o vacia, porque quien la usa es un acomodador que todavia
-     * no puso los datos.
+     * <p>It is measured with the renderer loaded with a letter, not with the content: the answer
+     * has to be the same whether the list is full or empty, because who uses it is a layout that
+     * has not put the data in yet.
      *
-     * @throws NullPointerException si el componente es nulo
-     * @throws IllegalArgumentException si el ancho o el alto son negativos
+     * @throws NullPointerException if the component is null
+     * @throws IllegalArgumentException if the width or the height are negative
      */
     public int getBaseline(JComponent c, int width, int height) {
         super.getBaseline(c, width, height);
         int rowHeight = list.getFixedCellHeight();
-        Component renderer = dibujanteDeBase;
+        Component renderer = baseRenderer;
         if (renderer == null) {
             ListCellRenderer lcr = list.getCellRenderer();
             if (lcr == null) {
                 lcr = new javax.swing.DefaultListCellRenderer();
             }
             renderer = lcr.getListCellRendererComponent(list, "a", -1, false, false);
-            dibujanteDeBase = renderer;
+            baseRenderer = renderer;
         }
         renderer.setFont(list.getFont());
         if (rowHeight > 0) {
@@ -466,16 +472,16 @@ public class BasicListUI extends ListUI {
     }
 
     /**
-     * {@code CONSTANT_ASCENT}: la primera fila esta siempre arriba de todo.
+     * {@code CONSTANT_ASCENT}: the first row is always at the very top.
      *
-     * @throws NullPointerException si el componente es nulo
+     * @throws NullPointerException if the component is null
      */
     public Component.BaselineResizeBehavior getBaselineResizeBehavior(JComponent c) {
         super.getBaselineResizeBehavior(c);
         return Component.BaselineResizeBehavior.CONSTANT_ASCENT;
     }
 
-    /** Las filas que se ven, una por una. */
+    /** The rows that are seen, one by one. */
     public void paint(Graphics g, JComponent c) {
         maybeUpdateLayoutState();
         ListCellRenderer renderer = list.getCellRenderer();
@@ -485,17 +491,17 @@ public class BasicListUI extends ListUI {
             return;
         }
         Rectangle paintBounds = g.getClipBounds();
-        int primera = convertYToRow(paintBounds.y);
-        int ultima = convertYToRow(paintBounds.y + paintBounds.height);
-        if (primera < 0) {
-            primera = 0;
+        int first = convertYToRow(paintBounds.y);
+        int last = convertYToRow(paintBounds.y + paintBounds.height);
+        if (first < 0) {
+            first = 0;
         }
-        if (ultima < 0) {
-            ultima = dataModel.getSize() - 1;
+        if (last < 0) {
+            last = dataModel.getSize() - 1;
         }
         int lead = list.getLeadSelectionIndex();
-        for (int row = primera; row <= ultima && row < dataModel.getSize(); row++) {
-            Rectangle rowBounds = bandaDeFila(row);
+        for (int row = first; row <= last && row < dataModel.getSize(); row++) {
+            Rectangle rowBounds = rowBand(row);
             if (rowBounds == null) {
                 break;
             }
@@ -504,7 +510,7 @@ public class BasicListUI extends ListUI {
         rendererPane.removeAll();
     }
 
-    /** Una fila: se arma el dibujante con su valor y se lo pinta en su rectangulo. */
+    /** One row: the renderer is built with its value and painted in its rectangle. */
     protected void paintCell(Graphics g, int row, Rectangle rowBounds, ListCellRenderer cellRenderer,
             ListModel dataModel, ListSelectionModel selModel, int leadIndex) {
         Object value = dataModel.getElementAt(row);
@@ -516,7 +522,7 @@ public class BasicListUI extends ListUI {
                 rowBounds.x, rowBounds.y, rowBounds.width, rowBounds.height, true);
     }
 
-    /** Mueve la seleccion una fila para arriba. */
+    /** It moves the selection one row up. */
     protected void selectPreviousIndex() {
         int s = list.getSelectedIndex();
         if (s > 0) {
@@ -526,7 +532,7 @@ public class BasicListUI extends ListUI {
         }
     }
 
-    /** Y una para abajo. */
+    /** And one down. */
     protected void selectNextIndex() {
         int s = list.getSelectedIndex();
         if ((s + 1) < list.getModel().getSize()) {
@@ -537,24 +543,24 @@ public class BasicListUI extends ListUI {
     }
 
     /**
-     * El que escucha todo.
+     * The one that listens to everything.
      *
-     * <p>Cinco interfaces en un objeto por lo mismo que en {@link BasicMenuItemUI}: las cinco
-     * reaccionan al mismo estado --que la tabla de alturas quedo vieja-- y separarlas obligaria a
-     * compartirlo.
+     * <p>Five interfaces in one object for the same reason as in {@link BasicMenuItemUI}: all
+     * five react to the same state -- that the table of heights went stale -- and separating them
+     * would force it to be shared.
      */
     private class Handler implements FocusListener, MouseInputListener, ListSelectionListener,
             ListDataListener, PropertyChangeListener {
 
         public void focusGained(FocusEvent e) {
-            repintarSeleccion();
+            repaintSelection();
         }
 
         public void focusLost(FocusEvent e) {
-            repintarSeleccion();
+            repaintSelection();
         }
 
-        private void repintarSeleccion() {
+        private void repaintSelection() {
             int lead = list.getLeadSelectionIndex();
             if (lead != -1) {
                 Rectangle r = getCellBounds(list, lead, lead);
@@ -650,23 +656,23 @@ public class BasicListUI extends ListUI {
         public void propertyChange(PropertyChangeEvent e) {
             String name = e.getPropertyName();
             if ("model".equals(name)) {
-                ListModel viejo = (ListModel) e.getOldValue();
-                if (viejo != null) {
-                    viejo.removeListDataListener(listDataListener);
+                ListModel old = (ListModel) e.getOldValue();
+                if (old != null) {
+                    old.removeListDataListener(listDataListener);
                 }
-                ListModel nuevo = (ListModel) e.getNewValue();
-                if (nuevo != null) {
-                    nuevo.addListDataListener(listDataListener);
+                ListModel newValue = (ListModel) e.getNewValue();
+                if (newValue != null) {
+                    newValue.addListDataListener(listDataListener);
                 }
                 updateLayoutStateNeeded |= modelChanged;
             } else if ("selectionModel".equals(name)) {
-                ListSelectionModel viejo = (ListSelectionModel) e.getOldValue();
-                if (viejo != null) {
-                    viejo.removeListSelectionListener(listSelectionListener);
+                ListSelectionModel old = (ListSelectionModel) e.getOldValue();
+                if (old != null) {
+                    old.removeListSelectionListener(listSelectionListener);
                 }
-                ListSelectionModel nuevo = (ListSelectionModel) e.getNewValue();
-                if (nuevo != null) {
-                    nuevo.addListSelectionListener(listSelectionListener);
+                ListSelectionModel newValue = (ListSelectionModel) e.getNewValue();
+                if (newValue != null) {
+                    newValue.addListSelectionListener(listSelectionListener);
                 }
                 updateLayoutStateNeeded |= selectionModelChanged;
             } else if ("font".equals(name)) {

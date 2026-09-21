@@ -581,11 +581,11 @@ final class StableMap<K, V> implements Map<K, V> {
     }
 
     /**
-     * Los valores de este mapa.
+     * This map's values.
      *
-     * <p>**Divergencia deliberada**, la misma que ya declara `keySet()`: la del JDK es una *vista*
-     * respaldada por el mapa; esta es una copia sacada en el momento. Y a diferencia de `keySet()`
-     * es una `Collection` y no un `Set`, porque los valores **si** pueden repetirse.
+     * <p>**A deliberate divergence**, the same one `keySet()` already declares: the JDK's is a *view*
+     * backed by the map; this is a copy taken at the moment. And unlike `keySet()` it is a
+     * `Collection` and not a `Set`, because values **can** repeat.
      */
     public java.util.Collection<V> values() {
         java.util.ArrayList<V> out = new java.util.ArrayList<V>();
@@ -597,11 +597,11 @@ final class StableMap<K, V> implements Map<K, V> {
     }
 
     /**
-     * Los pares de este mapa.
+     * This map's entries.
      *
-     * <p>Misma divergencia que `values()`: copia, no vista. Los pares que devuelve son inmutables,
-     * asi que `setValue` sobre uno de ellos lanza en vez de escribir en el mapa — que es lo
-     * coherente con que sea una copia: escribir en un par que nadie mira seria peor que negarse.
+     * <p>The same divergence as `values()`: a copy, not a view. The entries it returns are immutable,
+     * so `setValue` on one of them throws instead of writing into the map -- which is what being a
+     * copy implies: writing into an entry nobody looks at would be worse than refusing.
      */
     public java.util.Set<java.util.Map.Entry<K, V>> entrySet() {
         java.util.HashSet<java.util.Map.Entry<K, V>> out =
@@ -609,8 +609,8 @@ final class StableMap<K, V> implements Map<K, V> {
         java.util.Iterator<K> it = this.keySet().iterator();
         while (it.hasNext()) {
             K k = it.next();
-            java.util.Map.Entry<K, V> e = Map.entry(k, this.get(k));   // #285: el
-            out.add(e);                                               // local nombra el tipo
+            java.util.Map.Entry<K, V> e = Map.entry(k, this.get(k));   // #285: the
+            out.add(e);                                               // local names the type
         }
         return out;
     }

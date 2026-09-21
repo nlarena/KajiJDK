@@ -19,90 +19,93 @@ import javax.lang.model.element.VariableElement;
 import javax.tools.JavaFileObject;
 
 /**
- * KajiLibrary's javax.lang.model.util.Elements — las preguntas sobre elementos que sólo el compilador
- * puede contestar.
+ * KajiLibrary's javax.lang.model.util.Elements — the questions about elements only the compiler can
+ * answer.
  *
- * <p>La contraparte de {@link Types}: donde ésa razona sobre tipos, ésta razona sobre **declaraciones**
- * — buscar una clase por su nombre, saber si un método redefine a otro, leer el comentario de
- * documentación de un elemento.
+ * <p>The counterpart of {@link Types}: where that one reasons about types, this one reasons about
+ * **declarations** — looking up a class by its name, knowing whether a method overrides another,
+ * reading an element's documentation comment.
  *
- * <p>Es una **declaración pura**: la implementa el compilador y la entrega por
- * {@link javax.annotation.processing.ProcessingEnvironment#getElementUtils()}. Esta biblioteca no trae
- * implementación, porque lo que hace falta es la tabla de símbolos de `javac`, que vive en `src/javac/`.
+ * <p>It is a **pure declaration**: the compiler implements it and hands it over through {@link
+ * javax.annotation.processing.ProcessingEnvironment#getElementUtils()}. This library ships no
+ * implementation, because what is needed is `javac`'s symbol table, which lives in `src/javac/`.
  *
- * <h2>Sobre los cuerpos por omisión</h2>
+ * <h2>About the default bodies</h2>
  *
- * <p>Más de la mitad de los métodos son `default`, y sus cuerpos **son parte observable de la API**, no
- * detalle. Acá se siguieron dos reglas, y conviene que estén dichas:
+ * <p>More than half the methods are `default`, and their bodies **are an observable part of the
+ * API**, not a detail. Two rules were followed here, and it is as well that they be said:
  *
  * <ul>
- * <li>El que se puede **deducir de los métodos abstractos** se deduce. `getAllPackageElements` se arma
- *     con `getPackageElement`, y `getOutermostTypeElement` sube por los contenedores. Eso no inventa
- *     nada: es la misma respuesta a la que llegaría quien lo escribiera a mano.</li>
- * <li>El que necesita soporte que el modelo puede no tener --módulos, componentes de registro, el
- *     archivo de origen-- devuelve la respuesta que el contrato define para "no hay soporte":
- *     `null`, conjunto vacío, o `false`. **No tira.** Una implementación que sí lo soporte redefine.</li>
+ * <li>What can be **deduced from the abstract methods** is deduced. `getAllPackageElements` is
+ *     built with `getPackageElement`, and `getOutermostTypeElement` climbs the enclosing elements.
+ *     That invents nothing: it is the same answer whoever wrote it by hand would reach.</li>
+ * <li>What needs support the model may not have --modules, record components, the source file--
+ *     returns the answer the contract defines for "no support": `null`, an empty set, or `false`.
+ *     **It does not throw.** An implementation that does support it overrides.</li>
  * </ul>
  */
 public interface Elements {
 
     /**
-     * De dónde salió una declaración.
+     * Where a declaration came from.
      *
-     * <p>La distinción tiene consecuencias para un procesador: un miembro **sintético** --el
-     * `values()` de un enum, un puente-- no está en el fuente, así que reportar un error sobre él no
-     * le señala nada a nadie.
+     * <p>The distinction has consequences for a processor: a **synthetic** member --an enum's
+     * `values()`, a bridge-- is not in the source, so reporting an error on it points nobody at
+     * anything.
      */
     enum Origin {
-        /** Está escrito en el fuente o en el `.class`. */
+        /** It is written in the source or in the `.class`. */
         EXPLICIT,
-        /** La especificación obliga a que exista, aunque nadie lo escribió (`Enum.values()`). */
+        /** The specification requires it to exist, although nobody wrote it (`Enum.values()`). */
         MANDATED,
-        /** Lo fabricó el compilador y no está en la especificación (un puente). */
+        /** The compiler made it and it is not in the specification (a bridge). */
         SYNTHETIC;
 
         /**
-         * Si esta declaración es visible en el fuente.
+         * Whether this declaration is visible in the source.
          *
-         * <p>`EXPLICIT` y `MANDATED` sí --las dos son parte del programa que el lenguaje define--;
-         * `SYNTHETIC` no.
+         * <p>`EXPLICIT` and `MANDATED` are --both are part of the program the language defines--;
+         * `SYNTHETIC` is not.
          */
         public boolean isDeclared() {
             return this != Origin.SYNTHETIC;
         }
     }
 
-    /** La forma del comentario de documentación: `/** ... *&#47;` o una corrida de `///`. */
+    /** The form of the documentation comment: `/** ... *&#47;` or a run of `///`. */
     enum DocCommentKind {
-        /** Varias líneas que empiezan con `///`. */
+        /** Several lines starting with `///`. */
         END_OF_LINE,
-        /** El clásico delimitado. */
+        /** The classic delimited one. */
         TRADITIONAL
     }
 
-    /** El paquete con ese nombre canónico, o `null` si no hay. */
+    /** The package with that canonical name, or `null` if there is none. */
     PackageElement getPackageElement(CharSequence name);
 
     /**
-     * El paquete con ese nombre dentro de ese módulo, o `null`.
+     * The package with that name within that module, or `null`.
      *
-     * <p>Por omisión `null`: un modelo sin módulos no tiene por dónde buscar. No se delega en la
-     * versión de un argumento a propósito — sería contestar por otro módulo que el que se pidió.
+     * <p>By default `null`: a model without modules has nowhere to look. It does not delegate to
+     * the one-argument version on purpose — that would be answering for a module other than the one
+     * asked for.
      */
     default PackageElement getPackageElement(ModuleElement module, CharSequence name) {
         return null;
     }
 
     /**
-     * Todos los paquetes con ese nombre, en todos los módulos.
+     * All the packages with that name, in all the modules.
      *
-     * <p>Se deduce: sin módulos hay a lo sumo uno, el que devuelve {@link #getPackageElement}.
+     * <p>It is deduced: without modules there is at most one, the one {@link #getPackageElement}
+     * returns.
      */
     default Set<? extends PackageElement> getAllPackageElements(CharSequence name) {
-        // El conjunto se arma siempre y se devuelve vacio si no hubo nada, en vez de salir temprano
-        // con `Collections.emptySet()`: nuestro javac no infiere el argumento de tipo cuando el
-        // destino es un supertipo **con comodin** (`Set<? extends X>`), y da "tipo de retorno
-        // incompatible". Con la variable local escrita, resuelve.
+        // The set is always built and returned empty if there was nothing, instead of leaving early
+        // with `Collections.emptySet()`: the frozen javac that builds this library does not infer
+        // the type argument when the target is a supertype **with a wildcard** (`Set<? extends
+        // X>`), and reports "incompatible return type". With the local variable written out, it
+        // resolves. (The source-built javac infers it; checked 2026-09-18.)
         Set<PackageElement> out = new LinkedHashSet<PackageElement>();
         PackageElement p = this.getPackageElement(name);
         if (p != null) {
@@ -111,15 +114,17 @@ public interface Elements {
         return out;
     }
 
-    /** El tipo con ese nombre canónico, o `null`. */
+    /** The type with that canonical name, or `null`. */
     TypeElement getTypeElement(CharSequence name);
 
-    /** El tipo con ese nombre dentro de ese módulo, o `null`. Por omisión `null`, como el paquete. */
+    /**
+     * The type with that name within that module, or `null`. By default `null`, like the package.
+     */
     default TypeElement getTypeElement(ModuleElement module, CharSequence name) {
         return null;
     }
 
-    /** Todos los tipos con ese nombre. Se deduce de {@link #getTypeElement}. */
+    /** All the types with that name. Deduced from {@link #getTypeElement}. */
     default Set<? extends TypeElement> getAllTypeElements(CharSequence name) {
         Set<TypeElement> out = new LinkedHashSet<TypeElement>();
         TypeElement t = this.getTypeElement(name);
@@ -129,176 +134,179 @@ public interface Elements {
         return out;
     }
 
-    /** El módulo con ese nombre, o `null` si no hay módulos en el modelo. */
+    /** The module with that name, or `null` if there are no modules in the model. */
     default ModuleElement getModuleElement(CharSequence name) {
         return null;
     }
 
-    /** Todos los módulos, o el conjunto vacío si el modelo no los tiene. */
+    /** All the modules, or the empty set if the model has none. */
     default Set<? extends ModuleElement> getAllModuleElements() {
         return new LinkedHashSet<ModuleElement>();
     }
 
     /**
-     * Los valores de esa anotación, **con los que no se escribieron rellenados con su omisión**.
+     * The values of that annotation, **with the ones not written filled in with their default**.
      *
-     * <p>Es la diferencia con {@link AnnotationMirror#getElementValues()}, que devuelve sólo lo
-     * escrito. Un procesador casi siempre quiere ésta: `@Retention` sin `value` explícito igual tiene
-     * una política.
+     * <p>It is the difference from {@link AnnotationMirror#getElementValues()}, which returns only
+     * what was written. A processor almost always wants this one: `@Retention` with no explicit
+     * `value` still has a policy.
      */
     Map<? extends ExecutableElement, ? extends AnnotationValue> getElementValuesWithDefaults(
             AnnotationMirror a);
 
-    /** El comentario de documentación, sin delimitadores, o `null` si no tiene. */
+    /** The documentation comment, without delimiters, or `null` if it has none. */
     String getDocComment(Element e);
 
     /**
-     * La forma del comentario, o `null` si no tiene.
+     * The form of the comment, or `null` if it has none.
      *
-     * <p>Por omisión: si hay comentario es {@link DocCommentKind#TRADITIONAL}. Es lo correcto para un
-     * modelo que no distingue las dos formas — la tradicional es la que existe desde siempre.
+     * <p>By default: if there is a comment it is {@link DocCommentKind#TRADITIONAL}. It is right
+     * for a model that does not tell the two forms apart — the traditional one is the one that
+     * always existed.
      */
     default DocCommentKind getDocCommentKind(Element e) {
         return this.getDocComment(e) == null ? null : DocCommentKind.TRADITIONAL;
     }
 
-    /** Si está marcado obsoleto. */
+    /** Whether it is marked deprecated. */
     boolean isDeprecated(Element e);
 
-    /** De dónde salió ese elemento. Por omisión {@link Origin#EXPLICIT}. */
+    /** Where that element came from. By default {@link Origin#EXPLICIT}. */
     default Origin getOrigin(Element e) {
         return Origin.EXPLICIT;
     }
 
-    /** De dónde salió esa anotación. Por omisión {@link Origin#EXPLICIT}. */
+    /** Where that annotation came from. By default {@link Origin#EXPLICIT}. */
     default Origin getOrigin(AnnotatedConstruct c, AnnotationMirror a) {
         return Origin.EXPLICIT;
     }
 
-    /** De dónde salió esa directiva de módulo. Por omisión {@link Origin#EXPLICIT}. */
+    /** Where that module directive came from. By default {@link Origin#EXPLICIT}. */
     default Origin getOrigin(ModuleElement m, ModuleElement.Directive directive) {
         return Origin.EXPLICIT;
     }
 
     /**
-     * Si es un **puente**, el método sintético que el compilador agrega para que un retorno
-     * covariante funcione con el borrado.
+     * Whether it is a **bridge**, the synthetic method the compiler adds so that a covariant return
+     * works with erasure.
      *
-     * <p>Por omisión `false`: un modelo que no fabrica puentes no tiene ninguno.
+     * <p>By default `false`: a model that makes no bridges has none.
      */
     default boolean isBridge(ExecutableElement e) {
         return false;
     }
 
     /**
-     * El nombre binario de ese tipo.
+     * The binary name of that type.
      *
-     * <p>No es el canónico: un tipo anidado es `Outer$Inner` acá y `Outer.Inner` allá. Es el que hay
-     * que usar para nombrar el `.class`.
+     * <p>It is not the canonical one: a nested type is `Outer$Inner` here and `Outer.Inner` there.
+     * It is the one to use for naming the `.class`.
      */
     Name getBinaryName(TypeElement type);
 
-    /** El paquete que contiene a ese elemento. */
+    /** The package that contains that element. */
     PackageElement getPackageOf(Element e);
 
-    /** El módulo que lo contiene, o `null` si el modelo no tiene módulos. */
+    /** The module that contains it, or `null` if the model has no modules. */
     default ModuleElement getModuleOf(Element e) {
         return null;
     }
 
     /**
-     * Todos los miembros de ese tipo, **los heredados incluidos**.
+     * All the members of that type, **inherited ones included**.
      *
-     * <p>Es la diferencia con {@link Element#getEnclosedElements()}, que da sólo los declarados. La
-     * herencia la tiene que resolver el compilador, y de ahí que esté acá y no en el elemento.
+     * <p>It is the difference from {@link Element#getEnclosedElements()}, which gives only the
+     * declared ones. Inheritance has to be resolved by the compiler, and that is why it is here and
+     * not in the element.
      */
     List<? extends Element> getAllMembers(TypeElement type);
 
     /**
-     * El tipo de nivel superior que lo contiene, o `null` si no está dentro de ninguno.
+     * The top-level type that contains it, or `null` if it is not inside any.
      *
-     * <p>Se deduce subiendo por los contenedores hasta el último que sea un tipo.
+     * <p>It is deduced by climbing the enclosing elements up to the last one that is a type.
      */
     default TypeElement getOutermostTypeElement(Element e) {
-        TypeElement ultimo = null;
+        TypeElement outermost = null;
         Element cur = e;
         while (cur != null) {
             if (cur instanceof TypeElement) {
-                ultimo = (TypeElement) cur;
+                outermost = (TypeElement) cur;
             }
             cur = cur.getEnclosingElement();
         }
-        return ultimo;
+        return outermost;
     }
 
-    /** Todas las anotaciones de ese elemento, las heredadas incluidas. */
+    /** All the annotations of that element, inherited ones included. */
     List<? extends AnnotationMirror> getAllAnnotationMirrors(Element e);
 
     /**
-     * Si `hider` oculta a `hidden`.
+     * Whether `hider` hides `hidden`.
      *
-     * <p>Ocultar no es redefinir: un campo o un método estático de una subclase **oculta** al de la
-     * superclase, y cuál se usa lo decide el tipo estático. Redefinir es de los métodos de instancia,
-     * y lo decide el tipo dinámico. Por eso son dos métodos distintos.
+     * <p>Hiding is not overriding: a field or a static method of a subclass **hides** the
+     * superclass's, and which one is used is decided by the static type. Overriding belongs to
+     * instance methods, and the dynamic type decides it. That is why they are two different
+     * methods.
      */
     boolean hides(Element hider, Element hidden);
 
-    /** Si `overrider`, visto como miembro de `type`, redefine a `overridden`. */
+    /** Whether `overrider`, seen as a member of `type`, overrides `overridden`. */
     boolean overrides(ExecutableElement overrider, ExecutableElement overridden, TypeElement type);
 
     /**
-     * Ese valor constante escrito como una expresión de Java.
+     * That constant value written as a Java expression.
      *
-     * <p>Sirve para generar código: un `char` sale como `'a'` y un `String` con sus escapes puestos,
-     * de modo que el texto se pueda pegar en un fuente y compile.
+     * <p>It serves for generating code: a `char` comes out as `'a'` and a `String` with its escapes
+     * in place, so that the text can be pasted into a source file and compile.
      */
     String getConstantExpression(Object value);
 
-    /** Escribe una representación de esos elementos, para depurar. */
+    /** Writes a representation of those elements, for debugging. */
     void printElements(Writer w, Element... elements);
 
     /**
-     * Un {@link Name} con ese contenido.
+     * A {@link Name} with that content.
      *
-     * <p>Existe porque los `Name` del modelo se comparan por **identidad**, no con `equals`: el
-     * compilador los interna. Un `Name` fabricado por otro medio no coincidiría con los del modelo.
+     * <p>It exists because the model's `Name`s are compared by **identity**, not with `equals`: the
+     * compiler interns them. A `Name` made by other means would not match the model's.
      */
     Name getName(CharSequence cs);
 
-    /** Si ese tipo es una interfaz funcional (§9.8). */
+    /** Whether that type is a functional interface (§9.8). */
     boolean isFunctionalInterface(TypeElement type);
 
-    /** Si es un módulo automático. Por omisión `false`. */
+    /** Whether it is an automatic module. By default `false`. */
     default boolean isAutomaticModule(ModuleElement module) {
         return false;
     }
 
     /**
-     * El cuerpo de clase de esa constante de enum, o `null` si no tiene.
+     * The class body of that enum constant, or `null` if it has none.
      *
-     * <p>Una constante de enum puede traer su propio cuerpo (`ROJO { ... }`), y en ese caso es una
-     * subclase anónima. Por omisión `null`: ninguna lo tiene hasta que el modelo lo diga.
+     * <p>An enum constant may bring its own body (`RED { ... }`), and in that case it is an
+     * anonymous subclass. By default `null`: none has one until the model says so.
      */
     default TypeElement getEnumConstantBody(VariableElement enumConstant) {
         return null;
     }
 
-    /** El componente de registro que ese accesor devuelve, o `null` si no es un accesor. */
+    /** The record component that accessor returns, or `null` if it is not an accessor. */
     default RecordComponentElement recordComponentFor(ExecutableElement accessor) {
         return null;
     }
 
-    /** Si es el constructor canónico de un registro. Por omisión `false`. */
+    /** Whether it is a record's canonical constructor. By default `false`. */
     default boolean isCanonicalConstructor(ExecutableElement e) {
         return false;
     }
 
-    /** Si es el constructor compacto de un registro. Por omisión `false`. */
+    /** Whether it is a record's compact constructor. By default `false`. */
     default boolean isCompactConstructor(ExecutableElement e) {
         return false;
     }
 
-    /** El archivo de donde salió ese elemento, o `null` si no se sabe. */
+    /** The file that element came from, or `null` if not known. */
     default JavaFileObject getFileObjectOf(Element e) {
         return null;
     }

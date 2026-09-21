@@ -13,25 +13,26 @@ import javax.swing.event.MenuKeyListener;
 import javax.swing.plaf.MenuItemUI;
 
 /**
- * Una opcion de menu.
+ * A menu option.
  *
- * <h2>Es un boton, y eso resuelve casi todo</h2>
+ * <h2>It is a button, and that resolves almost everything</h2>
  *
- * <p>Hereda de {@link AbstractButton}, asi que ya tiene texto, icono, accion, habilitado y el
- * evento al apretarla. Lo que agrega es lo que un boton suelto no necesita: el atajo de teclado y
- * el manejo del recorrido del menu.
+ * <p>It inherits from {@link AbstractButton}, so it already has text, icon, action, enabled and
+ * the event on pressing it. What it adds is what a loose button does not need: the keyboard
+ * shortcut and the handling of the menu's walk.
  *
- * <h2>Armada no es apretada</h2>
+ * <h2>Armed is not pressed</h2>
  *
- * <p>{@link #setArmed} marca la opcion sobre la que esta el mouse mientras el menu esta abierto. Es
- * distinto de apretada: apretada dura lo que dura el clic, armada dura mientras el mouse pasa por
- * encima. Un menu se recorre sin soltar el boton, y esa es la diferencia que lo permite.
+ * <p>{@link #setArmed} marks the option the mouse is over while the menu is open. It is
+ * different from pressed: pressed lasts as long as the click lasts, armed lasts while the mouse
+ * passes over. A menu is walked without releasing the button, and that is the difference that
+ * allows it.
  *
- * <h2>Los eventos vienen con el camino</h2>
+ * <h2>The events come with the path</h2>
  *
- * <p>{@link #processMouseEvent(MouseEvent, MenuElement[], MenuSelectionManager)} recibe ademas el
- * camino de elementos desde el menu de arriba. Una opcion no puede decidir sola: si el mouse se
- * mueve a un submenu, quien cierra el anterior es quien conoce el camino entero.
+ * <p>{@link #processMouseEvent(MouseEvent, MenuElement[], MenuSelectionManager)} also receives
+ * the path of elements from the menu above. An option cannot decide alone: if the mouse moves
+ * to a submenu, who closes the previous one is whoever knows the whole path.
  */
 public class JMenuItem extends AbstractButton implements Accessible, MenuElement {
 
@@ -39,36 +40,36 @@ public class JMenuItem extends AbstractButton implements Accessible, MenuElement
 
     private KeyStroke accelerator;
     private boolean isMouseDragged = false;
-    private AccessibleContext accessibleContext;
 
-    /** Una opcion vacia. */
+    /** An empty option. */
     public JMenuItem() {
         this(null, (Icon) null);
     }
 
-    /** Una opcion con solo un icono. */
+    /** An option with only an icon. */
     public JMenuItem(Icon icon) {
         this(null, icon);
     }
 
-    /** Una opcion con ese texto. */
+    /** An option with that text. */
     public JMenuItem(String text) {
         this(text, (Icon) null);
     }
 
-    /** Una opcion que dispara esa accion y toma de ella su texto y su icono. */
+    /** An option that fires that action and takes its text and its icon from it. */
     public JMenuItem(Action a) {
         this();
         setAction(a);
     }
 
-    /** Una opcion con texto e icono. */
+    /** An option with text and icon. */
     public JMenuItem(String text, Icon icon) {
         setModel(new DefaultButtonModel());
         init(text, icon);
-        // Por la via del aspecto, no por la del usuario: asi el UI que se instale despues puede
-        // volver a prenderlo. Con `setBorderPainted(false)` quedaria marcado como decision del
-        // programa y ningun aspecto lo tocaria nunca mas.
+        // Through the look and feel's path, not the user's: that way the look and feel that is
+                // installed afterwards can switch it on again. With `setBorderPainted(false)` it
+                // would be marked as the program's decision and no look and feel would ever touch
+                // it again.
         javax.swing.LookAndFeel.installProperty(this, "borderPainted", Boolean.FALSE);
         setFocusPainted(false);
         setHorizontalTextPosition(JButton.TRAILING);
@@ -76,14 +77,15 @@ public class JMenuItem extends AbstractButton implements Accessible, MenuElement
         updateUI();
     }
 
-    /** Una opcion con texto y esa letra subrayada. */
+    /** An option with text and that letter underlined. */
     public JMenuItem(String text, int mnemonic) {
         setModel(new DefaultButtonModel());
         init(text, null);
         setMnemonic(mnemonic);
-        // Por la via del aspecto, no por la del usuario: asi el UI que se instale despues puede
-        // volver a prenderlo. Con `setBorderPainted(false)` quedaria marcado como decision del
-        // programa y ningun aspecto lo tocaria nunca mas.
+        // Through the look and feel's path, not the user's: that way the look and feel that is
+                // installed afterwards can switch it on again. With `setBorderPainted(false)` it
+                // would be marked as the program's decision and no look and feel would ever touch
+                // it again.
         javax.swing.LookAndFeel.installProperty(this, "borderPainted", Boolean.FALSE);
         setFocusPainted(false);
         setHorizontalTextPosition(JButton.TRAILING);
@@ -115,7 +117,7 @@ public class JMenuItem extends AbstractButton implements Accessible, MenuElement
         return uiClassID;
     }
 
-    /** Marca la opcion sobre la que esta el mouse; ver la nota de la clase. */
+    /** It marks the option the mouse is over; see the class note. */
     public void setArmed(boolean b) {
         ButtonModel model = getModel();
         if (model.isArmed() != b) {
@@ -129,10 +131,10 @@ public class JMenuItem extends AbstractButton implements Accessible, MenuElement
     }
 
     /**
-     * Habilita o deshabilita la opcion.
+     * It enables or disables the option.
      *
-     * <p>Deshabilitarla la desarma: una opcion apagada no puede quedar resaltada, porque al volver
-     * a habilitarla apareceria marcada sin que el mouse este encima.
+     * <p>Disabling it disarms it: a switched-off option cannot stay highlighted, because on being
+     * enabled again it would appear marked without the mouse being over it.
      */
     public void setEnabled(boolean b) {
         if (!b) {
@@ -142,10 +144,11 @@ public class JMenuItem extends AbstractButton implements Accessible, MenuElement
     }
 
     /**
-     * El atajo que dispara la opcion sin abrir el menu.
+     * The shortcut that fires the option without opening the menu.
      *
-     * <p>Es del menu, no del componente: funciona con la ventana en foco aunque el menu este
-     * cerrado. Por eso se dibuja al lado del texto, para que se pueda aprender.
+     * <p>It belongs to the menu, not to the component: it works with the window in focus even
+     * though the menu is closed. That is why it is drawn beside the text, so that it can be
+     * learned.
      */
     public void setAccelerator(KeyStroke keyStroke) {
         KeyStroke oldAccelerator = accelerator;
@@ -178,7 +181,7 @@ public class JMenuItem extends AbstractButton implements Accessible, MenuElement
         }
     }
 
-    /** Un evento de mouse con el camino del menu; ver la nota de la clase. */
+    /** A mouse event with the menu's path; see the class note. */
     public void processMouseEvent(MouseEvent e, MenuElement[] path,
             MenuSelectionManager manager) {
         processMenuDragMouseEvent(new MenuDragMouseEvent(e.getComponent(), e.getID(),
@@ -196,7 +199,7 @@ public class JMenuItem extends AbstractButton implements Accessible, MenuElement
         }
     }
 
-    /** Reparte el evento de arrastre a quien corresponda. */
+    /** It hands the drag event out to whoever it belongs to. */
     public void processMenuDragMouseEvent(MenuDragMouseEvent e) {
         int id = e.getID();
         if (id == MouseEvent.MOUSE_ENTERED) {
@@ -289,15 +292,15 @@ public class JMenuItem extends AbstractButton implements Accessible, MenuElement
         }
     }
 
-    /** El recorrido del menu paso por aca, o dejo de pasar. */
+    /** The menu's walk passed through here, or stopped passing. */
     public void menuSelectionChanged(boolean isIncluded) {
         setArmed(isIncluded);
     }
 
     /**
-     * Los elementos de adentro; ninguno.
+     * The elements inside; none.
      *
-     * <p>Una opcion es una hoja. {@link JMenu}, que si tiene submenu, lo sobrescribe.
+     * <p>An option is a leaf. {@link JMenu}, which does have a submenu, overrides it.
      */
     public MenuElement[] getSubElements() {
         return new MenuElement[0];

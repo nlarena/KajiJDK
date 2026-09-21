@@ -6,68 +6,69 @@ import javax.naming.InvalidNameException;
 import javax.naming.Name;
 
 /**
- * KajiLibrary's javax.naming.spi.ResolveResult -- hasta donde se llego, y que falta.
+ * KajiLibrary's javax.naming.spi.ResolveResult -- how far it got, and what is left.
  *
- * <p>Lo que devuelve un {@link Resolver}: el objeto al que se pudo resolver y el pedazo de nombre que
- * quedo sin resolver. Con los dos, quien llama sigue la resolucion contra el objeto nuevo.
+ * <p>What a {@link Resolver} returns: the object it could resolve to and the piece of the name left
+ * unresolved. With both, the caller carries on resolving against the new object.
  *
- * <p>Los dos {@code append} existen porque la resolucion va <b>hacia atras</b> al desarmarse: un
- * contexto que no puede seguir le agrega al resto lo que el mismo no consumio, y asi el resultado
- * final acumula todo lo que falta desde el punto donde se corto.
+ * <p>The two {@code append} methods exist because resolution goes <b>backwards</b> as it unwinds: a
+ * context that cannot carry on adds to the remainder what it did not consume itself, and so the
+ * final result accumulates everything missing from the point where it stopped.
  *
- * <p>Los campos son {@code protected}, como en el JDK: sus subclases --{@code CannotProceedException}
- * entre ellas-- los tocan directo.
+ * <p>The fields are {@code protected}, as in the JDK, for subclasses to touch directly. (An earlier
+ * note named {@code CannotProceedException} as one of them; it extends {@code NamingException},
+ * not this class.)
  */
 public class ResolveResult implements Serializable {
 
     private static final long serialVersionUID = -4552108072002407559L;
 
-    /** A que se resolvio. */
+    /** What it resolved to. */
     protected Object resolvedObj;
 
-    /** Que quedo sin resolver. */
+    /** What was left unresolved. */
     protected Name remainingName;
 
-    /** Vacio, para las subclases que se llenan despues. */
+    /** Empty, for subclasses that fill themselves in later. */
     protected ResolveResult() {
         this.resolvedObj = null;
         this.remainingName = null;
     }
 
     /**
-     * Con el resto como texto.
+     * With the remainder as text.
      *
-     * <p>El texto se parsea como {@link CompositeName}, que es el formato de los nombres que cruzan
-     * espacios de nombres distintos.
+     * <p>The text is parsed as a {@link CompositeName}, which is the format of names that cross
+     * different namespaces.
      */
     public ResolveResult(Object robj, String rcomp) {
         this.resolvedObj = robj;
         try {
             this.remainingName = new CompositeName(rcomp);
         } catch (InvalidNameException e) {
-            // La especificacion no deja lanzar aca. Un nombre que no parsea queda sin resto, que es
-            // lo unico coherente: no hay por donde seguir.
+            // The specification does not allow throwing here. A name that does not parse is left
+            // with no remainder, which is the only coherent thing: there is nowhere to carry on.
             this.remainingName = null;
         }
     }
 
-    /** Con el resto ya armado. */
+    /** With the remainder already built. */
     public ResolveResult(Object robj, Name rname) {
         this.resolvedObj = robj;
         setRemainingName(rname);
     }
 
-    /** Que quedo sin resolver. */
+    /** What was left unresolved. */
     public Name getRemainingName() {
         return this.remainingName;
     }
 
-    /** A que se resolvio. */
+    /** What it resolved to. */
     public Object getResolvedObj() {
         return this.resolvedObj;
     }
 
-    /** Reemplaza el resto. Se guarda una copia: el nombre es mutable. */
+    /** Replaces the remainder. A copy is kept: the name is mutable. */
     public void setRemainingName(Name name) {
         if (name == null) {
             this.remainingName = null;
@@ -76,7 +77,7 @@ public class ResolveResult implements Serializable {
         this.remainingName = (Name) name.clone();
     }
 
-    /** Le agrega eso al final del resto. Ver la nota de la clase. */
+    /** Appends that to the end of the remainder. See the class note. */
     public void appendRemainingName(Name name) {
         if (name == null) {
             return;
@@ -88,11 +89,11 @@ public class ResolveResult implements Serializable {
         try {
             this.remainingName.addAll(name);
         } catch (InvalidNameException e) {
-            // No puede pasar: se esta agregando al final de un nombre del mismo tipo.
+            // Cannot happen: it is appending to the end of a name of the same type.
         }
     }
 
-    /** Idem, con un solo componente. */
+    /** Same, with a single component. */
     public void appendRemainingComponent(String name) {
         if (name == null) {
             return;
@@ -103,11 +104,11 @@ public class ResolveResult implements Serializable {
             }
             this.remainingName.add(name);
         } catch (InvalidNameException e) {
-            // Idem.
+            // Same.
         }
     }
 
-    /** Reemplaza el objeto resuelto. */
+    /** Replaces the resolved object. */
     public void setResolvedObj(Object obj) {
         this.resolvedObj = obj;
     }

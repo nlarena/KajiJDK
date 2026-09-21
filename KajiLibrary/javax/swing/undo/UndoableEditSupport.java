@@ -6,44 +6,44 @@ import javax.swing.event.UndoableEditListener;
 import javax.swing.event.UndoableEditEvent;
 
 /**
- * El lado emisor: junta oyentes y les reparte las ediciones.
+ * The emitting side: it gathers listeners and hands the edits out to them.
  *
- * <h2>Que agrega sobre una lista de oyentes</h2>
+ * <h2>What it adds over a list of listeners</h2>
  *
- * <p>El <strong>agrupamiento</strong>. Entre {@link #beginUpdate} y {@link #endUpdate} las ediciones
- * no se reparten: se acumulan en un {@link CompoundEdit} y al cerrar sale <em>una sola</em>. Es como
- * una operacion compuesta —un reemplazo que borra e inserta— se deshace de un golpe en vez de en
- * dos pasos que el usuario nunca penso como separados.
+ * <p><strong>Grouping</strong>. Between {@link #beginUpdate} and {@link #endUpdate} the edits are
+ * not handed out: they pile up in a {@link CompoundEdit} and on closing <em>one single</em> edit
+ * comes out. It is how a composite operation --a replacement that deletes and inserts-- is undone
+ * in one go instead of in two steps the user never thought of as separate.
  *
- * <p>{@link #getUpdateLevel} cuenta anidamiento, asi que las agrupaciones se pueden encajar: solo el
- * {@code endUpdate} mas externo dispara el envio.
+ * <p>{@link #getUpdateLevel} counts nesting, so the groupings can be nested: only the outermost
+ * {@code endUpdate} triggers the sending.
  *
- * <h2>Por que existe {@link #realSource}</h2>
+ * <h2>Why {@link #realSource} exists</h2>
  *
- * <p>Un objeto que quiere emitir estos eventos rara vez hereda de esta clase: la tiene adentro como
- * un campo. Sin {@code realSource}, el evento diria que la edicion vino del ayudante y no del
- * documento, que es lo que al oyente le importa.
+ * <p>An object that wants to emit these events rarely inherits from this class: it has it inside
+ * as a field. Without {@code realSource}, the event would say the edit came from the helper and
+ * not from the document, which is what matters to the listener.
  */
 public class UndoableEditSupport {
 
-    /** Cuantos {@link #beginUpdate} hay abiertos. Cero significa que se reparte al toque. */
+    /** How many {@link #beginUpdate}s are open. Zero means it is handed out right away. */
     protected int updateLevel;
 
-    /** Donde se acumulan las ediciones mientras hay una agrupacion abierta. */
+    /** Where the edits pile up while a grouping is open. */
     protected CompoundEdit compoundEdit;
 
-    /** Los oyentes. */
+    /** The listeners. */
     protected Vector<UndoableEditListener> listeners;
 
-    /** Quien figura como origen de los eventos; ver la nota de la clase. */
+    /** Who appears as the events' source; see the class note. */
     protected Object realSource;
 
-    /** Con este mismo objeto como origen. */
+    /** With this same object as the source. */
     public UndoableEditSupport() {
         this(null);
     }
 
-    /** Con {@code r} como origen de los eventos. */
+    /** With {@code r} as the events' source. */
     public UndoableEditSupport(Object r) {
         this.realSource = r == null ? this : r;
         this.updateLevel = 0;
@@ -51,42 +51,42 @@ public class UndoableEditSupport {
         this.listeners = new Vector<UndoableEditListener>();
     }
 
-    /** Agrega un oyente. */
+    /** Adds a listener. */
     public synchronized void addUndoableEditListener(UndoableEditListener l) {
         this.listeners.addElement(l);
     }
 
-    /** Saca un oyente. */
+    /** Removes a listener. */
     public synchronized void removeUndoableEditListener(UndoableEditListener l) {
         this.listeners.removeElement(l);
     }
 
-    /** Los oyentes, en un arreglo nuevo. */
+    /** The listeners, in a new array. */
     public synchronized UndoableEditListener[] getUndoableEditListeners() {
         int n = this.listeners.size();
-        UndoableEditListener[] copia = new UndoableEditListener[n];
+        UndoableEditListener[] copy = new UndoableEditListener[n];
         for (int i = 0; i < n; i++) {
-            copia[i] = this.listeners.elementAt(i);
+            copy[i] = this.listeners.elementAt(i);
         }
-        return copia;
+        return copy;
     }
 
     /**
-     * Reparte {@code e} a todos los oyentes, ya.
+     * Hands {@code e} out to all the listeners, now.
      *
-     * <p>Sin sincronizar y separada de {@link #postEdit} a proposito: el reparto llama a codigo
-     * ajeno, y hacerlo con el candado tomado es una receta de interbloqueo.
+     * <p>Unsynchronized and separate from {@link #postEdit} on purpose: handing out calls foreign
+     * code, and doing that with the lock held is a recipe for deadlock.
      */
     protected void _postEdit(UndoableEdit e) {
         UndoableEditEvent ev = new UndoableEditEvent(this.realSource, e);
-        UndoableEditListener[] copia = getUndoableEditListeners();
-        for (int i = 0; i < copia.length; i++) {
-            copia[i].undoableEditHappened(ev);
+        UndoableEditListener[] copy = getUndoableEditListeners();
+        for (int i = 0; i < copy.length; i++) {
+            copy[i].undoableEditHappened(ev);
         }
     }
 
     /**
-     * Publica una edicion: la acumula si hay una agrupacion abierta, o la reparte si no.
+     * Publishes an edit: it piles it up if a grouping is open, or hands it out if not.
      */
     public synchronized void postEdit(UndoableEdit e) {
         if (this.updateLevel == 0) {
@@ -96,12 +96,12 @@ public class UndoableEditSupport {
         }
     }
 
-    /** Cuantas agrupaciones hay abiertas. */
+    /** How many groupings are open. */
     public int getUpdateLevel() {
         return this.updateLevel;
     }
 
-    /** Abre una agrupacion; las ediciones se acumulan hasta el {@link #endUpdate} que la cierre. */
+    /** Opens a grouping; the edits pile up until the {@link #endUpdate} that closes it. */
     public synchronized void beginUpdate() {
         if (this.updateLevel == 0) {
             this.compoundEdit = createCompoundEdit();
@@ -110,23 +110,23 @@ public class UndoableEditSupport {
     }
 
     /**
-     * El grupo que usa la agrupacion.
+     * The group the grouping uses.
      *
-     * <p>Existe para que una subclase pueda devolver un {@link CompoundEdit} propio —uno con nombre,
-     * por ejemplo— sin reescribir el resto del mecanismo.
+     * <p>It exists so that a subclass can return a {@link CompoundEdit} of its own --one with a
+     * name, for instance-- without rewriting the rest of the mechanism.
      */
     protected CompoundEdit createCompoundEdit() {
         return new CompoundEdit();
     }
 
-    /** Cierra una agrupacion; la mas externa reparte el grupo entero como una sola edicion. */
+    /** Closes a grouping; the outermost one hands the whole group out as a single edit. */
     public synchronized void endUpdate() {
         this.updateLevel = this.updateLevel - 1;
         if (this.updateLevel == 0) {
             this.compoundEdit.end();
-            CompoundEdit terminado = this.compoundEdit;
+            CompoundEdit finished = this.compoundEdit;
             this.compoundEdit = null;
-            _postEdit(terminado);
+            _postEdit(finished);
         }
     }
 

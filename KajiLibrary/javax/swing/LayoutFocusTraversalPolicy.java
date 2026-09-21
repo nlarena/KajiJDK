@@ -6,32 +6,34 @@ import java.io.Serializable;
 import java.util.Comparator;
 
 /**
- * La politica de foco que usa Swing: recorre en el orden en que se ve.
+ * The focus policy Swing uses: it walks in the order things are seen.
  *
- * <h2>Arriba a abajo, izquierda a derecha</h2>
+ * <h2>Top to bottom, left to right</h2>
  *
- * <p>Es lo unico que agrega sobre {@link SortingFocusTraversalPolicy}: el comparador. Se ordena por
- * la coordenada vertical y, dentro de la misma fila, por la horizontal. Es como se lee, y por eso
- * coincide con lo que el usuario espera del tabulador sin que nadie configure nada.
+ * <p>It is the only thing it adds over {@link SortingFocusTraversalPolicy}: the comparator. It
+ * sorts by the vertical coordinate and, within the same row, by the horizontal one. It is how
+ * one reads, and that is why it agrees with what the user expects of the tab key without
+ * anybody configuring anything.
  *
- * <p>"La misma fila" no es "la misma coordenada exacta": dos campos alineados pueden estar a un
- * pixel de distancia por sus bordes. Se los considera de la misma fila cuando se superponen
- * verticalmente, que es lo que hace que un boton mas alto al lado de un campo no se salga de orden.
+ * <p>"The same row" is not "the same exact coordinate": two aligned fields may be a pixel
+ * apart by their edges. They are taken to be of the same row when they overlap vertically, which
+ * is what keeps a taller button beside a field from falling out of order.
  *
- * <h2>Ademas filtra un poco mas</h2>
+ * <h2>It also filters a little more</h2>
  *
- * <p>{@link #accept} saltea tambien los componentes de texto de solo lectura: se pueden enfocar,
- * pero no hay nada que hacer ahi con el teclado, y detenerse en ellos molesta mas de lo que ayuda.
+ * <p>{@link #accept} also skips read-only text components: they can be focused, but there is
+ * nothing to do there with the keyboard, and stopping at them is more of a nuisance than a
+ * help.
  */
 public class LayoutFocusTraversalPolicy extends SortingFocusTraversalPolicy
         implements Serializable {
 
-    /** Con el orden de lectura. */
+    /** With the reading order. */
     public LayoutFocusTraversalPolicy() {
-        super(new PorPosicion());
+        super(new ByPosition());
     }
 
-    /** Con otro criterio; solo para las subclases de la biblioteca. */
+    /** With another criterion; only for the library's subclasses. */
     LayoutFocusTraversalPolicy(Comparator<? super Component> c) {
         super(c);
     }
@@ -53,9 +55,9 @@ public class LayoutFocusTraversalPolicy extends SortingFocusTraversalPolicy
     }
 
     /**
-     * Ademas de lo que pide la clase de arriba, saltea el texto de solo lectura.
+     * Besides what the class above asks for, it skips read-only text.
      *
-     * <p>Ver la nota de la clase.
+     * <p>See the class note.
      */
     protected boolean accept(Component aComponent) {
         if (!super.accept(aComponent)) {
@@ -70,8 +72,8 @@ public class LayoutFocusTraversalPolicy extends SortingFocusTraversalPolicy
         return true;
     }
 
-    /** Arriba a abajo, y dentro de la misma fila, izquierda a derecha. */
-    private static class PorPosicion implements Comparator<Component>, Serializable {
+    /** Top to bottom, and within the same row, left to right. */
+    private static class ByPosition implements Comparator<Component>, Serializable {
 
         public int compare(Component a, Component b) {
             if (a == b) {
@@ -81,9 +83,9 @@ public class LayoutFocusTraversalPolicy extends SortingFocusTraversalPolicy
             int by = b.getY();
             int ah = a.getHeight();
             int bh = b.getHeight();
-            // Se superponen verticalmente: misma fila. Ver la nota de la clase.
-            boolean mismaFila = (ay < by + bh) && (by < ay + ah);
-            if (!mismaFila) {
+            // They overlap vertically: the same row. See the class note.
+            boolean sameRow = (ay < by + bh) && (by < ay + ah);
+            if (!sameRow) {
                 return (ay < by) ? -1 : 1;
             }
             int ax = a.getX();
@@ -94,9 +96,9 @@ public class LayoutFocusTraversalPolicy extends SortingFocusTraversalPolicy
             if (ay != by) {
                 return (ay < by) ? -1 : 1;
             }
-            // Misma posicion exacta: se desempata por identidad para que el orden sea total y
-            // estable. Sin esto, dos componentes superpuestos podrian intercambiarse entre dos
-            // recorridos y el tabulador se volveria impredecible.
+            // The same exact position: it is broken by identity so that the order is total and
+                        // stable. Without this, two overlapping components could swap between two
+                        // walks and the tab key would become unpredictable.
             return (System.identityHashCode(a) < System.identityHashCode(b)) ? -1 : 1;
         }
     }

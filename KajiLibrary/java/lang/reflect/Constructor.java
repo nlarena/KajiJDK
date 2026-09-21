@@ -159,9 +159,9 @@ public final class Constructor<T> extends Executable {
      * @return the type variables; empty if it is not generic
      */
     public TypeVariable<Constructor<T>>[] getTypeParameters() {
-        // Vacio, y es la respuesta correcta: los parametros de tipo viven solo en
-        // el atributo `Signature`, la VM no lo lee, y un constructor sin
-        // `Signature` no declara ninguno.
+        // Empty, and that is the right answer: the type parameters live only in the `Signature`
+        // attribute, the VM does not read it, and a constructor with no `Signature` declares
+        // none.
         return new TypeVariable[0];
     }
 

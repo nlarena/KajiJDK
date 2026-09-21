@@ -5,31 +5,31 @@ import java.util.Enumeration;
 import java.util.Vector;
 
 /**
- * Un modelo de lista sobre un {@link Vector}.
+ * A list model over a {@link Vector}.
  *
- * <h2>Dos juegos de nombres para lo mismo</h2>
+ * <h2>Two sets of names for the same thing</h2>
  *
- * <p>{@code addElement} y {@code add}, {@code elementAt} y {@code get}, {@code removeElementAt} y
- * {@code remove}. No es descuido: los primeros son los de {@code Vector}, de 1996, y los segundos
- * los de {@code List}, de 1998. Los dos estan porque hay codigo escrito con cada uno, y sacar
- * cualquiera de los dos lo rompe.
+ * <p>{@code addElement} and {@code add}, {@code elementAt} and {@code get},
+ * {@code removeElementAt} and {@code remove}. It is not an oversight: the first are
+ * {@code Vector}'s, from 1996, and the second {@code List}'s, from 1998. Both are there because
+ * there is code written with each one, and removing either of the two breaks it.
  *
- * <p>La diferencia real es que los de {@code List} devuelven lo que sacaron y los de {@code Vector}
- * no.
+ * <p>The real difference is that {@code List}'s return what they removed and {@code Vector}'s do
+ * not.
  *
- * <h2>Cada cambio avisa</h2>
+ * <h2>Every change gives notice</h2>
  *
- * <p>Todo metodo que toca el contenido dispara el aviso que corresponde. Es lo que hace que la
- * lista en pantalla se actualice sola, y es tambien por lo que agregar mil elementos de a uno
- * cuesta mil avisos: para eso estan {@link #addAll}, que avisa una sola vez.
+ * <p>Every method that touches the content fires the notice that applies. It is what makes the
+ * list on the screen update itself, and it is also why adding a thousand elements one at a time
+ * costs a thousand notices: that is what {@link #addAll} is for, which gives notice only once.
  *
- * @param <E> el tipo de los elementos.
+ * @param <E> the elements' type.
  */
 public class DefaultListModel<E> extends AbstractListModel<E> {
 
     private Vector<E> delegate = new Vector<E>();
 
-    /** Un modelo vacio. */
+    /** An empty model. */
     public DefaultListModel() {
     }
 
@@ -54,10 +54,10 @@ public class DefaultListModel<E> extends AbstractListModel<E> {
     }
 
     /**
-     * Cambia la cantidad de elementos.
+     * It changes the number of elements.
      *
-     * <p>Achicar saca los del final; agrandar rellena con nulos. Avisa de lo que agrego o saco,
-     * no de todo.
+     * <p>Shrinking removes those at the end; growing fills with nulls. It gives notice of what it
+     * added or removed, not of everything.
      */
     public void setSize(int newSize) {
         int oldSize = delegate.size();
@@ -138,7 +138,7 @@ public class DefaultListModel<E> extends AbstractListModel<E> {
         fireIntervalAdded(this, index, index);
     }
 
-    /** Saca la primera aparicion; devuelve si estaba. */
+    /** It removes the first appearance; it returns whether it was there. */
     public boolean removeElement(Object obj) {
         int index = indexOf(obj);
         boolean rv = delegate.removeElement(obj);
@@ -148,7 +148,7 @@ public class DefaultListModel<E> extends AbstractListModel<E> {
         return rv;
     }
 
-    /** Vacia el modelo con un solo aviso. */
+    /** It empties the model with a single notice. */
     public void removeAllElements() {
         int index1 = delegate.size() - 1;
         delegate.removeAllElements();
@@ -171,7 +171,7 @@ public class DefaultListModel<E> extends AbstractListModel<E> {
         return delegate.elementAt(index);
     }
 
-    /** Reemplaza y devuelve lo que estaba; ver la nota de la clase. */
+    /** It replaces and returns what was there; see the class note. */
     public E set(int index, E element) {
         E rv = delegate.elementAt(index);
         delegate.setElementAt(element, index);
@@ -200,9 +200,9 @@ public class DefaultListModel<E> extends AbstractListModel<E> {
     }
 
     /**
-     * Saca los elementos entre esos dos indices, inclusive.
+     * It removes the elements between those two indices, inclusive.
      *
-     * @throws ArrayIndexOutOfBoundsException si el primero es mayor que el segundo.
+     * @throws ArrayIndexOutOfBoundsException if the first is greater than the second.
      */
     public void removeRange(int fromIndex, int toIndex) {
         if (fromIndex > toIndex) {
@@ -214,7 +214,7 @@ public class DefaultListModel<E> extends AbstractListModel<E> {
         fireIntervalRemoved(this, fromIndex, toIndex);
     }
 
-    /** Agrega todos al final, con un solo aviso. */
+    /** It adds them all at the end, with a single notice. */
     public void addAll(Collection<? extends E> c) {
         if (c.isEmpty()) {
             return;
@@ -224,7 +224,7 @@ public class DefaultListModel<E> extends AbstractListModel<E> {
         fireIntervalAdded(this, startIndex, getSize() - 1);
     }
 
-    /** Los inserta a partir de ese indice, con un solo aviso. */
+    /** It inserts them from that index on, with a single notice. */
     public void addAll(int index, Collection<? extends E> c) {
         if (index < 0 || index > getSize()) {
             throw new ArrayIndexOutOfBoundsException("index out of range: " + index);

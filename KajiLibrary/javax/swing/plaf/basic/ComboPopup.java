@@ -7,50 +7,53 @@ import java.awt.event.MouseMotionListener;
 import javax.swing.JList;
 
 /**
- * Lo que {@link BasicComboBoxUI} le pide a la lista que se despliega.
+ * What {@link BasicComboBoxUI} asks of the list that drops down.
  *
- * <h2>Por que es una interfaz y no una clase</h2>
+ * <h2>Why it is an interface and not a class</h2>
  *
- * <p>La lista desplegable de un combo es la parte que mas cambia de un aspecto a otro: puede ser una
- * ventana flotante, un panel dentro de la misma ventana, o algo que ni siquiera sea una lista. Pero
- * lo que el UI del combo necesita de ella es siempre lo mismo -- mostrala, escondela, decime si esta
- * visible, y prestame tus escuchas para reenviarles los eventos --, y eso es lo que dice esta
- * interfaz.
+ * <p>A combo box's drop-down list is the part that changes most from one look and feel to
+ * another: it may be a floating window, a panel inside the same window, or something that is not
+ * even a list. But what the combo box's look and feel needs of it is always the same -- show it,
+ * hide it, tell me whether it is visible, and lend me your listeners so as to forward the events
+ * to them --, and that is what this interface says.
  *
- * <h2>Los tres escuchas prestados</h2>
+ * <h2>The three borrowed listeners</h2>
  *
- * <p>{@link #getMouseListener}, {@link #getMouseMotionListener} y {@link #getKeyListener} no son
- * para que el combo los agregue a la lista: son para que el combo los agregue <em>a si mismo</em>.
- * Apretar el boton del combo, arrastrar hacia abajo y soltar sobre un item es un solo gesto que
- * empieza en el combo y termina en la lista, y esa es la unica manera de que los dos vean el mismo
- * arrastre.
+ * <p>{@link #getMouseListener}, {@link #getMouseMotionListener} and {@link #getKeyListener} are
+ * not for the combo box to add them to the list: they are for the combo box to add them
+ * <em>to itself</em>. Pressing the combo box's button, dragging downwards and releasing over an
+ * item is a single gesture that starts in the combo box and ends in the list, and that is the
+ * only way for the two to see the same drag.
  *
  * <h2>{@link #uninstallingUI}</h2>
  *
- * <p>El aviso de que el combo se esta quedando sin aspecto. Es donde la ventana desplegable suelta
- * lo que engancho en el modelo del combo; sin ese aviso, cambiar de aspecto dejaria la lista vieja
- * escuchando para siempre.
+ * <p>The notice that the combo box is being left without a look and feel. It is where the
+ * drop-down window lets go of what it hooked into the combo box's model; without that notice,
+ * changing the look and feel would leave the old list listening for ever.
  */
 public interface ComboPopup {
 
-    /** Muestra la lista. */
+    /** It shows the list. */
     void show();
 
-    /** La esconde. */
+    /** It hides it. */
     void hide();
 
     boolean isVisible();
 
-    /** La lista que se ve; el UI la necesita para saber que item quedo debajo del mouse. */
+    /**
+     * The list that is seen; the look and feel needs it in order to know which item ended up under
+     * the mouse.
+     */
     JList<Object> getList();
 
-    /** Ver la nota de la interfaz: van en el combo, no en la lista. */
+    /** See the interface note: they go on the combo box, not on the list. */
     MouseListener getMouseListener();
 
     MouseMotionListener getMouseMotionListener();
 
     KeyListener getKeyListener();
 
-    /** Ver la nota de la interfaz. */
+    /** See the interface note. */
     void uninstallingUI();
 }

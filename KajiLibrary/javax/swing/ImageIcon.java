@@ -13,106 +13,107 @@ import javax.accessibility.Accessible;
 import javax.accessibility.AccessibleContext;
 
 /**
- * Un icono hecho de una imagen.
+ * An icon made of an image.
  *
- * <h2>Carga antes de devolver, y por eso mide</h2>
+ * <h2>It loads before returning, and that is why it measures</h2>
  *
- * <p>Una {@link Image} de AWT se carga <em>de a poco</em>: al crearla no se sabe cuanto mide, y las
- * medidas van llegando mientras se lee el archivo. Un icono no puede darse ese lujo -- lo primero
- * que le preguntan es {@link #getIconWidth} -- asi que esta clase espera a que la imagen termine de
- * cargar antes de contestar.
+ * <p>An AWT {@link Image} loads <em>bit by bit</em>: on creating it one does not know how much
+ * it measures, and the measurements arrive while the file is read. An icon cannot afford that
+ * -- the first thing it is asked is {@link #getIconWidth} -- so this class waits for the image
+ * to finish loading before answering.
  *
- * <p>Quien espera es un {@link MediaTracker}, y hay <strong>uno solo para toda la aplicacion</strong>
- * ({@link #tracker}): cada icono se anota con un identificador propio, espera lo suyo y se
- * desanota. Compartirlo es lo que evita crear un rastreador por icono en una pantalla con cien.
+ * <p>Who waits is a {@link MediaTracker}, and there is <strong>a single one for the whole
+ * application</strong> ({@link #tracker}): each icon signs up with an identifier of its own,
+ * waits for its part and signs off. Sharing it is what avoids creating one tracker per icon on
+ * a screen with a hundred.
  *
- * <h2>La descripcion no se dibuja</h2>
+ * <h2>The description is not drawn</h2>
  *
- * <p>{@link #setDescription} es texto para quien no ve la imagen -- un lector de pantalla --. No
- * aparece en ningun lado; su unico uso es la accesibilidad.
+ * <p>{@link #setDescription} is text for whoever does not see the image -- a screen reader --.
+ * It appears nowhere; its only use is accessibility.
  *
- * <h2>Sin pantalla</h2>
+ * <h2>With no screen</h2>
  *
- * <p>Cargar una imagen no necesita pantalla: se lee, se decodifica y se sabe cuanto mide. Lo que
- * necesita pantalla es dibujarla, y {@link #paintIcon} recibe el {@link Graphics} de quien sea --
- * una imagen en memoria sirve.
+ * <p>Loading an image does not need a screen: it is read, decoded and how much it measures is
+ * known. What needs a screen is drawing it, and {@link #paintIcon} receives whoever's
+ * {@link Graphics} -- an image in memory serves.
  */
 public class ImageIcon implements Icon, Serializable, Accessible {
 
-    /** La imagen. */
+    /** The image. */
     transient Image image;
 
-    /** Como quedo la carga; ver {@link MediaTracker}. */
+    /** How the loading came out; see {@link MediaTracker}. */
     transient int loadStatus = 0;
 
     ImageObserver imageObserver;
 
     String description = null;
 
-    /** El componente al que se le cuelga el rastreador; no se dibuja nunca. */
-    protected static final Component component = new ComponenteDeCarga();
+    /** The component the tracker is hung from; it is never drawn. */
+    protected static final Component component = new LoadComponent();
 
-    /** El rastreador compartido; ver la nota de la clase. */
+    /** The shared tracker; see the class note. */
     protected static final MediaTracker tracker = new MediaTracker(component);
 
     int width = -1;
     int height = -1;
 
-    private static int siguienteId = 0;
+    private static int nextId = 0;
 
-    /** Un componente que existe solo para colgarle el rastreador. */
-    private static class ComponenteDeCarga extends Component {
+    /** A component that exists only in order to hang the tracker from it. */
+    private static class LoadComponent extends Component {
     }
 
-    /** Desde un archivo, con descripcion. */
+    /** From a file, with a description. */
     public ImageIcon(String filename, String description) {
         image = Toolkit.getDefaultToolkit().getImage(filename);
         this.description = description;
         if (image == null) {
-            // Sin decodificador el toolkit devuelve nulo donde el JDK devuelve una imagen que
-            // despues falla al cargar. El resultado que se ve es el mismo, y se anota igual:
-            // medidas en -1 y la carga en ERRORED. Ver la nota de la clase.
+            // With no decoder the toolkit returns null where the JDK returns an image that fails to
+                        // load afterwards. The result that is seen is the same, and it is noted the
+                        // same: measurements at -1 and the loading at ERRORED. See the class note.
             loadStatus = MediaTracker.ERRORED;
             return;
         }
         loadImage(image);
     }
 
-    /** Desde un archivo; la descripcion es el nombre del archivo. */
+    /** From a file; the description is the file's name. */
     public ImageIcon(String filename) {
         this(filename, filename);
     }
 
-    /** Desde una direccion, con descripcion. */
+    /** From an address, with a description. */
     public ImageIcon(URL location, String description) {
         image = Toolkit.getDefaultToolkit().getImage(location);
         this.description = description;
         if (image == null) {
-            // Sin decodificador el toolkit devuelve nulo donde el JDK devuelve una imagen que
-            // despues falla al cargar. El resultado que se ve es el mismo, y se anota igual:
-            // medidas en -1 y la carga en ERRORED. Ver la nota de la clase.
+            // With no decoder the toolkit returns null where the JDK returns an image that fails to
+                        // load afterwards. The result that is seen is the same, and it is noted the
+                        // same: measurements at -1 and the loading at ERRORED. See the class note.
             loadStatus = MediaTracker.ERRORED;
             return;
         }
         loadImage(image);
     }
 
-    /** Desde una direccion; la descripcion es la direccion. */
+    /** From an address; the description is the address. */
     public ImageIcon(URL location) {
         this(location, location.toExternalForm());
     }
 
-    /** De una imagen ya hecha, con descripcion. */
+    /** From an image already made, with a description. */
     public ImageIcon(Image image, String description) {
         this(image);
         this.description = description;
     }
 
     /**
-     * De una imagen ya hecha.
+     * From an image already made.
      *
-     * <p>Si la imagen trae una descripcion adentro -- se la puede poner con
-     * {@code setProperty("comment", ...)} -- se la usa.
+     * <p>If the image brings a description inside -- it can be set with
+     * {@code setProperty("comment", ...)} -- it is used.
      */
     public ImageIcon(Image image) {
         this.image = image;
@@ -123,7 +124,7 @@ public class ImageIcon implements Icon, Serializable, Accessible {
         loadImage(image);
     }
 
-    /** De los bytes de un archivo de imagen, con descripcion. */
+    /** From the bytes of an image file, with a description. */
     public ImageIcon(byte[] imageData, String description) {
         this.image = Toolkit.getDefaultToolkit().createImage(imageData);
         if (image == null) {
@@ -133,7 +134,7 @@ public class ImageIcon implements Icon, Serializable, Accessible {
         loadImage(image);
     }
 
-    /** De los bytes; la descripcion sale de la imagen si la trae. */
+    /** From the bytes; the description comes from the image if it brings one. */
     public ImageIcon(byte[] imageData) {
         this.image = Toolkit.getDefaultToolkit().createImage(imageData);
         if (image == null) {
@@ -146,19 +147,19 @@ public class ImageIcon implements Icon, Serializable, Accessible {
         loadImage(image);
     }
 
-    /** Un icono vacio, para llenarlo despues con {@link #setImage}. */
+    /** An empty icon, to be filled in afterwards with {@link #setImage}. */
     public ImageIcon() {
     }
 
     /**
-     * Espera a que la imagen termine de cargar y anota cuanto mide.
+     * It waits for the image to finish loading and notes how much it measures.
      *
-     * <p>El identificador tiene que ser distinto por icono: el rastreador es uno solo y dos iconos
-     * con el mismo numero se esperarian entre si. Ver la nota de la clase.
+     * <p>The identifier has to be different per icon: the tracker is a single one and two icons
+     * with the same number would wait for each other. See the class note.
      */
     protected void loadImage(Image image) {
         MediaTracker mTracker = tracker;
-        int id = proximoId();
+        int id = nextId();
         synchronized (mTracker) {
             mTracker.addImage(image, id);
             try {
@@ -175,12 +176,12 @@ public class ImageIcon implements Icon, Serializable, Accessible {
         height = image.getHeight(imageObserver);
     }
 
-    private static synchronized int proximoId() {
-        siguienteId = siguienteId + 1;
-        return siguienteId;
+    private static synchronized int nextId() {
+        nextId = nextId + 1;
+        return nextId;
     }
 
-    /** Como quedo la carga; las constantes son las de {@link MediaTracker}. */
+    /** How the loading came out; the constants are {@link MediaTracker}'s. */
     public int getImageLoadStatus() {
         return loadStatus;
     }
@@ -189,13 +190,13 @@ public class ImageIcon implements Icon, Serializable, Accessible {
         return image;
     }
 
-    /** Cambia la imagen; vuelve a esperar y a medir. */
+    /** It changes the image; it waits and measures again. */
     public void setImage(Image image) {
         this.image = image;
         loadImage(image);
     }
 
-    /** El texto para quien no ve la imagen; ver la nota de la clase. */
+    /** The text for whoever does not see the image; see the class note. */
     public String getDescription() {
         return description;
     }
@@ -204,7 +205,7 @@ public class ImageIcon implements Icon, Serializable, Accessible {
         this.description = description;
     }
 
-    /** Dibuja la imagen en esa posicion. */
+    /** It draws the image at that position. */
     public synchronized void paintIcon(Component c, Graphics g, int x, int y) {
         if (imageObserver == null) {
             g.drawImage(image, x, y, c);
@@ -213,21 +214,21 @@ public class ImageIcon implements Icon, Serializable, Accessible {
         }
     }
 
-    /** El ancho, o -1 si la imagen no se pudo cargar. */
+    /** The width, or -1 if the image could not be loaded. */
     public int getIconWidth() {
         return width;
     }
 
-    /** El alto, o -1 si la imagen no se pudo cargar. */
+    /** The height, or -1 if the image could not be loaded. */
     public int getIconHeight() {
         return height;
     }
 
     /**
-     * Quien se entera de que la imagen avanzo.
+     * Who learns that the image advanced.
      *
-     * <p>Hace falta para las imagenes que siguen cambiando despues de cargadas -- un GIF animado --:
-     * sin observador se dibuja el primer cuadro y ahi queda.
+     * <p>It is needed for the images that go on changing after being loaded -- an animated GIF --:
+     * with no observer the first frame is drawn and there it stays.
      */
     public void setImageObserver(ImageObserver observer) {
         imageObserver = observer;

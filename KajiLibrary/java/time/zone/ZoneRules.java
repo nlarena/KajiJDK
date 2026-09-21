@@ -24,42 +24,42 @@ public final class ZoneRules {
     private final int zone;
     private final int fixedOffset;
 
-    // ---- la tercera forma: las listas que el llamador dio ------------------------------------------
+    // ---- the third form: the lists the caller gave -------------------------------------------------
     //
-    // `of(ZoneOffset, ZoneOffset, List, List, List)` construye reglas que **no** salen de la tabla:
-    // las transiciones y las reglas recurrentes vienen de afuera. Se guardan aca y se leen por los
-    // mismos accesores privados que leen la tabla, asi que los diecisiete metodos publicos no
-    // distinguen una forma de la otra. Ramificarlos uno por uno habria sido la otra manera, y la
-    // manera de que dos de ellos se desincronicen.
+    // `of(ZoneOffset, ZoneOffset, List, List, List)` builds rules that do **not** come from the
+    // table: the transitions and the recurring rules come from outside. They are kept here and read
+    // through the same private accessors that read the table, so the seventeen public methods tell no
+    // form from the other. Branching them one by one would have been the other way, and the way for
+    // two of them to drift apart.
     //
-    // `null` = esta no es esa forma.
-    private final ZoneOffsetTransition[] transiciones;
-    private final ZoneOffsetTransitionRule[] reglas;
-    // Las transiciones del desplazamiento **estandar**: cuando la zona cambio su hora base, no su
-    // horario de verano. Casi siempre vacia, y por eso se guarda aparte de las otras.
-    private final ZoneOffsetTransition[] transicionesEstandar;
-    private final int estandarBase;
+    // `null` = this is not that form.
+    private final ZoneOffsetTransition[] transitions;
+    private final ZoneOffsetTransitionRule[] rules;
+    // The **standard** offset's transitions: when the zone changed its base time, not its daylight
+    // saving. Almost always empty, which is why it is kept apart from the others.
+    private final ZoneOffsetTransition[] standardTransitions;
+    private final int baseStandard;
 
     private ZoneRules(int zone, int fixedOffset) {
         this.zone = zone;
         this.fixedOffset = fixedOffset;
-        this.transiciones = null;
-        this.reglas = null;
-        this.transicionesEstandar = null;
-        this.estandarBase = fixedOffset;
+        this.transitions = null;
+        this.rules = null;
+        this.standardTransitions = null;
+        this.baseStandard = fixedOffset;
     }
 
-    private ZoneRules(int estandarBase, int muroBase, ZoneOffsetTransition[] transicionesEstandar,
-            ZoneOffsetTransition[] transiciones, ZoneOffsetTransitionRule[] reglas) {
-        // -2 y no -1: `-1` ya significa "desplazamiento fijo", y `isFixedOffset` lo usa. Un juego de
-        // reglas dado por listas **no** es fijo aunque las listas vengan vacias... salvo que lo sea, y
-        // eso lo decide `isFixedOffset` mirando las listas, no el marcador.
+    private ZoneRules(int baseStandard, int baseWall, ZoneOffsetTransition[] standardTransitions,
+            ZoneOffsetTransition[] transitions, ZoneOffsetTransitionRule[] rules) {
+        // -2 and not -1: `-1` already means "fixed offset", and `isFixedOffset` uses it. A rule set
+        // given by lists is **not** fixed even if the lists come in empty... unless it is, and that is
+        // decided by `isFixedOffset` looking at the lists, not at the marker.
         this.zone = -2;
-        this.fixedOffset = muroBase;
-        this.estandarBase = estandarBase;
-        this.transicionesEstandar = transicionesEstandar;
-        this.transiciones = transiciones;
-        this.reglas = reglas;
+        this.fixedOffset = baseWall;
+        this.baseStandard = baseStandard;
+        this.standardTransitions = standardTransitions;
+        this.transitions = transitions;
+        this.rules = rules;
     }
 
     public static ZoneRules of(ZoneOffset offset) {
@@ -67,25 +67,26 @@ public final class ZoneRules {
     }
 
     /**
-     * Un juego de reglas armado con **listas explicitas** en vez de con la tabla embebida.
+     * A rule set built with **explicit lists** instead of with the embedded table.
      *
-     * <p>Es la fabrica que usa quien tiene sus propios datos de zona: un lector de tzdb, una prueba
-     * que quiere una zona controlada, o un `ZoneRulesProvider` propio. Las tres listas dicen cosas
-     * distintas y conviene no confundirlas:
+     * <p>It is the factory used by whoever has zone data of their own: a tzdb reader, a test that
+     * wants a controlled zone, or a `ZoneRulesProvider` of their own. The three lists say different
+     * things and are worth not confusing:
      *
      * <ul>
-     *   <li>`standardOffsetTransitionList` -- cuando la zona cambio su hora **base**. Es rarisimo
-     *       (un pais que se cambia de huso) y por eso casi siempre va vacia.
-     *   <li>`transitionList` -- los cambios **historicos** ya ocurridos, con fecha exacta.
-     *   <li>`lastRules` -- las reglas **recurrentes** que rigen de ahi en adelante, sin fecha de fin.
-     *       Son las que hacen que la zona siga teniendo respuesta para un ano que todavia no paso.
+     *   <li>`standardOffsetTransitionList` -- when the zone changed its **base** time. It is very
+     *       rare (a country moving between offsets) and that is why it almost always comes empty.
+     *   <li>`transitionList` -- the **historical** changes that have already happened, with an exact
+     *       date.
+     *   <li>`lastRules` -- the **recurring** rules that hold from there on, with no end date. They
+     *       are what keeps the zone having an answer for a year that has not happened yet.
      * </ul>
      *
-     * <p>Las listas se **copian**: quien las pasa puede seguir usando las suyas sin que estas reglas
-     * cambien debajo. Un juego de reglas que mutara no serviria para nada -- `ZoneRules` se comparte
-     * entre todos los `ZonedDateTime` de esa zona.
+     * <p>The lists are **copied**: whoever passes them can go on using their own without these rules
+     * changing underneath. A rule set that mutated would be no use at all -- `ZoneRules` is shared
+     * among every `ZonedDateTime` of that zone.
      *
-     * @throws NullPointerException si algun argumento es `null`
+     * @throws NullPointerException if any argument is `null`
      */
     public static ZoneRules of(ZoneOffset baseStandardOffset, ZoneOffset baseWallOffset,
             List<ZoneOffsetTransition> standardOffsetTransitionList,
@@ -98,12 +99,12 @@ public final class ZoneRules {
         }
         return new ZoneRules(baseStandardOffset.getTotalSeconds(),
                 baseWallOffset.getTotalSeconds(),
-                copiarTransiciones(standardOffsetTransitionList),
-                copiarTransiciones(transitionList),
-                copiarReglas(lastRules));
+                copyTransitions(standardOffsetTransitionList),
+                copyTransitions(transitionList),
+                copyRules(lastRules));
     }
 
-    private static ZoneOffsetTransition[] copiarTransiciones(List<ZoneOffsetTransition> xs) {
+    private static ZoneOffsetTransition[] copyTransitions(List<ZoneOffsetTransition> xs) {
         ZoneOffsetTransition[] out = new ZoneOffsetTransition[xs.size()];
         int i = 0;
         while (i < out.length) {
@@ -113,7 +114,7 @@ public final class ZoneRules {
         return out;
     }
 
-    private static ZoneOffsetTransitionRule[] copiarReglas(List<ZoneOffsetTransitionRule> xs) {
+    private static ZoneOffsetTransitionRule[] copyRules(List<ZoneOffsetTransitionRule> xs) {
         ZoneOffsetTransitionRule[] out = new ZoneOffsetTransitionRule[xs.size()];
         int i = 0;
         while (i < out.length) {
@@ -123,41 +124,42 @@ public final class ZoneRules {
         return out;
     }
 
-    // ---- la capa de datos, comun a las tres formas --------------------------------------------------
+    // ---- the data layer, common to the three forms --------------------------------------------------
     //
-    // Aca es donde se decide de donde salen los numeros. Todo lo de arriba pregunta por estos cinco.
+    // This is where it is decided where the numbers come from. Everything above asks through these
+    // five.
 
-    private int cantTransiciones() {
-        if (this.transiciones != null) {
-            return this.transiciones.length;
+    private int transitionCount() {
+        if (this.transitions != null) {
+            return this.transitions.length;
         }
         return this.zone >= 0 ? TzData.transitionCount(this.zone) : 0;
     }
 
-    private int cantReglas() {
-        if (this.reglas != null) {
-            return this.reglas.length;
+    private int ruleCountOf() {
+        if (this.rules != null) {
+            return this.rules.length;
         }
         return this.zone >= 0 ? TzData.ruleCount(this.zone) : 0;
     }
 
-    private long epocaDe(int i) {
-        if (this.transiciones != null) {
-            return this.transiciones[i].toEpochSecond();
+    private long epochOf(int i) {
+        if (this.transitions != null) {
+            return this.transitions[i].toEpochSecond();
         }
         return TzData.transitionEpoch(this.zone, i);
     }
 
-    private int antesDe(int i) {
-        if (this.transiciones != null) {
-            return this.transiciones[i].getOffsetBefore().getTotalSeconds();
+    private int before(int i) {
+        if (this.transitions != null) {
+            return this.transitions[i].getOffsetBefore().getTotalSeconds();
         }
         return TzData.transitionBefore(this.zone, i);
     }
 
-    private int despuesDe(int i) {
-        if (this.transiciones != null) {
-            return this.transiciones[i].getOffsetAfter().getTotalSeconds();
+    private int after(int i) {
+        if (this.transitions != null) {
+            return this.transitions[i].getOffsetAfter().getTotalSeconds();
         }
         return TzData.transitionAfter(this.zone, i);
     }
@@ -168,27 +170,27 @@ public final class ZoneRules {
     }
 
     public boolean isFixedOffset() {
-        // La forma por listas es fija si no tiene ni transiciones ni reglas -- que es exactamente la
-        // misma prueba que se le hace a una zona tabulada. Por eso la pregunta se hace sobre los
-        // contadores y no sobre el marcador: `-2` no dice nada de si la zona cambia o no.
+        // The list form is fixed if it has neither transitions nor rules -- which is exactly the same
+        // test a tabulated zone gets. That is why the question is asked of the counters and not of the
+        // marker: `-2` says nothing about whether the zone changes.
         if (this.zone == -1) {
             return true;
         }
-        return this.cantTransiciones() == 0 && this.cantReglas() == 0;
+        return this.transitionCount() == 0 && this.ruleCountOf() == 0;
     }
 
     /**
-     * El desplazamiento vigente para esa fecha y hora **locales**.
+     * The offset in force for that **local** date and time.
      *
-     * <p>La diferencia con la version de `Instant` es toda la dificultad de las zonas horarias: un
-     * instante tiene **siempre exactamente una** respuesta, y una hora local puede tener dos --la
-     * hora que se repite cuando el reloj se atrasa-- o ninguna --la que se saltea cuando se
-     * adelanta--.
+     * <p>The difference from the `Instant` version is the whole difficulty of time zones: an instant
+     * has **always exactly one** answer, and a local time can have two --the hour that repeats when
+     * the clock goes back-- or none --the one skipped when it goes forward--.
      *
-     * <p>Este metodo devuelve **una sola**, y el contrato dice cual: en un solapamiento, la de
-     * **antes** del cambio; en un hueco, la de **antes** tambien. Es una simplificacion deliberada
-     * del JDK, y por eso existe `getValidOffsets`, que devuelve la lista entera. Quien necesite
-     * distinguir los tres casos tiene que mirar `isGap`/`isOverlap` de la transicion.
+     * <p>This method returns **one only**, and the contract says which: in an overlap, the one from
+     * **before** the change; in a gap, the one from **before** as well. It is a deliberate
+     * simplification of the JDK's, and that is why `getValidOffsets` exists, returning the whole
+     * list. Whoever needs to tell the three cases apart has to look at the transition's
+     * `isGap`/`isOverlap`.
      */
     public ZoneOffset getOffset(LocalDateTime localDateTime) {
         if (localDateTime == null) {
@@ -197,28 +199,28 @@ public final class ZoneRules {
         if (this.zone == -1) {
             return ZoneOffset.ofTotalSeconds(this.fixedOffset);
         }
-        // Se prueba con el desplazamiento de antes de la primera transicion y se avanza mientras la
-        // hora local caiga despues del cambio. Comparar en local y no en instante es justamente lo
-        // que hace que un hueco y un solapamiento den la respuesta de "antes".
-        int count = this.cantTransiciones();
+        // It starts from the offset in force before the first transition and advances while the local
+        // time falls after the change. Comparing in local terms and not in instants is exactly what
+        // makes a gap and an overlap give the "before" answer.
+        int count = this.transitionCount();
         if (count == 0) {
             return this.getOffset(java.time.Instant.ofEpochSecond(0L));
         }
-        int resultado = this.antesDe(0);
+        int result = this.before(0);
         int i = 0;
         while (i < count) {
-            int antes = this.antesDe(i);
-            long epochCambio = this.epocaDe(i);
-            // El instante del cambio, leido en el reloj de pared de **antes**.
-            long localDelCambio = epochCambio + (long) antes;
-            long localPedido = ZoneMath.toEpochSecond(localDateTime, 0);
-            if (localPedido < localDelCambio) {
-                return ZoneOffset.ofTotalSeconds(antes);
+            int before = this.before(i);
+            long changeEpoch = this.epochOf(i);
+            // The instant of the change, read on the wall clock of **before**.
+            long changeLocal = changeEpoch + (long) before;
+            long requestedLocal = ZoneMath.toEpochSecond(localDateTime, 0);
+            if (requestedLocal < changeLocal) {
+                return ZoneOffset.ofTotalSeconds(before);
             }
-            resultado = this.despuesDe(i);
+            result = this.after(i);
             i = i + 1;
         }
-        return ZoneOffset.ofTotalSeconds(resultado);
+        return ZoneOffset.ofTotalSeconds(result);
     }
 
     // The offset in force at an instant. Exactly one answer, always.
@@ -229,16 +231,16 @@ public final class ZoneRules {
     private int offsetSecondsAt(long epochSecond) {
         int result = this.fixedOffset;
         if (this.zone != -1) {
-            int count = this.cantTransiciones();
+            int count = this.transitionCount();
             if (count == 0) {
-                // Sin transiciones: la tabulada no sabe nada y da cero; la de listas tiene su
-                // desplazamiento de muro base, que es justamente lo que el llamador dijo.
-                result = this.transiciones != null ? this.fixedOffset : 0;
-                if (this.cantReglas() > 0) {
+                // With no transitions: the tabulated one knows nothing and gives zero; the list one
+                // has its base wall offset, which is exactly what the caller said.
+                result = this.transitions != null ? this.fixedOffset : 0;
+                if (this.ruleCountOf() > 0) {
                     result = this.offsetFromRules(epochSecond, result);
                 }
-            } else if (epochSecond < this.epocaDe(0)) {
-                result = this.antesDe(0);
+            } else if (epochSecond < this.epochOf(0)) {
+                result = this.before(0);
             } else {
                 // Last transition at or before the instant.
                 int lo = 0;
@@ -246,16 +248,16 @@ public final class ZoneRules {
                 int found = 0;
                 while (lo <= hi) {
                     int mid = (lo + hi) / 2;
-                    if (this.epocaDe(mid) <= epochSecond) {
+                    if (this.epochOf(mid) <= epochSecond) {
                         found = mid;
                         lo = mid + 1;
                     } else {
                         hi = mid - 1;
                     }
                 }
-                result = this.despuesDe(found);
+                result = this.after(found);
                 // Past the tabulated data the recurring rules take over.
-                if (found == count - 1 && this.cantReglas() > 0) {
+                if (found == count - 1 && this.ruleCountOf() > 0) {
                     result = this.offsetFromRules(epochSecond, result);
                 }
             }
@@ -273,7 +275,7 @@ public final class ZoneRules {
         int y = year - 1;
         while (y <= year + 1) {
             int i = 0;
-            while (i < this.cantReglas()) {
+            while (i < this.ruleCountOf()) {
                 ZoneOffsetTransition t = this.rule(i).createTransition(y);
                 long at = t.toEpochSecond();
                 if (at <= epochSecond && at > best) {
@@ -288,8 +290,8 @@ public final class ZoneRules {
     }
 
     private ZoneOffsetTransitionRule rule(int i) {
-        if (this.reglas != null) {
-            return this.reglas[i];
+        if (this.rules != null) {
+            return this.rules[i];
         }
         return new ZoneOffsetTransitionRule(
                 TzData.ruleField(this.zone, i, 0),
@@ -320,7 +322,7 @@ public final class ZoneRules {
     public ZoneOffsetTransition getTransition(LocalDateTime localDateTime) {
         ZoneOffsetTransition found = null;
         if (this.zone != -1) {
-            int count = this.cantTransiciones();
+            int count = this.transitionCount();
             int i = 0;
             while (i < count) {
                 ZoneOffsetTransition t = this.transition(i);
@@ -367,18 +369,18 @@ public final class ZoneRules {
 
     // The offset ignoring daylight saving — what the zone would use all year.
     public ZoneOffset getStandardOffset(Instant instant) {
-        // La forma por listas lo sabe de verdad: arranca en el estandar base y lo corre en cada
-        // transicion **de estandar** que ya haya pasado. Es la unica de las tres que puede contestar
-        // esto sin adivinar.
-        if (this.transicionesEstandar != null) {
-            int result = this.estandarBase;
+        // The list form genuinely knows: it starts at the base standard offset and shifts it at every
+        // **standard** transition that has already happened. It is the only one of the three that can
+        // answer this without guessing.
+        if (this.standardTransitions != null) {
+            int result = this.baseStandard;
             long epoch = instant.getEpochSecond();
             int i = 0;
-            while (i < this.transicionesEstandar.length) {
-                if (this.transicionesEstandar[i].toEpochSecond() > epoch) {
+            while (i < this.standardTransitions.length) {
+                if (this.standardTransitions[i].toEpochSecond() > epoch) {
                     break;
                 }
-                result = this.transicionesEstandar[i].getOffsetAfter().getTotalSeconds();
+                result = this.standardTransitions[i].getOffsetAfter().getTotalSeconds();
                 i = i + 1;
             }
             return ZoneOffset.ofTotalSeconds(result);
@@ -396,25 +398,25 @@ public final class ZoneRules {
     }
 
     public Duration getDaylightSavings(Instant instant) {
-        int actual = this.offsetSecondsAt(instant.getEpochSecond());
+        int current = this.offsetSecondsAt(instant.getEpochSecond());
         int standard = this.getStandardOffset(instant).getTotalSeconds();
-        return Duration.ofSeconds((long) (actual - standard));
+        return Duration.ofSeconds((long) (current - standard));
     }
 
     public boolean isDaylightSavings(Instant instant) {
-        int actual = this.offsetSecondsAt(instant.getEpochSecond());
+        int current = this.offsetSecondsAt(instant.getEpochSecond());
         int standard = this.getStandardOffset(instant).getTotalSeconds();
-        return actual != standard;
+        return current != standard;
     }
 
     public ZoneOffsetTransition nextTransition(Instant instant) {
         ZoneOffsetTransition found = null;
         if (this.zone != -1) {
             long epoch = instant.getEpochSecond();
-            int count = this.cantTransiciones();
+            int count = this.transitionCount();
             int i = 0;
             while (i < count) {
-                if (this.epocaDe(i) > epoch) {
+                if (this.epochOf(i) > epoch) {
                     found = this.transition(i);
                     i = count;
                 } else {
@@ -429,9 +431,9 @@ public final class ZoneRules {
         ZoneOffsetTransition found = null;
         if (this.zone != -1) {
             long epoch = instant.getEpochSecond();
-            int i = this.cantTransiciones() - 1;
+            int i = this.transitionCount() - 1;
             while (i >= 0) {
-                if (this.epocaDe(i) < epoch) {
+                if (this.epochOf(i) < epoch) {
                     found = this.transition(i);
                     i = -1;
                 } else {
@@ -443,8 +445,8 @@ public final class ZoneRules {
     }
 
     private ZoneOffsetTransition transition(int i) {
-        if (this.transiciones != null) {
-            return this.transiciones[i];
+        if (this.transitions != null) {
+            return this.transitions[i];
         }
         return ZoneOffsetTransition.ofRaw(TzData.transitionEpoch(this.zone, i),
                 TzData.transitionBefore(this.zone, i), TzData.transitionAfter(this.zone, i));
@@ -453,7 +455,7 @@ public final class ZoneRules {
     public List<ZoneOffsetTransition> getTransitions() {
         List<ZoneOffsetTransition> out = new ArrayList<ZoneOffsetTransition>();
         int i = 0;
-        while (i < this.cantTransiciones()) {
+        while (i < this.transitionCount()) {
             out.add(this.transition(i));
             i = i + 1;
         }
@@ -463,7 +465,7 @@ public final class ZoneRules {
     public List<ZoneOffsetTransitionRule> getTransitionRules() {
         List<ZoneOffsetTransitionRule> out = new ArrayList<ZoneOffsetTransitionRule>();
         int i = 0;
-        while (i < this.cantReglas()) {
+        while (i < this.ruleCountOf()) {
             out.add(this.rule(i));
             i = i + 1;
         }
@@ -479,11 +481,11 @@ public final class ZoneRules {
             if (this.zone != o.zone || this.fixedOffset != o.fixedOffset) {
                 return false;
             }
-            // Dos juegos armados por listas son iguales si sus listas lo son. Compararlos por
-            // identidad --que es lo que hacia el `zone == zone` solo-- diria que dos `of(...)` con
-            // los mismos datos son distintos, y no lo son.
+            // Two sets built from lists are equal if their lists are. Comparing them by identity
+            // --which is what the bare `zone == zone` did-- would say that two `of(...)` with the same
+            // data are different, and they are not.
             if (this.zone == -2) {
-                return this.estandarBase == o.estandarBase
+                return this.baseStandard == o.baseStandard
                         && this.getTransitions().equals(o.getTransitions())
                         && this.getTransitionRules().equals(o.getTransitionRules());
             }
@@ -495,7 +497,7 @@ public final class ZoneRules {
     public int hashCode() {
         int h = this.zone ^ this.fixedOffset;
         if (this.zone == -2) {
-            h = h ^ this.estandarBase ^ this.getTransitions().hashCode();
+            h = h ^ this.baseStandard ^ this.getTransitions().hashCode();
         }
         return h;
     }
@@ -505,8 +507,8 @@ public final class ZoneRules {
             return "ZoneRules[fixed=" + ZoneOffset.ofTotalSeconds(this.fixedOffset).toString() + "]";
         }
         if (this.zone == -2) {
-            return "ZoneRules[" + this.cantTransiciones() + " transiciones, "
-                    + this.cantReglas() + " reglas]";
+            return "ZoneRules[" + this.transitionCount() + " transitions, "
+                    + this.ruleCountOf() + " rules]";
         }
         return "ZoneRules[" + TzData.zoneIds()[this.zone] + "]";
     }

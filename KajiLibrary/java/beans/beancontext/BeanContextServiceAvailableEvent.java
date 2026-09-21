@@ -2,34 +2,34 @@ package java.beans.beancontext;
 
 import java.util.Iterator;
 
-/** Un servicio nuevo está disponible en un {@link BeanContextServices}. */
+/** A new service is available in a {@link BeanContextServices}. */
 public class BeanContextServiceAvailableEvent extends BeanContextEvent {
 
-    /** La clase del servicio que apareció. */
+    /** The class of the service that appeared. */
     protected Class serviceClass;
 
-    /** El evento del servicio de esa clase. */
+    /** The event for the service of that class. */
     public BeanContextServiceAvailableEvent(BeanContextServices bcs, Class sc) {
         super((BeanContext) bcs);
         this.serviceClass = sc;
     }
 
-    /** El contexto que lo anuncia. */
+    /** The context announcing it. */
     public BeanContextServices getSourceAsBeanContextServices() {
         return (BeanContextServices) this.getBeanContext();
     }
 
-    /** La clase del servicio. */
+    /** The service class. */
     public Class getServiceClass() {
         return this.serviceClass;
     }
 
     /**
-     * Los selectores que el servicio acepta, o `null` si no usa selectores.
+     * The selectors the service accepts, or `null` if it uses no selectors.
      *
-     * <p>Se le pregunta al contexto en el momento de la consulta y no se guarda en el evento: entre
-     * que el servicio se anunció y que alguien mira el evento, el proveedor pudo cambiar lo que
-     * acepta, y una copia vieja sería peor que ninguna.
+     * <p>The context is asked at the moment of the query and nothing is stored in the event:
+     * between the service being announced and someone looking at the event, the provider may have
+     * changed what it accepts, and a stale copy would be worse than none.
      */
     public Iterator getCurrentServiceSelectors() {
         return this.getSourceAsBeanContextServices().getCurrentServiceSelectors(this.serviceClass);

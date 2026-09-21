@@ -1,7 +1,7 @@
 package com.sun.jdi;
 
 /**
- * IntegerType de la maquina depurada.
+ * IntegerType of the debugged machine.
  *
  * @since 1.3
  */

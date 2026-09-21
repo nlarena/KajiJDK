@@ -2,10 +2,10 @@ package java.security.interfaces;
 
 import java.security.spec.ECParameterSpec;
 
-// Lo que toda clave EC tiene: sus parametros de dominio.
+// What every EC key has: its domain parameters.
 //
-// Sin ellos la clave no se interpreta —el mismo punto es valido en infinitas curvas— asi que es el
-// unico dato realmente comun entre la publica y la privada.
+// Without them the key cannot be interpreted —the same point is valid on infinitely many curves— so
+// they are the only data truly common to the public and the private key.
 public interface ECKey {
 
     ECParameterSpec getParams();

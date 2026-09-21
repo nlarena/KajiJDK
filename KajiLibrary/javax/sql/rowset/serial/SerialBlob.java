@@ -8,35 +8,35 @@ import java.sql.Blob;
 import java.sql.SQLException;
 
 /**
- * KajiLibrary's javax.sql.rowset.serial.SerialBlob -- una copia en memoria de un BLOB.
+ * KajiLibrary's javax.sql.rowset.serial.SerialBlob -- an in-memory copy of a BLOB.
  *
- * <p>Un {@link Blob} de verdad es un <b>puntero</b> a datos que viven en el servidor y solo vale
- * mientras la transaccion que lo produjo siga abierta. Esta clase copia los bytes en memoria, y con
- * eso el dato sobrevive a la conexion, se puede serializar y se puede mandar por la red.
+ * <p>A real {@link Blob} is a <b>pointer</b> to data that lives on the server and is only valid
+ * while the transaction that produced it stays open. This class copies the bytes into memory, and
+ * with that the datum survives the connection, can be serialized and can be sent over the network.
  *
- * <p>El precio es obvio y hay que decirlo: <b>todo</b> el contenido queda en memoria. Un BLOB de
- * varios gigabytes no entra, y ahi hay que quedarse con el puntero y leerlo de a partes.
+ * <p>The price is obvious and it has to be said: <b>all</b> the content stays in memory. A BLOB of
+ * several gigabytes does not fit, and there one has to keep the pointer and read it in parts.
  *
- * <h2>Las posiciones empiezan en 1</h2>
+ * <h2>Positions start at 1</h2>
  *
- * <p>Es la convencion de SQL y no la de Java, y es la fuente clasica de errores en este paquete:
- * {@code getBytes(1, 10)} devuelve los diez primeros bytes, no del segundo al onceavo. Una posicion
- * 0 o negativa es un error.
+ * <p>It is SQL's convention and not Java's, and it is the classic source of mistakes in this
+ * package: {@code getBytes(1, 10)} returns the first ten bytes, not the second to the eleventh. A
+ * position 0 or negative is an error.
  */
 public class SerialBlob implements Blob, Serializable, Cloneable {
 
     private static final long serialVersionUID = -8144641928112860441L;
 
-    /** La copia. */
+    /** The copy. */
     private byte[] buf;
 
-    /** Cuantos bytes valen; puede ser menos que {@code buf.length} tras un truncado. */
+    /** How many bytes count; it can be fewer than {@code buf.length} after a truncation. */
     private long len;
 
-    /** Null cuando ya se libero con {@link #free}. */
+    /** Null once it was freed with {@link #free}. */
     private boolean freed = false;
 
-    /** Copia esos bytes. */
+    /** Copies those bytes. */
     public SerialBlob(byte[] b) throws SerialException, SQLException {
         if (b == null) {
             throw new SQLException("Invalid Blob object. The byte array is null");
@@ -46,7 +46,7 @@ public class SerialBlob implements Blob, Serializable, Cloneable {
         this.len = b.length;
     }
 
-    /** Copia el contenido de un BLOB del servidor. */
+    /** Copies the content of a server BLOB. */
     public SerialBlob(Blob blob) throws SerialException, SQLException {
         if (blob == null) {
             throw new SQLException("Cannot instantiate a SerialBlob object with a null Blob object");
@@ -58,10 +58,10 @@ public class SerialBlob implements Blob, Serializable, Cloneable {
     }
 
     /**
-     * Una porcion.
+     * A slice.
      *
-     * @param pos la primera posicion, empezando en 1
-     * @throws SerialException si la porcion se sale del contenido
+     * @param pos the first position, starting at 1
+     * @throws SerialException if the slice goes outside the content
      */
     public byte[] getBytes(long pos, int length) throws SerialException {
         check();
@@ -78,22 +78,22 @@ public class SerialBlob implements Blob, Serializable, Cloneable {
         return out;
     }
 
-    /** Cuantos bytes tiene. */
+    /** How many bytes it has. */
     public long length() throws SerialException {
         check();
         return this.len;
     }
 
-    /** Un flujo sobre la copia. */
+    /** A stream over the copy. */
     public InputStream getBinaryStream() throws SerialException {
         check();
         return new ByteArrayInputStream(this.buf, 0, (int) this.len);
     }
 
     /**
-     * Busca ese patron a partir de esa posicion.
+     * Looks for that pattern from that position.
      *
-     * @return la posicion donde empieza, empezando en 1, o -1
+     * @return the position where it starts, starting at 1, or -1
      */
     public long position(byte[] pattern, long start) throws SerialException, SQLException {
         check();
@@ -116,7 +116,7 @@ public class SerialBlob implements Blob, Serializable, Cloneable {
         return -1;
     }
 
-    /** Idem, con el patron en otro BLOB. */
+    /** Likewise, with the pattern in another BLOB. */
     public long position(Blob pattern, long start) throws SerialException, SQLException {
         check();
         if (pattern == null) {
@@ -125,15 +125,15 @@ public class SerialBlob implements Blob, Serializable, Cloneable {
         return position(pattern.getBytes(1L, (int) pattern.length()), start);
     }
 
-    /** Escribe encima, desde esa posicion. */
+    /** Writes over it, from that position. */
     public int setBytes(long pos, byte[] bytes) throws SerialException, SQLException {
         return setBytes(pos, bytes, 0, bytes == null ? 0 : bytes.length);
     }
 
     /**
-     * Escribe encima una porcion del arreglo.
+     * Writes a slice of the array over it.
      *
-     * @throws SerialException si no entra en el contenido actual: esta copia no crece
+     * @throws SerialException if it does not fit in the current content: this copy does not grow
      */
     public int setBytes(long pos, byte[] bytes, int offset, int length)
         throws SerialException, SQLException {
@@ -155,17 +155,19 @@ public class SerialBlob implements Blob, Serializable, Cloneable {
     }
 
     /**
-     * No se puede escribir por flujo.
+     * Cannot be written through a stream.
      *
-     * @throws SerialException siempre: un flujo de salida podria crecer, y esta copia tiene un
-     *     tamano fijo desde que se construyo. Es lo que hace el JDK
+     * @throws SerialException always: an output stream could grow, and this copy has a fixed size
+     *     since it was built. The JDK throws only when it was built from a byte array; built from a
+     *     {@link Blob} it delegates to that one's {@code setBinaryStream}. This copy does not keep
+     *     the original, so it has nothing to delegate to
      */
     public OutputStream setBinaryStream(long pos) throws SerialException, SQLException {
         throw new SerialException("Unsupported operation. SerialBlob cannot return a writable "
             + "binary stream, unless instantiated with a Blob object.");
     }
 
-    /** Recorta a esa cantidad de bytes. */
+    /** Truncates to that many bytes. */
     public void truncate(long length) throws SerialException {
         check();
         if (length > this.len) {
@@ -182,7 +184,7 @@ public class SerialBlob implements Blob, Serializable, Cloneable {
         this.len = length;
     }
 
-    /** Un flujo sobre una porcion. */
+    /** A stream over a slice. */
     public InputStream getBinaryStream(long pos, long length) throws SQLException {
         check();
         if (pos < 1 || pos > this.len) {
@@ -196,11 +198,11 @@ public class SerialBlob implements Blob, Serializable, Cloneable {
     }
 
     /**
-     * Suelta la copia.
+     * Lets go of the copy.
      *
-     * <p>Despues de esto cualquier otro metodo lanza. Es lo que hace el contrato de {@link Blob} y
-     * tiene sentido aca aunque no haya recursos del servidor que soltar: libera la memoria, que en
-     * un BLOB grande es justamente el recurso.
+     * <p>After this any other method throws. It is what the {@link Blob} contract does and it makes
+     * sense here even though there are no server resources to release: it frees the memory, which
+     * in a large BLOB is precisely the resource.
      */
     public void free() throws SQLException {
         this.buf = null;
@@ -208,7 +210,7 @@ public class SerialBlob implements Blob, Serializable, Cloneable {
         this.freed = true;
     }
 
-    /** Iguales si tienen los mismos bytes. */
+    /** Equal if they have the same bytes. */
     public boolean equals(Object obj) {
         if (this == obj) {
             return true;
@@ -233,7 +235,7 @@ public class SerialBlob implements Blob, Serializable, Cloneable {
         return true;
     }
 
-    /** Coherente con {@link #equals}. */
+    /** Consistent with {@link #equals}. */
     public int hashCode() {
         int hash = 31;
         int i = 0;
@@ -244,7 +246,7 @@ public class SerialBlob implements Blob, Serializable, Cloneable {
         return hash;
     }
 
-    /** Una copia con sus propios bytes. */
+    /** A copy with its own bytes. */
     public Object clone() {
         try {
             SerialBlob copy = new SerialBlob(new byte[0]);
@@ -262,7 +264,7 @@ public class SerialBlob implements Blob, Serializable, Cloneable {
         }
     }
 
-    /** Que no se haya liberado. */
+    /** That it has not been freed. */
     private void check() throws SerialException {
         if (this.freed || this.buf == null) {
             throw new SerialException("Error: You cannot call a method on a SerialBlob instance "

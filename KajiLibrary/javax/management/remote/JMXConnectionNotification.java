@@ -3,46 +3,46 @@ package javax.management.remote;
 import javax.management.Notification;
 
 /**
- * KajiLibrary's javax.management.remote.JMXConnectionNotification -- cambio de estado de una conexion
- * JMX.
+ * KajiLibrary's javax.management.remote.JMXConnectionNotification -- a JMX connection's state
+ * change.
  *
- * <p>La emiten tanto el {@link JMXConnector} del lado cliente como el {@link JMXConnectorServer} del
- * lado servidor, con los mismos cuatro tipos.
+ * <p>Both the client-side {@link JMXConnector} and the server-side {@link JMXConnectorServer}
+ * emit it, with the same four types.
  *
- * <p>{@link #NOTIFS_LOST} es la que importa y la que se ignora. No es un error de conexion: la
- * conexion sigue viva y lo que se perdio son <b>notificaciones</b>, porque el buffer del servidor se
- * lleno antes de que el cliente las levantara. Su {@code userData} es un {@link Long} con cuantas se
- * perdieron. Ver {@link NotificationResult} sobre como se detecta.
+ * <p>{@link #NOTIFS_LOST} is the one that matters and the one that gets ignored. It is not a
+ * connection error: the connection is still alive and what was lost are <b>notifications</b>,
+ * because the server's buffer filled up before the client collected them. Its {@code userData} is
+ * a {@link Long} with how many were lost. See {@link NotificationResult} on how it is detected.
  *
- * <p>{@link #FAILED} si es final: la conexion se corto sin que nadie la cerrara.
+ * <p>{@link #FAILED} is final: the connection was cut without anybody closing it.
  */
 public class JMXConnectionNotification extends Notification {
 
     private static final long serialVersionUID = -2331308725952627538L;
 
-    /** Se abrio una conexion. */
+    /** A connection was opened. */
     public static final String OPENED = "jmx.remote.connection.opened";
 
-    /** Se cerro ordenadamente. */
+    /** It was closed in an orderly way. */
     public static final String CLOSED = "jmx.remote.connection.closed";
 
-    /** Se corto sola. */
+    /** It was cut by itself. */
     public static final String FAILED = "jmx.remote.connection.failed";
 
-    /** Se perdieron notificaciones. Ver la nota de la clase. */
+    /** Notifications were lost. See the class note. */
     public static final String NOTIFS_LOST = "jmx.remote.connection.notifs.lost";
 
-    /** Cual conexion. */
+    /** Which connection. */
     private final String connectionId;
 
     /**
-     * @param type uno de los cuatro tipos
-     * @param source quien la emite: el conector o el servidor
-     * @param connectionId el identificador de la conexion
-     * @param sequenceNumber el numero de secuencia de quien emite
-     * @param message texto para mostrar, o null
-     * @param userData el dato extra; para {@link #NOTIFS_LOST}, cuantas se perdieron
-     * @throws NullPointerException si el tipo, la fuente o el identificador son null
+     * @param type one of the four types
+     * @param source who emits it: the connector or the server
+     * @param connectionId the connection's identifier
+     * @param sequenceNumber the emitter's sequence number
+     * @param message text to show, or null
+     * @param userData the extra datum; for {@link #NOTIFS_LOST}, how many were lost
+     * @throws NullPointerException if the type, the source or the identifier are null
      */
     public JMXConnectionNotification(String type, Object source, String connectionId,
                                      long sequenceNumber, String message, Object userData) {
@@ -54,7 +54,7 @@ public class JMXConnectionNotification extends Notification {
         setUserData(userData);
     }
 
-    /** El identificador de la conexion. */
+    /** The connection's identifier. */
     public String getConnectionId() {
         return this.connectionId;
     }

@@ -1,15 +1,16 @@
 package org.w3c.dom;
 
 /**
- * KajiLibrary's org.w3c.dom.CDATASection -- una seccion `&lt;![CDATA[...]]&gt;`.
+ * KajiLibrary's org.w3c.dom.CDATASection -- a `&lt;![CDATA[...]]&gt;` section.
  *
- * <p>No agrega **ningun** miembro sobre `Text`, y esta bien que asi sea: para el modelo de datos un
- * CDATA es texto y nada mas. Lo unico que cambia es la **serializacion** --el texto sale sin escapar
- * `&amp;` ni `&lt;`-- y eso no es una operacion sobre el nodo. La interfaz existe para que
- * `getNodeType()` pueda distinguirlo y para que el serializador sepa como escribirlo.
+ * <p>It adds **no** member over `Text`, and it is right that it should be so: for the data model a
+ * CDATA is text and nothing else. The only thing that changes is the **serialisation** --the text
+ * goes out without escaping `&amp;` nor `&lt;`-- and that is not an operation on the node. The
+ * interface exists so that `getNodeType()` can tell it apart and so that the serialiser knows how
+ * to write it.
  *
- * <p>La consecuencia practica es que `normalize()` puede juntar un CDATA con el `Text` de al lado y
- * perder la distincion, que es exactamente lo que la norma permite.
+ * <p>The practical consequence is that `normalize()` may join a CDATA with the `Text` next to it
+ * and lose the distinction, which is exactly what the standard allows.
  */
 public interface CDATASection extends Text {
 }

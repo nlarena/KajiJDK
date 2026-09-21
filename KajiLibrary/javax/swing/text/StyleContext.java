@@ -18,41 +18,40 @@ import javax.swing.event.ChangeListener;
 import javax.swing.event.EventListenerList;
 
 /**
- * La bolsa donde viven los estilos y los conjuntos de atributos compartidos.
+ * The bag where the styles and the shared attribute sets live.
  *
- * <h2>Por que compartir</h2>
+ * <h2>Why share</h2>
  *
- * <p>Un documento con estilo tiene un conjunto de atributos por cada tramo de texto, y esos
- * conjuntos se repiten muchisimo: todo lo que esta en cursiva tiene el mismo. El contexto los
- * <em>internaliza</em>: al pedir "este conjunto mas negrita" devuelve un objeto inmutable y
- * compartido, asi que mil tramos en negrita son una sola instancia y comparar dos tramos es
- * comparar dos referencias.
+ * <p>A styled document has an attribute set for each stretch of text, and those sets repeat a
+ * great deal: everything in italics has the same one. The context <em>interns</em> them: on
+ * asking for "this set plus bold" it returns an immutable and shared object, so a thousand
+ * bold stretches are a single instance and comparing two stretches is comparing two references.
  *
- * <p>Los conjuntos chicos se guardan como un arreglo plano de pares nombre-valor
- * ({@link SmallAttributeSet}), que para pocos atributos es mas rapido y mas chico que una tabla.
- * Pasado el umbral de {@link #getCompressionThreshold} se usa una tabla y se deja de compartir:
- * un conjunto grande casi nunca se repite, y buscarle un gemelo costaria mas de lo que ahorra.
+ * <p>The small sets are kept as a flat array of name-value pairs
+ * ({@link SmallAttributeSet}), which for few attributes is faster and smaller than a table.
+ * Past the {@link #getCompressionThreshold} threshold a table is used and sharing stops: a large
+ * set almost never repeats, and looking for a twin for it would cost more than it saves.
  *
- * <h2>Los estilos</h2>
+ * <h2>The styles</h2>
  *
- * <p>Un {@link Style} es un conjunto con nombre que avisa cuando cambia, y los estilos se
- * encadenan por su padre de resolucion. El contexto siempre tiene uno, {@link #DEFAULT_STYLE},
- * que es el ultimo eslabon de esa cadena.
+ * <p>A {@link Style} is a named set that reports when it changes, and the styles are chained
+ * through their resolving parent. The context always has one, {@link #DEFAULT_STYLE}, which is
+ * the last link of that chain.
  *
- * <h2>Lo que no esta</h2>
+ * <h2>What is not there</h2>
  *
- * <p>{@link #writeAttributes} y {@link #readAttributes} y sus versiones estaticas serializan
- * atributos, y necesitan que las claves estaticas esten registradas para poder escribirlas por
- * nombre. El registro esta ({@link #registerStaticAttributeKey}) y las claves de
- * {@link StyleConstants} se registran solas; lo que no esta es la serializacion, que en esta VM no
- * se puede probar contra nada.
+ * <p>{@link #writeAttributes} and {@link #readAttributes} and their static versions serialize
+ * attributes, and they need the static keys to be registered in order to write them by name. The
+ * registry is there ({@link #registerStaticAttributeKey}) and {@link StyleConstants}'s keys
+ * register themselves; what is not there is the serialization, which in this VM cannot be tested
+ * against anything.
  */
 public class StyleContext implements Serializable, AbstractDocument.AttributeContext {
 
-    /** El nombre del estilo del que cuelgan todos los demas. */
+    /** The name of the style all the others hang from. */
     public static final String DEFAULT_STYLE = "default";
 
-    /** A partir de cuantos atributos se deja de compartir; ver la nota de la clase. */
+    /** From how many attributes on sharing stops; see the class note. */
     static final int THRESHOLD = 9;
 
     private static StyleContext defaultContext;
@@ -67,7 +66,7 @@ public class StyleContext implements Serializable, AbstractDocument.AttributeCon
             new Hashtable<SmallAttributeSet, SmallAttributeSet>();
     private transient MutableAttributeSet search = new SimpleAttributeSet();
 
-    /** El contexto que usan los documentos que no piden uno propio. */
+    /** The context used by the documents that do not ask for one of their own. */
     public static final StyleContext getDefaultStyleContext() {
         if (defaultContext == null) {
             defaultContext = new StyleContext();
@@ -75,17 +74,17 @@ public class StyleContext implements Serializable, AbstractDocument.AttributeCon
         return defaultContext;
     }
 
-    /** Un contexto con su estilo por omision vacio. */
+    /** A context with its default style empty. */
     public StyleContext() {
         styles = new NamedStyle(null);
         addStyle(DEFAULT_STYLE, null);
     }
 
     /**
-     * Agrega un estilo con ese nombre y ese padre.
+     * It adds a style with that name and that parent.
      *
-     * <p>Un nombre {@code null} crea un estilo anonimo: sirve igual para colgarse de el, pero no
-     * se puede pedir por nombre despues.
+     * <p>A {@code null} name creates an anonymous style: it serves just as well to hang from, but
+     * it cannot be asked for by name afterwards.
      */
     public Style addStyle(String nm, Style parent) {
         Style style = new NamedStyle(nm, parent);
@@ -107,7 +106,7 @@ public class StyleContext implements Serializable, AbstractDocument.AttributeCon
         return styles.getAttributeNames();
     }
 
-    /** Escucha los cambios de <em>cualquier</em> estilo del contexto. */
+    /** It listens to the changes of <em>any</em> style of the context. */
     public void addChangeListener(ChangeListener l) {
         ((NamedStyle) styles).addChangeListener(l);
     }
@@ -120,7 +119,7 @@ public class StyleContext implements Serializable, AbstractDocument.AttributeCon
         return ((NamedStyle) styles).getChangeListeners();
     }
 
-    /** La fuente que describen esos atributos. */
+    /** The font those attributes describe. */
     public Font getFont(AttributeSet attr) {
         int style = Font.PLAIN;
         if (StyleConstants.isBold(attr)) {
@@ -132,7 +131,7 @@ public class StyleContext implements Serializable, AbstractDocument.AttributeCon
         String family = StyleConstants.getFontFamily(attr);
         int size = StyleConstants.getFontSize(attr);
 
-        // El superindice y el subindice se dibujan mas chicos; es lo unico que cambia el cuerpo.
+        // Superscript and subscript are drawn smaller; it is the only thing that changes the size.
         if (StyleConstants.isSuperscript(attr) || StyleConstants.isSubscript(attr)) {
             size = size - 2;
         }
@@ -140,7 +139,7 @@ public class StyleContext implements Serializable, AbstractDocument.AttributeCon
         return getFont(family, style, size);
     }
 
-    /** El color de frente de esos atributos; ver {@link StyleConstants#getForeground}. */
+    /** Those attributes' foreground colour; see {@link StyleConstants#getForeground}. */
     public Color getForeground(AttributeSet attr) {
         return StyleConstants.getForeground(attr);
     }
@@ -149,7 +148,7 @@ public class StyleContext implements Serializable, AbstractDocument.AttributeCon
         return StyleConstants.getBackground(attr);
     }
 
-    /** Una fuente compartida: dos pedidos iguales devuelven el mismo objeto. */
+    /** A shared font: two equal requests return the same object. */
     public Font getFont(String family, int style, int size) {
         fontSearch.setValue(family, style, size);
         Font f = fontTable.get(fontSearch);
@@ -161,12 +160,12 @@ public class StyleContext implements Serializable, AbstractDocument.AttributeCon
         return f;
     }
 
-    /** Las metricas de esa fuente, del toolkit. */
+    /** That font's metrics, from the toolkit. */
     public FontMetrics getFontMetrics(Font f) {
         return Toolkit.getDefaultToolkit().getFontMetrics(f);
     }
 
-    // -- AttributeContext: la parte que comparte conjuntos ---------------------------------------
+    // -- AttributeContext: the part that shares sets --------------------------------------------
 
     public synchronized AttributeSet addAttribute(AttributeSet old, Object name, Object value) {
         if ((old.getAttributeCount() + 1) <= getCompressionThreshold()) {
@@ -233,22 +232,22 @@ public class StyleContext implements Serializable, AbstractDocument.AttributeCon
         return ma;
     }
 
-    /** El conjunto vacio compartido. */
+    /** The shared empty set. */
     public AttributeSet getEmptySet() {
         return SimpleAttributeSet.EMPTY;
     }
 
     /**
-     * Avisa que ese conjunto ya no se usa.
+     * It reports that that set is no longer used.
      *
-     * <p>No hace nada: los conjuntos chicos viven en la bolsa mientras el contexto exista, y
-     * llevar una cuenta de referencias costaria mas de lo que ahorraria. El JDK hace lo mismo
-     * cuando no hay recoleccion de por medio.
+     * <p>It does nothing: the small sets live in the bag as long as the context exists, and keeping
+     * a reference count would cost more than it would save. The JDK does the same when there is no
+     * collection involved.
      */
     public void reclaim(AttributeSet a) {
     }
 
-    /** Ver la nota de la clase. */
+    /** See the class note. */
     protected int getCompressionThreshold() {
         return THRESHOLD;
     }
@@ -261,11 +260,11 @@ public class StyleContext implements Serializable, AbstractDocument.AttributeCon
         return new SimpleAttributeSet(a);
     }
 
-    /** Nada que sacar: ver {@link #reclaim}. */
+    /** Nothing to take out: see {@link #reclaim}. */
     synchronized void removeUnusedSets() {
     }
 
-    /** El conjunto compartido igual al que se esta armando; lo crea si no existia. */
+    /** The shared set equal to the one being built; it creates it if it did not exist. */
     AttributeSet getImmutableUniqueSet() {
         SmallAttributeSet key = createSmallAttributeSet(search);
         SmallAttributeSet a = attributesPool.get(key);
@@ -294,34 +293,34 @@ public class StyleContext implements Serializable, AbstractDocument.AttributeCon
         return s;
     }
 
-    /** No esta; ver la nota de la clase. */
+    /** It is not there; see the class note. */
     public void writeAttributes(ObjectOutputStream out, AttributeSet a) throws IOException {
-        throw new IOException("esta VM no serializa atributos");
+        throw new IOException("this VM does not serialize attributes");
     }
 
-    /** No esta; ver la nota de la clase. */
+    /** It is not there; see the class note. */
     public void readAttributes(ObjectInputStream in, MutableAttributeSet a)
             throws ClassNotFoundException, IOException {
-        throw new IOException("esta VM no serializa atributos");
+        throw new IOException("this VM does not serialize attributes");
     }
 
-    /** No esta; ver la nota de la clase. */
+    /** It is not there; see the class note. */
     public static void writeAttributeSet(ObjectOutputStream out, AttributeSet a)
             throws IOException {
-        throw new IOException("esta VM no serializa atributos");
+        throw new IOException("this VM does not serialize attributes");
     }
 
-    /** No esta; ver la nota de la clase. */
+    /** It is not there; see the class note. */
     public static void readAttributeSet(ObjectInputStream in, MutableAttributeSet a)
             throws ClassNotFoundException, IOException {
-        throw new IOException("esta VM no serializa atributos");
+        throw new IOException("this VM does not serialize attributes");
     }
 
     /**
-     * Registra una clave estatica para poder nombrarla al serializar.
+     * It registers a static key so that it can be named when serializing.
      *
-     * <p>El nombre es el de la clase mas el de la clave: dos claves de clases distintas que se
-     * llamen igual no chocan.
+     * <p>The name is the class's plus the key's: two keys of different classes that are called the
+     * same do not clash.
      */
     public static void registerStaticAttributeKey(Object key) {
         String ioFmt = key.getClass().getName() + "." + key.toString();
@@ -333,7 +332,7 @@ public class StyleContext implements Serializable, AbstractDocument.AttributeCon
         thawKeyMap.put(ioFmt, key);
     }
 
-    /** La clave estatica que corresponde a ese nombre, o el mismo objeto si no esta registrada. */
+    /** The static key that corresponds to that name, or the same object if it is not registered. */
     public static Object getStaticAttribute(Object key) {
         if (thawKeyMap == null || key == null) {
             return null;
@@ -345,7 +344,7 @@ public class StyleContext implements Serializable, AbstractDocument.AttributeCon
         return key.getClass().getName() + "." + key.toString();
     }
 
-    /** La clave de la tabla de fuentes: familia, estilo y cuerpo. */
+    /** The font table's key: family, style and size. */
     static class FontKey {
 
         private String family;
@@ -377,11 +376,11 @@ public class StyleContext implements Serializable, AbstractDocument.AttributeCon
     }
 
     /**
-     * Un conjunto de atributos chico e inmutable: un arreglo de pares.
+     * A small and immutable attribute set: an array of pairs.
      *
-     * <p>Sin tabla: para menos de diez atributos, recorrer un arreglo es mas rapido que calcular
-     * un hash, y ocupa la mitad. El padre de resolucion se guarda aparte para no buscarlo en cada
-     * consulta fallida.
+     * <p>With no table: for fewer than ten attributes, walking an array is faster than computing a
+     * hash, and takes up half the room. The resolving parent is kept apart so as not to look it up
+     * on every failed query.
      */
     public class SmallAttributeSet implements AttributeSet {
 
@@ -418,7 +417,7 @@ public class StyleContext implements Serializable, AbstractDocument.AttributeCon
             }
         }
 
-        /** El valor propio, sin preguntarle al padre. */
+        /** Its own value, without asking the parent. */
         Object getLocalAttribute(Object nm) {
             Object[] tbl = attributes;
             for (int i = 0; i < tbl.length; i = i + 2) {
@@ -461,7 +460,7 @@ public class StyleContext implements Serializable, AbstractDocument.AttributeCon
             return false;
         }
 
-        /** Es inmutable: la copia es el mismo objeto. */
+        /** It is immutable: the copy is the same object. */
         public Object clone() {
             return this;
         }
@@ -528,10 +527,10 @@ public class StyleContext implements Serializable, AbstractDocument.AttributeCon
     }
 
     /**
-     * Recorre los nombres de un arreglo de pares.
+     * It walks the names of an array of pairs.
      *
-     * <p>Estatica y no interna: no necesita el contexto, y nuestro javac todavia no pasa la
-     * instancia externa implicita cuando una clase interna crea a una hermana.
+     * <p>Static and not inner: it does not need the context, and our javac does not yet pass the
+     * implicit outer instance when an inner class creates a sibling.
      */
     static class KeyEnumeration implements Enumeration<Object> {
 
@@ -558,11 +557,11 @@ public class StyleContext implements Serializable, AbstractDocument.AttributeCon
     }
 
     /**
-     * Un estilo con nombre: un conjunto mutable que avisa cuando cambia.
+     * A named style: a mutable set that reports when it changes.
      *
-     * <p>Guarda adentro un conjunto <em>inmutable</em> del contexto y lo reemplaza en cada cambio.
-     * Asi, quien se cuelgue de este estilo como padre de resolucion sigue viendo lo ultimo sin que
-     * nadie le avise, y los que si quieren enterarse escuchan.
+     * <p>It keeps inside an <em>immutable</em> set from the context and replaces it on every
+     * change. That way, whoever hangs from this style as their resolving parent goes on seeing the
+     * latest without anybody telling them, and those that do want to hear listen.
      */
     public class NamedStyle implements Style, Serializable {
 
@@ -572,25 +571,24 @@ public class StyleContext implements Serializable, AbstractDocument.AttributeCon
         private transient AttributeSet attributes;
 
         public NamedStyle(String name, Style parent) {
-            iniciar(name, parent);
+            begin(name, parent);
         }
 
         public NamedStyle(Style parent) {
-            iniciar(null, parent);
+            begin(null, parent);
         }
 
         public NamedStyle() {
-            iniciar(null, null);
+            begin(null, null);
         }
 
         /**
-         * El cuerpo comun de los tres constructores.
+         * The common body of the three constructors.
          *
-         * <p>Un metodo y no un `this(...)` encadenado: en una clase interna, nuestro javac cuenta
-         * la instancia externa como argumento y el encadenado termina llamandose a si mismo
-         * (#511).
+         * <p>A method and not a chained `this(...)`: in an inner class, our javac counts the outer
+         * instance as an argument and the chained call ends up calling itself (#511).
          */
-        private void iniciar(String name, Style parent) {
+        private void begin(String name, Style parent) {
             attributes = getEmptySet();
             listenerList = new EventListenerList();
             if (name != null) {

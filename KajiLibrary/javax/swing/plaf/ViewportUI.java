@@ -1,10 +1,10 @@
 package javax.swing.plaf;
 
 /**
- * El aspecto de una ventana de desplazamiento.
+ * A scrolling viewport's look and feel.
  *
- * <p>No agrega nada a {@link ComponentUI}: una ventana no dibuja mas que su fondo. Existe por lo
- * mismo que {@link ButtonUI}, para que cada familia tenga su tipo.
+ * <p>It adds nothing to {@link ComponentUI}: a viewport draws nothing but its background. It
+ * exists for the same reason as {@link ButtonUI}, so that each family has its type.
  */
 public abstract class ViewportUI extends ComponentUI {
 

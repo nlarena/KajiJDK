@@ -37,24 +37,25 @@ import java.lang.reflect.Array;
 import java.util.EventListener;
 
 /**
- * Dos oyentes disfrazados de uno.
+ * Two listeners disguised as one.
  *
- * <p>Es la solución de AWT al problema de tener varios oyentes sin usar una lista: en vez de que
- * cada componente guarde una colección, guarda **un** oyente, y si hay dos se los envuelve en uno de
- * éstos. Tres se envuelven en un multicaster que contiene a otro, y así.
+ * <p>It is the AWT answer to having several listeners without using a list: instead of every
+ * component keeping a collection, it keeps **one** listener, and if there are two they get wrapped
+ * in one of these. Three get wrapped in a multicaster holding another one, and so on.
  *
- * <p>Sale un árbol binario en vez de una lista, y la ventaja no es obvia hasta que se piensa en el
- * caso común: la enorme mayoría de los componentes tiene **cero o un** oyente, y ahí no se reserva
- * ninguna estructura. Sólo se paga memoria cuando de verdad hay más de uno.
+ * <p>What comes out is a binary tree instead of a list, and the advantage is not obvious until one
+ * thinks of the common case: the vast majority of components has **zero or one** listener, and
+ * there no structure is reserved at all. Memory is only paid for when there really is more than
+ * one.
  *
- * <p>Es **inmutable**, y de ahí la forma rara de los {@code add} y {@code remove}: son estáticos y
- * devuelven el oyente resultante en vez de modificar nada. Un componente hace
- * {@code l = AWTEventMulticaster.add(l, nuevo)}. Esa inmutabilidad es lo que hace que se pueda
- * repartir un evento mientras alguien se da de baja sin que la iteración explote.
+ * <p>It is **immutable**, and hence the odd shape of the {@code add} and {@code remove} methods:
+ * they are static and return the resulting listener instead of modifying anything. A component does
+ * {@code l = AWTEventMulticaster.add(l, newOne)}. That immutability is what makes it possible to
+ * deliver an event while someone unsubscribes without the iteration blowing up.
  *
- * <p>Un solo objeto implementa **diecisiete** interfaces de oyente. No es un descuido: como es
- * inmutable y se lo usa por su tipo estático, un multicaster de oyentes de teclado nunca va a
- * recibir un evento de ratón, aunque el método esté ahí.
+ * <p>A single object implements **seventeen** listener interfaces. It is not an oversight: since it
+ * is immutable and used through its static type, a multicaster of keyboard listeners is never going
+ * to receive a mouse event, even though the method is there.
  */
 public class AWTEventMulticaster implements
         ComponentListener,
@@ -75,17 +76,17 @@ public class AWTEventMulticaster implements
         HierarchyBoundsListener,
         MouseWheelListener {
 
-    /** El primero de los dos. */
+    /** The first of the two. */
     protected final EventListener a;
 
-    /** El segundo, que puede ser a su vez otro multicaster. */
+    /** The second one, which may itself be another multicaster. */
     protected final EventListener b;
 
     /**
-     * Envuelve dos oyentes.
+     * Wraps two listeners.
      *
-     * <p>Es protegido: se llega por los {@code add} estáticos, que son los que saben qué hacer
-     * cuando alguno de los dos es `null`.
+     * <p>It is protected: one gets here through the static {@code add} methods, which are the ones
+     * that know what to do when either of the two is `null`.
      */
     protected AWTEventMulticaster(EventListener a, EventListener b) {
         this.a = a;
@@ -93,9 +94,9 @@ public class AWTEventMulticaster implements
     }
 
     /**
-     * Saca un oyente de este par.
+     * Removes a listener from this pair.
      *
-     * @return lo que queda: el otro, o un par nuevo si el que se saca estaba más adentro
+     * @return what is left: the other one, or a new pair if the one being removed was deeper in
      */
     protected EventListener remove(EventListener oldl) {
         if (oldl == this.a) {
@@ -112,545 +113,545 @@ public class AWTEventMulticaster implements
         return addInternal(a2, b2);
     }
 
-    /** Se lo pasa a los dos. */
+    /** Passes it to both. */
     public void componentResized(ComponentEvent e) {
         ((ComponentListener) this.a).componentResized(e);
         ((ComponentListener) this.b).componentResized(e);
     }
 
-    /** Se lo pasa a los dos. */
+    /** Passes it to both. */
     public void componentMoved(ComponentEvent e) {
         ((ComponentListener) this.a).componentMoved(e);
         ((ComponentListener) this.b).componentMoved(e);
     }
 
-    /** Se lo pasa a los dos. */
+    /** Passes it to both. */
     public void componentShown(ComponentEvent e) {
         ((ComponentListener) this.a).componentShown(e);
         ((ComponentListener) this.b).componentShown(e);
     }
 
-    /** Se lo pasa a los dos. */
+    /** Passes it to both. */
     public void componentHidden(ComponentEvent e) {
         ((ComponentListener) this.a).componentHidden(e);
         ((ComponentListener) this.b).componentHidden(e);
     }
 
-    /** Se lo pasa a los dos. */
+    /** Passes it to both. */
     public void componentAdded(ContainerEvent e) {
         ((ContainerListener) this.a).componentAdded(e);
         ((ContainerListener) this.b).componentAdded(e);
     }
 
-    /** Se lo pasa a los dos. */
+    /** Passes it to both. */
     public void componentRemoved(ContainerEvent e) {
         ((ContainerListener) this.a).componentRemoved(e);
         ((ContainerListener) this.b).componentRemoved(e);
     }
 
-    /** Se lo pasa a los dos. */
+    /** Passes it to both. */
     public void focusGained(FocusEvent e) {
         ((FocusListener) this.a).focusGained(e);
         ((FocusListener) this.b).focusGained(e);
     }
 
-    /** Se lo pasa a los dos. */
+    /** Passes it to both. */
     public void focusLost(FocusEvent e) {
         ((FocusListener) this.a).focusLost(e);
         ((FocusListener) this.b).focusLost(e);
     }
 
-    /** Se lo pasa a los dos. */
+    /** Passes it to both. */
     public void keyTyped(KeyEvent e) {
         ((KeyListener) this.a).keyTyped(e);
         ((KeyListener) this.b).keyTyped(e);
     }
 
-    /** Se lo pasa a los dos. */
+    /** Passes it to both. */
     public void keyPressed(KeyEvent e) {
         ((KeyListener) this.a).keyPressed(e);
         ((KeyListener) this.b).keyPressed(e);
     }
 
-    /** Se lo pasa a los dos. */
+    /** Passes it to both. */
     public void keyReleased(KeyEvent e) {
         ((KeyListener) this.a).keyReleased(e);
         ((KeyListener) this.b).keyReleased(e);
     }
 
-    /** Se lo pasa a los dos. */
+    /** Passes it to both. */
     public void mouseClicked(MouseEvent e) {
         ((MouseListener) this.a).mouseClicked(e);
         ((MouseListener) this.b).mouseClicked(e);
     }
 
-    /** Se lo pasa a los dos. */
+    /** Passes it to both. */
     public void mousePressed(MouseEvent e) {
         ((MouseListener) this.a).mousePressed(e);
         ((MouseListener) this.b).mousePressed(e);
     }
 
-    /** Se lo pasa a los dos. */
+    /** Passes it to both. */
     public void mouseReleased(MouseEvent e) {
         ((MouseListener) this.a).mouseReleased(e);
         ((MouseListener) this.b).mouseReleased(e);
     }
 
-    /** Se lo pasa a los dos. */
+    /** Passes it to both. */
     public void mouseEntered(MouseEvent e) {
         ((MouseListener) this.a).mouseEntered(e);
         ((MouseListener) this.b).mouseEntered(e);
     }
 
-    /** Se lo pasa a los dos. */
+    /** Passes it to both. */
     public void mouseExited(MouseEvent e) {
         ((MouseListener) this.a).mouseExited(e);
         ((MouseListener) this.b).mouseExited(e);
     }
 
-    /** Se lo pasa a los dos. */
+    /** Passes it to both. */
     public void mouseDragged(MouseEvent e) {
         ((MouseMotionListener) this.a).mouseDragged(e);
         ((MouseMotionListener) this.b).mouseDragged(e);
     }
 
-    /** Se lo pasa a los dos. */
+    /** Passes it to both. */
     public void mouseMoved(MouseEvent e) {
         ((MouseMotionListener) this.a).mouseMoved(e);
         ((MouseMotionListener) this.b).mouseMoved(e);
     }
 
-    /** Se lo pasa a los dos. */
+    /** Passes it to both. */
     public void windowOpened(WindowEvent e) {
         ((WindowListener) this.a).windowOpened(e);
         ((WindowListener) this.b).windowOpened(e);
     }
 
-    /** Se lo pasa a los dos. */
+    /** Passes it to both. */
     public void windowClosing(WindowEvent e) {
         ((WindowListener) this.a).windowClosing(e);
         ((WindowListener) this.b).windowClosing(e);
     }
 
-    /** Se lo pasa a los dos. */
+    /** Passes it to both. */
     public void windowClosed(WindowEvent e) {
         ((WindowListener) this.a).windowClosed(e);
         ((WindowListener) this.b).windowClosed(e);
     }
 
-    /** Se lo pasa a los dos. */
+    /** Passes it to both. */
     public void windowIconified(WindowEvent e) {
         ((WindowListener) this.a).windowIconified(e);
         ((WindowListener) this.b).windowIconified(e);
     }
 
-    /** Se lo pasa a los dos. */
+    /** Passes it to both. */
     public void windowDeiconified(WindowEvent e) {
         ((WindowListener) this.a).windowDeiconified(e);
         ((WindowListener) this.b).windowDeiconified(e);
     }
 
-    /** Se lo pasa a los dos. */
+    /** Passes it to both. */
     public void windowActivated(WindowEvent e) {
         ((WindowListener) this.a).windowActivated(e);
         ((WindowListener) this.b).windowActivated(e);
     }
 
-    /** Se lo pasa a los dos. */
+    /** Passes it to both. */
     public void windowDeactivated(WindowEvent e) {
         ((WindowListener) this.a).windowDeactivated(e);
         ((WindowListener) this.b).windowDeactivated(e);
     }
 
-    /** Se lo pasa a los dos. */
+    /** Passes it to both. */
     public void windowStateChanged(WindowEvent e) {
         ((WindowStateListener) this.a).windowStateChanged(e);
         ((WindowStateListener) this.b).windowStateChanged(e);
     }
 
-    /** Se lo pasa a los dos. */
+    /** Passes it to both. */
     public void windowGainedFocus(WindowEvent e) {
         ((WindowFocusListener) this.a).windowGainedFocus(e);
         ((WindowFocusListener) this.b).windowGainedFocus(e);
     }
 
-    /** Se lo pasa a los dos. */
+    /** Passes it to both. */
     public void windowLostFocus(WindowEvent e) {
         ((WindowFocusListener) this.a).windowLostFocus(e);
         ((WindowFocusListener) this.b).windowLostFocus(e);
     }
 
-    /** Se lo pasa a los dos. */
+    /** Passes it to both. */
     public void actionPerformed(ActionEvent e) {
         ((ActionListener) this.a).actionPerformed(e);
         ((ActionListener) this.b).actionPerformed(e);
     }
 
-    /** Se lo pasa a los dos. */
+    /** Passes it to both. */
     public void itemStateChanged(ItemEvent e) {
         ((ItemListener) this.a).itemStateChanged(e);
         ((ItemListener) this.b).itemStateChanged(e);
     }
 
-    /** Se lo pasa a los dos. */
+    /** Passes it to both. */
     public void adjustmentValueChanged(AdjustmentEvent e) {
         ((AdjustmentListener) this.a).adjustmentValueChanged(e);
         ((AdjustmentListener) this.b).adjustmentValueChanged(e);
     }
 
-    /** Se lo pasa a los dos. */
+    /** Passes it to both. */
     public void textValueChanged(TextEvent e) {
         ((TextListener) this.a).textValueChanged(e);
         ((TextListener) this.b).textValueChanged(e);
     }
 
-    /** Se lo pasa a los dos. */
+    /** Passes it to both. */
     public void inputMethodTextChanged(InputMethodEvent e) {
         ((InputMethodListener) this.a).inputMethodTextChanged(e);
         ((InputMethodListener) this.b).inputMethodTextChanged(e);
     }
 
-    /** Se lo pasa a los dos. */
+    /** Passes it to both. */
     public void caretPositionChanged(InputMethodEvent e) {
         ((InputMethodListener) this.a).caretPositionChanged(e);
         ((InputMethodListener) this.b).caretPositionChanged(e);
     }
 
-    /** Se lo pasa a los dos. */
+    /** Passes it to both. */
     public void hierarchyChanged(HierarchyEvent e) {
         ((HierarchyListener) this.a).hierarchyChanged(e);
         ((HierarchyListener) this.b).hierarchyChanged(e);
     }
 
-    /** Se lo pasa a los dos. */
+    /** Passes it to both. */
     public void ancestorMoved(HierarchyEvent e) {
         ((HierarchyBoundsListener) this.a).ancestorMoved(e);
         ((HierarchyBoundsListener) this.b).ancestorMoved(e);
     }
 
-    /** Se lo pasa a los dos. */
+    /** Passes it to both. */
     public void ancestorResized(HierarchyEvent e) {
         ((HierarchyBoundsListener) this.a).ancestorResized(e);
         ((HierarchyBoundsListener) this.b).ancestorResized(e);
     }
 
-    /** Se lo pasa a los dos. */
+    /** Passes it to both. */
     public void mouseWheelMoved(MouseWheelEvent e) {
         ((MouseWheelListener) this.a).mouseWheelMoved(e);
         ((MouseWheelListener) this.b).mouseWheelMoved(e);
     }
 
     /**
-     * Junta dos oyentes de ComponentListener en uno.
+     * Joins two ComponentListener listeners into one.
      *
-     * @return `b` si `a` es `null`, `a` si `b` es `null`, o un par con los dos
+     * @return `b` if `a` is `null`, `a` if `b` is `null`, or a pair with the two
      */
     public static ComponentListener add(ComponentListener a, ComponentListener b) {
         return (ComponentListener) addInternal(a, b);
     }
 
     /**
-     * Junta dos oyentes de ContainerListener en uno.
+     * Joins two ContainerListener listeners into one.
      *
-     * @return `b` si `a` es `null`, `a` si `b` es `null`, o un par con los dos
+     * @return `b` if `a` is `null`, `a` if `b` is `null`, or a pair with the two
      */
     public static ContainerListener add(ContainerListener a, ContainerListener b) {
         return (ContainerListener) addInternal(a, b);
     }
 
     /**
-     * Junta dos oyentes de FocusListener en uno.
+     * Joins two FocusListener listeners into one.
      *
-     * @return `b` si `a` es `null`, `a` si `b` es `null`, o un par con los dos
+     * @return `b` if `a` is `null`, `a` if `b` is `null`, or a pair with the two
      */
     public static FocusListener add(FocusListener a, FocusListener b) {
         return (FocusListener) addInternal(a, b);
     }
 
     /**
-     * Junta dos oyentes de KeyListener en uno.
+     * Joins two KeyListener listeners into one.
      *
-     * @return `b` si `a` es `null`, `a` si `b` es `null`, o un par con los dos
+     * @return `b` if `a` is `null`, `a` if `b` is `null`, or a pair with the two
      */
     public static KeyListener add(KeyListener a, KeyListener b) {
         return (KeyListener) addInternal(a, b);
     }
 
     /**
-     * Junta dos oyentes de MouseListener en uno.
+     * Joins two MouseListener listeners into one.
      *
-     * @return `b` si `a` es `null`, `a` si `b` es `null`, o un par con los dos
+     * @return `b` if `a` is `null`, `a` if `b` is `null`, or a pair with the two
      */
     public static MouseListener add(MouseListener a, MouseListener b) {
         return (MouseListener) addInternal(a, b);
     }
 
     /**
-     * Junta dos oyentes de MouseMotionListener en uno.
+     * Joins two MouseMotionListener listeners into one.
      *
-     * @return `b` si `a` es `null`, `a` si `b` es `null`, o un par con los dos
+     * @return `b` if `a` is `null`, `a` if `b` is `null`, or a pair with the two
      */
     public static MouseMotionListener add(MouseMotionListener a, MouseMotionListener b) {
         return (MouseMotionListener) addInternal(a, b);
     }
 
     /**
-     * Junta dos oyentes de WindowListener en uno.
+     * Joins two WindowListener listeners into one.
      *
-     * @return `b` si `a` es `null`, `a` si `b` es `null`, o un par con los dos
+     * @return `b` if `a` is `null`, `a` if `b` is `null`, or a pair with the two
      */
     public static WindowListener add(WindowListener a, WindowListener b) {
         return (WindowListener) addInternal(a, b);
     }
 
     /**
-     * Junta dos oyentes de WindowStateListener en uno.
+     * Joins two WindowStateListener listeners into one.
      *
-     * @return `b` si `a` es `null`, `a` si `b` es `null`, o un par con los dos
+     * @return `b` if `a` is `null`, `a` if `b` is `null`, or a pair with the two
      */
     public static WindowStateListener add(WindowStateListener a, WindowStateListener b) {
         return (WindowStateListener) addInternal(a, b);
     }
 
     /**
-     * Junta dos oyentes de WindowFocusListener en uno.
+     * Joins two WindowFocusListener listeners into one.
      *
-     * @return `b` si `a` es `null`, `a` si `b` es `null`, o un par con los dos
+     * @return `b` if `a` is `null`, `a` if `b` is `null`, or a pair with the two
      */
     public static WindowFocusListener add(WindowFocusListener a, WindowFocusListener b) {
         return (WindowFocusListener) addInternal(a, b);
     }
 
     /**
-     * Junta dos oyentes de ActionListener en uno.
+     * Joins two ActionListener listeners into one.
      *
-     * @return `b` si `a` es `null`, `a` si `b` es `null`, o un par con los dos
+     * @return `b` if `a` is `null`, `a` if `b` is `null`, or a pair with the two
      */
     public static ActionListener add(ActionListener a, ActionListener b) {
         return (ActionListener) addInternal(a, b);
     }
 
     /**
-     * Junta dos oyentes de ItemListener en uno.
+     * Joins two ItemListener listeners into one.
      *
-     * @return `b` si `a` es `null`, `a` si `b` es `null`, o un par con los dos
+     * @return `b` if `a` is `null`, `a` if `b` is `null`, or a pair with the two
      */
     public static ItemListener add(ItemListener a, ItemListener b) {
         return (ItemListener) addInternal(a, b);
     }
 
     /**
-     * Junta dos oyentes de AdjustmentListener en uno.
+     * Joins two AdjustmentListener listeners into one.
      *
-     * @return `b` si `a` es `null`, `a` si `b` es `null`, o un par con los dos
+     * @return `b` if `a` is `null`, `a` if `b` is `null`, or a pair with the two
      */
     public static AdjustmentListener add(AdjustmentListener a, AdjustmentListener b) {
         return (AdjustmentListener) addInternal(a, b);
     }
 
     /**
-     * Junta dos oyentes de TextListener en uno.
+     * Joins two TextListener listeners into one.
      *
-     * @return `b` si `a` es `null`, `a` si `b` es `null`, o un par con los dos
+     * @return `b` if `a` is `null`, `a` if `b` is `null`, or a pair with the two
      */
     public static TextListener add(TextListener a, TextListener b) {
         return (TextListener) addInternal(a, b);
     }
 
     /**
-     * Junta dos oyentes de InputMethodListener en uno.
+     * Joins two InputMethodListener listeners into one.
      *
-     * @return `b` si `a` es `null`, `a` si `b` es `null`, o un par con los dos
+     * @return `b` if `a` is `null`, `a` if `b` is `null`, or a pair with the two
      */
     public static InputMethodListener add(InputMethodListener a, InputMethodListener b) {
         return (InputMethodListener) addInternal(a, b);
     }
 
     /**
-     * Junta dos oyentes de HierarchyListener en uno.
+     * Joins two HierarchyListener listeners into one.
      *
-     * @return `b` si `a` es `null`, `a` si `b` es `null`, o un par con los dos
+     * @return `b` if `a` is `null`, `a` if `b` is `null`, or a pair with the two
      */
     public static HierarchyListener add(HierarchyListener a, HierarchyListener b) {
         return (HierarchyListener) addInternal(a, b);
     }
 
     /**
-     * Junta dos oyentes de HierarchyBoundsListener en uno.
+     * Joins two HierarchyBoundsListener listeners into one.
      *
-     * @return `b` si `a` es `null`, `a` si `b` es `null`, o un par con los dos
+     * @return `b` if `a` is `null`, `a` if `b` is `null`, or a pair with the two
      */
     public static HierarchyBoundsListener add(HierarchyBoundsListener a, HierarchyBoundsListener b) {
         return (HierarchyBoundsListener) addInternal(a, b);
     }
 
     /**
-     * Junta dos oyentes de MouseWheelListener en uno.
+     * Joins two MouseWheelListener listeners into one.
      *
-     * @return `b` si `a` es `null`, `a` si `b` es `null`, o un par con los dos
+     * @return `b` if `a` is `null`, `a` if `b` is `null`, or a pair with the two
      */
     public static MouseWheelListener add(MouseWheelListener a, MouseWheelListener b) {
         return (MouseWheelListener) addInternal(a, b);
     }
 
     /**
-     * Saca un oyente de ComponentListener.
+     * Removes a ComponentListener listener.
      *
-     * @return lo que queda, que puede ser `null`
+     * @return what is left, which may be `null`
      */
     public static ComponentListener remove(ComponentListener l, ComponentListener oldl) {
         return (ComponentListener) removeInternal(l, oldl);
     }
 
     /**
-     * Saca un oyente de ContainerListener.
+     * Removes a ContainerListener listener.
      *
-     * @return lo que queda, que puede ser `null`
+     * @return what is left, which may be `null`
      */
     public static ContainerListener remove(ContainerListener l, ContainerListener oldl) {
         return (ContainerListener) removeInternal(l, oldl);
     }
 
     /**
-     * Saca un oyente de FocusListener.
+     * Removes a FocusListener listener.
      *
-     * @return lo que queda, que puede ser `null`
+     * @return what is left, which may be `null`
      */
     public static FocusListener remove(FocusListener l, FocusListener oldl) {
         return (FocusListener) removeInternal(l, oldl);
     }
 
     /**
-     * Saca un oyente de KeyListener.
+     * Removes a KeyListener listener.
      *
-     * @return lo que queda, que puede ser `null`
+     * @return what is left, which may be `null`
      */
     public static KeyListener remove(KeyListener l, KeyListener oldl) {
         return (KeyListener) removeInternal(l, oldl);
     }
 
     /**
-     * Saca un oyente de MouseListener.
+     * Removes a MouseListener listener.
      *
-     * @return lo que queda, que puede ser `null`
+     * @return what is left, which may be `null`
      */
     public static MouseListener remove(MouseListener l, MouseListener oldl) {
         return (MouseListener) removeInternal(l, oldl);
     }
 
     /**
-     * Saca un oyente de MouseMotionListener.
+     * Removes a MouseMotionListener listener.
      *
-     * @return lo que queda, que puede ser `null`
+     * @return what is left, which may be `null`
      */
     public static MouseMotionListener remove(MouseMotionListener l, MouseMotionListener oldl) {
         return (MouseMotionListener) removeInternal(l, oldl);
     }
 
     /**
-     * Saca un oyente de WindowListener.
+     * Removes a WindowListener listener.
      *
-     * @return lo que queda, que puede ser `null`
+     * @return what is left, which may be `null`
      */
     public static WindowListener remove(WindowListener l, WindowListener oldl) {
         return (WindowListener) removeInternal(l, oldl);
     }
 
     /**
-     * Saca un oyente de WindowStateListener.
+     * Removes a WindowStateListener listener.
      *
-     * @return lo que queda, que puede ser `null`
+     * @return what is left, which may be `null`
      */
     public static WindowStateListener remove(WindowStateListener l, WindowStateListener oldl) {
         return (WindowStateListener) removeInternal(l, oldl);
     }
 
     /**
-     * Saca un oyente de WindowFocusListener.
+     * Removes a WindowFocusListener listener.
      *
-     * @return lo que queda, que puede ser `null`
+     * @return what is left, which may be `null`
      */
     public static WindowFocusListener remove(WindowFocusListener l, WindowFocusListener oldl) {
         return (WindowFocusListener) removeInternal(l, oldl);
     }
 
     /**
-     * Saca un oyente de ActionListener.
+     * Removes a ActionListener listener.
      *
-     * @return lo que queda, que puede ser `null`
+     * @return what is left, which may be `null`
      */
     public static ActionListener remove(ActionListener l, ActionListener oldl) {
         return (ActionListener) removeInternal(l, oldl);
     }
 
     /**
-     * Saca un oyente de ItemListener.
+     * Removes a ItemListener listener.
      *
-     * @return lo que queda, que puede ser `null`
+     * @return what is left, which may be `null`
      */
     public static ItemListener remove(ItemListener l, ItemListener oldl) {
         return (ItemListener) removeInternal(l, oldl);
     }
 
     /**
-     * Saca un oyente de AdjustmentListener.
+     * Removes a AdjustmentListener listener.
      *
-     * @return lo que queda, que puede ser `null`
+     * @return what is left, which may be `null`
      */
     public static AdjustmentListener remove(AdjustmentListener l, AdjustmentListener oldl) {
         return (AdjustmentListener) removeInternal(l, oldl);
     }
 
     /**
-     * Saca un oyente de TextListener.
+     * Removes a TextListener listener.
      *
-     * @return lo que queda, que puede ser `null`
+     * @return what is left, which may be `null`
      */
     public static TextListener remove(TextListener l, TextListener oldl) {
         return (TextListener) removeInternal(l, oldl);
     }
 
     /**
-     * Saca un oyente de InputMethodListener.
+     * Removes a InputMethodListener listener.
      *
-     * @return lo que queda, que puede ser `null`
+     * @return what is left, which may be `null`
      */
     public static InputMethodListener remove(InputMethodListener l, InputMethodListener oldl) {
         return (InputMethodListener) removeInternal(l, oldl);
     }
 
     /**
-     * Saca un oyente de HierarchyListener.
+     * Removes a HierarchyListener listener.
      *
-     * @return lo que queda, que puede ser `null`
+     * @return what is left, which may be `null`
      */
     public static HierarchyListener remove(HierarchyListener l, HierarchyListener oldl) {
         return (HierarchyListener) removeInternal(l, oldl);
     }
 
     /**
-     * Saca un oyente de HierarchyBoundsListener.
+     * Removes a HierarchyBoundsListener listener.
      *
-     * @return lo que queda, que puede ser `null`
+     * @return what is left, which may be `null`
      */
     public static HierarchyBoundsListener remove(HierarchyBoundsListener l, HierarchyBoundsListener oldl) {
         return (HierarchyBoundsListener) removeInternal(l, oldl);
     }
 
     /**
-     * Saca un oyente de MouseWheelListener.
+     * Removes a MouseWheelListener listener.
      *
-     * @return lo que queda, que puede ser `null`
+     * @return what is left, which may be `null`
      */
     public static MouseWheelListener remove(MouseWheelListener l, MouseWheelListener oldl) {
         return (MouseWheelListener) removeInternal(l, oldl);
     }
 
     /**
-     * Junta dos oyentes cualesquiera.
+     * Joins any two listeners.
      *
-     * <p>Con uno solo no se envuelve nada: envolver un oyente con `null` gastaría un objeto y una
-     * indirección por evento para no agregar a nadie.
+     * <p>With only one nothing gets wrapped: wrapping a listener with `null` would spend an object
+     * and an indirection per event to add nobody.
      */
     protected static EventListener addInternal(EventListener a, EventListener b) {
         if (a == null) {
@@ -663,9 +664,9 @@ public class AWTEventMulticaster implements
     }
 
     /**
-     * Saca un oyente de donde esté.
+     * Removes a listener from wherever it is.
      *
-     * @return lo que queda, que puede ser `null`
+     * @return what is left, which may be `null`
      */
     protected static EventListener removeInternal(EventListener l, EventListener oldl) {
         if (l == oldl || l == null) {
@@ -678,10 +679,10 @@ public class AWTEventMulticaster implements
     }
 
     /**
-     * Serializa los oyentes de este par que sean serializables.
+     * Serializes the listeners of this pair that are serializable.
      *
-     * <p>Los que no lo sean se saltean en silencio: un oyente no serializable no debería impedir
-     * que el componente se guarde.
+     * <p>The ones that are not get skipped silently: a listener that cannot be serialized should
+     * not stop the component from being saved.
      */
     protected void saveInternal(ObjectOutputStream s, String k) throws IOException {
         if (this.a instanceof AWTEventMulticaster) {
@@ -698,7 +699,7 @@ public class AWTEventMulticaster implements
         }
     }
 
-    /** Serializa un oyente suelto o un par, con su clave. */
+    /** Serializes a lone listener or a pair, with its key. */
     protected static void save(ObjectOutputStream s, String k, EventListener l)
             throws IOException {
         if (l == null) {
@@ -713,14 +714,17 @@ public class AWTEventMulticaster implements
     }
 
     /**
-     * Aplana el árbol y devuelve los oyentes de esa clase.
+     * Flattens the tree and returns the listeners of that class.
      *
-     * <p>Es la única operación que recorre la estructura entera, y existe porque los
-     * {@code getXListeners} de los componentes la necesitan: por dentro es un árbol, pero por fuera
-     * hay que poder mostrarlo como un arreglo.
+     * <p>It is the only operation that walks the whole structure, and it exists because the {@code
+     * getXListeners} methods of the components need it: inside it is a tree, but from outside it
+     * has to be shown as an array.
      *
-     * @throws NullPointerException si la clase es `null`
-     * @throws ClassCastException si la clase no es de oyente
+     * <p>The {@code T extends EventListener} bound is what keeps the class honest: a class that is
+     * not a listener one cannot be passed without raw types, and if it is, the failure lands on the
+     * caller's assignment and not here.
+     *
+     * @throws NullPointerException if the class is `null`
      */
     public static <T extends EventListener> T[] getListeners(EventListener l,
             Class<T> listenerType) {
@@ -734,7 +738,7 @@ public class AWTEventMulticaster implements
         return out;
     }
 
-    /** Cuántos oyentes de esa clase hay en el árbol. */
+    /** How many listeners of that class there are in the tree. */
     private static int getListenerCount(EventListener l, Class<?> listenerType) {
         if (l == null) {
             return 0;
@@ -749,7 +753,7 @@ public class AWTEventMulticaster implements
         return 0;
     }
 
-    /** Vuelca el árbol en el arreglo, en orden, y devuelve por dónde quedó. */
+    /** Dumps the tree into the array, in order, and returns where it got to. */
     private static int populateListenerArray(EventListener[] out, EventListener l, int index) {
         if (l == null) {
             return index;

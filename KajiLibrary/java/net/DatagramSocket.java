@@ -12,27 +12,27 @@ import java.util.Set;
 // WHERE THE LINE IS
 // ===========================================================================================
 //
-// This header used to say that `send`, `receive` and the multicast memberships were not here because
-// there was no UDP stack in this VM, and that the line of the whole of `java.net` in KajiJDK was
-// "what is configured goes in, what transports does not". **Everything is in now.** The stack exists
-// --`jdk.internal.net.Net`, the same seam that opened TCP-- so all four are here, the constructors
-// that bind really bind, and `MulticastSocket` really joins groups.
+// This header used to say that `send`, `receive` and the multicast memberships were not here
+// because there was no UDP stack in this VM, and that the line of the whole of `java.net` in
+// KajiJDK was "what is configured goes in, what transports does not". **Everything is in now.** The
+// stack exists --`jdk.internal.net.Net`, the same seam that opened TCP-- so all four are here, the
+// constructors that bind really bind, and `MulticastSocket` really joins groups.
 //
 // **How a datagram is waited for.** The native does **not** block: it answers -3 when nothing has
 // arrived yet. It has to be that way, and it is not a convenience: this VM's Java threads share one
-// interpreter, so a native standing still waiting would not let the thread that was going to send the
-// packet run. `receive` waits on this side, retrying with a short `Thread.sleep` --sleeping releases
-// the interpreter-- and that is why it can really honour `setSoTimeout`.
+// interpreter, so a native standing still waiting would not let the thread that was going to send
+// the packet run. `receive` waits on this side, retrying with a short `Thread.sleep` --sleeping
+// releases the interpreter-- and that is why it can really honour `setSoTimeout`.
 //
-// **On `connect`:** in UDP there is no handshake. `connect` is a **local** decision --it fixes who is
-// being talked to so that the rest of the datagrams are filtered-- and it sends not one byte. That is
-// why it is really implemented and not omitted: it records state, and everything observable
+// **On `connect`:** in UDP there is no handshake. `connect` is a **local** decision --it fixes who
+// is being talked to so that the rest of the datagrams are filtered-- and it sends not one byte.
+// That is why it is really implemented and not omitted: it records state, and everything observable
 // afterwards (`isConnected`, `getInetAddress`, `getPort`, `getRemoteSocketAddress`) is true.
 //
 // **On the options' default values:** in the JDK the operating system sets them and they vary from
 // machine to machine. Here this class sets them, and they are documented one by one. No correct
-// program depends on them --which is why the JDK never promises them-- and what is guaranteed is the
-// only thing that matters about a configuration object: what is set is what is read.
+// program depends on them --which is why the JDK never promises them-- and what is guaranteed is
+// the only thing that matters about a configuration object: what is set is what is read.
 public class DatagramSocket implements Closeable {
 
     private static volatile DatagramSocketImplFactory factory;
@@ -115,8 +115,8 @@ public class DatagramSocket implements Closeable {
     /**
      * An unbound socket over the given implementation.
      *
-     * <p>It is the constructor a subclass bringing its own stack uses. It binds nothing, so it works
-     * in full.
+     * <p>It is the constructor a subclass bringing its own stack uses. It binds nothing, so it
+     * works in full.
      *
      * @throws NullPointerException if {@code impl} is null
      */
@@ -137,8 +137,8 @@ public class DatagramSocket implements Closeable {
     private void bindTo(String host, int port) throws SocketException {
         int h = jdk.internal.net.Net.udpBind(host, port);
         if (h < 0) {
-            // The native does not tell "port taken" from "no permission"; the message names the only
-            // thing known for certain.
+            // The native does not tell "port taken" from "no permission"; the message names the
+            // only thing known for certain.
             throw new SocketException("Cannot bind: " + host + ":" + port);
         }
         this.handle = h;
@@ -202,7 +202,8 @@ public class DatagramSocket implements Closeable {
     /**
      * Like {@link #connect(InetAddress, int)}, with the address and the port together.
      *
-     * @throws IllegalArgumentException if {@code addr} is null or is not an {@link InetSocketAddress}
+     * @throws IllegalArgumentException if {@code addr} is null or is not an {@link
+     *     InetSocketAddress}
      * @throws SocketException if {@code addr} does not have its address resolved
      */
     public void connect(SocketAddress addr) throws SocketException {
@@ -235,7 +236,7 @@ public class DatagramSocket implements Closeable {
         return this.remoteAddr != null;
     }
 
-    /** El destino fijado, o null. */
+    /** The destination that was set, or null. */
     public InetAddress getInetAddress() {
         return this.remoteAddr;
     }
@@ -275,10 +276,11 @@ public class DatagramSocket implements Closeable {
             String d = jdk.internal.net.Net.localAddress(this.handle);
             if (d != null) {
                 try {
-                    // Es un literal numerico: esto no consulta ningun DNS.
+                    // It is a numeric literal: this queries no DNS.
                     return InetAddress.getByName(d);
                 } catch (UnknownHostException e) {
-                    // It cannot happen with a numeric literal; if it did, it falls to the wildcard below.
+                    // It cannot happen with a numeric literal; if it did, it falls to the wildcard
+                    // below.
                 }
             }
         }
@@ -303,7 +305,7 @@ public class DatagramSocket implements Closeable {
         return this.bound && this.impl != null ? this.impl.getLocalPort() : 0;
     }
 
-    // ---- opciones ----
+    // ---- options ----
 
     /**
      * Milliseconds a reception waits; 0 is "forever".
@@ -328,8 +330,8 @@ public class DatagramSocket implements Closeable {
      * Suggested size of the output buffer.
      *
      * <p>"Suggested" comes from the JDK, it is not a get-out of ours: the operating system may give
-     * you another, and that is why the getter never promised to return what you set. Here there is no
-     * system to change it, so it returns exactly what was set.
+     * you another, and that is why the getter never promised to return what you set. Here there is
+     * no system to change it, so it returns exactly what was set.
      *
      * @throws IllegalArgumentException if the size is not positive
      */
@@ -375,7 +377,7 @@ public class DatagramSocket implements Closeable {
         return this.reuseAddress;
     }
 
-    /** Si se pueden mandar datagramas a la direccion de broadcast. */
+    /** Whether datagrams can be sent to the broadcast address. */
     public void setBroadcast(boolean on) throws SocketException {
         this.checkOpen();
         this.broadcast = on;
@@ -387,9 +389,9 @@ public class DatagramSocket implements Closeable {
     }
 
     /**
-     * El campo "type of service" de la cabecera IP.
+     * The "type of service" field of the IP header.
      *
-     * @throws IllegalArgumentException si no entra en un byte
+     * @throws IllegalArgumentException if it does not fit in a byte
      */
     public void setTrafficClass(int tc) throws SocketException {
         this.checkOpen();
@@ -470,7 +472,7 @@ public class DatagramSocket implements Closeable {
         return Collections.unmodifiableSet(s);
     }
 
-    // ---- ciclo de vida ----
+    // ---- life cycle ----
 
     /** Closes the socket. Closing twice does nothing, which is what {@link Closeable} requires. */
     public void close() {
@@ -484,7 +486,7 @@ public class DatagramSocket implements Closeable {
         }
     }
 
-    /** Si ya se cerro. */
+    /** Whether it was closed already. */
     public boolean isClosed() {
         return this.closed;
     }
@@ -492,8 +494,8 @@ public class DatagramSocket implements Closeable {
     /**
      * The associated NIO channel, or null.
      *
-     * <p>Null unless the socket came out of a `DatagramChannel`, which is what the JDK does: a socket
-     * created with `new` has no channel.
+     * <p>Null unless the socket came out of a `DatagramChannel`, which is what the JDK does: a
+     * socket created with `new` has no channel.
      */
     public java.nio.channels.DatagramChannel getChannel() {
         return null;
@@ -514,7 +516,7 @@ public class DatagramSocket implements Closeable {
         factory = fac;
     }
 
-    // ---- mover datagramas -------------------------------------------------------------------
+    // ---- moving datagrams -------------------------------------------------------------------
 
     /**
      * Sends that datagram.
@@ -524,7 +526,8 @@ public class DatagramSocket implements Closeable {
      * requires.
      *
      * @throws IOException if the datagram could not be sent whole
-     * @throws IllegalArgumentException if the packet has no destination and the socket is not connected
+     * @throws IllegalArgumentException if the packet has no destination and the socket is not
+     *     connected
      * @throws SocketException if the socket is closed
      */
     public void send(DatagramPacket p) throws IOException {
@@ -532,25 +535,25 @@ public class DatagramSocket implements Closeable {
             throw new NullPointerException("p");
         }
         this.checkOpen();
-        InetAddress destino = p.getAddress();
+        InetAddress target = p.getAddress();
         int port = p.getPort();
         if (this.isConnected()) {
-            if (destino == null) {
-                destino = this.remoteAddr;
+            if (target == null) {
+                target = this.remoteAddr;
                 port = this.remotePort;
-            } else if (!destino.equals(this.remoteAddr) || port != this.remotePort) {
+            } else if (!target.equals(this.remoteAddr) || port != this.remotePort) {
                 throw new IllegalArgumentException("connected address and packet address differ");
             }
         }
-        if (destino == null) {
+        if (target == null) {
             throw new IllegalArgumentException("Address not set");
         }
-        // Sending while unbound binds: the system chooses the outgoing port. It is what the JDK does,
-        // and without it a `new DatagramSocket(null)` that only sends could never send.
+        // Sending while unbound binds: the system chooses the outgoing port. It is what the JDK
+        // does, and without it a `new DatagramSocket(null)` that only sends could never send.
         if (this.handle < 0) {
             this.bindTo("0.0.0.0", 0);
         }
-        boolean ok = jdk.internal.net.Net.udpSend(this.handle, destino.getHostAddress(), port,
+        boolean ok = jdk.internal.net.Net.udpSend(this.handle, target.getHostAddress(), port,
                 p.getData(), p.getOffset(), p.getLength());
         if (!ok) {
             throw new IOException("send failed");
@@ -565,8 +568,8 @@ public class DatagramSocket implements Closeable {
      * started waiting.
      *
      * <p>It is `synchronized` because receiving and asking who it came from are **a single
-     * operation** split into three calls to the native; without the lock, two threads receiving over
-     * the same socket could take each other's sender.
+     * operation** split into three calls to the native; without the lock, two threads receiving
+     * over the same socket could take each other's sender.
      *
      * @throws SocketTimeoutException if the deadline expired with nothing arriving
      * @throws IOException if the reception failed
@@ -580,7 +583,7 @@ public class DatagramSocket implements Closeable {
             // Receiving while unbound binds, just as sending does.
             this.bindTo("0.0.0.0", 0);
         }
-        long comienzo = System.currentTimeMillis();
+        long start = System.currentTimeMillis();
         byte[] buf = p.getData();
         int n = jdk.internal.net.Net.udpReceive(this.handle, buf, p.getOffset(), p.getLength());
         while (n == -3) {
@@ -588,7 +591,7 @@ public class DatagramSocket implements Closeable {
                 throw new SocketException("Socket is closed");
             }
             if (this.soTimeout > 0
-                    && System.currentTimeMillis() - comienzo >= this.soTimeout) {
+                    && System.currentTimeMillis() - start >= this.soTimeout) {
                 throw new SocketTimeoutException("Receive timed out");
             }
             try {
@@ -638,38 +641,39 @@ public class DatagramSocket implements Closeable {
     // Joining and leaving a group resolve exactly the same things --the address, the interface, and
     // whether they are v4 or v6-- so they are kept together: separating them would duplicate that
     // resolution, which is where all the odd cases live.
-    private void membership(SocketAddress mcastaddr, NetworkInterface netIf, boolean entrar)
+    private void membership(SocketAddress mcastaddr, NetworkInterface netIf, boolean join)
             throws IOException {
         this.checkOpen();
         if (!(mcastaddr instanceof InetSocketAddress)) {
             throw new IllegalArgumentException("Unsupported address type");
         }
-        InetAddress grupo = ((InetSocketAddress) mcastaddr).getAddress();
-        if (grupo == null || !grupo.isMulticastAddress()) {
+        InetAddress group = ((InetSocketAddress) mcastaddr).getAddress();
+        if (group == null || !group.isMulticastAddress()) {
             // The JDK's javadoc says `IllegalArgumentException`, but JDK 25 throws
-            // `SocketException("Not a multicast address")`. What it **does** is followed, not what it
-            // says: it is what a program running against both will catch.
+            // `SocketException("Not a multicast address")`. What it **does** is followed, not what
+            // it says: it is what a program running against both will catch.
             throw new SocketException("Not a multicast address");
         }
         if (this.handle < 0) {
             this.bindTo("0.0.0.0", 0);
         }
-        String placa = DatagramSocket.nombrarPlaca(grupo, netIf);
-        boolean ok = entrar
-                ? jdk.internal.net.Net.udpJoin(this.handle, grupo.getHostAddress(), placa)
-                : jdk.internal.net.Net.udpLeave(this.handle, grupo.getHostAddress(), placa);
+        String iface = DatagramSocket.interfaceName(group, netIf);
+        boolean ok = join
+                ? jdk.internal.net.Net.udpJoin(this.handle, group.getHostAddress(), iface)
+                : jdk.internal.net.Net.udpLeave(this.handle, group.getHostAddress(), iface);
         if (!ok) {
-            throw new IOException((entrar ? "join" : "leave") + " group failed: " + grupo);
+            throw new IOException((join ? "join" : "leave") + " group failed: " + group);
         }
     }
 
-    // How to name the interface for the native: in IPv4 it is named by address and in IPv6 by index,
-    // and they are two different strings. The empty string means "whichever the system chooses".
-    static String nombrarPlaca(InetAddress grupo, NetworkInterface netIf) {
+    // How to name the interface for the native: in IPv4 it is named by address and in IPv6 by
+    // index, and they are two different strings. The empty string means "whichever the system
+    // chooses".
+    static String interfaceName(InetAddress group, NetworkInterface netIf) {
         if (netIf == null) {
             return "";
         }
-        if (grupo instanceof Inet6Address) {
+        if (group instanceof Inet6Address) {
             return Integer.toString(netIf.getIndex());
         }
         java.util.Enumeration<InetAddress> dirs = netIf.getInetAddresses();
@@ -679,8 +683,9 @@ public class DatagramSocket implements Closeable {
                 return d.getHostAddress();
             }
         }
-        // An interface with no IPv4 address cannot receive v4 multicast; letting the system choose is
-        // more useful than failing, and it is what the JDK does with an interface with no addresses.
+        // An interface with no IPv4 address cannot receive v4 multicast; letting the system choose
+        // is more useful than failing, and it is what the JDK does with an interface with no
+        // addresses.
         return "";
     }
 }

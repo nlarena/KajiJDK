@@ -28,43 +28,44 @@ import javax.sql.RowSetEvent;
 import javax.sql.RowSetListener;
 
 /**
- * La base de todo {@code RowSet}: guarda las propiedades y los parametros, y avisa a los oyentes.
+ * The base of every {@code RowSet}: it keeps the properties and the parameters, and notifies the
+ * listeners.
  *
- * <h2>Que hace y que no</h2>
+ * <h2>What it does and what it does not</h2>
  *
- * <p>Esta clase <strong>no tiene filas</strong>. Guarda la consulta, la URL, el usuario, el tipo de
- * cursor y los parametros que van a reemplazar los signos de pregunta — todo lo que hace falta
- * <em>antes</em> de traer datos. Los datos son problema de la subclase.
+ * <p>This class <strong>has no rows</strong>. It keeps the query, the URL, the user, the cursor
+ * type and the parameters that are going to replace the question marks — everything that is needed
+ * <em>before</em> fetching data. The data is the subclass's problem.
  *
- * <p>Esa division es la que permite que un {@code CachedRowSet} y un {@code JdbcRowSet}, que
- * guardan sus filas de maneras completamente distintas, compartan las cien y pico de propiedades y
- * setters que tienen identicos.
+ * <p>That division is what allows a {@code CachedRowSet} and a {@code JdbcRowSet}, which keep their
+ * rows in completely different ways, to share the hundred-odd properties and setters they have in
+ * common.
  *
- * <h2>Los parametros, y por que se guardan en vez de aplicarse</h2>
+ * <h2>The parameters, and why they are kept instead of applied</h2>
  *
- * <p>Un {@code RowSet} es un componente al estilo JavaBeans: primero se configura, despues se
- * ejecuta. Cuando alguien llama a {@code setInt(1, 42)} todavia puede no haber conexion ni
- * sentencia preparada donde poner ese 42, asi que se guarda en un mapa indexado y la subclase lo
- * recupera con {@link #getParams} en el momento de ejecutar.
+ * <p>A {@code RowSet} is a JavaBeans-style component: first it is configured, then it is executed.
+ * When somebody calls {@code setInt(1, 42)} there may still be no connection nor prepared statement
+ * to put that 42 in, so it is kept in an indexed map and the subclass retrieves it with
+ * {@link #getParams} at execution time.
  *
- * <p>De ahi salen dos rarezas visibles. Los indices son base 1 de cara afuera y base 0 en el mapa,
- * que es la unica resta que hay en toda la clase. Y los parametros que llevan mas de un dato
- * —{@code setNull} con su tipo SQL, {@code setObject} con escala, los flujos con su largo— se
- * guardan como un {@code Object[]}, porque el mapa tiene un solo lugar por posicion.
+ * <p>Two visible oddities come from that. Indices are 1-based on the outside and 0-based in the
+ * map, which is the only subtraction in the whole class. And the parameters that carry more than
+ * one datum —{@code setNull} with its SQL type, {@code setObject} with a scale, the streams with
+ * their length— are kept as an {@code Object[]}, because the map has a single slot per position.
  *
- * <h2>Los parametros por nombre no estan</h2>
+ * <h2>Parameters by name are not here</h2>
  *
- * <p>Las tres decenas de metodos {@code setXxx(String, ...)} lanzan
- * {@link SQLFeatureNotSupportedException}. No es un hueco de esta biblioteca: es lo que hace el
- * JDK. Estan declarados porque {@code RowSet} los declara, y no funcionan porque un
- * {@code PreparedStatement} de JDBC no acepta parametros por nombre — no habria adonde mandarlos.
+ * <p>The three dozen {@code setXxx(String, ...)} methods throw {@link
+ * SQLFeatureNotSupportedException}. It is not a gap of this library: it is what the JDK does. They
+ * are declared because {@code RowSet} declares them, and they do not work because a JDBC {@code
+ * PreparedStatement} does not accept parameters by name — there would be nowhere to send them.
  *
- * <h2>Los cuatro campos {@code protected} de flujos</h2>
+ * <h2>The four {@code protected} stream fields</h2>
  *
- * <p>{@link #binaryStream}, {@link #unicodeStream}, {@link #asciiStream} y {@link #charStream} son
- * un resto de una version anterior, cuando el ultimo flujo fijado se guardaba aparte para que la
- * subclase lo alcanzara. Hoy los flujos van al mapa de parametros como todo lo demas. Se conservan
- * porque son API {@code protected} y alguna subclase de afuera puede estar leyendolos.
+ * <p>{@link #binaryStream}, {@link #unicodeStream}, {@link #asciiStream} and {@link #charStream}
+ * are a leftover of an earlier version, when the last stream set was kept apart for the subclass to
+ * reach. Today the streams go into the parameter map like everything else. They are kept because
+ * they are {@code protected} API and some outside subclass may be reading them.
  *
  * @since 1.5
  */
@@ -72,25 +73,25 @@ public abstract class BaseRowSet implements Serializable, Cloneable {
 
     private static final long serialVersionUID = 4886719666485113312L;
 
-    /** Marca de que un parametro de flujo es de caracteres Unicode. */
+    /** Marks that a stream parameter is of Unicode characters. */
     public static final int UNICODE_STREAM_PARAM = 0;
 
-    /** Marca de que un parametro de flujo es binario. */
+    /** Marks that a stream parameter is binary. */
     public static final int BINARY_STREAM_PARAM = 1;
 
-    /** Marca de que un parametro de flujo es de caracteres ASCII. */
+    /** Marks that a stream parameter is of ASCII characters. */
     public static final int ASCII_STREAM_PARAM = 2;
 
-    /** El ultimo flujo binario fijado; ver la nota de la clase. */
+    /** The last binary stream set; see the class note. */
     protected InputStream binaryStream;
 
-    /** El ultimo flujo Unicode fijado; ver la nota de la clase. */
+    /** The last Unicode stream set; see the class note. */
     protected InputStream unicodeStream;
 
-    /** El ultimo flujo ASCII fijado; ver la nota de la clase. */
+    /** The last ASCII stream set; see the class note. */
     protected InputStream asciiStream;
 
-    /** El ultimo flujo de caracteres fijado; ver la nota de la clase. */
+    /** The last character stream set; see the class note. */
     protected Reader charStream;
 
     private String command;
@@ -114,53 +115,53 @@ public abstract class BaseRowSet implements Serializable, Cloneable {
 
     private transient Vector<RowSetListener> listeners = new Vector<RowSetListener>();
 
-    /** Parametros por posicion, en base 0; ver la nota de la clase. */
+    /** Parameters by position, 0-based; see the class note. */
     private Hashtable<Integer, Object> params;
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     public BaseRowSet() {
     }
 
     /**
-     * Prepara el mapa de parametros, vaciandolo si ya existia.
+     * Prepares the parameter map, emptying it if it already existed.
      *
-     * <p>Hay que llamarlo antes del primer {@code setXxx}. Los setters no lo hacen solos a
-     * proposito: fallan diciendo que falta, que es mas facil de diagnosticar que un mapa que
-     * aparece a mitad de camino.
+     * <p>It has to be called before the first {@code setXxx}. The setters do not do it by
+     * themselves on purpose: they fail saying it is missing, which is easier to diagnose than a map
+     * that appears halfway through.
      */
     protected void initParams() {
         params = new Hashtable<Integer, Object>();
     }
 
-    private Hashtable<Integer, Object> mapa(final String quien) throws SQLException {
+    private Hashtable<Integer, Object> paramsFor(final String caller) throws SQLException {
         if (params == null) {
-            throw new SQLException("Set initParams() before " + quien);
+            throw new SQLException("Set initParams() before " + caller);
         }
         return params;
     }
 
-    /** Los indices de parametro son base 1, como en todo JDBC. */
+    /** Parameter indices are 1-based, as in all of JDBC. */
     private void checkParamIndex(final int idx) throws SQLException {
         if (idx < 1) {
-            throw new SQLException("el indice de parametro tiene que ser mayor o igual a 1");
+            throw new SQLException("the parameter index has to be greater than or equal to 1");
         }
     }
 
-    private void poner(final int idx, final Object v, final String quien) throws SQLException {
+    private void store(final int idx, final Object v, final String caller) throws SQLException {
         checkParamIndex(idx);
-        mapa(quien).put(Integer.valueOf(idx - 1), v);
+        paramsFor(caller).put(Integer.valueOf(idx - 1), v);
     }
 
-    private static SQLFeatureNotSupportedException porNombre() {
+    private static SQLFeatureNotSupportedException byNameUnsupported() {
         return new SQLFeatureNotSupportedException("Feature not supported");
     }
 
-    // ---- oyentes ----
+    // ---- listeners ----
 
     /**
-     * Agrega un oyente.
+     * Adds a listener.
      *
-     * @param listener el oyente
+     * @param listener the listener
      */
     public void addRowSetListener(final RowSetListener listener) {
         if (listener != null) {
@@ -169,73 +170,73 @@ public abstract class BaseRowSet implements Serializable, Cloneable {
     }
 
     /**
-     * Saca un oyente.
+     * Removes a listener.
      *
-     * @param listener el oyente
+     * @param listener the listener
      */
     public void removeRowSetListener(final RowSetListener listener) {
         listeners.remove(listener);
     }
 
     /**
-     * Avisa a los oyentes que el cursor se movio.
+     * Notifies the listeners that the cursor moved.
      *
-     * <p>Los tres avisos recorren una copia de la lista: un oyente que se desregistre a si mismo
-     * mientras se lo notifica dejaria la iteracion sobre una lista que cambio debajo.
+     * <p>The three notices walk a copy of the list: a listener that unregisters itself while being
+     * notified would leave the iteration over a list that changed underneath.
      */
     protected void notifyCursorMoved() {
         final RowSetEvent e = new RowSetEvent((javax.sql.RowSet) this);
-        for (final RowSetListener l : copiaDeOyentes()) {
+        for (final RowSetListener l : listenersCopy()) {
             l.cursorMoved(e);
         }
     }
 
-    /** Avisa a los oyentes que la fila actual cambio. */
+    /** Notifies the listeners that the current row changed. */
     protected void notifyRowChanged() {
         final RowSetEvent e = new RowSetEvent((javax.sql.RowSet) this);
-        for (final RowSetListener l : copiaDeOyentes()) {
+        for (final RowSetListener l : listenersCopy()) {
             l.rowChanged(e);
         }
     }
 
-    /** Avisa a los oyentes que el conjunto entero cambio. */
+    /** Notifies the listeners that the whole set changed. */
     protected void notifyRowSetChanged() {
         final RowSetEvent e = new RowSetEvent((javax.sql.RowSet) this);
-        for (final RowSetListener l : copiaDeOyentes()) {
+        for (final RowSetListener l : listenersCopy()) {
             l.rowSetChanged(e);
         }
     }
 
-    private RowSetListener[] copiaDeOyentes() {
+    private RowSetListener[] listenersCopy() {
         synchronized (listeners) {
             return listeners.toArray(new RowSetListener[listeners.size()]);
         }
     }
 
-    // ---- propiedades ----
+    // ---- properties ----
 
     /**
-     * La consulta a ejecutar.
+     * The query to execute.
      *
-     * @return la consulta, o {@code null}
+     * @return the query, or {@code null}
      */
     public String getCommand() {
         return command;
     }
 
     /**
-     * Fija la consulta y descarta los parametros que hubiera.
+     * Sets the query and discards whatever parameters there were.
      *
-     * <p>Los descarta porque eran de la consulta anterior: los signos de pregunta de la consulta
-     * nueva estan en otro lado y significan otra cosa. Dejarlos seria pasar valores a posiciones
-     * que ya no les corresponden.
+     * <p>It discards them because they belonged to the previous query: the question marks of the
+     * new query are elsewhere and mean something else. Keeping them would be passing values to
+     * positions that no longer correspond to them.
      *
-     * @param cmd la consulta
-     * @throws SQLException si la consulta es una cadena vacia
+     * @param cmd the query
+     * @throws SQLException if the query is an empty string
      */
     public void setCommand(final String cmd) throws SQLException {
         if (cmd != null && cmd.trim().length() == 0) {
-            throw new SQLException("la consulta no puede ser vacia");
+            throw new SQLException("the query cannot be empty");
         }
         command = cmd;
         if (params != null) {
@@ -244,122 +245,122 @@ public abstract class BaseRowSet implements Serializable, Cloneable {
     }
 
     /**
-     * La URL de JDBC.
+     * The JDBC URL.
      *
-     * @return la URL, o {@code null}
-     * @throws SQLException nunca
+     * @return the URL, or {@code null}
+     * @throws SQLException never
      */
     public String getUrl() throws SQLException {
         return url;
     }
 
     /**
-     * Fija la URL de JDBC.
+     * Sets the JDBC URL.
      *
-     * @param url la URL
-     * @throws SQLException si es una cadena vacia
+     * @param url the URL
+     * @throws SQLException if it is an empty string
      */
     public void setUrl(final String url) throws SQLException {
         if (url != null && url.trim().length() == 0) {
-            throw new SQLException("la URL no puede ser vacia");
+            throw new SQLException("the URL cannot be empty");
         }
         this.url = url;
     }
 
     /**
-     * El nombre JNDI de la fuente de datos.
+     * The JNDI name of the data source.
      *
-     * @return el nombre, o {@code null}
+     * @return the name, or {@code null}
      */
     public String getDataSourceName() {
         return dataSource;
     }
 
     /**
-     * Fija el nombre JNDI de la fuente de datos y olvida la URL.
+     * Sets the JNDI name of the data source and forgets the URL.
      *
-     * <p>Son dos formas excluyentes de llegar a la base, y tener las dos puestas dejaria sin
-     * definir cual gana. Fijar una borra la otra.
+     * <p>They are two mutually exclusive ways of reaching the database, and having both set would
+     * leave undefined which one wins. Setting one erases the other.
      *
-     * @param name el nombre JNDI
-     * @throws SQLException si es una cadena vacia
+     * @param name the JNDI name
+     * @throws SQLException if it is an empty string
      */
     public void setDataSourceName(final String name) throws SQLException {
         if (name != null && name.trim().length() == 0) {
-            throw new SQLException("el nombre de la fuente de datos no puede ser vacio");
+            throw new SQLException("the data source name cannot be empty");
         }
         dataSource = name;
         url = null;
     }
 
     /**
-     * El usuario.
+     * The user.
      *
-     * @return el usuario, o {@code null}
+     * @return the user, or {@code null}
      */
     public String getUsername() {
         return username;
     }
 
     /**
-     * Fija el usuario.
+     * Sets the user.
      *
-     * @param name el usuario
+     * @param name the user
      */
     public void setUsername(final String name) {
         username = name;
     }
 
     /**
-     * La contrasena.
+     * The password.
      *
-     * @return la contrasena, o {@code null}
+     * @return the password, or {@code null}
      */
     public String getPassword() {
         return password;
     }
 
     /**
-     * Fija la contrasena.
+     * Sets the password.
      *
-     * <p>El campo es {@code transient}, igual que el del usuario: un {@code RowSet} se serializa y
-     * viaja, y las credenciales no deberian viajar con el.
+     * <p>The field is {@code transient}, like the user's: a {@code RowSet} is serialized and
+     * travels, and the credentials should not travel with it.
      *
-     * @param pass la contrasena
+     * @param pass the password
      */
     public void setPassword(final String pass) {
         password = pass;
     }
 
     /**
-     * Fija el tipo de cursor.
+     * Sets the cursor type.
      *
-     * @param type una de las constantes {@code TYPE_} de {@code ResultSet}
-     * @throws SQLException si el valor no es una de ellas
+     * @param type one of the {@code TYPE_} constants of {@code ResultSet}
+     * @throws SQLException if the value is not one of them
      */
     public void setType(final int type) throws SQLException {
         if (type != ResultSet.TYPE_FORWARD_ONLY && type != ResultSet.TYPE_SCROLL_INSENSITIVE
                 && type != ResultSet.TYPE_SCROLL_SENSITIVE) {
-            throw new SQLException("tipo de cursor invalido: " + type);
+            throw new SQLException("invalid cursor type: " + type);
         }
         rowSetType = type;
     }
 
     /**
-     * El tipo de cursor.
+     * The cursor type.
      *
-     * @return una de las constantes {@code TYPE_}
-     * @throws SQLException nunca
+     * @return one of the {@code TYPE_} constants
+     * @throws SQLException never
      */
     public int getType() throws SQLException {
         return rowSetType;
     }
 
     /**
-     * Fija la concurrencia.
+     * Sets the concurrency.
      *
-     * @param concurrency {@code CONCUR_READ_ONLY} o {@code CONCUR_UPDATABLE}
-     * @throws SQLException si el valor no es uno de esos dos
+     * @param concurrency {@code CONCUR_READ_ONLY} or {@code CONCUR_UPDATABLE}
+     * @throws SQLException if the value is not one of those two
      */
     public void setConcurrency(final int concurrency) throws SQLException {
         if (concurrency != ResultSet.CONCUR_READ_ONLY
@@ -370,47 +371,47 @@ public abstract class BaseRowSet implements Serializable, Cloneable {
     }
 
     /**
-     * La concurrencia.
+     * The concurrency.
      *
-     * @return {@code CONCUR_READ_ONLY} o {@code CONCUR_UPDATABLE}
-     * @throws SQLException nunca
+     * @return {@code CONCUR_READ_ONLY} or {@code CONCUR_UPDATABLE}
+     * @throws SQLException never
      */
     public int getConcurrency() throws SQLException {
         return concurrency;
     }
 
     /**
-     * Si el conjunto es de solo lectura.
+     * Whether the set is read-only.
      *
-     * @return si lo es
+     * @return whether it is
      */
     public boolean isReadOnly() {
         return readOnly;
     }
 
     /**
-     * Marca el conjunto como de solo lectura.
+     * Marks the set as read-only.
      *
-     * @param value si marcarlo
+     * @param value whether to mark it
      */
     public void setReadOnly(final boolean value) {
         readOnly = value;
     }
 
     /**
-     * El nivel de aislamiento de la transaccion.
+     * The transaction isolation level.
      *
-     * @return una de las constantes {@code TRANSACTION_} de {@code Connection}
+     * @return one of the {@code TRANSACTION_} constants of {@code Connection}
      */
     public int getTransactionIsolation() {
         return isolation;
     }
 
     /**
-     * Fija el nivel de aislamiento.
+     * Sets the isolation level.
      *
-     * @param level una de las constantes {@code TRANSACTION_}
-     * @throws SQLException si el valor no es una de ellas
+     * @param level one of the {@code TRANSACTION_} constants
+     * @throws SQLException if the value is not one of them
      */
     public void setTransactionIsolation(final int level) throws SQLException {
         if (level != Connection.TRANSACTION_NONE
@@ -418,210 +419,210 @@ public abstract class BaseRowSet implements Serializable, Cloneable {
                 && level != Connection.TRANSACTION_READ_COMMITTED
                 && level != Connection.TRANSACTION_REPEATABLE_READ
                 && level != Connection.TRANSACTION_SERIALIZABLE) {
-            throw new SQLException("nivel de aislamiento invalido: " + level);
+            throw new SQLException("invalid isolation level: " + level);
         }
         isolation = level;
     }
 
     /**
-     * El mapa de tipos SQL a clases Java.
+     * The map from SQL types to Java classes.
      *
-     * @return el mapa, o {@code null} si no se fijo ninguno
+     * @return the map, or {@code null} if none was set
      */
     public Map<String, Class<?>> getTypeMap() {
         return map;
     }
 
     /**
-     * Fija el mapa de tipos.
+     * Sets the type map.
      *
-     * @param map el mapa
+     * @param map the map
      */
     public void setTypeMap(final Map<String, Class<?>> map) {
         this.map = map;
     }
 
     /**
-     * El tope de bytes por columna.
+     * The cap on bytes per column.
      *
-     * @return el tope; cero es sin tope
-     * @throws SQLException nunca
+     * @return the cap; zero is no cap
+     * @throws SQLException never
      */
     public int getMaxFieldSize() throws SQLException {
         return maxFieldSize;
     }
 
     /**
-     * Fija el tope de bytes por columna.
+     * Sets the cap on bytes per column.
      *
-     * @param max el tope; cero para sin tope
-     * @throws SQLException si es negativo
+     * @param max the cap; zero for no cap
+     * @throws SQLException if it is negative
      */
     public void setMaxFieldSize(final int max) throws SQLException {
         if (max < 0) {
-            throw new SQLException("el tamano maximo de campo no puede ser negativo");
+            throw new SQLException("the maximum field size cannot be negative");
         }
         maxFieldSize = max;
     }
 
     /**
-     * El tope de filas.
+     * The cap on rows.
      *
-     * @return el tope; cero es sin tope
-     * @throws SQLException nunca
+     * @return the cap; zero is no cap
+     * @throws SQLException never
      */
     public int getMaxRows() throws SQLException {
         return maxRows;
     }
 
     /**
-     * Fija el tope de filas.
+     * Sets the cap on rows.
      *
-     * @param max el tope; cero para sin tope
-     * @throws SQLException si es negativo o menor que el tamano de lote ya fijado
+     * @param max the cap; zero for no cap
+     * @throws SQLException if it is negative or less than the fetch size already set
      */
     public void setMaxRows(final int max) throws SQLException {
         if (max < 0) {
-            throw new SQLException("la cantidad maxima de filas no puede ser negativa");
+            throw new SQLException("the maximum number of rows cannot be negative");
         }
         if (max != 0 && max < fetchSize) {
             throw new SQLException(
-                    "el maximo de filas no puede ser menor que el tamano de lote " + fetchSize);
+                    "the maximum rows cannot be less than the fetch size " + fetchSize);
         }
         maxRows = max;
     }
 
     /**
-     * Prende o apaga el procesamiento de secuencias de escape de SQL.
+     * Turns the processing of SQL escape sequences on or off.
      *
-     * @param enable si procesarlas
-     * @throws SQLException nunca
+     * @param enable whether to process them
+     * @throws SQLException never
      */
     public void setEscapeProcessing(final boolean enable) throws SQLException {
         escapeProcessing = enable;
     }
 
     /**
-     * Si se procesan las secuencias de escape.
+     * Whether escape sequences are processed.
      *
-     * @return si se procesan
-     * @throws SQLException nunca
+     * @return whether they are processed
+     * @throws SQLException never
      */
     public boolean getEscapeProcessing() throws SQLException {
         return escapeProcessing;
     }
 
     /**
-     * Cuantos segundos se espera a la consulta.
+     * How many seconds the query is waited for.
      *
-     * @return los segundos; cero es sin limite
-     * @throws SQLException nunca
+     * @return the seconds; zero is no limit
+     * @throws SQLException never
      */
     public int getQueryTimeout() throws SQLException {
         return queryTimeout;
     }
 
     /**
-     * Fija cuantos segundos esperar.
+     * Sets how many seconds to wait.
      *
-     * @param seconds los segundos; cero para sin limite
-     * @throws SQLException si es negativo
+     * @param seconds the seconds; zero for no limit
+     * @throws SQLException if it is negative
      */
     public void setQueryTimeout(final int seconds) throws SQLException {
         if (seconds < 0) {
-            throw new SQLException("el tiempo de espera no puede ser negativo");
+            throw new SQLException("the timeout cannot be negative");
         }
         queryTimeout = seconds;
     }
 
     /**
-     * Si las filas borradas se ven al recorrer.
+     * Whether deleted rows are seen when walking.
      *
-     * @return si se ven
-     * @throws SQLException nunca
+     * @return whether they are seen
+     * @throws SQLException never
      */
     public boolean getShowDeleted() throws SQLException {
         return showDeleted;
     }
 
     /**
-     * Muestra o esconde las filas borradas.
+     * Shows or hides the deleted rows.
      *
-     * @param value si mostrarlas
-     * @throws SQLException nunca
+     * @param value whether to show them
+     * @throws SQLException never
      */
     public void setShowDeleted(final boolean value) throws SQLException {
         showDeleted = value;
     }
 
     /**
-     * Fija en que direccion se van a leer las filas.
+     * Sets in which direction the rows are going to be read.
      *
-     * @param direction una de las constantes {@code FETCH_} de {@code ResultSet}
-     * @throws SQLException si el valor no es una de ellas, o si el cursor es de solo avance y se
-     *     pide otra direccion
+     * @param direction one of the {@code FETCH_} constants of {@code ResultSet}
+     * @throws SQLException if the value is not one of them, or if the cursor is forward-only and
+     *     another direction is asked for
      */
     public void setFetchDirection(final int direction) throws SQLException {
         if (direction != ResultSet.FETCH_FORWARD && direction != ResultSet.FETCH_REVERSE
                 && direction != ResultSet.FETCH_UNKNOWN) {
-            throw new SQLException("direccion de lectura invalida: " + direction);
+            throw new SQLException("invalid fetch direction: " + direction);
         }
-        // Un cursor de solo avance no puede leer al reves ni admitir "no se": la unica direccion
-        // coherente con su tipo es hacia adelante.
+        // A forward-only cursor cannot read backwards nor admit "unknown": the only direction
+        // coherent with its type is forward.
         if (rowSetType == ResultSet.TYPE_FORWARD_ONLY && direction != ResultSet.FETCH_FORWARD) {
-            throw new SQLException("un cursor de solo avance solo admite FETCH_FORWARD");
+            throw new SQLException("a forward-only cursor only admits FETCH_FORWARD");
         }
         fetchDir = direction;
     }
 
     /**
-     * La direccion de lectura.
+     * The reading direction.
      *
-     * @return una de las constantes {@code FETCH_}
-     * @throws SQLException nunca
+     * @return one of the {@code FETCH_} constants
+     * @throws SQLException never
      */
     public int getFetchDirection() throws SQLException {
         return fetchDir;
     }
 
     /**
-     * Cuantas filas se traen por vez.
+     * How many rows are fetched at a time.
      *
-     * @param rows el tamano de lote; cero deja decidir al controlador
-     * @throws SQLException si es negativo o supera el tope de filas
+     * @param rows the fetch size; zero lets the driver decide
+     * @throws SQLException if it is negative or exceeds the cap on rows
      */
     public void setFetchSize(final int rows) throws SQLException {
         if (rows < 0) {
-            throw new SQLException("el tamano de lote no puede ser negativo");
+            throw new SQLException("the fetch size cannot be negative");
         }
         if (maxRows != 0 && rows > maxRows) {
             throw new SQLException(
-                    "el tamano de lote no puede superar el maximo de filas " + maxRows);
+                    "the fetch size cannot exceed the maximum rows " + maxRows);
         }
         fetchSize = rows;
     }
 
     /**
-     * El tamano de lote.
+     * The fetch size.
      *
-     * @return el tamano
-     * @throws SQLException nunca
+     * @return the size
+     * @throws SQLException never
      */
     public int getFetchSize() throws SQLException {
         return fetchSize;
     }
 
-    // ---- parametros por posicion ----
+    // ---- parameters by position ----
 
     /**
-     * Los parametros fijados, ordenados por posicion.
+     * The parameters set, ordered by position.
      *
-     * <p>Es lo que la subclase usa al ejecutar. Una posicion que nadie fijo queda en {@code null},
-     * que no se distingue de un {@code setNull}; por eso {@code setNull} guarda un arreglo con el
-     * tipo SQL adentro en vez de guardar {@code null} pelado.
+     * <p>It is what the subclass uses when executing. A position nobody set is left {@code null},
+     * which cannot be told apart from a {@code setNull}; that is why {@code setNull} keeps an array
+     * with the SQL type inside instead of keeping a bare {@code null}.
      *
-     * @return los parametros
-     * @throws SQLException nunca
+     * @return the parameters
+     * @throws SQLException never
      */
     public Object[] getParams() throws SQLException {
         if (params == null) {
@@ -636,9 +637,9 @@ public abstract class BaseRowSet implements Serializable, Cloneable {
     }
 
     /**
-     * Borra todos los parametros.
+     * Erases all the parameters.
      *
-     * @throws SQLException nunca
+     * @throws SQLException never
      */
     public void clearParameters() throws SQLException {
         if (params != null) {
@@ -647,958 +648,958 @@ public abstract class BaseRowSet implements Serializable, Cloneable {
     }
 
     /**
-     * Un parametro nulo, con su tipo SQL.
+     * A null parameter, with its SQL type.
      *
-     * @param parameterIndex la posicion, desde 1
-     * @param sqlType el tipo SQL
-     * @throws SQLException si el indice es menor que 1 o falta {@link #initParams}
+     * @param parameterIndex the position, from 1
+     * @param sqlType the SQL type
+     * @throws SQLException if the index is less than 1 or {@link #initParams} was not called
      */
     public void setNull(final int parameterIndex, final int sqlType) throws SQLException {
-        poner(parameterIndex, new Object[] { null, Integer.valueOf(sqlType) }, "setNull");
+        store(parameterIndex, new Object[] { null, Integer.valueOf(sqlType) }, "setNull");
     }
 
     /**
-     * Un parametro nulo de un tipo definido por el usuario.
+     * A null parameter of a user-defined type.
      *
-     * @param parameterIndex la posicion, desde 1
-     * @param sqlType el tipo SQL
-     * @param typeName el nombre del tipo
-     * @throws SQLException si el indice es menor que 1 o falta {@link #initParams}
+     * @param parameterIndex the position, from 1
+     * @param sqlType the SQL type
+     * @param typeName the name of the type
+     * @throws SQLException if the index is less than 1 or {@link #initParams} was not called
      */
     public void setNull(final int parameterIndex, final int sqlType, final String typeName)
             throws SQLException {
-        poner(parameterIndex, new Object[] { null, Integer.valueOf(sqlType), typeName }, "setNull");
+        store(parameterIndex, new Object[] { null, Integer.valueOf(sqlType), typeName }, "setNull");
     }
 
     /**
-     * Un parametro booleano.
+     * A boolean parameter.
      *
-     * @param parameterIndex la posicion, desde 1
-     * @param x el valor
-     * @throws SQLException si el indice es menor que 1 o falta {@link #initParams}
+     * @param parameterIndex the position, from 1
+     * @param x the value
+     * @throws SQLException if the index is less than 1 or {@link #initParams} was not called
      */
     public void setBoolean(final int parameterIndex, final boolean x) throws SQLException {
-        poner(parameterIndex, Boolean.valueOf(x), "setBoolean");
+        store(parameterIndex, Boolean.valueOf(x), "setBoolean");
     }
 
     /**
-     * Un parametro {@code byte}.
+     * A {@code byte} parameter.
      *
-     * @param parameterIndex la posicion, desde 1
-     * @param x el valor
-     * @throws SQLException si el indice es menor que 1 o falta {@link #initParams}
+     * @param parameterIndex the position, from 1
+     * @param x the value
+     * @throws SQLException if the index is less than 1 or {@link #initParams} was not called
      */
     public void setByte(final int parameterIndex, final byte x) throws SQLException {
-        poner(parameterIndex, Byte.valueOf(x), "setByte");
+        store(parameterIndex, Byte.valueOf(x), "setByte");
     }
 
     /**
-     * Un parametro {@code short}.
+     * A {@code short} parameter.
      *
-     * @param parameterIndex la posicion, desde 1
-     * @param x el valor
-     * @throws SQLException si el indice es menor que 1 o falta {@link #initParams}
+     * @param parameterIndex the position, from 1
+     * @param x the value
+     * @throws SQLException if the index is less than 1 or {@link #initParams} was not called
      */
     public void setShort(final int parameterIndex, final short x) throws SQLException {
-        poner(parameterIndex, Short.valueOf(x), "setShort");
+        store(parameterIndex, Short.valueOf(x), "setShort");
     }
 
     /**
-     * Un parametro {@code int}.
+     * An {@code int} parameter.
      *
-     * @param parameterIndex la posicion, desde 1
-     * @param x el valor
-     * @throws SQLException si el indice es menor que 1 o falta {@link #initParams}
+     * @param parameterIndex the position, from 1
+     * @param x the value
+     * @throws SQLException if the index is less than 1 or {@link #initParams} was not called
      */
     public void setInt(final int parameterIndex, final int x) throws SQLException {
-        poner(parameterIndex, Integer.valueOf(x), "setInt");
+        store(parameterIndex, Integer.valueOf(x), "setInt");
     }
 
     /**
-     * Un parametro {@code long}.
+     * A {@code long} parameter.
      *
-     * @param parameterIndex la posicion, desde 1
-     * @param x el valor
-     * @throws SQLException si el indice es menor que 1 o falta {@link #initParams}
+     * @param parameterIndex the position, from 1
+     * @param x the value
+     * @throws SQLException if the index is less than 1 or {@link #initParams} was not called
      */
     public void setLong(final int parameterIndex, final long x) throws SQLException {
-        poner(parameterIndex, Long.valueOf(x), "setLong");
+        store(parameterIndex, Long.valueOf(x), "setLong");
     }
 
     /**
-     * Un parametro {@code float}.
+     * A {@code float} parameter.
      *
-     * @param parameterIndex la posicion, desde 1
-     * @param x el valor
-     * @throws SQLException si el indice es menor que 1 o falta {@link #initParams}
+     * @param parameterIndex the position, from 1
+     * @param x the value
+     * @throws SQLException if the index is less than 1 or {@link #initParams} was not called
      */
     public void setFloat(final int parameterIndex, final float x) throws SQLException {
-        poner(parameterIndex, Float.valueOf(x), "setFloat");
+        store(parameterIndex, Float.valueOf(x), "setFloat");
     }
 
     /**
-     * Un parametro {@code double}.
+     * A {@code double} parameter.
      *
-     * @param parameterIndex la posicion, desde 1
-     * @param x el valor
-     * @throws SQLException si el indice es menor que 1 o falta {@link #initParams}
+     * @param parameterIndex the position, from 1
+     * @param x the value
+     * @throws SQLException if the index is less than 1 or {@link #initParams} was not called
      */
     public void setDouble(final int parameterIndex, final double x) throws SQLException {
-        poner(parameterIndex, Double.valueOf(x), "setDouble");
+        store(parameterIndex, Double.valueOf(x), "setDouble");
     }
 
     /**
-     * Un parametro decimal.
+     * A decimal parameter.
      *
-     * @param parameterIndex la posicion, desde 1
-     * @param x el valor
-     * @throws SQLException si el indice es menor que 1 o falta {@link #initParams}
+     * @param parameterIndex the position, from 1
+     * @param x the value
+     * @throws SQLException if the index is less than 1 or {@link #initParams} was not called
      */
     public void setBigDecimal(final int parameterIndex, final BigDecimal x) throws SQLException {
-        poner(parameterIndex, x, "setBigDecimal");
+        store(parameterIndex, x, "setBigDecimal");
     }
 
     /**
-     * Un parametro de texto.
+     * A text parameter.
      *
-     * @param parameterIndex la posicion, desde 1
-     * @param x el valor
-     * @throws SQLException si el indice es menor que 1 o falta {@link #initParams}
+     * @param parameterIndex the position, from 1
+     * @param x the value
+     * @throws SQLException if the index is less than 1 or {@link #initParams} was not called
      */
     public void setString(final int parameterIndex, final String x) throws SQLException {
-        poner(parameterIndex, x, "setString");
+        store(parameterIndex, x, "setString");
     }
 
     /**
-     * Un parametro binario.
+     * A binary parameter.
      *
-     * @param parameterIndex la posicion, desde 1
-     * @param x el valor
-     * @throws SQLException si el indice es menor que 1 o falta {@link #initParams}
+     * @param parameterIndex the position, from 1
+     * @param x the value
+     * @throws SQLException if the index is less than 1 or {@link #initParams} was not called
      */
     public void setBytes(final int parameterIndex, final byte[] x) throws SQLException {
-        poner(parameterIndex, x, "setBytes");
+        store(parameterIndex, x, "setBytes");
     }
 
     /**
-     * Un parametro de fecha.
+     * A date parameter.
      *
-     * @param parameterIndex la posicion, desde 1
-     * @param x el valor
-     * @throws SQLException si el indice es menor que 1 o falta {@link #initParams}
+     * @param parameterIndex the position, from 1
+     * @param x the value
+     * @throws SQLException if the index is less than 1 or {@link #initParams} was not called
      */
     public void setDate(final int parameterIndex, final Date x) throws SQLException {
-        poner(parameterIndex, x, "setDate");
+        store(parameterIndex, x, "setDate");
     }
 
     /**
-     * Un parametro de hora.
+     * A time parameter.
      *
-     * @param parameterIndex la posicion, desde 1
-     * @param x el valor
-     * @throws SQLException si el indice es menor que 1 o falta {@link #initParams}
+     * @param parameterIndex the position, from 1
+     * @param x the value
+     * @throws SQLException if the index is less than 1 or {@link #initParams} was not called
      */
     public void setTime(final int parameterIndex, final Time x) throws SQLException {
-        poner(parameterIndex, x, "setTime");
+        store(parameterIndex, x, "setTime");
     }
 
     /**
-     * Un parametro de marca de tiempo.
+     * A timestamp parameter.
      *
-     * @param parameterIndex la posicion, desde 1
-     * @param x el valor
-     * @throws SQLException si el indice es menor que 1 o falta {@link #initParams}
+     * @param parameterIndex the position, from 1
+     * @param x the value
+     * @throws SQLException if the index is less than 1 or {@link #initParams} was not called
      */
     public void setTimestamp(final int parameterIndex, final Timestamp x) throws SQLException {
-        poner(parameterIndex, x, "setTimestamp");
+        store(parameterIndex, x, "setTimestamp");
     }
 
     /**
-     * Una fecha con la zona horaria de un calendario.
+     * A date with the time zone of a calendar.
      *
-     * <p>El calendario hace falta porque una fecha SQL no tiene zona: interpretar sus dias sin
-     * decir en que zona daria un dia distinto segun donde corra el programa.
+     * <p>The calendar is needed because an SQL date has no time zone: interpreting its days without
+     * saying in which zone would give a different day depending on where the program runs.
      *
-     * @param parameterIndex la posicion, desde 1
-     * @param x el valor
-     * @param cal el calendario con la zona
-     * @throws SQLException si el indice es menor que 1 o falta {@link #initParams}
+     * @param parameterIndex the position, from 1
+     * @param x the value
+     * @param cal the calendar with the time zone
+     * @throws SQLException if the index is less than 1 or {@link #initParams} was not called
      */
     public void setDate(final int parameterIndex, final Date x, final Calendar cal)
             throws SQLException {
-        poner(parameterIndex, new Object[] { x, cal }, "setDate");
+        store(parameterIndex, new Object[] { x, cal }, "setDate");
     }
 
     /**
-     * Una hora con la zona horaria de un calendario.
+     * A time with the time zone of a calendar.
      *
-     * @param parameterIndex la posicion, desde 1
-     * @param x el valor
-     * @param cal el calendario con la zona
-     * @throws SQLException si el indice es menor que 1 o falta {@link #initParams}
+     * @param parameterIndex the position, from 1
+     * @param x the value
+     * @param cal the calendar with the time zone
+     * @throws SQLException if the index is less than 1 or {@link #initParams} was not called
      */
     public void setTime(final int parameterIndex, final Time x, final Calendar cal)
             throws SQLException {
-        poner(parameterIndex, new Object[] { x, cal }, "setTime");
+        store(parameterIndex, new Object[] { x, cal }, "setTime");
     }
 
     /**
-     * Una marca de tiempo con la zona horaria de un calendario.
+     * A timestamp with the time zone of a calendar.
      *
-     * @param parameterIndex la posicion, desde 1
-     * @param x el valor
-     * @param cal el calendario con la zona
-     * @throws SQLException si el indice es menor que 1 o falta {@link #initParams}
+     * @param parameterIndex the position, from 1
+     * @param x the value
+     * @param cal the calendar with the time zone
+     * @throws SQLException if the index is less than 1 or {@link #initParams} was not called
      */
     public void setTimestamp(final int parameterIndex, final Timestamp x, final Calendar cal)
             throws SQLException {
-        poner(parameterIndex, new Object[] { x, cal }, "setTimestamp");
+        store(parameterIndex, new Object[] { x, cal }, "setTimestamp");
     }
 
     /**
-     * Un flujo ASCII de largo conocido.
+     * An ASCII stream of known length.
      *
-     * @param parameterIndex la posicion, desde 1
-     * @param x el flujo
-     * @param length cuantos bytes leer
-     * @throws SQLException si el indice es menor que 1 o falta {@link #initParams}
+     * @param parameterIndex the position, from 1
+     * @param x the stream
+     * @param length how many bytes to read
+     * @throws SQLException if the index is less than 1 or {@link #initParams} was not called
      */
     public void setAsciiStream(final int parameterIndex, final InputStream x, final int length)
             throws SQLException {
-        poner(parameterIndex,
+        store(parameterIndex,
                 new Object[] { x, Integer.valueOf(length), Integer.valueOf(ASCII_STREAM_PARAM) },
                 "setAsciiStream");
         asciiStream = x;
     }
 
     /**
-     * Un flujo ASCII de largo desconocido.
+     * An ASCII stream of unknown length.
      *
-     * @param parameterIndex la posicion, desde 1
-     * @param x el flujo
-     * @throws SQLException si el indice es menor que 1 o falta {@link #initParams}
+     * @param parameterIndex the position, from 1
+     * @param x the stream
+     * @throws SQLException if the index is less than 1 or {@link #initParams} was not called
      */
     public void setAsciiStream(final int parameterIndex, final InputStream x) throws SQLException {
-        poner(parameterIndex, new Object[] { x, null, Integer.valueOf(ASCII_STREAM_PARAM) },
+        store(parameterIndex, new Object[] { x, null, Integer.valueOf(ASCII_STREAM_PARAM) },
                 "setAsciiStream");
         asciiStream = x;
     }
 
     /**
-     * Un flujo binario de largo conocido.
+     * A binary stream of known length.
      *
-     * @param parameterIndex la posicion, desde 1
-     * @param x el flujo
-     * @param length cuantos bytes leer
-     * @throws SQLException si el indice es menor que 1 o falta {@link #initParams}
+     * @param parameterIndex the position, from 1
+     * @param x the stream
+     * @param length how many bytes to read
+     * @throws SQLException if the index is less than 1 or {@link #initParams} was not called
      */
     public void setBinaryStream(final int parameterIndex, final InputStream x, final int length)
             throws SQLException {
-        poner(parameterIndex,
+        store(parameterIndex,
                 new Object[] { x, Integer.valueOf(length), Integer.valueOf(BINARY_STREAM_PARAM) },
                 "setBinaryStream");
         binaryStream = x;
     }
 
     /**
-     * Un flujo binario de largo desconocido.
+     * A binary stream of unknown length.
      *
-     * @param parameterIndex la posicion, desde 1
-     * @param x el flujo
-     * @throws SQLException si el indice es menor que 1 o falta {@link #initParams}
+     * @param parameterIndex the position, from 1
+     * @param x the stream
+     * @throws SQLException if the index is less than 1 or {@link #initParams} was not called
      */
     public void setBinaryStream(final int parameterIndex, final InputStream x)
             throws SQLException {
-        poner(parameterIndex, new Object[] { x, null, Integer.valueOf(BINARY_STREAM_PARAM) },
+        store(parameterIndex, new Object[] { x, null, Integer.valueOf(BINARY_STREAM_PARAM) },
                 "setBinaryStream");
         binaryStream = x;
     }
 
     /**
-     * Un flujo de bytes Unicode.
+     * A stream of Unicode bytes.
      *
-     * @param parameterIndex la posicion, desde 1
-     * @param x el flujo
-     * @param length cuantos bytes leer
-     * @throws SQLException si el indice es menor que 1 o falta {@link #initParams}
-     * @deprecated La codificacion no se declara en ningun lado, asi que el que lee tiene que
-     *     adivinarla. Usar {@link #setCharacterStream(int, Reader, int)}.
+     * @param parameterIndex the position, from 1
+     * @param x the stream
+     * @param length how many bytes to read
+     * @throws SQLException if the index is less than 1 or {@link #initParams} was not called
+     * @deprecated Use {@link #setCharacterStream(int, Reader, int)}. (The note said the encoding is
+     *     declared nowhere; JDBC's {@code setUnicodeStream} says the bytes must be Java UTF-8.)
      */
     @Deprecated
     public void setUnicodeStream(final int parameterIndex, final InputStream x, final int length)
             throws SQLException {
-        poner(parameterIndex,
+        store(parameterIndex,
                 new Object[] { x, Integer.valueOf(length), Integer.valueOf(UNICODE_STREAM_PARAM) },
                 "setUnicodeStream");
         unicodeStream = x;
     }
 
     /**
-     * Un flujo de caracteres de largo conocido.
+     * A character stream of known length.
      *
-     * @param parameterIndex la posicion, desde 1
-     * @param reader el flujo
-     * @param length cuantos caracteres leer
-     * @throws SQLException si el indice es menor que 1 o falta {@link #initParams}
+     * @param parameterIndex the position, from 1
+     * @param reader the stream
+     * @param length how many characters to read
+     * @throws SQLException if the index is less than 1 or {@link #initParams} was not called
      */
     public void setCharacterStream(final int parameterIndex, final Reader reader, final int length)
             throws SQLException {
-        poner(parameterIndex, new Object[] { reader, Integer.valueOf(length) },
+        store(parameterIndex, new Object[] { reader, Integer.valueOf(length) },
                 "setCharacterStream");
         charStream = reader;
     }
 
     /**
-     * Un flujo de caracteres de largo desconocido.
+     * A character stream of unknown length.
      *
-     * @param parameterIndex la posicion, desde 1
-     * @param reader el flujo
-     * @throws SQLException si el indice es menor que 1 o falta {@link #initParams}
+     * @param parameterIndex the position, from 1
+     * @param reader the stream
+     * @throws SQLException if the index is less than 1 or {@link #initParams} was not called
      */
     public void setCharacterStream(final int parameterIndex, final Reader reader)
             throws SQLException {
-        poner(parameterIndex, new Object[] { reader, null }, "setCharacterStream");
+        store(parameterIndex, new Object[] { reader, null }, "setCharacterStream");
         charStream = reader;
     }
 
     /**
-     * Un objeto, con tipo SQL y escala.
+     * An object, with SQL type and scale.
      *
-     * @param parameterIndex la posicion, desde 1
-     * @param x el valor
-     * @param targetSqlType el tipo SQL de destino
-     * @param scale la escala, para los decimales
-     * @throws SQLException si el indice es menor que 1 o falta {@link #initParams}
+     * @param parameterIndex the position, from 1
+     * @param x the value
+     * @param targetSqlType the target SQL type
+     * @param scale the scale, for decimals
+     * @throws SQLException if the index is less than 1 or {@link #initParams} was not called
      */
     public void setObject(final int parameterIndex, final Object x, final int targetSqlType,
             final int scale) throws SQLException {
-        poner(parameterIndex,
+        store(parameterIndex,
                 new Object[] { x, Integer.valueOf(targetSqlType), Integer.valueOf(scale) },
                 "setObject");
     }
 
     /**
-     * Un objeto, con tipo SQL.
+     * An object, with SQL type.
      *
-     * @param parameterIndex la posicion, desde 1
-     * @param x el valor
-     * @param targetSqlType el tipo SQL de destino
-     * @throws SQLException si el indice es menor que 1 o falta {@link #initParams}
+     * @param parameterIndex the position, from 1
+     * @param x the value
+     * @param targetSqlType the target SQL type
+     * @throws SQLException if the index is less than 1 or {@link #initParams} was not called
      */
     public void setObject(final int parameterIndex, final Object x, final int targetSqlType)
             throws SQLException {
-        poner(parameterIndex, new Object[] { x, Integer.valueOf(targetSqlType) }, "setObject");
+        store(parameterIndex, new Object[] { x, Integer.valueOf(targetSqlType) }, "setObject");
     }
 
     /**
-     * Un objeto, dejando que el controlador elija el tipo.
+     * An object, letting the driver choose the type.
      *
-     * @param parameterIndex la posicion, desde 1
-     * @param x el valor
-     * @throws SQLException si el indice es menor que 1 o falta {@link #initParams}
+     * @param parameterIndex the position, from 1
+     * @param x the value
+     * @throws SQLException if the index is less than 1 or {@link #initParams} was not called
      */
     public void setObject(final int parameterIndex, final Object x) throws SQLException {
-        poner(parameterIndex, x, "setObject");
+        store(parameterIndex, x, "setObject");
     }
 
     /**
-     * Una referencia SQL.
+     * An SQL reference.
      *
-     * @param parameterIndex la posicion, desde 1
-     * @param ref el valor
-     * @throws SQLException si el indice es menor que 1 o falta {@link #initParams}
+     * @param parameterIndex the position, from 1
+     * @param ref the value
+     * @throws SQLException if the index is less than 1 or {@link #initParams} was not called
      */
     public void setRef(final int parameterIndex, final Ref ref) throws SQLException {
-        poner(parameterIndex, ref, "setRef");
+        store(parameterIndex, ref, "setRef");
     }
 
     /**
-     * Un objeto binario grande.
+     * A binary large object.
      *
-     * @param parameterIndex la posicion, desde 1
-     * @param x el valor
-     * @throws SQLException si el indice es menor que 1 o falta {@link #initParams}
+     * @param parameterIndex the position, from 1
+     * @param x the value
+     * @throws SQLException if the index is less than 1 or {@link #initParams} was not called
      */
     public void setBlob(final int parameterIndex, final Blob x) throws SQLException {
-        poner(parameterIndex, x, "setBlob");
+        store(parameterIndex, x, "setBlob");
     }
 
     /**
-     * Un objeto binario grande desde un flujo de largo conocido.
+     * A binary large object from a stream of known length.
      *
-     * @param parameterIndex la posicion, desde 1
-     * @param inputStream el flujo
-     * @param length cuantos bytes leer
-     * @throws SQLException si el indice es menor que 1 o falta {@link #initParams}
+     * @param parameterIndex the position, from 1
+     * @param inputStream the stream
+     * @param length how many bytes to read
+     * @throws SQLException if the index is less than 1 or {@link #initParams} was not called
      */
     public void setBlob(final int parameterIndex, final InputStream inputStream, final long length)
             throws SQLException {
-        poner(parameterIndex, new Object[] { inputStream, Long.valueOf(length) }, "setBlob");
+        store(parameterIndex, new Object[] { inputStream, Long.valueOf(length) }, "setBlob");
     }
 
     /**
-     * Un objeto binario grande desde un flujo de largo desconocido.
+     * A binary large object from a stream of unknown length.
      *
-     * @param parameterIndex la posicion, desde 1
-     * @param inputStream el flujo
-     * @throws SQLException si el indice es menor que 1 o falta {@link #initParams}
+     * @param parameterIndex the position, from 1
+     * @param inputStream the stream
+     * @throws SQLException if the index is less than 1 or {@link #initParams} was not called
      */
     public void setBlob(final int parameterIndex, final InputStream inputStream)
             throws SQLException {
-        poner(parameterIndex, new Object[] { inputStream, null }, "setBlob");
+        store(parameterIndex, new Object[] { inputStream, null }, "setBlob");
     }
 
     /**
-     * Un objeto de caracteres grande.
+     * A character large object.
      *
-     * @param parameterIndex la posicion, desde 1
-     * @param x el valor
-     * @throws SQLException si el indice es menor que 1 o falta {@link #initParams}
+     * @param parameterIndex the position, from 1
+     * @param x the value
+     * @throws SQLException if the index is less than 1 or {@link #initParams} was not called
      */
     public void setClob(final int parameterIndex, final Clob x) throws SQLException {
-        poner(parameterIndex, x, "setClob");
+        store(parameterIndex, x, "setClob");
     }
 
     /**
-     * Un objeto de caracteres grande desde un flujo de largo conocido.
+     * A character large object from a stream of known length.
      *
-     * @param parameterIndex la posicion, desde 1
-     * @param reader el flujo
-     * @param length cuantos caracteres leer
-     * @throws SQLException si el indice es menor que 1 o falta {@link #initParams}
+     * @param parameterIndex the position, from 1
+     * @param reader the stream
+     * @param length how many characters to read
+     * @throws SQLException if the index is less than 1 or {@link #initParams} was not called
      */
     public void setClob(final int parameterIndex, final Reader reader, final long length)
             throws SQLException {
-        poner(parameterIndex, new Object[] { reader, Long.valueOf(length) }, "setClob");
+        store(parameterIndex, new Object[] { reader, Long.valueOf(length) }, "setClob");
     }
 
     /**
-     * Un objeto de caracteres grande desde un flujo de largo desconocido.
+     * A character large object from a stream of unknown length.
      *
-     * @param parameterIndex la posicion, desde 1
-     * @param reader el flujo
-     * @throws SQLException si el indice es menor que 1 o falta {@link #initParams}
+     * @param parameterIndex the position, from 1
+     * @param reader the stream
+     * @throws SQLException if the index is less than 1 or {@link #initParams} was not called
      */
     public void setClob(final int parameterIndex, final Reader reader) throws SQLException {
-        poner(parameterIndex, new Object[] { reader, null }, "setClob");
+        store(parameterIndex, new Object[] { reader, null }, "setClob");
     }
 
     /**
-     * Un objeto de caracteres nacionales grande.
+     * A national character large object.
      *
-     * @param parameterIndex la posicion, desde 1
-     * @param value el valor
-     * @throws SQLException si el indice es menor que 1 o falta {@link #initParams}
+     * @param parameterIndex the position, from 1
+     * @param value the value
+     * @throws SQLException if the index is less than 1 or {@link #initParams} was not called
      */
     public void setNClob(final int parameterIndex, final NClob value) throws SQLException {
-        poner(parameterIndex, value, "setNClob");
+        store(parameterIndex, value, "setNClob");
     }
 
     /**
-     * Un objeto de caracteres nacionales grande desde un flujo de largo conocido.
+     * A national character large object from a stream of known length.
      *
-     * @param parameterIndex la posicion, desde 1
-     * @param reader el flujo
-     * @param length cuantos caracteres leer
-     * @throws SQLException si el indice es menor que 1 o falta {@link #initParams}
+     * @param parameterIndex the position, from 1
+     * @param reader the stream
+     * @param length how many characters to read
+     * @throws SQLException if the index is less than 1 or {@link #initParams} was not called
      */
     public void setNClob(final int parameterIndex, final Reader reader, final long length)
             throws SQLException {
-        poner(parameterIndex, new Object[] { reader, Long.valueOf(length) }, "setNClob");
+        store(parameterIndex, new Object[] { reader, Long.valueOf(length) }, "setNClob");
     }
 
     /**
-     * Un objeto de caracteres nacionales grande desde un flujo de largo desconocido.
+     * A national character large object from a stream of unknown length.
      *
-     * @param parameterIndex la posicion, desde 1
-     * @param reader el flujo
-     * @throws SQLException si el indice es menor que 1 o falta {@link #initParams}
+     * @param parameterIndex the position, from 1
+     * @param reader the stream
+     * @throws SQLException if the index is less than 1 or {@link #initParams} was not called
      */
     public void setNClob(final int parameterIndex, final Reader reader) throws SQLException {
-        poner(parameterIndex, new Object[] { reader, null }, "setNClob");
+        store(parameterIndex, new Object[] { reader, null }, "setNClob");
     }
 
     /**
-     * Un arreglo SQL.
+     * An SQL array.
      *
-     * @param parameterIndex la posicion, desde 1
-     * @param array el valor
-     * @throws SQLException si el indice es menor que 1 o falta {@link #initParams}
+     * @param parameterIndex the position, from 1
+     * @param array the value
+     * @throws SQLException if the index is less than 1 or {@link #initParams} was not called
      */
     public void setArray(final int parameterIndex, final Array array) throws SQLException {
-        poner(parameterIndex, array, "setArray");
+        store(parameterIndex, array, "setArray");
     }
 
     /**
-     * Un valor XML.
+     * An XML value.
      *
-     * @param parameterIndex la posicion, desde 1
-     * @param xmlObject el valor
-     * @throws SQLException si el indice es menor que 1 o falta {@link #initParams}
+     * @param parameterIndex the position, from 1
+     * @param xmlObject the value
+     * @throws SQLException if the index is less than 1 or {@link #initParams} was not called
      */
     public void setSQLXML(final int parameterIndex, final SQLXML xmlObject) throws SQLException {
-        poner(parameterIndex, xmlObject, "setSQLXML");
+        store(parameterIndex, xmlObject, "setSQLXML");
     }
 
     /**
-     * Un identificador de fila.
+     * A row identifier.
      *
-     * @param parameterIndex la posicion, desde 1
-     * @param x el valor
-     * @throws SQLException si el indice es menor que 1 o falta {@link #initParams}
+     * @param parameterIndex the position, from 1
+     * @param x the value
+     * @throws SQLException if the index is less than 1 or {@link #initParams} was not called
      */
     public void setRowId(final int parameterIndex, final RowId x) throws SQLException {
-        poner(parameterIndex, x, "setRowId");
+        store(parameterIndex, x, "setRowId");
     }
 
     /**
-     * Una cadena de caracteres nacionales.
+     * A national character string.
      *
-     * @param parameterIndex la posicion, desde 1
-     * @param value el valor
-     * @throws SQLException si el indice es menor que 1 o falta {@link #initParams}
+     * @param parameterIndex the position, from 1
+     * @param value the value
+     * @throws SQLException if the index is less than 1 or {@link #initParams} was not called
      */
     public void setNString(final int parameterIndex, final String value) throws SQLException {
-        poner(parameterIndex, value, "setNString");
+        store(parameterIndex, value, "setNString");
     }
 
     /**
-     * Un flujo de caracteres nacionales de largo conocido.
+     * A national character stream of known length.
      *
-     * @param parameterIndex la posicion, desde 1
-     * @param value el flujo
-     * @param length cuantos caracteres leer
-     * @throws SQLException si el indice es menor que 1 o falta {@link #initParams}
+     * @param parameterIndex the position, from 1
+     * @param value the stream
+     * @param length how many characters to read
+     * @throws SQLException if the index is less than 1 or {@link #initParams} was not called
      */
     public void setNCharacterStream(final int parameterIndex, final Reader value,
             final long length) throws SQLException {
-        poner(parameterIndex, new Object[] { value, Long.valueOf(length) },
+        store(parameterIndex, new Object[] { value, Long.valueOf(length) },
                 "setNCharacterStream");
     }
 
     /**
-     * Un flujo de caracteres nacionales de largo desconocido.
+     * A national character stream of unknown length.
      *
-     * @param parameterIndex la posicion, desde 1
-     * @param value el flujo
-     * @throws SQLException si el indice es menor que 1 o falta {@link #initParams}
+     * @param parameterIndex the position, from 1
+     * @param value the stream
+     * @throws SQLException if the index is less than 1 or {@link #initParams} was not called
      */
     public void setNCharacterStream(final int parameterIndex, final Reader value)
             throws SQLException {
-        poner(parameterIndex, new Object[] { value, null }, "setNCharacterStream");
+        store(parameterIndex, new Object[] { value, null }, "setNCharacterStream");
     }
 
     /**
-     * Una URL.
+     * A URL.
      *
-     * @param parameterIndex la posicion, desde 1
-     * @param x el valor
-     * @throws SQLException si el indice es menor que 1 o falta {@link #initParams}
+     * @param parameterIndex the position, from 1
+     * @param x the value
+     * @throws SQLException if the index is less than 1 or {@link #initParams} was not called
      */
     public void setURL(final int parameterIndex, final URL x) throws SQLException {
-        poner(parameterIndex, x, "setURL");
+        store(parameterIndex, x, "setURL");
     }
 
-    // ---- parametros por nombre: ninguno esta soportado, ver la nota de la clase ----
+    // ---- parameters by name: none is supported, see the class note ----
 
     /**
-     * @param parameterName el nombre
-     * @param sqlType el tipo SQL
-     * @throws SQLFeatureNotSupportedException siempre
+     * @param parameterName the name
+     * @param sqlType the SQL type
+     * @throws SQLFeatureNotSupportedException always
      */
     public void setNull(final String parameterName, final int sqlType) throws SQLException {
-        throw porNombre();
+        throw byNameUnsupported();
     }
 
     /**
-     * @param parameterName el nombre
-     * @param sqlType el tipo SQL
-     * @param typeName el nombre del tipo
-     * @throws SQLFeatureNotSupportedException siempre
+     * @param parameterName the name
+     * @param sqlType the SQL type
+     * @param typeName the name of the type
+     * @throws SQLFeatureNotSupportedException always
      */
     public void setNull(final String parameterName, final int sqlType, final String typeName)
             throws SQLException {
-        throw porNombre();
+        throw byNameUnsupported();
     }
 
     /**
-     * @param parameterName el nombre
-     * @param x el valor
-     * @throws SQLFeatureNotSupportedException siempre
+     * @param parameterName the name
+     * @param x the value
+     * @throws SQLFeatureNotSupportedException always
      */
     public void setBoolean(final String parameterName, final boolean x) throws SQLException {
-        throw porNombre();
+        throw byNameUnsupported();
     }
 
     /**
-     * @param parameterName el nombre
-     * @param x el valor
-     * @throws SQLFeatureNotSupportedException siempre
+     * @param parameterName the name
+     * @param x the value
+     * @throws SQLFeatureNotSupportedException always
      */
     public void setByte(final String parameterName, final byte x) throws SQLException {
-        throw porNombre();
+        throw byNameUnsupported();
     }
 
     /**
-     * @param parameterName el nombre
-     * @param x el valor
-     * @throws SQLFeatureNotSupportedException siempre
+     * @param parameterName the name
+     * @param x the value
+     * @throws SQLFeatureNotSupportedException always
      */
     public void setShort(final String parameterName, final short x) throws SQLException {
-        throw porNombre();
+        throw byNameUnsupported();
     }
 
     /**
-     * @param parameterName el nombre
-     * @param x el valor
-     * @throws SQLFeatureNotSupportedException siempre
+     * @param parameterName the name
+     * @param x the value
+     * @throws SQLFeatureNotSupportedException always
      */
     public void setInt(final String parameterName, final int x) throws SQLException {
-        throw porNombre();
+        throw byNameUnsupported();
     }
 
     /**
-     * @param parameterName el nombre
-     * @param x el valor
-     * @throws SQLFeatureNotSupportedException siempre
+     * @param parameterName the name
+     * @param x the value
+     * @throws SQLFeatureNotSupportedException always
      */
     public void setLong(final String parameterName, final long x) throws SQLException {
-        throw porNombre();
+        throw byNameUnsupported();
     }
 
     /**
-     * @param parameterName el nombre
-     * @param x el valor
-     * @throws SQLFeatureNotSupportedException siempre
+     * @param parameterName the name
+     * @param x the value
+     * @throws SQLFeatureNotSupportedException always
      */
     public void setFloat(final String parameterName, final float x) throws SQLException {
-        throw porNombre();
+        throw byNameUnsupported();
     }
 
     /**
-     * @param parameterName el nombre
-     * @param x el valor
-     * @throws SQLFeatureNotSupportedException siempre
+     * @param parameterName the name
+     * @param x the value
+     * @throws SQLFeatureNotSupportedException always
      */
     public void setDouble(final String parameterName, final double x) throws SQLException {
-        throw porNombre();
+        throw byNameUnsupported();
     }
 
     /**
-     * @param parameterName el nombre
-     * @param x el valor
-     * @throws SQLFeatureNotSupportedException siempre
+     * @param parameterName the name
+     * @param x the value
+     * @throws SQLFeatureNotSupportedException always
      */
     public void setBigDecimal(final String parameterName, final BigDecimal x) throws SQLException {
-        throw porNombre();
+        throw byNameUnsupported();
     }
 
     /**
-     * @param parameterName el nombre
-     * @param x el valor
-     * @throws SQLFeatureNotSupportedException siempre
+     * @param parameterName the name
+     * @param x the value
+     * @throws SQLFeatureNotSupportedException always
      */
     public void setString(final String parameterName, final String x) throws SQLException {
-        throw porNombre();
+        throw byNameUnsupported();
     }
 
     /**
-     * @param parameterName el nombre
-     * @param x el valor
-     * @throws SQLFeatureNotSupportedException siempre
+     * @param parameterName the name
+     * @param x the value
+     * @throws SQLFeatureNotSupportedException always
      */
     public void setBytes(final String parameterName, final byte[] x) throws SQLException {
-        throw porNombre();
+        throw byNameUnsupported();
     }
 
     /**
-     * @param parameterName el nombre
-     * @param x el valor
-     * @throws SQLFeatureNotSupportedException siempre
+     * @param parameterName the name
+     * @param x the value
+     * @throws SQLFeatureNotSupportedException always
      */
     public void setDate(final String parameterName, final Date x) throws SQLException {
-        throw porNombre();
+        throw byNameUnsupported();
     }
 
     /**
-     * @param parameterName el nombre
-     * @param x el valor
-     * @param cal el calendario
-     * @throws SQLFeatureNotSupportedException siempre
+     * @param parameterName the name
+     * @param x the value
+     * @param cal the calendar
+     * @throws SQLFeatureNotSupportedException always
      */
     public void setDate(final String parameterName, final Date x, final Calendar cal)
             throws SQLException {
-        throw porNombre();
+        throw byNameUnsupported();
     }
 
     /**
-     * @param parameterName el nombre
-     * @param x el valor
-     * @throws SQLFeatureNotSupportedException siempre
+     * @param parameterName the name
+     * @param x the value
+     * @throws SQLFeatureNotSupportedException always
      */
     public void setTime(final String parameterName, final Time x) throws SQLException {
-        throw porNombre();
+        throw byNameUnsupported();
     }
 
     /**
-     * @param parameterName el nombre
-     * @param x el valor
-     * @param cal el calendario
-     * @throws SQLFeatureNotSupportedException siempre
+     * @param parameterName the name
+     * @param x the value
+     * @param cal the calendar
+     * @throws SQLFeatureNotSupportedException always
      */
     public void setTime(final String parameterName, final Time x, final Calendar cal)
             throws SQLException {
-        throw porNombre();
+        throw byNameUnsupported();
     }
 
     /**
-     * @param parameterName el nombre
-     * @param x el valor
-     * @throws SQLFeatureNotSupportedException siempre
+     * @param parameterName the name
+     * @param x the value
+     * @throws SQLFeatureNotSupportedException always
      */
     public void setTimestamp(final String parameterName, final Timestamp x) throws SQLException {
-        throw porNombre();
+        throw byNameUnsupported();
     }
 
     /**
-     * @param parameterName el nombre
-     * @param x el valor
-     * @param cal el calendario
-     * @throws SQLFeatureNotSupportedException siempre
+     * @param parameterName the name
+     * @param x the value
+     * @param cal the calendar
+     * @throws SQLFeatureNotSupportedException always
      */
     public void setTimestamp(final String parameterName, final Timestamp x, final Calendar cal)
             throws SQLException {
-        throw porNombre();
+        throw byNameUnsupported();
     }
 
     /**
-     * @param parameterName el nombre
-     * @param x el flujo
-     * @param length el largo
-     * @throws SQLFeatureNotSupportedException siempre
+     * @param parameterName the name
+     * @param x the stream
+     * @param length the length
+     * @throws SQLFeatureNotSupportedException always
      */
     public void setAsciiStream(final String parameterName, final InputStream x, final int length)
             throws SQLException {
-        throw porNombre();
+        throw byNameUnsupported();
     }
 
     /**
-     * @param parameterName el nombre
-     * @param x el flujo
-     * @throws SQLFeatureNotSupportedException siempre
+     * @param parameterName the name
+     * @param x the stream
+     * @throws SQLFeatureNotSupportedException always
      */
     public void setAsciiStream(final String parameterName, final InputStream x)
             throws SQLException {
-        throw porNombre();
+        throw byNameUnsupported();
     }
 
     /**
-     * @param parameterName el nombre
-     * @param x el flujo
-     * @param length el largo
-     * @throws SQLFeatureNotSupportedException siempre
+     * @param parameterName the name
+     * @param x the stream
+     * @param length the length
+     * @throws SQLFeatureNotSupportedException always
      */
     public void setBinaryStream(final String parameterName, final InputStream x, final int length)
             throws SQLException {
-        throw porNombre();
+        throw byNameUnsupported();
     }
 
     /**
-     * @param parameterName el nombre
-     * @param x el flujo
-     * @throws SQLFeatureNotSupportedException siempre
+     * @param parameterName the name
+     * @param x the stream
+     * @throws SQLFeatureNotSupportedException always
      */
     public void setBinaryStream(final String parameterName, final InputStream x)
             throws SQLException {
-        throw porNombre();
+        throw byNameUnsupported();
     }
 
     /**
-     * @param parameterName el nombre
-     * @param reader el flujo
-     * @param length el largo
-     * @throws SQLFeatureNotSupportedException siempre
+     * @param parameterName the name
+     * @param reader the stream
+     * @param length the length
+     * @throws SQLFeatureNotSupportedException always
      */
     public void setCharacterStream(final String parameterName, final Reader reader,
             final int length) throws SQLException {
-        throw porNombre();
+        throw byNameUnsupported();
     }
 
     /**
-     * @param parameterName el nombre
-     * @param reader el flujo
-     * @throws SQLFeatureNotSupportedException siempre
+     * @param parameterName the name
+     * @param reader the stream
+     * @throws SQLFeatureNotSupportedException always
      */
     public void setCharacterStream(final String parameterName, final Reader reader)
             throws SQLException {
-        throw porNombre();
+        throw byNameUnsupported();
     }
 
     /**
-     * @param parameterName el nombre
-     * @param value el flujo
-     * @param length el largo
-     * @throws SQLFeatureNotSupportedException siempre
+     * @param parameterName the name
+     * @param value the stream
+     * @param length the length
+     * @throws SQLFeatureNotSupportedException always
      */
     public void setNCharacterStream(final String parameterName, final Reader value,
             final long length) throws SQLException {
-        throw porNombre();
+        throw byNameUnsupported();
     }
 
     /**
-     * @param parameterName el nombre
-     * @param value el flujo
-     * @throws SQLFeatureNotSupportedException siempre
+     * @param parameterName the name
+     * @param value the stream
+     * @throws SQLFeatureNotSupportedException always
      */
     public void setNCharacterStream(final String parameterName, final Reader value)
             throws SQLException {
-        throw porNombre();
+        throw byNameUnsupported();
     }
 
     /**
-     * @param parameterName el nombre
-     * @param x el valor
-     * @param targetSqlType el tipo SQL
-     * @param scale la escala
-     * @throws SQLFeatureNotSupportedException siempre
+     * @param parameterName the name
+     * @param x the value
+     * @param targetSqlType the SQL type
+     * @param scale the scale
+     * @throws SQLFeatureNotSupportedException always
      */
     public void setObject(final String parameterName, final Object x, final int targetSqlType,
             final int scale) throws SQLException {
-        throw porNombre();
+        throw byNameUnsupported();
     }
 
     /**
-     * @param parameterName el nombre
-     * @param x el valor
-     * @param targetSqlType el tipo SQL
-     * @throws SQLFeatureNotSupportedException siempre
+     * @param parameterName the name
+     * @param x the value
+     * @param targetSqlType the SQL type
+     * @throws SQLFeatureNotSupportedException always
      */
     public void setObject(final String parameterName, final Object x, final int targetSqlType)
             throws SQLException {
-        throw porNombre();
+        throw byNameUnsupported();
     }
 
     /**
-     * @param parameterName el nombre
-     * @param x el valor
-     * @throws SQLFeatureNotSupportedException siempre
+     * @param parameterName the name
+     * @param x the value
+     * @throws SQLFeatureNotSupportedException always
      */
     public void setObject(final String parameterName, final Object x) throws SQLException {
-        throw porNombre();
+        throw byNameUnsupported();
     }
 
     /**
-     * @param parameterName el nombre
-     * @param x el valor
-     * @throws SQLFeatureNotSupportedException siempre
+     * @param parameterName the name
+     * @param x the value
+     * @throws SQLFeatureNotSupportedException always
      */
     public void setBlob(final String parameterName, final Blob x) throws SQLException {
-        throw porNombre();
+        throw byNameUnsupported();
     }
 
     /**
-     * @param parameterName el nombre
-     * @param inputStream el flujo
-     * @param length el largo
-     * @throws SQLFeatureNotSupportedException siempre
+     * @param parameterName the name
+     * @param inputStream the stream
+     * @param length the length
+     * @throws SQLFeatureNotSupportedException always
      */
     public void setBlob(final String parameterName, final InputStream inputStream,
             final long length) throws SQLException {
-        throw porNombre();
+        throw byNameUnsupported();
     }
 
     /**
-     * @param parameterName el nombre
-     * @param inputStream el flujo
-     * @throws SQLFeatureNotSupportedException siempre
+     * @param parameterName the name
+     * @param inputStream the stream
+     * @throws SQLFeatureNotSupportedException always
      */
     public void setBlob(final String parameterName, final InputStream inputStream)
             throws SQLException {
-        throw porNombre();
+        throw byNameUnsupported();
     }
 
     /**
-     * @param parameterName el nombre
-     * @param x el valor
-     * @throws SQLFeatureNotSupportedException siempre
+     * @param parameterName the name
+     * @param x the value
+     * @throws SQLFeatureNotSupportedException always
      */
     public void setClob(final String parameterName, final Clob x) throws SQLException {
-        throw porNombre();
+        throw byNameUnsupported();
     }
 
     /**
-     * @param parameterName el nombre
-     * @param reader el flujo
-     * @param length el largo
-     * @throws SQLFeatureNotSupportedException siempre
+     * @param parameterName the name
+     * @param reader the stream
+     * @param length the length
+     * @throws SQLFeatureNotSupportedException always
      */
     public void setClob(final String parameterName, final Reader reader, final long length)
             throws SQLException {
-        throw porNombre();
+        throw byNameUnsupported();
     }
 
     /**
-     * @param parameterName el nombre
-     * @param reader el flujo
-     * @throws SQLFeatureNotSupportedException siempre
+     * @param parameterName the name
+     * @param reader the stream
+     * @throws SQLFeatureNotSupportedException always
      */
     public void setClob(final String parameterName, final Reader reader) throws SQLException {
-        throw porNombre();
+        throw byNameUnsupported();
     }
 
     /**
-     * @param parameterName el nombre
-     * @param value el valor
-     * @throws SQLFeatureNotSupportedException siempre
+     * @param parameterName the name
+     * @param value the value
+     * @throws SQLFeatureNotSupportedException always
      */
     public void setNClob(final String parameterName, final NClob value) throws SQLException {
-        throw porNombre();
+        throw byNameUnsupported();
     }
 
     /**
-     * @param parameterName el nombre
-     * @param reader el flujo
-     * @param length el largo
-     * @throws SQLFeatureNotSupportedException siempre
+     * @param parameterName the name
+     * @param reader the stream
+     * @param length the length
+     * @throws SQLFeatureNotSupportedException always
      */
     public void setNClob(final String parameterName, final Reader reader, final long length)
             throws SQLException {
-        throw porNombre();
+        throw byNameUnsupported();
     }
 
     /**
-     * @param parameterName el nombre
-     * @param reader el flujo
-     * @throws SQLFeatureNotSupportedException siempre
+     * @param parameterName the name
+     * @param reader the stream
+     * @throws SQLFeatureNotSupportedException always
      */
     public void setNClob(final String parameterName, final Reader reader) throws SQLException {
-        throw porNombre();
+        throw byNameUnsupported();
     }
 
     /**
-     * @param parameterName el nombre
-     * @param value el valor
-     * @throws SQLFeatureNotSupportedException siempre
+     * @param parameterName the name
+     * @param value the value
+     * @throws SQLFeatureNotSupportedException always
      */
     public void setNString(final String parameterName, final String value) throws SQLException {
-        throw porNombre();
+        throw byNameUnsupported();
     }
 
     /**
-     * @param parameterName el nombre
-     * @param xmlObject el valor
-     * @throws SQLFeatureNotSupportedException siempre
+     * @param parameterName the name
+     * @param xmlObject the value
+     * @throws SQLFeatureNotSupportedException always
      */
     public void setSQLXML(final String parameterName, final SQLXML xmlObject) throws SQLException {
-        throw porNombre();
+        throw byNameUnsupported();
     }
 
     /**
-     * @param parameterName el nombre
-     * @param x el valor
-     * @throws SQLFeatureNotSupportedException siempre
+     * @param parameterName the name
+     * @param x the value
+     * @throws SQLFeatureNotSupportedException always
      */
     public void setRowId(final String parameterName, final RowId x) throws SQLException {
-        throw porNombre();
+        throw byNameUnsupported();
     }
 }

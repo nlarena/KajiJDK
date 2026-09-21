@@ -3,23 +3,24 @@ package javax.management.relation;
 import javax.management.JMException;
 
 /**
- * La raiz de los errores del servicio de relaciones.
+ * The root of the relation service's errors.
  *
- * <p>Extiende {@link JMException} y no {@link RuntimeException}, y eso dice algo del diseno: en un
- * servicio de relaciones casi todo lo que puede fallar es <strong>estado</strong>, no programacion.
- * Que un rol no exista, que una relacion se haya borrado, que un MBean se haya desregistrado — todo
- * eso cambia mientras el sistema corre, asi que el compilador obliga a preverlo.
+ * <p>It extends {@link JMException} and not {@link RuntimeException}, and that says something about
+ * the design: in a relation service almost everything that can fail is <b>state</b>, not
+ * programming. That a role does not exist, that a relation was removed, that an MBean was
+ * unregistered -- all of that changes while the system runs, so the compiler forces you to foresee
+ * it.
  */
 public class RelationException extends JMException {
 
     private static final long serialVersionUID = 5434016005679159613L;
 
-    /** Sin detalle. */
+    /** Without detail. */
     public RelationException() {
         super();
     }
 
-    /** Con un mensaje. */
+    /** With a message. */
     public RelationException(String message) {
         super(message);
     }

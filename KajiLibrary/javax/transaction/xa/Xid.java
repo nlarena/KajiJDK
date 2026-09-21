@@ -1,27 +1,27 @@
 package javax.transaction.xa;
 
 /**
- * KajiLibrary's javax.transaction.xa.Xid -- el identificador de una transaccion distribuida.
+ * KajiLibrary's javax.transaction.xa.Xid -- the identifier of a distributed transaction.
  *
- * <p>Tiene **tres** partes y no un numero, y ahi esta toda la idea: un identificador global que es el
- * mismo en todos los sistemas que participan, un calificador de rama que distingue la parte de cada
- * uno, y un formato que dice quien invento el identificador. Un entero suelto no serviria -- dos
- * gestores de transacciones distintos elegirian el mismo y no habria como notarlo.
+ * <p>It has **three** parts and not a number, and there is the whole idea: a global identifier that
+ * is the same in every system that takes part, a branch qualifier that tells each one's part apart,
+ * and a format that says who invented the identifier. A loose integer would not serve -- two
+ * different transaction managers would choose the same one and there would be no way of noticing.
  */
 public interface Xid {
 
-    /** El maximo de bytes del identificador global. */
+    /** The maximum number of bytes of the global identifier. */
     int MAXGTRIDSIZE = 64;
 
-    /** El maximo de bytes del calificador de rama. */
+    /** The maximum number of bytes of the branch qualifier. */
     int MAXBQUALSIZE = 64;
 
-    /** Quien definio el formato de este identificador. */
+    /** Who defined the format of this identifier. */
     int getFormatId();
 
-    /** El identificador global, comun a todas las ramas. */
+    /** The global identifier, common to every branch. */
     byte[] getGlobalTransactionId();
 
-    /** Que rama de esa transaccion es esta. */
+    /** Which branch of that transaction this is. */
     byte[] getBranchQualifier();
 }

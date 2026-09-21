@@ -1,18 +1,18 @@
 package java.util.prefs;
 
-// De donde salen las dos raices.
+// Where the two roots come from.
 //
-// Es el unico punto de extension del paquete: `Preferences.userRoot()` y `Preferences.systemRoot()`
-// no hacen otra cosa que preguntarle a la fabrica. Quien quiera guardar las preferencias en una
-// base de datos, en un servidor o en memoria implementa esta interfaz y no toca nada mas.
+// It is the package's only extension point: `Preferences.userRoot()` and `Preferences.systemRoot()`
+// do nothing but ask the factory. Whoever wants to store the preferences in a database, on a server
+// or in memory implements this interface and touches nothing else.
 //
-// Las dos raices se piden por separado y se esperan **estables**: llamar dos veces tiene que dar el
-// mismo objeto, porque `AbstractPreferences.isUserNode()` compara la raiz por identidad.
+// The two roots are asked for separately and are expected to be **stable**: calling twice has to
+// give the same object, because `AbstractPreferences.isUserNode()` compares the root by identity.
 public interface PreferencesFactory {
 
-    // La raiz del arbol del sistema, compartida por todos los usuarios de la maquina.
+    // The root of the system tree, shared by every user of the machine.
     Preferences systemRoot();
 
-    // La raiz del arbol del usuario que corre la VM.
+    // The root of the tree of the user running the VM.
     Preferences userRoot();
 }

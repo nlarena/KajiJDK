@@ -1,51 +1,51 @@
 package javax.print.attribute;
 
-// El javax.print.attribute.AttributeSet de KajiLibrary -- un conjunto de atributos indexado por
-// **categoria**.
+// KajiLibrary's javax.print.attribute.AttributeSet -- a set of attributes indexed by **category**.
 //
-// La regla que define al tipo, y que se ve poco en la firma: el conjunto guarda a lo sumo **un**
-// atributo por categoria. `add` de un atributo cuya categoria ya esta reemplaza al que estaba en
-// vez de agregar otro. Por eso `get`, `remove` y `containsKey` toman una `Class` (la categoria) y
-// `containsValue` toma un `Attribute` (el valor): son dos ejes distintos.
+// The rule that defines the type, and that shows little in the signature: the set keeps at most
+// **one** attribute per category. `add` of an attribute whose category is already there replaces
+// the one there was instead of adding another. That is why `get`, `remove` and `containsKey` take a
+// `Class` (the category) and `containsValue` takes an `Attribute` (the value): they are two
+// different axes.
 //
-// No extiende `java.util.Collection`, aunque se le parezca: la clave es la categoria y el valor el
-// atributo, asi que se comporta como un `Map` con la clave metida adentro del valor.
+// It does not extend `java.util.Collection`, although it looks like one: the key is the category
+// and the value the attribute, so it behaves like a `Map` with the key tucked inside the value.
 public interface AttributeSet {
 
-    // El atributo de esa categoria, o null si no hay.
+    // The attribute of that category, or null if there is none.
     Attribute get(Class<?> category);
 
-    // Agrega el atributo, reemplazando al que hubiera de la misma categoria. Devuelve true si el
-    // conjunto cambio -- o sea, si no habia ya un atributo igual en esa categoria.
+    // Adds the attribute, replacing whatever there was of the same category. Returns true if the
+    // set changed -- that is, if there was not already an equal attribute in that category.
     boolean add(Attribute attribute);
 
-    // Saca el atributo de esa categoria, si hay. true si el conjunto cambio.
+    // Removes the attribute of that category, if there is one. true if the set changed.
     boolean remove(Class<?> category);
 
-    // Saca el atributo, si esta. true si el conjunto cambio.
+    // Removes the attribute, if it is there. true if the set changed.
     boolean remove(Attribute attribute);
 
-    // Si hay algun atributo de esa categoria.
+    // Whether there is any attribute of that category.
     boolean containsKey(Class<?> category);
 
-    // Si ese atributo exacto (por equals) esta en el conjunto.
+    // Whether that exact attribute (by equals) is in the set.
     boolean containsValue(Attribute attribute);
 
-    // Agrega todos los de `attributes`, con la misma regla de reemplazo por categoria.
+    // Adds all of `attributes`, with the same replacement-by-category rule.
     boolean addAll(AttributeSet attributes);
 
-    // Cuantas categorias hay -- que es lo mismo que cuantos atributos, por la regla de arriba.
+    // How many categories there are -- which is the same as how many attributes, by the rule above.
     int size();
 
-    // Los atributos, en un arreglo nuevo. El orden no esta especificado.
+    // The attributes, in a new array. The order is unspecified.
     Attribute[] toArray();
 
     void clear();
 
     boolean isEmpty();
 
-    // Dos conjuntos son iguales si tienen los mismos atributos. Se redeclara aca, como en el JDK,
-    // porque el contrato es mas fuerte que el de Object.
+    // Two sets are equal if they have the same attributes. It is redeclared here, as in the JDK,
+    // because the contract is stronger than Object's.
     boolean equals(Object object);
 
     int hashCode();

@@ -6,95 +6,93 @@ import javax.xml.namespace.NamespaceContext;
 import javax.xml.namespace.QName;
 
 /**
- * KajiLibrary's javax.xml.stream.events.StartElement -- la apertura de un elemento con todo lo que
- * la etiqueta traia.
+ * KajiLibrary's javax.xml.stream.events.StartElement -- the start of an element with everything the
+ * tag carried.
  *
- * <h2>El evento que carga con todo</h2>
+ * <h2>The event that carries everything</h2>
  *
- * <p>Es el mas gordo del modelo y por una razon estructural: la etiqueta de apertura es el unico
- * lugar de XML donde pasan varias cosas a la vez --se nombra un elemento, se declaran prefijos, se
- * dan atributos-- y el modelo de eventos promete que cada evento es autosuficiente. Asi que todo
- * eso viaja adentro.
+ * <p>It is the fattest of the model and for a structural reason: the start tag is the only place in
+ * XML where several things happen at once --an element is named, prefixes are declared, attributes
+ * are given-- and the event model promises that each event is self-sufficient. So all of that
+ * travels inside.
  *
- * <p>La diferencia practica con el modelo de cursor esta justo aca. Un
- * {@link javax.xml.stream.XMLStreamReader} contesta las mismas preguntas, pero solo mientras esta
- * parado en el elemento; el {@code StartElement} las sigue contestando cuando el parser ya avanzo,
- * o incluso cuando ya se cerro el archivo.
+ * <p>The practical difference from the cursor model is right here. An {@link
+ * javax.xml.stream.XMLStreamReader} answers the same questions, but only while it is standing on
+ * the element; the {@code StartElement} keeps answering them when the parser has already moved on,
+ * or even when the file has already been closed.
  *
- * <h2>Atributos y espacios de nombres van separados</h2>
+ * <h2>Attributes and namespaces go separately</h2>
  *
- * <p>{@link #getAttributes()} <b>no</b> incluye las declaraciones {@code xmlns}, que salen por
- * {@link #getNamespaces()}. Es la regla de la especificacion de Namespaces: una declaracion se
- * escribe como atributo pero no es uno, y confundirlos hace que un mapeo generico se lleve el
- * {@code xmlns} como si fuera un campo de datos.
+ * <p>{@link #getAttributes()} does <b>not</b> include the {@code xmlns} declarations, which come
+ * out through {@link #getNamespaces()}. It is the rule of the Namespaces specification: a
+ * declaration is written as an attribute but is not one, and confusing them makes a generic mapping
+ * take the {@code xmlns} along as if it were a data field.
  *
- * <h2>El contexto es el completo, no el local</h2>
+ * <h2>The context is the complete one, not the local one</h2>
  *
- * <p>{@link #getNamespaceContext()} devuelve el alcance <b>vigente</b> en este elemento: incluye lo
- * que declararon los ancestros, no solo lo de esta etiqueta. Es lo que hace falta para resolver un
- * prefijo que aparezca <b>dentro</b> de un valor de atributo --como en {@code xsi:type="tns:Pago"},
- * donde {@code tns} bien puede venir declarado en la raiz--, que es un caso que ningun otro accesor
- * cubre.
+ * <p>{@link #getNamespaceContext()} returns the scope <b>in force</b> at this element: it includes
+ * what the ancestors declared, not only what this tag did. It is what is needed to resolve a prefix
+ * that appears <b>inside</b> an attribute value --as in {@code xsi:type="tns:Payment"}, where
+ * {@code tns} may well be declared at the root--, which is a case no other accessor covers.
  */
 public interface StartElement extends XMLEvent {
 
     /**
-     * El nombre del elemento.
+     * The name of the element.
      *
-     * <p>Un elemento sin prefijo <b>si</b> queda en el espacio de nombres por omision, al reves de
-     * lo que pasa con los atributos.
+     * <p>An element without a prefix <b>does</b> fall into the default namespace, the other way
+     * round from attributes.
      *
-     * @return el nombre calificado; nunca null
+     * @return the qualified name; never null
      */
     QName getName();
 
     /**
-     * Los atributos de la etiqueta, sin las declaraciones {@code xmlns}.
+     * The attributes of the tag, without the {@code xmlns} declarations.
      *
-     * <p>El orden no es significativo --XML dice que los atributos de un elemento no estan
-     * ordenados-- asi que no hay que depender de el.
+     * <p>The order is not significant --XML says an element's attributes are not ordered-- so it
+     * should not be relied on.
      *
-     * @return un iterador de {@link Attribute}; vacio si no hay, nunca null
+     * @return an iterator of {@link Attribute}; empty if there are none, never null
      */
     Iterator<Attribute> getAttributes();
 
     /**
-     * Las declaraciones {@code xmlns} que hace <b>esta</b> etiqueta.
+     * The {@code xmlns} declarations <b>this</b> tag makes.
      *
-     * <p>Solo las de aca; para lo que este vigente incluyendo lo heredado, ver
+     * <p>Only the ones here; for what is in force including the inherited ones, see
      * {@link #getNamespaceContext()}.
      *
-     * @return un iterador de {@link Namespace}; vacio si no hay, nunca null
+     * @return an iterator of {@link Namespace}; empty if there are none, never null
      */
     Iterator<Namespace> getNamespaces();
 
     /**
-     * Un atributo por su nombre.
+     * An attribute by its name.
      *
-     * <p>Como {@link QName#equals} ignora el prefijo, el nombre que se pase se puede construir con
-     * cualquier prefijo o sin ninguno: lo que se compara es el espacio de nombres y el nombre
-     * local. Para buscar un atributo sin calificar hay que pasar el espacio de nombres vacio, no el
-     * del elemento.
+     * <p>Since {@link QName#equals} ignores the prefix, the name passed can be built with any
+     * prefix or none: what is compared is the namespace and the local name. To look up an
+     * unqualified attribute the empty namespace has to be passed, not the element's.
      *
-     * @param name el nombre buscado
-     * @return el atributo, o null si el elemento no lo tiene
+     * @param name the name looked for
+     * @return the attribute, or null if the element does not have it
      */
     Attribute getAttributeByName(QName name);
 
     /**
-     * El alcance de espacios de nombres vigente en este elemento, incluyendo el de los ancestros.
+     * The namespace scope in force at this element, including the ancestors'.
      *
-     * @return el contexto; nunca null
+     * @return the context; never null
      */
     NamespaceContext getNamespaceContext();
 
     /**
-     * El URI asociado a un prefijo en este elemento.
+     * The URI associated with a prefix at this element.
      *
-     * <p>Atajo de {@code getNamespaceContext().getNamespaceURI(prefix)}.
+     * <p>A shortcut for {@code getNamespaceContext().getNamespaceURI(prefix)}.
      *
-     * @param prefix el prefijo; la cadena vacia para el espacio de nombres por omision
-     * @return el URI, o null si el prefijo no esta declarado
+     * @param prefix the prefix; the empty string for the default namespace
+     * @return the URI, or null if the prefix is not declared
      */
     String getNamespaceURI(String prefix);
 }

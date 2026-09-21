@@ -2,13 +2,13 @@ package java.security.spec;
 
 import java.math.BigInteger;
 
-// Que clave RSA generar: cuantos bits el modulo y con que exponente publico.
+// Which RSA key to generate: how many bits for the modulus and with which public exponent.
 //
-// Los dos valores predefinidos son los primos de Fermat F0 = 3 y F4 = 65537. Ser primo y tener
-// pocos bits prendidos es lo que los hace utiles: el cifrado publico es una exponenciacion por e, y
-// con e = 65537 = 2^16 + 1 son diecisiete pasos. F0 = 3 es aun mas barato pero se desaconseja: con
-// e chico y sin padding correcto, un mensaje corto cifrado a tres destinatarios distintos se
-// recupera sin factorizar nada (el ataque de Hastad). F4 es el default de todo el mundo.
+// The two predefined values are the Fermat primes F0 = 3 and F4 = 65537. Being prime and having few
+// bits set is what makes them useful: public encryption is an exponentiation by e, and with
+// e = 65537 = 2^16 + 1 it is seventeen steps. F0 = 3 is cheaper still but discouraged: with a small
+// e and no proper padding, a short message encrypted to three different recipients is recovered
+// without factoring anything (Hastad's attack). F4 is everyone's default.
 public class RSAKeyGenParameterSpec implements AlgorithmParameterSpec {
 
     public static final BigInteger F0 = BigInteger.valueOf(3);
@@ -29,7 +29,7 @@ public class RSAKeyGenParameterSpec implements AlgorithmParameterSpec {
         this.keyParams = keyParams;
     }
 
-    // El tamaño del modulo en bits.
+    // The size of the modulus in bits.
     public int getKeysize() {
         return this.keysize;
     }
@@ -38,7 +38,7 @@ public class RSAKeyGenParameterSpec implements AlgorithmParameterSpec {
         return this.publicExponent;
     }
 
-    // Parametros que quedan pegados a la clave generada; para RSASSA-PSS, la `PSSParameterSpec`.
+    // Parameters that stay attached to the generated key; for RSASSA-PSS, the `PSSParameterSpec`.
     public AlgorithmParameterSpec getKeyParams() {
         return this.keyParams;
     }

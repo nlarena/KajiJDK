@@ -5,42 +5,38 @@ import java.awt.Graphics;
 import javax.swing.JComponent;
 
 /**
- * Lo que toda interfaz grafica de Synth tiene que saber contestar.
+ * What every Synth look and feel has to know how to answer.
  *
- * <p>Son dos metodos y alcanzan para todo el aspecto.
+ * <p>Two methods, and they are enough for the whole look.
  *
- * <p>{@link #getContext} devuelve el {@link SynthContext} de ese componente: que region es, en que
- * estado esta y que estilo le toca. Todo lo demas de Synth arranca ahi -- los colores, la
- * tipografia, los margenes y el pintor salen del estilo del contexto --, y por eso el metodo se
- * llama en cada dibujado y no una sola vez al instalar: el estado cambia con el mouse y con el
- * foco.
+ * <p>{@link #getContext} returns that component's {@link SynthContext}: which region it is, what
+ * state it is in and which style it gets. Everything else in Synth starts there -- the colours,
+ * the typeface, the margins and the painter come from the context's style --, and that is why the
+ * method is called on every drawing and not once on installing: the state changes with the mouse
+ * and with the focus.
  *
- * <p>{@link #paintBorder} esta separado del dibujo del contenido porque el borde de un componente
- * de Synth no lo dibuja un {@code Border}: lo dibuja el estilo, con la misma imagen de la que sale
- * el fondo. Un {@code Border} no tendria como saber en que estado esta el componente.
- *
- * <p>Hereda {@link SynthConstants} nada mas que para que las clases que la implementan puedan
- * escribir {@code ENABLED} en vez de {@code SynthConstants.ENABLED}.
+ * <p>It inherits {@link SynthConstants} for nothing more than letting the classes that implement
+ * it write {@code ENABLED} instead of {@code SynthConstants.ENABLED}.
  */
 public interface SynthUI extends SynthConstants {
 
     /**
-     * El contexto de ese componente, con su estado de ahora.
+     * That component's context, with its state right now.
      *
-     * @param c el componente
-     * @return el contexto
+     * @param c the component
+     * @return the context
      */
     SynthContext getContext(JComponent c);
 
     /**
-     * Dibuja el borde.
+     * It draws the border.
      *
-     * @param context el contexto
-     * @param g donde dibujar
-     * @param x la esquina
-     * @param y la esquina
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     void paintBorder(SynthContext context, Graphics g, int x, int y, int w, int h);
 }

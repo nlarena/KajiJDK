@@ -1,51 +1,52 @@
 package org.w3c.dom;
 
 /**
- * KajiLibrary's org.w3c.dom.UserDataHandler -- el aviso de que a un nodo con datos del usuario le
- * paso algo.
+ * KajiLibrary's org.w3c.dom.UserDataHandler -- the notice that something happened to a node with
+ * user data.
  *
- * <p>Se registra al guardar el dato, en {@link Node#setUserData}, y sirve para resolver una pregunta
- * que el DOM no puede contestar solo: si a un nodo con un objeto Java colgado se lo **clona**, el
- * clon deberia tener el mismo objeto, una copia, o nada. Depende enteramente de que sea ese objeto
- * --una cache es descartable, un identificador hay que copiarlo, una conexion abierta no se
- * duplica-- y el unico que lo sabe es quien lo colgo. Por eso el DOM no copia nada por su cuenta:
- * avisa, y el que avisa decide.
+ * <p>It is registered when keeping the datum, in {@link Node#setUserData}, and it serves for
+ * resolving a question the DOM cannot answer on its own: if a node with a Java object hung on it is
+ * **cloned**, should the clone have the same object, a copy, or nothing. It depends entirely on
+ * what that object is --a cache is disposable, an identifier has to be copied, an open connection
+ * is not duplicated-- and the only one who knows is whoever hung it. That is why the DOM copies
+ * nothing on its own: it notifies, and the one notified decides.
  *
- * <p>Los cinco motivos son 1 a 5 y salen de la especificacion. Notar cual **no** esta:
- * {@code NODE_DELETED} existe pero la norma advierte que las implementaciones en lenguajes con
- * recoleccion de basura, Java incluido, tipicamente **no** lo invocan nunca, porque no hay un
- * momento definido en que un nodo se destruya. Contar con esa notificacion para liberar un recurso
- * es apoyarse en algo que no va a llegar.
+ * <p>The five reasons are 1 to 5 and come from the specification. Note which one does **not**
+ * arrive: {@code NODE_DELETED} exists but the standard warns that implementations in languages with
+ * garbage collection, Java included, typically **never** invoke it, because there is no defined
+ * moment at which a node is destroyed. Counting on that notification to release a resource is
+ * leaning on something that is not going to come.
  *
- * <p>Interfaz declarada entera.
+ * <p>The interface is declared whole.
  */
 public interface UserDataHandler {
 
-    /** El nodo se duplico con {@link Node#cloneNode}. */
+    /** The node was duplicated with {@link Node#cloneNode}. */
     public static final short NODE_CLONED = 1;
 
-    /** El nodo se importo a otro documento con {@link Document#importNode}. */
+    /** The node was imported into another document with {@link Document#importNode}. */
     public static final short NODE_IMPORTED = 2;
 
     /**
-     * El nodo se destruyo.
+     * The node was destroyed.
      *
-     * <p>En Java tipicamente no se invoca nunca: no hay un momento definido en que un nodo muera.
+     * <p>In Java it is typically never invoked: there is no defined moment at which a node dies.
      */
     public static final short NODE_DELETED = 3;
 
-    /** El nodo se renombro con {@link Document#renameNode}. */
+    /** The node was renamed with {@link Document#renameNode}. */
     public static final short NODE_RENAMED = 4;
 
-    /** El nodo se adopto con {@link Document#adoptNode}. */
+    /** The node was adopted with {@link Document#adoptNode}. */
     public static final short NODE_ADOPTED = 5;
 
     /**
-     * @param operation uno de los {@code NODE_*}
-     * @param key la clave con que se habia guardado el dato
-     * @param data el dato guardado
-     * @param src el nodo que se clono, importo, renombro o adopto; {@code null} si se borro
-     * @param dst el nodo resultante; {@code null} si se borro o se renombro en el lugar
+     * @param operation one of the {@code NODE_*}
+     * @param key the key the datum was kept with
+     * @param data the datum kept
+     * @param src the node that was cloned, imported, renamed or adopted; {@code null} if it was
+     *     deleted
+     * @param dst the resulting node; {@code null} if it was deleted or renamed in place
      */
     public void handle(short operation, String key, Object data, Node src, Node dst);
 }

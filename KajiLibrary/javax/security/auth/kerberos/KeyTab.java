@@ -10,47 +10,48 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * KajiLibrary's javax.security.auth.kerberos.KeyTab -- un archivo de claves de servicio.
+ * KajiLibrary's javax.security.auth.kerberos.KeyTab -- a file of service keys.
  *
- * <p>Un keytab guarda las claves de largo plazo de uno o mas principales, para que un servicio se
- * autentique sin contrasena. Esta clase es una <b>referencia</b> al archivo: no lo lee al crearse
- * sino cada vez que se piden claves, asi que refleja el archivo tal como esta en ese momento.
+ * <p>A keytab keeps the long-term keys of one or more principals, so that a service authenticates
+ * without a password. This class is a <b>reference</b> to the file: it does not read it when
+ * created but each time keys are asked for, so it reflects the file as it is at that moment.
  *
- * <h2>Ligado o no</h2>
+ * <h2>Bound or not</h2>
  *
- * <p>Un keytab ligado ({@link #isBound}) es para un principal: {@link #getInstance(KerberosPrincipal)}
- * lo liga a ese, y {@link #getInstance()} lo liga "a alguien", el principal que se resuelva en el
- * momento de usarlo. Uno no ligado --{@link #getUnboundInstance}-- sirve para cualquiera. La
- * distincion existe para que un modulo de login sepa a quien representa el archivo.
+ * <p>A bound keytab ({@link #isBound}) is for one principal: {@link
+ * #getInstance(KerberosPrincipal)} binds it to that one, and {@link #getInstance()} binds it "to
+ * somebody", the principal resolved at the moment of use. An unbound one --{@link
+ * #getUnboundInstance}-- serves anybody. The distinction exists so that a login module knows whom
+ * the file represents.
  *
- * <h2>El archivo por omision</h2>
+ * <h2>The default file</h2>
  *
- * <p>Sale de la propiedad {@code java.security.krb5.keytab} si esta, y si no es
- * {@code krb5.keytab} en el directorio del usuario. KajiJDK no lee {@code krb5.conf}.
+ * <p>It comes from the {@code java.security.krb5.keytab} property if it is set, and otherwise it is
+ * {@code krb5.keytab} in the user's directory. KajiJDK does not read {@code krb5.conf}.
  *
- * <h2>El formato</h2>
+ * <h2>The format</h2>
  *
- * <p>Se lee la version 0x0502 --la de MIT y Heimdal desde los anos noventa--: dos bytes de version y
- * despues entradas, cada una con su largo, el principal por componentes, la marca de tiempo, la
- * version de la clave y la clave con su tipo. Un archivo que no exista o no se pueda leer da cero
- * claves, no un error: es lo que el JDK hace, y lo que un servicio sin keytab necesita para poder
- * decir "no tengo claves" en vez de caerse.
+ * <p>Version 0x0502 is read --MIT's and Heimdal's since the nineties--: two version bytes and then
+ * entries, each with its length, the principal by components, the timestamp, the key version and
+ * the key with its type. A file that does not exist or cannot be read gives zero keys, not an
+ * error: it is what the JDK does, and what a service without a keytab needs to be able to say "I
+ * have no keys" instead of falling over.
  */
 public final class KeyTab {
 
-    /** La version del formato que se entiende. */
+    /** The format version understood. */
     private static final int KEYTAB_VERSION = 0x0502;
 
-    /** El archivo, o null por el de por omision. */
+    /** The file, or null for the default one. */
     private final File file;
 
-    /** A quien esta ligado, o null si esta ligado "a alguien" o no esta ligado. */
+    /** Whom it is bound to, or null if it is bound "to somebody" or not bound. */
     private final KerberosPrincipal princ;
 
-    /** Si esta ligado. Ver la nota de la clase. */
+    /** Whether it is bound. See the class note. */
     private final boolean bound;
 
-    /** Se llega por los {@code getInstance}. */
+    /** It is reached through the {@code getInstance}s. */
     private KeyTab(KerberosPrincipal princ, File file, boolean bound) {
         this.princ = princ;
         this.file = file;
@@ -58,9 +59,9 @@ public final class KeyTab {
     }
 
     /**
-     * Ese archivo, ligado a alguien.
+     * That file, bound to somebody.
      *
-     * @throws NullPointerException si el archivo es null
+     * @throws NullPointerException if the file is null
      */
     public static KeyTab getInstance(File file) {
         if (file == null) {
@@ -70,9 +71,9 @@ public final class KeyTab {
     }
 
     /**
-     * Ese archivo, sin ligar.
+     * That file, unbound.
      *
-     * @throws NullPointerException si el archivo es null
+     * @throws NullPointerException if the file is null
      */
     public static KeyTab getUnboundInstance(File file) {
         if (file == null) {
@@ -82,9 +83,9 @@ public final class KeyTab {
     }
 
     /**
-     * Ese archivo, ligado a ese principal.
+     * That file, bound to that principal.
      *
-     * @throws NullPointerException si cualquiera es null
+     * @throws NullPointerException if either is null
      */
     public static KeyTab getInstance(KerberosPrincipal princ, File file) {
         if (princ == null) {
@@ -96,20 +97,20 @@ public final class KeyTab {
         return new KeyTab(princ, file, true);
     }
 
-    /** El archivo por omision, ligado a alguien. */
+    /** The default file, bound to somebody. */
     public static KeyTab getInstance() {
         return new KeyTab(null, null, true);
     }
 
-    /** El archivo por omision, sin ligar. */
+    /** The default file, unbound. */
     public static KeyTab getUnboundInstance() {
         return new KeyTab(null, null, false);
     }
 
     /**
-     * El archivo por omision, ligado a ese principal.
+     * The default file, bound to that principal.
      *
-     * @throws NullPointerException si es null
+     * @throws NullPointerException if it is null
      */
     public static KeyTab getInstance(KerberosPrincipal princ) {
         if (princ == null) {
@@ -119,11 +120,11 @@ public final class KeyTab {
     }
 
     /**
-     * Las claves de ese principal que haya en el archivo, en el orden del archivo.
+     * The keys of that principal in the file, in the file's order.
      *
-     * <p>Vacio si el archivo no existe o no se puede leer. Ver la nota de la clase.
+     * <p>Empty if the file does not exist or cannot be read. See the class note.
      *
-     * @throws NullPointerException si el principal es null
+     * @throws NullPointerException if the principal is null
      */
     public KerberosKey[] getKeys(KerberosPrincipal principal) {
         String wanted = principal.getName();
@@ -135,15 +136,16 @@ public final class KeyTab {
                 in = new FileInputStream(source);
                 readEntries(new DataInputStream(in), principal, wanted, keys);
             } catch (IOException e) {
-                // Un archivo truncado o de otra version: lo que se leyo hasta ahi es lo que hay.
+                // A truncated file or one of another version: what was read up to there is what
+                // there is.
             } catch (RuntimeException e) {
-                // Idem para un largo negativo o un componente que no entra.
+                // Likewise for a negative length or a component that does not fit.
             } finally {
                 if (in != null) {
                     try {
                         in.close();
                     } catch (IOException e) {
-                        // Ya no hay nada que leer.
+                        // There is nothing left to read.
                     }
                 }
             }
@@ -151,7 +153,7 @@ public final class KeyTab {
         return keys.toArray(new KerberosKey[keys.size()]);
     }
 
-    /** Recorre las entradas y guarda las del principal pedido. Ver la nota de la clase. */
+    /** Walks the entries and keeps the ones of the requested principal. See the class note. */
     private static void readEntries(DataInputStream in, KerberosPrincipal principal, String wanted,
                                     List<KerberosKey> keys) throws IOException {
         if (in.readUnsignedShort() != KEYTAB_VERSION) {
@@ -168,7 +170,7 @@ public final class KeyTab {
                 return;
             }
             if (size < 0) {
-                // Una entrada borrada: el largo es negativo y hay que saltar su valor absoluto.
+                // A deleted entry: the length is negative and its absolute value has to be skipped.
                 skipFully(in, -size);
                 continue;
             }
@@ -182,7 +184,7 @@ public final class KeyTab {
         }
     }
 
-    /** Una entrada, o null si el principal no se pudo armar. */
+    /** An entry, or null if the principal could not be put together. */
     private static KerberosKey parseEntry(DataInputStream in, KerberosPrincipal wanted)
             throws IOException {
         int components = in.readUnsignedShort();
@@ -204,7 +206,7 @@ public final class KeyTab {
         byte[] keyBytes = new byte[keyLength];
         in.readFully(keyBytes);
         if (in.available() >= 4) {
-            // La version de 32 bits, opcional al final, pisa la de un byte cuando esta.
+            // The 32-bit version, optional at the end, overrides the one-byte one when present.
             int longVersion = in.readInt();
             if (longVersion != 0) {
                 versionNumber = longVersion;
@@ -221,7 +223,7 @@ public final class KeyTab {
         return new KerberosKey(principal, keyBytes, keyType, versionNumber);
     }
 
-    /** Una cadena con su largo adelante. */
+    /** A string with its length in front. */
     private static String readString(DataInputStream in) throws IOException {
         int length = in.readUnsignedShort();
         byte[] bytes = new byte[length];
@@ -229,7 +231,7 @@ public final class KeyTab {
         return new String(bytes, "UTF-8");
     }
 
-    /** Salta esos bytes, todos. */
+    /** Skips those bytes, all of them. */
     private static void skipFully(DataInputStream in, int count) throws IOException {
         int remaining = count;
         while (remaining > 0) {
@@ -241,12 +243,12 @@ public final class KeyTab {
         }
     }
 
-    /** Si el archivo existe. */
+    /** Whether the file exists. */
     public boolean exists() {
         return resolveFile().isFile();
     }
 
-    /** El archivo que corresponde: el dado, o el de por omision. Ver la nota de la clase. */
+    /** The file that corresponds: the given one, or the default one. See the class note. */
     private File resolveFile() {
         if (this.file != null) {
             return this.file;
@@ -258,7 +260,7 @@ public final class KeyTab {
         return new File(System.getProperty("user.home", "."), "krb5.keytab");
     }
 
-    /** El archivo y a quien esta ligado. */
+    /** The file and whom it is bound to. */
     @Override
     public String toString() {
         String source = this.file == null ? "Default keytab" : this.file.toString();
@@ -273,7 +275,7 @@ public final class KeyTab {
         return Objects.hash(this.file, this.princ, this.bound);
     }
 
-    /** Iguales si son el mismo archivo --como se nombro, no como se resuelve-- y la misma ligadura. */
+    /** Equal if they are the same file --as named, not as resolved-- and the same binding. */
     @Override
     public boolean equals(Object obj) {
         if (this == obj) {
@@ -287,12 +289,12 @@ public final class KeyTab {
             && this.bound == other.bound;
     }
 
-    /** A quien esta ligado; null si esta ligado "a alguien" o no esta ligado. */
+    /** Whom it is bound to; null if it is bound "to somebody" or not bound. */
     public KerberosPrincipal getPrincipal() {
         return this.princ;
     }
 
-    /** Si esta ligado. Ver la nota de la clase. */
+    /** Whether it is bound. See the class note. */
     public boolean isBound() {
         return this.bound;
     }

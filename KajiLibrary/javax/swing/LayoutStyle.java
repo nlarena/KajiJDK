@@ -3,38 +3,40 @@ package javax.swing;
 import java.awt.Container;
 
 /**
- * Cuanto espacio va entre dos componentes, segun las reglas del sistema.
+ * How much space goes between two components, according to the system's rules.
  *
- * <h2>El espaciado no es una preferencia, es una regla de la plataforma</h2>
+ * <h2>The spacing is not a preference, it is a rule of the platform</h2>
  *
- * <p>Cada sistema tiene su guia de estilo, y ahi dice cuantos pixeles van entre una etiqueta y su
- * campo, entre dos botones de la misma barra, y entre el borde de un dialogo y su contenido. No son
- * los mismos numeros en Windows, en macOS y en GNOME, y una aplicacion que los fija a mano se ve
- * fuera de lugar en dos de los tres.
+ * <p>Each system has its style guide, and there it says how many pixels go between a label and
+ * its field, between two buttons of the same bar, and between a dialog's edge and its content.
+ * They are not the same numbers on Windows, on macOS and on GNOME, and an application that fixes
+ * them by hand looks out of place on two of the three.
  *
- * <p>Esta clase es donde el aspecto instalado contesta esas dos preguntas -- {@link #getPreferredGap}
- * entre dos componentes y {@link #getContainerGap} contra el borde -- y es lo que
- * {@link GroupLayout} consulta cuando se le pide un espacio "el que corresponda".
+ * <p>This class is where the installed look and feel answers those two questions --
+ * {@link #getPreferredGap} between two components and {@link #getContainerGap} against the edge
+ * -- and it is what {@link GroupLayout} consults when it is asked for a "whatever applies"
+ * space.
  *
- * <h2>Tres clases de vecindad</h2>
+ * <h2>Three kinds of neighbourhood</h2>
  *
- * <p>{@link ComponentPlacement#RELATED} para dos cosas que van juntas -- la etiqueta y su campo --,
- * {@link ComponentPlacement#UNRELATED} para dos grupos distintos, y
- * {@link ComponentPlacement#INDENT} para lo que cuelga de otra cosa, como la casilla que solo tiene
- * sentido si la de arriba esta marcada.
+ * <p>{@link ComponentPlacement#RELATED} for two things that go together -- the label and its
+ * field --, {@link ComponentPlacement#UNRELATED} for two different groups, and
+ * {@link ComponentPlacement#INDENT} for what hangs from something else, such as the check box
+ * that only makes sense if the one above is ticked.
  *
- * <h2>De donde sale la instancia</h2>
+ * <h2>Where the instance comes from</h2>
  *
- * <p>De {@link #setInstance} si alguien la puso, y si no del aspecto instalado. Sin aspecto no hay
- * guia de estilo que consultar, y {@link #getInstance} devuelve una que da los numeros del JDK
- * --seis pixeles entre cosas relacionadas, doce entre grupos y doce contra el borde--, medidos
- * contra el suyo. Un aspecto de verdad los reemplaza por los de su plataforma.
+ * <p>From {@link #setInstance} if somebody set it, and otherwise from the installed look and
+ * feel. With no look and feel there is no style guide to consult, and {@link #getInstance}
+ * returns one that gives the JDK's numbers -- six pixels between related things, twelve between
+ * groups and twelve against the edge --, measured against its own. A real look and feel replaces
+ * them with its platform's.
  */
 public abstract class LayoutStyle {
 
     private static LayoutStyle instance;
 
-    /** Fija la instancia; nulo devuelve la decision al aspecto. */
+    /** It fixes the instance; null gives the decision back to the look and feel. */
     public static void setInstance(LayoutStyle style) {
         synchronized (LayoutStyle.class) {
             instance = style;
@@ -42,9 +44,9 @@ public abstract class LayoutStyle {
     }
 
     /**
-     * La instancia en uso.
+     * The instance in use.
      *
-     * <p>Ver la nota de la clase: sin aspecto instalado, una con los numeros de siempre.
+     * <p>See the class note: with no look and feel installed, one with the usual numbers.
      */
     public static LayoutStyle getInstance() {
         LayoutStyle style;
@@ -56,63 +58,63 @@ public abstract class LayoutStyle {
         }
         LookAndFeel laf = UIManager.getLookAndFeel();
         if (laf != null) {
-            LayoutStyle delAspecto = laf.getLayoutStyle();
-            if (delAspecto != null) {
-                return delAspecto;
+            LayoutStyle fromLookAndFeel = laf.getLayoutStyle();
+            if (fromLookAndFeel != null) {
+                return fromLookAndFeel;
             }
         }
-        return DeSiempre.UNICA;
+        return DefaultLayoutStyle.SHARED;
     }
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     public LayoutStyle() {
     }
 
     /**
-     * El espacio que va entre esos dos componentes.
+     * The space that goes between those two components.
      *
-     * @param position de que lado esta el segundo respecto del primero; una de las constantes de
-     *     {@link SwingConstants}
-     * @throws IllegalArgumentException si algun componente o la posicion son invalidos
+     * @param position which side the second is on with respect to the first; one of
+     *     {@link SwingConstants}' constants
+     * @throws IllegalArgumentException if some component or the position is invalid
      */
     public abstract int getPreferredGap(JComponent component1, JComponent component2,
             ComponentPlacement type, int position, Container parent);
 
     /**
-     * El espacio que va entre ese componente y el borde de su contenedor.
+     * The space that goes between that component and its container's edge.
      *
-     * @throws IllegalArgumentException si el componente o la posicion son invalidos
+     * @throws IllegalArgumentException if the component or the position is invalid
      */
     public abstract int getContainerGap(JComponent component, int position, Container parent);
 
-    /** Que relacion hay entre los dos componentes; ver la nota de la clase. */
+    /** What relation there is between the two components; see the class note. */
     public enum ComponentPlacement {
 
-        /** Van juntos: una etiqueta y su campo. */
+        /** They go together: a label and its field. */
         RELATED,
 
-        /** Son grupos distintos. */
+        /** They are different groups. */
         UNRELATED,
 
-        /** El segundo cuelga del primero. */
+        /** The second hangs from the first. */
         INDENT;
     }
 
     /**
-     * La que se usa sin aspecto instalado.
+     * The one that is used with no look and feel installed.
      *
-     * <p>Los numeros son los que casi todas las guias comparten. No estan medidos contra ninguna
-     * plataforma en particular, y por eso esta clase no es publica: quien quiera los de su sistema
-     * tiene que instalar el aspecto que los sepa.
+     * <p>The numbers are the ones almost every guide shares. They are not measured against any
+     * platform in particular, and that is why this class is not public: whoever wants their
+     * system's has to install the look and feel that knows them.
      */
-    private static class DeSiempre extends LayoutStyle {
+    private static class DefaultLayoutStyle extends LayoutStyle {
 
-        static final LayoutStyle UNICA = new DeSiempre();
+        static final LayoutStyle SHARED = new DefaultLayoutStyle();
 
         public int getPreferredGap(JComponent component1, JComponent component2,
                 ComponentPlacement type, int position, Container parent) {
-            // Un componente nulo sale como NullPointerException, no como IllegalArgumentException:
-            // el JDK no lo comprueba y revienta al usarlo. Esta medido.
+            // A null component comes out as NullPointerException, not as IllegalArgumentException:
+                        // the JDK does not check it and blows up on using it. It is measured.
             component1.getWidth();
             component2.getWidth();
             if (type == null) {

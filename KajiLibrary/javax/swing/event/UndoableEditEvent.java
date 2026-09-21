@@ -5,11 +5,11 @@ import java.util.EventObject;
 import javax.swing.undo.UndoableEdit;
 
 /**
- * El aviso de que ocurrio algo deshacible.
+ * The notice that something undoable happened.
  *
- * <p>Lleva la edicion misma, no una descripcion: quien lo recibe puede guardarla y despues pedirle
- * que se deshaga. Es la diferencia entre notificar y delegar — el evento no cuenta que paso, entrega
- * el objeto que sabe revertirlo.
+ * <p>It carries the edit itself, not a description: whoever receives it can keep it and later ask
+ * it to undo itself. It is the difference between notifying and delegating -- the event does not
+ * tell what happened, it hands over the object that knows how to revert it.
  */
 public class UndoableEditEvent extends EventObject {
 
@@ -18,15 +18,15 @@ public class UndoableEditEvent extends EventObject {
     private UndoableEdit myEdit;
 
     /**
-     * @param source quien produjo la edicion
-     * @param edit la edicion, que sabe deshacerse y rehacerse
+     * @param source who produced the edit
+     * @param edit the edit, which knows how to undo and redo itself
      */
     public UndoableEditEvent(Object source, UndoableEdit edit) {
         super(source);
         this.myEdit = edit;
     }
 
-    /** La edicion que ocurrio. */
+    /** The edit that happened. */
     public UndoableEdit getEdit() {
         return this.myEdit;
     }

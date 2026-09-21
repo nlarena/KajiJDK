@@ -8,45 +8,47 @@ import javax.swing.JPanel;
 import javax.swing.SwingWorker;
 
 /**
- * Un complemento de jconsole: solapas propias sobre la aplicacion vigilada.
+ * A jconsole plugin: tabs of its own over the watched application.
  *
- * <p>Se instala por {@link java.util.ServiceLoader} --un JAR en `-pluginpath` que declare esta
- * clase como proveedor-- y jconsole crea una instancia **por conexion**, no una global.
+ * <p>It is installed by {@link java.util.ServiceLoader} --a JAR in `-pluginpath` that declares
+ * this class as a provider-- and jconsole creates one instance **per connection**, not a global
+ * one.
  *
- * <h2>Por que `newSwingWorker` y no un metodo de refresco</h2>
+ * <h2>Why `newSwingWorker` and not a refresh method</h2>
  *
- * <p>Un complemento tiene que leer MBean de una VM que puede estar del otro lado de la red, y la
- * lectura tarda lo que tarde. Si jconsole lo llamara en el hilo de la interfaz, un complemento
- * lento congelaria la ventana entera --incluidas las solapas de los demas. Por eso jconsole no
- * pide "actualizate": pide un {@link SwingWorker}, lo corre por su cuenta y deja que el complemento
- * separe las dos mitades como corresponde.
+ * <p>A plugin has to read MBeans of a VM that may be on the other side of the network, and the
+ * reading takes as long as it takes. If jconsole called it on the interface's thread, a slow
+ * plugin would freeze the whole window --including the others' tabs. That is why jconsole does
+ * not ask "update yourself": it asks for a {@link SwingWorker}, runs it on its own and lets
+ * the plugin separate the two halves as it should.
  *
- * <p>Devolver `null` es valido, y significa "no tengo nada que actualizar ahora".
+ * <p>To return `null` is valid, and means "I have nothing to update now".
  *
- * <h2>El contexto llega despues del constructor</h2>
+ * <h2>The context arrives after the constructor</h2>
  *
- * <p>{@link #setContext} lo llama jconsole, una vez, antes de {@link #getTabs}. Por eso
- * {@link #addContextPropertyChangeListener} existe: un complemento que quiera escuchar el estado de
- * la conexion no puede hacerlo en su constructor --todavia no hay contexto-- y este metodo guarda
- * el escucha hasta que lo haya.
+ * <p>{@link #setContext} is called by jconsole, once, before {@link #getTabs}. That is why
+ * {@link #addContextPropertyChangeListener} exists: a plugin that wants to listen to the
+ * connection's state cannot do it in its constructor --there is no context yet-- and this
+ * method keeps the listener until there is one.
  */
 public abstract class JConsolePlugin {
 
     private volatile JConsoleContext context = null;
 
-    /** Los escuchas registrados antes de que llegara el contexto. */
+    /** The listeners registered before the context arrived. */
     private List<PropertyChangeListener> listeners = null;
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected JConsolePlugin() {
     }
 
     /**
-     * Le da al complemento su contexto. Lo llama jconsole, una sola vez.
+     * It gives the plugin its context. It is called by jconsole, a single time.
      *
-     * <p>Los escuchas que se hayan registrado antes se pasan aca al contexto, y la lista se suelta.
+     * <p>The listeners that were registered before are passed here to the context, and the list is
+     * released.
      *
-     * @param context la conexion, o `null` para desengancharlo
+     * @param context the connection, or `null` in order to unhook it
      */
     public final synchronized void setContext(JConsoleContext context) {
         this.context = context;
@@ -58,43 +60,42 @@ public abstract class JConsolePlugin {
         }
     }
 
-    /** El contexto, o `null` si jconsole todavia no se lo dio. */
+    /** The context, or `null` if jconsole has not given it one yet. */
     public final JConsoleContext getContext() {
         return this.context;
     }
 
     /**
-     * Las solapas que este complemento agrega, por titulo.
+     * The tabs this plugin adds, by title.
      *
-     * <p>jconsole lo llama una sola vez, con el contexto ya puesto. Un mapa vacio es valido y
-     * significa que el complemento no agrega solapas --puede seguir haciendo su trabajo por
+     * <p>jconsole calls it a single time, with the context already set. An empty map is valid and
+     * means that the plugin adds no tabs --it may go on doing its work over
      * {@link #newSwingWorker}.
      */
     public abstract Map<String, JPanel> getTabs();
 
     /**
-     * Un trabajo para el proximo refresco, o `null` si no hay nada que hacer.
+     * A job for the next refresh, or `null` if there is nothing to do.
      *
-     * <p>jconsole lo llama en cada intervalo de actualizacion; ver la nota de la clase.
+     * <p>jconsole calls it at each update interval; see the class note.
      */
     public abstract SwingWorker<?, ?> newSwingWorker();
 
     /**
-     * Suelta lo que el complemento haya tomado.
+     * It releases whatever the plugin has taken.
      *
-     * <p>Lo llama jconsole al cerrar la ventana de la conexion. Por omision no hace nada: la
-     * mayoria de los complementos no tienen nada que soltar.
+     * <p>It is called by jconsole on closing the connection's window. By default it does nothing:
+     * most plugins have nothing to release.
      */
     public void dispose() {
     }
 
     /**
-     * Escucha las propiedades del contexto, ahora o cuando lo haya.
+     * It listens to the context's properties, now or when there is one.
      *
-     * <p>Es la unica forma segura de engancharse desde el constructor de un complemento. Ver la
-     * nota de la clase.
+     * <p>It is the only safe way of hooking on from a plugin's constructor. See the class note.
      *
-     * @throws NullPointerException si el escucha es nulo
+     * @throws NullPointerException if the listener is null
      */
     public final void addContextPropertyChangeListener(PropertyChangeListener listener) {
         if (listener == null) {
@@ -119,9 +120,9 @@ public abstract class JConsolePlugin {
     }
 
     /**
-     * Saca un escucha, este ya en el contexto o todavia en espera.
+     * It takes a listener out, be it already in the context or still waiting.
      *
-     * @throws NullPointerException si el escucha es nulo
+     * @throws NullPointerException if the listener is null
      */
     public final void removeContextPropertyChangeListener(PropertyChangeListener listener) {
         if (listener == null) {

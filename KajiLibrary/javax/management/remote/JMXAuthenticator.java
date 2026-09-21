@@ -3,25 +3,26 @@ package javax.management.remote;
 import javax.security.auth.Subject;
 
 /**
- * KajiLibrary's javax.management.remote.JMXAuthenticator -- decide si un cliente entra.
+ * KajiLibrary's javax.management.remote.JMXAuthenticator -- decides whether a client gets in.
  *
- * <p>Se le pasa al servidor en el mapa de entorno bajo la clave
- * {@link JMXConnectorServer#AUTHENTICATOR}, y se lo llama una vez por conexion.
+ * <p>It is given to the server in the environment map under the
+ * {@link JMXConnectorServer#AUTHENTICATOR} key, and it is called once per connection.
  *
- * <p>El argumento es {@link Object} y no algo mas preciso porque depende del protocolo: el conector
- * RMI pasa un {@code String[]} de dos elementos --usuario y clave--, otro protocolo podria pasar un
- * certificado. Un autenticador tiene que comprobar el tipo antes de usarlo.
+ * <p>The argument is {@link Object} and not something more precise because it depends on the
+ * protocol: the RMI connector passes a two-element {@code String[]} --user and password--,
+ * another protocol could pass a certificate. An authenticator has to check the type before using
+ * it.
  *
- * <p>Devuelve el {@link Subject} con el que van a correr las operaciones de ese cliente. Se rechaza
- * lanzando {@link SecurityException}: devolver null significa "sin identidad", que no es lo mismo que
- * "no entra".
+ * <p>It returns the {@link Subject} that client's operations will run as. Rejecting is done by
+ * throwing {@link SecurityException}: returning null means "no identity", which is not the same
+ * as "does not get in".
  */
 public interface JMXAuthenticator {
 
     /**
-     * @param credentials lo que mando el cliente; su tipo depende del protocolo
-     * @return con que identidad corre, o null para ninguna
-     * @throws SecurityException si no entra
+     * @param credentials what the client sent; its type depends on the protocol
+     * @return what identity it runs as, or null for none
+     * @throws SecurityException if it does not get in
      */
     Subject authenticate(Object credentials);
 }

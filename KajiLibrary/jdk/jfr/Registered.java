@@ -6,14 +6,14 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Si el evento se registra solo al cargarse la clase.
+ * Whether the event registers itself when the class is loaded.
  *
- * <p>Registrar significa que JFR lo conoce y puede grabarlo. Ponerlo en {@code false} deja el
- * registro para mas tarde, con {@link FlightRecorder#register}, que es lo que hace falta cuando la
- * clase se carga antes de que este decidido si el evento se va a usar.
+ * <p>Registering means that JFR knows it and can record it. Putting it at {@code false} leaves the
+ * registration for later, with {@link FlightRecorder#register}, which is what is needed when the
+ * class is loaded before it is decided whether the event is going to be used.
  *
- * <p>Es la unica anotacion de este grupo que <strong>no</strong> es {@link MetadataDefinition}: no
- * describe al evento, decide cuando aparece.
+ * <p>It is the only annotation of this group that is <strong>not</strong>
+ * {@link MetadataDefinition}: it does not describe the event, it decides when it appears.
  *
  * @since 9
  */
@@ -22,9 +22,9 @@ import java.lang.annotation.Target;
 public @interface Registered {
 
     /**
-     * El valor de la anotacion.
+     * The value of the annotation.
      *
-     * @return el valor
+     * @return the value
      */
     boolean value() default true;
 }

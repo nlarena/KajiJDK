@@ -2,42 +2,42 @@ package org.xml.sax.helpers;
 
 import org.xml.sax.Attributes;
 
-// KajiLibrary's org.xml.sax.helpers.AttributesImpl -- la implementacion de {@link Attributes}
-// que sirve para las dos cosas que hacen falta: **congelar** los atributos que un parser presto
-// durante `startElement`, y **construirlos** a mano cuando uno mismo genera eventos.
+// KajiLibrary's org.xml.sax.helpers.AttributesImpl -- the implementation of {@link Attributes}
+// that serves for the two things needed: **freezing** the attributes a parser lent during
+// `startElement`, and **building** them by hand when one generates events oneself.
 //
-// El almacenamiento es un solo `String[]` con cinco casilleros por atributo --uri, nombre local,
-// nombre calificado, tipo, valor-- en vez de un arreglo de objetos. Es la representacion del JDK
-// y vale la pena entender por que: los atributos de un elemento son tipicamente cero, uno o dos,
-// y a esa escala un objeto por atributo cuesta mas en asignaciones y en salto de puntero que lo
-// que ahorra en claridad. El precio es que todos los indices van multiplicados por cinco, asi
-// que el atributo `i` vive en `data[i*5 .. i*5+4]`.
+// The storage is a single `String[]` with five slots per attribute --uri, local name, qualified
+// name, type, value-- instead of an array of objects. It is the JDK's representation and it is
+// worth understanding why: the attributes of an element are typically zero, one or two, and at
+// that scale an object per attribute costs more in allocations and pointer chasing than it saves
+// in clarity. The price is that every index goes multiplied by five, so attribute `i` lives in
+// `data[i*5 .. i*5+4]`.
 //
-// **La asimetria de los indices fuera de rango es del contrato, no un descuido.** Los `getXxx(int)`
-// devuelven `null` --un indice que no existe simplemente no tiene valor--, pero los `setXxx(int)`
-// y `removeAttribute(int)` tiran `ArrayIndexOutOfBoundsException`: escribir en una posicion que
-// no existe es un error del programa y callarlo perderia el dato.
+// **The asymmetry of out-of-range indices belongs to the contract, it is not an oversight.** The
+// `getXxx(int)` return `null` --an index that does not exist simply has no value--, but the
+// `setXxx(int)` and `removeAttribute(int)` throw `ArrayIndexOutOfBoundsException`: writing into a
+// position that does not exist is a program error and keeping quiet about it would lose the datum.
 //
-// Las busquedas por nombre son lineales. Con la cantidad de atributos que tiene un elemento real
-// eso es mas rapido que cualquier mapa, y evita mantener un indice que habria que rehacer en cada
+// The lookups by name are linear. With the number of attributes a real element has, that is faster
+// than any map, and it avoids maintaining an index that would have to be rebuilt on every
 // `setQName`.
 public class AttributesImpl implements Attributes {
 
-    // Cantidad de atributos; el arreglo puede ser mas largo.
+    // Number of attributes; the array may be longer.
     int length;
 
-    // uri, localName, qName, type, value por cada atributo, en ese orden.
+    // uri, localName, qName, type, value for each attribute, in that order.
     String data[];
 
-    // Una lista vacia, lista para `addAttribute`.
+    // An empty list, ready for `addAttribute`.
     public AttributesImpl() {
         length = 0;
         data = null;
     }
 
-    // Una copia independiente de `atts`. Este es el constructor que resuelve el bug clasico de
-    // SAX: el objeto que llega a `startElement` deja de valer cuando la llamada termina, y esta
-    // copia no.
+    // An independent copy of `atts`. This is the constructor that solves the classic SAX bug: the
+    // object that arrives at `startElement` stops being valid when the call ends, and this copy
+    // does not.
     public AttributesImpl(Attributes atts) {
         setAttributes(atts);
     }
@@ -86,7 +86,7 @@ public class AttributesImpl implements Attributes {
         }
     }
 
-    // Busqueda por (URI, nombre local). -1 si no esta.
+    // Lookup by (URI, local name). -1 if it is not there.
     public int getIndex(String uri, String localName) {
         int max = length * 5;
         for (int i = 0; i < max; i += 5) {
@@ -97,7 +97,7 @@ public class AttributesImpl implements Attributes {
         return -1;
     }
 
-    // Busqueda por nombre calificado. -1 si no esta.
+    // Lookup by qualified name. -1 if it is not there.
     public int getIndex(String qName) {
         int max = length * 5;
         for (int i = 0; i < max; i += 5) {
@@ -148,8 +148,8 @@ public class AttributesImpl implements Attributes {
         return null;
     }
 
-    // Vacia la lista. Anula tambien los casilleros usados, no solo `length`: si no, la lista
-    // seguiria sosteniendo cadenas que ya nadie mira.
+    // It empties the list. It also nulls out the used slots, not only `length`: otherwise the list
+    // would go on holding strings nobody looks at any more.
     public void clear() {
         if (data != null) {
             for (int i = 0; i < (length * 5); i++) {
@@ -159,7 +159,7 @@ public class AttributesImpl implements Attributes {
         length = 0;
     }
 
-    // Reemplaza el contenido por una copia del de `atts`.
+    // It replaces the contents with a copy of those of `atts`.
     public void setAttributes(Attributes atts) {
         clear();
         length = atts.getLength();
@@ -175,8 +175,8 @@ public class AttributesImpl implements Attributes {
         }
     }
 
-    // Agrega al final. No chequea duplicados: XML lo prohibe, pero quien genera los eventos es
-    // responsable de eso, no esta lista.
+    // It appends at the end. It does not check for duplicates: XML forbids them, but whoever
+    // generates the events is responsible for that, not this list.
     public void addAttribute(String uri, String localName, String qName,
                              String type, String value) {
         ensureCapacity(length + 1);
@@ -188,7 +188,7 @@ public class AttributesImpl implements Attributes {
         length++;
     }
 
-    // Reescribe los cinco campos del atributo `index`.
+    // It rewrites the five fields of attribute `index`.
     public void setAttribute(int index, String uri, String localName,
                              String qName, String type, String value) {
         if (index >= 0 && index < length) {
@@ -202,8 +202,8 @@ public class AttributesImpl implements Attributes {
         }
     }
 
-    // Saca el atributo `index` corriendo los de atras una posicion. Los indices de los que
-    // siguen cambian, que es lo esperable en una lista.
+    // It removes attribute `index`, shifting the ones behind one position. The indices of the
+    // following ones change, which is what is to be expected in a list.
     public void removeAttribute(int index) {
         if (index >= 0 && index < length) {
             if (index < length - 1) {
@@ -262,9 +262,8 @@ public class AttributesImpl implements Attributes {
         }
     }
 
-    // Crece al doble desde un piso de 25 casilleros (cinco atributos), que es lo que el JDK
-    // eligio: la enorme mayoria de los elementos entra en el primer bloque y nunca vuelve a
-    // copiar.
+    // It grows to double from a floor of 25 slots (five attributes), which is what the JDK chose:
+    // the vast majority of elements fit in the first block and never copy again.
     private void ensureCapacity(int n) {
         if (n <= 0) {
             return;

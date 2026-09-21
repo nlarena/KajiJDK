@@ -1,31 +1,32 @@
 package javax.management;
 
 /**
- * Un MBean que emite notificaciones.
+ * An MBean that emits notifications.
  *
- * <p>Su carencia esta en {@link #removeNotificationListener}: saca <b>todos</b> los registros de
- * ese oyente, sin poder distinguir filtro ni handback. {@link NotificationEmitter} existe justamente
- * para arreglar eso, y es lo que conviene implementar hoy.
+ * <p>Its shortcoming is in {@link #removeNotificationListener}: it removes <b>all</b> the
+ * registrations of that listener, unable to tell filter or handback apart.
+ * {@link NotificationEmitter} exists precisely to fix that, and is what is worth implementing
+ * today.
  */
 public interface NotificationBroadcaster {
 
     /**
-     * Registra un oyente.
+     * Registers a listener.
      *
-     * @param filter si es `null`, pasan todas
-     * @param handback objeto opaco que vuelve en cada entrega
+     * @param filter if it is {@code null}, all pass
+     * @param handback opaque object that comes back on every delivery
      */
     void addNotificationListener(NotificationListener listener, NotificationFilter filter,
                                  Object handback) throws IllegalArgumentException;
 
     /**
-     * Saca todos los registros del oyente.
+     * Removes all the registrations of the listener.
      *
-     * @throws ListenerNotFoundException si no estaba registrado
+     * @throws ListenerNotFoundException if it was not registered
      */
     void removeNotificationListener(NotificationListener listener)
             throws ListenerNotFoundException;
 
-    /** Que notificaciones puede llegar a emitir este MBean. */
+    /** Which notifications this MBean may emit. */
     MBeanNotificationInfo[] getNotificationInfo();
 }

@@ -2,17 +2,18 @@ package java.security.spec;
 
 import java.math.BigInteger;
 
-// Los parametros de dominio de ECC: la curva, el punto generador, el orden de ese generador y el
+// The ECC domain parameters: the curve, the generator point, the order of that generator and the
 // cofactor.
 //
-// Los cuatro juntos son lo que dos partes tienen que compartir para que una clave publica signifique
-// lo mismo de los dos lados. Una clave EC sin estos parametros no es interpretable: el mismo par
-// (x, y) es un punto valido en infinitas curvas distintas.
+// The four together are what two parties have to share for a public key to mean the same on both
+// sides. An EC key without these parameters cannot be interpreted: the same pair (x, y) is a valid
+// point on infinitely many different curves.
 //
-// El cofactor h = |E| / n no es un detalle contable. Es la razon por la que existen los ataques de
-// subgrupo chico: si h > 1, un punto que el atacante manda puede vivir en un subgrupo de orden
-// pequeño y filtrar la clave privada modulo ese orden. Por eso las curvas serias lo tienen en 1 y
-// por eso el valor viaja con los parametros en lugar de deducirse.
+// The cofactor h = |E| / n is not a bookkeeping detail. It is the reason small-subgroup attacks
+// exist: if h > 1, a point an attacker sends can live in a subgroup of small order and leak the
+// private key modulo that order. That is why the value travels with the parameters instead of being
+// deduced. This note also said that serious curves have it at 1; the NIST prime curves do, but
+// Curve25519 has 8 and Ed448 has 4, and they defend by other means (see `XECPrivateKeySpec`).
 public class ECParameterSpec implements AlgorithmParameterSpec {
 
     private final EllipticCurve curve;
@@ -50,7 +51,7 @@ public class ECParameterSpec implements AlgorithmParameterSpec {
         return this.g;
     }
 
-    // El orden del generador: el n mas chico tal que n*G es el infinito.
+    // The order of the generator: the smallest n such that n*G is the point at infinity.
     public BigInteger getOrder() {
         return this.n;
     }

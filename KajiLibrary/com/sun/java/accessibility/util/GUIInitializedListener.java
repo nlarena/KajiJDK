@@ -3,20 +3,21 @@ package com.sun.java.accessibility.util;
 import java.util.EventListener;
 
 /**
- * Se entera cuando la interfaz grafica ya existe.
+ * It finds out when the graphical interface already exists.
  *
- * <h2>Por que hace falta esperar</h2>
+ * <h2>Why it is necessary to wait</h2>
  *
- * <p>Una tecnologia de asistencia —un lector de pantalla— arranca <strong>antes</strong> que la
- * aplicacion tenga ventanas: la VM la carga al principio, y en ese momento no hay nada que leer.
- * Consultar la interfaz ahi da vacio, y volver a consultar en un bucle es desperdiciar tiempo.
+ * <p>An assistive technology -- a screen reader -- starts <strong>before</strong> the
+ * application has windows: the VM loads it at the beginning, and at that moment there is nothing
+ * to read. Consulting the interface there gives empty, and consulting again in a loop is wasting
+ * time.
  *
- * <p>Este aviso resuelve eso: llega una sola vez, cuando aparece la primera ventana de primer nivel.
- * Registrarse despues de que eso ya paso no da nada, y por eso conviene consultar antes
- * {@link EventQueueMonitor#isGUIInitialized}.
+ * <p>This notice resolves that: it arrives only once, when the first top-level window appears.
+ * Registering after that has already happened gives nothing, and that is why it is convenient to
+ * consult {@link EventQueueMonitor#isGUIInitialized} first.
  */
 public interface GUIInitializedListener extends EventListener {
 
-    /** Ya hay interfaz grafica. */
+    /** There is a graphical interface now. */
     void guiInitialized();
 }

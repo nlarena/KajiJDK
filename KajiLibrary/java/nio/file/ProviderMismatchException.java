@@ -1,20 +1,20 @@
 package java.nio.file;
 
-// Se mezclo un objeto de un proveedor con otro que no es el suyo -- por ejemplo un `Path` de un ZIP
-// pasado a un metodo del sistema de archivos por omision.
+// An object of one provider was mixed with another that is not its own -- a `Path` from a ZIP
+// handed to a method of the default filesystem, say.
 //
-// **No es una `IOException`.** Hereda de `IllegalArgumentException` porque el error esta en el
-// argumento y se detecta sin tocar el disco. En KajiJDK aparece cuando a un metodo que espera un
-// `Path` de esta biblioteca le llega una implementacion ajena.
+// **It is not an `IOException`.** It inherits from `IllegalArgumentException` because the error is
+// in the argument and is detected without touching the disk. In KajiJDK it turns up when a method
+// that expects a `Path` of this library is handed a foreign implementation.
 public class ProviderMismatchException extends IllegalArgumentException {
 
     private static final long serialVersionUID = 4990847485741612530L;
 
-    /** Sin mensaje. */
+    /** With no message. */
     public ProviderMismatchException() {
     }
 
-    /** @param msg el detalle */
+    /** @param msg the detail */
     public ProviderMismatchException(String msg) {
         super(msg);
     }

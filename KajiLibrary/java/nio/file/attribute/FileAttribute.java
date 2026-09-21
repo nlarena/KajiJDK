@@ -1,20 +1,19 @@
 package java.nio.file.attribute;
 
-// Un atributo suelto --nombre y valor-- que se le pasa a `Files.createFile` y compania para fijarlo
-// **en el momento de crear**, atomicamente.
+// A loose attribute --name and value-- handed to `Files.createFile` and company so it is set **at
+// the moment of creation**, atomically.
 //
-// KajiJDK acepta el tipo pero no puede honrar ningun atributo: los nativos de `jdk.internal.io.Fs`
-// crean archivos y directorios sin ningun parametro de permisos. Los metodos que reciben
-// `FileAttribute<?>...` documentan que un array no vacio termina en
-// `UnsupportedOperationException` -- que es exactamente lo que manda la spec cuando el atributo no
-// se puede fijar, asi que la mentira no llega a existir.
+// KajiJDK accepts the type but cannot honour any attribute: `jdk.internal.io.Fs`'s natives create
+// files and directories with no permission parameter. The methods that take `FileAttribute<?>...`
+// document that a non-empty array ends in `UnsupportedOperationException` -- which is exactly what
+// the spec requires when the attribute cannot be set, so the lie never comes into existence.
 //
-// @param <T> el tipo del valor del atributo
+// @param <T> the type of the attribute's value
 public interface FileAttribute<T> {
 
-    /** El nombre del atributo, en la forma `"vista:atributo"`. */
+    /** The attribute's name, in the form `"view:attribute"`. */
     String name();
 
-    /** El valor. */
+    /** The value. */
     T value();
 }

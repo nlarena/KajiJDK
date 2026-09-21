@@ -5,6 +5,7 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.NavigableMap;
 import java.util.NavigableSet;
 import java.util.NoSuchElementException;
 import java.util.SequencedMap;
@@ -662,8 +663,8 @@ public class ConcurrentSkipListMap<K, V> extends AbstractMap<K, V>
 
     @Override
     public ConcurrentNavigableMap<K, V> subMap(K from, K to) {
-        // Construido directo y no delegando a subMap(K,boolean,K,boolean): esa llamada resuelve
-        // a la declaracion de NavigableMap, cuyo retorno es NavigableMap y no el nuestro.
+        // Built directly and not by delegating to subMap(K,boolean,K,boolean): that call resolves
+        // to NavigableMap's declaration, whose return is NavigableMap and not ours.
         return new SkipSubMap<K, V>(this, from, true, to, false, false);
     }
 
@@ -1043,8 +1044,8 @@ final class SkipSubMap<K, V> implements ConcurrentNavigableMap<K, V> {
         return this.base.get(key);
     }
 
-    // `keySet()` ya lo tiene esta vista mas abajo, con retorno covariante `NavigableSet<K>`, que
-    // satisface el `Set<K>` de `Map` — no hace falta agregar nada para el finding #205.
+    // `keySet()` is already on this view further down, with the covariant return `NavigableSet<K>`,
+    // which satisfies `Map`'s `Set<K>` -- nothing needs adding for finding #205.
 
     // Writing outside the bounds is refused rather than silently redirected: a view that accepted a
     // key it will never show back would be lying about what it contains.
@@ -1324,9 +1325,9 @@ final class SkipSubMap<K, V> implements ConcurrentNavigableMap<K, V> {
     }
 
     /**
-     * Los valores de este submapa.
+     * This submap's values.
      *
-     * <p>Misma divergencia que el resto de la biblioteca: copia, no vista.
+     * <p>The same divergence as the rest of the library: a copy, not a view.
      */
     public java.util.Collection<V> values() {
         java.util.ArrayList<V> out = new java.util.ArrayList<V>();

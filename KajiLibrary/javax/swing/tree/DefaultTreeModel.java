@@ -8,43 +8,45 @@ import javax.swing.event.TreeModelEvent;
 import javax.swing.event.TreeModelListener;
 
 /**
- * Un modelo de arbol sobre nodos {@link TreeNode}.
+ * A tree model over {@link TreeNode} nodes.
  *
- * <h2>Dos formas de decir que algo es hoja</h2>
+ * <h2>Two ways of saying that something is a leaf</h2>
  *
- * <p>{@link #setAsksAllowsChildren} elige entre preguntar si el nodo <em>permite</em> hijos o si
- * <em>tiene</em>. La diferencia se ve en una carpeta vacia: preguntando por permitir, se dibuja con
- * el triangulito de desplegar; preguntando por tener, se ve como un archivo.
+ * <p>{@link #setAsksAllowsChildren} chooses between asking whether the node <em>allows</em>
+ * children or whether it <em>has</em> them. The difference shows in an empty folder: asking
+ * about allowing, it is drawn with the little expand triangle; asking about having, it looks
+ * like a file.
  *
- * <p>Por omision pregunta si tiene, que es lo que quiere un arbol de datos donde no hay contenedores
- * vacios. Un arbol de archivos quiere lo otro.
+ * <p>By default it asks whether it has them, which is what a data tree with no empty containers
+ * wants. A file tree wants the other.
  *
- * <h2>Cambiar el arbol no alcanza</h2>
+ * <h2>Changing the tree is not enough</h2>
  *
- * <p>Se puede cambiar un {@link DefaultMutableTreeNode} directamente, pero entonces el modelo no se
- * entera y no avisa. Los metodos {@code insertNodeInto}, {@code removeNodeFromParent} y
- * {@code nodeChanged} hacen las dos cosas: cambian y avisan.
+ * <p>A {@link DefaultMutableTreeNode} can be changed directly, but then the model does not find
+ * out and does not report. The methods {@code insertNodeInto}, {@code removeNodeFromParent} and
+ * {@code nodeChanged} do both things: they change and they report.
  *
- * <p>Los {@code nodesWere...} son para el caso al reves: el arbol ya cambio por afuera y solo falta
- * avisar. Sirven cuando el cambio fue grande y conviene hacerlo de una y avisar una sola vez.
+ * <p>The {@code nodesWere...} ones are for the reverse case: the tree already changed from
+ * outside and only the report is missing. They serve when the change was large and it is better
+ * to do it in one go and report once.
  */
 public class DefaultTreeModel implements Serializable, TreeModel {
 
-    /** La raiz del arbol. */
+    /** The tree's root. */
     protected TreeNode root;
 
-    /** Quienes escuchan. */
+    /** Those who listen. */
     protected EventListenerList listenerList = new EventListenerList();
 
-    /** Si ser hoja se decide por permitir hijos; ver la nota de la clase. */
+    /** Whether being a leaf is decided by allowing children; see the class note. */
     protected boolean asksAllowsChildren;
 
-    /** Un modelo sobre ese arbol, que decide hoja por tener hijos. */
+    /** A model over that tree, which decides leaf by having children. */
     public DefaultTreeModel(TreeNode root) {
         this(root, false);
     }
 
-    /** Un modelo sobre ese arbol, eligiendo como se decide que es hoja. */
+    /** A model over that tree, choosing how being a leaf is decided. */
     public DefaultTreeModel(TreeNode root, boolean asksAllowsChildren) {
         this.root = root;
         this.asksAllowsChildren = asksAllowsChildren;
@@ -58,7 +60,7 @@ public class DefaultTreeModel implements Serializable, TreeModel {
         return asksAllowsChildren;
     }
 
-    /** Cambia la raiz; el arbol entero se rearma. */
+    /** Changes the root; the whole tree is rebuilt. */
     public void setRoot(TreeNode root) {
         Object oldRoot = this.root;
         this.root = root;
@@ -88,7 +90,7 @@ public class DefaultTreeModel implements Serializable, TreeModel {
         return ((TreeNode) parent).getChildCount();
     }
 
-    /** Si es hoja; la regla la elige {@link #setAsksAllowsChildren}. */
+    /** Whether it is a leaf; the rule is chosen by {@link #setAsksAllowsChildren}. */
     public boolean isLeaf(Object node) {
         if (asksAllowsChildren) {
             return !((TreeNode) node).getAllowsChildren();
@@ -96,16 +98,16 @@ public class DefaultTreeModel implements Serializable, TreeModel {
         return ((TreeNode) node).isLeaf();
     }
 
-    /** Avisa que todo el arbol cambio. */
+    /** Reports that the whole tree changed. */
     public void reload() {
         reload(root);
     }
 
     /**
-     * El usuario edito un nodo.
+     * The user edited a node.
      *
-     * <p>Guarda el valor en el nodo y avisa. Que el modelo lo haga y no el editor es lo que permite
-     * que un modelo sobre datos ajenos traduzca antes de guardar.
+     * <p>It stores the value in the node and reports. That the model does it and not the editor is
+     * what allows a model over somebody else's data to translate before storing.
      */
     public void valueForPathChanged(TreePath path, Object newValue) {
         MutableTreeNode aNode = (MutableTreeNode) path.getLastPathComponent();
@@ -113,7 +115,7 @@ public class DefaultTreeModel implements Serializable, TreeModel {
         nodeChanged(aNode);
     }
 
-    /** Inserta un nodo y avisa. */
+    /** Inserts a node and reports. */
     public void insertNodeInto(MutableTreeNode newChild, MutableTreeNode parent, int index) {
         parent.insert(newChild, index);
         int[] newIndexs = new int[1];
@@ -122,9 +124,9 @@ public class DefaultTreeModel implements Serializable, TreeModel {
     }
 
     /**
-     * Saca un nodo y avisa.
+     * Removes a node and reports.
      *
-     * @throws IllegalArgumentException si el nodo no tiene padre.
+     * @throws IllegalArgumentException if the node has no parent.
      */
     public void removeNodeFromParent(MutableTreeNode node) {
         MutableTreeNode parent = (MutableTreeNode) node.getParent();
@@ -139,7 +141,7 @@ public class DefaultTreeModel implements Serializable, TreeModel {
         nodesWereRemoved(parent, childIndex, removedArray);
     }
 
-    /** Avisa que cambio lo que muestra ese nodo, no su estructura. */
+    /** Reports that what that node shows changed, not its structure. */
     public void nodeChanged(TreeNode node) {
         if (listenerList != null && node != null) {
             TreeNode parent = node.getParent();
@@ -157,10 +159,11 @@ public class DefaultTreeModel implements Serializable, TreeModel {
     }
 
     /**
-     * Avisa que el subarbol de ese nodo cambio entero.
+     * Reports that that node's subtree changed entirely.
      *
-     * <p>Es el aviso mas caro: la vista tira todo lo que sabia de ese subarbol y lo vuelve a armar,
-     * incluido que estaba desplegado. Conviene solo cuando el cambio es grande.
+     * <p>It is the most expensive notice: the view throws away everything it knew about that
+     * subtree and builds it again, including that it was expanded. It is worth it only when the
+     * change is large.
      */
     public void reload(TreeNode node) {
         if (node != null) {
@@ -168,7 +171,7 @@ public class DefaultTreeModel implements Serializable, TreeModel {
         }
     }
 
-    /** Avisa que se insertaron esos hijos, que ya estan en el arbol. */
+    /** Reports that those children were inserted, and are already in the tree. */
     public void nodesWereInserted(TreeNode node, int[] childIndices) {
         if (listenerList != null && node != null && childIndices != null
                 && childIndices.length > 0) {
@@ -182,10 +185,11 @@ public class DefaultTreeModel implements Serializable, TreeModel {
     }
 
     /**
-     * Avisa que se sacaron esos hijos.
+     * Reports that those children were removed.
      *
-     * <p>Hay que pasar los nodos sacados porque ya no estan en el arbol: quien escuche no los podria
-     * conseguir de otro lado, y los necesita para limpiar lo que tuviera guardado de ellos.
+     * <p>The removed nodes have to be passed because they are no longer in the tree: whoever
+     * listens could not get them from anywhere else, and needs them to clean up whatever they had
+     * kept about them.
      */
     public void nodesWereRemoved(TreeNode node, int[] childIndices, Object[] removedChildren) {
         if (node != null && childIndices != null) {
@@ -193,7 +197,7 @@ public class DefaultTreeModel implements Serializable, TreeModel {
         }
     }
 
-    /** Avisa que esos hijos cambiaron lo que muestran. */
+    /** Reports that those children changed what they show. */
     public void nodesChanged(TreeNode node, int[] childIndices) {
         if (node != null) {
             if (childIndices != null) {
@@ -217,16 +221,16 @@ public class DefaultTreeModel implements Serializable, TreeModel {
         }
     }
 
-    /** El camino desde la raiz hasta ese nodo. */
+    /** The path from the root to that node. */
     public TreeNode[] getPathToRoot(TreeNode aNode) {
         return getPathToRoot(aNode, 0);
     }
 
     /**
-     * Arma el camino subiendo; ver {@link DefaultMutableTreeNode#getPathToRoot}.
+     * It builds the path walking up; see {@link DefaultMutableTreeNode#getPathToRoot}.
      *
-     * <p>Si el nodo no llega a la raiz de este modelo, el camino sale igual pero incompleto: el
-     * modelo no puede saber si el arbol se rearmo debajo de el.
+     * <p>If the node does not reach this model's root, the path comes out all the same but
+     * incomplete: the model cannot know whether the tree was rebuilt underneath it.
      */
     protected TreeNode[] getPathToRoot(TreeNode aNode, int depth) {
         TreeNode[] retNodes;
@@ -315,7 +319,7 @@ public class DefaultTreeModel implements Serializable, TreeModel {
         }
     }
 
-    /** El aviso de estructura con un camino ya armado. */
+    /** The structure notice with a path already built. */
     private void fireTreeStructureChanged(Object source, TreePath path) {
         Object[] listeners = listenerList.getListenerList();
         TreeModelEvent e = null;

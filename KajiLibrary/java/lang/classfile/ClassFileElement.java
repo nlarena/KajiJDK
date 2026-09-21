@@ -1,10 +1,10 @@
 package java.lang.classfile;
 
-// La raíz de todo lo que puede formar parte de un archivo `.class` visto como una secuencia de
-// piezas: atributos, banderas, modelos de miembro e instrucciones. No declara nada; su trabajo es
-// dar un tipo común a lo que un {@link ClassFileBuilder} acepta y un {@link CompoundElement} emite.
+// The root of everything that can be part of a `.class` file seen as a sequence of pieces:
+// attributes, flags, member models and instructions. It declares nothing; its job is to give a common
+// type to what a {@link ClassFileBuilder} accepts and a {@link CompoundElement} emits.
 //
-// En el JDK esta interfaz es `sealed`. Acá no lo es, por la razón que explica {@code PoolEntry}: el
-// sellado obligaría al paquete público a nombrar sus implementaciones internas.
+// In the JDK this interface is `sealed`. Here it is not, for the reason {@code PoolEntry} explains:
+// sealing would force the public package to name its internal implementations.
 public interface ClassFileElement {
 }

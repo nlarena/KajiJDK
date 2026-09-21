@@ -1,26 +1,26 @@
 package java.awt;
 
 /**
- * Las doce reglas de Porter-Duff mas un factor de alfa global.
+ * The twelve Porter-Duff rules plus a global alpha factor.
  *
- * <p>Cada regla dice que hace el dibujo nuevo con lo que ya estaba: taparlo, ser tapado, recortarse
- * contra el, borrarlo. El factor extra multiplica el alfa de todo lo que se dibuja antes de aplicar
- * la regla, y es lo que permite un fundido sin tocar los colores.
+ * <p>Each rule says what the new drawing does with what was already there: cover it, be covered,
+ * clip itself against it, erase it. The extra factor multiplies the alpha of everything drawn
+ * before the rule is applied, and it is what allows a fade without touching the colours.
  *
- * <p>La numeracion tiene un salto que conviene no "ordenar": {@code DST} vale 9 y no 3, entre
- * {@code DST_OUT} y {@code SRC_ATOP}. Las ocho primeras son las de 1.2; {@code DST},
- * {@code SRC_ATOP}, {@code DST_ATOP} y {@code XOR} se agregaron en 1.4 y se numeraron a
- * continuacion. Renumerarlas romperia cualquier valor serializado.
+ * <p>The numbering has a jump worth not "tidying": {@code DST} is 9, between {@code DST_OUT} and
+ * {@code SRC_ATOP}. The first eight are from 1.2; {@code DST}, {@code SRC_ATOP}, {@code DST_ATOP}
+ * and {@code XOR} were added in 1.4 and numbered after them. Renumbering them would break any code
+ * that stored the integers. (This note said any serialized value; this class is not serializable.)
  *
- * <p>{@code createContext} devuelve quien mezcla de verdad. Trabaja en ARGB premultiplicado, que es
- * donde las doce reglas son sumas y multiplicaciones en vez de doce casos especiales.
+ * <p>{@code createContext} returns what really blends. It works in premultiplied ARGB, which is
+ * where the twelve rules are sums and products instead of twelve special cases.
  */
 public final class AlphaComposite implements Composite {
 
-    /** Borra: ni el origen ni el destino quedan. */
+    /** Clears: neither the source nor the destination remains. */
     public static final int CLEAR = 1;
 
-    /** Solo el origen; el destino se descarta aunque el origen sea transparente. */
+    /** Only the source; the destination is discarded even if the source is transparent. */
     public static final int SRC = 2;
 
     public static final int SRC_OVER = 3;
@@ -35,7 +35,7 @@ public final class AlphaComposite implements Composite {
 
     public static final int DST_OUT = 8;
 
-    /** Agregada en 1.4, por eso vale 9 y no sigue a SRC. */
+    /** Added in 1.4, which is why it is 9 and does not follow SRC. */
     public static final int DST = 9;
 
     public static final int SRC_ATOP = 10;
@@ -84,8 +84,9 @@ public final class AlphaComposite implements Composite {
         if (rule < MIN_RULE || rule > MAX_RULE) {
             throw new IllegalArgumentException("unknown composite rule");
         }
-        // Escrito en positivo a proposito: asi NaN cae en el else y tira, que es lo correcto. Con
-        // `alpha < 0 || alpha > 1` un NaN pasaria de largo y despues daria pixeles indefinidos.
+        // Written in positive on purpose: that way NaN falls into the else and throws, which is
+        // right. With `alpha < 0 || alpha > 1` a NaN would slip through and later give undefined
+        // pixels.
         if (alpha >= 0.0f && alpha <= 1.0f) {
             this.rule = rule;
             this.extraAlpha = alpha;
@@ -94,7 +95,7 @@ public final class AlphaComposite implements Composite {
         }
     }
 
-    /** Con alfa 1 devuelve la constante compartida: no tiene sentido fabricar dos objetos iguales. */
+    /** With alpha 1 it returns the shared constant: there is no point making two equal objects. */
     public static AlphaComposite getInstance(int rule) {
         switch (rule) {
             case CLEAR:
@@ -141,7 +142,7 @@ public final class AlphaComposite implements Composite {
         return rule;
     }
 
-    /** Si no cambia nada devuelve {@code this}: derivar lo mismo no deberia costar un objeto. */
+    /** If nothing changes it returns {@code this}: deriving the same should not cost an object. */
     public AlphaComposite derive(int rule) {
         return (this.rule == rule) ? this : getInstance(rule, this.extraAlpha);
     }
@@ -169,10 +170,9 @@ public final class AlphaComposite implements Composite {
     }
 
     /**
-     * Arma la maquina que mezcla.
+     * Builds the machine that blends.
      *
-     * <p>Los formatos que se le pasan son una pista: el contexto trabaja siempre en ARGB
-     * premultiplicado.
+     * <p>The formats passed in are a hint: the context always works in premultiplied ARGB.
      */
     public CompositeContext createContext(java.awt.image.ColorModel srcColorModel,
             java.awt.image.ColorModel dstColorModel, RenderingHints hints) {

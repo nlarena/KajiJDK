@@ -3,26 +3,26 @@ package javax.swing;
 import java.awt.Component;
 
 /**
- * Quien convierte un elemento del modelo en algo que se pueda dibujar.
+ * Who turns an element of the model into something that can be drawn.
  *
- * <h2>Un solo componente para toda la lista</h2>
+ * <h2>A single component for the whole list</h2>
  *
- * <p>El metodo devuelve un componente, y lo normal es que devuelva <em>el mismo</em> cada vez, con
- * los valores cambiados. Una lista de mil renglones no arma mil componentes: arma uno y lo usa de
- * sello.
+ * <p>The method returns a component, and the usual thing is for it to return <em>the same</em>
+ * one each time, with the values changed. A list of a thousand lines does not build a thousand
+ * components: it builds one and uses it as a stamp.
  *
- * <p>Eso explica por que {@link DefaultListCellRenderer} deja vacios sus metodos de repintado: un
- * componente que no esta en ninguna ventana no tiene nada que repintar, y avisar seria puro costo.
+ * <p>That explains why {@link DefaultListCellRenderer} leaves its repainting methods empty: a
+ * component that is in no window has nothing to repaint, and giving notice would be pure cost.
  *
- * @param <E> el tipo de los elementos.
+ * @param <E> the elements' type.
  */
 public interface ListCellRenderer<E> {
 
     /**
-     * El componente que dibuja ese elemento.
+     * The component that draws that element.
      *
-     * @param isSelected si el renglon esta elegido.
-     * @param cellHasFocus si el renglon tiene el foco.
+     * @param isSelected whether the line is chosen.
+     * @param cellHasFocus whether the line has the focus.
      */
     Component getListCellRendererComponent(JList<? extends E> list, E value, int index,
             boolean isSelected, boolean cellHasFocus);

@@ -7,46 +7,47 @@ import java.io.Serializable;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * El identificador de un objeto remoto dentro de su VM.
+ * The identifier of a remote object within its VM.
  *
- * <h2>Los tres identificadores conocidos</h2>
+ * <h2>The three well-known identifiers</h2>
  *
- * <p>{@link #REGISTRY_ID}, {@link #ACTIVATOR_ID} y {@link #DGC_ID} son fijos, y tienen que serlo:
- * un cliente que busca el registro no puede preguntarle a nadie cual es su identificador, porque
- * preguntar ya requiere el registro. Es el problema del arranque en frio, y se resuelve fijando de
- * antemano los tres identificadores que hacen falta antes de poder averiguar nada.
+ * <p>{@link #REGISTRY_ID}, {@link #ACTIVATOR_ID} and {@link #DGC_ID} are fixed, and they have to
+ * be: a client looking for the registry cannot ask anyone what its identifier is, because asking
+ * already requires the registry. It is the cold-start problem, and it is solved by fixing in
+ * advance the three identifiers that are needed before anything can be found out.
  *
- * <p>Todos los demas salen del constructor sin argumentos, que usa un {@link UID} para no repetirse.
+ * <p>All the others come from the no-argument constructor, which uses a {@link UID} so as not to
+ * repeat itself.
  */
 public final class ObjID implements Serializable {
 
     private static final long serialVersionUID = -6386392263968365220L;
 
-    /** El registro RMI. */
+    /** The RMI registry. */
     public static final int REGISTRY_ID = 0;
 
-    /** El activador. */
+    /** The activator. */
     public static final int ACTIVATOR_ID = 1;
 
-    /** El recolector distribuido. */
+    /** The distributed garbage collector. */
     public static final int DGC_ID = 2;
 
-    private static final AtomicLong PROXIMO = new AtomicLong(0);
+    private static final AtomicLong NEXT = new AtomicLong(0);
 
     private final long objNum;
     private final UID space;
 
-    /** Uno nuevo, unico. */
+    /** A new, unique one. */
     public ObjID() {
-        this.objNum = PROXIMO.getAndIncrement();
+        this.objNum = NEXT.getAndIncrement();
         this.space = new UID();
     }
 
     /**
-     * Uno de los conocidos.
+     * One of the well-known ones.
      *
-     * <p>El {@link UID} que lleva es el "conocido" —el de {@link UID#UID(short)} con cero— y no uno
-     * nuevo: es lo que hace que dos VMs distintas construyan el mismo identificador.
+     * <p>The {@link UID} it carries is the "well-known" one —the one from {@link UID#UID(short)}
+     * with zero— and not a new one: that is what makes two different VMs build the same identifier.
      */
     public ObjID(int num) {
         this.objNum = num;
@@ -58,13 +59,13 @@ public final class ObjID implements Serializable {
         this.space = space;
     }
 
-    /** Lo escribe en el formato que espera {@link #read}. */
+    /** It writes it in the format {@link #read} expects. */
     public void write(ObjectOutput out) throws IOException {
         out.writeLong(this.objNum);
         this.space.write(out);
     }
 
-    /** Lo lee del formato que escribe {@link #write}. */
+    /** It reads it from the format {@link #write} writes. */
     public static ObjID read(ObjectInput in) throws IOException {
         long num = in.readLong();
         UID space = UID.read(in);

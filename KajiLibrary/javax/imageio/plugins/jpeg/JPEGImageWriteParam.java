@@ -4,61 +4,62 @@ import java.util.Locale;
 import javax.imageio.ImageWriteParam;
 
 /**
- * KajiLibrary's javax.imageio.plugins.jpeg.JPEGImageWriteParam -- los parametros propios de JPEG al
- * escribir.
+ * KajiLibrary's javax.imageio.plugins.jpeg.JPEGImageWriteParam -- JPEG's own parameters when
+ * writing.
  *
- * <p>Trae tres cosas sobre {@link ImageWriteParam}: las tablas para escribir un JPEG abreviado --ver
- * {@link JPEGImageReadParam}--, la optimizacion de las tablas de Huffman, y las descripciones de
- * calidad.
+ * <p>It brings three things on top of {@link ImageWriteParam}: the tables to write an abbreviated
+ * JPEG --see {@link JPEGImageReadParam}--, Huffman table optimization, and the quality
+ * descriptions.
  *
- * <h2>Los tramos de calidad</h2>
+ * <h2>The quality ranges</h2>
  *
- * <p>{@link #getCompressionQualityDescriptions} devuelve tres nombres y
- * {@link #getCompressionQualityValues} <b>cuatro</b> numeros: son los limites de los tres tramos. La
- * calidad por omision es 0.75, justo el limite entre "media" y "visualmente sin perdida".
+ * <p>{@link #getCompressionQualityDescriptions} returns three names and
+ * {@link #getCompressionQualityValues} <b>four</b> numbers: they are the limits of the three
+ * ranges. The default quality is 0.75, exactly the limit between "medium" and "visually
+ * lossless".
  *
- * <p>Ese 0.75 es la razon de que un JPEG guardado con la configuracion de fabrica se vea bien y no
- * ocupe demasiado.
+ * <p>That 0.75 is why a JPEG saved with the factory settings looks good and does not take too much
+ * space.
  *
  * <h2>{@link #setOptimizeHuffmanTables}</h2>
  *
- * <p>Apagado por omision, y prenderlo achica el archivo entre un cinco y un diez por ciento sin perder
- * <b>nada</b> de calidad. El costo es una pasada mas sobre la imagen para contar frecuencias y armar
- * las tablas a medida, en lugar de usar las del anexo K.
+ * <p>Off by default, and turning it on makes the file a few percent smaller while losing
+ * <b>nothing</b> in quality. The cost is one more pass over the image to count frequencies and
+ * build tailored tables, instead of using the annex K ones.
  *
- * <p>Es la mejora mas barata que tiene JPEG y casi nadie la usa.
+ * <p>It is the cheapest improvement JPEG has and almost nobody uses it.
  *
- * <h2>{@link #unsetCompression} no vuelve a cero</h2>
+ * <h2>{@link #unsetCompression} does not go back to zero</h2>
  *
- * <p>Deja la calidad en 0.75 y el tipo en {@code "JPEG"} -- no en null, como haria la clase base.
- * JPEG <b>siempre</b> comprime, asi que "sin compresion" no es un estado posible.
+ * <p>It leaves the quality at 0.75 and the type at {@code "JPEG"} -- not at null, as the base
+ * class would. JPEG <b>always</b> compresses, so "no compression" is not a possible state.
  */
 public class JPEGImageWriteParam extends ImageWriteParam {
 
-    /** Los tramos de calidad. Ver la nota de la clase. */
+    /** The quality ranges. See the class note. */
     private static final String[] QUALITY_DESCRIPTIONS = {
         "Low quality",
         "Medium quality",
         "Visually lossless",
     };
 
-    /** Sus limites; uno mas que las descripciones. */
+    /** Their limits; one more than the descriptions. */
     private static final float[] QUALITY_VALUES = { 0.00F, 0.30F, 0.75F, 1.00F };
 
-    /** Las de cuantizacion, o null. */
+    /** The quantization ones, or null. */
     private JPEGQTable[] qTables = null;
 
-    /** Las de continua, o null. */
+    /** The DC ones, or null. */
     private JPEGHuffmanTable[] DCHuffmanTables = null;
 
-    /** Las de alterna, o null. */
+    /** The AC ones, or null. */
     private JPEGHuffmanTable[] ACHuffmanTables = null;
 
-    /** Si armar las tablas a medida de la imagen. Ver la nota de la clase. */
+    /** Whether to build tables tailored to the image. See the class note. */
     private boolean optimizeHuffmanTables = false;
 
     /**
-     * @param locale en que idioma dar los textos, o null
+     * @param locale which locale to give the texts in, or null
      */
     public JPEGImageWriteParam(Locale locale) {
         super(locale);
@@ -71,11 +72,11 @@ public class JPEGImageWriteParam extends ImageWriteParam {
     }
 
     /**
-     * Vuelve a la calidad y el tipo de fabrica.
+     * Goes back to the factory quality and type.
      *
-     * <p>Ver la nota de la clase: no deja el tipo en null, porque JPEG siempre comprime.
+     * <p>See the class note: it does not leave the type at null, because JPEG always compresses.
      *
-     * @throws IllegalStateException si el modo no es {@link #MODE_EXPLICIT}
+     * @throws IllegalStateException if the mode is not {@link #MODE_EXPLICIT}
      */
     @Override
     public void unsetCompression() {
@@ -87,9 +88,9 @@ public class JPEGImageWriteParam extends ImageWriteParam {
     }
 
     /**
-     * No: JPEG pierde siempre.
+     * No: JPEG always loses.
      *
-     * @throws IllegalStateException si el modo no es {@link #MODE_EXPLICIT}
+     * @throws IllegalStateException if the mode is not {@link #MODE_EXPLICIT}
      */
     @Override
     public boolean isCompressionLossless() {
@@ -100,9 +101,9 @@ public class JPEGImageWriteParam extends ImageWriteParam {
     }
 
     /**
-     * Los tres tramos de calidad. Ver la nota de la clase.
+     * The three quality ranges. See the class note.
      *
-     * @throws IllegalStateException si el modo no es {@link #MODE_EXPLICIT}
+     * @throws IllegalStateException if the mode is not {@link #MODE_EXPLICIT}
      */
     @Override
     public String[] getCompressionQualityDescriptions() {
@@ -115,9 +116,9 @@ public class JPEGImageWriteParam extends ImageWriteParam {
     }
 
     /**
-     * Sus cuatro limites.
+     * Their four limits.
      *
-     * @throws IllegalStateException si el modo no es {@link #MODE_EXPLICIT}
+     * @throws IllegalStateException if the mode is not {@link #MODE_EXPLICIT}
      */
     @Override
     public float[] getCompressionQualityValues() {
@@ -129,16 +130,16 @@ public class JPEGImageWriteParam extends ImageWriteParam {
         return copy;
     }
 
-    /** Si hay tablas puestas. */
+    /** Whether tables are set. */
     public boolean areTablesSet() {
         return this.qTables != null;
     }
 
     /**
-     * Pone los tres juegos; ver {@link JPEGImageReadParam#setDecodeTables}.
+     * Sets the three sets; see {@link JPEGImageReadParam#setDecodeTables}.
      *
-     * @throws IllegalArgumentException si alguno es null, si estan vacios, o si los dos de Huffman no
-     *     tienen el mismo largo
+     * @throws IllegalArgumentException if any is null, if they are empty, or if the two Huffman
+     *     ones do not have the same length
      */
     public void setEncodeTables(JPEGQTable[] qTables, JPEGHuffmanTable[] DCHuffmanTables,
                                 JPEGHuffmanTable[] ACHuffmanTables) {
@@ -155,14 +156,14 @@ public class JPEGImageWriteParam extends ImageWriteParam {
         System.arraycopy(ACHuffmanTables, 0, this.ACHuffmanTables, 0, ACHuffmanTables.length);
     }
 
-    /** Los saca. */
+    /** Removes them. */
     public void unsetEncodeTables() {
         this.qTables = null;
         this.DCHuffmanTables = null;
         this.ACHuffmanTables = null;
     }
 
-    /** Las de cuantizacion, o null; una copia. */
+    /** The quantization ones, or null; a copy. */
     public JPEGQTable[] getQTables() {
         if (this.qTables == null) {
             return null;
@@ -172,7 +173,7 @@ public class JPEGImageWriteParam extends ImageWriteParam {
         return copy;
     }
 
-    /** Las de continua, o null; una copia. */
+    /** The DC ones, or null; a copy. */
     public JPEGHuffmanTable[] getDCHuffmanTables() {
         if (this.DCHuffmanTables == null) {
             return null;
@@ -182,7 +183,7 @@ public class JPEGImageWriteParam extends ImageWriteParam {
         return copy;
     }
 
-    /** Las de alterna, o null; una copia. */
+    /** The AC ones, or null; a copy. */
     public JPEGHuffmanTable[] getACHuffmanTables() {
         if (this.ACHuffmanTables == null) {
             return null;
@@ -192,12 +193,12 @@ public class JPEGImageWriteParam extends ImageWriteParam {
         return copy;
     }
 
-    /** Si armar las tablas de Huffman a medida. Ver la nota de la clase: conviene. */
+    /** Whether to build tailored Huffman tables. See the class note: worth it. */
     public void setOptimizeHuffmanTables(boolean optimize) {
         this.optimizeHuffmanTables = optimize;
     }
 
-    /** Si se van a armar a medida. */
+    /** Whether they will be tailored. */
     public boolean getOptimizeHuffmanTables() {
         return this.optimizeHuffmanTables;
     }

@@ -3,31 +3,31 @@ package java.lang.classfile.attribute;
 import java.lang.classfile.constantpool.Utf8Entry;
 import java.lang.constant.ClassDesc;
 
-// Una fila de `LocalVariableTable` (JVMS §4.7.13), con los bci crudos en vez de etiquetas. La
-// versión con etiquetas es {@link java.lang.classfile.instruction.LocalVariable}.
+// A row of `LocalVariableTable` (JVMS §4.7.13), with raw bci instead of labels. The version with
+// labels is {@link java.lang.classfile.instruction.LocalVariable}.
 //
-// No tiene fábrica, y en el JDK tampoco: una fila con bci crudos sólo tiene sentido dentro del
-// atributo del que se leyó, porque los números son posiciones de ESE arreglo `code`. Para armar una
-// tabla nueva está la versión con etiquetas.
+// It has no factory, and it has none in the JDK either: a row with raw bci only makes sense inside
+// the attribute it was read from, because the numbers are positions of THAT `code` array. To build a
+// new table there is the version with labels.
 public interface LocalVariableInfo {
 
-    /** El bci donde empieza el alcance. */
+    /** The bci where the scope starts. */
     int startPc();
 
-    /** Cuántos bytes dura el alcance. */
+    /** How many bytes the scope lasts. */
     int length();
 
-    /** El nombre de la variable. */
+    /** The variable's name. */
     Utf8Entry name();
 
-    /** El descriptor del tipo. */
+    /** The type's descriptor. */
     Utf8Entry type();
 
-    /** El tipo de la variable. */
+    /** The variable's type. */
     default ClassDesc typeSymbol() {
         return ClassDesc.ofDescriptor(type().stringValue());
     }
 
-    /** La ranura de variable local. */
+    /** The local variable slot. */
     int slot();
 }

@@ -13,34 +13,35 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Acomoda diciendo donde va cada borde en relacion con otro borde.
+ * It lays out by saying where each edge goes in relation to another edge.
  *
- * <h2>Bordes, no posiciones</h2>
+ * <h2>Edges, not positions</h2>
  *
- * <p>En vez de decir "este componente va en (10, 20)", se dice "su borde oeste esta a diez del borde
- * oeste del contenedor" y "su borde norte esta a cinco del borde sur del de arriba". Cada relacion es
- * un {@link Spring}, asi que las distancias pueden ser elasticas y el conjunto se reacomoda solo
- * cuando la ventana cambia de tamano.
+ * <p>Instead of saying "this component goes at (10, 20)", one says "its west edge is ten from
+ * the container's west edge" and "its north edge is five from the south edge of the one
+ * above". Each relation is a {@link Spring}, so the distances may be elastic and the set lays
+ * itself out again when the window changes size.
  *
- * <h2>Dos restricciones por eje, y la tercera pisa a la primera</h2>
+ * <h2>Two constraints per axis, and the third overrides the first</h2>
  *
- * <p>En horizontal hay cuatro bordes -- oeste, ancho, este y centro -- pero solo dos son
- * independientes: con dos cualesquiera los otros dos quedan determinados. Poner una tercera no es un
- * error: <strong>se descarta la mas vieja</strong> y se recalculan las derivadas. Lo mismo en
- * vertical, donde ademas esta la linea de base.
+ * <p>Horizontally there are four edges -- west, width, east and centre -- but only two are
+ * independent: with any two the other two are determined. Setting a third is not an error:
+ * <strong>the oldest is discarded</strong> and the derived ones are recomputed. The same
+ * vertically, where there is also the baseline.
  *
- * <p>Es la parte que sorprende y la que hay que tener presente: el orden en que se ponen las
- * restricciones cambia el resultado. De ahi que {@link Constraints} lleve una historia.
+ * <p>It is the part that surprises and the one to keep in mind: the order the constraints are
+ * set in changes the result. Hence {@link Constraints} carries a history.
  *
- * <h2>El contenedor tambien tiene bordes</h2>
+ * <h2>The container also has edges</h2>
  *
- * <p>Se le ponen restricciones igual que a un hijo, y es como se le dice que tan grande quiere ser.
- * Un contenedor sin restricciones propias mide lo que haga falta para que entren todos.
+ * <p>Constraints are set on it just as on a child, and it is how it is told how large it wants
+ * to be. A container with no constraints of its own measures whatever is needed for them all to
+ * fit.
  *
- * <h2>Los ciclos se detectan, no se cuelgan</h2>
+ * <h2>Cycles are detected, they do not hang</h2>
  *
- * <p>Decir que A esta a la derecha de B y B a la derecha de A no tiene solucion. En vez de girar para
- * siempre, un resorte que se encuentra a si mismo devuelve {@link Spring#UNSET}.
+ * <p>Saying that A is to the right of B and B to the right of A has no solution. Instead of
+ * going round for ever, a spring that finds itself returns {@link Spring#UNSET}.
  */
 public class SpringLayout implements LayoutManager2 {
 
@@ -51,31 +52,31 @@ public class SpringLayout implements LayoutManager2 {
     private Set<Spring> cyclicSprings;
     private Set<Spring> acyclicSprings;
 
-    /** El borde de arriba. */
+    /** The top edge. */
     public static final String NORTH = "North";
 
-    /** El borde de abajo. */
+    /** The bottom edge. */
     public static final String SOUTH = "South";
 
-    /** El borde derecho. */
+    /** The right edge. */
     public static final String EAST = "East";
 
-    /** El borde izquierdo. */
+    /** The left edge. */
     public static final String WEST = "West";
 
-    /** El centro horizontal. */
+    /** The horizontal centre. */
     public static final String HORIZONTAL_CENTER = "HorizontalCenter";
 
-    /** El centro vertical. */
+    /** The vertical centre. */
     public static final String VERTICAL_CENTER = "VerticalCenter";
 
-    /** La linea de base del texto. */
+    /** The text's baseline. */
     public static final String BASELINE = "Baseline";
 
-    /** El ancho. */
+    /** The width. */
     public static final String WIDTH = "Width";
 
-    /** El alto. */
+    /** The height. */
     public static final String HEIGHT = "Height";
 
     private static final String[] ALL_HORIZONTAL = {WEST, WIDTH, EAST, HORIZONTAL_CENTER};
@@ -83,16 +84,16 @@ public class SpringLayout implements LayoutManager2 {
     private static final String[] ALL_VERTICAL = {NORTH, HEIGHT, SOUTH, VERTICAL_CENTER,
         BASELINE};
 
-    /** Un acomodador sin ninguna restriccion puesta. */
+    /** A layout with no constraint set. */
     public SpringLayout() {
     }
 
     /**
-     * Las restricciones de un componente.
+     * A component's constraints.
      *
-     * <p>Solo dos por eje son independientes; ver la nota de {@link SpringLayout}. Los bordes que no
-     * se pusieron se derivan de los que si: el este es el oeste mas el ancho, el centro es el oeste
-     * mas la mitad del ancho, y asi. Se derivan al pedirlos y se guardan.
+     * <p>Only two per axis are independent; see {@link SpringLayout}'s note. The edges that were
+     * not set are derived from those that were: the east is the west plus the width, the centre is
+     * the west plus half the width, and so on. They are derived on being asked for and kept.
      */
     public static class Constraints {
 
@@ -109,20 +110,20 @@ public class SpringLayout implements LayoutManager2 {
         private final List<String> horizontalHistory = new ArrayList<String>(2);
         private final List<String> verticalHistory = new ArrayList<String>(2);
 
-        /** Para la linea de base, que depende del componente. */
+        /** For the baseline, which depends on the component. */
         private Component c;
 
-        /** Sin ninguna restriccion. */
+        /** With no constraint. */
         public Constraints() {
         }
 
-        /** Con la esquina noroeste puesta. */
+        /** With the north-west corner set. */
         public Constraints(Spring x, Spring y) {
             setX(x);
             setY(y);
         }
 
-        /** Con la esquina y las medidas. */
+        /** With the corner and the measurements. */
         public Constraints(Spring x, Spring y, Spring width, Spring height) {
             setX(x);
             setY(y);
@@ -131,11 +132,11 @@ public class SpringLayout implements LayoutManager2 {
         }
 
         /**
-         * Tomadas de ese componente.
+         * Taken from that component.
          *
-         * <p>La posicion queda fija -- la que el componente tiene ahora -- y las medidas quedan
-         * atadas a el, asi que si el componente cambia de tamano preferido las restricciones lo
-         * siguen.
+         * <p>The position is left fixed -- the one the component has now -- and the measurements
+         * are left tied to it, so if the component changes its preferred size the constraints
+         * follow it.
          */
         public Constraints(Component c) {
             this.c = c;
@@ -158,10 +159,10 @@ public class SpringLayout implements LayoutManager2 {
         }
 
         /**
-         * Anota que se puso esta restriccion, y descarta la mas vieja si ya habia dos.
+         * It notes that this constraint was set, and discards the oldest if there were already two.
          *
-         * <p>Al descartar, las derivadas que quedaron sin sustento se borran: si no, seguirian
-         * contestando con una cuenta hecha a partir de algo que ya no vale.
+         * <p>On discarding, the derived ones that were left without support are erased: otherwise,
+         * they would go on answering with an arithmetic done from something that no longer holds.
          */
         private void pushConstraint(String name, Spring value, boolean horizontal) {
             boolean valid = true;
@@ -186,26 +187,26 @@ public class SpringLayout implements LayoutManager2 {
             }
         }
 
-        /** El borde oeste. */
+        /** The west edge. */
         public void setX(Spring x) {
             this.x = x;
             pushConstraint(WEST, x, true);
         }
 
-        /** El borde oeste, derivandolo de los otros dos si no se puso; ver la nota de la clase. */
+        /** The west edge, deriving it from the other two if it was not set; see the class note. */
         public Spring getX() {
-            return derivarX();
+            return deriveX();
         }
 
-        /** El borde norte. */
+        /** The north edge. */
         public void setY(Spring y) {
             this.y = y;
             pushConstraint(NORTH, y, false);
         }
 
-        /** El borde norte, derivandolo si hace falta. */
+        /** The north edge, deriving it if needed. */
         public Spring getY() {
-            return derivarY();
+            return deriveY();
         }
 
         public void setWidth(Spring width) {
@@ -213,9 +214,9 @@ public class SpringLayout implements LayoutManager2 {
             pushConstraint(WIDTH, width, true);
         }
 
-        /** El ancho, derivandolo si hace falta. */
+        /** The width, deriving it if needed. */
         public Spring getWidth() {
-            return derivarAncho();
+            return deriveWidth();
         }
 
         public void setHeight(Spring height) {
@@ -223,9 +224,9 @@ public class SpringLayout implements LayoutManager2 {
             pushConstraint(HEIGHT, height, false);
         }
 
-        /** El alto, derivandolo si hace falta. */
+        /** The height, deriving it if needed. */
         public Spring getHeight() {
-            return derivarAlto();
+            return deriveHeight();
         }
 
         private void setEast(Spring east) {
@@ -234,7 +235,7 @@ public class SpringLayout implements LayoutManager2 {
         }
 
         private Spring getEast() {
-            return derivarEste();
+            return deriveEast();
         }
 
         private void setSouth(Spring south) {
@@ -243,7 +244,7 @@ public class SpringLayout implements LayoutManager2 {
         }
 
         private Spring getSouth() {
-            return derivarSur();
+            return deriveSouth();
         }
 
         private void setHorizontalCenter(Spring horizontalCenter) {
@@ -252,7 +253,7 @@ public class SpringLayout implements LayoutManager2 {
         }
 
         private Spring getHorizontalCenter() {
-            return derivarCentroH();
+            return deriveCenterH();
         }
 
         private void setVerticalCenter(Spring verticalCenter) {
@@ -261,7 +262,7 @@ public class SpringLayout implements LayoutManager2 {
         }
 
         private Spring getVerticalCenter() {
-            return derivarCentroV();
+            return deriveCenterV();
         }
 
         private void setBaseline(Spring baseline) {
@@ -274,11 +275,11 @@ public class SpringLayout implements LayoutManager2 {
         }
 
         /**
-         * Pone la restriccion de ese borde.
+         * It sets that edge's constraint.
          *
-         * <p>Un nombre que no es ninguno de los nueve se ignora en silencio, que es lo que hace el
-         * JDK: la lista de nombres es de cadenas y no de constantes de enumeracion, asi que no hay
-         * como distinguir un nombre nuevo de uno mal escrito.
+         * <p>A name that is none of the nine is silently ignored, which is what the JDK does: the
+         * list of names is of strings and not of enumeration constants, so there is no way of
+         * telling a new name from a misspelt one.
          */
         public void setConstraint(String edgeName, Spring s) {
             if (WEST.equals(edgeName)) {
@@ -303,9 +304,9 @@ public class SpringLayout implements LayoutManager2 {
         }
 
         /**
-         * La restriccion de ese borde, derivandola si hace falta.
+         * That edge's constraint, deriving it if needed.
          *
-         * <p>Nulo si no hay con que derivarla; ver la nota de la clase.
+         * <p>Null if there is nothing to derive it from; see the class note.
          */
         public Spring getConstraint(String edgeName) {
             if (WEST.equals(edgeName)) {
@@ -338,7 +339,7 @@ public class SpringLayout implements LayoutManager2 {
             return null;
         }
 
-        private Spring derivarX() {
+        private Spring deriveX() {
             if (x == null) {
                 if (east != null && width != null) {
                     x = difference(east, width);
@@ -349,7 +350,7 @@ public class SpringLayout implements LayoutManager2 {
             return x;
         }
 
-        private Spring derivarAncho() {
+        private Spring deriveWidth() {
             if (width == null) {
                 if (east != null && x != null) {
                     width = difference(east, x);
@@ -360,7 +361,7 @@ public class SpringLayout implements LayoutManager2 {
             return width;
         }
 
-        private Spring derivarEste() {
+        private Spring deriveEast() {
             if (east == null) {
                 if (x != null && width != null) {
                     east = sum(x, width);
@@ -371,7 +372,7 @@ public class SpringLayout implements LayoutManager2 {
             return east;
         }
 
-        private Spring derivarCentroH() {
+        private Spring deriveCenterH() {
             if (horizontalCenter == null) {
                 if (x != null && width != null) {
                     horizontalCenter = sum(x, scale(width, 0.5f));
@@ -382,7 +383,7 @@ public class SpringLayout implements LayoutManager2 {
             return horizontalCenter;
         }
 
-        private Spring derivarY() {
+        private Spring deriveY() {
             if (y == null) {
                 if (south != null && height != null) {
                     y = difference(south, height);
@@ -393,7 +394,7 @@ public class SpringLayout implements LayoutManager2 {
             return y;
         }
 
-        private Spring derivarAlto() {
+        private Spring deriveHeight() {
             if (height == null) {
                 if (south != null && y != null) {
                     height = difference(south, y);
@@ -404,7 +405,7 @@ public class SpringLayout implements LayoutManager2 {
             return height;
         }
 
-        private Spring derivarSur() {
+        private Spring deriveSouth() {
             if (south == null) {
                 if (y != null && height != null) {
                     south = sum(y, height);
@@ -415,7 +416,7 @@ public class SpringLayout implements LayoutManager2 {
             return south;
         }
 
-        private Spring derivarCentroV() {
+        private Spring deriveCenterV() {
             if (verticalCenter == null) {
                 if (y != null && height != null) {
                     verticalCenter = sum(y, scale(height, 0.5f));
@@ -426,24 +427,24 @@ public class SpringLayout implements LayoutManager2 {
             return verticalCenter;
         }
 
-        /** Devuelve todos los resortes a "todavia no se sabe". */
+        /** It gives every spring back to "it is not known yet". */
         void reset() {
-            Spring[] todos = {x, y, width, height, east, south, horizontalCenter,
+            Spring[] all = {x, y, width, height, east, south, horizontalCenter,
                 verticalCenter, baseline};
-            for (int i = 0; i < todos.length; i++) {
-                if (todos[i] != null) {
-                    todos[i].setValue(Spring.UNSET);
+            for (int i = 0; i < all.length; i++) {
+                if (all[i] != null) {
+                    all[i].setValue(Spring.UNSET);
                 }
             }
         }
     }
 
     /**
-     * Si ese resorte se encuentra a si mismo.
+     * Whether that spring finds itself.
      *
-     * <p>Se marca mientras se lo recorre: si al preguntarle a sus partes se vuelve a llegar a el, es
-     * ciclico. Los resultados se guardan en dos conjuntos, uno de los que si y otro de los que no,
-     * porque la pregunta se hace muchas veces por acomodada.
+     * <p>It is marked while it is walked: if on asking its parts it is reached again, it is
+     * cyclic. The results are kept in two sets, one of those that are and another of those that
+     * are not, because the question is asked many times per layout.
      */
     boolean isCyclic(Spring s) {
         if (s == null) {
@@ -468,7 +469,7 @@ public class SpringLayout implements LayoutManager2 {
         return result;
     }
 
-    /** El resorte que se devuelve en lugar de uno ciclico. */
+    /** The spring that is returned in place of a cyclic one. */
     private Spring abandonCycles(Spring s) {
         return isCyclic(s) ? cyclicReference : s;
     }
@@ -480,50 +481,50 @@ public class SpringLayout implements LayoutManager2 {
         componentConstraints.remove(c);
     }
 
-    private static Dimension sumar(Dimension size, Insets insets) {
+    private static Dimension add(Dimension size, Insets insets) {
         return new Dimension(size.width + insets.left + insets.right,
                 size.height + insets.top + insets.bottom);
     }
 
     /**
-     * Mide el contenedor por su ancho y su alto, no por sus bordes este y sur.
+     * It measures the container by its width and its height, not by its east and south edges.
      *
-     * <p>Parece lo mismo -- el este es el oeste mas el ancho, y el oeste del contenedor es cero --
-     * y no lo es: pedirle un numero al este obliga a resolver una suma, y resolver una suma pide el
-     * preferido de sus partes, y el preferido del contenedor vuelve a este metodo. Preguntarle
-     * directamente al ancho corta esa vuelta.
+     * <p>It looks like the same thing -- the east is the west plus the width, and the container's
+     * west is zero -- and it is not: asking the east for a number forces a sum to be resolved, and
+     * resolving a sum asks for its parts' preferred one, and the container's preferred one comes
+     * back to this method. Asking the width directly cuts that loop off.
      */
-    private Dimension medir(Container parent, int cual) {
+    private Dimension measure(Container parent, int which) {
         setParent(parent);
         Constraints pc = getConstraints(parent);
-        int w = valor(abandonCycles(pc.getWidth()), cual);
-        int h = valor(abandonCycles(pc.getHeight()), cual);
-        return sumar(new Dimension(w, h), parent.getInsets());
+        int w = value(abandonCycles(pc.getWidth()), which);
+        int h = value(abandonCycles(pc.getHeight()), which);
+        return add(new Dimension(w, h), parent.getInsets());
     }
 
-    private static int valor(Spring s, int cual) {
+    private static int value(Spring s, int which) {
         if (s == null) {
             return 0;
         }
-        if (cual == 0) {
+        if (which == 0) {
             return s.getMinimumValue();
         }
-        if (cual == 1) {
+        if (which == 1) {
             return s.getPreferredValue();
         }
         return s.getMaximumValue();
     }
 
     public Dimension minimumLayoutSize(Container parent) {
-        return medir(parent, 0);
+        return measure(parent, 0);
     }
 
     public Dimension preferredLayoutSize(Container parent) {
-        return medir(parent, 1);
+        return measure(parent, 1);
     }
 
     public Dimension maximumLayoutSize(Container parent) {
-        return medir(parent, 2);
+        return measure(parent, 2);
     }
 
     public void addLayoutComponent(Component component, Object constraints) {
@@ -540,17 +541,19 @@ public class SpringLayout implements LayoutManager2 {
         return 0.5f;
     }
 
-    /** Tira lo que se sabia de los valores; los tres numeros de cada resorte no cambian. */
+    /**
+     * It throws away what was known about the values; each spring's three numbers do not change.
+     */
     public void invalidateLayout(Container p) {
         cyclicSprings = null;
         acyclicSprings = null;
     }
 
     /**
-     * Le da al contenedor sus restricciones de origen.
+     * It gives the container its origin constraints.
      *
-     * <p>El noroeste del contenedor es siempre cero: es el origen de todo lo demas. El ancho y el
-     * alto ya se los puso {@link #getConstraints}.
+     * <p>The container's north-west is always zero: it is the origin of everything else. The width
+     * and the height were already set by {@link #getConstraints}.
      */
     private void setParent(Container p) {
         Constraints pc = getConstraints(p);
@@ -563,74 +566,75 @@ public class SpringLayout implements LayoutManager2 {
     }
 
     /**
-     * Ata un borde de un componente a un borde de otro, a esa distancia fija.
+     * It ties one component's edge to another's edge, at that fixed distance.
      *
-     * @throws NullPointerException si algun componente es nulo
+     * @throws NullPointerException if some component is null
      */
     public void putConstraint(String e1, Component c1, int pad, String e2, Component c2) {
         putConstraint(e1, c1, Spring.constant(pad), e2, c2);
     }
 
     /**
-     * Lo mismo con una distancia elastica.
+     * The same with an elastic distance.
      *
-     * <p><strong>El borde del otro componente se guarda como una referencia viva</strong>, no como
-     * una foto. Es lo que hace que atar A a B y B a A sea un ciclo de verdad -- si se guardara el
-     * resorte que B tenia en ese momento, el segundo lazo no cerraria y las dos posiciones saldrian
-     * de una cuenta que parece razonable y no lo es. Ver {@link ReferenciaAlBorde}.
+     * <p><strong>The other component's edge is kept as a live reference</strong>, not as a
+     * snapshot. It is what makes tying A to B and B to A a real cycle -- if the spring B had at
+     * that moment were kept, the second tie would not close and the two positions would come out
+     * of an arithmetic that looks reasonable and is not. See {@link EdgeReference}.
      *
-     * @throws NullPointerException si algun componente es nulo
+     * @throws NullPointerException if some component is null
      */
     public void putConstraint(String e1, Component c1, Spring s, String e2, Component c2) {
         Constraints cs = getConstraints(c1);
-        cs.setConstraint(e1, Spring.sum(s, new ReferenciaAlBorde(e2, c2, this)));
+        cs.setConstraint(e1, Spring.sum(s, new EdgeReference(e2, c2, this)));
     }
 
     /**
-     * Un resorte que es "el borde tal de aquel componente", resuelto cada vez que se lo consulta.
+     * A spring that is "such-and-such an edge of that component", resolved each time it is
+     * consulted.
      *
-     * <p>Sin esto, atar un componente a otro congelaria el estado del otro en ese instante; con
-     * esto, mover al otro mueve a este, que es lo que uno espera de un acomodador por restricciones.
-     * Y es tambien lo que permite que un ciclo se note: la vuelta se cierra de verdad.
+     * <p>Without this, tying a component to another would freeze the other's state at that
+     * instant; with this, moving the other moves this one, which is what one expects of a layout
+     * by constraints. And it is also what makes a cycle show: the loop really closes.
      */
-    private static class ReferenciaAlBorde extends Spring {
+    private static class EdgeReference extends Spring {
 
         private final String edgeName;
         private final Component c;
         private final SpringLayout l;
 
-        ReferenciaAlBorde(String edgeName, Component c, SpringLayout l) {
+        EdgeReference(String edgeName, Component c, SpringLayout l) {
             this.edgeName = edgeName;
             this.c = c;
             this.l = l;
         }
 
-        private Spring apuntado() {
+        private Spring pointed() {
             return l.getConstraints(c).getConstraint(edgeName);
         }
 
         public int getMinimumValue() {
-            return apuntado().getMinimumValue();
+            return pointed().getMinimumValue();
         }
 
         public int getPreferredValue() {
-            return apuntado().getPreferredValue();
+            return pointed().getPreferredValue();
         }
 
         public int getMaximumValue() {
-            return apuntado().getMaximumValue();
+            return pointed().getMaximumValue();
         }
 
         public int getValue() {
-            return apuntado().getValue();
+            return pointed().getValue();
         }
 
         public void setValue(int size) {
-            apuntado().setValue(size);
+            pointed().setValue(size);
         }
 
         boolean isCyclic(SpringLayout l) {
-            return l.isCyclic(apuntado());
+            return l.isCyclic(pointed());
         }
 
         public String toString() {
@@ -639,10 +643,10 @@ public class SpringLayout implements LayoutManager2 {
     }
 
     /**
-     * Las restricciones de ese componente, creandolas si no tenia.
+     * That component's constraints, creating them if it had none.
      *
-     * <p>Nunca devuelve nulo: un componente sin restricciones puestas igual tiene las que salen de
-     * su tamano.
+     * <p>It never returns null: a component with no constraints set has the ones that come out of
+     * its size all the same.
      */
     public Constraints getConstraints(Component c) {
         Constraints result = componentConstraints.get(c);
@@ -654,27 +658,28 @@ public class SpringLayout implements LayoutManager2 {
     }
 
     /**
-     * Completa lo que falte con lo de siempre: pegado al origen y del tamano del componente.
+     * It fills in whatever is missing with the usual: stuck to the origin and of the component's
+     * size.
      *
-     * <p>Solo mientras queden menos de dos restricciones en el eje. Con dos ya esta determinado y
-     * agregar una tercera descartaria una de las que el llamador puso.
+     * <p>Only while fewer than two constraints are left on the axis. With two it is already
+     * determined and adding a third would discard one of those the caller set.
      */
     private Constraints applyDefaults(Component c, Constraints cc) {
         if (cc.c == null) {
             cc.c = c;
         }
         if (cc.horizontalHistory.size() < 2) {
-            porOmision(cc, WEST, Spring.constant(0), WIDTH, Spring.width(c),
+            byDefault(cc, WEST, Spring.constant(0), WIDTH, Spring.width(c),
                     cc.horizontalHistory);
         }
         if (cc.verticalHistory.size() < 2) {
-            porOmision(cc, NORTH, Spring.constant(0), HEIGHT, Spring.height(c),
+            byDefault(cc, NORTH, Spring.constant(0), HEIGHT, Spring.height(c),
                     cc.verticalHistory);
         }
         return cc;
     }
 
-    private static void porOmision(Constraints cc, String n1, Spring s1, String n2, Spring s2,
+    private static void byDefault(Constraints cc, String n1, Spring s1, String n2, Spring s2,
             List<String> history) {
         if (history.size() < 2 && !history.contains(n1)) {
             cc.setConstraint(n1, s1);
@@ -684,12 +689,12 @@ public class SpringLayout implements LayoutManager2 {
         }
     }
 
-    /** El resorte de ese borde de ese componente, o nulo si no se puede derivar. */
+    /** That edge's spring of that component, or null if it cannot be derived. */
     public Spring getConstraint(String edgeName, Component c) {
         return abandonCycles(getConstraints(c).getConstraint(edgeName));
     }
 
-    /** Resuelve todos los resortes y coloca a cada hijo. */
+    /** It resolves every spring and places each child. */
     public void layoutContainer(Container parent) {
         setParent(parent);
         int n = parent.getComponentCount();
@@ -699,38 +704,39 @@ public class SpringLayout implements LayoutManager2 {
         }
         Insets insets = parent.getInsets();
         Constraints pc = getConstraints(parent);
-        // Se le pone valor al ancho y al alto, no al este y al sur: ver la nota de `medir`.
-        ponerValor(abandonCycles(pc.getX()), 0);
-        ponerValor(abandonCycles(pc.getY()), 0);
-        ponerValor(abandonCycles(pc.getWidth()),
+        // The width and the height are given a value, not the east and the south: see `measure`'s
+        // note.
+        setValue(abandonCycles(pc.getX()), 0);
+        setValue(abandonCycles(pc.getY()), 0);
+        setValue(abandonCycles(pc.getWidth()),
                 parent.getWidth() - insets.left - insets.right);
-        ponerValor(abandonCycles(pc.getHeight()),
+        setValue(abandonCycles(pc.getHeight()),
                 parent.getHeight() - insets.top - insets.bottom);
         for (int i = 0; i < n; i++) {
             Component c = parent.getComponent(i);
             Constraints cc = getConstraints(c);
-            int x = valorDe(abandonCycles(cc.getX()));
-            int y = valorDe(abandonCycles(cc.getY()));
-            int width = valorDe(abandonCycles(cc.getWidth()));
-            int height = valorDe(abandonCycles(cc.getHeight()));
+            int x = valueOf(abandonCycles(cc.getX()));
+            int y = valueOf(abandonCycles(cc.getY()));
+            int width = valueOf(abandonCycles(cc.getWidth()));
+            int height = valueOf(abandonCycles(cc.getHeight()));
             c.setBounds(insets.left + x, insets.top + y, width, height);
         }
     }
 
-    private static void ponerValor(Spring s, int valor) {
+    private static void setValue(Spring s, int value) {
         if (s != null) {
-            s.setValue(valor);
+            s.setValue(value);
         }
     }
 
     /**
-     * El valor de un resorte, tal cual.
+     * A spring's value, as it is.
      *
-     * <p>{@link Spring#UNSET} no se traduce a cero: un componente atrapado en un ciclo queda con
-     * una posicion absurda, y eso es visible y se investiga. Un cero se confunde con "esta arriba a
-     * la izquierda" y no se investiga nunca.
+     * <p>{@link Spring#UNSET} is not translated into zero: a component caught in a cycle is left
+     * with an absurd position, and that is visible and gets investigated. A zero is mistaken for
+     * "it is at the top left" and never gets investigated.
      */
-    private static int valorDe(Spring s) {
+    private static int valueOf(Spring s) {
         if (s == null) {
             return 0;
         }

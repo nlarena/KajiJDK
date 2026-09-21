@@ -6,10 +6,11 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * El campo es <strong>contexto</strong>: no describe al evento, dice en que situacion ocurrio.
+ * The field is <strong>context</strong>: it does not describe the event, it says in what situation
+ * it happened.
  *
- * <p>Un identificador de peticion o de transaccion es contexto. La distincion sirve para que una
- * herramienta pueda agrupar por el, que es distinto de mostrarlo como un dato mas.
+ * <p>An identifier of a request or of a transaction is context. The distinction serves so that a
+ * tool can group by it, which is different from showing it as one more datum.
  *
  * @since 9
  */

@@ -1,140 +1,145 @@
 package jdk.internal.io;
 
-// La costura entre Java y el disco: seis nativos y nada mas.
+// The seam between Java and the disk: six natives and nothing else.
 //
-// **Por que son tan pocos.** Todo lo que se puede escribir en Java se escribe en Java --
-// `File.getParent`, `Scanner`, `Formatter`, los streams-- porque ahi se lee, se prueba y se corrige
-// sin recompilar la VM. Bajar a Rust es la excepcion, y esta lista es exactamente donde no hay
-// alternativa: un programa Java no puede abrir un archivo por sus propios medios.
+// **Why there are so few.** Everything that can be written in Java is written in Java --
+// `File.getParent`, `Scanner`, `Formatter`, the streams-- because there it is read, tested and
+// corrected without recompiling the VM. Going down to Rust is the exception, and this list is
+// exactly where there is no alternative: a Java program cannot open a file by its own means.
 //
-// **El archivo se lee o escribe entero de una.** No hay descriptor abierto, ni posicion, ni `close`
-// que pueda faltar. Es una limitacion real --un archivo de un giga entra en memoria dos veces-- y a
-// cambio no hay ningun estado que se pueda quedar colgado, que es la clase de error mas dificil de
-// encontrar en una VM. Cuando haga falta streaming de verdad, la puerta es agregar un handle aca
-// abajo; nada de lo que esta arriba tiene que enterarse.
+// **The file is read or written whole in one go.** There is no open descriptor, nor position, nor
+// `close` that can be missing. It is a real limitation --a file of one gigabyte fits in memory
+// twice-- and in exchange there is no state that can be left hanging, which is the kind of error
+// that is hardest to find in a VM. When real streaming is needed, the door is adding a handle down
+// here; nothing that is above has to find out.
 //
-// **Ninguno tira.** Devuelven `null`, `false` o cero, y quien llama decide que excepcion
-// corresponde: el nativo no tiene con que distinguir "no existe" de "no tengo permiso", y adivinar
-// mal seria peor que no decir nada.
+// **None of them throws.** They return `null`, `false` or zero, and the caller decides which
+// exception corresponds: the native has nothing with which to tell "it does not exist" from "I do
+// not have permission", and guessing wrong would be worse than saying nothing.
 //
-// Esta clase es `jdk.internal` y no API: nadie de afuera deberia nombrarla.
+// This class is `jdk.internal` and not API: nobody from outside should name it.
 public final class Fs {
 
     private Fs() {
     }
 
-    /** Bandera de `stat`: la ruta existe. */
-    public static final int EXISTE = 1;
+    /** Flag of `stat`: the path exists. */
+    public static final int EXISTS = 1;
 
-    /** Es un archivo comun. */
-    public static final int ES_ARCHIVO = 2;
+    /** It is an ordinary file. */
+    public static final int IS_FILE = 2;
 
-    /** Es un directorio. */
-    public static final int ES_DIRECTORIO = 4;
+    /** It is a directory. */
+    public static final int IS_DIRECTORY = 4;
 
-    /** Se puede leer. */
-    public static final int SE_LEE = 8;
+    /** It can be read. */
+    public static final int CAN_READ = 8;
 
-    /** Se puede escribir. */
-    public static final int SE_ESCRIBE = 16;
+    /** It can be written. */
+    public static final int CAN_WRITE = 16;
 
-    /** Los bytes del archivo, o `null` si no se pudo leer. */
+    /** The bytes of the file, or `null` if it could not be read. */
     public static native byte[] readAllBytes(String path);
 
-    /** Escribe los bytes; `append` decide si agrega o pisa. `true` si se pudo. */
+    /** It writes the bytes; `append` decides whether it adds or overwrites. `true` if it could. */
     public static native boolean writeAllBytes(String path, byte[] bytes, boolean append);
 
     /**
-     * Los metadatos, en las banderas de arriba.
+     * The metadata, in the flags above.
      *
-     * <p>Van juntos y no en cinco llamadas porque salen de **una sola** consulta al sistema:
-     * preguntarlos por separado tocaria el disco cinco veces y --peor-- podria dar respuestas de
-     * momentos distintos si algo cambia en el medio.
+     * <p>They go together and not in five calls because they come from **one single** query to the
+     * system: asking for them separately would touch the disk five times and --worse-- could give
+     * answers from different moments if something changes in between.
      */
     public static native int stat(String path);
 
-    /** El tamaño en bytes, o 0 si no se puede saber. */
+    /** The size in bytes, or 0 if it cannot be known. */
     public static native long size(String path);
 
     /**
-     * Borra un archivo o un directorio **vacio**.
+     * It deletes a file or an **empty** directory.
      *
-     * <p>Vacio a proposito: `File.delete()` no borra recursivamente, y hacerlo aca convertiria un
-     * `delete()` sobre el directorio equivocado en una perdida de datos.
+     * <p>Empty on purpose: `File.delete()` does not delete recursively, and doing it here would
+     * turn a `delete()` on the wrong directory into a loss of data.
      */
     public static native boolean delete(String path);
 
-    /** Crea un directorio; `todos` decide si tambien los padres que falten. */
-    public static native boolean mkdir(String path, boolean todos);
+    /** It creates a directory; `all` decides whether the missing parents are created as well. */
+    public static native boolean mkdir(String path, boolean all);
 
     /**
-     * Los nombres **simples** de las entradas de un directorio, o `null` si no se pudo leer.
+     * The **simple** names of the entries of a directory, or `null` if it could not be read.
      *
-     * <p>Es el nativo que faltaba para poder **recorrer** el disco y no solo tocar archivos sueltos.
-     * Con el entran los nueve metodos de `java.nio.file` que enumeran --`list`, `walk`, `find`,
-     * `walkFileTree`, los tres `newDirectoryStream`-- y los cinco `list`/`listFiles` de
-     * `java.io.File`, que hasta ahora devolvian `null` siempre.
+     * <p>It is the native that was missing in order to be able to **walk** the disk and not only
+     * touch loose files. With it come in the nine methods of `java.nio.file` that enumerate
+     * --`list`, `walk`, `find`, `walkFileTree`, the three `newDirectoryStream`-- and the five
+     * `list`/`listFiles` of `java.io.File`, which until now always returned `null`.
      *
-     * <p>Nombres simples y no rutas completas, como hace `File.list()`: quien quiera la ruta la arma
-     * con el directorio que ya tiene. Devolverla armada obligaria al nativo a elegir un separador y a
-     * decidir si normaliza, y esas dos son decisiones del lado Java.
+     * <p>Simple names and not complete paths, as `File.list()` does: whoever wants the path puts it
+     * together with the directory they already have. Returning it ready-made would force the native
+     * to choose a separator and to decide whether it normalises, and those two are decisions of the
+     * Java side.
      *
-     * <p>`null` --y no un arreglo vacio-- cuando falla, para que se distinga de un directorio que
-     * existe y esta vacio. Es la misma distincion que `File.list()` hace, y perderla convertiria un
-     * error en un resultado.
+     * <p>`null` --and not an empty array-- when it fails, so that it is told apart from a directory
+     * that exists and is empty. It is the same distinction `File.list()` makes, and losing it would
+     * turn an error into a result.
      *
-     * <p>El orden es el que da el sistema de archivos y **no se ordena**: el contrato dice
-     * explicitamente que no hay garantia de orden.
+     * <p>The order is the one the file system gives and it is **not sorted**: the contract says
+     * explicitly that there is no guarantee of order.
      */
-    public static native String[] list(String ruta);
+    public static native String[] list(String path);
 
     /**
-     * El camino **canonico** de esa ruta: absoluto, resuelto y sin enlaces; `null` si no existe.
+     * The **canonical** path of that route: absolute, resolved and with no links; `null` if it does
+     * not exist.
      *
-     * <p>Es lo unico que contesta si dos rutas distintas nombran el mismo archivo. Comparar las
-     * cadenas no alcanza: en Windows `C:\A.TXT` y `C:.txt` son el mismo archivo.
+     * <p>It is the only thing that answers whether two different paths name the same file.
+     * Comparing the strings is not enough: on Windows `C:\A.TXT` and `C:\a.txt` are the same file.
      */
-    public static native String canonical(String ruta);
+    public static native String canonical(String path);
 
     /**
-     * La fecha de ultima modificacion, en milisegundos desde la epoca; `Long.MIN_VALUE` si no se
-     * pudo leer.
+     * The date of last modification, in milliseconds since the epoch; `Long.MIN_VALUE` if it could
+     * not be read.
      *
-     * <p>El centinela no es cero a proposito: cero **es** una fecha valida --la epoca-- y era la que
-     * se devolvia cuando no habia con que leer la de verdad. Confundir "no se" con "1 de enero de
-     * 1970" es exactamente el error que este valor evita.
+     * <p>The sentinel is not zero on purpose: zero **is** a valid date --the epoch-- and it was the
+     * one that was returned when there was nothing with which to read the real one. Confusing "I do
+     * not know" with "1 January 1970" is exactly the error this value avoids.
      */
-    public static native long mtime(String ruta);
+    public static native long mtime(String path);
 
-    /** Fija la fecha de ultima modificacion, en milisegundos desde la epoca. */
-    public static native boolean setMtime(String ruta, long millis);
+    /** It sets the date of last modification, in milliseconds since the epoch. */
+    public static native boolean setMtime(String path, long millis);
 
     /**
-     * El tamano total, en bytes, del volumen que contiene a esa ruta; **-1 si no se pudo saber**.
+     * The total size, in bytes, of the volume that contains that path; **-1 if it could not be
+     * known**.
      *
-     * <p>El centinela no es cero por lo mismo que en {@link #mtime}: cero **es** una respuesta
-     * valida --un volumen sin espacio-- y confundirla con "no se" es el error que este valor evita.
-     * El lado Java traduce el -1 a la `IOException` que `FileStore` declara.
+     * <p>The sentinel is not zero for the same reason as in {@link #mtime}: zero **is** a valid
+     * answer --a volume with no space-- and confusing it with "I do not know" is the error this
+     * value avoids. The Java side translates the -1 into the `IOException` `FileStore` declares.
      */
-    public static native long diskTotal(String ruta);
+    public static native long diskTotal(String path);
 
     /**
-     * Lo que **este usuario** puede escribir en ese volumen, en bytes; -1 si no se pudo saber.
+     * What **this user** can write on that volume, in bytes; -1 if it could not be known.
      *
-     * <p>No es lo mismo que {@link #diskUnallocated}, y la diferencia importa donde hay cuotas: lo
-     * utilizable es lo que la cuota deja, lo sin asignar es lo que el volumen tiene. Sin cuota los
-     * dos coinciden.
+     * <p>It is not the same as {@link #diskUnallocated}, and the difference matters where there are
+     * quotas: the usable is what the quota leaves, the unallocated is what the volume has. With no
+     * quota the two coincide.
      */
-    public static native long diskUsable(String ruta);
-
-    /** Los bytes sin asignar del volumen; -1 si no se pudo saber. Ver {@link #diskUsable}. */
-    public static native long diskUnallocated(String ruta);
+    public static native long diskUsable(String path);
 
     /**
-     * Las raices del sistema de archivos: `C:\`, `D:\`, ... en Windows; `/` en el resto.
+     * The unallocated bytes of the volume; -1 if it could not be known. See {@link #diskUsable}.
+     */
+    public static native long diskUnallocated(String path);
+
+    /**
+     * The roots of the file system: `C:\`, `D:\`, ... on Windows; `/` on the rest.
      *
-     * <p>Se pregunta al sistema en cada llamada y no se guarda: una unidad que se conecta agrega una
-     * raiz, y una lista cacheada estaria vieja justo cuando alguien la mira para ver que hay.
+     * <p>The system is asked on each call and it is not kept: a drive that is connected adds a
+     * root, and a cached list would be old just when somebody looks at it to see what there is.
      */
     public static native String[] roots();
 

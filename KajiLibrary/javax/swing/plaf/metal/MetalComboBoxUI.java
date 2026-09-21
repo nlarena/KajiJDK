@@ -17,43 +17,43 @@ import javax.swing.plaf.basic.BasicComboBoxUI;
 import javax.swing.plaf.basic.ComboPopup;
 
 /**
- * El desplegable de Metal.
+ * Metal's combo box.
  *
- * <p>La diferencia grande con el basico esta en {@link #createArrowButton}: no devuelve una
- * flechita sino un {@link MetalComboBoxButton}, que es <em>todo el desplegable</em>. Ver la nota
- * de esa clase; de ahi sale que la distribucion de Metal sea propia, porque el boton ocupa el
- * ancho entero cuando el desplegable no es editable y solo la punta cuando si lo es.
+ * <p>The big difference from the basic one is in {@link #createArrowButton}: it does not return
+ * a little arrow but a {@link MetalComboBoxButton}, which is <em>the whole combo box</em>. See
+ * that class's note; from there it follows that Metal's layout is its own, because the button
+ * takes up the whole width when the combo box is not editable and only the tip when it is.
  *
- * <p>{@link #layoutComboBox} es publico y toma la distribucion como parametro, que es una firma
- * rara y esta asi en el JDK: existe para que una subclase pueda cambiar donde va cada pieza sin
- * escribir un {@code LayoutManager} entero.
+ * <p>{@link #layoutComboBox} is public and takes the layout as a parameter, which is an odd
+ * signature and is so in the JDK: it exists so that a subclass can change where each piece goes
+ * without writing a whole {@code LayoutManager}.
  */
 public class MetalComboBoxUI extends BasicComboBoxUI {
 
     /**
-     * La distribucion y el escucha del basico, que las dos clases de abajo envuelven.
+     * The basic one's layout and listener, which the two classes below wrap.
      *
-     * <p>Estan aca y no adentro de cada clase interna porque el compilador de esta casa todavia no
-     * acepta {@code MetalComboBoxUI.super.createLayoutManager()}; ver el hallazgo #400.
+     * <p>They are here and not inside each inner class because this house's compiler does not yet
+     * accept {@code MetalComboBoxUI.super.createLayoutManager()}; see finding #400.
      */
-    private LayoutManager layoutDelBasico;
-    private PropertyChangeListener escuchaDelBasico;
+    private LayoutManager basicComboLayout;
+    private PropertyChangeListener basicListener;
 
     public MetalComboBoxUI() {
     }
 
-    private LayoutManager layoutDelBasico() {
-        if (layoutDelBasico == null) {
-            layoutDelBasico = super.createLayoutManager();
+    private LayoutManager basicComboLayout() {
+        if (basicComboLayout == null) {
+            basicComboLayout = super.createLayoutManager();
         }
-        return layoutDelBasico;
+        return basicComboLayout;
     }
 
-    private PropertyChangeListener escuchaDelBasico() {
-        if (escuchaDelBasico == null) {
-            escuchaDelBasico = super.createPropertyChangeListener();
+    private PropertyChangeListener basicListener() {
+        if (basicListener == null) {
+            basicListener = super.createPropertyChangeListener();
         }
-        return escuchaDelBasico;
+        return basicListener;
     }
 
     public static ComponentUI createUI(JComponent c) {
@@ -61,17 +61,18 @@ public class MetalComboBoxUI extends BasicComboBoxUI {
     }
 
     /**
-     * El desplegable entero, o la flechita sola.
+     * The whole combo box, or the little arrow alone.
      *
-     * <p>Con Ocean es <strong>siempre</strong> la flechita, sea o no editable, y esta medido: Ocean
-     * dibuja el desplegable como un campo con una flecha al lado, no como un boton unico. Con Steel
-     * depende de si es editable. Ver la nota de {@link MetalComboBoxButton}.
+     * <p>With Ocean it is <strong>always</strong> the little arrow, editable or not, and it is
+     * measured: Ocean draws the combo box as a field with an arrow beside it, not as a single
+     * button. With Steel it depends on whether it is editable. See
+     * {@link MetalComboBoxButton}'s note.
      */
     protected JButton createArrowButton() {
-        boolean soloIcono = MetalLookAndFeel.usandoOcean()
+        boolean iconOnly = MetalLookAndFeel.usingOcean()
                 || ((comboBox != null) && comboBox.isEditable());
         MetalComboBoxButton b = new MetalComboBoxButton(comboBox, new MetalComboBoxIcon(),
-                soloIcono, currentValuePane, listBox);
+                iconOnly, currentValuePane, listBox);
         b.setMargin(new Insets(0, 1, 1, 3));
         return b;
     }
@@ -92,7 +93,7 @@ public class MetalComboBoxUI extends BasicComboBoxUI {
         return new MetalPropertyChangeListener();
     }
 
-    /** Al volverse editable, el boton pasa a ser solo la flecha. */
+    /** On becoming editable, the button turns into the arrow alone. */
     protected void editablePropertyChanged(PropertyChangeEvent e) {
         if (arrowButton instanceof MetalComboBoxButton) {
             MetalComboBoxButton b = (MetalComboBoxButton) arrowButton;
@@ -124,7 +125,7 @@ public class MetalComboBoxUI extends BasicComboBoxUI {
         super.paint(g, c);
     }
 
-    /** El fondo de la celda del valor actual. */
+    /** The background of the current value's cell. */
     public void paintCurrentValueBackground(Graphics g, Rectangle bounds, boolean hasFocus) {
         super.paintCurrentValueBackground(g, bounds, hasFocus);
     }
@@ -133,13 +134,13 @@ public class MetalComboBoxUI extends BasicComboBoxUI {
         super.paintCurrentValue(g, bounds, hasFocus);
     }
 
-    /** Ver la nota de la clase sobre esta firma. */
+    /** See the class note about this signature. */
     public void layoutComboBox(Container parent, MetalComboBoxLayoutManager manager) {
         if (comboBox == null) {
             return;
         }
         if (!comboBox.isEditable() && arrowButton != null) {
-            // El boton es todo el desplegable.
+            // The button is the whole combo box.
             Insets i = comboBox.getInsets();
             arrowButton.setBounds(i.left, i.top,
                     comboBox.getWidth() - i.left - i.right,
@@ -150,11 +151,12 @@ public class MetalComboBoxUI extends BasicComboBoxUI {
     }
 
     /**
-     * La distribucion de Metal, que delega en {@link #layoutComboBox}.
+     * Metal's layout, which delegates to {@link #layoutComboBox}.
      *
-     * <p>Envuelve a la del basico en vez de heredarla: lo unico que necesita de ella es
-     * {@code layoutContainer} para el caso editable, y envolver deja los otros tres metodos de
-     * {@code LayoutManager} pasando derecho sin una cadena de herencia de por medio.
+     * <p>It wraps the basic one instead of inheriting it: the only thing it needs from it is
+     * {@code layoutContainer} for the editable case, and wrapping leaves the other three
+     * {@code LayoutManager} methods passing straight through without a chain of inheritance in
+     * between.
      */
     public class MetalComboBoxLayoutManager implements LayoutManager {
 
@@ -165,9 +167,9 @@ public class MetalComboBoxUI extends BasicComboBoxUI {
             layoutComboBox(parent, this);
         }
 
-        /** La del basico, para cuando el desplegable si es editable. */
+        /** The basic one's, for when the combo box is editable. */
         public void superLayout(Container parent) {
-            layoutDelBasico().layoutContainer(parent);
+            basicComboLayout().layoutContainer(parent);
         }
 
         public void addLayoutComponent(String name, java.awt.Component comp) {
@@ -177,22 +179,22 @@ public class MetalComboBoxUI extends BasicComboBoxUI {
         }
 
         public Dimension preferredLayoutSize(Container parent) {
-            return layoutDelBasico().preferredLayoutSize(parent);
+            return basicComboLayout().preferredLayoutSize(parent);
         }
 
         public Dimension minimumLayoutSize(Container parent) {
-            return layoutDelBasico().minimumLayoutSize(parent);
+            return basicComboLayout().minimumLayoutSize(parent);
         }
     }
 
-    /** El que se entera de que el desplegable paso a ser editable. */
+    /** The one that hears that the combo box has become editable. */
     public class MetalPropertyChangeListener implements PropertyChangeListener {
 
         public MetalPropertyChangeListener() {
         }
 
         public void propertyChange(PropertyChangeEvent e) {
-            escuchaDelBasico().propertyChange(e);
+            basicListener().propertyChange(e);
             if ("editable".equals(e.getPropertyName())) {
                 editablePropertyChanged(e);
             }

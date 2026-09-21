@@ -11,34 +11,36 @@ import java.util.Map;
 import javax.security.auth.Subject;
 
 /**
- * El servidor JMX que se alcanza por JRMP, el protocolo propio de RMI.
+ * The JMX server reached over JRMP, RMI's own protocol.
  *
- * <h2>Que agrega sobre {@link RMIServerImpl}</h2>
+ * <h2>What it adds over {@link RMIServerImpl}</h2>
  *
- * <p>Solamente el transporte. La clase de arriba ya sabe llevar la lista de clientes, autenticar y
- * cerrar en cascada; aca esta el puerto, las dos fabricas de sockets y las tres operaciones que
- * hablan con RMI: exportar, dar el stub y desexportar.
+ * <p>Only the transport. The class above already knows how to keep the client list, authenticate
+ * and close in cascade; here are the port, the two socket factories and the three operations
+ * that talk to RMI: exporting, giving the stub and unexporting.
  *
- * <h2>Las fabricas de sockets</h2>
+ * <h2>The socket factories</h2>
  *
- * <p>Son el punto donde se le pone TLS a una conexion JMX. La del cliente viaja
- * <strong>dentro del stub</strong> --por eso tiene que ser serializable--: el cliente recibe el
- * objeto remoto y con el, la instruccion de con que clase de socket hablarle. La del servidor se
- * queda de este lado y decide como se escucha.
+ * <p>They are the point where TLS is put on a JMX connection. The client's travels
+ * <strong>inside the stub</strong> --that is why it has to be serializable--: the client
+ * receives the remote object and with it the instruction on what kind of socket to talk to it
+ * with. The server's stays on this side and decides how listening is done.
  *
- * <h2>Estado en esta VM</h2>
+ * <h2>State in this VM</h2>
  *
- * <p>{@link #export} necesita {@link UnicastRemoteObject#exportObject}, que esta VM no tiene:
- * publicar un objeto remoto es abrir un puerto y atender el protocolo, y eso es transporte. Tira
- * {@link UnsupportedOperationException} con el motivo, igual que todo {@code java.rmi.server}.
+ * <p>{@link #export} needs {@link UnicastRemoteObject#exportObject}, which this VM does not
+ * have: publishing a remote object is opening a port and serving the protocol, and that is
+ * transport. It throws {@link UnsupportedOperationException} with the reason, like all of
+ * {@code java.rmi.server}.
  *
- * <p>{@link #toStub} tira {@link NoSuchObjectException}, que es exactamente lo que hace el JDK
- * cuando se lo llama sin haber exportado. Aca nunca se exporto, asi que siempre es ese el caso, y no
- * hace falta ninguna excepcion inventada para decirlo.
+ * <p>{@link #toStub} throws {@link NoSuchObjectException}, which is exactly what the JDK does
+ * when it is called without having exported. Here it was never exported, so that is always the
+ * case, and no invented exception is needed to say so.
  *
- * <p>Lo demas --el protocolo, fabricar la conexion del cliente, el cierre-- funciona. La conexion
- * que devuelve {@link #makeClient} es un {@link RMIConnectionImpl} de verdad, que reenvia al
- * {@link javax.management.MBeanServer}; lo que no hay es como hacerla llegar a otra maquina.
+ * <p>The rest --the protocol, building the client's connection, the close-- works. The connection
+ * {@link #makeClient} returns is a real {@link RMIConnectionImpl}, which forwards to the
+ * {@link javax.management.MBeanServer}; what there is not is a way of making it reach another
+ * machine.
  *
  * @since 1.5
  */
@@ -49,14 +51,14 @@ public class RMIJRMPServerImpl extends RMIServerImpl {
     private final RMIServerSocketFactory ssf;
 
     /**
-     * Un servidor JRMP en ese puerto.
+     * A JRMP server on that port.
      *
-     * @param port el puerto; {@code 0} deja que lo elija el sistema
-     * @param csf la fabrica de sockets del cliente, o {@code null} para la de siempre
-     * @param ssf la fabrica de sockets del servidor, o {@code null} para la de siempre
-     * @param env las propiedades de configuracion, o {@code null}
-     * @throws IOException si no se pudo crear
-     * @throws IllegalArgumentException si el puerto es negativo
+     * @param port the port; {@code 0} lets the system pick it
+     * @param csf the client's socket factory, or {@code null} for the usual one
+     * @param ssf the server's socket factory, or {@code null} for the usual one
+     * @param env the configuration properties, or {@code null}
+     * @throws IOException if it could not be created
+     * @throws IllegalArgumentException if the port is negative
      */
     public RMIJRMPServerImpl(int port, RMIClientSocketFactory csf, RMIServerSocketFactory ssf,
             Map<String, ?> env) throws IOException {
@@ -70,16 +72,16 @@ public class RMIJRMPServerImpl extends RMIServerImpl {
     }
 
     /**
-     * Publica este objeto por RMI.
+     * Publishes this object over RMI.
      *
-     * @throws IOException si no se pudo publicar
-     * @throws UnsupportedOperationException en esta VM, que no tiene el transporte de RMI
+     * @throws IOException if it could not be published
+     * @throws UnsupportedOperationException in this VM, which has no RMI transport
      */
     @Override
     protected void export() throws IOException {
-        // Las dos formas se distinguen porque el JDK las distingue: con las fabricas por omision no
-        // se le pasa `null`, se llama a la sobrecarga que no las toma. La diferencia se ve en el
-        // stub que le llega al cliente.
+        // The two forms are told apart because the JDK tells them apart: with the default factories
+        // `null` is not passed, the overload that does not take them is called. The difference
+        // shows in the stub that reaches the client.
         if (csf == null && ssf == null) {
             UnicastRemoteObject.exportObject(this, port);
         } else {
@@ -88,7 +90,7 @@ public class RMIJRMPServerImpl extends RMIServerImpl {
     }
 
     /**
-     * El nombre del protocolo.
+     * The protocol's name.
      *
      * @return {@code "rmi"}
      */
@@ -98,10 +100,10 @@ public class RMIJRMPServerImpl extends RMIServerImpl {
     }
 
     /**
-     * El objeto remoto que hay que mandarle al cliente.
+     * The remote object that has to be sent to the client.
      *
-     * @return el stub
-     * @throws NoSuchObjectException si este servidor no esta exportado, que aca es siempre
+     * @return the stub
+     * @throws NoSuchObjectException if this server is not exported, which here is always
      */
     @Override
     public Remote toStub() throws IOException {
@@ -109,17 +111,17 @@ public class RMIJRMPServerImpl extends RMIServerImpl {
     }
 
     /**
-     * Fabrica la conexion de un cliente y la publica.
+     * Builds a client's connection and publishes it.
      *
-     * <p>En el JDK la conexion tambien se exporta, porque el cliente la va a llamar directamente y
-     * no a traves de este servidor. Aca se la crea igual --es un {@link RMIConnectionImpl} que
-     * funciona-- pero no se la exporta: no hay transporte, y exportar seria lo unico que fallaria de
-     * un objeto que por lo demas anda.
+     * <p>In the JDK the connection is exported too, because the client is going to call it directly
+     * and not through this server. Here it is created all the same --it is an
+     * {@link RMIConnectionImpl} that works-- but it is not exported: there is no transport, and
+     * exporting would be the only thing that would fail of an object that otherwise runs.
      *
-     * @param connectionId el identificador que le toca
-     * @param subject quien se autentico, o {@code null}
-     * @return la conexion
-     * @throws IOException si no se pudo crear
+     * @param connectionId the identifier it gets
+     * @param subject who authenticated, or {@code null}
+     * @return the connection
+     * @throws IOException if it could not be created
      */
     @Override
     protected RMIConnection makeClient(String connectionId, Subject subject) throws IOException {
@@ -127,18 +129,18 @@ public class RMIJRMPServerImpl extends RMIServerImpl {
             throw new NullPointerException("Null connectionId");
         }
         return new RMIConnectionImpl(this, connectionId, getDefaultClassLoader(), subject,
-                entorno());
+                environment());
     }
 
     /**
-     * Deja de publicar la conexion de un cliente.
+     * Stops publishing a client's connection.
      *
-     * <p>En el JDK esto la desexporta, que es lo que la vuelve inalcanzable desde afuera. Aca no hay
-     * nada que deshacer, porque {@link #makeClient} nunca la exporto.
+     * <p>In the JDK this unexports it, which is what makes it unreachable from outside. Here there
+     * is nothing to undo, because {@link #makeClient} never exported it.
      *
-     * @param client la conexion
-     * @throws IOException si no se pudo cerrar
-     * @throws NullPointerException si {@code client} es {@code null}
+     * @param client the connection
+     * @throws IOException if it could not be closed
+     * @throws NullPointerException if {@code client} is {@code null}
      */
     @Override
     protected void closeClient(RMIConnection client) throws IOException {
@@ -148,9 +150,9 @@ public class RMIJRMPServerImpl extends RMIServerImpl {
     }
 
     /**
-     * Deja de publicar este servidor.
+     * Stops publishing this server.
      *
-     * @throws IOException si no se pudo cerrar
+     * @throws IOException if it could not be closed
      */
     @Override
     protected void closeServer() throws IOException {

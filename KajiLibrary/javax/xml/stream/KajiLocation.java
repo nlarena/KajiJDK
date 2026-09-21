@@ -1,18 +1,19 @@
 package javax.xml.stream;
 
 /**
- * Una ubicacion inmutable dentro del documento.
+ * An immutable location within the document.
  *
- * <p>De paquete: {@link Location} es la interfaz publica y esto es nada mas que cinco campos.
+ * <p>Package-private: {@link Location} is the public interface and this is nothing more than five
+ * fields.
  *
- * <p>Las tres coordenadas numericas valen -1 cuando no se conocen, que es lo que manda la interfaz.
- * Aca siempre se conocen porque el parser las lleva mientras consume caracteres; la constante
- * {@link #NINGUNA} es la que se usa para los eventos que fabrica {@link XMLEventFactory} a mano,
- * que no salieron de ningun documento.
+ * <p>The three numeric coordinates are -1 when not known, which is what the interface dictates.
+ * Here they are always known because the parser keeps them as it consumes characters; the constant
+ * {@link #NONE} is the one used for the events {@link XMLEventFactory} makes by hand, which did not
+ * come out of any document.
  */
 final class KajiLocation implements Location {
 
-    /** La que se le pone a un evento que no vino de un documento. */
+    /** The one given to an event that did not come from a document. */
     static final KajiLocation NONE = new KajiLocation(-1, -1, -1, null, null);
 
     private final int line;

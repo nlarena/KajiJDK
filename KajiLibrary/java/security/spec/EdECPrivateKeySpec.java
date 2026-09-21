@@ -1,12 +1,12 @@
 package java.security.spec;
 
-// Una clave privada Edwards: la curva por nombre, mas los bytes de la semilla.
+// An Edwards private key: the curve by name, plus the bytes of the seed.
 //
-// Son **bytes** y no un `BigInteger`, y la diferencia importa: en EdDSA la clave privada no es el
-// escalar sino una semilla de la que se derivan por hash tanto el escalar como el valor con el que
-// se genera el nonce de cada firma. Es lo que hace a Ed25519 deterministico y lo que lo salva del
-// desastre que hunde a DSA y ECDSA cuando el nonce se repite. Tratar estos bytes como un entero
-// perderia esa distincion.
+// They are **bytes** and not a `BigInteger`, and the difference matters: in EdDSA the private key
+// is not the scalar but a seed from which both the scalar and the value used to generate each
+// signature's nonce are derived by hashing. That is what makes Ed25519 deterministic and what saves
+// it from the disaster that sinks DSA and ECDSA when the nonce repeats. Treating these bytes as an
+// integer would lose that distinction.
 public final class EdECPrivateKeySpec implements KeySpec {
 
     private final NamedParameterSpec params;
@@ -20,10 +20,10 @@ public final class EdECPrivateKeySpec implements KeySpec {
             throw new NullPointerException("bytes must not be null");
         }
         this.params = params;
-        this.bytes = copiar(bytes);
+        this.bytes = copyOf(bytes);
     }
 
-    private static byte[] copiar(byte[] b) {
+    private static byte[] copyOf(byte[] b) {
         byte[] c = new byte[b.length];
         System.arraycopy(b, 0, c, 0, b.length);
         return c;
@@ -33,9 +33,9 @@ public final class EdECPrivateKeySpec implements KeySpec {
         return this.params;
     }
 
-    // Copia de la semilla. La copia es obligatoria en los dos sentidos: es material secreto y el que
-    // lo entrega no puede quedar expuesto a que el receptor le cambie el arreglo por debajo.
+    // A copy of the seed. The copy is required in both directions: it is secret material, and
+    // whoever hands it over cannot be exposed to the receiver changing the array underneath.
     public byte[] getBytes() {
-        return copiar(this.bytes);
+        return copyOf(this.bytes);
     }
 }

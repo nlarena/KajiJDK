@@ -10,71 +10,71 @@ import org.xml.sax.EntityResolver;
 import org.xml.sax.InputSource;
 
 /**
- * KajiLibrary's javax.xml.catalog.CatalogResolver -- enchufa un {@link Catalog} en las cuatro APIs de
- * XML.
+ * KajiLibrary's javax.xml.catalog.CatalogResolver -- plugs a {@link Catalog} into the four XML
+ * APIs.
  *
- * <p>Extiende las cuatro interfaces de resolucion que hay en la plataforma --SAX, StAX, transformacion
- * y DOM-- para que un mismo objeto sirva de resolutor en cualquiera de ellas. Es lo que hace que
- * configurar un catalogo sea una linea y no cuatro implementaciones.
+ * <p>It extends the four resolution interfaces there are in the platform --SAX, StAX,
+ * transformation and DOM-- so that the same object serves as resolver in any of them. It is what
+ * makes configuring a catalog one line and not four implementations.
  *
- * <h2>Que pasa cuando no hay coincidencia</h2>
+ * <h2>What happens when there is no match</h2>
  *
- * <p>Lo decide {@link NotFoundAction}, que sale de la caracteristica {@code RESOLVE}. Es la parte que
- * hay que entender antes de usar esto en produccion; ver ahi.
+ * <p>{@link NotFoundAction} decides it, and it comes from the {@code RESOLVE} feature. It is the
+ * part to understand before using this in production; see there.
  *
- * <h2>Los dos {@code resolveEntity} de cuatro argumentos</h2>
+ * <h2>The two four-argument {@code resolveEntity}s</h2>
  *
- * <p>Hay uno solo declarado, que devuelve {@link InputStream}; el otro que aparece en el bytecode es
- * el puente que el compilador genera porque {@link XMLResolver} lo declara devolviendo {@code Object}.
- * Es un detalle de compilacion, no dos metodos.
+ * <p>Only one is declared, returning {@link InputStream}; the other that appears in the bytecode is
+ * the bridge the compiler generates because {@link XMLResolver} declares it returning {@code
+ * Object}. It is a compilation detail, not two methods.
  */
 public interface CatalogResolver
     extends EntityResolver, XMLResolver, URIResolver, LSResourceResolver {
 
     /**
-     * Que hacer cuando el catalogo no tiene la entrada.
+     * What to do when the catalog does not have the entry.
      *
-     * <p>Las tres opciones son muy distintas y elegir mal se paga tarde:
+     * <p>The three options are very different and choosing wrong is paid for late:
      *
      * <ul>
-     *   <li>{@link #STRICT} --el de omision-- lanza {@link CatalogException}. Es lo que hay que usar
-     *       en un despliegue cerrado: si el catalogo no cubre algo, se quiere saber;
-     *   <li>{@link #CONTINUE} devuelve null, que en todas estas APIs significa "resolvelo vos como
-     *       siempre". O sea: <b>sale a la red</b>. Es lo que se quiere cuando el catalogo es una
-     *       cache y no una restriccion;
-     *   <li>{@link #IGNORE} devuelve algo vacio. El analizador sigue como si el recurso existiera y
-     *       estuviera en blanco -- util para saltear una DTD que solo declara entidades que no se
-     *       usan, y peligroso si esa DTD definia valores por omision.
+     *   <li>{@link #STRICT} --the default-- throws {@link CatalogException}. It is what to use in a
+     *       closed deployment: if the catalog does not cover something, one wants to know;
+     *   <li>{@link #CONTINUE} returns null, which in all these APIs means "resolve it yourself as
+     *       usual". That is: <b>it goes out to the network</b>. It is what is wanted when the
+     *       catalog is a cache and not a restriction;
+     *   <li>{@link #IGNORE} returns something empty. The parser goes on as if the resource existed
+     *       and were blank -- useful to skip a DTD that only declares entities that are not used,
+     *       and dangerous if that DTD defined default values.
      * </ul>
      */
     enum NotFoundAction {
 
-        /** Devolver null y dejar que la API resuelva sola. Ver la nota. */
+        /** Return null and let the API resolve by itself. See the note. */
         CONTINUE("continue"),
 
-        /** Devolver algo vacio. Ver la nota. */
+        /** Return something empty. See the note. */
         IGNORE("ignore"),
 
-        /** Lanzar {@link CatalogException}. Es el de omision. */
+        /** Throw {@link CatalogException}. It is the default. */
         STRICT("strict");
 
-        /** El nombre que usa la caracteristica {@code RESOLVE}. */
+        /** The name the {@code RESOLVE} feature uses. */
         private final String literal;
 
         NotFoundAction(String literal) {
             this.literal = literal;
         }
 
-        /** El nombre en minusculas, no el de la constante. */
+        /** The name in lower case, not the constant's. */
         @Override
         public String toString() {
             return this.literal;
         }
 
         /**
-         * La accion de ese nombre.
+         * The action with that name.
          *
-         * @throws IllegalArgumentException si no es ninguna; distingue mayusculas
+         * @throws IllegalArgumentException if it is none; case-sensitive
          */
         public static NotFoundAction getType(String literal) {
             NotFoundAction[] all = values();
@@ -90,37 +90,37 @@ public interface CatalogResolver
     }
 
     /**
-     * La resolucion de SAX.
+     * SAX's resolution.
      *
-     * @return la fuente, o null; ver {@link NotFoundAction}
-     * @throws CatalogException en modo estricto sin coincidencia
+     * @return the source, or null; see {@link NotFoundAction}
+     * @throws CatalogException in strict mode without a match
      */
     InputSource resolveEntity(String publicId, String systemId);
 
     /**
-     * La resolucion de las transformaciones.
+     * The transformations' resolution.
      *
-     * @return la fuente, o null
-     * @throws CatalogException en modo estricto sin coincidencia
+     * @return the source, or null
+     * @throws CatalogException in strict mode without a match
      */
     Source resolve(String href, String base);
 
     /**
-     * La resolucion de StAX.
+     * StAX's resolution.
      *
-     * <p>Devuelve {@link InputStream} y no {@code Object} como {@link XMLResolver}: es un
-     * estrechamiento del tipo de retorno, permitido y mas util.
+     * <p>It returns {@link InputStream} and not {@code Object} like {@link XMLResolver}: it is a
+     * narrowing of the return type, allowed and more useful.
      *
-     * @return el flujo, o null
-     * @throws CatalogException en modo estricto sin coincidencia
+     * @return the stream, or null
+     * @throws CatalogException in strict mode without a match
      */
     InputStream resolveEntity(String publicId, String systemId, String baseURI, String namespace);
 
     /**
-     * La resolucion de DOM.
+     * DOM's resolution.
      *
-     * @return la entrada, o null
-     * @throws CatalogException en modo estricto sin coincidencia
+     * @return the input, or null
+     * @throws CatalogException in strict mode without a match
      */
     LSInput resolveResource(String type, String namespaceURI, String publicId, String systemId,
                             String baseURI);

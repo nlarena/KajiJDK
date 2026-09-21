@@ -1,30 +1,31 @@
 package javax.sql;
 
 /**
- * KajiLibrary's javax.sql.RowSetInternal -- la cara **de adentro** de un {@link RowSet}.
+ * KajiLibrary's javax.sql.RowSetInternal -- the **inside** face of a {@link RowSet}.
  *
- * <p>Existe para que el lector y el escritor puedan ver cosas que la aplicacion no deberia tocar: los
- * parametros con los que se ejecuto y --la interesante-- los valores **originales** de las filas.
+ * <p>It exists so that the reader and the writer can see things the application should not touch:
+ * the parameters it was executed with and --the interesting one-- the **original** values of the
+ * rows.
  *
- * <p>Los originales son lo que hace posible sincronizar un conjunto desconectado: al escribir, el
- * escritor compara lo que habia cuando se leyo contra lo que hay ahora en la base, y si difiere es
- * que otro escribio en el medio. Sin ese original no habria como detectar el conflicto -- solo se
- * podria pisar.
+ * <p>The originals are what makes it possible to synchronize a disconnected set: when writing, the
+ * writer compares what there was when it was read against what there is now in the database, and if
+ * it differs somebody else wrote in between. Without that original there would be no way to detect
+ * the conflict -- it could only be overwritten.
  */
 public interface RowSetInternal {
 
-    /** Los parametros con los que se ejecuto la consulta. */
+    /** The parameters the query was executed with. */
     Object[] getParams() throws java.sql.SQLException;
 
-    /** La conexion, si el conjunto esta conectado. */
+    /** The connection, if the set is connected. */
     java.sql.Connection getConnection() throws java.sql.SQLException;
 
-    /** Todas las filas **como estaban** al leerse. */
+    /** All the rows **as they were** when read. */
     java.sql.ResultSet getOriginal() throws java.sql.SQLException;
 
-    /** Solo la fila actual, como estaba. */
+    /** Only the current row, as it was. */
     java.sql.ResultSet getOriginalRow() throws java.sql.SQLException;
 
-    /** Le dice al conjunto que columnas tiene. */
+    /** Tells the set which columns it has. */
     void setMetaData(RowSetMetaData md) throws java.sql.SQLException;
 }

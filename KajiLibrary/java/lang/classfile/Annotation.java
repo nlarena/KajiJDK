@@ -5,41 +5,41 @@ import java.lang.constant.ClassDesc;
 import java.util.List;
 import jdk.internal.classfile.impl.Annotations;
 
-// Una anotación tal como el formato la guarda (JVMS §4.7.16, `annotation`): el descriptor del tipo
-// anotado y la lista de pares nombre-valor. No es una `java.lang.annotation.Annotation` — acá no hay
-// clase cargada ni valores por omisión resueltos, sólo lo que está escrito en el archivo. Un
-// elemento que la anotación declara con valor por omisión y el sitio no menciona simplemente NO
-// aparece en `elements()`; el valor por omisión vive en el `AnnotationDefault` del método del tipo
-// de anotación, que es otro archivo.
+// An annotation just as the format stores it (JVMS §4.7.16, `annotation`): the annotated type's
+// descriptor and the list of name-value pairs. It is not a `java.lang.annotation.Annotation` -- there
+// is no loaded class here and no resolved default values, only what is written in the file. An
+// element the annotation declares with a default value and the site does not mention simply does NOT
+// show up in `elements()`; the default value lives in the `AnnotationDefault` of the annotation type's
+// method, which is another file.
 public interface Annotation {
 
-    /** El `Utf8` con el descriptor del tipo de la anotación (`Ljava/lang/Deprecated;`). */
+    /** The `Utf8` with the annotation type's descriptor (`Ljava/lang/Deprecated;`). */
     Utf8Entry className();
 
-    /** El tipo de la anotación. */
+    /** The annotation's type. */
     default ClassDesc classSymbol() {
         return ClassDesc.ofDescriptor(className().stringValue());
     }
 
-    /** Los pares nombre-valor, en el orden del archivo. */
+    /** The name-value pairs, in file order. */
     List<AnnotationElement> elements();
 
-    /** Una anotación de este tipo con estos elementos. */
+    /** An annotation of this type with these elements. */
     public static Annotation of(Utf8Entry annotationClass, List<AnnotationElement> elements) {
         return Annotations.annotation(annotationClass, elements);
     }
 
-    /** Una anotación de este tipo con estos elementos. */
+    /** An annotation of this type with these elements. */
     public static Annotation of(Utf8Entry annotationClass, AnnotationElement... elements) {
         return Annotations.annotation(annotationClass, Annotations.listOf(elements));
     }
 
-    /** Una anotación de este tipo con estos elementos. */
+    /** An annotation of this type with these elements. */
     public static Annotation of(ClassDesc annotationClass, List<AnnotationElement> elements) {
         return Annotations.annotation(Annotations.utf8(descriptorOf(annotationClass)), elements);
     }
 
-    /** Una anotación de este tipo con estos elementos. */
+    /** An annotation of this type with these elements. */
     public static Annotation of(ClassDesc annotationClass, AnnotationElement... elements) {
         return Annotations.annotation(Annotations.utf8(descriptorOf(annotationClass)),
                 Annotations.listOf(elements));

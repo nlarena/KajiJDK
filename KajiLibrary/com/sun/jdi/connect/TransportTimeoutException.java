@@ -3,28 +3,28 @@ package com.sun.jdi.connect;
 import java.io.IOException;
 
 /**
- * Se vencio el plazo de una operacion de transporte.
+ * A transport operation's term ran out.
  *
- * <p>Sale de los tres lugares donde un conector espera al otro extremo: adjuntarse, empezar a
- * escuchar, y aceptar. Es una {@link IOException} porque para el que llama es eso: un fallo del
- * medio, no del protocolo.
+ * <p>It comes out of the three places where a connector waits for the other end: attaching,
+ * starting to listen, and accepting. It is an {@link IOException} because for the caller that
+ * is what it is: a failure of the medium, not of the protocol.
  *
- * <p>Vale distinguirla de "no se pudo conectar": aca el plazo es del **cliente**, y volver a
- * intentar con uno mas largo puede funcionar.
+ * <p>It is worth telling it from "it could not connect": here the term is the **client's**,
+ * and trying again with a longer one may work.
  */
 public class TransportTimeoutException extends IOException {
 
     private static final long serialVersionUID = 4107035242623365074L;
 
-    /** Un vencimiento sin detalle. */
+    /** A timeout with no detail. */
     public TransportTimeoutException() {
         super();
     }
 
     /**
-     * Un vencimiento con detalle.
+     * A timeout with a detail.
      *
-     * @param message el detalle
+     * @param message the detail
      */
     public TransportTimeoutException(String message) {
         super(message);

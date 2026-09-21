@@ -5,14 +5,15 @@ import java.lang.classfile.Opcode;
 import java.lang.classfile.TypeKind;
 import jdk.internal.classfile.impl.Instructions;
 
-// Una operación aritmética, lógica o de comparación (`iadd`, `lxor`, `dcmpg`, `arraylength`). El
-// tipo sale de la primera letra del opcode; `arraylength`, que no tiene ninguna, es `INT`.
+// An arithmetic, logical or comparison operation (`iadd`, `lxor`, `dcmpg`, `arraylength`). The type
+// comes from the opcode's first letter; `arraylength`, which has none, is `INT`.
 public interface OperatorInstruction extends Instruction {
 
-    /** El tipo sobre el que opera. */
+    /** The type it operates on. */
     TypeKind typeKind();
 
-    /** La instrucción de este opcode. Tira `IllegalArgumentException` si no es un operador. */
+    /** The instruction for this opcode. It throws `IllegalArgumentException` if it is not an
+     * operator. */
     public static OperatorInstruction of(Opcode op) {
         return Instructions.operator(op);
     }

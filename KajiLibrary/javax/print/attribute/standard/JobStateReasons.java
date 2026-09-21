@@ -6,19 +6,17 @@ import javax.print.attribute.Attribute;
 import javax.print.attribute.PrintJobAttribute;
 
 /**
- * El conjunto de razones que explican el {@link JobState} de un trabajo.
+ * The set of reasons that explain a job's {@link JobState}.
  *
- * <p>Es un atributo que <b>es</b> una coleccion, no uno que la contiene: extiende
- * {@link HashSet} de {@link JobStateReason}. Eso es deliberado --se recorre y se consulta como
- * cualquier conjunto-- y trae la consecuencia de que es <b>mutable</b>, a diferencia del resto del
- * paquete. Guardarlo en un conjunto de atributos y despues modificarlo cambia lo que ese conjunto
- * reporta.
+ * <p>It is an attribute that <b>is</b> a collection, not one that contains it: it extends
+ * {@link HashSet} of {@link JobStateReason}. That is deliberate --it is walked and queried like any
+ * set-- and it brings the consequence that it is <b>mutable</b>, unlike the rest of the package.
+ * Keeping it in an attribute set and modifying it afterwards changes what that set reports.
  *
- * <p>Un trabajo puede tener cero razones: "esta imprimiendo y todo va bien" no necesita explicacion.
+ * <p>A job may have zero reasons: "it is printing and all is well" needs no explanation.
  *
- * <p>Lo unico que se redefine es {@code add}, para rechazar el null: una razon que no es ninguna
- * razon no dice nada, y dejarla entrar haria explotar mas tarde a cualquiera que recorra el
- * conjunto.
+ * <p>The only thing overridden is {@code add}, to reject null: a reason that is no reason says
+ * nothing, and letting it in would make whoever walks the set blow up later.
  */
 public final class JobStateReasons extends HashSet<JobStateReason> implements PrintJobAttribute {
 
@@ -36,7 +34,7 @@ public final class JobStateReasons extends HashSet<JobStateReason> implements Pr
         super(initialCapacity, loadFactor);
     }
 
-    /** Copia el contenido de otra coleccion; los null de adentro los rechaza {@link #add}. */
+    /** Copies another collection's contents; {@link #add} rejects the nulls inside. */
     public JobStateReasons(Collection<JobStateReason> collection) {
         super(collection);
     }

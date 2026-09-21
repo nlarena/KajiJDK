@@ -8,38 +8,38 @@ import java.io.ObjectOutputStream;
 import java.io.Serializable;
 
 /**
- * Un objeto serializado junto con su firma.
+ * An object serialised together with its signature.
  *
- * <h2>Que garantiza y que no</h2>
+ * <h2>What it guarantees and what it does not</h2>
  *
- * <p>Garantiza <strong>integridad y origen</strong>: quien recibe uno de estos puede comprobar que
- * el contenido no cambio y que lo firmo el dueno de una clave concreta. <strong>No</strong>
- * garantiza confidencialidad — el objeto viaja en claro, y cualquiera lo puede leer sin verificar
- * nada. Confundir las dos cosas es el error clasico con esta clase.
+ * <p>It guarantees <strong>integrity and origin</strong>: whoever receives one of these can check
+ * that the contents did not change and that the owner of a concrete key signed it. It does
+ * <strong>not</strong> guarantee confidentiality — the object travels in the clear, and anybody can
+ * read it without verifying anything. Confusing the two things is the classic mistake with this
+ * class.
  *
- * <h2>Por que se guardan los bytes y no el objeto</h2>
+ * <h2>Why the bytes are kept and not the object</h2>
  *
- * <p>Porque la firma es sobre <em>bytes</em>. Si esta clase guardara la referencia al objeto
- * original y lo volviera a serializar al verificar, dos serializaciones del mismo objeto podrian
- * diferir —un {@code HashMap} con otro orden, un campo que cambio— y la firma dejaria de validar sin
- * que nadie haya manipulado nada.
+ * <p>Because the signature is over <em>bytes</em>. If this class kept the reference to the original
+ * object and serialised it again when verifying, two serialisations of the same object could differ
+ * —a {@code HashMap} with another order, a field that changed— and the signature would stop
+ * validating without anybody having tampered with anything.
  *
- * <p>Guardar la copia serializada tiene ademas la consecuencia util de que {@link #getObject}
- * devuelve un objeto <strong>nuevo</strong> en cada llamada: es una copia profunda, no la instancia
- * de origen.
+ * <p>Keeping the serialised copy also has the useful consequence that {@link #getObject} returns a
+ * <strong>new</strong> object on each call: it is a deep copy, not the instance of origin.
  *
- * <h2>La {@link Signature} la trae quien llama</h2>
+ * <h2>The {@link Signature} is brought by the caller</h2>
  *
- * <p>Y eso es lo que hace que esta clase funcione en esta biblioteca aunque no haya proveedor
- * criptografico instalado: no pide ningun algoritmo por su cuenta. Quien construye o verifica trae
- * su motor de firma ya conseguido, y si no hay proveedor el fallo aparece alli —en
- * {@code Signature.getInstance}— y no aca.
+ * <p>And that is what makes this class work in this library even though there is no cryptographic
+ * provider installed: it asks for no algorithm on its own. Whoever builds or verifies brings their
+ * signature engine already obtained, and if there is no provider the failure appears there —in
+ * {@code Signature.getInstance}— and not here.
  *
- * <h2>Sobre reusar el objeto de firma</h2>
+ * <h2>On reusing the signature object</h2>
  *
- * <p>Tanto el constructor como {@link #verify} llaman a {@code initSign}/{@code initVerify}, asi que
- * el estado previo del {@code Signature} que se les pase se pierde. Es intencional en el JDK: recibir
- * uno a medio usar y confiar en su estado seria fragil.
+ * <p>Both the constructor and {@link #verify} call {@code initSign}/{@code initVerify}, so the
+ * previous state of the {@code Signature} passed to them is lost. It is intentional in the JDK:
+ * receiving one half used and trusting its state would be fragile.
  *
  * @since 1.2
  */
@@ -47,21 +47,21 @@ public final class SignedObject implements Serializable {
 
     private static final long serialVersionUID = 720502720485447167L;
 
-    /** El objeto, ya serializado. Ver la nota de la clase sobre por que se guarda asi. */
+    /** The object, serialised already. See the note of the class about why it is kept like this. */
     private byte[] content;
 
-    /** La firma sobre {@link #content}. */
+    /** The signature over {@link #content}. */
     private byte[] signature;
 
-    /** Con que algoritmo se firmo. */
+    /** Which algorithm it was signed with. */
     private String thealgorithm;
 
     /**
-     * Serializa {@code object} y lo firma.
+     * It serialises {@code object} and signs it.
      *
-     * @throws IOException si el objeto no se pudo serializar
-     * @throws InvalidKeyException si la clave no sirve para ese motor de firma
-     * @throws SignatureException si la firma fallo
+     * @throws IOException if the object could not be serialised
+     * @throws InvalidKeyException if the key does not serve for that signature engine
+     * @throws SignatureException if the signing failed
      */
     public SignedObject(Serializable object, PrivateKey signingKey, Signature signingEngine)
             throws IOException, InvalidKeyException, SignatureException {
@@ -82,15 +82,14 @@ public final class SignedObject implements Serializable {
     }
 
     /**
-     * Deserializa una copia del objeto.
+     * It deserialises a copy of the object.
      *
-     * <p><strong>No verifica nada.</strong> Llamar a esto sin haber pasado antes por
-     * {@link #verify} es leer datos de origen desconocido — y deserializar datos ajenos es
-     * justamente el vector de los ataques de deserializacion. El orden correcto es verificar
-     * primero.
+     * <p><strong>It verifies nothing.</strong> Calling this without having gone through {@link
+     * #verify} first is reading data of unknown origin — and deserialising somebody else's data is
+     * precisely the vector of the deserialisation attacks. The right order is to verify first.
      *
-     * @throws IOException si los bytes no se pudieron leer
-     * @throws ClassNotFoundException si la clase del objeto no esta
+     * @throws IOException if the bytes could not be read
+     * @throws ClassNotFoundException if the class of the object is not there
      */
     public Object getObject() throws IOException, ClassNotFoundException {
         ObjectInputStream in = new ObjectInputStream(new ByteArrayInputStream(this.content));
@@ -101,22 +100,23 @@ public final class SignedObject implements Serializable {
         }
     }
 
-    /** Una copia de la firma; el arreglo interno no se presta. */
+    /** A copy of the signature; the internal array is not lent out. */
     public byte[] getSignature() {
         return this.signature.clone();
     }
 
-    /** Con que algoritmo se firmo. */
+    /** Which algorithm it was signed with. */
     public String getAlgorithm() {
         return this.thealgorithm;
     }
 
     /**
-     * Comprueba la firma contra esa clave publica.
+     * It checks the signature against that public key.
      *
-     * @return {@code true} si el contenido no cambio y lo firmo el dueno de la clave
-     * @throws InvalidKeyException si la clave no sirve para ese motor
-     * @throws SignatureException si la verificacion fallo por un motivo que no es "no coincide"
+     * @return {@code true} if the contents did not change and the owner of the key signed it
+     * @throws InvalidKeyException if the key does not serve for that engine
+     * @throws SignatureException if the verification failed for a reason that is not "it does not
+     *     match"
      */
     public boolean verify(PublicKey verificationKey, Signature verificationEngine)
             throws InvalidKeyException, SignatureException {

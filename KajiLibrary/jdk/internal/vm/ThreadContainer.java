@@ -3,85 +3,85 @@ package jdk.internal.vm;
 import java.util.stream.Stream;
 
 /**
- * KajiLibrary's jdk.internal.vm.ThreadContainer — un grupo de hilos con dueño.
+ * KajiLibrary's jdk.internal.vm.ThreadContainer -- a group of threads with an owner.
  *
- * <p>Es lo que reemplaza a `ThreadGroup` para la concurrencia estructurada, y la diferencia importa:
- * un `ThreadGroup` es una jerarquía suelta que nadie cierra, mientras que un contenedor **es un
- * ámbito** --extiende {@link StackableScope}-- y por lo tanto tiene principio y fin. Ese es todo el
- * punto: cuando el ámbito termina, se sabe qué hilos había adentro y se puede exigir que hayan
- * terminado.
+ * <p>It is what replaces `ThreadGroup` for structured concurrency, and the difference matters: a
+ * `ThreadGroup` is a loose hierarchy nobody closes, while a container **is a scope** --it extends
+ * {@link StackableScope}-- and therefore has a beginning and an end. That is the whole point: when
+ * the scope ends, it is known which threads there were inside and it can be demanded that they have
+ * finished.
  *
- * <p>De ahí que la jerarquía de contenedores no se guarde con punteros de padre a hijo, sino que
- * salga de la **pila de ámbitos**: {@link #parent()} es el contenedor que encierra a éste en el hilo
- * que lo abrió. Un árbol que se deduce del anidamiento no puede desincronizarse con él.
+ * <p>Hence the hierarchy of containers is not kept with pointers from parent to child, but comes
+ * from the **stack of scopes**: {@link #parent()} is the container that encloses this one on the
+ * thread that opened it. A tree deduced from the nesting cannot fall out of step with it.
  *
- * <p>{@link #threads()} es abstracto a propósito: cómo se guardan los hilos depende de la subclase
- * --{@link SharedThreadContainer} usa un conjunto concurrente-- y esta clase no elige por ella.
+ * <p>{@link #threads()} is abstract on purpose: how the threads are kept depends on the subclass
+ * --{@link SharedThreadContainer} uses a concurrent set-- and this class does not choose for it.
  */
 public abstract class ThreadContainer extends StackableScope {
 
     /**
-     * @param shared si el contenedor **no** pertenece a un hilo en particular
+     * @param shared whether the container does **not** belong to a particular thread
      */
     protected ThreadContainer(boolean shared) {
         super(shared);
     }
 
-    /** El nombre, o `null` si no tiene. */
+    /** The name, or `null` if it has none. */
     public String name() {
         return null;
     }
 
-    /** El contenedor que encierra a éste, o `null` si es de nivel superior. */
+    /** The container that encloses this one, or `null` if it is top-level. */
     public ThreadContainer parent() {
         return ThreadContainers.parent(this);
     }
 
-    /** Los contenedores anidados directamente en éste. */
+    /** The containers nested directly in this one. */
     public final Stream<ThreadContainer> children() {
         return ThreadContainers.children(this);
     }
 
     /**
-     * Cuántos hilos tiene.
+     * How many threads it has.
      *
-     * <p>Se cuenta recorriendo {@link #threads()} y no con un contador aparte, y es deliberado: un
-     * contador se desincroniza --un hilo que muere sin avisar lo deja alto para siempre-- mientras que
-     * contar lo que hay no puede mentir. El costo es recorrer; el contrato del JDK ya dice que el
-     * número es una estimación.
+     * <p>It is counted by walking {@link #threads()} and not with a separate counter, and it is
+     * deliberate: a counter falls out of step --a thread that dies without notice leaves it high
+     * forever-- while counting what there is cannot lie. The cost is walking; the JDK's contract
+     * already says the number is an estimate.
      */
     public long threadCount() {
         return this.threads().count();
     }
 
-    /** Los hilos de este contenedor. */
+    /** The threads of this container. */
     public abstract Stream<Thread> threads();
 
-    /** Aviso de que un hilo arrancó. Las subclases lo redefinen para anotarlo. */
+    /** Notice that a thread started. The subclasses override it to note it down. */
     protected void onStart(Thread thread) {
     }
 
-    /** Aviso de que un hilo terminó. */
+    /** Notice that a thread finished. */
     protected void onExit(Thread thread) {
     }
 
     /**
-     * Registra un hilo que arrancó.
+     * It registers a thread that started.
      *
-     * <p>`final` --como en el JDK-- porque separa dos cosas que no conviene mezclar: éste es el punto
-     * de entrada que la VM usa, y {@link #onStart} es el gancho que la subclase redefine. Si `add`
-     * fuera redefinible, una subclase podría quedarse con el aviso sin llamar al de arriba.
+     * <p>`final` --as in the JDK-- because it separates two things that are as well not mixed: this
+     * is the entry point the VM uses, and {@link #onStart} is the hook the subclass overrides. If
+     * `add` could be overridden, a subclass could keep the notice without calling the one above.
      */
     public final void add(Thread thread) {
         this.onStart(thread);
     }
 
-    /** Da de baja un hilo que terminó. */
+    /** It deregisters a thread that finished. */
     public final void remove(Thread thread) {
         this.onExit(thread);
     }
 
-    /** Las ligaduras de {@link java.lang.ScopedValue} vigentes al abrirse este contenedor. */
+    /** The bindings of {@link java.lang.ScopedValue} in force when this container was opened. */
     public ScopedValueContainer.BindingsSnapshot scopedValueBindings() {
         return null;
     }

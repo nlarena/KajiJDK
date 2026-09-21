@@ -3,41 +3,41 @@ package javax.accessibility;
 import javax.swing.text.AttributeSet;
 
 /**
- * Texto accesible que además se puede **modificar**.
+ * Accessible text that can also be **modified**.
  *
- * <p>Es lo que permite que una ayuda técnica no sólo lea un campo sino que escriba en él: dictado
- por
- * voz, corrección automática, rellenado de formularios.
+ * <p>It is what lets an assistive technology not only read a field but write into it: voice
+ * dictation, automatic correction, form filling.
  *
- * <p>{@link #cut} y {@link #paste} están además de {@link #delete} e {@link #insertTextAtIndex}
- * porque no son lo mismo: cortar deja el texto en el portapapeles y borrar no.
+ * <p>{@link #cut} and {@link #paste} are there besides {@link #delete} and {@link
+ * #insertTextAtIndex} because they are not the same: cutting leaves the text on the clipboard and
+ * deleting does not.
  */
 public interface AccessibleEditableText extends AccessibleText {
 
-    /** Reemplaza todo el texto. */
+    /** Replaces all the text. */
     void setTextContents(String s);
 
-    /** Inserta texto en esa posición. */
+    /** Inserts text at that position. */
     void insertTextAtIndex(int index, String s);
 
-    /** El texto de ese tramo. */
+    /** The text of that range. */
     String getTextRange(int startIndex, int endIndex);
 
-    /** Borra ese tramo. */
+    /** Deletes that range. */
     void delete(int startIndex, int endIndex);
 
-    /** Corta ese tramo al portapapeles. */
+    /** Cuts that range to the clipboard. */
     void cut(int startIndex, int endIndex);
 
-    /** Pega el portapapeles en esa posición. */
+    /** Pastes the clipboard at that position. */
     void paste(int startIndex);
 
-    /** Reemplaza ese tramo. */
+    /** Replaces that range. */
     void replaceText(int startIndex, int endIndex, String s);
 
-    /** Selecciona ese tramo. */
+    /** Selects that range. */
     void selectText(int startIndex, int endIndex);
 
-    /** Le cambia los atributos a ese tramo. */
+    /** Changes the attributes of that range. */
     void setAttributes(int startIndex, int endIndex, AttributeSet as);
 }

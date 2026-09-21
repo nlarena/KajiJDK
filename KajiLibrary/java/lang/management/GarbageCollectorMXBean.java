@@ -1,23 +1,24 @@
 package java.lang.management;
 
 /**
- * KajiLibrary's java.lang.management.GarbageCollectorMXBean -- un recolector de basura.
+ * KajiLibrary's java.lang.management.GarbageCollectorMXBean -- a garbage collector.
  *
- * <p>Un {@link MemoryManagerMXBean} que ademas cuenta recolecciones. Hay varios por maquina virtual:
- * los recolectores generacionales tienen uno para la generacion joven y otro para la vieja, y sus
- * numeros se leen muy distinto -- muchas recolecciones jovenes y rapidas es sano, muchas viejas no.
+ * <p>A {@link MemoryManagerMXBean} that also counts collections. There are several per virtual
+ * machine: generational collectors have one for the young generation and another for the old, and
+ * their numbers read very differently -- many fast young collections is healthy, many old ones is
+ * not.
  *
- * <p>Los dos valores son <b>acumulados</b>. Para que digan algo hay que medir la diferencia entre dos
- * lecturas: el tiempo total dividido por el tiempo transcurrido es la fraccion de la maquina que se
- * fue en recolectar, y esa es la cifra que importa.
+ * <p>Both values are <b>cumulative</b>. For them to say anything the difference between two readings
+ * has to be measured: the total time divided by the elapsed time is the fraction of the machine that
+ * went into collecting, and that is the figure that matters.
  *
- * <p>Los dos pueden devolver -1 si la maquina virtual no lleva la cuenta.
+ * <p>Both can return -1 if the virtual machine does not keep the count.
  */
 public interface GarbageCollectorMXBean extends MemoryManagerMXBean {
 
-    /** Cuantas recolecciones hizo, o -1. */
+    /** How many collections it did, or -1. */
     long getCollectionCount();
 
-    /** Milisegundos acumulados recolectando, o -1. Ver la nota de la clase. */
+    /** Accumulated milliseconds collecting, or -1. See the class's note. */
     long getCollectionTime();
 }

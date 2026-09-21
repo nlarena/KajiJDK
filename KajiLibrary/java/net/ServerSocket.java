@@ -98,7 +98,7 @@ public class ServerSocket implements Closeable {
         this.bind(new InetSocketAddress(bindAddr, port), backlog);
     }
 
-    private void chequearAbierto() throws SocketException {
+    private void checkOpen() throws SocketException {
         if (this.closed) {
             throw new SocketException("Socket is closed");
         }
@@ -119,7 +119,7 @@ public class ServerSocket implements Closeable {
      * @throws IOException if it could not be bound
      */
     public void bind(SocketAddress endpoint, int backlog) throws IOException {
-        this.chequearAbierto();
+        this.checkOpen();
         if (this.bound) {
             throw new SocketException("Already bound");
         }
@@ -195,7 +195,7 @@ public class ServerSocket implements Closeable {
         return null;
     }
 
-    // ---- opciones ----
+    // ---- options ----
 
     /**
      * Milliseconds it waits for an incoming connection; 0 is "forever".
@@ -203,7 +203,7 @@ public class ServerSocket implements Closeable {
      * @throws IllegalArgumentException if the timeout is negative
      */
     public void setSoTimeout(int timeout) throws SocketException {
-        this.chequearAbierto();
+        this.checkOpen();
         if (timeout < 0) {
             throw new IllegalArgumentException("timeout can't be negative");
         }
@@ -212,7 +212,7 @@ public class ServerSocket implements Closeable {
 
     /** The waiting timeout. It declares `IOException` and not `SocketException`: that is how the JDK has it. */
     public int getSoTimeout() throws IOException {
-        this.chequearAbierto();
+        this.checkOpen();
         return this.soTimeout;
     }
 
@@ -223,12 +223,12 @@ public class ServerSocket implements Closeable {
      * has to be set **before** binding: afterwards it has no effect.
      */
     public void setReuseAddress(boolean on) throws SocketException {
-        this.chequearAbierto();
+        this.checkOpen();
         this.reuseAddress = on;
     }
 
     public boolean getReuseAddress() throws SocketException {
-        this.chequearAbierto();
+        this.checkOpen();
         return this.reuseAddress;
     }
 
@@ -241,7 +241,7 @@ public class ServerSocket implements Closeable {
      * @throws IllegalArgumentException if the size is not positive
      */
     public void setReceiveBufferSize(int size) throws SocketException {
-        this.chequearAbierto();
+        this.checkOpen();
         if (size <= 0) {
             throw new IllegalArgumentException("negative receive size");
         }
@@ -249,7 +249,7 @@ public class ServerSocket implements Closeable {
     }
 
     public int getReceiveBufferSize() throws SocketException {
-        this.chequearAbierto();
+        this.checkOpen();
         return this.receiveBufferSize;
     }
 
@@ -268,7 +268,7 @@ public class ServerSocket implements Closeable {
      * @throws UnsupportedOperationException if this class does not support that option
      */
     public <T> ServerSocket setOption(SocketOption<T> name, T value) throws IOException {
-        this.chequearAbierto();
+        this.checkOpen();
         if (name == null) {
             throw new NullPointerException();
         }
@@ -288,7 +288,7 @@ public class ServerSocket implements Closeable {
      * @throws UnsupportedOperationException if this class does not support that option
      */
     public <T> T getOption(SocketOption<T> name) throws IOException {
-        this.chequearAbierto();
+        this.checkOpen();
         if (name == null) {
             throw new NullPointerException();
         }
@@ -367,7 +367,7 @@ public class ServerSocket implements Closeable {
      * @throws IOException if the socket is closed or unbound, or if the accept failed
      */
     public Socket accept() throws IOException {
-        this.chequearAbierto();
+        this.checkOpen();
         if (!this.bound) {
             throw new SocketException("Socket is not bound yet");
         }
@@ -393,14 +393,14 @@ public class ServerSocket implements Closeable {
         // releases the VM's interpreter, and that is exactly what makes room for the thread that is
         // going to connect. A millisecond is short for the waiter and long enough not to burn the
         // processor.
-        long comienzo = System.currentTimeMillis();
+        long start = System.currentTimeMillis();
         int h = jdk.internal.net.Net.accept(this.handle);
         while (h == -3) {
             if (this.closed) {
                 throw new SocketException("Socket is closed");
             }
             if (this.soTimeout > 0
-                    && System.currentTimeMillis() - comienzo >= this.soTimeout) {
+                    && System.currentTimeMillis() - start >= this.soTimeout) {
                 throw new SocketTimeoutException("Accept timed out");
             }
             try {

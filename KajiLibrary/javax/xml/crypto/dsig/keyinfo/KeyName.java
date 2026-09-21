@@ -3,20 +3,20 @@ package javax.xml.crypto.dsig.keyinfo;
 import javax.xml.crypto.XMLStructure;
 
 /**
- * KajiLibrary's javax.xml.crypto.dsig.keyinfo.KeyName -- la clave, nombrada.
+ * KajiLibrary's javax.xml.crypto.dsig.keyinfo.KeyName -- the key, named.
  *
- * <p>Una cadena, y nada mas. Es la forma <b>correcta</b> de usar un {@link KeyInfo}: no trae la clave
- * sino un nombre que quien valida busca en su propio almacen.
+ * <p>A string, and nothing more. It is the <b>right</b> way of using a {@link KeyInfo}: it does not
+ * bring the key but a name that whoever validates looks up in their own store.
  *
- * <p>Eso invierte la relacion de confianza y por eso funciona: la clave la elige quien valida entre
- * las que ya tiene, y el documento solo dice cual. Un nombre que no esta en el almacen hace fallar la
- * validacion, que es exactamente lo que se quiere.
+ * <p>That inverts the trust relationship and that is why it works: whoever validates chooses the
+ * key among the ones they already have, and the document only says which. A name that is not in the
+ * store makes validation fail, which is exactly what is wanted.
  *
- * <p>El formato del nombre no lo define el estandar: puede ser un identificador, un correo, un
- * nombre distinguido. Las dos partes tienen que acordarlo por afuera.
+ * <p>The standard does not define the name's format: it can be an identifier, an email, a
+ * distinguished name. The two parties have to agree on it outside.
  */
 public interface KeyName extends XMLStructure {
 
-    /** El nombre de la clave. */
+    /** The key's name. */
     String getName();
 }

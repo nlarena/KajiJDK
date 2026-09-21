@@ -4,23 +4,23 @@ import java.util.List;
 import javax.xml.crypto.XMLStructure;
 
 /**
- * KajiLibrary's javax.xml.crypto.dsig.SignatureProperties -- un grupo de
- * {@link SignatureProperty}.
+ * KajiLibrary's javax.xml.crypto.dsig.SignatureProperties -- a group of {@link SignatureProperty}.
  *
- * <p>Solo agrupa. Existe porque un {@link Reference} apunta a <b>un</b> elemento, y sin el habria que
- * poner una referencia por propiedad; con el, una sola referencia cubre todas.
+ * <p>It only groups. It exists because a {@link Reference} points to <b>one</b> element, and
+ * without it one reference per property would be needed; with it, a single reference covers them
+ * all.
  *
- * <p>Vale la misma advertencia que en {@link SignatureProperty}: agrupar no protege. Si nadie apunta
- * al grupo, las propiedades quedan afuera de la firma.
+ * <p>The same warning as in {@link SignatureProperty} holds: grouping does not protect. If nobody
+ * points to the group, the properties are left outside the signature.
  */
 public interface SignatureProperties extends XMLStructure {
 
-    /** El URI de tipo de este elemento. */
+    /** The type URI of this element. */
     static final String TYPE = "http://www.w3.org/2000/09/xmldsig#SignatureProperties";
 
-    /** El identificador; es lo que una {@link Reference} apunta. */
+    /** The identifier; it is what a {@link Reference} points to. */
     String getId();
 
-    /** Las propiedades. No modificable y nunca vacia. */
+    /** The properties. Unmodifiable and never empty. */
     List<SignatureProperty> getProperties();
 }

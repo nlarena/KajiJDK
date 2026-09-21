@@ -1,40 +1,40 @@
 package java.security;
 
-// Las primitivas criptograficas que una restriccion de algoritmos puede nombrar.
+// The cryptographic primitives an algorithm constraint can name.
 //
-// Es un enum y no un conjunto de strings porque de esto se hacen conjuntos —`AlgorithmConstraints`
-// recibe un `Set<CryptoPrimitive>`— y un algoritmo suele valer para mas de una: RSA sirve para
-// firmar y para encriptar, y una politica que quiera prohibirlo solo para firmar tiene que poder
-// decirlo.
+// It is an enum and not a set of strings because sets are made of this —`AlgorithmConstraints`
+// receives a `Set<CryptoPrimitive>`— and an algorithm usually serves for more than one: RSA serves
+// for signing and for encrypting, and a policy that wants to forbid it only for signing has to be
+// able to say so.
 public enum CryptoPrimitive {
 
-    // Hash sin clave.
+    // A hash with no key.
     MESSAGE_DIGEST,
 
-    // Generacion de numeros seudoaleatorios seguros.
+    // Generation of secure pseudo-random numbers.
     SECURE_RANDOM,
 
-    // Cifrado simetrico por bloques.
+    // Symmetric block cipher.
     BLOCK_CIPHER,
 
-    // Cifrado simetrico de flujo.
+    // Symmetric stream cipher.
     STREAM_CIPHER,
 
-    // Codigo de autenticacion de mensaje.
+    // Message authentication code.
     MAC,
 
-    // Envoltura de una clave con otra.
+    // Wrapping of one key with another.
     KEY_WRAP,
 
-    // Cifrado con clave publica.
+    // Public key encryption.
     PUBLIC_KEY_ENCRYPTION,
 
-    // Firma digital.
+    // A digital signature.
     SIGNATURE,
 
-    // Encapsulamiento de clave.
+    // Key encapsulation.
     KEY_ENCAPSULATION,
 
-    // Acuerdo de clave.
+    // Key agreement.
     KEY_AGREEMENT
 }

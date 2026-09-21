@@ -1,39 +1,40 @@
 package javax.swing.plaf.synth;
 
 /**
- * Los estados en que puede estar un componente.
+ * The states a component may be in.
  *
- * <h2>Son banderas, no valores</h2>
+ * <h2>They are flags, not values</h2>
  *
- * <p>Se combinan con {@code |}: un boton puede estar a la vez {@link #ENABLED},
- * {@link #MOUSE_OVER} y {@link #FOCUSED}. Por eso son potencias de dos y por eso hay un
- * {@code SELECTED} separado de {@code PRESSED}, que son cosas distintas aunque se vean parecido.
+ * <p>They are combined with {@code |}: a button may be at once {@link #ENABLED},
+ * {@link #MOUSE_OVER} and {@link #FOCUSED}. That is why they are powers of two and why there is
+ * a {@code SELECTED} separate from {@code PRESSED}, which are different things even though they
+ * look alike.
  *
- * <p>El estado completo es lo que recibe {@link SynthContext#getComponentState} y lo que decide que
- * color y que borde le tocan al componente en ese momento.
+ * <p>The complete state is what {@link SynthContext#getComponentState} receives and what decides
+ * which colour and which border the component gets at that moment.
  *
  * @since 1.5
  */
 public interface SynthConstants {
 
-    /** Se puede usar. */
+    /** It can be used. */
     int ENABLED = 1;
 
-    /** El puntero esta encima. */
+    /** The pointer is over it. */
     int MOUSE_OVER = 2;
 
-    /** Esta apretado ahora mismo. */
+    /** It is pressed right now. */
     int PRESSED = 4;
 
-    /** No se puede usar. */
+    /** It cannot be used. */
     int DISABLED = 8;
 
-    /** Tiene el foco del teclado. */
+    /** It has the keyboard focus. */
     int FOCUSED = 256;
 
-    /** Esta elegido; no es lo mismo que estar apretado. */
+    /** It is selected; it is not the same as being pressed. */
     int SELECTED = 512;
 
-    /** Es la opcion por omision, la que responde a la tecla de entrada. */
+    /** It is the default option, the one that answers the enter key. */
     int DEFAULT = 1024;
 }

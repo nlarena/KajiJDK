@@ -1,69 +1,70 @@
 package javax.xml.stream.events;
 
 /**
- * KajiLibrary's javax.xml.stream.events.Characters -- el texto que hay entre las etiquetas.
+ * KajiLibrary's javax.xml.stream.events.Characters -- the text between the tags.
  *
- * <h2>Un tipo, tres tipos de evento</h2>
+ * <h2>One type, three event types</h2>
  *
- * <p>{@link XMLEvent#getEventType()} de un {@code Characters} puede devolver tres constantes
- * distintas y los tres son este mismo tipo:
+ * <p>{@link XMLEvent#getEventType()} of a {@code Characters} can return three different constants
+ * and all three are this same type:
  *
  * <ul>
- *   <li>{@link javax.xml.stream.XMLStreamConstants#CHARACTERS}, el texto normal;
- *   <li>{@link javax.xml.stream.XMLStreamConstants#CDATA}, el texto que venia en una seccion
- *       {@code <![CDATA[...]]>};
- *   <li>{@link javax.xml.stream.XMLStreamConstants#SPACE}, el espacio en blanco que el DTD declara
- *       ignorable.
+ *   <li>{@link javax.xml.stream.XMLStreamConstants#CHARACTERS}, normal text;
+ *   <li>{@link javax.xml.stream.XMLStreamConstants#CDATA}, text that came in a
+ *       {@code <![CDATA[...]]>} section;
+ *   <li>{@link javax.xml.stream.XMLStreamConstants#SPACE}, whitespace the DTD declares ignorable.
  * </ul>
  *
- * <p>{@link #getData()} devuelve lo mismo en los tres casos --el contenido, ya sin la envoltura de
- * CDATA y con las entidades resueltas--; lo que cambia es de donde salio. La distincion sobrevive
- * porque quien reescribe el documento quiere volver a poner el {@code CDATA} donde estaba: perderlo
- * no cambia el significado pero si el texto, y hay pipelines que comparan textos.
+ * <p>{@link #getData()} returns the same in the three cases --the content, already without the
+ * CDATA wrapper and with the entities resolved--; what changes is where it came from. The
+ * distinction survives because whoever rewrites the document wants to put the {@code CDATA} back
+ * where it was: losing it does not change the meaning but it does change the text, and there are
+ * pipelines that compare texts.
  *
- * <h2>{@link #isWhiteSpace()} y {@link #isIgnorableWhiteSpace()} no son lo mismo</h2>
+ * <h2>{@link #isWhiteSpace()} and {@link #isIgnorableWhiteSpace()} are not the same</h2>
  *
- * <p>La primera es una pregunta sobre los caracteres: mira el contenido y contesta si son todos
- * espacio. La segunda es una pregunta sobre el <b>esquema</b>: contesta si el DTD dice que en ese
- * lugar solo puede haber elementos, con lo cual el espacio que aparezca es sangria y no datos.
+ * <p>The first is a question about the characters: it looks at the content and answers whether they
+ * are all space. The second is a question about the <b>schema</b>: it answers whether the DTD says
+ * only elements can be at that place, in which case the space that appears is indentation and not
+ * data.
  *
- * <p>La confusion sale cara en el sentido de que solo la segunda autoriza a tirar el evento. Sin
- * DTD no se puede saber si el espacio entre dos elementos es sangria o es el contenido de un campo
- * de texto que quedo en blanco, asi que un parser que no valida --como el de esta biblioteca--
- * contesta siempre false a {@link #isIgnorableWhiteSpace()}: no lo sabe, y decir que si seria
- * autorizar a perder datos.
+ * <p>The confusion is costly in that only the second authorizes throwing the event away. Without a
+ * DTD there is no way of knowing whether the space between two elements is indentation or the
+ * content of a text field left blank, so a non-validating parser --like this library's-- always
+ * answers false to {@link #isIgnorableWhiteSpace()}: it does not know, and saying yes would be
+ * authorizing data loss.
  */
 public interface Characters extends XMLEvent {
 
     /**
-     * El texto, con las referencias a entidad ya resueltas.
+     * The text, with the entity references already resolved.
      *
-     * @return el contenido; nunca null
+     * @return the content; never null
      */
     String getData();
 
     /**
-     * Si el contenido son todos caracteres de espacio en blanco.
+     * Whether the content is all whitespace characters.
      *
-     * <p>Pregunta sobre los caracteres, no sobre el esquema; ver el encabezado.
+     * <p>A question about the characters, not about the schema; see the header.
      *
-     * @return true si {@link #getData()} es solo espacio
+     * @return true if {@link #getData()} is only space
      */
     boolean isWhiteSpace();
 
     /**
-     * Si venia dentro de una seccion {@code <![CDATA[...]]>}.
+     * Whether it came inside a {@code <![CDATA[...]]>} section.
      *
-     * @return true si era CDATA
+     * @return true if it was CDATA
      */
     boolean isCData();
 
     /**
-     * Si el esquema declara que este espacio es sangria y se puede descartar.
+     * Whether the schema declares this space to be indentation that can be discarded.
      *
-     * <p>Solo un parser que lee el DTD puede contestar que si; ver el encabezado.
+     * <p>Only a parser that reads the DTD can answer yes; see the header.
      *
-     * @return true si es espacio ignorable segun el esquema
+     * @return true if it is ignorable space according to the schema
      */
     boolean isIgnorableWhiteSpace();
 }

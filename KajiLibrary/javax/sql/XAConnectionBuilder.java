@@ -1,6 +1,6 @@
 package javax.sql;
 
-/** KajiLibrary's javax.sql.XAConnectionBuilder -- {@link java.sql.ConnectionBuilder} para XA. */
+/** KajiLibrary's javax.sql.XAConnectionBuilder -- {@link java.sql.ConnectionBuilder} for XA. */
 public interface XAConnectionBuilder {
 
     XAConnectionBuilder user(String username);

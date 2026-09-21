@@ -1,19 +1,21 @@
 package java.nio.file;
 
-// Los modos que se le pueden preguntar a `FileSystemProvider.checkAccess`.
+// The modes `FileSystemProvider.checkAccess` can be asked about.
 //
-// **KajiJDK contesta dos de los tres.** `stat` de `jdk.internal.io.Fs` trae las banderas de lectura y
-// escritura pero **no** la de ejecucion: no hay bit de ejecucion en la respuesta del nativo.
-// `checkAccess(EXECUTE)` levanta `UnsupportedOperationException` y `Files.isExecutable` directamente
-// no existe -- devolver `false` seria decir "no se puede ejecutar" cuando la verdad es "no se".
+// **KajiJDK answers two of the three.** `jdk.internal.io.Fs`'s `stat` brings the read and write
+// flags but **not** the execute one: there is no execute bit in the native's answer.
+// `checkAccess(EXECUTE)` throws `UnsupportedOperationException`. This note used to add that
+// `Files.isExecutable` does not exist; it does, and it returns `false` -- which the spec makes the
+// answer for "the access cannot be determined" as well as for "it would be denied", so it asserts
+// nothing false. The two differ because only `checkAccess`'s signature can say "cannot".
 public enum AccessMode {
 
-    /** Se puede leer. */
+    /** It can be read. */
     READ,
 
-    /** Se puede escribir. */
+    /** It can be written. */
     WRITE,
 
-    /** Se puede ejecutar. */
+    /** It can be executed. */
     EXECUTE
 }

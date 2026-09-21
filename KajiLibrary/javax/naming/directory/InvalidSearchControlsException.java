@@ -3,22 +3,23 @@ package javax.naming.directory;
 import javax.naming.NamingException;
 
 /**
- * KajiLibrary's javax.naming.directory.InvalidSearchControlsException -- los controles de busqueda no sirven.
+ * KajiLibrary's javax.naming.directory.InvalidSearchControlsException -- the search controls are
+ * not valid.
  *
- * <p>Un {@link SearchControls} con un alcance que no existe, o con limites incoherentes. Se sabe
- * antes de tocar el directorio, asi que aparece en la llamada y no a mitad de la
- * enumeracion.
+ * <p>A {@link SearchControls} with a scope that does not exist, or with inconsistent limits. It is
+ * known before touching the directory, so it shows up in the call and not halfway through the
+ * enumeration.
  */
 public class InvalidSearchControlsException extends NamingException {
 
     private static final long serialVersionUID = -5124108943352665777L;
 
-    /** Sin detalle. */
+    /** With no detail. */
     public InvalidSearchControlsException() {
         super();
     }
 
-    /** Con un mensaje que diga cual fue el problema. */
+    /** With a message saying what the problem was. */
     public InvalidSearchControlsException(String explanation) {
         super(explanation);
     }

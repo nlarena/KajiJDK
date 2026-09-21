@@ -7,51 +7,52 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * El formateador de mensajes con huecos: {@code "Hay {0} archivos en {1}"}.
+ * The formatter of messages with holes: {@code "There are {0} files in {1}"}.
  *
- * <p>Existe por una razón de traducción, no de comodidad. Concatenar
- * {@code "Hay " + n + " archivos en " + d} deja el ORDEN de las piezas fijado en el código, y hay
- * idiomas que lo quieren distinto; con un patrón, el traductor mueve {@code {0}} y {@code {1}} sin
- * tocar nada. Por eso el índice va explícito y no implícito en la posición.
+ * <p>It exists for a reason of translation, not of convenience. Concatenating
+ * {@code "There are " + n + " files in " + d} leaves the pieces' ORDER fixed in the code, and there
+ * are languages that want it different; with a pattern, the translator moves {@code {0}} and
+ * {@code {1}} without touching anything. That is why the index is explicit and not implicit in the
+ * position.
  *
- * <p><b>La representación interna es la del JDK y conviene entenderla</b>: el patrón no se guarda
- * como se escribió. Se guarda todo el texto literal concatenado en una sola cadena, más una lista de
- * "en el offset {@code o} va el argumento {@code a}, formateado con {@code f}". Formatear es
- * intercalar; parsear es reconocer los pedazos literales y dejar que cada subformato lea lo del
- * medio. {@link #toPattern()} vuelve a sintetizar el patrón desde ahí, así que después de un
- * {@link #setFormat} devuelve el patrón nuevo y no el original.
+ * <p><b>The internal representation is the JDK's and it is worth understanding</b>: the pattern is
+ * not stored as it was written. All the literal text is stored concatenated into one string, plus a
+ * list of "at offset {@code o} goes argument {@code a}, formatted with {@code f}". Formatting is
+ * interleaving; parsing is recognising the literal pieces and letting each subformat read what is in
+ * between. {@link #toPattern()} synthesises the pattern back from there, so after a
+ * {@link #setFormat} it returns the new pattern and not the original.
  *
- * <p>El entrecomillado es la parte que más sorprende: una comilla simple abre texto literal
- * ({@code 'no {0} se sustituye'}) y dos comillas seguidas son una comilla. Es lo que permite que un
- * mensaje hable de llaves sin que se lo interprete.
+ * <p>Quoting is the part that surprises most: a single quote opens literal text
+ * ({@code 'no {0} substitution'}) and two quotes in a row are one quote. It is what lets a message
+ * speak of braces without being interpreted.
  *
- * @implNote Subconjunto declarado, y son dos cosas distintas. (1) De la SINTAXIS de patrón están
- *           {@code number}, {@code date}, {@code time} y {@code choice} con sus estilos; los tipos
- *           {@code dtf_date}/{@code dtf_time}/{@code dtf_datetime} (que delegan en
- *           {@code java.time.format}) y {@code compact_short}/{@code compact_long} no están, y un
- *           patrón que los use es RECHAZADO con {@code IllegalArgumentException} — no se ignoran en
- *           silencio. (2) De {@link #formatToCharacterIterator}, el iterador marca los argumentos
- *           con {@link java.text.MessageFormat.Field#ARGUMENT} pero no reexporta los atributos que
- *           cada subformato pone dentro de su pedazo. Marcar de menos es un subconjunto; marcar mal
- *           no lo sería.
+ * @implNote A declared subset, and it is two different things. (1) Of the pattern SYNTAX,
+ *           {@code number}, {@code date}, {@code time} and {@code choice} with their styles are
+ *           here; the types {@code dtf_date}/{@code dtf_time}/{@code dtf_datetime} (which delegate
+ *           to {@code java.time.format}) and {@code compact_short}/{@code compact_long} are not, and
+ *           a pattern using them is REJECTED with {@code IllegalArgumentException} -- they are not
+ *           silently ignored. (2) Of {@link #formatToCharacterIterator}, the iterator marks the
+ *           arguments with {@link java.text.MessageFormat.Field#ARGUMENT} but does not re-export the
+ *           attributes each subformat puts inside its own piece. Marking too little is a subset;
+ *           marking wrongly would not be.
  */
 public class MessageFormat extends Format {
 
     /**
-     * La clave con la que se marca cada pedazo del resultado que salió de un argumento.
+     * The key each piece of the result that came out of an argument is marked with.
      *
-     * <p>Tiene una sola constante porque un mensaje tiene una sola pregunta interesante: qué parte
-     * del texto es texto fijo y qué parte se sustituyó.
+     * <p>It has a single constant because a message has a single interesting question: which part of
+     * the text is fixed text and which part was substituted.
      */
     public static class Field extends java.text.Format.Field {
 
-        private static final Map<String, java.text.MessageFormat.Field> INSTANCIAS =
+        private static final Map<String, java.text.MessageFormat.Field> INSTANCES =
                 new HashMap<String, java.text.MessageFormat.Field>();
 
         protected Field(String name) {
             super(name);
             if (this.getClass() == java.text.MessageFormat.Field.class) {
-                INSTANCIAS.put(name, this);
+                INSTANCES.put(name, this);
             }
         }
 
@@ -59,7 +60,7 @@ public class MessageFormat extends Format {
             if (this.getClass() != java.text.MessageFormat.Field.class) {
                 throw new InvalidObjectException("subclass didn't correctly implement readResolve");
             }
-            java.text.MessageFormat.Field f = INSTANCIAS.get(this.getName());
+            java.text.MessageFormat.Field f = INSTANCES.get(this.getName());
             if (f != null) {
                 return f;
             }
@@ -71,17 +72,17 @@ public class MessageFormat extends Format {
     }
 
     private Locale locale;
-    // Todo el texto literal, sin los elementos de formato. Los huecos viven en `offsets`.
+    // All the literal text, without the format elements. The holes live in `offsets`.
     private String pattern;
     private int[] offsets;
     private int[] argumentNumbers;
     private Format[] formats;
-    private int cantidad;
-    private int maxArgumento;
+    private int count;
+    private int maxArgument;
 
     public MessageFormat(String pattern) {
         this.locale = Locale.getDefault();
-        this.reiniciar();
+        this.resetTo();
         this.applyPattern(pattern);
     }
 
@@ -90,17 +91,17 @@ public class MessageFormat extends Format {
             throw new NullPointerException();
         }
         this.locale = locale;
-        this.reiniciar();
+        this.resetTo();
         this.applyPattern(pattern);
     }
 
-    private void reiniciar() {
+    private void resetTo() {
         this.pattern = "";
         this.offsets = new int[8];
         this.argumentNumbers = new int[8];
         this.formats = new Format[8];
-        this.cantidad = 0;
-        this.maxArgumento = -1;
+        this.count = 0;
+        this.maxArgument = -1;
     }
 
     public void setLocale(Locale locale) {
@@ -111,110 +112,110 @@ public class MessageFormat extends Format {
         return this.locale;
     }
 
-    // ---- patrón ----
+    // ---- pattern ----
 
     public void applyPattern(String pattern) {
         if (pattern == null) {
             throw new NullPointerException();
         }
-        StringBuilder crudo = new StringBuilder();
-        StringBuilder indice = new StringBuilder();
-        StringBuilder tipo = new StringBuilder();
-        StringBuilder estilo = new StringBuilder();
-        this.reiniciar();
+        StringBuilder raw = new StringBuilder();
+        StringBuilder index = new StringBuilder();
+        StringBuilder type = new StringBuilder();
+        StringBuilder style = new StringBuilder();
+        this.resetTo();
 
-        // parte 0 = texto literal, 1 = índice, 2 = tipo, 3 = estilo. El autómata es el del JDK:
-        // las comas separan partes sólo hasta la 3, porque el estilo puede contener comas propias
-        // (un subpatrón de choice las usa).
-        int parte = 0;
-        boolean entreComillas = false;
-        int llaves = 0;
+        // part 0 = literal text, 1 = index, 2 = type, 3 = style. The automaton is the JDK's: the
+        // commas separate parts only up to 3, because the style can contain commas of its own (a
+        // choice subpattern uses them).
+        int part = 0;
+        boolean betweenQuotes = false;
+        int braces = 0;
         int i = 0;
         int n = pattern.length();
         while (i < n) {
             char ch = pattern.charAt(i);
-            if (parte == 0) {
+            if (part == 0) {
                 if (ch == '\'') {
                     if (i + 1 < n && pattern.charAt(i + 1) == '\'') {
-                        crudo.append('\'');
+                        raw.append('\'');
                         i = i + 1;
                     } else {
-                        entreComillas = !entreComillas;
+                        betweenQuotes = !betweenQuotes;
                     }
-                } else if (ch == '{' && !entreComillas) {
-                    parte = 1;
+                } else if (ch == '{' && !betweenQuotes) {
+                    part = 1;
                 } else {
-                    crudo.append(ch);
+                    raw.append(ch);
                 }
-            } else if (entreComillas) {
-                this.aParte(parte, indice, tipo, estilo).append(ch);
+            } else if (betweenQuotes) {
+                this.toPart(part, index, type, style).append(ch);
                 if (ch == '\'') {
-                    entreComillas = false;
+                    betweenQuotes = false;
                 }
-            } else if (ch == ',' && parte < 3) {
-                parte = parte + 1;
+            } else if (ch == ',' && part < 3) {
+                part = part + 1;
             } else if (ch == '{') {
-                llaves = llaves + 1;
-                this.aParte(parte, indice, tipo, estilo).append(ch);
+                braces = braces + 1;
+                this.toPart(part, index, type, style).append(ch);
             } else if (ch == '}') {
-                if (llaves == 0) {
-                    this.agregarElemento(crudo.length(), indice.toString(), tipo.toString(),
-                            estilo.toString());
-                    indice.setLength(0);
-                    tipo.setLength(0);
-                    estilo.setLength(0);
-                    parte = 0;
+                if (braces == 0) {
+                    this.addElement(raw.length(), index.toString(), type.toString(),
+                            style.toString());
+                    index.setLength(0);
+                    type.setLength(0);
+                    style.setLength(0);
+                    part = 0;
                 } else {
-                    llaves = llaves - 1;
-                    this.aParte(parte, indice, tipo, estilo).append(ch);
+                    braces = braces - 1;
+                    this.toPart(part, index, type, style).append(ch);
                 }
             } else {
                 if (ch == '\'') {
-                    entreComillas = true;
+                    betweenQuotes = true;
                 }
-                this.aParte(parte, indice, tipo, estilo).append(ch);
+                this.toPart(part, index, type, style).append(ch);
             }
             i = i + 1;
         }
-        if (parte != 0 || llaves != 0) {
+        if (part != 0 || braces != 0) {
             throw new IllegalArgumentException("Unmatched braces in the pattern.");
         }
-        this.pattern = crudo.toString();
+        this.pattern = raw.toString();
     }
 
-    private StringBuilder aParte(int parte, StringBuilder indice, StringBuilder tipo,
-                                 StringBuilder estilo) {
-        if (parte == 1) {
-            return indice;
+    private StringBuilder toPart(int part, StringBuilder index, StringBuilder type,
+                                 StringBuilder style) {
+        if (part == 1) {
+            return index;
         }
-        if (parte == 2) {
-            return tipo;
+        if (part == 2) {
+            return type;
         }
-        return estilo;
+        return style;
     }
 
-    private void agregarElemento(int offset, String indice, String tipo, String estilo) {
-        // El indice es SOLO digitos: ni vacio, ni con espacios alrededor, ni con signo. `{ 0 }` no es
-        // `{0}` con adornos sino un patron mal formado, y aceptarlo haria que un `{0}` mal tipeado
-        // funcionara aca y fallara contra cualquier otra implementacion.
+    private void addElement(int offset, String index, String type, String style) {
+        // The index is digits ONLY: not empty, not with spaces around it, not with a sign. `{ 0 }` is
+        // not `{0}` with decoration but a malformed pattern, and accepting it would make a mistyped
+        // `{0}` work here and fail against every other implementation.
         int arg;
-        if (!soloDigitos(indice)) {
-            throw new IllegalArgumentException("can't parse argument number: " + indice);
+        if (!onlyDigits(index)) {
+            throw new IllegalArgumentException("can't parse argument number: " + index);
         }
         try {
-            arg = Integer.parseInt(indice);
+            arg = Integer.parseInt(index);
         } catch (NumberFormatException e) {
-            throw new IllegalArgumentException("can't parse argument number: " + indice);
+            throw new IllegalArgumentException("can't parse argument number: " + index);
         }
         if (arg < 0) {
             throw new IllegalArgumentException("negative argument number: " + arg);
         }
-        if (this.cantidad == this.offsets.length) {
-            int nuevo = this.cantidad * 2;
-            int[] o = new int[nuevo];
-            int[] a = new int[nuevo];
-            Format[] f = new Format[nuevo];
-            for (int k = 0; k < this.cantidad; k = k + 1) {
+        if (this.count == this.offsets.length) {
+            int raised = this.count * 2;
+            int[] o = new int[raised];
+            int[] a = new int[raised];
+            Format[] f = new Format[raised];
+            for (int k = 0; k < this.count; k = k + 1) {
                 o[k] = this.offsets[k];
                 a[k] = this.argumentNumbers[k];
                 f[k] = this.formats[k];
@@ -223,16 +224,16 @@ public class MessageFormat extends Format {
             this.argumentNumbers = a;
             this.formats = f;
         }
-        this.offsets[this.cantidad] = offset;
-        this.argumentNumbers[this.cantidad] = arg;
-        this.formats[this.cantidad] = this.armarFormato(tipo.trim(), estilo.trim());
-        this.cantidad = this.cantidad + 1;
-        if (arg > this.maxArgumento) {
-            this.maxArgumento = arg;
+        this.offsets[this.count] = offset;
+        this.argumentNumbers[this.count] = arg;
+        this.formats[this.count] = this.buildFormat(type.trim(), style.trim());
+        this.count = this.count + 1;
+        if (arg > this.maxArgument) {
+            this.maxArgument = arg;
         }
     }
 
-    private static boolean soloDigitos(String s) {
+    private static boolean onlyDigits(String s) {
         if (s.length() == 0) {
             return false;
         }
@@ -245,86 +246,87 @@ public class MessageFormat extends Format {
         return true;
     }
 
-    private Format armarFormato(String tipo, String estilo) {
-        if (tipo.length() == 0) {
-            // Sin tipo el argumento no lleva formateador fijo: se decide al formatear, según la
-            // clase del valor. Es lo que hace que {0} sirva para un número y para un texto.
+    private Format buildFormat(String type, String style) {
+        if (type.length() == 0) {
+            // With no type the argument carries no fixed formatter: it is decided when formatting,
+            // according to the value's class. It is what makes {0} serve for a number and for a
+            // text.
             return null;
         }
-        if (tipo.equals("number")) {
-            if (estilo.length() == 0) {
+        if (type.equals("number")) {
+            if (style.length() == 0) {
                 return NumberFormat.getInstance(this.locale);
             }
-            if (estilo.equals("currency")) {
+            if (style.equals("currency")) {
                 return NumberFormat.getCurrencyInstance(this.locale);
             }
-            if (estilo.equals("percent")) {
+            if (style.equals("percent")) {
                 return NumberFormat.getPercentInstance(this.locale);
             }
-            if (estilo.equals("integer")) {
+            if (style.equals("integer")) {
                 return NumberFormat.getIntegerInstance(this.locale);
             }
-            return new DecimalFormat(estilo, new DecimalFormatSymbols(this.locale));
+            return new DecimalFormat(style, new DecimalFormatSymbols(this.locale));
         }
-        if (tipo.equals("date")) {
-            return this.formatoDeFecha(estilo, true);
+        if (type.equals("date")) {
+            return this.dateFormatter(style, true);
         }
-        if (tipo.equals("time")) {
-            return this.formatoDeFecha(estilo, false);
+        if (type.equals("time")) {
+            return this.dateFormatter(style, false);
         }
-        if (tipo.equals("choice")) {
-            return new ChoiceFormat(estilo);
+        if (type.equals("choice")) {
+            return new ChoiceFormat(style);
         }
-        // Un tipo desconocido es un error del patrón, no algo para ignorar: si se aceptara en
-        // silencio, {0,dtf_date} saldría como el toString() del Date y nadie se enteraría.
-        throw new IllegalArgumentException("unknown format type: " + tipo);
+        // An unknown type is an error in the pattern, not something to ignore: were it accepted
+        // silently, {0,dtf_date} would come out as the Date's toString() and nobody would notice.
+        throw new IllegalArgumentException("unknown format type: " + type);
     }
 
-    private Format formatoDeFecha(String estilo, boolean fecha) {
+    private Format dateFormatter(String style, boolean date) {
         int st = -1;
-        if (estilo.length() == 0 || estilo.equals("medium")) {
+        if (style.length() == 0 || style.equals("medium")) {
             st = DateFormat.DEFAULT;
-        } else if (estilo.equals("short")) {
+        } else if (style.equals("short")) {
             st = DateFormat.SHORT;
-        } else if (estilo.equals("long")) {
+        } else if (style.equals("long")) {
             st = DateFormat.LONG;
-        } else if (estilo.equals("full")) {
+        } else if (style.equals("full")) {
             st = DateFormat.FULL;
         }
         if (st < 0) {
-            return new SimpleDateFormat(estilo, this.locale);
+            return new SimpleDateFormat(style, this.locale);
         }
-        if (fecha) {
+        if (date) {
             return DateFormat.getDateInstance(st, this.locale);
         }
         return DateFormat.getTimeInstance(st, this.locale);
     }
 
     /**
-     * Sintetiza el patrón que describe el estado actual.
+     * It synthesises the pattern describing the current state.
      *
-     * <p>Los subformatos se reconocen comparándolos con los que las fábricas del locale devuelven:
-     * si uno es igual al {@code getCurrencyInstance} de este locale, se escribe
-     * {@code ,number,currency} y no el patrón crudo. Un formateador puesto a mano que no se parezca
-     * a ninguno se escribe con su propio patrón; uno que no sepa dar patrón sale como {@code {n}} a
-     * secas — que es lo que hace el JDK, y es preferible a inventarle una sintaxis.
+     * <p>The subformats are recognised by comparing them against what the locale's factories return:
+     * if one equals this locale's {@code getCurrencyInstance}, {@code ,number,currency} is written
+     * and not the raw pattern. A formatter set by hand that resembles none of them is written with
+     * its own pattern; one that cannot give a pattern comes out as a bare {@code {n}} -- which is
+     * what the JDK does, and is preferable to inventing a syntax for it.
      */
     public String toPattern() {
         StringBuilder r = new StringBuilder();
-        int ultimo = 0;
-        for (int i = 0; i < this.cantidad; i = i + 1) {
-            this.copiarConComillas(this.pattern, ultimo, this.offsets[i], r);
-            ultimo = this.offsets[i];
+        int last = 0;
+        for (int i = 0; i < this.count; i = i + 1) {
+            this.copyQuoting(this.pattern, last, this.offsets[i], r);
+            last = this.offsets[i];
             r.append('{');
             r.append(Integer.toString(this.argumentNumbers[i]));
-            this.describirFormato(this.formats[i], r);
+            this.describeFormat(this.formats[i], r);
             r.append('}');
         }
-        this.copiarConComillas(this.pattern, ultimo, this.pattern.length(), r);
+        this.copyQuoting(this.pattern, last, this.pattern.length(), r);
         return r.toString();
     }
 
-    private void describirFormato(Format f, StringBuilder r) {
+    private void describeFormat(Format f, StringBuilder r) {
         if (f == null) {
             return;
         }
@@ -352,14 +354,14 @@ public class MessageFormat extends Format {
             for (int k = DateFormat.FULL; k <= DateFormat.SHORT; k = k + 1) {
                 if (f.equals(DateFormat.getDateInstance(k, this.locale))) {
                     r.append(",date");
-                    this.describirEstilo(k, r);
+                    this.describeStyle(k, r);
                     return;
                 }
             }
             for (int k = DateFormat.FULL; k <= DateFormat.SHORT; k = k + 1) {
                 if (f.equals(DateFormat.getTimeInstance(k, this.locale))) {
                     r.append(",time");
-                    this.describirEstilo(k, r);
+                    this.describeStyle(k, r);
                     return;
                 }
             }
@@ -370,52 +372,52 @@ public class MessageFormat extends Format {
         }
     }
 
-    private void describirEstilo(int estilo, StringBuilder r) {
-        if (estilo == DateFormat.FULL) {
+    private void describeStyle(int style, StringBuilder r) {
+        if (style == DateFormat.FULL) {
             r.append(",full");
-        } else if (estilo == DateFormat.LONG) {
+        } else if (style == DateFormat.LONG) {
             r.append(",long");
-        } else if (estilo == DateFormat.SHORT) {
+        } else if (style == DateFormat.SHORT) {
             r.append(",short");
         }
-        // MEDIUM es el estilo por omisión: escribirlo sería ruido, y el patrón sin estilo lo
-        // vuelve a dar.
+        // MEDIUM is the default style: writing it would be noise, and the pattern with no style
+        // gives it back again.
     }
 
-    // El texto literal vuelve al patrón con las comillas dobladas y las llaves de APERTURA
-    // entrecomilladas. Sólo las de apertura: una '}' suelta en texto literal no abre nada, así que
-    // no hace falta protegerla, y protegerla igual daría un patrón distinto del que devuelve el
-    // JDK para el mismo mensaje. Sin esto, un texto con '{' dejaría de round-tripear: el segundo
-    // applyPattern leería un elemento de formato donde había texto.
-    private void copiarConComillas(String s, int desde, int hasta, StringBuilder r) {
-        boolean abierta = false;
-        for (int i = desde; i < hasta; i = i + 1) {
+    // The literal text goes back into the pattern with the quotes doubled and the OPENING braces
+    // quoted. Only the opening ones: a loose '}' in literal text opens nothing, so it does not need
+    // protecting, and protecting it anyway would give a pattern different from the one the JDK
+    // returns for the same message. Without this, a text with a '{' would stop round-tripping: the
+    // second applyPattern would read a format element where there was text.
+    private void copyQuoting(String s, int from, int to, StringBuilder r) {
+        boolean open = false;
+        for (int i = from; i < to; i = i + 1) {
             char c = s.charAt(i);
             if (c == '{') {
-                if (!abierta) {
+                if (!open) {
                     r.append('\'');
-                    abierta = true;
+                    open = true;
                 }
                 r.append(c);
             } else if (c == '\'') {
                 r.append("''");
             } else {
-                if (abierta) {
+                if (open) {
                     r.append('\'');
-                    abierta = false;
+                    open = false;
                 }
                 r.append(c);
             }
         }
-        if (abierta) {
+        if (open) {
             r.append('\'');
         }
     }
 
-    // ---- subformatos ----
+    // ---- subformats -----------------------------------------------------------------------------
 
     public void setFormatsByArgumentIndex(Format[] newFormats) {
-        for (int i = 0; i < this.cantidad; i = i + 1) {
+        for (int i = 0; i < this.count; i = i + 1) {
             int arg = this.argumentNumbers[i];
             if (arg < newFormats.length) {
                 this.formats[i] = newFormats[arg];
@@ -424,7 +426,7 @@ public class MessageFormat extends Format {
     }
 
     public void setFormats(Format[] newFormats) {
-        int n = this.cantidad;
+        int n = this.count;
         if (newFormats.length < n) {
             n = newFormats.length;
         }
@@ -434,7 +436,7 @@ public class MessageFormat extends Format {
     }
 
     public void setFormatByArgumentIndex(int argumentIndex, Format newFormat) {
-        for (int i = 0; i < this.cantidad; i = i + 1) {
+        for (int i = 0; i < this.count; i = i + 1) {
             if (this.argumentNumbers[i] == argumentIndex) {
                 this.formats[i] = newFormat;
             }
@@ -442,46 +444,46 @@ public class MessageFormat extends Format {
     }
 
     public void setFormat(int formatElementIndex, Format newFormat) {
-        if (formatElementIndex < 0 || formatElementIndex >= this.cantidad) {
+        if (formatElementIndex < 0 || formatElementIndex >= this.count) {
             throw new ArrayIndexOutOfBoundsException(formatElementIndex);
         }
         this.formats[formatElementIndex] = newFormat;
     }
 
     /**
-     * Los subformatos indexados por número de argumento.
+     * The subformats indexed by argument number.
      *
-     * <p>Si un argumento aparece dos veces en el patrón gana el ÚLTIMO, que es lo que documenta el
-     * JDK: el arreglo tiene una casilla por argumento y las apariciones repetidas no caben.
+     * <p>If an argument appears twice in the pattern the LAST wins, which is what the JDK documents:
+     * the array has one slot per argument and repeated appearances do not fit.
      */
     public Format[] getFormatsByArgumentIndex() {
-        Format[] out = new Format[this.maxArgumento + 1];
-        for (int i = 0; i < this.cantidad; i = i + 1) {
+        Format[] out = new Format[this.maxArgument + 1];
+        for (int i = 0; i < this.count; i = i + 1) {
             out[this.argumentNumbers[i]] = this.formats[i];
         }
         return out;
     }
 
-    /** Los subformatos en el orden en que aparecen en el patrón, uno por elemento. */
+    /** The subformats in the order they appear in the pattern, one per element. */
     public Format[] getFormats() {
-        Format[] out = new Format[this.cantidad];
-        for (int i = 0; i < this.cantidad; i = i + 1) {
+        Format[] out = new Format[this.count];
+        for (int i = 0; i < this.count; i = i + 1) {
             out[i] = this.formats[i];
         }
         return out;
     }
 
-    // ---- formateo ----
+    // ---- formatting -----------------------------------------------------------------------------
 
     public final StringBuffer format(Object[] arguments, StringBuffer result, FieldPosition pos) {
-        return this.escribir(arguments, result, pos, null);
+        return this.write(arguments, result, pos, null);
     }
 
     public final StringBuffer format(Object arguments, StringBuffer result, FieldPosition pos) {
-        return this.escribir((Object[]) arguments, result, pos, null);
+        return this.write((Object[]) arguments, result, pos, null);
     }
 
-    /** El atajo de un solo uso: arma el formateador, formatea y lo tira. */
+    /** The one-shot shortcut: it builds the formatter, formats, and throws it away. */
     public static String format(String pattern, Object... arguments) {
         MessageFormat temp = new MessageFormat(pattern);
         return temp.format(arguments, new StringBuffer(), new FieldPosition(0)).toString();
@@ -491,143 +493,145 @@ public class MessageFormat extends Format {
         if (arguments == null) {
             throw new NullPointerException();
         }
-        MarcasDeCampo marcas = new MarcasDeCampo();
+        FieldMarks marks = new FieldMarks();
         StringBuffer sb = new StringBuffer();
-        this.escribir((Object[]) arguments, sb, null, marcas);
-        return marcas.iterador(sb.toString());
+        this.write((Object[]) arguments, sb, null, marks);
+        return marks.iterator(sb.toString());
     }
 
-    private StringBuffer escribir(Object[] arguments, StringBuffer result, FieldPosition pos,
-                                  MarcasDeCampo marcas) {
-        MarcasDeCampo m = marcas;
+    private StringBuffer write(Object[] arguments, StringBuffer result, FieldPosition pos,
+                                  FieldMarks marks) {
+        FieldMarks m = marks;
         if (m == null) {
-            m = new MarcasDeCampo();
+            m = new FieldMarks();
         }
-        int ultimo = 0;
-        for (int i = 0; i < this.cantidad; i = i + 1) {
-            result.append(this.pattern.substring(ultimo, this.offsets[i]));
-            ultimo = this.offsets[i];
+        int last = 0;
+        for (int i = 0; i < this.count; i = i + 1) {
+            result.append(this.pattern.substring(last, this.offsets[i]));
+            last = this.offsets[i];
             int arg = this.argumentNumbers[i];
             int d = result.length();
             if (arguments == null || arg >= arguments.length) {
-                // Un argumento que no vino se escribe como {n}, sin sustituir. Es información:
-                // dice exactamente qué faltó, en vez de dejar un hueco vacío o reventar.
+                // An argument that did not arrive is written as {n}, unsubstituted. It is
+                // information: it says exactly what was missing, instead of leaving an empty hole or
+                // blowing up.
                 result.append('{');
                 result.append(Integer.toString(arg));
                 result.append('}');
             } else {
-                this.escribirArgumento(arguments[arg], this.formats[i], result);
+                this.writeArgument(arguments[arg], this.formats[i], result);
             }
-            // El valor del atributo es el NÚMERO de argumento, no la clave: en un mensaje con
-            // varios huecos, "acá va un argumento" no dice cuál, y ese es justamente el dato.
-            m.marcar((AttributedCharacterIterator.Attribute) java.text.MessageFormat.Field.ARGUMENT,
+            // The attribute's value is the argument's NUMBER, not the key: in a message with
+            // several holes, "an argument goes here" does not say which, and that is precisely the
+            // datum.
+            m.mark((AttributedCharacterIterator.Attribute) java.text.MessageFormat.Field.ARGUMENT,
                     Integer.valueOf(arg), -1, d, result.length());
         }
-        result.append(this.pattern.substring(ultimo, this.pattern.length()));
-        m.aplicar(pos);
+        result.append(this.pattern.substring(last, this.pattern.length()));
+        m.apply(pos);
         return result;
     }
 
-    private void escribirArgumento(Object valor, Format formato, StringBuffer result) {
-        if (valor == null) {
+    private void writeArgument(Object value, Format formatter, StringBuffer result) {
+        if (value == null) {
             result.append("null");
             return;
         }
-        Format f = formato;
+        Format f = formatter;
         if (f == null) {
-            // Sin formateador declarado el tipo del valor decide. Un Number va por el formateador
-            // de números del locale y un Date por el de fecha y hora, porque su toString() no
-            // respeta ningún locale.
-            if (valor instanceof Number) {
+            // With no declared formatter the value's type decides. A Number goes through the
+            // locale's number formatter and a Date through its date and time one, because their
+            // toString() respects no locale at all.
+            if (value instanceof Number) {
                 f = NumberFormat.getInstance(this.locale);
-            } else if (valor instanceof Date) {
+            } else if (value instanceof Date) {
                 f = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT, this.locale);
             } else {
-                result.append(valor.toString());
+                result.append(value.toString());
                 return;
             }
         }
-        String texto = f.format(valor);
-        if (f instanceof ChoiceFormat && texto.indexOf('{') >= 0) {
-            // Un ChoiceFormat puede devolver un patrón de mensaje ("{0} archivos"): se vuelve a
-            // formatear con los mismos argumentos. Es lo que permite escribir plurales.
-            result.append(new MessageFormat(texto, this.locale).format(new Object[] {valor}));
+        String text = f.format(value);
+        if (f instanceof ChoiceFormat && text.indexOf('{') >= 0) {
+            // A ChoiceFormat can return a message pattern ("{0} files"): it is formatted again with
+            // the same arguments. It is what makes writing plurals possible.
+            result.append(new MessageFormat(text, this.locale).format(new Object[] {value}));
             return;
         }
-        result.append(texto);
+        result.append(text);
     }
 
-    // ---- parseo ----
+    // ---- parsing --------------------------------------------------------------------------------
 
     /**
-     * Lee los argumentos de un texto que sigue este patrón.
+     * It reads the arguments out of a text following this pattern.
      *
-     * <p>El algoritmo es el del JDK y su límite conviene decirlo: los pedazos literales se buscan
-     * de izquierda a derecha y no se prueban alternativas. Un patrón cuyos literales sean ambiguos
-     * ({@code "{0}{1}"}) no se puede parsear, y el resultado es un fallo, no una adivinanza.
+     * <p>The algorithm is the JDK's and its limit is worth stating: the literal pieces are searched
+     * left to right and no alternatives are tried. A pattern whose literals are ambiguous
+     * ({@code "{0}{1}"}) cannot be parsed, and the result is a failure, not a guess.
      *
-     * @return un arreglo con una casilla por argumento; las que el patrón no nombra quedan en null
+     * @return an array with one slot per argument; the ones the pattern does not name stay null
      */
     public Object[] parse(String source, ParsePosition pos) {
         if (source == null) {
             return null;
         }
-        Object[] resultado = new Object[this.maxArgumento + 1];
-        int patronOffset = 0;
-        int fuenteOffset = pos.getIndex();
+        Object[] result = new Object[this.maxArgument + 1];
+        int patternOffset = 0;
+        int sourceOffset = pos.getIndex();
         ParsePosition temp = new ParsePosition(0);
-        for (int i = 0; i < this.cantidad; i = i + 1) {
-            int largo = this.offsets[i] - patronOffset;
-            if (largo == 0 || this.pattern.regionMatches(patronOffset, source, fuenteOffset, largo)) {
-                fuenteOffset = fuenteOffset + largo;
-                patronOffset = patronOffset + largo;
+        for (int i = 0; i < this.count; i = i + 1) {
+            int length = this.offsets[i] - patternOffset;
+            if (length == 0 || this.pattern.regionMatches(patternOffset, source, sourceOffset, length)) {
+                sourceOffset = sourceOffset + length;
+                patternOffset = patternOffset + length;
             } else {
-                pos.setErrorIndex(fuenteOffset);
+                pos.setErrorIndex(sourceOffset);
                 return null;
             }
             if (this.formats[i] == null) {
-                // Argumento sin formateador: se toma todo lo que haya hasta el próximo literal.
-                // Si es el último, hasta el final — de ahí que el más largo posible sea la regla.
-                int hasta = this.pattern.length();
-                if (i + 1 < this.cantidad) {
-                    hasta = this.offsets[i + 1];
+                // An argument with no formatter: everything up to the next literal is taken. If it
+                // is the last, up to the end -- hence the longest possible being the rule.
+                int to = this.pattern.length();
+                if (i + 1 < this.count) {
+                    to = this.offsets[i + 1];
                 }
-                int siguiente;
-                if (patronOffset >= hasta) {
-                    siguiente = source.length();
+                int nextLevel;
+                if (patternOffset >= to) {
+                    nextLevel = source.length();
                 } else {
-                    siguiente = source.indexOf(this.pattern.substring(patronOffset, hasta),
-                            fuenteOffset);
+                    nextLevel = source.indexOf(this.pattern.substring(patternOffset, to),
+                            sourceOffset);
                 }
-                if (siguiente < 0) {
-                    pos.setErrorIndex(fuenteOffset);
+                if (nextLevel < 0) {
+                    pos.setErrorIndex(sourceOffset);
                     return null;
                 }
-                String valor = source.substring(fuenteOffset, siguiente);
-                // Un "{n}" literal en la entrada es la marca de "este argumento no vino" que pone
-                // el formateo: se lee como ausente y no como la cadena "{n}".
-                if (!valor.equals("{" + Integer.toString(this.argumentNumbers[i]) + "}")) {
-                    resultado[this.argumentNumbers[i]] = valor;
+                String value = source.substring(sourceOffset, nextLevel);
+                // A literal "{n}" in the input is the "this argument did not arrive" mark the
+                // formatting puts there: it is read as absent and not as the string "{n}".
+                if (!value.equals("{" + Integer.toString(this.argumentNumbers[i]) + "}")) {
+                    result[this.argumentNumbers[i]] = value;
                 }
-                fuenteOffset = siguiente;
+                sourceOffset = nextLevel;
             } else {
-                temp.setIndex(fuenteOffset);
-                resultado[this.argumentNumbers[i]] = this.formats[i].parseObject(source, temp);
-                if (temp.getIndex() == fuenteOffset) {
-                    pos.setErrorIndex(fuenteOffset);
+                temp.setIndex(sourceOffset);
+                result[this.argumentNumbers[i]] = this.formats[i].parseObject(source, temp);
+                if (temp.getIndex() == sourceOffset) {
+                    pos.setErrorIndex(sourceOffset);
                     return null;
                 }
-                fuenteOffset = temp.getIndex();
+                sourceOffset = temp.getIndex();
             }
         }
-        int largo = this.pattern.length() - patronOffset;
-        if (largo == 0 || this.pattern.regionMatches(patronOffset, source, fuenteOffset, largo)) {
-            pos.setIndex(fuenteOffset + largo);
+        int length = this.pattern.length() - patternOffset;
+        if (length == 0 || this.pattern.regionMatches(patternOffset, source, sourceOffset, length)) {
+            pos.setIndex(sourceOffset + length);
         } else {
-            pos.setErrorIndex(fuenteOffset);
+            pos.setErrorIndex(sourceOffset);
             return null;
         }
-        return resultado;
+        return result;
     }
 
     public Object[] parse(String source) throws ParseException {
@@ -643,14 +647,14 @@ public class MessageFormat extends Format {
         return this.parse(source, pos);
     }
 
-    // ---- identidad ----
+    // ---- identity -------------------------------------------------------------------------------
 
     public Object clone() {
-        MessageFormat copia = new MessageFormat(this.toPattern(), this.locale);
-        for (int i = 0; i < this.cantidad && i < copia.cantidad; i = i + 1) {
-            copia.formats[i] = this.formats[i];
+        MessageFormat copy = new MessageFormat(this.toPattern(), this.locale);
+        for (int i = 0; i < this.count && i < copy.count; i = i + 1) {
+            copy.formats[i] = this.formats[i];
         }
-        return copia;
+        return copy;
     }
 
     public boolean equals(Object obj) {
@@ -661,11 +665,11 @@ public class MessageFormat extends Format {
             return false;
         }
         MessageFormat other = (MessageFormat) obj;
-        if (this.cantidad != other.cantidad || !this.pattern.equals(other.pattern)
+        if (this.count != other.count || !this.pattern.equals(other.pattern)
                 || !this.locale.equals(other.locale)) {
             return false;
         }
-        for (int i = 0; i < this.cantidad; i = i + 1) {
+        for (int i = 0; i < this.count; i = i + 1) {
             if (this.offsets[i] != other.offsets[i]
                     || this.argumentNumbers[i] != other.argumentNumbers[i]) {
                 return false;

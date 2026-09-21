@@ -1,7 +1,8 @@
 package java.sql;
 
 /**
- * KajiLibrary's java.sql.SQLSyntaxErrorException -- La sentencia esta mal escrita, o nombra algo que no existe.
+ * KajiLibrary's java.sql.SQLSyntaxErrorException -- the statement is badly written, or names
+ * something that does not exist.
  */
 public class SQLSyntaxErrorException extends SQLNonTransientException {
 

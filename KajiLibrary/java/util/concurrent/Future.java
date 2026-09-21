@@ -58,10 +58,11 @@ public interface Future<V> {
                 get();
                 s = State.SUCCESS;
             } catch (InterruptedException e) {
-                // `state()` no declara `throws`, y el JDK tampoco: es una consulta, no una espera.
-                // Que `get()` pueda bloquear aca es solo porque la tarea ya termino --se llego por
-                // `isDone()`-- asi que la interrupcion no deberia llegar nunca. Si llega, se remarca
-                // el hilo y se reporta lo unico que se sabe: que la tarea corrio.
+                // `state()` declares no `throws`, and the JDK's does not either: it is a query, not
+                // a wait. That `get()` can block here is only because the task already finished --it
+                // was reached through `isDone()`-- so the interruption should never arrive. If it
+                // does, the thread is re-marked and the only thing known is reported: that the task
+                // ran.
                 Thread.currentThread().interrupt();
                 s = State.RUNNING;
             } catch (CancellationException e) {
@@ -89,10 +90,11 @@ public interface Future<V> {
         try {
             value = get();
         } catch (InterruptedException e) {
-            // Misma razon que en state(): se llego aca con la tarea ya terminada, asi que get() no
-            // espera y la interrupcion no deberia llegar. Si llega, se remarca el hilo -- tragarsela
-            // seria peor que el problema -- y se reporta como "sin completar", que es lo unico que
-            // este metodo sabe decir sin inventar un valor.
+            // The same reason as in state(): this was reached with the task already finished, so
+            // get() does not wait and the interruption should not arrive. If it does, the thread is
+            // re-marked -- swallowing it would be worse than the problem -- and it is reported as
+            // "not completed", which is the only thing this method can say without inventing a
+            // value.
             Thread.currentThread().interrupt();
             failure = "Task has not completed";
         } catch (CancellationException e) {
@@ -124,7 +126,7 @@ public interface Future<V> {
         try {
             get();
         } catch (InterruptedException e) {
-            // Igual que en state() y resultNow(): la tarea ya termino, get() no espera.
+            // As in state() and resultNow(): the task already finished, get() does not wait.
             Thread.currentThread().interrupt();
             failure = "Task has not completed";
         } catch (ExecutionException e) {

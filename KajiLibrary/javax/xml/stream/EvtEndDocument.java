@@ -5,10 +5,10 @@ import java.io.Writer;
 import javax.xml.stream.events.EndDocument;
 
 /**
- * El final del documento como evento.
+ * The end of the document as an event.
  *
- * <p>{@code writeAsEncodedUnicode} no escribe nada, y no es una omision: el final de un documento
- * XML no tiene representacion textual. Es el unico evento del que eso es cierto.
+ * <p>{@code writeAsEncodedUnicode} writes nothing, and it is not an omission: the end of an XML
+ * document has no textual representation. It is the only event for which that is true.
  */
 final class EvtEndDocument extends EvtBase implements EndDocument {
 
@@ -18,7 +18,7 @@ final class EvtEndDocument extends EvtBase implements EndDocument {
 
     public void writeAsEncodedUnicode(Writer writer) throws XMLStreamException {
         if (writer == null) {
-            throw new XMLStreamException("el escritor no puede ser null");
+            throw new XMLStreamException("the writer cannot be null");
         }
     }
 }

@@ -5,46 +5,47 @@ import java.rmi.Remote;
 import java.rmi.RemoteException;
 
 /**
- * El objeto remoto al que un cliente se conecta primero.
+ * The remote object a client connects to first.
  *
- * <h2>Dos metodos, y los dos hacen falta</h2>
+ * <h2>Two methods, and both are needed</h2>
  *
- * <p>{@link #getVersion} se llama <strong>antes</strong> de autenticarse, y es lo que permite que
- * cliente y servidor de versiones distintas se entiendan o se rechacen con un mensaje claro en vez
- * de fallar en el medio de la primera operacion.
+ * <p>{@link #getVersion} is called <strong>before</strong> authenticating, and it is what allows
+ * a client and a server of different versions to understand each other or to reject each other
+ * with a clear message instead of failing in the middle of the first operation.
  *
- * <p>{@link #newClient} es el que autentica y devuelve la conexion. Que la credencial sea un
- * {@code Object} y no algo tipado es a proposito: puede ser un arreglo de dos {@code String}, un
- * objeto de un mecanismo propio, o {@code null} si el servidor no pide nada.
+ * <p>{@link #newClient} is the one that authenticates and returns the connection. That the
+ * credential is an {@code Object} and not something typed is on purpose: it may be an array of
+ * two {@code String}s, an object of a mechanism of one's own, or {@code null} if the server asks
+ * for nothing.
  *
- * <h2>Por que hay dos objetos y no uno</h2>
+ * <h2>Why there are two objects and not one</h2>
  *
- * <p>Este es unico y compartido; el {@link RMIConnection} que devuelve es <strong>uno por
- * cliente</strong>. Esa separacion es la que permite que cada cliente tenga su propia identidad, su
- * propio cargador de clases y su propia cola de notificaciones.
+ * <p>This one is single and shared; the {@link RMIConnection} it returns is <strong>one per
+ * client</strong>. That separation is what allows each client to have its own identity, its own
+ * class loader and its own notification queue.
  *
  * @since 1.5
  */
 public interface RMIServer extends Remote {
 
     /**
-     * La version del protocolo y de la implementacion.
+     * The protocol's and the implementation's version.
      *
-     * <p>El formato es {@code "<version de la especificacion> <nombre del proveedor>"}.
+     * <p>The format is {@code "<specification version> <provider name>"}.
      *
-     * @return la version
-     * @throws RemoteException si no se pudo hablar con el servidor
+     * @return the version
+     * @throws RemoteException if the server could not be talked to
      */
     String getVersion() throws RemoteException;
 
     /**
-     * Autentica al cliente y le abre una conexion propia.
+     * Authenticates the client and opens a connection of its own for it.
      *
-     * @param credentials la credencial, o {@code null} si el servidor no pide ninguna
-     * @return la conexion de este cliente
-     * @throws java.rmi.RemoteException si no se pudo hablar con el servidor
-     * @throws java.lang.SecurityException si la credencial no sirve
-     * @throws IOException si no se pudo abrir la conexion
+     * @param credentials the credential, or {@code null} if the server asks for none
+     * @return this client's connection
+     * @throws java.rmi.RemoteException if the server could not be talked to
+     * @throws java.lang.SecurityException if the credential does not serve
+     * @throws IOException if the connection could not be opened
      */
     RMIConnection newClient(Object credentials) throws IOException;
 }

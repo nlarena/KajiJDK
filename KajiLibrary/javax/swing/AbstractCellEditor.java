@@ -8,50 +8,53 @@ import javax.swing.event.ChangeEvent;
 import javax.swing.event.EventListenerList;
 
 /**
- * La parte de un editor de celda que es igual en todos: los oyentes y los dos avisos.
+ * The part of a cell editor that is the same in all of them: the listeners and the two
+ * notices.
  *
- * <h2>Terminar y cancelar no son lo mismo</h2>
+ * <h2>Finishing and cancelling are not the same</h2>
  *
- * <p>{@link #stopCellEditing} dice "quedate con lo que escribi" y devuelve {@code false} si el
- * editor no puede aceptarlo -- un texto que no es un numero, por ejemplo --, en cuyo caso la edicion
- * sigue abierta. {@link #cancelCellEditing} dice "olvidate", no devuelve nada y no puede fallar.
+ * <p>{@link #stopCellEditing} says "keep what I typed" and returns {@code false} if the
+ * editor cannot accept it -- a text that is not a number, for instance --, in which case the
+ * editing stays open. {@link #cancelCellEditing} says "forget it", returns nothing and cannot
+ * fail.
  *
- * <p>Esta clase implementa las dos de la forma mas simple posible: terminar siempre se puede.
- * Validar es de la subclase.
+ * <p>This class implements both in the simplest way possible: finishing is always possible.
+ * Validating belongs to the subclass.
  *
- * <h2>Los oyentes se recorren al reves</h2>
+ * <h2>The listeners are walked through backwards</h2>
  *
- * <p>De atras para adelante, como en todo Swing: el ultimo en anotarse es el primero en enterarse.
+ * <p>Back to front, as everywhere in Swing: the last to sign up is the first to learn about
+ * it.
  */
 public abstract class AbstractCellEditor implements CellEditor, Serializable {
 
-    /** Los oyentes, por tipo. */
+    /** The listeners, by type. */
     protected EventListenerList listenerList = new EventListenerList();
 
-    /** El evento, armado una vez y reusado. */
+    /** The event, built once and reused. */
     protected transient ChangeEvent changeEvent = null;
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected AbstractCellEditor() {
     }
 
-    /** Siempre cierto: cualquier gesto empieza a editar. La subclase decide otra cosa. */
+    /** Always true: any gesture starts editing. The subclass decides otherwise. */
     public boolean isCellEditable(EventObject e) {
         return true;
     }
 
-    /** Siempre cierto: empezar a editar tambien elige la celda. */
+    /** Always true: starting to edit also chooses the cell. */
     public boolean shouldSelectCell(EventObject anEvent) {
         return true;
     }
 
-    /** Termina y avisa; siempre se puede. Ver la nota de la clase. */
+    /** It finishes and gives notice; it is always possible. See the class note. */
     public boolean stopCellEditing() {
         fireEditingStopped();
         return true;
     }
 
-    /** Cancela y avisa. */
+    /** It cancels and gives notice. */
     public void cancelCellEditing() {
         fireEditingCanceled();
     }
@@ -68,7 +71,7 @@ public abstract class AbstractCellEditor implements CellEditor, Serializable {
         return listenerList.getListeners(CellEditorListener.class);
     }
 
-    /** Avisa que la edicion termino bien. */
+    /** It gives notice that the editing finished well. */
     protected void fireEditingStopped() {
         Object[] listeners = listenerList.getListenerList();
         for (int i = listeners.length - 2; i >= 0; i = i - 2) {
@@ -81,7 +84,7 @@ public abstract class AbstractCellEditor implements CellEditor, Serializable {
         }
     }
 
-    /** Avisa que la edicion se cancelo. */
+    /** It gives notice that the editing was cancelled. */
     protected void fireEditingCanceled() {
         Object[] listeners = listenerList.getListenerList();
         for (int i = listeners.length - 2; i >= 0; i = i - 2) {

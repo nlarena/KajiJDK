@@ -17,82 +17,83 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.CompletionException;
 
 /**
- * KajiLibrary's javax.security.auth.Subject -- quien esta actuando: sus identidades y sus
- * credenciales.
+ * KajiLibrary's javax.security.auth.Subject -- who is acting: their identities and their
+ * credentials.
  *
- * <p>Un Subject junta tres conjuntos y la distincion entre ellos es todo el punto de la clase:
- *
- * <ul>
- *   <li><b>principals</b>: las identidades. Un mismo Subject puede ser {@code cn=juan} en X.500,
- *       {@code juan@ACME} en Kerberos y {@code uid=1000} en el sistema, todo a la vez. No hay una
- *       "principal" -- son todas igual de validas y cada servicio mira la que entiende.
- *   <li><b>credenciales publicas</b>: lo que prueba una identidad y se puede mostrar. Un certificado.
- *   <li><b>credenciales privadas</b>: lo que prueba una identidad y <b>no</b> se puede mostrar. Una
- *       clave privada, un ticket. La separacion existe para que se les pueda pedir un permiso
- *       distinto al leerlas.
- * </ul>
- *
- * <h2>Los conjuntos son vistas vivas</h2>
- *
- * <p>{@code getPrincipals()} no devuelve una copia: devuelve el conjunto, y agregar ahi agrega al
- * Subject. Es a proposito -- es como se arma un Subject -- y trae dos comportamientos que sorprenden
- * y que se reproducen tal cual:
+ * <p>A Subject brings together three sets and the distinction between them is the whole point of
+ * the class:
  *
  * <ul>
- *   <li>Meter algo que no es un {@code Principal} en el conjunto de principals tira
- *       {@code SecurityException}, no {@code ClassCastException}: el conjunto se defiende en
- *       ejecucion porque los genericos se borran y la lista puede llegar cruda.
- *   <li>El <b>constructor de cuatro</b>, en cambio, <b>no</b> chequea ese tipo. Tambien es del JDK, y
- *       por lo mismo: el constructor copia los elementos sin castearlos, asi que un conjunto crudo
- *       con basura adentro entra sin protestar. La diferencia entre las dos puertas es una rareza
- *       heredada, no un descuido de esta implementacion.
+ *   <li><b>principals</b>: the identities. The same Subject may be {@code cn=john} in X.500,
+ *       {@code john@ACME} in Kerberos and {@code uid=1000} in the system, all at once. There is no
+ *       "main" one -- they are all equally valid and each service looks at the one it understands.
+ *   <li><b>public credentials</b>: what proves an identity and can be shown. A certificate.
+ *   <li><b>private credentials</b>: what proves an identity and <b>cannot</b> be shown. A private
+ *       key, a ticket. The separation exists so that a different permission can be required to read
+ *       them.
  * </ul>
  *
- * <p>{@code setReadOnly()} es de ida sola: no hay como volver. Sin eso, pasar un Subject a codigo
- * ajeno seria pasarle permiso de agregarse identidades.
+ * <h2>The sets are live views</h2>
  *
- * <h2>current(), callAs() y doAs()</h2>
+ * <p>{@code getPrincipals()} does not return a copy: it returns the set, and adding there adds to
+ * the Subject. That is on purpose -- it is how a Subject is put together -- and it brings two
+ * surprising behaviours that are reproduced as they are:
  *
- * <p>{@code callAs} ata el Subject al hilo mientras corre la accion, y {@code current()} lo devuelve.
- * El JDK usa un {@code ScopedValue}; aca es un {@code ThreadLocal} que se restaura en un
- * {@code finally}, lo que da el mismo comportamiento observable en un hilo -- incluido el anidado,
- * donde el de adentro tapa al de afuera y al salir vuelve el de afuera --. <b>La diferencia
- * anotada</b>: un {@code ScopedValue} se hereda en los hilos que arranca la concurrencia
- * estructurada y un {@code ThreadLocal} no, asi que un hilo lanzado adentro de un {@code callAs} ve
- * {@code null} donde el JDK podria mostrarle el Subject.
+ * <ul>
+ *   <li>Putting something that is not a {@code Principal} into the principals set throws {@code
+ *       SecurityException}, not {@code ClassCastException}: the set defends itself at run time
+ *       because generics are erased and the list may arrive raw.
+ *   <li>The <b>four-argument constructor</b>, on the other hand, does <b>not</b> check that type.
+ *       That is the JDK's too, and for the same reason: the constructor copies the elements without
+ *       casting them, so a raw set with garbage inside gets in without protest. The difference
+ *       between the two doors is an inherited oddity, not an oversight of this implementation.
+ * </ul>
  *
- * <p>{@code doAs} y {@code doAsPrivileged} estan desaconsejados en el JDK y marcados para
- * eliminacion, pero <b>siguen funcionando</b> y siguen atando el Subject igual que {@code callAs};
- * lo unico que cambia es como se envuelven las excepciones. {@code getSubject(AccessControlContext)}
- * es el unico que ya no anda: tira {@code UnsupportedOperationException}, porque su contrato era
- * leer el Subject de un contexto de control de acceso y ese mecanismo ya no existe.
+ * <p>{@code setReadOnly()} is one way only: there is no going back. Without it, passing a Subject
+ * to someone else's code would be giving it permission to add identities to itself.
+ *
+ * <h2>current(), callAs() and doAs()</h2>
+ *
+ * <p>{@code callAs} binds the Subject to the thread while the action runs, and {@code current()}
+ * returns it. The JDK uses a {@code ScopedValue}; here it is a {@code ThreadLocal} restored in a
+ * {@code finally}, which gives the same observable behaviour within one thread -- nesting included,
+ * where the inner one hides the outer one and on leaving the outer one comes back --. <b>The noted
+ * difference</b>: a {@code ScopedValue} is inherited by the threads structured concurrency starts
+ * and a {@code ThreadLocal} is not, so a thread launched inside a {@code callAs} sees {@code null}
+ * where the JDK could show it the Subject.
+ *
+ * <p>{@code doAs} and {@code doAsPrivileged} are deprecated in the JDK and marked for removal, but
+ * <b>they still work</b> and still bind the Subject just like {@code callAs}; the only thing that
+ * changes is how exceptions are wrapped. {@code getSubject(AccessControlContext)} is the only one
+ * that no longer works: it throws {@code UnsupportedOperationException}, because its contract was
+ * reading the Subject from an access control context and that mechanism no longer exists.
  */
 public final class Subject implements Serializable {
 
     private static final long serialVersionUID = -8308522755600156056L;
 
-    // Un ThreadLocal y no un ScopedValue: ver la nota de la clase sobre la diferencia.
-    private static final ThreadLocal<Subject> ACTUAL = new ThreadLocal<Subject>();
+    // A ThreadLocal and not a ScopedValue: see the class note about the difference.
+    private static final ThreadLocal<Subject> CURRENT = new ThreadLocal<Subject>();
 
-    // Listas y no conjuntos: el orden de insercion es el que sale por `toString()`, y la igualdad de
-    // los elementos la decide `equals` de cada uno, no un hash.
+    // Lists and not sets: the insertion order is the one that comes out through `toString()`, and
+    // the elements' equality is decided by each one's `equals`, not by a hash.
     private final List<Object> principals = new ArrayList<Object>();
     private final List<Object> pubCredentials = new ArrayList<Object>();
     private final List<Object> privCredentials = new ArrayList<Object>();
 
     private volatile boolean readOnly = false;
 
-    /** Un Subject vacio y modificable. */
+    /** An empty, modifiable Subject. */
     public Subject() {
     }
 
     /**
-     * Un Subject con esos tres conjuntos, copiados.
+     * A Subject with those three sets, copied.
      *
-     * <p>Los conjuntos se copian: cambiarlos despues no cambia el Subject. Los elementos <b>no</b> se
-     * chequean -- ver la nota de la clase --, pero ninguno puede ser null.
+     * <p>The sets are copied: changing them afterwards does not change the Subject. The elements
+     * are <b>not</b> checked -- see the class note --, but none may be null.
      *
-     * @throws NullPointerException si algun conjunto o algun elemento es null
+     * @throws NullPointerException if any set or any element is null
      */
     public Subject(boolean readOnly, Set<? extends Principal> principals,
             Set<?> pubCredentials, Set<?> privCredentials) {
@@ -118,7 +119,7 @@ public final class Subject implements Serializable {
         }
     }
 
-    /** Congela el Subject. No hay vuelta atras. */
+    /** Freezes the Subject. There is no going back. */
     public void setReadOnly() {
         this.readOnly = true;
     }
@@ -127,37 +128,37 @@ public final class Subject implements Serializable {
         return this.readOnly;
     }
 
-    /** Las identidades. Vista viva: agregar aca agrega al Subject. */
+    /** The identities. Live view: adding here adds to the Subject. */
     public Set<Principal> getPrincipals() {
         return new SecureSet<Principal>(this, this.principals, true);
     }
 
-    /** Las credenciales publicas. Vista viva. */
+    /** The public credentials. Live view. */
     public Set<Object> getPublicCredentials() {
         return new SecureSet<Object>(this, this.pubCredentials, false);
     }
 
-    /** Las credenciales privadas. Vista viva. */
+    /** The private credentials. Live view. */
     public Set<Object> getPrivateCredentials() {
         return new SecureSet<Object>(this, this.privCredentials, false);
     }
 
     /**
-     * Las identidades que son de esa clase o de una subclase. <b>Copia</b>, a diferencia de
-     * {@link #getPrincipals()}: agregar a lo que sale de aca no agrega al Subject.
+     * The identities of that class or a subclass. A <b>copy</b>, unlike {@link #getPrincipals()}:
+     * adding to what comes out of here does not add to the Subject.
      *
-     * @throws NullPointerException si la clase es null
+     * @throws NullPointerException if the class is null
      */
     public <T extends Principal> Set<T> getPrincipals(Class<T> c) {
         return filterByClass(this.principals, c);
     }
 
-    /** Las credenciales publicas de esa clase o subclase. Copia. */
+    /** The public credentials of that class or subclass. A copy. */
     public <T> Set<T> getPublicCredentials(Class<T> c) {
         return filterByClass(this.pubCredentials, c);
     }
 
-    /** Las credenciales privadas de esa clase o subclase. Copia. */
+    /** The private credentials of that class or subclass. A copy. */
     public <T> Set<T> getPrivateCredentials(Class<T> c) {
         return filterByClass(this.privCredentials, c);
     }
@@ -180,64 +181,64 @@ public final class Subject implements Serializable {
         return out;
     }
 
-    /** El Subject atado al hilo actual, o null si no hay ninguno. */
+    /** The Subject bound to the current thread, or null if there is none. */
     public static Subject current() {
-        return ACTUAL.get();
+        return CURRENT.get();
     }
 
     /**
-     * Corre la accion con este Subject atado al hilo.
+     * Runs the action with this Subject bound to the thread.
      *
-     * <p>Envuelve <b>cualquier</b> excepcion de la accion en {@code CompletionException}, las de
-     * ejecucion incluidas. Es lo que hace el JDK y hay que tenerlo presente: un
-     * {@code IllegalStateException} que adentro se veia sale de aca como otra cosa.
+     * <p>It wraps <b>any</b> exception of the action in {@code CompletionException}, runtime ones
+     * included. It is what the JDK does and it has to be kept in mind: an
+     * {@code IllegalStateException} seen inside comes out of here as something else.
      *
-     * @throws NullPointerException si la accion es null
+     * @throws NullPointerException if the action is null
      */
     public static <T> T callAs(Subject subject, Callable<T> action) throws CompletionException {
         if (action == null) {
             throw new NullPointerException();
         }
-        Subject anterior = ACTUAL.get();
-        ACTUAL.set(subject);
+        Subject previous = CURRENT.get();
+        CURRENT.set(subject);
         try {
             return action.call();
         } catch (Exception e) {
             throw new CompletionException(e);
         } finally {
-            // En un `finally` y restaurando el anterior --no borrando--: es lo que hace que anidar
-            // dos `callAs` deje el de afuera intacto al volver del de adentro.
-            restore(anterior);
+            // In a `finally` and restoring the previous one --not clearing--: it is what makes
+            // nesting two `callAs` leave the outer one intact on coming back from the inner one.
+            restore(previous);
         }
     }
 
     /**
-     * Corre la accion con este Subject atado al hilo.
+     * Runs the action with this Subject bound to the thread.
      *
-     * @deprecated el mecanismo de control de acceso al que pertenecia ya no existe; usar
-     *     {@link #callAs}. Sigue funcionando y sigue atando el Subject.
+     * @deprecated the access control mechanism it belonged to no longer exists; use {@link
+     *     #callAs}. It still works and still binds the Subject.
      */
     @Deprecated
     public static <T> T doAs(Subject subject, PrivilegedAction<T> action) {
         if (action == null) {
             throw new NullPointerException("invalid null action provided");
         }
-        Subject anterior = ACTUAL.get();
-        ACTUAL.set(subject);
+        Subject previous = CURRENT.get();
+        CURRENT.set(subject);
         try {
             return action.run();
         } finally {
-            restore(anterior);
+            restore(previous);
         }
     }
 
     /**
-     * Idem, para una accion que puede lanzar.
+     * Likewise, for an action that may throw.
      *
-     * <p>Envuelve solo las excepciones <b>declaradas</b>: un {@code RuntimeException} sale tal cual.
-     * Es la diferencia con {@link #callAs}, que envuelve todo.
+     * <p>It wraps only the <b>declared</b> exceptions: a {@code RuntimeException} comes out as it
+     * is. It is the difference from {@link #callAs}, which wraps everything.
      *
-     * @deprecated ver {@link #doAs(Subject, PrivilegedAction)}
+     * @deprecated see {@link #doAs(Subject, PrivilegedAction)}
      */
     @Deprecated
     public static <T> T doAs(Subject subject, PrivilegedExceptionAction<T> action)
@@ -245,8 +246,8 @@ public final class Subject implements Serializable {
         if (action == null) {
             throw new NullPointerException("invalid null action provided");
         }
-        Subject anterior = ACTUAL.get();
-        ACTUAL.set(subject);
+        Subject previous = CURRENT.get();
+        CURRENT.set(subject);
         try {
             return action.run();
         } catch (RuntimeException e) {
@@ -254,17 +255,18 @@ public final class Subject implements Serializable {
         } catch (Exception e) {
             throw new PrivilegedActionException(e);
         } finally {
-            restore(anterior);
+            restore(previous);
         }
     }
 
     /**
-     * Igual que {@link #doAs(Subject, PrivilegedAction)}.
+     * Same as {@link #doAs(Subject, PrivilegedAction)}.
      *
-     * <p>El {@code AccessControlContext} se ignora, y no es un atajo de esta implementacion: sin
-     * gestor de seguridad no hay contexto que combinar, asi que en el JDK tambien deja de importar.
+     * <p>The {@code AccessControlContext} is ignored, and it is not a shortcut of this
+     * implementation: without a security manager there is no context to combine, so in the JDK it
+     * stops mattering too.
      *
-     * @deprecated ver {@link #doAs(Subject, PrivilegedAction)}
+     * @deprecated see {@link #doAs(Subject, PrivilegedAction)}
      */
     @Deprecated
     public static <T> T doAsPrivileged(Subject subject, PrivilegedAction<T> action,
@@ -273,9 +275,9 @@ public final class Subject implements Serializable {
     }
 
     /**
-     * Igual que {@link #doAs(Subject, PrivilegedExceptionAction)}.
+     * Same as {@link #doAs(Subject, PrivilegedExceptionAction)}.
      *
-     * @deprecated ver {@link #doAs(Subject, PrivilegedAction)}
+     * @deprecated see {@link #doAs(Subject, PrivilegedAction)}
      */
     @Deprecated
     public static <T> T doAsPrivileged(Subject subject, PrivilegedExceptionAction<T> action,
@@ -283,30 +285,30 @@ public final class Subject implements Serializable {
         return doAs(subject, action);
     }
 
-    private static void restore(Subject anterior) {
-        if (anterior == null) {
-            ACTUAL.remove();
+    private static void restore(Subject previous) {
+        if (previous == null) {
+            CURRENT.remove();
         } else {
-            ACTUAL.set(anterior);
+            CURRENT.set(previous);
         }
     }
 
     /**
-     * No se puede: el contrato de este metodo era leer el Subject de un contexto de control de
-     * acceso, y ese mecanismo ya no existe.
+     * It cannot: this method's contract was reading the Subject from an access control context, and
+     * that mechanism no longer exists.
      *
-     * <p>Lanza en vez de devolver null a proposito. Null se leeria como "no hay ningun Subject
-     * actuando", que es una respuesta -- y la equivocada. Usar {@link #current()}.
+     * <p>It throws instead of returning null on purpose. Null would read as "no Subject is acting",
+     * which is an answer -- and the wrong one. Use {@link #current()}.
      *
-     * @throws UnsupportedOperationException siempre
-     * @deprecated no tiene reemplazo directo; usar {@link #current()}
+     * @throws UnsupportedOperationException always
+     * @deprecated it has no direct replacement; use {@link #current()}
      */
     @Deprecated
     public static Subject getSubject(AccessControlContext acc) {
         throw new UnsupportedOperationException("getSubject is not supported");
     }
 
-    /** Dos Subjects son el mismo si tienen los mismos tres conjuntos. */
+    /** Two Subjects are the same if they have the same three sets. */
     @Override
     public boolean equals(Object o) {
         if (o == this) {
@@ -336,10 +338,10 @@ public final class Subject implements Serializable {
     }
 
     /**
-     * XOR de los hash de los elementos de los tres conjuntos.
+     * XOR of the hashes of the elements of the three sets.
      *
-     * <p>Tiene que ser un XOR y no una suma con posicion: {@code equals} no mira el orden, asi que el
-     * hash tampoco puede.
+     * <p>It has to be an XOR and not a positional sum: {@code equals} does not look at the order,
+     * so the hash cannot either.
      */
     @Override
     public int hashCode() {
@@ -366,20 +368,20 @@ public final class Subject implements Serializable {
         return sb.toString();
     }
 
-    private static void listEach(StringBuilder sb, List<Object> list, String etiqueta) {
+    private static void listEach(StringBuilder sb, List<Object> list, String label) {
         int i = 0;
         while (i < list.size()) {
-            sb.append(etiqueta).append(list.get(i)).append("\n");
+            sb.append(label).append(list.get(i)).append("\n");
             i = i + 1;
         }
     }
 
     /**
-     * La vista viva de uno de los tres conjuntos.
+     * The live view of one of the three sets.
      *
-     * <p>Hace dos cosas que un {@code Set} normal no: rechaza escrituras si el Subject esta
-     * congelado, y --en el conjunto de identidades-- rechaza lo que no es un {@code Principal}. Las
-     * dos con la excepcion que usa el JDK, que en el segundo caso no es la que uno esperaria.
+     * <p>It does two things a normal {@code Set} does not: it rejects writes if the Subject is
+     * frozen, and --in the identities set-- it rejects what is not a {@code Principal}. Both with
+     * the exception the JDK uses, which in the second case is not the one one would expect.
      */
     private static final class SecureSet<E> extends AbstractSet<E> {
 
@@ -411,8 +413,8 @@ public final class Subject implements Serializable {
             if (o == null) {
                 throw new NullPointerException("invalid null input(s)");
             }
-            // SecurityException y no ClassCastException: es lo que tira el JDK. El chequeo existe
-            // porque el generico se borra y la lista puede llegar cruda.
+            // SecurityException and not ClassCastException: it is what the JDK throws. The check
+            // exists because the generic is erased and the list may arrive raw.
             if (this.ofPrincipals && !(o instanceof Principal)) {
                 throw new SecurityException("attempting to add an object which is not an instance "
                     + "of java.security.Principal to a Subject's Principal Set");
@@ -455,9 +457,9 @@ public final class Subject implements Serializable {
                 }
 
                 public void remove() {
-                    // El chequeo va tambien aca y no solo en `remove(Object)`: quitar por el
-                    // iterador es la otra puerta al mismo conjunto, y dejarla abierta haria que
-                    // `setReadOnly()` no sirviera para nada.
+                    // The check goes here too and not only in `remove(Object)`: removing through
+                    // the iterator is the other door to the same set, and leaving it open would
+                    // make `setReadOnly()` useless.
                     if (owner.readOnly) {
                         throw new IllegalStateException("Subject is read-only");
                     }

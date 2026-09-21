@@ -1,16 +1,16 @@
 package javax.naming;
 
 /**
- * El que sabe convertir una cadena en un `Name` **con la sintaxis de un espacio de nombres**.
+ * The one that knows how to turn a string into a `Name` **with a namespace's syntax**.
  *
- * <p>Existe porque la sintaxis no es del que llama sino del proveedor: para parsear un nombre de
- * LDAP hay que saber que se separa con coma, que se cita con comillas y que el orden es de derecha
- * a izquierda. En vez de exponer esas propiedades, `Context.getNameParser()` devuelve un objeto
- * que ya las tiene adentro, y el que llama solo le pasa la cadena.
+ * <p>It exists because the syntax belongs not to the caller but to the provider: to parse an LDAP
+ * name you need to know it separates with a comma, quotes with double quotes and orders right to
+ * left. Instead of exposing those properties, `Context.getNameParser()` returns an object that
+ * already has them inside, and the caller just passes it the string.
  *
- * <p>Dos contextos distintos pueden devolver el **mismo** parser, y ahi el contrato dice algo
- * util: si `p1.equals(p2)`, los dos nombres viven en el mismo espacio de nombres y se pueden
- * comparar entre si. Es la unica manera de saberlo sin preguntarle al servidor.
+ * <p>Two different contexts may return the **same** parser, and there the contract says something
+ * useful: if `p1.equals(p2)`, both names live in the same namespace and can be compared with each
+ * other. It is the only way to know that without asking the server.
  */
 public interface NameParser {
 

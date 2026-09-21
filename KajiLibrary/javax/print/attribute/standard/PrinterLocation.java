@@ -6,9 +6,9 @@ import javax.print.attribute.PrintServiceAttribute;
 import javax.print.attribute.TextSyntax;
 
 /**
- * Donde esta fisicamente la impresora, en palabras.
+ * Where the printer physically is, in words.
  *
- * <p>Para que alguien la encuentre y vaya a buscar el papel.
+ * <p>So that somebody can find it and go fetch the paper.
  */
 public final class PrinterLocation extends TextSyntax implements PrintServiceAttribute {
 

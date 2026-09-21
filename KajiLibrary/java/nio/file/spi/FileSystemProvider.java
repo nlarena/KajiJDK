@@ -30,83 +30,83 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 
-// La costura por la que se enchufa un sistema de archivos: todo lo que `Files` hace, lo hace
-// llamando a un proveedor.
+// The seam a filesystem plugs into: everything `Files` does, it does by calling a provider.
 //
-// **Como esta partida la clase, que es lo que explica que metodos son `abstract`.** Lo `abstract` es
-// lo que ningun proveedor puede heredar de otro --borrar, copiar, crear un directorio, leer
-// atributos--; lo concreto son las combinaciones que se arman con eso: `deleteIfExists` es
-// `delete()` atrapando `NoSuchFileException`, y `readAttributesIfExists` es lo mismo con
-// `readAttributes`. Escribirlas una vez aca en vez de en cada proveedor es el punto de la clase.
+// **How the class is split, which is what explains which methods are `abstract`.** What is
+// `abstract` is what no provider can inherit from another --deleting, copying, creating a directory,
+// reading attributes--; what is concrete is the combinations built out of that: `deleteIfExists` is
+// `delete()` catching `NoSuchFileException`, and `readAttributesIfExists` is the same with
+// `readAttributes`. Writing them once here instead of in each provider is the point of the class.
 //
-// **Los tres metodos de canales estan, y `newByteChannel` es la razon por la que importan.** Es
-// `abstract` --como en el JDK-- y es de donde salen `newInputStream` y `newOutputStream` por
-// omision: un proveedor que sepa abrir un canal ya sabe abrir los dos streams, y no tiene que
-// escribirlos. `newFileChannel` y `newAsynchronousFileChannel` son concretos y por omision fallan,
-// tambien como en el JDK: son la promesa opcional de que el canal devuelto ademas se puede mapear a
-// memoria o candar, y eso no lo puede cumplir cualquier proveedor.
+// **The three channel methods are here, and `newByteChannel` is why they matter.** It is `abstract`
+// --as in the JDK-- and it is where `newInputStream` and `newOutputStream` come from by default: a
+// provider that knows how to open a channel already knows how to open both streams, and does not
+// have to write them. `newFileChannel` and `newAsynchronousFileChannel` are concrete and fail by
+// default, also as in the JDK: they are the optional promise that the returned channel can on top of
+// that be memory-mapped or locked, and not every provider can honour that.
 //
-// La API entera de la clase esta. Lo que un proveedor concreto pueda hacer con ella es asunto suyo:
-// el de esta VM abre canales sobre los seis nativos de `Fs` --que leen y escriben el archivo entero
-// de una-- y por eso no ofrece el asincronico, donde la firma prometeria un paralelismo que no hay.
-// Ver la cabecera de `java.nio.channels.AsynchronousFileChannel`.
+// The class's whole API is here. What a concrete provider can do with it is its own business: this
+// VM's opens channels over `Fs`'s natives --which read and write the whole file at once-- and that
+// is why it does not offer the asynchronous one, where the signature would promise a parallelism
+// that is not there. See `java.nio.channels.AsynchronousFileChannel`'s header.
 public abstract class FileSystemProvider {
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected FileSystemProvider() {
     }
 
     /**
-     * Los proveedores instalados, con el de por omision primero.
+     * The installed providers, with the default one first.
      *
-     * <p>KajiJDK devuelve **exactamente uno**: el del esquema `file`. No hay carga por servicios
-     * --nada que descubra proveedores en el classpath-- asi que la lista no puede crecer, y por eso
-     * es inmutable en vez de una copia defensiva.
+     * <p>KajiJDK returns **exactly one**: the `file` scheme's. There is no service loading --nothing
+     * that discovers providers on the class path-- so the list cannot grow, and that is why it is
+     * immutable rather than a defensive copy.
      */
     public static List<FileSystemProvider> installedProviders() {
         return Collections.singletonList(FileSystems.getDefault().provider());
     }
 
-    /** El esquema de URI que atiende este proveedor: `"file"`, `"jar"`, ... */
+    /** The URI scheme this provider serves: `"file"`, `"jar"`, ... */
     public abstract String getScheme();
 
-    /** Crea un sistema de archivos nuevo para `uri`. */
+    /** It creates a fresh filesystem for `uri`. */
     public abstract FileSystem newFileSystem(URI uri, Map<String, ?> env) throws IOException;
 
-    /** El sistema de archivos que ya existe para `uri`. */
+    /** The filesystem that already exists for `uri`. */
     public abstract FileSystem getFileSystem(URI uri);
 
-    /** La ruta que nombra `uri`. */
+    /** The path `uri` names. */
     public abstract Path getPath(URI uri);
 
     /**
-     * Crea un sistema de archivos a partir de un archivo --tipicamente un ZIP--.
+     * It creates a filesystem out of a file --typically a ZIP.
      *
-     * <p>Por omision falla: es la sobrecarga que solo tiene sentido para proveedores de contenedor.
+     * <p>By default it fails: it is the overload that only makes sense for container providers.
      */
     public FileSystem newFileSystem(Path path, Map<String, ?> env) throws IOException {
         throw new UnsupportedOperationException();
     }
 
     /**
-     * Abre `path` para leer.
+     * It opens `path` for reading.
      *
-     * <p>Concreto porque se arma sobre un canal de lectura envuelto en un stream. Ningun proveedor
-     * necesita escribirlo, y por eso esta aca una vez.
+     * <p>Concrete because it is built on a read channel wrapped in a stream. No provider needs to
+     * write it, and that is why it is here once.
      *
-     * <p>`APPEND` y `WRITE` se rechazan en vez de ignorarse: pedir que se escriba algo que se va a
-     * devolver como stream de lectura no es una opcion redundante, es una confusion sobre lo que se
-     * esta abriendo, y en silencio se descubre tarde.
+     * <p>`APPEND` and `WRITE` are rejected rather than ignored: asking that something be written
+     * that is going to be returned as a read stream is not a redundant option, it is a confusion
+     * about what is being opened, and in silence it is found out late.
      *
-     * <p><strong>El canal sale de `Files.newByteChannel`, no de `this.newByteChannel`</strong>, y no
-     * es un descuido: es lo que hace el JDK --se comprobo desasemblando `FileSystemProvider`-- y se
-     * copia para que las dos VMs contesten igual. Notar que `newOutputStream`, cuatro lineas mas
-     * abajo, si llama a `this`: la asimetria es del JDK, no de aca. Da lo mismo para cualquier
-     * proveedor real, porque la ruta pertenece al proveedor que la abre; solo se nota si a un
-     * proveedor se le pasa una ruta ajena, y ahi el JDK atiende a la ruta. **No "arreglar" esto sin
-     * volver a medir contra el JDK**: cambiarlo por `this` es una divergencia observable.
+     * <p><strong>The channel comes from `Files.newByteChannel`, not from
+     * `this.newByteChannel`</strong>, and it is not an oversight: it is what the JDK does --checked
+     * by disassembling `FileSystemProvider`-- and it is copied so the two VMs answer the same. Note
+     * that `newOutputStream`, four lines below, does call `this`: the asymmetry is the JDK's, not
+     * this file's. It comes to the same for any real provider, because the path belongs to the
+     * provider that opens it; it only shows if a provider is handed a foreign path, and there the JDK
+     * attends to the path. **Do not "fix" this without measuring against the JDK again**: changing it
+     * to `this` is an observable divergence.
      *
-     * @throws UnsupportedOperationException si se pide `APPEND` o `WRITE`
+     * @throws UnsupportedOperationException if `APPEND` or `WRITE` is asked for
      */
     public InputStream newInputStream(Path path, OpenOption... options) throws IOException {
         for (OpenOption opt : options) {
@@ -118,14 +118,14 @@ public abstract class FileSystemProvider {
     }
 
     /**
-     * Abre `path` para escribir, tambien sobre `newByteChannel`.
+     * It opens `path` for writing, also over `newByteChannel`.
      *
-     * <p>Sin opciones vale lo que vale en `Files`: crear si no esta y truncar si estaba. `READ` es
-     * `IllegalArgumentException` --y no `UnsupportedOperationException` como el caso simetrico de
-     * `newInputStream`-- porque asi lo distingue el JDK: alla la opcion es imposible de honrar, aca
-     * el argumento se contradice con la operacion.
+     * <p>With no options what holds in `Files` holds: create if it is not there and truncate if it
+     * was. `READ` is `IllegalArgumentException` --and not `UnsupportedOperationException` like
+     * `newInputStream`'s symmetric case-- because that is how the JDK tells them apart: there the
+     * option is impossible to honour, here the argument contradicts the operation.
      *
-     * @throws IllegalArgumentException si se pide `READ`
+     * @throws IllegalArgumentException if `READ` is asked for
      */
     public OutputStream newOutputStream(Path path, OpenOption... options) throws IOException {
         Set<OpenOption> opts = new HashSet<OpenOption>();
@@ -145,22 +145,23 @@ public abstract class FileSystemProvider {
     }
 
     /**
-     * Abre un canal sobre `path`: la operacion de la que salen las demas formas de leer y escribir.
+     * It opens a channel over `path`: the operation the other ways of reading and writing come out
+     * of.
      *
-     * <p>Es `abstract` y es el unico de los tres metodos de canal que lo es, porque es el minimo:
-     * un proveedor que sepa contestarlo ya le da a sus usuarios los dos streams y todo lo que
-     * `Files` arma encima. Los otros dos prometen mas y por eso son opcionales.
+     * <p>It is `abstract` and it is the only one of the three channel methods that is, because it is
+     * the minimum: a provider that can answer it already gives its users both streams and everything
+     * `Files` builds on top. The other two promise more and are therefore optional.
      */
     public abstract SeekableByteChannel newByteChannel(Path path, Set<? extends OpenOption> options,
             FileAttribute<?>... attrs) throws IOException;
 
     /**
-     * Como `newByteChannel`, pero prometiendo un `FileChannel`.
+     * Like `newByteChannel`, but promising a `FileChannel`.
      *
-     * <p>Por omision falla, y la diferencia con `newByteChannel` es lo que explica que sean dos
-     * metodos: un `FileChannel` no es solo un canal con posicion, es uno que ademas se puede mapear
-     * a memoria y candar contra otros procesos. Un proveedor de ZIP puede dar lo primero y no lo
-     * segundo, asi que la promesa se pide aparte.
+     * <p>By default it fails, and the difference from `newByteChannel` is what explains their being
+     * two methods: a `FileChannel` is not just a channel with a position, it is one that on top of
+     * that can be memory-mapped and locked against other processes. A ZIP provider can give the first
+     * and not the second, so the promise is asked for separately.
      */
     public FileChannel newFileChannel(Path path, Set<? extends OpenOption> options,
             FileAttribute<?>... attrs) throws IOException {
@@ -168,13 +169,13 @@ public abstract class FileSystemProvider {
     }
 
     /**
-     * Un canal asincronico sobre `path`, corriendo las operaciones en `executor`.
+     * An asynchronous channel over `path`, running the operations on `executor`.
      *
-     * <p>Por omision falla. El proveedor de esta VM **no lo sobreescribe**: los seis nativos de
-     * archivo son sincronicos y leen el archivo entero de una, asi que lo unico que se podria
-     * devolver es una fachada que corre operaciones sincronicas en otro hilo --sin cancelacion y sin
-     * paralelismo real--. Devolver eso seria prometer justo las propiedades por las que uno elige
-     * esta API. El razonamiento completo esta en la cabecera de `AsynchronousFileChannel`.
+     * <p>By default it fails. This VM's provider does **not** override it: the file natives are
+     * synchronous and read the whole file at once, so the only thing that could be returned is a
+     * facade that runs synchronous operations on another thread --with no cancellation and no real
+     * parallelism. Returning that would be promising exactly the properties one chooses this API
+     * for. The full reasoning is in `AsynchronousFileChannel`'s header.
      */
     public AsynchronousFileChannel newAsynchronousFileChannel(Path path,
             Set<? extends OpenOption> options, ExecutorService executor,
@@ -182,33 +183,33 @@ public abstract class FileSystemProvider {
         throw new UnsupportedOperationException();
     }
 
-    /** Abre un directorio para recorrerlo, quedandose con las entradas que acepte `filter`. */
+    /** It opens a directory to walk it, keeping the entries `filter` accepts. */
     public abstract DirectoryStream<Path> newDirectoryStream(Path dir,
             DirectoryStream.Filter<? super Path> filter) throws IOException;
 
-    /** Crea un directorio. */
+    /** It creates a directory. */
     public abstract void createDirectory(Path dir, FileAttribute<?>... attrs) throws IOException;
 
-    /** Crea un enlace simbolico. Por omision falla: no todo sistema los tiene. */
+    /** It creates a symbolic link. By default it fails: not every system has them. */
     public void createSymbolicLink(Path link, Path target, FileAttribute<?>... attrs)
             throws IOException {
         throw new UnsupportedOperationException();
     }
 
-    /** Crea un enlace duro. Por omision falla. */
+    /** It creates a hard link. By default it fails. */
     public void createLink(Path link, Path existing) throws IOException {
         throw new UnsupportedOperationException();
     }
 
-    /** Borra un archivo, o un directorio vacio. */
+    /** It deletes a file, or an empty directory. */
     public abstract void delete(Path path) throws IOException;
 
     /**
-     * Borra si esta; devuelve si borro algo.
+     * It deletes if it is there; it returns whether it deleted anything.
      *
-     * <p>Concreto porque es `delete()` atrapando la de "no estaba" -- ningun proveedor necesita
-     * escribirlo. Notar que **no es atomico**: entre el intento y el fallo alguien pudo crear el
-     * archivo.
+     * <p>Concrete because it is `delete()` catching the "was not there" one -- no provider needs to
+     * write it. Note that **it is not atomic**: between the attempt and the failure somebody could
+     * have created the file.
      */
     public boolean deleteIfExists(Path path) throws IOException {
         try {
@@ -219,55 +220,56 @@ public abstract class FileSystemProvider {
         }
     }
 
-    /** El destino de un enlace simbolico. Por omision falla. */
+    /** A symbolic link's target. By default it fails. */
     public Path readSymbolicLink(Path link) throws IOException {
         throw new UnsupportedOperationException();
     }
 
-    /** Copia `source` a `target`. */
+    /** It copies `source` to `target`. */
     public abstract void copy(Path source, Path target, CopyOption... options) throws IOException;
 
-    /** Mueve `source` a `target`. */
+    /** It moves `source` to `target`. */
     public abstract void move(Path source, Path target, CopyOption... options) throws IOException;
 
-    /** Si las dos rutas nombran el mismo archivo. */
+    /** Whether the two paths name the same file. */
     public abstract boolean isSameFile(Path path, Path path2) throws IOException;
 
-    /** Si el archivo esta marcado como oculto. */
+    /** Whether the file is marked hidden. */
     public abstract boolean isHidden(Path path) throws IOException;
 
-    /** El volumen donde vive el archivo. */
+    /** The volume the file lives on. */
     public abstract FileStore getFileStore(Path path) throws IOException;
 
     /**
-     * Comprueba que el archivo existe y que se puede acceder de los modos pedidos.
+     * It checks that the file exists and that it can be accessed in the modes asked for.
      *
-     * <p>Sin modos comprueba solo que existe. Devolver `void` y tirar es a proposito: el motivo del
-     * rechazo --no existe, o existe y no hay permiso-- es informacion que un booleano perderia.
+     * <p>With no modes it checks only that it exists. Returning `void` and throwing is on purpose:
+     * the reason for the refusal --it does not exist, or it does and there is no permission-- is
+     * information a boolean would lose.
      */
     public abstract void checkAccess(Path path, AccessMode... modes) throws IOException;
 
-    /** Una vista de atributos del archivo, o `null` si el proveedor no la tiene. */
+    /** A view of the file's attributes, or `null` if the provider does not have it. */
     public abstract <V extends FileAttributeView> V getFileAttributeView(Path path, Class<V> type,
             LinkOption... options);
 
-    /** Lee los atributos de una sola vez, con el tipo pedido. */
+    /** It reads the attributes in one go, of the type asked for. */
     public abstract <A extends BasicFileAttributes> A readAttributes(Path path, Class<A> type,
             LinkOption... options) throws IOException;
 
-    /** Lee atributos sueltos por nombre: `"basic:size,lastModifiedTime"`, `"posix:*"`. */
+    /** It reads individual attributes by name: `"basic:size,lastModifiedTime"`, `"posix:*"`. */
     public abstract Map<String, Object> readAttributes(Path path, String attributes,
             LinkOption... options) throws IOException;
 
-    /** Fija un atributo por nombre. */
+    /** It sets an attribute by name. */
     public abstract void setAttribute(Path path, String attribute, Object value,
             LinkOption... options) throws IOException;
 
     /**
-     * Si el archivo existe.
+     * Whether the file exists.
      *
-     * <p>Concreto: es `checkAccess` sin modos, atrapando. Un proveedor que tenga una forma mas
-     * barata de contestarlo lo sobreescribe.
+     * <p>Concrete: it is `checkAccess` with no modes, catching. A provider with a cheaper way of
+     * answering it overrides it.
      */
     public boolean exists(Path path, LinkOption... options) {
         try {
@@ -279,10 +281,11 @@ public abstract class FileSystemProvider {
     }
 
     /**
-     * Los atributos, o `null` si el archivo no esta.
+     * The attributes, or `null` if the file is not there.
      *
-     * <p>Existe para ahorrar el par comprobar-y-leer, que ademas tiene una carrera en el medio: aca
-     * la lectura es una sola y el `null` sale de la misma operacion que hubiera fallado.
+     * <p>It exists to save the check-then-read pair, which on top of that has a race in the middle:
+     * here the read is a single one and the `null` comes out of the very operation that would have
+     * failed.
      */
     public <A extends BasicFileAttributes> A readAttributesIfExists(Path path, Class<A> type,
             LinkOption... options) throws IOException {

@@ -3,39 +3,39 @@ package com.sun.java.accessibility.util;
 import java.beans.PropertyChangeListener;
 
 /**
- * Escucha los cambios de propiedad de <strong>los objetos accesibles</strong>, no de los
- * componentes.
+ * It listens to the property changes of <strong>the accessible objects</strong>, not of the
+ * components.
  *
- * <h2>En que se diferencia de los otros dos monitores</h2>
+ * <h2>How it differs from the other two monitors</h2>
  *
- * <p>{@link AWTEventMonitor} y {@link SwingEventMonitor} escuchan eventos de la interfaz: un clic,
- * una tecla, un cambio de foco. Este escucha el <strong>arbol de accesibilidad</strong>, que es otra
- * cosa: que cambio el nombre accesible de algo, que un elemento paso a estar deshabilitado, que
- * cambio la seleccion.
+ * <p>{@link AWTEventMonitor} and {@link SwingEventMonitor} listen to events of the interface: a
+ * click, a key, a change of focus. This one listens to the <strong>accessibility tree</strong>,
+ * which is another thing: that something's accessible name changed, that an element became
+ * disabled, that the selection changed.
  *
- * <p>La distincion importa porque no hay correspondencia uno a uno. Un solo evento de interfaz puede
- * cambiar varias propiedades accesibles, y una propiedad puede cambiar sin ningun evento de interfaz
- * — cuando el programa la modifica directamente.
+ * <p>The distinction matters because there is no one-to-one correspondence. A single interface
+ * event may change several accessible properties, and a property may change with no interface
+ * event at all -- when the program modifies it directly.
  *
- * <p>Un lector de pantalla necesita los dos: aquellos para saber que hizo el usuario, este para
- * saber que cambio en lo que hay para leer.
+ * <p>A screen reader needs both: those in order to know what the user did, this one in order to
+ * know what changed in what there is to read.
  */
 public class AccessibilityEventMonitor {
 
-    /** La lista compartida, con el mismo formato que la de los otros monitores. */
+    /** The shared list, with the same format as the other monitors'. */
     protected static final AccessibilityListenerList listenerList =
             new AccessibilityListenerList();
 
     public AccessibilityEventMonitor() {
     }
 
-    /** Escucha los cambios de propiedad de cualquier objeto accesible. */
+    /** It listens to the property changes of any accessible object. */
     public static void addPropertyChangeListener(PropertyChangeListener l) {
         EventQueueMonitor.maybeInitialize();
         listenerList.add(PropertyChangeListener.class, l);
     }
 
-    /** Deja de escucharlos. */
+    /** It stops listening to them. */
     public static void removePropertyChangeListener(PropertyChangeListener l) {
         listenerList.remove(PropertyChangeListener.class, l);
     }

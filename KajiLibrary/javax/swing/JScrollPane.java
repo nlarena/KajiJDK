@@ -6,6 +6,7 @@ import java.awt.LayoutManager;
 import java.awt.Point;
 import java.awt.Rectangle;
 
+import javax.accessibility.Accessible;
 import javax.accessibility.AccessibleContext;
 
 import javax.swing.border.Border;
@@ -13,28 +14,29 @@ import javax.swing.plaf.ScrollPaneUI;
 import javax.swing.plaf.basic.BasicScrollPaneUI;
 
 /**
- * Un panel que muestra un pedazo de algo grande, con barras para moverse.
+ * A pane that shows a piece of something large, with bars for moving about.
  *
- * <h2>No desplaza nada</h2>
+ * <h2>It scrolls nothing</h2>
  *
- * <p>El panel no mueve el contenido: lo mueve el {@link JViewport}, y las barras solo escriben en
- * su posicion. El panel es el que junta las piezas —ventana, dos barras, dos cabeceras, cuatro
- * esquinas—, les da una distribucion y mantiene sincronizados los modelos de las barras con lo que
- * la ventana muestra. Esa sincronizacion la hace el aspecto, no esta clase.
+ * <p>The pane does not move the content: the {@link JViewport} moves it, and the bars only
+ * write into its position. The pane is the one that gathers the pieces -- viewport, two bars,
+ * two headers, four corners --, gives them a layout and keeps the bars' models in step with
+ * what the viewport shows. That keeping in step is done by the look and feel, not by this
+ * class.
  *
- * <p>De ahi que casi todos los metodos sean pares {@code get}/{@code set} de piezas: agregarle un
- * componente al panel es agregarselo a su ventana ({@link #setViewportView}), y lo demas se
- * acomoda solo.
+ * <p>Hence almost every method is a {@code get}/{@code set} pair of pieces: adding a component
+ * to the pane is adding it to its viewport ({@link #setViewportView}), and the rest settles
+ * itself.
  *
- * <h2>El contenido puede opinar</h2>
+ * <h2>The content may have an opinion</h2>
  *
- * <p>Si el contenido implementa {@link Scrollable}, las barras le preguntan cuanto avanzar y la
- * distribucion le pregunta si quiere seguir al tamano de la ventana. La barra que hace esas
- * preguntas es {@link ScrollBar}, la que el panel crea; una barra puesta a mano con
- * {@link #setVerticalScrollBar} no las hace.
+ * <p>If the content implements {@link Scrollable}, the bars ask it how much to advance and the
+ * layout asks it whether it wants to follow the viewport's size. The bar that asks those
+ * questions is {@link ScrollBar}, the one the pane creates; a bar set by hand with
+ * {@link #setVerticalScrollBar} does not ask them.
  *
- * <p>No esta el desplazamiento por rueda: {@link #setWheelScrollingEnabled} guarda la propiedad,
- * pero sin eventos de rueda que despachar no hay a que responder.
+ * <p>Wheel scrolling is not there: {@link #setWheelScrollingEnabled} keeps the property, but
+ * with no wheel events to dispatch there is nothing to answer.
  */
 public class JScrollPane extends JComponent implements ScrollPaneConstants, Accessible {
 
@@ -66,7 +68,7 @@ public class JScrollPane extends JComponent implements ScrollPaneConstants, Acce
 
     private boolean wheelScrollState = true;
 
-    /** Un panel con ese contenido y esas dos politicas. */
+    /** A pane with that content and those two policies. */
     public JScrollPane(Component view, int vsbPolicy, int hsbPolicy) {
         setLayout(new ScrollPaneLayout$UIResource());
         setVerticalScrollBarPolicy(vsbPolicy);
@@ -85,7 +87,7 @@ public class JScrollPane extends JComponent implements ScrollPaneConstants, Acce
         }
     }
 
-    /** Un panel con ese contenido y las politicas "cuando haga falta". */
+    /** A pane with that content and the "as needed" policies. */
     public JScrollPane(Component view) {
         this(view, VERTICAL_SCROLLBAR_AS_NEEDED, HORIZONTAL_SCROLLBAR_AS_NEEDED);
     }
@@ -94,7 +96,7 @@ public class JScrollPane extends JComponent implements ScrollPaneConstants, Acce
         this(null, vsbPolicy, hsbPolicy);
     }
 
-    /** Un panel vacio. */
+    /** An empty pane. */
     public JScrollPane() {
         this(null, VERTICAL_SCROLLBAR_AS_NEEDED, HORIZONTAL_SCROLLBAR_AS_NEEDED);
     }
@@ -107,7 +109,7 @@ public class JScrollPane extends JComponent implements ScrollPaneConstants, Acce
         super.setUI(ui);
     }
 
-    /** Instala el aspecto basico; ver {@code JButton#updateUI}. */
+    /** It installs the basic look and feel; see {@code JButton#updateUI}. */
     public void updateUI() {
         setUI((ScrollPaneUI) BasicScrollPaneUI.createUI(this));
     }
@@ -116,7 +118,7 @@ public class JScrollPane extends JComponent implements ScrollPaneConstants, Acce
         return uiClassID;
     }
 
-    /** La distribucion tiene que ser una {@link ScrollPaneLayout}, o {@code null}. */
+    /** The layout has to be a {@link ScrollPaneLayout}, or {@code null}. */
     public void setLayout(LayoutManager layout) {
         if (layout instanceof ScrollPaneLayout) {
             super.setLayout(layout);
@@ -130,10 +132,10 @@ public class JScrollPane extends JComponent implements ScrollPaneConstants, Acce
     }
 
     /**
-     * Si: el maquetado para aca.
+     * Yes: the layout comes here.
      *
-     * <p>Un panel con barras tiene tamano propio, y lo que pase adentro no tiene por que obligar a
-     * recalcular la ventana entera.
+     * <p>A pane with bars has a size of its own, and whatever happens inside has no reason to
+     * force the whole window to be recomputed.
      */
     public boolean isValidateRoot() {
         return true;
@@ -171,7 +173,7 @@ public class JScrollPane extends JComponent implements ScrollPaneConstants, Acce
         repaint();
     }
 
-    /** El borde que se pinta alrededor de la ventana, por dentro del borde del panel. */
+    /** The border that is painted around the viewport, inside the pane's border. */
     public Border getViewportBorder() {
         return viewportBorder;
     }
@@ -182,7 +184,7 @@ public class JScrollPane extends JComponent implements ScrollPaneConstants, Acce
         firePropertyChange("viewportBorder", oldValue, viewportBorder);
     }
 
-    /** El rectangulo donde va ese borde: lo que queda sin cabeceras ni barras. */
+    /** The rectangle that border goes in: what is left with neither headers nor bars. */
     public Rectangle getViewportBorderBounds() {
         Rectangle borderR = new Rectangle(getSize());
 
@@ -228,7 +230,7 @@ public class JScrollPane extends JComponent implements ScrollPaneConstants, Acce
         return borderR;
     }
 
-    /** La barra que sabe preguntarle al contenido; ver {@link ScrollBar}. */
+    /** The bar that knows how to ask the content; see {@link ScrollBar}. */
     public JScrollBar createHorizontalScrollBar() {
         return new ScrollBar(JScrollBar.HORIZONTAL);
     }
@@ -289,18 +291,19 @@ public class JScrollPane extends JComponent implements ScrollPaneConstants, Acce
         }
         firePropertyChange("viewport", old, viewport);
 
-        if (accessibleContextExiste()) {
-            // El JDK reengancha aca el escucha de accesibilidad; sin contexto no hay nada.
+        if (accessibleContextExists()) {
+            // The JDK hooks the accessibility listener up again here; with no context there is
+            // nothing.
         }
         revalidate();
         repaint();
     }
 
-    private boolean accessibleContextExiste() {
+    private boolean accessibleContextExists() {
         return false;
     }
 
-    /** Poner contenido es ponerselo a la ventana; si no hay ventana, se crea una. */
+    /** Setting content is setting it on the viewport; if there is no viewport, one is created. */
     public void setViewportView(Component view) {
         if (getViewport() == null) {
             setViewport(createViewport());
@@ -325,7 +328,7 @@ public class JScrollPane extends JComponent implements ScrollPaneConstants, Acce
         repaint();
     }
 
-    /** Envuelve ese componente en una ventana y lo pone de cabecera de filas. */
+    /** It wraps that component in a viewport and sets it as the row header. */
     public void setRowHeaderView(Component view) {
         if (getRowHeader() == null) {
             setRowHeader(createViewport());
@@ -358,10 +361,10 @@ public class JScrollPane extends JComponent implements ScrollPaneConstants, Acce
     }
 
     /**
-     * La pieza de esa esquina.
+     * That corner's piece.
      *
-     * <p>Las esquinas "inicial" y "final" se resuelven segun la orientacion: en un idioma que se
-     * lee de derecha a izquierda, la inicial de arriba es la de arriba a la derecha.
+     * <p>The "leading" and "trailing" corners are resolved according to the orientation: in a
+     * language that is read right to left, the leading top one is the top right one.
      */
     public Component getCorner(String key) {
         boolean isLeftToRight = getComponentOrientation().isLeftToRight();
@@ -387,7 +390,7 @@ public class JScrollPane extends JComponent implements ScrollPaneConstants, Acce
         return null;
     }
 
-    /** Pone una pieza en una esquina; una esquina solo se ve si las dos barras que la rodean estan. */
+    /** It puts a piece in a corner; a corner is only seen if the two bars around it are there. */
     public void setCorner(String key, Component corner) {
         Component old;
         boolean isLeftToRight = getComponentOrientation().isLeftToRight();
@@ -427,7 +430,7 @@ public class JScrollPane extends JComponent implements ScrollPaneConstants, Acce
         repaint();
     }
 
-    /** Le pasa la orientacion a la ventana y a las dos barras. */
+    /** It passes the orientation on to the viewport and to the two bars. */
     public void setComponentOrientation(ComponentOrientation co) {
         super.setComponentOrientation(co);
         if (viewport != null) {
@@ -441,7 +444,7 @@ public class JScrollPane extends JComponent implements ScrollPaneConstants, Acce
         }
     }
 
-    /** Si la rueda desplaza; ver la nota de la clase. */
+    /** Whether the wheel scrolls; see the class note. */
     public boolean isWheelScrollingEnabled() {
         return wheelScrollState;
     }
@@ -485,20 +488,20 @@ public class JScrollPane extends JComponent implements ScrollPaneConstants, Acce
                 + ",viewport=" + viewportString + ",viewportBorder=" + viewportBorderString;
     }
 
-    /** Sin contexto de accesibilidad: no hay tecnologia asistiva que lo lea en esta VM. */
+    /** With no accessibility context: there is no assistive technology that reads it on this VM. */
     public AccessibleContext getAccessibleContext() {
         return null;
     }
 
     /**
-     * La barra que crea el panel: la que le pregunta al contenido cuanto avanzar.
+     * The bar the pane creates: the one that asks the content how much to advance.
      *
-     * <p>Si el contenido es {@link Scrollable}, los dos escalones salen de el; si no, el chico es
-     * uno y el grande es una pantalla. Fijar un escalon a mano corta la pregunta: a partir de ahi
-     * manda el numero fijado, que es lo que espera quien lo fijo.
+     * <p>If the content is {@link Scrollable}, both steps come from it; if not, the small one is
+     * one and the big one is a screenful. Fixing a step by hand cuts the question off: from there
+     * on the fixed number rules, which is what whoever fixed it expects.
      */
-    // `UIResource` sin calificar se resuelve a `ScrollPaneLayout.UIResource`, del mismo paquete,
-    // y no a la interfaz importada (#493). Va calificada.
+    // Unqualified, `UIResource` resolves to `ScrollPaneLayout.UIResource`, of the same package,
+    // and not to the imported interface (#493). It goes qualified.
     protected class ScrollBar extends JScrollBar implements javax.swing.plaf.UIResource {
 
         private boolean unitIncrementSet;

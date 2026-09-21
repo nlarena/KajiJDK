@@ -1,21 +1,21 @@
 package javax.management;
 
 /**
- * Se intento aplicar una consulta a un MBean de una clase que no corresponde.
+ * A query was applied to an MBean of a class it does not fit.
  *
- * <p>No tiene mensaje ni accesor: el valor ofensivo se guarda pero no se publica. Es asi en el JDK
- * y se respeta -- agregarle un getter que el JDK no tiene seria API inventada.
+ * <p>It has no message and no accessor: the offending value is kept but not published. It is like
+ * that in the JDK and is respected -- adding a getter the JDK does not have would be invented API.
  */
 public class InvalidApplicationException extends Exception {
 
     private static final long serialVersionUID = -3048022274675537269L;
 
     /**
-     * @serial el objeto sobre el que no se pudo aplicar la consulta
+     * @serial the object the query could not be applied to
      */
     private Object val;
 
-    /** @param val el objeto sobre el que fallo la aplicacion */
+    /** @param val the object the application failed on */
     public InvalidApplicationException(Object val) {
         this.val = val;
     }

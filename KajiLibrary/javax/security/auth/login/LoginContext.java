@@ -7,63 +7,66 @@ import javax.security.auth.callback.CallbackHandler;
 import javax.security.auth.spi.LoginModule;
 
 /**
- * KajiLibrary's javax.security.auth.login.LoginContext -- corre la cadena de autenticacion.
+ * KajiLibrary's javax.security.auth.login.LoginContext -- runs the authentication chain.
  *
- * <p>Le pide a la {@link Configuration} la lista de modulos de un nombre, los instancia y los corre
- * en dos fases. El resultado, si sale bien, es un {@link Subject} lleno de principales y
- * credenciales.
+ * <p>It asks the {@link Configuration} for the list of modules of a name, instantiates them and
+ * runs them in two phases. The result, if it goes well, is a {@link Subject} full of principals and
+ * credentials.
  *
- * <h2>Por que dos fases</h2>
+ * <h2>Why two phases</h2>
  *
- * <p>Primero se llama a {@code login()} en los modulos, y recien despues a {@code commit()}. Ningun
- * modulo escribe en el sujeto durante la primera fase.
+ * <p>First {@code login()} is called on the modules, and only afterwards {@code commit()}. No
+ * module writes to the subject during the first phase.
  *
- * <p>Es lo que evita un sujeto a medio llenar. Con una sola fase, una cadena de tres modulos donde
- * el tercero falla dejaria adentro del sujeto los principales de los dos primeros, y la aplicacion
- * recibiria un sujeto que parece autenticado y no lo esta. Con dos, o entran todos o no entra
- * ninguno: el fracaso llama a {@code abort()}.
+ * <p>It is what prevents a half-filled subject. With a single phase, a chain of three modules where
+ * the third fails would leave the principals of the first two inside the subject, and the
+ * application would receive a subject that looks authenticated and is not. With two, either all get
+ * in or none does: failure calls {@code abort()}.
  *
- * <h2>Como decide la cadena</h2>
+ * <h2>How the chain decides</h2>
  *
- * <p>Las reglas de {@link AppConfigurationEntry.LoginModuleControlFlag} se aplican asi:
+ * <p>The rules of {@link AppConfigurationEntry.LoginModuleControlFlag} are applied like this:
  *
  * <ul>
- *   <li>un modulo que anda y es <b>SUFFICIENT</b> corta el recorrido, salvo que antes haya fallado
- *       alguno obligatorio -- en ese caso el login ya esta perdido y cortar solo escondaria el
- *       motivo;
- *   <li>un <b>REQUISITE</b> que falla corta ahi mismo;
- *   <li>un <b>REQUIRED</b> que falla se anota y la cadena <b>sigue</b>. Seguir cuesta tiempo y es a
- *       proposito: si cortara, el tiempo de respuesta diria cual de los modulos rechazo, que es
- *       justo lo que no conviene contarle a quien esta probando;
- *   <li>si al final no fallo ningun obligatorio pero tampoco anduvo ninguno, se lanza
- *       {@link LoginException}: una cadena entera de opcionales que se desentienden no es un login
- *       exitoso.
+ *   <li>a module that succeeds and is <b>SUFFICIENT</b> cuts the walk, unless some mandatory one
+ *       failed before -- in that case the login is already lost and cutting would only hide the
+ *       reason;
+ *   <li>a <b>REQUISITE</b> that fails cuts right there;
+ *   <li>a <b>REQUIRED</b> that fails is noted and the chain <b>goes on</b>. Going on costs time and
+ *       is on purpose: if it cut, the response time would tell which of the modules rejected, which
+ *       is just what should not be told to whoever is probing;
+ *   <li>if at the end no mandatory one failed but none succeeded either, {@link LoginException} is
+ *       thrown: a whole chain of optional ones that stay out of it is not a successful login.
  * </ul>
  *
- * <p>El primer error obligatorio es el que se lanza, no el ultimo: es el que dice donde empezo el
- * problema.
+ * <p>The first mandatory error is the one thrown, not the last: it is the one that says where the
+ * problem began.
  *
- * <h2>Cuatro recorridos con la misma forma</h2>
+ * <h2>Four walks with the same shape</h2>
  *
- * <p>{@code login}, {@code commit}, {@code abort} y {@code logout} recorren la misma lista con las
- * mismas reglas, y se diferencian en <b>una</b> cosa: los dos primeros cortan ante un SUFFICIENT que
- * anda y los dos ultimos no. La asimetria es necesaria. Cortar en la ida es la definicion de
- * "suficiente"; cortar en la vuelta dejaria modulos con estado sin enterarse de que la cadena
- * termino.
+ * <p>{@code login}, {@code commit}, {@code abort} and {@code logout} walk the same list with the
+ * same rules. The first two cut at a SUFFICIENT that succeeds and the last two do not. The
+ * asymmetry is necessary. Cutting on the way in is the definition of "sufficient"; cutting on the
+ * way back would leave modules with state without finding out that the chain ended.
  *
- * <p>De ahi sale un detalle que sorprende la primera vez: un modulo que nunca llego a correr
- * <b>igual se instancia</b> cuando hay que abortar o cerrar sesion. Es lo correcto -- el recorrido
- * de limpieza tiene que llegar a todos los configurados-- y es lo que hace el JDK.
+ * <p>A failing REQUISITE, on the other hand, cuts in <b>all four</b> here. The note said the walks
+ * differ in one thing only; in the JDK they differ in two, because there a REQUISITE that fails in
+ * {@code abort} or {@code logout} is noted like a REQUIRED and the walk goes on, for the same
+ * reason as above. Here the modules after it are not aborted or logged out.
  *
- * <h2>El estado compartido</h2>
+ * <p>From there comes a detail that surprises the first time: a module that never got to run <b>is
+ * instantiated all the same</b> when the chain has to be aborted or logged out. It is the right
+ * thing -- the cleanup walk has to reach all the configured ones-- and it is what the JDK does.
  *
- * <p>Los modulos de una cadena comparten un mapa que sobrevive entre ellos. Para eso esta: el primer
- * modulo le pide la contrasena a la persona una vez y la deja ahi, y los que siguen la usan sin
- * volver a preguntar.
+ * <h2>The shared state</h2>
+ *
+ * <p>The modules of a chain share a map that survives between them. That is what it is for: the
+ * first module asks the person for the password once and leaves it there, and the ones that follow
+ * use it without asking again.
  */
 public class LoginContext {
 
-    /** La propiedad de seguridad con el manejador por omision. */
+    /** The security property with the default handler. */
     private static final String DEFAULT_HANDLER = "auth.login.defaultCallbackHandler";
 
     private final String name;
@@ -71,49 +74,52 @@ public class LoginContext {
     private final Configuration configuration;
     private final AppConfigurationEntry[] entries;
 
-    /** Uno por entrada; null hasta que ese modulo hace falta. */
+    /** One per entry; null until that module is needed. */
     private final LoginModule[] modules;
 
-    /** Compartido entre los modulos de esta cadena; ver la nota de la clase. */
+    /** Shared between the modules of this chain; see the class note. */
     private final Map<String, Object> sharedState = new HashMap<String, Object>();
 
-    /** Null hasta el primer {@link #login}, salvo que lo haya dado quien llama. */
+    /** Null until the first {@link #login}, unless the caller gave it. */
     private Subject subject;
 
-    /** Si el sujeto lo trajo quien llama; decide que devuelve {@link #getSubject} al fallar. */
+    /**
+     * Whether the caller brought the subject; it decides what {@link #getSubject} returns on
+     * failure.
+     */
     private final boolean subjectProvided;
 
-    /** Si la ultima cadena cerro bien. */
+    /** Whether the last chain went through. */
     private boolean loginSucceeded = false;
 
-    /** Con un sujeto nuevo y sin manejador propio. */
+    /** With a new subject and no handler of its own. */
     public LoginContext(String name) throws LoginException {
         this(name, null, null, null);
     }
 
-    /** Sobre un sujeto ya existente. */
+    /** On an existing subject. */
     public LoginContext(String name, Subject subject) throws LoginException {
         this(name, subject, null, null);
     }
 
-    /** Con un manejador que sabe preguntarle a la persona. */
+    /** With a handler that knows how to ask the person. */
     public LoginContext(String name, CallbackHandler callbackHandler) throws LoginException {
         this(name, null, callbackHandler, null);
     }
 
-    /** Las dos cosas. */
+    /** Both things. */
     public LoginContext(String name, Subject subject, CallbackHandler callbackHandler)
         throws LoginException {
         this(name, subject, callbackHandler, null);
     }
 
     /**
-     * Todo explicito, incluida la configuracion.
+     * Everything explicit, including the configuration.
      *
-     * <p>Pasarla aca es la forma de no depender de la global: dos partes del mismo proceso pueden
-     * autenticarse con reglas distintas.
+     * <p>Passing it here is the way not to depend on the global one: two parts of the same process
+     * can authenticate with different rules.
      *
-     * @throws LoginException si el nombre es null o no tiene modulos configurados
+     * @throws LoginException if the name is null or has no configured modules
      */
     public LoginContext(String name, Subject subject, CallbackHandler callbackHandler,
                         Configuration config) throws LoginException {
@@ -134,12 +140,12 @@ public class LoginContext {
     }
 
     /**
-     * Corre la cadena: {@code login} en todos, despues {@code commit}.
+     * Runs the chain: {@code login} on all, then {@code commit}.
      *
-     * <p>Si cualquiera de las dos fases falla, se aborta la cadena entera y se lanza el <b>primer</b>
-     * error; el que salga del aborto no tapa al original.
+     * <p>If either of the two phases fails, the whole chain is aborted and the <b>first</b> error
+     * is thrown; the one that comes out of the abort does not cover up the original.
      *
-     * @throws LoginException si la autenticacion no cierra
+     * @throws LoginException if the authentication does not go through
      */
     public void login() throws LoginException {
         this.loginSucceeded = false;
@@ -154,19 +160,19 @@ public class LoginContext {
             try {
                 invoke(Phase.ABORT);
             } catch (LoginException ignored) {
-                // El error del aborto no aporta nada y taparia al que de verdad importa.
+                // The abort's error adds nothing and would cover up the one that really matters.
             }
             throw first;
         }
     }
 
     /**
-     * Deshace la autenticacion.
+     * Undoes the authentication.
      *
-     * <p>Recorre <b>todos</b> los modulos configurados, incluidos los que nunca corrieron; ver la
-     * nota de la clase.
+     * <p>It walks <b>all</b> the configured modules, including the ones that never ran; see the
+     * class note.
      *
-     * @throws LoginException si nunca hubo login, o si un modulo falla al salir
+     * @throws LoginException if there was never a login, or if a module fails to log out
      */
     public void logout() throws LoginException {
         if (this.subject == null) {
@@ -177,10 +183,11 @@ public class LoginContext {
     }
 
     /**
-     * El sujeto autenticado.
+     * The authenticated subject.
      *
-     * @return null si el login no cerro y el sujeto no lo trajo quien llama -- devolver un sujeto
-     *     vacio invitaria a confundirlo con uno autenticado sin permisos
+     * @return null if the login did not go through and the caller did not bring the subject --
+     *     returning an empty subject would invite confusing it with an authenticated one without
+     *     permissions
      */
     public Subject getSubject() {
         if (!this.loginSucceeded && !this.subjectProvided) {
@@ -190,10 +197,10 @@ public class LoginContext {
     }
 
     /**
-     * El recorrido, que es el mismo para las cuatro fases.
+     * The walk, which is the same for the four phases.
      *
-     * <p>Las diferencias estan en {@link Phase}: que metodo se llama y si un SUFFICIENT que anda
-     * corta.
+     * <p>The differences are in {@link Phase}: which method is called and whether a SUFFICIENT that
+     * succeeds cuts. A failing REQUISITE cuts in all of them; see the class note.
      */
     private void invoke(Phase phase) throws LoginException {
         boolean anySucceeded = false;
@@ -246,7 +253,7 @@ public class LoginContext {
         }
     }
 
-    /** El modulo de esa entrada, creandolo e inicializandolo la primera vez. */
+    /** The module of that entry, creating and initializing it the first time. */
     private LoginModule moduleAt(int index) throws LoginException {
         if (this.modules[index] != null) {
             return this.modules[index];
@@ -258,7 +265,7 @@ public class LoginContext {
         return made;
     }
 
-    /** Carga e instancia un modulo por nombre de clase. */
+    /** Loads and instantiates a module by class name. */
     private LoginModule instantiate(AppConfigurationEntry entry) throws LoginException {
         try {
             ClassLoader loader = Thread.currentThread().getContextClassLoader();
@@ -281,17 +288,17 @@ public class LoginContext {
     }
 
     /**
-     * El manejador nombrado en la propiedad de seguridad, o null.
+     * The handler named in the security property, or null.
      *
-     * <p>Null es valido: un modulo que no necesita preguntar nada --uno que lee un token del
-     * ambiente, por ejemplo-- anda igual sin manejador.
+     * <p>Null is valid: a module that does not need to ask anything --one that reads a token from
+     * the environment, for example-- works all the same without a handler.
      */
     private static CallbackHandler defaultHandler() {
         String className = null;
         try {
             className = java.security.Security.getProperty(DEFAULT_HANDLER);
         } catch (SecurityException e) {
-            // Sin permiso para leerla: se sigue sin manejador.
+            // Without permission to read it: carry on without a handler.
         }
         if (className == null || className.length() == 0) {
             return null;
@@ -301,24 +308,24 @@ public class LoginContext {
             Object made = found.getConstructor(new Class<?>[0]).newInstance(new Object[0]);
             return (CallbackHandler) made;
         } catch (Exception e) {
-            // Un manejador mal configurado no puede tumbar el arranque de la autenticacion.
+            // A badly configured handler cannot bring down the start of the authentication.
             return null;
         }
     }
 
-    /** Las cuatro fases, con lo unico que las distingue. */
+    /** The four phases, with the only thing that tells them apart. */
     private static final class Phase {
 
-        /** Ida: verifica. */
+        /** Way in: verifies. */
         static final Phase LOGIN = new Phase(0, true);
 
-        /** Ida: escribe en el sujeto. */
+        /** Way in: writes to the subject. */
         static final Phase COMMIT = new Phase(1, true);
 
-        /** Vuelta: deshace lo que se hubiera empezado. */
+        /** Way back: undoes whatever was started. */
         static final Phase ABORT = new Phase(2, false);
 
-        /** Vuelta: cierra la sesion. */
+        /** Way back: logs out. */
         static final Phase LOGOUT = new Phase(3, false);
 
         private final int which;
@@ -329,12 +336,12 @@ public class LoginContext {
             this.stopsAtSufficient = stopsAtSufficient;
         }
 
-        /** Si un SUFFICIENT que anda corta el recorrido. Ver la nota de la clase. */
+        /** Whether a SUFFICIENT that succeeds cuts the walk. See the class note. */
         boolean stopsAtSufficient() {
             return this.stopsAtSufficient;
         }
 
-        /** Llama al metodo de esta fase. */
+        /** Calls this phase's method. */
         boolean call(LoginModule module) throws LoginException {
             if (this.which == 0) {
                 return module.login();

@@ -4,26 +4,27 @@ import java.lang.classfile.constantpool.Utf8Entry;
 import java.lang.constant.MethodTypeDesc;
 import java.util.Optional;
 
-// Un método ya leído. Es también un {@link ClassElement}, por lo mismo que {@link FieldModel}.
+// A method already read. It is also a {@link ClassElement}, for the same reason as
+// {@link FieldModel}.
 public interface MethodModel extends CompoundElement<MethodElement>, AttributedElement, ClassElement {
 
-    /** El `access_flags` del método. */
+    /** The method's `access_flags`. */
     AccessFlags flags();
 
-    /** La clase que lo declara, si este modelo salió de leer una. */
+    /** The class declaring it, if this model came out of reading one. */
     Optional<ClassModel> parent();
 
-    /** El nombre. */
+    /** The name. */
     Utf8Entry methodName();
 
-    /** El descriptor. */
+    /** The descriptor. */
     Utf8Entry methodType();
 
-    /** El tipo del método. */
+    /** The method's type. */
     default MethodTypeDesc methodTypeSymbol() {
         return MethodTypeDesc.ofDescriptor(methodType().stringValue());
     }
 
-    /** El cuerpo; vacío en un `abstract` o un `native`. */
+    /** The body; empty on an `abstract` or a `native`. */
     Optional<CodeModel> code();
 }

@@ -1,30 +1,30 @@
 package javax.security.auth;
 
 /**
- * KajiLibrary's javax.security.auth.Destroyable -- algo que guarda un secreto y lo puede borrar.
+ * KajiLibrary's javax.security.auth.Destroyable -- something that keeps a secret and can erase it.
  *
- * <p>Los dos metodos tienen implementacion por defecto, y las dos elegidas dicen "yo no se hacer
- * eso": {@code destroy()} lanza y {@code isDestroyed()} devuelve false. Eso es a proposito y es el
- * default seguro. Un {@code destroy()} que no hiciera nada y un {@code isDestroyed()} que devolviera
- * true dejarian a quien los llama creyendo que el secreto ya no esta en memoria cuando si esta, que
- * es exactamente el error que esta interfaz existe para evitar.
+ * <p>Both methods have a default implementation, and the two chosen say "I cannot do that": {@code
+ * destroy()} throws and {@code isDestroyed()} returns false. That is on purpose and it is the safe
+ * default. A {@code destroy()} that did nothing and an {@code isDestroyed()} that returned true
+ * would leave the caller believing the secret is no longer in memory when it is, which is exactly
+ * the error this interface exists to avoid.
  *
- * <p>Borrar un secreto en Java tiene un limite que conviene tener presente igual: si el secreto es
- * un {@code String}, no hay forma de borrarlo -- es inmutable y vive hasta que el recolector lo
- * levante. Por eso las contraseñas se pasan como {@code char[]} y no como {@code String}.
+ * <p>Erasing a secret in Java has a limit worth keeping in mind anyway: if the secret is a {@code
+ * String}, there is no way to erase it -- it is immutable and lives until the collector picks it
+ * up. That is why passwords are passed as {@code char[]} and not as {@code String}.
  */
 public interface Destroyable {
 
     /**
-     * Borra el secreto que guarda este objeto.
+     * Erases the secret this object keeps.
      *
-     * @throws DestroyFailedException si no se puede -- ver {@link DestroyFailedException}
+     * @throws DestroyFailedException if it cannot -- see {@link DestroyFailedException}
      */
     default void destroy() throws DestroyFailedException {
         throw new DestroyFailedException();
     }
 
-    /** Si el secreto ya se borro. */
+    /** Whether the secret was already erased. */
     default boolean isDestroyed() {
         return false;
     }

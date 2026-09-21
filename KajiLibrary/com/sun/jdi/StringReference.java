@@ -1,16 +1,16 @@
 package com.sun.jdi;
 
 /**
- * Una cadena de la maquina depurada.
+ * A string of the debugged machine.
  *
  * @since 1.3
  */
 public interface StringReference extends ObjectReference {
 
     /**
-     * El valor.
+     * The value.
      *
-     * @return el resultado
+     * @return the result
      */
     String value();
 }

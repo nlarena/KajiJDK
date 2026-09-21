@@ -72,12 +72,12 @@ public class Deflater implements AutoCloseable {
     }
 
     /**
-     * Toma como entrada los bytes que quedan en `input`, y lo deja consumido.
+     * It takes as input the bytes left in `input`, and leaves it consumed.
      *
-     * <p>**Se copia**, y eso es una diferencia con el JDK que conviene decir: alli un buffer directo
-     * se pasa al deflate nativo sin copiar, y por eso el JDK exige no tocarlo hasta que
-     * `needsInput()` vuelva a dar `true`. Aca la copia hace que esa exigencia no aplique -- el
-     * codigo que la respeta funciona igual, y el que no la respetaba tambien.
+     * <p>**It is copied**, and that is a difference from the JDK worth stating: there a direct buffer
+     * is handed to the native deflate without copying, which is why the JDK demands it not be touched
+     * until `needsInput()` returns `true` again. Here the copy makes that demand inapplicable -- code
+     * that respects it works just the same, and code that did not respect it works too.
      */
     public void setInput(java.nio.ByteBuffer input) {
         int n = input.remaining();
@@ -88,7 +88,7 @@ public class Deflater implements AutoCloseable {
         this.setInput(tmp, 0, n);
     }
 
-    /** El diccionario de precarga, desde los bytes que quedan en `dictionary`. */
+    /** The preset dictionary, from the bytes left in `dictionary`. */
     public void setDictionary(java.nio.ByteBuffer dictionary) {
         int n = dictionary.remaining();
         byte[] tmp = new byte[n];
@@ -98,19 +98,19 @@ public class Deflater implements AutoCloseable {
         this.setDictionary(tmp, 0, n);
     }
 
-    /** Comprime en el espacio que queda en `output`, avanzando su posicion por lo escrito. */
+    /** It compresses into the room left in `output`, advancing its position by what was written. */
     public int deflate(java.nio.ByteBuffer output) {
         return this.deflate(output, NO_FLUSH);
     }
 
-    /** El de arriba con modo de vaciado explicito. */
+    /** The one above with an explicit flush mode. */
     public int deflate(java.nio.ByteBuffer output, int flush) {
-        int espacio = output.remaining();
-        if (espacio <= 0) {
+        int room = output.remaining();
+        if (room <= 0) {
             return 0;
         }
-        byte[] tmp = new byte[espacio];
-        int n = this.deflate(tmp, 0, espacio, flush);
+        byte[] tmp = new byte[room];
+        int n = this.deflate(tmp, 0, room, flush);
         if (n > 0) {
             output.put(tmp, 0, n);
         }

@@ -1,18 +1,19 @@
 package com.sun.nio.sctp;
 
 /**
- * Se pidio desligar una direccion que no se puede desligar: la ultima que queda, o una que nunca estuvo ligada.
+ * Unbinding an address that cannot be unbound was asked for: the last one that is left, or one
+ * that was never bound.
  */
 public class IllegalUnbindException extends IllegalStateException {
 
     private static final long serialVersionUID = 2493124086598L;
 
-    /** Sin detalle. */
+    /** With no detail. */
     public IllegalUnbindException() {
         super();
     }
 
-    /** Con un mensaje que explique el caso. */
+    /** With a message that explains the case. */
     public IllegalUnbindException(String msg) {
         super(msg);
     }

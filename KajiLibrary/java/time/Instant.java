@@ -37,16 +37,16 @@ public final class Instant implements Temporal, TemporalAdjuster, Comparable<Ins
         return new Instant(seconds + extraSeconds, (int) nos);
     }
 
-    /** El instante cero: 1970-01-01T00:00:00Z. */
+    /** The zero instant: 1970-01-01T00:00:00Z. */
     public static final Instant EPOCH = new Instant(0L, 0);
 
-    /** El instante mas temprano representable. */
+    /** The earliest representable instant. */
     public static final Instant MIN = new Instant(-31557014167219200L, 0);
 
-    /** El mas tardio. */
+    /** The latest. */
     public static final Instant MAX = new Instant(31556889864403199L, 999999999);
 
-    /** El instante que `temporal` tiene. */
+    /** The instant `temporal` holds. */
     public static Instant from(java.time.temporal.TemporalAccessor temporal) {
         if (temporal == null) {
             throw new NullPointerException("temporal");
@@ -63,9 +63,10 @@ public final class Instant implements Temporal, TemporalAdjuster, Comparable<Ins
     }
 
     /**
-     * El instante que marca `clock`.
+     * The instant `clock` reads.
      *
-     * <p>Es la forma testeable de `now()`: con un `Clock.fixed` el resultado lo elige la prueba.
+     * <p>It is the testable form of `now()`: with a `Clock.fixed` the result is the test's to
+     * choose.
      */
     public static Instant now(Clock clock) {
         if (clock == null) {
@@ -148,15 +149,15 @@ public final class Instant implements Temporal, TemporalAdjuster, Comparable<Ins
     // --- Temporal ---
 
     /**
-     * Los cuatro campos que un instante tiene.
+     * The four fields an instant has.
      *
-     * <p>`INSTANT_SECONDS` es el que **define** a la clase, y faltaba: sin el,
-     * `Instant.from(unInstante)` tiraba y `DateTimeFormatter.ISO_INSTANT.format(...)` no podia
-     * funcionar. Es la clase de hueco que la medicion por forma no ve -- el metodo estaba, y contestaba
-     * `false` sobre su propio campo.
+     * <p>`INSTANT_SECONDS` is the one that **defines** the class, and it was missing: without it,
+     * `Instant.from(anInstant)` threw and `DateTimeFormatter.ISO_INSTANT.format(...)` could not work.
+     * It is the kind of hole that measuring by shape does not see -- the method was there, and
+     * answered `false` about its own field.
      *
-     * <p>Los otros tres son el nano en sus tres granularidades. Un instante **no** tiene fecha ni hora
-     * del dia: para eso hace falta una zona, y por eso `HOUR_OF_DAY` no esta.
+     * <p>The other three are the nano at its three granularities. An instant has **no** date and no
+     * time of day: that needs a zone, and that is why `HOUR_OF_DAY` is not here.
      */
     public boolean isSupported(TemporalField field) {
         return field == ChronoField.INSTANT_SECONDS || field == ChronoField.NANO_OF_SECOND
@@ -184,8 +185,8 @@ public final class Instant implements Temporal, TemporalAdjuster, Comparable<Ins
             || unit == ChronoUnit.MINUTES || unit == ChronoUnit.HOURS || unit == ChronoUnit.DAYS;
     }
 
-    // El retorno se estrecha a `Instant`, como en el JDK: asi `i.plus(1, DAYS).getNano()`
-    // compila sin castear. Es un override covariante (§8.4.8.3).
+    // The return is narrowed to `Instant`, as in the JDK: that way `i.plus(1, DAYS).getNano()`
+    // compiles without a cast. It is a covariant override (§8.4.8.3).
     public Instant plus(long amountToAdd, TemporalUnit unit) {
         if (unit == ChronoUnit.NANOS) {
             return this.plusNanos(amountToAdd);
@@ -212,7 +213,7 @@ public final class Instant implements Temporal, TemporalAdjuster, Comparable<Ins
         return this.plus(-amountToSubtract, unit);
     }
 
-    /** La duracion desde este instante hasta `endExclusive`. Negativa si aquel es anterior. */
+    /** The duration from this instant to `endExclusive`. Negative if that one is earlier. */
     public Duration until(Instant endExclusive) {
         if (endExclusive == null) {
             throw new NullPointerException("endExclusive");
@@ -223,10 +224,10 @@ public final class Instant implements Temporal, TemporalAdjuster, Comparable<Ins
 
 
     /**
-     * Este instante con `field` puesto en `newValue`.
+     * This instant with `field` set to `newValue`.
      *
-     * <p>Los cuatro campos que un `Instant` sabe. `NANO_OF_SECOND` y sus dos hermanos mas gruesos
-     * cambian la fraccion; `INSTANT_SECONDS` cambia el segundo entero.
+     * <p>The four fields an `Instant` knows. `NANO_OF_SECOND` and its two coarser siblings change the
+     * fraction; `INSTANT_SECONDS` changes the whole second.
      */
     public Instant with(TemporalField field, long newValue) {
         if (field == null) {
@@ -251,14 +252,14 @@ public final class Instant implements Temporal, TemporalAdjuster, Comparable<Ins
     }
 
     /**
-     * Este instante truncado a un multiplo de `unit`, contando desde el comienzo del dia.
+     * This instant truncated to a multiple of `unit`, counting from the start of the day.
      *
-     * <p>Trunca **hacia abajo** --hacia el pasado-- tambien para los instantes anteriores a la
-     * epoca, que es donde difiere de `Duration.truncatedTo`: aquella trunca hacia cero. La
-     * diferencia es real y esta en el JDK: un instante es un punto en una linea, y truncar un punto
-     * es ir al comienzo del intervalo que lo contiene, sea cual sea su signo.
+     * <p>It truncates **downwards** --towards the past-- for the instants before the epoch as well,
+     * which is where it differs from `Duration.truncatedTo`: that one truncates towards zero. The
+     * difference is real and is in the JDK: an instant is a point on a line, and truncating a point
+     * is going to the start of the interval containing it, whatever its sign.
      *
-     * @throws java.time.DateTimeException si la unidad no divide un dia
+     * @throws java.time.DateTimeException if the unit does not divide a day
      */
     public Instant truncatedTo(TemporalUnit unit) {
         if (unit == null) {
@@ -268,41 +269,41 @@ public final class Instant implements Temporal, TemporalAdjuster, Comparable<Ins
             return this;
         }
         Duration d = unit.getDuration();
-        long unidadNanos = d.toNanos();
-        if (unidadNanos > 86400000000000L) {
+        long unitNanos = d.toNanos();
+        if (unitNanos > 86400000000000L) {
             throw new java.time.temporal.UnsupportedTemporalTypeException("Unit is too large to be used for truncation");
         }
-        if (86400000000000L % unidadNanos != 0L) {
+        if (86400000000000L % unitNanos != 0L) {
             throw new java.time.temporal.UnsupportedTemporalTypeException("Unit must divide into a standard day without remainder");
         }
-        // Los nanos **dentro del dia**, que es donde el truncado tiene sentido. Se usa `floorMod`
-        // para que los instantes anteriores a la epoca --con segundos negativos-- caigan igual al
-        // comienzo de su intervalo y no al final del anterior.
-        long segsDelDia = Math.floorMod(this.getEpochSecond(), 86400L);
-        long nanosDelDia = segsDelDia * 1000000000L + this.getNano();
-        long truncado = (nanosDelDia / unidadNanos) * unidadNanos;
-        return this.plusNanos(truncado - nanosDelDia);
+        // The nanos **within the day**, which is where truncating makes sense. `floorMod` is used so
+        // that the instants before the epoch --with negative seconds-- still land at the start of
+        // their interval and not at the end of the previous one.
+        long secsOfDay = Math.floorMod(this.getEpochSecond(), 86400L);
+        long nanosOfDay = secsOfDay * 1000000000L + this.getNano();
+        long truncated = (nanosOfDay / unitNanos) * unitNanos;
+        return this.plusNanos(truncated - nanosOfDay);
     }
 
     /**
-     * Este instante con ese desplazamiento, como fecha y hora locales.
+     * This instant with that offset, as a local date and time.
      *
-     * <p>El instante no cambia: cambia como se lo lee. El mismo punto en la linea de tiempo son las
-     * 15:00 en `+02:00` y las 13:00 en UTC.
+     * <p>The instant does not change: how it is read does. The same point on the timeline is 15:00 in
+     * `+02:00` and 13:00 in UTC.
      */
     public OffsetDateTime atOffset(ZoneOffset offset) {
         if (offset == null) {
             throw new NullPointerException("offset");
         }
-        long segsLocales = this.getEpochSecond() + offset.getTotalSeconds();
-        long dia = Math.floorDiv(segsLocales, 86400L);
-        int segsDelDia = (int) Math.floorMod(segsLocales, 86400L);
-        LocalTime hora = LocalTime.of(segsDelDia / 3600, (segsDelDia / 60) % 60,
-                segsDelDia % 60, this.getNano());
-        return OffsetDateTime.of(LocalDateTime.of(LocalDate.ofEpochDay(dia), hora), offset);
+        long localSecs = this.getEpochSecond() + offset.getTotalSeconds();
+        long day = Math.floorDiv(localSecs, 86400L);
+        int secsOfDay = (int) Math.floorMod(localSecs, 86400L);
+        LocalTime time = LocalTime.of(secsOfDay / 3600, (secsOfDay / 60) % 60,
+                secsOfDay % 60, this.getNano());
+        return OffsetDateTime.of(LocalDateTime.of(LocalDate.ofEpochDay(day), time), offset);
     }
 
-    /** Este instante en esa zona. */
+    /** This instant in that zone. */
     public ZonedDateTime atZone(ZoneId zone) {
         return ZonedDateTime.ofInstant(this, zone);
     }

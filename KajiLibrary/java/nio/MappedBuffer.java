@@ -129,6 +129,16 @@ final class MappedBuffer extends MappedByteBuffer {
         return b;
     }
 
+    /**
+     * Returns the shift that turns an element index into a byte offset.
+     *
+     * @return zero — for a byte buffer the two are the same number
+     */
+    @Override
+    int scaleShifts() {
+        return 0;
+    }
+
     @Override
     public MappedByteBuffer compact() {
         checkWritable();

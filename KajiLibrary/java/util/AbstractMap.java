@@ -16,8 +16,8 @@ public abstract class AbstractMap<K, V> implements Map<K, V> {
 
     public abstract Set<Map.Entry<K, V>> entrySet();
 
-    // Las claves, derivadas de `entrySet()` — que es justamente el primitivo del que cuelga todo
-    // `AbstractMap` (finding #205). Las subclases que puedan hacerlo mas barato lo sobrescriben.
+    // The keys, derived from `entrySet()` — which is precisely the primitive the whole of
+    // `AbstractMap` hangs off (finding #205). Subclasses that can do it more cheaply override it.
     public Set<K> keySet() {
         HashSet<K> out = new HashSet<K>();
         Iterator<Map.Entry<K, V>> it = this.entrySet().iterator();
@@ -25,6 +25,46 @@ public abstract class AbstractMap<K, V> implements Map<K, V> {
             out.add(it.next().getKey());
         }
         return out;
+    }
+
+    // The three basic queries, derived from `entrySet()` like everything else (§ and the JDK declares
+    // them concrete right here). They were missing: `AbstractMap` let them fall through to `Map`'s
+    // abstract ones, and that forced each concrete subclass to write them or be left incomplete with
+    // nobody saying so -- finding #284 uncovered them, and it also explains why `values()` further
+    // down compiled calling `this.get(...)`.
+    //
+    // Subclasses that can answer them more cheaply override them; almost all do.
+    public boolean containsKey(Object key) {
+        Iterator<Map.Entry<K, V>> it = this.entrySet().iterator();
+        while (it.hasNext()) {
+            Map.Entry<K, V> e = it.next();
+            if (key == null ? e.getKey() == null : key.equals(e.getKey())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public boolean containsValue(Object value) {
+        Iterator<Map.Entry<K, V>> it = this.entrySet().iterator();
+        while (it.hasNext()) {
+            Map.Entry<K, V> e = it.next();
+            if (value == null ? e.getValue() == null : value.equals(e.getValue())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public V get(Object key) {
+        Iterator<Map.Entry<K, V>> it = this.entrySet().iterator();
+        while (it.hasNext()) {
+            Map.Entry<K, V> e = it.next();
+            if (key == null ? e.getKey() == null : key.equals(e.getKey())) {
+                return e.getValue();
+            }
+        }
+        return null;
     }
 
     public void putAll(Map<? extends K, ? extends V> m) {
@@ -52,11 +92,11 @@ public abstract class AbstractMap<K, V> implements Map<K, V> {
     public void clear() {
         throw new UnsupportedOperationException();
     }
-    // Los valores, como Collection.
+    // The values, as a Collection.
     //
-    // **Divergencia deliberada**, la misma que ya declara `keySet()`: la del JDK es una *vista*
-    // respaldada por el mapa; esta es una copia. Y a diferencia de `keySet()`, los valores **si**
-    // pueden repetirse, por eso es una Collection y no un Set.
+    // **A deliberate divergence**, the same one `keySet()` already declares: the JDK's is a *view*
+    // backed by the map; this one is a copy. And unlike `keySet()`, values **can** repeat, which is
+    // why it is a Collection and not a Set.
     public Collection<V> values() {
         ArrayList<V> out = new ArrayList<V>();
         Iterator<K> it = this.keySet().iterator();
@@ -67,17 +107,17 @@ public abstract class AbstractMap<K, V> implements Map<K, V> {
     }
 
     /**
-     * Igualdad por contenido: mismas claves, y cada una con el mismo valor.
+     * Equality by content: the same keys, and each with the same value.
      *
-     * <p>Misma ausencia que la de AbstractList, y por la misma razon invisible: al heredar el
-     * `equals` de Object, un HashMap y un LinkedHashMap con el mismo contenido daban false.
+     * <p>The same absence as AbstractList's, and for the same invisible reason: inheriting Object's
+     * `equals`, a HashMap and a LinkedHashMap with the same content gave false.
      *
-     * <p>Se recorre por `keySet()` y `get()` en vez de comparar los dos entrySet como hace el
-     * JDK, porque asi la igualdad no depende de que las entradas de cada implementacion tengan su
-     * propio `equals` bien puesto: alcanza con que el mapa sepa buscar por clave.
+     * <p>It walks by `keySet()` and `get()` instead of comparing the two entry sets as the JDK does,
+     * because that way equality does not depend on each implementation's entries having their own
+     * `equals` properly written: it is enough for the map to know how to look up by key.
      *
-     * <p>El caso del valor null pide el paso extra de `containsKey`: "no esta la clave" y "esta,
-     * y vale null" se ven igual desde `get`, y no son lo mismo.
+     * <p>The null value case asks for the extra `containsKey` step: "the key is not there" and "it is,
+     * and it is null" look the same from `get`, and they are not the same thing.
      */
     public boolean equals(Object o) {
         if (o == this) {
@@ -109,12 +149,12 @@ public abstract class AbstractMap<K, V> implements Map<K, V> {
     }
 
     /**
-     * El hash que exige el contrato de Map: la SUMA de los hash de las entradas, y el de una
-     * entrada es `hash(clave) ^ hash(valor)`.
+     * The hash Map's contract demands: the SUM of the entries' hashes, and an entry's is
+     * `hash(key) ^ hash(value)`.
      *
-     * <p>Que sea una suma y no una combinacion posicional es a proposito: un mapa no tiene orden,
-     * asi que la cuenta tiene que dar lo mismo recorrido como se lo recorra. Es la unica forma de
-     * que un HashMap y un TreeMap iguales tengan el mismo hash.
+     * <p>That it be a sum and not a positional combination is on purpose: a map has no order, so the
+     * sum has to come out the same however it is walked. It is the only way for an equal HashMap and
+     * TreeMap to have the same hash.
      */
     public int hashCode() {
         int h = 0;
@@ -128,30 +168,30 @@ public abstract class AbstractMap<K, V> implements Map<K, V> {
     }
 
     /**
-     * El mapa como {@code {clave=valor, clave=valor}}, en el orden en que lo recorre su iterador.
+     * The map as {@code {key=value, key=value}}, in the order its iterator walks it.
      *
-     * <p>Sin esto, cualquier mapa que no lo defina por su cuenta --HashMap incluido-- cae en el
-     * `toString` de Object y se imprime como `java.util.HashMap@3`. Es el tipo de agujero que no
-     * rompe nada hasta que alguien loguea un mapa y lee una direccion en vez de sus datos.
+     * <p>Without this, any map that does not define it itself --HashMap included-- falls to Object's
+     * `toString` and prints as `java.util.HashMap@3`. It is the kind of hole that breaks nothing
+     * until somebody logs a map and reads an address instead of its data.
      *
-     * <p>El auto-referencia se imprime como "(this Map)" y no se recurre, que es lo que hace el
-     * JDK: un mapa que se contiene a si mismo desbordaria la pila en la primera linea de log.
+     * <p>A self-reference prints as "(this Map)" and is not recursed into, which is what the JDK
+     * does: a map that contains itself would overflow the stack on the first line of the log.
      */
     public String toString() {
         StringBuilder sb = new StringBuilder();
         sb.append('{');
         Iterator<K> it = this.keySet().iterator();
-        boolean primero = true;
+        boolean first = true;
         while (it.hasNext()) {
             K k = it.next();
             V v = this.get(k);
-            if (!primero) {
+            if (!first) {
                 sb.append(',').append(' ');
             }
-            primero = false;
-            // Los `Object` intermedios no son decoracion: `String.valueOf(k)` con `k` de tipo
-            // variable elige la sobrecarga de `char[]` en este compilador (COMPILER_FINDINGS #341),
-            // y sale una cadena vacia. Con el tipo escrito a mano, elige la de `Object`.
+            first = false;
+            // The intermediate `Object`s are not decoration: `String.valueOf(k)` with `k` of a type
+            // variable picks the `char[]` overload in this compiler (COMPILER_FINDINGS #341), and an
+            // empty string comes out. With the type written by hand, it picks `Object`'s.
             Object ko = k;
             Object vo = v;
             sb.append(ko == this ? "(this Map)" : String.valueOf(ko));

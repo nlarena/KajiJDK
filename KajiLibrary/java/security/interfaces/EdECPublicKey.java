@@ -4,13 +4,13 @@ import java.security.PublicKey;
 import java.security.spec.EdECPoint;
 import java.security.spec.NamedParameterSpec;
 
-// Una clave publica Edwards: el punto en forma comprimida.
+// An Edwards public key: the point in compressed form.
 public interface EdECPublicKey extends EdECKey, PublicKey {
 
-    // El punto publico: la coordenada y mas el bit de signo de x.
+    // The public point: the y coordinate plus the sign bit of x.
     EdECPoint getPoint();
 
-    // Ver `ECPublicKey.getParams()`: desempata `EdECKey` contra `AsymmetricKey`.
+    // See `ECPublicKey.getParams()`: it breaks the tie between `EdECKey` and `AsymmetricKey`.
     @Override
     default NamedParameterSpec getParams() {
         return null;

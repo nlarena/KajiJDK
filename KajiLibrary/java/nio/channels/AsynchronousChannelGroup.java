@@ -7,52 +7,54 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 
 /**
- * KajiLibrary's java.nio.channels.AsynchronousChannelGroup — el pool de hilos donde corren los
- * `CompletionHandler`.
+ * KajiLibrary's java.nio.channels.AsynchronousChannelGroup — the thread pool where the
+ * `CompletionHandler`s run.
  *
- * <p>Existe porque un canal asincronico no atiende sus propias respuestas: cuando una lectura
- * termina, alguien tiene que correr el {@link CompletionHandler}, y ese alguien es un hilo del
- * grupo. Compartir un grupo entre muchos canales es todo el punto --mil conexiones, ocho hilos-- y
- * es lo que separa a esta API de "un hilo por operacion".
+ * <p>It exists because an asynchronous channel does not attend its own answers: when a read
+ * finishes, somebody has to run the {@link CompletionHandler}, and that somebody is a thread of the
+ * group. Sharing a group between many channels is the whole point --a thousand connections, eight
+ * threads-- and it is what separates this API from "one thread per operation".
  *
- * <p>Las dos formas de apagarlo no son grados de lo mismo:
+ * <p>The two ways of shutting it down are not degrees of the same thing:
  *
  * <ul>
- *   <li>{@link #shutdown()} cierra la puerta: no se aceptan canales nuevos, pero lo que hay sigue
- *       hasta que se cierren todos. **Vuelve en el acto** y no espera nada;
- *   <li>{@link #shutdownNow()} cierra los canales abiertos, lo que hace fallar a las operaciones en
- *       curso con {@link AsynchronousCloseException}.
+ *   <li>{@link #shutdown()} closes the door: no new channels are accepted, but what is there goes
+ *       on until they are all closed. **It returns on the spot** and waits for nothing;
+ *   <li>{@link #shutdownNow()} closes the open channels, which makes the operations under way fail
+ *       with {@link AsynchronousCloseException}.
  * </ul>
  *
- * <p>Un grupo con un canal abierto que nadie cierra **no termina nunca**, y ese es el modo de fallar
- * mas comun con esta clase: `shutdown()` seguido de un `awaitTermination` que no vuelve.
+ * <p>A group with an open channel nobody closes **never finishes**, and that is the most common way
+ * of failing with this class: a `shutdown()` followed by an `awaitTermination` that does not
+ * return.
  *
- * <h2>Estado en esta biblioteca</h2>
+ * <h2>State in this library</h2>
  *
- * <p><strong>Los tres estaticos ya estan.</strong> Esta nota decia que no, con dos argumentos: que
- * no habia proveedor del sistema porque la VM no tenia nativos de red, y que un grupo sin canales
- * que meterle seria una ceremonia sobre nada. Los dos dejaron de valer al mismo tiempo: la VM tiene
- * nativos de red --{@code jdk.internal.net.Net}-- asi que {@link AsynchronousSocketChannel} y
- * {@link AsynchronousServerSocketChannel} se abren de verdad, y con canales adentro el grupo hace
- * exactamente lo que promete. Ver {@code KajiAsyncChannelProvider}, que es el proveedor de fabrica.
+ * <p><strong>The three statics are here.</strong> This note used to say they were not, with two
+ * arguments: that there was no system provider because the VM had no network natives, and that a
+ * group with no channels to put into it would be ceremony over nothing. Both stopped holding at the
+ * same time: the VM has network natives --{@code jdk.internal.net.Net}-- so
+ * {@link AsynchronousSocketChannel} and {@link AsynchronousServerSocketChannel} really open, and
+ * with channels inside it the group does exactly what it promises. See
+ * {@code KajiAsyncChannelProvider}, which is the stock provider.
  */
 public abstract class AsynchronousChannelGroup {
 
-    private final AsynchronousChannelProvider proveedor;
+    private final AsynchronousChannelProvider theProvider;
 
     protected AsynchronousChannelGroup(AsynchronousChannelProvider provider) {
-        this.proveedor = provider;
+        this.theProvider = provider;
     }
 
     /**
-     * Un grupo con un pool de tamano fijo.
+     * A group with a fixed-size pool.
      *
-     * @param nThreads cuantos hilos
-     * @param threadFactory con que fabrica de hilos armarlos
-     * @return el grupo
-     * @throws IOException si no se puede armar
-     * @throws IllegalArgumentException si `nThreads` no es positivo
-     * @throws NullPointerException si la fabrica es nula
+     * @param nThreads how many threads
+     * @param threadFactory which thread factory to build them with
+     * @return the group
+     * @throws IOException if it cannot be built
+     * @throws IllegalArgumentException if `nThreads` is not positive
+     * @throws NullPointerException if the factory is null
      */
     public static AsynchronousChannelGroup withFixedThreadPool(int nThreads,
             ThreadFactory threadFactory) throws IOException {
@@ -61,16 +63,16 @@ public abstract class AsynchronousChannelGroup {
     }
 
     /**
-     * Un grupo sobre un pool que crece segun haga falta.
+     * A group over a pool that grows as needed.
      *
-     * <p>`initialSize` es una sugerencia sobre cuantos hilos arrancar; esta implementacion no
-     * necesita ninguno esperando, asi que la acepta y no la usa. Ver `KajiAsyncChannelProvider`.
+     * <p>`initialSize` is a suggestion about how many threads to start with; this implementation
+     * needs none waiting, so it accepts it and does not use it. See `KajiAsyncChannelProvider`.
      *
-     * @param executor el pool
-     * @param initialSize cuantos hilos arrancar, como sugerencia
-     * @return el grupo
-     * @throws IOException si no se puede armar
-     * @throws NullPointerException si el pool es nulo
+     * @param executor the pool
+     * @param initialSize how many threads to start with, as a suggestion
+     * @return the group
+     * @throws IOException if it cannot be built
+     * @throws NullPointerException if the pool is null
      */
     public static AsynchronousChannelGroup withCachedThreadPool(ExecutorService executor,
             int initialSize) throws IOException {
@@ -79,43 +81,44 @@ public abstract class AsynchronousChannelGroup {
     }
 
     /**
-     * Un grupo sobre ese pool.
+     * A group over that pool.
      *
-     * <p>El pool viene de afuera y **no se apaga solo** cuando el grupo termina: quien lo presto
-     * puede estar usandolo para otra cosa. Apagarlo es de quien lo armo.
+     * <p>The pool comes from outside and **does not shut itself down** when the group finishes:
+     * whoever lent it may be using it for something else. Shutting it down is the business of
+     * whoever built it.
      *
-     * @param executor el pool
-     * @return el grupo
-     * @throws IOException si no se puede armar
-     * @throws NullPointerException si el pool es nulo
+     * @param executor the pool
+     * @return the group
+     * @throws IOException if it cannot be built
+     * @throws NullPointerException if the pool is null
      */
     public static AsynchronousChannelGroup withThreadPool(ExecutorService executor)
             throws IOException {
         return AsynchronousChannelProvider.provider().openAsynchronousChannelGroup(executor, 0);
     }
 
-    /** El proveedor que lo fabrico. */
+    /** The provider that made it. */
     public final AsynchronousChannelProvider provider() {
-        return this.proveedor;
+        return this.theProvider;
     }
 
-    /** Si ya no acepta canales nuevos. */
+    /** Whether it no longer accepts new channels. */
     public abstract boolean isShutdown();
 
-    /** Si ademas ya no queda nada corriendo y los hilos se fueron. */
+    /** Whether besides that there is nothing left running and the threads have gone. */
     public abstract boolean isTerminated();
 
-    /** Cierra la puerta a canales nuevos y vuelve en el acto. Ver la nota de la clase. */
+    /** Closes the door to new channels and returns on the spot. See the note of the class. */
     public abstract void shutdown();
 
-    /** Cierra los canales abiertos; las operaciones en curso fallan. */
+    /** Closes the open channels; the operations under way fail. */
     public abstract void shutdownNow() throws IOException;
 
     /**
-     * Espera a que el grupo termine.
+     * Waits for the group to finish.
      *
-     * @return `true` si termino, `false` si se agoto la espera. Distinguirlos importa: un `false`
-     *         casi siempre significa que quedo un canal sin cerrar
+     * @return `true` if it finished, `false` if the wait ran out. Telling them apart matters: a
+     *         `false` almost always means a channel was left unclosed
      */
     public abstract boolean awaitTermination(long timeout, TimeUnit unit)
             throws InterruptedException;

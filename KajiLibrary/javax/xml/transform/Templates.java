@@ -3,44 +3,44 @@ package javax.xml.transform;
 import java.util.Properties;
 
 /**
- * KajiLibrary's javax.xml.transform.Templates -- una hoja de estilo ya compilada.
+ * KajiLibrary's javax.xml.transform.Templates -- an already compiled stylesheet.
  *
- * <p>Es la respuesta a un problema muy concreto: compilar una hoja de estilo cuesta caro --hay que
- * parsearla, resolver los `import`, armar el arbol de plantillas, compilar los patrones de XPath--
- * y un {@link Transformer} **no es reutilizable en paralelo**, porque tiene estado (los parametros,
- * las propiedades de salida). Sin esta interfaz habria que elegir entre pagar la compilacion en
- * cada transformacion o compartir un objeto que no se puede compartir.
+ * <p>It is the answer to a very concrete problem: compiling a stylesheet is expensive --it has to
+ * be parsed, its `import`s resolved, the template tree built, the XPath patterns compiled-- and a
+ * {@link Transformer} is **not reusable in parallel**, because it has state (the parameters, the
+ * output properties). Without this interface one would have to choose between paying for
+ * compilation on every transformation or sharing an object that cannot be shared.
  *
- * <p>`Templates` parte eso en dos: el resultado caro de compilar, **inmutable y seguro entre hilos**,
- * y los transformadores baratos que salen de el. El patron de uso es compilar una vez al arrancar y
- * pedir un {@link Transformer} por cada trabajo.
+ * <p>`Templates` splits that in two: the expensive result of compiling, **immutable and
+ * thread-safe**, and the cheap transformers that come out of it. The usage pattern is to compile
+ * once at startup and ask for one {@link Transformer} per job.
  *
- * <p>La inmutabilidad es la razon de que {@link #getOutputProperties} devuelva una **copia**: si
- * entregara la tabla interna, cualquiera que la modificara estaria cambiando la hoja de estilo para
- * todos los hilos que la comparten.
+ * <p>Immutability is the reason {@link #getOutputProperties} returns a **copy**: if it handed out
+ * the internal table, anybody who modified it would be changing the stylesheet for all the threads
+ * sharing it.
  */
 public interface Templates {
 
     /**
-     * Un transformador nuevo, listo para usar, con las propiedades de esta hoja de estilo.
+     * A new transformer, ready to use, with this stylesheet's properties.
      *
-     * <p>El objeto que devuelve es de un solo dueño: no se comparte entre hilos. El que se comparte
-     * es este `Templates`.
+     * <p>The object it returns has a single owner: it is not shared between threads. What is shared
+     * is this `Templates`.
      *
-     * @return un transformador recien hecho
-     * @throws TransformerConfigurationException si no se puede construir
+     * @return a freshly made transformer
+     * @throws TransformerConfigurationException if it cannot be built
      */
     Transformer newTransformer() throws TransformerConfigurationException;
 
     /**
-     * Una copia de las propiedades de salida que declara la hoja de estilo.
+     * A copy of the output properties the stylesheet declares.
      *
-     * <p>Copia, no vista: ver la nota del encabezado. Las que la hoja no declara aparecen como los
-     * valores por omision del metodo de salida en las {@link Properties#defaults} de la tabla, no
-     * como entradas propias -- asi se distingue "lo dijo la hoja" de "lo puso la spec", que es
-     * justo lo que hay que saber para decidir si conviene pisarlo.
+     * <p>A copy, not a view: see the header note. The ones the stylesheet does not declare appear
+     * as the output method's default values in the table's {@link Properties#defaults}, not as
+     * entries of their own -- that is how "the stylesheet said it" is told apart from "the spec put
+     * it", which is just what one needs to know to decide whether to override it.
      *
-     * @return las propiedades, con las por omision abajo
+     * @return the properties, with the defaults underneath
      */
     Properties getOutputProperties();
 }

@@ -30,8 +30,9 @@ public final class HijrahDate implements ChronoLocalDate {
         return new HijrahDate(HijrahTable.epochDayOf(prolepticYear, month, dayOfMonth));
     }
 
-    // De paquete: es como la cronologia arma una fecha sin pasar por mes y dia. No es publico
-    // porque el JDK no lo tiene --alli se llega por `HijrahChronology.dateEpochDay`--.
+    // Package-private: it is how the chronology builds a date without going through month and day.
+    // It is not public because the JDK does not have it --there one gets in through
+    // `HijrahChronology.dateEpochDay`--.
     static HijrahDate ofEpochDay(long epochDay) {
         return new HijrahDate(epochDay);
     }
@@ -198,38 +199,37 @@ public final class HijrahDate implements ChronoLocalDate {
     }
 
     /**
-     * El periodo entre esta fecha y `endDateExclusive`, en el calendario Hijri.
+     * The period between this date and `endDateExclusive`, in the Hijrah calendar.
      *
-     * <p>A diferencia de los otros tres calendarios de la biblioteca, este **no** es el ISO
-     * renumerado: sus meses son lunares y duran 29 o 30 dias. Asi que la cuenta no se puede delegar
-     * en `java.time.Period` -- se hace sobre los campos Hijri, tomando primero los meses completos y
-     * despues los dias que sobran, que es lo que hace valer
-     * `inicio.plus(until(inicio, fin)).equals(fin)`.
+     * <p>Unlike the library's other three calendars, this one is **not** ISO renumbered: its months
+     * are lunar and last 29 or 30 days. So the sum cannot be delegated to `java.time.Period` -- it is
+     * done over the Hijrah fields, taking the whole months first and then the days left over, which
+     * is what makes `start.plus(until(start, end)).equals(end)` hold.
      */
     public ChronoPeriod until(ChronoLocalDate endDateExclusive) {
         if (endDateExclusive == null) {
             throw new NullPointerException("endDateExclusive");
         }
-        HijrahDate fin = HijrahChronology.INSTANCE.date(
+        HijrahDate end = HijrahChronology.INSTANCE.date(
                 (int) endDateExclusive.getLong(ChronoField.YEAR),
                 (int) endDateExclusive.getLong(ChronoField.MONTH_OF_YEAR),
                 (int) endDateExclusive.getLong(ChronoField.DAY_OF_MONTH));
-        long mesesTotales = (fin.getLong(ChronoField.YEAR) * 12L
-                + fin.getLong(ChronoField.MONTH_OF_YEAR) - 1L)
+        long totalMonths = (end.getLong(ChronoField.YEAR) * 12L
+                + end.getLong(ChronoField.MONTH_OF_YEAR) - 1L)
                 - (this.getLong(ChronoField.YEAR) * 12L
                         + this.getLong(ChronoField.MONTH_OF_YEAR) - 1L);
-        int dias = (int) (fin.getLong(ChronoField.DAY_OF_MONTH)
+        int days = (int) (end.getLong(ChronoField.DAY_OF_MONTH)
                 - this.getLong(ChronoField.DAY_OF_MONTH));
-        if (mesesTotales > 0 && dias < 0) {
-            mesesTotales = mesesTotales - 1;
-            HijrahDate avanzada = (HijrahDate) this.plus(mesesTotales, ChronoUnit.MONTHS);
-            dias = (int) (fin.toEpochDay() - avanzada.toEpochDay());
-        } else if (mesesTotales < 0 && dias > 0) {
-            mesesTotales = mesesTotales + 1;
-            dias = dias - fin.lengthOfMonth();
+        if (totalMonths > 0 && days < 0) {
+            totalMonths = totalMonths - 1;
+            HijrahDate advanced = (HijrahDate) this.plus(totalMonths, ChronoUnit.MONTHS);
+            days = (int) (end.toEpochDay() - advanced.toEpochDay());
+        } else if (totalMonths < 0 && days > 0) {
+            totalMonths = totalMonths + 1;
+            days = days - end.lengthOfMonth();
         }
-        return new ChronoPeriodImpl(this.getChronology(), (int) (mesesTotales / 12L),
-                (int) (mesesTotales % 12L), dias);
+        return new ChronoPeriodImpl(this.getChronology(), (int) (totalMonths / 12L),
+                (int) (totalMonths % 12L), days);
     }
 
     public long toEpochDay() {
@@ -273,28 +273,28 @@ public final class HijrahDate implements ChronoLocalDate {
         return buf.toString();
     }
 
-    // ---- las cuatro entradas que faltaban, mas la variante ----------------------------------------
+    // ---- the four entry points that were missing, plus the variant -------------------------------
 
-    /** Hoy, en la zona por defecto del sistema. */
+    /** Today, in the system's default zone. */
     public static HijrahDate now() {
         return HijrahDate.ofEpochDay(java.time.LocalDate.now().toEpochDay());
     }
 
-    /** Hoy en esa zona. */
+    /** Today in that zone. */
     public static HijrahDate now(java.time.ZoneId zone) {
         return HijrahDate.ofEpochDay(java.time.LocalDate.now(zone).toEpochDay());
     }
 
-    /** Hoy **segun ese reloj**, que es la forma que se puede probar con un `Clock.fixed`. */
+    /** Today **according to that clock**, the form that can be tested with a `Clock.fixed`. */
     public static HijrahDate now(java.time.Clock clock) {
         return HijrahDate.ofEpochDay(java.time.LocalDate.now(clock).toEpochDay());
     }
 
     /**
-     * La fecha que `temporal` tiene, leida en el calendario hijri.
+     * The date `temporal` holds, read in the Hijrah calendar.
      *
-     * @throws java.time.DateTimeException si `temporal` no lleva una fecha, o si cae fuera de los
-     *     anios tabulados
+     * @throws java.time.DateTimeException if `temporal` carries no date, or if it falls outside the
+     *     tabulated years
      */
     public static HijrahDate from(java.time.temporal.TemporalAccessor temporal) {
         if (temporal == null) {
@@ -307,15 +307,15 @@ public final class HijrahDate implements ChronoLocalDate {
     }
 
     /**
-     * Esta misma fecha en otra **variante** del calendario hijri.
+     * This same date in another **variant** of the Hijrah calendar.
      *
-     * <p>El hijri no es un calendario sino una familia: la Umm al-Qura de Arabia Saudita, la
-     * tabular, y varias mas, que difieren en que dia empieza cada mes. Esta biblioteca **trae una
-     * sola tabla**, asi que la unica variante que existe es la que ya se esta usando; pedir esa
-     * devuelve `this` y pedir otra falla, en vez de devolver una fecha de un calendario que no se
-     * calculo.
+     * <p>Hijrah is not one calendar but a family: Saudi Arabia's Umm al-Qura, the tabular one, and
+     * several more, which differ in what day each month starts. This library **carries a single
+     * table**, so the only variant that exists is the one already in use; asking for that one
+     * returns `this` and asking for another fails, rather than returning a date of a calendar that
+     * was not computed.
      *
-     * @throws java.time.DateTimeException si la variante no es la que se trae
+     * @throws java.time.DateTimeException if the variant is not the one carried
      */
     public HijrahDate withVariant(HijrahChronology chronology) {
         if (chronology == null) {

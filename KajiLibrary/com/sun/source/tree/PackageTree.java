@@ -3,7 +3,7 @@ package com.sun.source.tree;
 import java.util.List;
 
 /**
- * La declaracion `package`, con sus anotaciones.
+ * The `package` declaration, with its annotations.
  */
 public interface PackageTree extends Tree {
 

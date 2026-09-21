@@ -2,7 +2,7 @@ package java.security.spec;
 
 import java.security.DEREncodable;
 
-// Una clave **privada** codificada segun el `PrivateKeyInfo` de PKCS#8.
+// A **private** key encoded as PKCS#8's `PrivateKeyInfo`.
 public class PKCS8EncodedKeySpec extends EncodedKeySpec implements DEREncodable {
 
     public PKCS8EncodedKeySpec(byte[] encodedKey) {

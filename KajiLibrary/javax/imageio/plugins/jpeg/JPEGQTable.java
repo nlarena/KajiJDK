@@ -1,36 +1,37 @@
 package javax.imageio.plugins.jpeg;
 
 /**
- * KajiLibrary's javax.imageio.plugins.jpeg.JPEGQTable -- una tabla de cuantizacion de JPEG.
+ * KajiLibrary's javax.imageio.plugins.jpeg.JPEGQTable -- a JPEG quantization table.
  *
- * <p>Aca es donde JPEG <b>pierde informacion</b>, y es lo unico que hay que entender de esta clase.
- * Cada uno de los 64 coeficientes de un bloque se divide por su entrada de la tabla y se redondea; lo
- * que se pierde en ese redondeo no vuelve.
+ * <p>This is where JPEG <b>loses information</b>, and it is the only thing to understand about this
+ * class. Each of the 64 coefficients of a block is divided by its table entry and rounded; what is
+ * lost in that rounding does not come back.
  *
- * <p>Por eso los numeros crecen hacia el final: las primeras entradas son las frecuencias bajas --las
- * formas grandes, que el ojo ve-- y las ultimas las altas --el detalle fino, que el ojo casi no ve--.
- * Dividir las altas por 99 y las bajas por 16 es exactamente la apuesta que hace JPEG.
+ * <p>That is why the numbers grow towards the end: the first entries are the low frequencies --the
+ * large shapes, which the eye sees-- and the last ones the high frequencies --the fine detail,
+ * which the eye hardly sees. Dividing the high ones by 99 and the low ones by 16 is exactly the bet
+ * JPEG makes.
  *
- * <p>Los 64 valores estan en <b>orden natural</b>, por filas: la entrada {@code i} es la fila
- * {@code i / 8}, columna {@code i % 8}. En el archivo van en zigzag; la conversion no es asunto de
- * esta clase.
+ * <p>The 64 values are in <b>natural order</b>, by rows: entry {@code i} is row {@code i / 8},
+ * column {@code i % 8}. In the file they go in zigzag; the conversion is not this class's
+ * business.
  *
  * <h2>{@link #getScaledInstance}</h2>
  *
- * <p>Es como se implementa un control de calidad: multiplicar la tabla entera por un factor. Menos de
- * uno da mas calidad y mas tamano; mas de uno, al reves.
+ * <p>It is how a quality control is implemented: multiplying the whole table by a factor. Less than
+ * one gives more quality and more size; more than one, the other way round.
  *
- * <p>El booleano decide el techo: {@code true} recorta a 255 --lo que exige JPEG de 8 bits-- y
- * {@code false} a 32767. El piso siempre es 1, porque dividir por cero no es una opcion.
+ * <p>The boolean decides the ceiling: {@code true} clips to 255 --which 8-bit JPEG requires-- and
+ * {@code false} to 32767. The floor is always 1, because dividing by zero is not an option.
  *
- * <p>Las cuatro constantes son las del anexo K del estandar. Las {@code Div2} son las mismas a la
- * mitad, que es aproximadamente calidad 75 contra calidad 50.
+ * <p>The four constants are the ones from annex K of the standard. The {@code Div2} ones are the
+ * same halved, which is roughly quality 75 against quality 50.
  *
- * <p>Es inmutable.
+ * <p>It is immutable.
  */
 public class JPEGQTable {
 
-    /** Los 64 valores de K1Luminance, en orden natural. */
+    /** The 64 values of K1Luminance, in natural order. */
     private static final int[] K1LUMINANCE_TABLE = {
         16, 11, 10, 16, 24, 40, 51, 61,
         12, 12, 14, 19, 26, 58, 60, 55,
@@ -42,7 +43,7 @@ public class JPEGQTable {
         72, 92, 95, 98, 112, 100, 103, 99
     };
 
-    /** Los 64 valores de K1Div2Luminance, en orden natural. */
+    /** The 64 values of K1Div2Luminance, in natural order. */
     private static final int[] K1DIV2LUMINANCE_TABLE = {
         8, 6, 5, 8, 12, 20, 26, 31,
         6, 6, 7, 10, 13, 29, 30, 28,
@@ -54,7 +55,7 @@ public class JPEGQTable {
         36, 46, 48, 49, 56, 50, 52, 50
     };
 
-    /** Los 64 valores de K2Chrominance, en orden natural. */
+    /** The 64 values of K2Chrominance, in natural order. */
     private static final int[] K2CHROMINANCE_TABLE = {
         17, 18, 24, 47, 99, 99, 99, 99,
         18, 21, 26, 66, 99, 99, 99, 99,
@@ -66,7 +67,7 @@ public class JPEGQTable {
         99, 99, 99, 99, 99, 99, 99, 99
     };
 
-    /** Los 64 valores de K2Div2Chrominance, en orden natural. */
+    /** The 64 values of K2Div2Chrominance, in natural order. */
     private static final int[] K2DIV2CHROMINANCE_TABLE = {
         9, 9, 12, 24, 50, 50, 50, 50,
         9, 11, 13, 33, 50, 50, 50, 50,
@@ -78,26 +79,26 @@ public class JPEGQTable {
         50, 50, 50, 50, 50, 50, 50, 50
     };
 
-    /** La tabla K.1 del estandar, para luminancia. */
+    /** The standard's table K.1, for luminance. */
     public static final JPEGQTable K1Luminance = new JPEGQTable(K1LUMINANCE_TABLE, false);
 
-    /** La K.1 a la mitad: el doble de calidad y de tamano. */
+    /** K.1 halved: higher quality and larger files. */
     public static final JPEGQTable K1Div2Luminance = new JPEGQTable(K1DIV2LUMINANCE_TABLE, false);
 
-    /** La tabla K.2 del estandar, para crominancia. */
+    /** The standard's table K.2, for chrominance. */
     public static final JPEGQTable K2Chrominance = new JPEGQTable(K2CHROMINANCE_TABLE, false);
 
-    /** La K.2 a la mitad. */
+    /** K.2 halved. */
     public static final JPEGQTable K2Div2Chrominance = new JPEGQTable(K2DIV2CHROMINANCE_TABLE, false);
 
-    /** Los 64 valores, en orden natural. */
+    /** The 64 values, in natural order. */
     private final int[] qTable;
 
     /**
-     * Una tabla nueva; el arreglo se copia.
+     * A new table; the array is copied.
      *
-     * @param table 64 valores en orden natural
-     * @throws IllegalArgumentException si es null o no tiene 64 entradas
+     * @param table 64 values in natural order
+     * @throws IllegalArgumentException if it is null or does not have 64 entries
      */
     public JPEGQTable(int[] table) {
         if (table == null) {
@@ -110,12 +111,12 @@ public class JPEGQTable {
         System.arraycopy(table, 0, this.qTable, 0, 64);
     }
 
-    /** El de las constantes, que no copia. Ver {@link JPEGHuffmanTable}. */
+    /** The constants' one, which does not copy. See {@link JPEGHuffmanTable}. */
     private JPEGQTable(int[] table, boolean shared) {
         this.qTable = table;
     }
 
-    /** Los 64 valores; una copia. */
+    /** The 64 values; a copy. */
     public int[] getTable() {
         int[] copy = new int[64];
         System.arraycopy(this.qTable, 0, copy, 0, 64);
@@ -123,12 +124,12 @@ public class JPEGQTable {
     }
 
     /**
-     * Una tabla con todos los valores multiplicados por ese factor.
+     * A table with all the values multiplied by that factor.
      *
-     * <p>Ver la nota de la clase: el piso es 1 y el techo depende del booleano.
+     * <p>See the class note: the floor is 1 and the ceiling depends on the boolean.
      *
-     * @param scaleFactor por cuanto multiplicar
-     * @param forceBaseline si recortar a 255 en lugar de a 32767
+     * @param scaleFactor what to multiply by
+     * @param forceBaseline whether to clip to 255 instead of 32767
      */
     public JPEGQTable getScaledInstance(float scaleFactor, boolean forceBaseline) {
         int max;
@@ -153,7 +154,7 @@ public class JPEGQTable {
         return new JPEGQTable(scaled, false);
     }
 
-    /** Los 64 valores en ocho filas de ocho, con una tabulacion adelante. */
+    /** The 64 values in eight rows of eight, with a tab in front. */
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder("JPEGQTable:\n");

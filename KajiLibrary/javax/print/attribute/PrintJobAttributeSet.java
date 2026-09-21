@@ -1,12 +1,12 @@
 package javax.print.attribute;
 
-// Un AttributeSet que solo acepta atributos que sean `PrintJobAttribute`. La restriccion se
-// verifica en tiempo de ejecucion; ver DocAttributeSet.
+// An AttributeSet that only accepts attributes that are `PrintJobAttribute`s. The restriction is
+// checked at run time; see DocAttributeSet.
 public interface PrintJobAttributeSet extends AttributeSet {
 
-    // ClassCastException si `attribute` no es un PrintJobAttribute.
+    // ClassCastException if `attribute` is not a PrintJobAttribute.
     boolean add(Attribute attribute);
 
-    // ClassCastException si alguno de los atributos no es un PrintJobAttribute.
+    // ClassCastException if any of the attributes is not a PrintJobAttribute.
     boolean addAll(AttributeSet attributes);
 }

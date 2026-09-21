@@ -4,24 +4,24 @@ import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeSupport;
 
 /**
- * El {@link PropertyChangeSupport} de JavaBeans, con la regla del hilo de Swing.
+ * JavaBeans' {@link PropertyChangeSupport}, with Swing's thread rule.
  *
- * <h2>Que agrega</h2>
+ * <h2>What it adds</h2>
  *
- * <p>Swing tiene una regla dura: todo lo que toca la interfaz corre en el hilo despachador de
- * eventos. Un bean que cambia una propiedad desde un hilo de trabajo y avisa directamente haria que
- * un oyente actualice un componente desde el hilo equivocado — que no falla enseguida, falla
- * despues y en otro lado.
+ * <p>Swing has a hard rule: everything that touches the interface runs on the event dispatch
+ * thread. A bean that changes a property from a worker thread and notifies directly would make a
+ * listener update a component from the wrong thread -- which does not fail right away, it fails
+ * later and somewhere else.
  *
- * <p>Con {@link #isNotifyOnEDT} en {@code true} el aviso se reencola en el hilo correcto. La bandera
- * arranca apagada por compatibilidad: esta clase es anterior a la regla.
+ * <p>With {@link #isNotifyOnEDT} at {@code true} the notice is re-queued on the right thread. The
+ * flag starts off for compatibility: this class predates the rule.
  *
- * <h2>Lo que esta VM no hace</h2>
+ * <h2>What this VM does not do</h2>
  *
- * <p>Reencolar necesita el hilo despachador, que lo provee el sistema de ventanas. Esta VM no lo
- * tiene, asi que el aviso sale en el hilo que llamo, como si la bandera estuviera apagada. La
- * bandera se guarda y se reporta con fidelidad; lo que no ocurre es el salto de hilo, y queda dicho
- * aca en vez de aparentar una garantia que no se cumple.
+ * <p>Re-queueing needs the dispatch thread, which the windowing system provides. This VM does not
+ * have it, so the notice goes out on the calling thread, as if the flag were off. The flag is
+ * kept and reported faithfully; what does not happen is the thread hop, and it is said here
+ * instead of pretending a guarantee that is not met.
  */
 public final class SwingPropertyChangeSupport extends PropertyChangeSupport {
 
@@ -29,23 +29,23 @@ public final class SwingPropertyChangeSupport extends PropertyChangeSupport {
 
     private final boolean notifyOnEDT;
 
-    /** Sin reencolado, que es el comportamiento historico. */
+    /** Without re-queueing, which is the historical behaviour. */
     public SwingPropertyChangeSupport(Object sourceBean) {
         this(sourceBean, false);
     }
 
-    /** Eligiendo si los avisos se reencolan al hilo de la interfaz. */
+    /** Choosing whether the notices are re-queued to the interface's thread. */
     public SwingPropertyChangeSupport(Object sourceBean, boolean notifyOnEDT) {
         super(sourceBean);
         this.notifyOnEDT = notifyOnEDT;
     }
 
-    /** Reparte el aviso; ver la nota de la clase sobre el hilo. */
+    /** Hands the notice out; see the class note about the thread. */
     public void firePropertyChange(PropertyChangeEvent evt) {
         super.firePropertyChange(evt);
     }
 
-    /** Si los avisos deberian reencolarse al hilo de la interfaz. */
+    /** Whether the notices should be re-queued to the interface's thread. */
     public boolean isNotifyOnEDT() {
         return this.notifyOnEDT;
     }

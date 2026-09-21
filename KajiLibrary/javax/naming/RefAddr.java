@@ -1,37 +1,35 @@
 package javax.naming;
 
 /**
- * Una direccion de comunicacion, etiquetada con **de que tipo de direccion se trata**.
+ * A communication address, labelled with **what kind of address it is**.
  *
- * <h2>Por que una direccion no es una cadena</h2>
+ * <h2>Why an address is not a string</h2>
  *
- * <p>Un objeto puede ser alcanzable de varias maneras a la vez: el mismo servicio tiene una URL,
- * un puerto RPC y un buzon de mensajes. Guardarlas como cadenas sueltas obliga a adivinar cual es
- * cual por su forma, que es exactamente lo que se rompe cuando aparece la cuarta. Aca cada
- * direccion viene con su tipo --`"URL"`, `"ORB"`, `"LinkAddress"`-- y `Reference.get(String)`
- * pide por tipo. El tipo es un `String` y no un `enum` porque el conjunto lo define cada
- * proveedor, y ninguno los conoce todos.
+ * <p>An object may be reachable in several ways at once: the same service has a URL, an RPC port
+ * and a mailbox. Storing them as loose strings forces guessing which is which by their shape, which
+ * is exactly what breaks when the fourth one appears. Here each address comes with its type
+ * --`"URL"`, `"ORB"`, `"LinkAddress"`-- and `Reference.get(String)` asks by type. The type is
+ * a `String` and not an `enum` because each provider defines the set, and none knows them all.
  *
- * <p>Es abstracta y el contenido lo pone la subclase, porque una direccion puede ser texto
- * (`StringRefAddr`) o bytes opacos que solo entiende el proveedor (`BinaryRefAddr`). Esas dos son
- * las unicas del paquete, pero la clase esta pensada para que un proveedor agregue las suyas.
+ * <p>It is abstract and the subclass supplies the content, because an address can be text
+ * (`StringRefAddr`) or opaque bytes only the provider understands (`BinaryRefAddr`). Those two are
+ * the only ones in the package, but the class is meant for a provider to add its own.
  *
- * <h2>La igualdad</h2>
+ * <h2>Equality</h2>
  *
- * <p>Dos direcciones son iguales si coinciden **el tipo y el contenido**. Aca se compara el
- * contenido con `equals`, que es lo correcto para `String` pero no para arreglos; por eso
- * `BinaryRefAddr` redefine `equals` y `hashCode` para comparar byte a byte.
+ * <p>Two addresses are equal if **the type and the content** match. Here the content is compared
+ * with `equals`, which is right for `String` but not for arrays; that is why `BinaryRefAddr`
+ * redefines `equals` and `hashCode` to compare byte by byte.
  *
- * <p>Sobre `Serializable`: el contrato dice que el contenido tiene que serlo tambien, y no se
- * puede chequear desde aca. Este arbol no tiene `ObjectOutputStream`, asi que la declaracion es un
- * contrato sin quien lo ejercite; el `serialVersionUID` es el del JDK real para que el dia que
- * exista un flujo la forma coincida.
+ * <p>On `Serializable`: the contract says the content has to be serializable too, and that cannot
+ * be checked from here. The `serialVersionUID` is the real JDK's so the serial form matches. (An
+ * earlier note said this tree had no `ObjectOutputStream`; it has one now.)
  */
 public abstract class RefAddr implements java.io.Serializable {
 
     private static final long serialVersionUID = -1468165120479475415L;
 
-    /** De que clase de direccion se trata. Es `protected` porque la subclase lo lee para su `toString`. */
+    /** What kind of address it is. `protected` because the subclass reads it for its `toString`. */
     protected String addrType;
 
     protected RefAddr(String addrType) {
@@ -44,7 +42,10 @@ public abstract class RefAddr implements java.io.Serializable {
 
     public abstract Object getContent();
 
-    /** Tipo y contenido. El contenido se compara con `equals`, no por identidad, salvo si es el mismo. */
+    /**
+     * Type and content. The content is compared with `equals`, not by identity, unless it is the
+     * same.
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj instanceof RefAddr) {
@@ -63,7 +64,7 @@ public abstract class RefAddr implements java.io.Serializable {
         return false;
     }
 
-    /** Suma en vez de mezcla, para que un contenido nulo no cambie el hash del tipo. */
+    /** A sum instead of a mix, so that null content does not change the type's hash. */
     @Override
     public int hashCode() {
         return (getContent() == null)

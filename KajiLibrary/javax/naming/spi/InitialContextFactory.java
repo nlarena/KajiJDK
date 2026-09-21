@@ -5,21 +5,22 @@ import javax.naming.Context;
 import javax.naming.NamingException;
 
 /**
- * KajiLibrary's javax.naming.spi.InitialContextFactory -- de donde sale el contexto inicial.
+ * KajiLibrary's javax.naming.spi.InitialContextFactory -- where the initial context comes from.
  *
- * <p>El punto de entrada de un proveedor JNDI entero. La aplicacion pone el nombre de la clase que la
- * implementa en la propiedad {@code java.naming.factory.initial}, y todo lo demas --el
- * {@code InitialContext}, sus busquedas, sus subcontextos-- sale de lo que devuelva este metodo.
+ * <p>The entry point of a whole JNDI provider. The application puts the name of the class that
+ * implements it in the {@code java.naming.factory.initial} property, and everything else --the
+ * {@code InitialContext}, its lookups, its subcontexts-- comes from what this method returns.
  *
- * <p>Una implementacion tiene que tener constructor publico sin argumentos: la plataforma la carga
- * por nombre y la instancia por reflexion.
+ * <p>An implementation must have a public no-argument constructor: the platform loads it by name
+ * and instantiates it by reflection. (In this library, {@code NamingManager.getInitialContext}
+ * does that, but {@code javax.naming.InitialContext} never calls it; see its class header.)
  */
 public interface InitialContextFactory {
 
     /**
-     * El contexto inicial para ese ambiente.
+     * The initial context for that environment.
      *
-     * @throws NamingException si el ambiente no alcanza para crearlo
+     * @throws NamingException if the environment is not enough to create it
      */
     Context getInitialContext(Hashtable<?, ?> environment) throws NamingException;
 }

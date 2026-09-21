@@ -1,12 +1,12 @@
 package javax.security.auth.callback;
 
 /**
- * KajiLibrary's javax.security.auth.callback.UnsupportedCallbackException -- ese callback no se sabe
- * contestar.
+ * KajiLibrary's javax.security.auth.callback.UnsupportedCallbackException -- that callback cannot
+ * be answered.
  *
- * <p>Lleva <b>cual</b>, y no solo un mensaje: quien la atrapa suele tener varios callbacks en vuelo
- * y necesita saber cual quedo sin contestar para decidir si puede seguir sin el. Ver
- * {@link CallbackHandler} para la diferencia con un fallo de entrada/salida.
+ * <p>It carries <b>which one</b>, and not only a message: whoever catches it usually has several
+ * callbacks in flight and needs to know which one was left unanswered to decide whether it can go
+ * on without it. See {@link CallbackHandler} for the difference from an input/output failure.
  */
 public class UnsupportedCallbackException extends Exception {
 
@@ -24,7 +24,7 @@ public class UnsupportedCallbackException extends Exception {
         this.callback = callback;
     }
 
-    /** El callback que no se pudo contestar. */
+    /** The callback that could not be answered. */
     public Callback getCallback() {
         return this.callback;
     }

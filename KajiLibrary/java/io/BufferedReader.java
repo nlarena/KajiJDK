@@ -81,9 +81,10 @@ public class BufferedReader extends Reader {
     /**
      * The lines of this reader, read eagerly, as a stream.
      *
-     * <p>No declara `throws IOException` --el JDK tampoco-- porque un `Stream` se consume despues, y
-     * una excepcion chequeada no puede salir de donde se consume. La salida del JDK es envolverla en
-     * {@link UncheckedIOException}, y es la que se copia: el error no se pierde, cambia de forma.
+     * <p>It does not declare `throws IOException` --nor does the JDK-- because a `Stream` is
+     * consumed later, and a checked exception cannot come out of where it is consumed. The JDK's
+     * way out is wrapping it in an {@link UncheckedIOException}, and it is the one copied here: the
+     * error is not lost, it changes shape.
      */
     public Stream<String> lines() {
         List<String> all = new ArrayList<String>();

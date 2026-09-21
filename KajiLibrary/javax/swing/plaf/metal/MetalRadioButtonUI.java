@@ -11,20 +11,22 @@ import javax.swing.plaf.ComponentUI;
 import javax.swing.plaf.basic.BasicRadioButtonUI;
 
 /**
- * El boton de opcion de Metal.
+ * Metal's radio button.
  *
- * <p>Los mismos tres colores que el boton -- foco, seleccion y texto apagado -- sacados del tema.
- * Lo unico distinto es {@link #paintFocus}, que dibuja el rectangulo punteado alrededor del
- * <em>texto</em> y no del componente entero: el circulito de la izquierda no entra en el marco de
- * foco, porque marcar el circulo ademas del texto se lee como dos cosas enfocadas.
+ * <p>The same three colours as the button -- focus, selection and disabled text -- taken from
+ * the theme. The only different thing is {@link #paintFocus}, which draws the dotted rectangle
+ * around the <em>text</em> and not around the whole component: the little circle on the left
+ * does not go inside the focus frame, because marking the circle as well as the text reads as
+ * two focused things.
  *
- * <p>De esta clase hereda {@link MetalCheckBoxUI}, y no al reves, aunque una casilla sea mas simple
- * que un boton de opcion. Es porque el dibujo -- icono a la izquierda, texto al lado, foco alrededor
- * del texto -- es el mismo, y lo unico que cambia es de que prefijo salen los valores.
+ * <p>{@link MetalCheckBoxUI} inherits from this class, and not the other way round, even though
+ * a check box is simpler than a radio button. It is because the drawing -- icon on the left,
+ * text beside it, focus around the text -- is the same, and the only thing that changes is which
+ * prefix the values come from.
  */
 public class MetalRadioButtonUI extends BasicRadioButtonUI {
 
-    private static final MetalRadioButtonUI UNICO = new MetalRadioButtonUI();
+    private static final MetalRadioButtonUI SHARED = new MetalRadioButtonUI();
 
     protected Color focusColor;
     protected Color selectColor;
@@ -34,19 +36,19 @@ public class MetalRadioButtonUI extends BasicRadioButtonUI {
     }
 
     public static ComponentUI createUI(JComponent b) {
-        return UNICO;
+        return SHARED;
     }
 
     protected Color getFocusColor() {
         if (focusColor == null) {
-            focusColor = MetalLookAndFeel.colorDeLaTabla(getPropertyPrefix() + "focus");
+            focusColor = MetalLookAndFeel.tableColor(getPropertyPrefix() + "focus");
         }
         return focusColor;
     }
 
     protected Color getSelectColor() {
         if (selectColor == null) {
-            selectColor = MetalLookAndFeel.colorDeLaTabla(getPropertyPrefix() + "select");
+            selectColor = MetalLookAndFeel.tableColor(getPropertyPrefix() + "select");
         }
         return selectColor;
     }
@@ -54,30 +56,31 @@ public class MetalRadioButtonUI extends BasicRadioButtonUI {
     protected Color getDisabledTextColor() {
         if (disabledTextColor == null) {
             disabledTextColor =
-                    MetalLookAndFeel.colorDeLaTabla(getPropertyPrefix() + "disabledText");
+                    MetalLookAndFeel.tableColor(getPropertyPrefix() + "disabledText");
         }
         return disabledTextColor;
     }
 
     public void installDefaults(AbstractButton b) {
         super.installDefaults(b);
-        focusColor = MetalLookAndFeel.colorDeLaTabla(getPropertyPrefix() + "focus");
-        selectColor = MetalLookAndFeel.colorDeLaTabla(getPropertyPrefix() + "select");
+        focusColor = MetalLookAndFeel.tableColor(getPropertyPrefix() + "focus");
+        selectColor = MetalLookAndFeel.tableColor(getPropertyPrefix() + "select");
         disabledTextColor =
-                MetalLookAndFeel.colorDeLaTabla(getPropertyPrefix() + "disabledText");
+                MetalLookAndFeel.tableColor(getPropertyPrefix() + "disabledText");
     }
 
     protected void uninstallDefaults(AbstractButton b) {
         super.uninstallDefaults(b);
-        // Los tres colores no se sueltan: este UI lo comparten todos los botones del
-        // programa, y soltarlos al desinstalar uno dejaria a los demas sin color. Medido.
+        // The three colours are not released: this UI is shared by every button in the
+                // program, and releasing them when one is uninstalled would leave the rest with no
+                // colour. Measured.
     }
 
     public synchronized void paint(Graphics g, JComponent c) {
         super.paint(g, c);
     }
 
-    /** Alrededor del texto, no del componente; ver la nota de la clase. */
+    /** Around the text, not around the component; see the class note. */
     protected void paintFocus(Graphics g, Rectangle t, Dimension d) {
         g.setColor(getFocusColor());
         g.drawRect(t.x - 1, t.y - 1, t.width + 1, t.height + 1);

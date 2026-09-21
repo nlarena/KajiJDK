@@ -10,46 +10,47 @@ import javax.print.attribute.AttributeSetUtilities;
 import javax.print.attribute.DocAttributeSet;
 
 /**
- * KajiLibrary's javax.print.SimpleDoc -- la implementacion comun de {@link Doc}.
+ * KajiLibrary's javax.print.SimpleDoc -- the common implementation of {@link Doc}.
  *
- * <p>Cubre el caso normal: un dato ya en memoria o un flujo abierto, con su formato y sus atributos.
- * Solo hace falta escribir un {@code Doc} propio cuando el dato se produce sobre la marcha.
+ * <p>It covers the normal case: data already in memory or an open stream, with its format and its
+ * attributes. One only needs to write a {@code Doc} of one's own when the data is produced on the
+ * fly.
  *
- * <h2>Verifica que el dato sea del tipo que dice</h2>
+ * <h2>It checks that the data is of the type it says</h2>
  *
- * <p>El constructor comprueba que el dato sea instancia de la clase de representacion del formato, y
- * lanza {@link IllegalArgumentException} si no. Vale la pena que falle aca y no adentro del servicio,
- * donde el error saldria como un {@code ClassCastException} sin contexto.
+ * <p>The constructor checks that the data is an instance of the format's representation class, and
+ * throws {@link IllegalArgumentException} if not. It is worth failing here and not inside the
+ * service, where the error would come out as a {@code ClassCastException} without context.
  *
- * <h2>Se lee una sola vez</h2>
+ * <h2>It is read only once</h2>
  *
- * <p>{@link #getReaderForText} y {@link #getStreamForBytes} guardan lo que devuelven y devuelven
- * siempre lo mismo, como pide {@link Doc}. La consecuencia es que un {@code SimpleDoc} sirve para una
- * sola impresion aunque el dato sea un {@code String}.
+ * <p>{@link #getReaderForText} and {@link #getStreamForBytes} keep what they return and always
+ * return the same, as {@link Doc} asks. The consequence is that a {@code SimpleDoc} serves for a
+ * single printing even if the data is a {@code String}.
  */
 public final class SimpleDoc implements Doc {
 
-    /** El dato. */
+    /** The data. */
     private final Object printData;
 
-    /** De que tipo es. */
+    /** What type it is. */
     private final DocFlavor flavor;
 
-    /** Los atributos, ya de solo lectura. */
+    /** The attributes, already read-only. */
     private final DocAttributeSet attributes;
 
-    /** El lector, una vez creado. Ver la nota de la clase. */
+    /** The reader, once created. See the class note. */
     private Reader reader;
 
-    /** El flujo, una vez creado. */
+    /** The stream, once created. */
     private InputStream inputStream;
 
     /**
-     * @param printData el dato, que tiene que ser de la clase que declara el formato
-     * @param flavor de que tipo es
-     * @param attributes los atributos propios del documento, o null
-     * @throws IllegalArgumentException si el dato o el formato son null, o si el dato no es de la
-     *     clase declarada
+     * @param printData the data, which has to be of the class the format declares
+     * @param flavor what type it is
+     * @param attributes the document's own attributes, or null
+     * @throws IllegalArgumentException if the data or the format is null, or if the data is not of
+     *     the declared class
      */
     public SimpleDoc(Object printData, DocFlavor flavor, DocAttributeSet attributes) {
         if (flavor == null || printData == null) {
@@ -74,25 +75,25 @@ public final class SimpleDoc implements Doc {
         }
     }
 
-    /** De que tipo es. */
+    /** What type it is. */
     public DocFlavor getDocFlavor() {
         return this.flavor;
     }
 
-    /** Los atributos, o null si no se pasaron. */
+    /** The attributes, or null if none were passed. */
     public DocAttributeSet getAttributes() {
         return this.attributes;
     }
 
-    /** El dato. */
+    /** The data. */
     public Object getPrintData() throws IOException {
         return this.printData;
     }
 
     /**
-     * El dato como caracteres, o null si no es texto.
+     * The data as characters, or null if it is not text.
      *
-     * <p>Reconoce {@code char[]}, {@link String} y {@link Reader}. Siempre el mismo lector.
+     * <p>It recognises {@code char[]}, {@link String} and {@link Reader}. Always the same reader.
      */
     public synchronized Reader getReaderForText() throws IOException {
         if (this.printData instanceof char[]) {
@@ -110,9 +111,9 @@ public final class SimpleDoc implements Doc {
     }
 
     /**
-     * El dato como bytes, o null si no lo es.
+     * The data as bytes, or null if it is not.
      *
-     * <p>Reconoce {@code byte[]} e {@link InputStream}. Siempre el mismo flujo.
+     * <p>It recognises {@code byte[]} and {@link InputStream}. Always the same stream.
      */
     public synchronized InputStream getStreamForBytes() throws IOException {
         if (this.printData instanceof byte[]) {

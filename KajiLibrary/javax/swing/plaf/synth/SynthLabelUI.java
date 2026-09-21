@@ -11,15 +11,15 @@ import java.awt.Dimension;
 import javax.swing.JLabel;
 
 /**
- * La etiqueta de Synth.
+ * Synth's label.
  *
- * <p>Es la clase mas corta del paquete y la que mejor muestra el reparto: el texto y el icono los
- * sigue ubicando y dibujando el aspecto basico, y lo unico que Synth agrega es el fondo y el
- * borde, sacados del estilo.
+ * <p>It is the shortest class in the package and the one that best shows the sharing out: the
+ * text and the icon go on being placed and drawn by the basic look and feel, and the only thing
+ * Synth adds is the background and the border, taken from the style.
  *
- * <p>La etiqueta no implementa {@code PropertyChangeListener} -- es de las pocas que no --, y
- * tiene sentido: una etiqueta no cambia de estado sola. Se le pide el estilo al instalarla y
- * cuando el programa la cambia a mano.
+ * <p>The label does not implement {@code PropertyChangeListener} -- it is one of the few that do
+ * not --, and it makes sense: a label does not change state by itself. The style is asked for
+ * when installing it and when the program changes it by hand.
  */
 public class SynthLabelUI extends javax.swing.plaf.basic.BasicLabelUI implements SynthUI {
 
@@ -30,32 +30,33 @@ public class SynthLabelUI extends javax.swing.plaf.basic.BasicLabelUI implements
     }
 
     public SynthContext getContext(JComponent c) {
-        return getContext(c, SynthLookAndFeel.estadoDe(c));
+        return getContext(c, SynthLookAndFeel.stateOf(c));
     }
 
     /**
-     * El contexto con ese estado.
+     * The context with that state.
      *
-     * <p>La region sale del componente y no de una constante fija, y eso importa en las cadenas de
-     * herencia: {@code SynthCheckBoxUI} hereda este metodo de {@code SynthButtonUI} y tiene que
-     * contestar {@code CheckBox}, no {@code Button}. Medido.
+     * <p>The region comes from the component and not from a fixed constant, and that matters in the
+     * chains of inheritance: {@code SynthCheckBoxUI} inherits this method from {@code
+     * SynthButtonUI} and has to answer {@code CheckBox}, not {@code Button}. Measured.
      */
     private SynthContext getContext(JComponent c, int state) {
         Region r = SynthLookAndFeel.getRegion(c);
         return new SynthContext(c, (r != null) ? r : Region.LABEL, style, state, true);
     }
 
-    /** Le pide el estilo a la fabrica; revienta si no hay, y esta medido. */
+    /** It asks the factory for the style; it blows up if there is none, and it is measured. */
     private void updateStyle(JComponent c) {
-        style = SynthLookAndFeel.actualizar(getContext(c, SynthConstants.ENABLED));
+        style = SynthLookAndFeel.update(getContext(c, SynthConstants.ENABLED));
     }
 
     /**
-     * Dibuja el fondo y despues el contenido.
+     * It draws the background and then the content.
      *
-     * <p>Synth separa las dos cosas: el fondo lo pinta el estilo -- que sabe en que estado esta el
-     * componente -- y el contenido lo pinta el aspecto basico. Por eso {@code update} no es
-     * {@code paint} con un relleno adelante, como en el basico, sino dos pasos distintos.
+     * <p>Synth separates the two things: the background is painted by the style -- which knows what
+     * state the component is in -- and the content is painted by the basic look and feel. That is
+     * why {@code update} is not {@code paint} with a fill in front, as in the basic one, but two
+     * different steps.
      */
     public void update(Graphics g, JComponent c) {
         SynthContext context = getContext(c);
@@ -74,7 +75,7 @@ public class SynthLabelUI extends javax.swing.plaf.basic.BasicLabelUI implements
         super.paint(g, context.getComponent());
     }
 
-    /** El borde lo dibuja el estilo, no un {@code Border}; ver {@link SynthUI}. */
+    /** The border is drawn by the style, not by a {@code Border}; see {@link SynthUI}. */
     public void paintBorder(SynthContext context, Graphics g, int x, int y, int w, int h) {
         if (context != null && context.getStyle() != null) {
             context.getStyle().getPainter(context)
@@ -82,7 +83,7 @@ public class SynthLabelUI extends javax.swing.plaf.basic.BasicLabelUI implements
         }
     }
 
-    /** Cualquier cambio puede querer otro estilo; ver {@link SynthLookAndFeel#actualizar}. */
+    /** Any change may want another style; see {@link SynthLookAndFeel#update}. */
     public void propertyChange(PropertyChangeEvent e) {
         Object o = e.getSource();
         if (o instanceof JComponent) {

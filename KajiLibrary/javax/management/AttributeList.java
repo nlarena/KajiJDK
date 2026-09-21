@@ -6,41 +6,41 @@ import java.util.Iterator;
 import java.util.List;
 
 /**
- * Una lista de {@link Attribute}, que hereda de `ArrayList&lt;Object&gt;` y no de
- * `ArrayList&lt;Attribute&gt;`.
+ * A list of {@link Attribute}s, which extends {@code ArrayList&lt;Object&gt;} and not
+ * {@code ArrayList&lt;Attribute&gt;}.
  *
- * <p>Esa herencia rara es una cicatriz de compatibilidad, no un descuido. La clase es de 1999 y
- * cuando llegaron los genericos ya habia codigo que metia cualquier cosa adentro; parametrizarla
- * con `Attribute` habria roto ese codigo al recompilarlo. La salida del JDK fue dejarla en `Object`
- * y agregar {@link #asList()}, que es la vista tipada y la que conviene usar.
+ * <p>That odd inheritance is a compatibility scar, not an oversight. The class predates generics,
+ * and when they arrived there was already code putting anything inside; parameterizing it with
+ * {@code Attribute} would have broken that code on recompilation. The JDK's way out was to leave it
+ * at {@code Object} and add {@link #asList()}, which is the typed view and the one worth using.
  *
- * <p>El precio: {@code add(Object)} acepta lo que sea. El JDK marca la lista como "contaminada"
- * cuando eso pasa y {@link #asList()} deja de andar; aca se hace lo mismo.
+ * <p>The price: {@code add(Object)} accepts anything. The JDK marks the list as "tainted" when that
+ * happens and {@link #asList()} stops working; the same is done here.
  */
 public class AttributeList extends ArrayList<Object> {
 
     private static final long serialVersionUID = -4077085769279709076L;
 
-    private transient volatile boolean tipada;
+    private transient volatile boolean typed;
 
-    private transient volatile boolean contaminada;
+    private transient volatile boolean tainted;
 
-    /** Vacia. */
+    /** Empty. */
     public AttributeList() {
         super();
     }
 
-    /** Vacia, con capacidad reservada. */
+    /** Empty, with reserved capacity. */
     public AttributeList(int initialCapacity) {
         super(initialCapacity);
     }
 
-    /** Copia de otra. */
+    /** A copy of another. */
     public AttributeList(AttributeList list) {
         super(list);
     }
 
-    /** Desde una lista ya tipada; la marca como tipada de entrada. */
+    /** From an already typed list; marks it as typed from the start. */
     public AttributeList(List<Attribute> list) {
         if (list == null) {
             throw new IllegalArgumentException("Null parameter");
@@ -53,102 +53,104 @@ public class AttributeList extends ArrayList<Object> {
             }
             super.add(a);
         }
-        tipada = true;
+        typed = true;
     }
 
     /**
-     * La vista tipada.
+     * The typed view.
      *
-     * <p>Es una <b>vista</b>, no una copia: agregar por aca agrega alla. Y a partir de la primera
-     * llamada la lista queda marcada como tipada, asi que un `add(Object)` posterior con algo que no
-     * sea un `Attribute` es un error.
+     * <p>It is a <b>view</b>, not a copy: adding through here adds there. And from the first call
+     * on the list is marked as typed, so a later {@code add(Object)} with something that is not an
+     * {@code Attribute} is an error.
      *
-     * @throws IllegalArgumentException si ya se le metio algo que no es un `Attribute`
+     * @throws IllegalArgumentException if something that is not an {@code Attribute} was already
+     *     put in
      */
     @SuppressWarnings("unchecked")
     public List<Attribute> asList() {
-        tipada = true;
-        if (contaminada) {
-            tipada = false;
+        typed = true;
+        if (tainted) {
+            typed = false;
             throw new IllegalArgumentException("AttributeList contains non-Attribute objects");
         }
         return (List<Attribute>) (List<?>) this;
     }
 
-    /** Agrega al final. */
+    /** Appends at the end. */
     public void add(Attribute object) {
         super.add(object);
     }
 
-    /** Inserta en la posicion dada. */
+    /** Inserts at the given position. */
     public void add(int index, Attribute object) {
         super.add(index, object);
     }
 
-    /** Reemplaza la posicion dada. */
+    /** Replaces the given position. */
     public void set(int index, Attribute object) {
         super.set(index, object);
     }
 
-    /** Agrega todos al final. */
+    /** Appends all at the end. */
     public boolean addAll(AttributeList list) {
         return super.addAll(list);
     }
 
-    /** Inserta todos a partir de la posicion dada. */
+    /** Inserts all starting at the given position. */
     public boolean addAll(int index, AttributeList list) {
         return super.addAll(index, list);
     }
 
     /**
-     * @throws IllegalArgumentException si la lista ya se declaro tipada y esto no es un `Attribute`
+     * @throws IllegalArgumentException if the list was already declared typed and this is not an
+     *     {@code Attribute}
      */
     public boolean add(Object element) {
-        revisar(element);
+        check(element);
         return super.add(element);
     }
 
     /** Ver {@link #add(Object)}. */
     public void add(int index, Object element) {
-        revisar(element);
+        check(element);
         super.add(index, element);
     }
 
     /** Ver {@link #add(Object)}. */
     public boolean addAll(Collection<?> c) {
-        revisar(c);
+        check(c);
         return super.addAll(c);
     }
 
     /** Ver {@link #add(Object)}. */
     public boolean addAll(int index, Collection<?> c) {
-        revisar(c);
+        check(c);
         return super.addAll(index, c);
     }
 
     /** Ver {@link #add(Object)}. */
     public Object set(int index, Object element) {
-        revisar(element);
+        check(element);
         return super.set(index, element);
     }
 
-    private void revisar(Object x) {
+    private void check(Object x) {
         if (x instanceof Attribute) {
             return;
         }
-        if (tipada) {
+        if (typed) {
             throw new IllegalArgumentException("Not an Attribute: " + x);
         }
-        contaminada = true;
+        tainted = true;
     }
 
-    private void revisar(Collection<?> c) {
+    private void check(Collection<?> c) {
         if (c == null) {
             return;
         }
         Iterator<?> it = c.iterator();
         while (it.hasNext()) {
-            revisar(it.next());
+            check(it.next());
         }
     }
 }

@@ -19,42 +19,43 @@ import java.util.stream.Stream;
 import javax.net.ssl.SSLSession;
 
 /**
- * Una respuesta HTTP, con el cuerpo ya convertido al tipo que se pidio.
+ * An HTTP response, with the body already converted to the requested type.
  *
- * <h2>El parametro de tipo, que es lo primero que sorprende</h2>
+ * <h2>The type parameter, which is the first thing that surprises</h2>
  *
- * <p>{@code HttpResponse<T>} donde {@code T} lo elige <strong>quien hace el pedido</strong>, con el
- * {@link BodyHandler} que le pasa al cliente. Pedir {@code BodyHandlers.ofString()} da un
- * {@code HttpResponse<String>}; {@code ofFile(ruta)} da un {@code HttpResponse<Path>}.
+ * <p>{@code HttpResponse<T>}, where {@code T} is chosen by <strong>whoever makes the
+ * request</strong>, with the {@link BodyHandler} it passes to the client. Asking for {@code
+ * BodyHandlers.ofString()} gives an {@code HttpResponse<String>}; {@code ofFile(path)} gives an
+ * {@code HttpResponse<Path>}.
  *
- * <p>Eso no es azucar. La conversion pasa <strong>mientras el cuerpo llega</strong>, no despues: un
- * cuerpo que se escribe a un archivo nunca esta entero en memoria, y uno que se descarta no se
- * guarda en ningun lado. Un {@code HttpResponse} con un {@code byte[]} adentro no podria hacer nada
- * de eso.
+ * <p>That is not sugar. The conversion happens <strong>while the body arrives</strong>, not after:
+ * a body written to a file is never whole in memory, and one that is discarded is stored nowhere.
+ * An {@code HttpResponse} with a {@code byte[]} inside could do none of that.
  *
- * <h2>La cadena de tres piezas</h2>
+ * <h2>The three-piece chain</h2>
  *
  * <ul>
- * <li>{@link BodyHandler} — mira el {@link ResponseInfo} (codigo, encabezados, version) y
- *     <strong>decide</strong> como leer el cuerpo. Es lo que permite descartar el cuerpo de un 404 y
- *     guardar el de un 200 sin dos pedidos;</li>
- * <li>{@link BodySubscriber} — el que efectivamente lo lee, con contrapresion;</li>
- * <li>{@link BodyHandlers} y {@link BodySubscribers} — los que trae el JDK, para no escribirlos.</li>
+ * <li>{@link BodyHandler} — looks at the {@link ResponseInfo} (status, headers, version) and
+ *     <strong>decides</strong> how to read the body. It is what allows discarding a 404's body and
+ *     keeping a 200's without two requests;</li>
+ * <li>{@link BodySubscriber} — the one that actually reads it, with backpressure;</li>
+ * <li>{@link BodyHandlers} and {@link BodySubscribers} — the ones the JDK provides, so they need
+ *     not be written.</li>
  * </ul>
  *
- * @param <T> el tipo del cuerpo ya convertido
+ * @param <T> the type of the converted body
  * @since 11
  */
 public interface HttpResponse<T> {
 
-    /** El codigo HTTP. */
+    /** The HTTP status code. */
     int statusCode();
 
     /**
-     * Una etiqueta de la conexion por la que vino, para diagnostico.
+     * A label for the connection it came through, for diagnostics.
      *
-     * <p>Llego con cuerpo por compatibilidad, y vacia por omision: no toda implementacion tiene un
-     * identificador de conexion que ofrecer.
+     * <p>It came with a body for compatibility, and empty by default: not every implementation has
+     * a connection identifier to offer.
      *
      * @since 25
      */
@@ -62,338 +63,347 @@ public interface HttpResponse<T> {
         return Optional.empty();
     }
 
-    /** El pedido que la genero; puede no ser el original si hubo redirecciones. */
+    /** The request that produced it; it may not be the original if there were redirects. */
     HttpRequest request();
 
     /**
-     * La respuesta anterior, si esta vino despues de una redireccion.
+     * The previous response, if this one came after a redirect.
      *
-     * <p>Es una cadena: cada eslabon apunta al anterior. Sirve para ver por donde paso el pedido,
-     * que de otro modo seria invisible.
+     * <p>It is a chain: each link points to the previous one. It shows the path the request took,
+     * which would otherwise be invisible.
      */
     Optional<HttpResponse<T>> previousResponse();
 
-    /** Los encabezados. */
+    /** The headers. */
     HttpHeaders headers();
 
-    /** El cuerpo, ya convertido. */
+    /** The body, already converted. */
     T body();
 
-    /** La sesion TLS, si vino por HTTPS. */
+    /** The TLS session, if it came over HTTPS. */
     Optional<SSLSession> sslSession();
 
-    /** La URI de la que finalmente se obtuvo, siguiendo las redirecciones. */
+    /** The URI it was finally obtained from, following redirects. */
     URI uri();
 
-    /** La version con la que se hablo. */
+    /** The version spoken. */
     HttpClient.Version version();
 
     /**
-     * Decide como leer el cuerpo, mirando lo que ya se sabe de la respuesta.
+     * Decides how to read the body, looking at what is already known of the response.
      *
-     * <p>Se lo consulta <strong>una vez</strong>, cuando llegaron los encabezados y antes que el
-     * cuerpo. Ese momento es todo el punto: es lo que permite elegir en funcion del codigo o del
-     * tipo de contenido sin haber bajado nada todavia.
+     * <p>It is consulted <strong>once</strong>, when the headers have arrived and before the body.
+     * That moment is the whole point: it is what allows choosing by status or content type without
+     * having downloaded anything yet.
      */
     @FunctionalInterface
     public interface BodyHandler<T> {
 
-        /** El lector para esta respuesta. */
+        /** The subscriber for this response. */
         BodySubscriber<T> apply(ResponseInfo responseInfo);
     }
 
-    /** Lo que un {@link BodyHandler} sabe de la respuesta antes de que llegue el cuerpo. */
+    /** What a {@link BodyHandler} knows of the response before the body arrives. */
     public interface ResponseInfo {
 
-        /** El codigo HTTP. */
+        /** The HTTP status code. */
         int statusCode();
 
-        /** Los encabezados. */
+        /** The headers. */
         HttpHeaders headers();
 
-        /** La version. */
+        /** The version. */
         HttpClient.Version version();
     }
 
     /**
-     * Lee el cuerpo y produce el resultado.
+     * Reads the body and produces the result.
      *
-     * <p>Es un {@link Flow.Subscriber} de <strong>listas</strong> de {@link ByteBuffer} y no de
-     * buffers sueltos: la red entrega en bloques y agruparlos evita una notificacion por cada uno.
+     * <p>It is a {@link Flow.Subscriber} of <strong>lists</strong> of {@link ByteBuffer} and not of
+     * single buffers: the network delivers in blocks, and grouping them avoids one notification per
+     * buffer.
      *
-     * <p>{@link #getBody} devuelve un {@link CompletionStage} que se completa cuando el cuerpo
-     * termino. Puede completarse <em>antes</em> de haber leido todo —un lector que solo quiere los
-     * encabezados no necesita el resto— y esa es la diferencia con esperar al {@code onComplete}.
+     * <p>{@link #getBody} returns a {@link CompletionStage} that completes when the result is
+     * available. It may complete <em>before</em> the whole body has been read —a streaming
+     * subscriber, such as the one {@link BodySubscribers#ofInputStream} returns, completes it with
+     * the stream right away— and that is the difference from waiting for {@code onComplete}. (This
+     * javadoc gave as the example a reader that only wants the headers; the headers are known
+     * before any subscriber exists.)
      */
     public interface BodySubscriber<T> extends Flow.Subscriber<List<ByteBuffer>> {
 
-        /** El resultado, cuando este. */
+        /** The result, when it is ready. */
         CompletionStage<T> getBody();
     }
 
     /**
-     * Atiende las respuestas que el servidor manda sin que se las pidan.
+     * Handles the responses the server sends without being asked.
      *
-     * <p>Es de HTTP/2: el servidor que sirve una pagina puede empujar de una las hojas de estilo que
-     * sabe que van a pedirse. Sin este manejador el cliente las rechaza, que es lo correcto por
-     * omision — aceptar contenido no pedido tiene que ser una decision explicita.
+     * <p>It is HTTP/2's: a server serving a page can push right away the stylesheets it knows will
+     * be requested. Without this handler the client rejects them, which is the right default —
+     * accepting unrequested content has to be an explicit decision.
      */
     public interface PushPromiseHandler<T> {
 
-        /** Llega una promesa; aceptarla es llamar al {@code acceptor} con un manejador de cuerpo. */
+        /** A promise arrives; accepting it is calling the {@code acceptor} with a body handler. */
         void applyPushPromise(HttpRequest initiatingRequest, HttpRequest pushPromiseRequest,
                 Function<BodyHandler<T>, CompletableFuture<HttpResponse<T>>> acceptor);
 
-        /** El manejador que acepta todas y las junta en ese mapa. */
+        /** The handler that accepts all of them and gathers them in that map. */
         static <T> PushPromiseHandler<T> of(
                 Function<HttpRequest, BodyHandler<T>> pushPromiseHandler,
                 ConcurrentMap<HttpRequest, CompletableFuture<HttpResponse<T>>> pushPromisesMap) {
             throw new UnsupportedOperationException(
-                    "esta VM no trae implementacion del cliente HTTP; ver HttpClient");
+                    "this VM has no HTTP client implementation; see HttpClient");
         }
     }
 
     /**
-     * Los {@link BodyHandler} que trae el JDK.
+     * The {@link BodyHandler}s the JDK provides.
      *
-     * <p>En esta VM declinan: no hay implementacion del cliente HTTP. Ver {@link HttpClient}.
+     * <p>In this VM they refuse: there is no HTTP client implementation. See {@link HttpClient}.
      */
     public static class BodyHandlers {
 
         private BodyHandlers() {
         }
 
-        private static <T> BodyHandler<T> declinar() {
+        private static <T> BodyHandler<T> refuse() {
             throw new UnsupportedOperationException(
-                    "esta VM no trae implementacion del cliente HTTP; ver HttpClient");
+                    "this VM has no HTTP client implementation; see HttpClient");
         }
 
-        /** Le pasa los bloques a ese suscriptor; el cuerpo queda en {@code null}. */
+        /** Passes the blocks to that subscriber; the body is {@code null}. */
         public static BodyHandler<Void> fromSubscriber(
                 Flow.Subscriber<? super List<ByteBuffer>> subscriber) {
-            return declinar();
+            return refuse();
         }
 
-        /** Igual, extrayendo el resultado del suscriptor con esa funcion. */
+        /** The same, extracting the result from the subscriber with that function. */
         public static <S extends Flow.Subscriber<? super List<ByteBuffer>>, T> BodyHandler<T>
                 fromSubscriber(S subscriber, Function<? super S, ? extends T> finisher) {
-            return declinar();
+            return refuse();
         }
 
-        /** Le pasa el cuerpo linea por linea a ese suscriptor. */
+        /** Passes the body line by line to that subscriber. */
         public static BodyHandler<Void> fromLineSubscriber(
                 Flow.Subscriber<? super String> subscriber) {
-            return declinar();
+            return refuse();
         }
 
-        /** Igual, con extractor y separador de linea propio. */
+        /** The same, with its own extractor and line separator. */
         public static <S extends Flow.Subscriber<? super String>, T> BodyHandler<T>
                 fromLineSubscriber(S subscriber, Function<? super S, ? extends T> finisher,
                         String lineSeparator) {
-            return declinar();
-        }
-
-        /** Descarta el cuerpo. No lo ignora: lo lee y lo tira, que es lo que libera la conexion. */
-        public static BodyHandler<Void> discarding() {
-            return declinar();
-        }
-
-        /** Descarta el cuerpo y devuelve ese valor fijo. */
-        public static <U> BodyHandler<U> replacing(U value) {
-            return declinar();
-        }
-
-        /** El cuerpo como cadena, con ese juego de caracteres. */
-        public static BodyHandler<String> ofString(Charset charset) {
-            return declinar();
-        }
-
-        /** El cuerpo a ese archivo, con esas opciones de apertura. */
-        public static BodyHandler<Path> ofFile(Path file, OpenOption... openOptions) {
-            return declinar();
-        }
-
-        /** El cuerpo a ese archivo. */
-        public static BodyHandler<Path> ofFile(Path file) {
-            return declinar();
+            return refuse();
         }
 
         /**
-         * El cuerpo a un archivo dentro de ese directorio, con el nombre que diga el servidor.
+         * Discards the body. It does not ignore it: it reads it and throws it away, which is what
+         * frees the connection.
+         */
+        public static BodyHandler<Void> discarding() {
+            return refuse();
+        }
+
+        /** Discards the body and returns that fixed value. */
+        public static <U> BodyHandler<U> replacing(U value) {
+            return refuse();
+        }
+
+        /** The body as a string, with that charset. */
+        public static BodyHandler<String> ofString(Charset charset) {
+            return refuse();
+        }
+
+        /** The body to that file, with those open options. */
+        public static BodyHandler<Path> ofFile(Path file, OpenOption... openOptions) {
+            return refuse();
+        }
+
+        /** The body to that file. */
+        public static BodyHandler<Path> ofFile(Path file) {
+            return refuse();
+        }
+
+        /**
+         * The body to a file inside that directory, with the name the server gives.
          *
-         * <p>El nombre sale del encabezado {@code Content-Disposition}, o sea <strong>del otro
-         * lado</strong>. El cliente lo valida para que no se escape del directorio, y aun asi
-         * conviene saber que quien elige el nombre es el servidor.
+         * <p>The name comes from the {@code Content-Disposition} header, that is, <strong>from the
+         * other side</strong>. The client validates it so it cannot escape the directory, and even
+         * so it is worth knowing that the server picks the name.
          */
         public static BodyHandler<Path> ofFileDownload(Path directory, OpenOption... openOptions) {
-            return declinar();
+            return refuse();
         }
 
         /**
-         * El cuerpo como flujo que se lee despues.
+         * The body as a stream to read later.
          *
-         * <p>Hay que cerrarlo o leerlo entero: mientras no se haga, la conexion queda tomada.
+         * <p>It has to be closed or read to the end: until then, the connection stays taken.
          */
         public static BodyHandler<InputStream> ofInputStream() {
-            return declinar();
+            return refuse();
         }
 
-        /** El cuerpo como flujo de lineas. */
+        /** The body as a stream of lines. */
         public static BodyHandler<Stream<String>> ofLines() {
-            return declinar();
+            return refuse();
         }
 
-        /** Le pasa los bloques a ese consumidor; el vacio marca el final. */
+        /** Passes the blocks to that consumer; the empty one marks the end. */
         public static BodyHandler<Void> ofByteArrayConsumer(
                 Consumer<Optional<byte[]>> consumer) {
-            return declinar();
+            return refuse();
         }
 
-        /** El cuerpo como arreglo de bytes, entero en memoria. */
+        /** The body as a byte array, whole in memory. */
         public static BodyHandler<byte[]> ofByteArray() {
-            return declinar();
+            return refuse();
         }
 
-        /** El cuerpo como cadena, en UTF-8 o lo que diga el {@code Content-Type}. */
+        /** The body as a string, in UTF-8 or whatever {@code Content-Type} says. */
         public static BodyHandler<String> ofString() {
-            return declinar();
+            return refuse();
         }
 
-        /** El cuerpo como publicador, para consumirlo con contrapresion propia. */
+        /** The body as a publisher, to consume with backpressure of one's own. */
         public static BodyHandler<Flow.Publisher<List<ByteBuffer>>> ofPublisher() {
-            return declinar();
+            return refuse();
         }
 
-        /** Agrupa los bloques hasta ese tamano antes de entregarlos. */
+        /** Groups the blocks up to that size before delivering them. */
         public static <T> BodyHandler<T> buffering(BodyHandler<T> downstream, int bufferSize) {
-            return declinar();
+            return refuse();
         }
 
         /**
-         * Corta si el cuerpo pasa de ese tamano.
+         * Cuts off if the body goes past that size.
          *
-         * <p>Es la defensa contra un servidor que manda mas de lo que uno puede guardar, sea por
-         * error o a proposito.
+         * <p>It is the defence against a server that sends more than one can keep, by mistake or on
+         * purpose.
          */
         public static <T> BodyHandler<T> limiting(BodyHandler<T> downstream, long capacity) {
-            return declinar();
+            return refuse();
         }
     }
 
     /**
-     * Los {@link BodySubscriber} que trae el JDK.
+     * The {@link BodySubscriber}s the JDK provides.
      *
-     * <p>Son la contraparte de {@link BodyHandlers}: aquellos <em>eligen</em> mirando la respuesta,
-     * estos <em>leen</em>. Se usan directamente al escribir un manejador propio.
+     * <p>They are the counterpart of {@link BodyHandlers}: those <em>choose</em> by looking at the
+     * response, these <em>read</em>. They are used directly when writing a handler of one's own.
      *
-     * <p>En esta VM declinan; ver {@link HttpClient}.
+     * <p>In this VM they refuse; see {@link HttpClient}.
      */
     public static class BodySubscribers {
 
         private BodySubscribers() {
         }
 
-        private static <T> BodySubscriber<T> declinar() {
+        private static <T> BodySubscriber<T> refuse() {
             throw new UnsupportedOperationException(
-                    "esta VM no trae implementacion del cliente HTTP; ver HttpClient");
+                    "this VM has no HTTP client implementation; see HttpClient");
         }
 
-        /** Reenvia los bloques a ese suscriptor. */
+        /** Forwards the blocks to that subscriber. */
         public static BodySubscriber<Void> fromSubscriber(
                 Flow.Subscriber<? super List<ByteBuffer>> subscriber) {
-            return declinar();
+            return refuse();
         }
 
-        /** Igual, extrayendo el resultado. */
+        /** The same, extracting the result. */
         public static <S extends Flow.Subscriber<? super List<ByteBuffer>>, T> BodySubscriber<T>
                 fromSubscriber(S subscriber, Function<? super S, ? extends T> finisher) {
-            return declinar();
+            return refuse();
         }
 
-        /** Reenvia linea por linea. */
+        /** Forwards line by line. */
         public static BodySubscriber<Void> fromLineSubscriber(
                 Flow.Subscriber<? super String> subscriber) {
-            return declinar();
+            return refuse();
         }
 
-        /** Igual, con extractor, juego de caracteres y separador propios. */
+        /** The same, with its own extractor, charset and line separator. */
         public static <S extends Flow.Subscriber<? super String>, T> BodySubscriber<T>
                 fromLineSubscriber(S subscriber, Function<? super S, ? extends T> finisher,
                         Charset charset, String lineSeparator) {
-            return declinar();
+            return refuse();
         }
 
-        /** Junta el cuerpo en una cadena. */
+        /** Gathers the body into a string. */
         public static BodySubscriber<String> ofString(Charset charset) {
-            return declinar();
+            return refuse();
         }
 
-        /** Junta el cuerpo en un arreglo. */
+        /** Gathers the body into an array. */
         public static BodySubscriber<byte[]> ofByteArray() {
-            return declinar();
+            return refuse();
         }
 
-        /** Escribe el cuerpo a ese archivo. */
+        /** Writes the body to that file. */
         public static BodySubscriber<Path> ofFile(Path file, OpenOption... openOptions) {
-            return declinar();
+            return refuse();
         }
 
-        /** Escribe el cuerpo a ese archivo. */
+        /** Writes the body to that file. */
         public static BodySubscriber<Path> ofFile(Path file) {
-            return declinar();
+            return refuse();
         }
 
-        /** Le pasa los bloques a ese consumidor. */
+        /** Passes the blocks to that consumer. */
         public static BodySubscriber<Void> ofByteArrayConsumer(
                 Consumer<Optional<byte[]>> consumer) {
-            return declinar();
+            return refuse();
         }
 
-        /** El cuerpo como flujo que se lee despues. */
+        /** The body as a stream to read later. */
         public static BodySubscriber<InputStream> ofInputStream() {
-            return declinar();
+            return refuse();
         }
 
-        /** El cuerpo como flujo de lineas. */
+        /** The body as a stream of lines. */
         public static BodySubscriber<Stream<String>> ofLines(Charset charset) {
-            return declinar();
+            return refuse();
         }
 
-        /** El cuerpo como publicador. */
+        /** The body as a publisher. */
         public static BodySubscriber<Flow.Publisher<List<ByteBuffer>>> ofPublisher() {
-            return declinar();
+            return refuse();
         }
 
-        /** Descarta el cuerpo y devuelve ese valor. */
+        /** Discards the body and returns that value. */
         public static <U> BodySubscriber<U> replacing(U value) {
-            return declinar();
+            return refuse();
         }
 
-        /** Descarta el cuerpo. */
+        /** Discards the body. */
         public static BodySubscriber<Void> discarding() {
-            return declinar();
+            return refuse();
         }
 
-        /** Agrupa antes de entregar. */
+        /** Groups before delivering. */
         public static <T> BodySubscriber<T> buffering(BodySubscriber<T> downstream,
                 int bufferSize) {
-            return declinar();
+            return refuse();
         }
 
         /**
-         * Transforma el resultado de otro lector.
+         * Transforms the result of another subscriber.
          *
-         * <p>La funcion corre cuando el cuerpo ya esta entero, asi que puede bloquear sin trabar la
-         * lectura — al reves que un {@code map} sobre el flujo de bloques.
+         * <p>The function runs once the upstream result is available. This javadoc said it can
+         * therefore block without holding up the reading; the JDK warns against that —a blocking
+         * mapper can starve the client's executor— and suggests mapping to a {@code Supplier} and
+         * blocking in the caller's thread.
          */
         public static <T, U> BodySubscriber<U> mapping(BodySubscriber<T> upstream,
                 Function<? super T, ? extends U> mapper) {
-            return declinar();
+            return refuse();
         }
 
-        /** Corta si el cuerpo pasa de ese tamano. */
+        /** Cuts off if the body goes past that size. */
         public static <T> BodySubscriber<T> limiting(BodySubscriber<T> downstream, long capacity) {
-            return declinar();
+            return refuse();
         }
     }
 }

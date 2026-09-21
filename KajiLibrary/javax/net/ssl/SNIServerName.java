@@ -3,19 +3,18 @@ package javax.net.ssl;
 import java.util.Arrays;
 
 /**
- * Un nombre de servidor de la extension SNI: su tipo y sus bytes.
+ * A server name of the SNI extension: its type and its bytes.
  *
- * <h2>Que problema resuelve SNI</h2>
+ * <h2>What problem SNI solves</h2>
  *
- * <p>Uno de orden. En una misma direccion IP puede haber muchos sitios, cada uno con su
- * certificado, y el servidor tiene que elegir cual mandar <strong>antes</strong> de que el cliente
- * haya dicho nada de la aplicacion — el certificado viaja al principio del handshake, mucho antes
- * que cualquier encabezado {@code Host:}. SNI es el cliente diciendo a que sitio viene, en el
- * primer mensaje.
+ * <p>One of ordering. At the same IP address there may be many sites, each with its certificate,
+ * and the server has to choose which to send <strong>before</strong> the client has said anything
+ * about the application — the certificate travels at the start of the handshake, long before any
+ * {@code Host:} header. SNI is the client saying which site it comes for, in the first message.
  *
- * <p>El tipo es un entero del registro de IANA y hoy solo hay uno,
- * {@link StandardConstants#SNI_HOST_NAME}. La clase es abstracta igual, para que agregar otro no
- * rompa nada.
+ * <p>The type is an integer from the IANA registry and today there is only one, {@link
+ * StandardConstants#SNI_HOST_NAME}. The class is abstract all the same, so that adding another
+ * breaks nothing.
  */
 public abstract class SNIServerName {
 
@@ -23,11 +22,11 @@ public abstract class SNIServerName {
     private final byte[] encoded;
 
     /**
-     * @throws IllegalArgumentException si el tipo no entra en un byte sin signo
+     * @throws IllegalArgumentException if the type does not fit in an unsigned byte
      */
     protected SNIServerName(int type, byte[] encoded) {
         if (type < 0 || type > 255) {
-            throw new IllegalArgumentException("tipo fuera de rango: " + String.valueOf(type));
+            throw new IllegalArgumentException("type out of range: " + String.valueOf(type));
         }
         if (encoded == null) {
             throw new NullPointerException("encoded");
@@ -36,22 +35,22 @@ public abstract class SNIServerName {
         this.encoded = encoded.clone();
     }
 
-    /** El tipo de nombre. */
+    /** The type of name. */
     public final int getType() {
         return this.type;
     }
 
-    /** Una copia de los bytes; el arreglo interno no se presta. */
+    /** A copy of the bytes; the internal array is not lent out. */
     public final byte[] getEncoded() {
         return this.encoded.clone();
     }
 
     /**
-     * Sobre el tipo y los bytes.
+     * On the type and the bytes.
      *
-     * <p>Es {@code final} en la practica aunque no lleve la palabra: dos nombres con el mismo tipo y
-     * los mismos bytes <strong>son</strong> el mismo nombre, y una subclase que lo redefiniera
-     * romperia la busqueda por igualdad que hace el servidor.
+     * <p>It is {@code final} in practice although it does not carry the word: two names with the
+     * same type and the same bytes <strong>are</strong> the same name, and a subclass that
+     * redefined it would break the lookup by equality the server does.
      */
     public boolean equals(Object other) {
         if (this == other) {
@@ -68,7 +67,7 @@ public abstract class SNIServerName {
         return 31 * (17 + this.type) + Arrays.hashCode(this.encoded);
     }
 
-    /** El tipo y los bytes en hexadecimal. */
+    /** The type and the bytes in hexadecimal. */
     public String toString() {
         StringBuilder sb = new StringBuilder();
         if (this.type == StandardConstants.SNI_HOST_NAME) {

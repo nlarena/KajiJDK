@@ -10,57 +10,60 @@ import java.util.ResourceBundle;
 import javax.imageio.ImageTypeSpecifier;
 
 /**
- * KajiLibrary's javax.imageio.metadata.IIOMetadataFormatImpl -- la mitad del trabajo de escribir un
- * esquema de metadatos.
+ * KajiLibrary's javax.imageio.metadata.IIOMetadataFormatImpl -- half the work of writing a
+ * metadata schema.
  *
- * <p>Implementa los veinticinco {@code getXxx} de {@link IIOMetadataFormat} sobre una tabla interna, y
- * expone metodos <b>protegidos</b> para llenarla. Una subclase declara su esquema en el constructor,
- * con llamadas a {@link #addElement} y {@link #addAttribute}, y hereda todas las consultas.
+ * <p>It implements the twenty-five {@code getXxx} of {@link IIOMetadataFormat} over an internal
+ * table, and exposes <b>protected</b> methods to fill it in. A subclass declares its schema in the
+ * constructor, with calls to {@link #addElement} and {@link #addAttribute}, and inherits all the
+ * queries.
  *
- * <p>Solo queda abstracto {@link IIOMetadataFormat#canNodeAppear}, que es lo unico que depende del
- * tipo concreto de imagen y que ninguna tabla puede contestar.
+ * <p>Only {@link IIOMetadataFormat#canNodeAppear} stays abstract, which is the only thing that
+ * depends on the concrete image type and that no table can answer.
  *
- * <h2>Los metodos de construccion son protegidos a proposito</h2>
+ * <h2>The building methods are protected on purpose</h2>
  *
- * <p>Un esquema se arma una vez, en el constructor, y despues no cambia. Si {@code addElement} fuera
- * publico, cualquiera podria modificar el esquema de un formato ya en uso y dejar arboles validos
- * ayer e invalidos hoy.
+ * <p>A schema is built once, in the constructor, and does not change afterwards. If
+ * {@code addElement} were public, anyone could modify the schema of a format already in use and
+ * leave trees that were valid yesterday invalid today.
  *
- * <h2>Las descripciones vienen de un paquete de recursos</h2>
+ * <h2>The descriptions come from a resource bundle</h2>
  *
- * <p>{@link #setResourceBaseName} dice de que paquete sacar los textos de
- * {@code getElementDescription} y {@code getAttributeDescription}, buscados por el nombre del elemento
- * o por {@code elemento/atributo}. Sin paquete, o si la clave no esta, esos metodos devuelven null --
- * que es lo correcto: no hay descripcion, y no una descripcion inventada.
+ * <p>{@link #setResourceBaseName} says which bundle to take the texts of
+ * {@code getElementDescription} and {@code getAttributeDescription} from, looked up by the
+ * element's name or by {@code element/attribute}. Without a bundle, or if the key is missing,
+ * those methods return null -- which is right: there is no description, rather than a made-up
+ * one.
  *
- * <h2>Agregar un hijo es dos llamadas</h2>
+ * <h2>Adding a child is two calls</h2>
  *
- * <p>{@link #addElement} <b>declara</b> el elemento; {@link #addChildElement} lo <b>cuelga</b> de otro.
- * Las dos versiones de {@code addElement} que toman un padre hacen las dos cosas de una, y son las que
- * se usan casi siempre. La separacion existe para poder declarar un elemento que sea hijo de varios.
+ * <p>{@link #addElement} <b>declares</b> the element; {@link #addChildElement} <b>hangs</b> it from
+ * another. The two versions of {@code addElement} that take a parent do both at once, and are the
+ * ones used almost always. The split exists to be able to declare an element that is a child of
+ * several.
  */
 public abstract class IIOMetadataFormatImpl implements IIOMetadataFormat {
 
-    /** El nombre del formato comun a todos los lectores y escritores. */
+    /** The name of the format common to all readers and writers. */
     public static final String standardMetadataFormatName = "javax_imageio_1.0";
 
-    /** El formato estandar, armado una sola vez. */
+    /** The standard format, built only once. */
     private static IIOMetadataFormat standardFormat = null;
 
-    /** Como se llama la raiz. */
+    /** What the root is called. */
     private final String rootName;
 
-    /** De donde sacar los textos, o null. */
+    /** Where to take the texts from, or null. */
     private String resourceBaseName = getClass().getName() + "Resources";
 
-    /** Los elementos, por nombre. */
+    /** The elements, by name. */
     private final Map<String, Element> elements = new HashMap<String, Element>();
 
     /**
-     * Un esquema con esa raiz y esa politica de hijos.
+     * A schema with that root and that child policy.
      *
-     * @throws IllegalArgumentException si el nombre es null o la politica no es una de las seis, o si
-     *     es {@link #CHILD_POLICY_REPEAT} -- para esa esta el otro constructor
+     * @throws IllegalArgumentException if the name is null or the policy is not one of the six, or
+     *     if it is {@link #CHILD_POLICY_REPEAT} -- that is what the other constructor is for
      */
     public IIOMetadataFormatImpl(String rootName, int childPolicy) {
         if (rootName == null) {
@@ -77,9 +80,9 @@ public abstract class IIOMetadataFormatImpl implements IIOMetadataFormat {
     }
 
     /**
-     * Idem, con la raiz repetible.
+     * Same, with a repeatable root.
      *
-     * @throws IllegalArgumentException si el nombre es null o los limites no cierran
+     * @throws IllegalArgumentException if the name is null or the limits do not add up
      */
     public IIOMetadataFormatImpl(String rootName, int minChildren, int maxChildren) {
         if (rootName == null) {
@@ -99,20 +102,20 @@ public abstract class IIOMetadataFormatImpl implements IIOMetadataFormat {
         this.elements.put(rootName, root);
     }
 
-    /** De donde sacar los textos; null los apaga. Ver la nota de la clase. */
+    /** Where to take the texts from; null turns them off. See the class note. */
     protected void setResourceBaseName(String resourceBaseName) {
         this.resourceBaseName = resourceBaseName;
     }
 
-    /** De donde salen. */
+    /** Where they come from. */
     protected String getResourceBaseName() {
         return this.resourceBaseName;
     }
 
     /**
-     * Declara un elemento y lo cuelga de su padre.
+     * Declares an element and hangs it from its parent.
      *
-     * @throws IllegalArgumentException si el padre no existe, o la politica no sirve
+     * @throws IllegalArgumentException if the parent does not exist, or the policy does not work
      */
     protected void addElement(String elementName, String parentName, int childPolicy) {
         if (childPolicy < CHILD_POLICY_EMPTY || childPolicy > CHILD_POLICY_MAX
@@ -125,9 +128,9 @@ public abstract class IIOMetadataFormatImpl implements IIOMetadataFormat {
     }
 
     /**
-     * Idem, repetible.
+     * Same, repeatable.
      *
-     * @throws IllegalArgumentException si el padre no existe o los limites no cierran
+     * @throws IllegalArgumentException if the parent does not exist or the limits do not add up
      */
     protected void addElement(String elementName, String parentName, int minChildren,
                               int maxChildren) {
@@ -145,9 +148,9 @@ public abstract class IIOMetadataFormatImpl implements IIOMetadataFormat {
     }
 
     /**
-     * Cuelga un elemento ya declarado de otro. Ver la nota de la clase.
+     * Hangs an already declared element from another. See the class note.
      *
-     * @throws IllegalArgumentException si el padre no existe
+     * @throws IllegalArgumentException if the parent does not exist
      */
     protected void addChildElement(String elementName, String parentName) {
         Element parent = element(parentName);
@@ -158,10 +161,10 @@ public abstract class IIOMetadataFormatImpl implements IIOMetadataFormat {
     }
 
     /**
-     * Saca un elemento del esquema.
+     * Removes an element from the schema.
      *
-     * <p>Lo saca tambien de las listas de hijos de todos los demas: dejarlo colgando produciria un
-     * esquema que nombra un elemento que ya no existe.
+     * <p>It also removes it from the child lists of all the others: leaving it dangling would
+     * produce a schema that names an element that no longer exists.
      */
     protected void removeElement(String elementName) {
         if (this.elements.remove(elementName) != null) {
@@ -173,12 +176,12 @@ public abstract class IIOMetadataFormatImpl implements IIOMetadataFormat {
     }
 
     /**
-     * Declara un atributo de valor libre o enumerado.
+     * Declares a free-valued or enumerated attribute.
      *
-     * @param dataType uno de los {@code DATATYPE_}
-     * @param required si tiene que estar
-     * @param defaultValue que vale si no se pone, o null
-     * @throws IllegalArgumentException si el elemento no existe o el tipo no sirve
+     * @param dataType one of the {@code DATATYPE_} constants
+     * @param required whether it has to be present
+     * @param defaultValue what it is worth if not set, or null
+     * @throws IllegalArgumentException if the element does not exist or the type does not work
      */
     protected void addAttribute(String elementName, String attrName, int dataType,
                                 boolean required, String defaultValue) {
@@ -194,9 +197,9 @@ public abstract class IIOMetadataFormatImpl implements IIOMetadataFormat {
     }
 
     /**
-     * Idem, con una lista cerrada de valores.
+     * Same, with a closed list of values.
      *
-     * @throws IllegalArgumentException si la lista es null o vacia
+     * @throws IllegalArgumentException if the list is null or empty
      */
     protected void addAttribute(String elementName, String attrName, int dataType,
                                 boolean required, String defaultValue,
@@ -220,9 +223,9 @@ public abstract class IIOMetadataFormatImpl implements IIOMetadataFormat {
     }
 
     /**
-     * Idem, con un rango.
+     * Same, with a range.
      *
-     * @param minInclusive si el minimo esta incluido
+     * @param minInclusive whether the minimum is included
      */
     protected void addAttribute(String elementName, String attrName, int dataType,
                                 boolean required, String defaultValue, String minValue,
@@ -248,10 +251,10 @@ public abstract class IIOMetadataFormatImpl implements IIOMetadataFormat {
     }
 
     /**
-     * Idem, con una lista de valores separados por espacios.
+     * Same, with a list of space-separated values.
      *
-     * @param listMinLength cuantos como minimo
-     * @throws IllegalArgumentException si los limites no cierran
+     * @param listMinLength how many at least
+     * @throws IllegalArgumentException if the limits do not add up
      */
     protected void addAttribute(String elementName, String attrName, int dataType,
                                 boolean required, int listMinLength, int listMaxLength) {
@@ -270,7 +273,7 @@ public abstract class IIOMetadataFormatImpl implements IIOMetadataFormat {
         element.attrList.add(attrName);
     }
 
-    /** Un atajo para un atributo de {@code true} o {@code false}. */
+    /** A shortcut for a {@code true} or {@code false} attribute. */
     protected void addBooleanAttribute(String elementName, String attrName,
                                        boolean hasDefaultValue, boolean defaultValue) {
         List<String> values = new ArrayList<String>();
@@ -288,9 +291,9 @@ public abstract class IIOMetadataFormatImpl implements IIOMetadataFormat {
     }
 
     /**
-     * Saca un atributo.
+     * Removes an attribute.
      *
-     * @throws IllegalArgumentException si el elemento no existe
+     * @throws IllegalArgumentException if the element does not exist
      */
     protected void removeAttribute(String elementName, String attrName) {
         Element element = element(elementName);
@@ -299,10 +302,10 @@ public abstract class IIOMetadataFormatImpl implements IIOMetadataFormat {
     }
 
     /**
-     * Declara que ese elemento lleva un objeto de usuario de esa clase.
+     * Declares that the element carries a user object of that class.
      *
-     * @param required si tiene que estar
-     * @param defaultValue que objeto va si no se pone, o null
+     * @param required whether it has to be present
+     * @param defaultValue what object goes if none is set, or null
      */
     protected <T> void addObjectValue(String elementName, Class<T> classType, boolean required,
                                       T defaultValue) {
@@ -315,9 +318,9 @@ public abstract class IIOMetadataFormatImpl implements IIOMetadataFormat {
     }
 
     /**
-     * Idem, con una lista cerrada de objetos.
+     * Same, with a closed list of objects.
      *
-     * @throws IllegalArgumentException si la lista es null o vacia
+     * @throws IllegalArgumentException if the list is null or empty
      */
     protected <T> void addObjectValue(String elementName, Class<T> classType, boolean required,
                                       T defaultValue, List<? extends T> enumeratedValues) {
@@ -336,7 +339,7 @@ public abstract class IIOMetadataFormatImpl implements IIOMetadataFormat {
         element.objectValue = value;
     }
 
-    /** Idem, con un rango. */
+    /** Same, with a range. */
     protected <T extends Comparable<? super T>> void addObjectValue(String elementName,
                                                                     Class<T> classType,
                                                                     T defaultValue,
@@ -362,9 +365,9 @@ public abstract class IIOMetadataFormatImpl implements IIOMetadataFormat {
     }
 
     /**
-     * Idem, con un arreglo de esa clase.
+     * Same, with an array of that class.
      *
-     * @throws IllegalArgumentException si los limites no cierran
+     * @throws IllegalArgumentException if the limits do not add up
      */
     protected void addObjectValue(String elementName, Class<?> classType, int arrayMinLength,
                                   int arrayMaxLength) {
@@ -380,23 +383,23 @@ public abstract class IIOMetadataFormatImpl implements IIOMetadataFormat {
         element.objectValue = value;
     }
 
-    /** Saca el objeto de usuario de ese elemento. */
+    /** Removes that element's user object. */
     protected void removeObjectValue(String elementName) {
         element(elementName).objectValue = null;
     }
 
-    /** Como se llama la raiz. */
+    /** What the root is called. */
     public String getRootName() {
         return this.rootName;
     }
 
-    /** Lo unico que la tabla no puede contestar; ver la nota de la clase. */
+    /** The only thing the table cannot answer; see the class note. */
     public abstract boolean canNodeAppear(String elementName, ImageTypeSpecifier imageType);
 
     /**
-     * Cuantos hijos como minimo.
+     * How many children at least.
      *
-     * @throws IllegalArgumentException si la politica no es {@link #CHILD_POLICY_REPEAT}
+     * @throws IllegalArgumentException if the policy is not {@link #CHILD_POLICY_REPEAT}
      */
     public int getElementMinChildren(String elementName) {
         Element element = element(elementName);
@@ -407,9 +410,9 @@ public abstract class IIOMetadataFormatImpl implements IIOMetadataFormat {
     }
 
     /**
-     * Cuantos como maximo.
+     * How many at most.
      *
-     * @throws IllegalArgumentException si la politica no es {@link #CHILD_POLICY_REPEAT}
+     * @throws IllegalArgumentException if the policy is not {@link #CHILD_POLICY_REPEAT}
      */
     public int getElementMaxChildren(String elementName) {
         Element element = element(elementName);
@@ -419,25 +422,25 @@ public abstract class IIOMetadataFormatImpl implements IIOMetadataFormat {
         return element.maxChildren;
     }
 
-    /** Que es ese elemento, o null si no hay texto. Ver la nota de la clase. */
+    /** What that element is, or null if there is no text. See the class note. */
     public String getElementDescription(String elementName, Locale locale) {
         element(elementName);
         return resource(elementName, locale);
     }
 
     /**
-     * Cual de las seis politicas.
+     * Which of the six policies.
      *
-     * @throws IllegalArgumentException si el elemento no existe
+     * @throws IllegalArgumentException if the element does not exist
      */
     public int getChildPolicy(String elementName) {
         return element(elementName).childPolicy;
     }
 
     /**
-     * Que hijos puede tener; null si no puede tener ninguno.
+     * Which children it can have; null if it can have none.
      *
-     * @throws IllegalArgumentException si el elemento no existe
+     * @throws IllegalArgumentException if the element does not exist
      */
     public String[] getChildNames(String elementName) {
         Element element = element(elementName);
@@ -448,39 +451,39 @@ public abstract class IIOMetadataFormatImpl implements IIOMetadataFormat {
     }
 
     /**
-     * Que atributos puede tener.
+     * Which attributes it can have.
      *
-     * @throws IllegalArgumentException si el elemento no existe
+     * @throws IllegalArgumentException if the element does not exist
      */
     public String[] getAttributeNames(String elementName) {
         Element element = element(elementName);
         return element.attrList.toArray(new String[element.attrList.size()]);
     }
 
-    /** Que forma tiene el valor. */
+    /** What shape the value has. */
     public int getAttributeValueType(String elementName, String attrName) {
         return attribute(elementName, attrName).valueType;
     }
 
-    /** De que tipo es. */
+    /** What type it is. */
     public int getAttributeDataType(String elementName, String attrName) {
         return attribute(elementName, attrName).dataType;
     }
 
-    /** Si tiene que estar. */
+    /** Whether it has to be present. */
     public boolean isAttributeRequired(String elementName, String attrName) {
         return attribute(elementName, attrName).required;
     }
 
-    /** Que vale si no se pone, o null. */
+    /** What it is worth if not set, or null. */
     public String getAttributeDefaultValue(String elementName, String attrName) {
         return attribute(elementName, attrName).defaultValue;
     }
 
     /**
-     * Los valores permitidos.
+     * The allowed values.
      *
-     * @throws IllegalArgumentException si no es de tipo enumeracion
+     * @throws IllegalArgumentException if it is not of enumeration type
      */
     public String[] getAttributeEnumerations(String elementName, String attrName) {
         Attribute attr = attribute(elementName, attrName);
@@ -491,9 +494,9 @@ public abstract class IIOMetadataFormatImpl implements IIOMetadataFormat {
     }
 
     /**
-     * El minimo del rango.
+     * The minimum of the range.
      *
-     * @throws IllegalArgumentException si no es de tipo rango
+     * @throws IllegalArgumentException if it is not of range type
      */
     public String getAttributeMinValue(String elementName, String attrName) {
         Attribute attr = attribute(elementName, attrName);
@@ -504,9 +507,9 @@ public abstract class IIOMetadataFormatImpl implements IIOMetadataFormat {
     }
 
     /**
-     * El maximo.
+     * The maximum.
      *
-     * @throws IllegalArgumentException si no es de tipo rango
+     * @throws IllegalArgumentException if it is not of range type
      */
     public String getAttributeMaxValue(String elementName, String attrName) {
         Attribute attr = attribute(elementName, attrName);
@@ -517,9 +520,9 @@ public abstract class IIOMetadataFormatImpl implements IIOMetadataFormat {
     }
 
     /**
-     * Cuantos valores como minimo.
+     * How many values at least.
      *
-     * @throws IllegalArgumentException si no es de tipo lista
+     * @throws IllegalArgumentException if it is not of list type
      */
     public int getAttributeListMinLength(String elementName, String attrName) {
         Attribute attr = attribute(elementName, attrName);
@@ -530,9 +533,9 @@ public abstract class IIOMetadataFormatImpl implements IIOMetadataFormat {
     }
 
     /**
-     * Cuantos como maximo.
+     * How many at most.
      *
-     * @throws IllegalArgumentException si no es de tipo lista
+     * @throws IllegalArgumentException if it is not of list type
      */
     public int getAttributeListMaxLength(String elementName, String attrName) {
         Attribute attr = attribute(elementName, attrName);
@@ -542,13 +545,13 @@ public abstract class IIOMetadataFormatImpl implements IIOMetadataFormat {
         return attr.listMaxLength;
     }
 
-    /** Que es ese atributo, o null. */
+    /** What that attribute is, or null. */
     public String getAttributeDescription(String elementName, String attrName, Locale locale) {
         attribute(elementName, attrName);
         return resource(elementName + "/" + attrName, locale);
     }
 
-    /** Que forma tiene el objeto de usuario; {@link #VALUE_NONE} si no lleva. */
+    /** What shape the user object has; {@link #VALUE_NONE} if there is none. */
     public int getObjectValueType(String elementName) {
         Element element = element(elementName);
         if (element.objectValue == null) {
@@ -558,23 +561,23 @@ public abstract class IIOMetadataFormatImpl implements IIOMetadataFormat {
     }
 
     /**
-     * De que clase es.
+     * What class it is.
      *
-     * @throws IllegalArgumentException si el elemento no lleva objeto
+     * @throws IllegalArgumentException if the element carries no object
      */
     public Class<?> getObjectClass(String elementName) {
         return objectValue(elementName).classType;
     }
 
-    /** Que objeto va si no se pone, o null. */
+    /** What object goes if none is set, or null. */
     public Object getObjectDefaultValue(String elementName) {
         return objectValue(elementName).defaultValue;
     }
 
     /**
-     * Los objetos permitidos.
+     * The allowed objects.
      *
-     * @throws IllegalArgumentException si no es de tipo enumeracion
+     * @throws IllegalArgumentException if it is not of enumeration type
      */
     public Object[] getObjectEnumerations(String elementName) {
         ObjectValue value = objectValue(elementName);
@@ -585,9 +588,9 @@ public abstract class IIOMetadataFormatImpl implements IIOMetadataFormat {
     }
 
     /**
-     * El minimo.
+     * The minimum.
      *
-     * @throws IllegalArgumentException si no es de tipo rango
+     * @throws IllegalArgumentException if it is not of range type
      */
     public Comparable<?> getObjectMinValue(String elementName) {
         ObjectValue value = objectValue(elementName);
@@ -598,9 +601,9 @@ public abstract class IIOMetadataFormatImpl implements IIOMetadataFormat {
     }
 
     /**
-     * El maximo.
+     * The maximum.
      *
-     * @throws IllegalArgumentException si no es de tipo rango
+     * @throws IllegalArgumentException if it is not of range type
      */
     public Comparable<?> getObjectMaxValue(String elementName) {
         ObjectValue value = objectValue(elementName);
@@ -611,9 +614,9 @@ public abstract class IIOMetadataFormatImpl implements IIOMetadataFormat {
     }
 
     /**
-     * Cuantos elementos como minimo.
+     * How many elements at least.
      *
-     * @throws IllegalArgumentException si no es un arreglo
+     * @throws IllegalArgumentException if it is not an array
      */
     public int getObjectArrayMinLength(String elementName) {
         ObjectValue value = objectValue(elementName);
@@ -624,9 +627,9 @@ public abstract class IIOMetadataFormatImpl implements IIOMetadataFormat {
     }
 
     /**
-     * Cuantos como maximo.
+     * How many at most.
      *
-     * @throws IllegalArgumentException si no es un arreglo
+     * @throws IllegalArgumentException if it is not an array
      */
     public int getObjectArrayMaxLength(String elementName) {
         ObjectValue value = objectValue(elementName);
@@ -636,7 +639,7 @@ public abstract class IIOMetadataFormatImpl implements IIOMetadataFormat {
         return value.arrayMaxLength;
     }
 
-    /** El esquema de {@code javax_imageio_1.0}; siempre la misma instancia. */
+    /** The schema of {@code javax_imageio_1.0}; always the same instance. */
     public static IIOMetadataFormat getStandardFormatInstance() {
         synchronized (IIOMetadataFormatImpl.class) {
             if (standardFormat == null) {
@@ -646,7 +649,7 @@ public abstract class IIOMetadataFormatImpl implements IIOMetadataFormat {
         }
     }
 
-    /** El elemento, o falla si no esta. */
+    /** The element, or fails if it is not there. */
     private Element element(String elementName) {
         if (elementName == null) {
             throw new IllegalArgumentException("element name == null!");
@@ -658,7 +661,7 @@ public abstract class IIOMetadataFormatImpl implements IIOMetadataFormat {
         return element;
     }
 
-    /** El elemento, creandolo si hace falta. */
+    /** The element, creating it if needed. */
     private Element getOrCreate(String elementName) {
         if (elementName == null) {
             throw new IllegalArgumentException("element name == null!");
@@ -671,7 +674,7 @@ public abstract class IIOMetadataFormatImpl implements IIOMetadataFormat {
         return element;
     }
 
-    /** El atributo, o falla. */
+    /** The attribute, or fails. */
     private Attribute attribute(String elementName, String attrName) {
         Element element = element(elementName);
         if (attrName == null) {
@@ -684,7 +687,7 @@ public abstract class IIOMetadataFormatImpl implements IIOMetadataFormat {
         return attr;
     }
 
-    /** El objeto de usuario, o falla. */
+    /** The user object, or fails. */
     private ObjectValue objectValue(String elementName) {
         Element element = element(elementName);
         if (element.objectValue == null) {
@@ -693,7 +696,7 @@ public abstract class IIOMetadataFormatImpl implements IIOMetadataFormat {
         return element.objectValue;
     }
 
-    /** El texto de esa clave, o null. */
+    /** The text for that key, or null. */
     private String resource(String key, Locale locale) {
         if (this.resourceBaseName == null) {
             return null;
@@ -707,44 +710,44 @@ public abstract class IIOMetadataFormatImpl implements IIOMetadataFormat {
                                                              getClass().getClassLoader());
             return bundle.getString(key);
         } catch (MissingResourceException e) {
-            // No hay descripcion. Devolver null es lo correcto: el contrato lo admite, e inventar un
-            // texto seria peor que no tener ninguno.
+            // There is no description. Returning null is right: the contract allows it, and making
+            // up a text would be worse than having none.
             return null;
         }
     }
 
-    /** Que el tipo de dato sea uno de los cinco. */
+    /** That the data type is one of the five. */
     private static void checkDataType(int dataType) {
         if (dataType < DATATYPE_STRING || dataType > DATATYPE_DOUBLE) {
             throw new IllegalArgumentException("Invalid value for dataType!");
         }
     }
 
-    /** Un elemento del esquema. */
+    /** An element of the schema. */
     private static final class Element {
 
-        /** Como se llama. */
+        /** What it is called. */
         final String name;
 
-        /** Cual de las seis politicas. */
+        /** Which of the six policies. */
         int childPolicy = CHILD_POLICY_EMPTY;
 
-        /** Solo con {@link #CHILD_POLICY_REPEAT}. */
+        /** Only with {@link #CHILD_POLICY_REPEAT}. */
         int minChildren = 0;
 
-        /** Idem. */
+        /** Same. */
         int maxChildren = 0;
 
-        /** Que hijos, en orden de declaracion. */
+        /** Which children, in declaration order. */
         final List<String> childList = new ArrayList<String>();
 
-        /** Los atributos, por nombre. */
+        /** The attributes, by name. */
         final Map<String, Attribute> attributes = new HashMap<String, Attribute>();
 
-        /** Sus nombres, en orden de declaracion: el mapa no lo conserva. */
+        /** Their names, in declaration order: the map does not keep it. */
         final List<String> attrList = new ArrayList<String>();
 
-        /** El objeto de usuario, o null. */
+        /** The user object, or null. */
         ObjectValue objectValue = null;
 
         Element(String name) {
@@ -752,7 +755,7 @@ public abstract class IIOMetadataFormatImpl implements IIOMetadataFormat {
         }
     }
 
-    /** Un atributo del esquema. */
+    /** An attribute of the schema. */
     private static final class Attribute {
 
         final String name;
@@ -780,7 +783,7 @@ public abstract class IIOMetadataFormatImpl implements IIOMetadataFormat {
         }
     }
 
-    /** El objeto de usuario declarado de un elemento. */
+    /** An element's declared user object. */
     private static final class ObjectValue {
 
         int valueType = VALUE_NONE;

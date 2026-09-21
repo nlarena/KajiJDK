@@ -78,13 +78,13 @@ public class EventHandler implements InvocationHandler {
                         + Integer.toHexString(System.identityHashCode(proxy));
                 }
             } else if (this.listenerMethodName == null || this.listenerMethodName.equals(name)) {
-                result = this.aplicar(arguments);
+                result = this.apply(arguments);
             }
         }
         return result;
     }
 
-    private Object aplicar(Object[] arguments) {
+    private Object apply(Object[] arguments) {
         Object result = null;
         try {
             // What to pass the target: whatever eventPropertyName says about the event, or
@@ -197,7 +197,7 @@ public class EventHandler implements InvocationHandler {
         for (int i = 0; i < ms.length; i++) {
             if (chosen == null
                     && ms[i].getName().equals(name)
-                    && Statement.aceptan(ms[i].getParameterTypes(), args)) {
+                    && Statement.accept(ms[i].getParameterTypes(), args)) {
                 chosen = ms[i];
             }
         }

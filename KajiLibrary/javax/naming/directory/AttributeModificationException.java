@@ -3,54 +3,54 @@ package javax.naming.directory;
 import javax.naming.NamingException;
 
 /**
- * KajiLibrary's javax.naming.directory.AttributeModificationException -- una modificacion violo el
- * esquema.
+ * KajiLibrary's javax.naming.directory.AttributeModificationException -- a modification violated
+ * the schema.
  *
- * <p>Es la unica de este paquete que lleva datos propios: los {@link ModificationItem} que no se
- * pudieron aplicar. Hace falta porque {@code modifyAttributes} recibe una <b>lista</b> de
- * modificaciones y la especificacion pide que se apliquen todas o ninguna -- sin saber cual fallo,
- * no habria como arreglar el pedido.
+ * <p>It is the only one in this package that carries data of its own: the {@link ModificationItem}s
+ * that could not be applied. It is needed because {@code modifyAttributes} takes a <b>list</b> of
+ * modifications and the specification asks for all or none to be applied -- without knowing which
+ * one failed, there would be no way to fix the request.
  *
- * <p>Las modificaciones se ponen despues de construir la excepcion y no en el constructor. Es
- * incomodo y tiene su motivo: la capa que detecta el error suele ser mas profunda que la que sabe
- * que items venian en el pedido.
+ * <p>The modifications are set after building the exception and not in the constructor. It is
+ * awkward and has its reason: the layer that detects the error is usually deeper than the one that
+ * knows which items came in the request.
  */
 public class AttributeModificationException extends NamingException {
 
     private static final long serialVersionUID = 8060676069678710186L;
 
-    /** Las que no se aplicaron, o null si no se dijo. */
+    /** The ones not applied, or null if not stated. */
     private ModificationItem[] unexecs = null;
 
-    /** Sin detalle. */
+    /** With no detail. */
     public AttributeModificationException() {
         super();
     }
 
-    /** Con un mensaje que diga cual fue el problema. */
+    /** With a message saying what the problem was. */
     public AttributeModificationException(String explanation) {
         super(explanation);
     }
 
     /**
-     * Deja las modificaciones que no se llegaron a aplicar.
+     * Sets the modifications that did not get applied.
      *
-     * <p>Se guarda el arreglo tal cual, sin copiar, que es lo que hace el JDK.
+     * <p>The array is kept as is, without copying, which is what the JDK does.
      */
     public void setUnexecutedModifications(ModificationItem[] e) {
         this.unexecs = e;
     }
 
-    /** Ver {@link #setUnexecutedModifications}; null si nadie las puso. */
+    /** See {@link #setUnexecutedModifications}; null if nobody set them. */
     public ModificationItem[] getUnexecutedModifications() {
         return this.unexecs;
     }
 
     /**
-     * El mensaje de {@code NamingException} y, si hay, la <b>primera</b> modificacion no aplicada.
+     * {@code NamingException}'s message and, if any, the <b>first</b> unapplied modification.
      *
-     * <p>La primera y no todas: es la que suele explicar el fallo, y una lista larga en un
-     * {@code toString} hace ilegible cualquier registro.
+     * <p>The first and not all of them: it is the one that usually explains the failure, and a long
+     * list in a {@code toString} makes any log unreadable.
      */
     public String toString() {
         String head = super.toString();

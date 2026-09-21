@@ -3,195 +3,199 @@ package java.io;
 import java.security.Permission;
 import java.security.PermissionCollection;
 
-// KajiLibrary's java.io.FilePermission -- el permiso de tocar archivos, con su gramatica de rutas.
+// KajiLibrary's java.io.FilePermission -- the permission to touch files, with its grammar of paths.
 //
-// **Es logica pura y por eso se puede implementar entera.** Un permiso no abre archivos: contesta
-// "¿lo que tengo alcanza para lo que se pide?". Esa cuenta se hace sobre dos cadenas y no toca el
-// disco, asi que no depende de nada que a esta VM le falte.
+// **It is pure logic and that is why it can be implemented in full.** A permission opens no files:
+// it answers "does what I have cover what is being asked for?". That reckoning is done over two
+// strings and touches no disk, so it depends on nothing this VM lacks.
 //
-// **Nota sobre el estado del modelo**, la misma que `java.security.Permission`: desde JDK 24 el
-// `SecurityManager` esta permanentemente deshabilitado, asi que nadie consulta estos permisos en
-// tiempo de ejecucion. Se implementan porque son contrato -- estan en firmas que otro codigo nombra
-// -- no porque hagan cumplir nada. El JDK 25 la marca deprecada y para remocion, y aca se reproduce
-// esa marca en vez de omitirla: quien la use tiene que ver el mismo aviso que veria compilando
-// contra el JDK.
+// **A note on the model's state**, the same one as `java.security.Permission`'s: since JDK 24 the
+// `SecurityManager` has been permanently disabled, so nobody consults these permissions at run
+// time. They are implemented because they are contract -- they appear in signatures other code
+// names -- not because they enforce anything. JDK 25 marks it deprecated and for removal, and that
+// mark is reproduced here instead of being left out: whoever uses it has to see the same warning
+// they would see compiling against the JDK.
 //
-// <h2>La gramatica de nombres</h2>
+// <h2>The grammar of names</h2>
 //
 // <pre>
-//   "&lt;&lt;ALL FILES&gt;&gt;"  todo el sistema de archivos
-//   "/tmp/x"          exactamente ese archivo
-//   "/tmp/*"          los archivos **directamente** dentro de /tmp, no los de sus subdirectorios
-//   "/tmp/-"          /tmp y todo lo que cuelgue, a cualquier profundidad
-//   "*" / "-"         idem sobre el directorio actual
+//   "&lt;&lt;ALL FILES&gt;&gt;"  the whole file system
+//   "/tmp/x"          exactly that file
+//   "/tmp/*"          the files **directly** inside /tmp, not those of its subdirectories
+//   "/tmp/-"          /tmp and everything hanging off it, at any depth
+//   "*" / "-"         likewise over the current directory
 // </pre>
 //
-// Dos detalles del contrato que parecen arbitrarios y no lo son:
+// Two details of the contract that look arbitrary and are not:
 //
-//   - `"/tmp/-"` **no** implica `"/tmp"`. El comodin habla de lo que hay *dentro*; el directorio en
-//     si es otro objeto, y borrarlo no es lo mismo que borrar su contenido.
-//   - `"/tmp/-"` si implica `"/tmp/*"` -- lo recursivo contiene a lo plano -- pero no al reves.
+//   - `"/tmp/-"` does **not** imply `"/tmp"`. The wildcard talks about what is *inside*; the
+//     directory itself is another object, and deleting it is not the same as deleting its contents.
+//   - `"/tmp/-"` does imply `"/tmp/*"` -- the recursive contains the flat -- but not the other way
+//     round.
 //
-// <h2>Las rutas se normalizan, y no se canonicalizan</h2>
+// <h2>Paths are normalized, and not canonicalized</h2>
 //
-// Antes de comparar, la ruta se normaliza: los dos separadores se unifican, los repetidos se
-// colapsan, y los segmentos `.` y `..` se resuelven **de forma lexica**. Por eso `"a.txt"` implica
-// `"./a.txt"`.
+// Before comparing, the path is normalized: the two separators are unified, the repeated ones are
+// collapsed, and the `.` and `..` segments are resolved **lexically**. That is why `"a.txt"`
+// implies `"./a.txt"`.
 //
-// Lo que **no** se hace es resolver la ruta contra el directorio actual ni seguir enlaces: `"/tmp/a"`
-// y `"tmp/a"` no se implican, aunque en una sesion dada pudieran nombrar el mismo archivo. Es lo
-// mismo que hace el JDK desde la 9 (`jdk.io.permissionsUseCanonicalPath` en falso por defecto), y la
-// razon es que canonicalizar toca el disco: el resultado dependeria de que existiera el archivo y de
-// donde apuntara un enlace **en el momento de construir el permiso**, con lo cual el mismo permiso
-// podria implicar cosas distintas en dos corridas. Un permiso tiene que ser una decision estable.
+// What is **not** done is resolving the path against the current directory or following links:
+// `"/tmp/a"` and `"tmp/a"` do not imply each other, even though in a given session they might name
+// the same file. It is the same thing the JDK has done since 9
+// (`jdk.io.permissionsUseCanonicalPath` false by default), and the reason is that canonicalizing
+// touches the disk: the result would depend on the file existing and on where a link pointed **at
+// the moment the permission was constructed**, so the same permission could imply different things
+// in two runs. A permission has to be a stable decision.
 @Deprecated(since = "24", forRemoval = true)
 public final class FilePermission extends Permission implements Serializable {
 
-    private static final int LEER = 1;
-    private static final int ESCRIBIR = 2;
-    private static final int EJECUTAR = 4;
-    private static final int BORRAR = 8;
-    private static final int LEER_ENLACE = 16;
+    private static final int READ = 1;
+    private static final int WRITE = 2;
+    private static final int EXECUTE = 4;
+    private static final int DELETE = 8;
+    private static final int READLINK = 16;
 
-    private static final String TODOS_LOS_ARCHIVOS = "<<ALL FILES>>";
+    private static final String ALL_FILES = "<<ALL FILES>>";
 
-    // Las acciones concedidas, como bits. Se guarda la mascara y no la cadena porque la pregunta
-    // que se hace mil veces es "¿estan estas incluidas?", que en bits es un `and`.
-    private final int mascara;
+    // The granted actions, as bits. The mask is stored and not the string because the question
+    // asked a thousand times is "are these included?", which in bits is an `and`.
+    private final int mask;
 
-    private final boolean todosLosArchivos;
+    private final boolean allFiles;
 
-    // El comodin de la ruta: `directorio` para `/*`, y ademas `recursivo` para `/-`. Son dos
-    // banderas y no un enum de tres porque `recursivo` implica `directorio`, y tenerlas separadas
-    // hace que las cuatro combinaciones de `implies` se lean tal cual estan escritas en el contrato.
-    private final boolean directorio;
-    private final boolean recursivo;
+    // The path's wildcard: `directory` for `/*`, and `recursive` as well for `/-`. They are two
+    // flags and not an enum of three because `recursive` implies `directory`, and keeping them
+    // apart makes the four combinations of `implies` read exactly as they are written in the
+    // contract.
+    private final boolean directory;
+    private final boolean recursive;
 
-    // La ruta normalizada, ya sin el comodin final: la raiz por un lado (`""`, `"\"`, `"C:\"`) y los
-    // segmentos por otro. Partida asi porque las dos preguntas de `implies` son "¿misma raiz?" y
-    // "¿es prefijo de segmentos?", y sobre la cadena entera la segunda daria falsos positivos --
-    // `/tmpx/a` empieza por `/tmp` como texto y no esta adentro de `/tmp`.
-    private final String raiz;
-    private final String[] segmentos;
+    // The normalized path, already without the trailing wildcard: the root on one side (`""`,
+    // `"\"`, `"C:\"`) and the segments on the other. Split like that because `implies`'s two
+    // questions are "same root?" and "is it a prefix of the segments?", and over the whole string
+    // the second would give false positives -- `/tmpx/a` starts with `/tmp` as text and is not
+    // inside `/tmp`.
+    private final String root;
+    private final String[] segments;
 
     /**
-     * Un permiso sobre `path` para `actions`.
+     * A permission over `path` for `actions`.
      *
-     * @throws NullPointerException si `path` es `null`
-     * @throws IllegalArgumentException si `actions` es `null`, esta vacio, o nombra algo que no sea
-     *     `read`, `write`, `execute`, `delete` o `readlink`. Se rechaza en vez de ignorarse: una
-     *     accion mal escrita que se descartara en silencio daria un permiso mas angosto que el que
-     *     se quiso escribir, y eso solo se descubre el dia que niega algo.
+     * @throws NullPointerException if `path` is `null`
+     * @throws IllegalArgumentException if `actions` is `null`, is empty, or names anything other
+     *     than `read`, `write`, `execute`, `delete` or `readlink`. It is rejected instead of
+     *     ignored: a misspelt action silently discarded would give a narrower permission than the
+     *     one that was meant, and that is only discovered the day it denies something.
      */
     public FilePermission(String path, String actions) {
         super(path);
         if (path == null) {
             throw new NullPointerException("name can't be null");
         }
-        this.mascara = mascaraDe(actions);
+        this.mask = maskOf(actions);
 
-        if (path.equals(TODOS_LOS_ARCHIVOS)) {
-            this.todosLosArchivos = true;
-            this.directorio = false;
-            this.recursivo = false;
-            this.raiz = "";
-            this.segmentos = new String[0];
+        if (path.equals(ALL_FILES)) {
+            this.allFiles = true;
+            this.directory = false;
+            this.recursive = false;
+            this.root = "";
+            this.segments = new String[0];
             return;
         }
-        this.todosLosArchivos = false;
+        this.allFiles = false;
 
-        // El comodin se saca **antes** de normalizar: normalizar primero podria mover el `-` de
-        // lugar al resolver un `..` que viniera justo antes.
-        String bruto = path;
+        // The wildcard is taken off **before** normalizing: normalizing first could move the `-`
+        // elsewhere while resolving a `..` that came right before it.
+        String raw = path;
         boolean dir = false;
         boolean rec = false;
-        if (bruto.equals("*")) {
+        if (raw.equals("*")) {
             dir = true;
-            bruto = "";
-        } else if (bruto.equals("-")) {
+            raw = "";
+        } else if (raw.equals("-")) {
             dir = true;
             rec = true;
-            bruto = "";
-        } else if (bruto.length() >= 2 && esSeparador(bruto.charAt(bruto.length() - 2))) {
-            char ultimo = bruto.charAt(bruto.length() - 1);
-            if (ultimo == '*') {
+            raw = "";
+        } else if (raw.length() >= 2 && isSeparator(raw.charAt(raw.length() - 2))) {
+            char last = raw.charAt(raw.length() - 1);
+            if (last == '*') {
                 dir = true;
-                bruto = bruto.substring(0, bruto.length() - 1);
-            } else if (ultimo == '-') {
+                raw = raw.substring(0, raw.length() - 1);
+            } else if (last == '-') {
                 dir = true;
                 rec = true;
-                bruto = bruto.substring(0, bruto.length() - 1);
+                raw = raw.substring(0, raw.length() - 1);
             }
         }
-        this.directorio = dir;
-        this.recursivo = rec;
+        this.directory = dir;
+        this.recursive = rec;
 
-        this.raiz = raizDe(bruto);
-        this.segmentos = segmentosDe(bruto.substring(this.raiz.length()));
+        this.root = rootOf(raw);
+        this.segments = segmentsOf(raw.substring(this.root.length()));
     }
 
     /**
-     * Si este permiso alcanza para `p`.
+     * Whether this permission covers `p`.
      *
-     * <p>Son dos preguntas independientes y las dos tienen que dar que si: que las acciones de `p`
-     * esten todas incluidas en las de este, y que la ruta de `p` caiga dentro de la de este.
+     * <p>They are two independent questions and both have to answer yes: that `p`'s actions are all
+     * included in this one's, and that `p`'s path falls inside this one's.
      */
     public boolean implies(Permission p) {
         if (!(p instanceof FilePermission)) {
             return false;
         }
-        FilePermission otro = (FilePermission) p;
-        if ((this.mascara & otro.mascara) != otro.mascara) {
+        FilePermission other = (FilePermission) p;
+        if ((this.mask & other.mask) != other.mask) {
             return false;
         }
-        return this.cubreLaRutaDe(otro);
+        return this.coversThePathOf(other);
     }
 
-    // La mitad de `implies` que mira solo la ruta.
+    // The half of `implies` that looks only at the path.
     //
-    // Los cuatro casos salen del contrato y estan escritos uno por uno a proposito: colapsarlos en
-    // una comparacion de prefijos con un `if` de mas es donde se cuela que `/tmp/-` implique `/tmp`,
-    // que es justo lo que no debe pasar.
-    private boolean cubreLaRutaDe(FilePermission otro) {
-        if (this.todosLosArchivos) {
+    // The four cases come from the contract and are written out one by one on purpose: collapsing
+    // them into a prefix comparison with one extra `if` is where `/tmp/-` implying `/tmp` sneaks
+    // in, which is exactly what must not happen.
+    private boolean coversThePathOf(FilePermission other) {
+        if (this.allFiles) {
             return true;
         }
-        if (otro.todosLosArchivos) {
-            return false;               // solo el comodin universal se implica a si mismo
+        if (other.allFiles) {
+            return false;               // only the universal wildcard implies itself
         }
-        if (!this.raiz.equals(otro.raiz)) {
-            return false;               // absoluto y relativo no se comparan; ver la nota de clase
+        if (!this.root.equals(other.root)) {
+            return false;               // absolute and relative do not compare; see the class note
         }
-        int mios = this.segmentos.length;
-        int suyos = otro.segmentos.length;
+        int mine = this.segments.length;
+        int theirs = other.segments.length;
 
-        if (!this.directorio) {
-            // Una ruta pelada implica exactamente a si misma.
-            return !otro.directorio && suyos == mios && this.esPrefijoDe(otro);
+        if (!this.directory) {
+            // A bare path implies exactly itself.
+            return !other.directory && theirs == mine && this.isPrefixOf(other);
         }
-        if (this.recursivo) {
-            if (otro.directorio) {
-                // `/tmp/-` cubre a `/tmp/*` y a `/tmp/sub/-`: cualquier comodin de mas abajo.
-                return suyos >= mios && this.esPrefijoDe(otro);
+        if (this.recursive) {
+            if (other.directory) {
+                // `/tmp/-` covers `/tmp/*` and `/tmp/sub/-`: any wildcard further down.
+                return theirs >= mine && this.isPrefixOf(other);
             }
-            // Estricto: `/tmp/-` habla de lo que hay dentro de /tmp, y /tmp no esta dentro de /tmp.
-            return suyos > mios && this.esPrefijoDe(otro);
+            // Strict: `/tmp/-` talks about what is inside /tmp, and /tmp is not inside /tmp.
+            return theirs > mine && this.isPrefixOf(other);
         }
-        if (otro.directorio) {
-            // `/tmp/*` solo cubre al mismo `/tmp/*`, y nunca a un `-` que es mas amplio.
-            return !otro.recursivo && suyos == mios && this.esPrefijoDe(otro);
+        if (other.directory) {
+            // `/tmp/*` covers only the same `/tmp/*`, and never a `-`, which is wider.
+            return !other.recursive && theirs == mine && this.isPrefixOf(other);
         }
-        // Un nivel exacto: `/tmp/*` cubre `/tmp/a.txt` y no `/tmp/sub/a.txt`.
-        return suyos == mios + 1 && this.esPrefijoDe(otro);
+        // Exactly one level: `/tmp/*` covers `/tmp/a.txt` and not `/tmp/sub/a.txt`.
+        return theirs == mine + 1 && this.isPrefixOf(other);
     }
 
-    private boolean esPrefijoDe(FilePermission otro) {
-        if (otro.segmentos.length < this.segmentos.length) {
+    private boolean isPrefixOf(FilePermission other) {
+        if (other.segments.length < this.segments.length) {
             return false;
         }
         int i = 0;
-        while (i < this.segmentos.length) {
-            if (!this.segmentos[i].equals(otro.segmentos[i])) {
+        while (i < this.segments.length) {
+            if (!this.segments[i].equals(other.segments[i])) {
                 return false;
             }
             i = i + 1;
@@ -200,42 +204,42 @@ public final class FilePermission extends Permission implements Serializable {
     }
 
     /**
-     * Las acciones en orden canonico: `read,write,execute,delete,readlink`.
+     * The actions in canonical order: `read,write,execute,delete,readlink`.
      *
-     * <p>Canonico y no el orden en que se escribieron, para que dos permisos iguales se vean
-     * iguales: `"write,read"` y `"read,write"` conceden lo mismo y tienen que imprimirse igual, si
-     * no `equals` y `toString` contarian historias distintas.
+     * <p>Canonical and not the order they were written in, so that two equal permissions look
+     * equal: `"write,read"` and `"read,write"` grant the same thing and have to print the same,
+     * otherwise `equals` and `toString` would tell different stories.
      */
     public String getActions() {
         StringBuilder sb = new StringBuilder();
-        if ((this.mascara & LEER) != 0) {
+        if ((this.mask & READ) != 0) {
             sb.append("read");
         }
-        if ((this.mascara & ESCRIBIR) != 0) {
-            coma(sb);
+        if ((this.mask & WRITE) != 0) {
+            comma(sb);
             sb.append("write");
         }
-        if ((this.mascara & EJECUTAR) != 0) {
-            coma(sb);
+        if ((this.mask & EXECUTE) != 0) {
+            comma(sb);
             sb.append("execute");
         }
-        if ((this.mascara & BORRAR) != 0) {
-            coma(sb);
+        if ((this.mask & DELETE) != 0) {
+            comma(sb);
             sb.append("delete");
         }
-        if ((this.mascara & LEER_ENLACE) != 0) {
-            coma(sb);
+        if ((this.mask & READLINK) != 0) {
+            comma(sb);
             sb.append("readlink");
         }
         return sb.toString();
     }
 
     /**
-     * Dos permisos son iguales si conceden lo mismo sobre la misma ruta.
+     * Two permissions are equal if they grant the same thing over the same path.
      *
-     * <p>Se compara la ruta **normalizada** y no el nombre tal como se escribio, por lo mismo que
-     * `implies`: `"/tmp/./a"` y `"/tmp/a"` son el mismo permiso, y si no fueran iguales una
-     * coleccion guardaria los dos y contestaria dos veces lo mismo.
+     * <p>The **normalized** path is compared and not the name as it was written, for the same
+     * reason as in `implies`: `"/tmp/./a"` and `"/tmp/a"` are the same permission, and if they were
+     * not equal a collection would store both and answer the same thing twice.
      */
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -244,90 +248,90 @@ public final class FilePermission extends Permission implements Serializable {
         if (!(obj instanceof FilePermission)) {
             return false;
         }
-        FilePermission otro = (FilePermission) obj;
-        if (this.mascara != otro.mascara
-                || this.todosLosArchivos != otro.todosLosArchivos
-                || this.directorio != otro.directorio
-                || this.recursivo != otro.recursivo
-                || !this.raiz.equals(otro.raiz)
-                || this.segmentos.length != otro.segmentos.length) {
+        FilePermission other = (FilePermission) obj;
+        if (this.mask != other.mask
+                || this.allFiles != other.allFiles
+                || this.directory != other.directory
+                || this.recursive != other.recursive
+                || !this.root.equals(other.root)
+                || this.segments.length != other.segments.length) {
             return false;
         }
-        return this.esPrefijoDe(otro);
+        return this.isPrefixOf(other);
     }
 
     public int hashCode() {
-        int h = this.raiz.hashCode();
+        int h = this.root.hashCode();
         int i = 0;
-        while (i < this.segmentos.length) {
-            h = h * 31 + this.segmentos[i].hashCode();
+        while (i < this.segments.length) {
+            h = h * 31 + this.segments[i].hashCode();
             i = i + 1;
         }
-        h = h * 31 + this.mascara;
-        h = h * 31 + (this.directorio ? 2 : 0) + (this.recursivo ? 1 : 0);
-        return h * 31 + (this.todosLosArchivos ? 1 : 0);
+        h = h * 31 + this.mask;
+        h = h * 31 + (this.directory ? 2 : 0) + (this.recursive ? 1 : 0);
+        return h * 31 + (this.allFiles ? 1 : 0);
     }
 
     /**
-     * Una coleccion para juntar permisos de archivo.
+     * A collection for gathering file permissions.
      *
-     * <p>No indexa por nombre como hace `BasicPermission`, y no es una omision: ahi el comodin cae
-     * siempre en un lugar previsible (`a.b.*`) y se pueden probar los cuatro candidatos; aca
-     * `"/a/-"` puede cubrir a `"/a/b/c/d"` a cualquier profundidad, asi que no hay un conjunto
-     * chico de claves que consultar. Se recorre.
+     * <p>It does not index by name the way `BasicPermission` does, and that is no omission: there
+     * the wildcard always falls in a predictable place (`a.b.*`) and the four candidates can be
+     * tried; here `"/a/-"` may cover `"/a/b/c/d"` at any depth, so there is no small set of keys to
+     * look up. It is walked.
      */
     public PermissionCollection newPermissionCollection() {
         return new FilePermissionCollection();
     }
 
-    // ---- partido y normalizado de rutas ------------------------------------------------------
+    // ---- splitting and normalizing paths -----------------------------------------------------
 
-    private static boolean esSeparador(char c) {
+    private static boolean isSeparator(char c) {
         return c == '/' || c == '\\';
     }
 
-    // La raiz: `""` (relativa), `"\"` (absoluta), `"C:"` (relativa a un disco) o `"C:\"`.
+    // The root: `""` (relative), `"\"` (absolute), `"C:"` (relative to a drive) or `"C:\"`.
     //
-    // La distincion entre `"C:"` y `"C:\"` se conserva porque son cosas distintas en Windows: la
-    // primera es relativa al directorio actual **de ese disco**. Fundirlas haria que un permiso
-    // sobre una implicara a la otra.
-    private static String raizDe(String p) {
+    // The distinction between `"C:"` and `"C:\"` is kept because they are different things on
+    // Windows: the first is relative to that **drive's** current directory. Merging them would make
+    // a permission over one imply the other.
+    private static String rootOf(String p) {
         int i = 0;
         int n = p.length();
-        if (n >= 2 && p.charAt(1) == ':' && esLetra(p.charAt(0))) {
+        if (n >= 2 && p.charAt(1) == ':' && isLetter(p.charAt(0))) {
             i = 2;
         }
         StringBuilder sb = new StringBuilder(p.substring(0, i));
-        if (i < n && esSeparador(p.charAt(i))) {
+        if (i < n && isSeparator(p.charAt(i))) {
             sb.append(File.separatorChar);
-            while (i < n && esSeparador(p.charAt(i))) {
+            while (i < n && isSeparator(p.charAt(i))) {
                 i = i + 1;
             }
         }
         return sb.toString();
     }
 
-    private static boolean esLetra(char c) {
+    private static boolean isLetter(char c) {
         return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
     }
 
-    // Los segmentos de la parte sin raiz, con `.` descartado y `..` resuelto lexicamente.
-    private static String[] segmentosDe(String resto) {
+    // The segments of the rootless part, with `.` discarded and `..` resolved lexically.
+    private static String[] segmentsOf(String rest) {
         java.util.ArrayList<String> out = new java.util.ArrayList<String>();
         int i = 0;
-        int n = resto.length();
+        int n = rest.length();
         while (i < n) {
             int j = i;
-            while (j < n && !esSeparador(resto.charAt(j))) {
+            while (j < n && !isSeparator(rest.charAt(j))) {
                 j = j + 1;
             }
             if (j > i) {
-                String seg = resto.substring(i, j);
+                String seg = rest.substring(i, j);
                 if (seg.equals(".")) {
-                    // nada: `.` es "aca mismo"
+                    // nothing: `.` is "right here"
                 } else if (seg.equals("..")) {
-                    // Si no hay a quien subir, el `..` se conserva: descartarlo convertiria
-                    // `../secreto` en `secreto`, o sea en otro archivo.
+                    // If there is nobody to climb to, the `..` is kept: discarding it would turn
+                    // `../secret` into `secret`, that is, into another file.
                     if (!out.isEmpty() && !out.get(out.size() - 1).equals("..")) {
                         out.remove(out.size() - 1);
                     } else {
@@ -342,15 +346,15 @@ public final class FilePermission extends Permission implements Serializable {
         return out.toArray(new String[out.size()]);
     }
 
-    // ---- acciones ----------------------------------------------------------------------------
+    // ---- actions -----------------------------------------------------------------------------
 
-    private static void coma(StringBuilder sb) {
+    private static void comma(StringBuilder sb) {
         if (sb.length() > 0) {
             sb.append(',');
         }
     }
 
-    private static int mascaraDe(String actions) {
+    private static int maskOf(String actions) {
         if (actions == null) {
             throw new IllegalArgumentException("actions can't be null");
         }
@@ -362,12 +366,13 @@ public final class FilePermission extends Permission implements Serializable {
             while (j < n && actions.charAt(j) != ',') {
                 j = j + 1;
             }
-            String pieza = actions.substring(i, j).trim();
-            if (pieza.length() > 0) {
-                m = m | unaAccion(pieza);
+            String piece = actions.substring(i, j).trim();
+            if (piece.length() > 0) {
+                m = m | oneAction(piece);
             } else if (n > 0) {
-                // `"read,,write"` o `"read,"`: una coma sin accion es un error de escritura, y
-                // aceptarla escondería el que de verdad importa -- una accion mal tipeada al lado.
+                // `"read,,write"` or `"read,"`: a comma with no action is a writing mistake, and
+                // accepting it would hide the one that really matters -- a mistyped action next to
+                // it.
                 throw new IllegalArgumentException("invalid actions: " + actions);
             }
             i = j + 1;
@@ -378,22 +383,22 @@ public final class FilePermission extends Permission implements Serializable {
         return m;
     }
 
-    private static int unaAccion(String s) {
+    private static int oneAction(String s) {
         String a = s.toLowerCase();
         if (a.equals("read")) {
-            return LEER;
+            return READ;
         }
         if (a.equals("write")) {
-            return ESCRIBIR;
+            return WRITE;
         }
         if (a.equals("execute")) {
-            return EJECUTAR;
+            return EXECUTE;
         }
         if (a.equals("delete")) {
-            return BORRAR;
+            return DELETE;
         }
         if (a.equals("readlink")) {
-            return LEER_ENLACE;
+            return READLINK;
         }
         throw new IllegalArgumentException("invalid actions: " + s);
     }

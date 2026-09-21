@@ -79,7 +79,7 @@ public class Vector<E> extends AbstractList<E> implements List<E>, RandomAccess,
 
     // --- unsynchronized internals ---------------------------------------------------
     //
-    // The real work lives here, lock-free. The public methods below are a thin locked shell
+    // The inner work lives here, lock-free. The public methods below are a thin locked shell
     // over these, which keeps the locking visible in one place instead of tangled with the
     // array bookkeeping.
 

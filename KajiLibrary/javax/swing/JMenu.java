@@ -15,28 +15,30 @@ import javax.swing.event.MenuEvent;
 import javax.swing.event.MenuListener;
 
 /**
- * Una opcion de menu que abre un submenu.
+ * A menu option that opens a submenu.
  *
- * <h2>Es una opcion, y ademas tiene un desplegable</h2>
+ * <h2>It is an option, and it also has a drop-down</h2>
  *
- * <p>Hereda de {@link JMenuItem}, asi que en la barra o en un menu de arriba se comporta como
- * cualquier opcion. Lo que agrega es un {@link JPopupMenu} propio: lo que se le agrega con
- * {@link #add} no va al menu sino a ese desplegable.
+ * <p>It inherits from {@link JMenuItem}, so in the bar or in a menu above it behaves like any
+ * option. What it adds is a {@link JPopupMenu} of its own: what is added to it with
+ * {@link #add} does not go to the menu but to that drop-down.
  *
- * <p>Eso explica que existan {@link #getMenuComponentCount} y {@link #getComponentCount} por
- * separado: el primero cuenta las opciones del submenu, el segundo los hijos del componente, que
- * son otra cosa.
+ * <p>That explains why {@link #getMenuComponentCount} and {@link #getComponentCount} exist
+ * separately: the first counts the submenu's options, the second the component's children,
+ * which are another thing.
  *
- * <h2>Elegido no es desplegado</h2>
+ * <h2>Chosen is not dropped down</h2>
  *
- * <p>{@link #setSelected} marca el menu como el que el recorrido esta tocando;
- * {@link #setPopupMenuVisible} abre el desplegable. Casi siempre van juntos, y no siempre: recorrer
- * la barra con el teclado marca menus sin abrirlos hasta que se aprieta la flecha abajo.
+ * <p>{@link #setSelected} marks the menu as the one the walk is touching;
+ * {@link #setPopupMenuVisible} opens the drop-down. Almost always they go together, and not
+ * always: walking the bar with the keyboard marks menus without opening them until the down
+ * arrow is pressed.
  *
- * <h2>El retardo</h2>
+ * <h2>The delay</h2>
  *
- * <p>{@link #setDelay} es cuanto espera antes de abrir el submenu al pasar el mouse. Existe porque
- * sin el, cruzar un menu camino a otro abriria todos los del camino.
+ * <p>{@link #setDelay} is how long it waits before opening the submenu when the mouse passes
+ * over. It exists because without it, crossing a menu on the way to another would open every
+ * one on the way.
  */
 public class JMenu extends JMenuItem implements Accessible, MenuElement {
 
@@ -46,29 +48,29 @@ public class JMenu extends JMenuItem implements Accessible, MenuElement {
     private int delay;
     private Point customMenuLocation = null;
 
-    /** Escucha la ventana del desplegable para cerrarlo cuando se cierra. */
+    /** It listens to the drop-down's window in order to close it when it closes. */
     protected WinListener popupListener;
 
-    /** Un menu vacio sin texto. */
+    /** An empty menu with no text. */
     public JMenu() {
         this("");
     }
 
-    /** Un menu con ese texto. */
+    /** A menu with that text. */
     public JMenu(String s) {
         super(s);
     }
 
-    /** Un menu que toma su texto y su icono de esa accion. */
+    /** A menu that takes its text and its icon from that action. */
     public JMenu(Action a) {
         this();
         setAction(a);
     }
 
     /**
-     * Un menu con ese texto.
+     * A menu with that text.
      *
-     * @param b si el submenu se puede arrancar y dejar flotando; no esta implementado.
+     * @param b whether the submenu can be torn off and left floating; it is not implemented.
      */
     public JMenu(String s, boolean b) {
         this(s);
@@ -85,7 +87,7 @@ public class JMenu extends JMenuItem implements Accessible, MenuElement {
         super.setModel(newModel);
     }
 
-    /** Si el recorrido del menu esta tocando este; ver la nota de la clase. */
+    /** Whether the menu's walk is touching this one; see the class note. */
     public boolean isSelected() {
         return getModel().isSelected();
     }
@@ -103,10 +105,10 @@ public class JMenu extends JMenuItem implements Accessible, MenuElement {
     }
 
     /**
-     * Abre o cierra el submenu.
+     * It opens or closes the submenu.
      *
-     * <p>Un menu deshabilitado no abre nada aunque se lo pidan: si abriera, el usuario podria
-     * elegir de un menu que esta apagado.
+     * <p>A disabled menu opens nothing even though it is asked to: if it opened, the user could
+     * choose from a menu that is switched off.
      */
     public void setPopupMenuVisible(boolean b) {
         boolean isVisible = isPopupMenuVisible();
@@ -122,10 +124,10 @@ public class JMenu extends JMenuItem implements Accessible, MenuElement {
     }
 
     /**
-     * Donde abrir el submenu, relativo a este menu.
+     * Where to open the submenu, relative to this menu.
      *
-     * <p>Abajo si el menu esta en la barra, al costado si esta adentro de otro menu. Es lo que hace
-     * que un submenu no tape a su padre.
+     * <p>Below if the menu is in the bar, at the side if it is inside another menu. It is what
+     * keeps a submenu from covering its parent.
      */
     protected Point getPopupMenuOrigin() {
         if (isTopLevelMenu()) {
@@ -139,9 +141,9 @@ public class JMenu extends JMenuItem implements Accessible, MenuElement {
     }
 
     /**
-     * Cuanto espera antes de abrir el submenu; ver la nota de la clase.
+     * How long it waits before opening the submenu; see the class note.
      *
-     * @throws IllegalArgumentException si es negativo.
+     * @throws IllegalArgumentException if it is negative.
      */
     public void setDelay(int d) {
         if (d < 0) {
@@ -150,7 +152,7 @@ public class JMenu extends JMenuItem implements Accessible, MenuElement {
         delay = d;
     }
 
-    /** Fuerza donde se abre el submenu, en lugar de calcularlo. */
+    /** It forces where the submenu opens, instead of computing it. */
     public void setMenuLocation(int x, int y) {
         customMenuLocation = new Point(x, y);
         if (popupMenu != null) {
@@ -175,7 +177,7 @@ public class JMenu extends JMenuItem implements Accessible, MenuElement {
         return c;
     }
 
-    /** Agrega una opcion con ese texto. */
+    /** It adds an option with that text. */
     public JMenuItem add(String s) {
         return add(new JMenuItem(s));
     }
@@ -194,7 +196,7 @@ public class JMenu extends JMenuItem implements Accessible, MenuElement {
         return mi;
     }
 
-    /** Devuelve nulo; la opcion escucha a la accion ella misma. Ver {@link JPopupMenu}. */
+    /** It returns null; the option listens to the action itself. See {@link JPopupMenu}. */
     protected PropertyChangeListener createActionChangeListener(JMenuItem b) {
         return null;
     }
@@ -241,10 +243,10 @@ public class JMenu extends JMenuItem implements Accessible, MenuElement {
     }
 
     /**
-     * La opcion numero tal del submenu.
+     * Option number such-and-such of the submenu.
      *
-     * <p>Devuelve nulo si en esa posicion hay algo que no es una opcion -- un separador, por
-     * ejemplo --. No saltea: la posicion es la del componente.
+     * <p>It returns null if at that position there is something that is not an option -- a
+     * separator, for instance --. It does not skip: the position is the component's.
      */
     public JMenuItem getItem(int pos) {
         if (pos < 0) {
@@ -257,15 +259,15 @@ public class JMenu extends JMenuItem implements Accessible, MenuElement {
         return null;
     }
 
-    /** Cuantas cosas hay en el submenu, contando separadores. */
+    /** How many things there are in the submenu, counting separators. */
     public int getItemCount() {
         return getMenuComponentCount();
     }
 
     /**
-     * Si el submenu se puede arrancar y dejar flotando.
+     * Whether the submenu can be torn off and left floating.
      *
-     * @throws Error siempre: no esta implementado, ni en el JDK.
+     * @throws Error always: it is not implemented, not in the JDK either.
      */
     public boolean isTearOff() {
         throw new Error("boolean isTearOff() {} not yet implemented");
@@ -301,7 +303,7 @@ public class JMenu extends JMenuItem implements Accessible, MenuElement {
         }
     }
 
-    /** Cuantos componentes hay en el submenu; ver la nota de la clase. */
+    /** How many components there are in the submenu; see the class note. */
     public int getMenuComponentCount() {
         int componentCount = 0;
         if (popupMenu != null) {
@@ -324,7 +326,7 @@ public class JMenu extends JMenuItem implements Accessible, MenuElement {
         return new Component[0];
     }
 
-    /** Si esta directamente en la barra de menu y no adentro de otro menu. */
+    /** Whether it is directly in the menu bar and not inside another menu. */
     public boolean isTopLevelMenu() {
         return getParent() instanceof JMenuBar;
     }
@@ -351,7 +353,7 @@ public class JMenu extends JMenuItem implements Accessible, MenuElement {
         return false;
     }
 
-    /** El desplegable; se arma la primera vez que hace falta. */
+    /** The drop-down; it is built the first time it is needed. */
     public JPopupMenu getPopupMenu() {
         ensurePopupMenuCreated();
         return popupMenu;
@@ -378,10 +380,10 @@ public class JMenu extends JMenuItem implements Accessible, MenuElement {
     }
 
     /**
-     * Avisa que el menu quedo elegido.
+     * It gives notice that the menu was chosen.
      *
-     * <p>Es el gancho para armar el menu justo antes de abrirlo: un menu de archivos recientes se
-     * llena aca y no al armar la ventana.
+     * <p>It is the hook for building the menu right before opening it: a menu of recent files is
+     * filled here and not when the window is built.
      */
     protected void fireMenuSelected() {
         Object[] listeners = listenerList.getListenerList();
@@ -427,10 +429,10 @@ public class JMenu extends JMenuItem implements Accessible, MenuElement {
     }
 
     /**
-     * Cierra el menu cuando se cierra la ventana del desplegable.
+     * It closes the menu when the drop-down's window closes.
      *
-     * <p>Solo hace falta con un desplegable pesado, que vive en su propia ventana. Sin esto,
-     * cerrarla desde el sistema dejaria al menu creyendo que sigue abierto.
+     * <p>It is only needed with a heavyweight drop-down, which lives in a window of its own.
+     * Without this, closing it from the system would leave the menu believing it is still open.
      */
     public static class WinListener extends WindowAdapter implements Serializable {
 
@@ -447,12 +449,12 @@ public class JMenu extends JMenuItem implements Accessible, MenuElement {
         }
     }
 
-    /** El recorrido del menu paso por aca: se abre o se cierra el submenu. */
+    /** The menu's walk passed through here: the submenu opens or closes. */
     public void menuSelectionChanged(boolean isIncluded) {
         setSelected(isIncluded);
     }
 
-    /** Las opciones del submenu, con el desplegable adelante. */
+    /** The submenu's options, with the drop-down in front. */
     public MenuElement[] getSubElements() {
         if (popupMenu == null) {
             return new MenuElement[0];
@@ -481,12 +483,12 @@ public class JMenu extends JMenuItem implements Accessible, MenuElement {
     }
 
     /**
-     * Un menu no lleva atajo.
+     * A menu carries no shortcut.
      *
-     * <p>Un atajo dispara una accion; un menu no hace nada, solo abre. Poner uno no tendria que
-     * hacer, y por eso se rechaza en lugar de guardarse.
+     * <p>A shortcut fires an action; a menu does nothing, it only opens. Setting one would have
+     * nothing to do, and that is why it is rejected instead of being kept.
      *
-     * @throws Error siempre.
+     * @throws Error always.
      */
     public void setAccelerator(KeyStroke keyStroke) {
         throw new Error("setAccelerator() is not defined for JMenu.  Use setMnemonic() instead.");
@@ -500,13 +502,13 @@ public class JMenu extends JMenuItem implements Accessible, MenuElement {
         super.processKeyEvent(evt);
     }
 
-    /** Abrir el submenu, que es lo que un menu hace al ser apretado. */
+    /** Open the submenu, which is what a menu does on being pressed. */
     public void doClick(int pressTime) {
         MenuElement[] me = buildMenuElementArray(this);
         MenuSelectionManager.defaultManager().setSelectedPath(me);
     }
 
-    /** El camino desde el menu de arriba hasta este. */
+    /** The path from the menu above down to this one. */
     private static MenuElement[] buildMenuElementArray(JMenu leaf) {
         java.util.Vector<MenuElement> elements = new java.util.Vector<MenuElement>();
         Component current = leaf.getPopupMenu();

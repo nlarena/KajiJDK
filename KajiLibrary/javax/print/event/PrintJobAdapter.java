@@ -1,44 +1,45 @@
 package javax.print.event;
 
 /**
- * KajiLibrary's javax.print.event.PrintJobAdapter -- {@link PrintJobListener} con los seis metodos
- * vacios.
+ * KajiLibrary's javax.print.event.PrintJobAdapter -- {@link PrintJobListener} with the six methods
+ * empty.
  *
- * <p>Para redefinir solo los que interesen. Es abstracta aunque no tenga metodos abstractos: lo es a
- * proposito, porque una instancia que no redefina nada no hace nada y casi seguro es un error.
+ * <p>To override only the ones of interest. It is abstract although it has no abstract methods: it
+ * is so on purpose, because an instance that overrides nothing does nothing and is almost surely a
+ * mistake.
  */
 public abstract class PrintJobAdapter implements PrintJobListener {
 
-    /** Para las subclases. */
+    /** For subclasses. */
     protected PrintJobAdapter() {
     }
 
-    /** No hace nada. */
+    /** Does nothing. */
     @Override
     public void printDataTransferCompleted(PrintJobEvent pje) {
     }
 
-    /** No hace nada. */
+    /** Does nothing. */
     @Override
     public void printJobCompleted(PrintJobEvent pje) {
     }
 
-    /** No hace nada. */
+    /** Does nothing. */
     @Override
     public void printJobFailed(PrintJobEvent pje) {
     }
 
-    /** No hace nada. */
+    /** Does nothing. */
     @Override
     public void printJobCanceled(PrintJobEvent pje) {
     }
 
-    /** No hace nada. */
+    /** Does nothing. */
     @Override
     public void printJobNoMoreEvents(PrintJobEvent pje) {
     }
 
-    /** No hace nada. */
+    /** Does nothing. */
     @Override
     public void printJobRequiresAttention(PrintJobEvent pje) {
     }

@@ -1,16 +1,16 @@
 package com.sun.jdi;
 
 /**
- * Lo que tiene una posicion en el codigo.
+ * What has a position in the code.
  *
  * @since 1.3
  */
 public interface Locatable {
 
     /**
-     * El location.
+     * The location.
      *
-     * @return el resultado
+     * @return the result
      */
     Location location();
 }

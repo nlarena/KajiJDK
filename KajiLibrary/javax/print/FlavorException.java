@@ -1,13 +1,13 @@
 package javax.print;
 
 /**
- * KajiLibrary's javax.print.FlavorException -- el fallo fue por el formato del documento.
+ * KajiLibrary's javax.print.FlavorException -- the failure was because of the document's format.
  *
- * <p>Una interfaz; ver la nota de {@link PrintException}. La implementa la excepcion que se lanza
- * cuando el {@link DocFlavor} del documento no esta entre los que la impresora acepta.
+ * <p>An interface; see the note of {@link PrintException}. It is implemented by the exception
+ * thrown when the document's {@link DocFlavor} is not among the ones the printer accepts.
  */
 public interface FlavorException {
 
-    /** Los formatos que no acepta. */
+    /** The formats it does not accept. */
     DocFlavor[] getUnsupportedFlavors();
 }

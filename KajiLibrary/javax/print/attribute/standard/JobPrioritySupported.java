@@ -5,11 +5,11 @@ import javax.print.attribute.IntegerSyntax;
 import javax.print.attribute.SupportedValuesAttribute;
 
 /**
- * Cuantos niveles de {@link JobPriority} distingue de verdad la impresora.
+ * How many levels of {@link JobPriority} the printer really distinguishes.
  *
- * <p>El numero no es una prioridad sino una <em>cantidad</em>: si vale 5, la escala de 1 a 100 se
- * reparte en cinco tramos iguales y pedir 3 o pedir 20 da lo mismo. Es el unico atributo de valores
- * soportados que es un entero suelto y no un conjunto de enteros.
+ * <p>The number is not a priority but a <em>quantity</em>: if it is 5, the scale from 1 to 100 is
+ * split into five equal stretches and asking for 3 or for 20 gives the same. It is the only
+ * supported-values attribute that is a loose integer and not a set of integers.
  */
 public final class JobPrioritySupported extends IntegerSyntax implements SupportedValuesAttribute {
 
@@ -19,8 +19,10 @@ public final class JobPrioritySupported extends IntegerSyntax implements Support
         super(value, 1, 100);
     }
 
-    /** El {@code instanceof} es lo que impide que un JobPrioritySupported de igual a otro atributo
-     * entero con el mismo numero. */
+    /**
+     * The {@code instanceof} is what keeps a JobPrioritySupported from being equal to another
+     * integer attribute with the same number.
+     */
     public boolean equals(Object object) {
         return super.equals(object) && object instanceof JobPrioritySupported;
     }

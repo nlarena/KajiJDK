@@ -1,7 +1,7 @@
 package com.sun.jdi;
 
 /**
- * ByteType de la maquina depurada.
+ * ByteType of the debugged machine.
  *
  * @since 1.3
  */

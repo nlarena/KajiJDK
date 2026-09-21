@@ -3,23 +3,23 @@ package com.sun.security.auth;
 import javax.security.auth.Subject;
 
 /**
- * Un principal que sabe decir si <em>implica</em> a un sujeto entero.
+ * A principal that knows how to say whether it <em>implies</em> a whole subject.
  *
- * <h2>Que quiere decir "implica"</h2>
+ * <h2>What "implies" means</h2>
  *
- * <p>Que una politica escrita para este principal alcanza a ese sujeto. Lo normal es que un sujeto
- * tenga varios principales —usuario, grupos, dominio— y una politica escrita para el grupo
- * {@code admin} alcance a todo el que lo tenga entre los suyos.
+ * <p>That a policy written for this principal reaches that subject. The normal thing is for a
+ * subject to have several principals -- user, groups, domain -- and for a policy written for
+ * the group {@code admin} to reach everybody who has it among theirs.
  *
- * <p>Sin esto, comparar seria buscar igualdad exacta contra cada principal del sujeto, y no habria
- * forma de expresar un principal que represente a un conjunto.
+ * <p>Without this, comparing would be looking for exact equality against each principal of the
+ * subject, and there would be no way of expressing a principal that represents a set.
  *
- * @deprecated el mecanismo de politicas basado en {@code Subject} quedo en desuso junto con el
- *     gestor de seguridad.
+ * @deprecated the policy mechanism based on {@code Subject} fell into disuse along with the
+ *     security manager.
  */
 @Deprecated(since = "17", forRemoval = true)
 public interface PrincipalComparator {
 
-    /** Si una politica escrita para este principal alcanza a {@code subject}. */
+    /** Whether a policy written for this principal reaches {@code subject}. */
     boolean implies(Subject subject);
 }

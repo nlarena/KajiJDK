@@ -4,78 +4,78 @@ import javax.imageio.metadata.IIOMetadataFormat;
 import javax.imageio.metadata.IIOMetadataFormatImpl;
 
 /**
- * KajiLibrary's javax.imageio.spi.ImageReaderWriterSpi -- lo que comparten el proveedor de lectores y
- * el de escritores.
+ * KajiLibrary's javax.imageio.spi.ImageReaderWriterSpi -- what the reader and the writer providers
+ * share.
  *
- * <p>Dos cosas: como se llama el formato --nombres, extensiones, tipos MIME-- y que formatos de
- * metadatos entiende.
+ * <p>Two things: what the format is called --names, suffixes, MIME types-- and which metadata
+ * formats it understands.
  *
- * <h2>Los tres nombres del mismo formato</h2>
+ * <h2>The three names of the same format</h2>
  *
- * <p>{@link #getFormatNames} son los nombres informales con los que un programa lo pide
- * --{@code "jpeg"}, {@code "JPG"}--; {@link #getFileSuffixes} las extensiones sin punto;
- * {@link #getMIMETypes} los tipos MIME. Los tres son arreglos porque un formato tiene varios de cada
- * uno, y {@code ImageIO} busca por cualquiera.
+ * <p>{@link #getFormatNames} are the informal names a program asks for it by --{@code "jpeg"},
+ * {@code "JPG"}--; {@link #getFileSuffixes} the suffixes without a dot; {@link #getMIMETypes} the
+ * MIME types. All three are arrays because a format has several of each, and {@code ImageIO} looks
+ * up by any of them.
  *
- * <h2>Los formatos de metadatos vienen de a dos juegos</h2>
+ * <h2>Metadata formats come in two sets</h2>
  *
- * <p>Uno para los metadatos del <b>flujo</b> --lo que vale para el archivo entero-- y otro para los de
- * cada <b>imagen</b>. Cada juego declara si soporta el formato estandar, cual es su formato nativo, y
- * que otros entiende.
+ * <p>One for the <b>stream</b> metadata --what holds for the whole file-- and another for each
+ * <b>image</b>'s. Each set declares whether it supports the standard format, which is its native
+ * format, and which others it understands.
  *
- * <p>El nombre de clase de cada formato se resuelve por reflexion, buscando su {@code getInstance}
- * estatico; ver {@link #getStreamMetadataFormat}. Es lo que permite declarar un formato sin cargar su
- * clase hasta que alguien lo pida.
+ * <p>Each format's class name is resolved by reflection, looking for its static {@code
+ * getInstance}; see {@link #getStreamMetadataFormat}. It is what allows declaring a format without
+ * loading its class until someone asks for it.
  */
 public abstract class ImageReaderWriterSpi extends IIOServiceProvider {
 
-    /** Los nombres informales del formato. */
+    /** The format's informal names. */
     protected String[] names = null;
 
-    /** Las extensiones, sin punto. */
+    /** The suffixes, without a dot. */
     protected String[] suffixes = null;
 
-    /** Los tipos MIME. */
+    /** The MIME types. */
     protected String[] MIMETypes = null;
 
-    /** La clase del lector o escritor que este proveedor crea. */
+    /** The class of the reader or writer this provider creates. */
     protected String pluginClassName = null;
 
-    /** Si entiende el formato estandar para los metadatos de flujo. */
+    /** Whether it understands the standard format for stream metadata. */
     protected boolean supportsStandardStreamMetadataFormat = false;
 
-    /** Como se llama su formato nativo de flujo, o null. */
+    /** What its native stream format is called, or null. */
     protected String nativeStreamMetadataFormatName = null;
 
-    /** La clase que lo describe. */
+    /** The class that describes it. */
     protected String nativeStreamMetadataFormatClassName = null;
 
-    /** Otros formatos de flujo que entiende. */
+    /** Other stream formats it understands. */
     protected String[] extraStreamMetadataFormatNames = null;
 
-    /** Las clases que los describen. */
+    /** The classes that describe them. */
     protected String[] extraStreamMetadataFormatClassNames = null;
 
-    /** Si entiende el formato estandar para los metadatos de imagen. */
+    /** Whether it understands the standard format for image metadata. */
     protected boolean supportsStandardImageMetadataFormat = false;
 
-    /** Como se llama su formato nativo de imagen, o null. */
+    /** What its native image format is called, or null. */
     protected String nativeImageMetadataFormatName = null;
 
-    /** La clase que lo describe. */
+    /** The class that describes it. */
     protected String nativeImageMetadataFormatClassName = null;
 
-    /** Otros formatos de imagen que entiende. */
+    /** Other image formats it understands. */
     protected String[] extraImageMetadataFormatNames = null;
 
-    /** Las clases que los describen. */
+    /** The classes that describe them. */
     protected String[] extraImageMetadataFormatClassNames = null;
 
     /**
-     * El constructor completo.
+     * The full constructor.
      *
-     * @throws IllegalArgumentException si los nombres del formato faltan o estan vacios, o si el
-     *     nombre de la clase del complemento es null
+     * @throws IllegalArgumentException if the format names are missing or empty, or if the plug-in
+     *     class name is null
      */
     public ImageReaderWriterSpi(String vendorName, String version, String[] names,
                                 String[] suffixes, String[] MIMETypes, String pluginClassName,
@@ -115,67 +115,68 @@ public abstract class ImageReaderWriterSpi extends IIOServiceProvider {
         this.extraImageMetadataFormatClassNames = copyOrNull(extraImageMetadataFormatClassNames);
     }
 
-    /** El que exige el cargador de servicios; ver {@link IIOServiceProvider}. */
+    /** The one the service loader requires; see {@link IIOServiceProvider}. */
     public ImageReaderWriterSpi() {
     }
 
-    /** Los nombres informales del formato. Una copia. */
+    /** The format's informal names. A copy. */
     public String[] getFormatNames() {
         return copy(this.names);
     }
 
-    /** Las extensiones, sin punto; null si no declaro ninguna. */
+    /** The suffixes, without a dot; null if it declared none. */
     public String[] getFileSuffixes() {
         return copyOrNull(this.suffixes);
     }
 
-    /** Los tipos MIME, o null. */
+    /** The MIME types, or null. */
     public String[] getMIMETypes() {
         return copyOrNull(this.MIMETypes);
     }
 
-    /** La clase del complemento que este proveedor crea. */
+    /** The class of the plug-in this provider creates. */
     public String getPluginClassName() {
         return this.pluginClassName;
     }
 
-    /** Si entiende el formato estandar de metadatos de flujo. */
+    /** Whether it understands the standard stream metadata format. */
     public boolean isStandardStreamMetadataFormatSupported() {
         return this.supportsStandardStreamMetadataFormat;
     }
 
-    /** Su formato nativo de flujo, o null. */
+    /** Its native stream format, or null. */
     public String getNativeStreamMetadataFormatName() {
         return this.nativeStreamMetadataFormatName;
     }
 
-    /** Los otros que entiende, o null. */
+    /** The other ones it understands, or null. */
     public String[] getExtraStreamMetadataFormatNames() {
         return copyOrNull(this.extraStreamMetadataFormatNames);
     }
 
-    /** Si entiende el formato estandar de metadatos de imagen. */
+    /** Whether it understands the standard image metadata format. */
     public boolean isStandardImageMetadataFormatSupported() {
         return this.supportsStandardImageMetadataFormat;
     }
 
-    /** Su formato nativo de imagen, o null. */
+    /** Its native image format, or null. */
     public String getNativeImageMetadataFormatName() {
         return this.nativeImageMetadataFormatName;
     }
 
-    /** Los otros que entiende, o null. */
+    /** The other ones it understands, or null. */
     public String[] getExtraImageMetadataFormatNames() {
         return copyOrNull(this.extraImageMetadataFormatNames);
     }
 
     /**
-     * El esquema de ese formato de metadatos de flujo.
+     * The schema of that stream metadata format.
      *
-     * <p>Ver la nota de la clase: la clase se carga por reflexion recien aca.
+     * <p>See the class note: the class is loaded by reflection only here.
      *
-     * @return null si este proveedor no entiende ese formato
-     * @throws IllegalStateException si la clase esta declarada y no se pudo cargar
+     * @return null if this provider does not understand that format (the JDK throws
+     *     {@code IllegalArgumentException} instead)
+     * @throws IllegalStateException if the class is declared and could not be loaded
      */
     public IIOMetadataFormat getStreamMetadataFormat(String formatName) {
         return format(formatName, this.supportsStandardStreamMetadataFormat,
@@ -186,10 +187,11 @@ public abstract class ImageReaderWriterSpi extends IIOServiceProvider {
     }
 
     /**
-     * Idem, para los de imagen.
+     * Same, for the image ones.
      *
-     * @return null si no entiende ese formato
-     * @throws IllegalStateException si la clase esta declarada y no se pudo cargar
+     * @return null if it does not understand that format (the JDK throws
+     *     {@code IllegalArgumentException} instead)
+     * @throws IllegalStateException if the class is declared and could not be loaded
      */
     public IIOMetadataFormat getImageMetadataFormat(String formatName) {
         return format(formatName, this.supportsStandardImageMetadataFormat,
@@ -199,7 +201,7 @@ public abstract class ImageReaderWriterSpi extends IIOServiceProvider {
                       this.extraImageMetadataFormatClassNames);
     }
 
-    /** La busqueda de esquema que comparten los dos metodos de arriba. */
+    /** The schema lookup both methods above share. */
     private IIOMetadataFormat format(String formatName, boolean standardSupported,
                                      String nativeName, String nativeClassName,
                                      String[] extraNames, String[] extraClassNames) {
@@ -234,14 +236,14 @@ public abstract class ImageReaderWriterSpi extends IIOServiceProvider {
         }
     }
 
-    /** Una copia; falla si es null. */
+    /** A copy; fails if it is null. */
     static String[] copy(String[] source) {
         String[] result = new String[source.length];
         System.arraycopy(source, 0, result, 0, source.length);
         return result;
     }
 
-    /** Una copia, o null. */
+    /** A copy, or null. */
     static String[] copyOrNull(String[] source) {
         if (source == null) {
             return null;

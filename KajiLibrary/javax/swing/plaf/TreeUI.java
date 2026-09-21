@@ -6,39 +6,39 @@ import javax.swing.JTree;
 import javax.swing.tree.TreePath;
 
 /**
- * El aspecto de un {@link JTree}.
+ * A {@link JTree}'s look and feel.
  *
- * <h2>Geometria y edicion</h2>
+ * <h2>Geometry and editing</h2>
  *
- * <p>Los cinco primeros metodos traducen entre caminos, filas y puntos. El arbol no puede hacerlo:
- * en que fila cae un camino depende de que este desplegado y de cuanto mide cada nodo, y las dos
- * cosas las decide el aspecto.
+ * <p>The first five methods translate between paths, rows and points. The tree cannot do it:
+ * which row a path falls on depends on whether it is expanded and on how much each node
+ * measures, and both things are decided by the look and feel.
  *
- * <p>Los otros cinco son sobre la edicion en el lugar. Tambien es del aspecto porque el editor es un
- * componente que el aspecto agrega y saca del arbol.
+ * <p>The other five are about in-place editing. That also belongs to the look and feel because
+ * the editor is a component the look and feel adds to and removes from the tree.
  */
 public abstract class TreeUI extends ComponentUI {
 
     protected TreeUI() {
     }
 
-    /** El rectangulo de ese camino, o nulo si no se ve. */
+    /** That path's rectangle, or null if it is not seen. */
     public abstract Rectangle getPathBounds(JTree tree, TreePath path);
 
     public abstract TreePath getPathForRow(JTree tree, int row);
 
-    /** La fila de ese camino, o -1 si no se ve. */
+    /** That path's row, or -1 if it is not seen. */
     public abstract int getRowForPath(JTree tree, TreePath path);
 
-    /** Cuantas filas se ven. */
+    /** How many rows are seen. */
     public abstract int getRowCount(JTree tree);
 
-    /** El camino mas cercano a ese punto, aunque el punto no caiga sobre ninguno. */
+    /** The path nearest that point, even if the point falls on none. */
     public abstract TreePath getClosestPathForLocation(JTree tree, int x, int y);
 
     public abstract boolean isEditing(JTree tree);
 
-    /** Termina la edicion guardando; devuelve si habia una. */
+    /** Ends the editing, saving; it returns whether there was one. */
     public abstract boolean stopEditing(JTree tree);
 
     public abstract void cancelEditing(JTree tree);

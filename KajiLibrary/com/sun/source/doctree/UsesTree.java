@@ -3,7 +3,7 @@ package com.sun.source.doctree;
 import java.util.List;
 
 /**
- * El nodo de `@uses`, de la documentacion de un modulo.
+ * The node of `@uses`, of a module's documentation.
  */
 public interface UsesTree extends BlockTagTree {
 

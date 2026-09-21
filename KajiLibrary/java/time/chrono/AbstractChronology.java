@@ -36,22 +36,23 @@ public abstract class AbstractChronology implements Chronology {
     }
 
     /**
-     * Reconstruye una fecha a partir de los campos sueltos que dejo un parseo.
+     * It rebuilds a date out of the loose fields a parse left behind.
      *
-     * <p>El mapa **se consume**: los campos que se usan se sacan, y lo que queda son los que no se
-     * entendieron. Es la convencion del JDK y no un detalle: el que llama despues comprueba que el
-     * mapa quedo vacio, y si no lo esta sabe exactamente que sobro.
+     * <p>The map is **consumed**: the fields used are removed, and what is left are the ones that
+     * were not understood. It is the JDK's convention and not a detail: the caller then checks that
+     * the map came back empty, and if it did not it knows exactly what was left over.
      *
-     * <p>El orden en que se prueban las combinaciones no es arbitrario, va de la mas especifica a la
-     * mas general: `EPOCH_DAY` sola ya dice todo; `ERA` + `YEAR_OF_ERA` se convierten a `YEAR` antes
-     * de mirar el mes, porque el anio de la era no sirve para nada solo; y `DAY_OF_YEAR` se prueba
-     * despues de mes+dia porque si estan los dos, mes y dia son los que el usuario escribio.
+     * <p>The order in which the combinations are tried is not arbitrary, it goes from the most
+     * specific to the most general: `EPOCH_DAY` alone already says everything; `ERA` + `YEAR_OF_ERA`
+     * are turned into `YEAR` before the month is looked at, because the year of the era is no use on
+     * its own; and `DAY_OF_YEAR` is tried after month+day because if both are there, month and day
+     * are what the user wrote.
      *
-     * <p>**Un subconjunto del resolvedor del JDK**, y conviene decir cual: aca se resuelven
-     * `EPOCH_DAY`, `PROLEPTIC_MONTH`, `ERA`/`YEAR_OF_ERA` y las dos formas de fecha
-     * --anio+mes+dia y anio+dia-del-anio--. Las combinaciones por semana --`ALIGNED_WEEK_OF_MONTH`
-     * con `DAY_OF_WEEK`, y las de `WeekFields`-- no; con esos campos el mapa vuelve sin resolver en
-     * vez de resolverse mal.
+     * <p>**A subset of the JDK's resolveWith**, and it is worth saying which: resolved here are
+     * `EPOCH_DAY`, `PROLEPTIC_MONTH`, `ERA`/`YEAR_OF_ERA` and the two date forms --year+month+day and
+     * year+day-of-year--. The week combinations --`ALIGNED_WEEK_OF_MONTH` with `DAY_OF_WEEK`, and
+     * `WeekFields`'-- are not; with those fields the map comes back unresolved instead of resolving
+     * wrongly.
      */
     public ChronoLocalDate resolveDate(Map<TemporalField, Long> fieldValues, ResolverStyle resolverStyle) {
         if (fieldValues == null) {
@@ -60,28 +61,28 @@ public abstract class AbstractChronology implements Chronology {
         if (resolverStyle == null) {
             throw new NullPointerException("resolverStyle");
         }
-        boolean laxo = resolverStyle == ResolverStyle.LENIENT;
+        boolean lenient = resolverStyle == ResolverStyle.LENIENT;
 
-        // El dia epoch designa la fecha por si solo: no hay nada que combinar ni que validar.
+        // The epoch day names the date all by itself: there is nothing to combine and nothing to validate.
         Long epochDay = fieldValues.remove(ChronoField.EPOCH_DAY);
         if (epochDay != null) {
             return this.dateEpochDay(epochDay.longValue());
         }
 
-        // El mes proleptico es anio y mes juntos en un solo numero: se lo parte antes de seguir.
+        // The proleptic month is year and month together in one number: it is split before going on.
         Long prolepticMonth = fieldValues.remove(ChronoField.PROLEPTIC_MONTH);
         if (prolepticMonth != null) {
             long pm = prolepticMonth.longValue();
-            if (!laxo) {
+            if (!lenient) {
                 ChronoField.PROLEPTIC_MONTH.checkValidValue(pm);
             }
-            long anio = Math.floorDiv(pm, 12L);
-            long mes = Math.floorMod(pm, 12L) + 1L;
-            fieldValues.put(ChronoField.YEAR, Long.valueOf(anio));
-            fieldValues.put(ChronoField.MONTH_OF_YEAR, Long.valueOf(mes));
+            long yearNum = Math.floorDiv(pm, 12L);
+            long monthNum = Math.floorMod(pm, 12L) + 1L;
+            fieldValues.put(ChronoField.YEAR, Long.valueOf(yearNum));
+            fieldValues.put(ChronoField.MONTH_OF_YEAR, Long.valueOf(monthNum));
         }
 
-        // La era mas el anio de la era dan el anio proleptico, que es el unico con el que se cuenta.
+        // The era plus the year of the era give the proleptic year, the only one that is counted with.
         Long eraValue = fieldValues.remove(ChronoField.ERA);
         Long yearOfEra = fieldValues.remove(ChronoField.YEAR_OF_ERA);
         if (yearOfEra != null && !fieldValues.containsKey(ChronoField.YEAR)) {
@@ -90,10 +91,10 @@ public abstract class AbstractChronology implements Chronology {
             if (eraValue != null) {
                 era = this.eraOf((int) eraValue.longValue());
             } else {
-                // Sin era escrita, la ultima de la lista: es la corriente, que es lo que alguien que
-                // escribe un anio sin era quiere decir.
-                List2 lista = new List2(this.eras());
-                era = lista.ultima();
+                // With no era written, the last on the list: it is the current one, which is what
+                // somebody writing a year with no era means.
+                List2 list = new List2(this.eras());
+                era = list.last();
             }
             fieldValues.put(ChronoField.YEAR,
                     Long.valueOf((long) this.prolepticYear(era, yoe)));
@@ -101,8 +102,8 @@ public abstract class AbstractChronology implements Chronology {
 
         Long year = fieldValues.remove(ChronoField.YEAR);
         if (year == null) {
-            // Sin anio no hay fecha. Los campos que se sacaron se devuelven: el que llama tiene que
-            // poder ver que habia, no un mapa a medio vaciar.
+            // With no year there is no date. The fields taken out are put back: the caller has to be
+            // able to see what was there, not a half-emptied map.
             if (eraValue != null) {
                 fieldValues.put(ChronoField.ERA, eraValue);
             }
@@ -111,43 +112,43 @@ public abstract class AbstractChronology implements Chronology {
             }
             return null;
         }
-        int anio = (int) year.longValue();
+        int yearNum = (int) year.longValue();
 
         Long month = fieldValues.remove(ChronoField.MONTH_OF_YEAR);
         Long dayOfMonth = fieldValues.remove(ChronoField.DAY_OF_MONTH);
         if (month != null && dayOfMonth != null) {
             long m = month.longValue();
             long d = dayOfMonth.longValue();
-            if (laxo) {
-                // Laxo: los desbordes se arrastran. `2011-02-31` es el 3 de marzo, y un mes 14 es
-                // febrero del anio siguiente. Se construye el primer dia y se suma.
-                ChronoLocalDate base = this.date(anio, 1, 1);
-                ChronoLocalDate conMes = base.plus(m - 1L, java.time.temporal.ChronoUnit.MONTHS);
-                return conMes.plus(d - 1L, java.time.temporal.ChronoUnit.DAYS);
+            if (lenient) {
+                // Lenient: the overflows carry. `2011-02-31` is the 3rd of March, and a month 14 is
+                // the following year's February. The first day is built and then added to.
+                ChronoLocalDate base = this.date(yearNum, 1, 1);
+                ChronoLocalDate withMonth = base.plus(m - 1L, java.time.temporal.ChronoUnit.MONTHS);
+                return withMonth.plus(d - 1L, java.time.temporal.ChronoUnit.DAYS);
             }
             if (resolverStyle == ResolverStyle.SMART) {
-                // Sensato: el mes tiene que existir, pero un dia que se pasa se recorta al ultimo
-                // del mes. Es lo que hace que `31 de febrero` sea el 28 y no un error.
+                // Smart: the month has to exist, but a day that goes past is clipped to the month's
+                // last. It is what makes `31 February` be the 28th and not an error.
                 ChronoField.DAY_OF_MONTH.checkValidValue(d);
-                ChronoLocalDate primero = this.date(anio, (int) m, 1);
-                int largo = primero.lengthOfMonth();
-                long dia = d > (long) largo ? (long) largo : d;
-                return this.date(anio, (int) m, (int) dia);
+                ChronoLocalDate first = this.date(yearNum, (int) m, 1);
+                int length = first.lengthOfMonth();
+                long day = d > (long) length ? (long) length : d;
+                return this.date(yearNum, (int) m, (int) day);
             }
-            return this.date(anio, (int) m, (int) d);
+            return this.date(yearNum, (int) m, (int) d);
         }
 
         Long dayOfYear = fieldValues.remove(ChronoField.DAY_OF_YEAR);
         if (dayOfYear != null) {
-            if (laxo) {
-                ChronoLocalDate base = this.dateYearDay(anio, 1);
+            if (lenient) {
+                ChronoLocalDate base = this.dateYearDay(yearNum, 1);
                 return base.plus(dayOfYear.longValue() - 1L, java.time.temporal.ChronoUnit.DAYS);
             }
-            return this.dateYearDay(anio, (int) dayOfYear.longValue());
+            return this.dateYearDay(yearNum, (int) dayOfYear.longValue());
         }
 
-        // Habia anio pero no alcanzo para una fecha: se devuelve lo que se saco, por lo mismo de
-        // arriba.
+        // There was a year but it was not enough for a date: what was taken out is put back, for the
+        // same reason as above.
         if (month != null) {
             fieldValues.put(ChronoField.MONTH_OF_YEAR, month);
         }
@@ -159,18 +160,18 @@ public abstract class AbstractChronology implements Chronology {
     }
 }
 
-// Un envoltorio de tres lineas para tomar el ultimo elemento de la lista de eras sin encadenar por un
-// intermedio de tipo interfaz, que se pierde en silencio (#108).
+// A three-line wrapper for taking the last element of the era list without chaining through an
+// interface-typed intermediate, which gets lost silently (#108).
 final class List2 {
 
-    private final java.util.List<Era> lista;
+    private final java.util.List<Era> list;
 
-    List2(java.util.List<Era> lista) {
-        this.lista = lista;
+    List2(java.util.List<Era> list) {
+        this.list = list;
     }
 
-    Era ultima() {
-        int n = this.lista.size();
-        return this.lista.get(n - 1);
+    Era last() {
+        int n = this.list.size();
+        return this.list.get(n - 1);
     }
 }

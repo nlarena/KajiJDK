@@ -1,20 +1,20 @@
 package javax.sql;
 
 /**
- * KajiLibrary's javax.sql.PooledConnection -- la conexion **fisica** que el pool guarda.
+ * KajiLibrary's javax.sql.PooledConnection -- the **physical** connection the pool keeps.
  *
- * <p>La distincion entre esta y {@link java.sql.Connection} es todo el asunto: esta es la conexion de
- * verdad, la que cuesta abrir; la que {@link #getConnection} devuelve es un envoltorio que la
- * aplicacion usa y cierra sin que la fisica se cierre. Por eso `close()` esta aca --lo llama el
- * pool, no la aplicacion-- y por eso no extiende `Connection`: no es una, es la fabrica de las que
- * la aplicacion ve.
+ * <p>The distinction between this one and {@link java.sql.Connection} is the whole point: this is
+ * the real connection, the one that is expensive to open; the one {@link #getConnection} returns is
+ * a wrapper the application uses and closes without the physical one closing. That is why `close()`
+ * is here --the pool calls it, not the application-- and why it does not extend `Connection`: it is
+ * not one, it is the factory of the ones the application sees.
  */
 public interface PooledConnection {
 
-    /** Una conexion logica sobre esta fisica. */
+    /** A logical connection over this physical one. */
     java.sql.Connection getConnection() throws java.sql.SQLException;
 
-    /** Cierra la conexion **fisica**. Lo llama el pool. */
+    /** Closes the **physical** connection. The pool calls it. */
     void close() throws java.sql.SQLException;
 
     void addConnectionEventListener(ConnectionEventListener listener);

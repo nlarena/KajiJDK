@@ -4,68 +4,70 @@ import java.io.Serializable;
 import javax.security.auth.callback.Callback;
 
 /**
- * KajiLibrary's javax.security.sasl.AuthorizeCallback -- puede este actuar como aquel.
+ * KajiLibrary's javax.security.sasl.AuthorizeCallback -- may this one act as that one.
  *
- * <p>La pregunta que hace un servidor SASL despues de autenticar, y separa dos cosas que se
- * confunden todo el tiempo:
+ * <p>The question a SASL server asks after authenticating, and it separates two things that get
+ * confused all the time:
  *
  * <ul>
- *   <li>el <b>identificador de autenticacion</b> es quien probo ser: la persona o el proceso que
- *       presento la contrasena;
- *   <li>el <b>identificador de autorizacion</b> es en nombre de quien quiere actuar.
+ *   <li>the <b>authentication identifier</b> is who proved to be: the person or process that
+ *       presented the password;
+ *   <li>the <b>authorization identifier</b> is on whose behalf it wants to act.
  * </ul>
  *
- * <p>Casi siempre son el mismo y no pasa nada. Cuando no lo son --un proceso de administracion que
- * quiere hacer algo como otro usuario, un proxy que reenvia-- es exactamente el punto donde hay que
- * decidir si eso se permite, y esta clase es donde el manejador lo decide.
+ * <p>Almost always they are the same and nothing happens. When they are not --an administration
+ * process that wants to do something as another user, a proxy that forwards-- it is exactly the
+ * point where it has to be decided whether that is allowed, and this class is where the handler
+ * decides it.
  *
- * <h2>La respuesta tiene dos partes</h2>
+ * <h2>The answer has two parts</h2>
  *
- * <p>{@link #setAuthorized} dice si se permite, y {@link #setAuthorizedID} deja ademas
- * <b>reescribir</b> el identificador. Reescribirlo es util porque el nombre que llega por el
- * protocolo casi nunca es el que el sistema usa por dentro: llega
- * {@code "juan@ejemplo.com"} y adentro se trabaja con {@code "uid=juan,ou=gente"}.
+ * <p>{@link #setAuthorized} says whether it is allowed, and {@link #setAuthorizedID} also lets the
+ * identifier be <b>rewritten</b>. Rewriting it is useful because the name that arrives through the
+ * protocol is almost never the one the system uses inside: {@code "juan@example.com"} arrives and
+ * inside the work is done with {@code "uid=juan,ou=people"}.
  *
- * <p>{@link #getAuthorizedID} devuelve null mientras no se haya autorizado, y el de autorizacion si
- * se autorizo sin reescribir. Que vuelva a null al desautorizar es lo correcto: un identificador
- * autorizado que sobrevive a la negativa es justo el que alguien va a leer sin mirar la bandera.
+ * <p>{@link #getAuthorizedID} returns null while it has not been authorized, and the authorization
+ * one if it was authorized without rewriting. Going back to null on unauthorizing is the right
+ * thing: an authorized identifier that survives the refusal is just the one somebody is going to
+ * read without looking at the flag.
  */
 public class AuthorizeCallback implements Callback, Serializable {
 
     private static final long serialVersionUID = -2353344186490470805L;
 
-    /** Quien probo ser. */
+    /** Who proved to be. */
     private final String authenticationID;
 
-    /** En nombre de quien quiere actuar. */
+    /** On whose behalf it wants to act. */
     private final String authorizationID;
 
-    /** Lo que el manejador contesto. */
+    /** What the handler answered. */
     private boolean authorized = false;
 
-    /** El identificador reescrito, o null para usar el de autorizacion. */
+    /** The rewritten identifier, or null to use the authorization one. */
     private String authorizedID = null;
 
     /**
-     * @param authnID quien probo ser
-     * @param authzID en nombre de quien quiere actuar
+     * @param authnID who proved to be
+     * @param authzID on whose behalf it wants to act
      */
     public AuthorizeCallback(String authnID, String authzID) {
         this.authenticationID = authnID;
         this.authorizationID = authzID;
     }
 
-    /** Quien probo ser. */
+    /** Who proved to be. */
     public String getAuthenticationID() {
         return this.authenticationID;
     }
 
-    /** En nombre de quien quiere actuar. */
+    /** On whose behalf it wants to act. */
     public String getAuthorizationID() {
         return this.authorizationID;
     }
 
-    /** Lo que contesto el manejador. */
+    /** What the handler answered. */
     public boolean isAuthorized() {
         return this.authorized;
     }
@@ -76,9 +78,9 @@ public class AuthorizeCallback implements Callback, Serializable {
     }
 
     /**
-     * El identificador que hay que usar.
+     * The identifier to use.
      *
-     * @return null si no se autorizo; ver la nota de la clase
+     * @return null if it was not authorized; see the class note
      */
     public String getAuthorizedID() {
         if (!this.authorized) {
@@ -87,7 +89,7 @@ public class AuthorizeCallback implements Callback, Serializable {
         return (this.authorizedID == null) ? this.authorizationID : this.authorizedID;
     }
 
-    /** Reescribe el identificador. Ver la nota de la clase sobre por que hace falta. */
+    /** Rewrites the identifier. See the class note on why it is needed. */
     public void setAuthorizedID(String id) {
         this.authorizedID = id;
     }

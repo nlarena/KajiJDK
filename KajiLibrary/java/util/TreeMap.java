@@ -18,41 +18,49 @@ import java.io.Serializable;
 // Ordering comes from the keys' own {@link Comparable}, or from a {@link Comparator} handed
 // to the constructor.
 //
-// Es un `NavigableMap` completo: la navegacion (ceiling/floor/higher/lower, los tres cortes,
-// el mapa descendente) sale entera de cuatro busquedas primitivas sobre el arbol, y los cortes son
-// **vistas** -- escribir en un `subMap` escribe en el mapa.
+// It is a complete `NavigableMap`: the navigation (ceiling/floor/higher/lower, the three slices,
+// the descending map) comes entirely out of four primitive searches over the tree, and the slices
+// are **views** -- writing into a `subMap` writes into the map.
 //
-// Lo que sigue divergiendo son `values()` y `entrySet()`, que son copias y no vistas. `keySet()`
-// si es una vista desde esta tanda, y ordenada: antes devolvia un HashSet, o sea que recorrer las
-// claves de un mapa **ordenado** salia en orden de hash. `values()` y `entrySet()` heredaban ese
-// desorden por construirse sobre el; ahora recorren el arbol.
+// What still diverges are `values()` and `entrySet()`, which are copies and not views. `keySet()` is
+// a view, and a sorted one: it used to return a HashSet, that is, walking the keys of a **sorted**
+// map came out in hash order. `values()` and `entrySet()` inherited that disorder by being built on
+// it; now they walk the tree.
 public class TreeMap<K, V> extends AbstractMap<K, V> implements NavigableMap<K, V>,
         TmWalk<K, V>, Serializable, Cloneable {
 
     private TmNode<K, V> root;
     private int size;
     // Null means "use the keys' natural ordering".
-    private final Comparator<K> comparator;
+    // `? super K` and not `K`: it is what the constructor accepts, and storing it narrower would
+    // force a cast. A comparator of a supertype of `K` knows how to compare `K`.
+    private final Comparator<? super K> comparator;
 
     public TreeMap() {
         this.comparator = null;
     }
 
-    public TreeMap(Comparator<K> comparator) {
+    /**
+     * With a comparator of its own.
+     *
+     * <p>`Comparator<? super K>`, as in the JDK: a comparator of a supertype of `K` knows how to
+     * compare `K`. See the same constructor's note in `TreeSet`.
+     */
+    public TreeMap(Comparator<? super K> comparator) {
         this.comparator = comparator;
     }
 
-    // Copia el contenido de otro mapa, ordenandolo por el orden natural de las claves.
+    // It copies another map's content, sorting it by the keys' natural ordering.
     public TreeMap(Map<? extends K, ? extends V> m) {
         this.comparator = null;
         this.putAll(m);
     }
 
-    // Copia un mapa que **ya viene ordenado**, y se queda con su comparador.
+    // It copies a map that **already comes sorted**, and keeps its comparator.
     //
-    // Que herede el comparador no es un detalle: sin el, copiar un mapa ordenado al reves daria
-    // uno ordenado al derecho, con las mismas claves y otro recorrido. Con el, la copia es
-    // equivalente al original en todo.
+    // That it inherits the comparator is not a detail: without it, copying a reverse-sorted map would
+    // give a forward-sorted one, with the same keys and a different traversal. With it, the copy is
+    // equivalent to the original in everything.
     public TreeMap(SortedMap<K, ? extends V> m) {
         this.comparator = (Comparator<K>) m.comparator();
         Iterator<K> it = m.keySet().iterator();
@@ -62,7 +70,7 @@ public class TreeMap<K, V> extends AbstractMap<K, V> implements NavigableMap<K, 
         }
     }
 
-    public Comparator<K> comparator() {
+    public Comparator<? super K> comparator() {
         return comparator;
     }
 
@@ -70,7 +78,7 @@ public class TreeMap<K, V> extends AbstractMap<K, V> implements NavigableMap<K, 
     // Both arguments are taken as `Object` on purpose: calling a method on a receiver whose
     // static type is a *type variable* is silently dropped by our javac (finding #111), so
     // the natural-ordering path binds the key to a `Comparable` local first.
-    int compare(Object a, Object b) {
+    final int compare(Object a, Object b) {
         int c;
         if (comparator != null) {
             c = comparator.compare((K) a, (K) b);
@@ -100,11 +108,11 @@ public class TreeMap<K, V> extends AbstractMap<K, V> implements NavigableMap<K, 
 
     // --- Map ---
 
-    // Las claves, en orden y como **vista**: quitar de aca quita del mapa.
+    // The keys, in order and as a **view**: removing from here removes from the map.
     //
-    // Antes era un `HashSet` copiado, y esa era una divergencia mas cara de lo que parecia:
-    // recorrer las claves de un mapa **ordenado** salia en orden de hash. Y como `values()` y
-    // `entrySet()` se construian sobre este, las tres vistas del TreeMap estaban desordenadas.
+    // It used to be a copied `HashSet`, and that was a divergence more expensive than it looked:
+    // walking the keys of a **sorted** map came out in hash order. And since `values()` and
+    // `entrySet()` were built on this one, the TreeMap's three views were all unordered.
     public Set<K> keySet() {
         return this.navigableKeySet();
     }
@@ -162,6 +170,12 @@ public class TreeMap<K, V> extends AbstractMap<K, V> implements NavigableMap<K, 
     public V put(K key, V value) {
         V old = null;
         if (root == null) {
+            // Compare the key against itself before doing anything with it. On a non-empty map the
+            // descent below does this for free, and the first insertion used to skip it -- so the
+            // very same `put(null, v)` threw on a map with entries and quietly succeeded on an
+            // empty one. A null key with no comparator comes out of here as the JDK's
+            // NullPointerException; a key that does not implement Comparable, as ClassCastException.
+            compare(key, key);
             root = new TmNode<K, V>(key, value, null);
             root.red = false;
             size = 1;
@@ -234,15 +248,15 @@ public class TreeMap<K, V> extends AbstractMap<K, V> implements NavigableMap<K, 
     }
 
 
-    // --- NavigableMap: las cuatro busquedas primitivas ---
+    // --- NavigableMap: the four primitive searches ---
     //
-    // Toda la navegacion sale de estas cuatro, y las cuatro son la misma bajada por el arbol con
-    // el signo cambiado. `ceiling` es el menor nodo >= la clave; `floor`, el mayor <=; `higher` y
-    // `lower` son los mismos con la desigualdad estricta.
+    // All the navigation comes out of these four, and the four are the same descent down the tree
+    // with the sign changed. `ceiling` is the smallest node >= the key; `floor`, the largest <=;
+    // `higher` and `lower` are the same with the strict inequality.
     //
-    // Cada una cuesta O(log n) y no recorre nada: baja recordando el mejor candidato visto. Ese
-    // candidato es la clave del asunto -- cuando la busqueda se pasa de largo, el ultimo nodo por
-    // el que se paso "del lado bueno" es exactamente la respuesta.
+    // Each costs O(log n) and walks nothing: it descends remembering the best candidate seen. That
+    // candidate is the heart of it -- when the search overshoots, the last node it passed "on the
+    // good side" is exactly the answer.
 
     TmNode<K, V> getCeilingNode(Object key) {
         TmNode<K, V> p = this.root;
@@ -308,11 +322,11 @@ public class TreeMap<K, V> extends AbstractMap<K, V> implements NavigableMap<K, 
         return best;
     }
 
-    // Envuelve un nodo como entrada, o null si no hay nodo.
+    // It wraps a node as an entry, or null if there is no node.
     //
-    // La entrada que sale es una **foto**: `setValue` sobre ella se niega en vez de escribir en el
-    // mapa. Es lo mismo que hace el JDK con las entradas que devuelve la navegacion, y por la
-    // misma razon -- son el resultado de una consulta, no una vista de la posicion.
+    // The entry that comes out is a **snapshot**: `setValue` on it refuses instead of writing into
+    // the map. It is the same thing the JDK does with the entries navigation returns, and for the
+    // same reason -- they are the result of a query, not a view of the position.
     static <K, V> Map.Entry<K, V> entryOf(TmNode<K, V> p) {
         if (p == null) {
             return null;
@@ -320,7 +334,7 @@ public class TreeMap<K, V> extends AbstractMap<K, V> implements NavigableMap<K, 
         return new ViewEntry<K, V>(p.key, p.value);
     }
 
-    // --- NavigableMap: entradas y claves vecinas ---
+    // --- NavigableMap: neighbouring entries and keys ---
 
     public Map.Entry<K, V> firstEntry() {
         return entryOf(this.firstNode());
@@ -369,8 +383,8 @@ public class TreeMap<K, V> extends AbstractMap<K, V> implements NavigableMap<K, 
         return keyOf(this.getHigherNode(key));
     }
 
-    // Saca y devuelve la primera entrada, o null si el mapa esta vacio. La foto se toma **antes**
-    // de borrar, porque despues el nodo ya no tiene sus enlaces.
+    // It takes out and returns the first entry, or null if the map is empty. The snapshot is taken
+    // **before** removing, because afterwards the node no longer has its links.
     public Map.Entry<K, V> pollFirstEntry() {
         TmNode<K, V> p = this.firstNode();
         Map.Entry<K, V> e = entryOf(p);
@@ -389,9 +403,9 @@ public class TreeMap<K, V> extends AbstractMap<K, V> implements NavigableMap<K, 
         return e;
     }
 
-    // Los dos de SequencedMap que un mapa ordenado **no puede** cumplir: la posicion de una clave
-    // la decide el orden, no quien la inserta. El JDK tambien se niega, y es lo unico honesto --
-    // aceptar y poner la clave donde le toque seria mentir sobre el "First".
+    // SequencedMap's two that a sorted map **cannot** honour: a key's position is decided by the
+    // order, not by whoever inserts it. The JDK refuses too, and it is the only honest thing --
+    // accepting and putting the key where it belongs would be lying about the "First".
     public V putFirst(K k, V v) {
         throw new UnsupportedOperationException();
     }
@@ -400,11 +414,11 @@ public class TreeMap<K, V> extends AbstractMap<K, V> implements NavigableMap<K, 
         throw new UnsupportedOperationException();
     }
 
-    // --- NavigableMap: las vistas ---
+    // --- NavigableMap: the views ---
     //
-    // Las cinco son la misma clase con distintos limites: `TmView` guarda el mapa, un piso, un
-    // techo y un sentido. Un `headMap` es un TmView sin piso, un `descendingMap` es uno sin
-    // limites y del reves, y un `subMap` los tiene todos.
+    // The five are the same class with different bounds: `TmView` keeps the map, a floor, a ceiling
+    // and a direction. A `headMap` is a TmView with no floor, a `descendingMap` is one with no bounds
+    // and reversed, and a `subMap` has them all.
 
     public NavigableMap<K, V> descendingMap() {
         return new TmView<K, V>(this, true, null, false, true, null, false, true);
@@ -434,8 +448,8 @@ public class TreeMap<K, V> extends AbstractMap<K, V> implements NavigableMap<K, 
         return new TmView<K, V>(this, false, from, inclusive, true, null, false, false);
     }
 
-    // Las tres formas de SortedMap, que son las de arriba con la inclusividad que fijo la
-    // especificacion hace veinticinco anios: el piso entra, el techo no.
+    // SortedMap's three forms, which are the ones above with the inclusivity the specification fixed
+    // twenty-five years ago: the floor is in, the ceiling is not.
     public SortedMap<K, V> subMap(K from, K to) {
         return this.subMap(from, true, to, false);
     }
@@ -448,7 +462,7 @@ public class TreeMap<K, V> extends AbstractMap<K, V> implements NavigableMap<K, 
         return this.tailMap(from, true);
     }
 
-    // --- recorrido para las vistas (TmWalk) ---
+    // --- traversal for the views (TmWalk) ---
 
     public TmNode<K, V> walkFirst() {
         return this.firstNode();
@@ -458,7 +472,7 @@ public class TreeMap<K, V> extends AbstractMap<K, V> implements NavigableMap<K, 
         return this.successor(n);
     }
 
-    // Package-private from here down: las vistas y los iteradores caminan el arbol por aca.
+    // Package-private from here down: the views and the iterators walk the tree through here.
     TmNode<K, V> firstNode() {
         TmNode<K, V> p = root;
         if (p != null) {
@@ -808,11 +822,11 @@ public class TreeMap<K, V> extends AbstractMap<K, V> implements NavigableMap<K, 
     }
 
     /**
-     * Los valores de este mapa.
+     * This map's values.
      *
-     * <p>**Divergencia deliberada**, la misma que ya declara `keySet()`: la del JDK es una *vista*
-     * respaldada por el mapa; esta es una copia sacada en el momento. Y a diferencia de `keySet()`
-     * es una `Collection` y no un `Set`, porque los valores **si** pueden repetirse.
+     * <p>**A deliberate divergence**: the JDK's is a *view* backed by the map; this one is a copy
+     * taken at the moment of asking. `keySet()` used to have the same divergence and no longer does.
+     * And unlike `keySet()` this is a `Collection` and not a `Set`, because values **can** repeat.
      */
     public java.util.Collection<V> values() {
         java.util.ArrayList<V> out = new java.util.ArrayList<V>();
@@ -825,11 +839,12 @@ public class TreeMap<K, V> extends AbstractMap<K, V> implements NavigableMap<K, 
     }
 
     /**
-     * Los pares de este mapa.
+     * This map's entries.
      *
-     * <p>Misma divergencia que `values()`: copia, no vista. Los pares que devuelve son inmutables,
-     * asi que `setValue` sobre uno de ellos lanza en vez de escribir en el mapa — que es lo
-     * coherente con que sea una copia: escribir en un par que nadie mira seria peor que negarse.
+     * <p>The same divergence as `values()`: a copy, not a view. The entries it returns are immutable,
+     * so `setValue` on one of them throws instead of writing into the map — which is what is
+     * consistent with it being a copy: writing into an entry nobody looks at would be worse than
+     * refusing.
      */
     public java.util.Set<java.util.Map.Entry<K, V>> entrySet() {
         java.util.LinkedHashSet<java.util.Map.Entry<K, V>> out =

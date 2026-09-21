@@ -1,56 +1,57 @@
 package com.sun.nio.sctp;
 
 /**
- * Un {@link NotificationHandler} que reparte cada notificacion al metodo de su tipo.
+ * A {@link NotificationHandler} that hands each notification to the method of its type.
  *
- * <h2>Que problema resuelve, y por que es una clase y no una interfaz</h2>
+ * <h2>What problem it resolves, and why it is a class and not an interface</h2>
  *
- * <p>Sin esto, todo manejador empieza con la misma cadena de {@code instanceof}: preguntar si la
- * notificacion es un cambio de asociacion, si es un cambio de direccion, si es un envio fallido.
- * Esta clase la escribe una vez — la <strong>sobrecarga</strong> hace el reparto — y cada subclase
- * sobrescribe solo los tipos que le interesan.
+ * <p>Without this, every handler starts with the same chain of {@code instanceof}: asking
+ * whether the notification is an association change, whether it is an address change, whether
+ * it is a failed send. This class writes it once -- the <strong>overloading</strong> does the
+ * handing out -- and each subclass overrides only the types that are of interest to it.
  *
- * <p>Es una clase con cuerpos y no una interfaz con {@code default} porque los cinco metodos tienen
- * que existir con una implementacion que no haga nada: quien atiende un solo tipo de notificacion no
- * deberia escribir cuatro metodos vacios.
+ * <p>It is a class with bodies and not an interface with {@code default} because the five
+ * methods have to exist with an implementation that does nothing: whoever attends to a single
+ * kind of notification should not have to write four empty methods.
  *
- * <p>Todos devuelven {@link HandlerResult#CONTINUE} por omision, que es la respuesta segura: seguir
- * esperando el mensaje que el programa pidio. Un manejador que quiera cortar tiene que decirlo.
+ * <p>They all return {@link HandlerResult#CONTINUE} by default, which is the safe answer: to go
+ * on waiting for the message the program asked for. A handler that wants to cut off has to say
+ * so.
  *
- * @param <T> el objeto de contexto que viaja desde el {@code receive}
+ * @param <T> the context object that travels from the {@code receive}
  */
 public class AbstractNotificationHandler<T> implements NotificationHandler<T> {
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected AbstractNotificationHandler() {
     }
 
     /**
-     * Lo que atiende una notificacion que no es de ninguno de los cuatro tipos conocidos.
+     * What attends to a notification that is of none of the four known types.
      *
-     * <p>Existe por la misma razon que un {@code default} en un {@code switch}: el protocolo puede
-     * crecer, y una notificacion nueva tiene que caer en algun lado.
+     * <p>It exists for the same reason as a {@code default} in a {@code switch}: the protocol may
+     * grow, and a new notification has to fall somewhere.
      */
     public HandlerResult handleNotification(Notification notification, T attachment) {
         return HandlerResult.CONTINUE;
     }
 
-    /** La asociacion cambio de estado. */
+    /** The association changed state. */
     public HandlerResult handleNotification(AssociationChangeNotification notification, T attachment) {
         return HandlerResult.CONTINUE;
     }
 
-    /** Una direccion del par cambio de estado. */
+    /** An address of the peer changed state. */
     public HandlerResult handleNotification(PeerAddressChangeNotification notification, T attachment) {
         return HandlerResult.CONTINUE;
     }
 
-    /** Un mensaje no se pudo entregar y volvio. */
+    /** A message could not be delivered and came back. */
     public HandlerResult handleNotification(SendFailedNotification notification, T attachment) {
         return HandlerResult.CONTINUE;
     }
 
-    /** El par empezo a cerrar la asociacion. */
+    /** The peer started closing the association. */
     public HandlerResult handleNotification(ShutdownNotification notification, T attachment) {
         return HandlerResult.CONTINUE;
     }

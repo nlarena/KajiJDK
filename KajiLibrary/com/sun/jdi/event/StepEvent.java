@@ -1,10 +1,10 @@
 package com.sun.jdi.event;
 
 /**
- * Termino un paso.
+ * A step finished.
  *
- * <p>Es lo que hace posible "paso a paso": se pide un {@code StepRequest}, el hilo avanza lo que se
- * pidio y llega esto.
+ * <p>It is what makes "step by step" possible: a {@code StepRequest} is asked for, the thread
+ * advances what was asked and this arrives.
  *
  * @since 1.3
  */

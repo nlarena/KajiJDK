@@ -3,11 +3,11 @@ package com.sun.nio.sctp;
 import java.net.SocketAddress;
 
 /**
- * Las opciones de socket que define el JDK para SCTP.
+ * The socket options the JDK defines for SCTP.
  *
- * <p>Cada constante es un objeto con nombre y tipo, no una cadena ni un entero, y eso es lo que
- * hace que {@code setOption(SCTP_NODELAY, 5)} no compile: el tipo del valor viaja en el tipo de la
- * opcion. Es el mismo diseno que {@link java.net.StandardSocketOptions}.
+ * <p>Each constant is an object with a name and a type, not a string nor an integer, and that
+ * is what makes {@code setOption(SCTP_NODELAY, 5)} not compile: the value's type travels in the
+ * option's type. It is the same design as {@link java.net.StandardSocketOptions}.
  */
 public class SctpStandardSocketOptions {
 
@@ -15,11 +15,11 @@ public class SctpStandardSocketOptions {
     }
 
     /**
-     * Cuantos flujos pedir en cada sentido al negociar la asociacion.
+     * How many streams to ask for in each direction when negotiating the association.
      *
-     * <p>Tiene que fijarse <strong>antes</strong> de conectar: los maximos de una asociacion se
-     * negocian al establecerla y despues no se mueven. Es la razon de que sea un objeto de dos
-     * numeros y no dos opciones sueltas — las dos van en el mismo mensaje de negociacion.
+     * <p>It has to be fixed <strong>before</strong> connecting: an association's maxima are
+     * negotiated when establishing it and afterwards do not move. It is the reason it is an object
+     * of two numbers and not two loose options -- the two go in the same negotiation message.
      */
     public static class InitMaxStreams {
 
@@ -32,26 +32,26 @@ public class SctpStandardSocketOptions {
         }
 
         /**
-         * @throws IllegalArgumentException si alguno es negativo o pasa de {@code 65535}
+         * @throws IllegalArgumentException if either is negative or goes over {@code 65535}
          */
         public static InitMaxStreams create(int maxInStreams, int maxOutStreams) {
             if (maxOutStreams < 0 || maxOutStreams > 65535) {
-                throw new IllegalArgumentException("maxOutStreams fuera de rango: "
+                throw new IllegalArgumentException("maxOutStreams out of range: "
                         + String.valueOf(maxOutStreams));
             }
             if (maxInStreams < 0 || maxInStreams > 65535) {
-                throw new IllegalArgumentException("maxInStreams fuera de rango: "
+                throw new IllegalArgumentException("maxInStreams out of range: "
                         + String.valueOf(maxInStreams));
             }
             return new InitMaxStreams(maxInStreams, maxOutStreams);
         }
 
-        /** Cuantos flujos entrantes pedir. */
+        /** How many incoming streams to ask for. */
         public int maxInStreams() {
             return this.maxInStreams;
         }
 
-        /** Cuantos flujos salientes pedir. */
+        /** How many outgoing streams to ask for. */
         public int maxOutStreams() {
             return this.maxOutStreams;
         }
@@ -63,86 +63,86 @@ public class SctpStandardSocketOptions {
 
         public boolean equals(Object obj) {
             if (obj instanceof InitMaxStreams) {
-                InitMaxStreams otro = (InitMaxStreams) obj;
-                return otro.maxInStreams == this.maxInStreams
-                        && otro.maxOutStreams == this.maxOutStreams;
+                InitMaxStreams other = (InitMaxStreams) obj;
+                return other.maxInStreams == this.maxInStreams
+                        && other.maxOutStreams == this.maxOutStreams;
             }
             return false;
         }
 
         public int hashCode() {
-            // Los dos campos entran en 16 bits cada uno, asi que concatenarlos es inyectivo: dos
-            // pares distintos no pueden colisionar. Un `31 * a + b` si podria.
+            // The two fields fit in 16 bits each, so concatenating them is injective: two
+                        // different pairs cannot collide. A `31 * a + b` could.
             return (this.maxInStreams << 16) | this.maxOutStreams;
         }
     }
 
-    /** No fragmentar: un mensaje mas grande que el MTU falla en vez de partirse. */
+    /** Not to fragment: a message bigger than the MTU fails instead of being split. */
     public static final SctpSocketOption<Boolean> SCTP_DISABLE_FRAGMENTS =
-            new Opcion<Boolean>("SCTP_DISABLE_FRAGMENTS", Boolean.class);
+            new Option<Boolean>("SCTP_DISABLE_FRAGMENTS", Boolean.class);
 
-    /** Un mensaje se manda recien cuando quien envia lo marca completo. */
+    /** A message is sent only when whoever sends it marks it complete. */
     public static final SctpSocketOption<Boolean> SCTP_EXPLICIT_COMPLETE =
-            new Opcion<Boolean>("SCTP_EXPLICIT_COMPLETE", Boolean.class);
+            new Option<Boolean>("SCTP_EXPLICIT_COMPLETE", Boolean.class);
 
-    /** Cuanto se intercalan los mensajes de flujos distintos al entregarlos. */
+    /** How much the messages of different streams are interleaved when delivering them. */
     public static final SctpSocketOption<Integer> SCTP_FRAGMENT_INTERLEAVE =
-            new Opcion<Integer>("SCTP_FRAGMENT_INTERLEAVE", Integer.class);
+            new Option<Integer>("SCTP_FRAGMENT_INTERLEAVE", Integer.class);
 
-    /** Cuantos flujos pedir al negociar; ver {@link InitMaxStreams}. */
+    /** How many streams to ask for when negotiating; see {@link InitMaxStreams}. */
     public static final SctpSocketOption<InitMaxStreams> SCTP_INIT_MAXSTREAMS =
-            new Opcion<InitMaxStreams>("SCTP_INIT_MAXSTREAMS", InitMaxStreams.class);
+            new Option<InitMaxStreams>("SCTP_INIT_MAXSTREAMS", InitMaxStreams.class);
 
-    /** Mandar enseguida en vez de juntar mensajes chicos. El {@code TCP_NODELAY} de SCTP. */
+    /** To send at once instead of gathering small messages. SCTP's {@code TCP_NODELAY}. */
     public static final SctpSocketOption<Boolean> SCTP_NODELAY =
-            new Opcion<Boolean>("SCTP_NODELAY", Boolean.class);
+            new Option<Boolean>("SCTP_NODELAY", Boolean.class);
 
-    /** Cual de las direcciones del par usar por omision. */
+    /** Which of the peer's addresses to use by default. */
     public static final SctpSocketOption<SocketAddress> SCTP_PRIMARY_ADDR =
-            new Opcion<SocketAddress>("SCTP_PRIMARY_ADDR", SocketAddress.class);
+            new Option<SocketAddress>("SCTP_PRIMARY_ADDR", SocketAddress.class);
 
-    /** Pedirle al par que use esta direccion nuestra como primaria. */
+    /** To ask the peer to use this address of ours as the primary one. */
     public static final SctpSocketOption<SocketAddress> SCTP_SET_PEER_PRIMARY_ADDR =
-            new Opcion<SocketAddress>("SCTP_SET_PEER_PRIMARY_ADDR", SocketAddress.class);
+            new Option<SocketAddress>("SCTP_SET_PEER_PRIMARY_ADDR", SocketAddress.class);
 
-    /** Tamano del buffer de envio. */
+    /** Size of the sending buffer. */
     public static final SctpSocketOption<Integer> SO_SNDBUF =
-            new Opcion<Integer>("SO_SNDBUF", Integer.class);
+            new Option<Integer>("SO_SNDBUF", Integer.class);
 
-    /** Tamano del buffer de recepcion. */
+    /** Size of the receiving buffer. */
     public static final SctpSocketOption<Integer> SO_RCVBUF =
-            new Opcion<Integer>("SO_RCVBUF", Integer.class);
+            new Option<Integer>("SO_RCVBUF", Integer.class);
 
-    /** Cuanto esperar al cerrar a que salga lo que quedo pendiente. */
+    /** How long to wait on closing for what was left pending to go out. */
     public static final SctpSocketOption<Integer> SO_LINGER =
-            new Opcion<Integer>("SO_LINGER", Integer.class);
+            new Option<Integer>("SO_LINGER", Integer.class);
 
     /**
-     * Una opcion: un nombre y un tipo.
+     * An option: a name and a type.
      *
-     * <p>Privada porque el conjunto de opciones es cerrado — son las diez constantes de arriba— y
-     * dejar fabricar mas daria objetos que ninguna implementacion sabe atender.
+     * <p>Private because the set of options is closed -- they are the ten constants above -- and
+     * letting more be made would give objects no implementation knows how to attend to.
      */
-    private static class Opcion<T> implements SctpSocketOption<T> {
+    private static class Option<T> implements SctpSocketOption<T> {
 
-        private final String nombre;
-        private final Class<T> tipo;
+        private final String name;
+        private final Class<T> type;
 
-        Opcion(String nombre, Class<T> tipo) {
-            this.nombre = nombre;
-            this.tipo = tipo;
+        Option(String name, Class<T> type) {
+            this.name = name;
+            this.type = type;
         }
 
         public String name() {
-            return this.nombre;
+            return this.name;
         }
 
         public Class<T> type() {
-            return this.tipo;
+            return this.type;
         }
 
         public String toString() {
-            return this.nombre;
+            return this.name;
         }
     }
 }

@@ -5,24 +5,24 @@ import java.lang.classfile.Label;
 import java.util.List;
 import jdk.internal.classfile.impl.Instructions;
 
-// `tableswitch`: los valores son un rango contiguo de `lowValue()` a `highValue()` y la tabla es un
-// arreglo de destinos indexado por el valor menos `low`. Un hueco en el rango se escribe con el
-// destino por omisión, así que `cases()` puede tener menos ramas que `high - low + 1`.
+// `tableswitch`: the values are a contiguous range from `lowValue()` to `highValue()` and the table
+// is an array of destinations indexed by the value minus `low`. A gap in the range is written with
+// the default destination, so `cases()` may have fewer branches than `high - low + 1`.
 public interface TableSwitchInstruction extends Instruction {
 
-    /** El valor más chico del rango. */
+    /** The range's smallest value. */
     int lowValue();
 
-    /** El valor más grande del rango. */
+    /** The range's largest value. */
     int highValue();
 
-    /** A dónde va lo que no cae en ninguna rama. */
+    /** Where whatever falls into no branch goes. */
     Label defaultTarget();
 
-    /** Las ramas cuyo destino no es el por omisión. */
+    /** The branches whose destination is not the default one. */
     List<SwitchCase> cases();
 
-    /** El `tableswitch` con este rango, este destino por omisión y estas ramas. */
+    /** The `tableswitch` with this range, this default destination and these branches. */
     public static TableSwitchInstruction of(int lowValue, int highValue, Label defaultTarget,
             List<SwitchCase> cases) {
         return Instructions.tableSwitch(lowValue, highValue, defaultTarget, cases);

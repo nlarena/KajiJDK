@@ -28,8 +28,13 @@ import java.util.function.ToLongFunction;
 // A hash map safe for concurrent use. The JDK stripes its table into independently locked
 // bins so unrelated keys never contend; KajiJDK guards one plain {@link HashMap} with the
 // intrinsic monitor of a private `sync` object. The *observable* contract is the same —
-// every operation is atomic, and the compare-and-act methods below are indivisible — and
-// on a runtime whose threads interleave between opcodes the coarse lock costs nothing real.
+// every operation is atomic, and the compare-and-act methods below are indivisible.
+//
+// This header used to add that "on a runtime whose threads interleave between opcodes the coarse
+// lock costs nothing real". That justification is gone: `JVM_THREADS=os` is a real OS-thread
+// substrate, so the lock does cost contention there. It stays correct --an intrinsic monitor is a
+// real mutex-- and what is given up is scalability, which the contract does not promise. The same
+// correction is on `java.util.concurrent.locks.ReentrantLock`.
 //
 // Single-exit style throughout (finding #105).
 public class ConcurrentHashMap<K, V> implements ConcurrentMap<K, V>, Serializable {
@@ -242,11 +247,11 @@ public class ConcurrentHashMap<K, V> implements ConcurrentMap<K, V>, Serializabl
     }
 
     /**
-     * Los valores de este mapa.
+     * This map's values.
      *
-     * <p>**Divergencia deliberada**, la misma que ya declara `keySet()`: la del JDK es una *vista*
-     * respaldada por el mapa; esta es una copia sacada en el momento. Y a diferencia de `keySet()`
-     * es una `Collection` y no un `Set`, porque los valores **si** pueden repetirse.
+     * <p>**A deliberate divergence**, the same one `keySet()` already declares: the JDK's is a
+     * *view* backed by the map; this is a copy taken at the moment. And unlike `keySet()` it is a
+     * `Collection` and not a `Set`, because values **can** repeat.
      */
     public java.util.Collection<V> values() {
         java.util.ArrayList<V> out = new java.util.ArrayList<V>();
@@ -258,11 +263,12 @@ public class ConcurrentHashMap<K, V> implements ConcurrentMap<K, V>, Serializabl
     }
 
     /**
-     * Los pares de este mapa.
+     * This map's entries.
      *
-     * <p>Misma divergencia que `values()`: copia, no vista. Los pares que devuelve son inmutables,
-     * asi que `setValue` sobre uno de ellos lanza en vez de escribir en el mapa — que es lo
-     * coherente con que sea una copia: escribir en un par que nadie mira seria peor que negarse.
+     * <p>The same divergence as `values()`: a copy, not a view. The entries it returns are
+     * immutable, so `setValue` on one of them throws instead of writing into the map -- which is
+     * what being a copy implies: writing into an entry nobody looks at would be worse than
+     * refusing.
      */
     public java.util.Set<java.util.Map.Entry<K, V>> entrySet() {
         java.util.HashSet<java.util.Map.Entry<K, V>> out =
@@ -270,8 +276,8 @@ public class ConcurrentHashMap<K, V> implements ConcurrentMap<K, V>, Serializabl
         java.util.Iterator<K> it = this.keySet().iterator();
         while (it.hasNext()) {
             K k = it.next();
-            java.util.Map.Entry<K, V> e = Map.entry(k, this.get(k));   // #285: el
-            out.add(e);                                               // local nombra el tipo
+            java.util.Map.Entry<K, V> e = Map.entry(k, this.get(k));   // #285: the
+            out.add(e);                                               // local names the type
         }
         return out;
     }

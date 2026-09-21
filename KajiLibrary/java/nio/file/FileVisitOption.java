@@ -1,11 +1,12 @@
 package java.nio.file;
 
-// Como configurar un recorrido del arbol de archivos. Tiene una sola constante desde que existe.
+// How to configure a walk of the file tree. It has had a single constant since it existed.
 //
-// KajiJDK no recorre arboles --no hay nativo que liste un directorio-- asi que ningun metodo la
-// recibe. El enum esta porque es parte de la API y porque codigo que lo nombra tiene que compilar.
+// This note used to say KajiJDK does not walk trees and that no method takes it; `Fs.list` arrived
+// and `Files.walkFileTree`, `walk` and `find` all take it. It changes nothing, because this VM has
+// no symbolic links to follow -- which is said where the option is read.
 public enum FileVisitOption {
 
-    /** Seguir los enlaces simbolicos al bajar. */
+    /** Follow the symbolic links on the way down. */
     FOLLOW_LINKS
 }

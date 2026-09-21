@@ -1,17 +1,16 @@
 package java.awt;
 
 /**
- * Como se convierte el contorno de una figura en la figura rellena que de verdad se pinta.
+ * How a shape's outline is turned into the filled shape that is really painted.
  *
- * <p>Esta entera --un solo metodo-- porque {@code Shape} ya existe: es la unica de las cinco
- * interfaces de pintado de {@code java.awt} que no menciona nada de {@code java.awt.image}.
+ * <p>It is one method, and of {@code java.awt}'s five painting interfaces it is the only one that
+ * mentions nothing from {@code java.awt.image}.
  */
 public interface Stroke {
 
     /**
-     * Devuelve la figura que hay que rellenar para que se vea el trazo de {@code p}. No dibuja: el
-     * grosor, las puntas y las uniones se resuelven aca, en geometria, y el rasterizador despues
-     * rellena y ya.
+     * Returns the shape that has to be filled for {@code p}'s stroke to show. It does not draw:
+     * thickness, caps and joins are resolved here, in geometry, and the rasterizer then just fills.
      */
     Shape createStrokedShape(Shape p);
 }

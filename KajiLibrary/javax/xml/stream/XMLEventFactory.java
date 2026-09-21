@@ -18,82 +18,85 @@ import javax.xml.stream.events.StartDocument;
 import javax.xml.stream.events.StartElement;
 
 /**
- * KajiLibrary's javax.xml.stream.XMLEventFactory -- de donde salen los
- * {@link javax.xml.stream.events.XMLEvent} que uno construye a mano.
+ * KajiLibrary's javax.xml.stream.XMLEventFactory -- where the {@link
+ * javax.xml.stream.events.XMLEvent}s one builds by hand come from.
  *
- * <h2>La fabrica que no necesita parser</h2>
+ * <h2>The factory that needs no parser</h2>
  *
- * <p>De las tres fabricas de StAX esta es la unica que no lee nada: cada metodo arma un evento a
- * partir de los datos que le pasa el llamador. Es la que se usa para <b>generar</b> XML con el
- * modelo de eventos, o para inyectar eventos en un flujo que se esta transformando.
+ * <p>Of the three StAX factories this is the only one that reads nothing: each method builds an
+ * event from the data the caller passes it. It is the one used to <b>generate</b> XML with the
+ * event model, or to inject events into a stream being transformed.
  *
- * <p>Por eso aca funciona entera, con implementaciones de verdad detras. Ver
- * {@link XMLInputFactory}, que si depende de que haya un parser.
+ * <p>That is why it works whole here, with real implementations behind it. See {@link
+ * XMLInputFactory}, which does depend on a parser.
  *
- * <h2>El {@link Location} pegajoso</h2>
+ * <h2>The sticky {@link Location}</h2>
  *
- * <p>{@link #setLocation} es la unica pieza con estado y hay que mirarla con cuidado: fija una
- * ubicacion que se le va a poner a <b>todos</b> los eventos que la fabrica cree de ahi en adelante,
- * hasta que se la cambie. No es un parametro de un evento, es un modo de la fabrica.
+ * <p>{@link #setLocation} is the only piece with state and it has to be looked at carefully: it
+ * sets a location that is going to be put on <b>all</b> the events the factory creates from then
+ * on, until it is changed. It is not a parameter of an event, it is a mode of the factory.
  *
- * <p>El diseno viene de que un evento tiene ubicacion pero los metodos {@code createXxx} no la
- * reciben, y agregarle un parametro a los veintipico habria sido peor. La consecuencia practica es
- * que una instancia de esta fabrica <b>no</b> se puede compartir entre hilos si alguno llama a
- * {@code setLocation}: es estado mutable sin sincronizar. La recomendacion es una fabrica por
- * hilo, que ademas es barata.
+ * <p>The design comes from an event having a location but the {@code createXxx} methods not
+ * receiving it, and adding a parameter to the twenty-odd of them would have been worse. The
+ * practical consequence is that an instance of this factory <b>cannot</b> be shared between threads
+ * if any of them calls {@code setLocation}: it is unsynchronized mutable state. The recommendation
+ * is one factory per thread, which is cheap anyway.
  *
- * <h2>Los {@code Iterator} que reciben varios metodos</h2>
+ * <h2>The {@code Iterator}s several methods receive</h2>
  *
- * <p>{@code createStartElement} y {@code createEndElement} toman iteradores de {@link Attribute} y
- * de {@link Namespace}. Se consumen <b>en el momento</b>: el evento que sale es inmutable y ya
- * tiene copiado lo que hacia falta, asi que el iterador se puede descartar despues. null vale y
- * significa "ninguno".
+ * <p>{@code createStartElement} and {@code createEndElement} take iterators of {@link Attribute}
+ * and of {@link Namespace}. They are consumed <b>at that moment</b>: the event that comes out is
+ * immutable and has already copied what it needed, so the iterator can be discarded afterwards.
+ * null is valid and means "none".
  */
 public abstract class XMLEventFactory {
 
     /**
-     * La propiedad de sistema con que se enchufa otra implementacion:
+     * The system property another implementation is plugged in with:
      * {@code javax.xml.stream.XMLEventFactory}.
      */
     static final String PROPERTY = "javax.xml.stream.XMLEventFactory";
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected XMLEventFactory() {
     }
 
-    // ---- descubrimiento ---------------------------------------------------------------------
+    // ---- discovery --------------------------------------------------------------------------
 
     /**
-     * La implementacion de la plataforma, sin mirar la configuracion.
+     * The platform implementation, without looking at the configuration.
      *
-     * @return la fabrica de eventos de esta biblioteca; nunca null
+     * @return this library's event factory; never null
      */
     public static XMLEventFactory newDefaultFactory() {
         return new KajiEventFactory();
     }
 
     /**
-     * La fabrica configurada.
+     * The configured factory.
      *
-     * <p>Mira la propiedad de sistema {@code javax.xml.stream.XMLEventFactory} y, si no esta, los
-     * proveedores declarados como servicio; si tampoco hay, devuelve la de la plataforma.
+     * <p>It looks at the system property {@code javax.xml.stream.XMLEventFactory} and, if it is not
+     * set, returns the platform's. (The note also named declared service providers; see {@code
+     * Factories}: no {@code ServiceLoader} is consulted here, while the JDK also reads {@code
+     * stax.properties}, {@code jaxp.properties} and the service providers.)
      *
-     * @return la fabrica encontrada; nunca null
-     * @throws FactoryConfigurationError si la configuracion nombra una clase que no se puede usar
+     * @return the factory found; never null
+     * @throws FactoryConfigurationError if the configuration names a class that cannot be used
      */
     public static XMLEventFactory newInstance() {
         return newFactory();
     }
 
     /**
-     * Lo mismo que {@link #newInstance()}, con el nombre nuevo.
+     * The same as {@link #newInstance()}, with the new name.
      *
-     * <p>Los dos existen porque {@code newInstance()} venia de la version 1.0 con una sobrecarga
-     * que no distinguia bien los errores; {@code newFactory()} es la que la reemplaza. Aca hacen lo
-     * mismo.
+     * <p>Both exist because the JDK replaced the {@code newInstance} methods with {@code
+     * newFactory} ones "to maintain API consistency", with no change in behaviour; only {@code
+     * newInstance(String, ClassLoader)} is deprecated there. Here they do the same. (The note said
+     * {@code newInstance()} had an overload that did not tell errors apart properly.)
      *
-     * @return la fabrica encontrada; nunca null
-     * @throws FactoryConfigurationError si la configuracion nombra una clase que no se puede usar
+     * @return the factory found; never null
+     * @throws FactoryConfigurationError if the configuration names a class that cannot be used
      */
     public static XMLEventFactory newFactory() {
         Object f = Factories.fromSystemProperty(PROPERTY, XMLEventFactory.class);
@@ -104,24 +107,28 @@ public abstract class XMLEventFactory {
     }
 
     /**
-     * La fabrica nombrada explicitamente, cargada con el cargador que se indique.
+     * The factory named explicitly, loaded with the loader indicated.
      *
-     * @param factoryId el nombre de la clase de la fabrica; null cae en {@link #newFactory()}
-     * @param classLoader el cargador con que buscarla; null usa el del contexto
-     * @return la fabrica; nunca null
-     * @throws FactoryConfigurationError si la clase no se puede cargar o no es una fabrica
+     * @param factoryId the name of the factory class; null falls back to {@link #newFactory()}. In
+     *     JDK 25 it is instead the name of a property that holds the class name, and a class name
+     *     there fails
+     * @param classLoader the loader to look for it with; null uses the context one
+     * @return the factory; never null
+     * @throws FactoryConfigurationError if the class cannot be loaded or is not a factory
      */
     public static XMLEventFactory newInstance(String factoryId, ClassLoader classLoader) {
         return newFactory(factoryId, classLoader);
     }
 
     /**
-     * Lo mismo que {@link #newInstance(String, ClassLoader)}, con el nombre nuevo.
+     * The same as {@link #newInstance(String, ClassLoader)}, with the new name.
      *
-     * @param factoryId el nombre de la clase de la fabrica; null cae en {@link #newFactory()}
-     * @param classLoader el cargador con que buscarla; null usa el del contexto
-     * @return la fabrica; nunca null
-     * @throws FactoryConfigurationError si la clase no se puede cargar o no es una fabrica
+     * @param factoryId the name of the factory class; null falls back to {@link #newFactory()}. In
+     *     JDK 25 it is instead the name of a property that holds the class name, and a class name
+     *     there fails
+     * @param classLoader the loader to look for it with; null uses the context one
+     * @return the factory; never null
+     * @throws FactoryConfigurationError if the class cannot be loaded or is not a factory
      */
     public static XMLEventFactory newFactory(String factoryId, ClassLoader classLoader) {
         if (factoryId == null) {
@@ -130,113 +137,113 @@ public abstract class XMLEventFactory {
         return (XMLEventFactory) Factories.instantiate(factoryId, classLoader, XMLEventFactory.class);
     }
 
-    // ---- la ubicacion pegajosa --------------------------------------------------------------
+    // ---- the sticky location --------------------------------------------------------------------
 
     /**
-     * Fija la ubicacion que van a llevar todos los eventos que se creen de aca en adelante.
+     * Sets the location all the events created from here on are going to carry.
      *
-     * <p>Es estado de la fabrica, no un parametro; ver el encabezado de la clase.
+     * <p>It is the factory's state, not a parameter; see the class header.
      *
-     * @param location la ubicacion; null vuelve a la de por omision, que no tiene datos
+     * @param location the location; null goes back to the default, which has no data
      */
     public abstract void setLocation(Location location);
 
-    // ---- los eventos ------------------------------------------------------------------------
+    // ---- the events -----------------------------------------------------------------------------
 
     /**
-     * Un atributo sin espacio de nombres.
+     * An attribute without a namespace.
      *
-     * @param localName el nombre local
-     * @param value el valor
-     * @return el atributo
+     * @param localName the local name
+     * @param value the value
+     * @return the attribute
      */
     public abstract Attribute createAttribute(String localName, String value);
 
     /**
-     * Un atributo calificado.
+     * A qualified attribute.
      *
-     * @param prefix el prefijo con que escribirlo
-     * @param namespaceURI el espacio de nombres
-     * @param localName el nombre local
-     * @param value el valor
-     * @return el atributo
+     * @param prefix the prefix to write it with
+     * @param namespaceURI the namespace
+     * @param localName the local name
+     * @param value the value
+     * @return the attribute
      */
     public abstract Attribute createAttribute(
             String prefix, String namespaceURI, String localName, String value);
 
     /**
-     * Un atributo a partir de un nombre ya armado.
+     * An attribute from an already built name.
      *
-     * @param name el nombre calificado
-     * @param value el valor
-     * @return el atributo
+     * @param name the qualified name
+     * @param value the value
+     * @return the attribute
      */
     public abstract Attribute createAttribute(QName name, String value);
 
     /**
-     * La declaracion del espacio de nombres por omision, o sea {@code xmlns="..."}.
+     * The declaration of the default namespace, that is {@code xmlns="..."}.
      *
-     * @param namespaceURI el URI a declarar
-     * @return la declaracion
+     * @param namespaceURI the URI to declare
+     * @return the declaration
      */
     public abstract Namespace createNamespace(String namespaceURI);
 
     /**
-     * La declaracion de un prefijo, o sea {@code xmlns:p="..."}.
+     * The declaration of a prefix, that is {@code xmlns:p="..."}.
      *
-     * @param prefix el prefijo a declarar
-     * @param namespaceUri el URI a asociarle
-     * @return la declaracion
+     * @param prefix the prefix to declare
+     * @param namespaceUri the URI to associate with it
+     * @return the declaration
      */
     public abstract Namespace createNamespace(String prefix, String namespaceUri);
 
     /**
-     * La apertura de un elemento, con sus atributos y sus declaraciones.
+     * The start of an element, with its attributes and its declarations.
      *
-     * @param name el nombre del elemento
-     * @param attributes los atributos, o null si no hay
-     * @param namespaces las declaraciones {@code xmlns}, o null si no hay
-     * @return el evento
+     * @param name the element's name
+     * @param attributes the attributes, or null if there are none
+     * @param namespaces the {@code xmlns} declarations, or null if there are none
+     * @return the event
      */
     public abstract StartElement createStartElement(
             QName name, Iterator<? extends Attribute> attributes,
             Iterator<? extends Namespace> namespaces);
 
     /**
-     * La apertura de un elemento, sin atributos ni declaraciones.
+     * The start of an element, without attributes or declarations.
      *
-     * @param prefix el prefijo con que escribirlo
-     * @param namespaceUri el espacio de nombres
-     * @param localName el nombre local
-     * @return el evento
+     * @param prefix the prefix to write it with
+     * @param namespaceUri the namespace
+     * @param localName the local name
+     * @return the event
      */
     public abstract StartElement createStartElement(
             String prefix, String namespaceUri, String localName);
 
     /**
-     * La apertura de un elemento, con sus atributos y sus declaraciones.
+     * The start of an element, with its attributes and its declarations.
      *
-     * @param prefix el prefijo con que escribirlo
-     * @param namespaceUri el espacio de nombres
-     * @param localName el nombre local
-     * @param attributes los atributos, o null si no hay
-     * @param namespaces las declaraciones {@code xmlns}, o null si no hay
-     * @return el evento
+     * @param prefix the prefix to write it with
+     * @param namespaceUri the namespace
+     * @param localName the local name
+     * @param attributes the attributes, or null if there are none
+     * @param namespaces the {@code xmlns} declarations, or null if there are none
+     * @return the event
      */
     public abstract StartElement createStartElement(
             String prefix, String namespaceUri, String localName,
             Iterator<? extends Attribute> attributes, Iterator<? extends Namespace> namespaces);
 
     /**
-     * La apertura de un elemento, con el contexto de espacios de nombres que la rodea.
+     * The start of an element, with the namespace context around it.
      *
-     * @param prefix el prefijo con que escribirlo
-     * @param namespaceUri el espacio de nombres
-     * @param localName el nombre local
-     * @param attributes los atributos, o null si no hay
-     * @param namespaces las declaraciones {@code xmlns}, o null si no hay
-     * @param context el alcance vigente, o null
-     * @return el evento
+     * @param prefix the prefix to write it with
+     * @param namespaceUri the namespace
+     * @param localName the local name
+     * @param attributes the attributes, or null if there are none
+     * @param namespaces the {@code xmlns} declarations, or null if there are none
+     * @param context the scope in force, or null
+     * @return the event
      */
     public abstract StartElement createStartElement(
             String prefix, String namespaceUri, String localName,
@@ -244,146 +251,146 @@ public abstract class XMLEventFactory {
             NamespaceContext context);
 
     /**
-     * El cierre de un elemento.
+     * The end of an element.
      *
-     * @param name el nombre del elemento
-     * @param namespaces los espacios de nombres que salen de alcance, o null
-     * @return el evento
+     * @param name the element's name
+     * @param namespaces the namespaces going out of scope, or null
+     * @return the event
      */
     public abstract EndElement createEndElement(
             QName name, Iterator<? extends Namespace> namespaces);
 
     /**
-     * El cierre de un elemento.
+     * The end of an element.
      *
-     * @param prefix el prefijo con que escribirlo
-     * @param namespaceUri el espacio de nombres
-     * @param localName el nombre local
-     * @return el evento
+     * @param prefix the prefix to write it with
+     * @param namespaceUri the namespace
+     * @param localName the local name
+     * @return the event
      */
     public abstract EndElement createEndElement(
             String prefix, String namespaceUri, String localName);
 
     /**
-     * El cierre de un elemento.
+     * The end of an element.
      *
-     * @param prefix el prefijo con que escribirlo
-     * @param namespaceUri el espacio de nombres
-     * @param localName el nombre local
-     * @param namespaces los espacios de nombres que salen de alcance, o null
-     * @return el evento
+     * @param prefix the prefix to write it with
+     * @param namespaceUri the namespace
+     * @param localName the local name
+     * @param namespaces the namespaces going out of scope, or null
+     * @return the event
      */
     public abstract EndElement createEndElement(
             String prefix, String namespaceUri, String localName,
             Iterator<? extends Namespace> namespaces);
 
     /**
-     * Texto comun.
+     * Ordinary text.
      *
-     * @param content el texto
-     * @return el evento, con {@link XMLStreamConstants#CHARACTERS}
+     * @param content the text
+     * @return the event, with {@link XMLStreamConstants#CHARACTERS}
      */
     public abstract Characters createCharacters(String content);
 
     /**
-     * Texto en una seccion {@code <![CDATA[...]]>}.
+     * Text in a {@code <![CDATA[...]]>} section.
      *
-     * @param content el texto
-     * @return el evento, con {@link XMLStreamConstants#CDATA}
+     * @param content the text
+     * @return the event, with {@link XMLStreamConstants#CDATA}
      */
     public abstract Characters createCData(String content);
 
     /**
-     * Espacio en blanco.
+     * Whitespace.
      *
-     * @param content el espacio
-     * @return el evento, con {@link XMLStreamConstants#CHARACTERS}
+     * @param content the space
+     * @return the event, with {@link XMLStreamConstants#CHARACTERS}
      */
     public abstract Characters createSpace(String content);
 
     /**
-     * Espacio en blanco marcado como ignorable.
+     * Whitespace marked as ignorable.
      *
-     * @param content el espacio
-     * @return el evento, con {@link XMLStreamConstants#SPACE}
+     * @param content the space
+     * @return the event, with {@link XMLStreamConstants#SPACE}
      */
     public abstract Characters createIgnorableSpace(String content);
 
     /**
-     * El comienzo del documento, con los valores por omision: {@code 1.0} y {@code UTF-8}, ninguno
-     * de los dos declarado.
+     * The start of the document, with the default values: {@code 1.0} and {@code UTF-8}, neither of
+     * them declared.
      *
-     * @return el evento
+     * @return the event
      */
     public abstract StartDocument createStartDocument();
 
     /**
-     * El comienzo del documento con una codificacion declarada.
+     * The start of the document with a declared encoding.
      *
-     * @param encoding la codificacion
-     * @return el evento
+     * @param encoding the encoding
+     * @return the event
      */
     public abstract StartDocument createStartDocument(String encoding);
 
     /**
-     * El comienzo del documento con codificacion y version declaradas.
+     * The start of the document with declared encoding and version.
      *
-     * @param encoding la codificacion
-     * @param version la version
-     * @return el evento
+     * @param encoding the encoding
+     * @param version the version
+     * @return the event
      */
     public abstract StartDocument createStartDocument(String encoding, String version);
 
     /**
-     * El comienzo del documento con las tres partes de la declaracion.
+     * The start of the document with the three parts of the declaration.
      *
-     * @param encoding la codificacion
-     * @param version la version
-     * @param standalone el valor de {@code standalone}
-     * @return el evento
+     * @param encoding the encoding
+     * @param version the version
+     * @param standalone the value of {@code standalone}
+     * @return the event
      */
     public abstract StartDocument createStartDocument(
             String encoding, String version, boolean standalone);
 
     /**
-     * El final del documento.
+     * The end of the document.
      *
-     * @return el evento
+     * @return the event
      */
     public abstract EndDocument createEndDocument();
 
     /**
-     * Una referencia a entidad sin expandir.
+     * An unexpanded entity reference.
      *
-     * @param name el nombre de la entidad
-     * @param declaration su declaracion
-     * @return el evento
+     * @param name the name of the entity
+     * @param declaration its declaration
+     * @return the event
      */
     public abstract EntityReference createEntityReference(
             String name, EntityDeclaration declaration);
 
     /**
-     * Un comentario.
+     * A comment.
      *
-     * @param text el texto, sin los delimitadores
-     * @return el evento
+     * @param text the text, without the delimiters
+     * @return the event
      */
     public abstract Comment createComment(String text);
 
     /**
-     * Una instruccion de procesamiento.
+     * A processing instruction.
      *
-     * @param target a quien va dirigida
-     * @param data el resto, crudo
-     * @return el evento
+     * @param target whom it is addressed to
+     * @param data the rest, raw
+     * @return the event
      */
     public abstract ProcessingInstruction createProcessingInstruction(String target, String data);
 
     /**
-     * Una declaracion de tipo de documento, a partir de su texto crudo.
+     * A document type declaration, from its raw text.
      *
-     * @param dtd el texto de la declaracion
-     * @return el evento
+     * @param dtd the text of the declaration
+     * @return the event
      */
     public abstract DTD createDTD(String dtd);
 }

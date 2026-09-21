@@ -2,27 +2,29 @@ package java.nio.file.attribute;
 
 import java.io.IOException;
 
-// La vista con la que se leen los `BasicFileAttributes` y se fijan las tres marcas de tiempo.
+// The view with which the `BasicFileAttributes` are read and the three timestamps are set.
 //
-// Su nombre es `"basic"` -- fijo, y el que usa `Files.getAttribute("basic:size", ...)`.
+// Its name is `"basic"` -- fixed, and the one `Files.getAttribute("basic:size", ...)` uses.
 //
-// **KajiJDK no tiene una implementacion.** Ni la lectura ni la escritura son posibles: `stat` de
-// `jdk.internal.io.Fs` no devuelve tiempos y no hay ningun nativo que los escriba. La interfaz esta
-// para que el tipo exista y para que quien traiga los nativos manaña solo tenga que implementarla.
+// **KajiJDK has no implementation.** This note used to say neither reading nor writing is possible
+// because `stat` returns no times; reading works --`Files.readAttributes` answers, `Fs.mtime`
+// included. What is not possible is `setTimes`, which sets all three at once and only has a native
+// for the modification one, and a view whose `setTimes` silently dropped two of the three would be
+// worse than no view. The interface is here so the type exists.
 public interface BasicFileAttributeView extends FileAttributeView {
 
-    /** Siempre `"basic"`. */
+    /** Always `"basic"`. */
     String name();
 
-    /** Lee los atributos de una sola vez, para que salgan todos del mismo instante. */
+    /** It reads the attributes in one go, so they all come from the same instant. */
     BasicFileAttributes readAttributes() throws IOException;
 
     /**
-     * Fija las marcas de tiempo. Un argumento en `null` deja esa marca como estaba.
+     * It sets the timestamps. An argument at `null` leaves that stamp as it was.
      *
-     * <p>Van los tres juntos, y no un metodo por marca, porque cambiar uno solo suele tocar los
-     * otros de rebote en el sistema de archivos: hacerlo en una llamada deja explicito que la
-     * operacion es una sola.
+     * <p>The three go together, and not one method per stamp, because changing only one usually
+     * touches the others by rebound in the filesystem: doing it in one call makes it explicit that
+     * the operation is a single one.
      */
     void setTimes(FileTime lastModifiedTime, FileTime lastAccessTime, FileTime createTime)
             throws IOException;

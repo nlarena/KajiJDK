@@ -1,81 +1,81 @@
 package com.sun.java.accessibility.util;
 
 /**
- * Los identificadores de cada familia de eventos, para poder hablar de "un tipo de evento" como
- * dato.
+ * The identifiers of each family of events, so as to be able to talk about "a kind of event"
+ * as a datum.
  *
- * <h2>Por que numeros y no clases</h2>
+ * <h2>Why numbers and not classes</h2>
  *
- * <p>Porque estos monitores registran oyentes <strong>por tipo</strong> en una sola lista, y una
- * clave numerica hace que agregar, sacar y repartir sea una comparacion de enteros. Con
- * {@code Class} habria que resolver jerarquias en cada despacho.
+ * <p>Because these monitors register listeners <strong>by type</strong> in a single list, and a
+ * numeric key makes adding, taking out and handing out a comparison of integers. With
+ * {@code Class} hierarchies would have to be resolved on each dispatch.
  *
- * <p>Es la razon de que exista {@link AccessibilityListenerList}: una lista de pares
- * (tipo, oyente) en un solo arreglo.
+ * <p>It is the reason {@link AccessibilityListenerList} exists: a list of (type, listener) pairs
+ * in a single array.
  *
- * <p>Las once primeras constantes son de AWT y las diecisiete siguientes de Swing, que es el mismo
- * corte que separa a {@link AWTEventMonitor} de {@link SwingEventMonitor}.
+ * <p>The first eleven constants are AWT's and the seventeen following ones Swing's, which is the
+ * same cut that separates {@link AWTEventMonitor} from {@link SwingEventMonitor}.
  */
 public class EventID {
 
-    /** Un boton o similar se activo. */
+    /** A button or similar was activated. */
     public static final int ACTION = 0;
-    /** Cambio una barra de desplazamiento. */
+    /** A scroll bar changed. */
     public static final int ADJUSTMENT = 1;
-    /** Un componente se movio, cambio de tamano o de visibilidad. */
+    /** A component moved, changed size or changed visibility. */
     public static final int COMPONENT = 2;
-    /** Un contenedor gano o perdio un hijo. */
+    /** A container gained or lost a child. */
     public static final int CONTAINER = 3;
-    /** Cambio el foco. */
+    /** The focus changed. */
     public static final int FOCUS = 4;
-    /** Se selecciono o deselecciono un item. */
+    /** An item was selected or deselected. */
     public static final int ITEM = 5;
-    /** Teclado. */
+    /** The keyboard. */
     public static final int KEY = 6;
-    /** Botones del mouse. */
+    /** Mouse buttons. */
     public static final int MOUSE = 7;
-    /** Movimiento del mouse; va aparte porque llega muchisimo mas seguido. */
+    /** Mouse movement; it goes separately because it arrives very much more often. */
     public static final int MOTION = 8;
-    /** Cambio un campo de texto. */
+    /** A text field changed. */
     public static final int TEXT = 9;
-    /** Una ventana se abrio, cerro, minimizo. */
+    /** A window opened, closed, minimized. */
     public static final int WINDOW = 10;
 
-    /** Cambio la cadena de ancestros de un componente. */
+    /** A component's chain of ancestors changed. */
     public static final int ANCESTOR = 11;
-    /** Se movio el cursor de texto. */
+    /** The text cursor moved. */
     public static final int CARET = 12;
-    /** Termino la edicion de una celda. */
+    /** The editing of a cell finished. */
     public static final int CELLEDITOR = 13;
-    /** Cambio de estado generico. */
+    /** A generic state change. */
     public static final int CHANGE = 14;
-    /** Cambio el modelo de columnas de una tabla. */
+    /** A table's column model changed. */
     public static final int COLUMNMODEL = 15;
-    /** Cambio un documento de texto. */
+    /** A text document changed. */
     public static final int DOCUMENT = 16;
-    /** Cambio el contenido de una lista. */
+    /** A list's content changed. */
     public static final int LISTDATA = 17;
-    /** Cambio la seleccion de una lista. */
+    /** A list's selection changed. */
     public static final int LISTSELECTION = 18;
-    /** Un menu se abrio o se cerro. */
+    /** A menu opened or closed. */
     public static final int MENU = 19;
-    /** Un menu contextual se abrio o se cerro. */
+    /** A context menu opened or closed. */
     public static final int POPUPMENU = 20;
-    /** Cambio el modelo de una tabla. */
+    /** A table's model changed. */
     public static final int TABLEMODEL = 21;
-    /** Un nodo de arbol se expandio o se contrajo. */
+    /** A tree node expanded or collapsed. */
     public static final int TREEEXPANSION = 22;
-    /** Cambio el modelo de un arbol. */
+    /** A tree's model changed. */
     public static final int TREEMODEL = 23;
-    /** Cambio la seleccion de un arbol. */
+    /** A tree's selection changed. */
     public static final int TREESELECTION = 24;
-    /** Se hizo algo deshacible. */
+    /** Something undoable was done. */
     public static final int UNDOABLEEDIT = 25;
-    /** Cambio una propiedad. */
+    /** A property changed. */
     public static final int PROPERTYCHANGE = 26;
-    /** Se va a cambiar una propiedad, y se puede vetar. */
+    /** A property is going to be changed, and it may be vetoed. */
     public static final int VETOABLECHANGE = 27;
-    /** Una ventana interna cambio de estado. */
+    /** An internal window changed state. */
     public static final int INTERNALFRAME = 28;
 
     public EventID() {

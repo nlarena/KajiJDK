@@ -5,71 +5,71 @@ import java.util.List;
 import jdk.jfr.ValueDescriptor;
 
 /**
- * Un marco de una pila de llamadas grabada.
+ * A frame of a recorded stack of calls.
  *
- * <h2>Por que hay indice de bytecode y numero de linea</h2>
+ * <h2>Why there is a bytecode index and a line number</h2>
  *
- * <p>El indice de bytecode siempre esta; el numero de linea solo si la clase se compilo con la
- * tabla de lineas, que es opcional. En codigo compilado sin ella, {@link #getLineNumber} devuelve
- * {@code -1} y el indice de bytecode es lo unico que ubica el punto exacto.
+ * <p>The bytecode index is always there; the line number only if the class was compiled with the
+ * table of lines, which is optional. In code compiled without it, {@link #getLineNumber} returns
+ * {@code -1} and the bytecode index is the only thing that locates the exact point.
  *
- * <p>Ademas son distintos en precision: dentro de una linea puede haber varias llamadas, y el
- * indice de bytecode distingue cual de ellas es.
+ * <p>They also differ in precision: inside one line there may be several calls, and the bytecode
+ * index tells which of them it is.
  *
- * <h2>{@link #getType} no es el tipo del metodo</h2>
+ * <h2>{@link #getType} is not the type of the method</h2>
  *
- * <p>Es el tipo <strong>del marco</strong>: si el codigo estaba interpretado, compilado por el JIT
- * o era nativo. Ese dato es lo que explica una pila donde el mismo metodo aparece dos veces con
- * costos completamente distintos.
+ * <p>It is the type <strong>of the frame</strong>: whether the code was interpreted, compiled by
+ * the JIT or native. That datum is what explains a stack where the same method appears twice with
+ * completely different costs.
  *
  * @since 9
  */
 public final class RecordedFrame extends RecordedObject {
 
-    RecordedFrame(List<ValueDescriptor> descriptores, Object[] valores) {
-        super(descriptores, valores);
+    RecordedFrame(List<ValueDescriptor> descriptors, Object[] values) {
+        super(descriptors, values);
     }
 
     /**
-     * Si el marco es de codigo Java y no nativo.
+     * Whether the frame is of Java code and not native.
      *
-     * @return si es de Java
+     * @return whether it is of Java
      */
     public boolean isJavaFrame() {
         return hasField("method") && getValue("method") != null;
     }
 
     /**
-     * El indice del bytecode dentro del metodo.
+     * The index of the bytecode inside the method.
      *
-     * @return el indice, o {@code -1} si no se sabe
+     * @return the index, or {@code -1} if it is not known
      */
     public int getBytecodeIndex() {
         return getInt("bytecodeIndex");
     }
 
     /**
-     * El numero de linea del fuente.
+     * The line number of the source.
      *
-     * @return la linea, o {@code -1} si la clase no trae la tabla de lineas
+     * @return the line, or {@code -1} if the class does not bring the table of lines
      */
     public int getLineNumber() {
         return getInt("lineNumber");
     }
 
     /**
-     * Como estaba ejecutandose el codigo: interpretado, compilado o nativo.
+     * How the code was running: interpreted, compiled or native.
      *
-     * @return el tipo de marco
+     * @return the type of frame
      */
     public String getType() {
         return getString("type");
     }
 
     /**
-     * El metodo del marco.
+     * The method of the frame.
      *
-     * @return el metodo, o {@code null} si el marco no es de Java
+     * @return the method, or {@code null} if the frame is not of Java
      */
     public RecordedMethod getMethod() {
         return getValue("method");

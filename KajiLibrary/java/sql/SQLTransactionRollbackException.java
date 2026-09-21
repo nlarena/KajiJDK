@@ -1,10 +1,11 @@
 package java.sql;
 
 /**
- * KajiLibrary's java.sql.SQLTransactionRollbackException -- La base deshizo la transaccion sola.
+ * KajiLibrary's java.sql.SQLTransactionRollbackException -- the database rolled the transaction
+ * back by itself.
 
- * <p>El caso tipico es un abrazo mortal: la base elige una victima y la deshace para que la otra
- * avance. Reintentar es exactamente lo que corresponde -- la segunda vez no hay con quien trabarse.
+ * <p>The typical case is a deadlock: the database picks a victim and rolls it back so the other can
+ * proceed. Retrying is exactly the right thing -- the second time there is no one to deadlock with.
  */
 public class SQLTransactionRollbackException extends SQLTransientException {
 

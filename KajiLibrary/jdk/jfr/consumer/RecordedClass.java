@@ -5,55 +5,56 @@ import java.util.List;
 import jdk.jfr.ValueDescriptor;
 
 /**
- * Una clase Java, tal como quedo grabada.
+ * A Java class, as it was recorded.
  *
- * <p>No es un {@code Class}: el proceso que lee la grabacion puede no tener esa clase cargada, ni
- * poder cargarla. Lo que queda es el nombre, los modificadores y de que cargador vino.
+ * <p>It is not a {@code Class}: the process that reads the recording may not have that class
+ * loaded, nor be able to load it. What is left is the name, the modifiers and which loader it came
+ * from.
  *
- * <p>{@link #getId} es el identificador que la VM que grabo le dio a la clase. Sirve para saber si
- * dos eventos hablan de la misma clase sin comparar nombres, que es lo unico que funciona cuando
- * dos cargadores distintos cargaron clases del mismo nombre — el caso normal en un servidor de
- * aplicaciones.
+ * <p>{@link #getId} is the identifier the VM that recorded gave the class. It serves for knowing
+ * whether two events talk about the same class without comparing names, which is the only thing
+ * that works when two different loaders loaded classes of the same name -- the normal case in an
+ * application server.
  *
  * @since 9
  */
 public final class RecordedClass extends RecordedObject {
 
-    RecordedClass(List<ValueDescriptor> descriptores, Object[] valores) {
-        super(descriptores, valores);
+    RecordedClass(List<ValueDescriptor> descriptors, Object[] values) {
+        super(descriptors, values);
     }
 
     /**
-     * Los modificadores de la clase, con el formato de {@code java.lang.reflect.Modifier}.
+     * The modifiers of the class, with the format of {@code java.lang.reflect.Modifier}.
      *
-     * @return los modificadores
+     * @return the modifiers
      */
     public int getModifiers() {
         return getInt("modifiers");
     }
 
     /**
-     * El cargador del que vino.
+     * The loader it came from.
      *
-     * @return el cargador, o {@code null} si es el de arranque
+     * @return the loader, or {@code null} if it is the bootstrap one
      */
     public RecordedClassLoader getClassLoader() {
         return getValue("classLoader");
     }
 
     /**
-     * El nombre completo de la clase.
+     * The complete name of the class.
      *
-     * @return el nombre
+     * @return the name
      */
     public String getName() {
         return getString("name");
     }
 
     /**
-     * El identificador que la VM que grabo le dio a esta clase.
+     * The identifier the VM that recorded gave this class.
      *
-     * @return el identificador
+     * @return the identifier
      */
     public long getId() {
         return getLong("id");

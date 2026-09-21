@@ -4,80 +4,81 @@ import java.io.Serializable;
 import java.security.Principal;
 
 /**
- * KajiLibrary's javax.security.auth.kerberos.KerberosPrincipal -- un nombre de Kerberos.
+ * KajiLibrary's javax.security.auth.kerberos.KerberosPrincipal -- a Kerberos name.
  *
- * <p>Tiene la forma {@code componente/componente@REINO}: un usuario es {@code ana@EMPRESA.COM}, un
- * servicio es {@code host/servidor.empresa.com@EMPRESA.COM}. El reino va en mayusculas por
- * convencion, pero esta clase no lo impone: es un nombre, no una regla.
+ * <p>It has the form {@code component/component@REALM}: a user is {@code ana@COMPANY.COM}, a
+ * service is {@code host/server.company.com@COMPANY.COM}. The realm goes in upper case by
+ * convention, but this class does not impose it: it is a name, not a rule.
  *
- * <h2>El reino por omision</h2>
+ * <h2>The default realm</h2>
  *
- * <p>Un nombre sin {@code @REINO} toma el reino de la configuracion de Kerberos. KajiJDK no lee
- * {@code krb5.conf}; toma la propiedad {@code java.security.krb5.realm} si esta, y si no falla con
- * {@link IllegalArgumentException}, igual que el JDK sin configuracion. Es la causa mas comun de que
- * un programa que anda en una maquina no ande en otra: no es el codigo, es que la otra no tiene
- * configurado el reino.
+ * <p>A name without {@code @REALM} takes the realm of the Kerberos configuration. KajiJDK does not
+ * read {@code krb5.conf}; it takes the {@code java.security.krb5.realm} property if it is set, and
+ * otherwise fails with {@link IllegalArgumentException}, like the JDK without configuration. It is
+ * the most common cause of a program that works on one machine not working on another: it is not
+ * the code, it is that the other one has no realm configured.
  *
- * <h2>El tipo de nombre no cuenta para la igualdad</h2>
+ * <h2>The name type does not count for equality</h2>
  *
- * <p>{@link #getNameType} dice si es un usuario, un servicio, un host. Dos principales con el mismo
- * nombre y distinto tipo son <b>iguales</b> y tienen el mismo hash; el tipo es una pista para el KDC,
- * no parte de la identidad.
+ * <p>{@link #getNameType} says whether it is a user, a service, a host. Two principals with the
+ * same name and a different type are <b>equal</b> and have the same hash; the type is a hint for
+ * the KDC, not part of the identity.
  *
- * <h2>La arroba se puede escapar</h2>
+ * <h2>The at sign can be escaped</h2>
  *
- * <p>{@code a\\@b@REINO} es el usuario {@code a@b} del reino {@code REINO}: la primera arroba va
- * precedida de una barra y no separa nada. Esta clase corta en la primera arroba <b>sin</b> escapar y
- * deja el nombre tal cual, con sus barras.
+ * <p>{@code a\\@b@REALM} is the user {@code a@b} of the realm {@code REALM}: the first at sign is
+ * preceded by a backslash and separates nothing. This class cuts at the first <b>unescaped</b> at
+ * sign and leaves the name as it is, with its backslashes.
  */
 public final class KerberosPrincipal implements Principal, Serializable {
 
     private static final long serialVersionUID = -7374788026156829911L;
 
-    /** Tipo desconocido. */
+    /** Unknown type. */
     public static final int KRB_NT_UNKNOWN = 0;
 
-    /** Un usuario, o un servicio con nombre propio. */
+    /** A user, or a service with a name of its own. */
     public static final int KRB_NT_PRINCIPAL = 1;
 
-    /** Un servicio con una instancia: {@code servicio/instancia}. */
+    /** A service with an instance: {@code service/instance}. */
     public static final int KRB_NT_SRV_INST = 2;
 
-    /** Un servicio de un host: {@code servicio/host}. */
+    /** A host's service: {@code service/host}. */
     public static final int KRB_NT_SRV_HST = 3;
 
-    /** Un servicio de un host, con el host como componentes separados. */
+    /** A host's service, with the host as separate components. */
     public static final int KRB_NT_SRV_XHST = 4;
 
-    /** Un identificador numerico. */
+    /** A numeric identifier. */
     public static final int KRB_NT_UID = 5;
 
-    /** Un nombre de empresa, del estilo {@code usuario@dominio}. */
+    /** An enterprise name, of the {@code user@domain} style. */
     public static final int KRB_NT_ENTERPRISE = 10;
 
-    /** El nombre completo, con el reino. */
+    /** The full name, with the realm. */
     private final String fullName;
 
-    /** El reino. */
+    /** The realm. */
     private final String realm;
 
-    /** De que tipo es. */
+    /** Which type it is. */
     private final int nameType;
 
     /**
-     * Un principal de tipo {@link #KRB_NT_PRINCIPAL}.
+     * A principal of type {@link #KRB_NT_PRINCIPAL}.
      *
-     * @throws IllegalArgumentException si el nombre es null, esta vacio, esta mal formado, o no
-     *     tiene reino y no hay reino por omision
+     * @throws IllegalArgumentException if the name is null, empty, malformed, or has no realm and
+     *     there is no default realm
      */
     public KerberosPrincipal(String name) {
         this(name, KRB_NT_PRINCIPAL);
     }
 
     /**
-     * Un principal de ese tipo.
+     * A principal of that type.
      *
-     * @throws IllegalArgumentException si el nombre no sirve, o si el tipo no es uno de los siete
+     * @throws IllegalArgumentException if the name does not serve, or if the type is not one of the
+     *     seven
      */
     public KerberosPrincipal(String name, int nameType) {
         if (name == null) {
@@ -106,18 +107,18 @@ public final class KerberosPrincipal implements Principal, Serializable {
         this.nameType = nameType;
     }
 
-    /** El reino. */
+    /** The realm. */
     public String getRealm() {
         return this.realm;
     }
 
-    /** El hash del nombre completo; el tipo no cuenta. Ver la nota de la clase. */
+    /** The hash of the full name; the type does not count. See the class note. */
     @Override
     public int hashCode() {
         return this.fullName.hashCode();
     }
 
-    /** Iguales si el nombre completo es el mismo; el tipo no cuenta. Ver la nota de la clase. */
+    /** Equal if the full name is the same; the type does not count. See the class note. */
     @Override
     public boolean equals(Object other) {
         if (other == this) {
@@ -129,30 +130,30 @@ public final class KerberosPrincipal implements Principal, Serializable {
         return this.fullName.equals(((KerberosPrincipal) other).fullName);
     }
 
-    /** El nombre completo, con el reino. */
+    /** The full name, with the realm. */
     @Override
     public String getName() {
         return this.fullName;
     }
 
-    /** De que tipo es. */
+    /** Which type it is. */
     public int getNameType() {
         return this.nameType;
     }
 
-    /** El nombre completo. */
+    /** The full name. */
     @Override
     public String toString() {
         return this.fullName;
     }
 
-    /** Si es uno de los siete tipos. */
+    /** Whether it is one of the seven types. */
     private static boolean isLegalType(int nameType) {
         return (nameType >= KRB_NT_UNKNOWN && nameType <= KRB_NT_UID)
             || nameType == KRB_NT_ENTERPRISE;
     }
 
-    /** La posicion de la primera arroba sin escapar, o -1. Ver la nota de la clase. */
+    /** The position of the first unescaped at sign, or -1. See the class note. */
     private static int unescapedAt(String name) {
         int i = 0;
         while (i < name.length()) {
@@ -169,13 +170,13 @@ public final class KerberosPrincipal implements Principal, Serializable {
         return -1;
     }
 
-    /** Que la parte del nombre tenga componentes y ninguno este vacio en el medio. */
+    /** That the name part has components and none is empty in the middle. */
     private static void checkNamePart(String namePart) {
         if (namePart.isEmpty()) {
             throw new IllegalArgumentException("Empty nameStrings not allowed");
         }
-        // Un componente vacio en el medio --"host//x"-- no es un nombre; una barra al final si se
-        // tolera, como en el JDK.
+        // An empty component in the middle --"host//x"-- is not a name; a slash at the end is
+        // tolerated, as in the JDK.
         int i = 0;
         while (i < namePart.length()) {
             char c = namePart.charAt(i);
@@ -190,7 +191,7 @@ public final class KerberosPrincipal implements Principal, Serializable {
         }
     }
 
-    /** Que el reino no este vacio ni tenga caracteres que el protocolo no admite. */
+    /** That the realm is not empty and has no characters the protocol does not admit. */
     private static void checkRealm(String realm) {
         if (realm.isEmpty()) {
             throw new IllegalArgumentException("empty realm part not allowed");
@@ -206,7 +207,7 @@ public final class KerberosPrincipal implements Principal, Serializable {
         }
     }
 
-    /** El reino por omision. Ver la nota de la clase. */
+    /** The default realm. See the class note. */
     private static String defaultRealm() {
         String configured = System.getProperty("java.security.krb5.realm");
         if (configured != null && !configured.isEmpty()) {

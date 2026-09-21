@@ -12,27 +12,27 @@ import javax.management.openmbean.CompositeType;
 import javax.management.openmbean.TabularData;
 
 /**
- * Los datos de una recoleccion de basura concreta: cuando fue y como quedo la memoria.
+ * The data of a concrete garbage collection: when it was and how the memory was left.
  *
- * <h2>Los dos mapas, que son el dato central</h2>
+ * <h2>The two maps, which are the central datum</h2>
  *
- * <p>{@link #getMemoryUsageBeforeGc} y {@link #getMemoryUsageAfterGc} tienen una entrada por
- * <strong>region</strong> de memoria — eden, superviviente, vieja, metaespacio— y no un total. Eso
- * es lo que permite decir algo util: una recoleccion que vacio el eden y no movio la region vieja
- * fue barata y sana; una que redujo el eden y ademas hizo crecer la vieja acaba de promover objetos
- * que van a costar caros despues.
+ * <p>{@link #getMemoryUsageBeforeGc} and {@link #getMemoryUsageAfterGc} have one entry per
+ * <strong>region</strong> of memory -- eden, survivor, old, metaspace -- and not a total. That
+ * is what allows something useful to be said: a collection that emptied the eden and did not
+ * move the old region was cheap and healthy; one that reduced the eden and besides made the
+ * old one grow has just promoted objects that are going to cost dear afterwards.
  *
- * <p>Un total antes y despues no distingue esos dos casos, y son opuestos.
+ * <p>A total before and after does not tell those two cases apart, and they are opposites.
  *
- * <h2>Por que implementa {@link CompositeData}</h2>
+ * <h2>Why it implements {@link CompositeData}</h2>
  *
- * <p>Para poder viajar por JMX sin que el cliente tenga esta clase. Un monitor remoto recibe un
- * valor compuesto generico, con los mismos items; si ademas tiene esta clase en su classpath, usa
- * {@link #from} y recupera los accesores tipados.
+ * <p>So as to be able to travel over JMX without the client having this class. A remote monitor
+ * receives a generic composite value, with the same items; if it besides has this class in its
+ * classpath, it uses {@link #from} and recovers the typed accessors.
  *
- * <p>Por eso no hay constructor publico: un {@code GcInfo} lo produce la VM al recolectar, o se
- * reconstruye desde su forma abierta. Fabricar uno a mano seria inventar una recoleccion que no
- * ocurrio.
+ * <p>That is why there is no public constructor: a {@code GcInfo} is produced by the VM on
+ * collecting, or is rebuilt from its open form. Making one by hand would be inventing a
+ * collection that did not happen.
  *
  * @since 1.5
  */
@@ -50,119 +50,121 @@ public class GcInfo implements CompositeData, CompositeDataView {
         this.id = ((Long) cd.get("id")).longValue();
         this.startTime = ((Long) cd.get("startTime")).longValue();
         this.endTime = ((Long) cd.get("endTime")).longValue();
-        this.usageBeforeGc = leerMapa(cd, "memoryUsageBeforeGc");
-        this.usageAfterGc = leerMapa(cd, "memoryUsageAfterGc");
+        this.usageBeforeGc = readMap(cd, "memoryUsageBeforeGc");
+        this.usageAfterGc = readMap(cd, "memoryUsageAfterGc");
     }
 
     /**
-     * Un {@code Map<String, MemoryUsage>} sale de la forma abierta como una tabla de filas
-     * {@code (key, value)}.
+     * A {@code Map<String, MemoryUsage>} comes out of the open form as a table of
+     * {@code (key, value)} rows.
      *
-     * <p>Es la unica forma que el sistema de tipos abiertos tiene de representar un mapa: no hay un
-     * "MapType", asi que se codifica como una tabla indexada por la clave. Deshacer esa
-     * codificacion es todo lo que hace este metodo.
+     * <p>It is the only way the open type system has of representing a map: there is no
+     * "MapType", so it is encoded as a table indexed by the key. Undoing that encoding is all
+     * this method does.
      */
-    private static Map<String, MemoryUsage> leerMapa(final CompositeData cd, final String item) {
+    private static Map<String, MemoryUsage> readMap(final CompositeData cd, final String item) {
         if (!cd.containsKey(item)) {
             return Collections.emptyMap();
         }
-        final Object valor = cd.get(item);
-        if (!(valor instanceof TabularData)) {
+        final Object value = cd.get(item);
+        if (!(value instanceof TabularData)) {
             return Collections.emptyMap();
         }
         final Map<String, MemoryUsage> out = new TreeMap<String, MemoryUsage>();
-        for (final Object fila : ((TabularData) valor).values()) {
-            final CompositeData f = (CompositeData) fila;
+        for (final Object row : ((TabularData) value).values()) {
+            final CompositeData f = (CompositeData) row;
             out.put((String) f.get("key"), MemoryUsage.from((CompositeData) f.get("value")));
         }
         return Collections.unmodifiableMap(out);
     }
 
     /**
-     * El numero de esta recoleccion, dentro de las de su recolector.
+     * This collection's number, within those of its collector.
      *
-     * <p>Es un contador por recolector, no global: el numero 7 del recolector joven y el 7 del
-     * viejo no tienen nada que ver.
+     * <p>It is a counter per collector, not a global one: number 7 of the young collector and 7 of
+     * the old one have nothing to do with each other.
      *
-     * @return el numero
+     * @return the number
      */
     public long getId() {
         return id;
     }
 
     /**
-     * Cuando empezo, en milisegundos desde que arranco la VM.
+     * When it began, in milliseconds since the VM started.
      *
-     * <p>Desde el arranque de la VM y no desde la epoca: lo que se quiere medir es una duracion
-     * dentro de esta ejecucion, y un reloj de pared puede saltar hacia atras.
+     * <p>Since the VM's start and not since the epoch: what is wanted to be measured is a duration
+     * inside this execution, and a wall clock may jump backwards.
      *
-     * @return los milisegundos desde el arranque
+     * @return the milliseconds since the start
      */
     public long getStartTime() {
         return startTime;
     }
 
     /**
-     * Cuando termino, en milisegundos desde que arranco la VM.
+     * When it finished, in milliseconds since the VM started.
      *
-     * @return los milisegundos desde el arranque
+     * @return the milliseconds since the start
      */
     public long getEndTime() {
         return endTime;
     }
 
     /**
-     * Cuanto duro, en milisegundos.
+     * How long it lasted, in milliseconds.
      *
-     * <p>No es necesariamente la pausa que sufrio la aplicacion: un recolector concurrente trabaja
-     * mientras los hilos siguen andando, y ahi esta duracion es mucho mayor que la pausa real.
+     * <p>It is not necessarily the pause the application suffered: a concurrent collector works
+     * while the threads go on running, and there this duration is much greater than the real
+     * pause.
      *
-     * @return la duracion
+     * @return the duration
      */
     public long getDuration() {
         return endTime - startTime;
     }
 
     /**
-     * Como estaba cada region antes de recolectar.
+     * How each region was before collecting.
      *
-     * @return el mapa, de nombre de region a su uso
+     * @return the map, from a region's name to its usage
      */
     public Map<String, MemoryUsage> getMemoryUsageBeforeGc() {
         return usageBeforeGc;
     }
 
     /**
-     * Como quedo cada region despues de recolectar.
+     * How each region was left after collecting.
      *
-     * @return el mapa, de nombre de region a su uso
+     * @return the map, from a region's name to its usage
      */
     public Map<String, MemoryUsage> getMemoryUsageAfterGc() {
         return usageAfterGc;
     }
 
     /**
-     * Reconstruye un {@code GcInfo} desde su forma abierta.
+     * It rebuilds a {@code GcInfo} from its open form.
      *
-     * @param cd la forma abierta, o {@code null}
-     * @return el objeto, o {@code null} si {@code cd} era {@code null}
-     * @throws IllegalArgumentException si {@code cd} no tiene la forma de un {@code GcInfo}
+     * @param cd the open form, or {@code null}
+     * @return the object, or {@code null} if {@code cd} was {@code null}
+     * @throws IllegalArgumentException if {@code cd} does not have a {@code GcInfo}'s shape
      */
     public static GcInfo from(final CompositeData cd) {
         if (cd == null) {
             return null;
         }
         if (!cd.containsKey("id") || !cd.containsKey("startTime") || !cd.containsKey("endTime")) {
-            throw new IllegalArgumentException("el CompositeData no tiene la forma de un GcInfo");
+            throw new IllegalArgumentException(
+                    "the CompositeData does not have the shape of a GcInfo");
         }
         return new GcInfo(cd);
     }
 
-    // ---- CompositeData, delegado en el valor abierto del que salio ----
+    // ---- CompositeData, delegated to the open value it came out of ----
     //
-    // Delegar y no reimplementar: los items son los que el productor puso, y una VM puede agregar
-    // los suyos. Contestar desde los campos de arriba haria desaparecer todo lo que esta clase no
-    // conoce, que es justamente lo que un monitor generico querria ver.
+    // To delegate and not to reimplement: the items are those the producer put, and a VM may
+    // add its own. Answering from the fields above would make everything this class does not
+    // know disappear, which is precisely what a generic monitor would want to see.
 
     /** {@inheritDoc} */
     public boolean containsKey(final String key) {
@@ -210,13 +212,13 @@ public class GcInfo implements CompositeData, CompositeDataView {
     }
 
     /**
-     * La forma abierta de este objeto.
+     * This object's open form.
      *
-     * <p>Devuelve el valor del que salio, sin volver a armarlo: es el que tiene todos los items,
-     * incluidos los que esta clase no interpreta.
+     * <p>It returns the value it came out of, without building it again: it is the one that has
+     * all the items, including those this class does not interpret.
      *
-     * @param ct el tipo pedido, que se ignora por lo dicho arriba
-     * @return la forma abierta
+     * @param ct the asked-for type, which is ignored for what is said above
+     * @return the open form
      */
     public CompositeData toCompositeData(final CompositeType ct) {
         return cdata;

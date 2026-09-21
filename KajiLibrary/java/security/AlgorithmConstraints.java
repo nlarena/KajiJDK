@@ -2,26 +2,26 @@ package java.security;
 
 import java.util.Set;
 
-// Una regla sobre que algoritmos se pueden usar y para que.
+// A rule about which algorithms can be used and for what.
 //
-// Es lo que permite decir "en este proceso, nada de MD5 para firmar" sin tocar el codigo que
-// firma. Las tres sobrecargas no son redundantes: se puede prohibir un algoritmo por nombre, una
-// clave concreta —por corta, por ejemplo, aunque el algoritmo este permitido— o la combinacion de
-// los dos con parametros. Una politica realista necesita las tres, porque "RSA esta bien" y "RSA
-// de 512 bits esta bien" son afirmaciones distintas.
+// It is what allows one to say "in this process, no MD5 for signing" without touching the code that
+// signs. The three overloads are not redundant: an algorithm can be forbidden by name, a concrete
+// key —for being short, for example, even though the algorithm is permitted— or the combination of
+// the two with parameters. A realistic policy needs all three, because "RSA is fine" and "512-bit
+// RSA is fine" are different assertions.
 //
-// El `Set<CryptoPrimitive>` es el "para que": el mismo algoritmo puede estar permitido para cifrar
-// y prohibido para firmar.
+// The `Set<CryptoPrimitive>` is the "for what": the same algorithm can be permitted for encrypting
+// and forbidden for signing.
 //
-// KajiLibrary no trae ninguna implementacion, y no es una omision: una lista de algoritmos
-// prohibidos es una decision de politica, no de biblioteca. Quien la tenga la escribe.
+// KajiLibrary brings no implementation, and it is not an omission: a list of forbidden algorithms
+// is a decision of policy, not of the library. Whoever has one writes it.
 public interface AlgorithmConstraints {
 
-    // Si el algoritmo esta permitido para esas primitivas, con esos parametros.
+    // Whether the algorithm is permitted for those primitives, with those parameters.
     boolean permits(Set<CryptoPrimitive> primitives, String algorithm,
                     AlgorithmParameters parameters);
 
-    // Si esa clave esta permitida para esas primitivas.
+    // Whether that key is permitted for those primitives.
     boolean permits(Set<CryptoPrimitive> primitives, Key key);
 
     boolean permits(Set<CryptoPrimitive> primitives, String algorithm, Key key,

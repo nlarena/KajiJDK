@@ -6,11 +6,11 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Si el evento se graba cuando nadie dijo lo contrario.
+ * Whether the event is recorded when nobody said otherwise.
  *
- * <p>Ponerlo en {@code false} deja al evento definido y apagado: existe, se puede prender desde una
- * configuracion, y mientras tanto no cuesta nada. Es lo que corresponde para un evento caro o muy
- * frecuente que solo interesa en una investigacion puntual.
+ * <p>Putting it at {@code false} leaves the event defined and switched off: it exists, it can be
+ * switched on from a configuration, and meanwhile it costs nothing. It is what corresponds for an
+ * expensive or very frequent event that is only of interest in one specific investigation.
  *
  * @since 9
  */
@@ -19,13 +19,13 @@ import java.lang.annotation.Target;
 @MetadataDefinition
 public @interface Enabled {
 
-    /** El nombre del ajuste que esta anotacion configura. */
+    /** The name of the setting this annotation configures. */
     String NAME = "enabled";
 
     /**
-     * El valor de la anotacion.
+     * The value of the annotation.
      *
-     * @return el valor
+     * @return the value
      */
     boolean value() default true;
 }

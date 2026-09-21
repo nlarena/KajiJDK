@@ -5,40 +5,42 @@ import java.util.List;
 import javax.lang.model.element.Name;
 
 /**
- * Un atributo de una etiqueta HTML dentro del comentario, como el {@code href} de un {@code <a>}.
+ * An attribute of an HTML tag inside the comment, such as the {@code href} of an {@code <a>}.
  *
- * <p>El valor es una <strong>lista de nodos</strong> y no una cadena porque adentro puede haber
- * cosas que el arbol tiene que representar: una entidad HTML, un {@code {@docRoot}}. Aplanarlo a
- * texto perderia esa estructura justo donde hace falta — un {@code href} que empieza con
- * {@code {@docRoot}} es lo que hace que un enlace funcione desde cualquier profundidad.
+ * <p>The value is a <strong>list of nodes</strong> and not a string because inside it there may
+ * be things the tree has to represent: an HTML entity, a {@code {@docRoot}}. Flattening it to
+ * text would lose that structure right where it is needed -- an {@code href} that starts with
+ * {@code {@docRoot}} is what makes a link work from any depth.
  */
 public interface AttributeTree extends DocTree {
 
     /**
-     * Como estaba escrito el valor del atributo.
+     * How the attribute's value was written.
      *
-     * <p>Se conserva en vez de normalizarse porque javadoc reemite el HTML, y reemitir
-     * {@code width=5} como {@code width="5"} cambiaria lo que el autor escribio. Distinguir las
-     * comillas simples de las dobles importa por lo mismo.
+     * <p>It is kept instead of being normalized because javadoc re-emits the HTML, and re-emitting
+     * {@code width=5} as {@code width="5"} would change what the author wrote. Telling single
+     * quotes from double ones matters for the same reason.
      */
     enum ValueKind {
 
-        /** Sin valor: el atributo esta solo, como el {@code checked} de un {@code <input>}. */
+        /**
+         * With no value: the attribute is alone, like the {@code checked} of an {@code <input>}.
+         */
         EMPTY,
-        /** Con valor y sin comillas: {@code width=5}. */
+        /** With a value and no quotes: {@code width=5}. */
         UNQUOTED,
-        /** Entre comillas simples. */
+        /** Between single quotes. */
         SINGLE,
-        /** Entre comillas dobles. */
+        /** Between double quotes. */
         DOUBLE
     }
 
-    /** El nombre del atributo. */
+    /** The attribute's name. */
     Name getName();
 
-    /** Como venia escrito el valor; ver {@link ValueKind}. */
+    /** How the value came written; see {@link ValueKind}. */
     ValueKind getValueKind();
 
-    /** El valor, o {@code null} si el {@link ValueKind} es {@link ValueKind#EMPTY}. */
+    /** The value, or {@code null} if the {@link ValueKind} is {@link ValueKind#EMPTY}. */
     List<? extends DocTree> getValue();
 }

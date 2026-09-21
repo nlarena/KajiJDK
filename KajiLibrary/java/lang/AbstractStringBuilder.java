@@ -1,6 +1,7 @@
 package java.lang;
 
-// Por import y nombre simple: calificar el tipo en el uso no resuelve desde java.lang
+// Through an import and a simple name: qualifying the type at the use site does not resolve
+// from java.lang
 // (finding #210).
 import java.util.stream.IntStream;
 
@@ -24,8 +25,8 @@ import java.util.stream.IntStream;
 abstract class AbstractStringBuilder implements CharSequence, Appendable {
 
 
-    // Package-private, como en el JDK: las subclases (`StringBuilder`/`StringBuffer`) viven en
-    // `java.lang` y pueden verlos, y nadie fuera del paquete debería.
+    // Package-private, as in the JDK: the subclasses (`StringBuilder`/`StringBuffer`) live in
+    // `java.lang` and can see them, and nobody outside the package should.
     char[] value;
 
     int count;

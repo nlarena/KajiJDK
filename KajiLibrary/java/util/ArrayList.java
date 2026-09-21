@@ -24,11 +24,12 @@ public class ArrayList<E> extends AbstractList<E>
     }
 
     /**
-     * Con capacidad inicial.
+     * With an initial capacity.
      *
-     * <p>No cambia lo que la lista **hace**, solo cuanto trabaja: una lista que va a recibir mil
-     * elementos y arranca en diez se recopia unas siete veces por el camino. Es la unica razon para
-     * usarlo, y por eso el argumento es una estimacion y no un limite.
+     * <p>It does not change what the list **does**, only how much it works: a list that is going to
+     * receive a thousand elements and starts at ten recopies itself some seven times along the way.
+     * It is the only reason to use it, and that is why the argument is an estimate and not a
+     * limit.
      */
     public ArrayList(int initialCapacity) {
         if (initialCapacity < 0) {
@@ -38,7 +39,7 @@ public class ArrayList<E> extends AbstractList<E>
         this.size = 0;
     }
 
-    // Copia los elementos de otra coleccion, en el orden en que los da su iterador.
+    // It copies another collection's elements, in the order its iterator gives them.
     public ArrayList(Collection<? extends E> c) {
         Object[] a = c.toArray();
         this.elementData = a.length == 0 ? new Object[1] : a;
@@ -46,17 +47,17 @@ public class ArrayList<E> extends AbstractList<E>
     }
 
     /**
-     * Achica el arreglo de atras al tamano actual.
+     * It shrinks the array behind to the current size.
      *
-     * <p>Sirve despues de una carga grande seguida de muchos borrados: la capacidad no baja sola
-     * nunca, asi que una lista que llego a tener un millon de elementos sigue ocupando un millon de
-     * referencias aunque le queden diez.
+     * <p>It serves after a large load followed by many removals: the capacity never comes down on its
+     * own, so a list that once held a million elements goes on taking up a million references even
+     * with ten left.
      */
     public void trimToSize() {
         if (this.size < this.elementData.length) {
-            Object[] mas = new Object[this.size == 0 ? 1 : this.size];
-            System.arraycopy(this.elementData, 0, mas, 0, this.size);
-            this.elementData = mas;
+            Object[] bigger = new Object[this.size == 0 ? 1 : this.size];
+            System.arraycopy(this.elementData, 0, bigger, 0, this.size);
+            this.elementData = bigger;
         }
     }
 

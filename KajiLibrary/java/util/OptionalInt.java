@@ -58,7 +58,7 @@ public final class OptionalInt {
         }
     }
 
-    // El valor, o NoSuchElementException. Ver la nota de `Optional.orElseThrow`.
+    // The value, or NoSuchElementException. See `Optional.orElseThrow`'s note.
     public int orElseThrow() {
         if (!this.isPresent) {
             throw new NoSuchElementException("No value present");
@@ -73,7 +73,7 @@ public final class OptionalInt {
         return this.value;
     }
 
-    // El valor, o el que calcule el proveedor. Se calcula **solo** si no hay valor.
+    // The value, or the one the supplier computes. It is computed **only** if there is no value.
     public int orElseGet(IntSupplier supplier) {
         if (this.isPresent) {
             return this.value;
@@ -89,13 +89,13 @@ public final class OptionalInt {
         }
     }
 
-    // Un IntStream de cero o un elemento.
+    // An IntStream of zero or one element.
     public IntStream stream() {
         if (!this.isPresent) {
             return IntStream.of(new int[0]);
         }
-        int[] uno = new int[1];
-        uno[0] = this.value;
-        return IntStream.of(uno);
+        int[] single = new int[1];
+        single[0] = this.value;
+        return IntStream.of(single);
     }
 }

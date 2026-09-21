@@ -28,8 +28,8 @@ public interface List<E> extends Collection<E>, SequencedCollection<E> {
     /**
      * A spliterator over these elements.
      *
-     *  <p>ORDERED, que es lo unico que una lista promete y una coleccion no: el recorrido repite el
-     * orden de la lista.
+     *  <p>ORDERED, which is the one thing a list promises and a collection does not: the traversal
+     * repeats the list's order.
      *
      */
     default Spliterator<E> spliterator() {
@@ -84,9 +84,9 @@ public interface List<E> extends Collection<E>, SequencedCollection<E> {
         return remove(size() - 1);
     }
 
-    // ---- los `default` del JDK 8+ ----------------------------------------------------------
+    // ---- the JDK 8+ `default`s    ----------------------------------------------------------
 
-    // Reemplaza cada elemento por el que devuelva `operator`.
+    // It replaces each element with the one `operator` returns.
     default void replaceAll(java.util.function.UnaryOperator<E> operator) {
         int i = 0;
         while (i < this.size()) {
@@ -95,38 +95,39 @@ public interface List<E> extends Collection<E>, SequencedCollection<E> {
         }
     }
 
-    // Ordena la lista con `c`, o por orden natural si `c` es null.
+    // It sorts the list with `c`, or by natural order if `c` is null.
     //
-    // Insercion sobre `get`/`set`: el JDK vuelca a un arreglo, llama a `Arrays.sort` y reescribe.
-    // Aca `Arrays.sort(T[], Comparator)` todavia no existe, y el cuerpo de un `default` es interno
-    // — lo observable es que quede ordenada y que la ordenacion sea **estable**, que la insercion
-    // cumple porque solo mueve un elemento cuando el de la izquierda es estrictamente mayor.
+    // Insertion sort over `get`/`set`: the JDK dumps into an array, calls `Arrays.sort` and writes
+    // back. Here `Arrays.sort(T[], Comparator)` does not exist yet, and a `default`'s body is
+    // internal — what is observable is that it ends up sorted and that the sort is **stable**, which
+    // insertion satisfies because it only moves an element when the one on its left is strictly
+    // greater.
     default void sort(Comparator<? super E> c) {
         int i = 1;
         while (i < this.size()) {
-            E actual = this.get(i);
+            E current = this.get(i);
             int j = i - 1;
-            while (j >= 0 && mayor(this.get(j), actual, c)) {
+            while (j >= 0 && greaterThan(this.get(j), current, c)) {
                 this.set(j + 1, this.get(j));
                 j = j - 1;
             }
-            this.set(j + 1, actual);
+            this.set(j + 1, current);
             i = i + 1;
         }
     }
 
-    // `a > b` segun `c`, o segun el orden natural de `a` si `c` es null.
-    private static <E> boolean mayor(E a, E b, Comparator<? super E> c) {
+    // `a > b` by `c`, or by `a`'s natural order if `c` is null.
+    private static <E> boolean greaterThan(E a, E b, Comparator<? super E> c) {
         if (c == null) {
             return ((Comparable<E>) a).compareTo(b) > 0;
         }
         return c.compare(a, b) > 0;
     }
 
-    // ---- las factorias inmutables (JDK 9+) --------------------------------------------------
+    // ---- the immutable factories (JDK 9+) ---------------------------------------------------
     //
-    // Devuelven una lista **inmutable** que rechaza elementos nulos. A diferencia de `Set.of`, los
-    // repetidos si se aceptan: una lista es una secuencia, y repetir es parte de lo que es.
+    // They return an **immutable** list that rejects null elements. Unlike `Set.of`, repeats are
+    // accepted: a list is a sequence, and repeating is part of what that is.
 
     static <E> List<E> of() {
         return new FixedList<E>(new Object[0]);
@@ -135,14 +136,14 @@ public interface List<E> extends Collection<E>, SequencedCollection<E> {
     static <E> List<E> of(E e1) {
         Object[] a = new Object[1];
         a[0] = e1;
-        return new FixedList<E>(a);
+        return new FixedList<E>(FixedList.nonNull(a));
     }
 
     static <E> List<E> of(E e1, E e2) {
         Object[] a = new Object[2];
         a[0] = e1;
         a[1] = e2;
-        return new FixedList<E>(a);
+        return new FixedList<E>(FixedList.nonNull(a));
     }
 
     static <E> List<E> of(E e1, E e2, E e3) {
@@ -150,7 +151,7 @@ public interface List<E> extends Collection<E>, SequencedCollection<E> {
         a[0] = e1;
         a[1] = e2;
         a[2] = e3;
-        return new FixedList<E>(a);
+        return new FixedList<E>(FixedList.nonNull(a));
     }
 
     static <E> List<E> of(E e1, E e2, E e3, E e4) {
@@ -159,7 +160,7 @@ public interface List<E> extends Collection<E>, SequencedCollection<E> {
         a[1] = e2;
         a[2] = e3;
         a[3] = e4;
-        return new FixedList<E>(a);
+        return new FixedList<E>(FixedList.nonNull(a));
     }
 
     static <E> List<E> of(E e1, E e2, E e3, E e4, E e5) {
@@ -169,7 +170,7 @@ public interface List<E> extends Collection<E>, SequencedCollection<E> {
         a[2] = e3;
         a[3] = e4;
         a[4] = e5;
-        return new FixedList<E>(a);
+        return new FixedList<E>(FixedList.nonNull(a));
     }
 
     static <E> List<E> of(E e1, E e2, E e3, E e4, E e5, E e6) {
@@ -180,7 +181,7 @@ public interface List<E> extends Collection<E>, SequencedCollection<E> {
         a[3] = e4;
         a[4] = e5;
         a[5] = e6;
-        return new FixedList<E>(a);
+        return new FixedList<E>(FixedList.nonNull(a));
     }
 
     static <E> List<E> of(E e1, E e2, E e3, E e4, E e5, E e6, E e7) {
@@ -192,7 +193,7 @@ public interface List<E> extends Collection<E>, SequencedCollection<E> {
         a[4] = e5;
         a[5] = e6;
         a[6] = e7;
-        return new FixedList<E>(a);
+        return new FixedList<E>(FixedList.nonNull(a));
     }
 
     static <E> List<E> of(E e1, E e2, E e3, E e4, E e5, E e6, E e7, E e8) {
@@ -205,7 +206,7 @@ public interface List<E> extends Collection<E>, SequencedCollection<E> {
         a[5] = e6;
         a[6] = e7;
         a[7] = e8;
-        return new FixedList<E>(a);
+        return new FixedList<E>(FixedList.nonNull(a));
     }
 
     static <E> List<E> of(E e1, E e2, E e3, E e4, E e5, E e6, E e7, E e8, E e9) {
@@ -219,7 +220,7 @@ public interface List<E> extends Collection<E>, SequencedCollection<E> {
         a[6] = e7;
         a[7] = e8;
         a[8] = e9;
-        return new FixedList<E>(a);
+        return new FixedList<E>(FixedList.nonNull(a));
     }
 
     static <E> List<E> of(E e1, E e2, E e3, E e4, E e5, E e6, E e7, E e8, E e9, E e10) {
@@ -234,24 +235,21 @@ public interface List<E> extends Collection<E>, SequencedCollection<E> {
         a[7] = e8;
         a[8] = e9;
         a[9] = e10;
-        return new FixedList<E>(a);
+        return new FixedList<E>(FixedList.nonNull(a));
     }
 
-    // La lista de los elementos dados.
+    // The list of the given elements.
     static <E> List<E> of(E... elements) {
         Object[] a = new Object[elements.length];
         int i = 0;
         while (i < elements.length) {
-            if (elements[i] == null) {
-                throw new NullPointerException();
-            }
             a[i] = elements[i];
             i = i + 1;
         }
-        return new FixedList<E>(a);
+        return new FixedList<E>(FixedList.nonNull(a));
     }
 
-    // Una copia inmutable de `coll`, sacada en el momento: cambios posteriores no se ven.
+    // An immutable copy of `coll`, taken at the moment: later changes are not seen.
     static <E> List<E> copyOf(Collection<? extends E> coll) {
         Object[] a = new Object[coll.size()];
         int i = 0;
@@ -264,25 +262,25 @@ public interface List<E> extends Collection<E>, SequencedCollection<E> {
             a[i] = e;
             i = i + 1;
         }
-        return new FixedList<E>(a);
+        return new FixedList<E>(FixedList.nonNull(a));
     }
 
 
-    // ---- lo que List agrega sobre Collection -------------------------------------------------
+    // ---- what List adds over Collection      -------------------------------------------------
 
-    // El indice de la ULTIMA aparicion de `o`, o -1.
+    // The index of the LAST occurrence of `o`, or -1.
     int lastIndexOf(Object o);
 
-    // Un cursor bidireccional sobre esta lista, desde el principio.
+    // A two-way cursor over this list, from the start.
     ListIterator<E> listIterator();
 
-    // Un cursor bidireccional sobre esta lista, desde `index`.
+    // A two-way cursor over this list, from `index`.
     ListIterator<E> listIterator(int index);
 
-    // Una vista de la porcion [fromIndex, toIndex).
+    // A view of the portion [fromIndex, toIndex).
     List<E> subList(int fromIndex, int toIndex);
 
-    // Inserta todos los de `c` a partir de `index`.
+    // It inserts all of `c`'s from `index` on.
     boolean addAll(int index, Collection<? extends E> c);
 
 }

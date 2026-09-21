@@ -8,25 +8,25 @@ import javax.swing.event.ChangeListener;
 import javax.swing.event.EventListenerList;
 
 /**
- * La parte de {@link SpinnerModel} que es igual en todos: los oyentes.
+ * The part of {@link SpinnerModel} that is the same in all of them: the listeners.
  *
- * <h2>Un solo evento para todos</h2>
+ * <h2>A single event for everybody</h2>
  *
- * <p>{@link #fireStateChanged} arma un {@link ChangeEvent} y lo reparte. El evento no dice que
- * cambio -- solo que algo cambio --, asi que uno solo alcanza y se arma una sola vez por tanda.
- * Quien escucha vuelve a preguntar el valor.
+ * <p>{@link #fireStateChanged} builds a {@link ChangeEvent} and hands it out. The event does
+ * not say what changed -- only that something changed --, so one is enough and it is built once
+ * per round. Whoever listens asks for the value again.
  *
- * <p>Los oyentes se recorren de atras para adelante, que es el orden del JDK: el ultimo en
- * anotarse es el primero en enterarse.
+ * <p>The listeners are walked through back to front, which is the JDK's order: the last to sign
+ * up is the first to learn about it.
  */
 public abstract class AbstractSpinnerModel implements SpinnerModel, Serializable {
 
-    /** Los oyentes, por tipo. */
+    /** The listeners, by type. */
     protected EventListenerList listenerList = new EventListenerList();
 
     private transient ChangeEvent changeEvent = null;
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected AbstractSpinnerModel() {
     }
 
@@ -43,10 +43,10 @@ public abstract class AbstractSpinnerModel implements SpinnerModel, Serializable
     }
 
     /**
-     * Avisa que el valor cambio.
+     * It gives notice that the value changed.
      *
-     * <p>El evento se arma la primera vez que hace falta y se reusa: es inmutable salvo por su
-     * origen, que siempre es este modelo.
+     * <p>The event is built the first time it is needed and reused: it is immutable save for its
+     * source, which is always this model.
      */
     protected void fireStateChanged() {
         Object[] listeners = listenerList.getListenerList();
@@ -60,7 +60,7 @@ public abstract class AbstractSpinnerModel implements SpinnerModel, Serializable
         }
     }
 
-    /** Los oyentes de ese tipo anotados en este modelo. */
+    /** The listeners of that type signed up on this model. */
     public <T extends EventListener> T[] getListeners(Class<T> listenerType) {
         return listenerList.getListeners(listenerType);
     }

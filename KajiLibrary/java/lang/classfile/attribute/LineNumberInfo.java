@@ -2,17 +2,17 @@ package java.lang.classfile.attribute;
 
 import jdk.internal.classfile.impl.TypedAttributes;
 
-// Una fila de `LineNumberTable` (JVMS §4.7.12): desde el bci `startPc()`, el código viene de la
-// línea `lineNumber()`. La tabla no tiene por qué estar ordenada ni cubrir todo el método.
+// A row of `LineNumberTable` (JVMS §4.7.12): from bci `startPc()` on, the code comes from line
+// `lineNumber()`. The table need not be sorted nor cover the whole method.
 public interface LineNumberInfo {
 
-    /** El bci donde empieza el tramo. */
+    /** The bci where the stretch starts. */
     int startPc();
 
-    /** El número de línea del fuente. */
+    /** The source line number. */
     int lineNumber();
 
-    /** La fila con estos valores. */
+    /** The row with these values. */
     public static LineNumberInfo of(int startPc, int lineNumber) {
         return TypedAttributes.lineNumberInfo(startPc, lineNumber);
     }

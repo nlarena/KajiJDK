@@ -8,54 +8,54 @@ import java.util.Hashtable;
 import java.util.Vector;
 
 /**
- * La descripcion de un lenguaje de marcas: que elementos hay y como se anidan.
+ * The description of a markup language: which elements there are and how they nest.
  *
- * <h2>Para que sirve tener una DTD</h2>
+ * <h2>What having a DTD is for</h2>
  *
- * <p>El HTML que se escribe de verdad esta lleno de etiquetas sin cerrar y de anidamientos que no
- * se declararon. Un analizador que solo mirara las etiquetas escritas no podria armar un arbol.
- * Este si, porque tiene la DTD: sabe que un <code>&lt;p&gt;</code> cierra al anterior, que un
- * <code>&lt;li&gt;</code> va adentro de una lista aunque no se haya abierto, y que dentro de un
- * <code>&lt;a&gt;</code> no puede haber otro.
+ * <p>The HTML that is really written is full of unclosed tags and of nestings that were not
+ * declared. A parser that only looked at the written tags could not build a tree. This one can,
+ * because it has the DTD: it knows that a <code>&lt;p&gt;</code> closes the previous one, that a
+ * <code>&lt;li&gt;</code> goes inside a list even if none was opened, and that inside an
+ * <code>&lt;a&gt;</code> there cannot be another.
  *
- * <h2>Los once elementos que son campos</h2>
+ * <h2>The eleven elements that are fields</h2>
  *
- * <p>{@link #html}, {@link #head}, {@link #body} y los demas estan como campos finales porque el
- * analizador los necesita a cada paso y buscarlos por nombre en cada decision seria caro. No son
- * mas importantes que los otros: son los que se consultan seguido.
+ * <p>{@link #html}, {@link #head}, {@link #body} and the others are final fields because the
+ * parser needs them at every step and looking them up by name on every decision would be
+ * expensive. They are no more important than the others: they are the ones consulted often.
  *
- * <p>El primero, {@link #pcdata}, no es una etiqueta: es el texto suelto. Que sea un elemento como
- * cualquier otro es lo que permite escribir en un modelo de contenido que un parrafo lleva texto,
- * sin ningun caso especial.
+ * <p>The first, {@link #pcdata}, is not a tag: it is loose text. That it is an element like any
+ * other is what allows writing in a content model that a paragraph carries text, with no special
+ * case.
  *
- * <h2>Como se llena</h2>
+ * <h2>How it is filled</h2>
  *
- * <p>Con los metodos {@code define...} y {@code def...}, o leyendo el formato binario con
- * {@link #read}. Los {@code def...} protegidos son los que usa {@link #read}; los
- * {@code define...} publicos son para armarla a mano. La diferencia es que los primeros aceptan
- * nombres y los segundos objetos ya armados.
+ * <p>With the {@code define...} and {@code def...} methods, or by reading the binary format with
+ * {@link #read}. The protected {@code def...} ones are what {@link #read} uses; the public
+ * {@code define...} ones are for building it by hand. The difference is that the first take
+ * names and the second objects that are already built.
  */
 public class DTD implements DTDConstants {
 
-    /** El nombre de la DTD, por ejemplo {@code html32}. */
+    /** The DTD's name, for instance {@code html32}. */
     public String name;
 
-    /** Los elementos, indexados por su {@link Element#index}. */
+    /** The elements, indexed by their {@link Element#index}. */
     public Vector<Element> elements = new Vector<Element>();
 
-    /** Los elementos por nombre. */
+    /** The elements by name. */
     public Hashtable<String, Element> elementHash = new Hashtable<String, Element>();
 
     /**
-     * Las entidades, por nombre y por numero de caracter.
+     * The entities, by name and by character number.
      *
-     * <p>Las claves son de dos tipos a proposito: una cadena para <code>&amp;amp;</code> y un
-     * {@link Integer} para <code>&amp;#38;</code>. Dos tablas separadas serian mas prolijas y
-     * obligarian a preguntar dos veces en cada busqueda.
+     * <p>The keys are of two kinds on purpose: a string for <code>&amp;amp;</code> and an
+     * {@link Integer} for <code>&amp;#38;</code>. Two separate tables would be tidier and would
+     * force asking twice on every lookup.
      */
     public Hashtable<Object, Entity> entityHash = new Hashtable<Object, Entity>();
 
-    /** El texto suelto; ver la nota de la clase. */
+    /** Loose text; see the class note. */
     public final Element pcdata = getElement("#pcdata");
 
     public final Element html = getElement("html");
@@ -70,12 +70,12 @@ public class DTD implements DTDConstants {
     public final Element title = getElement("title");
 
     /**
-     * Cuatro mas que el analizador consulta seguido, sin documentar en el JDK.
+     * Four more that the parser consults often, undocumented in the JDK.
      *
-     * <p>Estan aca por el mismo motivo que los publicos. Pero ademas importa <em>cuando</em> se
-     * crean: {@link #getElement(String)} le da a cada elemento nuevo el numero que sigue, asi que
-     * crearlos en el constructor les reserva los indices 11 a 14. Un {@link BitSet} de exclusiones
-     * guardado con una numeracion y leido con otra apuntaria a los elementos equivocados.
+     * <p>They are here for the same reason as the public ones. But besides, <em>when</em> they are
+     * created matters: {@link #getElement(String)} gives each new element the next number, so
+     * creating them in the constructor reserves indices 11 to 14 for them. A {@link BitSet} of
+     * exclusions stored with one numbering and read with another would point at the wrong elements.
      */
     final Element style = getElement("style");
 
@@ -87,12 +87,12 @@ public class DTD implements DTDConstants {
 
     Element html32title = getElement("title");
 
-    /** La version del formato binario que entiende {@link #read}. */
+    /** The version of the binary format {@link #read} understands. */
     public static final int FILE_VERSION = 1;
 
     private static final Hashtable<String, DTD> dtdHash = new Hashtable<String, DTD>();
 
-    /** Una DTD vacia con ese nombre. */
+    /** An empty DTD with that name. */
     protected DTD(String name) {
         this.name = name;
     }
@@ -101,23 +101,23 @@ public class DTD implements DTDConstants {
         return name;
     }
 
-    /** La entidad con ese nombre, o nulo. */
+    /** The entity with that name, or null. */
     public Entity getEntity(String name) {
         return entityHash.get(name);
     }
 
-    /** La entidad de ese caracter, o nulo; ver la nota de {@link #entityHash}. */
+    /** That character's entity, or null; see {@link #entityHash}'s note. */
     public Entity getEntity(int ch) {
         return entityHash.get(Integer.valueOf(ch));
     }
 
     /**
-     * El elemento con ese nombre, creandolo si no existe.
+     * The element with that name, creating it if it does not exist.
      *
-     * <p>Crear en lugar de devolver nulo es a proposito y es lo que hace que se pueda declarar un
-     * modelo de contenido que nombre un elemento antes de declararlo. Cuando llegue su declaracion,
-     * {@link #defineElement} la va a completar sobre el mismo objeto, y los modelos que ya lo
-     * apuntaban van a quedar bien.
+     * <p>Creating instead of returning null is on purpose and it is what makes it possible to
+     * declare a content model that names an element before declaring it. When its declaration
+     * arrives, {@link #defineElement} will complete it over the same object, and the models that
+     * already pointed at it will be right.
      */
     public Element getElement(String name) {
         Element e = elementHash.get(name);
@@ -129,35 +129,36 @@ public class DTD implements DTDConstants {
         return e;
     }
 
-    /** El elemento con ese numero. */
+    /** The element with that number. */
     public Element getElement(int index) {
         return elements.elementAt(index);
     }
 
     /**
-     * Declara una entidad.
+     * Declares an entity.
      *
-     * <p>Si ya estaba declarada no se toca: en una DTD, la primera declaracion gana, y es lo que
-     * permite que un documento redefina una entidad antes de incluir la DTD general.
+     * <p>If it was already declared it is not touched: in a DTD, the first declaration wins, and it
+     * is what allows a document to redefine an entity before including the general DTD.
      */
     public Entity defineEntity(String name, int type, char[] data) {
         Entity ent = entityHash.get(name);
         if (ent == null) {
             ent = new Entity(name, type, data);
             entityHash.put(name, ent);
-            // Una entidad general de un solo caracter se indexa tambien por ese caracter, para
-            // que `&#38;` encuentre lo mismo que `&amp;`. Un `switch` no compila: las constantes
-            // vienen de un `.class` y todavia no se pliegan en un `case` (hallazgo #503).
-            int clase = type & 0xFFFF;
+            // A general entity of a single character is also indexed by that character, so that
+                        // `&#38;` finds the same as `&amp;`. A `switch` does not compile: the
+                        // constants come from a `.class` and are not folded into a `case` yet
+                        // (finding #503).
+            int cls = type & 0xFFFF;
             if (((type & GENERAL) != 0) && (data.length == 1)
-                    && (clase == CDATA || clase == SDATA)) {
+                    && (cls == CDATA || cls == SDATA)) {
                 entityHash.put(Integer.valueOf(data[0]), ent);
             }
         }
         return ent;
     }
 
-    /** Declara un elemento, o completa el que ya se habia creado por nombre. */
+    /** Declares an element, or completes the one already created by name. */
     public Element defineElement(String name, int type, boolean omitStart, boolean omitEnd,
             ContentModel content, BitSet exclusions, BitSet inclusions, AttributeList atts) {
         Element e = getElement(name);
@@ -172,22 +173,23 @@ public class DTD implements DTDConstants {
     }
 
     /**
-     * Agrega atributos a un elemento.
+     * Adds attributes to an element.
      *
-     * <p>Los que ya estaban ganan: una segunda declaracion del mismo atributo no lo pisa.
+     * <p>Those already there win: a second declaration of the same attribute does not overwrite
+     * it.
      */
     public void defineAttributes(String name, AttributeList atts) {
         Element e = getElement(name);
         e.atts = atts;
     }
 
-    /** Declara una entidad de un solo caracter. */
+    /** Declares an entity of a single character. */
     public Entity defEntity(String name, int type, int ch) {
         char[] data = {(char) ch};
         return defineEntity(name, type, data);
     }
 
-    /** Declara una entidad cuyo contenido es ese texto. */
+    /** Declares an entity whose content is that text. */
     protected Entity defEntity(String name, int type, String str) {
         int len = str.length();
         char[] data = new char[len];
@@ -195,7 +197,7 @@ public class DTD implements DTDConstants {
         return defineEntity(name, type, data);
     }
 
-    /** Declara un elemento nombrando sus exclusiones e inclusiones. */
+    /** Declares an element naming its exclusions and inclusions. */
     protected Element defElement(String name, int type, boolean omitStart, boolean omitEnd,
             ContentModel content, String[] exclusions, String[] inclusions, AttributeList atts) {
         BitSet excl = null;
@@ -221,7 +223,7 @@ public class DTD implements DTDConstants {
         return defineElement(name, type, omitStart, omitEnd, content, excl, incl, atts);
     }
 
-    /** Arma un atributo y lo encadena adelante del que se le pase. */
+    /** Builds an attribute and chains it in front of the one passed in. */
     protected AttributeList defAttributeList(String name, int type, int modifier, String value,
             String values, AttributeList atts) {
         Vector<String> vals = null;
@@ -238,7 +240,7 @@ public class DTD implements DTDConstants {
         return new AttributeList(name, type, modifier, value, vals, atts);
     }
 
-    /** Arma un modelo de contenido. */
+    /** Builds a content model. */
     protected ContentModel defContentModel(int type, Object obj, ContentModel next) {
         return new ContentModel(type, obj, next);
     }
@@ -247,16 +249,16 @@ public class DTD implements DTDConstants {
         return name;
     }
 
-    /** Guarda una DTD con ese nombre para que {@link #getDTD} la encuentre. */
+    /** Stores a DTD under that name so that {@link #getDTD} finds it. */
     public static void putDTDHash(String name, DTD dtd) {
         dtdHash.put(name, dtd);
     }
 
     /**
-     * La DTD con ese nombre, creandola vacia si no estaba.
+     * The DTD with that name, creating it empty if it was not there.
      *
-     * <p>El nombre se pasa a minusculas antes de buscar. Devolver una DTD vacia en lugar de fallar
-     * es lo que hace el JDK, y es lo que permite armarla despues sobre el objeto devuelto.
+     * <p>The name is lowercased before looking up. Returning an empty DTD instead of failing is
+     * what the JDK does, and it is what allows building it afterwards over the returned object.
      */
     public static DTD getDTD(String name) throws IOException {
         String lower = name.toLowerCase(java.util.Locale.ROOT);
@@ -268,27 +270,27 @@ public class DTD implements DTDConstants {
     }
 
     /**
-     * Lee una DTD del formato binario.
+     * Reads a DTD from the binary format.
      *
-     * <p>El formato guarda todos los nombres una sola vez en una tabla al principio y despues los
-     * nombra por su numero. Es lo que hace que una DTD de HTML entre en veinte kilobytes: los
-     * mismos cien nombres aparecen miles de veces.
+     * <p>The format stores every name once in a table at the start and afterwards names them by
+     * their number. It is what makes an HTML DTD fit in twenty kilobytes: the same hundred names
+     * appear thousands of times.
      *
-     * @throws IOException si la version no es {@link #FILE_VERSION} o el archivo esta cortado.
+     * @throws IOException if the version is not {@link #FILE_VERSION} or the file is truncated.
      */
     public void read(DataInputStream in) throws IOException {
         if (in.readInt() != FILE_VERSION) {
             throw new IOException("version mismatch");
         }
 
-        // La tabla de nombres.
+        // The name table.
         short numNames = in.readShort();
         String[] names = new String[numNames];
         for (int i = 0; i < numNames; i++) {
             names[i] = in.readUTF();
         }
 
-        // Las entidades.
+        // The entities.
         short numEntities = in.readShort();
         for (int i = 0; i < numEntities; i++) {
             short nameId = in.readShort();
@@ -297,7 +299,7 @@ public class DTD implements DTDConstants {
             defEntity(names[nameId], type | GENERAL, name);
         }
 
-        // Los elementos.
+        // The elements.
         short numElements = in.readShort();
         for (int i = 0; i < numElements; i++) {
             short nameId = in.readShort();
@@ -313,10 +315,10 @@ public class DTD implements DTDConstants {
     }
 
     /**
-     * Un modelo de contenido, en el orden en que se escribio.
+     * A content model, in the order it was written.
      *
-     * <p>El byte de arranque dice de que se trata: cero es el fin, uno un operador con otro modelo
-     * adentro, dos una hoja que nombra un elemento.
+     * <p>The starting byte says what it is about: zero is the end, one an operator with another
+     * model inside, two a leaf that names an element.
      */
     private ContentModel readContentModel(DataInputStream in, String[] names) throws IOException {
         byte nodeType = in.readByte();
@@ -340,7 +342,7 @@ public class DTD implements DTDConstants {
         }
     }
 
-    /** Una lista de nombres; vacia se guarda como cero y se lee como nulo. */
+    /** A list of names; empty is stored as zero and read as null. */
     private String[] readNameArray(DataInputStream in, String[] names) throws IOException {
         short numNames = in.readShort();
         if (numNames == 0) {
@@ -354,10 +356,10 @@ public class DTD implements DTDConstants {
     }
 
     /**
-     * La lista de atributos de un elemento.
+     * An element's attribute list.
      *
-     * <p>Se arma encadenando cada uno adelante del anterior, asi que la lista queda al reves del
-     * archivo. Es lo que hace el JDK y lo que esperan los que la recorren.
+     * <p>It is built by chaining each one in front of the previous, so the list ends up the
+     * reverse of the file. It is what the JDK does and what those who walk it expect.
      */
     private AttributeList readAttributeList(DataInputStream in, String[] names)
             throws IOException {

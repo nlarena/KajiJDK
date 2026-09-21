@@ -9,32 +9,32 @@ import java.util.EventListener;
 import javax.swing.event.EventListenerList;
 
 /**
- * Dispara un {@link ActionEvent} cada tantos milisegundos, en el hilo de eventos.
+ * It fires an {@link ActionEvent} every so many milliseconds, on the event thread.
  *
- * <h2>Por que en el hilo de eventos</h2>
+ * <h2>Why on the event thread</h2>
  *
- * <p>Un reloj que avisa desde su propio hilo obliga a quien escucha a sincronizar todo lo que
- * toca. Este encola el aviso en la cola de eventos, asi que el escucha corre donde corre el resto
- * de la interfaz y puede tocar componentes sin cuidados. Es la diferencia con
- * {@code java.util.Timer}, y la razon de que exista este.
+ * <p>A timer that gives notice from its own thread forces whoever listens to synchronize
+ * everything it touches. This one queues the notice on the event queue, so the listener runs
+ * where the rest of the interface runs and may touch components without care. It is the
+ * difference with {@code java.util.Timer}, and the reason this one exists.
  *
- * <h2>Un hilo por reloj</h2>
+ * <h2>One thread per timer</h2>
  *
- * <p>El JDK tiene una cola compartida con un solo hilo para todos los relojes. Aca cada reloj
- * andando tiene el suyo, que duerme y encola. Se nota si alguien crea cientos; para los pocos que
- * usa una interfaz —el parpadeo de un cursor, una animacion— da igual, y el codigo es una decima
- * parte.
+ * <p>The JDK has a shared queue with a single thread for every timer. Here each running timer
+ * has its own, which sleeps and queues. It shows if somebody creates hundreds; for the few an
+ * interface uses -- a caret's blink, an animation -- it makes no difference, and the code is a
+ * tenth of the size.
  *
- * <p>{@link #setCoalesce} junta los avisos atrasados en uno: si la interfaz estuvo ocupada mas de
- * un periodo, no tiene sentido despachar cinco avisos seguidos de un parpadeo.
+ * <p>{@link #setCoalesce} gathers the late notices into one: if the interface was busy for more
+ * than a period, there is no point in dispatching five notices of a blink in a row.
  */
 public class Timer implements Serializable {
 
     protected EventListenerList listenerList = new EventListenerList();
 
-    private transient volatile boolean corriendo;
-    private transient Thread hilo;
-    private transient volatile boolean pendiente;
+    private transient volatile boolean running;
+    private transient Thread thread;
+    private transient volatile boolean pending;
 
     private int initialDelay;
     private int delay;
@@ -44,7 +44,7 @@ public class Timer implements Serializable {
 
     private static boolean logTimers;
 
-    /** Un reloj de ese periodo, con ese escucha si no es {@code null}. */
+    /** A timer of that period, with that listener if it is not {@code null}. */
     public Timer(int delay, ActionListener listener) {
         this.delay = delay;
         this.initialDelay = delay;
@@ -65,7 +65,7 @@ public class Timer implements Serializable {
         return listenerList.getListeners(ActionListener.class);
     }
 
-    /** Avisa a los escuchas; corre en el hilo de eventos. */
+    /** It gives notice to the listeners; it runs on the event thread. */
     protected void fireActionPerformed(ActionEvent e) {
         Object[] listeners = listenerList.getListenerList();
         for (int i = listeners.length - 2; i >= 0; i = i - 2) {
@@ -79,7 +79,7 @@ public class Timer implements Serializable {
         return listenerList.getListeners(listenerType);
     }
 
-    /** Enciende el registro de relojes; en esta VM no escribe nada. */
+    /** It switches the timer log on; on this VM it writes nothing. */
     public static void setLogTimers(boolean flag) {
         logTimers = flag;
     }
@@ -99,7 +99,7 @@ public class Timer implements Serializable {
         return delay;
     }
 
-    /** Cuanto espera antes del primer aviso; por omision, lo mismo que entre avisos. */
+    /** How long it waits before the first notice; by default, the same as between notices. */
     public void setInitialDelay(int initialDelay) {
         if (initialDelay < 0) {
             throw new IllegalArgumentException("Invalid initial delay: " + initialDelay);
@@ -111,7 +111,7 @@ public class Timer implements Serializable {
         return initialDelay;
     }
 
-    /** Si avisa una sola vez o para siempre. */
+    /** Whether it gives notice once or for ever. */
     public void setRepeats(boolean flag) {
         repeats = flag;
     }
@@ -120,7 +120,7 @@ public class Timer implements Serializable {
         return repeats;
     }
 
-    /** Si junta los avisos atrasados en uno; ver la nota de la clase. */
+    /** Whether it gathers the late notices into one; see the class note. */
     public void setCoalesce(boolean flag) {
         coalesce = flag;
     }
@@ -137,91 +137,93 @@ public class Timer implements Serializable {
         return actionCommand;
     }
 
-    /** Arranca; si ya estaba andando no hace nada. */
+    /** It starts; if it was already running it does nothing. */
     public void start() {
-        if (corriendo) {
+        if (running) {
             return;
         }
-        corriendo = true;
-        pendiente = false;
-        hilo = new Thread(new Latido(this));
-        hilo.setDaemon(true);
-        hilo.start();
+        running = true;
+        pending = false;
+        thread = new Thread(new Tick(this));
+        thread.setDaemon(true);
+        thread.start();
     }
 
     public boolean isRunning() {
-        return corriendo;
+        return running;
     }
 
-    /** Para; un aviso ya encolado puede llegar igual. */
+    /** It stops; a notice already queued may arrive all the same. */
     public void stop() {
-        corriendo = false;
-        Thread t = hilo;
-        hilo = null;
+        running = false;
+        Thread t = thread;
+        thread = null;
         if (t != null) {
             t.interrupt();
         }
     }
 
-    /** Para y arranca de nuevo, con la espera inicial otra vez. */
+    /** It stops and starts again, with the initial wait once more. */
     public void restart() {
         stop();
         start();
     }
 
-    /** Descarta el aviso encolado que todavia no se despacho. */
+    /** It discards the queued notice that has not been dispatched yet. */
     void cancelEvent() {
-        pendiente = false;
+        pending = false;
     }
 
-    /** Encola un aviso, salvo que ya haya uno esperando y se junten. */
+    /** It queues a notice, unless there is already one waiting and they are gathered. */
     void post() {
-        if (pendiente && coalesce) {
+        if (pending && coalesce) {
             return;
         }
-        pendiente = true;
-        EventQueue.invokeLater(new Aviso(this));
+        pending = true;
+        EventQueue.invokeLater(new PostEvent(this));
     }
 
-    /** El hilo que duerme y encola; uno por reloj andando. */
-    private static class Latido implements Runnable {
+    /** The thread that sleeps and queues; one per running timer. */
+    private static class Tick implements Runnable {
 
-        private final Timer reloj;
+        private final Timer timer;
 
-        Latido(Timer reloj) {
-            this.reloj = reloj;
+        Tick(Timer timer) {
+            this.timer = timer;
         }
 
         public void run() {
             try {
-                Thread.sleep(reloj.getInitialDelay());
-                while (reloj.isRunning()) {
-                    reloj.post();
-                    if (!reloj.isRepeats()) {
-                        reloj.corriendo = false;
+                // The constructor takes a negative delay without checking (so does the JDK's), and
+                // it means "fire now"; `Thread.sleep` would reject it (finding #296).
+                Thread.sleep(Math.max(0, timer.getInitialDelay()));
+                while (timer.isRunning()) {
+                    timer.post();
+                    if (!timer.isRepeats()) {
+                        timer.running = false;
                         return;
                     }
-                    Thread.sleep(Math.max(1, reloj.getDelay()));
+                    Thread.sleep(Math.max(1, timer.getDelay()));
                 }
             } catch (InterruptedException e) {
-                // Lo pararon: no es un error.
+                // It was stopped: it is not an error.
             }
         }
     }
 
-    /** El aviso que corre en el hilo de eventos. */
-    private static class Aviso implements Runnable {
+    /** The notice that runs on the event thread. */
+    private static class PostEvent implements Runnable {
 
-        private final Timer reloj;
+        private final Timer timer;
 
-        Aviso(Timer reloj) {
-            this.reloj = reloj;
+        PostEvent(Timer timer) {
+            this.timer = timer;
         }
 
         public void run() {
-            reloj.pendiente = false;
-            reloj.fireActionPerformed(new ActionEvent(reloj, ActionEvent.ACTION_PERFORMED,
-                    reloj.getActionCommand(), System.currentTimeMillis(), 0));
+            timer.pending = false;
+            timer.fireActionPerformed(new ActionEvent(timer, ActionEvent.ACTION_PERFORMED,
+                    timer.getActionCommand(), System.currentTimeMillis(), 0));
         }
     }
 }

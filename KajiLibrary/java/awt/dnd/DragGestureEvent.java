@@ -12,14 +12,15 @@ import java.util.Iterator;
 import java.util.List;
 
 /**
- * El usuario hizo el gesto de empezar a arrastrar.
+ * The user made the gesture of starting to drag.
  *
- * <p>Trae **todos** los eventos del gesto, no sólo el último: el apretón de botón y los movimientos
- * que hicieron falta para reconocerlo. Sirve para decidir qué se está arrastrando a partir de dónde
- * arrancó el gesto, que no es donde está el puntero ahora.
+ * <p>It brings **all** the events of the gesture, not only the last one: the press of the button
+ * and the movements that were needed to recognise it. It serves for deciding what is being dragged
+ * from where the gesture started, which is not where the pointer is now.
  *
- * <p>Los {@code startDrag} de acá son el atajo cómodo: le pasan todo al {@link DragSource} con este
- * evento como disparador, para no tener que repetir los datos que el evento ya tiene.
+ * <p>The {@code startDrag}s here are the comfortable shortcut: they pass everything on to the
+ * {@link DragSource} with this event as the trigger, so as not to have to repeat the data the event
+ * already has.
  */
 public class DragGestureEvent extends EventObject {
 
@@ -32,10 +33,10 @@ public class DragGestureEvent extends EventObject {
     private final int action;
 
     /**
-     * Con el reconocedor, la acción, el origen y los eventos del gesto.
+     * With the recogniser, the action, the source and the events of the gesture.
      *
-     * @throws IllegalArgumentException si falta el reconocedor, su componente o su origen de
-     *     arrastre, si el punto o la lista son `null`, o si la acción no es una de las de
+     * @throws IllegalArgumentException if the recogniser, its component or its drag source is
+     *     missing, if the point or the list is `null`, or if the action is not one of those of
      *     {@link DnDConstants}
      */
     public DragGestureEvent(DragGestureRecognizer dgr, int act, Point ori,
@@ -64,59 +65,59 @@ public class DragGestureEvent extends EventObject {
         this.origin = ori;
     }
 
-    /** El reconocedor que lo disparó. */
+    /** The recogniser that fired it. */
     public DragGestureRecognizer getSourceAsDragGestureRecognizer() {
         return (DragGestureRecognizer) this.getSource();
     }
 
-    /** Sobre qué componente se hizo el gesto. */
+    /** Over which component the gesture was made. */
     public Component getComponent() {
         return this.component;
     }
 
-    /** Quién va a llevar adelante el arrastre. */
+    /** Who is going to carry the drag through. */
     public DragSource getDragSource() {
         return this.dragSource;
     }
 
-    /** Dónde arrancó el gesto, relativo al componente. */
+    /** Where the gesture started, relative to the component. */
     public Point getDragOrigin() {
         return this.origin;
     }
 
-    /** Todos los eventos que formaron el gesto, en orden. */
+    /** All the events that made up the gesture, in order. */
     public Iterator<InputEvent> iterator() {
         return this.events.iterator();
     }
 
-    /** Los eventos del gesto, como arreglo. */
+    /** The events of the gesture, as an array. */
     public Object[] toArray() {
         return this.events.toArray();
     }
 
     /**
-     * Los eventos del gesto, en el arreglo dado.
+     * The events of the gesture, in the given array.
      *
-     * @throws ArrayStoreException si el tipo del arreglo no acepta eventos de entrada
+     * @throws ArrayStoreException if the type of the array does not accept input events
      */
     public Object[] toArray(Object[] array) {
         return this.events.toArray(array);
     }
 
-    /** Qué acción pide el usuario. */
+    /** Which action the user asks for. */
     public int getDragAction() {
         return this.action;
     }
 
-    /** El primer evento del gesto: el que lo empezó. */
+    /** The first event of the gesture: the one that started it. */
     public InputEvent getTriggerEvent() {
         return this.getSourceAsDragGestureRecognizer().getTriggerEvent();
     }
 
     /**
-     * Arranca el arrastre.
+     * Starts the drag.
      *
-     * @throws InvalidDnDOperationException si el arrastre no se puede empezar
+     * @throws InvalidDnDOperationException if the drag cannot be started
      */
     public void startDrag(Cursor dragCursor, Transferable transferable)
             throws InvalidDnDOperationException {
@@ -124,9 +125,9 @@ public class DragGestureEvent extends EventObject {
     }
 
     /**
-     * Arranca el arrastre con un oyente que siga su evolución.
+     * Starts the drag with a listener that follows how it goes.
      *
-     * @throws InvalidDnDOperationException si el arrastre no se puede empezar
+     * @throws InvalidDnDOperationException if the drag cannot be started
      */
     public void startDrag(Cursor dragCursor, Transferable transferable, DragSourceListener dsl)
             throws InvalidDnDOperationException {
@@ -134,9 +135,9 @@ public class DragGestureEvent extends EventObject {
     }
 
     /**
-     * Arranca el arrastre con una imagen que sigue al puntero.
+     * Starts the drag with an image that follows the pointer.
      *
-     * @throws InvalidDnDOperationException si el arrastre no se puede empezar
+     * @throws InvalidDnDOperationException if the drag cannot be started
      */
     public void startDrag(Cursor dragCursor, Image dragImage, Point imageOffset,
             Transferable transferable, DragSourceListener dsl)

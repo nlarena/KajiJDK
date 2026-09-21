@@ -8,20 +8,19 @@ import javax.swing.event.ChangeListener;
 import javax.swing.event.EventListenerList;
 
 /**
- * El modelo de rango de siempre: cuatro numeros, una lista de escuchas y una sola puerta de
- * escritura.
+ * The usual range model: four numbers, a list of listeners and a single writing door.
  *
- * <p>Todos los {@code set} pasan por {@link #setRangeProperties}, que es donde se acomodan los
- * numeros para que se cumpla la regla de {@link BoundedRangeModel} y donde se decide si hubo
- * cambio. Tener una sola puerta es lo que garantiza que nunca se avise dos veces por un solo
- * cambio, ni se avise por uno que no ocurrio.
+ * <p>Every {@code set} goes through {@link #setRangeProperties}, which is where the numbers are
+ * settled so that {@link BoundedRangeModel}'s rule holds and where it is decided whether there
+ * was a change. Having a single door is what guarantees that notice is never given twice for a
+ * single change, nor given for one that did not happen.
  *
- * <p>Las sumas de valor y extension se hacen en {@code long}: una extension de
- * {@code Integer.MAX_VALUE} es legal, y sumada al valor desbordaria.
+ * <p>The sums of value and extent are done in {@code long}: an extent of
+ * {@code Integer.MAX_VALUE} is legal, and added to the value it would overflow.
  */
 public class DefaultBoundedRangeModel implements BoundedRangeModel, Serializable {
 
-    /** El evento de cambio, creado una vez: no lleva nada mas que el origen. */
+    /** The change event, created once: it carries nothing but the source. */
     protected transient ChangeEvent changeEvent = null;
 
     protected EventListenerList listenerList = new EventListenerList();
@@ -32,11 +31,11 @@ public class DefaultBoundedRangeModel implements BoundedRangeModel, Serializable
     private int max = 100;
     private boolean isAdjusting = false;
 
-    /** Un modelo de 0 a 100, en cero y sin extension. */
+    /** A model from 0 to 100, at zero and with no extent. */
     public DefaultBoundedRangeModel() {
     }
 
-    /** Un modelo con esos numeros; los que rompen la regla son un error de programa. */
+    /** A model with those numbers; ones that break the rule are a mistake of the program. */
     public DefaultBoundedRangeModel(int value, int extent, int min, int max) {
         if ((max >= min) && (value >= min) && ((value + extent) >= value)
                 && ((value + extent) <= max)) {
@@ -65,7 +64,7 @@ public class DefaultBoundedRangeModel implements BoundedRangeModel, Serializable
         return max;
     }
 
-    /** Pone el valor, acomodandolo para que entre con su extension. */
+    /** It sets the value, settling it so that it fits with its extent. */
     public void setValue(int n) {
         n = Math.min(n, Integer.MAX_VALUE - extent);
 
@@ -76,7 +75,7 @@ public class DefaultBoundedRangeModel implements BoundedRangeModel, Serializable
         setRangeProperties(newValue, extent, min, max, isAdjusting);
     }
 
-    /** Pone la extension; si no entra, se recorta contra el maximo. */
+    /** It sets the extent; if it does not fit, it is clipped against the maximum. */
     public void setExtent(int n) {
         int newExtent = Math.max(0, n);
         if (value + newExtent > max) {
@@ -85,7 +84,7 @@ public class DefaultBoundedRangeModel implements BoundedRangeModel, Serializable
         setRangeProperties(value, newExtent, min, max, isAdjusting);
     }
 
-    /** Pone el minimo, arrastrando valor, extension y maximo si hace falta. */
+    /** It sets the minimum, dragging value, extent and maximum along if needed. */
     public void setMinimum(int n) {
         int newMax = Math.max(n, max);
         int newValue = Math.max(n, value);
@@ -93,7 +92,7 @@ public class DefaultBoundedRangeModel implements BoundedRangeModel, Serializable
         setRangeProperties(newValue, newExtent, n, newMax, isAdjusting);
     }
 
-    /** Pone el maximo, achicando primero la extension y despues el valor. */
+    /** It sets the maximum, shrinking the extent first and the value afterwards. */
     public void setMaximum(int n) {
         int newMin = Math.min(n, min);
         int newExtent = Math.min(n - newMin, extent);
@@ -109,7 +108,7 @@ public class DefaultBoundedRangeModel implements BoundedRangeModel, Serializable
         return isAdjusting;
     }
 
-    /** La unica puerta de escritura; ver la nota de la clase. */
+    /** The single writing door; see the class note. */
     public void setRangeProperties(int newValue, int newExtent, int newMin, int newMax,
             boolean adjusting) {
         if (newMin > newMax) {
@@ -122,7 +121,7 @@ public class DefaultBoundedRangeModel implements BoundedRangeModel, Serializable
             newMin = newValue;
         }
 
-        // En long: una extension de Integer.MAX_VALUE sumada al valor desbordaria.
+        // In long: an extent of Integer.MAX_VALUE added to the value would overflow.
         if (((long) newExtent + (long) newValue) > newMax) {
             newExtent = newMax - newValue;
         }

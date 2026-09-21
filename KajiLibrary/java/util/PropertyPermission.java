@@ -4,41 +4,41 @@ import java.security.BasicPermission;
 import java.security.Permission;
 import java.security.PermissionCollection;
 
-// El permiso de leer o escribir una propiedad del sistema.
+// The permission to read or write a system property.
 //
-// Hereda de `BasicPermission` los nombres jerarquicos con comodin —`"java.*"` cubre `"java.home"`
-// y `"java.version"`— y le agrega lo unico que `BasicPermission` no tiene: **acciones**. Un
-// permiso de propiedad no es solo "sobre cual", es "para que".
+// It inherits from `BasicPermission` the hierarchical names with a wildcard —`"java.*"` covers
+// `"java.home"` and `"java.version"`— and adds the one thing `BasicPermission` does not have:
+// **actions**. A property permission is not just "over which", it is "for what".
 //
-// Las acciones son `read` y `write`, separadas por coma, sin distinguir mayusculas y en cualquier
-// orden. `getActions()` las devuelve **canonicas** —siempre `"read,write"` en ese orden— porque
-// dos permisos que dicen lo mismo tienen que ser iguales y tener el mismo hash; si el texto
-// original sobreviviera, `"write,read"` y `"read,write"` serian permisos distintos que implican
-// exactamente lo mismo.
+// The actions are `read` and `write`, comma-separated, case-insensitive and in any order.
+// `getActions()` returns them **canonical** —always `"read,write"` in that order— because two
+// permissions that say the same thing have to be equal and have the same hash; if the original text
+// survived, `"write,read"` and `"read,write"` would be different permissions implying exactly the
+// same thing.
 //
-// Nota sobre el estado del modelo: desde JDK 24 el SecurityManager esta permanentemente
-// deshabilitado, asi que esta clase ya no gobierna el acceso a `System.getProperty`. Se
-// implementa porque es contrato.
+// A note on the state of the model: since JDK 24 the SecurityManager is permanently disabled, so this
+// class no longer governs access to `System.getProperty`. It is implemented because it is
+// contract.
 public final class PropertyPermission extends BasicPermission {
 
-    private static final int LEER = 1;
-    private static final int ESCRIBIR = 2;
+    private static final int READ = 1;
+    private static final int WRITE = 2;
 
-    // Las acciones, como bits. Es la forma en que `implies` puede preguntar "¿cubre todo lo que
-    // hace falta?" con un `and`, en vez de comparar cadenas.
+    // The actions, as bits. It is how `implies` can ask "does it cover everything needed?" with an
+    // `and`, instead of comparing strings.
     private final int mask;
 
-    // Un permiso sobre `name` con las acciones dadas.
+    // A permission over `name` with the given actions.
     public PropertyPermission(String name, String actions) {
         super(name);
-        this.mask = parsear(actions);
+        this.mask = parseText(actions);
     }
 
-    // Convierte "read", "write", "read,write" —en cualquier orden y capitalizacion— a bits.
+    // It turns "read", "write", "read,write" —in any order and capitalisation— into bits.
     //
-    // Una accion desconocida es IllegalArgumentException y no se ignora en silencio: un typo en
-    // una politica de seguridad que se traga sin decir nada es un agujero, no una molestia.
-    private static int parsear(String actions) {
+    // An unknown action is IllegalArgumentException and is not ignored in silence: a typo in a
+    // security policy that is swallowed without a word is a hole, not a nuisance.
+    private static int parseText(String actions) {
         if (actions == null) {
             throw new NullPointerException("actions can't be null");
         }
@@ -46,7 +46,7 @@ public final class PropertyPermission extends BasicPermission {
         int i = 0;
         int n = actions.length();
         while (i < n) {
-            // Saltear blancos y comas.
+            // Skip whitespace and commas.
             while (i < n && (actions.charAt(i) == ' ' || actions.charAt(i) == ','
                     || actions.charAt(i) == '\t' || actions.charAt(i) == '\n'
                     || actions.charAt(i) == '\r' || actions.charAt(i) == '\f')) {
@@ -55,16 +55,16 @@ public final class PropertyPermission extends BasicPermission {
             if (i >= n) {
                 break;
             }
-            int inicio = i;
+            int start = i;
             while (i < n && actions.charAt(i) != ',') {
                 i = i + 1;
             }
-            String palabra = recortar(actions.substring(inicio, i));
-            if (palabra.equalsIgnoreCase("read")) {
-                m = m | LEER;
-            } else if (palabra.equalsIgnoreCase("write")) {
-                m = m | ESCRIBIR;
-            } else if (palabra.length() > 0) {
+            String word = clampTo(actions.substring(start, i));
+            if (word.equalsIgnoreCase("read")) {
+                m = m | READ;
+            } else if (word.equalsIgnoreCase("write")) {
+                m = m | WRITE;
+            } else if (word.length() > 0) {
                 throw new IllegalArgumentException("invalid actions: " + actions);
             }
         }
@@ -74,26 +74,26 @@ public final class PropertyPermission extends BasicPermission {
         return m;
     }
 
-    private static String recortar(String s) {
+    private static String clampTo(String s) {
         int a = 0;
         int b = s.length();
-        while (a < b && esBlanco(s.charAt(a))) {
+        while (a < b && isBlankChar(s.charAt(a))) {
             a = a + 1;
         }
-        while (b > a && esBlanco(s.charAt(b - 1))) {
+        while (b > a && isBlankChar(s.charAt(b - 1))) {
             b = b - 1;
         }
         return s.substring(a, b);
     }
 
-    private static boolean esBlanco(char c) {
+    private static boolean isBlankChar(char c) {
         return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f';
     }
 
-    // Si este permiso implica al otro: el nombre tiene que cubrirlo **y** las acciones tambien.
+    // Whether this permission implies the other: the name has to cover it **and** the actions too.
     //
-    // Las dos condiciones son necesarias y ninguna alcanza sola: `("java.*", "read")` no implica
-    // `("java.home", "write")` aunque el nombre le quede grande.
+    // Both conditions are necessary and neither is enough alone: `("java.*", "read")` does not imply
+    // `("java.home", "write")` even though the name is wide enough.
     public boolean implies(Permission p) {
         if (!(p instanceof PropertyPermission)) {
             return false;
@@ -105,8 +105,8 @@ public final class PropertyPermission extends BasicPermission {
         return super.implies(that);
     }
 
-    // Igualdad por nombre y acciones. Dos permisos con el mismo nombre y distintas acciones son
-    // distintos, aunque uno implique al otro.
+    // Equality by name and actions. Two permissions with the same name and different actions are
+    // different, even if one implies the other.
     public boolean equals(Object obj) {
         if (obj == this) {
             return true;
@@ -122,33 +122,33 @@ public final class PropertyPermission extends BasicPermission {
         return this.getName().hashCode();
     }
 
-    // Las acciones en forma canonica: "read", "write" o "read,write".
+    // The actions in canonical form: "read", "write" or "read,write".
     public String getActions() {
-        if (this.mask == (LEER | ESCRIBIR)) {
+        if (this.mask == (READ | WRITE)) {
             return "read,write";
         }
-        if (this.mask == LEER) {
+        if (this.mask == READ) {
             return "read";
         }
         return "write";
     }
 
-    // Una coleccion que acumula las acciones de los permisos que cubren un nombre.
+    // A collection that accumulates the actions of the permissions covering a name.
     public PermissionCollection newPermissionCollection() {
         return new PropertyPermissionCollection();
     }
 }
 
-// La coleccion de PropertyPermission.
+// PropertyPermission's collection.
 //
-// No alcanza con preguntarle a cada permiso de a uno: tener `("java.*", "read")` y
-// `("java.home", "write")` **si** implica `("java.home", "read,write")`, y ningun permiso solo lo
-// implica. Hay que acumular las acciones de todos los que cubren el nombre y recien despues
-// comparar. Es la razon por la que `PermissionCollection.implies` existe como operacion propia y
-// no como un bucle sobre `Permission.implies`.
+// Asking each permission one at a time is not enough: holding `("java.*", "read")` and
+// `("java.home", "write")` **does** imply `("java.home", "read,write")`, and no single permission
+// implies it. The actions of all those covering the name have to be accumulated and only then
+// compared. It is the reason `PermissionCollection.implies` exists as an operation of its own and not
+// as a loop over `Permission.implies`.
 final class PropertyPermissionCollection extends PermissionCollection {
 
-    private final ArrayList<PropertyPermission> permisos = new ArrayList<PropertyPermission>();
+    private final ArrayList<PropertyPermission> permissions = new ArrayList<PropertyPermission>();
 
     public void add(Permission permission) {
         if (!(permission instanceof PropertyPermission)) {
@@ -158,47 +158,47 @@ final class PropertyPermissionCollection extends PermissionCollection {
             throw new SecurityException(
                 "attempt to add a Permission to a readonly PermissionCollection");
         }
-        this.permisos.add((PropertyPermission) permission);
+        this.permissions.add((PropertyPermission) permission);
     }
 
     public boolean implies(Permission permission) {
         if (!(permission instanceof PropertyPermission)) {
             return false;
         }
-        PropertyPermission pedido = (PropertyPermission) permission;
-        // Se acumulan las acciones de todos los que cubren el nombre; alcanza con que la union
-        // cubra lo pedido.
-        int acumulado = 0;
+        PropertyPermission wanted = (PropertyPermission) permission;
+        // The actions of all those covering the name are accumulated; it is enough for the union to
+        // cover what was asked.
+        int accumulated = 0;
         int i = 0;
-        while (i < this.permisos.size()) {
-            PropertyPermission tengo = this.permisos.get(i);
-            if (cubreNombre(tengo.getName(), pedido.getName())) {
-                // Un permiso con las mismas acciones y ese nombre: se le pregunta a el, que ya
-                // sabe comparar mascaras.
-                if (tengo.implies(new PropertyPermission(pedido.getName(), tengo.getActions()))) {
-                    acumulado = acumulado | mascara(tengo.getActions());
+        while (i < this.permissions.size()) {
+            PropertyPermission held = this.permissions.get(i);
+            if (coversName(held.getName(), wanted.getName())) {
+                // A permission with the same actions and that name: it is asked, since it already
+                // knows how to compare masks.
+                if (held.implies(new PropertyPermission(wanted.getName(), held.getActions()))) {
+                    accumulated = accumulated | maskBits(held.getActions());
                 }
             }
             i = i + 1;
         }
-        return (acumulado & mascara(pedido.getActions())) == mascara(pedido.getActions());
+        return (accumulated & maskBits(wanted.getActions())) == maskBits(wanted.getActions());
     }
 
-    // Si `tengo` cubre a `pedido` como nombre, con las mismas reglas de comodin que
-    // BasicPermission. Se reimplementa aca porque `getCanonicalName()` es package-private de
-    // `java.security` y desde `java.util` no se ve.
-    private static boolean cubreNombre(String tengo, String pedido) {
-        if (tengo.equals("*")) {
+    // Whether `held` covers `wanted` as a name, with the same wildcard rules as BasicPermission. It
+    // is reimplemented here because `getCanonicalName()` is package-private to `java.security` and is
+    // not visible from `java.util`.
+    private static boolean coversName(String held, String wanted) {
+        if (held.equals("*")) {
             return true;
         }
-        if (tengo.endsWith(".*")) {
-            String prefijo = tengo.substring(0, tengo.length() - 1);
-            return pedido.length() > prefijo.length() && pedido.startsWith(prefijo);
+        if (held.endsWith(".*")) {
+            String prefix = held.substring(0, held.length() - 1);
+            return wanted.length() > prefix.length() && wanted.startsWith(prefix);
         }
-        return tengo.equals(pedido);
+        return held.equals(wanted);
     }
 
-    private static int mascara(String actions) {
+    private static int maskBits(String actions) {
         int m = 0;
         if (actions.equals("read") || actions.equals("read,write")) {
             m = m | 1;
@@ -210,35 +210,35 @@ final class PropertyPermissionCollection extends PermissionCollection {
     }
 
     public Enumeration<Permission> elements() {
-        ArrayList<Permission> copia = new ArrayList<Permission>();
+        ArrayList<Permission> copied = new ArrayList<Permission>();
         int i = 0;
-        while (i < this.permisos.size()) {
-            copia.add(this.permisos.get(i));
+        while (i < this.permissions.size()) {
+            copied.add(this.permissions.get(i));
             i = i + 1;
         }
-        return new PropPermEnum(copia);
+        return new PropPermEnum(copied);
     }
 }
 
-// Enumeracion sobre los permisos de una PropertyPermissionCollection.
+// An enumeration over a PropertyPermissionCollection's permissions.
 final class PropPermEnum implements Enumeration<Permission> {
 
-    private final ArrayList<Permission> lista;
+    private final ArrayList<Permission> list;
     private int cursor;
 
-    PropPermEnum(ArrayList<Permission> lista) {
-        this.lista = lista;
+    PropPermEnum(ArrayList<Permission> list) {
+        this.list = list;
     }
 
     public boolean hasMoreElements() {
-        return this.cursor < this.lista.size();
+        return this.cursor < this.list.size();
     }
 
     public Permission nextElement() {
-        if (this.cursor >= this.lista.size()) {
+        if (this.cursor >= this.list.size()) {
             throw new NoSuchElementException();
         }
-        Permission p = this.lista.get(this.cursor);
+        Permission p = this.list.get(this.cursor);
         this.cursor = this.cursor + 1;
         return p;
     }

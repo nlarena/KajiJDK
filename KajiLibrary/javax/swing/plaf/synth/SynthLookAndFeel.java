@@ -12,74 +12,75 @@ import javax.swing.plaf.ComponentUI;
 import javax.swing.plaf.basic.BasicLookAndFeel;
 
 /**
- * El aspecto grafico que no dibuja nada por su cuenta: lo describe otro.
+ * The look and feel that draws nothing on its own: somebody else describes it.
  *
- * <h2>Que problema resuelve</h2>
+ * <h2>What problem it solves</h2>
  *
- * <p>Escribir un aspecto grafico para Swing significaba escribir cien clases. Synth invierte eso:
- * las cien clases ya estan --son las {@code SynthXxxUI}-- y lo que cambia es un archivo que dice de
- * que color es cada parte y con que imagen se dibuja. Un disenador puede cambiar el aspecto sin
- * escribir Java.
+ * <p>Writing a look and feel for Swing meant writing a hundred classes. Synth inverts that: the
+ * hundred classes are already there --they are the {@code SynthXxxUI}-- and what changes is a
+ * file that says what colour each part is and which image it is drawn with. A designer can
+ * change the look without writing Java.
  *
- * <p>{@link #load} es donde entra esa descripcion. {@link javax.swing.plaf.nimbus.NimbusLookAndFeel}
- * es el otro camino: en vez de leer un archivo, trae la descripcion escrita en codigo.
+ * <p>{@link #load} is where that description comes in.
+ * {@link javax.swing.plaf.nimbus.NimbusLookAndFeel} is the other path: instead of reading a
+ * file, it brings the description written in code.
  *
- * <h2>La fabrica de estilos</h2>
+ * <h2>The style factory</h2>
  *
- * <p>{@link #setStyleFactory} es el punto de union. Cada {@code SynthXxxUI} le pide a la fabrica el
- * estilo de su region, y la fabrica es lo unico que sabe de donde salio la descripcion. Es estatica
- * --y no un campo de la instancia-- porque las interfaces graficas la consultan sin tener a mano el
- * aspecto.
+ * <p>{@link #setStyleFactory} is the joining point. Each {@code SynthXxxUI} asks the factory for
+ * its region's style, and the factory is the only thing that knows where the description came
+ * from. It is static --and not an instance field-- because the looks and feels consult it
+ * without having the look and feel at hand.
  *
- * <h2>Estado en esta biblioteca</h2>
+ * <h2>State in this library</h2>
  *
- * <p>El registro de la fabrica, las regiones y el ciclo de vida funcionan. Lo que no hay son las
- * {@code SynthXxxUI}, que son cuarenta clases de dibujo y son casi todo el paquete; por eso
- * {@link #createUI} no tiene que devolver y {@link #load} no tiene que leer. Lo que si esta
- * completo es lo que {@code javax.swing.plaf.nimbus} necesita.
+ * <p>The factory's registry, the regions and the life cycle work. What there is not are the
+ * {@code SynthXxxUI} classes, which are forty drawing classes and are almost the whole package;
+ * that is why {@link #createUI} has nothing to return and {@link #load} has nothing to read.
+ * What is complete is what {@code javax.swing.plaf.nimbus} needs.
  *
  * @since 1.5
  */
 public class SynthLookAndFeel extends BasicLookAndFeel {
 
-    private static SynthStyleFactory fabrica;
+    private static SynthStyleFactory factory;
 
-    /** Uno. */
+    /** One. */
     public SynthLookAndFeel() {
     }
 
     /**
-     * Fija de donde salen los estilos.
+     * It sets where the styles come from.
      *
-     * <p>Es estatica porque las interfaces graficas la consultan sin tener a mano el aspecto. La
-     * consecuencia es que hay una sola por proceso, que es coherente con que haya un solo aspecto
-     * grafico por proceso.
+     * <p>It is static because the looks and feels consult it without having the look and feel at
+     * hand. The consequence is that there is a single one per process, which is consistent with
+     * there being a single look and feel per process.
      *
-     * @param cache la fabrica, o {@code null} para no tener ninguna
+     * @param cache the factory, or {@code null} for having none
      */
     public static void setStyleFactory(SynthStyleFactory cache) {
         synchronized (SynthLookAndFeel.class) {
-            fabrica = cache;
+            factory = cache;
         }
     }
 
     /**
-     * De donde salen los estilos.
+     * Where the styles come from.
      *
-     * @return la fabrica, o {@code null}
+     * @return the factory, or {@code null}
      */
     public static SynthStyleFactory getStyleFactory() {
         synchronized (SynthLookAndFeel.class) {
-            return fabrica;
+            return factory;
         }
     }
 
     /**
-     * El estilo de esa region de ese componente.
+     * That component's style for that region.
      *
-     * @param c el componente
-     * @param region la region
-     * @return el estilo, o {@code null} si no hay fabrica
+     * @param c the component
+     * @param region the region
+     * @return the style, or {@code null} if there is no factory
      */
     public static SynthStyle getStyle(JComponent c, Region region) {
         final SynthStyleFactory f = getStyleFactory();
@@ -87,13 +88,13 @@ public class SynthLookAndFeel extends BasicLookAndFeel {
     }
 
     /**
-     * Vuelve a pedir el estilo de ese componente y de todos los que tenga adentro.
+     * It asks again for the style of that component and of every one it contains.
      *
-     * <p>Hace falta cuando cambia algo que la fabrica mira para decidir: el nombre de un componente,
-     * una propiedad, el aspecto entero. Sin esto, los componentes que ya estaban en pantalla se
-     * quedarian con el estilo viejo.
+     * <p>It is needed when something the factory looks at in order to decide changes: a component's
+     * name, a property, the whole look and feel. Without this, the components already on the screen
+     * would be left with the old style.
      *
-     * @param c el componente desde el que bajar
+     * @param c the component to go down from
      */
     public static void updateStyles(Component c) {
         if (c instanceof JComponent) {
@@ -108,56 +109,46 @@ public class SynthLookAndFeel extends BasicLookAndFeel {
     }
 
     /**
-     * La region que le corresponde a ese componente.
+     * The region that corresponds to that component.
      *
-     * @param c el componente
-     * @return la region, o {@code null} si su identificador no corresponde a ninguna
+     * @param c the component
+     * @return the region, or {@code null} if its identifier corresponds to none
      */
     public static Region getRegion(JComponent c) {
-        return Region.porUI(c.getUIClassID());
+        return Region.byUI(c.getUIClassID());
     }
 
     /**
-     * La interfaz grafica de ese componente.
+     * That component's look and feel.
      *
-     * @param c el componente
-     * @return la interfaz grafica, o {@code null}
-     * @throws UnsupportedOperationException en esta biblioteca, que no tiene las {@code SynthXxxUI}
-     */
-    /**
-     * La interfaz grafica de Synth para ese componente.
-     *
-     * <p>El nombre de la clase sale del identificador del componente: un {@code JLabel} dice
-     * {@code "LabelUI"} y de ahi sale {@code javax.swing.plaf.synth.SynthLabelUI}. Esa regla es la
-     * que hace que el paquete no tenga una tabla de cuarenta entradas que mantener.
-     *
-     * @param c el componente
-     * @return la interfaz grafica
-     * @throws Error si no hay una clase de Synth para ese componente
+     * @param c the component
+     * @return the look and feel, or {@code null}
+     * @throws UnsupportedOperationException in this library, which does not have the
+     *     {@code SynthXxxUI} classes
      */
     public static ComponentUI createUI(JComponent c) {
-        final String nombre = "javax.swing.plaf.synth.Synth" + c.getUIClassID();
+        final String name = "javax.swing.plaf.synth.Synth" + c.getUIClassID();
         try {
-            final Class<?> k = Class.forName(nombre);
+            final Class<?> k = Class.forName(name);
             final java.lang.reflect.Method m = k.getMethod("createUI", JComponent.class);
             return (ComponentUI) m.invoke(null, c);
         } catch (Exception e) {
-            throw new Error("no hay una clase de synth para " + c.getUIClassID(), e);
+            throw new Error("no synth class for " + c.getUIClassID(), e);
         }
     }
 
     /**
-     * El estado de ese componente, como lo entiende Synth.
+     * That component's state, as Synth understands it.
      *
-     * <p>Tres casos y nada mas: apagado, encendido, y encendido con el foco. Los otros estados de
-     * {@link SynthConstants} -- apretado, con el cursor encima, elegido -- los agrega cada
-     * interfaz grafica mirando su propio modelo, porque un componente sin botones no tiene como
-     * estar apretado.
+     * <p>Three cases and nothing else: disabled, enabled, and enabled with the focus. The other
+     * {@link SynthConstants} states -- pressed, with the cursor over it, selected -- are added by
+     * each look and feel looking at its own model, because a component with no buttons has no way
+     * of being pressed.
      *
-     * @param c el componente
-     * @return la combinacion de banderas
+     * @param c the component
+     * @return the combination of flags
      */
-    static int estadoDe(java.awt.Component c) {
+    static int stateOf(java.awt.Component c) {
         if (c == null || !c.isEnabled()) {
             return SynthConstants.DISABLED;
         }
@@ -168,47 +159,48 @@ public class SynthLookAndFeel extends BasicLookAndFeel {
     }
 
     /**
-     * Le pide a la fabrica el estilo de ese contexto y se lo instala al componente.
+     * It asks the factory for that context's style and installs it on the component.
      *
-     * <p>Es lo que hace cada {@code SynthXxxUI} al instalarse y cada vez que algo cambia. Si no hay
-     * fabrica revienta con {@code NullPointerException}, y <strong>eso esta medido</strong>: en el
-     * JDK, instalar cualquier interfaz grafica de Synth sin haber cargado antes un archivo de
-     * estilos tira exactamente esa excepcion. No es un descuido de esta biblioteca; es que Synth no
-     * tiene un aspecto por omision, y ese es justamente el punto del paquete.
+     * <p>It is what each {@code SynthXxxUI} does on installing itself and every time something
+     * changes. If there is no factory it blows up with {@code NullPointerException}, and
+     * <strong>that is measured</strong>: in the JDK, installing any Synth look and feel without
+     * having loaded a style file first throws exactly that exception. It is not an oversight of
+     * this library; it is that Synth has no default look, and that is precisely the point of the
+     * package.
      *
-     * @param context el contexto
-     * @return el estilo nuevo
+     * @param context the context
+     * @return the new style
      */
-    static SynthStyle actualizar(SynthContext context) {
+    static SynthStyle update(SynthContext context) {
         final SynthStyleFactory f = getStyleFactory();
-        final SynthStyle estilo = f.getStyle(context.getComponent(), context.getRegion());
-        if (estilo != null) {
-            estilo.installDefaults(new SynthContext(context.getComponent(),
-                    context.getRegion(), estilo, context.getComponentState()));
+        final SynthStyle style = f.getStyle(context.getComponent(), context.getRegion());
+        if (style != null) {
+            style.installDefaults(new SynthContext(context.getComponent(),
+                    context.getRegion(), style, context.getComponentState()));
         }
-        return estilo;
+        return style;
     }
 
     /**
-     * Lee la descripcion del aspecto de un archivo.
+     * It reads the look's description from a file.
      *
-     * @param input de donde leer
-     * @param resourceBase la clase respecto de la cual resolver los recursos que el archivo nombre
-     * @throws ParseException si el archivo no se entiende
-     * @throws UnsupportedOperationException en esta biblioteca, que no tiene el lector
+     * @param input where to read from
+     * @param resourceBase the class the resources the file names are resolved against
+     * @throws ParseException if the file is not understood
+     * @throws UnsupportedOperationException in this library, which does not have the reader
      */
     public void load(InputStream input, Class<?> resourceBase) throws ParseException {
-        throw new UnsupportedOperationException("esta biblioteca no tiene el lector de "
-                + "descripciones de synth");
+        throw new UnsupportedOperationException("this library has no reader of "
+                + "synth descriptions");
     }
 
-    /** Se instala. */
+    /** It installs itself. */
     @Override
     public void initialize() {
         super.initialize();
     }
 
-    /** Se desinstala; suelta la fabrica de estilos. */
+    /** It uninstalls itself; it releases the style factory. */
     @Override
     public void uninitialize() {
         setStyleFactory(null);
@@ -216,9 +208,9 @@ public class SynthLookAndFeel extends BasicLookAndFeel {
     }
 
     /**
-     * La tabla de valores.
+     * The table of values.
      *
-     * @return la tabla
+     * @return the table
      */
     @Override
     public UIDefaults getDefaults() {
@@ -226,9 +218,9 @@ public class SynthLookAndFeel extends BasicLookAndFeel {
     }
 
     /**
-     * Si sirve en esta plataforma.
+     * Whether it serves on this platform.
      *
-     * @return cierto: no depende de la plataforma
+     * @return true: it does not depend on the platform
      */
     @Override
     public boolean isSupportedLookAndFeel() {
@@ -236,9 +228,9 @@ public class SynthLookAndFeel extends BasicLookAndFeel {
     }
 
     /**
-     * Si es el aspecto propio de la plataforma.
+     * Whether it is the platform's own look and feel.
      *
-     * @return falso
+     * @return false
      */
     @Override
     public boolean isNativeLookAndFeel() {
@@ -246,9 +238,9 @@ public class SynthLookAndFeel extends BasicLookAndFeel {
     }
 
     /**
-     * Que es.
+     * What it is.
      *
-     * @return la descripcion
+     * @return the description
      */
     @Override
     public String getDescription() {
@@ -256,7 +248,7 @@ public class SynthLookAndFeel extends BasicLookAndFeel {
     }
 
     /**
-     * El nombre para mostrar.
+     * The name to show.
      *
      * @return {@code "Synth Look and Feel"}
      */
@@ -266,7 +258,7 @@ public class SynthLookAndFeel extends BasicLookAndFeel {
     }
 
     /**
-     * El identificador corto.
+     * The short identifier.
      *
      * @return {@code "Synth"}
      */
@@ -276,24 +268,24 @@ public class SynthLookAndFeel extends BasicLookAndFeel {
     }
 
     /**
-     * Si hay que revisar el estilo cuando el componente cambia de contenedor.
+     * Whether the style has to be checked when the component changes container.
      *
-     * <p>Con {@code false} se ahorra trabajo; con {@code true} un aspecto puede decidir el estilo
-     * segun donde este el componente --un boton dentro de una barra de herramientas se ve
-     * distinto--. Por omision no, porque la mayoria de los aspectos no lo necesita y revisarlo
-     * cuesta en cada agregado.
+     * <p>With {@code false} work is saved; with {@code true} a look and feel may decide the style
+     * according to where the component is --a button inside a tool bar looks different--. By
+     * default no, because most looks and feels do not need it and checking it costs on every
+     * addition.
      *
-     * @return falso
+     * @return false
      */
     public boolean shouldUpdateStyleOnAncestorChanged() {
         return false;
     }
 
     /**
-     * Si ese cambio de propiedad obliga a revisar el estilo.
+     * Whether that property change forces checking the style.
      *
-     * @param ev que cambio
-     * @return cierto si el estilo puede haber cambiado
+     * @param ev what changed
+     * @return true if the style may have changed
      */
     protected boolean shouldUpdateStyleOnEvent(PropertyChangeEvent ev) {
         final String n = ev.getPropertyName();

@@ -1,37 +1,37 @@
 package org.w3c.dom;
 
 /**
- * KajiLibrary's org.w3c.dom.DocumentType -- el {@code <!DOCTYPE ...>} del documento.
+ * KajiLibrary's org.w3c.dom.DocumentType -- the {@code <!DOCTYPE ...>} of the document.
  *
- * <p>Cuelga del {@link Document} --se llega por {@link Document#getDoctype}-- y es de **solo
- * lectura**: no hay un solo setter en toda la interfaz. La razon es que el DOM Level 1 y 2 nunca
- * definieron como editar un DTD, y editarlo a medias es peor que no poder: cambiar una declaracion
- * de entidad cuando ya hay nodos en el arbol expandidos con la anterior deja el documento
- * incoherente sin manera de arreglarlo.
+ * <p>It hangs from the {@link Document} --it is reached through {@link Document#getDoctype}-- and
+ * is **read-only**: there is not a single setter in the whole interface. The reason is that DOM
+ * Level 1 and 2 never defined how to edit a DTD, and editing it halfway is worse than not being
+ * able to: changing an entity declaration when there are already nodes in the tree expanded with
+ * the previous one leaves the document incoherent with no way of fixing it.
  *
- * <p>Por eso tampoco expone el modelo de contenido: no hay forma de preguntarle "que hijos admite
- * este elemento". Lo que si expone son las declaraciones de entidades y de notaciones, cada una en
- * un {@link NamedNodeMap} de solo lectura.
+ * <p>That is why it does not expose the content model either: there is no way of asking it "which
+ * children does this element admit". What it does expose are the declarations of entities and of
+ * notations, each in a read-only {@link NamedNodeMap}.
  *
- * <p>Interfaz declarada entera.
+ * <p>The interface is declared whole.
  */
 public interface DocumentType extends Node {
 
-    /** El nombre del DTD, que es el del elemento raiz declarado. */
+    /** The name of the DTD, which is that of the declared root element. */
     public String getName();
 
-    /** Las entidades declaradas, generales y de parametro, indexadas por nombre. Solo lectura. */
+    /** The declared entities, general and parameter ones, indexed by name. Read-only. */
     public NamedNodeMap getEntities();
 
-    /** Las notaciones declaradas, indexadas por nombre. Solo lectura. */
+    /** The declared notations, indexed by name. Read-only. */
     public NamedNodeMap getNotations();
 
-    /** El identificador publico del subconjunto externo, o {@code null}. */
+    /** The public identifier of the external subset, or {@code null}. */
     public String getPublicId();
 
-    /** El identificador de sistema del subconjunto externo, o {@code null}. */
+    /** The system identifier of the external subset, or {@code null}. */
     public String getSystemId();
 
-    /** El subconjunto interno como texto, o {@code null}; sin parsear ni normalizar. */
+    /** The internal subset as text, or {@code null}; neither parsed nor normalised. */
     public String getInternalSubset();
 }

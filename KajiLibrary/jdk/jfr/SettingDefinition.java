@@ -6,12 +6,12 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Marca a un metodo como el que define un <strong>ajuste</strong> del evento.
+ * It marks a method as the one that defines a <strong>setting</strong> of the event.
  *
- * <p>El metodo toma un {@link SettingControl} y devuelve {@code boolean}: es el filtro que decide,
- * en cada emision, si el evento se graba. Es lo que permite que un evento tenga un ajuste propio
- * —no solo los que JFR trae— configurable desde afuera igual que {@code threshold} o
- * {@code stackTrace}.
+ * <p>The method takes a {@link SettingControl} and returns {@code boolean}: it is the filter that
+ * decides, on each emission, whether the event is recorded. It is what allows an event to have a
+ * setting of its own --not only the ones JFR brings-- configurable from outside just like
+ * {@code threshold} or {@code stackTrace}.
  *
  * @since 9
  */

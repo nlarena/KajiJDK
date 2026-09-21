@@ -5,33 +5,34 @@ import java.util.List;
 import javax.imageio.ImageReadParam;
 
 /**
- * KajiLibrary's javax.imageio.plugins.tiff.TIFFImageReadParam -- que etiquetas reconocer al leer un
- * TIFF.
+ * KajiLibrary's javax.imageio.plugins.tiff.TIFFImageReadParam -- which tags to recognize when
+ * reading a TIFF.
  *
- * <p>Un TIFF puede traer etiquetas de cualquier perfil, y el lector solo sabe interpretar las de los
- * conjuntos que se le declaren. Esta clase es esa declaracion.
+ * <p>A TIFF may carry tags from any profile, and the reader only knows how to interpret the ones of
+ * the sets declared to it. This class is that declaration.
  *
- * <p>Trae cuatro de fabrica --el basico, el de fax, el que lleva a los directorios Exif y el de
- * GeoTIFF--, que cubre lo que sale de una camara y de casi cualquier programa. Agregar uno propio con
- * {@link #addAllowedTagSet} es lo que hace que un lector entienda un TIFF especializado.
+ * <p>It comes with four built-in ones --the baseline one, the fax one, the one that leads to the
+ * Exif directories and the GeoTIFF one--, which covers what comes out of a camera and of almost any
+ * program. Adding one of your own with {@link #addAllowedTagSet} is what makes a reader understand
+ * a specialized TIFF.
  *
  * <h2>{@link #setReadUnknownTags}</h2>
  *
- * <p>Apagado por omision: las etiquetas que ningun conjunto declara se <b>descartan</b> al leer.
+ * <p>Off by default: the tags no set declares are <b>discarded</b> when reading.
  *
- * <p>Prenderlo las conserva como campos anonimos --con {@link TIFFTag#UNKNOWN_TAG_NAME} de nombre-- y
- * es lo que hace falta para reescribir un TIFF sin perder lo que no se entiende. Un flujo de leer y
- * volver a escribir con esto apagado tira en silencio todo lo que el lector no reconoce.
+ * <p>Turning it on keeps them as anonymous fields --named {@link TIFFTag#UNKNOWN_TAG_NAME}-- and is
+ * what is needed to rewrite a TIFF without losing what is not understood. A read-and-write-back
+ * flow with this off silently drops everything the reader does not recognize.
  */
 public final class TIFFImageReadParam extends ImageReadParam {
 
-    /** Los conjuntos que el lector va a reconocer, en orden de consulta. */
+    /** The sets the reader will recognize, in lookup order. */
     private final List<TIFFTagSet> allowedTagSets = new ArrayList<TIFFTagSet>();
 
-    /** Si conservar las etiquetas desconocidas. Ver la nota de la clase. */
+    /** Whether to keep unknown tags. See the class note. */
     private boolean readUnknownTags = false;
 
-    /** Con los cuatro conjuntos de fabrica. */
+    /** With the four built-in sets. */
     public TIFFImageReadParam() {
         this.allowedTagSets.add(BaselineTIFFTagSet.getInstance());
         this.allowedTagSets.add(FaxTIFFTagSet.getInstance());
@@ -40,11 +41,11 @@ public final class TIFFImageReadParam extends ImageReadParam {
     }
 
     /**
-     * Agrega un conjunto al final de la lista.
+     * Adds a set at the end of the list.
      *
-     * <p>Agregar uno que ya esta no hace nada.
+     * <p>Adding one that is already there does nothing.
      *
-     * @throws IllegalArgumentException si es null
+     * @throws IllegalArgumentException if it is null
      */
     public void addAllowedTagSet(TIFFTagSet tagSet) {
         if (tagSet == null) {
@@ -56,9 +57,9 @@ public final class TIFFImageReadParam extends ImageReadParam {
     }
 
     /**
-     * Lo saca.
+     * Removes it.
      *
-     * @throws IllegalArgumentException si es null
+     * @throws IllegalArgumentException if it is null
      */
     public void removeAllowedTagSet(TIFFTagSet tagSet) {
         if (tagSet == null) {
@@ -68,22 +69,22 @@ public final class TIFFImageReadParam extends ImageReadParam {
     }
 
     /**
-     * Los conjuntos declarados.
+     * The declared sets.
      *
-     * <p>Es una copia: agregar a la lista devuelta no declara nada. El JDK devuelve la lista viva, y
-     * quien la modifique le cambia el parametro por atras; se pasa por {@link #addAllowedTagSet} y no
-     * hay diferencia para el codigo que la use como lista de solo lectura.
+     * <p>It is a copy: adding to the returned list declares nothing. The JDK returns the live list,
+     * and whoever modifies it changes the parameter behind its back; going through
+     * {@link #addAllowedTagSet} makes no difference for code that uses it as a read-only list.
      */
     public List<TIFFTagSet> getAllowedTagSets() {
         return new ArrayList<TIFFTagSet>(this.allowedTagSets);
     }
 
-    /** Si conservar las desconocidas. Ver la nota de la clase. */
+    /** Whether to keep the unknown ones. See the class note. */
     public void setReadUnknownTags(boolean readUnknownTags) {
         this.readUnknownTags = readUnknownTags;
     }
 
-    /** Si se conservan. */
+    /** Whether they are kept. */
     public boolean getReadUnknownTags() {
         return this.readUnknownTags;
     }

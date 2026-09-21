@@ -1,80 +1,82 @@
 package java.security;
 
-// La unidad sobre la que se decide: de donde vino el codigo, quien lo carga, con que identidad
-// corre, y que permisos tiene.
+// The unit the decision is made about: where the code came from, who loads it, with which identity
+// it runs, and which permissions it has.
 //
-// Es el sujeto de toda la pregunta de control de acceso. Un permiso no se le concede "a una
-// clase": se le concede a un dominio, y todas las clases que comparten origen, cargador y
-// principales comparten dominio y por lo tanto permisos.
+// It is the subject of the whole access control question. A permission is not granted "to a class":
+// it is granted to a domain, and every class that shares origin, loader and principals shares a
+// domain and therefore permissions.
 //
 // ===============================================================================================
-// PERMISOS ESTATICOS VS. DINAMICOS
+// STATIC VS. DYNAMIC PERMISSIONS
 // ===============================================================================================
 //
-// La diferencia entre los dos constructores es la mas importante de la clase y esta escondida en
-// un booleano sin nombre visible:
+// The difference between the two constructors is the most important one of the class and is hidden
+// in a boolean with no visible name:
 //
-//   - El de **dos** argumentos crea un dominio de permisos **estaticos**: los que se le pasaron y
-//     nada mas, para siempre. `staticPermissionsOnly()` da `true`.
-//   - El de **cuatro** crea uno **dinamico**: los que se le pasaron **mas** los que la `Policy`
-//     vigente le conceda en el momento de preguntar. `staticPermissionsOnly()` da `false`.
+//   - The **two**-argument one creates a domain of **static** permissions: the ones it was passed
+//     and nothing else, for ever. `staticPermissionsOnly()` gives `true`.
+//   - The **four**-argument one creates a **dynamic** one: the ones it was passed **plus** the ones
+//     the `Policy` in force grants it at the moment of asking. `staticPermissionsOnly()` gives
+//     `false`.
 //
-// Refrescar la politica cambia lo que puede hacer un dominio dinamico y no toca a uno estatico. Es
-// la unica forma de que un cambio de politica tenga efecto sobre codigo ya cargado.
+// Refreshing the policy changes what a dynamic domain can do and does not touch a static one. It is
+// the only way for a change of policy to have an effect over code that is already loaded.
 //
-// La coleccion de permisos se marca de **solo lectura** al construir el dominio: si no, quien
-// entrego los permisos podria agregarse mas despues de que el dominio ya fue aceptado.
+// The collection of permissions is marked **read-only** when building the domain: if not, whoever
+// handed over the permissions could add more to themselves after the domain was accepted.
 //
-// (En KajiJDK no hay ninguna `Policy` con contenido, asi que la parte dinamica siempre suma cero.
-// La distincion se implementa igual porque es contrato observable: `staticPermissionsOnly()`
-// contesta distinto segun que constructor se uso.)
+// (In KajiJDK there is no `Policy` with contents, so the dynamic part always adds zero. The
+// distinction is implemented all the same because it is observable contract:
+// `staticPermissionsOnly()` answers differently depending on which constructor was used.)
 public class ProtectionDomain {
 
-    // null significa "origen desconocido", y no implica nada.
+    // null means "unknown origin", and implies nothing.
     private final CodeSource codesource;
 
     private final PermissionCollection permissions;
 
     private final ClassLoader classloader;
 
-    // Nunca null: un dominio sin principales tiene un arreglo vacio, no null. Simplifica a todos
-    // los que lo recorren.
+    // Never null: a domain with no principals has an empty array, not null. It simplifies things
+    // for everybody who walks it.
     private final Principal[] principals;
 
-    // Atajo: si los permisos ya incluyen `AllPermission`, no hace falta consultar nada mas.
+    // A shortcut: if the permissions include `AllPermission` already, there is no need to consult
+    // anything else.
     private final boolean hasAllPerm;
 
     private final boolean staticPermissions;
 
-    // Un dominio de permisos estaticos.
+    // A domain of static permissions.
     public ProtectionDomain(CodeSource codesource, PermissionCollection permissions) {
         this.codesource = codesource;
         this.permissions = permissions;
-        this.hasAllPerm = marcarYDetectarTodos(permissions);
+        this.hasAllPerm = sealAndDetectAll(permissions);
         this.classloader = null;
         this.principals = new Principal[0];
         this.staticPermissions = true;
     }
 
-    // Un dominio de permisos dinamicos: a los dados se les suman los que conceda la politica.
+    // A domain of dynamic permissions: to the given ones are added the ones the policy grants.
     public ProtectionDomain(CodeSource codesource, PermissionCollection permissions,
                             ClassLoader classloader, Principal[] principals) {
         this.codesource = codesource;
         this.permissions = permissions;
-        this.hasAllPerm = marcarYDetectarTodos(permissions);
+        this.hasAllPerm = sealAndDetectAll(permissions);
         this.classloader = classloader;
-        this.principals = principals == null ? new Principal[0] : copiar(principals);
+        this.principals = principals == null ? new Principal[0] : copyOf(principals);
         this.staticPermissions = false;
     }
 
-    private static Principal[] copiar(Principal[] a) {
+    private static Principal[] copyOf(Principal[] a) {
         Principal[] c = new Principal[a.length];
         System.arraycopy(a, 0, c, 0, a.length);
         return c;
     }
 
-    // Cierra la coleccion y avisa si trae el permiso universal.
-    private static boolean marcarYDetectarTodos(PermissionCollection pc) {
+    // It closes the collection and tells whether it brings the universal permission.
+    private static boolean sealAndDetectAll(PermissionCollection pc) {
         if (pc == null) {
             return false;
         }
@@ -89,27 +91,27 @@ public class ProtectionDomain {
         return this.codesource;
     }
 
-    // El cargador de este dominio, o null si las clases las definio el cargador de arranque.
+    // The loader of this domain, or null if the classes were defined by the bootstrap loader.
     public final ClassLoader getClassLoader() {
         return this.classloader;
     }
 
     public final Principal[] getPrincipals() {
-        return copiar(this.principals);
+        return copyOf(this.principals);
     }
 
-    // La coleccion estatica de permisos, o null. No incluye lo que la politica pueda conceder: para
-    // eso esta `implies`.
+    // The static collection of permissions, or null. It does not include what the policy may grant:
+    // that is what `implies` is for.
     public final PermissionCollection getPermissions() {
         return this.permissions;
     }
 
-    // Si este dominio ignora la politica.
+    // Whether this domain ignores the policy.
     public final boolean staticPermissionsOnly() {
         return this.staticPermissions;
     }
 
-    // Si este dominio tiene el permiso pedido.
+    // Whether this domain has the permission asked for.
     public boolean implies(Permission perm) {
         if (this.hasAllPerm) {
             return true;

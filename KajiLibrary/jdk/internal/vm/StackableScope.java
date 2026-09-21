@@ -1,154 +1,156 @@
 package jdk.internal.vm;
 
 /**
- * KajiLibrary's jdk.internal.vm.StackableScope — un ámbito que se apila por hilo.
+ * KajiLibrary's jdk.internal.vm.StackableScope -- a scope that is stacked per thread.
  *
- * <p>Es la base de la concurrencia estructurada: un ámbito se abre, se anidan otros adentro, y se
- * cierran **en orden inverso**. La palabra "stackable" es la promesa: si al cerrar uno descubrimos que
- * no era el de arriba, alguien se salteó el orden, y eso se detecta en vez de dejarlo pasar.
+ * <p>It is the base of structured concurrency: a scope is opened, others are nested inside, and
+ * they are closed **in reverse order**. The word "stackable" is the promise: if on closing one we
+ * find it was not the top one, somebody skipped the order, and that is detected instead of let
+ * through.
  *
- * <p>La pila es **por hilo** y vive en un {@link ThreadLocal}. En el JDK vive en un campo de
- * `Thread`, que es más rápido y llega antes durante el arranque; acá no se puede tocar `Thread` desde
- * este paquete, y un `ThreadLocal` da exactamente la misma semántica. Es un interno, y los internos
- * son libres.
+ * <p>The stack is **per thread** and lives in a {@link ThreadLocal}. In the JDK it lives in a field
+ * of `Thread`, which is faster and arrives earlier during start-up; here `Thread` cannot be touched
+ * from this package, and a `ThreadLocal` gives exactly the same semantics. It is an internal, and
+ * internals are free.
  *
- * <p>La distinción entre {@link #tryPop()} y {@link #popForcefully()} es la que gobierna la clase:
- * el primero saca este ámbito **sólo si es el de arriba** y devuelve `false` si no lo es --el camino
- * normal, donde el desorden se reporta--; el segundo saca todo lo que quedó por encima cerrándolo, y
- * es el camino de la excepción, donde ya sabemos que algo salió mal y hay que dejar la pila limpia.
+ * <p>The distinction between {@link #tryPop()} and {@link #popForcefully()} is the one that governs
+ * the class: the first pops this scope **only if it is the top one** and returns `false` if it is
+ * not --the normal road, where the disorder is reported--; the second pops everything that was left
+ * above, closing it, and is the road of the exception, where we already know something went wrong
+ * and the stack has to be left clean.
  */
 public class StackableScope {
 
-    // La cabeza de la pila del hilo actual. Un `ThreadLocal` por clase, no por instancia: la pila es
-    // una sola por hilo y todos los ambitos comparten esa vista.
-    private static final ThreadLocal<StackableScope> CABEZA = new ThreadLocal<StackableScope>();
+    // The head of the stack of the current thread. One `ThreadLocal` per class, not per instance:
+    // the stack is a single one per thread and all the scopes share that view.
+    private static final ThreadLocal<StackableScope> HEAD = new ThreadLocal<StackableScope>();
 
-    private final Thread duenio;
-    private StackableScope anterior;
-    private boolean apilado;
+    private final Thread owner;
+    private StackableScope previous;
+    private boolean pushed;
 
     /**
-     * @param shared si el ámbito **no** pertenece a un hilo en particular
+     * @param shared whether the scope does **not** belong to a particular thread
      */
     StackableScope(boolean shared) {
-        this.duenio = shared ? null : Thread.currentThread();
+        this.owner = shared ? null : Thread.currentThread();
     }
 
-    /** Un ámbito del hilo que lo construye. */
+    /** A scope of the thread that builds it. */
     protected StackableScope() {
         this(false);
     }
 
-    /** El hilo dueño, o `null` si es compartido. */
+    /** The owner thread, or `null` if it is shared. */
     public Thread owner() {
-        return this.duenio;
+        return this.owner;
     }
 
-    /** Apila este ámbito en el hilo actual y lo devuelve, para encadenar. */
+    /** It pushes this scope onto the current thread and returns it, for chaining. */
     public StackableScope push() {
-        this.anterior = StackableScope.CABEZA.get();
-        StackableScope.CABEZA.set(this);
-        this.apilado = true;
+        this.previous = StackableScope.HEAD.get();
+        StackableScope.HEAD.set(this);
+        this.pushed = true;
         return this;
     }
 
     /**
-     * Saca este ámbito **si es el de arriba**.
+     * It pops this scope **if it is the top one**.
      *
-     * @return `false` si no lo era, y entonces la pila queda intacta
+     * @return `false` if it was not, and then the stack is left intact
      */
     public boolean tryPop() {
-        if (StackableScope.CABEZA.get() != this) {
+        if (StackableScope.HEAD.get() != this) {
             return false;
         }
-        StackableScope.CABEZA.set(this.anterior);
-        this.anterior = null;
-        this.apilado = false;
+        StackableScope.HEAD.set(this.previous);
+        this.previous = null;
+        this.pushed = false;
         return true;
     }
 
     /**
-     * Saca este ámbito **y todo lo que haya quedado encima**, cerrando cada uno.
+     * It pops this scope **and everything left above it**, closing each one.
      *
-     * <p>Se usa cuando ya hubo un error: lo que importa es que el hilo quede con una pila coherente,
-     * no respetar un orden que alguien ya rompió. Cada ámbito de arriba recibe {@link #tryClose()},
-     * así que una subclase con algo que liberar se entera.
+     * <p>It is used when there was already an error: what matters is that the thread is left with a
+     * coherent stack, not respecting an order somebody already broke. Each scope above receives
+     * {@link #tryClose()}, so a subclass with something to release finds out.
      *
-     * @return si este ámbito estaba en la pila
+     * @return whether this scope was on the stack
      */
     public boolean popForcefully() {
-        if (!this.apilado) {
+        if (!this.pushed) {
             return false;
         }
-        StackableScope cur = StackableScope.CABEZA.get();
+        StackableScope cur = StackableScope.HEAD.get();
         while (cur != null && cur != this) {
-            StackableScope sig = cur.anterior;
+            StackableScope next = cur.previous;
             cur.tryClose();
-            cur.anterior = null;
-            cur.apilado = false;
-            cur = sig;
+            cur.previous = null;
+            cur.pushed = false;
+            cur = next;
         }
-        StackableScope.CABEZA.set(this.anterior);
-        this.anterior = null;
-        this.apilado = false;
+        StackableScope.HEAD.set(this.previous);
+        this.previous = null;
+        this.pushed = false;
         return true;
     }
 
-    /** Vacía la pila del hilo actual, cerrando todo lo que haya. */
+    /** It empties the stack of the current thread, closing everything there is. */
     public static void popAll() {
-        StackableScope cur = StackableScope.CABEZA.get();
+        StackableScope cur = StackableScope.HEAD.get();
         while (cur != null) {
-            StackableScope sig = cur.anterior;
+            StackableScope next = cur.previous;
             cur.tryClose();
-            cur.anterior = null;
-            cur.apilado = false;
-            cur = sig;
+            cur.previous = null;
+            cur.pushed = false;
+            cur = next;
         }
-        StackableScope.CABEZA.set(null);
+        StackableScope.HEAD.set(null);
     }
 
-    /** El ámbito inmediatamente debajo de éste, o `null`. */
+    /** The scope immediately below this one, or `null`. */
     public StackableScope enclosingScope() {
-        return this.anterior;
+        return this.previous;
     }
 
     /**
-     * El ámbito más cercano hacia abajo que sea de ese tipo, o `null`.
+     * The nearest scope further down that is of that type, or `null`.
      *
-     * <p>Se busca por {@link Class#isInstance}, o sea que una **subclase** también cuenta: quien pide
-     * un `ThreadContainer` quiere el contenedor más cercano, sea de la clase que sea.
+     * <p>It is looked for with {@link Class#isInstance}, that is a **subclass** counts too: whoever
+     * asks for a `ThreadContainer` wants the nearest container, whatever its class.
      */
-    public <T extends StackableScope> T enclosingScope(Class<T> tipo) {
-        StackableScope cur = this.anterior;
+    public <T extends StackableScope> T enclosingScope(Class<T> type) {
+        StackableScope cur = this.previous;
         while (cur != null) {
-            if (tipo.isInstance(cur)) {
+            if (type.isInstance(cur)) {
                 return (T) cur;
             }
-            cur = cur.anterior;
+            cur = cur.previous;
         }
         return null;
     }
 
-    /** El anterior, para el paquete. */
+    /** The previous one, for the package. */
     StackableScope previous() {
-        return this.anterior;
+        return this.previous;
     }
 
     /**
-     * Lo que hay que hacer al cerrar este ámbito.
+     * What has to be done when closing this scope.
      *
-     * <p>Un `StackableScope` pelado no tiene nada que liberar, así que dice que sí. Las subclases que
-     * sostienen algo --hilos, ligaduras-- lo redefinen; es el gancho por el que
-     * {@link #popForcefully()} y {@link #popAll()} las avisan.
+     * <p>A bare `StackableScope` has nothing to release, so it says yes. The subclasses that hold
+     * something --threads, bindings-- override it; it is the hook through which {@link
+     * #popForcefully()} and {@link #popAll()} notify them.
      *
-     * @return si se pudo cerrar
+     * @return whether it could be closed
      */
     protected boolean tryClose() {
         return true;
     }
 
-    /** La cabeza de la pila del hilo actual, para el paquete. */
+    /** The head of the stack of the current thread, for the package. */
     static StackableScope head() {
-        return StackableScope.CABEZA.get();
+        return StackableScope.HEAD.get();
     }
 }

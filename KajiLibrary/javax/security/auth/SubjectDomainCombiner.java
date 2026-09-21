@@ -6,28 +6,29 @@ import java.security.ProtectionDomain;
 import java.util.Set;
 
 /**
- * KajiLibrary's javax.security.auth.SubjectDomainCombiner -- le pega las identidades de un
- * {@link Subject} a los dominios de proteccion de la pila.
+ * KajiLibrary's javax.security.auth.SubjectDomainCombiner -- attaches a {@link Subject}'s
+ * identities to the protection domains of the stack.
  *
- * <p>Un {@code ProtectionDomain} dice de donde salio el codigo y que puede hacer. Este combinador
- * agrega la otra mitad de la pregunta: <b>en nombre de quien</b> esta corriendo. Sin el, una politica
- * solo puede decidir por origen del codigo; con el, puede decir "este jar puede leer ese archivo
- * <i>solo si</i> lo esta corriendo juan".
+ * <p>A {@code ProtectionDomain} says where the code came from and what it can do. This combiner
+ * adds the other half of the question: <b>on whose behalf</b> it is running. Without it, a policy
+ * can only decide by code origin; with it, it can say "this jar can read that file <i>only if</i>
+ * john is running it".
  *
- * <p>El trabajo es un recorrido: por cada dominio de la pila actual se arma uno nuevo con el mismo
- * origen, el mismo cargador y los mismos permisos, mas los principals del Subject; despues se le
- * pegan atras los dominios ya asignados.
+ * <p>The work is a walk: for each domain of the current stack a new one is built with the same
+ * origin, the same loader and the same permissions, plus the Subject's principals; then the domains
+ * already assigned are appended.
  *
- * <p>Con una excepcion que hay que reproducir porque es observable: un dominio de <b>permisos
- * estaticos</b> --el que se construyo con la coleccion de permisos ya cerrada-- se devuelve
- * <b>tal cual</b>, la misma instancia. La razon no es ahorrar un objeto: un dominio estatico dice
- * "estos permisos y nada mas, para siempre", asi que agregarle identidades no cambiaria ninguna
- * respuesta -- su {@code implies} ya no consulta la politica --. Los dinamicos, en cambio, si se
- * rehacen, porque ahi las identidades entran en la consulta.
+ * <p>With one exception that has to be reproduced because it is observable: a domain with <b>static
+ * permissions</b> --the one built with the permission collection already closed-- is returned <b>as
+ * it is</b>, the same instance. The reason is not saving an object: a static domain says "these
+ * permissions and nothing more, forever", so adding identities to it would change no answer -- its
+ * {@code implies} no longer consults the policy --. The dynamic ones, on the other hand, are
+ * rebuilt, because there the identities do enter the query.
  *
- * <p>Nota sobre para que sirve hoy: el gestor de seguridad ya no se puede habilitar, asi que nada de
- * la biblioteca llama a este combinador. La clase existe porque su forma es parte del API y porque
- * el calculo que hace es puro -- no depende de que haya un gestor -- y se puede mirar y probar.
+ * <p>A note on what it serves today: the security manager can no longer be enabled, so nothing in
+ * the library calls this combiner. The class exists because its form is part of the API and because
+ * the computation it does is pure -- it does not depend on there being a manager -- and can be
+ * looked at and tested.
  */
 public class SubjectDomainCombiner implements DomainCombiner {
 
@@ -37,17 +38,18 @@ public class SubjectDomainCombiner implements DomainCombiner {
         this.subject = subject;
     }
 
-    /** El Subject cuyas identidades se pegan. La misma instancia que se paso. */
+    /** The Subject whose identities are attached. The same instance that was passed. */
     public Subject getSubject() {
         return this.subject;
     }
 
     /**
-     * Los dominios de la pila con las identidades del Subject encima, seguidos de los ya asignados.
+     * The stack's domains with the Subject's identities on top, followed by the ones already
+     * assigned.
      *
-     * <p>Si no hay dominios actuales devuelve los asignados <b>tal cual</b> --incluido null--: no hay
-     * nada a que pegarle las identidades, y armar un arreglo vacio seria decir algo distinto de "no
-     * habia nada".
+     * <p>If there are no current domains it returns the assigned ones <b>as they are</b> --null
+     * included--: there is nothing to attach the identities to, and building an empty array would
+     * be saying something different from "there was nothing".
      */
     public ProtectionDomain[] combine(ProtectionDomain[] currentDomains,
             ProtectionDomain[] assignedDomains) {
@@ -61,7 +63,7 @@ public class SubjectDomainCombiner implements DomainCombiner {
         int i = 0;
         while (i < currentDomains.length) {
             ProtectionDomain d = currentDomains[i];
-            // Ver la nota de la clase: al estatico no le cambia nada tener identidades encima.
+            // See the class note: having identities on top changes nothing for the static one.
             out[i] = d.staticPermissionsOnly() ? d
                 : new ProtectionDomain(d.getCodeSource(), d.getPermissions(),
                     d.getClassLoader(), principalsOf);

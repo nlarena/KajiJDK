@@ -1,7 +1,7 @@
 package com.sun.jdi;
 
 /**
- * DoubleType de la maquina depurada.
+ * DoubleType of the debugged machine.
  *
  * @since 1.3
  */

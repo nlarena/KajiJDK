@@ -43,39 +43,41 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * La lectura de los atributos tipados: de los bytes del `.class` al objeto de
- * `java.lang.classfile.attribute`.
+ * The reading of the typed attributes: from the bytes of the `.class` to the
+ * `java.lang.classfile.attribute` object.
  *
- * <p>Es la mitad que le falta a {@link AttributeMappers}, cuya otra mitad es {@link AttributeWriter}.
- * Están juntos y no repartidos en una subclase de mapeador por atributo para poder compararlos: el
- * lector y el escritor de un atributo tienen que ser inversos, y eso se ve leyendo los dos casos
- * seguidos, no saltando entre treinta y cuatro archivos.
+ * <p>It is the half {@link AttributeMappers} lacks, whose other half is {@link AttributeWriter}.
+ * They are together and not spread over one mapper subclass per attribute so that they can be
+ * compared: the reader and the writer of an attribute have to be inverses, and that is seen reading
+ * the two cases one after the other, not jumping between thirty-four files.
  *
- * <h2>El cursor</h2>
+ * <h2>The cursor</h2>
  *
- * <p>Varios lectores toman un `int[] p` de un elemento en vez de recibir y devolver el offset. No es
- * capricho: una anotación **no tiene largo propio** —para saber dónde termina hay que recorrerla
- * entera— y un `element_value` puede tener adentro otro. Con recursión, devolver la posición nueva
- * obligaría a un tipo par (valor, posición) en cada nivel; el arreglo de un elemento es el mismo
- * truco con menos ceremonia.
+ * <p>Several readers take a one-element `int[] p` instead of receiving and returning the offset. It
+ * is not a whim: an annotation **has no length of its own** --to know where it ends it has to be
+ * walked whole-- and an `element_value` may have another inside. With recursion, returning the new
+ * position would force a (value, position) pair type at each level; the one-element array is the
+ * same trick with less ceremony.
  *
- * <h2>Las etiquetas</h2>
+ * <h2>The labels</h2>
  *
- * <p>Todo offset que el modelo expone como {@link java.lang.classfile.Label} se envuelve en un
- * {@link LabelImpl}, que es una etiqueta que **ya sabe su posición**. Es lo correcto acá: estos
- * offsets salieron de un archivo, no son incógnitas por resolver.
+ * <p>Every offset the model exposes as a {@link java.lang.classfile.Label} is wrapped in a {@link
+ * LabelImpl}, which is a label that **already knows its position**. It is what is right here: these
+ * offsets came out of a file, they are not unknowns to be resolved.
  */
 final class AttributeReader {
 
     private AttributeReader() {
     }
 
-    // ---- lectura de entradas de pool ------------------------------------------------------
+    // ---- reading pool entries ------------------------------------------------------------------
     //
-    // Nuestro javac borra la `T` de `readEntry(int, Class<T>)` a su cota cuando el resultado va
-    // derecho como argumento de otra llamada, y ahí no encuentra el método. Con un local del tipo
-    // declarado en el medio resuelve; es el mismo rodeo que ya documenta `AttributeMapperImpl`, y
-    // acá está una vez por tipo en lugar de repetido en cada sitio de lectura.
+    // These helpers put a local of the declared type between `readEntry(int, Class<T>)` and whoever
+    // takes its result, because our javac used to erase `T` to its bound when the result went
+    // straight in as an argument of another call, and then did not find the method. It is the same
+    // detour `AttributeMapperImpl` documents, here once per type instead of repeated at each
+    // reading site. The frozen javac compiles the direct form now (checked 2026-09-18), so the
+    // detour is no longer needed; it is harmless.
 
     private static Utf8Entry utf8At(ClassReader cf, int at) {
         Utf8Entry e = cf.readEntry(at, Utf8Entry.class);
@@ -139,10 +141,10 @@ final class AttributeReader {
 
 
     /**
-     * El atributo que empieza en `pos` (el primer byte del cuerpo), según su código de reparto.
+     * The attribute starting at `pos` (the first byte of the body), according to its dispatch code.
      *
-     * <p>`length` es el largo del cuerpo, que ya validó {@link TypedAttributeMapper}. Sólo lo usan
-     * los dos atributos cuyo cuerpo no lleva un contador propio.
+     * <p>`length` is the length of the body, already validated by {@link TypedAttributeMapper}.
+     * Only the two attributes whose body carries no counter of its own use it.
      */
     static Attribute<?> read(int code, AttributeMapper<?> mapper, Utf8Entry name,
             AttributedElement enclosing, ClassReader cf, int pos, int length) {
@@ -179,8 +181,8 @@ final class AttributeReader {
         if (code == AttributeMappers.C_MODULE_RESOLUTION) {
             return TypedAttributes.moduleResolution(cf.readU2(pos));
         }
-        // `SourceDebugExtension` es el único atributo del JVMS cuyo cuerpo NO tiene estructura: es
-        // UTF-8 modificado de punta a punta, sin contador. De ahí que necesite el `length`.
+        // `SourceDebugExtension` is the only JVMS attribute whose body has NO structure: it is
+        // modified UTF-8 from end to end, with no counter. Hence it needs the `length`.
         if (code == AttributeMappers.C_SOURCE_DEBUG_EXTENSION) {
             return TypedAttributes.sourceDebugExtension(cf.readBytes(pos, length));
         }
@@ -198,9 +200,9 @@ final class AttributeReader {
         }
         if (code == AttributeMappers.C_ENCLOSING_METHOD) {
             ClassEntry owner = classAt(cf, pos);
-            // Índice cero significa "no hay método": la clase está en un inicializador o en un
-            // cuerpo de clase, no dentro de un método. `readEntryOrNull` distingue eso de un índice
-            // roto, que sí tiene que romper.
+            // Index zero means "there is no method": the class is in an initialiser or in a class
+            // body, not inside a method. `readEntryOrNull` tells that apart from a broken index,
+            // which does have to break.
             NameAndTypeEntry nat = nameAndTypeOrNullAt(cf, pos + 2);
             return TypedAttributes.enclosingMethod(owner, Optional.ofNullable(nat));
         }
@@ -260,10 +262,10 @@ final class AttributeReader {
         if (code == AttributeMappers.C_UNKNOWN) {
             return new UnknownAttributeImpl(name, mapper, cf.readBytes(pos, length));
         }
-        throw new IllegalArgumentException("código de atributo desconocido: " + code);
+        throw new IllegalArgumentException("unknown attribute code: " + code);
     }
 
-    // ---- las listas de entradas de pool -------------------------------------------------------
+    // ---- the lists of pool entries -------------------------------------------------------------
 
     private static List<ClassEntry> readClasses(ClassReader cf, int pos) {
         int n = cf.readU2(pos);
@@ -283,7 +285,7 @@ final class AttributeReader {
         return out;
     }
 
-    // ---- las tablas ---------------------------------------------------------------------------
+    // ---- the tables ----------------------------------------------------------------------------
 
     private static Attribute<?> readInnerClasses(ClassReader cf, int pos) {
         int n = cf.readU2(pos);
@@ -345,8 +347,8 @@ final class AttributeReader {
         return TypedAttributes.characterRangeTable(out);
     }
 
-    // Ojo: la cantidad de parámetros va en UN byte, no en dos. Es el único contador `u1` de esta
-    // familia de tablas, y un `readU2` acá se lleva puesto el primer nombre.
+    // Careful: the parameter count goes in ONE byte, not in two. It is the only `u1` counter of
+    // this family of tables, and a `readU2` here swallows the first name.
     private static Attribute<?> readMethodParameters(ClassReader cf, int pos) {
         int n = cf.readU1(pos);
         List<MethodParameterInfo> out = new ArrayList<MethodParameterInfo>();
@@ -444,11 +446,11 @@ final class AttributeReader {
                 provides);
     }
 
-    // Los atributos de un componente se leen con el registro CRUDO, no con éste. No es
-    // inconsistencia: un componente puede llevar cualquier atributo, incluidos los que esta
-    // biblioteca no conoce, y `Mappers` es justamente el índice que sabe contestar por nombre para
-    // todos. Se pierde el tipado de esos atributos anidados y se gana que un `.class` con un
-    // atributo raro adentro de un componente se lea igual.
+    // The attributes of a component are read with the RAW registry, not with this one. It is not an
+    // inconsistency: a component may carry any attribute, including the ones this library does not
+    // know, and `Mappers` is precisely the index that knows how to answer by name for all of them.
+    // The typing of those nested attributes is lost, and what is gained is that a `.class` with an
+    // odd attribute inside a component is read all the same.
     private static Attribute<?> readRecord(ClassReader cf, int pos) {
         int n = cf.readU2(pos);
         List<RecordComponentInfo> out = new ArrayList<RecordComponentInfo>();
@@ -470,14 +472,15 @@ final class AttributeReader {
         return TypedAttributes.record(out);
     }
 
-    // ---- las anotaciones ----------------------------------------------------------------------
+    // ---- the annotations -----------------------------------------------------------------------
     //
-    // El grueso lo hace `Annotations`, que ya tiene el parser de `annotation` y de `element_value`
-    // con su cursor. Aca queda solo la capa de arriba de las anotaciones POR PARAMETRO, que es la
-    // unica forma que `Annotations` no cubre: una lista de listas con el contador en un byte.
+    // The bulk is done by `Annotations`, which already has the parser of `annotation` and of
+    // `element_value` with its cursor. What is left here is only the upper layer of the
+    // PER-PARAMETER annotations, which is the one form `Annotations` does not cover: a list of
+    // lists with the counter in one byte.
 
     private static List<List<Annotation>> readByParameter(ClassReader cf, int pos) {
-        // La cantidad de parametros va en un byte, como en `MethodParameters`.
+        // The parameter count goes in one byte, as in `MethodParameters`.
         int n = cf.readU1(pos);
         Annotations.Cursor c = new Annotations.Cursor();
         c.p = pos + 1;
@@ -485,23 +488,23 @@ final class AttributeReader {
         for (int i = 0; i < n; i++) {
             int m = cf.readU2(c.p);
             c.p = c.p + 2;
-            List<Annotation> uno = new ArrayList<Annotation>();
+            List<Annotation> single = new ArrayList<Annotation>();
             for (int j = 0; j < m; j++) {
-                uno.add(Annotations.readAnnotation(cf, c));
+                single.add(Annotations.readAnnotation(cf, c));
             }
-            out.add(uno);
+            out.add(single);
         }
         return out;
     }
 
     // ---- `StackMapTable` ----------------------------------------------------------------------
 
-    // Las seis formas de frame son una COMPRESIÓN del mismo estado: cada una se lee contra el frame
-    // anterior. Acá se descomprimen todas a la forma completa —locales y pila explícitas— porque
-    // `StackMapFrameInfo` describe el estado, no su codificación.
+    // The six frame forms are a COMPRESSION of the same state: each one is read against the
+    // previous frame. Here they are all decompressed to the full form --explicit locals and stack--
+    // because `StackMapFrameInfo` describes the state, not its encoding.
     //
-    // El offset también es relativo (`offset_delta`): el primero está en `offset_delta` y cada uno
-    // de los siguientes en `anterior + offset_delta + 1`. Ese `+1` es la parte que se olvida.
+    // The offset is relative too (`offset_delta`): the first is at `offset_delta` and each
+    // following one at `previous + offset_delta + 1`. That `+1` is the part that gets forgotten.
     private static Attribute<?> readStackMapTable(ClassReader cf, int pos) {
         int n = cf.readU2(pos);
         int[] p = new int[] { pos + 2 };
@@ -524,7 +527,7 @@ final class AttributeReader {
             } else if (frameType >= 248 && frameType <= 250) {
                 bci = bci + cf.readU2(p[0]) + 1;
                 p[0] = p[0] + 2;
-                // `chop`: se sacan del final tantas variables como diga la etiqueta.
+                // `chop`: as many variables as the tag says are removed from the end.
                 for (int k = 0; k < 251 - frameType; k++) {
                     locals.remove(locals.size() - 1);
                 }
@@ -552,11 +555,11 @@ final class AttributeReader {
                     stack.add(readVerificationType(cf, p));
                 }
             } else {
-                throw new IllegalArgumentException("frame_type reservado: " + frameType);
+                throw new IllegalArgumentException("reserved frame_type: " + frameType);
             }
-            // La copia de `locals` no es defensa: la lista se sigue usando como acumulador para el
-            // frame siguiente, así que sin copiar los frames terminarían compartiendo el estado
-            // final en vez de tener cada uno el suyo.
+            // The copy of `locals` is not defensive: the list keeps being used as the accumulator
+            // for the next frame, so without copying the frames would end up sharing the final
+            // state instead of each having its own.
             out.add(TypedAttributes.stackMapFrame(new LabelImpl(bci),
                     new ArrayList<VerificationTypeInfo>(locals), stack));
         }
@@ -576,18 +579,18 @@ final class AttributeReader {
             p[0] = p[0] + 2;
             return TypedAttributes.uninitializedVerificationType(new LabelImpl(offset));
         }
-        SimpleVerificationTypeInfo[] simples = SimpleVerificationTypeInfo.values();
-        for (int i = 0; i < simples.length; i++) {
-            if (simples[i].tag() == tag) {
-                return simples[i];
+        SimpleVerificationTypeInfo[] simpleTypes = SimpleVerificationTypeInfo.values();
+        for (int i = 0; i < simpleTypes.length; i++) {
+            if (simpleTypes[i].tag() == tag) {
+                return simpleTypes[i];
             }
         }
-        throw new IllegalArgumentException("verification_type_info desconocido: " + tag);
+        throw new IllegalArgumentException("unknown verification_type_info: " + tag);
     }
 }
 
-// Las entradas de las dos tablas de variables locales. No tienen fábrica pública —el JDK las expone
-// sólo como resultado de leer— así que viven acá, del lado del lector.
+// The entries of the two local variable tables. They have no public factory --the JDK exposes them
+// only as the result of reading-- so they live here, on the reader's side.
 final class LocalVariableInfoImpl implements LocalVariableInfo {
 
     private final int startPc;
@@ -663,9 +666,9 @@ final class LocalVariableTypeInfoImpl implements LocalVariableTypeInfo {
     }
 }
 
-// Un atributo cuyo nombre no está en el JVMS. Conserva las tres cosas que se saben de él —el nombre,
-// el mapeador que lo reconoció y sus bytes— y ninguna más. Es lo que permite copiarlo de un archivo
-// a otro sin entenderlo.
+// An attribute whose name is not in the JVMS. It keeps the three things known about it --the name,
+// the mapper that recognised it and its bytes-- and nothing more. It is what allows copying it from
+// one file to another without understanding it.
 final class UnknownAttributeImpl implements UnknownAttribute {
 
     private final Utf8Entry name;
@@ -687,12 +690,12 @@ final class UnknownAttributeImpl implements UnknownAttribute {
     }
 
     public byte[] contents() {
-        byte[] copia = new byte[this.contents.length];
-        System.arraycopy(this.contents, 0, copia, 0, this.contents.length);
-        return copia;
+        byte[] copy = new byte[this.contents.length];
+        System.arraycopy(this.contents, 0, copy, 0, this.contents.length);
+        return copy;
     }
 
-    // Sin copiar, para el escritor.
+    // Without copying, for the writer.
     byte[] raw() {
         return this.contents;
     }

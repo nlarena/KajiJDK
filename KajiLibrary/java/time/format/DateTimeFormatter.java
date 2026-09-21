@@ -611,10 +611,13 @@ public final class DateTimeFormatter {
     /**
      * This formatter seen as a `java.text.Format`.
      *
-     * <p>**It only writes.** This library's `java.text.Format` is the formatting half of the
-     * hierarchy --`parseObject` is not declared there-- so the object that comes back fulfils in
-     * full the contract its type declares. The reading half is done through `parse(text,
-     * ParsePosition)`, which is the same operation without the middleman.
+     * <p>It writes **and** reads: `parseObject` goes through `parse(text, ParsePosition)`, which is
+     * the same operation without the middleman.
+     *
+     * <p>This note used to say that it only wrote, because `java.text.Format` did not declare
+     * `parseObject` at the time. It does now, and until finding #284 caught it the adapter was a
+     * concrete class missing an inherited abstract method: it compiled, and any caller reaching for
+     * the reading half would have got an `AbstractMethodError`.
      */
     public Format toFormat() {
         return new FormatAdapter(this, null);
@@ -872,9 +875,10 @@ final class Unresolved implements TemporalAccessor {
 
 // `DateTimeFormatter.toFormat()`.
 //
-// It only writes, because this library's `java.text.Format` declares only the writing half. The
-// `parseQuery` is kept so that the object is the one the caller asked for --two `toFormat` with
-// different queries are not equal-- even though there is no `parseObject` today to use it.
+// It writes AND reads. This note used to say it only wrote, because this library's
+// `java.text.Format` declared only the writing half; it declares both now, and `parseObject` is
+// implemented below. The `parseQuery` is what that half reads with, and it is also what keeps the
+// object the one the caller asked for -- two `toFormat` with different queries are not equal.
 final class FormatAdapter extends Format {
 
     private final DateTimeFormatter formatter;
@@ -897,5 +901,35 @@ final class FormatAdapter extends Format {
         }
         toAppendTo.append(this.formatter.format((TemporalAccessor) obj));
         return toAppendTo;
+    }
+
+    /**
+     * Reads from `pos` and leaves the rest, as `Format` asks.
+     *
+     * <p>**A failure is noted in the cursor, not thrown.** That is the difference between this form
+     * and `parseObject(String)`, and it is why the call to `parse(text, position)` --which does
+     * throw-- goes inside a `try`: the two halves have opposite conventions for the same failure,
+     * and returning the exception through would break the contract of whoever called this one.
+     */
+    public Object parseObject(String source, ParsePosition pos) {
+        if (source == null) {
+            throw new NullPointerException("source");
+        }
+        if (pos == null) {
+            throw new NullPointerException("pos");
+        }
+        try {
+            TemporalAccessor read = this.formatter.parse(source, pos);
+            if (this.query == null) {
+                return read;
+            }
+            return read.query(this.query);
+        } catch (RuntimeException e) {
+            // `parse` may have moved the index before failing; the error index is what marks it.
+            if (pos.getErrorIndex() < 0) {
+                pos.setErrorIndex(pos.getIndex());
+            }
+            return null;
+        }
     }
 }

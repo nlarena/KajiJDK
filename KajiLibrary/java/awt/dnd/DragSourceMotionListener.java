@@ -3,14 +3,14 @@ package java.awt.dnd;
 import java.util.EventListener;
 
 /**
- * Quien quiere seguir el movimiento del ratón durante todo el arrastre.
+ * Whoever wants to follow the movement of the mouse throughout the drag.
  *
- * <p>Está separado de {@link DragSourceListener} por la misma razón que el movimiento del ratón está
- * separado de sus botones: son muchísimos más eventos, y quien sólo quiere saber dónde se soltó no
- * debería pagarlos.
+ * <p>It is kept apart from {@link DragSourceListener} for the same reason that the movement of the
+ * mouse is kept apart from its buttons: they are very many more events, and whoever only wants to
+ * know where it was dropped should not pay for them.
  */
 public interface DragSourceMotionListener extends EventListener {
 
-    /** El ratón se movió mientras se arrastra. */
+    /** The mouse moved while dragging. */
     void dragMouseMoved(DragSourceDragEvent dsde);
 }

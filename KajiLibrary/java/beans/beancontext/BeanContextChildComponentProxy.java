@@ -3,22 +3,23 @@ package java.beans.beancontext;
 import java.awt.Component;
 
 /**
- * Lo implementa un {@link BeanContextChild} que ademas tiene una parte visual.
+ * Implemented by a {@link BeanContextChild} that also has a visual part.
  *
- * <h2>Por que la parte visual va aparte y no en el propio bean</h2>
+ * <h2>Why the visual part is separate and not in the bean itself</h2>
  *
- * <p>Porque un bean no tiene por que ser visible. Un {@link BeanContextChild} puede ser un servicio,
- * un origen de datos o cualquier cosa sin representacion en pantalla, y obligarlo a extender
- * {@link Component} lo ataria a AWT sin motivo.
+ * <p>Because a bean does not have to be visible. A {@link BeanContextChild} can be a service, a
+ * data source or anything with no on-screen representation, and forcing it to extend {@link
+ * Component} would tie it to AWT for no reason.
  *
- * <p>Esta interfaz es la salida: quien tiene componente lo dice implementandola, y el contenedor
- * pregunta con un {@code instanceof} en vez de suponer.
+ * <p>This interface is the way out: whoever has a component says so by implementing it, and the
+ * container asks with an {@code instanceof} instead of assuming.
  *
- * @deprecated el modelo de {@code BeanContext} no tiene reemplazo y quedo en desuso; ver el paquete.
+ * @deprecated the {@code BeanContext} model has no replacement and is deprecated for removal. This
+ *     tag used to end in "see the package"; this tree has no package documentation to see.
  */
 @Deprecated(since = "23", forRemoval = true)
 public interface BeanContextChildComponentProxy {
 
-    /** El componente que representa a este bean; nunca {@code null}. */
+    /** The component that represents this bean; never {@code null}. */
     Component getComponent();
 }

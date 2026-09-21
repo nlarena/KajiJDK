@@ -11,26 +11,28 @@ public interface SequencedMap<K, V> extends Map<K, V> {
     SequencedMap<K, V> reversed();
 
     /**
-     * Las claves como conjunto secuenciado.
+     * The keys as a sequenced set.
      *
-     * <p>Los tres `sequenced*` son `default` **y lanzan**, igual que `firstEntry` y compania de mas
-     * abajo. La razon es la misma: construir la vista pide saber recorrer el mapa, y esta interfaz no
-     * tiene con que -- nuestro `Map` no expone `keySet`/`values`/`entrySet`. Cada implementacion que
-     * si sabe los sobreescribe; `LinkedHashMap` lo hace, y sus vistas son vistas de verdad.
+     * <p>The three `sequenced*` are inner views, built on `keySet()`, `values()` and `entrySet()`
+     * (see {@code SeqMapViews}). They used to refuse, on the grounds that this interface had no way
+     * of walking the map because `Map` did not expose those three; `Map` exposes them now, so the
+     * grounds are gone and so is the refusal.
      *
-     * <p>Lanzar es lo unico honesto que puede hacer una interfaz que no puede cumplir: devolver un
-     * conjunto vacio compilaria y mentiria.
+     * <p>The entry operations further down still refuse here, and that is a different matter: every
+     * implementation in this library overrides them, so the default is never what answers.
      */
     default SequencedSet<K> sequencedKeySet() {
-        throw new UnsupportedOperationException();
+        return new SeqMapKeySet<K, V>(this);
     }
 
+    /** The values, in the map's encounter order. */
     default SequencedCollection<V> sequencedValues() {
-        throw new UnsupportedOperationException();
+        return new SeqMapValues<K, V>(this);
     }
 
+    /** The entries, in the map's encounter order. */
     default SequencedSet<Map.Entry<K, V>> sequencedEntrySet() {
-        throw new UnsupportedOperationException();
+        return new SeqMapEntrySet<K, V>(this);
     }
 
     default Map.Entry<K, V> firstEntry() {

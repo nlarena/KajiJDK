@@ -1,7 +1,7 @@
 package com.sun.jdi.request;
 
 /**
- * Pedir aviso cuando se lea un campo.
+ * Ask to be told when a field is read.
  *
  * @since 1.3
  */

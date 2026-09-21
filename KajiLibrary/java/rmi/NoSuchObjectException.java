@@ -1,19 +1,19 @@
 package java.rmi;
 
 /**
- * KajiLibrary's java.rmi.NoSuchObjectException -- Ese objeto ya no esta en el servidor.
+ * KajiLibrary's java.rmi.NoSuchObjectException -- that object is no longer on the server.
  *
- * <p>El objeto remoto no existe mas en la maquina virtual del servidor: se lo exporto y despues se
- * lo dio de baja, o el servidor se reinicio.
+ * <p>The remote object no longer exists in the server's virtual machine: it was exported and then
+ * unexported, or the server restarted.
  *
- * <p>Es <b>final</b> en el sentido practico: reintentar con la misma referencia no va a funcionar
- * nunca. Hay que volver a buscar en el registro para conseguir una referencia nueva.
+ * <p>It is <b>final</b> in the practical sense: retrying with the same reference will never work.
+ * One has to look up the registry again to get a fresh reference.
  */
 public class NoSuchObjectException extends RemoteException {
 
     private static final long serialVersionUID = 6619395951570472985L;
 
-    /** @param s el mensaje */
+    /** @param s the message */
     public NoSuchObjectException(String s) {
         super(s);
     }

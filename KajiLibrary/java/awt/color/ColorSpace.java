@@ -6,25 +6,25 @@ import java.io.Serializable;
  * A colour space: how many components it has, what range each of them has, and how it converts to
  * sRGB and to CIEXYZ.
  *
- * <p>CIEXYZ is the axis of the whole design and it is worth saying why: it is an **absolute** space,
- * tied to how the human eye sees and not to any device. Any pair of spaces converts between each
- * other by passing through it, and that is why every space has to know how to go to and from XYZ
- * even though it knows nothing about the others. `toRGB`/`fromRGB` exist separately because the road
- * to sRGB is the most used one and doing it in two steps would be dearer and less exact.
+ * <p>CIEXYZ is the axis of the whole design and it is worth saying why: it is an **absolute**
+ * space, tied to how the human eye sees and not to any device. Any pair of spaces converts between
+ * each other by passing through it, and that is why every space has to know how to go to and from
+ * XYZ even though it knows nothing about the others. `toRGB`/`fromRGB` exist separately because the
+ * road to sRGB is the most used one and doing it in two steps would be dearer and less exact.
  *
  * <h2>The standard spaces come out of ICC profiles</h2>
  *
  * <p>{@link #getInstance} returns an {@link ICC_ColorSpace}, as the JDK does: behind each one there
- * is a real {@link ICC_Profile}, with its matrix, its curves and its white point. The difference from
- * the JDK is where the profile's bytes come from — the JDK ships them as a resource file and here
- * they are **built** out of the standard's constants. The result is a valid ICC profile that can be
- * written to a file and that another program reads.
+ * is a real {@link ICC_Profile}, with its matrix, its curves and its white point. The difference
+ * from the JDK is where the profile's bytes come from — the JDK ships them as a resource file and
+ * here they are **built** out of the standard's constants. The result is a valid ICC profile that
+ * can be written to a file and that another program reads.
  *
- * <p>The observable consequence is that the numbers differ in the last digits: both roads quantize to
- * 16 bits but not at the same points, so the JDK's `toRGB({0.5,0.5,0.5})` over sRGB gives `0.5000076`
- * and this one another value just as close to 0.5. A test comparing bit for bit against the JDK will
- * fail; this house's tests compare with a tolerance and verify **properties** — round trips, known
- * points — instead of digits.
+ * <p>The observable consequence is that the numbers differ in the last digits: both roads quantize
+ * to 16 bits but not at the same points, so the JDK's `toRGB({0.5,0.5,0.5})` over sRGB gives
+ * `0.5000076` and this one another value just as close to 0.5. A test comparing bit for bit against
+ * the JDK will fail; this house's tests compare with a tolerance and verify **properties** — round
+ * trips, known points — instead of digits.
  *
  * <p><strong>The one thing missing is {@link #CS_PYCC}</strong>, and the reason is concrete:
  * PhotoYCC is defined not by formulas but by 230 KB of interpolation tables that live inside its
@@ -48,7 +48,7 @@ public abstract class ColorSpace implements Serializable {
     public static final int TYPE_Yxy = 4;
     /** RGB. */
     public static final int TYPE_RGB = 5;
-    /** Escala de grises. */
+    /** Greyscale. */
     public static final int TYPE_GRAY = 6;
     /** HSV. */
     public static final int TYPE_HSV = 7;
@@ -58,33 +58,33 @@ public abstract class ColorSpace implements Serializable {
     public static final int TYPE_CMYK = 9;
     /** CMY. */
     public static final int TYPE_CMY = 11;
-    /** Genérico de 2 componentes. */
+    /** Generic, 2 components. */
     public static final int TYPE_2CLR = 12;
-    /** Genérico de 3 componentes. */
+    /** Generic, 3 components. */
     public static final int TYPE_3CLR = 13;
-    /** Genérico de 4 componentes. */
+    /** Generic, 4 components. */
     public static final int TYPE_4CLR = 14;
-    /** Genérico de 5 componentes. */
+    /** Generic, 5 components. */
     public static final int TYPE_5CLR = 15;
-    /** Genérico de 6 componentes. */
+    /** Generic, 6 components. */
     public static final int TYPE_6CLR = 16;
-    /** Genérico de 7 componentes. */
+    /** Generic, 7 components. */
     public static final int TYPE_7CLR = 17;
-    /** Genérico de 8 componentes. */
+    /** Generic, 8 components. */
     public static final int TYPE_8CLR = 18;
-    /** Genérico de 9 componentes. */
+    /** Generic, 9 components. */
     public static final int TYPE_9CLR = 19;
-    /** Genérico de 10 componentes. */
+    /** Generic, 10 components. */
     public static final int TYPE_ACLR = 20;
-    /** Genérico de 11 componentes. */
+    /** Generic, 11 components. */
     public static final int TYPE_BCLR = 21;
-    /** Genérico de 12 componentes. */
+    /** Generic, 12 components. */
     public static final int TYPE_CCLR = 22;
-    /** Genérico de 13 componentes. */
+    /** Generic, 13 components. */
     public static final int TYPE_DCLR = 23;
-    /** Genérico de 14 componentes. */
+    /** Generic, 14 components. */
     public static final int TYPE_ECLR = 24;
-    /** Genérico de 15 componentes. */
+    /** Generic, 15 components. */
     public static final int TYPE_FCLR = 25;
 
     /** The usual sRGB, with its gamma curve. */
@@ -93,9 +93,9 @@ public abstract class ColorSpace implements Serializable {
     public static final int CS_LINEAR_RGB = 1004;
     /** CIEXYZ with a D50 white, which is the one ICC uses. */
     public static final int CS_CIEXYZ = 1001;
-    /** PhotoYCC. **No disponible acá**; ver la nota de la clase. */
+    /** PhotoYCC. **Not available here**; see the note of the class. */
     public static final int CS_PYCC = 1002;
-    /** Escala de grises lineal. */
+    /** Linear greyscale. */
     public static final int CS_GRAY = 1003;
 
     // The twenty-odd `TYPE_` constants that are missing (there is no 10: the JDK skips the gap
@@ -109,17 +109,17 @@ public abstract class ColorSpace implements Serializable {
      *
      * @throws IllegalArgumentException if the number of components is less than 1
      */
-    protected ColorSpace(int type, int numcomponents) {
-        if (numcomponents < 1) {
+    protected ColorSpace(int type, int numComponentsArg) {
+        if (numComponentsArg < 1) {
             throw new IllegalArgumentException("numComponents < 1");
         }
         this.type = type;
-        this.numComponents = numcomponents;
+        this.numComponents = numComponentsArg;
     }
 
-    // The instances are unique per identifier: `getInstance(CS_sRGB) == getInstance(CS_sRGB)`, as in
-    // the JDK. They are created late because building all five on class load would cost the work of
-    // the four nobody asked for.
+    // The instances are unique per identifier: `getInstance(CS_sRGB) == getInstance(CS_sRGB)`, as
+    // in the JDK. They are created late because building all five on class load would cost the work
+    // of the four nobody asked for.
     private static ColorSpace sRGBcs;
     private static ColorSpace linearRGBcs;
     private static ColorSpace xyzCS;
@@ -257,28 +257,29 @@ public abstract class ColorSpace implements Serializable {
 
     // ---- the shared mathematics ------------------------------------------------------------
     //
-    // The matrices are ICC's sRGB profile's, adapted to D50 by Bradford. They are written out and not
-    // computed because they are the standard's constants: recomputing them on every start would be
-    // work to arrive at the same numbers with fewer digits.
+    // The matrices are ICC's sRGB profile's, adapted to D50 by Bradford. They are written out and
+    // not computed because they are the standard's constants: recomputing them on every start would
+    // be work to arrive at the same numbers with fewer digits.
 
-    static final float[] RGB_A_XYZ = {
+    static final float[] RGB_TO_XYZ = {
         0.4360747f, 0.3850649f, 0.1430804f,
         0.2225045f, 0.7168786f, 0.0606169f,
         0.0139322f, 0.0971045f, 0.7141733f };
 
-    static final float[] XYZ_A_RGB = {
+    static final float[] XYZ_TO_RGB = {
         3.1338561f, -1.6168667f, -0.4906146f,
         -0.9787684f, 1.9161415f, 0.0334540f,
         0.0719453f, -0.2289914f, 1.4052427f };
 
     /** The D50 white, which is ICC's white point. */
-    static final float[] BLANCO_D50 = { 0.9642f, 1.0f, 0.8249f };
+    static final float[] WHITE_D50 = { 0.9642f, 1.0f, 0.8249f };
 
     /**
      * The ceiling of an XYZ component.
      *
      * <p>It is not 2 but `2 - 1/32768`: XYZ is encoded in ICC as 16-bit fixed point with the 1 at
-     * 0x8000, so the largest representable value is 0xFFFF/0x8000. The JDK answers this same number.
+     * 0x8000, so the largest representable value is 0xFFFF/0x8000. The JDK answers this same
+     * number.
      */
     static final float XYZ_MAX = 1.0f + (32767.0f / 32768.0f);
 

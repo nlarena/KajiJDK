@@ -4,51 +4,51 @@ import java.io.Serializable;
 import java.util.Hashtable;
 
 /**
- * Los nombres de las propiedades de CSS, como constantes.
+ * The CSS property names, as constants.
  *
- * <h2>La misma idea que {@link HTML}, para otro lenguaje</h2>
+ * <h2>The same idea as {@link HTML}, for another language</h2>
  *
- * <p>Cada propiedad es un objeto unico que sirve de clave en los atributos de un documento. Lo que
- * agrega sobre {@link HTML.Attribute} son dos datos que en CSS hacen falta a cada paso: el valor
- * por omision y si la propiedad se hereda del elemento de arriba.
+ * <p>Each property is a unique object that serves as a key in a document's attributes. What it
+ * adds over {@link HTML.Attribute} are two data that in CSS are needed at every step: the default
+ * value and whether the property is inherited from the element above.
  *
- * <h2>Por que importa lo que se hereda</h2>
+ * <h2>Why what is inherited matters</h2>
  *
- * <p>El color de la letra se hereda y el color de fondo no. Esa diferencia no es un detalle: es lo
- * que hace que poner un color en el <code>&lt;body&gt;</code> pinte todo el texto de la pagina pero
- * no pinte el fondo de cada parrafo. Sin esta tabla habria que decidirlo caso por caso, y las
- * decisiones no coincidirian entre si.
+ * <p>The letter's colour is inherited and the background colour is not. That difference is not a
+ * detail: it is what makes putting a colour on the <code>&lt;body&gt;</code> paint all the page's
+ * text but not paint each paragraph's background. Without this table it would have to be decided
+ * case by case, and the decisions would not agree with each other.
  *
- * <p>Las propiedades que no se heredan tienen un valor por omision que se aplica cuando nadie las
- * pone. Las que se heredan tambien lo tienen, pero solo llega a usarse en la raiz.
+ * <p>The properties that are not inherited have a default value that applies when nobody sets
+ * them. Those that are inherited have one too, but it only gets used at the root.
  */
 public class CSS implements Serializable {
 
     private static final Hashtable<String, Attribute> attributeMap =
             new Hashtable<String, Attribute>();
 
-    /** Nada que construir; la clase es solo el lugar de las constantes. */
+    /** Nothing to build; the class is only the place where the constants live. */
     public CSS() {
     }
 
-    /** Todas las propiedades conocidas; es una copia. */
+    /** Every known property; it is a copy. */
     public static Attribute[] getAllAttributeKeys() {
         Attribute[] keys = new Attribute[Attribute.allAttributes.length];
         System.arraycopy(Attribute.allAttributes, 0, keys, 0, Attribute.allAttributes.length);
         return keys;
     }
 
-    /** La propiedad con ese nombre, o nulo. El nombre va en minusculas, como en la hoja. */
+    /** The property with that name, or null. The name goes in lower case, as in the sheet. */
     public static final Attribute getAttribute(String name) {
         return attributeMap.get(name);
     }
 
     /**
-     * El nombre de una propiedad de CSS.
+     * A CSS property's name.
      *
-     * <p>Es final y su constructor no es publico: la lista es cerrada. Una propiedad que no este
-     * aca se ignora al leer la hoja de estilos, que es mejor que guardarla y no saber que hacer con
-     * ella despues.
+     * <p>It is final and its constructor is not public: the list is closed. A property that is not
+     * here is ignored when reading the style sheet, which is better than keeping it and not knowing
+     * what to do with it later.
      */
     public static final class Attribute {
 
@@ -62,17 +62,17 @@ public class CSS implements Serializable {
             this.inherited = inherited;
         }
 
-        /** El nombre tal como se escribe en la hoja de estilos. */
+        /** The name just as it is written in the style sheet. */
         public String toString() {
             return name;
         }
 
-        /** Lo que vale si nadie la pone; nulo si no tiene un valor unico. */
+        /** What it is worth if nobody sets it; null if it has no single value. */
         public String getDefaultValue() {
             return defaultValue;
         }
 
-        /** Si el elemento de adentro la recibe sin declararla; ver la nota de {@link CSS}. */
+        /** Whether the element inside receives it without declaring it; see {@link CSS}'s note. */
         public boolean isInherited() {
             return inherited;
         }

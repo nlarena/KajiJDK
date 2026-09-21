@@ -4,23 +4,23 @@ import com.sun.jdi.ObjectReference;
 import com.sun.jdi.ThreadReference;
 
 /**
- * Un hilo empezo a esperar por un candado que otro tiene.
+ * A thread began waiting for a lock another one holds.
  *
  * @since 1.3
  */
 public interface MonitorContendedEnterEvent extends LocatableEvent {
 
     /**
-     * El thread.
+     * The thread.
      *
-     * @return el resultado
+     * @return the result
      */
     ThreadReference thread();
 
     /**
-     * El monitor.
+     * The monitor.
      *
-     * @return el resultado
+     * @return the result
      */
     ObjectReference monitor();
 }

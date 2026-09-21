@@ -49,10 +49,10 @@ public final class URL implements Serializable {
     // The factory the program registered, or `null`. It can be set **once only**, just as in the
     // JDK: two libraries setting it would trample each other, and the second would change the meaning
     // of the URLs the first had already created.
-    private static URLStreamHandlerFactory fabrica;
+    private static URLStreamHandlerFactory factory;
 
     // The `file:` handler, one only and shared: it has no state.
-    private static final URLStreamHandler ARCHIVO = new KajiFileHandler();
+    private static final URLStreamHandler FILE_HANDLER = new KajiFileHandler();
 
     /**
      * Sets the program's handler factory.
@@ -61,31 +61,31 @@ public final class URL implements Serializable {
      */
     public static void setURLStreamHandlerFactory(URLStreamHandlerFactory fac) {
         synchronized (URL.class) {
-            if (fabrica != null) {
+            if (factory != null) {
                 throw new Error("factory already defined");
             }
-            fabrica = fac;
+            factory = fac;
         }
     }
 
     // A protocol's handler: this URL's explicit one, whatever the factory says, or `file:`'s.
     // `null` = there is none, and whoever asks decides what to do about it.
-    private URLStreamHandler handlerDelProtocolo() {
+    private URLStreamHandler protocolHandler() {
         if (this.handler != null) {
             return this.handler;
         }
         URLStreamHandlerFactory f;
         synchronized (URL.class) {
-            f = fabrica;
+            f = factory;
         }
-        String protocolo = this.getProtocol();
+        String protocol = this.getProtocol();
         if (f != null) {
-            URLStreamHandler h = f.createURLStreamHandler(protocolo);
+            URLStreamHandler h = f.createURLStreamHandler(protocol);
             if (h != null) {
                 return h;
             }
         }
-        return "file".equalsIgnoreCase(protocolo) ? ARCHIVO : null;
+        return "file".equalsIgnoreCase(protocol) ? FILE_HANDLER : null;
     }
 
     /**
@@ -138,7 +138,7 @@ public final class URL implements Serializable {
      */
     @Deprecated
     public URL(URL context, String spec, URLStreamHandler handler) throws MalformedURLException {
-        this(resolverContra(context, spec), handler);
+        this(resolveAgainst(context, spec), handler);
     }
 
     /** A URL from a `URI` with a handler of its own. */
@@ -186,26 +186,26 @@ public final class URL implements Serializable {
      * @throws MalformedURLException if the result is not a valid URL
      */
     public URL(URL context, String spec) throws MalformedURLException {
-        this(resolverContra(context, spec));
+        this(resolveAgainst(context, spec));
     }
 
-    private static String resolverContra(URL context, String spec) throws MalformedURLException {
+    private static String resolveAgainst(URL context, String spec) throws MalformedURLException {
         if (spec == null) {
             throw new MalformedURLException("null spec");
         }
         if (context == null) {
             return spec;
         }
-        URI relativo;
+        URI relative;
         try {
-            relativo = new URI(spec);
+            relative = new URI(spec);
         } catch (URISyntaxException bad) {
             throw new MalformedURLException(bad.getMessage());
         }
         // Bound to a local: chaining through an intermediate is lost (#108).
         URI base = context.toURI();
-        URI resuelto = base.resolve(relativo);
-        return resuelto.toString();
+        URI resolved = base.resolve(relative);
+        return resolved.toString();
     }
 
     /**
@@ -244,20 +244,20 @@ public final class URL implements Serializable {
         if (other == null) {
             return false;
         }
-        if (!igual(this.getProtocol(), other.getProtocol())) {
+        if (!same(this.getProtocol(), other.getProtocol())) {
             return false;
         }
-        if (!igual(this.getHost(), other.getHost())) {
+        if (!same(this.getHost(), other.getHost())) {
             return false;
         }
-        if (this.puertoEfectivo() != other.puertoEfectivo()) {
+        if (this.effectivePort() != other.effectivePort()) {
             return false;
         }
-        return igual(this.getFile(), other.getFile());
+        return same(this.getFile(), other.getFile());
     }
 
     // The written port, or the protocol's: `http://a` and `http://a:80` are the same resource.
-    private int puertoEfectivo() {
+    private int effectivePort() {
         int p = this.getPort();
         if (p == -1) {
             return this.getDefaultPort();
@@ -265,7 +265,7 @@ public final class URL implements Serializable {
         return p;
     }
 
-    private static boolean igual(String a, String b) {
+    private static boolean same(String a, String b) {
         if (a == null) {
             return b == null;
         }
@@ -372,16 +372,16 @@ public final class URL implements Serializable {
             throw new java.net.UnknownServiceException(
                     "this library can only open file: URLs, not " + scheme + ":");
         }
-        String ruta = this.getPath();
-        if (ruta == null || ruta.length() == 0) {
+        String path = this.getPath();
+        if (path == null || path.length() == 0) {
             throw new java.io.IOException("the URL has no path: " + this.spec);
         }
         // A Windows path arrives as `/C:/x`: the extra slash belongs to the URL's format, not to the
         // file system, and it has to come off before touching the disk.
-        if (ruta.length() > 2 && ruta.charAt(0) == '/' && ruta.charAt(2) == ':') {
-            ruta = ruta.substring(1);
+        if (path.length() > 2 && path.charAt(0) == '/' && path.charAt(2) == ':') {
+            path = path.substring(1);
         }
-        return new java.io.FileInputStream(ruta);
+        return new java.io.FileInputStream(path);
     }
 
     /** The same resource as a {@link URI}. Always succeeds: the URI is what parsed it. */
@@ -412,7 +412,7 @@ public final class URL implements Serializable {
     }
 
     @Override
-    public int hashCode() {
+    public synchronized int hashCode() {
         return this.uri.hashCode();
     }
 
@@ -431,7 +431,7 @@ public final class URL implements Serializable {
      * @throws IOException if the protocol has no handler, or if building it fails
      */
     public URLConnection openConnection() throws java.io.IOException {
-        URLStreamHandler h = this.handlerDelProtocolo();
+        URLStreamHandler h = this.protocolHandler();
         if (h == null) {
             throw new java.io.IOException("unknown protocol: " + this.getProtocol());
         }

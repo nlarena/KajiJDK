@@ -2,23 +2,23 @@ package org.xml.sax;
 
 import org.xml.sax.SAXException;
 
-// KajiLibrary's org.xml.sax.DTDHandler -- las dos declaraciones de la DTD que SAX le reporta a
-// *toda* aplicacion, valide o no.
+// KajiLibrary's org.xml.sax.DTDHandler -- the two declarations of the DTD SAX reports to
+// *every* application, whether it validates or not.
 //
-// Por que solo estas dos: una entidad no analizada es contenido que no es XML (una imagen, por
-// ejemplo) al que el documento se refiere por nombre, y una notacion dice de que tipo de cosa se
-// trata. Una aplicacion que quiera seguir esa referencia no tiene otra manera de resolver el
-// nombre, asi que SAX considera estas dos declaraciones parte del contrato basico y deja el
-// resto de la DTD (elementos, atributos, entidades analizadas) al opcional ext.DeclHandler.
+// Why only these two: an unparsed entity is content that is not XML (an image, for example) that
+// the document refers to by name, and a notation says what kind of thing it is. An application
+// that wants to follow that reference has no other way of resolving the name, so SAX considers
+// these two declarations part of the basic contract and leaves the rest of the DTD (elements,
+// attributes, parsed entities) to the optional ext.DeclHandler.
 //
-// Los dos eventos se reportan antes de que empiece el elemento del documento.
+// The two events are reported before the element of the document starts.
 public interface DTDHandler {
 
-    // Una declaracion de notacion. Exactamente uno de publicId/systemId puede ser null.
+    // A notation declaration. Exactly one of publicId/systemId may be null.
     void notationDecl(String name, String publicId, String systemId) throws SAXException;
 
-    // Una declaracion de entidad no analizada. `notationName` nombra una notacion declarada en
-    // otra parte de la DTD, y publicId puede ser null.
+    // An unparsed entity declaration. `notationName` names a notation declared elsewhere in the
+    // DTD, and publicId may be null.
     void unparsedEntityDecl(String name, String publicId, String systemId, String notationName)
             throws SAXException;
 }

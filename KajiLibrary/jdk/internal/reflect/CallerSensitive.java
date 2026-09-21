@@ -6,27 +6,29 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * KajiLibrary's jdk.internal.reflect.CallerSensitive -- marca un metodo cuyo comportamiento depende
- * de <b>quien lo llamo</b>.
+ * KajiLibrary's jdk.internal.reflect.CallerSensitive -- it marks a method whose behaviour depends
+ * on <b>who called it</b>.
  *
- * <p>{@code Class.forName(String)} carga con el cargador de su llamador. {@code MethodHandles.lookup()}
- * devuelve los permisos de su llamador. Ninguno de los dos puede contestar sin mirar la pila, y por
- * eso llaman a {@link Reflection#getCallerClass()}.
+ * <p>{@code Class.forName(String)} loads with the loader of its caller.
+ * {@code MethodHandles.lookup()} returns the permissions of its caller. Neither of the two can
+ * answer without looking at the stack, and that is why they call
+ * {@link Reflection#getCallerClass()}.
  *
- * <h2>Por que hace falta la marca</h2>
+ * <h2>Why the mark is needed</h2>
  *
- * <p>{@code getCallerClass()} devuelve el cuadro de arriba del que la llama, y eso se rompe si algo
- * se mete en el medio: invocar {@code Class.forName} por reflexion pondria los cuadros de la
- * maquinaria de reflexion entre el llamador de verdad y el metodo, y el resultado seria el cargador
- * de esa maquinaria en vez del de quien pregunto. La marca es lo que le dice al runtime "cuando
- * invoques esto reflexivamente, no cambies quien parece el llamador".
+ * <p>{@code getCallerClass()} returns the frame above the one that calls it, and that breaks if
+ * something gets in the middle: invoking {@code Class.forName} by reflection would put the frames
+ * of the machinery of reflection between the real caller and the method, and the result would be
+ * the loader of that machinery instead of that of whoever asked. The mark is what tells the runtime
+ * "when you invoke this reflectively, do not change who appears to be the caller".
  *
- * <p>De ahi sale su condicion mas importante, y es una que no se puede verificar sola: un metodo
- * marcado <b>no debe</b> ser publico y a la vez delegar en otro marcado, porque entonces el segundo
- * veria como llamador al primero y no al de afuera. El JDK la revisa con una herramienta aparte.
+ * <p>From there comes its most important condition, and it is one that cannot be verified by
+ * itself: a marked method <b>must not</b> be public and at the same time delegate to another marked
+ * one, because then the second would see the first as its caller and not the one from outside. The
+ * JDK checks it with a separate tool.
  *
- * <p>Retencion en runtime porque {@link Reflection#isCallerSensitive} la lee de un
- * {@code java.lang.reflect.Method}, no del codigo fuente.
+ * <p>Retention at runtime because {@link Reflection#isCallerSensitive} reads it from a
+ * {@code java.lang.reflect.Method}, not from the source code.
  */
 @Retention(RetentionPolicy.RUNTIME)
 @Target({ElementType.METHOD, ElementType.CONSTRUCTOR})

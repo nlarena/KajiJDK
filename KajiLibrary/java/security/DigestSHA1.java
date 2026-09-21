@@ -1,18 +1,18 @@
 package java.security;
 
-// SHA-1, segun FIPS 180-4.
+// SHA-1, according to FIPS 180-4.
 //
-// **Roto para uso criptografico** desde SHAttered (2017), que exhibio dos PDF distintos con el
-// mismo digest, y desde 2020 se generan colisiones con prefijo elegido. No sirve para firmar ni
-// para integridad frente a un adversario.
+// **Broken for cryptographic use** since SHAttered (2017), which exhibited two different PDFs with
+// the same digest, and since 2020 collisions with a chosen prefix are generated. It does not serve
+// for signing or for integrity against an adversary.
 //
-// Se implementa por el mismo motivo que MD5: sigue siendo obligatorio para leer cosas que ya
-// existen —Git, HMAC-SHA1 en protocolos viejos, WebSocket— y esas cosas no dejan de existir porque
-// la biblioteca no lo tenga.
+// It is implemented for the same reason as MD5: it is still compulsory for reading things that
+// exist already —Git, HMAC-SHA1 in old protocols, WebSocket— and those things do not stop existing
+// because the library does not have it.
 //
-// Verificado contra los vectores de FIPS 180-2 ("abc" y la cadena de 56 caracteres) y contra el
+// Checked against the vectors of FIPS 180-2 ("abc" and the 56-character string) and against
 // JDK 25.
-final class DigestSHA1 extends DigestBloque {
+final class DigestSHA1 extends BlockDigest {
 
     private int h0;
     private int h1;
@@ -20,7 +20,7 @@ final class DigestSHA1 extends DigestBloque {
     private int h3;
     private int h4;
 
-    // El schedule expandido de 80 palabras, reusado entre bloques.
+    // The expanded schedule of 80 words, reused between blocks.
     private final int[] w = new int[80];
 
     DigestSHA1() {
@@ -29,7 +29,7 @@ final class DigestSHA1 extends DigestBloque {
     }
 
     @Override
-    void reiniciarEstado() {
+    void resetState() {
         this.h0 = 0x67452301;
         this.h1 = 0xefcdab89;
         this.h2 = 0x98badcfe;
@@ -43,21 +43,21 @@ final class DigestSHA1 extends DigestBloque {
     }
 
     @Override
-    int bytesDeLargo() {
+    int lengthBytes() {
         return 8;
     }
 
     @Override
-    void comprimir(byte[] in, int ofs) {
+    void compress(byte[] in, int ofs) {
         int i = 0;
         while (i < 16) {
-            this.w[i] = leerIntBE(in, ofs + i * 4);
+            this.w[i] = readIntBE(in, ofs + i * 4);
             i = i + 1;
         }
-        // La expansion a 80 palabras. La rotacion de 1 bit es lo unico que separa a SHA-1 de
-        // SHA-0, y es exactamente lo que le costo a SHA-0 ser roto veinte años antes.
+        // The expansion to 80 words. The rotation of 1 bit is the only thing that separates SHA-1
+        // from SHA-0, and it is exactly what cost SHA-0 being broken twenty years earlier.
         while (i < 80) {
-            this.w[i] = rotIzq(this.w[i - 3] ^ this.w[i - 8] ^ this.w[i - 14] ^ this.w[i - 16], 1);
+            this.w[i] = rotLeft(this.w[i - 3] ^ this.w[i - 8] ^ this.w[i - 14] ^ this.w[i - 16], 1);
             i = i + 1;
         }
 
@@ -84,10 +84,10 @@ final class DigestSHA1 extends DigestBloque {
                 f = b ^ c ^ d;
                 k = 0xca62c1d6;
             }
-            int tmp = rotIzq(a, 5) + f + e + k + this.w[t];
+            int tmp = rotLeft(a, 5) + f + e + k + this.w[t];
             e = d;
             d = c;
-            c = rotIzq(b, 30);
+            c = rotLeft(b, 30);
             b = a;
             a = tmp;
             t = t + 1;
@@ -101,22 +101,22 @@ final class DigestSHA1 extends DigestBloque {
     }
 
     @Override
-    void escribirEstado(byte[] out) {
-        escribirIntBE(out, 0, this.h0);
-        escribirIntBE(out, 4, this.h1);
-        escribirIntBE(out, 8, this.h2);
-        escribirIntBE(out, 12, this.h3);
-        escribirIntBE(out, 16, this.h4);
+    void writeState(byte[] out) {
+        writeIntBE(out, 0, this.h0);
+        writeIntBE(out, 4, this.h1);
+        writeIntBE(out, 8, this.h2);
+        writeIntBE(out, 12, this.h3);
+        writeIntBE(out, 16, this.h4);
     }
 
     @Override
-    DigestBloque nuevoIgual() {
+    BlockDigest freshInstance() {
         return new DigestSHA1();
     }
 
     @Override
-    void copiarEstadoDe(DigestBloque otro) {
-        DigestSHA1 o = (DigestSHA1) otro;
+    void copyStateFrom(BlockDigest other) {
+        DigestSHA1 o = (DigestSHA1) other;
         this.h0 = o.h0;
         this.h1 = o.h1;
         this.h2 = o.h2;

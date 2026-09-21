@@ -6,45 +6,45 @@ import javax.swing.plaf.ColorUIResource;
 import javax.swing.plaf.FontUIResource;
 
 /**
- * El tema Steel: el Metal de siempre, azul y gris.
+ * The Steel theme: the Metal of always, blue and grey.
  *
- * <p>Es la clase mas corta que hace algo grande. Da los seis colores que {@link MetalTheme} pide
- * y seis tipografias, y con eso queda definido un aspecto grafico entero.
+ * <p>It is the shortest class that does something big. It gives the six colours
+ * {@link MetalTheme} asks for and six typefaces, and with that a whole look and feel is defined.
  *
- * <p>Los seis colores son tres tonos de un azul violaceo y tres grises, todos multiplos de
- * {@code 0x33}: {@code 102/153/204} y {@code 255}. Eso no es casualidad ni gusto -- es la paleta
- * segura de 216 colores de los monitores de 256 --. Metal nacio para verse igual en cualquier
- * maquina, y esos seis valores son los que sobreviven a una pantalla que no puede mostrar mas.
+ * <p>The six colours are three shades of a violet blue and three greys, all multiples of
+ * {@code 0x33}: {@code 102/153/204} and {@code 255}. That is neither chance nor taste -- it is
+ * the safe 216-colour palette of 256-colour monitors --. Metal was born to look the same on any
+ * machine, and those six values are the ones that survive a screen that cannot show more.
  *
- * <p>Las tipografias son cinco veces Dialog en 12 y una en 10. Lo unico que las distingue es la
- * negrita: <strong>lo que se toca va en negrita</strong> --botones, menues, titulo de ventana-- y
- * lo que se lee va normal --texto del sistema y del usuario--. La chica de 10 es para lo
- * secundario, como el acelerador de un item de menu.
+ * <p>The typefaces are Dialog five times at 12 and one at 10. The only thing that tells them
+ * apart is the bold: <strong>what is touched goes in bold</strong> --buttons, menus, window
+ * title-- and what is read goes plain --the system's and the user's text--. The small 10 one is
+ * for the secondary things, such as a menu item's accelerator.
  *
- * <p>El nombre es {@code "Steel"} y sale por
+ * <p>The name is {@code "Steel"} and comes out through
  * {@code MetalLookAndFeel.getCurrentTheme().getName()}.
  */
 public class DefaultMetalTheme extends MetalTheme {
 
-    private static final ColorUIResource PRIMARIO_1 = new ColorUIResource(102, 102, 153);
-    private static final ColorUIResource PRIMARIO_2 = new ColorUIResource(153, 153, 204);
-    private static final ColorUIResource PRIMARIO_3 = new ColorUIResource(204, 204, 255);
+    private static final ColorUIResource PRIMARY_1 = new ColorUIResource(102, 102, 153);
+    private static final ColorUIResource PRIMARY_2 = new ColorUIResource(153, 153, 204);
+    private static final ColorUIResource PRIMARY_3 = new ColorUIResource(204, 204, 255);
 
-    private static final ColorUIResource SECUNDARIO_1 = new ColorUIResource(102, 102, 102);
-    private static final ColorUIResource SECUNDARIO_2 = new ColorUIResource(153, 153, 153);
-    private static final ColorUIResource SECUNDARIO_3 = new ColorUIResource(204, 204, 204);
+    private static final ColorUIResource SECONDARY_1 = new ColorUIResource(102, 102, 102);
+    private static final ColorUIResource SECONDARY_2 = new ColorUIResource(153, 153, 153);
+    private static final ColorUIResource SECONDARY_3 = new ColorUIResource(204, 204, 204);
 
     private static final FontUIResource CONTROL =
             new FontUIResource("Dialog", Font.BOLD, 12);
-    private static final FontUIResource SISTEMA =
+    private static final FontUIResource SYSTEM =
             new FontUIResource("Dialog", Font.PLAIN, 12);
-    private static final FontUIResource USUARIO =
+    private static final FontUIResource USER =
             new FontUIResource("Dialog", Font.PLAIN, 12);
     private static final FontUIResource MENU =
             new FontUIResource("Dialog", Font.BOLD, 12);
-    private static final FontUIResource TITULO =
+    private static final FontUIResource TITLE =
             new FontUIResource("Dialog", Font.BOLD, 12);
-    private static final FontUIResource CHICA =
+    private static final FontUIResource SMALL =
             new FontUIResource("Dialog", Font.PLAIN, 10);
 
     public DefaultMetalTheme() {
@@ -55,41 +55,41 @@ public class DefaultMetalTheme extends MetalTheme {
     }
 
     protected ColorUIResource getPrimary1() {
-        return PRIMARIO_1;
+        return PRIMARY_1;
     }
 
     protected ColorUIResource getPrimary2() {
-        return PRIMARIO_2;
+        return PRIMARY_2;
     }
 
     protected ColorUIResource getPrimary3() {
-        return PRIMARIO_3;
+        return PRIMARY_3;
     }
 
     protected ColorUIResource getSecondary1() {
-        return SECUNDARIO_1;
+        return SECONDARY_1;
     }
 
     protected ColorUIResource getSecondary2() {
-        return SECUNDARIO_2;
+        return SECONDARY_2;
     }
 
     protected ColorUIResource getSecondary3() {
-        return SECUNDARIO_3;
+        return SECONDARY_3;
     }
 
-    /** Dialog negrita 12: lo que se toca. */
+    /** Dialog bold 12: what is touched. */
     public FontUIResource getControlTextFont() {
         return CONTROL;
     }
 
-    /** Dialog normal 12: lo que se lee. */
+    /** Dialog plain 12: what is read. */
     public FontUIResource getSystemTextFont() {
-        return SISTEMA;
+        return SYSTEM;
     }
 
     public FontUIResource getUserTextFont() {
-        return USUARIO;
+        return USER;
     }
 
     public FontUIResource getMenuTextFont() {
@@ -97,11 +97,11 @@ public class DefaultMetalTheme extends MetalTheme {
     }
 
     public FontUIResource getWindowTitleFont() {
-        return TITULO;
+        return TITLE;
     }
 
-    /** Dialog normal 10: lo secundario. */
+    /** Dialog plain 10: the secondary things. */
     public FontUIResource getSubTextFont() {
-        return CHICA;
+        return SMALL;
     }
 }

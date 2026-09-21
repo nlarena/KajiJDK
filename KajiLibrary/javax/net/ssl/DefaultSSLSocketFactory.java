@@ -6,58 +6,58 @@ import java.net.Socket;
 import java.net.SocketException;
 
 /**
- * La fabrica que devuelve {@link SSLSocketFactory#getDefault} cuando no hay TLS disponible.
+ * The factory {@link SSLSocketFactory#getDefault} returns when no TLS is available.
  *
- * <p>De paquete, igual que en el JDK. Existe porque {@code getDefault()} no declara excepcion: en
- * vez de devolver {@code null} —que estallaria mucho despues y en otro lado— devuelve esto, que
- * falla en el primer intento de uso y <strong>lleva adentro la causa original</strong>. El error
- * termina apareciendo donde se lo puede entender.
+ * <p>Package-private, as in the JDK. It exists because {@code getDefault()} declares no exception:
+ * instead of returning {@code null} --which would blow up much later and somewhere else-- it
+ * returns this, which fails on the first attempt to use it and <strong>carries the original cause
+ * inside</strong>. The error ends up showing where it can be understood.
  */
 final class DefaultSSLSocketFactory extends SSLSocketFactory {
 
-    private final Exception motivo;
+    private final Exception reason;
 
-    DefaultSSLSocketFactory(Exception motivo) {
-        this.motivo = motivo;
+    DefaultSSLSocketFactory(Exception reason) {
+        this.reason = reason;
     }
 
-    private Socket fallar() throws SocketException {
-        throw new SocketException("no hay soporte de TLS: " + this.motivo.getMessage());
+    private Socket fail() throws SocketException {
+        throw new SocketException("no TLS support: " + this.reason.getMessage());
     }
 
     public Socket createSocket() throws IOException {
-        return fallar();
+        return fail();
     }
 
     public Socket createSocket(String host, int port) throws IOException {
-        return fallar();
+        return fail();
     }
 
     public Socket createSocket(Socket s, String host, int port, boolean autoClose)
             throws IOException {
-        return fallar();
+        return fail();
     }
 
     public Socket createSocket(InetAddress address, int port) throws IOException {
-        return fallar();
+        return fail();
     }
 
     public Socket createSocket(String host, int port, InetAddress clientAddress, int clientPort)
             throws IOException {
-        return fallar();
+        return fail();
     }
 
     public Socket createSocket(InetAddress address, int port, InetAddress clientAddress,
             int clientPort) throws IOException {
-        return fallar();
+        return fail();
     }
 
-    /** Vacio: no hay ninguna suite disponible, que es la verdad. */
+    /** Empty: no suite is available, which is the truth. */
     public String[] getDefaultCipherSuites() {
         return new String[0];
     }
 
-    /** Vacio, por lo mismo. */
+    /** Empty, for the same reason. */
     public String[] getSupportedCipherSuites() {
         return new String[0];
     }

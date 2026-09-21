@@ -1,35 +1,39 @@
 package javax.management;
 
 /**
- * El punto donde se cambia la implementacion del agente.
+ * The point where the agent's implementation is swapped.
  *
- * <p>Es un objeto y no un metodo estatico por una sola razon, y es la que le da sentido: la fabrica
- * no lo instancia con `new MBeanServerBuilder()` sino cargando la clase que nombre la propiedad
- * `javax.management.builder.initial`. Redefinir esta clase es como se le mete un agente propio
- * --uno que audite, uno que replique-- a un programa que ya esta escrito, sin tocar el programa.
+ * <p>It is an object and not a static method for a single reason, and it is the one that gives it
+ * meaning: the factory does not instantiate it with {@code new MBeanServerBuilder()} but by loading
+ * the class named by the {@code javax.management.builder.initial} property. Redefining this class
+ * is how an agent of your own --one that audits, one that replicates-- is slipped into a program
+ * that is already written, without touching the program.
  *
- * <p>Los dos metodos estan separados a proposito. Una subclase que solo quiera cambiar los datos
- * del delegado --el nombre del implementador, la version-- redefine `newMBeanServerDelegate` y deja
- * el agente como esta.
+ * <p>The two methods are separate on purpose. A subclass that only wants to change the delegate's
+ * data --the implementer's name, the version-- redefines {@code newMBeanServerDelegate} and leaves
+ * the agent as it is.
  */
 public class MBeanServerBuilder {
 
     public MBeanServerBuilder() {
     }
 
-    /** El delegado que va a llevar el `MBeanServerId` y a emitir las altas y bajas. */
+    /**
+     * The delegate that will carry the {@code MBeanServerId} and emit registrations and
+     * unregistrations.
+     */
     public MBeanServerDelegate newMBeanServerDelegate() {
         return new MBeanServerDelegate();
     }
 
     /**
-     * El agente.
+     * The agent.
      *
-     * @param defaultDomain el dominio que se usa cuando un {@link ObjectName} no trae uno
-     * @param outer el agente que se le pasa a los MBeans en `preRegister`, para que un envoltorio
-     *        pueda hacerse pasar por el agente verdadero. Si es `null`, el agente se pasa a si
-     *        mismo, que es el caso normal
-     * @param delegate el que devolvio {@link #newMBeanServerDelegate}
+     * @param defaultDomain the domain used when an {@link ObjectName} does not bring one
+     * @param outer the agent passed to the MBeans in {@code preRegister}, so that a wrapper can
+     *        pose as the real agent. If it is {@code null}, the agent passes itself, which is the
+     *        normal case
+     * @param delegate the one {@link #newMBeanServerDelegate} returned
      */
     public MBeanServer newMBeanServer(String defaultDomain, MBeanServer outer,
                                       MBeanServerDelegate delegate) {

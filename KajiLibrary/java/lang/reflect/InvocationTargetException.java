@@ -11,8 +11,9 @@ package java.lang.reflect;
  * <p>So the target's exception arrives boxed, reachable through {@link #getTargetException()}, and
  * everything else the reflective call can throw arrives unboxed.
  */
-// Bajo ReflectiveOperationException, que es donde el JDK agrupa todo lo que puede fallar al
-// reflexionar -- asi un solo `catch` cubre esto, ClassNotFoundException y NoSuchMethodException.
+// Under ReflectiveOperationException, which is where the JDK groups everything that can fail while
+// reflecting -- that way one `catch` covers this, ClassNotFoundException and
+// NoSuchMethodException.
 public class InvocationTargetException extends ReflectiveOperationException {
 
     private final Throwable target;
@@ -23,11 +24,11 @@ public class InvocationTargetException extends ReflectiveOperationException {
      * @param target the exception the invoked member threw
      */
     /**
-     * Sin objetivo.
+     * With no target.
      *
-     * <p>Es `protected` a proposito: nadie deberia poder construir esta excepcion **sin** la que la
-     * causo, porque entonces no envuelve nada y pierde su unica razon de existir. El JDK lo deja
-     * para las subclases, que pueden tener otra forma de proveer el objetivo.
+     * <p>It is `protected` on purpose: nobody should be able to build this exception **without**
+     * the one that caused it, because then it wraps nothing and loses its only reason for existing.
+     * The JDK leaves it for the subclasses, which may have another way of supplying the target.
      */
     protected InvocationTargetException() {
         super((Throwable) null);

@@ -1,9 +1,9 @@
 package com.sun.source.doctree;
 
 /**
- * La mitad de la jerarquia que agrupa los tags de **bloque**: los que van solos en
- * una linea, empezando con `@`, despues del cuerpo del comentario. Ver {@link InlineTagTree} para
- * la otra mitad y por que estan separadas.
+ * The half of the hierarchy that groups the **block** tags: those that go alone on
+ * a line, starting with `@`, after the comment's body. See {@link InlineTagTree} for the other
+ * half and for why they are separate.
  */
 public interface BlockTagTree extends DocTree {
 

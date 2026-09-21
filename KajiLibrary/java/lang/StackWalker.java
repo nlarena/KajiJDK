@@ -40,17 +40,17 @@ public final class StackWalker {
 
     /** Apply {@code function} to a lazy stream of the frames. */
     public <T> T walk(Function<? super Stream<StackFrame>, ? extends T> function) {
-        throw new UnsupportedOperationException("StackWalker necesita la introspección de pila del VM");
+        throw new UnsupportedOperationException("StackWalker needs the VM's stack introspection");
     }
 
     /** Apply {@code action} to each frame. */
     public void forEach(Consumer<? super StackFrame> action) {
-        throw new UnsupportedOperationException("StackWalker necesita la introspección de pila del VM");
+        throw new UnsupportedOperationException("StackWalker needs the VM's stack introspection");
     }
 
     /** The class that called the method calling this one (needs {@link Option#RETAIN_CLASS_REFERENCE}). */
     public Class<?> getCallerClass() {
-        throw new UnsupportedOperationException("StackWalker necesita la introspección de pila del VM");
+        throw new UnsupportedOperationException("StackWalker needs the VM's stack introspection");
     }
 
     /** What a {@link StackWalker} may be asked to keep while walking. */
@@ -78,12 +78,12 @@ public final class StackWalker {
 
         /** The method's type, if it was retained. */
         default java.lang.invoke.MethodType getMethodType() {
-            throw new UnsupportedOperationException("el MethodType no se retuvo");
+            throw new UnsupportedOperationException("the MethodType was not retained");
         }
 
         /** The method's descriptor, if it was retained. */
         default String getDescriptor() {
-            throw new UnsupportedOperationException("el descriptor no se retuvo");
+            throw new UnsupportedOperationException("the descriptor was not retained");
         }
 
         /** The bytecode index of the execution point in the frame. */

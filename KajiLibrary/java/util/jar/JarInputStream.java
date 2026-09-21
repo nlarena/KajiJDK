@@ -6,29 +6,30 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 /**
- * Un JAR leido de corrido: un {@link ZipInputStream} que se come el manifiesto antes de entregar la
- * primera entrada.
+ * A JAR read straight through: a {@link ZipInputStream} that eats the manifest before handing over
+ * the first entry.
  *
- * <p>Esa es toda la diferencia, y explica la unica rareza del constructor: para saber si hay
- * manifiesto hay que leer la primera entrada, y si la hay hay que consumirla entera. Cuando el
- * constructor termina, el flujo ya avanzo hasta la entrada siguiente y la tiene guardada; la
- * devuelve el primer `getNextEntry()`.
+ * <p>That is the whole difference, and it explains the constructor's one oddity: to know whether
+ * there is a manifest the first entry has to be read, and if there is one it has to be consumed
+ * whole. When the constructor finishes, the stream has already advanced to the next entry and is
+ * holding it; the first `getNextEntry()` returns it.
  *
- * <p>Consecuencia de eso, y esta copiada del JDK a proposito: <b>entre el constructor y el primer
- * `getNextEntry()`, `read` devuelve -1</b>. Los bytes que hay ahi debajo son los de una entrada que
- * el que llama todavia no pidio, y entregarselos seria darle contenido sin decirle de que entrada es.
+ * <p>A consequence of that, and it is copied from the JDK on purpose: <b>between the constructor and
+ * the first `getNextEntry()`, `read` returns -1</b>. The bytes down there belong to an entry the
+ * caller has not asked for yet, and handing them over would be giving them content without saying
+ * which entry it is from.
  *
- * <h2>Lo que queda afuera, y por que</h2>
+ * <h2>What is left out, and why</h2>
  *
- * <p>Nada de la superficie publica. Como en {@link JarFile}, el parametro `verify` se acepta y se
- * ignora --no hay verificacion de firmas en esta biblioteca-- y las entradas salen sin certificados
- * ni firmantes; el razonamiento completo, incluido por que el modo de falla es cerrado, esta en la
- * cabecera de `JarFile`.
+ * <p>Nothing of the public surface. As in {@link JarFile}, the `verify` parameter is accepted and
+ * ignored --there is no signature verification in this library-- and the entries come out with no
+ * certificates and no signers; the full reasoning, including why the failure mode is closed, is in
+ * `JarFile`'s header.
  */
 public class JarInputStream extends ZipInputStream {
 
     private Manifest man;
-    private JarEntry primera;
+    private JarEntry first;
 
     public JarInputStream(InputStream in) throws IOException {
         this(in, true);
@@ -37,53 +38,53 @@ public class JarInputStream extends ZipInputStream {
     public JarInputStream(InputStream in, boolean verify) throws IOException {
         super(in);
         JarEntry e = (JarEntry) super.getNextEntry();
-        // Un JAR escrito por `jar` empieza con la entrada de directorio `META-INF/`, que no es el
-        // manifiesto pero esta antes que el.
+        // A JAR written by `jar` starts with the `META-INF/` directory entry, which is not the
+        // manifest but comes before it.
         if (e != null && "META-INF/".equalsIgnoreCase(e.getName())) {
             e = (JarEntry) super.getNextEntry();
         }
         if (e != null && JarFile.MANIFEST_NAME.equalsIgnoreCase(e.getName())) {
             this.man = new Manifest(this);
             super.closeEntry();
-            this.primera = (JarEntry) super.getNextEntry();
+            this.first = (JarEntry) super.getNextEntry();
         } else {
-            this.primera = e;
+            this.first = e;
         }
     }
 
-    /** El manifiesto del JAR, o `null` si la primera entrada no era uno. */
+    /** The JAR's manifest, or `null` if the first entry was not one. */
     public Manifest getManifest() {
         return this.man;
     }
 
-    /** Avanza a la entrada siguiente, o `null` al final. */
+    /** It advances to the next entry, or `null` at the end. */
     public ZipEntry getNextEntry() throws IOException {
         JarEntry e;
-        if (this.primera == null) {
+        if (this.first == null) {
             e = (JarEntry) super.getNextEntry();
         } else {
-            e = this.primera;
-            this.primera = null;
+            e = this.first;
+            this.first = null;
         }
         return e;
     }
 
-    /** Lo mismo que {@link #getNextEntry()}, ya con el tipo de este paquete. */
+    /** The same as {@link #getNextEntry()}, already with this package's type. */
     public JarEntry getNextJarEntry() throws IOException {
         return (JarEntry) getNextEntry();
     }
 
-    /** Lee de la entrada en curso. Devuelve -1 mientras la primera entrada siga sin pedirse. */
+    /** It reads from the current entry. It returns -1 while the first entry has not been asked for. */
     public int read(byte[] b, int off, int len) throws IOException {
-        if (this.primera != null) {
+        if (this.first != null) {
             return -1;
         }
         return super.read(b, off, len);
     }
 
     /**
-     * La entrada que fabrica el lector de ZIP de abajo, ya con los atributos que el manifiesto le
-     * asigna --si es que a esta altura ya se leyo el manifiesto--.
+     * The entry the ZIP reader below builds, already with the attributes the manifest assigns it
+     * --if the manifest has been read by this point.
      */
     protected ZipEntry createZipEntry(String name) {
         JarEntry e = new JarEntry(name);

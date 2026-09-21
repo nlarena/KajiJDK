@@ -9,6 +9,7 @@ import java.awt.Rectangle;
 import java.awt.event.InputMethodEvent;
 import java.awt.event.InputMethodListener;
 import java.awt.event.MouseEvent;
+import java.awt.font.TextAttribute;
 import java.awt.geom.Point2D;
 import java.awt.geom.Rectangle2D;
 import java.awt.im.InputMethodRequests;
@@ -21,6 +22,7 @@ import java.text.MessageFormat;
 import java.util.Hashtable;
 import java.util.Vector;
 
+import javax.accessibility.Accessible;
 import javax.accessibility.AccessibleContext;
 import javax.print.PrintService;
 import javax.print.attribute.PrintRequestAttributeSet;
@@ -37,43 +39,43 @@ import javax.swing.event.CaretListener;
 import javax.swing.plaf.TextUI;
 
 /**
- * La base de todo componente que muestra o edita texto.
+ * The base of every component that shows or edits text.
  *
- * <h2>Cuatro piezas y ninguna es esta clase</h2>
+ * <h2>Four pieces and none of them is this class</h2>
  *
- * <p>El componente no guarda el texto, ni sabe dibujarlo, ni sabe donde esta el cursor. Guarda
- * referencias a los cuatro que si saben:
+ * <p>The component does not keep the text, nor know how to draw it, nor know where the cursor
+ * is. It keeps references to the four that do know:
  *
  * <ul>
- * <li>El {@link Document}, que tiene el texto y la estructura.
- * <li>El {@link Caret}, que sabe donde se escribe y que hay seleccionado.
- * <li>El {@link Highlighter}, que pinta los fondos.
- * <li>El {@link TextUI}, que tiene el arbol de vistas y traduce entre texto y pantalla.
+ * <li>The {@link Document}, which has the text and the structure.
+ * <li>The {@link Caret}, which knows where typing happens and what is selected.
+ * <li>The {@link Highlighter}, which paints the backgrounds.
+ * <li>The {@link TextUI}, which has the view tree and translates between text and screen.
  * </ul>
  *
- * <p>Casi todos los metodos de aca son eso: preguntarle a alguno de los cuatro. {@code setText} es
- * un {@code remove} mas un {@code insertString} sobre el documento; {@code modelToView} es una
- * llamada al UI; {@code getSelectionStart} es el menor entre el punto y la marca del cursor. Que
- * la clase sea tan grande y tan delgada a la vez es intencional: es la fachada.
+ * <p>Almost every method here is that: asking one of the four. {@code setText} is a
+ * {@code remove} plus an {@code insertString} on the document; {@code modelToView} is a call to
+ * the UI; {@code getSelectionStart} is the smaller of the cursor's dot and mark. That the class
+ * is so big and so thin at the same time is intentional: it is the facade.
  *
- * <h2>Los mapas de teclas</h2>
+ * <h2>The key maps</h2>
  *
- * <p>Los {@link Keymap} se guardan en una tabla estatica compartida por nombre. Es de las pocas
- * cosas globales que quedan en Swing, y viene de antes de {@code InputMap}: un editor podia
- * nombrar su mapa y otro pedirlo por ese nombre.
+ * <p>The {@link Keymap}s are kept in a static table shared by name. It is one of the few global
+ * things left in Swing, and it comes from before {@code InputMap}: an editor could name its map
+ * and another ask for it by that name.
  *
- * <h2>Lo que no esta</h2>
+ * <h2>What is not there</h2>
  *
- * <p>{@link #cut}, {@link #copy} y {@link #paste} necesitan un portapapeles del sistema, e
- * {@link #print} una impresora: esta VM no tiene ninguno de los dos y los metodos lo dicen. El
- * arrastre ({@link #setDragEnabled}) guarda la propiedad y nada mas, por lo mismo.
+ * <p>{@link #cut}, {@link #copy} and {@link #paste} need a system clipboard, and {@link #print}
+ * a printer: this VM has neither of the two and the methods say so. Dragging
+ * ({@link #setDragEnabled}) keeps the property and nothing else, for the same reason.
  */
 public abstract class JTextComponent extends JComponent implements Scrollable, Accessible {
 
-    /** La propiedad con el acelerador de foco. */
+    /** The property with the focus accelerator. */
     public static final String FOCUS_ACCELERATOR_KEY = "focusAcceleratorKey";
 
-    /** El nombre del mapa de teclas por omision. */
+    /** The name of the default key map. */
     public static final String DEFAULT_KEYMAP = "default";
 
     private static final Hashtable<String, Keymap> keymapTable =
@@ -97,17 +99,18 @@ public abstract class JTextComponent extends JComponent implements Scrollable, A
     private transient DropLocation dropLocation;
 
     /**
-     * Un componente vacio, con su mapa de teclas y su cursor.
+     * An empty component, with its key map and its cursor.
      *
-     * <p><strong>El cursor lo pone el constructor y no el aspecto.</strong> En el JDK el cursor es
-     * propiedad del aspecto: {@code BasicTextUI} le pasa uno al instalarse, y por eso el campo
-     * nunca se queda en nulo. Esta biblioteca todavia no instala delegados de aspecto, asi que sin
-     * esto {@code caret} quedaria nulo para siempre y cualquier {@code setCaretPosition} --que el
-     * JDK tampoco protege-- reventaria con {@code NullPointerException}.
+     * <p><strong>The cursor is set by the constructor and not by the look and feel.</strong> In the
+     * JDK the cursor is the look and feel's property: {@code BasicTextUI} passes one on installing,
+     * and that is why the field is never left null. This library does not install look and feel
+     * delegates yet, so without this {@code caret} would be left null for ever and any
+     * {@code setCaretPosition} --which the JDK does not protect either-- would blow up with
+     * {@code NullPointerException}.
      *
-     * <p>La diferencia observable es una sola y va en la direccion buena: {@link #getCaret} devuelve
-     * un cursor en vez de nulo, que es lo mismo que devuelve el JDK apenas se le instala el aspecto.
-     * Ponerle otro con {@link #setCaret} funciona igual.
+     * <p>The observable difference is a single one and it goes the good way: {@link #getCaret}
+     * returns a cursor instead of null, which is the same as the JDK returns as soon as the look
+     * and feel is installed on it. Setting another with {@link #setCaret} works the same.
      */
     public JTextComponent() {
         super();
@@ -131,11 +134,11 @@ public abstract class JTextComponent extends JComponent implements Scrollable, A
     }
 
     /**
-     * Nada: no hay aspecto basico de texto en esta biblioteca.
+     * Nothing: there is no basic text look and feel in this library.
      *
-     * <p>{@code BasicTextUI} y sus derivados no estan, asi que un componente de texto se queda sin
-     * aspecto salvo que le pongan uno con {@link #setUI}. Todo lo que no necesita el UI —el
-     * documento, el cursor, los atributos— funciona igual.
+     * <p>{@code BasicTextUI} and its derivatives are not there, so a text component is left with no
+     * look and feel unless one is set on it with {@link #setUI}. Everything that does not need the
+     * UI --the document, the cursor, the attributes-- works the same.
      */
     public void updateUI() {
     }
@@ -152,7 +155,7 @@ public abstract class JTextComponent extends JComponent implements Scrollable, A
         return listenerList.getListeners(CaretListener.class);
     }
 
-    /** Avisa que el cursor se movio; lo llama el cursor, no el componente. */
+    /** It reports that the cursor moved; the cursor calls it, not the component. */
     protected void fireCaretUpdate(CaretEvent e) {
         Object[] listeners = listenerList.getListenerList();
         for (int i = listeners.length - 2; i >= 0; i = i - 2) {
@@ -162,7 +165,7 @@ public abstract class JTextComponent extends JComponent implements Scrollable, A
         }
     }
 
-    /** Cambia el documento; el cursor y el resaltado se enganchan al nuevo. */
+    /** It changes the document; the cursor and the highlight hook themselves to the new one. */
     public void setDocument(Document doc) {
         Document old = model;
         try {
@@ -199,12 +202,12 @@ public abstract class JTextComponent extends JComponent implements Scrollable, A
         super.setComponentOrientation(o);
     }
 
-    /** Las acciones que este componente sabe hacer; las del juego de edicion. */
+    /** The actions this component knows how to do; the editor kit's. */
     public Action[] getActions() {
         return getUI().getEditorKit(this).getActions();
     }
 
-    /** El margen entre el borde y el texto. */
+    /** The margin between the border and the text. */
     public void setMargin(Insets m) {
         Insets old = margin;
         margin = m;
@@ -228,7 +231,7 @@ public abstract class JTextComponent extends JComponent implements Scrollable, A
         return caret;
     }
 
-    /** Cambia el cursor; al viejo se le avisa que lo sacaron. */
+    /** It changes the cursor; the old one is told it was removed. */
     public void setCaret(Caret c) {
         if (caret != null) {
             caret.removeChangeListener(null);
@@ -265,7 +268,7 @@ public abstract class JTextComponent extends JComponent implements Scrollable, A
         updateInputMap(old, map);
     }
 
-    /** Guarda la propiedad; ver la nota de la clase sobre el arrastre. */
+    /** It keeps the property; see the class note about dragging. */
     public void setDragEnabled(boolean b) {
         dragEnabled = b;
     }
@@ -288,7 +291,7 @@ public abstract class JTextComponent extends JComponent implements Scrollable, A
         return dropMode;
     }
 
-    /** Donde caeria algo soltado en ese punto. */
+    /** Where something dropped at that point would fall. */
     DropLocation dropLocationForPoint(Point p) {
         Position.Bias[] bias = new Position.Bias[1];
         int index = getUI().viewToModel(this, p, bias);
@@ -298,7 +301,7 @@ public abstract class JTextComponent extends JComponent implements Scrollable, A
         return new DropLocation(p, index, bias[0]);
     }
 
-    /** Lo llama la maquinaria de arrastre, que en esta VM no corre. */
+    /** The dragging machinery calls it, which in this VM does not run. */
     Object setDropLocation(TransferHandler$DropLocation location, Object state,
             boolean forDrop) {
         return null;
@@ -309,11 +312,11 @@ public abstract class JTextComponent extends JComponent implements Scrollable, A
     }
 
     /**
-     * Pasa el mapa de teclas a los mapas de entrada del componente.
+     * It passes the key map to the component's input maps.
      *
-     * <p>No hace nada: {@code InputMap} y {@code ActionMap} no estan en esta biblioteca, y el
-     * mapa de teclas se consulta directo. Esta el metodo porque el JDK lo llama desde
-     * {@link #setKeymap} y una subclase podria redefinirlo.
+     * <p>It does nothing: {@code InputMap} and {@code ActionMap} are not in this library, and the
+     * key map is consulted directly. The method is there because the JDK calls it from
+     * {@link #setKeymap} and a subclass could redefine it.
      */
     void updateInputMap(Keymap oldKm, Keymap newKm) {
     }
@@ -322,7 +325,7 @@ public abstract class JTextComponent extends JComponent implements Scrollable, A
         return keymap;
     }
 
-    /** Agrega un mapa con ese nombre a la tabla compartida; ver la nota de la clase. */
+    /** It adds a map with that name to the shared table; see the class note. */
     public static Keymap addKeymap(String nm, Keymap parent) {
         Keymap map = new DefaultKeymap(nm, parent);
         if (nm != null) {
@@ -340,11 +343,11 @@ public abstract class JTextComponent extends JComponent implements Scrollable, A
     }
 
     /**
-     * Carga en un mapa las ataduras de tecla que nombran acciones.
+     * It loads into a map the key bindings that name actions.
      *
-     * <p>Las ataduras nombran la accion por su nombre y no la traen: asi una tabla de atajos se
-     * puede escribir sin tener las acciones a mano, y despues se resuelve contra las que el
-     * componente ofrece.
+     * <p>The bindings name the action by its name and do not bring it: that way a shortcut table
+     * can be written without having the actions at hand, and afterwards it is resolved against
+     * those the component offers.
      */
     public static void loadKeymap(Keymap map, KeyBinding[] bindings, Action[] actions) {
         Hashtable<String, Action> h = new Hashtable<String, Action>();
@@ -361,7 +364,7 @@ public abstract class JTextComponent extends JComponent implements Scrollable, A
         }
     }
 
-    /** El componente de texto que tiene el foco; sin foco en esta VM, {@code null}. */
+    /** The text component that has the focus; with no focus in this VM, {@code null}. */
     static final JTextComponent getFocusedComponent() {
         return null;
     }
@@ -407,10 +410,10 @@ public abstract class JTextComponent extends JComponent implements Scrollable, A
     }
 
     /**
-     * Reemplaza lo seleccionado por ese texto.
+     * It replaces what is selected by that text.
      *
-     * <p>Sin seleccion, inserta donde esta el cursor. Es la operacion que hace escribir una tecla,
-     * y por eso esta aca y no en el documento: necesita saber del cursor.
+     * <p>With no selection, it inserts where the cursor is. It is the operation typing a key does,
+     * and that is why it is here and not in the document: it needs to know about the cursor.
      */
     public void replaceSelection(String content) {
         Document doc = getDocument();
@@ -439,44 +442,44 @@ public abstract class JTextComponent extends JComponent implements Scrollable, A
         return getDocument().getText(offs, len);
     }
 
-    /** @deprecated es {@link #modelToView2D}. */
+    /** @deprecated it is {@link #modelToView2D}. */
     @Deprecated
     public Rectangle modelToView(int pos) throws BadLocationException {
         return getUI().modelToView(this, pos);
     }
 
-    /** Donde cae esa posicion en la pantalla. */
+    /** Where that position falls on the screen. */
     public Rectangle2D modelToView2D(int pos) throws BadLocationException {
         return getUI().modelToView2D(this, pos, Position.Bias.Forward);
     }
 
-    /** @deprecated es {@link #viewToModel2D}. */
+    /** @deprecated it is {@link #viewToModel2D}. */
     @Deprecated
     public int viewToModel(Point pt) {
         return getUI().viewToModel(this, pt);
     }
 
-    /** Que posicion del texto hay en ese punto. */
+    /** Which position of the text is at that point. */
     public int viewToModel2D(Point2D pt) {
         return getUI().viewToModel2D(this, pt, new Position.Bias[1]);
     }
 
-    /** No hay portapapeles del sistema en esta VM; ver la nota de la clase. */
+    /** There is no system clipboard in this VM; see the class note. */
     public void cut() {
-        throw new UnsupportedOperationException("esta VM no tiene portapapeles del sistema");
+        throw new UnsupportedOperationException("this VM has no system clipboard");
     }
 
-    /** No hay portapapeles del sistema en esta VM; ver la nota de la clase. */
+    /** There is no system clipboard in this VM; see the class note. */
     public void copy() {
-        throw new UnsupportedOperationException("esta VM no tiene portapapeles del sistema");
+        throw new UnsupportedOperationException("this VM has no system clipboard");
     }
 
-    /** No hay portapapeles del sistema en esta VM; ver la nota de la clase. */
+    /** There is no system clipboard in this VM; see the class note. */
     public void paste() {
-        throw new UnsupportedOperationException("esta VM no tiene portapapeles del sistema");
+        throw new UnsupportedOperationException("this VM has no system clipboard");
     }
 
-    /** Mueve el cursor extendiendo la seleccion. */
+    /** It moves the cursor extending the selection. */
     public void moveCaretPosition(int pos) {
         Document doc = getDocument();
         if (doc != null) {
@@ -487,7 +490,7 @@ public abstract class JTextComponent extends JComponent implements Scrollable, A
         }
     }
 
-    /** La tecla que le da el foco a este componente con Alt. */
+    /** The key that gives this component the focus with Alt. */
     public void setFocusAccelerator(char aKey) {
         aKey = Character.toUpperCase(aKey);
         char old = focusAccelerator;
@@ -499,7 +502,7 @@ public abstract class JTextComponent extends JComponent implements Scrollable, A
         return focusAccelerator;
     }
 
-    /** Lee un documento del flujo con el juego de edicion instalado. */
+    /** It reads a document from the stream with the installed editor kit. */
     public void read(Reader in, Object desc) throws IOException {
         EditorKit kit = getUI().getEditorKit(this);
         Document doc = kit.createDefaultDocument();
@@ -527,7 +530,7 @@ public abstract class JTextComponent extends JComponent implements Scrollable, A
         super.removeNotify();
     }
 
-    /** Mueve el cursor y deshace la seleccion. */
+    /** It moves the cursor and undoes the selection. */
     public void setCaretPosition(int position) {
         Document doc = getDocument();
         if (doc != null) {
@@ -542,7 +545,7 @@ public abstract class JTextComponent extends JComponent implements Scrollable, A
         return caret.getDot();
     }
 
-    /** Reemplaza todo el texto. */
+    /** It replaces all the text. */
     public void setText(String t) {
         try {
             Document doc = getDocument();
@@ -568,7 +571,7 @@ public abstract class JTextComponent extends JComponent implements Scrollable, A
         return txt;
     }
 
-    /** Lo seleccionado, o {@code null} si no hay seleccion. */
+    /** What is selected, or {@code null} if there is no selection. */
     public String getSelectedText() {
         String txt = null;
         int p0 = Math.min(caret.getDot(), caret.getMark());
@@ -615,7 +618,7 @@ public abstract class JTextComponent extends JComponent implements Scrollable, A
         select(getSelectionStart(), selectionEnd);
     }
 
-    /** Selecciona ese tramo; los limites se acomodan al documento. */
+    /** It selects that stretch; the bounds are fitted to the document. */
     public void select(int selectionStart, int selectionEnd) {
         int docLength = getDocument().getLength();
 
@@ -663,10 +666,10 @@ public abstract class JTextComponent extends JComponent implements Scrollable, A
     }
 
     /**
-     * Cuanto avanza un paso chico: el alto de una linea, o el ancho de un caracter.
+     * How much one small step advances: a line's height, or a character's width.
      *
-     * <p>Se mide de verdad —cuanto ocupa la linea visible— y no con un numero fijo: en un texto
-     * con lineas de distinto alto, un numero fijo dejaria el texto cortado a la mitad.
+     * <p>It is really measured --how much the visible line takes up-- and not with a fixed number:
+     * in a text with lines of different heights, a fixed number would leave the text cut in half.
      */
     public int getScrollableUnitIncrement(Rectangle visibleRect, int orientation, int direction) {
         if (orientation == SwingConstants.VERTICAL) {
@@ -689,7 +692,7 @@ public abstract class JTextComponent extends JComponent implements Scrollable, A
         throw new IllegalArgumentException("Invalid orientation: " + orientation);
     }
 
-    /** Sigue al ancho de la ventana si el padre es mas ancho que el texto. */
+    /** It follows the viewport's width if the parent is wider than the text. */
     public boolean getScrollableTracksViewportWidth() {
         java.awt.Container parent = getParent();
         if (parent instanceof javax.swing.JViewport) {
@@ -706,32 +709,32 @@ public abstract class JTextComponent extends JComponent implements Scrollable, A
         return false;
     }
 
-    // -- impresion -------------------------------------------------------------------------------
+    // -- printing ---------------------------------------------------------------------------------
 
-    /** No hay impresora en esta VM; ver la nota de la clase. */
+    /** There is no printer in this VM; see the class note. */
     public boolean print() throws PrinterException {
-        throw new PrinterException("esta VM no tiene impresion");
+        throw new PrinterException("this VM has no printing");
     }
 
-    /** No hay impresora en esta VM; ver la nota de la clase. */
+    /** There is no printer in this VM; see the class note. */
     public boolean print(MessageFormat headerFormat, MessageFormat footerFormat)
             throws PrinterException {
-        throw new PrinterException("esta VM no tiene impresion");
+        throw new PrinterException("this VM has no printing");
     }
 
-    /** No hay impresora en esta VM; ver la nota de la clase. */
+    /** There is no printer in this VM; see the class note. */
     public boolean print(MessageFormat headerFormat, MessageFormat footerFormat,
             boolean showPrintDialog, PrintService service, PrintRequestAttributeSet attributes,
             boolean interactive) throws PrinterException {
-        throw new PrinterException("esta VM no tiene impresion");
+        throw new PrinterException("this VM has no printing");
     }
 
-    /** No hay impresion en esta VM; ver la nota de la clase. */
+    /** There is no printing in this VM; see the class note. */
     public Printable getPrintable(MessageFormat headerFormat, MessageFormat footerFormat) {
-        throw new UnsupportedOperationException("esta VM no tiene impresion");
+        throw new UnsupportedOperationException("this VM has no printing");
     }
 
-    /** Sin contexto de accesibilidad: no hay tecnologia asistiva en esta VM. */
+    /** No accessibility context: there is no assistive technology in this VM. */
     public AccessibleContext getAccessibleContext() {
         return null;
     }
@@ -752,12 +755,12 @@ public abstract class JTextComponent extends JComponent implements Scrollable, A
                 + ",selectionColor=" + selectionColorString;
     }
 
-    /** Los metodos de entrada —escritura oriental— no estan en esta VM. */
+    /** The input methods --eastern writing-- are not in this VM. */
     protected void processInputMethodEvent(InputMethodEvent e) {
         super.processInputMethodEvent(e);
     }
 
-    /** {@code null}: sin metodos de entrada; ver arriba. */
+    /** {@code null}: with no input methods; see above. */
     public InputMethodRequests getInputMethodRequests() {
         return null;
     }
@@ -766,7 +769,7 @@ public abstract class JTextComponent extends JComponent implements Scrollable, A
         super.addInputMethodListener(l);
     }
 
-    /** No hay texto en composicion sin metodos de entrada. */
+    /** There is no text being composed without input methods. */
     protected boolean saveComposedText(int pos) {
         return false;
     }
@@ -779,9 +782,9 @@ public abstract class JTextComponent extends JComponent implements Scrollable, A
     }
 
     /**
-     * Una tecla atada al nombre de una accion.
+     * A key tied to an action's name.
      *
-     * <p>Nombra la accion en vez de traerla; ver {@link JTextComponent#loadKeymap}.
+     * <p>It names the action instead of bringing it; see {@link JTextComponent#loadKeymap}.
      */
     public static class KeyBinding {
 
@@ -794,7 +797,7 @@ public abstract class JTextComponent extends JComponent implements Scrollable, A
         }
     }
 
-    /** Donde caeria lo que se esta arrastrando: una posicion del texto, con su sentido. */
+    /** Where what is being dragged would fall: a position in the text, with its bias. */
     public static final class DropLocation extends TransferHandler$DropLocation {
 
         private final int index;
@@ -821,9 +824,10 @@ public abstract class JTextComponent extends JComponent implements Scrollable, A
     }
 
     /**
-     * El mapa de teclas de siempre: una tabla con padre de resolucion.
+     * The usual key map: a table with a resolving parent.
      *
-     * <p>Es privado en el JDK y aca tambien: se llega a el por {@link JTextComponent#addKeymap}.
+     * <p>It is private in the JDK and here too: it is reached through
+     * {@link JTextComponent#addKeymap}.
      */
     static class DefaultKeymap implements Keymap {
 

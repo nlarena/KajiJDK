@@ -16,28 +16,31 @@ import javax.swing.text.View;
 import javax.swing.text.WrappedPlainView;
 
 /**
- * El aspecto basico de un area de texto de varias lineas.
+ * The basic look and feel of a multi-line text area.
  *
- * <h2>Dos vistas distintas segun corte o no</h2>
+ * <h2>Two different views according to whether it wraps or not</h2>
  *
- * <p>Si el area no corta las lineas largas, la vista es {@link PlainView}: cada linea del documento
- * es una linea en pantalla y el area se hace todo lo ancha que haga falta. Si corta, es
- * {@link WrappedPlainView}, que parte cada linea en el ancho disponible y por lo tanto tiene que
- * rehacer las cuentas cada vez que el area cambia de ancho. Cambiar {@code lineWrap} en caliente
- * obliga a rehacer el arbol de vistas entero, y de eso se ocupa {@link #propertyChange}.
+ * <p>If the area does not wrap long lines, the view is a {@link PlainView}: each line of the
+ * document is a line on the screen and the area becomes as wide as it needs to be. If it wraps,
+ * it is a {@link WrappedPlainView}, which splits each line to the available width and therefore
+ * has to redo the arithmetic every time the area changes width. Changing {@code lineWrap} on
+ * the fly forces the whole view tree to be rebuilt, and {@link #propertyChange} takes care of
+ * that.
  *
- * <h2>El pixel del cursor</h2>
+ * <h2>The caret's pixel</h2>
  *
- * <p>El tamano preferido y el minimo son los de las vistas <em>mas el ancho del cursor</em>. Sin
- * ese pixel, el cursor parado al final de la linea mas larga queda medio afuera y no se ve. El
- * ancho sale de la propiedad de cliente {@code caretWidth} y es uno si no esta puesta; esta medido
- * --con {@code caretWidth} en cinco, el preferido crece cuatro pixeles--.
+ * <p>The preferred size and the minimum are the views' <em>plus the caret's width</em>. Without
+ * that pixel, the caret standing at the end of the longest line ends up half outside and is not
+ * seen. The width comes from the client property {@code caretWidth} and is one if it is not
+ * set; it is measured -- with {@code caretWidth} at five, the preferred one grows by four
+ * pixels --.
  *
- * <h2>La linea de base no se mueve</h2>
+ * <h2>The baseline does not move</h2>
  *
- * <p>Al contrario que en un campo, la primera linea de un area esta siempre arriba de todo: la base
- * es el margen de arriba mas el ascenso de la fuente, y no depende del alto. Por eso el
- * comportamiento es {@code CONSTANT_ASCENT}, y por eso contesta lo mismo con alto cero.
+ * <p>Unlike in a field, an area's first line is always at the very top: the baseline is the top
+ * margin plus the typeface's ascent, and it does not depend on the height. That is why the
+ * behaviour is {@code CONSTANT_ASCENT}, and that is why it answers the same with a height of
+ * zero.
  */
 public class BasicTextAreaUI extends BasicTextUI {
 
@@ -45,7 +48,7 @@ public class BasicTextAreaUI extends BasicTextUI {
         super();
     }
 
-    /** Uno nuevo por area: un UI de texto guarda el componente. */
+    /** A new one per area: a text look and feel keeps the component. */
     public static ComponentUI createUI(JComponent c) {
         return new BasicTextAreaUI();
     }
@@ -55,25 +58,25 @@ public class BasicTextAreaUI extends BasicTextUI {
     }
 
     /**
-     * No agrega nada a lo que instala {@link BasicTextUI}.
+     * It adds nothing to what {@link BasicTextUI} installs.
      *
-     * <p>Existe como punto donde una subclase mete lo suyo sin repetir la cadena entera; el basico
-     * no tiene nada propio que poner en un area.
+     * <p>It exists as the place where a subclass puts its own without repeating the whole chain;
+     * the basic one has nothing of its own to put into an area.
      */
     protected void installDefaults() {
         super.installDefaults();
     }
 
-    /** Rehace las vistas cuando cambia como se cortan las lineas o cuanto mide un tabulador. */
+    /** It rebuilds the views when how the lines are wrapped or how much a tab measures changes. */
     protected void propertyChange(PropertyChangeEvent evt) {
-        String nombre = evt.getPropertyName();
-        if ("lineWrap".equals(nombre) || "wrapStyleWord".equals(nombre)
-                || "tabSize".equals(nombre)) {
+        String name = evt.getPropertyName();
+        if ("lineWrap".equals(name) || "wrapStyleWord".equals(name)
+                || "tabSize".equals(name)) {
             modelChanged();
         }
     }
 
-    /** La vista, segun corte o no; ver la nota de la clase. */
+    /** The view, according to whether it wraps or not; see the class note. */
     public View create(Element elem) {
         JTextComponent c = getComponent();
         if (c instanceof JTextArea) {
@@ -86,34 +89,34 @@ public class BasicTextAreaUI extends BasicTextUI {
         return null;
     }
 
-    /** El de las vistas mas el ancho del cursor; ver la nota de la clase. */
+    /** The views' plus the caret's width; see the class note. */
     public Dimension getPreferredSize(JComponent c) {
-        return conElCursor(c, super.getPreferredSize(c));
+        return underCursor(c, super.getPreferredSize(c));
     }
 
-    /** Idem: en un area el minimo y el preferido salen de la misma cuenta. */
+    /** The same: in an area the minimum and the preferred come out of the same arithmetic. */
     public Dimension getMinimumSize(JComponent c) {
-        return conElCursor(c, super.getMinimumSize(c));
+        return underCursor(c, super.getMinimumSize(c));
     }
 
-    private static Dimension conElCursor(JComponent c, Dimension d) {
+    private static Dimension underCursor(JComponent c, Dimension d) {
         if (d == null) {
             return null;
         }
-        Object ancho = c.getClientProperty("caretWidth");
+        Object width = c.getClientProperty("caretWidth");
         int px = 1;
-        if (ancho instanceof Number) {
-            px = ((Number) ancho).intValue();
+        if (width instanceof Number) {
+            px = ((Number) width).intValue();
         }
         d.width += px;
         return d;
     }
 
     /**
-     * Margen de arriba mas ascenso; ver la nota de la clase.
+     * Top margin plus ascent; see the class note.
      *
-     * @throws NullPointerException si el componente es nulo
-     * @throws IllegalArgumentException si el ancho o el alto son negativos
+     * @throws NullPointerException if the component is null
+     * @throws IllegalArgumentException if the width or the height are negative
      */
     public int getBaseline(JComponent c, int width, int height) {
         super.getBaseline(c, width, height);
@@ -123,9 +126,9 @@ public class BasicTextAreaUI extends BasicTextUI {
     }
 
     /**
-     * {@code CONSTANT_ASCENT}; ver la nota de la clase.
+     * {@code CONSTANT_ASCENT}; see the class note.
      *
-     * @throws NullPointerException si el componente es nulo
+     * @throws NullPointerException if the component is null
      */
     public Component.BaselineResizeBehavior getBaselineResizeBehavior(JComponent c) {
         super.getBaselineResizeBehavior(c);

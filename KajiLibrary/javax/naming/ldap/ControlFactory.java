@@ -6,39 +6,39 @@ import javax.naming.Context;
 import javax.naming.NamingException;
 
 /**
- * Convierte un {@link Control} crudo —OID y bytes— en el tipo que lo sabe interpretar.
+ * Turns a raw {@link Control} --OID and bytes-- into the type that knows how to interpret it.
  *
- * <h2>Por que hace falta el paso</h2>
+ * <h2>Why the step is needed</h2>
  *
- * <p>Porque el proveedor LDAP recibe del servidor un OID y un arreglo de bytes, y no tiene por que
- * saber que significan: un control puede estar definido por cualquiera. Lo que hace es armar un
- * {@link BasicControl} y preguntarle a las fabricas registradas si alguna lo reconoce.
+ * <p>Because the LDAP provider receives an OID and a byte array from the server, and has no reason
+ * to know what they mean: anyone can define a control. What it does is build a
+ * {@link BasicControl} and ask the registered factories whether any recognizes it.
  *
- * <p>La primera que devuelva algo distinto de {@code null} gana; si ninguna reconoce el control,
- * queda el crudo — que sigue siendo utilizable, solo que sin accesores con sentido.
+ * <p>The first one that returns something other than {@code null} wins; if none recognizes the
+ * control, the raw one remains -- still usable, just without meaningful accessors.
  *
- * <p>Es el mismo patron que {@link ExtendedRequest#createExtendedResponse} resuelve del otro lado:
- * quien definio la extension es el unico que sabe interpretarla.
+ * <p>It is the same pattern that {@link ExtendedRequest#createExtendedResponse} solves on the other
+ * side: whoever defined the extension is the only one who knows how to interpret it.
  */
 public abstract class ControlFactory {
 
-    /** Para las implementaciones. */
+    /** For the implementations. */
     protected ControlFactory() {
     }
 
     /**
-     * Interpreta el control, o devuelve {@code null} si no lo reconoce.
+     * Interprets the control, or returns {@code null} if it does not recognize it.
      *
-     * <p>Devolver {@code null} es la respuesta normal: una fabrica reconoce uno o dos OIDs y no
-     * opina sobre el resto.
+     * <p>Returning {@code null} is the normal answer: a factory recognizes one or two OIDs and has
+     * no opinion on the rest.
      */
     public abstract Control getControlInstance(Control ctl) throws NamingException;
 
     /**
-     * Prueba con todas las fabricas registradas.
+     * Tries all the registered factories.
      *
-     * @param env el entorno, de donde sale {@link LdapContext#CONTROL_FACTORIES}
-     * @return el control interpretado, o el mismo que entro si nadie lo reconocio
+     * @param env the environment, where {@link LdapContext#CONTROL_FACTORIES} comes from
+     * @return the interpreted control, or the same one that came in if nobody recognized it
      */
     public static Control getControlInstance(Control ctl, Context ctx, Hashtable<?, ?> env)
             throws NamingException {
@@ -48,9 +48,9 @@ public abstract class ControlFactory {
         }
         java.util.StringTokenizer st = new java.util.StringTokenizer(prop.toString(), ":");
         while (st.hasMoreTokens()) {
-            String nombre = st.nextToken();
+            String className = st.nextToken();
             try {
-                Class<?> c = Class.forName(nombre, true, ClassLoader.getSystemClassLoader());
+                Class<?> c = Class.forName(className, true, ClassLoader.getSystemClassLoader());
                 ControlFactory f = (ControlFactory) c.getDeclaredConstructor().newInstance();
                 Control r = f.getControlInstance(ctl);
                 if (r != null) {
@@ -59,8 +59,8 @@ public abstract class ControlFactory {
             } catch (NamingException e) {
                 throw e;
             } catch (Exception e) {
-                // Una fabrica que no carga no invalida a las que siguen: el orden de la lista es
-                // una preferencia, no una dependencia.
+                // A factory that does not load does not invalidate the following ones: the list's
+                // order is a preference, not a dependency.
                 continue;
             }
         }

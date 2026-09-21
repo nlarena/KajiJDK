@@ -12,20 +12,20 @@ import javax.swing.text.StyleConstants;
 import javax.swing.text.View;
 
 /**
- * La vista de un parrafo de HTML.
+ * The view of an HTML paragraph.
  *
- * <h2>Que agrega sobre el parrafo comun</h2>
+ * <h2>What it adds over the plain paragraph</h2>
  *
- * <p>Toma del CSS los margenes, el fondo y la alineacion, y sabe esconderse. Lo de esconderse no es
- * un adorno: un parrafo que el analizador invento y que quedo sin texto -- porque el HTML tenia dos
- * etiquetas de bloque seguidas -- no tiene que dejar un renglon en blanco.
+ * <p>It takes the margins, the background and the alignment from the CSS, and knows how to hide
+ * itself. The hiding is not an ornament: a paragraph the parser invented and that was left
+ * without text -- because the HTML had two block tags in a row -- must not leave a blank line.
  */
 public class ParagraphView extends javax.swing.text.ParagraphView {
 
     private AttributeSet attr;
     private StyleSheet.BoxPainter painter;
 
-    /** Una vista de parrafo sobre ese elemento. */
+    /** A paragraph view on that element. */
     public ParagraphView(Element elem) {
         super(elem);
     }
@@ -45,7 +45,7 @@ public class ParagraphView extends javax.swing.text.ParagraphView {
         return attr;
     }
 
-    /** Lee margenes, fondo y alineacion de la hoja de estilos. */
+    /** It reads margins, background and alignment from the style sheet. */
     protected void setPropertiesFromAttributes() {
         attr = null;
         StyleSheet sheet = getStyleSheet();
@@ -71,7 +71,7 @@ public class ParagraphView extends javax.swing.text.ParagraphView {
         }
     }
 
-    /** La hoja de estilos del documento, o nulo si el documento no es de HTML. */
+    /** The document's style sheet, or null if the document is not an HTML one. */
     protected StyleSheet getStyleSheet() {
         Document d = getDocument();
         if (d instanceof HTMLDocument) {
@@ -85,10 +85,10 @@ public class ParagraphView extends javax.swing.text.ParagraphView {
     }
 
     /**
-     * Si el parrafo se ve.
+     * Whether the paragraph is seen.
      *
-     * <p>Un parrafo se ve si alguno de sus renglones tiene algo. Uno inventado y vacio no, y por
-     * eso desaparece en lugar de dejar un hueco; ver la nota de la clase.
+     * <p>A paragraph is seen if any of its rows has something. An invented and empty one is not,
+     * and that is why it disappears instead of leaving a gap; see the class note.
      */
     public boolean isVisible() {
         int n = getLayoutViewCount() - 1;
@@ -105,7 +105,8 @@ public class ParagraphView extends javax.swing.text.ParagraphView {
             }
         }
         if (getStartOffset() == getDocument().getLength()) {
-            // El ultimo parrafo del documento se ve aunque este vacio: es donde va el cursor.
+            // The document's last paragraph is seen even if it is empty: it is where the cursor
+            // goes.
             return true;
         }
         return false;

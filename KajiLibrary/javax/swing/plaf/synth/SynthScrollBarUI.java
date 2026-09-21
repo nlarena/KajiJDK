@@ -10,15 +10,15 @@ import java.awt.Dimension;
 import java.awt.Rectangle;
 
 /**
- * La barra de desplazamiento de Synth.
+ * Synth's scroll bar.
  *
- * <p>Es el componente con mas regiones de todo el paquete: {@code ScrollBar} para la barra entera,
- * {@code ScrollBarTrack} para la pista y {@code ScrollBarThumb} para el pulgar. Tres imagenes
- * distintas para una sola cosa.
+ * <p>It is the component with the most regions in the whole package: {@code ScrollBar} for the
+ * whole bar, {@code ScrollBarTrack} for the track and {@code ScrollBarThumb} for the thumb.
+ * Three different images for a single thing.
  *
- * <p>Que la pista y el pulgar sean regiones y no colores es lo que permite el aspecto que ningun
- * otro paquete puede dar: un pulgar con las puntas redondeadas y un relieve en el medio, dibujado
- * como imagen y no como cuatro lineas.
+ * <p>That the track and the thumb are regions and not colours is what allows the look no other
+ * package can give: a thumb with rounded tips and a relief in the middle, drawn as an image and
+ * not as four lines.
  */
 public class SynthScrollBarUI extends javax.swing.plaf.basic.BasicScrollBarUI implements SynthUI, PropertyChangeListener {
 
@@ -29,32 +29,33 @@ public class SynthScrollBarUI extends javax.swing.plaf.basic.BasicScrollBarUI im
     }
 
     public SynthContext getContext(JComponent c) {
-        return getContext(c, SynthLookAndFeel.estadoDe(c));
+        return getContext(c, SynthLookAndFeel.stateOf(c));
     }
 
     /**
-     * El contexto con ese estado.
+     * The context with that state.
      *
-     * <p>La region sale del componente y no de una constante fija, y eso importa en las cadenas de
-     * herencia: {@code SynthCheckBoxUI} hereda este metodo de {@code SynthButtonUI} y tiene que
-     * contestar {@code CheckBox}, no {@code Button}. Medido.
+     * <p>The region comes from the component and not from a fixed constant, and that matters in the
+     * chains of inheritance: {@code SynthCheckBoxUI} inherits this method from {@code
+     * SynthButtonUI} and has to answer {@code CheckBox}, not {@code Button}. Measured.
      */
     private SynthContext getContext(JComponent c, int state) {
         Region r = SynthLookAndFeel.getRegion(c);
         return new SynthContext(c, (r != null) ? r : Region.SCROLL_BAR, style, state, true);
     }
 
-    /** Le pide el estilo a la fabrica; revienta si no hay, y esta medido. */
+    /** It asks the factory for the style; it blows up if there is none, and it is measured. */
     private void updateStyle(JComponent c) {
-        style = SynthLookAndFeel.actualizar(getContext(c, SynthConstants.ENABLED));
+        style = SynthLookAndFeel.update(getContext(c, SynthConstants.ENABLED));
     }
 
     /**
-     * Dibuja el fondo y despues el contenido.
+     * It draws the background and then the content.
      *
-     * <p>Synth separa las dos cosas: el fondo lo pinta el estilo -- que sabe en que estado esta el
-     * componente -- y el contenido lo pinta el aspecto basico. Por eso {@code update} no es
-     * {@code paint} con un relleno adelante, como en el basico, sino dos pasos distintos.
+     * <p>Synth separates the two things: the background is painted by the style -- which knows what
+     * state the component is in -- and the content is painted by the basic look and feel. That is
+     * why {@code update} is not {@code paint} with a fill in front, as in the basic one, but two
+     * different steps.
      */
     public void update(Graphics g, JComponent c) {
         SynthContext context = getContext(c);
@@ -74,14 +75,15 @@ public class SynthScrollBarUI extends javax.swing.plaf.basic.BasicScrollBarUI im
     }
 
     /**
-     * La pista, en su region propia.
+     * The track, in its own region.
      *
-     * <p>La firma toma el contexto y no lo pide: el que llama ya lo tiene, y armarlo de nuevo
-     * significaria volver a preguntarle el estado al componente en el medio de un dibujado.
+     * <p>The signature takes the context and does not ask for it: the caller already has it, and
+     * building it again would mean asking the component for its state again in the middle of a
+     * drawing.
      *
-     * @param context el contexto de la pista
-     * @param g donde dibujar
-     * @param trackBounds donde va
+     * @param context the track's context
+     * @param g where to draw
+     * @param trackBounds where it goes
      */
     protected void paintTrack(SynthContext context, Graphics g, Rectangle trackBounds) {
         if (context != null && context.getStyle() != null) {
@@ -92,11 +94,11 @@ public class SynthScrollBarUI extends javax.swing.plaf.basic.BasicScrollBarUI im
     }
 
     /**
-     * El pulgar, en la suya.
+     * The thumb, in its own.
      *
-     * @param context el contexto del pulgar
-     * @param g donde dibujar
-     * @param thumbBounds donde va
+     * @param context the thumb's context
+     * @param g where to draw
+     * @param thumbBounds where it goes
      */
     protected void paintThumb(SynthContext context, Graphics g, Rectangle thumbBounds) {
         if (context != null && context.getStyle() != null) {
@@ -107,7 +109,7 @@ public class SynthScrollBarUI extends javax.swing.plaf.basic.BasicScrollBarUI im
         }
     }
 
-    /** El borde lo dibuja el estilo, no un {@code Border}; ver {@link SynthUI}. */
+    /** The border is drawn by the style, not by a {@code Border}; see {@link SynthUI}. */
     public void paintBorder(SynthContext context, Graphics g, int x, int y, int w, int h) {
         if (context != null && context.getStyle() != null) {
             context.getStyle().getPainter(context)
@@ -115,7 +117,7 @@ public class SynthScrollBarUI extends javax.swing.plaf.basic.BasicScrollBarUI im
         }
     }
 
-    /** Cualquier cambio puede querer otro estilo; ver {@link SynthLookAndFeel#actualizar}. */
+    /** Any change may want another style; see {@link SynthLookAndFeel#update}. */
     public void propertyChange(PropertyChangeEvent e) {
         Object o = e.getSource();
         if (o instanceof JComponent) {

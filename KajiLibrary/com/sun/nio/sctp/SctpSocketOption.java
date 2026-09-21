@@ -3,16 +3,16 @@ package com.sun.nio.sctp;
 import java.net.SocketOption;
 
 /**
- * Una opcion de socket propia de SCTP.
+ * A socket option of SCTP's own.
  *
- * <p>No agrega ningun metodo a {@link SocketOption}, y aun asi no sobra: existe para que el tipo
- * distinga las opciones que un canal SCTP entiende de las que no. Los {@code setOption} de
- * {@link SctpChannel} piden este tipo, asi que pasarles una opcion de TCP no compila — un error que
- * de otro modo apareceria recien al correr.
+ * <p>It adds no method to {@link SocketOption}, and even so it is not superfluous: it exists so
+ * that the type should tell the options an SCTP channel understands from those it does not.
+ * {@link SctpChannel}'s {@code setOption}s ask for this type, so passing them a TCP option does
+ * not compile -- an error that otherwise would appear only when running.
  *
- * <p>Ver {@link SctpStandardSocketOptions} para las que define el JDK.
+ * <p>See {@link SctpStandardSocketOptions} for those the JDK defines.
  *
- * @param <T> el tipo del valor de la opcion
+ * @param <T> the type of the option's value
  */
 public interface SctpSocketOption<T> extends SocketOption<T> {
 }

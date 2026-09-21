@@ -12,61 +12,62 @@ class WriteCondition implements Condition {
 
     private final ReentrantReadWriteLock lock;
     private final Object cvar = new Object();
-    // Quienes esperan en esta condicion. Ver la nota de `ReentrantCondition`.
-    private final java.util.ArrayList<Thread> esperando = new java.util.ArrayList<Thread>();
+    // Those waiting on this condition. See `ReentrantCondition`'s note.
+    private final java.util.ArrayList<Thread> waiting = new java.util.ArrayList<Thread>();
 
     WriteCondition(ReentrantReadWriteLock lock) {
         this.lock = lock;
     }
 
-    // Declara `throws InterruptedException`, como el JDK: `Object.wait()` es una espera
-    // interrumpible y tragarse esa interrupcion le quita al que llama la unica forma de sacar a un
-    // hilo de la espera. La nota anterior lo evitaba por el finding #104, que se cerro.
+    // It declares `throws InterruptedException`, as the JDK does: `Object.wait()` is an
+    // interruptible wait and swallowing that interruption takes from the caller the only way of
+    // getting a thread out of the wait. The previous note avoided it because of finding #104, which
+    // is closed.
     public void await() throws InterruptedException {
         int holds;
         synchronized (cvar) {
-            esperando.add(Thread.currentThread());
+            waiting.add(Thread.currentThread());
             holds = lock.fullyReleaseWrite();
             try {
                 cvar.wait();
             } finally {
-                esperando.remove(Thread.currentThread());
+                waiting.remove(Thread.currentThread());
             }
         }
         lock.reacquireWrite(holds);
     }
 
-    /** Espera sin poder ser interrumpida; la interrupcion se remarca al final, no se pierde. */
+    /** It waits uninterruptibly; the interruption is re-marked at the end, it is not lost. */
     public void awaitUninterruptibly() {
         int holds;
-        boolean interrumpido = false;
+        boolean wasInterrupted = false;
         synchronized (cvar) {
-            esperando.add(Thread.currentThread());
+            waiting.add(Thread.currentThread());
             holds = lock.fullyReleaseWrite();
-            boolean listo = false;
-            while (!listo) {
+            boolean done = false;
+            while (!done) {
                 try {
                     cvar.wait();
-                    listo = true;
+                    done = true;
                 } catch (InterruptedException e) {
-                    interrumpido = true;
+                    wasInterrupted = true;
                 }
             }
-            esperando.remove(Thread.currentThread());
+            waiting.remove(Thread.currentThread());
         }
         lock.reacquireWrite(holds);
-        if (interrumpido) {
+        if (wasInterrupted) {
             Thread.currentThread().interrupt();
         }
     }
 
-    /** Espera con plazo en nanosegundos; devuelve lo que sobro. Ver `ReentrantCondition`. */
+    /** It waits with a deadline in nanoseconds; it returns what was left. See `ReentrantCondition`. */
     public long awaitNanos(long nanosTimeout) throws InterruptedException {
         int holds;
-        long sobrante;
+        long leftOver;
         synchronized (cvar) {
-            long arranque = System.nanoTime();
-            esperando.add(Thread.currentThread());
+            long startedAt = System.nanoTime();
+            waiting.add(Thread.currentThread());
             holds = lock.fullyReleaseWrite();
             try {
                 long millis = nanosTimeout / 1000000L;
@@ -75,15 +76,15 @@ class WriteCondition implements Condition {
                     cvar.wait(millis, nanos);
                 }
             } finally {
-                esperando.remove(Thread.currentThread());
+                waiting.remove(Thread.currentThread());
             }
-            sobrante = nanosTimeout - (System.nanoTime() - arranque);
+            leftOver = nanosTimeout - (System.nanoTime() - startedAt);
         }
         lock.reacquireWrite(holds);
-        return sobrante;
+        return leftOver;
     }
 
-    /** Espera con plazo; `false` si se agoto. */
+    /** It waits with a deadline; `false` if it ran out. */
     public boolean await(long time, java.util.concurrent.TimeUnit unit)
             throws InterruptedException {
         if (unit == null) {
@@ -92,47 +93,47 @@ class WriteCondition implements Condition {
         return this.awaitNanos(unit.toNanos(time)) > 0L;
     }
 
-    /** Espera hasta una fecha del calendario; `false` si llego antes la fecha. */
+    /** It waits until a calendar date; `false` if the date arrived first. */
     public boolean awaitUntil(java.util.Date deadline) throws InterruptedException {
         if (deadline == null) {
             throw new NullPointerException("deadline");
         }
-        long falta = deadline.getTime() - System.currentTimeMillis();
-        if (falta <= 0L) {
+        long remaining = deadline.getTime() - System.currentTimeMillis();
+        if (remaining <= 0L) {
             return false;
         }
-        this.awaitNanos(falta * 1000000L);
+        this.awaitNanos(remaining * 1000000L);
         return System.currentTimeMillis() < deadline.getTime();
     }
 
-    // ---- lo que el lock necesita para sus consultas de inspeccion ---------------------------------
+    // ---- what the lock needs for its inspection queries ------------------------------------------
 
-    boolean perteneceA(ReentrantReadWriteLock otro) {
-        return this.lock == otro;
+    boolean belongsTo(ReentrantReadWriteLock other) {
+        return this.lock == other;
     }
 
-    boolean hayEsperando() {
-        boolean hay;
+    boolean anyWaiting() {
+        boolean any;
         synchronized (cvar) {
-            hay = !esperando.isEmpty();
+            any = !waiting.isEmpty();
         }
-        return hay;
+        return any;
     }
 
-    int cuantosEsperan() {
+    int waitingCount() {
         int n;
         synchronized (cvar) {
-            n = esperando.size();
+            n = waiting.size();
         }
         return n;
     }
 
-    java.util.Collection<Thread> losQueEsperan() {
-        java.util.ArrayList<Thread> copia;
+    java.util.Collection<Thread> theWaiters() {
+        java.util.ArrayList<Thread> copy;
         synchronized (cvar) {
-            copia = new java.util.ArrayList<Thread>(esperando);
+            copy = new java.util.ArrayList<Thread>(waiting);
         }
-        return copia;
+        return copy;
     }
 
     public void signal() {

@@ -15,89 +15,90 @@ import javax.swing.plaf.BorderUIResource$LineBorderUIResource;
 import javax.swing.plaf.UIResource;
 
 /**
- * Los bordes del aspecto basico: bisel de boton, campo grabado, margen, barra de menu.
+ * The basic look and feel's borders: button bevel, etched field, margin, menu bar.
  *
- * <p>Los colores de las fabricas estaticas son los que {@code UIManager} daria bajo Metal, medidos
- * en el JDK 25: sombra (184, 207, 229), sombra oscura (122, 138, 153), brillo y brillo claro
- * blancos. Sin {@code UIManager}, van escritos aca.
+ * <p>The colours of the static factories are those {@code UIManager} would give under Metal,
+ * measured in JDK 25: shadow (184, 207, 229), dark shadow (122, 138, 153), highlight and light
+ * highlight white. With no {@code UIManager}, they are written here.
  *
- * <p>{@link MarginBorder} es el que hace que el margen de un boton cuente: no pinta nada, solo
- * declara como insets lo que {@code AbstractButton.getMargin} dice. El JDK tambien lo aplica a
- * {@code JToolBar} y a los componentes de texto, que no estan; para cualquier otro componente los
- * insets son cero.
+ * <p>{@link MarginBorder} is the one that makes a button's margin count: it paints nothing, it
+ * only declares as insets whatever {@code AbstractButton.getMargin} says. The JDK also applies
+ * it to {@code JToolBar} and to the text components, which are not there; for any other
+ * component the insets are zero.
  *
- * <p>No estan {@code SplitPaneBorder} ni {@code getSplitPaneBorder},
- * {@code getSplitPaneDividerBorder} y {@code getInternalFrameBorder}: dependen de
- * {@code JSplitPane} y de colores de {@code InternalFrame.*} que no se midieron.
+ * <p>{@code SplitPaneBorder} and {@code getSplitPaneBorder},
+ * {@code getSplitPaneDividerBorder} and {@code getInternalFrameBorder} are not there: they
+ * depend on {@code JSplitPane} and on {@code InternalFrame.*} colours that were not measured.
  */
 public class BasicBorders {
 
-    private static final Color SOMBRA = new Color(184, 207, 229);
-    private static final Color SOMBRA_OSCURA = new Color(122, 138, 153);
-    private static final Color BRILLO = new Color(255, 255, 255);
-    private static final Color BRILLO_CLARO = new Color(255, 255, 255);
+    private static final Color SHADOW = new Color(184, 207, 229);
+    private static final Color DARK_SHADOW = new Color(122, 138, 153);
+    private static final Color HIGHLIGHT = new Color(255, 255, 255);
+    private static final Color LIGHT_HIGHLIGHT = new Color(255, 255, 255);
 
     public BasicBorders() {
     }
 
-    /** El borde de un boton: bisel por fuera, margen por dentro. */
+    /** A button's border: bevel on the outside, margin on the inside. */
     public static Border getButtonBorder() {
         return new BorderUIResource$CompoundBorderUIResource(
-                new ButtonBorder(SOMBRA, SOMBRA_OSCURA, BRILLO, BRILLO_CLARO), new MarginBorder());
+                new ButtonBorder(SHADOW, DARK_SHADOW, HIGHLIGHT, LIGHT_HIGHLIGHT),
+                new MarginBorder());
     }
 
     public static Border getRadioButtonBorder() {
         return new BorderUIResource$CompoundBorderUIResource(
-                new RadioButtonBorder(SOMBRA, SOMBRA_OSCURA, BRILLO, BRILLO_CLARO),
+                new RadioButtonBorder(SHADOW, DARK_SHADOW, HIGHLIGHT, LIGHT_HIGHLIGHT),
                 new MarginBorder());
     }
 
     public static Border getToggleButtonBorder() {
         return new BorderUIResource$CompoundBorderUIResource(
-                new ToggleButtonBorder(SOMBRA, SOMBRA_OSCURA, BRILLO, BRILLO_CLARO),
+                new ToggleButtonBorder(SHADOW, DARK_SHADOW, HIGHLIGHT, LIGHT_HIGHLIGHT),
                 new MarginBorder());
     }
 
     public static Border getMenuBarBorder() {
-        return new MenuBarBorder(SOMBRA, BRILLO);
+        return new MenuBarBorder(SHADOW, HIGHLIGHT);
     }
 
     public static Border getTextFieldBorder() {
-        return new FieldBorder(SOMBRA, SOMBRA_OSCURA, BRILLO, BRILLO_CLARO);
+        return new FieldBorder(SHADOW, DARK_SHADOW, HIGHLIGHT, LIGHT_HIGHLIGHT);
     }
 
     /**
-     * El borde de un panel dividido: una linea alrededor, y nada donde va el divisor.
+     * A split pane's border: a line all around, and nothing where the divider goes.
      *
-     * <p>El hueco del divisor es la parte interesante: el borde no dibuja su propio trazo ahi,
-     * porque el divisor tiene el suyo y los dos juntos se verian como una linea doble.
+     * <p>The divider's gap is the interesting part: the border does not draw a stroke of its own
+     * there, because the divider has its own and the two together would look like a double line.
      */
     public static Border getSplitPaneBorder() {
-        return new SplitPaneBorder(BRILLO, SOMBRA_OSCURA);
+        return new SplitPaneBorder(HIGHLIGHT, DARK_SHADOW);
     }
 
-    /** El borde del divisor en si; una linea de un pixel de cada lado. */
+    /** The divider's own border; a one-pixel line on each side. */
     public static Border getSplitPaneDividerBorder() {
-        return new SplitPaneDividerBorder(BRILLO, SOMBRA_OSCURA);
+        return new SplitPaneDividerBorder(HIGHLIGHT, DARK_SHADOW);
     }
 
-    /** El de una barra de progreso: dos pixeles de linea. */
+    /** A progress bar's: two pixels of line. */
     public static Border getProgressBarBorder() {
-        return new BorderUIResource$LineBorderUIResource(SOMBRA_OSCURA, 2);
+        return new BorderUIResource$LineBorderUIResource(DARK_SHADOW, 2);
     }
 
-    /** El de una ventana interna: dos lineas por fuera y una por dentro. */
+    /** An internal frame's: two lines on the outside and one on the inside. */
     public static Border getInternalFrameBorder() {
         return new BorderUIResource$CompoundBorderUIResource(
-                new BorderUIResource$LineBorderUIResource(SOMBRA_OSCURA, 2),
-                new BorderUIResource$LineBorderUIResource(SOMBRA, 1));
+                new BorderUIResource$LineBorderUIResource(DARK_SHADOW, 2),
+                new BorderUIResource$LineBorderUIResource(SHADOW, 1));
     }
 
     /**
-     * El borde de un panel dividido; ver {@link #getSplitPaneBorder}.
+     * A split pane's border; see {@link #getSplitPaneBorder}.
      *
-     * <p>Los dos colores son publicos-protegidos y estan medidos: el claro arriba y a la izquierda,
-     * el oscuro abajo y a la derecha, que es lo que hace que el panel se vea hundido.
+     * <p>The two colours are public-protected and are measured: the light one on top and on the
+     * left, the dark one at the bottom and on the right, which is what makes the pane look sunken.
      */
     public static class SplitPaneBorder implements Border, UIResource {
 
@@ -110,10 +111,10 @@ public class BasicBorders {
         }
 
         /**
-         * La linea de alrededor, salteando el ancho del divisor.
+         * The line all around, skipping the divider's width.
          *
-         * <p>Si el componente no es un panel dividido se dibuja el rectangulo entero: es lo unico
-         * que se puede hacer sin saber donde esta el divisor.
+         * <p>If the component is not a split pane the whole rectangle is drawn: it is the only
+         * thing that can be done without knowing where the divider is.
          */
         public void paintBorder(Component c, Graphics g, int x, int y, int width, int height) {
             if (!(c instanceof javax.swing.JSplitPane)) {
@@ -122,7 +123,7 @@ public class BasicBorders {
                 return;
             }
             javax.swing.JSplitPane splitPane = (javax.swing.JSplitPane) c;
-            Component izq = splitPane.getLeftComponent();
+            Component left = splitPane.getLeftComponent();
             Component der = splitPane.getRightComponent();
             g.setColor(highlight);
             g.drawLine(x, y, x + width - 1, y);
@@ -130,16 +131,16 @@ public class BasicBorders {
             g.setColor(shadow);
             g.drawLine(x + width - 1, y, x + width - 1, y + height - 1);
             g.drawLine(x, y + height - 1, x + width - 1, y + height - 1);
-            // El hueco: donde termina un hijo y empieza el otro no va nada.
-            if (izq != null && der != null) {
+            // The gap: where one child ends and the other begins nothing goes.
+            if (left != null && der != null) {
                 g.setColor(c.getBackground());
                 if (splitPane.getOrientation() == javax.swing.JSplitPane.HORIZONTAL_SPLIT) {
-                    int dx = izq.getWidth() + x;
+                    int dx = left.getWidth() + x;
                     g.drawLine(dx, y, dx + splitPane.getDividerSize() - 1, y);
                     g.drawLine(dx, y + height - 1, dx + splitPane.getDividerSize() - 1,
                             y + height - 1);
                 } else {
-                    int dy = izq.getHeight() + y;
+                    int dy = left.getHeight() + y;
                     g.drawLine(x, dy, x, dy + splitPane.getDividerSize() - 1);
                     g.drawLine(x + width - 1, dy, x + width - 1,
                             dy + splitPane.getDividerSize() - 1);
@@ -157,11 +158,11 @@ public class BasicBorders {
     }
 
     /**
-     * El borde del divisor de un panel dividido.
+     * A split pane divider's border.
      *
-     * <p>No es publico en el JDK y aca tampoco: lo unico publico es
-     * {@link #getSplitPaneDividerBorder}, que devuelve uno. El nombre igual se ve por
-     * {@code getClass()}, asi que es el del JDK.
+     * <p>It is not public in the JDK and it is not here either: the only public thing is
+     * {@link #getSplitPaneDividerBorder}, which returns one. The name shows through
+     * {@code getClass()} all the same, so it is the JDK's.
      */
     static class SplitPaneDividerBorder implements Border, UIResource {
 
@@ -173,12 +174,12 @@ public class BasicBorders {
             this.shadow = shadow;
         }
 
-        /** Una linea de cada lado, en el sentido perpendicular al que divide. */
+        /** A line on each side, in the direction perpendicular to the one it divides. */
         public void paintBorder(Component c, Graphics g, int x, int y, int width, int height) {
-            Component padre = c.getParent();
+            Component parent = c.getParent();
             boolean horizontal = true;
-            if (padre instanceof javax.swing.JSplitPane) {
-                horizontal = ((javax.swing.JSplitPane) padre).getOrientation()
+            if (parent instanceof javax.swing.JSplitPane) {
+                horizontal = ((javax.swing.JSplitPane) parent).getOrientation()
                         == javax.swing.JSplitPane.HORIZONTAL_SPLIT;
             }
             g.setColor(highlight);
@@ -194,11 +195,12 @@ public class BasicBorders {
         }
 
         /**
-         * Uno de cada lado, en el sentido que divide.
+         * One on each side, in the direction it divides.
          *
-         * <p>Un divisor horizontal tiene sus lineas a izquierda y derecha, asi que sus insets son
-         * (0, 1, 0, 1); uno vertical, al reves. Y un componente que no es un divisor -- o uno que
-         * todavia no tiene panel -- se lleva uno de cada lado. Los tres casos estan medidos.
+         * <p>A horizontal divider has its lines on the left and on the right, so its insets are
+         * (0, 1, 0, 1); a vertical one, the other way round. And a component that is not a divider
+         * -- or one that does not have a pane yet -- gets one on each side. The three cases are
+         * measured.
          */
         public Insets getBorderInsets(Component c) {
             if (c instanceof BasicSplitPaneDivider) {
@@ -221,7 +223,9 @@ public class BasicBorders {
         }
     }
 
-    /** El bisel de un boton: levantado en reposo, hundido al apretar, con marco si es el por omision. */
+    /**
+     * A button's bevel: raised at rest, sunken when pressed, with a frame if it is the default one.
+     */
     public static class ButtonBorder extends AbstractBorder implements UIResource {
 
         protected Color shadow;
@@ -238,21 +242,24 @@ public class BasicBorders {
         }
 
         public void paintBorder(Component c, Graphics g, int x, int y, int width, int height) {
-            boolean apretado = false;
-            boolean porOmision = false;
+            boolean pressed = false;
+            boolean byDefault = false;
             if (c instanceof AbstractButton) {
                 AbstractButton b = (AbstractButton) c;
-                ButtonModel modelo = b.getModel();
-                apretado = modelo.isPressed() && modelo.isArmed();
+                ButtonModel model = b.getModel();
+                pressed = model.isPressed() && model.isArmed();
                 if (c instanceof JButton) {
-                    porOmision = ((JButton) c).isDefaultButton();
+                    byDefault = ((JButton) c).isDefaultButton();
                 }
             }
-            BasicGraphicsUtils.drawBezel(g, x, y, width, height, apretado, porOmision, shadow,
+            BasicGraphicsUtils.drawBezel(g, x, y, width, height, pressed, byDefault, shadow,
                     darkShadow, highlight, lightHighlight);
         }
 
-        /** Dos arriba y tres en los otros lados: el pixel de menos arriba deja lugar al marco. */
+        /**
+         * Two on top and three on the other sides: the missing pixel on top leaves room for the
+         * frame.
+         */
         public Insets getBorderInsets(Component c, Insets insets) {
             insets.top = 2;
             insets.left = 3;
@@ -262,7 +269,7 @@ public class BasicBorders {
         }
     }
 
-    /** El bisel de un boton con estado: hundido mientras esta seleccionado. */
+    /** The bevel of a button with state: sunken while it is selected. */
     public static class ToggleButtonBorder extends ButtonBorder {
 
         public ToggleButtonBorder(Color shadow, Color darkShadow, Color highlight,
@@ -271,12 +278,12 @@ public class BasicBorders {
         }
 
         public void paintBorder(Component c, Graphics g, int x, int y, int width, int height) {
-            boolean hundido = false;
+            boolean sunken = false;
             if (c instanceof AbstractButton) {
-                ButtonModel modelo = ((AbstractButton) c).getModel();
-                hundido = (modelo.isArmed() && modelo.isPressed()) || modelo.isSelected();
+                ButtonModel model = ((AbstractButton) c).getModel();
+                sunken = (model.isArmed() && model.isPressed()) || model.isSelected();
             }
-            if (hundido) {
+            if (sunken) {
                 BasicGraphicsUtils.drawLoweredBezel(g, x, y, width, height, shadow, darkShadow,
                         highlight, lightHighlight);
             } else {
@@ -294,7 +301,7 @@ public class BasicBorders {
         }
     }
 
-    /** El bisel de un boton de radio: hundido si esta seleccionado, con marco si tiene el foco. */
+    /** A radio button's bevel: sunken if it is selected, with a frame if it has the focus. */
     public static class RadioButtonBorder extends ButtonBorder {
 
         public RadioButtonBorder(Color shadow, Color darkShadow, Color highlight,
@@ -305,8 +312,8 @@ public class BasicBorders {
         public void paintBorder(Component c, Graphics g, int x, int y, int width, int height) {
             if (c instanceof AbstractButton) {
                 AbstractButton b = (AbstractButton) c;
-                ButtonModel modelo = b.getModel();
-                if ((modelo.isArmed() && modelo.isPressed()) || modelo.isSelected()) {
+                ButtonModel model = b.getModel();
+                if ((model.isArmed() && model.isPressed()) || model.isSelected()) {
                     BasicGraphicsUtils.drawLoweredBezel(g, x, y, width, height, shadow,
                             darkShadow, highlight, lightHighlight);
                 } else {
@@ -329,30 +336,30 @@ public class BasicBorders {
         }
     }
 
-    /** El margen de un boton, como borde; ver la nota de la clase. */
+    /** A button's margin, as a border; see the class note. */
     public static class MarginBorder extends AbstractBorder implements UIResource {
 
         public MarginBorder() {
         }
 
         public Insets getBorderInsets(Component c, Insets insets) {
-            Insets margen = null;
+            Insets margin = null;
             if (c instanceof AbstractButton) {
-                margen = ((AbstractButton) c).getMargin();
+                margin = ((AbstractButton) c).getMargin();
             }
-            insets.top = margen != null ? margen.top : 0;
-            insets.left = margen != null ? margen.left : 0;
-            insets.bottom = margen != null ? margen.bottom : 0;
-            insets.right = margen != null ? margen.right : 0;
+            insets.top = margin != null ? margin.top : 0;
+            insets.left = margin != null ? margin.left : 0;
+            insets.bottom = margin != null ? margin.bottom : 0;
+            insets.right = margin != null ? margin.right : 0;
             return insets;
         }
     }
 
     /**
-     * El borde de un campo de texto: un rectangulo grabado.
+     * A text field's border: an etched rectangle.
      *
-     * <p>En el JDK los insets suman el margen del {@code JTextComponent}; sin componentes de texto,
-     * son los dos pixeles del grabado.
+     * <p>In the JDK the insets add the {@code JTextComponent}'s margin; with no text components,
+     * they are the etching's two pixels.
      */
     public static class FieldBorder extends AbstractBorder implements UIResource {
 
@@ -383,7 +390,7 @@ public class BasicBorders {
         }
     }
 
-    /** El borde de una barra de menu: una linea de sombra y una de brillo, abajo. */
+    /** A menu bar's border: a shadow line and a highlight one, at the bottom. */
     public static class MenuBarBorder extends AbstractBorder implements UIResource {
 
         private Color shadow;
@@ -395,14 +402,14 @@ public class BasicBorders {
         }
 
         public void paintBorder(Component c, Graphics g, int x, int y, int width, int height) {
-            Color viejo = g.getColor();
+            Color old = g.getColor();
             g.translate(x, y);
             g.setColor(shadow);
             g.drawLine(0, height - 2, width, height - 2);
             g.setColor(highlight);
             g.drawLine(0, height - 1, width, height - 1);
             g.translate(-x, -y);
-            g.setColor(viejo);
+            g.setColor(old);
         }
 
         public Insets getBorderInsets(Component c, Insets insets) {

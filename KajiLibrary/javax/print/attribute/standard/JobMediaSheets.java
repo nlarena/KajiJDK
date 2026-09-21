@@ -6,10 +6,10 @@ import javax.print.attribute.PrintJobAttribute;
 import javax.print.attribute.PrintRequestAttribute;
 
 /**
- * Cuantas hojas de papel consume el trabajo.
+ * How many sheets of paper the job consumes.
  *
- * <p>Hojas fisicas, no caras: a dos caras, cien paginas son cincuenta hojas. Y aca las copias si
- * cuentan, al reves que en {@link JobKOctets}: es papel que se gasta.
+ * <p>Physical sheets, not sides: two-sided, a hundred pages are fifty sheets. And here the copies
+ * do count, unlike in {@link JobKOctets}: it is paper being used up.
  */
 public class JobMediaSheets extends IntegerSyntax implements PrintRequestAttribute, PrintJobAttribute {
 
@@ -19,8 +19,10 @@ public class JobMediaSheets extends IntegerSyntax implements PrintRequestAttribu
         super(value, 0, Integer.MAX_VALUE);
     }
 
-    /** El {@code instanceof} es lo que impide que un JobMediaSheets de igual a otro atributo
-     * entero con el mismo numero. */
+    /**
+     * The {@code instanceof} is what keeps a JobMediaSheets from being equal to another
+     * integer attribute with the same number.
+     */
     public boolean equals(Object object) {
         return super.equals(object) && object instanceof JobMediaSheets;
     }

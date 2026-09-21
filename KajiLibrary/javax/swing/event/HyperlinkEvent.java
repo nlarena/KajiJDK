@@ -7,14 +7,15 @@ import java.util.EventObject;
 import javax.swing.text.Element;
 
 /**
- * Algo paso con un enlace: el mouse entro, salio, o se lo activo.
+ * Something happened with a link: the mouse entered, left, or it was activated.
  *
- * <p>Lleva la {@link URL} <em>y</em> la descripcion en texto, y las dos hacen falta: un enlace
- * relativo o mal formado no da URL, y en ese caso el texto es lo unico que queda. Un lector que solo
- * mire {@link #getURL} se pierde justamente los enlaces rotos, que son los que hay que reportar.
+ * <p>It carries the {@link URL} <em>and</em> the description as text, and both are needed: a
+ * relative or malformed link gives no URL, and in that case the text is all that is left. A
+ * reader that only looks at {@link #getURL} misses precisely the broken links, which are the ones
+ * worth reporting.
  *
- * <p>{@link #getSourceElement} es el elemento del documento donde estaba el enlace, para poder
- * cambiarle el formato — resaltarlo al pasar por encima, por ejemplo.
+ * <p>{@link #getSourceElement} is the document element where the link was, so that its formatting
+ * can be changed -- highlighting it on hover, for instance.
  */
 public class HyperlinkEvent extends EventObject {
 
@@ -26,23 +27,23 @@ public class HyperlinkEvent extends EventObject {
     private Element sourceElement;
     private InputEvent inputEvent;
 
-    /** Con la URL sola. */
+    /** With the URL alone. */
     public HyperlinkEvent(Object source, EventType type, URL u) {
         this(source, type, u, null, null, null);
     }
 
-    /** Con la URL y la descripcion. */
+    /** With the URL and the description. */
     public HyperlinkEvent(Object source, EventType type, URL u, String desc) {
         this(source, type, u, desc, null, null);
     }
 
-    /** Agregando el elemento del documento. */
+    /** Adding the document element. */
     public HyperlinkEvent(Object source, EventType type, URL u, String desc,
             Element sourceElement) {
         this(source, type, u, desc, sourceElement, null);
     }
 
-    /** Agregando el evento de entrada que lo provoco. */
+    /** Adding the input event that caused it. */
     public HyperlinkEvent(Object source, EventType type, URL u, String desc,
             Element sourceElement, InputEvent inputEvent) {
         super(source);
@@ -53,56 +54,56 @@ public class HyperlinkEvent extends EventObject {
         this.inputEvent = inputEvent;
     }
 
-    /** Que paso con el enlace. */
+    /** What happened with the link. */
     public EventType getEventType() {
         return this.type;
     }
 
-    /** El texto del enlace; lo unico que queda si la URL no se pudo formar. */
+    /** The link's text; all that is left if the URL could not be formed. */
     public String getDescription() {
         return this.desc;
     }
 
-    /** La direccion, o {@code null} si no se pudo formar. */
+    /** The address, or {@code null} if it could not be formed. */
     public URL getURL() {
         return this.u;
     }
 
-    /** El elemento del documento donde estaba el enlace, o {@code null}. */
+    /** The document element where the link was, or {@code null}. */
     public Element getSourceElement() {
         return this.sourceElement;
     }
 
     /**
-     * El evento de entrada que lo provoco, o {@code null}.
+     * The input event that caused it, or {@code null}.
      *
-     * <p>Sirve para mirar los modificadores: un clic con control apretado suele querer decir
-     * "abrilo en otro lado".
+     * <p>It serves for looking at the modifiers: a click with control held usually means "open it
+     * somewhere else".
      */
     public InputEvent getInputEvent() {
         return this.inputEvent;
     }
 
-    /** Que paso con el enlace. */
+    /** What happened with the link. */
     public static final class EventType {
 
-        /** El mouse entro. */
+        /** The mouse entered. */
         public static final EventType ENTERED = new EventType("ENTERED");
 
-        /** El mouse salio. */
+        /** The mouse left. */
         public static final EventType EXITED = new EventType("EXITED");
 
-        /** Se activo el enlace. */
+        /** The link was activated. */
         public static final EventType ACTIVATED = new EventType("ACTIVATED");
 
-        private String tipo;
+        private String type;
 
-        private EventType(String tipo) {
-            this.tipo = tipo;
+        private EventType(String type) {
+            this.type = type;
         }
 
         public String toString() {
-            return this.tipo;
+            return this.type;
         }
     }
 }

@@ -1,33 +1,33 @@
 package javax.management;
 
 /**
- * El agente avisa que se dio de alta o de baja un MBean.
+ * The agent announces that an MBean was registered or unregistered.
  *
- * <p>Es la unica notificacion que emite el propio servidor. La emite el delegado, registrado bajo
- * {@code JMImplementation:type=MBeanServerDelegate}, y hay que escucharla ahi: es lo que permite a
- * una consola descubrir MBeans nuevos sin repreguntar cada tanto.
+ * <p>It is the only notification the server itself emits. The delegate emits it, registered under
+ * {@code JMImplementation:type=MBeanServerDelegate}, and it has to be listened to there: it is what
+ * lets a console discover new MBeans without asking again every so often.
  *
- * <p>El MBean afectado va en {@link #getMBeanName()}, no en `getSource()`: la fuente es el delegado,
- * siempre.
+ * <p>The affected MBean goes in {@link #getMBeanName()}, not in {@code getSource()}: the source is
+ * the delegate, always.
  */
 public class MBeanServerNotification extends Notification {
 
     private static final long serialVersionUID = 2876477500475969677L;
 
-    /** Se registro un MBean: {@value}. */
+    /** An MBean was registered: {@value}. */
     public static final String REGISTRATION_NOTIFICATION = "JMX.mbean.registered";
 
-    /** Se dio de baja un MBean: {@value}. */
+    /** An MBean was unregistered: {@value}. */
     public static final String UNREGISTRATION_NOTIFICATION = "JMX.mbean.unregistered";
 
     /**
-     * @serial el MBean que se dio de alta o de baja
+     * @serial the MBean that was registered or unregistered
      */
     private final ObjectName objectName;
 
     /**
-     * @param type {@link #REGISTRATION_NOTIFICATION} o {@link #UNREGISTRATION_NOTIFICATION}
-     * @param objectName el MBean afectado
+     * @param type {@link #REGISTRATION_NOTIFICATION} or {@link #UNREGISTRATION_NOTIFICATION}
+     * @param objectName the affected MBean
      */
     public MBeanServerNotification(String type, Object source, long sequenceNumber,
                                    ObjectName objectName) {
@@ -35,7 +35,7 @@ public class MBeanServerNotification extends Notification {
         this.objectName = objectName;
     }
 
-    /** El MBean que se dio de alta o de baja. */
+    /** The MBean that was registered or unregistered. */
     public ObjectName getMBeanName() {
         return objectName;
     }

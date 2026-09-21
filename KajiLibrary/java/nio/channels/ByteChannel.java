@@ -1,12 +1,12 @@
 package java.nio.channels;
 
 /**
- * KajiLibrary's java.nio.channels.ByteChannel — un canal que lee **y** escribe.
+ * KajiLibrary's java.nio.channels.ByteChannel — a channel that reads **and** writes.
  *
- * <p>No declara nada propio: es la union de {@link ReadableByteChannel} y
- * {@link WritableByteChannel}, y su valor es exactamente ese. Permite que una firma pida "un canal
- * bidireccional" con un solo tipo, en vez de un parametro por cada mitad o una interseccion escrita a
- * mano en cada lugar.
+ * <p>It declares nothing of its own: it is the union of {@link ReadableByteChannel} and {@link
+ * WritableByteChannel}, and its value is exactly that. It lets a signature ask for "a bidirectional
+ * channel" with a single type, instead of one parameter for each half or an intersection written by
+ * hand in each place.
  */
 public interface ByteChannel extends ReadableByteChannel, WritableByteChannel {
 }

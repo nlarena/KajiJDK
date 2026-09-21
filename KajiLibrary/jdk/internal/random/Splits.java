@@ -5,31 +5,31 @@ import java.util.List;
 import java.util.random.RandomGenerator.SplittableGenerator;
 import java.util.stream.Stream;
 
-// KajiLibrary's jdk.internal.random.Splits -- la parte comun de `splits(...)`, compartida por los
-// ocho generadores LXM.
+// KajiLibrary's jdk.internal.random.Splits -- the common part of `splits(...)`, shared by the
+// eight LXM generators.
 //
-// Existe porque en el JDK esto vive en una jerarquia de clases abstractas
+// It exists because in the JDK this lives in a hierarchy of abstract classes
 // (`AbstractSpliteratorGenerator` -> `AbstractSplittableGenerator` ->
-// `AbstractSplittableWithBrineGenerator`) que esta biblioteca no tiene: aca cada generador es
-// `final` e implementa la interfaz directo. La logica igual tiene que estar en un solo lugar, asi
-// que esta aca.
+// `AbstractSplittableWithBrineGenerator`) that this library does not have: here each generator is
+// `final` and implements the interface directly. The logic still has to be in one single place, so
+// it is here.
 //
-// **Una diferencia con el JDK, y es la de siempre en esta biblioteca**: el flujo es *ansioso*. El
-// JDK devuelve un `Stream` perezoso sobre un spliterator que va partiendo a medida que se lo
-// consume, y ademas usa una **salmuera con sal** --digitos de 4 bits que garantizan que dos hijos
-// de ramas distintas del arbol de particion nunca compartan `a`--. Aca los `streamSize` hijos se
-// construyen de una y la salmuera de cada uno sale del `source`, que da la misma garantia para un
-// solo nivel de particion pero no para un arbol.
+// **One difference with the JDK, and it is the usual one in this library**: the stream is *eager*.
+// The JDK returns a lazy `Stream` over a spliterator that goes on splitting as it is consumed, and
+// it also uses a **salted brine** --4-bit digits that guarantee that two children of different
+// branches of the tree of splitting never share `a`--. Here the `streamSize` children are built in
+// one go and the brine of each one comes from the `source`, which gives the same guarantee for one
+// single level of splitting but not for a tree.
 //
-// Se documenta en vez de fingir: quien parta en un solo nivel --que es lo que hace el 99 % del
-// codigo-- obtiene generadores independientes; quien arme un arbol profundo tiene menos garantia
-// que en el JDK.
+// It is documented instead of pretended: whoever splits at one single level --which is what 99 % of
+// the code does-- obtains independent generators; whoever builds a deep tree has less guarantee
+// than in the JDK.
 final class Splits {
 
     private Splits() {
     }
 
-    static Stream<SplittableGenerator> de(SplittableGenerator padre, long streamSize,
+    static Stream<SplittableGenerator> de(SplittableGenerator parent, long streamSize,
             SplittableGenerator source) {
         if (streamSize < 0L) {
             throw new IllegalArgumentException("size must be non-negative");
@@ -37,12 +37,12 @@ final class Splits {
         if (source == null) {
             throw new NullPointerException("source");
         }
-        List<SplittableGenerator> hijos = new ArrayList<SplittableGenerator>();
+        List<SplittableGenerator> children = new ArrayList<SplittableGenerator>();
         long i = 0L;
         while (i < streamSize) {
-            hijos.add(padre.split(source));
+            children.add(parent.split(source));
             i = i + 1L;
         }
-        return hijos.stream();
+        return children.stream();
     }
 }

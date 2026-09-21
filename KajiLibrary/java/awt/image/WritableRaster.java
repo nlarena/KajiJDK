@@ -4,28 +4,28 @@ import java.awt.Point;
 import java.awt.Rectangle;
 
 /**
- * Un {@link Raster} en el que además se puede **escribir**.
+ * A {@link Raster} that can also be **written** to.
  *
- * <p>Toda la geometría —la traducción del modelo de muestras, los recortes que comparten datos, las
- * comprobaciones de borde— ya está en la clase padre. Acá se agregan los métodos que escriben, que
- * son el espejo exacto de los que leen, más dos que no tienen espejo: {@link #setRect} y
- * {@link #setDataElements(int, int, Raster)}, que copian de otro ráster.
+ * <p>All the geometry —the translation of the sample model, the crops that share data, the edge
+ * checks— is in the parent class already. Here the methods that write are added, which are the
+ * exact mirror of the ones that read, plus two that have no mirror: {@link #setRect} and {@link
+ * #setDataElements(int, int, Raster)}, which copy from another raster.
  *
- * <p>Que la escritura viva en una subclase no es un detalle de organización. Un método que recibe un
- * `Raster` declara que sólo va a leerlo, y un recorte de sólo lectura sobre datos escribibles es una
- * vista honesta: el tipo dice lo que el que lo tiene puede hacer, no lo que hay abajo.
+ * <p>That writing lives in a subclass is not a detail of organisation. A method that receives a
+ * `Raster` declares that it is only going to read it, and a read-only crop over writable data is an
+ * honest view: the type says what whoever holds it can do, not what is underneath.
  *
- * <p>La diferencia entre los dos métodos de copia está en el borde. {@link #setRect} **recorta**: lo
- * que caiga afuera se descarta en silencio, porque copiar una imagen contra una esquina es lo normal
- * y no un error. {@link #setDataElements(int, int, Raster)} **tira**, porque copia píxeles crudos y
- * ahí un desborde sería un error de cuenta, no un recorte querido.
+ * <p>The difference between the two copying methods is at the edge. {@link #setRect} **clips**:
+ * whatever falls outside is discarded silently, because copying an image against a corner is normal
+ * and not an error. {@link #setDataElements(int, int, Raster)} **throws**, because it copies raw
+ * pixels and there an overflow would be an arithmetic mistake, not a wanted clip.
  */
 public class WritableRaster extends Raster {
 
     /**
-     * Un ráster escribible con un buffer nuevo, del tamaño del modelo, ubicado en `origin`.
+     * A writable raster with a new buffer, of the size of the model, placed at `origin`.
      *
-     * @throws RasterFormatException si el tamaño resultante es vacío
+     * @throws RasterFormatException if the resulting size is empty
      */
     protected WritableRaster(SampleModel sampleModel, Point origin) {
         this(sampleModel, sampleModel.createDataBuffer(),
@@ -34,9 +34,9 @@ public class WritableRaster extends Raster {
     }
 
     /**
-     * Un ráster escribible sobre el buffer dado, del tamaño del modelo, ubicado en `origin`.
+     * A writable raster over the given buffer, of the size of the model, placed at `origin`.
      *
-     * @throws RasterFormatException si el tamaño resultante es vacío
+     * @throws RasterFormatException if the resulting size is empty
      */
     protected WritableRaster(SampleModel sampleModel, DataBuffer dataBuffer, Point origin) {
         this(sampleModel, dataBuffer,
@@ -45,10 +45,10 @@ public class WritableRaster extends Raster {
     }
 
     /**
-     * El constructor general: región, traducción y padre dados por separado.
+     * The general constructor: region, translation and parent given separately.
      *
-     * @throws NullPointerException si falta cualquiera de los cuatro primeros
-     * @throws RasterFormatException si la región es vacía
+     * @throws NullPointerException if any of the first four is missing
+     * @throws RasterFormatException if the region is empty
      */
     protected WritableRaster(SampleModel sampleModel, DataBuffer dataBuffer, Rectangle aRegion,
             Point sampleModelTranslate, WritableRaster parent) {
@@ -56,19 +56,19 @@ public class WritableRaster extends Raster {
     }
 
     /**
-     * El ráster escribible del que éste es un recorte, o `null`.
+     * The writable raster this one is a crop of, or `null`.
      *
-     * <p>Se hereda el campo `parent` de {@link Raster}; acá se devuelve con su tipo verdadero,
-     * porque un hijo escribible sólo se arma sobre un padre escribible.
+     * <p>The `parent` field is inherited from {@link Raster}; here it is returned with its true
+     * type, because a writable child is only built over a writable parent.
      */
     public WritableRaster getWritableParent() {
         return (WritableRaster) this.parent;
     }
 
     /**
-     * El mismo ráster mudado a otras coordenadas, **sobre los mismos datos**.
+     * The same raster moved to other coordinates, **over the same data**.
      *
-     * @throws RasterFormatException si las coordenadas nuevas se pasan de `int`
+     * @throws RasterFormatException if the new coordinates go past `int`
      */
     public WritableRaster createWritableTranslatedChild(int childMinX, int childMinY) {
         return this.createWritableChild(this.minX, this.minY, this.width, this.height, childMinX,
@@ -76,11 +76,11 @@ public class WritableRaster extends Raster {
     }
 
     /**
-     * Un recorte escribible sobre los **mismos datos**, opcionalmente con menos bandas.
+     * A writable crop over the **same data**, optionally with fewer bands.
      *
-     * <p>Escribir en el hijo cambia al padre: no hay copia de por medio.
+     * <p>Writing into the child changes the parent: there is no copy in between.
      *
-     * @throws RasterFormatException si el rectángulo pedido no cae dentro de éste
+     * @throws RasterFormatException if the rectangle asked for does not fall inside this one
      */
     public WritableRaster createWritableChild(int parentX, int parentY, int w, int h,
             int childMinX, int childMinY, int[] bandList) {
@@ -112,9 +112,9 @@ public class WritableRaster extends Raster {
     }
 
     /**
-     * Comprueba que un punto caiga adentro.
+     * Checks that a point falls inside.
      *
-     * @throws ArrayIndexOutOfBoundsException si no cae
+     * @throws ArrayIndexOutOfBoundsException if it does not
      */
     private void checkPoint(int x, int y) {
         if (x < this.minX || y < this.minY || x >= this.minX + this.width
@@ -124,9 +124,9 @@ public class WritableRaster extends Raster {
     }
 
     /**
-     * Comprueba que un rectángulo caiga adentro.
+     * Checks that a rectangle falls inside.
      *
-     * @throws ArrayIndexOutOfBoundsException si no cae
+     * @throws ArrayIndexOutOfBoundsException if it does not
      */
     private void checkRect(int x, int y, int w, int h) {
         if (x < this.minX || y < this.minY || x + w > this.minX + this.width
@@ -136,9 +136,9 @@ public class WritableRaster extends Raster {
     }
 
     /**
-     * Escribe un píxel crudo, sin desempaquetar.
+     * Writes a raw pixel, without unpacking.
      *
-     * @throws ArrayIndexOutOfBoundsException si el punto cae afuera
+     * @throws ArrayIndexOutOfBoundsException if the point falls outside
      */
     public void setDataElements(int x, int y, Object inData) {
         this.checkPoint(x, y);
@@ -147,12 +147,12 @@ public class WritableRaster extends Raster {
     }
 
     /**
-     * Copia otro ráster acá, en crudo.
+     * Copies another raster here, raw.
      *
-     * <p>`(x, y)` es a dónde va el ángulo del ráster de origen. Si algo no entra, **tira**: son
-     * píxeles crudos y un desborde sería un error de cuenta.
+     * <p>`(x, y)` is where the corner of the source raster goes. If something does not fit, it
+     * **throws**: they are raw pixels and an overflow would be an arithmetic mistake.
      *
-     * @throws ArrayIndexOutOfBoundsException si el origen no entra entero
+     * @throws ArrayIndexOutOfBoundsException if the source does not fit whole
      */
     public void setDataElements(int x, int y, Raster inRaster) {
         int dstOffX = x + inRaster.getMinX();
@@ -166,8 +166,8 @@ public class WritableRaster extends Raster {
         }
         int srcOffX = inRaster.getMinX();
         int srcOffY = inRaster.getMinY();
-        // Fila por fila y no todo junto: el rectangulo entero podria no entrar en memoria, y de a
-        // una fila el arreglo temporal se reusa.
+        // Row by row and not all at once: the whole rectangle might not fit in memory, and one row
+        // at a time the temporary array gets reused.
         Object tdata = null;
         for (int startY = 0; startY < h; startY++) {
             tdata = inRaster.getDataElements(srcOffX, srcOffY + startY, w, 1, tdata);
@@ -176,9 +176,9 @@ public class WritableRaster extends Raster {
     }
 
     /**
-     * Escribe los píxeles crudos de un rectángulo.
+     * Writes the raw pixels of a rectangle.
      *
-     * @throws ArrayIndexOutOfBoundsException si el rectángulo se sale
+     * @throws ArrayIndexOutOfBoundsException if the rectangle goes outside
      */
     public void setDataElements(int x, int y, int w, int h, Object inData) {
         this.checkRect(x, y, w, h);
@@ -187,23 +187,23 @@ public class WritableRaster extends Raster {
     }
 
     /**
-     * Copia otro ráster acá, píxel por píxel, con el ángulo en el mismo lugar.
+     * Copies another raster here, pixel by pixel, with the corner in the same place.
      *
-     * <p>Lo que caiga afuera se descarta.
+     * <p>Whatever falls outside is discarded.
      */
     public void setRect(Raster srcRaster) {
         this.setRect(0, 0, srcRaster);
     }
 
     /**
-     * Copia otro ráster acá, corrido `(dx, dy)`.
+     * Copies another raster here, shifted by `(dx, dy)`.
      *
-     * <p><strong>Recorta</strong>: lo que caiga afuera se descarta en silencio. Es lo contrario de
-     * {@link #setDataElements(int, int, Raster)}, y a propósito — pegar una imagen contra una
-     * esquina es lo normal y no un error.
+     * <p><strong>It clips</strong>: whatever falls outside is discarded silently. It is the
+     * opposite of {@link #setDataElements(int, int, Raster)}, and on purpose — pasting an image
+     * against a corner is normal and not an error.
      *
-     * <p>La copia pasa por valores de banda, no por elementos crudos, así que origen y destino
-     * pueden tener disposiciones distintas mientras coincidan las bandas.
+     * <p>The copy goes through band values, not through raw elements, so source and destination can
+     * have different layouts as long as the bands match.
      */
     public void setRect(int dx, int dy, Raster srcRaster) {
         int w = srcRaster.getWidth();
@@ -233,10 +233,11 @@ public class WritableRaster extends Raster {
         if (w <= 0 || h <= 0) {
             return;
         }
-        // Los tipos enteros pasan por int y los de coma por su propio tipo: convertir un float a int
-        // para copiarlo perderia la parte decimal en una operacion que no deberia perder nada.
-        int tipo = srcRaster.getSampleModel().getDataType();
-        if (tipo == DataBuffer.TYPE_FLOAT) {
+        // The integer types go through int and the floating ones through their own type: converting
+        // a float to int to copy it would lose the decimal part in an operation that should lose
+        // nothing.
+        int type = srcRaster.getSampleModel().getDataType();
+        if (type == DataBuffer.TYPE_FLOAT) {
             float[] fData = null;
             for (int startY = 0; startY < h; startY++) {
                 fData = srcRaster.getPixels(srcOffX, srcOffY + startY, w, 1, fData);
@@ -244,7 +245,7 @@ public class WritableRaster extends Raster {
             }
             return;
         }
-        if (tipo == DataBuffer.TYPE_DOUBLE) {
+        if (type == DataBuffer.TYPE_DOUBLE) {
             double[] dData = null;
             for (int startY = 0; startY < h; startY++) {
                 dData = srcRaster.getPixels(srcOffX, srcOffY + startY, w, 1, dData);
@@ -260,9 +261,9 @@ public class WritableRaster extends Raster {
     }
 
     /**
-     * Escribe todas las bandas de un píxel.
+     * Writes every band of a pixel.
      *
-     * @throws ArrayIndexOutOfBoundsException si el punto cae afuera
+     * @throws ArrayIndexOutOfBoundsException if the point falls outside
      */
     public void setPixel(int x, int y, int[] iArray) {
         this.checkPoint(x, y);
@@ -271,9 +272,9 @@ public class WritableRaster extends Raster {
     }
 
     /**
-     * Como el anterior, desde `float`.
+     * Like the previous one, from `float`.
      *
-     * @throws ArrayIndexOutOfBoundsException si el punto cae afuera
+     * @throws ArrayIndexOutOfBoundsException if the point falls outside
      */
     public void setPixel(int x, int y, float[] fArray) {
         this.checkPoint(x, y);
@@ -282,9 +283,9 @@ public class WritableRaster extends Raster {
     }
 
     /**
-     * Como el anterior, desde `double`.
+     * Like the previous one, from `double`.
      *
-     * @throws ArrayIndexOutOfBoundsException si el punto cae afuera
+     * @throws ArrayIndexOutOfBoundsException if the point falls outside
      */
     public void setPixel(int x, int y, double[] dArray) {
         this.checkPoint(x, y);
@@ -293,9 +294,9 @@ public class WritableRaster extends Raster {
     }
 
     /**
-     * Escribe los píxeles de un rectángulo.
+     * Writes the pixels of a rectangle.
      *
-     * @throws ArrayIndexOutOfBoundsException si el rectángulo se sale
+     * @throws ArrayIndexOutOfBoundsException if the rectangle goes outside
      */
     public void setPixels(int x, int y, int w, int h, int[] iArray) {
         this.checkRect(x, y, w, h);
@@ -304,9 +305,9 @@ public class WritableRaster extends Raster {
     }
 
     /**
-     * Como el anterior, desde `float`.
+     * Like the previous one, from `float`.
      *
-     * @throws ArrayIndexOutOfBoundsException si el rectángulo se sale
+     * @throws ArrayIndexOutOfBoundsException if the rectangle goes outside
      */
     public void setPixels(int x, int y, int w, int h, float[] fArray) {
         this.checkRect(x, y, w, h);
@@ -315,9 +316,9 @@ public class WritableRaster extends Raster {
     }
 
     /**
-     * Como el anterior, desde `double`.
+     * Like the previous one, from `double`.
      *
-     * @throws ArrayIndexOutOfBoundsException si el rectángulo se sale
+     * @throws ArrayIndexOutOfBoundsException if the rectangle goes outside
      */
     public void setPixels(int x, int y, int w, int h, double[] dArray) {
         this.checkRect(x, y, w, h);
@@ -326,9 +327,9 @@ public class WritableRaster extends Raster {
     }
 
     /**
-     * Escribe una banda de un píxel.
+     * Writes one band of a pixel.
      *
-     * @throws ArrayIndexOutOfBoundsException si el punto cae afuera
+     * @throws ArrayIndexOutOfBoundsException if the point falls outside
      */
     public void setSample(int x, int y, int b, int s) {
         this.checkPoint(x, y);
@@ -337,9 +338,9 @@ public class WritableRaster extends Raster {
     }
 
     /**
-     * Como el anterior, desde `float`.
+     * Like the previous one, from `float`.
      *
-     * @throws ArrayIndexOutOfBoundsException si el punto cae afuera
+     * @throws ArrayIndexOutOfBoundsException if the point falls outside
      */
     public void setSample(int x, int y, int b, float s) {
         this.checkPoint(x, y);
@@ -348,9 +349,9 @@ public class WritableRaster extends Raster {
     }
 
     /**
-     * Como el anterior, desde `double`.
+     * Like the previous one, from `double`.
      *
-     * @throws ArrayIndexOutOfBoundsException si el punto cae afuera
+     * @throws ArrayIndexOutOfBoundsException if the point falls outside
      */
     public void setSample(int x, int y, int b, double s) {
         this.checkPoint(x, y);
@@ -359,9 +360,9 @@ public class WritableRaster extends Raster {
     }
 
     /**
-     * Escribe una banda en un rectángulo.
+     * Writes one band over a rectangle.
      *
-     * @throws ArrayIndexOutOfBoundsException si el rectángulo se sale
+     * @throws ArrayIndexOutOfBoundsException if the rectangle goes outside
      */
     public void setSamples(int x, int y, int w, int h, int b, int[] iArray) {
         this.checkRect(x, y, w, h);
@@ -370,9 +371,9 @@ public class WritableRaster extends Raster {
     }
 
     /**
-     * Como el anterior, desde `float`.
+     * Like the previous one, from `float`.
      *
-     * @throws ArrayIndexOutOfBoundsException si el rectángulo se sale
+     * @throws ArrayIndexOutOfBoundsException if the rectangle goes outside
      */
     public void setSamples(int x, int y, int w, int h, int b, float[] fArray) {
         this.checkRect(x, y, w, h);
@@ -381,9 +382,9 @@ public class WritableRaster extends Raster {
     }
 
     /**
-     * Como el anterior, desde `double`.
+     * Like the previous one, from `double`.
      *
-     * @throws ArrayIndexOutOfBoundsException si el rectángulo se sale
+     * @throws ArrayIndexOutOfBoundsException if the rectangle goes outside
      */
     public void setSamples(int x, int y, int w, int h, int b, double[] dArray) {
         this.checkRect(x, y, w, h);

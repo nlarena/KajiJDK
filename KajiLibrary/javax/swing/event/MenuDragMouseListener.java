@@ -3,19 +3,20 @@ package javax.swing.event;
 import java.util.EventListener;
 
 /**
- * Quien quiere enterarse del mouse arrastrado sobre un menu; ver {@link MenuDragMouseEvent}.
+ * Whoever wants to hear about the mouse dragged over a menu; see
+ * {@link MenuDragMouseEvent}.
  */
 public interface MenuDragMouseListener extends EventListener {
 
-    /** El arrastre entro en el elemento. */
+    /** The drag entered the element. */
     void menuDragMouseEntered(MenuDragMouseEvent e);
 
-    /** El arrastre salio del elemento. */
+    /** The drag left the element. */
     void menuDragMouseExited(MenuDragMouseEvent e);
 
-    /** El arrastre se movio. */
+    /** The drag moved. */
     void menuDragMouseDragged(MenuDragMouseEvent e);
 
-    /** Se solto el boton. */
+    /** The button was released. */
     void menuDragMouseReleased(MenuDragMouseEvent e);
 }

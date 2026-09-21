@@ -3,8 +3,8 @@ package com.sun.source.tree;
 import java.util.List;
 
 /**
- * Un patron de record, como `Punto(int x, int y)`, con sus patrones
- * anidados.
+ * A record pattern, such as `Point(int x, int y)`, with its nested
+ * patterns.
  */
 public interface DeconstructionPatternTree extends PatternTree {
 

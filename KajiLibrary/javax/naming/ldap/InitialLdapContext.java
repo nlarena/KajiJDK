@@ -6,86 +6,99 @@ import javax.naming.NamingException;
 import javax.naming.directory.InitialDirContext;
 
 /**
- * El punto de entrada a LDAP: el contexto inicial con las extensiones de LDAP v3.
+ * The entry point to LDAP: the initial context with the LDAP v3 extensions.
  *
- * <h2>Que es un "contexto inicial"</h2>
+ * <h2>What an "initial context" is</h2>
  *
- * <p>Es el patron de {@code javax.naming}: no se instancia un proveedor concreto sino esta clase,
- * que lee el entorno —{@code java.naming.factory.initial} y compania— y delega en la fabrica que
- * corresponda. Es lo que permite cambiar de proveedor LDAP sin tocar el codigo.
+ * <p>It is the {@code javax.naming} pattern: you do not instantiate a concrete provider but this
+ * class, which reads the environment --{@code java.naming.factory.initial} and company-- and
+ * delegates to the matching factory. It is what allows changing LDAP provider without touching
+ * the code.
  *
- * <p>Extiende {@link InitialDirContext} y agrega lo de {@link LdapContext}: operaciones extendidas y
- * controles.
+ * <p>It extends {@link InitialDirContext} and adds what {@link LdapContext} has: extended
+ * operations and controls.
  *
- * <h2>Los controles de conexion van en el constructor</h2>
+ * <h2>Connection controls go in the constructor</h2>
  *
- * <p>Y no despues, porque se mandan <strong>al conectarse</strong>. Ponerlos mas tarde exigiria
- * reconectar, que es justamente lo que hace {@link #reconnect}.
+ * <p>And not later, because they are sent <strong>when connecting</strong>. Setting them later
+ * would require reconnecting, which is exactly what {@link #reconnect} does.
  *
- * <h2>En esta VM</h2>
+ * <h2>In this VM</h2>
  *
- * <p>No hay proveedor LDAP registrado, asi que construir uno falla con {@link NamingException} —
- * que es lo que hace {@code javax.naming} cuando no encuentra la fabrica inicial, y no una carencia
- * de esta clase.
+ * <p>There is no LDAP provider, and this class does not delegate. The constructors pass the
+ * environment to {@link InitialDirContext} and drop {@code connCtls}; they fail only when the
+ * environment names an initial factory (because {@code InitialContext} never loads one here).
+ * The {@link DirContext} methods end in {@code NoInitialContextException}, and the
+ * {@link LdapContext} methods of this class throw a plain {@link NamingException} every time, where
+ * the JDK forwards them to the provider's {@code LdapContext}. An earlier note said construction
+ * always fails and called this the normal {@code javax.naming} behaviour without a factory; neither
+ * holds: the JDK would throw {@code NoInitialContextException} and would use a configured
+ * factory.
  */
 public class InitialLdapContext extends InitialDirContext implements LdapContext {
 
-    private static final String NO_HAY =
-            "no hay ningun proveedor LDAP registrado en esta VM";
+    private static final String NO_PROVIDER =
+            "no LDAP provider is registered in this VM";
 
     /**
-     * Con el entorno por omision y sin controles de conexion.
+     * With the default environment and no connection controls.
      *
-     * @throws NamingException si no hay proveedor
+     * @throws NamingException if the environment names an initial factory; see the class note
      */
     public InitialLdapContext() throws NamingException {
         super();
     }
 
     /**
-     * Con ese entorno y esos controles de conexion.
+     * With that environment and those connection controls.
      *
-     * @param environment la configuracion, o {@code null} para la por omision
-     * @param connCtls los controles de conexion, o {@code null}
-     * @throws NamingException si no hay proveedor
+     * @param environment the configuration, or {@code null} for the default one
+     * @param connCtls the connection controls, or {@code null}; ignored in this library
+     * @throws NamingException if the environment names an initial factory; see the class note
      */
     public InitialLdapContext(Hashtable<?, ?> environment, Control[] connCtls)
             throws NamingException {
         super(environment);
     }
 
-    /** Delega en el contexto que resolvio la fabrica inicial. */
+    /**
+     * In the JDK, forwarded to the provider's context; here it always throws. See the class note.
+     */
     public ExtendedResponse extendedOperation(ExtendedRequest request) throws NamingException {
-        throw new NamingException(NO_HAY);
+        throw new NamingException(NO_PROVIDER);
     }
 
-    /** Una copia con otros controles de pedido; ver {@link LdapContext#newInstance}. */
+    /**
+     * A copy with other request controls; see {@link LdapContext#newInstance}. Always throws here.
+     */
     public LdapContext newInstance(Control[] reqCtls) throws NamingException {
-        throw new NamingException(NO_HAY);
+        throw new NamingException(NO_PROVIDER);
     }
 
-    /** Reconecta con otros controles de conexion. */
+    /** Reconnects with other connection controls. Always throws here. */
     public void reconnect(Control[] connCtls) throws NamingException {
-        throw new NamingException(NO_HAY);
+        throw new NamingException(NO_PROVIDER);
     }
 
-    /** Los controles de conexion. */
+    /** The connection controls. Always throws here. */
     public Control[] getConnectControls() throws NamingException {
-        throw new NamingException(NO_HAY);
+        throw new NamingException(NO_PROVIDER);
     }
 
-    /** Fija los controles de pedido; no se heredan a los contextos derivados. */
+    /**
+     * Sets the request controls; they are not inherited by derived contexts. Always throws here.
+     */
     public void setRequestControls(Control[] requestControls) throws NamingException {
-        throw new NamingException(NO_HAY);
+        throw new NamingException(NO_PROVIDER);
     }
 
-    /** Los controles de pedido. */
+    /** The request controls. Always throws here. */
     public Control[] getRequestControls() throws NamingException {
-        throw new NamingException(NO_HAY);
+        throw new NamingException(NO_PROVIDER);
     }
 
-    /** Los controles que mando el servidor con la ultima operacion. */
+    /** The controls the server sent with the last operation. Always throws here. */
     public Control[] getResponseControls() throws NamingException {
-        throw new NamingException(NO_HAY);
+        throw new NamingException(NO_PROVIDER);
     }
 }

@@ -81,6 +81,8 @@ public class GZIPInputStream extends InflaterInputStream {
         return n;
     }
 
-    // Sin override de `close()`: solo delegaba, y `super.close()` no compila (finding #125). El
-    // heredado hace exactamente lo mismo, y no declararlo es un subconjunto valido para el gate.
+    // No `close()` override: it only delegated, and this note said `super.close()` did not compile
+    // because of finding #125. That finding is closed --and its VM half, #265, with it-- so the
+    // reason is gone; the inherited one does exactly the same, and not declaring it is a valid
+    // subset for the gate, which is why it is left as it stands.
 }

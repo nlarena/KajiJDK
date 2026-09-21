@@ -7,33 +7,33 @@ import javax.net.ssl.SSLSession;
 import javax.net.ssl.SSLSocketFactory;
 
 /**
- * La respuesta a un {@link StartTlsRequest}, que ademas <strong>hace</strong> la negociacion.
+ * The response to a {@link StartTlsRequest}, which also <strong>does</strong> the negotiation.
  *
- * <h2>Por que una respuesta tiene metodos que actuan</h2>
+ * <h2>Why a response has methods that act</h2>
  *
- * <p>Es la anomalia de esta clase, y tiene motivo: el servidor contesta que acepta cambiar a TLS, y
- * el handshake tiene que pasar <em>sobre la misma conexion</em>. El unico objeto que tiene esa
- * conexion a mano es el que el proveedor construyo para la respuesta.
+ * <p>It is this class's anomaly, and it has a reason: the server answers that it agrees to switch
+ * to TLS, and the handshake has to happen <em>over the same connection</em>. The only object that
+ * has that connection at hand is the one the provider built for the response.
  *
- * <p>De ahi el orden obligado: configurar —{@link #setEnabledCipherSuites},
- * {@link #setHostnameVerifier}— y recien despues {@link #negotiate}. Configurar despues no hace
- * nada.
+ * <p>Hence the mandatory order: configure --{@link #setEnabledCipherSuites},
+ * {@link #setHostnameVerifier}-- and only then {@link #negotiate}. Configuring afterwards does
+ * nothing.
  *
- * <h2>El verificador de nombre, que es el punto delicado</h2>
+ * <h2>The hostname verifier, which is the delicate point</h2>
  *
- * <p>Tras el handshake hay que comprobar que el certificado corresponde al servidor al que se creia
- * uno conectado. La implementacion por omision lo hace; poner un {@link HostnameVerifier} permisivo
- * lo desactiva, y con eso se pierde la proteccion contra un intermediario — que es justamente lo que
- * StartTLS venia a resolver.
+ * <p>After the handshake you have to check that the certificate belongs to the server you believed
+ * you were connected to. The default implementation does it; setting a permissive
+ * {@link HostnameVerifier} turns it off, and with that the protection against a man in the middle
+ * is lost -- which is exactly what StartTLS came to solve.
  */
 public abstract class StartTlsResponse implements ExtendedResponse {
 
     private static final long serialVersionUID = 8372842182579276418L;
 
-    /** El OID de la operacion. */
+    /** The operation's OID. */
     public static final String OID = "1.3.6.1.4.1.1466.20037";
 
-    /** Para las implementaciones del proveedor. */
+    /** For the provider's implementations. */
     protected StartTlsResponse() {
     }
 
@@ -41,35 +41,35 @@ public abstract class StartTlsResponse implements ExtendedResponse {
         return OID;
     }
 
-    /** {@code null}: esta respuesta no lleva datos. */
+    /** {@code null}: this response carries no data. */
     public byte[] getEncodedValue() {
         return null;
     }
 
     /**
-     * Restringe las suites a usar. Hay que llamarlo <strong>antes</strong> de {@link #negotiate}.
+     * Restricts the suites to use. It has to be called <strong>before</strong> {@link #negotiate}.
      */
     public abstract void setEnabledCipherSuites(String[] suites);
 
-    /** Cambia como se verifica el nombre; ver la nota de la clase antes de usarlo. */
+    /** Changes how the hostname is verified; see the class note before using it. */
     public abstract void setHostnameVerifier(HostnameVerifier verifier);
 
     /**
-     * Hace el handshake con la fabrica de sockets por omision.
+     * Does the handshake with the default socket factory.
      *
-     * @throws IOException si el handshake falla, o si el nombre no verifica
+     * @throws IOException if the handshake fails, or if the hostname does not verify
      */
     public abstract SSLSession negotiate() throws IOException;
 
-    /** Igual, con esa fabrica — asi se usa un contexto TLS propio. */
+    /** Same, with that factory -- that is how you use a TLS context of your own. */
     public abstract SSLSession negotiate(SSLSocketFactory factory) throws IOException;
 
     /**
-     * Cierra la capa TLS y vuelve a la conexion en claro.
+     * Closes the TLS layer and goes back to the cleartext connection.
      *
-     * <p>La conexion LDAP <strong>sigue</strong>: esto no la cierra. Es lo que permite bajar el
-     * cifrado despues de una operacion sensible sin reconectar — aunque en la practica casi nadie
-     * quiera eso.
+     * <p>The LDAP connection <strong>stays</strong>: this does not close it. It is what allows
+     * dropping encryption after a sensitive operation without reconnecting -- though in practice
+     * almost nobody wants that.
      */
     public abstract void close() throws IOException;
 }

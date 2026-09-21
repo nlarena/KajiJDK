@@ -1,36 +1,35 @@
 package java.io;
 
-// KajiLibrary's java.io.PipedOutputStream -- la punta de escritura de una tuberia entre dos hilos.
+// KajiLibrary's java.io.PipedOutputStream -- the writing end of a pipe between two threads.
 //
-// Casi no tiene estado propio: guarda a quien le escribe y le pasa todo. El buffer, la espera y la
-// sincronizacion viven del lado del lector (`PipedInputStream`), que es donde tienen que estar --
-// hay un solo buffer y un solo monitor, y ponerlos de un solo lado es lo que evita tener que
-// tomar dos candados y ordenarlos.
+// It has almost no state of its own: it keeps whoever it writes to and passes everything on. The
+// buffer, the waiting and the synchronization live on the reader's side (`PipedInputStream`), which
+// is where they have to be -- there is a single buffer and a single monitor, and putting them on
+// one side alone is what avoids having to take two locks and order them.
 //
-// **Las dos puntas tienen que estar en hilos distintos.** Escribir y leer desde el mismo hilo se
-// cuelga en cuanto el buffer se llena: el escritor espera lugar, y el unico que podria hacerlo es
-// el mismo hilo que esta esperando. No es un defecto de esta implementacion, es lo que una tuberia
-// es.
+// **The two ends have to be in different threads.** Writing and reading from the same thread hangs
+// as soon as the buffer fills up: the writer waits for room, and the only one that could make room
+// is the very thread that is waiting. It is no defect of this implementation, it is what a pipe is.
 //
-// Las excepciones son las del JDK y chequeadas, como en `PipedInputStream`; ver la nota de alla
-// por que durante un tiempo no lo fueron.
+// The exceptions are the JDK's and checked, as in `PipedInputStream`; see the note over there for
+// why for a while they were not.
 public class PipedOutputStream extends OutputStream {
 
     private PipedInputStream sink;
 
-    /** Conecta esta punta al lector dado. */
+    /** Connects this end to the given reader. */
     public PipedOutputStream(PipedInputStream snk) throws IOException {
         this.connect(snk);
     }
 
-    /** Sin conectar: hace falta un `connect` antes de escribir. */
+    /** Unconnected: a `connect` is needed before writing. */
     public PipedOutputStream() {
     }
 
     /**
-     * Conecta esta punta al lector dado y deja la tuberia vacia.
+     * Connects this end to the given reader and leaves the pipe empty.
      *
-     * @throws IOException si alguna de las dos puntas ya estaba conectada
+     * @throws IOException if either of the two ends was already connected
      */
     public synchronized void connect(PipedInputStream snk) throws IOException {
         if (snk == null) {
@@ -45,7 +44,7 @@ public class PipedOutputStream extends OutputStream {
         snk.connected = true;
     }
 
-    /** Escribe un byte. **Bloquea si la tuberia esta llena.** */
+    /** Writes one byte. **It blocks if the pipe is full.** */
     public void write(int b) throws IOException {
         if (this.sink == null) {
             throw new IOException("Pipe not connected");
@@ -53,7 +52,7 @@ public class PipedOutputStream extends OutputStream {
         this.sink.receive(b);
     }
 
-    /** Escribe `len` bytes. **Bloquea hasta que entren todos.** */
+    /** Writes `len` bytes. **It blocks until they all fit.** */
     public void write(byte[] b, int off, int len) throws IOException {
         if (this.sink == null) {
             throw new IOException("Pipe not connected");
@@ -70,9 +69,9 @@ public class PipedOutputStream extends OutputStream {
         this.sink.receive(b, off, len);
     }
 
-    // No vacia nada --no hay nada guardado de este lado-- sino que **despierta al lector**. Sirve
-    // cuando el escritor dejo datos y quiere que el otro los vea ya, sin esperar el plazo de un
-    // segundo del `wait`.
+    // It flushes nothing --there is nothing stored on this side-- but **wakes the reader**. It
+    // serves when the writer has left data and wants the other side to see it now, without waiting
+    // for the `wait`'s one-second deadline.
     public synchronized void flush() throws IOException {
         if (this.sink != null) {
             synchronized (this.sink) {
@@ -82,10 +81,11 @@ public class PipedOutputStream extends OutputStream {
     }
 
     /**
-     * Cierra la punta de escritura.
+     * Closes the writing end.
      *
-     * <p>El lector **no** ve el fin de stream enseguida: primero termina de leer lo que quedo en el
-     * buffer, y recien cuando se vacia le llega el -1. Cerrar no descarta lo escrito.
+     * <p>The reader does **not** see end of stream straight away: it first finishes reading
+     * whatever was left in the buffer, and only when that empties does the -1 reach it. Closing
+     * does not discard what was written.
      */
     public void close() throws IOException {
         if (this.sink != null) {

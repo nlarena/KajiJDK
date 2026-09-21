@@ -12,31 +12,32 @@ import javax.accessibility.Accessible;
 import javax.accessibility.AccessibleContext;
 
 /**
- * Una ventana sin marco ni barra de titulo.
+ * A window with neither frame nor title bar.
  *
- * <h2>Para que sirve una ventana que no se puede mover ni cerrar</h2>
+ * <h2>What a window that cannot be moved or closed is for</h2>
  *
- * <p>Para lo que se dibuja <em>encima</em> de todo y desaparece solo: un menu desplegable que se sale
- * del borde de la aplicacion, un cartel de ayuda, una pantalla de bienvenida. Todo eso necesita una
- * ventana del sistema -- si no, no puede salirse de su aplicacion -- pero no necesita ninguno de los
- * adornos.
+ * <p>For what is drawn <em>on top</em> of everything and disappears by itself: a drop-down menu
+ * that goes outside the application's edge, a tool tip, a splash screen. All that needs a
+ * system window -- otherwise, it cannot go outside its application -- but it needs none of the
+ * trimmings.
  *
- * <p>Como no tiene barra de titulo, tampoco tiene boton de cerrar, y por lo tanto <strong>no puede
- * recibir el foco del teclado por si sola</strong>. Quien la abre tiene que acordarse de cerrarla.
+ * <p>As it has no title bar, it has no close button either, and therefore it <strong>cannot
+ * receive the keyboard focus on its own</strong>. Whoever opens it has to remember to close
+ * it.
  *
- * <h2>Los hijos van al contenido</h2>
+ * <h2>The children go to the content</h2>
  *
- * <p>Como en {@link JDialog}, adentro hay un {@link JRootPane} y {@code add} redirige a su panel de
- * contenido; ver la nota de esa clase, que explica tambien por que la redireccion se apaga mientras
- * se arma el panel raiz.
+ * <p>As in {@link JDialog}, inside there is a {@link JRootPane} and {@code add} redirects to
+ * its content pane; see that class's note, which also explains why the redirection is switched
+ * off while the root pane is built.
  */
 public class JWindow extends Window implements Accessible, RootPaneContainer,
         TransferHandler.HasGetTransferHandler {
 
-    /** El panel raiz; ver la nota de la clase. */
+    /** The root pane; see the class note. */
     protected JRootPane rootPane;
 
-    /** Si agregar redirige al contenido. */
+    /** Whether adding redirects to the content. */
     protected boolean rootPaneCheckingEnabled = false;
 
     protected AccessibleContext accessibleContext;
@@ -44,21 +45,21 @@ public class JWindow extends Window implements Accessible, RootPaneContainer,
     private TransferHandler transferHandler;
 
     /**
-     * Una ventana sin dueno.
+     * A window with no owner.
      *
-     * <p>Cuelga de una ventana compartida y escondida: una ventana del sistema necesita alguna
-     * ventana de la que depender.
+     * <p>It hangs from a shared and hidden window: a system window needs some window to depend
+     * on.
      *
-     * @throws java.awt.HeadlessException si no hay pantalla
+     * @throws java.awt.HeadlessException if there is no screen
      */
     public JWindow() {
         this((Frame) null);
     }
 
     /**
-     * En esa configuracion de pantalla.
+     * In that screen configuration.
      *
-     * @throws java.awt.HeadlessException si no hay pantalla
+     * @throws java.awt.HeadlessException if there is no screen
      */
     public JWindow(GraphicsConfiguration gc) {
         this(null, gc);
@@ -66,9 +67,9 @@ public class JWindow extends Window implements Accessible, RootPaneContainer,
     }
 
     /**
-     * Con esa ventana de dueno.
+     * With that window as owner.
      *
-     * @throws java.awt.HeadlessException si no hay pantalla
+     * @throws java.awt.HeadlessException if there is no screen
      */
     public JWindow(Frame owner) {
         super(owner == null ? SwingUtilities.getSharedOwnerFrame() : owner);
@@ -79,9 +80,9 @@ public class JWindow extends Window implements Accessible, RootPaneContainer,
     }
 
     /**
-     * Con esa ventana de dueno.
+     * With that window as owner.
      *
-     * @throws java.awt.HeadlessException si no hay pantalla
+     * @throws java.awt.HeadlessException if there is no screen
      */
     public JWindow(Window owner) {
         super(owner == null ? (Window) SwingUtilities.getSharedOwnerFrame() : owner);
@@ -92,9 +93,9 @@ public class JWindow extends Window implements Accessible, RootPaneContainer,
     }
 
     /**
-     * Con dueno y configuracion de pantalla.
+     * With owner and screen configuration.
      *
-     * @throws java.awt.HeadlessException si no hay pantalla
+     * @throws java.awt.HeadlessException if there is no screen
      */
     public JWindow(Window owner, GraphicsConfiguration gc) {
         super(owner == null ? (Window) SwingUtilities.getSharedOwnerFrame() : owner, gc);
@@ -104,7 +105,7 @@ public class JWindow extends Window implements Accessible, RootPaneContainer,
         windowInit();
     }
 
-    /** Arma el panel raiz; la redireccion se prende recien al final. */
+    /** It builds the root pane; the redirection is switched on only at the end. */
     protected void windowInit() {
         setLocale(JComponent.getDefaultLocale());
         setRootPane(createRootPane());
@@ -132,9 +133,10 @@ public class JWindow extends Window implements Accessible, RootPaneContainer,
     }
 
     /**
-     * Dibuja sin borrar el fondo primero.
+     * It draws without clearing the background first.
      *
-     * <p>Swing dibuja cada pixel que le toca, asi que borrar antes solo produce un parpadeo.
+     * <p>Swing draws every pixel that falls to it, so clearing beforehand only produces a
+     * flicker.
      */
     public void update(Graphics g) {
         paint(g);
@@ -145,10 +147,10 @@ public class JWindow extends Window implements Accessible, RootPaneContainer,
     }
 
     /**
-     * Agrega al contenido, no a la ventana.
+     * It adds to the content, not to the window.
      *
-     * @throws IllegalArgumentException si se intenta agregar el panel raiz con la redireccion
-     *     prendida
+     * @throws IllegalArgumentException if the root pane is added with the redirection switched
+     *     on
      */
     protected void addImpl(Component comp, Object constraints, int index) {
         if (isRootPaneCheckingEnabled()) {
@@ -158,7 +160,7 @@ public class JWindow extends Window implements Accessible, RootPaneContainer,
         }
     }
 
-    /** Saca del contenido, salvo que sea el panel raiz. */
+    /** It removes from the content, unless it is the root pane. */
     public void remove(Component comp) {
         if (comp == rootPane) {
             super.remove(comp);
@@ -167,7 +169,7 @@ public class JWindow extends Window implements Accessible, RootPaneContainer,
         }
     }
 
-    /** Le pone acomodador al contenido, no a la ventana. */
+    /** It gives the layout to the content, not to the window. */
     public void setLayout(LayoutManager manager) {
         if (isRootPaneCheckingEnabled()) {
             getContentPane().setLayout(manager);
@@ -188,7 +190,8 @@ public class JWindow extends Window implements Accessible, RootPaneContainer,
         if (rootPane != null) {
             boolean checkingEnabled = isRootPaneCheckingEnabled();
             try {
-                // Apagado mientras se agrega el panel raiz: si no, se redirigiria a si mismo.
+                // Switched off while the root pane is added: otherwise, it would redirect to
+                // itself.
                 setRootPaneCheckingEnabled(false);
                 add(rootPane, java.awt.BorderLayout.CENTER);
             } finally {

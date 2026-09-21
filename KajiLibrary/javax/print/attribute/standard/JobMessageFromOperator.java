@@ -6,9 +6,9 @@ import javax.print.attribute.PrintJobAttribute;
 import javax.print.attribute.TextSyntax;
 
 /**
- * Un mensaje que el operador de la impresora le deja al duenio del trabajo.
+ * A message the printer's operator leaves for the job's owner.
  *
- * <p>Es la explicacion en castellano de lo que {@link JobStateReasons} dice en codigos.
+ * <p>It is the explanation in plain words of what {@link JobStateReasons} says in codes.
  */
 public final class JobMessageFromOperator extends TextSyntax implements PrintJobAttribute {
 

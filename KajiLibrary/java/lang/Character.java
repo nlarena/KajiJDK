@@ -1,6 +1,7 @@
 package java.lang;
 
-// Por import y nombre simple: calificar el tipo en el uso no resuelve desde java.lang
+// Through an import and a simple name: qualifying the type at the use site does not resolve from
+// java.lang
 // (finding #210).
 import java.lang.constant.ConstantDescs;
 import java.lang.constant.DynamicConstantDesc;
@@ -92,13 +93,13 @@ public final class Character implements Comparable<Character>, Serializable {
         this.value = value;
     }
 
-    // Las instancias compartidas de 0..127. Viven en una clase anidada para que se construyan
-    // en el primer `valueOf` y no en la primera mencion de la clase.
+    // The shared instances for 0..127. They live in a nested class so they are built on the first
+    // `valueOf` and not on the first mention of the class.
     //
-    // No es una optimizacion: **JLS 5.1.7 exige que boxear un valor de ese rango devuelva la
-    // MISMA referencia**, asi que `Character.valueOf('k') == Character.valueOf('k')` es una promesa del lenguaje. Sin la cache
-    // la promesa se rompe en silencio -- el codigo sigue andando hasta que alguien compara con
-    // `==`, que es justo lo que la cache existe para permitir.
+    // It is not an optimisation: **JLS 5.1.7 requires that boxing a value in that range return the
+    // SAME reference**, so `Character.valueOf('k') == Character.valueOf('k')` is a promise of the
+    // language. Without the cache the promise breaks silently -- the code keeps working until
+    // somebody compares with `==`, which is exactly what the cache exists to allow.
     private static final class CharacterCache {
 
         static final Character[] CACHE = CharacterCache.fill();
@@ -1864,9 +1865,9 @@ public final class Character implements Comparable<Character>, Serializable {
         return false;
     }
 
-    // Los treinta y un caracteres de categoria Lt, como pares [desde, hasta]. Son los digrafos
-    // que se escriben con solo su primera letra en mayuscula -- `Dz` frente a `DZ` y `dz` -- mas
-    // las formas griegas con iota suscrita.
+    // The thirty-one characters of category Lt, as [from, to] pairs. They are the digraphs written
+    // with only their first letter capitalised -- `Dz` against `DZ` and `dz` -- plus the Greek forms
+    // with iota subscript.
     private static final int[] TITLECASE = new int[] {
         453, 453, 456, 456, 459, 459, 498, 498, 8072, 8079,
         8088, 8095, 8104, 8111, 8124, 8124, 8140, 8140, 8188, 8188,
@@ -1885,20 +1886,20 @@ public final class Character implements Comparable<Character>, Serializable {
     }
 
 
-    // ---- lo que Unicode dice de cada code point ----
+    // ---- what Unicode says about each code point ----
     //
-    // Todo lo que sigue sale de UNA tabla: la CATEGORIA GENERAL. Unicode le asigna a cada code
-    // point exactamente una de treinta categorias -- letra mayuscula, digito decimal, separador
-    // de linea, sin asignar -- y casi toda pregunta sobre un caracter es una pregunta sobre a que
-    // conjunto de categorias pertenece. Por eso `getType` esta primero y las demas se escriben en
-    // una linea encima de el.
+    // Everything that follows comes out of ONE table: the GENERAL CATEGORY. Unicode assigns each
+    // code point exactly one of thirty categories -- uppercase letter, decimal digit, line separator,
+    // unassigned -- and nearly every question about a character is a question about which set of
+    // categories it belongs to. That is why `getType` comes first and the rest are written in one
+    // line on top of it.
     //
-    // Casi. Tres propiedades NO se derivan de la categoria y se comprobo una por una barriendo
-    // los 0x110000 code points contra la referencia: `isAlphabetic` (Unicode marca ademas
-    // Other_Alphabetic, 1495 code points mas), y los dos identificadores Unicode (Other_ID_Start
-    // y Other_ID_Continue, seis y dieciocho). Esas tienen su propia tabla o su propia lista de
-    // excepciones -- que es exactamente el error que `isTitleCase` cometio antes de esta tanda:
-    // una derivacion que suena impecable y discrepa en 73 lugares.
+    // Nearly. Three properties are NOT derived from the category, and each was checked one by one by
+    // sweeping all 0x110000 code points against the reference: `isAlphabetic` (Unicode also marks
+    // Other_Alphabetic, 1495 more code points), and the two Unicode identifiers (Other_ID_Start and
+    // Other_ID_Continue, six and eighteen). Those have a table of their own or a list of exceptions of
+    // their own -- which is exactly the mistake `isTitleCase` made before this round: a derivation
+    // that sounds impeccable and disagrees in 73 places.
 
     private static final int[] TYPES = Character.typeTable();
     private static final int[] DIRECTIONS = Character.directionTable();
@@ -1912,8 +1913,8 @@ public final class Character implements Comparable<Character>, Serializable {
     private static final int[] EMOJI_PRESENTATION = Character.emojiPresentationTable();
     private static final int[] PICTOGRAPHIC = Character.pictographicTable();
 
-    // Las categorias que cuentan como "letra", como mascara de bits: preguntar por cinco
-    // categorias es un corrimiento y un and, en vez de cinco comparaciones.
+    // The categories that count as a "letter", as a bit mask: asking about five categories is a
+    // shift and an and, instead of five comparisons.
     private static final int LETTER_MASK = (1 << Character.UPPERCASE_LETTER)
             | (1 << Character.LOWERCASE_LETTER) | (1 << Character.TITLECASE_LETTER)
             | (1 << Character.MODIFIER_LETTER) | (1 << Character.OTHER_LETTER);
@@ -2313,8 +2314,8 @@ public final class Character implements Comparable<Character>, Serializable {
         return false;
     }
 
-    // La categoria general de cada code point, como pares [desde, categoria].
-    // 8198 enteros, 4099 rangos.
+    // Each code point's general category, as [from, category] pairs.
+    // 8198 integers, 4099 ranges.
     private static int[] typeTable() {
         int[] part0 = Character.typeTable0();
         int[] part1 = Character.typeTable1();
@@ -3028,8 +3029,8 @@ public final class Character implements Comparable<Character>, Serializable {
         };
     }
 
-    // La clase bidireccional de cada code point, como pares [desde, clase].
-    // 4600 enteros, 2300 rangos.
+    // Each code point's bidirectional class, as [from, class] pairs.
+    // 4600 integers, 2300 ranges.
     private static int[] directionTable() {
         int[] part0 = Character.directionTable0();
         int[] part1 = Character.directionTable1();
@@ -3435,9 +3436,9 @@ public final class Character implements Comparable<Character>, Serializable {
         };
     }
 
-    // Los rangos alfabeticos. NO es derivable de la categoria: Unicode marca ademas una propiedad Other_Alphabetic
-    // que abarca 1495 code points mas.
-    // 1514 enteros, 757 rangos.
+    // The alphabetic ranges. NOT derivable from the category: Unicode also marks an Other_Alphabetic
+    // property covering 1495 more code points.
+    // 1514 integers, 757 ranges.
     private static int[] alphabeticTable() {
         return alphabeticTable0();
     }
@@ -3574,8 +3575,8 @@ public final class Character implements Comparable<Character>, Serializable {
         };
     }
 
-    // Los rangos de caracteres con espejo bidireccional.
-    // 228 enteros, 114 rangos.
+    // The ranges of characters with a bidirectional mirror.
+    // 228 integers, 114 ranges.
     private static int[] mirroredTable() {
         return mirroredTable0();
     }
@@ -3604,8 +3605,8 @@ public final class Character implements Comparable<Character>, Serializable {
         };
     }
 
-    // Los rangos ideograficos.
-    // 42 enteros, 21 rangos.
+    // The ideographic ranges.
+    // 42 integers, 21 ranges.
     private static int[] ideographicTable() {
         return ideographicTable0();
     }
@@ -3619,8 +3620,8 @@ public final class Character implements Comparable<Character>, Serializable {
         };
     }
 
-    // Los rangos de Emoji.
-    // 300 enteros, 150 rangos.
+    // The Emoji ranges.
+    // 300 integers, 150 ranges.
     private static int[] emojiTable() {
         return emojiTable0();
     }
@@ -3655,8 +3656,8 @@ public final class Character implements Comparable<Character>, Serializable {
         };
     }
 
-    // Los rangos de Emoji_Component.
-    // 20 enteros, 10 rangos.
+    // The Emoji_Component ranges.
+    // 20 integers, 10 ranges.
     private static int[] emojiComponentTable() {
         return emojiComponentTable0();
     }
@@ -3668,8 +3669,8 @@ public final class Character implements Comparable<Character>, Serializable {
         };
     }
 
-    // Los rangos de Emoji_Modifier.
-    // 2 enteros, 1 rangos.
+    // The Emoji_Modifier ranges.
+    // 2 integers, 1 ranges.
     private static int[] emojiModifierTable() {
         return emojiModifierTable0();
     }
@@ -3680,8 +3681,8 @@ public final class Character implements Comparable<Character>, Serializable {
         };
     }
 
-    // Los rangos de Emoji_Modifier_Base.
-    // 80 enteros, 40 rangos.
+    // The Emoji_Modifier_Base ranges.
+    // 80 integers, 40 ranges.
     private static int[] emojiModifierBaseTable() {
         return emojiModifierBaseTable0();
     }
@@ -3698,8 +3699,8 @@ public final class Character implements Comparable<Character>, Serializable {
         };
     }
 
-    // Los rangos de Emoji_Presentation.
-    // 160 enteros, 80 rangos.
+    // The Emoji_Presentation ranges.
+    // 160 integers, 80 ranges.
     private static int[] emojiPresentationTable() {
         return emojiPresentationTable0();
     }
@@ -3723,8 +3724,8 @@ public final class Character implements Comparable<Character>, Serializable {
         };
     }
 
-    // Los rangos de Extended_Pictographic.
-    // 156 enteros, 78 rangos.
+    // The Extended_Pictographic ranges.
+    // 156 integers, 78 ranges.
     private static int[] pictographicTable() {
         return pictographicTable0();
     }
@@ -3747,21 +3748,23 @@ public final class Character implements Comparable<Character>, Serializable {
         };
     }
 
-    // Other_ID_Start: los que son inicio de identificador Unicode sin ser letra ni numero-letra.
+    // Other_ID_Start: the ones that start a Unicode identifier without being a letter or a
+    // letter-number.
     private static final int[] OTHER_ID_START = new int[] {6277, 6278, 8472, 8494, 12443, 12444, };
 
-    // Other_ID_Continue: los que continuan un identificador Unicode sin entrar en las categorias.
+    // Other_ID_Continue: the ones that continue a Unicode identifier without falling in the
+    // categories.
     private static final int[] OTHER_ID_CONTINUE = new int[] {183, 903, 4969, 4970, 4971, 4972, 4973, 4974, 4975, 4976, 4977, 6618, 8472, 8494, 12443, 12444, 12539, 65381, };
 
-    // ---- nombres Unicode: getName / codePointOf ----
+    // ---- Unicode names: getName / codePointOf ----
     //
-    // Los dos dependen de la BASE DE NOMBRES Unicode (`getName('A')` == "LATIN CAPITAL LETTER A"),
-    // que el JDK envia como un recurso aparte (`uniName.dat`, ~150.000 entradas) y NO se calcula.
-    // KajiLibrary no lleva esa tabla (ver el @implNote de la clase), asi que la busqueda del nombre
-    // en si no esta disponible y lanza UnsupportedOperationException. Lo que SI es fiel y no necesita
-    // tabla se conserva: la validacion del code point en getName y el saneo del argumento en
-    // codePointOf (incluida la NPE si es null), de modo que la superficie observable coincide con la
-    // del JDK hasta el punto exacto donde haria falta la tabla.
+    // Both depend on Unicode's NAME DATABASE (`getName('A')` == "LATIN CAPITAL LETTER A"), which the
+    // JDK ships as a separate resource (`uniName.dat`, ~150,000 entries) and does NOT compute.
+    // KajiLibrary does not carry that table (see the class's @implNote), so the name lookup itself is
+    // unavailable and throws UnsupportedOperationException. What IS faithful and needs no table is
+    // kept: the code point validation in getName and the argument's sanitising in codePointOf (the
+    // NPE on null included), so the observable surface matches the JDK's up to the exact point where
+    // the table would be needed.
 
     /**
      * The Unicode name of the character {@code codePoint}, e.g. {@code "LATIN CAPITAL LETTER A"}.
@@ -3776,7 +3779,7 @@ public final class Character implements Comparable<Character>, Serializable {
                     + Integer.toHexString(codePoint).toUpperCase());
         }
         throw new UnsupportedOperationException(
-                "la tabla de nombres Unicode (uniName.dat) no esta en KajiLibrary");
+                "the Unicode name table (uniName.dat) is not in KajiLibrary");
     }
 
     /**
@@ -3788,10 +3791,11 @@ public final class Character implements Comparable<Character>, Serializable {
      *         ({@code uniName.dat}) the lookup needs
      */
     public static int codePointOf(String name) {
-        // Fiel hasta donde no hace falta la tabla: NPE si es null, y el mismo saneo que el JDK.
+        // Faithful up to where the table is not needed: NPE on null, and the same sanitising as the
+        // JDK.
         name = name.trim().toUpperCase();
         throw new UnsupportedOperationException(
-                "la tabla de nombres Unicode (uniName.dat) no esta en KajiLibrary");
+                "the Unicode name table (uniName.dat) is not in KajiLibrary");
     }
 
 

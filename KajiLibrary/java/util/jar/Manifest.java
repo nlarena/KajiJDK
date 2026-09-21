@@ -12,65 +12,65 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * El manifiesto de un JAR: una seccion principal de atributos, y despues cero o mas secciones por
- * entrada.
+ * A JAR's manifest: a main section of attributes, and then zero or more per-entry sections.
  *
- * <p>Esta clase es lo unico que un JAR tiene y un ZIP no, y por eso es donde esta todo el trabajo del
- * paquete. El resto --`JarFile`, `JarEntry`, los dos flujos-- se apoya en `java.util.zip`, que ya
- * estaba entero.
+ * <p>This class is the only thing a JAR has and a ZIP does not, and that is why it is where all the
+ * package's work is. The rest --`JarFile`, `JarEntry`, the two streams-- leans on `java.util.zip`,
+ * which was already whole.
  *
- * <h2>El formato, en la parte que se puede hacer mal</h2>
+ * <h2>The format, in the part that can be got wrong</h2>
  *
- * <p><b>Las lineas se cortan a 72 bytes</b> y la continuacion arranca con un espacio. El corte es
- * por **bytes UTF-8**, no por caracteres: la primera linea lleva 72 bytes de contenido y cada
- * continuacion lleva el espacio mas 71.
+ * <p><b>Lines are cut at 72 bytes</b> and the continuation starts with a space. The cut is by
+ * **UTF-8 bytes**, not by characters: the first line carries 72 bytes of content and each
+ * continuation carries the space plus 71.
  *
- * <p>Y aca esta lo que hay que mirar antes de escribir el codigo, porque la intuicion dice lo
- * contrario: <b>el JDK parte los caracteres multibyte al medio</b>. Se verifico contra el JDK 25 con
- * un valor de 60 `n` con virgulilla --dos bytes cada una-- y la primera linea termina en un `c3` suelto que la
- * continuacion completa con su `b1`. Eso es correcto, y la razon es el lector: la continuacion se une
- * a nivel de **bytes** y recien despues se decodifica UTF-8, asi que el caracter se rearma antes de
- * que nadie lo mire. Un escritor que se negara a partir caracteres tambien seria legible, pero no
- * daria los mismos bytes que el JDK; se eligio dar los mismos.
+ * <p>And here is what to look at before writing the code, because intuition says the opposite:
+ * <b>the JDK splits multibyte characters down the middle</b>. It was checked against JDK 25 with a
+ * value of 60 tilde-n --two bytes each-- and the first line ends in a lone `c3` that the continuation
+ * completes with its `b1`. That is correct, and the reason is the reader: the continuation is joined
+ * at the **byte** level and only then decoded as UTF-8, so the character is reassembled before
+ * anybody looks at it. A writer that refused to split characters would also be readable, but it
+ * would not give the same bytes as the JDK; giving the same ones was chosen.
  *
- * <p>La contrapartida obliga: <b>el lector de aca une bytes, nunca `String`s</b>. Decodificar cada
- * linea fisica por separado y concatenar los textos romperia todo valor con un caracter partido, y
- * lo haria en silencio --con un `?` en el medio--. Por eso {@link #read} trabaja sobre `byte[]`.
+ * <p>The counterpart is obligatory: <b>the reader here joins bytes, never `String`s</b>. Decoding
+ * each physical line separately and concatenating the texts would break every value with a split
+ * character, and it would do it in silence --with a `?` in the middle--. That is why {@link #read}
+ * works over `byte[]`.
  *
- * <p>La otra regla es la de las secciones: una linea en blanco cierra la principal, y cada seccion
- * siguiente tiene que empezar con `Name: `. Una seccion sin `Name` es un error, no una seccion
- * anonima.
+ * <p>The other rule is the sections': a blank line closes the main one, and every following section
+ * has to start with `Name: `. A section with no `Name` is an error, not an anonymous section.
  *
- * <h2>Lo que queda afuera, y por que</h2>
+ * <h2>What is left out, and why</h2>
  *
- * <p>Nada de la superficie publica. De los miembros que el JDK declara y aca no estan, todos son
- * **de paquete** --los dos constructores internos, `getTrustedAttributes`, `getErrorPosition`--; por
- * la regla del contrato, lo interno es libre. `getTrustedAttributes` en particular solo tiene sentido
- * con verificacion de firmas, que este paquete no hace (ver la cabecera de {@link JarFile}).
+ * <p>Nothing of the public surface. Of the members the JDK declares and are not here, all are
+ * **package-private** --the two internal constructors, `getTrustedAttributes`, `getErrorPosition`--;
+ * by the contract rule, the internals are free. `getTrustedAttributes` in particular only makes
+ * sense with signature verification, which this package does not do (see {@link JarFile}'s
+ * header).
  */
 public class Manifest implements Cloneable {
 
     private final Attributes attr = new Attributes();
 
-    // `LinkedHashMap` y no `HashMap` como el JDK: el orden de las secciones no es contrato, pero
-    // que escribir dos veces el mismo manifiesto de los mismos bytes si lo es de hecho, y con un
-    // `HashMap` no lo era.
+    // A `LinkedHashMap` and not a `HashMap` like the JDK's: the sections' order is not contract, but
+    // that writing the same manifest twice gives the same bytes is one in practice, and with a
+    // `HashMap` it was not.
     private final Map<String, Attributes> entries = new LinkedHashMap<String, Attributes>();
 
-    /** Un manifiesto vacio. */
+    /** An empty manifest. */
     public Manifest() {
     }
 
     /**
-     * Un manifiesto leido de ese flujo.
+     * A manifest read from that stream.
      *
-     * @throws IOException si el flujo no tiene un manifiesto bien formado
+     * @throws IOException if the stream has no well-formed manifest
      */
     public Manifest(InputStream is) throws IOException {
         read(is);
     }
 
-    /** Una copia de `man`. */
+    /** A copy of `man`. */
     public Manifest(Manifest man) {
         this.attr.putAll(man.getMainAttributes());
         for (Map.Entry<String, Attributes> e : man.getEntries().entrySet()) {
@@ -78,26 +78,26 @@ public class Manifest implements Cloneable {
         }
     }
 
-    /** Los atributos de la seccion principal. */
+    /** The main section's attributes. */
     public Attributes getMainAttributes() {
         return this.attr;
     }
 
     /**
-     * Las secciones por entrada, indexadas por el nombre que dice su linea `Name`.
+     * The per-entry sections, indexed by the name their `Name` line gives.
      *
-     * <p>Es el mapa vivo: modificarlo modifica el manifiesto.
+     * <p>It is the live map: modifying it modifies the manifest.
      */
     public Map<String, Attributes> getEntries() {
         return this.entries;
     }
 
-    /** Los atributos de esa entrada, o `null` si el manifiesto no tiene una seccion para ella. */
+    /** That entry's attributes, or `null` if the manifest has no section for it. */
     public Attributes getAttributes(String name) {
         return getEntries().get(name);
     }
 
-    /** Vacia la seccion principal y todas las secciones por entrada. */
+    /** It empties the main section and every per-entry section. */
     public void clear() {
         this.attr.clear();
         this.entries.clear();
@@ -115,184 +115,184 @@ public class Manifest implements Cloneable {
         return this.attr.hashCode() + this.entries.hashCode();
     }
 
-    /** Una copia. */
+    /** A copy. */
     public Object clone() {
         return new Manifest(this);
     }
 
-    // ---- escritura ------------------------------------------------------------------------------
+    // ---- writing --------------------------------------------------------------------------------
 
     /**
-     * Escribe el manifiesto en el formato que lee cualquier herramienta de JAR.
+     * It writes the manifest in the format any JAR tool reads.
      *
-     * <p>Si la seccion principal no tiene ni `Manifest-Version` ni `Signature-Version` no se escribe
-     * ningun atributo: ver la nota en `Attributes.writeMain`, donde esta el motivo.
+     * <p>If the main section has neither `Manifest-Version` nor `Signature-Version` no attribute is
+     * written: see the note in `Attributes.writeMain`, where the reason is.
      */
     public void write(OutputStream out) throws IOException {
-        DataOutputStream dos = new DataOutputStream(out);
-        this.attr.writeMain(dos);
+        DataOutputStream dataOut = new DataOutputStream(out);
+        this.attr.writeMain(dataOut);
         for (Map.Entry<String, Attributes> e : this.entries.entrySet()) {
-            println72(dos, "Name: " + e.getKey());
-            e.getValue().write(dos);
+            println72(dataOut, "Name: " + e.getKey());
+            e.getValue().write(dataOut);
         }
-        dos.flush();
+        dataOut.flush();
     }
 
     /**
-     * Escribe una linea logica plegada a 72 bytes.
+     * It writes a logical line folded at 72 bytes.
      *
-     * <p>El primer byte se escribe suelto y despues van bloques de 71: asi la primera linea queda en
-     * 1 + 71 = 72 bytes y cada continuacion en 1 (el espacio) + 71 = 72. Es exactamente el reparto
-     * del JDK, incluido que un caracter multibyte se pueda partir en el corte.
+     * <p>The first byte is written on its own and then blocks of 71 follow: that way the first line
+     * comes to 1 + 71 = 72 bytes and each continuation to 1 (the space) + 71 = 72. It is exactly the
+     * JDK's split, including that a multibyte character can be broken at the cut.
      */
     static void println72(OutputStream out, String line) throws IOException {
         if (!line.isEmpty()) {
             byte[] bytes = line.getBytes(StandardCharsets.UTF_8);
-            int largo = bytes.length;
+            int length = bytes.length;
             out.write(bytes[0]);
             int pos = 1;
-            while (largo - pos > 71) {
+            while (length - pos > 71) {
                 out.write(bytes, pos, 71);
                 pos = pos + 71;
                 println(out);
                 out.write(' ');
             }
-            out.write(bytes, pos, largo - pos);
+            out.write(bytes, pos, length - pos);
         }
         println(out);
     }
 
-    /** El fin de linea del formato, que es CRLF y no el del sistema. */
+    /** The format's line ending, which is CRLF and not the system's. */
     static void println(OutputStream out) throws IOException {
         out.write('\r');
         out.write('\n');
     }
 
-    // ---- lectura --------------------------------------------------------------------------------
+    // ---- reading --------------------------------------------------------------------------------
 
     /**
-     * Lee un manifiesto de ese flujo.
+     * It reads a manifest from that stream.
      *
-     * <p>Se lee el flujo entero a memoria antes de parsear. Es la misma decision que tomo `ZipFile`
-     * en esta biblioteca y por el mismo motivo: un manifiesto no llega a los megabytes, y a cambio no
-     * queda ningun estado a medio consumir si el parseo falla.
+     * <p>The whole stream is read into memory before parsing. It is the same decision `ZipFile` took
+     * in this library and for the same reason: a manifest does not reach megabytes, and in exchange
+     * no half-consumed state is left if the parse fails.
      *
-     * <p>Lo leido se **mezcla** con lo que el manifiesto ya tuviera, que es lo que dice el javadoc
-     * del JDK. No reemplaza.
+     * <p>What is read is **merged** with whatever the manifest already had, which is what the JDK's
+     * javadoc says. It does not replace.
      */
     public void read(InputStream is) throws IOException {
-        byte[] datos = leerTodo(is);
-        List<byte[]> logicas = new ArrayList<byte[]>();
-        List<Integer> numeros = new ArrayList<Integer>();
-        plegar(datos, logicas, numeros);
+        byte[] data = readAll(is);
+        List<byte[]> logicalLines = new ArrayList<byte[]>();
+        List<Integer> lineNumbers = new ArrayList<Integer>();
+        unfold(data, logicalLines, lineNumbers);
 
-        // No se limpia: el contrato del JDK dice que lo leido se **mezcla** con lo que ya habia.
+        // It is not cleared: the JDK's contract says what is read is **merged** with what was there.
         int i = 0;
-        // La seccion principal: hasta la primera linea en blanco.
-        while (i < logicas.size() && logicas.get(i).length != 0) {
-            leerCabecera(this.attr, logicas.get(i), numeros.get(i).intValue());
+        // The main section: up to the first blank line.
+        while (i < logicalLines.size() && logicalLines.get(i).length != 0) {
+            readHeader(this.attr, logicalLines.get(i), lineNumbers.get(i).intValue());
             i = i + 1;
         }
-        // Y despues, una seccion por entrada. Las lineas en blanco de sobra se ignoran.
-        while (i < logicas.size()) {
-            if (logicas.get(i).length == 0) {
+        // And then one section per entry. Extra blank lines are ignored.
+        while (i < logicalLines.size()) {
+            if (logicalLines.get(i).length == 0) {
                 i = i + 1;
                 continue;
             }
-            int nro = numeros.get(i).intValue();
-            String[] par = partirCabecera(logicas.get(i), nro);
-            if (!par[0].equalsIgnoreCase("Name")) {
-                throw new IOException("invalid manifest format (line " + nro + ")");
+            int num = lineNumbers.get(i).intValue();
+            String[] pair = splitHeader(logicalLines.get(i), num);
+            if (!pair[0].equalsIgnoreCase("Name")) {
+                throw new IOException("invalid manifest format (line " + num + ")");
             }
-            String nombre = par[1];
-            Attributes seccion = this.entries.get(nombre);
-            if (seccion == null) {
-                seccion = new Attributes();
-                this.entries.put(nombre, seccion);
+            String name = pair[1];
+            Attributes section = this.entries.get(name);
+            if (section == null) {
+                section = new Attributes();
+                this.entries.put(name, section);
             }
             i = i + 1;
-            while (i < logicas.size() && logicas.get(i).length != 0) {
-                leerCabecera(seccion, logicas.get(i), numeros.get(i).intValue());
+            while (i < logicalLines.size() && logicalLines.get(i).length != 0) {
+                readHeader(section, logicalLines.get(i), lineNumbers.get(i).intValue());
                 i = i + 1;
             }
         }
     }
 
     /**
-     * Parte el contenido en lineas **logicas**: cada linea fisica que empieza con un espacio se pega
-     * a la anterior, sin ese espacio.
+     * It splits the content into **logical** lines: every physical line starting with a space is
+     * appended to the previous one, without that space.
      *
-     * <p>Se pega a nivel de bytes. Ver la cabecera de la clase: es lo que permite que el escritor
-     * parta caracteres UTF-8 en el corte de 72.
+     * <p>It is appended at the byte level. See the class's header: it is what lets the writer split
+     * UTF-8 characters at the 72 cut.
      *
-     * <p>Los tres finales de linea --CRLF, LF y CR solo-- valen, porque el JDK acepta los tres.
+     * <p>All three line endings --CRLF, LF and bare CR-- count, because the JDK accepts all three.
      */
-    private static void plegar(byte[] datos, List<byte[]> logicas, List<Integer> numeros)
+    private static void unfold(byte[] data, List<byte[]> logicalLines, List<Integer> lineNumbers)
             throws IOException {
         int pos = 0;
-        int nro = 0;
-        while (pos < datos.length) {
-            nro = nro + 1;
-            int fin = pos;
-            while (fin < datos.length && datos[fin] != '\n' && datos[fin] != '\r') {
-                fin = fin + 1;
+        int num = 0;
+        while (pos < data.length) {
+            num = num + 1;
+            int end = pos;
+            while (end < data.length && data[end] != '\n' && data[end] != '\r') {
+                end = end + 1;
             }
-            int siguiente = fin;
-            if (siguiente < datos.length) {
-                if (datos[siguiente] == '\r' && siguiente + 1 < datos.length
-                        && datos[siguiente + 1] == '\n') {
-                    siguiente = siguiente + 2;
+            int next = end;
+            if (next < data.length) {
+                if (data[next] == '\r' && next + 1 < data.length
+                        && data[next + 1] == '\n') {
+                    next = next + 2;
                 } else {
-                    siguiente = siguiente + 1;
+                    next = next + 1;
                 }
             }
-            int largo = fin - pos;
-            if (largo > 0 && datos[pos] == ' ') {
-                // Una continuacion. Tiene que haber una linea logica no vacia adelante: si no, el
-                // manifiesto arranca con un espacio y no hay a que pegarla.
-                if (logicas.isEmpty() || logicas.get(logicas.size() - 1).length == 0) {
-                    throw new IOException("misplaced continuation line (line " + nro + ")");
+            int length = end - pos;
+            if (length > 0 && data[pos] == ' ') {
+                // A continuation. There has to be a non-empty logical line ahead of it: otherwise
+                // the manifest starts with a space and there is nothing to append it to.
+                if (logicalLines.isEmpty() || logicalLines.get(logicalLines.size() - 1).length == 0) {
+                    throw new IOException("misplaced continuation line (line " + num + ")");
                 }
-                byte[] previa = logicas.get(logicas.size() - 1);
-                byte[] junta = new byte[previa.length + largo - 1];
-                System.arraycopy(previa, 0, junta, 0, previa.length);
-                System.arraycopy(datos, pos + 1, junta, previa.length, largo - 1);
-                logicas.set(logicas.size() - 1, junta);
+                byte[] previous = logicalLines.get(logicalLines.size() - 1);
+                byte[] joined = new byte[previous.length + length - 1];
+                System.arraycopy(previous, 0, joined, 0, previous.length);
+                System.arraycopy(data, pos + 1, joined, previous.length, length - 1);
+                logicalLines.set(logicalLines.size() - 1, joined);
             } else {
-                byte[] linea = new byte[largo];
-                System.arraycopy(datos, pos, linea, 0, largo);
-                logicas.add(linea);
-                numeros.add(Integer.valueOf(nro));
+                byte[] line = new byte[length];
+                System.arraycopy(data, pos, line, 0, length);
+                logicalLines.add(line);
+                lineNumbers.add(Integer.valueOf(num));
             }
-            pos = siguiente;
+            pos = next;
         }
     }
 
-    /** Parte `nombre: valor` en sus dos mitades, con los errores que da el JDK. */
-    private static String[] partirCabecera(byte[] linea, int nro) throws IOException {
+    /** It splits `name: value` into its two halves, with the errors the JDK gives. */
+    private static String[] splitHeader(byte[] line, int num) throws IOException {
         int i = 0;
-        while (i < linea.length && linea[i] != ':') {
+        while (i < line.length && line[i] != ':') {
             i = i + 1;
         }
-        // Hace falta el `:` **y** el espacio que va detras: `A:uno` es invalido para el JDK.
-        if (i >= linea.length || i + 1 >= linea.length || linea[i + 1] != ' ') {
-            throw new IOException("invalid header field (line " + nro + ")");
+        // The `:` **and** the space behind it are needed: `A:one` is invalid to the JDK.
+        if (i >= line.length || i + 1 >= line.length || line[i + 1] != ' ') {
+            throw new IOException("invalid header field (line " + num + ")");
         }
-        String nombre = new String(linea, 0, i, StandardCharsets.UTF_8);
-        String valor = new String(linea, i + 2, linea.length - i - 2, StandardCharsets.UTF_8);
-        return new String[] { nombre, valor };
+        String name = new String(line, 0, i, StandardCharsets.UTF_8);
+        String value = new String(line, i + 2, line.length - i - 2, StandardCharsets.UTF_8);
+        return new String[] { name, value };
     }
 
-    private static void leerCabecera(Attributes destino, byte[] linea, int nro) throws IOException {
-        String[] par = partirCabecera(linea, nro);
+    private static void readHeader(Attributes target, byte[] line, int num) throws IOException {
+        String[] pair = splitHeader(line, num);
         try {
-            destino.putValue(par[0], par[1]);
+            target.putValue(pair[0], pair[1]);
         } catch (IllegalArgumentException e) {
-            throw new IOException("invalid header field name: " + par[0] + " (line " + nro + ")");
+            throw new IOException("invalid header field name: " + pair[0] + " (line " + num + ")");
         }
     }
 
-    private static byte[] leerTodo(InputStream is) throws IOException {
+    private static byte[] readAll(InputStream is) throws IOException {
         if (is == null) {
             throw new NullPointerException("is");
         }

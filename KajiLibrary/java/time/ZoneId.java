@@ -34,19 +34,20 @@ public abstract class ZoneId implements Serializable {
     public abstract String getId();
 
     /**
-     * Las reglas de esta zona: los desplazamientos y cuando cambian.
+     * This zone's rules: the offsets and when they change.
      *
-     * <p>Es donde vive el horario de verano. En esta biblioteca las unicas zonas con reglas son las
-     * de desplazamiento fijo (`ZoneOffset`), asi que las reglas son constantes.
+     * <p>It is where daylight saving lives. The only zones **this class can build** are the
+     * fixed-offset ones (`ZoneOffset`), so the rules a `ZoneId` obtained here carries are constant.
+     * `java.time.zone` knows more: see {@link #getAvailableZoneIds()}.
      */
     public abstract java.time.zone.ZoneRules getRules();
 
     /**
-     * Los identificadores cortos historicos (`EST`, `PST`, ...) mapeados a los largos.
+     * The historical short identifiers (`EST`, `PST`, ...) mapped to the long ones.
      *
-     * <p>Se aceptan **solo** cuando se los pide explicitamente, via `of(id, aliasMap)`: son
-     * ambiguos --`CST` es tanto Chicago como Shanghai-- y por eso el JDK dejo de aceptarlos por
-     * defecto. Este mapa existe para el codigo viejo que todavia los usa.
+     * <p>They are accepted **only** when asked for explicitly, through `of(id, aliasMap)`: they are
+     * ambiguous --`CST` is both Chicago and Shanghai-- and that is why the JDK stopped accepting
+     * them by default. This map exists for old code that still uses them.
      */
     public static final java.util.Map<String, String> SHORT_IDS = ZoneId.shortIds();
 
@@ -84,9 +85,9 @@ public abstract class ZoneId implements Serializable {
     }
 
     /**
-     * Como `of(String)`, pero traduciendo antes por `aliasMap`.
+     * Like `of(String)`, but translating through `aliasMap` first.
      *
-     * @throws java.time.DateTimeException si el identificador no se reconoce
+     * @throws java.time.DateTimeException if the identifier is not recognised
      */
     public static ZoneId of(String zoneId, java.util.Map<String, String> aliasMap) {
         if (zoneId == null || aliasMap == null) {
@@ -97,10 +98,10 @@ public abstract class ZoneId implements Serializable {
     }
 
     /**
-     * Una zona con ese nombre y ese desplazamiento fijo.
+     * A zone with that name and that fixed offset.
      *
-     * <p>El prefijo tiene que ser vacio, `GMT`, `UTC` o `UT`: son los unicos que la especificacion
-     * admite, porque el identificador resultante tiene que poder volver a parsearse.
+     * <p>The prefix has to be empty, `GMT`, `UTC` or `UT`: they are the only ones the specification
+     * allows, because the resulting identifier has to be re-parseable.
      */
     public static ZoneId ofOffset(String prefix, ZoneOffset offset) {
         if (prefix == null || offset == null) {
@@ -115,7 +116,7 @@ public abstract class ZoneId implements Serializable {
         return ZoneId.of(prefix + offset.getId());
     }
 
-    /** La zona que `temporal` tiene, si tiene alguna. */
+    /** The zone `temporal` holds, if it holds one. */
     public static ZoneId from(java.time.temporal.TemporalAccessor temporal) {
         if (temporal == null) {
             throw new NullPointerException("temporal");
@@ -129,35 +130,40 @@ public abstract class ZoneId implements Serializable {
     }
 
     /**
-     * Los identificadores de zona disponibles.
+     * The available zone identifiers.
      *
-     * <p>Esta biblioteca no trae la base de datos de zonas horarias, asi que el conjunto esta
-     * **vacio**. Se documenta en vez de fingir: devolver una lista inventada haria fallar a
-     * `ZoneId.of` sobre sus propios elementos.
+     * <p>**Empty**, and the reason is not the one this note used to give. It said the library
+     * carries no time-zone database; it does -- `java.time.zone.TzData` holds eight zones with real
+     * transition data, and `ZoneRulesProvider.getAvailableZoneIds()` enumerates them.
+     *
+     * <p>What is still true is the second half: `ZoneId.of` builds fixed-offset zones **only** and
+     * throws `ZoneRulesException` on a region id, so listing `"Europe/Madrid"` here would hand back
+     * a set whose own elements this very class cannot parse. Until `of` can reach the rules,
+     * empty is the honest answer, and `ZoneRulesProvider` is where the eight are enumerable.
      */
     public static java.util.Set<String> getAvailableZoneIds() {
         return java.util.Collections.unmodifiableSet(new java.util.HashSet<String>());
     }
 
     /**
-     * Esta zona reducida a su forma normal: un `ZoneOffset` si el desplazamiento es fijo.
+     * This zone reduced to its normal form: a `ZoneOffset` if the offset is fixed.
      *
-     * <p>Sirve para comparar: `ZoneId.of("UTC")` y `ZoneOffset.UTC` designan lo mismo y no son
-     * `equals`, pero sus normalizadas si.
+     * <p>It serves for comparing: `ZoneId.of("UTC")` and `ZoneOffset.UTC` name the same thing and
+     * are not `equals`, but their normalised forms are.
      */
     public ZoneId normalized() {
-        java.time.zone.ZoneRules reglas = this.getRules();
-        if (reglas != null && reglas.isFixedOffset()) {
-            return reglas.getOffset(java.time.Instant.ofEpochSecond(0L));
+        java.time.zone.ZoneRules rules = this.getRules();
+        if (rules != null && rules.isFixedOffset()) {
+            return rules.getOffset(java.time.Instant.ofEpochSecond(0L));
         }
         return this;
     }
 
     /**
-     * El nombre de la zona en esa region.
+     * The zone's name in that region.
      *
-     * <p>Devuelve el identificador para cualquier region: esta biblioteca no trae los nombres
-     * localizados de zona. Se documenta en vez de fingir.
+     * <p>It returns the identifier for any region: this library does not carry the localised zone
+     * names. It is documented instead of faked.
      */
     public String getDisplayName(java.time.format.TextStyle style, java.util.Locale locale) {
         if (style == null || locale == null) {

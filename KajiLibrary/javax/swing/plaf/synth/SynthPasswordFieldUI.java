@@ -4,10 +4,10 @@ import javax.swing.JComponent;
 import javax.swing.plaf.ComponentUI;
 
 /**
- * El campo de contrasena de Synth.
+ * Synth's password field.
  *
- * <p>Cambia el prefijo del que salen sus valores y nada mas; el caracter de eco lo pone
- * {@code JPasswordField}, no el aspecto.
+ * <p>It changes the prefix its values come from and nothing else; the echo character is set by
+ * {@code JPasswordField}, not by the look and feel.
  */
 public class SynthPasswordFieldUI extends SynthTextFieldUI {
 

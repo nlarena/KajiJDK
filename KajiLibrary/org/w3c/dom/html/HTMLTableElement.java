@@ -3,127 +3,127 @@ package org.w3c.dom.html;
 import org.w3c.dom.DOMException;
 
 /**
- * Un `<table>`.
+ * A `<table>`.
  *
- * <p>Los `createTHead`/`createTFoot`/`createCaption` son **idempotentes**: si la seccion ya existe
- * la devuelven en vez de agregar una segunda, porque una tabla no puede tener dos. Los `deleteXxx`
- * que corresponden no fallan si no hay nada que borrar.
+ * <p>The `createTHead`/`createTFoot`/`createCaption` are **idempotent**: if the section already
+ * exists they return it instead of adding a second one, because a table cannot have two. The
+ * matching `deleteXxx` do not fail if there is nothing to delete.
  *
- * <p>`getRows` incluye las filas de las tres secciones y en el orden en que se muestran --cabecera,
- * cuerpos, pie--, que no es necesariamente el orden en que estan escritas en el documento.
+ * <p>`getRows` includes the rows of the three sections and in the order in which they are shown
+ * --header, bodies, footer--, which is not necessarily the order in which they are written in the
+ * document.
  *
- * <p>`insertRow(-1)` agrega al final; cualquier otro indice fuera de rango es
- * `INDEX_SIZE_ERR`.
+ * <p>`insertRow(-1)` appends at the end; any other index out of range is `INDEX_SIZE_ERR`.
  */
 public interface HTMLTableElement extends HTMLElement {
 
-    /** El `<caption>` de la tabla, o nulo si no tiene. */
+    /** The `<caption>` of the table, or null if it has none. */
     HTMLTableCaptionElement getCaption();
 
-    /** Fija el `<caption>` de la tabla, o nulo si no tiene. */
+    /** It sets the `<caption>` of the table, or null if it has none. */
     void setCaption(HTMLTableCaptionElement caption);
 
-    /** El `<thead>`, o nulo si no tiene. */
+    /** The `<thead>`, or null if it has none. */
     HTMLTableSectionElement getTHead();
 
-    /** Fija el `<thead>`, o nulo si no tiene. */
+    /** It sets the `<thead>`, or null if it has none. */
     void setTHead(HTMLTableSectionElement tHead);
 
-    /** El `<tfoot>`, o nulo si no tiene. */
+    /** The `<tfoot>`, or null if it has none. */
     HTMLTableSectionElement getTFoot();
 
-    /** Fija el `<tfoot>`, o nulo si no tiene. */
+    /** It sets the `<tfoot>`, or null if it has none. */
     void setTFoot(HTMLTableSectionElement tFoot);
 
-    /** Las filas, en una coleccion viva. */
+    /** The rows, in a live collection. */
     HTMLCollection getRows();
 
-    /** Los `<tbody>`, en una coleccion viva. */
+    /** The `<tbody>`s, in a live collection. */
     HTMLCollection getTBodies();
 
-    /** La alineacion (presentacion; HTML 4 la desaconseja). */
+    /** The alignment (presentational; HTML 4 deprecates it). */
     String getAlign();
 
-    /** Fija la alineacion (presentacion; HTML 4 la desaconseja). */
+    /** It sets the alignment (presentational; HTML 4 deprecates it). */
     void setAlign(String align);
 
-    /** El atributo `bgColor`. */
+    /** The `bgColor` attribute. */
     String getBgColor();
 
-    /** Fija el atributo `bgColor`. */
+    /** It sets the `bgColor` attribute. */
     void setBgColor(String bgColor);
 
-    /** El borde. */
+    /** The border. */
     String getBorder();
 
-    /** Fija el borde. */
+    /** It sets the border. */
     void setBorder(String border);
 
-    /** El atributo `cellPadding`. */
+    /** The `cellPadding` attribute. */
     String getCellPadding();
 
-    /** Fija el atributo `cellPadding`. */
+    /** It sets the `cellPadding` attribute. */
     void setCellPadding(String cellPadding);
 
-    /** El atributo `cellSpacing`. */
+    /** The `cellSpacing` attribute. */
     String getCellSpacing();
 
-    /** Fija el atributo `cellSpacing`. */
+    /** It sets the `cellSpacing` attribute. */
     void setCellSpacing(String cellSpacing);
 
-    /** El atributo `frame`. */
+    /** The `frame` attribute. */
     String getFrame();
 
-    /** Fija el atributo `frame`. */
+    /** It sets the `frame` attribute. */
     void setFrame(String frame);
 
-    /** El atributo `rules`. */
+    /** The `rules` attribute. */
     String getRules();
 
-    /** Fija el atributo `rules`. */
+    /** It sets the `rules` attribute. */
     void setRules(String rules);
 
-    /** El atributo `summary`. */
+    /** The `summary` attribute. */
     String getSummary();
 
-    /** Fija el atributo `summary`. */
+    /** It sets the `summary` attribute. */
     void setSummary(String summary);
 
-    /** El ancho. */
+    /** The width. */
     String getWidth();
 
-    /** Fija el ancho. */
+    /** It sets the width. */
     void setWidth(String width);
 
-    /** La cabecera; si ya hay una la devuelve en vez de agregar otra. */
+    /** The header; if there already is one it returns it instead of adding another. */
     HTMLElement createTHead();
 
-    /** Borra la cabecera. Si no hay, no hace nada. */
+    /** It deletes the header. If there is none, it does nothing. */
     void deleteTHead();
 
-    /** El pie; si ya hay uno lo devuelve en vez de agregar otro. */
+    /** The footer; if there already is one it returns it instead of adding another. */
     HTMLElement createTFoot();
 
-    /** Borra el pie. Si no hay, no hace nada. */
+    /** It deletes the footer. If there is none, it does nothing. */
     void deleteTFoot();
 
-    /** El titulo; si ya hay uno lo devuelve en vez de agregar otro. */
+    /** The caption; if there already is one it returns it instead of adding another. */
     HTMLElement createCaption();
 
-    /** Borra el titulo. Si no hay, no hace nada. */
+    /** It deletes the caption. If there is none, it does nothing. */
     void deleteCaption();
 
     /**
-     * Inserta una fila en esa posicion; -1 agrega al final.
+     * It inserts a row at that position; -1 appends at the end.
      *
-     * @throws DOMException `INDEX_SIZE_ERR` si el indice esta fuera de rango
+     * @throws DOMException `INDEX_SIZE_ERR` if the index is out of range
      */
     HTMLElement insertRow(int index) throws org.w3c.dom.DOMException;
 
     /**
-     * Borra la fila de esa posicion; -1 borra la ultima.
+     * It deletes the row at that position; -1 deletes the last one.
      *
-     * @throws DOMException `INDEX_SIZE_ERR` si el indice esta fuera de rango
+     * @throws DOMException `INDEX_SIZE_ERR` if the index is out of range
      */
     void deleteRow(int index) throws org.w3c.dom.DOMException;
 }

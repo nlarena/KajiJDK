@@ -1,46 +1,46 @@
 package org.w3c.dom;
 
 /**
- * KajiLibrary's org.w3c.dom.DOMConfiguration -- los parametros con que se normaliza un documento.
+ * KajiLibrary's org.w3c.dom.DOMConfiguration -- the parameters a document is normalised with.
  *
- * <p>La devuelve {@link Document#getDomConfig} y la consume {@link Document#normalizeDocument}.
- * Es un mapa de parametros con nombre, y es asi --y no una interfaz con un metodo por opcion--
- * porque el juego de parametros es **abierto**: la norma define unos veinte
+ * <p>{@link Document#getDomConfig} returns it and {@link Document#normalizeDocument} consumes it.
+ * It is a map of named parameters, and it is so --and not an interface with one method per option--
+ * because the set of parameters is **open**: the standard defines about twenty
  * ({@code "comments"}, {@code "cdata-sections"}, {@code "entities"}, {@code "namespaces"},
- * {@code "validate"}, {@code "error-handler"}...) y cada implementacion agrega los suyos con un
- * prefijo propio.
+ * {@code "validate"}, {@code "error-handler"}...) and each implementation adds its own with a
+ * prefix of its own.
  *
- * <p>Los nombres no distinguen mayusculas. El valor es un {@code Object} porque casi todos son
- * booleanos pero algunos no --{@code "error-handler"} quiere un {@link DOMErrorHandler},
- * {@code "schema-location"} una cadena.
+ * <p>The names are case-insensitive. The value is an {@code Object} because almost all of them are
+ * booleans but some are not --{@code "error-handler"} wants a {@link DOMErrorHandler},
+ * {@code "schema-location"} a string.
  *
- * <p>La parte que se olvida: {@link #canSetParameter} existe porque un parametro puede estar
- * **soportado pero no en ese valor**. Una implementacion que siempre valide acepta
- * {@code ("validate", true)} y rechaza {@code ("validate", false)}, y sin este metodo la unica
- * forma de averiguarlo seria provocando la excepcion.
+ * <p>The part that gets forgotten: {@link #canSetParameter} exists because a parameter may be
+ * **supported but not at that value**. An implementation that always validates accepts
+ * {@code ("validate", true)} and rejects {@code ("validate", false)}, and without this method the
+ * only way of finding out would be provoking the exception.
  *
- * <p>Interfaz declarada entera.
+ * <p>The interface is declared whole.
  */
 public interface DOMConfiguration {
 
     /**
-     * Fija un parametro.
+     * It sets a parameter.
      *
-     * @throws DOMException {@code NOT_FOUND_ERR} si el parametro no se reconoce, o
-     *     {@code NOT_SUPPORTED_ERR} si se reconoce pero ese valor no se soporta
+     * @throws DOMException {@code NOT_FOUND_ERR} if the parameter is not recognised, or
+     *     {@code NOT_SUPPORTED_ERR} if it is recognised but that value is not supported
      */
     public void setParameter(String name, Object value) throws DOMException;
 
     /**
-     * El valor actual del parametro.
+     * The current value of the parameter.
      *
-     * @throws DOMException {@code NOT_FOUND_ERR} si el parametro no se reconoce
+     * @throws DOMException {@code NOT_FOUND_ERR} if the parameter is not recognised
      */
     public Object getParameter(String name) throws DOMException;
 
-    /** Si ese parametro se puede poner en ese valor, sin intentarlo. */
+    /** Whether that parameter can be set to that value, without trying. */
     public boolean canSetParameter(String name, Object value);
 
-    /** Los nombres de todos los parametros que esta configuracion reconoce. */
+    /** The names of all the parameters this configuration recognises. */
     public DOMStringList getParameterNames();
 }

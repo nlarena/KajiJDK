@@ -1,49 +1,49 @@
 package org.w3c.dom.html;
 
 /**
- * Un `<option>`.
+ * An `<option>`.
  *
- * <p>`getIndex` es su posicion dentro del `select` que lo contiene, y `getText` el texto que se
- * muestra --que no es el `value` que se envia--.
+ * <p>`getIndex` is its position inside the `select` that contains it, and `getText` the text that
+ * is shown --which is not the `value` that is submitted--.
  */
 public interface HTMLOptionElement extends HTMLElement {
 
-    /** El formulario que lo contiene, o nulo si no esta en ninguno. */
+    /** The form that contains it, or null if it is in none. */
     HTMLFormElement getForm();
 
-    /** Si el documento lo selecciona. */
+    /** Whether the document selects it. */
     boolean getDefaultSelected();
 
-    /** Fija si el documento lo selecciona. */
+    /** It sets whether the document selects it. */
     void setDefaultSelected(boolean defaultSelected);
 
-    /** El texto que se muestra. */
+    /** The text that is shown. */
     String getText();
 
-    /** La posicion. */
+    /** The position. */
     int getIndex();
 
-    /** Si esta deshabilitado. */
+    /** Whether it is disabled. */
     boolean getDisabled();
 
-    /** Fija si esta deshabilitado. */
+    /** It sets whether it is disabled. */
     void setDisabled(boolean disabled);
 
-    /** El atributo `label`. */
+    /** The `label` attribute. */
     String getLabel();
 
-    /** Fija el atributo `label`. */
+    /** It sets the `label` attribute. */
     void setLabel(String label);
 
-    /** Si esta seleccionado ahora. */
+    /** Whether it is selected now. */
     boolean getSelected();
 
-    /** Fija si esta seleccionado ahora. */
+    /** It sets whether it is selected now. */
     void setSelected(boolean selected);
 
-    /** El valor actual. */
+    /** The current value. */
     String getValue();
 
-    /** Fija el valor actual. */
+    /** It sets the current value. */
     void setValue(String value);
 }

@@ -2,49 +2,50 @@ package java.security;
 
 import java.io.Serializable;
 
-// El permiso de nombre jerarquico con comodin, que es la forma que usan casi todos.
+// The permission with a hierarchical name and a wildcard, which is the shape almost all of them
+// use.
 //
-// Un nombre es una cadena separada por puntos —`java.home`, `os.name`— y `*` al final de un
-// segmento significa "y todo lo que cuelgue". Las tres formas:
+// A name is a string separated by dots —`java.home`, `os.name`— and `*` at the end of a segment
+// means "and everything that hangs from it". The three forms:
 //
-//   "*"            implica todo
-//   "java.*"       implica "java.home", "java.version", "java.a.b" — pero NO "java" a secas
-//   "java.home"    implica solo a si mismo
+//   "*"            implies everything
+//   "java.*"       implies "java.home", "java.version", "java.a.b" — but NOT plain "java"
+//   "java.home"    implies only itself
 //
-// El detalle de que `"java.*"` **no** implique `"java"` es del contrato y no una arbitrariedad: el
-// comodin reemplaza a un segmento que existe, y `"java"` no tiene ese segmento. Un permiso que
-// diga "todo lo que hay debajo" no deberia dar acceso al nodo de arriba.
+// The detail that `"java.*"` does **not** imply `"java"` is of the contract and not an arbitrary
+// choice: the wildcard replaces a segment that exists, and `"java"` does not have that segment. A
+// permission that says "everything below" should not give access to the node above.
 //
-// No tiene acciones: `getActions()` devuelve "". Una subclase que las necesite —como
-// `PropertyPermission`, con read/write— las agrega ella.
+// It has no actions: `getActions()` returns "". A subclass that needs them —such as
+// `PropertyPermission`, with read/write— adds them itself.
 public abstract class BasicPermission extends Permission implements Serializable {
 
-    // El nombre sin el `*` final si lo tenia; "" para el comodin universal.
+    // The name without the trailing `*` if it had one; "" for the universal wildcard.
     private transient String path;
 
-    // Si el nombre terminaba en un `*` que cuenta como comodin.
+    // Whether the name ended in a `*` that counts as a wildcard.
     private transient boolean wildcard;
 
-    // Si el nombre es el `"exitVM"` pelado de antes de 1.6. Ver `init`.
+    // Whether the name is the bare `"exitVM"` of before 1.6. See `init`.
     private transient boolean exitVM;
 
-    // Un permiso con el nombre dado.
+    // A permission with the given name.
     public BasicPermission(String name) {
         super(name);
         this.init(name);
     }
 
-    // Un permiso con el nombre dado. `actions` se ignora: esta clase no las usa, y el constructor
-    // existe para que las subclases puedan encadenar y para deserializar.
+    // A permission with the given name. `actions` is ignored: this class does not use them, and the
+    // constructor exists so that the subclasses can chain and for deserialising.
     public BasicPermission(String name, String actions) {
         super(name);
         this.init(name);
     }
 
-    // Parte el nombre en camino y comodin.
+    // It splits the name into path and wildcard.
     //
-    // El `*` solo cuenta como comodin si es todo el nombre o viene precedido por un punto:
-    // `"a.b*"` es un nombre literal que termina en asterisco, no un comodin sobre `"a.b"`.
+    // The `*` only counts as a wildcard if it is the whole name or comes preceded by a dot:
+    // `"a.b*"` is a literal name that ends in an asterisk, not a wildcard over `"a.b"`.
     private void init(String name) {
         if (name == null) {
             throw new NullPointerException("name can't be null");
@@ -62,15 +63,16 @@ public abstract class BasicPermission extends Permission implements Serializable
                 this.path = name.substring(0, len - 1);
             }
         } else if (name.equals("exitVM")) {
-            // La unica excepcion a la regla, y viene de una compatibilidad vieja: hasta 1.6 el
-            // permiso para terminar la VM se llamaba `"exitVM"` a secas, y despues paso a ser
-            // `"exitVM.<codigo>"` con `"exitVM.*"` para cualquiera. Los dos nombres tienen que
-            // seguir significando lo mismo, asi que el viejo se parsea como si fuera el comodin:
-            // sin esto, un `"exitVM.*"` no implicaria a un `"exitVM"` y una policy escrita antes
-            // de 1.6 dejaria de valer.
+            // The only exception to the rule, and it comes from an old compatibility: until 1.6 the
+            // permission to end the VM was called plain `"exitVM"`, and afterwards it became
+            // `"exitVM.<code>"` with `"exitVM.*"` for any of them. Both names have to go on meaning
+            // the same, so the old one is parsed as if it were the wildcard: without this, an
+            // `"exitVM.*"` would not imply an `"exitVM"` and a policy written before 1.6 would stop
+            // being valid.
             //
-            // Vive aca y no en `RuntimePermission` —que es la unica clase donde el nombre
-            // aparece— porque el JDK lo puso aca, y moverlo cambiaria a que permiso se aplica.
+            // It lives here and not in `RuntimePermission` —which is the only class where the name
+            // appears— because the JDK put it here, and moving it would change which permission it
+            // applies to.
             this.wildcard = true;
             this.path = "exitVM.";
             this.exitVM = true;
@@ -79,10 +81,10 @@ public abstract class BasicPermission extends Permission implements Serializable
         }
     }
 
-    // Si este permiso implica al otro.
+    // Whether this permission implies the other.
     //
-    // Primero la clase: dos permisos de clases distintas nunca se implican, aunque el nombre
-    // coincida. Un `PropertyPermission("x")` no da un `RuntimePermission("x")`.
+    // The class first: two permissions of different classes never imply each other, even if the
+    // name coincides. A `PropertyPermission("x")` does not give a `RuntimePermission("x")`.
     public boolean implies(Permission p) {
         if (p == null || p.getClass() != this.getClass()) {
             return false;
@@ -90,20 +92,20 @@ public abstract class BasicPermission extends Permission implements Serializable
         BasicPermission that = (BasicPermission) p;
         if (this.wildcard) {
             if (that.wildcard) {
-                // "a.*" implica "a.b.*"
+                // "a.*" implies "a.b.*"
                 return that.path.startsWith(this.path);
             }
-            // "a.*" implica "a.b" pero no "a"
+            // "a.*" implies "a.b" but not "a"
             return that.path.length() > this.path.length() && that.path.startsWith(this.path);
         }
         if (that.wildcard) {
-            // un nombre concreto nunca implica un comodin
+            // a concrete name never implies a wildcard
             return false;
         }
         return this.path.equals(that.path);
     }
 
-    // Igualdad por clase y nombre canonico.
+    // Equality by class and canonical name.
     public boolean equals(Object obj) {
         if (obj == this) {
             return true;
@@ -119,21 +121,22 @@ public abstract class BasicPermission extends Permission implements Serializable
         return this.getName().hashCode();
     }
 
-    // "" — esta clase no tiene acciones.
+    // "" — this class has no actions.
     public String getActions() {
         return "";
     }
 
-    // Una coleccion que sabe resolver `implies` sobre nombres jerarquicos sin recorrer todo.
+    // A collection that knows how to resolve `implies` over hierarchical names without walking it
+    // all.
     public PermissionCollection newPermissionCollection() {
         return new BasicPermissionCollection(this.getClass());
     }
 
-    // El nombre tal como quedo tras parsear el comodin. Package-private, como en el JDK.
+    // The name as it was left after parsing the wildcard. Package-private, as in the JDK.
     //
-    // Es el nombre con el que la coleccion indexa, y por eso el `"exitVM"` viejo tiene que
-    // canonizarse como `"exitVM.*"`: los dos nombres son el mismo permiso y deben caer en la misma
-    // entrada.
+    // It is the name the collection indexes by, and that is why the old `"exitVM"` has to be
+    // canonicalised as `"exitVM.*"`: both names are the same permission and must land in the same
+    // entry.
     final String getCanonicalName() {
         if (this.exitVM) {
             return "exitVM.*";

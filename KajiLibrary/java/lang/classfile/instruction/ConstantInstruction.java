@@ -7,67 +7,67 @@ import java.lang.classfile.constantpool.LoadableConstantEntry;
 import java.lang.constant.ConstantDesc;
 import jdk.internal.classfile.impl.Instructions;
 
-// Poner una constante en la pila. El formato tiene tres maneras de hacerlo y esta interfaz las
-// separa en tres subtipos porque no son intercambiables:
+// Putting a constant on the stack. The format has three ways of doing it and this interface keeps
+// them in three subtypes because they are not interchangeable:
 //
-//   1. `IntrinsicConstantInstruction` — el valor está EN el opcode (`iconst_1`, `aconst_null`).
-//   2. `ArgumentConstantInstruction` — el valor está en el operando inmediato (`bipush`, `sipush`),
-//      siempre un `int` chico.
-//   3. `LoadConstantInstruction` — el valor está en el pool (`ldc`, `ldc_w`, `ldc2_w`).
+//   1. `IntrinsicConstantInstruction` -- the value is IN the opcode (`iconst_1`, `aconst_null`).
+//   2. `ArgumentConstantInstruction` -- the value is in the immediate operand (`bipush`, `sipush`),
+//      always a small `int`.
+//   3. `LoadConstantInstruction` -- the value is in the pool (`ldc`, `ldc_w`, `ldc2_w`).
 //
-// `constantValue()` devuelve el valor de las tres, pero sólo la tercera puede llevar un `String`, un
-// literal de clase o una constante dinámica.
+// `constantValue()` returns the value of all three, but only the third can carry a `String`, a class
+// literal or a dynamic constant.
 public interface ConstantInstruction extends Instruction {
 
-    /** El valor que carga. */
+    /** The value it loads. */
     ConstantDesc constantValue();
 
-    /** El tipo del valor. */
+    /** The value's type. */
     TypeKind typeKind();
 
-    /** La constante que va dentro del opcode. */
+    /** The constant that goes inside the opcode. */
     public static IntrinsicConstantInstruction ofIntrinsic(Opcode op) {
         return Instructions.intrinsicConstant(op);
     }
 
-    /** La constante que va en el operando inmediato. */
+    /** The constant that goes in the immediate operand. */
     public static ArgumentConstantInstruction ofArgument(Opcode op, int value) {
         return Instructions.argumentConstant(op, value);
     }
 
-    /** La constante que va en el pool. */
+    /** The constant that goes in the pool. */
     public static LoadConstantInstruction ofLoad(Opcode op, LoadableConstantEntry constant) {
         return Instructions.loadConstant(op, constant);
     }
 
-    /** Una constante que el opcode ya trae puesta. */
+    /** A constant the opcode already carries. */
     public interface IntrinsicConstantInstruction extends ConstantInstruction {
 
-        /** El tipo, que sale del opcode. */
+        /** The type, which comes from the opcode. */
         default TypeKind typeKind() {
             return Instructions.intrinsicConstantTypeKind(opcode());
         }
     }
 
-    /** Una constante que viaja en el operando inmediato: siempre un `int`. */
+    /** A constant travelling in the immediate operand: always an `int`. */
     public interface ArgumentConstantInstruction extends ConstantInstruction {
 
-        /** El valor. */
+        /** The value. */
         Integer constantValue();
 
-        /** Siempre `INT`. */
+        /** Always `INT`. */
         default TypeKind typeKind() {
             return TypeKind.INT;
         }
     }
 
-    /** Una constante que viaja en el pool. */
+    /** A constant travelling in the pool. */
     public interface LoadConstantInstruction extends ConstantInstruction {
 
-        /** La entrada del pool. */
+        /** The pool entry. */
         LoadableConstantEntry constantEntry();
 
-        /** El tipo, que sale de la entrada. */
+        /** The type, which comes from the entry. */
         default TypeKind typeKind() {
             return constantEntry().typeKind();
         }

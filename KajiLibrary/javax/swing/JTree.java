@@ -32,28 +32,29 @@ import javax.swing.tree.TreePath;
 import javax.swing.tree.TreeSelectionModel;
 
 /**
- * Un arbol de nodos que se pueden desplegar y plegar.
+ * A tree of nodes that can be unfolded and folded.
  *
- * <h2>Que sabe el arbol y que sabe la vista</h2>
+ * <h2>What the tree knows and what the view knows</h2>
  *
- * <p>El arbol guarda los datos ({@link TreeModel}), lo elegido ({@link TreeSelectionModel}) y
- * <em>que esta desplegado</em>. Ese ultimo es suyo y no del modelo: dos arboles sobre los mismos
- * datos pueden tener desplegadas cosas distintas.
+ * <p>The tree keeps the data ({@link TreeModel}), what is chosen
+ * ({@link TreeSelectionModel}) and <em>what is unfolded</em>. That last one is its own and not
+ * the model's: two trees over the same data may have different things unfolded.
  *
- * <p>Lo que no sabe es la geometria. En que fila cae un camino, que camino hay en un punto, cuanto
- * mide una fila: todo eso lo contesta el {@link TreeUI}, porque depende de como se dibuje.
+ * <p>What it does not know is the geometry. Which row a path falls in, which path there is at a
+ * point, how much a row measures: all that is answered by the {@link TreeUI}, because it
+ * depends on how it is drawn.
  *
- * <h2>Caminos y filas</h2>
+ * <h2>Paths and rows</h2>
  *
- * <p>Casi todo tiene dos versiones, una por camino y otra por fila. No son intercambiables: un
- * camino existe siempre, una fila solo si sus padres estan desplegados. Guardar filas es lo que
- * hace que una seleccion se corra sola al plegar algo mas arriba.
+ * <p>Almost everything has two versions, one by path and another by row. They are not
+ * interchangeable: a path always exists, a row only if its parents are unfolded. Keeping rows
+ * is what makes a selection shift by itself when something further up is folded.
  *
- * <h2>Avisar antes de desplegar</h2>
+ * <h2>Giving notice before unfolding</h2>
  *
- * <p>{@link TreeWillExpandListener} llega antes y puede vetar con
- * {@link ExpandVetoException}. Es lo que permite cargar los hijos al desplegar -- y negarse si la
- * carga falla -- en lugar de tener todo el arbol en memoria.
+ * <p>{@link TreeWillExpandListener} arrives first and may veto with
+ * {@link ExpandVetoException}. It is what allows the children to be loaded on unfolding -- and
+ * refused if the loading fails -- instead of having the whole tree in memory.
  */
 public class JTree extends JComponent implements Scrollable, Accessible {
 
@@ -76,49 +77,49 @@ public class JTree extends JComponent implements Scrollable, Accessible {
     public static final String ANCHOR_SELECTION_PATH_PROPERTY = "anchorSelectionPath";
     public static final String EXPANDS_SELECTED_PATHS_PROPERTY = "expandsSelectedPaths";
 
-    /** Los datos. */
+    /** The data. */
     protected transient TreeModel treeModel;
 
-    /** Lo elegido. */
+    /** What is chosen. */
     protected transient TreeSelectionModel selectionModel;
 
-    /** Si la raiz se ve. */
+    /** Whether the root is seen. */
     protected boolean rootVisible;
 
-    /** Quien dibuja cada nodo. */
+    /** Who draws each node. */
     protected transient TreeCellRenderer cellRenderer;
 
-    /** El alto de una fila; cero o menos significa medir cada una. */
+    /** A row's height; zero or less means measuring each one. */
     protected int rowHeight;
 
-    /** Si la raiz lleva el triangulito de desplegar. */
+    /** Whether the root carries the little unfolding triangle. */
     protected boolean showsRootHandles;
 
-    /** El puente entre el modelo de seleccion y quien escucha al arbol. */
+    /** The bridge between the selection model and whoever listens to the tree. */
     protected transient TreeSelectionRedirector selectionRedirector;
 
-    /** Quien deja editar un nodo. */
+    /** Who allows a node to be edited. */
     protected transient TreeCellEditor cellEditor;
 
-    /** Si se pueden editar los nodos. */
+    /** Whether the nodes can be edited. */
     protected boolean editable;
 
-    /** Si el arbol es grande y conviene no medir cada fila. */
+    /** Whether the tree is large and it is best not to measure each row. */
     protected boolean largeModel;
 
-    /** Cuantas filas se ven sin desplazar. */
+    /** How many rows are seen without scrolling. */
     protected int visibleRowCount;
 
-    /** Si al perder el foco la edicion se guarda en lugar de cancelarse. */
+    /** Whether on losing the focus the editing is saved instead of cancelled. */
     protected boolean invokesStopCellEditing;
 
-    /** Si desplegar desplaza para que se vea lo que aparecio. */
+    /** Whether unfolding scrolls so that what appeared is seen. */
     protected boolean scrollsOnExpand;
 
-    /** Cuantos clics despliegan un nodo. */
+    /** How many clicks unfold a node. */
     protected int toggleClickCount;
 
-    /** Quien escucha al modelo de datos. */
+    /** Who listens to the data model. */
     protected transient TreeModelListener treeModelListener;
 
     private Hashtable<TreePath, Boolean> expandedState = new Hashtable<TreePath, Boolean>();
@@ -131,10 +132,10 @@ public class JTree extends JComponent implements Scrollable, Accessible {
     private AccessibleContext accessibleContext;
 
     /**
-     * Un arbol de ejemplo.
+     * A sample tree.
      *
-     * <p>Existe para que {@code new JTree()} muestre algo. Un arbol vacio se veria roto y hace
-     * pensar que falta configurar cuando lo que falta es el modelo.
+     * <p>It exists so that {@code new JTree()} shows something. An empty tree would look broken
+     * and makes one think that something is left to configure when what is left is the model.
      */
     protected static TreeModel getDefaultTreeModel() {
         DefaultMutableTreeNode root = new DefaultMutableTreeNode("JTree");
@@ -159,7 +160,7 @@ public class JTree extends JComponent implements Scrollable, Accessible {
         return new DefaultTreeModel(root);
     }
 
-    /** Arma un modelo a partir de un arreglo, un vector o una tabla. */
+    /** It builds a model from an array, a vector or a table. */
     protected static TreeModel createTreeModel(Object value) {
         DefaultMutableTreeNode root;
         if ((value instanceof Object[]) || (value instanceof Hashtable)
@@ -171,19 +172,19 @@ public class JTree extends JComponent implements Scrollable, Accessible {
         return new DefaultTreeModel(root, false);
     }
 
-    /** Un arbol de ejemplo; ver {@link #getDefaultTreeModel}. */
+    /** A sample tree; see {@link #getDefaultTreeModel}. */
     public JTree() {
         this(getDefaultTreeModel());
     }
 
-    /** Un arbol con esos elementos como hijos de una raiz escondida. */
+    /** A tree with those elements as children of a hidden root. */
     public JTree(Object[] value) {
         this(createTreeModel(value));
         setRootVisible(false);
         setShowsRootHandles(true);
     }
 
-    /** Un arbol con los elementos de ese vector. */
+    /** A tree with that vector's elements. */
     public JTree(Vector<?> value) {
         this(createTreeModel(value));
         setRootVisible(false);
@@ -191,10 +192,10 @@ public class JTree extends JComponent implements Scrollable, Accessible {
     }
 
     /**
-     * Un arbol a partir de una tabla.
+     * A tree from a table.
      *
-     * <p>Las claves son los nodos y los valores sus hijos, que a su vez pueden ser tablas. El
-     * orden de los hermanos es el de la tabla, o sea que no hay orden garantizado.
+     * <p>The keys are the nodes and the values their children, which may in turn be tables. The
+     * siblings' order is the table's, that is, there is no guaranteed order.
      */
     public JTree(Hashtable<?, ?> value) {
         this(createTreeModel(value));
@@ -202,17 +203,17 @@ public class JTree extends JComponent implements Scrollable, Accessible {
         setShowsRootHandles(true);
     }
 
-    /** Un arbol sobre ese nodo como raiz. */
+    /** A tree over that node as the root. */
     public JTree(TreeNode root) {
         this(root, false);
     }
 
-    /** Un arbol sobre esa raiz, eligiendo como se decide que es hoja. */
+    /** A tree over that root, choosing how it is decided what is a leaf. */
     public JTree(TreeNode root, boolean asksAllowsChildren) {
         this(new DefaultTreeModel(root, asksAllowsChildren));
     }
 
-    /** Un arbol sobre ese modelo. */
+    /** A tree over that model. */
     public JTree(TreeModel newModel) {
         super();
         expandedState = new Hashtable<TreePath, Boolean>();
@@ -254,7 +255,7 @@ public class JTree extends JComponent implements Scrollable, Accessible {
         invalidate();
     }
 
-    /** Si se pueden editar los nodos; apagarlo corta una edicion en curso. */
+    /** Whether the nodes can be edited; switching it off cuts off an editing under way. */
     public void setEditable(boolean flag) {
         boolean oldValue = this.editable;
         this.editable = flag;
@@ -281,10 +282,10 @@ public class JTree extends JComponent implements Scrollable, Accessible {
     }
 
     /**
-     * Cambia los datos.
+     * It changes the data.
      *
-     * <p>Olvida lo desplegado y lo elegido: los caminos viejos apuntan a nodos que ya no estan, y
-     * conservarlos dejaria el arbol mostrando algo que no existe.
+     * <p>It forgets what is unfolded and what is chosen: the old paths point at nodes that are no
+     * longer there, and keeping them would leave the tree showing something that does not exist.
      */
     public void setModel(TreeModel newModel) {
         clearSelection();
@@ -304,7 +305,7 @@ public class JTree extends JComponent implements Scrollable, Accessible {
             if (treeModelListener != null) {
                 treeModel.addTreeModelListener(treeModelListener);
             }
-            // La raiz arranca desplegada: si no, un arbol nuevo se veria como una sola fila.
+            // The root starts unfolded: otherwise, a new tree would be seen as a single row.
             Object root = treeModel.getRoot();
             if (root != null && !treeModel.isLeaf(root)) {
                 expandedState.put(new TreePath(root), Boolean.TRUE);
@@ -319,10 +320,10 @@ public class JTree extends JComponent implements Scrollable, Accessible {
     }
 
     /**
-     * Si la raiz se ve.
+     * Whether the root is seen.
      *
-     * <p>Esconderla es lo que hace que un arbol parezca varios: los hijos de la raiz quedan como
-     * raices sueltas. Por eso los constructores que reciben una lista la esconden.
+     * <p>Hiding it is what makes a tree look like several: the root's children are left as loose
+     * roots. That is why the constructors that receive a list hide it.
      */
     public void setRootVisible(boolean rootVisible) {
         boolean oldValue = this.rootVisible;
@@ -342,10 +343,10 @@ public class JTree extends JComponent implements Scrollable, Accessible {
     }
 
     /**
-     * El alto de todas las filas.
+     * The height of every row.
      *
-     * <p>Cero o menos significa medir cada una. Medir es correcto y cuesta: con un arbol grande, un
-     * alto fijo es la diferencia entre desplazarse suave y a saltos.
+     * <p>Zero or less means measuring each one. Measuring is right and it costs: with a large
+     * tree, a fixed height is the difference between scrolling smoothly and in jumps.
      */
     public void setRowHeight(int rowHeight) {
         int oldValue = this.rowHeight;
@@ -355,15 +356,17 @@ public class JTree extends JComponent implements Scrollable, Accessible {
         invalidate();
     }
 
-    /** Si el alto de fila lo puso el programa; entonces el aspecto no lo pisa. */
+    /**
+     * Whether the row height was set by the program; then the look and feel does not overwrite it.
+     */
     private boolean rowHeightSet;
 
     /**
-     * El aspecto propone el alto de fila; ver {@link JComponent#customSetUIProperty}.
+     * The look and feel proposes the row height; see {@link JComponent#customSetUIProperty}.
      *
-     * <p>Es la unica propiedad que el arbol agrega a la lista. Un aspecto con filas de alto fijo
-     * propone el suyo, y el basico propone cero -- "medi cada una" --; en las dos, si el programa
-     * ya llamo a {@link #setRowHeight}, la propuesta se descarta.
+     * <p>It is the only property the tree adds to the list. A look and feel with fixed-height rows
+     * proposes its own, and the basic one proposes zero -- "measure each one" --; in both, if the
+     * program has already called {@link #setRowHeight}, the proposal is discarded.
      */
     boolean customSetUIProperty(String propertyName, Object value) {
         if (ROW_HEIGHT_PROPERTY.equals(propertyName)) {
@@ -384,7 +387,9 @@ public class JTree extends JComponent implements Scrollable, Accessible {
         return (rowHeight > 0);
     }
 
-    /** Si el arbol es grande; el aspecto puede usarlo para no medir todo. */
+    /**
+     * Whether the tree is large; the look and feel may use it in order not to measure everything.
+     */
     public void setLargeModel(boolean newValue) {
         boolean oldValue = largeModel;
         largeModel = newValue;
@@ -396,10 +401,10 @@ public class JTree extends JComponent implements Scrollable, Accessible {
     }
 
     /**
-     * Que hacer con una edicion en curso cuando pasa algo.
+     * What to do with an editing under way when something happens.
      *
-     * <p>Guardar o descartar. No hay una respuesta buena: guardar puede meter un valor a medio
-     * escribir, descartar puede perder lo escrito.
+     * <p>Save or discard. There is no good answer: saving may put in a half-typed value,
+     * discarding may lose what was typed.
      */
     public void setInvokesStopCellEditing(boolean newValue) {
         boolean oldValue = invokesStopCellEditing;
@@ -421,7 +426,7 @@ public class JTree extends JComponent implements Scrollable, Accessible {
         return scrollsOnExpand;
     }
 
-    /** Cuantos clics despliegan un nodo; cero significa que el clic no despliega. */
+    /** How many clicks unfold a node; zero means that the click does not unfold. */
     public void setToggleClickCount(int clickCount) {
         int oldCount = toggleClickCount;
         toggleClickCount = clickCount;
@@ -433,10 +438,10 @@ public class JTree extends JComponent implements Scrollable, Accessible {
     }
 
     /**
-     * Si elegir un nodo escondido despliega lo que haga falta para verlo.
+     * Whether choosing a hidden node unfolds whatever is needed in order to see it.
      *
-     * <p>Apagarlo permite tener elegido algo que no se ve, que es lo que quiere un programa que
-     * elige por su cuenta y no quiere mover lo que el usuario dejo plegado.
+     * <p>Switching it off allows something that is not seen to be chosen, which is what a program
+     * that chooses on its own and does not want to move what the user left folded wants.
      */
     public void setExpandsSelectedPaths(boolean newValue) {
         boolean oldValue = expandsSelectedPaths;
@@ -457,9 +462,9 @@ public class JTree extends JComponent implements Scrollable, Accessible {
     }
 
     /**
-     * Como se muestra donde va a caer lo que se arrastra.
+     * How where what is dragged will fall is shown.
      *
-     * @throws IllegalArgumentException si el modo no sirve para un arbol.
+     * @throws IllegalArgumentException if the mode does not serve for a tree.
      */
     public final void setDropMode(DropMode dropMode) {
         if (dropMode != null) {
@@ -480,7 +485,7 @@ public class JTree extends JComponent implements Scrollable, Accessible {
         return dropLocation;
     }
 
-    /** Si ese nodo se puede editar; por omision, si el arbol lo es. */
+    /** Whether that node can be edited; by default, if the tree can. */
     public boolean isPathEditable(TreePath path) {
         return isEditable();
     }
@@ -490,10 +495,10 @@ public class JTree extends JComponent implements Scrollable, Accessible {
     }
 
     /**
-     * El texto de un nodo.
+     * A node's text.
      *
-     * <p>Por omision su {@code toString}. Sobrescribirlo es la forma barata de cambiar como se ven
-     * los nodos sin escribir un dibujante entero.
+     * <p>By default its {@code toString}. Overriding it is the cheap way of changing how the nodes
+     * are seen without writing a whole renderer.
      */
     public String convertValueToText(Object value, boolean selected, boolean expanded,
             boolean leaf, int row, boolean hasFocus) {
@@ -506,7 +511,7 @@ public class JTree extends JComponent implements Scrollable, Accessible {
         return "";
     }
 
-    /** Cuantas filas se ven; lo contesta el aspecto. */
+    /** How many rows are seen; the look and feel answers it. */
     public int getRowCount() {
         TreeUI tree = getUI();
         if (tree != null) {
@@ -523,14 +528,14 @@ public class JTree extends JComponent implements Scrollable, Accessible {
         getSelectionModel().setSelectionPaths(paths);
     }
 
-    /** El camino desde donde se extiende con Shift. */
+    /** The path it extends from with Shift. */
     public void setLeadSelectionPath(TreePath newPath) {
         TreePath oldValue = leadPath;
         leadPath = newPath;
         firePropertyChange(LEAD_SELECTION_PATH_PROPERTY, oldValue, newPath);
     }
 
-    /** El camino donde empezo la seleccion. */
+    /** The path where the selection started. */
     public void setAnchorSelectionPath(TreePath newPath) {
         TreePath oldValue = anchorPath;
         anchorPath = newPath;
@@ -579,7 +584,7 @@ public class JTree extends JComponent implements Scrollable, Accessible {
         }
     }
 
-    /** El nodo del primer camino elegido, no el camino. */
+    /** The node of the first chosen path, not the path. */
     public Object getLastSelectedPathComponent() {
         TreePath selPath = getSelectionModel().getSelectionPath();
         if (selPath != null) {
@@ -638,10 +643,10 @@ public class JTree extends JComponent implements Scrollable, Accessible {
     }
 
     /**
-     * Los descendientes desplegados de ese camino.
+     * That path's unfolded descendants.
      *
-     * <p>Sirve para guardar y restaurar el estado del arbol: al rearmarlo, volver a desplegar estos
-     * caminos lo deja como estaba.
+     * <p>It serves in order to keep and restore the tree's state: on rebuilding it, unfolding
+     * these paths again leaves it as it was.
      */
     public Enumeration<TreePath> getExpandedDescendants(TreePath parent) {
         if (!isExpanded(parent)) {
@@ -660,9 +665,10 @@ public class JTree extends JComponent implements Scrollable, Accessible {
     }
 
     /**
-     * Si ese camino estuvo desplegado alguna vez.
+     * Whether that path was ever unfolded.
      *
-     * <p>Distinto de estar desplegado ahora: sirve para saber si sus hijos ya se cargaron.
+     * <p>Different from being unfolded now: it serves in order to know whether its children have
+     * already been loaded.
      */
     public boolean hasBeenExpanded(TreePath path) {
         return (path != null && expandedState.get(path) != null);
@@ -676,7 +682,7 @@ public class JTree extends JComponent implements Scrollable, Accessible {
         if (value == null || !((Boolean) value).booleanValue()) {
             return false;
         }
-        // Un nodo desplegado con un padre plegado no se ve, y entonces no cuenta.
+        // An unfolded node with a folded parent is not seen, and then it does not count.
         TreePath parentPath = path.getParentPath();
         if (parentPath != null) {
             return isExpanded(parentPath);
@@ -704,7 +710,7 @@ public class JTree extends JComponent implements Scrollable, Accessible {
         return !isExpanded(row);
     }
 
-    /** Despliega lo que haga falta para que ese camino se vea. */
+    /** It unfolds whatever is needed for that path to be seen. */
     public void makeVisible(TreePath path) {
         if (path != null) {
             TreePath parentPath = path.getParentPath();
@@ -714,20 +720,20 @@ public class JTree extends JComponent implements Scrollable, Accessible {
         }
     }
 
-    /** Si ese camino se ve, o sea si todos sus padres estan desplegados. */
+    /** Whether that path is seen, that is, whether all its parents are unfolded. */
     public boolean isVisible(TreePath path) {
         if (path != null) {
             TreePath parentPath = path.getParentPath();
             if (parentPath != null) {
                 return isExpanded(parentPath);
             }
-            // La raiz se ve si esta puesta como visible.
+            // The root is seen if it is set as visible.
             return true;
         }
         return false;
     }
 
-    /** El rectangulo de ese camino; lo contesta el aspecto. */
+    /** That path's rectangle; the look and feel answers it. */
     public Rectangle getPathBounds(TreePath path) {
         TreeUI tree = getUI();
         if (tree != null) {
@@ -740,7 +746,7 @@ public class JTree extends JComponent implements Scrollable, Accessible {
         return getPathBounds(getPathForRow(row));
     }
 
-    /** Despliega y desplaza para que ese camino se vea. */
+    /** It unfolds and scrolls so that that path is seen. */
     public void scrollPathToVisible(TreePath path) {
         if (path != null) {
             makeVisible(path);
@@ -771,7 +777,7 @@ public class JTree extends JComponent implements Scrollable, Accessible {
         return -1;
     }
 
-    /** Despliega ese camino y todos sus padres. */
+    /** It unfolds that path and all its parents. */
     public void expandPath(TreePath path) {
         TreeModel model = getModel();
         if (path != null && model != null && !model.isLeaf(path.getLastPathComponent())) {
@@ -791,7 +797,7 @@ public class JTree extends JComponent implements Scrollable, Accessible {
         collapsePath(getPathForRow(row));
     }
 
-    /** El camino que hay en ese punto, o nulo si no hay ninguno. */
+    /** The path there is at that point, or null if there is none. */
     public TreePath getPathForLocation(int x, int y) {
         TreePath closestPath = getClosestPathForLocation(x, y);
         if (closestPath != null) {
@@ -809,7 +815,7 @@ public class JTree extends JComponent implements Scrollable, Accessible {
         return getRowForPath(getPathForLocation(x, y));
     }
 
-    /** El camino mas cercano a ese punto, aunque el punto no caiga sobre ninguno. */
+    /** The path nearest to that point, even though the point does not fall on any. */
     public TreePath getClosestPathForLocation(int x, int y) {
         TreeUI tree = getUI();
         if (tree != null) {
@@ -830,7 +836,7 @@ public class JTree extends JComponent implements Scrollable, Accessible {
         return false;
     }
 
-    /** Termina la edicion guardando; devuelve si habia una. */
+    /** It ends the editing saving; it returns whether there was one. */
     public boolean stopEditing() {
         TreeUI tree = getUI();
         if (tree != null) {
@@ -862,19 +868,19 @@ public class JTree extends JComponent implements Scrollable, Accessible {
     }
 
     /**
-     * Cambia el modelo de seleccion.
+     * It changes the selection model.
      *
-     * <p>Nulo pone uno que no deja elegir nada, no deja el arbol sin modelo: asi el resto del
-     * codigo nunca tiene que preguntar si hay.
+     * <p>Null sets one that does not allow anything to be chosen, it does not leave the tree with
+     * no model: that way the rest of the code never has to ask whether there is one.
      */
     public void setSelectionModel(TreeSelectionModel selectionModel) {
-        TreeSelectionModel nuevo = (selectionModel == null)
+        TreeSelectionModel newValue = (selectionModel == null)
                 ? EmptySelectionModel.sharedInstance() : selectionModel;
         TreeSelectionModel oldValue = this.selectionModel;
         if (this.selectionModel != null && selectionRedirector != null) {
             this.selectionModel.removeTreeSelectionListener(selectionRedirector);
         }
-        this.selectionModel = nuevo;
+        this.selectionModel = newValue;
         if (selectionRedirector == null) {
             selectionRedirector = new TreeSelectionRedirector(this);
         }
@@ -886,7 +892,7 @@ public class JTree extends JComponent implements Scrollable, Accessible {
         return selectionModel;
     }
 
-    /** Los caminos de las filas entre esas dos, en orden. */
+    /** The paths of the rows between those two, in order. */
     protected TreePath[] getPathBetweenRows(int index0, int index1) {
         TreeUI tree = getUI();
         if (tree != null) {
@@ -1003,9 +1009,9 @@ public class JTree extends JComponent implements Scrollable, Accessible {
     }
 
     /**
-     * Avisa antes de desplegar.
+     * It gives notice before unfolding.
      *
-     * @throws ExpandVetoException si alguien se niega; ver la nota de la clase.
+     * @throws ExpandVetoException if somebody refuses; see the class note.
      */
     public void fireTreeWillExpand(TreePath path) throws ExpandVetoException {
         Object[] listeners = listenerList.getListenerList();
@@ -1021,9 +1027,9 @@ public class JTree extends JComponent implements Scrollable, Accessible {
     }
 
     /**
-     * Avisa antes de plegar.
+     * It gives notice before folding.
      *
-     * @throws ExpandVetoException si alguien se niega.
+     * @throws ExpandVetoException if somebody refuses.
      */
     public void fireTreeWillCollapse(TreePath path) throws ExpandVetoException {
         Object[] listeners = listenerList.getListenerList();
@@ -1059,13 +1065,13 @@ public class JTree extends JComponent implements Scrollable, Accessible {
         }
     }
 
-    /** Avisa que algo cambio y hay que rehacer el dibujo. */
+    /** It gives notice that something changed and the drawing has to be redone. */
     public void treeDidChange() {
         revalidate();
         repaint();
     }
 
-    /** Cuantas filas se ven; es lo que el arbol le pide al desplazador. */
+    /** How many rows are seen; it is what the tree asks the scroller for. */
     public void setVisibleRowCount(int newCount) {
         int oldCount = visibleRowCount;
         visibleRowCount = Math.max(0, newCount);
@@ -1078,12 +1084,12 @@ public class JTree extends JComponent implements Scrollable, Accessible {
     }
 
     /**
-     * El proximo nodo cuyo texto empieza con eso.
+     * The next node whose text begins with that.
      *
-     * <p>Igual que en {@link JList}: es lo que hace que escribir salte al nodo. Usa el texto que se
-     * muestra, no el objeto.
+     * <p>The same as in {@link JList}: it is what makes typing jump to the node. It uses the text
+     * that is shown, not the object.
      *
-     * @throws IllegalArgumentException si el prefijo es nulo o la fila no existe.
+     * @throws IllegalArgumentException if the prefix is null or the row does not exist.
      */
     public TreePath getNextMatch(String prefix, int startingRow, Position.Bias bias) {
         int max = getRowCount();
@@ -1108,7 +1114,7 @@ public class JTree extends JComponent implements Scrollable, Accessible {
         return null;
     }
 
-    /** El alto sale de {@link #getVisibleRowCount} filas, no de todas. */
+    /** The height comes from {@link #getVisibleRowCount} rows, not from all of them. */
     public Dimension getPreferredScrollableViewportSize() {
         int width = getPreferredSize().width;
         int visRows = getVisibleRowCount();
@@ -1138,7 +1144,7 @@ public class JTree extends JComponent implements Scrollable, Accessible {
         return new Dimension(width, height);
     }
 
-    /** De a cuanto avanza la rueda: una fila. */
+    /** How much the wheel advances by: one row. */
     public int getScrollableUnitIncrement(Rectangle visibleRect, int orientation,
             int direction) {
         if (orientation == SwingConstants.VERTICAL) {
@@ -1160,7 +1166,7 @@ public class JTree extends JComponent implements Scrollable, Accessible {
         return 4;
     }
 
-    /** De a cuanto avanza al hacer clic en la barra: una pantalla. */
+    /** How much it advances by on clicking on the bar: a screenful. */
     public int getScrollableBlockIncrement(Rectangle visibleRect, int orientation,
             int direction) {
         return (orientation == SwingConstants.VERTICAL) ? visibleRect.height
@@ -1184,24 +1190,24 @@ public class JTree extends JComponent implements Scrollable, Accessible {
     }
 
     /**
-     * Despliega o pliega un camino, avisando antes y despues.
+     * It unfolds or folds a path, giving notice before and afterwards.
      *
-     * <p>Desplegar despliega tambien todos los padres: no tiene sentido dejar desplegado algo que
-     * no se ve. Plegar no toca a los hijos, que quedan como estaban para cuando se vuelva a
-     * desplegar.
+     * <p>Unfolding also unfolds every parent: there is no point in leaving something unfolded
+     * that is not seen. Folding does not touch the children, which are left as they were for when
+     * it is unfolded again.
      */
     protected void setExpandedState(TreePath path, boolean state) {
         if (path == null) {
             return;
         }
         if (state) {
-            // De arriba hacia abajo: un padre plegado esconderia lo que se acaba de desplegar.
-            Vector<TreePath> cadena = new Vector<TreePath>();
+            // Top down: a folded parent would hide what has just been unfolded.
+            Vector<TreePath> chain = new Vector<TreePath>();
             for (TreePath p = path; p != null; p = p.getParentPath()) {
-                cadena.insertElementAt(p, 0);
+                chain.insertElementAt(p, 0);
             }
-            for (int i = 0; i < cadena.size(); i++) {
-                TreePath p = cadena.elementAt(i);
+            for (int i = 0; i < chain.size(); i++) {
+                TreePath p = chain.elementAt(i);
                 Boolean v = expandedState.get(p);
                 if (v == null || !v.booleanValue()) {
                     try {
@@ -1227,7 +1233,7 @@ public class JTree extends JComponent implements Scrollable, Accessible {
         }
     }
 
-    /** Los descendientes de ese camino que se desplegaron alguna vez. */
+    /** That path's descendants that were unfolded at some point. */
     protected Enumeration<TreePath> getDescendantToggledPaths(TreePath parent) {
         if (parent == null) {
             return null;
@@ -1243,7 +1249,7 @@ public class JTree extends JComponent implements Scrollable, Accessible {
         return descendants.elements();
     }
 
-    /** Olvida lo desplegado de esos caminos. */
+    /** It forgets what was unfolded of those paths. */
     protected void removeDescendantToggledPaths(Enumeration<TreePath> toRemove) {
         if (toRemove != null) {
             while (toRemove.hasMoreElements()) {
@@ -1267,10 +1273,10 @@ public class JTree extends JComponent implements Scrollable, Accessible {
     }
 
     /**
-     * Saca de la seleccion lo que cuelgue de ese camino.
+     * It removes from the selection whatever hangs from that path.
      *
-     * <p>Se llama cuando un subarbol desaparece: dejar elegido un nodo que ya no esta haria que el
-     * arbol informara una seleccion imposible.
+     * <p>It is called when a subtree disappears: leaving a node that is no longer there chosen
+     * would make the tree report an impossible selection.
      */
     protected boolean removeDescendantSelectedPaths(TreePath path, boolean includePath) {
         TreePath[] toRemove = getDescendantSelectedPaths(path, includePath);
@@ -1310,15 +1316,15 @@ public class JTree extends JComponent implements Scrollable, Accessible {
     }
 
     /**
-     * Un modelo de seleccion que no deja elegir nada.
+     * A selection model that does not allow anything to be chosen.
      *
-     * <p>Es lo que se pone cuando alguien pide un arbol sin seleccion; ver
-     * {@link JTree#setSelectionModel}. Todos sus metodos que cambiarian algo no hacen nada, asi que
-     * el resto del codigo no necesita preguntar si hay modelo.
+     * <p>It is what is set when somebody asks for a tree with no selection; see
+     * {@link JTree#setSelectionModel}. All its methods that would change something do nothing, so
+     * the rest of the code does not need to ask whether there is a model.
      */
     public static class EmptySelectionModel extends DefaultTreeSelectionModel {
 
-        /** El unico; no guarda estado, asi que uno alcanza para todos los arboles. */
+        /** The single one; it keeps no state, so one is enough for every tree. */
         protected static final EmptySelectionModel sharedInstance = new EmptySelectionModel();
 
         protected EmptySelectionModel() {
@@ -1357,37 +1363,37 @@ public class JTree extends JComponent implements Scrollable, Accessible {
     }
 
     /**
-     * Reenvia los avisos del modelo de seleccion como si vinieran del arbol.
+     * It forwards the selection model's notices as though they came from the tree.
      *
-     * <p>Cambia el origen del evento. Quien escucha al arbol espera que el evento diga que viene
-     * del arbol, no de un modelo del que puede no saber nada.
+     * <p>It changes the event's source. Whoever listens to the tree expects the event to say that
+     * it comes from the tree, not from a model they may know nothing about.
      */
     public static class TreeSelectionRedirector implements Serializable, TreeSelectionListener {
 
-        private final JTree arbol;
+        private final JTree tree;
 
-        protected TreeSelectionRedirector(JTree arbol) {
-            this.arbol = arbol;
+        protected TreeSelectionRedirector(JTree tree) {
+            this.tree = tree;
         }
 
         public void valueChanged(TreeSelectionEvent e) {
-            TreeSelectionEvent newE = (TreeSelectionEvent) e.cloneWithSource(arbol);
-            arbol.fireValueChanged(newE);
+            TreeSelectionEvent newE = (TreeSelectionEvent) e.cloneWithSource(tree);
+            tree.fireValueChanged(newE);
         }
     }
 
     /**
-     * Escucha al modelo de datos y acomoda lo desplegado y lo elegido.
+     * It listens to the data model and settles what is unfolded and what is chosen.
      *
-     * <p>Es donde se limpia lo que quedo colgando: un subarbol que desaparece se lleva su estado de
-     * desplegado y sus nodos elegidos.
+     * <p>It is where what was left hanging is cleaned up: a subtree that disappears takes its
+     * unfolded state and its chosen nodes with it.
      */
     public static class TreeModelHandler implements TreeModelListener {
 
-        private final JTree arbol;
+        private final JTree tree;
 
-        protected TreeModelHandler(JTree arbol) {
-            this.arbol = arbol;
+        protected TreeModelHandler(JTree tree) {
+            this.tree = tree;
         }
 
         public void treeNodesChanged(TreeModelEvent e) {
@@ -1405,22 +1411,22 @@ public class JTree extends JComponent implements Scrollable, Accessible {
                 return;
             }
             if (parent.getPathCount() == 1) {
-                // Cambio la raiz: se empieza de cero, con la raiz desplegada.
-                arbol.clearToggledPaths();
-                Object treeRoot = arbol.getModel().getRoot();
-                if (treeRoot != null && !arbol.getModel().isLeaf(treeRoot)) {
-                    arbol.expandedState.put(new TreePath(treeRoot), Boolean.TRUE);
+                // The root changed: it starts from scratch, with the root unfolded.
+                tree.clearToggledPaths();
+                Object treeRoot = tree.getModel().getRoot();
+                if (treeRoot != null && !tree.getModel().isLeaf(treeRoot)) {
+                    tree.expandedState.put(new TreePath(treeRoot), Boolean.TRUE);
                 }
-            } else if (arbol.expandedState.get(parent) != null) {
+            } else if (tree.expandedState.get(parent) != null) {
                 Vector<TreePath> toRemove = new Vector<TreePath>(1);
-                boolean isExpanded = arbol.isExpanded(parent);
+                boolean isExpanded = tree.isExpanded(parent);
                 toRemove.addElement(parent);
-                arbol.removeDescendantToggledPaths(toRemove.elements());
+                tree.removeDescendantToggledPaths(toRemove.elements());
                 if (isExpanded) {
-                    arbol.expandedState.put(parent, Boolean.TRUE);
+                    tree.expandedState.put(parent, Boolean.TRUE);
                 }
             }
-            arbol.removeDescendantSelectedPaths(parent, false);
+            tree.removeDescendantSelectedPaths(parent, false);
         }
 
         public void treeNodesRemoved(TreeModelEvent e) {
@@ -1436,32 +1442,32 @@ public class JTree extends JComponent implements Scrollable, Accessible {
             for (int counter = children.length - 1; counter >= 0; counter--) {
                 toRemove.addElement(parent.pathByAddingChild(children[counter]));
             }
-            arbol.removeDescendantToggledPaths(toRemove.elements());
+            tree.removeDescendantToggledPaths(toRemove.elements());
             for (int counter = children.length - 1; counter >= 0; counter--) {
-                arbol.removeDescendantSelectedPaths(
+                tree.removeDescendantSelectedPaths(
                         parent.pathByAddingChild(children[counter]), true);
             }
         }
     }
 
     /**
-     * Un nodo que arma sus hijos recien cuando se lo despliega.
+     * A node that builds its children only when it is unfolded.
      *
-     * <p>Es lo que usan los constructores que reciben un arreglo, un vector o una tabla: el arbol
-     * se arma solo hasta donde se mira.
+     * <p>It is what the constructors that receive an array, a vector or a table use: the tree
+     * builds itself only as far as it is looked at.
      */
     public static class DynamicUtilTreeNode extends DefaultMutableTreeNode {
 
-        /** Si el valor original tenia hijos. */
+        /** Whether the original value had children. */
         protected boolean hasChildren;
 
-        /** El valor del que salen los hijos. */
+        /** The value the children come from. */
         protected Object childValue;
 
-        /** Si ya se armaron. */
+        /** Whether they have already been built. */
         protected boolean loadedChildren;
 
-        /** Arma los hijos de ese nodo a partir de ese valor. */
+        /** It builds that node's children from that value. */
         public static void createChildren(DefaultMutableTreeNode parent, Object children) {
             if (children instanceof Vector) {
                 Vector<?> childVector = (Vector<?>) children;
@@ -1487,7 +1493,7 @@ public class JTree extends JComponent implements Scrollable, Accessible {
             }
         }
 
-        /** Un nodo con ese valor, cuyos hijos salen de ese otro. */
+        /** A node with that value, whose children come from that other one. */
         public DynamicUtilTreeNode(Object value, Object children) {
             super(value);
             loadedChildren = false;
@@ -1521,7 +1527,7 @@ public class JTree extends JComponent implements Scrollable, Accessible {
             return super.getChildCount();
         }
 
-        /** Arma los hijos; se llama sola la primera vez que se los pide. */
+        /** It builds the children; it is called by itself the first time they are asked for. */
         protected void loadChildren() {
             loadedChildren = true;
             createChildren(this, childValue);
@@ -1543,11 +1549,11 @@ public class JTree extends JComponent implements Scrollable, Accessible {
     }
 
     /**
-     * Donde caeria lo que se esta arrastrando.
+     * Where what is being dragged would fall.
      *
-     * <p>{@link #getChildIndex} distingue soltar <em>sobre</em> un nodo de soltar <em>entre</em>
-     * dos: -1 significa sobre el nodo del camino, y otro numero significa insertar en esa posicion
-     * entre sus hijos.
+     * <p>{@link #getChildIndex} tells dropping <em>over</em> a node from dropping
+     * <em>between</em> two: -1 means over the path's node, and another number means inserting at
+     * that position among its children.
      */
     public static final class DropLocation extends TransferHandler.DropLocation {
 
@@ -1560,7 +1566,7 @@ public class JTree extends JComponent implements Scrollable, Accessible {
             this.index = index;
         }
 
-        /** En que posicion entre los hijos, o -1 si es sobre el nodo. */
+        /** At which position among the children, or -1 if it is over the node. */
         public int getChildIndex() {
             return index;
         }

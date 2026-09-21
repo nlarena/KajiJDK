@@ -3,23 +3,23 @@ package com.sun.net.httpserver;
 import java.io.IOException;
 
 /**
- * Lo que atiende un pedido: la unica pieza que escribe siempre quien usa este servidor.
+ * What attends a request: the only piece whoever uses this server always writes.
  *
- * <p>Una sola operacion, sin valor de retorno, y no es pobreza de diseno: la respuesta no se
- * <em>devuelve</em> sino que se <em>escribe</em> en el {@link HttpExchange}. Eso es lo que permite
- * responder con un flujo que no cabe en memoria, o empezar a mandar antes de saber cuanto va a
- * medir.
+ * <p>A single operation, with no return value, and it is not poverty of design: the response is
+ * not <em>returned</em> but <em>written</em> into the {@link HttpExchange}. That is what allows
+ * one to answer with a stream that does not fit in memory, or to start sending before knowing
+ * how much it is going to measure.
  *
- * <p>El precio de esa libertad es que el cierre queda a cargo de quien escribe: no cerrar el
- * intercambio deja la conexion tomada.
+ * <p>The price of that freedom is that the closing is up to whoever writes: not closing the
+ * exchange leaves the connection held.
  */
 public interface HttpHandler {
 
     /**
-     * Atiende un pedido y escribe la respuesta.
+     * It attends a request and writes the response.
      *
-     * <p>Tiene que llamar a {@link HttpExchange#sendResponseHeaders} antes de escribir el cuerpo, y
-     * cerrar el intercambio cuando termina.
+     * <p>It has to call {@link HttpExchange#sendResponseHeaders} before writing the body, and
+     * close the exchange when it finishes.
      */
     void handle(HttpExchange exchange) throws IOException;
 }

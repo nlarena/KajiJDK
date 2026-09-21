@@ -3,97 +3,98 @@ package javax.swing;
 import javax.swing.event.ListSelectionListener;
 
 /**
- * Que filas de una lista estan seleccionadas.
+ * Which rows of a list are selected.
  *
- * <h2>Aparte del modelo de datos, a proposito</h2>
+ * <h2>Separate from the data model, on purpose</h2>
  *
- * <p>Que hay en la lista y que esta seleccionado son dos preguntas independientes, y separarlas
- * permite que dos vistas de los mismos datos tengan selecciones distintas — o que compartan una.
+ * <p>What is in the list and what is selected are two independent questions, and separating them
+ * allows two views of the same data to have different selections -- or to share one.
  *
- * <h2>{@code valueIsAdjusting}, que es lo que evita mil repintados</h2>
+ * <h2>{@code valueIsAdjusting}, which is what avoids a thousand repaints</h2>
  *
- * <p>Arrastrar el mouse por veinte filas produce veinte cambios de seleccion. Con la bandera
- * prendida, quien escucha sabe que <em>vienen mas</em> y puede esperar: recalcular todo en cada paso
- * intermedio es trabajo tirado. Se apaga al soltar, y ese ultimo evento es el que vale.
+ * <p>Dragging the mouse over twenty rows produces twenty changes of selection. With the flag
+ * switched on, whoever listens knows that <em>more are coming</em> and may wait: recomputing
+ * everything at each intermediate step is work thrown away. It is switched off on releasing, and
+ * that last event is the one that counts.
  */
 public interface ListSelectionModel {
 
-    /** Solo una fila a la vez. */
+    /** Only one row at a time. */
     int SINGLE_SELECTION = 0;
 
-    /** Un rango contiguo. */
+    /** A contiguous range. */
     int SINGLE_INTERVAL_SELECTION = 1;
 
-    /** Cualquier combinacion de filas. */
+    /** Any combination of rows. */
     int MULTIPLE_INTERVAL_SELECTION = 2;
 
-    /** Selecciona el rango, descartando lo anterior. */
+    /** It selects the range, discarding what was there. */
     void setSelectionInterval(int index0, int index1);
 
-    /** Agrega el rango a la seleccion. */
+    /** It adds the range to the selection. */
     void addSelectionInterval(int index0, int index1);
 
-    /** Saca el rango de la seleccion. */
+    /** It removes the range from the selection. */
     void removeSelectionInterval(int index0, int index1);
 
-    /** La fila seleccionada mas chica, o {@code -1}. */
+    /** The smallest selected row, or {@code -1}. */
     int getMinSelectionIndex();
 
-    /** La fila seleccionada mas grande, o {@code -1}. */
+    /** The largest selected row, or {@code -1}. */
     int getMaxSelectionIndex();
 
-    /** Si esa fila esta seleccionada. */
+    /** Whether that row is selected. */
     boolean isSelectedIndex(int index);
 
-    /** El extremo fijo del rango que se esta armando. */
+    /** The fixed end of the range that is being built. */
     int getAnchorSelectionIndex();
 
-    /** Fija el extremo fijo. */
+    /** It fixes the fixed end. */
     void setAnchorSelectionIndex(int index);
 
-    /** El extremo movil del rango que se esta armando. */
+    /** The moving end of the range that is being built. */
     int getLeadSelectionIndex();
 
-    /** Fija el extremo movil. */
+    /** It fixes the moving end. */
     void setLeadSelectionIndex(int index);
 
-    /** Deselecciona todo. */
+    /** It deselects everything. */
     void clearSelection();
 
-    /** Si no hay nada seleccionado. */
+    /** Whether there is nothing selected. */
     boolean isSelectionEmpty();
 
-    /** Avisa que se insertaron filas, para correr la seleccion. */
+    /** It gives notice that rows were inserted, so as to shift the selection. */
     void insertIndexInterval(int index, int length, boolean before);
 
-    /** Avisa que se borraron filas. */
+    /** It gives notice that rows were deleted. */
     void removeIndexInterval(int index0, int index1);
 
-    /** Marca que vienen mas cambios; ver la nota de la interfaz. */
+    /** It marks that more changes are coming; see the interface note. */
     void setValueIsAdjusting(boolean valueIsAdjusting);
 
-    /** Si vienen mas cambios. */
+    /** Whether more changes are coming. */
     boolean getValueIsAdjusting();
 
-    /** Cambia el modo de seleccion; una de las tres constantes. */
+    /** It changes the selection mode; one of the three constants. */
     void setSelectionMode(int selectionMode);
 
-    /** El modo de seleccion. */
+    /** The selection mode. */
     int getSelectionMode();
 
-    /** Agrega un oyente. */
+    /** It adds a listener. */
     void addListSelectionListener(ListSelectionListener x);
 
-    /** Saca un oyente. */
+    /** It removes a listener. */
     void removeListSelectionListener(ListSelectionListener x);
 
     /**
-     * Los indices elegidos, en orden.
+     * The chosen indices, in order.
      *
-     * <p>Es un metodo con cuerpo en la interfaz -- lo agrego Java 19 -- para que las
-     * implementaciones viejas lo hereden sin tocarlas. Recorre del minimo al maximo preguntando uno
-     * por uno, que es lo unico que se puede hacer con la interfaz de arriba: un modelo que sepa
-     * mejor donde estan sus tramos puede sobreescribirlo.
+     * <p>It is a method with a body in the interface -- Java 19 added it -- so that the old
+     * implementations inherit it without being touched. It walks from the minimum to the maximum
+     * asking one by one, which is the only thing that can be done with the interface above: a model
+     * that knows better where its ranges are may override it.
      */
     default int[] getSelectedIndices() {
         int iMin = getMinSelectionIndex();
@@ -114,7 +115,7 @@ public interface ListSelectionModel {
         return rv;
     }
 
-    /** Cuantos hay elegidos; ver {@link #getSelectedIndices}. */
+    /** How many are chosen; see {@link #getSelectedIndices}. */
     default int getSelectedItemsCount() {
         int iMin = getMinSelectionIndex();
         int iMax = getMaxSelectionIndex();

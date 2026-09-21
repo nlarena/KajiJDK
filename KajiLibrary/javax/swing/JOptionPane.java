@@ -17,93 +17,95 @@ import javax.swing.plaf.ComponentUI;
 import javax.swing.plaf.OptionPaneUI;
 
 /**
- * El panel de los dialogos estandar: avisos, preguntas y pedidos de un dato.
+ * The pane of the standard dialogs: notices, questions and requests for a datum.
  *
- * <h2>El panel y el dialogo son cosas distintas</h2>
+ * <h2>The pane and the dialog are different things</h2>
  *
- * <p>{@code JOptionPane} es un {@link JComponent}: el mensaje, el icono y los botones. Los metodos
- * {@code showXxxDialog} son un atajo que arma el panel, lo mete en un {@link JDialog}, lo muestra y
- * devuelve la respuesta. Se puede saltear el atajo y poner el panel donde uno quiera, que es para
- * lo que existe {@link #createDialog}.
+ * <p>{@code JOptionPane} is a {@link JComponent}: the message, the icon and the buttons. The
+ * {@code showXxxDialog} methods are a shortcut that builds the pane, puts it into a
+ * {@link JDialog}, shows it and returns the answer. The shortcut can be skipped and the pane put
+ * wherever one likes, which is what {@link #createDialog} exists for.
  *
- * <h2>Los cuatro ejes</h2>
+ * <h2>The four axes</h2>
  *
- * <p>El <em>mensaje</em> es lo que se dice. El <em>tipo de mensaje</em>
- * ({@link #ERROR_MESSAGE} y compania) elige el icono. El <em>tipo de opciones</em>
- * ({@link #YES_NO_OPTION} y compania) elige los botones. Las <em>opciones</em> los reemplazan por
- * unos propios. Son independientes: se puede tener un icono de error con botones de si y no.
+ * <p>The <em>message</em> is what is said. The <em>message type</em>
+ * ({@link #ERROR_MESSAGE} and company) chooses the icon. The <em>option type</em>
+ * ({@link #YES_NO_OPTION} and company) chooses the buttons. The <em>options</em> replace them
+ * with ones of one's own. They are independent: one may have an error icon with yes and no
+ * buttons.
  *
- * <h2>Lo que devuelven los atajos</h2>
+ * <h2>What the shortcuts return</h2>
  *
- * <p>Con botones estandar, la constante del boton apretado. Con opciones propias, el <em>indice</em>
- * en el arreglo. Y si el usuario cerro la ventana sin apretar nada, {@link #CLOSED_OPTION}, que vale
- * lo mismo que {@link #PLAIN_MESSAGE} y que {@link #DEFAULT_OPTION} pero no significa lo mismo:
- * confundirlos es el error clasico con esta clase. Siempre hay que comparar contra la constante que
- * corresponde al tipo de opciones que se pidio.
+ * <p>With standard buttons, the constant of the button that was pressed. With options of one's
+ * own, the <em>index</em> in the array. And if the user closed the window without pressing
+ * anything, {@link #CLOSED_OPTION}, which holds the same as {@link #PLAIN_MESSAGE} and as
+ * {@link #DEFAULT_OPTION} but does not mean the same: confusing them is the classic mistake
+ * with this class. One always has to compare against the constant that corresponds to the
+ * option type that was asked for.
  *
- * <h2>Aca no bloquea nada</h2>
+ * <h2>Here nothing blocks</h2>
  *
- * <p>En el JDK real, {@code showConfirmDialog} no vuelve hasta que el usuario contesta, porque el
- * dialogo modal apila un bucle de eventos. Esta biblioteca no reparte eventos de ventana: como en
- * {@link java.awt.Dialog}, {@code setVisible} vuelve enseguida. Los atajos por lo tanto arman todo,
- * lo muestran y devuelven {@link #CLOSED_OPTION} (o nulo, los de entrada de texto), que es lo que
- * corresponde a un dialogo que se cerro sin que se eligiera nada.
+ * <p>In the real JDK, {@code showConfirmDialog} does not return until the user answers, because
+ * the modal dialog stacks an event loop. This library does not hand out window events: as in
+ * {@link java.awt.Dialog}, {@code setVisible} returns at once. The shortcuts therefore build
+ * everything, show it and return {@link #CLOSED_OPTION} (or null, the text input ones), which
+ * is what corresponds to a dialog that closed without anything being chosen.
  *
- * <p>Se dice aca y no se disimula: un metodo que devolviera {@link #YES_OPTION} inventado seria
- * mucho peor que uno que dice la verdad.
+ * <p>It is said here and not disguised: a method that returned an invented
+ * {@link #YES_OPTION} would be much worse than one that tells the truth.
  */
 public class JOptionPane extends JComponent implements Accessible {
 
     private static final String uiClassID = "OptionPaneUI";
 
     /**
-     * El valor que tiene el panel antes de que el usuario elija.
+     * The value the pane has before the user chooses.
      *
-     * <p>Hace falta un centinela propio porque nulo es una respuesta legitima, y porque el panel
-     * tiene que distinguir "todavia no contesto" de "contesto nulo".
+     * <p>A sentinel of its own is needed because null is a legitimate answer, and because the pane
+     * has to tell "it has not answered yet" from "it answered null".
      */
     public static final Object UNINITIALIZED_VALUE = "uninitializedValue";
 
-    /** Un solo boton, el que proponga el aspecto. */
+    /** A single button, the one the look and feel proposes. */
     public static final int DEFAULT_OPTION = -1;
 
-    /** Si y No. */
+    /** Yes and No. */
     public static final int YES_NO_OPTION = 0;
 
-    /** Si, No y Cancelar. */
+    /** Yes, No and Cancel. */
     public static final int YES_NO_CANCEL_OPTION = 1;
 
-    /** Aceptar y Cancelar. */
+    /** OK and Cancel. */
     public static final int OK_CANCEL_OPTION = 2;
 
-    /** Apreto Si. */
+    /** They pressed Yes. */
     public static final int YES_OPTION = 0;
 
-    /** Apreto No. */
+    /** They pressed No. */
     public static final int NO_OPTION = 1;
 
-    /** Apreto Cancelar. */
+    /** They pressed Cancel. */
     public static final int CANCEL_OPTION = 2;
 
-    /** Apreto Aceptar. */
+    /** They pressed OK. */
     public static final int OK_OPTION = 0;
 
-    /** Cerro la ventana sin elegir; ver la nota de la clase. */
+    /** They closed the window without choosing; see the class note. */
     public static final int CLOSED_OPTION = -1;
 
-    /** Icono de error. */
+    /** Error icon. */
     public static final int ERROR_MESSAGE = 0;
 
-    /** Icono de informacion. */
+    /** Information icon. */
     public static final int INFORMATION_MESSAGE = 1;
 
-    /** Icono de advertencia. */
+    /** Warning icon. */
     public static final int WARNING_MESSAGE = 2;
 
-    /** Icono de pregunta. */
+    /** Question icon. */
     public static final int QUESTION_MESSAGE = 3;
 
-    /** Sin icono. */
+    /** No icon. */
     public static final int PLAIN_MESSAGE = -1;
 
     public static final String ICON_PROPERTY = "icon";
@@ -118,76 +120,76 @@ public class JOptionPane extends JComponent implements Accessible {
     public static final String INPUT_VALUE_PROPERTY = "inputValue";
     public static final String WANTS_INPUT_PROPERTY = "wantsInput";
 
-    /** El icono; si es nulo lo elige el aspecto segun el tipo de mensaje. */
+    /** The icon; if it is null the look and feel chooses it according to the message type. */
     protected transient Icon icon;
 
-    /** El mensaje. */
+    /** The message. */
     protected transient Object message;
 
-    /** Los botones propios, o nulo para los estandar. */
+    /** The buttons of one's own, or null for the standard ones. */
     protected transient Object[] options;
 
-    /** Cual empieza con el foco. */
+    /** Which one starts with the focus. */
     protected transient Object initialValue;
 
-    /** Que icono va. */
+    /** Which icon goes. */
     protected int messageType;
 
-    /** Que botones van. */
+    /** Which buttons go. */
     protected int optionType;
 
-    /** Lo que el usuario eligio; ver {@link #UNINITIALIZED_VALUE}. */
+    /** What the user chose; see {@link #UNINITIALIZED_VALUE}. */
     protected transient Object value;
 
-    /** Las opciones de la lista, cuando se pide un dato de un conjunto. */
+    /** The list's options, when a datum from a set is asked for. */
     protected transient Object[] selectionValues;
 
-    /** Lo que el usuario escribio o eligio de la lista. */
+    /** What the user typed or chose from the list. */
     protected transient Object inputValue;
 
-    /** Cual viene elegida de entrada en la lista. */
+    /** Which one comes chosen from the start in the list. */
     protected transient Object initialSelectionValue;
 
-    /** Si ademas del mensaje se pide un dato. */
+    /** Whether besides the message a datum is asked for. */
     protected boolean wantsInput;
 
     private static Frame rootFrame = null;
 
-    /** Un panel con un mensaje de prueba, que es lo que muestra el JDK. */
+    /** A pane with a test message, which is what the JDK shows. */
     public JOptionPane() {
         this("JOptionPane message");
     }
 
-    /** Un panel con ese mensaje. */
+    /** A pane with that message. */
     public JOptionPane(Object message) {
         this(message, PLAIN_MESSAGE);
     }
 
-    /** Con ese mensaje y ese icono. */
+    /** With that message and that icon. */
     public JOptionPane(Object message, int messageType) {
         this(message, messageType, DEFAULT_OPTION);
     }
 
-    /** Con ese mensaje, ese icono y esos botones. */
+    /** With that message, that icon and those buttons. */
     public JOptionPane(Object message, int messageType, int optionType) {
         this(message, messageType, optionType, null);
     }
 
-    /** Con un icono propio. */
+    /** With an icon of one's own. */
     public JOptionPane(Object message, int messageType, int optionType, Icon icon) {
         this(message, messageType, optionType, icon, null);
     }
 
-    /** Con botones propios. */
+    /** With buttons of one's own. */
     public JOptionPane(Object message, int messageType, int optionType, Icon icon,
             Object[] options) {
         this(message, messageType, optionType, icon, options, null);
     }
 
     /**
-     * El constructor completo.
+     * The complete constructor.
      *
-     * @throws RuntimeException si el tipo de mensaje o el de opciones no son validos.
+     * @throws RuntimeException if the message type or the option one are not valid.
      */
     public JOptionPane(Object message, int messageType, int optionType, Icon icon,
             Object[] options, Object initialValue) {
@@ -203,31 +205,31 @@ public class JOptionPane extends JComponent implements Accessible {
     }
 
     /**
-     * Muestra un pedido de texto sobre la ventana de siempre.
+     * It shows a request for text over the usual window.
      *
-     * @return lo que escribio, o nulo; ver la nota de la clase.
-     * @throws HeadlessException si no hay pantalla.
+     * @return what they typed, or null; see the class note.
+     * @throws HeadlessException if there is no screen.
      */
     public static String showInputDialog(Object message) throws HeadlessException {
         return showInputDialog(null, message);
     }
 
-    /** Con ese texto ya puesto. */
+    /** With that text already set. */
     public static String showInputDialog(Object message, Object initialSelectionValue) {
         return showInputDialog(null, message, initialSelectionValue);
     }
 
     /**
-     * Sobre esa ventana.
+     * Over that window.
      *
-     * @throws HeadlessException si no hay pantalla.
+     * @throws HeadlessException if there is no screen.
      */
     public static String showInputDialog(Component parentComponent, Object message)
             throws HeadlessException {
         return showInputDialog(parentComponent, message, "Input", QUESTION_MESSAGE);
     }
 
-    /** Sobre esa ventana y con ese texto ya puesto. */
+    /** Over that window and with that text already set. */
     public static String showInputDialog(Component parentComponent, Object message,
             Object initialSelectionValue) {
         return (String) showInputDialog(parentComponent, message, "Input", QUESTION_MESSAGE, null,
@@ -235,9 +237,9 @@ public class JOptionPane extends JComponent implements Accessible {
     }
 
     /**
-     * Con titulo e icono propios.
+     * With a title and an icon of one's own.
      *
-     * @throws HeadlessException si no hay pantalla.
+     * @throws HeadlessException if there is no screen.
      */
     public static String showInputDialog(Component parentComponent, Object message, String title,
             int messageType) throws HeadlessException {
@@ -246,12 +248,13 @@ public class JOptionPane extends JComponent implements Accessible {
     }
 
     /**
-     * El pedido completo: se puede elegir de una lista en vez de escribir.
+     * The complete request: one may choose from a list instead of typing.
      *
-     * <p>Si {@code selectionValues} no es nulo, el aspecto pone una lista y no un campo de texto.
+     * <p>If {@code selectionValues} is not null, the look and feel puts a list and not a text
+     * field.
      *
-     * @return lo elegido, o nulo; ver la nota de la clase.
-     * @throws HeadlessException si no hay pantalla.
+     * @return what was chosen, or null; see the class note.
+     * @throws HeadlessException if there is no screen.
      */
     public static Object showInputDialog(Component parentComponent, Object message, String title,
             int messageType, Icon icon, Object[] selectionValues, Object initialSelectionValue)
@@ -265,17 +268,17 @@ public class JOptionPane extends JComponent implements Accessible {
         pane.selectInitialValue();
         dialog.setVisible(true);
         dialog.dispose();
-        Object valor = pane.getInputValue();
-        if (valor == UNINITIALIZED_VALUE) {
+        Object value = pane.getInputValue();
+        if (value == UNINITIALIZED_VALUE) {
             return null;
         }
-        return valor;
+        return value;
     }
 
     /**
-     * Muestra un aviso.
+     * It shows a notice.
      *
-     * @throws HeadlessException si no hay pantalla.
+     * @throws HeadlessException if there is no screen.
      */
     public static void showMessageDialog(Component parentComponent, Object message)
             throws HeadlessException {
@@ -283,9 +286,9 @@ public class JOptionPane extends JComponent implements Accessible {
     }
 
     /**
-     * Con titulo y tipo de icono.
+     * With a title and an icon type.
      *
-     * @throws HeadlessException si no hay pantalla.
+     * @throws HeadlessException if there is no screen.
      */
     public static void showMessageDialog(Component parentComponent, Object message, String title,
             int messageType) throws HeadlessException {
@@ -293,9 +296,9 @@ public class JOptionPane extends JComponent implements Accessible {
     }
 
     /**
-     * Con un icono propio.
+     * With an icon of one's own.
      *
-     * @throws HeadlessException si no hay pantalla.
+     * @throws HeadlessException if there is no screen.
      */
     public static void showMessageDialog(Component parentComponent, Object message, String title,
             int messageType, Icon icon) throws HeadlessException {
@@ -304,10 +307,10 @@ public class JOptionPane extends JComponent implements Accessible {
     }
 
     /**
-     * Pregunta Si / No / Cancelar.
+     * It asks Yes / No / Cancel.
      *
-     * @return la constante del boton, o {@link #CLOSED_OPTION}; ver la nota de la clase.
-     * @throws HeadlessException si no hay pantalla.
+     * @return the button's constant, or {@link #CLOSED_OPTION}; see the class note.
+     * @throws HeadlessException if there is no screen.
      */
     public static int showConfirmDialog(Component parentComponent, Object message)
             throws HeadlessException {
@@ -316,9 +319,9 @@ public class JOptionPane extends JComponent implements Accessible {
     }
 
     /**
-     * Con titulo y juego de botones.
+     * With a title and a set of buttons.
      *
-     * @throws HeadlessException si no hay pantalla.
+     * @throws HeadlessException if there is no screen.
      */
     public static int showConfirmDialog(Component parentComponent, Object message, String title,
             int optionType) throws HeadlessException {
@@ -326,9 +329,9 @@ public class JOptionPane extends JComponent implements Accessible {
     }
 
     /**
-     * Con tipo de icono.
+     * With an icon type.
      *
-     * @throws HeadlessException si no hay pantalla.
+     * @throws HeadlessException if there is no screen.
      */
     public static int showConfirmDialog(Component parentComponent, Object message, String title,
             int optionType, int messageType) throws HeadlessException {
@@ -336,9 +339,9 @@ public class JOptionPane extends JComponent implements Accessible {
     }
 
     /**
-     * Con un icono propio.
+     * With an icon of one's own.
      *
-     * @throws HeadlessException si no hay pantalla.
+     * @throws HeadlessException if there is no screen.
      */
     public static int showConfirmDialog(Component parentComponent, Object message, String title,
             int optionType, int messageType, Icon icon) throws HeadlessException {
@@ -347,11 +350,11 @@ public class JOptionPane extends JComponent implements Accessible {
     }
 
     /**
-     * El dialogo completo, con botones propios.
+     * The complete dialog, with buttons of one's own.
      *
-     * @return el indice en {@code options} del boton apretado, o su constante si
-     *     {@code options} es nulo, o {@link #CLOSED_OPTION}.
-     * @throws HeadlessException si no hay pantalla.
+     * @return the index in {@code options} of the button that was pressed, or its constant if
+     *     {@code options} is null, or {@link #CLOSED_OPTION}.
+     * @throws HeadlessException if there is no screen.
      */
     public static int showOptionDialog(Component parentComponent, Object message, String title,
             int optionType, int messageType, Icon icon, Object[] options, Object initialValue)
@@ -363,28 +366,28 @@ public class JOptionPane extends JComponent implements Accessible {
         pane.selectInitialValue();
         dialog.setVisible(true);
         dialog.dispose();
-        return traducir(pane.getValue(), options);
+        return translate(pane.getValue(), options);
     }
 
     /**
-     * Convierte el valor que quedo en el panel en el entero que devuelven los atajos.
+     * It turns the value that was left in the pane into the integer the shortcuts return.
      *
-     * <p>Con botones propios el resultado es el indice; con los estandar, el entero que el aspecto
-     * puso como valor. Cualquier otra cosa -- incluido el centinela de "no contesto" -- es
-     * {@link #CLOSED_OPTION}.
+     * <p>With buttons of one's own the result is the index; with the standard ones, the integer
+     * the look and feel set as the value. Anything else -- the "it did not answer" sentinel
+     * included -- is {@link #CLOSED_OPTION}.
      */
-    private static int traducir(Object elegido, Object[] options) {
-        if (elegido == null || elegido == UNINITIALIZED_VALUE) {
+    private static int translate(Object chosen, Object[] options) {
+        if (chosen == null || chosen == UNINITIALIZED_VALUE) {
             return CLOSED_OPTION;
         }
         if (options == null) {
-            if (elegido instanceof Integer) {
-                return ((Integer) elegido).intValue();
+            if (chosen instanceof Integer) {
+                return ((Integer) chosen).intValue();
             }
             return CLOSED_OPTION;
         }
         for (int i = 0; i < options.length; i++) {
-            if (options[i] != null && options[i].equals(elegido)) {
+            if (options[i] != null && options[i].equals(chosen)) {
                 return i;
             }
         }
@@ -392,125 +395,125 @@ public class JOptionPane extends JComponent implements Accessible {
     }
 
     /**
-     * Arma el dialogo que contiene a este panel.
+     * It builds the dialog that contains this pane.
      *
-     * <p>El dialogo se esconde solo cuando el panel cambia de valor: es lo que hace que apretar un
-     * boton cierre la ventana sin que el aspecto tenga que conocerla.
+     * <p>The dialog hides itself when the pane changes value: it is what makes pressing a button
+     * close the window without the look and feel having to know it.
      *
-     * @throws HeadlessException si no hay pantalla.
+     * @throws HeadlessException if there is no screen.
      */
     public JDialog createDialog(Component parentComponent, String title) throws HeadlessException {
-        Window duena = null;
+        Window owner = null;
         if (parentComponent != null) {
-            duena = SwingUtilities.getWindowAncestor(parentComponent);
+            owner = SwingUtilities.getWindowAncestor(parentComponent);
         }
         JDialog dialog;
-        if (duena instanceof java.awt.Dialog) {
-            dialog = new JDialog((java.awt.Dialog) duena, title, true);
-        } else if (duena instanceof Frame) {
-            dialog = new JDialog((Frame) duena, title, true);
+        if (owner instanceof java.awt.Dialog) {
+            dialog = new JDialog((java.awt.Dialog) owner, title, true);
+        } else if (owner instanceof Frame) {
+            dialog = new JDialog((Frame) owner, title, true);
         } else {
             dialog = new JDialog((Frame) null, title, true);
         }
-        armarDialogo(dialog);
+        buildDialog(dialog);
         return dialog;
     }
 
     /**
-     * Arma el dialogo sobre la ventana de siempre.
+     * It builds the dialog over the usual window.
      *
-     * @throws HeadlessException si no hay pantalla.
+     * @throws HeadlessException if there is no screen.
      */
     public JDialog createDialog(String title) throws HeadlessException {
         JDialog dialog = new JDialog((Frame) null, title, true);
-        armarDialogo(dialog);
+        buildDialog(dialog);
         return dialog;
     }
 
-    /** Le pone el panel adentro y lo conecta al valor; ver {@link #createDialog}. */
-    private void armarDialogo(JDialog dialog) {
-        Container contenido = dialog.getContentPane();
-        contenido.setLayout(new BorderLayout());
-        contenido.add(this, BorderLayout.CENTER);
+    /** It puts the pane inside it and connects it to the value; see {@link #createDialog}. */
+    private void buildDialog(JDialog dialog) {
+        Container content = dialog.getContentPane();
+        content.setLayout(new BorderLayout());
+        content.add(this, BorderLayout.CENTER);
         dialog.setResizable(false);
         setValue(UNINITIALIZED_VALUE);
-        dialog.addPropertyChangeListener(new EscuchaValor(this, dialog));
-        addPropertyChangeListener(new EscuchaValor(this, dialog));
+        dialog.addPropertyChangeListener(new ValueListener(this, dialog));
+        addPropertyChangeListener(new ValueListener(this, dialog));
         dialog.pack();
     }
 
     /**
-     * Esconde el dialogo apenas el panel tiene un valor.
+     * It hides the dialog as soon as the pane has a value.
      *
-     * <p>Es una clase con nombre y no una anonima porque el panel tambien la registra sobre si
-     * mismo, y hace falta poder distinguir el origen del evento.
+     * <p>It is a named class and not an anonymous one because the pane also registers it on
+     * itself, and the event's source has to be able to be told apart.
      */
-    private static class EscuchaValor implements PropertyChangeListener {
+    private static class ValueListener implements PropertyChangeListener {
 
         private final JOptionPane panel;
-        private final JDialog dialogo;
+        private final JDialog dialog;
 
-        EscuchaValor(JOptionPane panel, JDialog dialogo) {
+        ValueListener(JOptionPane panel, JDialog dialog) {
             this.panel = panel;
-            this.dialogo = dialogo;
+            this.dialog = dialog;
         }
 
         public void propertyChange(PropertyChangeEvent event) {
             if (event.getSource() != panel) {
                 return;
             }
-            if (!dialogo.isVisible()) {
+            if (!dialog.isVisible()) {
                 return;
             }
-            String nombre = event.getPropertyName();
-            boolean esValor = VALUE_PROPERTY.equals(nombre)
-                    || INPUT_VALUE_PROPERTY.equals(nombre);
-            if (esValor && event.getNewValue() != null
+            String name = event.getPropertyName();
+            boolean isValue = VALUE_PROPERTY.equals(name)
+                    || INPUT_VALUE_PROPERTY.equals(name);
+            if (isValue && event.getNewValue() != null
                     && event.getNewValue() != UNINITIALIZED_VALUE) {
-                dialogo.setVisible(false);
+                dialog.setVisible(false);
             }
         }
     }
 
-    /** Como {@link #showMessageDialog} pero con una ventana interna. */
+    /** Like {@link #showMessageDialog} but with an internal frame. */
     public static void showInternalMessageDialog(Component parentComponent, Object message) {
         showInternalMessageDialog(parentComponent, message, "Message", INFORMATION_MESSAGE);
     }
 
-    /** Con titulo y tipo de icono. */
+    /** With a title and an icon type. */
     public static void showInternalMessageDialog(Component parentComponent, Object message,
             String title, int messageType) {
         showInternalMessageDialog(parentComponent, message, title, messageType, null);
     }
 
-    /** Con un icono propio. */
+    /** With an icon of one's own. */
     public static void showInternalMessageDialog(Component parentComponent, Object message,
             String title, int messageType, Icon icon) {
         showInternalOptionDialog(parentComponent, message, title, DEFAULT_OPTION, messageType,
                 icon, null, null);
     }
 
-    /** Como {@link #showConfirmDialog} pero con una ventana interna. */
+    /** Like {@link #showConfirmDialog} but with an internal frame. */
     public static int showInternalConfirmDialog(Component parentComponent, Object message) {
         return showInternalConfirmDialog(parentComponent, message, "Select an Option",
                 YES_NO_CANCEL_OPTION);
     }
 
-    /** Con titulo y juego de botones. */
+    /** With a title and a set of buttons. */
     public static int showInternalConfirmDialog(Component parentComponent, Object message,
             String title, int optionType) {
         return showInternalConfirmDialog(parentComponent, message, title, optionType,
                 QUESTION_MESSAGE);
     }
 
-    /** Con tipo de icono. */
+    /** With an icon type. */
     public static int showInternalConfirmDialog(Component parentComponent, Object message,
             String title, int optionType, int messageType) {
         return showInternalConfirmDialog(parentComponent, message, title, optionType, messageType,
                 null);
     }
 
-    /** Con un icono propio. */
+    /** With an icon of one's own. */
     public static int showInternalConfirmDialog(Component parentComponent, Object message,
             String title, int optionType, int messageType, Icon icon) {
         return showInternalOptionDialog(parentComponent, message, title, optionType, messageType,
@@ -518,10 +521,11 @@ public class JOptionPane extends JComponent implements Accessible {
     }
 
     /**
-     * El dialogo interno completo.
+     * The complete internal dialog.
      *
-     * @return el indice del boton apretado, o {@link #CLOSED_OPTION}; ver la nota de la clase.
-     * @throws RuntimeException si el componente no esta en un escritorio ni tiene padre.
+     * @return the index of the button that was pressed, or {@link #CLOSED_OPTION}; see the class
+     *     note.
+     * @throws RuntimeException if the component is neither in a desktop nor has a parent.
      */
     public static int showInternalOptionDialog(Component parentComponent, Object message,
             String title, int optionType, int messageType, Icon icon, Object[] options,
@@ -529,18 +533,18 @@ public class JOptionPane extends JComponent implements Accessible {
         JOptionPane pane = new JOptionPane(message, messageType, optionType, icon, options,
                 initialValue);
         pane.setInitialValue(initialValue);
-        JInternalFrame marco = pane.createInternalFrame(parentComponent, title);
+        JInternalFrame frame = pane.createInternalFrame(parentComponent, title);
         pane.selectInitialValue();
-        marco.setVisible(true);
-        return traducir(pane.getValue(), options);
+        frame.setVisible(true);
+        return translate(pane.getValue(), options);
     }
 
-    /** Como {@link #showInputDialog} pero con una ventana interna. */
+    /** Like {@link #showInputDialog} but with an internal frame. */
     public static String showInternalInputDialog(Component parentComponent, Object message) {
         return showInternalInputDialog(parentComponent, message, "Input", QUESTION_MESSAGE);
     }
 
-    /** Con titulo y tipo de icono. */
+    /** With a title and an icon type. */
     public static String showInternalInputDialog(Component parentComponent, Object message,
             String title, int messageType) {
         return (String) showInternalInputDialog(parentComponent, message, title, messageType, null,
@@ -548,9 +552,9 @@ public class JOptionPane extends JComponent implements Accessible {
     }
 
     /**
-     * El pedido interno completo.
+     * The complete internal request.
      *
-     * @throws RuntimeException si el componente no esta en un escritorio ni tiene padre.
+     * @throws RuntimeException if the component is neither in a desktop nor has a parent.
      */
     public static Object showInternalInputDialog(Component parentComponent, Object message,
             String title, int messageType, Icon icon, Object[] selectionValues,
@@ -560,64 +564,64 @@ public class JOptionPane extends JComponent implements Accessible {
         pane.setWantsInput(true);
         pane.setSelectionValues(selectionValues);
         pane.setInitialSelectionValue(initialSelectionValue);
-        JInternalFrame marco = pane.createInternalFrame(parentComponent, title);
+        JInternalFrame frame = pane.createInternalFrame(parentComponent, title);
         pane.selectInitialValue();
-        marco.setVisible(true);
-        Object valor = pane.getInputValue();
-        if (valor == UNINITIALIZED_VALUE) {
+        frame.setVisible(true);
+        Object value = pane.getInputValue();
+        if (value == UNINITIALIZED_VALUE) {
             return null;
         }
-        return valor;
+        return value;
     }
 
     /**
-     * Arma la ventana interna que contiene a este panel.
+     * It builds the internal frame that contains this pane.
      *
-     * <p>Se pone en la capa modal del escritorio para que quede arriba de las demas ventanas, que
-     * es lo mas parecido a la modalidad que hay adentro de un escritorio.
+     * <p>It is put in the desktop's modal layer so that it stays above the other frames, which is
+     * the nearest thing to modality there is inside a desktop.
      *
-     * @throws RuntimeException si el componente no esta en un escritorio ni tiene padre.
+     * @throws RuntimeException if the component is neither in a desktop nor has a parent.
      */
     public JInternalFrame createInternalFrame(Component parentComponent, String title) {
-        Container padre = getDesktopPaneForComponent(parentComponent);
-        if (padre == null) {
+        Container parent = getDesktopPaneForComponent(parentComponent);
+        if (parent == null) {
             if (parentComponent == null) {
                 throw new RuntimeException(
                         "JOptionPane: parentComponent does not have a valid parent");
             }
-            padre = parentComponent.getParent();
-            if (padre == null) {
+            parent = parentComponent.getParent();
+            if (parent == null) {
                 throw new RuntimeException(
                         "JOptionPane: parentComponent does not have a valid parent");
             }
         }
-        // Un dialogo se cierra, no se agranda ni se achica ni se redimensiona.
-        JInternalFrame marco = new JInternalFrame(title, false, true, false, false);
-        marco.putClientProperty("JInternalFrame.frameType", "optionDialog");
-        marco.putClientProperty("JInternalFrame.messageType", Integer.valueOf(getMessageType()));
-        marco.getContentPane().add(this, BorderLayout.CENTER);
-        if (padre instanceof JDesktopPane) {
-            padre.add(marco, JLayeredPane.MODAL_LAYER);
+        // A dialog closes, it does not grow or shrink or resize.
+        JInternalFrame frame = new JInternalFrame(title, false, true, false, false);
+        frame.putClientProperty("JInternalFrame.frameType", "optionDialog");
+        frame.putClientProperty("JInternalFrame.messageType", Integer.valueOf(getMessageType()));
+        frame.getContentPane().add(this, BorderLayout.CENTER);
+        if (parent instanceof JDesktopPane) {
+            parent.add(frame, JLayeredPane.MODAL_LAYER);
         } else {
-            padre.add(marco, BorderLayout.CENTER);
+            parent.add(frame, BorderLayout.CENTER);
         }
-        Dimension medida = marco.getPreferredSize();
-        marco.setBounds(0, 0, medida.width, medida.height);
-        padre.validate();
+        Dimension measured = frame.getPreferredSize();
+        frame.setBounds(0, 0, measured.width, measured.height);
+        parent.validate();
         try {
-            marco.setSelected(true);
+            frame.setSelected(true);
         } catch (PropertyVetoException e) {
-            // Que no se pueda activar no impide mostrarla.
+            // Its not being able to be activated does not prevent showing it.
         }
-        return marco;
+        return frame;
     }
 
     /**
-     * La ventana del sistema que contiene a ese componente.
+     * The system window that contains that component.
      *
-     * <p>Si no hay ninguna, la ventana de siempre: un dialogo tiene que colgar de algo.
+     * <p>If there is none, the usual window: a dialog has to hang from something.
      *
-     * @throws HeadlessException si no hay pantalla y hace falta la ventana de siempre.
+     * @throws HeadlessException if there is no screen and the usual window is needed.
      */
     public static Frame getFrameForComponent(Component parentComponent) throws HeadlessException {
         if (parentComponent == null) {
@@ -629,7 +633,7 @@ public class JOptionPane extends JComponent implements Accessible {
         return getFrameForComponent(parentComponent.getParent());
     }
 
-    /** El escritorio que contiene a ese componente, o nulo. */
+    /** The desktop that contains that component, or null. */
     public static JDesktopPane getDesktopPaneForComponent(Component parentComponent) {
         if (parentComponent == null) {
             return null;
@@ -640,15 +644,15 @@ public class JOptionPane extends JComponent implements Accessible {
         return getDesktopPaneForComponent(parentComponent.getParent());
     }
 
-    /** Fija la ventana de la que cuelgan los dialogos sin padre. */
+    /** It fixes the window the dialogs with no parent hang from. */
     public static void setRootFrame(Frame newRootFrame) {
         rootFrame = newRootFrame;
     }
 
     /**
-     * La ventana de la que cuelgan los dialogos sin padre.
+     * The window the dialogs with no parent hang from.
      *
-     * @throws HeadlessException si no hay pantalla.
+     * @throws HeadlessException if there is no screen.
      */
     public static Frame getRootFrame() throws HeadlessException {
         if (rootFrame == null) {
@@ -673,11 +677,11 @@ public class JOptionPane extends JComponent implements Accessible {
     }
 
     /**
-     * El mensaje.
+     * The message.
      *
-     * <p>No tiene por que ser texto: un {@link Component} se muestra tal cual, y un arreglo se
-     * apila renglon por renglon. Es lo que permite meter un campo de contrasena adentro de un
-     * aviso sin escribir un dialogo entero.
+     * <p>It does not have to be text: a {@link Component} is shown as it is, and an array is
+     * stacked line by line. It is what allows a password field to be put inside a notice without
+     * writing a whole dialog.
      */
     public void setMessage(Object newMessage) {
         Object oldMessage = message;
@@ -689,7 +693,7 @@ public class JOptionPane extends JComponent implements Accessible {
         return message;
     }
 
-    /** El icono; nulo deja que lo elija el aspecto segun el tipo de mensaje. */
+    /** The icon; null lets the look and feel choose it according to the message type. */
     public void setIcon(Icon newIcon) {
         Object oldIcon = icon;
         icon = newIcon;
@@ -701,9 +705,10 @@ public class JOptionPane extends JComponent implements Accessible {
     }
 
     /**
-     * Lo que el usuario eligio.
+     * What the user chose.
      *
-     * <p>Ponerlo es lo que cierra el dialogo: quien arma el dialogo escucha esta propiedad.
+     * <p>Setting it is what closes the dialog: whoever builds the dialog listens to this
+     * property.
      */
     public void setValue(Object newValue) {
         Object oldValue = value;
@@ -711,19 +716,19 @@ public class JOptionPane extends JComponent implements Accessible {
         firePropertyChange(VALUE_PROPERTY, oldValue, value);
     }
 
-    /** Lo elegido, o {@link #UNINITIALIZED_VALUE} si todavia no contesto. */
+    /** What was chosen, or {@link #UNINITIALIZED_VALUE} if it has not answered yet. */
     public Object getValue() {
         return value;
     }
 
-    /** Los botones propios; nulo deja los estandar. */
+    /** The buttons of one's own; null leaves the standard ones. */
     public void setOptions(Object[] newOptions) {
         Object[] oldOptions = options;
         options = newOptions;
         firePropertyChange(OPTIONS_PROPERTY, oldOptions, options);
     }
 
-    /** Una copia de los botones propios, o nulo. */
+    /** A copy of the buttons of one's own, or null. */
     public Object[] getOptions() {
         if (options != null) {
             int optionCount = options.length;
@@ -734,7 +739,7 @@ public class JOptionPane extends JComponent implements Accessible {
         return options;
     }
 
-    /** Cual boton empieza con el foco. */
+    /** Which button starts with the focus. */
     public void setInitialValue(Object newInitialValue) {
         Object oldIV = initialValue;
         initialValue = newInitialValue;
@@ -746,9 +751,9 @@ public class JOptionPane extends JComponent implements Accessible {
     }
 
     /**
-     * Que icono va.
+     * Which icon goes.
      *
-     * @throws RuntimeException si no es uno de los cinco tipos.
+     * @throws RuntimeException if it is not one of the five types.
      */
     public void setMessageType(int newType) {
         if (newType != ERROR_MESSAGE && newType != INFORMATION_MESSAGE
@@ -768,9 +773,9 @@ public class JOptionPane extends JComponent implements Accessible {
     }
 
     /**
-     * Que botones van.
+     * Which buttons go.
      *
-     * @throws RuntimeException si no es uno de los cuatro juegos.
+     * @throws RuntimeException if it is not one of the four sets.
      */
     public void setOptionType(int newType) {
         if (newType != DEFAULT_OPTION && newType != YES_NO_OPTION
@@ -789,10 +794,10 @@ public class JOptionPane extends JComponent implements Accessible {
     }
 
     /**
-     * Las opciones de la lista.
+     * The list's options.
      *
-     * <p>Ponerlas prende {@link #setWantsInput}: una lista de donde elegir no tiene sentido si no
-     * se esta pidiendo un dato.
+     * <p>Setting them switches {@link #setWantsInput} on: a list to choose from makes no sense if
+     * a datum is not being asked for.
      */
     public void setSelectionValues(Object[] newValues) {
         Object[] oldValues = selectionValues;
@@ -817,7 +822,7 @@ public class JOptionPane extends JComponent implements Accessible {
         return initialSelectionValue;
     }
 
-    /** Lo que el usuario escribio o eligio; lo pone el aspecto. */
+    /** What the user typed or chose; the look and feel sets it. */
     public void setInputValue(Object newValue) {
         Object oldValue = inputValue;
         inputValue = newValue;
@@ -829,16 +834,16 @@ public class JOptionPane extends JComponent implements Accessible {
     }
 
     /**
-     * Cuantos caracteres entran en un renglon del mensaje.
+     * How many characters fit in a line of the message.
      *
-     * <p>Con {@link Integer#MAX_VALUE} no se corta nunca, que es lo que devuelve el aspecto de
-     * base: cortar es una decision de presentacion y cada aspecto la toma por su cuenta.
+     * <p>With {@link Integer#MAX_VALUE} it is never cut, which is what the base look and feel
+     * returns: cutting is a presentation decision and each look and feel takes it on its own.
      */
     public int getMaxCharactersPerLineCount() {
         return Integer.MAX_VALUE;
     }
 
-    /** Si ademas del mensaje se pide un dato. */
+    /** Whether besides the message a datum is asked for. */
     public void setWantsInput(boolean newValue) {
         boolean oldValue = wantsInput;
         wantsInput = newValue;
@@ -849,7 +854,7 @@ public class JOptionPane extends JComponent implements Accessible {
         return wantsInput;
     }
 
-    /** Le pide al aspecto que le de el foco al valor inicial. */
+    /** It asks the look and feel to give the focus to the initial value. */
     public void selectInitialValue() {
         OptionPaneUI ui = getUI();
         if (ui != null) {

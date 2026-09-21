@@ -8,27 +8,27 @@ import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 
 /**
- * Los `Gatherer` de fabrica, como `Collectors` lo es de `Collector`.
+ * The stock `Gatherer`s, as `Collectors` is for `Collector`.
  *
- * <p>Igual que en Collectors.java, <b>no hay ni una lambda en este archivo</b>: cada pieza de cada
- * `Gatherer` es una clase con nombre. La razon es la misma y esta anotada alla -- una lambda
- * alcanzada a traves de un campo de otro objeto no se ejecuta bien en nuestra VM, y las piezas de
- * un `Gatherer` viven exactamente ahi, en campos de `GathererImpl`.
+ * <p>Just as in Collectors.java, <b>there is not one lambda in this file</b>: every piece of every
+ * `Gatherer` is a named class. The reason is the same and is noted over there -- a lambda reached
+ * through a field of another object does not execute correctly on our VM, and a `Gatherer`'s pieces
+ * live exactly there, in `GathererImpl`'s fields.
  *
- * <p>Los contenedores de estado son `Object[]`, tambien por la regla de la casa: evita el acceso a
- * campos de una clase auxiliar desde otra clase del mismo archivo.
+ * <p>The state containers are `Object[]`, also by the house rule: it avoids accessing the fields of
+ * a helper class from another class in the same file.
  *
- * <p>Los tres `Gatherer` con finalizador se arman con `new GathererImpl<...>(...)` y no con
- * `Gatherer.ofSequential(init, paso, fin)`, que seria lo natural: este javac no resuelve una
- * llamada cuyo parametro mete una variable de tipo dentro de un argumento de tipo invariante
- * (`BiConsumer&lt;A, Downstream&lt;R&gt;&gt;`). Esta explicado en el encabezado de Gatherer.java, y
- * el repro con las cinco variantes es java/WcLib3.java. El constructor si resuelve porque los
- * argumentos de tipo se escriben, no se infieren.
+ * <p>The three `Gatherer`s with a finisher are built with `new GathererImpl<...>(...)` and not with
+ * `Gatherer.ofSequential(init, step, end)`, which would be the natural way: this javac does not
+ * resolve a call whose parameter puts a type variable inside an invariant type argument
+ * (`BiConsumer&lt;A, Downstream&lt;R&gt;&gt;`). It is explained in Gatherer.java's header, and the
+ * repro with the five variants is java/WcLib3.java. The constructor does resolve because the type
+ * arguments are written, not inferred.
  *
- * <p><b>Divergencia con el JDK, y es una sola: `mapConcurrent` no es concurrente.</b> Esta
- * documentada en su propio javadoc; el resultado es identico, lo que no hay es paralelismo. Es la
- * misma decision --y el mismo precedente-- que `BaseStream.parallel()`, que devuelve un flujo
- * secuencial.
+ * <p><b>A divergence from the JDK, and there is only one: `mapConcurrent` is not concurrent.</b> It
+ * is documented in its own javadoc; the result is identical, what there is not is parallelism. It
+ * is the same decision --and the same precedent-- as `BaseStream.parallel()`, which returns a
+ * sequential stream.
  */
 public final class Gatherers {
 
@@ -36,131 +36,133 @@ public final class Gatherers {
     }
 
     /**
-     * Ventanas consecutivas y sin solapamiento de `windowSize` elementos.
+     * Consecutive, non-overlapping windows of `windowSize` elements.
      *
-     * <p>La ultima ventana puede salir mas corta: se emite al terminar la entrada con lo que
-     * haya juntado. Cada ventana es una `List` que se niega a ser modificada.
+     * <p>The last window may come out shorter: it is emitted when the input ends, with whatever it
+     * gathered. Each window is a `List` that refuses to be modified.
      *
-     * @param windowSize cuantos elementos por ventana
-     * @param <TR> el tipo de los elementos
-     * @return el `Gatherer`
-     * @throws IllegalArgumentException si `windowSize` es menor que 1
+     * @param windowSize how many elements per window
+     * @param <TR> the elements' type
+     * @return the `Gatherer`
+     * @throws IllegalArgumentException if `windowSize` is less than 1
      */
     public static <TR> Gatherer<TR, ?, List<TR>> windowFixed(int windowSize) {
         if (windowSize < 1) {
-            // Mensaje constante: la concatenacion de String en tiempo de ejecucion no esta
-            // disponible en nuestra VM (#226).
+            // A constant message: String concatenation at run time is not
+            // available on our VM (#226).
             throw new IllegalArgumentException("windowSize must be greater than zero");
         }
         Supplier<Object[]> init = new WindowSupplier();
-        Gatherer.Integrator<Object[], TR, List<TR>> paso = new FixedWindowIntegrator<TR>(windowSize);
-        BiConsumer<Object[], Gatherer.Downstream<? super List<TR>>> fin = new FixedWindowFinisher<TR>();
-        return new GathererImpl<TR, Object[], List<TR>>(init, paso, new NoCombiner<Object[]>(), fin);
+        Gatherer.Integrator<Object[], TR, List<TR>> step = new FixedWindowIntegrator<TR>(windowSize);
+        BiConsumer<Object[], Gatherer.Downstream<? super List<TR>>> end = new FixedWindowFinisher<TR>();
+        return new GathererImpl<TR, Object[], List<TR>>(init, step, new NoCombiner<Object[]>(), end);
     }
 
     /**
-     * Ventanas de `windowSize` elementos que avanzan de a uno.
+     * Windows of `windowSize` elements advancing one at a time.
      *
-     * <p>Si la entrada entera tiene menos de `windowSize` elementos, sale <b>una</b> ventana con
-     * todos ellos, en vez de ninguna. Es lo que hace el JDK y no es un caso de borde caprichoso:
-     * la alternativa --no emitir nada-- pierde la entrada sin decirlo.
+     * <p>If the whole input has fewer than `windowSize` elements, <b>one</b> window comes out with
+     * all of them, instead of none. It is what the JDK does and it is not a whimsical edge case: the
+     * alternative --emitting nothing-- loses the input without saying so.
      *
-     * @param windowSize cuantos elementos por ventana
-     * @param <TR> el tipo de los elementos
-     * @return el `Gatherer`
-     * @throws IllegalArgumentException si `windowSize` es menor que 1
+     * @param windowSize how many elements per window
+     * @param <TR> the elements' type
+     * @return the `Gatherer`
+     * @throws IllegalArgumentException if `windowSize` is less than 1
      */
     public static <TR> Gatherer<TR, ?, List<TR>> windowSliding(int windowSize) {
         if (windowSize < 1) {
             throw new IllegalArgumentException("windowSize must be greater than zero");
         }
         Supplier<Object[]> init = new WindowSupplier();
-        Gatherer.Integrator<Object[], TR, List<TR>> paso = new SlidingWindowIntegrator<TR>(windowSize);
-        BiConsumer<Object[], Gatherer.Downstream<? super List<TR>>> fin = new SlidingWindowFinisher<TR>();
-        return new GathererImpl<TR, Object[], List<TR>>(init, paso, new NoCombiner<Object[]>(), fin);
+        Gatherer.Integrator<Object[], TR, List<TR>> step = new SlidingWindowIntegrator<TR>(windowSize);
+        BiConsumer<Object[], Gatherer.Downstream<? super List<TR>>> end = new SlidingWindowFinisher<TR>();
+        return new GathererImpl<TR, Object[], List<TR>>(init, step, new NoCombiner<Object[]>(), end);
     }
 
     /**
-     * Pliega toda la entrada en un solo valor y lo emite al final.
+     * It folds the whole input into a single value and emits it at the end.
      *
-     * <p>La diferencia con `Stream.reduce` es de forma, no de calculo: esto es una operacion
-     * <b>intermedia</b> que deja un flujo de un elemento, y por eso se puede seguir encadenando.
+     * <p>The difference from `Stream.reduce` is of shape, not of computation: this is an
+     * <b>intermediate</b> operation leaving a one-element stream, and that is why it can go on being
+     * chained.
      *
-     * @param initial de donde sale el valor inicial
-     * @param folder como combinar el acumulado con el siguiente elemento
-     * @param <T> el tipo de entrada
-     * @param <R> el tipo del acumulado
-     * @return el `Gatherer`
+     * @param initial where the initial value comes from
+     * @param folder how to combine the accumulated value with the next element
+     * @param <T> the input type
+     * @param <R> the accumulated value's type
+     * @return the `Gatherer`
      */
     public static <T, R> Gatherer<T, ?, R> fold(Supplier<R> initial,
                                                 BiFunction<? super R, ? super T, ? extends R> folder) {
         Supplier<Object[]> init = new FoldSupplier<R>(initial);
-        Gatherer.Integrator<Object[], T, R> paso = new FoldIntegrator<T, R>(folder);
-        BiConsumer<Object[], Gatherer.Downstream<? super R>> fin = new FoldFinisher<R>();
-        return new GathererImpl<T, Object[], R>(init, paso, new NoCombiner<Object[]>(), fin);
+        Gatherer.Integrator<Object[], T, R> step = new FoldIntegrator<T, R>(folder);
+        BiConsumer<Object[], Gatherer.Downstream<? super R>> end = new FoldFinisher<R>();
+        return new GathererImpl<T, Object[], R>(init, step, new NoCombiner<Object[]>(), end);
     }
 
     /**
-     * Emite el acumulado <b>despues de cada elemento</b>: la suma corrida.
+     * It emits the accumulated value <b>after each element</b>: the running total.
      *
-     * <p>Salen tantos elementos como entraron, a diferencia de `fold`, que emite uno solo.
+     * <p>As many elements come out as went in, unlike `fold`, which emits a single one.
      *
-     * @param initial de donde sale el valor inicial
-     * @param scanner como combinar el acumulado con el siguiente elemento
-     * @param <T> el tipo de entrada
-     * @param <R> el tipo del acumulado
-     * @return el `Gatherer`
+     * @param initial where the initial value comes from
+     * @param scanner how to combine the accumulated value with the next element
+     * @param <T> the input type
+     * @param <R> the accumulated value's type
+     * @return the `Gatherer`
      */
     public static <T, R> Gatherer<T, ?, R> scan(Supplier<R> initial,
                                                 BiFunction<? super R, ? super T, ? extends R> scanner) {
         Supplier<Object[]> init = new FoldSupplier<R>(initial);
-        Gatherer.Integrator<Object[], T, R> paso = new ScanIntegrator<T, R>(scanner);
-        return Gatherer.ofSequential(init, paso);
+        Gatherer.Integrator<Object[], T, R> step = new ScanIntegrator<T, R>(scanner);
+        return Gatherer.ofSequential(init, step);
     }
 
     /**
-     * Aplica `mapper` a cada elemento, conservando el orden de encuentro.
+     * It applies `mapper` to each element, keeping encounter order.
      *
-     * <p><b>Divergencia deliberada con el JDK: aca no hay concurrencia.</b> El JDK lanza hasta
-     * `maxConcurrency` hilos virtuales y va emitiendo en orden a medida que terminan; esta
-     * implementacion aplica `mapper` a un elemento por vez, en el mismo hilo.
+     * <p><b>A deliberate divergence from the JDK: there is no concurrency here.</b> The JDK launches
+     * up to `maxConcurrency` virtual threads and emits in order as they finish; this implementation
+     * applies `mapper` to one element at a time, on the same thread.
      *
-     * <p>El <b>resultado</b> es identico --los mismos elementos, en el mismo orden--, porque la
-     * concurrencia de este metodo es una propiedad de rendimiento y no de significado. Lo que
-     * cambia es la latencia cuando `mapper` bloquea, que es justamente para lo que uno lo usaria.
-     * Se declara igual, por el mismo criterio con el que `BaseStream.parallel()` devuelve un flujo
-     * secuencial: el codigo escrito contra la API real sigue compilando y dando lo correcto.
+     * <p>The <b>result</b> is identical --the same elements, in the same order-- because this
+     * method's concurrency is a property of performance and not of meaning. What changes is the
+     * latency when `mapper` blocks, which is exactly what one would use it for. It is declared all
+     * the same, on the criterion by which `BaseStream.parallel()` returns a sequential stream: code
+     * written against the real API goes on compiling and giving the right thing.
      *
-     * <p>`maxConcurrency` se <b>valida</b> aunque despues no se use: un programa que pasa 0 esta
-     * mal escrito contra la API real, y enterarse aca es mejor que enterarse al portarlo.
+     * <p>`maxConcurrency` is <b>validated</b> even though it is then unused: a program passing 0 is
+     * written wrongly against the real API, and finding out here is better than finding out when
+     * porting it.
      *
-     * @param maxConcurrency cuantas aplicaciones simultaneas permitiria el JDK
-     * @param mapper la funcion a aplicar
-     * @param <T> el tipo de entrada
-     * @param <R> el tipo de salida
-     * @return el `Gatherer`
-     * @throws IllegalArgumentException si `maxConcurrency` es menor que 1
+     * @param maxConcurrency how many simultaneous applications the JDK would allow
+     * @param mapper the function to apply
+     * @param <T> the input type
+     * @param <R> the output type
+     * @return the `Gatherer`
+     * @throws IllegalArgumentException if `maxConcurrency` is less than 1
      */
     public static <T, R> Gatherer<T, ?, R> mapConcurrent(int maxConcurrency,
                                                          Function<? super T, ? extends R> mapper) {
         if (maxConcurrency < 1) {
             throw new IllegalArgumentException("maxConcurrency must be greater than zero");
         }
-        Gatherer.Integrator<Void, T, R> paso = new MapIntegrator<T, R>(mapper);
-        return Gatherer.ofSequential(paso);
+        Gatherer.Integrator<Void, T, R> step = new MapIntegrator<T, R>(mapper);
+        return Gatherer.ofSequential(step);
     }
 }
 
-// ---- ventanas -----------------------------------------------------------------------------------
+// ---- windows ------------------------------------------------------------------------------------
 
-// El estado de las dos ventanas es el mismo Object[2]: {ArrayList<?> buffer, Boolean primeraAun}.
-// `primeraAun` solo lo mira la deslizante, pero compartir el proveedor ahorra una clase.
+// Both windows' state is the same Object[2]: {ArrayList<?> buffer, Boolean stillFirst}.
+// `stillFirst` is only looked at by the sliding one, but sharing the supplier saves a class.
 final class WindowSupplier implements Supplier<Object[]> {
     public Object[] get() {
-        Object[] estado = new Object[2];
-        estado[0] = new ArrayList<Object>();
-        estado[1] = Boolean.TRUE;
-        return estado;
+        Object[] state = new Object[2];
+        state[0] = new ArrayList<Object>();
+        state[1] = Boolean.TRUE;
+        return state;
     }
 }
 
@@ -172,29 +174,29 @@ final class FixedWindowIntegrator<TR> implements Gatherer.Integrator<Object[], T
         this.windowSize = windowSize;
     }
 
-    public boolean integrate(Object[] estado, TR element, Gatherer.Downstream<? super List<TR>> downstream) {
-        ArrayList<TR> buffer = (ArrayList<TR>) estado[0];
+    public boolean integrate(Object[] state, TR element, Gatherer.Downstream<? super List<TR>> downstream) {
+        ArrayList<TR> buffer = (ArrayList<TR>) state[0];
         buffer.add(element);
         if (buffer.size() < this.windowSize) {
             return true;
         }
-        // La ventana emitida es una copia: el buffer se sigue usando para la siguiente.
-        List<TR> ventana = new FrozenList<TR>(new ArrayList<TR>(buffer));
+        // The window emitted is a copy: the buffer goes on being used for the next one.
+        List<TR> window = new FrozenList<TR>(new ArrayList<TR>(buffer));
         buffer.clear();
-        estado[1] = Boolean.FALSE;
-        return downstream.push(ventana);
+        state[1] = Boolean.FALSE;
+        return downstream.push(window);
     }
 }
 
 final class FixedWindowFinisher<TR> implements BiConsumer<Object[], Gatherer.Downstream<? super List<TR>>> {
-    public void accept(Object[] estado, Gatherer.Downstream<? super List<TR>> downstream) {
-        ArrayList<TR> buffer = (ArrayList<TR>) estado[0];
+    public void accept(Object[] state, Gatherer.Downstream<? super List<TR>> downstream) {
+        ArrayList<TR> buffer = (ArrayList<TR>) state[0];
         if (buffer.isEmpty()) {
             return;
         }
-        List<TR> ventana = new FrozenList<TR>(new ArrayList<TR>(buffer));
+        List<TR> window = new FrozenList<TR>(new ArrayList<TR>(buffer));
         buffer.clear();
-        downstream.push(ventana);
+        downstream.push(window);
     }
 }
 
@@ -206,43 +208,43 @@ final class SlidingWindowIntegrator<TR> implements Gatherer.Integrator<Object[],
         this.windowSize = windowSize;
     }
 
-    public boolean integrate(Object[] estado, TR element, Gatherer.Downstream<? super List<TR>> downstream) {
-        ArrayList<TR> buffer = (ArrayList<TR>) estado[0];
+    public boolean integrate(Object[] state, TR element, Gatherer.Downstream<? super List<TR>> downstream) {
+        ArrayList<TR> buffer = (ArrayList<TR>) state[0];
         buffer.add(element);
         if (buffer.size() < this.windowSize) {
             return true;
         }
-        List<TR> ventana = new FrozenList<TR>(new ArrayList<TR>(buffer));
-        // Se descarta el mas viejo: la ventana avanza de a uno.
+        List<TR> window = new FrozenList<TR>(new ArrayList<TR>(buffer));
+        // The oldest is dropped: the window advances one at a time.
         buffer.remove(0);
-        estado[1] = Boolean.FALSE;
-        return downstream.push(ventana);
+        state[1] = Boolean.FALSE;
+        return downstream.push(window);
     }
 }
 
 final class SlidingWindowFinisher<TR> implements BiConsumer<Object[], Gatherer.Downstream<? super List<TR>>> {
-    public void accept(Object[] estado, Gatherer.Downstream<? super List<TR>> downstream) {
-        // Solo emite si NUNCA se completo una ventana: es el caso de una entrada mas corta que
-        // la ventana. Si ya salio alguna, lo que queda en el buffer es la cola de la ultima y
-        // volver a emitirla seria una ventana incompleta que el JDK no produce.
-        Boolean primeraAun = (Boolean) estado[1];
-        if (!primeraAun.booleanValue()) {
+    public void accept(Object[] state, Gatherer.Downstream<? super List<TR>> downstream) {
+        // It only emits if a window was NEVER completed: that is the case of an input shorter than
+        // the window. If one already came out, what is left in the buffer is the last one's tail and
+        // emitting it again would be an incomplete window the JDK does not produce.
+        Boolean stillFirst = (Boolean) state[1];
+        if (!stillFirst.booleanValue()) {
             return;
         }
-        ArrayList<TR> buffer = (ArrayList<TR>) estado[0];
+        ArrayList<TR> buffer = (ArrayList<TR>) state[0];
         if (buffer.isEmpty()) {
             return;
         }
-        List<TR> ventana = new FrozenList<TR>(new ArrayList<TR>(buffer));
+        List<TR> window = new FrozenList<TR>(new ArrayList<TR>(buffer));
         buffer.clear();
-        downstream.push(ventana);
+        downstream.push(window);
     }
 }
 
-// ---- fold y scan --------------------------------------------------------------------------------
+// ---- fold and scan ------------------------------------------------------------------------------
 
-// El estado es un Object[1] con el acumulado. `get()` llama al proveedor del que llama una sola
-// vez, cuando el `Gatherer` empieza a correr, no cuando se construye.
+// The state is an Object[1] with the accumulated value. `get()` calls the caller's supplier once
+// only, when the `Gatherer` starts running, not when it is built.
 final class FoldSupplier<R> implements Supplier<Object[]> {
 
     private final Supplier<R> initial;
@@ -252,9 +254,9 @@ final class FoldSupplier<R> implements Supplier<Object[]> {
     }
 
     public Object[] get() {
-        Object[] estado = new Object[1];
-        estado[0] = this.initial.get();
-        return estado;
+        Object[] state = new Object[1];
+        state[0] = this.initial.get();
+        return state;
     }
 }
 
@@ -263,23 +265,23 @@ final class FoldIntegrator<T, R> implements Gatherer.Integrator<Object[], T, R> 
     private final BiFunction<R, T, R> folder;
 
     FoldIntegrator(BiFunction<? super R, ? super T, ? extends R> folder) {
-        // Los comodines se sacan de encima con una conversion exacta en el borrado: el cuerpo
-        // solo llama a `apply`, y por ahi entra un R y un T y sale un R.
+        // The wildcards are shed with a conversion that is exact in erasure: the body only calls
+        // `apply`, and through there an R and a T go in and an R comes out.
         Object f = folder;
         this.folder = (BiFunction<R, T, R>) f;
     }
 
-    public boolean integrate(Object[] estado, T element, Gatherer.Downstream<? super R> downstream) {
-        R acumulado = (R) estado[0];
-        estado[0] = this.folder.apply(acumulado, element);
+    public boolean integrate(Object[] state, T element, Gatherer.Downstream<? super R> downstream) {
+        R accumulated = (R) state[0];
+        state[0] = this.folder.apply(accumulated, element);
         return true;
     }
 }
 
 final class FoldFinisher<R> implements BiConsumer<Object[], Gatherer.Downstream<? super R>> {
-    public void accept(Object[] estado, Gatherer.Downstream<? super R> downstream) {
-        R acumulado = (R) estado[0];
-        downstream.push(acumulado);
+    public void accept(Object[] state, Gatherer.Downstream<? super R> downstream) {
+        R accumulated = (R) state[0];
+        downstream.push(accumulated);
     }
 }
 
@@ -292,18 +294,18 @@ final class ScanIntegrator<T, R> implements Gatherer.Integrator<Object[], T, R> 
         this.scanner = (BiFunction<R, T, R>) f;
     }
 
-    public boolean integrate(Object[] estado, T element, Gatherer.Downstream<? super R> downstream) {
-        R acumulado = (R) estado[0];
-        R siguiente = this.scanner.apply(acumulado, element);
-        estado[0] = siguiente;
-        return downstream.push(siguiente);
+    public boolean integrate(Object[] state, T element, Gatherer.Downstream<? super R> downstream) {
+        R accumulated = (R) state[0];
+        R next = this.scanner.apply(accumulated, element);
+        state[0] = next;
+        return downstream.push(next);
     }
 }
 
 // ---- mapConcurrent ------------------------------------------------------------------------------
 
-// Sin estado: cada elemento se mapea y se empuja. Ver el javadoc de Gatherers.mapConcurrent para
-// por que aca no hay ni hilos ni cola.
+// Stateless: each element is mapped and pushed. See Gatherers.mapConcurrent's javadoc for why
+// there are neither threads nor a queue here.
 final class MapIntegrator<T, R> implements Gatherer.Integrator<Void, T, R> {
 
     private final Function<T, R> mapper;
@@ -313,8 +315,8 @@ final class MapIntegrator<T, R> implements Gatherer.Integrator<Void, T, R> {
         this.mapper = (Function<T, R>) f;
     }
 
-    public boolean integrate(Void estado, T element, Gatherer.Downstream<? super R> downstream) {
-        R mapeado = this.mapper.apply(element);
-        return downstream.push(mapeado);
+    public boolean integrate(Void state, T element, Gatherer.Downstream<? super R> downstream) {
+        R mapped = this.mapper.apply(element);
+        return downstream.push(mapped);
     }
 }

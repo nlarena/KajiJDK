@@ -2,10 +2,11 @@ package java.nio.file.attribute;
 
 import java.io.IOException;
 
-// No se encontro el usuario o grupo que se estaba buscando.
+// The user or group being looked up was not found.
 //
-// Guarda el nombre aparte del mensaje porque quien la atrapa suele querer el nombre crudo para
-// reintentar o para armar su propio mensaje, y sacarlo de `getMessage()` a mano seria fragil.
+// It keeps the name apart from the message because whoever catches it usually wants the raw name to
+// retry or to build their own message, and taking it out of `getMessage()` by hand would be
+// fragile.
 public class UserPrincipalNotFoundException extends IOException {
 
     private static final long serialVersionUID = -5369283889045833024L;
@@ -13,14 +14,14 @@ public class UserPrincipalNotFoundException extends IOException {
     private final String name;
 
     /**
-     * @param name el nombre que no se encontro, o `null` si no se sabe
+     * @param name the name that was not found, or `null` if it is not known
      */
     public UserPrincipalNotFoundException(String name) {
         super();
         this.name = name;
     }
 
-    /** El nombre que no se encontro, o `null` si no se sabe. */
+    /** The name that was not found, or `null` if it is not known. */
     public String getName() {
         return this.name;
     }

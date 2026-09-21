@@ -5,57 +5,59 @@ import java.io.File;
 import javax.swing.Icon;
 
 /**
- * Como se le muestra un archivo al usuario: su nombre, su icono, su descripcion.
+ * How a file is shown to the user: its name, its icon, its description.
  *
- * <h2>La convencion de devolver {@code null}</h2>
+ * <h2>The convention of returning {@code null}</h2>
  *
- * <p>Los cinco metodos devuelven {@code null} por omision, y eso no significa "no se": significa
- * <strong>"usa lo que ibas a usar"</strong>. Quien pregunta cae de vuelta en el
- * {@link FileSystemView} del sistema.
+ * <p>The five methods return {@code null} by default, and that does not mean "I do not know":
+ * it means <strong>"use what you were going to use"</strong>. Whoever asks falls back on the
+ * system's {@link FileSystemView}.
  *
- * <p>Esa convencion es lo que hace practica a la clase. Un {@code FileView} que quiera solo cambiar
- * el icono de los {@code .java} escribe un metodo, contesta {@code null} para todo lo demas, y el
- * resto sigue viendose como el sistema lo muestra. Sin ella habria que reimplementar los cinco.
+ * <p>That convention is what makes the class practical. A {@code FileView} that only wants to
+ * change the icon of {@code .java} files writes one method, answers {@code null} to everything
+ * else, and the rest goes on looking as the system shows it. Without it the five would have to be
+ * reimplemented.
  *
- * <p>{@link #isTraversable} devuelve {@link Boolean} y no {@code boolean} justamente por esto:
- * necesita un tercer valor. Es la unica forma de distinguir "no es navegable" de "decidilo vos".
+ * <p>{@link #isTraversable} returns {@link Boolean} and not {@code boolean} precisely because of
+ * this: it needs a third value. It is the only way to tell "it is not traversable" from "you
+ * decide".
  */
 public abstract class FileView {
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected FileView() {
     }
 
-    /** El nombre a mostrar, o {@code null} para dejar el del sistema. */
+    /** The name to show, or {@code null} to leave the system's. */
     public String getName(File f) {
         return null;
     }
 
-    /** Una descripcion de este archivo en particular, o {@code null}. */
+    /** A description of this file in particular, or {@code null}. */
     public String getDescription(File f) {
         return null;
     }
 
     /**
-     * Una descripcion del tipo de archivo, o {@code null}.
+     * A description of the file type, or {@code null}.
      *
-     * <p>Distinta de {@link #getDescription}: aquella habla de <em>este</em> archivo, esta de su
-     * clase — "Documento de texto" contra "Las notas de la reunion".
+     * <p>Different from {@link #getDescription}: that one talks about <em>this</em> file, this one
+     * about its kind -- "Text document" against "The meeting notes".
      */
     public String getTypeDescription(File f) {
         return null;
     }
 
-    /** El icono, o {@code null} para dejar el del sistema. */
+    /** The icon, or {@code null} to leave the system's. */
     public Icon getIcon(File f) {
         return null;
     }
 
     /**
-     * Si se puede entrar en {@code f}, o {@code null} para dejar que decida el sistema.
+     * Whether {@code f} can be entered, or {@code null} to let the system decide.
      *
-     * <p>No es lo mismo que ser un directorio: una carpeta comprimida puede ser navegable sin serlo,
-     * y un directorio sin permisos puede no serlo siendolo.
+     * <p>It is not the same as being a directory: a compressed folder may be traversable without
+     * being one, and a directory with no permissions may not be, being one.
      */
     public Boolean isTraversable(File f) {
         return null;

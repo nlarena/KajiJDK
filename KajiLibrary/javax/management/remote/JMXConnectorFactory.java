@@ -9,76 +9,79 @@ import java.util.Map;
 import java.util.ServiceLoader;
 
 /**
- * KajiLibrary's javax.management.remote.JMXConnectorFactory -- consigue un conector cliente.
+ * KajiLibrary's javax.management.remote.JMXConnectorFactory -- gets a client connector.
  *
- * <p>El punto de entrada del lado cliente. {@link #connect} es el atajo normal;
- * {@link #newJMXConnector} devuelve el conector <b>sin conectar</b>, que es lo que hace falta para
- * registrar escuchas antes de que pase nada -- ver {@link JMXConnector}.
-
- * <h2>Como se encuentra el proveedor de un protocolo</h2>
+ * <p>The client side's entry point. {@link #connect} is the normal shortcut;
+ * {@link #newJMXConnector} returns the connector <b>unconnected</b>, which is what is needed to
+ * register listeners before anything happens -- see {@link JMXConnector}.
  *
- * <p>Se prueban dos caminos, en orden:
+ * <h2>How a protocol's provider is found</h2>
+ *
+ * <p>Two paths are tried, in order:
  *
  * <ol>
- *   <li>los declarados como servicio y encontrados con {@link java.util.ServiceLoader}. Es la forma
- *       moderna y la que no pide configuracion;
- *   <li>por <b>nombre de clase deducido</b>: para cada paquete de la propiedad
- *       {@link #PROTOCOL_PROVIDER_PACKAGES} se busca la clase
- *       {@code <paquete>.<protocolo>.ClientProvider}. Los paquetes se separan con {@code |}, y el
- *       protocolo se traduce cambiando {@code +} por punto y {@code -} por raya baja, porque un
- *       protocolo puede tener caracteres que un nombre de paquete no admite.
+ *   <li>those declared as a service and found with {@link java.util.ServiceLoader}. It is the
+ *       modern way and the one that asks for no configuration;
+ *   <li>by <b>deduced class name</b>: for each package of the
+ *       {@link #PROTOCOL_PROVIDER_PACKAGES} property, the class
+ *       {@code <package>.<protocol>.ClientProvider} is looked for. The packages are separated with
+ *       {@code |}, and the protocol is translated by turning {@code +} into a dot and
+ *       {@code -} into an underscore, because a protocol may have characters a package name
+ *       does not admit.
  * </ol>
  *
- * <p>Si un proveedor reconoce el protocolo pero no puede con ese entorno, lanza
- * {@link JMXProviderException} y se sigue con el siguiente. Si ninguno lo reconoce, sale
- * {@link java.net.MalformedURLException} con {@code "Unsupported protocol"}.
+ * <p>If a provider recognizes the protocol but cannot cope with that environment, it throws
+ * {@link JMXProviderException} and the next one is tried. If none recognizes it,
+ * {@link java.net.MalformedURLException} comes out with {@code "Unsupported protocol"}.
  *
- * <p>Esa distincion es la que le sirve a quien llama: la primera dice "esta roto", la segunda dice "no
- * existe". Ver {@link JMXProviderException}.
-
+ * <p>That distinction is what is of use to the caller: the first says "it is broken", the
+ * second says "it does not exist". See {@link JMXProviderException}.
+ *
  * <h2>A KajiLibrary subset</h2>
  *
- * <p>Esta biblioteca no trae ningun protocolo. RMI necesita una capa de transporte remota que no esta,
- * y JMXMP nunca estuvo en el JDK. La busqueda esta implementada de verdad --recorre el
- * {@link java.util.ServiceLoader} y prueba los nombres deducidos-- y termina en
- * {@code "Unsupported protocol"}, que es exactamente lo que hace el JDK 25 con un protocolo que nadie
- * provee. Agregando un proveedor, esto funciona sin cambios.
+ * <p>This library ships no protocol. RMI needs a remote transport layer that is not there, and
+ * JMXMP was never in the JDK. The search is really implemented --it walks the
+ * {@link java.util.ServiceLoader} and tries the deduced names-- and ends in
+ * {@code "Unsupported protocol"}, which is exactly what JDK 25 does with a protocol nobody
+ * provides. Adding a provider, this works with no changes.
  */
 public class JMXConnectorFactory {
 
-    /** Clave del entorno: con que cargador de clases deserializar lo que llega. */
+    /** Environment key: with what class loader to deserialize what arrives. */
     public static final String DEFAULT_CLASS_LOADER = "jmx.remote.default.class.loader";
 
-    /** Propiedad y clave del entorno: en que paquetes buscar proveedores, separados por {@code |}. */
+    /**
+     * Property and environment key: in what packages to look for providers, separated by {@code |}.
+     */
     public static final String PROTOCOL_PROVIDER_PACKAGES = "jmx.remote.protocol.provider.pkgs";
 
-    /** Clave del entorno: con que cargador buscar la clase del proveedor. */
+    /** Environment key: with what loader to look for the provider's class. */
     public static final String PROTOCOL_PROVIDER_CLASS_LOADER =
         "jmx.remote.protocol.provider.class.loader";
 
-    /** Los paquetes que se prueban si no se dice otra cosa. */
+    /** The packages that are tried if nothing else is said. */
     private static final String DEFAULT_PACKAGES = "com.sun.jmx.remote.protocol";
 
-    /** No tiene estado; el constructor publico es el que el JDK dejo. */
+    /** It has no state; the public constructor is the one the JDK left. */
     public JMXConnectorFactory() {
     }
 
     /**
-     * Crea un conector y lo conecta.
+     * Creates a connector and connects it.
      *
-     * @throws MalformedURLException si no hay proveedor para ese protocolo
-     * @throws IOException si no se pudo conectar
-     * @throws NullPointerException si la direccion es null
+     * @throws MalformedURLException if there is no provider for that protocol
+     * @throws IOException if it could not connect
+     * @throws NullPointerException if the address is null
      */
     public static JMXConnector connect(JMXServiceURL serviceURL) throws IOException {
         return connect(serviceURL, null);
     }
 
     /**
-     * Idem, con entorno.
+     * The same, with an environment.
      *
-     * @throws MalformedURLException si no hay proveedor para ese protocolo
-     * @throws IOException si no se pudo conectar
+     * @throws MalformedURLException if there is no provider for that protocol
+     * @throws IOException if it could not connect
      */
     public static JMXConnector connect(JMXServiceURL serviceURL, Map<String, ?> environment)
         throws IOException {
@@ -91,11 +94,11 @@ public class JMXConnectorFactory {
     }
 
     /**
-     * Crea un conector sin conectarlo. Ver la nota de la clase.
+     * Creates a connector without connecting it. See the class note.
      *
-     * @throws MalformedURLException si no hay proveedor para ese protocolo
-     * @throws JMXProviderException si lo hay y no pudo
-     * @throws IOException si fallo por otra cosa
+     * @throws MalformedURLException if there is no provider for that protocol
+     * @throws JMXProviderException if there is one and it could not
+     * @throws IOException if it failed for something else
      */
     public static JMXConnector newJMXConnector(JMXServiceURL serviceURL,
                                                Map<String, ?> environment) throws IOException {
@@ -124,7 +127,7 @@ public class JMXConnectorFactory {
         throw new MalformedURLException("Unsupported protocol: " + protocol);
     }
 
-    /** Una copia mutable, comprobando que las claves sean cadenas. */
+    /** A mutable copy, checking that the keys are strings. */
     private static Map<String, Object> copyEnvironment(Map<String, ?> env) {
         if (env == null) {
             return new HashMap<String, Object>();
@@ -133,7 +136,7 @@ public class JMXConnectorFactory {
         return new HashMap<String, Object>(env);
     }
 
-    /** Un proveedor roto no puede tumbar la busqueda; los que siguen todavia pueden servir. */
+    /** A broken provider cannot bring the search down; the ones that follow may still serve. */
     private static boolean hasNextQuietly(Iterator<JMXConnectorProvider> it) {
         try {
             return it.hasNext();

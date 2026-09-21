@@ -5,89 +5,90 @@ import java.util.HashMap;
 import java.util.Iterator;
 
 /**
- * KajiLibrary's javax.print.attribute.HashAttributeSet -- la implementacion de referencia de
- * {@link AttributeSet}, y la unica que trae el paquete.
+ * KajiLibrary's javax.print.attribute.HashAttributeSet -- the reference implementation of
+ * {@link AttributeSet}, and the only one the package ships.
  *
- * <h2>Es un mapa con la clave metida adentro del valor</h2>
+ * <h2>It is a map with the key tucked inside the value</h2>
  *
- * <p>Adentro hay un {@code HashMap} de categoria a atributo, y esa eleccion es toda la clase: la
- * regla de "un atributo por categoria" no se implementa, se hereda de que un mapa tiene una entrada
- * por clave. {@code add} es un {@code put} bajo la clave {@code attribute.getCategory()}, asi que
- * meter un segundo atributo de la misma categoria pisa al primero sin que haya que buscarlo.
+ * <p>Inside there is a {@code HashMap} from category to attribute, and that choice is the whole
+ * class: the "one attribute per category" rule is not implemented, it is inherited from a map
+ * having one entry per key. {@code add} is a {@code put} under the key {@code
+ * attribute.getCategory()}, so putting in a second attribute of the same category overwrites the
+ * first without having to look for it.
  *
- * <p>Lo que si hay que decidir es el **valor de retorno**: {@code add} devuelve si el conjunto
- * cambio, y eso no es "si habia algo antes" sino "si lo que hay ahora es distinto de lo que habia".
- * Por eso se compara el atributo nuevo con el viejo con {@code equals} y no se mira si el
- * {@code put} devolvio null. Agregar {@code new Copies(3)} donde ya estaba {@code new Copies(3)}
- * devuelve {@code false} aunque sean dos objetos distintos.
+ * <p>What does have to be decided is the **return value**: {@code add} returns whether the set
+ * changed, and that is not "whether there was something before" but "whether what there is now
+ * differs from what there was". That is why the new attribute is compared with the old one with
+ * {@code equals} and it is not a matter of whether the {@code put} returned null. Adding
+ * {@code new Copies(3)} where {@code new Copies(3)} already was returns {@code false} even though
+ * they are two different objects.
  *
- * <h2>El segundo campo, {@code myInterface}, es lo que hace utiles a las subclases</h2>
+ * <h2>The second field, {@code myInterface}, is what makes the subclasses useful</h2>
  *
- * <p>Cada conjunto recuerda **de que interfaz** tienen que ser sus miembros. Para un
- * {@code HashAttributeSet} pelado es {@code Attribute.class} y no restringe nada; las cuatro
- * subclases ({@link HashDocAttributeSet} y companeras) pasan {@code DocAttribute.class} y demas, y
- * con eso la restriccion de categoria sale gratis: {@code add} pasa por
- * {@link AttributeSetUtilities#verifyAttributeValue} contra esa interfaz y lo que no encaja sale
- * por {@code ClassCastException}.
+ * <p>Each set remembers **which interface** its members have to be of. For a bare {@code
+ * HashAttributeSet} it is {@code Attribute.class} and restricts nothing; the four subclasses
+ * ({@link HashDocAttributeSet} and company) pass {@code DocAttribute.class} and so on, and with
+ * that the category restriction comes for free: {@code add} goes through {@link
+ * AttributeSetUtilities#verifyAttributeValue} against that interface and whatever does not fit goes
+ * out through {@code ClassCastException}.
  *
- * <p>Notar la asimetria, que es del JDK y se replica: {@code add} verifica contra
- * {@code myInterface} (la restriccion de la subclase) pero {@code get}, {@code remove} y
- * {@code containsKey} verifican contra {@code Attribute.class} a secas. O sea que a un
- * {@code HashDocAttributeSet} se le puede **preguntar** por una categoria que nunca podria
- * contener --devuelve null-- pero no se le puede meter.
+ * <p>Note the asymmetry, which is the JDK's and is replicated: {@code add} checks against
+ * {@code myInterface} (the subclass's restriction) but {@code get}, {@code remove} and
+ * {@code containsKey} check against plain {@code Attribute.class}. That is, a
+ * {@code HashDocAttributeSet} can be **asked** about a category it could never contain --it returns
+ * null-- but it cannot be given one.
  *
- * <h2>Igualdad</h2>
+ * <h2>Equality</h2>
  *
- * <p>{@code equals} acepta cualquier {@link AttributeSet}, no solo otro {@code HashAttributeSet}:
- * compara tamano y despues pregunta por cada atributo con {@code containsValue}. Es lo que permite
- * que dos implementaciones distintas de la interfaz se comparen entre si. El hash es la **suma**
- * de los hashes de los atributos, que es lo unico que puede ser porque el orden no esta definido.
+ * <p>{@code equals} accepts any {@link AttributeSet}, not only another {@code HashAttributeSet}: it
+ * compares size and then asks about each attribute with {@code containsValue}. It is what lets two
+ * different implementations of the interface compare with each other. The hash is the **sum** of
+ * the attributes' hashes, which is the only thing it can be because the order is undefined.
  *
- * <h2>Lo que quedo afuera</h2>
+ * <h2>What was left out</h2>
  *
- * <p>Los metodos {@code private writeObject}/{@code readObject} de la serializacion. Son la unica
- * parte de esta clase que no se puede escribir con honestidad aca: piden
- * {@code java.io.ObjectOutputStream} y {@code ObjectInputStream}, que KajiLibrary no tiene --de
- * {@code java.io} solo estan las **interfaces** {@code ObjectInput}/{@code ObjectOutput}--. No son
- * API publica y no cuentan en la superficie; el campo del mapa igual se declara
- * {@code transient}, que es la mitad del contrato que si se puede sostener.
+ * <p>The serialization's {@code private writeObject}/{@code readObject} methods. The note said they
+ * cannot be written here because KajiLibrary lacks {@code java.io.ObjectOutputStream} and
+ * {@code ObjectInputStream}; both exist now, so that reason no longer holds and they could be
+ * written. They are not public API and do not count in the surface; the map field is declared
+ * {@code transient} all the same, which is the half of the contract that is kept.
  */
 public class HashAttributeSet implements AttributeSet, Serializable {
 
     private static final long serialVersionUID = 5311560590283707917L;
 
-    // La interfaz de la que tienen que ser instancia todos los miembros. Attribute.class para esta
-    // clase; una subinterfaz para cada subclase.
+    // The interface all members have to be an instance of. Attribute.class for this class; a
+    // subinterface for each subclass.
     private Class<?> myInterface;
 
-    // transient porque la forma serializada del JDK escribe los atributos uno por uno, no el mapa.
-    // Aca no hay quien la escriba (ver la cabecera), pero el campo es el mismo.
+    // transient because the JDK's serialized form writes the attributes one by one, not the map.
+    // Here nothing writes it (see the header), but the field is the same.
     private transient HashMap<Class<?>, Attribute> attrMap = new HashMap<Class<?>, Attribute>();
 
-    /** Un conjunto vacio, sin restriccion de categoria mas alla de ser atributos. */
+    /** An empty set, with no category restriction beyond being attributes. */
     public HashAttributeSet() {
         this(Attribute.class);
     }
 
-    /** Con un atributo adentro. NullPointerException si es null. */
+    /** With one attribute inside. NullPointerException if it is null. */
     public HashAttributeSet(Attribute attribute) {
         this(attribute, Attribute.class);
     }
 
     /**
-     * Con los atributos del arreglo, agregados en orden desde el indice 0 -- asi que si el arreglo
-     * trae dos de la misma categoria gana el ultimo. Un arreglo null da el conjunto vacio.
+     * With the array's attributes, added in order from index 0 -- so if the array brings two of the
+     * same category the last one wins. A null array gives the empty set.
      */
     public HashAttributeSet(Attribute[] attributes) {
         this(attributes, Attribute.class);
     }
 
-    /** Con los atributos de otro conjunto. Un conjunto null da el conjunto vacio. */
+    /** With another set's attributes. A null set gives the empty set. */
     public HashAttributeSet(AttributeSet attributes) {
         this(attributes, Attribute.class);
     }
 
-    /** Vacio y restringido a `interfaceName`. NullPointerException si `interfaceName` es null. */
+    /** Empty and restricted to `interfaceName`. NullPointerException if `interfaceName` is null. */
     protected HashAttributeSet(Class<?> interfaceName) {
         if (interfaceName == null) {
             throw new NullPointerException("null interface");
@@ -95,7 +96,9 @@ public class HashAttributeSet implements AttributeSet, Serializable {
         this.myInterface = interfaceName;
     }
 
-    /** Con un atributo, restringido. ClassCastException si el atributo no es de la interfaz. */
+    /**
+     * With one attribute, restricted. ClassCastException if the attribute is not of the interface.
+     */
     protected HashAttributeSet(Attribute attribute, Class<?> interfaceName) {
         if (interfaceName == null) {
             throw new NullPointerException("null interface");
@@ -104,7 +107,7 @@ public class HashAttributeSet implements AttributeSet, Serializable {
         add(attribute);
     }
 
-    /** Con un arreglo, restringido. */
+    /** With an array, restricted. */
     protected HashAttributeSet(Attribute[] attributes, Class<?> interfaceName) {
         if (interfaceName == null) {
             throw new NullPointerException("null interface");
@@ -117,12 +120,12 @@ public class HashAttributeSet implements AttributeSet, Serializable {
     }
 
     /**
-     * Con otro conjunto, restringido.
+     * With another set, restricted.
      *
-     * <p>Este es el unico de los cuatro que **no** rechaza un `interfaceName` null, igual que en el
-     * JDK: si ademas `attributes` es null o vacio, el conjunto queda armado con `myInterface` en
-     * null y el primer `add` revienta con NullPointerException recien ahi. Es una inconsistencia
-     * del original, no una simplificacion nuestra, y se replica porque es observable.
+     * <p>This is the only one of the four that does **not** reject a null `interfaceName`, just as
+     * in the JDK: if `attributes` is also null or empty, the set ends up built with `myInterface`
+     * null and the first `add` blows up with NullPointerException only then. It is an inconsistency
+     * of the original, not a simplification of ours, and it is replicated because it is observable.
      */
     protected HashAttributeSet(AttributeSet attributes, Class<?> interfaceName) {
         this.myInterface = interfaceName;
@@ -136,10 +139,10 @@ public class HashAttributeSet implements AttributeSet, Serializable {
     }
 
     /**
-     * El atributo de esa categoria, o null.
+     * The attribute of that category, or null.
      *
-     * <p>Verifica contra `Attribute.class`, no contra `myInterface`: se puede preguntar por
-     * cualquier categoria de atributo aunque este conjunto no la pueda contener.
+     * <p>It checks against `Attribute.class`, not against `myInterface`: any attribute category can
+     * be asked about even if this set cannot contain it.
      */
     public Attribute get(Class<?> category) {
         return this.attrMap.get(
@@ -147,10 +150,10 @@ public class HashAttributeSet implements AttributeSet, Serializable {
     }
 
     /**
-     * Agrega, reemplazando al de la misma categoria.
+     * Adds, replacing the one of the same category.
      *
-     * <p>Devuelve si el conjunto **cambio**, o sea si el atributo nuevo no es igual al que estaba;
-     * no si habia algo. Ver la cabecera.
+     * <p>It returns whether the set **changed**, that is whether the new attribute is not equal to
+     * the one there was; not whether there was something. See the header.
      */
     public boolean add(Attribute attribute) {
         Object oldAttribute = this.attrMap.put(attribute.getCategory(),
@@ -158,7 +161,10 @@ public class HashAttributeSet implements AttributeSet, Serializable {
         return !attribute.equals(oldAttribute);
     }
 
-    /** Saca el de esa categoria. Una categoria null no es un error: no hace nada y da false. */
+    /**
+     * Removes the one of that category. A null category is not an error: it does nothing and gives
+     * false.
+     */
     public boolean remove(Class<?> category) {
         return category != null
                 && AttributeSetUtilities.verifyAttributeCategory(category, Attribute.class) != null
@@ -166,33 +172,33 @@ public class HashAttributeSet implements AttributeSet, Serializable {
     }
 
     /**
-     * Saca ese atributo.
+     * Removes that attribute.
      *
-     * <p>Ojo con la letra chica, que es la del JDK: saca **por categoria**, sin comparar el valor.
-     * `remove(new Copies(3))` sobre un conjunto que tiene `new Copies(5)` saca las cinco copias y
-     * devuelve true. Un atributo null no es un error: da false.
+     * <p>Mind the fine print, which is the JDK's: it removes **by category**, without comparing the
+     * value. `remove(new Copies(3))` on a set that has `new Copies(5)` removes the five copies and
+     * returns true. A null attribute is not an error: it gives false.
      */
     public boolean remove(Attribute attribute) {
         return attribute != null && this.attrMap.remove(attribute.getCategory()) != null;
     }
 
-    /** Si hay algo de esa categoria. Una categoria null da false. */
+    /** Whether there is something of that category. A null category gives false. */
     public boolean containsKey(Class<?> category) {
         return category != null
                 && AttributeSetUtilities.verifyAttributeCategory(category, Attribute.class) != null
                 && this.attrMap.get(category) != null;
     }
 
-    /** Si ese atributo exacto (por equals) esta. Aca si se compara el valor. */
+    /** Whether that exact attribute (by equals) is there. Here the value is compared. */
     public boolean containsValue(Attribute attribute) {
         return attribute != null && attribute.equals(this.attrMap.get(attribute.getCategory()));
     }
 
     /**
-     * Agrega todos, con la misma regla de reemplazo.
+     * Adds them all, with the same replacement rule.
      *
-     * <p>Devuelve true si cambio por lo menos uno. Si tira a mitad de camino, los que ya entraron
-     * quedan adentro: no hay transaccion, igual que en el JDK.
+     * <p>It returns true if at least one changed. If it throws halfway, the ones already in stay
+     * in: there is no transaction, just as in the JDK.
      */
     public boolean addAll(AttributeSet attributes) {
         Attribute[] attrs = attributes.toArray();
@@ -211,10 +217,10 @@ public class HashAttributeSet implements AttributeSet, Serializable {
     }
 
     /**
-     * Los atributos en un arreglo nuevo, sin orden definido.
+     * The attributes in a new array, in no defined order.
      *
-     * <p>El JDK escribe `attrMap.values().toArray(attrs)`; aca se recorre con el iterador para no
-     * depender de `Collection.toArray(T[])`. Mismo resultado.
+     * <p>The JDK writes `attrMap.values().toArray(attrs)`; here it walks with the iterator so as
+     * not to depend on `Collection.toArray(T[])`. Same result.
      */
     public Attribute[] toArray() {
         Attribute[] attrs = new Attribute[size()];
@@ -236,10 +242,10 @@ public class HashAttributeSet implements AttributeSet, Serializable {
     }
 
     /**
-     * Igual a cualquier {@link AttributeSet} con los mismos pares categoria-valor.
+     * Equal to any {@link AttributeSet} with the same category-value pairs.
      *
-     * <p>No pide que el otro sea un HashAttributeSet: pregunta por la interfaz, que es lo que hace
-     * que dos implementaciones distintas se puedan comparar.
+     * <p>It does not ask the other to be a HashAttributeSet: it asks through the interface, which
+     * is what lets two different implementations be compared.
      */
     public boolean equals(Object object) {
         if (!(object instanceof AttributeSet)) {
@@ -258,7 +264,7 @@ public class HashAttributeSet implements AttributeSet, Serializable {
         return true;
     }
 
-    /** La suma de los hashes. Es lo unico consistente con un orden no definido. */
+    /** The sum of the hashes. It is the only thing consistent with an undefined order. */
     public int hashCode() {
         int hcode = 0;
         Attribute[] attrs = toArray();

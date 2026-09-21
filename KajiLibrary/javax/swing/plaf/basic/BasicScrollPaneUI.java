@@ -30,36 +30,36 @@ import javax.swing.plaf.UIResource;
 import javax.swing.plaf.metal.MetalBorders$ScrollPaneBorder;
 
 /**
- * El aspecto basico de un panel con barras: mantiene los tres modelos de acuerdo.
+ * The basic look and feel of a pane with bars: it keeps the three models in agreement.
  *
- * <h2>Un triangulo de escuchas</h2>
+ * <h2>A triangle of listeners</h2>
  *
- * <p>Tres cosas pueden cambiar y las tres tienen que reflejarse en las otras:
+ * <p>Three things may change and all three have to be reflected in the others:
  *
  * <ul>
- * <li>Cambio la ventana —se movio, o cambio de tamano, o le pusieron otro contenido—: se recalculan
- * el valor y la extension de las dos barras ({@link #syncScrollPaneWithViewport}).
- * <li>Cambio el modelo de una barra —alguien la arrastro—: se mueve la posicion de la ventana.
- * <li>Cambio una propiedad del panel —otra ventana, otra barra, otra politica—: se reengancha lo
- * que corresponda.
+ * <li>The viewport changed -- it moved, or changed size, or was given other content --: the
+ * two bars' value and extent are recomputed ({@link #syncScrollPaneWithViewport}).
+ * <li>A bar's model changed -- somebody dragged it --: the viewport's position is moved.
+ * <li>A property of the pane changed -- another viewport, another bar, another policy --:
+ * whatever applies is hooked up again.
  * </ul>
  *
- * <p>El circuito no se realimenta porque cada paso escribe un valor que ya es el que corresponde:
- * al segundo aviso, nada cambia y el modelo no vuelve a avisar.
+ * <p>The circuit does not feed back because each step writes a value that is already the right
+ * one: at the second notice, nothing changes and the model does not give notice again.
  *
- * <h2>Lo que no esta</h2>
+ * <h2>What is not there</h2>
  *
- * <p>Las acciones por teclado necesitan la tabla del aspecto para saber que tecla hace que, y esa
- * tabla todavia no esta.
+ * <p>The keyboard actions need the look and feel's table in order to know which key does what,
+ * and that table is not there yet.
  */
 public class BasicScrollPaneUI extends ScrollPaneUI implements ScrollPaneConstants {
 
     protected JScrollPane scrollpane;
 
-    /** La rueda; se registra en el panel, no en la vista. */
+    /** The wheel; it is registered on the pane, not on the view. */
     private MouseWheelListener mouseWheelListener;
 
-    /** El escucha compartido; ver {@link #createMouseWheelListener}. */
+    /** The shared listener; see {@link #createMouseWheelListener}. */
     private Handler handler;
 
     protected ChangeListener vsbChangeListener;
@@ -70,19 +70,19 @@ public class BasicScrollPaneUI extends ScrollPaneUI implements ScrollPaneConstan
 
     protected PropertyChangeListener spPropertyChangeListener;
 
-    private static final ColorUIResource FONDO_POR_OMISION = new ColorUIResource(238, 238, 238);
-    private static final ColorUIResource FRENTE_POR_OMISION = new ColorUIResource(51, 51, 51);
-    private static final Font FUENTE_POR_OMISION = new FontUIResource("Dialog", Font.PLAIN, 12);
+    private static final ColorUIResource DEFAULT_BACKGROUND = new ColorUIResource(238, 238, 238);
+    private static final ColorUIResource DEFAULT_FOREGROUND = new ColorUIResource(51, 51, 51);
+    private static final Font DEFAULT_FONT = new FontUIResource("Dialog", Font.PLAIN, 12);
 
     public BasicScrollPaneUI() {
     }
 
-    /** Un aspecto por panel: guarda el panel y sus cuatro escuchas. */
+    /** One look and feel per pane: it keeps the pane and its four listeners. */
     public static ComponentUI createUI(JComponent x) {
         return new BasicScrollPaneUI();
     }
 
-    /** Pinta el borde de la ventana, si hay; lo demas lo pintan las piezas. */
+    /** It paints the viewport's border, if there is one; the rest is painted by the pieces. */
     public void paint(Graphics g, JComponent c) {
         Border vpBorder = scrollpane.getViewportBorder();
         if (vpBorder != null) {
@@ -91,37 +91,38 @@ public class BasicScrollPaneUI extends ScrollPaneUI implements ScrollPaneConstan
         }
     }
 
-    /** Sin tope: un panel con barras se estira todo lo que le den. */
+    /** No cap: a pane with bars stretches as far as it is given. */
     public Dimension getMaximumSize(JComponent c) {
         return new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE);
     }
 
     /**
-     * Colores, fuente y borde.
+     * Colours, typeface and border.
      *
-     * <p>Son los de {@code ScrollPane.*} medidos en Metal (JDK 25): fondo (238, 238, 238), frente
-     * (51, 51, 51), Dialog 12 y el borde de {@code MetalBorders.ScrollPaneBorder}. El borde de la
-     * ventana queda en {@code null}, como en Metal.
+     * <p>They are those of {@code ScrollPane.*} measured in Metal (JDK 25): background
+     * (238, 238, 238), foreground (51, 51, 51), Dialog 12 and the border from
+     * {@code MetalBorders.ScrollPaneBorder}. The viewport's border is left {@code null}, as in
+     * Metal.
      */
     protected void installDefaults(JScrollPane scrollpane) {
-        Color fondo = scrollpane.getBackground();
-        if (fondo == null || fondo instanceof UIResource) {
-            scrollpane.setBackground(FONDO_POR_OMISION);
+        Color background = scrollpane.getBackground();
+        if (background == null || background instanceof UIResource) {
+            scrollpane.setBackground(DEFAULT_BACKGROUND);
         }
-        Color frente = scrollpane.getForeground();
-        if (frente == null || frente instanceof UIResource) {
-            scrollpane.setForeground(FRENTE_POR_OMISION);
+        Color foreground = scrollpane.getForeground();
+        if (foreground == null || foreground instanceof UIResource) {
+            scrollpane.setForeground(DEFAULT_FOREGROUND);
         }
-        Font fuente = scrollpane.getFont();
-        if (fuente == null || fuente instanceof UIResource) {
-            scrollpane.setFont(FUENTE_POR_OMISION);
+        Font font = scrollpane.getFont();
+        if (font == null || font instanceof UIResource) {
+            scrollpane.setFont(DEFAULT_FONT);
         }
-        Border borde = scrollpane.getBorder();
-        if (borde == null || borde instanceof UIResource) {
+        Border border = scrollpane.getBorder();
+        if (border == null || border instanceof UIResource) {
             scrollpane.setBorder(new MetalBorders$ScrollPaneBorder());
         }
-        Border bordeVentana = scrollpane.getViewportBorder();
-        if (bordeVentana == null || bordeVentana instanceof UIResource) {
+        Border viewportBorder = scrollpane.getViewportBorder();
+        if (viewportBorder == null || viewportBorder instanceof UIResource) {
             scrollpane.setViewportBorder(null);
         }
         LookAndFeel.installProperty(scrollpane, "opaque", Boolean.TRUE);
@@ -151,7 +152,7 @@ public class BasicScrollPaneUI extends ScrollPaneUI implements ScrollPaneConstan
         scrollpane.addPropertyChangeListener(spPropertyChangeListener);
     }
 
-    /** Nada: sin {@code InputMap} no hay donde registrar teclas. */
+    /** Nothing: with no {@code InputMap} there is nowhere to register keys. */
     protected void installKeyboardActions(JScrollPane c) {
     }
 
@@ -163,7 +164,7 @@ public class BasicScrollPaneUI extends ScrollPaneUI implements ScrollPaneConstan
         installKeyboardActions(scrollpane);
     }
 
-    /** Lo instalado queda en el componente; el JDK tampoco lo borra. */
+    /** What was installed stays in the component; the JDK does not erase it either. */
     protected void uninstallDefaults(JScrollPane c) {
         LookAndFeel.uninstallBorder(scrollpane);
         if (scrollpane.getViewportBorder() instanceof UIResource) {
@@ -205,12 +206,12 @@ public class BasicScrollPaneUI extends ScrollPaneUI implements ScrollPaneConstan
     }
 
     /**
-     * Copia a las barras lo que la ventana muestra.
+     * It copies to the bars what the viewport shows.
      *
-     * <p>El valor es la posicion, la extension es lo que se ve, el maximo es el tamano del
-     * contenido y el minimo es cero. Las cabeceras se acompanan en su unico eje: la de filas sigue
-     * el desplazamiento vertical y la de columnas el horizontal, y por eso no se van de la
-     * pantalla.
+     * <p>The value is the position, the extent is what is seen, the maximum is the content's size
+     * and the minimum is zero. The headers go along on their single axis: the row one follows the
+     * vertical scrolling and the column one the horizontal, and that is why they do not leave the
+     * screen.
      */
     protected void syncScrollPaneWithViewport() {
         JViewport viewport = scrollpane.getViewport();
@@ -263,15 +264,15 @@ public class BasicScrollPaneUI extends ScrollPaneUI implements ScrollPaneConstan
     }
 
     /**
-     * La linea de base del panel: la de su cabecera de columnas, y nada mas.
+     * The pane's baseline: its column header's, and nothing else.
      *
-     * <p>Sin cabecera devuelve {@code -1}, aunque el contenido tenga una. Tiene sentido: el
-     * contenido se desplaza, asi que su linea de base no esta en un lugar fijo del panel, y
-     * alinear contra ella dejaria de valer en cuanto alguien mueva la barra. La cabecera, en
-     * cambio, no se mueve en vertical.
+     * <p>With no header it returns {@code -1}, even though the content has one. It makes sense:
+     * the content scrolls, so its baseline is not at a fixed place in the pane, and lining up
+     * against it would stop holding as soon as somebody moved the bar. The header, on the other
+     * hand, does not move vertically.
      *
-     * <p>Medido en el JDK 25: con borde da 14 y sin borde 13, para una cabecera cuya propia linea
-     * esta en 13; o sea, la de la cabecera mas el inset de arriba del panel.
+     * <p>Measured in JDK 25: with a border it gives 14 and with no border 13, for a header whose
+     * own line is at 13; that is, the header's plus the pane's top inset.
      */
     public int getBaseline(JComponent c, int width, int height) {
         super.getBaseline(c, width, height);
@@ -301,19 +302,20 @@ public class BasicScrollPaneUI extends ScrollPaneUI implements ScrollPaneConstan
     }
 
     /**
-     * El escucha de la rueda.
+     * The wheel's listener.
      *
-     * <p>Devuelve siempre el mismo, y no un {@link MouseWheelHandler} nuevo: es lo que hace el JDK
-     * desde que junto a todos sus escuchas internos en una sola clase. {@link MouseWheelHandler}
-     * sigue estando -- es publica y alguien pudo haberla extendido -- pero ya no es lo que sale de
-     * aca; lo unico que hace es delegar en este. Medido.
+     * <p>It always returns the same one, and not a new {@link MouseWheelHandler}: it is what the
+     * JDK does since it gathered all its internal listeners into a single class.
+     * {@link MouseWheelHandler} is still there -- it is public and somebody may have extended it
+     * -- but it is no longer what comes out of here; the only thing it does is delegate to this
+     * one. Measured.
      */
     protected MouseWheelListener createMouseWheelListener() {
-        return elEscucha();
+        return theListener();
     }
 
-    /** El escucha compartido, creado la primera vez que hace falta. */
-    private Handler elEscucha() {
+    /** The shared listener, created the first time it is needed. */
+    private Handler theListener() {
         if (handler == null) {
             handler = new Handler();
         }
@@ -328,13 +330,13 @@ public class BasicScrollPaneUI extends ScrollPaneUI implements ScrollPaneConstan
         return new VSBChangeListener();
     }
 
-    /** Cambio la politica de una barra: hay que volver a acomodar. */
+    /** A bar's policy changed: it has to be laid out again. */
     protected void updateScrollBarDisplayPolicy(PropertyChangeEvent e) {
         scrollpane.revalidate();
         scrollpane.repaint();
     }
 
-    /** Cambio la ventana: se reengancha el escucha y se resincroniza todo. */
+    /** The viewport changed: the listener is hooked up again and everything is resynchronized. */
     protected void updateViewport(PropertyChangeEvent e) {
         JViewport oldViewport = (JViewport) (e.getOldValue());
         JViewport newViewport = (JViewport) (e.getNewValue());
@@ -388,16 +390,15 @@ public class BasicScrollPaneUI extends ScrollPaneUI implements ScrollPaneConstan
         return new PropertyChangeHandler();
     }
 
-    /** Cambio la ventana: hay que copiarles a las barras lo que ahora se ve. */
     /**
-     * La rueda del mouse.
+     * The mouse wheel.
      *
-     * <p>Mueve la barra vertical; si no hay o no se ve, la horizontal. Que la rueda mueva en
-     * horizontal cuando no hay nada que mover en vertical es lo que hace usable un panel ancho y
-     * bajo, donde la unica barra es la de abajo.
+     * <p>It moves the vertical bar; if there is none or it is not seen, the horizontal one. That
+     * the wheel scrolls horizontally when there is nothing to move vertically is what makes a wide
+     * and low pane usable, where the only bar is the bottom one.
      *
-     * <p>El evento se consume apenas se decide cual barra mover, aun antes de moverla: consumirlo
-     * es lo que evita que el panel de mas afuera tambien se desplace con el mismo giro.
+     * <p>The event is consumed as soon as it is decided which bar to move, even before moving it:
+     * consuming it is what keeps the outermost pane from scrolling with the same turn too.
      */
     protected class MouseWheelHandler implements MouseWheelListener {
 
@@ -405,55 +406,56 @@ public class BasicScrollPaneUI extends ScrollPaneUI implements ScrollPaneConstan
         }
 
         public void mouseWheelMoved(MouseWheelEvent e) {
-            elEscucha().mouseWheelMoved(e);
+            theListener().mouseWheelMoved(e);
         }
     }
 
-    /** Donde vive de verdad la logica de la rueda; ver {@link MouseWheelHandler}. */
+    /** Where the wheel's logic really lives; see {@link MouseWheelHandler}. */
     private class Handler implements MouseWheelListener {
 
         public void mouseWheelMoved(MouseWheelEvent e) {
             if (!scrollpane.isWheelScrollingEnabled() || e.getWheelRotation() == 0) {
                 return;
             }
-            JScrollBar barra = scrollpane.getVerticalScrollBar();
-            if (barra == null || !barra.isVisible()) {
-                barra = scrollpane.getHorizontalScrollBar();
-                if (barra == null || !barra.isVisible()) {
+            JScrollBar bar = scrollpane.getVerticalScrollBar();
+            if (bar == null || !bar.isVisible()) {
+                bar = scrollpane.getHorizontalScrollBar();
+                if (bar == null || !bar.isVisible()) {
                     return;
                 }
             }
             e.consume();
             if (e.getScrollType() == MouseWheelEvent.WHEEL_BLOCK_SCROLL) {
-                porBloques(barra, e.getWheelRotation() < 0 ? -1 : 1);
+                byBlocks(bar, e.getWheelRotation() < 0 ? -1 : 1);
             } else {
-                porPasos(barra, e.getUnitsToScroll());
+                bySteps(bar, e.getUnitsToScroll());
             }
         }
 
-        /** Una pantalla en esa direccion. */
-        private void porBloques(JScrollBar barra, int direccion) {
-            int salto = barra.getBlockIncrement(direccion);
+        /** One screenful in that direction. */
+        private void byBlocks(JScrollBar bar, int direction) {
+            int salto = bar.getBlockIncrement(direction);
             if (salto == 0) {
-                salto = barra.getVisibleAmount();
+                salto = bar.getVisibleAmount();
             }
-            barra.setValue(barra.getValue() + salto * direccion);
+            bar.setValue(bar.getValue() + salto * direction);
         }
 
-        /** Tantos pasos como pida el evento, sumando el paso de cada uno. */
-        private void porPasos(JScrollBar barra, int pasos) {
-            if (pasos == 0) {
+        /** As many steps as the event asks for, adding up each one's step. */
+        private void bySteps(JScrollBar bar, int steps) {
+            if (steps == 0) {
                 return;
             }
-            int direccion = (pasos < 0) ? -1 : 1;
+            int direction = (steps < 0) ? -1 : 1;
             int total = 0;
-            for (int i = Math.abs(pasos); i > 0; i--) {
-                total += barra.getUnitIncrement(direccion) * direccion;
+            for (int i = Math.abs(steps); i > 0; i--) {
+                total += bar.getUnitIncrement(direction) * direction;
             }
-            barra.setValue(barra.getValue() + total);
+            bar.setValue(bar.getValue() + total);
         }
     }
 
+    /** The viewport changed: what is now seen has to be copied to the bars. */
     protected class ViewportChangeHandler implements ChangeListener {
 
         public ViewportChangeHandler() {
@@ -464,7 +466,7 @@ public class BasicScrollPaneUI extends ScrollPaneUI implements ScrollPaneConstan
         }
     }
 
-    /** Cambio el modelo de la barra horizontal: se mueve la ventana. */
+    /** The horizontal bar's model changed: the viewport is moved. */
     protected class HSBChangeListener implements ChangeListener {
 
         public HSBChangeListener() {
@@ -491,7 +493,7 @@ public class BasicScrollPaneUI extends ScrollPaneUI implements ScrollPaneConstan
         }
     }
 
-    /** Cambio el modelo de la barra vertical: se mueve la ventana. */
+    /** The vertical bar's model changed: the viewport is moved. */
     protected class VSBChangeListener implements ChangeListener {
 
         public VSBChangeListener() {
@@ -511,7 +513,7 @@ public class BasicScrollPaneUI extends ScrollPaneUI implements ScrollPaneConstan
         }
     }
 
-    /** Cambio una pieza o una politica del panel; reengancha lo que haga falta. */
+    /** A piece or a policy of the pane changed; it hooks up again whatever is needed. */
     public class PropertyChangeHandler implements PropertyChangeListener {
 
         public PropertyChangeHandler() {
@@ -532,24 +534,24 @@ public class BasicScrollPaneUI extends ScrollPaneUI implements ScrollPaneConstan
             } else if (propertyName.equals("columnHeader")) {
                 updateColumnHeader(e);
             } else if (propertyName.equals("verticalScrollBar")) {
-                actualizarBarra(e, vsbChangeListener);
+                updateBar(e, vsbChangeListener);
             } else if (propertyName.equals("horizontalScrollBar")) {
-                actualizarBarra(e, hsbChangeListener);
+                updateBar(e, hsbChangeListener);
             } else if (propertyName.equals("componentOrientation")) {
                 syncScrollPaneWithViewport();
             }
         }
     }
 
-    /** Cambio una barra: el escucha se muda del modelo viejo al nuevo. */
-    private void actualizarBarra(PropertyChangeEvent e, ChangeListener listener) {
-        JScrollBar vieja = (JScrollBar) e.getOldValue();
-        JScrollBar nueva = (JScrollBar) e.getNewValue();
-        if (vieja != null) {
-            vieja.getModel().removeChangeListener(listener);
+    /** A bar changed: the listener moves from the old model to the new one. */
+    private void updateBar(PropertyChangeEvent e, ChangeListener listener) {
+        JScrollBar old = (JScrollBar) e.getOldValue();
+        JScrollBar created = (JScrollBar) e.getNewValue();
+        if (old != null) {
+            old.getModel().removeChangeListener(listener);
         }
-        if (nueva != null) {
-            nueva.getModel().addChangeListener(listener);
+        if (created != null) {
+            created.getModel().addChangeListener(listener);
         }
         syncScrollPaneWithViewport();
     }

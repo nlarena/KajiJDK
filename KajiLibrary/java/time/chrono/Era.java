@@ -9,38 +9,38 @@ import java.time.temporal.TemporalQuery;
 import java.time.temporal.UnsupportedTemporalTypeException;
 import java.time.temporal.ValueRange;
 
-// KajiLibrary's java.time.chrono.Era -- una era de un calendario (las BCE/CE del ISO, las cinco
-// imperiales del japones, y las dos de cada uno de los otros).
+// KajiLibrary's java.time.chrono.Era -- a calendar's era (ISO's BCE/CE, the Japanese calendar's five
+// imperial ones, and the two of each of the others).
 //
-// Que una era sea un `TemporalAccessor` suena raro hasta que uno mira que campo tiene: exactamente
-// uno, `ERA`, y ninguno mas. No es "una fecha con muy pocos datos" sino **un valor de un solo campo**,
-// y eso es justo lo que la interfaz pide. Ser `TemporalAdjuster` sale de lo mismo: ajustar una fecha
-// con una era es poner ese campo.
+// That an era should be a `TemporalAccessor` sounds odd until one looks at which field it has:
+// exactly one, `ERA`, and none besides. It is not "a date with very little data" but **a value of a
+// single field**, and that is just what the interface asks for. Being a `TemporalAdjuster` follows
+// from the same: adjusting a date with an era is setting that field.
 //
-// Sobre `getDisplayName(TextStyle, Locale)`: esta, y devuelve el **valor numerico**. Ver su javadoc,
-// que explica por que eso no es una mentira sino la rama que el contrato define para cuando no hay
-// datos de texto.
+// On `getDisplayName(TextStyle, Locale)`: it is here, and it returns the **numeric value**. See its
+// javadoc, which explains why that is not a lie but the branch the contract defines for when there
+// is no text data.
 public interface Era extends TemporalAccessor, TemporalAdjuster {
 
     int getValue();
 
     /**
-     * El nombre de esta era para mostrarle a alguien.
+     * This era's name to show to somebody.
      *
-     * <p>Devuelve **el valor numerico**, que es lo que el contrato manda cuando no hay un nombre
-     * para el estilo y el locale pedidos: <i>"If no textual mapping is found then the numeric value
+     * <p>It returns **the numeric value**, which is what the contract demands when there is no name
+     * for the style and locale asked for: <i>"If no textual mapping is found then the numeric value
      * is returned"</i>.
      *
-     * <p>**Esta biblioteca no trae los datos de texto del CLDR**, asi que esa rama se toma
-     * **siempre**, para cualquier locale. La diferencia con el JDK es concreta:
-     * `IsoEra.CE.getDisplayName(FULL, ENGLISH)` da `"1"` aca y `"AD"` en el JDK.
+     * <p>**This library does not carry the CLDR's text data**, so that branch is taken **always**,
+     * for any locale. The difference from the JDK is concrete:
+     * `IsoEra.CE.getDisplayName(FULL, ENGLISH)` gives `"1"` here and `"AD"` in the JDK.
      *
-     * <p>Que esto se pueda escribir --y que antes se hubiera dejado afuera-- es por un detalle que
-     * vale la pena anotar: el contrato **define** que hacer cuando no hay nombre. Lo que seria
-     * mentir es inventar uno. Y el numero **se anuncia solo**: nadie confunde `"1"` con un nombre
-     * traducido, mientras que un `"CE"` devuelto para un locale frances pasaria por bueno.
+     * <p>That this can be written at all --and that it had been left out before-- comes down to a
+     * detail worth noting: the contract **defines** what to do when there is no name. What would be
+     * lying is inventing one. And the number **announces itself**: nobody mistakes `"1"` for a
+     * translated name, whereas a `"CE"` returned for a French locale would pass for good.
      *
-     * @throws NullPointerException si `style` o `locale` son `null`
+     * @throws NullPointerException if `style` or `locale` are `null`
      */
     default String getDisplayName(java.time.format.TextStyle style, java.util.Locale locale) {
         if (style == null) {
@@ -52,7 +52,7 @@ public interface Era extends TemporalAccessor, TemporalAdjuster {
         return Integer.toString(this.getValue());
     }
 
-    /** Una era **solo** sabe de `ERA`. */
+    /** An era knows **only** about `ERA`. */
     default boolean isSupported(TemporalField field) {
         if (field instanceof ChronoField) {
             return field == ChronoField.ERA;
@@ -62,9 +62,10 @@ public interface Era extends TemporalAccessor, TemporalAdjuster {
 
     default ValueRange range(TemporalField field) {
         if (field == ChronoField.ERA) {
-            // El rango real depende del calendario --el japones tiene cinco eras y arranca en -1--,
-            // pero una `Era` suelta no sabe de cual es. El de `ChronoField` es el rango generico, que
-            // es lo que el JDK devuelve aca; el ajustado lo da `Chronology.range(ERA)`.
+            // The real range depends on the calendar --the Japanese one has five eras and starts at
+            // -1-- but a loose `Era` does not know which it belongs to. `ChronoField`'s is the generic
+            // range, which is what the JDK returns here; the refined one comes from
+            // `Chronology.range(ERA)`.
             return field.range();
         }
         if (field instanceof ChronoField) {
@@ -80,10 +81,10 @@ public interface Era extends TemporalAccessor, TemporalAdjuster {
         if (field instanceof ChronoField) {
             throw new UnsupportedTemporalTypeException("Unsupported field: " + field);
         }
-        // Ligado a una local: encadenar por un intermedio de tipo interfaz se pierde (#108).
-        ValueRange rango = field.rangeRefinedBy(this);
-        long valor = field.getFrom(this);
-        return (int) rango.checkValidIntValue(valor, field);
+        // Bound to a local: chaining through an interface-typed intermediate gets lost (#108).
+        ValueRange range = field.rangeRefinedBy(this);
+        long value = field.getFrom(this);
+        return (int) range.checkValidIntValue(value, field);
     }
 
     default long getLong(TemporalField field) {
@@ -104,11 +105,11 @@ public interface Era extends TemporalAccessor, TemporalAdjuster {
     }
 
     /**
-     * Pone esta era en `temporal`, dejando el anio de la era como estaba.
+     * It sets this era on `temporal`, leaving the year of the era as it was.
      *
-     * <p>Ojo con lo que eso significa: `fecha.with(IsoEra.BCE)` sobre el anio 2024 da el anio -2023,
-     * no el -2024, porque lo que se conserva es el **anio de la era** y no el proleptico. Es lo que
-     * hace el JDK y es lo unico coherente: la era y el anio de la era son un par.
+     * <p>Mind what that means: `date.with(IsoEra.BCE)` over the year 2024 gives the year -2023, not
+     * -2024, because what is kept is the **year of the era** and not the proleptic one. It is what
+     * the JDK does and the only coherent thing: the era and the year of the era are a pair.
      */
     default Temporal adjustInto(Temporal temporal) {
         return temporal.with(ChronoField.ERA, (long) this.getValue());

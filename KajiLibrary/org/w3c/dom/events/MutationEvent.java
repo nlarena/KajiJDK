@@ -3,48 +3,48 @@ package org.w3c.dom.events;
 import org.w3c.dom.Node;
 
 /**
- * KajiLibrary's org.w3c.dom.events.MutationEvent -- el documento cambio.
+ * KajiLibrary's org.w3c.dom.events.MutationEvent -- the document changed.
  *
- * <p>Es el unico evento del DOM que no viene de una persona: lo dispara el propio arbol cuando se le
- * agrega, saca o modifica algo. Sirve para mantener sincronizada una vista sin tener que revisar el
- * documento entero.
+ * <p>It is the only DOM event that does not come from a person: the tree itself fires it when
+ * something is added to it, removed or modified. It serves for keeping a view in step without
+ * having to check the whole document.
  *
- * <h2>relatedNode es el que NO es el objetivo</h2>
+ * <h2>relatedNode is the one that is NOT the target</h2>
  *
- * <p>Y cual es depende del evento, que es lo que confunde: en {@code DOMNodeInserted} el objetivo es
- * el nodo insertado y el relacionado es su <b>padre nuevo</b>; en {@code DOMAttrModified} el objetivo
- * es el elemento y el relacionado es el <b>atributo</b>.
+ * <p>And which one it is depends on the event, which is what confuses: in {@code DOMNodeInserted}
+ * the target is the inserted node and the related one is its <b>new parent</b>; in
+ * {@code DOMAttrModified} the target is the element and the related one is the <b>attribute</b>.
  *
- * <p>Los tres campos de valor solo tienen sentido para cambios de atributo o de texto, y para el
- * resto son null. {@link #getAttrChange()} dice si el atributo se agrego, se saco o se cambio.
+ * <p>The three value fields only make sense for changes of attribute or of text, and for the rest
+ * they are null. {@link #getAttrChange()} says whether the attribute was added, removed or changed.
  */
 public interface MutationEvent extends Event {
 
-    /** El atributo se modifico. */
+    /** The attribute was modified. */
     short MODIFICATION = 1;
 
-    /** El atributo se agrego. */
+    /** The attribute was added. */
     short ADDITION = 2;
 
-    /** El atributo se saco. */
+    /** The attribute was removed. */
     short REMOVAL = 3;
 
-    /** El otro nodo involucrado. Cual es depende del evento; ver la nota de la clase. */
+    /** The other node involved. Which one depends on the event; see the note of the class. */
     Node getRelatedNode();
 
-    /** El valor anterior, o null si el evento no cambia un valor. */
+    /** The previous value, or null if the event does not change a value. */
     String getPrevValue();
 
-    /** El valor nuevo, o null. */
+    /** The new value, or null. */
     String getNewValue();
 
-    /** El nombre del atributo que cambio, o null. */
+    /** The name of the attribute that changed, or null. */
     String getAttrName();
 
-    /** Cual de los tres cambios fue. Solo tiene sentido en un cambio de atributo. */
+    /** Which of the three changes it was. It only makes sense for a change of attribute. */
     short getAttrChange();
 
-    /** Inicializa un evento de mutacion recien creado. */
+    /** It initialises a newly created mutation event. */
     void initMutationEvent(String typeArg, boolean canBubbleArg, boolean cancelableArg,
         Node relatedNodeArg, String prevValueArg, String newValueArg, String attrNameArg,
         short attrChangeArg);

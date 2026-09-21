@@ -1,22 +1,23 @@
 package javax.security.auth.login;
 
 /**
- * KajiLibrary's javax.security.auth.login.CredentialNotFoundException -- no se presento ninguna credencial.
+ * KajiLibrary's javax.security.auth.login.CredentialNotFoundException -- no credential was
+ * presented.
  *
- * <p>No es lo mismo que presentar una mal: aca no hubo nada que verificar. Suele significar que el
- * manejador de callbacks no devolvio nada, o que el modulo esperaba algo que la aplicacion nunca
- * junto.
+ * <p>It is not the same as presenting a wrong one: here there was nothing to verify. It usually
+ * means the callback handler returned nothing, or that the module expected something the
+ * application never collected.
  */
 public class CredentialNotFoundException extends CredentialException {
 
     private static final long serialVersionUID = -7779934467214319475L;
 
-    /** Sin detalle. */
+    /** Without detail. */
     public CredentialNotFoundException() {
         super();
     }
 
-    /** Con un mensaje que diga que paso. */
+    /** With a message that says what happened. */
     public CredentialNotFoundException(String msg) {
         super(msg);
     }

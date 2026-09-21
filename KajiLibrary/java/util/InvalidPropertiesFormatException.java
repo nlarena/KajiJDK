@@ -2,23 +2,23 @@ package java.util;
 
 import java.io.IOException;
 
-// El XML de un `Properties` no cumple el DTD de properties.
+// A `Properties`'s XML does not satisfy the properties DTD.
 //
-// Es una `IOException` y no una `RuntimeException` porque el que carga un properties ya esta
-// obligado a tratar la entrada/salida: un archivo mal formado es otra forma de que la carga
-// falle, no una categoria aparte que el llamador tenga que descubrir.
+// It is an `IOException` and not a `RuntimeException` because whoever loads a properties file is
+// already obliged to deal with I/O: a malformed file is another way for the load to fail, not a
+// separate category the caller has to discover.
 //
-// El JDK la declara sin los constructores de `Throwable` que aceptan `null` de causa; se replica
-// esa forma: las dos que hay, y ninguna mas.
+// The JDK declares it without the `Throwable` constructors that accept a null cause; that shape is
+// replicated: the two that are here, and no more.
 public class InvalidPropertiesFormatException extends IOException {
 
-    // Con `cause` como causa; el mensaje sale de ella.
+    // With `cause` as the cause; the message comes from it.
     public InvalidPropertiesFormatException(Throwable cause) {
         super(cause == null ? null : cause.toString());
         this.initCause(cause);
     }
 
-    // Con el mensaje dado.
+    // With the given message.
     public InvalidPropertiesFormatException(String message) {
         super(message);
     }

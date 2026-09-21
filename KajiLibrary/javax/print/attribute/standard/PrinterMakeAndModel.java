@@ -6,7 +6,7 @@ import javax.print.attribute.PrintServiceAttribute;
 import javax.print.attribute.TextSyntax;
 
 /**
- * Marca y modelo de la impresora, en una sola cadena.
+ * The printer's make and model, in a single string.
  */
 public final class PrinterMakeAndModel extends TextSyntax implements PrintServiceAttribute {
 

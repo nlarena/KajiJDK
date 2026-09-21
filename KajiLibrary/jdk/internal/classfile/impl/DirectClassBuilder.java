@@ -26,16 +26,16 @@ import java.util.List;
 import java.util.function.Consumer;
 
 /**
- * El {@link ClassBuilder} que escribe bytes de verdad.
+ * The {@link ClassBuilder} that writes real bytes.
  *
- * <p>Acumula lo que le dan y al final lo serializa en el orden del formato (JVMS 4.1), que **no** es
- * el orden en que llega: el pool va primero en el archivo y se termina de llenar último, porque cada
- * método que se escribe puede agregarle entradas. Por eso el cuerpo se arma en un búfer aparte y
- * recién al cerrar se pegan pool y cuerpo.
+ * <p>It accumulates what it is given and at the end serialises it in the order of the format (JVMS
+ * 4.1), which is **not** the order in which it arrives: the pool goes first in the file and is
+ * finished last, because each method written may add entries to it. That is why the body is built
+ * in a separate buffer and only on closing are pool and body joined.
  *
- * <p>Cuando un elemento se da dos veces --dos `AccessFlags`, dos superclases-- **gana el último**.
- * Es lo que hace componibles a las transformaciones: una que quiere cambiar las banderas escribe las
- * suyas después de dejar pasar las originales, sin tener que filtrarlas primero.
+ * <p>When an element is given twice --two `AccessFlags`, two superclasses-- **the last one wins**.
+ * It is what makes the transformations composable: one that wants to change the flags writes its
+ * own after letting the original ones through, without having to filter them first.
  */
 public final class DirectClassBuilder implements ClassBuilder {
 
@@ -43,14 +43,14 @@ public final class DirectClassBuilder implements ClassBuilder {
     private final ClassEntry thisClass;
     private int major = 69;
     private int minor;
-    private int flags = 0x0020; // ACC_SUPER, que es lo que emite cualquier clase moderna
+    private int flags = 0x0020; // ACC_SUPER, which is what any modern class emits
     private ClassEntry superclass;
     private List<ClassEntry> interfaces = new ArrayList<ClassEntry>();
     private final List<byte[]> fields = new ArrayList<byte[]>();
     private final List<byte[]> methods = new ArrayList<byte[]>();
     private final List<Attribute<?>> attributes = new ArrayList<Attribute<?>>();
 
-    /** Un constructor para esa clase, con ese pool. */
+    /** A builder for that class, with that pool. */
     public DirectClassBuilder(ConstantPoolBuilder pool, ClassEntry thisClass) {
         this.pool = pool;
         this.thisClass = thisClass;
@@ -90,7 +90,7 @@ public final class DirectClassBuilder implements ClassBuilder {
             this.attributes.add((Attribute<?>) e);
             return this;
         }
-        throw new IllegalArgumentException("no se sabe escribir el elemento de clase " + e);
+        throw new IllegalArgumentException("cannot write the class element " + e);
     }
 
     public ClassBuilder withField(Utf8Entry name, Utf8Entry descriptor,
@@ -134,9 +134,9 @@ public final class DirectClassBuilder implements ClassBuilder {
         return this;
     }
 
-    /** Los bytes de la clase. */
+    /** The bytes of the class. */
     public byte[] build() {
-        // El cuerpo primero, para que el pool termine de llenarse; el encabezado después.
+        // The body first, so that the pool finishes filling up; the header afterwards.
         BufWriterImpl body = new BufWriterImpl(this.pool);
         body.writeU2(this.flags);
         body.writeIndex(this.thisClass);
@@ -153,8 +153,9 @@ public final class DirectClassBuilder implements ClassBuilder {
         for (int i = 0; i < this.methods.size(); i++) {
             body.writeBytes(this.methods.get(i));
         }
-        // `BootstrapMethods` no es un atributo que el llamador escriba: lo genera el pool cuando
-        // alguien pide un `invokedynamic`. Por eso se cuenta acá y no en la lista de atributos.
+        // `BootstrapMethods` is not an attribute the caller writes: the pool generates it when
+        // somebody asks for an `invokedynamic`. That is why it is counted here and not in the list
+        // of attributes.
         boolean bsm = PoolWriter.hasBootstrapMethods(this.pool);
         body.writeU2(this.attributes.size() + (bsm ? 1 : 0));
         for (int i = 0; i < this.attributes.size(); i++) {
@@ -174,7 +175,7 @@ public final class DirectClassBuilder implements ClassBuilder {
     }
 }
 
-/** El {@link FieldBuilder} que escribe bytes. */
+/** The {@link FieldBuilder} that writes bytes. */
 final class DirectFieldBuilder implements FieldBuilder {
 
     private final ConstantPoolBuilder pool;
@@ -202,7 +203,7 @@ final class DirectFieldBuilder implements FieldBuilder {
             this.attributes.add((Attribute<?>) e);
             return this;
         }
-        throw new IllegalArgumentException("no se sabe escribir el elemento de campo " + e);
+        throw new IllegalArgumentException("cannot write the field element " + e);
     }
 
     byte[] serialize() {
@@ -218,7 +219,7 @@ final class DirectFieldBuilder implements FieldBuilder {
     }
 }
 
-/** El {@link MethodBuilder} que escribe bytes. */
+/** The {@link MethodBuilder} that writes bytes. */
 final class DirectMethodBuilder implements MethodBuilder {
 
     private final ConstantPoolBuilder pool;
@@ -252,7 +253,7 @@ final class DirectMethodBuilder implements MethodBuilder {
             this.attributes.add((Attribute<?>) e);
             return this;
         }
-        throw new IllegalArgumentException("no se sabe escribir el elemento de metodo " + e);
+        throw new IllegalArgumentException("cannot write the method element " + e);
     }
 
     public MethodBuilder withCode(Consumer<CodeBuilder> handler) {

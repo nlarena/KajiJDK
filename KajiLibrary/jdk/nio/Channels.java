@@ -5,36 +5,38 @@ import java.io.IOException;
 import java.nio.channels.SelectableChannel;
 
 /**
- * La puerta para envolver un descriptor de archivo prestado en un canal seleccionable.
+ * The door for wrapping a borrowed file descriptor in a selectable channel.
  *
- * <h2>Qué problema resuelve</h2>
+ * <h2>Which problem it solves</h2>
  *
- * <p>NIO sabe hacer canales sobre las cosas que él mismo abre: un socket, un archivo, un pipe. Lo
- * que no sabe hacer es tomar un descriptor que consiguió <em>otro</em> —una biblioteca nativa, un
- * proceso padre que lo heredó, un dispositivo abierto por JNI— y meterlo en un {@link
- * java.nio.channels.Selector}. Este método es esa costura, y por eso vive en un módulo aparte y no
- * en {@code java.nio.channels}: es una puerta de servicio, no API general.
+ * <p>NIO knows how to make channels over the things it opens itself: a socket, a file, a pipe. What
+ * it does not know how to do is take a descriptor <em>somebody else</em> got hold of —a native
+ * library, a parent process that passed it down, a device opened through JNI— and put it into a
+ * {@link java.nio.channels.Selector}. This method is that seam, and that is why it lives in a module
+ * apart and not in {@code java.nio.channels}: it is a service door, not general API.
  *
- * <h2>Por qué hace falta el {@link SelectableChannelCloser}</h2>
+ * <h2>Why the {@link SelectableChannelCloser} is needed</h2>
  *
- * <p>Porque el descriptor <strong>no es de quien lo envuelve</strong>. Un canal normal cierra su
- * descriptor cuando lo cierran a él, y eso acá sería un error: el dueño puede seguir usándolo. Como
- * NIO no puede saber cuál es la política correcta, la delega — el cierre y la liberación se los
- * pregunta a un objeto que provee quien llama.
+ * <p>Because the descriptor <strong>does not belong to whoever wraps it</strong>. An ordinary
+ * channel closes its descriptor when it is closed, and that would be a mistake here: the owner may
+ * go on using it. Since NIO cannot know which the right policy is, it delegates it — the closing and
+ * the releasing are asked of an object the caller provides.
  *
- * <p>Que sean <em>dos</em> métodos y no uno es la parte fina. {@code implCloseChannel} corre cuando
- * cierran el canal, pero el descriptor puede seguir en uso por una operación de E/S que todavía no
- * volvió; {@code implReleaseChannel} corre cuando esa última operación termina y ahí sí no queda
- * nadie. Un solo método obligaría a elegir entre cerrar demasiado pronto o no cerrar nunca.
+ * <p>That there are <em>two</em> methods and not one is the fine part. {@code implCloseChannel} runs
+ * when the channel is closed, but the descriptor may still be in use by an I/O operation that has
+ * not returned yet; {@code implReleaseChannel} runs when that last operation finishes and there is
+ * really nobody left. A single method would force a choice between closing too early and never
+ * closing.
  *
- * <h2>Lo que esta VM no puede</h2>
+ * <h2>What this VM cannot do</h2>
  *
- * <p>{@link #readWriteSelectableChannel} <strong>no está implementado acá</strong> y tira
- * {@link UnsupportedOperationException}. No es una omisión que se pueda tapar escribiendo más Java:
- * hace falta un canal seleccionable construido sobre un descriptor crudo, o sea la maquinaria que en
- * el JDK vive en {@code sun.nio.ch} y que en esta VM no existe — el selector propio sólo conoce los
- * canales que abrió él. Queda declarado, con el tipo exacto del JDK, y diciendo que no puede: es
- * preferible a fingir que devuelve un canal que después no seleccionaría nada.
+ * <p>{@link #readWriteSelectableChannel} <strong>is not implemented here</strong> and throws
+ * {@link UnsupportedOperationException}. It is not an omission that can be covered by writing more
+ * Java: it needs a selectable channel built over a raw descriptor, that is, the machinery that in
+ * the JDK lives in {@code sun.nio.ch} and that does not exist in this VM — its own selector only
+ * knows the channels it opened. It is left declared, with the exact type of the JDK, and saying that
+ * it cannot: it is preferable to pretending to return a channel that would afterwards select
+ * nothing.
  */
 public final class Channels {
 
@@ -42,37 +44,37 @@ public final class Channels {
     }
 
     /**
-     * Envuelve {@code fd} en un canal seleccionable de lectura y escritura.
+     * It wraps {@code fd} in a selectable channel for reading and writing.
      *
-     * @param fd el descriptor, que sigue siendo de quien lo pasó
-     * @param closer quién decide qué hacer al cerrar y al liberar
-     * @throws UnsupportedOperationException siempre, en esta VM — ver la nota de la clase
+     * @param fd the descriptor, which goes on belonging to whoever passed it
+     * @param closer who decides what to do on closing and on releasing
+     * @throws UnsupportedOperationException always, in this VM — see the note of the class
      */
     public static SelectableChannel readWriteSelectableChannel(FileDescriptor fd,
             SelectableChannelCloser closer) {
         throw new UnsupportedOperationException(
-                "esta VM no sabe hacer un canal seleccionable sobre un descriptor prestado");
+                "this VM cannot make a selectable channel over a borrowed descriptor");
     }
 
     /**
-     * La política de cierre de un canal que envuelve un descriptor ajeno.
+     * The closing policy of a channel that wraps somebody else's descriptor.
      *
-     * <p>Ver la descripción de {@link Channels} para por qué son dos métodos y no uno.
+     * <p>See the description of {@link Channels} for why there are two methods and not one.
      */
     public interface SelectableChannelCloser {
 
         /**
-         * Cierran el canal.
+         * The channel is closed.
          *
-         * <p>Puede haber E/S en vuelo todavía, así que acá va lo que desbloquea a quien esté
-         * esperando — no necesariamente cerrar el descriptor.
+         * <p>There may be I/O in flight still, so what goes here is what unblocks whoever is waiting —
+         * not necessarily closing the descriptor.
          */
         void implCloseChannel(SelectableChannel sc) throws IOException;
 
         /**
-         * Terminó la última operación de E/S sobre el canal ya cerrado.
+         * The last I/O operation over the already closed channel has finished.
          *
-         * <p>Recién acá el descriptor no lo está usando nadie.
+         * <p>Only here is nobody using the descriptor.
          */
         void implReleaseChannel(SelectableChannel sc) throws IOException;
     }

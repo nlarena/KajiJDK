@@ -1,26 +1,26 @@
 package java.lang.instrument;
 
 /**
- * KajiLibrary's java.lang.instrument.UnmodifiableClassException -- esa clase no se puede redefinir.
+ * KajiLibrary's java.lang.instrument.UnmodifiableClassException -- that class cannot be redefined.
  *
- * <p>Sale de {@code redefineClasses} y {@code retransformClasses}. Hay clases que la maquina virtual
- * no deja tocar --las primitivas, los arreglos, y en la practica buena parte de lo que ya se estaba
- * ejecutando cuando el agente arranco--.
+ * <p>It comes out of {@code redefineClasses} and {@code retransformClasses}. There are classes the
+ * virtual machine does not allow touching --the primitives, the arrays, and in practice a good part
+ * of whatever was already running when the agent started--.
  *
- * <p>Es comprobada porque cuales son depende de la implementacion y del momento: un agente serio
- * consulta {@code isModifiableClass} antes, y ataja esto igual por si algo cambio entre la consulta y
- * la redefinicion.
+ * <p>It is checked because which ones they are depends on the implementation and on the moment: a
+ * serious agent asks {@code isModifiableClass} first, and catches this all the same in case
+ * something changed between the question and the redefinition.
  */
 public class UnmodifiableClassException extends Exception {
 
     private static final long serialVersionUID = 1716652643585309178L;
 
-    /** Sin detalle. */
+    /** With no detail. */
     public UnmodifiableClassException() {
         super();
     }
 
-    /** Con un mensaje que diga cual. */
+    /** With a message saying which one. */
     public UnmodifiableClassException(String s) {
         super(s);
     }

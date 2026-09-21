@@ -1,31 +1,31 @@
 package java.security;
 
-// Una entidad: una persona, una maquina, un rol. Lo que un sistema de seguridad puede nombrar.
+// An entity: a person, a machine, a role. What a security system can name.
 //
-// Es la abstraccion mas usada de `java.security` fuera del propio paquete —la citan `java.net`,
-// `java.nio.file.attribute`, `javax.net.ssl` y `java.security.cert`— y es tan chica como se ve:
-// un nombre, mas la igualdad para poder compararlas.
+// It is the most used abstraction of `java.security` outside the package itself —`java.net`,
+// `java.nio.file.attribute`, `javax.net.ssl` and `java.security.cert` cite it— and it is as small
+// as it looks: a name, plus the equality in order to be able to compare them.
 //
 public interface Principal {
 
-    // Si este principal es igual al objeto dado.
+    // Whether this principal is equal to the given object.
     boolean equals(Object another);
 
     String toString();
 
     int hashCode();
 
-    // El nombre de este principal.
+    // The name of this principal.
     String getName();
 
-    // Si este principal es uno de los del `Subject` dado.
+    // Whether this principal is one of those of the given `Subject`.
     //
-    // El default es la respuesta chica: busca **este mismo** principal entre los del Subject. Quien
-    // quiera la respuesta grande —un rol que abarca a otros, un grupo que contiene miembros— tiene
-    // que sobrescribirlo, y ese es justamente el motivo por el que el metodo existe en vez de que
-    // cada quien haga `subject.getPrincipals().contains(p)`.
+    // The default is the small answer: it looks for **this same** principal among those of the
+    // Subject. Whoever wants the big answer —a role that takes in others, a group that contains
+    // members— has to override it, and that is precisely the reason the method exists instead of
+    // everybody doing `subject.getPrincipals().contains(p)`.
     //
-    // Un Subject null da false y no explota: "nadie" nunca implica a nadie.
+    // A null Subject gives false and does not blow up: "nobody" never implies anybody.
     default boolean implies(javax.security.auth.Subject subject) {
         if (subject == null) {
             return false;

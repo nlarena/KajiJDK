@@ -3,7 +3,7 @@ package com.sun.source.tree;
 import javax.lang.model.element.Name;
 
 /**
- * `continue`, con etiqueta o sin ella.
+ * `continue`, with a label or without one.
  */
 public interface ContinueTree extends StatementTree {
 

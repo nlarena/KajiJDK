@@ -4,12 +4,12 @@ import java.io.IOException;
 import java.math.BigInteger;
 import java.util.Date;
 
-// Una entrada de una CRL X.509: un certificado revocado, cuando, y —si lo dice— por que.
+// An entry of an X.509 CRL: a revoked certificate, when, and —if it says so— why.
 //
-// La identidad es el **numero de serie**, no el certificado: la CRL no incluye los certificados que
-// revoca, solo sus series. Por eso hace falta saber ademas quien es el emisor, y por eso
-// `getCertificateIssuer()` existe: en una CRL indirecta —una que revoca certificados de varias
-// CAs— cada entrada puede tener un emisor distinto del de la CRL.
+// The identity is the **serial number**, not the certificate: the CRL does not include the
+// certificates it revokes, only their serials. That is why one also has to know who the issuer is,
+// and that is why `getCertificateIssuer()` exists: in an indirect CRL —one that revokes
+// certificates of several CAs— each entry can have an issuer different from that of the CRL.
 //
 public abstract class X509CRLEntry implements X509Extension {
 
@@ -18,20 +18,22 @@ public abstract class X509CRLEntry implements X509Extension {
     public X509CRLEntry() {
     }
 
-    // El emisor del certificado que esta entrada revoca, o null si es el mismo que el de la CRL.
+    // The issuer of the certificate this entry revokes, or null if it is the same as that of the
+    // CRL.
     //
-    // Devuelve null y no lanza: es un metodo **concreto** de la clase base cuyo contrato es "la
-    // subclase que sepa decodificar la extension `certificateIssuer` que lo sobrescriba", y el JDK
-    // hace exactamente esto mismo. Null no significa "no se": significa "el de la CRL", que es el
-    // caso de casi todas. Solo una CRL indirecta —una que revoca certificados de varias CAs— lleva
-    // ese campo, y ahi decodificarlo pide `GeneralName`, que este paquete no tiene.
+    // It returns null and does not throw: it is a **concrete** method of the base class whose
+    // contract is "the subclass that knows how to decode the `certificateIssuer` extension should
+    // override it", and the JDK does exactly this same thing. Null does not mean "I do not know":
+    // it means "the one of the CRL", which is the case of almost all of them. Only an indirect CRL
+    // —one that revokes certificates of several CAs— carries that field, and there decoding it asks
+    // for `GeneralName`, which this package does not have.
     public javax.security.auth.x500.X500Principal getCertificateIssuer() {
         return null;
     }
 
-    // Dos entradas son la misma si codifican los mismos bytes, igual que en `Certificate`. Comparar
-    // por numero de serie no alcanzaria: la misma serie de dos emisores distintos son dos
-    // certificados distintos.
+    // Two entries are the same if they encode the same bytes, just as in `Certificate`. Comparing
+    // by serial number would not be enough: the same serial of two different issuers are two
+    // different certificates.
     @Override
     public boolean equals(Object other) {
         if (this == other) {
@@ -75,14 +77,14 @@ public abstract class X509CRLEntry implements X509Extension {
         return h;
     }
 
-    // La entrada codificada en DER.
+    // The entry encoded in DER.
     public abstract byte[] getEncoded() throws CRLException;
 
-    // El numero de serie del certificado revocado.
+    // The serial number of the revoked certificate.
     public abstract BigInteger getSerialNumber();
 
-    // Cuando se revoco. Con `KEY_COMPROMISE` esta fecha es la que decide si una firma vieja sigue
-    // valiendo, asi que no es informativa.
+    // When it was revoked. With `KEY_COMPROMISE` this date is the one that decides whether an old
+    // signature is still worth something, so it is not informative.
     public abstract Date getRevocationDate();
 
     public abstract boolean hasExtensions();
@@ -90,16 +92,17 @@ public abstract class X509CRLEntry implements X509Extension {
     @Override
     public abstract String toString();
 
-    // La razon de la revocacion, o null si la entrada no la dice.
+    // The reason for the revocation, or null if the entry does not say.
     //
-    // Se decodifica de verdad: la extension es un ENUMERATED y nada mas. Dos comportamientos que
-    // parecen inconsistentes y son los del JDK, replicados a proposito:
+    // It is really decoded: the extension is an ENUMERATED and nothing else. Two behaviours that
+    // look inconsistent and are the JDK's, replicated on purpose:
     //
-    //   - un codigo fuera de la lista conocida da `UNSPECIFIED`, no una excepcion. Es lo correcto:
-    //     una razon que no se entiende no cambia el hecho de que **esta revocado**, y fallar ahi
-    //     convertiria una CRL nueva en una CRL ilegible.
-    //   - una extension mal formada da null, tambien sin lanzar. La consecuencia es que perder la
-    //     razon nunca hace que se pierda la revocacion, que es el lado seguro del error.
+    //   - a code outside the known list gives `UNSPECIFIED`, not an exception. It is right: a
+    //     reason that is not understood does not change the fact that it **is revoked**, and
+    //     failing there would turn a new CRL into an unreadable CRL.
+    //   - a badly formed extension gives null, also without throwing. The consequence is that
+    //     losing the reason never makes the revocation be lost, which is the safe side of the
+    //     error.
     public CRLReason getRevocationReason() {
         if (!this.hasExtensions()) {
             return null;
@@ -116,17 +119,17 @@ public abstract class X509CRLEntry implements X509Extension {
                 return null;
             }
             int from = d.skip(len);
-            int codigo = 0;
+            int code = 0;
             int i = 0;
             while (i < len) {
-                codigo = (codigo << 8) | (value[from + i] & 0xff);
+                code = (code << 8) | (value[from + i] & 0xff);
                 i = i + 1;
             }
-            CRLReason[] todas = CRLReason.values();
-            if (codigo < 0 || codigo >= todas.length) {
+            CRLReason[] all = CRLReason.values();
+            if (code < 0 || code >= all.length) {
                 return CRLReason.UNSPECIFIED;
             }
-            return todas[codigo];
+            return all[code];
         } catch (IOException e) {
             return null;
         }

@@ -9,25 +9,24 @@ import javax.lang.model.type.UnionType;
 import javax.lang.model.type.UnknownTypeException;
 
 /**
- * KajiLibrary's javax.lang.model.util.AbstractTypeVisitor6 — la base de la familia de visitantes de
- * tipos.
+ * KajiLibrary's javax.lang.model.util.AbstractTypeVisitor6 — the base of the type visitor family.
  *
- * <p>Mismo mecanismo que {@link AbstractElementVisitor6}, aplicado a {@link TypeVisitor}: una clase por
- * version del lenguaje, lo que existia en esa version abstracto, lo posterior con un cuerpo que cae en
- * {@link #visitUnknown} y tira. Ahi esta explicado por que, y no se repite.
+ * <p>Same mechanism as {@link AbstractElementVisitor6}, applied to {@link TypeVisitor}: one class
+ * per language version, what existed in that version abstract, what came later with a body that
+ * falls into {@link #visitUnknown} and throws. Why is explained there, and not repeated.
  *
- * <p>Lo que cambia es **cuales** son las formas de tipo que fueron llegando, que no son las mismas que
- * las clases de declaracion:
+ * <p>What changes is **which** forms of type kept arriving, which are not the same as the kinds of
+ * declaration:
  *
  * <ul>
- * <li>El tipo **union** es de Java 7, del `catch` multiple: en `catch (A | B e)`, el tipo de `e` no es ni
- *     `A` ni `B` sino la union de las dos.</li>
- * <li>El tipo **interseccion** es de Java 8, de las cotas multiples: en `&lt;T extends A &amp; B&gt;`, el
- *     tipo de `T` es la interseccion.</li>
+ * <li>The **union** type is from Java 7, from multi-catch: in `catch (A | B e)`, the type of `e` is
+ *     neither `A` nor `B` but the union of both.</li>
+ * <li>The **intersection** type is from Java 8, from multiple bounds: in `&lt;T extends A &amp;
+ *     B&gt;`, the type of `T` is the intersection.</li>
  * </ul>
  *
- * <p>Los dos aparecen aca con cuerpo que delega en `visitUnknown`, y pasan a abstractos en la clase de
- * la version que los introdujo — 7 y 8 respectivamente.
+ * <p>Both appear here with a body that delegates to `visitUnknown`, and become abstract in the
+ * class of the version that introduced them — 7 and 8 respectively.
  */
 @SupportedSourceVersion(SourceVersion.RELEASE_6)
 public abstract class AbstractTypeVisitor6<R, P> implements TypeVisitor<R, P> {
@@ -35,12 +34,14 @@ public abstract class AbstractTypeVisitor6<R, P> implements TypeVisitor<R, P> {
     protected AbstractTypeVisitor6() {
     }
 
-    /** El despacho: la que sabe que forma de tipo es, es la implementacion de `accept`. */
+    /**
+     * The dispatch: the one that knows which form of type it is, the implementation of `accept`.
+     */
     public final R visit(TypeMirror t, P p) {
         return t.accept(this, p);
     }
 
-    /** Igual, con parametro nulo. */
+    /** The same, with a null parameter. */
     public final R visit(TypeMirror t) {
         return t.accept(this, null);
     }

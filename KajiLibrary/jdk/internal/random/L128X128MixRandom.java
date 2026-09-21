@@ -7,9 +7,9 @@ import jdk.internal.util.random.RandomSupport;
 /**
  * The LXM family with a 128-BIT LCG.
  *
- * <p>This is where the family stops being a variation on a theme. The other members hold the LCG state
- * in one long and advance it with {@code s = M*s + a}, which the hardware does in one instruction. Here
- * the state is a PAIR (sh, sl) and the multiply has to be done by hand:
+ * <p>This is where the family stops being a variation on a theme. The other members hold the LCG
+ * state in one long and advance it with {@code s = M*s + a}, which the hardware does in one
+ * instruction. Here the state is a PAIR (sh, sl) and the multiply has to be done by hand:
  *
  * <pre>
  *     sl' = M*sl + al                            the low half, wrapping
@@ -17,15 +17,15 @@ import jdk.internal.util.random.RandomSupport;
  *     if (sl' &lt;u sl_partial) sh'++               the addition's own carry
  * </pre>
  *
- * <p>{@code high64(M x sl)} is the top 64 bits of an unsigned 128-bit product — the part Java's {@code *} throws
- * away. Reconstructing it from 32-bit halves is what Bits.unsignedMultiplyHigh does, and
- * it is the single reason this class is more than a copy of L64X128MixRandom.
+ * <p>{@code high64(M x sl)} is the top 64 bits of an unsigned 128-bit product — the part Java's
+ * {@code *} throws away. Reconstructing it from 32-bit halves is what Bits.unsignedMultiplyHigh
+ * does, and it is the single reason this class is more than a copy of L64X128MixRandom.
  *
  * <p>Both carry detections must be UNSIGNED. Using a signed comparison would miss exactly the cases
  * where the sum crossed 2<sup>63</sup>, which is half of them.
  *
- * <p>What it buys: an LCG period of 2<sup>128</sup> instead of 2<sup>64</sup>, so the two subgenerators' periods are
- * comparable rather than one dwarfing the other.
+ * <p>What it buys: an LCG period of 2<sup>128</sup> instead of 2<sup>64</sup>, so the two
+ * subgenerators' periods are comparable rather than one dwarfing the other.
  *
  * @implNote An INTERNAL class; the JDK's is splittable through a nested interface (finding #101).
  */
@@ -127,27 +127,27 @@ public final class L128X128MixRandom implements RandomGenerator.SplittableGenera
         return result;
     }
 
-    // ---- las tres entradas que faltaban ----------------------------------------------------------
+    // ---- the three entry points that were missing -----------------------------------------------
 
-    // La semilla de los generadores sin argumentos. Es un contador compartido que avanza de a
-    // GOLDEN_RATIO_64: dos generadores creados uno detras del otro no arrancan en estados vecinos,
-    // que es lo unico que se le pide.
+    // The seed of the generators with no arguments. It is a shared counter that advances by
+    // GOLDEN_RATIO_64: two generators created one after the other do not start at neighbouring
+    // states, which is the only thing asked of it.
     private static final java.util.concurrent.atomic.AtomicLong SEMILLERO =
             new java.util.concurrent.atomic.AtomicLong(RandomSupport.initialSeed());
 
-    /** Un generador con una semilla elegida sola, distinta en cada llamada. */
+    /** A generator with a seed chosen by itself, different on each call. */
     public L128X128MixRandom() {
         this(SEMILLERO.getAndAdd(RandomSupport.GOLDEN_RATIO_64));
     }
 
     /**
-     * Un generador sembrado desde bytes.
+     * A generator seeded from bytes.
      *
-     * <p>Los bytes se reparten en las palabras del estado y, si no alcanzan, el resto se rellena con
-     * un generador auxiliar -- una semilla corta dejaria el estado casi en cero, que para un
-     * xor-shift es un punto fijo. Lo hace {@link RandomSupport#convertSeedBytesToLongs}, con los
-     * mismos 6 y 2 que usa el JDK para este algoritmo, asi que la misma semilla da el mismo
-     * generador.
+     * <p>The bytes are spread over the words of the state and, if they are not enough, the rest is
+     * filled in with an auxiliary generator -- a short seed would leave the state almost at zero,
+     * which for a xor-shift is a fixed point. {@link RandomSupport#convertSeedBytesToLongs} does
+     * it, with the same 6 and 2 the JDK uses for this algorithm, so the same seed gives the same
+     * generator.
      */
     public L128X128MixRandom(byte[] seed) {
         long[] data = RandomSupport.convertSeedBytesToLongs(seed, 6, 2);
@@ -159,37 +159,38 @@ public final class L128X128MixRandom implements RandomGenerator.SplittableGenera
         this.x1 = data[5];
     }
 
-    // ---- particion ---------------------------------------------------------------------------------
+    // ---- splitting ------------------------------------------------------------------------------
     //
-    // Partir no es "sembrar otro al azar": dos semillas cercanas pueden dar secuencias que se pisan.
-    // La garantia sale de que el **addend** del LCG --la `a`-- del hijo se toma de la salmuera
-    // (`brine`) y no del azar, con lo cual cada hijo recorre una orbita distinta del mismo espacio.
+    // Splitting is not "seeding another one at random": two nearby seeds may give sequences that
+    // overlap. The guarantee comes from the **addend** of the LCG --the `a`-- of the child being
+    // taken from the brine and not from chance, with which each child walks a different orbit of
+    // the same space.
     //
-    // El corrimiento `brine << 1` deja el bit bajo libre, que es donde el constructor fuerza el
-    // impar. Sin eso, la mitad de las salmueras darian el mismo addend.
+    // The shift `brine << 1` leaves the low bit free, which is where the constructor forces it odd.
+    // Without that, half the brines would give the same addend.
 
-    /** Un generador independiente de este, con la entropia de este. */
+    /** A generator independent of this one, with the entropy of this one. */
     public SplittableGenerator split() {
         return this.split(this);
     }
 
-    /** Un generador independiente de este, con la entropia de `source`. */
+    /** A generator independent of this one, with the entropy of `source`. */
     public SplittableGenerator split(SplittableGenerator source) {
         return this.split(source, source.nextLong());
     }
 
-    /** El de arriba con la salmuera explicita: es el que hace el trabajo. */
+    /** The one above with the brine made explicit: it is the one that does the work. */
     public SplittableGenerator split(SplittableGenerator source, long brine) {
         return new L128X128MixRandom(source.nextLong(), brine << 1,
                 source.nextLong(), source.nextLong(), source.nextLong(), source.nextLong());
     }
 
-    /** `streamSize` generadores independientes, con la entropia de este. */
+    /** `streamSize` independent generators, with the entropy of this one. */
     public java.util.stream.Stream<SplittableGenerator> splits(long streamSize) {
         return this.splits(streamSize, this);
     }
 
-    /** `streamSize` generadores independientes, con la entropia de `source`. */
+    /** `streamSize` independent generators, with the entropy of `source`. */
     public java.util.stream.Stream<SplittableGenerator> splits(long streamSize,
             SplittableGenerator source) {
         return Splits.de(this, streamSize, source);

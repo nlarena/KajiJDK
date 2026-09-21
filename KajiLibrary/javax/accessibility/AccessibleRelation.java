@@ -1,138 +1,138 @@
 package javax.accessibility;
 
 /**
- * Un vínculo entre dos objetos que el árbol de componentes no expresa.
+ * A link between two objects that the component tree does not express.
  *
- * <p>La jerarquía dice quién está adentro de quién, y eso no alcanza. Que una etiqueta describa a un
- * campo, que un botón controle a un panel, que un texto siga a otro en el orden de lectura: nada de
- * eso se deduce de estar al lado. Estas relaciones lo dicen explícitamente.
+ * <p>The hierarchy says who is inside whom, and that is not enough. That a label describes a field,
+ * that a button controls a panel, that a text follows another in reading order: none of that is
+ * deduced from being side by side. These relations say it explicitly.
  *
- * <p>La más usada es {@link #LABELED_BY}, y es la que arregla el problema clásico de un formulario:
- * sin ella, una ayuda técnica llega a un campo de texto vacío y no tiene forma de saber que la
- * palabra que está a la izquierda es su nombre.
+ * <p>The most used is {@link #LABELED_BY}, and it is the one that fixes the classic problem of a
+ * form: without it, an assistive technology reaches an empty text field and has no way of knowing
+ * that the word to its left is its name.
  *
- * <p>Casi todas vienen de a pares —{@code LABEL_FOR} y {@code LABELED_BY}— porque el vínculo se
- * declara desde los dos lados y quien recorra el árbol puede entrar por cualquiera.
+ * <p>Almost all come in pairs --{@code LABEL_FOR} and {@code LABELED_BY}-- because the link is
+ * declared from both sides and whoever walks the tree may come in through either.
  */
 public class AccessibleRelation extends AccessibleBundle {
 
-    /** El nombre de la propiedad <b>childNodeOf</b>. */
+    /** The name of the <b>childNodeOf</b> property. */
     public static final String CHILD_NODE_OF = "childNodeOf";
 
-    /** El nombre de la propiedad <b>childNodeOfProperty</b>. */
+    /** The name of the <b>childNodeOfProperty</b> property. */
     public static final String CHILD_NODE_OF_PROPERTY = "childNodeOfProperty";
 
-    /** El nombre de la propiedad <b>controlledBy</b>. */
+    /** The name of the <b>controlledBy</b> property. */
     public static final String CONTROLLED_BY = "controlledBy";
 
-    /** El nombre de la propiedad <b>controlledByProperty</b>. */
+    /** The name of the <b>controlledByProperty</b> property. */
     public static final String CONTROLLED_BY_PROPERTY = "controlledByProperty";
 
-    /** El nombre de la propiedad <b>controllerFor</b>. */
+    /** The name of the <b>controllerFor</b> property. */
     public static final String CONTROLLER_FOR = "controllerFor";
 
-    /** El nombre de la propiedad <b>controllerForProperty</b>. */
+    /** The name of the <b>controllerForProperty</b> property. */
     public static final String CONTROLLER_FOR_PROPERTY = "controllerForProperty";
 
-    /** El nombre de la propiedad <b>embeddedBy</b>. */
+    /** The name of the <b>embeddedBy</b> property. */
     public static final String EMBEDDED_BY = "embeddedBy";
 
-    /** El nombre de la propiedad <b>embeddedByProperty</b>. */
+    /** The name of the <b>embeddedByProperty</b> property. */
     public static final String EMBEDDED_BY_PROPERTY = "embeddedByProperty";
 
-    /** El nombre de la propiedad <b>embeds</b>. */
+    /** The name of the <b>embeds</b> property. */
     public static final String EMBEDS = "embeds";
 
-    /** El nombre de la propiedad <b>embedsProperty</b>. */
+    /** The name of the <b>embedsProperty</b> property. */
     public static final String EMBEDS_PROPERTY = "embedsProperty";
 
-    /** El nombre de la propiedad <b>flowsFrom</b>. */
+    /** The name of the <b>flowsFrom</b> property. */
     public static final String FLOWS_FROM = "flowsFrom";
 
-    /** El nombre de la propiedad <b>flowsFromProperty</b>. */
+    /** The name of the <b>flowsFromProperty</b> property. */
     public static final String FLOWS_FROM_PROPERTY = "flowsFromProperty";
 
-    /** El nombre de la propiedad <b>flowsTo</b>. */
+    /** The name of the <b>flowsTo</b> property. */
     public static final String FLOWS_TO = "flowsTo";
 
-    /** El nombre de la propiedad <b>flowsToProperty</b>. */
+    /** The name of the <b>flowsToProperty</b> property. */
     public static final String FLOWS_TO_PROPERTY = "flowsToProperty";
 
-    /** El nombre de la propiedad <b>labeledBy</b>. */
+    /** The name of the <b>labeledBy</b> property. */
     public static final String LABELED_BY = "labeledBy";
 
-    /** El nombre de la propiedad <b>labeledByProperty</b>. */
+    /** The name of the <b>labeledByProperty</b> property. */
     public static final String LABELED_BY_PROPERTY = "labeledByProperty";
 
-    /** El nombre de la propiedad <b>labelFor</b>. */
+    /** The name of the <b>labelFor</b> property. */
     public static final String LABEL_FOR = "labelFor";
 
-    /** El nombre de la propiedad <b>labelForProperty</b>. */
+    /** The name of the <b>labelForProperty</b> property. */
     public static final String LABEL_FOR_PROPERTY = "labelForProperty";
 
-    /** El nombre de la propiedad <b>memberOf</b>. */
+    /** The name of the <b>memberOf</b> property. */
     public static final String MEMBER_OF = "memberOf";
 
-    /** El nombre de la propiedad <b>memberOfProperty</b>. */
+    /** The name of the <b>memberOfProperty</b> property. */
     public static final String MEMBER_OF_PROPERTY = "memberOfProperty";
 
-    /** El nombre de la propiedad <b>parentWindowOf</b>. */
+    /** The name of the <b>parentWindowOf</b> property. */
     public static final String PARENT_WINDOW_OF = "parentWindowOf";
 
-    /** El nombre de la propiedad <b>parentWindowOfProperty</b>. */
+    /** The name of the <b>parentWindowOfProperty</b> property. */
     public static final String PARENT_WINDOW_OF_PROPERTY = "parentWindowOfProperty";
 
-    /** El nombre de la propiedad <b>subwindowOf</b>. */
+    /** The name of the <b>subwindowOf</b> property. */
     public static final String SUBWINDOW_OF = "subwindowOf";
 
-    /** El nombre de la propiedad <b>subwindowOfProperty</b>. */
+    /** The name of the <b>subwindowOfProperty</b> property. */
     public static final String SUBWINDOW_OF_PROPERTY = "subwindowOfProperty";
 
     private Object[] target = new Object[0];
 
-    /** Con la clave y sin destino. */
+    /** With the key and no target. */
     public AccessibleRelation(String key) {
         this.key = key;
     }
 
-    /** Con la clave y un destino. */
+    /** With the key and one target. */
     public AccessibleRelation(String key, Object target) {
         this.key = key;
         this.target = new Object[1];
         this.target[0] = target;
     }
 
-    /** Con la clave y varios destinos. */
+    /** With the key and several targets. */
     public AccessibleRelation(String key, Object[] target) {
         this.key = key;
         this.target = target;
     }
 
-    /** Qué relación es. */
+    /** Which relation it is. */
     public String getKey() {
         return this.key;
     }
 
-    /** Con qué objetos se relaciona. */
+    /** Which objects it relates to. */
     public Object[] getTarget() {
-        Object[] copia;
+        Object[] copy;
         if (this.target == null) {
-            copia = new Object[0];
+            copy = new Object[0];
         } else {
-            copia = new Object[this.target.length];
-            System.arraycopy(this.target, 0, copia, 0, this.target.length);
+            copy = new Object[this.target.length];
+            System.arraycopy(this.target, 0, copy, 0, this.target.length);
         }
-        return copia;
+        return copy;
     }
 
-    /** Cambia el destino. */
+    /** Changes the target. */
     public void setTarget(Object target) {
-        Object[] uno = new Object[1];
-        uno[0] = target;
-        this.target = uno;
+        Object[] single = new Object[1];
+        single[0] = target;
+        this.target = single;
     }
 
-    /** Cambia los destinos. */
+    /** Changes the targets. */
     public void setTarget(Object[] target) {
         if (target == null) {
             this.target = new Object[0];

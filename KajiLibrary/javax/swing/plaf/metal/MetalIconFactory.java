@@ -11,51 +11,53 @@ import javax.swing.Icon;
 import javax.swing.plaf.UIResource;
 
 /**
- * Los iconos del aspecto Metal; por ahora, la casilla y el boton de radio.
+ * The icons of the Metal look and feel; for now, the check box and the radio button.
  *
- * <h2>Iconos medidos, no dibujados</h2>
+ * <h2>Icons measured, not drawn</h2>
  *
- * <p>En el JDK estos iconos se dibujan con lineas, arcos y un degradado ({@code Button.gradient})
- * sobre colores del tema. Aca estan como mapas de pixeles: cada estado de cada icono es lo que el
- * JDK 25 pinto, medido pixel por pixel en el tema Ocean. Es la misma sustitucion que
- * {@code jdk.internal.awt.FuenteBitmap}: el resultado exacto, en vez del procedimiento.
+ * <p>In the JDK these icons are drawn with lines, arcs and a gradient ({@code Button.gradient})
+ * over the theme's colours. Here they are pixel maps: each state of each icon is what JDK 25
+ * painted, measured pixel by pixel in the Ocean theme. It is the same substitution as
+ * {@code jdk.internal.awt.BitmapFont}: the exact result, instead of the procedure.
  *
- * <p>Los mapas usan una letra por color: {@code #} la sombra oscura (122, 138, 153), {@code p} el
- * control primario (184, 207, 229), {@code o} el negro del tema (51, 51, 51), {@code q} el gris
- * inactivo (153, 153, 153), {@code g} la fila correspondiente del degradado, y {@code .} nada. El
- * degradado va de arriba abajo y depende de la altura, asi que cada icono tiene su tabla de filas.
+ * <p>The maps use one letter per colour: {@code #} the dark shadow (122, 138, 153), {@code p}
+ * the primary control (184, 207, 229), {@code o} the theme's black (51, 51, 51), {@code q} the
+ * inactive grey (153, 153, 153), {@code g} the corresponding row of the gradient, and {@code .}
+ * nothing. The gradient runs from top to bottom and depends on the height, so each icon has its
+ * own table of rows.
  *
- * <p>Los estados salen del modelo del boton, de mas a menos especifico: deshabilitado, apretado y
- * armado, con el cursor encima, y en reposo; cada uno con y sin seleccion. Un icono apretado
- * baja la tilde de la casilla un pixel, como baja el texto del boton.
+ * <p>The states come from the button's model, from the most specific to the least: disabled,
+ * pressed and armed, with the cursor over it, and at rest; each one with and without selection.
+ * A pressed icon lowers the check box's tick by one pixel, as the button's text lowers.
  *
- * <h2>Los otros veinticuatro</h2>
+ * <h2>The other twenty-four</h2>
  *
- * <p>Los dos de arriba son mapas medidos. Los demas -- el arbol, el marco interno, el selector de
- * archivos, los menues, el deslizador -- estan dibujados: tienen el <strong>tamano exacto</strong>
- * del JDK, la misma clase para cada uno, y la misma respuesta a
- * {@code instanceof UIResource}, que es lo que decide si el aspecto puede reemplazarlos. Lo que no
- * es identico es el pixel: son figuras propias en los colores del tema.
+ * <p>The two above are measured maps. The rest -- the tree's, the internal frame's, the file
+ * chooser's, the menus', the slider's -- are drawn: they have the <strong>exact size</strong> of
+ * the JDK's, the same class for each one, and the same answer to
+ * {@code instanceof UIResource}, which is what decides whether the look and feel may replace
+ * them. What is not identical is the pixel: they are figures of their own in the theme's
+ * colours.
  *
- * <p>La distincion importa y esta documentada a proposito. Un tamano equivocado corre todo el
- * dibujo de alrededor; un trazo distinto adentro de un icono de 16 x 16 no corre nada.
+ * <p>The distinction matters and is documented on purpose. A wrong size shifts all the drawing
+ * around it; a different stroke inside a 16 x 16 icon shifts nothing.
  *
- * <h2>Cuales son recursos del aspecto y cuales no</h2>
+ * <h2>Which are look and feel resources and which are not</h2>
  *
- * <p>Casi todos son {@link UIResource}, y eso significa que un cambio de aspecto los reemplaza. Los
- * tres del arbol que no lo son -- la manija, la carpeta y la hoja -- se quedan puestos, y esta
- * medido. La razon es que un arbol al que el programa le puso iconos propios no deberia perderlos
- * al cambiar de tema, y el JDK resuelve eso no marcandolos.
+ * <p>Almost all are {@link UIResource}, and that means a change of look and feel replaces them.
+ * The three of the tree that are not -- the handle, the folder and the leaf -- stay put, and it
+ * is measured. The reason is that a tree the program set its own icons on should not lose them
+ * on changing theme, and the JDK solves that by not marking them.
  *
- * <p>{@link #getMenuItemCheckIcon} devuelve {@code null}, y tambien esta medido: un item de menu de
- * Metal no lleva tilde propia.
+ * <p>{@link #getMenuItemCheckIcon} returns {@code null}, and that is measured too: a Metal menu
+ * item carries no tick of its own.
  */
 public class MetalIconFactory implements Serializable {
 
-    private static final Color SOMBRA_OSCURA = new Color(122, 138, 153);
-    private static final Color CONTROL_PRIMARIO = new Color(184, 207, 229);
-    private static final Color NEGRO = new Color(51, 51, 51);
-    private static final Color INACTIVO = new Color(153, 153, 153);
+    private static final Color DARK_SHADOW = new Color(122, 138, 153);
+    private static final Color PRIMARY_CONTROL = new Color(184, 207, 229);
+    private static final Color BLACK = new Color(51, 51, 51);
+    private static final Color INACTIVE = new Color(153, 153, 153);
 
     private static Icon checkBoxIcon;
     private static Icon radioButtonIcon;
@@ -63,7 +65,7 @@ public class MetalIconFactory implements Serializable {
     public MetalIconFactory() {
     }
 
-    /** El icono de casilla, compartido. */
+    /** The check box icon, shared. */
     public static Icon getCheckBoxIcon() {
         if (checkBoxIcon == null) {
             checkBoxIcon = new CheckBoxIcon();
@@ -71,7 +73,7 @@ public class MetalIconFactory implements Serializable {
         return checkBoxIcon;
     }
 
-    /** El icono de boton de radio, compartido. */
+    /** The radio button icon, shared. */
     public static Icon getRadioButtonIcon() {
         if (radioButtonIcon == null) {
             radioButtonIcon = new RadioButtonIcon();
@@ -79,34 +81,34 @@ public class MetalIconFactory implements Serializable {
         return radioButtonIcon;
     }
 
-    /** Pinta un mapa de pixeles en ese lugar; ver la leyenda en la nota de la clase. */
-    static void pintarMapa(Graphics g, int x, int y, String[] mapa, Color[] degradado) {
-        for (int fila = 0; fila < mapa.length; fila++) {
-            String linea = mapa[fila];
-            for (int col = 0; col < linea.length(); col++) {
-                char c = linea.charAt(col);
+    /** It paints a pixel map at that place; see the legend in the class note. */
+    static void paintMap(Graphics g, int x, int y, String[] map, Color[] gradient) {
+        for (int row = 0; row < map.length; row++) {
+            String line = map[row];
+            for (int col = 0; col < line.length(); col++) {
+                char c = line.charAt(col);
                 Color color;
                 if (c == '#') {
-                    color = SOMBRA_OSCURA;
+                    color = DARK_SHADOW;
                 } else if (c == 'p') {
-                    color = CONTROL_PRIMARIO;
+                    color = PRIMARY_CONTROL;
                 } else if (c == 'o') {
-                    color = NEGRO;
+                    color = BLACK;
                 } else if (c == 'q') {
-                    color = INACTIVO;
+                    color = INACTIVE;
                 } else if (c == 'g') {
-                    color = degradado[fila];
+                    color = gradient[row];
                 } else {
                     continue;
                 }
                 g.setColor(color);
-                g.fillRect(x + col, y + fila, 1, 1);
+                g.fillRect(x + col, y + row, 1, 1);
             }
         }
     }
 
-    /** Que mapa corresponde al estado del modelo; el orden es el de la nota de la clase. */
-    static int estado(ButtonModel m) {
+    /** Which map corresponds to the model's state; the order is the class note's. */
+    static int state(ButtonModel m) {
         boolean sel = m.isSelected();
         if (!m.isEnabled()) {
             return sel ? 5 : 4;
@@ -120,10 +122,10 @@ public class MetalIconFactory implements Serializable {
         return sel ? 1 : 0;
     }
 
-    /** La casilla de Ocean: 13 por 13, medida. */
+    /** Ocean's check box: 13 by 13, measured. */
     private static class CheckBoxIcon implements Icon, UIResource, Serializable {
 
-        private static final Color[] DEGRADADO = {
+        private static final Color[] GRADIENT = {
             null, new Color(0xE8EFF6), new Color(0xF3F7FA), new Color(0xFFFFFF),
             new Color(0xF3F7FB), new Color(0xE8EFF7), new Color(0xDDE8F3), new Color(0xD7E4F1),
             new Color(0xD2E0EF), new Color(0xCDDDED), new Color(0xC7D9EB), new Color(0xC2D6E9),
@@ -144,7 +146,7 @@ public class MetalIconFactory implements Serializable {
             "#ggggggggggg#",
             "#############" };
 
-        private static final String[] SELECCIONADO = {
+        private static final String[] SELECTED = {
             "#############",
             "#ggggggggggg#",
             "#ggggggggggg#",
@@ -159,7 +161,7 @@ public class MetalIconFactory implements Serializable {
             "#ggggggggggg#",
             "#############" };
 
-        private static final String[] APRETADO = {
+        private static final String[] PRESSED = {
             "#############",
             "#############",
             "##pppppppppp#",
@@ -174,7 +176,7 @@ public class MetalIconFactory implements Serializable {
             "##pppppppppp#",
             "#############" };
 
-        private static final String[] APRETADO_SELECCIONADO = {
+        private static final String[] PRESSED_SELECTED = {
             "#############",
             "#############",
             "##pppppppppp#",
@@ -189,7 +191,7 @@ public class MetalIconFactory implements Serializable {
             "##pppppppppp#",
             "#############" };
 
-        private static final String[] DESHABILITADO = {
+        private static final String[] DISABLED = {
             "#############",
             "#...........#",
             "#...........#",
@@ -204,7 +206,7 @@ public class MetalIconFactory implements Serializable {
             "#...........#",
             "#############" };
 
-        private static final String[] DESHABILITADO_SELECCIONADO = {
+        private static final String[] DISABLED_SELECTED = {
             "#############",
             "#...........#",
             "#...........#",
@@ -234,7 +236,7 @@ public class MetalIconFactory implements Serializable {
             "#ppppppppppp#",
             "#############" };
 
-        private static final String[] ROLLOVER_SELECCIONADO = {
+        private static final String[] ROLLOVER_SELECTED = {
             "#############",
             "#ppppppppppp#",
             "#ppppppppppp#",
@@ -249,13 +251,13 @@ public class MetalIconFactory implements Serializable {
             "#ppppppppppp#",
             "#############" };
 
-        private static final String[][] MAPAS = { NORMAL, SELECCIONADO, APRETADO,
-            APRETADO_SELECCIONADO, DESHABILITADO, DESHABILITADO_SELECCIONADO, ROLLOVER,
-            ROLLOVER_SELECCIONADO };
+        private static final String[][] MAPS = { NORMAL, SELECTED, PRESSED,
+            PRESSED_SELECTED, DISABLED, DISABLED_SELECTED, ROLLOVER,
+            ROLLOVER_SELECTED };
 
         public void paintIcon(Component c, Graphics g, int x, int y) {
-            ButtonModel modelo = ((AbstractButton) c).getModel();
-            pintarMapa(g, x, y, MAPAS[estado(modelo)], DEGRADADO);
+            ButtonModel model = ((AbstractButton) c).getModel();
+            paintMap(g, x, y, MAPS[state(model)], GRADIENT);
         }
 
         public int getIconWidth() {
@@ -267,10 +269,10 @@ public class MetalIconFactory implements Serializable {
         }
     }
 
-    /** El boton de radio de Ocean: 13 por 13, medido; la ultima fila queda vacia. */
+    /** Ocean's radio button: 13 by 13, measured; the last row is left empty. */
     private static class RadioButtonIcon implements Icon, UIResource, Serializable {
 
-        private static final Color[] DEGRADADO = {
+        private static final Color[] GRADIENT = {
             null, new Color(0xDDE8F3), new Color(0xE8EFF6), new Color(0xF3F7FA),
             new Color(0xFFFFFF), new Color(0xF3F7FB), new Color(0xE8EFF7), new Color(0xDDE8F3),
             new Color(0xD3E1EF), new Color(0xCADBEC), new Color(0xC1D5E8), null, null };
@@ -290,7 +292,7 @@ public class MetalIconFactory implements Serializable {
             "....####.....",
             "............." };
 
-        private static final String[] SELECCIONADO = {
+        private static final String[] SELECTED = {
             "....####.....",
             "..##gggg##...",
             ".#gggggggg#..",
@@ -305,7 +307,7 @@ public class MetalIconFactory implements Serializable {
             "....####.....",
             "............." };
 
-        private static final String[] APRETADO = {
+        private static final String[] PRESSED = {
             "....####.....",
             "..########...",
             ".#.#ppppp.#..",
@@ -320,7 +322,7 @@ public class MetalIconFactory implements Serializable {
             "....####.....",
             "............." };
 
-        private static final String[] APRETADO_SELECCIONADO = {
+        private static final String[] PRESSED_SELECTED = {
             "....####.....",
             "..########...",
             ".#.#ppppp.#..",
@@ -335,7 +337,7 @@ public class MetalIconFactory implements Serializable {
             "....####.....",
             "............." };
 
-        private static final String[] DESHABILITADO = {
+        private static final String[] DISABLED = {
             "....qqqq.....",
             "..qq....qq...",
             ".q........q..",
@@ -350,7 +352,7 @@ public class MetalIconFactory implements Serializable {
             "....qqqq.....",
             "............." };
 
-        private static final String[] DESHABILITADO_SELECCIONADO = {
+        private static final String[] DISABLED_SELECTED = {
             "....qqqq.....",
             "..qq....qq...",
             ".q........q..",
@@ -380,7 +382,7 @@ public class MetalIconFactory implements Serializable {
             "....####.....",
             "............." };
 
-        private static final String[] ROLLOVER_SELECCIONADO = {
+        private static final String[] ROLLOVER_SELECTED = {
             "....####.....",
             "..##gggg##...",
             ".#ggppppgg#..",
@@ -395,13 +397,13 @@ public class MetalIconFactory implements Serializable {
             "....####.....",
             "............." };
 
-        private static final String[][] MAPAS = { NORMAL, SELECCIONADO, APRETADO,
-            APRETADO_SELECCIONADO, DESHABILITADO, DESHABILITADO_SELECCIONADO, ROLLOVER,
-            ROLLOVER_SELECCIONADO };
+        private static final String[][] MAPS = { NORMAL, SELECTED, PRESSED,
+            PRESSED_SELECTED, DISABLED, DISABLED_SELECTED, ROLLOVER,
+            ROLLOVER_SELECTED };
 
         public void paintIcon(Component c, Graphics g, int x, int y) {
-            ButtonModel modelo = ((AbstractButton) c).getModel();
-            pintarMapa(g, x, y, MAPAS[estado(modelo)], DEGRADADO);
+            ButtonModel model = ((AbstractButton) c).getModel();
+            paintMap(g, x, y, MAPS[state(model)], GRADIENT);
         }
 
         public int getIconWidth() {
@@ -413,12 +415,12 @@ public class MetalIconFactory implements Serializable {
         }
     }
 
-    // ---- los otros veinticuatro; ver la nota de la clase ----
+    // ---- the other twenty-four; see the class note ----
 
-    /** El sentido de la luz para un icono de marco interno: desde arriba. */
+    /** The direction of the light for an internal frame icon: from above. */
     public static final boolean LIGHT = true;
 
-    /** Y el contrario. */
+    /** And the opposite one. */
     public static final boolean DARK = false;
 
     private static Icon checkBoxMenuItemIcon;
@@ -451,7 +453,7 @@ public class MetalIconFactory implements Serializable {
         return radioButtonMenuItemIcon;
     }
 
-    /** Ninguno; ver la nota de la clase. */
+    /** None; see the class note. */
     public static Icon getMenuItemCheckIcon() {
         return null;
     }
@@ -471,13 +473,14 @@ public class MetalIconFactory implements Serializable {
     }
 
     /**
-     * La manija de abrir y cerrar una rama.
+     * The handle that opens and closes a branch.
      *
-     * <p>Uno nuevo cada vez, igual que la carpeta y la hoja. Los tres son justo los que no son
-     * {@link UIResource} -- un arbol puede quedarselos aunque cambie el aspecto -- y compartirlos
-     * haria que dos arboles con temas distintos se pisaran el icono. Medido.
+     * <p>A new one every time, the same as the folder and the leaf. The three are just the ones
+     * that are not {@link UIResource} -- a tree may keep them even if the look and feel changes --
+     * and sharing them would make two trees with different themes tread on each other's icon.
+     * Measured.
      *
-     * @param isCollapsed si la rama esta cerrada
+     * @param isCollapsed whether the branch is closed
      */
     public static Icon getTreeControlIcon(boolean isCollapsed) {
         return new TreeControlIcon(isCollapsed);
@@ -547,7 +550,7 @@ public class MetalIconFactory implements Serializable {
         return fcListViewIcon;
     }
 
-    /** El pulgar de un deslizador acostado: quince de ancho por dieciseis de alto. */
+    /** A horizontal slider's thumb: fifteen wide by sixteen high. */
     public static Icon getHorizontalSliderThumbIcon() {
         if (hSliderThumbIcon == null) {
             hSliderThumbIcon = new OceanHorizontalSliderThumbIcon();
@@ -570,13 +573,13 @@ public class MetalIconFactory implements Serializable {
     }
 
     /**
-     * La cruz de cerrar una ventana interna.
+     * The cross that closes an internal frame.
      *
-     * <p>Los cuatro botones de la barra de titulo toman el tamano como parametro y no lo tienen
-     * fijo: una ventana normal los quiere de dieciseis y una paleta de ocho. Por eso estos cinco
-     * metodos fabrican uno nuevo cada vez en vez de compartir.
+     * <p>The four title bar buttons take the size as a parameter and do not have it fixed: a normal
+     * window wants them at sixteen and a palette at eight. That is why these five methods build a
+     * new one every time instead of sharing.
      *
-     * @param size el lado, en pixeles
+     * @param size the side, in pixels
      */
     public static Icon getInternalFrameCloseIcon(int size) {
         return new InternalFrameCloseIcon(size);
@@ -586,7 +589,7 @@ public class MetalIconFactory implements Serializable {
         return new InternalFrameMaximizeIcon(size);
     }
 
-    /** El de restaurar: dos marcos corridos. */
+    /** The restore one: two shifted frames. */
     public static Icon getInternalFrameAltMaximizeIcon(int size) {
         return new InternalFrameAltMaximizeIcon(size);
     }
@@ -595,28 +598,28 @@ public class MetalIconFactory implements Serializable {
         return new InternalFrameMinimizeIcon(size);
     }
 
-    // ---- las clases; los nombres son los del JDK y se ven por getClass().getName() ----
+    // ---- the classes; the names are the JDK's and are seen through getClass().getName() ----
 
-    /** Un icono de lado fijo que dibuja en los colores del tema. */
-    private abstract static class Dibujado implements Icon, Serializable {
+    /** An icon of fixed side that draws in the theme's colours. */
+    private abstract static class Drawn implements Icon, Serializable {
 
-        private final int ancho;
-        private final int alto;
+        private final int width;
+        private final int height;
 
-        Dibujado(int ancho, int alto) {
-            this.ancho = ancho;
-            this.alto = alto;
+        Drawn(int width, int height) {
+            this.width = width;
+            this.height = height;
         }
 
         public int getIconWidth() {
-            return ancho;
+            return width;
         }
 
         public int getIconHeight() {
-            return alto;
+            return height;
         }
 
-        /** El color de trazo: el del tema, o el gris si el componente no responde. */
+        /** The stroke colour: the theme's, or the grey if the component does not respond. */
         static Color trazo(Component c) {
             if (c != null && !c.isEnabled()) {
                 return MetalLookAndFeel.getControlShadow();
@@ -625,45 +628,45 @@ public class MetalIconFactory implements Serializable {
         }
     }
 
-    /** El cuadradito de un item de menu con casilla. */
-    public static class CheckBoxMenuItemIcon extends Dibujado implements UIResource {
+    /** The little square of a menu item with a check box. */
+    public static class CheckBoxMenuItemIcon extends Drawn implements UIResource {
 
         public CheckBoxMenuItemIcon() {
             super(10, 10);
         }
 
         public void paintIcon(Component c, Graphics g, int x, int y) {
-            boolean prendido = (c instanceof AbstractButton)
+            boolean on = (c instanceof AbstractButton)
                     && ((AbstractButton) c).getModel().isSelected();
             g.setColor(trazo(c));
             g.drawRect(x, y, 9, 9);
-            if (prendido) {
+            if (on) {
                 g.drawLine(x + 2, y + 5, x + 4, y + 7);
                 g.drawLine(x + 4, y + 7, x + 7, y + 2);
             }
         }
     }
 
-    /** Y el circulito de uno con opcion. */
-    public static class RadioButtonMenuItemIcon extends Dibujado implements UIResource {
+    /** And the little circle of one with an option. */
+    public static class RadioButtonMenuItemIcon extends Drawn implements UIResource {
 
         public RadioButtonMenuItemIcon() {
             super(10, 10);
         }
 
         public void paintIcon(Component c, Graphics g, int x, int y) {
-            boolean prendido = (c instanceof AbstractButton)
+            boolean on = (c instanceof AbstractButton)
                     && ((AbstractButton) c).getModel().isSelected();
             g.setColor(trazo(c));
             g.drawOval(x, y, 9, 9);
-            if (prendido) {
+            if (on) {
                 g.fillOval(x + 3, y + 3, 4, 4);
             }
         }
     }
 
-    /** La flecha que dice que un item de menu abre un submenu. */
-    public static class MenuArrowIcon extends Dibujado implements UIResource {
+    /** The arrow that says a menu item opens a submenu. */
+    public static class MenuArrowIcon extends Drawn implements UIResource {
 
         public MenuArrowIcon() {
             super(4, 8);
@@ -677,8 +680,8 @@ public class MetalIconFactory implements Serializable {
         }
     }
 
-    /** La misma flecha, para un item que no es un menu. */
-    public static class MenuItemArrowIcon extends Dibujado implements UIResource {
+    /** The same arrow, for an item that is not a menu. */
+    public static class MenuItemArrowIcon extends Drawn implements UIResource {
 
         public MenuItemArrowIcon() {
             super(4, 8);
@@ -688,8 +691,8 @@ public class MetalIconFactory implements Serializable {
         }
     }
 
-    /** La manija de una rama; ver {@link MetalIconFactory#getTreeControlIcon}. */
-    public static class TreeControlIcon extends Dibujado {
+    /** A branch's handle; see {@link MetalIconFactory#getTreeControlIcon}. */
+    public static class TreeControlIcon extends Drawn {
 
         protected boolean isLight;
 
@@ -702,19 +705,19 @@ public class MetalIconFactory implements Serializable {
             drawControlIcon(g, x, y, isLight);
         }
 
-        /** Un circulo con un mas o un menos adentro. */
-        void drawControlIcon(Graphics g, int x, int y, boolean cerrada) {
+        /** A circle with a plus or a minus inside. */
+        void drawControlIcon(Graphics g, int x, int y, boolean closed) {
             g.setColor(MetalLookAndFeel.getPrimaryControlDarkShadow());
             g.drawOval(x + 4, y + 4, 9, 9);
             g.drawLine(x + 6, y + 8, x + 11, y + 8);
-            if (cerrada) {
+            if (closed) {
                 g.drawLine(x + 8, y + 6, x + 8, y + 11);
             }
         }
     }
 
-    /** La carpeta del arbol. No es un recurso del aspecto; ver la nota de la clase. */
-    public static class TreeFolderIcon extends Dibujado {
+    /** The tree's folder. It is not a look and feel resource; see the class note. */
+    public static class TreeFolderIcon extends Drawn {
 
         public TreeFolderIcon() {
             super(16, 18);
@@ -730,8 +733,8 @@ public class MetalIconFactory implements Serializable {
         }
     }
 
-    /** Y la hoja. Tampoco es un recurso. */
-    public static class TreeLeafIcon extends Dibujado {
+    /** And the leaf. It is not a resource either. */
+    public static class TreeLeafIcon extends Drawn {
 
         public TreeLeafIcon() {
             super(16, 20);
@@ -742,13 +745,13 @@ public class MetalIconFactory implements Serializable {
             g.fillRect(x + 2, y + 2, 11, 15);
             g.setColor(MetalLookAndFeel.getPrimaryControlDarkShadow());
             g.drawRect(x + 2, y + 2, 10, 14);
-            // La esquina doblada, que es lo que lo hace leerse como una hoja de papel.
+            // The folded corner, which is what makes it read as a sheet of paper.
             g.drawLine(x + 9, y + 2, x + 12, y + 5);
         }
     }
 
-    /** La computadora del selector de archivos. */
-    public static class TreeComputerIcon extends Dibujado implements UIResource {
+    /** The file chooser's computer. */
+    public static class TreeComputerIcon extends Drawn implements UIResource {
 
         public TreeComputerIcon() {
             super(16, 16);
@@ -763,8 +766,8 @@ public class MetalIconFactory implements Serializable {
         }
     }
 
-    /** El disco rigido. */
-    public static class TreeHardDriveIcon extends Dibujado implements UIResource {
+    /** The hard disk. */
+    public static class TreeHardDriveIcon extends Drawn implements UIResource {
 
         public TreeHardDriveIcon() {
             super(16, 16);
@@ -779,8 +782,8 @@ public class MetalIconFactory implements Serializable {
         }
     }
 
-    /** Y el diskette, que sigue ahi por compatibilidad con una epoca. */
-    public static class TreeFloppyDriveIcon extends Dibujado implements UIResource {
+    /** And the floppy disk, which is still there for compatibility with an era. */
+    public static class TreeFloppyDriveIcon extends Drawn implements UIResource {
 
         public TreeFloppyDriveIcon() {
             super(16, 16);
@@ -796,15 +799,15 @@ public class MetalIconFactory implements Serializable {
         }
     }
 
-    /** Una carpeta de dieciocho, base de los tres botones del selector. */
-    private abstract static class CarpetaDeSelector extends Dibujado implements UIResource {
+    /** A folder of eighteen, the base of the chooser's three buttons. */
+    private abstract static class FileChooserFolder extends Drawn implements UIResource {
 
-        CarpetaDeSelector() {
+        FileChooserFolder() {
             super(18, 18);
         }
 
-        /** La carpeta sola; cada boton le agrega su marca encima. */
-        void carpeta(Graphics g, int x, int y) {
+        /** The folder alone; each button adds its mark on top. */
+        void folder(Graphics g, int x, int y) {
             g.setColor(MetalLookAndFeel.getPrimaryControlShadow());
             g.fillRect(x + 1, y + 5, 15, 10);
             g.setColor(MetalLookAndFeel.getPrimaryControlDarkShadow());
@@ -814,25 +817,25 @@ public class MetalIconFactory implements Serializable {
         }
     }
 
-    /** La carpeta con una estrella: crear una nueva. */
-    public static class FileChooserNewFolderIcon extends CarpetaDeSelector {
+    /** The folder with a star: create a new one. */
+    public static class FileChooserNewFolderIcon extends FileChooserFolder {
 
         public FileChooserNewFolderIcon() {
         }
 
         public void paintIcon(Component c, Graphics g, int x, int y) {
-            carpeta(g, x, y);
+            folder(g, x, y);
         }
     }
 
-    /** La carpeta con una flecha para arriba: subir un nivel. */
-    public static class FileChooserUpFolderIcon extends CarpetaDeSelector {
+    /** The folder with an up arrow: go up one level. */
+    public static class FileChooserUpFolderIcon extends FileChooserFolder {
 
         public FileChooserUpFolderIcon() {
         }
 
         public void paintIcon(Component c, Graphics g, int x, int y) {
-            carpeta(g, x, y);
+            folder(g, x, y);
             g.setColor(MetalLookAndFeel.getControlInfo());
             g.drawLine(x + 8, y + 7, x + 8, y + 12);
             g.drawLine(x + 6, y + 9, x + 8, y + 7);
@@ -840,8 +843,8 @@ public class MetalIconFactory implements Serializable {
         }
     }
 
-    /** Y la casita. */
-    public static class FileChooserHomeFolderIcon extends Dibujado implements UIResource {
+    /** And the little house. */
+    public static class FileChooserHomeFolderIcon extends Drawn implements UIResource {
 
         public FileChooserHomeFolderIcon() {
             super(18, 18);
@@ -855,8 +858,8 @@ public class MetalIconFactory implements Serializable {
         }
     }
 
-    /** Las tres rayas de la vista de detalle. */
-    public static class FileChooserDetailViewIcon extends Dibujado implements UIResource {
+    /** The three lines of the detail view. */
+    public static class FileChooserDetailViewIcon extends Drawn implements UIResource {
 
         public FileChooserDetailViewIcon() {
             super(18, 18);
@@ -871,8 +874,8 @@ public class MetalIconFactory implements Serializable {
         }
     }
 
-    /** Y las dos columnas de la vista de lista. */
-    public static class FileChooserListViewIcon extends Dibujado implements UIResource {
+    /** And the two columns of the list view. */
+    public static class FileChooserListViewIcon extends Drawn implements UIResource {
 
         public FileChooserListViewIcon() {
             super(18, 18);
@@ -890,13 +893,13 @@ public class MetalIconFactory implements Serializable {
     }
 
     /**
-     * El pulgar de un deslizador acostado.
+     * A horizontal slider's thumb.
      *
-     * <p>Quince de ancho por dieciseis de alto, y la punta abajo. El nombre lleva {@code Ocean}
-     * porque el tema Steel usa otro; los dos existen en el JDK y {@code getHorizontalSliderThumbIcon}
-     * devuelve el que corresponda al tema.
+     * <p>Fifteen wide by sixteen high, and the tip at the bottom. The name carries {@code Ocean}
+     * because the Steel theme uses another; both exist in the JDK and
+     * {@code getHorizontalSliderThumbIcon} returns whichever corresponds to the theme.
      */
-    public static class OceanHorizontalSliderThumbIcon extends Dibujado implements UIResource {
+    public static class OceanHorizontalSliderThumbIcon extends Drawn implements UIResource {
 
         public OceanHorizontalSliderThumbIcon() {
             super(15, 16);
@@ -913,8 +916,8 @@ public class MetalIconFactory implements Serializable {
         }
     }
 
-    /** El mismo, parado. */
-    public static class OceanVerticalSliderThumbIcon extends Dibujado implements UIResource {
+    /** The same one, upright. */
+    public static class OceanVerticalSliderThumbIcon extends Drawn implements UIResource {
 
         public OceanVerticalSliderThumbIcon() {
             super(16, 15);
@@ -931,8 +934,8 @@ public class MetalIconFactory implements Serializable {
         }
     }
 
-    /** El icono de la esquina izquierda de una barra de titulo. */
-    public static class InternalFrameDefaultMenuIcon extends Dibujado implements UIResource {
+    /** The icon of the left corner of a title bar. */
+    public static class InternalFrameDefaultMenuIcon extends Drawn implements UIResource {
 
         public InternalFrameDefaultMenuIcon() {
             super(16, 16);
@@ -946,32 +949,32 @@ public class MetalIconFactory implements Serializable {
         }
     }
 
-    /** Los cuatro botones de la barra de titulo; el lado viene por parametro. */
-    private abstract static class BotonDeTitulo extends Dibujado implements UIResource {
+    /** The four title bar buttons; the side arrives as a parameter. */
+    private abstract static class TitleButton extends Drawn implements UIResource {
 
-        BotonDeTitulo(int lado) {
-            super(lado, lado);
+        TitleButton(int side) {
+            super(side, side);
         }
 
-        int margen() {
+        int margin() {
             return getIconWidth() / 4;
         }
 
-        int lejos() {
-            return getIconWidth() - 1 - margen();
+        int far() {
+            return getIconWidth() - 1 - margin();
         }
     }
 
-    /** La cruz. */
-    public static class InternalFrameCloseIcon extends BotonDeTitulo {
+    /** The cross. */
+    public static class InternalFrameCloseIcon extends TitleButton {
 
         public InternalFrameCloseIcon(int size) {
             super(size);
         }
 
         public void paintIcon(Component c, Graphics g, int x, int y) {
-            int m = margen();
-            int f = lejos();
+            int m = margin();
+            int f = far();
             g.setColor(MetalLookAndFeel.getControlInfo());
             g.drawLine(x + m, y + m, x + f, y + f);
             g.drawLine(x + m + 1, y + m, x + f, y + f - 1);
@@ -980,48 +983,48 @@ public class MetalIconFactory implements Serializable {
         }
     }
 
-    /** El cuadrado de agrandar. */
-    public static class InternalFrameMaximizeIcon extends BotonDeTitulo {
+    /** The maximize square. */
+    public static class InternalFrameMaximizeIcon extends TitleButton {
 
         public InternalFrameMaximizeIcon(int size) {
             super(size);
         }
 
         public void paintIcon(Component c, Graphics g, int x, int y) {
-            int m = margen();
-            int f = lejos();
+            int m = margin();
+            int f = far();
             g.setColor(MetalLookAndFeel.getControlInfo());
             g.drawRect(x + m, y + m, f - m, f - m);
             g.drawLine(x + m, y + m + 1, x + f, y + m + 1);
         }
     }
 
-    /** Los dos cuadrados corridos de restaurar. */
-    public static class InternalFrameAltMaximizeIcon extends BotonDeTitulo {
+    /** The two shifted squares of restore. */
+    public static class InternalFrameAltMaximizeIcon extends TitleButton {
 
         public InternalFrameAltMaximizeIcon(int size) {
             super(size);
         }
 
         public void paintIcon(Component c, Graphics g, int x, int y) {
-            int m = margen();
-            int f = lejos();
+            int m = margin();
+            int f = far();
             g.setColor(MetalLookAndFeel.getControlInfo());
             g.drawRect(x + m, y + m + 2, f - m - 2, f - m - 2);
             g.drawRect(x + m + 2, y + m, f - m - 2, f - m - 2);
         }
     }
 
-    /** Y la raya de achicar. */
-    public static class InternalFrameMinimizeIcon extends BotonDeTitulo {
+    /** And the iconify line. */
+    public static class InternalFrameMinimizeIcon extends TitleButton {
 
         public InternalFrameMinimizeIcon(int size) {
             super(size);
         }
 
         public void paintIcon(Component c, Graphics g, int x, int y) {
-            int m = margen();
-            int f = lejos();
+            int m = margin();
+            int f = far();
             g.setColor(MetalLookAndFeel.getControlInfo());
             g.fillRect(x + m, y + f - 1, f - m + 1, 2);
         }

@@ -3,7 +3,7 @@ package com.sun.source.doctree;
 import java.util.List;
 
 /**
- * El nodo de `@provides`, de la documentacion de un modulo.
+ * The node of `@provides`, of a module's documentation.
  */
 public interface ProvidesTree extends BlockTagTree {
 

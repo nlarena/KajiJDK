@@ -7,51 +7,55 @@ import java.lang.reflect.Method;
 import java.rmi.Remote;
 
 /**
- * El handle de un objeto remoto: donde vive y como llamarlo.
+ * The handle of a remote object: where it lives and how to call it.
  *
- * <p>Es lo que un stub lleva adentro. Que sea {@link Externalizable} es la razon de que un stub
- * pueda viajar: al serializarlo se escribe primero el nombre de la clase de la referencia
- * ({@link #getRefClass}) y despues sus datos, de modo que el otro lado sepa que implementacion
- * reconstruir.
+ * <p>It is what a stub carries inside. This note used to say that its being
+ * {@link Externalizable} is what lets a stub travel: that serialising it writes first the name of
+ * the reference's class ({@link #getRefClass}) and then its data, so the other side knows which
+ * implementation to rebuild. Nothing in the library does that: {@link #getRefClass} has no caller,
+ * no class implements this interface (only the interface {@code ServerRef} extends it), and
+ * {@link RemoteObject} keeps its {@code ref} {@code transient} with no {@code writeObject}, so a
+ * serialised stub carries no reference at all (checked with grep over {@code java/}).
  *
- * <p>{@link #remoteHashCode} y {@link #remoteEquals} existen porque la identidad de un objeto
- * remoto es <strong>la de su referencia</strong>, no la del stub: dos stubs distintos que apuntan al
- * mismo objeto tienen que ser iguales, y eso no sale de {@code Object}.
+ * <p>{@link #remoteHashCode} and {@link #remoteEquals} exist because the identity of a remote
+ * object is <strong>that of its reference</strong>, not that of the stub: two distinct stubs that
+ * point at the same object have to be equal, and that does not come from {@code Object}.
  */
 public interface RemoteRef extends Externalizable {
 
-    /** @deprecated la parte de {@code newCall}/{@code invoke(RemoteCall)} quedo obsoleta. */
+    /** @deprecated the {@code newCall}/{@code invoke(RemoteCall)} part became obsolete. */
     @Deprecated(since = "1.2")
     static final String packagePrefix = "sun.rmi.server";
 
     static final long serialVersionUID = 3632638527362204081L;
 
-    /** Invoca el metodo en el objeto remoto y devuelve el resultado. */
+    /** It invokes the method on the remote object and returns the result. */
     Object invoke(Remote obj, Method method, Object[] params, long opnum) throws Exception;
 
     /**
-     * @deprecated de la epoca de los stubs generados; usar {@link #invoke(Remote, Method, Object[], long)}
+     * @deprecated from the days of generated stubs; use {@link #invoke(Remote, Method, Object[],
+     *     long)}
      */
     @Deprecated(since = "1.2")
     RemoteCall newCall(RemoteObject obj, Operation[] op, int opnum, long hash) throws RemoteException;
 
-    /** @deprecated idem. */
+    /** @deprecated ditto. */
     @Deprecated(since = "1.2")
     void invoke(RemoteCall call) throws Exception;
 
-    /** @deprecated idem. */
+    /** @deprecated ditto. */
     @Deprecated(since = "1.2")
     void done(RemoteCall call) throws RemoteException;
 
-    /** El nombre de la clase de esta referencia, para poder reconstruirla del otro lado. */
+    /** The name of this reference's class, so it can be rebuilt on the other side. */
     String getRefClass(ObjectOutput out);
 
-    /** El hash del objeto remoto, no el del stub. */
+    /** The hash of the remote object, not that of the stub. */
     int remoteHashCode();
 
-    /** Si apuntan al mismo objeto remoto. */
+    /** Whether they point at the same remote object. */
     boolean remoteEquals(RemoteRef obj);
 
-    /** Una descripcion de la referencia. */
+    /** A description of the reference. */
     String remoteToString();
 }

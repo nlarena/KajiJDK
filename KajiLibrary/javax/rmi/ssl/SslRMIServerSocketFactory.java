@@ -11,24 +11,24 @@ import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
 
 /**
- * La fabrica que hace que el lado servidor de una llamada RMI escuche por SSL.
+ * The factory that makes the server side of an RMI call listen over SSL.
  *
- * <p>Es la contraparte de {@link SslRMIClientSocketFactory}, y a diferencia de aquella **si** tiene
- * estado: las suites, los protocolos y la exigencia de certificado de cliente son decisiones del
- * servidor, se configuran aca y no viajan a ninguna parte.
+ * <p>It is the counterpart of {@link SslRMIClientSocketFactory}, and unlike that one it **does**
+ * have state: the suites, the protocols and the demand for a client certificate are decisions of
+ * the server, are configured here and travel nowhere.
  *
- * <h2>Por que valida en el constructor</h2>
+ * <h2>Why it validates in the constructor</h2>
  *
- * <p>El constructor fabrica un {@link SSLSocket} de prueba solo para comprobar que las suites y los
- * protocolos que le pasaron existen. Es a proposito: si no lo hiciera, un nombre mal escrito no se
- * notaria hasta la primera conexion entrante --y ahi el error aparece en el hilo del `accept`, sin
- * relacion visible con la linea que lo configuro mal.
+ * <p>The constructor makes a test {@link SSLSocket} only in order to check that the suites and the
+ * protocols it was passed exist. It is on purpose: if it did not, a badly written name would not
+ * show until the first incoming connection --and there the error appears in the thread of the
+ * `accept`, with no visible relation to the line that configured it wrongly.
  *
- * <h2>Sobre `equals`</h2>
+ * <h2>About `equals`</h2>
  *
- * <p>Dos fabricas son iguales si tienen la **misma clase** y la misma configuracion. La clase
- * cuenta porque una subclase puede agregar estado que esta clase no sabe comparar, y dos fabricas
- * "iguales" hacen que RMI comparta un socket de escucha entre objetos exportados.
+ * <p>Two factories are equal if they have the **same class** and the same configuration. The class
+ * counts because a subclass can add state this class does not know how to compare, and two "equal"
+ * factories make RMI share one listening socket between exported objects.
  */
 public class SslRMIServerSocketFactory implements RMIServerSocketFactory {
 
@@ -42,20 +42,20 @@ public class SslRMIServerSocketFactory implements RMIServerSocketFactory {
     private SSLContext context;
 
     /**
-     * Una fabrica con la configuracion SSL de siempre y sin exigir certificado de cliente.
+     * A factory with the usual SSL configuration and demanding no client certificate.
      */
     public SslRMIServerSocketFactory() {
         this(null, null, null, false);
     }
 
     /**
-     * Una fabrica con las suites y los protocolos dados.
+     * A factory with the given suites and protocols.
      *
-     * @param enabledCipherSuites las suites a habilitar, o `null` para las de siempre
-     * @param enabledProtocols los protocolos a habilitar, o `null` para los de siempre
-     * @param needClientAuth si se le exige certificado al cliente
-     * @throws IllegalArgumentException si alguna suite o protocolo no esta soportado, o si no se
-     *     pudo averiguar
+     * @param enabledCipherSuites the suites to enable, or `null` for the usual ones
+     * @param enabledProtocols the protocols to enable, or `null` for the usual ones
+     * @param needClientAuth whether a certificate is demanded of the client
+     * @throws IllegalArgumentException if some suite or protocol is not supported, or if it could
+     *     not be found out
      */
     public SslRMIServerSocketFactory(String[] enabledCipherSuites, String[] enabledProtocols,
             boolean needClientAuth) throws IllegalArgumentException {
@@ -63,14 +63,14 @@ public class SslRMIServerSocketFactory implements RMIServerSocketFactory {
     }
 
     /**
-     * Una fabrica que saca sus sockets de ese contexto.
+     * A factory that takes its sockets from that context.
      *
-     * @param context el contexto SSL, o `null` para el de siempre
-     * @param enabledCipherSuites las suites a habilitar, o `null` para las de siempre
-     * @param enabledProtocols los protocolos a habilitar, o `null` para los de siempre
-     * @param needClientAuth si se le exige certificado al cliente
-     * @throws IllegalArgumentException si alguna suite o protocolo no esta soportado, o si no se
-     *     pudo averiguar
+     * @param context the SSL context, or `null` for the usual one
+     * @param enabledCipherSuites the suites to enable, or `null` for the usual ones
+     * @param enabledProtocols the protocols to enable, or `null` for the usual ones
+     * @param needClientAuth whether a certificate is demanded of the client
+     * @throws IllegalArgumentException if some suite or protocol is not supported, or if it could
+     *     not be found out
      */
     public SslRMIServerSocketFactory(SSLContext context, String[] enabledCipherSuites,
             String[] enabledProtocols, boolean needClientAuth) throws IllegalArgumentException {
@@ -83,8 +83,8 @@ public class SslRMIServerSocketFactory implements RMIServerSocketFactory {
             return;
         }
 
-        // Las listas son para `equals`: comparar arreglos por contenido a mano en cada llamada es
-        // lo que esto evita.
+        // The lists are for `equals`: comparing arrays by contents by hand at every call is what
+        // this avoids.
         if (this.enabledCipherSuites != null) {
             this.enabledCipherSuitesList = new ArrayList<String>(
                     Arrays.asList(this.enabledCipherSuites));
@@ -94,51 +94,51 @@ public class SslRMIServerSocketFactory implements RMIServerSocketFactory {
                     Arrays.asList(this.enabledProtocols));
         }
 
-        SSLSocket prueba;
+        SSLSocket probe;
         try {
-            prueba = (SSLSocket) fabrica().createSocket();
+            probe = (SSLSocket) factory().createSocket();
         } catch (Exception e) {
             throw new IllegalArgumentException(
                     "Unable to check if the cipher suites and protocols to enable are supported", e);
         }
         if (this.enabledCipherSuites != null) {
-            prueba.setEnabledCipherSuites(this.enabledCipherSuites);
+            probe.setEnabledCipherSuites(this.enabledCipherSuites);
         }
         if (this.enabledProtocols != null) {
-            prueba.setEnabledProtocols(this.enabledProtocols);
+            probe.setEnabledProtocols(this.enabledProtocols);
         }
     }
 
-    /** Las suites habilitadas, o `null` si son las de siempre. */
+    /** The enabled suites, or `null` if they are the usual ones. */
     public final String[] getEnabledCipherSuites() {
         return this.enabledCipherSuites == null ? null : this.enabledCipherSuites.clone();
     }
 
-    /** Los protocolos habilitados, o `null` si son los de siempre. */
+    /** The enabled protocols, or `null` if they are the usual ones. */
     public final String[] getEnabledProtocols() {
         return this.enabledProtocols == null ? null : this.enabledProtocols.clone();
     }
 
-    /** Si se le exige certificado al cliente. */
+    /** Whether a certificate is demanded of the client. */
     public final boolean getNeedClientAuth() {
         return this.needClientAuth;
     }
 
     /**
-     * Un socket de escucha que negocia SSL en cada `accept`.
+     * A listening socket that negotiates SSL at every `accept`.
      *
-     * <p>El handshake no pasa aca sino en el `accept`: crear el socket de escucha no habla con
-     * nadie.
+     * <p>The handshake does not happen here but in the `accept`: creating the listening socket
+     * talks to nobody.
      *
-     * @throws IOException si no se puede escuchar en ese puerto
+     * @throws IOException if it cannot listen on that port
      */
     public ServerSocket createServerSocket(int port) throws IOException {
-        return new SslServerSocket(port, fabrica(), this.enabledCipherSuites,
+        return new SslServerSocket(port, factory(), this.enabledCipherSuites,
                 this.enabledProtocols, this.needClientAuth);
     }
 
     /**
-     * Dos fabricas de la misma clase con la misma configuracion.
+     * Two factories of the same class with the same configuration.
      */
     public boolean equals(Object obj) {
         if (obj == null) {
@@ -153,7 +153,7 @@ public class SslRMIServerSocketFactory implements RMIServerSocketFactory {
         return checkParameters((SslRMIServerSocketFactory) obj);
     }
 
-    /** La comparacion de configuracion que usa {@link #equals}. */
+    /** The comparison of configuration {@link #equals} uses. */
     private boolean checkParameters(SslRMIServerSocketFactory that) {
         if (this.needClientAuth != that.needClientAuth) {
             return false;
@@ -172,7 +172,7 @@ public class SslRMIServerSocketFactory implements RMIServerSocketFactory {
         return true;
     }
 
-    /** Coherente con {@link #equals}. */
+    /** Coherent with {@link #equals}. */
     public int hashCode() {
         return this.getClass().hashCode()
                 + (this.needClientAuth ? Boolean.TRUE.hashCode() : Boolean.FALSE.hashCode())
@@ -180,12 +180,12 @@ public class SslRMIServerSocketFactory implements RMIServerSocketFactory {
                 + (this.enabledProtocols == null ? 0 : this.enabledProtocolsList.hashCode());
     }
 
-    /** La fabrica de sockets: la del contexto si hay, la de siempre si no. */
-    private SSLSocketFactory fabrica() {
+    /** The socket factory: the context's if there is one, the usual one if not. */
+    private SSLSocketFactory factory() {
         return this.context == null ? getDefaultSSLSocketFactory() : this.context.getSocketFactory();
     }
 
-    /** La fabrica SSL de siempre, memorizada; armarla no es gratis. */
+    /** The usual SSL factory, memoised; building it is not free. */
     private static synchronized SSLSocketFactory getDefaultSSLSocketFactory() {
         if (defaultSSLSocketFactory == null) {
             defaultSSLSocketFactory = (SSLSocketFactory) SSLSocketFactory.getDefault();

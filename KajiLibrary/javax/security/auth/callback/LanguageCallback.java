@@ -3,11 +3,12 @@ package javax.security.auth.callback;
 import java.util.Locale;
 
 /**
- * KajiLibrary's javax.security.auth.callback.LanguageCallback -- en que idioma hablarle al usuario.
+ * KajiLibrary's javax.security.auth.callback.LanguageCallback -- which language to speak to the
+ * user in.
  *
- * <p>Es el unico callback <b>sin prompt</b>, y tiene sentido: preguntar en que idioma se pregunta
- * seria circular. La aplicacion lo contesta con lo que ya sabe -- la configuracion del sistema, la
- * cabecera de una peticion HTTP, la preferencia guardada del usuario.
+ * <p>It is the only callback <b>without a prompt</b>, and that makes sense: asking which language
+ * to ask in would be circular. The application answers it with what it already knows -- the
+ * system's configuration, an HTTP request's header, the user's saved preference.
  */
 public class LanguageCallback implements Callback, java.io.Serializable {
 
@@ -18,12 +19,12 @@ public class LanguageCallback implements Callback, java.io.Serializable {
     public LanguageCallback() {
     }
 
-    /** Fija el idioma. Lo llama quien contesta. */
+    /** Sets the language. Whoever answers calls it. */
     public void setLocale(Locale locale) {
         this.locale = locale;
     }
 
-    /** El idioma, o null si todavia nadie contesto. */
+    /** The language, or null if nobody answered yet. */
     public Locale getLocale() {
         return this.locale;
     }

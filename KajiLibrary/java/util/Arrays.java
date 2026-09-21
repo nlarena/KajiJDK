@@ -266,9 +266,9 @@ public final class Arrays {
 
     // ---- spliterators over an array ----
     //
-    // ORDERED e IMMUTABLE, y la segunda es la que sorprende: el array se puede modificar, y lo
-    // que la caracteristica promete es que **el spliterator no lo va a hacer**. Es una promesa
-    // sobre el recorrido, no sobre el dato.
+    // ORDERED and IMMUTABLE, and the second is the one that surprises: the array can be modified,
+    // and what the characteristic promises is that **the spliterator will not do it**. It is a
+    // promise about the traversal, not about the data.
 
     /**
      * A spliterator over all of {@code array}.
@@ -276,10 +276,10 @@ public final class Arrays {
      * @param array what to traverse
      */
     public static <T> Spliterator<T> spliterator(T[] array) {
-        // El local no cambia nada -- un `T[]` ES un `Object[]` -- y esta porque nuestro javac
-        // declara ambigua la llamada cuando el argumento es un arreglo de una VARIABLE de tipo.
-        // Con `String[]` elige bien; con `T[]` no elige (#279). Nombrar el tipo del parametro es
-        // justamente lo que no dedujo.
+        // The local changes nothing -- a `T[]` IS an `Object[]` -- and it is here because our javac
+        // declares the call ambiguous when the argument is an array of a type VARIABLE. With
+        // `String[]` it chooses well; with `T[]` it does not choose (#279). Naming the parameter's
+        // type is exactly what it did not deduce.
         Object[] widened = array;
         return Spliterators.spliterator(widened, Spliterator.ORDERED | Spliterator.IMMUTABLE);
     }
@@ -368,11 +368,11 @@ public final class Arrays {
         return binarySearch(a, 0, a.length, key);
     }
 
-    // El indice de `key`, o `-(punto de insercion) - 1` si no esta. El negativo no es un "no lo
-    // encontre" a secas: codifica DONDE habria ido, que es lo que permite insertar manteniendo el
-    // orden sin buscar de nuevo.
+    // The index of `key`, or `-(insertion point) - 1` if it is not there. The negative is not a bare
+    // "I did not find it": it encodes WHERE it would have gone, which is what allows inserting in
+    // order without searching again.
     public static int binarySearch(int[] a, int fromIndex, int toIndex, int key) {
-        rangoValido(a.length, fromIndex, toIndex);
+        validRange(a.length, fromIndex, toIndex);
         int lo = fromIndex;
         int hi = toIndex - 1;
         while (lo <= hi) {
@@ -424,165 +424,165 @@ public final class Arrays {
 
 
 
-    // ---- comparacion elemento a elemento -----------------------------------------------------
+    // ---- element-by-element comparison --------------------------------------------------------
     //
-    // Todo lo que sigue —sort, binarySearch, compare, mismatch— se apoya en el `compare` del
-    // wrapper y no en `<`. Para los enteros da lo mismo; para `float` y `double` NO: `<` dice que
-    // NaN no es menor ni mayor que nada y que -0.0 == 0.0, y con eso un sort no termina de ordenar
-    // y un binarySearch se pierde. `Double.compare` define el orden total que la especificacion de
-    // `Arrays` exige: -0.0 antes que 0.0, y NaN al final.
+    // Everything that follows --sort, binarySearch, compare, mismatch-- leans on the wrapper's
+    // `compare` and not on `<`. For the integers it makes no difference; for `float` and `double` it
+    // does: `<` says NaN is neither less nor greater than anything and that -0.0 == 0.0, and with
+    // that a sort does not finish sorting and a binarySearch gets lost. `Double.compare` defines the
+    // total order `Arrays`'s specification demands: -0.0 before 0.0, and NaN at the end.
 
-    // Ordena `a` entero, ascendente.
+    // It sorts the whole of `a`, ascending.
     public static void sort(byte[] a) {
         sort(a, 0, a.length);
     }
 
-    // Ordena [fromIndex, toIndex) de `a`, ascendente.
+    // It sorts [fromIndex, toIndex) of `a`, ascending.
     public static void sort(byte[] a, int fromIndex, int toIndex) {
-        rangoValido(a.length, fromIndex, toIndex);
+        validRange(a.length, fromIndex, toIndex);
         byte[] scratch = new byte[toIndex - fromIndex];
         mergeSortByte(a, scratch, fromIndex, toIndex);
     }
 
-    // Igual que `sort`. A KajiLibrary subset: secuencial, sin fork/join.
+    // The same as `sort`. A KajiLibrary subset: sequential, with no fork/join.
     public static void parallelSort(byte[] a) {
         sort(a, 0, a.length);
     }
 
-    // Igual que `sort`. A KajiLibrary subset: secuencial.
+    // The same as `sort`. A KajiLibrary subset: sequential.
     public static void parallelSort(byte[] a, int fromIndex, int toIndex) {
         sort(a, fromIndex, toIndex);
     }
 
-    // Ordena [fromIndex, toIndex) de `a`, ascendente.
+    // It sorts [fromIndex, toIndex) of `a`, ascending.
     public static void sort(char[] a, int fromIndex, int toIndex) {
-        rangoValido(a.length, fromIndex, toIndex);
+        validRange(a.length, fromIndex, toIndex);
         char[] scratch = new char[toIndex - fromIndex];
         mergeSortCharacter(a, scratch, fromIndex, toIndex);
     }
 
-    // Igual que `sort`. A KajiLibrary subset: secuencial, sin fork/join.
+    // The same as `sort`. A KajiLibrary subset: sequential, with no fork/join.
     public static void parallelSort(char[] a) {
         sort(a, 0, a.length);
     }
 
-    // Igual que `sort`. A KajiLibrary subset: secuencial.
+    // The same as `sort`. A KajiLibrary subset: sequential.
     public static void parallelSort(char[] a, int fromIndex, int toIndex) {
         sort(a, fromIndex, toIndex);
     }
 
-    // Ordena `a` entero, ascendente.
+    // It sorts the whole of `a`, ascending.
     public static void sort(short[] a) {
         sort(a, 0, a.length);
     }
 
-    // Ordena [fromIndex, toIndex) de `a`, ascendente.
+    // It sorts [fromIndex, toIndex) of `a`, ascending.
     public static void sort(short[] a, int fromIndex, int toIndex) {
-        rangoValido(a.length, fromIndex, toIndex);
+        validRange(a.length, fromIndex, toIndex);
         short[] scratch = new short[toIndex - fromIndex];
         mergeSortShort(a, scratch, fromIndex, toIndex);
     }
 
-    // Igual que `sort`. A KajiLibrary subset: secuencial, sin fork/join.
+    // The same as `sort`. A KajiLibrary subset: sequential, with no fork/join.
     public static void parallelSort(short[] a) {
         sort(a, 0, a.length);
     }
 
-    // Igual que `sort`. A KajiLibrary subset: secuencial.
+    // The same as `sort`. A KajiLibrary subset: sequential.
     public static void parallelSort(short[] a, int fromIndex, int toIndex) {
         sort(a, fromIndex, toIndex);
     }
 
-    // Ordena [fromIndex, toIndex) de `a`, ascendente.
+    // It sorts [fromIndex, toIndex) of `a`, ascending.
     public static void sort(int[] a, int fromIndex, int toIndex) {
-        rangoValido(a.length, fromIndex, toIndex);
+        validRange(a.length, fromIndex, toIndex);
         int[] scratch = new int[toIndex - fromIndex];
         mergeSortInteger(a, scratch, fromIndex, toIndex);
     }
 
-    // Igual que `sort`. A KajiLibrary subset: secuencial, sin fork/join.
+    // The same as `sort`. A KajiLibrary subset: sequential, with no fork/join.
     public static void parallelSort(int[] a) {
         sort(a, 0, a.length);
     }
 
-    // Igual que `sort`. A KajiLibrary subset: secuencial.
+    // The same as `sort`. A KajiLibrary subset: sequential.
     public static void parallelSort(int[] a, int fromIndex, int toIndex) {
         sort(a, fromIndex, toIndex);
     }
 
-    // Ordena `a` entero, ascendente.
+    // It sorts the whole of `a`, ascending.
     public static void sort(long[] a) {
         sort(a, 0, a.length);
     }
 
-    // Ordena [fromIndex, toIndex) de `a`, ascendente.
+    // It sorts [fromIndex, toIndex) of `a`, ascending.
     public static void sort(long[] a, int fromIndex, int toIndex) {
-        rangoValido(a.length, fromIndex, toIndex);
+        validRange(a.length, fromIndex, toIndex);
         long[] scratch = new long[toIndex - fromIndex];
         mergeSortLong(a, scratch, fromIndex, toIndex);
     }
 
-    // Igual que `sort`. A KajiLibrary subset: secuencial, sin fork/join.
+    // The same as `sort`. A KajiLibrary subset: sequential, with no fork/join.
     public static void parallelSort(long[] a) {
         sort(a, 0, a.length);
     }
 
-    // Igual que `sort`. A KajiLibrary subset: secuencial.
+    // The same as `sort`. A KajiLibrary subset: sequential.
     public static void parallelSort(long[] a, int fromIndex, int toIndex) {
         sort(a, fromIndex, toIndex);
     }
 
-    // Ordena `a` entero, ascendente.
+    // It sorts the whole of `a`, ascending.
     public static void sort(float[] a) {
         sort(a, 0, a.length);
     }
 
-    // Ordena [fromIndex, toIndex) de `a`, ascendente.
+    // It sorts [fromIndex, toIndex) of `a`, ascending.
     public static void sort(float[] a, int fromIndex, int toIndex) {
-        rangoValido(a.length, fromIndex, toIndex);
+        validRange(a.length, fromIndex, toIndex);
         float[] scratch = new float[toIndex - fromIndex];
         mergeSortFloat(a, scratch, fromIndex, toIndex);
     }
 
-    // Igual que `sort`. A KajiLibrary subset: secuencial, sin fork/join.
+    // The same as `sort`. A KajiLibrary subset: sequential, with no fork/join.
     public static void parallelSort(float[] a) {
         sort(a, 0, a.length);
     }
 
-    // Igual que `sort`. A KajiLibrary subset: secuencial.
+    // The same as `sort`. A KajiLibrary subset: sequential.
     public static void parallelSort(float[] a, int fromIndex, int toIndex) {
         sort(a, fromIndex, toIndex);
     }
 
-    // Ordena `a` entero, ascendente.
+    // It sorts the whole of `a`, ascending.
     public static void sort(double[] a) {
         sort(a, 0, a.length);
     }
 
-    // Ordena [fromIndex, toIndex) de `a`, ascendente.
+    // It sorts [fromIndex, toIndex) of `a`, ascending.
     public static void sort(double[] a, int fromIndex, int toIndex) {
-        rangoValido(a.length, fromIndex, toIndex);
+        validRange(a.length, fromIndex, toIndex);
         double[] scratch = new double[toIndex - fromIndex];
         mergeSortDouble(a, scratch, fromIndex, toIndex);
     }
 
-    // Igual que `sort`. A KajiLibrary subset: secuencial, sin fork/join.
+    // The same as `sort`. A KajiLibrary subset: sequential, with no fork/join.
     public static void parallelSort(double[] a) {
         sort(a, 0, a.length);
     }
 
-    // Igual que `sort`. A KajiLibrary subset: secuencial.
+    // The same as `sort`. A KajiLibrary subset: sequential.
     public static void parallelSort(double[] a, int fromIndex, int toIndex) {
         sort(a, fromIndex, toIndex);
     }
 
-    // Ordena por el orden natural de los elementos.
+    // It sorts by the elements' natural order.
     public static void sort(java.lang.Object[] a) {
         sort(a, 0, a.length);
     }
 
     public static void sort(java.lang.Object[] a, int fromIndex, int toIndex) {
-        rangoValido(a.length, fromIndex, toIndex);
+        validRange(a.length, fromIndex, toIndex);
         java.lang.Object[] scratch = new java.lang.Object[toIndex - fromIndex];
         mergeSortObj(a, scratch, fromIndex, toIndex, null);
     }
@@ -592,7 +592,7 @@ public final class Arrays {
     }
 
     public static <T> void sort(T[] a, int fromIndex, int toIndex, java.util.Comparator<? super T> c) {
-        rangoValido(a.length, fromIndex, toIndex);
+        validRange(a.length, fromIndex, toIndex);
         java.lang.Object[] scratch = new java.lang.Object[toIndex - fromIndex];
         mergeSortObj(a, scratch, fromIndex, toIndex, c);
     }
@@ -609,11 +609,11 @@ public final class Arrays {
         return binarySearch(a, 0, a.length, key);
     }
 
-    // El indice de `key`, o `-(punto de insercion) - 1` si no esta. El negativo no es un
-    // "no lo encontre" a secas: codifica DONDE habria ido, que es lo que permite insertar
-    // manteniendo el orden sin buscar de nuevo.
+    // The index of `key`, or `-(insertion point) - 1` if it is not there. The negative is not a
+    // bare "I did not find it": it encodes WHERE it would have gone, which is what allows
+    // inserting in order without searching again.
     public static int binarySearch(byte[] a, int fromIndex, int toIndex, byte key) {
-        rangoValido(a.length, fromIndex, toIndex);
+        validRange(a.length, fromIndex, toIndex);
         int lo = fromIndex;
         int hi = toIndex - 1;
         while (lo <= hi) {
@@ -634,11 +634,11 @@ public final class Arrays {
         return binarySearch(a, 0, a.length, key);
     }
 
-    // El indice de `key`, o `-(punto de insercion) - 1` si no esta. El negativo no es un
-    // "no lo encontre" a secas: codifica DONDE habria ido, que es lo que permite insertar
-    // manteniendo el orden sin buscar de nuevo.
+    // The index of `key`, or `-(insertion point) - 1` if it is not there. The negative is not a
+    // bare "I did not find it": it encodes WHERE it would have gone, which is what allows
+    // inserting in order without searching again.
     public static int binarySearch(char[] a, int fromIndex, int toIndex, char key) {
-        rangoValido(a.length, fromIndex, toIndex);
+        validRange(a.length, fromIndex, toIndex);
         int lo = fromIndex;
         int hi = toIndex - 1;
         while (lo <= hi) {
@@ -659,11 +659,11 @@ public final class Arrays {
         return binarySearch(a, 0, a.length, key);
     }
 
-    // El indice de `key`, o `-(punto de insercion) - 1` si no esta. El negativo no es un
-    // "no lo encontre" a secas: codifica DONDE habria ido, que es lo que permite insertar
-    // manteniendo el orden sin buscar de nuevo.
+    // The index of `key`, or `-(insertion point) - 1` if it is not there. The negative is not a
+    // bare "I did not find it": it encodes WHERE it would have gone, which is what allows
+    // inserting in order without searching again.
     public static int binarySearch(short[] a, int fromIndex, int toIndex, short key) {
-        rangoValido(a.length, fromIndex, toIndex);
+        validRange(a.length, fromIndex, toIndex);
         int lo = fromIndex;
         int hi = toIndex - 1;
         while (lo <= hi) {
@@ -684,11 +684,11 @@ public final class Arrays {
         return binarySearch(a, 0, a.length, key);
     }
 
-    // El indice de `key`, o `-(punto de insercion) - 1` si no esta. El negativo no es un
-    // "no lo encontre" a secas: codifica DONDE habria ido, que es lo que permite insertar
-    // manteniendo el orden sin buscar de nuevo.
+    // The index of `key`, or `-(insertion point) - 1` if it is not there. The negative is not a
+    // bare "I did not find it": it encodes WHERE it would have gone, which is what allows
+    // inserting in order without searching again.
     public static int binarySearch(long[] a, int fromIndex, int toIndex, long key) {
-        rangoValido(a.length, fromIndex, toIndex);
+        validRange(a.length, fromIndex, toIndex);
         int lo = fromIndex;
         int hi = toIndex - 1;
         while (lo <= hi) {
@@ -709,11 +709,11 @@ public final class Arrays {
         return binarySearch(a, 0, a.length, key);
     }
 
-    // El indice de `key`, o `-(punto de insercion) - 1` si no esta. El negativo no es un
-    // "no lo encontre" a secas: codifica DONDE habria ido, que es lo que permite insertar
-    // manteniendo el orden sin buscar de nuevo.
+    // The index of `key`, or `-(insertion point) - 1` if it is not there. The negative is not a
+    // bare "I did not find it": it encodes WHERE it would have gone, which is what allows
+    // inserting in order without searching again.
     public static int binarySearch(float[] a, int fromIndex, int toIndex, float key) {
-        rangoValido(a.length, fromIndex, toIndex);
+        validRange(a.length, fromIndex, toIndex);
         int lo = fromIndex;
         int hi = toIndex - 1;
         while (lo <= hi) {
@@ -734,11 +734,11 @@ public final class Arrays {
         return binarySearch(a, 0, a.length, key);
     }
 
-    // El indice de `key`, o `-(punto de insercion) - 1` si no esta. El negativo no es un
-    // "no lo encontre" a secas: codifica DONDE habria ido, que es lo que permite insertar
-    // manteniendo el orden sin buscar de nuevo.
+    // The index of `key`, or `-(insertion point) - 1` if it is not there. The negative is not a
+    // bare "I did not find it": it encodes WHERE it would have gone, which is what allows
+    // inserting in order without searching again.
     public static int binarySearch(double[] a, int fromIndex, int toIndex, double key) {
-        rangoValido(a.length, fromIndex, toIndex);
+        validRange(a.length, fromIndex, toIndex);
         int lo = fromIndex;
         int hi = toIndex - 1;
         while (lo <= hi) {
@@ -760,7 +760,7 @@ public final class Arrays {
     }
 
     public static int binarySearch(java.lang.Object[] a, int fromIndex, int toIndex, java.lang.Object key) {
-        rangoValido(a.length, fromIndex, toIndex);
+        validRange(a.length, fromIndex, toIndex);
         int lo = fromIndex;
         int hi = toIndex - 1;
         while (lo <= hi) {
@@ -778,7 +778,7 @@ public final class Arrays {
     }
 
     public static <T> int binarySearch(T[] a, int fromIndex, int toIndex, T key, java.util.Comparator<? super T> c) {
-        rangoValido(a.length, fromIndex, toIndex);
+        validRange(a.length, fromIndex, toIndex);
         int lo = fromIndex;
         int hi = toIndex - 1;
         while (lo <= hi) {
@@ -797,7 +797,7 @@ public final class Arrays {
     }
 
     public static void fill(boolean[] a, int fromIndex, int toIndex, boolean val) {
-        rangoValido(a.length, fromIndex, toIndex);
+        validRange(a.length, fromIndex, toIndex);
         int i = fromIndex;
         while (i < toIndex) {
             a[i] = val;
@@ -810,7 +810,7 @@ public final class Arrays {
     }
 
     public static void fill(byte[] a, int fromIndex, int toIndex, byte val) {
-        rangoValido(a.length, fromIndex, toIndex);
+        validRange(a.length, fromIndex, toIndex);
         int i = fromIndex;
         while (i < toIndex) {
             a[i] = val;
@@ -819,7 +819,7 @@ public final class Arrays {
     }
 
     public static void fill(char[] a, int fromIndex, int toIndex, char val) {
-        rangoValido(a.length, fromIndex, toIndex);
+        validRange(a.length, fromIndex, toIndex);
         int i = fromIndex;
         while (i < toIndex) {
             a[i] = val;
@@ -832,7 +832,7 @@ public final class Arrays {
     }
 
     public static void fill(short[] a, int fromIndex, int toIndex, short val) {
-        rangoValido(a.length, fromIndex, toIndex);
+        validRange(a.length, fromIndex, toIndex);
         int i = fromIndex;
         while (i < toIndex) {
             a[i] = val;
@@ -841,7 +841,7 @@ public final class Arrays {
     }
 
     public static void fill(int[] a, int fromIndex, int toIndex, int val) {
-        rangoValido(a.length, fromIndex, toIndex);
+        validRange(a.length, fromIndex, toIndex);
         int i = fromIndex;
         while (i < toIndex) {
             a[i] = val;
@@ -854,7 +854,7 @@ public final class Arrays {
     }
 
     public static void fill(long[] a, int fromIndex, int toIndex, long val) {
-        rangoValido(a.length, fromIndex, toIndex);
+        validRange(a.length, fromIndex, toIndex);
         int i = fromIndex;
         while (i < toIndex) {
             a[i] = val;
@@ -867,7 +867,7 @@ public final class Arrays {
     }
 
     public static void fill(float[] a, int fromIndex, int toIndex, float val) {
-        rangoValido(a.length, fromIndex, toIndex);
+        validRange(a.length, fromIndex, toIndex);
         int i = fromIndex;
         while (i < toIndex) {
             a[i] = val;
@@ -880,7 +880,7 @@ public final class Arrays {
     }
 
     public static void fill(double[] a, int fromIndex, int toIndex, double val) {
-        rangoValido(a.length, fromIndex, toIndex);
+        validRange(a.length, fromIndex, toIndex);
         int i = fromIndex;
         while (i < toIndex) {
             a[i] = val;
@@ -889,7 +889,7 @@ public final class Arrays {
     }
 
     public static void fill(java.lang.Object[] a, int fromIndex, int toIndex, java.lang.Object val) {
-        rangoValido(a.length, fromIndex, toIndex);
+        validRange(a.length, fromIndex, toIndex);
         int i = fromIndex;
         while (i < toIndex) {
             a[i] = val;
@@ -897,18 +897,18 @@ public final class Arrays {
         }
     }
 
-    // La copia de [from, to). `to` PUEDE pasarse del largo del original: lo que sobra queda
-    // en el valor por defecto. Es deliberado en el JDK — permite copiar y agrandar de una.
+    // The copy of [from, to). `to` MAY go past the original's length: what is left over is filled
+    // with the default value. It is deliberate in the JDK -- it allows copying and growing at once.
     public static boolean[] copyOfRange(boolean[] original, int from, int to) {
         if (from < 0 || from > original.length) {
             throw new ArrayIndexOutOfBoundsException(from);
         }
-        int largo = to - from;
-        if (largo < 0) {
+        int count = to - from;
+        if (count < 0) {
             throw new IllegalArgumentException(from + " > " + to);
         }
-        boolean[] out = new boolean[largo];
-        int n = Math.min(original.length - from, largo);
+        boolean[] out = new boolean[count];
+        int n = Math.min(original.length - from, count);
         int i = 0;
         while (i < n) {
             out[i] = original[from + i];
@@ -921,18 +921,18 @@ public final class Arrays {
         return copyOfRange(original, 0, newLength);
     }
 
-    // La copia de [from, to). `to` PUEDE pasarse del largo del original: lo que sobra queda
-    // en el valor por defecto. Es deliberado en el JDK — permite copiar y agrandar de una.
+    // The copy of [from, to). `to` MAY go past the original's length: what is left over is filled
+    // with the default value. It is deliberate in the JDK -- it allows copying and growing at once.
     public static byte[] copyOfRange(byte[] original, int from, int to) {
         if (from < 0 || from > original.length) {
             throw new ArrayIndexOutOfBoundsException(from);
         }
-        int largo = to - from;
-        if (largo < 0) {
+        int count = to - from;
+        if (count < 0) {
             throw new IllegalArgumentException(from + " > " + to);
         }
-        byte[] out = new byte[largo];
-        int n = Math.min(original.length - from, largo);
+        byte[] out = new byte[count];
+        int n = Math.min(original.length - from, count);
         int i = 0;
         while (i < n) {
             out[i] = original[from + i];
@@ -941,18 +941,18 @@ public final class Arrays {
         return out;
     }
 
-    // La copia de [from, to). `to` PUEDE pasarse del largo del original: lo que sobra queda
-    // en el valor por defecto. Es deliberado en el JDK — permite copiar y agrandar de una.
+    // The copy of [from, to). `to` MAY go past the original's length: what is left over is filled
+    // with the default value. It is deliberate in the JDK -- it allows copying and growing at once.
     public static char[] copyOfRange(char[] original, int from, int to) {
         if (from < 0 || from > original.length) {
             throw new ArrayIndexOutOfBoundsException(from);
         }
-        int largo = to - from;
-        if (largo < 0) {
+        int count = to - from;
+        if (count < 0) {
             throw new IllegalArgumentException(from + " > " + to);
         }
-        char[] out = new char[largo];
-        int n = Math.min(original.length - from, largo);
+        char[] out = new char[count];
+        int n = Math.min(original.length - from, count);
         int i = 0;
         while (i < n) {
             out[i] = original[from + i];
@@ -965,18 +965,18 @@ public final class Arrays {
         return copyOfRange(original, 0, newLength);
     }
 
-    // La copia de [from, to). `to` PUEDE pasarse del largo del original: lo que sobra queda
-    // en el valor por defecto. Es deliberado en el JDK — permite copiar y agrandar de una.
+    // The copy of [from, to). `to` MAY go past the original's length: what is left over is filled
+    // with the default value. It is deliberate in the JDK -- it allows copying and growing at once.
     public static short[] copyOfRange(short[] original, int from, int to) {
         if (from < 0 || from > original.length) {
             throw new ArrayIndexOutOfBoundsException(from);
         }
-        int largo = to - from;
-        if (largo < 0) {
+        int count = to - from;
+        if (count < 0) {
             throw new IllegalArgumentException(from + " > " + to);
         }
-        short[] out = new short[largo];
-        int n = Math.min(original.length - from, largo);
+        short[] out = new short[count];
+        int n = Math.min(original.length - from, count);
         int i = 0;
         while (i < n) {
             out[i] = original[from + i];
@@ -985,18 +985,18 @@ public final class Arrays {
         return out;
     }
 
-    // La copia de [from, to). `to` PUEDE pasarse del largo del original: lo que sobra queda
-    // en el valor por defecto. Es deliberado en el JDK — permite copiar y agrandar de una.
+    // The copy of [from, to). `to` MAY go past the original's length: what is left over is filled
+    // with the default value. It is deliberate in the JDK -- it allows copying and growing at once.
     public static int[] copyOfRange(int[] original, int from, int to) {
         if (from < 0 || from > original.length) {
             throw new ArrayIndexOutOfBoundsException(from);
         }
-        int largo = to - from;
-        if (largo < 0) {
+        int count = to - from;
+        if (count < 0) {
             throw new IllegalArgumentException(from + " > " + to);
         }
-        int[] out = new int[largo];
-        int n = Math.min(original.length - from, largo);
+        int[] out = new int[count];
+        int n = Math.min(original.length - from, count);
         int i = 0;
         while (i < n) {
             out[i] = original[from + i];
@@ -1009,18 +1009,18 @@ public final class Arrays {
         return copyOfRange(original, 0, newLength);
     }
 
-    // La copia de [from, to). `to` PUEDE pasarse del largo del original: lo que sobra queda
-    // en el valor por defecto. Es deliberado en el JDK — permite copiar y agrandar de una.
+    // The copy of [from, to). `to` MAY go past the original's length: what is left over is filled
+    // with the default value. It is deliberate in the JDK -- it allows copying and growing at once.
     public static long[] copyOfRange(long[] original, int from, int to) {
         if (from < 0 || from > original.length) {
             throw new ArrayIndexOutOfBoundsException(from);
         }
-        int largo = to - from;
-        if (largo < 0) {
+        int count = to - from;
+        if (count < 0) {
             throw new IllegalArgumentException(from + " > " + to);
         }
-        long[] out = new long[largo];
-        int n = Math.min(original.length - from, largo);
+        long[] out = new long[count];
+        int n = Math.min(original.length - from, count);
         int i = 0;
         while (i < n) {
             out[i] = original[from + i];
@@ -1033,18 +1033,18 @@ public final class Arrays {
         return copyOfRange(original, 0, newLength);
     }
 
-    // La copia de [from, to). `to` PUEDE pasarse del largo del original: lo que sobra queda
-    // en el valor por defecto. Es deliberado en el JDK — permite copiar y agrandar de una.
+    // The copy of [from, to). `to` MAY go past the original's length: what is left over is filled
+    // with the default value. It is deliberate in the JDK -- it allows copying and growing at once.
     public static float[] copyOfRange(float[] original, int from, int to) {
         if (from < 0 || from > original.length) {
             throw new ArrayIndexOutOfBoundsException(from);
         }
-        int largo = to - from;
-        if (largo < 0) {
+        int count = to - from;
+        if (count < 0) {
             throw new IllegalArgumentException(from + " > " + to);
         }
-        float[] out = new float[largo];
-        int n = Math.min(original.length - from, largo);
+        float[] out = new float[count];
+        int n = Math.min(original.length - from, count);
         int i = 0;
         while (i < n) {
             out[i] = original[from + i];
@@ -1057,18 +1057,18 @@ public final class Arrays {
         return copyOfRange(original, 0, newLength);
     }
 
-    // La copia de [from, to). `to` PUEDE pasarse del largo del original: lo que sobra queda
-    // en el valor por defecto. Es deliberado en el JDK — permite copiar y agrandar de una.
+    // The copy of [from, to). `to` MAY go past the original's length: what is left over is filled
+    // with the default value. It is deliberate in the JDK -- it allows copying and growing at once.
     public static double[] copyOfRange(double[] original, int from, int to) {
         if (from < 0 || from > original.length) {
             throw new ArrayIndexOutOfBoundsException(from);
         }
-        int largo = to - from;
-        if (largo < 0) {
+        int count = to - from;
+        if (count < 0) {
             throw new IllegalArgumentException(from + " > " + to);
         }
-        double[] out = new double[largo];
-        int n = Math.min(original.length - from, largo);
+        double[] out = new double[count];
+        int n = Math.min(original.length - from, count);
         int i = 0;
         while (i < n) {
             out[i] = original[from + i];
@@ -1078,8 +1078,8 @@ public final class Arrays {
     }
 
     public static boolean equals(boolean[] a, int aFromIndex, int aToIndex, boolean[] b, int bFromIndex, int bToIndex) {
-        rangoValido(a.length, aFromIndex, aToIndex);
-        rangoValido(b.length, bFromIndex, bToIndex);
+        validRange(a.length, aFromIndex, aToIndex);
+        validRange(b.length, bFromIndex, bToIndex);
         if (aToIndex - aFromIndex != bToIndex - bFromIndex) {
             return false;
         }
@@ -1104,8 +1104,8 @@ public final class Arrays {
     }
 
     public static boolean equals(byte[] a, int aFromIndex, int aToIndex, byte[] b, int bFromIndex, int bToIndex) {
-        rangoValido(a.length, aFromIndex, aToIndex);
-        rangoValido(b.length, bFromIndex, bToIndex);
+        validRange(a.length, aFromIndex, aToIndex);
+        validRange(b.length, bFromIndex, bToIndex);
         if (aToIndex - aFromIndex != bToIndex - bFromIndex) {
             return false;
         }
@@ -1120,8 +1120,8 @@ public final class Arrays {
     }
 
     public static boolean equals(char[] a, int aFromIndex, int aToIndex, char[] b, int bFromIndex, int bToIndex) {
-        rangoValido(a.length, aFromIndex, aToIndex);
-        rangoValido(b.length, bFromIndex, bToIndex);
+        validRange(a.length, aFromIndex, aToIndex);
+        validRange(b.length, bFromIndex, bToIndex);
         if (aToIndex - aFromIndex != bToIndex - bFromIndex) {
             return false;
         }
@@ -1146,8 +1146,8 @@ public final class Arrays {
     }
 
     public static boolean equals(short[] a, int aFromIndex, int aToIndex, short[] b, int bFromIndex, int bToIndex) {
-        rangoValido(a.length, aFromIndex, aToIndex);
-        rangoValido(b.length, bFromIndex, bToIndex);
+        validRange(a.length, aFromIndex, aToIndex);
+        validRange(b.length, bFromIndex, bToIndex);
         if (aToIndex - aFromIndex != bToIndex - bFromIndex) {
             return false;
         }
@@ -1162,8 +1162,8 @@ public final class Arrays {
     }
 
     public static boolean equals(int[] a, int aFromIndex, int aToIndex, int[] b, int bFromIndex, int bToIndex) {
-        rangoValido(a.length, aFromIndex, aToIndex);
-        rangoValido(b.length, bFromIndex, bToIndex);
+        validRange(a.length, aFromIndex, aToIndex);
+        validRange(b.length, bFromIndex, bToIndex);
         if (aToIndex - aFromIndex != bToIndex - bFromIndex) {
             return false;
         }
@@ -1188,8 +1188,8 @@ public final class Arrays {
     }
 
     public static boolean equals(long[] a, int aFromIndex, int aToIndex, long[] b, int bFromIndex, int bToIndex) {
-        rangoValido(a.length, aFromIndex, aToIndex);
-        rangoValido(b.length, bFromIndex, bToIndex);
+        validRange(a.length, aFromIndex, aToIndex);
+        validRange(b.length, bFromIndex, bToIndex);
         if (aToIndex - aFromIndex != bToIndex - bFromIndex) {
             return false;
         }
@@ -1214,8 +1214,8 @@ public final class Arrays {
     }
 
     public static boolean equals(float[] a, int aFromIndex, int aToIndex, float[] b, int bFromIndex, int bToIndex) {
-        rangoValido(a.length, aFromIndex, aToIndex);
-        rangoValido(b.length, bFromIndex, bToIndex);
+        validRange(a.length, aFromIndex, aToIndex);
+        validRange(b.length, bFromIndex, bToIndex);
         if (aToIndex - aFromIndex != bToIndex - bFromIndex) {
             return false;
         }
@@ -1240,8 +1240,8 @@ public final class Arrays {
     }
 
     public static boolean equals(double[] a, int aFromIndex, int aToIndex, double[] b, int bFromIndex, int bToIndex) {
-        rangoValido(a.length, aFromIndex, aToIndex);
-        rangoValido(b.length, bFromIndex, bToIndex);
+        validRange(a.length, aFromIndex, aToIndex);
+        validRange(b.length, bFromIndex, bToIndex);
         if (aToIndex - aFromIndex != bToIndex - bFromIndex) {
             return false;
         }
@@ -1256,8 +1256,8 @@ public final class Arrays {
     }
 
     public static boolean equals(java.lang.Object[] a, int aFromIndex, int aToIndex, java.lang.Object[] b, int bFromIndex, int bToIndex) {
-        rangoValido(a.length, aFromIndex, aToIndex);
-        rangoValido(b.length, bFromIndex, bToIndex);
+        validRange(a.length, aFromIndex, aToIndex);
+        validRange(b.length, bFromIndex, bToIndex);
         if (aToIndex - aFromIndex != bToIndex - bFromIndex) {
             return false;
         }
@@ -1282,8 +1282,8 @@ public final class Arrays {
     }
 
     public static <T> boolean equals(T[] a, int aFromIndex, int aToIndex, T[] b, int bFromIndex, int bToIndex, java.util.Comparator<? super T> cmp) {
-        rangoValido(a.length, aFromIndex, aToIndex);
-        rangoValido(b.length, bFromIndex, bToIndex);
+        validRange(a.length, aFromIndex, aToIndex);
+        validRange(b.length, bFromIndex, bToIndex);
         if (aToIndex - aFromIndex != bToIndex - bFromIndex) {
             return false;
         }
@@ -1297,9 +1297,9 @@ public final class Arrays {
         return true;
     }
 
-    // Compara los dos arreglos **lexicograficamente**: en el primer indice donde difieren
-    // gana esa comparacion; si uno es prefijo del otro, gana el mas corto. Es el mismo
-    // orden que usa un diccionario, y por eso sirve para ordenar arreglos entre si.
+    // It compares the two arrays **lexicographically**: at the first index where they differ that
+    // comparison wins; if one is a prefix of the other, the shorter wins. It is the same order a
+    // dictionary uses, and that is why it serves for ordering arrays against each other.
     public static int compare(boolean[] a, boolean[] b) {
         if (a == b) {
             return 0;
@@ -1311,8 +1311,8 @@ public final class Arrays {
     }
 
     public static int compare(boolean[] a, int aFromIndex, int aToIndex, boolean[] b, int bFromIndex, int bToIndex) {
-        rangoValido(a.length, aFromIndex, aToIndex);
-        rangoValido(b.length, bFromIndex, bToIndex);
+        validRange(a.length, aFromIndex, aToIndex);
+        validRange(b.length, bFromIndex, bToIndex);
         int n = Math.min(aToIndex - aFromIndex, bToIndex - bFromIndex);
         int i = 0;
         while (i < n) {
@@ -1325,9 +1325,9 @@ public final class Arrays {
         return (aToIndex - aFromIndex) - (bToIndex - bFromIndex);
     }
 
-    // Compara los dos arreglos **lexicograficamente**: en el primer indice donde difieren
-    // gana esa comparacion; si uno es prefijo del otro, gana el mas corto. Es el mismo
-    // orden que usa un diccionario, y por eso sirve para ordenar arreglos entre si.
+    // It compares the two arrays **lexicographically**: at the first index where they differ that
+    // comparison wins; if one is a prefix of the other, the shorter wins. It is the same order a
+    // dictionary uses, and that is why it serves for ordering arrays against each other.
     public static int compare(byte[] a, byte[] b) {
         if (a == b) {
             return 0;
@@ -1339,8 +1339,8 @@ public final class Arrays {
     }
 
     public static int compare(byte[] a, int aFromIndex, int aToIndex, byte[] b, int bFromIndex, int bToIndex) {
-        rangoValido(a.length, aFromIndex, aToIndex);
-        rangoValido(b.length, bFromIndex, bToIndex);
+        validRange(a.length, aFromIndex, aToIndex);
+        validRange(b.length, bFromIndex, bToIndex);
         int n = Math.min(aToIndex - aFromIndex, bToIndex - bFromIndex);
         int i = 0;
         while (i < n) {
@@ -1353,8 +1353,8 @@ public final class Arrays {
         return (aToIndex - aFromIndex) - (bToIndex - bFromIndex);
     }
 
-    // Igual que `compare` pero leyendo cada elemento como SIN signo: para un `byte`,
-    // 0xFF vale 255 y no -1. Es lo que hace falta cuando el arreglo lleva bytes crudos.
+    // The same as `compare` but reading each element as UNSIGNED: for a `byte`, 0xFF is 255 and
+    // not -1. It is what is needed when the array carries raw bytes.
     public static int compareUnsigned(byte[] a, byte[] b) {
         if (a == b) {
             return 0;
@@ -1366,8 +1366,8 @@ public final class Arrays {
     }
 
     public static int compareUnsigned(byte[] a, int aFromIndex, int aToIndex, byte[] b, int bFromIndex, int bToIndex) {
-        rangoValido(a.length, aFromIndex, aToIndex);
-        rangoValido(b.length, bFromIndex, bToIndex);
+        validRange(a.length, aFromIndex, aToIndex);
+        validRange(b.length, bFromIndex, bToIndex);
         int n = Math.min(aToIndex - aFromIndex, bToIndex - bFromIndex);
         int i = 0;
         while (i < n) {
@@ -1380,9 +1380,9 @@ public final class Arrays {
         return (aToIndex - aFromIndex) - (bToIndex - bFromIndex);
     }
 
-    // Compara los dos arreglos **lexicograficamente**: en el primer indice donde difieren
-    // gana esa comparacion; si uno es prefijo del otro, gana el mas corto. Es el mismo
-    // orden que usa un diccionario, y por eso sirve para ordenar arreglos entre si.
+    // It compares the two arrays **lexicographically**: at the first index where they differ that
+    // comparison wins; if one is a prefix of the other, the shorter wins. It is the same order a
+    // dictionary uses, and that is why it serves for ordering arrays against each other.
     public static int compare(char[] a, char[] b) {
         if (a == b) {
             return 0;
@@ -1394,8 +1394,8 @@ public final class Arrays {
     }
 
     public static int compare(char[] a, int aFromIndex, int aToIndex, char[] b, int bFromIndex, int bToIndex) {
-        rangoValido(a.length, aFromIndex, aToIndex);
-        rangoValido(b.length, bFromIndex, bToIndex);
+        validRange(a.length, aFromIndex, aToIndex);
+        validRange(b.length, bFromIndex, bToIndex);
         int n = Math.min(aToIndex - aFromIndex, bToIndex - bFromIndex);
         int i = 0;
         while (i < n) {
@@ -1408,9 +1408,9 @@ public final class Arrays {
         return (aToIndex - aFromIndex) - (bToIndex - bFromIndex);
     }
 
-    // Compara los dos arreglos **lexicograficamente**: en el primer indice donde difieren
-    // gana esa comparacion; si uno es prefijo del otro, gana el mas corto. Es el mismo
-    // orden que usa un diccionario, y por eso sirve para ordenar arreglos entre si.
+    // It compares the two arrays **lexicographically**: at the first index where they differ that
+    // comparison wins; if one is a prefix of the other, the shorter wins. It is the same order a
+    // dictionary uses, and that is why it serves for ordering arrays against each other.
     public static int compare(short[] a, short[] b) {
         if (a == b) {
             return 0;
@@ -1422,8 +1422,8 @@ public final class Arrays {
     }
 
     public static int compare(short[] a, int aFromIndex, int aToIndex, short[] b, int bFromIndex, int bToIndex) {
-        rangoValido(a.length, aFromIndex, aToIndex);
-        rangoValido(b.length, bFromIndex, bToIndex);
+        validRange(a.length, aFromIndex, aToIndex);
+        validRange(b.length, bFromIndex, bToIndex);
         int n = Math.min(aToIndex - aFromIndex, bToIndex - bFromIndex);
         int i = 0;
         while (i < n) {
@@ -1436,8 +1436,8 @@ public final class Arrays {
         return (aToIndex - aFromIndex) - (bToIndex - bFromIndex);
     }
 
-    // Igual que `compare` pero leyendo cada elemento como SIN signo: para un `byte`,
-    // 0xFF vale 255 y no -1. Es lo que hace falta cuando el arreglo lleva bytes crudos.
+    // The same as `compare` but reading each element as UNSIGNED: for a `byte`, 0xFF is 255 and
+    // not -1. It is what is needed when the array carries raw bytes.
     public static int compareUnsigned(short[] a, short[] b) {
         if (a == b) {
             return 0;
@@ -1449,8 +1449,8 @@ public final class Arrays {
     }
 
     public static int compareUnsigned(short[] a, int aFromIndex, int aToIndex, short[] b, int bFromIndex, int bToIndex) {
-        rangoValido(a.length, aFromIndex, aToIndex);
-        rangoValido(b.length, bFromIndex, bToIndex);
+        validRange(a.length, aFromIndex, aToIndex);
+        validRange(b.length, bFromIndex, bToIndex);
         int n = Math.min(aToIndex - aFromIndex, bToIndex - bFromIndex);
         int i = 0;
         while (i < n) {
@@ -1464,8 +1464,8 @@ public final class Arrays {
     }
 
     public static int compare(int[] a, int aFromIndex, int aToIndex, int[] b, int bFromIndex, int bToIndex) {
-        rangoValido(a.length, aFromIndex, aToIndex);
-        rangoValido(b.length, bFromIndex, bToIndex);
+        validRange(a.length, aFromIndex, aToIndex);
+        validRange(b.length, bFromIndex, bToIndex);
         int n = Math.min(aToIndex - aFromIndex, bToIndex - bFromIndex);
         int i = 0;
         while (i < n) {
@@ -1478,8 +1478,8 @@ public final class Arrays {
         return (aToIndex - aFromIndex) - (bToIndex - bFromIndex);
     }
 
-    // Igual que `compare` pero leyendo cada elemento como SIN signo: para un `byte`,
-    // 0xFF vale 255 y no -1. Es lo que hace falta cuando el arreglo lleva bytes crudos.
+    // The same as `compare` but reading each element as UNSIGNED: for a `byte`, 0xFF is 255 and
+    // not -1. It is what is needed when the array carries raw bytes.
     public static int compareUnsigned(int[] a, int[] b) {
         if (a == b) {
             return 0;
@@ -1491,8 +1491,8 @@ public final class Arrays {
     }
 
     public static int compareUnsigned(int[] a, int aFromIndex, int aToIndex, int[] b, int bFromIndex, int bToIndex) {
-        rangoValido(a.length, aFromIndex, aToIndex);
-        rangoValido(b.length, bFromIndex, bToIndex);
+        validRange(a.length, aFromIndex, aToIndex);
+        validRange(b.length, bFromIndex, bToIndex);
         int n = Math.min(aToIndex - aFromIndex, bToIndex - bFromIndex);
         int i = 0;
         while (i < n) {
@@ -1505,9 +1505,9 @@ public final class Arrays {
         return (aToIndex - aFromIndex) - (bToIndex - bFromIndex);
     }
 
-    // Compara los dos arreglos **lexicograficamente**: en el primer indice donde difieren
-    // gana esa comparacion; si uno es prefijo del otro, gana el mas corto. Es el mismo
-    // orden que usa un diccionario, y por eso sirve para ordenar arreglos entre si.
+    // It compares the two arrays **lexicographically**: at the first index where they differ that
+    // comparison wins; if one is a prefix of the other, the shorter wins. It is the same order a
+    // dictionary uses, and that is why it serves for ordering arrays against each other.
     public static int compare(long[] a, long[] b) {
         if (a == b) {
             return 0;
@@ -1519,8 +1519,8 @@ public final class Arrays {
     }
 
     public static int compare(long[] a, int aFromIndex, int aToIndex, long[] b, int bFromIndex, int bToIndex) {
-        rangoValido(a.length, aFromIndex, aToIndex);
-        rangoValido(b.length, bFromIndex, bToIndex);
+        validRange(a.length, aFromIndex, aToIndex);
+        validRange(b.length, bFromIndex, bToIndex);
         int n = Math.min(aToIndex - aFromIndex, bToIndex - bFromIndex);
         int i = 0;
         while (i < n) {
@@ -1533,8 +1533,8 @@ public final class Arrays {
         return (aToIndex - aFromIndex) - (bToIndex - bFromIndex);
     }
 
-    // Igual que `compare` pero leyendo cada elemento como SIN signo: para un `byte`,
-    // 0xFF vale 255 y no -1. Es lo que hace falta cuando el arreglo lleva bytes crudos.
+    // The same as `compare` but reading each element as UNSIGNED: for a `byte`, 0xFF is 255 and
+    // not -1. It is what is needed when the array carries raw bytes.
     public static int compareUnsigned(long[] a, long[] b) {
         if (a == b) {
             return 0;
@@ -1546,8 +1546,8 @@ public final class Arrays {
     }
 
     public static int compareUnsigned(long[] a, int aFromIndex, int aToIndex, long[] b, int bFromIndex, int bToIndex) {
-        rangoValido(a.length, aFromIndex, aToIndex);
-        rangoValido(b.length, bFromIndex, bToIndex);
+        validRange(a.length, aFromIndex, aToIndex);
+        validRange(b.length, bFromIndex, bToIndex);
         int n = Math.min(aToIndex - aFromIndex, bToIndex - bFromIndex);
         int i = 0;
         while (i < n) {
@@ -1560,9 +1560,9 @@ public final class Arrays {
         return (aToIndex - aFromIndex) - (bToIndex - bFromIndex);
     }
 
-    // Compara los dos arreglos **lexicograficamente**: en el primer indice donde difieren
-    // gana esa comparacion; si uno es prefijo del otro, gana el mas corto. Es el mismo
-    // orden que usa un diccionario, y por eso sirve para ordenar arreglos entre si.
+    // It compares the two arrays **lexicographically**: at the first index where they differ that
+    // comparison wins; if one is a prefix of the other, the shorter wins. It is the same order a
+    // dictionary uses, and that is why it serves for ordering arrays against each other.
     public static int compare(float[] a, float[] b) {
         if (a == b) {
             return 0;
@@ -1574,8 +1574,8 @@ public final class Arrays {
     }
 
     public static int compare(float[] a, int aFromIndex, int aToIndex, float[] b, int bFromIndex, int bToIndex) {
-        rangoValido(a.length, aFromIndex, aToIndex);
-        rangoValido(b.length, bFromIndex, bToIndex);
+        validRange(a.length, aFromIndex, aToIndex);
+        validRange(b.length, bFromIndex, bToIndex);
         int n = Math.min(aToIndex - aFromIndex, bToIndex - bFromIndex);
         int i = 0;
         while (i < n) {
@@ -1588,9 +1588,9 @@ public final class Arrays {
         return (aToIndex - aFromIndex) - (bToIndex - bFromIndex);
     }
 
-    // Compara los dos arreglos **lexicograficamente**: en el primer indice donde difieren
-    // gana esa comparacion; si uno es prefijo del otro, gana el mas corto. Es el mismo
-    // orden que usa un diccionario, y por eso sirve para ordenar arreglos entre si.
+    // It compares the two arrays **lexicographically**: at the first index where they differ that
+    // comparison wins; if one is a prefix of the other, the shorter wins. It is the same order a
+    // dictionary uses, and that is why it serves for ordering arrays against each other.
     public static int compare(double[] a, double[] b) {
         if (a == b) {
             return 0;
@@ -1602,8 +1602,8 @@ public final class Arrays {
     }
 
     public static int compare(double[] a, int aFromIndex, int aToIndex, double[] b, int bFromIndex, int bToIndex) {
-        rangoValido(a.length, aFromIndex, aToIndex);
-        rangoValido(b.length, bFromIndex, bToIndex);
+        validRange(a.length, aFromIndex, aToIndex);
+        validRange(b.length, bFromIndex, bToIndex);
         int n = Math.min(aToIndex - aFromIndex, bToIndex - bFromIndex);
         int i = 0;
         while (i < n) {
@@ -1617,12 +1617,12 @@ public final class Arrays {
     }
 
     public static <T extends java.lang.Comparable<? super T>> int compare(T[] a, int aFromIndex, int aToIndex, T[] b, int bFromIndex, int bToIndex) {
-        rangoValido(a.length, aFromIndex, aToIndex);
-        rangoValido(b.length, bFromIndex, bToIndex);
+        validRange(a.length, aFromIndex, aToIndex);
+        validRange(b.length, bFromIndex, bToIndex);
         int n = Math.min(aToIndex - aFromIndex, bToIndex - bFromIndex);
         int i = 0;
         while (i < n) {
-            int c = compararNatural(a[aFromIndex + i], b[bFromIndex + i]);
+            int c = compareNatural(a[aFromIndex + i], b[bFromIndex + i]);
             if (c != 0) {
                 return c;
             }
@@ -1642,8 +1642,8 @@ public final class Arrays {
     }
 
     public static <T> int compare(T[] a, int aFromIndex, int aToIndex, T[] b, int bFromIndex, int bToIndex, java.util.Comparator<? super T> cmp) {
-        rangoValido(a.length, aFromIndex, aToIndex);
-        rangoValido(b.length, bFromIndex, bToIndex);
+        validRange(a.length, aFromIndex, aToIndex);
+        validRange(b.length, bFromIndex, bToIndex);
         int n = Math.min(aToIndex - aFromIndex, bToIndex - bFromIndex);
         int i = 0;
         while (i < n) {
@@ -1656,16 +1656,16 @@ public final class Arrays {
         return (aToIndex - aFromIndex) - (bToIndex - bFromIndex);
     }
 
-    // El primer indice donde los dos arreglos difieren, o -1 si el prefijo comun los agota
-    // a los dos. Cuando uno es prefijo del otro, devuelve el largo del mas corto — o sea
-    // "hasta aca son iguales", que es informacion util y no un error.
+    // The first index where the two arrays differ, or -1 if the common prefix exhausts both. When
+    // one is a prefix of the other, it returns the shorter one's length -- that is, "they are equal
+    // this far", which is useful information and not an error.
     public static int mismatch(boolean[] a, boolean[] b) {
         return mismatch(a, 0, a.length, b, 0, b.length);
     }
 
     public static int mismatch(boolean[] a, int aFromIndex, int aToIndex, boolean[] b, int bFromIndex, int bToIndex) {
-        rangoValido(a.length, aFromIndex, aToIndex);
-        rangoValido(b.length, bFromIndex, bToIndex);
+        validRange(a.length, aFromIndex, aToIndex);
+        validRange(b.length, bFromIndex, bToIndex);
         int n = Math.min(aToIndex - aFromIndex, bToIndex - bFromIndex);
         int i = 0;
         while (i < n) {
@@ -1680,16 +1680,16 @@ public final class Arrays {
         return -1;
     }
 
-    // El primer indice donde los dos arreglos difieren, o -1 si el prefijo comun los agota
-    // a los dos. Cuando uno es prefijo del otro, devuelve el largo del mas corto — o sea
-    // "hasta aca son iguales", que es informacion util y no un error.
+    // The first index where the two arrays differ, or -1 if the common prefix exhausts both. When
+    // one is a prefix of the other, it returns the shorter one's length -- that is, "they are equal
+    // this far", which is useful information and not an error.
     public static int mismatch(byte[] a, byte[] b) {
         return mismatch(a, 0, a.length, b, 0, b.length);
     }
 
     public static int mismatch(byte[] a, int aFromIndex, int aToIndex, byte[] b, int bFromIndex, int bToIndex) {
-        rangoValido(a.length, aFromIndex, aToIndex);
-        rangoValido(b.length, bFromIndex, bToIndex);
+        validRange(a.length, aFromIndex, aToIndex);
+        validRange(b.length, bFromIndex, bToIndex);
         int n = Math.min(aToIndex - aFromIndex, bToIndex - bFromIndex);
         int i = 0;
         while (i < n) {
@@ -1704,16 +1704,16 @@ public final class Arrays {
         return -1;
     }
 
-    // El primer indice donde los dos arreglos difieren, o -1 si el prefijo comun los agota
-    // a los dos. Cuando uno es prefijo del otro, devuelve el largo del mas corto — o sea
-    // "hasta aca son iguales", que es informacion util y no un error.
+    // The first index where the two arrays differ, or -1 if the common prefix exhausts both. When
+    // one is a prefix of the other, it returns the shorter one's length -- that is, "they are equal
+    // this far", which is useful information and not an error.
     public static int mismatch(char[] a, char[] b) {
         return mismatch(a, 0, a.length, b, 0, b.length);
     }
 
     public static int mismatch(char[] a, int aFromIndex, int aToIndex, char[] b, int bFromIndex, int bToIndex) {
-        rangoValido(a.length, aFromIndex, aToIndex);
-        rangoValido(b.length, bFromIndex, bToIndex);
+        validRange(a.length, aFromIndex, aToIndex);
+        validRange(b.length, bFromIndex, bToIndex);
         int n = Math.min(aToIndex - aFromIndex, bToIndex - bFromIndex);
         int i = 0;
         while (i < n) {
@@ -1728,16 +1728,16 @@ public final class Arrays {
         return -1;
     }
 
-    // El primer indice donde los dos arreglos difieren, o -1 si el prefijo comun los agota
-    // a los dos. Cuando uno es prefijo del otro, devuelve el largo del mas corto — o sea
-    // "hasta aca son iguales", que es informacion util y no un error.
+    // The first index where the two arrays differ, or -1 if the common prefix exhausts both. When
+    // one is a prefix of the other, it returns the shorter one's length -- that is, "they are equal
+    // this far", which is useful information and not an error.
     public static int mismatch(short[] a, short[] b) {
         return mismatch(a, 0, a.length, b, 0, b.length);
     }
 
     public static int mismatch(short[] a, int aFromIndex, int aToIndex, short[] b, int bFromIndex, int bToIndex) {
-        rangoValido(a.length, aFromIndex, aToIndex);
-        rangoValido(b.length, bFromIndex, bToIndex);
+        validRange(a.length, aFromIndex, aToIndex);
+        validRange(b.length, bFromIndex, bToIndex);
         int n = Math.min(aToIndex - aFromIndex, bToIndex - bFromIndex);
         int i = 0;
         while (i < n) {
@@ -1753,8 +1753,8 @@ public final class Arrays {
     }
 
     public static int mismatch(int[] a, int aFromIndex, int aToIndex, int[] b, int bFromIndex, int bToIndex) {
-        rangoValido(a.length, aFromIndex, aToIndex);
-        rangoValido(b.length, bFromIndex, bToIndex);
+        validRange(a.length, aFromIndex, aToIndex);
+        validRange(b.length, bFromIndex, bToIndex);
         int n = Math.min(aToIndex - aFromIndex, bToIndex - bFromIndex);
         int i = 0;
         while (i < n) {
@@ -1769,16 +1769,16 @@ public final class Arrays {
         return -1;
     }
 
-    // El primer indice donde los dos arreglos difieren, o -1 si el prefijo comun los agota
-    // a los dos. Cuando uno es prefijo del otro, devuelve el largo del mas corto — o sea
-    // "hasta aca son iguales", que es informacion util y no un error.
+    // The first index where the two arrays differ, or -1 if the common prefix exhausts both. When
+    // one is a prefix of the other, it returns the shorter one's length -- that is, "they are equal
+    // this far", which is useful information and not an error.
     public static int mismatch(long[] a, long[] b) {
         return mismatch(a, 0, a.length, b, 0, b.length);
     }
 
     public static int mismatch(long[] a, int aFromIndex, int aToIndex, long[] b, int bFromIndex, int bToIndex) {
-        rangoValido(a.length, aFromIndex, aToIndex);
-        rangoValido(b.length, bFromIndex, bToIndex);
+        validRange(a.length, aFromIndex, aToIndex);
+        validRange(b.length, bFromIndex, bToIndex);
         int n = Math.min(aToIndex - aFromIndex, bToIndex - bFromIndex);
         int i = 0;
         while (i < n) {
@@ -1793,16 +1793,16 @@ public final class Arrays {
         return -1;
     }
 
-    // El primer indice donde los dos arreglos difieren, o -1 si el prefijo comun los agota
-    // a los dos. Cuando uno es prefijo del otro, devuelve el largo del mas corto — o sea
-    // "hasta aca son iguales", que es informacion util y no un error.
+    // The first index where the two arrays differ, or -1 if the common prefix exhausts both. When
+    // one is a prefix of the other, it returns the shorter one's length -- that is, "they are equal
+    // this far", which is useful information and not an error.
     public static int mismatch(float[] a, float[] b) {
         return mismatch(a, 0, a.length, b, 0, b.length);
     }
 
     public static int mismatch(float[] a, int aFromIndex, int aToIndex, float[] b, int bFromIndex, int bToIndex) {
-        rangoValido(a.length, aFromIndex, aToIndex);
-        rangoValido(b.length, bFromIndex, bToIndex);
+        validRange(a.length, aFromIndex, aToIndex);
+        validRange(b.length, bFromIndex, bToIndex);
         int n = Math.min(aToIndex - aFromIndex, bToIndex - bFromIndex);
         int i = 0;
         while (i < n) {
@@ -1817,16 +1817,16 @@ public final class Arrays {
         return -1;
     }
 
-    // El primer indice donde los dos arreglos difieren, o -1 si el prefijo comun los agota
-    // a los dos. Cuando uno es prefijo del otro, devuelve el largo del mas corto — o sea
-    // "hasta aca son iguales", que es informacion util y no un error.
+    // The first index where the two arrays differ, or -1 if the common prefix exhausts both. When
+    // one is a prefix of the other, it returns the shorter one's length -- that is, "they are equal
+    // this far", which is useful information and not an error.
     public static int mismatch(double[] a, double[] b) {
         return mismatch(a, 0, a.length, b, 0, b.length);
     }
 
     public static int mismatch(double[] a, int aFromIndex, int aToIndex, double[] b, int bFromIndex, int bToIndex) {
-        rangoValido(a.length, aFromIndex, aToIndex);
-        rangoValido(b.length, bFromIndex, bToIndex);
+        validRange(a.length, aFromIndex, aToIndex);
+        validRange(b.length, bFromIndex, bToIndex);
         int n = Math.min(aToIndex - aFromIndex, bToIndex - bFromIndex);
         int i = 0;
         while (i < n) {
@@ -1846,8 +1846,8 @@ public final class Arrays {
     }
 
     public static int mismatch(java.lang.Object[] a, int aFromIndex, int aToIndex, java.lang.Object[] b, int bFromIndex, int bToIndex) {
-        rangoValido(a.length, aFromIndex, aToIndex);
-        rangoValido(b.length, bFromIndex, bToIndex);
+        validRange(a.length, aFromIndex, aToIndex);
+        validRange(b.length, bFromIndex, bToIndex);
         int n = Math.min(aToIndex - aFromIndex, bToIndex - bFromIndex);
         int i = 0;
         while (i < n) {
@@ -1863,8 +1863,8 @@ public final class Arrays {
     }
 
     public static <T> int mismatch(T[] a, int aFromIndex, int aToIndex, T[] b, int bFromIndex, int bToIndex, java.util.Comparator<? super T> cmp) {
-        rangoValido(a.length, aFromIndex, aToIndex);
-        rangoValido(b.length, bFromIndex, bToIndex);
+        validRange(a.length, aFromIndex, aToIndex);
+        validRange(b.length, bFromIndex, bToIndex);
         int n = Math.min(aToIndex - aFromIndex, bToIndex - bFromIndex);
         int i = 0;
         while (i < n) {
@@ -2060,9 +2060,9 @@ public final class Arrays {
         return b.toString();
     }
 
-    // Igualdad que **baja por los arreglos anidados**. `equals(Object[], Object[])` compara los
-    // elementos con su `equals`, y el `equals` de un arreglo es identidad — asi que dos matrices
-    // con el mismo contenido dan `false` alli y `true` aca. Esa es toda la diferencia.
+    // Equality that **descends into the nested arrays**. `equals(Object[], Object[])` compares the
+    // elements with their `equals`, and an array's `equals` is identity -- so two matrices with the
+    // same content give `false` there and `true` here. That is the whole difference.
     public static boolean deepEquals(java.lang.Object[] a1, java.lang.Object[] a2) {
         if (a1 == a2) {
             return true;
@@ -2072,7 +2072,7 @@ public final class Arrays {
         }
         int i = 0;
         while (i < a1.length) {
-            if (!hondoIguales(a1[i], a2[i])) {
+            if (!deepEqual(a1[i], a2[i])) {
                 return false;
             }
             i = i + 1;
@@ -2087,7 +2087,7 @@ public final class Arrays {
         int h = 1;
         int i = 0;
         while (i < a.length) {
-            h = 31 * h + hondoHash(a[i]);
+            h = 31 * h + deepHashOf(a[i]);
             i = i + 1;
         }
         return h;
@@ -2098,70 +2098,70 @@ public final class Arrays {
             return "null";
         }
         StringBuilder b = new StringBuilder();
-        hondoTexto(a, b);
+        deepText(a, b);
         return b.toString();
     }
 
     public static java.util.stream.IntStream stream(int[] array) {
-        // Inline y no `stream(array, 0, array.length)`: con las cuatro sobrecargas de tres
-        // argumentos en juego la resolucion no elige bien, y el cuerpo son dos lineas.
-        // Local tipado en medio: la llamada anidada como argumento no resuelve
-        // (#285), y ademas el destino es varargs.
-        int[] trozo = copyOfRange(array, 0, array.length);
-        return IntStream.of(trozo);
+        // Inlined and not `stream(array, 0, array.length)`: with the four three-argument overloads
+        // in play the resolution does not choose well, and the body is two lines.
+        // A typed local in between: the nested call as an argument does not resolve
+        // (#285), and the target is varargs besides.
+        int[] chunk = copyOfRange(array, 0, array.length);
+        return IntStream.of(chunk);
     }
 
     public static java.util.stream.IntStream stream(int[] array, int startInclusive, int endExclusive) {
-        rangoValido(array.length, startInclusive, endExclusive);
-        // Local tipado en medio: la llamada anidada como argumento no resuelve
-        // (#285), y ademas el destino es varargs.
-        int[] trozo = copyOfRange(array, startInclusive, endExclusive);
-        return IntStream.of(trozo);
+        validRange(array.length, startInclusive, endExclusive);
+        // A typed local in between: the nested call as an argument does not resolve
+        // (#285), and the target is varargs besides.
+        int[] chunk = copyOfRange(array, startInclusive, endExclusive);
+        return IntStream.of(chunk);
     }
 
     public static java.util.stream.LongStream stream(long[] array) {
-        // Inline y no `stream(array, 0, array.length)`: con las cuatro sobrecargas de tres
-        // argumentos en juego la resolucion no elige bien, y el cuerpo son dos lineas.
-        // Local tipado en medio: la llamada anidada como argumento no resuelve
-        // (#285), y ademas el destino es varargs.
-        long[] trozo = copyOfRange(array, 0, array.length);
-        return LongStream.of(trozo);
+        // Inlined and not `stream(array, 0, array.length)`: with the four three-argument overloads
+        // in play the resolution does not choose well, and the body is two lines.
+        // A typed local in between: the nested call as an argument does not resolve
+        // (#285), and the target is varargs besides.
+        long[] chunk = copyOfRange(array, 0, array.length);
+        return LongStream.of(chunk);
     }
 
     public static java.util.stream.LongStream stream(long[] array, int startInclusive, int endExclusive) {
-        rangoValido(array.length, startInclusive, endExclusive);
-        // Local tipado en medio: la llamada anidada como argumento no resuelve
-        // (#285), y ademas el destino es varargs.
-        long[] trozo = copyOfRange(array, startInclusive, endExclusive);
-        return LongStream.of(trozo);
+        validRange(array.length, startInclusive, endExclusive);
+        // A typed local in between: the nested call as an argument does not resolve
+        // (#285), and the target is varargs besides.
+        long[] chunk = copyOfRange(array, startInclusive, endExclusive);
+        return LongStream.of(chunk);
     }
 
     public static java.util.stream.DoubleStream stream(double[] array) {
-        // Inline y no `stream(array, 0, array.length)`: con las cuatro sobrecargas de tres
-        // argumentos en juego la resolucion no elige bien, y el cuerpo son dos lineas.
-        // Local tipado en medio: la llamada anidada como argumento no resuelve
-        // (#285), y ademas el destino es varargs.
-        double[] trozo = copyOfRange(array, 0, array.length);
-        return DoubleStream.of(trozo);
+        // Inlined and not `stream(array, 0, array.length)`: with the four three-argument overloads
+        // in play the resolution does not choose well, and the body is two lines.
+        // A typed local in between: the nested call as an argument does not resolve
+        // (#285), and the target is varargs besides.
+        double[] chunk = copyOfRange(array, 0, array.length);
+        return DoubleStream.of(chunk);
     }
 
     public static java.util.stream.DoubleStream stream(double[] array, int startInclusive, int endExclusive) {
-        rangoValido(array.length, startInclusive, endExclusive);
-        // Local tipado en medio: la llamada anidada como argumento no resuelve
-        // (#285), y ademas el destino es varargs.
-        double[] trozo = copyOfRange(array, startInclusive, endExclusive);
-        return DoubleStream.of(trozo);
+        validRange(array.length, startInclusive, endExclusive);
+        // A typed local in between: the nested call as an argument does not resolve
+        // (#285), and the target is varargs besides.
+        double[] chunk = copyOfRange(array, startInclusive, endExclusive);
+        return DoubleStream.of(chunk);
     }
 
     public static <T> java.util.stream.Stream<T> stream(T[] array) {
-        // Sin delegar en `stream(array, 0, array.length)`: entre las cuatro sobrecargas de tres
-        // argumentos la resolucion no elige la generica, y el cuerpo entero son dos lineas.
-        Object[] trozo = copyOfRange((Object[]) array, 0, array.length);
-        return (Stream<T>) Stream.of(trozo);
+        // Without delegating to `stream(array, 0, array.length)`: among the four three-argument
+        // overloads the resolution does not choose the generic one, and the whole body is two lines.
+        Object[] chunk = copyOfRange((Object[]) array, 0, array.length);
+        return (Stream<T>) Stream.of(chunk);
     }
 
     public static <T> java.util.stream.Stream<T> stream(T[] array, int startInclusive, int endExclusive) {
-        rangoValido(array.length, startInclusive, endExclusive);
+        validRange(array.length, startInclusive, endExclusive);
         return (java.util.stream.Stream<T>) Stream.of(
             copyOfRange((java.lang.Object[]) array, startInclusive, endExclusive));
     }
@@ -2230,18 +2230,18 @@ public final class Arrays {
         }
     }
 
-    // Reemplaza cada elemento por la acumulacion de todos los anteriores y el: para la suma,
-    // `[1,2,3]` queda `[1,3,6]`. Es la suma prefija, y sirve para pasar de "cuanto hay en
-    // cada casilla" a "cuanto hay hasta aca" en una sola pasada.
+    // It replaces each element by the accumulation of all the previous ones and itself: for the
+    // sum, `[1,2,3]` becomes `[1,3,6]`. It is the prefix sum, and it serves to go from "how much is
+    // in each cell" to "how much there is up to here" in a single pass.
     //
-    // A KajiLibrary subset: secuencial. La version del JDK divide el arreglo y lo hace en
-    // dos barridas paralelas; el resultado es identico.
+    // A KajiLibrary subset: sequential. The JDK's version splits the array and does it in two
+    // parallel sweeps; the result is identical.
     public static void parallelPrefix(int[] array, java.util.function.IntBinaryOperator op) {
         parallelPrefix(array, 0, array.length, op);
     }
 
     public static void parallelPrefix(int[] array, int fromIndex, int toIndex, java.util.function.IntBinaryOperator op) {
-        rangoValido(array.length, fromIndex, toIndex);
+        validRange(array.length, fromIndex, toIndex);
         int i = fromIndex + 1;
         while (i < toIndex) {
             array[i] = op.applyAsInt(array[i - 1], array[i]);
@@ -2249,18 +2249,18 @@ public final class Arrays {
         }
     }
 
-    // Reemplaza cada elemento por la acumulacion de todos los anteriores y el: para la suma,
-    // `[1,2,3]` queda `[1,3,6]`. Es la suma prefija, y sirve para pasar de "cuanto hay en
-    // cada casilla" a "cuanto hay hasta aca" en una sola pasada.
+    // It replaces each element by the accumulation of all the previous ones and itself: for the
+    // sum, `[1,2,3]` becomes `[1,3,6]`. It is the prefix sum, and it serves to go from "how much is
+    // in each cell" to "how much there is up to here" in a single pass.
     //
-    // A KajiLibrary subset: secuencial. La version del JDK divide el arreglo y lo hace en
-    // dos barridas paralelas; el resultado es identico.
+    // A KajiLibrary subset: sequential. The JDK's version splits the array and does it in two
+    // parallel sweeps; the result is identical.
     public static void parallelPrefix(long[] array, java.util.function.LongBinaryOperator op) {
         parallelPrefix(array, 0, array.length, op);
     }
 
     public static void parallelPrefix(long[] array, int fromIndex, int toIndex, java.util.function.LongBinaryOperator op) {
-        rangoValido(array.length, fromIndex, toIndex);
+        validRange(array.length, fromIndex, toIndex);
         int i = fromIndex + 1;
         while (i < toIndex) {
             array[i] = op.applyAsLong(array[i - 1], array[i]);
@@ -2268,18 +2268,18 @@ public final class Arrays {
         }
     }
 
-    // Reemplaza cada elemento por la acumulacion de todos los anteriores y el: para la suma,
-    // `[1,2,3]` queda `[1,3,6]`. Es la suma prefija, y sirve para pasar de "cuanto hay en
-    // cada casilla" a "cuanto hay hasta aca" en una sola pasada.
+    // It replaces each element by the accumulation of all the previous ones and itself: for the
+    // sum, `[1,2,3]` becomes `[1,3,6]`. It is the prefix sum, and it serves to go from "how much is
+    // in each cell" to "how much there is up to here" in a single pass.
     //
-    // A KajiLibrary subset: secuencial. La version del JDK divide el arreglo y lo hace en
-    // dos barridas paralelas; el resultado es identico.
+    // A KajiLibrary subset: sequential. The JDK's version splits the array and does it in two
+    // parallel sweeps; the result is identical.
     public static void parallelPrefix(double[] array, java.util.function.DoubleBinaryOperator op) {
         parallelPrefix(array, 0, array.length, op);
     }
 
     public static void parallelPrefix(double[] array, int fromIndex, int toIndex, java.util.function.DoubleBinaryOperator op) {
-        rangoValido(array.length, fromIndex, toIndex);
+        validRange(array.length, fromIndex, toIndex);
         int i = fromIndex + 1;
         while (i < toIndex) {
             array[i] = op.applyAsDouble(array[i - 1], array[i]);
@@ -2292,7 +2292,7 @@ public final class Arrays {
     }
 
     public static <T> void parallelPrefix(T[] array, int fromIndex, int toIndex, java.util.function.BinaryOperator<T> op) {
-        rangoValido(array.length, fromIndex, toIndex);
+        validRange(array.length, fromIndex, toIndex);
         int i = fromIndex + 1;
         while (i < toIndex) {
             array[i] = op.apply(array[i - 1], array[i]);
@@ -2300,37 +2300,36 @@ public final class Arrays {
         }
     }
 
-    // La lista de esos elementos.
+    // The list of those elements, as a fixed-size **view** over the array itself: `set` writes
+    // through to `a`, and a write to `a` shows up in the list.
     //
-    // **Divergencia deliberada**: la del JDK es una VISTA sobre el arreglo —escribir con `set`
-    // escribe en el arreglo— y aca es una copia inmutable. La vista pide una clase propia que
-    // delegue de vuelta; cuando algo la necesite de verdad, se cambia. Lo que NO cambia es que
-    // las dos rechazan `add` y `remove`: el largo es fijo en ambas.
+    // It used to return a copy, with a note saying a inner view needed a class of its own and would
+    // be written when something needed it. `ArrayAsList` is that class. `add` and `remove` still
+    // refuse either way -- an array's length is fixed.
     public static <T> java.util.List<T> asList(T... a) {
-        Object[] copia = copyOfRange((Object[]) a, 0, a.length);
-        return new FixedList<T>(copia);
+        return new ArrayAsList<T>((Object[]) a);
     }
 
-    // Igual que `sort`. A KajiLibrary subset: secuencial.
+    // The same as `sort`. A KajiLibrary subset: sequential.
     public static <T extends java.lang.Comparable<? super T>> void parallelSort(T[] a) {
-        // El local tipado es el rodeo de #279: con el argumento como `T[]` la llamada se declara
-        // ambigua; nombrando `Object[]` elige bien.
-        Object[] ensanchado = a;
-        sort(ensanchado, 0, ensanchado.length);
+        // The typed local is #279's way round: with the argument as `T[]` the call is declared
+        // ambiguous; naming `Object[]` picks correctly.
+        Object[] widenedArray = a;
+        sort(widenedArray, 0, widenedArray.length);
     }
 
     public static <T extends java.lang.Comparable<? super T>> void parallelSort(T[] a, int fromIndex, int toIndex) {
-        Object[] ensanchado = a;
-        sort(ensanchado, fromIndex, toIndex);
+        Object[] widenedArray = a;
+        sort(widenedArray, fromIndex, toIndex);
     }
 
     /**
-     * Una copia de `original` con largo `newLength`, del MISMO tipo dinamico.
+     * A copy of `original` of length `newLength`, of the SAME dynamic type.
      *
-     * <p>Ese "mismo tipo dinamico" es todo el punto: quien copia un `String[]` espera un
-     * `String[]` de vuelta, no un `Object[]` que reviente con ArrayStoreException al primer
-     * guardado. El tipo solo se conoce en runtime, asi que hace falta reflexion — es la misma
-     * razon por la que `Collection.toArray(T[])` la necesita.
+     * <p>That "same dynamic type" is the whole point: whoever copies a `String[]` expects a
+     * `String[]` back, not an `Object[]` that blows up with ArrayStoreException at the first store.
+     * The type is only known at run time, so reflection is needed -- it is the same reason
+     * `Collection.toArray(T[])` needs it.
      */
     public static <T> T[] copyOf(T[] original, int newLength) {
         return copyOfRange(original, 0, newLength);
@@ -2340,7 +2339,7 @@ public final class Arrays {
         return (T[]) copyOfRange(original, from, to, original.getClass());
     }
 
-    /** Una copia con largo `newLength`, del tipo de arreglo que pida `newType`. */
+    /** A copy of length `newLength`, of whatever array type `newType` asks for. */
     public static <T, U> T[] copyOf(U[] original, int newLength, java.lang.Class<? extends T[]> newType) {
         return copyOfRange(original, 0, newLength, newType);
     }
@@ -2349,13 +2348,13 @@ public final class Arrays {
         if (from < 0 || from > original.length) {
             throw new ArrayIndexOutOfBoundsException(from);
         }
-        int largo = to - from;
-        if (largo < 0) {
+        int count = to - from;
+        if (count < 0) {
             throw new IllegalArgumentException(from + " > " + to);
         }
         java.lang.Object[] out = (java.lang.Object[]) Array.newInstance(
-            newType.getComponentType(), largo);
-        int n = Math.min(original.length - from, largo);
+            newType.getComponentType(), count);
+        int n = Math.min(original.length - from, count);
         int i = 0;
         while (i < n) {
             out[i] = original[from + i];
@@ -2364,16 +2363,17 @@ public final class Arrays {
         return (T[]) out;
     }
 
-    // ---- helpers internos ---------------------------------------------------------------------
+    // ---- internal helpers -----------------------------------------------------------------------
 
     /**
-     * Valida un rango [from, to) contra un largo, con los mismos tres errores que el JDK.
+     * It validates a range [from, to) against a length, with the JDK's same three errors.
      *
-     * <p>Son tres y no uno porque dicen cosas distintas: `from > to` es un rango dado vuelta
-     * (culpa del llamador al calcularlo), y salirse de [0, length] es un indice fuera del arreglo.
-     * Colapsarlos en un solo mensaje haria perder cual de los dos pasó.
+     * <p>They are three and not one because they say different things: `from > to` is a range the
+     * wrong way round (the caller's fault in computing it), and going outside [0, length] is an index
+     * off the end of the array. Collapsing them into one message would lose which of the two
+     * happened.
      */
-    private static void rangoValido(int length, int fromIndex, int toIndex) {
+    private static void validRange(int length, int fromIndex, int toIndex) {
         if (fromIndex > toIndex) {
             throw new IllegalArgumentException("fromIndex(" + fromIndex + ") > toIndex(" + toIndex + ")");
         }
@@ -2385,14 +2385,14 @@ public final class Arrays {
         }
     }
 
-    /** El `compareTo` de un elemento, para los `compare` de orden natural. */
-    private static int compararNatural(Object a, Object b) {
+    /** An element's `compareTo`, for the natural-order `compare`s. */
+    private static int compareNatural(Object a, Object b) {
         return ((Comparable) a).compareTo(b);
     }
 
-    // Merge sort sobre [lo, hi) de un boolean[]. Estable y O(n log n) garantizado, que es lo que
-    // hace falta: el quicksort de dos pivotes del JDK es mas rapido en el caso medio pero se
-    // degrada a O(n²) con entradas adversarias, y aca la simplicidad vale mas que ese margen.
+    // Merge sort over [lo, hi) of a boolean[]. Stable and guaranteed O(n log n), which is what
+    // is needed: the JDK's dual-pivot quicksort is faster in the average case but degrades to
+    // O(n²) on adversarial input, and here simplicity is worth more than that margin.
     private static void mergeSortBoolean(boolean[] a, boolean[] scratch, int lo, int hi) {
         if (hi - lo < 2) {
             return;
@@ -2430,9 +2430,9 @@ public final class Arrays {
         }
     }
 
-    // Merge sort sobre [lo, hi) de un byte[]. Estable y O(n log n) garantizado, que es lo que
-    // hace falta: el quicksort de dos pivotes del JDK es mas rapido en el caso medio pero se
-    // degrada a O(n²) con entradas adversarias, y aca la simplicidad vale mas que ese margen.
+    // Merge sort over [lo, hi) of a byte[]. Stable and guaranteed O(n log n), which is what
+    // is needed: the JDK's dual-pivot quicksort is faster in the average case but degrades to
+    // O(n²) on adversarial input, and here simplicity is worth more than that margin.
     private static void mergeSortByte(byte[] a, byte[] scratch, int lo, int hi) {
         if (hi - lo < 2) {
             return;
@@ -2470,9 +2470,9 @@ public final class Arrays {
         }
     }
 
-    // Merge sort sobre [lo, hi) de un char[]. Estable y O(n log n) garantizado, que es lo que
-    // hace falta: el quicksort de dos pivotes del JDK es mas rapido en el caso medio pero se
-    // degrada a O(n²) con entradas adversarias, y aca la simplicidad vale mas que ese margen.
+    // Merge sort over [lo, hi) of a char[]. Stable and guaranteed O(n log n), which is what
+    // is needed: the JDK's dual-pivot quicksort is faster in the average case but degrades to
+    // O(n²) on adversarial input, and here simplicity is worth more than that margin.
     private static void mergeSortCharacter(char[] a, char[] scratch, int lo, int hi) {
         if (hi - lo < 2) {
             return;
@@ -2510,9 +2510,9 @@ public final class Arrays {
         }
     }
 
-    // Merge sort sobre [lo, hi) de un short[]. Estable y O(n log n) garantizado, que es lo que
-    // hace falta: el quicksort de dos pivotes del JDK es mas rapido en el caso medio pero se
-    // degrada a O(n²) con entradas adversarias, y aca la simplicidad vale mas que ese margen.
+    // Merge sort over [lo, hi) of a short[]. Stable and guaranteed O(n log n), which is what
+    // is needed: the JDK's dual-pivot quicksort is faster in the average case but degrades to
+    // O(n²) on adversarial input, and here simplicity is worth more than that margin.
     private static void mergeSortShort(short[] a, short[] scratch, int lo, int hi) {
         if (hi - lo < 2) {
             return;
@@ -2550,9 +2550,9 @@ public final class Arrays {
         }
     }
 
-    // Merge sort sobre [lo, hi) de un int[]. Estable y O(n log n) garantizado, que es lo que
-    // hace falta: el quicksort de dos pivotes del JDK es mas rapido en el caso medio pero se
-    // degrada a O(n²) con entradas adversarias, y aca la simplicidad vale mas que ese margen.
+    // Merge sort over [lo, hi) of a int[]. Stable and guaranteed O(n log n), which is what
+    // is needed: the JDK's dual-pivot quicksort is faster in the average case but degrades to
+    // O(n²) on adversarial input, and here simplicity is worth more than that margin.
     private static void mergeSortInteger(int[] a, int[] scratch, int lo, int hi) {
         if (hi - lo < 2) {
             return;
@@ -2590,9 +2590,9 @@ public final class Arrays {
         }
     }
 
-    // Merge sort sobre [lo, hi) de un long[]. Estable y O(n log n) garantizado, que es lo que
-    // hace falta: el quicksort de dos pivotes del JDK es mas rapido en el caso medio pero se
-    // degrada a O(n²) con entradas adversarias, y aca la simplicidad vale mas que ese margen.
+    // Merge sort over [lo, hi) of a long[]. Stable and guaranteed O(n log n), which is what
+    // is needed: the JDK's dual-pivot quicksort is faster in the average case but degrades to
+    // O(n²) on adversarial input, and here simplicity is worth more than that margin.
     private static void mergeSortLong(long[] a, long[] scratch, int lo, int hi) {
         if (hi - lo < 2) {
             return;
@@ -2630,9 +2630,9 @@ public final class Arrays {
         }
     }
 
-    // Merge sort sobre [lo, hi) de un float[]. Estable y O(n log n) garantizado, que es lo que
-    // hace falta: el quicksort de dos pivotes del JDK es mas rapido en el caso medio pero se
-    // degrada a O(n²) con entradas adversarias, y aca la simplicidad vale mas que ese margen.
+    // Merge sort over [lo, hi) of a float[]. Stable and guaranteed O(n log n), which is what
+    // is needed: the JDK's dual-pivot quicksort is faster in the average case but degrades to
+    // O(n²) on adversarial input, and here simplicity is worth more than that margin.
     private static void mergeSortFloat(float[] a, float[] scratch, int lo, int hi) {
         if (hi - lo < 2) {
             return;
@@ -2670,9 +2670,9 @@ public final class Arrays {
         }
     }
 
-    // Merge sort sobre [lo, hi) de un double[]. Estable y O(n log n) garantizado, que es lo que
-    // hace falta: el quicksort de dos pivotes del JDK es mas rapido en el caso medio pero se
-    // degrada a O(n²) con entradas adversarias, y aca la simplicidad vale mas que ese margen.
+    // Merge sort over [lo, hi) of a double[]. Stable and guaranteed O(n log n), which is what
+    // is needed: the JDK's dual-pivot quicksort is faster in the average case but degrades to
+    // O(n²) on adversarial input, and here simplicity is worth more than that margin.
     private static void mergeSortDouble(double[] a, double[] scratch, int lo, int hi) {
         if (hi - lo < 2) {
             return;
@@ -2711,12 +2711,12 @@ public final class Arrays {
     }
 
     /**
-     * Merge sort sobre objetos, con `cmp` o por orden natural si es null.
+     * Merge sort over objects, with `cmp` or by natural order if it is null.
      *
-     * <p>La **estabilidad** no es un detalle aca: el contrato de `Arrays.sort(Object[])` la exige,
-     * y es lo que permite ordenar por un criterio y despues por otro sin perder el primero. La
-     * garantiza el `<= 0` de la comparacion: ante un empate gana el de la mitad izquierda, que es
-     * el que venia antes.
+     * <p>**Stability** is not a detail here: `Arrays.sort(Object[])`'s contract demands it, and it is
+     * what allows sorting by one criterion and then by another without losing the first. The
+     * comparison's `<= 0` guarantees it: on a tie the one from the left half wins, and that is the
+     * one that came before.
      */
     private static void mergeSortObj(Object[] a, Object[] scratch, int lo, int hi, Comparator cmp) {
         if (hi - lo < 2) {
@@ -2729,7 +2729,7 @@ public final class Arrays {
         int j = mid;
         int k = 0;
         while (i < mid && j < hi) {
-            int c = cmp == null ? compararNatural(a[i], a[j]) : cmp.compare(a[i], a[j]);
+            int c = cmp == null ? compareNatural(a[i], a[j]) : cmp.compare(a[i], a[j]);
             if (c <= 0) {
                 scratch[k] = a[i];
                 i = i + 1;
@@ -2756,13 +2756,14 @@ public final class Arrays {
         }
     }
 
-    // ---- el trio "hondo": baja por los arreglos anidados ---------------------------------------
+    // ---- the "deep" trio: it descends into the nested arrays -----------------------------------
     //
-    // Los tres despachan sobre el tipo dinamico del elemento porque en Java no hay otra forma: un
-    // `Object` que resulta ser `int[]` no comparte nada con uno que resulta ser `Object[]`, y el
-    // `equals` de los dos es identidad. Sin este despacho, dos matrices iguales darian distinto.
+    // All three dispatch on the element's dynamic type because in Java there is no other way: an
+    // `Object` that turns out to be an `int[]` shares nothing with one that turns out to be an
+    // `Object[]`, and both of their `equals` is identity. Without this dispatch, two equal matrices
+    // would compare different.
 
-    private static boolean hondoIguales(Object a, Object b) {
+    private static boolean deepEqual(Object a, Object b) {
         if (a == b) {
             return true;
         }
@@ -2799,7 +2800,7 @@ public final class Arrays {
         return a.equals(b);
     }
 
-    private static int hondoHash(Object e) {
+    private static int deepHashOf(Object e) {
         if (e == null) {
             return 0;
         }
@@ -2833,7 +2834,7 @@ public final class Arrays {
         return e.hashCode();
     }
 
-    private static void hondoTexto(Object[] a, StringBuilder b) {
+    private static void deepText(Object[] a, StringBuilder b) {
         b.append('[');
         int i = 0;
         while (i < a.length) {
@@ -2844,7 +2845,7 @@ public final class Arrays {
             if (e == null) {
                 b.append("null");
             } else if (e instanceof Object[]) {
-                hondoTexto((Object[]) e, b);
+                deepText((Object[]) e, b);
             } else if (e instanceof int[]) {
                 b.append(toString((int[]) e));
             } else if (e instanceof long[]) {

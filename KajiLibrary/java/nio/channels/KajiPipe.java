@@ -19,8 +19,8 @@ final class KajiPipe extends Pipe {
 
     KajiPipe(SelectorProvider provider) throws IOException {
         final SocketChannel[] pair = LoopbackPair.open();
-        // The accepted end reads and the connecting end writes; which is which does not matter, only
-        // that each one gives up the direction it will not use.
+        // The accepted end reads and the connecting end writes; which is which does not matter,
+        // only that each one gives up the direction it will not use.
         pair[0].shutdownOutput();
         pair[1].shutdownInput();
         this.source = new Source(provider, pair[0]);

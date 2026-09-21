@@ -5,50 +5,51 @@ import java.awt.HeadlessException;
 import javax.print.attribute.PrintRequestAttributeSet;
 
 /**
- * KajiLibrary's javax.print.ServiceUI -- el dialogo de impresion.
+ * KajiLibrary's javax.print.ServiceUI -- the print dialog.
  *
- * <p>Una clase con un solo metodo estatico. Muestra el cuadro donde el usuario elige impresora y
- * opciones, y devuelve la que eligio o null si cancelo.
+ * <p>A class with a single static method. It shows the box where the user chooses printer and
+ * options, and returns the one chosen or null if they cancelled.
  *
- * <h2>El conjunto de atributos es de entrada y de salida</h2>
+ * <h2>The set of attributes is both input and output</h2>
  *
- * <p>Es lo unico que hay que saber de este metodo. El {@link PrintRequestAttributeSet} que se pasa se
- * usa para <b>rellenar</b> el dialogo, y despues se <b>modifica en el lugar</b> con lo que el usuario
- * eligio. Pasar un conjunto compartido, o reusar el mismo entre dos dialogos, produce sorpresas.
+ * <p>It is the only thing to know about this method. The {@link PrintRequestAttributeSet} passed is
+ * used to <b>fill in</b> the dialog, and then <b>modified in place</b> with what the user chose.
+ * Passing a shared set, or reusing the same one between two dialogs, produces surprises.
  *
- * <p>Devolver null y haber modificado el conjunto no es contradictorio: si el usuario cancela, la
- * documentacion no promete que el conjunto quede intacto.
+ * <p>Returning null and having modified the set is not contradictory: if the user cancels, the
+ * documentation does not promise the set stays intact.
  *
  * <h2>A KajiLibrary subset</h2>
  *
- * <p>Esta biblioteca no tiene interfaz grafica: no hay Swing ni ventanas, y por lo tanto siempre esta
- * en el caso que el JDK llama sin pantalla. Ahi el propio JDK lanza {@link HeadlessException}
- * <b>antes</b> de mirar los argumentos --se comprobo contra el JDK 25 con
- * {@code -Djava.awt.headless=true}--, asi que eso es exactamente lo que hacemos: la validacion de
- * {@code services} y {@code attributes} nunca llega a correr, igual que alla.
+ * <p>This VM is always headless: {@link java.awt.GraphicsEnvironment#isHeadless()} returns true, so
+ * it is always in the case the JDK calls headless. (The note said this library has no Swing and no
+ * windows; the Swing classes are here, but there is no screen.) There the JDK itself throws {@link
+ * HeadlessException} <b>before</b> looking at the arguments --checked against JDK 25 with {@code
+ * -Djava.awt.headless=true}--, so that is exactly what we do: the validation of {@code services}
+ * and {@code attributes} never gets to run, just as there.
  */
 public class ServiceUI {
 
-    /** Publico porque el JDK lo dejo publico; la clase no tiene estado. */
+    /** Public because the JDK left it public; the class has no state. */
     public ServiceUI() {
     }
 
     /**
-     * Muestra el dialogo y devuelve la impresora elegida, o null si se cancelo.
+     * Shows the dialog and returns the chosen printer, or null if it was cancelled.
      *
-     * <p>Ver la nota de la clase: {@code attributes} se modifica en el lugar.
+     * <p>See the class note: {@code attributes} is modified in place.
      *
-     * @param gc en que pantalla, o null para la principal
-     * @param x posicion de la esquina
-     * @param y idem
-     * @param services entre cuales elegir; no puede ser null ni vacio
-     * @param defaultService cual viene seleccionada, o null
-     * @param flavor el formato que se va a imprimir, o null
-     * @param attributes entra con lo pedido y sale con lo elegido
-     * @throws IllegalArgumentException si {@code services} es null o vacio, o si
-     *     {@code defaultService} no esta entre ellos -- en el JDK con pantalla; aca gana el
-     *     {@code HeadlessException}
-     * @throws HeadlessException siempre: no hay pantalla. Ver la nota de la clase
+     * @param gc on which screen, or null for the main one
+     * @param x position of the corner
+     * @param y likewise
+     * @param services among which to choose; it cannot be null or empty
+     * @param defaultService which one comes selected, or null
+     * @param flavor the format that is going to be printed, or null
+     * @param attributes comes in with what was asked for and goes out with what was chosen
+     * @throws IllegalArgumentException if {@code services} is null or empty, or if
+     *     {@code defaultService} is not among them -- in the JDK with a screen; here the
+     *     {@code HeadlessException} wins
+     * @throws HeadlessException always: there is no screen. See the class note
      */
     public static PrintService printDialog(GraphicsConfiguration gc, int x, int y,
                                            PrintService[] services, PrintService defaultService,

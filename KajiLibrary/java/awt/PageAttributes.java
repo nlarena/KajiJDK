@@ -3,30 +3,31 @@ package java.awt;
 import java.util.Locale;
 
 /**
- * Cómo es la página que se imprime: color o blanco y negro, qué papel, en qué orientación y con
- * qué resolución.
+ * What the printed page is like: colour or black and white, which paper, in which orientation and
+ * at which resolution.
  *
- * <p>La contraparte de {@link JobAttributes}: aquélla describe el **trabajo** --cuántas copias, qué
- * páginas-- y ésta cada **página**. Como aquélla, es sólo configuración: no dibuja nada y no
- * consulta a ninguna impresora. Lo que hace es rechazar valores imposibles al fijarlos.
+ * <p>The counterpart of {@link JobAttributes}: that one describes the **job** --how many copies,
+ * which pages-- and this one each **page**. Like that one, it is only configuration: it draws
+ * nothing and asks no printer anything. What it does do is reject impossible values when they are
+ * set.
  *
- * <h2>El papel por omisión depende del país</h2>
+ * <h2>The default paper depends on the country</h2>
  *
- * <p>{@link MediaType#NA_LETTER} en Estados Unidos y Canadá, {@link MediaType#ISO_A4} en el resto.
- * Comprobado contra el JDK 25 país por país: sólo esos dos dan carta. No es una decisión de esta
- * biblioteca --es lo que hace el JDK-- y se toma de `Locale.getDefault()` en el momento de
- * construir el objeto, así que cambiar el locale después no lo cambia.
+ * <p>{@link MediaType#NA_LETTER} in the United States and Canada, {@link MediaType#ISO_A4}
+ * everywhere else. Checked against JDK 25 country by country: only those two give letter. It is not
+ * a decision of this library --it is what the JDK does-- and it is taken from `Locale.getDefault()`
+ * at the moment the object is built, so changing the locale afterwards does not change it.
  *
- * <h2>La resolución son tres números</h2>
+ * <h2>The resolution is three numbers</h2>
  *
- * <p>`{x, y, unidad}`, y la unidad es **3 para puntos por pulgada y 4 para puntos por centímetro**
- * — los códigos que usa IPP. Es la parte que sorprende: un arreglo de dos números no vale, y uno
- * con cualquier otra unidad tampoco. {@link #setPrinterResolution(int)} existe para el caso normal,
- * que es el mismo valor en los dos ejes y en puntos por pulgada.
+ * <p>`{x, y, unit}`, and the unit is **3 for dots per inch and 4 for dots per centimetre** — the
+ * codes IPP uses. It is the part that surprises: an array of two numbers is no good, and one with
+ * any other unit is not either. {@link #setPrinterResolution(int)} exists for the normal case,
+ * which is the same value on both axes and in dots per inch.
  */
 public final class PageAttributes implements Cloneable {
 
-    /** Si se imprime a color o en blanco y negro. */
+    /** Whether it is printed in colour or in black and white. */
     public static final class ColorType extends AttributeValue {
 
         private static final int I_COLOR = 0;
@@ -34,9 +35,9 @@ public final class PageAttributes implements Cloneable {
 
         private static final String[] NAMES = { "color", "monochrome" };
 
-        /** A color. */
+        /** In colour. */
         public static final ColorType COLOR = new ColorType(I_COLOR);
-        /** En blanco y negro. */
+        /** In black and white. */
         public static final ColorType MONOCHROME = new ColorType(I_MONOCHROME);
 
         private ColorType(int type) {
@@ -44,7 +45,7 @@ public final class PageAttributes implements Cloneable {
         }
     }
 
-    /** Si la página va apaisada o vertical. */
+    /** Whether the page goes landscape or portrait. */
     public static final class OrientationRequestedType extends AttributeValue {
 
         private static final int I_PORTRAIT = 0;
@@ -65,11 +66,12 @@ public final class PageAttributes implements Cloneable {
     }
 
     /**
-     * Desde dónde se miden las coordenadas de la página.
+     * Where the coordinates of the page are measured from.
      *
-     * <p>La diferencia importa al posicionar: {@link #PHYSICAL} mide desde la esquina del papel y
-     * {@link #PRINTABLE} desde donde la impresora **puede** imprimir, que está adentro por el margen
-     * que el mecanismo no alcanza. Dibujar en (0,0) da resultados distintos según cuál se use.
+     * <p>The difference matters when positioning: {@link #PHYSICAL} measures from the corner of the
+     * paper and {@link #PRINTABLE} from where the printer **can** print, which is further in by the
+     * margin the mechanism cannot reach. Drawing at (0,0) gives different results depending on
+     * which one is used.
      */
     public static final class OriginType extends AttributeValue {
 
@@ -78,9 +80,9 @@ public final class PageAttributes implements Cloneable {
 
         private static final String[] NAMES = { "physical", "printable" };
 
-        /** Desde la esquina del papel. */
+        /** From the corner of the paper. */
         public static final OriginType PHYSICAL = new OriginType(I_PHYSICAL);
-        /** Desde el área imprimible. */
+        /** From the printable area. */
         public static final OriginType PRINTABLE = new OriginType(I_PRINTABLE);
 
         private OriginType(int type) {
@@ -88,7 +90,7 @@ public final class PageAttributes implements Cloneable {
         }
     }
 
-    /** Qué tan buena tiene que salir. */
+    /** How good it has to come out. */
     public static final class PrintQualityType extends AttributeValue {
 
         private static final int I_HIGH = 0;
@@ -97,11 +99,11 @@ public final class PageAttributes implements Cloneable {
 
         private static final String[] NAMES = { "high", "normal", "draft" };
 
-        /** La mejor que la impresora dé. */
+        /** The best the printer gives. */
         public static final PrintQualityType HIGH = new PrintQualityType(I_HIGH);
-        /** La normal. */
+        /** The normal one. */
         public static final PrintQualityType NORMAL = new PrintQualityType(I_NORMAL);
-        /** Borrador: rápido y con menos tinta. */
+        /** Draft: fast and with less ink. */
         public static final PrintQualityType DRAFT = new PrintQualityType(I_DRAFT);
 
         private PrintQualityType(int type) {
@@ -110,18 +112,18 @@ public final class PageAttributes implements Cloneable {
     }
 
     /**
-     * Los tamaños de papel que la API nombra: 75 distintos y 72 alias.
+     * The paper sizes the API names: 75 different ones and 72 aliases.
      *
-     * <p>Los alias son constantes **idénticas** a otra, no equivalentes: `A4 == ISO_A4` da `true`.
-     * Existen porque la misma hoja tiene nombres distintos según de dónde venga quien la nombra
-     * --`ISO_A4` para el estándar, `A4` para el uso corriente, `ENV_10` y
-     * `NA_NUMBER_10_ENVELOPE` para el mismo sobre--, y tener las dos formas evita que quien lee un
-     * archivo de configuración tenga que traducir.
+     * <p>The aliases are constants **identical** to another one, not equivalent: `A4 == ISO_A4`
+     * gives `true`. They exist because the same sheet has different names depending on where
+     * whoever names it comes from --`ISO_A4` for the standard, `A4` for everyday use, `ENV_10` and
+     * `NA_NUMBER_10_ENVELOPE` for the same envelope--, and having both forms saves whoever reads a
+     * configuration file from having to translate.
      */
     public static final class MediaType extends AttributeValue {
 
 
-        // Los nombres que devuelve `toString()`, en el orden de los indices.
+        // The names `toString()` returns, in index order.
         private static final String[] NAMES = {
             "iso-4a0", "iso-2a0", "iso-a0", "iso-a1", "iso-a2", "iso-a3", "iso-a4", "iso-a5",
             "iso-a6", "iso-a7", "iso-a8", "iso-a9", "iso-a10", "iso-b0", "iso-b1", "iso-b2",
@@ -138,7 +140,7 @@ public final class PageAttributes implements Cloneable {
         };
 
 
-        // ---- Los tamanos ISO 216, la serie A: cada uno es la mitad del anterior.
+        // ---- The ISO 216 sizes, the A series: each one is half the previous one.
         /** `iso-4a0`. */
         public static final MediaType ISO_4A0 = new MediaType(0);
         /** `iso-2a0`. */
@@ -166,7 +168,7 @@ public final class PageAttributes implements Cloneable {
         /** `iso-a10`. */
         public static final MediaType ISO_A10 = new MediaType(12);
 
-        // ---- La serie B de ISO 216, entre dos tamanos A consecutivos.
+        // ---- The B series of ISO 216, between two consecutive A sizes.
         /** `iso-b0`. */
         public static final MediaType ISO_B0 = new MediaType(13);
         /** `iso-b1`. */
@@ -190,7 +192,7 @@ public final class PageAttributes implements Cloneable {
         /** `iso-b10`. */
         public static final MediaType ISO_B10 = new MediaType(23);
 
-        // ---- La serie B japonesa, que **no** coincide con la B de ISO pese al nombre.
+        // ---- The Japanese B series, which does **not** match the ISO B one despite the name.
         /** `jis-b0`. */
         public static final MediaType JIS_B0 = new MediaType(24);
         /** `jis-b1`. */
@@ -214,7 +216,7 @@ public final class PageAttributes implements Cloneable {
         /** `jis-b10`. */
         public static final MediaType JIS_B10 = new MediaType(34);
 
-        // ---- La serie C de ISO 269: sobres para la serie A del mismo numero.
+        // ---- The C series of ISO 269: envelopes for the A series of the same number.
         /** `iso-c0`. */
         public static final MediaType ISO_C0 = new MediaType(35);
         /** `iso-c1`. */
@@ -240,7 +242,7 @@ public final class PageAttributes implements Cloneable {
         /** `iso-designated-long`. */
         public static final MediaType ISO_DESIGNATED_LONG = new MediaType(46);
 
-        // ---- Tamanos norteamericanos que no siguen ninguna serie.
+        // ---- North American sizes that follow no series.
         /** `executive`. */
         public static final MediaType EXECUTIVE = new MediaType(47);
         /** `folio`. */
@@ -266,7 +268,7 @@ public final class PageAttributes implements Cloneable {
         /** `e`. */
         public static final MediaType E = new MediaType(58);
 
-        // ---- Sobres norteamericanos, por sus medidas en pulgadas.
+        // ---- North American envelopes, by their measures in inches.
         /** `na-10x15-envelope`. */
         public static final MediaType NA_10X15_ENVELOPE = new MediaType(59);
         /** `na-10x14-envelope`. */
@@ -282,7 +284,7 @@ public final class PageAttributes implements Cloneable {
         /** `na-6x9-envelope`. */
         public static final MediaType NA_6X9_ENVELOPE = new MediaType(65);
 
-        // ---- Sobres norteamericanos por numero comercial.
+        // ---- North American envelopes by commercial number.
         /** `na-number-9-envelope`. */
         public static final MediaType NA_NUMBER_9_ENVELOPE = new MediaType(66);
         /** `na-number-10-envelope`. */
@@ -294,7 +296,7 @@ public final class PageAttributes implements Cloneable {
         /** `na-number-14-envelope`. */
         public static final MediaType NA_NUMBER_14_ENVELOPE = new MediaType(70);
 
-        // ---- Sobres con nombre propio.
+        // ---- Envelopes with names of their own.
         /** `invite-envelope`. */
         public static final MediaType INVITE_ENVELOPE = new MediaType(71);
         /** `italy-envelope`. */
@@ -304,151 +306,151 @@ public final class PageAttributes implements Cloneable {
         /** `personal-envelope`. */
         public static final MediaType PERSONAL_ENVELOPE = new MediaType(74);
 
-        // ---- Los alias. Son la MISMA instancia, no una equivalente:
-        // `A4 == ISO_A4` da `true`. Ver la nota de la clase.
-        /** Igual que {@link #ISO_A0}. */
+        // ---- The aliases. They are the SAME instance, not an equivalent one:
+        // `A4 == ISO_A4` gives `true`. See the note of the class.
+        /** The same as {@link #ISO_A0}. */
         public static final MediaType A0 = ISO_A0;
-        /** Igual que {@link #ISO_A1}. */
+        /** The same as {@link #ISO_A1}. */
         public static final MediaType A1 = ISO_A1;
-        /** Igual que {@link #ISO_A2}. */
+        /** The same as {@link #ISO_A2}. */
         public static final MediaType A2 = ISO_A2;
-        /** Igual que {@link #ISO_A3}. */
+        /** The same as {@link #ISO_A3}. */
         public static final MediaType A3 = ISO_A3;
-        /** Igual que {@link #ISO_A4}. */
+        /** The same as {@link #ISO_A4}. */
         public static final MediaType A4 = ISO_A4;
-        /** Igual que {@link #ISO_A5}. */
+        /** The same as {@link #ISO_A5}. */
         public static final MediaType A5 = ISO_A5;
-        /** Igual que {@link #ISO_A6}. */
+        /** The same as {@link #ISO_A6}. */
         public static final MediaType A6 = ISO_A6;
-        /** Igual que {@link #ISO_A7}. */
+        /** The same as {@link #ISO_A7}. */
         public static final MediaType A7 = ISO_A7;
-        /** Igual que {@link #ISO_A8}. */
+        /** The same as {@link #ISO_A8}. */
         public static final MediaType A8 = ISO_A8;
-        /** Igual que {@link #ISO_A9}. */
+        /** The same as {@link #ISO_A9}. */
         public static final MediaType A9 = ISO_A9;
-        /** Igual que {@link #ISO_A10}. */
+        /** The same as {@link #ISO_A10}. */
         public static final MediaType A10 = ISO_A10;
-        /** Igual que {@link #ISO_B0}. */
+        /** The same as {@link #ISO_B0}. */
         public static final MediaType B0 = ISO_B0;
-        /** Igual que {@link #ISO_B1}. */
+        /** The same as {@link #ISO_B1}. */
         public static final MediaType B1 = ISO_B1;
-        /** Igual que {@link #ISO_B2}. */
+        /** The same as {@link #ISO_B2}. */
         public static final MediaType B2 = ISO_B2;
-        /** Igual que {@link #ISO_B3}. */
+        /** The same as {@link #ISO_B3}. */
         public static final MediaType B3 = ISO_B3;
-        /** Igual que {@link #ISO_B4}. */
+        /** The same as {@link #ISO_B4}. */
         public static final MediaType B4 = ISO_B4;
-        /** Igual que {@link #ISO_B4}. */
+        /** The same as {@link #ISO_B4}. */
         public static final MediaType ISO_B4_ENVELOPE = ISO_B4;
-        /** Igual que {@link #ISO_B5}. */
+        /** The same as {@link #ISO_B5}. */
         public static final MediaType B5 = ISO_B5;
-        /** Igual que {@link #ISO_B5}. */
+        /** The same as {@link #ISO_B5}. */
         public static final MediaType ISO_B5_ENVELOPE = ISO_B5;
-        /** Igual que {@link #ISO_B6}. */
+        /** The same as {@link #ISO_B6}. */
         public static final MediaType B6 = ISO_B6;
-        /** Igual que {@link #ISO_B7}. */
+        /** The same as {@link #ISO_B7}. */
         public static final MediaType B7 = ISO_B7;
-        /** Igual que {@link #ISO_B8}. */
+        /** The same as {@link #ISO_B8}. */
         public static final MediaType B8 = ISO_B8;
-        /** Igual que {@link #ISO_B9}. */
+        /** The same as {@link #ISO_B9}. */
         public static final MediaType B9 = ISO_B9;
-        /** Igual que {@link #ISO_B10}. */
+        /** The same as {@link #ISO_B10}. */
         public static final MediaType B10 = ISO_B10;
-        /** Igual que {@link #ISO_C0}. */
+        /** The same as {@link #ISO_C0}. */
         public static final MediaType C0 = ISO_C0;
-        /** Igual que {@link #ISO_C0}. */
+        /** The same as {@link #ISO_C0}. */
         public static final MediaType ISO_C0_ENVELOPE = ISO_C0;
-        /** Igual que {@link #ISO_C1}. */
+        /** The same as {@link #ISO_C1}. */
         public static final MediaType C1 = ISO_C1;
-        /** Igual que {@link #ISO_C1}. */
+        /** The same as {@link #ISO_C1}. */
         public static final MediaType ISO_C1_ENVELOPE = ISO_C1;
-        /** Igual que {@link #ISO_C2}. */
+        /** The same as {@link #ISO_C2}. */
         public static final MediaType C2 = ISO_C2;
-        /** Igual que {@link #ISO_C2}. */
+        /** The same as {@link #ISO_C2}. */
         public static final MediaType ISO_C2_ENVELOPE = ISO_C2;
-        /** Igual que {@link #ISO_C3}. */
+        /** The same as {@link #ISO_C3}. */
         public static final MediaType C3 = ISO_C3;
-        /** Igual que {@link #ISO_C3}. */
+        /** The same as {@link #ISO_C3}. */
         public static final MediaType ISO_C3_ENVELOPE = ISO_C3;
-        /** Igual que {@link #ISO_C4}. */
+        /** The same as {@link #ISO_C4}. */
         public static final MediaType C4 = ISO_C4;
-        /** Igual que {@link #ISO_C4}. */
+        /** The same as {@link #ISO_C4}. */
         public static final MediaType ISO_C4_ENVELOPE = ISO_C4;
-        /** Igual que {@link #ISO_C5}. */
+        /** The same as {@link #ISO_C5}. */
         public static final MediaType C5 = ISO_C5;
-        /** Igual que {@link #ISO_C5}. */
+        /** The same as {@link #ISO_C5}. */
         public static final MediaType ISO_C5_ENVELOPE = ISO_C5;
-        /** Igual que {@link #ISO_C6}. */
+        /** The same as {@link #ISO_C6}. */
         public static final MediaType C6 = ISO_C6;
-        /** Igual que {@link #ISO_C6}. */
+        /** The same as {@link #ISO_C6}. */
         public static final MediaType ISO_C6_ENVELOPE = ISO_C6;
-        /** Igual que {@link #ISO_C7}. */
+        /** The same as {@link #ISO_C7}. */
         public static final MediaType C7 = ISO_C7;
-        /** Igual que {@link #ISO_C7}. */
+        /** The same as {@link #ISO_C7}. */
         public static final MediaType ISO_C7_ENVELOPE = ISO_C7;
-        /** Igual que {@link #ISO_C8}. */
+        /** The same as {@link #ISO_C8}. */
         public static final MediaType C8 = ISO_C8;
-        /** Igual que {@link #ISO_C8}. */
+        /** The same as {@link #ISO_C8}. */
         public static final MediaType ISO_C8_ENVELOPE = ISO_C8;
-        /** Igual que {@link #ISO_C9}. */
+        /** The same as {@link #ISO_C9}. */
         public static final MediaType C9 = ISO_C9;
-        /** Igual que {@link #ISO_C9}. */
+        /** The same as {@link #ISO_C9}. */
         public static final MediaType ISO_C9_ENVELOPE = ISO_C9;
-        /** Igual que {@link #ISO_C10}. */
+        /** The same as {@link #ISO_C10}. */
         public static final MediaType C10 = ISO_C10;
-        /** Igual que {@link #ISO_C10}. */
+        /** The same as {@link #ISO_C10}. */
         public static final MediaType ISO_C10_ENVELOPE = ISO_C10;
-        /** Igual que {@link #ISO_DESIGNATED_LONG}. */
+        /** The same as {@link #ISO_DESIGNATED_LONG}. */
         public static final MediaType ISO_DESIGNATED_LONG_ENVELOPE = ISO_DESIGNATED_LONG;
-        /** Igual que {@link #INVOICE}. */
+        /** The same as {@link #INVOICE}. */
         public static final MediaType STATEMENT = INVOICE;
-        /** Igual que {@link #LEDGER}. */
+        /** The same as {@link #LEDGER}. */
         public static final MediaType TABLOID = LEDGER;
-        /** Igual que {@link #NA_LETTER}. */
+        /** The same as {@link #NA_LETTER}. */
         public static final MediaType LETTER = NA_LETTER;
-        /** Igual que {@link #NA_LETTER}. */
+        /** The same as {@link #NA_LETTER}. */
         public static final MediaType NOTE = NA_LETTER;
-        /** Igual que {@link #NA_LEGAL}. */
+        /** The same as {@link #NA_LEGAL}. */
         public static final MediaType LEGAL = NA_LEGAL;
-        /** Igual que {@link #NA_10X15_ENVELOPE}. */
+        /** The same as {@link #NA_10X15_ENVELOPE}. */
         public static final MediaType ENV_10X15 = NA_10X15_ENVELOPE;
-        /** Igual que {@link #NA_10X14_ENVELOPE}. */
+        /** The same as {@link #NA_10X14_ENVELOPE}. */
         public static final MediaType ENV_10X14 = NA_10X14_ENVELOPE;
-        /** Igual que {@link #NA_10X13_ENVELOPE}. */
+        /** The same as {@link #NA_10X13_ENVELOPE}. */
         public static final MediaType ENV_10X13 = NA_10X13_ENVELOPE;
-        /** Igual que {@link #NA_9X12_ENVELOPE}. */
+        /** The same as {@link #NA_9X12_ENVELOPE}. */
         public static final MediaType ENV_9X12 = NA_9X12_ENVELOPE;
-        /** Igual que {@link #NA_9X11_ENVELOPE}. */
+        /** The same as {@link #NA_9X11_ENVELOPE}. */
         public static final MediaType ENV_9X11 = NA_9X11_ENVELOPE;
-        /** Igual que {@link #NA_7X9_ENVELOPE}. */
+        /** The same as {@link #NA_7X9_ENVELOPE}. */
         public static final MediaType ENV_7X9 = NA_7X9_ENVELOPE;
-        /** Igual que {@link #NA_6X9_ENVELOPE}. */
+        /** The same as {@link #NA_6X9_ENVELOPE}. */
         public static final MediaType ENV_6X9 = NA_6X9_ENVELOPE;
-        /** Igual que {@link #NA_NUMBER_9_ENVELOPE}. */
+        /** The same as {@link #NA_NUMBER_9_ENVELOPE}. */
         public static final MediaType ENV_9 = NA_NUMBER_9_ENVELOPE;
-        /** Igual que {@link #NA_NUMBER_10_ENVELOPE}. */
+        /** The same as {@link #NA_NUMBER_10_ENVELOPE}. */
         public static final MediaType ENV_10 = NA_NUMBER_10_ENVELOPE;
-        /** Igual que {@link #NA_NUMBER_11_ENVELOPE}. */
+        /** The same as {@link #NA_NUMBER_11_ENVELOPE}. */
         public static final MediaType ENV_11 = NA_NUMBER_11_ENVELOPE;
-        /** Igual que {@link #NA_NUMBER_12_ENVELOPE}. */
+        /** The same as {@link #NA_NUMBER_12_ENVELOPE}. */
         public static final MediaType ENV_12 = NA_NUMBER_12_ENVELOPE;
-        /** Igual que {@link #NA_NUMBER_14_ENVELOPE}. */
+        /** The same as {@link #NA_NUMBER_14_ENVELOPE}. */
         public static final MediaType ENV_14 = NA_NUMBER_14_ENVELOPE;
-        /** Igual que {@link #INVITE_ENVELOPE}. */
+        /** The same as {@link #INVITE_ENVELOPE}. */
         public static final MediaType ENV_INVITE = INVITE_ENVELOPE;
-        /** Igual que {@link #ITALY_ENVELOPE}. */
+        /** The same as {@link #ITALY_ENVELOPE}. */
         public static final MediaType ENV_ITALY = ITALY_ENVELOPE;
-        /** Igual que {@link #MONARCH_ENVELOPE}. */
+        /** The same as {@link #MONARCH_ENVELOPE}. */
         public static final MediaType ENV_MONARCH = MONARCH_ENVELOPE;
-        /** Igual que {@link #PERSONAL_ENVELOPE}. */
+        /** The same as {@link #PERSONAL_ENVELOPE}. */
         public static final MediaType ENV_PERSONAL = PERSONAL_ENVELOPE;
-        /** Igual que {@link #INVITE_ENVELOPE}. */
+        /** The same as {@link #INVITE_ENVELOPE}. */
         public static final MediaType INVITE = INVITE_ENVELOPE;
-        /** Igual que {@link #ITALY_ENVELOPE}. */
+        /** The same as {@link #ITALY_ENVELOPE}. */
         public static final MediaType ITALY = ITALY_ENVELOPE;
-        /** Igual que {@link #MONARCH_ENVELOPE}. */
+        /** The same as {@link #MONARCH_ENVELOPE}. */
         public static final MediaType MONARCH = MONARCH_ENVELOPE;
-        /** Igual que {@link #PERSONAL_ENVELOPE}. */
+        /** The same as {@link #PERSONAL_ENVELOPE}. */
         public static final MediaType PERSONAL = PERSONAL_ENVELOPE;
 
         private MediaType(int type) {
@@ -463,7 +465,7 @@ public final class PageAttributes implements Cloneable {
     private PrintQualityType printQuality;
     private int[] printerResolution;
 
-    /** Los valores por omisión. El papel depende del país; ver la nota de la clase. */
+    /** The default values. The paper depends on the country; see the note of the class. */
     public PageAttributes() {
         this.setColor(ColorType.MONOCHROME);
         this.setMediaToDefault();
@@ -474,18 +476,18 @@ public final class PageAttributes implements Cloneable {
     }
 
     /**
-     * Una copia de `obj`.
+     * A copy of `obj`.
      *
-     * @throws NullPointerException si `obj` es nulo
+     * @throws NullPointerException if `obj` is null
      */
     public PageAttributes(PageAttributes obj) {
         this.set(obj);
     }
 
     /**
-     * Con todos los valores dados.
+     * With every value given.
      *
-     * @throws IllegalArgumentException si alguno no es válido
+     * @throws IllegalArgumentException if any of them is not valid
      */
     public PageAttributes(ColorType color, MediaType media,
             OrientationRequestedType orientationRequested, OriginType origin,
@@ -498,16 +500,16 @@ public final class PageAttributes implements Cloneable {
         this.setPrinterResolution(printerResolution);
     }
 
-    /** Una copia. La resolución se copia de verdad: es el único campo mutable. */
+    /** A copy. The resolution is really copied: it is the only mutable field. */
     public Object clone() {
         PageAttributes copy = new PageAttributes(this);
         return copy;
     }
 
     /**
-     * Toma todos los valores de `obj`.
+     * Takes every value from `obj`.
      *
-     * @throws NullPointerException si `obj` es nulo
+     * @throws NullPointerException if `obj` is null
      */
     public void set(PageAttributes obj) {
         this.color = obj.color;
@@ -527,13 +529,13 @@ public final class PageAttributes implements Cloneable {
         return out;
     }
 
-    /** Color o blanco y negro. */
+    /** Colour or black and white. */
     public ColorType getColor() {
         return this.color;
     }
 
     /**
-     * @throws IllegalArgumentException si es nulo
+     * @throws IllegalArgumentException if it is null
      */
     public void setColor(ColorType color) {
         if (color == null) {
@@ -542,13 +544,13 @@ public final class PageAttributes implements Cloneable {
         this.color = color;
     }
 
-    /** El papel. */
+    /** The paper. */
     public MediaType getMedia() {
         return this.media;
     }
 
     /**
-     * @throws IllegalArgumentException si es nulo
+     * @throws IllegalArgumentException if it is null
      */
     public void setMedia(MediaType media) {
         if (media == null) {
@@ -558,28 +560,29 @@ public final class PageAttributes implements Cloneable {
     }
 
     /**
-     * Vuelve al papel por omisión del país.
+     * Goes back to the default paper of the country.
      *
-     * <p>`NA_LETTER` en `US` y `CA`, `ISO_A4` en todo lo demás. Es el reparto exacto del JDK,
-     * comprobado país por país -- México, Filipinas y Puerto Rico usan carta en la práctica y aun
-     * así el JDK les da A4, así que la regla es la de los dos países y no la del continente.
+     * <p>`NA_LETTER` in `US` and `CA`, `ISO_A4` in everything else. It is the JDK's exact split,
+     * checked country by country -- Mexico, the Philippines and Puerto Rico use letter in practice
+     * and even so the JDK gives them A4, so the rule is the one of the two countries and not the
+     * one of the continent.
      */
     public void setMediaToDefault() {
-        String pais = Locale.getDefault().getCountry();
-        if ("US".equals(pais) || "CA".equals(pais)) {
+        String country = Locale.getDefault().getCountry();
+        if ("US".equals(country) || "CA".equals(country)) {
             this.setMedia(MediaType.NA_LETTER);
         } else {
             this.setMedia(MediaType.ISO_A4);
         }
     }
 
-    /** Vertical o apaisada. */
+    /** Portrait or landscape. */
     public OrientationRequestedType getOrientationRequested() {
         return this.orientationRequested;
     }
 
     /**
-     * @throws IllegalArgumentException si es nulo
+     * @throws IllegalArgumentException if it is null
      */
     public void setOrientationRequested(OrientationRequestedType orientationRequested) {
         if (orientationRequested == null) {
@@ -590,12 +593,12 @@ public final class PageAttributes implements Cloneable {
     }
 
     /**
-     * Por su código IPP: **3 es vertical y 4 apaisada**.
+     * By its IPP code: **3 is portrait and 4 landscape**.
      *
-     * <p>Los números no empiezan en cero ni en uno porque son los de la especificación IPP, no un
-     * índice de esta API.
+     * <p>The numbers do not start at zero or at one because they are the ones of the IPP
+     * specification, not an index of this API.
      *
-     * @throws IllegalArgumentException si no es 3 ni 4
+     * @throws IllegalArgumentException if it is neither 3 nor 4
      */
     public void setOrientationRequested(int orientationRequested) {
         if (orientationRequested == 3) {
@@ -608,18 +611,18 @@ public final class PageAttributes implements Cloneable {
         }
     }
 
-    /** Vuelve a vertical. */
+    /** Goes back to portrait. */
     public void setOrientationRequestedToDefault() {
         this.setOrientationRequested(OrientationRequestedType.PORTRAIT);
     }
 
-    /** Desde dónde se miden las coordenadas. */
+    /** Where the coordinates are measured from. */
     public OriginType getOrigin() {
         return this.origin;
     }
 
     /**
-     * @throws IllegalArgumentException si es nulo
+     * @throws IllegalArgumentException if it is null
      */
     public void setOrigin(OriginType origin) {
         if (origin == null) {
@@ -628,13 +631,13 @@ public final class PageAttributes implements Cloneable {
         this.origin = origin;
     }
 
-    /** La calidad. */
+    /** The quality. */
     public PrintQualityType getPrintQuality() {
         return this.printQuality;
     }
 
     /**
-     * @throws IllegalArgumentException si es nulo
+     * @throws IllegalArgumentException if it is null
      */
     public void setPrintQuality(PrintQualityType printQuality) {
         if (printQuality == null) {
@@ -644,12 +647,12 @@ public final class PageAttributes implements Cloneable {
     }
 
     /**
-     * Por su código IPP: **3 borrador, 4 normal, 5 alta**.
+     * By its IPP code: **3 draft, 4 normal, 5 high**.
      *
-     * <p>Ojo con el orden, que va al revés de lo que uno diría: el número más chico es la calidad
-     * más baja.
+     * <p>Mind the order, which goes the other way round from what one would say: the smaller number
+     * is the lower quality.
      *
-     * @throws IllegalArgumentException si no es 3, 4 ni 5
+     * @throws IllegalArgumentException if it is neither 3, 4 nor 5
      */
     public void setPrintQuality(int printQuality) {
         if (printQuality == 3) {
@@ -663,21 +666,21 @@ public final class PageAttributes implements Cloneable {
         }
     }
 
-    /** Vuelve a calidad normal. */
+    /** Goes back to normal quality. */
     public void setPrintQualityToDefault() {
         this.setPrintQuality(PrintQualityType.NORMAL);
     }
 
-    /** Una copia de los tres números. Ver la nota de la clase sobre qué significan. */
+    /** A copy of the three numbers. See the note of the class about what they mean. */
     public int[] getPrinterResolution() {
         return copyRes(this.printerResolution);
     }
 
     /**
-     * Fija la resolución: `{x, y, unidad}` con la unidad en 3 (por pulgada) o 4 (por centímetro).
+     * Sets the resolution: `{x, y, unit}` with the unit at 3 (per inch) or 4 (per centimetre).
      *
-     * @throws IllegalArgumentException si el arreglo es nulo, no tiene exactamente tres números,
-     *     alguno de los dos primeros no es positivo, o la unidad no es 3 ni 4
+     * @throws IllegalArgumentException if the array is null, does not have exactly three numbers,
+     *     either of the first two is not positive, or the unit is neither 3 nor 4
      */
     public void setPrinterResolution(int[] printerResolution) {
         if (printerResolution == null
@@ -691,21 +694,21 @@ public final class PageAttributes implements Cloneable {
     }
 
     /**
-     * La misma resolución en los dos ejes, en puntos por pulgada.
+     * The same resolution on both axes, in dots per inch.
      *
-     * @throws IllegalArgumentException si no es positiva
+     * @throws IllegalArgumentException if it is not positive
      */
     public void setPrinterResolution(int printerResolution) {
         this.setPrinterResolution(
                 new int[] { printerResolution, printerResolution, 3 });
     }
 
-    /** Vuelve a 72 puntos por pulgada, que es la unidad tipográfica clásica. */
+    /** Goes back to 72 dots per inch, which is the classic typographic unit. */
     public void setPrinterResolutionToDefault() {
         this.setPrinterResolution(72);
     }
 
-    /** Igualdad por todos los campos, con la resolución comparada por contenido. */
+    /** Equality by every field, with the resolution compared by content. */
     public boolean equals(Object obj) {
         if (this == obj) {
             return true;
@@ -751,7 +754,7 @@ public final class PageAttributes implements Cloneable {
         return h;
     }
 
-    /** El mismo formato que el JDK. */
+    /** The same format as the JDK. */
     public String toString() {
         StringBuilder res = new StringBuilder("[");
         int[] r = this.getPrinterResolution();

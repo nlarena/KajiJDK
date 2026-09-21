@@ -11,54 +11,57 @@ import javax.xml.crypto.XMLStructure;
 import javax.xml.crypto.dsig.spec.TransformParameterSpec;
 
 /**
- * KajiLibrary's javax.xml.crypto.dsig.TransformService -- el enchufe para escribir una
- * transformacion propia.
+ * KajiLibrary's javax.xml.crypto.dsig.TransformService -- the socket for writing a transform of
+ * one's own.
  *
- * <p>Es la unica extension que XML-DSig deja abierta a quien usa la biblioteca: una
- * {@link Transform} nueva se implementa extendiendo esto y registrandola como servicio de un
- * proveedor de seguridad.
+ * <p>It is the only extension XML-DSig leaves open to whoever uses the library: a new
+ * {@link Transform} is implemented by extending this and registering it as a service of a security
+ * provider.
  *
- * <h2>Se pide por dos cosas, no por una</h2>
+ * <h2>It is asked for by two things, not one</h2>
  *
- * <p>Los {@code getInstance} reciben <b>algoritmo y mecanismo</b>: el URI de la transformacion y el
- * modelo de objetos. Hacen falta los dos porque una transformacion trabaja sobre la representacion
- * concreta del XML, y la misma transformacion sobre DOM y sobre otro modelo son dos implementaciones
- * distintas.
+ * <p>The {@code getInstance}s receive <b>algorithm and mechanism</b>: the URI of the transform and
+ * the object model. Both are needed because a transform works on the concrete representation of the
+ * XML, and the same transform over DOM and over another model are two different implementations.
  *
- * <p>Adentro, el servicio se registra con el tipo {@code TransformService} y el algoritmo
- * {@code "<URI> MechanismType"} -- las dos cosas en una cadena, que es como el JDK las combina.
+ * <p>Here the service is looked up with the type {@code TransformService} and the algorithm
+ * {@code "<URI> <mechanism>"} -- both things in one string. The note said that is how the JDK
+ * combines them; it is not: the JDK registers the algorithm as the bare URI and the mechanism as a
+ * {@code MechanismType} attribute of the service
+ * ({@code put("TransformService.<URI> MechanismType", "DOM")}), so a provider registered that way
+ * is not found by this lookup.
  *
- * <h2>Los dos init</h2>
+ * <h2>The two inits</h2>
  *
- * <p>{@link #init(TransformParameterSpec)} es para <b>firmar</b>: los parametros los da el programa.
- * {@link #init(XMLStructure, XMLCryptoContext)} es para <b>validar</b>: los parametros se leen del
- * documento. {@link #marshalParams} es el camino de vuelta, al escribir.
+ * <p>{@link #init(TransformParameterSpec)} is for <b>signing</b>: the parameters are given by the
+ * program. {@link #init(XMLStructure, XMLCryptoContext)} is for <b>validating</b>: the parameters
+ * are read from the document. {@link #marshalParams} is the way back, when writing.
  *
- * <p>Una implementacion tiene que soportar los tres, porque una transformacion propia tiene que poder
- * ir y volver del XML; si no, la firma que produce no la puede validar nadie mas.
+ * <p>An implementation has to support all three, because a transform of one's own has to be able to
+ * go to and from XML; otherwise the signature it produces cannot be validated by anybody else.
  */
 public abstract class TransformService implements Transform {
 
-    /** El tipo de servicio con el que se registra un proveedor. */
+    /** The service type a provider registers with. */
     private static final String SERVICE = "TransformService";
 
-    /** El mecanismo con el que se pidio. */
+    /** The mechanism it was asked for with. */
     private String mechanismType;
 
-    /** El URI del algoritmo. */
+    /** The URI of the algorithm. */
     private String algorithm;
 
-    /** De donde salio. */
+    /** Where it came from. */
     private Provider provider;
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected TransformService() {
     }
 
     /**
-     * El servicio de ese algoritmo y ese mecanismo.
+     * The service of that algorithm and that mechanism.
      *
-     * @throws NoSuchAlgorithmException si ningun proveedor lo tiene
+     * @throws NoSuchAlgorithmException if no provider has it
      */
     public static TransformService getInstance(String algorithm, String mechanismType)
         throws NoSuchAlgorithmException {
@@ -76,7 +79,7 @@ public abstract class TransformService implements Transform {
             "No TransformService for algorithm " + algorithm + " and mechanism " + mechanismType);
     }
 
-    /** Idem, de un proveedor concreto. */
+    /** Likewise, from a concrete provider. */
     public static TransformService getInstance(String algorithm, String mechanismType,
                                                Provider provider) throws NoSuchAlgorithmException {
         checkArgs(algorithm, mechanismType);
@@ -92,9 +95,9 @@ public abstract class TransformService implements Transform {
     }
 
     /**
-     * Idem, nombrando el proveedor.
+     * Likewise, naming the provider.
      *
-     * @throws NoSuchProviderException si no hay proveedor con ese nombre
+     * @throws NoSuchProviderException if there is no provider with that name
      */
     public static TransformService getInstance(String algorithm, String mechanismType,
                                                String provider)
@@ -112,46 +115,46 @@ public abstract class TransformService implements Transform {
         return getInstance(algorithm, mechanismType, p);
     }
 
-    /** El mecanismo con el que se pidio. */
+    /** The mechanism it was asked for with. */
     public final String getMechanismType() {
         return this.mechanismType;
     }
 
-    /** El URI del algoritmo. */
+    /** The URI of the algorithm. */
     public final String getAlgorithm() {
         return this.algorithm;
     }
 
-    /** El proveedor de donde salio. */
+    /** The provider it came from. */
     public final Provider getProvider() {
         return this.provider;
     }
 
     /**
-     * Inicializa para firmar, con parametros dados por el programa.
+     * Initializes for signing, with parameters given by the program.
      *
-     * @throws InvalidAlgorithmParameterException si los parametros no sirven
+     * @throws InvalidAlgorithmParameterException if the parameters are no good
      */
     public abstract void init(TransformParameterSpec params)
         throws InvalidAlgorithmParameterException;
 
     /**
-     * Escribe los parametros en el XML.
+     * Writes the parameters into the XML.
      *
-     * @throws MarshalException si no se pueden escribir ahi
+     * @throws MarshalException if they cannot be written there
      */
     public abstract void marshalParams(XMLStructure parent, XMLCryptoContext context)
         throws MarshalException;
 
     /**
-     * Inicializa para validar, leyendo los parametros del documento.
+     * Initializes for validating, reading the parameters from the document.
      *
-     * @throws InvalidAlgorithmParameterException si lo que hay en el documento no sirve
+     * @throws InvalidAlgorithmParameterException if what is in the document is no good
      */
     public abstract void init(XMLStructure parent, XMLCryptoContext context)
         throws InvalidAlgorithmParameterException;
 
-    /** Que los dos nombres esten. */
+    /** That both names are there. */
     private static void checkArgs(String algorithm, String mechanismType) {
         if (algorithm == null) {
             throw new NullPointerException("algorithm cannot be null");
@@ -161,7 +164,7 @@ public abstract class TransformService implements Transform {
         }
     }
 
-    /** El armado comun de los tres {@code getInstance}. */
+    /** What the three {@code getInstance}s build in common. */
     private static TransformService build(Provider.Service s, String algorithm,
                                           String mechanismType) throws NoSuchAlgorithmException {
         Object made;

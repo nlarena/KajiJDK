@@ -6,7 +6,7 @@ import javax.swing.JComponent;
 import javax.swing.plaf.ComponentUI;
 
 /**
- * El item de menu con casilla, en Synth. Cambia el prefijo y nada mas.
+ * Synth's check box menu item. It changes the prefix and nothing else.
  */
 public class SynthCheckBoxMenuItemUI extends SynthMenuItemUI {
 

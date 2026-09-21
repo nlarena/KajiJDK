@@ -4,90 +4,91 @@ import java.util.Collection;
 import java.util.Set;
 
 /**
- * Una tabla de {@link CompositeData} indexados por algunos de sus items.
+ * A table of {@link CompositeData} indexed by some of their items.
  *
- * <p>La particularidad frente a un `Map` es que **la clave sale del valor**: el {@link TabularType}
- * dice qué items forman el índice, y {@link #calculateIndex} la calcula. Por eso {@link #put} toma
- * la fila sola, y por eso poner dos filas con la misma clave es
- * {@link KeyAlreadyExistsException} y no un reemplazo -- reemplazar sin querer una fila cuya clave
- * uno no eligió es un error, no una intención.
+ * <p>What sets it apart from a {@code Map} is that <b>the key comes from the value</b>: the
+ * {@link TabularType} says which items make up the index, and {@link #calculateIndex} computes it.
+ * That is why {@link #put} takes the row alone, and why putting two rows with the same key is a
+ * {@link KeyAlreadyExistsException} and not a replacement -- accidentally replacing a row whose key
+ * you did not choose is an error, not an intention.
  *
- * <p>Las claves son `Object[]`: un arreglo con los valores de los items de índice, **en el orden
- * de {@link TabularType#getIndexNames}**. Ese orden es la razón por la que ese método existe.
+ * <p>The keys are {@code Object[]}: an array with the values of the index items, <b>in the order of
+ * {@link TabularType#getIndexNames}</b>. That order is the reason that method exists.
  */
 public interface TabularData {
 
-    /** El tipo de esta tabla. */
+    /** The type of this table. */
     TabularType getTabularType();
 
     /**
-     * La clave que le corresponde a esa fila.
+     * The key that corresponds to that row.
      *
-     * @throws NullPointerException si la fila es nula
-     * @throws InvalidOpenTypeException si la fila no es del tipo que esta tabla espera
+     * @throws NullPointerException if the row is null
+     * @throws InvalidOpenTypeException if the row is not of the type this table expects
      */
     Object[] calculateIndex(CompositeData value);
 
-    /** Cuántas filas hay. */
+    /** How many rows there are. */
     int size();
 
-    /** Si no hay ninguna fila. */
+    /** Whether there is no row at all. */
     boolean isEmpty();
 
     /**
-     * Si hay una fila con esa clave.
+     * Whether there is a row with that key.
      *
-     * @throws NullPointerException nunca: una clave nula o de largo equivocado da `false`
+     * @throws NullPointerException never: a null key or one of the wrong length gives {@code false}
      */
     boolean containsKey(Object[] key);
 
-    /** Si esa fila está en la tabla. Un nulo da `false`. */
+    /** Whether that row is in the table. A null gives {@code false}. */
     boolean containsValue(CompositeData value);
 
     /**
-     * La fila con esa clave, o nulo si no hay.
+     * The row with that key, or null if there is none.
      *
-     * @throws NullPointerException si la clave es nula
-     * @throws InvalidKeyException si la clave no tiene tantos valores como items de índice, o si
-     *     alguno no es del tipo que corresponde
+     * @throws NullPointerException if the key is null
+     * @throws InvalidKeyException if the key does not have as many values as there are index items,
+     *     or if one is not of the right type
      */
     CompositeData get(Object[] key);
 
     /**
-     * Agrega esa fila.
+     * Adds that row.
      *
-     * @throws NullPointerException si la fila es nula
-     * @throws InvalidOpenTypeException si la fila no es del tipo que esta tabla espera
-     * @throws KeyAlreadyExistsException si ya hay una fila con esa clave
+     * @throws NullPointerException if the row is null
+     * @throws InvalidOpenTypeException if the row is not of the type this table expects
+     * @throws KeyAlreadyExistsException if there is already a row with that key
      */
     void put(CompositeData value);
 
     /**
-     * Saca la fila con esa clave y la devuelve, o nulo si no había.
+     * Removes the row with that key and returns it, or null if there was none.
      *
-     * @throws NullPointerException si la clave es nula
-     * @throws InvalidKeyException si la clave no es válida para esta tabla
+     * @throws NullPointerException if the key is null
+     * @throws InvalidKeyException if the key is not valid for this table
      */
     CompositeData remove(Object[] key);
 
     /**
-     * Agrega todas esas filas.
+     * Adds all those rows.
      *
-     * <p>O entran todas o no entra ninguna: si una falla, la tabla queda como estaba. Es lo que
-     * hace que un error a mitad de camino no deje media tabla cargada.
+     * <p>Either they all go in or none does: if one fails, the table is left as it was. It is what
+     * keeps an error halfway through from leaving the table half loaded.
      *
-     * @throws InvalidOpenTypeException si alguna fila no es del tipo que la tabla espera
-     * @throws KeyAlreadyExistsException si alguna clave ya está, o si dos de las nuevas coinciden
+     * @throws InvalidOpenTypeException if some row is not of the type the table expects
+     * @throws KeyAlreadyExistsException if some key is already there, or if two of the new ones
+     *     match
      */
     void putAll(CompositeData[] values);
 
-    /** Vacía la tabla. */
+    /** Empties the table. */
     void clear();
 
-    /** Las claves, cada una como una `List` de sus valores de índice. */
+    /** The keys, each as a {@code List} of its index values. */
     Set<?> keySet();
 
-    /** Las filas. */
+    /** The rows. */
     Collection<?> values();
 
     boolean equals(Object obj);

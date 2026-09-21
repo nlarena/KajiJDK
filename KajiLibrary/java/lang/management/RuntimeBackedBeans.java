@@ -10,36 +10,39 @@ import java.util.Properties;
 import javax.management.ObjectName;
 
 /**
- * Las tres MXBean que esta biblioteca puede contestar con datos de verdad.
+ * The MXBeans this library can answer with genuine data.
  *
- * <p>De acceso de paquete: no es API. Salen de {@code System} y de {@code Runtime}, que son las dos
- * cosas que la maquina virtual si expone.
+ * <p>Package-private: not API. They come out of {@code System} and {@code Runtime}, which are the
+ * two things the virtual machine does expose, plus the fact that it has a JIT.
  *
- * <p>Lo que no se puede saber no se inventa: {@code getNonHeapMemoryUsage} lanza
- * {@link UnsupportedOperationException} en lugar de devolver ceros. Ver la nota de
- * {@link ManagementFactory}.
+ * <p>What cannot be known is not invented: {@code getNonHeapMemoryUsage} throws
+ * {@link UnsupportedOperationException} instead of returning zeros. See {@link ManagementFactory}'s
+ * note.
  */
 final class RuntimeBackedBeans {
 
-    /** Cuando se cargo esta clase; lo mas parecido al arranque que se puede medir desde Java. */
+    /** When this class was loaded; the closest thing to start-up measurable from Java. */
     private static final long START_TIME = System.currentTimeMillis();
 
-    /** Un contador monotono para medir el tiempo corriendo. */
+    /** A monotonic counter for measuring the time running. */
     private static final long START_NANOS = System.nanoTime();
 
-    /** El del sistema operativo. */
+    /** The operating system's. */
     static final OperatingSystemMXBean OS = new Os();
 
-    /** El de arranque. */
+    /** The runtime's. */
     static final RuntimeMXBean RUNTIME = new Rt();
 
-    /** El de memoria. */
+    /** Memory's. */
     static final MemoryMXBean MEMORY = new Mem();
+
+    /** The run-time compiler's. See {@link Compilation} for what it can and cannot answer. */
+    static final CompilationMXBean COMPILATION = new Compilation();
 
     private RuntimeBackedBeans() {
     }
 
-    /** Una propiedad del sistema, o null si no se puede leer. */
+    /** A system property, or null if it cannot be read. */
     static String property(String name) {
         try {
             return System.getProperty(name);
@@ -48,7 +51,7 @@ final class RuntimeBackedBeans {
         }
     }
 
-    /** El nombre del MBean, o null si no se pudo armar. */
+    /** The MBean's name, or null if it could not be built. */
     static ObjectName name(String s) {
         try {
             return ObjectName.getInstance(s);
@@ -57,7 +60,7 @@ final class RuntimeBackedBeans {
         }
     }
 
-    /** Datos del sistema operativo; todos reales. */
+    /** Operating system data; all of it real. */
     private static final class Os implements OperatingSystemMXBean {
 
         public String getName() {
@@ -76,7 +79,7 @@ final class RuntimeBackedBeans {
             return Runtime.getRuntime().availableProcessors();
         }
 
-        /** Negativo: esta plataforma no publica la carga promedio, que es lo que significa. */
+        /** Negative: this platform does not publish the load average, which is what that means. */
         public double getSystemLoadAverage() {
             return -1.0;
         }
@@ -86,15 +89,48 @@ final class RuntimeBackedBeans {
         }
     }
 
-    /** Datos de arranque; salen de las propiedades del sistema. */
+    /**
+     * The run-time compiler.
+     *
+     * <p>This one exists, and that is the point: `getCompilationMXBean()` used to return null on the
+     * grounds that this virtual machine only interprets. It does not -- `src/burst` is a JIT and the
+     * interpreter carries its cache (`jit: JitCache`) -- so null was the answer for a machine with no
+     * compiler, given by one that has one.
+     *
+     * <p>What it still cannot answer is <b>how long</b> it has spent compiling: nothing in the VM
+     * publishes that counter. So {@link #isCompilationTimeMonitoringSupported} says false and
+     * {@link #getTotalCompilationTime} throws, which is exactly the branch the JDK's contract defines
+     * for that case -- not a gap invented here.
+     */
+    private static final class Compilation implements CompilationMXBean {
+
+        public String getName() {
+            return "Burst";
+        }
+
+        public boolean isCompilationTimeMonitoringSupported() {
+            return false;
+        }
+
+        public long getTotalCompilationTime() {
+            throw new UnsupportedOperationException(
+                    "this virtual machine does not measure how long it spends compiling");
+        }
+
+        public ObjectName getObjectName() {
+            return name(ManagementFactory.COMPILATION_MXBEAN_NAME);
+        }
+    }
+
+    /** Start-up data; it comes out of the system properties. */
     private static final class Rt implements RuntimeMXBean {
 
         /**
-         * El nombre de esta maquina virtual.
+         * This virtual machine's name.
          *
-         * <p>El JDK devuelve {@code pid@maquina}; aca no hay pid que consultar, y la documentacion
-         * del metodo dice explicitamente que puede ser cualquier cadena. Devolver algo con forma de
-         * pid seria inventarlo.
+         * <p>The JDK returns {@code pid@machine}; here there is no pid to ask for, and the method's
+         * documentation says explicitly that it can be any string. Returning something shaped like a
+         * pid would be inventing one.
          */
         public String getName() {
             return "KajiJDK";
@@ -136,7 +172,7 @@ final class RuntimeBackedBeans {
             return property("java.library.path");
         }
 
-        /** No: la ruta de arranque desaparecio con los modulos. */
+        /** No: the boot class path went away with modules. */
         public boolean isBootClassPathSupported() {
             return false;
         }
@@ -147,17 +183,17 @@ final class RuntimeBackedBeans {
         }
 
         /**
-         * Vacio.
+         * Empty.
          *
-         * <p>No es una afirmacion de que no hubo argumentos: es que esta maquina virtual no los
-         * conserva. La lista vacia es lo unico que se puede devolver sin inventar, y el metodo no
-         * tiene forma de decir "no se".
+         * <p>It is not a statement that there were no arguments: it is that this virtual machine does
+         * not keep them. The empty list is the only thing returnable without inventing, and the
+         * method has no way of saying "I do not know".
          */
         public List<String> getInputArguments() {
             return Collections.emptyList();
         }
 
-        /** Desde que se cargo la clase, medido con un contador monotono. */
+        /** Since the class was loaded, measured with a monotonic counter. */
         public long getUptime() {
             return (System.nanoTime() - START_NANOS) / 1000000L;
         }
@@ -178,8 +214,8 @@ final class RuntimeBackedBeans {
             while (it.hasNext()) {
                 Object k = it.next();
                 Object v = props.get(k);
-                // Solo las de cadena a cadena, como manda la documentacion: las Properties admiten
-                // cualquier objeto y este mapa no.
+                // String-to-string only, as the documentation requires: Properties accepts any
+                // object and this map does not.
                 if (k instanceof String && v instanceof String) {
                     out.put((String) k, (String) v);
                 }
@@ -192,14 +228,14 @@ final class RuntimeBackedBeans {
         }
     }
 
-    /** El monton, medido de verdad; lo demas, declarado como ausente. */
+    /** The heap, genuinely measured; the rest, declared absent. */
     private static final class Mem implements MemoryMXBean {
 
-        /** Si el rastreo esta prendido; se guarda aunque no haya nada que rastrear. */
+        /** Whether tracking is on; it is kept even though there is nothing to track. */
         private volatile boolean verbose = false;
 
         /**
-         * @throws UnsupportedOperationException esta maquina virtual no lleva esa cuenta
+         * @throws UnsupportedOperationException this virtual machine does not keep that count
          */
         public int getObjectPendingFinalizationCount() {
             throw new UnsupportedOperationException(
@@ -207,10 +243,11 @@ final class RuntimeBackedBeans {
         }
 
         /**
-         * El monton, desde {@code Runtime}.
+         * The heap, from {@code Runtime}.
          *
-         * <p>{@code init} sale -1 porque no se sabe cuanto se pidio al arrancar; {@code used} es lo
-         * total menos lo libre, {@code committed} es lo total, y {@code max} es el techo.
+         * <p>{@code init} comes out -1 because how much was asked for at start-up is not known;
+         * {@code used} is the total minus the free, {@code committed} is the total, and {@code max}
+         * is the ceiling.
          */
         public MemoryUsage getHeapMemoryUsage() {
             Runtime r = Runtime.getRuntime();
@@ -228,7 +265,8 @@ final class RuntimeBackedBeans {
         }
 
         /**
-         * @throws UnsupportedOperationException esta maquina virtual no separa lo que no es monton
+         * @throws UnsupportedOperationException this virtual machine does not separate out what is
+         *     not heap
          */
         public MemoryUsage getNonHeapMemoryUsage() {
             throw new UnsupportedOperationException(
@@ -243,7 +281,7 @@ final class RuntimeBackedBeans {
             this.verbose = value;
         }
 
-        /** Sugiere recolectar; es exactamente {@code System.gc()}. */
+        /** It suggests collecting; it is exactly {@code System.gc()}. */
         public void gc() {
             System.gc();
         }

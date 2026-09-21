@@ -1,28 +1,28 @@
 package javax.accessibility;
 
 /**
- * Texto accesible con enlaces adentro.
+ * Accessible text with links inside.
  *
- * <p>{@link #getLinkIndex} es la operación que importa: dado un punto del texto, dice qué enlace lo
- * contiene. Es lo que permite anunciar "esto es un enlace" mientras se recorre el texto, en vez de
- * tener que listar los enlaces por separado y perder dónde estaban.
+ * <p>{@link #getLinkIndex} is the operation that matters: given a point in the text, it says which
+ * link contains it. It is what allows announcing "this is a link" while walking the text, instead
+ * of having to list the links separately and lose where they were.
  */
 public interface AccessibleHypertext extends AccessibleText {
 
-    /** Cuántos enlaces hay. */
+    /** How many links there are. */
     int getLinkCount();
 
     /**
-     * El `linkIndex`-ésimo enlace.
+     * The `linkIndex`-th link.
      *
-     * @return el enlace, o `null` si no hay tantos
+     * @return the link, or `null` if there are not that many
      */
     AccessibleHyperlink getLink(int linkIndex);
 
     /**
-     * Qué enlace contiene a ese carácter.
+     * Which link contains that character.
      *
-     * @return el número de enlace, o -1 si ese carácter no está en ninguno
+     * @return the link number, or -1 if that character is in none
      */
     int getLinkIndex(int charIndex);
 }

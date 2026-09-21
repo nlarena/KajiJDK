@@ -4,17 +4,17 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
-// Algo que lleva atributos: una clase, un campo, un método o un cuerpo de método.
+// Something carrying attributes: a class, a field, a method or a method body.
 public interface AttributedElement extends ClassFileElement {
 
-    /** Todos los atributos, en el orden del archivo. */
+    /** Every attribute, in file order. */
     List<Attribute<?>> attributes();
 
-    /** El primer atributo de este mapeador, si hay alguno. */
+    /** The first attribute of this mapper, if there is one. */
     default <T extends Attribute<T>> Optional<T> findAttribute(AttributeMapper<T> attr) {
-        List<Attribute<?>> todos = attributes();
-        for (int i = 0; i < todos.size(); i++) {
-            Attribute<?> a = todos.get(i);
+        List<Attribute<?>> all = attributes();
+        for (int i = 0; i < all.size(); i++) {
+            Attribute<?> a = all.get(i);
             if (a.attributeMapper() == attr) {
                 return Optional.of((T) a);
             }
@@ -22,16 +22,16 @@ public interface AttributedElement extends ClassFileElement {
         return Optional.empty();
     }
 
-    /** Todos los atributos de este mapeador, en el orden del archivo. */
+    /** Every attribute of this mapper, in file order. */
     default <T extends Attribute<T>> List<T> findAttributes(AttributeMapper<T> attr) {
-        List<T> encontrados = new ArrayList<T>();
-        List<Attribute<?>> todos = attributes();
-        for (int i = 0; i < todos.size(); i++) {
-            Attribute<?> a = todos.get(i);
+        List<T> found = new ArrayList<T>();
+        List<Attribute<?>> all = attributes();
+        for (int i = 0; i < all.size(); i++) {
+            Attribute<?> a = all.get(i);
             if (a.attributeMapper() == attr) {
-                encontrados.add((T) a);
+                found.add((T) a);
             }
         }
-        return encontrados;
+        return found;
     }
 }

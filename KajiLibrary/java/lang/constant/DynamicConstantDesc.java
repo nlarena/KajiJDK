@@ -16,9 +16,10 @@ public abstract class DynamicConstantDesc<T> implements ConstantDesc {
     private final ClassDesc constantType;
     private final ConstantDesc[] bootstrapArgs;
 
-    // `ConstantDesc...` y no `ConstantDesc[]`: el descriptor es el mismo, pero el flag `ACC_VARARGS`
-    // es lo que deja al que llama desplegar los argumentos en vez de armar el array a mano. Es la
-    // diferencia entre `new Sub(bsm, "x", t, a, b)` y `new Sub(bsm, "x", t, new ConstantDesc[]{a,b})`.
+    // `ConstantDesc...` and not `ConstantDesc[]`: the descriptor is the same, but the `ACC_VARARGS`
+    // flag is what lets the caller spread the arguments instead of building the array by hand. It is
+    // the difference between `new Sub(bsm, "x", t, a, b)` and
+    // `new Sub(bsm, "x", t, new ConstantDesc[]{a,b})`.
     protected DynamicConstantDesc(DirectMethodHandleDesc bootstrapMethod, String constantName,
             ClassDesc constantType, ConstantDesc... bootstrapArgs) {
         this.bootstrapMethod = bootstrapMethod;
@@ -27,13 +28,13 @@ public abstract class DynamicConstantDesc<T> implements ConstantDesc {
         this.bootstrapArgs = bootstrapArgs;
     }
 
-    // Un `condy` sobre un bootstrap bien conocido describe algo que YA tiene un descriptor mas
-    // simple, y devolver el simple es lo que hace que dos descripciones de la misma constante se
-    // comparen iguales. La nota que estaba acá decia que no se podia porque los `ConstantDescs.
-    // BSM_*` estaban bloqueados por #101 -- #101 esta cerrado y los BSM existen, asi que el
-    // pliegue del constante nulo se hace. Los otros que el JDK pliega (la clase primitiva, la
-    // constante de enum, los VarHandle) necesitan descriptores que la biblioteca todavia no
-    // tiene, y esos siguen devolviendose como estan.
+    // A `condy` over a well-known bootstrap describes something that ALREADY has a simpler
+    // descriptor, and returning the simple one is what makes two descriptions of the same constant
+    // compare equal. The note that used to be here said it could not be done because the
+    // `ConstantDescs.BSM_*` were blocked by #101 -- #101 is closed and the BSMs exist, so the null
+    // constant's folding is done. The others the JDK folds (the primitive class, the enum constant,
+    // the VarHandles) need descriptors the library does not have yet, and those are still returned
+    // as they stand.
     public static ConstantDesc ofCanonical(DirectMethodHandleDesc bootstrapMethod, String constantName,
             ClassDesc constantType, ConstantDesc[] bootstrapArgs) {
         if (bootstrapArgs.length == 0 && bootstrapMethod.equals(ConstantDescs.BSM_NULL_CONSTANT)) {

@@ -7,6 +7,7 @@ import java.awt.event.AdjustmentEvent;
 import java.awt.event.AdjustmentListener;
 import java.io.Serializable;
 
+import javax.accessibility.Accessible;
 import javax.accessibility.AccessibleContext;
 
 import javax.swing.event.ChangeEvent;
@@ -15,31 +16,31 @@ import javax.swing.plaf.ScrollBarUI;
 import javax.swing.plaf.basic.BasicScrollBarUI;
 
 /**
- * Una barra de desplazamiento: un {@link BoundedRangeModel} con dos botones y un pulgar.
+ * A scroll bar: a {@link BoundedRangeModel} with two buttons and a thumb.
  *
- * <h2>El modelo es la barra</h2>
+ * <h2>The model is the bar</h2>
  *
- * <p>Valor, extension, minimo y maximo estan en el modelo, y la barra solo los reexpone con los
- * nombres de {@link Adjustable} —{@code visibleAmount} es la extension—. El pulgar no es un objeto:
- * es el dibujo del rango {@code [valor, valor + extension]} sobre el rango
- * {@code [minimo, maximo]}, y por eso se agranda cuando se ve mas contenido.
+ * <p>Value, extent, minimum and maximum are in the model, and the bar only re-exposes them with
+ * {@link Adjustable}'s names -- {@code visibleAmount} is the extent --. The thumb is not an
+ * object: it is the drawing of the range {@code [value, value + extent]} over the range
+ * {@code [minimum, maximum]}, and that is why it grows when more content is seen.
  *
- * <h2>Dos escalones</h2>
+ * <h2>Two steps</h2>
  *
- * <p>El <em>unitario</em> es lo que avanza una flecha; el <em>de bloque</em>, lo que avanza un clic
- * en la pista, que por omision es una pantalla entera. Los dos se preguntan con una direccion,
- * porque un contenido de filas desparejas avanza distinto para arriba que para abajo; esta clase
- * devuelve siempre el mismo numero, y es {@code JScrollPane} el que pone una barra que le pregunta
- * al contenido.
+ * <p>The <em>unit</em> one is what an arrow advances; the <em>block</em> one, what a click on
+ * the track advances, which by default is a whole screenful. Both are asked for with a
+ * direction, because a content of uneven rows advances differently upwards and downwards; this
+ * class always returns the same number, and it is {@code JScrollPane} that puts in a bar that
+ * asks the content.
  *
- * <p>Los cambios del modelo salen como {@link AdjustmentEvent} de tipo {@code TRACK}: el JDK no
- * distingue de donde vino el cambio una vez que llego al modelo.
+ * <p>The model's changes come out as an {@link AdjustmentEvent} of type {@code TRACK}: the JDK
+ * does not tell where the change came from once it has reached the model.
  */
 public class JScrollBar extends JComponent implements Adjustable, Accessible {
 
     private static final String uiClassID = "ScrollBarUI";
 
-    /** El modelo; ver la nota de la clase. */
+    /** The model; see the class note. */
     protected BoundedRangeModel model;
 
     protected int orientation;
@@ -50,7 +51,7 @@ public class JScrollBar extends JComponent implements Adjustable, Accessible {
 
     private ChangeListener fwdAdjustmentEvents = new ModelListener();
 
-    /** Un {@code switch} aca serian dos `case` con constantes de {@code Adjustable} (#503). */
+    /** A {@code switch} here would be two `case`s with {@code Adjustable}'s constants (#503). */
     private void checkOrientation(int orientation) {
         if (orientation != VERTICAL && orientation != HORIZONTAL) {
             throw new IllegalArgumentException(
@@ -58,7 +59,7 @@ public class JScrollBar extends JComponent implements Adjustable, Accessible {
         }
     }
 
-    /** Una barra con esa orientacion y esos cuatro numeros. */
+    /** A bar with that orientation and those four numbers. */
     public JScrollBar(int orientation, int value, int extent, int min, int max) {
         checkOrientation(orientation);
         this.unitIncrement = 1;
@@ -70,12 +71,12 @@ public class JScrollBar extends JComponent implements Adjustable, Accessible {
         updateUI();
     }
 
-    /** Una barra de 0 a 100, en cero y con una extension de 10. */
+    /** A bar from 0 to 100, at zero and with an extent of 10. */
     public JScrollBar(int orientation) {
         this(orientation, 0, 10, 0, 100);
     }
 
-    /** Una barra vertical. */
+    /** A vertical bar. */
     public JScrollBar() {
         this(VERTICAL);
     }
@@ -88,7 +89,7 @@ public class JScrollBar extends JComponent implements Adjustable, Accessible {
         return (ScrollBarUI) ui;
     }
 
-    /** Instala el aspecto basico; ver {@code JButton#updateUI}. */
+    /** It installs the basic look and feel; see {@code JButton#updateUI}. */
     public void updateUI() {
         setUI((ScrollBarUI) BasicScrollBarUI.createUI(this));
     }
@@ -116,7 +117,7 @@ public class JScrollBar extends JComponent implements Adjustable, Accessible {
         return model;
     }
 
-    /** Cambia el modelo, llevandose el escucha que convierte sus cambios en eventos. */
+    /** It changes the model, taking along the listener that turns its changes into events. */
     public void setModel(BoundedRangeModel newModel) {
         BoundedRangeModel oldModel = model;
         if (model != null) {
@@ -130,9 +131,9 @@ public class JScrollBar extends JComponent implements Adjustable, Accessible {
     }
 
     /**
-     * Cuanto avanza un paso chico en esa direccion.
+     * How much a small step advances in that direction.
      *
-     * <p>Siempre lo mismo; ver la nota de la clase sobre quien si mira la direccion.
+     * <p>Always the same; see the class note about who does look at the direction.
      */
     public int getUnitIncrement(int direction) {
         return unitIncrement;
@@ -144,7 +145,7 @@ public class JScrollBar extends JComponent implements Adjustable, Accessible {
         firePropertyChange("unitIncrement", oldValue, unitIncrement);
     }
 
-    /** Cuanto avanza un paso grande en esa direccion. */
+    /** How much a big step advances in that direction. */
     public int getBlockIncrement(int direction) {
         return blockIncrement;
     }
@@ -172,7 +173,7 @@ public class JScrollBar extends JComponent implements Adjustable, Accessible {
         m.setValue(value);
     }
 
-    /** La extension del modelo, con el nombre que le da {@link Adjustable}. */
+    /** The model's extent, with the name {@link Adjustable} gives it. */
     public int getVisibleAmount() {
         return getModel().getExtent();
     }
@@ -206,7 +207,7 @@ public class JScrollBar extends JComponent implements Adjustable, Accessible {
         m.setValueIsAdjusting(b);
     }
 
-    /** Cambia los cuatro numeros de una vez, avisando una sola vez. */
+    /** It changes the four numbers at once, giving notice only once. */
     public void setValues(int newValue, int newExtent, int newMin, int newMax) {
         BoundedRangeModel m = getModel();
         m.setRangeProperties(newValue, newExtent, newMin, newMax, m.getValueIsAdjusting());
@@ -241,7 +242,7 @@ public class JScrollBar extends JComponent implements Adjustable, Accessible {
         }
     }
 
-    /** Convierte los cambios del modelo en eventos de ajuste; nombrada y no anonima (#499). */
+    /** It turns the model's changes into adjustment events; named and not anonymous (#499). */
     private class ModelListener implements ChangeListener, Serializable {
         public void stateChanged(ChangeEvent e) {
             Object obj = e.getSource();
@@ -253,7 +254,10 @@ public class JScrollBar extends JComponent implements Adjustable, Accessible {
         }
     }
 
-    /** Rigida en su ancho y flexible en su largo: ese es todo el criterio de las tres medidas. */
+    /**
+     * Rigid in its width and flexible in its length: that is the whole criterion of the three
+     * measurements.
+     */
     public Dimension getMinimumSize() {
         Dimension pref = getPreferredSize();
         if (orientation == VERTICAL) {
@@ -278,7 +282,7 @@ public class JScrollBar extends JComponent implements Adjustable, Accessible {
         super.setMaximumSize(maximumSize);
     }
 
-    /** Habilita la barra y sus dos botones: una flecha viva en una barra muerta no tendria sentido. */
+    /** It enables the bar and its two buttons: a live arrow on a dead bar would make no sense. */
     public void setEnabled(boolean x) {
         super.setEnabled(x);
         Component[] children = getComponents();
@@ -293,7 +297,7 @@ public class JScrollBar extends JComponent implements Adjustable, Accessible {
                 + unitIncrement;
     }
 
-    /** Sin contexto de accesibilidad: no hay tecnologia asistiva que lo lea en esta VM. */
+    /** With no accessibility context: there is no assistive technology that reads it on this VM. */
     public AccessibleContext getAccessibleContext() {
         return null;
     }

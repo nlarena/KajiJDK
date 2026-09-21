@@ -7,24 +7,25 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * KajiLibrary's java.io.Serial — marca un campo o un metodo como parte del mecanismo de
- * serializacion, para que el compilador lo revise.
+ * KajiLibrary's java.io.Serial -- it marks a field or a method as part of the serialization
+ * mechanism, so that the compiler checks it.
  *
- * <p>Existe porque los miembros de la serializacion se declaran <b>por convencion de nombre y
- * firma</b>, no por implementar nada: {@code writeObject} es privado, no sobreescribe ni implementa
- * un metodo, y si se lo escribe con la firma equivocada nadie se queja — simplemente no se llama
- * nunca, y el objeto se serializa distinto de como su autor creia. Un {@code serialVersionUID} que
- * no sea {@code private static final long} tiene el mismo problema: se ignora en silencio.
+ * <p>It exists because the serialization members are declared <b>by name and signature
+ * convention</b>, not by implementing anything: {@code writeObject} is private, it neither
+ * overrides nor implements a method, and if it is written with the wrong signature nobody complains
+ * -- it simply never gets called, and the object is serialized differently from how its author
+ * believed. A {@code serialVersionUID} that is not {@code private static final long} has the same
+ * problem: it is ignored silently.
  *
- * <p>Esta anotacion convierte ese error silencioso en un error de compilacion. Es el mismo trato
- * que {@code @Override} le hace a los metodos heredados, y por la misma razon: donde el contrato es
- * una convencion y no un tipo, hace falta algo que lo diga en voz alta.
+ * <p>This annotation turns that silent mistake into a compilation error. It is the same treatment
+ * {@code @Override} gives inherited methods, and for the same reason: where the contract is a
+ * convention and not a type, something is needed to say so out loud.
  *
- * <p>Se aplica a {@code serialVersionUID}, {@code serialPersistentFields}, {@code writeObject},
- * {@code readObject}, {@code readObjectNoData}, {@code writeReplace} y {@code readResolve}.
+ * <p>It applies to {@code serialVersionUID}, {@code serialPersistentFields}, {@code writeObject},
+ * {@code readObject}, {@code readObjectNoData}, {@code writeReplace} and {@code readResolve}.
  *
- * <p>No tiene efecto en tiempo de ejecucion: es {@code SOURCE}, la revisa el compilador y no llega
- * al {@code .class}.
+ * <p>It has no effect at run time: it is {@code SOURCE}, the compiler checks it and it never
+ * reaches the {@code .class}.
  */
 @Documented
 @Retention(RetentionPolicy.SOURCE)

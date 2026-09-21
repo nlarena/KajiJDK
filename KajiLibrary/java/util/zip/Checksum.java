@@ -18,11 +18,11 @@ public interface Checksum {
     }
 
     /**
-     * Suma los bytes que quedan en `buffer`, y **lo deja consumido**.
+     * It folds in the bytes left in `buffer`, and **leaves it consumed**.
      *
-     * <p>Dejar la posicion en el limite no es un detalle de implementacion: es lo que distingue a un
-     * metodo que "lee un buffer" de uno que lo espia. Sin eso, un bucle que sume y vuelva a sumar
-     * procesaria los mismos bytes para siempre.
+     * <p>Leaving the position at the limit is not an implementation detail: it is what tells a
+     * method that "reads a buffer" from one that peeks at it. Without that, a loop that folded and
+     * folded again would process the same bytes forever.
      */
     default void update(java.nio.ByteBuffer buffer) {
         int n = buffer.remaining();

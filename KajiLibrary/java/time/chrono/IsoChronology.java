@@ -47,13 +47,13 @@ public final class IsoChronology extends AbstractChronology {
         return IsoEra.of(eraValue);
     }
 
-    // ---- lo que el calendario tiene que saber contestar ------------------------------------------
+    // ---- what the calendar has to know how to answer ---------------------------------------------
 
     /**
-     * El anio proleptico: para el ISO, el mismo numero con signo.
+     * The proleptic year: for ISO, the same signed number.
      *
-     * <p>`CE 2024` es 2024; `BCE 100` es -99, no -100, porque no hay anio cero: el anio 1 antes de
-     * Cristo es el proleptico 0.
+     * <p>`CE 2024` is 2024; `BCE 100` is -99, not -100, because there is no year zero: 1 BC is
+     * proleptic 0.
      */
     public int prolepticYear(Era era, int yearOfEra) {
         if (!(era instanceof IsoEra)) {
@@ -93,12 +93,12 @@ public final class IsoChronology extends AbstractChronology {
         return this.dateYearDay(this.prolepticYear(era, yearOfEra), dayOfYear);
     }
 
-    /** El ISO **es** el ISO. */
+    /** ISO **is** ISO. */
     public boolean isIsoBased() {
         return true;
     }
 
-    /** Los rangos del ISO son los que los campos declaran de fabrica. */
+    /** ISO's ranges are the ones the fields declare out of the box. */
     public ValueRange range(ChronoField field) {
         return field.range();
     }
@@ -107,7 +107,7 @@ public final class IsoChronology extends AbstractChronology {
         return Arrays.asList(new Era[] { IsoEra.BCE, IsoEra.CE });
     }
 
-    // ---- los compuestos, con el tipo del ISO en el retorno ---------------------------------------
+    // ---- the composites, with ISO's type in the return -------------------------------------------
 
     public LocalDateTime localDateTime(TemporalAccessor temporal) {
         return LocalDateTime.from(temporal);
@@ -121,15 +121,15 @@ public final class IsoChronology extends AbstractChronology {
         return ZonedDateTime.ofInstant(instant, zone);
     }
 
-    /** Un `Period` de verdad, no un `ChronoPeriod` generico: el ISO tiene su propia clase. */
+    /** A real `Period`, not a generic `ChronoPeriod`: ISO has a class of its own. */
     public Period period(int years, int months, int days) {
         return Period.of(years, months, days);
     }
 
     public LocalDate resolveDate(java.util.Map<java.time.temporal.TemporalField, Long> fieldValues,
             java.time.format.ResolverStyle resolverStyle) {
-        // Ligado a una local: encadenar por un intermedio de tipo interfaz se pierde (#108).
-        ChronoLocalDate resuelta = super.resolveDate(fieldValues, resolverStyle);
-        return (LocalDate) resuelta;
+        // Bound to a local: chaining through an interface-typed intermediate gets lost (#108).
+        ChronoLocalDate resolvedOne = super.resolveDate(fieldValues, resolverStyle);
+        return (LocalDate) resolvedOne;
     }
 }

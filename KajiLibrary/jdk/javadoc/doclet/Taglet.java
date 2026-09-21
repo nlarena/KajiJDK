@@ -8,102 +8,101 @@ import javax.lang.model.element.Element;
 import com.sun.source.doctree.DocTree;
 
 /**
- * Una etiqueta de documentacion propia, que se suma a las que javadoc ya entiende.
+ * A documentation tag of one's own, which is added to the ones javadoc already understands.
  *
- * <h2>De bloque o en linea</h2>
+ * <h2>Of block or inline</h2>
  *
- * <p>Una etiqueta de bloque ocupa su propio parrafo y se escribe {@code @nombre ...}; una en linea
- * va dentro del texto y se escribe {@code {@nombre ...}}. Es la unica distincion estructural, y por
- * eso {@link #isBlockTag} viene por omision como la negacion de {@link #isInlineTag} — una etiqueta
- * es una cosa o la otra, nunca las dos.
+ * <p>A block tag takes up its own paragraph and is written {@code @name ...}; an inline one goes
+ * inside the text and is written <code>{&#64;name ...}</code>. It is the only structural
+ * distinction, and that is why {@link #isBlockTag} comes by default as the negation of
+ * {@link #isInlineTag} -- a tag is one thing or the other, never both.
  *
- * <h2>Donde puede aparecer</h2>
+ * <h2>Where it can appear</h2>
  *
- * <p>{@link #getAllowedLocations} devuelve un conjunto y no un lugar: {@code @since} tiene sentido
- * en casi todos lados, {@code @return} solo en un metodo. javadoc usa esa respuesta para avisar
- * cuando una etiqueta aparece donde no corresponde, que es un error que de otro modo pasaria como
- * texto suelto.
+ * <p>{@link #getAllowedLocations} returns a set and not a place: {@code @since} makes sense almost
+ * everywhere, {@code @return} only on a method. javadoc uses that answer to warn when a tag appears
+ * where it does not belong, which is an error that would otherwise pass as loose text.
  *
- * <h2>Como se traduce</h2>
+ * <h2>How it is translated</h2>
  *
- * <p>{@link #toString(List, Element)} recibe los arboles del comentario ya analizados, no el texto
- * crudo. Eso significa que la etiqueta no tiene que analizar nada: recibe la estructura y devuelve
- * lo que corresponda en el formato de salida. El {@link Element} es el que estaba documentado, y
- * sirve para lo que depende del contexto — un {@code @implNote} puede escribirse distinto en una
- * interfaz que en una clase.
+ * <p>{@link #toString(List, Element)} receives the trees of the comment already analysed, not the
+ * raw text. That means the tag does not have to analyse anything: it receives the structure and
+ * returns what corresponds in the output format. The {@link Element} is the one that was being
+ * documented, and it serves for what depends on the context -- an {@code @implNote} may be written
+ * differently in an interface than in a class.
  *
  * @since 9
  */
 public interface Taglet {
 
     /**
-     * Donde puede aparecer esta etiqueta.
+     * Where this tag can appear.
      *
-     * @return los lugares permitidos
+     * @return the allowed places
      */
     Set<Location> getAllowedLocations();
 
     /**
-     * Si va dentro del texto, entre llaves.
+     * Whether it goes inside the text, between braces.
      *
-     * @return si es en linea
+     * @return whether it is inline
      */
     boolean isInlineTag();
 
     /**
-     * Si ocupa su propio parrafo.
+     * Whether it takes up its own paragraph.
      *
-     * <p>Por omision es lo contrario de {@link #isInlineTag}: no hay una tercera forma.
+     * <p>By default it is the opposite of {@link #isInlineTag}: there is no third form.
      *
-     * @return si es de bloque
+     * @return whether it is of block
      */
     default boolean isBlockTag() {
         return !isInlineTag();
     }
 
     /**
-     * El nombre, sin la arroba.
+     * The name, without the at sign.
      *
-     * @return el nombre
+     * @return the name
      */
     String getName();
 
     /**
-     * El aviso de arranque, con el modelo y el complemento que la hospeda.
+     * The notice of start-up, with the model and the plug-in that hosts it.
      *
-     * <p>Por omision no hace nada: una etiqueta que solo mira sus propios argumentos no necesita
-     * enterarse de nada mas, y obligarla a escribir un metodo vacio seria ruido.
+     * <p>By default it does nothing: a tag that only looks at its own arguments does not need to
+     * find out about anything else, and forcing it to write an empty method would be noise.
      *
-     * @param env el modelo del codigo analizado
-     * @param doclet el complemento que la va a usar
+     * @param env the model of the analysed code
+     * @param doclet the plug-in that is going to use it
      */
     default void init(DocletEnvironment env, Doclet doclet) {
     }
 
     /**
-     * La salida que produce esta etiqueta.
+     * The output this tag produces.
      *
-     * @param tags las apariciones de la etiqueta, ya analizadas
-     * @param element el elemento que estaba siendo documentado
-     * @return el texto a insertar, en el formato de salida del complemento
+     * @param tags the appearances of the tag, already analysed
+     * @param element the element that was being documented
+     * @return the text to insert, in the output format of the plug-in
      */
     String toString(List<? extends DocTree> tags, Element element);
 
-    /** Los lugares donde una etiqueta puede aparecer. */
+    /** The places where a tag can appear. */
     enum Location {
-        /** En el archivo de resumen general. */
+        /** In the file of the overall summary. */
         OVERVIEW,
-        /** En la documentacion de un modulo. */
+        /** In the documentation of a module. */
         MODULE,
-        /** En la de un paquete. */
+        /** In that of a package. */
         PACKAGE,
-        /** En la de una clase o interfaz. */
+        /** In that of a class or interface. */
         TYPE,
-        /** En la de un constructor. */
+        /** In that of a constructor. */
         CONSTRUCTOR,
-        /** En la de un metodo. */
+        /** In that of a method. */
         METHOD,
-        /** En la de un campo. */
+        /** In that of a field. */
         FIELD
     }
 }

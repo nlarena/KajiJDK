@@ -1,51 +1,50 @@
 package jdk.internal.vm.vector;
 
 /**
- * La base interna sobre la que se apoya {@code jdk.incubator.vector}.
+ * The internal base {@code jdk.incubator.vector} rests on.
  *
- * <p>No es API publica --{@code jdk.internal.*} no se exporta-- y existe por una razon muy concreta:
- * la VM necesita <strong>un tipo comun</strong> al que reconocer para poder reemplazar las
- * operaciones de vector por instrucciones de la maquina. Ese reconocimiento es todo el punto del
- * API de vectores: sin el, cada operacion seria una llamada a un metodo Java y no habria ninguna
- * ganancia.
+ * <p>It is not public API --{@code jdk.internal.*} is not exported-- and it exists for a very
+ * concrete reason: the VM needs <strong>a common type</strong> to recognise in order to be able to
+ * replace the vector operations by instructions of the machine. That recognition is the whole point
+ * of the vector API: without it, each operation would be a call to a Java method and there would be
+ * no gain at all.
  *
- * <p>{@link VectorPayload} guarda la carga util --el arreglo de carriles-- en un solo campo. Que
- * sea un {@code Object} y no un tipo concreto es lo que permite que la misma clase sirva para
- * carriles de cualquier tipo, y lo que le deja a la VM la libertad de reemplazar ese campo por un
- * registro vectorial cuando puede.
+ * <p>{@link VectorPayload} keeps the payload --the array of lanes-- in a single field. That it is
+ * an {@code Object} and not a concrete type is what allows the same class to serve for lanes of any
+ * type, and what leaves the VM the freedom to replace that field by a vector register when it can.
  */
 public class VectorSupport {
 
-    /** Para quien la instancie; la clase solo agrupa a las de adentro. */
+    /** For whoever instantiates it; the class only groups the ones inside. */
     public VectorSupport() {
     }
 
     /**
-     * Lo que lleva la carga util de un vector, una mascara o una permutacion.
+     * What carries the payload of a vector, a mask or a shuffle.
      *
-     * <p>Un solo campo, {@code final}, con el arreglo de carriles adentro.
+     * <p>A single field, {@code final}, with the array of lanes inside.
      */
     public static class VectorPayload {
 
         private final Object payload;
 
         /**
-         * Con esa carga util.
+         * With that payload.
          *
-         * @param payload el arreglo de carriles
+         * @param payload the array of lanes
          */
         public VectorPayload(Object payload) {
             this.payload = payload;
         }
 
         /**
-         * La carga util.
+         * The payload.
          *
-         * <p>Es {@code protected} y {@code final}: solo la jerarquia la ve, y nadie la puede
-         * reemplazar por otra cosa. Las dos condiciones hacen falta para que la VM pueda razonar
-         * sobre ella.
+         * <p>It is {@code protected} and {@code final}: only the hierarchy sees it, and nobody can
+         * replace it by something else. The two conditions are needed for the VM to be able to
+         * reason about it.
          *
-         * @return el arreglo de carriles
+         * @return the array of lanes
          */
         protected final Object getPayload() {
             return payload;
@@ -53,16 +52,16 @@ public class VectorSupport {
     }
 
     /**
-     * La base de {@code jdk.incubator.vector.Vector}.
+     * The base of {@code jdk.incubator.vector.Vector}.
      *
-     * @param <E> el tipo de los carriles, encajonado
+     * @param <E> the type of the lanes, boxed
      */
     public static class Vector<E> extends VectorPayload {
 
         /**
-         * Con esa carga util.
+         * With that payload.
          *
-         * @param payload el arreglo de carriles
+         * @param payload the array of lanes
          */
         public Vector(Object payload) {
             super(payload);
@@ -70,16 +69,16 @@ public class VectorSupport {
     }
 
     /**
-     * La base de {@code jdk.incubator.vector.VectorMask}.
+     * The base of {@code jdk.incubator.vector.VectorMask}.
      *
-     * @param <E> el tipo de los carriles, encajonado
+     * @param <E> the type of the lanes, boxed
      */
     public static class VectorMask<E> extends VectorPayload {
 
         /**
-         * Con esa carga util.
+         * With that payload.
          *
-         * @param payload el arreglo de banderas
+         * @param payload the array of flags
          */
         public VectorMask(Object payload) {
             super(payload);
@@ -87,16 +86,16 @@ public class VectorSupport {
     }
 
     /**
-     * La base de {@code jdk.incubator.vector.VectorShuffle}.
+     * The base of {@code jdk.incubator.vector.VectorShuffle}.
      *
-     * @param <E> el tipo de los carriles, encajonado
+     * @param <E> the type of the lanes, boxed
      */
     public static class VectorShuffle<E> extends VectorPayload {
 
         /**
-         * Con esa carga util.
+         * With that payload.
          *
-         * @param payload el arreglo de indices
+         * @param payload the array of indices
          */
         public VectorShuffle(Object payload) {
             super(payload);

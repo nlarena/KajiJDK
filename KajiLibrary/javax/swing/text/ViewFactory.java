@@ -1,14 +1,14 @@
 package javax.swing.text;
 
 /**
- * Quien decide que vista le corresponde a cada elemento.
+ * Who decides which view corresponds to each element.
  *
- * <p>Un solo metodo, y en el esta la libertad del sistema: el mismo documento se ve como texto
- * plano, como HTML o como una lista, segun quien fabrique las vistas. Un editor cambia de aspecto
- * cambiando esta fabrica, no el documento.
+ * <p>A single method, and in it lies the system's freedom: the same document is seen as plain
+ * text, as HTML or as a list, according to who builds the views. An editor changes its look by
+ * changing this factory, not the document.
  */
 public interface ViewFactory {
 
-    /** La vista que le corresponde a ese elemento. */
+    /** The view that corresponds to that element. */
     View create(Element elem);
 }

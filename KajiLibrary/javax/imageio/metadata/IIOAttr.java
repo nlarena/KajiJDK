@@ -11,25 +11,25 @@ import org.w3c.dom.TypeInfo;
 import org.w3c.dom.UserDataHandler;
 
 /**
- * Un atributo de un {@link IIOMetadataNode}.
+ * An attribute of an {@link IIOMetadataNode}.
  *
- * <p>De acceso de paquete: no es API. Existe porque {@code Element.getAttributeNode} tiene que
- * devolver un {@link Attr}, y un par de cadenas en un mapa no lo es.
+ * <p>Package-private: it is not API. It exists because {@code Element.getAttributeNode} has to
+ * return an {@link Attr}, and a pair of strings in a map is not one.
  *
- * <p>Es deliberadamente minimo. Todo lo del nivel 3 del DOM --tipos de esquema, datos de usuario,
- * comparacion de posicion-- lanza {@link DOMException} con {@code NOT_SUPPORTED_ERR}, igual que en
- * {@link IIOMetadataNode}: los metadatos de imagen son un arbol de nombres y valores, no un documento
- * XML completo.
+ * <p>It is deliberately minimal. Everything from DOM level 3 --schema types, user data, position
+ * comparison-- throws {@link DOMException} with {@code NOT_SUPPORTED_ERR}, as in
+ * {@link IIOMetadataNode}: image metadata is a tree of names and values, not a full XML
+ * document.
  */
 class IIOAttr implements Attr {
 
-    /** Como se llama. */
+    /** What it is called. */
     private final String name;
 
-    /** Que vale. */
+    /** What it is worth. */
     private String value;
 
-    /** De que elemento es. */
+    /** Which element it belongs to. */
     private Element owner;
 
     IIOAttr(Element owner, String name, String value) {
@@ -50,7 +50,7 @@ class IIOAttr implements Attr {
         return ATTRIBUTE_NODE;
     }
 
-    /** Siempre true: un atributo sin valor no se guarda. */
+    /** Always true: an attribute without a value is not stored. */
     public boolean getSpecified() {
         return true;
     }
@@ -75,12 +75,12 @@ class IIOAttr implements Attr {
         return this.owner;
     }
 
-    /** De acceso de paquete: lo usa {@link IIOMetadataNode} al mover atributos. */
+    /** Package-private: {@link IIOMetadataNode} uses it when moving attributes. */
     void setOwnerElement(Element owner) {
         this.owner = owner;
     }
 
-    /** Un atributo no tiene padre en el sentido del DOM; su duena es el elemento. */
+    /** An attribute has no parent in the DOM sense; its owner is the element. */
     public Node getParentNode() {
         return null;
     }
@@ -163,72 +163,72 @@ class IIOAttr implements Attr {
         return false;
     }
 
-    /** No soportado; ver la nota de la clase. */
+    /** Not supported; see the class note. */
     public TypeInfo getSchemaTypeInfo() {
         throw new DOMException(DOMException.NOT_SUPPORTED_ERR, "Method not supported");
     }
 
-    /** No soportado. */
+    /** Not supported. */
     public boolean isId() {
         throw new DOMException(DOMException.NOT_SUPPORTED_ERR, "Method not supported");
     }
 
-    /** No soportado. */
+    /** Not supported. */
     public Object setUserData(String key, Object data, UserDataHandler handler) {
         throw new DOMException(DOMException.NOT_SUPPORTED_ERR, "Method not supported");
     }
 
-    /** No soportado. */
+    /** Not supported. */
     public Object getUserData(String key) {
         throw new DOMException(DOMException.NOT_SUPPORTED_ERR, "Method not supported");
     }
 
-    /** No soportado. */
+    /** Not supported. */
     public Object getFeature(String feature, String version) {
         throw new DOMException(DOMException.NOT_SUPPORTED_ERR, "Method not supported");
     }
 
-    /** No soportado. */
+    /** Not supported. */
     public boolean isSameNode(Node node) {
         throw new DOMException(DOMException.NOT_SUPPORTED_ERR, "Method not supported");
     }
 
-    /** No soportado. */
+    /** Not supported. */
     public boolean isEqualNode(Node node) {
         throw new DOMException(DOMException.NOT_SUPPORTED_ERR, "Method not supported");
     }
 
-    /** No soportado. */
+    /** Not supported. */
     public String lookupNamespaceURI(String prefix) {
         throw new DOMException(DOMException.NOT_SUPPORTED_ERR, "Method not supported");
     }
 
-    /** No soportado. */
+    /** Not supported. */
     public boolean isDefaultNamespace(String namespaceURI) {
         throw new DOMException(DOMException.NOT_SUPPORTED_ERR, "Method not supported");
     }
 
-    /** No soportado. */
+    /** Not supported. */
     public String lookupPrefix(String namespaceURI) {
         throw new DOMException(DOMException.NOT_SUPPORTED_ERR, "Method not supported");
     }
 
-    /** No soportado. */
+    /** Not supported. */
     public String getTextContent() {
         throw new DOMException(DOMException.NOT_SUPPORTED_ERR, "Method not supported");
     }
 
-    /** No soportado. */
+    /** Not supported. */
     public void setTextContent(String textContent) {
         throw new DOMException(DOMException.NOT_SUPPORTED_ERR, "Method not supported");
     }
 
-    /** No soportado. */
+    /** Not supported. */
     public short compareDocumentPosition(Node other) {
         throw new DOMException(DOMException.NOT_SUPPORTED_ERR, "Method not supported");
     }
 
-    /** No soportado. */
+    /** Not supported. */
     public String getBaseURI() {
         throw new DOMException(DOMException.NOT_SUPPORTED_ERR, "Method not supported");
     }

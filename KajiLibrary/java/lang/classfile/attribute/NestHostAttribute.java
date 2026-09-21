@@ -6,21 +6,21 @@ import java.lang.classfile.constantpool.ClassEntry;
 import java.lang.constant.ClassDesc;
 import jdk.internal.classfile.impl.TypedAttributes;
 
-// `NestHost` (JVMS §4.7.28): quién es el anfitrión del nido al que esta clase pertenece. Es la
-// mitad del mecanismo que reemplazó a los métodos puente sintéticos entre una clase y sus anidadas:
-// dos miembros del mismo nido acceden a sus privados sin intermediarios. La otra mitad es
-// {@link NestMembersAttribute}, y las dos tienen que coincidir o la JVM no reconoce el nido.
+// `NestHost` (JVMS §4.7.28): who hosts the nest this class belongs to. It is half of the mechanism
+// that replaced the synthetic bridge methods between a class and its nested ones: two members of the
+// same nest reach each other's privates with no go-between. The other half is
+// {@link NestMembersAttribute}, and the two have to agree or the JVM does not recognise the nest.
 public interface NestHostAttribute extends Attribute<NestHostAttribute>, ClassElement {
 
-    /** El anfitrión del nido. */
+    /** The nest's host. */
     ClassEntry nestHost();
 
-    /** El atributo con este anfitrión. */
+    /** The attribute with this host. */
     public static NestHostAttribute of(ClassEntry nestHost) {
         return TypedAttributes.nestHost(nestHost);
     }
 
-    /** El atributo con este anfitrión. */
+    /** The attribute with this host. */
     public static NestHostAttribute of(ClassDesc nestHost) {
         return TypedAttributes.nestHost(TypedAttributes.classEntry(nestHost));
     }

@@ -3,12 +3,12 @@ package javax.swing.text;
 import java.io.Serializable;
 
 /**
- * Las paradas de tabulacion de un parrafo, ordenadas y sin cambiar.
+ * A paragraph's tab stops, ordered and unchanging.
  *
- * <p>Inmutable como {@link TabStop}, y por la misma razon: un juego de paradas suele valer para
- * todo un documento. Las busquedas son binarias porque el arreglo esta ordenado por posicion, que
- * es como llega y como se lo usa: la pregunta tipica es "cual es la proxima parada despues de este
- * punto".
+ * <p>Immutable like {@link TabStop}, and for the same reason: a set of stops usually holds for a
+ * whole document. The searches are binary because the array is ordered by position, which is how
+ * it arrives and how it is used: the typical question is "which is the next stop after this
+ * point".
  */
 public class TabSet implements Serializable {
 
@@ -16,7 +16,7 @@ public class TabSet implements Serializable {
 
     private int hashCode = Integer.MAX_VALUE;
 
-    /** Un juego con esas paradas; el arreglo se copia. */
+    /** A set with those stops; the array is copied. */
     public TabSet(TabStop[] tabs) {
         if (tabs != null) {
             int tabCount = tabs.length;
@@ -39,7 +39,7 @@ public class TabSet implements Serializable {
         return tabs[index];
     }
 
-    /** La primera parada estrictamente despues de esa posicion, o {@code null} si no hay. */
+    /** The first stop strictly after that position, or {@code null} if there is none. */
     public TabStop getTabAfter(float location) {
         int index = getTabIndexAfter(location);
         return (index == -1) ? null : tabs[index];
@@ -54,7 +54,7 @@ public class TabSet implements Serializable {
         return -1;
     }
 
-    /** Busqueda binaria: el indice de la primera parada despues de esa posicion, o {@code -1}. */
+    /** Binary search: the index of the first stop after that position, or {@code -1}. */
     public int getTabIndexAfter(float location) {
         int lower = 0;
         int upper = tabs.length - 1;
@@ -72,8 +72,8 @@ public class TabSet implements Serializable {
             } else if (location < tabPosition) {
                 upper = mid - 1;
             } else {
-                // Una parada justo en esa posicion cuenta como "la de despues": es lo que hace que
-                // tabular estando en una parada no salte a la siguiente.
+                // A stop exactly at that position counts as "the one after": it is what keeps
+                                // tabbing while standing on a stop from jumping to the next one.
                 return mid;
             }
         }
@@ -102,7 +102,7 @@ public class TabSet implements Serializable {
         return false;
     }
 
-    /** Se calcula una vez y se guarda: el objeto no cambia. */
+    /** It is computed once and kept: the object does not change. */
     public int hashCode() {
         if (hashCode == Integer.MAX_VALUE) {
             hashCode = 0;

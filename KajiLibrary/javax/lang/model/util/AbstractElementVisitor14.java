@@ -5,16 +5,14 @@ import javax.lang.model.SourceVersion;
 import javax.lang.model.element.RecordComponentElement;
 
 /**
- * El visitante de elementos de Java 14 en adelante. Ver {@link AbstractElementVisitor6} por el
- * mecanismo.
+ * The element visitor for Java 14 onwards. See {@link AbstractElementVisitor6} for the mechanism.
  *
- * <p>Los **componentes de registro** son la segunda clase de declaracion nueva, y aca
- * `visitRecordComponent` pasa a abstracto por la misma razon que `visitModule` en la de 9.
+ * <p>**Record components** are the second new kind of declaration, and here `visitRecordComponent`
+ * becomes abstract for the same reason as `visitModule` in the 9 one.
  *
- * <p>El numero se quedo en 14 aunque el visitante cubre hasta 25: los registros fueron vista previa en
- * 14 y definitivos en 16, y la familia no volvio a crecer desde entonces. Que no exista un
- * `AbstractElementVisitor16` no es un olvido — es que no hizo falta, porque no aparecio ninguna clase de
- * declaracion mas.
+ * <p>The number stayed at 14 although the visitor covers up to 25: records were preview in 14 and
+ * final in 16, and the family has not grown since. That there is no `AbstractElementVisitor16` is
+ * not an oversight — it was not needed, because no further kind of declaration appeared.
  */
 @SupportedSourceVersion(SourceVersion.RELEASE_25)
 public abstract class AbstractElementVisitor14<R, P> extends AbstractElementVisitor9<R, P> {

@@ -1,11 +1,12 @@
 package java.security.cert;
 
-// Los parametros de un algoritmo de validacion o de construccion de caminos.
+// The parameters of an algorithm of validation or of path building.
 //
-// Es una interfaz marcadora con `clone()`: cada algoritmo define sus propios parametros
-// —`PKIXParameters` es el unico que trae el JDK— y lo unico comun es que se puedan copiar. La copia
-// no es prolijidad: estos objetos son mutables y el validador se los queda, asi que sin ella
-// cambiar los parametros despues de arrancar cambiaria las reglas a mitad de la validacion.
+// It is a marker interface with `clone()`: each algorithm defines its own parameters
+// —`PKIXParameters` is the only one the JDK brings— and the only thing in common is that they can
+// be copied. The copy is not tidiness: these objects are mutable and the validator keeps them, so
+// without it changing the parameters after starting would change the rules halfway through the
+// validation.
 public interface CertPathParameters extends Cloneable {
 
     Object clone();

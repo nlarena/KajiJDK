@@ -1,41 +1,41 @@
 package java.awt.print;
 
 /**
- * KajiLibrary's java.awt.print.Pageable -- un documento del que se sabe cuantas paginas tiene.
+ * KajiLibrary's java.awt.print.Pageable -- a document whose number of pages is known.
  *
- * <p>La alternativa a pasar un {@link Printable} suelto, y sirve para dos cosas que aquel no puede:
+ * <p>The alternative to passing a lone {@link Printable}, and it serves two things that one cannot:
  *
  * <ul>
- *   <li>decir cuantas paginas hay de antemano, para que el dialogo pueda ofrecer un rango;
- *   <li>dar un {@link PageFormat} <b>distinto por pagina</b>. Un documento con una tabla apaisada en el
- *       medio no se puede describir de otra forma.
+ *   <li>saying how many pages there are in advance, so the dialog can offer a range;
+ *   <li>giving a <b>different</b> {@link PageFormat} <b>per page</b>. A document with a landscape
+ *       table in the middle cannot be described any other way.
  * </ul>
  *
- * <p>Tambien puede dar un {@code Printable} distinto por pagina, que es lo que permite armar un
- * documento juntando pedazos de origenes distintos. {@link Book} es la implementacion que viene hecha.
+ * <p>It can also give a different {@code Printable} per page, which is what allows building a
+ * document by joining pieces from different sources. {@link Book} is the ready-made implementation.
  *
- * <p>{@link #getNumberOfPages} puede devolver {@link #UNKNOWN_NUMBER_OF_PAGES}, y ahi se vuelve al
- * comportamiento de {@code Printable}: se piden paginas hasta que una devuelva {@code NO_SUCH_PAGE}.
+ * <p>{@link #getNumberOfPages} can return {@link #UNKNOWN_NUMBER_OF_PAGES}, and then it falls back
+ * to {@code Printable}'s behaviour: pages are requested until one returns {@code NO_SUCH_PAGE}.
  */
 public interface Pageable {
 
-    /** No se sabe cuantas hay. Ver la nota de la clase. */
+    /** It is not known how many there are. See the class note. */
     int UNKNOWN_NUMBER_OF_PAGES = -1;
 
-    /** Cuantas paginas, o {@link #UNKNOWN_NUMBER_OF_PAGES}. */
+    /** How many pages, or {@link #UNKNOWN_NUMBER_OF_PAGES}. */
     int getNumberOfPages();
 
     /**
-     * El formato de esa pagina.
+     * The format of that page.
      *
-     * @throws IndexOutOfBoundsException si no existe
+     * @throws IndexOutOfBoundsException if it does not exist
      */
     PageFormat getPageFormat(int pageIndex) throws IndexOutOfBoundsException;
 
     /**
-     * Quien dibuja esa pagina.
+     * Who draws that page.
      *
-     * @throws IndexOutOfBoundsException si no existe
+     * @throws IndexOutOfBoundsException if it does not exist
      */
     Printable getPrintable(int pageIndex) throws IndexOutOfBoundsException;
 }

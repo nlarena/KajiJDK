@@ -4,14 +4,14 @@ import java.awt.Graphics;
 import java.awt.Shape;
 
 /**
- * Quien pinta los fondos de colores del texto: la seleccion, los resultados de una busqueda.
+ * Who paints the coloured backgrounds of the text: the selection, a search's results.
  *
- * <p>Un resaltado es un tramo mas un {@link HighlightPainter} que sabe pintarlo. Separar las dos
- * cosas es lo que permite tener a la vez una seleccion azul y cinco coincidencias amarillas sin
- * que el componente sepa de ninguna.
+ * <p>A highlight is a stretch plus a {@link HighlightPainter} that knows how to paint it.
+ * Separating the two things is what allows having at once a blue selection and five yellow
+ * matches without the component knowing about any of them.
  *
- * <p>{@link #addHighlight} devuelve una etiqueta opaca, no un indice: los tramos se mueven cuando
- * el documento cambia, y un indice dejaria de valer.
+ * <p>{@link #addHighlight} returns an opaque tag, not an index: the stretches move when the
+ * document changes, and an index would stop holding.
  */
 public interface Highlighter {
 
@@ -21,26 +21,29 @@ public interface Highlighter {
 
     void paint(Graphics g);
 
-    /** Agrega un resaltado y devuelve con que sacarlo despues. */
+    /** It adds a highlight and returns what to remove it with later. */
     Object addHighlight(int p0, int p1, HighlightPainter p) throws BadLocationException;
 
     void removeHighlight(Object tag);
 
     void removeAllHighlights();
 
-    /** Le cambia el tramo a un resaltado que ya esta; es como sigue la seleccion al cursor. */
+    /**
+     * It changes the stretch of a highlight already there; it is how the selection follows the
+     * cursor.
+     */
     void changeHighlight(Object tag, int p0, int p1) throws BadLocationException;
 
     Highlight[] getHighlights();
 
-    /** Quien sabe pintar un resaltado. */
+    /** Who knows how to paint a highlight. */
     public interface HighlightPainter {
 
-        /** Pinta el tramo {@code [p0, p1)} dentro de esa forma. */
+        /** It paints the stretch {@code [p0, p1)} inside that shape. */
         void paint(Graphics g, int p0, int p1, Shape bounds, JTextComponent c);
     }
 
-    /** Un resaltado puesto: su tramo y quien lo pinta. */
+    /** A highlight in place: its stretch and who paints it. */
     public interface Highlight {
 
         int getStartOffset();

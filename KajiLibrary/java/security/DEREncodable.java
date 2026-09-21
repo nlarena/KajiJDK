@@ -1,10 +1,11 @@
 package java.security;
 
-// Marca lo que se puede escribir como DER, y por lo tanto lo que `PEMEncoder` sabe encodear.
+// It marks what can be written as DER, and therefore what `PEMEncoder` knows how to encode.
 //
-// Es una interfaz vacia introducida con el soporte de PEM (JDK 25). No declara `getEncoded()` a
-// proposito: los tipos que la implementan ya lo tienen con firmas incompatibles entre si —`Key`
-// lo devuelve sin excepcion, `Certificate` lo tira— y unificarlas hubiera roto a los dos. La
-// interfaz solo dice "esto tiene una forma DER"; quien encodea sabe como sacarla de cada tipo.
+// It is an empty interface introduced with the PEM support (JDK 25). It does not declare
+// `getEncoded()` on purpose: the types that implement it have it already with signatures
+// incompatible with each other —`Key` returns it without an exception, `Certificate` throws— and
+// unifying them would have broken both. The interface only says "this has a DER form"; whoever
+// encodes knows how to get it out of each type.
 public interface DEREncodable {
 }

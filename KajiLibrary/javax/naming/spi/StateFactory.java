@@ -6,25 +6,27 @@ import javax.naming.Name;
 import javax.naming.NamingException;
 
 /**
- * KajiLibrary's javax.naming.spi.StateFactory -- convierte un objeto en algo que se pueda guardar.
+ * KajiLibrary's javax.naming.spi.StateFactory -- turns an object into something that can be
+ * stored.
  *
- * <p>El camino inverso de {@link ObjectFactory}: la aplicacion pasa un objeto a {@code bind} y esta
- * fabrica lo convierte en lo que el directorio sabe almacenar --tipicamente una
- * {@code Reference}--.
+ * <p>The reverse path of {@link ObjectFactory}: the application passes an object to {@code bind}
+ * and this factory turns it into what the directory knows how to store --typically a {@code
+ * Reference}.
  *
- * <p>Que sean dos interfaces y no una con dos metodos es a proposito: guardar y recuperar los suele
- * hacer gente distinta. Quien publica un servicio escribe la de estado; quien lo consume necesita la
- * de objeto, que casi siempre viene con la biblioteca del servicio.
+ * <p>That they are two interfaces and not one with two methods is on purpose: storing and
+ * retrieving are usually done by different people. Whoever publishes a service writes the state
+ * one; whoever consumes it needs the object one, which almost always comes with the service's
+ * library.
  *
- * <p>Devolver null significa "no es lo mio" y la plataforma sigue con la que viene, igual que del
- * otro lado.
+ * <p>Returning null means "not mine" and the platform carries on with the next, same as on the
+ * other side.
  */
 public interface StateFactory {
 
     /**
-     * Lo que hay que guardar en lugar de ese objeto.
+     * What to store in place of that object.
      *
-     * @return null si esta fabrica no lo reconoce
+     * @return null if this factory does not recognize it
      */
     Object getStateToBind(Object obj, Name name, Context nameCtx, Hashtable<?, ?> environment)
         throws NamingException;

@@ -2,19 +2,19 @@ package java.nio.file.attribute;
 
 import java.io.IOException;
 
-// La vista que sabe leer y cambiar el dueño de un archivo. Su nombre es `"owner"`, salvo cuando se
-// llega a ella a traves de `PosixFileAttributeView` o `AclFileAttributeView`, que la heredan y
-// devuelven el suyo.
+// The view that knows how to read and change a file's owner. Its name is `"owner"`, except when it
+// is reached through `PosixFileAttributeView` or `AclFileAttributeView`, which inherit it and return
+// their own.
 //
-// Sin implementacion en KajiJDK: no hay nativo que consulte ni cambie el dueño.
+// Without an implementation in KajiJDK: there is no native that queries or changes the owner.
 public interface FileOwnerAttributeView extends FileAttributeView {
 
-    /** `"owner"`, o el nombre de la vista que la extiende. */
+    /** `"owner"`, or the name of the view that extends it. */
     String name();
 
-    /** El dueño. */
+    /** The owner. */
     UserPrincipal getOwner() throws IOException;
 
-    /** Cambia el dueño. */
+    /** It changes the owner. */
     void setOwner(UserPrincipal owner) throws IOException;
 }

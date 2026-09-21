@@ -3,67 +3,67 @@ package javax.smartcardio;
 import java.util.List;
 
 /**
- * KajiLibrary's javax.smartcardio.CardTerminals -- los lectores que hay.
+ * KajiLibrary's javax.smartcardio.CardTerminals -- the readers there are.
  *
- * <p>Se consigue con {@link TerminalFactory#terminals}. Lo que aporta sobre una lista comun es que
- * sabe <b>esperar cambios</b>: que aparezca un lector, que metan una tarjeta.
+ * <p>It is obtained with {@link TerminalFactory#terminals}. What it adds over an ordinary list is
+ * that it knows how to <b>wait for changes</b>: a reader appearing, a card being inserted.
  *
- * <h2>{@link State#CARD_INSERTION} y {@link State#CARD_REMOVAL}</h2>
+ * <h2>{@link State#CARD_INSERTION} and {@link State#CARD_REMOVAL}</h2>
  *
- * <p>Estos dos no son estados sino <b>transiciones desde la ultima consulta</b>. Un lector aparece en
- * {@code CARD_INSERTION} una sola vez, en la primera consulta despues de que le pusieron la tarjeta;
- * en la siguiente ya esta solo en {@code CARD_PRESENT}. Tratarlos como estados hace que el programa se
- * pierda insercciones o las cuente dos veces.
+ * <p>These two are not states but <b>transitions since the last query</b>. A reader appears in
+ * {@code CARD_INSERTION} only once, in the first query after the card was inserted; in the next one
+ * it is only in {@code CARD_PRESENT}. Treating them as states makes the program miss insertions or
+ * count them twice.
  */
 public abstract class CardTerminals {
 
-    /** Para las subclases. */
+    /** For subclasses. */
     protected CardTerminals() {
     }
 
     /**
-     * Que lectores pedir. Ver la nota de la clase sobre los dos ultimos.
+     * Which readers to ask for. See the class note about the last two.
      */
     public enum State {
 
-        /** Todos. */
+        /** All of them. */
         ALL,
 
-        /** Los que tienen tarjeta. */
+        /** The ones that have a card. */
         CARD_PRESENT,
 
-        /** Los que no. */
+        /** The ones that do not. */
         CARD_ABSENT,
 
-        /** Los que recibieron una desde la ultima consulta. */
+        /** The ones that received one since the last query. */
         CARD_INSERTION,
 
-        /** Los que la perdieron desde la ultima consulta. */
+        /** The ones that lost it since the last query. */
         CARD_REMOVAL,
     }
 
     /**
-     * Todos los lectores.
+     * All the readers.
      *
-     * @throws CardException si no se pudieron listar
+     * @throws CardException if they could not be listed
      */
     public List<CardTerminal> list() throws CardException {
         return list(State.ALL);
     }
 
     /**
-     * Los que esten en ese estado.
+     * The ones in that state.
      *
-     * @throws NullPointerException si el estado es null
-     * @throws CardException si no se pudieron listar
+     * @throws NullPointerException if the state is null
+     * @throws CardException if they could not be listed
      */
     public abstract List<CardTerminal> list(State state) throws CardException;
 
     /**
-     * El lector que se llama asi.
+     * The reader with that name.
      *
-     * @return null si no hay ninguno
-     * @throws NullPointerException si el nombre es null
+     * @return null if there is none
+     * @throws NullPointerException if the name is null
      */
     public CardTerminal getTerminal(String name) {
         if (name == null) {
@@ -85,23 +85,23 @@ public abstract class CardTerminals {
     }
 
     /**
-     * Espera para siempre a que algo cambie.
+     * Waits forever for something to change.
      *
-     * @throws IllegalStateException si no hay lectores
-     * @throws CardException si no se pudo esperar
+     * @throws IllegalStateException if there are no readers
+     * @throws CardException if it could not wait
      */
     public void waitForChange() throws CardException {
         waitForChange(0);
     }
 
     /**
-     * Espera a que algo cambie.
+     * Waits for something to change.
      *
-     * @param timeout milisegundos, o cero para esperar para siempre
-     * @return si hubo un cambio; false si se acabo el tiempo
-     * @throws IllegalStateException si no hay lectores
-     * @throws IllegalArgumentException si el tiempo es negativo
-     * @throws CardException si no se pudo esperar
+     * @param timeout milliseconds, or zero to wait forever
+     * @return whether there was a change; false if the time ran out
+     * @throws IllegalStateException if there are no readers
+     * @throws IllegalArgumentException if the time is negative
+     * @throws CardException if it could not wait
      */
     public abstract boolean waitForChange(long timeout) throws CardException;
 }

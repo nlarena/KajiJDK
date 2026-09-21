@@ -9,20 +9,20 @@ import javax.swing.plaf.basic.BasicGraphicsUtils;
 import javax.swing.plaf.basic.BasicLabelUI;
 
 /**
- * La etiqueta de Metal.
+ * Metal's label.
  *
- * <p>Cambia una sola cosa del basico, y es como se ve una etiqueta apagada. El basico la dibuja
- * dos veces corrida un pixel -- blanco y despues gris -- que es el grabado de Windows 95. Metal la
- * dibuja una sola vez en el gris del tema. Es mas plano y es lo que corresponde a un aspecto que
- * no imita a nadie.
+ * <p>It changes a single thing from the basic one, and that is how a disabled label looks. The
+ * basic one draws it twice shifted by a pixel -- white and then grey -- which is Windows 95's
+ * engraving. Metal draws it once in the theme's grey. It is flatter and it is what suits a look
+ * and feel that imitates nobody.
  *
- * <p>Comparte instancia: {@link #createUI} devuelve siempre la misma. Puede hacerlo porque no
- * guarda nada de la etiqueta que dibuja, y una sola instancia para las mil etiquetas de un programa
- * es la razon de que exista {@link #metalLabelUI}.
+ * <p>It shares its instance: {@link #createUI} always returns the same one. It can do so because
+ * it keeps nothing of the label it draws, and a single instance for a program's thousand labels
+ * is the reason {@link #metalLabelUI} exists.
  */
 public class MetalLabelUI extends BasicLabelUI {
 
-    /** La unica; ver la nota de la clase. */
+    /** The only one; see the class note. */
     protected static MetalLabelUI metalLabelUI = new MetalLabelUI();
 
     public MetalLabelUI() {
@@ -32,10 +32,10 @@ public class MetalLabelUI extends BasicLabelUI {
         return metalLabelUI;
     }
 
-    /** Una sola pasada en el gris del tema; ver la nota de la clase. */
+    /** A single pass in the theme's grey; see the class note. */
     protected void paintDisabledText(JLabel l, Graphics g, String s, int textX, int textY) {
-        int indice = l.getDisplayedMnemonicIndex();
+        int index = l.getDisplayedMnemonicIndex();
         g.setColor(MetalLookAndFeel.getInactiveSystemTextColor());
-        BasicGraphicsUtils.drawStringUnderlineCharAt(g, s, indice, textX, textY);
+        BasicGraphicsUtils.drawStringUnderlineCharAt(g, s, index, textX, textY);
     }
 }

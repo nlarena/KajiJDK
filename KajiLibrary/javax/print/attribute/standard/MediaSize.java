@@ -6,34 +6,34 @@ import javax.print.attribute.Attribute;
 import javax.print.attribute.Size2DSyntax;
 
 /**
- * Las medidas de un tamano de papel, y el registro que las conecta con los nombres de
- * {@link MediaSizeName}.
+ * The measures of a paper size, and the registry connecting them to the {@link MediaSizeName}
+ * names.
  *
- * <p>La clase misma es un {@link Size2DSyntax} con una restriccion --{@code x} no puede ser mayor
- * que {@code y}, o sea que el papel se declara siempre de pie-- y un nombre opcional. Lo que la
- * hace distinta del resto del paquete es el <b>registro estatico</b>: las clases anidadas de abajo
- * declaran los noventa y cuatro tamanos de norma, y sus constructores se van anotando en dos
- * tablas.
+ * <p>The class itself is a {@link Size2DSyntax} with a restriction --{@code x} cannot be greater
+ * than {@code y}, that is the paper is always declared portrait-- and an optional name. What makes
+ * it different from the rest of the package is the <b>static registry</b>: the nested classes below
+ * declare the ninety-four standard sizes, and their constructors keep noting them down in two
+ * tables.
  *
  * <ul>
- * <li>Un mapa nombre {@code ->} medidas, que es el que contesta {@link #getMediaSizeForName}. Solo
- *     entran los que se declararon con un {@link MediaSizeName}, y solo el primero que reclama cada
- *     nombre.</li>
- * <li>Una lista de todos, incluso los anonimos, que es sobre la que busca {@link #findMedia}.</li>
+ * <li>A name {@code ->} measures map, which is the one {@link #getMediaSizeForName} answers from.
+ *     Only the ones declared with a {@link MediaSizeName} go in, and only the first to claim each
+ *     name.</li>
+ * <li>A list of all, even the anonymous ones, which is the one {@link #findMedia} searches.</li>
  * </ul>
  *
- * <p>Que el registro se llene desde los constructores tiene una consecuencia: hay que forzar la
- * carga de las clases anidadas antes de contestar cualquiera de las dos consultas, porque si nadie
- * toco {@code MediaSize.ISO} todavia, sus constantes no existen y las tablas estan vacias. De eso
- * se encarga el bloque estatico del final. La recursion que eso arma --{@code ISO} inicializa
- * {@code MediaSize}, que toca {@code ISO}-- es legal y la JVM la corta sola: el segundo acceso
- * desde el mismo hilo pasa de largo.
+ * <p>That the registry is filled from the constructors has a consequence: the nested classes have
+ * to be forced to load before answering either of the two queries, because if nobody touched {@code
+ * MediaSize.ISO} yet, its constants do not exist and the tables are empty. The static block at the
+ * end takes care of that. The recursion that sets up --{@code ISO} initializes {@code MediaSize},
+ * which touches {@code ISO}-- is legal and the JVM cuts it by itself: the second access from the
+ * same thread passes straight through.
  *
- * <p>Estas tablas son <b>datos de norma</b> (ISO 216, JIS P 0138, ANSI), no de locale. No dependen
- * del CLDR ni de ninguna impresora, asi que van completas y con los numeros exactos.
+ * <p>These tables are <b>standards data</b> (ISO 216, JIS P 0138, ANSI), not locale data. They
+ * depend neither on CLDR nor on any printer, so they go in complete and with the exact numbers.
  *
- * <p>Que un tamano este aca no significa que ninguna impresora lo tenga cargado: eso lo contesta
- * {@code javax.print}, no este paquete.
+ * <p>That a size is here does not mean any printer has it loaded: {@code javax.print} answers that,
+ * not this package.
  */
 public class MediaSize extends Size2DSyntax implements Attribute {
 
@@ -41,13 +41,13 @@ public class MediaSize extends Size2DSyntax implements Attribute {
 
     private MediaSizeName mediaName;
 
-    // Las dos tablas del registro. Se inicializan aca arriba, antes del bloque estatico del final,
-    // porque los constructores de las clases anidadas escriben en ellas mientras ese bloque corre.
+    // The registry's two tables. They are initialized up here, before the static block at the end,
+    // because the nested classes' constructors write into them while that block runs.
     private static HashMap<MediaSizeName, MediaSize> mediaMap = new HashMap<MediaSizeName, MediaSize>(100, 10);
 
     private static Vector<MediaSize> sizeVector = new Vector<MediaSize>(100, 10);
 
-    /** Un tamano anonimo: entra en la busqueda de {@link #findMedia} pero no reclama nombre. */
+    /** An anonymous size: it goes into {@link #findMedia}'s search but claims no name. */
     public MediaSize(float x, float y, int units) {
         super(x, y, units);
         if (x > y) {
@@ -65,9 +65,9 @@ public class MediaSize extends Size2DSyntax implements Attribute {
     }
 
     /**
-     * Un tamano con nombre. Si ese nombre ya estaba tomado el objeto se construye igual pero no se
-     * registra en ningun lado --ni siquiera en la lista de busqueda-- y su
-     * {@link #getMediaSizeName} queda en null: el primero que reclama un nombre se lo queda.
+     * A named size. If that name was already taken the object is built all the same but is not
+     * registered anywhere --not even in the search list-- and its {@link #getMediaSizeName} is left
+     * null: the first to claim a name keeps it.
      */
     public MediaSize(float x, float y, int units, MediaSizeName media) {
         super(x, y, units);
@@ -93,26 +93,26 @@ public class MediaSize extends Size2DSyntax implements Attribute {
         }
     }
 
-    /** El nombre con el que se registro, o null si es anonimo. */
+    /** The name it was registered with, or null if it is anonymous. */
     public MediaSizeName getMediaSizeName() {
         return this.mediaName;
     }
 
-    /** Las medidas de un nombre, o null si ese nombre no tiene ninguna registrada. */
+    /** A name's measures, or null if that name has none registered. */
     public static MediaSize getMediaSizeForName(MediaSizeName media) {
         return mediaMap.get(media);
     }
 
     /**
-     * El nombre del tamano registrado mas parecido a las medidas dadas.
+     * The name of the registered size closest to the given measures.
      *
-     * <p>Nunca devuelve "no encontre": elige el de <b>menor distancia euclidea</b> entre los dos
-     * pares de medidas y corta apenas encuentra una coincidencia exacta. Dos consecuencias que
-     * conviene saber antes de confiar en el resultado: unas medidas absurdas igual devuelven algo,
-     * y el resultado puede ser {@code null} sin que haya fallado nada --si el mas cercano resulta
-     * ser uno de los sobres japoneses, que no tienen nombre.
+     * <p>It never returns "not found": it chooses the one at the <b>smallest Euclidean distance</b>
+     * between the two pairs of measures and stops as soon as it finds an exact match. Two
+     * consequences worth knowing before trusting the result: absurd measures still return
+     * something, and the result may be {@code null} without anything having failed --if the closest
+     * turns out to be one of the Japanese envelopes, which have no name.
      *
-     * <p>El candidato inicial es A4, asi que con la lista vacia eso es lo que sale.
+     * <p>The initial candidate is A4, so with the list empty that is what comes out.
      */
     public static MediaSizeName findMedia(float x, float y, int units) {
         MediaSize match = MediaSize.ISO.A4;
@@ -138,7 +138,7 @@ public class MediaSize extends Size2DSyntax implements Attribute {
         return match.getMediaSizeName();
     }
 
-    /** Mismas medidas y ademas ser un {@code MediaSize}: el nombre no entra en la comparacion. */
+    /** Same measures and also being a {@code MediaSize}: the name does not enter the comparison. */
     public boolean equals(Object object) {
         return super.equals(object) && object instanceof MediaSize;
     }
@@ -152,15 +152,16 @@ public class MediaSize extends Size2DSyntax implements Attribute {
     }
 
     /**
-     * Los tamanos de la norma ISO 216: las series A, B y C mas el sobre DL.
-
-     * <p>Toda la serie A sale de partir A0 --un metro cuadrado-- por la mitad del lado largo, una y
-     * otra vez, con la proporcion raiz de dos que hace que la mitad de una hoja sea semejante a la
-     * hoja. La serie B son las medias geometricas entre dos A consecutivos y la C, los sobres para
-     * meter una A sin doblarla. Los numeros van en milimetros porque asi los define la norma.
-
-     * <p>{@code C0}, {@code C1} y {@code C2} existen como {@link MediaSizeName} pero no tienen
-     * constante aca: nadie imprime en un sobre de un metro.
+     * The sizes of the ISO 216 standard: the A, B and C series plus the DL envelope.
+     *
+     * <p>The whole A series comes from halving A0 --one square metre-- along the long side, again
+     * and again, with the square-root-of-two proportion that makes half a sheet similar to the
+     * sheet. The B series are the geometric means between two consecutive As and the C, the
+     * envelopes for putting an A in without folding it. The numbers go in millimetres because that
+     * is how the standard defines them.
+     *
+     * <p>{@code C0}, {@code C1} and {@code C2} exist as {@link MediaSizeName}s but have no constant
+     * here: nobody prints on a one-metre envelope.
      */
     public static final class ISO {
 
@@ -250,15 +251,15 @@ public class MediaSize extends Size2DSyntax implements Attribute {
     }
 
     /**
-     * Los tamanos japoneses de la norma JIS P 0138.
-
-     * <p>Las B japonesas <b>no</b> son las B de ISO: JIS las define como la media aritmetica entre
-     * dos A y no la geometrica, asi que JIS B4 mide 257x364 y no 250x353. Es la clase de detalle que
-     * hace fallar un trabajo en silencio si uno confunde las tablas.
-
-     * <p>Las series CHOU, KAKU y YOU son sobres, y son las unicas entradas del paquete que no tienen
-     * {@link MediaSizeName}: {@code getMediaSizeName()} devuelve {@code null} para ellas, aunque
-     * {@link MediaSize#findMedia} igual las considere.
+     * The Japanese sizes of the JIS P 0138 standard.
+     *
+     * <p>The Japanese Bs are <b>not</b> ISO's Bs: JIS defines them as the arithmetic mean between
+     * two As and not the geometric one, so JIS B4 measures 257x364 and not 250x353. It is the kind
+     * of detail that makes a job fail silently if one confuses the tables.
+     *
+     * <p>The CHOU, KAKU and YOU series are envelopes, and they are the package's only entries
+     * without a {@link MediaSizeName}: {@code getMediaSizeName()} returns {@code null} for them,
+     * although {@link MediaSize#findMedia} still considers them.
      */
     public static final class JIS {
 
@@ -372,14 +373,14 @@ public class MediaSize extends Size2DSyntax implements Attribute {
     }
 
     /**
-     * Los tamanos de America del Norte, incluidos los sobres numerados.
-
-     * <p>Estan definidos en pulgadas y por eso se declaran en pulgadas: {@code 8.5x11} da
-     * 215900x279400 micrometros exactos, mientras que escribirlo en milimetros perderia decimas.
-
-     * <p>Los nombres de las constantes tienen la mayuscula de la X inconsistente
-     * --{@code NA_9x11_ENVELOPE} contra {@code NA_10X15_ENVELOPE}-- porque asi estan en el JDK y
-     * cambiarlo romperia el codigo que las usa.
+     * The North American sizes, including the numbered envelopes.
+     *
+     * <p>They are defined in inches and that is why they are declared in inches: {@code 8.5x11}
+     * gives exactly 215900x279400 micrometres, whereas writing it in millimetres would lose tenths.
+     *
+     * <p>The constants' names have an inconsistent capital X --{@code NA_9x11_ENVELOPE} against
+     * {@code NA_10X15_ENVELOPE}-- because that is how they are in the JDK and changing it would
+     * break the code that uses them.
      */
     public static final class NA {
 
@@ -436,11 +437,11 @@ public class MediaSize extends Size2DSyntax implements Attribute {
     }
 
     /**
-     * Los cinco tamanos de plano de ingenieria de ANSI, de la A a la E.
-
-     * <p>Cada uno es el doble del anterior girado noventa grados, arrancando de la carta: A es
-     * 8.5x11, B es 11x17, y asi. Ojo con el choque de nombres: esta {@code A} es la carta
-     * norteamericana y no tiene nada que ver con {@code ISO.A4}.
+     * ANSI's five engineering drawing sizes, from A to E.
+     *
+     * <p>Each is double the previous one turned ninety degrees, starting from letter: A is 8.5x11,
+     * B is 11x17, and so on. Mind the name clash: this {@code A} is North American letter and has
+     * nothing to do with {@code ISO.A4}.
      */
     public static final class Engineering {
 
@@ -464,12 +465,11 @@ public class MediaSize extends Size2DSyntax implements Attribute {
     }
 
     /**
-     * Los que no entran en ninguna norma: los formatos de oficina heredados y algunos
-     * sobres sueltos.
-
-     * <p>{@code LEDGER} y {@code TABLOID} miden exactamente lo mismo (11x17 pulgadas) y son dos
-     * constantes distintas porque el nombre dice la orientacion con la que se usa cada uno --por eso
-     * {@link MediaSize#findMedia} con esas medidas devuelve uno de los dos y no el otro.
+     * The ones that fit in no standard: the inherited office formats and some loose envelopes.
+     *
+     * <p>{@code LEDGER} and {@code TABLOID} measure exactly the same (11x17 inches) and are two
+     * different constants because the name says the orientation each is used in --that is why
+     * {@link MediaSize#findMedia} with those measures returns one of the two and not the other.
      */
     public static final class Other {
 
@@ -510,10 +510,10 @@ public class MediaSize extends Size2DSyntax implements Attribute {
             new MediaSize(148f, 200f, Size2DSyntax.MM, MediaSizeName.JAPANESE_DOUBLE_POSTCARD);
     }
 
-    // Forzar la carga de las cinco clases anidadas. Sin esto, preguntar por un tamano antes de
-    // haber nombrado ninguna de ellas contestaria contra tablas vacias. Referenciar una sola
-    // alcanza: cada una arrastra a MediaSize, que arrastra a la siguiente.
+    // Force the five nested classes to load. Without this, asking about a size before having named
+    // any of them would answer against empty tables. Referencing one is enough: each drags in
+    // MediaSize, which drags in the next.
     static {
-        MediaSize[] forzar = {ISO.A4, JIS.B4, NA.LETTER, Engineering.A, Other.EXECUTIVE};
+        MediaSize[] force = {ISO.A4, JIS.B4, NA.LETTER, Engineering.A, Other.EXECUTIVE};
     }
 }

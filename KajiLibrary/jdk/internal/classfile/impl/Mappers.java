@@ -8,9 +8,9 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Function;
 
-// El índice de nombre a mapeador. Los treinta y seis que el JVMS define salen de `Attributes`; para
-// un nombre desconocido se fabrica —una sola vez por nombre— un mapeador con estabilidad `UNKNOWN`,
-// que es exactamente lo que significa: se puede copiar byte a byte y no se sabe qué dice.
+// The index from name to mapper. The thirty-six the JVMS defines come from `Attributes`; for an
+// unknown name a mapper with `UNKNOWN` stability is made --once per name--, which is exactly what
+// it means: it can be copied byte by byte and what it says is not known.
 final class Mappers {
 
     private static final Map<String, AttributeMapper<RawAttribute>> KNOWN = build();
@@ -83,10 +83,11 @@ final class Mappers {
     }
 }
 
-// La función de mapeadores a medida de un lector que no tiene ninguno registrado. Registrarlos exige
-// `ClassFile.Option`, que KajiLibrary no implementa; devolver siempre `null` es decir eso mismo, y no
-// hay forma de que un atributo a medida se pierda en silencio: sin mapeador propio, cae en el
-// genérico de `Mapeadores` y conserva su nombre y sus bytes.
+// The custom-mapper function of a reader that has none registered. Registering them requires the
+// `ClassFile.Option`s, which KajiLibrary does not implement; always returning `null` says exactly
+// that, and there is no way for a custom attribute to be lost silently: without a mapper of its
+// own, it falls into this class's generic one and keeps its name and its bytes. (The note called
+// this class `Mapeadores`, its old name.)
 final class NoCustomMappers implements Function<Utf8Entry, AttributeMapper<?>> {
 
     static final NoCustomMappers INSTANCE = new NoCustomMappers();

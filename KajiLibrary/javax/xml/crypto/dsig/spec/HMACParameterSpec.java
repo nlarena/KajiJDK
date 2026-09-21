@@ -1,31 +1,32 @@
 package javax.xml.crypto.dsig.spec;
 
 /**
- * KajiLibrary's javax.xml.crypto.dsig.spec.HMACParameterSpec -- cuantos bits del HMAC se conservan.
+ * KajiLibrary's javax.xml.crypto.dsig.spec.HMACParameterSpec -- how many bits of the HMAC are kept.
  *
- * <p>Un solo numero: el largo, en bits, al que se <b>trunca</b> la salida del HMAC.
+ * <p>A single number: the length, in bits, the HMAC output is <b>truncated</b> to.
  *
- * <p>Truncar esta permitido por la especificacion y es una mala idea casi siempre. Un HMAC-SHA1
- * truncado a 80 bits es lo que la especificacion de XML-DSig nombra como ejemplo, y hoy eso esta al
- * alcance de la fuerza bruta; la recomendacion actual es no truncar por debajo de la mitad de la
- * salida, y en la practica no truncar.
+ * <p>Truncating is allowed by the specification and is a bad idea almost always. An HMAC-SHA1
+ * truncated to 80 bits is what the XML-DSig specification gives as an example, and today that is
+ * within reach of brute force; the current recommendation is not to truncate below half of the
+ * output, and in practice not to truncate.
  *
- * <p>La clase no valida el valor: acepta cualquier entero. Es la implementacion la que rechaza los
- * que no puede, y por eso un largo absurdo se descubre al firmar y no al construir esto.
+ * <p>The class does not validate the value: it accepts any integer. It is the implementation that
+ * rejects the ones it cannot handle, and that is why an absurd length is discovered when signing
+ * and not when building this.
  */
 public final class HMACParameterSpec implements SignatureMethodParameterSpec {
 
-    /** El largo en bits. */
+    /** The length in bits. */
     private final int outputLength;
 
     /**
-     * @param outputLength a cuantos bits truncar; ver la nota de la clase
+     * @param outputLength how many bits to truncate to; see the class note
      */
     public HMACParameterSpec(int outputLength) {
         this.outputLength = outputLength;
     }
 
-    /** El largo en bits. */
+    /** The length in bits. */
     public int getOutputLength() {
         return this.outputLength;
     }

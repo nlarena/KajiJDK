@@ -9,23 +9,24 @@ import javax.lang.model.element.VariableElement;
 import javax.lang.model.type.TypeMirror;
 
 /**
- * KajiLibrary's javax.lang.model.util.SimpleAnnotationValueVisitor6 — el visitante de valores de
- * anotacion para el que casi todos los casos dan lo mismo.
+ * KajiLibrary's javax.lang.model.util.SimpleAnnotationValueVisitor6 — the annotation value visitor
+ * for which almost every case gives the same.
  *
- * <p>Mismo embudo que {@link SimpleElementVisitor6}, con una diferencia de firma que vale explicar:
- * {@link #defaultAction} toma **`Object`** y no un tipo del modelo. Es lo unico que puede tomar, porque
- * los trece `visitXxx` de esta familia no comparten un supertipo util — un `boolean`, un `String`, un
- * `TypeMirror` y una `List` no tienen nada en comun salvo `Object`.
+ * <p>Same funnel as {@link SimpleElementVisitor6}, with a difference of signature worth explaining:
+ * {@link #defaultAction} takes an **`Object`** and not a model type. It is the only thing it can
+ * take, because the thirteen `visitXxx` of this family share no useful supertype — a `boolean`, a
+ * `String`, a `TypeMirror` and a `List` have nothing in common but `Object`.
  *
- * <p>La consecuencia es concreta y hay que verla venir: los ocho primitivos **se autoboxean** al entrar
- * al embudo. Una `defaultAction` que reciba `o` va a ver un `Integer`, no un `int`, y si quiere
- * distinguir el tipo original tiene que redefinir el `visitXxx` puntual en vez de mirar el `Object`.
- * `visitInt` y `visitShort` autoboxeados no se distinguen del todo por `instanceof`.
+ * <p>The consequence is concrete and has to be seen coming: the eight primitives **are autoboxed**
+ * on entering the funnel. A `defaultAction` that receives `o` is going to see an `Integer`, not an
+ * `int`, and if it wants to tell the original type it has to override the particular `visitXxx`
+ * instead of looking at the `Object`. Autoboxed, `visitInt` and `visitShort` cannot be fully told
+ * apart with `instanceof`.
  */
 @SupportedSourceVersion(SourceVersion.RELEASE_6)
 public class SimpleAnnotationValueVisitor6<R, P> extends AbstractAnnotationValueVisitor6<R, P> {
 
-    /** Lo que devuelve `defaultAction` mientras no la redefinan. */
+    /** What `defaultAction` returns until it is overridden. */
     protected final R DEFAULT_VALUE;
 
     @Deprecated(since = "9")
@@ -40,7 +41,7 @@ public class SimpleAnnotationValueVisitor6<R, P> extends AbstractAnnotationValue
         this.DEFAULT_VALUE = defaultValue;
     }
 
-    /** El embudo. Ver el encabezado por que toma `Object`. */
+    /** The funnel. See the header for why it takes `Object`. */
     protected R defaultAction(Object o, P p) {
         return this.DEFAULT_VALUE;
     }

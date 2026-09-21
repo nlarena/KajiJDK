@@ -11,24 +11,24 @@ import java.io.Serializable;
 import java.util.TooManyListenersException;
 
 /**
- * Declara que un componente **puede recibir** cosas arrastradas.
+ * Declares that a component **can receive** dragged things.
  *
- * <p>Se le engancha a un componente con {@code setDropTarget} y con eso el componente pasa a ser un
- * destino válido. Todo lo demás —qué formatos acepta, qué hace al soltar— lo decide el
- * {@link DropTargetListener} que se le registre.
+ * <p>It is hooked to a component with {@code setDropTarget} and with that the component becomes a
+ * valid destination. Everything else —which formats it accepts, what it does on dropping— is
+ * decided by the {@link DropTargetListener} registered with it.
  *
- * <p>Es {@link DropTargetListener} él mismo, y eso permite dos formas de usarlo: registrarle un
- * oyente, o heredar de él y redefinir los cinco métodos. La primera es la normal; la segunda existe
- * porque a veces el destino y su lógica son la misma cosa.
+ * <p>It is a {@link DropTargetListener} itself, and that allows two ways of using it: registering a
+ * listener with it, or inheriting from it and redefining the five methods. The first is the usual
+ * one; the second exists because sometimes the destination and its logic are the same thing.
  *
- * <p><strong>Admite un solo oyente</strong>, y por eso {@link #addDropTargetListener} tira
- * {@code TooManyListenersException}. No es una limitación arbitraria: dos oyentes podrían contestar
- * cosas distintas al mismo arrastre —uno aceptar y otro rechazar— y no hay forma de resolver ese
- * empate.
+ * <p><strong>It admits a single listener</strong>, and that is why {@link #addDropTargetListener}
+ * throws {@code TooManyListenersException}. It is not an arbitrary limitation: two listeners could
+ * answer different things to the same drag —one accept and the other reject— and there is no way of
+ * resolving that tie.
  *
- * <p>El desplazamiento automático se prende solo si el componente implementa {@link Autoscroll}. La
- * cuenta de si el puntero entró en la zona sensible está acá y no en el componente, para que cada
- * uno no tenga que rehacerla.
+ * <p>The automatic scrolling turns itself on only if the component implements {@link Autoscroll}.
+ * The sum of whether the pointer entered the sensitive zone is here and not in the component, so
+ * that each one does not have to redo it.
  */
 public class DropTarget implements DropTargetListener, Serializable {
 
@@ -36,10 +36,10 @@ public class DropTarget implements DropTargetListener, Serializable {
 
     private Component component;
 
-    /** Qué acciones acepta este destino. */
+    /** Which actions this destination accepts. */
     int actions = DnDConstants.ACTION_COPY_OR_MOVE;
 
-    /** Si el destino está escuchando. */
+    /** Whether the destination is listening. */
     boolean active = true;
 
     private transient DropTargetContext dropTargetContext;
@@ -48,14 +48,14 @@ public class DropTarget implements DropTargetListener, Serializable {
     private transient DropTargetAutoScroller autoScroller;
 
     /**
-     * Con todo dado.
+     * With everything given.
      *
-     * @param dt el componente, o `null` para engancharlo después
-     * @param ops las acciones que acepta
-     * @param dtl el oyente, o `null`
-     * @param act si arranca activo
-     * @param fm el mapa de formatos, o `null` para el del sistema
-     * @throws HeadlessException si no hay pantalla
+     * @param dt the component, or `null` to hook it later
+     * @param ops the actions it accepts
+     * @param dtl the listener, or `null`
+     * @param act whether it starts active
+     * @param fm the map of formats, or `null` for the system's
+     * @throws HeadlessException if there is no screen
      */
     public DropTarget(Component dt, int ops, DropTargetListener dtl, boolean act, FlavorMap fm)
             throws HeadlessException {
@@ -77,9 +77,9 @@ public class DropTarget implements DropTargetListener, Serializable {
     }
 
     /**
-     * Con el mapa de formatos del sistema.
+     * With the system's map of formats.
      *
-     * @throws HeadlessException si no hay pantalla
+     * @throws HeadlessException if there is no screen
      */
     public DropTarget(Component dt, int ops, DropTargetListener dtl, boolean act)
             throws HeadlessException {
@@ -87,81 +87,81 @@ public class DropTarget implements DropTargetListener, Serializable {
     }
 
     /**
-     * Sin componente ni oyente; hay que engancharlos después.
+     * With neither component nor listener; they have to be hooked later.
      *
-     * @throws HeadlessException si no hay pantalla
+     * @throws HeadlessException if there is no screen
      */
     public DropTarget() throws HeadlessException {
         this(null, DnDConstants.ACTION_COPY_OR_MOVE, null, true, null);
     }
 
     /**
-     * Con el componente y el oyente, aceptando copiar o mover.
+     * With the component and the listener, accepting copy or move.
      *
-     * @throws HeadlessException si no hay pantalla
+     * @throws HeadlessException if there is no screen
      */
     public DropTarget(Component dt, DropTargetListener dtl) throws HeadlessException {
         this(dt, DnDConstants.ACTION_COPY_OR_MOVE, dtl, true, null);
     }
 
     /**
-     * Con el componente, las acciones y el oyente.
+     * With the component, the actions and the listener.
      *
-     * @throws HeadlessException si no hay pantalla
+     * @throws HeadlessException if there is no screen
      */
     public DropTarget(Component dt, int ops, DropTargetListener dtl) throws HeadlessException {
         this(dt, ops, dtl, true, null);
     }
 
     /**
-     * Engancha este destino a otro componente.
+     * Hooks this destination to another component.
      *
-     * <p>Desengancha el anterior: un destino pertenece a un componente por vez.
+     * <p>It unhooks the previous one: a destination belongs to one component at a time.
      */
     public synchronized void setComponent(Component c) {
         if (this.component == c) {
             return;
         }
-        Component anterior = this.component;
+        Component previous = this.component;
         this.component = c;
-        if (anterior != null) {
+        if (previous != null) {
             this.clearAutoscroll();
-            anterior.setDropTarget(null);
+            previous.setDropTarget(null);
         }
         if (c != null && c.getDropTarget() != this) {
             c.setDropTarget(this);
         }
     }
 
-    /** El componente al que está enganchado, o `null`. */
+    /** The component it is hooked to, or `null`. */
     public synchronized Component getComponent() {
         return this.component;
     }
 
     /**
-     * Cambia qué acciones acepta.
+     * Changes which actions it accepts.
      *
-     * <p>Lo que no sea copiar, mover o enlazar se descarta en silencio, igual que el JDK.
+     * <p>Whatever is not copy, move or link is discarded silently, just as the JDK does.
      */
     public void setDefaultActions(int ops) {
         this.doSetDefaultActions(ops);
     }
 
-    /** La parte que hace el trabajo, para que el contexto la pueda llamar. */
+    /** The part that does the work, so that the context can call it. */
     void doSetDefaultActions(int ops) {
         this.actions = ops & (DnDConstants.ACTION_COPY_OR_MOVE | DnDConstants.ACTION_LINK);
     }
 
-    /** Qué acciones acepta. */
+    /** Which actions it accepts. */
     public int getDefaultActions() {
         return this.actions;
     }
 
     /**
-     * Prende o apaga el destino.
+     * Turns the destination on or off.
      *
-     * <p>Apagarlo mientras hay un arrastre encima lo corta: el desplazamiento automático se detiene
-     * y el arrastre deja de recibir respuesta.
+     * <p>Turning it off while there is a drag over it cuts it short: the automatic scrolling stops
+     * and the drag stops receiving an answer.
      */
     public synchronized void setActive(boolean isActive) {
         if (isActive != this.active) {
@@ -172,16 +172,16 @@ public class DropTarget implements DropTargetListener, Serializable {
         }
     }
 
-    /** Si está escuchando. */
+    /** Whether it is listening. */
     public boolean isActive() {
         return this.active;
     }
 
     /**
-     * Registra el oyente.
+     * Registers the listener.
      *
-     * @throws TooManyListenersException si ya hay uno: dos oyentes podrían contestar cosas
-     *     contradictorias al mismo arrastre
+     * @throws TooManyListenersException if there is one already: two listeners could answer
+     *     contradictory things to the same drag
      */
     public synchronized void addDropTargetListener(DropTargetListener dtl)
             throws TooManyListenersException {
@@ -198,7 +198,7 @@ public class DropTarget implements DropTargetListener, Serializable {
         }
     }
 
-    /** Saca al oyente. */
+    /** Removes the listener. */
     public synchronized void removeDropTargetListener(DropTargetListener dtl) {
         if (dtl != null && this.dtListener != null) {
             if (this.dtListener == dtl) {
@@ -209,7 +209,7 @@ public class DropTarget implements DropTargetListener, Serializable {
         }
     }
 
-    /** Le pasa el aviso al oyente y arranca el desplazamiento automático si corresponde. */
+    /** Passes the notice on to the listener and starts the automatic scrolling where it fits. */
     public synchronized void dragEnter(DropTargetDragEvent dtde) {
         if (!this.active) {
             return;
@@ -222,7 +222,7 @@ public class DropTarget implements DropTargetListener, Serializable {
         this.initializeAutoscrolling(dtde.getLocation());
     }
 
-    /** Le pasa el aviso al oyente y actualiza el desplazamiento automático. */
+    /** Passes the notice on to the listener and updates the automatic scrolling. */
     public synchronized void dragOver(DropTargetDragEvent dtde) {
         if (!this.active) {
             return;
@@ -233,7 +233,7 @@ public class DropTarget implements DropTargetListener, Serializable {
         this.updateAutoscroll(dtde.getLocation());
     }
 
-    /** Le pasa el aviso al oyente. */
+    /** Passes the notice on to the listener. */
     public synchronized void dropActionChanged(DropTargetDragEvent dtde) {
         if (!this.active) {
             return;
@@ -244,7 +244,7 @@ public class DropTarget implements DropTargetListener, Serializable {
         this.updateAutoscroll(dtde.getLocation());
     }
 
-    /** Le pasa el aviso al oyente y para el desplazamiento automático. */
+    /** Passes the notice on to the listener and stops the automatic scrolling. */
     public synchronized void dragExit(DropTargetEvent dte) {
         if (!this.active) {
             return;
@@ -256,10 +256,10 @@ public class DropTarget implements DropTargetListener, Serializable {
     }
 
     /**
-     * Le pasa el soltado al oyente.
+     * Passes the drop on to the listener.
      *
-     * <p>Sin oyente, se rechaza: aceptar sin nadie que lea los datos dejaría al origen esperando un
-     * {@code dropComplete} que no va a llegar.
+     * <p>With no listener, it is rejected: accepting with nobody to read the data would leave the
+     * source waiting for a {@code dropComplete} that is not going to come.
      */
     public synchronized void drop(DropTargetDropEvent dtde) {
         this.clearAutoscroll();
@@ -270,12 +270,12 @@ public class DropTarget implements DropTargetListener, Serializable {
         }
     }
 
-    /** El diccionario de formatos que usa este destino. */
+    /** The dictionary of formats this destination uses. */
     public FlavorMap getFlavorMap() {
         return this.flavorMap;
     }
 
-    /** Cambia el diccionario; `null` vuelve al del sistema. */
+    /** Changes the dictionary; `null` goes back to the system's. */
     public void setFlavorMap(FlavorMap fm) {
         if (fm == null) {
             this.flavorMap = SystemFlavorMap.getDefaultFlavorMap();
@@ -284,16 +284,16 @@ public class DropTarget implements DropTargetListener, Serializable {
         }
     }
 
-    /** Avisa que el componente pasó a poder mostrarse. */
+    /** Tells that the component became displayable. */
     public void addNotify() {
     }
 
-    /** Avisa que el componente dejó de poder mostrarse; corta el desplazamiento. */
+    /** Tells that the component stopped being displayable; it cuts the scrolling short. */
     public void removeNotify() {
         this.clearAutoscroll();
     }
 
-    /** El canal por el que este destino contesta. */
+    /** The channel this destination answers through. */
     public DropTargetContext getDropTargetContext() {
         if (this.dropTargetContext == null) {
             this.dropTargetContext = this.createDropTargetContext();
@@ -301,21 +301,21 @@ public class DropTarget implements DropTargetListener, Serializable {
         return this.dropTargetContext;
     }
 
-    /** Arma el contexto; una subclase puede dar el suyo. */
+    /** Builds the context; a subclass can give its own. */
     protected DropTargetContext createDropTargetContext() {
         return new DropTargetContext(this);
     }
 
-    /** Arma el temporizador de desplazamiento; una subclase puede dar el suyo. */
+    /** Builds the scrolling timer; a subclass can give its own. */
     protected DropTargetAutoScroller createDropTargetAutoScroller(Component c, Point p) {
         return new DropTargetAutoScroller(c, p);
     }
 
     /**
-     * Arranca el desplazamiento automático si el componente lo admite.
+     * Starts the automatic scrolling if the component admits it.
      *
-     * <p>Se comprueba `instanceof` en vez de una bandera: implementar {@link Autoscroll} **es** la
-     * forma de pedirlo.
+     * <p>`instanceof` is checked instead of a flag: implementing {@link Autoscroll} **is** the way
+     * of asking for it.
      */
     protected void initializeAutoscrolling(Point p) {
         if (this.component == null || !(this.component instanceof Autoscroll)) {
@@ -324,14 +324,14 @@ public class DropTarget implements DropTargetListener, Serializable {
         this.autoScroller = this.createDropTargetAutoScroller(this.component, p);
     }
 
-    /** Le avisa al desplazamiento dónde está ahora el puntero. */
+    /** Tells the scrolling where the pointer is now. */
     protected void updateAutoscroll(Point dragCursorLocn) {
         if (this.autoScroller != null) {
             this.autoScroller.updateLocation(dragCursorLocn);
         }
     }
 
-    /** Para el desplazamiento automático. */
+    /** Stops the automatic scrolling. */
     protected void clearAutoscroll() {
         if (this.autoScroller != null) {
             this.autoScroller.stop();
@@ -340,11 +340,11 @@ public class DropTarget implements DropTargetListener, Serializable {
     }
 
     /**
-     * Quien desplaza el componente mientras el puntero está cerca de un borde.
+     * Whoever scrolls the component while the pointer is near an edge.
      *
-     * <p>La cuenta que hace es una sola: si el punto cae dentro de los márgenes que declaró el
-     * componente, se le pide un paso de desplazamiento. Vive acá y no en el componente para que cada
-     * uno no tenga que repetirla.
+     * <p>The sum it does is a single one: if the point falls inside the insets the component
+     * declared, a scrolling step is asked of it. It lives here and not in the component so that
+     * each one does not have to repeat it.
      */
     protected static class DropTargetAutoScroller {
 
@@ -352,29 +352,29 @@ public class DropTarget implements DropTargetListener, Serializable {
         private final Autoscroll autoScroll;
         private Point locn;
 
-        /** Con el componente a desplazar y el punto inicial. */
+        /** With the component to scroll and the initial point. */
         protected DropTargetAutoScroller(Component c, Point p) {
             this.component = c;
             this.autoScroll = (Autoscroll) c;
             this.locn = new Point(p);
         }
 
-        /** Le avisa dónde está el puntero y desplaza si cae en la zona sensible. */
+        /** Tells it where the pointer is and scrolls if it falls in the sensitive zone. */
         protected void updateLocation(Point newLocn) {
             this.locn = new Point(newLocn);
-            Insets margenes = this.autoScroll.getAutoscrollInsets();
+            Insets margins = this.autoScroll.getAutoscrollInsets();
             int w = this.component.getWidth();
             int h = this.component.getHeight();
-            boolean dentroDeZona = this.locn.x < margenes.left
-                    || this.locn.x > w - margenes.right
-                    || this.locn.y < margenes.top
-                    || this.locn.y > h - margenes.bottom;
-            if (dentroDeZona) {
+            boolean insideZone = this.locn.x < margins.left
+                    || this.locn.x > w - margins.right
+                    || this.locn.y < margins.top
+                    || this.locn.y > h - margins.bottom;
+            if (insideZone) {
                 this.autoScroll.autoscroll(this.locn);
             }
         }
 
-        /** Deja de desplazar. */
+        /** Stops scrolling. */
         protected void stop() {
             this.locn = null;
         }

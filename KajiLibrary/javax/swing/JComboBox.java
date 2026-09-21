@@ -18,62 +18,63 @@ import javax.swing.plaf.ComboBoxUI;
 import javax.swing.plaf.ComponentUI;
 
 /**
- * Una lista desplegable, con o sin campo para escribir.
+ * A combo box, with or without a field for typing.
  *
- * <h2>Dos avisos por cada eleccion</h2>
+ * <h2>Two notices for each choice</h2>
  *
- * <p>Elegir un elemento dispara un {@link ItemEvent} y ademas un {@link ActionEvent}. No es
- * redundante: el primero llega dos veces, una por lo que se dejo de elegir y otra por lo nuevo, y
- * sirve para saber que cambio; el segundo llega una vez y significa "el usuario eligio". Para casi
- * todo lo que se quiere es el segundo.
+ * <p>Choosing an element fires an {@link ItemEvent} and also an {@link ActionEvent}. It is not
+ * redundant: the first arrives twice, once for what stopped being chosen and another for the
+ * new one, and it serves in order to know what changed; the second arrives once and means "the
+ * user chose". For almost everything one wants it is the second.
  *
- * <h2>Editable o no</h2>
+ * <h2>Editable or not</h2>
  *
- * <p>Con {@link #setEditable} la lista lleva adelante un campo de texto y el usuario puede escribir
- * algo que no esta en la lista. Por eso {@link #getSelectedItem} devuelve {@code Object} y no el
- * tipo de los elementos; ver la nota de {@link ComboBoxModel}.
+ * <p>With {@link #setEditable} the combo box carries a text field in front and the user may
+ * type something that is not in the list. That is why {@link #getSelectedItem} returns
+ * {@code Object} and not the elements' type; see {@link ComboBoxModel}'s note.
  *
- * <h2>Por que escucha a su propio modelo</h2>
+ * <h2>Why it listens to its own model</h2>
  *
- * <p>La clase implementa {@link ListDataListener}. Es lo que hace que agregar un elemento al modelo
- * por afuera actualice la lista, y que sacar el elegido no la deje mostrando algo que ya no esta.
+ * <p>The class implements {@link ListDataListener}. It is what makes adding an element to the
+ * model from outside update the combo box, and removing the chosen one not leave it showing
+ * something that is no longer there.
  *
- * @param <E> el tipo de los elementos.
+ * @param <E> the elements' type.
  */
 public class JComboBox<E> extends JComponent implements ItemSelectable, ListDataListener,
         ActionListener, Accessible {
 
     private static final String uiClassID = "ComboBoxUI";
 
-    /** El modelo de datos. */
+    /** The data model. */
     protected ComboBoxModel<E> dataModel;
 
-    /** Quien dibuja cada renglon del desplegable. */
+    /** Who draws each line of the drop-down. */
     protected ListCellRenderer<? super E> renderer;
 
-    /** El campo de texto, cuando la lista es editable. */
+    /** The text field, when the combo box is editable. */
     protected ComboBoxEditor editor;
 
-    /** Cuantos renglones se ven antes de que el desplegable se desplace. */
+    /** How many lines are seen before the drop-down scrolls. */
     protected int maximumRowCount = 8;
 
-    /** Si se puede escribir. */
+    /** Whether typing is possible. */
     protected boolean isEditable = false;
 
-    /** Quien decide a que renglon saltar al escribir una letra. */
+    /** Who decides which line to jump to on typing a letter. */
     protected KeySelectionManager keySelectionManager = null;
 
-    /** El nombre que llevan los eventos de accion. */
+    /** The name the action events carry. */
     protected String actionCommand = "comboBoxChanged";
 
-    /** Si el desplegable se dibuja adentro de la ventana o en una propia. */
+    /** Whether the drop-down is drawn inside the window or in one of its own. */
     protected boolean lightWeightPopupEnabled = true;
 
     /**
-     * Lo que estaba elegido la ultima vez que se aviso.
+     * What was chosen the last time notice was given.
      *
-     * <p>Se guarda para poder decir <em>que</em> se dejo de elegir: el modelo solo sabe lo que esta
-     * elegido ahora.
+     * <p>It is kept in order to be able to say <em>what</em> stopped being chosen: the model only
+     * knows what is chosen now.
      */
     protected Object selectedItemReminder = null;
 
@@ -83,28 +84,28 @@ public class JComboBox<E> extends JComponent implements ItemSelectable, ListData
     private Action action;
     private AccessibleContext accessibleContext;
 
-    /** Una lista sobre ese modelo. */
+    /** A combo box over that model. */
     public JComboBox(ComboBoxModel<E> aModel) {
         super();
         setModel(aModel);
         init();
     }
 
-    /** Una lista con esos elementos. */
+    /** A combo box with those elements. */
     public JComboBox(E[] items) {
         super();
         setModel(new DefaultComboBoxModel<E>(items));
         init();
     }
 
-    /** Una lista con los elementos de ese vector. */
+    /** A combo box with that vector's elements. */
     public JComboBox(Vector<E> items) {
         super();
         setModel(new DefaultComboBoxModel<E>(items));
         init();
     }
 
-    /** Una lista vacia, sobre un modelo que se puede modificar. */
+    /** An empty combo box, over a model that can be modified. */
     public JComboBox() {
         super();
         setModel(new DefaultComboBoxModel<E>());
@@ -118,10 +119,10 @@ public class JComboBox<E> extends JComponent implements ItemSelectable, ListData
     }
 
     /**
-     * Se engancha para cerrar el desplegable si la ventana se mueve.
+     * It hooks itself up in order to close the drop-down if the window moves.
      *
-     * <p>Sin eso, mover la ventana con el desplegable abierto lo dejaria flotando en su lugar
-     * viejo.
+     * <p>Without that, moving the window with the drop-down open would leave it floating in its
+     * old place.
      */
     protected void installAncestorListener() {
     }
@@ -142,9 +143,9 @@ public class JComboBox<E> extends JComponent implements ItemSelectable, ListData
     }
 
     /**
-     * Cambia el modelo.
+     * It changes the model.
      *
-     * <p>Se desengancha del viejo y se engancha al nuevo; ver la nota de la clase.
+     * <p>It unhooks itself from the old one and hooks itself to the new one; see the class note.
      */
     public void setModel(ComboBoxModel<E> aModel) {
         ComboBoxModel<E> oldModel = dataModel;
@@ -163,7 +164,7 @@ public class JComboBox<E> extends JComponent implements ItemSelectable, ListData
         return dataModel;
     }
 
-    /** Si el desplegable se dibuja adentro de la ventana. */
+    /** Whether the drop-down is drawn inside the window. */
     public void setLightWeightPopupEnabled(boolean aFlag) {
         boolean oldFlag = lightWeightPopupEnabled;
         lightWeightPopupEnabled = aFlag;
@@ -174,7 +175,7 @@ public class JComboBox<E> extends JComponent implements ItemSelectable, ListData
         return lightWeightPopupEnabled;
     }
 
-    /** Si el usuario puede escribir un valor que no este en la lista. */
+    /** Whether the user may type a value that is not in the list. */
     public void setEditable(boolean aFlag) {
         boolean oldFlag = isEditable;
         isEditable = aFlag;
@@ -186,9 +187,9 @@ public class JComboBox<E> extends JComponent implements ItemSelectable, ListData
     }
 
     /**
-     * Cuantos renglones se ven en el desplegable.
+     * How many lines are seen in the drop-down.
      *
-     * @throws IllegalArgumentException si no es positivo.
+     * @throws IllegalArgumentException if it is not positive.
      */
     public void setMaximumRowCount(int count) {
         int oldCount = maximumRowCount;
@@ -211,7 +212,7 @@ public class JComboBox<E> extends JComponent implements ItemSelectable, ListData
         return renderer;
     }
 
-    /** El campo de texto de la lista editable. */
+    /** The editable combo box's text field. */
     public void setEditor(ComboBoxEditor anEditor) {
         ComboBoxEditor oldEditor = editor;
         if (editor != null) {
@@ -228,13 +229,13 @@ public class JComboBox<E> extends JComponent implements ItemSelectable, ListData
         return editor;
     }
 
-    /** Elige ese elemento; puede no estar en la lista si es editable. */
+    /** It chooses that element; it may not be in the list if it is editable. */
     public void setSelectedItem(Object anObject) {
         Object oldSelection = selectedItemReminder;
         Object objectToSelect = anObject;
         if (oldSelection == null || !oldSelection.equals(anObject)) {
             if (anObject != null && !isEditable()) {
-                // Sin campo de texto, solo se puede elegir algo que este en la lista.
+                // With no text field, only something that is in the list can be chosen.
                 boolean found = false;
                 for (int i = 0; i < dataModel.getSize(); i++) {
                     E element = dataModel.getElementAt(i);
@@ -263,9 +264,9 @@ public class JComboBox<E> extends JComponent implements ItemSelectable, ListData
     }
 
     /**
-     * Elige el renglon numero tal; con -1 no queda ninguno.
+     * It chooses line number such-and-such; with -1 none is left.
      *
-     * @throws IllegalArgumentException si el indice no existe.
+     * @throws IllegalArgumentException if the index does not exist.
      */
     public void setSelectedIndex(int anIndex) {
         int size = dataModel.getSize();
@@ -279,7 +280,7 @@ public class JComboBox<E> extends JComponent implements ItemSelectable, ListData
         }
     }
 
-    /** En que renglon esta lo elegido, o -1 si lo elegido no esta en la lista. */
+    /** Which line what is chosen is in, or -1 if what is chosen is not in the list. */
     public int getSelectedIndex() {
         Object sObject = dataModel.getSelectedItem();
         if (sObject != null) {
@@ -293,7 +294,7 @@ public class JComboBox<E> extends JComponent implements ItemSelectable, ListData
         return -1;
     }
 
-    /** Un valor de ejemplo del que se deduce el ancho, sin recorrer todos. */
+    /** A sample value the width is deduced from, without walking through them all. */
     public E getPrototypeDisplayValue() {
         return prototypeDisplayValue;
     }
@@ -305,9 +306,9 @@ public class JComboBox<E> extends JComponent implements ItemSelectable, ListData
     }
 
     /**
-     * Agrega un elemento al final.
+     * It adds an element at the end.
      *
-     * @throws RuntimeException si el modelo no se puede modificar.
+     * @throws RuntimeException if the model cannot be modified.
      */
     public void addItem(E item) {
         checkMutableComboBoxModel();
@@ -329,7 +330,7 @@ public class JComboBox<E> extends JComponent implements ItemSelectable, ListData
         ((MutableComboBoxModel<E>) dataModel).removeElementAt(anIndex);
     }
 
-    /** Vacia la lista. */
+    /** It empties the list. */
     public void removeAllItems() {
         checkMutableComboBoxModel();
         MutableComboBoxModel<E> model = (MutableComboBoxModel<E>) dataModel;
@@ -358,7 +359,7 @@ public class JComboBox<E> extends JComponent implements ItemSelectable, ListData
         setPopupVisible(false);
     }
 
-    /** Abre o cierra el desplegable; lo hace el aspecto. */
+    /** It opens or closes the drop-down; the look and feel does it. */
     public void setPopupVisible(boolean v) {
         getUI().setPopupVisible(this, v);
     }
@@ -403,7 +404,7 @@ public class JComboBox<E> extends JComponent implements ItemSelectable, ListData
         return listenerList.getListeners(PopupMenuListener.class);
     }
 
-    /** Avisa que el desplegable esta por abrirse; lo llama el aspecto. */
+    /** It gives notice that the drop-down is about to open; the look and feel calls it. */
     public void firePopupMenuWillBecomeVisible() {
         Object[] listeners = listenerList.getListenerList();
         javax.swing.event.PopupMenuEvent e = null;
@@ -451,7 +452,7 @@ public class JComboBox<E> extends JComponent implements ItemSelectable, ListData
         return actionCommand;
     }
 
-    /** Ata la lista a una accion, que se dispara al elegir. */
+    /** It ties the combo box to an action, which is fired on choosing. */
     public void setAction(Action a) {
         Action oldValue = getAction();
         if (action == null || !action.equals(a)) {
@@ -494,10 +495,10 @@ public class JComboBox<E> extends JComponent implements ItemSelectable, ListData
     }
 
     /**
-     * Avisa que el usuario eligio.
+     * It gives notice that the user chose.
      *
-     * <p>Se protege de volver a entrar: un oyente que cambie lo elegido dispararia otro aviso
-     * desde adentro de este, y el par de avisos quedaria cruzado.
+     * <p>It guards itself against coming back in: a listener that changed what is chosen would
+     * fire another notice from inside this one, and the pair of notices would end up crossed.
      */
     protected void fireActionEvent() {
         if (!firingActionEvent) {
@@ -520,7 +521,7 @@ public class JComboBox<E> extends JComponent implements ItemSelectable, ListData
         }
     }
 
-    /** Manda los dos avisos de elemento: lo que se dejo de elegir y lo nuevo. */
+    /** It sends the two item notices: what stopped being chosen and the new one. */
     protected void selectedItemChanged() {
         if (selectedItemReminder != null) {
             fireItemStateChanged(new ItemEvent(this, ItemEvent.ITEM_STATE_CHANGED,
@@ -533,7 +534,7 @@ public class JComboBox<E> extends JComponent implements ItemSelectable, ListData
         }
     }
 
-    /** Lo elegido, como arreglo de uno; es lo que pide {@link ItemSelectable}. */
+    /** What is chosen, as an array of one; it is what {@link ItemSelectable} asks for. */
     public Object[] getSelectedObjects() {
         Object selectedObject = getSelectedItem();
         if (selectedObject == null) {
@@ -544,7 +545,7 @@ public class JComboBox<E> extends JComponent implements ItemSelectable, ListData
         return result;
     }
 
-    /** Lo llama el campo de texto cuando el usuario aprieta Enter. */
+    /** The text field calls it when the user presses Enter. */
     public void actionPerformed(ActionEvent e) {
         ComboBoxEditor editor = getEditor();
         if (editor != null) {
@@ -556,7 +557,7 @@ public class JComboBox<E> extends JComponent implements ItemSelectable, ListData
         }
     }
 
-    /** El modelo cambio lo elegido. */
+    /** The model changed what is chosen. */
     public void contentsChanged(ListDataEvent e) {
         Object oldSelection = selectedItemReminder;
         Object newSelection = dataModel.getSelectedItem();
@@ -578,7 +579,7 @@ public class JComboBox<E> extends JComponent implements ItemSelectable, ListData
         contentsChanged(e);
     }
 
-    /** Salta al renglon que empieza con esa letra. */
+    /** It jumps to the line that starts with that letter. */
     public boolean selectWithKeyChar(char keyChar) {
         int index;
         if (keySelectionManager == null) {
@@ -597,7 +598,7 @@ public class JComboBox<E> extends JComponent implements ItemSelectable, ListData
         firePropertyChange("enabled", !isEnabled(), isEnabled());
     }
 
-    /** Prepara el campo de texto con ese valor. */
+    /** It gets the text field ready with that value. */
     public void configureEditor(ComboBoxEditor anEditor, Object anItem) {
         anEditor.setItem(anItem);
     }
@@ -643,23 +644,24 @@ public class JComboBox<E> extends JComponent implements ItemSelectable, ListData
     }
 
     /**
-     * Decide a que renglon saltar cuando el usuario escribe una letra.
+     * It decides which line to jump to when the user types a letter.
      *
-     * <p>Es una interfaz y no una regla fija porque la respuesta depende del idioma y del contenido:
-     * en una lista de apellidos conviene saltar por la primera letra, y en una de codigos tal vez
-     * no.
+     * <p>It is an interface and not a fixed rule because the answer depends on the language and on
+     * the content: in a list of surnames it is best to jump by the first letter, and in one of
+     * codes perhaps not.
      */
     public interface KeySelectionManager {
 
-        /** El renglon al que saltar, o -1 si ninguno. */
+        /** The line to jump to, or -1 if none. */
         int selectionForKey(char aKey, ComboBoxModel<?> aModel);
     }
 
     /**
-     * La regla de siempre: el proximo renglon que empiece con esa letra.
+     * The usual rule: the next line that begins with that letter.
      *
-     * <p>Arranca del que sigue al elegido y da la vuelta. Es lo que hace que apretar la misma letra
-     * varias veces recorra todos los que empiezan con ella en lugar de quedarse en el primero.
+     * <p>It starts from the one after the chosen one and wraps round. It is what makes pressing
+     * the same letter several times walk through all those that begin with it instead of staying
+     * at the first.
      */
     class DefaultKeySelectionManager implements KeySelectionManager, java.io.Serializable {
 

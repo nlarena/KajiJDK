@@ -3,15 +3,15 @@ package javax.swing.event;
 import java.util.EventListener;
 
 /**
- * Quien quiere enterarse de que ocurrio algo deshacible.
+ * Whoever wants to hear that something undoable happened.
  *
- * <p>Es el enganche entre quien <em>produce</em> las ediciones —un documento, un modelo— y quien
- * las <em>administra</em>, tipicamente un {@link javax.swing.undo.UndoManager}. Esa separacion es
- * lo que permite que un documento no sepa nada de pilas de deshacer: solo avisa, y quien lleva la
- * cuenta se suscribe.
+ * <p>It is the hook between whoever <em>produces</em> the edits --a document, a model-- and
+ * whoever <em>manages</em> them, typically a {@link javax.swing.undo.UndoManager}. That
+ * separation is what allows a document to know nothing about undo stacks: it only reports, and
+ * whoever keeps track subscribes.
  */
 public interface UndoableEditListener extends EventListener {
 
-    /** Aviso de que se hizo algo que se puede deshacer. */
+    /** Notice that something that can be undone was done. */
     void undoableEditHappened(UndoableEditEvent e);
 }

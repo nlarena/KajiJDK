@@ -13,60 +13,61 @@ import javax.swing.event.TreeSelectionEvent;
 import javax.swing.event.TreeSelectionListener;
 
 /**
- * La seleccion de un arbol.
+ * A tree's selection.
  *
- * <h2>Dos representaciones de lo mismo</h2>
+ * <h2>Two representations of the same thing</h2>
  *
- * <p>Los caminos elegidos van en {@link #selection}; las filas correspondientes, en un
- * {@link DefaultListSelectionModel}. Las dos dicen lo mismo, y sin embargo hacen falta las dos: los
- * caminos sobreviven a desplegar y plegar, y las filas son lo que la vista dibuja.
+ * <p>The chosen paths go in {@link #selection}; the corresponding rows, in a
+ * {@link DefaultListSelectionModel}. The two say the same thing, and even so both are needed:
+ * the paths survive expanding and collapsing, and the rows are what the view draws.
  *
- * <p>Mantenerlas en acuerdo es todo el trabajo de esta clase. {@link #resetRowSelection} es donde
- * se rehacen las filas a partir de los caminos, y la llama la vista cada vez que cambia lo
- * desplegado.
+ * <p>Keeping them in agreement is this class's whole job. {@link #resetRowSelection} is where
+ * the rows are rebuilt from the paths, and the view calls it every time what is expanded
+ * changes.
  *
- * <h2>El guia</h2>
+ * <h2>The lead</h2>
  *
- * <p>{@link #getLeadSelectionPath} es el ultimo camino que se toco, y es desde donde se extiende con
- * Shift. No es el ultimo del arreglo: sacar un camino del medio no cambia el guia.
+ * <p>{@link #getLeadSelectionPath} is the last path that was touched, and it is where Shift
+ * extends from. It is not the last one in the array: removing a path from the middle does not
+ * change the lead.
  */
 public class DefaultTreeSelectionModel implements Cloneable, Serializable, TreeSelectionModel {
 
-    /** El nombre de la propiedad del modo de seleccion. */
+    /** The selection mode property's name. */
     public static final String SELECTION_MODE_PROPERTY = "selectionMode";
 
-    /** Quienes escuchan los cambios de propiedad. */
+    /** Those who listen to property changes. */
     protected SwingPropertyChangeSupport changeSupport;
 
-    /** Los caminos elegidos. */
+    /** The chosen paths. */
     protected TreePath[] selection;
 
-    /** Quienes escuchan los cambios de seleccion. */
+    /** Those who listen to selection changes. */
     protected EventListenerList listenerList = new EventListenerList();
 
-    /** Quien traduce caminos a filas. */
+    /** Who translates paths to rows. */
     protected transient RowMapper rowMapper;
 
-    /** Las filas elegidas; ver la nota de la clase. */
+    /** The chosen rows; see the class note. */
     protected DefaultListSelectionModel listSelectionModel;
 
-    /** Uno, contiguos o cualquiera. */
+    /** One, contiguous or any. */
     protected int selectionMode;
 
-    /** El ultimo camino que se toco. */
+    /** The last path that was touched. */
     protected TreePath leadPath;
 
-    /** Su posicion en {@link #selection}, o -1. */
+    /** Its position in {@link #selection}, or -1. */
     protected int leadIndex;
 
-    /** Su fila, o -1 si no se ve. */
+    /** Its row, or -1 if it is not seen. */
     protected int leadRow;
 
     private Hashtable<TreePath, Boolean> uniquePaths;
     private Hashtable<TreePath, Boolean> lastPaths;
     private TreePath[] tempPaths;
 
-    /** Un modelo sin nada elegido, que acepta cualquier conjunto. */
+    /** A model with nothing chosen, which accepts any set. */
     public DefaultTreeSelectionModel() {
         listSelectionModel = new DefaultListSelectionModel();
         selectionMode = DISCONTIGUOUS_TREE_SELECTION;
@@ -77,7 +78,7 @@ public class DefaultTreeSelectionModel implements Cloneable, Serializable, TreeS
         tempPaths = new TreePath[1];
     }
 
-    /** Cambiar quien traduce filas obliga a rehacerlas. */
+    /** Changing who translates rows forces rebuilding them. */
     public void setRowMapper(RowMapper newMapper) {
         rowMapper = newMapper;
         resetRowSelection();
@@ -88,10 +89,10 @@ public class DefaultTreeSelectionModel implements Cloneable, Serializable, TreeS
     }
 
     /**
-     * Cuantos nodos se pueden elegir a la vez.
+     * How many nodes can be chosen at a time.
      *
-     * <p>Un valor que no sea uno de los tres se toma como el mas permisivo, no como un error. Es lo
-     * que hace el JDK.
+     * <p>A value that is not one of the three is taken as the most permissive one, not as an error.
+     * It is what the JDK does.
      */
     public void setSelectionMode(int mode) {
         int oldMode = selectionMode;
@@ -122,11 +123,11 @@ public class DefaultTreeSelectionModel implements Cloneable, Serializable, TreeS
     }
 
     /**
-     * Deja elegidos solo esos caminos.
+     * It leaves only those paths chosen.
      *
-     * <p>Los repetidos se descartan y, si el modo lo pide, se recorta a uno o al primer tramo
-     * contiguo. Recortar en silencio es lo que hace el JDK: el modo es una promesa sobre lo que el
-     * modelo va a contener, no una validacion de lo que se le pide.
+     * <p>The repeated ones are discarded and, if the mode asks for it, it is cut down to one or to
+     * the first contiguous stretch. Cutting down silently is what the JDK does: the mode is a
+     * promise about what the model is going to contain, not a validation of what it is asked for.
      */
     public void setSelectionPaths(TreePath[] pPaths) {
         int newCount = (pPaths == null) ? 0 : pPaths.length;
@@ -139,40 +140,40 @@ public class DefaultTreeSelectionModel implements Cloneable, Serializable, TreeS
             newCount = 1;
         }
 
-        Vector<PathPlaceHolder> cambios = new Vector<PathPlaceHolder>();
-        Hashtable<TreePath, Boolean> nuevos = new Hashtable<TreePath, Boolean>();
-        Vector<TreePath> limpios = new Vector<TreePath>();
+        Vector<PathPlaceHolder> changes = new Vector<PathPlaceHolder>();
+        Hashtable<TreePath, Boolean> added = new Hashtable<TreePath, Boolean>();
+        Vector<TreePath> cleaned = new Vector<TreePath>();
         for (int i = 0; i < newCount; i++) {
             TreePath p = paths[i];
-            if (p != null && !nuevos.containsKey(p)) {
-                nuevos.put(p, Boolean.TRUE);
-                limpios.addElement(p);
+            if (p != null && !added.containsKey(p)) {
+                added.put(p, Boolean.TRUE);
+                cleaned.addElement(p);
             }
         }
-        TreePath[] finales = new TreePath[limpios.size()];
-        limpios.copyInto(finales);
+        TreePath[] finalPaths = new TreePath[cleaned.size()];
+        cleaned.copyInto(finalPaths);
 
         if (selectionMode == TreeSelectionModel.CONTIGUOUS_TREE_SELECTION
-                && !arePathsContiguous(finales) && finales.length > 0) {
-            finales = new TreePath[] {finales[0]};
+                && !arePathsContiguous(finalPaths) && finalPaths.length > 0) {
+            finalPaths = new TreePath[] {finalPaths[0]};
         }
 
-        // Lo que llega primero y lo que se va despues. El orden se ve: el evento lleva los
-        // caminos en un arreglo, y quien lo recorra los recibe asi.
-        for (int i = 0; i < finales.length; i++) {
-            if (!estaba(finales[i])) {
-                cambios.addElement(new PathPlaceHolder(finales[i], true));
+        // What arrives first and what leaves afterwards. The order shows: the event carries the
+                // paths in an array, and whoever walks it receives them that way.
+        for (int i = 0; i < finalPaths.length; i++) {
+            if (!wasThere(finalPaths[i])) {
+                changes.addElement(new PathPlaceHolder(finalPaths[i], true));
             }
         }
         if (selection != null) {
             for (int i = 0; i < selection.length; i++) {
-                if (!nuevos.containsKey(selection[i])) {
-                    cambios.addElement(new PathPlaceHolder(selection[i], false));
+                if (!added.containsKey(selection[i])) {
+                    changes.addElement(new PathPlaceHolder(selection[i], false));
                 }
             }
         }
 
-        selection = (finales.length == 0) ? null : finales;
+        selection = (finalPaths.length == 0) ? null : finalPaths;
         uniquePaths.clear();
         if (selection != null) {
             for (int i = 0; i < selection.length; i++) {
@@ -183,12 +184,12 @@ public class DefaultTreeSelectionModel implements Cloneable, Serializable, TreeS
                 ? null : selection[selection.length - 1];
         updateLeadIndex();
         resetRowSelection();
-        if (cambios.size() > 0) {
-            notifyPathChange(cambios, leadPath);
+        if (changes.size() > 0) {
+            notifyPathChange(changes, leadPath);
         }
     }
 
-    private boolean estaba(TreePath p) {
+    private boolean wasThere(TreePath p) {
         if (selection == null) {
             return false;
         }
@@ -208,7 +209,7 @@ public class DefaultTreeSelectionModel implements Cloneable, Serializable, TreeS
         }
     }
 
-    /** Agrega esos caminos a lo elegido. */
+    /** Adds those paths to what is chosen. */
     public void addSelectionPaths(TreePath[] paths) {
         if (paths == null || paths.length == 0) {
             return;
@@ -217,19 +218,19 @@ public class DefaultTreeSelectionModel implements Cloneable, Serializable, TreeS
             setSelectionPaths(paths);
             return;
         }
-        Vector<TreePath> juntos = new Vector<TreePath>();
+        Vector<TreePath> together = new Vector<TreePath>();
         if (selection != null) {
             for (int i = 0; i < selection.length; i++) {
-                juntos.addElement(selection[i]);
+                together.addElement(selection[i]);
             }
         }
         for (int i = 0; i < paths.length; i++) {
             if (paths[i] != null && !isPathSelected(paths[i])) {
-                juntos.addElement(paths[i]);
+                together.addElement(paths[i]);
             }
         }
-        TreePath[] arr = new TreePath[juntos.size()];
-        juntos.copyInto(arr);
+        TreePath[] arr = new TreePath[together.size()];
+        together.copyInto(arr);
         setSelectionPaths(arr);
     }
 
@@ -241,29 +242,29 @@ public class DefaultTreeSelectionModel implements Cloneable, Serializable, TreeS
         }
     }
 
-    /** Saca esos caminos de lo elegido. */
+    /** Removes those paths from what is chosen. */
     public void removeSelectionPaths(TreePath[] paths) {
         if (paths == null || selection == null || paths.length == 0) {
             return;
         }
-        Hashtable<TreePath, Boolean> sacar = new Hashtable<TreePath, Boolean>();
+        Hashtable<TreePath, Boolean> remove = new Hashtable<TreePath, Boolean>();
         for (int i = 0; i < paths.length; i++) {
             if (paths[i] != null) {
-                sacar.put(paths[i], Boolean.TRUE);
+                remove.put(paths[i], Boolean.TRUE);
             }
         }
-        Vector<TreePath> quedan = new Vector<TreePath>();
+        Vector<TreePath> remaining = new Vector<TreePath>();
         for (int i = 0; i < selection.length; i++) {
-            if (!sacar.containsKey(selection[i])) {
-                quedan.addElement(selection[i]);
+            if (!remove.containsKey(selection[i])) {
+                remaining.addElement(selection[i]);
             }
         }
-        TreePath[] arr = new TreePath[quedan.size()];
-        quedan.copyInto(arr);
+        TreePath[] arr = new TreePath[remaining.size()];
+        remaining.copyInto(arr);
         setSelectionPaths(arr);
     }
 
-    /** El primero de los elegidos, o nulo. */
+    /** The first of the chosen ones, or null. */
     public TreePath getSelectionPath() {
         if (selection != null && selection.length > 0) {
             return selection[0];
@@ -271,7 +272,7 @@ public class DefaultTreeSelectionModel implements Cloneable, Serializable, TreeS
         return null;
     }
 
-    /** Los elegidos; es una copia. */
+    /** The chosen ones; it is a copy. */
     public TreePath[] getSelectionPaths() {
         if (selection != null) {
             TreePath[] out = new TreePath[selection.length];
@@ -297,9 +298,9 @@ public class DefaultTreeSelectionModel implements Cloneable, Serializable, TreeS
         if (selection != null && selection.length > 0) {
             int selSize = selection.length;
             boolean[] newness = new boolean[selSize];
-            Vector<PathPlaceHolder> cambios = new Vector<PathPlaceHolder>();
+            Vector<PathPlaceHolder> changes = new Vector<PathPlaceHolder>();
             for (int counter = 0; counter < selSize; counter++) {
-                cambios.addElement(new PathPlaceHolder(selection[counter], false));
+                changes.addElement(new PathPlaceHolder(selection[counter], false));
             }
             selection = null;
             uniquePaths.clear();
@@ -307,7 +308,7 @@ public class DefaultTreeSelectionModel implements Cloneable, Serializable, TreeS
             leadPath = null;
             leadIndex = -1;
             leadRow = -1;
-            notifyPathChange(cambios, null);
+            notifyPathChange(changes, null);
         }
     }
 
@@ -336,30 +337,30 @@ public class DefaultTreeSelectionModel implements Cloneable, Serializable, TreeS
         return listenerList.getListeners(listenerType);
     }
 
-    /** Las filas de lo elegido, ordenadas; vacio si no hay quien traduzca. */
+    /** The rows of what is chosen, in order; empty if there is nobody to translate. */
     public int[] getSelectionRows() {
         if (rowMapper != null && selection != null && selection.length > 0) {
-            int[] filas = rowMapper.getRowsForPaths(selection);
-            if (filas != null) {
+            int[] rows = rowMapper.getRowsForPaths(selection);
+            if (rows != null) {
                 int n = 0;
-                for (int i = 0; i < filas.length; i++) {
-                    if (filas[i] != -1) {
+                for (int i = 0; i < rows.length; i++) {
+                    if (rows[i] != -1) {
                         n++;
                     }
                 }
-                if (n != filas.length) {
-                    // Los caminos que no se ven dan -1 y no son filas.
+                if (n != rows.length) {
+                    // The paths that are not seen give -1 and are not rows.
                     int[] out = new int[n];
                     int k = 0;
-                    for (int i = 0; i < filas.length; i++) {
-                        if (filas[i] != -1) {
-                            out[k] = filas[i];
+                    for (int i = 0; i < rows.length; i++) {
+                        if (rows[i] != -1) {
+                            out[k] = rows[i];
                             k++;
                         }
                     }
                     return out;
                 }
-                return filas;
+                return rows;
             }
         }
         return new int[0];
@@ -378,18 +379,18 @@ public class DefaultTreeSelectionModel implements Cloneable, Serializable, TreeS
     }
 
     /**
-     * Rehace las filas a partir de los caminos.
+     * It rebuilds the rows from the paths.
      *
-     * <p>La llama la vista cuando cambia lo desplegado; ver la nota de la clase.
+     * <p>The view calls it when what is expanded changes; see the class note.
      */
     public void resetRowSelection() {
         listSelectionModel.clearSelection();
         if (selection != null && rowMapper != null) {
-            int[] filas = rowMapper.getRowsForPaths(selection);
-            if (filas != null) {
-                for (int i = 0; i < filas.length; i++) {
-                    if (filas[i] != -1) {
-                        listSelectionModel.addSelectionInterval(filas[i], filas[i]);
+            int[] rows = rowMapper.getRowsForPaths(selection);
+            if (rows != null) {
+                for (int i = 0; i < rows.length; i++) {
+                    if (rows[i] != -1) {
+                        listSelectionModel.addSelectionInterval(rows[i], rows[i]);
                     }
                 }
             }
@@ -434,10 +435,11 @@ public class DefaultTreeSelectionModel implements Cloneable, Serializable, TreeS
     }
 
     /**
-     * Recorta la seleccion si el modo pide filas seguidas y dejaron de serlo.
+     * It cuts the selection down if the mode asks for consecutive rows and they stopped being so.
      *
-     * <p>Puede pasar sin que nadie toque la seleccion: plegar un nodo del medio cambia las filas.
-     * Por eso se llama desde {@link #resetRowSelection} y no solo al elegir.
+     * <p>It can happen without anybody touching the selection: collapsing a node in the middle
+     * changes the rows. That is why it is called from {@link #resetRowSelection} and not only when
+     * choosing.
      */
     protected void insureRowContinuity() {
         if (selectionMode == TreeSelectionModel.CONTIGUOUS_TREE_SELECTION
@@ -448,15 +450,15 @@ public class DefaultTreeSelectionModel implements Cloneable, Serializable, TreeS
                 int max = lModel.getMaxSelectionIndex();
                 for (int counter = min; counter <= max; counter++) {
                     if (!lModel.isSelectedIndex(counter)) {
-                        // El primer hueco corta: se queda lo de antes.
+                        // The first gap cuts: what came before stays.
                         if (counter == min) {
                             clearSelection();
                         } else {
                             TreePath[] newSel = new TreePath[counter - min];
-                            int[] filas = rowMapper.getRowsForPaths(selection);
+                            int[] rows = rowMapper.getRowsForPaths(selection);
                             int k = 0;
-                            for (int i = 0; i < filas.length && k < newSel.length; i++) {
-                                if (filas[i] < counter && filas[i] >= min) {
+                            for (int i = 0; i < rows.length && k < newSel.length; i++) {
+                                if (rows[i] < counter && rows[i] >= min) {
                                     newSel[k] = selection[i];
                                     k++;
                                 }
@@ -473,30 +475,30 @@ public class DefaultTreeSelectionModel implements Cloneable, Serializable, TreeS
         }
     }
 
-    /** Si esos caminos caen en filas seguidas. */
+    /** Whether those paths fall on consecutive rows. */
     protected boolean arePathsContiguous(TreePath[] paths) {
         if (rowMapper == null || paths.length < 2) {
             return true;
         }
-        int[] filas = rowMapper.getRowsForPaths(paths);
-        if (filas == null) {
+        int[] rows = rowMapper.getRowsForPaths(paths);
+        if (rows == null) {
             return true;
         }
         int min = Integer.MAX_VALUE;
         int max = -1;
-        int vistas = 0;
-        for (int i = 0; i < filas.length; i++) {
-            if (filas[i] == -1) {
+        int seen = 0;
+        for (int i = 0; i < rows.length; i++) {
+            if (rows[i] == -1) {
                 return false;
             }
-            min = Math.min(min, filas[i]);
-            max = Math.max(max, filas[i]);
-            vistas++;
+            min = Math.min(min, rows[i]);
+            max = Math.max(max, rows[i]);
+            seen++;
         }
-        return (max - min + 1) == vistas;
+        return (max - min + 1) == seen;
     }
 
-    /** Si agregar esos caminos deja la seleccion como el modo permite. */
+    /** Whether adding those paths leaves the selection as the mode allows. */
     protected boolean canPathsBeAdded(TreePath[] paths) {
         if (paths == null || paths.length == 0 || rowMapper == null || selection == null
                 || selectionMode == TreeSelectionModel.DISCONTIGUOUS_TREE_SELECTION) {
@@ -516,34 +518,34 @@ public class DefaultTreeSelectionModel implements Cloneable, Serializable, TreeS
         return arePathsContiguous(arr);
     }
 
-    /** Si sacar esos caminos deja la seleccion como el modo permite. */
+    /** Whether removing those paths leaves the selection as the mode allows. */
     protected boolean canPathsBeRemoved(TreePath[] paths) {
         if (rowMapper == null || selection == null
                 || selectionMode == TreeSelectionModel.DISCONTIGUOUS_TREE_SELECTION) {
             return true;
         }
-        Hashtable<TreePath, Boolean> sacar = new Hashtable<TreePath, Boolean>();
+        Hashtable<TreePath, Boolean> remove = new Hashtable<TreePath, Boolean>();
         for (int i = 0; i < paths.length; i++) {
             if (paths[i] != null) {
-                sacar.put(paths[i], Boolean.TRUE);
+                remove.put(paths[i], Boolean.TRUE);
             }
         }
-        Vector<TreePath> quedan = new Vector<TreePath>();
+        Vector<TreePath> remaining = new Vector<TreePath>();
         for (int i = 0; i < selection.length; i++) {
-            if (!sacar.containsKey(selection[i])) {
-                quedan.addElement(selection[i]);
+            if (!remove.containsKey(selection[i])) {
+                remaining.addElement(selection[i]);
             }
         }
-        TreePath[] arr = new TreePath[quedan.size()];
-        quedan.copyInto(arr);
+        TreePath[] arr = new TreePath[remaining.size()];
+        remaining.copyInto(arr);
         return arePathsContiguous(arr);
     }
 
     /**
-     * Manda un solo aviso con todo lo que entro y lo que salio.
+     * It sends a single notice with everything that came in and everything that went out.
      *
-     * <p>Un aviso por camino haria que reemplazar una seleccion de cien nodos costara doscientos
-     * avisos, y quien escucha veria estados intermedios que nunca existieron.
+     * <p>One notice per path would make replacing a selection of a hundred nodes cost two hundred
+     * notices, and whoever listens would see intermediate states that never existed.
      */
     protected void notifyPathChange(Vector<?> changedPaths, TreePath oldLeadSelection) {
         int cPathCount = changedPaths.size();
@@ -559,7 +561,7 @@ public class DefaultTreeSelectionModel implements Cloneable, Serializable, TreeS
         fireValueChanged(event);
     }
 
-    /** Recalcula en que posicion del arreglo esta el guia. */
+    /** It recomputes at what position in the array the lead is. */
     protected void updateLeadIndex() {
         leadIndex = -1;
         if (leadPath != null && selection != null) {
@@ -573,9 +575,10 @@ public class DefaultTreeSelectionModel implements Cloneable, Serializable, TreeS
     }
 
     /**
-     * Saca los caminos repetidos.
+     * Removes the repeated paths.
      *
-     * @deprecated Los repetidos ya se descartan al elegir; no queda nada que hacer aca.
+     * @deprecated The repeated ones are already discarded when choosing; there is nothing left to
+     *     do here.
      */
     @Deprecated
     protected void insureUniqueness() {
@@ -603,7 +606,7 @@ public class DefaultTreeSelectionModel implements Cloneable, Serializable, TreeS
         return retBuffer.toString();
     }
 
-    /** Una copia con la misma seleccion y sin los que escuchan. */
+    /** A copy with the same selection and without those who listen. */
     public Object clone() throws CloneNotSupportedException {
         DefaultTreeSelectionModel clone = (DefaultTreeSelectionModel) super.clone();
         clone.changeSupport = null;
@@ -620,7 +623,7 @@ public class DefaultTreeSelectionModel implements Cloneable, Serializable, TreeS
         return clone;
     }
 
-    /** Un camino y si entro o salio; se usa para armar el aviso. */
+    /** A path and whether it came in or went out; it is used to build the notice. */
     static final class PathPlaceHolder {
 
         final TreePath path;

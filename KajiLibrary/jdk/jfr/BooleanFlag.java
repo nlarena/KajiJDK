@@ -6,10 +6,10 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * El campo es una <strong>bandera</strong>: se muestra como si o no.
+ * The field is a <strong>flag</strong>: it is shown as yes or no.
  *
- * <p>Sirve para un entero que en realidad solo vale cero o distinto de cero, que es como llegan
- * muchas banderas desde la VM.
+ * <p>It serves for an integer that in reality is only worth zero or different from zero, which is
+ * how many flags arrive from the VM.
  *
  * @since 9
  */

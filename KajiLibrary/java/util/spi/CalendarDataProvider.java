@@ -3,20 +3,20 @@ package java.util.spi;
 import java.util.Locale;
 
 /**
- * KajiLibrary's java.util.spi.CalendarDataProvider -- los dos numeros que definen una semana.
+ * KajiLibrary's java.util.spi.CalendarDataProvider -- the two numbers that define a week.
  *
- * <p>Son pocos pero son los que rompen fechas cuando estan mal:
+ * <p>They are few but they are the ones that break dates when they are wrong:
  *
  * <ul>
- *   <li><b>El primer dia de la semana</b>: domingo en Estados Unidos, lunes en casi toda Europa y
- *       Latinoamerica, sabado en varios paises arabes.
- *   <li><b>Los dias minimos de la primera semana</b>: cuantos dias del ano nuevo tiene que tener una
- *       semana para contar como la primera. Con 1 la primera semana puede tener un solo dia; con 4
- *       --la regla ISO-- la del 1 de enero puede pertenecer al año anterior.
+ *   <li><b>The first day of the week</b>: Sunday in the United States, Monday in almost all of
+ *       Europe and Latin America, Saturday in several Arab countries.
+ *   <li><b>The minimal days in the first week</b>: how many days of the new year a week has to have
+ *       to count as the first. With 1 the first week can have a single day; with 4 --the ISO rule--
+ *       the one containing the 1st of January can belong to the previous year.
  * </ul>
  *
- * <p>El segundo es el que sorprende: es la razon por la que el 1 de enero puede caer en la "semana
- * 52 del año pasado".
+ * <p>The second is the one that surprises: it is the reason the 1st of January can fall in "week 52
+ * of last year".
  */
 public abstract class CalendarDataProvider extends LocaleServiceProvider {
 
@@ -24,17 +24,17 @@ public abstract class CalendarDataProvider extends LocaleServiceProvider {
     }
 
     /**
-     * Que dia empieza la semana, con los valores de {@code Calendar}: 1 domingo, 2 lunes, ... 7
-     * sabado.
+     * Which day the week starts on, with {@code Calendar}'s values: 1 Sunday, 2 Monday, ... 7
+     * Saturday.
      *
-     * @return 0 si este proveedor no tiene el dato para ese local
+     * @return 0 if this provider has no datum for that locale
      */
     public abstract int getFirstDayOfWeek(Locale locale);
 
     /**
-     * Cuantos dias del año nuevo necesita una semana para ser la primera.
+     * How many days of the new year a week needs in order to be the first.
      *
-     * @return 0 si este proveedor no tiene el dato para ese local
+     * @return 0 if this provider has no datum for that locale
      */
     public abstract int getMinimalDaysInFirstWeek(Locale locale);
 }

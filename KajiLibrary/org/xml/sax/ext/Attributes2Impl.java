@@ -3,49 +3,49 @@ package org.xml.sax.ext;
 import org.xml.sax.Attributes;
 
 /**
- * KajiLibrary's org.xml.sax.ext.Attributes2Impl -- `AttributesImpl` con los dos arreglos de
- * banderas que hacen falta para contestar {@link Attributes2}.
+ * KajiLibrary's org.xml.sax.ext.Attributes2Impl -- `AttributesImpl` with the two arrays of flags
+ * needed to answer {@link Attributes2}.
  *
- * <p>La herencia hace casi todo: los cinco campos por atributo, las busquedas por nombre y el
- * crecimiento del arreglo estan en `AttributesImpl`. Aca se agregan dos `boolean[]` paralelos, uno
- * por cada pregunta nueva, y la unica obligacion real es **mantenerlos alineados con la lista de
- * abajo**: cada `addAttribute` y cada `removeAttribute` tiene que mover las banderas igual que la
- * superclase mueve los datos, o el atributo `i` termina contestando por las banderas del `j`.
+ * <p>Inheritance does almost everything: the five fields per attribute, the lookups by name and the
+ * growth of the array are in `AttributesImpl`. Here two parallel `boolean[]` are added, one for
+ * each new question, and the only real obligation is **keeping them aligned with the list
+ * underneath**: every `addAttribute` and every `removeAttribute` has to move the flags just as the
+ * superclass moves the data, or attribute `i` ends up answering with the flags of `j`.
  *
- * <p><strong>Hay una trampa de inicializacion en el constructor de copia y esta puesta a
- * proposito.</strong> `super(atts)` llama a `setAttributes`, que es virtual y por lo tanto ejecuta
- * la version de **esta** clase mientras la superclase todavia se esta construyendo: los dos
- * arreglos quedan armados desde ahi. Eso funciona solo porque ningun campo de aca tiene
- * inicializador --si lo tuviera, correria despues del `super(...)` y pisaria con `null` lo que
- * `setAttributes` acababa de dejar--. Es la razon por la que `declared` y `specified` se declaran
- * pelados y se llenan en el constructor sin argumentos.
+ * <p><strong>There is an initialisation trap in the copy constructor and it is set on
+ * purpose.</strong> `super(atts)` calls `setAttributes`, which is virtual and therefore runs the
+ * version of **this** class while the superclass is still being built: the two arrays are set up
+ * from there. That works only because no field here has an initialiser --if it had one, it would
+ * run after the `super(...)` and overwrite with `null` what `setAttributes` had just left--. It is
+ * the reason why `declared` and `specified` are declared bare and filled in the constructor with no
+ * arguments.
  *
- * <p>Los valores por omision de `addAttribute` no son relleno: `specified` queda en `true` --lo
- * estan agregando, luego fue especificado-- y `declared` sale del tipo, en `true` para todo lo que
- * no sea `CDATA`. Eso ultimo vale porque sin DTD todos los atributos son `CDATA`, asi que un tipo
- * distinto de `CDATA` solo puede haber salido de una declaracion. Es una deduccion correcta, no una
- * adivinanza; el que quiera otra cosa tiene {@link #setDeclared} y {@link #setSpecified}.
+ * <p>The default values of `addAttribute` are not filler: `specified` is left at `true` --it is
+ * being added, so it was specified-- and `declared` comes from the type, `true` for everything that
+ * is not `CDATA`. The latter holds because with no DTD all attributes are `CDATA`, so a type other
+ * than `CDATA` can only have come from a declaration. It is a correct deduction, not a guess;
+ * whoever wants something else has {@link #setDeclared} and {@link #setSpecified}.
  *
- * <p>Y por eso mismo `setAttributes` mira si la fuente es un `Attributes2`: si lo es, copia las
- * banderas de verdad; si no, aplica esa misma deduccion, que es lo unico que se puede saber de una
- * lista que no las tiene.
+ * <p>And for that same reason `setAttributes` looks at whether the source is an `Attributes2`: if
+ * it is, it copies the real flags; if not, it applies that same deduction, which is the only thing
+ * that can be known of a list that does not have them.
  */
 public class Attributes2Impl extends org.xml.sax.helpers.AttributesImpl
         implements Attributes2 {
 
-    // Sin inicializador, por lo que explica el comentario de la clase.
+    // No initialiser, for what the comment of the class explains.
     private boolean declared[];
     private boolean specified[];
 
-    /** Una lista vacia, lista para `addAttribute`. */
+    /** An empty list, ready for `addAttribute`. */
     public Attributes2Impl() {
         declared = new boolean[0];
         specified = new boolean[0];
     }
 
     /**
-     * Una copia independiente, banderas incluidas. El `Attributes` que el parser presta en
-     * `startElement` deja de valer cuando la llamada termina; esta copia no.
+     * An independent copy, flags included. The `Attributes` the parser lends in `startElement`
+     * stops being valid when the call ends; this copy does not.
      */
     public Attributes2Impl(Attributes atts) {
         super(atts);
@@ -100,9 +100,9 @@ public class Attributes2Impl extends org.xml.sax.helpers.AttributesImpl
     }
 
     /**
-     * Reemplaza el contenido por una copia del de `atts`. Los arreglos se rehacen del tamano justo
-     * en vez de reusarse: la lista anterior podia ser mas larga y dejar banderas viejas colgando
-     * detras de la nueva.
+     * It replaces the contents with a copy of those of `atts`. The arrays are remade at the exact
+     * size instead of being reused: the previous list could be longer and leave old flags hanging
+     * behind the new one.
      */
     public void setAttributes(Attributes atts) {
         int length = atts.getLength();
@@ -125,7 +125,7 @@ public class Attributes2Impl extends org.xml.sax.helpers.AttributesImpl
         }
     }
 
-    /** Agrega al final con las banderas deducidas que explica el comentario de la clase. */
+    /** It appends with the deduced flags the comment of the class explains. */
     public void addAttribute(String uri, String localName, String qName,
                              String type, String value) {
         super.addAttribute(uri, localName, qName, type, value);
@@ -148,8 +148,8 @@ public class Attributes2Impl extends org.xml.sax.helpers.AttributesImpl
     }
 
     /**
-     * Saca el atributo `index`. Los arreglos de banderas se corren igual que los datos de la
-     * superclase; si no, los que quedan detras contestarian por el que se fue.
+     * It removes attribute `index`. The arrays of flags shift just like the data of the superclass;
+     * otherwise, the ones left behind would answer for the one that went away.
      */
     public void removeAttribute(int index) {
         int origMax = getLength() - 1;

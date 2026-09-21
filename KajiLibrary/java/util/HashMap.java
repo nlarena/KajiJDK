@@ -14,20 +14,20 @@ import java.util.Map;
 public class HashMap<K, V> extends AbstractMap<K, V> implements Map<K, V>, Serializable, Cloneable {
 
     /**
-     * La clave null vive aparte de la tabla.
+     * The null key lives apart from the table.
      *
-     * <p>La tabla es de direccionamiento abierto y usa <b>null como marca de slot vacio</b>, asi que
-     * una clave null no se puede guardar ahi: ocuparia el slot y a la vez diria que esta libre. Y
-     * `null.hashCode()` tampoco existe, con lo cual ni siquiera hay bucket que calcular.
+     * <p>The table is open-addressed and uses <b>null as the empty-slot mark</b>, so a null key
+     * cannot be stored there: it would take the slot and at the same time say it was free. And
+     * `null.hashCode()` does not exist either, so there is not even a bucket to compute.
      *
-     * <p>Aceptarla igual no es un capricho: que `HashMap` permita una clave null es lo que lo
-     * distingue de `Hashtable`, esta en su contrato, y hay codigo que lo usa a proposito --un mapa de
-     * configuracion donde null es "el valor por omision"--. Por eso va en dos campos al costado, que
-     * es la solucion habitual para una tabla abierta.
+     * <p>Accepting it all the same is no whim: that `HashMap` allows a null key is what tells it from
+     * `Hashtable`, it is in its contract, and there is code that uses it on purpose --a configuration
+     * map where null is "the default value". That is why it goes in two fields off to the side, which
+     * is the usual solution for an open table.
      */
     private boolean hasNullKey = false;
 
-    /** El valor de la clave null; solo significa algo con {@link #hasNullKey} en true. */
+    /** The null key's value; it only means anything with {@link #hasNullKey} true. */
     private V nullValue = null;
 
     private Object[] keys;
@@ -41,37 +41,37 @@ public class HashMap<K, V> extends AbstractMap<K, V> implements Map<K, V>, Seria
     }
 
     /**
-     * Un mapa vacio con lugar para `initialCapacity` cubetas.
+     * An empty map with room for `initialCapacity` buckets.
      *
-     * <p>Sirve para lo de siempre: si se sabe cuantos pares van a entrar, dimensionar de entrada
-     * evita las rehashes del crecimiento. Ojo con el nombre --y es el mismo malentendido que en el
-     * JDK--: `initialCapacity` es la cantidad de **cubetas**, no de pares. Con el factor de carga de
-     * esta implementacion (~50 %) entran aproximadamente la mitad antes de la primera rehash. El que
-     * quiere pensar en pares tiene `newHashMap`.
+     * <p>It serves the usual purpose: if how many pairs will go in is known, sizing up front avoids
+     * the rehashes of growth. Mind the name --and it is the same misunderstanding as in the JDK--:
+     * `initialCapacity` is the number of **buckets**, not of pairs. With this implementation's load
+     * factor (~50 %) about half of them fit before the first rehash. Whoever wants to think in pairs
+     * has `newHashMap`.
      *
-     * @throws IllegalArgumentException si la capacidad es negativa
+     * @throws IllegalArgumentException if the capacity is negative
      */
     public HashMap(int initialCapacity) {
         this(initialCapacity, 0.75f);
     }
 
     /**
-     * Idem, con factor de carga.
+     * The same, with a load factor.
      *
-     * <p>El `loadFactor` se **valida y se ignora**, y conviene decirlo de frente: esta tabla usa
-     * direccionamiento abierto con sondeo lineal y duplica pasado ~50 %, un umbral que es parte de
-     * como esta escrita y no un parametro. Aceptar el valor y no usarlo seria mentir; rechazarlo
-     * seria romper codigo que compila contra el JDK y solo pasa el 0.75 de siempre. Se valida
-     * --un factor no positivo o NaN es un error, igual que en el JDK-- y despues se descarta, que es
-     * la unica de las tres opciones que no le miente a nadie.
+     * <p>The `loadFactor` is **validated and ignored**, and it is worth saying so plainly: this table
+     * uses open addressing with linear probing and doubles past ~50 %, a threshold that is part of how
+     * it is written and not a parameter. Accepting the value and not using it would be lying;
+     * rejecting it would break code that compiles against the JDK and only passes the usual 0.75. It
+     * is validated --a non-positive factor or NaN is an error, just as in the JDK-- and then
+     * discarded, which is the only one of the three options that lies to nobody.
      *
-     * @throws IllegalArgumentException si la capacidad es negativa o el factor no es positivo
+     * @throws IllegalArgumentException if the capacity is negative or the factor is not positive
      */
     public HashMap(int initialCapacity, float loadFactor) {
         if (initialCapacity < 0) {
             throw new IllegalArgumentException("Illegal initial capacity: " + initialCapacity);
         }
-        if (!(loadFactor > 0)) {   // negado, para que NaN caiga aca
+        if (!(loadFactor > 0)) {   // negated, so NaN falls in here
             throw new IllegalArgumentException("Illegal load factor: " + loadFactor);
         }
         int cap = 16;
@@ -84,12 +84,12 @@ public class HashMap<K, V> extends AbstractMap<K, V> implements Map<K, V>, Seria
     }
 
     /**
-     * Un mapa dimensionado para `numMappings` **pares**, sin rehashes.
+     * A map sized for `numMappings` **pairs**, with no rehashes.
      *
-     * <p>Es el que la gente queria cuando escribia `new HashMap<>(n)`: aquel toma cubetas y este
-     * toma pares. Java 19 lo agrego justamente porque el otro se usaba mal.
+     * <p>It is the one people meant when they wrote `new HashMap<>(n)`: that one takes buckets and
+     * this one takes pairs. Java 19 added it precisely because the other was being used wrong.
      *
-     * @throws IllegalArgumentException si `numMappings` es negativo
+     * @throws IllegalArgumentException if `numMappings` is negative
      */
     public static <K, V> HashMap<K, V> newHashMap(int numMappings) {
         if (numMappings < 0) {
@@ -98,7 +98,7 @@ public class HashMap<K, V> extends AbstractMap<K, V> implements Map<K, V>, Seria
         return new HashMap<K, V>(numMappings * 2 + 1);
     }
 
-    // Copia los pares de otro mapa. El de siempre para quedarse con una foto de un mapa ajeno.
+    // It copies another map's pairs. The usual one for keeping a snapshot of somebody else's map.
     public HashMap(Map<? extends K, ? extends V> m) {
         this.keys = new Object[16];
         this.values = new Object[16];
@@ -142,16 +142,28 @@ public class HashMap<K, V> extends AbstractMap<K, V> implements Map<K, V>, Seria
         return this.keys[this.slotFor(key)] != null;
     }
 
-    // Direccionamiento abierto: las claves vivas son los slots no nulos de `keys` (finding #205).
+    // A live view: removing a key from the set removes it from the map. It used to be a detached
+    // `HashSet`, so `map.keySet().remove(k)` compiled, ran, and did nothing to the map -- see
+    // {@link MapKeySet} for exactly how live it is, since the iterator is the one part that is not.
     public Set<K> keySet() {
-        HashSet<K> out = new HashSet<K>();
-        if (this.hasNullKey) {
-            out.add(null);
+        return new MapKeySet<K, V>(this);
+    }
+
+    // The live keys, as an array. It reads `keys` directly and NOT through `entrySet()`, which is
+    // the whole point: `entrySet()` is built on `keySet()`, so a snapshot taken through it would
+    // call straight back into the view that asked for it.
+    Object[] keyArray() {
+        Object[] out = new Object[this.size];
+        int n = 0;
+        if (this.hasNullKey && n < out.length) {
+            out[n] = null;
+            n = n + 1;
         }
         int i = 0;
-        while (i < this.keys.length) {
+        while (i < this.keys.length && n < out.length) {
             if (this.keys[i] != null) {
-                out.add((K) this.keys[i]);
+                out[n] = this.keys[i];
+                n = n + 1;
             }
             i = i + 1;
         }
@@ -263,7 +275,7 @@ public class HashMap<K, V> extends AbstractMap<K, V> implements Map<K, V>, Seria
         int newCap = oldKeys.length * 2;
         this.keys = new Object[newCap];
         this.values = new Object[newCap];
-        // La entrada de clave null no esta en la tabla, asi que su +1 hay que conservarlo a mano.
+        // The null-key entry is not in the table, so its +1 has to be kept by hand.
         this.size = this.hasNullKey ? 1 : 0;
         for (int i = 0; i < oldKeys.length; i++) {
             if (oldKeys[i] != null) {
@@ -273,11 +285,11 @@ public class HashMap<K, V> extends AbstractMap<K, V> implements Map<K, V>, Seria
     }
 
     /**
-     * Los valores de este mapa.
+     * This map's values.
      *
-     * <p>**Divergencia deliberada**, la misma que ya declara `keySet()`: la del JDK es una *vista*
-     * respaldada por el mapa; esta es una copia sacada en el momento. Y a diferencia de `keySet()`
-     * es una `Collection` y no un `Set`, porque los valores **si** pueden repetirse.
+     * <p>**A deliberate divergence**: the JDK's is a *view* backed by the map; this one is a copy
+     * taken at the moment of asking. `keySet()` used to have the same divergence and no longer does.
+     * And unlike `keySet()` this is a `Collection` and not a `Set`, because values **can** repeat.
      */
     public java.util.Collection<V> values() {
         java.util.ArrayList<V> out = new java.util.ArrayList<V>();
@@ -289,11 +301,12 @@ public class HashMap<K, V> extends AbstractMap<K, V> implements Map<K, V>, Seria
     }
 
     /**
-     * Los pares de este mapa.
+     * This map's pairs.
      *
-     * <p>Misma divergencia que `values()`: copia, no vista. Los pares que devuelve son inmutables,
-     * asi que `setValue` sobre uno de ellos lanza en vez de escribir en el mapa — que es lo
-     * coherente con que sea una copia: escribir en un par que nadie mira seria peor que negarse.
+     * <p>The same divergence as `values()`: a copy, not a view. The pairs it returns are immutable,
+     * so `setValue` on one of them throws instead of writing into the map — which is what is
+     * consistent with it being a copy: writing into a pair nobody looks at would be worse than
+     * refusing.
      */
     public java.util.Set<java.util.Map.Entry<K, V>> entrySet() {
         java.util.HashSet<java.util.Map.Entry<K, V>> out =

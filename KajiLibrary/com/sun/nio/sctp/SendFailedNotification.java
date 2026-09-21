@@ -4,31 +4,31 @@ import java.net.SocketAddress;
 import java.nio.ByteBuffer;
 
 /**
- * Un mensaje no se pudo entregar y volvio.
+ * A message could not be delivered and came back.
  *
- * <p>Lo notable es {@link #buffer}: <strong>el mensaje vuelve entero</strong>, no solo el aviso de
- * que fallo. Es lo que permite reintentarlo por otra direccion o por otro flujo sin haberlo tenido
- * que guardar de antemano — y la razon de que esta notificacion no sea simplemente un codigo de
- * error.
+ * <p>The notable thing is {@link #buffer}: <strong>the message comes back whole</strong>, not
+ * only the notice that it failed. It is what allows it to be retried over another address or
+ * over another stream without having had to keep it beforehand -- and the reason this
+ * notification is not simply an error code.
  */
 public abstract class SendFailedNotification implements Notification {
 
-    /** Para las implementaciones de SCTP. */
+    /** For the SCTP implementations. */
     protected SendFailedNotification() {
     }
 
-    /** La asociacion por la que se intento enviar. */
+    /** The association it was tried to send over. */
     public abstract Association association();
 
-    /** La direccion a la que se intento enviar. */
+    /** The address it was tried to send to. */
     public abstract SocketAddress address();
 
-    /** El mensaje que no se pudo entregar, entero. */
+    /** The message that could not be delivered, whole. */
     public abstract ByteBuffer buffer();
 
-    /** El codigo de error que dio la pila. */
+    /** The error code the stack gave. */
     public abstract int errorCode();
 
-    /** El flujo por el que se intento enviar. */
+    /** The stream it was tried to send over. */
     public abstract int streamNumber();
 }

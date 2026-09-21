@@ -101,11 +101,11 @@ public final class Optional<T> {
     }
 
     /**
-     * El valor, o `NoSuchElementException` si no hay.
+     * The value, or `NoSuchElementException` if there is none.
      *
-     * <p>Es `get()` con otro nombre, y el nombre es el punto: `get` no dice que puede fallar, y en
-     * un `Optional` **todo** puede fallar. Java 10 agrego este para poder desalentar aquel sin
-     * romper nada.
+     * <p>It is `get()` under another name, and the name is the point: `get` does not say it can fail,
+     * and in an `Optional` **everything** can fail. Java 10 added this one so that one could be
+     * discouraged without breaking anything.
      */
     public T orElseThrow() {
         if (this.value == null) {
@@ -114,8 +114,8 @@ public final class Optional<T> {
         return this.value;
     }
 
-    // El valor, o la excepcion que arme el proveedor. Es la forma de no perder el contexto: quien
-    // llama sabe por que esperaba un valor, y esta clase no.
+    // The value, or whatever exception the supplier builds. It is the way of not losing the context:
+    // the caller knows why they expected a value, and this class does not.
     public <X extends Throwable> T orElseThrow(Supplier<? extends X> exceptionSupplier) throws X {
         if (this.value == null) {
             throw exceptionSupplier.get();
@@ -124,11 +124,11 @@ public final class Optional<T> {
     }
 
     /**
-     * Como `map`, pero para una funcion que **ya devuelve** un Optional.
+     * Like `map`, but for a function that **already returns** an Optional.
      *
-     * <p>Sin el, encadenar dos busquedas que pueden fallar da un `Optional<Optional<T>>`, que no
-     * sirve para nada. `flatMap` aplana ese nivel de mas, y es lo que hace que las busquedas
-     * encadenadas se lean como una sola.
+     * <p>Without it, chaining two lookups that can fail gives an `Optional<Optional<T>>`, which is of
+     * no use at all. `flatMap` flattens that extra level, and it is what makes chained lookups read
+     * as one.
      */
     public <U> Optional<U> flatMap(Function<? super T, ? extends Optional<? extends U>> mapper) {
         if (this.value == null) {
@@ -141,8 +141,9 @@ public final class Optional<T> {
         return r;
     }
 
-    // Este si hay valor, o el que arme el proveedor si no. La alternativa se calcula **solo** si
-    // hace falta, que es toda la diferencia con escribir un `orElse` con la busqueda adentro.
+    // This one if there is a value, or whatever the supplier builds if not. The alternative is
+    // computed **only** if it is needed, which is the whole difference from writing an `orElse` with
+    // the lookup inside.
     public Optional<T> or(Supplier<? extends Optional<? extends T>> supplier) {
         if (this.value != null) {
             return this;
@@ -154,7 +155,7 @@ public final class Optional<T> {
         return r;
     }
 
-    // La accion si hay valor, la otra si no. El par que faltaba de `ifPresent`.
+    // The action if there is a value, the other one if not. `ifPresent`'s missing partner.
     public void ifPresentOrElse(Consumer<? super T> action, Runnable emptyAction) {
         if (this.value != null) {
             action.accept(this.value);
@@ -164,19 +165,19 @@ public final class Optional<T> {
     }
 
     /**
-     * Un Stream de cero o un elemento.
+     * A Stream of zero or one element.
      *
-     * <p>Parece de adorno hasta que se ve para que existe: `stream.map(f).flatMap(Optional::stream)`
-     * filtra los ausentes y desenvuelve los presentes de una sola pasada, sin un `filter` seguido de
-     * un `map` que repita la condicion.
+     * <p>It looks ornamental until one sees what it exists for:
+     * `stream.map(f).flatMap(Optional::stream)` filters out the absent ones and unwraps the present
+     * ones in a single pass, with no `filter` followed by a `map` that repeats the condition.
      */
     public Stream<T> stream() {
         if (this.value == null) {
-            Object[] nada = new Object[0];
-            return (Stream<T>) Stream.of(nada);
+            Object[] none = new Object[0];
+            return (Stream<T>) Stream.of(none);
         }
-        Object[] uno = new Object[1];
-        uno[0] = this.value;
-        return (Stream<T>) Stream.of(uno);
+        Object[] single = new Object[1];
+        single[0] = this.value;
+        return (Stream<T>) Stream.of(single);
     }
 }

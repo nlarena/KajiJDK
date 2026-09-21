@@ -2,11 +2,11 @@ package java.security.interfaces;
 
 import java.math.BigInteger;
 
-// Una clave privada RSA que ademas expone los valores del teorema chino del resto.
+// An RSA private key that also exposes the Chinese remainder theorem values.
 //
-// Es la contraparte de `RSAPrivateCrtKeySpec` del lado de las claves: lo mismo que ahi se explica
-// sobre por que el CRT vale la pena y por que hay que verificar la firma antes de entregarla vale
-// igual aca.
+// It is the key-side counterpart of `RSAPrivateCrtKeySpec`: what is explained there about why CRT
+// is worth it, and why the signature has to be verified before handing it out, applies here as
+// well.
 public interface RSAPrivateCrtKey extends RSAPrivateKey {
 
     long serialVersionUID = -5682214253527700368L;

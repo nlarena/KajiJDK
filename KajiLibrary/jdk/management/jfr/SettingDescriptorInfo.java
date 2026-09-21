@@ -5,13 +5,14 @@ import java.util.Collections;
 import javax.management.openmbean.CompositeData;
 
 /**
- * Un {@link jdk.jfr.SettingDescriptor} visto desde el otro lado de una conexion JMX.
+ * A {@link jdk.jfr.SettingDescriptor} seen from the other side of a JMX connection.
  *
- * <p>Mismo dato, sin las anotaciones: {@link jdk.jfr.SettingDescriptor#getAnnotationElements} no
- * tiene equivalente aca porque una anotacion no se puede representar como tipo abierto.
+ * <p>The same datum, without the annotations:
+ * {@link jdk.jfr.SettingDescriptor#getAnnotationElements} has no equivalent here because an
+ * annotation cannot be represented as an open type.
  *
- * <p>Lo que si sobrevive es lo que una consola necesita para dibujar un formulario de
- * configuracion: nombre, etiqueta, descripcion, tipo y valor por omision.
+ * <p>What does survive is what a console needs in order to draw a configuration form: name, label,
+ * description, type and default value.
  *
  * @since 9
  */
@@ -35,76 +36,76 @@ public final class SettingDescriptorInfo {
     }
 
     /**
-     * El nombre del ajuste.
+     * The name of the setting.
      *
-     * @return el valor
+     * @return the value
      */
     public String getName() {
         return name;
     }
 
     /**
-     * El nombre legible.
+     * The readable name.
      *
-     * @return el valor
+     * @return the value
      */
     public String getLabel() {
         return label;
     }
 
     /**
-     * Que hace el ajuste.
+     * What the setting does.
      *
-     * @return el valor
+     * @return the value
      */
     public String getDescription() {
         return description;
     }
 
     /**
-     * El nombre del tipo del ajuste.
+     * The name of the type of the setting.
      *
-     * @return el valor
+     * @return the value
      */
     public String getTypeName() {
         return typeName;
     }
 
     /**
-     * El nombre de la anotacion que le da significado al valor, o {@code null}.
+     * The name of the annotation that gives the value meaning, or {@code null}.
      *
-     * @return el valor
+     * @return the value
      */
     public String getContentType() {
         return contentType;
     }
 
     /**
-     * El valor con el que arranca.
+     * The value it starts with.
      *
-     * @return el valor
+     * @return the value
      */
     public String getDefaultValue() {
         return defaultValue;
     }
 
     /**
-     * Reconstruye el objeto desde su forma abierta.
+     * It rebuilds the object from its open form.
      *
-     * <p>Es el camino por el que este dato llega de una VM remota: lo que viaja por JMX es un
-     * {@link CompositeData} generico y esto lo vuelve a convertir.
+     * <p>It is the road by which this datum arrives from a remote VM: what travels over JMX is a
+     * generic {@link CompositeData} and this turns it back.
      *
-     * @param cd la forma abierta, o {@code null}
-     * @return el objeto, o {@code null} si {@code cd} era {@code null}
-     * @throws IllegalArgumentException si no tiene la forma esperada
+     * @param cd the open form, or {@code null}
+     * @return the object, or {@code null} if {@code cd} was {@code null}
+     * @throws IllegalArgumentException if it does not have the expected shape
      */
     public static SettingDescriptorInfo from(final CompositeData cd) {
         if (cd == null) {
             return null;
         }
         throw new IllegalArgumentException(
-                "reconstruir un SettingDescriptorInfo necesita el soporte de tipos abiertos "
-                + "de JFR, que esta biblioteca no implementa");
+                "rebuilding a SettingDescriptorInfo needs the support of open types "
+                + "of JFR, which this library does not implement");
     }
 
     /** {@inheritDoc} */

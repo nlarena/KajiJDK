@@ -5,50 +5,51 @@ import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 
 /**
- * Autenticacion HTTP basica: usuario y clave en un encabezado.
+ * HTTP basic authentication: user and password in a header.
  *
- * <h2>Lo que hay que saber antes de usarla</h2>
+ * <h2>What has to be known before using it</h2>
  *
- * <p>La clave viaja en <strong>Base64, que no es cifrado</strong>: es una codificacion reversible
- * que cualquiera deshace de memoria. Sobre HTTP en claro, mandar autenticacion basica es mandar la
- * clave en texto plano. Solo tiene sentido sobre TLS.
+ * <p>The password travels in <strong>Base64, which is not encryption</strong>: it is a
+ * reversible encoding anybody undoes from memory. Over plain HTTP, sending basic authentication
+ * is sending the password in plain text. It only makes sense over TLS.
  *
- * <p>Y va en <em>cada</em> pedido, no solo en el primero: no hay sesion, asi que la clave se repite
- * indefinidamente mientras dure la navegacion.
+ * <p>And it goes in <em>every</em> request, not only in the first: there is no session, so the
+ * password is repeated indefinitely for as long as the browsing lasts.
  *
- * <h2>Lo unico que hay que escribir</h2>
+ * <h2>The only thing that has to be written</h2>
  *
- * <p>{@link #checkCredentials}. Todo lo demas —parsear el encabezado, decodificar, armar el desafio
- * con el reino, distinguir "no mando nada" de "mando mal"— ya esta.
+ * <p>{@link #checkCredentials}. Everything else -- parsing the header, decoding, building the
+ * challenge with the realm, telling "it sent nothing" from "it sent something wrong" -- is
+ * already there.
  *
- * <h2>El juego de caracteres</h2>
+ * <h2>The character set</h2>
  *
- * <p>El constructor de dos argumentos existe porque la especificacion original no decia como
- * codificar los no-ASCII, y cada cliente hizo lo suyo. Fijarlo en UTF-8 es lo correcto hoy; el
- * constructor de un argumento usa ese mismo valor.
+ * <p>The two-argument constructor exists because the original specification did not say how to
+ * encode the non-ASCII ones, and each client did its own thing. Fixing it at UTF-8 is what is
+ * right today; the one-argument constructor uses that same value.
  */
 public abstract class BasicAuthenticator extends Authenticator {
 
-    /** El reino que se anuncia en el desafio. */
+    /** The realm that is announced in the challenge. */
     protected final String realm;
 
     private final Charset charset;
 
     /**
-     * En ese reino, con UTF-8.
+     * In that realm, with UTF-8.
      *
-     * @throws IllegalArgumentException si el reino esta vacio o tiene caracteres no ASCII — viaja
-     *     en un encabezado, y ahi no entra otra cosa
+     * @throws IllegalArgumentException if the realm is empty or has non-ASCII characters -- it
+     *     travels in a header, and nothing else fits there
      */
     public BasicAuthenticator(String realm) {
         this(realm, StandardCharsets.UTF_8);
     }
 
     /**
-     * En ese reino, con ese juego de caracteres para decodificar las credenciales.
+     * In that realm, with that character set for decoding the credentials.
      *
-     * @throws NullPointerException si alguno es {@code null}
-     * @throws IllegalArgumentException si el reino esta vacio o no es ASCII
+     * @throws NullPointerException if either is {@code null}
+     * @throws IllegalArgumentException if the realm is empty or is not ASCII
      */
     public BasicAuthenticator(String realm, Charset charset) {
         if (realm == null) {
@@ -58,69 +59,70 @@ public abstract class BasicAuthenticator extends Authenticator {
             throw new NullPointerException("charset");
         }
         if (realm.isEmpty()) {
-            throw new IllegalArgumentException("el reino no puede estar vacio");
+            throw new IllegalArgumentException("the realm cannot be empty");
         }
         for (int i = 0; i < realm.length(); i++) {
             if (realm.charAt(i) > 127) {
-                throw new IllegalArgumentException("el reino tiene que ser ASCII: " + realm);
+                throw new IllegalArgumentException("the realm has to be ASCII: " + realm);
             }
         }
         this.realm = realm;
         this.charset = charset;
     }
 
-    /** El reino. */
+    /** The realm. */
     public String getRealm() {
         return this.realm;
     }
 
     /**
-     * Parsea el encabezado y consulta a {@link #checkCredentials}.
+     * It parses the header and consults {@link #checkCredentials}.
      *
-     * <p>Devuelve {@link Retry} cuando no vino credencial o vino mal formada, y tambien cuando la
-     * credencial no valida. Lo segundo es a proposito y no un descuido: un {@link Failure} le diria
-     * al navegador que deje de intentar, cuando lo que corresponde es volver a pedirle la clave.
+     * <p>It returns {@link Retry} when no credential came or it came malformed, and also when the
+     * credential does not validate. The second is on purpose and not an oversight: a
+     * {@link Failure} would tell the browser to stop trying, when what is right is to ask for the
+     * password again.
      */
     public Result authenticate(HttpExchange t) {
         String header = t.getRequestHeaders().getFirst("Authorization");
         if (header == null) {
-            return desafiar(t);
+            return challenge(t);
         }
         int sp = header.indexOf(' ');
         if (sp == -1 || !header.substring(0, sp).equalsIgnoreCase("Basic")) {
-            return desafiar(t);
+            return challenge(t);
         }
-        byte[] crudo;
+        byte[] raw;
         try {
-            crudo = Base64.getDecoder().decode(header.substring(sp + 1).trim());
+            raw = Base64.getDecoder().decode(header.substring(sp + 1).trim());
         } catch (IllegalArgumentException e) {
-            return desafiar(t);
+            return challenge(t);
         }
-        String userpass = new String(crudo, this.charset);
-        // El PRIMER `:`, no el ultimo: una clave puede contener dos puntos y un usuario no.
-        int corte = userpass.indexOf(':');
-        if (corte == -1) {
-            return desafiar(t);
+        String userpass = new String(raw, this.charset);
+        // The FIRST `:`, not the last: a password may contain a colon and a user may not.
+        int cut = userpass.indexOf(':');
+        if (cut == -1) {
+            return challenge(t);
         }
-        String usuario = userpass.substring(0, corte);
-        String clave = userpass.substring(corte + 1);
-        if (!checkCredentials(usuario, clave)) {
-            return desafiar(t);
+        String user = userpass.substring(0, cut);
+        String key = userpass.substring(cut + 1);
+        if (!checkCredentials(user, key)) {
+            return challenge(t);
         }
-        return new Success(new HttpPrincipal(usuario, this.realm));
+        return new Success(new HttpPrincipal(user, this.realm));
     }
 
-    private Result desafiar(HttpExchange t) {
+    private Result challenge(HttpExchange t) {
         t.getResponseHeaders().set("WWW-Authenticate",
                 "Basic realm=\"" + this.realm + "\", charset=\"" + this.charset.name() + "\"");
         return new Retry(401);
     }
 
     /**
-     * Si esas credenciales son validas.
+     * Whether those credentials are valid.
      *
-     * <p>Conviene compararlas en tiempo constante: un {@code equals} de {@code String} corta en la
-     * primera diferencia, y eso deja medir cuantos caracteres se acerto.
+     * <p>It is best to compare them in constant time: a {@code String}'s {@code equals} stops at
+     * the first difference, and that allows how many characters were right to be measured.
      */
     public abstract boolean checkCredentials(String username, String password);
 }

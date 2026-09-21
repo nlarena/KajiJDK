@@ -4,65 +4,65 @@ import javax.xml.XMLConstants;
 import javax.xml.namespace.QName;
 
 /**
- * KajiLibrary's javax.xml.datatype.DatatypeConstants -- las constantes de los tipos de fecha y
- * duracion de XML Schema: los nombres de los tipos, los resultados de comparar, los meses, y el
- * valor que significa "este campo no esta".
+ * KajiLibrary's javax.xml.datatype.DatatypeConstants -- the constants of the XML Schema date and
+ * duration types: the names of the types, the results of comparing, the months, and the value that
+ * means "this field is not there".
  *
- * <p>Es una clase de solo constantes --constructor privado, nada que instanciar-- pero tres de sus
- * grupos dicen cosas que no son obvias y conviene leer antes de usarlas.
+ * <p>It is a constants-only class --private constructor, nothing to instantiate-- but three of its
+ * groups say things that are not obvious and are worth reading before using them.
  *
- * <h2>{@link #INDETERMINATE}, que es el que sorprende</h2>
+ * <h2>{@link #INDETERMINATE}, which is the surprising one</h2>
  *
- * <p>Comparar dos duraciones no siempre da un resultado. {@link Duration#compare} devuelve
- * {@link #LESSER}, {@link #EQUAL}, {@link #GREATER} <b>o {@link #INDETERMINATE}</b>, y ese cuarto
- * caso no es un error ni un "no se pudo": es la respuesta correcta.
+ * <p>Comparing two durations does not always give a result. {@link Duration#compare} returns {@link
+ * #LESSER}, {@link #EQUAL}, {@link #GREATER} <b>or {@link #INDETERMINATE}</b>, and that fourth case
+ * is not an error nor a "could not": it is the right answer.
  *
- * <p>El motivo es que un mes no tiene una cantidad fija de dias. {@code P1M} dura 28, 29, 30 o 31
- * dias segun cuando empiece, asi que frente a {@code P30D} no hay un orden: en febrero {@code P1M}
- * es mas corto, en marzo es mas largo. Decir {@code LESSER} o {@code GREATER} seria inventar; decir
- * {@code EQUAL} tambien. La unica respuesta honesta es que no se pueden ordenar.
+ * <p>The reason is that a month has no fixed number of days. {@code P1M} lasts 28, 29, 30 or 31
+ * days depending on when it starts, so against {@code P30D} there is no order: in February {@code
+ * P1M} is shorter, in March it is longer. Saying {@code LESSER} or {@code GREATER} would be
+ * inventing; saying {@code EQUAL} too. The only honest answer is that they cannot be ordered.
  *
- * <p>La consecuencia practica pega fuerte: {@code Duration} <b>no</b> implementa
- * {@code Comparable}, y no puede, porque un orden total no existe. Y
- * {@link Duration#isLongerThan} devolviendo false no quiere decir "es mas corta o igual": puede
- * querer decir que no se sabe.
+ * <p>The practical consequence hits hard: {@code Duration} does <b>not</b> implement {@code
+ * Comparable}, and cannot, because a total order does not exist. And {@link Duration#isLongerThan}
+ * returning false does not mean "it is shorter or equal": it can mean that it is not known.
  *
- * <h2>{@link #MAX_TIMEZONE_OFFSET} es el minimo y {@link #MIN_TIMEZONE_OFFSET} el maximo</h2>
+ * <h2>{@link #MAX_TIMEZONE_OFFSET} is the minimum and {@link #MIN_TIMEZONE_OFFSET} the maximum</h2>
  *
- * <p>No es un error de lectura: {@code MAX_TIMEZONE_OFFSET} vale -840 y {@code MIN_TIMEZONE_OFFSET}
- * vale 840. Los nombres estan al reves de los numeros.
+ * <p>It is not a misreading: {@code MAX_TIMEZONE_OFFSET} is -840 and {@code MIN_TIMEZONE_OFFSET} is
+ * 840. The names are the other way round from the numbers.
  *
- * <p>Lo que se puede afirmar sin adivinar por que, porque esta comprobado contra el JDK 25: el campo
- * de zona horaria se cuenta en minutos <b>tal como se escribe la zona</b> --{@code -03:00} da -180 y
- * {@code +05:30} da 330-- y {@link XMLGregorianCalendar#setTimezone} acepta exactamente el intervalo
- * de -840 a 840, rechazando 841 y -841 con {@link IllegalArgumentException}. O sea que el valor
- * <b>maximo</b> del campo es el que guarda la constante llamada {@code MIN_}, y el <b>minimo</b> el
- * de la llamada {@code MAX_}.
+ * <p>What can be stated without guessing why, because it is checked against JDK 25: the time zone
+ * field counts minutes <b>as the zone is written</b> --{@code -03:00} gives -180 and {@code +05:30}
+ * gives 330-- and {@link XMLGregorianCalendar#setTimezone} accepts exactly the interval from -840
+ * to 840, rejecting 841 and -841 with {@link IllegalArgumentException}. So the <b>maximum</b> value
+ * of the field is the one kept by the constant called {@code MIN_}, and the <b>minimum</b> the one
+ * of the constant called {@code MAX_}.
  *
- * <p>Se replican con esos nombres y esos valores porque son API publica y hay codigo que los usa por
- * nombre; darlos vuelta "arreglaria" la lectura y romperia a quien los compare.
+ * <p>They are replicated with those names and those values because they are public API and there is
+ * code that uses them by name; swapping them would "fix" the reading and break whoever compares
+ * them.
  *
- * <h2>{@link #FIELD_UNDEFINED} en vez de null</h2>
+ * <h2>{@link #FIELD_UNDEFINED} instead of null</h2>
  *
- * <p>Los campos de {@link XMLGregorianCalendar} son {@code int}, y un {@code int} no puede ser null.
- * Un {@code gMonth} --el tipo de "mayo, de cualquier anio"-- tiene mes y no tiene anio, asi que hace
- * falta un valor que signifique ausente. Es {@code Integer.MIN_VALUE}, elegido porque no es un anio,
- * ni un mes, ni un dia, ni una hora posible. El que lea {@code getYear()} tiene que compararlo
- * contra esta constante antes de usarlo: no hay excepcion que avise.
+ * <p>The fields of {@link XMLGregorianCalendar} are {@code int}s, and an {@code int} cannot be
+ * null. A {@code gMonth} --the type of "May, of any year"-- has a month and no year, so a value
+ * meaning absent is needed. It is {@code Integer.MIN_VALUE}, chosen because it is not a possible
+ * year, month, day nor hour. Whoever reads {@code getYear()} has to compare it against this
+ * constant before using it: there is no exception to warn.
  *
- * <h2>Que hay aca</h2>
+ * <h2>What is here</h2>
  *
- * <p>Los treinta y seis miembros publicos, con los mismos valores que el original --comprobados uno
- * por uno contra el JDK 25-- y la clase anidada {@link Field}, que es el testigo de tipo con que
- * {@link Duration#getField} y {@link Duration#isSet} nombran un campo sin usar cadenas.
+ * <p>The thirty-six public members, with the same values as the original --checked one by one
+ * against JDK 25-- and the nested class {@link Field}, which is the type token with which {@link
+ * Duration#getField} and {@link Duration#isSet} name a field without using strings.
  */
 public final class DatatypeConstants {
 
-    /** No hay nada que instanciar: son todas constantes. */
+    /** There is nothing to instantiate: they are all constants. */
     private DatatypeConstants() {
     }
 
-    /** Enero, contado desde uno --al reves que {@code java.util.Calendar}, que cuenta desde cero--. */
+    /** January, counted from one --unlike {@code java.util.Calendar}, which counts from zero--. */
     public static final int JANUARY = 1;
 
     /** Febrero. */
@@ -95,142 +95,143 @@ public final class DatatypeConstants {
     /** Noviembre. */
     public static final int NOVEMBER = 11;
 
-    /** Diciembre, que es doce y no once. */
+    /** December, which is twelve and not eleven. */
     public static final int DECEMBER = 12;
 
-    /** El primero es menor que el segundo. */
+    /** The first is less than the second. */
     public static final int LESSER = -1;
 
-    /** Los dos son el mismo valor. */
+    /** Both are the same value. */
     public static final int EQUAL = 0;
 
-    /** El primero es mayor que el segundo. */
+    /** The first is greater than the second. */
     public static final int GREATER = 1;
 
     /**
-     * No se pueden ordenar, y eso es la respuesta y no una falla.
+     * They cannot be ordered, and that is the answer and not a failure.
      *
-     * <p>Ver el encabezado de la clase: pasa cuando la comparacion depende de datos que no estan
-     * --de que mes se trata, o de en que zona horaria-- y cualquier orden que se eligiera seria
-     * inventado.
+     * <p>See the class header: it happens when the comparison depends on data that is not there
+     * --which month it is, or in which time zone-- and any order chosen would be invented.
      */
     public static final int INDETERMINATE = 2;
 
     /**
-     * El campo no esta puesto.
+     * The field is not set.
      *
-     * <p>{@code Integer.MIN_VALUE}, escrito como literal porque asi figura en el original.
+     * <p>{@code Integer.MIN_VALUE}, written as a literal because that is how it appears in
+     * the original.
      */
     public static final int FIELD_UNDEFINED = Integer.MIN_VALUE;
 
-    /** El campo de los anios de una {@link Duration}. */
+    /** The years field of a {@link Duration}. */
     public static final Field YEARS = new Field("YEARS", 0);
 
-    /** El campo de los meses. */
+    /** The months field. */
     public static final Field MONTHS = new Field("MONTHS", 1);
 
-    /** El campo de los dias. */
+    /** The days field. */
     public static final Field DAYS = new Field("DAYS", 2);
 
-    /** El campo de las horas. */
+    /** The hours field. */
     public static final Field HOURS = new Field("HOURS", 3);
 
-    /** El campo de los minutos. */
+    /** The minutes field. */
     public static final Field MINUTES = new Field("MINUTES", 4);
 
     /**
-     * El campo de los segundos, que es el unico fraccionario.
+     * The seconds field, which is the only fractional one.
      *
-     * <p>{@link Duration#getField} lo devuelve como {@link java.math.BigDecimal} y no como
-     * {@link java.math.BigInteger}, porque {@code PT0.5S} es una duracion valida.
+     * <p>{@link Duration#getField} returns it as a {@link java.math.BigDecimal} and not as a
+     * {@link java.math.BigInteger}, because {@code PT0.5S} is a valid duration.
      */
     public static final Field SECONDS = new Field("SECONDS", 5);
 
-    /** El nombre calificado del tipo {@code xs:dateTime}. */
+    /** The qualified name of the {@code xs:dateTime} type. */
     public static final QName DATETIME =
             new QName(XMLConstants.W3C_XML_SCHEMA_NS_URI, "dateTime");
 
-    /** El nombre calificado del tipo {@code xs:time}. */
+    /** The qualified name of the {@code xs:time} type. */
     public static final QName TIME = new QName(XMLConstants.W3C_XML_SCHEMA_NS_URI, "time");
 
-    /** El nombre calificado del tipo {@code xs:date}. */
+    /** The qualified name of the {@code xs:date} type. */
     public static final QName DATE = new QName(XMLConstants.W3C_XML_SCHEMA_NS_URI, "date");
 
-    /** El nombre calificado del tipo {@code xs:gYearMonth}: un mes de un anio, sin dia. */
+    /** The qualified name of the {@code xs:gYearMonth} type: a month of a year, without a day. */
     public static final QName GYEARMONTH =
             new QName(XMLConstants.W3C_XML_SCHEMA_NS_URI, "gYearMonth");
 
-    /** El nombre calificado del tipo {@code xs:gMonthDay}: un dia del anio, sin anio. */
+    /** The qualified name of the {@code xs:gMonthDay} type: a day of the year, without a year. */
     public static final QName GMONTHDAY =
             new QName(XMLConstants.W3C_XML_SCHEMA_NS_URI, "gMonthDay");
 
-    /** El nombre calificado del tipo {@code xs:gYear}. */
+    /** The qualified name of the {@code xs:gYear} type. */
     public static final QName GYEAR = new QName(XMLConstants.W3C_XML_SCHEMA_NS_URI, "gYear");
 
-    /** El nombre calificado del tipo {@code xs:gMonth}. */
+    /** The qualified name of the {@code xs:gMonth} type. */
     public static final QName GMONTH = new QName(XMLConstants.W3C_XML_SCHEMA_NS_URI, "gMonth");
 
-    /** El nombre calificado del tipo {@code xs:gDay}. */
+    /** The qualified name of the {@code xs:gDay} type. */
     public static final QName GDAY = new QName(XMLConstants.W3C_XML_SCHEMA_NS_URI, "gDay");
 
-    /** El nombre calificado del tipo {@code xs:duration}, el que puede tener los seis campos. */
+    /** The qualified name of the {@code xs:duration} type, the one that can have the six fields. */
     public static final QName DURATION =
             new QName(XMLConstants.W3C_XML_SCHEMA_NS_URI, "duration");
 
     /**
-     * El nombre calificado de {@code xdt:dayTimeDuration}: dias, horas, minutos y segundos.
+     * The qualified name of {@code xdt:dayTimeDuration}: days, hours, minutes and seconds.
      *
-     * <p>Es de XPath 2.0 y no de XML Schema, y de ahi que el espacio de nombres sea otro. Existe
-     * justamente por lo de {@link #INDETERMINATE}: una duracion sin meses <b>si</b> se puede
-     * ordenar, porque un dia siempre dura lo mismo.
+     * <p>It is from XPath 2.0 and not from XML Schema, hence the different namespace. It exists
+     * precisely because of {@link #INDETERMINATE}: a duration without months <b>can</b> be ordered,
+     * because a day always lasts the same.
      */
     public static final QName DURATION_DAYTIME =
             new QName(XMLConstants.W3C_XPATH_DATATYPE_NS_URI, "dayTimeDuration");
 
     /**
-     * El nombre calificado de {@code xdt:yearMonthDuration}: anios y meses.
+     * The qualified name of {@code xdt:yearMonthDuration}: years and months.
      *
-     * <p>La otra mitad ordenable: contada en meses, tampoco tiene ambigüedad.
+     * <p>The other orderable half: counted in months, it has no ambiguity either.
      */
     public static final QName DURATION_YEARMONTH =
             new QName(XMLConstants.W3C_XPATH_DATATYPE_NS_URI, "yearMonthDuration");
 
     /**
-     * El extremo <b>inferior</b> del campo de zona horaria, en minutos: -840, o sea {@code -14:00}.
+     * The <b>lower</b> end of the time zone field, in minutes: -840, that is {@code -14:00}.
      *
-     * <p>Que la constante llamada "MAX" guarde el minimo esta explicado en el encabezado de la
-     * clase; el nombre es el del original y no se toca.
+     * <p>That the constant called "MAX" keeps the minimum is explained in the class header; the
+     * name is the original's and is not touched.
      */
     public static final int MAX_TIMEZONE_OFFSET = -14 * 60;
 
-    /** El extremo <b>superior</b>, en minutos: 840, o sea {@code +14:00}. */
+    /** The <b>upper</b> end, in minutes: 840, that is {@code +14:00}. */
     public static final int MIN_TIMEZONE_OFFSET = 14 * 60;
 
     /**
-     * Uno de los seis campos de una {@link Duration}, como objeto.
+     * One of the six fields of a {@link Duration}, as an object.
      *
-     * <p>Existe para que {@link Duration#getField} y {@link Duration#isSet} tomen un campo sin que
-     * el llamador pase una cadena que se puede escribir mal. Las seis instancias posibles son las
-     * constantes de arriba y no hay forma de crear otras --el constructor es privado--, asi que
-     * comparar con {@code ==} es correcto y es lo que hacen las implementaciones.
+     * <p>It exists so that {@link Duration#getField} and {@link Duration#isSet} take a field
+     * without the caller passing a string that can be misspelt. The six possible instances are the
+     * constants above and there is no way of creating others --the constructor is private--, so
+     * comparing with {@code ==} is correct and it is what implementations do.
      *
-     * <p>Es de antes de que el lenguaje tuviera {@code enum}; con {@code enum} hoy no se escribiria
-     * asi, pero cambiarlo romperia la serializacion y la comparacion por identidad de todo el codigo
-     * que ya existe.
+     * <p>It predates {@code enum} in the language; with {@code enum} it would not be written this
+     * way today, but changing it would break the comparison by identity of all the code that
+     * already exists. (The note also said it would break serialization; the class is not {@code
+     * Serializable}, here nor in the JDK.)
      */
     public static final class Field {
 
-        /** El nombre, que es lo unico que se ve desde afuera. */
+        /** The name, which is the only thing visible from outside. */
         private final String str;
 
-        /** El indice, de 0 a 5, en el orden en que los campos van en la representacion lexica. */
+        /** The index, from 0 to 5, in the order the fields go in the lexical representation. */
         private final int id;
 
         /**
-         * Solo desde aca adentro: las seis instancias son las constantes de la clase envolvente.
+         * Only from in here: the six instances are the constants of the enclosing class.
          *
-         * @param str el nombre
-         * @param id el indice
+         * @param str the name
+         * @param id the index
          */
         private Field(String str, int id) {
             this.str = str;
@@ -238,21 +239,22 @@ public final class DatatypeConstants {
         }
 
         /**
-         * El nombre del campo, en mayusculas, igual al de la constante.
+         * The name of the field, in upper case, the same as the constant's.
          *
-         * @return por ejemplo {@code "YEARS"}
+         * @return for example {@code "YEARS"}
          */
         public String toString() {
             return str;
         }
 
         /**
-         * El indice del campo, de {@code YEARS} = 0 a {@code SECONDS} = 5.
+         * The index of the field, from {@code YEARS} = 0 to {@code SECONDS} = 5.
          *
-         * <p>El orden es el de la representacion lexica {@code PnYnMnDTnHnMnS}, que es lo que lo
-         * hace util: sirve de indice en un arreglo de campos sin tener que traducir nada.
+         * <p>The order is that of the lexical representation {@code PnYnMnDTnHnMnS}, which is what
+         * makes it useful: it serves as an index into an array of fields without having to
+         * translate anything.
          *
-         * @return de 0 a 5
+         * @return from 0 to 5
          */
         public int getId() {
             return id;

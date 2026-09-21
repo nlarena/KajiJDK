@@ -6,63 +6,62 @@ import java.util.ServiceLoader;
 import org.xml.sax.SAXException;
 import org.xml.sax.XMLReader;
 
-// KajiLibrary's org.xml.sax.helpers.XMLReaderFactory -- "encontrame un XMLReader", el reemplazo
-// de SAX2 para ParserFactory.
+// KajiLibrary's org.xml.sax.helpers.XMLReaderFactory -- "find me an XMLReader", the SAX2
+// replacement for ParserFactory.
 //
-// Busca en dos lugares, en este orden, y se queda con el primero que conteste:
+// It looks in two places, in this order, and keeps the first one that answers:
 //
-//   1. la propiedad de sistema `org.xml.sax.driver`, que nombra una clase directamente;
-//   2. el mecanismo de proveedores de servicio, es decir una entrada org.xml.sax.XMLReader
-//      declarada por algun jar del classpath.
+//   1. the system property `org.xml.sax.driver`, which names a class directly;
+//   2. the service provider mechanism, that is an org.xml.sax.XMLReader entry declared by some
+//      jar on the classpath.
 //
-// Un JDK de fabrica tiene un tercer paso, un respaldo hardcodeado a su Xerces incluido
-// (com.sun.org.apache.xerces.internal.parsers.SAXParser). **KajiLibrary no tiene ese respaldo,
-// porque KajiLibrary no trae ningun parser XML.** Sin la propiedad seteada ni un proveedor
-// declarado, createXMLReader() tira SAXException, que es exactamente lo que hace el JDK cuando su
-// propio respaldo no esta. Este es el unico lugar de estos dos paquetes donde a proposito no se
-// reproduce un comportamiento del JDK, y la razon es que reproducirlo significaria nombrar una
-// clase que aca no existe -- una mentira que fallaria en la llamada, no en la declaracion.
+// A stock JDK has a third step, a hard-coded fallback to its bundled Xerces
+// (com.sun.org.apache.xerces.internal.parsers.SAXParser). **KajiLibrary does not have that
+// fallback, because KajiLibrary brings no XML parser.** With neither the property set nor a
+// provider declared, createXMLReader() throws SAXException, which is exactly what the JDK does when
+// its own fallback is not there. This is the only place in these two packages where a behaviour of
+// the JDK is on purpose not reproduced, and the reason is that reproducing it would mean naming a
+// class that does not exist here -- a lie that would fail on the call, not on the declaration.
 //
-// Todo el resto de org.xml.sax y org.xml.sax.helpers funciona sin parser: las interfaces de
-// manejadores son declaraciones, y los helpers (AttributesImpl, NamespaceSupport, XMLFilterImpl,
-// ParserAdapter, XMLReaderAdapter) operan sobre eventos sin importar quien los produjo. Apuntale
-// a esta fabrica una clase driver y toda la capa anda.
+// All the rest of org.xml.sax and org.xml.sax.helpers works with no parser: the handler interfaces
+// are declarations, and the helpers (AttributesImpl, NamespaceSupport, XMLFilterImpl,
+// ParserAdapter, XMLReaderAdapter) operate on events regardless of who produced them. Point this
+// factory at a driver class and the whole layer works.
 //
-// Los dos metodos reportan cualquier falla como una SAXException con la original como causa -- a
-// diferencia de ParserFactory, que deja salir cinco excepciones chequeadas distintas. Esa es la
-// mejora de SAX2: un solo tipo de excepcion para atrapar.
+// Both methods report any failure as a SAXException with the original as its cause -- unlike
+// ParserFactory, which lets five different checked exceptions out. That is the improvement of
+// SAX2: one single exception type to catch.
 public final class XMLReaderFactory {
 
     private static final String property = "org.xml.sax.driver";
 
-    // No se instancia: aca todo es estatico.
+    // Not instantiated: everything here is static.
     private XMLReaderFactory() {
     }
 
-    // Un XMLReader encontrado con la busqueda que describe el comentario de la clase.
+    // An XMLReader found with the search the comment of the class describes.
     public static XMLReader createXMLReader() throws SAXException {
         String className = null;
         ClassLoader loader = classLoader();
 
-        // 1. La propiedad de sistema.
+        // 1. The system property.
         try {
             className = System.getProperty(property);
         } catch (RuntimeException e) {
-            // Un entorno restringido puede negarse a contestar. No es un error: seguimos
-            // buscando.
+            // A restricted environment may refuse to answer. It is not an error: we keep looking.
         }
 
         if (className != null) {
             return loadClass(loader, className);
         }
 
-        // 2. Un proveedor de servicio declarado, si lo hay.
+        // 2. A declared service provider, if there is one.
         XMLReader reader = findServiceProvider(XMLReader.class, loader);
         if (reader != null) {
             return reader;
         }
 
-        // 3. Aca no hay paso 3. Ver el comentario de la clase.
+        // 3. Here there is no step 3. See the comment of the class.
         throw new SAXException("Can't create XMLReader: no value for the "
                                + property + " system property, and no "
                                + "org.xml.sax.XMLReader service provider is "
@@ -70,15 +69,15 @@ public final class XMLReaderFactory {
                                + "bundles no XML parser of its own.");
     }
 
-    // El lector con exactamente este nombre de clase.
+    // The reader with exactly this class name.
     public static XMLReader createXMLReader(String className)
             throws SAXException {
         return loadClass(classLoader(), className);
     }
 
-    // El class loader de contexto cuando hay uno, y si no el loader que cargo SAX mismo. Un
-    // driver que este en el classpath de la aplicacion es invisible para este ultimo, y por eso
-    // el de contexto se prueba primero.
+    // The context class loader when there is one, and otherwise the loader that loaded SAX itself.
+    // A driver on the classpath of the application is invisible to the latter, and that is why the
+    // context one is tried first.
     private static ClassLoader classLoader() {
         ClassLoader loader = null;
         try {
@@ -92,8 +91,8 @@ public final class XMLReaderFactory {
         return loader;
     }
 
-    // Cargar, instanciar y castear, convirtiendo las cinco maneras de fallar en una sola
-    // SAXException que igual lleva la original como causa.
+    // Load, instantiate and cast, turning the five ways of failing into one single SAXException
+    // that still carries the original as its cause.
     private static XMLReader loadClass(ClassLoader loader, String className)
             throws SAXException {
         try {
@@ -120,8 +119,8 @@ public final class XMLReaderFactory {
         }
     }
 
-    // El primer proveedor declarado, o null si no hay ninguno. Un proveedor que explota mientras
-    // se construye es una falla de verdad y se reporta; que no haya proveedor no lo es.
+    // The first declared provider, or null if there is none. A provider that blows up while being
+    // built is a real failure and is reported; there being no provider is not.
     private static <T> T findServiceProvider(Class<T> type, ClassLoader loader)
             throws SAXException {
         try {

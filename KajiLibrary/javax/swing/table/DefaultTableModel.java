@@ -6,82 +6,83 @@ import java.util.Vector;
 import javax.swing.event.TableModelEvent;
 
 /**
- * Un modelo de tabla hecho de vectores, para cuando no vale la pena escribir uno.
+ * A table model made of vectors, for when writing one is not worth it.
  *
- * <h2>Todo es {@code Object} y todo se edita</h2>
+ * <h2>Everything is {@code Object} and everything is editable</h2>
  *
- * <p>Guarda un vector de filas, cada una un vector de celdas, y no sabe nada de tipos: cada columna
- * es de {@link Object} y cada celda se puede editar. Es lo que lo hace comodo para empezar y lo que
- * lo vuelve insuficiente en cuanto la tabla tiene que ordenar numeros o mostrar tildes -- ahi
- * conviene una subclase que diga {@code getColumnClass}.
+ * <p>It keeps a vector of rows, each one a vector of cells, and knows nothing about types: every
+ * column is of {@link Object} and every cell can be edited. It is what makes it convenient to
+ * start with and what makes it insufficient as soon as the table has to sort numbers or show
+ * check marks -- there a subclass that says {@code getColumnClass} is better.
  *
- * <h2>Las filas se estiran solas</h2>
+ * <h2>The rows stretch themselves</h2>
  *
- * <p>Agregar una fila mas corta que las columnas no es un error: se la rellena con nulos. Y agregar
- * una columna estira todas las filas. La estructura se mantiene rectangular sin que el llamador
- * tenga que cuidarlo, que es la mitad de la razon por la que existe esta clase.
+ * <p>Adding a row shorter than the columns is not an error: it is padded with nulls. And adding a
+ * column stretches every row. The structure is kept rectangular without the caller having to look
+ * after it, which is half the reason this class exists.
  *
- * <h2>Los tres metodos con nombre raro</h2>
+ * <h2>The three oddly named methods</h2>
  *
- * <p>{@link #newDataAvailable}, {@link #newRowsAdded} y {@link #rowsRemoved} reciben un evento y
- * avisan. Vienen de una version vieja de Swing donde el llamador tocaba el vector directamente y
- * despues avisaba; siguen ahi por compatibilidad y no hay motivo para usarlos hoy.
+ * <p>{@link #newDataAvailable}, {@link #newRowsAdded} and {@link #rowsRemoved} take an event and
+ * report. They come from an old version of Swing where the caller touched the vector directly and
+ * reported afterwards; they are still there for compatibility and there is no reason to use them
+ * today.
  */
 public class DefaultTableModel extends AbstractTableModel implements Serializable {
 
-    /** Las filas; cada una un vector de celdas. */
+    /** The rows; each one a vector of cells. */
     protected Vector<Vector> dataVector;
 
-    /** Los nombres de las columnas. */
+    /** The column names. */
     protected Vector columnIdentifiers;
 
-    /** Sin filas ni columnas. */
+    /** With no rows or columns. */
     public DefaultTableModel() {
         this(0, 0);
     }
 
-    /** Con esa cantidad de filas y columnas, todas vacias. */
+    /** With that many rows and columns, all empty. */
     public DefaultTableModel(int rowCount, int columnCount) {
         this(newVector(columnCount), rowCount);
     }
 
     /**
-     * Con esos nombres de columna y esa cantidad de filas vacias.
+     * With those column names and that many empty rows.
      *
-     * <p>Una cantidad negativa revienta, pero no aca: el error sale del vector que se intenta
-     * crear, con su mensaje. Es lo que hace el JDK y esta medido.
+     * <p>A negative count blows up, but not here: the error comes out of the vector that is
+     * attempted, with its message. It is what the JDK does and it is measured.
      *
-     * @throws IllegalArgumentException si la cantidad de filas es negativa
+     * @throws IllegalArgumentException if the row count is negative
      */
     public DefaultTableModel(Vector<?> columnNames, int rowCount) {
         setDataVector(newVector(rowCount), columnNames);
     }
 
-    /** Idem, con los nombres en un arreglo. */
+    /** The same, with the names in an array. */
     public DefaultTableModel(Object[] columnNames, int rowCount) {
         this(convertToVector(columnNames), rowCount);
     }
 
-    /** Con esos datos y esos nombres. */
+    /** With that data and those names. */
     public DefaultTableModel(Vector<? extends Vector> data, Vector<?> columnNames) {
         setDataVector(data, columnNames);
     }
 
-    /** Idem, con arreglos. */
+    /** The same, with arrays. */
     public DefaultTableModel(Object[][] data, Object[] columnNames) {
         setDataVector(data, columnNames);
     }
 
-    /** Los datos; no es copia -- tocarlos cambia el modelo sin que nadie se entere. */
+    /** The data; not a copy -- touching it changes the model without anybody finding out. */
     public Vector<Vector> getDataVector() {
         return dataVector;
     }
 
     /**
-     * Reemplaza datos y nombres de columna.
+     * Replaces data and column names.
      *
-     * <p>Avisa un cambio de estructura, no de datos: cambian las columnas y la tabla tiene que
-     * rearmarlas. Ver la nota de {@link AbstractTableModel}.
+     * <p>It reports a change of structure, not of data: the columns change and the table has to
+     * rebuild them. See {@link AbstractTableModel}'s note.
      */
     public void setDataVector(Vector<? extends Vector> dataVector, Vector<?> columnIdentifiers) {
         this.dataVector = new Vector<Vector>(0);
@@ -95,35 +96,35 @@ public class DefaultTableModel extends AbstractTableModel implements Serializabl
         fireTableStructureChanged();
     }
 
-    /** Idem, con arreglos. */
+    /** The same, with arrays. */
     public void setDataVector(Object[][] dataVector, Object[] columnIdentifiers) {
         setDataVector(convertToVector(dataVector), convertToVector(columnIdentifiers));
     }
 
-    /** Avisa que los datos cambiaron; ver la nota de la clase. */
+    /** Reports that the data changed; see the class note. */
     public void newDataAvailable(TableModelEvent event) {
         fireTableChanged(event);
     }
 
     /**
-     * Avisa que se agregaron filas, despues de emparejarlas.
+     * Reports that rows were added, after evening them out.
      *
-     * <p>Emparejar es lo que hace que una fila mas corta que las columnas no rompa nada.
+     * <p>Evening them out is what keeps a row shorter than the columns from breaking anything.
      */
     public void newRowsAdded(TableModelEvent e) {
         justifyRows(e.getFirstRow(), e.getLastRow() + 1);
         fireTableChanged(e);
     }
 
-    /** Avisa que se sacaron filas. */
+    /** Reports that rows were removed. */
     public void rowsRemoved(TableModelEvent event) {
         fireTableChanged(event);
     }
 
     /**
-     * Cuantas filas hay; agrega vacias o saca las de mas.
+     * How many rows there are; it adds empty ones or removes the extra ones.
      *
-     * @deprecated Usar {@link #setRowCount}.
+     * @deprecated Use {@link #setRowCount}.
      */
     @Deprecated
     public void setNumRows(int rowCount) {
@@ -140,25 +141,25 @@ public class DefaultTableModel extends AbstractTableModel implements Serializabl
         }
     }
 
-    /** Cuantas filas hay; agrega vacias o saca las de mas. */
+    /** How many rows there are; it adds empty ones or removes the extra ones. */
     public void setRowCount(int rowCount) {
         setNumRows(rowCount);
     }
 
-    /** Agrega una fila al final. */
+    /** Adds a row at the end. */
     public void addRow(Vector<?> rowData) {
         insertRow(getRowCount(), rowData);
     }
 
-    /** Idem, con un arreglo. */
+    /** The same, with an array. */
     public void addRow(Object[] rowData) {
         addRow(convertToVector(rowData));
     }
 
     /**
-     * Mete una fila en esa posicion.
+     * Puts a row at that position.
      *
-     * @throws ArrayIndexOutOfBoundsException si la posicion esta fuera de rango
+     * @throws ArrayIndexOutOfBoundsException if the position is out of range
      */
     public void insertRow(int row, Vector<?> rowData) {
         dataVector.insertElementAt(nonNullVector(rowData), row);
@@ -166,15 +167,15 @@ public class DefaultTableModel extends AbstractTableModel implements Serializabl
         fireTableRowsInserted(row, row);
     }
 
-    /** Idem, con un arreglo. */
+    /** The same, with an array. */
     public void insertRow(int row, Object[] rowData) {
         insertRow(row, convertToVector(rowData));
     }
 
     /**
-     * Mueve el bloque de filas de {@code start} a {@code end} para que empiece en {@code to}.
+     * Moves the block of rows from {@code start} to {@code end} so that it starts at {@code to}.
      *
-     * @throws ArrayIndexOutOfBoundsException si algun indice esta fuera de rango
+     * @throws ArrayIndexOutOfBoundsException if some index is out of range
      */
     public void moveRow(int start, int end, int to) {
         int shift = to - start;
@@ -188,8 +189,9 @@ public class DefaultTableModel extends AbstractTableModel implements Serializabl
             last = to + end - start;
         }
         verifyRange(first, last);
-        // Se rota el tramo que va del primero al ultimo afectado, no el bloque que se mueve: lo
-        // que sale de un extremo tiene que entrar por el otro.
+        // The stretch from the first to the last affected is rotated, not the block that moves:
+        // what
+                // leaves one end has to come in at the other.
         rotate(dataVector, first, last + 1, to - start);
         fireTableRowsUpdated(first, last);
     }
@@ -201,9 +203,10 @@ public class DefaultTableModel extends AbstractTableModel implements Serializabl
     }
 
     /**
-     * Rota un tramo del vector.
+     * Rotates a stretch of the vector.
      *
-     * <p>Mover un bloque es rotar: lo que sale de un lado entra por el otro, sin espacio de mas.
+     * <p>Moving a block is rotating: what leaves one side comes in at the other, with no extra
+     * room.
      */
     private static void rotate(Vector<Vector> v, int a, int b, int shift) {
         int size = b - a;
@@ -225,9 +228,9 @@ public class DefaultTableModel extends AbstractTableModel implements Serializabl
     }
 
     /**
-     * Saca esa fila.
+     * Removes that row.
      *
-     * @throws ArrayIndexOutOfBoundsException si la posicion esta fuera de rango
+     * @throws ArrayIndexOutOfBoundsException if the position is out of range
      */
     public void removeRow(int row) {
         dataVector.removeElementAt(row);
@@ -235,35 +238,35 @@ public class DefaultTableModel extends AbstractTableModel implements Serializabl
     }
 
     /**
-     * Cambia los nombres de las columnas, y con ellos cuantas hay.
+     * Changes the column names, and with them how many there are.
      *
-     * <p>Nulo deja cero columnas.
+     * <p>Null leaves zero columns.
      */
     public void setColumnIdentifiers(Vector<?> columnIdentifiers) {
         setDataVector(dataVector, columnIdentifiers);
     }
 
-    /** Idem, con un arreglo. */
+    /** The same, with an array. */
     public void setColumnIdentifiers(Object[] newIdentifiers) {
         setColumnIdentifiers(convertToVector(newIdentifiers));
     }
 
-    /** Cuantas columnas hay; agrega sin nombre o saca las de mas. */
+    /** How many columns there are; it adds nameless ones or removes the extra ones. */
     public void setColumnCount(int columnCount) {
         columnIdentifiers.setSize(columnCount);
         justifyRows(0, getRowCount());
         fireTableStructureChanged();
     }
 
-    /** Agrega una columna vacia con ese nombre. */
+    /** Adds an empty column with that name. */
     public void addColumn(Object columnName) {
         addColumn(columnName, (Vector) null);
     }
 
     /**
-     * Agrega una columna con esos valores.
+     * Adds a column with those values.
      *
-     * <p>Si hay menos valores que filas, las que sobran quedan en nulo.
+     * <p>If there are fewer values than rows, the leftover ones are left null.
      */
     public void addColumn(Object columnName, Vector columnData) {
         columnIdentifiers.addElement(columnName);
@@ -284,7 +287,7 @@ public class DefaultTableModel extends AbstractTableModel implements Serializabl
         fireTableStructureChanged();
     }
 
-    /** Idem, con un arreglo. */
+    /** The same, with an array. */
     public void addColumn(Object columnName, Object[] columnData) {
         addColumn(columnName, convertToVector(columnData));
     }
@@ -298,9 +301,9 @@ public class DefaultTableModel extends AbstractTableModel implements Serializabl
     }
 
     /**
-     * El nombre de esa columna.
+     * That column's name.
      *
-     * <p>Una columna sin nombre puesto se llama como diga {@link AbstractTableModel}: A, B, C...
+     * <p>A column with no name set is called whatever {@link AbstractTableModel} says: A, B, C...
      */
     public String getColumnName(int column) {
         Object id = null;
@@ -310,13 +313,13 @@ public class DefaultTableModel extends AbstractTableModel implements Serializabl
         return (id == null) ? super.getColumnName(column) : id.toString();
     }
 
-    /** Cierto siempre: ver la nota de la clase. */
+    /** Always true: see the class note. */
     public boolean isCellEditable(int row, int column) {
         return true;
     }
 
     /**
-     * @throws ArrayIndexOutOfBoundsException si la fila o la columna estan fuera de rango
+     * @throws ArrayIndexOutOfBoundsException if the row or the column are out of range
      */
     public Object getValueAt(int row, int column) {
         Vector rowVector = dataVector.elementAt(row);
@@ -324,7 +327,7 @@ public class DefaultTableModel extends AbstractTableModel implements Serializabl
     }
 
     /**
-     * @throws ArrayIndexOutOfBoundsException si la fila o la columna estan fuera de rango
+     * @throws ArrayIndexOutOfBoundsException if the row or the column are out of range
      */
     public void setValueAt(Object aValue, int row, int column) {
         Vector rowVector = dataVector.elementAt(row);
@@ -332,7 +335,7 @@ public class DefaultTableModel extends AbstractTableModel implements Serializabl
         fireTableCellUpdated(row, column);
     }
 
-    /** Ese arreglo como vector; nulo da un vector vacio. */
+    /** That array as a vector; null gives an empty vector. */
     protected static Vector<Object> convertToVector(Object[] anArray) {
         if (anArray == null) {
             return null;
@@ -344,7 +347,7 @@ public class DefaultTableModel extends AbstractTableModel implements Serializabl
         return v;
     }
 
-    /** Esa matriz como vector de vectores; nula da nulo. */
+    /** That matrix as a vector of vectors; null gives null. */
     protected static Vector<Vector<Object>> convertToVector(Object[][] anArray) {
         if (anArray == null) {
             return null;
@@ -356,7 +359,7 @@ public class DefaultTableModel extends AbstractTableModel implements Serializabl
         return v;
     }
 
-    /** Empareja esas filas al ancho de las columnas, rellenando con nulos. */
+    /** Evens those rows out to the columns' width, padding with nulls. */
     private void justifyRows(int from, int to) {
         dataVector.setSize(getRowCount());
         for (int i = from; i < to; i++) {
@@ -368,10 +371,10 @@ public class DefaultTableModel extends AbstractTableModel implements Serializabl
     }
 
     /**
-     * Un vector de ese largo, lleno de nulos.
+     * A vector of that length, full of nulls.
      *
-     * <p>Crudo a proposito: sirve tanto para una lista de nombres de columna como para una lista de
-     * filas, que son dos tipos distintos. Es como esta en el JDK.
+     * <p>Raw on purpose: it serves both for a list of column names and for a list of rows, which
+     * are two different types. It is as it is in the JDK.
      */
     @SuppressWarnings("rawtypes")
     private static Vector newVector(int size) {
@@ -381,18 +384,18 @@ public class DefaultTableModel extends AbstractTableModel implements Serializabl
     }
 
     /**
-     * Una copia de ese vector, o uno vacio si es nulo.
+     * A copy of that vector, or an empty one if it is null.
      *
-     * <p>Se copia con {@code addAll} y no con el constructor de copia, que es lo que hace el JDK:
-     * este compilador no acepta un argumento con comodin en un constructor de clase generica -- ver
-     * el hallazgo #519 -- y por metodo si pasa.
+     * <p>It is copied with {@code addAll} and not with the copy constructor, which is what the JDK
+     * does: this compiler does not accept a wildcard argument in a generic class's constructor --
+     * see finding #519 -- and through a method it does go.
      */
     @SuppressWarnings("rawtypes")
     private static Vector nonNullVector(Vector<?> v) {
-        Vector<Object> copia = new Vector<Object>();
+        Vector<Object> copy = new Vector<Object>();
         if (v != null) {
-            copia.addAll(v);
+            copy.addAll(v);
         }
-        return copia;
+        return copy;
     }
 }

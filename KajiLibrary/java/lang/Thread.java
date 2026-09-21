@@ -278,9 +278,13 @@ public class Thread implements Runnable {
         return !isAlive();
     }
 
-    // Sleep the current thread for `ms`. Under the green scheduler that's ticks of the VM's
-    // opcode clock; under the OS substrates it's real wall time. VM-intercepted.
+    // Sleep the current thread for `ms` of real wall time, on every substrate. VM-intercepted --
+    // except a **negative** timeout, which the VM lets fall through to this body so the exception
+    // carries the JDK's message and comes before the interrupt check (finding #296).
     public static void sleep(long millis) throws InterruptedException {
+        if (millis < 0) {
+            throw new IllegalArgumentException("timeout value is negative");
+        }
         throw new UnsupportedOperationException("Thread.sleep is intercepted by the VM");
     }
 
@@ -303,6 +307,18 @@ public class Thread implements Runnable {
         }
         long millis = duration.toMillis();
         if (millis <= 0) {
+            // A non-positive timeout is NOT a no-op: it is still an **interruption point**. The
+            // JDK, with the flag set, throws `InterruptedException` and clears it; here it used to
+            // come back silently leaving it set, so a `sleep(Duration.ZERO)` swallowed the
+            // cancellation and the thread went on as if nothing had happened. Measured against JDK
+            // 25: `//zero IE flag=false` there, `//zero came back flag=true` here.
+            //
+            // `Thread.interrupted()` tests **and clears**, which is exactly the pair the contract
+            // asks for. The same goes for the `long` overload, but that one is intercepted by the
+            // VM and the fix does not go here: see the note of #296.
+            if (Thread.interrupted()) {
+                throw new InterruptedException();
+            }
             return;
         }
         sleep(millis);

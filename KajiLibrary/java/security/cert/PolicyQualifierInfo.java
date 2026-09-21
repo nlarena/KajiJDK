@@ -2,30 +2,30 @@ package java.security.cert;
 
 import java.io.IOException;
 
-// Un calificador de politica de certificado (RFC 5280): un OID que dice de que tipo es, mas el
-// valor, sin interpretar.
+// A certificate policy qualifier (RFC 5280): an OID that says what type it is, plus the value,
+// uninterpreted.
 //
-// Los dos que existen en la practica son CPS (1.3.6.1.5.5.7.2.1), una URL a la declaracion de
-// practicas de la CA, y UserNotice (1.3.6.1.5.5.7.2.2), un texto para mostrarle a la persona. Esta
-// clase **no** los interpreta: separa el OID del resto y entrega el resto en crudo. Es lo correcto,
-// porque la lista de calificadores es abierta y quien conozca uno nuevo sabra que hacer con sus
-// bytes.
+// The two that exist in practice are CPS (1.3.6.1.5.5.7.2.1), a URL to the declaration of practices
+// of the CA, and UserNotice (1.3.6.1.5.5.7.2.2), a text to show the person. This class does **not**
+// interpret them: it separates the OID from the rest and hands the rest over raw. It is the right
+// thing, because the list of qualifiers is open and whoever knows a new one will know what to do
+// with its bytes.
 //
-// Es la unica clase del paquete con un constructor que parsea DER, y lo hace porque su contrato es
-// exactamente ese: recibe bytes y tiene que devolver el OID de adentro. Lo que se lee es un
-// SEQUENCE con un OBJECT IDENTIFIER adelante y nada mas — no hay ninguna decision de confianza
-// involucrada, asi que se puede hacer bien. Ver `DerReader` para donde se puso el limite.
+// It is the only class of the package with a constructor that parses DER, and it does it because
+// its contract is exactly that: it receives bytes and has to return the OID inside. What is read is
+// a SEQUENCE with an OBJECT IDENTIFIER in front and nothing else — there is no decision of trust
+// involved, so it can be done properly. See `DerReader` for where the limit was put.
 public class PolicyQualifierInfo {
 
     private final byte[] mEncoded;
     private final String mId;
     private final byte[] mData;
 
-    // Lee el calificador de su codificacion DER.
+    // It reads the qualifier from its DER encoding.
     //
-    // Se exige que los bytes sean **exactamente** un PolicyQualifierInfo: sobrar datos al final es
-    // un error y no algo que se ignore. Aceptar cola de mas dejaria pasar dos codificaciones para
-    // el mismo valor, que es justo lo que DER existe para impedir.
+    // The bytes are demanded to be **exactly** one PolicyQualifierInfo: data left over at the end
+    // is an error and not something that is ignored. Accepting extra tail would let two encodings
+    // of the same value through, which is just what DER exists to prevent.
     public PolicyQualifierInfo(byte[] encoded) throws IOException {
         if (encoded.length < 3) {
             throw new IOException("Too short");
@@ -40,42 +40,43 @@ public class PolicyQualifierInfo {
             throw new IOException("Invalid encoding for PolicyQualifierInfo");
         }
         int seqLen = d.readLength();
-        int inicioSec = d.position();
-        if (inicioSec + seqLen != copyOf.length) {
+        int seqStart = d.position();
+        if (seqStart + seqLen != copyOf.length) {
             throw new IOException("extra data at the end");
         }
         int oidLen = d.expect(DerReader.TAG_OID);
         int oidAt = d.skip(oidLen);
         this.mId = d.readOid(oidAt, oidLen);
-        // Lo que queda del SEQUENCE es el calificador, tal cual vino. Puede ser de largo cero: un
-        // PolicyQualifierInfo sin calificador es legal y devuelve un arreglo vacio, no null.
+        // What is left of the SEQUENCE is the qualifier, as it came. It may be of length zero: a
+        // PolicyQualifierInfo with no qualifier is legal and returns an empty array, not null.
         int restAt = d.position();
-        this.mData = d.copy(restAt, inicioSec + seqLen - restAt);
+        this.mData = d.copy(restAt, seqStart + seqLen - restAt);
     }
 
-    // El OID del tipo de calificador, en notacion de puntos.
+    // The OID of the type of qualifier, in dotted notation.
     public final String getPolicyQualifierId() {
         return this.mId;
     }
 
-    // Copia de la codificacion completa que se recibio.
+    // A copy of the complete encoding that was received.
     public final byte[] getEncoded() {
         byte[] c = new byte[this.mEncoded.length];
         System.arraycopy(this.mEncoded, 0, c, 0, this.mEncoded.length);
         return c;
     }
 
-    // Copia del valor del calificador en DER, sin interpretar. Nunca null: vacio si no hay.
+    // A copy of the value of the qualifier in DER, uninterpreted. Never null: empty if there is
+    // none.
     public final byte[] getPolicyQualifier() {
         byte[] c = new byte[this.mData.length];
         System.arraycopy(this.mData, 0, c, 0, this.mData.length);
         return c;
     }
 
-    // A KajiLibrary subset: el JDK imprime el calificador con su volcado hexadecimal interno, con
-    // offsets y columna ASCII. Ese formato no esta especificado en ningun lado y no vale la pena
-    // reproducirlo byte a byte; aca se imprime el hexadecimal plano. La estructura de las lineas y
-    // los nombres de los campos si son los mismos.
+    // A KajiLibrary subset: the JDK prints the qualifier with its internal hexadecimal dump, with
+    // offsets and an ASCII column. That format is not specified anywhere and is not worth
+    // reproducing byte by byte; here the plain hexadecimal is printed. The structure of the lines
+    // and the names of the fields are the same.
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();

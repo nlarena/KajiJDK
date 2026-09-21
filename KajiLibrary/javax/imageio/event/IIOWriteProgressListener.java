@@ -4,36 +4,36 @@ import java.util.EventListener;
 import javax.imageio.ImageWriter;
 
 /**
- * KajiLibrary's javax.imageio.event.IIOWriteProgressListener -- sigue el avance de una escritura.
+ * KajiLibrary's javax.imageio.event.IIOWriteProgressListener -- follows the progress of a write.
  *
- * <p>El espejo de {@link IIOReadProgressListener}, con una diferencia: <b>no hay par de secuencia</b>.
- * Escribir varias imagenes se hace de a una con {@code writeToSequence}, asi que cada llamada abre y
- * cierra su propio par de imagen.
+ * <p>The mirror of {@link IIOReadProgressListener}, with one difference: <b>there is no sequence
+ * pair</b>. Several images are written one at a time with {@code writeToSequence}, so each call
+ * opens and closes its own image pair.
  *
- * <p>{@link #writeAborted} reemplaza al {@code imageComplete} que hubiera correspondido, igual que en
- * la lectura -- y aca importa mas: un archivo cuya escritura se cancelo queda a medio escribir, y hay
- * que borrarlo. Un programa que solo escuche {@code imageComplete} deja archivos truncados.
+ * <p>{@link #writeAborted} replaces the {@code imageComplete} that would have come, as when reading
+ * -- and here it matters more: a file whose write was cancelled is left half written, and has to be
+ * deleted. A program that only listens to {@code imageComplete} leaves truncated files behind.
  */
 public interface IIOWriteProgressListener extends EventListener {
 
-    /** Empieza a escribir una imagen. */
+    /** An image starts being written. */
     void imageStarted(ImageWriter source, int imageIndex);
 
-    /** Va por ese porcentaje, de 0 a 100. */
+    /** It is at that percentage, from 0 to 100. */
     void imageProgress(ImageWriter source, float percentageDone);
 
-    /** Termino. */
+    /** It finished. */
     void imageComplete(ImageWriter source);
 
-    /** Empieza una miniatura. */
+    /** A thumbnail begins. */
     void thumbnailStarted(ImageWriter source, int imageIndex, int thumbnailIndex);
 
-    /** Va por ese porcentaje. */
+    /** It is at that percentage. */
     void thumbnailProgress(ImageWriter source, float percentageDone);
 
-    /** Termino la miniatura. */
+    /** The thumbnail finished. */
     void thumbnailComplete(ImageWriter source);
 
-    /** Se cancelo. Ver la nota de la clase: el archivo queda a medio escribir. */
+    /** It was cancelled. See the class note: the file is left half written. */
     void writeAborted(ImageWriter source);
 }

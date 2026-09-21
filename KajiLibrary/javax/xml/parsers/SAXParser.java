@@ -14,35 +14,35 @@ import org.xml.sax.XMLReader;
 import org.xml.sax.helpers.DefaultHandler;
 
 /**
- * KajiLibrary's javax.xml.parsers.SAXParser -- lee un XML avisando por evento.
+ * KajiLibrary's javax.xml.parsers.SAXParser -- reads XML notifying by event.
  *
- * <p>La contracara de {@link DocumentBuilder}: no arma nada en memoria, va llamando a un manejador a
- * medida que lee. Por eso puede leer un archivo mas grande que la memoria disponible, y por eso
- * quien lo usa tiene que quedarse con lo que le interesa mientras pasa -- lo que no se guarda, se
- * perdio.
+ * <p>The counterpart of {@link DocumentBuilder}: it builds nothing in memory, it keeps calling a
+ * handler as it reads. That is why it can read a file larger than the available memory, and why
+ * whoever uses it has to keep what interests them as it goes by -- what is not kept is lost.
  *
- * <h2>Las dos familias de {@code parse}</h2>
+ * <h2>The two {@code parse} families</h2>
  *
- * <p>Las que reciben {@link HandlerBase} son de SAX 1 y estan obsoletas; las que reciben
- * {@link DefaultHandler} son de SAX 2 y son las que hay que usar. No es solo un cambio de nombre: en
- * SAX 1 los elementos no tienen espacio de nombres, asi que un documento con prefijos llega con los
- * prefijos pegados al nombre y hay que separarlos a mano. Las dos familias siguen porque
- * {@code javax.xml.parsers} salio cuando SAX 1 todavia se usaba.
+ * <p>The ones that receive a {@link HandlerBase} are SAX 1's and are deprecated; the ones that
+ * receive a {@link DefaultHandler} are SAX 2's and are the ones to use. It is not just a change of
+ * name: in SAX 1 elements have no namespace, so a document with prefixes arrives with the prefixes
+ * stuck to the name and they have to be split by hand. Both families remain because {@code
+ * javax.xml.parsers} came out when SAX 1 was still in use.
  *
- * <p>Las dos hacen lo mismo con el manejador: se lo enchufan a los <b>cuatro</b> puntos --contenido,
- * entidades, errores y DTD-- porque {@link DefaultHandler} implementa las cuatro interfaces. De ahi
- * viene la comodidad de la clase: una sola instancia y solo se redefinen los metodos que importan.
+ * <p>Both do the same with the handler: they plug it into the <b>four</b> points --content,
+ * entities, errors and DTD-- because {@link DefaultHandler} implements the four interfaces. That is
+ * where the class's convenience comes from: a single instance, and only the methods that matter are
+ * overridden.
  */
 public abstract class SAXParser {
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected SAXParser() {
     }
 
     /**
-     * Deja el analizador como recien creado.
+     * Leaves the parser as newly created.
      *
-     * @throws UnsupportedOperationException por omision, igual que en {@link DocumentBuilder#reset}
+     * @throws UnsupportedOperationException by default, as in {@link DocumentBuilder#reset}
      */
     public void reset() {
         throw new UnsupportedOperationException(
@@ -51,10 +51,10 @@ public abstract class SAXParser {
     }
 
     /**
-     * Lee de un flujo con un manejador de SAX 1.
+     * Reads from a stream with a SAX 1 handler.
      *
-     * @throws IllegalArgumentException si el flujo es null
-     * @deprecated ver la nota de la clase; usar la version con {@link DefaultHandler}
+     * @throws IllegalArgumentException if the stream is null
+     * @deprecated see the class note; use the version with {@link DefaultHandler}
      */
     @Deprecated
     public void parse(InputStream is, HandlerBase hb) throws SAXException, IOException {
@@ -65,10 +65,10 @@ public abstract class SAXParser {
     }
 
     /**
-     * Idem, diciendo desde donde vino.
+     * Likewise, saying where it came from.
      *
-     * @throws IllegalArgumentException si el flujo es null
-     * @deprecated ver la nota de la clase
+     * @throws IllegalArgumentException if the stream is null
+     * @deprecated see the class note
      */
     @Deprecated
     public void parse(InputStream is, HandlerBase hb, String systemId)
@@ -82,9 +82,9 @@ public abstract class SAXParser {
     }
 
     /**
-     * Lee de un flujo.
+     * Reads from a stream.
      *
-     * @throws IllegalArgumentException si el flujo es null
+     * @throws IllegalArgumentException if the stream is null
      */
     public void parse(InputStream is, DefaultHandler dh) throws SAXException, IOException {
         if (is == null) {
@@ -94,10 +94,10 @@ public abstract class SAXParser {
     }
 
     /**
-     * Idem, diciendo desde donde vino.
+     * Likewise, saying where it came from.
      *
-     * @param systemId contra el que se resuelven las referencias relativas
-     * @throws IllegalArgumentException si el flujo es null
+     * @param systemId what relative references are resolved against
+     * @throws IllegalArgumentException if the stream is null
      */
     public void parse(InputStream is, DefaultHandler dh, String systemId)
         throws SAXException, IOException {
@@ -110,10 +110,10 @@ public abstract class SAXParser {
     }
 
     /**
-     * Lee de un URI con un manejador de SAX 1.
+     * Reads from a URI with a SAX 1 handler.
      *
-     * @throws IllegalArgumentException si el URI es null
-     * @deprecated ver la nota de la clase
+     * @throws IllegalArgumentException if the URI is null
+     * @deprecated see the class note
      */
     @Deprecated
     public void parse(String uri, HandlerBase hb) throws SAXException, IOException {
@@ -124,9 +124,9 @@ public abstract class SAXParser {
     }
 
     /**
-     * Lee de un URI.
+     * Reads from a URI.
      *
-     * @throws IllegalArgumentException si el URI es null
+     * @throws IllegalArgumentException if the URI is null
      */
     public void parse(String uri, DefaultHandler dh) throws SAXException, IOException {
         if (uri == null) {
@@ -136,10 +136,10 @@ public abstract class SAXParser {
     }
 
     /**
-     * Lee de un archivo con un manejador de SAX 1.
+     * Reads from a file with a SAX 1 handler.
      *
-     * @throws IllegalArgumentException si el archivo es null
-     * @deprecated ver la nota de la clase
+     * @throws IllegalArgumentException if the file is null
+     * @deprecated see the class note
      */
     @Deprecated
     public void parse(File f, HandlerBase hb) throws SAXException, IOException {
@@ -150,12 +150,12 @@ public abstract class SAXParser {
     }
 
     /**
-     * Lee de un archivo.
+     * Reads from a file.
      *
-     * <p>El identificador de sistema sale del camino absoluto; ver
-     * {@link DocumentBuilder#parse(File)}.
+     * <p>The system identifier comes from the absolute path; see {@link
+     * DocumentBuilder#parse(File)}.
      *
-     * @throws IllegalArgumentException si el archivo es null
+     * @throws IllegalArgumentException if the file is null
      */
     public void parse(File f, DefaultHandler dh) throws SAXException, IOException {
         if (f == null) {
@@ -165,10 +165,10 @@ public abstract class SAXParser {
     }
 
     /**
-     * Lee de una fuente con un manejador de SAX 1.
+     * Reads from a source with a SAX 1 handler.
      *
-     * @throws IllegalArgumentException si la fuente es null
-     * @deprecated ver la nota de la clase
+     * @throws IllegalArgumentException if the source is null
+     * @deprecated see the class note
      */
     @Deprecated
     public void parse(InputSource is, HandlerBase hb) throws SAXException, IOException {
@@ -186,12 +186,12 @@ public abstract class SAXParser {
     }
 
     /**
-     * Lee de una fuente.
+     * Reads from a source.
      *
-     * <p>Es donde terminan todos los demas {@code parse} de SAX 2: el manejador se enchufa en los
-     * cuatro puntos y recien ahi se lee.
+     * <p>It is where all the other SAX 2 {@code parse}s end up: the handler is plugged into the
+     * four points and only then is it read.
      *
-     * @throws IllegalArgumentException si la fuente es null
+     * @throws IllegalArgumentException if the source is null
      */
     public void parse(InputSource is, DefaultHandler dh) throws SAXException, IOException {
         if (is == null) {
@@ -208,41 +208,41 @@ public abstract class SAXParser {
     }
 
     /**
-     * El analizador de SAX 1 que hay detras.
+     * The SAX 1 parser behind it.
      *
-     * @deprecated ver la nota de la clase; usar {@link #getXMLReader}
+     * @deprecated see the class note; use {@link #getXMLReader}
      */
     @Deprecated
     public abstract Parser getParser() throws SAXException;
 
-    /** El de SAX 2, que es el que de verdad hace el trabajo. */
+    /** The SAX 2 one, which is the one that really does the work. */
     public abstract XMLReader getXMLReader() throws SAXException;
 
-    /** Si distingue espacios de nombres. */
+    /** Whether it tells namespaces apart. */
     public abstract boolean isNamespaceAware();
 
-    /** Si valida contra la DTD del documento. */
+    /** Whether it validates against the document's DTD. */
     public abstract boolean isValidating();
 
     /**
-     * Cambia una propiedad del lector.
+     * Changes a property of the reader.
      *
-     * @throws SAXNotRecognizedException si no conoce ese nombre
-     * @throws SAXNotSupportedException si lo conoce pero no lo puede cambiar ahora
+     * @throws SAXNotRecognizedException if it does not know that name
+     * @throws SAXNotSupportedException if it knows it but cannot change it now
      */
     public abstract void setProperty(String name, Object value)
         throws SAXNotRecognizedException, SAXNotSupportedException;
 
-    /** El valor de una propiedad. */
+    /** The value of a property. */
     public abstract Object getProperty(String name)
         throws SAXNotRecognizedException, SAXNotSupportedException;
 
     /**
-     * El esquema contra el que valida, o null.
+     * The schema it validates against, or null.
      *
-     * <p>Lo pone la fabrica; ver {@link DocumentBuilder#getSchema}.
+     * <p>The factory sets it; see {@link DocumentBuilder#getSchema}.
      *
-     * @throws UnsupportedOperationException por omision
+     * @throws UnsupportedOperationException by default
      */
     public Schema getSchema() {
         throw new UnsupportedOperationException(
@@ -250,9 +250,9 @@ public abstract class SAXParser {
     }
 
     /**
-     * Si resuelve XInclude.
+     * Whether it resolves XInclude.
      *
-     * @throws UnsupportedOperationException por omision; ver {@link DocumentBuilder#isXIncludeAware}
+     * @throws UnsupportedOperationException by default; see {@link DocumentBuilder#isXIncludeAware}
      */
     public boolean isXIncludeAware() {
         throw new UnsupportedOperationException(

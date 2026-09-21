@@ -6,14 +6,14 @@ import javax.swing.plaf.basic.BasicSplitPaneDivider;
 import javax.swing.plaf.basic.BasicSplitPaneUI;
 
 /**
- * El panel dividido de Metal.
+ * Metal's split pane.
  *
- * <p>Una sola linea de codigo util: cambia el divisor por uno de Metal. Todo lo demas -- la
- * distribucion, el arrastre, los dos botones de un toque -- es del basico.
+ * <p>A single useful line of code: it swaps the divider for a Metal one. Everything else -- the
+ * layout, the dragging, the two one-touch buttons -- is the basic one's.
  *
- * <p>Es un buen ejemplo de para que sirve que {@code createDefaultDivider} sea un metodo y no un
- * {@code new} adentro de {@code installUI}: un aspecto entero que cambia el aspecto de un
- * componente entero, en tres lineas.
+ * <p>It is a good example of what it is for that {@code createDefaultDivider} is a method and not
+ * a {@code new} inside {@code installUI}: a whole look and feel changing the look of a whole
+ * component, in three lines.
  */
 public class MetalSplitPaneUI extends BasicSplitPaneUI {
 

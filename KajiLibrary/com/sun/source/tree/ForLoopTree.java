@@ -3,7 +3,7 @@ package com.sun.source.tree;
 import java.util.List;
 
 /**
- * El `for` clasico de tres partes. Las tres pueden faltar.
+ * The classic `for` of three parts. The three of them may be missing.
  */
 public interface ForLoopTree extends StatementTree {
 

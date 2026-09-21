@@ -48,10 +48,11 @@ public class EnumMap<K extends Enum, V> implements Map<K, V>, Serializable, Clon
     // Values by ordinal. `vals[i] == null` means absent.
     private Object[] vals;
 
-    // Las CLAVES por ordinal, en paralelo a `vals` (finding #205). Sin esto no hay `keySet()`
-    // posible: de un ordinal no se vuelve a la constante sin el universo del enum, y obtenerlo
-    // pide `Class.getEnumConstants()` — reflexion sobre `$VALUES`, que la VM no implementa.
-    // Guardar la clave que ya nos pasaron cuesta un puntero por entrada y no necesita nada.
+    // The KEYS by ordinal, parallel to `vals` (finding #205). Without this no `keySet()` is possible:
+    // from an ordinal there is no way back to the constant without the enum's universe, and getting
+    // that asks for `Class.getEnumConstants()` — reflection over `$VALUES`, which the VM does not
+    // implement. Storing the key we were handed anyway costs one pointer per entry and needs
+    // nothing.
     private Object[] keys;
 
     private int size;
@@ -74,56 +75,56 @@ public class EnumMap<K extends Enum, V> implements Map<K, V>, Serializable, Clon
     }
 
     /**
-     * Copia los pares de otro mapa cualquiera.
+     * It copies any other map's pairs.
      *
-     * <p>Si el origen ya es un EnumMap se delega en el constructor de arriba, que copia los
-     * arreglos directo. Si no, hay que **deducir el tipo del enum** de la primera clave, porque un
-     * EnumMap no puede existir sin el: sus arreglos van indexados por ordinal, y de un ordinal no
-     * se vuelve a la constante sin saber de que enum es.
+     * <p>If the source is an EnumMap already it delegates to the constructor above, which copies the
+     * arrays directly. If not, the **enum's type has to be deduced** from the first key, because an
+     * EnumMap cannot exist without it: its arrays are indexed by ordinal, and from an ordinal there
+     * is no way back to the constant without knowing which enum it is from.
      *
-     * <p>De ahi que un mapa vacio que no sea EnumMap sea un error y no un mapa vacio: no hay
-     * primera clave de donde sacarlo. Es lo que hace el JDK.
+     * <p>Hence an empty map that is not an EnumMap is an error and not an empty map: there is no
+     * first key to take it from. It is what the JDK does.
      */
     public EnumMap(Map<K, ? extends V> m) {
         if (m instanceof EnumMap) {
-            EnumMap<K, V> otro = (EnumMap<K, V>) m;
-            this.keyType = otro.keyType;
-            this.vals = new Object[otro.vals.length];
-            this.keys = new Object[otro.vals.length];
-            for (int i = 0; i < otro.vals.length; i++) {
-                this.vals[i] = otro.vals[i];
-                this.keys[i] = otro.keys[i];
+            EnumMap<K, V> src = (EnumMap<K, V>) m;
+            this.keyType = src.keyType;
+            this.vals = new Object[src.vals.length];
+            this.keys = new Object[src.vals.length];
+            for (int i = 0; i < src.vals.length; i++) {
+                this.vals[i] = src.vals[i];
+                this.keys[i] = src.keys[i];
             }
-            this.size = otro.size;
+            this.size = src.size;
             return;
         }
         Iterator<K> it = m.keySet().iterator();
         if (!it.hasNext()) {
             throw new IllegalArgumentException("Specified map is empty");
         }
-        K primera = it.next();
-        Object c = primera.getClass();
+        K first = it.next();
+        Object c = first.getClass();
         this.keyType = (Class<K>) c;
         this.vals = new Object[8];
         this.keys = new Object[8];
-        this.put(primera, m.get(primera));
+        this.put(first, m.get(first));
         while (it.hasNext()) {
             K k = it.next();
             this.put(k, m.get(k));
         }
     }
 
-    // Una copia superficial: mismos pares, arreglos propios.
+    // A shallow copy: the same pairs, arrays of its own.
     public EnumMap<K, V> clone() {
         return new EnumMap<K, V>(this);
     }
 
     // The ordinal of `key`, or -1 if it is not a constant of this map's enum type.
     //
-    // El bind a un local `Enum` antes de llamar `ordinal()` ya no es un rodeo: lo era por el
-    // finding #111 (una llamada sobre un receptor de tipo *variable de tipo* se descartaba en
-    // silencio), que quedo **arreglado el 2026-08-24**. Se conserva porque el parametro es `Object`
-    // y el cast hace falta igual, pero ya no hay nada que esquivar.
+    // Binding to an `Enum` local before calling `ordinal()` is no longer a detour: it was one because
+    // of finding #111 (a call on a receiver of a *type variable* type was silently dropped), which
+    // was **fixed on 2026-08-24**. It is kept because the parameter is `Object` and the cast is needed
+    // anyway, but there is nothing left to dodge.
     private int ordinalOf(Object key) {
         int index = -1;
         if (key != null && keyType.isInstance(key)) {
@@ -168,10 +169,12 @@ public class EnumMap<K extends Enum, V> implements Map<K, V>, Serializable, Clon
         }
     }
 
-    // Las claves presentes, recorridas en orden de ordinal (finding #205). Divergencia: el JDK
-    // devuelve una vista ordenada por ordinal; esta es un HashSet, que no conserva ese orden.
+    // The keys that are present, in ordinal order (finding #205). The walk below is by ordinal, so
+    // the order is right at the source; it is the destination that has to keep it, which is why this
+    // is a LinkedHashSet and not a HashSet. Still a divergence from the JDK, but only in one thing
+    // now: this is a copy and the JDK's is a view.
     public Set<K> keySet() {
-        HashSet<K> out = new HashSet<K>();
+        LinkedHashSet<K> out = new LinkedHashSet<K>();
         int i = 0;
         while (i < vals.length) {
             if (vals[i] != null) {
@@ -213,10 +216,15 @@ public class EnumMap<K extends Enum, V> implements Map<K, V>, Serializable, Clon
     }
 
     public V put(K key, V value) {
+        // The two rejections are different exceptions and the order matters: the JDK reaches
+        // `key.getClass()` on the way to its type check, so a null key comes out as a
+        // NullPointerException and only a constant of ANOTHER enum is a ClassCastException.
+        // Lumping both into one was the caller being told the wrong thing about their bug.
+        if (key == null) {
+            throw new NullPointerException("an EnumMap has no null key");
+        }
         int i = ordinalOf(key);
         if (i < 0) {
-            // Either null or a constant of some other enum. Both are the caller confusing two
-            // key spaces, and silently ignoring that would corrupt the map.
             throw new ClassCastException("key is not a constant of this map's enum type");
         }
         ensureCapacity(i);
@@ -324,11 +332,11 @@ public class EnumMap<K extends Enum, V> implements Map<K, V>, Serializable, Clon
     }
 
     /**
-     * Los valores de este mapa.
+     * This map's values.
      *
-     * <p>**Divergencia deliberada**, la misma que ya declara `keySet()`: la del JDK es una *vista*
-     * respaldada por el mapa; esta es una copia sacada en el momento. Y a diferencia de `keySet()`
-     * es una `Collection` y no un `Set`, porque los valores **si** pueden repetirse.
+     * <p>**A deliberate divergence**, the same one `keySet()` already declares: the JDK's is a *view*
+     * backed by the map; this one is a copy taken at the moment of asking. And unlike `keySet()` this
+     * is a `Collection` and not a `Set`, because values **can** repeat.
      */
     public java.util.Collection<V> values() {
         java.util.ArrayList<V> out = new java.util.ArrayList<V>();
@@ -340,15 +348,16 @@ public class EnumMap<K extends Enum, V> implements Map<K, V>, Serializable, Clon
     }
 
     /**
-     * Los pares de este mapa.
+     * This map's pairs.
      *
-     * <p>Misma divergencia que `values()`: copia, no vista. Los pares que devuelve son inmutables,
-     * asi que `setValue` sobre uno de ellos lanza en vez de escribir en el mapa — que es lo
-     * coherente con que sea una copia: escribir en un par que nadie mira seria peor que negarse.
+     * <p>The same divergence as `values()`: a copy, not a view. The pairs it returns are immutable,
+     * so `setValue` on one of them throws instead of writing into the map — which is what is
+     * consistent with it being a copy: writing into a pair nobody looks at would be worse than
+     * refusing.
      */
     public java.util.Set<java.util.Map.Entry<K, V>> entrySet() {
-        java.util.HashSet<java.util.Map.Entry<K, V>> out =
-            new java.util.HashSet<java.util.Map.Entry<K, V>>();
+        java.util.LinkedHashSet<java.util.Map.Entry<K, V>> out =
+            new java.util.LinkedHashSet<java.util.Map.Entry<K, V>>();
         java.util.Iterator<K> it = this.keySet().iterator();
         while (it.hasNext()) {
             K k = it.next();

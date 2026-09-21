@@ -3,28 +3,28 @@ package javax.swing.tree;
 import javax.swing.event.TreeExpansionEvent;
 
 /**
- * Alguien se opuso a que una rama se abriera o cerrara.
+ * Somebody objected to a branch being opened or closed.
  *
- * <p>Es un <em>veto</em>, no un error: el mecanismo es que el arbol pregunta antes de expandir y
- * cualquier oyente puede negarse tirando esto. Que sea una excepcion chequeada es lo que obliga al
- * arbol a preverlo en vez de asumir que la expansion siempre ocurre.
+ * <p>It is a <em>veto</em>, not an error: the mechanism is that the tree asks before expanding
+ * and any listener can refuse by throwing this. That it is a checked exception is what forces the
+ * tree to foresee it instead of assuming that the expansion always happens.
  *
- * <p>Lleva adentro el evento que se estaba por procesar, para que quien la atrape sepa de que rama
- * se trataba.
+ * <p>It carries inside the event that was about to be processed, so that whoever catches it knows
+ * which branch it was about.
  */
 public class ExpandVetoException extends Exception {
 
     private static final long serialVersionUID = 1L;
 
-    /** El evento que se veto. */
+    /** The event that was vetoed. */
     protected TreeExpansionEvent event;
 
-    /** Sin mensaje. */
+    /** Without a message. */
     public ExpandVetoException(TreeExpansionEvent event) {
         this(event, null);
     }
 
-    /** Con un mensaje que explique el motivo del veto. */
+    /** With a message explaining the reason for the veto. */
     public ExpandVetoException(TreeExpansionEvent event, String message) {
         super(message);
         this.event = event;

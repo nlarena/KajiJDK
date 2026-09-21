@@ -7,77 +7,80 @@ import java.nio.charset.Charset;
 import java.util.Locale;
 
 /**
- * KajiLibrary's jdk.internal.io.JdkConsoleImpl — la consola por omisión.
+ * KajiLibrary's jdk.internal.io.JdkConsoleImpl -- the default console.
  *
- * <p><strong>Esta VM no tiene terminal, y esta clase lo dice en vez de fingir.</strong> La salida va a
- * un sumidero y la entrada está en fin de archivo, exactamente como {@link java.io.Console} —que es
- * quien la usaría— ya lo documenta desde antes. `System.console()` devuelve `null`, así que en la
- * práctica nadie llega hasta acá.
+ * <p><strong>This VM has no terminal, and this class says so instead of pretending.</strong> The
+ * output goes to a sink and the input is at end of file, exactly as {@link java.io.Console} --which
+ * is the one that would use it-- already documents from before. `System.console()` returns `null`,
+ * so in practice nobody gets this far.
  *
- * <p>Vale explicar por qué eso **no** la convierte en un miembro que miente, que es la línea que este
- * proyecto no cruza. Ninguno de estos métodos promete que haya alguien del otro lado:
+ * <p>It is worth explaining why that does **not** turn it into a member that lies, which is the
+ * line this project does not cross. None of these methods promises that there is somebody on the
+ * other side:
  *
  * <ul>
- * <li>{@link #readLine()} devuelve `null` en fin de entrada, y eso es lo que el contrato dice que
- *     pasa cuando la entrada se agotó. Una entrada vacía **está** agotada desde el principio.</li>
- * <li>{@link #readPassword()} devuelve `null` por lo mismo.</li>
- * <li>Escribir en una consola sin terminal no tiene resultado observable, así que un sumidero es una
- *     implementación correcta y no una simulación.</li>
+ * <li>{@link #readLine()} returns `null` at end of input, and that is what the contract says
+ *     happens when the input has run out. An empty input **is** run out from the start.</li>
+ * <li>{@link #readPassword()} returns `null` for the same reason.</li>
+ * <li>Writing to a console with no terminal has no observable result, so a sink is a correct
+ *     implementation and not a simulation.</li>
  * </ul>
  *
- * <p>Lo que sí sería mentir es que `System.console()` devolviera una de éstas: el programa creería
- * que hay un usuario mirando. Por eso devuelve `null`, y por eso esta clase es alcanzable sólo por
- * quien la construya a mano sabiendo lo que hace.
+ * <p>What would be lying is that `System.console()` returned one of these: the program would
+ * believe that there is a user watching. That is why it returns `null`, and that is why this class
+ * is reachable only by whoever builds it by hand knowing what they are doing.
  *
- * <p>La única diferencia visible con el JDK está en `readPassword`: allá el eco se apaga tocando la
- * terminal, y acá no hay terminal que tocar. No hay nada que apagar y nada que se muestre.
+ * <p>The only visible difference with the JDK is in `readPassword`: over there the echo is turned
+ * off by touching the terminal, and here there is no terminal to touch. There is nothing to turn
+ * off and nothing that is shown.
  */
 public final class JdkConsoleImpl implements JdkConsole {
 
-    private final Charset entrada;
-    private final Charset salida;
-    private final PrintWriter escritor;
-    private final Reader lector;
+    private final Charset inCharset;
+    private final Charset outCharset;
+    private final PrintWriter writer;
+    private final Reader reader;
 
     /**
-     * @param inCharset el juego de caracteres de la entrada
-     * @param outCharset el de la salida
+     * @param inCharset the character set of the input
+     * @param outCharset that of the output
      */
     public JdkConsoleImpl(Charset inCharset, Charset outCharset) {
-        this.entrada = inCharset;
-        this.salida = outCharset;
-        this.escritor = new PrintWriter(new Sumidero(), true);
-        this.lector = new EnFinDeArchivo();
+        this.inCharset = inCharset;
+        this.outCharset = outCharset;
+        this.writer = new PrintWriter(new Sink(), true);
+        this.reader = new AtEndOfFile();
     }
 
     public PrintWriter writer() {
-        return this.escritor;
+        return this.writer;
     }
 
     public Reader reader() {
-        return this.lector;
+        return this.reader;
     }
 
     public JdkConsole println(Object obj) {
-        this.escritor.println(obj);
-        this.escritor.flush();
+        this.writer.println(obj);
+        this.writer.flush();
         return this;
     }
 
     public JdkConsole print(Object obj) {
-        this.escritor.print(obj);
-        this.escritor.flush();
+        this.writer.print(obj);
+        this.writer.flush();
         return this;
     }
 
     public JdkConsole format(Locale locale, String format, Object... args) {
-        this.escritor.write(String.format(locale, format, args));
-        this.escritor.flush();
+        this.writer.write(String.format(locale, format, args));
+        this.writer.flush();
         return this;
     }
 
-    // El mensaje se escribe igual antes de leer: que la lectura no vaya a dar nada no cambia el
-    // orden de las operaciones, y un llamador que mire la salida tiene que ver el pedido.
+    // The message is written all the same before reading: that the reading is not going to give
+    // anything does not change the order of the operations, and a caller that looks at the output
+    // has to see the request.
     public String readLine(Locale locale, String format, Object... args) {
         this.format(locale, format, args);
         return this.readLine();
@@ -97,28 +100,29 @@ public final class JdkConsoleImpl implements JdkConsole {
     }
 
     public void flush() {
-        this.escritor.flush();
+        this.writer.flush();
     }
 
     /**
-     * El juego de caracteres de la **salida**.
+     * The character set of the **output**.
      *
-     * <p>El constructor recibe dos y este método devuelve uno: el del JDK devuelve el de salida, que
-     * es el que gobierna lo que se escribe. El de entrada se guarda porque el constructor lo declara
-     * y porque es parte del estado de la consola, no porque haga falta para responder esto.
+     * <p>The constructor receives two and this method returns one: the one of the JDK returns that
+     * of the output, which is the one that governs what is written. The one of the input is kept
+     * because the constructor declares it and because it is part of the state of the console, not
+     * because it is needed in order to answer this.
      */
     public Charset charset() {
-        return this.salida;
+        return this.outCharset;
     }
 
-    /** El juego de caracteres de la entrada, para quien lo necesite dentro del paquete. */
-    Charset charsetDeEntrada() {
-        return this.entrada;
+    /** The character set of the input, for whoever needs it inside the package. */
+    Charset inputCharset() {
+        return this.inCharset;
     }
 
-    // Sin terminal, escribir no tiene efecto observable. Se descarta en vez de acumular: guardar
-    // texto que nadie va a leer seria una perdida silenciosa de memoria.
-    private static final class Sumidero extends Writer {
+    // With no terminal, writing has no observable effect. It is discarded instead of accumulated:
+    // keeping text nobody is going to read would be a silent loss of memory.
+    private static final class Sink extends Writer {
         public void write(char[] buf, int off, int len) {
         }
 
@@ -129,8 +133,9 @@ public final class JdkConsoleImpl implements JdkConsole {
         }
     }
 
-    // Una entrada que ya se agoto. `read` devuelve -1, que es como se dice "no hay mas".
-    private static final class EnFinDeArchivo extends Reader {
+    // An input that has already run out. `read` returns -1, which is how "there is no more" is
+    // said.
+    private static final class AtEndOfFile extends Reader {
         public int read(char[] buf, int off, int len) {
             return -1;
         }

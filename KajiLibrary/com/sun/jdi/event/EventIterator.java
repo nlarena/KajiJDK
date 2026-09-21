@@ -3,16 +3,16 @@ package com.sun.jdi.event;
 import java.util.Iterator;
 
 /**
- * Recorre los eventos de un {@link EventSet} sin tener que convertirlos.
+ * It walks an {@link EventSet}'s events without having to convert them.
  *
  * @since 1.3
  */
 public interface EventIterator extends Iterator<Event> {
 
     /**
-     * El next event.
+     * The next event.
      *
-     * @return el resultado
+     * @return the result
      */
     Event nextEvent();
 }

@@ -1,14 +1,14 @@
 package java.util.logging;
 
 /**
- * KajiLibrary's java.util.logging.Filter -- el segundo criterio, despues del nivel.
+ * KajiLibrary's java.util.logging.Filter -- the second criterion, after the level.
  *
- * <p>El nivel decide por **importancia** y este por lo que sea: el nombre de la clase, el contenido
- * del mensaje, la hora. Se aplica despues del nivel a proposito, porque comparar dos enteros es
- * mucho mas barato que llamar a codigo del usuario.
+ * <p>The level decides by **importance** and this one by whatever: the class's name, the message's
+ * content, the time. It is applied after the level on purpose, because comparing two integers is
+ * much cheaper than calling the user's code.
  */
 public interface Filter {
 
-    /** Si ese registro debe publicarse. */
+    /** Whether that record should be published. */
     boolean isLoggable(LogRecord record);
 }

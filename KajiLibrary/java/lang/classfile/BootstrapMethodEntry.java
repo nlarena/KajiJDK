@@ -5,21 +5,21 @@ import java.lang.classfile.constantpool.LoadableConstantEntry;
 import java.lang.classfile.constantpool.MethodHandleEntry;
 import java.util.List;
 
-// Una fila de la tabla del atributo `BootstrapMethods` (JVMS §4.7.23): el method handle de arranque
-// y sus argumentos estáticos. No es una `PoolEntry` —no vive en el pool de constantes— pero se
-// indexa igual que él desde `CONSTANT_Dynamic` y `CONSTANT_InvokeDynamic`, y por eso la API la trata
-// como parte del pool.
+// A row of the `BootstrapMethods` attribute's table (JVMS §4.7.23): the bootstrap method handle and
+// its static arguments. It is not a `PoolEntry` --it does not live in the constant pool-- but it is
+// indexed just as one from `CONSTANT_Dynamic` and `CONSTANT_InvokeDynamic`, and that is why the API
+// treats it as part of the pool.
 public interface BootstrapMethodEntry {
 
-    /** El pool al que pertenece. */
+    /** The pool it belongs to. */
     ConstantPool constantPool();
 
-    /** El índice de esta fila dentro de la tabla. */
+    /** This row's index within the table. */
     int bsmIndex();
 
-    /** El method handle de arranque. */
+    /** The bootstrap method handle. */
     MethodHandleEntry bootstrapMethod();
 
-    /** Los argumentos estáticos, en orden. */
+    /** The static arguments, in order. */
     List<LoadableConstantEntry> arguments();
 }

@@ -1,20 +1,20 @@
 package javax.sql;
 
 /**
- * KajiLibrary's javax.sql.RowSetListener -- se entera de lo que le pasa a un {@link RowSet}.
+ * KajiLibrary's javax.sql.RowSetListener -- finds out what happens to a {@link RowSet}.
  *
- * <p>Los tres avisos van de menos a mas grande, y estan separados porque cuestan distinto reaccionar:
- * mover el cursor puede pedir solo repintar una fila, cambiar una fila pide repintarla, y cambiar el
- * conjunto entero pide volver a dibujar todo.
+ * <p>The three notices go from smaller to larger, and they are separate because reacting costs
+ * differently: moving the cursor may only need repainting one row, changing a row needs repainting
+ * it, and changing the whole set needs drawing everything again.
  */
 public interface RowSetListener extends java.util.EventListener {
 
-    /** El cursor se movio. */
+    /** The cursor moved. */
     void cursorMoved(RowSetEvent event);
 
-    /** La fila actual cambio. */
+    /** The current row changed. */
     void rowChanged(RowSetEvent event);
 
-    /** Cambio el conjunto entero. */
+    /** The whole set changed. */
     void rowSetChanged(RowSetEvent event);
 }

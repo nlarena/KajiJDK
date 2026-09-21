@@ -1,22 +1,24 @@
 package javax.security.auth.login;
 
 /**
- * KajiLibrary's javax.security.auth.login.FailedLoginException -- la autenticacion no cerro.
+ * KajiLibrary's javax.security.auth.login.FailedLoginException -- the authentication did not go
  *
- * <p>Es la generica, y a proposito: es la que hay que mostrar hacia afuera. Las de arriba dicen
- * <b>por que</b> fallo, que es informacion que sirve en los registros y que casi nunca conviene
- * mandarle a quien esta intentando entrar.
+ * through.
+ *
+ * <p>It is the generic one, and on purpose: it is the one to show to the outside. The ones above
+ * say <b>why</b> it failed, which is information that serves in the logs and that is almost never
+ * wise to send to whoever is trying to get in.
  */
 public class FailedLoginException extends LoginException {
 
     private static final long serialVersionUID = 802556922354616286L;
 
-    /** Sin detalle. */
+    /** Without detail. */
     public FailedLoginException() {
         super();
     }
 
-    /** Con un mensaje que diga que paso. */
+    /** With a message that says what happened. */
     public FailedLoginException(String msg) {
         super(msg);
     }

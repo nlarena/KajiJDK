@@ -3,28 +3,28 @@ package org.w3c.dom.ls;
 import org.w3c.dom.events.Event;
 
 /**
- * KajiLibrary's org.w3c.dom.ls.LSProgressEvent -- avance de una carga.
+ * KajiLibrary's org.w3c.dom.ls.LSProgressEvent -- the progress of a load.
  *
- * <p>Se manda cada tanto mientras un {@link LSParser} asincronico trabaja, para poder mostrar una
- * barra de progreso.
+ * <p>It is sent every so often while an asynchronous {@link LSParser} works, so that a progress bar
+ * can be shown.
  *
- * <p>Los dos numeros estan en bytes del documento fuente, no en nodos del arbol. Es la unidad
- * correcta --el analizador sabe cuanto leyo, no cuanto le falta por construir-- y tiene una
- * consecuencia que conviene tener presente: {@link #getTotalSize} <b>no siempre se conoce</b>. Un
- * documento que llega por un flujo sin largo declarado no tiene total, y la especificacion no define
- * un valor para ese caso, asi que quien dibuja la barra tiene que estar preparado para no tenerlo.
+ * <p>The two numbers are in bytes of the source document, not in nodes of the tree. It is the right
+ * unit --the parser knows how much it read, not how much it has left to build-- and it has a
+ * consequence worth keeping in mind: {@link #getTotalSize} <b>is not always known</b>. A document
+ * that arrives through a stream with no declared length has no total, and the specification defines
+ * no value for that case, so whoever draws the bar has to be ready not to have it.
  *
- * <p>La frecuencia con que se manda queda a criterio de la implementacion. No hay forma de pedir una
- * granularidad, y por eso no sirve para contar: sirve para mostrar.
+ * <p>How often it is sent is left to the implementation. There is no way of asking for a
+ * granularity, and that is why it does not serve for counting: it serves for showing.
  */
 public interface LSProgressEvent extends Event {
 
-    /** De donde se esta cargando. */
+    /** Where it is being loaded from. */
     LSInput getInput();
 
-    /** Cuantos bytes se leyeron. */
+    /** How many bytes were read. */
     int getPosition();
 
-    /** Cuantos hay en total, si se sabe. Ver la nota de la clase. */
+    /** How many there are in total, if it is known. See the note of the class. */
     int getTotalSize();
 }

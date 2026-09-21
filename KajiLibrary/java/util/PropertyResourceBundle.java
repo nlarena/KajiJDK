@@ -4,40 +4,41 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.Reader;
 
-// Un ResourceBundle escrito como archivo `.properties` en vez de como clase.
+// A ResourceBundle written as a `.properties` file instead of as a class.
 //
-// Es la otra mitad de ListResourceBundle, y la que se usa cuando las traducciones las mantiene
-// alguien que no compila: un `.properties` se edita con cualquier editor y no necesita pasar por
-// javac. La contrapartida es que los valores solo pueden ser cadenas — un `.properties` no sabe
-// decir "arreglo de String" ni "entero".
+// It is ListResourceBundle's other half, and the one used when the translations are maintained by
+// somebody who does not compile: a `.properties` is edited with any editor and does not have to go
+// through javac. The counterpart is that the values can only be strings — a `.properties` cannot say
+// "array of String" nor "integer".
 //
-// Cargar es un acto unico: el archivo se lee entero en el constructor y despues el bundle es
-// inmutable. Por eso el constructor declara `throws IOException` y ningun otro metodo lo hace.
+// Loading is a single act: the file is read whole in the constructor and afterwards the bundle is
+// immutable. That is why the constructor declares `throws IOException` and no other method does.
 public class PropertyResourceBundle extends ResourceBundle {
 
-    // Los pares leidos del archivo.
+    // The pairs read from the file.
     private final Properties lookup;
 
-    // Lee el bundle de `stream`, en ISO-8859-1 como manda el formato.
+    // It reads the bundle from `stream`, in ISO-8859-1 as the format demands.
     //
-    // Que sea Latin-1 y no UTF-8 sorprende siempre, y es por compatibilidad: el formato es
-    // anterior a que UTF-8 fuera lo normal, y por eso trae `\\uXXXX` — es la unica forma de
-    // escribir un caracter que no entra en un byte.
+    // That it be Latin-1 and not UTF-8 always surprises, and it is for compatibility: the format
+    // predates UTF-8 being normal, and that is why it carries `\\uXXXX` — it is the only way of
+    // writing a character that does not fit in a byte.
     public PropertyResourceBundle(InputStream stream) throws IOException {
         this.lookup = new Properties();
         this.lookup.load(stream);
     }
 
-    // Lee el bundle de `reader`, que ya viene decodificado.
+    // It reads the bundle from `reader`, which arrives already decoded.
     //
-    // Esta es la sobrecarga que hay que usar para un archivo en UTF-8: el llamador decide la
-    // codificacion al construir el Reader, en vez de quedar atado al Latin-1 del stream.
+    // This is the overload to use for a file in UTF-8: the caller decides the encoding when building
+    // the Reader, instead of being tied to the stream's Latin-1.
     public PropertyResourceBundle(Reader reader) throws IOException {
         this.lookup = new Properties();
         this.lookup.load(reader);
     }
 
-    // El valor de `key` en ESTE bundle, o null. No consulta al padre: de eso se ocupa getObject.
+    // `key`'s value in THIS bundle, or null. It does not consult the parent: getObject sees to
+    // that.
     public Object handleGetObject(String key) {
         if (key == null) {
             throw new NullPointerException();
@@ -45,16 +46,16 @@ public class PropertyResourceBundle extends ResourceBundle {
         return this.lookup.get(key);
     }
 
-    // Todas las claves visibles: las propias y las que agregue el padre.
+    // Every visible key: its own and whatever the parent adds.
     public Enumeration<String> getKeys() {
-        Enumeration<String> delPadre = null;
+        Enumeration<String> fromParent = null;
         if (this.parent != null) {
-            delPadre = this.parent.getKeys();
+            fromParent = this.parent.getKeys();
         }
-        return new BundleKeyEnumeration(this.handleKeySet().iterator(), delPadre);
+        return new BundleKeyEnumeration(this.handleKeySet().iterator(), fromParent);
     }
 
-    // Las claves que este bundle define, sin las del padre.
+    // The keys this bundle defines, without the parent's.
     protected Set<String> handleKeySet() {
         HashSet<String> out = new HashSet<String>();
         Iterator<String> it = this.lookup.stringPropertyNames().iterator();

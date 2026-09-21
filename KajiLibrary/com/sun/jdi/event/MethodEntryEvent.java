@@ -3,16 +3,16 @@ package com.sun.jdi.event;
 import com.sun.jdi.Method;
 
 /**
- * Se entro a un metodo.
+ * A method was entered.
  *
  * @since 1.3
  */
 public interface MethodEntryEvent extends LocatableEvent {
 
     /**
-     * El method.
+     * The method.
      *
-     * @return el resultado
+     * @return the result
      */
     Method method();
 }

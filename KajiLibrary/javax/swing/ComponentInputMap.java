@@ -1,27 +1,28 @@
 package javax.swing;
 
 /**
- * Un {@link InputMap} atado a un componente.
+ * An {@link InputMap} tied to a component.
  *
- * <h2>Por que necesita conocer al componente</h2>
+ * <h2>Why it needs to know the component</h2>
  *
- * <p>Un atajo que vale en toda la ventana lo atiende el componente que lo declaro, aunque el foco
- * este en otro lado. Para eso Swing guarda una tabla de esos atajos por ventana, armada a partir de
- * los componentes que la contienen; cuando uno cambia su tabla, esa tabla de ventana hay que
- * rehacerla. Sin saber de que componente es, no habria a quien avisarle.
+ * <p>A shortcut that holds in the whole window is attended by the component that declared it,
+ * even though the focus is somewhere else. For that Swing keeps a table of those shortcuts per
+ * window, built from the components it contains; when one changes its table, that window table
+ * has to be rebuilt. Without knowing which component it belongs to, there would be nobody to
+ * tell.
  *
- * <p>De ahi tambien la regla del padre: solo puede serlo otro {@code ComponentInputMap} del
- * <em>mismo</em> componente. Encadenar la de un componente con la de otro haria que un atajo se
- * atribuyera a quien no es.
+ * <p>Hence also the parent's rule: only another {@code ComponentInputMap} of the <em>same</em>
+ * component can be one. Chaining one component's with another's would make a shortcut be
+ * attributed to the wrong one.
  */
 public class ComponentInputMap extends InputMap {
 
     private JComponent component;
 
     /**
-     * Una tabla para ese componente.
+     * A table for that component.
      *
-     * @throws IllegalArgumentException si el componente es nulo.
+     * @throws IllegalArgumentException if the component is null.
      */
     public ComponentInputMap(JComponent component) {
         this.component = component;
@@ -32,9 +33,9 @@ public class ComponentInputMap extends InputMap {
     }
 
     /**
-     * El padre; ver la nota de la clase.
+     * The parent; see the class note.
      *
-     * @throws IllegalArgumentException si no es de este mismo componente.
+     * @throws IllegalArgumentException if it is not of this same component.
      */
     public void setParent(InputMap map) {
         if (getParent() == map) {
@@ -46,34 +47,34 @@ public class ComponentInputMap extends InputMap {
                     "ComponentInputMaps must have a parent ComponentInputMap");
         }
         super.setParent(map);
-        avisar();
+        notifyChange();
     }
 
-    /** El componente al que pertenece. */
+    /** The component it belongs to. */
     public JComponent getComponent() {
         return component;
     }
 
     public void put(KeyStroke key, Object actionMapKey) {
         super.put(key, actionMapKey);
-        avisar();
+        notifyChange();
     }
 
     public void remove(KeyStroke key) {
         super.remove(key);
-        avisar();
+        notifyChange();
     }
 
     public void clear() {
         int n = size();
         super.clear();
         if (n > 0) {
-            avisar();
+            notifyChange();
         }
     }
 
-    /** Le avisa al componente que la tabla de la ventana hay que rehacerla. */
-    private void avisar() {
+    /** It tells the component that the window's table has to be rebuilt. */
+    private void notifyChange() {
         if (getComponent() != null) {
             getComponent().componentInputMapChanged(this);
         }

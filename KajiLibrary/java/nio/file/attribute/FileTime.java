@@ -6,246 +6,246 @@ import java.time.ZoneOffset;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
-// Una marca de tiempo de archivo: un instante mas la granularidad con la que se lo midio.
+// A file timestamp: an instant plus the granularity it was measured at.
 //
-// **Es puro valor.** No toca el disco, no necesita ningun nativo, y por eso esta completa mientras
-// el resto del paquete queda a medias: `FileTime` es el unico tipo de `java.nio.file.attribute` que
-// se puede escribir entero y honesto con lo que hay. Lo que falta es **quien la produzca** -- no hay
-// nativo que devuelva la fecha de modificacion de un archivo, asi que `Files.getLastModifiedTime` no
-// existe. La clase igual vale por si sola: es el tipo con el que `java.util.zip` expresa las fechas
-// de una entrada, y ahi los datos vienen del propio ZIP, no del sistema de archivos.
+// **It is pure value.** It does not touch the disk and needs no native. This note used to add that
+// what was missing was **something to produce it** -- no native for a file's modification date, so
+// `Files.getLastModifiedTime` did not exist. `Fs.mtime` exists now and that method is declared, so
+// the type is produced from the filesystem as well as from a ZIP entry's own dates, which is where
+// `java.util.zip` gets them.
 //
-// **Por que se guarda `(valor, unidad)` y no nanosegundos.** Un `long` de nanos cubre solo ~292
-// años alrededor de 1970, y `FileTime.from(Long.MAX_VALUE, DAYS)` tiene que seguir funcionando.
-// Guardando la unidad, el rango representable es el de la unidad mas gruesa que se haya usado, y la
-// conversion se satura --a `Long.MIN_VALUE`/`Long.MAX_VALUE`-- solo cuando de verdad no entra.
+// **Why `(value, unit)` is stored and not nanoseconds.** A `long` of nanos covers only ~292 years
+// around 1970, and `FileTime.from(Long.MAX_VALUE, DAYS)` has to go on working. By storing the unit,
+// the representable range is that of the coarsest unit used, and the conversion saturates --to
+// `Long.MIN_VALUE`/`Long.MAX_VALUE`-- only when it really does not fit.
 //
-// **Un `FileTime` construido desde un `Instant` no tiene unidad.** Se guarda el `Instant` tal cual y
-// `unidad` queda en `null`; el campo `valor` no se usa en ese caso. Es la razon de que casi todos
-// los metodos tengan dos ramas.
+// **A `FileTime` built from an `Instant` has no unit.** The `Instant` is stored as it is and `unit`
+// is left `null`; the `value` field is unused in that case. It is why almost every method has two
+// branches.
 public final class FileTime implements Comparable<FileTime> {
 
-    private static final long HORAS_POR_DIA = 24L;
-    private static final long MINUTOS_POR_HORA = 60L;
-    private static final long SEGUNDOS_POR_MINUTO = 60L;
-    private static final long SEGUNDOS_POR_HORA = SEGUNDOS_POR_MINUTO * MINUTOS_POR_HORA;
-    private static final long SEGUNDOS_POR_DIA = SEGUNDOS_POR_HORA * HORAS_POR_DIA;
-    private static final long MILIS_POR_SEGUNDO = 1000L;
-    private static final long MICROS_POR_SEGUNDO = 1000000L;
-    private static final long NANOS_POR_SEGUNDO = 1000000000L;
-    private static final int NANOS_POR_MILI = 1000000;
-    private static final int NANOS_POR_MICRO = 1000;
+    private static final long HOURS_PER_DAY = 24L;
+    private static final long MINUTES_PER_HOUR = 60L;
+    private static final long SECONDS_PER_MINUTE = 60L;
+    private static final long SECONDS_PER_HOUR = SECONDS_PER_MINUTE * MINUTES_PER_HOUR;
+    private static final long SECONDS_PER_DAY = SECONDS_PER_HOUR * HOURS_PER_DAY;
+    private static final long MILLIS_PER_SECOND = 1000L;
+    private static final long MICROS_PER_SECOND = 1000000L;
+    private static final long NANOS_PER_SECOND = 1000000000L;
+    private static final int NANOS_PER_MILLI = 1000000;
+    private static final int NANOS_PER_MICRO = 1000;
 
-    // Los limites de `Instant`, en segundos. Fuera de ahi `toInstant()` satura en vez de tirar.
-    private static final long SEGUNDO_MIN = -31557014167219200L;
-    private static final long SEGUNDO_MAX = 31556889864403199L;
+    // `Instant`'s bounds, in seconds. Outside them `toInstant()` saturates instead of throwing.
+    private static final long MIN_SECOND = -31557014167219200L;
+    private static final long MAX_SECOND = 31556889864403199L;
 
-    // Un ciclo de 400 años tiene 146097 dias; uno de 10000 años, 25 de esos.
-    private static final long SEGUNDOS_POR_10000_ANIOS = 146097L * 25L * 86400L;
-    private static final long SEGUNDOS_0000_A_1970 = ((146097L * 5L) - (30L * 365L + 7L)) * 86400L;
+    // A 400-year cycle has 146097 days; a 10000-year one, 25 of those.
+    private static final long SECONDS_PER_10000_YEARS = 146097L * 25L * 86400L;
+    private static final long SECONDS_0000_TO_1970 = ((146097L * 5L) - (30L * 365L + 7L)) * 86400L;
 
-    /** La granularidad; `null` si se construyo desde un `Instant`. */
-    private final TimeUnit unidad;
+    /** The granularity; `null` if it was built from an `Instant`. */
+    private final TimeUnit unit;
 
-    /** El valor desde la epoca, en `unidad`. Puede ser negativo. Sin sentido si `unidad` es null. */
-    private final long valor;
+    /** The value since the epoch, in `unit`. It can be negative. Meaningless if `unit` is null. */
+    private final long value;
 
-    // Memorizados: `toInstant()` y `toString()` son puros, y ambos se llaman repetido al ordenar o
-    // al formatear una lista de archivos. No hay carrera que importe -- el peor caso es que dos
-    // hilos calculen lo mismo y uno pise al otro con un valor identico.
-    private Instant instante;
-    private String texto;
+    // Memoised: `toInstant()` and `toString()` are pure, and both are called repeatedly when sorting
+    // or formatting a list of files. There is no race that matters -- the worst case is two threads
+    // computing the same thing and one overwriting the other with an identical value.
+    private Instant instant;
+    private String text;
 
-    private FileTime(long valor, TimeUnit unidad, Instant instante) {
-        this.valor = valor;
-        this.unidad = unidad;
-        this.instante = instante;
+    private FileTime(long value, TimeUnit unit, Instant instant) {
+        this.value = value;
+        this.unit = unit;
+        this.instant = instant;
     }
 
     /**
-     * Un `FileTime` con `valor` unidades desde la epoca.
+     * A `FileTime` at `value` units since the epoch.
      *
-     * @param valor el valor desde 1970-01-01T00:00:00Z; puede ser negativo
-     * @param unidad como interpretar `valor`
+     * @param value the value since 1970-01-01T00:00:00Z; it can be negative
+     * @param unit how to read `value`
      */
-    public static FileTime from(long valor, TimeUnit unidad) {
-        Objects.requireNonNull(unidad, "unit");
-        return new FileTime(valor, unidad, null);
+    public static FileTime from(long value, TimeUnit unit) {
+        Objects.requireNonNull(unit, "unit");
+        return new FileTime(value, unit, null);
     }
 
-    /** Un `FileTime` desde milisegundos de la epoca. */
-    public static FileTime fromMillis(long valor) {
-        return new FileTime(valor, TimeUnit.MILLISECONDS, null);
+    /** A `FileTime` from milliseconds since the epoch. */
+    public static FileTime fromMillis(long value) {
+        return new FileTime(value, TimeUnit.MILLISECONDS, null);
     }
 
-    /** Un `FileTime` en el mismo punto de la linea de tiempo que `instante`. */
-    public static FileTime from(Instant instante) {
-        Objects.requireNonNull(instante, "instant");
-        return new FileTime(0, null, instante);
+    /** A `FileTime` at the same point on the time line as `instant`. */
+    public static FileTime from(Instant instant) {
+        Objects.requireNonNull(instant, "instant");
+        return new FileTime(0, null, instant);
     }
 
     /**
-     * El valor en la granularidad pedida.
+     * The value at the granularity asked for.
      *
-     * <p>Si no entra en un `long` **satura** en vez de dar vuelta el signo: bajar de dias a
-     * nanosegundos multiplica por 86400000000000, y un desborde silencioso convertiria una fecha
-     * lejana en el futuro en una del pasado.
+     * <p>If it does not fit in a `long` it **saturates** instead of flipping the sign: going from
+     * days down to nanoseconds multiplies by 86400000000000, and a silent overflow would turn a date
+     * far in the future into one in the past.
      */
-    public long to(TimeUnit unidad) {
-        Objects.requireNonNull(unidad, "unit");
-        if (this.unidad != null) {
-            return unidad.convert(this.valor, this.unidad);
+    public long to(TimeUnit unit) {
+        Objects.requireNonNull(unit, "unit");
+        if (this.unit != null) {
+            return unit.convert(this.value, this.unit);
         }
-        long segs = unidad.convert(this.instante.getEpochSecond(), TimeUnit.SECONDS);
-        if (segs == Long.MIN_VALUE || segs == Long.MAX_VALUE) {
-            return segs;
+        long secs = unit.convert(this.instant.getEpochSecond(), TimeUnit.SECONDS);
+        if (secs == Long.MIN_VALUE || secs == Long.MAX_VALUE) {
+            return secs;
         }
-        long nanos = unidad.convert(this.instante.getNano(), TimeUnit.NANOSECONDS);
-        long r = segs + nanos;
-        // La suma desbordo si los dos sumandos tienen el signo contrario al resultado.
-        if (((segs ^ r) & (nanos ^ r)) < 0) {
-            return (segs < 0) ? Long.MIN_VALUE : Long.MAX_VALUE;
+        long nanos = unit.convert(this.instant.getNano(), TimeUnit.NANOSECONDS);
+        long r = secs + nanos;
+        // The sum overflowed if both addends have the sign opposite to the result.
+        if (((secs ^ r) & (nanos ^ r)) < 0) {
+            return (secs < 0) ? Long.MIN_VALUE : Long.MAX_VALUE;
         }
         return r;
     }
 
-    /** El valor en milisegundos, saturando igual que `to`. */
+    /** The value in milliseconds, saturating as `to` does. */
     public long toMillis() {
-        if (this.unidad != null) {
-            return this.unidad.toMillis(this.valor);
+        if (this.unit != null) {
+            return this.unit.toMillis(this.value);
         }
-        long segs = this.instante.getEpochSecond();
-        int nanos = this.instante.getNano();
-        long r = segs * 1000;
-        long ax = Math.abs(segs);
+        long secs = this.instant.getEpochSecond();
+        int nanos = this.instant.getNano();
+        long r = secs * 1000;
+        long ax = Math.abs(secs);
         if (((ax | 1000) >>> 31) != 0) {
-            if ((r / 1000) != segs) {
-                return (segs < 0) ? Long.MIN_VALUE : Long.MAX_VALUE;
+            if ((r / 1000) != secs) {
+                return (secs < 0) ? Long.MIN_VALUE : Long.MAX_VALUE;
             }
         }
         return r + nanos / 1000000;
     }
 
-    // Multiplica `d` por `m` saturando: por encima de `tope` el producto no entra en un long.
-    private static long escalar(long d, long m, long tope) {
-        if (d > tope) {
+    // It multiplies `d` by `m` saturating: above `cap` the product does not fit in a long.
+    private static long scale(long d, long m, long cap) {
+        if (d > cap) {
             return Long.MAX_VALUE;
         }
-        if (d < -tope) {
+        if (d < -cap) {
             return Long.MIN_VALUE;
         }
         return d * m;
     }
 
     /**
-     * El mismo punto de la linea de tiempo, como `Instant`.
+     * The same point on the time line, as an `Instant`.
      *
-     * <p>`FileTime` llega mas lejos que `Instant` en las dos direcciones, asi que lo que quede
-     * afuera se satura en `Instant.MIN` o `Instant.MAX`.
+     * <p>`FileTime` reaches further than `Instant` in both directions, so whatever falls outside
+     * saturates at `Instant.MIN` or `Instant.MAX`.
      */
     public Instant toInstant() {
-        Instant i = this.instante;
+        Instant i = this.instant;
         if (i != null) {
             return i;
         }
-        long segs = 0L;
+        long secs = 0L;
         int nanos = 0;
-        TimeUnit u = this.unidad;
+        TimeUnit u = this.unit;
         if (u == TimeUnit.DAYS) {
-            segs = escalar(this.valor, SEGUNDOS_POR_DIA, Long.MAX_VALUE / SEGUNDOS_POR_DIA);
+            secs = scale(this.value, SECONDS_PER_DAY, Long.MAX_VALUE / SECONDS_PER_DAY);
         } else if (u == TimeUnit.HOURS) {
-            segs = escalar(this.valor, SEGUNDOS_POR_HORA, Long.MAX_VALUE / SEGUNDOS_POR_HORA);
+            secs = scale(this.value, SECONDS_PER_HOUR, Long.MAX_VALUE / SECONDS_PER_HOUR);
         } else if (u == TimeUnit.MINUTES) {
-            segs = escalar(this.valor, SEGUNDOS_POR_MINUTO, Long.MAX_VALUE / SEGUNDOS_POR_MINUTO);
+            secs = scale(this.value, SECONDS_PER_MINUTE, Long.MAX_VALUE / SECONDS_PER_MINUTE);
         } else if (u == TimeUnit.SECONDS) {
-            segs = this.valor;
+            secs = this.value;
         } else if (u == TimeUnit.MILLISECONDS) {
-            segs = Math.floorDiv(this.valor, MILIS_POR_SEGUNDO);
-            nanos = ((int) Math.floorMod(this.valor, MILIS_POR_SEGUNDO)) * NANOS_POR_MILI;
+            secs = Math.floorDiv(this.value, MILLIS_PER_SECOND);
+            nanos = ((int) Math.floorMod(this.value, MILLIS_PER_SECOND)) * NANOS_PER_MILLI;
         } else if (u == TimeUnit.MICROSECONDS) {
-            segs = Math.floorDiv(this.valor, MICROS_POR_SEGUNDO);
-            nanos = ((int) Math.floorMod(this.valor, MICROS_POR_SEGUNDO)) * NANOS_POR_MICRO;
+            secs = Math.floorDiv(this.value, MICROS_PER_SECOND);
+            nanos = ((int) Math.floorMod(this.value, MICROS_PER_SECOND)) * NANOS_PER_MICRO;
         } else {
-            segs = Math.floorDiv(this.valor, NANOS_POR_SEGUNDO);
-            nanos = (int) Math.floorMod(this.valor, NANOS_POR_SEGUNDO);
+            secs = Math.floorDiv(this.value, NANOS_PER_SECOND);
+            nanos = (int) Math.floorMod(this.value, NANOS_PER_SECOND);
         }
-        if (segs <= SEGUNDO_MIN) {
+        if (secs <= MIN_SECOND) {
             i = Instant.MIN;
-        } else if (segs >= SEGUNDO_MAX) {
+        } else if (secs >= MAX_SECOND) {
             i = Instant.MAX;
         } else {
-            i = Instant.ofEpochSecond(segs, nanos);
+            i = Instant.ofEpochSecond(secs, nanos);
         }
-        this.instante = i;
+        this.instant = i;
         return i;
     }
 
-    /** Igual si representan el mismo momento, aunque las unidades difieran. */
+    /** Equal if they stand for the same moment, even if the units differ. */
     public boolean equals(Object obj) {
         return (obj instanceof FileTime) && this.compareTo((FileTime) obj) == 0;
     }
 
     /**
-     * El hash del `Instant` equivalente.
+     * The equivalent `Instant`'s hash.
      *
-     * <p>Tiene que salir de ahi y no de `(valor, unidad)`: `from(1, SECONDS)` y `fromMillis(1000)`
-     * son iguales por `equals`, asi que deben coincidir en el hash.
+     * <p>It has to come from there and not from `(value, unit)`: `from(1, SECONDS)` and
+     * `fromMillis(1000)` are equal by `equals`, so they must agree on the hash.
      */
     public int hashCode() {
         return this.toInstant().hashCode();
     }
 
-    private long aDias() {
-        if (this.unidad != null) {
-            return this.unidad.toDays(this.valor);
+    private long asDays() {
+        if (this.unit != null) {
+            return this.unit.toDays(this.value);
         }
         return TimeUnit.SECONDS.toDays(this.toInstant().getEpochSecond());
     }
 
-    private long nanosSobrantes(long dias) {
-        if (this.unidad != null) {
-            return this.unidad.toNanos(this.valor - this.unidad.convert(dias, TimeUnit.DAYS));
+    private long leftoverNanos(long days) {
+        if (this.unit != null) {
+            return this.unit.toNanos(this.value - this.unit.convert(days, TimeUnit.DAYS));
         }
         return TimeUnit.SECONDS.toNanos(
-                this.toInstant().getEpochSecond() - TimeUnit.DAYS.toSeconds(dias));
+                this.toInstant().getEpochSecond() - TimeUnit.DAYS.toSeconds(days));
     }
 
     /**
-     * Orden cronologico.
+     * Chronological order.
      *
-     * <p>Con la misma unidad alcanza con comparar los valores. Con unidades distintas hay que pasar
-     * por `Instant`, y ahi aparece el caso raro que justifica la ultima rama: dos momentos **muy**
-     * lejanos saturan los dos al mismo `Instant.MAX` y pareceria que son iguales. Cuando los
-     * segundos dan justo en el limite se vuelve a comparar en dias y nanos del dia, que no saturan.
+     * <p>With the same unit comparing the values is enough. With different units one has to go
+     * through `Instant`, and there the odd case that justifies the last branch turns up: two **very**
+     * distant moments both saturate to the same `Instant.MAX` and would look equal. When the seconds
+     * land exactly on the bound the comparison is redone in days and nanos of the day, which do not
+     * saturate.
      */
-    public int compareTo(FileTime otro) {
-        if (this.unidad != null && this.unidad == otro.unidad) {
-            return Long.compare(this.valor, otro.valor);
+    public int compareTo(FileTime other) {
+        if (this.unit != null && this.unit == other.unit) {
+            return Long.compare(this.value, other.value);
         }
-        long segs = this.toInstant().getEpochSecond();
-        long segsOtro = otro.toInstant().getEpochSecond();
-        int cmp = Long.compare(segs, segsOtro);
+        long secs = this.toInstant().getEpochSecond();
+        long otherSecs = other.toInstant().getEpochSecond();
+        int cmp = Long.compare(secs, otherSecs);
         if (cmp != 0) {
             return cmp;
         }
-        cmp = Long.compare(this.toInstant().getNano(), otro.toInstant().getNano());
+        cmp = Long.compare(this.toInstant().getNano(), other.toInstant().getNano());
         if (cmp != 0) {
             return cmp;
         }
-        if (segs != SEGUNDO_MAX && segs != SEGUNDO_MIN) {
+        if (secs != MAX_SECOND && secs != MIN_SECOND) {
             return 0;
         }
-        long dias = this.aDias();
-        long diasOtro = otro.aDias();
-        if (dias == diasOtro) {
-            return Long.compare(this.nanosSobrantes(dias), otro.nanosSobrantes(diasOtro));
+        long days = this.asDays();
+        long otherDays = other.asDays();
+        if (days == otherDays) {
+            return Long.compare(this.leftoverNanos(days), other.leftoverNanos(otherDays));
         }
-        return Long.compare(dias, diasOtro);
+        return Long.compare(days, otherDays);
     }
 
-    // Escribe `d` con `ancho` digitos y ceros a la izquierda; `ancho` viene como potencia de diez.
-    private static StringBuilder rellenar(StringBuilder sb, int ancho, int d) {
-        int w = ancho;
+    // It writes `d` with `width` digits and leading zeros; `width` arrives as a power of ten.
+    private static StringBuilder pad(StringBuilder sb, int width, int d) {
+        int w = width;
         int v = d;
         while (w > 0) {
             sb.append((char) (v / w + '0'));
@@ -256,80 +256,80 @@ public final class FileTime implements Comparable<FileTime> {
     }
 
     /**
-     * La fecha en ISO 8601: `YYYY-MM-DDThh:mm:ss[.s+]Z`, siempre en UTC.
+     * The date in ISO 8601: `YYYY-MM-DDThh:mm:ss[.s+]Z`, always in UTC.
      *
-     * <p>La fraccion de segundo aparece solo si no es cero, y sin ceros al final: `fromMillis(
-     * 1234567890000L)` da `"2009-02-13T23:31:30Z"` y no `"...30.000Z"`.
+     * <p>The fraction of a second appears only if it is not zero, and with no trailing zeros:
+     * `fromMillis(1234567890000L)` gives `"2009-02-13T23:31:30Z"` and not `"...30.000Z"`.
      *
-     * <p>Para años fuera de `0001..9999` --que `FileTime` puede representar y ISO 8601 no-- se
-     * sigue la desviacion de XML Schema: mas de cuatro digitos, sin ceros a la izquierda, y signo
-     * menos para las fechas anteriores. La cuenta de `hi`/`lo` esta para eso: parte los segundos en
-     * ciclos de 10000 años **antes** de pasarselos a `LocalDateTime`, que solo cubre el rango
-     * chico.
+     * <p>For years outside `0001..9999` --which `FileTime` can represent and ISO 8601 cannot-- XML
+     * Schema's deviation is followed: more than four digits, no leading zeros, and a minus sign for
+     * the earlier dates. The `hi`/`lo` arithmetic is there for that: it splits the seconds into
+     * 10000-year cycles **before** handing them to `LocalDateTime`, which only covers the small
+     * range.
      */
     public String toString() {
-        String s = this.texto;
+        String s = this.text;
         if (s != null) {
             return s;
         }
-        long segs;
+        long secs;
         int nanos = 0;
-        if (this.instante == null && this.unidad.compareTo(TimeUnit.SECONDS) >= 0) {
-            segs = this.unidad.toSeconds(this.valor);
+        if (this.instant == null && this.unit.compareTo(TimeUnit.SECONDS) >= 0) {
+            secs = this.unit.toSeconds(this.value);
         } else {
-            segs = this.toInstant().getEpochSecond();
+            secs = this.toInstant().getEpochSecond();
             nanos = this.toInstant().getNano();
         }
         LocalDateTime ldt;
-        int anio;
-        if (segs >= -SEGUNDOS_0000_A_1970) {
-            long ceroSegs = segs - SEGUNDOS_POR_10000_ANIOS + SEGUNDOS_0000_A_1970;
-            long hi = Math.floorDiv(ceroSegs, SEGUNDOS_POR_10000_ANIOS) + 1;
-            long lo = Math.floorMod(ceroSegs, SEGUNDOS_POR_10000_ANIOS);
-            ldt = LocalDateTime.ofEpochSecond(lo - SEGUNDOS_0000_A_1970, nanos, ZoneOffset.UTC);
-            anio = ldt.getYear() + ((int) hi) * 10000;
+        int year;
+        if (secs >= -SECONDS_0000_TO_1970) {
+            long zeroSecs = secs - SECONDS_PER_10000_YEARS + SECONDS_0000_TO_1970;
+            long hi = Math.floorDiv(zeroSecs, SECONDS_PER_10000_YEARS) + 1;
+            long lo = Math.floorMod(zeroSecs, SECONDS_PER_10000_YEARS);
+            ldt = LocalDateTime.ofEpochSecond(lo - SECONDS_0000_TO_1970, nanos, ZoneOffset.UTC);
+            year = ldt.getYear() + ((int) hi) * 10000;
         } else {
-            long ceroSegs = segs + SEGUNDOS_0000_A_1970;
-            long hi = ceroSegs / SEGUNDOS_POR_10000_ANIOS;
-            long lo = ceroSegs % SEGUNDOS_POR_10000_ANIOS;
-            ldt = LocalDateTime.ofEpochSecond(lo - SEGUNDOS_0000_A_1970, nanos, ZoneOffset.UTC);
-            anio = ldt.getYear() + ((int) hi) * 10000;
+            long zeroSecs = secs + SECONDS_0000_TO_1970;
+            long hi = zeroSecs / SECONDS_PER_10000_YEARS;
+            long lo = zeroSecs % SECONDS_PER_10000_YEARS;
+            ldt = LocalDateTime.ofEpochSecond(lo - SECONDS_0000_TO_1970, nanos, ZoneOffset.UTC);
+            year = ldt.getYear() + ((int) hi) * 10000;
         }
-        // No hay año cero: el anterior a 0001 es -0001.
-        if (anio <= 0) {
-            anio = anio - 1;
+        // There is no year zero: the one before 0001 is -0001.
+        if (year <= 0) {
+            year = year - 1;
         }
-        int fraccion = ldt.getNano();
+        int fraction = ldt.getNano();
         StringBuilder sb = new StringBuilder(64);
-        sb.append(anio < 0 ? "-" : "");
-        anio = (int) Math.abs((long) anio);
-        if (anio < 10000) {
-            rellenar(sb, 1000, anio);
+        sb.append(year < 0 ? "-" : "");
+        year = (int) Math.abs((long) year);
+        if (year < 10000) {
+            pad(sb, 1000, year);
         } else {
-            sb.append(String.valueOf(anio));
+            sb.append(String.valueOf(year));
         }
         sb.append('-');
-        rellenar(sb, 10, ldt.getMonthValue());
+        pad(sb, 10, ldt.getMonthValue());
         sb.append('-');
-        rellenar(sb, 10, ldt.getDayOfMonth());
+        pad(sb, 10, ldt.getDayOfMonth());
         sb.append('T');
-        rellenar(sb, 10, ldt.getHour());
+        pad(sb, 10, ldt.getHour());
         sb.append(':');
-        rellenar(sb, 10, ldt.getMinute());
+        pad(sb, 10, ldt.getMinute());
         sb.append(':');
-        rellenar(sb, 10, ldt.getSecond());
-        if (fraccion != 0) {
+        pad(sb, 10, ldt.getSecond());
+        if (fraction != 0) {
             sb.append('.');
             int w = 100000000;
-            while (fraccion % 10 == 0) {
-                fraccion = fraccion / 10;
+            while (fraction % 10 == 0) {
+                fraction = fraction / 10;
                 w = w / 10;
             }
-            rellenar(sb, w, fraccion);
+            pad(sb, w, fraction);
         }
         sb.append('Z');
         s = sb.toString();
-        this.texto = s;
+        this.text = s;
         return s;
     }
 }

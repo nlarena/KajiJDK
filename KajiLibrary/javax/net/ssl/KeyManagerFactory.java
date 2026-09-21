@@ -10,11 +10,12 @@ import java.security.Security;
 import java.security.UnrecoverableKeyException;
 
 /**
- * Produce los {@link KeyManager} que presentan las credenciales propias.
+ * Produces the {@link KeyManager}s that present the own credentials.
  *
- * <p>El espejo de {@link TrustManagerFactory}: aquella decide en quien confiar, esta decide que
- * presentar. La diferencia visible es que {@link #init(KeyStore, char[])} <strong>si</strong> lleva
- * contrasena — un almacen de claves guarda claves privadas, y desbloquearlas es todo el punto.
+ * <p>The mirror of {@link TrustManagerFactory}: that one decides whom to trust, this one decides
+ * what to present. The visible difference is that {@link #init(KeyStore, char[])}
+ * <strong>does</strong> take a password — a key store keeps private keys, and unlocking them is the
+ * whole point.
  */
 public class KeyManagerFactory {
 
@@ -22,13 +23,13 @@ public class KeyManagerFactory {
     private final Provider provider;
     private final String algorithm;
 
-    /** El algoritmo por omision: la propiedad {@code ssl.KeyManagerFactory.algorithm}. */
+    /** The default algorithm: the {@code ssl.KeyManagerFactory.algorithm} property. */
     public static final String getDefaultAlgorithm() {
         String a = Security.getProperty("ssl.KeyManagerFactory.algorithm");
         return a == null ? "SunX509" : a;
     }
 
-    /** Para los proveedores. */
+    /** For providers. */
     protected KeyManagerFactory(KeyManagerFactorySpi factorySpi, Provider provider,
             String algorithm) {
         this.factorySpi = factorySpi;
@@ -36,15 +37,15 @@ public class KeyManagerFactory {
         this.algorithm = algorithm;
     }
 
-    /** El algoritmo de esta fabrica. */
+    /** This factory's algorithm. */
     public final String getAlgorithm() {
         return this.algorithm;
     }
 
     /**
-     * Del primer proveedor que ofrezca ese algoritmo.
+     * From the first provider that offers that algorithm.
      *
-     * @throws NoSuchAlgorithmException si ninguno lo ofrece
+     * @throws NoSuchAlgorithmException if none offers it
      */
     public static final KeyManagerFactory getInstance(String algorithm)
             throws NoSuchAlgorithmException {
@@ -55,16 +56,16 @@ public class KeyManagerFactory {
         for (int i = 0; i < provs.length; i++) {
             Provider.Service s = provs[i].getService("KeyManagerFactory", algorithm);
             if (s != null) {
-                return armar(s, provs[i], algorithm);
+                return build(s, provs[i], algorithm);
             }
         }
         throw new NoSuchAlgorithmException(algorithm + " KeyManagerFactory not available");
     }
 
     /**
-     * De un proveedor nombrado.
+     * From a named provider.
      *
-     * @throws NoSuchProviderException si no hay proveedor con ese nombre
+     * @throws NoSuchProviderException if there is no provider with that name
      */
     public static final KeyManagerFactory getInstance(String algorithm, String provider)
             throws NoSuchAlgorithmException, NoSuchProviderException {
@@ -79,9 +80,9 @@ public class KeyManagerFactory {
     }
 
     /**
-     * De un proveedor concreto.
+     * From a concrete provider.
      *
-     * @throws NoSuchAlgorithmException si ese proveedor no lo ofrece
+     * @throws NoSuchAlgorithmException if that provider does not offer it
      */
     public static final KeyManagerFactory getInstance(String algorithm, Provider provider)
             throws NoSuchAlgorithmException {
@@ -95,16 +96,16 @@ public class KeyManagerFactory {
         if (s == null) {
             throw new NoSuchAlgorithmException(algorithm + " KeyManagerFactory not available");
         }
-        return armar(s, provider, algorithm);
+        return build(s, provider, algorithm);
     }
 
-    private static KeyManagerFactory armar(Provider.Service s, Provider p, String algorithm)
+    private static KeyManagerFactory build(Provider.Service s, Provider p, String algorithm)
             throws NoSuchAlgorithmException {
         try {
             Object spi = s.newInstance(null);
             if (!(spi instanceof KeyManagerFactorySpi)) {
                 throw new NoSuchAlgorithmException(
-                        "el proveedor no devolvio un KeyManagerFactorySpi para " + algorithm);
+                        "the provider did not return a KeyManagerFactorySpi for " + algorithm);
             }
             return new KeyManagerFactory((KeyManagerFactorySpi) spi, p, algorithm);
         } catch (NoSuchAlgorithmException e) {
@@ -114,33 +115,33 @@ public class KeyManagerFactory {
         }
     }
 
-    /** El proveedor que la produjo. */
+    /** The provider that produced it. */
     public final Provider getProvider() {
         return this.provider;
     }
 
     /**
-     * Desde un almacen de claves y su contrasena.
+     * From a key store and its password.
      *
-     * <p>La contrasena puede ser {@code null} si las claves no estan protegidas por separado; el
-     * arreglo conviene limpiarlo despues, porque un {@code char[]} en memoria vive hasta que alguien
-     * lo pise.
+     * <p>The password may be {@code null} if the keys are not protected separately; the array is
+     * best cleared afterwards, because a {@code char[]} in memory lives until somebody overwrites
+     * it.
      */
     public final void init(KeyStore ks, char[] password)
             throws KeyStoreException, NoSuchAlgorithmException, UnrecoverableKeyException {
         this.factorySpi.engineInit(ks, password);
     }
 
-    /** Desde parametros; ver {@link KeyStoreBuilderParameters}. */
+    /** From parameters; see {@link KeyStoreBuilderParameters}. */
     public final void init(ManagerFactoryParameters spec)
             throws InvalidAlgorithmParameterException {
         this.factorySpi.engineInit(spec);
     }
 
     /**
-     * Los manejadores de claves, uno por tipo.
+     * The key managers, one per type.
      *
-     * @throws IllegalStateException si no se llamo antes a {@code init}
+     * @throws IllegalStateException if {@code init} was not called first
      */
     public final KeyManager[] getKeyManagers() {
         return this.factorySpi.engineGetKeyManagers();

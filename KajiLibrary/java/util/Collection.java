@@ -23,11 +23,12 @@ public interface Collection<E> extends Iterable<E> {
     // A sequential stream over these elements, in encounter order (finding #205).
     //
     // The JDK's is `default Stream<E> stream() { return StreamSupport.stream(spliterator(), false); }`.
-    // That route is closed here: `java.util.Spliterator` doesn't exist, which is also why
-    // `StreamSupport` was ruled out — its five public methods all take one. So this walks the
-    // iterator into an array and hands it to `Stream.of`, which yields the same observable thing.
-    // The difference is laziness, not results: the JDK's stream pulls from the source on demand,
-    // this one snapshots first.
+    // This note used to say that route was closed because `java.util.Spliterator` does not exist and
+    // `StreamSupport` therefore could not be used: both exist, and `spliterator()` is declared right
+    // below. What is left is that this library's streams are eager, so the lazy route would buy
+    // nothing -- this walks the iterator into an array and hands it to `Stream.of`, which yields the
+    // same observable thing. The difference is laziness, not results: the JDK's stream pulls from the
+    // source on demand, this one snapshots first.
     //
     // `default` and not abstract, exactly like the JDK: `Collection` has 15 implementors here, and
     // none of them should have to write this.
@@ -46,68 +47,68 @@ public interface Collection<E> extends Iterable<E> {
     /**
      * A spliterator over these elements.
      *
-     *  <p>Sobre el iterador, con el tamano que la coleccion sabe. Sin caracteristicas propias: una
-     * `Collection` no promete orden, ni unicidad, ni nada.
+     *  <p>Over the iterator, with the size the collection knows. With no characteristics of its own:
+     * a `Collection` promises no order, no uniqueness, nothing.
      *
      */
     default Spliterator<E> spliterator() {
         return Spliterators.spliterator(this, 0);
     }
 
-    // ---- las operaciones en bloque -----------------------------------------------------------
+    // ---- the bulk operations -----------------------------------------------------------------
     //
-    // Abstractas, como en el JDK. `AbstractCollection` las deriva a partir de `iterator()`,
-    // `size()`, `contains()`, `add()` y `remove()`, asi que una implementacion que herede del
-    // esqueleto no escribe ninguna.
+    // Abstract, as in the JDK. `AbstractCollection` derives them from `iterator()`, `size()`,
+    // `contains()`, `add()` and `remove()`, so an implementation that inherits from the skeleton
+    // writes none of them.
 
-    // Si todos los elementos de `c` estan en esta coleccion.
+    // Whether all of `c`'s elements are in this collection.
     boolean containsAll(Collection<?> c);
 
-    // Agrega todos los de `c`; devuelve si esta coleccion cambio.
+    // It adds all of `c`'s; it returns whether this collection changed.
     boolean addAll(Collection<? extends E> c);
 
-    // Quita todas las apariciones de cada elemento de `c`.
+    // It removes every occurrence of each element of `c`.
     boolean removeAll(Collection<?> c);
 
-    // Deja solo los elementos que tambien estan en `c`.
+    // It keeps only the elements that are also in `c`.
     boolean retainAll(Collection<?> c);
 
-    // Los elementos en un arreglo nuevo, en el orden del iterador.
+    // The elements in a fresh array, in the iterator's order.
     Object[] toArray();
 
-    // Los elementos en `a` si entran, o en un arreglo nuevo del mismo tipo dinamico si no.
+    // The elements in `a` if they fit, or in a fresh array of the same runtime type if not.
     <T> T[] toArray(T[] a);
 
-    // Los elementos en un arreglo que fabrica `generator` con el tamano justo.
+    // The elements in an array `generator` makes at exactly the right size.
     //
-    // Existe para poder escribir `c.toArray(String[]::new)` en vez de `c.toArray(new String[0])`,
-    // que es la misma idea dicha sin el arreglo vacio de por medio.
+    // It exists so `c.toArray(String[]::new)` can be written instead of `c.toArray(new String[0])`,
+    // which is the same idea said without the empty array in the way.
     default <T> T[] toArray(java.util.function.IntFunction<T[]> generator) {
         return this.toArray(generator.apply(0));
     }
 
-    // Quita los elementos que cumplan `filter`; devuelve si algo cambio.
+    // It removes the elements that satisfy `filter`; it returns whether anything changed.
     default boolean removeIf(java.util.function.Predicate<? super E> filter) {
-        boolean cambio = false;
-        Object[] foto = this.toArray();
+        boolean changed = false;
+        Object[] snapshot = this.toArray();
         int i = 0;
-        while (i < foto.length) {
-            if (filter.test((E) foto[i])) {
-                while (this.remove(foto[i])) {
-                    cambio = true;
+        while (i < snapshot.length) {
+            if (filter.test((E) snapshot[i])) {
+                while (this.remove(snapshot[i])) {
+                    changed = true;
                 }
             }
             i = i + 1;
         }
-        return cambio;
+        return changed;
     }
 
-    // Un stream posiblemente paralelo sobre estos elementos.
+    // A possibly parallel stream over these elements.
     //
-    // **Divergencia deliberada**: aca devuelve el mismo stream secuencial que `stream()`. La
-    // biblioteca no tiene todavia el motor de division en paralelo, y un metodo que dijera
-    // "paralelo" y corriera secuencial es preferible a uno que no exista: el resultado es el
-    // mismo, solo que sin la ganancia.
+    // **A deliberate divergence**: here it returns the same sequential stream as `stream()`. The
+    // library does not have the parallel splitting engine yet, and a method that says "parallel" and
+    // runs sequentially is preferable to one that does not exist: the result is the same, only
+    // without the gain.
     default java.util.stream.Stream<E> parallelStream() {
         return this.stream();
     }

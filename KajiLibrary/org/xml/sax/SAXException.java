@@ -1,26 +1,26 @@
 package org.xml.sax;
 
-// KajiLibrary's org.xml.sax.SAXException -- la excepcion chequeada que toda callback de SAX
-// tiene permitido lanzar. Es anterior a las excepciones encadenadas de JDK 1.4, asi que le
-// crecio su propio casillero de "excepcion envuelta"; hoy ese casillero *es* la causa de
-// Throwable, y los dos constructores que toman una Exception simplemente se la pasan a super.
-// getException() lee la causa de vuelta, angostada a Exception (una causa que sea un Error o un
-// Throwable pelado se lee como null, que es lo que hace el JDK).
+// KajiLibrary's org.xml.sax.SAXException -- the checked exception every SAX callback is allowed
+// to throw. It predates the chained exceptions of JDK 1.4, so it grew its own "wrapped exception"
+// slot; today that slot *is* the cause of Throwable, and the two constructors that take an
+// Exception simply pass it to super. getException() reads the cause back, narrowed to Exception
+// (a cause that is an Error or a bare Throwable reads as null, which is what the JDK does).
 //
-// La regla que vale la pena leer dos veces es getMessage(): cuando esta excepcion no tiene
-// mensaje propio pero si tiene causa, contesta con el mensaje *de la causa* en vez de null. Asi
+// The rule worth reading twice is getMessage(): when this exception has no message of its own but
+// does have a cause, it answers with the message *of the cause* instead of null. So
 //
 //     new SAXException(new java.io.IOException("disk on fire")).getMessage()
 //
-// da "disk on fire", no null. Solo con los dos en null sale null, y un mensaje propio siempre le
-// gana al de la causa.
+// gives "disk on fire", not null. Only with both at null does null come out, and a message of its
+// own always beats that of the cause.
 //
-// Lo que queda afuera, y por que: los ganchos de serializacion (writeObject/readObject y el
-// arreglo serialPersistentFields que mantiene en el alambre el nombre historico de campo
-// "exception"). Son privados, asi que ningun contrato depende de ellos, y harian falta
-// java.io.ObjectStreamField mas ObjectOutputStream.PutField / ObjectInputStream.GetField, que
-// esta biblioteca no tiene. serialVersionUID se deja en el valor del JDK para que un flujo
-// escrito en otro lado siga nombrando la misma clase.
+// What is left out: the serialisation hooks (writeObject/readObject and the
+// serialPersistentFields array that keeps the historical field name "exception" on the wire).
+// They are private, so no contract depends on them. The note gave as the other reason that they
+// would need java.io.ObjectStreamField plus ObjectOutputStream.PutField /
+// ObjectInputStream.GetField, "which this library does not have"; the three are in the library
+// now, so that reason no longer holds and the hooks could be written. serialVersionUID is left at
+// the JDK's value so that a stream written elsewhere still names the same class.
 public class SAXException extends Exception {
 
     static final long serialVersionUID = 583241635256073760L;
@@ -41,8 +41,8 @@ public class SAXException extends Exception {
         super(message, e);
     }
 
-    // La regla de delegacion descripta arriba. Notar que lee super.getMessage(), no
-    // getMessage(): lo segundo se llamaria a si mismo.
+    // The rule of delegation described above. Note that it reads super.getMessage(), not
+    // getMessage(): the second would call itself.
     public String getMessage() {
         String message = super.getMessage();
         Throwable cause = super.getCause();
@@ -54,13 +54,13 @@ public class SAXException extends Exception {
         }
     }
 
-    // La excepcion envuelta, es decir la causa cuando resulta ser una Exception.
+    // The wrapped exception, that is the cause when it happens to be an Exception.
     public Exception getException() {
         return getExceptionInternal();
     }
 
-    // Declarado explicitamente (en vez de heredado) porque el JDK tambien lo declara aca: el
-    // contrato lista getCause() como miembro de esta clase.
+    // Declared explicitly (instead of inherited) because the JDK declares it here as well: the
+    // contract lists getCause() as a member of this class.
     public Throwable getCause() {
         return super.getCause();
     }

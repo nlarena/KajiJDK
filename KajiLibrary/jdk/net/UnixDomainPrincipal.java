@@ -4,34 +4,33 @@ import java.nio.file.attribute.GroupPrincipal;
 import java.nio.file.attribute.UserPrincipal;
 
 /**
- * Quien esta del otro lado de un socket de dominio Unix: su usuario y su grupo.
+ * Who is on the other side of a Unix domain socket: their user and their group.
  *
- * <h2>Por que esto solo existe para sockets de dominio Unix</h2>
+ * <h2>Why this only exists for Unix domain sockets</h2>
  *
- * <p>Sobre TCP, la identidad del par no es averiguable: lo unico que hay es una direccion, y una
- * direccion no dice quien corre el proceso que la usa. Un socket de dominio Unix vive dentro de una
- * sola maquina, asi que el nucleo <strong>si</strong> sabe que usuario abrio la otra punta y puede
- * contarlo — lo que convierte a estos sockets en un canal donde se puede autorizar sin credenciales
- * propias.
+ * <p>Over TCP, the identity of the peer cannot be found out: the only thing there is is an address,
+ * and an address does not say who runs the process that uses it. A Unix domain socket lives inside a
+ * single machine, so the kernel <strong>does</strong> know which user opened the other end and can
+ * tell — which turns these sockets into a channel where one can authorise without credentials of
+ * one's own.
  *
- * <p>Se lee con la opcion {@link ExtendedSocketOptions#SO_PEERCRED}.
+ * <p>It is read with the option {@link ExtendedSocketOptions#SO_PEERCRED}.
  *
- * <p>Es un {@code record} y no una clase con getters porque es exactamente eso: dos valores, sin
- * comportamiento, comparables por contenido.
+ * <p>It is a {@code record} and not a class with getters because it is exactly that: two values,
+ * with no behaviour, comparable by contents.
  *
- * @param user el usuario que abrio la otra punta
- * @param group su grupo
+ * @param user the user who opened the other end
+ * @param group their group
  */
 public record UnixDomainPrincipal(UserPrincipal user, GroupPrincipal group) {
 
     /**
-     * @throws NullPointerException si alguno es {@code null} — un principal a medias no identifica
-     *     a nadie, y dejarlo pasar solo cambia donde explota
+     * @throws NullPointerException if either is {@code null} — a half principal identifies nobody, and
+     *     letting it through only changes where it blows up
      */
-    // El JDK lo escribe en la forma COMPACTA (`public UnixDomainPrincipal {`), que nuestro parser
-    // todavia no acepta: finding #403. La forma canonica completa es equivalente —el compilador
-    // solo agrega las asignaciones que aca estan escritas— y es lo que ese finding registra como
-    // rodeo.
+    // The JDK writes it in the COMPACT form (`public UnixDomainPrincipal {`), which our parser does
+    // not accept yet: finding #403. The complete canonical form is equivalent —the compiler only adds
+    // the assignments that are written here— and it is what that finding records as the way round.
     public UnixDomainPrincipal(UserPrincipal user, GroupPrincipal group) {
         if (user == null) {
             throw new NullPointerException("user");

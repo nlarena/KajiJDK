@@ -2,31 +2,31 @@ package java.io;
 
 import java.security.BasicPermission;
 
-// KajiLibrary's java.io.SerializablePermission -- el permiso para tocar los mecanismos de la
-// serializacion.
+// KajiLibrary's java.io.SerializablePermission -- the permission for touching the serialization
+// machinery.
 //
-// Los dos nombres que existen dicen bien por que hace falta un permiso:
+// The two names that exist say well why a permission is needed:
 //
-//   - `enableSubclassImplementation`, para subclasear `ObjectOutputStream`/`ObjectInputStream` y
-//     sobreescribir como se escriben o se leen los objetos. Quien puede hacerlo puede cambiar lo
-//     que un objeto *dice* ser al deserializarse.
-//   - `enableSubstitution`, para `enableReplaceObject`/`enableResolveObject`, o sea para cambiar un
-//     objeto por otro en pleno vuelo.
+//   - `enableSubclassImplementation`, for subclassing
+//     `ObjectOutputStream`/`ObjectInputStream` and overriding how objects are written or read.
+//     Whoever can do that can change what an object *says* it is when deserialized.
+//   - `enableSubstitution`, for `enableReplaceObject`/`enableResolveObject`, that is, for swapping
+//     one object for another in mid-flight.
 //
-// Los dos rompen la garantia de que lo que entra a un stream es lo que sale, y por eso son
-// permisos y no metodos comunes.
+// Both break the guarantee that what goes into a stream is what comes out, and that is why they are
+// permissions and not ordinary methods.
 //
-// **Sin acciones**: hereda de `BasicPermission`, asi que `implies` es comparacion de nombre con
-// comodines (`*` al final) y `getActions()` devuelve la cadena vacia. El constructor de dos
-// argumentos existe solo porque el contrato de `Permission` lo pide; ignora el segundo, como en el
-// JDK.
+// **No actions**: it inherits from `BasicPermission`, so `implies` is a name comparison with
+// wildcards (a trailing `*`) and `getActions()` returns the empty string. The two-argument
+// constructor exists only because `Permission`'s contract asks for it; it ignores the second one,
+// as in the JDK.
 public final class SerializablePermission extends BasicPermission {
 
     public SerializablePermission(String name) {
         super(name);
     }
 
-    /** @param actions no se usa; esta por uniformidad con el resto de los permisos */
+    /** @param actions unused; it is here for uniformity with the rest of the permissions */
     public SerializablePermission(String name, String actions) {
         super(name, actions);
     }

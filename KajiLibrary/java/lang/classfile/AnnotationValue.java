@@ -10,316 +10,317 @@ import java.lang.constant.ClassDesc;
 import java.util.List;
 import jdk.internal.classfile.impl.Annotations;
 
-// El valor de un elemento de anotación (JVMS §4.7.16.1, `element_value`). Cada forma tiene su
-// etiqueta de un byte —`I` un `int`, `s` un `String`, `e` una constante de enum, `[` un arreglo— y
-// esta interfaz tiene un subtipo por etiqueta.
+// The value of an annotation element (JVMS §4.7.16.1, `element_value`). Each form has its one-byte
+// tag --`I` an `int`, `s` a `String`, `e` an enum constant, `[` an array-- and this interface has one
+// subtype per tag.
 //
-// FALTA, y con razón concreta: `OfConstant.resolvedValue()` y sus catorce redefiniciones
-// covariantes. El JDK las declara devolviendo `java.lang.constant.Constable` y las estrecha a
-// `Integer`, `Double`, `String`, … En KajiLibrary `java.lang.Integer` y compañía implementan
-// `ConstantDesc` pero NO `Constable`, así que ese estrechamiento no compila y declararlo con otro
-// tipo de retorno sería declarar otro método. El valor se saca igual, y sin cajas, por
-// `intValue()`, `stringValue()` y los demás accesores de cada subtipo, que sí están.
+// MISSING, and for a concrete reason: `OfConstant.resolvedValue()` and its fourteen covariant
+// overrides. The JDK declares them returning `java.lang.constant.Constable` and narrows them to
+// `Integer`, `Double`, `String`, ... In KajiLibrary `java.lang.Integer` and company implement
+// `ConstantDesc` but NOT `Constable`, so that narrowing does not compile and declaring it with
+// another return type would be declaring another method. The value is obtained all the same, and
+// without boxes, through `intValue()`, `stringValue()` and each subtype's other accessors, which are
+// here.
 public interface AnnotationValue {
 
-    /** La etiqueta `B`: un `byte`. */
+    /** The `B` tag: a `byte`. */
     public static final int TAG_BYTE = 'B';
-    /** La etiqueta `C`: un `char`. */
+    /** The `C` tag: a `char`. */
     public static final int TAG_CHAR = 'C';
-    /** La etiqueta `D`: un `double`. */
+    /** The `D` tag: a `double`. */
     public static final int TAG_DOUBLE = 'D';
-    /** La etiqueta `F`: un `float`. */
+    /** The `F` tag: a `float`. */
     public static final int TAG_FLOAT = 'F';
-    /** La etiqueta `I`: un `int`. */
+    /** The `I` tag: an `int`. */
     public static final int TAG_INT = 'I';
-    /** La etiqueta `J`: un `long`. */
+    /** The `J` tag: a `long`. */
     public static final int TAG_LONG = 'J';
-    /** La etiqueta `S`: un `short`. */
+    /** The `S` tag: a `short`. */
     public static final int TAG_SHORT = 'S';
-    /** La etiqueta `Z`: un `boolean`. */
+    /** The `Z` tag: a `boolean`. */
     public static final int TAG_BOOLEAN = 'Z';
-    /** La etiqueta `s`: un `String`. */
+    /** The `s` tag: a `String`. */
     public static final int TAG_STRING = 's';
-    /** La etiqueta `e`: una constante de enum. */
+    /** The `e` tag: an enum constant. */
     public static final int TAG_ENUM = 'e';
-    /** La etiqueta `c`: un literal de clase. */
+    /** The `c` tag: a class literal. */
     public static final int TAG_CLASS = 'c';
-    /** La etiqueta `@`: una anotación anidada. */
+    /** The `@` tag: a nested annotation. */
     public static final int TAG_ANNOTATION = '@';
-    /** La etiqueta `[`: un arreglo de valores. */
+    /** The `[` tag: an array of values. */
     public static final int TAG_ARRAY = '[';
 
-    /** La etiqueta de esta forma; una de las constantes `TAG_*`. */
+    /** This form's tag; one of the `TAG_*` constants. */
     int tag();
 
-    /** Un valor que es una constante del pool. */
+    /** A value that is a pool constant. */
     public interface OfConstant extends AnnotationValue {
 
-        /** La entrada del pool que lo lleva. */
+        /** The pool entry carrying it. */
         AnnotationConstantValueEntry constant();
     }
 
-    /** Un `String`. */
+    /** A `String`. */
     public interface OfString extends OfConstant {
 
-        /** El `Utf8` con el texto. */
+        /** The `Utf8` with the text. */
         Utf8Entry constant();
 
-        /** El texto. */
+        /** The text. */
         String stringValue();
     }
 
-    /** Un `double`. */
+    /** A `double`. */
     public interface OfDouble extends OfConstant {
 
-        /** La entrada `CONSTANT_Double`. */
+        /** The `CONSTANT_Double` entry. */
         DoubleEntry constant();
 
-        /** El valor. */
+        /** The value. */
         double doubleValue();
     }
 
-    /** Un `float`. */
+    /** A `float`. */
     public interface OfFloat extends OfConstant {
 
-        /** La entrada `CONSTANT_Float`. */
+        /** The `CONSTANT_Float` entry. */
         FloatEntry constant();
 
-        /** El valor. */
+        /** The value. */
         float floatValue();
     }
 
-    /** Un `long`. */
+    /** A `long`. */
     public interface OfLong extends OfConstant {
 
-        /** La entrada `CONSTANT_Long`. */
+        /** The `CONSTANT_Long` entry. */
         LongEntry constant();
 
-        /** El valor. */
+        /** The value. */
         long longValue();
     }
 
-    /** Un `int`. */
+    /** An `int`. */
     public interface OfInt extends OfConstant {
 
-        /** La entrada `CONSTANT_Integer`. */
+        /** The `CONSTANT_Integer` entry. */
         IntegerEntry constant();
 
-        /** El valor. */
+        /** The value. */
         int intValue();
     }
 
-    /** Un `short`, que el formato guarda en un `CONSTANT_Integer`. */
+    /** A `short`, which the format stores in a `CONSTANT_Integer`. */
     public interface OfShort extends OfConstant {
 
-        /** La entrada `CONSTANT_Integer`. */
+        /** The `CONSTANT_Integer` entry. */
         IntegerEntry constant();
 
-        /** El valor. */
+        /** The value. */
         short shortValue();
     }
 
-    /** Un `char`, que el formato guarda en un `CONSTANT_Integer`. */
+    /** A `char`, which the format stores in a `CONSTANT_Integer`. */
     public interface OfChar extends OfConstant {
 
-        /** La entrada `CONSTANT_Integer`. */
+        /** The `CONSTANT_Integer` entry. */
         IntegerEntry constant();
 
-        /** El valor. */
+        /** The value. */
         char charValue();
     }
 
-    /** Un `byte`, que el formato guarda en un `CONSTANT_Integer`. */
+    /** A `byte`, which the format stores in a `CONSTANT_Integer`. */
     public interface OfByte extends OfConstant {
 
-        /** La entrada `CONSTANT_Integer`. */
+        /** The `CONSTANT_Integer` entry. */
         IntegerEntry constant();
 
-        /** El valor. */
+        /** The value. */
         byte byteValue();
     }
 
-    /** Un `boolean`, que el formato guarda en un `CONSTANT_Integer` que vale 0 o 1. */
+    /** A `boolean`, which the format stores in a `CONSTANT_Integer` holding 0 or 1. */
     public interface OfBoolean extends OfConstant {
 
-        /** La entrada `CONSTANT_Integer`. */
+        /** The `CONSTANT_Integer` entry. */
         IntegerEntry constant();
 
-        /** El valor. */
+        /** The value. */
         boolean booleanValue();
     }
 
-    /** Un literal de clase, o sea `Foo.class`. */
+    /** A class literal, that is, `Foo.class`. */
     public interface OfClass extends AnnotationValue {
 
-        /** El `Utf8` con el descriptor de la clase. */
+        /** The `Utf8` with the class's descriptor. */
         Utf8Entry className();
 
-        /** La clase. */
+        /** The class. */
         default ClassDesc classSymbol() {
             return ClassDesc.ofDescriptor(className().stringValue());
         }
     }
 
-    /** Una constante de enum. */
+    /** An enum constant. */
     public interface OfEnum extends AnnotationValue {
 
-        /** El `Utf8` con el descriptor del enum. */
+        /** The `Utf8` with the enum's descriptor. */
         Utf8Entry className();
 
-        /** El enum. */
+        /** The enum. */
         default ClassDesc classSymbol() {
             return ClassDesc.ofDescriptor(className().stringValue());
         }
 
-        /** El `Utf8` con el nombre de la constante. */
+        /** The `Utf8` with the constant's name. */
         Utf8Entry constantName();
     }
 
-    /** Una anotación anidada. */
+    /** A nested annotation. */
     public interface OfAnnotation extends AnnotationValue {
 
-        /** La anotación. */
+        /** The annotation. */
         Annotation annotation();
     }
 
-    /** Un arreglo de valores. */
+    /** An array of values. */
     public interface OfArray extends AnnotationValue {
 
-        /** Los valores, en orden. */
+        /** The values, in order. */
         List<AnnotationValue> values();
     }
 
-    /** La constante `constantName` del enum cuyo descriptor lleva `className`. */
+    /** The constant `constantName` of the enum whose descriptor `className` carries. */
     public static OfEnum ofEnum(Utf8Entry className, Utf8Entry constantName) {
         return Annotations.ofEnum(className, constantName);
     }
 
-    /** La constante `constantName` del enum `enumClass`. */
+    /** The constant `constantName` of the enum `enumClass`. */
     public static OfEnum ofEnum(ClassDesc enumClass, String constantName) {
         return Annotations.ofEnum(Annotations.utf8(descriptorOf(enumClass, "enumClass")),
                 Annotations.utf8(constantName));
     }
 
-    /** El literal de la clase cuyo descriptor lleva `className`. */
+    /** The literal of the class whose descriptor `className` carries. */
     public static OfClass ofClass(Utf8Entry className) {
         return Annotations.ofClass(className);
     }
 
-    /** El literal de clase de `value`. */
+    /** `value`'s class literal. */
     public static OfClass ofClass(ClassDesc value) {
         return Annotations.ofClass(Annotations.utf8(descriptorOf(value, "value")));
     }
 
-    /** El `String` que lleva `value`. */
+    /** The `String` `value` carries. */
     public static OfString ofString(Utf8Entry value) {
         return Annotations.ofString(value);
     }
 
-    /** El `String` `value`. */
+    /** The `String` `value`. */
     public static OfString ofString(String value) {
         return Annotations.ofString(Annotations.utf8(value));
     }
 
-    /** El `double` que lleva `value`. */
+    /** The `double` `value` carries. */
     public static OfDouble ofDouble(DoubleEntry value) {
         return Annotations.ofDouble(value);
     }
 
-    /** El `double` `value`. */
+    /** The `double` `value`. */
     public static OfDouble ofDouble(double value) {
         return Annotations.ofDouble(Annotations.doubleEntry(value));
     }
 
-    /** El `float` que lleva `value`. */
+    /** The `float` `value` carries. */
     public static OfFloat ofFloat(FloatEntry value) {
         return Annotations.ofFloat(value);
     }
 
-    /** El `float` `value`. */
+    /** The `float` `value`. */
     public static OfFloat ofFloat(float value) {
         return Annotations.ofFloat(Annotations.floatEntry(value));
     }
 
-    /** El `long` que lleva `value`. */
+    /** The `long` `value` carries. */
     public static OfLong ofLong(LongEntry value) {
         return Annotations.ofLong(value);
     }
 
-    /** El `long` `value`. */
+    /** The `long` `value`. */
     public static OfLong ofLong(long value) {
         return Annotations.ofLong(Annotations.longEntry(value));
     }
 
-    /** El `int` que lleva `value`. */
+    /** The `int` `value` carries. */
     public static OfInt ofInt(IntegerEntry value) {
         return Annotations.ofInt(value);
     }
 
-    /** El `int` `value`. */
+    /** The `int` `value`. */
     public static OfInt ofInt(int value) {
         return Annotations.ofInt(Annotations.intEntry(value));
     }
 
-    /** El `short` que lleva `value`. */
+    /** The `short` `value` carries. */
     public static OfShort ofShort(IntegerEntry value) {
         return Annotations.ofShort(value);
     }
 
-    /** El `short` `value`. */
+    /** The `short` `value`. */
     public static OfShort ofShort(short value) {
         return Annotations.ofShort(Annotations.intEntry(value));
     }
 
-    /** El `char` que lleva `value`. */
+    /** The `char` `value` carries. */
     public static OfChar ofChar(IntegerEntry value) {
         return Annotations.ofChar(value);
     }
 
-    /** El `char` `value`. */
+    /** The `char` `value`. */
     public static OfChar ofChar(char value) {
         return Annotations.ofChar(Annotations.intEntry(value));
     }
 
-    /** El `byte` que lleva `value`. */
+    /** The `byte` `value` carries. */
     public static OfByte ofByte(IntegerEntry value) {
         return Annotations.ofByte(value);
     }
 
-    /** El `byte` `value`. */
+    /** The `byte` `value`. */
     public static OfByte ofByte(byte value) {
         return Annotations.ofByte(Annotations.intEntry(value));
     }
 
-    /** El `boolean` que lleva `value`. */
+    /** The `boolean` `value` carries. */
     public static OfBoolean ofBoolean(IntegerEntry value) {
         return Annotations.ofBoolean(value);
     }
 
-    /** El `boolean` `value`. */
+    /** The `boolean` `value`. */
     public static OfBoolean ofBoolean(boolean value) {
         return Annotations.ofBoolean(Annotations.intEntry(value ? 1 : 0));
     }
 
-    /** La anotación anidada `value`. */
+    /** The nested annotation `value`. */
     public static OfAnnotation ofAnnotation(Annotation value) {
         return Annotations.ofAnnotation(value);
     }
 
-    /** El arreglo con estos valores. */
+    /** The array with these values. */
     public static OfArray ofArray(List<AnnotationValue> array) {
         return Annotations.ofArrayOfList(array);
     }
 
-    /** El arreglo con estos valores. */
+    /** The array with these values. */
     public static OfArray ofArray(AnnotationValue... array) {
         return Annotations.ofArray(array);
     }
 
     /**
-     * El valor que corresponde a `value`: una caja, un `String`, un `ClassDesc`, una constante de
-     * enum, o un arreglo de cualquiera de esos. Tira `IllegalArgumentException` con cualquier otra
-     * cosa — que es lo correcto: un `element_value` sólo puede ser una de esas formas.
+     * The value corresponding to `value`: a box, a `String`, a `ClassDesc`, an enum constant, or an
+     * array of any of those. It throws `IllegalArgumentException` with anything else -- which is the
+     * right answer: an `element_value` can only be one of those forms.
      */
     public static AnnotationValue of(Object value) {
         return Annotations.ofObject(value);

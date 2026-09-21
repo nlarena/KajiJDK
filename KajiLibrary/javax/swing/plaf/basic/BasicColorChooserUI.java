@@ -23,35 +23,37 @@ import javax.swing.plaf.FontUIResource;
 import javax.swing.plaf.UIResource;
 
 /**
- * El aspecto basico de un selector de color.
+ * The basic look and feel of a colour chooser.
  *
- * <h2>Dos mitades: las solapas y la muestra</h2>
+ * <h2>Two halves: the tabs and the preview</h2>
  *
- * <p>Arriba, una solapa por cada forma de elegir un color -- muestrario, HSV, RGB --; abajo, la
- * muestra de como quedo. El selector no elige nada por su cuenta: cada panel de solapa escribe en el
- * mismo {@code ColorSelectionModel}, y la muestra lo escucha. Este UI solo los conecta.
+ * <p>Above, one tab for each way of choosing a colour -- swatches, HSV, RGB --; below, the
+ * preview of how it came out. The chooser chooses nothing on its own: each tab panel writes
+ * into the same {@code ColorSelectionModel}, and the preview listens to it. This look and feel
+ * only connects them.
  *
- * <h2>Sin paneles de solapa</h2>
+ * <h2>With no tab panels</h2>
  *
- * <p><strong>{@link #createDefaultChoosers} devuelve un arreglo vacio.</strong> Los cinco paneles
- * del JDK --muestrario, HSV, HSL, RGB, CMYK-- son componentes interactivos de verdad: deslizadores,
- * campos con formato y un diagrama de color que se pinta y se arrastra. Esta biblioteca no los trae
- * y {@code ColorChooserComponentFactory.getDefaultChooserPanels} lo dice tirando
- * {@code UnsupportedOperationException}.
+ * <p><strong>{@link #createDefaultChoosers} returns an empty array.</strong> The JDK's five
+ * panels -- swatches, HSV, HSL, RGB, CMYK -- are real interactive components: sliders,
+ * formatted fields and a colour diagram that is painted and dragged. This library does not
+ * bring them and {@code ColorChooserComponentFactory.getDefaultChooserPanels} says so by
+ * throwing {@code UnsupportedOperationException}.
  *
- * <p>Devolver ninguno es un subconjunto legal --un selector sin formas de elegir--; dejar que la
- * excepcion salga por {@link #installUI} haria que ni siquiera se pueda construir el componente, y
- * eso es peor. Lo que si esta es todo el andamiaje: la muestra, los escuchas, y el reemplazo de
- * paneles cuando el programa pone los suyos, que es el caso en el que un selector es util aca.
+ * <p>Returning none is a legal subset -- a chooser with no ways of choosing --; letting the
+ * exception come out through {@link #installUI} would make it impossible even to build the
+ * component, and that is worse. What is there is the whole scaffolding: the preview, the
+ * listeners, and the replacing of panels when the program puts its own in, which is the case in
+ * which a chooser is useful here.
  */
 public class BasicColorChooserUI extends ColorChooserUI {
 
     protected JColorChooser chooser;
 
-    /** Los paneles que puso este UI; ver la nota de la clase. */
+    /** The panels this look and feel put in; see the class note. */
     protected AbstractColorChooserPanel[] defaultChoosers;
 
-    /** El que redibuja la muestra cuando cambia el color elegido. */
+    /** The one that redraws the preview when the chosen colour changes. */
     protected ChangeListener previewListener;
 
     protected PropertyChangeListener propertyChangeListener;
@@ -61,14 +63,14 @@ public class BasicColorChooserUI extends ColorChooserUI {
     private JPanel previewPanelHolder;
     private Component previewPanel;
 
-    private static final ColorUIResource FONDO = new ColorUIResource(238, 238, 238);
-    private static final ColorUIResource FRENTE = new ColorUIResource(51, 51, 51);
-    private static final FontUIResource FUENTE = new FontUIResource("Dialog", Font.PLAIN, 12);
+    private static final ColorUIResource BACKGROUND = new ColorUIResource(238, 238, 238);
+    private static final ColorUIResource FOREGROUND = new ColorUIResource(51, 51, 51);
+    private static final FontUIResource FONT = new FontUIResource("Dialog", Font.PLAIN, 12);
 
     public BasicColorChooserUI() {
     }
 
-    /** Uno nuevo por selector: guarda el componente y los paneles que armo. */
+    /** A new one per chooser: it keeps the component and the panels it built. */
     public static ComponentUI createUI(JComponent c) {
         return new BasicColorChooserUI();
     }
@@ -97,12 +99,12 @@ public class BasicColorChooserUI extends ColorChooserUI {
         tabbedPane = null;
     }
 
-    /** Ver la nota de la clase: ninguno. */
+    /** See the class note: none. */
     protected AbstractColorChooserPanel[] createDefaultChoosers() {
         return new AbstractColorChooserPanel[0];
     }
 
-    /** Desconecta los paneles que este UI puso. */
+    /** It disconnects the panels this look and feel put in. */
     protected void uninstallDefaultChoosers() {
         if (defaultChoosers == null) {
             return;
@@ -112,24 +114,24 @@ public class BasicColorChooserUI extends ColorChooserUI {
         }
     }
 
-    /** Colores, fuente y opacidad; los valores son los de {@code ColorChooser.*} en Metal. */
+    /** Colours, typeface and opacity; the values are those of {@code ColorChooser.*} in Metal. */
     protected void installDefaults() {
-        Color fondo = chooser.getBackground();
-        if (fondo == null || fondo instanceof UIResource) {
-            chooser.setBackground(FONDO);
+        Color background = chooser.getBackground();
+        if (background == null || background instanceof UIResource) {
+            chooser.setBackground(BACKGROUND);
         }
-        Color frente = chooser.getForeground();
-        if (frente == null || frente instanceof UIResource) {
-            chooser.setForeground(FRENTE);
+        Color foreground = chooser.getForeground();
+        if (foreground == null || foreground instanceof UIResource) {
+            chooser.setForeground(FOREGROUND);
         }
-        Font fuente = chooser.getFont();
-        if (fuente == null || fuente instanceof UIResource) {
-            chooser.setFont(FUENTE);
+        Font font = chooser.getFont();
+        if (font == null || font instanceof UIResource) {
+            chooser.setFont(FONT);
         }
         LookAndFeel.installProperty(chooser, "opaque", Boolean.TRUE);
     }
 
-    /** No saca nada; ver {@link BasicPanelUI#uninstallDefaults}. */
+    /** It removes nothing; see {@link BasicPanelUI#uninstallDefaults}. */
     protected void uninstallDefaults() {
     }
 
@@ -152,11 +154,11 @@ public class BasicColorChooserUI extends ColorChooserUI {
     }
 
     /**
-     * Pone la muestra abajo de todo.
+     * It puts the preview at the very bottom.
      *
-     * <p>Si el programa no puso una propia, la que arma la fabrica. Y si la fabrica no puede --lo
-     * mismo que con los paneles de solapa--, ninguna: la mitad de abajo queda vacia y el selector
-     * sigue andando.
+     * <p>If the program did not put one of its own, the one the factory builds. And if the
+     * factory cannot -- the same as with the tab panels --, none: the bottom half is left empty
+     * and the chooser goes on working.
      */
     protected void installPreviewPanel() {
         if (previewPanelHolder == null) {
@@ -164,16 +166,16 @@ public class BasicColorChooserUI extends ColorChooserUI {
             previewPanelHolder.setName("ColorChooser.previewPanelHolder");
         }
         previewPanelHolder.removeAll();
-        Component previa = chooser.getPreviewPanel();
-        if (previa == null) {
+        Component previous = chooser.getPreviewPanel();
+        if (previous == null) {
             try {
-                previa = ColorChooserComponentFactory.getPreviewPanel();
+                previous = ColorChooserComponentFactory.getPreviewPanel();
             } catch (UnsupportedOperationException e) {
-                // Ver la nota del metodo: sin muestra, el selector igual funciona.
-                previa = null;
+                // See the method's note: with no preview, the chooser works all the same.
+                previous = null;
             }
         }
-        previewPanel = previa;
+        previewPanel = previous;
         if (previewPanel != null) {
             previewPanelHolder.add(previewPanel, BorderLayout.CENTER);
         }
@@ -188,12 +190,12 @@ public class BasicColorChooserUI extends ColorChooserUI {
     }
 
     /**
-     * Rearma la parte de arriba segun cuantos paneles haya.
+     * It rebuilds the top part according to how many panels there are.
      *
-     * <p>Con uno solo va suelto; con dos o mas, cada uno en su solapa. Poner una sola solapa se
-     * veria como un marco de mas alrededor de nada.
+     * <p>With only one it goes loose; with two or more, each in its tab. Putting a single tab
+     * would look like an extra frame around nothing.
      */
-    private void rearmarPaneles() {
+    private void rebuildPanels() {
         AbstractColorChooserPanel[] panels = chooser.getChooserPanels();
         if (tabbedPane != null) {
             chooser.remove(tabbedPane);
@@ -221,9 +223,10 @@ public class BasicColorChooserUI extends ColorChooserUI {
     }
 
     /**
-     * El que reacciona al color elegido y a los cambios del selector.
+     * The one that reacts to the chosen colour and to the chooser's changes.
      *
-     * <p>Estatico y con el UI como campo, por lo mismo que en todo el paquete; ver el hallazgo #518.
+     * <p>Static and with the look and feel as a field, for the same reason as everywhere in the
+     * package; see finding #518.
      */
     private static class Handler implements PropertyChangeListener, ChangeListener {
 
@@ -240,22 +243,22 @@ public class BasicColorChooserUI extends ColorChooserUI {
         }
 
         public void propertyChange(PropertyChangeEvent e) {
-            String nombre = e.getPropertyName();
-            if (JColorChooser.CHOOSER_PANELS_PROPERTY.equals(nombre)) {
-                ui.rearmarPaneles();
+            String name = e.getPropertyName();
+            if (JColorChooser.CHOOSER_PANELS_PROPERTY.equals(name)) {
+                ui.rebuildPanels();
                 ui.chooser.revalidate();
-            } else if (JColorChooser.PREVIEW_PANEL_PROPERTY.equals(nombre)) {
+            } else if (JColorChooser.PREVIEW_PANEL_PROPERTY.equals(name)) {
                 ui.installPreviewPanel();
                 ui.chooser.revalidate();
-            } else if (JColorChooser.SELECTION_MODEL_PROPERTY.equals(nombre)) {
-                Object viejo = e.getOldValue();
-                Object nuevo = e.getNewValue();
-                if (viejo instanceof javax.swing.colorchooser.ColorSelectionModel) {
-                    ((javax.swing.colorchooser.ColorSelectionModel) viejo)
+            } else if (JColorChooser.SELECTION_MODEL_PROPERTY.equals(name)) {
+                Object old = e.getOldValue();
+                Object newValue = e.getNewValue();
+                if (old instanceof javax.swing.colorchooser.ColorSelectionModel) {
+                    ((javax.swing.colorchooser.ColorSelectionModel) old)
                             .removeChangeListener(ui.previewListener);
                 }
-                if (nuevo instanceof javax.swing.colorchooser.ColorSelectionModel) {
-                    ((javax.swing.colorchooser.ColorSelectionModel) nuevo)
+                if (newValue instanceof javax.swing.colorchooser.ColorSelectionModel) {
+                    ((javax.swing.colorchooser.ColorSelectionModel) newValue)
                             .addChangeListener(ui.previewListener);
                 }
             }

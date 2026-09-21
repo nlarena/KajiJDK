@@ -3,14 +3,16 @@ package java.nio.file;
 import java.io.Closeable;
 import java.util.concurrent.TimeUnit;
 
-// KajiLibrary's java.nio.file.WatchService -- a service that watches registered objects for changes.
-// KajiJDK creates none (FileSystem.newWatchService rejects the request), so this is inert surface.
+// KajiLibrary's java.nio.file.WatchService -- a service that watches registered objects for
+// changes. KajiJDK creates none (FileSystem.newWatchService rejects the request), so this is inert
+// surface.
 public interface WatchService extends Closeable {
 
-    // Sin `throws IOException`, y eso **estrecha** lo que hereda: `java.io.Closeable.close()` si lo
-    // declara. Estrechar es legal (JLS 8.4.8.3 solo prohibe ensanchar) y aca es honesto, porque
-    // cerrar este servicio no toca nada que pueda fallar. El JDK lo declara igual que `Closeable`;
-    // la diferencia solo se nota en que un `catch (IOException)` alrededor de este `close` sobra.
+    // With no `throws IOException`, and that **narrows** what it inherits:
+    // `java.io.Closeable.close()` does declare it. Narrowing is legal (JLS 8.4.8.3 only forbids
+    // widening) and here it is honest, because closing this service touches nothing that can fail.
+    // The JDK declares it the same as `Closeable`; the difference only shows in that a `catch
+    // (IOException)` around this `close` is superfluous.
     void close();
 
     /** Retrieves and removes the next signalled key, or null if none is present. */

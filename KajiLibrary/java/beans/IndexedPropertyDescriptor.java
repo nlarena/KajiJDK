@@ -134,9 +134,9 @@ public class IndexedPropertyDescriptor extends PropertyDescriptor {
     // If there are array accessors as well, the indexed type has to be the array type's
     // component.
     private void checkAgainstTheArray() throws IntrospectionException {
-        Class<?> arreglo = this.getPropertyType();
-        if (arreglo != null && this.indexedPropertyType != null) {
-            if (!arreglo.isArray() || arreglo.getComponentType() != this.indexedPropertyType) {
+        Class<?> array = this.getPropertyType();
+        if (array != null && this.indexedPropertyType != null) {
+            if (!array.isArray() || array.getComponentType() != this.indexedPropertyType) {
                 throw new IntrospectionException(
                     "type mismatch between indexed and non-indexed methods");
             }
@@ -147,26 +147,26 @@ public class IndexedPropertyDescriptor extends PropertyDescriptor {
     // be indexed only, and in that case the super already left propertyType null.
     private static Method findIndexed(Class<?> c, String name, int argCount) {
         Method m = findMethod(c, name, argCount);
-        Method bueno = null;
+        Method found = null;
         if (m != null) {
             Class<?>[] args = m.getParameterTypes();
             if (args.length == argCount && args[0] == int.class) {
-                bueno = m;
+                found = m;
             }
         }
-        return bueno;
+        return found;
     }
 
     public boolean equals(Object obj) {
-        boolean igual = this == obj;
-        if (!igual && obj instanceof IndexedPropertyDescriptor) {
-            IndexedPropertyDescriptor otro = (IndexedPropertyDescriptor) obj;
-            igual = super.equals(obj)
-                 && this.indexedPropertyType == otro.indexedPropertyType
-                 && sameMethod(this.indexedReadMethod, otro.indexedReadMethod)
-                 && sameMethod(this.indexedWriteMethod, otro.indexedWriteMethod);
+        boolean same = this == obj;
+        if (!same && obj instanceof IndexedPropertyDescriptor) {
+            IndexedPropertyDescriptor other = (IndexedPropertyDescriptor) obj;
+            same = super.equals(obj)
+                 && this.indexedPropertyType == other.indexedPropertyType
+                 && sameMethod(this.indexedReadMethod, other.indexedReadMethod)
+                 && sameMethod(this.indexedWriteMethod, other.indexedWriteMethod);
         }
-        return igual;
+        return same;
     }
 
     public int hashCode() {

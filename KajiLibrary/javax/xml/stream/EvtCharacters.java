@@ -6,15 +6,15 @@ import java.io.Writer;
 import javax.xml.stream.events.Characters;
 
 /**
- * Texto como evento: los tres sabores.
+ * Text as an event: the three flavours.
  *
- * <p>El tipo de evento que se le pase al constructor decide cual es --{@code CHARACTERS},
- * {@code CDATA} o {@code SPACE}-- y de ahi salen las tres preguntas de la interfaz.
+ * <p>The event type passed to the constructor decides which one it is --{@code CHARACTERS},
+ * {@code CDATA} or {@code SPACE}-- and the three questions of the interface follow from that.
  *
- * <p>{@link #isIgnorableWhiteSpace()} contesta true unicamente cuando el evento es {@code SPACE},
- * que en esta biblioteca solo lo produce
- * {@link XMLEventFactory#createIgnorableSpace}: el parser no lo emite nunca, porque sin DTD no hay
- * forma de saber que un espacio es ignorable. Ver {@link Characters}.
+ * <p>{@link #isIgnorableWhiteSpace()} answers true only when the event is {@code SPACE}, which in
+ * this library only {@link XMLEventFactory#createIgnorableSpace} produces: the parser never emits
+ * it, because without a DTD there is no way of knowing that a space is ignorable. See {@link
+ * Characters}.
  */
 final class EvtCharacters extends EvtBase implements Characters {
 
@@ -50,7 +50,7 @@ final class EvtCharacters extends EvtBase implements Characters {
 
     public void writeAsEncodedUnicode(Writer writer) throws XMLStreamException {
         if (writer == null) {
-            throw new XMLStreamException("el escritor no puede ser null");
+            throw new XMLStreamException("the writer cannot be null");
         }
         try {
             if (isCData()) {

@@ -3,10 +3,10 @@ package javax.swing.plaf;
 import javax.swing.ActionMap;
 
 /**
- * Una {@link ActionMap} marcada como puesta por el aspecto.
+ * An {@link ActionMap} marked as set by the look and feel.
  *
- * <p>La marca es toda la clase. Sirve para que al cambiar de aspecto se reemplace esta tabla y se
- * respete la que haya puesto el programa; ver {@link UIResource}.
+ * <p>The mark is the whole class. It serves so that on changing look and feel this table is
+ * replaced and whatever the program set is respected; see {@link UIResource}.
  */
 public class ActionMapUIResource extends ActionMap implements UIResource {
 

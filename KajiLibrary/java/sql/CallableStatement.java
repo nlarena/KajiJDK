@@ -1,30 +1,30 @@
 package java.sql;
 
 /**
- * KajiLibrary's java.sql.CallableStatement -- llama a un procedimiento almacenado.
+ * KajiLibrary's java.sql.CallableStatement -- calls a stored procedure.
  *
- * <p>Lo que la separa de {@link PreparedStatement} es que los parametros pueden ir en **las dos
- * direcciones**. Un procedimiento puede devolver por parametro, y eso obliga a un paso que ninguna
- * otra sentencia tiene: {@link #registerOutParameter}, que hay que llamar **antes** de ejecutar. El
- * driver necesita saber de que tipo es lo que va a volver para reservar el espacio; no puede
- * deducirlo del valor porque todavia no hay valor.
+ * <p>What separates it from {@link PreparedStatement} is that parameters can go **both ways**. A
+ * procedure can return through a parameter, and that forces a step no other statement has:
+ * {@link #registerOutParameter}, which has to be called **before** executing. The driver needs to
+ * know the type of what will come back to reserve the space; it cannot deduce it from the value
+ * because there is no value yet.
  *
- * <p>De ahi tambien la familia de `getXxx` que hereda en espiritu de {@link ResultSet} pero vive
- * aca: los resultados por parametro se leen de la sentencia, no de un conjunto de filas.
+ * <p>Hence also the `getXxx` family that inherits in spirit from {@link ResultSet} but lives here:
+ * results through parameters are read from the statement, not from a set of rows.
  *
- * <p>Y de ahi la duplicacion por indice y por nombre: un procedimiento con doce parametros de los
- * cuales tres son de salida es exactamente donde contar posiciones deja de ser viable.
+ * <p>And hence the duplication by index and by name: a procedure with twelve parameters of which
+ * three are outputs is exactly where counting positions stops being viable.
  */
 public interface CallableStatement extends PreparedStatement {
 
-    // ---- registrar salidas, y leerlas ----------------------------------------------------------------
+    // ---- registering outputs, and reading them --------------------------------------------------
     //
-    // Las tres familias son las tres cosas que una llamada a procedimiento necesita: registrar que
-    // parametros son de salida y de que tipo, ponerle valor a los de entrada **por nombre** --que la
-    // sentencia preparada no permite-- y leer los de salida despues de ejecutar.
+    // The three families are the three things a procedure call needs: registering which parameters
+    // are outputs and of what type, setting the input ones **by name** --which the prepared
+    // statement does not allow-- and reading the outputs after executing.
     //
-    // {@link #wasNull} vale aca por lo mismo que en {@link java.sql.ResultSet}: un `getInt` que
-    // devuelve cero no distingue el cero del nulo.
+    // {@link #wasNull} matters here for the same reason as in {@link java.sql.ResultSet}: a
+    // `getInt` that returns zero does not tell zero from null.
 
     boolean getBoolean(int parameterIndex) throws java.sql.SQLException;
 
@@ -157,15 +157,15 @@ public interface CallableStatement extends PreparedStatement {
     void registerOutParameter(int parameterIndex, int sqlType, java.lang.String scale) throws java.sql.SQLException;
 
     default void registerOutParameter(int parameterIndex, java.sql.SQLType sqlType) throws java.sql.SQLException {
-        throw new java.sql.SQLFeatureNotSupportedException("registerOutParameter no esta implementado");
+        throw new java.sql.SQLFeatureNotSupportedException("registerOutParameter not implemented");
     }
 
     default void registerOutParameter(int parameterIndex, java.sql.SQLType sqlType, int scale) throws java.sql.SQLException {
-        throw new java.sql.SQLFeatureNotSupportedException("registerOutParameter no esta implementado");
+        throw new java.sql.SQLFeatureNotSupportedException("registerOutParameter not implemented");
     }
 
     default void registerOutParameter(int parameterIndex, java.sql.SQLType sqlType, java.lang.String scale) throws java.sql.SQLException {
-        throw new java.sql.SQLFeatureNotSupportedException("registerOutParameter no esta implementado");
+        throw new java.sql.SQLFeatureNotSupportedException("registerOutParameter not implemented");
     }
 
     void registerOutParameter(java.lang.String parameterIndex, int sqlType) throws java.sql.SQLException;
@@ -175,15 +175,15 @@ public interface CallableStatement extends PreparedStatement {
     void registerOutParameter(java.lang.String parameterIndex, int sqlType, java.lang.String scale) throws java.sql.SQLException;
 
     default void registerOutParameter(java.lang.String parameterIndex, java.sql.SQLType sqlType) throws java.sql.SQLException {
-        throw new java.sql.SQLFeatureNotSupportedException("registerOutParameter no esta implementado");
+        throw new java.sql.SQLFeatureNotSupportedException("registerOutParameter not implemented");
     }
 
     default void registerOutParameter(java.lang.String parameterIndex, java.sql.SQLType sqlType, int scale) throws java.sql.SQLException {
-        throw new java.sql.SQLFeatureNotSupportedException("registerOutParameter no esta implementado");
+        throw new java.sql.SQLFeatureNotSupportedException("registerOutParameter not implemented");
     }
 
     default void registerOutParameter(java.lang.String parameterIndex, java.sql.SQLType sqlType, java.lang.String scale) throws java.sql.SQLException {
-        throw new java.sql.SQLFeatureNotSupportedException("registerOutParameter no esta implementado");
+        throw new java.sql.SQLFeatureNotSupportedException("registerOutParameter not implemented");
     }
 
     void setAsciiStream(java.lang.String parameterName, java.io.InputStream x) throws java.sql.SQLException;
@@ -259,11 +259,11 @@ public interface CallableStatement extends PreparedStatement {
     void setObject(java.lang.String parameterName, java.lang.Object x, int scale, int scale) throws java.sql.SQLException;
 
     default void setObject(java.lang.String parameterName, java.lang.Object x, java.sql.SQLType sqlType) throws java.sql.SQLException {
-        throw new java.sql.SQLFeatureNotSupportedException("setObject no esta implementado");
+        throw new java.sql.SQLFeatureNotSupportedException("setObject not implemented");
     }
 
     default void setObject(java.lang.String parameterName, java.lang.Object x, java.sql.SQLType sqlType, int scale) throws java.sql.SQLException {
-        throw new java.sql.SQLFeatureNotSupportedException("setObject no esta implementado");
+        throw new java.sql.SQLFeatureNotSupportedException("setObject not implemented");
     }
 
     void setRowId(java.lang.String parameterName, java.sql.RowId x) throws java.sql.SQLException;

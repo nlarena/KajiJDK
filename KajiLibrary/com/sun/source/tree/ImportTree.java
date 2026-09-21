@@ -1,14 +1,14 @@
 package com.sun.source.tree;
 
 /**
- * Un `import`. {@link #isStatic} y {@link #isModule} distinguen las tres formas.
+ * An `import`. {@link #isStatic} and {@link #isModule} tell the three forms apart.
  */
 public interface ImportTree extends Tree {
 
-    /** Si es un `import static`. */
+    /** Whether it is an `import static`. */
     boolean isStatic();
 
-    /** Si es un `import module`. */
+    /** Whether it is an `import module`. */
     boolean isModule();
 
     Tree getQualifiedIdentifier();

@@ -1,23 +1,23 @@
 package org.w3c.dom;
 
 /**
- * KajiLibrary's org.w3c.dom.Notation -- una notacion declarada en el DTD.
+ * KajiLibrary's org.w3c.dom.Notation -- a notation declared in the DTD.
  *
- * <p>Una notacion le pone nombre al **formato** de algo que el procesador XML no entiende: el tipo
- * de un binario referido por una entidad no parseada, o el destino de una
- * {@link ProcessingInstruction}. Es la manera que tiene un DTD de decir "esto es un TIFF" sin que
- * el parser sepa nada de TIFF.
+ * <p>A notation gives a name to the **format** of something the XML processor does not understand:
+ * the type of a binary referred to by an unparsed entity, or the target of a {@link
+ * ProcessingInstruction}. It is the way a DTD has of saying "this is a TIFF" without the parser
+ * knowing anything about TIFF.
  *
- * <p>Vive en {@link DocumentType#getNotations}, no tiene padre, no aparece recorriendo el arbol y es
- * de solo lectura. Al menos uno de los dos identificadores esta presente.
+ * <p>It lives in {@link DocumentType#getNotations}, has no parent, does not appear when walking the
+ * tree and is read-only. At least one of the two identifiers is present.
  *
- * <p>Interfaz declarada entera.
+ * <p>The interface is declared whole.
  */
 public interface Notation extends Node {
 
-    /** El identificador publico, o {@code null}. */
+    /** The public identifier, or {@code null}. */
     public String getPublicId();
 
-    /** El identificador de sistema, o {@code null}. */
+    /** The system identifier, or {@code null}. */
     public String getSystemId();
 }

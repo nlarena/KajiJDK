@@ -11,8 +11,8 @@ import java.util.Iterator;
 // BaseStream<Integer, IntStream>, and so on. Each subinterface redeclares those four methods
 // with its own type as the return type; that is a plain covariant override, not a new method.
 //
-// `spliterator()` ya esta declarado abajo — java.util.Spliterator existe, y los tres flujos
-// primitivos lo sobreescriben covariantemente con `Spliterator.OfInt`/`OfLong`/`OfDouble`.
+// `spliterator()` is declared below — java.util.Spliterator exists, and the three primitive
+// streams override it covariantly with `Spliterator.OfInt`/`OfLong`/`OfDouble`.
 //
 // Deliberately left out of this port:
 //

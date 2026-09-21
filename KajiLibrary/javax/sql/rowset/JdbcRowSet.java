@@ -6,89 +6,89 @@ import java.sql.Savepoint;
 import javax.sql.RowSet;
 
 /**
- * Un {@code RowSet} <strong>conectado</strong>: un envoltorio delgado sobre un {@code ResultSet}.
+ * A <strong>connected</strong> {@code RowSet}: a thin wrapper over a {@code ResultSet}.
  *
- * <h2>Que agrega si ya existe {@code ResultSet}</h2>
+ * <h2>What it adds if {@code ResultSet} already exists</h2>
  *
- * <p>Dos cosas. Es un componente al estilo JavaBeans —tiene propiedades que se fijan y despues se
- * ejecuta— y emite eventos, asi que una interfaz grafica se puede enganchar a el. Y es desplazable y
- * actualizable aunque el controlador subyacente no lo sea de por si.
+ * <p>Two things. It is a JavaBeans-style component —it has properties that are set and then it is
+ * executed— and it emits events, so a graphical interface can hook onto it. And it is scrollable
+ * and updatable even if the underlying driver is not by itself.
  *
- * <p>Lo que <strong>no</strong> agrega es desconexion: mantiene la conexion abierta todo el tiempo,
- * como un {@code ResultSet}. Para soltarla esta {@link CachedRowSet}.
+ * <p>What it does <strong>not</strong> add is disconnection: it keeps the connection open the whole
+ * time, like a {@code ResultSet}. To let go of it there is {@link CachedRowSet}.
  *
- * <h2>Cuando conviene este y no un {@link CachedRowSet}</h2>
+ * <h2>When this one is preferable to a {@link CachedRowSet}</h2>
  *
- * <p>Cuando los datos tienen que estar frescos y el conjunto es grande. Al estar conectado, lo que
- * se lee es lo que hay ahora, y no hay conflictos que resolver porque no hay ventana entre leer y
- * escribir. El precio es la conexion retenida.
+ * <p>When the data has to be fresh and the set is large. Being connected, what is read is what
+ * there is now, and there are no conflicts to resolve because there is no window between reading
+ * and writing. The price is the held connection.
  *
  * @since 1.5
  */
 public interface JdbcRowSet extends RowSet, Joinable {
 
     /**
-     * Si las filas borradas se siguen viendo al recorrer.
+     * Whether deleted rows are still seen when walking.
      *
-     * @return si se muestran
-     * @throws SQLException si no se pudo consultar
+     * @return whether they are shown
+     * @throws SQLException if it could not be queried
      */
     boolean getShowDeleted() throws SQLException;
 
     /**
-     * Muestra o esconde las filas borradas.
+     * Shows or hides the deleted rows.
      *
-     * @param b si mostrarlas
-     * @throws SQLException si no se pudo cambiar
+     * @param b whether to show them
+     * @throws SQLException if it could not be changed
      */
     void setShowDeleted(boolean b) throws SQLException;
 
     /**
-     * Los avisos acumulados.
+     * The accumulated warnings.
      *
-     * @return el primero de la cadena, o {@code null}
-     * @throws SQLException si no se pudieron obtener
+     * @return the first of the chain, or {@code null}
+     * @throws SQLException if they could not be obtained
      */
     RowSetWarning getRowSetWarnings() throws SQLException;
 
     /**
-     * Confirma la transaccion.
+     * Commits the transaction.
      *
-     * @throws SQLException si no se pudo confirmar
+     * @throws SQLException if it could not be committed
      */
     void commit() throws SQLException;
 
     /**
-     * Si la conexion confirma sola cada sentencia.
+     * Whether the connection commits each statement by itself.
      *
-     * @return si esta en confirmacion automatica
-     * @throws SQLException si no se pudo consultar
+     * @return whether it is in auto-commit
+     * @throws SQLException if it could not be queried
      */
     boolean getAutoCommit() throws SQLException;
 
     /**
-     * Prende o apaga la confirmacion automatica.
+     * Turns auto-commit on or off.
      *
-     * <p>Apagarla es lo que hace posible {@link #rollback}: con la confirmacion automatica prendida
-     * cada sentencia ya quedo escrita y no hay nada que deshacer.
+     * <p>Turning it off is what makes {@link #rollback} possible: with auto-commit on, each
+     * statement was already written and there is nothing to undo.
      *
-     * @param autoCommit si confirmar sola
-     * @throws SQLException si no se pudo cambiar
+     * @param autoCommit whether to commit by itself
+     * @throws SQLException if it could not be changed
      */
     void setAutoCommit(boolean autoCommit) throws SQLException;
 
     /**
-     * Deshace la transaccion.
+     * Rolls back the transaction.
      *
-     * @throws SQLException si no se pudo deshacer
+     * @throws SQLException if it could not be rolled back
      */
     void rollback() throws SQLException;
 
     /**
-     * Deshace hasta el punto de resguardo dado.
+     * Rolls back to the given savepoint.
      *
-     * @param s el punto de resguardo
-     * @throws SQLException si no se pudo deshacer
+     * @param s the savepoint
+     * @throws SQLException if it could not be rolled back
      */
     void rollback(Savepoint s) throws SQLException;
 }

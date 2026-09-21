@@ -10,21 +10,21 @@ import javax.swing.plaf.ComponentUI;
 import javax.swing.plaf.basic.BasicScrollPaneUI;
 
 /**
- * El panel de desplazamiento de Metal.
+ * Metal's scroll pane.
  *
- * <p>Lo unico que agrega es un escucha que mira cuando alguien <em>reemplaza</em> una de las dos
- * barras. Metal les pone a las barras del panel una propiedad -- {@code "JScrollBar.isFreeStanding"}
- * en {@code false} -- que le dice al aspecto de la barra que no se dibuje el borde de afuera,
- * porque el borde ya lo pone el panel. Una barra puesta despues no la tendria y se dibujaria con
- * un marco de mas justo contra el marco del panel.
+ * <p>The only thing it adds is a listener that watches for somebody <em>replacing</em> one of
+ * the two bars. Metal sets on the pane's bars a property -- {@code "JScrollBar.isFreeStanding"}
+ * at {@code false} -- that tells the bar's look and feel not to draw the outer border, because
+ * the border is already put there by the pane. A bar put in afterwards would not have it and
+ * would be drawn with an extra frame right against the pane's frame.
  *
- * <p>Es un detalle de dos pixeles y es la clase entera. Vale la pena porque el sintoma -- una
- * doble linea en un solo lado, y solo si el programa cambio la barra -- es de los que nadie
- * encuentra mirando el codigo.
+ * <p>It is a two-pixel detail and it is the whole class. It is worth it because the symptom -- a
+ * double line on a single side, and only if the program changed the bar -- is one of those
+ * nobody finds by reading the code.
  */
 public class MetalScrollPaneUI extends BasicScrollPaneUI {
 
-    private PropertyChangeListener cambioDeBarra;
+    private PropertyChangeListener scrollBarChange;
 
     public MetalScrollPaneUI() {
     }
@@ -43,17 +43,17 @@ public class MetalScrollPaneUI extends BasicScrollPaneUI {
 
     public void installListeners(JScrollPane scrollPane) {
         super.installListeners(scrollPane);
-        cambioDeBarra = createScrollBarSwapListener();
-        scrollPane.addPropertyChangeListener(cambioDeBarra);
-        libre(scrollPane.getHorizontalScrollBar());
-        libre(scrollPane.getVerticalScrollBar());
+        scrollBarChange = createScrollBarSwapListener();
+        scrollPane.addPropertyChangeListener(scrollBarChange);
+        free(scrollPane.getHorizontalScrollBar());
+        free(scrollPane.getVerticalScrollBar());
     }
 
     public void uninstallListeners(JScrollPane scrollPane) {
         super.uninstallListeners((JComponent) scrollPane);
-        if (cambioDeBarra != null) {
-            scrollPane.removePropertyChangeListener(cambioDeBarra);
-            cambioDeBarra = null;
+        if (scrollBarChange != null) {
+            scrollPane.removePropertyChangeListener(scrollBarChange);
+            scrollBarChange = null;
         }
     }
 
@@ -61,23 +61,25 @@ public class MetalScrollPaneUI extends BasicScrollPaneUI {
         uninstallListeners((JScrollPane) c);
     }
 
-    /** Le avisa a la barra que va pegada al panel y no suelta. */
-    private static void libre(JScrollBar barra) {
-        if (barra != null) {
-            barra.putClientProperty("JScrollBar.isFreeStanding", Boolean.FALSE);
+    /** It tells the bar that it goes attached to the pane and not free standing. */
+    private static void free(JScrollBar bar) {
+        if (bar != null) {
+            bar.putClientProperty("JScrollBar.isFreeStanding", Boolean.FALSE);
         }
     }
 
     protected PropertyChangeListener createScrollBarSwapListener() {
-        return new CambioDeBarra();
+        return new ScrollBarChange();
     }
 
-    /** Estatico no: necesita nada del panel, pero el JDK lo hace anonimo y da igual. */
-    private static class CambioDeBarra implements PropertyChangeListener {
+    /**
+     * Not static: it needs nothing of the pane, but the JDK makes it anonymous and it is the same.
+     */
+    private static class ScrollBarChange implements PropertyChangeListener {
 
         public void propertyChange(PropertyChangeEvent e) {
-            String nombre = e.getPropertyName();
-            if ("verticalScrollBar".equals(nombre) || "horizontalScrollBar".equals(nombre)) {
+            String name = e.getPropertyName();
+            if ("verticalScrollBar".equals(name) || "horizontalScrollBar".equals(name)) {
                 if (e.getOldValue() instanceof JScrollBar) {
                     ((JScrollBar) e.getOldValue())
                             .putClientProperty("JScrollBar.isFreeStanding", null);

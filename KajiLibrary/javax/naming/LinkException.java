@@ -1,33 +1,32 @@
 package javax.naming;
 
 /**
- * Falla al seguir un enlace, con el estado del enlace **aparte** del estado del contexto.
+ * A failure following a link, with the link's state **apart** from the context's state.
  *
- * <p>Un enlace (`LinkRef`) es un nombre atado a otro nombre: resolver `a/b` puede llevar a un
- * enlace que dice "en realidad esto es `x/y/z`", y la resolucion sigue por ahi. Cuando falla,
- * hay **dos** resoluciones en juego y las dos importan: la del nombre original y la del nombre
- * del enlace. Los cuatro campos heredados de `NamingException` cuentan la primera; los cuatro
- * `link*` de esta clase cuentan la segunda.
+ * <p>A link (`LinkRef`) is a name bound to another name: resolving `a/b` may lead to a link that
+ * says "this is really `x/y/z`", and resolution carries on there. When it fails there are **two**
+ * resolutions in play and both matter: the original name's and the link name's. The four fields
+ * inherited from `NamingException` tell the first; the four `link*` of this class tell the second.
  *
- * <p>Sin esa separacion el diagnostico seria inutil: "no encontre `z`" no dice si `z` era parte
- * del nombre que se pidio o del nombre al que el enlace mandaba.
+ * <p>Without that split the diagnosis would be useless: "`z` not found" does not say whether `z`
+ * was part of the requested name or of the name the link pointed to.
  *
- * <p>El resto de la jerarquia esta explicado en `NamingException`.
+ * <p>The rest of the hierarchy is explained in `NamingException`.
  */
 public class LinkException extends NamingException {
 
     private static final long serialVersionUID = -7967662604076777712L;
 
-    /** Hasta donde se resolvio **el nombre del enlace**. */
+    /** How far **the link name** was resolved. */
     protected Name linkResolvedName;
 
-    /** El objeto al que se llego resolviendo el nombre del enlace. */
+    /** The object reached by resolving the link name. */
     protected Object linkResolvedObj;
 
-    /** Lo que faltaba del nombre del enlace. */
+    /** What was left of the link name. */
     protected Name linkRemainingName;
 
-    /** El porque, en texto, de la falla del enlace. Es el paralelo de `getExplanation()`. */
+    /** The why, in text, of the link failure. It is the counterpart of `getExplanation()`. */
     protected String linkExplanation;
 
     public LinkException(String explanation) {
@@ -66,8 +65,8 @@ public class LinkException extends NamingException {
         this.linkExplanation = msg;
     }
 
-    // Clonan por la misma razon que los de `NamingException`: el proveedor sigue usando su copia
-    // del nombre despues de haber lanzado.
+    // They clone for the same reason as `NamingException`'s: the provider keeps using its copy of
+    // the name after throwing.
 
     public void setLinkResolvedName(Name name) {
         this.linkResolvedName = (name != null) ? (Name) name.clone() : null;

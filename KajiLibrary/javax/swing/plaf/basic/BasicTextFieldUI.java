@@ -12,20 +12,20 @@ import javax.swing.text.JTextComponent;
 import javax.swing.text.View;
 
 /**
- * El aspecto basico de un campo de texto de una sola linea.
+ * The basic look and feel of a single-line text field.
  *
- * <p>Casi todo el trabajo lo hace {@link BasicTextUI}; lo propio de esta clase son dos cosas: la
- * vista que arma --{@link FieldView}, la unica que sabe centrar verticalmente una linea sola y
- * correrse cuando el texto no entra-- y la linea de base.
+ * <p>Almost all the work is done by {@link BasicTextUI}; what is this class's own are two
+ * things: the view it builds -- {@link FieldView}, the only one that knows how to centre a
+ * single line vertically and to shift when the text does not fit -- and the baseline.
  *
- * <h2>La linea de base se mueve con el alto</h2>
+ * <h2>The baseline moves with the height</h2>
  *
- * <p>Un campo centra su unica linea, asi que si el campo crece la linea baja la mitad de lo que
- * crecio. Por eso el comportamiento es {@code CENTER_OFFSET} y no {@code CONSTANT_ASCENT}: quien
- * alinea un campo con una etiqueta al lado tiene que volver a preguntar cada vez que cambia el
- * alto. Medido: con 20 de alto la base esta en 15 y con 30 en 20.
+ * <p>A field centres its only line, so if the field grows the line goes down by half of what it
+ * grew. That is why the behaviour is {@code CENTER_OFFSET} and not {@code CONSTANT_ASCENT}:
+ * whoever lines a field up with a label beside it has to ask again every time the height
+ * changes. Measured: with a height of 20 the baseline is at 15 and with 30 at 20.
  *
- * <p>Con alto cero no hay donde poner nada y la respuesta es -1.
+ * <p>With a height of zero there is nowhere to put anything and the answer is -1.
  */
 public class BasicTextFieldUI extends BasicTextUI {
 
@@ -33,7 +33,7 @@ public class BasicTextFieldUI extends BasicTextUI {
         super();
     }
 
-    /** Uno nuevo por campo: un UI de texto guarda el componente. */
+    /** A new one per field: a text look and feel keeps the component. */
     public static ComponentUI createUI(JComponent c) {
         return new BasicTextFieldUI();
     }
@@ -43,21 +43,21 @@ public class BasicTextFieldUI extends BasicTextUI {
     }
 
     /**
-     * La vista del campo.
+     * The field's view.
      *
-     * <p>Siempre una {@link FieldView}. El JDK tiene una variante para texto que se lee de derecha
-     * a izquierda mezclado con texto que se lee al reves; aca no esta, y esta dicho: un campo con
-     * texto bidireccional se dibuja en un solo sentido.
+     * <p>Always a {@link FieldView}. The JDK has a variant for text that is read right to left
+     * mixed with text that is read the other way round; here it is not there, and it is said: a
+     * field with bidirectional text is drawn in a single direction.
      */
     public View create(Element elem) {
         return new FieldView(elem);
     }
 
     /**
-     * Donde apoya el texto; ver la nota de la clase.
+     * Where the text rests; see the class note.
      *
-     * @throws NullPointerException si el componente es nulo
-     * @throws IllegalArgumentException si el ancho o el alto son negativos
+     * @throws NullPointerException if the component is null
+     * @throws IllegalArgumentException if the width or the height are negative
      */
     public int getBaseline(JComponent c, int width, int height) {
         super.getBaseline(c, width, height);
@@ -70,7 +70,7 @@ public class BasicTextFieldUI extends BasicTextUI {
                 View fieldView = rootView.getView(0);
                 int vspan = (int) fieldView.getPreferredSpan(View.Y_AXIS);
                 if (height != vspan) {
-                    // La linea va centrada: la mitad de lo que sobra queda arriba.
+                    // The line goes centred: half of what is left over stays on top.
                     int slop = height - vspan;
                     baseline += slop / 2;
                 }
@@ -83,9 +83,9 @@ public class BasicTextFieldUI extends BasicTextUI {
     }
 
     /**
-     * {@code CENTER_OFFSET}; ver la nota de la clase.
+     * {@code CENTER_OFFSET}; see the class note.
      *
-     * @throws NullPointerException si el componente es nulo
+     * @throws NullPointerException if the component is null
      */
     public Component.BaselineResizeBehavior getBaselineResizeBehavior(JComponent c) {
         super.getBaselineResizeBehavior(c);

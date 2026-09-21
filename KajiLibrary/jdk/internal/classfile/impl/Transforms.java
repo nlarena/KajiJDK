@@ -24,137 +24,139 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 /**
- * Las implementaciones de las fábricas de las cuatro transformaciones.
+ * The implementations of the factories of the four transformations.
  *
- * <p>Están las cuatro juntas y no una por archivo porque son la **misma** clase escrita cuatro
- * veces: encadenar, filtrar, agregar al final y dar estado no dependen de qué se transforma. La
- * repetición es del sistema de tipos, no del problema — `ClassTransform` y `MethodTransform` no
- * tienen supertipo común que fije `E` y `B`, así que no hay forma de escribir una sola.
+ * <p>The four are together and not one per file because they are the **same** class written four
+ * times: chaining, filtering, appending at the end and giving state do not depend on what is being
+ * transformed. The repetition is the type system's, not the problem's -- `ClassTransform` and
+ * `MethodTransform` have no common supertype that fixes `E` and `B`, so there is no way of writing
+ * a single one.
  *
- * <h2>El encadenado, que es lo único no evidente</h2>
+ * <h2>The chaining, which is the only non-obvious thing</h2>
  *
- * <p>`a.andThen(b)` **no** corre las dos sobre el original: corre `b` sobre lo que `a` produce. Para
- * eso, `a` no puede escribir en el constructor de verdad — tiene que escribir en uno intermedio que
- * le pase cada elemento a `b`. Eso es lo que son las clases `Chained*Builder` de más abajo: un
- * constructor que por dentro es una transformación.
+ * <p>`a.andThen(b)` does **not** run both on the original: it runs `b` on what `a` produces. For
+ * that, `a` cannot write into the real builder -- it has to write into an intermediate one that
+ * hands each element to `b`. That is what the `Chained*Builder` classes further down are: a builder
+ * that inside is a transformation.
  */
 public final class Transforms {
 
     private Transforms() {
     }
 
-    // ---- el predicado que acepta todo ----------------------------------------------------------
+    // ---- the predicate that accepts everything --------------------------------------------------
 
-    /** El predicado de métodos que dice que sí a todos. */
+    /** The method predicate that says yes to all. */
     public static Predicate<MethodModel> allMethods() {
         return AllMethods.INSTANCE;
     }
 
-    // ---- clase ---------------------------------------------------------------------------------
+    // ---- class ---------------------------------------------------------------------------------
 
-    /** Una transformación de clase seguida de otra. */
+    /** A class transformation followed by another. */
     public static ClassTransform chainClass(ClassTransform first, ClassTransform second) {
         return new ChainedClass(first, second);
     }
 
-    /** La que tira lo que cumple el predicado. */
+    /** The one that drops what meets the predicate. */
     public static ClassTransform droppingClass(Predicate<ClassElement> filter) {
         return new DroppingClass(filter);
     }
 
-    /** La que deja pasar todo y corre eso al final. */
+    /** The one that lets everything through and runs that at the end. */
     public static ClassTransform endHandlerClass(Consumer<ClassBuilder> finisher) {
         return new EndHandlerClass(finisher);
     }
 
-    /** La que se fabrica de nuevo por cada uso. */
+    /** The one that is made anew for each use. */
     public static ClassTransform statefulClass(Supplier<ClassTransform> supplier) {
         return new StatefulClass(supplier);
     }
 
-    /** La que transforma cada campo. */
+    /** The one that transforms each field. */
     public static ClassTransform transformingFields(FieldTransform xform) {
         return new TransformingFields(xform);
     }
 
-    /** La que transforma los métodos que cumplen el predicado. */
+    /** The one that transforms the methods that meet the predicate. */
     public static ClassTransform transformingMethods(Predicate<MethodModel> filter,
             MethodTransform xform) {
         return new TransformingMethods(filter, xform);
     }
 
-    // ---- método --------------------------------------------------------------------------------
+    // ---- method --------------------------------------------------------------------------------
 
-    /** Una transformación de método seguida de otra. */
+    /** A method transformation followed by another. */
     public static MethodTransform chainMethod(MethodTransform first, MethodTransform second) {
         return new ChainedMethod(first, second);
     }
 
-    /** La que tira lo que cumple el predicado. */
+    /** The one that drops what meets the predicate. */
     public static MethodTransform droppingMethod(Predicate<MethodElement> filter) {
         return new DroppingMethod(filter);
     }
 
-    /** La que deja pasar todo y corre eso al final. */
+    /** The one that lets everything through and runs that at the end. */
     public static MethodTransform endHandlerMethod(Consumer<MethodBuilder> finisher) {
         return new EndHandlerMethod(finisher);
     }
 
-    /** La que se fabrica de nuevo por cada uso. */
+    /** The one that is made anew for each use. */
     public static MethodTransform statefulMethod(Supplier<MethodTransform> supplier) {
         return new StatefulMethod(supplier);
     }
 
-    /** La que transforma el cuerpo. */
+    /** The one that transforms the body. */
     public static MethodTransform transformingCode(CodeTransform xform) {
         return new TransformingCode(xform);
     }
 
-    // ---- campo ---------------------------------------------------------------------------------
+    // ---- field ----------------------------------------------------------------------------------
 
-    /** Una transformación de campo seguida de otra. */
+    /** A field transformation followed by another. */
     public static FieldTransform chainField(FieldTransform first, FieldTransform second) {
         return new ChainedField(first, second);
     }
 
-    /** La que tira lo que cumple el predicado. */
+    /** The one that drops what meets the predicate. */
     public static FieldTransform droppingField(Predicate<FieldElement> filter) {
         return new DroppingField(filter);
     }
 
-    /** La que deja pasar todo y corre eso al final. */
+    /** The one that lets everything through and runs that at the end. */
     public static FieldTransform endHandlerField(Consumer<FieldBuilder> finisher) {
         return new EndHandlerField(finisher);
     }
 
-    /** La que se fabrica de nuevo por cada uso. */
+    /** The one that is made anew for each use. */
     public static FieldTransform statefulField(Supplier<FieldTransform> supplier) {
         return new StatefulField(supplier);
     }
 
-    // ---- código --------------------------------------------------------------------------------
+    // ---- code ----------------------------------------------------------------------------------
 
-    /** Una transformación de código seguida de otra. */
+    /** A code transformation followed by another. */
     public static CodeTransform chainCode(CodeTransform first, CodeTransform second) {
         return new ChainedCode(first, second);
     }
 
-    /** La que deja pasar todo y corre eso al final. */
+    /** The one that lets everything through and runs that at the end. */
     public static CodeTransform endHandlerCode(Consumer<CodeBuilder> finisher) {
         return new EndHandlerCode(finisher);
     }
 
-    /** La que se fabrica de nuevo por cada uso. */
+    /** The one that is made anew for each use. */
     public static CodeTransform statefulCode(Supplier<CodeTransform> supplier) {
         return new StatefulCode(supplier);
     }
 
     /**
-     * Un constructor de codigo que escribe **a traves** de esa transformacion.
+     * A code builder that writes **through** that transformation.
      *
-     * <p>Lo pide `CodeBuilder.transforming`. Esta fabrica existe porque la clase es de paquete y el
-     * que la necesita esta en otro archivo del mismo paquete pero no puede nombrarla desde la
-     * interfaz publica.
+     * <p>`CodeBuilder.transforming` asks for it. The note said this factory exists because the
+     * class is package-private and whoever needs it cannot name it; the caller,
+     * `DirectCodeBuilder`, is in this very package and could. What the factory does give is a
+     * single place where the chained builder is made.
      */
     public static CodeBuilder chainedCodeBuilder(CodeBuilder downstream, CodeTransform transform) {
         return new ChainedCodeBuilder(downstream, transform);
@@ -170,7 +172,7 @@ final class AllMethods implements Predicate<MethodModel> {
     }
 }
 
-// ---- clase -------------------------------------------------------------------------------------
+// ---- class -------------------------------------------------------------------------------------
 
 final class ChainedClass implements ClassTransform {
 
@@ -192,16 +194,16 @@ final class ChainedClass implements ClassTransform {
         this.second.atStart(builder);
     }
 
-    // El orden es el inverso al de `atStart`, y hace falta: lo que la primera escriba en su cierre
-    // todavía tiene que pasar por la segunda, así que la segunda cierra después.
+    // The order is the reverse of `atStart`'s, and it has to be: what the first writes in its
+    // closing still has to go through the second, so the second closes afterwards.
     public void atEnd(ClassBuilder builder) {
         this.first.atEnd(new ChainedClassBuilder(builder, this.second));
         this.second.atEnd(builder);
     }
 }
 
-// Un `ClassBuilder` que por dentro es una transformación: lo que se le escribe no va al constructor
-// de destino sino al `accept` de la transformación, con el destino como salida.
+// A `ClassBuilder` that inside is a transformation: what is written into it does not go to the
+// destination builder but to the transformation's `accept`, with the destination as output.
 final class ChainedClassBuilder implements ClassBuilder {
 
     private final ClassBuilder downstream;
@@ -221,10 +223,10 @@ final class ChainedClassBuilder implements ClassBuilder {
         return this.downstream.constantPool();
     }
 
-    // Los cuatro de abajo van derecho al destino y **no** pasan por la transformación. No es una
-    // omisión: la transformación trabaja sobre elementos, y un campo o un método que se crea con
-    // `withField`/`withMethod` no es un elemento que alguien haya emitido -- es una estructura nueva
-    // que quien la crea ya decidió cómo quiere.
+    // The four below go straight to the destination and do **not** go through the transformation.
+    // It is not an omission: the transformation works on elements, and a field or a method created
+    // with `withField`/`withMethod` is not an element somebody emitted -- it is a new structure
+    // whose creator already decided how they want it.
     public ClassBuilder withField(Utf8Entry name, Utf8Entry descriptor,
             Consumer<FieldBuilder> handler) {
         this.downstream.withField(name, descriptor, handler);
@@ -280,11 +282,12 @@ final class EndHandlerClass implements ClassTransform {
     }
 }
 
-// La transformación con estado. Pide una nueva al proveedor en `atStart` y la usa hasta `atEnd`.
+// The transformation with state. It asks the supplier for a new one in `atStart` and uses it until
+// `atEnd`.
 //
-// El campo mutable es exactamente lo que esta clase existe para encapsular: una transformación con
-// estado no se puede compartir, y guardarlo acá --con una instancia nueva por aplicación-- es lo que
-// hace que quien la use no tenga que saberlo.
+// The mutable field is exactly what this class exists to encapsulate: a transformation with state
+// cannot be shared, and keeping it here --with a new instance per application-- is what spares
+// whoever uses it from having to know.
 final class StatefulClass implements ClassTransform {
 
     private final Supplier<ClassTransform> supplier;
@@ -345,7 +348,7 @@ final class TransformingMethods implements ClassTransform {
     }
 }
 
-// ---- método --------------------------------------------------------------------------------------
+// ---- method ----------------------------------------------------------------------------------
 
 final class ChainedMethod implements MethodTransform {
 
@@ -475,7 +478,7 @@ final class TransformingCode implements MethodTransform {
     }
 }
 
-// ---- campo ---------------------------------------------------------------------------------------
+// ---- field -----------------------------------------------------------------------------------
 
 final class ChainedField implements FieldTransform {
 
@@ -578,7 +581,7 @@ final class StatefulField implements FieldTransform {
     }
 }
 
-// ---- código --------------------------------------------------------------------------------------
+// ---- code ------------------------------------------------------------------------------------
 
 final class ChainedCode implements CodeTransform {
 
@@ -624,8 +627,8 @@ final class ChainedCodeBuilder implements CodeBuilder {
         return this.downstream.constantPool();
     }
 
-    // Las etiquetas y los slots son del constructor de destino: una etiqueta pedida acá tiene que
-    // resolver en el método que de verdad se está escribiendo, no en este intermediario.
+    // The labels and the slots are the destination builder's: a label asked for here has to resolve
+    // in the method really being written, not in this intermediary.
     public Label newLabel() {
         return this.downstream.newLabel();
     }

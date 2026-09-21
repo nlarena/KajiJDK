@@ -1,30 +1,30 @@
 package java.awt;
 
 /**
- * Como se coloca un componente dentro de un {@code GridBagLayout}: celda, expansion, relleno,
- * anclaje y margenes.
+ * How a component is placed inside a {@code GridBagLayout}: cell, expansion, fill, anchor and
+ * insets.
  *
- * <p>Es una bolsa de campos publicos sin comportamiento, asi que se puede escribir entera aunque el
- * {@code GridBagLayout} que la consume no exista: la clase no toca ningun componente, solo describe
- * una intencion.
+ * <p>It is a bag of public fields with no behaviour: the class touches no component, it only
+ * describes an intention. (This note added that for that reason it could be written whole even
+ * though the {@code GridBagLayout} that consumes it did not exist; it exists now.)
  *
- * <p>Los valores de los anclajes no son consecutivos por casualidad. Los absolutos --CENTER,
- * NORTH...-- van del 10 al 18; los relativos al sentido de lectura --PAGE_START, LINE_END...-- del
- * 19 al 26; y los relativos a la linea de base saltan a multiplos de 256. El salto no es estetico:
- * permite que el layout distinga las tres familias con una comparacion de rango en vez de un
- * switch de treinta casos, y deja hueco para agregar valores sin renumerar nada.
+ * <p>The anchor values are not consecutive by chance. The absolute ones --CENTER, NORTH...-- go
+ * from 10 to 18; the ones relative to reading direction --PAGE_START, LINE_END...-- from 19 to 26;
+ * and the ones relative to the baseline jump to multiples of 256. The jump is not aesthetic: it
+ * lets a layout tell the three families apart with a range comparison instead of a thirty-case
+ * switch, and leaves room to add values without renumbering anything.
  */
 public class GridBagConstraints implements Cloneable, java.io.Serializable {
 
     private static final long serialVersionUID = -1000070633030801713L;
 
-    /** Poner esto a continuacion del anterior, sin decir en que fila o columna cae. */
+    /** Put this one after the previous one, without saying which row or column it falls in. */
     public static final int RELATIVE = -1;
 
-    /** Este componente es el ultimo de su fila o columna. */
+    /** This component is the last in its row or column. */
     public static final int REMAINDER = 0;
 
-    /** No agrandar el componente aunque sobre lugar en la celda. */
+    /** Do not enlarge the component even if there is room to spare in the cell. */
     public static final int NONE = 0;
 
     public static final int BOTH = 1;
@@ -33,7 +33,7 @@ public class GridBagConstraints implements Cloneable, java.io.Serializable {
 
     public static final int VERTICAL = 3;
 
-    // --- anclajes absolutos: la celda como puntos cardinales ---
+    // --- absolute anchors: the cell as the points of the compass ---
 
     public static final int CENTER = 10;
 
@@ -53,7 +53,7 @@ public class GridBagConstraints implements Cloneable, java.io.Serializable {
 
     public static final int NORTHWEST = 18;
 
-    // --- anclajes relativos al sentido de lectura: en arabe "LINE_START" es la derecha ---
+    // --- anchors relative to reading direction: in Arabic "LINE_START" is the right ---
 
     public static final int PAGE_START = 19;
 
@@ -71,7 +71,7 @@ public class GridBagConstraints implements Cloneable, java.io.Serializable {
 
     public static final int LAST_LINE_END = 26;
 
-    // --- anclajes relativos a la linea de base del texto ---
+    // --- anchors relative to the text's baseline ---
 
     public static final int BASELINE = 0x100;
 
@@ -110,22 +110,22 @@ public class GridBagConstraints implements Cloneable, java.io.Serializable {
     public Insets insets;
 
     /**
-     * Lo que mide el componente, sin el relleno interno.
+     * What the component measures, without the internal padding.
      *
-     * <p>Es de paquete y lo llena {@link GridBagLayout#getLayoutInfo}: la distribución mide una vez
-     * y lo deja anotado acá para que {@link GridBagLayout#adjustForGravity} sepa de qué tamaño
-     * dejar al componente cuando la celda le queda grande y no pidió llenarla.
+     * <p>It is package-private and {@link GridBagLayout#getLayoutInfo} fills it: the layout
+     * measures once and records it here so that {@link GridBagLayout#adjustForGravity} knows what
+     * size to leave the component at when the cell is too big for it and it did not ask to fill it.
      */
     int minWidth;
 
-    /** Lo mismo de alto. */
+    /** The same, for the height. */
     int minHeight;
 
     public int ipadx;
 
     public int ipady;
 
-    /** Los valores por defecto: una celda a continuacion de la anterior, centrada y sin estirar. */
+    /** The defaults: a cell after the previous one, centred and not stretched. */
     public GridBagConstraints() {
         gridx = RELATIVE;
         gridy = RELATIVE;
@@ -159,8 +159,9 @@ public class GridBagConstraints implements Cloneable, java.io.Serializable {
     }
 
     /**
-     * Copia. Los Insets se clonan aparte: son un objeto mutable y si se compartieran, cambiar el
-     * margen de la copia cambiaria el del original, que es justo lo que nadie espera de un clone.
+     * A copy. The Insets are cloned separately: they are a mutable object, and if they were shared,
+     * changing the copy's insets would change the original's, which is exactly what nobody expects
+     * from a clone.
      */
     public Object clone() {
         try {

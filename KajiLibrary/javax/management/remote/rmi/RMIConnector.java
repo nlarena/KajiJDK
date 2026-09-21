@@ -17,41 +17,41 @@ import javax.management.remote.JMXConnector;
 import javax.management.remote.JMXServiceURL;
 
 /**
- * El lado del cliente: se conecta a un servidor JMX por RMI.
+ * The client side: it connects to a JMX server over RMI.
  *
- * <h2>Dos maneras de decirle a donde ir</h2>
+ * <h2>Two ways of saying where to go</h2>
  *
- * <p>Con una {@link JMXServiceURL} hay que <strong>encontrar</strong> el objeto remoto: o viene
- * codificado dentro de la propia direccion, o hay que ir a buscarlo a un directorio JNDI. Con un
- * {@link RMIServer} ya se lo tiene, y conectarse es pedirle una conexion.
+ * <p>With a {@link JMXServiceURL} the remote object has to be <strong>found</strong>: either it
+ * comes encoded inside the address itself, or it has to be looked up in a JNDI directory. With
+ * an {@link RMIServer} it is already at hand, and connecting is asking it for a connection.
  *
- * <h2>Conectarse no es abrir un socket</h2>
+ * <h2>Connecting is not opening a socket</h2>
  *
- * <p>Es llamar a {@link RMIServer#newClient}, que autentica y devuelve la conexion propia de este
- * cliente. Recien despues {@link #getMBeanServerConnection} tiene algo que devolver: un
- * {@link MBeanServerConnection} que parece local y por debajo empaqueta cada llamada.
+ * <p>It is calling {@link RMIServer#newClient}, which authenticates and returns this client's
+ * own connection. Only after that does {@link #getMBeanServerConnection} have something to
+ * return: an {@link MBeanServerConnection} that looks local and underneath packs every call.
  *
- * <p>Todo lo que se haga antes de {@link #connect} falla con {@code IOException: Not connected}, y
- * todo lo que se haga despues de {@link #close} con {@code IOException: Connector closed}. Los dos
- * mensajes son distintos a proposito: "todavia no" y "ya no" son dos errores distintos del que
- * llama.
+ * <p>Everything done before {@link #connect} fails with {@code IOException: Not connected}, and
+ * everything done after {@link #close} with {@code IOException: Connector closed}. The two
+ * messages are different on purpose: "not yet" and "no longer" are two different errors of
+ * the caller.
  *
- * <h2>Las notificaciones de la conexion</h2>
+ * <h2>The connection notifications</h2>
  *
- * <p>Este objeto es el mismo un emisor de notificaciones, y emite tres: abierta, cerrada y fallada.
- * Es como un cliente se entera de que se quedo sin servidor sin tener que descubrirlo en medio de
- * una llamada.
+ * <p>This object is itself a notification broadcaster, and it emits three: opened, closed and
+ * failed. It is how a client learns that it was left without a server without having to discover
+ * it in the middle of a call.
  *
- * <h2>Estado en esta VM</h2>
+ * <h2>State in this VM</h2>
  *
- * <p>Con un {@link RMIServer} de este mismo proceso <strong>funciona entero</strong>: conecta,
- * devuelve un {@link MBeanServerConnection} que llega hasta el
- * {@link javax.management.MBeanServer}, reparte notificaciones y cierra. Es el camino que prueba
- * {@code java/RMI1.java}.
+ * <p>With an {@link RMIServer} of this same process it <strong>works entirely</strong>: it
+ * connects, returns an {@link MBeanServerConnection} that reaches the
+ * {@link javax.management.MBeanServer}, delivers notifications and closes. It is the path
+ * {@code java/RMI1.java} exercises.
  *
- * <p>Con una {@link JMXServiceURL} no puede: encontrar el objeto remoto es el transporte, y esta VM
- * no lo tiene. En ese caso {@link #connect} tira {@link IOException} diciendolo, en vez de devolver
- * un conector que despues fallaria en la primera llamada.
+ * <p>With a {@link JMXServiceURL} it cannot: finding the remote object is the transport, and
+ * this VM does not have it. In that case {@link #connect} throws {@link IOException} saying so,
+ * instead of returning a connector that would then fail on the first call.
  *
  * @since 1.5
  */
@@ -59,35 +59,36 @@ public class RMIConnector implements JMXConnector, Serializable {
 
     private static final long serialVersionUID = 817323035842634473L;
 
-    /** Para que dos notificaciones de la misma conexion lleguen en orden. */
-    private static final AtomicLong SECUENCIA = new AtomicLong();
+    /** So that two notifications of the same connection arrive in order. */
+    private static final AtomicLong SEQUENCE = new AtomicLong();
 
     private final RMIServer rmiServer;
     private final JMXServiceURL jmxServiceURL;
 
-    private transient NotificationBroadcasterSupport emisor = new NotificationBroadcasterSupport();
+    private transient NotificationBroadcasterSupport broadcaster =
+        new NotificationBroadcasterSupport();
     private transient RMIConnection connection;
-    private transient ConexionRemota remota;
+    private transient RemoteConnection serverConnection;
     private transient String connectionId;
-    private transient boolean cerrado;
+    private transient boolean closed;
 
     /**
-     * Un conector a esa direccion.
+     * A connector to that address.
      *
-     * @param url la direccion del servidor
-     * @param environment las propiedades de configuracion, o {@code null}
-     * @throws IllegalArgumentException si {@code url} es {@code null}
+     * @param url the server's address
+     * @param environment the configuration properties, or {@code null}
+     * @throws IllegalArgumentException if {@code url} is {@code null}
      */
     public RMIConnector(JMXServiceURL url, Map<String, ?> environment) {
         this(null, url, environment);
     }
 
     /**
-     * Un conector a un servidor que ya se tiene.
+     * A connector to a server one already has.
      *
-     * @param rmiServer el servidor
-     * @param environment las propiedades de configuracion, o {@code null}
-     * @throws IllegalArgumentException si {@code rmiServer} es {@code null}
+     * @param rmiServer the server
+     * @param environment the configuration properties, or {@code null}
+     * @throws IllegalArgumentException if {@code rmiServer} is {@code null}
      */
     public RMIConnector(RMIServer rmiServer, Map<String, ?> environment) {
         this(rmiServer, null, environment);
@@ -102,78 +103,78 @@ public class RMIConnector implements JMXConnector, Serializable {
     }
 
     /**
-     * La direccion del servidor, si se construyo con una.
+     * The server's address, if it was built with one.
      *
-     * @return la direccion, o {@code null} si se construyo con un {@link RMIServer}
+     * @return the address, or {@code null} if it was built with an {@link RMIServer}
      */
     public JMXServiceURL getAddress() {
         return jmxServiceURL;
     }
 
     /**
-     * Se conecta sin propiedades adicionales.
+     * Connects without additional properties.
      *
-     * @throws IOException si no se pudo conectar
+     * @throws IOException if it could not connect
      */
     public void connect() throws IOException {
         connect(null);
     }
 
     /**
-     * Se conecta.
+     * Connects.
      *
-     * <p>Sobre un conector ya conectado no hace nada: es lo que permite llamarlo desde varios lados
-     * sin coordinar quien conecta primero.
+     * <p>On an already connected connector it does nothing: it is what allows calling it from
+     * several places without coordinating who connects first.
      *
-     * @param environment las propiedades de configuracion, o {@code null}; la credencial va en
+     * @param environment the configuration properties, or {@code null}; the credential goes in
      *     {@code jmx.remote.credentials}
-     * @throws IOException si no se pudo conectar, o si el conector ya se cerro
+     * @throws IOException if it could not connect, or if the connector is already closed
      */
     public synchronized void connect(Map<String, ?> environment) throws IOException {
-        if (cerrado) {
+        if (closed) {
             throw new IOException("Connector closed");
         }
         if (connection != null) {
             return;
         }
         if (rmiServer == null) {
-            throw new IOException("esta VM no tiene el transporte de RMI: no hay forma de "
-                    + "encontrar el objeto remoto de " + jmxServiceURL);
+            throw new IOException("this VM has no RMI transport: there is no way to "
+                    + "find the remote object of " + jmxServiceURL);
         }
         final Map<String, ?> env = environment == null
                 ? Collections.<String, Object>emptyMap() : new HashMap<String, Object>(environment);
         connection = rmiServer.newClient(env.get(CREDENTIALS));
         connectionId = connection.getConnectionId();
-        remota = new ConexionRemota(connection);
-        emisor.sendNotification(new JMXConnectionNotification(
+        serverConnection = new RemoteConnection(connection);
+        broadcaster.sendNotification(new JMXConnectionNotification(
                 JMXConnectionNotification.OPENED, this, connectionId,
-                SECUENCIA.getAndIncrement(), "Connection opened", null));
+                SEQUENCE.getAndIncrement(), "Connection opened", null));
     }
 
     /**
-     * El identificador que el servidor le dio a esta conexion.
+     * The identifier the server gave this connection.
      *
-     * @return el identificador
-     * @throws IOException si todavia no se conecto o ya se cerro
+     * @return the identifier
+     * @throws IOException if it has not connected yet or is already closed
      */
     public synchronized String getConnectionId() throws IOException {
-        exigirConectado();
+        requireConnected();
         return connectionId;
     }
 
     /**
-     * La conexion al {@link javax.management.MBeanServer} del servidor.
+     * The connection to the server's {@link javax.management.MBeanServer}.
      *
-     * @return la conexion
-     * @throws IOException si todavia no se conecto o ya se cerro
+     * @return the connection
+     * @throws IOException if it has not connected yet or is already closed
      */
     public synchronized MBeanServerConnection getMBeanServerConnection() throws IOException {
-        exigirConectado();
-        return remota;
+        requireConnected();
+        return serverConnection;
     }
 
-    private void exigirConectado() throws IOException {
-        if (cerrado) {
+    private void requireConnected() throws IOException {
+        if (closed) {
             throw new IOException("Connector closed");
         }
         if (connection == null) {
@@ -182,69 +183,69 @@ public class RMIConnector implements JMXConnector, Serializable {
     }
 
     /**
-     * Registra un oyente de las notificaciones de la conexion.
+     * Registers a listener of the connection's notifications.
      *
-     * @param listener el oyente
-     * @param filter el filtro, o {@code null}
-     * @param handback lo que se le devuelve con cada notificacion, o {@code null}
-     * @throws NullPointerException si {@code listener} es {@code null}
+     * @param listener the listener
+     * @param filter the filter, or {@code null}
+     * @param handback what is handed back to it with each notification, or {@code null}
+     * @throws NullPointerException if {@code listener} is {@code null}
      */
     public void addConnectionNotificationListener(NotificationListener listener,
             NotificationFilter filter, Object handback) {
         if (listener == null) {
             throw new NullPointerException("listener");
         }
-        emisor.addNotificationListener(listener, filter, handback);
+        broadcaster.addNotificationListener(listener, filter, handback);
     }
 
     /**
-     * Saca un oyente de las notificaciones de la conexion.
+     * Removes a listener of the connection's notifications.
      *
-     * @param listener el oyente
-     * @throws ListenerNotFoundException si no estaba registrado
-     * @throws NullPointerException si {@code listener} es {@code null}
+     * @param listener the listener
+     * @throws ListenerNotFoundException if it was not registered
+     * @throws NullPointerException if {@code listener} is {@code null}
      */
     public void removeConnectionNotificationListener(NotificationListener listener)
             throws ListenerNotFoundException {
         if (listener == null) {
             throw new NullPointerException("listener");
         }
-        emisor.removeNotificationListener(listener);
+        broadcaster.removeNotificationListener(listener);
     }
 
     /**
-     * Saca el oyente registrado con ese filtro y ese objeto.
+     * Removes the listener registered with that filter and that object.
      *
-     * @param l el oyente
-     * @param f el filtro con el que se lo registro
-     * @param handback el objeto con el que se lo registro
-     * @throws ListenerNotFoundException si no estaba registrado asi
-     * @throws NullPointerException si {@code l} es {@code null}
+     * @param l the listener
+     * @param f the filter it was registered with
+     * @param handback the object it was registered with
+     * @throws ListenerNotFoundException if it was not registered that way
+     * @throws NullPointerException if {@code l} is {@code null}
      */
     public void removeConnectionNotificationListener(NotificationListener l, NotificationFilter f,
             Object handback) throws ListenerNotFoundException {
         if (l == null) {
             throw new NullPointerException("listener");
         }
-        emisor.removeNotificationListener(l, f, handback);
+        broadcaster.removeNotificationListener(l, f, handback);
     }
 
     /**
-     * Cierra la conexion.
+     * Closes the connection.
      *
-     * <p>Sobre uno que nunca se conecto no hace nada mas que dejarlo cerrado. Es a proposito: cerrar
-     * algo que no se abrio no es un error, y obligar a comprobarlo antes solo agrega ruido en el
-     * bloque {@code finally} de todo el mundo.
+     * <p>On one that never connected it does nothing beyond leaving it closed. It is on purpose:
+     * closing something that was not opened is not an error, and forcing everybody to check first
+     * would only add noise to everybody's {@code finally} block.
      *
-     * @throws IOException si el servidor no pudo cerrar la conexion
+     * @throws IOException if the server could not close the connection
      */
     public synchronized void close() throws IOException {
-        if (cerrado) {
+        if (closed) {
             return;
         }
-        cerrado = true;
-        if (remota != null) {
-            remota.cerrar();
+        closed = true;
+        if (serverConnection != null) {
+            serverConnection.close();
         }
         final String id = connectionId;
         try {
@@ -253,19 +254,19 @@ public class RMIConnector implements JMXConnector, Serializable {
             }
         } finally {
             connection = null;
-            remota = null;
+            serverConnection = null;
             if (id != null) {
-                emisor.sendNotification(new JMXConnectionNotification(
+                broadcaster.sendNotification(new JMXConnectionNotification(
                         JMXConnectionNotification.CLOSED, this, id,
-                        SECUENCIA.getAndIncrement(), "Connection closed", null));
+                        SEQUENCE.getAndIncrement(), "Connection closed", null));
             }
         }
     }
 
     /**
-     * Una descripcion, con la direccion o con el servidor.
+     * A description, with the address or with the server.
      *
-     * @return la descripcion
+     * @return the description
      */
     @Override
     public String toString() {
@@ -281,8 +282,8 @@ public class RMIConnector implements JMXConnector, Serializable {
     private void readObject(java.io.ObjectInputStream in)
             throws IOException, ClassNotFoundException {
         in.defaultReadObject();
-        // Los campos transitorios no se serializan y quedarian en null: un conector deserializado
-        // tiene que poder registrar oyentes antes de conectarse, igual que uno recien construido.
-        emisor = new NotificationBroadcasterSupport();
+        // The transient fields are not serialized and would be left null: a deserialized connector
+        // has to be able to register listeners before connecting, just like a freshly built one.
+        broadcaster = new NotificationBroadcasterSupport();
     }
 }

@@ -4,16 +4,16 @@ package java.util;
 import java.util.Arrays;
 import java.util.Comparator;
 
-// java.util.Objects — los ayudantes estaticos que toleran null: igualdad, hash y toString que no
-// revientan con una referencia vacia, y las guardas `requireNonNull` que convierten un NPE
-// silencioso y lejano en uno ruidoso y en el lugar. No se instancia.
+// java.util.Objects — the static helpers that tolerate null: equality, hash and toString that do not
+// blow up on an empty reference, and the `requireNonNull` guards that turn a silent, distant NPE into
+// a noisy one at the spot. It is not instantiated.
 //
-// La otra mitad, la que cierra el contrato en esta tanda, son los seis `check*`: la verificacion de
-// indices y rangos que hasta ahora cada clase escribia a mano. No parecen gran cosa hasta que se ve
-// que la razon por la que existen es que **el desbordamiento las hace dificiles de escribir bien**:
-// el `from + size <= length` obvio da un falso positivo cuando `from + size` desborda, y por eso la
-// version de aca compara al reves. Estan en el JDK desde el 9 justamente porque cada quien las
-// escribia distinto y algunas mal.
+// The other half, the one that closes the contract, is the six `check*`: the index and range checking
+// each class used to write by hand. They do not look like much until one sees that the reason they
+// exist is that **overflow makes them hard to write correctly**: the obvious `from + size <= length`
+// gives a false positive when `from + size` overflows, and that is why the version here compares the
+// other way round. They have been in the JDK since 9 precisely because everybody wrote them
+// differently and some wrote them wrong.
 public final class Objects {
 
     private Objects() {}
@@ -76,10 +76,10 @@ public final class Objects {
         return obj != null;
     }
 
-    // Los dos argumentos comparados por `c`, o 0 si son el MISMO objeto.
+    // The two arguments compared by `c`, or 0 if they are the SAME object.
     //
-    // El atajo por identidad es lo que permite pasar `null, null`: nunca llega al comparador. Con
-    // dos referencias distintas, en cambio, la responsabilidad de tolerar null es de `c`.
+    // The identity shortcut is what allows `null, null` to be passed: it never reaches the comparator.
+    // With two different references, on the other hand, tolerating null is `c`'s responsibility.
     public static <T> int compare(T a, T b, Comparator<? super T> c) {
         if (a == b) {
             return 0;
@@ -87,11 +87,11 @@ public final class Objects {
         return c.compare(a, b);
     }
 
-    // Igualdad **honda**: si los dos son arreglos, se comparan elemento por elemento (y si esos
-    // elementos son arreglos, se baja otro nivel). Para cualquier otra cosa es `equals`.
+    // **Deep** equality: if both are arrays, they are compared element by element (and if those
+    // elements are arrays, it goes down another level). For anything else it is `equals`.
     //
-    // Existe porque `equals` sobre un arreglo es identidad: `new int[]{1}.equals(new int[]{1})` da
-    // false, y no hay forma de arreglarlo desde `Object`.
+    // It exists because `equals` over an array is identity: `new int[]{1}.equals(new int[]{1})` gives
+    // false, and there is no way of fixing that from `Object`.
     public static boolean deepEquals(Object a, Object b) {
         if (a == b) {
             return true;
@@ -129,29 +129,30 @@ public final class Objects {
         return a.equals(b);
     }
 
-    // El hash de una **secuencia** de valores, con la formula que fija el contrato de List.
+    // The hash of a **sequence** of values, with the formula List's contract fixes.
     //
-    // Ojo con el caso de un solo argumento: `hash(x)` NO es `hashCode(x)`, porque el varargs arma
-    // un arreglo de uno y le aplica igual el `31 * 1 + h`. Es una trampa conocida del JDK y se
-    // replica tal cual, porque el numero es parte del contrato.
+    // Mind the single-argument case: `hash(x)` is NOT `hashCode(x)`, because the varargs builds an
+    // array of one and applies the `31 * 1 + h` to it all the same. It is a known JDK trap and it is
+    // replicated as it stands, because the number is part of the contract.
     public static int hash(Object... values) {
         return Arrays.hashCode(values);
     }
 
-    // La representacion que da `Object.toString` por defecto, aunque la clase la haya
-    // sobreescrito: clase y hash de **identidad**.
+    // The representation `Object.toString` gives by default, even if the class has overridden it:
+    // class and **identity** hash.
     //
-    // Sirve para lo que su nombre dice y no para lo que parece: cuando el `toString` propio miente,
-    // o cuesta caro, o entra en recursion, este dice quien es el objeto sin preguntarle.
+    // It serves what its name says and not what it looks like: when the object's own `toString` lies,
+    // or costs a lot, or recurses, this one says who the object is without asking it.
     public static String toIdentityString(Object o) {
         requireNonNull(o);
         return o.getClass().getName() + "@" + Integer.toHexString(System.identityHashCode(o));
     }
 
-    // `requireNonNull` con el mensaje **diferido**: solo se arma si hay que lanzar.
+    // `requireNonNull` with the message **deferred**: it is only built if there is something to
+    // throw.
     //
-    // Esa es toda la diferencia con la version de String, y es la razon de ser: una guarda que pasa
-    // el 99.99% de las veces no tiene por que pagar la concatenacion del mensaje.
+    // That is the whole difference from the String version, and it is the point: a guard that passes
+    // 99.99% of the time has no reason to pay for the message's concatenation.
     public static <T> T requireNonNull(T obj, java.util.function.Supplier<String> messageSupplier) {
         if (obj == null) {
             String m = null;
@@ -163,7 +164,7 @@ public final class Objects {
         return obj;
     }
 
-    // El primero si no es null, si no el segundo -- que **si** tiene que ser no-null.
+    // The first if it is not null, otherwise the second -- which **does** have to be non-null.
     public static <T> T requireNonNullElse(T obj, T defaultObj) {
         if (obj != null) {
             return obj;
@@ -171,22 +172,22 @@ public final class Objects {
         return requireNonNull(defaultObj, "defaultObj");
     }
 
-    // Igual, con el reemplazo diferido.
+    // The same, with the replacement deferred.
     public static <T> T requireNonNullElseGet(T obj,
             java.util.function.Supplier<? extends T> supplier) {
         if (obj != null) {
             return obj;
         }
-        T alterno = requireNonNull(supplier, "supplier").get();
-        return requireNonNull(alterno, "supplier.get()");
+        T alternate = requireNonNull(supplier, "supplier").get();
+        return requireNonNull(alternate, "supplier.get()");
     }
 
-    // ---- verificacion de indices y rangos -------------------------------------------------------
+    // ---- index and range checking ---------------------------------------------------------------
     //
-    // Las seis devuelven lo que recibieron cuando la comprobacion pasa, para poder encadenarlas en
-    // una expresion: `arr[checkIndex(i, arr.length)]`.
+    // The six return what they were given when the check passes, so they can be chained inside an
+    // expression: `arr[checkIndex(i, arr.length)]`.
 
-    // `index` valido en `[0, length)`.
+    // `index` valid in `[0, length)`.
     public static int checkIndex(int index, int length) {
         if (index < 0 || index >= length) {
             throw new IndexOutOfBoundsException(
@@ -203,7 +204,7 @@ public final class Objects {
         return index;
     }
 
-    // El rango `[from, to)` dentro de `[0, length]`. Devuelve `from`.
+    // The range `[from, to)` inside `[0, length]`. It returns `from`.
     public static int checkFromToIndex(int fromIndex, int toIndex, int length) {
         if (fromIndex < 0 || fromIndex > toIndex || toIndex > length) {
             throw new IndexOutOfBoundsException("Range [" + fromIndex + ", " + toIndex
@@ -220,11 +221,11 @@ public final class Objects {
         return fromIndex;
     }
 
-    // El rango `[from, from + size)` dentro de `[0, length]`. Devuelve `from`.
+    // The range `[from, from + size)` inside `[0, length]`. It returns `from`.
     //
-    // La comparacion va escrita como `size > length - from` y **no** como `from + size > length`,
-    // que es la forma obvia: la obvia desborda con un `size` grande, la suma da negativa, y el
-    // chequeo pasa justo en el caso que tenia que atajar.
+    // The comparison is written as `size > length - from` and **not** as `from + size > length`,
+    // which is the obvious form: the obvious one overflows with a large `size`, the sum comes out
+    // negative, and the check passes in exactly the case it was there to catch.
     public static int checkFromIndexSize(int fromIndex, int size, int length) {
         if (fromIndex < 0 || size < 0 || length < 0 || size > length - fromIndex) {
             throw new IndexOutOfBoundsException("Range [" + fromIndex + ", " + fromIndex + " + "

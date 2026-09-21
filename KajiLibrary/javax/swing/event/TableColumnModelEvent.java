@@ -5,20 +5,21 @@ import java.util.EventObject;
 import javax.swing.table.TableColumnModel;
 
 /**
- * Las columnas de una tabla cambiaron: se agrego, se saco o se movio una.
+ * A table's columns changed: one was added, removed or moved.
  *
- * <p>Los dos indices se leen distinto segun que paso, y es la trampa de la clase: al mover, son
- * de donde y hacia donde; al agregar o sacar, son el mismo numero repetido. Cual de los tres fue lo
- * dice el metodo del {@link TableColumnModelListener} al que llega, no el evento.
+ * <p>The two indices are read differently according to what happened, and it is the class's trap:
+ * when moving, they are from where and to where; when adding or removing, they are the same
+ * number repeated. Which of the three it was is said by the
+ * {@link TableColumnModelListener} method it reaches, not by the event.
  */
 public class TableColumnModelEvent extends EventObject {
 
     private static final long serialVersionUID = 1L;
 
-    /** De donde. */
+    /** From where. */
     protected int fromIndex;
 
-    /** Hacia donde. */
+    /** To where. */
     protected int toIndex;
 
     public TableColumnModelEvent(TableColumnModel source, int from, int to) {
@@ -27,12 +28,12 @@ public class TableColumnModelEvent extends EventObject {
         this.toIndex = to;
     }
 
-    /** De donde salio la columna. */
+    /** Where the column came from. */
     public int getFromIndex() {
         return this.fromIndex;
     }
 
-    /** Adonde fue. */
+    /** Where it went. */
     public int getToIndex() {
         return this.toIndex;
     }

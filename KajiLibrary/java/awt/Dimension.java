@@ -2,11 +2,12 @@ package java.awt;
 
 import java.awt.geom.Dimension2D;
 
-// java.awt.Dimension de KajiLibrary -- ancho y alto enteros.
+// KajiLibrary's java.awt.Dimension -- integer width and height.
 //
-// Esta aca porque `RectangularShape.setFrame(Point2D, Dimension2D)` y `Arc2D.setArc(Point2D,
-// Dimension2D, ...)` piden un Dimension2D, y Dimension es su unica implementacion concreta en el
-// JDK. Superficie deliberadamente acotada a lo que la geometria usa; `java.awt` no es esta tarea.
+// It was written first because `RectangularShape.setFrame(Point2D, Dimension2D)` and
+// `Arc2D.setArc(Point2D, Dimension2D, ...)` ask for a Dimension2D, and Dimension is its only
+// concrete implementation in the JDK. This note called its surface deliberately limited to what the
+// geometry uses; it declares every member the JDK's has.
 public class Dimension extends Dimension2D implements java.io.Serializable {
 
     public int width;
@@ -33,8 +34,8 @@ public class Dimension extends Dimension2D implements java.io.Serializable {
         return (double) this.height;
     }
 
-    // El JDK redondea con Math.ceil y satura en Integer.MAX_VALUE; se replica tal cual porque es
-    // observable desde `setFrame(Point2D, Dimension2D)`.
+    // The JDK rounds with Math.ceil and saturates at Integer.MAX_VALUE; it is replicated as is
+    // because it is observable from `setFrame(Point2D, Dimension2D)`.
     public void setSize(double width, double height) {
         this.width = clamp(Math.ceil(width));
         this.height = clamp(Math.ceil(height));
@@ -77,11 +78,11 @@ public class Dimension extends Dimension2D implements java.io.Serializable {
     }
 
     /**
-     * El nombre de la clase real y las dos medidas.
+     * The name of the real class and the two sizes.
      *
-     * <p>La clase real, no {@code java.awt.Dimension} fijo: una {@code DimensionUIResource} tiene
-     * que decir que lo es. Es lo que hace visible de donde salio un tamano --del aspecto o del
-     * programa-- cuando se lo imprime.
+     * <p>The real class, not a fixed {@code java.awt.Dimension}: a {@code DimensionUIResource} has
+     * to say it is one. It is what makes visible where a size came from --the look and feel or the
+     * program-- when it is printed.
      */
     public String toString() {
         return getClass().getName() + "[width=" + this.width + ",height=" + this.height + "]";

@@ -2,7 +2,7 @@ package javax.swing.plaf;
 
 import java.awt.Color;
 
-/** Un {@link Color} que puso el aspecto; ver {@link UIResource}. */
+/** A {@link Color} the look and feel set; see {@link UIResource}. */
 public class ColorUIResource extends Color implements UIResource {
 
     public ColorUIResource(int r, int g, int b) {
@@ -17,7 +17,7 @@ public class ColorUIResource extends Color implements UIResource {
         super(r, g, b);
     }
 
-    /** El mismo color, con la etiqueta; el alfa se conserva si lo tenia. */
+    /** The same colour, with the label; the alpha is kept if it had one. */
     public ColorUIResource(Color c) {
         super(c.getRGB(), (c.getRGB() & 0xFF000000) != 0xFF000000);
     }

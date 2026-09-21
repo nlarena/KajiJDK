@@ -5,18 +5,18 @@ import javax.lang.model.SourceVersion;
 import javax.lang.model.element.ModuleElement;
 
 /**
- * El visitante simple de elementos de Java 9. Ver {@link SimpleElementVisitor6} por el mecanismo.
+ * The simple element visitor for Java 9. See {@link SimpleElementVisitor6} for the mechanism.
  *
- * <p>Con los modulos ya en el lenguaje, `visitModule` entra al embudo: hereda de
- * {@link AbstractElementVisitor6} un cuerpo que tira, y aca pasa a `defaultAction`. Notar que esta clase
- * **no** extiende {@link AbstractElementVisitor9} — extiende `SimpleElementVisitor8` — asi que
- * `visitModule` no se vuelve abstracto. Es la diferencia entre las dos ramas: la abstracta obliga a
- * decidir, la simple decide por vos.
+ * <p>With modules in the language, `visitModule` enters the funnel: it inherits from {@link
+ * AbstractElementVisitor6} a body that throws, and here it goes to `defaultAction`. Note that this
+ * class does **not** extend {@link AbstractElementVisitor9} — it extends `SimpleElementVisitor8` —
+ * so `visitModule` does not become abstract. It is the difference between the two branches: the
+ * abstract one forces you to decide, the simple one decides for you.
  */
-// RELEASE_14 y no RELEASE_9: la anotacion dice la ultima version del lenguaje que este visitante
-// **soporta**, no aquella en la que aparecio. Entre 9 y 14 no llego ninguna construccion que este
-// no sepa tratar, asi que sigue siendo adecuado para las dos. Es el mismo valor que llevan
-// `TypeKindVisitor9` y `ElementScanner9` en el JDK.
+// RELEASE_14 and not RELEASE_9: the annotation states the latest language version this visitor
+// **supports**, not the one in which it appeared. Between 9 and 14 no construct arrived that it
+// cannot handle, so it is still adequate for both. It is the same value `TypeKindVisitor9` and
+// `ElementScanner9` carry in the JDK.
 @SupportedSourceVersion(SourceVersion.RELEASE_14)
 public class SimpleElementVisitor9<R, P> extends SimpleElementVisitor8<R, P> {
 

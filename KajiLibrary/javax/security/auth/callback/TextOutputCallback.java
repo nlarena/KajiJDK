@@ -1,31 +1,32 @@
 package javax.security.auth.callback;
 
 /**
- * KajiLibrary's javax.security.auth.callback.TextOutputCallback -- el unico que no pregunta nada.
+ * KajiLibrary's javax.security.auth.callback.TextOutputCallback -- the only one that asks nothing.
  *
- * <p>Lleva un mensaje para mostrarle al usuario y su gravedad. Existe por lo mismo que los demas:
- * un modulo de login que quiera avisar "la clave vence en tres dias" no puede escribir en la
- * terminal, porque no sabe si hay una. Lo manda por el mismo canal que sus preguntas.
+ * <p>It carries a message to show the user and its severity. It exists for the same reason as the
+ * others: a login module that wants to warn "the password expires in three days" cannot write to
+ * the terminal, because it does not know whether there is one. It sends it through the same channel
+ * as its questions.
  */
 public class TextOutputCallback implements Callback, java.io.Serializable {
 
     private static final long serialVersionUID = 1689502495511663102L;
 
-    /** Un aviso informativo. */
+    /** An informative notice. */
     public static final int INFORMATION = 0;
 
-    /** Una advertencia. */
+    /** A warning. */
     public static final int WARNING = 1;
 
-    /** Un error. */
+    /** An error. */
     public static final int ERROR = 2;
 
     private final int messageType;
     private final String message;
 
     /**
-     * @throws IllegalArgumentException si el tipo no es uno de los tres, o el mensaje es null o
-     *     vacio: un mensaje vacio no le dice nada a nadie
+     * @throws IllegalArgumentException if the type is not one of the three, or the message is null
+     *     or empty: an empty message tells nobody anything
      */
     public TextOutputCallback(int messageType, String message) {
         if ((messageType != INFORMATION && messageType != WARNING && messageType != ERROR)

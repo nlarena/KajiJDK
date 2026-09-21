@@ -1,36 +1,36 @@
 package org.w3c.dom;
 
 /**
- * KajiLibrary's org.w3c.dom.NamedNodeMap -- nodos accesibles por nombre, no por posicion.
+ * KajiLibrary's org.w3c.dom.NamedNodeMap -- nodes accessible by name, not by position.
  *
- * <p>Es lo que devuelve `Node.getAttributes()` y lo que guardan las entidades y notaciones de un
- * `DocumentType`. Lo que agrega sobre `NodeList` es el acceso por nombre; lo que **no** agrega es
- * orden: la especificacion dice explicitamente que `item(int)` esta para poder recorrerla entera y
- * que el orden no significa nada. Codigo que dependa de el se rompe al cambiar de implementacion.
+ * <p>It is what `Node.getAttributes()` returns and what the entities and notations of a
+ * `DocumentType` keep. What it adds over `NodeList` is the access by name; what it does **not** add
+ * is order: the specification says explicitly that `item(int)` is there to be able to walk it whole
+ * and that the order means nothing. Code that depends on it breaks on changing implementation.
  *
- * <p>Los pares de metodos `xxxNS` son el modelo de espacios de nombres, que convive con el otro sin
- * mezclarse: un atributo puesto con `setNamedItem` se busca con `getNamedItem` por su nombre
- * calificado completo, y uno puesto con `setNamedItemNS` se busca por (URI, nombre local).
+ * <p>The `xxxNS` pairs of methods are the namespace model, which lives with the other without
+ * mixing: an attribute set with `setNamedItem` is looked up with `getNamedItem` by its complete
+ * qualified name, and one set with `setNamedItemNS` is looked up by (URI, local name).
  */
 public interface NamedNodeMap {
 
     Node getNamedItem(String name);
 
     /**
-     * Devuelve el nodo que estaba con ese nombre, o `null`.
+     * It returns the node that was there with that name, or `null`.
      *
-     * @throws DOMException con `INUSE_ATTRIBUTE_ERR` si el `Attr` ya pertenece a otro elemento: un
-     *         atributo no se comparte, se clona.
+     * @throws DOMException with `INUSE_ATTRIBUTE_ERR` if the `Attr` already belongs to another
+     *         element: an attribute is not shared, it is cloned.
      */
     Node setNamedItem(Node arg) throws DOMException;
 
     /**
-     * @throws DOMException con `NOT_FOUND_ERR` si no hay ninguno con ese nombre. Aca el DOM si tira,
-     *         a diferencia de `getNamedItem`, que devuelve `null`.
+     * @throws DOMException with `NOT_FOUND_ERR` if there is none with that name. Here the DOM does
+     *         throw, unlike `getNamedItem`, which returns `null`.
      */
     Node removeNamedItem(String name) throws DOMException;
 
-    /** `null` si el indice esta fuera de rango. El orden no esta definido. */
+    /** `null` if the index is out of range. The order is not defined. */
     Node item(int index);
 
     int getLength();

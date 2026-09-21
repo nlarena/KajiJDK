@@ -11,24 +11,24 @@ import javax.swing.event.CaretEvent;
 import javax.swing.event.CaretListener;
 
 /**
- * El juego de edicion para texto con estilos.
+ * The editor kit for styled text.
  *
- * <h2>Los atributos de entrada</h2>
+ * <h2>The input attributes</h2>
  *
- * <p>Cuando el cursor se para en un lugar, lo que se escriba ahi tiene que salir con los atributos
- * de ese lugar. Esos atributos viven en {@link #getInputAttributes} y se rearman cada vez que el
- * cursor se mueve, en {@link #createInputAttributes}.
+ * <p>When the cursor stops in a place, what is typed there has to come out with that place's
+ * attributes. Those attributes live in {@link #getInputAttributes} and are rebuilt every time
+ * the cursor moves, in {@link #createInputAttributes}.
  *
- * <p>Que sean un objeto aparte y no los del elemento es lo que permite que el usuario prenda
- * negrita <em>antes</em> de escribir: la negrita entra en los atributos de entrada, no en el
- * documento, y recien pasa al documento con la primera letra.
+ * <p>That they are a separate object and not the element's is what allows the user to turn bold
+ * on <em>before</em> typing: the bold goes into the input attributes, not into the document, and
+ * only passes to the document with the first letter.
  *
- * <h2>Las acciones</h2>
+ * <h2>The actions</h2>
  *
- * <p>Las que hereda de {@link DefaultEditorKit} mueven el cursor y editan texto. Las que agrega
- * cambian atributos: negrita, cursiva, subrayado, tipografia, tamano, color y alineacion. Todas
- * bajan de {@link StyledTextAction}, que sabe encontrar el editor y el documento con estilos a
- * partir del evento.
+ * <p>Those it inherits from {@link DefaultEditorKit} move the cursor and edit text. Those it
+ * adds change attributes: bold, italic, underline, typeface, size, colour and alignment. They
+ * all descend from {@link StyledTextAction}, which knows how to find the editor and the styled
+ * document from the event.
  */
 public class StyledEditorKit extends DefaultEditorKit {
 
@@ -39,7 +39,7 @@ public class StyledEditorKit extends DefaultEditorKit {
 
     private static final ViewFactory defaultFactory = new StyledViewFactory();
 
-    /** Un juego de edicion con estilos, sin instalar. */
+    /** A styled editor kit, not installed. */
     public StyledEditorKit() {
         createInputAttributes();
     }
@@ -57,12 +57,12 @@ public class StyledEditorKit extends DefaultEditorKit {
         return o;
     }
 
-    /** Los atributos con los que saldra lo proximo que se escriba. */
+    /** The attributes the next thing typed will come out with. */
     public MutableAttributeSet getInputAttributes() {
         return inputAttributes;
     }
 
-    /** El elemento de caracteres donde esta parado el cursor. */
+    /** The character element the cursor is standing in. */
     public Element getCharacterAttributeRun() {
         return currentRun;
     }
@@ -75,7 +75,7 @@ public class StyledEditorKit extends DefaultEditorKit {
         return new DefaultStyledDocument();
     }
 
-    /** Se engancha al cursor del editor para seguir los atributos de entrada. */
+    /** It hooks itself to the editor's cursor to follow the input attributes. */
     public void install(JEditorPane c) {
         if (inputAttributeUpdater == null) {
             inputAttributeUpdater = new AttributeTracker(this);
@@ -102,10 +102,11 @@ public class StyledEditorKit extends DefaultEditorKit {
     }
 
     /**
-     * Rearma los atributos de entrada a partir del elemento donde esta el cursor.
+     * It rebuilds the input attributes from the element the cursor is in.
      *
-     * <p>Los atributos de parrafo no se copian: si se copiaran, escribir heredaria la alineacion
-     * del parrafo como si fuera un atributo de caracter, y despues viajaria con el texto.
+     * <p>The paragraph attributes are not copied: if they were, typing would inherit the
+     * paragraph's alignment as if it were a character attribute, and afterwards it would travel
+     * with the text.
      */
     protected void createInputAttributes(Element element, MutableAttributeSet set) {
         if (element.getAttributes().getAttributeCount() > 0
@@ -120,18 +121,18 @@ public class StyledEditorKit extends DefaultEditorKit {
         }
     }
 
-    /** Los atributos de entrada; se avisan al juego cuando cambian. */
+    /** The input attributes; the kit is told when they change. */
     static class InputAttributes extends SimpleAttributeSet {
 
-        private final StyledEditorKit juego;
+        private final StyledEditorKit kit;
 
-        InputAttributes(StyledEditorKit juego) {
-            this.juego = juego;
+        InputAttributes(StyledEditorKit kit) {
+            this.kit = kit;
         }
 
         public AttributeSet getResolveParent() {
-            return (juego.currentParagraph != null)
-                    ? juego.currentParagraph.getAttributes() : null;
+            return (kit.currentParagraph != null)
+                    ? kit.currentParagraph.getAttributes() : null;
         }
 
         public Object clone() {
@@ -140,45 +141,46 @@ public class StyledEditorKit extends DefaultEditorKit {
     }
 
     /**
-     * Sigue al cursor y rearma los atributos de entrada cuando se mueve.
+     * It follows the cursor and rebuilds the input attributes when it moves.
      *
-     * <p>Tambien mira el cambio de documento: sin eso, cambiar el documento del editor dejaria los
-     * atributos del documento anterior.
+     * <p>It also watches the change of document: without that, changing the editor's document would
+     * leave the previous document's attributes.
      */
     static class AttributeTracker implements CaretListener, PropertyChangeListener,
             java.io.Serializable {
 
-        private final StyledEditorKit juego;
+        private final StyledEditorKit kit;
 
-        AttributeTracker(StyledEditorKit juego) {
-            this.juego = juego;
+        AttributeTracker(StyledEditorKit kit) {
+            this.kit = kit;
         }
 
         void updateInputAttributes(int dot, int mark, JTextComponent c) {
-            // No se toca nada si hay seleccion: la seleccion no define un lugar.
+            // Nothing is touched if there is a selection: a selection does not define a place.
             if (dot != mark) {
                 return;
             }
             int start = Math.min(dot, mark);
             Document doc = c.getDocument();
             if (!(doc instanceof StyledDocument)) {
-                // El juego se instala antes de que el editor tenga su documento con estilos:
-                // `setEditorKit` llama a `install` y recien despues a `setDocument`. En ese hueco
-                // el documento es el anterior --uno plano-- y no hay atributos que mirar. Sin esta
-                // guarda, armar un JTextPane revienta antes de terminar el constructor.
+                // The kit is installed before the editor has its styled document:
+                                // `setEditorKit` calls `install` and only afterwards `setDocument`.
+                                // In that gap the document is the previous one --a plain one-- and
+                                // there are no attributes to look at. Without this guard, building
+                                // a JTextPane blows up before the constructor finishes.
                 return;
             }
             Element run;
-            juego.currentParagraph = doc.getDefaultRootElement();
-            if (juego.currentParagraph instanceof AbstractDocument.BranchElement) {
-                juego.currentParagraph = ((StyledDocument) doc).getParagraphElement(start);
+            kit.currentParagraph = doc.getDefaultRootElement();
+            if (kit.currentParagraph instanceof AbstractDocument.BranchElement) {
+                kit.currentParagraph = ((StyledDocument) doc).getParagraphElement(start);
                 run = ((StyledDocument) doc).getCharacterElement(start);
             } else {
                 run = null;
             }
-            if (run != juego.currentRun) {
-                juego.currentRun = run;
-                juego.createInputAttributes(juego.currentRun, juego.getInputAttributes());
+            if (run != kit.currentRun) {
+                kit.currentRun = run;
+                kit.createInputAttributes(kit.currentRun, kit.getInputAttributes());
             }
         }
 
@@ -199,7 +201,7 @@ public class StyledEditorKit extends DefaultEditorKit {
         }
     }
 
-    /** La fabrica de vistas con estilos: parrafos, cajas, componentes e iconos. */
+    /** The styled view factory: paragraphs, boxes, components and icons. */
     static class StyledViewFactory implements ViewFactory {
 
         public View create(Element elem) {
@@ -217,7 +219,7 @@ public class StyledEditorKit extends DefaultEditorKit {
                     return new IconView(elem);
                 }
             }
-            // Un elemento que no se conoce se muestra como texto.
+            // An element that is not known is shown as text.
             return new LabelView(elem);
         }
     }
@@ -244,19 +246,19 @@ public class StyledEditorKit extends DefaultEditorKit {
     };
 
     /**
-     * La base de las acciones que cambian atributos.
+     * The base of the actions that change attributes.
      *
-     * <p>Trae lo que toda accion de estilos necesita: encontrar el editor a partir del evento y
-     * aplicar atributos al tramo seleccionado o, si no hay seleccion, a los de entrada.
+     * <p>It brings what every style action needs: finding the editor from the event and applying
+     * attributes to the selected stretch or, if there is no selection, to the input ones.
      */
     public abstract static class StyledTextAction extends TextAction {
 
-        /** Una accion con ese nombre. */
+        /** An action with that name. */
         public StyledTextAction(String nm) {
             super(nm);
         }
 
-        /** El editor donde ocurrio el evento. */
+        /** The editor where the event happened. */
         protected final JEditorPane getEditor(ActionEvent e) {
             JTextComponent tcomp = getTextComponent(e);
             if (tcomp instanceof JEditorPane) {
@@ -282,10 +284,10 @@ public class StyledEditorKit extends DefaultEditorKit {
         }
 
         /**
-         * Aplica atributos de caracter a la seleccion, o a lo proximo que se escriba.
+         * It applies character attributes to the selection, or to the next thing typed.
          *
-         * <p>Sin seleccion no hay nada que cambiar en el documento, asi que van a los atributos de
-         * entrada. Ese es el caso de prender negrita y despues escribir.
+         * <p>With no selection there is nothing to change in the document, so they go to the input
+         * attributes. That is the case of turning bold on and then typing.
          */
         protected final void setCharacterAttributes(JEditorPane editor, AttributeSet attr,
                 boolean replace) {
@@ -303,7 +305,7 @@ public class StyledEditorKit extends DefaultEditorKit {
             inputAttributes.addAttributes(attr);
         }
 
-        /** Aplica atributos a los parrafos que toca la seleccion. */
+        /** It applies attributes to the paragraphs the selection touches. */
         protected final void setParagraphAttributes(JEditorPane editor, AttributeSet attr,
                 boolean replace) {
             int p0 = editor.getSelectionStart();
@@ -313,7 +315,7 @@ public class StyledEditorKit extends DefaultEditorKit {
         }
     }
 
-    /** Prende o apaga la negrita, segun como este el texto donde esta el cursor. */
+    /** It turns bold on or off, according to how the text where the cursor is stands. */
     public static class BoldAction extends StyledTextAction {
 
         public BoldAction() {
@@ -333,7 +335,7 @@ public class StyledEditorKit extends DefaultEditorKit {
         }
     }
 
-    /** Prende o apaga la cursiva. */
+    /** It turns italics on or off. */
     public static class ItalicAction extends StyledTextAction {
 
         public ItalicAction() {
@@ -353,7 +355,7 @@ public class StyledEditorKit extends DefaultEditorKit {
         }
     }
 
-    /** Prende o apaga el subrayado. */
+    /** It turns the underline on or off. */
     public static class UnderlineAction extends StyledTextAction {
 
         public UnderlineAction() {
@@ -374,16 +376,16 @@ public class StyledEditorKit extends DefaultEditorKit {
     }
 
     /**
-     * Pone una tipografia.
+     * It sets a typeface.
      *
-     * <p>El nombre puede venir en el evento y no en la accion: asi un menu armado desde datos
-     * puede usar una sola accion para todas las tipografias.
+     * <p>The name may come in the event and not in the action: that way a menu built from data can
+     * use a single action for every typeface.
      */
     public static class FontFamilyAction extends StyledTextAction {
 
         private String family;
 
-        /** Una accion con ese nombre que pone esa tipografia. */
+        /** An action with that name that sets that typeface. */
         public FontFamilyAction(String nm, String family) {
             super(nm);
             this.family = family;
@@ -408,7 +410,7 @@ public class StyledEditorKit extends DefaultEditorKit {
         }
     }
 
-    /** Pone un tamano de letra; el evento puede traer otro, como en la tipografia. */
+    /** It sets a letter size; the event may bring another, as with the typeface. */
     public static class FontSizeAction extends StyledTextAction {
 
         private int size;
@@ -427,7 +429,7 @@ public class StyledEditorKit extends DefaultEditorKit {
                     try {
                         size = Integer.parseInt(s, 10);
                     } catch (NumberFormatException nfe) {
-                        // El comando no era un numero: queda el de la accion.
+                        // The command was not a number: the action's is left.
                     }
                 }
                 if (size != 0) {
@@ -439,7 +441,7 @@ public class StyledEditorKit extends DefaultEditorKit {
         }
     }
 
-    /** Pone un color de letra; el comando puede traerlo como texto. */
+    /** It sets a letter colour; the command may bring it as text. */
     public static class ForegroundAction extends StyledTextAction {
 
         private Color fg;
@@ -458,7 +460,7 @@ public class StyledEditorKit extends DefaultEditorKit {
                     try {
                         fg = Color.decode(s);
                     } catch (NumberFormatException nfe) {
-                        // El comando no era un color: queda el de la accion.
+                        // The command was not a colour: the action's is left.
                     }
                 }
                 if (fg != null) {
@@ -470,7 +472,7 @@ public class StyledEditorKit extends DefaultEditorKit {
         }
     }
 
-    /** Alinea los parrafos de la seleccion. */
+    /** It aligns the selection's paragraphs. */
     public static class AlignmentAction extends StyledTextAction {
 
         private int a;
@@ -489,7 +491,7 @@ public class StyledEditorKit extends DefaultEditorKit {
                     try {
                         a = Integer.parseInt(s, 10);
                     } catch (NumberFormatException nfe) {
-                        // Igual que en el tamano.
+                        // The same as with the size.
                     }
                 }
                 SimpleAttributeSet attr = new SimpleAttributeSet();

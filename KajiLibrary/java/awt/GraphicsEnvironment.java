@@ -4,36 +4,37 @@ import java.awt.image.BufferedImage;
 import java.util.Locale;
 
 /**
- * Lo que hay para dibujar: las pantallas, las impresoras y las tipografías.
+ * What there is to draw on: the screens, the printers and the fonts.
  *
- * <p>Es el punto de entrada a todo lo que depende del hardware gráfico, y por eso es el que sabe
- * responder la pregunta que decide la mitad del comportamiento de AWT: {@link #isHeadless}. Si no hay
- * pantalla, todo lo que la necesite tiene que tirar {@link HeadlessException} en vez de inventar.
+ * <p>It is the way in to everything that depends on the graphics hardware, and that is why it is
+ * the one that can answer the question deciding half of AWT's behaviour: {@link #isHeadless}. If
+ * there is no screen, everything that needs one has to throw {@link HeadlessException} instead of
+ * inventing.
  *
- * <p><strong>Acá siempre es sin pantalla.</strong> Esta implementación no tiene forma de hablar con
- * un sistema de ventanas, así que {@link #isHeadless} da `true` y los métodos de pantalla tiran.
+ * <p><strong>Here it is always without a screen.</strong> This implementation has no way of talking
+ * to a windowing system, so {@link #isHeadless} gives `true` and the screen methods throw.
  *
- * <p>La lista de tipografías queda **vacía**, y no por falta de ganas. Una tipografía sólo se puede
- * registrar si se la creó con {@link Font#createFont} —así lo pide el JDK y así se comporta acá— y
- * ese método necesita un motor de tipografías que esta biblioteca no tiene. Leer las instaladas del
- * sistema tampoco se puede. Una lista vacía es entonces la respuesta correcta; devolver nombres
- * conocidos —"Dialog", "SansSerif"— sería inventar tipografías que después no se pueden medir ni
- * dibujar.
+ * <p>The font list comes out **empty**, and not for lack of will. A font can only be registered if
+ * it was created with {@link Font#createFont} —that is what the JDK asks for and that is how it
+ * behaves here— and that method needs a font engine this library does not have. Reading the ones
+ * installed on the system is not possible either. An empty list is then the right answer; returning
+ * well-known names —"Dialog", "SansSerif"— would be inventing fonts that afterwards can neither be
+ * measured nor drawn.
  */
 public abstract class GraphicsEnvironment {
 
-    /** El único entorno, armado la primera vez que lo piden. */
+    /** The only environment, built the first time it is asked for. */
     private static GraphicsEnvironment local;
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected GraphicsEnvironment() {
     }
 
     /**
-     * El entorno de esta máquina.
+     * The environment of this machine.
      *
-     * <p>Es único y se arma una sola vez: preguntar por las pantallas dos veces no puede dar dos
-     * conjuntos distintos de pantallas.
+     * <p>It is unique and built only once: asking about the screens twice cannot give two different
+     * sets of screens.
      */
     public static GraphicsEnvironment getLocalGraphicsEnvironment() {
         synchronized (GraphicsEnvironment.class) {
@@ -45,15 +46,18 @@ public abstract class GraphicsEnvironment {
     }
 
     /**
-     * Si esta máquina no tiene pantalla, teclado ni mouse.
+     * Whether this machine has no screen, keyboard or mouse.
      *
-     * @return `true` siempre: esta implementación no habla con ningún sistema de ventanas
+     * @return `true` always: this implementation talks to no windowing system
      */
     public static boolean isHeadless() {
         return true;
     }
 
-    /** El mensaje que lleva la {@link HeadlessException}, o `null` si sí hay pantalla. */
+    /**
+     * The message the {@link HeadlessException} carries. In the JDK it is `null` when there is a
+     * screen; here there never is, so the text always comes back.
+     */
     static String getHeadlessMessage() {
         return "\nNo X11 DISPLAY variable was set, "
                 + "or no headful library support was found, "
@@ -61,60 +65,60 @@ public abstract class GraphicsEnvironment {
     }
 
     /**
-     * Tira si no hay pantalla.
+     * Throws if there is no screen.
      *
-     * @throws HeadlessException siempre
+     * @throws HeadlessException always
      */
     static void checkHeadless() throws HeadlessException {
         throw new HeadlessException(getHeadlessMessage());
     }
 
     /**
-     * Si **este** entorno no tiene pantalla.
+     * Whether **this** environment has no screen.
      *
-     * <p>Es distinto de {@link #isHeadless}, que habla de la máquina: un entorno puede ser sin
-     * pantalla en una máquina que sí la tiene. Acá dan lo mismo.
+     * <p>It is different from {@link #isHeadless}, which talks about the machine: an environment
+     * can be without a screen on a machine that does have one. Here they come to the same.
      */
     public boolean isHeadlessInstance() {
         return true;
     }
 
     /**
-     * Todas las pantallas.
+     * All the screens.
      *
-     * @throws HeadlessException si no hay ninguna
+     * @throws HeadlessException if there is none
      */
     public abstract GraphicsDevice[] getScreenDevices() throws HeadlessException;
 
     /**
-     * La pantalla principal.
+     * The main screen.
      *
-     * @throws HeadlessException si no hay ninguna
+     * @throws HeadlessException if there is none
      */
     public abstract GraphicsDevice getDefaultScreenDevice() throws HeadlessException;
 
-    /** Un contexto de dibujo sobre esa imagen. */
+    /** A drawing context over that image. */
     public abstract Graphics2D createGraphics(BufferedImage img);
 
-    /** Todas las tipografías, cada una en tamaño 1. */
+    /** All the fonts, each one at size 1. */
     public abstract Font[] getAllFonts();
 
-    /** Los nombres de familia de todas las tipografías. */
+    /** The family names of all the fonts. */
     public abstract String[] getAvailableFontFamilyNames();
 
-    /** Lo mismo, con los nombres traducidos a ese idioma. */
+    /** The same, with the names translated into that locale. */
     public abstract String[] getAvailableFontFamilyNames(Locale l);
 
     /**
-     * Registra una tipografía para que la vean {@link #getAllFonts} y quien la pida por nombre.
+     * Registers a font so that {@link #getAllFonts} and whoever asks for it by name can see it.
      *
-     * <p>Es cómo se usa una tipografía que viene en un archivo y no está instalada en el sistema.
-     * Sólo acepta las **creadas** con {@link Font#createFont}: una armada con `new Font(nombre, ...)`
-     * no trae glifos consigo, sólo un nombre, así que registrarla no agregaría nada.
+     * <p>It is how a font that comes in a file and is not installed on the system gets used. It
+     * only accepts the ones **created** with {@link Font#createFont}: one built with `new
+     * Font(name, ...)` carries no glyphs with it, only a name, so registering it would add nothing.
      *
-     * @return `false` siempre acá: {@link Font#createFont} necesita un motor de tipografías que esta
-     *     biblioteca no tiene, así que ninguna tipografía llega a ser una creada
-     * @throws NullPointerException si la tipografía es `null`
+     * @return `false` always here: {@link Font#createFont} needs a font engine this library does
+     *     not have, so no font ever gets to be a created one
+     * @throws NullPointerException if the font is `null`
      */
     public boolean registerFont(Font font) {
         if (font == null) {
@@ -124,23 +128,23 @@ public abstract class GraphicsEnvironment {
     }
 
     /**
-     * Pide que se prefieran las tipografías del idioma actual.
+     * Asks that the fonts of the current locale be preferred.
      *
-     * <p>No hace nada: es una preferencia sobre cómo elegir un sustituto cuando falta un glifo, y sin
-     * tipografías instaladas no hay nada entre qué elegir. El JDK también la ignora cuando su gestor
-     * de tipografías no la admite.
+     * <p>It does nothing: it is a preference about how to choose a substitute when a glyph is
+     * missing, and with no installed fonts there is nothing to choose between. The JDK also ignores
+     * it when its font manager does not support it.
      */
     public void preferLocaleFonts() {
     }
 
-    /** Pide que se prefieran las proporcionales; no hace nada, por lo mismo. */
+    /** Asks that the proportional ones be preferred; it does nothing, for the same reason. */
     public void preferProportionalFonts() {
     }
 
     /**
-     * El centro de la zona útil de la pantalla, que es donde se centra una ventana.
+     * The centre of the useful area of the screen, which is where a window is centred.
      *
-     * @throws HeadlessException si no hay pantalla
+     * @throws HeadlessException if there is no screen
      */
     public Point getCenterPoint() throws HeadlessException {
         Rectangle r = this.getMaximumWindowBounds();
@@ -148,9 +152,11 @@ public abstract class GraphicsEnvironment {
     }
 
     /**
-     * La zona de la pantalla donde puede ir una ventana maximizada: todo menos la barra de tareas.
+     * The area of the screen a maximised window can occupy: everything but the taskbar.
      *
-     * @throws HeadlessException si no hay pantalla
+     * <p>It asks the {@link Toolkit} for the size of the screen, so here it always throws.
+     *
+     * @throws HeadlessException if there is no screen
      */
     public Rectangle getMaximumWindowBounds() throws HeadlessException {
         Dimension d = Toolkit.getDefaultToolkit().getScreenSize();

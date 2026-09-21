@@ -1,18 +1,18 @@
 package java.nio.file.attribute;
 
-// Como se hereda una entrada de ACL hacia lo que cuelga de un directorio. Solo tienen sentido sobre
-// directorios; sobre un archivo comun se ignoran.
+// How an ACL entry is inherited by what hangs off a directory. They only make sense on directories;
+// on a regular file they are ignored.
 public enum AclEntryFlag {
 
-    /** La heredan los archivos que se creen adentro. */
+    /** The files created inside inherit it. */
     FILE_INHERIT,
 
-    /** La heredan los subdirectorios que se creen adentro. */
+    /** The subdirectories created inside inherit it. */
     DIRECTORY_INHERIT,
 
-    /** La herencia llega un nivel y no sigue bajando. */
+    /** The inheritance reaches one level and does not go on down. */
     NO_PROPAGATE_INHERIT,
 
-    /** Se hereda pero no se aplica al directorio que la lleva. */
+    /** It is inherited but does not apply to the directory that carries it. */
     INHERIT_ONLY
 }

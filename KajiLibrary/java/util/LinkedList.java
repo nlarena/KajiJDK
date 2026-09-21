@@ -23,7 +23,7 @@ public class LinkedList<E> extends AbstractSequentialList<E> implements List<E>,
     public LinkedList() {
     }
 
-    // Copia los elementos de otra coleccion, en el orden de su iterador.
+    // It copies another collection's elements, in its iterator's order.
     public LinkedList(Collection<? extends E> c) {
         Iterator<? extends E> it = c.iterator();
         while (it.hasNext()) {
@@ -386,16 +386,16 @@ public class LinkedList<E> extends AbstractSequentialList<E> implements List<E>,
     }
 
     /**
-     * Una **vista** de la lista al reves.
+     * A **view** of the list backwards.
      *
-     * <p>El tipo de retorno se estrecha a `LinkedList` porque el JDK lo estrecha, y eso obliga a
-     * **copiar** en vez de envolver: `ReverseDeque` es una vista pero no es una `LinkedList`, y no
-     * hay forma de que lo sea sin duplicar la implementacion entera.
+     * <p>The return type is narrowed to `LinkedList` because the JDK narrows it, and that forces a
+     * **copy** instead of a wrapper: `ReverseDeque` is a view but is not a `LinkedList`, and there is
+     * no way for it to be one without duplicating the whole implementation.
      *
-     * <p>Asi que esta es la unica de las cuatro vistas invertidas de la biblioteca que **no** es una
-     * vista, y conviene decirlo fuerte: los cambios **no** se propagan. El JDK tiene exactamente el
-     * mismo problema con la misma firma y lo resuelve igual. Quien quiera la vista viva tiene
-     * `((Deque<E>) lista).reversed()`, que devuelve el envoltorio de verdad.
+     * <p>So this is the one of the library's four reversed views that is **not** a view, and it is
+     * worth saying loudly: the changes do **not** propagate. The JDK has exactly the same problem
+     * with the same signature and settles it the same way. Whoever wants the live view has
+     * `((Deque<E>) list).reversed()`, which returns the inner wrapper.
      */
     public LinkedList<E> reversed() {
         LinkedList<E> out = new LinkedList<E>();

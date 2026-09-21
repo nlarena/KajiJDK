@@ -10,25 +10,25 @@ import javax.swing.Icon;
 import javax.swing.plaf.UIResource;
 
 /**
- * El cuadradito de una casilla de Metal: trece por trece.
+ * The little square of a Metal check box: thirteen by thirteen.
  *
- * <p>El tamano sale de {@link #getControlSize}, que es {@code protected} a proposito: un tema que
- * quiera casillas mas grandes hereda y cambia ese numero, y el resto -- el marco, la tilde, los
- * cuatro estados -- sigue funcionando.
+ * <p>The size comes from {@link #getControlSize}, which is {@code protected} on purpose: a theme
+ * that wants larger boxes inherits and changes that number, and the rest -- the frame, the tick,
+ * the four states -- goes on working.
  *
- * <p>La tilde tambien esta separada, en {@link #drawCheck}, por la misma razon: es la parte que un
- * tema podria querer dibujar distinta -- una cruz, un punto -- sin tocar el marco.
+ * <p>The tick is also separate, in {@link #drawCheck}, for the same reason: it is the part a
+ * theme might want to draw differently -- a cross, a dot -- without touching the frame.
  *
- * <p>El icono dibuja cuatro estados y no dos: prendido y apagado, cada uno habilitado o no. Un
- * cuadrado apagado no es un cuadrado gris; es un cuadrado <em>sin marco hundido</em>, porque lo que
- * comunica que algo no responde es que deje de tener relieve.
+ * <p>The icon draws four states and not two: on and off, each enabled or not. A disabled square
+ * is not a grey square; it is a square <strong>with no sunken frame</strong>, because what
+ * communicates that something does not respond is that it stops having relief.
  */
 public class MetalCheckBoxIcon implements Icon, UIResource, Serializable {
 
     public MetalCheckBoxIcon() {
     }
 
-    /** Trece; ver la nota de la clase. */
+    /** Thirteen; see the class note. */
     protected int getControlSize() {
         return 13;
     }
@@ -41,38 +41,39 @@ public class MetalCheckBoxIcon implements Icon, UIResource, Serializable {
         return getControlSize();
     }
 
-    /** La tilde: dos trazos, el corto para abajo y el largo para arriba. */
+    /** The tick: two strokes, the short one down and the long one up. */
     protected void drawCheck(Component c, Graphics g, int x, int y) {
-        int lado = getControlSize();
-        g.fillRect(x + 3, y + 5, 2, lado - 8);
-        g.drawLine(x + (lado - 4), y + 3, x + 5, y + (lado - 6));
-        g.drawLine(x + (lado - 4), y + 4, x + 5, y + (lado - 5));
+        int side = getControlSize();
+        g.fillRect(x + 3, y + 5, 2, side - 8);
+        g.drawLine(x + (side - 4), y + 3, x + 5, y + (side - 6));
+        g.drawLine(x + (side - 4), y + 4, x + 5, y + (side - 5));
     }
 
     public void paintIcon(Component c, Graphics g, int x, int y) {
-        int lado = getControlSize();
+        int side = getControlSize();
         ButtonModel m = (c instanceof AbstractButton)
                 ? ((AbstractButton) c).getModel() : null;
-        boolean prendido = (m != null) && m.isSelected();
-        boolean anda = (m == null) || m.isEnabled();
-        boolean apretado = (m != null) && m.isPressed() && m.isArmed();
+        boolean on = (m != null) && m.isSelected();
+        boolean enabled = (m == null) || m.isEnabled();
+        boolean pressed = (m != null) && m.isPressed() && m.isArmed();
 
-        if (anda) {
-            // El marco hundido: oscuro arriba y a la izquierda, claro abajo y a la derecha.
-            g.setColor(apretado ? MetalLookAndFeel.getControlShadow()
+        if (enabled) {
+            // The sunken frame: dark at the top and on the left, light at the bottom and on the
+            // right.
+            g.setColor(pressed ? MetalLookAndFeel.getControlShadow()
                     : MetalLookAndFeel.getControlDarkShadow());
-            g.drawLine(x, y, x + lado - 1, y);
-            g.drawLine(x, y, x, y + lado - 1);
+            g.drawLine(x, y, x + side - 1, y);
+            g.drawLine(x, y, x, y + side - 1);
             g.setColor(MetalLookAndFeel.getControlHighlight());
-            g.drawLine(x + lado - 1, y, x + lado - 1, y + lado - 1);
-            g.drawLine(x, y + lado - 1, x + lado - 1, y + lado - 1);
+            g.drawLine(x + side - 1, y, x + side - 1, y + side - 1);
+            g.drawLine(x, y + side - 1, x + side - 1, y + side - 1);
             g.setColor(MetalLookAndFeel.getControlInfo());
         } else {
-            // Sin relieve; ver la nota de la clase.
+            // Without relief; see the class note.
             g.setColor(MetalLookAndFeel.getControlShadow());
-            g.drawRect(x, y, lado - 1, lado - 1);
+            g.drawRect(x, y, side - 1, side - 1);
         }
-        if (prendido) {
+        if (on) {
             drawCheck(c, g, x, y);
         }
     }

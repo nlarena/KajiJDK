@@ -3,10 +3,10 @@ package javax.swing.event;
 import java.util.EventListener;
 
 /**
- * Quien quiere enterarse de que la seleccion del arbol cambio.
+ * Whoever wants to hear that the tree's selection changed.
  */
 public interface TreeSelectionListener extends EventListener {
 
-    /** La seleccion cambio. */
+    /** The selection changed. */
     void valueChanged(TreeSelectionEvent e);
 }

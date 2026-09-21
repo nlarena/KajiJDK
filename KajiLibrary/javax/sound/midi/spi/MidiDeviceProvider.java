@@ -3,23 +3,23 @@ package javax.sound.midi.spi;
 import javax.sound.midi.MidiDevice;
 
 /**
- * KajiLibrary's javax.sound.midi.spi.MidiDeviceProvider -- trae dispositivos MIDI.
+ * KajiLibrary's javax.sound.midi.spi.MidiDeviceProvider -- provides MIDI devices.
  *
- * <p>Lo que implementa quien conecta la plataforma con puertos MIDI reales, o quien escribe un
- * sintetizador o un secuenciador por software. Se registra como servicio y {@code MidiSystem} lo
- * encuentra solo.
+ * <p>What is implemented by whoever connects the platform with real MIDI ports, or whoever writes a
+ * software synthesizer or sequencer. It is registered as a service and {@code MidiSystem} finds it
+ * by itself.
  *
- * <p>{@link #isDeviceSupported} viene implementado sobre {@link #getDeviceInfo} comparando por
- * igualdad. Como los {@link MidiDevice.Info} se comparan por <b>identidad</b>, eso significa que solo
- * reconoce los objetos que el mismo proveedor devolvio -- que es justamente lo que corresponde.
+ * <p>{@link #isDeviceSupported} comes implemented over {@link #getDeviceInfo}, comparing by
+ * equality. Since {@link MidiDevice.Info}s are compared by <b>identity</b>, that means it only
+ * recognizes the objects the same provider returned -- which is precisely what is right.
  */
 public abstract class MidiDeviceProvider {
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected MidiDeviceProvider() {
     }
 
-    /** Si este proveedor tiene ese dispositivo. Ver la nota de la clase. */
+    /** Whether this provider has that device. See the class note. */
     public boolean isDeviceSupported(MidiDevice.Info info) {
         MidiDevice.Info[] all = getDeviceInfo();
         int i = 0;
@@ -32,13 +32,13 @@ public abstract class MidiDeviceProvider {
         return false;
     }
 
-    /** Los dispositivos que trae. */
+    /** The devices it provides. */
     public abstract MidiDevice.Info[] getDeviceInfo();
 
     /**
-     * Ese dispositivo, sin abrir.
+     * That device, not opened.
      *
-     * @throws IllegalArgumentException si no tiene ninguno asi
+     * @throws IllegalArgumentException if it has none like that
      */
     public abstract MidiDevice getDevice(MidiDevice.Info info);
 }

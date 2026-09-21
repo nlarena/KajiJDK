@@ -7,7 +7,7 @@ package java.util;
 //
 // Each operation comes in two flavours: one that **throws** when the deque is empty or full
 // (addFirst / removeFirst / getFirst) and one that returns a **sentinel** — false or null —
-// instead (offerFirst / pollFirst / peekFirst). Which to use is a real choice: the throwing
+// instead (offerFirst / pollFirst / peekFirst). Which to use is a inner choice: the throwing
 // form when an empty deque means a bug, the sentinel form when it is expected.
 //
 // Subset: the JDK's Deque also extends SequencedCollection (Java 21) and declares addAll /
@@ -81,11 +81,11 @@ public interface Deque<E> extends Queue<E>, SequencedCollection<E> {
     Iterator<E> descendingIterator();
 
     /**
-     * Una **vista** de esta cola doble con las dos puntas intercambiadas.
+     * A **view** of this deque with the two ends swapped.
      *
-     * <p>Es la mas barata de las tres vistas invertidas de la biblioteca: un `Deque` ya sabe
-     * recorrerse al reves (`descendingIterator`) y ya tiene las dos puntas, asi que invertir es
-     * cruzar los nombres.
+     * <p>It is the cheapest of the library's three reversed views: a `Deque` already knows how to be
+     * walked backwards (`descendingIterator`) and already has both ends, so reversing is crossing the
+     * names.
      */
     default Deque<E> reversed() {
         return new ReverseDeque<E>(this);

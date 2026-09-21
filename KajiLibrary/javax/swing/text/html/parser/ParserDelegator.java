@@ -7,49 +7,49 @@ import java.io.Serializable;
 import javax.swing.text.html.HTMLEditorKit;
 
 /**
- * El analizador que se usa cuando nadie pide otro.
+ * The parser used when nobody asks for another.
  *
- * <h2>Que agrega sobre {@link DocumentParser}</h2>
+ * <h2>What it adds over {@link DocumentParser}</h2>
  *
- * <p>La DTD. Un {@code DocumentParser} necesita una y no sabe de donde sacarla; este arma la de
- * HTML 3.2 una sola vez y la comparte entre todos los analizadores del programa.
+ * <p>The DTD. A {@code DocumentParser} needs one and does not know where to get it from; this one
+ * builds the HTML 3.2 one once and shares it among all the program's parsers.
  *
- * <p>Compartirla es seguro porque, una vez armada, la DTD no cambia: el analisis solo la consulta.
- * Armar una por documento costaria ochenta elementos y quinientas entidades cada vez.
+ * <p>Sharing it is safe because, once built, the DTD does not change: parsing only consults it.
+ * Building one per document would cost eighty elements and five hundred entities every time.
  *
- * <h2>De donde sale la DTD</h2>
+ * <h2>Where the DTD comes from</h2>
  *
- * <p>De {@link Html32}, que la tiene escrita como datos. El JDK la lee de un archivo binario de su
- * imagen; aca no hay archivo que buscar. Ver la nota de esa clase.
+ * <p>From {@link Html32}, which has it written as data. The JDK reads it from a binary file in
+ * its image; here there is no file to look up. See that class's note.
  */
 public class ParserDelegator extends HTMLEditorKit.Parser implements Serializable {
 
     private static DTD dtd = null;
 
-    /** Arma la DTD de siempre, si todavia no estaba. */
+    /** Builds the usual DTD, if it was not there yet. */
     protected static synchronized void setDefaultDTD() {
         if (dtd == null) {
             dtd = createDTD(new DTD("html32"), "html32");
         }
     }
 
-    /** Llena esa DTD con el HTML 3.2 y la registra con ese nombre. */
+    /** Fills that DTD with HTML 3.2 and registers it under that name. */
     protected static DTD createDTD(DTD dtd, String name) {
-        Html32.llenar(dtd);
+        Html32.fill(dtd);
         DTD.putDTDHash(name, dtd);
         return dtd;
     }
 
-    /** Un analizador listo para usar. */
+    /** A parser ready to use. */
     public ParserDelegator() {
         setDefaultDTD();
     }
 
-    /** Analiza y reenvia a quien escucha. */
+    /** It parses and forwards to whoever listens. */
     public void parse(Reader r, HTMLEditorKit.ParserCallback cb, boolean ignoreCharSet)
             throws IOException {
-        // Uno nuevo por llamada: el analizador guarda el estado del documento que esta leyendo, y
-        // compartirlo entre dos lecturas a la vez mezclaria los dos arboles.
+        // A new one per call: the parser keeps the state of the document it is reading, and
+                // sharing it between two readings at once would mix the two trees.
         new DocumentParser(dtd).parse(r, cb, ignoreCharSet);
     }
 }

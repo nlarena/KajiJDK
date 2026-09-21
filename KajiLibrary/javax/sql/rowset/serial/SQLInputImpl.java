@@ -5,40 +5,39 @@ import java.sql.SQLInput;
 import java.util.Map;
 
 /**
- * KajiLibrary's javax.sql.rowset.serial.SQLInputImpl -- un {@link SQLInput} sobre un arreglo.
+ * KajiLibrary's javax.sql.rowset.serial.SQLInputImpl -- an {@link SQLInput} over an array.
  *
- * <p>Lo que un {@code SQLData} usa para <b>leerse</b> a si mismo desde una copia en memoria: el
- * driver le entrega los atributos ya leidos y esta clase se los va sirviendo en orden.
+ * <p>What an {@code SQLData} uses to <b>read</b> itself from an in-memory copy: the driver hands it
+ * the attributes already read and this class serves them one after another.
  *
- * <h2>Un cursor, no un acceso por indice</h2>
+ * <h2>A cursor, not access by index</h2>
  *
- * <p>Los veintiseis {@code read} no reciben posicion: cada uno consume <b>el siguiente</b> atributo y
- * avanza. Es lo que hace que un {@code readSQL} escrito a mano funcione, y tambien lo que lo hace
- * fragil: leer los atributos en distinto orden que el que se escribieron da valores cruzados, y
- * ningun {@code ClassCastException} lo avisa si los tipos coinciden por casualidad.
+ * <p>The twenty-six {@code read}s take no position: each one consumes <b>the next</b> attribute and
+ * advances. It is what makes a hand-written {@code readSQL} work, and also what makes it fragile:
+ * reading the attributes in a different order from the one they were written in gives crossed
+ * values, and no {@code ClassCastException} warns about it if the types happen to match.
  *
- * <p>{@link #wasNull} contesta sobre <b>la ultima lectura</b>, no sobre la siguiente. Con los
- * primitivos es la unica forma de distinguir un cero de un null, porque {@code readInt} sobre un null
- * devuelve 0.
+ * <p>{@link #wasNull} answers about <b>the last read</b>, not the next one. With primitives it is
+ * the only way to tell a zero from a null, because {@code readInt} on a null returns 0.
  */
 public class SQLInputImpl implements SQLInput {
 
-    /** Los atributos, en orden. */
+    /** The attributes, in order. */
     private final Object[] attrib;
 
-    /** El mapa de tipos definidos por el usuario. */
+    /** The map of user-defined types. */
     private final Map<String, Class<?>> map;
 
-    /** Cual sigue. */
+    /** Which one is next. */
     private int idx = 0;
 
-    /** Si la ultima lectura dio null. */
+    /** Whether the last read gave null. */
     private boolean lastWasNull = false;
 
     /**
-     * @param attributes los atributos ya leidos, en orden
-     * @param map la traduccion de tipos definidos por el usuario
-     * @throws SQLException si alguno de los dos es null
+     * @param attributes the attributes already read, in order
+     * @param map the translation of user-defined types
+     * @throws SQLException if either of the two is null
      */
     public SQLInputImpl(Object[] attributes, Map<String, Class<?>> map) throws SQLException {
         if (attributes == null || map == null) {
@@ -49,9 +48,9 @@ public class SQLInputImpl implements SQLInput {
     }
 
     /**
-     * El siguiente atributo, avanzando el cursor.
+     * The next attribute, advancing the cursor.
      *
-     * @throws SQLException si ya no quedan
+     * @throws SQLException if there are none left
      */
     private Object nextAttribute() throws SQLException {
         if (this.idx >= this.attrib.length) {
@@ -63,17 +62,17 @@ public class SQLInputImpl implements SQLInput {
         return v;
     }
 
-    /** Si la <b>ultima</b> lectura dio null. Ver la nota de la clase. */
+    /** Whether the <b>last</b> read gave null. See the class note. */
     public boolean wasNull() throws SQLException {
         return this.lastWasNull;
     }
 
     /**
-     * El siguiente atributo, sin castear.
+     * The next attribute, without casting.
      *
-     * <p>Si es un {@code Struct} cuyo nombre de tipo esta en el mapa, se lo traduce: se instancia la
-     * clase que le corresponde y se le pide que se lea a si misma. Es la recursion que permite que un
-     * tipo estructurado contenga otro.
+     * <p>If it is a {@code Struct} whose type name is in the map, it is translated: the class that
+     * corresponds to it is instantiated and asked to read itself. It is the recursion that allows a
+     * structured type to contain another.
      */
     public Object readObject() throws SQLException {
         Object v = nextAttribute();
@@ -101,151 +100,151 @@ public class SQLInputImpl implements SQLInput {
         }
     }
 
-    /** El siguiente atributo. Consume y avanza; ver la nota de la clase. */
+    /** The next attribute. It consumes and advances; see the class note. */
     public String readString() throws SQLException {
         Object v = nextAttribute();
         return (String) v;
     }
 
-    /** El siguiente atributo. Consume y avanza; ver la nota de la clase. */
+    /** The next attribute. It consumes and advances; see the class note. */
     public boolean readBoolean() throws SQLException {
         Object v = nextAttribute();
         return (v == null) ? false : ((Boolean) v).booleanValue();
     }
 
-    /** El siguiente atributo. Consume y avanza; ver la nota de la clase. */
+    /** The next attribute. It consumes and advances; see the class note. */
     public byte readByte() throws SQLException {
         Object v = nextAttribute();
         return (v == null) ? 0 : ((Byte) v).byteValue();
     }
 
-    /** El siguiente atributo. Consume y avanza; ver la nota de la clase. */
+    /** The next attribute. It consumes and advances; see the class note. */
     public short readShort() throws SQLException {
         Object v = nextAttribute();
         return (v == null) ? 0 : ((Short) v).shortValue();
     }
 
-    /** El siguiente atributo. Consume y avanza; ver la nota de la clase. */
+    /** The next attribute. It consumes and advances; see the class note. */
     public int readInt() throws SQLException {
         Object v = nextAttribute();
         return (v == null) ? 0 : ((Integer) v).intValue();
     }
 
-    /** El siguiente atributo. Consume y avanza; ver la nota de la clase. */
+    /** The next attribute. It consumes and advances; see the class note. */
     public long readLong() throws SQLException {
         Object v = nextAttribute();
         return (v == null) ? 0L : ((Long) v).longValue();
     }
 
-    /** El siguiente atributo. Consume y avanza; ver la nota de la clase. */
+    /** The next attribute. It consumes and advances; see the class note. */
     public float readFloat() throws SQLException {
         Object v = nextAttribute();
         return (v == null) ? 0f : ((Float) v).floatValue();
     }
 
-    /** El siguiente atributo. Consume y avanza; ver la nota de la clase. */
+    /** The next attribute. It consumes and advances; see the class note. */
     public double readDouble() throws SQLException {
         Object v = nextAttribute();
         return (v == null) ? 0d : ((Double) v).doubleValue();
     }
 
-    /** El siguiente atributo. Consume y avanza; ver la nota de la clase. */
+    /** The next attribute. It consumes and advances; see the class note. */
     public java.math.BigDecimal readBigDecimal() throws SQLException {
         Object v = nextAttribute();
         return (java.math.BigDecimal) v;
     }
 
-    /** El siguiente atributo. Consume y avanza; ver la nota de la clase. */
+    /** The next attribute. It consumes and advances; see the class note. */
     public byte[] readBytes() throws SQLException {
         Object v = nextAttribute();
         return (byte[]) v;
     }
 
-    /** El siguiente atributo. Consume y avanza; ver la nota de la clase. */
+    /** The next attribute. It consumes and advances; see the class note. */
     public java.sql.Date readDate() throws SQLException {
         Object v = nextAttribute();
         return (java.sql.Date) v;
     }
 
-    /** El siguiente atributo. Consume y avanza; ver la nota de la clase. */
+    /** The next attribute. It consumes and advances; see the class note. */
     public java.sql.Time readTime() throws SQLException {
         Object v = nextAttribute();
         return (java.sql.Time) v;
     }
 
-    /** El siguiente atributo. Consume y avanza; ver la nota de la clase. */
+    /** The next attribute. It consumes and advances; see the class note. */
     public java.sql.Timestamp readTimestamp() throws SQLException {
         Object v = nextAttribute();
         return (java.sql.Timestamp) v;
     }
 
-    /** El siguiente atributo. Consume y avanza; ver la nota de la clase. */
+    /** The next attribute. It consumes and advances; see the class note. */
     public java.io.Reader readCharacterStream() throws SQLException {
         Object v = nextAttribute();
         return (java.io.Reader) v;
     }
 
-    /** El siguiente atributo. Consume y avanza; ver la nota de la clase. */
+    /** The next attribute. It consumes and advances; see the class note. */
     public java.io.InputStream readAsciiStream() throws SQLException {
         Object v = nextAttribute();
         return (java.io.InputStream) v;
     }
 
-    /** El siguiente atributo. Consume y avanza; ver la nota de la clase. */
+    /** The next attribute. It consumes and advances; see the class note. */
     public java.io.InputStream readBinaryStream() throws SQLException {
         Object v = nextAttribute();
         return (java.io.InputStream) v;
     }
 
-    /** El siguiente atributo. Consume y avanza; ver la nota de la clase. */
+    /** The next attribute. It consumes and advances; see the class note. */
     public java.sql.Ref readRef() throws SQLException {
         Object v = nextAttribute();
         return (java.sql.Ref) v;
     }
 
-    /** El siguiente atributo. Consume y avanza; ver la nota de la clase. */
+    /** The next attribute. It consumes and advances; see the class note. */
     public java.sql.Blob readBlob() throws SQLException {
         Object v = nextAttribute();
         return (java.sql.Blob) v;
     }
 
-    /** El siguiente atributo. Consume y avanza; ver la nota de la clase. */
+    /** The next attribute. It consumes and advances; see the class note. */
     public java.sql.Clob readClob() throws SQLException {
         Object v = nextAttribute();
         return (java.sql.Clob) v;
     }
 
-    /** El siguiente atributo. Consume y avanza; ver la nota de la clase. */
+    /** The next attribute. It consumes and advances; see the class note. */
     public java.sql.Array readArray() throws SQLException {
         Object v = nextAttribute();
         return (java.sql.Array) v;
     }
 
-    /** El siguiente atributo. Consume y avanza; ver la nota de la clase. */
+    /** The next attribute. It consumes and advances; see the class note. */
     public java.net.URL readURL() throws SQLException {
         Object v = nextAttribute();
         return (java.net.URL) v;
     }
 
-    /** El siguiente atributo. Consume y avanza; ver la nota de la clase. */
+    /** The next attribute. It consumes and advances; see the class note. */
     public java.sql.NClob readNClob() throws SQLException {
         Object v = nextAttribute();
         return (java.sql.NClob) v;
     }
 
-    /** El siguiente atributo. Consume y avanza; ver la nota de la clase. */
+    /** The next attribute. It consumes and advances; see the class note. */
     public String readNString() throws SQLException {
         Object v = nextAttribute();
         return (String) v;
     }
 
-    /** El siguiente atributo. Consume y avanza; ver la nota de la clase. */
+    /** The next attribute. It consumes and advances; see the class note. */
     public java.sql.SQLXML readSQLXML() throws SQLException {
         Object v = nextAttribute();
         return (java.sql.SQLXML) v;
     }
 
-    /** El siguiente atributo. Consume y avanza; ver la nota de la clase. */
+    /** The next attribute. It consumes and advances; see the class note. */
     public java.sql.RowId readRowId() throws SQLException {
         Object v = nextAttribute();
         return (java.sql.RowId) v;

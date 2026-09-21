@@ -13,77 +13,78 @@ import javax.swing.table.TableCellEditor;
 import javax.swing.tree.TreeCellEditor;
 
 /**
- * El editor de celda que sirve para los tres casos comunes: texto, tilde y lista desplegable.
+ * The cell editor that serves for the three common cases: text, tick and combo box.
  *
- * <h2>Un editor, tres componentes, un delegado</h2>
+ * <h2>One editor, three components, one delegate</h2>
  *
- * <p>Los tres componentes no tienen nada en comun: uno guarda texto, otro un booleano, otro un
- * elemento elegido. En vez de tres clases, hay una y un {@link EditorDelegate} que sabe hablar con
- * el componente que le toco. Los tres constructores arman el delegado que corresponde.
+ * <p>The three components have nothing in common: one keeps text, another a boolean, another a
+ * chosen element. Instead of three classes, there is one and an {@link EditorDelegate} that
+ * knows how to talk to the component it got. The three constructors build the delegate that
+ * applies.
  *
- * <p>El delegado es protegido y reemplazable a proposito: es el punto donde se le enseña a esta
- * clase a manejar un componente que no es ninguno de los tres.
+ * <p>The delegate is protected and replaceable on purpose: it is the point where this class is
+ * taught to handle a component that is none of the three.
  *
- * <h2>Cuando empieza a editar</h2>
+ * <h2>When it starts editing</h2>
  *
- * <p>{@link #setClickCountToStart} decide cuantos clics hacen falta. Es dos para el campo de texto y
- * <strong>uno</strong> para el tilde y la lista, y la diferencia tiene sentido: en un campo de texto
- * el primer clic se usa para poner el cursor, mientras que un tilde no tiene nada que hacer con un
- * clic que no sea cambiar.
+ * <p>{@link #setClickCountToStart} decides how many clicks are needed. It is two for the text
+ * field and <strong>one</strong> for the tick and the combo box, and the difference makes
+ * sense: in a text field the first click is used in order to put the caret, whereas a tick has
+ * nothing to do with a click other than change.
  *
- * <p>Un gesto que no es del mouse -- una tecla -- empieza la edicion sin contar clics.
+ * <p>A gesture that is not the mouse's -- a key -- starts the editing without counting clicks.
  */
 public class DefaultCellEditor extends AbstractCellEditor
         implements TableCellEditor, TreeCellEditor {
 
-    /** El componente con el que se edita. */
+    /** The component the editing is done with. */
     protected JComponent editorComponent;
 
-    /** Quien sabe hablar con ese componente; ver la nota de la clase. */
+    /** Who knows how to talk to that component; see the class note. */
     protected EditorDelegate delegate;
 
-    /** Cuantos clics empiezan la edicion. */
+    /** How many clicks start the editing. */
     protected int clickCountToStart = 1;
 
     /**
-     * Con un campo de texto.
+     * With a text field.
      *
-     * <p>Dos clics, por lo que dice la nota de la clase.
+     * <p>Two clicks, for what the class note says.
      */
     public DefaultCellEditor(final JTextField textField) {
         editorComponent = textField;
         this.clickCountToStart = 2;
-        delegate = new DelegadoDeTexto(this, textField);
+        delegate = new TextDelegate(this, textField);
         textField.addActionListener(delegate);
     }
 
-    /** Con un tilde; un solo clic. */
+    /** With a tick; a single click. */
     public DefaultCellEditor(final JCheckBox checkBox) {
         editorComponent = checkBox;
-        delegate = new DelegadoDeTilde(this, checkBox);
+        delegate = new CheckDelegate(this, checkBox);
         checkBox.addActionListener(delegate);
         checkBox.setRequestFocusEnabled(false);
     }
 
     /**
-     * Con una lista desplegable; un solo clic.
+     * With a combo box; a single click.
      *
-     * <p>La lista queda marcada para que apretar Enter no dispare tambien el boton por omision de la
-     * ventana: en una celda, Enter significa "termine de editar".
+     * <p>The combo box is marked so that pressing Enter does not also fire the window's default
+     * button: in a cell, Enter means "I have finished editing".
      */
     public DefaultCellEditor(final JComboBox<?> comboBox) {
         editorComponent = comboBox;
         comboBox.putClientProperty("JComboBox.isTableCellEditor", Boolean.TRUE);
-        delegate = new DelegadoDeLista(this, comboBox);
+        delegate = new ListDelegate(this, comboBox);
         comboBox.addActionListener(delegate);
     }
 
-    /** El componente con el que se edita. */
+    /** The component the editing is done with. */
     public Component getComponent() {
         return editorComponent;
     }
 
-    /** Cuantos clics empiezan la edicion; ver la nota de la clase. */
+    /** How many clicks start the editing; see the class note. */
     public void setClickCountToStart(int count) {
         clickCountToStart = count;
     }
@@ -96,7 +97,7 @@ public class DefaultCellEditor extends AbstractCellEditor
         return delegate.getCellEditorValue();
     }
 
-    /** Si ese gesto alcanza para empezar a editar. */
+    /** Whether that gesture is enough to start editing. */
     public boolean isCellEditable(EventObject anEvent) {
         return delegate.isCellEditable(anEvent);
     }
@@ -113,7 +114,7 @@ public class DefaultCellEditor extends AbstractCellEditor
         delegate.cancelCellEditing();
     }
 
-    /** El componente ya cargado con el valor de esa fila del arbol. */
+    /** The component already loaded with that tree row's value. */
     public Component getTreeCellEditorComponent(JTree tree, Object value, boolean isSelected,
             boolean expanded, boolean leaf, int row) {
         String stringValue = tree.convertValueToText(value, isSelected, expanded, leaf, row,
@@ -123,12 +124,12 @@ public class DefaultCellEditor extends AbstractCellEditor
     }
 
     /**
-     * El componente ya cargado con el valor de esa celda de la tabla.
+     * The component already loaded with that table cell's value.
      *
-     * <p><strong>El tilde lleva un paso de mas.</strong> Un tilde no llena toda la celda, asi que se
-     * le pide a la tabla el dibujante de esa celda y se le copian el borde y el color de fondo; sin
-     * eso, al empezar a editar se ve un parpadeo donde la celda cambia de aspecto. Los otros dos
-     * editores llenan la celda y no lo necesitan.
+     * <p><strong>The tick carries an extra step.</strong> A tick does not fill the whole cell, so
+     * the table is asked for that cell's renderer and its border and background colour are copied
+     * from it; without that, on starting to edit a flicker is seen where the cell changes
+     * appearance. The other two editors fill the cell and do not need it.
      */
     public Component getTableCellEditorComponent(JTable table, Object value, boolean isSelected,
             int row, int column) {
@@ -151,26 +152,27 @@ public class DefaultCellEditor extends AbstractCellEditor
     }
 
     /**
-     * Lo que hay que saber de cada componente para editar con el.
+     * What has to be known about each component in order to edit with it.
      *
-     * <p>Escucha al componente -- de ahi que implemente los dos oyentes -- para terminar la edicion
-     * cuando el usuario aprieta Enter o elige de la lista.
+     * <p>It listens to the component -- hence it implements both listeners -- in order to finish
+     * the editing when the user presses Enter or chooses from the list.
      */
     protected static class EditorDelegate implements ActionListener, ItemListener, Serializable {
 
-        /** El valor que se esta editando. */
+        /** The value that is being edited. */
         protected Object value;
 
         /**
-         * El editor al que pertenece este delegado.
+         * The editor this delegate belongs to.
          *
-         * <p>En el JDK esto es una clase interna y la referencia a la externa es implicita. Aca es
-         * anidada estatica con la externa como primer parametro -- que es la misma firma que el JDK
-         * emite -- porque este compilador no analiza `externa.super(...)`; ver el hallazgo #518.
+         * <p>In the JDK this is an inner class and the reference to the outer one is implicit. Here
+         * it is a static nested one with the outer one as the first parameter -- which is the same
+         * signature the JDK emits -- because this compiler does not analyse `outer.super(...)`; see
+         * finding #518.
          */
         final DefaultCellEditor editor;
 
-        /** Para las subclases. */
+        /** For the subclasses. */
         protected EditorDelegate(DefaultCellEditor editor) {
             this.editor = editor;
         }
@@ -184,10 +186,10 @@ public class DefaultCellEditor extends AbstractCellEditor
         }
 
         /**
-         * Si ese gesto alcanza.
+         * Whether that gesture is enough.
          *
-         * <p>Un clic cuenta los clics; cualquier otro evento -- una tecla, o nada -- empieza la
-         * edicion sin mas.
+         * <p>A click counts the clicks; any other event -- a key, or nothing -- starts the editing
+         * without more ado.
          */
         public boolean isCellEditable(EventObject anEvent) {
             if (anEvent instanceof MouseEvent) {
@@ -200,7 +202,10 @@ public class DefaultCellEditor extends AbstractCellEditor
             return true;
         }
 
-        /** Empieza a editar. Nadie la llama en esta biblioteca; esta porque el JDK la expone. */
+        /**
+         * It starts editing. Nobody calls it in this library; it is here because the JDK exposes
+         * it.
+         */
         public boolean startCellEditing(EventObject anEvent) {
             return true;
         }
@@ -214,47 +219,47 @@ public class DefaultCellEditor extends AbstractCellEditor
             editor.fireEditingCanceled();
         }
 
-        /** El usuario apreto Enter o eligio: se termina de editar. */
+        /** The user pressed Enter or chose: the editing is finished. */
         public void actionPerformed(ActionEvent e) {
             editor.stopCellEditing();
         }
 
-        /** Lo mismo, para los componentes que avisan por seleccion y no por accion. */
+        /** The same, for the components that give notice by selection and not by action. */
         public void itemStateChanged(ItemEvent e) {
             editor.stopCellEditing();
         }
     }
 
-    /** El delegado que habla con un campo de texto: el valor es lo escrito. */
-    private static class DelegadoDeTexto extends EditorDelegate {
+    /** The delegate that talks to a text field: the value is what is written. */
+    private static class TextDelegate extends EditorDelegate {
 
-        private final JTextField campo;
+        private final JTextField field;
 
-        DelegadoDeTexto(DefaultCellEditor editor, JTextField campo) {
+        TextDelegate(DefaultCellEditor editor, JTextField field) {
             super(editor);
-            this.campo = campo;
+            this.field = field;
         }
 
         public void setValue(Object value) {
-            campo.setText((value != null) ? value.toString() : "");
+            field.setText((value != null) ? value.toString() : "");
         }
 
         public Object getCellEditorValue() {
-            return campo.getText();
+            return field.getText();
         }
     }
 
-    /** El delegado que habla con un tilde: el valor es un booleano. */
-    private static class DelegadoDeTilde extends EditorDelegate {
+    /** The delegate that talks to a tick: the value is a boolean. */
+    private static class CheckDelegate extends EditorDelegate {
 
         private final JCheckBox tilde;
 
-        DelegadoDeTilde(DefaultCellEditor editor, JCheckBox tilde) {
+        CheckDelegate(DefaultCellEditor editor, JCheckBox tilde) {
             super(editor);
             this.tilde = tilde;
         }
 
-        /** Un texto tambien sirve: {@code "true"} prende, cualquier otro apaga. */
+        /** A text serves too: {@code "true"} switches on, any other switches off. */
         public void setValue(Object value) {
             boolean selected = false;
             if (value instanceof Boolean) {
@@ -270,29 +275,29 @@ public class DefaultCellEditor extends AbstractCellEditor
         }
     }
 
-    /** El delegado que habla con una lista desplegable: el valor es lo elegido. */
-    private static class DelegadoDeLista extends EditorDelegate {
+    /** The delegate that talks to a combo box: the value is what is chosen. */
+    private static class ListDelegate extends EditorDelegate {
 
-        private final JComboBox<?> lista;
+        private final JComboBox<?> list;
 
-        DelegadoDeLista(DefaultCellEditor editor, JComboBox<?> lista) {
+        ListDelegate(DefaultCellEditor editor, JComboBox<?> list) {
             super(editor);
-            this.lista = lista;
+            this.list = list;
         }
 
         public void setValue(Object value) {
-            lista.setSelectedItem(value);
+            list.setSelectedItem(value);
         }
 
         public Object getCellEditorValue() {
-            return lista.getSelectedItem();
+            return list.getSelectedItem();
         }
 
         /**
-         * Un clic sobre la lista no empieza a editar por si mismo.
+         * A click on the combo box does not start editing by itself.
          *
-         * <p>La lista ya reacciona al clic abriendose; contar ese clic como el que empieza la
-         * edicion haria que el desplegable se abriera y se cerrara de una.
+         * <p>The combo box already reacts to the click by opening; counting that click as the one
+         * that starts the editing would make the drop-down open and close in one go.
          */
         public boolean shouldSelectCell(EventObject anEvent) {
             if (anEvent instanceof MouseEvent) {
@@ -303,9 +308,9 @@ public class DefaultCellEditor extends AbstractCellEditor
         }
 
         public boolean stopCellEditing() {
-            if (lista.isEditable()) {
-                // Una lista editable puede tener texto a medio escribir; se lo confirma antes.
-                lista.actionPerformed(new ActionEvent(this, 0, ""));
+            if (list.isEditable()) {
+                // An editable combo box may have text half written; it is confirmed first.
+                list.actionPerformed(new ActionEvent(this, 0, ""));
             }
             return super.stopCellEditing();
         }

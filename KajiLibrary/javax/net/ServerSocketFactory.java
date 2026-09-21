@@ -5,37 +5,37 @@ import java.net.InetAddress;
 import java.net.ServerSocket;
 
 /**
- * KajiLibrary's javax.net.ServerSocketFactory -- crea sockets de servidor.
+ * KajiLibrary's javax.net.ServerSocketFactory -- creates server sockets.
  *
- * <p>El espejo de {@link SocketFactory} para el lado que escucha, con la misma razon de ser:
- * {@code javax.net.ssl.SSLServerSocketFactory} es una subclase, y cambiarla es todo lo que hace falta
- * para que un servidor pase a hablar TLS.
+ * <p>The mirror of {@link SocketFactory} for the listening side, with the same reason for being:
+ * {@code javax.net.ssl.SSLServerSocketFactory} is a subclass, and swapping it is all it takes for a
+ * server to start talking TLS.
  *
- * <h2>Los tres argumentos</h2>
+ * <h2>The three arguments</h2>
  *
- * <p>El puerto, la <b>cola de espera</b>, y la direccion local:
+ * <p>The port, the <b>backlog</b>, and the local address:
  *
  * <ul>
- *   <li>puerto 0 significa "el que el sistema quiera", y despues se pregunta cual toco;
- *   <li>la cola es cuantas conexiones pueden quedar esperando a que alguien las acepte. Chica, los
- *       clientes ven la conexion rechazada bajo un pico;
- *   <li>la direccion local decide <b>por que interfaz</b> se escucha. Sin ella se escucha en todas,
- *       que en una maquina con una pata en internet no siempre es lo que se quiere.
+ *   <li>port 0 means "whichever the system wants", and afterwards one asks which it got;
+ *   <li>the backlog is how many connections can be left waiting for somebody to accept them. Too
+ *       small, and clients see the connection refused under a peak;
+ *   <li>the local address decides <b>on which interface</b> it listens. Without it it listens on
+ *       all of them, which on a machine with one leg on the internet is not always what is wanted.
  * </ul>
  *
- * <p>{@link #createServerSocket()} devuelve uno sin atar, para poder fijar opciones antes; ver
+ * <p>{@link #createServerSocket()} returns an unbound one, so that options can be set first; see
  * {@link SocketFactory#createSocket()}.
  */
 public abstract class ServerSocketFactory {
 
-    /** La de siempre; se crea una sola vez. */
+    /** The usual one; it is created only once. */
     private static ServerSocketFactory theFactory;
 
-    /** Para las subclases. */
+    /** For subclasses. */
     protected ServerSocketFactory() {
     }
 
-    /** La fabrica por omision: sockets de servidor normales, sin cifrar. Siempre la misma. */
+    /** The default factory: ordinary, unencrypted server sockets. Always the same one. */
     public static ServerSocketFactory getDefault() {
         synchronized (ServerSocketFactory.class) {
             if (theFactory == null) {
@@ -46,32 +46,32 @@ public abstract class ServerSocketFactory {
     }
 
     /**
-     * Un socket de servidor sin atar. Ver la nota de la clase.
+     * An unbound server socket. See the class note.
      *
-     * @throws IOException si esta fabrica no sabe crearlos sin atar
+     * @throws IOException if this factory cannot create them unbound
      */
     public ServerSocket createServerSocket() throws IOException {
         throw new java.net.SocketException("Unbound server sockets not implemented");
     }
 
     /**
-     * Escucha en ese puerto; 0 deja que el sistema elija.
+     * Listens on that port; 0 lets the system choose.
      *
-     * @throws IOException si no se pudo abrir
+     * @throws IOException if it could not be opened
      */
     public abstract ServerSocket createServerSocket(int port) throws IOException;
 
     /**
-     * Idem, con esa cola de espera. Ver la nota de la clase.
+     * Likewise, with that backlog. See the class note.
      *
-     * @throws IOException si no se pudo abrir
+     * @throws IOException if it could not be opened
      */
     public abstract ServerSocket createServerSocket(int port, int backlog) throws IOException;
 
     /**
-     * Idem, escuchando solo por esa interfaz. Ver la nota de la clase.
+     * Likewise, listening only on that interface. See the class note.
      *
-     * @throws IOException si no se pudo abrir
+     * @throws IOException if it could not be opened
      */
     public abstract ServerSocket createServerSocket(int port, int backlog, InetAddress ifAddress)
         throws IOException;

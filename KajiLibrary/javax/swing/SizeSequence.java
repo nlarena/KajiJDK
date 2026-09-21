@@ -1,140 +1,140 @@
 package javax.swing;
 
 /**
- * Los tamanos de una fila de cosas puestas una atras de otra, y donde empieza cada una.
+ * The sizes of a row of things put one after another, and where each one starts.
  *
- * <h2>Para que sirve</h2>
+ * <h2>What it is for</h2>
  *
- * <p>Una tabla con mil filas de alturas distintas necesita responder dos preguntas todo el tiempo:
- * en que pixel empieza la fila 700, y a que fila corresponde el pixel 4823. Sumar de a una es
- * demasiado lento cuando pasa en cada repintado, y guardar las posiciones ya sumadas obliga a
- * recalcular la mitad de la tabla cada vez que una fila cambia de alto.
+ * <p>A table with a thousand rows of different heights needs to answer two questions all the
+ * time: at which pixel row 700 starts, and which row pixel 4823 corresponds to. Adding one at a
+ * time is too slow when it happens on every repaint, and keeping the already added positions
+ * forces half the table to be recomputed every time a row changes height.
  *
- * <p>Esta clase es la respuesta a las dos preguntas con la misma estructura. Guarda los
- * <em>tamanos</em> -- que es lo que cambia -- y deriva las posiciones.
+ * <p>This class is the answer to both questions with the same structure. It keeps the
+ * <em>sizes</em> -- which is what changes -- and derives the positions.
  *
- * <h2>Las dos preguntas no son simetricas</h2>
+ * <h2>The two questions are not symmetrical</h2>
  *
- * <p>{@link #getPosition} de un indice fuera de rango devuelve el total, y {@link #getIndex} de una
- * posicion pasada del final devuelve la cantidad de entradas. Las dos son la misma respuesta dicha
- * de dos maneras: "esta despues de todo lo que hay".
+ * <p>{@link #getPosition} of an index out of range returns the total, and {@link #getIndex} of a
+ * position past the end returns the number of entries. Both are the same answer said in two
+ * ways: "it is after everything there is".
  */
 public class SizeSequence {
 
-    private static final int[] VACIO = new int[0];
+    private static final int[] EMPTY = new int[0];
 
-    private int[] tamanos;
+    private int[] sizeArray;
 
-    /** Sin entradas. */
+    /** With no entries. */
     public SizeSequence() {
-        tamanos = VACIO;
+        sizeArray = EMPTY;
     }
 
-    /** Esa cantidad de entradas, todas de tamano cero. */
+    /** That many entries, all of size zero. */
     public SizeSequence(int numEntries) {
         this(numEntries, 0);
     }
 
-    /** Esa cantidad de entradas, todas de ese tamano. */
+    /** That many entries, all of that size. */
     public SizeSequence(int numEntries, int value) {
         this();
         insertEntries(0, numEntries, value);
     }
 
-    /** Con esos tamanos. */
+    /** With those sizes. */
     public SizeSequence(int[] sizes) {
         this();
         setSizes(sizes);
     }
 
-    /** Le pone ese tamano a las primeras {@code length} entradas. */
+    /** It gives that size to the first {@code length} entries. */
     void setSizes(int length, int size) {
-        int[] nuevos = new int[length];
+        int[] added = new int[length];
         for (int i = 0; i < length; i++) {
-            nuevos[i] = size;
+            added[i] = size;
         }
-        setSizes(nuevos);
+        setSizes(added);
     }
 
-    /** Reemplaza todos los tamanos; se guarda una copia. */
+    /** It replaces every size; a copy is kept. */
     public void setSizes(int[] sizes) {
-        int[] copia = new int[sizes.length];
-        System.arraycopy(sizes, 0, copia, 0, sizes.length);
-        tamanos = copia;
+        int[] copy = new int[sizes.length];
+        System.arraycopy(sizes, 0, copy, 0, sizes.length);
+        sizeArray = copy;
     }
 
-    /** Una copia de los tamanos. */
+    /** A copy of the sizes. */
     public int[] getSizes() {
-        int[] copia = new int[tamanos.length];
-        System.arraycopy(tamanos, 0, copia, 0, tamanos.length);
-        return copia;
+        int[] copy = new int[sizeArray.length];
+        System.arraycopy(sizeArray, 0, copy, 0, sizeArray.length);
+        return copy;
     }
 
     /**
-     * Donde empieza esa entrada.
+     * Where that entry starts.
      *
-     * <p>Un indice pasado del final da el total; ver la nota de la clase.
+     * <p>An index past the end gives the total; see the class note.
      */
     public int getPosition(int index) {
-        int suma = 0;
-        int tope = index;
-        if (tope > tamanos.length) {
-            tope = tamanos.length;
+        int sum = 0;
+        int cap = index;
+        if (cap > sizeArray.length) {
+            cap = sizeArray.length;
         }
-        for (int i = 0; i < tope; i++) {
-            suma = suma + tamanos[i];
+        for (int i = 0; i < cap; i++) {
+            sum = sum + sizeArray[i];
         }
-        return suma;
+        return sum;
     }
 
     /**
-     * A que entrada corresponde esa posicion.
+     * Which entry that position corresponds to.
      *
-     * <p>Una posicion pasada del final da la cantidad de entradas; ver la nota de la clase. Las
-     * entradas de tamano cero no ocupan lugar y por lo tanto no se pueden alcanzar: la posicion cae
-     * en la primera que si ocupe algo.
+     * <p>A position past the end gives the number of entries; see the class note. Entries of size
+     * zero take up no room and therefore cannot be reached: the position falls on the first that
+     * does take up something.
      */
     public int getIndex(int position) {
-        int suma = 0;
-        for (int i = 0; i < tamanos.length; i++) {
-            suma = suma + tamanos[i];
-            if (position < suma) {
+        int sum = 0;
+        for (int i = 0; i < sizeArray.length; i++) {
+            sum = sum + sizeArray[i];
+            if (position < sum) {
                 return i;
             }
         }
-        return tamanos.length;
+        return sizeArray.length;
     }
 
-    /** El tamano de esa entrada; cero si el indice esta fuera de rango. */
+    /** That entry's size; zero if the index is out of range. */
     public int getSize(int index) {
-        if (index < 0 || index >= tamanos.length) {
+        if (index < 0 || index >= sizeArray.length) {
             return 0;
         }
-        return tamanos[index];
+        return sizeArray[index];
     }
 
     /**
-     * Le cambia el tamano a una entrada.
+     * It changes an entry's size.
      *
-     * <p>Un indice fuera de rango no hace nada. <strong>Con un indice negativo el JDK difiere</strong>:
-     * su implementacion guarda un arbol de sumas parciales en vez de los tamanos, y un indice
-     * negativo termina sumandole el tamano pedido a la entrada cero -- pedirle {@code setSize(-1, 100)}
-     * a una secuencia que empieza en 5 la deja en 105. Es un efecto de su estructura interna, no una
-     * regla; aca no se copia, y queda dicho porque es la unica diferencia observable entre las dos
-     * implementaciones.
+     * <p>An index out of range does nothing. <strong>With a negative index the JDK
+     * differs</strong>: its implementation keeps a tree of partial sums instead of the sizes, and
+     * a negative index ends up adding the requested size to entry zero -- asking a sequence that
+     * starts at 5 for {@code setSize(-1, 100)} leaves it at 105. It is an effect of its internal
+     * structure, not a rule; here it is not copied, and it is said because it is the only
+     * observable difference between the two implementations.
      */
     public void setSize(int index, int size) {
-        if (index < 0 || index >= tamanos.length) {
+        if (index < 0 || index >= sizeArray.length) {
             return;
         }
-        tamanos[index] = size;
+        sizeArray[index] = size;
     }
 
     /**
-     * Mete {@code length} entradas de ese tamano a partir de {@code start}.
+     * It puts {@code length} entries of that size in from {@code start} on.
      *
-     * <p>Las que estaban de {@code start} en adelante se corren; es una insercion, no un
-     * reemplazo.
+     * <p>Those that were there from {@code start} on are shifted; it is an insertion, not a
+     * replacement.
      */
     public void insertEntries(int start, int length, int value) {
         int[] sizes = getSizes();
@@ -153,7 +153,7 @@ public class SizeSequence {
         setSizes(newSizes);
     }
 
-    /** Saca {@code length} entradas a partir de {@code start}. */
+    /** It removes {@code length} entries from {@code start} on. */
     public void removeEntries(int start, int length) {
         int[] sizes = getSizes();
         int newLength = sizes.length - length;

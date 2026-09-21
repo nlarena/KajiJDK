@@ -12,39 +12,41 @@ import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
 
 /**
- * KajiLibrary's javax.xml.parsers.DocumentBuilder -- lee un XML y devuelve un arbol.
+ * KajiLibrary's javax.xml.parsers.DocumentBuilder -- reads XML and returns a tree.
  *
- * <p>Es la cara DOM del analisis: se lee todo el documento y queda en memoria como un
- * {@link Document} que se puede recorrer en cualquier direccion. La otra cara es {@link SAXParser},
- * que avisa por evento y no guarda nada. La eleccion entre las dos no es de gusto: DOM necesita
- * varias veces el tamaño del archivo en memoria, asi que para un documento grande que solo se
- * recorre una vez, SAX es la unica opcion.
+ * <p>It is the DOM face of parsing: the whole document is read and stays in memory as a {@link
+ * Document} that can be walked in any direction. The other face is {@link SAXParser}, which
+ * notifies by event and keeps nothing. Choosing between the two is not a matter of taste: DOM needs
+ * several times the size of the file in memory, so for a large document that is walked only once,
+ * SAX is the only option.
  *
- * <h2>Un solo metodo abstracto y seis atajos</h2>
+ * <h2>One abstract parse and four shortcuts</h2>
  *
- * <p>Los {@code parse} que reciben flujo, archivo o URI arman un {@link InputSource} y llaman al
- * abstracto. Vale la pena mirar que hacen con el <b>identificador de sistema</b>: es lo que despues
- * permite resolver una referencia relativa dentro del documento, y por eso {@code parse(File)} lo
- * pone a partir del camino absoluto y no del que se paso. Un XML leido de un flujo sin identificador
- * no puede resolver nada relativo, y ese es el motivo de la sobrecarga que recibe uno aparte.
+ * <p>The {@code parse}s that receive a stream, a file or a URI build an {@link InputSource} and
+ * call the abstract one. It is worth looking at what they do with the <b>system identifier</b>: it
+ * is what later allows a relative reference inside the document to be resolved, and that is why
+ * {@code parse(File)} sets it from the absolute path and not from the one passed. An XML read from
+ * a stream without an identifier cannot resolve anything relative, and that is the reason for the
+ * overload that receives one separately. (The note said six shortcuts; there are four.)
  *
- * <h2>Los defaults que lanzan</h2>
+ * <h2>The defaults that throw</h2>
  *
- * <p>{@link #reset} y {@link #isXIncludeAware} tienen cuerpo y lanzan
- * {@link UnsupportedOperationException}. Es deliberado y es lo que hace el JDK: llegaron despues de
- * la version 1 de la clase, y una implementacion vieja que no las conoce no puede contestarlas.
- * Devolver false en {@code isXIncludeAware} seria peor -- afirmaria algo que nadie verifico.
+ * <p>{@link #reset} and {@link #isXIncludeAware} have a body and throw {@link
+ * UnsupportedOperationException}. It is deliberate and it is what the JDK does: they arrived after
+ * version 1 of the class, and an old implementation that does not know them cannot answer them.
+ * Returning false in {@code isXIncludeAware} would be worse -- it would assert something nobody
+ * checked.
  */
 public abstract class DocumentBuilder {
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected DocumentBuilder() {
     }
 
     /**
-     * Deja el analizador como recien creado.
+     * Leaves the parser as newly created.
      *
-     * @throws UnsupportedOperationException por omision; ver la nota de la clase
+     * @throws UnsupportedOperationException by default; see the class note
      */
     public void reset() {
         throw new UnsupportedOperationException(
@@ -53,11 +55,11 @@ public abstract class DocumentBuilder {
     }
 
     /**
-     * Lee de un flujo, sin identificador de sistema.
+     * Reads from a stream, without a system identifier.
      *
-     * <p>Un documento leido asi no puede resolver referencias relativas; ver la nota de la clase.
+     * <p>A document read this way cannot resolve relative references; see the class note.
      *
-     * @throws IllegalArgumentException si el flujo es null
+     * @throws IllegalArgumentException if the stream is null
      */
     public Document parse(InputStream is) throws SAXException, IOException {
         if (is == null) {
@@ -67,10 +69,10 @@ public abstract class DocumentBuilder {
     }
 
     /**
-     * Lee de un flujo, diciendo desde donde vino.
+     * Reads from a stream, saying where it came from.
      *
-     * @param systemId contra el que se resuelven las referencias relativas
-     * @throws IllegalArgumentException si el flujo es null
+     * @param systemId what relative references are resolved against
+     * @throws IllegalArgumentException if the stream is null
      */
     public Document parse(InputStream is, String systemId) throws SAXException, IOException {
         if (is == null) {
@@ -82,9 +84,9 @@ public abstract class DocumentBuilder {
     }
 
     /**
-     * Lee de un URI.
+     * Reads from a URI.
      *
-     * @throws IllegalArgumentException si el URI es null
+     * @throws IllegalArgumentException if the URI is null
      */
     public Document parse(String uri) throws SAXException, IOException {
         if (uri == null) {
@@ -94,12 +96,12 @@ public abstract class DocumentBuilder {
     }
 
     /**
-     * Lee de un archivo.
+     * Reads from a file.
      *
-     * <p>El identificador de sistema sale del <b>camino absoluto</b>, no del que se paso: si no, un
-     * documento abierto con un camino relativo no podria resolver los suyos.
+     * <p>The system identifier comes from the <b>absolute path</b>, not from the one passed:
+     * otherwise, a document opened with a relative path could not resolve its own.
      *
-     * @throws IllegalArgumentException si el archivo es null
+     * @throws IllegalArgumentException if the file is null
      */
     public Document parse(File f) throws SAXException, IOException {
         if (f == null) {
@@ -108,41 +110,40 @@ public abstract class DocumentBuilder {
         return parse(new InputSource(f.toURI().toString()));
     }
 
-    /** El unico que hay que escribir: todos los demas terminan aca. */
+    /** The only one to write: all the others end up here. */
     public abstract Document parse(InputSource is) throws SAXException, IOException;
 
-    /** Si distingue espacios de nombres. */
+    /** Whether it tells namespaces apart. */
     public abstract boolean isNamespaceAware();
 
-    /** Si valida contra la DTD del documento. */
+    /** Whether it validates against the document's DTD. */
     public abstract boolean isValidating();
 
     /**
-     * Quien resuelve las entidades externas.
+     * Who resolves the external entities.
      *
-     * <p>Ponerle uno que las rechace es la defensa contra XXE, que es el ataque clasico de este API:
-     * un documento que declara una entidad apuntando a un archivo local y lo hace aparecer en la
-     * salida.
+     * <p>Giving it one that rejects them is the defence against XXE, which is the classic attack on
+     * this API: a document that declares an entity pointing to a local file and makes it appear in
+     * the output.
      */
     public abstract void setEntityResolver(EntityResolver er);
 
-    /** Quien decide que hacer con los errores; sin uno, van a la salida de error. */
+    /** Who decides what to do with errors; without one, they go to standard error. */
     public abstract void setErrorHandler(ErrorHandler eh);
 
-    /** Un documento vacio, para construir uno a mano. */
+    /** An empty document, to build one by hand. */
     public abstract Document newDocument();
 
-    /** La implementacion DOM detras de este analizador. */
+    /** The DOM implementation behind this parser. */
     public abstract DOMImplementation getDOMImplementation();
 
     /**
-     * El esquema contra el que valida, o null.
+     * The schema it validates against, or null.
      *
-     * <p>Lo pone la fabrica con {@code DocumentBuilderFactory.setSchema}, no se pone aca: un
-     * analizador ya construido no puede cambiar de esquema, porque el esquema decide como se
-     * construye.
+     * <p>The factory sets it with {@code DocumentBuilderFactory.setSchema}, it is not set here: an
+     * already built parser cannot change schema, because the schema decides how it is built.
      *
-     * @throws UnsupportedOperationException por omision; ver la nota de la clase
+     * @throws UnsupportedOperationException by default; see the class note
      */
     public Schema getSchema() {
         throw new UnsupportedOperationException(
@@ -150,9 +151,9 @@ public abstract class DocumentBuilder {
     }
 
     /**
-     * Si resuelve XInclude.
+     * Whether it resolves XInclude.
      *
-     * @throws UnsupportedOperationException por omision; ver la nota de la clase
+     * @throws UnsupportedOperationException by default; see the class note
      */
     public boolean isXIncludeAware() {
         throw new UnsupportedOperationException(

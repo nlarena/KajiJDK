@@ -1,40 +1,38 @@
 package javax.xml.stream.events;
 
 /**
- * KajiLibrary's javax.xml.stream.events.EntityReference -- una {@code &entidad;} que quedo sin
- * expandir.
+ * KajiLibrary's javax.xml.stream.events.EntityReference -- an {@code &entity;} left unexpanded.
  *
- * <h2>Cuando aparece, que es casi nunca</h2>
+ * <h2>When it appears, which is almost never</h2>
  *
- * <p>Por omision un lector de StAX expande las entidades: el {@code &saludo;} se convierte en el
- * texto que la entidad declaraba y llega como {@link Characters}. Este evento existe solo si se
- * apago esa expansion con {@link javax.xml.stream.XMLInputFactory#IS_REPLACING_ENTITY_REFERENCES}.
+ * <p>By default a StAX reader expands entities: {@code &greeting;} becomes the text the entity
+ * declared and arrives as {@link Characters}. This event exists only if that expansion was turned
+ * off with {@link javax.xml.stream.XMLInputFactory#IS_REPLACING_ENTITY_REFERENCES}.
  *
- * <p>Apagarla sirve para dos cosas concretas: reescribir un documento conservando las referencias
- * tal cual estaban --expandirlas es una perdida irreversible-- y no expandir entidades de
- * documentos que no son de confianza, que es de donde vienen los ataques de expansion
- * exponencial.
+ * <p>Turning it off serves two concrete purposes: rewriting a document keeping the references as
+ * they were --expanding them is an irreversible loss-- and not expanding entities of untrusted
+ * documents, which is where exponential expansion attacks come from.
  *
- * <p>Las cinco entidades predefinidas de XML --{@code &lt;}, {@code &gt;}, {@code &amp;},
- * {@code &quot;}, {@code &apos;}-- se resuelven <b>siempre</b> y nunca llegan como este evento: no
- * son entidades declaradas sino sintaxis del lenguaje.
+ * <p>The five predefined XML entities --{@code &lt;}, {@code &gt;}, {@code &amp;}, {@code &quot;},
+ * {@code &apos;}-- are <b>always</b> resolved and never arrive as this event: they are not declared
+ * entities but syntax of the language.
  *
- * <p>{@link #getDeclaration()} devuelve la declaracion que le corresponde, lo que solo es posible
- * si el parser leyo el DTD. Sin DTD no hay declaracion que devolver.
+ * <p>{@link #getDeclaration()} returns the declaration that corresponds to it, which is only
+ * possible if the parser read the DTD. Without a DTD there is no declaration to return.
  */
 public interface EntityReference extends XMLEvent {
 
     /**
-     * La declaracion de la entidad referenciada.
+     * The declaration of the referenced entity.
      *
-     * @return la declaracion, o null si el parser no leyo el DTD que la declara
+     * @return the declaration, or null if the parser did not read the DTD that declares it
      */
     EntityDeclaration getDeclaration();
 
     /**
-     * El nombre de la entidad, sin el {@code &} ni el {@code ;}.
+     * The name of the entity, without the {@code &} or the {@code ;}.
      *
-     * @return el nombre; nunca null
+     * @return the name; never null
      */
     String getName();
 }

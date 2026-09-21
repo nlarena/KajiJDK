@@ -1,15 +1,15 @@
 package javax.swing.plaf;
 
 /**
- * El aspecto de una etiqueta.
+ * A label's look and feel.
  *
- * <p>No agrega nada a {@link ComponentUI}, y aun asi existe: es el <em>tipo</em> que
- * {@code JLabel.setUI} pide, para que a una etiqueta no se le pueda instalar por error el aspecto
- * de un boton. Cada componente tiene una de estas, vacia, por la misma razon.
+ * <p>It adds nothing to {@link ComponentUI}, and even so it exists: it is the <em>type</em>
+ * {@code JLabel.setUI} asks for, so that a button's look and feel cannot be installed on a label
+ * by mistake. Every component has one of these, empty, for the same reason.
  */
 public abstract class LabelUI extends ComponentUI {
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected LabelUI() {
     }
 }

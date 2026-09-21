@@ -6,86 +6,87 @@ import java.util.Map;
 import javax.management.ObjectName;
 
 /**
- * Una relacion concreta: que MBeans ocupan cada rol.
+ * A concrete relation: which MBeans occupy each role.
  *
- * <h2>Que resuelve el servicio de relaciones</h2>
+ * <h2>What the relation service solves</h2>
  *
- * <p>JMX modela objetos administrados sueltos. Cuando entre ellos hay vinculos —este servidor aloja
- * estas aplicaciones, este disco pertenece a esta maquina— cada MBean podria guardar el
- * {@link ObjectName} del otro en un atributo, y ahi empiezan los problemas: nadie mantiene la
- * consistencia cuando uno se desregistra, no hay forma de recorrer el vinculo al reves, y la
- * cardinalidad no esta escrita en ningun lado.
+ * <p>JMX models managed objects in isolation. When there are links between them --this server hosts
+ * these applications, this disk belongs to this machine-- each MBean could keep the other's
+ * {@link ObjectName} in an attribute, and that is where the problems start: nobody keeps things
+ * consistent when one is unregistered, there is no way to walk the link backwards, and the
+ * cardinality is written nowhere.
  *
- * <p>Esto lo saca de los MBeans y lo pone en un servicio que si puede garantizarlo.
+ * <p>This takes it out of the MBeans and puts it in a service that can guarantee it.
  *
- * <h2>Por que casi todo devuelve {@link RoleResult} en vez de tirar</h2>
+ * <h2>Why almost everything returns {@link RoleResult} instead of throwing</h2>
  *
- * <p>Porque una operacion sobre varios roles puede fallar en algunos: ver {@link RoleUnresolved}. Los
- * metodos que trabajan sobre <strong>uno</strong> si tiran, porque ahi no hay mitad buena.
+ * <p>Because an operation over several roles may fail on some: see {@link RoleUnresolved}. The
+ * methods that work on <b>one</b> do throw, because there is no good half there.
  *
- * <h2>Quien la implementa</h2>
+ * <h2>Who implements it</h2>
  *
- * <p>{@link RelationSupport} para el caso normal. Implementarla directamente sirve para una relacion
- * cuyos roles se <em>calculen</em> en vez de guardarse — todas las maquinas de un rack, por ejemplo,
- * derivadas de otra cosa.
+ * <p>{@link RelationSupport} for the normal case. Implementing it directly serves for a relation
+ * whose roles are <em>computed</em> instead of stored -- all the machines in a rack, for example,
+ * derived from something else.
  */
 public interface Relation {
 
     /**
-     * Los MBeans que ocupan ese rol.
+     * The MBeans that occupy that role.
      *
-     * @throws RoleNotFoundException si no existe o no se puede leer
+     * @throws RoleNotFoundException if it does not exist or cannot be read
      */
     List<ObjectName> getRole(String roleName)
             throws IllegalArgumentException, RoleNotFoundException,
             RelationServiceNotRegisteredException;
 
-    /** Varios roles a la vez; los que fallen vienen como {@link RoleUnresolved}. */
+    /** Several roles at once; the ones that fail come as {@link RoleUnresolved}. */
     RoleResult getRoles(String[] roleNameArray)
             throws IllegalArgumentException, RelationServiceNotRegisteredException;
 
     /**
-     * Cuantos MBeans tiene ese rol.
+     * How many MBeans that role has.
      *
-     * @throws RoleNotFoundException si el rol no existe
+     * @throws RoleNotFoundException if the role does not exist
      */
     Integer getRoleCardinality(String roleName)
             throws IllegalArgumentException, RoleNotFoundException;
 
-    /** Todos los roles legibles, con los que no lo son aparte. */
+    /** All the readable roles, with the unreadable ones apart. */
     RoleResult getAllRoles() throws RelationServiceNotRegisteredException;
 
     /**
-     * Todos los roles, <strong>sin</strong> comprobar si son legibles.
+     * All the roles, <b>without</b> checking whether they are readable.
      *
-     * <p>Es el acceso interno: lo usa el servicio de relaciones, que ya decidio que puede mirar. Por
-     * eso devuelve una {@link RoleList} pelada y no un {@link RoleResult} — aca no hay nada que
-     * pueda quedar sin resolver.
+     * <p>It is the internal access: the relation service uses it, having already decided it may
+     * look. That is why it returns a bare {@link RoleList} and not a {@link RoleResult} -- there is
+     * nothing here that can be left unresolved.
      */
     RoleList retrieveAllRoles();
 
     /**
-     * Cambia el valor de un rol.
+     * Changes a role's value.
      *
-     * @throws InvalidRoleValueException si el valor no cumple lo que el {@link RoleInfo} exige
-     * @throws RoleNotFoundException si el rol no existe o no se puede escribir
+     * @throws InvalidRoleValueException if the value does not meet what the {@link RoleInfo}
+     *     requires
+     * @throws RoleNotFoundException if the role does not exist or cannot be written
      */
     void setRole(Role role)
             throws IllegalArgumentException, RoleNotFoundException,
             RelationTypeNotFoundException, InvalidRoleValueException,
             RelationServiceNotRegisteredException, RelationNotFoundException;
 
-    /** Cambia varios; los que fallen vienen como {@link RoleUnresolved}. */
+    /** Changes several; the ones that fail come as {@link RoleUnresolved}. */
     RoleResult setRoles(RoleList roleList)
             throws IllegalArgumentException, RelationServiceNotRegisteredException,
             RelationTypeNotFoundException, RelationNotFoundException;
 
     /**
-     * Le avisa a la relacion que un MBean referenciado se desregistro.
+     * Tells the relation that a referenced MBean was unregistered.
      *
-     * <p>Lo llama el servicio, que es quien escucha al servidor de MBeans. La relacion saca esa
-     * referencia de sus roles — y ahi puede quedar por debajo del minimo, que es como una relacion
-     * pasa a estar en falta sin que nadie la haya tocado.
+     * <p>The service, which is the one listening to the MBean server, calls it. The relation
+     * removes that reference from its roles -- and there it may fall below the minimum, which is
+     * how a relation comes to be in breach without anyone having touched it.
      */
     void handleMBeanUnregistration(ObjectName objectName, String roleName)
             throws IllegalArgumentException, RoleNotFoundException, InvalidRoleValueException,
@@ -93,19 +94,19 @@ public interface Relation {
             RelationNotFoundException;
 
     /**
-     * Todos los MBeans referenciados, y en que roles aparece cada uno.
+     * All the referenced MBeans, and in which roles each appears.
      *
-     * <p>Es el indice al reves: dado un MBean, en que roles esta. El servicio lo usa para saber a
-     * quien avisarle cuando uno se desregistra.
+     * <p>It is the index the other way round: given an MBean, which roles it is in. The service
+     * uses it to know whom to notify when one is unregistered.
      */
     Map<ObjectName, List<String>> getReferencedMBeans();
 
-    /** El nombre del tipo de esta relacion. */
+    /** The name of this relation's type. */
     String getRelationTypeName();
 
-    /** El nombre del servicio de relaciones que la administra. */
+    /** The name of the relation service that manages it. */
     ObjectName getRelationServiceName();
 
-    /** El identificador de esta relacion, unico dentro del servicio. */
+    /** This relation's identifier, unique within the service. */
     String getRelationId();
 }

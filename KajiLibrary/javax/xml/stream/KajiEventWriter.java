@@ -18,18 +18,18 @@ import javax.xml.stream.events.StartElement;
 import javax.xml.stream.events.XMLEvent;
 
 /**
- * El escritor de eventos de esta biblioteca: traduce cada evento a llamadas al escritor de cursor.
+ * This library's event writer: it translates each event into calls to the cursor writer.
  *
- * <p>Podria escribir directo, llamando a {@code writeAsEncodedUnicode} de cada evento, y seria mas
- * corto. No se hace, y el motivo es concreto: el escritor de cursor lleva la cuenta de los espacios
- * de nombres y sabe reparar los que falten, cosa que un evento suelto no puede hacer porque no
- * conoce su entorno. Pasando por el cursor, los dos modelos de escritura producen lo mismo y
- * respetan la misma configuracion.
+ * <p>It could write directly, calling each event's {@code writeAsEncodedUnicode}, and it would be
+ * shorter. It is not done, and the reason is concrete: the cursor writer keeps track of the
+ * namespaces and knows how to repair the missing ones, which a loose event cannot do because it
+ * does not know its surroundings. Going through the cursor, both writing models produce the same
+ * and respect the same configuration.
  *
- * <p>El orden dentro de un {@link StartElement} es el que manda XML: primero las declaraciones,
- * despues los atributos. Si se invirtiera, un atributo podria usar un prefijo que se declara mas
- * adelante en la misma etiqueta --que es legal en XML, pero el escritor de cursor en modo reparador
- * lo veria como no declarado y agregaria una segunda declaracion--.
+ * <p>The order within a {@link StartElement} is the one XML dictates: first the declarations, then
+ * the attributes. If it were inverted, an attribute could use a prefix declared later in the same
+ * tag --which is legal in XML, but the cursor writer in repairing mode would see it as undeclared
+ * and add a second declaration--.
  */
 final class KajiEventWriter implements XMLEventWriter {
 
@@ -41,7 +41,7 @@ final class KajiEventWriter implements XMLEventWriter {
 
     public void add(XMLEvent event) throws XMLStreamException {
         if (event == null) {
-            throw new XMLStreamException("el evento no puede ser null");
+            throw new XMLStreamException("the event cannot be null");
         }
         int t = event.getEventType();
         if (t == XMLStreamConstants.START_DOCUMENT) {
@@ -73,8 +73,8 @@ final class KajiEventWriter implements XMLEventWriter {
         }
         if (t == XMLStreamConstants.END_ELEMENT) {
             EndElement e = event.asEndElement();
-            // El nombre no se usa: el escritor de cursor lleva su propia pila y cierra el que
-            // corresponde. Pedirle el nombre seria darle la oportunidad de discrepar.
+            // The name is not used: the cursor writer keeps its own stack and closes the one that
+            // corresponds. Giving it the name would give it the chance to disagree.
             if (e != null) {
                 w.writeEndElement();
             }
@@ -113,7 +113,7 @@ final class KajiEventWriter implements XMLEventWriter {
             writeAttributeEvent((Attribute) event);
             return;
         }
-        throw new XMLStreamException("no se sabe escribir el evento de tipo " + t);
+        throw new XMLStreamException("cannot write an event of type " + t);
     }
 
     private void writeNs(Namespace ns) throws XMLStreamException {
@@ -143,7 +143,7 @@ final class KajiEventWriter implements XMLEventWriter {
 
     public void add(XMLEventReader reader) throws XMLStreamException {
         if (reader == null) {
-            throw new XMLStreamException("el lector no puede ser null");
+            throw new XMLStreamException("the reader cannot be null");
         }
         while (reader.hasNext()) {
             add(reader.nextEvent());

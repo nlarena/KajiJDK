@@ -1,38 +1,38 @@
 package java.time.temporal;
 
-// KajiLibrary's java.time.temporal.TemporalField -- un campo de una fecha u hora, como el año o la
-// hora del dia. `ChronoField` es el enum estandar de estos.
+// KajiLibrary's java.time.temporal.TemporalField -- a field of a date or a time, such as the year or
+// the hour of the day. `ChronoField` is the standard enum of these.
 //
-// La interfaz describe el campo desde **dos lados**, y la distincion es la que organiza todo el
-// paquete:
+// The interface describes the field from **two sides**, and that distinction is what organises the
+// whole package:
 //
-//   - la **unidad base** es lo que el campo cuenta (el minuto del dia cuenta minutos);
-//   - la **unidad de rango** es dentro de que lo cuenta (dentro de un dia).
+//   - the **base unit** is what the field counts (the minute of the day counts minutes);
+//   - the **range unit** is within what it counts them (within a day).
 //
-// De ese par sale casi todo lo demas: el rango de valores validos, si el campo es de fecha o de
-// hora, y como se lo ajusta sobre un `Temporal`.
+// Almost everything else follows from that pair: the range of valid values, whether the field is
+// date-based or time-based, and how it is adjusted over a `Temporal`.
 public interface TemporalField {
 
-    /** Lo que este campo cuenta. El minuto del dia cuenta `MINUTES`. */
+    /** What this field counts. The minute of the day counts `MINUTES`. */
     TemporalUnit getBaseUnit();
 
-    /** Dentro de que lo cuenta. El minuto del dia se cuenta dentro de `DAYS`. */
+    /** Within what it counts them. The minute of the day is counted within `DAYS`. */
     TemporalUnit getRangeUnit();
 
     /**
-     * El rango de valores que el campo admite **en general**.
+     * The range of values the field allows **in general**.
      *
-     * <p>Es el rango sin mirar ninguna fecha concreta, y por eso `DAY_OF_MONTH` da 1..28/31: el
-     * maximo depende del mes, y aca todavia no hay mes. Para el rango de una fecha dada esta
-     * {@link #rangeRefinedBy(TemporalAccessor)}.
+     * <p>It is the range without looking at any concrete date, and that is why `DAY_OF_MONTH` gives
+     * 1..28/31: the maximum depends on the month, and here there is no month yet. For a given date's
+     * range there is {@link #rangeRefinedBy(TemporalAccessor)}.
      */
     ValueRange range();
 
     /**
-     * El rango de valores para **ese** temporal.
+     * The range of values for **that** temporal.
      *
-     * <p>Es la version afinada de {@link #range()}: sobre un febrero de año bisiesto,
-     * `DAY_OF_MONTH` devuelve 1..29 y no 1..31.
+     * <p>It is the refined version of {@link #range()}: over a leap year's February,
+     * `DAY_OF_MONTH` returns 1..29 and not 1..31.
      */
     ValueRange rangeRefinedBy(TemporalAccessor temporal);
 
@@ -42,10 +42,10 @@ public interface TemporalField {
     boolean isSupportedBy(TemporalAccessor temporal);
 
     /**
-     * Devuelve `temporal` con este campo puesto en `newValue`.
+     * It returns `temporal` with this field set to `newValue`.
      *
-     * <p>El tipo de retorno repite el del parametro para que el resultado conserve el tipo concreto:
-     * ajustar un `LocalDate` devuelve un `LocalDate`, no un `Temporal` que haya que castear.
+     * <p>The return type repeats the parameter's so the result keeps the concrete type: adjusting a
+     * `LocalDate` returns a `LocalDate`, not a `Temporal` that has to be cast.
      */
     <R extends Temporal> R adjustInto(R temporal, long newValue);
 
@@ -54,10 +54,10 @@ public interface TemporalField {
     boolean isTimeBased();
 
     /**
-     * El nombre del campo en esa region.
+     * The field's name in that region.
      *
-     * <p>Devuelve `toString()` para cualquier region: esta biblioteca no trae los datos de
-     * localizacion de nombres de campo. Se documenta en vez de fingir.
+     * <p>It returns `toString()` for any region: this library does not carry the localisation data
+     * for field names. It is documented instead of faked.
      */
     default String getDisplayName(java.util.Locale locale) {
         if (locale == null) {
@@ -67,10 +67,11 @@ public interface TemporalField {
     }
 
     /**
-     * Resuelve este campo durante el parseo, a partir de los campos ya leidos.
+     * It resolves this field during parsing, out of the fields already read.
      *
-     * <p>`null` --el default-- significa "no se de una forma especial de resolverme": el parser usa
-     * el camino generico. Solo lo sobreescribe un campo que sepa derivarse de otros.
+     * <p>`null` --the default-- means "I know of no special way of resolving myself": the parser
+     * takes the generic path. Only a field that knows how to derive itself from others overrides
+     * it.
      */
     default TemporalAccessor resolve(java.util.Map<TemporalField, Long> fieldValues,
             TemporalAccessor partialTemporal, java.time.format.ResolverStyle resolverStyle) {

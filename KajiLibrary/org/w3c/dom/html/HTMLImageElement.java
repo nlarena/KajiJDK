@@ -1,85 +1,85 @@
 package org.w3c.dom.html;
 
 /**
- * Un `<img>`.
+ * An `<img>`.
  */
 public interface HTMLImageElement extends HTMLElement {
 
-    /** El atributo `lowSrc`. */
+    /** The `lowSrc` attribute. */
     String getLowSrc();
 
-    /** Fija el atributo `lowSrc`. */
+    /** It sets the `lowSrc` attribute. */
     void setLowSrc(String lowSrc);
 
-    /** El atributo `name`. */
+    /** The `name` attribute. */
     String getName();
 
-    /** Fija el atributo `name`. */
+    /** It sets the `name` attribute. */
     void setName(String name);
 
-    /** La alineacion (presentacion; HTML 4 la desaconseja). */
+    /** The alignment (presentational; HTML 4 deprecates it). */
     String getAlign();
 
-    /** Fija la alineacion (presentacion; HTML 4 la desaconseja). */
+    /** It sets the alignment (presentational; HTML 4 deprecates it). */
     void setAlign(String align);
 
-    /** El texto alternativo. */
+    /** The alternative text. */
     String getAlt();
 
-    /** Fija el texto alternativo. */
+    /** It sets the alternative text. */
     void setAlt(String alt);
 
-    /** El borde. */
+    /** The border. */
     String getBorder();
 
-    /** Fija el borde. */
+    /** It sets the border. */
     void setBorder(String border);
 
-    /** El alto. */
+    /** The height. */
     String getHeight();
 
-    /** Fija el alto. */
+    /** It sets the height. */
     void setHeight(String height);
 
-    /** El atributo `hspace`. */
+    /** The `hspace` attribute. */
     String getHspace();
 
-    /** Fija el atributo `hspace`. */
+    /** It sets the `hspace` attribute. */
     void setHspace(String hspace);
 
-    /** El atributo `isMap`. */
+    /** The `isMap` attribute. */
     boolean getIsMap();
 
-    /** Fija el atributo `isMap`. */
+    /** It sets the `isMap` attribute. */
     void setIsMap(boolean isMap);
 
-    /** El atributo `longDesc`. */
+    /** The `longDesc` attribute. */
     String getLongDesc();
 
-    /** Fija el atributo `longDesc`. */
+    /** It sets the `longDesc` attribute. */
     void setLongDesc(String longDesc);
 
-    /** El origen. */
+    /** The source. */
     String getSrc();
 
-    /** Fija el origen. */
+    /** It sets the source. */
     void setSrc(String src);
 
-    /** El atributo `useMap`. */
+    /** The `useMap` attribute. */
     String getUseMap();
 
-    /** Fija el atributo `useMap`. */
+    /** It sets the `useMap` attribute. */
     void setUseMap(String useMap);
 
-    /** El atributo `vspace`. */
+    /** The `vspace` attribute. */
     String getVspace();
 
-    /** Fija el atributo `vspace`. */
+    /** It sets the `vspace` attribute. */
     void setVspace(String vspace);
 
-    /** El ancho. */
+    /** The width. */
     String getWidth();
 
-    /** Fija el ancho. */
+    /** It sets the width. */
     void setWidth(String width);
 }

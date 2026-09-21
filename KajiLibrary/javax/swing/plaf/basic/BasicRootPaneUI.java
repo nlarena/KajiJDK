@@ -20,32 +20,34 @@ import javax.swing.plaf.ComponentInputMapUIResource;
 import javax.swing.plaf.RootPaneUI;
 
 /**
- * El aspecto basico de un panel raiz: no dibuja nada, y ata el Enter al boton por omision.
+ * The basic look and feel of a root pane: it draws nothing, and ties Enter to the default
+ * button.
  *
- * <h2>Lo unico que hace es teclado</h2>
+ * <h2>The only thing it does is keyboard</h2>
  *
- * <p>Un panel raiz no tiene aspecto: es la capa que sostiene al menu, al contenido y al cristal, y
- * lo que se ve son sus hijos. Asi que este UI no instala ni un color. Lo que si instala es el
- * atajo que hace que Enter apriete el boton por omision de la ventana --el que esta marcado con un
- * borde distinto en un dialogo--, que es la unica cosa que el panel raiz tiene que saber hacer.
+ * <p>A root pane has no look: it is the layer that holds the menu, the content and the glass,
+ * and what is seen are its children. So this look and feel does not install a single colour.
+ * What it does install is the shortcut that makes Enter press the frame's default button -- the
+ * one marked with a different border in a dialog --, which is the only thing the root pane has
+ * to know how to do.
  *
- * <h2>El mapa vacio que no es inutil</h2>
+ * <h2>The empty map that is not useless</h2>
  *
- * <p>El mapa de teclas se instala <em>siempre</em>, pero arranca vacio: las cuatro combinaciones
- * --Enter y ctrl-Enter, apretar y soltar-- se agregan cuando la ventana tiene boton por omision y
- * se sacan cuando deja de tenerlo. {@link #propertyChange} es quien lo nota. Esta medido: un panel
- * raiz recien creado tiene el mapa puesto y sin ninguna clave.
+ * <p>The key map is installed <em>always</em>, but it starts out empty: the four combinations
+ * -- Enter and ctrl-Enter, pressed and released -- are added when the frame has a default
+ * button and removed when it stops having one. {@link #propertyChange} is the one that notices
+ * it. It is measured: a newly created root pane has the map set and with no key in it.
  *
- * <p>El mapa es de la clase {@code RootPaneInputMap}, que no aporta nada salvo ser reconocible:
- * {@link #updateDefaultButtonBindings} sube por la cadena de padres hasta encontrarla, y asi sabe
- * cual de todos los mapas es el suyo y cual puso el usuario.
+ * <p>The map is of the class {@code RootPaneInputMap}, which contributes nothing save being
+ * recognizable: {@link #updateDefaultButtonBindings} goes up the chain of parents until it
+ * finds it, and that way it knows which of all the maps is its own and which the user set.
  */
 public class BasicRootPaneUI extends RootPaneUI implements PropertyChangeListener {
 
     private static RootPaneUI rootPaneUI = new BasicRootPaneUI();
 
-    /** Las cuatro combinaciones; ver la nota de la clase. */
-    private static final Object[] ATAJOS_DEL_BOTON_POR_OMISION = {
+    /** The four combinations; see the class note. */
+    private static final Object[] DEFAULT_BUTTON_BINDINGS = {
         "ENTER", "press",
         "released ENTER", "release",
         "ctrl ENTER", "press",
@@ -55,7 +57,7 @@ public class BasicRootPaneUI extends RootPaneUI implements PropertyChangeListene
     public BasicRootPaneUI() {
     }
 
-    /** El aspecto compartido: no guarda nada del panel. */
+    /** The shared look and feel: it keeps nothing of the pane. */
     public static ComponentUI createUI(JComponent c) {
         return rootPaneUI;
     }
@@ -74,23 +76,23 @@ public class BasicRootPaneUI extends RootPaneUI implements PropertyChangeListene
         uninstallKeyboardActions((JRootPane) c);
     }
 
-    /** Nada: ver la nota de la clase. */
+    /** Nothing: see the class note. */
     protected void installDefaults(JRootPane c) {
     }
 
-    /** Nada. */
+    /** Nothing. */
     protected void uninstallDefaults(JRootPane c) {
     }
 
-    /** Nada: los hijos los pone {@link JRootPane} en su constructor. */
+    /** Nothing: the children are set by {@link JRootPane} in its constructor. */
     protected void installComponents(JRootPane root) {
     }
 
-    /** Nada. */
+    /** Nothing. */
     protected void uninstallComponents(JRootPane root) {
     }
 
-    /** Escucha el cambio de boton por omision y el de ancestro. */
+    /** It listens to the change of default button and to the ancestor one. */
     protected void installListeners(JRootPane root) {
         root.addPropertyChangeListener(this);
     }
@@ -99,11 +101,11 @@ public class BasicRootPaneUI extends RootPaneUI implements PropertyChangeListene
         root.removePropertyChangeListener(this);
     }
 
-    /** El mapa de teclas y las tres acciones; ver la nota de la clase. */
+    /** The key map and the three actions; see the class note. */
     protected void installKeyboardActions(JRootPane root) {
         InputMap km = new RootPaneInputMap(root);
         SwingUtilities.replaceUIInputMap(root, JComponent.WHEN_IN_FOCUSED_WINDOW, km);
-        ActionMap am = crearMapaDeAcciones();
+        ActionMap am = createActionMap();
         SwingUtilities.replaceUIActionMap(root, am);
         updateDefaultButtonBindings(root);
     }
@@ -113,18 +115,19 @@ public class BasicRootPaneUI extends RootPaneUI implements PropertyChangeListene
         SwingUtilities.replaceUIActionMap(root, null);
     }
 
-    private ActionMap crearMapaDeAcciones() {
+    private ActionMap createActionMap() {
         ActionMap map = new ActionMapUIResource();
-        map.put("press", new AccionDelBotonPorOmision(true));
-        map.put("release", new AccionDelBotonPorOmision(false));
-        map.put("postPopup", new AccionDeMenuContextual());
+        map.put("press", new DefaultButtonAction(true));
+        map.put("release", new DefaultButtonAction(false));
+        map.put("postPopup", new PopupMenuAction());
         return map;
     }
 
     /**
-     * Pone o saca las cuatro combinaciones segun haya boton por omision.
+     * It puts in or takes out the four combinations according to whether there is a default
+     * button.
      *
-     * <p>Sube por la cadena de padres hasta el mapa propio; ver la nota de la clase.
+     * <p>It goes up the chain of parents as far as its own map; see the class note.
      */
     private void updateDefaultButtonBindings(JRootPane root) {
         InputMap km = SwingUtilities.getUIInputMap(root, JComponent.WHEN_IN_FOCUSED_WINDOW);
@@ -134,12 +137,12 @@ public class BasicRootPaneUI extends RootPaneUI implements PropertyChangeListene
         if (km != null) {
             km.clear();
             if (root.getDefaultButton() != null) {
-                LookAndFeel.loadKeyBindings(km, ATAJOS_DEL_BOTON_POR_OMISION);
+                LookAndFeel.loadKeyBindings(km, DEFAULT_BUTTON_BINDINGS);
             }
         }
     }
 
-    /** Rearma los atajos cuando cambia el boton por omision. */
+    /** It rebuilds the shortcuts when the default button changes. */
     public void propertyChange(PropertyChangeEvent e) {
         if (e.getPropertyName().equals("defaultButton")) {
             JRootPane rootpane = (JRootPane) e.getSource();
@@ -150,7 +153,7 @@ public class BasicRootPaneUI extends RootPaneUI implements PropertyChangeListene
         }
     }
 
-    /** El mapa reconocible; ver la nota de la clase. */
+    /** The recognizable map; see the class note. */
     static class RootPaneInputMap extends ComponentInputMapUIResource {
 
         public RootPaneInputMap(JComponent c) {
@@ -159,17 +162,17 @@ public class BasicRootPaneUI extends RootPaneUI implements PropertyChangeListene
     }
 
     /**
-     * Aprieta o suelta el boton por omision.
+     * It presses or releases the default button.
      *
-     * <p>Aprieta el modelo en vez de llamar a {@code doClick}: asi el boton se ve hundido mientras
-     * la tecla esta abajo, que es lo que hace un boton de verdad.
+     * <p>It presses the model instead of calling {@code doClick}: that way the button looks sunken
+     * while the key is down, which is what a real button does.
      */
-    private static class AccionDelBotonPorOmision extends AbstractAction {
+    private static class DefaultButtonAction extends AbstractAction {
 
-        private final boolean apretar;
+        private final boolean press;
 
-        AccionDelBotonPorOmision(boolean apretar) {
-            this.apretar = apretar;
+        DefaultButtonAction(boolean press) {
+            this.press = press;
         }
 
         public void actionPerformed(ActionEvent e) {
@@ -177,7 +180,7 @@ public class BasicRootPaneUI extends RootPaneUI implements PropertyChangeListene
             JButton owner = root.getDefaultButton();
             if (owner != null && SwingUtilities.getRootPane(owner) == root) {
                 ButtonModel model = owner.getModel();
-                if (apretar) {
+                if (press) {
                     model.setArmed(true);
                     model.setPressed(true);
                 } else {
@@ -192,23 +195,23 @@ public class BasicRootPaneUI extends RootPaneUI implements PropertyChangeListene
         }
     }
 
-    /** Muestra el menu contextual del componente que tiene el foco, si tiene uno. */
-    private static class AccionDeMenuContextual extends AbstractAction {
+    /** It shows the context menu of the component that has the focus, if it has one. */
+    private static class PopupMenuAction extends AbstractAction {
 
         public void actionPerformed(ActionEvent e) {
             JRootPane root = (JRootPane) e.getSource();
-            java.awt.Component foco = java.awt.KeyboardFocusManager
+            java.awt.Component focus = java.awt.KeyboardFocusManager
                     .getCurrentKeyboardFocusManager().getFocusOwner();
-            if (!(foco instanceof JComponent)) {
+            if (!(focus instanceof JComponent)) {
                 return;
             }
-            JPopupMenu menu = ((JComponent) foco).getComponentPopupMenu();
+            JPopupMenu menu = ((JComponent) focus).getComponentPopupMenu();
             if (menu != null) {
-                java.awt.Point p = ((JComponent) foco).getPopupLocation(null);
+                java.awt.Point p = ((JComponent) focus).getPopupLocation(null);
                 if (p == null) {
-                    p = new java.awt.Point(foco.getWidth() / 2, foco.getHeight() / 2);
+                    p = new java.awt.Point(focus.getWidth() / 2, focus.getHeight() / 2);
                 }
-                menu.show(foco, p.x, p.y);
+                menu.show(focus, p.x, p.y);
             }
         }
     }

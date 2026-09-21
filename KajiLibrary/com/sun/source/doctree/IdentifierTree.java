@@ -3,8 +3,8 @@ package com.sun.source.doctree;
 import javax.lang.model.element.Name;
 
 /**
- * Un identificador de Java dentro de un tag: el nombre de un parametro en
- * `@param`, el de un campo en `@serialField`.
+ * A Java identifier inside a tag: a parameter's name in
+ * `@param`, a field's in `@serialField`.
  */
 public interface IdentifierTree extends DocTree {
 

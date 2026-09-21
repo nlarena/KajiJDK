@@ -5,45 +5,45 @@ import java.io.InputStream;
 import java.util.ArrayList;
 
 /**
- * KajiLibrary's javax.imageio.stream.MemoryCacheImageInputStream -- lee un flujo cualquiera,
- * guardando en memoria lo que pasa.
+ * KajiLibrary's javax.imageio.stream.MemoryCacheImageInputStream -- reads any stream, keeping what
+ * goes by in memory.
  *
- * <p>Un {@link InputStream} no se puede rebobinar, y los formatos de imagen necesitan volver. La
- * solucion de esta clase es guardar todo lo leido en memoria.
+ * <p>An {@link InputStream} cannot be rewound, and image formats need to go back. This class's
+ * solution is to keep everything read in memory.
  *
- * <p>La consecuencia es la que se espera: <b>la memoria crece con lo que se lee</b>. Para una imagen
- * de cien megabytes desde un socket, son cien megabytes de monton. {@link FileCacheImageInputStream}
- * es la alternativa cuando eso no entra.
+ * <p>The consequence is the expected one: <b>memory grows with what is read</b>. For a
+ * hundred-megabyte image from a socket, that is a hundred megabytes of heap.
+ * {@link FileCacheImageInputStream} is the alternative when that does not fit.
  *
- * <p>{@link #flushBefore} es lo que lo hace usable: prometer que no se va a volver antes de cierto
- * punto libera todo lo anterior. Un lector que trabaja en franjas puede leer un archivo enorme con
- * memoria acotada, y por eso conviene llamarlo.
+ * <p>{@link #flushBefore} is what makes it usable: promising not to go back before a certain point
+ * frees everything before it. A reader that works in strips can read a huge file with bounded
+ * memory, which is why it is worth calling.
  *
- * <p>El flujo de abajo <b>no</b> se cierra al cerrar este.
+ * <p>The underlying stream is <b>not</b> closed when this one is closed.
  */
 public class MemoryCacheImageInputStream extends ImageInputStreamImpl {
 
-    /** Cuantos bytes tiene cada bloque de la cache. */
+    /** How many bytes each cache block has. */
     private static final int BLOCK_SIZE = 8192;
 
-    /** De donde se lee de verdad. */
+    /** Where it really reads from. */
     private InputStream stream;
 
-    /** Los bloques guardados; el primero corresponde a {@link #cacheStart}. */
+    /** The kept blocks; the first one corresponds to {@link #cacheStart}. */
     private final ArrayList<byte[]> cache = new ArrayList<byte[]>();
 
-    /** A que posicion del flujo corresponde el primer bloque guardado. */
+    /** Which stream position the first kept block corresponds to. */
     private long cacheStart = 0;
 
-    /** Cuantos bytes se leyeron del flujo de abajo en total. */
+    /** How many bytes were read from the underlying stream in total. */
     private long length = 0;
 
-    /** Si el flujo de abajo se termino. */
+    /** Whether the underlying stream ended. */
     private boolean foundEOF = false;
 
     /**
-     * @param stream de donde leer
-     * @throws IllegalArgumentException si es null
+     * @param stream where to read from
+     * @throws IllegalArgumentException if it is null
      */
     public MemoryCacheImageInputStream(InputStream stream) {
         if (stream == null) {
@@ -52,7 +52,7 @@ public class MemoryCacheImageInputStream extends ImageInputStreamImpl {
         this.stream = stream;
     }
 
-    /** Un byte. */
+    /** One byte. */
     @Override
     public int read() throws IOException {
         checkClosed();
@@ -65,7 +65,7 @@ public class MemoryCacheImageInputStream extends ImageInputStreamImpl {
         return value;
     }
 
-    /** Hasta {@code len} bytes. */
+    /** Up to {@code len} bytes. */
     @Override
     public int read(byte[] b, int off, int len) throws IOException {
         checkClosed();
@@ -94,14 +94,15 @@ public class MemoryCacheImageInputStream extends ImageInputStreamImpl {
     }
 
     /**
-     * Libera todo lo anterior a esa posicion. Ver la nota de la clase.
+     * Frees everything before that position. See the class note.
      *
-     * @throws IndexOutOfBoundsException si es anterior al descarte actual o posterior a la posicion
+     * @throws IndexOutOfBoundsException if it is before the current flushed position or after the
+     *     position
      */
     @Override
     public void flushBefore(long pos) throws IOException {
         super.flushBefore(pos);
-        // Se tiran bloques enteros: liberar de a bytes obligaria a mover lo que queda.
+        // Whole blocks are dropped: freeing byte by byte would force moving what is left.
         long firstNeeded = (pos / BLOCK_SIZE) * BLOCK_SIZE;
         while (this.cacheStart + BLOCK_SIZE <= firstNeeded && !this.cache.isEmpty()) {
             this.cache.remove(0);
@@ -109,7 +110,7 @@ public class MemoryCacheImageInputStream extends ImageInputStreamImpl {
         }
     }
 
-    /** Si. Guarda en memoria. */
+    /** Yes. It keeps things in memory. */
     @Override
     public boolean isCached() {
         return true;
@@ -121,13 +122,13 @@ public class MemoryCacheImageInputStream extends ImageInputStreamImpl {
         return false;
     }
 
-    /** Si. */
+    /** Yes. */
     @Override
     public boolean isCachedMemory() {
         return true;
     }
 
-    /** Cierra y suelta la cache. No cierra el flujo de abajo. */
+    /** Closes and releases the cache. Does not close the underlying stream. */
     @Override
     public void close() throws IOException {
         super.close();
@@ -135,16 +136,16 @@ public class MemoryCacheImageInputStream extends ImageInputStreamImpl {
         this.stream = null;
     }
 
-    /** Cierra si nadie lo hizo. */
+    /** Closes it if nobody did. */
     @Override
     protected void finalize() throws Throwable {
         super.finalize();
     }
 
     /**
-     * Lee del flujo de abajo hasta tener esa cantidad de bytes guardados.
+     * Reads from the underlying stream until that many bytes are kept.
      *
-     * @return si se llego; false si el flujo se termino antes
+     * @return whether it got there; false if the stream ended first
      */
     private boolean ensureAvailable(long needed) throws IOException {
         while (this.length < needed && !this.foundEOF) {
@@ -159,8 +160,8 @@ public class MemoryCacheImageInputStream extends ImageInputStreamImpl {
             int read = this.stream.read(block, within, BLOCK_SIZE - within);
             if (read <= 0) {
                 this.foundEOF = true;
-                // El bloque recien agregado quedo sin nada; se saca para que la cuenta de bloques
-                // siga correspondiendo a los bytes guardados.
+                // The block just added was left empty; it is removed so that the block count keeps
+                // matching the bytes kept.
                 if (within == 0 && !this.cache.isEmpty()) {
                     this.cache.remove(this.cache.size() - 1);
                 }
@@ -171,7 +172,7 @@ public class MemoryCacheImageInputStream extends ImageInputStreamImpl {
         return this.length >= needed;
     }
 
-    /** El byte guardado en esa posicion del flujo. */
+    /** The byte kept at that stream position. */
     private byte byteAt(long pos) {
         long offset = pos - this.cacheStart;
         byte[] block = this.cache.get((int) (offset / BLOCK_SIZE));

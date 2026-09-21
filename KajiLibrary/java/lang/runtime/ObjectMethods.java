@@ -5,32 +5,33 @@ import java.lang.invoke.MethodHandles$Lookup;
 import java.lang.invoke.TypeDescriptor;
 
 /**
- * El bootstrap de los tres métodos de un {@code record}.
+ * The bootstrap of a {@code record}'s three methods.
  *
- * <h2>Por qué un bootstrap y no código emitido</h2>
+ * <h2>Why a bootstrap and not emitted code</h2>
  *
- * <p>Un {@code record} promete {@code equals}, {@code hashCode} y {@code toString} derivados de sus
- * componentes. El compilador podría emitir los tres cuerpos en cada record —comparar campo por
- * campo, mezclar hashes, concatenar—, y esa fue la primera idea. El problema es que congelaría la
- * definición exacta de "derivados" en cada class file jamás compilado: cambiar cómo se mezcla un
- * hash obligaría a recompilar el mundo.
+ * <p>A {@code record} promises {@code equals}, {@code hashCode} and {@code toString} derived from its
+ * components. The compiler could emit the three bodies into each record --compare field by field, mix
+ * hashes, concatenate--, and that was the first idea. The problem is that it would freeze the exact
+ * definition of "derived" into every class file ever compiled: changing how a hash is mixed would
+ * force recompiling the world.
  *
- * <p>Con un {@code invokedynamic} el class file sólo dice <em>cuáles</em> son los componentes; el
- * JDK decide en tiempo de ejecución qué hacer con ellos. Es el mismo movimiento que hizo
- * {@link java.lang.invoke.StringConcatFactory} con la concatenación.
+ * <p>With an {@code invokedynamic} the class file only says <em>which</em> the components are; the
+ * JDK decides at run time what to do with them. It is the same move
+ * {@link java.lang.invoke.StringConcatFactory} made with concatenation.
  *
- * <h2>Los tres, desde una sola entrada</h2>
+ * <h2>All three, from a single entry</h2>
  *
- * <p>{@link #bootstrap} atiende a los tres, y los distingue por el <strong>nombre del call site</strong>
- * —el parámetro {@code methodName}—, no por la firma. Es la razón de que la tabla
- * {@code BootstrapMethods} de un record tenga una sola entrada y tres call sites apuntándole.
+ * <p>{@link #bootstrap} serves all three, and tells them apart by the <strong>call site's
+ * name</strong> --the {@code methodName} parameter--, not by the signature. It is the reason a
+ * record's {@code BootstrapMethods} table has one entry with three call sites pointing at it.
  *
- * <h2>Acá lo hace la VM</h2>
+ * <h2>Here the VM does it</h2>
  *
- * <p>Esta VM implementa el bootstrap en Rust y reconoce la clase por su nombre, así que este cuerpo
- * no corre nunca; la declaración existe para que el descriptor del call site resuelva y para que
- * quien lea la biblioteca encuentre la clase donde el JDK la tiene. Es el mismo trato que reciben
- * {@code LambdaMetafactory} y {@code StringConcatFactory}, y está anotado en {@code intrinsecos.md}.
+ * <p>This VM implements the bootstrap in Rust and recognises the class by its name, so this body
+ * never runs; the declaration exists so the call site's descriptor resolves and so whoever reads the
+ * library finds the class where the JDK has it. It is the same treatment
+ * {@code LambdaMetafactory} and {@code StringConcatFactory} get, and it is noted in
+ * {@code intrinsecos.md}.
  *
  * @since 16
  */
@@ -40,25 +41,25 @@ public final class ObjectMethods {
     }
 
     /**
-     * Arma el {@code equals}, el {@code hashCode} o el {@code toString} de un record.
+     * It builds a record's {@code equals}, {@code hashCode} or {@code toString}.
      *
-     * <p>{@code MethodHandles$Lookup} con el nombre <strong>binario</strong> y no
-     * {@code MethodHandles.Lookup}: el nombre Java de un tipo anidado de otro archivo no resuelve
-     * (#101), y esquivarlo con un {@code import} emite {@code LLookup;}, una clase que no existe en
-     * ningún paquete (#208). El nombre binario da el descriptor exacto del JDK, que es lo que un
-     * call site necesita para ligar.
+     * <p>{@code MethodHandles$Lookup} with the <strong>binary</strong> name and not
+     * {@code MethodHandles.Lookup}: the Java name of a nested type from another file does not resolve
+     * (#101), and dodging that with an {@code import} emits {@code LLookup;}, a class that exists in
+     * no package (#208). The binary name gives the JDK's exact descriptor, which is what a call site
+     * needs in order to link.
      *
-     * @param lookup el contexto de acceso del record que se está enlazando
-     * @param methodName cuál de los tres se pide: {@code "equals"}, {@code "hashCode"} o
+     * @param lookup the access context of the record being linked
+     * @param methodName which of the three is asked for: {@code "equals"}, {@code "hashCode"} or
      *     {@code "toString"}
-     * @param type la forma del call site
-     * @param recordClass el record
-     * @param names los nombres de los componentes, separados por punto y coma
-     * @param getters un getter por componente, en el mismo orden que {@code names}
+     * @param type the call site's shape
+     * @param recordClass the record
+     * @param names the components' names, separated by semicolons
+     * @param getters one getter per component, in the same order as {@code names}
      */
     public static Object bootstrap(MethodHandles$Lookup lookup, String methodName,
             TypeDescriptor type, Class<?> recordClass, String names, MethodHandle... getters)
             throws Throwable {
-        throw new UnsupportedOperationException("los metodos de un record los arma la VM");
+        throw new UnsupportedOperationException("a record's methods are built by the VM");
     }
 }

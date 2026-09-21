@@ -6,112 +6,115 @@ import javax.swing.event.RowSorterEvent;
 import javax.swing.event.RowSorterListener;
 
 /**
- * La traduccion entre el orden del modelo y el que se ve.
+ * The translation between the model's order and the one that is seen.
  *
- * <h2>Ordenar sin tocar los datos</h2>
+ * <h2>Sorting without touching the data</h2>
  *
- * <p>Un usuario que hace clic en el encabezado de una columna espera ver las filas ordenadas. La
- * forma ingenua seria reordenar el modelo, y estaria mal: el modelo es de la aplicacion, y el orden
- * es una preferencia de <em>esta</em> vista. Dos tablas sobre los mismos datos tendrian que pelearse
- * por el.
+ * <p>A user who clicks on a column's header expects to see the rows sorted. The naive way would
+ * be to reorder the model, and it would be wrong: the model belongs to the application, and the
+ * order is a preference of <em>this</em> view. Two tables over the same data would have to fight
+ * over it.
  *
- * <p>Esta clase resuelve eso con un mapeo. El modelo no se toca; lo que cambia es que la fila 0 de
- * la vista puede ser la 37 del modelo. De ahi los dos metodos de conversion, y de ahi que sean el
- * origen de casi todos los bugs de una tabla ordenable: usar un indice de vista donde iba uno de
- * modelo devuelve el dato equivocado sin fallar.
+ * <p>This class resolves that with a mapping. The model is not touched; what changes is that the
+ * view's row 0 may be the model's 37. Hence the two conversion methods, and hence they are the
+ * source of almost every bug of a sortable table: using a view index where a model one belonged
+ * returns the wrong datum without failing.
  *
- * <p>Tambien filtra: {@link #getViewRowCount} puede ser menor que {@link #getModelRowCount}.
+ * <p>It also filters: {@link #getViewRowCount} may be smaller than {@link #getModelRowCount}.
  *
- * @param <M> el tipo del modelo
+ * @param <M> the model's type
  * @since 1.6
  */
 public abstract class RowSorter<M> {
 
     private List<RowSorterListener> listeners;
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     public RowSorter() {
         this.listeners = new java.util.ArrayList<RowSorterListener>();
     }
 
-    /** El modelo cuyas filas se ordenan. */
+    /** The model whose rows are sorted. */
     public abstract M getModel();
 
-    /** Alterna el orden de esa columna del modelo: ascendente, descendente, sin ordenar. */
+    /** It cycles that model column's order: ascending, descending, unsorted. */
     public abstract void toggleSortOrder(int column);
 
-    /** El indice en el modelo de la fila que se ve en {@code index}. */
+    /** The model index of the row that is seen at {@code index}. */
     public abstract int convertRowIndexToModel(int index);
 
-    /** Donde se ve la fila {@code index} del modelo, o {@code -1} si esta filtrada. */
+    /** Where the model's row {@code index} is seen, or {@code -1} if it is filtered out. */
     public abstract int convertRowIndexToView(int index);
 
-    /** Fija por que columnas se ordena y en que sentido. */
+    /** It fixes which columns it sorts by and in which direction. */
     public abstract void setSortKeys(List<? extends SortKey> keys);
 
-    /** Por que columnas se ordena. */
+    /** Which columns it sorts by. */
     public abstract List<? extends SortKey> getSortKeys();
 
-    /** Cuantas filas se ven, ya filtradas. */
+    /** How many rows are seen, already filtered. */
     public abstract int getViewRowCount();
 
-    /** Cuantas filas tiene el modelo. */
+    /** How many rows the model has. */
     public abstract int getModelRowCount();
 
-    /** Aviso de que el modelo cambio de forma por completo. */
+    /** Notice that the model changed shape completely. */
     public abstract void modelStructureChanged();
 
-    /** Aviso de que cambio el contenido de todas las filas. */
+    /** Notice that the content of every row changed. */
     public abstract void allRowsChanged();
 
-    /** Aviso de que se insertaron filas en el modelo. */
+    /** Notice that rows were inserted into the model. */
     public abstract void rowsInserted(int firstRow, int endRow);
 
-    /** Aviso de que se borraron filas del modelo. */
+    /** Notice that rows were deleted from the model. */
     public abstract void rowsDeleted(int firstRow, int endRow);
 
-    /** Aviso de que cambiaron filas del modelo. */
+    /** Notice that rows of the model changed. */
     public abstract void rowsUpdated(int firstRow, int endRow);
 
-    /** Aviso de que cambio una columna de un rango de filas. */
+    /** Notice that a column of a range of rows changed. */
     public abstract void rowsUpdated(int firstRow, int endRow, int column);
 
-    /** Agrega un oyente. */
+    /** It adds a listener. */
     public void addRowSorterListener(RowSorterListener l) {
         this.listeners.add(l);
     }
 
-    /** Saca un oyente. */
+    /** It removes a listener. */
     public void removeRowSorterListener(RowSorterListener l) {
         this.listeners.remove(l);
     }
 
-    /** Avisa que cambio por que columnas se ordena, sin que el orden de las filas se rehiciera. */
+    /**
+     * It gives notice that which columns it sorts by changed, without the rows' order being
+     * rebuilt.
+     */
     protected void fireSortOrderChanged() {
-        repartir(new RowSorterEvent(this));
+        distribute(new RowSorterEvent(this));
     }
 
     /**
-     * Avisa que las filas se reordenaron.
+     * It gives notice that the rows were reordered.
      *
-     * @param lastRowIndexToModel donde estaba cada fila antes, o {@code null} si no se sabe. Es lo
-     *     que le permite a una vista conservar la seleccion a traves del reordenamiento
+     * @param lastRowIndexToModel where each row was before, or {@code null} if it is not known. It
+     *     is what allows a view to keep the selection through the reordering
      */
     protected void fireRowSorterChanged(int[] lastRowIndexToModel) {
-        repartir(new RowSorterEvent(this, RowSorterEvent.Type.SORTED, lastRowIndexToModel));
+        distribute(new RowSorterEvent(this, RowSorterEvent.Type.SORTED, lastRowIndexToModel));
     }
 
-    private void repartir(RowSorterEvent e) {
+    private void distribute(RowSorterEvent e) {
         for (int i = this.listeners.size() - 1; i >= 0; i--) {
             this.listeners.get(i).sorterChanged(e);
         }
     }
 
     /**
-     * Por que columna se ordena y en que sentido.
+     * Which column it sorts by and in which direction.
      *
-     * <p>Inmutable, y es una lista y no una sola: ordenar por apellido y despues por nombre necesita
-     * dos claves, y el orden de la lista es el de desempate.
+     * <p>Immutable, and it is a list and not a single one: sorting by surname and then by first
+     * name needs two keys, and the list's order is the tie-breaking one.
      */
     public static class SortKey {
 
@@ -119,22 +122,22 @@ public abstract class RowSorter<M> {
         private final SortOrder sortOrder;
 
         /**
-         * @throws IllegalArgumentException si {@code sortOrder} es {@code null}
+         * @throws IllegalArgumentException if {@code sortOrder} is {@code null}
          */
         public SortKey(int column, SortOrder sortOrder) {
             if (sortOrder == null) {
-                throw new IllegalArgumentException("El sentido no puede ser null");
+                throw new IllegalArgumentException("The sort order cannot be null");
             }
             this.column = column;
             this.sortOrder = sortOrder;
         }
 
-        /** La columna del modelo. */
+        /** The model's column. */
         public final int getColumn() {
             return this.column;
         }
 
-        /** El sentido. */
+        /** The direction. */
         public final SortOrder getSortOrder() {
             return this.sortOrder;
         }
@@ -148,8 +151,8 @@ public abstract class RowSorter<M> {
                 return true;
             }
             if (o instanceof SortKey) {
-                SortKey otra = (SortKey) o;
-                return otra.column == this.column && otra.sortOrder == this.sortOrder;
+                SortKey other = (SortKey) o;
+                return other.column == this.column && other.sortOrder == this.sortOrder;
             }
             return false;
         }

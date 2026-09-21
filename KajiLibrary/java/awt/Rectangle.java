@@ -3,34 +3,32 @@ package java.awt;
 import java.awt.geom.Point2D;
 import java.awt.geom.Rectangle2D;
 
-// java.awt.Rectangle de KajiLibrary -- rectangulo con coordenadas enteras.
+// KajiLibrary's java.awt.Rectangle -- a rectangle with integer coordinates.
 //
-// Igual que Shape y Dimension, esta clase vive en `java.awt` pero se escribio por java.awt.geom: es
-// el tipo de retorno de `Shape.getBounds()` y por lo tanto de `RectangularShape.getBounds()`,
-// `Line2D.getBounds()`, `Path2D.getBounds()` y `Area.getBounds()`. Sin ella esos miembros no se
-// pueden declarar y la interfaz Shape ni siquiera compila.
+// Like Shape and Dimension, this class lives in `java.awt` but was written for java.awt.geom: it is
+// the return type of `Shape.getBounds()` and therefore of `RectangularShape.getBounds()`,
+// `Line2D.getBounds()`, `Path2D.getBounds()` and `Area.getBounds()`. Without it those members
+// cannot be declared and the Shape interface does not even compile.
 //
-// **Superficie deliberadamente parcial.** `java.awt` no es esta tarea y no esta medido. Lo que falta
-// y por que:
+// **The surface is complete.** This note headed a list of what was missing, and every item in the
+// list said it was already there:
 //
-//   * Los miembros con `java.awt.Point` -- `Rectangle(Point)`, `Rectangle(Point, Dimension)`,
-//     `getLocation()`, `setLocation(Point)`, `add(Point)`, `contains(Point)` -- **ya estan**:
-//     faltaban solo porque `java.awt.Point` no existia, y ahora existe.
-//   * Los cuatro nombres de 1.0 -- `inside`, `move`, `reshape`, `resize` -- tambien estan. Estan
-//     obsoletos desde 1.1 pero son API publica, y en el JDK no son alias: son los metodos que
-//     hacen el trabajo y los nombres nuevos delegan en ellos. Se replica esa direccion porque una
-//     subclase que redefina `reshape` --que es lo que hacia el codigo de la epoca-- tiene que
-//     seguir viendo pasar por ahi las llamadas a `setBounds`.
-//   * `getSize()`/`setSize(Dimension)` si estan: Dimension ya existe (la escribio la geometria por
-//     `RectangularShape.setFrame(Point2D, Dimension2D)`).
+//   * The members with `java.awt.Point` -- `Rectangle(Point)`, `Rectangle(Point, Dimension)`,
+//     `getLocation()`, `setLocation(Point)`, `add(Point)`, `contains(Point)` -- are declared. * The
+//     four 1.0 names -- `inside`, `move`, `reshape`, `resize` -- are declared too. In the JDK they
+//     are not aliases: they are the methods that do the work and the new names delegate to them.
+//     That direction is replicated because a subclass that overrides `reshape` --which is what code
+//     of the time did-- has to keep seeing the `setBounds` calls go through it. The JDK marks those
+//     four `@Deprecated`; they are not marked here. * `getSize()`/`setSize(Dimension)` are
+//     declared.
 //
-// Sobre la aritmetica de `setRect(double,...)`: hereda de Rectangle2D una firma en `double` y tiene
-// que meterla en cuatro `int`. El recorte no es "castear y listo": el origen se redondea hacia
-// abajo y la dimension hacia arriba, para que el rectangulo entero **contenga** al de coma flotante
-// en vez de recortarlo, y un ancho que se sale del rango de int se satura en MAX_VALUE en vez de
-// dar la vuelta. Un rectangulo cuyo origen ya esta fuera de rango se marca vacio (ancho -1) porque
-// no hay ningun entero que lo represente; devolver un rectangulo saturado seria decir que cubre
-// algo que no cubre.
+// On the arithmetic of `setRect(double,...)`: it inherits from Rectangle2D a signature in `double`
+// and has to fit it into four `int`. The clipping is not "cast and done": the origin is rounded
+// down and the size up, so that the integer rectangle **contains** the floating-point one instead
+// of cropping it, and a width outside the int range saturates at MAX_VALUE instead of wrapping
+// around. A rectangle whose origin is already out of range is marked empty (width -1) because no
+// integer represents it; returning a saturated rectangle would claim it covers something it does
+// not.
 public class Rectangle extends Rectangle2D implements Shape, java.io.Serializable {
 
     public int x;
@@ -115,7 +113,7 @@ public class Rectangle extends Rectangle2D implements Shape, java.io.Serializabl
         int newh;
 
         if (x > 2.0 * Integer.MAX_VALUE) {
-            // Tan lejos en +X que ningun int lo representa: se marca vacio en vez de saturar.
+            // So far in +X that no int represents it: it is marked empty instead of saturating.
             newx = Integer.MAX_VALUE;
             neww = -1;
         } else {
@@ -150,8 +148,8 @@ public class Rectangle extends Rectangle2D implements Shape, java.io.Serializabl
         return clip(v, true);
     }
 
-    // doceil=false para origenes (piso) y true para dimensiones (techo): el entero resultante
-    // contiene al rectangulo de coma flotante.
+    // doceil=false for origins (floor) and true for sizes (ceiling): the resulting integer
+    // rectangle contains the floating-point one.
     private static int clip(double v, boolean doceil) {
         if (v <= (double) Integer.MIN_VALUE) {
             return Integer.MIN_VALUE;
@@ -203,8 +201,9 @@ public class Rectangle extends Rectangle2D implements Shape, java.io.Serializabl
         int oldv = this.x;
         int newv = oldv + dx;
         if (dx < 0) {
-            // Desbordamiento hacia abajo: el borde izquierdo se satura y el ancho se estira para
-            // que el borde derecho no se mueva. Si tampoco entra, el rectangulo queda vacio.
+            // Overflow downwards: the left edge saturates and the width is stretched so the right
+            // edge does not move. If that does not fit either, the width saturates at MAX_VALUE
+            // (this comment said the rectangle became empty).
             if (newv > oldv) {
                 if (this.width >= 0) {
                     this.width = this.width + (newv - Integer.MIN_VALUE);
@@ -383,8 +382,8 @@ public class Rectangle extends Rectangle2D implements Shape, java.io.Serializabl
         }
         tx2 = tx2 - tx1;
         ty2 = ty2 - ty1;
-        // tx2,ty2 pueden quedar negativos (no hay interseccion); se saturan a int sin normalizar,
-        // igual que Rectangle2D.intersect.
+        // tx2,ty2 can end up negative (no intersection); they are saturated to int without
+        // normalizing, like Rectangle2D.intersect.
         if (tx2 < Integer.MIN_VALUE) {
             tx2 = Integer.MIN_VALUE;
         }
@@ -398,7 +397,7 @@ public class Rectangle extends Rectangle2D implements Shape, java.io.Serializabl
         long tx2 = (long) this.width;
         long ty2 = (long) this.height;
         if ((tx2 | ty2) < 0) {
-            // Este rectangulo es "vacio por dimension negativa": la union es el otro tal cual.
+            // This rectangle is "empty by negative size": the union is the other one as is.
             return new Rectangle(r);
         }
         long rx2 = (long) r.width;

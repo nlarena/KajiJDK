@@ -15,34 +15,34 @@ import javax.swing.plaf.ComponentUI;
 import javax.swing.plaf.DesktopIconUI;
 
 /**
- * El aspecto basico de una ventana interna hecha icono.
+ * The basic look and feel of an internal frame turned into an icon.
  *
- * <h2>El icono es una barra de titulo sin ventana</h2>
+ * <h2>The icon is a title bar with no frame</h2>
  *
- * <p>{@link #iconPane} <em>es</em> un {@link BasicInternalFrameTitlePane}. No se le parece: es uno.
- * Eso explica por que un icono de escritorio muestra el titulo y los botones de restaurar y cerrar,
- * y por que mide lo que mide -- lo que mida esa barra --.
+ * <p>{@link #iconPane} <em>is</em> a {@link BasicInternalFrameTitlePane}. It does not look like
+ * one: it is one. That explains why a desktop icon shows the title and the restore and close
+ * buttons, and why it measures what it measures -- whatever that bar measures --.
  *
- * <p>La consecuencia practica es que esta clase no se puede escribir antes que la barra de titulo, y
- * es por eso que quedo para el final del paquete.
+ * <p>The practical consequence is that this class cannot be written before the title bar, and
+ * that is why it was left for the end of the package.
  *
- * <h2>Doble click restaura</h2>
+ * <h2>A double click restores</h2>
  *
- * <p>{@link #deiconize} es la operacion, y el escucha de mouse la dispara con dos clicks. Un click
- * solo elige la ventana sin restaurarla, que es lo que deja arrastrar el icono a otro lugar del
- * escritorio.
+ * <p>{@link #deiconize} is the operation, and the mouse listener fires it with two clicks. A
+ * single click chooses the frame without restoring it, which is what allows dragging the icon
+ * to another place on the desktop.
  *
- * <h2>Lo que queda dicho</h2>
+ * <h2>What is left said</h2>
  *
- * <p>Arrastrar el icono por el escritorio necesita el administrador de escritorio y un mouse; el
- * escucha esta y no arrastra.
+ * <p>Dragging the icon around the desktop needs the desktop manager and a mouse; the listener
+ * is there and does not drag.
  */
 public class BasicDesktopIconUI extends DesktopIconUI {
 
     protected JInternalFrame.JDesktopIcon desktopIcon;
     protected JInternalFrame frame;
 
-    /** La barra de titulo que se ve como icono; ver la nota de la clase. */
+    /** The title bar that is seen as an icon; see the class note. */
     protected JComponent iconPane;
 
     private MouseInputListener mouseInputListener;
@@ -50,7 +50,7 @@ public class BasicDesktopIconUI extends DesktopIconUI {
     public BasicDesktopIconUI() {
     }
 
-    /** Uno nuevo por icono: guarda la barra que muestra. */
+    /** A new one per icon: it keeps the bar it shows. */
     public static ComponentUI createUI(JComponent c) {
         return new BasicDesktopIconUI();
     }
@@ -72,18 +72,18 @@ public class BasicDesktopIconUI extends DesktopIconUI {
         desktopIcon = null;
     }
 
-    /** Colores, acomodador y opacidad. */
+    /** Colours, layout and opacity. */
     protected void installDefaults() {
         desktopIcon.setLayout(new BorderLayout());
         LookAndFeel.installProperty(desktopIcon, "opaque", Boolean.TRUE);
     }
 
-    /** No saca nada; ver {@link BasicPanelUI#uninstallDefaults}. */
+    /** It removes nothing; see {@link BasicPanelUI#uninstallDefaults}. */
     protected void uninstallDefaults() {
         desktopIcon.setLayout(null);
     }
 
-    /** Arma la barra de titulo y la pone en el centro; ver la nota de la clase. */
+    /** It builds the title bar and puts it in the centre; see the class note. */
     protected void installComponents() {
         iconPane = new BasicInternalFrameTitlePane(frame);
         desktopIcon.setLayout(new BorderLayout());
@@ -114,31 +114,31 @@ public class BasicDesktopIconUI extends DesktopIconUI {
         return new Handler(this);
     }
 
-    /** Devuelve la ventana a su tamano; ver la nota de la clase. */
+    /** It gives the frame back its size; see the class note. */
     public void deiconize() {
         try {
             frame.setIcon(false);
         } catch (PropertyVetoException ex) {
-            // Alguien dijo que no. Es una respuesta valida, no un error.
+            // Somebody said no. It is a valid answer, not an error.
         }
     }
 
-    /** El de la barra de titulo mas los margenes. */
+    /** The title bar's plus the margins. */
     public Dimension getPreferredSize(JComponent c) {
         return desktopIcon.getLayout().preferredLayoutSize(desktopIcon);
     }
 
-    /** Idem con el minimo. */
+    /** The same with the minimum. */
     public Dimension getMinimumSize(JComponent c) {
         return desktopIcon.getLayout().minimumLayoutSize(desktopIcon);
     }
 
-    /** Sin tope. */
+    /** No cap. */
     public Dimension getMaximumSize(JComponent c) {
         return new Dimension(Short.MAX_VALUE, Short.MAX_VALUE);
     }
 
-    /** Cuatro pixeles de aire alrededor. */
+    /** Four pixels of air all around. */
     public Insets getInsets(JComponent c) {
         JInternalFrame f = desktopIcon.getInternalFrame();
         javax.swing.border.Border border = f.getBorder();
@@ -148,7 +148,7 @@ public class BasicDesktopIconUI extends DesktopIconUI {
         return new Insets(0, 0, 0, 0);
     }
 
-    /** Dos clicks restauran la ventana; ver la nota de la clase. */
+    /** Two clicks restore the frame; see the class note. */
     private static class Handler extends MouseInputAdapter implements MouseInputListener {
 
         private final BasicDesktopIconUI ui;
@@ -165,7 +165,7 @@ public class BasicDesktopIconUI extends DesktopIconUI {
             try {
                 ui.frame.setSelected(true);
             } catch (PropertyVetoException ex) {
-                // Alguien dijo que no.
+                // Somebody said no.
             }
         }
     }

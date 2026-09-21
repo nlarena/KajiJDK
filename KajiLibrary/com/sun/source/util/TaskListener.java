@@ -1,19 +1,19 @@
 package com.sun.source.util;
 
 /**
- * Se entera de cada fase de la compilacion.
+ * It learns about each phase of the compilation.
  *
- * <p>Los dos metodos tienen cuerpo vacio a proposito: casi nadie necesita los dos, y obligar a
- * escribir uno vacio no aporta nada. Es el mismo criterio que el de un adaptador de eventos, resuelto
- * con {@code default} en vez de con una clase extra.
+ * <p>The two methods have an empty body on purpose: almost nobody needs both, and forcing an
+ * empty one to be written contributes nothing. It is the same criterion as an event adapter's,
+ * resolved with {@code default} instead of with an extra class.
  */
 public interface TaskListener {
 
-    /** Empieza una fase. */
+    /** A phase starts. */
     default void started(TaskEvent e) {
     }
 
-    /** Termina una fase. */
+    /** A phase finishes. */
     default void finished(TaskEvent e) {
     }
 }

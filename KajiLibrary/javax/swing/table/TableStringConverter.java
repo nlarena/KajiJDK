@@ -1,28 +1,28 @@
 package javax.swing.table;
 
 /**
- * Convierte el valor de una celda a texto, para ordenar y filtrar.
+ * Converts a cell's value to text, for sorting and filtering.
  *
- * <h2>Por que no alcanza con {@code toString}</h2>
+ * <h2>Why {@code toString} is not enough</h2>
  *
- * <p>El {@code toString} de un objeto es para el programador; lo que la tabla muestra es para el
- * usuario, y muchas veces no son lo mismo -- una fecha, un importe, un enumerado con nombres
- * traducidos --. Ordenar o filtrar por el primero da un resultado que no se parece a lo que se ve.
+ * <p>An object's {@code toString} is for the programmer; what the table shows is for the user,
+ * and many times they are not the same -- a date, an amount, an enum with translated names --.
+ * Sorting or filtering by the first gives a result that does not look like what is seen.
  *
- * <p>Un convertidor propio resuelve eso sin tocar el modelo: el modelo sigue guardando objetos y la
- * vista los ordena por como se leen.
+ * <p>A converter of one's own solves that without touching the model: the model goes on keeping
+ * objects and the view sorts them by how they read.
  */
 public abstract class TableStringConverter {
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected TableStringConverter() {
     }
 
     /**
-     * El texto de esa celda.
+     * That cell's text.
      *
-     * <p>Los indices son del <strong>modelo</strong>, no de la vista: se llama mientras se decide
-     * el orden, cuando el de la vista todavia no existe.
+     * <p>The indices are the <strong>model</strong>'s, not the view's: it is called while the order
+     * is being decided, when the view's do not yet exist.
      */
     public abstract String toString(TableModel model, int row, int column);
 }

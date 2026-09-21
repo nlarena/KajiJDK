@@ -3,32 +3,31 @@ package java.lang.management;
 import javax.management.openmbean.CompositeData;
 
 /**
- * KajiLibrary's java.lang.management.LockInfo -- que candado esta esperando un hilo.
+ * KajiLibrary's java.lang.management.LockInfo -- which lock a thread is waiting for.
  *
- * <p>Dos datos: la clase del objeto que hace de candado, y su {@code System.identityHashCode}. No
- * guarda el objeto: si lo hiciera, un volcado de hilos impediria que el recolector se llevara todo lo
- * que alguien estaba esperando.
+ * <p>Two data: the class of the object acting as the lock, and its
+ * {@code System.identityHashCode}. It does not keep the object: if it did, a thread dump would stop
+ * the collector taking away everything somebody was waiting on.
  *
- * <p>El codigo de identidad es lo que permite cruzar la informacion: dos hilos esperando el
- * <b>mismo</b> candado muestran el mismo par de clase y codigo. Es asi como se detecta un ciclo de
- * espera a mano.
+ * <p>The identity code is what allows cross-referencing: two threads waiting for the <b>same</b> lock
+ * show the same class-and-code pair. That is how a wait cycle is spotted by hand.
  *
- * <p>No es un identificador perfecto -- dos objetos pueden compartir codigo de identidad-- pero para
- * un volcado alcanza.
+ * <p>It is not a perfect identifier -- two objects can share an identity code-- but for a dump it is
+ * enough.
  *
- * <p>Cubre tanto los monitores como los candados de {@code java.util.concurrent};
- * {@link MonitorInfo} es la subclase que agrega lo que solo tienen los monitores.
+ * <p>It covers both monitors and {@code java.util.concurrent}'s locks; {@link MonitorInfo} is the
+ * subclass adding what only monitors have.
  */
 public class LockInfo {
 
-    /** La clase del candado. */
+    /** The lock's class. */
     private final String className;
 
-    /** Su codigo de identidad. */
+    /** Its identity code. */
     private final int identityHashCode;
 
     /**
-     * @throws NullPointerException si el nombre de clase es null
+     * @throws NullPointerException if the class name is null
      */
     public LockInfo(String className, int identityHashCode) {
         if (className == null) {
@@ -38,27 +37,27 @@ public class LockInfo {
         this.identityHashCode = identityHashCode;
     }
 
-    /** La clase del candado. */
+    /** The lock's class. */
     public String getClassName() {
         return this.className;
     }
 
-    /** Su codigo de identidad. */
+    /** Its identity code. */
     public int getIdentityHashCode() {
         return this.identityHashCode;
     }
 
-    /** La clase, arroba, y el codigo en hexadecimal. Igual que {@code Object.toString}. */
+    /** The class, an at sign, and the code in hexadecimal. Just like {@code Object.toString}. */
     @Override
     public String toString() {
         return this.className + '@' + Integer.toHexString(this.identityHashCode);
     }
 
     /**
-     * Lo mismo, leido de un {@link CompositeData}.
+     * The same, read out of a {@link CompositeData}.
      *
-     * @return el objeto, o null si el dato es null
-     * @throws IllegalArgumentException si el dato no describe un {@code LockInfo}
+     * @return the object, or null if the datum is null
+     * @throws IllegalArgumentException if the datum does not describe a {@code LockInfo}
      */
     public static LockInfo from(CompositeData cd) {
         if (cd == null) {

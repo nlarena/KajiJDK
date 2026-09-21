@@ -4,23 +4,25 @@ import java.io.IOException;
 import java.util.Map;
 
 /**
- * KajiLibrary's javax.management.remote.JMXConnectorProvider -- sabe hacer conectores de un protocolo.
+ * KajiLibrary's javax.management.remote.JMXConnectorProvider -- knows how to make connectors of a
+ * protocol.
  *
- * <p>Lo que implementa quien agrega un protocolo nuevo. {@link JMXConnectorFactory} lo encuentra por
- * {@link java.util.ServiceLoader}, o por el nombre de clase derivado del protocolo; ver ahi las dos
- * formas.
+ * <p>What whoever adds a new protocol implements. {@link JMXConnectorFactory} finds it through
+ * {@link java.util.ServiceLoader}, or by the class name derived from the protocol; see both ways
+ * there.
  *
- * <p>Un proveedor que reconoce el protocolo pero no puede con <b>ese</b> entorno lanza
- * {@link JMXProviderException}, y la fabrica sigue probando con los demas. Devolver null no esta
- * permitido.
+ * <p>A provider that recognizes the protocol but cannot cope with <b>that</b> environment throws
+ * {@link JMXProviderException}, and the factory goes on trying the others. Returning null is not
+ * allowed.
  */
 public interface JMXConnectorProvider {
 
     /**
-     * Un conector sin conectar para esa direccion.
+     * An unconnected connector for that address.
      *
-     * @throws JMXProviderException si reconoce el protocolo y no puede con este entorno
-     * @throws IOException si fallo por otra cosa
+     * @throws JMXProviderException if it recognizes the protocol and cannot cope with this
+     *     environment
+     * @throws IOException if it failed for something else
      */
     JMXConnector newJMXConnector(JMXServiceURL serviceURL, Map<String, ?> environment)
         throws IOException;

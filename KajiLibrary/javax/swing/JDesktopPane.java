@@ -9,35 +9,35 @@ import javax.swing.plaf.ComponentUI;
 import javax.swing.plaf.DesktopPaneUI;
 
 /**
- * El contenedor de ventanas internas.
+ * The container of internal frames.
  *
- * <h2>Es un panel por capas</h2>
+ * <h2>It is a layered pane</h2>
  *
- * <p>Hereda de {@link JLayeredPane} porque las ventanas se superponen y hay que saber cual esta
- * arriba. Lo que agrega es la nocion de <em>ventana activa</em> y un {@link DesktopManager} que
- * decide como se comportan.
+ * <p>It inherits from {@link JLayeredPane} because the frames overlap and one has to know which
+ * is on top. What it adds is the notion of the <em>active frame</em> and a
+ * {@link DesktopManager} that decides how they behave.
  *
- * <h2>Los iconos tambien son hijos</h2>
+ * <h2>The icons are children too</h2>
  *
- * <p>Una ventana minimizada se saca del escritorio y se pone su {@code JDesktopIcon} en su lugar.
- * Por eso {@link #getAllFrames} mira las dos cosas: los hijos que son ventanas y los que son
- * iconos, preguntandole a cada icono por su ventana. Recorrer los hijos buscando solo
- * {@code JInternalFrame} perderia las minimizadas.
+ * <p>A minimized frame is taken off the desktop and its {@code JDesktopIcon} is put in its
+ * place. That is why {@link #getAllFrames} looks at both things: the children that are frames
+ * and those that are icons, asking each icon for its frame. Walking the children looking only
+ * for {@code JInternalFrame} would lose the minimized ones.
  *
- * <h2>Arrastre en vivo o con contorno</h2>
+ * <h2>Live dragging or with an outline</h2>
  *
- * <p>{@link #LIVE_DRAG_MODE} redibuja la ventana entera mientras se la mueve;
- * {@link #OUTLINE_DRAG_MODE} dibuja solo un rectangulo y mueve al soltar. El segundo existe para
- * escritorios con muchas ventanas, donde redibujar en vivo se arrastra.
+ * <p>{@link #LIVE_DRAG_MODE} redraws the whole frame while it is moved;
+ * {@link #OUTLINE_DRAG_MODE} draws only a rectangle and moves on releasing. The second exists
+ * for desktops with many frames, where redrawing live drags.
  */
 public class JDesktopPane extends JLayeredPane implements Accessible {
 
     private static final String uiClassID = "DesktopPaneUI";
 
-    /** Se redibuja la ventana entera mientras se la mueve. */
+    /** The whole frame is redrawn while it is moved. */
     public static final int LIVE_DRAG_MODE = 0;
 
-    /** Se dibuja solo el contorno y se mueve al soltar. */
+    /** Only the outline is drawn and it moves on releasing. */
     public static final int OUTLINE_DRAG_MODE = 1;
 
     transient DesktopManager desktopManager;
@@ -46,7 +46,7 @@ public class JDesktopPane extends JLayeredPane implements Accessible {
     private int dragMode = LIVE_DRAG_MODE;
     private boolean dragModeSet = false;
 
-    /** Un escritorio vacio. */
+    /** An empty desktop. */
     public JDesktopPane() {
         setFocusCycleRoot(true);
         setOpaque(true);
@@ -62,11 +62,11 @@ public class JDesktopPane extends JLayeredPane implements Accessible {
     }
 
     /**
-     * Como se ve el arrastre de una ventana.
+     * How a frame's dragging is seen.
      *
-     * <p>No valida nada, y esto esta medido contra el JDK: su documentacion promete un
-     * {@link IllegalArgumentException} para un modo desconocido y el codigo no lo lanza. Se copia
-     * el codigo y no la promesa -- un modo raro se guarda y lo ignora el aspecto.
+     * <p>It validates nothing, and this is measured against the JDK: its documentation promises an
+     * {@link IllegalArgumentException} for an unknown mode and the code does not throw it. The code
+     * is copied and not the promise -- an odd mode is kept and the look and feel ignores it.
      */
     public void setDragMode(int dragMode) {
         int oldDragMode = this.dragMode;
@@ -79,7 +79,7 @@ public class JDesktopPane extends JLayeredPane implements Accessible {
         return dragMode;
     }
 
-    /** Quien decide como se comportan las ventanas; ver {@link DesktopManager}. */
+    /** Who decides how the frames behave; see {@link DesktopManager}. */
     public DesktopManager getDesktopManager() {
         return desktopManager;
     }
@@ -97,7 +97,7 @@ public class JDesktopPane extends JLayeredPane implements Accessible {
         return uiClassID;
     }
 
-    /** Todas las ventanas, minimizadas incluidas; ver la nota de la clase. */
+    /** Every frame, minimized ones included; see the class note. */
     public JInternalFrame[] getAllFrames() {
         Vector<JInternalFrame> vResults = new Vector<JInternalFrame>(10);
         int count = getComponentCount();
@@ -106,8 +106,8 @@ public class JDesktopPane extends JLayeredPane implements Accessible {
             if (next instanceof JInternalFrame) {
                 vResults.addElement((JInternalFrame) next);
             } else if (next instanceof JInternalFrame.JDesktopIcon) {
-                JInternalFrame.JDesktopIcon icono = (JInternalFrame.JDesktopIcon) next;
-                JInternalFrame tmp = icono.getInternalFrame();
+                JInternalFrame.JDesktopIcon icon = (JInternalFrame.JDesktopIcon) next;
+                JInternalFrame tmp = icon.getInternalFrame();
                 if (tmp != null) {
                     vResults.addElement(tmp);
                 }
@@ -118,22 +118,23 @@ public class JDesktopPane extends JLayeredPane implements Accessible {
         return results;
     }
 
-    /** La ventana activa, o nulo si ninguna lo esta. */
+    /** The active frame, or null if none is. */
     public JInternalFrame getSelectedFrame() {
         return selectedFrame;
     }
 
     /**
-     * Anota cual es la ventana activa.
+     * It notes which the active frame is.
      *
-     * <p>Solo anota: no la activa. Quien activa es {@link JInternalFrame#setSelected}, y este
-     * metodo esta para que el escritorio se entere.
+     * <p>It only notes: it does not activate it. Who activates is
+     * {@link JInternalFrame#setSelected}, and this method is there for the desktop to learn about
+     * it.
      */
     public void setSelectedFrame(JInternalFrame f) {
         selectedFrame = f;
     }
 
-    /** Las ventanas de esa capa, minimizadas incluidas. */
+    /** That layer's frames, minimized ones included. */
     public JInternalFrame[] getAllFramesInLayer(int layer) {
         Vector<JInternalFrame> vResults = new Vector<JInternalFrame>(10);
         int count = getComponentCount();
@@ -145,8 +146,8 @@ public class JDesktopPane extends JLayeredPane implements Accessible {
                     vResults.addElement(v);
                 }
             } else if (next instanceof JInternalFrame.JDesktopIcon) {
-                JInternalFrame.JDesktopIcon icono = (JInternalFrame.JDesktopIcon) next;
-                JInternalFrame tmp = icono.getInternalFrame();
+                JInternalFrame.JDesktopIcon icon = (JInternalFrame.JDesktopIcon) next;
+                JInternalFrame tmp = icon.getInternalFrame();
                 if (tmp != null && tmp.getLayer() == layer) {
                     vResults.addElement(tmp);
                 }
@@ -158,65 +159,69 @@ public class JDesktopPane extends JLayeredPane implements Accessible {
     }
 
     /**
-     * Activa la ventana siguiente o la anterior.
+     * It activates the next frame or the previous one.
      *
-     * <p>Es lo que hace Ctrl+F6. Da la vuelta al llegar al final: en un escritorio no hay una
-     * ventana final en la que quedarse trabado.
+     * <p>It is what Ctrl+F6 does. It wraps round on reaching the end: on a desktop there is no
+     * final frame to get stuck on.
      *
-     * @return la que quedo activa, o nulo si no hay ninguna.
+     * @return the one that was left active, or null if there is none.
      */
     public JInternalFrame selectFrame(boolean forward) {
-        JInternalFrame[] marcos = getAllFrames();
-        if (marcos.length == 0) {
+        JInternalFrame[] frames = getAllFrames();
+        if (frames.length == 0) {
             return null;
         }
-        int actual = -1;
+        int current = -1;
         JInternalFrame sel = getSelectedFrame();
-        for (int i = 0; i < marcos.length; i++) {
-            if (marcos[i] == sel) {
-                actual = i;
+        for (int i = 0; i < frames.length; i++) {
+            if (frames[i] == sel) {
+                current = i;
             }
         }
-        int siguiente;
-        if (actual < 0) {
-            siguiente = forward ? 0 : marcos.length - 1;
+        int next;
+        if (current < 0) {
+            next = forward ? 0 : frames.length - 1;
         } else {
-            siguiente = forward ? actual + 1 : actual - 1;
-            if (siguiente >= marcos.length) {
-                siguiente = 0;
-            } else if (siguiente < 0) {
-                siguiente = marcos.length - 1;
+            next = forward ? current + 1 : current - 1;
+            if (next >= frames.length) {
+                next = 0;
+            } else if (next < 0) {
+                next = frames.length - 1;
             }
         }
-        JInternalFrame elegido = marcos[siguiente];
+        JInternalFrame chosen = frames[next];
         try {
-            elegido.setSelected(true);
-            elegido.moveToFront();
+            chosen.setSelected(true);
+            chosen.moveToFront();
         } catch (java.beans.PropertyVetoException e) {
-            // Si se veta, la seleccion no cambia; se devuelve igual cual se intento.
+            // If it is vetoed, the selection does not change; the one that was attempted is
+            // returned all the same.
         }
-        return elegido;
+        return chosen;
     }
 
     /**
-     * Saca un hijo.
+     * It removes a child.
      *
-     * <p>Sacar la ventana activa <em>no</em> deja al escritorio sin activa: {@link #getSelectedFrame}
-     * sigue devolviendo la que se fue. Parece un descuido y es lo que hace el JDK -- esta medido --,
-     * asi que se copia. Quien saca una ventana a mano y quiere el escritorio limpio tiene que
-     * llamar el mismo a {@link #setSelectedFrame} con nulo; el administrador de escritorio ya lo
-     * hace al cerrar.
+     * <p>Removing the active frame does <em>not</em> leave the desktop with no active one:
+     * {@link #getSelectedFrame} goes on returning the one that left. It looks like an oversight
+     * and it is what the JDK does -- it is measured --, so it is copied. Whoever removes a frame
+     * by hand and wants the desktop clean has to call {@link #setSelectedFrame} with null
+     * themselves; the desktop manager already does it on closing.
      */
     public void remove(Component comp) {
         super.remove(comp);
     }
 
-    /** Saca el hijo de esa posicion; ver {@link #remove(Component)}. */
+    /** It removes the child at that position; see {@link #remove(Component)}. */
     public void remove(int index) {
         super.remove(index);
     }
 
-    /** Saca todos; tampoco olvida la activa. Ver {@link #remove(Component)}. */
+    /**
+     * It removes them all; it does not forget the active one either. See {@link
+     * #remove(Component)}.
+     */
     public void removeAll() {
         super.removeAll();
     }

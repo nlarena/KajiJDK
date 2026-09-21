@@ -3,17 +3,17 @@ package javax.print;
 import javax.print.attribute.PrintRequestAttributeSet;
 
 /**
- * KajiLibrary's javax.print.MultiDocPrintJob -- un trabajo que acepta varios documentos.
+ * KajiLibrary's javax.print.MultiDocPrintJob -- a job that accepts several documents.
  *
- * <p>Los documentos van en un solo trabajo, no en varios. La diferencia importa: comparten los
- * atributos de la peticion, salen juntos en la cola, y se cancelan juntos.
+ * <p>The documents go in a single job, not in several. The difference matters: they share the
+ * request's attributes, come out together in the queue, and are cancelled together.
  */
 public interface MultiDocPrintJob extends DocPrintJob {
 
     /**
-     * Imprime todos.
+     * Prints them all.
      *
-     * @throws PrintException si algo fallo
+     * @throws PrintException if something failed
      */
     void print(MultiDoc multiDoc, PrintRequestAttributeSet attributes) throws PrintException;
 }

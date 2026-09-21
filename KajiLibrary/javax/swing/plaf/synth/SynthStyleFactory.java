@@ -3,31 +3,32 @@ package javax.swing.plaf.synth;
 import javax.swing.JComponent;
 
 /**
- * De donde salen los estilos.
+ * Where the styles come from.
  *
- * <h2>Por que una fabrica y no una tabla</h2>
+ * <h2>Why a factory and not a table</h2>
  *
- * <p>Porque el estilo de un componente puede depender de mas cosas que su tipo: de su nombre, de
- * quien es su contenedor, de una propiedad que le pusieron. Una tabla solo podria mirar el tipo; una
- * fabrica mira lo que quiera.
+ * <p>Because a component's style may depend on more things than its type: on its name, on who
+ * its container is, on a property that was set on it. A table could only look at the type; a
+ * factory looks at whatever it likes.
  *
- * <p>Es el punto donde un aspecto grafico decide como se ve todo. {@link SynthLookAndFeel} le pide
- * un estilo por cada componente y por cada region de cada componente.
+ * <p>It is the point where a look and feel decides how everything looks.
+ * {@link SynthLookAndFeel} asks it for a style for each component and for each region of each
+ * component.
  *
  * @since 1.5
  */
 public abstract class SynthStyleFactory {
 
-    /** Una fabrica. */
+    /** A factory. */
     public SynthStyleFactory() {
     }
 
     /**
-     * El estilo de esa region de ese componente.
+     * That component's style for that region.
      *
-     * @param c el componente
-     * @param id la region
-     * @return el estilo; no puede ser {@code null}
+     * @param c the component
+     * @param id the region
+     * @return the style; it cannot be {@code null}
      */
     public abstract SynthStyle getStyle(JComponent c, Region id);
 }

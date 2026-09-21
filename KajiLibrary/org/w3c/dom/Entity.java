@@ -1,40 +1,43 @@
 package org.w3c.dom;
 
 /**
- * KajiLibrary's org.w3c.dom.Entity -- una entidad declarada en el DTD.
+ * KajiLibrary's org.w3c.dom.Entity -- an entity declared in the DTD.
  *
- * <p>No confundirla con {@link EntityReference}: esta es la **declaracion**, la que vive en el
- * {@link NamedNodeMap} de {@link DocumentType#getEntities}, y aquella es cada **uso** en el
- * documento. La declaracion no tiene padre y no aparece recorriendo el arbol.
+ * <p>Not to be confused with {@link EntityReference}: this is the **declaration**, the one that
+ * lives in the {@link NamedNodeMap} of {@link DocumentType#getEntities}, and that one is each
+ * **use** in the document. The declaration has no parent and does not appear when walking the tree.
  *
- * <p>Toda la interfaz --y el subarbol de hijos, que es el texto de reemplazo ya parseado-- es de
- * solo lectura, por la misma razon que {@link DocumentType}: no hay forma coherente de cambiar una
- * entidad cuando ya hay referencias expandidas con la version anterior.
+ * <p>The whole interface --and the subtree of children, which is the already parsed replacement
+ * text-- is read-only, for the same reason as {@link DocumentType}: there is no coherent way of
+ * changing an entity when there are already references expanded with the previous version.
  *
- * <p>Los tres identificadores distinguen los tres tipos de entidad: una **interna** no tiene ni
- * {@code publicId} ni {@code systemId}; una **externa parseada** tiene {@code systemId} y no
- * {@code notationName}; y una **no parseada** --un binario, una imagen-- tiene {@code notationName},
- * y entonces sus hijos son {@code null} porque no hay nada XML que parsear adentro.
+ * <p>The three identifiers tell the three types of entity apart: an **internal** one has neither
+ * {@code publicId} nor {@code systemId}; an **external parsed** one has a {@code systemId} and no
+ * {@code notationName}; and an **unparsed** one --a binary, an image-- has a {@code notationName},
+ * and then its children are {@code null} because there is nothing XML to parse inside.
  *
- * <p>Interfaz declarada entera.
+ * <p>The interface is declared whole.
  */
 public interface Entity extends Node {
 
-    /** El identificador publico, o {@code null}. */
+    /** The public identifier, or {@code null}. */
     public String getPublicId();
 
-    /** El identificador de sistema, o {@code null} si la entidad es interna. */
+    /** The system identifier, or {@code null} if the entity is internal. */
     public String getSystemId();
 
-    /** El nombre de la notacion si la entidad es no parseada; {@code null} si es parseada. */
+    /** The name of the notation if the entity is unparsed; {@code null} if it is parsed. */
     public String getNotationName();
 
-    /** La codificacion detectada al leer la entidad, o {@code null} si no vino de un parser. */
+    /**
+     * The encoding detected when reading the entity, or {@code null} if it did not come from a
+     * parser.
+     */
     public String getInputEncoding();
 
-    /** La codificacion declarada en la declaracion de texto de la entidad, o {@code null}. */
+    /** The encoding declared in the text declaration of the entity, or {@code null}. */
     public String getXmlEncoding();
 
-    /** La version XML declarada en la entidad, o {@code null}. */
+    /** The XML version declared in the entity, or {@code null}. */
     public String getXmlVersion();
 }

@@ -20,27 +20,28 @@ import javax.swing.text.JTextComponent;
 import javax.swing.text.PlainDocument;
 
 /**
- * Un campo de texto de una sola linea.
+ * A single-line text field.
  *
- * <h2>Una linea, y lo que eso implica</h2>
+ * <h2>One line, and what that implies</h2>
  *
- * <p>El documento es un {@link PlainDocument} al que se le filtran los fines de linea: no es que
- * el campo no los muestre, es que no los deja entrar. Esa decision esta en
- * {@link #createDefaultModel} y es lo que hace que pegar un texto de varias lineas en un campo
- * pegue una sola.
+ * <p>The document is a {@link PlainDocument} whose line ends are filtered out: it is not that
+ * the field does not show them, it is that it does not let them in. That decision is in
+ * {@link #createDefaultModel} and it is what makes pasting a text of several lines into a field
+ * paste a single one.
  *
- * <p>Enter dispara un {@link ActionEvent} en vez de escribir: es la unica tecla que un campo trata
- * distinto, y es lo que permite que un formulario se envie desde el teclado.
+ * <p>Enter fires an {@link ActionEvent} instead of typing: it is the only key a field treats
+ * differently, and it is what allows a form to be sent from the keyboard.
  *
- * <h2>El ancho preferido</h2>
+ * <h2>The preferred width</h2>
  *
- * <p>Se pide en <em>columnas</em>, no en pixeles, y una columna es el ancho de la letra "m" de la
- * fuente actual. Es una medida vieja y sigue siendo la mejor que hay: un campo de veinte columnas
- * sigue entrando veinte caracteres cuando alguien cambia el tamano de la letra.
+ * <p>It is asked for in <em>columns</em>, not in pixels, and a column is the width of the
+ * current typeface's letter "m". It is an old measurement and it is still the best there is:
+ * a field of twenty columns goes on fitting twenty characters when somebody changes the letter
+ * size.
  */
 public class JTextField extends JTextComponent implements SwingConstants {
 
-    /** El nombre de la accion que dispara Enter. */
+    /** The name of the action Enter fires. */
     public static final String notifyAction = "notify-field-accept";
 
     private static final String uiClassID = "TextFieldUI";
@@ -53,7 +54,7 @@ public class JTextField extends JTextComponent implements SwingConstants {
     private String command;
     private PropertyChangeListener actionPropertyChangeListener;
 
-    /** Un campo vacio. */
+    /** An empty field. */
     public JTextField() {
         this(null, null, 0);
     }
@@ -62,7 +63,7 @@ public class JTextField extends JTextComponent implements SwingConstants {
         this(null, text, 0);
     }
 
-    /** Un campo vacio de ese ancho en columnas. */
+    /** An empty field of that width in columns. */
     public JTextField(int columns) {
         this(null, null, columns);
     }
@@ -71,7 +72,7 @@ public class JTextField extends JTextComponent implements SwingConstants {
         this(null, text, columns);
     }
 
-    /** El constructor al que llegan todos los demas. */
+    /** The constructor all the others reach. */
     public JTextField(Document doc, String text, int columns) {
         if (columns < 0) {
             throw new IllegalArgumentException("columns less than zero.");
@@ -99,7 +100,7 @@ public class JTextField extends JTextComponent implements SwingConstants {
         super.setDocument(doc);
     }
 
-    /** Si: un campo tiene tamano propio y el maquetado para aca. */
+    /** Yes: a field has a size of its own and the layout comes here. */
     public boolean isValidateRoot() {
         return false;
     }
@@ -108,7 +109,7 @@ public class JTextField extends JTextComponent implements SwingConstants {
         return horizontalAlignment;
     }
 
-    /** Como se alinea el texto cuando sobra lugar. */
+    /** How the text is aligned when there is room left over. */
     public void setHorizontalAlignment(int alignment) {
         if (alignment == horizontalAlignment) {
             return;
@@ -125,7 +126,7 @@ public class JTextField extends JTextComponent implements SwingConstants {
         repaint();
     }
 
-    /** Un documento de texto plano sin fines de linea; ver la nota de la clase. */
+    /** A plain text document with no line ends; see the class note. */
     protected Document createDefaultModel() {
         return new PlainDocument();
     }
@@ -145,7 +146,7 @@ public class JTextField extends JTextComponent implements SwingConstants {
         }
     }
 
-    /** El ancho de una columna: el de la letra "m"; ver la nota de la clase. */
+    /** A column's width: that of the letter "m"; see the class note. */
     protected int getColumnWidth() {
         if (columnWidth == 0) {
             FontMetrics metrics = getFontMetrics(getFont());
@@ -154,7 +155,7 @@ public class JTextField extends JTextComponent implements SwingConstants {
         return columnWidth;
     }
 
-    /** El ancho de las columnas pedidas, o el del texto si no se pidieron. */
+    /** The width of the columns asked for, or the text's if none were asked for. */
     public Dimension getPreferredSize() {
         Dimension size = super.getPreferredSize();
         if (columns != 0) {
@@ -164,7 +165,7 @@ public class JTextField extends JTextComponent implements SwingConstants {
         return size;
     }
 
-    /** Cambiar la fuente cambia el ancho de columna. */
+    /** Changing the typeface changes the column's width. */
     public void setFont(Font f) {
         super.setFont(f);
         columnWidth = 0;
@@ -186,7 +187,7 @@ public class JTextField extends JTextComponent implements SwingConstants {
         return listenerList.getListeners(ActionListener.class);
     }
 
-    /** Avisa que se apreto Enter. */
+    /** It gives notice that Enter was pressed. */
     protected void fireActionPerformed() {
         Object[] listeners = listenerList.getListenerList();
         int modifiers = 0;
@@ -207,7 +208,7 @@ public class JTextField extends JTextComponent implements SwingConstants {
         this.command = command;
     }
 
-    /** Ata el campo a una accion, como un boton. */
+    /** It ties the field to an action, like a button. */
     public void setAction(Action a) {
         Action oldValue = getAction();
         if (action == null || !action.equals(a)) {
@@ -252,24 +253,24 @@ public class JTextField extends JTextComponent implements SwingConstants {
     }
 
     protected PropertyChangeListener createActionPropertyChangeListener(Action a) {
-        return new EscuchaDeAccion(this, a);
+        return new ActionListenerImpl(this, a);
     }
 
-    /** Las del componente mas la de Enter. */
+    /** The component's plus Enter's. */
     public Action[] getActions() {
         return super.getActions();
     }
 
-    /** Dispara la accion de Enter; es lo que llama la tecla. */
+    /** It fires Enter's action; it is what the key calls. */
     public void postActionEvent() {
         fireActionPerformed();
     }
 
     /**
-     * El modelo de lo que se ve cuando el texto no entra.
+     * The model of what is seen when the text does not fit.
      *
-     * <p>Es un {@link BoundedRangeModel} y no un par de enteros porque asi se le puede enchufar
-     * una barra de desplazamiento sin escribir nada.
+     * <p>It is a {@link BoundedRangeModel} and not a pair of integers because that way a scroll
+     * bar can be plugged into it without writing anything.
      */
     public BoundedRangeModel getHorizontalVisibility() {
         return visibility;
@@ -283,7 +284,7 @@ public class JTextField extends JTextComponent implements SwingConstants {
         visibility.setValue(scrollOffset);
     }
 
-    /** Desplaza para que ese rectangulo se vea. */
+    /** It scrolls so that that rectangle is seen. */
     public void scrollRectToVisible(Rectangle r) {
         Insets i = getInsets();
         int x0 = r.x + visibility.getValue() - i.left;
@@ -326,38 +327,38 @@ public class JTextField extends JTextComponent implements SwingConstants {
                 + horizontalAlignmentString;
     }
 
-    /** Sin contexto de accesibilidad: no hay tecnologia asistiva en esta VM. */
+    /** With no accessibility context: there is no assistive technology on this VM. */
     public AccessibleContext getAccessibleContext() {
         return null;
     }
 
-    /** Repinta cuando cambia lo que se ve; nombrada y no anonima (#499). */
+    /** It repaints when what is seen changes; named and not anonymous (#499). */
     static class ScrollRepainter implements ChangeListener, java.io.Serializable {
 
-        private final JTextField campo;
+        private final JTextField field;
 
-        ScrollRepainter(JTextField campo) {
-            this.campo = campo;
+        ScrollRepainter(JTextField field) {
+            this.field = field;
         }
 
         public void stateChanged(ChangeEvent e) {
-            campo.repaint();
+            field.repaint();
         }
     }
 
-    /** Sigue a la accion atada; nombrada y no anonima (#499). */
-    static class EscuchaDeAccion implements PropertyChangeListener, java.io.Serializable {
+    /** It follows the tied action; named and not anonymous (#499). */
+    static class ActionListenerImpl implements PropertyChangeListener, java.io.Serializable {
 
-        private final JTextField campo;
-        private final Action accion;
+        private final JTextField field;
+        private final Action action;
 
-        EscuchaDeAccion(JTextField campo, Action accion) {
-            this.campo = campo;
-            this.accion = accion;
+        ActionListenerImpl(JTextField field, Action action) {
+            this.field = field;
+            this.action = action;
         }
 
         public void propertyChange(PropertyChangeEvent e) {
-            campo.actionPropertyChanged(accion, e.getPropertyName());
+            field.actionPropertyChanged(action, e.getPropertyName());
         }
     }
 }

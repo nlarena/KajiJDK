@@ -1,102 +1,103 @@
 package com.sun.jdi;
 
 /**
- * Un punto en el codigo: una clase, un metodo y un indice de bytecode.
+ * A point in the code: a class, a method and a bytecode index.
  *
- * <p>{@code lineNumber} y {@code sourceName} pueden no estar: dependen de que la clase se haya
- * compilado con la informacion de depuracion, que es opcional. Cuando falta tiran
- * {@link AbsentInformationException} y lo unico que ubica el punto es {@code codeIndex}.
+ * <p>{@code lineNumber} and {@code sourceName} may not be there: they depend on the class
+ * having been compiled with the debugging information, which is optional. When it is missing
+ * they throw {@link AbsentInformationException} and the only thing that places the point is
+ * {@code codeIndex}.
  *
  * @since 1.3
  */
 public interface Location extends Mirror, Comparable<Location> {
 
     /**
-     * El declaring type.
+     * The declaring type.
      *
-     * @return el resultado
+     * @return the result
      */
     ReferenceType declaringType();
 
     /**
-     * El method.
+     * The method.
      *
-     * @return el resultado
+     * @return the result
      */
     Method method();
 
     /**
-     * El code index.
+     * The code index.
      *
-     * @return el resultado
+     * @return the result
      */
     long codeIndex();
 
     /**
-     * El source name.
+     * The source name.
      *
-     * @return el resultado
-     * @throws AbsentInformationException si corresponde
+     * @return the result
+     * @throws AbsentInformationException if it applies
      */
     String sourceName()
             throws AbsentInformationException;
 
     /**
-     * El source name.
+     * The source name.
      *
-     * @param name el String
-     * @return el resultado
-     * @throws AbsentInformationException si corresponde
+     * @param name the String
+     * @return the result
+     * @throws AbsentInformationException if it applies
      */
     String sourceName(String name)
             throws AbsentInformationException;
 
     /**
-     * El source path.
+     * The source path.
      *
-     * @return el resultado
-     * @throws AbsentInformationException si corresponde
+     * @return the result
+     * @throws AbsentInformationException if it applies
      */
     String sourcePath()
             throws AbsentInformationException;
 
     /**
-     * El source path.
+     * The source path.
      *
-     * @param name el String
-     * @return el resultado
-     * @throws AbsentInformationException si corresponde
+     * @param name the String
+     * @return the result
+     * @throws AbsentInformationException if it applies
      */
     String sourcePath(String name)
             throws AbsentInformationException;
 
     /**
-     * El line number.
+     * The line number.
      *
-     * @return el resultado
+     * @return the result
      */
     int lineNumber();
 
     /**
-     * El line number.
+     * The line number.
      *
-     * @param name el String
-     * @return el resultado
+     * @param name the String
+     * @return the result
      */
     int lineNumber(String name);
 
     /**
-     * Dos reflejos son iguales si nombran a lo mismo en la misma VM.
+     * Two mirrors are equal if they name the same thing in the same VM.
      *
-     * @param obj el Object
-     * @return el resultado
+     * @param obj the Object
+     * @return the result
      */
     boolean equals(Object obj);
 
     /**
-     * Coherente con {@link #equals}.
+     * Consistent with {@link #equals}.
      *
-     * @return el resultado
+     * @return the result
      */
     int hashCode();
 }

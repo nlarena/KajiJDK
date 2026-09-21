@@ -3,68 +3,71 @@ package javax.script;
 import java.util.List;
 
 /**
- * KajiLibrary's javax.script.ScriptEngineFactory -- la ficha tecnica de un motor, y como hacerlo.
+ * KajiLibrary's javax.script.ScriptEngineFactory -- an engine's specification sheet, and how to
+ * make one.
  *
- * <p>Es lo que un lenguaje publica como servicio: {@link ScriptEngineManager} carga las fabricas
- * por {@link java.util.ServiceLoader}, les pregunta sus nombres, extensiones y tipos MIME, y
- * cuando alguna coincide con lo que se pidio le manda {@link #getScriptEngine()}. El motor no se
- * construye hasta ese momento -- por eso la fabrica y el motor son dos cosas separadas.
+ * <p>It is what a language publishes as a service: {@link ScriptEngineManager} loads the factories
+ * through {@link java.util.ServiceLoader}, asks them their names, extensions and MIME types, and
+ * when one matches what was asked for it calls {@link #getScriptEngine()}. The engine is not built
+ * until that moment -- that is why the factory and the engine are two separate things.
  *
- * <p>Los tres metodos del final ({@link #getMethodCallSyntax}, {@link #getOutputStatement},
- * {@link #getProgram}) no describen: **generan codigo**. Existen para que un programa que hospeda
- * pueda armar un script sin saber en que lenguaje esta escribiendo -- pedirle a la fabrica "como
- * se llama a este metodo aca" en vez de concatenar puntos y parentesis a mano.
+ * <p>The three methods at the end ({@link #getMethodCallSyntax}, {@link #getOutputStatement},
+ * {@link #getProgram}) do not describe: they **generate code**. They exist so that a hosting
+ * program can put a script together without knowing which language it is writing in -- asking the
+ * factory "how is this method called here" instead of concatenating dots and parentheses by hand.
  */
 public interface ScriptEngineFactory {
 
-    /** El nombre completo del motor, para mostrar. */
+    /** The engine's full name, for display. */
     String getEngineName();
 
-    /** La version del motor. */
+    /** The engine's version. */
     String getEngineVersion();
 
-    /** Las extensiones de archivo que este motor atiende, sin el punto. */
+    /** The file extensions this engine serves, without the dot. */
     List<String> getExtensions();
 
-    /** Los tipos MIME que este motor atiende. */
+    /** The MIME types this engine serves. */
     List<String> getMimeTypes();
 
-    /** Los nombres cortos con los que se puede pedir este motor. */
+    /** The short names this engine can be asked for by. */
     List<String> getNames();
 
-    /** El nombre del lenguaje que el motor interpreta. */
+    /** The name of the language the engine interprets. */
     String getLanguageName();
 
-    /** La version del lenguaje. */
+    /** The language's version. */
     String getLanguageVersion();
 
     /**
-     * El valor de una propiedad de la fabrica, o nulo si no la conoce.
+     * The value of a property of the factory, or null if it does not know it.
      *
-     * <p>Las claves que toda fabrica entiende son las constantes de {@link ScriptEngine}, mas
-     * `"THREADING"`, que dice si el motor se puede usar desde varios hilos.
+     * <p>The keys every factory understands are the constants of {@link ScriptEngine}, plus
+     * `"THREADING"`, which says whether the engine can be used from several threads.
      */
     Object getParameter(String key);
 
     /**
-     * El texto de una llamada a metodo en este lenguaje.
+     * The text of a method call in this language.
      *
-     * @param obj el objeto receptor
-     * @param m el nombre del metodo
-     * @param args los argumentos, ya como texto del lenguaje
+     * @param obj the receiver object
+     * @param m the name of the method
+     * @param args the arguments, already as text of the language
      */
     String getMethodCallSyntax(String obj, String m, String... args);
 
-    /** El texto de una sentencia que imprime `toDisplay`. */
+    /** The text of a statement that prints `toDisplay`. */
     String getOutputStatement(String toDisplay);
 
-    /** Un programa completo hecho de esas sentencias, con lo que el lenguaje pida alrededor. */
+    /**
+     * A complete program made of those statements, with whatever the language asks for around them.
+     */
     String getProgram(String... statements);
 
     /**
-     * Un motor nuevo de esta fabrica.
+     * A new engine from this factory.
      *
-     * <p>Cada llamada devuelve uno distinto: dos motores no comparten ambito de motor.
+     * <p>Each call returns a different one: two engines do not share an engine scope.
      */
     ScriptEngine getScriptEngine();
 }

@@ -1,16 +1,18 @@
 package javax.swing;
 
+import javax.accessibility.Accessible;
 import javax.accessibility.AccessibleContext;
 
 import javax.swing.plaf.ButtonUI;
 import javax.swing.plaf.basic.BasicRadioButtonUI;
 
 /**
- * Un boton de radio: un {@link JToggleButton} con el circulo del aspecto, pensado para vivir en
- * un {@link ButtonGroup}.
+ * A radio button: a {@link JToggleButton} with the look and feel's circle, meant to live in a
+ * {@link ButtonGroup}.
  *
- * <p>La exclusion no esta aca sino en el grupo y en {@code ToggleButtonModel}: un radio suelto
- * se marca y desmarca como una casilla. Como la casilla, ignora el icono de su {@link Action}.
+ * <p>The exclusion is not here but in the group and in {@code ToggleButtonModel}: a loose radio
+ * button is ticked and unticked like a check box. Like the check box, it ignores its
+ * {@link Action}'s icon.
  */
 public class JRadioButton extends JToggleButton implements Accessible {
 
@@ -51,7 +53,7 @@ public class JRadioButton extends JToggleButton implements Accessible {
         setHorizontalAlignment(LEADING);
     }
 
-    /** Instala el aspecto basico; ver {@code JButton#updateUI}. */
+    /** It installs the basic look and feel; see {@code JButton#updateUI}. */
     public void updateUI() {
         setUI((ButtonUI) BasicRadioButtonUI.createUI(this));
     }
@@ -60,7 +62,7 @@ public class JRadioButton extends JToggleButton implements Accessible {
         return uiClassID;
     }
 
-    /** Nada: ver la nota de la clase. */
+    /** Nothing: see the class note. */
     void setIconFromAction(Action a) {
     }
 
@@ -68,7 +70,7 @@ public class JRadioButton extends JToggleButton implements Accessible {
         return super.paramString();
     }
 
-    /** Sin contexto de accesibilidad: no hay tecnologia asistiva que lo lea en esta VM. */
+    /** With no accessibility context: there is no assistive technology that reads it on this VM. */
     public AccessibleContext getAccessibleContext() {
         return null;
     }

@@ -4,51 +4,51 @@ import java.security.Key;
 import javax.xml.crypto.dsig.keyinfo.KeyInfo;
 
 /**
- * KajiLibrary's javax.xml.crypto.KeySelector -- decide con que clave se firma o se valida.
+ * KajiLibrary's javax.xml.crypto.KeySelector -- decides which key signs or validates.
  *
- * <p>Recibe el {@link KeyInfo} del documento, para que se la usa, y el algoritmo, y devuelve la
- * clave. Es <b>la</b> decision de seguridad de toda la firma XML, y por eso el API la deja en manos
- * de quien usa la biblioteca en vez de resolverla sola.
+ * <p>It receives the document's {@link KeyInfo}, what it is wanted for, and the algorithm, and
+ * returns the key. It is <b>the</b> security decision of the whole XML signature, and that is why
+ * the API leaves it in the hands of whoever uses the library instead of settling it by itself.
  *
- * <h2>El KeyInfo no es una fuente de confianza</h2>
+ * <h2>The KeyInfo is not a source of trust</h2>
  *
- * <p>El argumento mas tentador es el {@code KeyInfo}: viene con la clave adentro, o con un
- * certificado, y usarlo hace que la firma valide. Y no prueba nada -- lo escribio quien firmo, asi
- * que una firma falsificada trae su propia clave y valida perfecto.
+ * <p>The most tempting argument is the {@code KeyInfo}: it comes with the key inside, or with a
+ * certificate, and using it makes the signature validate. And it proves nothing -- whoever signed
+ * wrote it, so a forged signature brings its own key and validates perfectly.
  *
- * <p>Un selector correcto usa el {@code KeyInfo} como <b>pista</b> --para elegir cual de las claves
- * que uno ya conoce corresponde-- y nunca como fuente. {@link #singletonKeySelector} es el caso
- * extremo y el mas seguro: siempre la misma clave, ignorando lo que el documento diga.
+ * <p>A correct selector uses the {@code KeyInfo} as a <b>hint</b> --to choose which of the keys one
+ * already knows corresponds-- and never as a source. {@link #singletonKeySelector} is the extreme
+ * and safest case: always the same key, ignoring whatever the document says.
  *
- * <p>{@link Purpose} distingue los cuatro usos. Importa porque una clave puede servir para uno y no
- * para otro, y porque validar con una clave destinada a firmar es un error de configuracion que
- * conviene detectar.
+ * <p>{@link Purpose} tells the four uses apart. It matters because a key can serve for one and not
+ * for another, and because validating with a key meant for signing is a configuration error worth
+ * detecting.
  */
 public abstract class KeySelector {
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected KeySelector() {
     }
 
     /**
-     * La clave para esa operacion.
+     * The key for that operation.
      *
-     * @param keyInfo lo que el documento dice; ver la nota de la clase
-     * @param purpose para que se la quiere
-     * @param method el algoritmo que la va a usar
-     * @throws KeySelectorException si no se puede elegir ninguna
+     * @param keyInfo what the document says; see the class note
+     * @param purpose what it is wanted for
+     * @param method the algorithm that is going to use it
+     * @throws KeySelectorException if none can be chosen
      */
     public abstract KeySelectorResult select(KeyInfo keyInfo, Purpose purpose,
                                              AlgorithmMethod method, XMLCryptoContext context)
         throws KeySelectorException;
 
     /**
-     * Un selector que siempre devuelve esa clave.
+     * A selector that always returns that key.
      *
-     * <p>Ignora el {@code KeyInfo} por completo, que es justamente lo que lo hace seguro: la clave la
-     * elige quien valida y no el documento.
+     * <p>It ignores the {@code KeyInfo} completely, which is precisely what makes it safe: the key
+     * is chosen by whoever validates and not by the document.
      *
-     * @throws NullPointerException si la clave es null
+     * @throws NullPointerException if the key is null
      */
     public static KeySelector singletonKeySelector(Key key) {
         if (key == null) {
@@ -58,23 +58,24 @@ public abstract class KeySelector {
     }
 
     /**
-     * Para que se quiere la clave.
+     * What the key is wanted for.
      *
-     * <p>No es un enum porque la clase es de 2005 y su forma quedo fijada; son cuatro constantes con
-     * constructor privado, que es el patron de enum a mano de esa epoca.
+     * <p>It is not an enum; it is four constants with a private constructor, the hand-made enum
+     * pattern of that time. (The note said the reason is that the class is from 2005; Java 5
+     * already had enums in 2004, but JSR 105 was also meant to run on J2SE 1.4, which had none.)
      */
     public static class Purpose {
 
-        /** Para firmar. */
+        /** To sign. */
         public static final Purpose SIGN = new Purpose("sign");
 
-        /** Para validar una firma. */
+        /** To validate a signature. */
         public static final Purpose VERIFY = new Purpose("verify");
 
-        /** Para cifrar. */
+        /** To encrypt. */
         public static final Purpose ENCRYPT = new Purpose("encrypt");
 
-        /** Para descifrar. */
+        /** To decrypt. */
         public static final Purpose DECRYPT = new Purpose("decrypt");
 
         private final String name;
@@ -83,13 +84,13 @@ public abstract class KeySelector {
             this.name = name;
         }
 
-        /** El nombre del proposito. */
+        /** The purpose's name. */
         public String toString() {
             return this.name;
         }
     }
 
-    /** El que devuelve {@link KeySelector#singletonKeySelector}. */
+    /** The one {@link KeySelector#singletonKeySelector} returns. */
     private static final class SingletonKeySelector extends KeySelector {
 
         private final Key key;
@@ -98,14 +99,14 @@ public abstract class KeySelector {
             this.key = key;
         }
 
-        /** Siempre la misma, sin mirar nada. */
+        /** Always the same one, looking at nothing. */
         public KeySelectorResult select(KeyInfo keyInfo, Purpose purpose, AlgorithmMethod method,
                                         XMLCryptoContext context) {
             return new SingletonResult(this.key);
         }
     }
 
-    /** El resultado de {@link SingletonKeySelector}. */
+    /** The result of {@link SingletonKeySelector}. */
     private static final class SingletonResult implements KeySelectorResult {
 
         private final Key key;

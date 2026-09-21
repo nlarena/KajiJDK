@@ -1,10 +1,11 @@
 package java.security.spec;
 
-// El nombre de una curva estandar, para pedirla al generar un par de claves EC.
+// The name of a standard curve, to ask for it when generating an EC key pair.
 //
-// Desde el JDK 11 no es mas que un `NamedParameterSpec`: quedo como subclase por compatibilidad
-// —hay codigo que hace `instanceof ECGenParameterSpec` para distinguir "me pidieron EC por nombre"
-// de "me pidieron otra cosa por nombre"— y porque el tipo distinto sigue documentando la intencion.
+// Since JDK 11 it is nothing more than a `NamedParameterSpec`: it stayed as a subclass for
+// compatibility —there is code that does `instanceof ECGenParameterSpec` to tell "they asked me for
+// EC by name" from "they asked me for something else by name"— and because the distinct type still
+// documents the intent.
 public class ECGenParameterSpec extends NamedParameterSpec {
 
     public ECGenParameterSpec(String stdName) {

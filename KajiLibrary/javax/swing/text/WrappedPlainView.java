@@ -12,17 +12,17 @@ import java.awt.Shape;
 import javax.swing.event.DocumentEvent;
 
 /**
- * Texto plano que se corta en lineas para entrar en el ancho.
+ * Plain text that is broken into lines to fit the width.
  *
- * <h2>Una vista por linea del documento, no por linea visible</h2>
+ * <h2>One view per document line, not per visible line</h2>
  *
- * <p>Los hijos son una vista por linea <em>del documento</em>; cada una de esas vistas dibuja
- * varias lineas visibles si hace falta. Es la mezcla de las dos ideas: la economia de
- * {@link PlainView}, que no crea nada por linea visible, con el corte de {@link FlowView}.
+ * <p>The children are one view per <em>document</em> line; each of those views draws several
+ * visible lines if needed. It is the mixture of the two ideas: {@link PlainView}'s economy,
+ * which creates nothing per visible line, with {@link FlowView}'s breaking.
  *
- * <p>El corte puede ser por palabras o por caracteres, y se elige al construir. Por palabras es lo
- * que uno espera de un editor; por caracteres es lo que hace falta cuando no hay espacios donde
- * cortar.
+ * <p>The breaking may be by words or by characters, and it is chosen on construction. By words
+ * is what one expects of an editor; by characters is what is needed when there are no spaces to
+ * break at.
  */
 public class WrappedPlainView extends BoxView implements TabExpander {
 
@@ -38,12 +38,12 @@ public class WrappedPlainView extends BoxView implements TabExpander {
     Color unselected;
     Color selected;
 
-    /** Corta por caracteres. */
+    /** It breaks by characters. */
     public WrappedPlainView(Element elem) {
         this(elem, false);
     }
 
-    /** Corta por palabras si {@code wordWrap}; ver la nota de la clase. */
+    /** It breaks by words if {@code wordWrap}; see the class note. */
     public WrappedPlainView(Element elem, boolean wordWrap) {
         super(elem, Y_AXIS);
         this.wordWrap = wordWrap;
@@ -55,7 +55,7 @@ public class WrappedPlainView extends BoxView implements TabExpander {
         return size;
     }
 
-    /** Dibuja un tramo de una linea, partido por la seleccion. */
+    /** It draws a stretch of a line, split by the selection. */
     protected void drawLine(int p0, int p1, Graphics g, int x, int y) {
         try {
             if (sel0 == sel1 || selected == unselected) {
@@ -114,7 +114,7 @@ public class WrappedPlainView extends BoxView implements TabExpander {
         return drawSelectedText((Graphics) g, (int) x, (int) y, p0, p1);
     }
 
-    /** El segmento de trabajo compartido; ver {@link PlainView#getLineBuffer}. */
+    /** The shared working segment; see {@link PlainView#getLineBuffer}. */
     protected final Segment getLineBuffer() {
         if (lineBuffer == null) {
             lineBuffer = new Segment();
@@ -122,7 +122,7 @@ public class WrappedPlainView extends BoxView implements TabExpander {
         return lineBuffer;
     }
 
-    /** Donde hay que cortar para que el tramo entre en el ancho. */
+    /** Where it has to break so that the stretch fits the width. */
     protected int calculateBreakPosition(int p0, int p1) {
         int p;
         Segment segment = getLineBuffer();
@@ -138,7 +138,7 @@ public class WrappedPlainView extends BoxView implements TabExpander {
         return p;
     }
 
-    /** Una vista por linea del documento; ver la nota de la clase. */
+    /** One view per document line; see the class note. */
     protected void loadChildren(ViewFactory f) {
         Element e = getElement();
         int n = e.getElementCount();
@@ -169,7 +169,7 @@ public class WrappedPlainView extends BoxView implements TabExpander {
         }
     }
 
-    /** Carga ese tramo en el segmento de trabajo. */
+    /** It loads that stretch into the working segment. */
     final void loadText(Segment segment, int p0, int p1) {
         try {
             Document doc = getDocument();
@@ -211,7 +211,7 @@ public class WrappedPlainView extends BoxView implements TabExpander {
     public void setSize(float width, float height) {
         updateMetrics();
         if ((int) width != getWidth()) {
-            // Cambio el ancho: hay que volver a cortar todo.
+            // The width changed: everything has to be broken again.
             widthChanging = true;
         }
         super.setSize(width, height);
@@ -258,30 +258,30 @@ public class WrappedPlainView extends BoxView implements TabExpander {
     }
 
     /**
-     * Una linea del documento, que puede ocupar varias lineas visibles.
+     * A line of the document, which may take up several visible lines.
      *
-     * <p>Es privada en el JDK y aca tambien. No tiene hijos: dibuja los pedazos ella misma,
-     * calculando donde cortar cada vez. Es lo que evita crear una vista por linea visible.
+     * <p>It is private in the JDK and here too. It has no children: it draws the pieces itself,
+     * computing where to break each time. It is what avoids creating a view per visible line.
      */
     static class WrappedLine extends View {
 
-        private final WrappedPlainView padre;
+        private final WrappedPlainView parent;
         private int nlines;
 
-        WrappedLine(Element elem, WrappedPlainView padre) {
+        WrappedLine(Element elem, WrappedPlainView parent) {
             super(elem);
-            this.padre = padre;
+            this.parent = parent;
             nlines = 1;
         }
 
-        /** Cuantas lineas visibles ocupa. */
+        /** How many visible lines it takes up. */
         final int calculateLineCount() {
             int nlines = 0;
             int startOffset = getStartOffset();
             int p1 = getEndOffset();
             for (int p0 = startOffset; p0 < p1;) {
                 nlines = nlines + 1;
-                int p = padre.calculateBreakPosition(p0, p1);
+                int p = parent.calculateBreakPosition(p0, p1);
                 if (p <= p0) {
                     p = p0 + 1;
                 }
@@ -292,50 +292,50 @@ public class WrappedPlainView extends BoxView implements TabExpander {
 
         public float getPreferredSpan(int axis) {
             if (axis == View.X_AXIS) {
-                if (padre.metrics == null) {
-                    padre.updateMetrics();
+                if (parent.metrics == null) {
+                    parent.updateMetrics();
                 }
-                return padre.getWidth();
+                return parent.getWidth();
             }
-            if (padre.metrics == null) {
-                padre.updateMetrics();
+            if (parent.metrics == null) {
+                parent.updateMetrics();
             }
             nlines = calculateLineCount();
-            return nlines * padre.metrics.getHeight();
+            return nlines * parent.metrics.getHeight();
         }
 
         public void paint(Graphics g, Shape a) {
             Rectangle alloc = (Rectangle) a;
-            int y = alloc.y + padre.metrics.getAscent();
+            int y = alloc.y + parent.metrics.getAscent();
             int x = alloc.x;
             int p1 = getEndOffset();
             for (int p0 = getStartOffset(); p0 < p1;) {
-                int p = padre.calculateBreakPosition(p0, p1);
+                int p = parent.calculateBreakPosition(p0, p1);
                 if (p <= p0) {
                     p = p0 + 1;
                 }
-                padre.drawLine(p0, Math.min(p, p1 - 1) + ((p >= p1) ? 1 : 0), g, x, y);
+                parent.drawLine(p0, Math.min(p, p1 - 1) + ((p >= p1) ? 1 : 0), g, x, y);
                 p0 = p;
-                y = y + padre.metrics.getHeight();
+                y = y + parent.metrics.getHeight();
             }
         }
 
         public Shape modelToView(int pos, Shape a, Position.Bias b) throws BadLocationException {
             Rectangle alloc = a.getBounds();
-            alloc.height = padre.metrics.getHeight();
+            alloc.height = parent.metrics.getHeight();
             alloc.width = 1;
             int p1 = getEndOffset();
             int p0 = getStartOffset();
             while (p0 < p1) {
-                int p = padre.calculateBreakPosition(p0, p1);
+                int p = parent.calculateBreakPosition(p0, p1);
                 if (p <= p0) {
                     p = p0 + 1;
                 }
                 if (pos >= p0 && pos < p) {
-                    Segment segment = padre.getLineBuffer();
-                    padre.loadText(segment, p0, pos);
+                    Segment segment = parent.getLineBuffer();
+                    parent.loadText(segment, p0, pos);
                     alloc.x = alloc.x + (int) Utilities.getTabbedTextWidth(segment,
-                            padre.metrics, alloc.x, padre, p0);
+                            parent.metrics, alloc.x, parent, p0);
                     return alloc;
                 }
                 p0 = p;
@@ -352,35 +352,35 @@ public class WrappedPlainView extends BoxView implements TabExpander {
             int p1 = getEndOffset();
             int p0 = getStartOffset();
             int lineY = alloc.y;
-            int alto = padre.metrics.getHeight();
+            int height = parent.metrics.getHeight();
             while (p0 < p1) {
-                int p = padre.calculateBreakPosition(p0, p1);
+                int p = parent.calculateBreakPosition(p0, p1);
                 if (p <= p0) {
                     p = p0 + 1;
                 }
-                if (y >= lineY && y < lineY + alto) {
-                    Segment segment = padre.getLineBuffer();
-                    padre.loadText(segment, p0, p);
-                    int offs = Utilities.getTabbedTextOffset(segment, padre.metrics, alloc.x, x,
-                            padre, p0);
+                if (y >= lineY && y < lineY + height) {
+                    Segment segment = parent.getLineBuffer();
+                    parent.loadText(segment, p0, p);
+                    int offs = Utilities.getTabbedTextOffset(segment, parent.metrics, alloc.x, x,
+                            parent, p0);
                     return Math.min(p0 + offs, p1 - 1);
                 }
                 p0 = p;
-                lineY = lineY + alto;
+                lineY = lineY + height;
             }
             return p1 - 1;
         }
 
         public void insertUpdate(DocumentEvent e, Shape a, ViewFactory f) {
-            actualizar(a);
+            update(a);
         }
 
         public void removeUpdate(DocumentEvent e, Shape a, ViewFactory f) {
-            actualizar(a);
+            update(a);
         }
 
-        /** Si cambio la cantidad de lineas visibles, hay que rehacer el maquetado. */
-        private void actualizar(Shape a) {
+        /** If the number of visible lines changed, the layout has to be redone. */
+        private void update(Shape a) {
             int n = calculateLineCount();
             if (nlines != n) {
                 nlines = n;

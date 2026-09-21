@@ -1,49 +1,50 @@
 package javax.xml.transform;
 
 /**
- * KajiLibrary's javax.xml.transform.TransformerFactoryConfigurationError -- no hay fabrica.
+ * KajiLibrary's javax.xml.transform.TransformerFactoryConfigurationError -- there is no factory.
  *
- * <p>Es un {@link Error} y no una excepcion, y la eleccion tiene fundamento aunque parezca dura:
- * lo lanza {@link TransformerFactory#newInstance()}, que **no declara nada chequeado**, porque en el
- * caso normal --hay una implementacion de XSLT en el classpath-- el fallo es imposible. Cuando
- * ocurre, ocurre por un despliegue mal armado: falta el jar, o la propiedad de sistema nombra una
- * clase que no existe. No es una condicion que el codigo de la aplicacion pueda manejar, es una
- * instalacion rota, y obligarlo a un `try`/`catch` en cada llamada seria puro ruido.
+ * <p>It is an {@link Error} and not an exception, and the choice has grounds even if it seems
+ * harsh: it is thrown by {@link TransformerFactory#newInstance()}, which **declares nothing
+ * checked**, because in the normal case --there is an XSLT implementation on the classpath--
+ * failure is impossible. When it happens, it happens because of a badly put together deployment:
+ * the jar is missing, or the system property names a class that does not exist. It is not a
+ * condition the application's code can handle, it is a broken installation, and forcing a
+ * `try`/`catch` on every call would be pure noise.
  *
- * <p>**Aca se lanza siempre**, y no por un fallo: esta biblioteca no trae ningun procesador de
- * XSLT. Ver el encabezado de {@link TransformerFactory} para el criterio -- el resumen es que un
- * `Transformer` que no transforma seria mucho peor que este error.
+ * <p>**Here it is thrown whenever no factory is configured**, and not because of a fault: this
+ * library brings no XSLT processor. See the header of {@link TransformerFactory} for the criterion
+ * -- the summary is that a `Transformer` that does not transform would be much worse than this
+ * error.
  *
- * <p>Como {@link TransformerException}, arrastra un campo de causa propio anterior a las causas
- * encadenadas de la plataforma, y con dos diferencias respecto de aquella que conviene tener
- * presentes porque no son las que uno supondria:
+ * <p>Like {@link TransformerException}, it carries its own cause field that predates the platform's
+ * chained causes, and with two differences from that one worth keeping in mind because they are not
+ * the ones one would assume:
  *
  * <ul>
- *   <li>el campo es {@code Exception} y no {@code Throwable}, asi que un {@code Error} de fondo no
- *       se puede guardar aca;
- *   <li>{@link #getMessage} **cae en el mensaje de la causa** cuando el propio es nulo. Es la unica
- *       clase del paquete que lo hace, y es el motivo por el que el constructor
- *       {@code (Exception, String)} tiene los argumentos en ese orden raro: el que se agrego
- *       despues quedo al final.
+ *   <li>the field is {@code Exception} and not {@code Throwable}, so an underlying {@code Error}
+ *       cannot be kept here;
+ *   <li>{@link #getMessage} **falls back to the cause's message** when its own is null. It is the
+ *       only class of the package that does so, and it is why the {@code (Exception, String)}
+ *       constructor has its arguments in that odd order: the one added later ended up last.
  * </ul>
  */
 public class TransformerFactoryConfigurationError extends Error {
 
     private static final long serialVersionUID = -6323715983680123667L;
 
-    /** La causa, por el nombre viejo. Ver la nota del encabezado. */
+    /** The cause, by the old name. See the header note. */
     private Exception exception;
 
-    /** Sin mensaje ni causa. */
+    /** Without message nor cause. */
     public TransformerFactoryConfigurationError() {
         super();
         this.exception = null;
     }
 
     /**
-     * Con un mensaje.
+     * With a message.
      *
-     * @param msg la descripcion del error
+     * @param msg the description of the error
      */
     public TransformerFactoryConfigurationError(String msg) {
         super(msg);
@@ -51,9 +52,9 @@ public class TransformerFactoryConfigurationError extends Error {
     }
 
     /**
-     * Envolviendo una excepcion; el mensaje sale de ella.
+     * Wrapping an exception; the message comes from it.
      *
-     * @param e la causa
+     * @param e the cause
      */
     public TransformerFactoryConfigurationError(Exception e) {
         super(e.toString());
@@ -61,10 +62,10 @@ public class TransformerFactoryConfigurationError extends Error {
     }
 
     /**
-     * Con causa y mensaje, en ese orden.
+     * With cause and message, in that order.
      *
-     * @param e la causa
-     * @param msg la descripcion del error
+     * @param e the cause
+     * @param msg the description of the error
      */
     public TransformerFactoryConfigurationError(Exception e, String msg) {
         super(msg);
@@ -72,10 +73,10 @@ public class TransformerFactoryConfigurationError extends Error {
     }
 
     /**
-     * El mensaje propio; si no hay, el de la causa.
+     * Its own message; if there is none, the cause's.
      *
-     * <p>La cascada existe para que {@code new TransformerFactoryConfigurationError(e, null)} no
-     * pierda lo unico que se sabia del problema.
+     * <p>The cascade exists so that {@code new TransformerFactoryConfigurationError(e, null)} does
+     * not lose the only thing that was known about the problem.
      */
     public String getMessage() {
         String message = super.getMessage();
@@ -85,12 +86,12 @@ public class TransformerFactoryConfigurationError extends Error {
         return message;
     }
 
-    /** La causa, por el nombre viejo. */
+    /** The cause, by the old name. */
     public Exception getException() {
         return exception;
     }
 
-    /** La causa, por el nombre de la plataforma. */
+    /** The cause, by the platform's name. */
     public Throwable getCause() {
         return exception;
     }

@@ -5,27 +5,28 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 
-// La coleccion que devuelve `BasicPermission.newPermissionCollection()`. Package-private: el
-// contrato solo promete una `PermissionCollection`.
+// The collection `BasicPermission.newPermissionCollection()` returns. Package-private: the contract
+// only promises a `PermissionCollection`.
 //
-// Indexa por nombre canonico, y de ahi sale toda su razon de ser: para saber si el conjunto
-// implica `"a.b.c"` no hace falta recorrerlo entero, alcanza con probar `"a.b.c"`, `"a.b.*"`,
-// `"a.*"` y `"*"` — cuatro consultas de tabla en vez de N comparaciones. Con un puñado de
-// permisos da igual; con cientos, no.
+// It indexes by canonical name, and out of that comes its whole reason for being: to know whether
+// the set implies `"a.b.c"` there is no need to walk it entirely, it is enough to try `"a.b.c"`,
+// `"a.b.*"`, `"a.*"` and `"*"` — four table lookups instead of N comparisons. With a handful of
+// permissions it makes no difference; with hundreds, it does.
 //
-// Todos los permisos de una coleccion tienen que ser de **la misma clase**: mezclar un
-// `PropertyPermission` con un `RuntimePermission` haria que el indice mintiera, porque dos
-// permisos de clases distintas con el mismo nombre no se implican.
+// Every permission of a collection has to be of **the same class**: mixing a `PropertyPermission`
+// with a `RuntimePermission` would make the index lie, because two permissions of different classes
+// with the same name do not imply each other.
 final class BasicPermissionCollection extends PermissionCollection {
 
-    // Nombre canonico -> permiso.
-    private final HashMap<String, Permission> permisos = new HashMap<String, Permission>();
+    // Canonical name -> permission.
+    private final HashMap<String, Permission> perms = new HashMap<String, Permission>();
 
-    // La clase que esta coleccion acepta.
+    // The class this collection accepts.
     private final Class<?> permClass;
 
-    // Si alguno de los permisos es el comodin universal `"*"`, que implica todo de un saque.
-    private boolean todos;
+    // Whether any of the permissions is the universal wildcard `"*"`, which implies everything in
+    // one go.
+    private boolean all;
 
     BasicPermissionCollection(Class<?> permClass) {
         this.permClass = permClass;
@@ -43,10 +44,10 @@ final class BasicPermissionCollection extends PermissionCollection {
                 "attempt to add a Permission to a readonly PermissionCollection");
         }
         BasicPermission bp = (BasicPermission) permission;
-        String canonico = bp.getCanonicalName();
-        this.permisos.put(canonico, permission);
-        if (canonico.equals("*")) {
-            this.todos = true;
+        String canonical = bp.getCanonicalName();
+        this.perms.put(canonical, permission);
+        if (canonical.equals("*")) {
+            this.all = true;
         }
     }
 
@@ -57,39 +58,39 @@ final class BasicPermissionCollection extends PermissionCollection {
         if (permission.getClass() != this.permClass) {
             return false;
         }
-        if (this.todos) {
+        if (this.all) {
             return true;
         }
         BasicPermission bp = (BasicPermission) permission;
-        String nombre = bp.getCanonicalName();
+        String name = bp.getCanonicalName();
 
-        // Coincidencia exacta.
-        Permission exacto = this.permisos.get(nombre);
-        if (exacto != null) {
+        // An exact match.
+        Permission exact = this.perms.get(name);
+        if (exact != null) {
             return true;
         }
 
-        // Los comodines de cada prefijo, del mas especifico al mas general: para "a.b.c" se
-        // prueban "a.b.*" y "a.*". El `lastIndexOf` recorta un segmento por vuelta.
-        int corte = nombre.length() - 1;
-        while (corte >= 0) {
-            int punto = lastIndexOf(nombre, '.', corte);
-            if (punto < 0) {
+        // The wildcards of each prefix, from the most specific to the most general: for "a.b.c"
+        // "a.b.*" and "a.*" are tried. The `lastIndexOf` cuts one segment per round.
+        int cut = name.length() - 1;
+        while (cut >= 0) {
+            int dot = lastIndexOf(name, '.', cut);
+            if (dot < 0) {
                 break;
             }
-            Permission comodin = this.permisos.get(nombre.substring(0, punto + 1) + "*");
-            if (comodin != null) {
+            Permission wildcard = this.perms.get(name.substring(0, dot + 1) + "*");
+            if (wildcard != null) {
                 return true;
             }
-            corte = punto - 1;
+            cut = dot - 1;
         }
         return false;
     }
 
-    // El ultimo `c` en `s` en la posicion `desde` o antes, o -1. Escrito a mano porque
-    // `String.lastIndexOf(int, int)` no esta en esta biblioteca.
-    private static int lastIndexOf(String s, char c, int desde) {
-        int i = desde;
+    // The last `c` in `s` at the position `from` or before, or -1. Written by hand because
+    // `String.lastIndexOf(int, int)` is not in this library.
+    private static int lastIndexOf(String s, char c, int from) {
+        int i = from;
         if (i >= s.length()) {
             i = s.length() - 1;
         }
@@ -103,29 +104,29 @@ final class BasicPermissionCollection extends PermissionCollection {
     }
 
     public Enumeration<Permission> elements() {
-        return new PermisoEnum(this.permisos.keySet().iterator(), this.permisos);
+        return new PermissionEnum(this.perms.keySet().iterator(), this.perms);
     }
 }
 
-// La enumeracion sobre los permisos de una BasicPermissionCollection.
-final class PermisoEnum implements Enumeration<Permission> {
+// The enumeration over the permissions of a BasicPermissionCollection.
+final class PermissionEnum implements Enumeration<Permission> {
 
-    private final Iterator<String> claves;
-    private final HashMap<String, Permission> permisos;
+    private final Iterator<String> names;
+    private final HashMap<String, Permission> perms;
 
-    PermisoEnum(Iterator<String> claves, HashMap<String, Permission> permisos) {
-        this.claves = claves;
-        this.permisos = permisos;
+    PermissionEnum(Iterator<String> names, HashMap<String, Permission> perms) {
+        this.names = names;
+        this.perms = perms;
     }
 
     public boolean hasMoreElements() {
-        return this.claves.hasNext();
+        return this.names.hasNext();
     }
 
     public Permission nextElement() {
-        if (!this.claves.hasNext()) {
+        if (!this.names.hasNext()) {
             throw new NoSuchElementException();
         }
-        return this.permisos.get(this.claves.next());
+        return this.perms.get(this.names.next());
     }
 }

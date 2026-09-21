@@ -2,25 +2,26 @@ package java.util;
 
 // Same-package imports work around the frozen javac's finder (finding #4).
 import java.util.Map;
+import java.util.Set;
 
-// Las vistas invertidas genericas: la de un `SortedSet`, la de un `SortedMap` y la de un `Deque`.
-// Son las que respaldan los `reversed()` que esas tres interfaces declaran como `default`, para
-// cualquier implementacion -- incluida una que escriba alguien de afuera.
+// The generic reversed views: a `SortedSet`'s, a `SortedMap`'s and a `Deque`'s. They are what backs
+// the `reversed()` those three interfaces declare as a `default`, for any implementation -- one
+// written by somebody outside included.
 //
-// **El problema, y por que no se resuelve copiando.** `reversed()` promete una *vista*: lo que se
-// agregue de un lado tiene que verse del otro. Copiar los elementos a un arreglo y darlo vuelta es
-// tres lineas y produce una foto; la primera modificacion la deja obsoleta sin avisar. Asi que estas
-// clases no guardan elementos: guardan el conjunto de atras y una forma de recorrerlo al reves.
+// **The problem, and why copying does not settle it.** `reversed()` promises a *view*: what is added
+// on one side has to be seen from the other. Copying the elements into an array and reversing it is
+// three lines and produces a snapshot; the first modification leaves it stale without warning. So
+// these classes keep no elements: they keep the set behind and a way of walking it backwards.
 //
-// **Como se recorre al reves un SortedSet cualquiera.** No hay iterador hacia atras en la interfaz,
-// pero si hay `last()` y `headSet(e)`: el anterior a `e` es `headSet(e).last()`. Encadenando eso se
-// recorre entero, en O(log n) por paso sobre un arbol. Es lo mismo que hace el JDK, y es la razon de
-// que estas vistas sean utiles y no un adorno: no materializan nada.
+// **How any SortedSet is walked backwards.** There is no backward iterator in the interface, but
+// there are `last()` and `headSet(e)`: the one before `e` is `headSet(e).last()`. Chaining that walks
+// the whole thing, at O(log n) per step over a tree. It is the same thing the JDK does, and it is the
+// reason these views are useful and not an ornament: they materialise nothing.
 //
-// La comparacion tambien se invierte, con `Collections.reverseOrder`, para que `first`/`last`,
-// `headSet`/`tailSet` y el orden de iteracion queden todos coherentes entre si.
+// The comparison is reversed too, with `Collections.reverseOrder`, so that `first`/`last`,
+// `headSet`/`tailSet` and the iteration order are all consistent with each other.
 
-/** Un `SortedSet` visto al reves. */
+/** A `SortedSet` seen backwards. */
 final class ReverseSortedSet<E> extends AbstractSet<E> implements SortedSet<E> {
 
     private final SortedSet<E> base;
@@ -32,7 +33,8 @@ final class ReverseSortedSet<E> extends AbstractSet<E> implements SortedSet<E> {
     public Comparator<? super E> comparator() {
         Comparator<? super E> c = this.base.comparator();
         if (c == null) {
-            // Orden natural del de atras: invertido es el `reverseOrder` sin comparador.
+            // The one behind's natural order: reversed, that is `reverseOrder` with no
+            // comparator.
             return (Comparator<? super E>) Collections.reverseOrder();
         }
         return Collections.reverseOrder(c);
@@ -66,7 +68,7 @@ final class ReverseSortedSet<E> extends AbstractSet<E> implements SortedSet<E> {
         return new ReverseSortedItr<E>(this.base);
     }
 
-    /** Invertir lo invertido es el de atras, no un tercer envoltorio. */
+    /** Reversing the reversed is the one behind, not a third wrapper. */
     public SortedSet<E> reversed() {
         return this.base;
     }
@@ -79,12 +81,12 @@ final class ReverseSortedSet<E> extends AbstractSet<E> implements SortedSet<E> {
         return this.base.first();
     }
 
-    // Los tres cortes se dan vuelta junto con el orden: lo que en la vista es "hasta `to`" es en el
-    // de atras "desde `to`", y **exclusivo/inclusivo se intercambian** -- de ahi que `headSet` de la
-    // vista use `tailSet` del de atras y despues saque el propio `to`.
+    // The three slices turn round along with the order: what in the view is "up to `to`" is in the
+    // one behind "from `to`", and **exclusive/inclusive swap** -- which is why the view's `headSet`
+    // uses the one behind's `tailSet` and then takes `to` itself out.
     public SortedSet<E> headSet(E to) {
-        SortedSet<E> cola = this.base.tailSet(to);
-        return new ReverseSortedSet<E>(new SinPrimero<E>(cola, to));
+        SortedSet<E> queue = this.base.tailSet(to);
+        return new ReverseSortedSet<E>(new TailWithoutFirst<E>(queue, to));
     }
 
     public SortedSet<E> tailSet(E from) {
@@ -92,64 +94,64 @@ final class ReverseSortedSet<E> extends AbstractSet<E> implements SortedSet<E> {
     }
 
     public SortedSet<E> subSet(E from, E to) {
-        SortedSet<E> tramo = this.base.subSet(to, from);
-        return new ReverseSortedSet<E>(new SinPrimero<E>(tramo, to));
+        SortedSet<E> stretch = this.base.subSet(to, from);
+        return new ReverseSortedSet<E>(new TailWithoutFirst<E>(stretch, to));
     }
 }
 
-// El recorrido hacia atras: arranca en `last()` y va tomando `headSet(actual).last()`.
+// The backward traversal: it starts at `last()` and goes on taking `headSet(current).last()`.
 final class ReverseSortedItr<E> implements Iterator<E> {
 
     private final SortedSet<E> base;
-    private E proximo;
-    private boolean hay;
-    private boolean arrancado = false;
+    private E upcoming;
+    private boolean hasAny;
+    private boolean started = false;
 
     ReverseSortedItr(SortedSet<E> base) {
         this.base = base;
     }
 
-    private void arrancar() {
-        if (!this.arrancado) {
-            this.arrancado = true;
-            this.hay = !this.base.isEmpty();
-            if (this.hay) {
-                this.proximo = this.base.last();
+    private void startThread() {
+        if (!this.started) {
+            this.started = true;
+            this.hasAny = !this.base.isEmpty();
+            if (this.hasAny) {
+                this.upcoming = this.base.last();
             }
         }
     }
 
     public boolean hasNext() {
-        this.arrancar();
-        return this.hay;
+        this.startThread();
+        return this.hasAny;
     }
 
     public E next() {
-        this.arrancar();
-        if (!this.hay) {
+        this.startThread();
+        if (!this.hasAny) {
             throw new NoSuchElementException();
         }
-        E actual = this.proximo;
-        SortedSet<E> antes = this.base.headSet(actual);
-        if (antes.isEmpty()) {
-            this.hay = false;
+        E current = this.upcoming;
+        SortedSet<E> before = this.base.headSet(current);
+        if (before.isEmpty()) {
+            this.hasAny = false;
         } else {
-            this.proximo = antes.last();
+            this.upcoming = before.last();
         }
-        return actual;
+        return current;
     }
 }
 
-// Un `SortedSet` sin su primer elemento. Existe para un solo detalle de los cortes de arriba: al dar
-// vuelta el orden, un limite que era exclusivo pasa a ser inclusivo, y esta clase saca justamente el
-// que sobra. Sin esto, `reversed().headSet(x)` incluiria `x`, que es el error clasico de invertir
-// rangos y el mas dificil de ver en una prueba que solo mira los tamaños.
-final class SinPrimero<E> extends AbstractSet<E> implements SortedSet<E> {
+// A `SortedSet` without its first element. It exists for a single detail of the slices above: on
+// turning the order round, a bound that was exclusive becomes inclusive, and this class takes out
+// exactly the one left over. Without it, `reversed().headSet(x)` would include `x`, which is the
+// classic error of reversing ranges and the hardest to see in a test that only looks at sizes.
+final class TailWithoutFirst<E> extends AbstractSet<E> implements SortedSet<E> {
 
     private final SortedSet<E> base;
     private final E excluido;
 
-    SinPrimero(SortedSet<E> base, E excluido) {
+    TailWithoutFirst(SortedSet<E> base, E excluido) {
         this.base = base;
         this.excluido = excluido;
     }
@@ -176,7 +178,7 @@ final class SinPrimero<E> extends AbstractSet<E> implements SortedSet<E> {
 
     public Iterator<E> iterator() {
         Iterator<E> it = this.base.iterator();
-        // El excluido, si esta, es el primero: `base` es la cola desde el.
+        // The excluded one, if it is there, is the first: `base` is the tail from it.
         if (this.base.contains(this.excluido) && it.hasNext()) {
             it.next();
         }
@@ -200,19 +202,19 @@ final class SinPrimero<E> extends AbstractSet<E> implements SortedSet<E> {
     }
 
     public SortedSet<E> headSet(E to) {
-        return new SinPrimero<E>(this.base.headSet(to), this.excluido);
+        return new TailWithoutFirst<E>(this.base.headSet(to), this.excluido);
     }
 
     public SortedSet<E> tailSet(E from) {
-        return new SinPrimero<E>(this.base.tailSet(from), this.excluido);
+        return new TailWithoutFirst<E>(this.base.tailSet(from), this.excluido);
     }
 
     public SortedSet<E> subSet(E from, E to) {
-        return new SinPrimero<E>(this.base.subSet(from, to), this.excluido);
+        return new TailWithoutFirst<E>(this.base.subSet(from, to), this.excluido);
     }
 }
 
-/** Un `SortedMap` visto al reves. */
+/** A `SortedMap` seen backwards. */
 final class ReverseSortedMap<K, V> extends AbstractMap<K, V> implements SortedMap<K, V> {
 
     private final SortedMap<K, V> base;
@@ -280,9 +282,149 @@ final class ReverseSortedMap<K, V> extends AbstractMap<K, V> implements SortedMa
     public SortedMap<K, V> subMap(K from, K to) {
         return new ReverseSortedMap<K, V>(this.base.subMap(to, from));
     }
+
+    // `AbstractMap` leaves `entrySet()` abstract and builds `toString`, `equals` and the two derived
+    // collections on it, so without this the class compiled and blew up at the first traversal. The
+    // view is the one below: the same entries of the map behind, walked backwards.
+    public Set<Map.Entry<K, V>> entrySet() {
+        return new ReverseSortedEntries<K, V>(this.base);
+    }
 }
 
-/** Un `Deque` visto al reves: las dos puntas intercambiadas. */
+// The entries of a reversed `SortedMap`.
+//
+// It keeps **no entries**, for the same reason as the rest of the file: it keeps the map and a way of
+// walking its keys backwards. And the entries it returns are **live** --they read and write against
+// the map-- because an entry from `entrySet()` has to be able to `setValue`; a copy with the pair
+// inside would compile all the same and lose the writes in silence, which is the kind of error this
+// file exists in order not to commit.
+final class ReverseSortedEntries<K, V> extends AbstractSet<Map.Entry<K, V>> {
+
+    private final SortedMap<K, V> base;
+
+    ReverseSortedEntries(SortedMap<K, V> base) {
+        this.base = base;
+    }
+
+    public int size() {
+        return this.base.size();
+    }
+
+    public boolean isEmpty() {
+        return this.base.isEmpty();
+    }
+
+    public void clear() {
+        this.base.clear();
+    }
+
+    // Membership and removal are delegated to the set of the map behind: they are the same entries,
+    // and the only thing that changes between the two views is the traversal order.
+    public boolean contains(Object o) {
+        return this.base.entrySet().contains(o);
+    }
+
+    public boolean remove(Object o) {
+        return this.base.entrySet().remove(o);
+    }
+
+    public Iterator<Map.Entry<K, V>> iterator() {
+        return new ReverseSortedEntriesItr<K, V>(this.base);
+    }
+}
+
+// The backward traversal, with the same technique as `ReverseSortedItr` but over the map's keys: the
+// one before `k` is `headMap(k).lastKey()`.
+final class ReverseSortedEntriesItr<K, V> implements Iterator<Map.Entry<K, V>> {
+
+    private final SortedMap<K, V> base;
+    private K upcoming;
+    private boolean hasAny;
+    private boolean started = false;
+
+    ReverseSortedEntriesItr(SortedMap<K, V> base) {
+        this.base = base;
+    }
+
+    private void startThread() {
+        if (!this.started) {
+            this.started = true;
+            this.hasAny = !this.base.isEmpty();
+            if (this.hasAny) {
+                this.upcoming = this.base.lastKey();
+            }
+        }
+    }
+
+    public boolean hasNext() {
+        this.startThread();
+        return this.hasAny;
+    }
+
+    public Map.Entry<K, V> next() {
+        this.startThread();
+        if (!this.hasAny) {
+            throw new NoSuchElementException();
+        }
+        K current = this.upcoming;
+        SortedMap<K, V> before = this.base.headMap(current);
+        if (before.isEmpty()) {
+            this.hasAny = false;
+        } else {
+            this.upcoming = before.lastKey();
+        }
+        return new ReverseSortedEntry<K, V>(this.base, current);
+    }
+}
+
+// A live entry: the key is fixed and the value is read from and written to the map.
+final class ReverseSortedEntry<K, V> implements Map.Entry<K, V> {
+
+    private final SortedMap<K, V> base;
+    private final K entryKey;
+
+    ReverseSortedEntry(SortedMap<K, V> base, K entryKey) {
+        this.base = base;
+        this.entryKey = entryKey;
+    }
+
+    public K getKey() {
+        return this.entryKey;
+    }
+
+    public V getValue() {
+        return this.base.get(this.entryKey);
+    }
+
+    public V setValue(V value) {
+        return this.base.put(this.entryKey, value);
+    }
+
+    public boolean equals(Object o) {
+        if (!(o instanceof Map.Entry)) {
+            return false;
+        }
+        Map.Entry<?, ?> other = (Map.Entry<?, ?>) o;
+        K k = this.getKey();
+        V v = this.getValue();
+        boolean sameKey = k == null ? other.getKey() == null : k.equals(other.getKey());
+        boolean sameValue = v == null ? other.getValue() == null : v.equals(other.getValue());
+        return sameKey && sameValue;
+    }
+
+    // `Map.Entry`'s contract's: the XOR of the two, with null counting as zero.
+    public int hashCode() {
+        K k = this.getKey();
+        V v = this.getValue();
+        return (k == null ? 0 : k.hashCode()) ^ (v == null ? 0 : v.hashCode());
+    }
+
+    public String toString() {
+        return this.getKey() + "=" + this.getValue();
+    }
+}
+
+/** A `Deque` seen backwards: the two ends swapped. */
 final class ReverseDeque<E> extends AbstractCollection<E> implements Deque<E> {
 
     private final Deque<E> base;
@@ -319,7 +461,7 @@ final class ReverseDeque<E> extends AbstractCollection<E> implements Deque<E> {
         return this.base;
     }
 
-    // Todo el resto es el mismo metodo con la punta cambiada.
+    // All the rest is the same method with the end changed.
     public void addFirst(E e) {
         this.base.addLast(e);
     }
@@ -376,8 +518,8 @@ final class ReverseDeque<E> extends AbstractCollection<E> implements Deque<E> {
         return this.base.removeFirstOccurrence(o);
     }
 
-    // Los de `Queue` y los de pila, que en un Deque son sinonimos de los de arriba. Se escriben en
-    // terminos de **esta** vista, no del de atras: `push` empuja al principio de la vista.
+    // `Queue`'s and the stack's, which in a Deque are synonyms of the ones above. They are written in
+    // terms of **this** view, not of the one behind: `push` pushes onto the view's front.
     public boolean add(E e) {
         this.addLast(e);
         return true;

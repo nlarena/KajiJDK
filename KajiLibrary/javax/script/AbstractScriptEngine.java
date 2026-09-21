@@ -3,39 +3,39 @@ package javax.script;
 import java.io.Reader;
 
 /**
- * KajiLibrary's javax.script.AbstractScriptEngine -- la mitad aburrida de un motor, ya escrita.
+ * KajiLibrary's javax.script.AbstractScriptEngine -- the boring half of an engine, already written.
  *
- * <p>De los catorce metodos de {@link ScriptEngine}, diez no dependen del lenguaje: guardar un
- * contexto, buscar un `Bindings` por numero de ambito, poner y sacar variables, y reducir los
- * cuatro `eval` faciles a los dos dificiles. Esta clase hace eso y deja abstractos justo los que
- * no puede saber: {@code eval(String,ScriptContext)}, {@code eval(Reader,ScriptContext)},
- * {@code createBindings()} y {@code getFactory()}.
+ * <p>Of the fourteen methods of {@link ScriptEngine}, ten do not depend on the language: keeping a
+ * context, looking up a `Bindings` by scope number, putting and getting variables, and reducing the
+ * four easy `eval`s to the two hard ones. This class does that and leaves abstract exactly the ones
+ * it cannot know: {@code eval(String,ScriptContext)}, {@code eval(Reader,ScriptContext)},
+ * {@code createBindings()} and {@code getFactory()}.
  *
- * <p>El metodo con la logica de verdad es {@link #getScriptContext(Bindings)}, y conviene leerlo
- * al reves de como suena: cuando alguien evalua pasando un {@link Bindings} suelto, **no** se le
- * esta cambiando el ambito de motor al motor. Se arma un contexto nuevo y descartable con ese
- * `Bindings` como ambito de motor, el global del motor tal cual esta, y los tres canales copiados
- * del contexto del motor. Asi lo que el script defina en esa evaluacion se va con el contexto y no
- * queda pegado -- que es exactamente la diferencia entre `eval(s, bindings)` y hacer
- * `setBindings` antes de `eval(s)`.
+ * <p>The method with the real logic is {@link #getScriptContext(Bindings)}, and it is best read the
+ * other way round from how it sounds: when somebody evaluates passing a loose {@link Bindings}, the
+ * engine's engine scope is **not** being changed. A new, disposable context is built with that
+ * `Bindings` as engine scope, the engine's global scope as it is, and the three streams copied from
+ * the engine's context. That way what the script defines in that evaluation goes away with the
+ * context and does not stick -- which is exactly the difference between `eval(s, bindings)` and
+ * doing `setBindings` before `eval(s)`.
  *
- * <p>El campo {@link #context} es `protected` y no final: una subclase puede leerlo y cambiarlo
- * directo. Es parte del contrato del original, con lo bueno y lo malo que eso trae.
+ * <p>The {@link #context} field is `protected` and not final: a subclass can read it and change it
+ * directly. It is part of the original's contract, with the good and the bad that brings.
  */
 public abstract class AbstractScriptEngine implements ScriptEngine {
 
-    /** El contexto por defecto de este motor. Nunca deberia quedar en nulo. */
+    /** This engine's default context. It should never be left null. */
     protected ScriptContext context;
 
-    /** Con un {@link SimpleScriptContext} recien hecho. */
+    /** With a freshly made {@link SimpleScriptContext}. */
     public AbstractScriptEngine() {
         context = new SimpleScriptContext();
     }
 
     /**
-     * Igual que el sin argumentos, pero con `n` como ambito de motor del contexto.
+     * Like the no-argument one, but with `n` as the context's engine scope.
      *
-     * @throws NullPointerException si `n` es nulo
+     * @throws NullPointerException if `n` is null
      */
     public AbstractScriptEngine(Bindings n) {
         this();
@@ -48,7 +48,7 @@ public abstract class AbstractScriptEngine implements ScriptEngine {
     /**
      * {@inheritDoc}
      *
-     * @throws NullPointerException si `ctxt` es nulo
+     * @throws NullPointerException if `ctxt` is null
      */
     @Override
     public void setContext(ScriptContext ctxt) {
@@ -67,7 +67,7 @@ public abstract class AbstractScriptEngine implements ScriptEngine {
     /**
      * {@inheritDoc}
      *
-     * @throws IllegalArgumentException si `scope` no es 100 ni 200
+     * @throws IllegalArgumentException if `scope` is neither 100 nor 200
      */
     @Override
     public Bindings getBindings(int scope) {
@@ -82,8 +82,8 @@ public abstract class AbstractScriptEngine implements ScriptEngine {
     /**
      * {@inheritDoc}
      *
-     * @throws IllegalArgumentException si `scope` no es 100 ni 200
-     * @throws NullPointerException si `bindings` es nulo y `scope` es el de motor
+     * @throws IllegalArgumentException if `scope` is neither 100 nor 200
+     * @throws NullPointerException if `bindings` is null and `scope` is the engine one
      */
     @Override
     public void setBindings(Bindings bindings, int scope) {
@@ -142,13 +142,14 @@ public abstract class AbstractScriptEngine implements ScriptEngine {
     }
 
     /**
-     * Un contexto descartable con `nn` de ambito de motor, para las variantes de `eval` que
-     * reciben un {@link Bindings}.
+     * A disposable context with `nn` as engine scope, for the variants of `eval` that receive a
+     * {@link Bindings}.
      *
-     * <p>Copia el ambito global del motor (si tiene) y los tres canales, pero **no** el ambito de
-     * motor: ese lo aporta `nn`. Lo que el script defina se queda en `nn` y en el contexto nuevo.
+     * <p>It copies the engine's global scope (if it has one) and the three streams, but **not** the
+     * engine scope: `nn` supplies that. What the script defines stays in `nn` and in the new
+     * context.
      *
-     * @throws NullPointerException si `nn` es nulo -- un `eval` con `Bindings` necesita uno
+     * @throws NullPointerException if `nn` is null -- an `eval` with `Bindings` needs one
      */
     protected ScriptContext getScriptContext(Bindings nn) {
         SimpleScriptContext ctxt = new SimpleScriptContext();

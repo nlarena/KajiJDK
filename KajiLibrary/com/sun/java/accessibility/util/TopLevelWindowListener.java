@@ -4,22 +4,23 @@ import java.awt.Window;
 import java.util.EventListener;
 
 /**
- * Se entera cuando aparece o desaparece una ventana de primer nivel.
+ * It finds out when a top-level window appears or disappears.
  *
- * <h2>Por que solo las de primer nivel</h2>
+ * <h2>Why only the top-level ones</h2>
  *
- * <p>Porque son las raices del arbol de accesibilidad. Una tecnologia de asistencia recorre desde
- * ahi hacia abajo, asi que enterarse de las ventanas alcanza para saber que arboles hay — y
- * suscribirse a cada componente seria imposible en una aplicacion de tamano real.
+ * <p>Because they are the roots of the accessibility tree. An assistive technology walks from
+ * there downwards, so finding out about the windows is enough in order to know what trees there
+ * are -- and subscribing to each component would be impossible in an application of a real
+ * size.
  *
- * <p>El aviso de destruccion importa tanto como el de creacion: sin el, un lector de pantalla
- * conservaria referencias a arboles que ya no existen.
+ * <p>The notice of destruction matters as much as the one of creation: without it, a screen
+ * reader would keep references to trees that no longer exist.
  */
 public interface TopLevelWindowListener extends EventListener {
 
-    /** Aparecio una ventana de primer nivel. */
+    /** A top-level window appeared. */
     void topLevelWindowCreated(Window w);
 
-    /** Desaparecio una. */
+    /** One disappeared. */
     void topLevelWindowDestroyed(Window w);
 }

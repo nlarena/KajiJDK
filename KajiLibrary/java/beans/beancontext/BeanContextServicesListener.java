@@ -1,14 +1,14 @@
 package java.beans.beancontext;
 
 /**
- * Escucha la aparición de servicios nuevos, además de su revocación.
+ * Listens for new services appearing, as well as for their revocation.
  *
- * <p>Extiende a {@link BeanContextServiceRevokedListener} y no lo repite: quien quiere enterarse de
- * las altas casi siempre quiere enterarse también de las bajas, y separarlos obligaría a registrar
- * dos oyentes para seguir un mismo servicio.
+ * <p>It extends {@link BeanContextServiceRevokedListener} instead of repeating it: whoever wants to
+ * hear about additions almost always wants to hear about removals too, and keeping them apart would
+ * force registering two listeners to follow one service.
  */
 public interface BeanContextServicesListener extends BeanContextServiceRevokedListener {
 
-    /** Hay un servicio nuevo disponible. */
+    /** A new service is available. */
     void serviceAvailable(BeanContextServiceAvailableEvent bcsae);
 }

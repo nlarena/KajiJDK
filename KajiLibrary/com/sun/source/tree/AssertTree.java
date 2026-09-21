@@ -1,7 +1,7 @@
 package com.sun.source.tree;
 
 /**
- * `assert cond;` o `assert cond : detalle;`.
+ * `assert cond;` or `assert cond : detail;`.
  */
 public interface AssertTree extends StatementTree {
 

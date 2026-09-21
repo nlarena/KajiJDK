@@ -1,36 +1,36 @@
 package javax.accessibility;
 
 /**
- * Lo implementa lo que tiene hijos que se pueden **elegir**: una lista, un árbol, una tabla, un
- * panel de pestañas.
+ * Implemented by what has children that can be **chosen**: a list, a tree, a table, a tabbed pane.
  *
- * <p>Los hijos se nombran por su número dentro del padre, no por su número dentro de la selección.
- * Es la numeración que usa todo el paquete y evita que agregar un elemento renumere lo elegido.
+ * <p>The children are named by their number within the parent, not by their number within the
+ * selection. It is the numbering the whole package uses and it keeps adding an item from
+ * renumbering what was chosen.
  */
 public interface AccessibleSelection {
 
-    /** Cuántos hijos están elegidos. */
+    /** How many children are chosen. */
     int getAccessibleSelectionCount();
 
     /**
-     * El `i`-ésimo hijo elegido.
+     * The `i`-th chosen child.
      *
-     * @return el hijo, o `null` si no hay tantos
+     * @return the child, or `null` if there are not that many
      */
     Accessible getAccessibleSelection(int i);
 
-    /** Si ese hijo está elegido. */
+    /** Whether that child is chosen. */
     boolean isAccessibleChildSelected(int i);
 
-    /** Agrega ese hijo a la selección. */
+    /** Adds that child to the selection. */
     void addAccessibleSelection(int i);
 
-    /** Saca ese hijo de la selección. */
+    /** Removes that child from the selection. */
     void removeAccessibleSelection(int i);
 
-    /** Deja la selección vacía. */
+    /** Leaves the selection empty. */
     void clearAccessibleSelection();
 
-    /** Elige todos los hijos, si el objeto lo admite. */
+    /** Chooses all the children, if the object allows it. */
     void selectAllAccessibleSelection();
 }

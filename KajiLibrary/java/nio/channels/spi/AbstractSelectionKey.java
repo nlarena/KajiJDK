@@ -3,52 +3,52 @@ package java.nio.channels.spi;
 import java.nio.channels.SelectionKey;
 
 /**
- * KajiLibrary's java.nio.channels.spi.AbstractSelectionKey — la validez de una llave, resuelta.
+ * KajiLibrary's java.nio.channels.spi.AbstractSelectionKey — the validity of a key, solved.
  *
- * <p>Es la clase mas chica del paquete y hace una sola cosa, que es la que todos harian mal: separar
- * **cancelar** de **invalidar**.
+ * <p>It is the smallest class of the package and it does a single thing, which is the one everybody
+ * would do wrongly: keeping **cancelling** apart from **invalidating**.
  *
- * <p>{@link #cancel()} lo llama el usuario y tiene que ser barato e idempotente; lo unico que hace
- * es marcar la llave y anotarla en la lista de canceladas del selector. La baja de verdad
- * --sacar el canal, liberar lo que haya-- ocurre despues, dentro de la seleccion siguiente, donde el
- * selector es due&ntilde;o de sus estructuras. Hacerlo al reves --dar de baja en el acto-- significa
- * modificar el juego de llaves mientras otro hilo puede estar recorriendolo.
+ * <p>{@link #cancel()} is called by the user and has to be cheap and idempotent; the only thing it
+ * does is mark the key and note it in the selector's list of cancelled ones. The real dropping
+ * --taking the channel out, releasing whatever there is-- happens afterwards, inside the next
+ * selection, where the selector owns its structures. Doing it the other way round --dropping on the
+ * spot-- means modifying the set of keys while another thread may be walking it.
  *
- * <p>{@link #invalidate()} es lo contrario: no la llama el usuario --no es publica-- sino el
- * selector, cuando ya hizo la baja.
+ * <p>{@link #invalidate()} is the opposite: it is not called by the user --it is not public-- but
+ * by the selector, once it has done the dropping.
  */
 public abstract class AbstractSelectionKey extends SelectionKey {
 
-    private boolean valida = true;
+    private boolean validFlag = true;
 
     protected AbstractSelectionKey() {
     }
 
     public final boolean isValid() {
-        return this.valida;
+        return this.validFlag;
     }
 
-    // La usa `AbstractSelector.deregister`. Package-private como en el JDK: invalidar sin dar de
-    // baja dejaria al canal registrado en un selector que ya no lo mira.
+    // It is used by `AbstractSelector.deregister`. Package-private as in the JDK: invalidating
+    // without dropping would leave the channel registered in a selector that no longer looks at it.
     void invalidate() {
-        this.valida = false;
+        this.validFlag = false;
     }
 
     /**
-     * Cancela la llave.
+     * Cancels the key.
      *
-     * <p>Idempotente: llamarla dos veces no anota dos veces en la lista de canceladas, que si no
-     * creceria sin limite en cualquier lazo que cancele por las dudas.
+     * <p>Idempotent: calling it twice does not note it twice in the list of cancelled ones, which
+     * would otherwise grow without limit in any loop that cancels just in case.
      */
     public final void cancel() {
-        boolean primera = false;
+        boolean firstCancel = false;
         synchronized (this) {
-            if (this.valida) {
-                this.valida = false;
-                primera = true;
+            if (this.validFlag) {
+                this.validFlag = false;
+                firstCancel = true;
             }
         }
-        if (primera) {
+        if (firstCancel) {
             ((AbstractSelector) this.selector()).cancel(this);
         }
     }

@@ -2,11 +2,11 @@ package java.security.spec;
 
 import java.math.BigInteger;
 
-// Un cuerpo primo GF(p): los enteros modulo un primo.
+// A prime field GF(p): the integers modulo a prime.
 //
-// La clase **no verifica que `p` sea primo**, y eso es del contrato del JDK, no una omision de
-// aca: probar primalidad de un numero de 256 bits en un constructor que se llama por cada clave
-// seria un costo que nadie pidio. Quien construye el cuerpo es responsable de que lo sea.
+// The class **does not check that `p` is prime**, and that is the JDK's contract, not an omission
+// here: testing the primality of a 256-bit number in a constructor called for every key would be a
+// cost nobody asked for. Whoever builds the field is responsible for it being prime.
 public class ECFieldFp implements ECField {
 
     private final BigInteger p;
@@ -21,7 +21,7 @@ public class ECFieldFp implements ECField {
         this.p = p;
     }
 
-    // El tamano en bits de `p`, que es lo que ocupa un elemento del cuerpo.
+    // The size of `p` in bits, which is what an element of the field takes.
     public int getFieldSize() {
         return this.p.bitLength();
     }

@@ -5,36 +5,38 @@ import java.util.function.Supplier;
 import jdk.internal.classfile.impl.Transforms;
 
 /**
- * Una transformación sobre las instrucciones de un método.
+ * A transformation over a method's instructions.
  *
- * <p>Es la que hace el trabajo interesante --instrumentar, reescribir llamadas, contar-- y la única
- * de las cuatro que **no** tiene `dropping`. No es un olvido del JDK: tirar una instrucción suelta
- * casi siempre deja el método inconsistente, porque las instrucciones dependen de lo que las de
- * antes dejaron en la pila. Filtrar código es reescribirlo, y para eso está {@link #accept}.
+ * <p>It is the one doing the interesting work --instrumenting, rewriting calls, counting-- and the
+ * only one of the four that does **not** have `dropping`. That is no oversight of the JDK's: dropping
+ * a lone instruction nearly always leaves the method inconsistent, because instructions depend on
+ * what the earlier ones left on the stack. Filtering code is rewriting it, and {@link #accept} is
+ * there for that.
  */
 public interface CodeTransform extends ClassFileTransform<CodeTransform, CodeElement, CodeBuilder> {
 
-    /** La que deja pasar todo tal cual. */
+    /** The one letting everything through as it is. */
     public static final CodeTransform ACCEPT_ALL = new AcceptAllCode();
 
-    /** Ésta y después esa otra. */
+    /** This one and then that other one. */
     default CodeTransform andThen(CodeTransform next) {
         return Transforms.chainCode(this, next);
     }
 
-    /** La que deja pasar todo y al final corre eso. */
+    /** The one letting everything through and running that at the end. */
     public static CodeTransform endHandler(Consumer<CodeBuilder> finisher) {
         return Transforms.endHandlerCode(finisher);
     }
 
-    /** Una transformación con estado, fabricada de nuevo por cada uso. */
+    /** A stateful transformation, made anew for each use. */
     public static CodeTransform ofStateful(Supplier<CodeTransform> supplier) {
         return Transforms.statefulCode(supplier);
     }
 }
 
-// La implementacion de `CodeTransform.ACCEPT_ALL`. Con nombre y no anonima: nuestro javac no emite una anonima
-// en el inicializador de un campo de interfaz, y de paso el nombre aparece en los volcados de pila.
+// The implementation of `CodeTransform.ACCEPT_ALL`. Named and not anonymous: our javac emits no
+// anonymous class
+// in an interface field's initialiser, and the name shows up in stack dumps as a bonus.
 final class AcceptAllCode implements CodeTransform {
 
     public void accept(CodeBuilder builder, CodeElement element) {

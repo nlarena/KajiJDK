@@ -3,18 +3,19 @@ package java.lang.classfile.instruction;
 import java.lang.classfile.Instruction;
 import jdk.internal.classfile.impl.Instructions;
 
-// `iinc`: sumarle una constante a una variable local sin pasar por la pila. La forma corta guarda la
-// ranura en un byte y la constante en un byte con signo; la ensanchada, los dos en dos bytes. Que
-// `constant()` sea `int` y no `byte` es por eso: el rango depende de la codificación.
+// `iinc`: adding a constant to a local variable without going through the stack. The short form
+// stores the slot in one byte and the constant in a signed byte; the widened one, both in two bytes.
+// That `constant()` is an `int` and not a `byte` is because of that: the range depends on the
+// encoding.
 public interface IncrementInstruction extends Instruction {
 
-    /** La ranura de variable local. */
+    /** The local variable slot. */
     int slot();
 
-    /** Lo que se le suma. */
+    /** What is added to it. */
     int constant();
 
-    /** El `iinc` de esta ranura y esta constante, en la codificación más corta que les entre. */
+    /** The `iinc` of this slot and this constant, in the shortest encoding they fit into. */
     public static IncrementInstruction of(int slot, int constant) {
         return Instructions.increment(slot, constant);
     }

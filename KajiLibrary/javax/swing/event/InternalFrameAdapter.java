@@ -1,15 +1,15 @@
 package javax.swing.event;
 
 /**
- * Un {@link InternalFrameListener} con los siete metodos vacios.
+ * An {@link InternalFrameListener} with the seven methods empty.
  *
- * <p>El patron adaptador: atender solo el cierre no deberia obligar a escribir seis metodos que no
- * hacen nada. Es abstracta aunque no tenga metodos abstractos —heredo todos con cuerpo— porque
- * instanciarla tal cual no serviria para nada.
+ * <p>The adapter pattern: attending only to the closing should not force writing six methods that
+ * do nothing. It is abstract even though it has no abstract methods --it inherits them all with a
+ * body-- because instantiating it as it is would serve no purpose.
  */
 public abstract class InternalFrameAdapter implements InternalFrameListener {
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected InternalFrameAdapter() {
     }
 

@@ -3,44 +3,44 @@ package java.lang.management;
 import javax.management.openmbean.CompositeData;
 
 /**
- * KajiLibrary's java.lang.management.MemoryUsage -- cuanta memoria hay y cuanta se usa.
+ * KajiLibrary's java.lang.management.MemoryUsage -- how much memory there is and how much is used.
  *
- * <p>Cuatro numeros, y la diferencia entre ellos es lo que hay que entender:
+ * <p>Four numbers, and the difference between them is the thing to understand:
  *
  * <ul>
- *   <li>{@link #getInit} lo que se pidio al arrancar;
- *   <li>{@link #getUsed} lo que hay ocupado ahora;
- *   <li>{@link #getCommitted} lo que el sistema operativo tiene <b>reservado de verdad</b> para la
- *       maquina virtual. Siempre mayor o igual que lo usado, y puede bajar si la maquina virtual
- *       devuelve memoria;
- *   <li>{@link #getMax} el techo, si lo hay.
+ *   <li>{@link #getInit} what was asked for at start-up;
+ *   <li>{@link #getUsed} what is occupied now;
+ *   <li>{@link #getCommitted} what the operating system has <b>genuinely reserved</b> for the
+ *       virtual machine. Always greater than or equal to what is used, and it can go down if the
+ *       virtual machine gives memory back;
+ *   <li>{@link #getMax} the ceiling, if there is one.
  * </ul>
  *
- * <p>El que se malinterpreta es {@code committed}. Un programa que mira {@code used/max} para saber si
- * esta cerca del limite se lleva sorpresas: lo que importa para el rendimiento es cuanto falta para
- * que {@code committed} tenga que crecer.
+ * <p>The one that gets misread is {@code committed}. A program watching {@code used/max} to tell
+ * whether it is near the limit is in for surprises: what matters for performance is how much is left
+ * before {@code committed} has to grow.
  *
- * <p>{@code init} y {@code max} pueden valer -1, que significa "no definido". Los otros dos no.
+ * <p>{@code init} and {@code max} may be -1, which means "undefined". The other two may not.
  *
- * <p>Es inmutable: es una foto del momento en que se pidio, no una vista viva.
+ * <p>It is immutable: a snapshot of the moment it was asked for, not a live view.
  */
 public class MemoryUsage {
 
-    /** Lo pedido al arrancar, o -1. */
+    /** What was asked for at start-up, or -1. */
     private final long init;
 
-    /** Lo ocupado ahora. */
+    /** What is occupied now. */
     private final long used;
 
-    /** Lo reservado al sistema operativo. */
+    /** What is reserved from the operating system. */
     private final long committed;
 
-    /** El techo, o -1. */
+    /** The ceiling, or -1. */
     private final long max;
 
     /**
-     * @throws IllegalArgumentException si algun valor es negativo sin ser -1 donde se permite, si lo
-     *     usado supera lo reservado, o si lo reservado supera el techo
+     * @throws IllegalArgumentException if some value is negative without being the -1 that is allowed
+     *     there, if what is used exceeds what is reserved, or if what is reserved exceeds the ceiling
      */
     public MemoryUsage(long init, long used, long committed, long max) {
         if (init < -1) {
@@ -72,27 +72,27 @@ public class MemoryUsage {
         this.max = max;
     }
 
-    /** Lo pedido al arrancar, o -1. */
+    /** What was asked for at start-up, or -1. */
     public long getInit() {
         return this.init;
     }
 
-    /** Lo ocupado ahora. */
+    /** What is occupied now. */
     public long getUsed() {
         return this.used;
     }
 
-    /** Lo reservado al sistema operativo. Ver la nota de la clase. */
+    /** What is reserved from the operating system. See the class's note. */
     public long getCommitted() {
         return this.committed;
     }
 
-    /** El techo, o -1. */
+    /** The ceiling, or -1. */
     public long getMax() {
         return this.max;
     }
 
-    /** Los cuatro numeros, cada uno en bytes y en kilobytes. */
+    /** The four numbers, each in bytes and in kilobytes. */
     @Override
     public String toString() {
         StringBuilder buf = new StringBuilder();
@@ -105,13 +105,13 @@ public class MemoryUsage {
     }
 
     /**
-     * Lo mismo, leido de un {@link CompositeData}.
+     * The same, read out of a {@link CompositeData}.
      *
-     * <p>Es como llega de una maquina virtual remota: por la red viaja el dato abierto y de este lado
-     * se vuelve a armar el objeto.
+     * <p>It is how it arrives from a remote virtual machine: the open datum travels over the network
+     * and the object is rebuilt on this side.
      *
-     * @return el objeto, o null si el dato es null
-     * @throws IllegalArgumentException si el dato no describe un {@code MemoryUsage}
+     * @return the object, or null if the datum is null
+     * @throws IllegalArgumentException if the datum does not describe a {@code MemoryUsage}
      */
     public static MemoryUsage from(CompositeData cd) {
         if (cd == null) {

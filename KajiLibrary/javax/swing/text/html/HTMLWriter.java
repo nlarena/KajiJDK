@@ -13,23 +13,25 @@ import javax.swing.text.ElementIterator;
 import javax.swing.text.StyleConstants;
 
 /**
- * Escribe un {@link HTMLDocument} de vuelta como HTML.
+ * It writes an {@link HTMLDocument} back out as HTML.
  *
- * <h2>El problema: el arbol no es el HTML</h2>
+ * <h2>The problem: the tree is not the HTML</h2>
  *
- * <p>Un documento guarda parrafos y tramos de caracteres con atributos. El HTML tiene etiquetas
- * anidadas. No son lo mismo: un tramo con negrita y cursiva es <em>un</em> elemento del documento y
- * <em>dos</em> etiquetas anidadas en el HTML.
+ * <p>A document keeps paragraphs and stretches of characters with attributes. HTML has nested
+ * tags. They are not the same: a stretch with bold and italic is <em>one</em> element of the
+ * document and <em>two</em> nested tags in the HTML.
  *
- * <p>Por eso el escritor lleva la cuenta de las etiquetas que tiene abiertas
- * ({@link #writeEmbeddedTags} y {@link #closeOutUnwantedEmbeddedTags}): al pasar de un tramo al
- * siguiente abre las que aparecen y cierra las que dejaron de estar, en el orden que corresponde.
+ * <p>That is why the writer keeps track of the tags it has open
+ * ({@link #writeEmbeddedTags} and {@link #closeOutUnwantedEmbeddedTags}): on going from one
+ * stretch to the next it opens those that appear and closes those that stopped being there, in
+ * the right order.
  *
- * <h2>Elementos que no se escriben</h2>
+ * <h2>Elements that are not written</h2>
  *
- * <p>El analizador inventa elementos que el autor no escribio -- el parrafo implicito, el
- * <code>&lt;html&gt;</code> que faltaba -- y los marca. {@link #synthesizedElement} los reconoce y
- * los saltea, para que el HTML que sale se parezca al que entro.
+ * <p>The parser invents elements the author did not write -- the implicit paragraph, the
+ * <code>&lt;html&gt;</code> that was missing -- and marks them. {@link #synthesizedElement}
+ * recognizes them and skips them, so that the HTML that comes out looks like the one that went
+ * in.
  */
 public class HTMLWriter extends AbstractWriter {
 
@@ -43,21 +45,21 @@ public class HTMLWriter extends AbstractWriter {
     private boolean indentNext = false;
     private char[] tempChars;
 
-    /** Escribe el documento entero. */
+    /** It writes the whole document. */
     public HTMLWriter(Writer w, HTMLDocument doc) {
         this(w, doc, 0, doc.getLength());
     }
 
-    /** Escribe ese tramo del documento. */
+    /** It writes that stretch of the document. */
     public HTMLWriter(Writer w, HTMLDocument doc, int pos, int len) {
         super(w, doc, pos, len);
     }
 
     /**
-     * Escribe el documento.
+     * It writes the document.
      *
-     * <p>Recorre el arbol de elementos con un {@link ElementIterator}, abriendo y cerrando
-     * etiquetas segun el nivel.
+     * <p>It walks the element tree with an {@link ElementIterator}, opening and closing tags
+     * according to the level.
      */
     public void write() throws IOException, BadLocationException {
         ElementIterator it = getElementIterator();
@@ -85,20 +87,20 @@ public class HTMLWriter extends AbstractWriter {
             }
             next = it.next();
             if (next == null) {
-                cerrarHasta(0, current);
+                closeUpTo(0, current);
                 break;
             }
-            int nivelActual = nivel(current);
-            int nivelSiguiente = nivel(next);
-            if (nivelSiguiente <= nivelActual) {
-                cerrarHasta(nivelSiguiente, current);
+            int currentLevel = level(current);
+            int nextLevel = level(next);
+            if (nextLevel <= currentLevel) {
+                closeUpTo(nextLevel, current);
             }
             current = next;
         }
         closeOutUnwantedEmbeddedTags(null);
     }
 
-    private static int nivel(Element e) {
+    private static int level(Element e) {
         int n = 0;
         for (Element p = e.getParentElement(); p != null; p = p.getParentElement()) {
             n++;
@@ -106,13 +108,13 @@ public class HTMLWriter extends AbstractWriter {
         return n;
     }
 
-    /** Cierra las etiquetas abiertas desde ese elemento hasta ese nivel. */
-    private void cerrarHasta(int nivelDestino, Element desde) throws IOException {
-        Element e = desde;
+    /** It closes the tags open from that element down to that level. */
+    private void closeUpTo(int targetLevel, Element from) throws IOException {
+        Element e = from;
         if (!(e instanceof javax.swing.text.AbstractDocument.BranchElement)) {
             e = e.getParentElement();
         }
-        while (e != null && nivel(e) >= nivelDestino) {
+        while (e != null && level(e) >= targetLevel) {
             if (!synthesizedElement(e)) {
                 endTag(e);
             }
@@ -121,10 +123,10 @@ public class HTMLWriter extends AbstractWriter {
     }
 
     /**
-     * Escribe los atributos de un conjunto.
+     * It writes a set's attributes.
      *
-     * <p>No escribe los internos: el nombre del elemento y las marcas que puso el analizador no son
-     * atributos de HTML, y escribirlos daria un documento que no se puede volver a leer.
+     * <p>It does not write the internal ones: the element's name and the marks the parser put in
+     * are not HTML attributes, and writing them would give a document that cannot be read back.
      */
     protected void writeAttributes(AttributeSet attr) throws IOException {
         Enumeration<?> names = attr.getAttributeNames();
@@ -141,21 +143,21 @@ public class HTMLWriter extends AbstractWriter {
         }
     }
 
-    /** Escribe una etiqueta sin cierre, como {@code <br>} o {@code <img>}. */
+    /** It writes a tag with no closing, such as {@code <br>} or {@code <img>}. */
     protected void emptyTag(Element elem) throws BadLocationException, IOException {
         AttributeSet attr = elem.getAttributes();
         closeOutUnwantedEmbeddedTags(attr);
         writeEmbeddedTags(attr);
-        Object nombre = attr.getAttribute(StyleConstants.NameAttribute);
-        if (nombre instanceof HTML.Tag) {
+        Object name = attr.getAttribute(StyleConstants.NameAttribute);
+        if (name instanceof HTML.Tag) {
             write('<');
-            write(nombre.toString());
+            write(name.toString());
             writeAttributes(attr);
             write('>');
         }
     }
 
-    /** Si esa etiqueta arma bloque. */
+    /** Whether that tag makes a block. */
     protected boolean isBlockTag(AttributeSet attr) {
         Object o = attr.getAttribute(StyleConstants.NameAttribute);
         if (o instanceof HTML.Tag) {
@@ -164,14 +166,14 @@ public class HTMLWriter extends AbstractWriter {
         return false;
     }
 
-    /** Escribe la etiqueta de apertura de un elemento con hijos. */
+    /** It writes the opening tag of an element with children. */
     protected void startTag(Element elem) throws IOException, BadLocationException {
         AttributeSet attr = elem.getAttributes();
-        Object nombre = attr.getAttribute(StyleConstants.NameAttribute);
-        if (!(nombre instanceof HTML.Tag)) {
+        Object name = attr.getAttribute(StyleConstants.NameAttribute);
+        if (!(name instanceof HTML.Tag)) {
             return;
         }
-        HTML.Tag tag = (HTML.Tag) nombre;
+        HTML.Tag tag = (HTML.Tag) name;
         if (tag == HTML.Tag.PRE) {
             inPre = true;
         }
@@ -189,19 +191,19 @@ public class HTMLWriter extends AbstractWriter {
         incrIndent();
     }
 
-    /** El contenido de un {@code <textarea>}, tal cual, sin cortar lineas. */
+    /** A {@code <textarea>}'s content, as it is, without breaking lines. */
     protected void textAreaContent(AttributeSet attr) throws BadLocationException, IOException {
-        Object modelo = attr.getAttribute(StyleConstants.ModelAttribute);
-        if (modelo instanceof javax.swing.text.Document) {
-            javax.swing.text.Document doc = (javax.swing.text.Document) modelo;
-            String texto = doc.getText(0, doc.getLength());
+        Object model = attr.getAttribute(StyleConstants.ModelAttribute);
+        if (model instanceof javax.swing.text.Document) {
+            javax.swing.text.Document doc = (javax.swing.text.Document) model;
+            String text = doc.getText(0, doc.getLength());
             setCanWrapLines(false);
-            write(texto);
+            write(text);
             setCanWrapLines(true);
         }
     }
 
-    /** El texto de un elemento hoja, con las entidades escapadas. */
+    /** A leaf element's text, with the entities escaped. */
     protected void text(Element elem) throws BadLocationException, IOException {
         int start = Math.max(getStartOffset(), elem.getStartOffset());
         int end = Math.min(getEndOffset(), elem.getEndOffset());
@@ -213,19 +215,19 @@ public class HTMLWriter extends AbstractWriter {
         if (inPre) {
             setCanWrapLines(false);
         }
-        write(escapar(s));
+        write(escape(s));
         if (inPre) {
             setCanWrapLines(true);
         }
     }
 
     /**
-     * Escapa lo que en HTML no se puede escribir tal cual.
+     * It escapes what in HTML cannot be written as it is.
      *
-     * <p>Son cuatro: los dos angulos, el ampersand y la comilla doble. El ampersand va primero, si
-     * no se escaparia el que acaba de escribir el reemplazo anterior.
+     * <p>There are four: the two angles, the ampersand and the double quote. The ampersand goes
+     * first, otherwise it would escape the one the previous replacement has just written.
      */
-    private static String escapar(String s) {
+    private static String escape(String s) {
         StringBuilder sb = new StringBuilder(s.length());
         for (int i = 0; i < s.length(); i++) {
             char c = s.charAt(i);
@@ -245,24 +247,24 @@ public class HTMLWriter extends AbstractWriter {
     }
 
     /**
-     * Las opciones de un {@code <select>}.
+     * A {@code <select>}'s options.
      *
-     * <p>Salen del modelo del control, no del documento: el usuario pudo haber cambiado la
-     * seleccion, y lo que hay que escribir es lo que se ve.
+     * <p>They come from the control's model, not from the document: the user may have changed the
+     * selection, and what has to be written is what is seen.
      */
     protected void selectContent(AttributeSet attr) throws IOException {
-        Object modelo = attr.getAttribute(StyleConstants.ModelAttribute);
+        Object model = attr.getAttribute(StyleConstants.ModelAttribute);
         incrIndent();
-        if (modelo instanceof javax.swing.ComboBoxModel) {
-            javax.swing.ComboBoxModel<?> m = (javax.swing.ComboBoxModel<?>) modelo;
+        if (model instanceof javax.swing.ComboBoxModel) {
+            javax.swing.ComboBoxModel<?> m = (javax.swing.ComboBoxModel<?>) model;
             for (int i = 0; i < m.getSize(); i++) {
                 Object o = m.getElementAt(i);
                 if (o instanceof Option) {
                     writeOption((Option) o);
                 }
             }
-        } else if (modelo instanceof javax.swing.ListModel) {
-            javax.swing.ListModel<?> m = (javax.swing.ListModel<?>) modelo;
+        } else if (model instanceof javax.swing.ListModel) {
+            javax.swing.ListModel<?> m = (javax.swing.ListModel<?>) model;
             for (int i = 0; i < m.getSize(); i++) {
                 Object o = m.getElementAt(i);
                 if (o instanceof Option) {
@@ -273,7 +275,7 @@ public class HTMLWriter extends AbstractWriter {
         decrIndent();
     }
 
-    /** Una opcion de lista, con su marca de seleccionada si la tiene. */
+    /** A list option, with its selected mark if it has one. */
     protected void writeOption(Option option) throws IOException {
         indent();
         write('<');
@@ -292,14 +294,14 @@ public class HTMLWriter extends AbstractWriter {
         writeLineSeparator();
     }
 
-    /** La etiqueta de cierre. */
+    /** The closing tag. */
     protected void endTag(Element elem) throws IOException {
         AttributeSet attr = elem.getAttributes();
-        Object nombre = attr.getAttribute(StyleConstants.NameAttribute);
-        if (!(nombre instanceof HTML.Tag)) {
+        Object name = attr.getAttribute(StyleConstants.NameAttribute);
+        if (!(name instanceof HTML.Tag)) {
             return;
         }
-        HTML.Tag tag = (HTML.Tag) nombre;
+        HTML.Tag tag = (HTML.Tag) name;
         if (tag == HTML.Tag.PRE) {
             inPre = false;
         }
@@ -317,7 +319,7 @@ public class HTMLWriter extends AbstractWriter {
         }
     }
 
-    /** Un comentario, con sus delimitadores. */
+    /** A comment, with its delimiters. */
     protected void comment(Element elem) throws BadLocationException, IOException {
         AttributeSet as = elem.getAttributes();
         Object o = as.getAttribute(HTML.Attribute.COMMENT);
@@ -330,7 +332,7 @@ public class HTMLWriter extends AbstractWriter {
         }
     }
 
-    /** Si el elemento lo invento el analizador; ver la nota de la clase. */
+    /** Whether the parser invented the element; see the class note. */
     protected boolean synthesizedElement(Element elem) {
         Object o = elem.getAttributes().getAttribute(StyleConstants.NameAttribute);
         if (o == HTML.Tag.IMPLIED) {
@@ -340,17 +342,17 @@ public class HTMLWriter extends AbstractWriter {
                 HTMLEditorKit.ParserCallback.IMPLIED) != null;
     }
 
-    /** Si el nombre del elemento es esa etiqueta. */
+    /** Whether the element's name is that tag. */
     protected boolean matchNameAttribute(AttributeSet attr, HTML.Tag tag) {
         Object o = attr.getAttribute(StyleConstants.NameAttribute);
         return (o instanceof HTML.Tag && o == tag);
     }
 
     /**
-     * Abre las etiquetas de caracter que este tramo tiene y el anterior no.
+     * It opens the character tags this stretch has and the previous one did not.
      *
-     * <p>Son las que no salen de un elemento del arbol sino de un atributo del tramo: negrita,
-     * cursiva, un enlace. Ver la nota de la clase.
+     * <p>They are the ones that do not come from an element of the tree but from an attribute of
+     * the stretch: bold, italic, a link. See the class note.
      */
     protected void writeEmbeddedTags(AttributeSet attr) throws IOException {
         Enumeration<?> names = attr.getAttributeNames();
@@ -375,60 +377,60 @@ public class HTMLWriter extends AbstractWriter {
     }
 
     /**
-     * Cierra las etiquetas de caracter que ya no corresponden.
+     * It closes the character tags that no longer apply.
      *
-     * <p>Se cierran en orden inverso al de apertura, y si una del medio dejo de valer se cierran
-     * tambien las de adentro y se vuelven a abrir. No hay otra forma: el HTML no permite cerrar una
-     * etiqueta salteando las que tiene adentro.
+     * <p>They are closed in the reverse order of opening, and if one in the middle stopped holding,
+     * those inside are closed too and reopened. There is no other way: HTML does not allow closing
+     * a tag skipping over those it has inside.
      */
     protected void closeOutUnwantedEmbeddedTags(AttributeSet attr) throws IOException {
         tagsToRemove.removeAllElements();
         for (int i = 0; i < tags.size(); i++) {
             HTML.Tag tag = tags.elementAt(i);
             Object value = tagValues.elementAt(i);
-            if (attr == null || !valorIgual(attr.getAttribute(tag), value)) {
+            if (attr == null || !sameValue(attr.getAttribute(tag), value)) {
                 tagsToRemove.addElement(tag);
             }
         }
         if (tagsToRemove.size() == 0) {
             return;
         }
-        int desde = tags.size();
+        int from = tags.size();
         for (int i = 0; i < tags.size(); i++) {
             if (tagsToRemove.contains(tags.elementAt(i))) {
-                desde = i;
+                from = i;
                 break;
             }
         }
-        // Se cierra desde la ultima hasta la primera que dejo de valer.
-        Vector<HTML.Tag> reabrir = new Vector<HTML.Tag>();
-        Vector<Object> reabrirVal = new Vector<Object>();
-        for (int i = tags.size() - 1; i >= desde; i--) {
+        // It closes from the last one down to the first that stopped holding.
+        Vector<HTML.Tag> reopen = new Vector<HTML.Tag>();
+        Vector<Object> reopenValue = new Vector<Object>();
+        for (int i = tags.size() - 1; i >= from; i--) {
             HTML.Tag tag = tags.elementAt(i);
             write('<');
             write('/');
             write(tag.toString());
             write('>');
             if (!tagsToRemove.contains(tag)) {
-                reabrir.insertElementAt(tag, 0);
-                reabrirVal.insertElementAt(tagValues.elementAt(i), 0);
+                reopen.insertElementAt(tag, 0);
+                reopenValue.insertElementAt(tagValues.elementAt(i), 0);
             }
         }
-        while (tags.size() > desde) {
+        while (tags.size() > from) {
             tags.removeElementAt(tags.size() - 1);
             tagValues.removeElementAt(tagValues.size() - 1);
         }
-        for (int i = 0; i < reabrir.size(); i++) {
-            HTML.Tag tag = reabrir.elementAt(i);
+        for (int i = 0; i < reopen.size(); i++) {
+            HTML.Tag tag = reopen.elementAt(i);
             write('<');
             write(tag.toString());
             write('>');
             tags.addElement(tag);
-            tagValues.addElement(reabrirVal.elementAt(i));
+            tagValues.addElement(reopenValue.elementAt(i));
         }
     }
 
-    private static boolean valorIgual(Object a, Object b) {
+    private static boolean sameValue(Object a, Object b) {
         return (a == null) ? (b == null) : a.equals(b);
     }
 

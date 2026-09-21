@@ -1,27 +1,28 @@
 package com.sun.tools.attach;
 
 /**
- * No se pudo adjuntar.
+ * It was not possible to attach.
  *
- * <p>Distinta de {@link AgentLoadException}, y la diferencia es donde se corto. Aca ni siquiera se
- * llego a hablar con la VM destino. Las tres causas posibles son que no haya ningun
- * {@link com.sun.tools.attach.spi.AttachProvider} instalado, que ninguno de los instalados reconozca
- * ese identificador, o que el destino no sea una VM que acepte conexiones.
+ * <p>Different from {@link AgentLoadException}, and the difference is where it was cut off. Here
+ * it did not even get to talk to the target VM. The three possible causes are that there should
+ * be no {@link com.sun.tools.attach.spi.AttachProvider} installed, that none of those installed
+ * should recognize that identifier, or that the target should not be a VM that accepts
+ * connections.
  *
- * <p>Que un proveedor la tire no es necesariamente una falla del sistema, y por eso
- * {@link VirtualMachine#attach(String)} la atrapa y sigue con el siguiente proveedor. Es la manera
- * que tiene un proveedor de decir "este identificador no es mio".
+ * <p>That a provider should throw it is not necessarily a failure of the system, and that is why
+ * {@link VirtualMachine#attach(String)} catches it and goes on with the next provider. It is the
+ * way a provider has of saying "this identifier is not mine".
  */
 public class AttachNotSupportedException extends Exception {
 
     private static final long serialVersionUID = 3391824968260177264L;
 
-    /** Sin detalle. */
+    /** With no detail. */
     public AttachNotSupportedException() {
         super();
     }
 
-    /** Con un mensaje que explique el caso. */
+    /** With a message that explains the case. */
     public AttachNotSupportedException(String s) {
         super(s);
     }

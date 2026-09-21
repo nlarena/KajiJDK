@@ -1,16 +1,16 @@
 package javax.print.attribute;
 
-// Un AttributeSet que solo acepta atributos que sean `DocAttribute`.
+// An AttributeSet that only accepts attributes that are `DocAttribute`s.
 //
-// La restriccion no se puede poner en la firma -- `add` sigue tomando un `Attribute`, porque hay
-// que poder pasarle un AttributeSet cualquiera a `addAll` --, asi que se cumple en tiempo de
-// ejecucion: lo que no sea DocAttribute sale por ClassCastException. Redeclarar `add`/`addAll` aca
-// existe justamente para documentar esa excepcion; no cambia la firma.
+// The restriction cannot be put in the signature -- `add` still takes an `Attribute`, because one
+// has to be able to pass any AttributeSet to `addAll` --, so it is enforced at run time: whatever
+// is not a DocAttribute goes out through ClassCastException. Redeclaring `add`/`addAll` here exists
+// precisely to document that exception; it does not change the signature.
 public interface DocAttributeSet extends AttributeSet {
 
-    // ClassCastException si `attribute` no es un DocAttribute.
+    // ClassCastException if `attribute` is not a DocAttribute.
     boolean add(Attribute attribute);
 
-    // ClassCastException si alguno de los atributos no es un DocAttribute.
+    // ClassCastException if any of the attributes is not a DocAttribute.
     boolean addAll(AttributeSet attributes);
 }

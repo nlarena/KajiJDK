@@ -2,15 +2,15 @@ package java.security.cert;
 
 import java.security.PublicKey;
 
-// El resultado de construir un camino PKIX: el camino, mas todo lo que devuelve una validacion.
+// The result of building a PKIX path: the path, plus everything a validation returns.
 //
-// Hereda del resultado de validacion en vez de ser un tipo aparte, y eso dice algo: construir un
-// camino **incluye** validarlo. Un constructor que devolviera cadenas armadas pero sin verificar
-// seria peor que inutil, porque el nombre invitaria a confiar en ellas.
+// It inherits from the validation result instead of being a separate type, and that says something:
+// building a path **includes** validating it. A builder that returned assembled but unverified
+// chains would be worse than useless, because the name would invite trust in them.
 //
-// El camino que sale de aca **no incluye el ancla**. Es facil de olvidar y cambia los indices: la
-// cadena va del sujeto hasta el certificado emitido por la raiz, y la raiz misma esta en
-// `getTrustAnchor()`.
+// The path that comes out of here **does not include the anchor**. It is easy to forget and it
+// changes the indices: the chain goes from the subject to the certificate issued by the root, and
+// the root itself is in `getTrustAnchor()`.
 public class PKIXCertPathBuilderResult extends PKIXCertPathValidatorResult
         implements CertPathBuilderResult {
 
@@ -25,7 +25,7 @@ public class PKIXCertPathBuilderResult extends PKIXCertPathValidatorResult
         this.certPath = certPath;
     }
 
-    // El camino construido y validado, sin el ancla.
+    // The built and validated path, without the anchor.
     @Override
     public CertPath getCertPath() {
         return this.certPath;

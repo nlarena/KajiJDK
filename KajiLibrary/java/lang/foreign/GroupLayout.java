@@ -3,15 +3,15 @@ package java.lang.foreign;
 import java.util.List;
 
 /**
- * KajiLibrary's java.lang.foreign.GroupLayout -- varios layouts juntos.
+ * KajiLibrary's java.lang.foreign.GroupLayout -- several layouts together.
  *
- * <p>Lo comun a un `struct` y a una `union`; lo que los diferencia es **donde empieza cada
- * miembro**, y eso lo deciden {@link StructLayout} y {@link UnionLayout}. Esta interfaz solo dice
- * que hay miembros.
+ * <p>What a `struct` and a `union` have in common; what tells them apart is **where each member
+ * starts**, and that is decided by {@link StructLayout} and {@link UnionLayout}. This interface only
+ * says that there are members.
  */
 public interface GroupLayout extends MemoryLayout {
 
-    /** Los miembros, en orden. */
+    /** The members, in order. */
     List<MemoryLayout> memberLayouts();
 
     GroupLayout withName(String name);

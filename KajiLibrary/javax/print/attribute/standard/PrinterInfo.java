@@ -6,9 +6,9 @@ import javax.print.attribute.PrintServiceAttribute;
 import javax.print.attribute.TextSyntax;
 
 /**
- * Una descripcion libre de la impresora, para que la lea una persona.
+ * A free description of the printer, for a person to read.
  *
- * <p>Lo que un administrador escribio: "la de color del segundo piso".
+ * <p>What an administrator wrote: "the colour one on the second floor".
  */
 public final class PrinterInfo extends TextSyntax implements PrintServiceAttribute {
 

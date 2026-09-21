@@ -1,20 +1,20 @@
 package java.awt.image;
 
 /**
- * Un {@link ComponentSampleModel} con **todas las bandas en el mismo banco**: el formato
- * intercalado, RGBRGBRGB.
+ * A {@link ComponentSampleModel} with **every band in the same bank**: the interleaved format,
+ * RGBRGBRGB.
  *
- * <p>No agrega ningun dato: es el mismo modelo con una restriccion. Que exista como clase propia
- * sirve para dos cosas concretas. Una, el constructor comprueba la restriccion en vez de dejar que
- * se arme un modelo que dice ser intercalado y no lo es. Dos --y es la que importa--,
- * `createCompatibleSampleModel` devuelve otro intercalado en vez de un componente generico, asi que
- * copiar una imagen conserva su formato.
+ * <p>It adds no data at all: it is the same model with a restriction. That it exists as a class of
+ * its own serves two concrete purposes. One, the constructor checks the restriction instead of
+ * letting a model be built that says it is interleaved and is not. Two --and it is the one that
+ * matters--, `createCompatibleSampleModel` returns another interleaved one instead of a generic
+ * component one, so copying an image keeps its format.
  */
 public class PixelInterleavedSampleModel extends ComponentSampleModel {
 
     /**
-     * @throws RasterFormatException si los desplazamientos de banda no caben dentro de un pixel,
-     *     que es lo que significa estar intercalado
+     * @throws RasterFormatException if the band offsets do not fit inside one pixel, which is what
+     *     being interleaved means
      */
     public PixelInterleavedSampleModel(int dataType, int w, int h, int pixelStride,
             int scanlineStride, int[] bandOffsets) {
@@ -29,9 +29,9 @@ public class PixelInterleavedSampleModel extends ComponentSampleModel {
                 max = bandOffsets[i];
             }
         }
-        // Si las bandas se separan mas de lo que mide un pixel, no estan intercaladas: el modelo
-        // seria por planos disfrazado, y `createCompatibleSampleModel` daria un resultado que no
-        // describe los mismos datos.
+        // If the bands are further apart than a pixel measures, they are not interleaved: the model
+        // would be by planes in disguise, and `createCompatibleSampleModel` would give a result
+        // that does not describe the same data.
         if (max - min > pixelStride) {
             throw new RasterFormatException("Offsets between bands must be less than the pixel "
                     + "stride");
@@ -42,7 +42,7 @@ public class PixelInterleavedSampleModel extends ComponentSampleModel {
         }
     }
 
-    /** Otro intercalado del tamano pedido. Ver la nota de la clase. */
+    /** Another interleaved one of the size asked for. See the note of the class. */
     public SampleModel createCompatibleSampleModel(int w, int h) {
         int min = this.bandOffsets[0];
         for (int i = 1; i < this.bandOffsets.length; i++) {
@@ -59,9 +59,9 @@ public class PixelInterleavedSampleModel extends ComponentSampleModel {
     }
 
     /**
-     * Un intercalado con solo esas bandas, sobre los mismos datos.
+     * An interleaved one with only those bands, over the same data.
      *
-     * @throws RasterFormatException si alguna banda no existe
+     * @throws RasterFormatException if some band does not exist
      */
     public SampleModel createSubsetSampleModel(int[] bands) {
         int[] offsets = new int[bands.length];

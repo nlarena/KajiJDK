@@ -3,9 +3,9 @@ package javax.swing.event;
 import java.util.EventObject;
 
 /**
- * Un menu emergente esta por aparecer, por irse, o se cancelo.
+ * A popup menu is about to appear, to go away, or was cancelled.
  *
- * <p>Como {@link MenuEvent}, cual de las tres lo dice el metodo que lo recibe.
+ * <p>As with {@link MenuEvent}, which of the three is said by the method that receives it.
  */
 public class PopupMenuEvent extends EventObject {
 

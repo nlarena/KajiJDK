@@ -4,50 +4,51 @@ import java.io.Serializable;
 import java.util.Vector;
 
 /**
- * Que puede haber adentro de un elemento, segun la DTD.
+ * What may be inside an element, according to the DTD.
  *
- * <h2>Un arbol donde el tipo es un caracter</h2>
+ * <h2>A tree where the type is a character</h2>
  *
- * <p>Una regla como <code>(#PCDATA | B | I)*</code> se guarda como un arbol de estos. El campo
- * {@link #type} no es un numero de una lista sino el <em>caracter</em> del operador:
- * <code>'|'</code> para elegir uno, <code>','</code> para uno detras de otro, <code>'&amp;'</code>
- * para todos en cualquier orden, y <code>'*'</code>, <code>'?'</code>, <code>'+'</code> para
- * repetir. El cero marca una hoja, y entonces {@link #content} es un {@link Element}.
+ * <p>A rule such as <code>(#PCDATA | B | I)*</code> is kept as a tree of these. The {@link #type}
+ * field is not a number from a list but the operator's <em>character</em>: <code>'|'</code> to
+ * choose one, <code>','</code> for one after another, <code>'&amp;'</code> for all in any order,
+ * and <code>'*'</code>, <code>'?'</code>, <code>'+'</code> to repeat. Zero marks a leaf, and then
+ * {@link #content} is an {@link Element}.
  *
- * <p>Guardar el operador como su caracter parece un atajo, y lo es, pero tambien es lo que hace
- * que {@link #toString} pueda reconstruir la regla tal como se escribio.
+ * <p>Keeping the operator as its character looks like a shortcut, and it is, but it is also what
+ * lets {@link #toString} rebuild the rule just as it was written.
  *
- * <h2>Los hijos van en una lista enlazada</h2>
+ * <h2>The children go in a linked list</h2>
  *
- * <p>Para los operadores de varios hijos, {@code content} es el primer hijo y los demas cuelgan de
- * su {@code next}. Igual que en {@link AttributeList}: no hay una clase lista aparte.
+ * <p>For the operators with several children, {@code content} is the first child and the rest
+ * hang from its {@code next}. The same as in {@link AttributeList}: there is no separate list
+ * class.
  */
 public final class ContentModel implements Serializable {
 
-    /** El operador, como caracter; cero si es una hoja. */
+    /** The operator, as a character; zero if it is a leaf. */
     public int type;
 
-    /** Un {@link Element} si es hoja, o el primer hijo si es un operador. */
+    /** An {@link Element} if it is a leaf, or the first child if it is an operator. */
     public Object content;
 
-    /** El siguiente hermano, cuando este modelo es hijo de un operador. */
+    /** The next sibling, when this model is an operator's child. */
     public ContentModel next;
 
-    /** Un modelo vacio, para llenar despues. */
+    /** An empty model, to fill in later. */
     public ContentModel() {
     }
 
-    /** Una hoja: ese elemento y nada mas. */
+    /** A leaf: that element and nothing else. */
     public ContentModel(Element content) {
         this(0, content, null);
     }
 
-    /** Un operador de un solo hijo, como {@code *} o {@code ?}. */
+    /** An operator with a single child, such as {@code *} or {@code ?}. */
     public ContentModel(int type, ContentModel content) {
         this(type, content, null);
     }
 
-    /** Un modelo con ese operador, ese contenido y ese hermano. */
+    /** A model with that operator, that content and that sibling. */
     public ContentModel(int type, Object content, ContentModel next) {
         this.type = type;
         this.content = content;
@@ -55,10 +56,10 @@ public final class ContentModel implements Serializable {
     }
 
     /**
-     * Si el elemento puede no tener nada adentro.
+     * Whether the element may have nothing inside.
      *
-     * <p>Es lo que decide si una etiqueta se puede cerrar enseguida. Un <code>*</code> o un
-     * <code>?</code> siempre pueden estar vacios; una secuencia solo si todos sus miembros pueden.
+     * <p>It is what decides whether a tag can be closed right away. A <code>*</code> or a
+     * <code>?</code> can always be empty; a sequence only if all its members can.
      */
     public boolean empty() {
         switch (type) {
@@ -89,7 +90,7 @@ public final class ContentModel implements Serializable {
         }
     }
 
-    /** Agrega al vector todos los elementos que aparecen en el modelo. */
+    /** Adds to the vector every element that appears in the model. */
     public void getElements(Vector<Element> elemVec) {
         switch (type) {
             case '*':
@@ -110,11 +111,11 @@ public final class ContentModel implements Serializable {
     }
 
     /**
-     * Si ese elemento puede ser el primero.
+     * Whether that element can be the first one.
      *
-     * <p>Es la pregunta que hace el analizador para decidir si tiene que abrir una etiqueta que el
-     * autor se salteo. La secuencia es el caso interesante: se puede seguir mirando el que sigue
-     * solo mientras los anteriores puedan estar vacios.
+     * <p>It is the question the parser asks to decide whether it has to open a tag the author
+     * skipped. The sequence is the interesting case: the next one can go on being looked at only
+     * while the previous ones can be empty.
      */
     public boolean first(Object token) {
         switch (type) {
@@ -149,11 +150,11 @@ public final class ContentModel implements Serializable {
     }
 
     /**
-     * El unico elemento que puede ir primero, si hay uno solo.
+     * The only element that can go first, if there is only one.
      *
-     * <p>Devuelve nulo cuando hay eleccion o cuando el modelo puede estar vacio: en esos casos no
-     * hay un primero forzoso, y devolver uno cualquiera haria que el analizador abriera una
-     * etiqueta que el documento no pedia.
+     * <p>It returns null when there is a choice or when the model can be empty: in those cases
+     * there is no forced first one, and returning any would make the parser open a tag the
+     * document was not asking for.
      */
     public Element first() {
         switch (type) {
@@ -172,7 +173,7 @@ public final class ContentModel implements Serializable {
         }
     }
 
-    /** La regla, escrita como en la DTD. */
+    /** The rule, written as in the DTD. */
     public String toString() {
         switch (type) {
             case '*':

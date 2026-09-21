@@ -1,13 +1,13 @@
 package org.w3c.dom.html;
 
 /**
- * El `<html>` de la raiz.
+ * A `<html>` of the root.
  */
 public interface HTMLHtmlElement extends HTMLElement {
 
-    /** El atributo `version`. */
+    /** The `version` attribute. */
     String getVersion();
 
-    /** Fija el atributo `version`. */
+    /** It sets the `version` attribute. */
     void setVersion(String version);
 }

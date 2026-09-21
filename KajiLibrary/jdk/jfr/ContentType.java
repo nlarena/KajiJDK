@@ -6,14 +6,14 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Marca a una anotacion como una que le da <strong>significado</strong> a un numero.
+ * It marks an annotation as one that gives a number its <strong>meaning</strong>.
  *
- * <p>Un {@code long} en un evento puede ser nanosegundos, bytes, una direccion de memoria o un
- * conteo. El tipo Java es el mismo en los cuatro casos y no alcanza para mostrarlo bien: 1500000000
- * se lee como "1,5 s" o como "1,4 GB" segun que sea.
+ * <p>A {@code long} in an event may be nanoseconds, bytes, a memory address or a count. The Java
+ * type is the same in the four cases and is not enough to show it properly: 1500000000 reads as
+ * "1.5 s" or as "1.4 GB" depending on what it is.
  *
- * <p>{@link Timespan}, {@link DataAmount}, {@link MemoryAddress}, {@link Percentage} y
- * {@link Frequency} estan marcadas con esta, y son las que aportan ese significado.
+ * <p>{@link Timespan}, {@link DataAmount}, {@link MemoryAddress}, {@link Percentage} and
+ * {@link Frequency} are marked with this one, and they are the ones that bring that meaning.
  *
  * @since 9
  */

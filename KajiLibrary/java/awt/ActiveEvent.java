@@ -1,17 +1,17 @@
 package java.awt;
 
 /**
- * Un evento que sabe atenderse solo.
+ * An event that knows how to dispatch itself.
  *
- * <p>Lo normal es que la cola de eventos decida a quién entregarle cada evento. Uno que implemente
- * esto se despacha a sí mismo: la cola le llama {@link #dispatch} y listo.
+ * <p>Normally the event queue decides whom to deliver each event to. One that implements this
+ * dispatches itself: the queue calls its {@link #dispatch} and that is it.
  *
- * <p>Es lo que hace posible {@link java.awt.event.InvocationEvent}, y con él poner trabajo a correr
- * en el hilo de eventos desde otro hilo — que es la única forma legítima de tocar la interfaz desde
- * afuera.
+ * <p>It is what makes {@link java.awt.event.InvocationEvent} possible, and with it putting work to
+ * run on the event thread from another thread — which is the only legitimate way to touch the
+ * interface from outside.
  */
 public interface ActiveEvent {
 
-    /** Atiende el evento. */
+    /** Dispatches the event. */
     void dispatch();
 }

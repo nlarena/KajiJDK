@@ -1,19 +1,19 @@
 package org.w3c.dom.html;
 
 /**
- * Un `<base>`.
+ * A `<base>`.
  */
 public interface HTMLBaseElement extends HTMLElement {
 
-    /** El destino. */
+    /** The destination. */
     String getHref();
 
-    /** Fija el destino. */
+    /** It sets the destination. */
     void setHref(String href);
 
-    /** El marco de destino. */
+    /** The target frame. */
     String getTarget();
 
-    /** Fija el marco de destino. */
+    /** It sets the target frame. */
     void setTarget(String target);
 }

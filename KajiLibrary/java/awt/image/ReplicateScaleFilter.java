@@ -3,47 +3,47 @@ package java.awt.image;
 import java.util.Hashtable;
 
 /**
- * Escala una imagen **repitiendo y salteando** píxeles.
+ * Scales an image by **repeating and skipping** pixels.
  *
- * <p>Es el escalado más barato que hay: para cada píxel del destino se elige el píxel del origen que
- * le queda más cerca, y listo. Al ampliar salen bloques y al achicar se pierden detalles enteros —un
- * cable de un píxel de ancho puede desaparecer del todo—, pero no hace ni una multiplicación.
+ * <p>It is the cheapest scaling there is: for each pixel of the destination the nearest pixel of
+ * the source is chosen, and that is that. Enlarging gives blocks and shrinking loses whole details
+ * —a cable one pixel wide can disappear altogether—, but it does not do a single multiplication.
  *
- * <p>La correspondencia entre columnas y filas se calcula una sola vez, en dos tablas. Que estén
- * **redondeadas al centro** y no truncadas es lo que evita que la imagen se corra medio píxel:
- * `srccols[dx]` es el origen del centro del píxel de destino, no el de su borde izquierdo.
+ * <p>The correspondence between columns and rows is computed once, into two tables. That they are
+ * **rounded to the centre** and not truncated is what keeps the image from moving half a pixel:
+ * `srccols[dx]` is the source of the centre of the destination pixel, not that of its left edge.
  *
- * <p>Con una de las dos medidas negativa se calcula a partir de la otra manteniendo la proporción,
- * y eso recién se puede hacer cuando se conoce el tamaño del origen: por eso pasa en
- * {@link #setDimensions} y no en el constructor.
+ * <p>With one of the two measures negative it is computed from the other keeping the proportion,
+ * and that can only be done once the size of the source is known: that is why it happens in {@link
+ * #setDimensions} and not in the constructor.
  */
 public class ReplicateScaleFilter extends ImageFilter {
 
-    /** Ancho del origen. */
+    /** Width of the source. */
     protected int srcWidth;
 
-    /** Alto del origen. */
+    /** Height of the source. */
     protected int srcHeight;
 
-    /** Ancho del destino. */
+    /** Width of the destination. */
     protected int destWidth;
 
-    /** Alto del destino. */
+    /** Height of the destination. */
     protected int destHeight;
 
-    /** Para cada fila del destino, de qué fila del origen sale. */
+    /** For each row of the destination, which row of the source it comes from. */
     protected int[] srcrows;
 
-    /** Para cada columna del destino, de qué columna del origen sale. */
+    /** For each column of the destination, which column of the source it comes from. */
     protected int[] srccols;
 
-    /** El arreglo reusado para armar cada fila de salida. */
+    /** The array reused to build each output row. */
     protected Object outpixbuf;
 
     /**
-     * Con el tamaño de destino.
+     * With the destination size.
      *
-     * @throws IllegalArgumentException si alguna de las dos medidas es cero
+     * @throws IllegalArgumentException if either of the two measures is zero
      */
     public ReplicateScaleFilter(int width, int height) {
         if (width == 0 || height == 0) {
@@ -54,9 +54,9 @@ public class ReplicateScaleFilter extends ImageFilter {
         this.destHeight = height;
     }
 
-    /** Reenvía las propiedades, dejando constancia del escalado. */
+    /** Forwards the properties, leaving a record of the scaling. */
     public void setProperties(Hashtable<?, ?> props) {
-        Hashtable<Object, Object> p = copiar(props);
+        Hashtable<Object, Object> p = copyProperties(props);
         String key = "rescale";
         String val = this.destWidth + "x" + this.destHeight;
         Object o = p.get(key);
@@ -67,7 +67,7 @@ public class ReplicateScaleFilter extends ImageFilter {
         super.setProperties(p);
     }
 
-    /** Guarda el tamaño del origen y resuelve las medidas de destino que faltaban. */
+    /** Stores the size of the source and works out the destination measures that were missing. */
     public void setDimensions(int w, int h) {
         this.srcWidth = w;
         this.srcHeight = h;
@@ -91,12 +91,12 @@ public class ReplicateScaleFilter extends ImageFilter {
     }
 
     /**
-     * Arma las dos tablas de correspondencia.
+     * Builds the two correspondence tables.
      *
-     * <p>La cuenta `(2*d*src + src) / (2*dest)` es el origen del **centro** del píxel de destino: el
-     * `+ src` de arriba es medio píxel de destino llevado a unidades de origen.
+     * <p>The sum `(2*d*src + src) / (2*dest)` is the source of the **centre** of the destination
+     * pixel: the `+ src` on top is half a destination pixel taken to source units.
      */
-    private void calcularTablas() {
+    private void computeTables() {
         this.srcrows = new int[this.destHeight + 1];
         for (int y = 0; y <= this.destHeight; y++) {
             this.srcrows[y] = (2 * y * this.srcHeight + this.srcHeight) / (2 * this.destHeight);
@@ -107,11 +107,11 @@ public class ReplicateScaleFilter extends ImageFilter {
         }
     }
 
-    /** Reparte una tanda de píxeles de un byte a las filas de destino que le tocan. */
+    /** Hands a batch of pixels of one byte out to the destination rows it falls on. */
     public void setPixels(int x, int y, int w, int h, ColorModel model, byte[] pixels, int off,
             int scansize) {
         if (this.srcrows == null || this.srccols == null) {
-            this.calcularTablas();
+            this.computeTables();
         }
         int dx1 = (2 * x * this.destWidth + this.srcWidth - 1) / (2 * this.srcWidth);
         int dy1 = (2 * y * this.destHeight + this.srcHeight - 1) / (2 * this.srcHeight);
@@ -136,11 +136,11 @@ public class ReplicateScaleFilter extends ImageFilter {
         }
     }
 
-    /** Lo mismo para píxeles de un `int`. */
+    /** The same for pixels of one `int`. */
     public void setPixels(int x, int y, int w, int h, ColorModel model, int[] pixels, int off,
             int scansize) {
         if (this.srcrows == null || this.srccols == null) {
-            this.calcularTablas();
+            this.computeTables();
         }
         int dx1 = (2 * x * this.destWidth + this.srcWidth - 1) / (2 * this.srcWidth);
         int dy1 = (2 * y * this.destHeight + this.srcHeight - 1) / (2 * this.srcHeight);

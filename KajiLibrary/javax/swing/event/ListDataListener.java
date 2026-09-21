@@ -3,16 +3,16 @@ package javax.swing.event;
 import java.util.EventListener;
 
 /**
- * Quien quiere enterarse de que el contenido de una lista cambio.
+ * Whoever wants to hear that a list's contents changed.
  */
 public interface ListDataListener extends EventListener {
 
-    /** Se agregaron elementos. */
+    /** Elements were added. */
     void intervalAdded(ListDataEvent e);
 
-    /** Se sacaron elementos. */
+    /** Elements were removed. */
     void intervalRemoved(ListDataEvent e);
 
-    /** Cambiaron elementos, sin cambiar cuantos hay. */
+    /** Elements changed, without changing how many there are. */
     void contentsChanged(ListDataEvent e);
 }

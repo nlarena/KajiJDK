@@ -1,6 +1,6 @@
 package javax.management;
 
-/** No hay ningun MBean registrado con ese ObjectName. */
+/** No MBean is registered with that ObjectName. */
 public class InstanceNotFoundException extends OperationsException {
 
     private static final long serialVersionUID = -882579438394773049L;

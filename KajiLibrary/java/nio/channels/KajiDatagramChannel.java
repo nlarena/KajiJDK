@@ -16,75 +16,75 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * El {@link DatagramChannel} de esta biblioteca, sobre la costura UDP de la VM.
+ * This library's {@link DatagramChannel}, over the UDP seam of the VM.
  *
- * <h2>Recibir sin esperar</h2>
+ * <h2>Receiving without waiting</h2>
  *
- * <p>{@link #receive} devuelve `null` en modo no bloqueante cuando no llego nada, que es el contrato,
- * y es exactamente lo que la costura ya contesta --un -3--. En modo bloqueante se insiste con un
- * `Thread.sleep` corto: dormir suelta el interprete, asi que el hilo que espera un paquete no le
- * impide avanzar al que lo va a mandar.
+ * <p>{@link #receive} returns `null` in non-blocking mode when nothing arrived, which is the
+ * contract, and it is exactly what the seam answers already --a -3--. In blocking mode it insists
+ * with a short `Thread.sleep`: sleeping releases the interpreter, so the thread that waits for a
+ * packet does not stop the one that is going to send it from advancing.
  *
- * <h2>El remitente y el datagrama son un solo dato</h2>
+ * <h2>The sender and the datagram are a single datum</h2>
  *
- * <p>La costura los entrega en tres llamadas --recibir, y despues preguntar de quien vino-- porque un
- * nativo que devuelve un entero no puede devolver los dos. Por eso {@link #receive} es
- * `synchronized`: sin el candado, dos hilos recibiendo sobre el mismo canal podrian llevarse el
- * remitente del otro. Es la misma razon y el mismo candado que en `java.net.DatagramSocket`.
+ * <p>The seam hands them over in three calls --receive, and then ask who it came from-- because a
+ * native that returns an integer cannot return both. That is why {@link #receive} is
+ * `synchronized`: without the lock, two threads receiving over the same channel could take each
+ * other's sender. It is the same reason and the same lock as in `java.net.DatagramSocket`.
  *
- * <h2>Conectar, que en UDP no manda nada</h2>
+ * <h2>Connecting, which in UDP sends nothing</h2>
  *
- * <p>{@link #connect} fija con quien se habla para que el resto se filtre. Es una decision local: no
- * hay handshake. Aca el filtro lo aplica esta clase --se descarta lo que venga de otro-- porque la
- * costura no tiene forma de pedirselo al sistema, y el resultado observable es el que promete el
- * contrato.
+ * <p>{@link #connect} fixes who is talked to so that the rest is filtered. It is a local decision:
+ * there is no handshake. Here the filter is applied by this class --whatever comes from another is
+ * discarded-- because the seam has no way of asking the system for it, and the observable result is
+ * the one the contract promises.
  */
 final class KajiDatagramChannel extends DatagramChannel {
 
-    /** El socket de la VM, o -1 si todavia no se ato. */
+    /** The socket of the VM, or -1 if it has not been tied yet. */
     private int handle = -1;
 
-    private InetSocketAddress par = null;
+    private InetSocketAddress peer = null;
 
     private int ttl = 1;
 
-    private final List<KajiMembershipKey> membresias = new ArrayList<KajiMembershipKey>();
+    private final List<KajiMembershipKey> memberships = new ArrayList<KajiMembershipKey>();
 
-    private static final Set<SocketOption<?>> OPCIONES;
+    private static final Set<SocketOption<?>> OPTIONS;
 
     static {
         Set<SocketOption<?>> s = new HashSet<SocketOption<?>>();
         s.add(StandardSocketOptions.IP_MULTICAST_TTL);
-        OPCIONES = Collections.unmodifiableSet(s);
+        OPTIONS = Collections.unmodifiableSet(s);
     }
 
     KajiDatagramChannel(SelectorProvider provider) {
         super(provider);
     }
 
-    private void exigirAbierto() throws ClosedChannelException {
+    private void requireOpen() throws ClosedChannelException {
         if (!this.isOpen()) {
             throw new ClosedChannelException();
         }
     }
 
-    // Atar sin que nadie lo pida: mandar o recibir sobre un canal sin atar lo ata, que es lo que
-    // hace el JDK. Sin esto, un canal que solo manda no podria mandar nunca.
-    private void asegurarAtado() throws IOException {
+    // Tying without anybody asking for it: sending or receiving over an untied channel ties it,
+    // which is what the JDK does. Without this, a channel that only sends could never send.
+    private void ensureBound() throws IOException {
         if (this.handle < 0) {
             this.bind(null);
         }
     }
 
-    // ---- atar --------------------------------------------------------------------------------
+    // ---- binding --------------------------------------------------------------------------------
 
     public DatagramChannel bind(SocketAddress local) throws IOException {
-        this.exigirAbierto();
+        this.requireOpen();
         if (this.handle >= 0) {
             throw new AlreadyBoundException();
         }
         String host = "0.0.0.0";
-        int puerto = 0;
+        int port = 0;
         if (local != null) {
             if (!(local instanceof InetSocketAddress)) {
                 throw new UnsupportedAddressTypeException();
@@ -96,18 +96,18 @@ final class KajiDatagramChannel extends DatagramChannel {
             if (d.getAddress() != null && !d.getAddress().isAnyLocalAddress()) {
                 host = d.getAddress().getHostAddress();
             }
-            puerto = d.getPort();
+            port = d.getPort();
         }
-        int h = jdk.internal.net.Net.udpBind(host, puerto);
+        int h = jdk.internal.net.Net.udpBind(host, port);
         if (h < 0) {
-            throw new java.net.BindException("Cannot bind: " + host + ":" + puerto);
+            throw new java.net.BindException("Cannot bind: " + host + ":" + port);
         }
         this.handle = h;
         return this;
     }
 
     public SocketAddress getLocalAddress() throws IOException {
-        this.exigirAbierto();
+        this.requireOpen();
         if (this.handle < 0) {
             return null;
         }
@@ -123,14 +123,14 @@ final class KajiDatagramChannel extends DatagramChannel {
         return (java.net.DatagramSocket) jdk.internal.net.Adoption.datagram(this.handle);
     }
 
-    // ---- conectar ----------------------------------------------------------------------------
+    // ---- connecting ----------------------------------------------------------------------------
 
     public boolean isConnected() {
-        return this.par != null;
+        return this.peer != null;
     }
 
     public DatagramChannel connect(SocketAddress remote) throws IOException {
-        this.exigirAbierto();
+        this.requireOpen();
         if (remote == null) {
             throw new IllegalArgumentException("address is null");
         }
@@ -141,34 +141,34 @@ final class KajiDatagramChannel extends DatagramChannel {
         if (d.isUnresolved()) {
             throw new UnresolvedAddressException();
         }
-        this.asegurarAtado();
-        this.par = d;
+        this.ensureBound();
+        this.peer = d;
         return this;
     }
 
     public DatagramChannel disconnect() throws IOException {
-        this.exigirAbierto();
-        this.par = null;
+        this.requireOpen();
+        this.peer = null;
         return this;
     }
 
     public SocketAddress getRemoteAddress() throws IOException {
-        this.exigirAbierto();
-        return this.par;
+        this.requireOpen();
+        return this.peer;
     }
 
-    // ---- mover datagramas --------------------------------------------------------------------
+    // ---- moving datagrams --------------------------------------------------------------------
 
     public synchronized SocketAddress receive(ByteBuffer dst) throws IOException {
-        this.exigirAbierto();
+        this.requireOpen();
         if (dst == null) {
             throw new NullPointerException("dst");
         }
-        this.asegurarAtado();
-        int cuantos = dst.remaining();
-        byte[] buf = new byte[cuantos];
+        this.ensureBound();
+        int count = dst.remaining();
+        byte[] buf = new byte[count];
         while (true) {
-            int n = jdk.internal.net.Net.udpReceive(this.handle, buf, 0, cuantos);
+            int n = jdk.internal.net.Net.udpReceive(this.handle, buf, 0, count);
             while (n == -3 && this.isBlocking()) {
                 if (!this.isOpen()) {
                     throw new AsynchronousCloseException();
@@ -179,7 +179,7 @@ final class KajiDatagramChannel extends DatagramChannel {
                     Thread.currentThread().interrupt();
                     throw new java.io.InterruptedIOException("receive interrupted");
                 }
-                n = jdk.internal.net.Net.udpReceive(this.handle, buf, 0, cuantos);
+                n = jdk.internal.net.Net.udpReceive(this.handle, buf, 0, count);
             }
             if (n == -3) {
                 return null;
@@ -188,25 +188,25 @@ final class KajiDatagramChannel extends DatagramChannel {
                 throw new IOException("receive failed");
             }
             String dir = jdk.internal.net.Net.udpSenderAddress(this.handle);
-            int puerto = jdk.internal.net.Net.udpSenderPort(this.handle);
-            InetSocketAddress fuente = dir == null
-                    ? null : new InetSocketAddress(InetAddress.getByName(dir), puerto);
-            if (this.par != null && !this.par.equals(fuente)) {
-                // Canal conectado: lo que no viene del par se descarta **sin entregarlo**. En modo
-                // no bloqueante hay que contestar ya --no se puede quedar dando vueltas-- y por eso
-                // el `return null`: no llego nada que este canal deba ver.
+            int port = jdk.internal.net.Net.udpSenderPort(this.handle);
+            InetSocketAddress src_ = dir == null
+                    ? null : new InetSocketAddress(InetAddress.getByName(dir), port);
+            if (this.peer != null && !this.peer.equals(src_)) {
+                // Connected channel: whatever does not come from the peer is discarded **without handing it
+                // over**. In non-blocking mode an answer has to come now --it cannot go round and round-- and
+                // that is why the `return null`: nothing arrived that this channel should see.
                 if (!this.isBlocking()) {
                     return null;
                 }
                 continue;
             }
             dst.put(buf, 0, n);
-            return fuente;
+            return src_;
         }
     }
 
     public int send(ByteBuffer src, SocketAddress target) throws IOException {
-        this.exigirAbierto();
+        this.requireOpen();
         if (src == null) {
             throw new NullPointerException("src");
         }
@@ -217,37 +217,37 @@ final class KajiDatagramChannel extends DatagramChannel {
         if (d.isUnresolved()) {
             throw new UnresolvedAddressException();
         }
-        if (this.par != null && !this.par.equals(d)) {
+        if (this.peer != null && !this.peer.equals(d)) {
             throw new IllegalArgumentException("Connected address not equal to target address");
         }
-        this.asegurarAtado();
-        int cuantos = src.remaining();
-        byte[] buf = new byte[cuantos];
-        src.get(buf, 0, cuantos);
+        this.ensureBound();
+        int count = src.remaining();
+        byte[] buf = new byte[count];
+        src.get(buf, 0, count);
         if (!jdk.internal.net.Net.udpSend(this.handle, d.getAddress().getHostAddress(), d.getPort(),
-                buf, 0, cuantos)) {
+                buf, 0, count)) {
             throw new IOException("send failed");
         }
-        return cuantos;
+        return count;
     }
 
-    // ---- las formas de flujo, que exigen estar conectado --------------------------------------
+    // ---- the stream forms, which demand being connected --------------------------------------
 
     public int read(ByteBuffer dst) throws IOException {
-        if (this.par == null) {
+        if (this.peer == null) {
             throw new NotYetConnectedException();
         }
-        SocketAddress fuente = this.receive(dst);
-        return fuente == null ? 0 : dst.position();
+        SocketAddress src_ = this.receive(dst);
+        return src_ == null ? 0 : dst.position();
     }
 
     public long read(ByteBuffer[] dsts, int offset, int length) throws IOException {
-        KajiSocketChannel.exigirRango(dsts, offset, length);
-        if (this.par == null) {
+        KajiSocketChannel.requireRange(dsts, offset, length);
+        if (this.peer == null) {
             throw new NotYetConnectedException();
         }
-        // Un datagrama entra en **un** buffer: no se parte entre varios, porque el limite del
-        // mensaje es parte del dato. El primero con lugar se lo lleva entero.
+        // A datagram goes into **one** buffer: it is not split among several, because the limit of
+        // the message is part of the datum. The first one with room takes it whole.
         for (int i = 0; i < length; i++) {
             if (dsts[offset + i].remaining() > 0) {
                 return this.read(dsts[offset + i]);
@@ -257,19 +257,19 @@ final class KajiDatagramChannel extends DatagramChannel {
     }
 
     public int write(ByteBuffer src) throws IOException {
-        if (this.par == null) {
+        if (this.peer == null) {
             throw new NotYetConnectedException();
         }
-        return this.send(src, this.par);
+        return this.send(src, this.peer);
     }
 
     public long write(ByteBuffer[] srcs, int offset, int length) throws IOException {
-        KajiSocketChannel.exigirRango(srcs, offset, length);
-        if (this.par == null) {
+        KajiSocketChannel.requireRange(srcs, offset, length);
+        if (this.peer == null) {
             throw new NotYetConnectedException();
         }
-        // Los buffers se juntan en **un solo** datagrama: escribir uno por buffer mandaria varios
-        // mensajes donde el que llama pidio uno, y del otro lado eso se nota.
+        // The buffers are gathered into **a single** datagram: writing one per buffer would send
+        // several messages where the caller asked for one, and on the other side that shows.
         int total = 0;
         for (int i = 0; i < length; i++) {
             total += srcs[offset + i].remaining();
@@ -282,9 +282,9 @@ final class KajiDatagramChannel extends DatagramChannel {
             b.get(buf, pos, n);
             pos += n;
         }
-        this.asegurarAtado();
-        if (!jdk.internal.net.Net.udpSend(this.handle, this.par.getAddress().getHostAddress(),
-                this.par.getPort(), buf, 0, total)) {
+        this.ensureBound();
+        if (!jdk.internal.net.Net.udpSend(this.handle, this.peer.getAddress().getHostAddress(),
+                this.peer.getPort(), buf, 0, total)) {
             throw new IOException("send failed");
         }
         return total;
@@ -293,7 +293,7 @@ final class KajiDatagramChannel extends DatagramChannel {
     // ---- multidifusion -----------------------------------------------------------------------
 
     public MembershipKey join(InetAddress group, NetworkInterface interf) throws IOException {
-        return this.sumarse(group, interf, null);
+        return this.joinGroup(group, interf, null);
     }
 
     public MembershipKey join(InetAddress group, NetworkInterface interf, InetAddress source)
@@ -301,46 +301,48 @@ final class KajiDatagramChannel extends DatagramChannel {
         if (source == null) {
             throw new NullPointerException("source");
         }
-        // Una membresia por emisor la tiene que sostener el sistema, y la costura de esta VM no la
-        // pide. Decirlo es lo que el contrato prevé para este caso, y es informacion util: significa
-        // "esta pila no filtra por emisor", que no es lo mismo que "no se pudo".
+        // A membership by sender has to be sustained by the system, and the seam of this VM does not
+        // ask for it. Saying so is what the contract foresees for this case, and it is useful
+        // information: it means "this stack does not filter by sender", which is not the same as "it
+        // could not be done".
         throw new UnsupportedOperationException("source-specific multicast not supported");
     }
 
-    private MembershipKey sumarse(InetAddress group, NetworkInterface interf, InetAddress source)
+    private MembershipKey joinGroup(InetAddress group, NetworkInterface interf, InetAddress source)
             throws IOException {
-        this.exigirAbierto();
+        this.requireOpen();
         if (group == null) {
             throw new NullPointerException("group");
         }
         if (!group.isMulticastAddress()) {
             throw new IllegalArgumentException("Group not a multicast address");
         }
-        this.asegurarAtado();
-        for (KajiMembershipKey k : this.membresias) {
-            if (k.isValid() && k.group().equals(group) && k.mismaPlaca(interf)) {
+        this.ensureBound();
+        for (KajiMembershipKey k : this.memberships) {
+            if (k.isValid() && k.group().equals(group) && k.sameCard(interf)) {
                 throw new IllegalStateException("Already a member of the group");
             }
         }
-        String placa = KajiDatagramChannel.nombrarPlaca(group, interf);
-        if (!jdk.internal.net.Net.udpJoin(this.handle, group.getHostAddress(), placa)) {
+        String card = KajiDatagramChannel.nameCard(group, interf);
+        if (!jdk.internal.net.Net.udpJoin(this.handle, group.getHostAddress(), card)) {
             throw new IOException("join group failed: " + group);
         }
-        KajiMembershipKey k = new KajiMembershipKey(this, group, interf, source, placa);
-        this.membresias.add(k);
+        KajiMembershipKey k = new KajiMembershipKey(this, group, interf, source, card);
+        this.memberships.add(k);
         return k;
     }
 
-    // Da de baja la membresia. Lo llama la llave, que es quien tiene el contrato de `drop()`.
-    void soltar(KajiMembershipKey k) {
+    // It drops the membership. It is called by the key, which is the one that has the contract of
+    // `drop()`.
+    void release(KajiMembershipKey k) {
         if (this.handle >= 0) {
-            jdk.internal.net.Net.udpLeave(this.handle, k.group().getHostAddress(), k.placa());
+            jdk.internal.net.Net.udpLeave(this.handle, k.group().getHostAddress(), k.card());
         }
     }
 
-    // En IPv4 la placa se nombra por direccion y en IPv6 por indice: son dos cadenas distintas. La
-    // vacia significa "la que elija el sistema".
-    static String nombrarPlaca(InetAddress group, NetworkInterface interf) {
+    // In IPv4 the card is named by address and in IPv6 by index: they are two different strings.
+    // The empty one means "the one the system chooses".
+    static String nameCard(InetAddress group, NetworkInterface interf) {
         if (interf == null) {
             return "";
         }
@@ -357,10 +359,10 @@ final class KajiDatagramChannel extends DatagramChannel {
         return "";
     }
 
-    // ---- opciones ----------------------------------------------------------------------------
+    // ---- options ----------------------------------------------------------------------------
 
     public <T> DatagramChannel setOption(SocketOption<T> name, T value) throws IOException {
-        this.exigirAbierto();
+        this.requireOpen();
         if (name == null) {
             throw new NullPointerException("name");
         }
@@ -371,7 +373,7 @@ final class KajiDatagramChannel extends DatagramChannel {
         if (v < 0 || v > 255) {
             throw new IllegalArgumentException("Invalid TTL: " + v);
         }
-        this.asegurarAtado();
+        this.ensureBound();
         this.ttl = v;
         jdk.internal.net.Net.udpSetTtl(this.handle, v);
         return this;
@@ -379,7 +381,7 @@ final class KajiDatagramChannel extends DatagramChannel {
 
     @SuppressWarnings("unchecked")
     public <T> T getOption(SocketOption<T> name) throws IOException {
-        this.exigirAbierto();
+        this.requireOpen();
         if (name == null) {
             throw new NullPointerException("name");
         }
@@ -390,17 +392,17 @@ final class KajiDatagramChannel extends DatagramChannel {
     }
 
     public Set<SocketOption<?>> supportedOptions() {
-        return OPCIONES;
+        return OPTIONS;
     }
 
-    // ---- cierre ------------------------------------------------------------------------------
+    // ---- closing ------------------------------------------------------------------------------
 
     protected void implCloseSelectableChannel() throws IOException {
-        // Cerrar da de baja todas las membresias, que es lo que `MulticastChannel.close()` promete.
-        for (KajiMembershipKey k : this.membresias) {
-            k.invalidar();
+        // Closing drops every membership, which is what `MulticastChannel.close()` promises.
+        for (KajiMembershipKey k : this.memberships) {
+            k.invalidateKey();
         }
-        this.membresias.clear();
+        this.memberships.clear();
         if (this.handle >= 0) {
             jdk.internal.net.Net.close(this.handle);
             this.handle = -1;
@@ -408,7 +410,7 @@ final class KajiDatagramChannel extends DatagramChannel {
     }
 
     protected void implConfigureBlocking(boolean block) throws IOException {
-        // Nada que decirle al sistema; ver la nota de `KajiSocketChannel`.
+        // Nothing to say to the system; see the note of `KajiSocketChannel`.
     }
 
     /**

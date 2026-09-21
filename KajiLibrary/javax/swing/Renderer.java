@@ -3,25 +3,26 @@ package javax.swing;
 import java.awt.Component;
 
 /**
- * Dibuja un valor con un componente prestado.
+ * It draws a value with a borrowed component.
  *
- * <h2>El componente se reusa</h2>
+ * <h2>The component is reused</h2>
  *
- * <p>{@link #setValue} lo carga y {@link #getComponent} lo devuelve, y lo normal es que sea siempre
- * el <em>mismo</em> componente: en una lista de mil elementos se lo configura mil veces y se lo
- * dibuja mil veces, en vez de tener mil componentes. Por eso lo que devuelve no se puede guardar
- * para despues: en la proxima llamada muestra otra cosa.
+ * <p>{@link #setValue} loads it and {@link #getComponent} returns it, and the usual thing is for
+ * it to always be the <em>same</em> component: in a list of a thousand elements it is configured
+ * a thousand times and drawn a thousand times, instead of there being a thousand components.
+ * That is why what it returns cannot be kept for later: on the next call it shows something
+ * else.
  *
- * <p><strong>No la usa nadie.</strong> Swing terminó con dos interfaces mas especificas --
- * {@link ListCellRenderer} y {@link javax.swing.table.TableCellRenderer} --, que le pasan al
- * dibujante el contexto que esta no tiene: cual es la lista, en que fila esta, si tiene el foco.
- * Queda porque es publica.
+ * <p><strong>Nobody uses it.</strong> Swing ended up with two more specific interfaces --
+ * {@link ListCellRenderer} and {@link javax.swing.table.TableCellRenderer} --, which pass the
+ * renderer the context this one does not have: which list it is, which row it is in, whether it
+ * has the focus. It stays because it is public.
  */
 public interface Renderer {
 
-    /** Carga el valor; el segundo parametro dice si esta elegido. */
+    /** It loads the value; the second parameter says whether it is chosen. */
     void setValue(Object aValue, boolean isSelected);
 
-    /** El componente cargado; ver la nota de la interfaz. */
+    /** The loaded component; see the interface note. */
     Component getComponent();
 }

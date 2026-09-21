@@ -16,29 +16,31 @@ import javax.swing.event.MouseInputListener;
 import javax.swing.plaf.ComponentUI;
 
 /**
- * El aspecto basico de un menu.
+ * The basic look and feel of a menu.
  *
- * <p>Un {@link JMenu} <em>es</em> un item de menu --hereda de {@code JMenuItem}--, asi que casi todo
- * viene de {@link BasicMenuItemUI}. Lo propio son tres cosas.
+ * <p>A {@link JMenu} <em>is</em> a menu item -- it inherits from {@code JMenuItem} --, so
+ * almost everything comes from {@link BasicMenuItemUI}. What is its own are three things.
  *
- * <h2>El menu de barra no se estira</h2>
+ * <h2>A bar menu does not stretch</h2>
  *
- * <p>{@link #getMaximumSize} devuelve el ancho preferido y un alto infinito, pero <em>solo</em> para
- * un menu que cuelga de la barra. Sin eso, el acomodador de la barra le daria todo el ancho
- * sobrante al primer menu y "Archivo" ocuparia media pantalla. Un menu de adentro devuelve
- * {@code null} como cualquier item, porque ahi lo reparte {@code DefaultMenuLayout}.
+ * <p>{@link #getMaximumSize} returns the preferred width and an infinite height, but
+ * <em>only</em> for a menu that hangs from the bar. Without that, the bar's layout would give
+ * all the leftover width to the first menu and "File" would take up half the screen. A menu
+ * inside returns {@code null} like any item, because there it is handed out by
+ * {@code DefaultMenuLayout}.
  *
- * <h2>La demora antes de abrir</h2>
+ * <h2>The delay before opening</h2>
  *
- * <p>{@link #setupPostTimer} arma el reloj que abre el submenu cuando el mouse se queda quieto
- * encima. La demora sale de {@code Menu.delay}, y esta en 200 milisegundos. La demora existe para
- * que pasar el mouse por arriba de camino a otro lado no abra tres submenus.
+ * <p>{@link #setupPostTimer} sets the timer that opens the submenu when the mouse stays still
+ * over it. The delay comes from {@code Menu.delay}, and it is at 200 milliseconds. The delay
+ * exists so that passing the mouse over it on the way somewhere else does not open three
+ * submenus.
  *
- * <h2>Avisar que se abrio</h2>
+ * <h2>Telling that it opened</h2>
  *
- * <p>El {@link MenuListener} es lo que hace que {@code menuSelected} llegue antes de que el submenu
- * se muestre: es el momento en que un programa puede armar el contenido del menu segun el estado,
- * en vez de tener que mantenerlo al dia todo el tiempo.
+ * <p>The {@link MenuListener} is what makes {@code menuSelected} arrive before the submenu is
+ * shown: it is the moment when a program can build the menu's content according to the state,
+ * instead of having to keep it up to date all the time.
  */
 public class BasicMenuUI extends BasicMenuItemUI {
 
@@ -48,7 +50,7 @@ public class BasicMenuUI extends BasicMenuItemUI {
     public BasicMenuUI() {
     }
 
-    /** Uno nuevo por menu: guarda el componente y sus escuchas. */
+    /** A new one per menu: it keeps the component and its listeners. */
     public static ComponentUI createUI(JComponent c) {
         return new BasicMenuUI();
     }
@@ -59,8 +61,8 @@ public class BasicMenuUI extends BasicMenuItemUI {
 
     protected void installDefaults() {
         super.installDefaults();
-        // El menu tiene su propia flecha: la del item apunta a un submenu que cuelga al costado,
-        // y la del menu tambien, pero un aspecto puede querer dibujarlas distinto.
+        // The menu has an arrow of its own: the item's points to a submenu that hangs at the side,
+                // and so does the menu's, but a look and feel may want to draw them differently.
         arrowIcon = BasicIconFactory.getMenuArrowIcon();
         ((JMenu) menuItem).setDelay(200);
     }
@@ -93,7 +95,7 @@ public class BasicMenuUI extends BasicMenuItemUI {
         menuListener = null;
     }
 
-    /** Sin atajos propios; la letra subrayada la maneja la barra. */
+    /** With no shortcuts of its own; the underlined letter is handled by the bar. */
     protected void installKeyboardActions() {
         super.installKeyboardActions();
     }
@@ -110,7 +112,7 @@ public class BasicMenuUI extends BasicMenuItemUI {
         return super.createMenuDragMouseListener(c);
     }
 
-    /** Ninguno, como en {@link BasicMenuItemUI}. */
+    /** None, as in {@link BasicMenuItemUI}. */
     protected MenuKeyListener createMenuKeyListener(JComponent c) {
         return null;
     }
@@ -120,23 +122,23 @@ public class BasicMenuUI extends BasicMenuItemUI {
     }
 
     /**
-     * Ninguno.
+     * None.
      *
-     * <p>Los dos --este y {@link #createMenuListener}-- devuelven {@code null}, y los dos campos
-     * quedan en nulo despues de instalar. No es un olvido: quien sigue el estado del menu es el
-     * mismo objeto que sigue el mouse, y engancharlo dos veces lo haria reaccionar dos veces. Esta
-     * medido.
+     * <p>Both -- this one and {@link #createMenuListener} -- return {@code null}, and both fields
+     * are left null after installing. It is not an oversight: who follows the menu's state is the
+     * same object that follows the mouse, and hooking it twice would make it react twice. It is
+     * measured.
      */
     protected ChangeListener createChangeListener(JComponent c) {
         return null;
     }
 
-    /** Ninguno; ver {@link #createChangeListener}. */
+    /** None; see {@link #createChangeListener}. */
     protected MenuListener createMenuListener(JComponent c) {
         return null;
     }
 
-    /** Infinito solo para el menu de barra; ver la nota de la clase. */
+    /** Infinite only for a bar menu; see the class note. */
     public Dimension getMaximumSize(JComponent c) {
         if (((JMenu) menuItem).isTopLevelMenu()) {
             Dimension d = c.getPreferredSize();
@@ -145,15 +147,15 @@ public class BasicMenuUI extends BasicMenuItemUI {
         return null;
     }
 
-    /** {@code null}, como en cualquier item. */
+    /** {@code null}, as in any item. */
     public Dimension getMinimumSize(JComponent c) {
         return null;
     }
 
     /**
-     * Arma el reloj que abre el submenu; ver la nota de la clase.
+     * It sets the timer that opens the submenu; see the class note.
      *
-     * <p>Un solo disparo: el reloj abre el menu y se apaga.
+     * <p>A single shot: the timer opens the menu and switches off.
      */
     protected void setupPostTimer(JMenu menu) {
         Timer timer = new Timer(menu.getDelay(), new java.awt.event.ActionListener() {

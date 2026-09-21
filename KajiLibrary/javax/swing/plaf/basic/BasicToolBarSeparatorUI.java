@@ -10,54 +10,55 @@ import javax.swing.plaf.ComponentUI;
 import javax.swing.plaf.UIResource;
 
 /**
- * El separador de una barra de herramientas: un hueco, y nada dibujado.
+ * A tool bar's separator: a gap, and nothing drawn.
  *
- * <p>Es el unico separador que no pinta ninguna linea. En una barra de herramientas lo que separa
- * dos grupos de botones es el aire, no un surco, asi que {@link #paint} esta vacio a proposito y lo
- * unico que importa es el tamano: {@code ToolBar.separatorSize}, medido en Metal (JDK 25) en
+ * <p>It is the only separator that paints no line. In a tool bar what separates two groups of
+ * buttons is the air, not a groove, so {@link #paint} is empty on purpose and the only thing
+ * that matters is the size: {@code ToolBar.separatorSize}, measured in Metal (JDK 25) at
  * 10 x 10.
  *
- * <p>{@link #getPreferredSize} lee el tamano del componente en vez de contestar la constante,
- * porque puede ser el que le puso el usuario. Si el separador no tiene ninguno devuelve
- * {@code null}, igual que {@link BasicSeparatorUI#getMinimumSize}.
+ * <p>{@link #getPreferredSize} reads the component's size instead of answering the constant,
+ * because it may be the one the user set. If the separator does not have one it returns
+ * {@code null}, just like {@link BasicSeparatorUI#getMinimumSize}.
  */
 public class BasicToolBarSeparatorUI extends BasicSeparatorUI {
 
     /**
-     * Un {@link Dimension} pelado, no un {@code DimensionUIResource}.
+     * A bare {@link Dimension}, not a {@code DimensionUIResource}.
      *
-     * <p>Parece un descuido y esta medido: la tabla del aspecto guarda ahi un tamano sin marcar. La
-     * consecuencia es que despues del primer instalado el separador ya no tiene un tamano "del
-     * aspecto", asi que un segundo instalado no lo pisa. Marcarlo cambiaria eso y ademas se veria:
-     * {@code getSeparatorSize().toString()} dice el nombre de la clase.
+     * <p>It looks like an oversight and it is measured: the look and feel's table keeps an unmarked
+     * size there. The consequence is that after the first install the separator no longer has a
+     * size "of the look and feel's", so a second install does not overwrite it. Marking it would
+     * change that and it would also show: {@code getSeparatorSize().toString()} says the class's
+     * name.
      */
-    private static final Dimension TAMANIO_POR_OMISION = new Dimension(10, 10);
+    private static final Dimension DEFAULT_SIZE = new Dimension(10, 10);
 
     public BasicToolBarSeparatorUI() {
     }
 
-    /** Uno nuevo cada vez, como el de la clase de la que sale. */
+    /** A new one each time, like the one of the class it comes from. */
     public static ComponentUI createUI(JComponent c) {
         return new BasicToolBarSeparatorUI();
     }
 
-    /** El tamano del hueco, solo si el separador no tiene uno propio. */
+    /** The gap's size, only if the separator does not have one of its own. */
     protected void installDefaults(JSeparator s) {
-        Dimension tamanio = ((JToolBar.Separator) s).getSeparatorSize();
-        if (tamanio == null || tamanio instanceof UIResource) {
-            ((JToolBar.Separator) s).setSeparatorSize(TAMANIO_POR_OMISION);
+        Dimension size = ((JToolBar.Separator) s).getSeparatorSize();
+        if (size == null || size instanceof UIResource) {
+            ((JToolBar.Separator) s).setSeparatorSize(DEFAULT_SIZE);
         }
     }
 
-    /** Nada; ver la nota de la clase. */
+    /** Nothing; see the class note. */
     public void paint(Graphics g, JComponent c) {
     }
 
-    /** El tamano que tenga puesto el separador, o {@code null} si no tiene ninguno. */
+    /** Whatever size the separator has set, or {@code null} if it has none. */
     public Dimension getPreferredSize(JComponent c) {
-        Dimension tamanio = ((JToolBar.Separator) c).getSeparatorSize();
-        if (tamanio != null) {
-            return tamanio.getSize();
+        Dimension size = ((JToolBar.Separator) c).getSeparatorSize();
+        if (size != null) {
+            return size.getSize();
         }
         return null;
     }

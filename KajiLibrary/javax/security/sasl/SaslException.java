@@ -3,35 +3,35 @@ package javax.security.sasl;
 import java.io.IOException;
 
 /**
- * KajiLibrary's javax.security.sasl.SaslException -- fallo la negociacion SASL.
+ * KajiLibrary's javax.security.sasl.SaslException -- the SASL negotiation failed.
  *
- * <p>Extiende {@link IOException} y no {@code Exception}, que es la decision de diseno que hay que
- * mirar: SASL siempre va adentro de un protocolo --LDAP, IMAP, SMTP-- y quien lo usa ya esta
- * atajando errores de entrada y salida. Colgarla de ahi evita que cada llamada tenga dos
- * {@code catch} que hacen lo mismo.
+ * <p>It extends {@link IOException} and not {@code Exception}, which is the design decision worth
+ * looking at: SASL always goes inside a protocol --LDAP, IMAP, SMTP-- and whoever uses it is
+ * already catching input/output errors. Hanging it from there saves each call from having two
+ * {@code catch}es that do the same thing.
  *
- * <p>El {@link #toString} es propio y agrega la causa entre corchetes, en vez de dejar que aparezca
- * recien en el rastro de pila. Es util aca: lo que falla en SASL casi siempre es el mecanismo de
- * abajo, y el mensaje de arriba solo no dice nada.
+ * <p>{@link #toString} is its own and adds the cause in brackets, instead of letting it appear only
+ * in the stack trace. It is useful here: what fails in SASL is almost always the mechanism below,
+ * and the message above says nothing on its own.
  */
 public class SaslException extends IOException {
 
     private static final long serialVersionUID = 4579784287983423626L;
 
-    /** Sin detalle. */
+    /** Without detail. */
     public SaslException() {
         super();
     }
 
-    /** Con un mensaje. */
+    /** With a message. */
     public SaslException(String detail) {
         super(detail);
     }
 
     /**
-     * Con la causa de abajo.
+     * With the underlying cause.
      *
-     * @param ex lo que fallo de verdad; null si no hay
+     * @param ex what really failed; null if there is nothing
      */
     public SaslException(String detail, Throwable ex) {
         super(detail);
@@ -40,21 +40,21 @@ public class SaslException extends IOException {
         }
     }
 
-    /** La causa, o null. */
+    /** The cause, or null. */
     public Throwable getCause() {
         return super.getCause();
     }
 
     /**
-     * Fija la causa.
+     * Sets the cause.
      *
-     * @throws IllegalStateException si ya tenia una
+     * @throws IllegalStateException if it already had one
      */
     public Throwable initCause(Throwable cause) {
         return super.initCause(cause);
     }
 
-    /** Con la causa entre corchetes si la hay; ver la nota de la clase. */
+    /** With the cause in brackets if there is one; see the class note. */
     public String toString() {
         Throwable cause = getCause();
         String head = super.toString();

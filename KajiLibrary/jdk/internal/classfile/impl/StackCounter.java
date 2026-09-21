@@ -25,23 +25,23 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Calcula el `max_stack` de un metodo recorriendo su grafo de flujo.
+ * It computes the `max_stack` of a method by walking its flow graph.
  *
- * <p>Hace falta porque el `Code` lo lleva escrito y la JVM lo comprueba: un valor mas chico que la
- * profundidad real hace que la clase no verifique. Uno mas grande verifica igual y desperdicia
- * marco, asi que **cuando algo no se puede decidir se toma la cota de arriba**, no la de abajo.
+ * <p>It is needed because the `Code` carries it written and the JVM checks it: a value smaller than
+ * the real depth makes the class not verify. A bigger one verifies all the same and wastes frame,
+ * so **when something cannot be decided the upper bound is taken**, not the lower.
  *
- * <h2>Por que un recorrido y no una suma</h2>
+ * <h2>Why a walk and not a sum</h2>
  *
- * <p>La profundidad en una instruccion no es la suma de los efectos de las anteriores en el orden
- * del arreglo: depende de por donde se llego. Un `goto` hacia atras, un `catch` que entra con la
- * pila en uno, las dos ramas de un `if` -- todo eso hace que el orden textual no sea el orden de
- * ejecucion. El recorrido visita cada instruccion con la profundidad de entrada de cada camino y se
- * queda con la mayor.
+ * <p>The depth at an instruction is not the sum of the effects of the previous ones in array order:
+ * it depends on where it was reached from. A backward `goto`, a `catch` that comes in with the
+ * stack at one, the two branches of an `if` -- all of that makes the textual order not the
+ * execution order. The walk visits each instruction with the entry depth of each path and keeps the
+ * largest.
  *
- * <p>La entrada del metodo empieza en cero; **la de cada manejador de excepciones empieza en uno**,
- * porque la JVM le deja la excepcion en la pila. Olvidar eso da un `max_stack` que falla exactamente
- * en los metodos con `try`.
+ * <p>The method's entry starts at zero; **that of each exception handler starts at one**, because
+ * the JVM leaves the exception on the stack for it. Forgetting that gives a `max_stack` that fails
+ * exactly in the methods with `try`.
  */
 final class StackCounter {
 
@@ -49,11 +49,11 @@ final class StackCounter {
     }
 
     /**
-     * El `max_stack` del codigo formado por esas instrucciones.
+     * The `max_stack` of the code made of those instructions.
      *
-     * @param elements las instrucciones, en orden
-     * @param handlers los manejadores, cuya entrada arranca con uno en la pila
-     * @param labelIndex de cada etiqueta, el indice de la instruccion a la que apunta
+     * @param elements the instructions, in order
+     * @param handlers the handlers, whose entry starts with one on the stack
+     * @param labelIndex for each label, the index of the instruction it points at
      */
     static int maxStack(List<Instruction> elements, List<ExceptionCatch> handlers,
             Map<Label, Integer> labelIndex) {
@@ -69,7 +69,7 @@ final class StackCounter {
         for (int i = 0; i < handlers.size(); i++) {
             Integer at = labelIndex.get(handlers.get(i).handler());
             if (at != null) {
-                // Uno, no cero: la JVM entra al manejador con la excepcion ya empujada.
+                // One, not zero: the JVM enters the handler with the exception already pushed.
                 StackCounter.seed(at.intValue(), 1, depth, seen, queue);
             }
         }
@@ -84,8 +84,9 @@ final class StackCounter {
             Instruction ins = elements.get(i);
             int after = d + StackCounter.effect(ins);
             if (after < 0) {
-                // Una pila negativa significa que el codigo esta mal formado. No se corta la cuenta
-                // -- calcular un `max_stack` no es verificar-- pero tampoco se propaga un absurdo.
+                // A negative stack means the code is malformed. The count is not cut short
+                // --computing a `max_stack` is not verifying-- but an absurdity is not propagated
+                // either.
                 after = 0;
             }
             if (after > max) {
@@ -100,7 +101,8 @@ final class StackCounter {
         if (at < 0 || at >= depth.length) {
             return;
         }
-        // Si ya se lo visito con una profundidad al menos igual, no hay nada nuevo que propagar.
+        // If it was already visited with a depth at least as large, there is nothing new to
+        // propagate.
         if (seen[at] && depth[at] >= d) {
             return;
         }
@@ -115,7 +117,7 @@ final class StackCounter {
         Opcode.Kind k = op.kind();
 
         if (k == Opcode.Kind.RETURN || k == Opcode.Kind.THROW_EXCEPTION) {
-            return; // no sigue
+            return; // it does not fall through
         }
         if (k == Opcode.Kind.BRANCH) {
             Label t = ((BranchInstruction) ins).target();
@@ -158,11 +160,11 @@ final class StackCounter {
     }
 
     /**
-     * Cuanto crece (o decrece) la pila con esa instruccion, en **ranuras**.
+     * How much the stack grows (or shrinks) with that instruction, in **slots**.
      *
-     * <p>Un `long` y un `double` cuentan dos, que es lo que ocupan. Es la razon de que esto no sea
-     * una tabla de opcodes a secas: el efecto de un `invokevirtual` depende de su descriptor, y el
-     * de un `getfield` del tipo del campo.
+     * <p>A `long` and a `double` count two, which is what they take. It is the reason this is not a
+     * bare table of opcodes: the effect of an `invokevirtual` depends on its descriptor, and that
+     * of a `getfield` on the type of the field.
      */
     private static int effect(Instruction ins) {
         Opcode op = ins.opcode();
@@ -178,7 +180,7 @@ final class StackCounter {
             return ((ConstantInstruction) ins).typeKind().slotSize();
         }
         if (k == Opcode.Kind.ARRAY_LOAD) {
-            // Salen el arreglo y el indice, entra el elemento.
+            // The array and the index go out, the element comes in.
             return -2 + ((ArrayLoadInstruction) ins).typeKind().slotSize();
         }
         if (k == Opcode.Kind.ARRAY_STORE) {
@@ -200,13 +202,13 @@ final class StackCounter {
             if (op == Opcode.GETFIELD) {
                 return slots - 1;
             }
-            return -slots - 1; // putfield: sale el objeto y sale el valor
+            return -slots - 1; // putfield: the object goes out and the value goes out
         }
         if (k == Opcode.Kind.INVOKE) {
             InvokeInstruction inv = (InvokeInstruction) ins;
             int e = StackCounter.descriptorEffect(inv.type().stringValue());
             if (op != Opcode.INVOKESTATIC) {
-                e = e - 1; // el receptor
+                e = e - 1; // the receiver
             }
             return e;
         }
@@ -218,13 +220,13 @@ final class StackCounter {
             return 1;
         }
         if (k == Opcode.Kind.NEW_PRIMITIVE_ARRAY || k == Opcode.Kind.NEW_REF_ARRAY) {
-            return 0; // sale el largo, entra el arreglo
+            return 0; // the length goes out, the array comes in
         }
         if (k == Opcode.Kind.NEW_MULTI_ARRAY) {
             return 1 - ((NewMultiArrayInstruction) ins).dimensions();
         }
         if (k == Opcode.Kind.TYPE_CHECK) {
-            return 0; // checkcast deja lo mismo; instanceof cambia el tipo pero no la altura
+            return 0; // checkcast leaves the same; instanceof changes the type but not the height
         }
         if (k == Opcode.Kind.MONITOR) {
             return -1;
@@ -240,7 +242,7 @@ final class StackCounter {
             return -1;
         }
         if (k == Opcode.Kind.BRANCH) {
-            // Los de un operando sacan uno; los de dos, dos; `goto` no saca nada.
+            // The one-operand ones pop one; the two-operand ones, two; `goto` pops nothing.
             if (op == Opcode.GOTO || op == Opcode.GOTO_W) {
                 return 0;
             }
@@ -266,9 +268,9 @@ final class StackCounter {
         return 0;
     }
 
-    // Los nueve de manipulacion de pila. Van en una tabla porque no hay regla: `dup2` empuja dos
-    // ranuras o duplica un valor de dos segun lo que haya arriba, y en las dos lecturas el efecto
-    // sobre la ALTURA es el mismo, que es lo unico que hace falta acá.
+    // The nine stack-manipulation ones. They go in a table because there is no rule: `dup2` pushes
+    // two slots or duplicates a two-slot value depending on what is on top, and in both readings
+    // the effect on the HEIGHT is the same, which is the only thing needed here.
     private static int stackEffect(Opcode op) {
         if (op == Opcode.POP) {
             return -1;
@@ -285,7 +287,7 @@ final class StackCounter {
         return 0; // swap
     }
 
-    // Los aritmeticos y los de comparacion. `arraylength` cae acá y saca uno y pone uno.
+    // The arithmetic and comparison ones. `arraylength` falls here and pops one and pushes one.
     private static int operatorEffect(Opcode op) {
         if (op == Opcode.ARRAYLENGTH) {
             return 0;
@@ -297,13 +299,13 @@ final class StackCounter {
             return 0;
         }
         if (op == Opcode.LCMP || op == Opcode.DCMPL || op == Opcode.DCMPG) {
-            return -3; // salen dos de dos ranuras, entra un int
+            return -3; // two two-slot values go out, an int comes in
         }
         if (op == Opcode.FCMPL || op == Opcode.FCMPG) {
             return -1;
         }
         if (op == Opcode.LSHL || op == Opcode.LSHR || op == Opcode.LUSHR) {
-            return -1; // long y int, queda long
+            return -1; // long and int, long remains
         }
         if (op == Opcode.LADD || op == Opcode.LSUB || op == Opcode.LMUL || op == Opcode.LDIV
                 || op == Opcode.LREM || op == Opcode.LAND || op == Opcode.LOR
@@ -314,10 +316,10 @@ final class StackCounter {
                 || op == Opcode.DREM) {
             return -2;
         }
-        return -1; // los de int y float: dos entran, uno sale
+        return -1; // the int and float ones: two go in, one comes out
     }
 
-    /** Lo que un descriptor de metodo le hace a la pila, sin contar el receptor. */
+    /** What a method descriptor does to the stack, without counting the receiver. */
     private static int descriptorEffect(String desc) {
         int i = desc.indexOf('(') + 1;
         int slots = 0;
@@ -330,21 +332,21 @@ final class StackCounter {
         return TypeKind.fromDescriptor(ret).slotSize() - slots;
     }
 
-    // Donde termina el tipo que empieza en `i`. Los arreglos anidados y los nombres de clase son lo
-    // unico que no mide un caracter.
+    // Where the type starting at `i` ends. Nested arrays and class names are the only thing that
+    // does not measure one character.
     private static int endOfType(String desc, int i) {
         int j = i;
         while (j < desc.length() && desc.charAt(j) == '[') {
             j = j + 1;
         }
         if (j < desc.length() && desc.charAt(j) == 'L') {
-            int fin = desc.indexOf(';', j);
-            return fin < 0 ? desc.length() : fin + 1;
+            int end = desc.indexOf(';', j);
+            return end < 0 ? desc.length() : end + 1;
         }
         return j + 1;
     }
 
-    /** El indice de cada etiqueta en la lista de instrucciones. */
+    /** The index of each label in the list of instructions. */
     static Map<Label, Integer> indexLabels(List<Object> raw) {
         Map<Label, Integer> out = new HashMap<Label, Integer>();
         int idx = 0;

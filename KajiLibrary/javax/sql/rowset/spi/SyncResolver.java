@@ -5,105 +5,106 @@ import java.sql.SQLException;
 import javax.sql.RowSet;
 
 /**
- * El conjunto de filas que <strong>no</strong> se pudieron escribir, para decidir una por una.
+ * The set of rows that could <strong>not</strong> be written, to decide one by one.
  *
- * <h2>Que es un conflicto</h2>
+ * <h2>What a conflict is</h2>
  *
- * <p>El {@code RowSet} se lleno en un momento y se escribe en otro. Si entre esos dos momentos
- * alguien cambio la misma fila en el origen, escribir encima perderia su cambio sin que nadie se
- * entere. El proveedor detecta eso y no escribe: en lugar de decidir por su cuenta, junta las filas
- * en conflicto y las entrega aca.
+ * <p>The {@code RowSet} was filled at one moment and is written at another. If between those two
+ * moments somebody changed the same row in the source, writing over it would lose their change
+ * without anybody finding out. The provider detects that and does not write: instead of deciding on
+ * its own, it gathers the rows in conflict and hands them over here.
  *
- * <h2>Por que es un {@link RowSet} y ademas tiene sus propios accesores</h2>
+ * <h2>Why it is a {@link RowSet} and also has its own accessors</h2>
  *
- * <p>Porque hay <strong>tres</strong> valores por celda en juego: el que estaba cuando se cargo, el
- * que el usuario escribio, y el que hay ahora en el origen. Un {@code RowSet} solo puede contener
- * uno.
+ * <p>Because there are <strong>three</strong> values per cell at play: the one there was when it
+ * was loaded, the one the user wrote, and the one there is now in the source.
  *
- * <p>La division es: los metodos heredados de {@code RowSet} dan el valor que el usuario quiso
- * poner, {@link #getConflictValue} da el que hay en el origen ahora mismo, y
- * {@link #setResolvedValue} es donde se escribe el que finalmente va a quedar. Resolver un
- * conflicto es mirar los dos primeros y elegir el tercero.
+ * <p>The specification splits them like this: this object "contains the values from the data source
+ * that caused the conflict(s) and null for all other values"; {@link #getConflictValue} gives that
+ * source value; the value the user wanted is read from the user's own {@code RowSet}; and
+ * {@link #setResolvedValue} is where the one that is finally going to stay is written. Resolving a
+ * conflict is looking at the first two and choosing the third. (The note said the inherited
+ * {@code RowSet} getters give the value the user wanted to put.)
  *
- * <h2>El recorrido</h2>
+ * <h2>The walk</h2>
  *
- * <p>{@link #nextConflict} y {@link #previousConflict} recorren solo las filas conflictivas,
- * salteando las que se escribieron bien. {@link #getStatus} dice de que tipo es el conflicto de la
- * fila actual — al actualizar, al borrar o al insertar—, que no se resuelven igual: una fila que ya
- * no existe en el origen no se puede actualizar de ninguna manera.
+ * <p>{@link #nextConflict} and {@link #previousConflict} walk only the conflicting rows, skipping
+ * the ones that were written fine. {@link #getStatus} says what kind of conflict the current row
+ * has — on updating, on deleting or on inserting—, which are not resolved the same way: a row that
+ * no longer exists in the source cannot be updated in any way.
  *
  * @since 1.5
  */
 public interface SyncResolver extends RowSet {
 
-    /** La fila que se quiso actualizar cambio en el origen. */
+    /** The row that was to be updated changed in the source. */
     int UPDATE_ROW_CONFLICT = 0;
 
-    /** La fila que se quiso borrar cambio en el origen. */
+    /** The row that was to be deleted changed in the source. */
     int DELETE_ROW_CONFLICT = 1;
 
-    /** La fila que se quiso insertar choca con una que ya esta. */
+    /** The row that was to be inserted clashes with one that is already there. */
     int INSERT_ROW_CONFLICT = 2;
 
-    /** Esta fila no tuvo conflicto. */
+    /** This row had no conflict. */
     int NO_ROW_CONFLICT = 3;
 
     /**
-     * De que tipo es el conflicto de la fila actual.
+     * What kind of conflict the current row has.
      *
-     * @return una de las cuatro constantes
+     * @return one of the four constants
      */
     int getStatus();
 
     /**
-     * El valor que hay <strong>en el origen</strong> para esa columna.
+     * The value there is <strong>in the source</strong> for that column.
      *
-     * @param index la columna, desde 1
-     * @return el valor del origen
-     * @throws SQLException si el indice no es valido o no hay fila actual
+     * @param index the column, from 1
+     * @return the source's value
+     * @throws SQLException if the index is not valid or there is no current row
      */
     Object getConflictValue(int index) throws SQLException;
 
     /**
-     * El valor que hay <strong>en el origen</strong> para esa columna.
+     * The value there is <strong>in the source</strong> for that column.
      *
-     * @param columnName el nombre de la columna
-     * @return el valor del origen
-     * @throws SQLException si el nombre no existe o no hay fila actual
+     * @param columnName the name of the column
+     * @return the source's value
+     * @throws SQLException if the name does not exist or there is no current row
      */
     Object getConflictValue(String columnName) throws SQLException;
 
     /**
-     * Fija el valor con el que se resuelve el conflicto de esa columna.
+     * Sets the value the conflict of that column is resolved with.
      *
-     * @param index la columna, desde 1
-     * @param obj el valor que va a quedar
-     * @throws SQLException si el indice no es valido o no hay fila actual
+     * @param index the column, from 1
+     * @param obj the value that is going to stay
+     * @throws SQLException if the index is not valid or there is no current row
      */
     void setResolvedValue(int index, Object obj) throws SQLException;
 
     /**
-     * Fija el valor con el que se resuelve el conflicto de esa columna.
+     * Sets the value the conflict of that column is resolved with.
      *
-     * @param columnName el nombre de la columna
-     * @param obj el valor que va a quedar
-     * @throws SQLException si el nombre no existe o no hay fila actual
+     * @param columnName the name of the column
+     * @param obj the value that is going to stay
+     * @throws SQLException if the name does not exist or there is no current row
      */
     void setResolvedValue(String columnName, Object obj) throws SQLException;
 
     /**
-     * Avanza a la proxima fila en conflicto.
+     * Moves forward to the next row in conflict.
      *
-     * @return {@code true} si habia otra
-     * @throws SQLException si no se pudo avanzar
+     * @return {@code true} if there was another
+     * @throws SQLException if it could not move forward
      */
     boolean nextConflict() throws SQLException;
 
     /**
-     * Retrocede a la fila en conflicto anterior.
+     * Moves back to the previous row in conflict.
      *
-     * @return {@code true} si habia otra
-     * @throws SQLException si no se pudo retroceder
+     * @return {@code true} if there was another
+     * @throws SQLException if it could not move back
      */
     boolean previousConflict() throws SQLException;
 }

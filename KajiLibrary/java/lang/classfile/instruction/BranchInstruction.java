@@ -5,15 +5,15 @@ import java.lang.classfile.Label;
 import java.lang.classfile.Opcode;
 import jdk.internal.classfile.impl.Instructions;
 
-// Un salto condicional o incondicional. El destino es una {@link Label} y no un número: el archivo
-// lo guarda como un desplazamiento relativo al bci de la instrucción, pero exponerlo así obligaría a
-// recalcularlo cada vez que se inserta o se saca código antes del salto.
+// A conditional or unconditional branch. The destination is a {@link Label} and not a number: the
+// file stores it as an offset relative to the instruction's bci, but exposing it that way would force
+// recomputing it every time code is inserted or removed before the branch.
 public interface BranchInstruction extends Instruction {
 
-    /** A dónde salta. */
+    /** Where it jumps to. */
     Label target();
 
-    /** El salto de este opcode a esta etiqueta. */
+    /** The branch of this opcode to this label. */
     public static BranchInstruction of(Opcode op, Label target) {
         return Instructions.branch(op, target);
     }

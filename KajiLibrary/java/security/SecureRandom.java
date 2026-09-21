@@ -3,37 +3,38 @@ package java.security;
 import java.util.Random;
 
 /**
- * KajiLibrary's java.security.SecureRandom -- el generador del que salen las claves.
+ * KajiLibrary's java.security.SecureRandom -- the generator the keys come out of.
  *
- * <p>Hereda de {@link Random} y esa herencia es historica, no conceptual: lo unico que comparten es
- * la forma. Un {@code Random} es un generador <b>predecible</b> -- misma semilla, misma serie -- y
- * es lo correcto para una simulacion o un juego. Un {@code SecureRandom} promete lo contrario, y
- * usar el primero donde hace falta el segundo es el error de seguridad mas comun que existe: el
- * codigo anda, las pruebas pasan, y las claves son adivinables.
+ * <p>It inherits from {@link Random} and that inheritance is historical, not conceptual: the only
+ * thing they share is the shape. A {@code Random} is a <b>predictable</b> generator -- the same
+ * seed, the same series -- and it is the right thing for a simulation or a game. A
+ * {@code SecureRandom} promises the opposite, and using the first where the second is needed is the
+ * most common security mistake there is: the code works, the tests pass, and the keys are
+ * guessable.
  *
- * <h2>Que hay detras aca</h2>
+ * <h2>What is behind it here</h2>
  *
- * <p>El proveedor de fabrica registra un solo algoritmo, {@code "OS-PRNG"}, que es un pase directo
- * al generador del sistema operativo -- {@code BCryptGenRandom} en Windows, {@code /dev/urandom} en
- * el resto. Ver {@code OsPrngSpi} para por que se eligio un pase directo y no un DRBG propio.
+ * <p>The stock provider registers a single algorithm, {@code "OS-PRNG"}, which is a direct pass to
+ * the generator of the operating system -- {@code BCryptGenRandom} on Windows, {@code /dev/urandom}
+ * on the rest. See {@code OsPrngSpi} for why a direct pass was chosen and not a DRBG of our own.
  *
- * <p><b>Diferencia anotada con el JDK</b>: alla {@code getInstance("SHA1PRNG")} y
- * {@code getInstance("DRBG")} funcionan. Aca lanzan {@code NoSuchAlgorithmException}, porque esta
- * biblioteca no implementa esos dos algoritmos y devolver otro con ese nombre seria mentir sobre
- * que construccion esta corriendo. Lo que si funciona, y es lo que casi todo el mundo usa, es
- * {@code new SecureRandom()}: toma el primero que haya, que aca es el del sistema.
+ * <p><b>Noted difference with the JDK</b>: there {@code getInstance("SHA1PRNG")} and
+ * {@code getInstance("DRBG")} work. Here they throw {@code NoSuchAlgorithmException}, because this
+ * library does not implement those two algorithms and returning another one with that name would be
+ * lying about which construction is running. What does work, and is what almost everybody uses, is
+ * {@code new SecureRandom()}: it takes the first there is, which here is the system's.
  *
- * <h2>Tres detalles del contrato que se olvidan</h2>
+ * <h2>Three details of the contract that are forgotten</h2>
  *
  * <ol>
- *   <li>{@code setSeed} <b>agrega</b> entropia, no la reemplaza. Dos generadores con la misma
- *       semilla <b>no</b> dan la misma serie, al reves que en {@link Random}. Contar con eso para
- *       reproducir una corrida es un error.
- *   <li>{@code generateSeed} no es {@code nextBytes}: el primero entrega entropia para sembrar a
- *       otro generador y el segundo entrega salida. Ver {@link SecureRandomSpi}.
- *   <li>{@code setSeed(long)} con cero <b>no hace nada</b>. Tiene que ser asi porque el constructor
- *       de {@link Random} llama a {@code setSeed} antes de que este objeto tenga su generador
- *       armado; sin esa salida, construir un {@code SecureRandom} reventaria.
+ *   <li>{@code setSeed} <b>adds</b> entropy, it does not replace it. Two generators with the same
+ *       seed do <b>not</b> give the same series, the other way round from {@link Random}. Counting
+ *       on that to reproduce a run is a mistake.
+ *   <li>{@code generateSeed} is not {@code nextBytes}: the first hands over entropy for seeding
+ *       another generator and the second hands over output. See {@link SecureRandomSpi}.
+ *   <li>{@code setSeed(long)} with zero <b>does nothing</b>. It has to be that way because the
+ *       constructor of {@link Random} calls {@code setSeed} before this object has its generator
+ *       built; without that way out, building a {@code SecureRandom} would blow up.
  * </ol>
  */
 public class SecureRandom extends Random {
@@ -45,15 +46,15 @@ public class SecureRandom extends Random {
     private String algorithm;
 
     /**
-     * El primer generador que ofrezca algun proveedor instalado.
+     * The first generator any installed provider offers.
      *
-     * @throws ProviderException si no hay ninguno. El JDK garantiza que siempre hay uno; aca ese
-     *     uno es el del sistema operativo, y si el sistema no puede dar entropia no hay nada
-     *     razonable que devolver.
+     * @throws ProviderException if there is none. The JDK guarantees that there is always one; here
+     *     that one is the operating system's, and if the system cannot give entropy there is
+     *     nothing reasonable to return.
      */
     public SecureRandom() {
-        // `super(0)` y no `super()`: el constructor de Random llama a setSeed, que esta
-        // sobrescrito, y todavia no hay `secureRandomSpi`. Con cero, el override no hace nada.
+        // `super(0)` and not `super()`: the constructor of Random calls setSeed, which is
+        // overridden, and there is no `secureRandomSpi` yet. With zero, the override does nothing.
         super(0);
         Provider[] provs = Security.getProviders();
         int i = 0;
@@ -66,8 +67,8 @@ public class SecureRandom extends Random {
                     this.algorithm = s.getAlgorithm();
                     return;
                 } catch (NoSuchAlgorithmException e) {
-                    // Un proveedor que anuncia un servicio y no lo puede construir no descalifica a
-                    // los que vienen despues.
+                    // A provider that announces a service and cannot build it does not disqualify
+                    // the ones that come afterwards.
                     i = i + 1;
                     continue;
                 }
@@ -78,16 +79,16 @@ public class SecureRandom extends Random {
     }
 
     /**
-     * Idem, sembrado con esos bytes.
+     * The same, seeded with those bytes.
      *
-     * <p>La semilla <b>agrega</b>: dos generadores construidos con la misma no dan la misma serie.
+     * <p>The seed <b>adds</b>: two generators built with the same one do not give the same series.
      */
     public SecureRandom(byte[] seed) {
         this();
         this.secureRandomSpi.engineSetSeed(seed);
     }
 
-    /** El constructor para quien trae su propia implementacion. */
+    /** The constructor for whoever brings their own implementation. */
     protected SecureRandom(SecureRandomSpi secureRandomSpi, Provider provider) {
         super(0);
         this.secureRandomSpi = secureRandomSpi;
@@ -107,9 +108,9 @@ public class SecureRandom extends Random {
     }
 
     /**
-     * El generador de ese algoritmo, del primer proveedor que lo ofrezca.
+     * The generator of that algorithm, of the first provider that offers it.
      *
-     * @throws NoSuchAlgorithmException si ningun proveedor lo ofrece
+     * @throws NoSuchAlgorithmException if no provider offers it
      */
     public static SecureRandom getInstance(String algorithm) throws NoSuchAlgorithmException {
         if (algorithm == null) {
@@ -128,9 +129,9 @@ public class SecureRandom extends Random {
     }
 
     /**
-     * Idem, exigiendo ese proveedor.
+     * The same, demanding that provider.
      *
-     * @throws NoSuchProviderException si no hay un proveedor instalado con ese nombre
+     * @throws NoSuchProviderException if there is no installed provider with that name
      */
     public static SecureRandom getInstance(String algorithm, String provider)
             throws NoSuchAlgorithmException, NoSuchProviderException {
@@ -147,7 +148,7 @@ public class SecureRandom extends Random {
         return getInstance(algorithm, p);
     }
 
-    /** Idem, con la instancia del proveedor en vez de su nombre. */
+    /** The same, with the instance of the provider instead of its name. */
     public static SecureRandom getInstance(String algorithm, Provider provider)
             throws NoSuchAlgorithmException {
         if (algorithm == null) {
@@ -165,11 +166,11 @@ public class SecureRandom extends Random {
     }
 
     /**
-     * El generador de ese algoritmo configurado con esos parametros.
+     * The generator of that algorithm configured with those parameters.
      *
-     * <p>Los parametros solo los entiende un DRBG. El generador de fabrica de esta biblioteca no lo
-     * es, asi que aca esta sobrecarga siempre termina en {@code NoSuchAlgorithmException}: el
-     * servicio existe pero no acepta parametros, y ese es el error que corresponde.
+     * <p>The parameters are only understood by a DRBG. The stock generator of this library is not
+     * one, so here this overload always ends in {@code NoSuchAlgorithmException}: the service
+     * exists but does not accept parameters, and that is the error that corresponds.
      */
     public static SecureRandom getInstance(String algorithm, SecureRandomParameters params)
             throws NoSuchAlgorithmException {
@@ -188,7 +189,7 @@ public class SecureRandom extends Random {
         throw new NoSuchAlgorithmException(algorithm + " SecureRandom not available");
     }
 
-    /** Idem, exigiendo ese proveedor por nombre. */
+    /** The same, demanding that provider by name. */
     public static SecureRandom getInstance(String algorithm, SecureRandomParameters params,
             String provider) throws NoSuchAlgorithmException, NoSuchProviderException {
         if (params == null) {
@@ -204,7 +205,7 @@ public class SecureRandom extends Random {
         return getInstance(algorithm, params, p);
     }
 
-    /** Idem, con la instancia del proveedor. */
+    /** The same, with the instance of the provider. */
     public static SecureRandom getInstance(String algorithm, SecureRandomParameters params,
             Provider provider) throws NoSuchAlgorithmException {
         if (params == null) {
@@ -243,7 +244,7 @@ public class SecureRandom extends Random {
         return this.provider;
     }
 
-    /** El nombre del algoritmo, o {@code "unknown"} si se construyo con un SPI a mano. */
+    /** The name of the algorithm, or {@code "unknown"} if it was built with an SPI by hand. */
     public String getAlgorithm() {
         return this.algorithm == null ? "unknown" : this.algorithm;
     }
@@ -253,12 +254,12 @@ public class SecureRandom extends Random {
         return this.secureRandomSpi.toString();
     }
 
-    /** Los parametros con los que se creo, o null si no tiene. */
+    /** The parameters it was created with, or null if it has none. */
     public SecureRandomParameters getParameters() {
         return this.secureRandomSpi.engineGetParameters();
     }
 
-    /** Agrega esa semilla. Ver la nota de la clase: agrega, no reemplaza. */
+    /** It adds that seed. See the note of the class: it adds, it does not replace. */
     public void setSeed(byte[] seed) {
         if (seed == null) {
             throw new NullPointerException("seed is null");
@@ -267,10 +268,10 @@ public class SecureRandom extends Random {
     }
 
     /**
-     * Agrega los ocho bytes de ese entero como semilla.
+     * It adds the eight bytes of that integer as a seed.
      *
-     * <p>Con cero no hace nada, y no es un capricho: el constructor de {@link Random} llama a este
-     * metodo antes de que el generador exista. Ver la nota de la clase.
+     * <p>With zero it does nothing, and it is not a whim: the constructor of {@link Random} calls
+     * this method before the generator exists. See the note of the class.
      */
     @Override
     public void setSeed(long seed) {
@@ -290,7 +291,7 @@ public class SecureRandom extends Random {
         return out;
     }
 
-    /** Llena el arreglo con la salida del generador. */
+    /** It fills the array with the output of the generator. */
     @Override
     public void nextBytes(byte[] bytes) {
         if (bytes == null) {
@@ -300,9 +301,9 @@ public class SecureRandom extends Random {
     }
 
     /**
-     * Idem, con parametros por llamada.
+     * The same, with parameters per call.
      *
-     * @throws UnsupportedOperationException si el generador no es un DRBG
+     * @throws UnsupportedOperationException if the generator is not a DRBG
      */
     public void nextBytes(byte[] bytes, SecureRandomParameters params) {
         if (bytes == null) {
@@ -315,12 +316,12 @@ public class SecureRandom extends Random {
     }
 
     /**
-     * Los `numBits` bits de abajo, sacados del generador.
+     * The `numBits` bits from below, taken from the generator.
      *
-     * <p>Es el metodo que {@link Random} llama desde {@code nextInt}, {@code nextLong} y compañia,
-     * y por eso alcanza con sobrescribirlo para que **todos** ellos pasen a ser criptograficos. Es
-     * `final`: una subclase que lo cambiara podria devolver bits predecibles sin que nada mas de la
-     * clase se entere.
+     * <p>It is the method {@link Random} calls from {@code nextInt}, {@code nextLong} and company,
+     * and that is why overriding it is enough for **all** of them to become cryptographic. It is
+     * `final`: a subclass that changed it could return predictable bits without anything else of
+     * the class finding out.
      */
     @Override
     protected final int next(int numBits) {
@@ -337,16 +338,17 @@ public class SecureRandom extends Random {
     }
 
     /**
-     * Bytes de entropia, del generador por omision.
+     * Bytes of entropy, from the default generator.
      *
-     * <p>Es estatico y por lo tanto no dice de que generador salen: usa el mismo que
-     * {@code new SecureRandom()}. Para sembrar algo propio conviene el de instancia.
+     * <p>It is static and therefore does not say which generator they come from: it uses the same
+     * one as {@code new SecureRandom()}. For seeding something of one's own the instance one is
+     * preferable.
      */
     public static byte[] getSeed(int numBytes) {
         return new SecureRandom().generateSeed(numBytes);
     }
 
-    /** Bytes de <b>entropia</b>, no de salida. Ver la nota de {@link SecureRandomSpi}. */
+    /** Bytes of <b>entropy</b>, not of output. See the note of {@link SecureRandomSpi}. */
     public byte[] generateSeed(int numBytes) {
         if (numBytes < 0) {
             throw new IllegalArgumentException("numBytes cannot be negative");
@@ -355,14 +357,14 @@ public class SecureRandom extends Random {
     }
 
     /**
-     * El generador mas fuerte que haya.
+     * The strongest generator there is.
      *
-     * <p>En el JDK se elige con la propiedad de seguridad {@code securerandom.strongAlgorithms}.
-     * Aca no hay archivo de configuracion que leer (ver {@link Security}), y el unico generador de
-     * fabrica es el del sistema operativo -- que es justamente el que esa propiedad nombraria --,
-     * asi que devuelve el mismo que {@code new SecureRandom()}.
+     * <p>In the JDK it is chosen with the security property {@code securerandom.strongAlgorithms}.
+     * Here there is no configuration file to read (see {@link Security}), and the only stock
+     * generator is the operating system's -- which is precisely the one that property would name
+     * --, so it returns the same one as {@code new SecureRandom()}.
      *
-     * @throws NoSuchAlgorithmException si no hay ninguno instalado
+     * @throws NoSuchAlgorithmException if there is none installed
      */
     public static SecureRandom getInstanceStrong() throws NoSuchAlgorithmException {
         try {
@@ -373,19 +375,19 @@ public class SecureRandom extends Random {
     }
 
     /**
-     * Resiembra el estado interno con entropia nueva.
+     * It reseeds the internal state with new entropy.
      *
-     * @throws UnsupportedOperationException si el generador no tiene estado interno que resembrar
-     *     -- que es el caso del pase directo al sistema, ver {@code OsPrngSpi}
+     * @throws UnsupportedOperationException if the generator has no internal state to reseed
+     *     -- which is the case of the direct pass to the system, see {@code OsPrngSpi}
      */
     public void reseed() {
         this.secureRandomSpi.engineReseed(null);
     }
 
     /**
-     * Idem, con parametros.
+     * The same, with parameters.
      *
-     * @throws UnsupportedOperationException si el generador no es un DRBG
+     * @throws UnsupportedOperationException if the generator is not a DRBG
      */
     public void reseed(SecureRandomParameters params) {
         if (params == null) {

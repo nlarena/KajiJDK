@@ -1,14 +1,15 @@
 package java.nio.file;
 
-// Se detecto un ciclo mientras se recorria el arbol de directorios.
+// A cycle was detected while walking the directory tree.
 //
-// KajiJDK nunca la levanta: recorrer requiere listar directorios y no hay nativo que lo haga, asi
-// que `Files.walkFileTree` no existe. El tipo esta para que la jerarquia este completa.
+// KajiJDK never throws it. This note used to blame `Files.walkFileTree` not existing; it exists.
+// What it does not do is follow symbolic links --this VM has none-- so no cycle can arise. The type
+// is here so the hierarchy is complete.
 public class FileSystemLoopException extends FileSystemException {
 
     private static final long serialVersionUID = 4843039591949217617L;
 
-    /** @param file la ruta donde se cerro el ciclo */
+    /** @param file the path where the cycle closed */
     public FileSystemLoopException(String file) {
         super(file);
     }

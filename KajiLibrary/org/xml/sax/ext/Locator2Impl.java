@@ -3,30 +3,31 @@ package org.xml.sax.ext;
 import org.xml.sax.Locator;
 
 /**
- * KajiLibrary's org.xml.sax.ext.Locator2Impl -- un {@link Locator2} que se puede guardar, y el que
- * un parser usa para entregar la posicion.
+ * KajiLibrary's org.xml.sax.ext.Locator2Impl -- a {@link Locator2} that can be kept, and the one a
+ * parser uses to hand over the position.
  *
- * <p>Sirve para las dos cosas de siempre, igual que `LocatorImpl`: **congelar** una posicion --el
- * `Locator` que el parser presta es vivo y preguntarle despues del evento contesta por otro lado--
- * y **construir** una cuando uno mismo genera los eventos.
+ * <p>It serves for the usual two things, just like `LocatorImpl`: **freezing** a position --the
+ * `Locator` the parser lends is alive and asking it after the event answers for somewhere else--
+ * and **building** one when one generates the events oneself.
  *
- * <p>El detalle que no se ve en la firma esta en el constructor de copia: si el `Locator` que le
- * pasan **no** es un `Locator2`, la version y la codificacion quedan en `null` en vez de inventarse
- * un `"1.0"` por omision. Es la unica respuesta honesta --no se sabe cual era-- y ademas la que
- * hace distinguible el caso de un `Locator2` que devolvio `null` porque el parser tampoco sabia.
+ * <p>The detail that does not show in the signature is in the copy constructor: if the `Locator`
+ * passed to it is **not** a `Locator2`, the version and the encoding are left at `null` instead of
+ * inventing a default `"1.0"`. It is the only honest answer --it is not known which it was--. The
+ * note added that this makes the case distinguishable from a `Locator2` that returned `null`
+ * because the parser did not know either; it does not: both come out as `null`.
  */
 public class Locator2Impl extends org.xml.sax.helpers.LocatorImpl implements Locator2 {
 
     private String encoding;
     private String version;
 
-    /** Todo sin valor, listo para que le pongan los campos. */
+    /** Everything with no value, ready for the fields to be set. */
     public Locator2Impl() {
     }
 
     /**
-     * La foto descrita arriba. Copia siempre los cuatro campos del `Locator`, y los dos de
-     * `Locator2` solo cuando el objeto los tiene.
+     * The snapshot described above. It always copies the four fields of the `Locator`, and the two
+     * of `Locator2` only when the object has them.
      */
     public Locator2Impl(Locator locator) {
         super(locator);

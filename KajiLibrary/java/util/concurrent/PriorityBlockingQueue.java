@@ -84,17 +84,17 @@ public class PriorityBlockingQueue<E> extends AbstractQueue<E> implements Blocki
     // Never blocks, despite the name -- the queue is unbounded, so there is nothing to wait
     // for. Present because BlockingQueue demands it.
     //
-    // No `throws InterruptedException`, y eso es deliberado: `BlockingQueue.put` la declara, pero un
-    // metodo que redefine puede declarar MENOS de lo que declara el que redefine, y el JDK usa
-    // exactamente esa libertad aca. Ponerla obligaria a quien llame a atrapar una excepcion que este
-    // metodo no puede tirar, y --peor-- el codigo que compila contra el JDK real dejaria de compilar
-    // contra esta biblioteca. La firma mas estricta no es un subconjunto legal: es otra firma.
+    // No `throws InterruptedException`, and that is deliberate: `BlockingQueue.put` declares it, but
+    // an overriding method may declare LESS than the one it overrides, and the JDK uses exactly that
+    // freedom here. Adding it would force the caller to catch an exception this method cannot throw,
+    // and --worse-- code that compiles against the real JDK would stop compiling against this
+    // library. The stricter signature is not a legal subset: it is a different signature.
     public void put(E e) {
         offer(e);
     }
 
-    // Same: the timeout is unreachable, so it is ignored and the answer is always true. Sin `throws`
-    // por la misma razon que `put`.
+    // Same: the timeout is unreachable, so it is ignored and the answer is always true. No `throws`
+    // for the same reason as `put`.
     public boolean offer(E e, long timeout, TimeUnit unit) {
         return offer(e);
     }

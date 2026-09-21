@@ -16,66 +16,65 @@ import java.util.Map;
 import java.util.Properties;
 
 /**
- * El juego de herramientas de una máquina sin pantalla.
+ * The toolkit of a machine without a screen.
  *
- * <p>La regla es una sola y se aplica en todos lados: **lo que se puede contestar sin pantalla se
- * contesta de verdad; lo que la necesita tira {@link HeadlessException}**. No hay ningún valor
- * inventado. Un tamaño de pantalla que no existe no se aproxima, una fuente que no se puede medir no
- * se estima.
+ * <p>The rule is a single one and it is applied everywhere: **what can be answered without a screen
+ * is answered truthfully; what needs one throws {@link HeadlessException}**. There is not one
+ * invented value. A screen size that does not exist is not approximated, a font that cannot be
+ * measured is not estimated.
  *
- * <p>Es más de lo que parece. Funcionan la cola de eventos con su hilo de despacho, el modelo de
- * color, la construcción de imágenes desde un productor de píxeles, la preparación y comprobación de
- * imágenes, y las propiedades del escritorio.
+ * <p>It is more than it looks. The event queue with its dispatch thread works, and so do the colour
+ * model, the building of images from a producer of pixels, the preparing and checking of images,
+ * and the desktop properties.
  *
- * <p>El portapapeles que devuelve es **privado**: vive dentro de este proceso. No es un sustituto
- * del portapapeles del sistema disfrazado — es un portapapeles de verdad que sirve para mover datos
- * entre partes de la misma aplicación, que es todo lo que se puede hacer sin un escritorio con el que
- * compartir.
+ * <p>The clipboard it returns is **private**: it lives inside this process. It is not a substitute
+ * for the system clipboard in disguise — it is a real clipboard, good for moving data between parts
+ * of the same application, which is all that can be done without a desktop to share with.
  *
- * <p>No es pública: se llega por {@link Toolkit#getDefaultToolkit}.
+ * <p>It is not public: one gets to it through {@link Toolkit#getDefaultToolkit}.
  */
 class HeadlessToolkit extends Toolkit {
 
     private final EventQueue eventQueue = new EventQueue();
     private final Clipboard clipboard = new Clipboard("System");
 
-    /** El juego de herramientas sin pantalla. */
+    /** The toolkit without a screen. */
     HeadlessToolkit() {
     }
 
     /**
-     * El tamaño de la pantalla.
+     * The size of the screen.
      *
-     * @throws HeadlessException siempre: no hay pantalla que medir
+     * @throws HeadlessException always: there is no screen to measure
      */
     public Dimension getScreenSize() throws HeadlessException {
         throw new HeadlessException();
     }
 
     /**
-     * Los puntos por pulgada.
+     * The dots per inch.
      *
-     * @throws HeadlessException siempre, por el mismo motivo
+     * @throws HeadlessException always, for the same reason
      */
     public int getScreenResolution() throws HeadlessException {
         throw new HeadlessException();
     }
 
     /**
-     * El formato de píxel.
+     * The pixel format.
      *
-     * <p>Ésta **sí** se puede contestar: es el ARGB de ocho bits por canal, que es el formato en el
-     * que la biblioteca trabaja con color sin importar en qué pantalla se muestre.
+     * <p>This one **can** be answered: it is eight-bit-per-channel ARGB, which is the format the
+     * library works with colour in, whatever screen it is shown on.
      */
     public ColorModel getColorModel() {
         return ColorModel.getRGBdefault();
     }
 
     /**
-     * Las fuentes instaladas.
+     * The installed fonts.
      *
-     * <p>Las cinco familias lógicas, que son las que existen sin motor tipográfico: son nombres, no
-     * archivos, y esta biblioteca los reconoce.
+     * <p>The five logical families, which are the ones that exist without a font engine: they are
+     * names, not files, and this library recognises them.
      */
     public String[] getFontList() {
         String[] out = new String[5];
@@ -88,72 +87,69 @@ class HeadlessToolkit extends Toolkit {
     }
 
     /**
-     * Las medidas de una fuente.
+     * The metrics of the only font of this VM, whatever the one asked for.
      *
-     * @throws UnsupportedOperationException siempre: medir texto exige leer los glifos del archivo
-     *     de la fuente, y esta biblioteca no trae motor tipográfico. Es la misma frontera que parte
-     *     a {@link Font} en dos mitades.
-     */
-    /**
-     * Las metricas de la unica fuente de esta VM, sea cual sea la pedida.
+     * <p>See {@link KajiFontMetrics}: every font is substituted by the same face, and the metrics
+     * are the ones of that face, which is what the rasteriser actually paints.
      *
-     * <p>Ver {@link KajiFontMetrics}: toda fuente se sustituye por la misma cara, y las metricas
-     * son las de esa cara, que es lo que el rasterizador efectivamente pinta.
+     * <p>This note used to say that measuring text demanded reading the glyphs of the font file and
+     * that the method therefore threw {@code UnsupportedOperationException}. It does not throw: the
+     * substitute face is measured instead.
      */
     public FontMetrics getFontMetrics(Font font) {
         return new KajiFontMetrics(font);
     }
 
-    /** No hay nada pendiente de dibujar: no hay pantalla. */
+    /** There is nothing waiting to be drawn: there is no screen. */
     public void sync() {
     }
 
     /**
-     * Una imagen leída de un archivo.
+     * An image read from a file.
      *
-     * @return `null` si el archivo no se puede leer o no es una imagen que se sepa decodificar
+     * @return `null` if the file cannot be read or is not an image it knows how to decode
      */
     public Image getImage(String filename) {
         return this.createImage(filename);
     }
 
     /**
-     * Una imagen leída de una dirección.
+     * An image read from an address.
      *
-     * @return `null` si no se puede leer
+     * @return `null` if it cannot be read
      */
     public Image getImage(URL url) {
         return this.createImage(url);
     }
 
     /**
-     * Una imagen leída de un archivo.
+     * An image read from a file.
      *
-     * @return `null` siempre: decodificar PNG o JPEG es trabajo de `javax.imageio`, que esta
-     *     biblioteca no trae. Devolver una imagen vacía sería peor: quien la dibujara no vería nada
-     *     y no sabría por qué.
+     * @return `null` always: decoding PNG or JPEG is the work of `javax.imageio`, which this
+     *     library does not ship. Returning an empty image would be worse: whoever drew it would see
+     *     nothing and would not know why.
      */
     public Image createImage(String filename) {
         return null;
     }
 
     /**
-     * Una imagen leída de una dirección.
+     * An image read from an address.
      *
-     * @return `null` siempre, por el mismo motivo
+     * @return `null` always, for the same reason
      */
     public Image createImage(URL url) {
         return null;
     }
 
     /**
-     * Una imagen a partir de un productor de píxeles.
+     * An image from a producer of pixels.
      *
-     * <p>Ésta **sí** funciona, y es la que importa: no hay nada que decodificar, los píxeles ya
-     * vienen dados. Es lo que hace que la tubería de filtros de {@code java.awt.image} sirva de
-     * punta a punta.
+     * <p>This one **does** work, and it is the one that matters: there is nothing to decode, the
+     * pixels come given. It is what makes the filter pipeline of {@code java.awt.image} useful end
+     * to end.
      *
-     * @return la imagen, o `null` si el productor no llegó a entregarla
+     * @return the image, or `null` if the producer did not get to deliver it
      */
     public Image createImage(ImageProducer producer) {
         PixelGrabber pg = new PixelGrabber(producer, 0, 0, -1, -1, null, 0, 0);
@@ -177,27 +173,27 @@ class HeadlessToolkit extends Toolkit {
     }
 
     /**
-     * Una imagen decodificada de unos bytes.
+     * An image decoded from some bytes.
      *
-     * @return `null` siempre: hace falta un decodificador de formatos de imagen
+     * @return `null` always: a decoder of image formats is needed
      */
     public Image createImage(byte[] imagedata, int imageoffset, int imagelength) {
         return null;
     }
 
     /**
-     * Empieza a preparar una imagen.
+     * Starts preparing an image.
      *
-     * <p>Una imagen que ya está en memoria no necesita prepararse: contesta que sí de una.
+     * <p>An image that is already in memory does not need preparing: it answers yes straight away.
      */
     public boolean prepareImage(Image image, int width, int height, ImageObserver observer) {
         return image != null && image.getWidth(observer) >= 0;
     }
 
     /**
-     * Cuánto se preparó de una imagen.
+     * How much of an image was prepared.
      *
-     * <p>Una imagen en memoria está entera desde el principio.
+     * <p>An image in memory is whole from the start.
      */
     public int checkImage(Image image, int width, int height, ImageObserver observer) {
         if (image == null) {
@@ -210,47 +206,47 @@ class HeadlessToolkit extends Toolkit {
     }
 
     /**
-     * Un trabajo de impresión.
+     * A print job.
      *
-     * @return `null` siempre: no hay sistema de impresión al que mandarlo
+     * @return `null` always: there is no printing system to send it to
      */
     public PrintJob getPrintJob(Frame frame, String jobtitle, Properties props) {
         return null;
     }
 
-    /** No hay campanilla que tocar. */
+    /** There is no bell to ring. */
     public void beep() {
     }
 
     /**
-     * El portapapeles.
+     * The clipboard.
      *
-     * <p>Es uno **privado** de este proceso, no el del sistema: no hay sistema con el que compartir.
-     * Sirve igual para mover datos entre partes de la misma aplicación.
+     * <p>It is one **private** to this process, not the system's: there is no system to share with.
+     * It is still good for moving data between parts of the same application.
      */
     public Clipboard getSystemClipboard() {
         return this.clipboard;
     }
 
-    /** Si admite ese alcance de modalidad. */
+    /** Whether it supports that modality scope. */
     public boolean isModalityTypeSupported(Dialog.ModalityType modalityType) {
         return modalityType == Dialog.ModalityType.MODELESS;
     }
 
-    /** Si admite ese tipo de exclusión. */
+    /** Whether it supports that kind of exclusion. */
     public boolean isModalExclusionTypeSupported(Dialog.ModalExclusionType type) {
         return type == Dialog.ModalExclusionType.NO_EXCLUDE;
     }
 
-    /** La cola de eventos: ésta funciona de verdad, con su hilo de despacho. */
+    /** The event queue: this one really works, with its dispatch thread. */
     protected EventQueue getSystemEventQueueImpl() {
         return this.eventQueue;
     }
 
     /**
-     * Cómo dibujar un tramo en composición.
+     * How to draw a stretch that is being composed.
      *
-     * @return un mapa vacío: no hay método de entrada que componga nada
+     * @return an empty map: there is no input method composing anything
      */
     public Map<java.awt.font.TextAttribute, ?> mapInputMethodHighlight(
             InputMethodHighlight highlight) {

@@ -1,11 +1,11 @@
 package org.w3c.dom;
 
 /**
- * KajiLibrary's org.w3c.dom.Comment -- el contenido de un `&lt;!-- ... --&gt;`.
+ * KajiLibrary's org.w3c.dom.Comment -- the contents of a `&lt;!-- ... --&gt;`.
  *
- * <p>No agrega miembros sobre `CharacterData` por la misma razon que `CDATASection` no agrega nada
- * sobre `Text`: un comentario es una tira de caracteres y la unica diferencia esta en como se
- * escribe. El texto que guarda es el de **adentro** de los delimitadores.
+ * <p>It adds no members over `CharacterData` for the same reason `CDATASection` adds nothing over
+ * `Text`: a comment is a string of characters and the only difference is in how it is written. The
+ * text it keeps is the one **inside** the delimiters.
  */
 public interface Comment extends CharacterData {
 }

@@ -3,18 +3,18 @@ package java.lang.management;
 import javax.management.openmbean.CompositeData;
 
 /**
- * La lectura de items que comparten los cinco {@code from(CompositeData)} de este paquete.
+ * The item reading this package's five {@code from(CompositeData)} share.
  *
- * <p>De acceso de paquete: no es API. Existe para que el control de "esta el item y es del tipo que
- * corresponde" este escrito una vez y no cinco, y para que el mensaje de error diga siempre de que
- * tipo se esperaba.
+ * <p>Package-private: not API. It exists so the "is the item there and is it of the right type"
+ * check is written once and not five times, and so the error message always says which type was
+ * expected.
  */
 final class CompositeItems {
 
     private CompositeItems() {
     }
 
-    /** Un item de texto que puede ser null. */
+    /** A text item that may be null. */
     static String string(CompositeData cd, String name, String type) {
         Object v = value(cd, name, type);
         if (v != null && !(v instanceof String)) {
@@ -23,7 +23,7 @@ final class CompositeItems {
         return (String) v;
     }
 
-    /** Un item entero. */
+    /** An int item. */
     static int integer(CompositeData cd, String name, String type) {
         Object v = value(cd, name, type);
         if (!(v instanceof Integer)) {
@@ -32,7 +32,7 @@ final class CompositeItems {
         return ((Integer) v).intValue();
     }
 
-    /** Un item entero largo. */
+    /** A long item. */
     static long longValue(CompositeData cd, String name, String type) {
         Object v = value(cd, name, type);
         if (!(v instanceof Long)) {
@@ -41,7 +41,7 @@ final class CompositeItems {
         return ((Long) v).longValue();
     }
 
-    /** Un item booleano. */
+    /** A boolean item. */
     static boolean bool(CompositeData cd, String name, String type) {
         Object v = value(cd, name, type);
         if (!(v instanceof Boolean)) {
@@ -50,7 +50,7 @@ final class CompositeItems {
         return ((Boolean) v).booleanValue();
     }
 
-    /** Un item que puede faltar; devuelve null si no esta. */
+    /** An item that may be missing; it returns null if it is not there. */
     static Object optional(CompositeData cd, String name) {
         if (!cd.containsKey(name)) {
             return null;
@@ -58,7 +58,7 @@ final class CompositeItems {
         return cd.get(name);
     }
 
-    /** El item, exigiendo que exista. */
+    /** The item, demanding that it exist. */
     private static Object value(CompositeData cd, String name, String type) {
         if (!cd.containsKey(name)) {
             throw new IllegalArgumentException(

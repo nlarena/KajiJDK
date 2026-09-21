@@ -7,41 +7,40 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * KajiLibrary's javax.script.SimpleBindings -- el {@link Bindings} de todos los dias.
+ * KajiLibrary's javax.script.SimpleBindings -- the everyday {@link Bindings}.
  *
- * <p>Es un {@link Map} de respaldo mas una guarda. Toda la logica esta en `checkKey`, que corre
- * antes de cada operacion que toca una clave y decide entre tres errores distintos:
+ * <p>It is a backing {@link Map} plus a guard. All the logic is in `checkKey`, which runs before
+ * each operation that touches a key and decides among three different errors:
  *
  * <ul>
- *   <li>clave nula -&gt; {@link NullPointerException}, "key can not be null"
- *   <li>clave que no es {@code String} -&gt; {@link ClassCastException}, "key should be a String"
- *   <li>clave vacia -&gt; {@link IllegalArgumentException}, "key can not be empty"
+ *   <li>null key -&gt; {@link NullPointerException}, "key can not be null"
+ *   <li>key that is not a {@code String} -&gt; {@link ClassCastException}, "key should be a String"
+ *   <li>empty key -&gt; {@link IllegalArgumentException}, "key can not be empty"
  * </ul>
  *
- * <p>El orden importa y es ese: nulo antes que tipo, tipo antes que vacio. Y la guarda esta
- * tambien en los metodos de **lectura** ({@code get}, {@code containsKey}, {@code remove}), que no
- * es lo habitual en un mapa -- un `HashMap` acepta cualquier clave y devuelve nulo. Aca no: si la
- * clave no puede ser un nombre de variable, preguntar por ella es un error del que pregunta, no un
- * "no esta".
+ * <p>The order matters and it is that one: null before type, type before empty. And the guard is
+ * also in the **reading** methods ({@code get}, {@code containsKey}, {@code remove}), which is not
+ * usual in a map -- a `HashMap` accepts any key and returns null. Not here: if the key cannot be a
+ * variable name, asking about it is the asker's error, not an "it is not there".
  *
- * <p>Hay un detalle del constructor con mapa que conviene tener presente: **no copia**. Se queda
- * con la referencia, asi que lo que se le meta al mapa por afuera aparece aca, incluso saltandose
- * la guarda de claves. Es a proposito -- permite envolver un mapa que ya existe -- pero significa
- * que las reglas de arriba valen para lo que entra *por esta clase*, no para lo que ya estaba.
+ * <p>There is a detail of the constructor with a map worth keeping in mind: it **does not copy**.
+ * It keeps the reference, so what is put into the map from outside shows up here, even skipping the
+ * key guard. It is on purpose -- it allows wrapping a map that already exists -- but it means the
+ * rules above hold for what comes in *through this class*, not for what was already there.
  *
- * <p>Esta clase no redefine `equals`, `hashCode` ni `toString`, igual que el original: dos
- * `SimpleBindings` con el mismo contenido no son iguales. No es un descuido nuestro; es lo que
- * hace la implementacion de referencia y hay codigo que depende de la identidad.
+ * <p>This class does not override `equals`, `hashCode` or `toString`, just like the original: two
+ * `SimpleBindings` with the same contents are not equal. It is not an oversight of ours; it is what
+ * the reference implementation does and there is code that depends on identity.
  */
 public class SimpleBindings implements Bindings {
 
-    /** El mapa de respaldo. Se guarda por referencia, no se copia. */
+    /** The backing map. It is kept by reference, not copied. */
     private final Map<String, Object> map;
 
     /**
-     * Envuelve `m`, sin copiarlo.
+     * Wraps `m`, without copying it.
      *
-     * @throws NullPointerException si `m` es nulo
+     * @throws NullPointerException if `m` is null
      */
     public SimpleBindings(Map<String, Object> m) {
         if (m == null) {
@@ -50,7 +49,7 @@ public class SimpleBindings implements Bindings {
         this.map = m;
     }
 
-    /** Con un {@link HashMap} vacio de respaldo. */
+    /** With an empty {@link HashMap} as backing. */
     public SimpleBindings() {
         this(new HashMap<String, Object>());
     }
@@ -58,8 +57,8 @@ public class SimpleBindings implements Bindings {
     /**
      * {@inheritDoc}
      *
-     * @throws NullPointerException si `name` es nulo
-     * @throws IllegalArgumentException si `name` es vacio
+     * @throws NullPointerException if `name` is null
+     * @throws IllegalArgumentException if `name` is empty
      */
     @Override
     public Object put(String name, Object value) {
@@ -70,11 +69,11 @@ public class SimpleBindings implements Bindings {
     /**
      * {@inheritDoc}
      *
-     * <p>Se valida clave por clave a medida que se copian, asi que un mapa con una clave mala
-     * puede dejar copiadas las que venian antes. Es lo mismo que hace el original.
+     * <p>It validates key by key as they are copied, so a map with a bad key may leave the ones
+     * that came before copied. It is the same thing the original does.
      *
-     * @throws NullPointerException si `toMerge` es nulo, o si alguna clave lo es
-     * @throws IllegalArgumentException si alguna clave es vacia
+     * @throws NullPointerException if `toMerge` is null, or if any key is
+     * @throws IllegalArgumentException if any key is empty
      */
     @Override
     public void putAll(Map<? extends String, ? extends Object> toMerge) {
@@ -86,7 +85,7 @@ public class SimpleBindings implements Bindings {
         }
     }
 
-    /** Vacia el mapa. */
+    /** Empties the map. */
     @Override
     public void clear() {
         map.clear();
@@ -95,9 +94,9 @@ public class SimpleBindings implements Bindings {
     /**
      * {@inheritDoc}
      *
-     * @throws NullPointerException si `key` es nulo
-     * @throws ClassCastException si `key` no es un `String`
-     * @throws IllegalArgumentException si `key` es vacio
+     * @throws NullPointerException if `key` is null
+     * @throws ClassCastException if `key` is not a `String`
+     * @throws IllegalArgumentException if `key` is empty
      */
     @Override
     public boolean containsKey(Object key) {
@@ -105,13 +104,13 @@ public class SimpleBindings implements Bindings {
         return map.containsKey(key);
     }
 
-    /** Si algun valor es igual a `value`. Sobre los valores no hay ninguna regla. */
+    /** Whether any value is equal to `value`. There is no rule on the values. */
     @Override
     public boolean containsValue(Object value) {
         return map.containsValue(value);
     }
 
-    /** Las entradas del mapa de respaldo, en vivo. */
+    /** The entries of the backing map, live. */
     @Override
     public Set<Map.Entry<String, Object>> entrySet() {
         return map.entrySet();
@@ -120,9 +119,9 @@ public class SimpleBindings implements Bindings {
     /**
      * {@inheritDoc}
      *
-     * @throws NullPointerException si `key` es nulo
-     * @throws ClassCastException si `key` no es un `String`
-     * @throws IllegalArgumentException si `key` es vacio
+     * @throws NullPointerException if `key` is null
+     * @throws ClassCastException if `key` is not a `String`
+     * @throws IllegalArgumentException if `key` is empty
      */
     @Override
     public Object get(Object key) {
@@ -130,13 +129,13 @@ public class SimpleBindings implements Bindings {
         return map.get(key);
     }
 
-    /** Si no hay ninguna entrada. */
+    /** Whether there is no entry. */
     @Override
     public boolean isEmpty() {
         return map.isEmpty();
     }
 
-    /** Las claves del mapa de respaldo, en vivo. */
+    /** The keys of the backing map, live. */
     @Override
     public Set<String> keySet() {
         return map.keySet();
@@ -145,9 +144,9 @@ public class SimpleBindings implements Bindings {
     /**
      * {@inheritDoc}
      *
-     * @throws NullPointerException si `key` es nulo
-     * @throws ClassCastException si `key` no es un `String`
-     * @throws IllegalArgumentException si `key` es vacio
+     * @throws NullPointerException if `key` is null
+     * @throws ClassCastException if `key` is not a `String`
+     * @throws IllegalArgumentException if `key` is empty
      */
     @Override
     public Object remove(Object key) {
@@ -155,20 +154,20 @@ public class SimpleBindings implements Bindings {
         return map.remove(key);
     }
 
-    /** Cuantas entradas hay. */
+    /** How many entries there are. */
     @Override
     public int size() {
         return map.size();
     }
 
-    /** Los valores del mapa de respaldo, en vivo. */
+    /** The values of the backing map, live. */
     @Override
     public Collection<Object> values() {
         return map.values();
     }
 
     /**
-     * La guarda: nulo, despues tipo, despues vacio. Ese orden es parte del contrato observable.
+     * The guard: null, then type, then empty. That order is part of the observable contract.
      */
     private void checkKey(Object key) {
         if (key == null) {

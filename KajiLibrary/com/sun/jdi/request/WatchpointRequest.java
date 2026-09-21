@@ -6,51 +6,51 @@ import com.sun.jdi.ReferenceType;
 import com.sun.jdi.ThreadReference;
 
 /**
- * Pedir aviso cuando se toque un campo.
+ * Ask to be told when a field is touched.
  *
  * @since 1.3
  */
 public interface WatchpointRequest extends EventRequest {
 
     /**
-     * El field.
+     * The field.
      *
-     * @return el resultado
+     * @return the result
      */
     Field field();
 
     /**
-     * Filtra por thread; solo con el pedido deshabilitado.
+     * It filters by thread; only with the request disabled.
      *
-     * @param thread el ThreadReference
+     * @param thread the ThreadReference
      */
     void addThreadFilter(ThreadReference thread);
 
     /**
-     * Filtra por class; solo con el pedido deshabilitado.
+     * It filters by class; only with the request disabled.
      *
-     * @param type el ReferenceType
+     * @param type the ReferenceType
      */
     void addClassFilter(ReferenceType type);
 
     /**
-     * Filtra por class; solo con el pedido deshabilitado.
+     * It filters by class; only with the request disabled.
      *
-     * @param name el String
+     * @param name the String
      */
     void addClassFilter(String name);
 
     /**
-     * Filtra por class exclusion; solo con el pedido deshabilitado.
+     * It filters by class exclusion; only with the request disabled.
      *
-     * @param name el String
+     * @param name the String
      */
     void addClassExclusionFilter(String name);
 
     /**
-     * Filtra por instance; solo con el pedido deshabilitado.
+     * It filters by instance; only with the request disabled.
      *
-     * @param object el ObjectReference
+     * @param object the ObjectReference
      */
     void addInstanceFilter(ObjectReference object);
 }

@@ -3,16 +3,15 @@ package javax.xml.crypto.dsig.spec;
 import java.security.spec.AlgorithmParameterSpec;
 
 /**
- * KajiLibrary's javax.xml.crypto.dsig.spec.TransformParameterSpec -- los parametros de una
- * transformacion.
+ * KajiLibrary's javax.xml.crypto.dsig.spec.TransformParameterSpec -- the parameters of a transform.
  *
- * <p>Marcadora, sin metodos. Su unico trabajo es <b>tipar</b>: {@code newTransform} recibe uno de
- * estos y no un {@link AlgorithmParameterSpec} cualquiera, asi que pasarle los parametros de un
- * algoritmo de firma no compila.
+ * <p>A marker, without methods. Its only job is to <b>type</b>: {@code newTransform} receives one
+ * of these and not just any {@link AlgorithmParameterSpec}, so passing it the parameters of a
+ * signature algorithm does not compile.
  *
- * <p>Parece poco y evita el error clasico de este API. Los parametros de XML-DSig son todos
- * {@code AlgorithmParameterSpec} y sin esta jerarquia serian intercambiables a los ojos del
- * compilador, con el fallo apareciendo recien al firmar.
+ * <p>It seems little and it avoids the classic mistake of this API. XML-DSig's parameters are all
+ * {@code AlgorithmParameterSpec}s and without this hierarchy they would be interchangeable in the
+ * compiler's eyes, with the failure appearing only when signing.
  */
 public interface TransformParameterSpec extends AlgorithmParameterSpec {
 }

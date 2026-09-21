@@ -1,32 +1,33 @@
 package javax.management;
 
 /**
- * La cara publica del propio agente: es el MBean estandar que describe al servidor de MBeans.
+ * The public face of the agent itself: the standard MBean that describes the MBean server.
  *
- * <p>Se registra siempre bajo {@code JMImplementation:type=MBeanServerDelegate} y es tambien quien
- * emite los {@link MBeanServerNotification} de alta y baja. O sea: el agente se administra a si
- * mismo por las mismas vias que administra a los demas, sin API aparte.
+ * <p>It is always registered under {@code JMImplementation:type=MBeanServerDelegate} and it is also
+ * the one that emits the registration and unregistration {@link MBeanServerNotification}s. That is:
+ * the agent manages itself through the same channels it manages the others, without a separate
+ * API.
  */
 public interface MBeanServerDelegateMBean {
 
-    /** Identificador unico de esta instancia de agente. */
+    /** Unique identifier of this agent instance. */
     String getMBeanServerId();
 
-    /** El nombre de la especificacion que se cumple: "Java Management Extensions". */
+    /** The name of the specification followed: "Java Management Extensions". */
     String getSpecificationName();
 
-    /** La version de la especificacion. */
+    /** The version of the specification. */
     String getSpecificationVersion();
 
-    /** Quien publico la especificacion. */
+    /** Who published the specification. */
     String getSpecificationVendor();
 
-    /** El nombre de esta implementacion. */
+    /** The name of this implementation. */
     String getImplementationName();
 
-    /** Su version. */
+    /** Its version. */
     String getImplementationVersion();
 
-    /** Su fabricante. */
+    /** Its vendor. */
     String getImplementationVendor();
 }

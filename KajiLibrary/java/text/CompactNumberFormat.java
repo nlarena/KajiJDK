@@ -5,33 +5,34 @@ import java.math.BigInteger;
 import java.math.RoundingMode;
 
 /**
- * El formateador compacto: {@code 1234} sale {@code 1K} y {@code 1234567} sale {@code 1M}.
+ * The compact formatter: {@code 1234} comes out {@code 1K} and {@code 1234567} comes out
+ * {@code 1M}.
  *
- * <p><b>Por qué esta clase SÍ está y las fábricas de {@link NumberFormat} no.</b> Los sufijos
- * compactos son datos del CLDR —"K", "mil", "万"— y esta biblioteca no los trae. Pero los
- * constructores de esta clase <em>reciben los patrones del llamador</em>: el que la usa dice
- * {@code {"", "", "", "0K", "00K", "000K", "0M", ...}} y la clase no tiene que inventar nada. Por
- * eso puede funcionar honestamente sin tabla, mientras que
- * {@code NumberFormat.getCompactNumberInstance(locale, style)} —que tiene que producir esos
- * patrones por locale— no puede y quedó afuera.
+ * <p><b>Why this class IS here and {@link NumberFormat}'s factories are not.</b> The compact
+ * suffixes are CLDR data --"K", "mil", "\u4e07"-- and this library does not carry them. But this
+ * class's constructors <em>receive the patterns from the caller</em>: whoever uses it says
+ * {@code {"", "", "", "0K", "00K", "000K", "0M", ...}} and the class has nothing to invent. That is
+ * why it can work honestly with no table, whereas
+ * {@code NumberFormat.getCompactNumberInstance(locale, style)} --which has to produce those patterns
+ * per locale-- cannot, and was left out.
  *
- * <p><b>Cómo se lee el arreglo de patrones.</b> La posición ES la magnitud: el índice {@code i}
- * gobierna los números de {@code i+1} dígitos. Un patrón vacío quiere decir "en esta magnitud no se
- * compacta" y el número sale entero. La cantidad de ceros del patrón dice cuánto se divide: en el
- * índice 3, {@code "0K"} (un cero) divide por {@code 10^3}, y en el índice 5, {@code "000K"} (tres
- * ceros) divide por {@code 10^(5-3+1)}, o sea también por mil. Es lo que hace que 1.000, 12.000 y
- * 999.000 se escriban todos en miles con tres patrones distintos.
+ * <p><b>How the pattern array is read.</b> The position IS the magnitude: index {@code i} governs
+ * the numbers of {@code i+1} digits. An empty pattern means "at this magnitude nothing is compacted"
+ * and the number comes out whole. The pattern's number of zeros says how much is divided out: at
+ * index 3, {@code "0K"} (one zero) divides by {@code 10^3}, and at index 5, {@code "000K"} (three
+ * zeros) divides by {@code 10^(5-3+1)}, that is, by a thousand as well. It is what makes 1,000,
+ * 12,000 and 999,000 all be written in thousands with three different patterns.
  *
- * <p><b>El redondeo puede cambiar la magnitud, y hay que volver a elegir.</b> 999.999 cae en el
- * índice 5, se divide por mil y redondea a 1000 — escribirlo ahí daría "1000K". Por eso, después de
- * redondear, se vuelve a mirar en qué magnitud quedó el número y se repite: sale "1M", que es lo
- * que devuelve el JDK.
+ * <p><b>Rounding can change the magnitude, and the choice has to be made again.</b> 999,999 falls
+ * at index 5, is divided by a thousand and rounds to 1000 -- writing it there would give "1000K".
+ * So, after rounding, which magnitude the number ended up at is looked at again and the step is
+ * repeated: out comes "1M", which is what the JDK returns.
  *
- * <p>El cuarto argumento del constructor largo son las reglas de plural del locale, en la sintaxis
- * del CLDR ({@code "one:i = 1 and v = 0"}). Sirven para los patrones que traen variantes
- * ({@code "{one:0 mil other:0 mil}"}): se evalúa la regla contra el número ya dividido y se elige la
- * categoría. Si ninguna regla da, se usa {@code other}, que es la que el CLDR garantiza en todos los
- * locales.
+ * <p>The long constructor's fourth argument is the locale's plural rules, in the CLDR's syntax
+ * ({@code "one:i = 1 and v = 0"}). They serve the patterns that carry variants
+ * ({@code "{one:0 mil other:0 mil}"}): the rule is evaluated against the already divided number and
+ * the category is chosen. If no rule matches, {@code other} is used, which is the one the CLDR
+ * guarantees in every locale.
  */
 public final class CompactNumberFormat extends NumberFormat {
 
@@ -69,22 +70,22 @@ public final class CompactNumberFormat extends NumberFormat {
         this.groupingSize = 0;
         this.strict = false;
         this.parseBigDecimal = false;
-        // Un formateador compacto no agrupa ni muestra decimales por omisión: "1K" y no "1.234K"
-        // ni "1,2K". El patrón decimal que recibe se usa para los símbolos y para el caso en que la
-        // magnitud NO se compacta, no para decidir esto.
+        // A compact formatter neither groups nor shows decimals by default: "1K" and not "1.234K"
+        // nor "1,2K". The decimal pattern it receives is used for the symbols and for the case where
+        // the magnitude is NOT compacted, not to decide this.
         this.setGroupingUsed(false);
         this.setMinimumFractionDigits(0);
         this.setMaximumFractionDigits(0);
     }
 
-    // ---- formateo ----
+    // ---- formatting -----------------------------------------------------------------------------
 
     public final StringBuffer format(Object number, StringBuffer toAppendTo, FieldPosition pos) {
         if (number instanceof BigDecimal) {
-            return this.escribir((BigDecimal) number, toAppendTo, pos, null);
+            return this.write((BigDecimal) number, toAppendTo, pos, null);
         }
         if (number instanceof BigInteger) {
-            return this.escribir(new BigDecimal((BigInteger) number), toAppendTo, pos, null);
+            return this.write(new BigDecimal((BigInteger) number), toAppendTo, pos, null);
         }
         if (number instanceof Long || number instanceof Integer
                 || number instanceof Short || number instanceof Byte) {
@@ -98,15 +99,16 @@ public final class CompactNumberFormat extends NumberFormat {
 
     public StringBuffer format(double number, StringBuffer toAppendTo, FieldPosition pos) {
         if (Double.isNaN(number) || Double.isInfinite(number)) {
-            // Ni NaN ni infinito tienen magnitud, así que no hay índice compacto que elegir: los
-            // escribe el formateador decimal, que sí sabe cómo se llaman en este locale.
+            // Neither NaN nor infinity has a magnitude, so there is no compact index to choose:
+            // they are written by the decimal formatter, which does know their names in this
+            // locale.
             return this.base.format(number, toAppendTo, pos);
         }
-        return this.escribir(new BigDecimal(number), toAppendTo, pos, null);
+        return this.write(new BigDecimal(number), toAppendTo, pos, null);
     }
 
     public StringBuffer format(long number, StringBuffer toAppendTo, FieldPosition pos) {
-        return this.escribir(BigDecimal.valueOf(number), toAppendTo, pos, null);
+        return this.write(BigDecimal.valueOf(number), toAppendTo, pos, null);
     }
 
     public AttributedCharacterIterator formatToCharacterIterator(Object obj) {
@@ -116,7 +118,7 @@ public final class CompactNumberFormat extends NumberFormat {
         if (!(obj instanceof Number)) {
             throw new IllegalArgumentException("Cannot format given Object as a Number");
         }
-        MarcasDeCampo marcas = new MarcasDeCampo();
+        FieldMarks marks = new FieldMarks();
         StringBuffer sb = new StringBuffer();
         BigDecimal v;
         if (obj instanceof BigDecimal) {
@@ -129,135 +131,135 @@ public final class CompactNumberFormat extends NumberFormat {
         } else {
             v = new BigDecimal(((Number) obj).doubleValue());
         }
-        this.escribir(v, sb, null, marcas);
-        return marcas.iterador(sb.toString());
+        this.write(v, sb, null, marks);
+        return marks.iterator(sb.toString());
     }
 
-    private StringBuffer escribir(BigDecimal valor, StringBuffer out, FieldPosition pos,
-                                  MarcasDeCampo marcas) {
-        MarcasDeCampo m = marcas;
+    private StringBuffer write(BigDecimal value, StringBuffer out, FieldPosition pos,
+                                  FieldMarks marks) {
+        FieldMarks m = marks;
         if (m == null) {
-            m = new MarcasDeCampo();
+            m = new FieldMarks();
         }
-        int indice = this.indiceDe(valor);
-        String patron = null;
-        if (indice >= 0 && indice < this.compactPatterns.length) {
-            patron = this.compactPatterns[indice];
+        int index = this.indexFor(value);
+        String pattern = null;
+        if (index >= 0 && index < this.compactPatterns.length) {
+            pattern = this.compactPatterns[index];
         }
-        if (patron == null || patron.length() == 0) {
-            return this.base.format(valor, out, pos);
+        if (pattern == null || pattern.length() == 0) {
+            return this.base.format(value, out, pos);
         }
-        // Un patron sin prefijo ni sufijo --"{one:0 other:0}"-- **no es una forma compacta**: es
-        // como el CLDR escribe "esta magnitud no se compacta en este locale". El aleman no compacta
-        // por debajo del millon y el japones no compacta el millar, y los dos lo dicen asi.
-        // Compactarlo igual daria "1" donde corresponde "1.000", que es exactamente el numero
-        // equivocado por tres ordenes de magnitud.
+        // A pattern with neither prefix nor suffix --"{one:0 other:0}"-- **is not a compact form**:
+        // it is how the CLDR writes "this magnitude is not compacted in this locale". German does not
+        // compact below the million and Japanese does not compact the thousand, and both say so this
+        // way. Compacting it anyway would give "1" where "1,000" belongs, which is exactly the wrong
+        // number by three orders of magnitude.
         //
-        // Se mira antes del bucle y no despues porque el bucle solo puede subir de magnitud --
-        // redondear agranda-- y las entradas sin afijos son siempre las de abajo.
-        if (CompactNumberFormat.sinAfijos(patron)) {
-            return this.base.format(valor, out, pos);
+        // It is looked at before the loop and not after because the loop can only go up in magnitude
+        // --rounding grows-- and the affixless entries are always the bottom ones.
+        if (CompactNumberFormat.hasNoAffixes(pattern)) {
+            return this.base.format(value, out, pos);
         }
 
-        BigDecimal dividido = valor;
-        int vueltas = 0;
-        // Como máximo dos vueltas: la primera elige por la magnitud original, la segunda por la que
-        // quedó después de redondear. Una tercera no puede cambiar nada — redondear un número ya
-        // redondeado a la misma escala lo deja igual.
-        while (vueltas < 2) {
-            int ceros = CompactNumberFormat.cerosDe(patron);
-            int exp = indice - ceros + 1;
+        BigDecimal divided = value;
+        int turns = 0;
+        // Two turns at most: the first chooses by the original magnitude, the second by the one left
+        // after rounding. A third can change nothing -- rounding an already rounded number to the
+        // same scale leaves it as it is.
+        while (turns < 2) {
+            int zeros = CompactNumberFormat.zerosOf(pattern);
+            int exp = index - zeros + 1;
             if (exp < 0) {
                 exp = 0;
             }
-            dividido = valor.movePointLeft(exp).setScale(this.getMaximumFractionDigits(),
+            divided = value.movePointLeft(exp).setScale(this.getMaximumFractionDigits(),
                     this.roundingMode);
-            BigDecimal reconstruido = dividido.movePointRight(exp);
-            int nuevo = this.indiceDe(reconstruido);
-            if (nuevo == indice || nuevo < 0 || nuevo >= this.compactPatterns.length) {
+            BigDecimal rebuilt = divided.movePointRight(exp);
+            int raised = this.indexFor(rebuilt);
+            if (raised == index || raised < 0 || raised >= this.compactPatterns.length) {
                 break;
             }
-            String otro = this.compactPatterns[nuevo];
-            if (otro == null || otro.length() == 0) {
+            String other = this.compactPatterns[raised];
+            if (other == null || other.length() == 0) {
                 break;
             }
-            indice = nuevo;
-            patron = otro;
-            vueltas = vueltas + 1;
+            index = raised;
+            pattern = other;
+            turns = turns + 1;
         }
 
-        String elegido = this.elegirVariante(patron, dividido);
-        String prefijo = CompactNumberFormat.afijo(elegido, true);
-        String sufijo = CompactNumberFormat.afijo(elegido, false);
+        String chosen = this.chooseVariant(pattern, divided);
+        String prefix = CompactNumberFormat.affix(chosen, true);
+        String suffix = CompactNumberFormat.affix(chosen, false);
 
         int base0 = out.length();
         StringBuilder sb = new StringBuilder();
-        boolean negativo = dividido.signum() < 0;
-        if (negativo) {
+        boolean negative = divided.signum() < 0;
+        if (negative) {
             int d = sb.length();
             sb.append(this.symbols.getMinusSign());
-            m.marcar((AttributedCharacterIterator.Attribute) java.text.NumberFormat.Field.SIGN, -1, base0 + d, base0 + sb.length());
+            m.mark((AttributedCharacterIterator.Attribute) java.text.NumberFormat.Field.SIGN, -1, base0 + d, base0 + sb.length());
         }
         int dp = sb.length();
-        sb.append(prefijo);
-        m.marcar((AttributedCharacterIterator.Attribute) java.text.NumberFormat.Field.PREFIX, -1, base0 + dp, base0 + sb.length());
+        sb.append(prefix);
+        m.mark((AttributedCharacterIterator.Attribute) java.text.NumberFormat.Field.PREFIX, -1, base0 + dp, base0 + sb.length());
 
-        DecimalFormat cuerpo = new DecimalFormat(this.decimalPattern, this.symbols);
-        cuerpo.setGroupingUsed(this.isGroupingUsed());
+        DecimalFormat body = new DecimalFormat(this.decimalPattern, this.symbols);
+        body.setGroupingUsed(this.isGroupingUsed());
         if (this.groupingSize > 0) {
-            cuerpo.setGroupingSize(this.groupingSize);
+            body.setGroupingSize(this.groupingSize);
         }
-        cuerpo.setMaximumIntegerDigits(this.getMaximumIntegerDigits());
-        cuerpo.setMinimumIntegerDigits(this.getMinimumIntegerDigits());
-        cuerpo.setMaximumFractionDigits(this.getMaximumFractionDigits());
-        cuerpo.setMinimumFractionDigits(this.getMinimumFractionDigits());
-        cuerpo.setRoundingMode(this.roundingMode);
+        body.setMaximumIntegerDigits(this.getMaximumIntegerDigits());
+        body.setMinimumIntegerDigits(this.getMinimumIntegerDigits());
+        body.setMaximumFractionDigits(this.getMaximumFractionDigits());
+        body.setMinimumFractionDigits(this.getMinimumFractionDigits());
+        body.setRoundingMode(this.roundingMode);
         int dn = sb.length();
-        sb.append(cuerpo.format(dividido.abs()));
-        m.marcar((AttributedCharacterIterator.Attribute) java.text.NumberFormat.Field.INTEGER, NumberFormat.INTEGER_FIELD,
+        sb.append(body.format(divided.abs()));
+        m.mark((AttributedCharacterIterator.Attribute) java.text.NumberFormat.Field.INTEGER, NumberFormat.INTEGER_FIELD,
                 base0 + dn, base0 + sb.length());
 
         int ds = sb.length();
-        sb.append(sufijo);
-        m.marcar((AttributedCharacterIterator.Attribute) java.text.NumberFormat.Field.SUFFIX, -1, base0 + ds, base0 + sb.length());
+        sb.append(suffix);
+        m.mark((AttributedCharacterIterator.Attribute) java.text.NumberFormat.Field.SUFFIX, -1, base0 + ds, base0 + sb.length());
 
         out.append(sb.toString());
-        m.aplicar(pos);
+        m.apply(pos);
         return out;
     }
 
-    // El índice es "cuántos dígitos enteros tiene, menos uno". Un cero cae en el índice 0 igual que
-    // un uno: los dos tienen un solo dígito.
-    private int indiceDe(BigDecimal valor) {
-        BigDecimal abs = valor.abs();
+    // The index is "how many integer digits it has, minus one". A zero falls at index 0 just like a
+    // one: both have a single digit.
+    private int indexFor(BigDecimal value) {
+        BigDecimal abs = value.abs();
         if (abs.signum() == 0) {
             return 0;
         }
-        String enteros = abs.setScale(0, RoundingMode.DOWN).toPlainString();
-        int digitos = enteros.length();
-        if (enteros.equals("0")) {
-            digitos = 1;
+        String integerDigits = abs.setScale(0, RoundingMode.DOWN).toPlainString();
+        int digits = integerDigits.length();
+        if (integerDigits.equals("0")) {
+            digits = 1;
         }
-        int i = digitos - 1;
+        int i = digits - 1;
         if (i >= this.compactPatterns.length) {
             i = this.compactPatterns.length - 1;
         }
         return i;
     }
 
-    // Los ceros se cuentan sobre UNA variante, no sobre el patrón entero: "{one:0 mil other:0
-    // miles}" tiene dos ceros escritos pero divide por mil, no por cien. Todas las variantes de un
-    // patrón compacto comparten la magnitud —es lo que las hace variantes de un mismo patrón— así
-    // que alcanza con la primera.
-    private static int cerosDe(String patron) {
-        String p = CompactNumberFormat.variante(patron, null);
+    // The zeros are counted over ONE variant, not over the whole pattern: "{one:0 mil other:0
+    // miles}" has two zeros written but divides by a thousand, not by a hundred. Every variant of a
+    // compact pattern shares the magnitude --it is what makes them variants of one pattern-- so the
+    // first one is enough.
+    private static int zerosOf(String pattern) {
+        String p = CompactNumberFormat.variant(pattern, null);
         int n = 0;
-        boolean citado = false;
+        boolean quoted = false;
         for (int i = 0; i < p.length(); i = i + 1) {
             char c = p.charAt(i);
             if (c == '\'') {
-                citado = !citado;
-            } else if (!citado && c == '0') {
+                quoted = !quoted;
+            } else if (!quoted && c == '0') {
                 n = n + 1;
             }
         }
@@ -267,152 +269,152 @@ public final class CompactNumberFormat extends NumberFormat {
         return n;
     }
 
-    // Si el patron no aporta ni prefijo ni sufijo. Se mira sobre UNA variante, como `cerosDe`: las
-    // variantes de un patron se diferencian en el texto del plural, no en tener o no tenerlo.
-    private static boolean sinAfijos(String patron) {
-        String p = CompactNumberFormat.variante(patron, null);
-        return CompactNumberFormat.afijo(p, true).length() == 0
-                && CompactNumberFormat.afijo(p, false).length() == 0;
+    // Whether the pattern contributes neither prefix nor suffix. It is looked at over ONE variant,
+    // like `zerosOf`: a pattern's variants differ in the plural's text, not in having one at all.
+    private static boolean hasNoAffixes(String pattern) {
+        String p = CompactNumberFormat.variant(pattern, null);
+        return CompactNumberFormat.affix(p, true).length() == 0
+                && CompactNumberFormat.affix(p, false).length() == 0;
     }
 
-    private static String afijo(String patron, boolean prefijo) {
+    private static String affix(String pattern, boolean prefix) {
         StringBuilder sb = new StringBuilder();
-        boolean citado = false;
-        boolean vistoDigito = false;
-        for (int i = 0; i < patron.length(); i = i + 1) {
-            char c = patron.charAt(i);
+        boolean quoted = false;
+        boolean seenDigit = false;
+        for (int i = 0; i < pattern.length(); i = i + 1) {
+            char c = pattern.charAt(i);
             if (c == '\'') {
-                citado = !citado;
+                quoted = !quoted;
                 continue;
             }
-            if (!citado && c == '0') {
-                vistoDigito = true;
+            if (!quoted && c == '0') {
+                seenDigit = true;
                 continue;
             }
-            if (prefijo && !vistoDigito) {
+            if (prefix && !seenDigit) {
                 sb.append(c);
-            } else if (!prefijo && vistoDigito) {
+            } else if (!prefix && seenDigit) {
                 sb.append(c);
             }
         }
         return sb.toString();
     }
 
-    // Un patrón con variantes se escribe "{cat:patrón cat:patrón}". Sin variantes se devuelve tal
-    // cual, que es el caso de los constructores de tres argumentos.
-    private String elegirVariante(String patron, BigDecimal valor) {
-        if (patron.length() == 0 || patron.charAt(0) != '{') {
-            return patron;
+    // A pattern with variants is written "{cat:pattern cat:pattern}". With no variants it is
+    // returned as it is, which is the three-argument constructors' case.
+    private String chooseVariant(String pattern, BigDecimal value) {
+        if (pattern.length() == 0 || pattern.charAt(0) != '{') {
+            return pattern;
         }
-        return CompactNumberFormat.variante(patron,
-                ReglasDePlural.categoria(this.pluralRules, valor));
+        return CompactNumberFormat.variant(pattern,
+                PluralRules.category(this.pluralRules, value));
     }
 
     /**
-     * La variante de una categoría dentro de un patrón con variantes.
+     * A category's variant inside a pattern with variants.
      *
-     * @param categoria la categoría buscada, o {@code null} para quedarse con la primera. El
-     *                  {@code null} no es un "no sé" disfrazado: lo usa {@code cerosDe}, al que
-     *                  sólo le interesa la magnitud, y ésa es la misma en todas las variantes.
+     * @param category the category sought, or {@code null} to keep the first one. The {@code null}
+     *                  is not a disguised "I do not know": it is used by {@code zerosOf}, which only
+     *                  cares about the magnitude, and that is the same in every variant.
      */
-    private static String variante(String patron, String categoria) {
-        if (patron.length() == 0 || patron.charAt(0) != '{') {
-            return patron;
+    private static String variant(String pattern, String category) {
+        if (pattern.length() == 0 || pattern.charAt(0) != '{') {
+            return pattern;
         }
-        String cuerpo = patron.substring(1, patron.length() - 1);
-        String otra = null;
+        String body = pattern.substring(1, pattern.length() - 1);
+        String otherOne = null;
         int i = 0;
-        while (i < cuerpo.length()) {
-            int dosPuntos = cuerpo.indexOf(':', i);
-            if (dosPuntos < 0) {
+        while (i < body.length()) {
+            int colon = body.indexOf(':', i);
+            if (colon < 0) {
                 break;
             }
-            String cat = cuerpo.substring(i, dosPuntos).trim();
-            int fin = cuerpo.length();
-            // El patrón de una categoría termina donde arranca la siguiente, que se reconoce por
-            // "palabra:" — el espacio solo no alcanza, porque un patrón puede tener espacios.
-            for (int k = dosPuntos + 1; k < cuerpo.length(); k = k + 1) {
-                if (cuerpo.charAt(k) == ':') {
-                    int atras = k - 1;
-                    while (atras > dosPuntos && cuerpo.charAt(atras) != ' ') {
-                        atras = atras - 1;
+            String cat = body.substring(i, colon).trim();
+            int end = body.length();
+            // A category's pattern ends where the next one starts, which is recognised by "word:"
+            // -- the space alone is not enough, because a pattern can have spaces.
+            for (int k = colon + 1; k < body.length(); k = k + 1) {
+                if (body.charAt(k) == ':') {
+                    int back = k - 1;
+                    while (back > colon && body.charAt(back) != ' ') {
+                        back = back - 1;
                     }
-                    if (atras > dosPuntos) {
-                        fin = atras;
+                    if (back > colon) {
+                        end = back;
                         break;
                     }
                 }
             }
-            String valorPat = cuerpo.substring(dosPuntos + 1, fin).trim();
-            if (categoria == null || cat.equals(categoria)) {
-                return valorPat;
+            String patValue = body.substring(colon + 1, end).trim();
+            if (category == null || cat.equals(category)) {
+                return patValue;
             }
             if (cat.equals("other")) {
-                otra = valorPat;
+                otherOne = patValue;
             }
-            i = fin + 1;
-            if (fin >= cuerpo.length()) {
+            i = end + 1;
+            if (end >= body.length()) {
                 break;
             }
         }
-        if (otra != null) {
-            return otra;
+        if (otherOne != null) {
+            return otherOne;
         }
         return "";
     }
 
-    // ---- parseo ----
+    // ---- parsing --------------------------------------------------------------------------------
 
     /**
-     * Lee un número compacto.
+     * It reads a compact number.
      *
-     * <p>Se busca el sufijo más largo que coincida y se multiplica por su magnitud: {@code "12K"}
-     * da 12000. El más largo y no el primero, porque los sufijos de una misma tabla se contienen
-     * ({@code "mil"} y {@code "millones"} empiezan igual) y quedarse con el primero daría un factor
-     * mil veces menor sin que nadie se entere.
+     * <p>The longest suffix that matches is sought and multiplied by its magnitude: {@code "12K"}
+     * gives 12000. The longest and not the first, because the suffixes of one table contain each
+     * other ({@code "mil"} and {@code "millones"} start alike) and keeping the first would give a
+     * factor a thousand times smaller without anyone noticing.
      */
     public Number parse(String text, ParsePosition pos) {
         if (text == null) {
             throw new NullPointerException();
         }
-        int inicio = pos.getIndex();
-        ParsePosition tmp = new ParsePosition(inicio);
+        int start = pos.getIndex();
+        ParsePosition tmp = new ParsePosition(start);
         Number n = this.base.parse(text, tmp);
-        if (n == null || tmp.getIndex() == inicio) {
-            pos.setErrorIndex(inicio);
+        if (n == null || tmp.getIndex() == start) {
+            pos.setErrorIndex(start);
             return null;
         }
-        int tras = tmp.getIndex();
-        int mejorExp = -1;
-        int mejorLargo = -1;
+        int after = tmp.getIndex();
+        int bestExp = -1;
+        int bestLength = -1;
         for (int i = 0; i < this.compactPatterns.length; i = i + 1) {
             String p = this.compactPatterns[i];
             if (p == null || p.length() == 0) {
                 continue;
             }
-            String elegido = this.elegirVariante(p, BigDecimal.valueOf(n.longValue()));
-            String sufijo = CompactNumberFormat.afijo(elegido, false);
-            if (sufijo.length() == 0) {
+            String chosen = this.chooseVariant(p, BigDecimal.valueOf(n.longValue()));
+            String suffix = CompactNumberFormat.affix(chosen, false);
+            if (suffix.length() == 0) {
                 continue;
             }
-            if (sufijo.length() > mejorLargo && text.startsWith(sufijo, tras)) {
-                mejorLargo = sufijo.length();
-                mejorExp = i - CompactNumberFormat.cerosDe(elegido) + 1;
+            if (suffix.length() > bestLength && text.startsWith(suffix, after)) {
+                bestLength = suffix.length();
+                bestExp = i - CompactNumberFormat.zerosOf(chosen) + 1;
             }
         }
         BigDecimal v = new BigDecimal(n.toString());
-        if (mejorExp >= 0) {
-            v = v.movePointRight(mejorExp);
-            tras = tras + mejorLargo;
+        if (bestExp >= 0) {
+            v = v.movePointRight(bestExp);
+            after = after + bestLength;
         }
-        pos.setIndex(tras);
+        pos.setIndex(after);
         if (this.parseBigDecimal) {
             return v;
         }
-        BigDecimal limpio = v.stripTrailingZeros();
-        if (limpio.scale() <= 0) {
+        BigDecimal clean = v.stripTrailingZeros();
+        if (clean.scale() <= 0) {
             try {
-                return Long.valueOf(limpio.longValueExact());
+                return Long.valueOf(clean.longValueExact());
             } catch (ArithmeticException e) {
                 return Double.valueOf(v.doubleValue());
             }
@@ -420,7 +422,7 @@ public final class CompactNumberFormat extends NumberFormat {
         return Double.valueOf(v.doubleValue());
     }
 
-    // ---- estado ----
+    // ---- state  ----
 
     public void setMaximumIntegerDigits(int newValue) {
         super.setMaximumIntegerDigits(newValue);

@@ -1,7 +1,7 @@
 package java.util;
 
-// El nombre simple para el `catch`: un tipo calificado en la clausula de captura no se
-// reconoce como el mismo tipo que el `throws` (ver la nota de #274b al pie).
+// The simple name for the `catch`: a qualified type in the catch clause is not recognised as the
+// same type as the `throws` (see #274b's note at the foot).
 import java.io.IOException;
 
 // KajiLibrary's java.util.Properties (finding #267).
@@ -13,20 +13,20 @@ import java.io.IOException;
 // is why `put` can take any object and `getProperty` returns null for a non-String value rather
 // than throwing -- and it chains to a `defaults` table.
 //
-// Los seis metodos de formato --`load` x2, `store` x2, `save` y `list` x2-- ya estan, y con ellos
-// el par de XML. La nota vieja decia que escribirlos seria "inventar un parser que nadie puede
-// probar aca"; lo que cambio no es el criterio sino que ahora **si** se pueden probar: el
-// round-trip `store` -> `load` compara contra `java` real, y el formato de `.properties` esta
-// especificado al detalle.
+// The six format methods --`load` x2, `store` x2, `save` and `list` x2-- are here, and with them
+// the XML pair. The old note said writing them would be "inventing a parser nobody can test here";
+// what changed is not the criterion but that now they **can** be tested: the `store` -> `load`
+// round trip compares against the inner `java`, and the `.properties` format is specified in detail.
 //
-// Sobre los escapes, que es donde vive la unica dificultad real del formato: al **escribir**, una
-// clave escapa mucho mas que un valor. En la clave hay que escapar los tres separadores (`=`, `:`
-// y el blanco) porque si no partirian el par al releer; en el valor solo el blanco **inicial**, que
-// es el unico que el lector se comeria. Escapar de mas no rompe nada al releer, pero produce
-// archivos distintos de los del JDK, asi que se escapa exactamente lo que corresponde.
+// About the escapes, which is where the format's only inner difficulty lives: on **writing**, a key
+// escapes far more than a value. In the key the three separators (`=`, `:` and whitespace) have to
+// be escaped, because otherwise they would split the pair on re-reading; in the value only the
+// **leading** whitespace, which is the only one the reader would eat. Escaping too much breaks
+// nothing on re-reading, but it produces files different from the JDK's, so exactly what is called
+// for is escaped.
 //
-// El par de XML es un subconjunto honesto y esta dicho abajo, en `loadFromXML`: se lee la forma que
-// `storeToXML` escribe --que es la del DTD-- sin validar contra el DTD ni resolverlo.
+// The XML pair is an honest subset and it is said below, at `loadFromXML`: the shape `storeToXML`
+// writes --which is the DTD's-- is read, without validating against the DTD or resolving it.
 //
 // A missing member is a legal subset; a member that lies is not.
 public class Properties extends Hashtable<Object, Object> {
@@ -38,7 +38,7 @@ public class Properties extends Hashtable<Object, Object> {
         this.defaults = null;
     }
 
-    // Con capacidad inicial. La tabla de atras la usa; el resto es igual.
+    // With an initial capacity. The table behind uses it; the rest is the same.
     public Properties(int initialCapacity) {
         super(initialCapacity);
         this.defaults = null;
@@ -78,7 +78,7 @@ public class Properties extends Hashtable<Object, Object> {
      * Stores a String value. Returns whatever was there before, which need not be a String --
      * again the JDK's signature, and the honest one for a table of Objects.
      */
-    public Object setProperty(String key, String value) {
+    public synchronized Object setProperty(String key, String value) {
         return this.put(key, value);
     }
 
@@ -121,112 +121,112 @@ public class Properties extends Hashtable<Object, Object> {
         return all;
     }
 
-    // ---- lectura del formato .properties -----------------------------------------------------
+    // ---- reading the .properties format  -----------------------------------------------------
 
     /**
-     * Lee pares clave/valor de `reader`, en el formato `.properties`.
+     * It reads key/value pairs from `reader`, in the `.properties` format.
      *
-     * <p>El formato tiene mas reglas de las que parece, y todas importan porque un archivo de
-     * configuracion mal leido falla lejos:
+     * <p>The format has more rules than it looks, and all of them matter because a badly read
+     * configuration file fails far away:
      *
      * <ul>
-     *   <li>Una linea cuyo primer caracter no blanco sea {@code #} o {@code !} es un comentario.
-     *   <li>La clave termina en el primer {@code =}, {@code :} o blanco **sin escapar**; el
-     *       separador puede venir rodeado de blancos, que se descartan.
-     *   <li>Una linea que termina en un numero **impar** de barras invertidas continua en la
-     *       siguiente, cuyos blancos iniciales se descartan. El numero impar es lo que distingue
-     *       una continuacion de un valor que termina en una barra escapada.
-     *   <li>Escapes: {@code \t \n \r \f \\} y {@code \uXXXX}. Cualquier otro {@code \x} da
-     *       {@code x} — asi es como {@code \=} y {@code \:} entran en una clave.
+     *   <li>A line whose first non-blank character is {@code #} or {@code !} is a comment.
+     *   <li>The key ends at the first **unescaped** {@code =}, {@code :} or whitespace; the
+     *       separator may come surrounded by whitespace, which is discarded.
+     *   <li>A line ending in an **odd** number of backslashes continues on the next one, whose
+     *       leading whitespace is discarded. The odd number is what tells a continuation from a
+     *       value ending in an escaped backslash.
+     *   <li>Escapes: {@code \t \n \r \f \\} and {@code \uXXXX}. Any other {@code \x} gives
+     *       {@code x} — that is how {@code \=} and {@code \:} get into a key.
      * </ul>
      *
-     * <p>Una clave sin separador es una clave con valor vacio, no un error.
+     * <p>A key with no separator is a key with an empty value, not an error.
      */
     public synchronized void load(java.io.Reader reader) throws IOException {
-        StringBuilder todo = new StringBuilder();
+        StringBuilder whole = new StringBuilder();
         int c = reader.read();
         while (c >= 0) {
-            todo.append((char) c);
+            whole.append((char) c);
             c = reader.read();
         }
-        this.parsear(todo.toString());
+        this.parseText(whole.toString());
     }
 
     /**
-     * Lee pares clave/valor de `inStream`, en el formato `.properties`.
+     * It reads key/value pairs from `inStream`, in the `.properties` format.
      *
-     * <p>Los bytes se interpretan como **ISO-8859-1**, un byte por caracter, que es lo que manda
-     * la especificacion. No es una simplificacion nuestra: es por eso que existe {@code \uXXXX}
-     * en el formato — es la unica forma de escribir un caracter fuera de Latin-1.
+     * <p>The bytes are read as **ISO-8859-1**, one byte per character, which is what the
+     * specification demands. It is not a simplification of ours: it is why {@code \uXXXX} exists in
+     * the format — it is the only way of writing a character outside Latin-1.
      */
     public synchronized void load(java.io.InputStream inStream) throws IOException {
-        StringBuilder todo = new StringBuilder();
+        StringBuilder whole = new StringBuilder();
         int b = inStream.read();
         while (b >= 0) {
-            todo.append((char) (b & 0xFF));
+            whole.append((char) (b & 0xFF));
             b = inStream.read();
         }
-        this.parsear(todo.toString());
+        this.parseText(whole.toString());
     }
 
-    // Parte el texto en lineas logicas —juntando las continuaciones— y guarda cada par.
-    private void parsear(String texto) {
+    // It splits the text into logical lines —joining the continuations— and stores each pair.
+    private void parseText(String text) {
         int i = 0;
-        int n = texto.length();
+        int n = text.length();
         while (i < n) {
-            // Una linea fisica.
-            int fin = i;
-            while (fin < n && texto.charAt(fin) != '\n' && texto.charAt(fin) != '\r') {
-                fin = fin + 1;
+            // One physical line.
+            int end = i;
+            while (end < n && text.charAt(end) != '\n' && text.charAt(end) != '\r') {
+                end = end + 1;
             }
-            String linea = texto.substring(i, fin);
-            // Saltear el salto de linea, contando \r\n como uno solo.
-            i = fin;
-            if (i < n && texto.charAt(i) == '\r') {
+            String line = text.substring(i, end);
+            // Skip the line break, counting \r\n as a single one.
+            i = end;
+            if (i < n && text.charAt(i) == '\r') {
                 i = i + 1;
             }
-            if (i < n && texto.charAt(i) == '\n') {
+            if (i < n && text.charAt(i) == '\n') {
                 i = i + 1;
             }
 
-            String recortada = quitarBlancosIniciales(linea);
-            if (recortada.length() == 0) {
+            String trimmed = stripLeadingBlanks(line);
+            if (trimmed.length() == 0) {
                 continue;
             }
-            char primero = recortada.charAt(0);
-            if (primero == '#' || primero == '!') {
+            char first = trimmed.charAt(0);
+            if (first == '#' || first == '!') {
                 continue;
             }
 
-            // Continuaciones: mientras la linea termine en un numero IMPAR de barras.
-            while (terminaEnBarraImpar(recortada) && i < n) {
-                recortada = recortada.substring(0, recortada.length() - 1);
+            // Continuations: while the line ends in an ODD number of backslashes.
+            while (endsInOddBackslashes(trimmed) && i < n) {
+                trimmed = trimmed.substring(0, trimmed.length() - 1);
                 int f2 = i;
-                while (f2 < n && texto.charAt(f2) != '\n' && texto.charAt(f2) != '\r') {
+                while (f2 < n && text.charAt(f2) != '\n' && text.charAt(f2) != '\r') {
                     f2 = f2 + 1;
                 }
-                String sigue = texto.substring(i, f2);
+                String continuation = text.substring(i, f2);
                 i = f2;
-                if (i < n && texto.charAt(i) == '\r') {
+                if (i < n && text.charAt(i) == '\r') {
                     i = i + 1;
                 }
-                if (i < n && texto.charAt(i) == '\n') {
+                if (i < n && text.charAt(i) == '\n') {
                     i = i + 1;
                 }
-                recortada = recortada + quitarBlancosIniciales(sigue);
+                trimmed = trimmed + stripLeadingBlanks(continuation);
             }
 
-            this.guardarPar(recortada);
+            this.storePair(trimmed);
         }
     }
 
-    // Parte una linea logica en clave y valor y los guarda.
-    private void guardarPar(String linea) {
-        int n = linea.length();
+    // It splits a logical line into key and value and stores them.
+    private void storePair(String line) {
+        int n = line.length();
         int k = 0;
-        // La clave termina en el primer =, : o blanco sin escapar.
+        // The key ends at the first unescaped =, : or whitespace.
         while (k < n) {
-            char c = linea.charAt(k);
+            char c = line.charAt(k);
             if (c == '\\') {
                 k = k + 2;
                 continue;
@@ -236,23 +236,23 @@ public class Properties extends Hashtable<Object, Object> {
             }
             k = k + 1;
         }
-        String clave = linea.substring(0, Math.min(k, n));
-        // Saltear blancos, un separador opcional, y mas blancos.
+        String keyText = line.substring(0, Math.min(k, n));
+        // Skip whitespace, an optional separator, and more whitespace.
         int v = Math.min(k, n);
-        while (v < n && (linea.charAt(v) == ' ' || linea.charAt(v) == '\t' || linea.charAt(v) == '\f')) {
+        while (v < n && (line.charAt(v) == ' ' || line.charAt(v) == '\t' || line.charAt(v) == '\f')) {
             v = v + 1;
         }
-        if (v < n && (linea.charAt(v) == '=' || linea.charAt(v) == ':')) {
+        if (v < n && (line.charAt(v) == '=' || line.charAt(v) == ':')) {
             v = v + 1;
-            while (v < n && (linea.charAt(v) == ' ' || linea.charAt(v) == '\t' || linea.charAt(v) == '\f')) {
+            while (v < n && (line.charAt(v) == ' ' || line.charAt(v) == '\t' || line.charAt(v) == '\f')) {
                 v = v + 1;
             }
         }
-        String valor = linea.substring(v, n);
-        this.put(desescapar(clave), desescapar(valor));
+        String valueText = line.substring(v, n);
+        this.put(unescape(keyText), unescape(valueText));
     }
 
-    private static String quitarBlancosIniciales(String s) {
+    private static String stripLeadingBlanks(String s) {
         int i = 0;
         while (i < s.length()) {
             char c = s.charAt(i);
@@ -264,20 +264,20 @@ public class Properties extends Hashtable<Object, Object> {
         return s.substring(i, s.length());
     }
 
-    // Si la linea termina en un numero IMPAR de barras invertidas, o sea si continua.
-    private static boolean terminaEnBarraImpar(String s) {
-        int barras = 0;
+    // Whether the line ends in an ODD number of backslashes, that is, whether it continues.
+    private static boolean endsInOddBackslashes(String s) {
+        int backslashes = 0;
         int i = s.length() - 1;
         while (i >= 0 && s.charAt(i) == '\\') {
-            barras = barras + 1;
+            backslashes = backslashes + 1;
             i = i - 1;
         }
-        return barras % 2 == 1;
+        return backslashes % 2 == 1;
     }
 
-    // Aplica los escapes del formato. Un `\x` desconocido da `x`, que es como `\=` y `\:` entran
-    // en una clave sin partirla.
-    private static String desescapar(String s) {
+    // It applies the format's escapes. An unknown `\x` gives `x`, which is how `\=` and `\:` get
+    // into a key without splitting it.
+    private static String unescape(String s) {
         StringBuilder out = new StringBuilder();
         int i = 0;
         int n = s.length();
@@ -303,18 +303,18 @@ public class Properties extends Hashtable<Object, Object> {
             } else if (e == 'f') {
                 out.append('\f');
             } else if (e == 'u') {
-                int valor = 0;
-                int leidos = 0;
-                while (leidos < 4 && i < n) {
-                    int d = digitoHex(s.charAt(i));
+                int valueText = 0;
+                int readCount = 0;
+                while (readCount < 4 && i < n) {
+                    int d = hexDigitOf(s.charAt(i));
                     if (d < 0) {
                         break;
                     }
-                    valor = valor * 16 + d;
+                    valueText = valueText * 16 + d;
                     i = i + 1;
-                    leidos = leidos + 1;
+                    readCount = readCount + 1;
                 }
-                out.append((char) valor);
+                out.append((char) valueText);
             } else {
                 out.append(e);
             }
@@ -322,7 +322,7 @@ public class Properties extends Hashtable<Object, Object> {
         return out.toString();
     }
 
-    private static int digitoHex(char c) {
+    private static int hexDigitOf(char c) {
         if (c >= '0' && c <= '9') {
             return c - '0';
         }
@@ -335,12 +335,13 @@ public class Properties extends Hashtable<Object, Object> {
         return -1;
     }
 
-    // ---- las operaciones de Map, redeclaradas ----------------------------------------------------
+    // ---- Map's operations, redeclared ------------------------------------------------------------
     //
-    // El JDK las redeclara sobre `Object` --y no las hereda de Hashtable<Object,Object>-- por dos
-    // razones que siguen valiendo aca: fijan el `synchronized` en un solo lugar, y dejan el tipo
-    // crudo a la vista, que es lo que recuerda que una Properties **puede** tener claves que no son
-    // String (y que por eso `getProperty` devuelve null en vez de tirar).
+    // The JDK redeclares them over `Object` --and does not inherit them from Hashtable<Object,Object>
+    // -- for two reasons that still hold here: they pin the `synchronized` down in one place, and
+    // they leave the raw type in plain sight, which is what reminds one that a Properties **can**
+    // have keys that are not Strings (and that this is why `getProperty` returns null instead of
+    // throwing).
 
     public synchronized Object put(Object key, Object value) {
         return super.put(key, value);
@@ -392,11 +393,11 @@ public class Properties extends Hashtable<Object, Object> {
         if (v != null) {
             return v;
         }
-        Object nuevo = mappingFunction.apply(key);
-        if (nuevo != null) {
-            super.put(key, nuevo);
+        Object updated = mappingFunction.apply(key);
+        if (updated != null) {
+            super.put(key, updated);
         }
-        return nuevo;
+        return updated;
     }
 
     public synchronized Object computeIfPresent(Object key,
@@ -405,93 +406,93 @@ public class Properties extends Hashtable<Object, Object> {
         if (v == null) {
             return null;
         }
-        Object nuevo = f.apply(key, v);
-        if (nuevo != null) {
-            super.put(key, nuevo);
+        Object updated = f.apply(key, v);
+        if (updated != null) {
+            super.put(key, updated);
         } else {
             super.remove(key);
         }
-        return nuevo;
+        return updated;
     }
 
     public synchronized Object compute(Object key,
             java.util.function.BiFunction<? super Object, ? super Object, ? extends Object> f) {
         Object v = super.get(key);
-        Object nuevo = f.apply(key, v);
-        if (nuevo == null) {
+        Object updated = f.apply(key, v);
+        if (updated == null) {
             if (v != null) {
                 super.remove(key);
             }
             return null;
         }
-        super.put(key, nuevo);
-        return nuevo;
+        super.put(key, updated);
+        return updated;
     }
 
     public synchronized Object merge(Object key, Object value,
             java.util.function.BiFunction<? super Object, ? super Object, ? extends Object> f) {
         Object v = super.get(key);
-        Object nuevo;
+        Object updated;
         if (v == null) {
-            nuevo = value;
+            updated = value;
         } else {
-            nuevo = f.apply(v, value);
+            updated = f.apply(v, value);
         }
-        if (nuevo == null) {
+        if (updated == null) {
             super.remove(key);
         } else {
-            super.put(key, nuevo);
+            super.put(key, updated);
         }
-        return nuevo;
+        return updated;
     }
 
-    // ---- escritura del formato .properties ---------------------------------------------------------
+    // ---- writing the .properties format   ---------------------------------------------------------
 
     /**
-     * Escribe la tabla en el formato `.properties`, con `comments` como encabezado.
+     * It writes the table in the `.properties` format, with `comments` as the header.
      *
-     * <p>El formato de salida es el que el JDK fija: los comentarios primero (cada linea con `#`),
-     * despues una linea con la fecha, y despues un `clave=valor` por entrada.
+     * <p>The output format is the one the JDK fixes: the comments first (each line with `#`), then a
+     * line with the date, and then one `key=value` per entry.
      *
-     * <p>**Divergencia deliberada**: no se escriben las entradas de `defaults`. Es lo que hace el
-     * JDK -- guardar una tabla guarda lo suyo, no lo heredado --, y es lo que hace que guardar y
-     * releer conserve la cadena de defaults en vez de aplanarla.
+     * <p>**A deliberate divergence**: `defaults`'s entries are not written. It is what the JDK does
+     * -- storing a table stores its own, not what it inherits -- and it is what makes storing and
+     * re-reading keep the defaults chain instead of flattening it.
      */
     public void store(java.io.Writer writer, String comments) throws IOException {
         StringBuilder sb = new StringBuilder();
-        this.escribirCabecera(sb, comments);
-        Enumeration<Object> claves = this.keys();
-        while (claves.hasMoreElements()) {
-            Object k = claves.nextElement();
+        this.writeHeader(sb, comments);
+        Enumeration<Object> keyList = this.keys();
+        while (keyList.hasMoreElements()) {
+            Object k = keyList.nextElement();
             Object v = super.get(k);
-            sb.append(escapar(String.valueOf(k), true));
+            sb.append(escape(String.valueOf(k), true));
             sb.append('=');
-            sb.append(escapar(String.valueOf(v), false));
+            sb.append(escape(String.valueOf(v), false));
             sb.append('\n');
         }
         writer.write(sb.toString());
         writer.flush();
     }
 
-    // La version sobre bytes. Se escribe en Latin-1, que es lo que el formato manda para un
-    // `.properties` sin declarar: todo lo que no entra sale como `\uXXXX`.
+    // The version over bytes. It writes in Latin-1, which is what the format demands for an
+    // undeclared `.properties`: everything that does not fit comes out as `\uXXXX`.
     public void store(java.io.OutputStream out, String comments) throws IOException {
         StringBuilder sb = new StringBuilder();
-        this.escribirCabecera(sb, comments);
-        Enumeration<Object> claves = this.keys();
-        while (claves.hasMoreElements()) {
-            Object k = claves.nextElement();
+        this.writeHeader(sb, comments);
+        Enumeration<Object> keyList = this.keys();
+        while (keyList.hasMoreElements()) {
+            Object k = keyList.nextElement();
             Object v = super.get(k);
-            sb.append(escapar(String.valueOf(k), true));
+            sb.append(escape(String.valueOf(k), true));
             sb.append('=');
-            sb.append(escapar(String.valueOf(v), false));
+            sb.append(escape(String.valueOf(v), false));
             sb.append('\n');
         }
-        String texto = sb.toString();
-        byte[] bytes = new byte[texto.length()];
+        String text = sb.toString();
+        byte[] bytes = new byte[text.length()];
         int i = 0;
-        while (i < texto.length()) {
-            bytes[i] = (byte) texto.charAt(i);
+        while (i < text.length()) {
+            bytes[i] = (byte) text.charAt(i);
             i = i + 1;
         }
         out.write(bytes, 0, bytes.length);
@@ -499,21 +500,21 @@ public class Properties extends Hashtable<Object, Object> {
     }
 
     /**
-     * Lo mismo que `store`, pero se traga los errores de escritura.
+     * The same as `store`, but it swallows the write errors.
      *
-     * <p>Esta **deprecado desde 1.2** y por una razon que se entiende sola: si el disco se llena a
-     * mitad de camino, este metodo no lo dice. Se implementa igual porque esta en el contrato, y
-     * delegando en `store` para que no haya dos formatos.
+     * <p>It is **deprecated since 1.2** and for a reason that explains itself: if the disk fills up
+     * half way, this method does not say so. It is implemented all the same because it is in the
+     * contract, and by delegating to `store` so there are not two formats.
      */
     public void save(java.io.OutputStream out, String comments) {
         try {
             this.store(out, comments);
         } catch (IOException e) {
-            // Y esto es exactamente lo que lo hace un mal metodo.
+            // And this is exactly what makes it a bad method.
         }
     }
 
-    private void escribirCabecera(StringBuilder sb, String comments) {
+    private void writeHeader(StringBuilder sb, String comments) {
         if (comments != null) {
             sb.append('#');
             sb.append(comments);
@@ -525,14 +526,14 @@ public class Properties extends Hashtable<Object, Object> {
     }
 
     /**
-     * Escapa una clave o un valor para el formato.
+     * It escapes a key or a value for the format.
      *
-     * <p>La asimetria es del formato y no un descuido: en una **clave** hay que escapar los tres
-     * separadores (`=`, `:` y el blanco), porque si no partirian el par al releer. En un **valor**
-     * solo el blanco **inicial**, que es el unico que el lector se comeria; los de adentro son
-     * parte del valor.
+     * <p>The asymmetry is the format's and not an oversight: in a **key** the three separators
+     * (`=`, `:` and whitespace) have to be escaped, because otherwise they would split the pair on
+     * re-reading. In a **value** only the **leading** whitespace, which is the only one the reader
+     * would eat; the ones inside are part of the value.
      */
-    private static String escapar(String s, boolean esClave) {
+    private static String escape(String s, boolean isKeyChar) {
         StringBuilder out = new StringBuilder();
         int i = 0;
         while (i < s.length()) {
@@ -548,13 +549,13 @@ public class Properties extends Hashtable<Object, Object> {
             } else if (c == '\f') {
                 out.append("\\f");
             } else if (c == ' ') {
-                // En la clave siempre; en el valor, solo si abre.
-                if (esClave || i == 0) {
+                // In the key always; in the value, only if it opens it.
+                if (isKeyChar || i == 0) {
                     out.append("\\ ");
                 } else {
                     out.append(' ');
                 }
-            } else if (esClave && (c == '=' || c == ':' || c == '#' || c == '!')) {
+            } else if (isKeyChar && (c == '=' || c == ':' || c == '#' || c == '!')) {
                 out.append('\\');
                 out.append(c);
             } else if (c < 32 || c > 126) {
@@ -571,43 +572,43 @@ public class Properties extends Hashtable<Object, Object> {
     private static String hex4(char c) {
         String h = Integer.toHexString(c);
         StringBuilder sb = new StringBuilder();
-        int faltan = 4 - h.length();
-        while (faltan > 0) {
+        int missing = 4 - h.length();
+        while (missing > 0) {
             sb.append('0');
-            faltan = faltan - 1;
+            missing = missing - 1;
         }
         sb.append(h);
         return sb.toString();
     }
 
-    // ---- volcado legible -----------------------------------------------------------------------------
+    // ---- readable listing -----------------------------------------------------------------------
 
     /**
-     * Vuelca la tabla para mirarla, no para releerla.
+     * It dumps the table to be looked at, not to be re-read.
      *
-     * <p>La diferencia con `store` es esa, y esta en el contrato: `list` **trunca** los valores
-     * largos a 40 caracteres con `...` al final. Un archivo escrito con `list` no se puede volver a
-     * cargar, y esa es la idea -- es para depurar.
+     * <p>That is the difference from `store`, and it is in the contract: `list` **truncates** long
+     * values to 40 characters with `...` at the end. A file written with `list` cannot be loaded
+     * back, and that is the idea -- it is for debugging.
      */
     public void list(java.io.PrintStream out) {
         out.println("-- listing properties --");
-        Enumeration<Object> claves = this.keys();
-        while (claves.hasMoreElements()) {
-            Object k = claves.nextElement();
-            out.println(String.valueOf(k) + "=" + truncar(String.valueOf(super.get(k))));
+        Enumeration<Object> keyList = this.keys();
+        while (keyList.hasMoreElements()) {
+            Object k = keyList.nextElement();
+            out.println(String.valueOf(k) + "=" + truncate(String.valueOf(super.get(k))));
         }
     }
 
     public void list(java.io.PrintWriter out) {
         out.println("-- listing properties --");
-        Enumeration<Object> claves = this.keys();
-        while (claves.hasMoreElements()) {
-            Object k = claves.nextElement();
-            out.println(String.valueOf(k) + "=" + truncar(String.valueOf(super.get(k))));
+        Enumeration<Object> keyList = this.keys();
+        while (keyList.hasMoreElements()) {
+            Object k = keyList.nextElement();
+            out.println(String.valueOf(k) + "=" + truncate(String.valueOf(super.get(k))));
         }
     }
 
-    private static String truncar(String v) {
+    private static String truncate(String v) {
         if (v.length() <= 40) {
             return v;
         }
@@ -621,10 +622,10 @@ public class Properties extends Hashtable<Object, Object> {
     }
 
     /**
-     * La misma tabla en el XML que fija el DTD de `properties`.
+     * The same table in the XML the `properties` DTD fixes.
      *
-     * <p>Es la forma de guardar propiedades sin la ambiguedad de los escapes del formato de texto:
-     * en XML una clave con un `=` adentro no necesita nada especial.
+     * <p>It is the way of storing properties without the ambiguity of the text format's escapes: in
+     * XML a key with an `=` inside needs nothing special.
      */
     public void storeToXML(java.io.OutputStream os, String comment, String encoding)
             throws IOException {
@@ -636,21 +637,21 @@ public class Properties extends Hashtable<Object, Object> {
         sb.append("<properties>\n");
         if (comment != null) {
             sb.append("<comment>");
-            sb.append(escaparXml(comment));
+            sb.append(escapeXml(comment));
             sb.append("</comment>\n");
         }
-        Enumeration<Object> claves = this.keys();
-        while (claves.hasMoreElements()) {
-            Object k = claves.nextElement();
+        Enumeration<Object> keyList = this.keys();
+        while (keyList.hasMoreElements()) {
+            Object k = keyList.nextElement();
             sb.append("<entry key=\"");
-            sb.append(escaparXml(String.valueOf(k)));
+            sb.append(escapeXml(String.valueOf(k)));
             sb.append("\">");
-            sb.append(escaparXml(String.valueOf(super.get(k))));
+            sb.append(escapeXml(String.valueOf(super.get(k))));
             sb.append("</entry>\n");
         }
         sb.append("</properties>\n");
-        String texto = sb.toString();
-        byte[] bytes = texto.getBytes(java.nio.charset.Charset.forName(encoding));
+        String text = sb.toString();
+        byte[] bytes = text.getBytes(java.nio.charset.Charset.forName(encoding));
         os.write(bytes, 0, bytes.length);
         os.flush();
     }
@@ -661,66 +662,66 @@ public class Properties extends Hashtable<Object, Object> {
     }
 
     /**
-     * Lee el XML que escribe {@link #storeToXML}.
+     * It reads the XML {@link #storeToXML} writes.
      *
-     * <p>**Subconjunto honesto, y conviene que quede dicho cual**: se reconoce la forma del DTD
-     * --`<entry key="...">valor</entry>`, con `<comment>` opcional-- y las cinco entidades
-     * predefinidas. Lo que **no** se hace es validar contra el DTD ni resolverlo por la red, que es
-     * lo que el JDK si hace. Un XML bien formado pero con otra estructura se rechaza con
-     * `InvalidPropertiesFormatException` en vez de aceptarse a medias.
+     * <p>**An honest subset, and it is worth saying which**: the DTD's shape is recognised
+     * --`<entry key="...">value</entry>`, with an optional `<comment>`-- along with the five
+     * predefined entities. What is **not** done is validating against the DTD or resolving it over
+     * the network, which the JDK does do. A well-formed XML with another structure is rejected with
+     * `InvalidPropertiesFormatException` instead of being half accepted.
      */
     public synchronized void loadFromXML(java.io.InputStream in) throws IOException {
-        byte[] todo = new byte[0];
-        int usados = 0;
-        byte[] trozo = new byte[8192];
-        int n = in.read(trozo, 0, trozo.length);
+        byte[] whole = new byte[0];
+        int used = 0;
+        byte[] chunk = new byte[8192];
+        int n = in.read(chunk, 0, chunk.length);
         while (n > 0) {
-            if (usados + n > todo.length) {
-                int nuevo = todo.length * 2;
-                if (nuevo < usados + n) {
-                    nuevo = usados + n;
+            if (used + n > whole.length) {
+                int updated = whole.length * 2;
+                if (updated < used + n) {
+                    updated = used + n;
                 }
-                byte[] mas = new byte[nuevo];
-                System.arraycopy(todo, 0, mas, 0, usados);
-                todo = mas;
+                byte[] bigger = new byte[updated];
+                System.arraycopy(whole, 0, bigger, 0, used);
+                whole = bigger;
             }
-            System.arraycopy(trozo, 0, todo, usados, n);
-            usados = usados + n;
-            n = in.read(trozo, 0, trozo.length);
+            System.arraycopy(chunk, 0, whole, used, n);
+            used = used + n;
+            n = in.read(chunk, 0, chunk.length);
         }
-        String texto = new String(todo, 0, usados, java.nio.charset.Charset.forName("UTF-8"));
-        if (texto.indexOf("<properties") < 0) {
-            throw new InvalidPropertiesFormatException("no es un documento de properties");
+        String text = new String(whole, 0, used, java.nio.charset.Charset.forName("UTF-8"));
+        if (text.indexOf("<properties") < 0) {
+            throw new InvalidPropertiesFormatException("not a properties document");
         }
         int i = 0;
         while (true) {
-            int abre = texto.indexOf("<entry key=\"", i);
-            if (abre < 0) {
+            int openAt = text.indexOf("<entry key=\"", i);
+            if (openAt < 0) {
                 break;
             }
-            int desdeClave = abre + 12;
-            int cierraClave = texto.indexOf('"', desdeClave);
-            if (cierraClave < 0) {
-                throw new InvalidPropertiesFormatException("entry sin cerrar");
+            int keyStart = openAt + 12;
+            int closesKey = text.indexOf('"', keyStart);
+            if (closesKey < 0) {
+                throw new InvalidPropertiesFormatException("unclosed entry");
             }
-            int finTag = texto.indexOf('>', cierraClave);
-            if (finTag < 0) {
-                throw new InvalidPropertiesFormatException("entry sin cerrar");
+            int tagEnd = text.indexOf('>', closesKey);
+            if (tagEnd < 0) {
+                throw new InvalidPropertiesFormatException("unclosed entry");
             }
-            int cierre = texto.indexOf("</entry>", finTag);
-            if (cierre < 0) {
-                throw new InvalidPropertiesFormatException("entry sin cerrar");
+            int closing = text.indexOf("</entry>", tagEnd);
+            if (closing < 0) {
+                throw new InvalidPropertiesFormatException("unclosed entry");
             }
-            String clave = desescaparXml(texto.substring(desdeClave, cierraClave));
-            String valor = desescaparXml(texto.substring(finTag + 1, cierre));
-            super.put(clave, valor);
-            i = cierre + 8;
+            String keyText = unescapeXml(text.substring(keyStart, closesKey));
+            String valueText = unescapeXml(text.substring(tagEnd + 1, closing));
+            super.put(keyText, valueText);
+            i = closing + 8;
         }
     }
 
-    // Las cinco entidades predefinidas de XML. `&amp;` va primero al escapar y ultimo al
-    // desescapar, o se escaparia dos veces la propia ampersand.
-    private static String escaparXml(String s) {
+    // XML's five predefined entities. `&amp;` goes first when escaping and last when unescaping, or
+    // the ampersand itself would be escaped twice.
+    private static String escapeXml(String s) {
         StringBuilder out = new StringBuilder();
         int i = 0;
         while (i < s.length()) {
@@ -743,23 +744,23 @@ public class Properties extends Hashtable<Object, Object> {
         return out.toString();
     }
 
-    private static String desescaparXml(String s) {
+    private static String unescapeXml(String s) {
         String r = s;
-        r = reemplazar(r, "&lt;", "<");
-        r = reemplazar(r, "&gt;", ">");
-        r = reemplazar(r, "&quot;", "\"");
-        r = reemplazar(r, "&apos;", "'");
-        r = reemplazar(r, "&amp;", "&");
+        r = substitute(r, "&lt;", "<");
+        r = substitute(r, "&gt;", ">");
+        r = substitute(r, "&quot;", "\"");
+        r = substitute(r, "&apos;", "'");
+        r = substitute(r, "&amp;", "&");
         return r;
     }
 
-    private static String reemplazar(String s, String de, String a) {
+    private static String substitute(String s, String what, String a) {
         StringBuilder out = new StringBuilder();
         int i = 0;
         while (i < s.length()) {
-            if (s.startsWith(de, i)) {
+            if (s.startsWith(what, i)) {
                 out.append(a);
-                i = i + de.length();
+                i = i + what.length();
             } else {
                 out.append(s.charAt(i));
                 i = i + 1;

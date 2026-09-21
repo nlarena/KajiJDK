@@ -4,29 +4,29 @@ import java.util.List;
 import javax.xml.crypto.XMLStructure;
 
 /**
- * KajiLibrary's javax.xml.crypto.dsig.keyinfo.PGPData -- informacion de clave del mundo PGP.
+ * KajiLibrary's javax.xml.crypto.dsig.keyinfo.PGPData -- key information from the PGP world.
  *
- * <p>Lleva un identificador de clave PGP, un paquete de clave, o los dos, mas lo que la aplicacion
- * quiera agregar en {@link #getExternalElements}.
+ * <p>It carries a PGP key identifier, a key packet, or both, plus whatever the application wants to
+ * add in {@link #getExternalElements}.
  *
- * <p>Es el rincon menos usado del paquete: XML-DSig salio cuando PGP y X.509 competian, y este
- * elemento existe por esa epoca. Casi ninguna implementacion lo maneja de verdad, y una que lo
- * encuentre normalmente lo ignora -- lo cual esta bien, porque un {@code KeyInfo} con contenido que
- * no se entiende no invalida la firma.
+ * <p>It is the least used corner of the package: XML-DSig came out when PGP and X.509 were
+ * competing, and this element exists from that time. Almost no implementation really handles it,
+ * and one that finds it usually ignores it -- which is fine, because a {@code KeyInfo} with content
+ * that is not understood does not invalidate the signature.
  *
- * <p>Los bytes son de los formatos de OpenPGP, no de XML: el elemento los lleva en base 64.
+ * <p>The bytes are in OpenPGP formats, not XML: the element carries them in base 64.
  */
 public interface PGPData extends XMLStructure {
 
-    /** El URI de tipo de este elemento. */
+    /** The type URI of this element. */
     static final String TYPE = "http://www.w3.org/2000/09/xmldsig#PGPData";
 
-    /** El identificador de la clave PGP, o null. */
+    /** The PGP key identifier, or null. */
     byte[] getKeyId();
 
-    /** El paquete de clave PGP, o null. */
+    /** The PGP key packet, or null. */
     byte[] getKeyPacket();
 
-    /** Lo que la aplicacion haya agregado. No modificable. */
+    /** Whatever the application added. Unmodifiable. */
     List<XMLStructure> getExternalElements();
 }

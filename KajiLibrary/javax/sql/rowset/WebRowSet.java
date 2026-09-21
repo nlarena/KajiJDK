@@ -9,93 +9,93 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 
 /**
- * Un {@link CachedRowSet} que sabe escribirse y leerse como XML.
+ * A {@link CachedRowSet} that knows how to write and read itself as XML.
  *
- * <h2>Que se serializa, y por que no alcanza con las filas</h2>
+ * <h2>What is serialized, and why the rows are not enough</h2>
  *
- * <p>El documento lleva tres cosas: las <strong>propiedades</strong> del conjunto (la consulta, la
- * fuente de datos, el tipo de cursor), los <strong>metadatos</strong> de cada columna, y los
- * <strong>datos</strong> — que a su vez incluyen, para las filas modificadas, el valor original
- * ademas del actual.
+ * <p>The document carries three things: the <strong>properties</strong> of the set (the query, the
+ * data source, the cursor type), the <strong>metadata</strong> of each column, and the
+ * <strong>data</strong> — which in turn includes, for the modified rows, the original value as well
+ * as the current one.
  *
- * <p>Esa ultima parte es la que hace que valga la pena. Un conjunto reconstruido del XML puede
- * sincronizar con la base igual que si nunca se hubiera movido, porque tiene contra que comparar.
- * Serializar solo las filas produciria algo que se puede mostrar y no se puede escribir.
+ * <p>That last part is what makes it worthwhile. A set rebuilt from the XML can synchronize with
+ * the database just as if it had never moved, because it has something to compare against.
+ * Serializing only the rows would produce something that can be shown and cannot be written.
  *
- * <h2>Para que sirve en concreto</h2>
+ * <h2>What it is concretely for</h2>
  *
- * <p>Para mover un conjunto entre procesos que no comparten clases: un cliente pide datos, los
- * recibe como XML, los modifica sin conexion y devuelve el documento; el servidor lo reconstruye y
- * lo sincroniza. Es la version en texto de lo que {@code Serializable} hace en binario, con la
- * ventaja de que del otro lado puede no haber Java.
+ * <p>To move a set between processes that do not share classes: a client asks for data, receives it
+ * as XML, modifies it without a connection and returns the document; the server rebuilds it and
+ * synchronizes it. It is the text version of what {@code Serializable} does in binary, with the
+ * advantage that there may be no Java on the other side.
  *
- * <h2>Las dos formas de cada metodo</h2>
+ * <h2>The two forms of each method</h2>
  *
- * <p>Hay version con {@code Reader}/{@code Writer} y con {@code InputStream}/{@code OutputStream}.
- * No son intercambiables: la de flujos de bytes es la correcta, porque un documento XML declara su
- * propia codificacion adentro y solo se puede respetar si se leen bytes. La de caracteres obliga a
- * que el que llama haya elegido bien la codificacion antes.
+ * <p>There is a version with {@code Reader}/{@code Writer} and one with {@code InputStream}/{@code
+ * OutputStream}. They are not interchangeable: the byte-stream one is the right one, because an XML
+ * document declares its own encoding inside and it can only be honoured if bytes are read. The
+ * character one forces the caller to have chosen the encoding correctly beforehand.
  *
  * @since 1.5
  */
 public interface WebRowSet extends CachedRowSet {
 
-    /** El identificador publico del esquema XML de un {@code WebRowSet}. */
+    /** The public identifier of the XML schema of a {@code WebRowSet}. */
     String PUBLIC_XML_SCHEMA = "--//Oracle Corporation//XSD Schema//EN";
 
-    /** Donde vive el esquema. */
+    /** Where the schema lives. */
     String SCHEMA_SYSTEM_ID = "http://java.sun.com/xml/ns/jdbc/webrowset.xsd";
 
     /**
-     * Llena el conjunto desde un documento XML.
+     * Fills the set from an XML document.
      *
-     * @param reader de donde leer
-     * @throws SQLException si el documento esta mal formado o no corresponde al esquema
+     * @param reader where to read from
+     * @throws SQLException if the document is malformed or does not match the schema
      */
     void readXml(Reader reader) throws SQLException;
 
     /**
-     * Llena el conjunto desde un documento XML.
+     * Fills the set from an XML document.
      *
-     * @param iStream de donde leer
-     * @throws SQLException si el documento no corresponde al esquema
-     * @throws IOException si no se pudo leer
+     * @param iStream where to read from
+     * @throws SQLException if the document does not match the schema
+     * @throws IOException if it could not be read
      */
     void readXml(InputStream iStream) throws SQLException, IOException;
 
     /**
-     * Escribe como XML el contenido de un {@code ResultSet}.
+     * Writes the content of a {@code ResultSet} as XML.
      *
-     * @param rs el resultado a escribir
-     * @param writer adonde escribir
-     * @throws SQLException si no se pudo leer el resultado o escribir el documento
+     * @param rs the result to write
+     * @param writer where to write
+     * @throws SQLException if the result could not be read or the document written
      */
     void writeXml(ResultSet rs, Writer writer) throws SQLException;
 
     /**
-     * Escribe como XML el contenido de un {@code ResultSet}.
+     * Writes the content of a {@code ResultSet} as XML.
      *
-     * @param rs el resultado a escribir
-     * @param oStream adonde escribir
-     * @throws SQLException si no se pudo leer el resultado
-     * @throws IOException si no se pudo escribir
+     * @param rs the result to write
+     * @param oStream where to write
+     * @throws SQLException if the result could not be read
+     * @throws IOException if it could not be written
      */
     void writeXml(ResultSet rs, OutputStream oStream) throws SQLException, IOException;
 
     /**
-     * Escribe este conjunto como XML.
+     * Writes this set as XML.
      *
-     * @param writer adonde escribir
-     * @throws SQLException si no se pudo escribir
+     * @param writer where to write
+     * @throws SQLException if it could not be written
      */
     void writeXml(Writer writer) throws SQLException;
 
     /**
-     * Escribe este conjunto como XML.
+     * Writes this set as XML.
      *
-     * @param oStream adonde escribir
-     * @throws SQLException si no se pudo armar el documento
-     * @throws IOException si no se pudo escribir
+     * @param oStream where to write
+     * @throws SQLException if the document could not be built
+     * @throws IOException if it could not be written
      */
     void writeXml(OutputStream oStream) throws SQLException, IOException;
 }

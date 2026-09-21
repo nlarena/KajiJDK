@@ -4,50 +4,50 @@ import org.ietf.jgss.GSSContext;
 import org.ietf.jgss.GSSException;
 
 /**
- * Un {@link GSSContext} con lo que GSS-API estandar no da.
+ * A {@link GSSContext} with what standard GSS-API does not give.
  *
- * <p>Las tres operaciones tienen la misma razon de ser: el estandar deja fuera cosas que un
- * programa que usa Kerberos de verdad necesita --mirar adentro del contexto, y la delegacion
- * restringida-- y esta interfaz las agrega sin tocar la interfaz portable.
+ * <p>The three operations have the same reason for being: the standard leaves out things a
+ * program that uses Kerberos for real needs --looking inside the context, and constrained
+ * delegation-- and this interface adds them without touching the portable interface.
  *
- * <p>No se implementa: la devuelve el proveedor. Un `GSSContext` obtenido de
- * {@code GSSManager.createContext} se puede probar con `instanceof` y usar como `ExtendedGSSContext`
- * si el mecanismo lo soporta.
+ * <p>It is not implemented: it is returned by the provider. A `GSSContext` obtained from
+ * {@code GSSManager.createContext} may be tried with `instanceof` and used as an
+ * `ExtendedGSSContext` if the mechanism supports it.
  */
 public interface ExtendedGSSContext extends GSSContext {
 
     /**
-     * Pregunta uno de los datos internos del contexto.
+     * It asks for one of the context's internal data.
      *
-     * <p>Solo tiene sentido con el contexto ya establecido; antes, la respuesta no existe todavia.
-     * El tipo de lo que devuelve depende de `type`: ver {@link InquireType}.
+     * <p>It only makes sense with the context already established; before, the answer does not
+     * exist yet. The type of what it returns depends on `type`: see {@link InquireType}.
      *
-     * @param type que se pregunta
-     * @return la respuesta, del tipo que documente `type`
-     * @throws GSSException si el contexto no esta establecido, o si el mecanismo no sabe responder
-     *     esa consulta
+     * @param type what is asked
+     * @return the answer, of the type `type` documents
+     * @throws GSSException if the context is not established, or if the mechanism does not know
+     *     how to answer that query
      */
     Object inquireSecContext(InquireType type) throws GSSException;
 
     /**
-     * Pide que la delegacion quede sujeta a la politica del KDC.
+     * It asks that the delegation should be subject to the KDC's policy.
      *
-     * <p>Es mas estricto que {@code requestCredDeleg}: alli el cliente decide delegar y el servicio
-     * recibe la credencial completa. Aca la decision la toma el KDC, que marca el ticket como
-     * `OK-AS-DELEGATE` solo para los servicios en los que confia. Sirve para no entregarle la
-     * identidad del usuario a cualquier servicio al que se conecte.
+     * <p>It is stricter than {@code requestCredDeleg}: there the client decides to delegate and the
+     * service receives the complete credential. Here the decision is taken by the KDC, which marks
+     * the ticket as `OK-AS-DELEGATE` only for the services it trusts. It serves so as not to hand
+     * the user's identity over to any service it connects to.
      *
-     * <p>Hay que llamarlo **antes** de establecer el contexto; despues no tiene efecto.
+     * <p>It has to be called **before** establishing the context; afterwards it has no effect.
      *
-     * @throws GSSException si el mecanismo no soporta la politica de delegacion
+     * @throws GSSException if the mechanism does not support the delegation policy
      */
     void requestDelegPolicy(boolean state) throws GSSException;
 
     /**
-     * Si la politica de delegacion quedo en efecto.
+     * Whether the delegation policy came into effect.
      *
-     * <p>Antes de establecer el contexto informa lo que se pidio; despues, lo que se consiguio, que
-     * puede ser menos.
+     * <p>Before establishing the context it reports what was asked for; afterwards, what was got,
+     * which may be less.
      */
     boolean getDelegPolicyState();
 }

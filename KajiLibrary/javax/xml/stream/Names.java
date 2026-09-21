@@ -4,23 +4,23 @@ import javax.xml.XMLConstants;
 import javax.xml.namespace.QName;
 
 /**
- * Como se escribe un {@link QName} en el documento, y que caracteres puede tener un nombre XML.
+ * How a {@link QName} is written in the document, and which characters an XML name can have.
  *
- * <p>Lo primero no lo hace {@link QName#toString()}, que produce la notacion
- * <code>{uri}local</code> --util para mensajes, no para XML-- y ademas descarta el prefijo, que es
- * justamente lo que hace falta aca.
+ * <p>The first is not done by {@link QName#toString()}, which produces the <code>{uri}local</code>
+ * notation --useful for messages, not for XML-- and also discards the prefix, which is precisely
+ * what is needed here.
  *
- * <p>Lo segundo son las reglas de {@code Name} y {@code NameStartChar} de XML 1.0 quinta edicion,
- * recortadas al plano basico. Los nombres con caracteres suplementarios --pares subrogados-- no se
- * aceptan; es una limitacion real y vale mas que un nombre asi de raro sea rechazado a que pase
- * como valido y produzca un documento que otro parser no lee.
+ * <p>The second are the {@code Name} and {@code NameStartChar} rules of XML 1.0 fifth edition, cut
+ * down to the basic plane. Names with supplementary characters --surrogate pairs-- are not
+ * accepted; it is a real limitation and it is better for such an odd name to be rejected than to
+ * pass as valid and produce a document another parser cannot read.
  */
 final class Names {
 
     private Names() {
     }
 
-    /** El nombre tal como va escrito: {@code prefijo:local}, o {@code local} si no hay prefijo. */
+    /** The name as it is written: {@code prefix:local}, or {@code local} if there is no prefix. */
     static String written(QName q) {
         String p = q.getPrefix();
         if (p == null || p.equals(XMLConstants.DEFAULT_NS_PREFIX)) {
@@ -29,7 +29,7 @@ final class Names {
         return p + ":" + q.getLocalPart();
     }
 
-    /** Si el caracter puede empezar un nombre XML. */
+    /** Whether the character can start an XML name. */
     static boolean isNameStart(char c) {
         if (c >= 'a' && c <= 'z') {
             return true;
@@ -76,7 +76,7 @@ final class Names {
         return false;
     }
 
-    /** Si el caracter puede continuar un nombre XML. */
+    /** Whether the character can continue an XML name. */
     static boolean isNamePart(char c) {
         if (isNameStart(c)) {
             return true;

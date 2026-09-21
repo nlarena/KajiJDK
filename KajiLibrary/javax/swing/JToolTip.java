@@ -6,20 +6,21 @@ import javax.swing.plaf.ComponentUI;
 import javax.swing.plaf.ToolTipUI;
 
 /**
- * El cartelito de ayuda que aparece al dejar el puntero quieto.
+ * The little tip that appears when the pointer is left still.
  *
- * <h2>Casi nadie lo construye</h2>
+ * <h2>Almost nobody builds it</h2>
  *
- * <p>Lo normal es {@code componente.setToolTipText("...")} y listo: el
- * {@code ToolTipManager} arma el cartel, lo muestra y lo esconde. Esta clase existe para el caso en
- * que haga falta otra cosa -- un cartel con varias lineas, con un icono, con un borde propio --, y
- * entonces se la extiende y se devuelve la subclase desde {@code createToolTip()}.
+ * <p>The usual thing is {@code component.setToolTipText("...")} and that is that: the
+ * {@code ToolTipManager} builds the tip, shows it and hides it. This class exists for the case
+ * in which something else is needed -- a tip with several lines, with an icon, with a border of
+ * its own --, and then it is extended and the subclass is returned from
+ * {@code createToolTip()}.
  *
- * <h2>Guarda a quien describe</h2>
+ * <h2>It keeps who it describes</h2>
  *
- * <p>{@link #setComponent} le dice de que componente es este cartel. No es adorno: el aspecto lo usa
- * para tomarle prestada la tipografia y los colores, de manera que el cartel se parezca a lo que
- * describe.
+ * <p>{@link #setComponent} tells it which component this tip belongs to. It is not decoration:
+ * the look and feel uses it in order to borrow its typeface and colours, so that the tip looks
+ * like what it describes.
  */
 public class JToolTip extends JComponent implements Accessible {
 
@@ -28,7 +29,7 @@ public class JToolTip extends JComponent implements Accessible {
     String tipText;
     JComponent component;
 
-    /** Un cartel vacio. */
+    /** An empty tip. */
     public JToolTip() {
         setOpaque(true);
         updateUI();
@@ -45,7 +46,7 @@ public class JToolTip extends JComponent implements Accessible {
         return uiClassID;
     }
 
-    /** El texto; cambiarlo lo vuelve a medir, porque el cartel se ajusta a lo que dice. */
+    /** The text; changing it measures it again, because the tip fits what it says. */
     public void setTipText(String tipText) {
         String oldValue = this.tipText;
         this.tipText = tipText;
@@ -60,7 +61,7 @@ public class JToolTip extends JComponent implements Accessible {
         return tipText;
     }
 
-    /** De que componente es este cartel; ver la nota de la clase. */
+    /** Which component this tip belongs to; see the class note. */
     public void setComponent(JComponent c) {
         JComponent oldValue = this.component;
         component = c;
@@ -71,7 +72,7 @@ public class JToolTip extends JComponent implements Accessible {
         return component;
     }
 
-    /** Siempre cierto: un cartel de ayuda tapado por lo que describe no serviria de nada. */
+    /** Always true: a tool tip covered by what it describes would be of no use. */
     boolean alwaysOnTop() {
         return true;
     }

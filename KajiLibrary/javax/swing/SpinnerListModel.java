@@ -5,23 +5,23 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * Una secuencia hecha de una lista fija, para un {@link JSpinner}.
+ * A sequence made of a fixed list, for a {@link JSpinner}.
  *
- * <h2>La lista no puede estar vacia</h2>
+ * <h2>The list cannot be empty</h2>
  *
- * <p>Todos los constructores y {@link #setList} rechazan nulo y vacio. El motivo es que el modelo
- * guarda una <em>posicion</em>, no un valor, y {@link #getValue} lee la lista en esa posicion: con
- * la lista vacia no habria nada que devolver y cada consulta reventaria. Es mejor que reviente el
- * que la vacia.
+ * <p>Every constructor and {@link #setList} reject null and empty. The reason is that the model
+ * keeps a <em>position</em>, not a value, and {@link #getValue} reads the list at that position:
+ * with the list empty there would be nothing to return and every query would blow up. It is
+ * better that whoever empties it blows up.
  *
- * <h2>El valor se busca por igualdad</h2>
+ * <h2>The value is looked up by equality</h2>
  *
- * <p>{@link #setValue} no guarda lo que se le da: busca donde esta en la lista y guarda esa
- * posicion. Un valor que no esta en la lista es un error, no un valor nuevo. Y si la lista tiene
- * repetidos, gana el primero.
+ * <p>{@link #setValue} does not keep what it is given: it looks up where it is in the list and
+ * keeps that position. A value that is not in the list is an error, not a new value. And if the
+ * list has repeats, the first one wins.
  *
- * <p>Cambiar la lista vuelve la posicion a cero, aunque el valor de antes siga estando: la posicion
- * vieja no significa lo mismo en una lista nueva.
+ * <p>Changing the list takes the position back to zero, even though the previous value is still
+ * there: the old position does not mean the same thing in a new list.
  */
 public class SpinnerListModel extends AbstractSpinnerModel implements Serializable {
 
@@ -29,9 +29,9 @@ public class SpinnerListModel extends AbstractSpinnerModel implements Serializab
     private int index;
 
     /**
-     * Con esa lista.
+     * With that list.
      *
-     * @throws IllegalArgumentException si es nula o vacia.
+     * @throws IllegalArgumentException if it is null or empty.
      */
     public SpinnerListModel(List<?> values) {
         if (values == null || values.size() == 0) {
@@ -43,9 +43,9 @@ public class SpinnerListModel extends AbstractSpinnerModel implements Serializab
     }
 
     /**
-     * Con ese arreglo.
+     * With that array.
      *
-     * @throws IllegalArgumentException si es nulo o vacio.
+     * @throws IllegalArgumentException if it is null or empty.
      */
     public SpinnerListModel(Object[] values) {
         if (values == null || values.length == 0) {
@@ -56,20 +56,20 @@ public class SpinnerListModel extends AbstractSpinnerModel implements Serializab
         this.index = 0;
     }
 
-    /** Con un solo elemento de relleno, que es lo que pone el JDK. */
+    /** With a single filler element, which is what the JDK sets. */
     public SpinnerListModel() {
         this(new Object[] {"empty"});
     }
 
-    /** La lista; no es copia. */
+    /** The list; it is not a copy. */
     public List<?> getList() {
         return list;
     }
 
     /**
-     * Cambia la lista y vuelve al primero.
+     * It changes the list and goes back to the first.
      *
-     * @throws IllegalArgumentException si es nula o vacia.
+     * @throws IllegalArgumentException if it is null or empty.
      */
     public void setList(List<?> list) {
         if ((list == null) || (list.size() == 0)) {
@@ -87,9 +87,9 @@ public class SpinnerListModel extends AbstractSpinnerModel implements Serializab
     }
 
     /**
-     * Se para en ese elemento.
+     * It stands on that element.
      *
-     * @throws IllegalArgumentException si no esta en la lista.
+     * @throws IllegalArgumentException if it is not in the list.
      */
     public void setValue(Object elt) {
         int index = list.indexOf(elt);
@@ -101,21 +101,21 @@ public class SpinnerListModel extends AbstractSpinnerModel implements Serializab
         }
     }
 
-    /** El siguiente, o nulo si ya esta en el ultimo. */
+    /** The next one, or null if it is already on the last. */
     public Object getNextValue() {
         return (index >= (list.size() - 1)) ? null : list.get(index + 1);
     }
 
-    /** El anterior, o nulo si ya esta en el primero. */
+    /** The previous one, or null if it is already on the first. */
     public Object getPreviousValue() {
         return (index <= 0) ? null : list.get(index - 1);
     }
 
     /**
-     * El primer elemento a partir del actual cuyo texto empieza con ese prefijo.
+     * The first element from the current one on whose text begins with that prefix.
      *
-     * <p>Es lo que usa el editor para saltar escribiendo. Da la vuelta al llegar al final, asi que
-     * teclear la misma letra recorre todos los que empiezan con ella.
+     * <p>It is what the editor uses in order to jump by typing. It wraps round on reaching the
+     * end, so typing the same letter walks through all those that begin with it.
      */
     Object findNextMatch(String prefix) {
         int max = list.size();

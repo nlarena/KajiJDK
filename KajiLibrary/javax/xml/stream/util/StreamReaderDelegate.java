@@ -7,71 +7,71 @@ import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamReader;
 
 /**
- * KajiLibrary's javax.xml.stream.util.StreamReaderDelegate -- un lector de cursor que reenvia todo
- * a otro.
+ * KajiLibrary's javax.xml.stream.util.StreamReaderDelegate -- a cursor reader that forwards
+ * everything to another.
  *
- * <h2>Para que sirve una clase que no hace nada</h2>
+ * <h2>What a class that does nothing is for</h2>
  *
- * <p>{@link XMLStreamReader} tiene cuarenta y pico de metodos. Quien quiera interceptar <b>uno</b>
- * --contar elementos, normalizar el texto al pasar, saltear una rama-- tendria que escribir los
- * otros cuarenta a mano si implementara la interfaz directamente. Esta clase los escribe una vez;
- * la subclase redefine el que le importa y hereda el resto.
+ * <p>{@link XMLStreamReader} has forty-odd methods. Whoever wants to intercept <b>one</b> --count
+ * elements, normalize text as it goes by, skip a branch-- would have to write the other forty by
+ * hand if they implemented the interface directly. This class writes them once; the subclass
+ * overrides the one it cares about and inherits the rest.
  *
- * <p>Es el patron decorador con la parte aburrida ya hecha, y el mismo que
- * {@link java.io.FilterInputStream} usa para los flujos.
+ * <p>It is the decorator pattern with the boring part already done, and the same one
+ * {@link java.io.FilterInputStream} uses for streams.
  *
- * <h2>El constructor sin argumentos y el {@link #setParent}</h2>
+ * <h2>The no-argument constructor and {@link #setParent}</h2>
  *
- * <p>Se puede construir sin lector y ponerlo despues. Sirve cuando la subclase necesita calcular
- * algo antes de saber a quien envuelve, o cuando el mismo decorador se reusa sobre lectores
- * sucesivos. El precio es que entre la construccion y el {@code setParent} cualquier llamada revienta
- * con {@link NullPointerException}, que es la falla correcta: usar un decorador sin nada abajo es un
- * error del llamador, no un estado que valga la pena representar.
+ * <p>It can be built without a reader and have it set later. It serves when the subclass needs to
+ * compute something before knowing whom it wraps, or when the same decorator is reused over
+ * successive readers. The price is that between construction and {@code setParent} any call blows
+ * up with {@link NullPointerException}, which is the right failure: using a decorator with nothing
+ * underneath is a caller error, not a state worth representing.
  *
- * <p>Los metodos no estan sincronizados y el campo del padre no es {@code volatile}: cambiar el
- * padre mientras otro hilo lee no es un uso previsto ni aca ni en el original.
+ * <p>The methods are not synchronized and the parent field is not {@code volatile}: changing the
+ * parent while another thread reads is not an intended use, here nor in the original.
  */
 public class StreamReaderDelegate implements XMLStreamReader {
 
-    /** A quien se le reenvia todo. */
+    /** Whom everything is forwarded to. */
     private XMLStreamReader reader;
 
     /**
-     * Un decorador sin lector todavia.
+     * A decorator without a reader yet.
      *
-     * <p>Hay que llamar a {@link #setParent} antes de usarlo; ver el encabezado.
+     * <p>{@link #setParent} has to be called before using it; see the header.
      */
     public StreamReaderDelegate() {
     }
 
     /**
-     * Un decorador sobre el lector dado.
+     * A decorator over the given reader.
      *
-     * @param reader el lector de abajo
+     * @param reader the underlying reader
      */
     public StreamReaderDelegate(XMLStreamReader reader) {
         this.reader = reader;
     }
 
     /**
-     * Cambia el lector de abajo.
+     * Changes the underlying reader.
      *
-     * @param reader el lector nuevo
+     * @param reader the new reader
      */
     public void setParent(XMLStreamReader reader) {
         this.reader = reader;
     }
 
     /**
-     * El lector de abajo.
+     * The underlying reader.
      *
-     * @return el lector, o null si todavia no se puso
+     * @return the reader, or null if it has not been set yet
      */
     public XMLStreamReader getParent() {
         return reader;
     }
 
-    // ---- todo lo demas es reenvio -----------------------------------------------------------
+    // ---- everything else is forwarding ----------------------------------------------------------
 
     /** {@inheritDoc} */
     public int next() throws XMLStreamException {

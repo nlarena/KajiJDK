@@ -35,7 +35,7 @@ public interface NavigableMap<K, V> extends SortedMap<K, V> {
 
     NavigableMap<K, V> headMap(K to, boolean inclusive);
 
-    // Igual que en NavigableSet: `reversed()` y `descendingMap()` son lo mismo.
+    // As in NavigableSet: `reversed()` and `descendingMap()` are the same thing.
     default NavigableMap<K, V> reversed() {
         return this.descendingMap();
     }

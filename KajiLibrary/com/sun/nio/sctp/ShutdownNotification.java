@@ -1,18 +1,18 @@
 package com.sun.nio.sctp;
 
 /**
- * El par empezo a cerrar la asociacion ordenadamente.
+ * The peer started closing the association in an orderly way.
  *
- * <p>Ordenadamente quiere decir que lo que ya estaba en vuelo se entrega igual: SCTP separa el
- * cierre de la perdida, y esta notificacion es la del cierre. La perdida llega como un
- * {@link AssociationChangeNotification} con {@code COMM_LOST}.
+ * <p>In an orderly way means that what was already in flight is delivered all the same: SCTP
+ * separates the close from the loss, and this notification is the close's. The loss arrives as
+ * an {@link AssociationChangeNotification} with {@code COMM_LOST}.
  */
 public abstract class ShutdownNotification implements Notification {
 
-    /** Para las implementaciones de SCTP. */
+    /** For the SCTP implementations. */
     protected ShutdownNotification() {
     }
 
-    /** La asociacion que se esta cerrando. */
+    /** The association that is being closed. */
     public abstract Association association();
 }

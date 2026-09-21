@@ -7,23 +7,23 @@ import javax.print.attribute.PrintRequestAttribute;
 import javax.print.attribute.URISyntax;
 
 /*
- * CABECERA DE FAMILIA -- los atributos {@code URISyntax} de este paquete.
+ * FAMILY HEADER -- this package's {@code URISyntax} attributes.
  *
- * <p>Una URI y nada mas. El mecanismo esta en {@link javax.print.attribute.URISyntax URISyntax}:
- * null es error, {@code equals()} delega en el de {@link java.net.URI} y {@code toString()}
- * imprime la URI.
+ * <p>A URI and nothing more. The mechanism is in {@link javax.print.attribute.URISyntax URISyntax}:
+ * null is an error, {@code equals()} delegates to {@link java.net.URI}'s and {@code toString()}
+ * prints the URI.
  *
- * <p>Ninguna de estas clases abre nada. Guardan una direccion; ir a buscarla es cosa de
- * {@code javax.print}, y que esquemas se pueden ir a buscar lo dice
+ * <p>None of these classes opens anything. They keep an address; going to fetch it is
+ * {@code javax.print}'s business, and which schemes can be fetched is said by
  * {@link ReferenceUriSchemesSupported}.
  */
 
 /**
- * A donde mandar la salida en vez de al papel.
+ * Where to send the output instead of to paper.
  *
- * <p>El nombre IPP no coincide con el de la clase --es {@code "spool-data-destination"}-- y esa
- * diferencia es observable desde {@code getName()}. Tipicamente un {@code file:} para volcar el
- * PostScript a disco. Si el esquema no esta soportado, el trabajo falla.
+ * <p>The IPP name does not match the class's --it is {@code "spool-data-destination"}-- and that
+ * difference is observable from {@code getName()}. Typically a {@code file:} to dump the PostScript
+ * to disk. If the scheme is not supported, the job fails.
  */
 public final class Destination extends URISyntax implements PrintJobAttribute, PrintRequestAttribute {
 

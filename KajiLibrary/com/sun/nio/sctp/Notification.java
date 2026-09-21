@@ -1,20 +1,21 @@
 package com.sun.nio.sctp;
 
 /**
- * Algo que le paso a una asociacion y que no es un mensaje.
+ * Something that happened to an association and is not a message.
  *
- * <h2>Por que el protocolo necesita esto y TCP no</h2>
+ * <h2>Why the protocol needs this and TCP does not</h2>
  *
- * <p>En TCP los eventos de la conexion se ven como efectos: el socket se cierra, una lectura
- * devuelve {@code -1}. SCTP tiene mas cosas que contar —una direccion del par que dejo de responder,
- * un mensaje que no se pudo entregar, una asociacion que se reinicio— y ninguna de ellas cabe en el
- * flujo de datos, porque no son datos.
+ * <p>In TCP the connection's events are seen as effects: the socket closes, a read returns
+ * {@code -1}. SCTP has more things to tell -- an address of the peer that stopped answering, a
+ * message that could not be delivered, an association that restarted -- and none of them fits
+ * in the data stream, because they are not data.
  *
- * <p>Van entonces por un canal aparte, y como el {@code receive} es el unico momento en que el
- * programa mira el canal, las notificaciones se entregan ahi, a un {@link NotificationHandler}.
+ * <p>They go then over a separate channel, and since the {@code receive} is the only moment the
+ * program looks at the channel, the notifications are delivered there, to a
+ * {@link NotificationHandler}.
  */
 public interface Notification {
 
-    /** La asociacion a la que le paso; puede ser {@code null} si todavia no habia ninguna. */
+    /** The association it happened to; it may be {@code null} if there was not one yet. */
     Association association();
 }

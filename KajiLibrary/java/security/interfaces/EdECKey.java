@@ -2,11 +2,11 @@ package java.security.interfaces;
 
 import java.security.spec.NamedParameterSpec;
 
-// Lo que toda clave Edwards tiene: la curva, siempre por nombre.
+// What every Edwards key has: the curve, always by name.
 //
-// El tipo del retorno es `NamedParameterSpec` y no `AlgorithmParameterSpec`, y eso no es un detalle:
-// en Ed25519/Ed448 los parametros son fijos y no hay forma de escribirlos a mano. El tipo mas
-// estrecho es lo que hace imposible pasar una curva inventada.
+// The return type is `NamedParameterSpec` and not `AlgorithmParameterSpec`, and that is not a
+// detail: in Ed25519/Ed448 the parameters are fixed and there is no way to write them by hand. The
+// narrower type is what makes it impossible to pass an invented curve.
 public interface EdECKey {
 
     NamedParameterSpec getParams();

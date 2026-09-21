@@ -53,44 +53,44 @@ public class Base64 {
 
     // The URL-and-filename-safe decoder. Rejects '+' and '/'.
     /**
-     * El codificador **MIME** (RFC 2045): alfabeto basico, cortado en lineas de 76 caracteres
-     * separadas por CRLF.
+     * The **MIME** encoder (RFC 2045): the basic alphabet, cut into lines of 76 characters separated
+     * by CRLF.
      *
-     * <p>El corte no es decorativo. MIME nacio para el cuerpo de un mail, y los transportes de la
-     * epoca no garantizaban lineas largas: una linea de 10 000 caracteres podia llegar cortada por
-     * donde al servidor se le ocurriera, y eso rompe el base64. Cortarlo uno mismo cada 76 es
-     * asegurarse de que nadie mas lo corte.
+     * <p>The cut is not decorative. MIME was born for the body of an email, and the transports of the
+     * day did not guarantee long lines: a line of 10,000 characters could arrive cut wherever the
+     * server felt like, and that breaks the base64. Cutting it oneself every 76 is making sure nobody
+     * else cuts it.
      */
     public static Encoder getMimeEncoder() {
         return new Encoder(false, true, 76, new byte[] {(byte) '\r', (byte) '\n'});
     }
 
     /**
-     * Un codificador MIME con la longitud de linea y el separador que se le den.
+     * A MIME encoder with the line length and separator it is given.
      *
-     * <p>`lineLength` se **redondea hacia abajo a un multiplo de 4**, y si queda en cero o menos no
-     * se corta nada. Las dos reglas son del JDK y las dos tienen motivo: cuatro caracteres son un
-     * grupo de tres bytes, asi que cortar en otro lado partiria un grupo al medio.
+     * <p>`lineLength` is **rounded down to a multiple of 4**, and if it comes out at zero or less
+     * nothing is cut. Both rules are the JDK's and both have a reason: four characters are one group
+     * of three bytes, so cutting anywhere else would split a group down the middle.
      *
-     * @throws IllegalArgumentException si `lineSeparator` contiene un caracter del alfabeto base64
-     *         --seria indistinguible de los datos al decodificar--
+     * @throws IllegalArgumentException if `lineSeparator` contains a base64 alphabet character
+     *         --it would be indistinguishable from the data when decoding--
      */
     public static Encoder getMimeEncoder(int lineLength, byte[] lineSeparator) {
         if (lineSeparator == null) {
             throw new NullPointerException();
         }
-        byte[] alfabeto = new byte[64];
+        byte[] alphabet = new byte[64];
         char[] base = Encoder.buildAlphabet(false);
         int i = 0;
         while (i < 64) {
-            alfabeto[i] = (byte) base[i];
+            alphabet[i] = (byte) base[i];
             i = i + 1;
         }
         int j = 0;
         while (j < lineSeparator.length) {
             int k = 0;
             while (k < 64) {
-                if (lineSeparator[j] == alfabeto[k]) {
+                if (lineSeparator[j] == alphabet[k]) {
                     throw new IllegalArgumentException(
                             "Illegal base64 line separator character 0x"
                                     + Integer.toString(lineSeparator[j], 16));
@@ -103,17 +103,17 @@ public class Base64 {
         if (len <= 0) {
             return new Encoder(false, true, 0, new byte[0]);
         }
-        byte[] copia = new byte[lineSeparator.length];
-        System.arraycopy(lineSeparator, 0, copia, 0, lineSeparator.length);
-        return new Encoder(false, true, len, copia);
+        byte[] copied = new byte[lineSeparator.length];
+        System.arraycopy(lineSeparator, 0, copied, 0, lineSeparator.length);
+        return new Encoder(false, true, len, copied);
     }
 
     /**
-     * El decodificador MIME: alfabeto basico, y **descarta** todo caracter que no este en el.
+     * The MIME decoder: the basic alphabet, and it **discards** every character not in it.
      *
-     * <p>Esa tolerancia es la diferencia con `getDecoder()`, que rechaza lo que no reconoce. Aca es
-     * lo correcto: el texto viene de un mail, con saltos de linea, espacios y lo que el transporte
-     * haya metido en el medio.
+     * <p>That tolerance is the difference from `getDecoder()`, which rejects what it does not
+     * recognise. Here it is the right thing: the text comes from an email, with line breaks, spaces
+     * and whatever the transport put in between.
      */
     public static Decoder getMimeDecoder() {
         return new Decoder(false, true);
@@ -138,7 +138,7 @@ public class Base64 {
         // Whether the tail is padded out to a multiple of 4 with '='.
         private final boolean doPadding;
 
-        // Cada cuantos caracteres se corta la linea (0 = no se corta), y con que separador.
+        // Every how many characters the line is cut (0 = it is not cut), and with what separator.
         private final int lineLength;
         private final byte[] lineSeparator;
 
@@ -190,9 +190,9 @@ public class Base64 {
                     n = n + rem + 1;
                 }
             }
-            // Los separadores de linea de la variante MIME. Van **entre** lineas y no al final, asi
-            // que son `(n-1)/lineLength` y no `n/lineLength`: una salida de exactamente 76
-            // caracteres lleva cero separadores, no uno.
+            // The MIME variant's line separators. They go **between** lines and not at the end, so
+            // they are `(n-1)/lineLength` and not `n/lineLength`: an output of exactly 76 characters
+            // carries zero separators, not one.
             if (this.lineLength > 0 && n > 0) {
                 n = n + ((n - 1) / this.lineLength) * this.lineSeparator.length;
             }
@@ -201,39 +201,39 @@ public class Base64 {
 
         // The encoder proper. Everything else is a wrapper that decides where the characters go.
         private char[] encodeChars(byte[] src) {
-            char[] crudo = encodeSinCortar(src);
-            if (this.lineLength <= 0 || crudo.length == 0) {
-                return crudo;
+            char[] raw = encodeUnwrapped(src);
+            if (this.lineLength <= 0 || raw.length == 0) {
+                return raw;
             }
-            // Se reparte en lineas insertando el separador cada `lineLength` caracteres.
+            // It is laid out in lines by inserting the separator every `lineLength` characters.
             char[] dst = new char[outLength(src.length)];
-            int leidos = 0;
-            int escritos = 0;
-            while (leidos < crudo.length) {
-                if (leidos > 0 && leidos % this.lineLength == 0) {
+            int readCount = 0;
+            int written = 0;
+            while (readCount < raw.length) {
+                if (readCount > 0 && readCount % this.lineLength == 0) {
                     int k = 0;
                     while (k < this.lineSeparator.length) {
-                        dst[escritos] = (char) (this.lineSeparator[k] & 0xff);
-                        escritos = escritos + 1;
+                        dst[written] = (char) (this.lineSeparator[k] & 0xff);
+                        written = written + 1;
                         k = k + 1;
                     }
                 }
-                dst[escritos] = crudo[leidos];
-                escritos = escritos + 1;
-                leidos = leidos + 1;
+                dst[written] = raw[readCount];
+                written = written + 1;
+                readCount = readCount + 1;
             }
             return dst;
         }
 
-        // La codificacion sin cortar en lineas, que es la que hace el trabajo real.
-        private char[] encodeSinCortar(byte[] src) {
+        // The encoding without cutting into lines, which is the one that does the inner work.
+        private char[] encodeUnwrapped(byte[] src) {
             int slen = src.length;
-            int sinSep = slen / 3 * 4;
-            int resto = slen % 3;
-            if (resto != 0) {
-                sinSep = sinSep + (this.doPadding ? 4 : resto + 1);
+            int noSeparator = slen / 3 * 4;
+            int rest = slen % 3;
+            if (rest != 0) {
+                noSeparator = noSeparator + (this.doPadding ? 4 : rest + 1);
             }
-            char[] dst = new char[sinSep];
+            char[] dst = new char[noSeparator];
             int full = slen / 3 * 3;   // the part that splits evenly into 3-byte groups
             int sp = 0;
             int dp = 0;
@@ -328,7 +328,8 @@ public class Base64 {
         // result means "not data", and which negative says whether it is padding or an error.
         private final int[] fromBase64;
 
-        // Si es la variante MIME: descarta lo que no reconoce en vez de rechazarlo.
+        // Whether it is the MIME variant: it discards what it does not recognise instead of
+        // rejecting it.
         private final boolean mime;
 
         Decoder(boolean url) {
@@ -371,33 +372,33 @@ public class Base64 {
         private int outLength(byte[] src) {
             int len = src.length;
             if (this.mime) {
-                // Se cuentan solo los caracteres del alfabeto: los demas no aportan bits, y contarlos
-                // sobredimensionaria el arreglo (y con el, lo que `decode` devuelve).
-                int utiles = 0;
+                // Only the alphabet's characters are counted: the others contribute no bits, and
+                // counting them would oversize the array (and with it, what `decode` returns).
+                int usefulCount = 0;
                 int i = 0;
                 while (i < len) {
                     int c = src[i] & 0xff;
                     if (this.fromBase64[c] != -1) {
-                        utiles = utiles + 1;
+                        usefulCount = usefulCount + 1;
                     }
                     i = i + 1;
                 }
-                if (utiles == 0) {
+                if (usefulCount == 0) {
                     return 0;
                 }
-                byte[] limpio = new byte[utiles];
+                byte[] cleaned = new byte[usefulCount];
                 int j = 0;
                 i = 0;
                 while (i < len) {
                     int c = src[i] & 0xff;
                     if (this.fromBase64[c] != -1) {
-                        limpio[j] = src[i];
+                        cleaned[j] = src[i];
                         j = j + 1;
                     }
                     i = i + 1;
                 }
-                src = limpio;
-                len = utiles;
+                src = cleaned;
+                len = usefulCount;
             }
             int result;
             if (len == 0) {
@@ -462,9 +463,10 @@ public class Base64 {
                     }
                     done = true;
                 } else if (b < 0) {
-                    // La variante MIME **descarta** lo que no reconoce --saltos de linea, espacios,
-                    // lo que el transporte haya metido-- en vez de rechazarlo. Es toda la diferencia
-                    // con `getDecoder()`, y es la que hace que un base64 pegado de un mail decodifique.
+                    // The MIME variant **discards** what it does not recognise --line breaks,
+                    // spaces, whatever the transport put in-- instead of rejecting it. It is the whole
+                    // difference from `getDecoder()`, and it is what makes a base64 pasted out of an
+                    // email decode.
                     if (!this.mime) {
                         throw new IllegalArgumentException("Illegal base64 character");
                     }

@@ -1,43 +1,45 @@
 package java.util.logging;
 
 /**
- * KajiLibrary's java.util.logging.XMLFormatter -- la misma traza, para que la lea un programa.
+ * KajiLibrary's java.util.logging.XMLFormatter -- the same log, for a program to read.
  *
- * <p>Es el caso que justifica que {@link Formatter} tenga {@link Formatter#getHead} y
- * {@link Formatter#getTail}: un documento XML necesita la declaracion y el `<log>` de apertura antes
- * del primer registro y el cierre despues del ultimo, y sin esos dos ganchos no habria donde
- * ponerlos.
+ * <p>It is the case that justifies {@link Formatter} having {@link Formatter#getHead} and
+ * {@link Formatter#getTail}: an XML document needs the declaration and the opening `<log>` before
+ * the first record and the closing one after the last, and without those two hooks there would be
+ * nowhere to put them.
  *
- * <p>Contra {@link SimpleFormatter} la diferencia no es de gusto: aca **nada se pierde**. La fecha va
- * al nanosegundo, el numero de secuencia va, la traza de pila de la excepcion va cuadro por cuadro
- * con su linea. Cuesta unas diez veces mas espacio y es lo que corresponde cuando la traza la va a
- * leer una herramienta y no una persona.
+ * <p>Against {@link SimpleFormatter} the difference is not one of taste: here **nothing is lost**.
+ * The date goes to the nanosecond, the sequence number goes, the exception's stack trace goes frame
+ * by frame with its line. It costs some ten times the space and it is what suits when the log is
+ * going to be read by a tool and not by a person.
  *
- * <p>Dos decisiones que sorprenden al leer la salida y son del contrato:
+ * <p>Two decisions that surprise on reading the output and are the contract's:
  *
  * <ul>
- * <li>La fecha se escribe en **UTC**, no en la zona local. Un archivo de traza se junta con otros de
- *     otras maquinas, y ordenar por hora local es ordenar mal.
- * <li>Los `<param>` salen **solo si** el mensaje no tiene ninguna `{`. Si las tiene, los parametros ya
- *     estan dentro del `<message>` sustituidos, y repetirlos afuera seria decir dos veces lo mismo.
+ * <li>The date is written in **UTC**, not in the local zone. A log file gets joined with others from
+ *     other machines, and ordering by local time is ordering wrongly.
+ * <li>The `<param>` come out **only if** the message has no `{` at all. If it has, the parameters are
+ *     already inside the `<message>`, substituted, and repeating them outside would say the same
+ *     thing twice.
  * </ul>
  *
- * <p>El `<nanos>` aparece solo cuando hay nanosegundos que `<millis>` no alcanza a contar. Es
- * redundante con `<date>` a proposito: `<millis>` mas `<nanos>` reconstruyen el instante exacto sin
- * parsear una fecha.
+ * <p>The `<nanos>` appears only when there are nanoseconds `<millis>` cannot count. It is redundant
+ * with `<date>` on purpose: `<millis>` plus `<nanos>` reconstruct the exact instant without parsing
+ * a date.
  */
 public class XMLFormatter extends Formatter {
 
-    // El salto de linea es siempre LF, y **no** el de la plataforma. Es un documento XML: lo que se
-    // escribe aca lo lee un parser en otra maquina, y el salto de linea del sistema que lo genero no
-    // le dice nada a nadie. Ver `SimpleFormatter`, que hace lo contrario porque lo lee una persona.
-    private static final String SALTO = "\n";
+    // The line break is always LF, and **not** the platform's. It is an XML document: what is
+    // written here is read by a parser on another machine, and the line break of the system that
+    // generated it tells nobody anything. See `SimpleFormatter`, which does the opposite because a
+    // person reads it.
+    private static final String LINE_BREAK = "\n";
 
     public XMLFormatter() {
     }
 
     public String format(LogRecord record) {
-        String nl = SALTO;
+        String nl = LINE_BREAK;
         StringBuilder sb = new StringBuilder();
         sb.append("<record>").append(nl);
 
@@ -57,22 +59,22 @@ public class XMLFormatter extends Formatter {
 
         if (record.getLoggerName() != null) {
             sb.append("  <logger>");
-            escapar(sb, record.getLoggerName());
+            escape(sb, record.getLoggerName());
             sb.append("</logger>").append(nl);
         }
 
         sb.append("  <level>");
-        escapar(sb, record.getLevel().toString());
+        escape(sb, record.getLevel().toString());
         sb.append("</level>").append(nl);
 
         if (record.getSourceClassName() != null) {
             sb.append("  <class>");
-            escapar(sb, record.getSourceClassName());
+            escape(sb, record.getSourceClassName());
             sb.append("</class>").append(nl);
         }
         if (record.getSourceMethodName() != null) {
             sb.append("  <method>");
-            escapar(sb, record.getSourceMethodName());
+            escape(sb, record.getSourceMethodName());
             sb.append("</method>").append(nl);
         }
 
@@ -80,24 +82,25 @@ public class XMLFormatter extends Formatter {
 
         if (record.getMessage() != null) {
             sb.append("  <message>");
-            escapar(sb, this.formatMessage(record));
+            escape(sb, this.formatMessage(record));
             sb.append("</message>").append(nl);
         }
 
-        // La clave y el catalogo solo si el mensaje **de verdad** se tradujo: un `<key>` sobre un
-        // mensaje que el catalogo no define seria decir que hay una traduccion donde no la hay.
-        java.util.ResourceBundle catalogo = record.getResourceBundle();
+        // The key and the bundle only if the message **really** was translated: a `<key>` over a
+        // message the bundle does not define would be saying there is a translation where there is
+        // none.
+        java.util.ResourceBundle bundle = record.getResourceBundle();
         try {
-            if (catalogo != null && catalogo.getString(record.getMessage()) != null) {
+            if (bundle != null && bundle.getString(record.getMessage()) != null) {
                 sb.append("  <key>");
-                escapar(sb, record.getMessage());
+                escape(sb, record.getMessage());
                 sb.append("</key>").append(nl);
                 sb.append("  <catalog>");
-                escapar(sb, record.getResourceBundleName());
+                escape(sb, record.getResourceBundleName());
                 sb.append("</catalog>").append(nl);
             }
         } catch (Exception e) {
-            // Sin traduccion no van ni la clave ni el catalogo, y nada mas.
+            // With no translation neither the key nor the bundle goes, and that is all.
         }
 
         Object[] params = record.getParameters();
@@ -107,10 +110,10 @@ public class XMLFormatter extends Formatter {
             while (i < params.length) {
                 sb.append("  <param>");
                 try {
-                    escapar(sb, params[i].toString());
+                    escape(sb, params[i].toString());
                 } catch (Exception e) {
-                    // Un `toString` que falla --o un parametro nulo-- no puede impedir que el resto
-                    // del registro se escriba: el elemento queda, con su contenido marcado.
+                    // A `toString` that fails --or a null parameter-- cannot stop the rest of the
+                    // record being written: the element stays, with its content marked.
                     sb.append("???");
                 }
                 sb.append("</param>").append(nl);
@@ -122,21 +125,21 @@ public class XMLFormatter extends Formatter {
         if (th != null) {
             sb.append("  <exception>").append(nl);
             sb.append("    <message>");
-            escapar(sb, th.toString());
+            escape(sb, th.toString());
             sb.append("</message>").append(nl);
-            StackTraceElement[] traza = th.getStackTrace();
+            StackTraceElement[] trace = th.getStackTrace();
             int i = 0;
-            while (i < traza.length) {
-                StackTraceElement cuadro = traza[i];
+            while (i < trace.length) {
+                StackTraceElement frame = trace[i];
                 sb.append("    <frame>").append(nl);
                 sb.append("      <class>");
-                escapar(sb, cuadro.getClassName());
+                escape(sb, frame.getClassName());
                 sb.append("</class>").append(nl);
                 sb.append("      <method>");
-                escapar(sb, cuadro.getMethodName());
+                escape(sb, frame.getMethodName());
                 sb.append("</method>").append(nl);
-                if (cuadro.getLineNumber() >= 0) {
-                    sb.append("      <line>").append(cuadro.getLineNumber()).append("</line>")
+                if (frame.getLineNumber() >= 0) {
+                    sb.append("      <line>").append(frame.getLineNumber()).append("</line>")
                             .append(nl);
                 }
                 sb.append("    </frame>").append(nl);
@@ -150,25 +153,25 @@ public class XMLFormatter extends Formatter {
     }
 
     /**
-     * La declaracion XML, el DOCTYPE y el `<log>` de apertura.
+     * The XML declaration, the DOCTYPE and the opening `<log>`.
      *
-     * <p>La codificacion se toma del manejador cuando la declara, porque el que escribe los bytes es
-     * el: anunciar en la cabecera una codificacion distinta de la que se usa produce un archivo que
-     * no se puede leer, y eso es peor que no anunciar nada.
+     * <p>The encoding is taken from the handler when it declares one, because it is the handler that
+     * writes the bytes: announcing in the header an encoding other than the one used produces a file
+     * that cannot be read, and that is worse than announcing nothing.
      */
     public String getHead(Handler h) {
-        String nl = SALTO;
-        String codificacion = h == null ? null : h.getEncoding();
-        if (codificacion == null) {
-            codificacion = java.nio.charset.Charset.defaultCharset().name();
+        String nl = LINE_BREAK;
+        String encodingName = h == null ? null : h.getEncoding();
+        if (encodingName == null) {
+            encodingName = java.nio.charset.Charset.defaultCharset().name();
         }
         try {
-            codificacion = java.nio.charset.Charset.forName(codificacion).name();
+            encodingName = java.nio.charset.Charset.forName(encodingName).name();
         } catch (Exception e) {
-            // Un nombre que no se reconoce se escribe tal cual: es lo que el manejador dijo que usa.
+            // A name that is not recognised is written as it stands: it is what the handler said it uses.
         }
         StringBuilder sb = new StringBuilder();
-        sb.append("<?xml version=\"1.0\" encoding=\"").append(codificacion)
+        sb.append("<?xml version=\"1.0\" encoding=\"").append(encodingName)
                 .append("\" standalone=\"no\"?>").append(nl);
         sb.append("<!DOCTYPE log SYSTEM \"logger.dtd\">").append(nl);
         sb.append("<log>").append(nl);
@@ -176,18 +179,18 @@ public class XMLFormatter extends Formatter {
     }
 
     public String getTail(Handler h) {
-        return "</log>" + SALTO;
+        return "</log>" + LINE_BREAK;
     }
 
-    // Los tres caracteres que no pueden aparecer crudos dentro de un elemento. Las comillas no se
-    // escapan porque nada de lo que esto escribe va dentro de un atributo.
-    private void escapar(StringBuilder sb, String texto) {
-        if (texto == null) {
-            texto = "<null>";
+    // The three characters that cannot appear raw inside an element. Quotes are not escaped because
+    // nothing this writes goes inside an attribute.
+    private void escape(StringBuilder sb, String text) {
+        if (text == null) {
+            text = "<null>";
         }
         int i = 0;
-        while (i < texto.length()) {
-            char c = texto.charAt(i);
+        while (i < text.length()) {
+            char c = text.charAt(i);
             if (c == '<') {
                 sb.append("&lt;");
             } else if (c == '>') {

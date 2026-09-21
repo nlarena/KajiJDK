@@ -14,50 +14,51 @@ import javax.swing.text.StyledDocument;
 import javax.swing.text.StyledEditorKit;
 
 /**
- * El juego de edicion para RTF.
+ * The editor kit for RTF.
  *
- * <h2>Que es RTF y por que esta aca</h2>
+ * <h2>What RTF is and why it is here</h2>
  *
- * <p>Es el formato con el que los procesadores de texto se pasan documentos con estilos. Todo va en
- * caracteres imprimibles: las marcas son palabras que empiezan con barra invertida
- * (<code>\b</code> para negrita, <code>\par</code> para parrafo) y los grupos van entre llaves.
+ * <p>It is the format word processors pass styled documents to each other with. Everything goes
+ * in printable characters: the marks are words that start with a backslash
+ * (<code>\b</code> for bold, <code>\par</code> for a paragraph) and the groups go between
+ * braces.
  *
- * <p>Esta en la biblioteca porque un {@code JTextPane} puede leer y escribir RTF con solo cambiarle
- * el juego de edicion, sin que el programa sepa nada del formato.
+ * <p>It is in the library because a {@code JTextPane} can read and write RTF just by changing
+ * its editor kit, without the program knowing anything about the format.
  *
- * <h2>Un formato de bytes con un lector de caracteres</h2>
+ * <h2>A byte format with a character reader</h2>
  *
- * <p>Los cuatro metodos son dos pares: uno de bytes y uno de caracteres. RTF es ASCII por
- * definicion -- lo que no entra va escapado como <code>\'xx</code> --, asi que los dos pares
- * pueden compartir el mismo trabajo sin perder nada.
+ * <p>The four methods are two pairs: one of bytes and one of characters. RTF is ASCII by
+ * definition -- what does not fit goes escaped as <code>\'xx</code> --, so the two pairs can
+ * share the same work without losing anything.
  *
- * <h2>Hasta donde llega</h2>
+ * <h2>How far it goes</h2>
  *
- * <p>Lee y escribe el texto con negrita, cursiva, subrayado y parrafos. Lo que no hace es tablas,
- * imagenes incrustadas ni tipografias con nombre: son la parte del formato que necesita tablas de
- * recursos al principio del archivo, y esta biblioteca todavia no las arma. Un documento con eso se
- * lee igual, sin esos atributos.
+ * <p>It reads and writes the text with bold, italic, underline and paragraphs. What it does not
+ * do is tables, embedded images or named typefaces: they are the part of the format that needs
+ * resource tables at the start of the file, and this library does not build them yet. A document
+ * with those is read all the same, without those attributes.
  */
 public class RTFEditorKit extends StyledEditorKit {
 
-    /** Un juego de edicion de RTF. */
+    /** An RTF editor kit. */
     public RTFEditorKit() {
         super();
     }
 
-    /** Siempre {@code text/rtf}. */
+    /** Always {@code text/rtf}. */
     public String getContentType() {
         return "text/rtf";
     }
 
-    /** Lee RTF de un flujo de bytes. */
+    /** Reads RTF from a byte stream. */
     public void read(InputStream in, Document doc, int pos) throws IOException,
             BadLocationException {
         read(new java.io.InputStreamReader(in, java.nio.charset.StandardCharsets.US_ASCII),
                 doc, pos);
     }
 
-    /** Escribe el documento como RTF en un flujo de bytes. */
+    /** Writes the document as RTF to a byte stream. */
     public void write(OutputStream out, Document doc, int pos, int len) throws IOException,
             BadLocationException {
         Writer w = new java.io.OutputStreamWriter(out,
@@ -67,141 +68,141 @@ public class RTFEditorKit extends StyledEditorKit {
     }
 
     /**
-     * Lee RTF y lo mete en el documento.
+     * Reads RTF and puts it into the document.
      *
-     * @throws IOException si el flujo falla.
-     * @throws BadLocationException si la posicion no existe.
+     * @throws IOException if the stream fails.
+     * @throws BadLocationException if the position does not exist.
      */
     public void read(Reader in, Document doc, int pos) throws IOException, BadLocationException {
-        StringBuilder texto = new StringBuilder();
+        StringBuilder text = new StringBuilder();
         javax.swing.text.MutableAttributeSet attr = new javax.swing.text.SimpleAttributeSet();
         int c;
         while ((c = in.read()) != -1) {
             if (c == '{' || c == '}') {
-                // Los grupos delimitan el alcance de los atributos; aca solo se saltean.
+                // The groups delimit the attributes' scope; here they are only skipped.
                 continue;
             }
             if (c != '\\') {
-                texto.append((char) c);
+                text.append((char) c);
                 continue;
             }
-            volcar(doc, pos, texto, attr);
+            flush(doc, pos, text, attr);
             pos = doc.getLength();
-            c = leerControl(in, attr, doc, pos);
+            c = readControl(in, attr, doc, pos);
             if (c == -1) {
                 break;
             }
             if (c != ' ') {
-                texto.append((char) c);
+                text.append((char) c);
             }
         }
-        volcar(doc, pos, texto, attr);
+        flush(doc, pos, text, attr);
     }
 
-    /** Mete lo juntado en el documento y vacia el juntador. */
-    private void volcar(Document doc, int pos, StringBuilder texto,
+    /** Puts what was gathered into the document and empties the gatherer. */
+    private void flush(Document doc, int pos, StringBuilder text,
             javax.swing.text.AttributeSet attr) throws BadLocationException {
-        if (texto.length() == 0) {
+        if (text.length() == 0) {
             return;
         }
-        doc.insertString(Math.min(pos, doc.getLength()), texto.toString(), attr);
-        texto.setLength(0);
+        doc.insertString(Math.min(pos, doc.getLength()), text.toString(), attr);
+        text.setLength(0);
     }
 
     /**
-     * Lee una palabra de control y la aplica.
+     * Reads a control word and applies it.
      *
-     * @return el caracter que la termino, o -1 si se acabo el flujo.
+     * @return the character that ended it, or -1 if the stream ran out.
      */
-    private int leerControl(Reader in, javax.swing.text.MutableAttributeSet attr, Document doc,
+    private int readControl(Reader in, javax.swing.text.MutableAttributeSet attr, Document doc,
             int pos) throws IOException, BadLocationException {
-        StringBuilder palabra = new StringBuilder();
+        StringBuilder word = new StringBuilder();
         int c;
         while ((c = in.read()) != -1 && Character.isLetter((char) c)) {
-            palabra.append((char) c);
+            word.append((char) c);
         }
-        StringBuilder numero = new StringBuilder();
+        StringBuilder number = new StringBuilder();
         while (c != -1 && (Character.isDigit((char) c) || c == '-')) {
-            numero.append((char) c);
+            number.append((char) c);
             c = in.read();
         }
-        aplicar(palabra.toString(), numero.toString(), attr, doc);
+        apply(word.toString(), number.toString(), attr, doc);
         return c;
     }
 
-    /** Aplica una palabra de control a los atributos que valen ahora. */
-    private void aplicar(String palabra, String numero,
+    /** Applies a control word to the attributes that hold now. */
+    private void apply(String word, String number,
             javax.swing.text.MutableAttributeSet attr, Document doc)
             throws BadLocationException {
-        boolean prende = !"0".equals(numero);
-        if (palabra.equals("b")) {
-            StyleConstants.setBold(attr, prende);
-        } else if (palabra.equals("i")) {
-            StyleConstants.setItalic(attr, prende);
-        } else if (palabra.equals("ul")) {
-            StyleConstants.setUnderline(attr, prende);
-        } else if (palabra.equals("ulnone")) {
+        boolean on = !"0".equals(number);
+        if (word.equals("b")) {
+            StyleConstants.setBold(attr, on);
+        } else if (word.equals("i")) {
+            StyleConstants.setItalic(attr, on);
+        } else if (word.equals("ul")) {
+            StyleConstants.setUnderline(attr, on);
+        } else if (word.equals("ulnone")) {
             StyleConstants.setUnderline(attr, false);
-        } else if (palabra.equals("fs") && numero.length() > 0) {
-            // En RTF el tamano va en medios puntos.
+        } else if (word.equals("fs") && number.length() > 0) {
+            // In RTF the size goes in half points.
             try {
-                StyleConstants.setFontSize(attr, Integer.parseInt(numero) / 2);
+                StyleConstants.setFontSize(attr, Integer.parseInt(number) / 2);
             } catch (NumberFormatException nfe) {
-                // Un tamano que no se entiende deja el que estaba.
+                // A size that is not understood leaves the one that was there.
             }
-        } else if (palabra.equals("par")) {
+        } else if (word.equals("par")) {
             doc.insertString(doc.getLength(), "\n", attr);
-        } else if (palabra.equals("plain")) {
+        } else if (word.equals("plain")) {
             attr.removeAttributes(attr);
         }
     }
 
-    /** Escribe el documento como RTF. */
+    /** Writes the document as RTF. */
     public void write(Writer out, Document doc, int pos, int len) throws IOException,
             BadLocationException {
         out.write("{\\rtf1\\ansi\n");
-        boolean negrita = false;
-        boolean cursiva = false;
-        boolean subrayado = false;
+        boolean bold = false;
+        boolean italic = false;
+        boolean underline = false;
 
         if (doc instanceof StyledDocument) {
             StyledDocument sd = (StyledDocument) doc;
             int i = pos;
-            int fin = pos + len;
-            while (i < fin) {
+            int end = pos + len;
+            while (i < end) {
                 Element e = sd.getCharacterElement(i);
-                int hasta = Math.min(e.getEndOffset(), fin);
+                int upTo = Math.min(e.getEndOffset(), end);
                 javax.swing.text.AttributeSet a = e.getAttributes();
-                negrita = marca(out, "b", StyleConstants.isBold(a), negrita);
-                cursiva = marca(out, "i", StyleConstants.isItalic(a), cursiva);
-                subrayado = marca(out, "ul", StyleConstants.isUnderline(a), subrayado);
-                out.write(escapar(doc.getText(i, hasta - i)));
-                i = hasta;
+                bold = mark(out, "b", StyleConstants.isBold(a), bold);
+                italic = mark(out, "i", StyleConstants.isItalic(a), italic);
+                underline = mark(out, "ul", StyleConstants.isUnderline(a), underline);
+                out.write(escape(doc.getText(i, upTo - i)));
+                i = upTo;
             }
         } else {
-            out.write(escapar(doc.getText(pos, len)));
+            out.write(escape(doc.getText(pos, len)));
         }
         out.write("}\n");
     }
 
-    /** Escribe la marca solo si el estado cambia; repetirla no hace nada y ocupa. */
-    private boolean marca(Writer out, String palabra, boolean quiere, boolean esta)
+    /** Writes the mark only if the state changes; repeating it does nothing and takes room. */
+    private boolean mark(Writer out, String word, boolean wanted, boolean current)
             throws IOException {
-        if (quiere == esta) {
-            return esta;
+        if (wanted == current) {
+            return current;
         }
-        out.write("\\" + palabra + (quiere ? "" : "0") + " ");
-        return quiere;
+        out.write("\\" + word + (wanted ? "" : "0") + " ");
+        return wanted;
     }
 
     /**
-     * Escapa lo que en RTF no se puede escribir tal cual.
+     * Escapes what in RTF cannot be written as it is.
      *
-     * <p>Las tres marcas del formato ({@code \}, <code>{</code>, <code>}</code>) y todo lo que no
-     * sea ASCII, que va como <code>\'xx</code>. El fin de linea se escribe como
-     * <code>\par</code>: un salto de linea suelto en el archivo no significa nada en RTF.
+     * <p>The format's three marks ({@code \}, <code>{</code>, <code>}</code>) and everything that
+     * is not ASCII, which goes as <code>\'xx</code>. The end of line is written as
+     * <code>\par</code>: a bare line break in the file means nothing in RTF.
      */
-    private static String escapar(String s) {
+    private static String escape(String s) {
         StringBuilder sb = new StringBuilder(s.length());
         for (int i = 0; i < s.length(); i++) {
             char c = s.charAt(i);

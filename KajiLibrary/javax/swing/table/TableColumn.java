@@ -4,97 +4,100 @@ import java.beans.PropertyChangeListener;
 import java.beans.PropertyChangeSupport;
 
 /**
- * Una columna de una tabla: su ancho, su encabezado, y como se dibujan y editan sus celdas.
+ * A table column: its width, its header, and how its cells are drawn and edited.
  *
- * <h2>{@link #getModelIndex} es la clave de toda la clase</h2>
+ * <h2>{@link #getModelIndex} is the key to the whole class</h2>
  *
- * <p>Una columna sabe <strong>de que columna del modelo saca sus datos</strong>, y ese numero no
- * tiene por que coincidir con donde esta en pantalla. Es lo que permite reordenar columnas
- * arrastrandolas, o esconder algunas, sin tocar el modelo: se mueve la columna en la vista y su
- * indice de modelo viaja con ella.
+ * <p>A column knows <strong>which model column it takes its data from</strong>, and that number
+ * does not have to match where it is on the screen. It is what allows reordering columns by
+ * dragging them, or hiding some, without touching the model: the column moves in the view and its
+ * model index travels with it.
  *
- * <p>Confundir los dos indices es el bug clasico de una tabla, y es silencioso: devuelve el dato de
- * otra columna, no un error.
+ * <p>Confusing the two indices is a table's classic bug, and it is silent: it returns another
+ * column's datum, not an error.
  *
- * <h2>Tres anchos, no uno</h2>
+ * <h2>Three widths, not one</h2>
  *
- * <p>El minimo, el preferido y el maximo. Cuando la tabla se agranda o achica, el reparto respeta
- * los limites y estira lo que puede — sin los tres, redimensionar una tabla o le rompe el layout a
- * una columna o se lo rompe a todas.
+ * <p>The minimum, the preferred and the maximum. When the table grows or shrinks, the sharing out
+ * respects the limits and stretches what it can -- without the three, resizing a table either
+ * breaks one column's layout or breaks everybody's.
  *
- * <p>{@link #setWidth} recorta contra el minimo y el maximo en vez de aceptar cualquier numero:
- * dejar pasar un ancho fuera de rango dejaria la columna en un estado que ella misma declara
- * invalido.
+ * <p>{@link #setWidth} clamps against the minimum and the maximum instead of accepting any
+ * number: letting a width outside the range through would leave the column in a state it itself
+ * declares invalid.
  */
 public class TableColumn implements java.io.Serializable {
 
     private static final long serialVersionUID = -6113660025878112608L;
 
-    /** El nombre de la propiedad del ancho, para {@link PropertyChangeListener}. */
+    /** The width property's name, for {@link PropertyChangeListener}. */
     public static final String COLUMN_WIDTH_PROPERTY = "columWidth";
 
-    /** El nombre de la propiedad del valor del encabezado. */
+    /** The header value property's name. */
     public static final String HEADER_VALUE_PROPERTY = "headerValue";
 
-    /** El nombre de la propiedad del dibujante del encabezado. */
+    /** The header renderer property's name. */
     public static final String HEADER_RENDERER_PROPERTY = "headerRenderer";
 
-    /** El nombre de la propiedad del dibujante de las celdas. */
+    /** The cell renderer property's name. */
     public static final String CELL_RENDERER_PROPERTY = "cellRenderer";
 
-    /** De que columna del modelo saca los datos; ver la nota de la clase. */
+    /** Which model column it takes the data from; see the class note. */
     protected int modelIndex;
 
-    /** Con que se la identifica; si es {@code null}, se usa el valor del encabezado. */
+    /** What it is identified by; if it is {@code null}, the header value is used. */
     protected Object identifier;
 
-    /** El ancho actual. */
+    /** The current width. */
     protected int width;
 
-    /** El ancho minimo. */
+    /** The minimum width. */
     protected int minWidth;
 
     private int preferredWidth;
 
-    /** El ancho maximo. */
+    /** The maximum width. */
     protected int maxWidth;
 
-    /** Como se dibuja el encabezado; {@code null} para el de la tabla. */
+    /** How the header is drawn; {@code null} for the table's. */
     protected TableCellRenderer headerRenderer;
 
-    /** Que dice el encabezado. */
+    /** What the header says. */
     protected Object headerValue;
 
-    /** Como se dibujan las celdas; {@code null} para el de la tabla. */
+    /** How the cells are drawn; {@code null} for the table's. */
     protected TableCellRenderer cellRenderer;
 
-    /** Como se editan las celdas; {@code null} para el de la tabla. */
+    /** How the cells are edited; {@code null} for the table's. */
     protected TableCellEditor cellEditor;
 
-    /** Si el usuario la puede redimensionar. */
+    /** Whether the user can resize it. */
     protected boolean isResizable;
 
-    /** Cuantas veces se pidio callar los avisos de redimension; ver {@link #disableResizedPosting}. */
+    /**
+     * How many times the resize notices were asked to be silenced; see {@link
+     * #disableResizedPosting}.
+     */
     protected transient int resizedPostingDisableCount;
 
-    private PropertyChangeSupport cambios;
+    private PropertyChangeSupport changes;
 
-    /** La columna 0, con el ancho por omision. */
+    /** Column 0, with the default width. */
     public TableColumn() {
         this(0);
     }
 
-    /** Sobre esa columna del modelo. */
+    /** Over that model column. */
     public TableColumn(int modelIndex) {
         this(modelIndex, 75, null, null);
     }
 
-    /** Sobre esa columna del modelo, con ese ancho. */
+    /** Over that model column, with that width. */
     public TableColumn(int modelIndex, int width) {
         this(modelIndex, width, null, null);
     }
 
-    /** Con todo explicito. */
+    /** With everything explicit. */
     public TableColumn(int modelIndex, int width, TableCellRenderer cellRenderer,
             TableCellEditor cellEditor) {
         super();
@@ -110,30 +113,30 @@ public class TableColumn implements java.io.Serializable {
         this.headerValue = null;
     }
 
-    /** Cambia de que columna del modelo saca los datos. */
+    /** Changes which model column it takes the data from. */
     public void setModelIndex(int modelIndex) {
-        int viejo = this.modelIndex;
+        int old = this.modelIndex;
         this.modelIndex = modelIndex;
-        avisar("modelIndex", Integer.valueOf(viejo), Integer.valueOf(modelIndex));
+        fire("modelIndex", Integer.valueOf(old), Integer.valueOf(modelIndex));
     }
 
-    /** De que columna del modelo saca los datos. */
+    /** Which model column it takes the data from. */
     public int getModelIndex() {
         return this.modelIndex;
     }
 
-    /** Cambia el identificador. */
+    /** Changes the identifier. */
     public void setIdentifier(Object identifier) {
-        Object viejo = this.identifier;
+        Object old = this.identifier;
         this.identifier = identifier;
-        avisar("identifier", viejo, identifier);
+        fire("identifier", old, identifier);
     }
 
     /**
-     * El identificador; si no se fijo ninguno, el valor del encabezado.
+     * The identifier; if none was set, the header value.
      *
-     * <p>La caida al encabezado es comoda y tiene un filo: dos columnas con el mismo titulo tienen
-     * el mismo identificador, y buscar por identificador devuelve la primera.
+     * <p>The fall back to the header is convenient and has an edge: two columns with the same title
+     * have the same identifier, and looking up by identifier returns the first.
      */
     public Object getIdentifier() {
         if (this.identifier != null) {
@@ -142,100 +145,101 @@ public class TableColumn implements java.io.Serializable {
         return getHeaderValue();
     }
 
-    /** Cambia lo que dice el encabezado. */
+    /** Changes what the header says. */
     public void setHeaderValue(Object headerValue) {
-        Object viejo = this.headerValue;
+        Object old = this.headerValue;
         this.headerValue = headerValue;
-        avisar(HEADER_VALUE_PROPERTY, viejo, headerValue);
+        fire(HEADER_VALUE_PROPERTY, old, headerValue);
     }
 
-    /** Lo que dice el encabezado. */
+    /** What the header says. */
     public Object getHeaderValue() {
         return this.headerValue;
     }
 
-    /** Cambia como se dibuja el encabezado. */
+    /** Changes how the header is drawn. */
     public void setHeaderRenderer(TableCellRenderer headerRenderer) {
-        TableCellRenderer viejo = this.headerRenderer;
+        TableCellRenderer old = this.headerRenderer;
         this.headerRenderer = headerRenderer;
-        avisar(HEADER_RENDERER_PROPERTY, viejo, headerRenderer);
+        fire(HEADER_RENDERER_PROPERTY, old, headerRenderer);
     }
 
-    /** Como se dibuja el encabezado, o {@code null} para el de la tabla. */
+    /** How the header is drawn, or {@code null} for the table's. */
     public TableCellRenderer getHeaderRenderer() {
         return this.headerRenderer;
     }
 
-    /** Cambia como se dibujan las celdas. */
+    /** Changes how the cells are drawn. */
     public void setCellRenderer(TableCellRenderer cellRenderer) {
-        TableCellRenderer viejo = this.cellRenderer;
+        TableCellRenderer old = this.cellRenderer;
         this.cellRenderer = cellRenderer;
-        avisar(CELL_RENDERER_PROPERTY, viejo, cellRenderer);
+        fire(CELL_RENDERER_PROPERTY, old, cellRenderer);
     }
 
-    /** Como se dibujan las celdas, o {@code null} para el de la tabla. */
+    /** How the cells are drawn, or {@code null} for the table's. */
     public TableCellRenderer getCellRenderer() {
         return this.cellRenderer;
     }
 
-    /** Cambia como se editan las celdas. */
+    /** Changes how the cells are edited. */
     public void setCellEditor(TableCellEditor cellEditor) {
-        TableCellEditor viejo = this.cellEditor;
+        TableCellEditor old = this.cellEditor;
         this.cellEditor = cellEditor;
-        avisar("cellEditor", viejo, cellEditor);
+        fire("cellEditor", old, cellEditor);
     }
 
-    /** Como se editan las celdas, o {@code null} para el de la tabla. */
+    /** How the cells are edited, or {@code null} for the table's. */
     public TableCellEditor getCellEditor() {
         return this.cellEditor;
     }
 
     /**
-     * Cambia el ancho, recortando contra el minimo y el maximo.
+     * Changes the width, clamping against the minimum and the maximum.
      *
-     * <p>El aviso se puede haber silenciado con {@link #disableResizedPosting}: mientras el usuario
-     * arrastra el borde, cada pixel dispararia un aviso y un relayout.
+     * <p>The notice may have been silenced with {@link #disableResizedPosting}: while the user
+     * drags the edge, every pixel would fire a notice and a relayout.
      */
     public void setWidth(int width) {
-        int viejo = this.width;
-        int nuevo = Math.min(Math.max(width, this.minWidth), this.maxWidth);
-        this.width = nuevo;
-        if (nuevo == viejo) {
+        int old = this.width;
+        int newValue = Math.min(Math.max(width, this.minWidth), this.maxWidth);
+        this.width = newValue;
+        if (newValue == old) {
             return;
         }
         if (this.resizedPostingDisableCount == 0) {
-            // El aviso va con el nombre "width", NO con COLUMN_WIDTH_PROPERTY, que vale
-            // "columWidth" -- un error de tipeo del JDK que quedo en la constante publica y que
-            // nadie usa. Esta medido: quien escucha una columna recibe "width".
-            avisar("width", Integer.valueOf(viejo), Integer.valueOf(nuevo));
+            // The notice goes with the name "width", NOT with COLUMN_WIDTH_PROPERTY, which is worth
+                        // "columWidth" -- a typo of the JDK's that stayed in the public constant
+                        // and that nobody uses. It is measured: whoever listens to a column
+                        // receives "width".
+            fire("width", Integer.valueOf(old), Integer.valueOf(newValue));
         }
     }
 
-    /** El ancho actual. */
+    /** The current width. */
     public int getWidth() {
         return this.width;
     }
 
-    /** Cambia el ancho preferido, recortando contra el minimo y el maximo. */
+    /** Changes the preferred width, clamping against the minimum and the maximum. */
     public void setPreferredWidth(int preferredWidth) {
-        int viejo = this.preferredWidth;
+        int old = this.preferredWidth;
         this.preferredWidth = Math.min(Math.max(preferredWidth, this.minWidth), this.maxWidth);
-        avisar("preferredWidth", Integer.valueOf(viejo), Integer.valueOf(this.preferredWidth));
+        fire("preferredWidth", Integer.valueOf(old), Integer.valueOf(this.preferredWidth));
     }
 
-    /** El ancho preferido. */
+    /** The preferred width. */
     public int getPreferredWidth() {
         return this.preferredWidth;
     }
 
     /**
-     * Cambia el ancho minimo.
+     * Changes the minimum width.
      *
-     * <p>Sube el actual y el preferido si quedaron por debajo: dejarlos abajo del minimo seria dejar
-     * la columna violando su propia restriccion.
+     * <p>It raises the current and the preferred ones if they were left below: leaving them under
+     * the minimum would be leaving the column violating its own constraint.
      */
     public void setMinWidth(int minWidth) {
-        int viejo = this.minWidth;
+        int old = this.minWidth;
         this.minWidth = Math.max(Math.min(minWidth, this.maxWidth), 0);
         if (this.width < this.minWidth) {
             setWidth(this.minWidth);
@@ -243,17 +247,17 @@ public class TableColumn implements java.io.Serializable {
         if (this.preferredWidth < this.minWidth) {
             setPreferredWidth(this.minWidth);
         }
-        avisar("minWidth", Integer.valueOf(viejo), Integer.valueOf(this.minWidth));
+        fire("minWidth", Integer.valueOf(old), Integer.valueOf(this.minWidth));
     }
 
-    /** El ancho minimo. */
+    /** The minimum width. */
     public int getMinWidth() {
         return this.minWidth;
     }
 
-    /** Cambia el ancho maximo, bajando el actual y el preferido si hace falta. */
+    /** Changes the maximum width, lowering the current and the preferred ones if needed. */
     public void setMaxWidth(int maxWidth) {
-        int viejo = this.maxWidth;
+        int old = this.maxWidth;
         this.maxWidth = Math.max(this.minWidth, maxWidth);
         if (this.width > this.maxWidth) {
             setWidth(this.maxWidth);
@@ -261,27 +265,27 @@ public class TableColumn implements java.io.Serializable {
         if (this.preferredWidth > this.maxWidth) {
             setPreferredWidth(this.maxWidth);
         }
-        avisar("maxWidth", Integer.valueOf(viejo), Integer.valueOf(this.maxWidth));
+        fire("maxWidth", Integer.valueOf(old), Integer.valueOf(this.maxWidth));
     }
 
-    /** El ancho maximo. */
+    /** The maximum width. */
     public int getMaxWidth() {
         return this.maxWidth;
     }
 
-    /** Cambia si el usuario la puede redimensionar. */
+    /** Changes whether the user can resize it. */
     public void setResizable(boolean isResizable) {
-        boolean viejo = this.isResizable;
+        boolean old = this.isResizable;
         this.isResizable = isResizable;
-        avisar("isResizable", Boolean.valueOf(viejo), Boolean.valueOf(isResizable));
+        fire("isResizable", Boolean.valueOf(old), Boolean.valueOf(isResizable));
     }
 
-    /** Si el usuario la puede redimensionar. */
+    /** Whether the user can resize it. */
     public boolean getResizable() {
         return this.isResizable;
     }
 
-    /** Fija los tres anchos al preferido, dejando la columna sin margen de estiramiento. */
+    /** Sets the three widths to the preferred one, leaving the column with no stretching room. */
     public void sizeWidthToFit() {
         if (this.headerRenderer == null) {
             return;
@@ -292,13 +296,13 @@ public class TableColumn implements java.io.Serializable {
     }
 
     /**
-     * Calla los avisos de cambio de ancho.
+     * Silences the width change notices.
      *
-     * <p>Es un contador y no una bandera para que dos silenciamientos anidados no se pisen: el
-     * interno no puede volver a prender los avisos que el externo apago.
+     * <p>It is a counter and not a flag so that two nested silencings do not tread on each other:
+     * the inner one cannot turn the notices the outer one turned off back on.
      *
-     * @deprecated es de la epoca en que la tabla lo usaba mientras el usuario arrastraba; hoy lo
-     *     resuelve el propio arrastre
+     * @deprecated it is from the time when the table used it while the user dragged; today the
+     *     drag itself resolves it
      */
     @Deprecated
     public void disableResizedPosting() {
@@ -306,9 +310,9 @@ public class TableColumn implements java.io.Serializable {
     }
 
     /**
-     * Vuelve a permitir los avisos, y manda uno si el ancho cambio mientras estaban callados.
+     * Allows the notices again, and sends one if the width changed while they were silenced.
      *
-     * @deprecated ver {@link #disableResizedPosting}
+     * @deprecated see {@link #disableResizedPosting}
      */
     @Deprecated
     public void enableResizedPosting() {
@@ -318,43 +322,43 @@ public class TableColumn implements java.io.Serializable {
         }
     }
 
-    /** Agrega un oyente de cambios de propiedad. */
+    /** Adds a property change listener. */
     public synchronized void addPropertyChangeListener(PropertyChangeListener listener) {
-        if (this.cambios == null) {
-            this.cambios = new PropertyChangeSupport(this);
+        if (this.changes == null) {
+            this.changes = new PropertyChangeSupport(this);
         }
-        this.cambios.addPropertyChangeListener(listener);
+        this.changes.addPropertyChangeListener(listener);
     }
 
-    /** Saca un oyente. */
+    /** Removes a listener. */
     public synchronized void removePropertyChangeListener(PropertyChangeListener listener) {
-        if (this.cambios != null) {
-            this.cambios.removePropertyChangeListener(listener);
+        if (this.changes != null) {
+            this.changes.removePropertyChangeListener(listener);
         }
     }
 
-    /** Los oyentes de cambios de propiedad. */
+    /** The property change listeners. */
     public synchronized PropertyChangeListener[] getPropertyChangeListeners() {
-        if (this.cambios == null) {
+        if (this.changes == null) {
             return new PropertyChangeListener[0];
         }
-        return this.cambios.getPropertyChangeListeners();
+        return this.changes.getPropertyChangeListeners();
     }
 
     /**
-     * El dibujante por omision del encabezado.
+     * The header's default renderer.
      *
-     * @return {@code null} en esta VM: el del JDK es un componente que se pinta, y esta biblioteca
-     *     no trae Swing dibujable. Ver la nota de {@link javax.swing.JTable}. Devolver {@code null}
-     *     es lo que ya significa "usa el de la tabla", asi que no inventa nada
+     * @return {@code null} in this VM: the JDK's is a component that paints itself, and this
+     *     library does not ship drawable Swing. See {@link javax.swing.JTable}'s note. Returning
+     *     {@code null} is what already means "use the table's", so it invents nothing
      */
     protected TableCellRenderer createDefaultHeaderRenderer() {
         return null;
     }
 
-    private void avisar(String propiedad, Object viejo, Object nuevo) {
-        if (this.cambios != null) {
-            this.cambios.firePropertyChange(propiedad, viejo, nuevo);
+    private void fire(String property, Object old, Object newValue) {
+        if (this.changes != null) {
+            this.changes.firePropertyChange(property, old, newValue);
         }
     }
 }

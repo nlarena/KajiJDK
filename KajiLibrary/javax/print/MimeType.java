@@ -5,50 +5,50 @@ import java.util.Map;
 import java.util.TreeMap;
 
 /**
- * KajiLibrary's javax.print.MimeType -- un tipo MIME normalizado.
+ * KajiLibrary's javax.print.MimeType -- a normalised MIME type.
  *
- * <p>Es de acceso de paquete: existe solo para que {@link DocFlavor} tenga contra que comparar. No es
- * parte de la API publica y no hay que exponerla.
+ * <p>It is package-private: it exists only so that {@link DocFlavor} has something to compare
+ * against. It is not part of the public API and must not be exposed.
  *
- * <h2>Que normaliza, y que no</h2>
+ * <h2>What it normalises, and what not</h2>
  *
- * <p>El punto de la clase es que {@code "Text/Plain; CharSet=Utf-8"} y {@code "text/plain;
- * charset=utf-8"} tienen que ser iguales. Para eso:
+ * <p>The point of the class is that {@code "Text/Plain; CharSet=Utf-8"} and {@code "text/plain;
+ * charset=utf-8"} have to be equal. For that:
  *
  * <ul>
- *   <li>tipo y subtipo pasan a minusculas;
- *   <li>los <b>nombres</b> de parametro pasan a minusculas;
- *   <li>los parametros se ordenan alfabeticamente por nombre;
- *   <li>los <b>valores</b> se dejan como estan, con una excepcion: el de {@code charset}, que tambien
- *       pasa a minusculas.
+ *   <li>type and subtype are lowered;
+ *   <li>the parameter <b>names</b> are lowered;
+ *   <li>the parameters are sorted alphabetically by name;
+ *   <li>the <b>values</b> are left as they are, with one exception: the {@code charset} one, which
+ *       is lowered too.
  * </ul>
  *
- * <p>Esa excepcion no es un capricho. Un nombre de juego de caracteres es insensible a mayusculas por
- * definicion, mientras que el valor de un parametro cualquiera --{@code name="Informe Final"}-- puede
- * no serlo, y bajarlo a minusculas seria destruir informacion.
+ * <p>That exception is not a whim. A character set name is case-insensitive by definition, while
+ * the value of an arbitrary parameter --{@code name="Final Report"}-- may not be, and lowering it
+ * would destroy information.
  */
 class MimeType implements Serializable, Cloneable {
 
     private static final long serialVersionUID = -2785720609362367683L;
 
-    /** El texto de entrada, tal cual. */
+    /** The input text, as it is. */
     private final String mimeType;
 
-    /** Tipo, ya en minusculas. */
+    /** Type, already in lower case. */
     private final String mediaType;
 
-    /** Subtipo, ya en minusculas. */
+    /** Subtype, already in lower case. */
     private final String mediaSubtype;
 
-    /** Parametros, ordenados y normalizados. */
+    /** Parameters, sorted and normalised. */
     private final TreeMap<String, String> parameterMap;
 
-    /** La forma canonica, que es lo que se compara. */
+    /** The canonical form, which is what is compared. */
     private final String canonical;
 
     /**
-     * @throws NullPointerException si es null
-     * @throws IllegalArgumentException si no es un tipo MIME valido
+     * @throws NullPointerException if it is null
+     * @throws IllegalArgumentException if it is not a valid MIME type
      */
     public MimeType(String s) {
         if (s == null) {
@@ -73,39 +73,39 @@ class MimeType implements Serializable, Cloneable {
         this.canonical = build(this.mediaType, this.mediaSubtype, this.parameterMap);
     }
 
-    /** La forma canonica: tipo, subtipo y parametros ordenados. Ver la nota de la clase. */
+    /** The canonical form: type, subtype and sorted parameters. See the class note. */
     public String getMimeType() {
         return this.canonical;
     }
 
-    /** El tipo, en minusculas. */
+    /** The type, in lower case. */
     public String getMediaType() {
         return this.mediaType;
     }
 
-    /** El subtipo, en minusculas. */
+    /** The subtype, in lower case. */
     public String getMediaSubtype() {
         return this.mediaSubtype;
     }
 
-    /** Los parametros, de solo lectura. */
+    /** The parameters, read-only. */
     public Map<String, String> getParameterMap() {
         return java.util.Collections.unmodifiableMap(this.parameterMap);
     }
 
-    /** La forma canonica. */
+    /** The canonical form. */
     @Override
     public String toString() {
         return this.canonical;
     }
 
-    /** Sobre la forma canonica, no sobre el texto de entrada. */
+    /** On the canonical form, not on the input text. */
     @Override
     public int hashCode() {
         return this.canonical.hashCode();
     }
 
-    /** Idem. Dos tipos escritos distinto pero equivalentes son iguales. */
+    /** Likewise. Two types written differently but equivalent are equal. */
     @Override
     public boolean equals(Object obj) {
         if (!(obj instanceof MimeType)) {
@@ -114,12 +114,12 @@ class MimeType implements Serializable, Cloneable {
         return this.canonical.equals(((MimeType) obj).canonical);
     }
 
-    /** El texto tal como se paso, sin normalizar. */
+    /** The text as it was passed, not normalised. */
     String getOriginal() {
         return this.mimeType;
     }
 
-    /** Arma la forma canonica. */
+    /** Builds the canonical form. */
     private static String build(String type, String subtype, TreeMap<String, String> params) {
         StringBuilder sb = new StringBuilder();
         sb.append(type).append('/').append(subtype);
@@ -132,14 +132,14 @@ class MimeType implements Serializable, Cloneable {
     }
 
     /**
-     * El analizador de RFC 2045, reducido a lo que hace falta.
+     * RFC 2045's parser, reduced to what is needed.
      *
-     * <p>Un token es cualquier cosa que no sea espacio, control, ni uno de los separadores; un valor
-     * puede ademas venir entre comillas, y ahi si acepta espacios y barras invertidas de escape.
+     * <p>A token is anything that is not a space, a control, or one of the separators; a value may
+     * also come in quotes, and then it does accept spaces and escaping backslashes.
      */
     private static final class Parser {
 
-        /** Los separadores de RFC 2045; un token no puede contener ninguno. */
+        /** RFC 2045's separators; a token cannot contain any. */
         private static final String TSPECIALS = "()<>@,;:/[]?=\\\"";
 
         private final String text;
@@ -151,14 +151,14 @@ class MimeType implements Serializable, Cloneable {
             this.pos = 0;
         }
 
-        /** Se come los espacios. */
+        /** Eats the spaces. */
         private void skipSpace() {
             while (this.pos < this.text.length() && this.text.charAt(this.pos) <= ' ') {
                 this.pos = this.pos + 1;
             }
         }
 
-        /** Un token no vacio. */
+        /** A non-empty token. */
         String token() {
             skipSpace();
             int start = this.pos;
@@ -175,7 +175,7 @@ class MimeType implements Serializable, Cloneable {
             return this.text.substring(start, this.pos);
         }
 
-        /** Un token o una cadena entre comillas. */
+        /** A token or a quoted string. */
         String value() {
             skipSpace();
             if (this.pos < this.text.length() && this.text.charAt(this.pos) == '"') {
@@ -203,7 +203,7 @@ class MimeType implements Serializable, Cloneable {
             return token();
         }
 
-        /** Consume ese caracter o falla. */
+        /** Consumes that character or fails. */
         void expect(char c) {
             skipSpace();
             if (this.pos >= this.text.length() || this.text.charAt(this.pos) != c) {
@@ -212,7 +212,7 @@ class MimeType implements Serializable, Cloneable {
             this.pos = this.pos + 1;
         }
 
-        /** Consume un punto y coma si lo hay; dice si lo habia. */
+        /** Consumes a semicolon if there is one; says whether there was. */
         boolean skipSemicolon() {
             skipSpace();
             if (this.pos < this.text.length() && this.text.charAt(this.pos) == ';') {
@@ -222,7 +222,7 @@ class MimeType implements Serializable, Cloneable {
             return false;
         }
 
-        /** Falla si sobro algo. */
+        /** Fails if something was left over. */
         void expectEnd() {
             skipSpace();
             if (this.pos < this.text.length()) {

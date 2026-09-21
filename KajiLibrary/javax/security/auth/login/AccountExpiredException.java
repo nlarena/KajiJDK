@@ -1,21 +1,21 @@
 package javax.security.auth.login;
 
 /**
- * KajiLibrary's javax.security.auth.login.AccountExpiredException -- la cuenta vencio.
+ * KajiLibrary's javax.security.auth.login.AccountExpiredException -- the account expired.
  *
- * <p>Suele venir de una politica de rotacion. A diferencia de {@link AccountLockedException}, se
- * resuelve renovando y no esperando.
+ * <p>It usually comes from a rotation policy. Unlike {@link AccountLockedException}, it is solved
+ * by renewing and not by waiting.
  */
 public class AccountExpiredException extends AccountException {
 
     private static final long serialVersionUID = -6870589190242052883L;
 
-    /** Sin detalle. */
+    /** Without detail. */
     public AccountExpiredException() {
         super();
     }
 
-    /** Con un mensaje que diga que paso. */
+    /** With a message that says what happened. */
     public AccountExpiredException(String msg) {
         super(msg);
     }

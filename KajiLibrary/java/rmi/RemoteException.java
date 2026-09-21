@@ -3,56 +3,63 @@ package java.rmi;
 import java.io.IOException;
 
 /**
- * KajiLibrary's java.rmi.RemoteException -- fallo una llamada remota.
+ * KajiLibrary's java.rmi.RemoteException -- a remote call failed.
  *
- * <p>La base de casi todo lo que puede salir mal en RMI, y la que <b>todo</b> metodo de una interfaz
- * {@link Remote} tiene que declarar. Es comprobada a proposito: obliga a que quien escribe el cliente
- * se haga cargo de que la red existe.
+ * <p>The base of almost everything that can go wrong in RMI, and the one that <b>every</b> method
+ * of a {@link Remote} interface has to declare. It is checked on purpose: it forces whoever
+ * writes the client to take on board that the network exists.
  *
- * <h2>Lo que no se sabe cuando salta</h2>
+ * <h2>What is not known when it is thrown</h2>
  *
- * <p>Es lo importante de esta clase y casi nunca se tiene en cuenta: en general <b>no se sabe si el
- * metodo remoto llego a ejecutarse</b>. Si la conexion se corto despues de enviar la llamada y antes
- * de recibir la respuesta, la operacion pudo haberse hecho igual.
+ * <p>It is the important thing about this class and it is almost never taken into account: in
+ * general <b>it is not known whether the remote method got to run</b>. If the connection dropped
+ * after sending the call and before receiving the reply, the operation may have been done anyway.
  *
- * <p>Por eso reintentar a ciegas es peligroso, y por eso las operaciones remotas conviene disenarlas
- * idempotentes. Las unicas de las que si se sabe son {@link MarshalException} --no salio-- y
- * {@link NoSuchObjectException} --no existe--.
+ * <p>That is why retrying blindly is dangerous, and why remote operations are best designed
+ * idempotent. This note used to say the only ones about which it is known are
+ * {@link MarshalException} --it did not go out-- and {@link NoSuchObjectException} --it does not
+ * exist--. The first half is not true: the JDK's contract for {@code MarshalException} covers
+ * marshalling the return value as well as the call, so the call may or may not have reached the
+ * server (nothing in KajiLibrary throws it; checked with grep). The ones that do settle it are
+ * {@link NoSuchObjectException} --the object does not exist-- and {@link ConnectException} --the
+ * connection was refused, so the call never went out--.
  *
- * <h2>El campo {@link #detail} y la causa</h2>
+ * <h2>The {@link #detail} field and the cause</h2>
  *
- * <p>{@code detail} es publico y es de 1996, anterior al mecanismo de causas encadenadas. Cuando
- * llego, en 1.4, se hizo que {@link #getCause} lo devuelva, asi que <b>son lo mismo</b>.
+ * <p>{@code detail} is public and dates from 1996, before the chained-cause mechanism. When that
+ * arrived, in 1.4, {@link #getCause} was made to return it, so <b>they are the same thing</b>.
  *
- * <p>Eso trae dos consecuencias: {@link #getMessage} pega el mensaje del detalle al propio, y
- * {@code initCause} lanza {@link IllegalStateException} porque el constructor ya la fijo -- aunque se
- * haya construido sin causa.
+ * <p>That has two consequences: {@link #getMessage} appends the detail to its own message, and
+ * {@code initCause} throws {@link IllegalStateException} because the constructor already set it --
+ * even when it was built without a cause. (This note used to say {@code getMessage} appends the
+ * detail's message; it appends {@code detail.toString()}, class name included, as the code below
+ * shows.)
  */
 public class RemoteException extends IOException {
 
     private static final long serialVersionUID = -5148567311918794206L;
 
     /**
-     * La excepcion original, si la hay.
+     * The original exception, if there is one.
      *
-     * <p>Publico por compatibilidad; lo mismo que devuelve {@link #getCause}.
+     * <p>Public for compatibility; the same thing {@link #getCause} returns.
      */
     public Throwable detail;
 
-    /** Sin detalle. */
+    /** Without detail. */
     public RemoteException() {
         initCause(null);
     }
 
-    /** @param s el mensaje */
+    /** @param s the message */
     public RemoteException(String s) {
         super(s);
         initCause(null);
     }
 
     /**
-     * @param s el mensaje
-     * @param cause la original
+     * @param s the message
+     * @param cause the original one
      */
     public RemoteException(String s, Throwable cause) {
         super(s);
@@ -60,7 +67,7 @@ public class RemoteException extends IOException {
         this.detail = cause;
     }
 
-    /** El mensaje propio, y el del detalle debajo si lo hay. */
+    /** Its own message, with the detail's {@code toString()} underneath if there is one. */
     @Override
     public String getMessage() {
         if (this.detail == null) {
@@ -69,7 +76,7 @@ public class RemoteException extends IOException {
         return super.getMessage() + "; nested exception is: \n\t" + this.detail.toString();
     }
 
-    /** El detalle. Ver la nota de la clase. */
+    /** The detail. See the class note. */
     @Override
     public Throwable getCause() {
         return this.detail;

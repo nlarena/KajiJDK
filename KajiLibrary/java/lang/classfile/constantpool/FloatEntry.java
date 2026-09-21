@@ -5,7 +5,7 @@ import java.lang.classfile.TypeKind;
 // `CONSTANT_Float_info` (JVMS §4.4.4).
 public interface FloatEntry extends AnnotationConstantValueEntry, ConstantValueEntry {
 
-    /** El valor. */
+    /** The value. */
     float floatValue();
 
     default TypeKind typeKind() {

@@ -41,10 +41,11 @@ public interface TypeElement extends Element, Parameterizable, QualifiedNameable
 
     List<? extends TypeParameterElement> getTypeParameters();
 
-    // The JDK writes both bodies as `List.of()`. KajiLibrary's java.util.List is the subset
-    // interface and carries no static factories, and #11 blocks calling java.util statics
-    // from outside java.util anyway, so the empty list is a fresh ArrayList. Same contract
-    // (an empty list), one allocation more.
+    // The JDK writes both bodies as `List.of()`. The note said KajiLibrary's java.util.List had
+    // no static factories and that #11 blocked calling java.util statics from outside java.util;
+    // List.of() exists now and the frozen javac compiles the call from here (checked 2026-09-18),
+    // so the JDK's form could come back. Meanwhile the empty list is a fresh ArrayList: same
+    // contract (an empty list), one allocation more.
     default List<? extends RecordComponentElement> getRecordComponents() {
         return new ArrayList<RecordComponentElement>();
     }

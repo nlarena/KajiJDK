@@ -17,28 +17,28 @@ import javax.swing.JComponent;
 import javax.swing.SwingUtilities;
 
 /**
- * Los trazos que comparten los aspectos basicos: biseles, surcos, texto con mnemonico.
+ * The strokes the basic looks and feels share: bevels, grooves, text with a mnemonic.
  *
- * <p>Estatica y sin estado a proposito: son rutinas de dibujo puras, y ponerlas en un lugar es lo
- * que hace que un boton, un panel con borde y una barra se vean con el mismo relieve.
+ * <p>Static and stateless on purpose: they are pure drawing routines, and putting them in one
+ * place is what makes a button, a panel with a border and a bar look with the same relief.
  *
- * <p>Las cuatro rutinas de relieve dibujan la misma ilusion que {@code BevelBorder}: la luz viene
- * de arriba a la izquierda, asi que ese lado va claro y el opuesto oscuro. Cambiar que color va a
- * cada lado es toda la diferencia entre levantado y hundido.
+ * <p>The four relief routines draw the same illusion as {@code BevelBorder}: the light comes
+ * from the top left, so that side goes light and the opposite one dark. Changing which colour
+ * goes on each side is the whole difference between raised and sunken.
  */
 public class BasicGraphicsUtils {
 
-    private static final Insets INSETS_GRABADO = new Insets(2, 2, 2, 2);
-    private static final Insets INSETS_SURCO = new Insets(2, 2, 2, 2);
+    private static final Insets ETCHED_INSETS = new Insets(2, 2, 2, 2);
+    private static final Insets GROOVE_INSETS = new Insets(2, 2, 2, 2);
 
-    /** El JDK la deja instanciable, aunque no haya nada que instanciar. */
+    /** The JDK leaves it instantiable, even though there is nothing to instantiate. */
     public BasicGraphicsUtils() {
     }
 
-    /** Un rectangulo grabado de dos pixeles: sombra afuera arriba-izquierda, brillo abajo-derecha. */
+    /** A two-pixel etched rectangle: shadow outside top-left, highlight bottom-right. */
     public static void drawEtchedRect(Graphics g, int x, int y, int w, int h, Color shadow,
             Color darkShadow, Color highlight, Color lightHighlight) {
-        Color viejo = g.getColor();
+        Color old = g.getColor();
         g.translate(x, y);
 
         g.setColor(shadow);
@@ -58,18 +58,18 @@ public class BasicGraphicsUtils {
         g.drawLine(1, h - 2, w - 2, h - 2);
 
         g.translate(-x, -y);
-        g.setColor(viejo);
+        g.setColor(old);
     }
 
-    /** Cuanto ocupa un rectangulo grabado: dos pixeles por lado. */
+    /** How much an etched rectangle takes up: two pixels on each side. */
     public static Insets getEtchedInsets() {
-        return INSETS_GRABADO;
+        return ETCHED_INSETS;
     }
 
-    /** Un surco: una linea de sombra y una de brillo, desplazada un pixel. */
+    /** A groove: a shadow line and a highlight one, shifted by a pixel. */
     public static void drawGroove(Graphics g, int x, int y, int w, int h, Color shadow,
             Color highlight) {
-        Color viejo = g.getColor();
+        Color old = g.getColor();
         g.translate(x, y);
 
         g.setColor(shadow);
@@ -82,24 +82,24 @@ public class BasicGraphicsUtils {
         g.drawLine(w - 1, h - 1, w - 1, 0);
 
         g.translate(-x, -y);
-        g.setColor(viejo);
+        g.setColor(old);
     }
 
-    /** Cuanto ocupa un surco: dos pixeles por lado. */
+    /** How much a groove takes up: two pixels on each side. */
     public static Insets getGrooveInsets() {
-        return INSETS_SURCO;
+        return GROOVE_INSETS;
     }
 
     /**
-     * El bisel de un boton, en sus cuatro estados.
+     * A button's bevel, in its four states.
      *
-     * <p>{@code isPressed} invierte los colores —el boton se hunde— y {@code isDefault} agrega el
-     * marco oscuro exterior que marca al boton por omision de un dialogo. Los dos se combinan.
+     * <p>{@code isPressed} swaps the colours -- the button sinks -- and {@code isDefault} adds the
+     * outer dark frame that marks a dialog's default button. The two combine.
      */
     public static void drawBezel(Graphics g, int x, int y, int w, int h, boolean isPressed,
             boolean isDefault, Color shadow, Color darkShadow, Color highlight,
             Color lightHighlight) {
-        Color viejo = g.getColor();
+        Color old = g.getColor();
         g.translate(x, y);
 
         if (isPressed && isDefault) {
@@ -147,13 +147,13 @@ public class BasicGraphicsUtils {
         }
 
         g.translate(-x, -y);
-        g.setColor(viejo);
+        g.setColor(old);
     }
 
-    /** El bisel hundido: los colores del levantado, intercambiados. */
+    /** The sunken bevel: the raised one's colours, swapped. */
     public static void drawLoweredBezel(Graphics g, int x, int y, int w, int h, Color shadow,
             Color darkShadow, Color highlight, Color lightHighlight) {
-        Color viejo = g.getColor();
+        Color old = g.getColor();
         g.translate(x, y);
 
         g.setColor(darkShadow);
@@ -173,59 +173,61 @@ public class BasicGraphicsUtils {
         g.drawLine(w - 2, h - 2, w - 2, 1);
 
         g.translate(-x, -y);
-        g.setColor(viejo);
+        g.setColor(old);
     }
 
     /**
-     * Dibuja texto subrayando la primera aparicion del mnemonico.
+     * It draws text underlining the mnemonic's first appearance.
      *
-     * <p>Primero busca la mayuscula y despues la minuscula, como {@code JLabel} al elegir que
-     * subrayar. Un mnemonico que no esta en el texto no subraya nada, y eso no es un error: un
-     * boton puede tener atajo sin que la letra aparezca.
+     * <p>It looks for the upper-case letter first and the lower-case one afterwards, like
+     * {@code JLabel} when choosing what to underline. A mnemonic that is not in the text
+     * underlines nothing, and that is not an error: a button may have a shortcut without the
+     * letter appearing.
      */
     public static void drawString(Graphics g, String text, int underlinedChar, int x, int y) {
-        int indice = -1;
+        int index = -1;
         if (underlinedChar != '\0') {
-            char mayus = Character.toUpperCase((char) underlinedChar);
+            char shift = Character.toUpperCase((char) underlinedChar);
             char minus = Character.toLowerCase((char) underlinedChar);
-            int i1 = text.indexOf(mayus);
+            int i1 = text.indexOf(shift);
             int i2 = text.indexOf(minus);
             if (i1 == -1) {
-                indice = i2;
+                index = i2;
             } else if (i2 == -1) {
-                indice = i1;
+                index = i1;
             } else {
-                indice = Math.min(i1, i2);
+                index = Math.min(i1, i2);
             }
         }
-        drawStringUnderlineCharAt(g, text, indice, x, y);
+        drawStringUnderlineCharAt(g, text, index, x, y);
     }
 
     /**
-     * Dibuja texto subrayando el caracter en esa posicion.
+     * It draws text underlining the character at that position.
      *
-     * <p>La raya va un pixel por encima del fondo del descenso, del ancho del caracter, y de un
-     * pixel de alto: es donde el JDK la pone, y lo que hace que el subrayado no se pise con la base
-     * de las letras ni se separe de ellas.
+     * <p>The stroke goes one pixel above the bottom of the descent, the character's width, and one
+     * pixel high: it is where the JDK puts it, and what keeps the underline from clashing with the
+     * letters' baseline or from drifting away from them.
      */
     public static void drawStringUnderlineCharAt(Graphics g, String text, int underlinedIndex,
             int x, int y) {
         g.drawString(text, x, y);
         if (underlinedIndex >= 0 && underlinedIndex < text.length()) {
             FontMetrics fm = g.getFontMetrics();
-            int rayaX = x + fm.stringWidth(text.substring(0, underlinedIndex));
-            int rayaY = y;
-            int rayaAncho = fm.charWidth(text.charAt(underlinedIndex));
-            int rayaAlto = 1;
-            g.fillRect(rayaX, rayaY + fm.getDescent() - 1, rayaAncho, rayaAlto);
+            int stripeX = x + fm.stringWidth(text.substring(0, underlinedIndex));
+            int stripeY = y;
+            int stripeWidth = fm.charWidth(text.charAt(underlinedIndex));
+            int stripeHeight = 1;
+            g.fillRect(stripeX, stripeY + fm.getDescent() - 1, stripeWidth, stripeHeight);
         }
     }
 
     /**
-     * Un rectangulo punteado, de a un pixel si y uno no.
+     * A dotted rectangle, one pixel on and one off.
      *
-     * <p>Es el marco de foco de los aspectos basicos. Se dibuja pixel por pixel y no con un trazo
-     * discontinuo porque tiene que quedar igual en las esquinas, donde un trazo se desfasaria.
+     * <p>It is the focus frame of the basic looks and feels. It is drawn pixel by pixel and not
+     * with a dashed stroke because it has to come out the same at the corners, where a stroke
+     * would get out of phase.
      */
     public static void drawDashedRect(Graphics g, int x, int y, int width, int height) {
         int vx;
@@ -241,51 +243,50 @@ public class BasicGraphicsUtils {
     }
 
     /**
-     * El tamano preferido de un boton: icono y texto ubicados en una vista infinita, mas los
-     * insets.
+     * A button's preferred size: icon and text placed in an infinite view, plus the insets.
      *
-     * <p>{@code null} si el boton tiene hijos: entonces el tamano lo decide su layout, no su
-     * texto. Sin texto la separacion icono-texto es cero, como al pintar, para que un boton de
-     * solo icono mida lo que mide el icono.
+     * <p>{@code null} if the button has children: then the size is decided by its layout, not by
+     * its text. With no text the icon-text gap is zero, as when painting, so that an icon-only
+     * button measures what the icon measures.
      */
     public static Dimension getPreferredButtonSize(AbstractButton b, int textIconGap) {
         if (b.getComponentCount() > 0) {
             return null;
         }
-        Icon icono = b.getIcon();
-        String texto = b.getText();
-        Font fuente = b.getFont();
-        FontMetrics fm = b.getFontMetrics(fuente);
-        Rectangle iconoR = new Rectangle();
-        Rectangle textoR = new Rectangle();
-        Rectangle vistaR = new Rectangle(Short.MAX_VALUE, Short.MAX_VALUE);
-        SwingUtilities.layoutCompoundLabel(b, fm, texto, icono, b.getVerticalAlignment(),
+        Icon icon = b.getIcon();
+        String text = b.getText();
+        Font font = b.getFont();
+        FontMetrics fm = b.getFontMetrics(font);
+        Rectangle iconRect = new Rectangle();
+        Rectangle textRect = new Rectangle();
+        Rectangle viewRect = new Rectangle(Short.MAX_VALUE, Short.MAX_VALUE);
+        SwingUtilities.layoutCompoundLabel(b, fm, text, icon, b.getVerticalAlignment(),
                 b.getHorizontalAlignment(), b.getVerticalTextPosition(),
-                b.getHorizontalTextPosition(), vistaR, iconoR, textoR,
-                texto == null ? 0 : textIconGap);
-        Rectangle r = iconoR.union(textoR);
+                b.getHorizontalTextPosition(), viewRect, iconRect, textRect,
+                text == null ? 0 : textIconGap);
+        Rectangle r = iconRect.union(textRect);
         Insets insets = b.getInsets();
         r.width = r.width + insets.left + insets.right;
         r.height = r.height + insets.top + insets.bottom;
         return new Dimension(r.width, r.height);
     }
 
-    /** Si el componente se lee de izquierda a derecha. */
+    /** Whether the component is read left to right. */
     static boolean isLeftToRight(Component c) {
         return c.getComponentOrientation().isLeftToRight();
     }
 
     /**
-     * Si el modificador de atajos del sistema esta apretado.
+     * Whether the system's shortcut modifier is held down.
      *
-     * <p>Control, en esta VM: no hay {@code Toolkit.getMenuShortcutKeyMaskEx} que consultar, y
-     * Control es lo que devuelve en todas las plataformas que no son macOS.
+     * <p>Control, in this VM: there is no {@code Toolkit.getMenuShortcutKeyMaskEx} to consult, and
+     * Control is what it returns on every platform that is not macOS.
      */
     static boolean isMenuShortcutKeyDown(InputEvent event) {
         return (event.getModifiersEx() & InputEvent.CTRL_DOWN_MASK) != 0;
     }
 
-    /** Dibuja texto con las sugerencias de renderizado del componente; ver la nota de {@link #getStringWidth}. */
+    /** It draws text with the component's rendering hints; see {@link #getStringWidth}'s note. */
     public static void drawString(JComponent c, Graphics2D g, String string, float x, float y) {
         if (string == null || string.isEmpty()) {
             return;
@@ -293,7 +294,7 @@ public class BasicGraphicsUtils {
         g.drawString(string, x, y);
     }
 
-    /** Dibuja texto subrayando una posicion, con coordenadas fraccionarias. */
+    /** It draws text underlining a position, with fractional coordinates. */
     public static void drawStringUnderlineCharAt(JComponent c, Graphics2D g, String string,
             int underlinedIndex, float x, float y) {
         if (string == null || string.isEmpty()) {
@@ -303,44 +304,44 @@ public class BasicGraphicsUtils {
     }
 
     /**
-     * Recorta la cadena con puntos suspensivos para que entre en ese ancho.
+     * It clips the string with an ellipsis so that it fits that width.
      *
-     * <p>Devuelve la cadena entera si entra, y solo los puntos si ni ellos entran: nunca
-     * {@code null}. El bucle suma de a un caracter y para en el primero que se pasa, igual que
-     * {@code SwingUtilities.layoutCompoundLabel}, para que una etiqueta y un texto recortado a mano
-     * corten en el mismo lugar.
+     * <p>It returns the whole string if it fits, and only the dots if not even they fit: never
+     * {@code null}. The loop adds one character at a time and stops at the first that goes over,
+     * just like {@code SwingUtilities.layoutCompoundLabel}, so that a label and a text clipped by
+     * hand cut at the same place.
      */
     public static String getClippedString(JComponent c, FontMetrics fm, String string,
             int availTextWidth) {
         if (string == null || string.isEmpty()) {
             return "";
         }
-        int ancho = fm.stringWidth(string);
-        if (ancho <= availTextWidth) {
+        int width = fm.stringWidth(string);
+        if (width <= availTextWidth) {
             return string;
         }
-        String puntos = "...";
-        int disponible = availTextWidth - fm.stringWidth(puntos);
-        if (disponible <= 0) {
-            return puntos;
+        String points = "...";
+        int available = availTextWidth - fm.stringWidth(points);
+        if (available <= 0) {
+            return points;
         }
         int total = 0;
         int n;
         for (n = 0; n < string.length(); n++) {
             total = total + fm.charWidth(string.charAt(n));
-            if (total > disponible) {
+            if (total > available) {
                 break;
             }
         }
-        return string.substring(0, n) + puntos;
+        return string.substring(0, n) + points;
     }
 
     /**
-     * El ancho de una cadena.
+     * A string's width.
      *
-     * <p>Entero, aunque la firma diga {@code float}: esta VM no tiene metricas fraccionarias, asi
-     * que el ancho es el de {@link FontMetrics#stringWidth}. La firma es la del JDK, que si las tiene
-     * cuando el componente las pide.
+     * <p>An integer, even though the signature says {@code float}: this VM has no fractional
+     * metrics, so the width is {@link FontMetrics#stringWidth}'s. The signature is the JDK's,
+     * which does have them when the component asks for them.
      */
     public static float getStringWidth(JComponent c, FontMetrics fm, String string) {
         if (string == null || string.isEmpty()) {

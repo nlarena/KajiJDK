@@ -1,46 +1,48 @@
 package jdk.incubator.vector;
 
 /**
- * Los operadores que se le pasan a un vector para decirle que hacer.
+ * The operators passed to a vector to tell it what to do.
  *
- * <h2>Por que la operacion es un objeto y no un metodo</h2>
+ * <h2>Why the operation is an object and not a method</h2>
  *
- * <p>En vez de {@code v.add(w)}, {@code v.mul(w)}, {@code v.min(w)} y otros cincuenta, el API tiene
- * un solo {@code lanewise(op, w)} y {@code op} es uno de estos objetos. La diferencia no es de
- * gusto: asi se puede escribir un algoritmo que recibe la operacion como parametro y sirve para
- * todas, que es justamente lo que se hace cuando se reduce un arreglo o se compone una expresion.
+ * <p>Instead of {@code v.add(w)}, {@code v.mul(w)}, {@code v.min(w)} and fifty others, the API has
+ * a single {@code lanewise(op, w)} and {@code op} is one of these objects. The difference is not
+ * one of taste: that way an algorithm can be written that receives the operation as a parameter and
+ * serves for all of them, which is exactly what is done when an array is reduced or an expression
+ * composed.
  *
- * <p>El tipo del operador es el que limita donde entra. {@link Unary} toma un argumento,
- * {@link Binary} dos, {@link Ternary} tres; {@link Comparison} y {@link Test} dan una mascara en
- * lugar de un vector, y {@link Associative} es un {@link Binary} que ademas se puede usar para
- * reducir, porque agrupar de a pares en cualquier orden da el mismo resultado. Que
- * {@code reduceLanes} pida un {@link Associative} y no un {@link Binary} es lo que impide reducir
- * con una resta, que daria un resultado distinto segun como el hardware parta el vector.
+ * <p>The operator's type is what limits where it fits. {@link Unary} takes one argument, {@link
+ * Binary} two, {@link Ternary} three; {@link Comparison} and {@link Test} give a mask instead of a
+ * vector, and {@link Associative} is a {@link Binary} that can also be used for reducing, because
+ * grouping in pairs in any order gives the same result. That {@code reduceLanes} asks for an {@link
+ * Associative} and not a {@link Binary} is what prevents reducing with a subtraction, which would
+ * give a different result depending on how the hardware splits the vector.
  *
- * <h2>Un operador es una descripcion, no una cuenta</h2>
+ * <h2>An operator is a description, not a computation</h2>
  *
- * <p>Cada constante de aca es un objeto con datos: como se llama, con que simbolo se escribe,
- * cuantos argumentos toma, si es asociativa, sobre que tipos de posicion sirve. No sabe calcular
- * nada. El que calcula es el vector, que recibe el operador y elige la instruccion de maquina.
+ * <p>Each constant here is an object with data: what it is called, with which symbol it is written,
+ * how many arguments it takes, whether it is associative, which lane types it serves. It cannot
+ * compute anything. The one that computes is the vector, which receives the operator and chooses
+ * the machine instruction.
  *
- * <p>Por eso esta clase esta implementada <strong>entera y de verdad</strong> en esta biblioteca,
- * aunque no haya vectores: los 109 operadores existen, responden lo que corresponde y estan
- * comprobados contra el JDK 25. {@code VectorOperators.ADD.operatorName()} devuelve {@code "+"} aca
- * igual que alla, y {@code ADD.compatibleWith(float.class)} contesta bien.
+ * <p>That is why this class is implemented <strong>whole and for real</strong> in this library,
+ * even though there are no vectors: the 109 operators exist, answer what they should and are
+ * checked against JDK 25. {@code VectorOperators.ADD.operatorName()} returns {@code "+"} here just
+ * as there, and {@code ADD.compatibleWith(float.class)} answers right.
  *
- * <p>Lo que no se puede es usarlos: hace falta un vector al cual pasarselos, y crear un vector si
- * necesita los intrinsecos de la VM.
+ * <p>What cannot be done is use them: a vector to pass them to is needed, and creating a vector
+ * does need the VM's intrinsics.
  *
- * <h2>Las conversiones</h2>
+ * <h2>The conversions</h2>
  *
- * <p>Hay dos maneras de pasar de un tipo a otro y el API las separa con cuidado.
- * {@link #B2D} y sus hermanas conservan el <strong>valor</strong>: es el {@code (double) b} de toda
- * la vida. {@link #REINTERPRET_F2I} y sus hermanas conservan los <strong>bits</strong>: el mismo
- * patron leido como otra cosa.
+ * <p>There are two ways of going from one type to another and the API separates them carefully.
+ * {@link #B2D} and its siblings preserve the <strong>value</strong>: it is the good old {@code
+ * (double) b}. {@link #REINTERPRET_F2I} and its siblings preserve the <strong>bits</strong>: the
+ * same pattern read as something else.
  *
- * <p>{@code ZERO_EXTEND} es el caso raro del medio. Al ensanchar un entero por bits sobran lugares
- * que hay que llenar, y estas los llenan con ceros en vez de copiar el signo: {@code (byte) -1}
- * ensanchado asi da 255, no -1.
+ * <p>{@code ZERO_EXTEND} is the odd case in between. When widening an integer by bits there are
+ * places left over that have to be filled, and these fill them with zeros instead of copying the
+ * sign: {@code (byte) -1} widened that way gives 255, not -1.
  *
  * @since 16
  */
@@ -50,111 +52,113 @@ public abstract class VectorOperators {
     }
 
     /**
-     * Los datos que las constantes de abajo necesitan para construirse.
+     * The data the constants below need in order to be built.
      *
-     * <p>Van en una clase aparte por una razon dura: los campos estaticos se inicializan en el orden
-     * en que estan escritos, y las cuarenta conversiones de mas abajo llaman a {@link #cast} apenas
-     * se crean. Si estos arreglos estuvieran despues de ellas todavia valdrian {@code null} en ese
-     * momento y la clase entera fallaria al cargarse. Una clase anidada se inicializa recien cuando
-     * se la toca, asi que el orden dentro del archivo deja de importar.
+     * <p>They go in a separate class for a hard reason: static fields are initialised in the order
+     * in which they are written, and the forty conversions further down call their factory as soon
+     * as they are created (thirty call {@code cast} and ten {@code reinterpret}; the note said all
+     * forty call {@code cast}). If these arrays came after them they would still be {@code null} at
+     * that moment and the whole class would fail to load. A nested class is initialised only when
+     * it is touched, so the order within the file stops mattering.
      */
-    private static final class Tabla {
+    private static final class Table {
 
-        /** Los tipos de posicion, en el orden en que los numera {@code indice}. */
-        static final Class<?>[] TIPOS = {
+        /** The lane types, in the order {@code typeIndex} numbers them. */
+        static final Class<?>[] TYPES = {
             byte.class, short.class, int.class, long.class, float.class, double.class,
         };
 
-        /** Las letras con las que se arman los nombres de las conversiones. */
-        static final String LETRAS = "BSILFD";
+        /** The letters the conversion names are built from. */
+        static final String LETTERS = "BSILFD";
 
-        private Tabla() {
+        private Table() {
         }
     }
 
-    /** Sirve para los seis tipos de posicion. */
-    static final int TODOS = 0x3F;
+    /** Serves all six lane types. */
+    static final int ALL = 0x3F;
 
-    /** Solo para los cuatro enteros. */
-    static final int ENTEROS = 0x0F;
+    /** Only for the four integral types. */
+    static final int INTEGRAL = 0x0F;
 
-    /** Solo para {@code float} y {@code double}. */
-    static final int FLOTANTES = 0x30;
+    /** Only for {@code float} and {@code double}. */
+    static final int FLOATING = 0x30;
 
     /**
-     * Lo que todo operador sabe decir de si mismo.
+     * What every operator can say about itself.
      *
      * @since 16
      */
     public interface Operator {
 
         /**
-         * El nombre de la constante, como {@code "ADD"}.
+         * The name of the constant, such as {@code "ADD"}.
          *
-         * @return el nombre
+         * @return the name
          */
         String name();
 
         /**
-         * El simbolo con que se escribe la operacion, como {@code "+"}.
+         * The symbol the operation is written with, such as {@code "+"}.
          *
-         * <p>No siempre es un simbolo: cuando la operacion no tiene uno, es el nombre del metodo
-         * equivalente ({@code "sqrt"}) o directamente la formula ({@code "a!=0?a:b"}).
+         * <p>It is not always a symbol: when the operation has none, it is the name of the
+         * equivalent method ({@code "sqrt"}) or directly the formula ({@code "a!=0?a:b"}).
          *
-         * @return el simbolo
+         * @return the symbol
          */
         String operatorName();
 
         /**
-         * Cuantos argumentos toma.
+         * How many arguments it takes.
          *
-         * @return uno, dos o tres
+         * @return one, two or three
          */
         int arity();
 
         /**
-         * Si el resultado es una mascara y no un vector.
+         * Whether the result is a mask and not a vector.
          *
-         * @return cierto para las comparaciones y las pruebas
+         * @return true for the comparisons and the tests
          */
         boolean isBoolean();
 
         /**
-         * El tipo del resultado, cuando se lo puede decir sin saber sobre que vector se aplica.
+         * The type of the result, when it can be told without knowing which vector it is applied
+         * to.
          *
-         * <p>Para las operaciones comunes es {@code Object.class}, que aca quiere decir "el mismo
-         * tipo que la entrada". Para las comparaciones y las pruebas es {@code boolean.class}, y
-         * para una {@link Conversion} es el tipo de destino.
+         * <p>For the ordinary operations it is {@code Object.class}, which here means "the same
+         * type as the input". For the comparisons and the tests it is {@code boolean.class}, and
+         * for a {@link Conversion} it is the target type.
          *
-         * @return el tipo del resultado
+         * @return the type of the result
          */
         Class<?> rangeType();
 
         /**
-         * Si agrupar de a pares en cualquier orden da el mismo resultado.
+         * Whether grouping in pairs in any order gives the same result.
          *
-         * <p>Es lo que hace falta para reducir un vector, porque el hardware parte el trabajo como
-         * le conviene y ese orden no esta bajo control de quien escribe el algoritmo.
+         * <p>It is what is needed to reduce a vector, because the hardware splits the work as it
+         * sees fit and that order is not under the control of whoever writes the algorithm.
          *
-         * @return cierto si es asociativa
+         * @return true if it is associative
          */
         boolean isAssociative();
 
         /**
-         * Si la operacion sirve para posiciones de ese tipo.
+         * Whether the operation serves lanes of that type.
          *
-         * <p>Un tipo que no puede ser posicion de un vector no devuelve {@code false}: es un error.
-         * Preguntar si {@code ADD} sirve para {@code String} no es una pregunta con respuesta.
+         * <p>A type that cannot be a vector lane does not return {@code false}: it is an error.
+         * Asking whether {@code ADD} serves {@code String} is not a question with an answer.
          *
-         * @param elementType el tipo de la posicion
-         * @return cierto si sirve
-         * @throws UnsupportedOperationException si no es un tipo de posicion
+         * @param elementType the lane type
+         * @return true if it serves
+         * @throws UnsupportedOperationException if it is not a lane type
          */
         boolean compatibleWith(Class<?> elementType);
     }
 
     /**
-     * Un operador de un argumento.
+     * A one-argument operator.
      *
      * @since 16
      */
@@ -162,7 +166,7 @@ public abstract class VectorOperators {
     }
 
     /**
-     * Un operador de dos argumentos.
+     * A two-argument operator.
      *
      * @since 16
      */
@@ -170,12 +174,12 @@ public abstract class VectorOperators {
     }
 
     /**
-     * Un operador de dos argumentos que ademas sirve para reducir.
+     * A two-argument operator that also serves for reducing.
      *
-     * <p>Que herede de {@link Binary} y no al reves es la parte que importa: donde se pide un
-     * {@link Associative} no entra un {@link Binary} cualquiera, y eso deja fuera de
-     * {@code reduceLanes} a la resta y a la division, que darian un resultado distinto segun como
-     * el hardware parta el vector.
+     * <p>That it inherits from {@link Binary} and not the other way round is the part that matters:
+     * where an {@link Associative} is asked for, just any {@link Binary} does not fit, and that
+     * leaves subtraction and division out of {@code reduceLanes}, since they would give a different
+     * result depending on how the hardware splits the vector.
      *
      * @since 16
      */
@@ -183,7 +187,7 @@ public abstract class VectorOperators {
     }
 
     /**
-     * Un operador de tres argumentos.
+     * A three-argument operator.
      *
      * @since 16
      */
@@ -191,7 +195,7 @@ public abstract class VectorOperators {
     }
 
     /**
-     * Una comparacion entre dos vectores, que da una mascara.
+     * A comparison between two vectors, which gives a mask.
      *
      * @since 16
      */
@@ -199,7 +203,7 @@ public abstract class VectorOperators {
     }
 
     /**
-     * Una pregunta sobre cada posicion de un vector, que da una mascara.
+     * A question about each lane of a vector, which gives a mask.
      *
      * @since 16
      */
@@ -207,79 +211,78 @@ public abstract class VectorOperators {
     }
 
     /**
-     * Una conversion de un tipo de posicion a otro.
+     * A conversion from one lane type to another.
      *
-     * <p>Los parametros de tipo son los tipos envueltos --{@code Conversion<Byte, Double>}-- porque
-     * un parametro de tipo no puede ser primitivo. Los metodos, en cambio, devuelven los primitivos:
-     * {@code B2D.domainType()} es {@code byte.class}.
+     * <p>The type parameters are the boxed types --{@code Conversion<Byte, Double>}-- because a
+     * type parameter cannot be primitive. The methods, on the other hand, return the primitives:
+     * {@code B2D.domainType()} is {@code byte.class}.
      *
-     * @param <E> el tipo de origen, envuelto
-     * @param <F> el tipo de destino, envuelto
+     * @param <E> the source type, boxed
+     * @param <F> the target type, boxed
      * @since 16
      */
     public interface Conversion<E, F> extends Operator {
 
         /**
-         * El tipo de origen.
+         * The source type.
          *
-         * @return el tipo de origen, primitivo
+         * @return the source type, primitive
          */
         Class<E> domainType();
 
         /**
-         * El tipo de destino.
+         * The target type.
          *
-         * @return el tipo de destino, primitivo
+         * @return the target type, primitive
          */
         @Override
         Class<F> rangeType();
 
         /**
-         * Comprueba que esta conversion sea justo la que va de ese tipo a ese otro.
+         * Checks that this conversion is exactly the one going from that type to that other.
          *
-         * <p>Existe para poder recuperar los parametros de tipo despues de haber pasado por una
-         * variable sin parametrizar, que es lo que pasa cuando la conversion se elige en tiempo de
-         * ejecucion. Si no coincide falla en el acto, y no mas tarde con un tipo equivocado dando
-         * vueltas.
+         * <p>It exists to recover the type parameters after going through an unparameterised
+         * variable, which is what happens when the conversion is chosen at run time. If it does not
+         * match it fails on the spot, and not later with a wrong type going around.
          *
-         * @param <E> el tipo de origen esperado
-         * @param <F> el tipo de destino esperado
-         * @param from el tipo de origen esperado
-         * @param to el tipo de destino esperado
-         * @return esta misma conversion, con los parametros de tipo puestos
-         * @throws ClassCastException si no es esa conversion
+         * @param <E> the expected source type
+         * @param <F> the expected target type
+         * @param from the expected source type
+         * @param to the expected target type
+         * @return this same conversion, with the type parameters in place
+         * @throws ClassCastException if it is not that conversion
          */
         <E, F> Conversion<E, F> check(Class<E> from, Class<F> to);
 
         /**
-         * La conversion de valor entre esos dos tipos.
+         * The value conversion between those two types.
          *
-         * <p>Es la que hace el {@code (double) b} de Java. Cuando los dos tipos son el mismo la
-         * conversion no hace nada, y aun asi existe: se llama {@code COPY_X2X}.
+         * <p>It is the one Java's {@code (double) b} does. When the two types are the same the
+         * conversion does nothing, and it exists all the same: it is called {@code COPY_X2X}.
          *
-         * @param <E> el tipo de origen, envuelto
-         * @param <F> el tipo de destino, envuelto
-         * @param from el tipo de origen
-         * @param to el tipo de destino
-         * @return la conversion
-         * @throws UnsupportedOperationException si alguno no es un tipo de posicion
+         * @param <E> the source type, boxed
+         * @param <F> the target type, boxed
+         * @param from the source type
+         * @param to the target type
+         * @return the conversion
+         * @throws UnsupportedOperationException if either is not a lane type
          */
         static <E, F> Conversion<E, F> ofCast(Class<E> from, Class<F> to) {
             return cast(from, to);
         }
 
         /**
-         * La conversion de bits entre esos dos tipos.
+         * The bit conversion between those two types.
          *
-         * <p>Los bits se conservan y el valor no. Al ensanchar un entero los lugares que sobran se
-         * llenan con ceros, no con el signo.
+         * <p>The bits are preserved and the value is not. When widening an integer the places left
+         * over are filled with zeros, not with the sign.
          *
-         * @param <E> el tipo de origen, envuelto
-         * @param <F> el tipo de destino, envuelto
-         * @param from el tipo de origen
-         * @param to el tipo de destino
-         * @return la conversion
-         * @throws UnsupportedOperationException si alguno no es un tipo de posicion
+         * @param <E> the source type, boxed
+         * @param <F> the target type, boxed
+         * @param from the source type
+         * @param to the target type
+         * @return the conversion
+         * @throws UnsupportedOperationException if either is not a lane type
          */
         static <E, F> Conversion<E, F> ofReinterpret(Class<E> from, Class<F> to) {
             return reinterpret(from, to);
@@ -287,596 +290,597 @@ public abstract class VectorOperators {
     }
 
     /**
-     * Invierte todos los bits.
+     * Inverts all the bits.
      */
-    public static final Unary NOT = unaria("NOT", "~", ENTEROS);
+    public static final Unary NOT = unary("NOT", "~", INTEGRAL);
 
     /**
-     * Cero si la posicion es cero, y todos unos si no. Es la forma de convertir un valor en una
-     * mascara de bits que despues sirve para elegir sin ramificar.
+     * Zero if the lane is zero, and all ones otherwise. It is the way of turning a value into a bit
+     * mask that then serves for choosing without branching.
      */
-    public static final Unary ZOMO = unaria("ZOMO", "a==0?0:-1", ENTEROS);
+    public static final Unary ZOMO = unary("ZOMO", "a==0?0:-1", INTEGRAL);
 
     /**
-     * El valor absoluto. Con enteros tiene el mismo agujero que {@code Math.abs}: el minimo del
-     * tipo no tiene positivo y se devuelve a si mismo.
+     * The absolute value. With integers it has the same hole as {@code Math.abs}: the type's
+     * minimum has no positive and returns itself.
      */
-    public static final Unary ABS = unaria("ABS", "abs", TODOS);
+    public static final Unary ABS = unary("ABS", "abs", ALL);
 
     /**
-     * El opuesto.
+     * The negation.
      */
-    public static final Unary NEG = unaria("NEG", "-a", TODOS);
+    public static final Unary NEG = unary("NEG", "-a", ALL);
 
     /**
-     * Cuantos bits en uno tiene la posicion.
+     * How many one bits the lane has.
      */
-    public static final Unary BIT_COUNT = unaria("BIT_COUNT", "bitCount", ENTEROS);
+    public static final Unary BIT_COUNT = unary("BIT_COUNT", "bitCount", INTEGRAL);
 
     /**
-     * Cuantos ceros hay antes del primer uno, contando desde el bit menos significativo.
+     * How many zeros there are before the first one, counting from the least significant bit.
      */
     public static final Unary TRAILING_ZEROS_COUNT =
-            unaria("TRAILING_ZEROS_COUNT", "numberOfTrailingZeros", ENTEROS);
+            unary("TRAILING_ZEROS_COUNT", "numberOfTrailingZeros", INTEGRAL);
 
     /**
-     * Cuantos ceros hay antes del primer uno, contando desde el bit mas significativo.
+     * How many zeros there are before the first one, counting from the most significant bit.
      */
     public static final Unary LEADING_ZEROS_COUNT =
-            unaria("LEADING_ZEROS_COUNT", "numberOfLeadingZeros", ENTEROS);
+            unary("LEADING_ZEROS_COUNT", "numberOfLeadingZeros", INTEGRAL);
 
     /**
-     * Da vuelta el orden de los bits.
+     * Reverses the order of the bits.
      */
-    public static final Unary REVERSE = unaria("REVERSE", "reverse", ENTEROS);
+    public static final Unary REVERSE = unary("REVERSE", "reverse", INTEGRAL);
 
     /**
-     * Da vuelta el orden de los bytes; es el cambio de extremo.
+     * Reverses the order of the bytes; it is the endianness swap.
      */
-    public static final Unary REVERSE_BYTES = unaria("REVERSE_BYTES", "reverseBytes", ENTEROS);
+    public static final Unary REVERSE_BYTES = unary("REVERSE_BYTES", "reverseBytes", INTEGRAL);
 
     /**
-     * El seno.
+     * The sine.
      */
-    public static final Unary SIN = unaria("SIN", "sin", FLOTANTES);
+    public static final Unary SIN = unary("SIN", "sin", FLOATING);
 
     /**
-     * El coseno.
+     * The cosine.
      */
-    public static final Unary COS = unaria("COS", "cos", FLOTANTES);
+    public static final Unary COS = unary("COS", "cos", FLOATING);
 
     /**
-     * La tangente.
+     * The tangent.
      */
-    public static final Unary TAN = unaria("TAN", "tan", FLOTANTES);
+    public static final Unary TAN = unary("TAN", "tan", FLOATING);
 
     /**
-     * El arco seno.
+     * The arc sine.
      */
-    public static final Unary ASIN = unaria("ASIN", "asin", FLOTANTES);
+    public static final Unary ASIN = unary("ASIN", "asin", FLOATING);
 
     /**
-     * El arco coseno.
+     * The arc cosine.
      */
-    public static final Unary ACOS = unaria("ACOS", "acos", FLOTANTES);
+    public static final Unary ACOS = unary("ACOS", "acos", FLOATING);
 
     /**
-     * El arco tangente.
+     * The arc tangent.
      */
-    public static final Unary ATAN = unaria("ATAN", "atan", FLOTANTES);
+    public static final Unary ATAN = unary("ATAN", "atan", FLOATING);
 
     /**
-     * La exponencial.
+     * The exponential.
      */
-    public static final Unary EXP = unaria("EXP", "exp", FLOTANTES);
+    public static final Unary EXP = unary("EXP", "exp", FLOATING);
 
     /**
-     * El logaritmo natural.
+     * The natural logarithm.
      */
-    public static final Unary LOG = unaria("LOG", "log", FLOTANTES);
+    public static final Unary LOG = unary("LOG", "log", FLOATING);
 
     /**
-     * El logaritmo en base diez.
+     * The base-ten logarithm.
      */
-    public static final Unary LOG10 = unaria("LOG10", "log10", FLOTANTES);
+    public static final Unary LOG10 = unary("LOG10", "log10", FLOATING);
 
     /**
-     * La raiz cuadrada.
+     * The square root.
      */
-    public static final Unary SQRT = unaria("SQRT", "sqrt", FLOTANTES);
+    public static final Unary SQRT = unary("SQRT", "sqrt", FLOATING);
 
     /**
-     * La raiz cubica.
+     * The cube root.
      */
-    public static final Unary CBRT = unaria("CBRT", "cbrt", FLOTANTES);
+    public static final Unary CBRT = unary("CBRT", "cbrt", FLOATING);
 
     /**
-     * El seno hiperbolico.
+     * The hyperbolic sine.
      */
-    public static final Unary SINH = unaria("SINH", "sinh", FLOTANTES);
+    public static final Unary SINH = unary("SINH", "sinh", FLOATING);
 
     /**
-     * El coseno hiperbolico.
+     * The hyperbolic cosine.
      */
-    public static final Unary COSH = unaria("COSH", "cosh", FLOTANTES);
+    public static final Unary COSH = unary("COSH", "cosh", FLOATING);
 
     /**
-     * La tangente hiperbolica.
+     * The hyperbolic tangent.
      */
-    public static final Unary TANH = unaria("TANH", "tanh", FLOTANTES);
+    public static final Unary TANH = unary("TANH", "tanh", FLOATING);
 
     /**
-     * {@code exp(a)-1}, calculado de forma que no pierda precision cuando el argumento es chico.
+     * {@code exp(a)-1}, computed so that it does not lose precision when the argument is small.
      */
-    public static final Unary EXPM1 = unaria("EXPM1", "expm1", FLOTANTES);
+    public static final Unary EXPM1 = unary("EXPM1", "expm1", FLOATING);
 
     /**
-     * {@code log(1+a)}, calculado de forma que no pierda precision cuando el argumento es chico.
+     * {@code log(1+a)}, computed so that it does not lose precision when the argument is small.
      */
-    public static final Unary LOG1P = unaria("LOG1P", "log1p", FLOTANTES);
+    public static final Unary LOG1P = unary("LOG1P", "log1p", FLOATING);
 
     /**
-     * La suma.
+     * The sum.
      */
-    public static final Associative ADD = asociativa("ADD", "+", TODOS);
+    public static final Associative ADD = associative("ADD", "+", ALL);
 
     /**
-     * La resta.
+     * The difference.
      */
-    public static final Binary SUB = binaria("SUB", "-", TODOS);
+    public static final Binary SUB = binary("SUB", "-", ALL);
 
     /**
-     * El producto.
+     * The product.
      */
-    public static final Associative MUL = asociativa("MUL", "*", TODOS);
+    public static final Associative MUL = associative("MUL", "*", ALL);
 
     /**
-     * El cociente.
+     * The quotient.
      */
-    public static final Binary DIV = binaria("DIV", "/", TODOS);
+    public static final Binary DIV = binary("DIV", "/", ALL);
 
     /**
-     * El menor de los dos.
+     * The smaller of the two.
      */
-    public static final Associative MIN = asociativa("MIN", "min", TODOS);
+    public static final Associative MIN = associative("MIN", "min", ALL);
 
     /**
-     * El mayor de los dos.
+     * The larger of the two.
      */
-    public static final Associative MAX = asociativa("MAX", "max", TODOS);
+    public static final Associative MAX = associative("MAX", "max", ALL);
 
     /**
-     * El primero de los dos que no sea cero. Sirve para juntar resultados parciales donde el cero
-     * significa "esta posicion no aporto nada".
+     * The first of the two that is not zero. It serves to gather partial results where zero means
+     * "this lane contributed nothing".
      */
-    public static final Associative FIRST_NONZERO = asociativa("FIRST_NONZERO", "a!=0?a:b", TODOS);
+    public static final Associative FIRST_NONZERO = associative("FIRST_NONZERO", "a!=0?a:b", ALL);
 
     /**
-     * La conjuncion bit a bit.
+     * The bitwise conjunction.
      */
-    public static final Associative AND = asociativa("AND", "&", ENTEROS);
+    public static final Associative AND = associative("AND", "&", INTEGRAL);
 
     /**
-     * La conjuncion con el segundo invertido.
+     * The conjunction with the second inverted.
      */
-    public static final Binary AND_NOT = binaria("AND_NOT", "&~", ENTEROS);
+    public static final Binary AND_NOT = binary("AND_NOT", "&~", INTEGRAL);
 
     /**
-     * La disyuncion bit a bit.
+     * The bitwise disjunction.
      */
-    public static final Associative OR = asociativa("OR", "|", ENTEROS);
+    public static final Associative OR = associative("OR", "|", INTEGRAL);
 
     /**
-     * La disyuncion exclusiva bit a bit.
+     * The bitwise exclusive disjunction.
      */
-    public static final Associative XOR = asociativa("XOR", "^", ENTEROS);
+    public static final Associative XOR = associative("XOR", "^", INTEGRAL);
 
     /**
-     * La suma con signo que satura en vez de dar la vuelta; ver {@link VectorMath}.
+     * The signed addition that saturates instead of wrapping around; see {@link VectorMath}.
      */
-    public static final Binary SADD = binaria("SADD", "+", ENTEROS);
+    public static final Binary SADD = binary("SADD", "+", INTEGRAL);
 
     /**
-     * La suma sin signo que satura arriba.
+     * The unsigned addition that saturates at the top.
      */
-    public static final Binary SUADD = binaria("SUADD", "+", ENTEROS);
+    public static final Binary SUADD = binary("SUADD", "+", INTEGRAL);
 
     /**
-     * La resta con signo que satura en los extremos.
+     * The signed subtraction that saturates at the ends.
      */
-    public static final Binary SSUB = binaria("SSUB", "-", ENTEROS);
+    public static final Binary SSUB = binary("SSUB", "-", INTEGRAL);
 
     /**
-     * La resta sin signo que satura en cero.
+     * The unsigned subtraction that saturates at zero.
      */
-    public static final Binary SUSUB = binaria("SUSUB", "-", ENTEROS);
+    public static final Binary SUSUB = binary("SUSUB", "-", INTEGRAL);
 
     /**
-     * El menor de los dos, comparados sin signo.
+     * The smaller of the two, compared unsigned.
      */
-    public static final Associative UMIN = asociativa("UMIN", "umin", ENTEROS);
+    public static final Associative UMIN = associative("UMIN", "umin", INTEGRAL);
 
     /**
-     * El mayor de los dos, comparados sin signo.
+     * The larger of the two, compared unsigned.
      */
-    public static final Associative UMAX = asociativa("UMAX", "umax", ENTEROS);
+    public static final Associative UMAX = associative("UMAX", "umax", INTEGRAL);
 
     /**
-     * Corrimiento a la izquierda.
+     * Shift left.
      */
-    public static final Binary LSHL = binaria("LSHL", "<<", TODOS);
+    public static final Binary LSHL = binary("LSHL", "<<", ALL);
 
     /**
-     * Corrimiento a la derecha que conserva el signo.
+     * Shift right that preserves the sign.
      */
-    public static final Binary ASHR = binaria("ASHR", ">>", TODOS);
+    public static final Binary ASHR = binary("ASHR", ">>", ALL);
 
     /**
-     * Corrimiento a la derecha que mete ceros.
+     * Shift right that shifts in zeros.
      */
-    public static final Binary LSHR = binaria("LSHR", ">>>", TODOS);
+    public static final Binary LSHR = binary("LSHR", ">>>", ALL);
 
     /**
-     * Rotacion a la izquierda: lo que sale por un extremo entra por el otro.
+     * Rotate left: what goes out at one end comes in at the other.
      */
-    public static final Binary ROL = binaria("ROL", "rotateLeft", TODOS);
+    public static final Binary ROL = binary("ROL", "rotateLeft", ALL);
 
     /**
-     * Rotacion a la derecha.
+     * Rotate right.
      */
-    public static final Binary ROR = binaria("ROR", "rotateRight", TODOS);
+    public static final Binary ROR = binary("ROR", "rotateRight", ALL);
 
     /**
-     * Junta los bits del primero que la mascara del segundo selecciona, y los deja pegados en la
-     * parte baja.
+     * Gathers the bits of the first that the mask of the second selects, and leaves them packed in
+     * the low part.
      */
-    public static final Binary COMPRESS_BITS = binaria("COMPRESS_BITS", "compressBits", ENTEROS);
+    public static final Binary COMPRESS_BITS = binary("COMPRESS_BITS", "compressBits", INTEGRAL);
 
     /**
-     * La inversa de {@link #COMPRESS_BITS}: reparte los bits bajos del primero en las posiciones
-     * que la mascara del segundo marca.
+     * The inverse of {@link #COMPRESS_BITS}: spreads the low bits of the first into the positions
+     * the mask of the second marks.
      */
-    public static final Binary EXPAND_BITS = binaria("EXPAND_BITS", "expandBits", ENTEROS);
+    public static final Binary EXPAND_BITS = binary("EXPAND_BITS", "expandBits", INTEGRAL);
 
     /**
-     * El angulo del punto, con el cuadrante bien resuelto por los signos de los dos argumentos.
+     * The angle of the point, with the quadrant correctly resolved by the signs of the two
+     * arguments.
      */
-    public static final Binary ATAN2 = binaria("ATAN2", "atan2", FLOTANTES);
+    public static final Binary ATAN2 = binary("ATAN2", "atan2", FLOATING);
 
     /**
-     * La potencia.
+     * The power.
      */
-    public static final Binary POW = binaria("POW", "pow", FLOTANTES);
+    public static final Binary POW = binary("POW", "pow", FLOATING);
 
     /**
-     * La hipotenusa, sin desbordar en los pasos intermedios como haria {@code sqrt(a*a+b*b)}.
+     * The hypotenuse, without overflowing in the intermediate steps as {@code sqrt(a*a+b*b)} would.
      */
-    public static final Binary HYPOT = binaria("HYPOT", "hypot", FLOTANTES);
+    public static final Binary HYPOT = binary("HYPOT", "hypot", FLOATING);
 
     /**
-     * Elige bit a bit entre los dos primeros segun el tercero: donde el tercero tiene un uno queda
-     * el bit del segundo, y donde tiene cero queda el del primero.
+     * Chooses bit by bit between the first two according to the third: where the third has a one
+     * the second's bit remains, and where it has zero the first's.
      */
-    public static final Ternary BITWISE_BLEND = ternaria("BITWISE_BLEND", "a^((a^b)&c)", ENTEROS);
+    public static final Ternary BITWISE_BLEND = ternary("BITWISE_BLEND", "a^((a^b)&c)", INTEGRAL);
 
     /**
-     * Multiplica y suma con un solo redondeo al final, no dos; ver {@code Math.fma}.
+     * Multiplies and adds with a single rounding at the end, not two; see {@code Math.fma}.
      */
-    public static final Ternary FMA = ternaria("FMA", "fma", FLOTANTES);
+    public static final Ternary FMA = ternary("FMA", "fma", FLOATING);
 
     /**
-     * Si los bits de la posicion son todos cero. Con {@code double} eso distingue el cero positivo
-     * del negativo, cosa que {@code == 0} no hace.
+     * Whether the lane's bits are all zero. With {@code double} that tells positive zero from
+     * negative zero, which {@code == 0} does not.
      */
-    public static final Test IS_DEFAULT = prueba("IS_DEFAULT", "bits(a)==0", TODOS);
+    public static final Test IS_DEFAULT = test("IS_DEFAULT", "bits(a)==0", ALL);
 
     /**
-     * Si el bit de signo esta prendido. Tambien mira los bits, asi que el cero negativo da cierto.
+     * Whether the sign bit is set. It also looks at the bits, so negative zero gives true.
      */
-    public static final Test IS_NEGATIVE = prueba("IS_NEGATIVE", "bits(a)<0", TODOS);
+    public static final Test IS_NEGATIVE = test("IS_NEGATIVE", "bits(a)<0", ALL);
 
     /**
-     * Si no es infinito ni NaN.
+     * Whether it is neither infinite nor NaN.
      */
-    public static final Test IS_FINITE = prueba("IS_FINITE", "isFinite", FLOTANTES);
+    public static final Test IS_FINITE = test("IS_FINITE", "isFinite", FLOATING);
 
     /**
-     * Si no es un numero.
+     * Whether it is not a number.
      */
-    public static final Test IS_NAN = prueba("IS_NAN", "isNaN", FLOTANTES);
+    public static final Test IS_NAN = test("IS_NAN", "isNaN", FLOATING);
 
     /**
-     * Si es infinito.
+     * Whether it is infinite.
      */
-    public static final Test IS_INFINITE = prueba("IS_INFINITE", "isInfinite", FLOTANTES);
+    public static final Test IS_INFINITE = test("IS_INFINITE", "isInfinite", FLOATING);
 
     /**
-     * Igual.
+     * Equal.
      */
-    public static final Comparison EQ = comparacion("EQ", "==", TODOS);
+    public static final Comparison EQ = comparison("EQ", "==", ALL);
 
     /**
-     * Distinto.
+     * Not equal.
      */
-    public static final Comparison NE = comparacion("NE", "!=", TODOS);
+    public static final Comparison NE = comparison("NE", "!=", ALL);
 
     /**
-     * Menor.
+     * Less.
      */
-    public static final Comparison LT = comparacion("LT", "<", TODOS);
+    public static final Comparison LT = comparison("LT", "<", ALL);
 
     /**
-     * Menor o igual.
+     * Less or equal.
      */
-    public static final Comparison LE = comparacion("LE", "<=", TODOS);
+    public static final Comparison LE = comparison("LE", "<=", ALL);
 
     /**
-     * Mayor.
+     * Greater.
      */
-    public static final Comparison GT = comparacion("GT", ">", TODOS);
+    public static final Comparison GT = comparison("GT", ">", ALL);
 
     /**
-     * Mayor o igual.
+     * Greater or equal.
      */
-    public static final Comparison GE = comparacion("GE", ">=", TODOS);
+    public static final Comparison GE = comparison("GE", ">=", ALL);
 
     /**
-     * Menor, comparando sin signo.
+     * Less, comparing unsigned.
      */
-    public static final Comparison ULT = comparacion("ULT", "<", ENTEROS);
+    public static final Comparison ULT = comparison("ULT", "<", INTEGRAL);
 
     /**
-     * Menor o igual, comparando sin signo.
+     * Less or equal, comparing unsigned.
      */
-    public static final Comparison ULE = comparacion("ULE", "<=", ENTEROS);
+    public static final Comparison ULE = comparison("ULE", "<=", INTEGRAL);
 
     /**
-     * Mayor, comparando sin signo.
+     * Greater, comparing unsigned.
      */
-    public static final Comparison UGT = comparacion("UGT", ">", ENTEROS);
+    public static final Comparison UGT = comparison("UGT", ">", INTEGRAL);
 
     /**
-     * Mayor o igual, comparando sin signo.
+     * Greater or equal, comparing unsigned.
      */
-    public static final Comparison UGE = comparacion("UGE", ">=", ENTEROS);
+    public static final Comparison UGE = comparison("UGE", ">=", INTEGRAL);
 
     /**
-     * Convierte {@code byte} a {@code double} conservando el valor.
+     * Converts {@code byte} to {@code double} preserving the value.
      */
     public static final Conversion<Byte, Double> B2D = cast(byte.class, double.class);
 
     /**
-     * Convierte {@code byte} a {@code float} conservando el valor.
+     * Converts {@code byte} to {@code float} preserving the value.
      */
     public static final Conversion<Byte, Float> B2F = cast(byte.class, float.class);
 
     /**
-     * Convierte {@code byte} a {@code int} conservando el valor.
+     * Converts {@code byte} to {@code int} preserving the value.
      */
     public static final Conversion<Byte, Integer> B2I = cast(byte.class, int.class);
 
     /**
-     * Convierte {@code byte} a {@code long} conservando el valor.
+     * Converts {@code byte} to {@code long} preserving the value.
      */
     public static final Conversion<Byte, Long> B2L = cast(byte.class, long.class);
 
     /**
-     * Convierte {@code byte} a {@code short} conservando el valor.
+     * Converts {@code byte} to {@code short} preserving the value.
      */
     public static final Conversion<Byte, Short> B2S = cast(byte.class, short.class);
 
     /**
-     * Convierte {@code double} a {@code byte} conservando el valor.
+     * Converts {@code double} to {@code byte} preserving the value.
      */
     public static final Conversion<Double, Byte> D2B = cast(double.class, byte.class);
 
     /**
-     * Convierte {@code double} a {@code float} conservando el valor.
+     * Converts {@code double} to {@code float} preserving the value.
      */
     public static final Conversion<Double, Float> D2F = cast(double.class, float.class);
 
     /**
-     * Convierte {@code double} a {@code int} conservando el valor.
+     * Converts {@code double} to {@code int} preserving the value.
      */
     public static final Conversion<Double, Integer> D2I = cast(double.class, int.class);
 
     /**
-     * Convierte {@code double} a {@code long} conservando el valor.
+     * Converts {@code double} to {@code long} preserving the value.
      */
     public static final Conversion<Double, Long> D2L = cast(double.class, long.class);
 
     /**
-     * Convierte {@code double} a {@code short} conservando el valor.
+     * Converts {@code double} to {@code short} preserving the value.
      */
     public static final Conversion<Double, Short> D2S = cast(double.class, short.class);
 
     /**
-     * Convierte {@code float} a {@code byte} conservando el valor.
+     * Converts {@code float} to {@code byte} preserving the value.
      */
     public static final Conversion<Float, Byte> F2B = cast(float.class, byte.class);
 
     /**
-     * Convierte {@code float} a {@code double} conservando el valor.
+     * Converts {@code float} to {@code double} preserving the value.
      */
     public static final Conversion<Float, Double> F2D = cast(float.class, double.class);
 
     /**
-     * Convierte {@code float} a {@code int} conservando el valor.
+     * Converts {@code float} to {@code int} preserving the value.
      */
     public static final Conversion<Float, Integer> F2I = cast(float.class, int.class);
 
     /**
-     * Convierte {@code float} a {@code long} conservando el valor.
+     * Converts {@code float} to {@code long} preserving the value.
      */
     public static final Conversion<Float, Long> F2L = cast(float.class, long.class);
 
     /**
-     * Convierte {@code float} a {@code short} conservando el valor.
+     * Converts {@code float} to {@code short} preserving the value.
      */
     public static final Conversion<Float, Short> F2S = cast(float.class, short.class);
 
     /**
-     * Convierte {@code int} a {@code byte} conservando el valor.
+     * Converts {@code int} to {@code byte} preserving the value.
      */
     public static final Conversion<Integer, Byte> I2B = cast(int.class, byte.class);
 
     /**
-     * Convierte {@code int} a {@code double} conservando el valor.
+     * Converts {@code int} to {@code double} preserving the value.
      */
     public static final Conversion<Integer, Double> I2D = cast(int.class, double.class);
 
     /**
-     * Convierte {@code int} a {@code float} conservando el valor.
+     * Converts {@code int} to {@code float} preserving the value.
      */
     public static final Conversion<Integer, Float> I2F = cast(int.class, float.class);
 
     /**
-     * Convierte {@code int} a {@code long} conservando el valor.
+     * Converts {@code int} to {@code long} preserving the value.
      */
     public static final Conversion<Integer, Long> I2L = cast(int.class, long.class);
 
     /**
-     * Convierte {@code int} a {@code short} conservando el valor.
+     * Converts {@code int} to {@code short} preserving the value.
      */
     public static final Conversion<Integer, Short> I2S = cast(int.class, short.class);
 
     /**
-     * Convierte {@code long} a {@code byte} conservando el valor.
+     * Converts {@code long} to {@code byte} preserving the value.
      */
     public static final Conversion<Long, Byte> L2B = cast(long.class, byte.class);
 
     /**
-     * Convierte {@code long} a {@code double} conservando el valor.
+     * Converts {@code long} to {@code double} preserving the value.
      */
     public static final Conversion<Long, Double> L2D = cast(long.class, double.class);
 
     /**
-     * Convierte {@code long} a {@code float} conservando el valor.
+     * Converts {@code long} to {@code float} preserving the value.
      */
     public static final Conversion<Long, Float> L2F = cast(long.class, float.class);
 
     /**
-     * Convierte {@code long} a {@code int} conservando el valor.
+     * Converts {@code long} to {@code int} preserving the value.
      */
     public static final Conversion<Long, Integer> L2I = cast(long.class, int.class);
 
     /**
-     * Convierte {@code long} a {@code short} conservando el valor.
+     * Converts {@code long} to {@code short} preserving the value.
      */
     public static final Conversion<Long, Short> L2S = cast(long.class, short.class);
 
     /**
-     * Convierte {@code short} a {@code byte} conservando el valor.
+     * Converts {@code short} to {@code byte} preserving the value.
      */
     public static final Conversion<Short, Byte> S2B = cast(short.class, byte.class);
 
     /**
-     * Convierte {@code short} a {@code double} conservando el valor.
+     * Converts {@code short} to {@code double} preserving the value.
      */
     public static final Conversion<Short, Double> S2D = cast(short.class, double.class);
 
     /**
-     * Convierte {@code short} a {@code float} conservando el valor.
+     * Converts {@code short} to {@code float} preserving the value.
      */
     public static final Conversion<Short, Float> S2F = cast(short.class, float.class);
 
     /**
-     * Convierte {@code short} a {@code int} conservando el valor.
+     * Converts {@code short} to {@code int} preserving the value.
      */
     public static final Conversion<Short, Integer> S2I = cast(short.class, int.class);
 
     /**
-     * Convierte {@code short} a {@code long} conservando el valor.
+     * Converts {@code short} to {@code long} preserving the value.
      */
     public static final Conversion<Short, Long> S2L = cast(short.class, long.class);
 
     /**
-     * Vuelve a leer los bits de un {@code double} como si fueran un {@code long}.
+     * Reads the bits of a {@code double} again as if they were a {@code long}.
      */
     public static final Conversion<Double, Long> REINTERPRET_D2L =
             reinterpret(double.class, long.class);
 
     /**
-     * Vuelve a leer los bits de un {@code float} como si fueran un {@code int}.
+     * Reads the bits of a {@code float} again as if they were a {@code int}.
      */
     public static final Conversion<Float, Integer> REINTERPRET_F2I =
             reinterpret(float.class, int.class);
 
     /**
-     * Vuelve a leer los bits de un {@code int} como si fueran un {@code float}.
+     * Reads the bits of a {@code int} again as if they were a {@code float}.
      */
     public static final Conversion<Integer, Float> REINTERPRET_I2F =
             reinterpret(int.class, float.class);
 
     /**
-     * Vuelve a leer los bits de un {@code long} como si fueran un {@code double}.
+     * Reads the bits of a {@code long} again as if they were a {@code double}.
      */
     public static final Conversion<Long, Double> REINTERPRET_L2D =
             reinterpret(long.class, double.class);
 
     /**
-     * Convierte {@code byte} a {@code int} conservando los bits y rellenando con ceros; el valor
-     * cambia si el original era negativo.
+     * Converts {@code byte} to {@code int} preserving the bits and filling with zeros; the value
+     * changes if the original was negative.
      */
     public static final Conversion<Byte, Integer> ZERO_EXTEND_B2I =
             reinterpret(byte.class, int.class);
 
     /**
-     * Convierte {@code byte} a {@code long} conservando los bits y rellenando con ceros; el valor
-     * cambia si el original era negativo.
+     * Converts {@code byte} to {@code long} preserving the bits and filling with zeros; the value
+     * changes if the original was negative.
      */
     public static final Conversion<Byte, Long> ZERO_EXTEND_B2L =
             reinterpret(byte.class, long.class);
 
     /**
-     * Convierte {@code byte} a {@code short} conservando los bits y rellenando con ceros; el valor
-     * cambia si el original era negativo.
+     * Converts {@code byte} to {@code short} preserving the bits and filling with zeros; the value
+     * changes if the original was negative.
      */
     public static final Conversion<Byte, Short> ZERO_EXTEND_B2S =
             reinterpret(byte.class, short.class);
 
     /**
-     * Convierte {@code int} a {@code long} conservando los bits y rellenando con ceros; el valor
-     * cambia si el original era negativo.
+     * Converts {@code int} to {@code long} preserving the bits and filling with zeros; the value
+     * changes if the original was negative.
      */
     public static final Conversion<Integer, Long> ZERO_EXTEND_I2L =
             reinterpret(int.class, long.class);
 
     /**
-     * Convierte {@code short} a {@code int} conservando los bits y rellenando con ceros; el valor
-     * cambia si el original era negativo.
+     * Converts {@code short} to {@code int} preserving the bits and filling with zeros; the value
+     * changes if the original was negative.
      */
     public static final Conversion<Short, Integer> ZERO_EXTEND_S2I =
             reinterpret(short.class, int.class);
 
     /**
-     * Convierte {@code short} a {@code long} conservando los bits y rellenando con ceros; el valor
-     * cambia si el original era negativo.
+     * Converts {@code short} to {@code long} preserving the bits and filling with zeros; the value
+     * changes if the original was negative.
      */
     public static final Conversion<Short, Long> ZERO_EXTEND_S2L =
             reinterpret(short.class, long.class);
 
 
     // ------------------------------------------------------------------
-    // La implementacion. Nada de aca es API: son los objetos que respaldan las
-    // constantes de arriba. Van adentro y no en un archivo aparte porque afuera
-    // habria un ciclo -- la clase de afuera necesita las fabricas y las fabricas
-    // necesitan las interfaces de adentro.
+    // The implementation. Nothing here is API: these are the objects that back the
+    // constants above. They go inside and not in a separate file because outside
+    // there would be a cycle -- the outer class needs the factories and the factories
+    // need the inner interfaces.
     // ------------------------------------------------------------------
 
 
-        /** La posicion de ese tipo en {@link #Tabla.TIPOS}, o -1 si no es un tipo de posicion. */
-        static int indice(final Class<?> t) {
-            for (int i = 0; i < Tabla.TIPOS.length; i++) {
-                if (Tabla.TIPOS[i] == t) {
+        /** The position of that type in {@link Table#TYPES}, or -1 if it is not a lane type. */
+        static int typeIndex(final Class<?> t) {
+            for (int i = 0; i < Table.TYPES.length; i++) {
+                if (Table.TYPES[i] == t) {
                     return i;
                 }
             }
             return -1;
         }
 
-        static int indiceExigido(final Class<?> t) {
-            final int i = indice(t);
+        static int requiredTypeIndex(final Class<?> t) {
+            final int i = typeIndex(t);
             if (i < 0) {
                 throw new UnsupportedOperationException("Bad vector element type: " + t
                         + " (should be a primitive type such as byte.class with a known bit-size)");
@@ -884,68 +888,69 @@ public abstract class VectorOperators {
             return i;
         }
 
-        /** Lo comun a todos: los datos y las respuestas que salen de ellos. */
+        /** What they all share: the data and the answers that come from it. */
         abstract static class Base implements Operator {
 
-            private final String nombre;
-            private final String simbolo;
-            private final int aridad;
-            private final boolean booleano;
-            private final boolean asociativo;
-            private final int mascara;
-            private final Class<?> rango;
+            private final String name;
+            private final String symbol;
+            private final int arity;
+            private final boolean boolResult;
+            private final boolean associative;
+            private final int mask;
+            private final Class<?> range;
 
-            Base(final String nombre, final String simbolo, final int aridad, final boolean booleano,
-                    final boolean asociativo, final int mascara, final Class<?> rango) {
-                this.nombre = nombre;
-                this.simbolo = simbolo;
-                this.aridad = aridad;
-                this.booleano = booleano;
-                this.asociativo = asociativo;
-                this.mascara = mascara;
-                this.rango = rango;
+            Base(final String name, final String symbol, final int arity, final boolean boolResult,
+                    final boolean associative, final int mask, final Class<?> range) {
+                this.name = name;
+                this.symbol = symbol;
+                this.arity = arity;
+                this.boolResult = boolResult;
+                this.associative = associative;
+                this.mask = mask;
+                this.range = range;
             }
 
             @Override
             public String name() {
-                return nombre;
+                return name;
             }
 
             @Override
             public String operatorName() {
-                return simbolo;
+                return symbol;
             }
 
             @Override
             public int arity() {
-                return aridad;
+                return arity;
             }
 
             @Override
             public boolean isBoolean() {
-                return booleano;
+                return boolResult;
             }
 
             @Override
             public boolean isAssociative() {
-                return asociativo;
+                return associative;
             }
 
             @Override
             public Class<?> rangeType() {
-                return rango;
+                return range;
             }
 
             @Override
             public boolean compatibleWith(final Class<?> elementType) {
-                // Un tipo que no es de posicion no da `false`, da error: preguntar si `ADD` sirve para
-                // `String` no es una pregunta con respuesta, es un error de quien pregunta.
-                return (mascara & 1 << indiceExigido(elementType)) != 0;
+                // A type that is not a lane type does not give `false`, it gives an error: asking
+                // whether `ADD` serves `String` is not a question with an answer, it is the asker's
+                // error.
+                return (mask & 1 << requiredTypeIndex(elementType)) != 0;
             }
 
             @Override
             public String toString() {
-                return nombre;
+                return name;
             }
         }
 
@@ -961,8 +966,8 @@ public abstract class VectorOperators {
             }
         }
 
-        static final class Asoc extends Base implements Associative {
-            Asoc(final String n, final String s, final int m) {
+        static final class Assoc extends Base implements Associative {
+            Assoc(final String n, final String s, final int m) {
                 super(n, s, 2, false, true, m, Object.class);
             }
         }
@@ -979,33 +984,35 @@ public abstract class VectorOperators {
             }
         }
 
-        static final class Prueba extends Base implements Test {
-            Prueba(final String n, final String s, final int m) {
+        static final class TestOp extends Base implements Test {
+            TestOp(final String n, final String s, final int m) {
                 super(n, s, 1, true, false, m, boolean.class);
             }
         }
 
         /**
-         * Una conversion, que ademas de operador sabe de que tipo a que tipo va.
+         * A conversion, which besides being an operator knows from which type to which type it
+         * goes.
          *
-         * <p>Los parametros de tipo son los envueltos --{@code Conversion<Byte, Double>}-- pero
-         * {@link #domainType()} y {@link #rangeType()} devuelven los primitivos, que es lo que dice el
-         * JDK. Los dos {@code Class} se guardan sin parametrizar y se convierten al salir: no hay forma
-         * de escribir {@code Class<Byte>} apuntando a {@code byte.class} sin ese paso.
+         * <p>The type parameters are the boxed ones --{@code Conversion<Byte, Double>}-- but {@link
+         * #domainType()} and {@link #rangeType()} return the primitives, which is what the JDK
+         * says. The two {@code Class}es are kept unparameterised and converted on the way out:
+         * there is no way of writing a {@code Class<Byte>} pointing at {@code byte.class} without
+         * that step.
          */
         static final class Conv<E, F> extends Base implements Conversion<E, F> {
 
-            final Class<?> dominio;
+            final Class<?> domain;
 
-            Conv(final String n, final String s, final Class<?> dominio, final Class<?> rango) {
-                super(n, s, 1, false, false, TODOS, rango);
-                this.dominio = dominio;
+            Conv(final String n, final String s, final Class<?> domain, final Class<?> range) {
+                super(n, s, 1, false, false, ALL, range);
+                this.domain = domain;
             }
 
             @SuppressWarnings("unchecked")
             @Override
             public Class<E> domainType() {
-                return (Class<E>) dominio;
+                return (Class<E>) domain;
             }
 
             @SuppressWarnings("unchecked")
@@ -1017,7 +1024,7 @@ public abstract class VectorOperators {
             @SuppressWarnings("unchecked")
             @Override
             public <E2, F2> Conversion<E2, F2> check(final Class<E2> from, final Class<F2> to) {
-                if (from != dominio || to != super.rangeType()) {
+                if (from != domain || to != super.rangeType()) {
                     throw new ClassCastException(name() + ": not " + from.getName() + " -> "
                             + to.getName());
                 }
@@ -1025,84 +1032,85 @@ public abstract class VectorOperators {
             }
         }
 
-        static Unary unaria(final String n, final String s, final int m) {
+        static Unary unary(final String n, final String s, final int m) {
             return new Un(n, s, m);
         }
 
-        static Binary binaria(final String n, final String s, final int m) {
+        static Binary binary(final String n, final String s, final int m) {
             return new Bin(n, s, m);
         }
 
-        static Associative asociativa(final String n, final String s, final int m) {
-            return new Asoc(n, s, m);
+        static Associative associative(final String n, final String s, final int m) {
+            return new Assoc(n, s, m);
         }
 
-        static Ternary ternaria(final String n, final String s, final int m) {
+        static Ternary ternary(final String n, final String s, final int m) {
             return new Ter(n, s, m);
         }
 
-        static Comparison comparacion(final String n, final String s, final int m) {
+        static Comparison comparison(final String n, final String s, final int m) {
             return new Cmp(n, s, m);
         }
 
-        static Test prueba(final String n, final String s, final int m) {
-            return new Prueba(n, s, m);
+        static Test test(final String n, final String s, final int m) {
+            return new TestOp(n, s, m);
         }
 
         /**
-         * La conversion de valor: el numero se conserva, no los bits.
+         * The value conversion: the number is preserved, not the bits.
          *
-         * <p>El nombre y el simbolo se arman con la misma regla que el JDK: {@code B2D} y
-         * {@code byte-C-double} para tipos distintos, {@code COPY_B2B} y {@code byte-I-byte} cuando son
-         * el mismo, porque ahi la conversion no hace nada.
+         * <p>The name and the symbol are built with the same rule as the JDK's: {@code B2D} and
+         * {@code byte-C-double} for different types, {@code COPY_B2B} and {@code byte-I-byte} when
+         * they are the same, because there the conversion does nothing.
          *
-         * @param <E> el tipo de origen, envuelto
-         * @param <F> el tipo de destino, envuelto
-         * @param dominio el tipo de origen
-         * @param rango el tipo de destino
-         * @return la conversion
+         * @param <E> the source type, boxed
+         * @param <F> the target type, boxed
+         * @param domain the source type
+         * @param range the target type
+         * @return the conversion
          */
-        static <E, F> Conversion<E, F> cast(final Class<?> dominio, final Class<?> rango) {
-            final int d = indiceExigido(dominio);
-            final int r = indiceExigido(rango);
+        static <E, F> Conversion<E, F> cast(final Class<?> domain, final Class<?> range) {
+            final int d = requiredTypeIndex(domain);
+            final int r = requiredTypeIndex(range);
             if (d == r) {
-                return new Conv<E, F>("COPY_" + par(d, r), marca(dominio, "I", rango), dominio, rango);
+                return new Conv<E, F>("COPY_" + pair(d, r), key(domain, "I", range), domain, range);
             }
-            return new Conv<E, F>(par(d, r), marca(dominio, "C", rango), dominio, rango);
+            return new Conv<E, F>(pair(d, r), key(domain, "C", range), domain, range);
         }
 
         /**
-         * La conversion de bits: los bits se conservan, no el numero.
+         * The bit conversion: the bits are preserved, not the number.
          *
-         * <p>Ensanchar un entero es el caso especial: los bits que faltan hay que inventarlos, y esta
-         * conversion los pone en cero en vez de copiar el signo. Por eso ahi el nombre dice
-         * {@code ZERO_EXTEND}: {@code (byte) -1} reinterpretado a {@code int} da 255, no -1.
+         * <p>Widening an integer is the special case: the missing bits have to be invented, and
+         * this conversion sets them to zero instead of copying the sign. That is why the name there
+         * says {@code ZERO_EXTEND}: {@code (byte) -1} reinterpreted to {@code int} gives 255, not
+         * -1.
          *
-         * @param <E> el tipo de origen, envuelto
-         * @param <F> el tipo de destino, envuelto
-         * @param dominio el tipo de origen
-         * @param rango el tipo de destino
-         * @return la conversion
+         * @param <E> the source type, boxed
+         * @param <F> the target type, boxed
+         * @param domain the source type
+         * @param range the target type
+         * @return the conversion
          */
-        static <E, F> Conversion<E, F> reinterpret(final Class<?> dominio, final Class<?> rango) {
-            final int d = indiceExigido(dominio);
-            final int r = indiceExigido(rango);
+        static <E, F> Conversion<E, F> reinterpret(final Class<?> domain, final Class<?> range) {
+            final int d = requiredTypeIndex(domain);
+            final int r = requiredTypeIndex(range);
             if (d == r) {
-                return new Conv<E, F>("COPY_" + par(d, r), marca(dominio, "I", rango), dominio, rango);
+                return new Conv<E, F>("COPY_" + pair(d, r), key(domain, "I", range), domain, range);
             }
             if (d < 4 && r < 4 && r > d) {
-                return new Conv<E, F>("ZERO_EXTEND_" + par(d, r), marca(dominio, "Z", rango),
-                        dominio, rango);
+                return new Conv<E, F>("ZERO_EXTEND_" + pair(d, r), key(domain, "Z", range),
+                        domain, range);
             }
-            return new Conv<E, F>("REINTERPRET_" + par(d, r), marca(dominio, "R", rango),
-                    dominio, rango);
+            return new Conv<E, F>("REINTERPRET_" + pair(d, r), key(domain, "R", range),
+                    domain, range);
         }
 
-        static String par(final int d, final int r) {
-            return "" + Tabla.LETRAS.charAt(d) + '2' + Tabla.LETRAS.charAt(r);
+        static String pair(final int d, final int r) {
+            return "" + Table.LETTERS.charAt(d) + '2' + Table.LETTERS.charAt(r);
         }
 
-        static String marca(final Class<?> dominio, final String clase, final Class<?> rango) {
-            return dominio.getName() + "-" + clase + "-" + rango.getName();
+        static String key(final Class<?> domain, final String kind, final Class<?> range) {
+            return domain.getName() + "-" + kind + "-" + range.getName();
         }
 }

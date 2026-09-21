@@ -13,398 +13,402 @@ import javax.sql.rowset.spi.SyncProvider;
 import javax.sql.rowset.spi.SyncProviderException;
 
 /**
- * Un conjunto de filas que vive <strong>desconectado</strong> de la base.
+ * A set of rows that lives <strong>disconnected</strong> from the database.
  *
- * <h2>Que gana con desconectarse</h2>
+ * <h2>What it gains by disconnecting</h2>
  *
- * <p>Que no ocupa una conexion mientras alguien lo mira. Una conexion es un recurso escaso y caro; un
- * {@code ResultSet} comun la retiene desde que se abre hasta que se cierra, y en una aplicacion con
- * miles de usuarios eso no escala. Este conjunto se llena, suelta la conexion, y despues se puede
- * recorrer, modificar y hasta serializar y mandar por la red.
+ * <p>That it does not hold a connection while somebody looks at it. A connection is a scarce and
+ * expensive resource; an ordinary {@code ResultSet} holds it from the moment it opens until it
+ * closes, and in an application with thousands of users that does not scale. This set fills up,
+ * lets go of the connection, and afterwards can be walked, modified and even serialized and sent
+ * over the network.
  *
- * <p>Tambien es {@code Serializable} y desplazable en los dos sentidos, cosas que un
- * {@code ResultSet} de solo avance no puede ofrecer justamente porque esta atado al cursor del
- * servidor.
+ * <p>It is also {@code Serializable} and scrollable in both directions, things a forward-only
+ * {@code ResultSet} cannot offer precisely because it is tied to the server's cursor.
  *
- * <h2>Lo que cuesta: los conflictos</h2>
+ * <h2>What it costs: conflicts</h2>
  *
- * <p>Entre que se leyo y que se escribe pasa tiempo, y en ese tiempo otro pudo tocar las mismas
- * filas. Por eso {@link #acceptChanges} lanza {@link SyncProviderException} y no una
- * {@code SQLException} comun: adentro viene el
- * {@link javax.sql.rowset.spi.SyncResolver} con las filas que chocaron, para resolverlas una por
- * una en vez de perder el lote entero.
+ * <p>Time passes between reading and writing, and in that time somebody else may have touched the
+ * same rows. That is why {@link #acceptChanges} throws {@link SyncProviderException} and not an
+ * ordinary {@code SQLException}: inside comes the {@link javax.sql.rowset.spi.SyncResolver} with
+ * the rows that clashed, to resolve them one by one instead of losing the whole batch.
  *
- * <p>Ese es el nucleo del diseno: la desconexion no elimina el problema de la concurrencia, lo
- * <strong>mueve</strong> del servidor al cliente y lo hace explicito.
+ * <p>That is the core of the design: disconnecting does not eliminate the concurrency problem, it
+ * <strong>moves</strong> it from the server to the client and makes it explicit.
  *
- * <h2>Las filas originales</h2>
+ * <h2>The original rows</h2>
  *
- * <p>El conjunto guarda dos versiones de cada fila modificada: la que se cargo y la que el usuario
- * dejo. La original es lo que permite detectar conflictos —hay contra que comparar— y tambien lo
- * que hace posible {@link #undoUpdate} y {@link #restoreOriginal}. Sin ella, deshacer significaria
- * volver a consultar.
+ * <p>The set keeps two versions of each modified row: the one that was loaded and the one the user
+ * left. The original is what allows conflicts to be detected —there is something to compare
+ * against— and also what makes {@link #undoUpdate} and {@link #restoreOriginal} possible. Without
+ * it, undoing would mean querying again.
  *
- * <h2>La paginacion</h2>
+ * <h2>Paging</h2>
  *
- * <p>{@link #setPageSize} y {@link #nextPage} sirven para un resultado que no entra en memoria: se
- * trae de a tantas filas. La contrapartida es que las paginas se leen en momentos distintos, asi que
- * dos paginas del mismo recorrido pueden no ser consistentes entre si.
+ * <p>{@link #setPageSize} and {@link #nextPage} serve for a result that does not fit in memory: it
+ * is fetched so many rows at a time. The trade-off is that the pages are read at different moments,
+ * so two pages of the same walk may not be consistent with each other.
  *
  * @since 1.5
  */
 public interface CachedRowSet extends RowSet, Joinable {
 
     /**
-     * Si {@link #acceptChanges()} confirma la transaccion por su cuenta.
+     * Whether {@link #acceptChanges()} commits the transaction on its own.
      *
-     * <p>Es {@code true} y es una constante, no una propiedad: el comportamiento esta fijado por la
-     * especificacion.
+     * <p>It is {@code true} and it is a constant, not a property: the behaviour is fixed by the
+     * specification.
      */
     boolean COMMIT_ON_ACCEPT_CHANGES = true;
 
     /**
-     * Llena el conjunto con lo que haya en un {@code ResultSet} ya abierto.
+     * Fills the set with whatever there is in an already open {@code ResultSet}.
      *
-     * @param data el resultado del cual copiar
-     * @throws SQLException si no se pudo leer
+     * @param data the result to copy from
+     * @throws SQLException if it could not be read
      */
     void populate(ResultSet data) throws SQLException;
 
     /**
-     * Se conecta con la conexion dada, ejecuta la consulta y se desconecta.
+     * Connects with the given connection, executes the query and disconnects.
      *
-     * <p>La conexion la cierra el que llama, no este metodo: se la prestaron.
+     * <p>The specification says this method also closes {@code conn} once it has populated the set.
+     * (The note said the caller closes it, not this method, because it was lent.)
      *
-     * @param conn la conexion a usar
-     * @throws SQLException si la consulta fallo
+     * @param conn the connection to use
+     * @throws SQLException if the query failed
      */
     void execute(Connection conn) throws SQLException;
 
     /**
-     * Devuelve los cambios al origen.
+     * Returns the changes to the source.
      *
-     * @throws SyncProviderException si hubo conflictos; trae adentro el resolvedor
+     * @throws SyncProviderException if there were conflicts; it carries the resolver inside
      */
     void acceptChanges() throws SyncProviderException;
 
     /**
-     * Devuelve los cambios al origen usando la conexion dada.
+     * Returns the changes to the source using the given connection.
      *
-     * @param con la conexion a usar
-     * @throws SyncProviderException si hubo conflictos; trae adentro el resolvedor
+     * @param con the connection to use
+     * @throws SyncProviderException if there were conflicts; it carries the resolver inside
      */
     void acceptChanges(Connection con) throws SyncProviderException;
 
     /**
-     * Descarta todos los cambios y vuelve al contenido con el que se cargo.
+     * Discards all the changes and goes back to the content it was loaded with.
      *
-     * @throws SQLException si no se pudo restaurar
+     * @throws SQLException if it could not be restored
      */
     void restoreOriginal() throws SQLException;
 
     /**
-     * Suelta el contenido, dejando el conjunto vacio pero con sus propiedades.
+     * Lets go of the content, leaving the set empty but with its properties.
      *
-     * @throws SQLException si no se pudo liberar
+     * @throws SQLException if it could not be released
      */
     void release() throws SQLException;
 
     /**
-     * Deshace el borrado de la fila actual.
+     * Undoes the deletion of the current row.
      *
-     * @throws SQLException si la fila actual no estaba borrada
+     * @throws SQLException if the current row was not deleted
      */
     void undoDelete() throws SQLException;
 
     /**
-     * Deshace la insercion de la fila actual.
+     * Undoes the insertion of the current row.
      *
-     * @throws SQLException si la fila actual no era una insercion
+     * @throws SQLException if the current row was not an insertion
      */
     void undoInsert() throws SQLException;
 
     /**
-     * Deshace la modificacion de la fila actual.
+     * Undoes the modification of the current row.
      *
-     * @throws SQLException si la fila actual no estaba modificada
+     * @throws SQLException if the current row was not modified
      */
     void undoUpdate() throws SQLException;
 
     /**
-     * Si esa columna de la fila actual fue modificada.
+     * Whether that column of the current row was modified.
      *
-     * @param idx la columna, desde 1
-     * @return si cambio
-     * @throws SQLException si el indice no es valido
+     * @param idx the column, from 1
+     * @return whether it changed
+     * @throws SQLException if the index is not valid
      */
     boolean columnUpdated(int idx) throws SQLException;
 
     /**
-     * Si esa columna de la fila actual fue modificada.
+     * Whether that column of the current row was modified.
      *
-     * @param columnName el nombre de la columna
-     * @return si cambio
-     * @throws SQLException si el nombre no existe
+     * @param columnName the name of the column
+     * @return whether it changed
+     * @throws SQLException if the name does not exist
      */
     boolean columnUpdated(String columnName) throws SQLException;
 
     /**
-     * El conjunto entero como una coleccion de filas.
+     * The whole set as a collection of rows.
      *
-     * @return la coleccion
-     * @throws SQLException si no se pudo construir
+     * @return the collection
+     * @throws SQLException if it could not be built
      */
     Collection<?> toCollection() throws SQLException;
 
     /**
-     * Una columna entera como coleccion de valores.
+     * A whole column as a collection of values.
      *
-     * @param column la columna, desde 1
-     * @return la coleccion
-     * @throws SQLException si el indice no es valido
+     * @param column the column, from 1
+     * @return the collection
+     * @throws SQLException if the index is not valid
      */
     Collection<?> toCollection(int column) throws SQLException;
 
     /**
-     * Una columna entera como coleccion de valores.
+     * A whole column as a collection of values.
      *
-     * @param column el nombre de la columna
-     * @return la coleccion
-     * @throws SQLException si el nombre no existe
+     * @param column the name of the column
+     * @return the collection
+     * @throws SQLException if the name does not exist
      */
     Collection<?> toCollection(String column) throws SQLException;
 
     /**
-     * El proveedor que sincroniza este conjunto con su origen.
+     * The provider that synchronizes this set with its source.
      *
-     * @return el proveedor
-     * @throws SQLException si no se pudo obtener
+     * @return the provider
+     * @throws SQLException if it could not be obtained
      */
     SyncProvider getSyncProvider() throws SQLException;
 
     /**
-     * Cambia el proveedor de sincronizacion.
+     * Changes the synchronization provider.
      *
-     * @param provider el identificador del proveedor
-     * @throws SQLException si no esta registrado o no se pudo instanciar
+     * @param provider the provider's identifier
+     * @throws SQLException if it is not registered or could not be instantiated
      */
     void setSyncProvider(String provider) throws SQLException;
 
     /**
-     * Cuantas filas hay.
+     * How many rows there are.
      *
-     * @return la cantidad
+     * @return the count
      */
     int size();
 
     /**
-     * Fija los metadatos de las columnas.
+     * Sets the metadata of the columns.
      *
-     * <p>Hace falta cuando el conjunto se llena a mano y no desde un {@code ResultSet}: sin
-     * metadatos no hay nombres ni tipos de columna, y casi nada del resto de la interfaz funciona.
+     * <p>It is needed when the set is filled by hand and not from a {@code ResultSet}: without
+     * metadata there are no column names nor types, and almost nothing of the rest of the interface
+     * works.
      *
-     * @param md los metadatos
-     * @throws SQLException si no se pudieron fijar
+     * @param md the metadata
+     * @throws SQLException if it could not be set
      */
     void setMetaData(RowSetMetaData md) throws SQLException;
 
     /**
-     * El contenido original de todo el conjunto, como {@code ResultSet}.
+     * The original content of the whole set, as a {@code ResultSet}.
      *
-     * @return el contenido original
-     * @throws SQLException si no se pudo construir
+     * @return the original content
+     * @throws SQLException if it could not be built
      */
     ResultSet getOriginal() throws SQLException;
 
     /**
-     * El contenido original de la fila actual.
+     * The original content of the current row.
      *
-     * @return la fila original
-     * @throws SQLException si no hay fila actual
+     * @return the original row
+     * @throws SQLException if there is no current row
      */
     ResultSet getOriginalRow() throws SQLException;
 
     /**
-     * Declara que la fila actual pasa a ser la original.
+     * Declares that the current row becomes the original.
      *
-     * <p>Es lo que se hace despues de sincronizar bien: lo que se acaba de escribir es ahora lo que
-     * hay en el origen, asi que es contra eso que hay que comparar la proxima vez.
+     * <p>It is what is done after synchronizing successfully: what was just written is now what
+     * there is in the source, so that is what has to be compared against next time.
      *
-     * @throws SQLException si no hay fila actual
+     * @throws SQLException if there is no current row
      */
     void setOriginalRow() throws SQLException;
 
     /**
-     * La tabla contra la cual se escriben los cambios.
+     * The table the changes are written against.
      *
-     * @return el nombre de la tabla
-     * @throws SQLException si no se pudo obtener
+     * @return the name of the table
+     * @throws SQLException if it could not be obtained
      */
     String getTableName() throws SQLException;
 
     /**
-     * Fija la tabla contra la cual escribir.
+     * Sets the table to write against.
      *
-     * <p>Hace falta cuando la consulta toco varias tablas: el conjunto no puede adivinar en cual
-     * escribir, y sin esto {@link #acceptChanges} no tiene destino.
+     * <p>It is needed when the query touched several tables: the set cannot guess which one to
+     * write to, and without this {@link #acceptChanges} has no destination.
      *
-     * @param tabName el nombre de la tabla
-     * @throws SQLException si el nombre es invalido
+     * @param tabName the name of the table
+     * @throws SQLException if the name is invalid
      */
     void setTableName(String tabName) throws SQLException;
 
     /**
-     * Las columnas que identifican una fila.
+     * The columns that identify a row.
      *
-     * @return los indices, desde 1
-     * @throws SQLException si no se pudieron obtener
+     * @return the indices, from 1
+     * @throws SQLException if they could not be obtained
      */
     int[] getKeyColumns() throws SQLException;
 
     /**
-     * Fija las columnas que identifican una fila.
+     * Sets the columns that identify a row.
      *
-     * <p>Es lo que el escritor usa para armar el {@code WHERE} al actualizar. Sin claves tendria
-     * que comparar todas las columnas, que es mas lento y falla con las que no se pueden comparar.
+     * <p>It is what the writer uses to build the {@code WHERE} when updating. Without keys it would
+     * have to compare all the columns, which is slower and fails with the ones that cannot be
+     * compared.
      *
-     * @param keys los indices, desde 1
-     * @throws SQLException si algun indice no es valido
+     * @param keys the indices, from 1
+     * @throws SQLException if some index is not valid
      */
     void setKeyColumns(int[] keys) throws SQLException;
 
     /**
-     * Otro conjunto que comparte los datos de este.
+     * Another set that shares this one's data.
      *
-     * <p>Comparten las filas y tienen <strong>cursores distintos</strong>: dos recorridos
-     * independientes sobre los mismos datos, sin copiarlos. Modificar por uno se ve por el otro.
+     * <p>They share the rows and have <strong>different cursors</strong>: two independent walks
+     * over the same data, without copying it. Modifying through one is seen through the other.
      *
-     * @return el conjunto compartido
-     * @throws SQLException si no se pudo crear
+     * @return the shared set
+     * @throws SQLException if it could not be created
      */
     RowSet createShared() throws SQLException;
 
     /**
-     * Una copia independiente, con datos y estado.
+     * An independent copy, with data and state.
      *
-     * @return la copia
-     * @throws SQLException si no se pudo copiar
+     * @return the copy
+     * @throws SQLException if it could not be copied
      */
     CachedRowSet createCopy() throws SQLException;
 
     /**
-     * Una copia con las columnas pero sin las filas.
+     * A copy with the columns but without the rows.
      *
-     * @return la copia vacia
-     * @throws SQLException si no se pudo copiar
+     * @return the empty copy
+     * @throws SQLException if it could not be copied
      */
     CachedRowSet createCopySchema() throws SQLException;
 
     /**
-     * Una copia sin las restricciones del original.
+     * A deep copy of the data, independent of this set.
      *
-     * <p>Sin la marca de solo lectura, sin el tipo de cursor, sin el nivel de aislamiento. Sirve
-     * para trabajar con los datos sin arrastrar limitaciones que venian de como se los consulto.
+     * <p>The note said the constraints left behind are the read-only mark, the cursor type and the
+     * isolation level; the specification says only that it is a deep copy of the data, independent
+     * of this one.
      *
-     * @return la copia sin restricciones
-     * @throws SQLException si no se pudo copiar
+     * @return the copy without constraints
+     * @throws SQLException if it could not be copied
      */
     CachedRowSet createCopyNoConstraints() throws SQLException;
 
     /**
-     * Los avisos acumulados.
+     * The accumulated warnings.
      *
-     * @return el primero de la cadena, o {@code null}
-     * @throws SQLException si no se pudieron obtener
+     * @return the first of the chain, or {@code null}
+     * @throws SQLException if they could not be obtained
      */
     RowSetWarning getRowSetWarnings() throws SQLException;
 
     /**
-     * Si las filas borradas se siguen viendo al recorrer.
+     * Whether deleted rows are still seen when walking.
      *
-     * @return si se muestran
-     * @throws SQLException si no se pudo consultar
+     * @return whether they are shown
+     * @throws SQLException if it could not be queried
      */
     boolean getShowDeleted() throws SQLException;
 
     /**
-     * Muestra o esconde las filas borradas.
+     * Shows or hides the deleted rows.
      *
-     * <p>Las filas borradas no desaparecen hasta sincronizar —hay que recordar que borrarlas para
-     * escribirlo despues—, asi que la pregunta es solo si el recorrido pasa por ellas.
+     * <p>Deleted rows do not disappear until synchronizing —it has to be remembered that they were
+     * deleted in order to write it later—, so the question is only whether the walk goes through
+     * them.
      *
-     * @param b si mostrarlas
-     * @throws SQLException si no se pudo cambiar
+     * @param b whether to show them
+     * @throws SQLException if it could not be changed
      */
     void setShowDeleted(boolean b) throws SQLException;
 
     /**
-     * Confirma la transaccion de la conexion subyacente.
+     * Commits the transaction of the underlying connection.
      *
-     * @throws SQLException si no se pudo confirmar
+     * @throws SQLException if it could not be committed
      */
     void commit() throws SQLException;
 
     /**
-     * Deshace la transaccion de la conexion subyacente.
+     * Rolls back the transaction of the underlying connection.
      *
-     * @throws SQLException si no se pudo deshacer
+     * @throws SQLException if it could not be rolled back
      */
     void rollback() throws SQLException;
 
     /**
-     * Deshace hasta el punto de resguardo dado.
+     * Rolls back to the given savepoint.
      *
-     * @param s el punto de resguardo
-     * @throws SQLException si no se pudo deshacer
+     * @param s the savepoint
+     * @throws SQLException if it could not be rolled back
      */
     void rollback(Savepoint s) throws SQLException;
 
     /**
-     * Aviso de que el conjunto se lleno, con la fila donde arranco la pagina.
+     * Notice that the set was filled, with the row where the page started.
      *
-     * @param event el evento
-     * @param numRows la fila inicial de la pagina
-     * @throws SQLException si no se pudo procesar
+     * @param event the event
+     * @param numRows the starting row of the page
+     * @throws SQLException if it could not be processed
      */
     void rowSetPopulated(RowSetEvent event, int numRows) throws SQLException;
 
     /**
-     * Llena el conjunto desde una fila en adelante.
+     * Fills the set from a row onwards.
      *
-     * @param startRow la fila del resultado por la cual empezar, desde 1
-     * @param rs el resultado del cual copiar
-     * @throws SQLException si no se pudo leer
+     * @param startRow the row of the result to start from, from 1
+     * @param rs the result to copy from
+     * @throws SQLException if it could not be read
      */
     void populate(ResultSet rs, int startRow) throws SQLException;
 
     /**
-     * Cuantas filas trae cada pagina.
+     * How many rows each page brings.
      *
-     * @param size el tamano; cero desactiva la paginacion
-     * @throws SQLException si el tamano es negativo o supera el maximo de filas
+     * @param size the size; zero turns paging off
+     * @throws SQLException if the size is negative or exceeds the maximum number of rows
      */
     void setPageSize(int size) throws SQLException;
 
     /**
-     * El tamano de pagina.
+     * The page size.
      *
-     * @return el tamano
+     * @return the size
      */
     int getPageSize();
 
     /**
-     * Trae la pagina siguiente.
+     * Fetches the next page.
      *
-     * @return {@code true} si habia otra
-     * @throws SQLException si no se pudo leer
+     * @return {@code true} if there was another
+     * @throws SQLException if it could not be read
      */
     boolean nextPage() throws SQLException;
 
     /**
-     * Trae la pagina anterior.
+     * Fetches the previous page.
      *
-     * @return {@code true} si habia otra
-     * @throws SQLException si no se pudo leer
+     * @return {@code true} if there was another
+     * @throws SQLException if it could not be read
      */
     boolean previousPage() throws SQLException;
 }

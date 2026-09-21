@@ -1,27 +1,27 @@
 package org.w3c.dom;
 
 /**
- * KajiLibrary's org.w3c.dom.DOMErrorHandler -- quien recibe los {@link DOMError}.
+ * KajiLibrary's org.w3c.dom.DOMErrorHandler -- the one who receives the {@link DOMError}s.
  *
- * <p>Se registra en la {@link DOMConfiguration} del documento bajo el parametro
- * {@code "error-handler"}. Un solo metodo, y el valor que devuelve **invierte el control**: con
- * {@code true} el procesador sigue adelante, con {@code false} para. Es la unica forma que tiene el
- * llamador de imponer su politica --lo que para un servidor es fatal para un editor es un aviso--
- * porque el procesador no puede saberla.
+ * <p>It is registered in the {@link DOMConfiguration} of the document under the {@code
+ * "error-handler"} parameter. One single method, and the value it returns **inverts the control**:
+ * with {@code true} the processor carries on, with {@code false} it stops. It is the only way the
+ * caller has of imposing its policy --what for a server is fatal for an editor is a warning--
+ * because the processor cannot know it.
  *
- * <p>La regla que se rompe siempre: devolver {@code true} ante un
- * {@link DOMError#SEVERITY_FATAL_ERROR} **no** hace que el procesador continue. Un error fatal es
- * fatal; la norma dice que el procesador puede ignorar la respuesta, y lo que salga de seguir sobre
- * un estado que el mismo declaro inutilizable no significa nada.
+ * <p>The rule that always gets broken: returning {@code true} on a {@link
+ * DOMError#SEVERITY_FATAL_ERROR} does **not** make the processor continue. A fatal error is fatal;
+ * the standard says the processor may ignore the answer, and whatever comes out of carrying on over
+ * a state it itself declared unusable means nothing.
  *
- * <p>Interfaz declarada entera.
+ * <p>The interface is declared whole.
  */
 public interface DOMErrorHandler {
 
     /**
-     * @param error el problema, que solo es valido durante esta llamada: guardarse la referencia y
-     *     leerla despues no esta garantizado
-     * @return {@code true} para continuar, {@code false} para parar
+     * @param error the problem, which is only valid during this call: keeping the reference and
+     *     reading it later is not guaranteed
+     * @return {@code true} to continue, {@code false} to stop
      */
     public boolean handleError(DOMError error);
 }

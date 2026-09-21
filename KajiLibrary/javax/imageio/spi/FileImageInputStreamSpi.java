@@ -7,13 +7,13 @@ import javax.imageio.stream.FileImageInputStream;
 import javax.imageio.stream.ImageInputStream;
 
 /**
- * Envuelve un {@link File} en un flujo de entrada de imagenes.
+ * Wraps a {@link File} in an image input stream.
  *
- * <p>De acceso de paquete: no es API. Es uno de los cuatro proveedores de flujo que
- * {@link IIORegistry} registra de fabrica, y el que hace que
- * {@code ImageIO.createImageInputStream(new File(...))} funcione sin que nadie instale nada.
+ * <p>Package-private: it is not API. It is one of the four stream providers {@link IIORegistry}
+ * registers by default, and the one that makes {@code ImageIO.createImageInputStream(new
+ * File(...))} work without anybody installing anything.
  *
- * <p>No usa cache ni la necesita: un archivo ya se puede posicionar.
+ * <p>It uses no cache and needs none: a file can already seek.
  */
 final class FileImageInputStreamSpi extends ImageInputStreamSpi {
 

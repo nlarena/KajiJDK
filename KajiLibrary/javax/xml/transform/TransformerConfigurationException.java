@@ -1,71 +1,73 @@
 package javax.xml.transform;
 
 /**
- * KajiLibrary's javax.xml.transform.TransformerConfigurationException -- no se pudo *armar* nada.
+ * KajiLibrary's javax.xml.transform.TransformerConfigurationException -- nothing could be *set up*.
  *
- * <p>Separa dos fracasos que se parecen y se arreglan distinto. Una {@link TransformerException} a
- * secas dice que la transformacion fallo; esta dice que **ni siquiera llego a empezar**: la hoja de
- * estilo no compila, la fabrica no soporta una caracteristica que se le pidio, el `Templates` no se
- * pudo construir. Uno se investiga mirando el documento de entrada; el otro, mirando la
- * configuracion. De ahi que sea un tipo propio y no un mensaje distinto.
+ * <p>It separates two failures that look alike and are fixed differently. A plain {@link
+ * TransformerException} says the transformation failed; this one says it **did not even get to
+ * start**: the stylesheet does not compile, the factory does not support a feature it was asked
+ * for, the `Templates` could not be built. One is investigated by looking at the input document;
+ * the other, by looking at the configuration. That is why it is a type of its own and not a
+ * different message.
  *
- * <p>El constructor sin argumentos pone {@code "Configuration Error"} de mensaje en vez de dejarlo
- * nulo. No es decorativo: una excepcion sin mensaje que aparece en un log a las tres de la mañana
- * no dice absolutamente nada, y aca el nombre de la clase ya es toda la informacion que hay.
+ * <p>The no-argument constructor sets {@code "Configuration Error"} as the message instead of
+ * leaving it null. It is not decorative: an exception without a message showing up in a log at
+ * three in the morning says absolutely nothing, and here the class name is already all the
+ * information there is.
  */
 public class TransformerConfigurationException extends TransformerException {
 
     private static final long serialVersionUID = -4251405565727967249L;
 
-    /** Sin datos; el mensaje queda en {@code "Configuration Error"}. */
+    /** Without data; the message stays {@code "Configuration Error"}. */
     public TransformerConfigurationException() {
         super("Configuration Error");
     }
 
     /**
-     * Con un mensaje.
+     * With a message.
      *
-     * @param msg la descripcion del error
+     * @param msg the description of the error
      */
     public TransformerConfigurationException(String msg) {
         super(msg);
     }
 
     /**
-     * Envolviendo otra excepcion.
+     * Wrapping another exception.
      *
-     * @param e la causa
+     * @param e the cause
      */
     public TransformerConfigurationException(Throwable e) {
         super(e);
     }
 
     /**
-     * Con mensaje y causa.
+     * With message and cause.
      *
-     * @param msg la descripcion del error
-     * @param e la causa
+     * @param msg the description of the error
+     * @param e the cause
      */
     public TransformerConfigurationException(String msg, Throwable e) {
         super(msg, e);
     }
 
     /**
-     * Con mensaje y ubicacion.
+     * With message and location.
      *
-     * @param msg la descripcion del error
-     * @param locator donde paso
+     * @param msg the description of the error
+     * @param locator where it happened
      */
     public TransformerConfigurationException(String msg, SourceLocator locator) {
         super(msg, locator);
     }
 
     /**
-     * Con mensaje, ubicacion y causa.
+     * With message, location and cause.
      *
-     * @param msg la descripcion del error
-     * @param locator donde paso
-     * @param e la causa
+     * @param msg the description of the error
+     * @param locator where it happened
+     * @param e the cause
      */
     public TransformerConfigurationException(String msg, SourceLocator locator, Throwable e) {
         super(msg, locator, e);

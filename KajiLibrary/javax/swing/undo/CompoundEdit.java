@@ -3,42 +3,42 @@ package javax.swing.undo;
 import java.util.Vector;
 
 /**
- * Varias ediciones que se deshacen y rehacen como una sola.
+ * Several edits that are undone and redone as a single one.
  *
- * <h2>Los dos momentos: en curso y cerrada</h2>
+ * <h2>The two moments: in progress and closed</h2>
  *
- * <p>Es el estado que gobierna todo lo demas. Mientras esta <em>en curso</em> acepta ediciones y no
- * se puede deshacer; despues de {@link #end} deja de aceptar y recien ahi se comporta como una
- * edicion normal. Esa asimetria evita el caso sin sentido de deshacer un grupo que todavia se esta
- * armando.
+ * <p>It is the state that governs everything else. While it is <em>in progress</em> it accepts
+ * edits and cannot be undone; after {@link #end} it stops accepting and only then behaves like a
+ * normal edit. That asymmetry avoids the senseless case of undoing a group that is still being
+ * assembled.
  *
- * <h2>El orden importa</h2>
+ * <h2>The order matters</h2>
  *
- * <p>Deshacer recorre la lista <strong>al reves</strong> y rehacer hacia adelante. Es obvio dicho y
- * facil de escribir mal: deshacer en orden de aplicacion revertiria los efectos en la secuencia
- * equivocada cada vez que dos ediciones tocan lo mismo.
+ * <p>Undo walks the list <strong>backwards</strong> and redo forwards. It is obvious said out
+ * loud and easy to write wrong: undoing in order of application would revert the effects in the
+ * wrong sequence every time two edits touch the same thing.
  *
- * <p>Un grupo es significativo si <em>alguna</em> de sus partes lo es, y su nombre es el de la
- * ultima, que es la que el usuario acaba de hacer.
+ * <p>A group is significant if <em>any</em> of its parts is, and its name is the last one's,
+ * which is the one the user has just made.
  */
 public class CompoundEdit extends AbstractUndoableEdit {
 
     private static final long serialVersionUID = -6512679417930021399L;
 
-    /** Si todavia acepta ediciones. */
+    /** Whether it still accepts edits. */
     boolean inProgress;
 
-    /** Las ediciones que agrupa, en orden de aplicacion. */
+    /** The edits it groups, in order of application. */
     protected Vector<UndoableEdit> edits;
 
-    /** Un grupo nuevo, en curso y vacio. */
+    /** A new group, in progress and empty. */
     public CompoundEdit() {
         super();
         this.inProgress = true;
         this.edits = new Vector<UndoableEdit>();
     }
 
-    /** Deshace todas, de la ultima a la primera. */
+    /** Undoes them all, from the last to the first. */
     public void undo() throws CannotUndoException {
         super.undo();
         int i = this.edits.size();
@@ -49,7 +49,7 @@ public class CompoundEdit extends AbstractUndoableEdit {
         }
     }
 
-    /** Rehace todas, de la primera a la ultima. */
+    /** Redoes them all, from the first to the last. */
     public void redo() throws CannotRedoException {
         super.redo();
         for (int i = 0; i < this.edits.size(); i++) {
@@ -57,7 +57,7 @@ public class CompoundEdit extends AbstractUndoableEdit {
         }
     }
 
-    /** La ultima edicion agregada, o {@code null} si no hay ninguna. */
+    /** The last edit added, or {@code null} if there is none. */
     protected UndoableEdit lastEdit() {
         int n = this.edits.size();
         if (n > 0) {
@@ -66,7 +66,7 @@ public class CompoundEdit extends AbstractUndoableEdit {
         return null;
     }
 
-    /** Mata a todas, de la ultima a la primera, y despues a si misma. */
+    /** Kills them all, from the last to the first, and then itself. */
     public void die() {
         int i = this.edits.size();
         while (i > 0) {
@@ -77,23 +77,23 @@ public class CompoundEdit extends AbstractUndoableEdit {
     }
 
     /**
-     * Agrega una edicion al grupo, si todavia esta en curso.
+     * Adds an edit to the group, if it is still in progress.
      *
-     * <p>Antes de encolarla intenta <strong>fusionarla</strong> con la ultima: primero le pregunta a
-     * la ultima si puede absorber a la nueva, y si no, le pregunta a la nueva si puede absorber a la
-     * ultima. Solo si las dos dicen que no, la lista crece.
+     * <p>Before queueing it, it tries to <strong>merge</strong> it with the last one: first it asks
+     * the last one whether it can absorb the new one, and if not, it asks the new one whether it
+     * can absorb the last one. Only if both say no does the list grow.
      */
     public boolean addEdit(UndoableEdit anEdit) {
         if (!this.inProgress) {
             return false;
         }
-        UndoableEdit ultima = lastEdit();
-        if (ultima == null) {
+        UndoableEdit last = lastEdit();
+        if (last == null) {
             this.edits.addElement(anEdit);
             return true;
         }
-        if (!ultima.addEdit(anEdit)) {
-            if (anEdit.replaceEdit(ultima)) {
+        if (!last.addEdit(anEdit)) {
+            if (anEdit.replaceEdit(last)) {
                 this.edits.removeElementAt(this.edits.size() - 1);
             }
             this.edits.addElement(anEdit);
@@ -101,27 +101,27 @@ public class CompoundEdit extends AbstractUndoableEdit {
         return true;
     }
 
-    /** Cierra el grupo: deja de aceptar ediciones y empieza a poder deshacerse. */
+    /** Closes the group: it stops accepting edits and starts being able to be undone. */
     public void end() {
         this.inProgress = false;
     }
 
-    /** Se puede deshacer si esta cerrada y viva. */
+    /** It can be undone if it is closed and alive. */
     public boolean canUndo() {
         return !isInProgress() && super.canUndo();
     }
 
-    /** Se puede rehacer si esta cerrada y deshecha. */
+    /** It can be redone if it is closed and undone. */
     public boolean canRedo() {
         return !isInProgress() && super.canRedo();
     }
 
-    /** Si todavia acepta ediciones. */
+    /** Whether it still accepts edits. */
     public boolean isInProgress() {
         return this.inProgress;
     }
 
-    /** Significativa si alguna de sus partes lo es. */
+    /** Significant if any of its parts is. */
     public boolean isSignificant() {
         for (int i = 0; i < this.edits.size(); i++) {
             if (this.edits.elementAt(i).isSignificant()) {
@@ -131,27 +131,27 @@ public class CompoundEdit extends AbstractUndoableEdit {
         return false;
     }
 
-    /** El nombre de la ultima edicion: la que el usuario acaba de hacer. */
+    /** The last edit's name: the one the user has just made. */
     public String getPresentationName() {
-        UndoableEdit ultima = lastEdit();
-        if (ultima != null) {
-            return ultima.getPresentationName();
+        UndoableEdit last = lastEdit();
+        if (last != null) {
+            return last.getPresentationName();
         }
         return super.getPresentationName();
     }
 
     public String getUndoPresentationName() {
-        UndoableEdit ultima = lastEdit();
-        if (ultima != null) {
-            return ultima.getUndoPresentationName();
+        UndoableEdit last = lastEdit();
+        if (last != null) {
+            return last.getUndoPresentationName();
         }
         return super.getUndoPresentationName();
     }
 
     public String getRedoPresentationName() {
-        UndoableEdit ultima = lastEdit();
-        if (ultima != null) {
-            return ultima.getRedoPresentationName();
+        UndoableEdit last = lastEdit();
+        if (last != null) {
+            return last.getRedoPresentationName();
         }
         return super.getRedoPresentationName();
     }

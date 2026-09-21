@@ -6,54 +6,54 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * La vista de sólo lectura que {@link AttributedString#getIterator()} entrega.
+ * The read-only view {@link AttributedString#getIterator()} hands out.
  *
- * <p>No es pública porque el JDK tampoco la expone: el tipo que el llamador ve es la interfaz
- * {@link AttributedCharacterIterator}. Vive en su propio archivo y no como clase anidada para que
- * los dos lados de la pieza —el escribible y el legible— se lean por separado.
+ * <p>It is not public because the JDK does not expose it either: the type the caller sees is the
+ * {@link AttributedCharacterIterator} interface. It lives in its own file and not as a nested class
+ * so the piece's two sides --the writable one and the readable one-- can be read separately.
  *
- * <p>Los tramos se calculan acá y no se guardan en el {@code AttributedString}: los atributos se
- * almacenan como una lista de "esta clave, este valor, este rango", y el borde de un tramo es el
- * lugar donde el mapa efectivo cambia. Calcularlo al leer es lo que permite que "gana el último"
- * salga gratis y que un borde que no cambia nada no aparezca como tramo.
+ * <p>The runs are computed here and not stored in the {@code AttributedString}: the attributes are
+ * kept as a list of "this key, this value, this range", and a run's boundary is the place where the
+ * effective map changes. Computing it when reading is what makes "the last one wins" come out free
+ * and what keeps a boundary that changes nothing from showing up as a run.
  */
 final class AttributedStringIterator implements AttributedCharacterIterator {
 
-    private final AttributedString fuente;
+    private final AttributedString source;
     private final int begin;
     private final int end;
-    private final Set<AttributedCharacterIterator.Attribute> filtro;
+    private final Set<AttributedCharacterIterator.Attribute> filter;
     private int pos;
 
-    AttributedStringIterator(AttributedString fuente,
-                             AttributedCharacterIterator.Attribute[] atributos,
+    AttributedStringIterator(AttributedString source,
+                             AttributedCharacterIterator.Attribute[] attributes,
                              int begin, int end) {
-        if (begin < 0 || end > fuente.texto.length() || begin > end) {
+        if (begin < 0 || end > source.text.length() || begin > end) {
             throw new IllegalArgumentException("Invalid substring range");
         }
-        this.fuente = fuente;
+        this.source = source;
         this.begin = begin;
         this.end = end;
         this.pos = begin;
-        if (atributos == null) {
-            this.filtro = null;
+        if (attributes == null) {
+            this.filter = null;
         } else {
-            // Un arreglo vacío NO es lo mismo que null: pide explícitamente "ningún atributo".
+            // An empty array is NOT the same as null: it explicitly asks for "no attributes".
             Set<AttributedCharacterIterator.Attribute> s =
                     new HashSet<AttributedCharacterIterator.Attribute>();
-            for (int i = 0; i < atributos.length; i++) {
-                s.add(atributos[i]);
+            for (int i = 0; i < attributes.length; i++) {
+                s.add(attributes[i]);
             }
-            this.filtro = s;
+            this.filter = s;
         }
     }
 
-    private AttributedStringIterator(AttributedStringIterator otro) {
-        this.fuente = otro.fuente;
-        this.begin = otro.begin;
-        this.end = otro.end;
-        this.filtro = otro.filtro;
-        this.pos = otro.pos;
+    private AttributedStringIterator(AttributedStringIterator other) {
+        this.source = other.source;
+        this.begin = other.begin;
+        this.end = other.end;
+        this.filter = other.filter;
+        this.pos = other.pos;
     }
 
     // ---- CharacterIterator ----
@@ -74,7 +74,7 @@ final class AttributedStringIterator implements AttributedCharacterIterator {
         if (this.pos < this.begin || this.pos >= this.end) {
             return CharacterIterator.DONE;
         }
-        return this.fuente.texto.charAt(this.pos);
+        return this.source.text.charAt(this.pos);
     }
 
     public char next() {
@@ -112,8 +112,8 @@ final class AttributedStringIterator implements AttributedCharacterIterator {
         return this.pos;
     }
 
-    // Copia a mano, como el resto de la casa: un iterador nuevo con la misma ventana y el mismo
-    // cursor es exactamente lo mismo, y no depende del nativo Object.clone().
+    // Copied by hand, like the rest of the house: a new iterator with the same window and the same
+    // cursor is exactly the same thing, and does not depend on the native Object.clone().
     public Object clone() {
         return new AttributedStringIterator(this);
     }
@@ -121,46 +121,47 @@ final class AttributedStringIterator implements AttributedCharacterIterator {
     // ---- AttributedCharacterIterator ----
 
     public int getRunStart() {
-        return this.comienzo(this.pos, null);
+        return this.runStartFrom(this.pos, null);
     }
 
     public int getRunStart(AttributedCharacterIterator.Attribute attribute) {
-        return this.comienzo(this.pos, unitario(attribute));
+        return this.runStartFrom(this.pos, unitary(attribute));
     }
 
     public int getRunStart(Set<? extends AttributedCharacterIterator.Attribute> attributes) {
-        return this.comienzo(this.pos, copia(attributes));
+        return this.runStartFrom(this.pos, copy(attributes));
     }
 
     public int getRunLimit() {
-        return this.limite(this.pos, null);
+        return this.runLimitFrom(this.pos, null);
     }
 
     public int getRunLimit(AttributedCharacterIterator.Attribute attribute) {
-        return this.limite(this.pos, unitario(attribute));
+        return this.runLimitFrom(this.pos, unitary(attribute));
     }
 
     public int getRunLimit(Set<? extends AttributedCharacterIterator.Attribute> attributes) {
-        return this.limite(this.pos, copia(attributes));
+        return this.runLimitFrom(this.pos, copy(attributes));
     }
 
     public Map<AttributedCharacterIterator.Attribute, Object> getAttributes() {
-        return this.mapaEn(this.pos);
+        return this.mapAt(this.pos);
     }
 
     public Object getAttribute(AttributedCharacterIterator.Attribute attribute) {
-        return this.valorEn(this.pos, attribute);
+        return this.valueAt(this.pos, attribute);
     }
 
     public Set<AttributedCharacterIterator.Attribute> getAllAttributeKeys() {
         Set<AttributedCharacterIterator.Attribute> s =
                 new HashSet<AttributedCharacterIterator.Attribute>();
-        for (int i = 0; i < this.fuente.cantidad; i++) {
-            // Un tramo que no toca la ventana no aporta clave: el iterador no puede devolver su
-            // valor en ninguna posición, así que anunciarlo sería anunciar algo inalcanzable.
-            if (this.fuente.hasta[i] > this.begin && this.fuente.desde[i] < this.end) {
-                AttributedCharacterIterator.Attribute k = this.fuente.claves[i];
-                if (this.filtro == null || this.filtro.contains(k)) {
+        for (int i = 0; i < this.source.count; i++) {
+            // A run that does not touch the window contributes no key: the iterator cannot return
+            // its value at any position, so announcing it would be announcing something
+            // unreachable.
+            if (this.source.to[i] > this.begin && this.source.from[i] < this.end) {
+                AttributedCharacterIterator.Attribute k = this.source.keys[i];
+                if (this.filter == null || this.filter.contains(k)) {
                     s.add(k);
                 }
             }
@@ -168,9 +169,9 @@ final class AttributedStringIterator implements AttributedCharacterIterator {
         return s;
     }
 
-    // ---- interno ----
+    // ---- internal -------------------------------------------------------------------------------
 
-    private static Set<AttributedCharacterIterator.Attribute> unitario(
+    private static Set<AttributedCharacterIterator.Attribute> unitary(
             AttributedCharacterIterator.Attribute a) {
         Set<AttributedCharacterIterator.Attribute> s =
                 new HashSet<AttributedCharacterIterator.Attribute>();
@@ -178,7 +179,7 @@ final class AttributedStringIterator implements AttributedCharacterIterator {
         return s;
     }
 
-    private static Set<AttributedCharacterIterator.Attribute> copia(
+    private static Set<AttributedCharacterIterator.Attribute> copy(
             Set<? extends AttributedCharacterIterator.Attribute> in) {
         Set<AttributedCharacterIterator.Attribute> s =
                 new HashSet<AttributedCharacterIterator.Attribute>();
@@ -190,62 +191,62 @@ final class AttributedStringIterator implements AttributedCharacterIterator {
         return s;
     }
 
-    private Map<AttributedCharacterIterator.Attribute, Object> mapaEn(int idx) {
+    private Map<AttributedCharacterIterator.Attribute, Object> mapAt(int idx) {
         Map<AttributedCharacterIterator.Attribute, Object> m =
                 new HashMap<AttributedCharacterIterator.Attribute, Object>();
         if (idx < this.begin || idx >= this.end) {
             return m;
         }
-        // En orden de inserción: el último que cubre la posición pisa a los anteriores. Esa es la
-        // regla completa de resolución de conflictos, y por eso no hace falta guardar tramos
-        // partidos en el AttributedString.
-        for (int i = 0; i < this.fuente.cantidad; i++) {
-            if (this.fuente.desde[i] <= idx && idx < this.fuente.hasta[i]) {
-                AttributedCharacterIterator.Attribute k = this.fuente.claves[i];
-                if (this.filtro == null || this.filtro.contains(k)) {
-                    m.put(k, this.fuente.valores[i]);
+        // In insertion order: the last one covering the position overrides the earlier ones. That
+        // is the whole conflict-resolution rule, and it is why there is no need to store split runs
+        // in the AttributedString.
+        for (int i = 0; i < this.source.count; i++) {
+            if (this.source.from[i] <= idx && idx < this.source.to[i]) {
+                AttributedCharacterIterator.Attribute k = this.source.keys[i];
+                if (this.filter == null || this.filter.contains(k)) {
+                    m.put(k, this.source.values[i]);
                 }
             }
         }
         return m;
     }
 
-    private Object valorEn(int idx, AttributedCharacterIterator.Attribute clave) {
+    private Object valueAt(int idx, AttributedCharacterIterator.Attribute key) {
         if (idx < this.begin || idx >= this.end) {
             return null;
         }
-        if (this.filtro != null && !this.filtro.contains(clave)) {
+        if (this.filter != null && !this.filter.contains(key)) {
             return null;
         }
         Object v = null;
-        for (int i = 0; i < this.fuente.cantidad; i++) {
-            if (this.fuente.claves[i] == clave
-                    && this.fuente.desde[i] <= idx && idx < this.fuente.hasta[i]) {
-                v = this.fuente.valores[i];
+        for (int i = 0; i < this.source.count; i++) {
+            if (this.source.keys[i] == key
+                    && this.source.from[i] <= idx && idx < this.source.to[i]) {
+                v = this.source.values[i];
             }
         }
         return v;
     }
 
-    // Los bordes posibles de un tramo son exactamente los extremos de los rangos declarados, más
-    // los de la ventana. Entre dos bordes consecutivos nada puede cambiar, así que alcanza con
-    // mirar los bordes en lugar de recorrer carácter por carácter.
-    private int[] bordes() {
-        int n = this.fuente.cantidad * 2 + 2;
+    // A run's possible boundaries are exactly the declared ranges' ends, plus the window's. Between
+    // two consecutive boundaries nothing can change, so looking at the boundaries is enough instead
+    // of walking character by character.
+    private int[] boundaries() {
+        int n = this.source.count * 2 + 2;
         int[] b = new int[n];
         int k = 0;
         b[k] = this.begin;
         k = k + 1;
         b[k] = this.end;
         k = k + 1;
-        for (int i = 0; i < this.fuente.cantidad; i++) {
-            b[k] = this.recortar(this.fuente.desde[i]);
+        for (int i = 0; i < this.source.count; i++) {
+            b[k] = this.trimTo(this.source.from[i]);
             k = k + 1;
-            b[k] = this.recortar(this.fuente.hasta[i]);
+            b[k] = this.trimTo(this.source.to[i]);
             k = k + 1;
         }
-        // Inserción: n es chico (dos por atributo agregado) y el orden tiene que ser estable y
-        // sin duplicados para que los recorridos de comienzo/limite lean cada borde una vez.
+        // Insertion sort: n is small (two per attribute added) and the order has to be stable and
+        // free of duplicates so the start/limit walks read each boundary once.
         for (int i = 1; i < k; i++) {
             int v = b[i];
             int j = i - 1;
@@ -269,7 +270,7 @@ final class AttributedStringIterator implements AttributedCharacterIterator {
         return out;
     }
 
-    private int recortar(int v) {
+    private int trimTo(int v) {
         if (v < this.begin) {
             return this.begin;
         }
@@ -279,30 +280,30 @@ final class AttributedStringIterator implements AttributedCharacterIterator {
         return v;
     }
 
-    private int limite(int idx, Set<AttributedCharacterIterator.Attribute> considerados) {
+    private int runLimitFrom(int idx, Set<AttributedCharacterIterator.Attribute> considered) {
         if (idx >= this.end) {
             return this.end;
         }
-        int[] b = this.bordes();
+        int[] b = this.boundaries();
         for (int i = 0; i < b.length; i++) {
-            if (b[i] > idx && !this.mismos(b[i], idx, considerados)) {
+            if (b[i] > idx && !this.sameAttributes(b[i], idx, considered)) {
                 return b[i];
             }
         }
         return this.end;
     }
 
-    private int comienzo(int idx, Set<AttributedCharacterIterator.Attribute> considerados) {
+    private int runStartFrom(int idx, Set<AttributedCharacterIterator.Attribute> considered) {
         if (idx >= this.end) {
             return this.end;
         }
-        int[] b = this.bordes();
+        int[] b = this.boundaries();
         int r = -1;
         for (int i = 0; i < b.length; i++) {
             if (b[i] > idx) {
                 break;
             }
-            if (this.mismos(b[i], idx, considerados)) {
+            if (this.sameAttributes(b[i], idx, considered)) {
                 if (r < 0) {
                     r = b[i];
                 }
@@ -316,10 +317,10 @@ final class AttributedStringIterator implements AttributedCharacterIterator {
         return r;
     }
 
-    private boolean mismos(int a, int c, Set<AttributedCharacterIterator.Attribute> considerados) {
-        if (considerados == null) {
-            Map<AttributedCharacterIterator.Attribute, Object> ma = this.mapaEn(a);
-            Map<AttributedCharacterIterator.Attribute, Object> mc = this.mapaEn(c);
+    private boolean sameAttributes(int a, int c, Set<AttributedCharacterIterator.Attribute> considered) {
+        if (considered == null) {
+            Map<AttributedCharacterIterator.Attribute, Object> ma = this.mapAt(a);
+            Map<AttributedCharacterIterator.Attribute, Object> mc = this.mapAt(c);
             if (ma.size() != mc.size()) {
                 return false;
             }
@@ -327,21 +328,21 @@ final class AttributedStringIterator implements AttributedCharacterIterator {
                 if (!mc.containsKey(e.getKey())) {
                     return false;
                 }
-                if (!coinciden(e.getValue(), mc.get(e.getKey()))) {
+                if (!bothMatch(e.getValue(), mc.get(e.getKey()))) {
                     return false;
                 }
             }
             return true;
         }
-        for (AttributedCharacterIterator.Attribute k : considerados) {
-            if (!coinciden(this.valorEn(a, k), this.valorEn(c, k))) {
+        for (AttributedCharacterIterator.Attribute k : considered) {
+            if (!bothMatch(this.valueAt(a, k), this.valueAt(c, k))) {
                 return false;
             }
         }
         return true;
     }
 
-    private static boolean coinciden(Object a, Object b) {
+    private static boolean bothMatch(Object a, Object b) {
         if (a == null) {
             return b == null;
         }

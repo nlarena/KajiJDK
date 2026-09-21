@@ -21,18 +21,18 @@ import java.util.Locale;
  *           transcribed, and every non-ASCII character is written as a {@code \\uXXXX} escape so the
  *           source stays ASCII and cannot be corrupted by an encoding mishap.
  *
- * @implNote La superficie está completa. Lo que sigue siendo un subconjunto son los DATOS: la tabla
- *           cubre seis locales y no los cientos del JDK, y un locale desconocido cae en ROOT — que
- *           es lo mismo que hace el JDK con un locale del que no tiene datos. Ampliarla es extraer
- *           más filas, no escribir código nuevo.
+ * @implNote The surface is complete. What is still a subset is the DATA: the table covers six
+ *           locales and not the JDK's hundreds, and an unknown locale falls back to ROOT -- which is
+ *           the same as what the JDK does with a locale it has no data for. Widening it is extracting
+ *           more rows, not writing new code.
  */
 public class DecimalFormatSymbols implements Cloneable, Serializable {
 
     // The supported locales, and the symbol table in parallel rows. Index 0 is ROOT, which is also
-    // the fallback. Se escribieron como métodos, y no como campos `static final`, cuando el finding
-    // #112 hacía que una constante primitiva se leyera como 0 en tiempo de ejecución. #112 está
-    // cerrado; la forma se conserva porque devolver un arreglo nuevo por llamada también impide que
-    // un llamador mute la tabla compartida, que es la razón por la que ahora vale la pena.
+    // the fallback. They were written as methods, and not as `static final` fields, back when finding
+    // #112 made a primitive constant read as 0 at run time. #112 is closed; the shape is kept because
+    // returning a fresh array per call also stops a caller mutating the shared table, which is the
+    // reason it is worth it now.
     private static String[] tags() {
         return new String[] {"und", "en-US", "es-AR", "de-DE", "fr-FR", "ja-JP"};
     }
@@ -146,10 +146,10 @@ public class DecimalFormatSymbols implements Cloneable, Serializable {
         this.currencySymbol = DecimalFormatSymbols.currencySymbols()[i];
         this.internationalCurrencySymbol = DecimalFormatSymbols.currencyCodes()[i];
         this.exponentSeparator = DecimalFormatSymbols.exponents()[i];
-        // El símbolo NO se recalcula desde la moneda: la tabla ya trae el que corresponde a este
-        // locale, y Currency.getSymbol() de una moneda ajena al locale devolvería el código ISO.
-        // La moneda se deriva del código, y "XXX" (la de ROOT) deja el campo en null a propósito:
-        // ROOT no tiene moneda, y decir que tiene una sería inventarla.
+        // The symbol is NOT recomputed from the currency: the table already carries the one this
+        // locale takes, and Currency.getSymbol() of a currency foreign to the locale would return the
+        // ISO code. The currency is derived from the code, and "XXX" (ROOT's) leaves the field null
+        // on purpose: ROOT has no currency, and saying it has one would be inventing it.
         this.currency = null;
         try {
             this.currency = Currency.getInstance(this.internationalCurrencySymbol);
@@ -162,9 +162,9 @@ public class DecimalFormatSymbols implements Cloneable, Serializable {
     // ordering is what makes an unlisted country of a listed language (es-MX) still get Spanish
     // symbols rather than the root ones.
     //
-    // De acceso de paquete y no privado porque PatronesLocales resuelve el locale con ESTA misma
-    // función: si las dos tablas se indexaran distinto, un locale podría terminar con los símbolos
-    // de uno y el patrón de otro, que es exactamente el tipo de mezcla que nadie encuentra mirando.
+    // Package-access and not private because LocalePatterns resolves the locale with THIS very
+    // function: if the two tables were indexed differently, a locale could end up with one's symbols
+    // and another's pattern, which is exactly the kind of mix nobody finds by looking.
     static int indexOf(Locale locale) {
         String lang = locale.getLanguage();
         String country = locale.getCountry();
@@ -235,9 +235,9 @@ public class DecimalFormatSymbols implements Cloneable, Serializable {
             if (dash > 0) {
                 out[i] = new Locale(tag.substring(0, dash), tag.substring(dash + 1, tag.length()));
             } else if (tag.equals("und")) {
-                // `und` es el tag BCP-47 de "sin determinar", y el locale que le corresponde es
-                // ROOT --no uno cuyo idioma se llame literalmente "und"--. Es lo que devuelve
-                // `Locale.forLanguageTag("und")`, y lo que el JDK pone en esta lista.
+                // `und` is BCP-47's tag for "undetermined", and the locale it corresponds to is
+                // ROOT --not one whose language is literally called "und"--. It is what
+                // `Locale.forLanguageTag("und")` returns, and what the JDK puts in this list.
                 out[i] = Locale.ROOT;
             } else {
                 out[i] = new Locale(tag);
@@ -491,9 +491,10 @@ public class DecimalFormatSymbols implements Cloneable, Serializable {
      */
     public void setInternationalCurrencySymbol(String currencyCode) {
         this.internationalCurrencySymbol = currencyCode;
-        // El código ISO manda: si nombra una moneda conocida, la moneda y su símbolo se recalculan.
-        // Si no la nombra —o si es null— la moneda queda en null y el símbolo NO se toca, que es lo
-        // que hace el JDK: un código desconocido no es motivo para borrar un símbolo válido.
+        // The ISO code rules: if it names a known currency, the currency and its symbol are
+        // recomputed. If it names none --or is null-- the currency is left null and the symbol is NOT
+        // touched, which is what the JDK does: an unknown code is no reason to erase a valid
+        // symbol.
         this.currency = null;
         if (currencyCode != null) {
             try {
@@ -507,25 +508,24 @@ public class DecimalFormatSymbols implements Cloneable, Serializable {
     }
 
     /**
-     * La moneda de estos símbolos, o {@code null} si el código internacional no nombra ninguna
-     * conocida.
+     * These symbols' currency, or {@code null} if the international code names no known one.
      *
-     * <p>Estuvo afuera mientras {@code java.util.Currency} no existía. Existe: hoy los símbolos y la
-     * moneda se mantienen sincronizados en las dos direcciones —{@link #setCurrency} reescribe los
-     * dos símbolos, {@link #setInternationalCurrencySymbol} reescribe la moneda—, que es la parte
-     * del contrato que se pierde si sólo se agrega el getter.
+     * <p>It was left out while {@code java.util.Currency} did not exist. It does: today the symbols
+     * and the currency are kept in step in both directions --{@link #setCurrency} rewrites both
+     * symbols, {@link #setInternationalCurrencySymbol} rewrites the currency-- which is the part of
+     * the contract that is lost if only the getter is added.
      *
-     * @return la moneda, o {@code null}
+     * @return the currency, or {@code null}
      */
     public Currency getCurrency() {
         return this.currency;
     }
 
     /**
-     * Fija la moneda y, con ella, el código ISO y el símbolo.
+     * It sets the currency and, with it, the ISO code and the symbol.
      *
-     * @param currency la moneda
-     * @throws NullPointerException si {@code currency} es {@code null}
+     * @param currency the currency
+     * @throws NullPointerException if {@code currency} is {@code null}
      */
     public void setCurrency(Currency currency) {
         if (currency == null) {

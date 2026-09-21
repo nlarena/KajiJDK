@@ -7,48 +7,50 @@ import java.nio.channels.spi.AsynchronousChannelProvider;
 import java.util.concurrent.Future;
 
 /**
- * KajiLibrary's java.nio.channels.AsynchronousServerSocketChannel — un canal de escucha asincronico.
+ * KajiLibrary's java.nio.channels.AsynchronousServerSocketChannel — an asynchronous listening
+ * channel.
  *
- * <p>Solo acepta; no lee ni escribe. {@link #accept()} pide **una** conexion, no abre un flujo de
- * conexiones: para seguir aceptando hay que volver a llamarlo, y lo normal es hacerlo desde el mismo
- * {@link CompletionHandler} que atendio la anterior. Ese re-pedido dentro del handler es el modo
- * idiomatico de usar esta clase, y olvidarlo produce un servidor que atiende exactamente una
- * conexion.
+ * <p>It only accepts; it neither reads nor writes. {@link #accept()} asks for **one** connection, it
+ * does not open a stream of connections: to go on accepting it has to be called again, and the
+ * normal thing is to do it from the same {@link CompletionHandler} that attended the previous one.
+ * That re-asking inside the handler is the idiomatic way of using this class, and forgetting it
+ * produces a server that attends exactly one connection.
  *
- * <p>Como en {@link AsynchronousSocketChannel}, hay **una sola operacion pendiente** a la vez: un
- * segundo `accept` antes de que el primero termine es {@link AcceptPendingException}.
+ * <p>As in {@link AsynchronousSocketChannel}, there is **a single pending operation** at a time: a
+ * second `accept` before the first has finished is {@link AcceptPendingException}.
  *
- * <h2>Estado en esta biblioteca</h2>
+ * <h2>State in this library</h2>
  *
- * <p>Los dos {@code open()} <strong>no estan</strong>, por lo mismo que en todos los canales de red:
- * esta VM no tiene nativos de red. El resto de la clase esta, como contrato.
+ * <p>Both {@code open()}s **are here**, and this note used to say they were not, for want of network
+ * natives in this VM. They are there, so both are as well: they go through the asynchronous provider
+ * and underneath there is the blocking listening channel with a thread pool.
  */
 public abstract class AsynchronousServerSocketChannel
         implements AsynchronousChannel, NetworkChannel {
 
-    private final AsynchronousChannelProvider proveedor;
+    private final AsynchronousChannelProvider provider;
 
     protected AsynchronousServerSocketChannel(AsynchronousChannelProvider provider) {
-        this.proveedor = provider;
+        this.provider = provider;
     }
 
     /**
-     * Uno del grupo de omision.
+     * One of the default group.
      *
-     * @return el canal
-     * @throws IOException si no se puede abrir
+     * @return the channel
+     * @throws IOException if it cannot be opened
      */
     public static AsynchronousServerSocketChannel open() throws IOException {
         return open(null);
     }
 
     /**
-     * Uno de ese grupo.
+     * One of that group.
      *
-     * @param group el grupo, o {@code null} para el de omision
-     * @return el canal
-     * @throws IOException si no se puede abrir
-     * @throws ShutdownChannelGroupException si el grupo ya no acepta canales
+     * @param group the group, or {@code null} for the default one
+     * @return the channel
+     * @throws IOException if it cannot be opened
+     * @throws ShutdownChannelGroupException if the group no longer accepts channels
      */
     public static AsynchronousServerSocketChannel open(AsynchronousChannelGroup group) throws IOException {
         final AsynchronousChannelProvider p = group == null
@@ -56,36 +58,36 @@ public abstract class AsynchronousServerSocketChannel
         return p.openAsynchronousServerSocketChannel(group);
     }
 
-    /** El proveedor que lo fabrico. */
+    /** The provider that made it. */
     public final AsynchronousChannelProvider provider() {
-        return this.proveedor;
+        return this.provider;
     }
 
-    /** Ata el canal a `local` con la cola de pendientes que el sistema prefiera. */
+    /** Ties the channel to `local` with the queue of pending ones the system prefers. */
     public final AsynchronousServerSocketChannel bind(SocketAddress local) throws IOException {
         return this.bind(local, 0);
     }
 
     /**
-     * Ata el canal a `local`.
+     * Ties the channel to `local`.
      *
-     * @param backlog cuantas conexiones pueden esperar sin aceptar; `0` o menos deja elegir al
-     *        sistema
+     * @param backlog how many connections can wait without being accepted; `0` or less lets the system
+     *        choose
      */
     public abstract AsynchronousServerSocketChannel bind(SocketAddress local, int backlog)
             throws IOException;
 
-    /** Fija una opcion de socket. */
+    /** Sets a socket option. */
     public abstract <T> AsynchronousServerSocketChannel setOption(SocketOption<T> name, T value)
             throws IOException;
 
-    /** Acepta **una** conexion y avisa a `handler`. Ver la nota de la clase. */
+    /** Accepts **one** connection and tells `handler`. See the note of the class. */
     public abstract <A> void accept(A attachment,
             CompletionHandler<AsynchronousSocketChannel, ? super A> handler);
 
-    /** Como el otro, devolviendo un {@link Future}. */
+    /** Like the other one, returning a {@link Future}. */
     public abstract Future<AsynchronousSocketChannel> accept();
 
-    /** La direccion a la que esta atado, o `null` si no lo esta. */
+    /** The address it is tied to, or `null` if it is not tied. */
     public abstract SocketAddress getLocalAddress() throws IOException;
 }

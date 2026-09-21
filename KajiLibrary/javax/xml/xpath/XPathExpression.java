@@ -4,50 +4,49 @@ import javax.xml.namespace.QName;
 import org.xml.sax.InputSource;
 
 /**
- * KajiLibrary's javax.xml.xpath.XPathExpression -- una expresion ya compilada.
+ * KajiLibrary's javax.xml.xpath.XPathExpression -- an already compiled expression.
  *
- * <p>Compilar cuesta y evaluar es barato, asi que una expresion que se aplica muchas veces se
- * compila una sola. Es la misma relacion que hay entre {@code Pattern} y {@code Matcher}, o entre un
- * esquema compilado y sus validadores.
+ * <p>Compiling is expensive and evaluating is cheap, so an expression applied many times is
+ * compiled once. It is the same relation as between {@code Pattern} and {@code Matcher}, or between
+ * a compiled schema and its validators.
  *
- * <p>Las dos familias de {@code evaluate} se diferencian en de donde sale el documento: las que
- * reciben {@code Object} trabajan sobre un arbol que ya existe, y las que reciben
- * {@link InputSource} <b>leen y analizan</b> el documento en cada llamada. La segunda es comoda y
- * cara: para evaluar varias expresiones sobre el mismo documento hay que analizarlo una vez y usar
- * la primera.
+ * <p>The two families of {@code evaluate} differ in where the document comes from: the ones taking
+ * {@code Object} work on a tree that already exists, and the ones taking {@link InputSource}
+ * <b>read and parse</b> the document on every call. The second is convenient and expensive: to
+ * evaluate several expressions on the same document, parse it once and use the first.
  *
- * <p>Las sobrecargas sin {@link QName} devuelven {@code String}, que es pedir
- * {@link XPathConstants#STRING}. Las {@code evaluateExpression} son la via moderna: se pide un
- * {@code Class} y se recibe ese tipo, sin cast.
+ * <p>The overloads without a {@link QName} return {@code String}, which is asking for
+ * {@link XPathConstants#STRING}. The {@code evaluateExpression} methods are the modern way: you ask
+ * for a {@code Class} and get that type, without a cast.
  *
- * <p>No es segura entre hilos, aunque parezca inmutable: la evaluacion consulta los resolvedores del
- * {@link XPath} que la compilo, y esos pueden tener estado.
+ * <p>It is not thread-safe, even though it looks immutable: evaluation consults the resolvers of
+ * the {@link XPath} that compiled it, and those may have state.
  */
 public interface XPathExpression {
 
     /**
-     * Evalua sobre un arbol y devuelve el tipo pedido.
+     * Evaluates on a tree and returns the requested type.
      *
-     * @param returnType una de las constantes de {@link XPathConstants}
+     * @param returnType one of the constants in {@link XPathConstants}
      */
     Object evaluate(Object item, QName returnType) throws XPathExpressionException;
 
-    /** Idem, como cadena. */
+    /** Same, as a string. */
     String evaluate(Object item) throws XPathExpressionException;
 
-    /** Analiza el documento y evalua. Ver la nota de la clase sobre el costo. */
+    /** Parses the document and evaluates. See the class note about the cost. */
     Object evaluate(InputSource source, QName returnType) throws XPathExpressionException;
 
-    /** Idem, como cadena. */
+    /** Same, as a string. */
     String evaluate(InputSource source) throws XPathExpressionException;
 
     /**
-     * La via moderna: se pide un tipo y se recibe ese tipo.
+     * The modern way: you ask for a type and you get that type.
      *
-     * <p>Por omision delega en {@link #evaluate(Object, QName)} traduciendo el {@code Class} al
-     * {@code QName} que le corresponde.
+     * <p>By default it delegates to {@link #evaluate(Object, QName)}, translating the {@code Class}
+     * to its corresponding {@code QName}.
      *
-     * @throws IllegalArgumentException si ese tipo no es uno de los que XPath sabe producir
+     * @throws IllegalArgumentException if that type is not one XPath can produce
      */
     default <T> T evaluateExpression(Object item, Class<T> type) throws XPathExpressionException {
         QName qname = XPathEvaluationResult.XPathResultType.getQNameType(type);
@@ -58,17 +57,18 @@ public interface XPathExpression {
     }
 
     /**
-     * Evalua sin decir que tipo se espera.
+     * Evaluates without saying which type is expected.
      *
-     * @throws UnsupportedOperationException por omision: sin implementacion no hay como saber que
-     *     tipo produjo la expresion, y devolver algo con un tipo inventado seria peor
+     * @throws UnsupportedOperationException by default: without an implementation there is no way
+     *     to know which type the expression produced, and returning something with a made-up type
+     *     would be worse
      */
     default XPathEvaluationResult<?> evaluateExpression(Object item)
         throws XPathExpressionException {
         throw new UnsupportedOperationException("evaluateExpression(Object item)");
     }
 
-    /** Analiza el documento y evalua, con el tipo pedido. */
+    /** Parses the document and evaluates, with the requested type. */
     default <T> T evaluateExpression(InputSource source, Class<T> type)
         throws XPathExpressionException {
         QName qname = XPathEvaluationResult.XPathResultType.getQNameType(type);
@@ -79,9 +79,9 @@ public interface XPathExpression {
     }
 
     /**
-     * Idem, sin decir el tipo.
+     * Same, without saying the type.
      *
-     * @throws UnsupportedOperationException por omision
+     * @throws UnsupportedOperationException by default
      */
     default XPathEvaluationResult<?> evaluateExpression(InputSource source)
         throws XPathExpressionException {

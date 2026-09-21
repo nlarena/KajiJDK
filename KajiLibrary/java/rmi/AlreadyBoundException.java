@@ -1,28 +1,28 @@
 package java.rmi;
 
 /**
- * KajiLibrary's java.rmi.AlreadyBoundException -- ese nombre ya esta ocupado en el registro.
+ * KajiLibrary's java.rmi.AlreadyBoundException -- that name is already taken in the registry.
  *
- * <p>Sale de {@code bind}, que se niega a pisar. {@code rebind} es el que si pisa, y por eso no lanza
- * esta.
+ * <p>It comes out of {@code bind}, which refuses to overwrite. {@code rebind} is the one that does
+ * overwrite, and that is why it does not throw this.
  *
- * <p>Que sean dos operaciones distintas es a proposito: arrancar dos veces el mismo servidor por error
- * es facil, y con {@code bind} el segundo falla en lugar de robarle los clientes al primero en
- * silencio.
+ * <p>That they are two different operations is on purpose: starting the same server twice by
+ * mistake is easy, and with {@code bind} the second one fails instead of silently stealing the
+ * first one's clients.
  *
- * <p>No hereda de {@link RemoteException}: no es un problema de la red sino del contenido del
- * registro, y la llamada llego perfectamente.
+ * <p>It does not inherit from {@link RemoteException}: it is not a network problem but one of the
+ * registry's contents, and the call arrived perfectly well.
  */
 public class AlreadyBoundException extends Exception {
 
     private static final long serialVersionUID = 9218657361741657110L;
 
-    /** Sin detalle. */
+    /** With no detail. */
     public AlreadyBoundException() {
         super();
     }
 
-    /** @param s el nombre que ya estaba */
+    /** @param s the name that was already there */
     public AlreadyBoundException(String s) {
         super(s);
     }

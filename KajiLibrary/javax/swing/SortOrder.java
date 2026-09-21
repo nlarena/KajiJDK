@@ -1,20 +1,20 @@
 package javax.swing;
 
 /**
- * Como esta ordenada una columna.
+ * How a column is sorted.
  *
- * <p>Son tres y no dos: {@link #UNSORTED} no es "ascendente por defecto" sino
- * <strong>el orden del modelo</strong>, o sea el que tenian los datos antes de que nadie los
- * ordenara. Sin esa tercera constante no habria forma de volver atras.
+ * <p>There are three and not two: {@link #UNSORTED} is not "ascending by default" but
+ * <strong>the model's order</strong>, that is, the one the data had before anybody sorted it.
+ * Without that third constant there would be no way of going back.
  *
  * @since 1.6
  */
 public enum SortOrder {
 
-    /** De menor a mayor. */
+    /** From smallest to largest. */
     ASCENDING,
-    /** De mayor a menor. */
+    /** From largest to smallest. */
     DESCENDING,
-    /** Sin ordenar: el orden del modelo. */
+    /** Unsorted: the model's order. */
     UNSORTED
 }

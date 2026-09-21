@@ -26,9 +26,9 @@ public interface ChronoLocalDateTime extends Temporal, TemporalAdjuster, Compara
     LocalTime toLocalTime();
 
     /**
-     * Esta fecha y hora, formateada con ese formateador.
+     * This date and time, formatted with that formatter.
      *
-     * @throws java.time.DateTimeException si no se puede formatear
+     * @throws java.time.DateTimeException if it cannot be formatted
      */
     default String format(java.time.format.DateTimeFormatter formatter) {
         if (formatter == null) {
@@ -37,7 +37,7 @@ public interface ChronoLocalDateTime extends Temporal, TemporalAdjuster, Compara
         return formatter.format(this);
     }
 
-    /** La fecha y hora que `temporal` tiene, en el calendario que el mismo indique. */
+    /** The date and time `temporal` holds, in whatever calendar it names itself. */
     static ChronoLocalDateTime from(java.time.temporal.TemporalAccessor temporal) {
         if (temporal == null) {
             throw new NullPointerException("temporal");
@@ -47,67 +47,67 @@ public interface ChronoLocalDateTime extends Temporal, TemporalAdjuster, Compara
         }
         Chronology chrono = temporal.query(java.time.temporal.TemporalQueries.chronology());
         if (chrono == null) {
-            // Sin calendario declarado, el ISO: es lo que hace el JDK cuando el temporal no dice.
+            // With no calendar declared, ISO: it is what the JDK does when the temporal does not say.
             return java.time.LocalDateTime.from(temporal);
         }
-        ChronoLocalDate fecha = chrono.dateEpochDay(temporal.getLong(ChronoField.EPOCH_DAY));
-        LocalTime hora = LocalTime.ofNanoOfDay(temporal.getLong(ChronoField.NANO_OF_DAY));
-        return ChronoLocalDateTimeImpl.of(fecha, hora);
+        ChronoLocalDate date = chrono.dateEpochDay(temporal.getLong(ChronoField.EPOCH_DAY));
+        LocalTime time = LocalTime.ofNanoOfDay(temporal.getLong(ChronoField.NANO_OF_DAY));
+        return ChronoLocalDateTimeImpl.of(date, time);
     }
 
     /**
-     * El orden **solo por linea de tiempo**, ignorando el calendario.
+     * The order **by timeline alone**, ignoring the calendar.
      *
-     * <p>Es el complemento de `compareTo`, que desempata por calendario. Ojo con usarlo en un
-     * `TreeSet`: al no desempatar, dos momentos iguales de calendarios distintos comparan 0 y el
-     * conjunto se queda con uno solo.
+     * <p>It is the complement of `compareTo`, which breaks ties by calendar. Beware of using it in a
+     * `TreeSet`: breaking no ties, two equal moments of different calendars compare 0 and the set
+     * keeps only one.
      */
     static java.util.Comparator<ChronoLocalDateTime> timeLineOrder() {
-        return new LineaDeTiempoLocal();
+        return new LocalTimeLine();
     }
 
     boolean isSupported(TemporalField field);
 
     /**
-     * Esta fecha y hora locales **en una zona**, que es lo que las convierte en un instante.
+     * This local date and time **in a zone**, which is what turns them into an instant.
      *
-     * <p>Una lectura de reloj de pared no es un momento hasta que uno dice donde cuelga el reloj.
-     * Este es el metodo que lo dice.
+     * <p>A wall-clock reading is not a moment until one says where the clock hangs. This is the
+     * method that says it.
      */
     ChronoZonedDateTime atZone(java.time.ZoneId zone);
 
-    // ---- las seis redeclaraciones covariantes ---------------------------------------------------
+    // ---- the six covariant redeclarations -------------------------------------------------------
     //
-    // Repiten lo que `Temporal` ya declara, pero con el retorno estrechado: sumarle horas a una fecha
-    // y hora sigue siendo una fecha y hora, y el que llama no tiene que castear. De paso son las que
-    // hacen que el compilador emita los **metodos puente** en `LocalDateTime`, que estrecha todavia
-    // mas -- sin ellas una llamada por la interfaz no encuentra la implementacion.
+    // They repeat what `Temporal` already declares, but with the return narrowed: adding hours to a
+    // date-time is still a date-time, and the caller need not cast. They are also what makes the
+    // compiler emit the **bridge methods** in `LocalDateTime`, which narrows further -- without them
+    // a call through the interface does not find the implementation.
 
     ChronoLocalDateTime with(TemporalField field, long newValue);
 
     ChronoLocalDateTime plus(long amountToAdd, TemporalUnit unit);
 
     default ChronoLocalDateTime with(TemporalAdjuster adjuster) {
-        // Ligado a una local: encadenar por un intermedio de tipo interfaz se pierde (#108).
-        Temporal ajustado = adjuster.adjustInto(this);
-        return (ChronoLocalDateTime) ajustado;
+        // Bound to a local: chaining through an interface-typed intermediate gets lost (#108).
+        Temporal adjustedOne = adjuster.adjustInto(this);
+        return (ChronoLocalDateTime) adjustedOne;
     }
 
     default ChronoLocalDateTime plus(java.time.temporal.TemporalAmount amount) {
-        Temporal sumado = amount.addTo(this);
-        return (ChronoLocalDateTime) sumado;
+        Temporal added = amount.addTo(this);
+        return (ChronoLocalDateTime) added;
     }
 
     default ChronoLocalDateTime minus(java.time.temporal.TemporalAmount amount) {
-        Temporal restado = amount.subtractFrom(this);
-        return (ChronoLocalDateTime) restado;
+        Temporal subtracted = amount.subtractFrom(this);
+        return (ChronoLocalDateTime) subtracted;
     }
 
     default ChronoLocalDateTime minus(long amountToSubtract, TemporalUnit unit) {
-        // `Long.MIN_VALUE` no se puede negar: se resta en dos pasos, como en el JDK.
+        // `Long.MIN_VALUE` cannot be negated: it is subtracted in two steps, as in the JDK.
         if (amountToSubtract == Long.MIN_VALUE) {
-            ChronoLocalDateTime medio = this.plus(Long.MAX_VALUE, unit);
-            return medio.plus(1L, unit);
+            ChronoLocalDateTime half = this.plus(Long.MAX_VALUE, unit);
+            return half.plus(1L, unit);
         }
         return this.plus(-amountToSubtract, unit);
     }
@@ -213,8 +213,8 @@ final class LocalOrder {
     }
 }
 
-// El comparador que devuelve `timeLineOrder()`: dia epoch y nano del dia, sin mirar el calendario.
-final class LineaDeTiempoLocal implements java.util.Comparator<ChronoLocalDateTime> {
+// The comparator `timeLineOrder()` returns: epoch day and nano of day, without looking at the calendar.
+final class LocalTimeLine implements java.util.Comparator<ChronoLocalDateTime> {
 
     public int compare(ChronoLocalDateTime a, ChronoLocalDateTime b) {
         return LocalOrder.compare(a, b);

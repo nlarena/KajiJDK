@@ -3,18 +3,18 @@ package java.awt;
 import java.awt.event.KeyEvent;
 
 /**
- * Alguien que mira los eventos de teclado **después** de que nadie los haya consumido.
+ * Something that looks at key events **after** nobody consumed them.
  *
- * <p>Es el otro extremo de {@link KeyEventDispatcher}: el repartidor va antes que todos y el
- * posprocesador va después. Sirve para el atajo que sólo tiene que actuar si el componente con el
- * foco no hizo nada con la tecla —una tecla de menú, por ejemplo—.
+ * <p>It is the other end of {@link KeyEventDispatcher}: the dispatcher goes before everyone and the
+ * post-processor goes after. It is for the shortcut that only has to act if the component with the
+ * focus did nothing with the key —a menu key, for example—.
  */
 public interface KeyEventPostProcessor {
 
     /**
-     * Mira ese evento ya repartido.
+     * Looks at that already dispatched event.
      *
-     * @return `true` si lo consumió y ningún otro posprocesador tiene que verlo
+     * @return `true` if it consumed it and no other post-processor has to see it
      */
     boolean postProcessKeyEvent(KeyEvent e);
 }

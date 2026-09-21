@@ -24,102 +24,103 @@ import java.util.random.RandomGenerator;
  */
 public final class RandomSupport {
 
-    // ---- los mensajes de error, compartidos ------------------------------------------------------
+    // ---- the error messages, shared -------------------------------------------------------------
     //
-    // Son `public` porque el JDK los expone: cada generador los usa al validar sus argumentos, y que
-    // esten aca es lo que hace que el mensaje sea **el mismo** venga de donde venga.
+    // They are `public` because the JDK exposes them: each generator uses them when validating its
+    // arguments, and their being here is what makes the message **the same** wherever it comes
+    // from.
 
-    /** El de un limite superior que no es positivo. */
+    /** The one of an upper bound that is not positive. */
     public static final String BAD_BOUND = "bound must be positive";
 
-    /** El de un rango vacio o invertido. */
+    /** The one of an empty or inverted range. */
     public static final String BAD_RANGE = "bound must be greater than origin";
 
-    /** El de un tamanio de flujo negativo. */
+    /** The one of a negative stream size. */
     public static final String BAD_SIZE = "size must be non-negative";
 
-    /** El de una distancia de salto que no es finita y positiva. */
+    /** The one of a jump distance that is not finite and positive. */
     public static final String BAD_DISTANCE =
             "jump distance must be finite, positive, and an exact integer";
 
-    /** El de un limite en coma flotante que no es finito y positivo. */
+    /** The one of a floating point bound that is not finite and positive. */
     public static final String BAD_FLOATING_BOUND = "bound must be finite and positive";
 
-    // ---- las dos constantes irracionales ---------------------------------------------------------
+    // ---- the two irrational constants -----------------------------------------------------------
     //
-    // Son los primeros bits de la parte fraccionaria de dos irracionales --la razon aurea y la razon
-    // de plata-- redondeados a impar. Que sean irracionales es el punto: como incremento de un
-    // contador, un numero cuya expansion binaria no tiene periodo hace que los estados sucesivos no
-    // caigan en un patron; y que sean impares los vuelve invertibles modulo dos a la n, con lo cual
-    // ningun par de contadores distintos colisiona.
+    // They are the first bits of the fractional part of two irrationals --the golden ratio and the
+    // silver ratio-- rounded to odd. That they are irrational is the point: as the increment of a
+    // counter, a number whose binary expansion has no period makes the successive states not fall
+    // into a pattern; and their being odd makes them invertible modulo two to the n, with which no
+    // pair of different counters collides.
 
-    /** La razon aurea en 32 bits. */
+    /** The golden ratio in 32 bits. */
     public static final int GOLDEN_RATIO_32 = 0x9e3779b9;
 
-    /** La razon aurea en 64 bits. */
+    /** The golden ratio in 64 bits. */
     public static final long GOLDEN_RATIO_64 = 0x9e3779b97f4a7c15L;
 
-    /** La razon de plata en 32 bits. */
+    /** The silver ratio in 32 bits. */
     public static final int SILVER_RATIO_32 = 0x6A09E667;
 
-    /** La razon de plata en 64 bits. */
+    /** The silver ratio in 64 bits. */
     public static final long SILVER_RATIO_64 = 0x6A09E667F3BCC909L;
 
-    // `protected` y no `private`: es lo que declara el JDK. Una clase de utilidades estaticas no se
-    // instancia, pero dejarlo protegido permite que una subclase exista, que es la diferencia entre
-    // "no tiene sentido" y "esta prohibido".
+    // `protected` and not `private`: it is what the JDK declares. A class of static utilities is
+    // not instantiated, but leaving it protected allows a subclass to exist, which is the
+    // difference between "it makes no sense" and "it is forbidden".
     protected RandomSupport() {
     }
 
-    // ---- validacion de argumentos ----------------------------------------------------------------
+    // ---- validation of arguments ----------------------------------------------------------------
 
-    /** @throws IllegalArgumentException si el limite no es positivo */
+    /** @throws IllegalArgumentException if the bound is not positive */
     public static void checkBound(int bound) {
         if (bound <= 0) {
             throw new IllegalArgumentException(BAD_BOUND);
         }
     }
 
-    /** @throws IllegalArgumentException si el limite no es positivo */
+    /** @throws IllegalArgumentException if the bound is not positive */
     public static void checkBound(long bound) {
         if (bound <= 0L) {
             throw new IllegalArgumentException(BAD_BOUND);
         }
     }
 
-    /** @throws IllegalArgumentException si el limite no es finito y positivo */
+    /** @throws IllegalArgumentException if the bound is not finite and positive */
     public static void checkBound(float bound) {
         if (!(0.0f < bound && bound < Float.POSITIVE_INFINITY)) {
             throw new IllegalArgumentException(BAD_FLOATING_BOUND);
         }
     }
 
-    /** @throws IllegalArgumentException si el limite no es finito y positivo */
+    /** @throws IllegalArgumentException if the bound is not finite and positive */
     public static void checkBound(double bound) {
         if (!(0.0d < bound && bound < Double.POSITIVE_INFINITY)) {
             throw new IllegalArgumentException(BAD_FLOATING_BOUND);
         }
     }
 
-    /** @throws IllegalArgumentException si el rango esta vacio o invertido */
+    /** @throws IllegalArgumentException if the range is empty or inverted */
     public static void checkRange(int origin, int bound) {
         if (origin >= bound) {
             throw new IllegalArgumentException(BAD_RANGE);
         }
     }
 
-    /** @throws IllegalArgumentException si el rango esta vacio o invertido */
+    /** @throws IllegalArgumentException if the range is empty or inverted */
     public static void checkRange(long origin, long bound) {
         if (origin >= bound) {
             throw new IllegalArgumentException(BAD_RANGE);
         }
     }
 
-    // Las dos de coma flotante piden ademas que los dos extremos sean **finitos**. La forma negada
-    // no es un adorno: atrapa tambien al NaN, que no es ni mayor ni menor que nada y con la
-    // comparacion directa se colaria.
+    // The two floating point ones also ask for both ends to be **finite**. The negated form is not
+    // an ornament: it also catches the NaN, which is neither greater nor smaller than anything and
+    // would slip through with the direct comparison.
 
-    /** @throws IllegalArgumentException si el rango esta vacio, invertido, o no es finito */
+    /** @throws IllegalArgumentException if the range is empty, inverted, or not finite */
     public static void checkRange(float origin, float bound) {
         if (!(Float.NEGATIVE_INFINITY < origin && origin < bound
                 && bound < Float.POSITIVE_INFINITY)) {
@@ -127,7 +128,7 @@ public final class RandomSupport {
         }
     }
 
-    /** @throws IllegalArgumentException si el rango esta vacio, invertido, o no es finito */
+    /** @throws IllegalArgumentException if the range is empty, inverted, or not finite */
     public static void checkRange(double origin, double bound) {
         if (!(Double.NEGATIVE_INFINITY < origin && origin < bound
                 && bound < Double.POSITIVE_INFINITY)) {
@@ -135,24 +136,25 @@ public final class RandomSupport {
         }
     }
 
-    /** @throws IllegalArgumentException si el tamanio del flujo es negativo */
+    /** @throws IllegalArgumentException if the size of the stream is negative */
     public static void checkStreamSize(long streamSize) {
         if (streamSize < 0L) {
             throw new IllegalArgumentException(BAD_SIZE);
         }
     }
 
-    // ---- valores acotados ------------------------------------------------------------------------
+    // ---- bounded values -------------------------------------------------------------------------
     //
-    // Los cuatro enteros comparten la misma idea, que es lo unico interesante de este bloque: tomar
-    // el resto de un valor uniforme **sesga** el resultado cuando el rango no divide al espacio, asi
-    // que hay que **rechazar** los candidatos sobre-representados y volver a tirar. Un rango que es
-    // potencia de dos no tiene ese problema y se resuelve con una mascara.
+    // The four integer ones share the same idea, which is the only interesting thing about this
+    // block: taking the remainder of a uniform value **biases** the result when the range does not
+    // divide the space, so the over-represented candidates have to be **rejected** and thrown
+    // again. A range that is a power of two does not have that problem and is resolved with a mask.
     //
-    // El bucle de rechazo tiene una forma incomoda a proposito --el trabajo esta en la condicion-- y
-    // es la del JDK: como el primer candidato ya esta disponible, hace falta salir desde el medio.
+    // The loop of rejection has an uncomfortable shape on purpose --the work is in the condition--
+    // and it is that of the JDK: as the first candidate is already available, one has to leave from
+    // the middle.
 
-    /** Un int uniforme en el rango de cero a bound, sin incluirlo. */
+    /** A uniform int in the range from zero to bound, not including it. */
     public static int boundedNextInt(RandomGenerator rng, int bound) {
         final int m = bound - 1;
         int r = rng.nextInt();
@@ -166,7 +168,7 @@ public final class RandomSupport {
         return r;
     }
 
-    /** Un int uniforme en el rango de origin a bound, sin incluirlo. */
+    /** A uniform int in the range from origin to bound, not including it. */
     public static int boundedNextInt(RandomGenerator rng, int origin, int bound) {
         int r = rng.nextInt();
         if (origin < bound) {
@@ -180,8 +182,8 @@ public final class RandomSupport {
                 }
                 r = r + origin;
             } else {
-                // El ancho del rango no entra en un int: no hay aritmetica que sirva, se tira hasta
-                // acertar.
+                // The width of the range does not fit in an int: there is no arithmetic that
+                // serves, it is thrown until it hits.
                 while (r < origin || r >= bound) {
                     r = rng.nextInt();
                 }
@@ -190,7 +192,7 @@ public final class RandomSupport {
         return r;
     }
 
-    /** Un long uniforme en el rango de cero a bound, sin incluirlo. */
+    /** A uniform long in the range from zero to bound, not including it. */
     public static long boundedNextLong(RandomGenerator rng, long bound) {
         final long m = bound - 1L;
         long r = rng.nextLong();
@@ -204,7 +206,7 @@ public final class RandomSupport {
         return r;
     }
 
-    /** Un long uniforme en el rango de origin a bound, sin incluirlo. */
+    /** A uniform long in the range from origin to bound, not including it. */
     public static long boundedNextLong(RandomGenerator rng, long origin, long bound) {
         long r = rng.nextLong();
         if (origin < bound) {
@@ -226,10 +228,11 @@ public final class RandomSupport {
         return r;
     }
 
-    // Las de coma flotante escalan y despues **corrigen**: multiplicar puede redondear justo hasta el
-    // limite, y el limite es exclusivo. Sin la correccion, el limite sale de vez en cuando.
+    // The floating point ones scale and then **correct**: multiplying may round right up to the
+    // bound, and the bound is exclusive. Without the correction, the bound comes out every so
+    // often.
 
-    /** Un double uniforme en el rango de cero a bound, sin incluirlo. */
+    /** A uniform double in the range from zero to bound, not including it. */
     public static double boundedNextDouble(RandomGenerator rng, double bound) {
         double r = rng.nextDouble();
         r = r * bound;
@@ -239,16 +242,16 @@ public final class RandomSupport {
         return r;
     }
 
-    /** Un double uniforme en el rango de origin a bound, sin incluirlo. */
+    /** A uniform double in the range from origin to bound, not including it. */
     public static double boundedNextDouble(RandomGenerator rng, double origin, double bound) {
         double r = rng.nextDouble();
         if (origin < bound) {
             if (bound - origin < Double.POSITIVE_INFINITY) {
                 r = r * (bound - origin) + origin;
             } else {
-                // El ancho no entra en un double: se escala a la mitad y se duplica al final.
-                double mitadOrigen = 0.5d * origin;
-                r = (r * (0.5d * bound - mitadOrigen) + mitadOrigen) * 2.0d;
+                // The width does not fit in a double: it is scaled to half and doubled at the end.
+                double halfOrigin = 0.5d * origin;
+                r = (r * (0.5d * bound - halfOrigin) + halfOrigin) * 2.0d;
             }
             if (r >= bound) {
                 r = Math.nextDown(bound);
@@ -257,7 +260,7 @@ public final class RandomSupport {
         return r;
     }
 
-    /** Un float uniforme en el rango de cero a bound, sin incluirlo. */
+    /** A uniform float in the range from zero to bound, not including it. */
     public static float boundedNextFloat(RandomGenerator rng, float bound) {
         float r = rng.nextFloat();
         r = r * bound;
@@ -267,15 +270,15 @@ public final class RandomSupport {
         return r;
     }
 
-    /** Un float uniforme en el rango de origin a bound, sin incluirlo. */
+    /** A uniform float in the range from origin to bound, not including it. */
     public static float boundedNextFloat(RandomGenerator rng, float origin, float bound) {
         float r = rng.nextFloat();
         if (origin < bound) {
             if (bound - origin < Float.POSITIVE_INFINITY) {
                 r = r * (bound - origin) + origin;
             } else {
-                float mitadOrigen = 0.5f * origin;
-                r = (r * (0.5f * bound - mitadOrigen) + mitadOrigen) * 2.0f;
+                float halfOrigin = 0.5f * origin;
+                r = (r * (0.5f * bound - halfOrigin) + halfOrigin) * 2.0f;
             }
             if (r >= bound) {
                 r = Math.nextDown(bound);
@@ -284,30 +287,31 @@ public final class RandomSupport {
         return r;
     }
 
-    // ---- semillas --------------------------------------------------------------------------------
+    // ---- seeds ----------------------------------------------------------------------------------
 
     /**
-     * Una semilla inicial, distinta en cada llamada.
+     * An initial seed, different on each call.
      *
-     * <p>Mezcla el reloj de pared con el de alta resolucion **por separado** y despues los combina:
-     * los dos solos son predecibles --el primero avanza de a milisegundos, el segundo arranca en un
-     * origen arbitrario-- y lo que aporta cada uno es distinto.
+     * <p>It mixes the wall clock with the high resolution one **separately** and then combines
+     * them: the two on their own are predictable --the first one advances in milliseconds, the
+     * second one starts at an arbitrary origin-- and what each one brings is different.
      */
     public static long initialSeed() {
         return mixStafford13(System.currentTimeMillis()) ^ mixStafford13(System.nanoTime());
     }
 
     /**
-     * Convierte una semilla de bytes de cualquier largo en n valores long, garantizando que los
-     * ultimos z no sean todos cero.
+     * It turns a seed of bytes of any length into n long values, guaranteeing that the last z are
+     * not all zero.
      *
-     * <p>Los tres pasos responden a tres problemas distintos, y conviene no confundirlos: empaquetar
-     * los bytes que hay; **rellenar** con un generador si no alcanzan (una semilla corta dejaria el
-     * resto en cero, que es un estado pobre); y garantizar que la cola no sea toda cero, porque para
-     * un generador xor-shift el cero es un **punto fijo** -- se queda ahi para siempre.
+     * <p>The three steps answer three different problems, and it is as well not to confuse them:
+     * packing the bytes there are; **filling in** with a generator if they are not enough (a short
+     * seed would leave the rest at zero, which is a poor state); and guaranteeing that the tail is
+     * not all zero, because for a xor-shift generator zero is a **fixed point** -- it stays there
+     * forever.
      *
-     * <p>El and con el complemento de uno de la ultima parte no es decorativo: cubre el caso z igual
-     * a uno, donde hay que asegurar que el primer valor generado no sea cero.
+     * <p>The and with the one's complement of the last part is not decorative: it covers the case
+     * of z equal to one, where one has to make sure that the first generated value is not zero.
      */
     public static long[] convertSeedBytesToLongs(byte[] seed, int n, int z) {
         final long[] result = new long[n];
@@ -324,15 +328,15 @@ public final class RandomSupport {
             result[j] = mixMurmur64(v);
             j = j + 1;
         }
-        boolean algunoNoCero = false;
+        boolean someNonZero = false;
         j = n - z;
         while (j < n) {
             if (result[j] != 0L) {
-                algunoNoCero = true;
+                someNonZero = true;
             }
             j = j + 1;
         }
-        if (!algunoNoCero) {
+        if (!someNonZero) {
             long w = result[0] & ~1L;
             j = n - z;
             while (j < n) {
@@ -344,7 +348,7 @@ public final class RandomSupport {
         return result;
     }
 
-    /** El gemelo de 32 bits de {@link #convertSeedBytesToLongs}. */
+    /** The 32-bit twin of {@link #convertSeedBytesToLongs}. */
     public static int[] convertSeedBytesToInts(byte[] seed, int n, int z) {
         final int[] result = new int[n];
         final int m = Math.min(seed.length, n << 2);
@@ -360,15 +364,15 @@ public final class RandomSupport {
             result[j] = mixMurmur32(v);
             j = j + 1;
         }
-        boolean algunoNoCero = false;
+        boolean someNonZero = false;
         j = n - z;
         while (j < n) {
             if (result[j] != 0) {
-                algunoNoCero = true;
+                someNonZero = true;
             }
             j = j + 1;
         }
-        if (!algunoNoCero) {
+        if (!someNonZero) {
             int w = result[0] & ~1;
             j = n - z;
             while (j < n) {
@@ -380,36 +384,36 @@ public final class RandomSupport {
         return result;
     }
 
-    // ---- las dos distribuciones no uniformes -----------------------------------------------------
+    // ---- the two non-uniform distributions ------------------------------------------------------
     //
-    // **Delegan en el generador**, y eso es una diferencia con el JDK que conviene decir de frente:
-    // el JDK las calcula con el ziggurat modificado de McFarland, que son dos tablas generadas de
-    // varios cientos de entradas. Esta biblioteca usa el metodo polar para la normal y la
-    // transformada inversa para la exponencial -- **la distribucion es la correcta, la secuencia no
-    // es la misma**.
+    // They **delegate to the generator**, and that is a difference with the JDK that is as well
+    // said outright: the JDK calculates them with McFarland's modified ziggurat, which is two
+    // generated tables of several hundred entries. This library uses the polar method for the
+    // normal one and the inverse transform for the exponential one -- **the distribution is the
+    // right one, the sequence is not the same**.
     //
-    // Es la misma diferencia que ya tienen `RandomGenerator.nextGaussian` y `nextExponential`, y
-    // esta escrita alli tambien. Delegar es lo que la mantiene en **un solo lugar**: si algun dia
-    // entra el ziggurat, entra una vez.
+    // It is the same difference `RandomGenerator.nextGaussian` and `nextExponential` already have,
+    // and it is written there as well. Delegating is what keeps it in **one single place**: if the
+    // ziggurat ever comes in, it comes in once.
 
-    /** Un valor de una normal estandar. Ver la nota de arriba sobre la secuencia. */
+    /** A value of a standard normal. See the note above about the sequence. */
     public static double computeNextGaussian(RandomGenerator rng) {
         return rng.nextGaussian();
     }
 
-    /** Un valor de una exponencial de media 1. Ver la nota de arriba. */
+    /** A value of an exponential of mean 1. See the note above. */
     public static double computeNextExponential(RandomGenerator rng) {
         return rng.nextExponential();
     }
 
     /**
-     * Igual que {@link #computeNextExponential}, con un tope **blando** en maxValue.
+     * The same as {@link #computeNextExponential}, with a **soft** cap at maxValue.
      *
-     * <p>El tope existe en el JDK para acotar el peor caso del ziggurat: garantiza que el minimo
-     * entre el valor y el tope tenga la distribucion correcta con una cantidad de llamadas lineal en
-     * el tope, y para lograrlo **puede devolver un valor mayor** que el tope. Sin el ziggurat no hay
-     * peor caso que acotar, asi que el tope no cambia nada -- y devolver mas que el tope sigue
-     * estando permitido, que es justo lo que "blando" quiere decir.
+     * <p>The cap exists in the JDK in order to bound the worst case of the ziggurat: it guarantees
+     * that the minimum between the value and the cap has the right distribution with a number of
+     * calls linear in the cap, and in order to achieve that it **may return a value greater** than
+     * the cap. With no ziggurat there is no worst case to bound, so the cap changes nothing -- and
+     * returning more than the cap is still allowed, which is just what "soft" means.
      */
     public static double computeNextExponentialSoftCapped(RandomGenerator rng, double maxValue) {
         return rng.nextExponential();

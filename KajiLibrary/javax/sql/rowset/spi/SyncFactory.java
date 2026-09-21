@@ -14,213 +14,215 @@ import javax.naming.NamingEnumeration;
 import javax.naming.NamingException;
 
 /**
- * El registro de proveedores de sincronizacion: donde un {@code RowSet} consigue el suyo.
+ * The registry of synchronization providers: where a {@code RowSet} gets its own.
  *
- * <h2>Todo estatico, y por que</h2>
+ * <h2>All static, and why</h2>
  *
- * <p>Porque el registro es del proceso. Que haya {@link #getSyncFactory()} devolviendo una instancia
- * es historico —la clase se penso como una fabrica con estado y termino siendo una tabla global— y
- * ninguno de los metodos de instancia existe. Se conserva porque es API.
+ * <p>Because the registry belongs to the process. That there is a {@link #getSyncFactory()}
+ * returning an instance is historical —the class was conceived as a factory with state and ended up
+ * being a global table— and none of the instance methods exists. It is kept because it is API.
  *
- * <h2>De donde salen los proveedores</h2>
+ * <h2>Where the providers come from</h2>
  *
- * <p>De cuatro lados, y el orden importa porque el ultimo que registra un identificador gana:
+ * <p>From four places, and the order matters because the last one to register an identifier wins:
  *
  * <ol>
- *   <li>el proveedor por omision, que siempre esta;
- *   <li>la propiedad de sistema {@link #ROWSET_SYNC_PROVIDER};
- *   <li>los servicios declarados que {@link ServiceLoader} encuentre;
- *   <li>lo que alguien registre a mano con {@link #registerProvider}.
+ *   <li>the default provider, which is always there;
+ *   <li>the system property {@link #ROWSET_SYNC_PROVIDER};
+ *   <li>the declared services {@link ServiceLoader} finds;
+ *   <li>whatever somebody registers by hand with {@link #registerProvider}.
  * </ol>
  *
- * <p>La idea es que una aplicacion pueda cambiar el proveedor sin tocar codigo —con una propiedad—
- * y que una biblioteca pueda aportar el suyo con solo estar en el classpath.
+ * <p>The idea is that an application can change the provider without touching code —with a
+ * property— and that a library can contribute its own just by being on the classpath.
  *
- * <h2>Un identificador es un nombre de clase</h2>
+ * <h2>An identifier is a class name</h2>
  *
- * <p>No hay tabla de nombres a implementaciones: el identificador <strong>es</strong> el nombre
- * completo de la clase, y {@link #getInstance} la carga por reflexion. Es lo que permite registrar
- * un proveedor sin que esta clase lo conozca.
+ * <p>There is no table from names to implementations: the identifier <strong>is</strong> the fully
+ * qualified name of the class, and {@link #getInstance} loads it by reflection. It is what allows
+ * registering a provider without this class knowing it.
  *
- * <p>La consecuencia es que registrar no valida nada: un identificador se acepta al registrarlo y
- * recien falla al pedir la instancia, si la clase no esta o no es un {@link SyncProvider}.
+ * <p>The consequence is that registering validates nothing: an identifier is accepted when it is
+ * registered and only fails when the instance is asked for, if the class is not there or is not a
+ * {@link SyncProvider}.
  *
  * @since 1.5
  */
 public class SyncFactory {
 
-    /** La propiedad de sistema con el nombre de clase del proveedor. */
+    /** The system property with the provider's class name. */
     public static final String ROWSET_SYNC_PROVIDER = "rowset.provider.classname";
 
-    /** La propiedad de sistema con el nombre del fabricante. */
+    /** The system property with the vendor's name. */
     public static final String ROWSET_SYNC_VENDOR = "rowset.provider.vendor";
 
-    /** La propiedad de sistema con la version del proveedor. */
+    /** The system property with the provider's version. */
     public static final String ROWSET_SYNC_PROVIDER_VERSION = "rowset.provider.version";
 
     /**
-     * El proveedor por omision del JDK.
+     * The JDK's default provider.
      *
-     * <p>Esta biblioteca no lo trae, asi que pedirlo falla con {@link SyncFactoryException}
-     * diciendo que la clase no esta. Se conserva el nombre porque es el que la especificacion
-     * nombra y el que una aplicacion portada va a pedir.
+     * <p>This library does not come with it, so asking for it fails with {@link
+     * SyncFactoryException} saying the class is not there. The name is kept because it is the one
+     * the specification names and the one a ported application is going to ask for.
      */
-    private static final String POR_OMISION = "com.sun.rowset.providers.RIOptimisticProvider";
+    private static final String DEFAULT_PROVIDER = "com.sun.rowset.providers.RIOptimisticProvider";
 
-    /** Identificador de proveedor a nombre de clase; hoy son lo mismo, ver la nota de la clase. */
-    private static final Map<String, String> registrados = new TreeMap<String, String>();
+    /** Provider identifier to class name; today they are the same, see the class note. */
+    private static final Map<String, String> registered = new TreeMap<String, String>();
 
-    private static final SyncFactory INSTANCIA = new SyncFactory();
+    private static final SyncFactory INSTANCE = new SyncFactory();
 
     private static Logger logger;
-    private static Context contextoJNDI;
-    private static boolean inicializada;
+    private static Context jndiContext;
+    private static boolean initialized;
 
     private SyncFactory() {
     }
 
     /**
-     * Carga los proveedores de las tres fuentes automaticas, una sola vez.
+     * Loads the providers from the three automatic sources, only once.
      *
-     * <p>Es perezosa y no un inicializador estatico: recorrer el {@link ServiceLoader} carga clases
-     * de terceros, y eso no deberia pasar por el solo hecho de que alguien nombre esta clase.
+     * <p>It is lazy and not a static initializer: walking the {@link ServiceLoader} loads
+     * third-party classes, and that should not happen just because somebody names this class.
      */
-    private static synchronized void inicializar() {
-        if (inicializada) {
+    private static synchronized void initialize() {
+        if (initialized) {
             return;
         }
-        inicializada = true;
-        registrados.put(POR_OMISION, POR_OMISION);
+        initialized = true;
+        registered.put(DEFAULT_PROVIDER, DEFAULT_PROVIDER);
 
-        final String delSistema = System.getProperty(ROWSET_SYNC_PROVIDER);
-        if (delSistema != null && delSistema.length() > 0) {
-            registrados.put(delSistema, delSistema);
+        final String fromSystem = System.getProperty(ROWSET_SYNC_PROVIDER);
+        if (fromSystem != null && fromSystem.length() > 0) {
+            registered.put(fromSystem, fromSystem);
         }
 
         try {
             for (final SyncProvider p : ServiceLoader.load(SyncProvider.class)) {
-                registrados.put(p.getProviderID(), p.getClass().getName());
+                registered.put(p.getProviderID(), p.getClass().getName());
             }
         } catch (final java.util.ServiceConfigurationError e) {
-            // Un servicio mal declarado no puede tumbar a los que si estan bien: se anota y se
-            // sigue con el resto.
+            // A badly declared service cannot bring down the ones that are fine: it is noted and
+            // the rest carry on.
             if (logger != null) {
-                logger.log(Level.WARNING, "un proveedor declarado no se pudo cargar", e);
+                logger.log(Level.WARNING, "a declared provider could not be loaded", e);
             }
         }
     }
 
     /**
-     * Registra un proveedor por su identificador, que es el nombre completo de su clase.
+     * Registers a provider by its identifier, which is the fully qualified name of its class.
      *
-     * <p>No valida: la clase se busca recien en {@link #getInstance}.
+     * <p>It does not validate: the class is looked for only in {@link #getInstance}.
      *
-     * @param providerID el identificador
-     * @throws SyncFactoryException si el identificador es {@code null} o vacio
+     * @param providerID the identifier
+     * @throws SyncFactoryException if the identifier is {@code null} or empty (JDK 25 accepts an
+     *     empty one)
      */
     public static synchronized void registerProvider(final String providerID)
             throws SyncFactoryException {
         if (providerID == null || providerID.length() == 0) {
-            throw new SyncFactoryException("el identificador de proveedor no puede ser vacio");
+            throw new SyncFactoryException("the provider identifier cannot be empty");
         }
-        inicializar();
-        registrados.put(providerID, providerID);
+        initialize();
+        registered.put(providerID, providerID);
     }
 
     /**
-     * La instancia de la fabrica.
+     * The factory's instance.
      *
-     * <p>No sirve para nada: todos los metodos utiles son estaticos. Existe porque la API la
-     * declara.
+     * <p>It is good for nothing: all the useful methods are static. It exists because the API
+     * declares it.
      *
-     * @return la instancia
+     * @return the instance
      */
     public static SyncFactory getSyncFactory() {
-        return INSTANCIA;
+        return INSTANCE;
     }
 
     /**
-     * Saca un proveedor del registro.
+     * Removes a provider from the registry.
      *
-     * @param providerID el identificador
-     * @throws SyncFactoryException si el identificador es {@code null} o vacio
+     * @param providerID the identifier
+     * @throws SyncFactoryException if the identifier is {@code null} or empty
      */
     public static synchronized void unregisterProvider(final String providerID)
             throws SyncFactoryException {
         if (providerID == null || providerID.length() == 0) {
-            throw new SyncFactoryException("el identificador de proveedor no puede ser vacio");
+            throw new SyncFactoryException("the provider identifier cannot be empty");
         }
-        inicializar();
-        registrados.remove(providerID);
+        initialize();
+        registered.remove(providerID);
     }
 
     /**
-     * Una instancia nueva del proveedor con ese identificador.
+     * A new instance of the provider with that identifier.
      *
-     * <p>Nueva y no compartida: un proveedor tiene estado —el nivel de candado, por ejemplo— y dos
-     * {@code RowSet} distintos no deberian pisarselo.
+     * <p>New and not shared: a provider has state —the lock level, for example— and two different
+     * {@code RowSet}s should not overwrite each other's.
      *
-     * @param providerID el identificador
-     * @return el proveedor
-     * @throws SyncFactoryException si el identificador es vacio, la clase no esta, no es un
-     *     {@link SyncProvider}, o no se pudo instanciar
+     * @param providerID the identifier
+     * @return the provider
+     * @throws SyncFactoryException if the identifier is empty, the class is not there, it is not a
+     *     {@link SyncProvider}, or it could not be instantiated
      */
     public static SyncProvider getInstance(final String providerID) throws SyncFactoryException {
         if (providerID == null || providerID.length() == 0) {
-            throw new SyncFactoryException("el identificador de proveedor no puede ser vacio");
+            throw new SyncFactoryException("the provider identifier cannot be empty");
         }
-        inicializar();
-        final String clase;
+        initialize();
+        final String className;
         synchronized (SyncFactory.class) {
-            final String r = registrados.get(providerID);
-            clase = r != null ? r : providerID;
+            final String r = registered.get(providerID);
+            className = r != null ? r : providerID;
         }
         try {
-            final Class<?> c = Class.forName(clase, true,
+            final Class<?> c = Class.forName(className, true,
                     Thread.currentThread().getContextClassLoader());
             final Object o = c.getDeclaredConstructor().newInstance();
             if (!(o instanceof SyncProvider)) {
-                throw new SyncFactoryException(clase + " no es un SyncProvider");
+                throw new SyncFactoryException(className + " is not a SyncProvider");
             }
             return (SyncProvider) o;
         } catch (final SyncFactoryException e) {
             throw e;
         } catch (final ClassNotFoundException e) {
             final SyncFactoryException s =
-                    new SyncFactoryException("no se encontro la clase del proveedor " + clase);
+                    new SyncFactoryException("provider class not found: " + className);
             s.initCause(e);
             throw s;
         } catch (final ReflectiveOperationException e) {
             final SyncFactoryException s =
-                    new SyncFactoryException("no se pudo instanciar el proveedor " + clase);
+                    new SyncFactoryException("could not instantiate the provider " + className);
             s.initCause(e);
             throw s;
         }
     }
 
     /**
-     * Los proveedores registrados, ya instanciados.
+     * The registered providers, already instantiated.
      *
-     * <p>Los que no se puedan instanciar se saltean en vez de hacer fallar la enumeracion entera:
-     * un proveedor roto no deberia esconder a los que andan.
+     * <p>The ones that cannot be instantiated are skipped instead of making the whole enumeration
+     * fail: a broken provider should not hide the ones that work.
      *
-     * @return la enumeracion
-     * @throws SyncFactoryException si el registro no se pudo leer
+     * @return the enumeration
+     * @throws SyncFactoryException if the registry could not be read
      */
     public static Enumeration<SyncProvider> getRegisteredProviders()
             throws SyncFactoryException {
-        inicializar();
+        initialize();
         final Vector<SyncProvider> out = new Vector<SyncProvider>();
         final String[] ids;
         synchronized (SyncFactory.class) {
-            ids = registrados.keySet().toArray(new String[registrados.size()]);
+            ids = registered.keySet().toArray(new String[registered.size()]);
         }
         for (int i = 0; i < ids.length; i++) {
             try {
                 out.add(getInstance(ids[i]));
             } catch (final SyncFactoryException e) {
                 if (logger != null) {
-                    logger.log(Level.FINE, "proveedor no instanciable: " + ids[i], e);
+                    logger.log(Level.FINE, "provider not instantiable: " + ids[i], e);
                 }
             }
         }
@@ -228,42 +230,42 @@ public class SyncFactory {
     }
 
     /**
-     * Fija el registro por donde la fabrica deja rastro.
+     * Sets the logger the factory leaves its trace through.
      *
-     * @param logger el registro
-     * @throws NullPointerException si es {@code null}
+     * @param logger the logger
+     * @throws NullPointerException if it is {@code null}
      */
     public static void setLogger(final Logger logger) {
         if (logger == null) {
-            throw new NullPointerException("el logger no puede ser null");
+            throw new NullPointerException("the logger cannot be null");
         }
         SyncFactory.logger = logger;
     }
 
     /**
-     * Fija el registro y su nivel.
+     * Sets the logger and its level.
      *
-     * @param logger el registro
-     * @param level el nivel
-     * @throws NullPointerException si el registro es {@code null}
+     * @param logger the logger
+     * @param level the level
+     * @throws NullPointerException if the logger is {@code null}
      */
     public static void setLogger(final Logger logger, final Level level) {
         if (logger == null) {
-            throw new NullPointerException("el logger no puede ser null");
+            throw new NullPointerException("the logger cannot be null");
         }
         logger.setLevel(level);
         SyncFactory.logger = logger;
     }
 
     /**
-     * El registro que se fijo.
+     * The logger that was set.
      *
-     * <p>Falla si no se fijo ninguno, en vez de devolver uno por omision: quien pide el logger
-     * quiere el que configuro, y devolverle otro haria que sus mensajes salieran por un lado que no
-     * espera.
+     * <p>It fails if none was set, instead of returning a default one: whoever asks for the logger
+     * wants the one they configured, and returning another would make their messages come out
+     * somewhere they do not expect.
      *
-     * @return el registro
-     * @throws SyncFactoryException si no se fijo ninguno
+     * @return the logger
+     * @throws SyncFactoryException if none was set
      */
     public static Logger getLogger() throws SyncFactoryException {
         final Logger l = logger;
@@ -274,44 +276,44 @@ public class SyncFactory {
     }
 
     /**
-     * Fija un contexto JNDI del cual leer proveedores registrados en el directorio.
+     * Sets a JNDI context to read providers registered in the directory from.
      *
-     * <p>Es para un servidor de aplicaciones, que publica sus proveedores en el arbol JNDI en vez
-     * de en una propiedad de sistema. Lo que se busca son objetos {@link SyncProvider}; el resto de
-     * lo que haya en el contexto se ignora.
+     * <p>It is for an application server, which publishes its providers in the JNDI tree instead of
+     * in a system property. What is looked for are {@link SyncProvider} objects; the rest of
+     * whatever there is in the context is ignored.
      *
-     * @param ctx el contexto
-     * @throws SyncFactoryException si es {@code null} o no se pudo recorrer
+     * @param ctx the context
+     * @throws SyncFactoryException if it is {@code null} or could not be walked
      */
     public static synchronized void setJNDIContext(final Context ctx) throws SyncFactoryException {
         if (ctx == null) {
-            throw new SyncFactoryException("el contexto JNDI no puede ser null");
+            throw new SyncFactoryException("the JNDI context cannot be null");
         }
-        inicializar();
-        contextoJNDI = ctx;
+        initialize();
+        jndiContext = ctx;
         try {
-            final Hashtable<String, SyncProvider> hallados =
+            final Hashtable<String, SyncProvider> found =
                     new Hashtable<String, SyncProvider>();
-            recorrer(ctx, hallados);
-            for (final Map.Entry<String, SyncProvider> e : hallados.entrySet()) {
-                registrados.put(e.getKey(), e.getValue().getClass().getName());
+            collect(ctx, found);
+            for (final Map.Entry<String, SyncProvider> e : found.entrySet()) {
+                registered.put(e.getKey(), e.getValue().getClass().getName());
             }
         } catch (final NamingException e) {
             final SyncFactoryException s =
-                    new SyncFactoryException("no se pudo leer el contexto JNDI");
+                    new SyncFactoryException("could not read the JNDI context");
             s.initCause(e);
             throw s;
         }
     }
 
-    private static void recorrer(final Context ctx, final Map<String, SyncProvider> out)
+    private static void collect(final Context ctx, final Map<String, SyncProvider> out)
             throws NamingException {
         final NamingEnumeration<javax.naming.Binding> e = ctx.listBindings("");
         while (e.hasMore()) {
             final javax.naming.Binding b = e.next();
             final Object o = b.getObject();
             if (o instanceof Context) {
-                recorrer((Context) o, out);
+                collect((Context) o, out);
             } else if (o instanceof SyncProvider) {
                 final SyncProvider p = (SyncProvider) o;
                 out.put(p.getProviderID(), p);

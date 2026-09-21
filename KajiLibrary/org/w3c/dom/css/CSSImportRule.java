@@ -3,20 +3,20 @@ package org.w3c.dom.css;
 import org.w3c.dom.stylesheets.MediaList;
 
 /**
- * Un `@import`: otra hoja traida a esta.
+ * An `@import`: another sheet brought into this one.
  *
- * <p>`getStyleSheet` puede devolver nulo y hay varias razones legitimas: la hoja todavia no se
- * descargo, no se pudo descargar, o el medio del `@import` no aplica al medio actual. Ninguna es un
- * error, y por eso no hay excepcion.
+ * <p>`getStyleSheet` may return null and there are several legitimate reasons: the sheet has not
+ * been downloaded yet, it could not be downloaded, or the medium of the `@import` does not apply to
+ * the current medium. None is an error, and that is why there is no exception.
  */
 public interface CSSImportRule extends CSSRule {
 
-    /** La URI de la hoja importada. */
+    /** The URI of the imported sheet. */
     String getHref();
 
-    /** Los medios para los que aplica la importacion. Vacia significa todos. */
+    /** The media the import applies to. Empty means all. */
     MediaList getMedia();
 
-    /** La hoja importada, o nulo. Ver la nota de la clase. */
+    /** The imported sheet, or null. See the note of the class. */
     CSSStyleSheet getStyleSheet();
 }

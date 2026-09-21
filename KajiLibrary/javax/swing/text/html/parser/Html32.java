@@ -4,34 +4,34 @@ import java.util.StringTokenizer;
 import java.util.Vector;
 
 /**
- * La DTD de HTML 3.2, escrita como datos.
+ * The HTML 3.2 DTD, written as data.
  *
- * <h2>Por que una tabla y no un archivo</h2>
+ * <h2>Why a table and not a file</h2>
  *
- * <p>El JDK guarda esta misma DTD en un archivo binario que carga desde su imagen. Aca va como
- * texto adentro de la clase: no hay recurso que buscar, ni que empaquetar, ni que se pueda perder
- * al armar una imagen recortada. El costo es que la clase es larga; a cambio, la biblioteca no
- * depende de nada externo para analizar HTML.
+ * <p>The JDK keeps this same DTD in a binary file it loads from its image. Here it goes as text
+ * inside the class: there is no resource to look up, nor to package, nor that can be lost when
+ * building a trimmed image. The cost is that the class is long; in exchange, the library depends
+ * on nothing external to parse HTML.
  *
- * <p>Los datos son la DTD de HTML 3.2, que es una especificacion publica del W3C. Estan verificados
- * contra el JDK: {@code java/texto/Dtd1.java} lee el archivo binario del JDK con
- * {@link DTD#read} y {@code java/texto/Dtd2.java} compara esta tabla contra el resultado, elemento
- * por elemento y entidad por entidad.
+ * <p>The data is the HTML 3.2 DTD, which is a public W3C specification. It is verified against
+ * the JDK: {@code java/texto/Dtd1.java} reads the JDK's binary file with {@link DTD#read} and
+ * {@code java/texto/Dtd2.java} compares this table against the result, element by element and
+ * entity by entity.
  *
- * <h2>El orden importa</h2>
+ * <h2>The order matters</h2>
  *
- * <p>{@link #NOMBRES} se recorre primero y crea todos los elementos vacios, antes de definir
- * ninguno. No es por prolijidad: {@link DTD#getElement(String)} numera a cada elemento nuevo en el
- * orden en que aparece, y las exclusiones e inclusiones se guardan como conjuntos de esos numeros.
- * Si un elemento naciera en otro momento, todos los conjuntos apuntarian a otra cosa.
+ * <p>{@link #NAMES} is walked first and creates every element empty, before defining any. It is
+ * not for tidiness: {@link DTD#getElement(String)} numbers each new element in the order it
+ * appears, and the exclusions and inclusions are stored as sets of those numbers. If an element
+ * were born at another moment, every set would point at something else.
  */
 final class Html32 {
 
     private Html32() {
     }
 
-    /** Los elementos, en el orden exacto en que hay que crearlos; ver la nota de la clase. */
-    private static final String[] NOMBRES = {
+    /** The elements, in the exact order in which they have to be created; see the class note. */
+    private static final String[] NAMES = {
         "#pcdata", "html", "meta", "base", "isindex", "head", "body", "applet", "param", "p",
         "title", "style", "link", "script", "unknown", "plaintext", "nextid", "noscript", "h1",
         "h2", "h3", "h4", "h5", "h6", "ul", "ol", "dir", "menu", "pre", "xmp", "listing", "dl",
@@ -43,8 +43,8 @@ final class Html32 {
         "thead", "tfoot", "tbody"
     };
 
-    /** Una entidad por linea: nombre, tipo y los codigos de sus caracteres. */
-    private static final String[] ENTIDADES = {
+    /** One entity per line: name, type and the codes of its characters. */
+    private static final String[] ENTITIES = {
         "#RE\u000965536\u000913", "#RS\u000965536\u000910", "#SPACE\u000965536\u000932",
         "AElig\u000965537\u0009198", "Aacute\u000965537\u0009193", "Acirc\u000965537\u0009194",
         "Agrave\u000965537\u0009192", "Alpha\u000965537\u0009913", "Aring\u000965537\u0009197",
@@ -134,17 +134,17 @@ final class Html32 {
     };
 
     /**
-     * Un elemento por entrada.
+     * One element per entry.
      *
-     * <p>La primera linea es el elemento -- nombre, tipo, si se puede omitir la apertura, si se
-     * puede omitir el cierre, exclusiones, inclusiones y modelo de contenido -- y las que siguen
-     * son sus atributos.
+     * <p>The first line is the element -- name, type, whether the opening may be omitted, whether
+     * the closing may be omitted, exclusions, inclusions and content model -- and those that follow
+     * are its attributes.
      *
-     * <p>El modelo va en la forma {@code tipo:contenido:siguiente}, donde el contenido es
-     * {@code E} y un nombre de elemento, o {@code M(...)} con otro modelo adentro. Es la misma
-     * forma del arbol de {@link ContentModel}, escrita en una linea.
+     * <p>The model goes in the form {@code type:content:next}, where the content is {@code E} and
+     * an element name, or {@code M(...)} with another model inside. It is the same shape as
+     * {@link ContentModel}'s tree, written on one line.
      */
-    private static final String[] ELEMENTOS = {
+    private static final String[] ELEMENTS = {
         "#pcdata\u000919\u0009false\u0009false\u0009\u0009\u0009-",
         "html\u000918\u0009true\u0009true\u0009\u0009\u000944:M(0:Ehead:0:Ebody:63:M(0:Eplaintext:-):-):-\nversion\u00091\u00091\u0009-//HotJava//DTD HotJava 1.0 HTML 3.2 Draft 19960821//EN\u0009",
         "meta\u000917\u0009false\u0009true\u0009\u0009\u0009-\ncontent\u00091\u00092\u0009 \u0009\nname\u00097\u00095\u0009 \u0009\nhttp-equiv\u00097\u00095\u0009 \u0009",
@@ -235,23 +235,23 @@ final class Html32 {
         "tbody\u000918\u0009true\u0009true\u0009\u0009\u000943:M(44:M(0:Etr:-):-):-"
     };
 
-    /** Arma la DTD de HTML 3.2 sobre la que se le pase. */
-    static void llenar(DTD d) {
-        for (int i = 0; i < NOMBRES.length; i++) {
-            d.getElement(NOMBRES[i]);
+    /** Builds the HTML 3.2 DTD over the one passed in. */
+    static void fill(DTD d) {
+        for (int i = 0; i < NAMES.length; i++) {
+            d.getElement(NAMES[i]);
         }
-        for (int i = 0; i < ENTIDADES.length; i++) {
-            String[] p = partir(ENTIDADES[i], '\t');
-            char[] datos = codigos(p[2]);
-            d.defineEntity(p[0], Integer.parseInt(p[1]), datos);
+        for (int i = 0; i < ENTITIES.length; i++) {
+            String[] p = partir(ENTITIES[i], '\t');
+            char[] data = codes(p[2]);
+            d.defineEntity(p[0], Integer.parseInt(p[1]), data);
         }
-        for (int i = 0; i < ELEMENTOS.length; i++) {
-            String[] filas = partir(ELEMENTOS[i], '\n');
-            String[] p = partir(filas[0], '\t');
+        for (int i = 0; i < ELEMENTS.length; i++) {
+            String[] rows = partir(ELEMENTS[i], '\n');
+            String[] p = partir(rows[0], '\t');
             AttributeList atts = null;
-            // Al reves: la lista se encadena hacia adelante, como al leer el binario.
-            for (int j = filas.length - 1; j >= 1; j--) {
-                String[] a = partir(filas[j], '\t');
+            // Backwards: the list is chained forwards, as when reading the binary.
+            for (int j = rows.length - 1; j >= 1; j--) {
+                String[] a = partir(rows[j], '\t');
                 Vector<String> vals = null;
                 if (a[4].length() > 0) {
                     vals = new Vector<String>();
@@ -260,17 +260,17 @@ final class Html32 {
                         vals.addElement(st.nextToken());
                     }
                 }
-                String valor = " ".equals(a[3]) ? null : a[3];
+                String value = " ".equals(a[3]) ? null : a[3];
                 atts = new AttributeList(a[0], Integer.parseInt(a[1]),
-                        Integer.parseInt(a[2]), valor, vals, atts);
+                        Integer.parseInt(a[2]), value, vals, atts);
             }
             d.defineElement(p[0], Integer.parseInt(p[1]), "true".equals(p[2]),
-                    "true".equals(p[3]), modelo(d, p[6], new int[1]),
-                    conjunto(d, p[4]), conjunto(d, p[5]), atts);
+                    "true".equals(p[3]), model(d, p[6], new int[1]),
+                    set(d, p[4]), set(d, p[5]), atts);
         }
     }
 
-    /** Parte por un caracter, dejando los campos vacios; {@code split} los descartaria. */
+    /** Splits on a character, keeping the empty fields; {@code split} would discard them. */
     private static String[] partir(String s, char sep) {
         int n = 1;
         for (int i = 0; i < s.length(); i++) {
@@ -280,19 +280,19 @@ final class Html32 {
         }
         String[] out = new String[n];
         int k = 0;
-        int desde = 0;
+        int from = 0;
         for (int i = 0; i <= s.length(); i++) {
             if (i == s.length() || s.charAt(i) == sep) {
-                out[k] = s.substring(desde, i);
+                out[k] = s.substring(from, i);
                 k++;
-                desde = i + 1;
+                from = i + 1;
             }
         }
         return out;
     }
 
-    /** Los caracteres de una lista de codigos separados por comas. */
-    private static char[] codigos(String s) {
+    /** The characters of a comma-separated list of codes. */
+    private static char[] codes(String s) {
         if (s.length() == 0) {
             return new char[0];
         }
@@ -304,8 +304,8 @@ final class Html32 {
         return out;
     }
 
-    /** El conjunto de elementos nombrados en esa lista, o nulo si esta vacia. */
-    private static java.util.BitSet conjunto(DTD d, String s) {
+    /** The set of elements named in that list, or null if it is empty. */
+    private static java.util.BitSet set(DTD d, String s) {
         if (s.length() == 0) {
             return null;
         }
@@ -318,12 +318,12 @@ final class Html32 {
     }
 
     /**
-     * Vuelve a armar un modelo de contenido desde su forma plana.
+     * Rebuilds a content model from its flat form.
      *
-     * <p>El entero de {@code pos} entra y sale con la posicion: es un cursor que comparten las
-     * llamadas recursivas, y es lo que permite leer un arbol de una sola pasada por la cadena.
+     * <p>The {@code pos} integer goes in and comes out with the position: it is a cursor shared by
+     * the recursive calls, and it is what allows reading a tree in a single pass over the string.
      */
-    private static ContentModel modelo(DTD d, String s, int[] pos) {
+    private static ContentModel model(DTD d, String s, int[] pos) {
         if (pos[0] >= s.length()) {
             return null;
         }
@@ -331,33 +331,33 @@ final class Html32 {
             pos[0] = pos[0] + 1;
             return null;
         }
-        int dosp = s.indexOf(':', pos[0]);
-        int tipo = Integer.parseInt(s.substring(pos[0], dosp));
-        pos[0] = dosp + 1;
+        int colon = s.indexOf(':', pos[0]);
+        int type = Integer.parseInt(s.substring(pos[0], colon));
+        pos[0] = colon + 1;
 
-        Object contenido;
+        Object content;
         if (s.charAt(pos[0]) == 'E') {
-            int fin = s.indexOf(':', pos[0]);
-            contenido = d.getElement(s.substring(pos[0] + 1, fin));
-            pos[0] = fin + 1;
+            int end = s.indexOf(':', pos[0]);
+            content = d.getElement(s.substring(pos[0] + 1, end));
+            pos[0] = end + 1;
         } else {
-            // "M(" ... ")" -- se busca el parentesis que cierra contando los que se abren.
-            int nivel = 0;
+            // "M(" ... ")" -- the closing parenthesis is found by counting those that open.
+            int level = 0;
             int i = pos[0] + 1;
-            int desde = i + 1;
+            int from = i + 1;
             for (; i < s.length(); i++) {
                 if (s.charAt(i) == '(') {
-                    nivel++;
+                    level++;
                 } else if (s.charAt(i) == ')') {
-                    nivel--;
-                    if (nivel == 0) {
+                    level--;
+                    if (level == 0) {
                         break;
                     }
                 }
             }
-            contenido = modelo(d, s.substring(desde, i), new int[1]);
+            content = model(d, s.substring(from, i), new int[1]);
             pos[0] = i + 2;
         }
-        return new ContentModel(tipo, contenido, modelo(d, s, pos));
+        return new ContentModel(type, content, model(d, s, pos));
     }
 }

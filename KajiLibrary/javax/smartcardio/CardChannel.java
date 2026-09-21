@@ -3,45 +3,45 @@ package javax.smartcardio;
 import java.nio.ByteBuffer;
 
 /**
- * KajiLibrary's javax.smartcardio.CardChannel -- por donde van las ordenes.
+ * KajiLibrary's javax.smartcardio.CardChannel -- the way the commands go.
  *
- * <p>El canal 0 es el basico y no se cierra; los logicos se abren con
- * {@link Card#openLogicalChannel} y se cierran con {@link #close}.
+ * <p>Channel 0 is the basic one and is not closed; the logical ones are opened with
+ * {@link Card#openLogicalChannel} and closed with {@link #close}.
  *
- * <p>Las dos formas de {@link #transmit} hacen lo mismo: una con objetos, otra con buffers para
- * quien quiera evitar la copia.
+ * <p>The two forms of {@link #transmit} do the same: one with objects, the other with buffers for
+ * whoever wants to avoid the copy.
  */
 public abstract class CardChannel {
 
-    /** Para las subclases. */
+    /** For subclasses. */
     protected CardChannel() {
     }
 
-    /** De que tarjeta es. */
+    /** Which card it belongs to. */
     public abstract Card getCard();
 
-    /** Que numero de canal es; 0 es el basico. */
+    /** Which channel number it is; 0 is the basic one. */
     public abstract int getChannelNumber();
 
     /**
-     * Manda la orden y espera la respuesta.
+     * Sends the command and waits for the answer.
      *
-     * @throws CardException si la tarjeta no contesta
+     * @throws CardException if the card does not answer
      */
     public abstract ResponseAPDU transmit(CommandAPDU command) throws CardException;
 
     /**
-     * Lo mismo, con buffers.
+     * The same, with buffers.
      *
-     * @return cuantos bytes se escribieron en el buffer de respuesta
-     * @throws CardException si la tarjeta no contesta
+     * @return how many bytes were written into the response buffer
+     * @throws CardException if the card does not answer
      */
     public abstract int transmit(ByteBuffer command, ByteBuffer response) throws CardException;
 
     /**
-     * Cierra el canal.
+     * Closes the channel.
      *
-     * @throws CardException si es el basico, que no se cierra, o si fallo
+     * @throws CardException if it is the basic one, which is not closed, or if it failed
      */
     public abstract void close() throws CardException;
 }

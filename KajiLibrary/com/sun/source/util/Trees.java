@@ -20,131 +20,135 @@ import com.sun.source.tree.Scope;
 import com.sun.source.tree.Tree;
 
 /**
- * El puente entre el arbol de sintaxis y el modelo de elementos.
+ * The bridge between the syntax tree and the element model.
  *
- * <h2>Que problema resuelve</h2>
+ * <h2>What problem it resolves</h2>
  *
- * <p>Hay dos vistas del mismo programa y cada una sabe algo que la otra no. El
- * <strong>arbol</strong> ({@code com.sun.source.tree}) tiene la forma como se escribio: los
- * parentesis, el orden, donde esta cada cosa en el archivo. El <strong>modelo</strong>
- * ({@code javax.lang.model}) tiene lo resuelto: a que apunta cada nombre, cual es el tipo de cada
- * expresion, quien hereda de quien.
+ * <p>There are two views of the same program and each one knows something the other does not.
+ * The <strong>tree</strong> ({@code com.sun.source.tree}) has the shape as it was written: the
+ * parentheses, the order, where each thing is in the file. The <strong>model</strong>
+ * ({@code javax.lang.model}) has what is resolved: what each name points at, what the type of
+ * each expression is, who inherits from whom.
  *
- * <p>Un procesador de anotaciones recibe el modelo. Cuando ademas necesita el fuente —para reportar
- * un error en la linea exacta, o para mirar como se escribio algo— tiene que cruzar de una vista a
- * la otra, y esta clase es ese cruce. Sin ella, las dos APIs existirian sin forma de relacionarlas.
+ * <p>An annotation processor receives the model. When it also needs the source -- in order to
+ * report an error on the exact line, or to look at how something was written -- it has to
+ * cross from one view to the other, and this class is that crossing. Without it, the two APIs
+ * would exist with no way of relating them.
  *
- * <h2>Por que casi todo pide un {@link TreePath} y no un {@link Tree}</h2>
+ * <h2>Why almost everything asks for a {@link TreePath} and not a {@link Tree}</h2>
  *
- * <p>Porque un nodo suelto es ambiguo. El mismo {@code IdentifierTree} para {@code x} aparece en
- * muchos lugares y significa una variable distinta en cada uno; resolverlo necesita saber
- * <em>donde</em> esta, y eso es exactamente lo que un camino aporta y un nodo no.
+ * <p>Because a loose node is ambiguous. The same {@code IdentifierTree} for {@code x} appears
+ * in many places and means a different variable in each; resolving it needs to know
+ * <em>where</em> it is, and that is exactly what a path contributes and a node does not.
  *
- * <h2>Y por que declina en esta VM</h2>
+ * <h2>And why it declines on this VM</h2>
  *
- * <p>{@link #instance} pide una tarea de compilacion de {@code javac} y devuelve la implementacion
- * que el compilador trae adentro. El compilador de este proyecto esta escrito en Rust y no expone
- * esa implementacion, asi que las dos fabricas declinan en vez de devolver algo que no cruzaria
- * nada. La API queda entera para quien compile contra ella.
+ * <p>{@link #instance} asks for a {@code javac} compilation task and returns the
+ * implementation the compiler brings inside. This project's compiler is written in Rust and
+ * does not expose that implementation, so the two factories decline instead of returning
+ * something that would cross nothing. The API is left whole for whoever compiles against it.
  */
 public abstract class Trees {
 
-    /** Para las implementaciones. */
+    /** For the implementations. */
     public Trees() {
     }
 
     /**
-     * La instancia asociada a esa tarea de compilacion.
+     * The instance associated with that compilation task.
      *
-     * @throws IllegalArgumentException si la tarea no es de un compilador que sepa proveerla — que
-     *     es siempre, en esta VM
+     * @throws IllegalArgumentException if the task is not from a compiler that knows how to
+     *     provide it -- which is always, on this VM
      */
     public static Trees instance(JavaCompiler.CompilationTask task) {
         throw new IllegalArgumentException(
-                "el javac de este proyecto no expone la implementacion de Trees");
+                "this project's javac does not expose the implementation of Trees");
     }
 
     /**
-     * La instancia asociada a un entorno de procesamiento de anotaciones.
+     * The instance associated with an annotation processing environment.
      *
-     * @throws IllegalArgumentException idem
+     * @throws IllegalArgumentException the same
      */
     public static Trees instance(ProcessingEnvironment env) {
         throw new IllegalArgumentException(
-                "el javac de este proyecto no expone la implementacion de Trees");
+                "this project's javac does not expose the implementation of Trees");
     }
 
-    /** Las posiciones en el fuente. */
+    /** The positions in the source. */
     public abstract SourcePositions getSourcePositions();
 
-    /** El nodo donde se declaro ese elemento, o {@code null} si no vino de un fuente. */
+    /**
+     * The node where that element was declared, or {@code null} if it did not come from a source.
+     */
     public abstract Tree getTree(Element element);
 
-    /** La declaracion de ese tipo. */
+    /** That type's declaration. */
     public abstract ClassTree getTree(TypeElement element);
 
-    /** La declaracion de ese metodo. */
+    /** That method's declaration. */
     public abstract MethodTree getTree(ExecutableElement method);
 
-    /** El nodo de esa anotacion sobre ese elemento. */
+    /** The node of that annotation over that element. */
     public abstract Tree getTree(Element e, AnnotationMirror a);
 
-    /** El nodo de ese valor dentro de esa anotacion. */
+    /** The node of that value inside that annotation. */
     public abstract Tree getTree(Element e, AnnotationMirror a, AnnotationValue v);
 
-    /** El camino hasta ese nodo dentro de esa unidad. */
+    /** The path as far as that node inside that unit. */
     public abstract TreePath getPath(CompilationUnitTree unit, Tree node);
 
-    /** El camino hasta la declaracion de ese elemento. */
+    /** The path as far as that element's declaration. */
     public abstract TreePath getPath(Element e);
 
-    /** El camino hasta esa anotacion. */
+    /** The path as far as that annotation. */
     public abstract TreePath getPath(Element e, AnnotationMirror a);
 
-    /** El camino hasta ese valor de anotacion. */
+    /** The path as far as that annotation value. */
     public abstract TreePath getPath(Element e, AnnotationMirror a, AnnotationValue v);
 
-    /** El elemento al que resuelve ese camino, o {@code null}. */
+    /** The element that path resolves to, or {@code null}. */
     public abstract Element getElement(TreePath path);
 
-    /** El tipo de lo que hay en ese camino, o {@code null}. */
+    /** The type of what there is at that path, or {@code null}. */
     public abstract TypeMirror getTypeMirror(TreePath path);
 
-    /** El alcance lexico en ese punto. */
+    /** The lexical scope at that point. */
     public abstract Scope getScope(TreePath path);
 
-    /** El comentario de documentacion de esa declaracion, o {@code null}. */
+    /** That declaration's documentation comment, or {@code null}. */
     public abstract String getDocComment(TreePath path);
 
-    /** Si ese tipo es accesible desde ese alcance. */
+    /** Whether that type is accessible from that scope. */
     public abstract boolean isAccessible(Scope scope, TypeElement type);
 
-    /** Si ese miembro es accesible desde ese alcance. */
+    /** Whether that member is accessible from that scope. */
     public abstract boolean isAccessible(Scope scope, Element member, DeclaredType type);
 
     /**
-     * El tipo que el compilador tenia antes de darse por vencido.
+     * The type the compiler had before giving up.
      *
-     * <p>Cuando un tipo no resuelve, el modelo entrega un {@link ErrorType} para poder seguir
-     * compilando. Esto recupera lo que se sabia de el, que es lo que permite dar un mensaje util en
-     * vez de "tipo desconocido".
+     * <p>When a type does not resolve, the model hands over an {@link ErrorType} so as to be able
+     * to go on compiling. This recovers what was known about it, which is what allows a useful
+     * message to be given instead of "unknown type".
      */
     public abstract TypeMirror getOriginalType(ErrorType errorType);
 
     /**
-     * Reporta un diagnostico ubicado en ese nodo.
+     * It reports a diagnostic placed at that node.
      *
-     * <p>Es lo que hace que un procesador pueda subrayar la linea exacta en vez de decir el nombre
-     * del archivo y nada mas.
+     * <p>It is what allows a processor to underline the exact line instead of saying the file's
+     * name and nothing more.
      */
     public abstract void printMessage(Diagnostic.Kind kind, CharSequence msg, Tree t,
             CompilationUnitTree root);
 
     /**
-     * El supertipo comun mas ajustado de las excepciones de un {@code catch} multiple.
+     * The tightest common supertype of the exceptions of a multi-{@code catch}.
      *
-     * <p>Hace falta porque el tipo de la variable de un {@code catch (A | B e)} no es ni {@code A}
-     * ni {@code B} sino su cota superior, y esa no esta escrita en ningun lado del fuente.
+     * <p>It is needed because the type of the variable of a {@code catch (A | B e)} is neither
+     * {@code A} nor {@code B} but their upper bound, and that one is not written anywhere in the
+     * source.
      */
     public abstract TypeMirror getLub(CatchTree tree);
 }

@@ -5,13 +5,13 @@ import javax.accessibility.AccessibleState;
 import javax.accessibility.AccessibleStateSet;
 
 /**
- * Un rectángulo de varios renglones donde escribir.
+ * A rectangle of several lines to type in.
  *
- * <p>A diferencia de {@link TextField}, Enter mete un salto de línea en vez de disparar un evento:
- * no hay forma de "confirmar" un área de texto, y por eso no tiene oyentes de acción.
+ * <p>Unlike {@link TextField}, Enter puts in a line break instead of firing an event: there is no
+ * way to "confirm" a text area, and that is why it has no action listeners.
  *
- * <p>Las barras de desplazamiento se eligen en el constructor y **no se pueden cambiar después**;
- * {@link #getScrollbarVisibility} sólo informa qué se pidió. Es una limitación real de AWT.
+ * <p>The scrollbars are chosen in the constructor and **cannot be changed afterwards**;
+ * {@link #getScrollbarVisibility} only reports what was asked for. It is a real limitation of AWT.
  */
 public class TextArea extends TextComponent {
 
@@ -19,53 +19,53 @@ public class TextArea extends TextComponent {
 
     private static int textAreaCounter = 0;
 
-    /** Cuántos renglones de alto pide. */
+    /** How many lines tall it asks to be. */
     int rows;
 
-    /** Cuántas letras de ancho pide. */
+    /** How many letters wide it asks to be. */
     int columns;
 
-    /** Las dos barras. */
+    /** Both bars. */
     public static final int SCROLLBARS_BOTH = 0;
 
-    /** Sólo la vertical. */
+    /** The vertical one only. */
     public static final int SCROLLBARS_VERTICAL_ONLY = 1;
 
-    /** Sólo la horizontal. */
+    /** The horizontal one only. */
     public static final int SCROLLBARS_HORIZONTAL_ONLY = 2;
 
-    /** Ninguna. */
+    /** Neither of them. */
     public static final int SCROLLBARS_NONE = 3;
 
-    /** Cuáles se pidieron. */
+    /** Which ones were asked for. */
     private int scrollbarVisibility;
 
-    /** Un área vacía con las dos barras. */
+    /** An empty area with both bars. */
     public TextArea() throws HeadlessException {
         this("", 0, 0, SCROLLBARS_BOTH);
     }
 
-    /** Un área con ese texto y las dos barras. */
+    /** An area with that text and both bars. */
     public TextArea(String text) throws HeadlessException {
         this(text, 0, 0, SCROLLBARS_BOTH);
     }
 
-    /** Un área vacía de ese tamaño, con las dos barras. */
+    /** An empty area of that size, with both bars. */
     public TextArea(int rows, int columns) throws HeadlessException {
         this("", rows, columns, SCROLLBARS_BOTH);
     }
 
-    /** Un área con ese texto y ese tamaño, con las dos barras. */
+    /** An area with that text and that size, with both bars. */
     public TextArea(String text, int rows, int columns) throws HeadlessException {
         this(text, rows, columns, SCROLLBARS_BOTH);
     }
 
     /**
-     * Un área con todo dicho.
+     * An area with everything given.
      *
-     * <p>Un valor de barras que no sea una de las cuatro constantes se toma como
-     * {@link #SCROLLBARS_BOTH}, que es lo que hace el JDK: es un pedido de apariencia, no algo que
-     * justifique una excepción.
+     * <p>A scrollbar value that is not one of the four constants is taken as {@link
+     * #SCROLLBARS_BOTH}, which is what the JDK does: it is a request about appearance, not
+     * something that justifies an exception.
      */
     public TextArea(String text, int rows, int columns, int scrollbars) throws HeadlessException {
         super(text);
@@ -86,24 +86,24 @@ public class TextArea extends TextComponent {
         }
     }
 
-    /** La declara mostrable. */
+    /** Declares it showable. */
     public void addNotify() {
         super.addNotify();
     }
 
     /**
-     * Mete ese texto en esa posición.
+     * Puts that text at that position.
      *
-     * @throws StringIndexOutOfBoundsException si la posición cae fuera del texto
+     * @throws StringIndexOutOfBoundsException if the position falls outside the text
      */
     public void insert(String str, int pos) {
         this.insertText(str, pos);
     }
 
     /**
-     * Mete texto en esa posición.
+     * Puts text at that position.
      *
-     * @deprecated es del nombrado de 1.0. Usar {@link #insert}.
+     * @deprecated it is from the 1.0 naming. Use {@link #insert}.
      */
     @Deprecated
     public synchronized void insertText(String str, int pos) {
@@ -111,15 +111,15 @@ public class TextArea extends TextComponent {
         this.setText(t.substring(0, pos) + str + t.substring(pos));
     }
 
-    /** Pega ese texto al final. */
+    /** Sticks that text at the end. */
     public void append(String str) {
         this.appendText(str);
     }
 
     /**
-     * Pega texto al final.
+     * Sticks text at the end.
      *
-     * @deprecated es del nombrado de 1.0. Usar {@link #append}.
+     * @deprecated it is from the 1.0 naming. Use {@link #append}.
      */
     @Deprecated
     public synchronized void appendText(String str) {
@@ -127,23 +127,23 @@ public class TextArea extends TextComponent {
     }
 
     /**
-     * Reemplaza ese tramo por ese texto.
+     * Replaces that stretch with that text.
      *
-     * <p><strong>No</strong> recorta ni ordena las posiciones, a diferencia de
-     * {@link TextComponent#select}: un tramo dado vuelta o pasado del texto tira. Ahí la tolerancia
-     * tiene sentido —la selección la calcula una búsqueda— y acá no: reemplazar el tramo equivocado
-     * en silencio es peor que no reemplazar nada.
+     * <p>It does **not** clamp or reorder the positions, unlike {@link TextComponent#select}: a
+     * stretch that is reversed or past the text throws. There the tolerance makes sense —the
+     * selection is worked out by a search— and here it does not: replacing the wrong stretch
+     * silently is worse than replacing nothing.
      *
-     * @throws StringIndexOutOfBoundsException si el tramo no es válido
+     * @throws StringIndexOutOfBoundsException if the stretch is not valid
      */
     public void replaceRange(String str, int start, int end) {
         this.replaceText(str, start, end);
     }
 
     /**
-     * Reemplaza un tramo.
+     * Replaces a stretch.
      *
-     * @deprecated es del nombrado de 1.0. Usar {@link #replaceRange}.
+     * @deprecated it is from the 1.0 naming. Use {@link #replaceRange}.
      */
     @Deprecated
     public synchronized void replaceText(String str, int start, int end) {
@@ -151,15 +151,15 @@ public class TextArea extends TextComponent {
         this.setText(t.substring(0, start) + str + t.substring(end));
     }
 
-    /** Cuántos renglones de alto pide. */
+    /** How many lines tall it asks to be. */
     public int getRows() {
         return this.rows;
     }
 
     /**
-     * Cambia el alto pedido.
+     * Changes the height it asks for.
      *
-     * @throws IllegalArgumentException si es negativo
+     * @throws IllegalArgumentException if it is negative
      */
     public void setRows(int rows) {
         if (rows < 0) {
@@ -168,15 +168,15 @@ public class TextArea extends TextComponent {
         this.rows = rows;
     }
 
-    /** Cuántas letras de ancho pide. */
+    /** How many letters wide it asks to be. */
     public int getColumns() {
         return this.columns;
     }
 
     /**
-     * Cambia el ancho pedido.
+     * Changes the width it asks for.
      *
-     * @throws IllegalArgumentException si es negativo
+     * @throws IllegalArgumentException if it is negative
      */
     public void setColumns(int columns) {
         if (columns < 0) {
@@ -185,20 +185,25 @@ public class TextArea extends TextComponent {
         this.columns = columns;
     }
 
-    /** Qué barras se pidieron al construirla. */
+    /** Which bars were asked for when it was built. */
     public int getScrollbarVisibility() {
         return this.scrollbarVisibility;
     }
 
-    /** Lo que necesitaría un área de ese tamaño. */
+    /**
+     * What an area of that size would need.
+     *
+     * <p>It answers the current size and ignores the rows and the columns: working out what a given
+     * number of letters measures needs the font measured on a screen.
+     */
     public Dimension getPreferredSize(int rows, int columns) {
         return this.getSize();
     }
 
     /**
-     * Lo que necesitaría un área de ese tamaño.
+     * What an area of that size would need.
      *
-     * @deprecated es del nombrado de 1.0. Usar {@link #getPreferredSize(int, int)}.
+     * @deprecated it is from the 1.0 naming. Use {@link #getPreferredSize(int, int)}.
      */
     @Deprecated
     public Dimension preferredSize(int rows, int columns) {
@@ -213,24 +218,29 @@ public class TextArea extends TextComponent {
     }
 
     /**
-     * Lo que necesita.
+     * What it needs.
      *
-     * @deprecated es del nombrado de 1.0. Usar {@link #getPreferredSize()}.
+     * @deprecated it is from the 1.0 naming. Use {@link #getPreferredSize()}.
      */
     @Deprecated
     public Dimension preferredSize() {
         return this.getPreferredSize();
     }
 
-    /** Lo mínimo para un área de ese tamaño. */
+    /**
+     * The minimum for an area of that size.
+     *
+     * <p>Like {@link #getPreferredSize(int, int)}, it answers the current size and ignores the rows
+     * and the columns.
+     */
     public Dimension getMinimumSize(int rows, int columns) {
         return this.getSize();
     }
 
     /**
-     * Lo mínimo para ese tamaño.
+     * The minimum for that size.
      *
-     * @deprecated es del nombrado de 1.0. Usar {@link #getMinimumSize(int, int)}.
+     * @deprecated it is from the 1.0 naming. Use {@link #getMinimumSize(int, int)}.
      */
     @Deprecated
     public Dimension minimumSize(int rows, int columns) {
@@ -245,9 +255,9 @@ public class TextArea extends TextComponent {
     }
 
     /**
-     * Lo mínimo que necesita.
+     * The minimum it needs.
      *
-     * @deprecated es del nombrado de 1.0. Usar {@link #getMinimumSize()}.
+     * @deprecated it is from the 1.0 naming. Use {@link #getMinimumSize()}.
      */
     @Deprecated
     public Dimension minimumSize() {
@@ -255,19 +265,19 @@ public class TextArea extends TextComponent {
     }
 
     protected String paramString() {
-        String barras = "both";
+        String bars = "both";
         if (this.scrollbarVisibility == SCROLLBARS_VERTICAL_ONLY) {
-            barras = "vertical";
+            bars = "vertical";
         } else if (this.scrollbarVisibility == SCROLLBARS_HORIZONTAL_ONLY) {
-            barras = "horizontal";
+            bars = "horizontal";
         } else if (this.scrollbarVisibility == SCROLLBARS_NONE) {
-            barras = "none";
+            bars = "none";
         }
         return super.paramString() + ",rows=" + this.rows + ",columns=" + this.columns
-                + ",scrollbarVisibility=" + barras;
+                + ",scrollbarVisibility=" + bars;
     }
 
-    /** La accesibilidad del área. */
+    /** The accessibility information of this area. */
     public AccessibleContext getAccessibleContext() {
         if (this.accessibleContext == null) {
             this.accessibleContext = new AccessibleAWTTextArea();
@@ -276,14 +286,14 @@ public class TextArea extends TextComponent {
     }
 
     /**
-     * La accesibilidad de un área de texto.
+     * The accessibility of a text area.
      *
-     * <p>Informa `MULTI_LINE` en vez de `SINGLE_LINE`, que es la diferencia que le importa a un
-     * lector de pantalla: le dice que tiene que ofrecer navegación por renglón.
+     * <p>It reports `MULTI_LINE` instead of `SINGLE_LINE`, which is the difference that matters to
+     * a screen reader: it tells it to offer navigation by line.
      */
     protected class AccessibleAWTTextArea extends AccessibleAWTTextComponent {
 
-        /** Para las subclases. */
+        /** For the subclasses. */
         protected AccessibleAWTTextArea() {
         }
 

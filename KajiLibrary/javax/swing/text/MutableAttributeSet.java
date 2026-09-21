@@ -3,14 +3,14 @@ package javax.swing.text;
 import java.util.Enumeration;
 
 /**
- * Un conjunto de atributos que se puede cambiar.
+ * A set of attributes that can be changed.
  *
- * <p>{@link AttributeSet} es de solo lectura a proposito: los conjuntos que un documento comparte
- * entre miles de caracteres tienen que ser inmutables para poder compartirse. Esta interfaz es la
- * otra mitad, la que usa quien esta armando o editando un conjunto.
+ * <p>{@link AttributeSet} is read-only on purpose: the sets a document shares among thousands of
+ * characters have to be immutable in order to be shareable. This interface is the other half,
+ * the one used by whoever is building or editing a set.
  *
- * <p>El <em>padre de resolucion</em> es lo que hace que los estilos se encadenen: un atributo que
- * este conjunto no define se le pregunta al padre, y asi hasta el estilo por omision del documento.
+ * <p>The <em>resolving parent</em> is what makes the styles chain: an attribute this set does
+ * not define is asked of the parent, and so on up to the document's default style.
  */
 public interface MutableAttributeSet extends AttributeSet {
 
@@ -20,17 +20,17 @@ public interface MutableAttributeSet extends AttributeSet {
 
     void removeAttribute(Object name);
 
-    /** Quita esos nombres; el valor que tuvieran no importa. */
+    /** It removes those names; whatever value they had does not matter. */
     void removeAttributes(Enumeration<?> names);
 
     /**
-     * Quita los que este conjunto tenga con el mismo valor que el otro.
+     * It removes those this set has with the same value as the other.
      *
-     * <p>Con el mismo valor, no solo el mismo nombre: quitar "negrita = false" de un conjunto donde
-     * la negrita esta en {@code true} no hace nada.
+     * <p>With the same value, not only the same name: removing "bold = false" from a set where
+     * bold is at {@code true} does nothing.
      */
     void removeAttributes(AttributeSet attributes);
 
-    /** Ver la nota de la interfaz. */
+    /** See the interface note. */
     void setResolveParent(AttributeSet parent);
 }

@@ -7,15 +7,19 @@ import javax.accessibility.AccessibleRole;
 import javax.accessibility.AccessibleStateSet;
 
 /**
- * La raíz de todo lo que vive en un menú.
+ * The root of everything that lives in a menu.
  *
- * <p>Es el equivalente de {@link Component} para los menús, y que sean dos jerarquías separadas no
- * es un descuido de diseño sino una consecuencia: los menús los dibuja el sistema operativo, no el
- * programa. Un elemento de menú no tiene posición ni tamaño en el espacio de la ventana porque no
- * está en la ventana.
+ * <p>It is the equivalent of {@link Component} for menus, and that they are two separate
+ * hierarchies is not a design oversight but a consequence: menus are drawn by the operating system,
+ * not by the program. A menu item has no position or size in the window's space because it is not
+ * in the window.
  *
- * <p>De ahí que esta clase sea tan chica comparada con `Component`: nombre, fuente, padre, y el
- * reparto de eventos. Todo lo geométrico no existe.
+ * <p>Hence this class being so small next to `Component`: name, font, parent, and the dispatching
+ * of events. Everything geometric does not exist.
+ *
+ * <p>The constructors of this class and of the ones below it declare {@link HeadlessException}
+ * because the JDK's do, and none of them throws it: with no screen ever, throwing would leave no
+ * way to build a menu at all.
  */
 public abstract class MenuComponent implements Serializable {
 
@@ -26,20 +30,16 @@ public abstract class MenuComponent implements Serializable {
     private Font font;
     private MenuContainer parent;
 
-    /** El contexto de accesibilidad, armado a demanda. */
+    /** The accessibility context, built on demand. */
     protected AccessibleContext accessibleContext;
 
     private static int nameCounter;
 
-    /**
-     * Un componente de menú.
-     *
-     * @throws HeadlessException si no hay pantalla
-     */
+    /** A menu component. */
     public MenuComponent() throws HeadlessException {
     }
 
-    /** El nombre por omisión, distinto para cada uno. */
+    /** The default name, a different one for each. */
     String constructComponentName() {
         synchronized (MenuComponent.class) {
             String n = this.getClass().getName() + nameCounter;
@@ -49,10 +49,10 @@ public abstract class MenuComponent implements Serializable {
     }
 
     /**
-     * Cómo se llama.
+     * What it is called.
      *
-     * <p>Si nadie le puso nombre, se le arma uno: sirve para depurar, y devolver `null` obligaría a
-     * comprobarlo en cada traza.
+     * <p>If nobody gave it a name, one is built for it: it serves for debugging, and returning
+     * `null` would force checking for it in every trace.
      */
     public String getName() {
         if (this.name == null && !this.nameExplicitlySet) {
@@ -65,7 +65,7 @@ public abstract class MenuComponent implements Serializable {
         return this.name;
     }
 
-    /** Le pone nombre. */
+    /** Gives it a name. */
     public void setName(String name) {
         synchronized (this) {
             this.name = name;
@@ -73,21 +73,21 @@ public abstract class MenuComponent implements Serializable {
         }
     }
 
-    /** De qué menú o barra cuelga, o `null`. */
+    /** Which menu or bar it hangs from, or `null`. */
     public MenuContainer getParent() {
         return this.parent;
     }
 
-    /** Lo usa el contenedor al agregarlo o sacarlo. */
+    /** The container uses it when adding or removing it. */
     void setParent(MenuContainer p) {
         this.parent = p;
     }
 
     /**
-     * La fuente con la que se dibuja.
+     * The font it is drawn with.
      *
-     * <p>Si no tiene una propia, se hereda la del padre. Devolver `null` cuando no hay ninguna en
-     * toda la cadena es correcto: significa que la decide el sistema.
+     * <p>If it has none of its own, the parent's is inherited. Returning `null` when there is none
+     * in the whole chain is right: it means the system decides it.
      */
     public Font getFont() {
         Font f = this.font;
@@ -101,21 +101,21 @@ public abstract class MenuComponent implements Serializable {
         return null;
     }
 
-    /** Le pone fuente propia. */
+    /** Gives it a font of its own. */
     public void setFont(Font f) {
         synchronized (this) {
             this.font = f;
         }
     }
 
-    /** Avisa que dejó de poder mostrarse. */
+    /** Notifies that it can no longer be shown. */
     public void removeNotify() {
     }
 
     /**
-     * Le manda un evento del modelo viejo.
+     * Sends it an event of the old model.
      *
-     * @deprecated es del modelo de eventos de 1.0. Usar {@link #dispatchEvent}.
+     * @deprecated it is from the 1.0 event model. Use {@link #dispatchEvent}.
      */
     @Deprecated
     public boolean postEvent(Event evt) {
@@ -127,20 +127,20 @@ public abstract class MenuComponent implements Serializable {
     }
 
     /**
-     * Le entrega un evento.
+     * Delivers an event to it.
      *
-     * <p>Es `final` y delega en {@link #processEvent}: el reparto no se redefine, lo que se
-     * redefine es qué se hace con el evento.
+     * <p>It is `final` and delegates to {@link #processEvent}: the dispatching is not overridden,
+     * what is overridden is what to do with the event.
      */
     public final void dispatchEvent(AWTEvent e) {
         this.processEvent(e);
     }
 
-    /** Atiende el evento; las subclases lo redefinen. */
+    /** Handles the event; the subclasses override it. */
     protected void processEvent(AWTEvent e) {
     }
 
-    /** La descripción del componente, sin el nombre de la clase. */
+    /** The description of the component, without the class name. */
     protected String paramString() {
         return "name=" + this.getName();
     }
@@ -150,16 +150,16 @@ public abstract class MenuComponent implements Serializable {
     }
 
     /**
-     * El candado con el que se sincroniza el árbol de menús.
+     * The lock the menu tree synchronises on.
      *
-     * <p>Es el mismo objeto para todo AWT, y ésa es la idea: un solo candado global evita que
-     * bloquear dos ramas del árbol en distinto orden termine en un abrazo mortal.
+     * <p>It is the same object for all of AWT, and that is the point: a single global lock keeps
+     * locking two branches of the tree in different orders from ending in a deadlock.
      */
     protected final Object getTreeLock() {
         return Component.LOCK;
     }
 
-    /** La información de accesibilidad de este componente de menú. */
+    /** The accessibility information of this menu component. */
     public AccessibleContext getAccessibleContext() {
         if (this.accessibleContext == null) {
             this.accessibleContext = new AccessibleAWTMenuComponent();
@@ -168,48 +168,48 @@ public abstract class MenuComponent implements Serializable {
     }
 
     /**
-     * La accesibilidad de un componente de menú.
+     * The accessibility of a menu component.
      *
-     * <p>Es lo mínimo honesto: nombre, rol y padre. Sin sistema de ventanas no hay estados de
-     * pantalla que informar, así que el conjunto de estados sale vacío en vez de inventado.
+     * <p>It is the honest minimum: name, role and parent. Without a windowing system there are no
+     * screen states to report, so the state set comes out empty instead of invented.
      */
     protected class AccessibleAWTMenuComponent extends AccessibleContext {
 
-        /** Para las subclases. */
+        /** For the subclasses. */
         protected AccessibleAWTMenuComponent() {
         }
 
-        /** Desconocido; las subclases concretas lo afinan. */
+        /** {@code AWT_COMPONENT}: the non-specific role, which the concrete subclasses refine. */
         public AccessibleRole getAccessibleRole() {
             return AccessibleRole.AWT_COMPONENT;
         }
 
-        /** Vacío: no hay pantalla de la que sacar estados. */
+        /** Empty: there is no screen to take states from. */
         public AccessibleStateSet getAccessibleStateSet() {
             return new AccessibleStateSet();
         }
 
-        /** El nombre del componente de menú. */
+        /** The name of the menu component. */
         public String getAccessibleName() {
             return MenuComponent.this.getName();
         }
 
-        /** Cero: un componente de menú simple no tiene hijos. */
+        /** Zero: a plain menu component has no children. */
         public int getAccessibleChildrenCount() {
             return 0;
         }
 
-        /** Siempre `null`. */
+        /** Always `null`: it has no children. */
         public javax.accessibility.Accessible getAccessibleChild(int i) {
             return null;
         }
 
-        /** Su posición dentro del padre, o -1 si no se sabe. */
+        /** Always -1: the position inside the parent is not tracked here. */
         public int getAccessibleIndexInParent() {
             return -1;
         }
 
-        /** El idioma por omisión: un menú no tiene uno propio. */
+        /** The default locale: a menu does not have one of its own. */
         public Locale getLocale() {
             return Locale.getDefault();
         }

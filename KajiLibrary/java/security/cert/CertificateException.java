@@ -2,7 +2,7 @@ package java.security.cert;
 
 import java.security.GeneralSecurityException;
 
-// La base de los problemas con certificados.
+// The base of the problems with certificates.
 public class CertificateException extends GeneralSecurityException {
 
     public CertificateException() {

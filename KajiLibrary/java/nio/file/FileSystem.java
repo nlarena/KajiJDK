@@ -6,17 +6,17 @@ import java.nio.file.spi.FileSystemProvider;
 import java.util.Set;
 
 // KajiLibrary's java.nio.file.FileSystem -- a provider of a file system, the factory for Path
-// objects. La superficie esta completa; que puede y que no puede la implementacion por omision esta
-// dicho en `KajiFileSystem`.
+// objects. The surface is complete; what the default implementation can and cannot do is said in
+// `KajiFileSystem`.
 //
-// **Los tres miembros que faltaban ya estan.** `provider()`, `getFileStores()` y
-// `getUserPrincipalLookupService()` estaban omitidos porque nombraban tipos que no existian;
-// `java.nio.file.spi.FileSystemProvider`, `java.nio.file.FileStore` y
-// `java.nio.file.attribute.UserPrincipalLookupService` ya estan escritos, asi que se pueden
-// declarar. Que la implementacion por omision no pueda **producir** un `FileStore` ni un servicio de
-// principals es otro asunto, y esta dicho en `KajiFileSystem`: los dos levantan
-// `UnsupportedOperationException`, que es lo que la spec preve para un sistema de archivos que no
-// los soporta.
+// **The three members that were missing are here.** `provider()`, `getFileStores()` and
+// `getUserPrincipalLookupService()` were omitted because they named types that did not exist;
+// `java.nio.file.spi.FileSystemProvider`, `java.nio.file.FileStore` and
+// `java.nio.file.attribute.UserPrincipalLookupService` are written now, so they can be declared.
+// The default implementation produces a `FileStore` too, out of `KajiFileStore`; what it still
+// cannot produce is a principal lookup service, and that is said in `KajiFileSystem`, where it
+// throws `UnsupportedOperationException` -- which is what the spec foresees for a filesystem that
+// does not support it.
 public abstract class FileSystem implements Closeable {
 
     /** Initializes a new instance of this class (for subclasses only). */
@@ -26,8 +26,9 @@ public abstract class FileSystem implements Closeable {
     /** The provider that created this file system. */
     public abstract FileSystemProvider provider();
 
-    // Con `throws IOException`, como en el JDK. Hubo una epoca en que no: `java.io.Closeable.close()`
-    // no lo declaraba, y un override no puede ensanchar las chequeadas (JLS 8.4.8.3). Ya lo declara.
+    // With `throws IOException`, as in the JDK. There was a time when it was not:
+    // `java.io.Closeable.close()` did not declare it, and an override cannot widen the checked ones
+    // (JLS 8.4.8.3). It declares it now.
     public abstract void close() throws java.io.IOException;
 
     /** Whether this file system is open. */
@@ -45,9 +46,9 @@ public abstract class FileSystem implements Closeable {
     /**
      * The file stores backing this file system.
      *
-     * <p>Devuelve un `Iterable` y no una `List` porque enumerar los volumenes puede ser caro y
-     * puede fallar a mitad de camino: la spec permite que la iteracion levante una excepcion
-     * envuelta, cosa que una lista ya construida no podria.
+     * <p>It returns an `Iterable` and not a `List` because enumerating the volumes can be expensive
+     * and can fail half way: the spec allows the iteration to throw a wrapped exception, which an
+     * already built list could not.
      */
     public abstract Iterable<FileStore> getFileStores();
 

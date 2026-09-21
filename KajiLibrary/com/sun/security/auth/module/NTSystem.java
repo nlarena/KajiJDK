@@ -1,112 +1,115 @@
 package com.sun.security.auth.module;
 
 /**
- * Quien es el usuario del proceso, segun Windows: nombre, dominio y los SID.
+ * Who the process's user is, according to Windows: name, domain and the SIDs.
  *
- * <h2>Que es un SID y por que no es un numero</h2>
+ * <h2>What a SID is and why it is not a number</h2>
  *
- * <p>Un SID identifica una cuenta de forma unica <strong>y para siempre</strong>: borrar un usuario
- * y crear otro con el mismo nombre da SIDs distintos, que es lo que impide que el nuevo herede los
- * permisos del viejo. Por eso Windows guarda SIDs en las listas de control de acceso y no nombres.
+ * <p>A SID identifies an account uniquely <strong>and for ever</strong>: deleting a user and
+ * creating another with the same name gives different SIDs, which is what keeps the new one
+ * from inheriting the old one's permissions. That is why Windows keeps SIDs in the access
+ * control lists and not names.
  *
- * <p>Se escribe {@code S-1-5-21-...-1001}: la autoridad, el dominio y el identificador relativo
- * dentro de ese dominio. El nombre es solo una etiqueta encima de eso.
+ * <p>It is written {@code S-1-5-21-...-1001}: the authority, the domain and the relative
+ * identifier inside that domain. The name is only a label on top of that.
  *
- * <h2>Por que el constructor falla en vez de contestar algo</h2>
+ * <h2>Why the constructor fails instead of answering something</h2>
  *
- * <p>Porque no hay forma de obtener un SID en Java puro. Vienen de {@code OpenProcessToken} y
- * {@code GetTokenInformation}, que son llamadas a la API de Windows.
+ * <p>Because there is no way of obtaining a SID in pure Java. They come from
+ * {@code OpenProcessToken} and {@code GetTokenInformation}, which are calls to the Windows
+ * API.
  *
- * <p>Y un SID inventado es peor que ninguno, por la misma razon que un uid inventado: se usa para
- * comparar contra listas de control de acceso, y una comparacion contra un valor fabricado puede
- * dar verdadera. Por eso falla de entrada.
+ * <p>And an invented SID is worse than none, for the same reason as an invented uid: it is used
+ * in order to compare against access control lists, and a comparison against a made-up value
+ * may come out true. That is why it fails from the start.
  *
- * <p>{@link #getImpersonationToken} es todavia mas claro: devuelve un descriptor del sistema
- * operativo, un puntero. No hay valor honesto que devolver sin el sistema operativo del otro lado.
+ * <p>{@link #getImpersonationToken} is even clearer: it returns a descriptor of the operating
+ * system, a pointer. There is no honest value to return without the operating system on the
+ * other side.
  *
  * @since 1.4
  */
 public class NTSystem {
 
     /**
-     * Consulta a Windows quien es el usuario del proceso.
+     * It asks Windows who the process's user is.
      *
-     * @throws UnsupportedOperationException siempre, en esta biblioteca: los SID vienen de la API
-     *     de Windows y esta VM no tiene como llamarla
+     * @throws UnsupportedOperationException always, in this library: the SIDs come from the
+     *     Windows API and this VM has no way of calling it
      */
     public NTSystem() {
         throw new UnsupportedOperationException(
-                "los datos de NTSystem vienen de OpenProcessToken/GetTokenInformation, que esta VM "
-                + "no puede llamar; un SID inventado se compara contra listas de control de acceso "
-                + "y puede dar verdadero, asi que fallar es lo unico defendible");
+                "NTSystem's data come from OpenProcessToken/GetTokenInformation, which this VM "
+                + "cannot call; an invented SID is compared against access control lists and may "
+                + "come out true, so failing is the only defensible thing");
     }
 
     /**
-     * El nombre del usuario.
+     * The user's name.
      *
-     * @return el nombre, o {@code null} si no se pudo obtener
+     * @return the name, or {@code null} if it could not be obtained
      */
     public String getName() {
         return null;
     }
 
     /**
-     * El dominio al que pertenece.
+     * The domain it belongs to.
      *
-     * @return el dominio, o {@code null} si no se pudo obtener
+     * @return the domain, or {@code null} if it could not be obtained
      */
     public String getDomain() {
         return null;
     }
 
     /**
-     * El SID del dominio.
+     * The domain's SID.
      *
-     * @return el SID, o {@code null} si no se pudo obtener
+     * @return the SID, or {@code null} if it could not be obtained
      */
     public String getDomainSID() {
         return null;
     }
 
     /**
-     * El SID del usuario.
+     * The user's SID.
      *
-     * @return el SID, o {@code null} si no se pudo obtener
+     * @return the SID, or {@code null} if it could not be obtained
      */
     public String getUserSID() {
         return null;
     }
 
     /**
-     * El SID del grupo principal.
+     * The primary group's SID.
      *
-     * @return el SID, o {@code null} si no se pudo obtener
+     * @return the SID, or {@code null} if it could not be obtained
      */
     public String getPrimaryGroupID() {
         return null;
     }
 
     /**
-     * Los SID de los demas grupos.
+     * The SIDs of the other groups.
      *
-     * @return los SID, o {@code null} si no se pudieron obtener
+     * @return the SIDs, or {@code null} if they could not be obtained
      */
     public String[] getGroupIDs() {
         return null;
     }
 
     /**
-     * El descriptor del token de suplantacion del proceso.
+     * The descriptor of the process's impersonation token.
      *
-     * <p>Es un puntero del sistema operativo, no un dato: quien lo recibe se lo pasa de vuelta a
-     * Windows. Sin Windows del otro lado no hay ningun valor que signifique algo.
+     * <p>It is a pointer of the operating system, not a datum: whoever receives it passes it back
+     * to Windows. Without Windows on the other side there is nothing that means anything.
      *
-     * @return el descriptor
-     * @throws UnsupportedOperationException siempre, en esta biblioteca
+     * @return the descriptor
+     * @throws UnsupportedOperationException always, in this library
      */
     public synchronized long getImpersonationToken() {
         throw new UnsupportedOperationException(
-                "el token de suplantacion es un descriptor del sistema operativo; no hay valor que "
-                + "devolver sin Windows del otro lado");
+                "the impersonation token is a descriptor of the operating system; there is "
+                + "nothing to return without Windows on the other side");
     }
 }

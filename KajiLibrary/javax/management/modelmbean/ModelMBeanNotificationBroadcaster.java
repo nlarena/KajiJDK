@@ -10,55 +10,56 @@ import javax.management.NotificationListener;
 import javax.management.RuntimeOperationsException;
 
 /**
- * KajiLibrary's javax.management.modelmbean.ModelMBeanNotificationBroadcaster -- avisos, y avisos de
- * cambio de atributo.
+ * KajiLibrary's javax.management.modelmbean.ModelMBeanNotificationBroadcaster -- notices, and
+ * attribute change notices.
  *
- * <p>Extiende {@link NotificationBroadcaster} con dos cosas: la capacidad de <b>mandar</b> avisos
- * --un emisor comun solo los recibe-- y un canal aparte para los cambios de atributo.
+ * <p>It extends {@link NotificationBroadcaster} with two things: the ability to <b>send</b>
+ * notices --a plain broadcaster only receives them-- and a separate channel for attribute
+ * changes.
  *
- * <p>El canal aparte es lo interesante. Un oyente de cambios de atributo se registra diciendo
- * <b>que atributo</b> le interesa, y solo recibe los de ese. Con el canal comun habria que mandarle
- * todos los avisos del MBean y filtrar del lado del oyente, que sobre un MBean con muchos atributos
- * es trabajo puro.
+ * <p>The separate channel is the interesting part. A listener of attribute changes registers
+ * saying <b>which attribute</b> it cares about, and receives only that one's. With the common
+ * channel it would have to be sent every notice of the MBean and filter on the listener's side,
+ * which over an MBean with many attributes is pure work.
  *
- * <p>{@code sendNotification(String)} arma el aviso a partir del texto: es el atajo para el caso
- * comun de querer avisar algo sin construir un {@link Notification}.
+ * <p>{@code sendNotification(String)} builds the notice from the text: it is the shortcut for the
+ * common case of wanting to report something without constructing a {@link Notification}.
  */
 public interface ModelMBeanNotificationBroadcaster extends NotificationBroadcaster {
 
-    /** Manda ese aviso a los oyentes del canal comun. */
+    /** Sends that notice to the common channel's listeners. */
     void sendNotification(Notification ntfyObj) throws MBeanException, RuntimeOperationsException;
 
-    /** Idem, armando el aviso a partir del texto. */
+    /** The same, building the notice from the text. */
     void sendNotification(String ntfyText) throws MBeanException, RuntimeOperationsException;
 
-    /** Manda ese aviso a los oyentes del canal de cambios de atributo. */
+    /** Sends that notice to the attribute change channel's listeners. */
     void sendAttributeChangeNotification(AttributeChangeNotification notification)
         throws MBeanException, RuntimeOperationsException;
 
     /**
-     * Idem, armando el aviso a partir del valor viejo y el nuevo.
+     * The same, building the notice from the old value and the new one.
      *
-     * @param oldValue como estaba; su nombre es el del atributo
-     * @param newValue como quedo
+     * @param oldValue how it was; its name is the attribute's
+     * @param newValue how it ended up
      */
     void sendAttributeChangeNotification(Attribute oldValue, Attribute newValue)
         throws MBeanException, RuntimeOperationsException;
 
     /**
-     * Registra un oyente para los cambios de <b>un</b> atributo.
+     * Registers a listener for the changes of <b>one</b> attribute.
      *
-     * @param attributeName cual; null significa todos
-     * @throws IllegalArgumentException si el oyente es null
+     * @param attributeName which one; null means all
+     * @throws IllegalArgumentException if the listener is null
      */
     void addAttributeChangeNotificationListener(NotificationListener listener,
                                                 String attributeName, Object handback)
         throws MBeanException, RuntimeOperationsException, IllegalArgumentException;
 
     /**
-     * Lo da de baja.
+     * Removes it.
      *
-     * @throws ListenerNotFoundException si no estaba registrado para ese atributo
+     * @throws ListenerNotFoundException if it was not registered for that attribute
      */
     void removeAttributeChangeNotificationListener(NotificationListener listener,
                                                    String attributeName)

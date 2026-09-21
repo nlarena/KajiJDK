@@ -8,17 +8,17 @@ import java.awt.Shape;
 import javax.swing.event.DocumentEvent;
 
 /**
- * Un tramo de texto con estilo: {@link GlyphView} con los atributos ya resueltos y guardados.
+ * A stretch of styled text: {@link GlyphView} with the attributes already resolved and kept.
  *
- * <h2>Por que guarda lo que ya sabe preguntar</h2>
+ * <h2>Why it keeps what it already knows how to ask for</h2>
  *
- * <p>{@code GlyphView} pregunta la fuente y el color al documento cada vez. Esta los resuelve una
- * sola vez ({@link #setPropertiesFromAttributes}) y los guarda en campos. Dibujar una linea
- * consulta el color por cada tramo y por cada cuadro; con el estilo resuelto, esa consulta es leer
- * un campo.
+ * <p>{@code GlyphView} asks the document for the font and the colour every time. This one
+ * resolves them once ({@link #setPropertiesFromAttributes}) and keeps them in fields. Drawing a
+ * line consults the colour for every stretch and for every frame; with the style resolved, that
+ * query is reading a field.
  *
- * <p>Lo guardado se rehace cuando los atributos cambian, y de ahi que {@link #changedUpdate} sea
- * el unico metodo que hace algo mas que reenviar.
+ * <p>What is kept is redone when the attributes change, and hence {@link #changedUpdate} is the
+ * only method that does anything more than forward.
  */
 public class LabelView extends GlyphView implements TabableView {
 
@@ -30,16 +30,16 @@ public class LabelView extends GlyphView implements TabableView {
     private boolean superscript;
     private boolean subscript;
 
-    /** Si lo guardado sigue valiendo. */
-    private boolean valido;
+    /** Whether what is kept still holds. */
+    private boolean valid;
 
     public LabelView(Element elem) {
         super(elem);
     }
 
-    /** Rehace lo guardado si hizo falta. */
+    /** It redoes what is kept if it was needed. */
     final void sync() {
-        if (!valido) {
+        if (!valid) {
             setPropertiesFromAttributes();
         }
     }
@@ -64,7 +64,7 @@ public class LabelView extends GlyphView implements TabableView {
         this.bg = bg;
     }
 
-    /** Resuelve fuente, colores y decoraciones de los atributos, una sola vez. */
+    /** It resolves font, colours and decorations from the attributes, once. */
     protected void setPropertiesFromAttributes() {
         AttributeSet attr = getAttributes();
         if (attr != null) {
@@ -83,11 +83,11 @@ public class LabelView extends GlyphView implements TabableView {
             setStrikeThrough(StyleConstants.isStrikeThrough(attr));
             setSuperscript(StyleConstants.isSuperscript(attr));
             setSubscript(StyleConstants.isSubscript(attr));
-            valido = true;
+            valid = true;
         }
     }
 
-    /** Las metricas de la fuente resuelta. */
+    /** The metrics of the resolved font. */
     protected FontMetrics getFontMetrics() {
         sync();
         java.awt.Container c = getContainer();
@@ -135,9 +135,9 @@ public class LabelView extends GlyphView implements TabableView {
         return superscript;
     }
 
-    /** Cambiaron los atributos: lo guardado dejo de valer. */
+    /** The attributes changed: what is kept stopped holding. */
     public void changedUpdate(DocumentEvent e, Shape a, ViewFactory f) {
-        valido = false;
+        valid = false;
         super.changedUpdate(e, a, f);
     }
 }

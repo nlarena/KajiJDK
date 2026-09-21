@@ -7,70 +7,70 @@ import jdk.jfr.Configuration;
 import jdk.jfr.EventType;
 
 /**
- * El aviso de que los metadatos de un flujo de eventos cambiaron.
+ * The notice that the metadata of a stream of events changed.
  *
- * <h2>Por que los metadatos cambian a mitad de un flujo</h2>
+ * <h2>Why the metadata change in the middle of a stream</h2>
  *
- * <p>Porque las clases se cargan cuando hacen falta. Un evento definido en una biblioteca que se
- * carga a los diez minutos de arrancar no existe en los metadatos iniciales, y sin este aviso quien
- * consume el flujo no tendria como enterarse de que apareció un tipo nuevo.
+ * <p>Because classes are loaded when they are needed. An event defined in a library that is loaded
+ * ten minutes after starting does not exist in the initial metadata, and without this notice
+ * whoever consumes the stream would have no way of finding out that a new type appeared.
  *
- * <p>Tambien pueden desaparecer, si el codigo que los definia se descarga.
+ * <p>They may also disappear, if the code that defined them is unloaded.
  *
- * <p>{@link #getAddedEventTypes} y {@link #getRemovedEventTypes} son el delta;
- * {@link #getEventTypes} es el estado completo despues del cambio. El delta es lo que sirve para
- * reaccionar, el estado completo para el que se conecta a mitad de camino.
+ * <p>{@link #getAddedEventTypes} and {@link #getRemovedEventTypes} are the delta;
+ * {@link #getEventTypes} is the complete state after the change. The delta is what serves for
+ * reacting, the complete state for the one who connects halfway through.
  *
  * @since 16
  */
 public final class MetadataEvent {
 
-    private final List<EventType> todos;
-    private final List<EventType> agregados;
-    private final List<EventType> quitados;
-    private final List<Configuration> configuraciones;
+    private final List<EventType> all;
+    private final List<EventType> added;
+    private final List<EventType> removed;
+    private final List<Configuration> configurations;
 
-    MetadataEvent(List<EventType> todos, List<EventType> agregados, List<EventType> quitados,
-            List<Configuration> configuraciones) {
-        this.todos = Collections.unmodifiableList(todos);
-        this.agregados = Collections.unmodifiableList(agregados);
-        this.quitados = Collections.unmodifiableList(quitados);
-        this.configuraciones = Collections.unmodifiableList(configuraciones);
+    MetadataEvent(List<EventType> all, List<EventType> added, List<EventType> removed,
+            List<Configuration> configurations) {
+        this.all = Collections.unmodifiableList(all);
+        this.added = Collections.unmodifiableList(added);
+        this.removed = Collections.unmodifiableList(removed);
+        this.configurations = Collections.unmodifiableList(configurations);
     }
 
     /**
-     * Todos los tipos de evento que hay despues del cambio.
+     * Every type of event there is after the change.
      *
-     * @return los tipos
+     * @return the types
      */
     public final List<EventType> getEventTypes() {
-        return todos;
+        return all;
     }
 
     /**
-     * Los tipos que aparecieron.
+     * The types that appeared.
      *
-     * @return los tipos agregados
+     * @return the added types
      */
     public final List<EventType> getAddedEventTypes() {
-        return agregados;
+        return added;
     }
 
     /**
-     * Los tipos que desaparecieron.
+     * The types that disappeared.
      *
-     * @return los tipos quitados
+     * @return the removed types
      */
     public final List<EventType> getRemovedEventTypes() {
-        return quitados;
+        return removed;
     }
 
     /**
-     * Las configuraciones disponibles.
+     * The available configurations.
      *
-     * @return las configuraciones
+     * @return the configurations
      */
     public List<Configuration> getConfigurations() {
-        return configuraciones;
+        return configurations;
     }
 }

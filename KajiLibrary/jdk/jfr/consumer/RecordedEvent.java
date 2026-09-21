@@ -8,90 +8,90 @@ import jdk.jfr.EventType;
 import jdk.jfr.ValueDescriptor;
 
 /**
- * Un evento leido de una grabacion.
+ * An event read from a recording.
  *
- * <p>Es un {@link RecordedObject} con cuatro accesores de mas, uno por cada campo que todo evento
- * lleva: {@link #getStartTime}, {@link #getEndTime}, {@link #getThread} y {@link #getStackTrace}.
- * Los demas campos, los que definio quien escribio el evento, se leen por nombre con los getters
- * tipados de la clase base.
+ * <p>It is a {@link RecordedObject} with four extra accessors, one for each field every event
+ * carries: {@link #getStartTime}, {@link #getEndTime}, {@link #getThread} and
+ * {@link #getStackTrace}. The other fields, the ones whoever wrote the event defined, are read by
+ * name with the typed getters of the base class.
  *
- * <p>{@link #getEndTime} no es un campo grabado: sale de sumar la duracion al comienzo. Es asi
- * porque en el archivo se guarda el comienzo y la duracion, y guardar ademas el final seria un dato
- * redundante en cada uno de millones de eventos.
+ * <p>{@link #getEndTime} is not a recorded field: it comes from adding the duration to the
+ * beginning. It is so because what is kept in the file is the beginning and the duration, and
+ * keeping the end as well would be a redundant datum in each one of millions of events.
  *
  * @since 9
  */
 public final class RecordedEvent extends RecordedObject {
 
-    private final EventType tipo;
+    private final EventType type;
 
-    RecordedEvent(EventType tipo, List<ValueDescriptor> descriptores, Object[] valores) {
-        super(descriptores, valores);
-        this.tipo = tipo;
+    RecordedEvent(EventType type, List<ValueDescriptor> descriptors, Object[] values) {
+        super(descriptors, values);
+        this.type = type;
     }
 
     /**
-     * La pila de llamadas del punto donde se emitio.
+     * The stack of calls of the point where it was emitted.
      *
-     * @return la pila, o {@code null} si no se grabo
+     * @return the stack, or {@code null} if it was not recorded
      */
     public RecordedStackTrace getStackTrace() {
         return getValue("stackTrace");
     }
 
     /**
-     * El hilo que lo emitio.
+     * The thread that emitted it.
      *
-     * @return el hilo, o {@code null} si no se grabo
+     * @return the thread, or {@code null} if it was not recorded
      */
     public RecordedThread getThread() {
         return getValue("eventThread");
     }
 
     /**
-     * El tipo del evento.
+     * The type of the event.
      *
-     * @return el tipo
+     * @return the type
      */
     public EventType getEventType() {
-        return tipo;
+        return type;
     }
 
     /**
-     * Cuando empezo.
+     * When it began.
      *
-     * @return el momento
+     * @return the moment
      */
     public Instant getStartTime() {
         return getInstant("startTime");
     }
 
     /**
-     * Cuando termino.
+     * When it ended.
      *
-     * <p>Calculado: el comienzo mas la duracion.
+     * <p>Calculated: the beginning plus the duration.
      *
-     * @return el momento
+     * @return the moment
      */
     public Instant getEndTime() {
         return getStartTime().plus(getDuration());
     }
 
     /**
-     * Cuanto duro.
+     * How long it lasted.
      *
-     * @return la duracion
+     * @return the duration
      */
     public Duration getDuration() {
         return getDuration("duration");
     }
 
     /**
-     * Los campos del evento.
+     * The fields of the event.
      *
-     * @return los descriptores
+     * @return the descriptors
      */
     public List<ValueDescriptor> getFields() {
-        return tipo.getFields();
+        return type.getFields();
     }
 }

@@ -113,34 +113,34 @@ public class PropertyChangeSupport implements Serializable {
     // Every listener: the global ones as they stand, and those tied to a property wrapped in a
     // proxy saying which one.
     public synchronized PropertyChangeListener[] getPropertyChangeListeners() {
-        List<PropertyChangeListener> salida = new ArrayList<PropertyChangeListener>();
+        List<PropertyChangeListener> out = new ArrayList<PropertyChangeListener>();
         for (int i = 0; i < this.global.size(); i++) {
-            salida.add(this.global.get(i));
+            out.add(this.global.get(i));
         }
         Object[] names = this.byName.keySet().toArray();
         for (int i = 0; i < names.length; i++) {
             String name = (String) names[i];
             List<PropertyChangeListener> l = this.byName.get(name);
             for (int j = 0; j < l.size(); j++) {
-                salida.add(new PropertyChangeListenerProxy(name, l.get(j)));
+                out.add(new PropertyChangeListenerProxy(name, l.get(j)));
             }
         }
-        return this.asArray(salida);
+        return this.asArray(out);
     }
 
     // Only the listeners tied to `propertyName`, unwrapped: whoever asked already knows the
     // name.
     public synchronized PropertyChangeListener[] getPropertyChangeListeners(String propertyName) {
-        List<PropertyChangeListener> salida = new ArrayList<PropertyChangeListener>();
+        List<PropertyChangeListener> out = new ArrayList<PropertyChangeListener>();
         if (propertyName != null) {
             List<PropertyChangeListener> l = this.byName.get(propertyName);
             if (l != null) {
                 for (int i = 0; i < l.size(); i++) {
-                    salida.add(l.get(i));
+                    out.add(l.get(i));
                 }
             }
         }
-        return this.asArray(salida);
+        return this.asArray(out);
     }
 
     private PropertyChangeListener[] asArray(List<PropertyChangeListener> l) {
@@ -154,29 +154,29 @@ public class PropertyChangeSupport implements Serializable {
     // The copy that gets dispatched: the global ones plus those tied to the event's name. It is
     // built under the lock and walked outside it, which is exactly what makes unsubscribing from
     // inside a listener safe.
-    private synchronized PropertyChangeListener[] instantanea(String propertyName) {
-        List<PropertyChangeListener> salida = new ArrayList<PropertyChangeListener>();
+    private synchronized PropertyChangeListener[] snapshot(String propertyName) {
+        List<PropertyChangeListener> out = new ArrayList<PropertyChangeListener>();
         for (int i = 0; i < this.global.size(); i++) {
-            salida.add(this.global.get(i));
+            out.add(this.global.get(i));
         }
         if (propertyName != null) {
             List<PropertyChangeListener> l = this.byName.get(propertyName);
             if (l != null) {
                 for (int i = 0; i < l.size(); i++) {
-                    salida.add(l.get(i));
+                    out.add(l.get(i));
                 }
             }
         }
-        return this.asArray(salida);
+        return this.asArray(out);
     }
 
     public void firePropertyChange(PropertyChangeEvent evt) {
-        Object viejo = evt.getOldValue();
+        Object old = evt.getOldValue();
         Object fresh = evt.getNewValue();
         // Two known, equal values are not a change. If either is null it is not known, and when in
         // doubt it notifies.
-        if (viejo == null || fresh == null || !viejo.equals(fresh)) {
-            PropertyChangeListener[] copy = this.instantanea(evt.getPropertyName());
+        if (old == null || fresh == null || !old.equals(fresh)) {
+            PropertyChangeListener[] copy = this.snapshot(evt.getPropertyName());
             for (int i = 0; i < copy.length; i++) {
                 copy[i].propertyChange(evt);
             }

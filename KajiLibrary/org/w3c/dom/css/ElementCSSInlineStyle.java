@@ -1,14 +1,14 @@
 package org.w3c.dom.css;
 
 /**
- * Un elemento con atributo `style`.
+ * An element with a `style` attribute.
  *
- * <p>El bloque que devuelve es **vivo y escribible**: cambiarlo cambia el atributo del documento.
- * Es lo que distingue este estilo del computado de {@link ViewCSS}, que es de solo lectura porque
- * es un resultado y no una fuente.
+ * <p>The block it returns is **live and writable**: changing it changes the attribute of the
+ * document. It is what tells this style apart from the computed one of {@link ViewCSS}, which is
+ * read-only because it is a result and not a source.
  */
 public interface ElementCSSInlineStyle {
 
-    /** El bloque del atributo `style`. */
+    /** The block of the `style` attribute. */
     CSSStyleDeclaration getStyle();
 }

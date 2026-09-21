@@ -1,26 +1,26 @@
 package javax.management;
 
 /**
- * Se pidio una operacion de cadena que no existe dentro de una consulta.
+ * A string operation that does not exist was asked for inside a query.
  *
- * <p>Cuelga de `Exception` y no de {@link JMException}: las cuatro excepciones del subsistema de
- * consultas son anteriores al arbol de JMX y quedaron sueltas.
+ * <p>It hangs from {@code Exception} and not from {@link JMException}: the four exceptions of the
+ * query subsystem sit outside the {@code JMException} tree.
  */
 public class BadStringOperationException extends Exception {
 
     private static final long serialVersionUID = 7802201238441662100L;
 
     /**
-     * @serial la operacion que no se reconocio
+     * @serial the operation that was not recognized
      */
     private String op;
 
-    /** @param message la operacion que no se reconocio */
+    /** @param message the operation that was not recognized */
     public BadStringOperationException(String message) {
         op = message;
     }
 
-    /** Nombre de la clase seguido de la operacion ofensiva. */
+    /** The class name followed by the offending operation. */
     public String toString() {
         return "BadStringOperationException: " + op;
     }

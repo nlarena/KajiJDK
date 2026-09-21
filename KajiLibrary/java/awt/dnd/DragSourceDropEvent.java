@@ -1,15 +1,15 @@
 package java.awt.dnd;
 
 /**
- * Terminó el arrastre, visto desde el origen.
+ * The drag finished, seen from the source.
  *
- * <p>Es el único evento que **siempre** llega, se haya soltado o cancelado, y trae la única
- * información que el origen realmente necesita: si el destino se quedó con los datos y con qué
- * acción.
+ * <p>It is the only event that **always** arrives, whether it was dropped or cancelled, and it
+ * brings the only information the source really needs: whether the destination kept the data and
+ * with which action.
  *
- * <p>De ahí sale la decisión de borrar el original: hay que borrarlo sólo si
- * {@link #getDropSuccess} es cierto **y** {@link #getDropAction} es mover. Un soltado exitoso con
- * copiar no borra nada, y un arrastre cancelado tampoco.
+ * <p>Out of that comes the decision to delete the original: it has to be deleted only if
+ * {@link #getDropSuccess} is true **and** {@link #getDropAction} is move. A successful drop with
+ * copy deletes nothing, and a cancelled drag neither.
  */
 public class DragSourceDropEvent extends DragSourceEvent {
 
@@ -19,9 +19,9 @@ public class DragSourceDropEvent extends DragSourceEvent {
     private final int dropAction;
 
     /**
-     * Un arrastre que terminó **sin** soltarse.
+     * A drag that finished **without** being dropped.
      *
-     * @throws IllegalArgumentException si el contexto es `null`
+     * @throws IllegalArgumentException if the context is `null`
      */
     public DragSourceDropEvent(DragSourceContext dsc) {
         super(dsc);
@@ -30,9 +30,9 @@ public class DragSourceDropEvent extends DragSourceEvent {
     }
 
     /**
-     * Un arrastre que terminó soltándose, sin posición.
+     * A drag that finished by being dropped, with no position.
      *
-     * @throws IllegalArgumentException si el contexto es `null`
+     * @throws IllegalArgumentException if the context is `null`
      */
     public DragSourceDropEvent(DragSourceContext dsc, int action, boolean success) {
         super(dsc);
@@ -41,9 +41,9 @@ public class DragSourceDropEvent extends DragSourceEvent {
     }
 
     /**
-     * Como el anterior, con la posición en pantalla.
+     * Like the previous one, with the position on the screen.
      *
-     * @throws IllegalArgumentException si el contexto es `null`
+     * @throws IllegalArgumentException if the context is `null`
      */
     public DragSourceDropEvent(DragSourceContext dsc, int action, boolean success, int x, int y) {
         super(dsc, x, y);
@@ -51,12 +51,12 @@ public class DragSourceDropEvent extends DragSourceEvent {
         this.dropAction = action;
     }
 
-    /** Si el destino se quedó con los datos. */
+    /** Whether the destination kept the data. */
     public boolean getDropSuccess() {
         return this.dropSuccess;
     }
 
-    /** Con qué acción los tomó. */
+    /** With which action it took them. */
     public int getDropAction() {
         return this.dropAction;
     }

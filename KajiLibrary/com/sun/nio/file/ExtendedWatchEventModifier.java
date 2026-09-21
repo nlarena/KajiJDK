@@ -3,18 +3,18 @@ package com.sun.nio.file;
 import java.nio.file.WatchEvent;
 
 /**
- * Modificadores de registro de un {@link java.nio.file.WatchService} fuera del conjunto estandar.
+ * Registration modifiers of a {@link java.nio.file.WatchService} outside the standard set.
  */
 public enum ExtendedWatchEventModifier implements WatchEvent.Modifier {
 
     /**
-     * Vigilar el arbol entero y no solo el directorio registrado.
+     * To watch the whole tree and not only the registered directory.
      *
-     * <p>Es una capacidad del sistema operativo, no un bucle que el JDK haga por su cuenta: solo
-     * anda donde el sistema sabe vigilar recursivamente —Windows lo hace, Linux no— y donde no,
-     * registrar con esto tira {@link UnsupportedOperationException}. Ahi hay que registrar cada
-     * subdirectorio a mano, con lo que eso implica: los que se creen despues no quedan vigilados
-     * hasta que alguien los registre.
+     * <p>It is a capability of the operating system, not a loop the JDK does on its own: it only
+     * works where the system knows how to watch recursively --Windows does it, Linux does not--
+     * and where it does not, registering with this throws {@link UnsupportedOperationException}.
+     * There each subdirectory has to be registered by hand, with what that implies: those that are
+     * created afterwards are not left watched until somebody registers them.
      */
     FILE_TREE
 }

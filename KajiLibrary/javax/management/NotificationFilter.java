@@ -3,14 +3,14 @@ package javax.management;
 import java.io.Serializable;
 
 /**
- * Decide, del lado del emisor, que notificaciones valen el viaje.
+ * Decides, on the emitter's side, which notifications are worth the trip.
  *
- * <p>Es `Serializable` por la misma razon que {@link QueryExp}: sobre una conexion remota el filtro
- * viaja al agente y se evalua alla. Filtrar en el cliente seria filtrar despues de pagar el costo
- * que el filtro existe para evitar.
+ * <p>It is {@code Serializable} for the same reason as {@link QueryExp}: over a remote connection
+ * the filter travels to the agent and is evaluated there. Filtering on the client would be
+ * filtering after paying the cost the filter exists to avoid.
  */
 public interface NotificationFilter extends Serializable {
 
-    /** Si esta notificacion se le entrega al oyente. */
+    /** Whether this notification is delivered to the listener. */
     boolean isNotificationEnabled(Notification notification);
 }

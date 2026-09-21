@@ -1,13 +1,13 @@
 package java.nio.file;
 
-// La cadena no se puede convertir en una ruta.
+// The string cannot be turned into a path.
 //
-// **No es una `IOException`.** Hereda de `IllegalArgumentException` porque el problema esta en el
-// argumento y no en el disco: la cadena esta mal escrita, y eso se sabe sin tocar nada. Por eso
-// `Path.of` no declara `throws`.
+// **It is not an `IOException`.** It inherits from `IllegalArgumentException` because the problem
+// is in the argument and not on the disk: the string is badly written, and that is known without
+// touching anything. That is why `Path.of` declares no `throws`.
 //
-// Guarda el **indice** del caracter que la rompio, que es lo que permite subrayar la posicion exacta
-// en un mensaje de error en vez de repetir la cadena entera.
+// It keeps the **index** of the character that broke it, which is what allows underlining the exact
+// position in an error message instead of repeating the whole string.
 public class InvalidPathException extends IllegalArgumentException {
 
     private static final long serialVersionUID = 4355821422286746137L;
@@ -17,11 +17,11 @@ public class InvalidPathException extends IllegalArgumentException {
     private final int index;
 
     /**
-     * @param input la cadena que no sirve
-     * @param reason por que no sirve
-     * @param index la posicion del caracter culpable, o -1 si no se sabe
-     * @throws IllegalArgumentException si `index` es menor que -1
-     * @throws NullPointerException si `input` o `reason` son `null`
+     * @param input the string that is no good
+     * @param reason why it is no good
+     * @param index the position of the offending character, or -1 if it is not known
+     * @throws IllegalArgumentException if `index` is less than -1
+     * @throws NullPointerException if `input` or `reason` is `null`
      */
     public InvalidPathException(String input, String reason, int index) {
         super(reason);
@@ -36,36 +36,36 @@ public class InvalidPathException extends IllegalArgumentException {
         this.index = index;
     }
 
-    /** Como el otro, con el indice en -1: no se sabe donde esta el problema. */
+    /** Like the other, with the index at -1: where the problem is is not known. */
     public InvalidPathException(String input, String reason) {
         this(input, reason, -1);
     }
 
-    /** La cadena que se intento convertir. */
+    /** The string that was to be converted. */
     public String getInput() {
         return this.input;
     }
 
     /**
-     * La explicacion.
+     * The explanation.
      *
-     * <p>Sale de un campo propio y no de `super.getMessage()` --que es de donde lo saca el JDK--
-     * por un bug de **esta VM**: un `invokespecial` a un metodo que la superclase nombrada
-     * *hereda* en vez de declarar ejecuta el cuerpo con el pool de constantes equivocado y
-     * revienta con `getfield: bad FieldRef`. `getMessage()` esta declarado en `Throwable`, no en
-     * `IllegalArgumentException`, asi que cae justo en el caso. Guardar la razon aparte da el
-     * mismo resultado y no depende de eso.
+     * <p>It comes from a field of its own and not from `super.getMessage()` --which is where the
+     * JDK takes it from-- because of a bug in **this VM**: an `invokespecial` to a method the named
+     * superclass *inherits* rather than declares runs the body with the wrong constant pool and
+     * blows up with `getfield: bad FieldRef`. `getMessage()` is declared in `Throwable`, not in
+     * `IllegalArgumentException`, so it falls exactly into that case. Keeping the reason separately
+     * gives the same result and does not depend on it.
      */
     public String getReason() {
         return this.reason;
     }
 
-    /** La posicion del caracter culpable, o -1. */
+    /** The offending character's position, or -1. */
     public int getIndex() {
         return this.index;
     }
 
-    /** `razon: cadena` y, si se sabe, ` at index N` en el medio. */
+    /** `reason: string` and, if it is known, ` at index N` in between. */
     public String getMessage() {
         StringBuilder sb = new StringBuilder();
         sb.append(this.getReason());

@@ -17,39 +17,43 @@ import javax.swing.text.NumberFormatter;
 import javax.swing.text.TextAction;
 
 /**
- * Un campo de texto que guarda un valor, no una cadena.
+ * A text field that keeps a value, not a string.
  *
- * <h2>El valor y el texto son dos cosas</h2>
+ * <h2>The value and the text are two things</h2>
  *
- * <p>Un campo de texto comun tiene texto. Este tiene un <em>valor</em> (una fecha, un numero, lo
- * que sea) y un formateador que lo convierte a texto para mostrarlo y de vuelta a valor cuando el
- * usuario termina de editar. El texto que se ve es una representacion; el valor es lo que importa.
+ * <p>An ordinary text field has text. This one has a <em>value</em> (a date, a number,
+ * whatever) and a formatter that converts it into text in order to show it and back into a
+ * value when the user finishes editing. The text that is seen is a representation; the value is
+ * what matters.
  *
- * <p>Que sean dos cosas es lo que permite que el campo muestre <code>1.234,50</code> y el programa
- * lea un {@code double}. Y tambien lo que obliga a decidir que pasa cuando el texto no se puede
- * convertir: eso es {@link #setFocusLostBehavior}.
+ * <p>That they are two things is what allows the field to show <code>1.234,50</code> and the
+ * program to read a {@code double}. And also what forces one to decide what happens when the
+ * text cannot be converted: that is {@link #setFocusLostBehavior}.
  *
- * <h2>Por que hay una fabrica y no un formateador</h2>
+ * <h2>Why there is a factory and not a formatter</h2>
  *
- * <p>Muchas veces el texto que se muestra y el que se edita no son el mismo: un importe se muestra
- * con signo de moneda y se edita sin el. La fabrica devuelve un formateador distinto segun si el
- * campo tiene el foco o no. Con un solo formateador habria que elegir uno de los dos.
+ * <p>Many times the text that is shown and the one that is edited are not the same: an amount
+ * is shown with a currency sign and edited without it. The factory returns a different
+ * formatter according to whether the field has the focus or not. With a single formatter one of
+ * the two would have to be chosen.
  */
 public class JFormattedTextField extends JTextField {
 
     private static final String uiClassID = "FormattedTextFieldUI";
     private static final Action[] defaultActions = {new CommitAction(), new CancelAction()};
 
-    /** Al perder el foco, pasar el texto al valor; si no se puede, dejarlo invalido. */
+    /**
+     * On losing the focus, pass the text to the value; if that cannot be done, leave it invalid.
+     */
     public static final int COMMIT = 0;
 
-    /** Igual, pero si no se puede volver al ultimo valor bueno. */
+    /** The same, but if that cannot be done go back to the last good value. */
     public static final int COMMIT_OR_REVERT = 1;
 
-    /** Al perder el foco, volver siempre al valor. */
+    /** On losing the focus, always go back to the value. */
     public static final int REVERT = 2;
 
-    /** Al perder el foco, no hacer nada. */
+    /** On losing the focus, do nothing. */
     public static final int PERSIST = 3;
 
     private AbstractFormatterFactory factory;
@@ -60,43 +64,43 @@ public class JFormattedTextField extends JTextField {
     private boolean edited;
     private boolean composedTextExists = false;
 
-    /** Un campo vacio, sin formateador todavia. */
+    /** An empty field, with no formatter yet. */
     public JFormattedTextField() {
         super();
         enableEvents(java.awt.AWTEvent.FOCUS_EVENT_MASK);
         setFocusLostBehavior(COMMIT_OR_REVERT);
     }
 
-    /** Un campo con ese valor; el formateador sale del tipo del valor. */
+    /** A field with that value; the formatter comes from the value's type. */
     public JFormattedTextField(Object value) {
         this();
         setValue(value);
     }
 
-    /** Un campo que usa ese formato de {@code java.text}. */
+    /** A field that uses that {@code java.text} format. */
     public JFormattedTextField(Format format) {
         this();
         setFormatterFactory(getDefaultFormatterFactory(format));
     }
 
-    /** Un campo con ese formateador, para editar y para mostrar. */
+    /** A field with that formatter, for editing and for showing. */
     public JFormattedTextField(AbstractFormatter formatter) {
         this(new DefaultFormatterFactory(formatter));
     }
 
-    /** Un campo con esa fabrica de formateadores. */
+    /** A field with that formatter factory. */
     public JFormattedTextField(AbstractFormatterFactory factory) {
         this();
         setFormatterFactory(factory);
     }
 
-    /** Un campo con esa fabrica y ese valor inicial. */
+    /** A field with that factory and that initial value. */
     public JFormattedTextField(AbstractFormatterFactory factory, Object currentValue) {
         this(currentValue);
         setFormatterFactory(factory);
     }
 
-    /** Que hacer cuando el campo pierde el foco; ver la nota de la clase. */
+    /** What to do when the field loses the focus; see the class note. */
     public void setFocusLostBehavior(int behavior) {
         if (behavior != COMMIT && behavior != COMMIT_OR_REVERT
                 && behavior != PERSIST && behavior != REVERT) {
@@ -111,7 +115,7 @@ public class JFormattedTextField extends JTextField {
         return focusLostBehavior;
     }
 
-    /** La fabrica de formateadores; cambiarla vuelve a formatear el valor. */
+    /** The formatter factory; changing it formats the value again. */
     public void setFormatterFactory(AbstractFormatterFactory tf) {
         AbstractFormatterFactory oldFactory = factory;
         factory = tf;
@@ -124,10 +128,10 @@ public class JFormattedTextField extends JTextField {
     }
 
     /**
-     * El formateador que esta puesto ahora.
+     * The formatter that is set now.
      *
-     * <p>No lo pone quien usa el campo sino el campo mismo, pidiendoselo a la fabrica. Es
-     * protegido justamente para eso.
+     * <p>It is not set by whoever uses the field but by the field itself, asking the factory for
+     * it. It is protected precisely for that.
      */
     protected void setFormatter(AbstractFormatter format) {
         AbstractFormatter oldFormat = this.format;
@@ -147,7 +151,7 @@ public class JFormattedTextField extends JTextField {
         return format;
     }
 
-    /** Cambia el valor y actualiza el texto. */
+    /** It changes the value and updates the text. */
     public void setValue(Object value) {
         if (getFormatterFactory() == null) {
             setFormatterFactory(getDefaultFormatterFactory(value));
@@ -160,9 +164,9 @@ public class JFormattedTextField extends JTextField {
     }
 
     /**
-     * Pasa el texto que se ve al valor.
+     * It passes the text that is seen to the value.
      *
-     * @throws ParseException si el texto no se puede convertir.
+     * @throws ParseException if the text cannot be converted.
      */
     public void commitEdit() throws ParseException {
         AbstractFormatter format = getFormatter();
@@ -171,12 +175,12 @@ public class JFormattedTextField extends JTextField {
         }
     }
 
-    /** Si lo que se escribio hasta ahora se puede convertir a un valor. */
+    /** Whether what has been typed so far can be converted into a value. */
     public boolean isEditValid() {
         return editValid;
     }
 
-    /** Avisa que lo que se escribio no sirve; el aspecto suele hacer sonar un pitido. */
+    /** It gives notice that what was typed does not serve; the look and feel usually beeps. */
     protected void invalidEdit() {
         UIManagerBeep();
     }
@@ -188,14 +192,15 @@ public class JFormattedTextField extends JTextField {
     protected void processInputMethodEvent(InputMethodEvent e) {
         java.text.AttributedCharacterIterator text = e.getText();
         int commitCount = e.getCommittedCharacterCount();
-        // Un texto que se esta componiendo (por ejemplo en japones) no se valida hasta que
-        // termina: validarlo a medias marcaria como invalido algo que todavia no es nada.
+        // A text that is being composed (in Japanese, for instance) is not validated until it
+                // finishes: validating it half done would mark as invalid something that is not
+                // anything yet.
         composedTextExists = ((text != null)
                 && (text.getEndIndex() - (text.getBeginIndex() + commitCount)) > 0);
         super.processInputMethodEvent(e);
     }
 
-    /** Al ganar o perder el foco cambia el formateador, y a veces el valor. */
+    /** On gaining or losing the focus the formatter changes, and sometimes the value. */
     protected void processFocusEvent(FocusEvent e) {
         super.processFocusEvent(e);
         if (composedTextExists) {
@@ -210,7 +215,7 @@ public class JFormattedTextField extends JTextField {
                     || fb == JFormattedTextField.COMMIT_OR_REVERT) {
                 try {
                     commitEdit();
-                    // Volver a formatear: el valor puede verse distinto ya guardado.
+                    // Format it again: the value may look different once kept.
                     setValue(getValue(), true, true);
                 } catch (ParseException pe) {
                     if (fb == JFormattedTextField.COMMIT_OR_REVERT) {
@@ -233,7 +238,7 @@ public class JFormattedTextField extends JTextField {
         return uiClassID;
     }
 
-    /** Cambiar el documento vuelve a poner el texto del valor. */
+    /** Changing the document sets the value's text again. */
     public void setDocument(Document doc) {
         super.setDocument(doc);
     }
@@ -270,10 +275,10 @@ public class JFormattedTextField extends JTextField {
     }
 
     /**
-     * Elige una fabrica mirando el tipo del valor.
+     * It chooses a factory by looking at the value's type.
      *
-     * <p>Es lo que hace que un campo construido con una fecha ya sepa formatear fechas sin que
-     * nadie diga nada.
+     * <p>It is what makes a field built with a date already know how to format dates without
+     * anybody saying anything.
      */
     private AbstractFormatterFactory getDefaultFormatterFactory(Object type) {
         if (type instanceof java.text.DateFormat) {
@@ -304,11 +309,11 @@ public class JFormattedTextField extends JTextField {
     }
 
     /**
-     * Convierte entre el valor y el texto que se ve.
+     * It converts between the value and the text that is seen.
      *
-     * <p>Ademas de convertir puede controlar la edicion: {@link #getDocumentFilter} deja filtrar
-     * lo que se escribe y {@link #getNavigationFilter} donde se puede parar el cursor. Con eso se
-     * arma una mascara donde ciertas posiciones no se pueden tocar.
+     * <p>Besides converting it may control the editing: {@link #getDocumentFilter} allows what is
+     * typed to be filtered and {@link #getNavigationFilter} where the caret may stop. With that a
+     * mask is built where certain positions cannot be touched.
      */
     public abstract static class AbstractFormatter implements java.io.Serializable {
 
@@ -318,10 +323,10 @@ public class JFormattedTextField extends JTextField {
         }
 
         /**
-         * Se engancha al campo: pone el texto del valor y los filtros.
+         * It hooks itself to the field: it sets the value's text and the filters.
          *
-         * <p>Si el valor no se puede formatear, el campo queda vacio e invalido; dejar el texto
-         * anterior mostraria algo que ya no corresponde al valor.
+         * <p>If the value cannot be formatted, the field is left empty and invalid; leaving the
+         * previous text would show something that no longer corresponds to the value.
          */
         public void install(JFormattedTextField ftf) {
             if (this.ftf != null) {
@@ -350,10 +355,10 @@ public class JFormattedTextField extends JTextField {
             this.ftf = null;
         }
 
-        /** El valor que representa esa cadena. */
+        /** The value that string represents. */
         public abstract Object stringToValue(String text) throws ParseException;
 
-        /** El texto que representa ese valor. */
+        /** The text that represents that value. */
         public abstract String valueToString(Object value) throws ParseException;
 
         protected JFormattedTextField getFormattedTextField() {
@@ -374,17 +379,17 @@ public class JFormattedTextField extends JTextField {
             }
         }
 
-        /** Acciones propias del formateador; ninguna, salvo que la subclase agregue. */
+        /** The formatter's own actions; none, unless the subclass adds some. */
         protected Action[] getActions() {
             return null;
         }
 
-        /** El filtro que decide que se puede escribir. */
+        /** The filter that decides what may be typed. */
         protected DocumentFilter getDocumentFilter() {
             return null;
         }
 
-        /** El filtro que decide donde se puede parar el cursor. */
+        /** The filter that decides where the caret may stop. */
         protected NavigationFilter getNavigationFilter() {
             return null;
         }
@@ -407,13 +412,13 @@ public class JFormattedTextField extends JTextField {
         }
     }
 
-    /** Devuelve el formateador que corresponde al estado del campo. */
+    /** It returns the formatter that corresponds to the field's state. */
     public abstract static class AbstractFormatterFactory {
 
         protected AbstractFormatterFactory() {
         }
 
-        /** El formateador para ese campo, ahora. */
+        /** The formatter for that field, now. */
         public abstract AbstractFormatter getFormatter(JFormattedTextField tf);
     }
 
@@ -423,7 +428,7 @@ public class JFormattedTextField extends JTextField {
         formatterActions = actions;
     }
 
-    /** Pasa el texto al valor; la accion del Enter. */
+    /** It passes the text to the value; Enter's action. */
     static class CommitAction extends TextAction {
 
         CommitAction() {
@@ -452,7 +457,7 @@ public class JFormattedTextField extends JTextField {
         }
     }
 
-    /** Vuelve al ultimo valor bueno; la accion del Escape. */
+    /** It goes back to the last good value; Escape's action. */
     static class CancelAction extends TextAction {
 
         CancelAction() {

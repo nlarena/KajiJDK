@@ -4,38 +4,38 @@ import java.io.IOException;
 import java.security.spec.AlgorithmParameterSpec;
 import java.security.spec.InvalidParameterSpecException;
 
-// Los parametros de un algoritmo, en forma **opaca**.
+// The parameters of an algorithm, in **opaque** form.
 //
-// El par con `AlgorithmParameterSpec` es la idea central: la spec es transparente y el programa la
-// lee campo por campo; esto guarda los mismos parametros codificados en DER y sabe convertir entre
-// las dos formas. Sirve para mover parametros de un lado a otro sin entenderlos —lo que hace falta
-// para hablar con una contraparte que usa un algoritmo que uno no implementa.
+// The pair with `AlgorithmParameterSpec` is the central idea: the spec is transparent and the
+// program reads it field by field; this keeps the same parameters encoded in DER and knows how to
+// convert between the two forms. It serves for moving parameters from one place to another without
+// understanding them —which is what is needed in order to talk to a counterpart that uses an
+// algorithm one does not implement.
 //
-// El objeto es de **un solo disparo**: se construye sin inicializar, se llama a `init` una vez, y
-// desde ahi es de solo lectura. Llamar a `init` dos veces tira, y llamar a `getEncoded` antes de
-// inicializar tambien. Eso es lo que impide que unos parametros cambien despues de que alguien
-// los uso para tomar una decision.
+// The object is a **single shot**: it is built uninitialised, `init` is called once, and from there
+// it is read-only. Calling `init` twice throws, and calling `getEncoded` before initialising throws
+// too. That is what keeps some parameters from changing after somebody used them to take a
+// decision.
 //
 // ===============================================================================================
-// LA FABRICA NO TIENE PROVEEDORES, Y ESO ES A PROPOSITO
+// THE FACTORY HAS NO PROVIDERS, AND THAT IS ON PURPOSE
 // ===============================================================================================
 //
-// `getInstance` recorre los proveedores registrados buscando un servicio de tipo
-// "AlgorithmParameters", y no hay ninguno: `KajiProvider` solo ofrece digests. O sea que hoy las
-// tres sobrecargas de `getInstance` tiran siempre `NoSuchAlgorithmException`.
+// `getInstance` walks the registered providers looking for a service of type
+// "AlgorithmParameters", and there is none: `KajiProvider` only offers digests. That is, today the
+// three overloads of `getInstance` always throw `NoSuchAlgorithmException`.
 //
-// Es la respuesta correcta y no un agujero: codificar parametros es escribir DER especifico de
-// cada algoritmo, y un `AlgorithmParameters` que devolviera bytes que no son los parametros seria
-// exactamente el tipo de miembro que miente. La estructura queda escrita y funcionando —el ciclo
-// de vida, la delegacion al spi, los errores de estado— para el dia que haya un proveedor que
-// registrar.
+// It is the right answer and not a hole: encoding parameters is writing DER specific to each
+// algorithm, and an `AlgorithmParameters` that returned bytes that are not the parameters would be
+// exactly the kind of member that lies. The structure is left written and working —the life cycle,
+// the delegation to the spi, the state errors— for the day there is a provider to register.
 public class AlgorithmParameters {
 
     private final AlgorithmParametersSpi paramSpi;
     private final Provider provider;
     private final String algorithm;
 
-    // Si ya se llamo a `init`.
+    // Whether `init` has been called already.
     private boolean initialized;
 
     protected AlgorithmParameters(AlgorithmParametersSpi paramSpi, Provider provider,
@@ -59,7 +59,7 @@ public class AlgorithmParameters {
         while (i < provs.length) {
             Provider.Service s = provs[i].getService("AlgorithmParameters", algorithm);
             if (s != null) {
-                return armar(s, algorithm);
+                return build(s, algorithm);
             }
             i = i + 1;
         }
@@ -91,10 +91,10 @@ public class AlgorithmParameters {
             throw new NoSuchAlgorithmException(
                 "no such algorithm: " + algorithm + " for provider " + provider.getName());
         }
-        return armar(s, algorithm);
+        return build(s, algorithm);
     }
 
-    private static AlgorithmParameters armar(Provider.Service s, String algorithm)
+    private static AlgorithmParameters build(Provider.Service s, String algorithm)
             throws NoSuchAlgorithmException {
         Object o = s.newInstance(null);
         if (!(o instanceof AlgorithmParametersSpi)) {
@@ -134,7 +134,7 @@ public class AlgorithmParameters {
         this.initialized = true;
     }
 
-    // La version transparente de estos parametros, del tipo pedido.
+    // The transparent version of these parameters, of the type asked for.
     public final <T extends AlgorithmParameterSpec> T getParameterSpec(Class<T> paramSpec)
             throws InvalidParameterSpecException {
         if (!this.initialized) {
@@ -157,8 +157,8 @@ public class AlgorithmParameters {
         return this.paramSpi.engineGetEncoded(format);
     }
 
-    // Devuelve null si no esta inicializado, y no una cadena vacia ni "<uninitialized>". Es lo que
-    // hace el JDK y hay codigo que lo comprueba.
+    // It returns null if it is not initialised, and not an empty string or "<uninitialized>". It is
+    // what the JDK does and there is code that checks it.
     @Override
     public final String toString() {
         if (!this.initialized) {

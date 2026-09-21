@@ -21,54 +21,53 @@ import org.xml.sax.SAXNotSupportedException;
 import org.xml.sax.SAXParseException;
 import org.xml.sax.XMLReader;
 
-// KajiLibrary's org.xml.sax.helpers.ParserAdapter -- un parser SAX1 con cara de SAX2.
+// KajiLibrary's org.xml.sax.helpers.ParserAdapter -- a SAX1 parser with a SAX2 face.
 //
-// Implementa XMLReader (SAX2) por afuera y DocumentHandler (SAX1) por adentro: se registra con
-// el parser viejo que envuelve, recibe los eventos viejos y los vuelve a emitir como nuevos. No
-// analiza nada por su cuenta; toda la lectura la hace el Parser envuelto.
+// It implements XMLReader (SAX2) on the outside and DocumentHandler (SAX1) on the inside: it
+// registers itself with the old parser it wraps, receives the old events and emits them again as
+// new ones. It analyses nothing on its own; all the reading is done by the wrapped Parser.
 //
-// Toda la razon de ser es lo unico que SAX1 no hace: espacios de nombres. Un parser SAX1 reporta
-// `<xsl:template match="/">` con el nombre "xsl:template" y una lista de atributos que todavia
-// contiene las declaraciones xmlns, y no sabe nada de lo que significa "xsl". Este adaptador
-// corre un NamespaceSupport en paralelo y convierte eso en el (uri, localName, qName) de SAX2
-// mas los eventos startPrefixMapping/endPrefixMapping.
+// The whole reason for it is the one thing SAX1 does not do: namespaces. A SAX1 parser reports
+// `<xsl:template match="/">` with the name "xsl:template" and an attribute list that still contains
+// the xmlns declarations, and knows nothing of what "xsl" means. This adapter runs a
+// NamespaceSupport in parallel and turns that into the SAX2 (uri, localName, qName) plus the
+// startPrefixMapping/endPrefixMapping events.
 //
-// Todo el trabajo esta en startElement, y son dos pasadas sobre la lista de atributos a
-// proposito. **La primera pasada atiende solo las declaraciones xmlns**, porque una declaracion
-// hecha en este elemento aplica al nombre del elemento mismo y a sus otros atributos; resolver
-// cualquier nombre antes de que esten todas las declaraciones lo resolveria contra las
-// vinculaciones del padre. Recien despues la segunda pasada copia los atributos de verdad con
-// las vinculaciones ya definitivas. Hacerlo en una sola pasada es la forma clasica de equivocarse
-// con `<a xmlns:p="u" p:x="1">`.
+// All the work is in startElement, and it is two passes over the attribute list on purpose. **The
+// first pass attends only to the xmlns declarations**, because a declaration made on this element
+// applies to the name of the element itself and to its other attributes; resolving any name before
+// all the declarations are in would resolve it against the bindings of the parent. Only then does
+// the second pass copy the real attributes with the bindings already final. Doing it in one single
+// pass is the classic way of getting `<a xmlns:p="u" p:x="1">` wrong.
 //
-// Se reconocen tres features de SAX2, y solo esas tres:
+// Three SAX2 features are recognised, and only those three:
 //
-//   namespaces          (default true)   hacer el procesamiento, para empezar
-//   namespace-prefixes  (default false)  pasar ademas los atributos xmlns hacia SAX2
-//   xmlns-uris          (default false)  y darle a esos atributos el espacio de nombres NSDECL
+//   namespaces          (default true)   do the processing, to begin with
+//   namespace-prefixes  (default false)  also pass the xmlns attributes up to SAX2
+//   xmlns-uris          (default false)  and give those attributes the NSDECL namespace
 //
-// Las dos primeras no pueden estar las dos en false --sin ninguna, el nombre de un elemento no
-// tendria ni forma resuelta ni forma cruda--, asi que apagar una prende la otra. Ninguna se
-// puede cambiar en medio del analisis; eso lanza SAXNotSupportedException en vez de producir un
-// documento analizado bajo dos reglas distintas. No se reconoce ninguna propiedad: no hay nada
-// abajo a quien preguntarle.
+// The first two cannot both be false --with neither, the name of an element would have neither a
+// resolved form nor a raw one--, so switching one off switches the other on. None of them can be
+// changed in the middle of the analysis; that throws SAXNotSupportedException instead of producing
+// a document analysed under two different rules. No property is recognised: there is nothing
+// underneath to ask.
 //
-// Un prefijo no declarado se le reporta al ErrorHandler como error recuperable, no se lanza. En
-// un *atributo* el adaptador va mas lejos y conserva el atributo, con URI vacio y el nombre
-// crudo en el casillero del nombre local, para que un prefijo mal puesto no borre en silencio un
-// atributo del documento. Los errores de la segunda pasada se juntan y se reportan despues de
-// las pasadas y no en medio del ciclo, asi el manejador ve una lista de atributos consistente.
+// An undeclared prefix is reported to the ErrorHandler as a recoverable error, not thrown. For an
+// *attribute* the adapter goes further and keeps the attribute, with an empty URI and the raw name
+// in the slot of the local name, so that a misplaced prefix does not silently erase an attribute
+// of the document. The errors of the second pass are collected and reported after the passes and
+// not in the middle of the loop, so that the handler sees a consistent attribute list.
 //
-// NOTA DE COMPILACION, y no es cosmetica -- la misma que lleva DefaultHandler.java: el campo
-// `contentHandler` y las firmas de `setContentHandler`/`getContentHandler` escriben
-// `org.xml.sax.ContentHandler` con nombre completo aunque el `import` de arriba ya lo trae. No es
-// redundancia: es el rodeo del bug #466 del informe. Cuando el fuente de
-// org/xml/sax/ContentHandler.java entra en la MISMA invocacion que este archivo, nuestro javac
-// ignora el import de un solo tipo y resuelve el nombre simple contra java.net.ContentHandler,
-// que existe en el arbol y es una clase abstracta, no la interfaz. Y como tampoco comprueba que
-// lo que va en un `implements` sea una interfaz (#467), sale un .class que compila, mide bien,
-// corre en nuestra VM y muere con IncompatibleClassChangeError en una JVM real. **No lo
-// "limpies" a nombre simple.**
+// COMPILATION NOTE, and it is not cosmetic -- the same one DefaultHandler.java carries: the
+// `contentHandler` field and the signatures of `setContentHandler`/`getContentHandler` write
+// `org.xml.sax.ContentHandler` with its full name even though the `import` above already brings
+// it. It is not redundancy: it is the way round finding #530 of the report (the note said #466, the
+// number it had before the renumbering). When the source of org/xml/sax/ContentHandler.java enters
+// the SAME invocation as this file, our javac ignores the single-type import and resolves the
+// simple name against java.net.ContentHandler, which exists in the tree and is an abstract class,
+// not the interface. And as it does not check either that what goes in an `implements` is an
+// interface (#467), out comes a .class that compiles, measures fine, runs on our VM and dies with
+// IncompatibleClassChangeError on a real JVM. **Do not "clean" it to a simple name.**
 public class ParserAdapter implements XMLReader, DocumentHandler {
 
     private static final String FEATURES = "http://xml.org/sax/features/";
@@ -86,8 +85,8 @@ public class ParserAdapter implements XMLReader, DocumentHandler {
     private Parser parser = null;
     private AttributesImpl atts = null;
 
-    // Las banderas de features. Los valores por defecto son los de SAX2: procesar espacios de
-    // nombres, esconder las declaraciones.
+    // The feature flags. The default values are those of SAX2: process namespaces, hide the
+    // declarations.
     private boolean namespaces = true;
     private boolean prefixes = false;
     private boolean uris = false;
@@ -98,9 +97,9 @@ public class ParserAdapter implements XMLReader, DocumentHandler {
     org.xml.sax.ContentHandler contentHandler = null;
     ErrorHandler errorHandler = null;
 
-    // Envuelve lo que encuentre ParserFactory, es decir la clase que nombra la propiedad de
-    // sistema `org.xml.sax.parser`. Cada forma en que eso puede fallar se vuelve aca una
-    // SAXException, que es la diferencia entre las convenciones de error de SAX1 y SAX2.
+    // It wraps whatever ParserFactory finds, that is the class the system property
+    // `org.xml.sax.parser` names. Each way that can fail becomes a SAXException here, which is the
+    // difference between the error conventions of SAX1 and SAX2.
     public ParserAdapter() throws SAXException {
         super();
 
@@ -142,7 +141,7 @@ public class ParserAdapter implements XMLReader, DocumentHandler {
     }
 
     ////////////////////////////////////////////////////////////////////
-    // XMLReader: configuracion
+    // XMLReader: configuration
     ////////////////////////////////////////////////////////////////////
 
     public void setFeature(String name, boolean value)
@@ -150,8 +149,8 @@ public class ParserAdapter implements XMLReader, DocumentHandler {
         if (name.equals(NAMESPACES)) {
             checkNotParsing("feature", name);
             namespaces = value;
-            // Las dos apagadas no significa nada: quien llama no recibiria los nombres en
-            // ninguna de las dos formas.
+            // Both off means nothing: the caller would receive the names in neither of the two
+            // forms.
             if (!namespaces && !prefixes) {
                 prefixes = true;
             }
@@ -182,8 +181,8 @@ public class ParserAdapter implements XMLReader, DocumentHandler {
         }
     }
 
-    // Un parser SAX1 no tiene propiedades, asi que no se puede reconocer ninguna. Afirmar otra
-    // cosa seria afirmar algo del parser de abajo que esta clase no puede saber.
+    // A SAX1 parser has no properties, so none can be recognised. Asserting otherwise would be
+    // asserting something about the parser underneath that this class cannot know.
     public void setProperty(String name, Object value)
             throws SAXNotRecognizedException, SAXNotSupportedException {
         throw new SAXNotRecognizedException("Property: " + name);
@@ -194,8 +193,8 @@ public class ParserAdapter implements XMLReader, DocumentHandler {
         throw new SAXNotRecognizedException("Property: " + name);
     }
 
-    // Los manejadores se guardan aca y setupParser() se los empuja al parser al momento de
-    // analizar, salvo el manejador de documento, que siempre es este adaptador.
+    // The handlers are kept here and setupParser() pushes them onto the parser at the moment of
+    // analysing, except the document handler, which is always this adapter.
     public void setEntityResolver(EntityResolver resolver) {
         entityResolver = resolver;
     }
@@ -232,9 +231,8 @@ public class ParserAdapter implements XMLReader, DocumentHandler {
         parse(new InputSource(systemId));
     }
 
-    // La reentrada se rechaza de plano: la pila de espacios de nombres y el buffer de atributos
-    // son estado de un analisis, y un segundo parse sobre el mismo adaptador pisotearia al
-    // primero.
+    // Reentry is rejected outright: the namespace stack and the attribute buffer are state of one
+    // analysis, and a second parse on the same adapter would trample the first.
     public void parse(InputSource input) throws IOException, SAXException {
         if (parsing) {
             throw new SAXException("Parser is already in use");
@@ -249,11 +247,11 @@ public class ParserAdapter implements XMLReader, DocumentHandler {
     }
 
     ////////////////////////////////////////////////////////////////////
-    // DocumentHandler: los eventos SAX1 que llegan del parser envuelto
+    // DocumentHandler: the SAX1 events that arrive from the wrapped parser
     ////////////////////////////////////////////////////////////////////
 
-    // Se guarda ademas de reenviarse, porque makeException() lo necesita para darle posicion a
-    // los errores.
+    // It is kept besides being forwarded, because makeException() needs it to give the errors a
+    // position.
     public void setDocumentLocator(Locator locator) {
         this.locator = locator;
         if (contentHandler != null) {
@@ -273,15 +271,15 @@ public class ParserAdapter implements XMLReader, DocumentHandler {
         }
     }
 
-    // La traduccion en dos pasadas descripta en el comentario de la clase.
+    // The two-pass translation described in the comment of the class.
     public void startElement(String qName, AttributeList qAtts)
             throws SAXException {
-        // Errores encontrados al resolver nombres de atributo, retenidos hasta que terminen las
-        // dos pasadas para que el manejador nunca vea una lista de atributos a medio armar.
+        // Errors found while resolving attribute names, held back until the two passes finish so
+        // that the handler never sees a half-built attribute list.
         List<SAXException> exceptions = null;
 
-        // Con el procesamiento de espacios de nombres apagado no hay nada que resolver: se pasa
-        // la lista SAX1 derecho detras de una cara de Attributes, con uri y nombre local vacios.
+        // With namespace processing off there is nothing to resolve: the SAX1 list is passed
+        // straight through behind an Attributes face, with empty uri and local name.
         if (!namespaces) {
             if (contentHandler != null) {
                 attAdapter.setAttributeList(qAtts);
@@ -294,8 +292,8 @@ public class ParserAdapter implements XMLReader, DocumentHandler {
         nsSupport.pushContext();
         int length = qAtts.getLength();
 
-        // Pasada uno: solo las declaraciones. Todas y cada una tienen que estar vigentes antes
-        // de resolver cualquier nombre de este elemento.
+        // Pass one: only the declarations. Each and every one of them has to be in force before any
+        // name of this element is resolved.
         for (int i = 0; i < length; i++) {
             String attQName = qAtts.getName(i);
 
@@ -307,11 +305,11 @@ public class ParserAdapter implements XMLReader, DocumentHandler {
             int n = attQName.indexOf(':');
 
             if (n == -1 && attQName.length() == 5) {
-                // Exactamente `xmlns`: el espacio de nombres por defecto.
+                // Exactly `xmlns`: the default namespace.
                 prefix = "";
             } else if (n != 5) {
-                // Algo como `xmlnsfoo` o `xmlnsf:oo`: empieza con las cinco letras pero no es una
-                // declaracion. La norma no habla de estos; SAX los ignora.
+                // Something like `xmlnsfoo` or `xmlnsf:oo`: it starts with the five letters but is
+                // not a declaration. The standard does not speak of these; SAX ignores them.
                 continue;
             } else {
                 // `xmlns:foo`.
@@ -320,7 +318,7 @@ public class ParserAdapter implements XMLReader, DocumentHandler {
 
             String value = qAtts.getValue(i);
             if (!nsSupport.declarePrefix(prefix, value)) {
-                // El prefijo era "xml" o "xmlns", que no se pueden redeclarar.
+                // The prefix was "xml" or "xmlns", which cannot be redeclared.
                 reportError("Illegal Namespace prefix: " + prefix);
                 continue;
             }
@@ -329,8 +327,7 @@ public class ParserAdapter implements XMLReader, DocumentHandler {
             }
         }
 
-        // Pasada dos: los atributos propiamente dichos, resueltos contra las vinculaciones que
-        // ahora estan completas.
+        // Pass two: the attributes proper, resolved against the bindings that are now complete.
         atts.clear();
         for (int i = 0; i < length; i++) {
             String attQName = qAtts.getName(i);
@@ -344,16 +341,16 @@ public class ParserAdapter implements XMLReader, DocumentHandler {
                 if (n == -1 && attQName.length() == 5) {
                     prefix = "";
                 } else if (n != 5) {
-                    // Al final no era una declaracion; sigue de largo para tratarse mas abajo
-                    // como un atributo comun.
+                    // It was not a declaration after all; it goes on to be treated below as an
+                    // ordinary attribute.
                     prefix = null;
                 } else {
                     prefix = attQName.substring(n + 1);
                 }
 
                 if (prefix != null) {
-                    // Una declaracion de verdad. Llega a SAX2 solo si quien llama la pidio, y
-                    // recien ahi en el espacio de nombres NSDECL solo si tambien pidio eso.
+                    // A real declaration. It reaches SAX2 only if the caller asked for it, and only
+                    // then in the NSDECL namespace if they also asked for that.
                     if (prefixes) {
                         if (uris) {
                             atts.addAttribute(NamespaceSupport.NSDECL, prefix,
@@ -367,7 +364,7 @@ public class ParserAdapter implements XMLReader, DocumentHandler {
                 }
             }
 
-            // Un atributo comun.
+            // An ordinary attribute.
             try {
                 String attName[] = processName(attQName, true, true);
                 atts.addAttribute(attName[0], attName[1], attName[2],
@@ -377,13 +374,13 @@ public class ParserAdapter implements XMLReader, DocumentHandler {
                     exceptions = new ArrayList<SAXException>();
                 }
                 exceptions.add(e);
-                // Se conserva igual el atributo, sin resolver. Descartarlo perderia datos que el
-                // documento realmente tiene por culpa de un error de espacio de nombres.
+                // The attribute is kept all the same, unresolved. Discarding it would lose data the
+                // document really has because of a namespace error.
                 atts.addAttribute("", attQName, attQName, type, value);
             }
         }
 
-        // Ahora si los errores retenidos, con la lista ya consistente.
+        // Now the held-back errors, with the list already consistent.
         if (exceptions != null && errorHandler != null) {
             for (int i = 0; i < exceptions.size(); i++) {
                 SAXException e = exceptions.get(i);
@@ -397,9 +394,9 @@ public class ParserAdapter implements XMLReader, DocumentHandler {
         }
     }
 
-    // El espejo de startElement: resolver el nombre, emitir endElement, y recien ahi desarmar los
-    // prefijos que declaro este elemento; en ese orden, porque endPrefixMapping quiere decir "el
-    // mapeo ya termino", es decir despues de que cerro el elemento que lo tenia.
+    // The mirror of startElement: resolve the name, emit endElement, and only then take apart the
+    // prefixes this element declared; in that order, because endPrefixMapping means "the mapping
+    // has ended", that is after the element that had it has closed.
     public void endElement(String qName) throws SAXException {
         if (!namespaces) {
             if (contentHandler != null) {
@@ -411,7 +408,7 @@ public class ParserAdapter implements XMLReader, DocumentHandler {
         String names[] = processName(qName, false, false);
         if (contentHandler != null) {
             contentHandler.endElement(names[0], names[1], names[2]);
-            // Se llama `declared` para no tapar la bandera de feature `prefixes` de mas arriba.
+            // It is called `declared` so as not to shadow the `prefixes` feature flag further up.
             Enumeration<String> declared = nsSupport.getDeclaredPrefixes();
             while (declared.hasMoreElements()) {
                 String prefix = declared.nextElement();
@@ -444,12 +441,12 @@ public class ParserAdapter implements XMLReader, DocumentHandler {
 
     ////////////////////////////////////////////////////////////////////
 
-    // Cablea el parser envuelto para un analisis. El manejador de documento siempre es este
-    // adaptador; los otros tres son los de quien llama, y si no estan puestos se dejan como
-    // estaban en el parser, para que un parser configurado directamente conserve lo que tenia.
+    // It wires the wrapped parser for one analysis. The document handler is always this adapter;
+    // the other three are the caller's, and if they are not set they are left as they were on the
+    // parser, so that a parser configured directly keeps what it had.
     private void setupParser() {
-        // Va con guarda porque setFeature impide que las dos queden en false, asi que llegar aca
-        // significa que alguien metio mano por atras de la API publica.
+        // It goes with a guard because setFeature keeps both from being false, so getting here
+        // means somebody went behind the public API.
         if (!prefixes && !namespaces) {
             throw new IllegalStateException();
         }
@@ -471,10 +468,10 @@ public class ParserAdapter implements XMLReader, DocumentHandler {
         parser.setDocumentHandler(this);
     }
 
-    // Resuelve un nombre calificado. Un prefijo sin vincular es un error recuperable, y
-    // `useException` dice de que forma quiere enterarse quien llama: los atributos quieren la
-    // excepcion para poder conservar el atributo en forma degradada, los nombres de elemento
-    // quieren el error reportado y una terna usable de vuelta para que el analisis siga.
+    // It resolves a qualified name. An unbound prefix is a recoverable error, and `useException`
+    // says in which form the caller wants to find out: attributes want the exception so as to be
+    // able to keep the attribute in degraded form, element names want the error reported and a
+    // usable triple back so that the analysis goes on.
     private String[] processName(String qName, boolean isAttribute,
                                  boolean useException) throws SAXException {
         String parts[] = nsSupport.processName(qName, nameParts, isAttribute);
@@ -490,16 +487,16 @@ public class ParserAdapter implements XMLReader, DocumentHandler {
         return parts;
     }
 
-    // Es recuperable, asi que va a error() y no a fatalError(); sin manejador de errores se
-    // descarta, que es la convencion de SAX para un problema del que nadie pidio enterarse.
+    // It is recoverable, so it goes to error() and not to fatalError(); with no error handler it is
+    // discarded, which is the SAX convention for a problem nobody asked to hear about.
     void reportError(String message) throws SAXException {
         if (errorHandler != null) {
             errorHandler.error(makeException(message));
         }
     }
 
-    // Con posicion cuando el parser dio un localizador, y explicitamente sin posicion cuando no:
-    // -1/-1 y no 0/0, para que nadie lo lea como "linea cero".
+    // With a position when the parser gave a locator, and explicitly with no position when it did
+    // not: -1/-1 and not 0/0, so that nobody reads it as "line zero".
     private SAXParseException makeException(String message) {
         if (locator != null) {
             return new SAXParseException(message, locator);
@@ -508,13 +505,13 @@ public class ParserAdapter implements XMLReader, DocumentHandler {
         }
     }
 
-    // Ver el comentario largo en NamespaceSupport: String.intern() es nativo y la VM de esta
-    // casa no lo implementa, asi que se prueba una vez y se cae a devolver la cadena tal cual.
-    // El JDK interna todos los nombres que reporta; no es parte del contrato de SAX, pero
-    // donde se puede se hace igual.
-    private static final boolean PUEDE_INTERNAR = pruebaIntern();
+    // See the long comment in NamespaceSupport. The note said that String.intern() is native and
+    // the house VM does not implement it; it does now, so the probe answers true and names are
+    // interned. The JDK interns every name it reports; it is not part of the SAX contract, but
+    // where it can be done it is done all the same.
+    private static final boolean CAN_INTERN = probeIntern();
 
-    private static boolean pruebaIntern() {
+    private static boolean probeIntern() {
         try {
             String s = "";
             return s.intern() != null;
@@ -524,7 +521,7 @@ public class ParserAdapter implements XMLReader, DocumentHandler {
     }
 
     private static String canon(String s) {
-        if (PUEDE_INTERNAR) {
+        if (CAN_INTERN) {
             return s.intern();
         }
         return s;
@@ -540,11 +537,10 @@ public class ParserAdapter implements XMLReader, DocumentHandler {
 
     ////////////////////////////////////////////////////////////////////
 
-    // Un AttributeList de SAX1 visto por la cara de Attributes de SAX2, usado solo cuando el
-    // procesamiento de espacios de nombres esta apagado. Todo lo que tenga forma de espacio de
-    // nombres contesta vacio o ausente, porque con los espacios de nombres apagados no hay con
-    // que contestar: getURI y getLocalName dan "", y las dos busquedas por (uri, localName) no
-    // encuentran nada.
+    // A SAX1 AttributeList seen through the Attributes face of SAX2, used only when namespace
+    // processing is off. Everything shaped like a namespace answers empty or absent, because with
+    // namespaces off there is nothing to answer with: getURI and getLocalName give "", and the two
+    // lookups by (uri, localName) find nothing.
     final class AttributeListAdapter implements Attributes {
 
         private AttributeList qAtts;

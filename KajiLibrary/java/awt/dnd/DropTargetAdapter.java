@@ -1,31 +1,31 @@
 package java.awt.dnd;
 
 /**
- * Un {@link DropTargetListener} con los tres métodos opcionales vacíos.
+ * A {@link DropTargetListener} with the four optional methods empty.
  *
- * <p>La asimetría con los otros adaptadores es deliberada y está bien pensada: {@link #drop} sigue
- * siendo **abstracto**. Un destino de arrastre que no haga nada al soltar no tiene sentido, así que
- * la clase obliga a escribirlo en vez de dejar que se olvide.
+ * <p>The asymmetry with the other adapters is deliberate and well thought out: {@link #drop} goes
+ * on being **abstract**. A drop target that does nothing on dropping makes no sense, so the class
+ * forces it to be written instead of letting it be forgotten.
  */
 public abstract class DropTargetAdapter implements DropTargetListener {
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected DropTargetAdapter() {
     }
 
-    /** No hace nada. */
+    /** It does nothing. */
     public void dragEnter(DropTargetDragEvent dtde) {
     }
 
-    /** No hace nada. */
+    /** It does nothing. */
     public void dragOver(DropTargetDragEvent dtde) {
     }
 
-    /** No hace nada. */
+    /** It does nothing. */
     public void dropActionChanged(DropTargetDragEvent dtde) {
     }
 
-    /** No hace nada. */
+    /** It does nothing. */
     public void dragExit(DropTargetEvent dte) {
     }
 }

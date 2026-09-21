@@ -3,22 +3,23 @@ package javax.naming.directory;
 import javax.naming.NamingException;
 
 /**
- * KajiLibrary's javax.naming.directory.InvalidAttributeValueException -- el valor no sirve para ese atributo.
+ * KajiLibrary's javax.naming.directory.InvalidAttributeValueException -- the value is not valid for
+ * that attribute.
  *
- * <p>La contracara de {@link InvalidAttributeIdentifierException}: el nombre esta bien y el valor
- * no. Tipicamente porque el esquema declara el atributo como de un solo valor y se le
- * pasaron dos, o porque el tipo no coincide.
+ * <p>The flip side of {@link InvalidAttributeIdentifierException}: the name is fine and the value
+ * is not. Typically because the schema declares the attribute single-valued and it was given two,
+ * or because the type does not match.
  */
 public class InvalidAttributeValueException extends NamingException {
 
     private static final long serialVersionUID = 8720050295499275011L;
 
-    /** Sin detalle. */
+    /** With no detail. */
     public InvalidAttributeValueException() {
         super();
     }
 
-    /** Con un mensaje que diga cual fue el problema. */
+    /** With a message saying what the problem was. */
     public InvalidAttributeValueException(String explanation) {
         super(explanation);
     }

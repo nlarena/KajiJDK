@@ -1,13 +1,13 @@
 package org.w3c.dom.html;
 
 /**
- * Un `<pre>`.
+ * A `<pre>`.
  */
 public interface HTMLPreElement extends HTMLElement {
 
-    /** El ancho. */
+    /** The width. */
     int getWidth();
 
-    /** Fija el ancho. */
+    /** It sets the width. */
     void setWidth(int width);
 }

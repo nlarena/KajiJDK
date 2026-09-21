@@ -9,53 +9,52 @@ import org.w3c.dom.DOMImplementationList;
 import org.w3c.dom.DOMImplementationSource;
 
 /**
- * KajiLibrary's org.w3c.dom.bootstrap.DOMImplementationRegistry -- por donde se entra al DOM.
+ * KajiLibrary's org.w3c.dom.bootstrap.DOMImplementationRegistry -- where one enters the DOM.
  *
- * <p>El problema que resuelve es de arranque: para usar DOM hace falta un
- * {@link DOMImplementation}, y para conseguir uno haria falta ya tener uno. Esta clase corta ese
- * circulo, y por eso vive en un paquete que se llama <b>bootstrap</b>.
+ * <p>The problem it solves is one of bootstrapping: to use DOM a {@link DOMImplementation} is
+ * needed, and to get one one would need to have one already. This class breaks that circle, and
+ * that is why it lives in a package called <b>bootstrap</b>.
  *
- * <p>Se piden implementaciones por <b>caracteristicas</b>, no por nombre de clase:
- * {@code "XML 3.0 LS"} pide una que sepa XML nivel 3 y ademas cargar y guardar. Es lo que hace que
- * el codigo no dependa de quien la provee, que es todo el punto de la indireccion.
+ * <p>Implementations are asked for by <b>features</b>, not by class name: {@code "XML 3.0 LS"} asks
+ * for one that knows XML level 3 and also loading and saving. It is what makes the code not depend
+ * on who provides it, which is the whole point of the indirection.
  *
- * <h2>El orden de busqueda</h2>
+ * <h2>The order of search</h2>
  *
- * <p>{@link #newInstance} arma la lista de fuentes con la propiedad de sistema {@link #PROPERTY} --un
- * texto con nombres de clase separados por espacios-- y con los proveedores registrados como
- * servicio. Despues, cada consulta le pregunta a las fuentes <b>en ese orden</b> y se queda con la
- * primera que conteste.
+ * <p>{@link #newInstance} builds the list of sources with the system property {@link #PROPERTY} --a
+ * text with class names separated by spaces-- and with the providers registered as a service. Then
+ * each query asks the sources <b>in that order</b> and keeps the first one that answers.
  *
  * <h2>A KajiLibrary subset</h2>
  *
- * <p>Esta biblioteca no trae una implementacion de DOM incluida, asi que sin una fuente registrada el
- * registro esta vacio: {@link #getDOMImplementation} devuelve null y {@link #getDOMImplementationList}
- * una lista de largo cero. Las dos son respuestas <b>definidas</b> del contrato --significan "no hay
- * ninguna con esas caracteristicas"-- y son exactamente lo que contesta el JDK cuando se le piden
- * caracteristicas que nadie soporta. Registrando una fuente, el registro funciona como siempre.
+ * <p>This library brings no DOM implementation included, so with no source registered the registry
+ * is empty: {@link #getDOMImplementation} returns null and {@link #getDOMImplementationList} a list
+ * of length zero. Both are <b>defined</b> answers of the contract --they mean "there is none with
+ * those features"-- and they are exactly what the JDK answers when asked for features nobody
+ * supports. Registering a source, the registry works as usual.
  */
 public final class DOMImplementationRegistry {
 
-    /** La propiedad de sistema con los nombres de clase, separados por espacios. */
+    /** The system property with the class names, separated by spaces. */
     public static final String PROPERTY = "org.w3c.dom.DOMImplementationSourceList";
 
-    /** Las fuentes, en orden de consulta. */
+    /** The sources, in order of query. */
     private final List<DOMImplementationSource> sources;
 
-    /** Privado: se entra por {@link #newInstance}. */
+    /** Private: one gets in through {@link #newInstance}. */
     private DOMImplementationRegistry(List<DOMImplementationSource> sources) {
         this.sources = sources;
     }
 
     /**
-     * Un registro con las fuentes configuradas.
+     * A registry with the configured sources.
      *
-     * <p>Ver el orden en la nota de la clase.
+     * <p>See the order in the note of the class.
      *
-     * @throws ClassNotFoundException si la propiedad nombra una clase que no existe
-     * @throws InstantiationException si una no se puede construir
-     * @throws IllegalAccessException si su constructor no es accesible
-     * @throws ClassCastException si una no es un {@link DOMImplementationSource}
+     * @throws ClassNotFoundException if the property names a class that does not exist
+     * @throws InstantiationException if one cannot be built
+     * @throws IllegalAccessException if its constructor is not accessible
+     * @throws ClassCastException if one is not a {@link DOMImplementationSource}
      */
     public static DOMImplementationRegistry newInstance()
         throws ClassNotFoundException, InstantiationException, IllegalAccessException,
@@ -65,11 +64,11 @@ public final class DOMImplementationRegistry {
         try {
             configured = System.getProperty(PROPERTY);
         } catch (SecurityException e) {
-            // Sin permiso para leerla: quedan solo los servicios.
+            // No permission to read it: only the services are left.
         }
         if (configured != null) {
-            // Espacios como separador: es lo que dice la especificacion, y por eso un nombre de
-            // clase con espacios no se puede configurar por esta via.
+            // Spaces as the separator: it is what the specification says, and that is why a class
+            // name with spaces cannot be configured this way.
             String[] names = configured.split(" ");
             int i = 0;
             while (i < names.length) {
@@ -89,7 +88,7 @@ public final class DOMImplementationRegistry {
         return new DOMImplementationRegistry(found);
     }
 
-    /** Construye una fuente por nombre, traduciendo las fallas a las que declara el contrato. */
+    /** It builds a source by name, translating the failures into the ones the contract declares. */
     private static DOMImplementationSource build(String className)
         throws ClassNotFoundException, InstantiationException, IllegalAccessException {
         ClassLoader loader = Thread.currentThread().getContextClassLoader();
@@ -105,18 +104,18 @@ public final class DOMImplementationRegistry {
         } catch (IllegalAccessException e) {
             throw e;
         } catch (Exception e) {
-            // Sin constructor sin argumentos, o el constructor tiro: para el contrato es lo mismo
-            // que no haberla podido instanciar.
+            // No no-argument constructor, or the constructor threw: for the contract it is the same
+            // as not having been able to instantiate it.
             throw new InstantiationException(className + ": " + e);
         }
         return (DOMImplementationSource) made;
     }
 
     /**
-     * La primera implementacion que tenga esas caracteristicas.
+     * The first implementation that has those features.
      *
-     * @param features una lista separada por espacios, por ejemplo {@code "XML 3.0 LS"}
-     * @return null si ninguna fuente la tiene
+     * @param features a list separated by spaces, for example {@code "XML 3.0 LS"}
+     * @return null if no source has it
      */
     public DOMImplementation getDOMImplementation(String features) {
         int i = 0;
@@ -131,9 +130,9 @@ public final class DOMImplementationRegistry {
     }
 
     /**
-     * Todas las que tengan esas caracteristicas, de todas las fuentes.
+     * All the ones that have those features, from all the sources.
      *
-     * @return una lista de largo cero si no hay ninguna
+     * @return a list of length zero if there is none
      */
     public DOMImplementationList getDOMImplementationList(String features) {
         List<DOMImplementation> all = new ArrayList<DOMImplementation>();
@@ -153,12 +152,12 @@ public final class DOMImplementationRegistry {
     }
 
     /**
-     * Agrega una fuente al final.
+     * It adds a source at the end.
      *
-     * <p>Al final y no al principio: las configuradas ganan sobre las agregadas a mano, que es lo
-     * que hace que la propiedad de sistema sirva para forzar una implementacion.
+     * <p>At the end and not at the start: the configured ones win over the ones added by hand,
+     * which is what makes the system property serve for forcing an implementation.
      *
-     * @throws NullPointerException si es null
+     * @throws NullPointerException if it is null
      */
     public void addSource(DOMImplementationSource s) {
         if (s == null) {
@@ -167,7 +166,7 @@ public final class DOMImplementationRegistry {
         this.sources.add(s);
     }
 
-    /** La lista que devuelve {@link #getDOMImplementationList}. */
+    /** The list {@link #getDOMImplementationList} returns. */
     private static final class ListOfImplementations implements DOMImplementationList {
 
         private final List<DOMImplementation> items;
@@ -176,7 +175,7 @@ public final class DOMImplementationRegistry {
             this.items = items;
         }
 
-        /** Null fuera de rango, como pide el DOM; no lanza. */
+        /** Null out of range, as the DOM asks; it does not throw. */
         public DOMImplementation item(int index) {
             if (index < 0 || index >= this.items.size()) {
                 return null;

@@ -15,8 +15,8 @@ import java.net.InetSocketAddress;
 // would read and write perfectly well and be invisible to `select`, which is the one thing it is
 // wanted for.
 //
-// **This is what the JDK does on Windows**, for the same reason: `sun.nio.ch.PipeImpl` there opens a
-// listener on the loopback address, connects to it, accepts, and hands back the two ends. What it
+// **This is what the JDK does on Windows**, for the same reason: `sun.nio.ch.PipeImpl` there opens
+// a listener on the loopback address, connects to it, accepts, and hands back the two ends. What it
 // costs is a port number for as long as the connection lives and a trip through the network stack
 // that never leaves the machine.
 //

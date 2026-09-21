@@ -1,22 +1,22 @@
 package javax.smartcardio;
 
 /**
- * KajiLibrary's javax.smartcardio.TerminalFactorySpi -- lo que implementa un proveedor de lectores.
+ * KajiLibrary's javax.smartcardio.TerminalFactorySpi -- what a reader provider implements.
  *
- * <p>Un proveedor que quiera dar acceso a lectores registra un servicio {@code TerminalFactory} cuya
- * clase extiende esto. {@link TerminalFactory} es la cara publica; esto es lo unico que hay que
- * escribir.
+ * <p>A provider that wants to give access to readers registers a {@code TerminalFactory} service
+ * whose class extends this. {@link TerminalFactory} is the public face; this is the only thing that
+ * has to be written.
  *
- * <p>El constructor de la subclase recibe el parametro que se le paso a
- * {@link TerminalFactory#getInstance}, y ahi es donde va la configuracion --que biblioteca cargar, a
- * que servidor conectarse--.
+ * <p>The subclass's constructor receives the parameter passed to {@link
+ * TerminalFactory#getInstance}, and that is where the configuration goes --which library to load,
+ * which server to connect to--.
  */
 public abstract class TerminalFactorySpi {
 
-    /** Para las subclases. */
+    /** For subclasses. */
     protected TerminalFactorySpi() {
     }
 
-    /** Los lectores de este proveedor. */
+    /** This provider's readers. */
     protected abstract CardTerminals engineTerminals();
 }

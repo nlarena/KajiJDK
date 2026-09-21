@@ -6,10 +6,10 @@ import javax.print.attribute.PrintJobAttribute;
 import javax.print.attribute.PrintRequestAttribute;
 
 /**
- * En que bandeja de salida cae el papel impreso.
+ * In which output tray the printed paper falls.
  *
- * <p>{@code FACE_UP} y {@code FACE_DOWN} no son lugares sino como queda apilado, que es lo que
- * decide si el orden de las paginas sale derecho o al reves.
+ * <p>{@code FACE_UP} and {@code FACE_DOWN} are not places but how it ends up stacked, which is what
+ * decides whether the pages' order comes out straight or reversed.
  */
 public class OutputBin extends EnumSyntax implements PrintRequestAttribute, PrintJobAttribute {
 

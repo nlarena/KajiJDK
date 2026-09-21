@@ -3,107 +3,108 @@ package com.sun.jdi.request;
 import com.sun.jdi.Mirror;
 
 /**
- * Un pedido de aviso: la mitad de JDI que dice <strong>que</strong> se quiere saber.
+ * A request to be told: the half of JDI that says <strong>what</strong> one wants to know.
  *
- * <h2>Se configura apagado y despues se prende</h2>
+ * <h2>It is configured switched off and afterwards switched on</h2>
  *
- * <p>Un pedido nace deshabilitado. Los filtros --por hilo, por clase, por instancia-- solo se
- * pueden poner mientras esta apagado, y {@link #enable} lo activa. Intentar filtrar un pedido ya
- * habilitado tira {@link InvalidRequestStateException}.
+ * <p>A request is born disabled. The filters -- by thread, by class, by instance -- may only be
+ * set while it is switched off, and {@link #enable} activates it. Trying to filter a request
+ * that is already enabled throws {@link InvalidRequestStateException}.
  *
- * <p>El orden no es capricho: los filtros se traducen a configuracion de la otra VM, y cambiarlos
- * con el pedido activo dejaria eventos en vuelo con el filtro viejo.
+ * <p>The order is not a whim: the filters are translated into configuration of the other VM,
+ * and changing them with the request active would leave events in flight with the old filter.
  *
- * <h2>La politica de suspension es la decision importante</h2>
+ * <h2>The suspension policy is the important decision</h2>
  *
- * <p>{@link #setSuspendPolicy} decide que se congela cuando el evento llega: {@link #SUSPEND_NONE}
- * nada, {@link #SUSPEND_EVENT_THREAD} el hilo que lo genero, {@link #SUSPEND_ALL} el programa
- * entero.
+ * <p>{@link #setSuspendPolicy} decides what is frozen when the event arrives:
+ * {@link #SUSPEND_NONE} nothing, {@link #SUSPEND_EVENT_THREAD} the thread that generated it,
+ * {@link #SUSPEND_ALL} the whole program.
  *
- * <p>{@code SUSPEND_ALL} es lo que un depurador quiere para un punto de interrupcion y lo peor
- * posible para un evento frecuente: congela todo, miles de veces por segundo.
+ * <p>{@code SUSPEND_ALL} is what a debugger wants for a breakpoint and the worst possible thing
+ * for a frequent event: it freezes everything, thousands of times a second.
  *
- * <h2>Filtrar es una optimizacion, no una comodidad</h2>
+ * <h2>Filtering is an optimization, not a convenience</h2>
  *
- * <p>Sin filtro, cada ocurrencia cruza la conexion. Un {@code MethodEntryRequest} sin filtrar sobre
- * un programa real manda millones de eventos y lo vuelve inusable. El filtro se aplica <strong>del
- * lado de la VM depurada</strong>, que es lo que evita el viaje.
+ * <p>With no filter, each occurrence crosses the connection. An unfiltered
+ * {@code MethodEntryRequest} over a real program sends millions of events and makes it
+ * unusable. The filter is applied <strong>on the debugged VM's side</strong>, which is what
+ * avoids the trip.
  *
  * @since 1.3
  */
 public interface EventRequest extends Mirror {
 
-    /** No suspender nada cuando el evento llegue. */
+    /** Do not suspend anything when the event arrives. */
     int SUSPEND_NONE = 0;
 
-    /** Suspender solo el hilo que genero el evento. */
+    /** Suspend only the thread that generated the event. */
     int SUSPEND_EVENT_THREAD = 1;
 
     /**
-     * Suspender todos los hilos.
+     * Suspend every thread.
      *
-     * <p>Es lo que un punto de interrupcion quiere y lo peor posible para un evento frecuente.
+     * <p>It is what a breakpoint wants and the worst possible thing for a frequent event.
      */
     int SUSPEND_ALL = 2;
 
     /**
-     * Si enabled.
+     * Whether enabled.
      *
-     * @return el resultado
+     * @return the result
      */
     boolean isEnabled();
 
     /**
-     * Fija el enabled.
+     * It fixes the enabled.
      *
-     * @param flag el boolean
+     * @param flag the boolean
      */
     void setEnabled(boolean flag);
 
     /**
-     * El enable.
+     * The enable.
      */
     void enable();
 
     /**
-     * El disable.
+     * The disable.
      */
     void disable();
 
     /**
-     * Filtra por count; solo con el pedido deshabilitado.
+     * It filters by count; only with the request disabled.
      *
-     * @param index el int
+     * @param index the int
      */
     void addCountFilter(int index);
 
     /**
-     * Fija el suspend policy.
+     * It fixes the suspend policy.
      *
-     * @param index el int
+     * @param index the int
      */
     void setSuspendPolicy(int index);
 
     /**
-     * El suspend policy.
+     * The suspend policy.
      *
-     * @return el resultado
+     * @return the result
      */
     int suspendPolicy();
 
     /**
-     * El put property.
+     * The put property.
      *
-     * @param obj el Object
-     * @param obj2 el Object
+     * @param obj the Object
+     * @param obj2 the Object
      */
     void putProperty(Object obj, Object obj2);
 
     /**
-     * El property.
+     * The property.
      *
-     * @param obj el Object
-     * @return el resultado
+     * @param obj the Object
+     * @return the result
      */
     Object getProperty(Object obj);
 }

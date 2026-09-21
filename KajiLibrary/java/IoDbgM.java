@@ -8,13 +8,17 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
 
-// Prueba cruzada de verdad: un archivo escrito por una VM y leido por la otra. Las de IoDbgK
-// comprueban el formato contra hexa fijo; esta comprueba que las dos VM se entienden sobre las
-// **mismas clases**, que es lo unico que prueba que el formato sirve para lo que existe.
+// A real cross test: a file written by one VM and read by the other. The ones of IoDbgK check the
+// format against fixed hexadecimal; this one checks that the two VMs understand each other about
+// the **same classes**, which is the only thing that proves the format serves for what exists.
 //
-//   real:  java -cp /tmp/iom IoDbgM write     -> escribe kaji-cross-in.ser
-//   kaji:  run-headless .../IoDbgM.class run  -> lee ese y escribe kaji-cross-out.ser
-//   real:  java -cp /tmp/iom IoDbgM check     -> lee el que escribio kaji
+//   real:  java -cp /tmp/iom IoDbgM write     -> writes kaji-cross-in.ser
+//   kaji:  run-headless .../IoDbgM.class run  -> reads that one and writes kaji-cross-out.ser
+//   real:  java -cp /tmp/iom IoDbgM check     -> reads the one kaji wrote
+//
+// The names of the classes that travel are left in Spanish on purpose: the same source is compiled
+// on both sides and the names go inside the stream, so renaming them here is only safe together
+// with the copy the real JDK compiles. The same reason as in IoTest.
 public class IoDbgM {
 
     static class Punto implements Serializable {
@@ -60,7 +64,7 @@ public class IoDbgM {
         }
     }
 
-    /** Con `putFields`/`readFields`: los campos por nombre en los dos sentidos. */
+    /** With `putFields`/`readFields`: the fields by name in both directions. */
     static class ConPut implements Serializable {
         private static final long serialVersionUID = 7L;
         int a;
@@ -75,17 +79,19 @@ public class IoDbgM {
             ObjectInputStream.GetField gf = in.readFields();
             this.a = gf.get("a", -1);
             this.b = (String) gf.get("b", null);
-            // Un campo que no existe **ni en el flujo ni en la clase** no es "no vino": es que el
-            // que llama se equivoco de nombre, y el contrato manda avisarselo en vez de devolverle
-            // su propio valor por omision, que le esconderia el error para siempre.
-            boolean aviso = false;
+            // A field that exists **neither in the stream nor in the class** is not "it did not
+            // come": it is that the caller got the name wrong, and the contract requires telling
+            // them instead of returning their own default value, which would hide the mistake from
+            // them for ever.
+            boolean warned = false;
             try {
                 gf.get("noExiste", 7);
-            } catch (IllegalArgumentException esperada) {
-                aviso = true;
+            } catch (IllegalArgumentException expected) {
+                warned = true;
             }
-            // Los que si estan tienen que decir que **no** salieron por omision: vinieron del flujo.
-            if (!aviso || gf.defaulted("a") || gf.defaulted("b")) {
+            // The ones that are there have to say that they did **not** come out by default: they
+            // came from the stream.
+            if (!warned || gf.defaulted("a") || gf.defaulted("b")) {
                 throw new IOException("readFields roto");
             }
         }
@@ -118,13 +124,13 @@ public class IoDbgM {
 
     enum Color implements Serializable { ROJO, VERDE }
 
-    private static File archivo(String nombre) {
+    private static File file(String name) {
         String t = System.getProperty("java.io.tmpdir");
-        return new File(t == null ? "." : t, nombre);
+        return new File(t == null ? "." : t, name);
     }
 
-    /** El grafo que viaja. Los valores son fijos para que el que lee pueda comprobarlos. */
-    private static Object[] grafo() {
+    /** The graph that travels. The values are fixed so that whoever reads can check them. */
+    private static Object[] graph() {
         Punto p = new Punto();
         p.x = 3;
         p.y = -4;
@@ -148,19 +154,19 @@ public class IoDbgM {
         h.abajo = 22;
         Externa ex = new Externa();
         ex.v = 3;
-        Nodo compartido = new Nodo();
-        compartido.nombre = "uno";
+        Nodo shared = new Nodo();
+        shared.nombre = "uno";
         return new Object[] {
             p, ciclo, t, ce, h, ex, Color.VERDE, new ConPut(),
             new int[] { 1, 2, 3 }, new String[] { "a", "b" }, new double[] { 0.5D },
-            "hola", null, compartido, compartido,
+            "hola", null, shared, shared,
         };
     }
 
-    private static void escribir(File f) throws IOException {
+    private static void write(File f) throws IOException {
         FileOutputStream fos = new FileOutputStream(f);
         ObjectOutputStream oos = new ObjectOutputStream(fos);
-        Object[] g = grafo();
+        Object[] g = graph();
         for (int i = 0; i < g.length; i++) {
             oos.writeObject(g[i]);
         }
@@ -168,8 +174,8 @@ public class IoDbgM {
         oos.close();
     }
 
-    /** -1 si todo dio, o el indice de lo primero que no. */
-    private static int verificar(File f) throws Exception {
+    /** -1 if everything passed, or the index of the first thing that did not. */
+    private static int check(File f) throws Exception {
         FileInputStream fis = new FileInputStream(f);
         ObjectInputStream in = new ObjectInputStream(fis);
         int i = 0;
@@ -182,7 +188,8 @@ public class IoDbgM {
         if (t.i != 70000 || t.j != -5000000000L) return i; i++;               // 3
         if (t.f != 1.5F || t.d != -2.25D) return i; i++;                      // 4
         if (!t.s.equals("eñe")) return i; i++;                           // 5
-        // El transient no viaja, y el constructor no corre: queda en el cero de la VM.
+        // The transient does not travel, and the constructor does not run: it is left at the zero
+        // of the VM.
         if (t.noSale != 0) return i; i++;                                     // 6
         ConEscritor ce = (ConEscritor) in.readObject();
         if (ce.n != 5 || ce.doble != 10 || !ce.extra.equals("extra")) return i; i++;  // 7
@@ -211,12 +218,12 @@ public class IoDbgM {
 
     public static int run() {
         try {
-            int r = verificar(archivo("kaji-cross-in.ser"));
-            System.out.println("leido del otro lado: " + r);
+            int r = check(file("kaji-cross-in.ser"));
+            System.out.println("read from the other side: " + r);
             if (r != -1) {
                 return r;
             }
-            escribir(archivo("kaji-cross-out.ser"));
+            write(file("kaji-cross-out.ser"));
             System.out.println("escrito kaji-cross-out.ser");
             return -1;
         } catch (Throwable e) {
@@ -227,12 +234,12 @@ public class IoDbgM {
 
     public static void main(String[] args) throws Exception {
         if (args.length > 0 && args[0].equals("write")) {
-            escribir(archivo("kaji-cross-in.ser"));
+            write(file("kaji-cross-in.ser"));
             System.out.println("escrito kaji-cross-in.ser");
             return;
         }
         if (args.length > 0 && args[0].equals("check")) {
-            System.out.println("leido del otro lado: " + verificar(archivo("kaji-cross-out.ser")));
+            System.out.println("read from the other side: " + check(file("kaji-cross-out.ser")));
             return;
         }
         System.out.println(run());

@@ -1,27 +1,26 @@
 package javax.xml.crypto;
 
 /**
- * KajiLibrary's javax.xml.crypto.XMLStructure -- cualquier pedazo de una estructura criptografica
- * XML.
+ * KajiLibrary's javax.xml.crypto.XMLStructure -- any piece of an XML cryptographic structure.
  *
- * <p>La interfaz raiz del paquete, y casi vacia a proposito: un solo metodo, que pregunta si una
- * caracteristica esta soportada. Todo lo demas --que sea una firma, una referencia, una clave-- lo
- * dicen las subinterfaces.
+ * <p>The root interface of the package, and almost empty on purpose: a single method, which asks
+ * whether a feature is supported. Everything else --that it is a signature, a reference, a key-- is
+ * said by the subinterfaces.
  *
- * <p>Existe porque las estructuras de XML-DSig se anidan de formas que no se pueden tipar de
- * antemano: el contenido de un {@code Object} o de un {@code KeyInfo} es "lo que sea que el
- * documento traiga", y eso necesita un tipo comun.
+ * <p>It exists because XML-DSig structures nest in ways that cannot be typed beforehand: the
+ * content of an {@code Object} or of a {@code KeyInfo} is "whatever the document brings", and that
+ * needs a common type.
  *
- * <p>{@link #isFeatureSupported} recibe un nombre de caracteristica --como los de un
- * {@code XMLReader}-- y devuelve false para las que no conoce. No hay una lista estandar; cada
- * implementacion define las suyas.
+ * <p>{@link #isFeatureSupported} receives a feature name --like those of an {@code XMLReader}-- and
+ * returns false for the ones it does not know. There is no standard list; each implementation
+ * defines its own.
  */
 public interface XMLStructure {
 
     /**
-     * Si esta implementacion soporta esa caracteristica.
+     * Whether this implementation supports that feature.
      *
-     * @throws NullPointerException si el nombre es null
+     * @throws NullPointerException if the name is null
      */
     boolean isFeatureSupported(String feature);
 }

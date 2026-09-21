@@ -15,46 +15,46 @@ import java.util.EventListener;
 import java.util.List;
 
 /**
- * El lado que **entrega** en un arrastre.
+ * The side that **delivers** in a drag.
  *
- * <p>Es el espejo de {@link DropTarget}: uno declara que un componente puede recibir, éste lleva
- * adelante el envío. Un solo `DragSource` alcanza para toda la aplicación —de ahí
- * {@link #getDefaultDragSource}— porque no guarda estado del arrastre; eso vive en el
- * {@link DragSourceContext} que se arma para cada uno.
+ * <p>It is the mirror of {@link DropTarget}: that one declares that a component can receive, this
+ * one carries the sending through. A single `DragSource` is enough for the whole application —hence
+ * {@link #getDefaultDragSource}— because it keeps no state of the drag; that lives in the {@link
+ * DragSourceContext} built for each one.
  *
- * <p>Los seis cursores de fábrica son los que ve el usuario mientras arrastra, y vienen de a pares:
- * uno para cuando se puede soltar y otro para cuando no. Es la única realimentación que tiene sobre
- * si el destino lo va a aceptar.
+ * <p>The six stock cursors are the ones the user sees while dragging, and they come in pairs: one
+ * for when it can be dropped and another for when it cannot. It is the only feedback they have
+ * about whether the destination is going to accept it.
  *
- * <p><strong>Esta implementación no puede empezar un arrastre.</strong> Un arrastre real lo maneja
- * el sistema operativo: captura el ratón, dibuja el cursor por encima de todas las ventanas y
- * negocia con programas ajenos. Sin sistema de ventanas no hay nada de eso, así que los cuatro
- * {@code startDrag} tiran {@link InvalidDnDOperationException} — que es exactamente la excepción que
- * declaran para "el sistema de arrastre no está en condiciones de hacer esto", y es verdad. Todo lo
- * demás de la clase —los cursores, los oyentes, el diccionario de formatos, el umbral— funciona.
+ * <p><strong>This implementation cannot start a drag.</strong> A real drag is handled by the
+ * operating system: it captures the mouse, draws the cursor over every window and negotiates with
+ * other programs. With no window system there is none of that, so the four {@code startDrag}s throw
+ * {@link InvalidDnDOperationException} — which is exactly the exception they declare for "the drag
+ * system is in no condition to do this", and it is true. Everything else of the class —the cursors,
+ * the listeners, the dictionary of formats, the threshold— works.
  */
 public class DragSource implements Serializable {
 
     private static final long serialVersionUID = 6236096958971414066L;
 
-    /** El cursor de copiar sobre un destino que acepta. */
+    /** The copy cursor over a destination that accepts. */
     public static final Cursor DefaultCopyDrop = cursor("DnD.Cursor.CopyDrop", Cursor.HAND_CURSOR);
 
-    /** El cursor de mover sobre un destino que acepta. */
+    /** The move cursor over a destination that accepts. */
     public static final Cursor DefaultMoveDrop = cursor("DnD.Cursor.MoveDrop", Cursor.HAND_CURSOR);
 
-    /** El cursor de enlazar sobre un destino que acepta. */
+    /** The link cursor over a destination that accepts. */
     public static final Cursor DefaultLinkDrop = cursor("DnD.Cursor.LinkDrop", Cursor.HAND_CURSOR);
 
-    /** El cursor de copiar donde no se puede soltar. */
+    /** The copy cursor where nothing can be dropped. */
     public static final Cursor DefaultCopyNoDrop =
             cursor("DnD.Cursor.CopyNoDrop", Cursor.DEFAULT_CURSOR);
 
-    /** El cursor de mover donde no se puede soltar. */
+    /** The move cursor where nothing can be dropped. */
     public static final Cursor DefaultMoveNoDrop =
             cursor("DnD.Cursor.MoveNoDrop", Cursor.DEFAULT_CURSOR);
 
-    /** El cursor de enlazar donde no se puede soltar. */
+    /** The link cursor where nothing can be dropped. */
     public static final Cursor DefaultLinkNoDrop =
             cursor("DnD.Cursor.LinkNoDrop", Cursor.DEFAULT_CURSOR);
 
@@ -67,33 +67,33 @@ public class DragSource implements Serializable {
             new ArrayList<DragSourceMotionListener>();
 
     /**
-     * El cursor del escritorio con ese nombre, o el predefinido si no está.
+     * The desktop cursor with that name, or the predefined one if it is not there.
      *
-     * <p>Es lo que hace el JDK cuando el escritorio no define el cursor: cae en uno predefinido en
-     * vez de quedarse sin cursor. Acá **nunca** está, porque esta biblioteca no trae descriptores de
-     * cursor, así que siempre se usa el predefinido — y eso es honesto: es el cursor que de verdad se
-     * vería.
+     * <p>It is what the JDK does when the desktop does not define the cursor: it falls back on a
+     * predefined one instead of being left with no cursor. Here it is **never** there, because this
+     * library brings no cursor descriptors, so the predefined one is always used — and that is
+     * honest: it is the cursor that would really be seen.
      */
-    private static Cursor cursor(String nombre, int predefinido) {
+    private static Cursor cursor(String name, int predefined) {
         try {
-            return Cursor.getSystemCustomCursor(nombre);
+            return Cursor.getSystemCustomCursor(name);
         } catch (AWTException e) {
-            return Cursor.getPredefinedCursor(predefinido);
+            return Cursor.getPredefinedCursor(predefined);
         }
     }
 
     /**
-     * Un origen de arrastre nuevo.
+     * A new drag source.
      *
-     * @throws HeadlessException si no hay pantalla
+     * @throws HeadlessException if there is no screen
      */
     public DragSource() throws HeadlessException {
     }
 
     /**
-     * El origen que comparte toda la aplicación.
+     * The source the whole application shares.
      *
-     * @throws HeadlessException si no hay pantalla
+     * @throws HeadlessException if there is no screen
      */
     public static DragSource getDefaultDragSource() {
         synchronized (DragSource.class) {
@@ -105,82 +105,82 @@ public class DragSource implements Serializable {
     }
 
     /**
-     * Si se puede mostrar una imagen que siga al puntero durante el arrastre.
+     * Whether an image that follows the pointer can be shown during the drag.
      *
-     * <p>Contesta `false`: dibujar por encima de todas las ventanas lo hace el sistema, y no hay.
+     * <p>It answers `false`: drawing over every window is done by the system, and there is none.
      */
     public static boolean isDragImageSupported() {
         return false;
     }
 
-    /** El mensaje único de todo lo que necesita el sistema de arrastre. */
-    private static InvalidDnDOperationException sinSistema() {
-        return new InvalidDnDOperationException("no hay sistema de arrastre nativo: empezar un "
-                + "arrastre requiere capturar el ratón y dibujar por encima de todas las ventanas, "
-                + "y esta biblioteca no trae sistema de ventanas");
+    /** The single message of everything the drag system needs. */
+    private static InvalidDnDOperationException noDragSystem() {
+        return new InvalidDnDOperationException("there is no native drag system: starting a "
+                + "drag requires capturing the mouse and drawing over every window, and this "
+                + "library brings no window system");
     }
 
     /**
-     * Arranca el arrastre con imagen y diccionario de formatos.
+     * Starts the drag with an image and a dictionary of formats.
      *
-     * @throws InvalidDnDOperationException siempre: no hay sistema de arrastre que lo lleve adelante
+     * @throws InvalidDnDOperationException always: there is no drag system to carry it through
      */
     public void startDrag(DragGestureEvent trigger, Cursor dragCursor, Image dragImage,
             Point dragOffset, Transferable transferable, DragSourceListener dsl, FlavorMap fm)
             throws InvalidDnDOperationException {
-        throw sinSistema();
+        throw noDragSystem();
     }
 
     /**
-     * Arranca el arrastre con diccionario de formatos.
+     * Starts the drag with a dictionary of formats.
      *
-     * @throws InvalidDnDOperationException siempre, por el mismo motivo
+     * @throws InvalidDnDOperationException always, for the same reason
      */
     public void startDrag(DragGestureEvent trigger, Cursor dragCursor, Transferable transferable,
             DragSourceListener dsl, FlavorMap fm) throws InvalidDnDOperationException {
-        throw sinSistema();
+        throw noDragSystem();
     }
 
     /**
-     * Arranca el arrastre con imagen.
+     * Starts the drag with an image.
      *
-     * @throws InvalidDnDOperationException siempre, por el mismo motivo
+     * @throws InvalidDnDOperationException always, for the same reason
      */
     public void startDrag(DragGestureEvent trigger, Cursor dragCursor, Image dragImage,
             Point imageOffset, Transferable transferable, DragSourceListener dsl)
             throws InvalidDnDOperationException {
-        throw sinSistema();
+        throw noDragSystem();
     }
 
     /**
-     * Arranca el arrastre.
+     * Starts the drag.
      *
-     * @throws InvalidDnDOperationException siempre, por el mismo motivo
+     * @throws InvalidDnDOperationException always, for the same reason
      */
     public void startDrag(DragGestureEvent trigger, Cursor dragCursor, Transferable transferable,
             DragSourceListener dsl) throws InvalidDnDOperationException {
-        throw sinSistema();
+        throw noDragSystem();
     }
 
     /**
-     * Arma el contexto de un arrastre; una subclase puede dar el suyo.
+     * Builds the context of a drag; a subclass can give its own.
      *
-     * @throws IllegalArgumentException si el disparador o el transferible son `null`
+     * @throws IllegalArgumentException if the trigger or the transferable is `null`
      */
     protected DragSourceContext createDragSourceContext(DragGestureEvent dgl, Cursor dragCursor,
             Image dragImage, Point imageOffset, Transferable t, DragSourceListener dsl) {
         return new DragSourceContext(dgl, dragCursor, dragImage, imageOffset, t, dsl);
     }
 
-    /** El diccionario entre formatos de Java y nombres nativos. */
+    /** The dictionary between Java formats and native names. */
     public FlavorMap getFlavorMap() {
         return this.flavorMap;
     }
 
     /**
-     * Arma un reconocedor de gesto de la clase pedida.
+     * Builds a gesture recogniser of the class asked for.
      *
-     * @return el reconocedor, o `null` si la plataforma no tiene uno de esa clase
+     * @return the recogniser, or `null` if the platform has none of that class
      */
     public <T extends DragGestureRecognizer> T createDragGestureRecognizer(
             Class<T> recognizerAbstractClass, Component c, int actions, DragGestureListener dgl) {
@@ -188,16 +188,17 @@ public class DragSource implements Serializable {
     }
 
     /**
-     * Arma el reconocedor de gesto que corresponda a esta plataforma.
+     * Builds the gesture recogniser that corresponds to this platform.
      *
-     * @return `null` siempre: el reconocedor concreto lo aporta el sistema de ventanas, y no hay
+     * @return `null` always: the concrete recogniser is provided by the window system, and there is
+     *     none
      */
     public DragGestureRecognizer createDefaultDragGestureRecognizer(Component c, int actions,
             DragGestureListener dgl) {
         return null;
     }
 
-    /** Suma un oyente del estado del arrastre; un `null` se ignora. */
+    /** Adds a listener of the state of the drag; a `null` is ignored. */
     public void addDragSourceListener(DragSourceListener dsl) {
         if (dsl == null) {
             return;
@@ -207,7 +208,7 @@ public class DragSource implements Serializable {
         }
     }
 
-    /** Saca a ese oyente. */
+    /** Removes that listener. */
     public void removeDragSourceListener(DragSourceListener dsl) {
         if (dsl == null) {
             return;
@@ -217,14 +218,14 @@ public class DragSource implements Serializable {
         }
     }
 
-    /** Los oyentes del estado del arrastre. */
+    /** The listeners of the state of the drag. */
     public DragSourceListener[] getDragSourceListeners() {
         synchronized (this) {
             return this.listeners.toArray(new DragSourceListener[this.listeners.size()]);
         }
     }
 
-    /** Suma un oyente del movimiento; un `null` se ignora. */
+    /** Adds a listener of the movement; a `null` is ignored. */
     public void addDragSourceMotionListener(DragSourceMotionListener dsml) {
         if (dsml == null) {
             return;
@@ -234,7 +235,7 @@ public class DragSource implements Serializable {
         }
     }
 
-    /** Saca a ese oyente. */
+    /** Removes that listener. */
     public void removeDragSourceMotionListener(DragSourceMotionListener dsml) {
         if (dsml == null) {
             return;
@@ -244,7 +245,7 @@ public class DragSource implements Serializable {
         }
     }
 
-    /** Los oyentes del movimiento. */
+    /** The listeners of the movement. */
     public DragSourceMotionListener[] getDragSourceMotionListeners() {
         synchronized (this) {
             return this.motionListeners.toArray(
@@ -253,9 +254,9 @@ public class DragSource implements Serializable {
     }
 
     /**
-     * Los oyentes de esa clase.
+     * The listeners of that class.
      *
-     * @throws ClassCastException si la clase no es una de las dos de oyente de arrastre
+     * @throws ClassCastException if the class is not one of the two drag listener ones
      */
     public <T extends EventListener> T[] getListeners(Class<T> listenerType) {
         EventListener[] out;
@@ -267,15 +268,15 @@ public class DragSource implements Serializable {
             out = new EventListener[0];
         }
         @SuppressWarnings("unchecked")
-        T[] tipado = (T[]) out;
-        return tipado;
+        T[] typed = (T[]) out;
+        return typed;
     }
 
     /**
-     * Cuántos píxeles hay que moverse para que sea un arrastre y no un clic.
+     * How many pixels one has to move for it to be a drag and not a click.
      *
-     * <p>Sale de la propiedad `awt.dnd.drag.threshold` si está puesta, y si no vale 5, que es el
-     * valor por omisión del JDK. Un valor no numérico o no positivo se ignora.
+     * <p>It comes from the `awt.dnd.drag.threshold` property if it is set, and if not it is worth
+     * 5, which is the JDK's default value. A value that is not numeric or not positive is ignored.
      */
     public static int getDragThreshold() {
         String prop = System.getProperty("awt.dnd.drag.threshold");
@@ -286,7 +287,7 @@ public class DragSource implements Serializable {
                     return v;
                 }
             } catch (NumberFormatException e) {
-                // Propiedad mal escrita: se usa el valor por omisión.
+                // Badly written property: the default value is used.
             }
         }
         return 5;

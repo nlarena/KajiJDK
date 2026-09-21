@@ -5,22 +5,22 @@ import java.lang.classfile.Opcode;
 import java.lang.classfile.TypeKind;
 import jdk.internal.classfile.impl.Instructions;
 
-// La guarda de la cima de la pila en una variable local. Vale la misma nota que en
-// {@link LoadInstruction}: las tres codificaciones son una sola operación.
+// The store of the top of the stack into a local variable. The same note as in
+// {@link LoadInstruction} holds: the three encodings are a single operation.
 public interface StoreInstruction extends Instruction {
 
-    /** La ranura de variable local. */
+    /** The local variable slot. */
     int slot();
 
-    /** El tipo que guarda. */
+    /** The type it stores. */
     TypeKind typeKind();
 
-    /** La guarda de este tipo en esta ranura, en la codificación más corta que le entre. */
+    /** The store of this type into this slot, in the shortest encoding it fits into. */
     public static StoreInstruction of(TypeKind typeKind, int slot) {
         return Instructions.store(typeKind, slot);
     }
 
-    /** La guarda de este opcode en esta ranura. */
+    /** The store of this opcode into this slot. */
     public static StoreInstruction of(Opcode op, int slot) {
         return Instructions.store(op, slot);
     }

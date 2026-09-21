@@ -1,28 +1,28 @@
 package java.rmi;
 
 /**
- * KajiLibrary's java.rmi.RMISecurityException -- obsoleta desde 1.2.
+ * KajiLibrary's java.rmi.RMISecurityException -- deprecated since 1.2.
  *
- * <p>Ya no la lanza nadie: donde antes salia esta, ahora sale {@link SecurityException} a secas. Se
- * mantiene solo para que el codigo viejo compile.
+ * <p>Nobody throws it any more: where this used to come out, a plain {@link SecurityException}
+ * comes out now. It is kept only so old code compiles.
  *
- * <p>El segundo constructor toma dos cadenas y nunca quedo claro que significaba la segunda; tampoco
- * importa ya.
+ * <p>The second constructor takes two strings and it was never clear what the second one meant; it
+ * does not matter any more either.
  */
 @Deprecated
 public class RMISecurityException extends SecurityException {
 
     private static final long serialVersionUID = -8433406075740433514L;
 
-    /** @param name el mensaje */
+    /** @param name the message */
     @Deprecated
     public RMISecurityException(String name) {
         super(name);
     }
 
     /**
-     * @param name el mensaje
-     * @param arg sin uso
+     * @param name the message
+     * @param arg unused
      */
     @Deprecated
     public RMISecurityException(String name, String arg) {

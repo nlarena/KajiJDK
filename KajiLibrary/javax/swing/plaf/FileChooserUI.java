@@ -8,45 +8,46 @@ import javax.swing.filechooser.FileFilter;
 import javax.swing.filechooser.FileView;
 
 /**
- * El aspecto de un {@link JFileChooser}.
+ * A {@link JFileChooser}'s look and feel.
  *
- * <h2>Por que el filtro de "todos" lo da el aspecto</h2>
+ * <h2>Why the "accept all" filter comes from the look and feel</h2>
  *
- * <p>{@link #getAcceptAllFileFilter} devuelve el filtro que acepta cualquier archivo. Podria ser
- * una constante del selector, pero su descripcion es texto que se le muestra al usuario y depende
- * del idioma y del sistema; por eso lo arma el aspecto, que es quien tiene la tabla de textos.
+ * <p>{@link #getAcceptAllFileFilter} returns the filter that accepts any file. It could be a
+ * constant of the chooser's, but its description is text shown to the user and depends on the
+ * language and the system; that is why the look and feel builds it, being the one that has the
+ * table of texts.
  *
- * <p>Lo mismo vale para {@link #getApproveButtonText} y {@link #getDialogTitle}: el selector solo
- * los pide cuando el programa no puso los suyos.
+ * <p>The same goes for {@link #getApproveButtonText} and {@link #getDialogTitle}: the chooser
+ * only asks for them when the program did not set its own.
  */
 public abstract class FileChooserUI extends ComponentUI {
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected FileChooserUI() {
     }
 
-    /** El filtro que acepta todo; ver la nota de la clase. */
+    /** The filter that accepts everything; see the class note. */
     public abstract FileFilter getAcceptAllFileFilter(JFileChooser fc);
 
-    /** La vista con la que se nombran y dibujan los archivos. */
+    /** The view with which files are named and drawn. */
     public abstract FileView getFileView(JFileChooser fc);
 
-    /** El texto del boton de aceptar. */
+    /** The accept button's text. */
     public abstract String getApproveButtonText(JFileChooser fc);
 
-    /** El titulo del dialogo. */
+    /** The dialog's title. */
     public abstract String getDialogTitle(JFileChooser fc);
 
-    /** Vuelve a leer la carpeta actual del disco. */
+    /** Reads the current folder from disk again. */
     public abstract void rescanCurrentDirectory(JFileChooser fc);
 
-    /** Desplaza la lista para que ese archivo se vea. */
+    /** Scrolls the list so that that file is seen. */
     public abstract void ensureFileIsVisible(JFileChooser fc, File f);
 
     /**
-     * El boton que se activa con Enter.
+     * The button that is activated with Enter.
      *
-     * @return nulo si el aspecto no designa ninguno.
+     * @return null if the look and feel designates none.
      */
     public JButton getDefaultButton(JFileChooser fc) {
         return null;

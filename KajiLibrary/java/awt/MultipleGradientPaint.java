@@ -3,48 +3,52 @@ package java.awt;
 import java.awt.geom.AffineTransform;
 
 /**
- * La base de los degradés de **varias paradas**.
+ * The base of the gradients with **several stops**.
  *
- * <p>Un {@link GradientPaint} va de un color a otro. Éstos van por una lista de colores, cada uno
- * anclado a una fracción del recorrido, y entre dos paradas se interpola. Es la diferencia entre un
- * degradé y un arcoíris.
+ * <p>A {@link GradientPaint} goes from one colour to another. These go through a list of colours,
+ * each anchored to a fraction of the way, and between two stops the colour is interpolated. It is
+ * the difference between a gradient and a rainbow.
  *
- * <p>Tres decisiones se declaran acá porque valen para todos:
+ * <p>Three decisions are declared here because they apply to all:
  *
  * <ul>
- *   <li>el <strong>ciclo</strong>, que dice qué pasa más allá del recorrido: se estira el color del
- *       extremo, se repite el degradé, o se repite en espejo, que es la única de las tres que no
- *       deja una costura visible;
- *   <li>el <strong>espacio de color</strong> en el que se interpola. Interpolar en sRGB de negro a
- *       blanco da un medio más claro que el gris de verdad, porque sRGB no es lineal en luz;
- *       interpolar en RGB lineal da el gris físicamente correcto, que a veces se ve más sucio.
- *       Ninguna de las dos es la buena siempre, por eso se elige;
- *   <li>la <strong>transformación</strong> propia del degradé, que se compone con la del dibujado y
- *       permite rotar o estirar el degradé sin tocar la figura.
+ *   <li>the <strong>cycle</strong>, which says what happens beyond the way: the end colour is
+ *       stretched, the gradient is repeated, or it is repeated as a mirror, which is the only one
+ *       of the three that leaves no visible seam;
+ *   <li>the <strong>colour space</strong> interpolation happens in. Halfway from black to white in
+ *       sRGB is darker than the physically halfway grey, because sRGB is not linear in light;
+ *       interpolating in linear RGB gives the physically halfway grey, which looks lighter. (This
+ *       note had the sRGB middle lighter.) Neither is always the right one, which is why it is
+ *       chosen;
+ *   <li>the gradient's own <strong>transformation</strong>, which is composed with the drawing's
+ *       and allows rotating or stretching the gradient without touching the shape.
  * </ul>
  */
 public abstract class MultipleGradientPaint implements Paint {
 
-    /** Qué pasa fuera del recorrido del degradé. */
+    /** What happens outside the gradient's way. */
     public static enum CycleMethod {
 
-        /** Se estira el color del extremo. */
+        /** The end colour is stretched. */
         NO_CYCLE,
 
-        /** El degradé se repite, con una costura en cada vuelta. */
+        /**
+         * The gradient is repeated as a mirror, without a seam. (This comment and the next were
+         * swapped.)
+         */
         REFLECT,
 
-        /** El degradé se repite en espejo, sin costura. */
+        /** The gradient is repeated, with a seam at each turn. */
         REPEAT
     }
 
-    /** En qué espacio de color se interpola. */
+    /** Which colour space interpolation happens in. */
     public static enum ColorSpaceType {
 
-        /** En sRGB, tal como se ven los colores. */
+        /** In sRGB, as the colours look. */
         SRGB,
 
-        /** En RGB lineal, proporcional a la luz. */
+        /** In linear RGB, proportional to light. */
         LINEAR_RGB
     }
 
@@ -56,11 +60,11 @@ public abstract class MultipleGradientPaint implements Paint {
     final int transparency;
 
     /**
-     * Con las paradas, el ciclo, el espacio y la transformación.
+     * With the stops, the cycle, the space and the transformation.
      *
-     * @throws NullPointerException si falta alguno de los cinco
-     * @throws IllegalArgumentException si hay menos de dos paradas, si los arreglos no miden lo
-     *     mismo, o si las fracciones no están en 0..1 y en orden estrictamente creciente
+     * @throws NullPointerException if any of the five is missing
+     * @throws IllegalArgumentException if there are fewer than two stops, if the arrays differ in
+     *     length, or if the fractions are not in 0..1 and in strictly increasing order
      */
     MultipleGradientPaint(float[] fractions, Color[] colors, CycleMethod cycleMethod,
             ColorSpaceType colorSpace, AffineTransform gradientTransform) {
@@ -85,8 +89,8 @@ public abstract class MultipleGradientPaint implements Paint {
         if (colors.length < 2) {
             throw new IllegalArgumentException("User must specify at least 2 colors");
         }
-        // Las fracciones tienen que crecer **estrictamente**: dos paradas en el mismo lugar serian
-        // un salto de ancho cero y no hay forma de interpolar entre ellas.
+        // The fractions have to grow **strictly**: two stops at the same place would be a
+        // zero-width jump and there is no way to interpolate between them.
         float previous = -1.0f;
         for (int i = 0; i < fractions.length; i++) {
             if (fractions[i] < 0.0f || fractions[i] > 1.0f) {
@@ -107,53 +111,53 @@ public abstract class MultipleGradientPaint implements Paint {
         this.cycleMethod = cycleMethod;
         this.colorSpace = colorSpace;
         this.gradientTransform = (AffineTransform) gradientTransform.clone();
-        boolean opaco = true;
+        boolean opaque = true;
         for (int i = 0; i < colors.length; i++) {
             if (colors[i].getAlpha() != 0xFF) {
-                opaco = false;
+                opaque = false;
                 break;
             }
         }
-        this.transparency = opaco ? Transparency.OPAQUE : Transparency.TRANSLUCENT;
+        this.transparency = opaque ? Transparency.OPAQUE : Transparency.TRANSLUCENT;
     }
 
-    /** Dónde está cada parada, de 0 a 1. */
+    /** Where each stop is, from 0 to 1. */
     public final float[] getFractions() {
         return this.fractions.clone();
     }
 
-    /** El color de cada parada. */
+    /** The colour of each stop. */
     public final Color[] getColors() {
         return this.colors.clone();
     }
 
-    /** Qué pasa fuera del recorrido. */
+    /** What happens outside the way. */
     public final CycleMethod getCycleMethod() {
         return this.cycleMethod;
     }
 
-    /** En qué espacio se interpola. */
+    /** Which space interpolation happens in. */
     public final ColorSpaceType getColorSpace() {
         return this.colorSpace;
     }
 
-    /** La transformación propia del degradé. */
+    /** The gradient's own transformation. */
     public final AffineTransform getTransform() {
         return (AffineTransform) this.gradientTransform.clone();
     }
 
-    /** `OPAQUE` si todas las paradas son opacas, `TRANSLUCENT` si alguna no. */
+    /** `OPAQUE` if all the stops are opaque, `TRANSLUCENT` if any is not. */
     public final int getTransparency() {
         return this.transparency;
     }
 
     /**
-     * El color a la fracción `t` del recorrido, ya resuelto el ciclo.
+     * The colour at fraction `t` of the way, with the cycle already resolved.
      *
-     * <p>Lo usan las dos subclases: lo único que cambia entre un degradé lineal y uno radial es cómo
-     * se calcula `t`.
+     * <p>Both subclasses use it: the only thing that changes between a linear gradient and a radial
+     * one is how `t` is computed.
      */
-    final int colorEn(float t) {
+    final int colorForFraction(float t) {
         float f = t;
         if (this.cycleMethod == CycleMethod.NO_CYCLE) {
             if (f < 0.0f) {
@@ -162,15 +166,16 @@ public abstract class MultipleGradientPaint implements Paint {
                 f = 1.0f;
             }
         } else {
-            // El resto de dividir por 1 deja la parte fraccionaria; para los negativos hay que
-            // sumarle uno, porque el resto de Java conserva el signo del dividendo.
+            // `f - floor(f)` keeps the fractional part, already in [0, 1) for negatives too. (This
+            // comment spoke of Java's remainder keeping the dividend's sign and having to add one;
+            // the code does not use the remainder.)
             f = f - (float) Math.floor(f);
             if (this.cycleMethod == CycleMethod.REFLECT) {
-                float doble = (t - (float) Math.floor(t / 2) * 2);
-                if (doble > 1.0f) {
-                    f = 2.0f - doble;
+                float folded = (t - (float) Math.floor(t / 2) * 2);
+                if (folded > 1.0f) {
+                    f = 2.0f - folded;
                 } else {
-                    f = doble;
+                    f = folded;
                 }
             }
         }
@@ -187,51 +192,51 @@ public abstract class MultipleGradientPaint implements Paint {
         float lo = this.fractions[i];
         float hi = this.fractions[i + 1];
         float u = (f - lo) / (hi - lo);
-        return this.mezclar(this.colors[i], this.colors[i + 1], u);
+        return this.blend(this.colors[i], this.colors[i + 1], u);
     }
 
-    /** Interpola dos colores, en el espacio que se haya declarado. */
-    private int mezclar(Color a, Color b, float u) {
+    /** Interpolates two colours, in the space that was declared. */
+    private int blend(Color a, Color b, float u) {
         int aa = a.getAlpha();
         int ab = b.getAlpha();
-        int alfa = (int) (aa + (ab - aa) * u + 0.5f);
+        int alpha = (int) (aa + (ab - aa) * u + 0.5f);
         if (this.colorSpace == ColorSpaceType.LINEAR_RGB) {
-            float r = interpolarLineal(a.getRed(), b.getRed(), u);
-            float g = interpolarLineal(a.getGreen(), b.getGreen(), u);
-            float bl = interpolarLineal(a.getBlue(), b.getBlue(), u);
-            return (alfa << 24) | (redondear(r) << 16) | (redondear(g) << 8) | redondear(bl);
+            float r = interpolateLinear(a.getRed(), b.getRed(), u);
+            float g = interpolateLinear(a.getGreen(), b.getGreen(), u);
+            float bl = interpolateLinear(a.getBlue(), b.getBlue(), u);
+            return (alpha << 24) | (toByte(r) << 16) | (toByte(g) << 8) | toByte(bl);
         }
         int r = (int) (a.getRed() + (b.getRed() - a.getRed()) * u + 0.5f);
         int g = (int) (a.getGreen() + (b.getGreen() - a.getGreen()) * u + 0.5f);
         int bl = (int) (a.getBlue() + (b.getBlue() - a.getBlue()) * u + 0.5f);
-        return (alfa << 24) | (r << 16) | (g << 8) | bl;
+        return (alpha << 24) | (r << 16) | (g << 8) | bl;
     }
 
-    /** Interpola dos componentes sRGB pasando por luz lineal. */
-    private static float interpolarLineal(int a, int b, float u) {
-        double la = aLineal(a / 255.0);
-        double lb = aLineal(b / 255.0);
-        return (float) (aSrgb(la + (lb - la) * u) * 255.0);
+    /** Interpolates two sRGB components by going through linear light. */
+    private static float interpolateLinear(int a, int b, float u) {
+        double la = toLinear(a / 255.0);
+        double lb = toLinear(b / 255.0);
+        return (float) (toSrgb(la + (lb - la) * u) * 255.0);
     }
 
-    /** De sRGB a luz lineal. */
-    private static double aLineal(double c) {
+    /** From sRGB to linear light. */
+    private static double toLinear(double c) {
         if (c <= 0.04045) {
             return c / 12.92;
         }
         return Math.pow((c + 0.055) / 1.055, 2.4);
     }
 
-    /** De luz lineal a sRGB. */
-    private static double aSrgb(double c) {
+    /** From linear light to sRGB. */
+    private static double toSrgb(double c) {
         if (c <= 0.0031308) {
             return c * 12.92;
         }
         return 1.055 * Math.pow(c, 1.0 / 2.4) - 0.055;
     }
 
-    /** Un `float` de 0 a 255 llevado a un byte. */
-    private static int redondear(float v) {
+    /** A `float` from 0 to 255 brought into a byte. */
+    private static int toByte(float v) {
         int i = (int) (v + 0.5f);
         if (i < 0) {
             return 0;

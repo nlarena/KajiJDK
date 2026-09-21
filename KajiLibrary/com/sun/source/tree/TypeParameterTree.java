@@ -4,8 +4,8 @@ import java.util.List;
 import javax.lang.model.element.Name;
 
 /**
- * Un parametro de tipo con sus limites, como el `<T extends Number>` de una
- * declaracion.
+ * A type parameter with its bounds, such as the `<T extends Number>` of a
+ * declaration.
  */
 public interface TypeParameterTree extends Tree {
 

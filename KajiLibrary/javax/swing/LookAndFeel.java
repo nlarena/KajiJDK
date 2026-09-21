@@ -3,22 +3,23 @@ package javax.swing;
 import javax.swing.plaf.UIResource;
 
 /**
- * Un aspecto: el conjunto de {@code ComponentUI} y valores por omision que dan a Swing una cara.
+ * A look and feel: the set of {@code ComponentUI}s and default values that give Swing a face.
  *
- * <h2>Lo que hay y lo que no</h2>
+ * <h2>What there is and what there is not</h2>
  *
- * <p>Esta biblioteca tiene <strong>un solo aspecto</strong>: el basico, con los valores por
- * omision medidos en Metal, instalados directamente por cada {@code updateUI}.
+ * <p>This library has <strong>a single look and feel</strong>: the basic one, with the default
+ * values measured in Metal, installed directly by each {@code updateUI}.
  *
- * <p>Esta nota decia que tampoco estaban los metodos que consultan las tablas de
- * {@link UIManager}, porque no habia {@code UIManager} donde registrarlas y sin tablas solo podrian
- * mentir. Ya lo hay, junto con {@link UIDefaults}, asi que estan todos: los que instalan colores,
- * tipografia y bordes, los que arman mapas de teclas, y {@link #getLayoutStyle}.
+ * <p>This note used to say that the methods that consult {@link UIManager}'s tables were not
+ * there either, because there was no {@code UIManager} to register them in and with no tables
+ * they could only lie. There is one now, along with {@link UIDefaults}, so they are all there:
+ * those that install colours, typeface and borders, those that build key maps, and
+ * {@link #getLayoutStyle}.
  *
- * <p>Lo que si esta es lo que no depende de tablas: {@link #installProperty}, que es como un
- * aspecto pone una propiedad <em>sin pisar lo que el usuario puso</em>, y
- * {@link #uninstallBorder}, que quita un borde solo si es del aspecto. Los dos se apoyan en
- * {@link UIResource}, que es la manera de distinguir lo uno de lo otro.
+ * <p>What is there is what does not depend on tables: {@link #installProperty}, which is how a
+ * look and feel sets a property <em>without overwriting what the user set</em>, and
+ * {@link #uninstallBorder}, which takes a border away only if it is the look and feel's. Both
+ * rest on {@link UIResource}, which is the way of telling one from the other.
  */
 public abstract class LookAndFeel {
 
@@ -26,18 +27,18 @@ public abstract class LookAndFeel {
     }
 
     /**
-     * Pone una propiedad en el componente, salvo que el usuario ya la haya puesto.
+     * It sets a property in the component, unless the user has already set it.
      *
-     * <p>Es la regla de convivencia entre aspecto y programador: el aspecto propone, el programador
-     * dispone. El componente recuerda cuales propiedades le puso el programador, y esta llamada
-     * respeta esas. Las propiedades admitidas dependen del componente; una que no admite es un
-     * {@code IllegalArgumentException}.
+     * <p>It is the rule of coexistence between look and feel and programmer: the look and feel
+     * proposes, the programmer disposes. The component remembers which properties the programmer
+     * set, and this call respects those. The properties that are admitted depend on the component;
+     * one that is not admitted is an {@code IllegalArgumentException}.
      */
     public static void installProperty(JComponent c, String propertyName, Object propertyValue) {
         c.setUIProperty(propertyName, propertyValue);
     }
 
-    /** Quita el borde del componente si lo puso un aspecto; uno del usuario se queda. */
+    /** It takes the component's border away if a look and feel set it; one of the user's stays. */
     public static void uninstallBorder(JComponent c) {
         if (c.getBorder() instanceof UIResource) {
             c.setBorder(null);
@@ -45,59 +46,59 @@ public abstract class LookAndFeel {
     }
 
     /**
-     * El icono deshabilitado que corresponde a ese icono: ninguno.
+     * The disabled icon that corresponds to that icon: none.
      *
-     * <p>El JDK fabrica uno agrisado cuando el icono es un {@code ImageIcon}, y {@code null} para
-     * cualquier otro. Sin {@code ImageIcon}, la respuesta es siempre la segunda, y quien la recibe
-     * —{@code AbstractButton}, {@code JLabel}— pinta el icono normal.
+     * <p>The JDK makes a greyed one when the icon is an {@code ImageIcon}, and {@code null} for any
+     * other. With no {@code ImageIcon}, the answer is always the second, and whoever receives it
+     * -- {@code AbstractButton}, {@code JLabel} -- paints the ordinary icon.
      */
     public Icon getDisabledIcon(JComponent component, Icon icon) {
         return null;
     }
 
-    /** El icono deshabilitado y seleccionado: ninguno, por lo mismo que {@link #getDisabledIcon}. */
+    /** The disabled and selected icon: none, for the same reason as {@link #getDisabledIcon}. */
     public Icon getDisabledSelectedIcon(JComponent component, Icon icon) {
         return null;
     }
 
-    /** Un nombre corto para mostrar, como "Metal". */
+    /** A short name to show, such as "Metal". */
     public abstract String getName();
 
-    /** Un identificador estable, como "Metal"; el nombre puede cambiar, este no. */
+    /** A stable identifier, such as "Metal"; the name may change, this one does not. */
     public abstract String getID();
 
-    /** Una linea que lo describe. */
+    /** A line that describes it. */
     public abstract String getDescription();
 
-    /** Si este aspecto puede decorar las ventanas el mismo: no, este no. */
+    /** Whether this look and feel can decorate the windows itself: no, this one cannot. */
     public boolean getSupportsWindowDecorations() {
         return false;
     }
 
-    /** Si es el aspecto nativo de la plataforma. */
+    /** Whether it is the platform's native look and feel. */
     public abstract boolean isNativeLookAndFeel();
 
-    /** Si este aspecto puede usarse en esta plataforma. */
+    /** Whether this look and feel can be used on this platform. */
     public abstract boolean isSupportedLookAndFeel();
 
-    /** Se llama al instalarlo; no hay nada que preparar. */
+    /** It is called on installing it; there is nothing to prepare. */
     public void initialize() {
     }
 
-    /** Se llama al desinstalarlo; no hay nada que soltar. */
     /**
-     * La tabla de valores de este aspecto.
+     * This look and feel's table of values.
      *
-     * <p>Devuelve {@code null} salvo que la subclase la arme. No es una omision: un aspecto que no
-     * define valores propios usa los que ya estan en {@link UIManager}, y devolver una tabla vacia
-     * en lugar de {@code null} los borraria a todos al instalarse.
+     * <p>It returns {@code null} unless the subclass builds it. It is not an omission: a look and
+     * feel that defines no values of its own uses those that are already in {@link UIManager}, and
+     * returning an empty table instead of {@code null} would erase them all on installing.
      *
-     * @return la tabla, o {@code null} si este aspecto no tiene una propia
+     * @return the table, or {@code null} if this look and feel does not have one of its own
      */
     public UIDefaults getDefaults() {
         return null;
     }
 
+    /** It is called on uninstalling it; there is nothing to let go of. */
     public void uninitialize() {
     }
 
@@ -105,15 +106,16 @@ public abstract class LookAndFeel {
         return "[" + getDescription() + " - " + getClass().getName() + "]";
     }
 
-    // -- instalar valores del aspecto ------------------------------------------------------------
+    // -- installing the look and feel's values ---------------------------------------------------
 
     /**
-     * Le pone al componente el frente y el fondo de la tabla, si no los tiene puestos a mano.
+     * It gives the component the foreground and the background from the table, if it does not
+     * have them set by hand.
      *
-     * <p>"Puestos a mano" se decide por {@link UIResource}: un color que es recurso de aspecto lo
-     * puso el aspecto anterior y se puede pisar; uno que no lo es lo puso el programa y se respeta.
-     * Es toda la logica de estos cuatro metodos, y es lo que hace que cambiar de aspecto no borre lo
-     * que el programa configuro.
+     * <p>"Set by hand" is decided by {@link UIResource}: a colour that is a look and feel
+     * resource was set by the previous look and feel and may be overwritten; one that is not was
+     * set by the program and is respected. It is the whole logic of these four methods, and it is
+     * what keeps changing the look and feel from erasing what the program configured.
      */
     public static void installColors(JComponent c, String defaultBgName,
             String defaultFgName) {
@@ -127,7 +129,7 @@ public abstract class LookAndFeel {
         }
     }
 
-    /** Lo mismo, y ademas la tipografia; ver {@link #installColors}. */
+    /** The same, and also the typeface; see {@link #installColors}. */
     public static void installColorsAndFont(JComponent c, String defaultBgName,
             String defaultFgName, String defaultFontName) {
         java.awt.Font f = c.getFont();
@@ -138,9 +140,9 @@ public abstract class LookAndFeel {
     }
 
     /**
-     * Le pone el borde de la tabla, si no tiene uno puesto a mano.
+     * It gives it the border from the table, if it does not have one set by hand.
      *
-     * @throws NullPointerException si el componente es nulo
+     * @throws NullPointerException if the component is null
      */
     public static void installBorder(JComponent c, String defaultBorderName) {
         javax.swing.border.Border b = c.getBorder();
@@ -149,16 +151,16 @@ public abstract class LookAndFeel {
         }
     }
 
-    // -- mapas de teclas -------------------------------------------------------------------------
+    // -- key maps --------------------------------------------------------------------------------
 
     /**
-     * Convierte una lista plana de pares en ataduras de tecla a accion.
+     * It turns a flat list of pairs into bindings from key to action.
      *
-     * <p>El arreglo va de a dos: una tecla -- {@link KeyStroke} o su texto -- y el nombre de la
-     * accion. Se escribe asi porque un aspecto define cien ataduras y un arreglo literal es mas
-     * corto y mas legible que cien llamadas.
+     * <p>The array goes two at a time: a key -- a {@link KeyStroke} or its text -- and the
+     * action's name. It is written like that because a look and feel defines a hundred bindings
+     * and a literal array is shorter and more readable than a hundred calls.
      *
-     * @throws IllegalArgumentException si el arreglo es nulo o tiene un numero impar de elementos
+     * @throws IllegalArgumentException if the array is null or has an odd number of elements
      */
     public static javax.swing.text.JTextComponent.KeyBinding[] makeKeyBindings(
             Object[] keyBindingList) {
@@ -179,10 +181,11 @@ public abstract class LookAndFeel {
     }
 
     /**
-     * Un mapa de teclas armado con esa lista plana; ver {@link #makeKeyBindings}.
+     * A key map built with that flat list; see {@link #makeKeyBindings}.
      *
-     * <p>El mapa que sale es un recurso de aspecto, y eso importa: es lo que permite reemplazarlo
-     * entero al cambiar de aspecto sin tocar las ataduras que puso el programa.
+     * <p>The map that comes out is a look and feel resource, and that matters: it is what allows
+     * it to be replaced whole on changing look and feel without touching the bindings the program
+     * set.
      */
     public static InputMap makeInputMap(Object[] keys) {
         InputMap retMap = new javax.swing.plaf.InputMapUIResource();
@@ -190,7 +193,7 @@ public abstract class LookAndFeel {
         return retMap;
     }
 
-    /** Lo mismo, para las ataduras que valen mientras la ventana tenga el foco. */
+    /** The same, for the bindings that hold while the window has the focus. */
     public static ComponentInputMap makeComponentInputMap(JComponent c, Object[] keys) {
         ComponentInputMap retMap = new javax.swing.plaf.ComponentInputMapUIResource(c);
         loadKeyBindings(retMap, keys);
@@ -198,10 +201,10 @@ public abstract class LookAndFeel {
     }
 
     /**
-     * Carga esa lista plana en un mapa que ya existe.
+     * It loads that flat list into a map that already exists.
      *
-     * <p>Una lista nula no hace nada -- que es lo que hace el JDK --: un aspecto que no define
-     * ataduras para un componente no es un error.
+     * <p>A null list does nothing -- which is what the JDK does --: a look and feel that defines
+     * no bindings for a component is not an error.
      */
     public static void loadKeyBindings(InputMap retMap, Object[] keys) {
         if (keys != null) {
@@ -215,23 +218,24 @@ public abstract class LookAndFeel {
     }
 
     /**
-     * Un icono que se carga recien cuando alguien lo dibuja.
+     * An icon that is loaded only when somebody draws it.
      *
-     * <p>La demora importa: una tabla de aspecto nombra decenas de iconos y una pantalla usa unos
-     * pocos. Cargarlos todos al instalar el aspecto seria leer decenas de archivos para nada.
+     * <p>The delay matters: a look and feel's table names dozens of icons and a screen uses a few.
+     * Loading them all on installing the look and feel would be reading dozens of files for
+     * nothing.
      */
     public static Object makeIcon(final Class<?> baseClass, final String gifFile) {
-        return new IconoDemorado(baseClass, gifFile);
+        return new LazyIcon(baseClass, gifFile);
     }
 
-    // -- lo que sale del escritorio --------------------------------------------------------------
+    // -- what comes from the desktop -------------------------------------------------------------
 
     /**
-     * Un valor de configuracion del escritorio, o el de reserva si no lo hay.
+     * A configuration value from the desktop, or the fallback one if there is none.
      *
-     * <p>Son cosas como la velocidad del cursor o si el sistema pide subrayar los atajos. Esta
-     * biblioteca no consulta al escritorio, asi que siempre devuelve el de reserva -- y lo dice, en
-     * vez de inventar un numero que parezca del sistema.
+     * <p>They are things like the caret's speed or whether the system asks for the shortcuts to be
+     * underlined. This library does not consult the desktop, so it always returns the fallback one
+     * -- and it says so, instead of inventing a number that looks like the system's.
      */
     public static Object getDesktopPropertyValue(String systemPropertyName,
             Object fallbackValue) {
@@ -250,10 +254,10 @@ public abstract class LookAndFeel {
     }
 
     /**
-     * Como se le avisa al usuario que hizo algo invalido.
+     * How the user is told they did something invalid.
      *
-     * <p>Lo normal es un pitido. Aca no suena nada: no hay con que. Un aspecto de verdad lo
-     * sobreescribe.
+     * <p>The usual thing is a beep. Here nothing sounds: there is nothing to sound with. A real
+     * look and feel overrides it.
      */
     public void provideErrorFeedback(java.awt.Component component) {
         java.awt.Toolkit toolkit = java.awt.Toolkit.getDefaultToolkit();
@@ -263,50 +267,50 @@ public abstract class LookAndFeel {
     }
 
     /**
-     * El espaciado que este aspecto recomienda entre componentes.
+     * The spacing this look and feel recommends between components.
      *
-     * <p>Nulo -- que es lo de omision -- deja que {@link LayoutStyle#getInstance} use el de siempre;
-     * ver la nota de esa clase.
+     * <p>Null -- which is the default -- lets {@link LayoutStyle#getInstance} use the usual one;
+     * see that class's note.
      */
     public LayoutStyle getLayoutStyle() {
         return null;
     }
 
-    /** El icono que se carga al primer dibujado; ver {@link LookAndFeel#makeIcon}. */
-    private static class IconoDemorado implements Icon, UIResource, java.io.Serializable {
+    /** The icon that is loaded on the first drawing; see {@link LookAndFeel#makeIcon}. */
+    private static class LazyIcon implements Icon, UIResource, java.io.Serializable {
 
         private final Class<?> baseClass;
         private final String gifFile;
-        private Icon icono;
+        private Icon icon;
 
-        IconoDemorado(Class<?> baseClass, String gifFile) {
+        LazyIcon(Class<?> baseClass, String gifFile) {
             this.baseClass = baseClass;
             this.gifFile = gifFile;
         }
 
-        private Icon cargar() {
-            if (icono == null) {
+        private Icon load() {
+            if (icon == null) {
                 java.net.URL url = baseClass.getResource(gifFile);
-                icono = (url == null) ? new IconoVacio() : new ImageIcon(url);
+                icon = (url == null) ? new EmptyIcon() : new ImageIcon(url);
             }
-            return icono;
+            return icon;
         }
 
         public void paintIcon(java.awt.Component c, java.awt.Graphics g, int x, int y) {
-            cargar().paintIcon(c, g, x, y);
+            load().paintIcon(c, g, x, y);
         }
 
         public int getIconWidth() {
-            return cargar().getIconWidth();
+            return load().getIconWidth();
         }
 
         public int getIconHeight() {
-            return cargar().getIconHeight();
+            return load().getIconHeight();
         }
     }
 
-    /** Lo que queda cuando el archivo del icono no esta: nada, pero de tamano cero. */
-    private static class IconoVacio implements Icon, UIResource, java.io.Serializable {
+    /** What is left when the icon's file is not there: nothing, but of size zero. */
+    private static class EmptyIcon implements Icon, UIResource, java.io.Serializable {
 
         public void paintIcon(java.awt.Component c, java.awt.Graphics g, int x, int y) {
         }

@@ -31,73 +31,78 @@ import javax.swing.plaf.OptionPaneUI;
 import javax.swing.plaf.UIResource;
 
 /**
- * El aspecto basico de un panel de opciones -- el contenido de un cuadro de dialogo --.
+ * The basic look and feel of an option pane -- a dialog box's content --.
  *
- * <h2>Tres franjas, y la del medio es la interesante</h2>
+ * <h2>Three strips, and the middle one is the interesting one</h2>
  *
- * <p>De arriba a abajo: el mensaje con su icono, el componente de entrada si lo hay, y los botones.
- * Lo unico que no es trivial es el mensaje, porque puede ser cualquier cosa: un texto, un icono, un
- * componente, o un arreglo de todo eso mezclado. {@link #addMessageComponents} lo desarma
- * recursivamente y {@link #burstStringInto} corta el texto largo en renglones.
+ * <p>From top to bottom: the message with its icon, the input component if there is one, and
+ * the buttons. The only thing that is not trivial is the message, because it may be anything: a
+ * text, an icon, a component, or an array of all that mixed up.
+ * {@link #addMessageComponents} takes it apart recursively and {@link #burstStringInto} cuts
+ * long text into lines.
  *
- * <h2>El tamano minimo no se calcula</h2>
+ * <h2>The minimum size is not computed</h2>
  *
- * <p>Son 262 x 90, escritos. Un dialogo mas chico que eso se ve como un error aunque su contenido
- * entre, y el numero no depende de nada que se pueda medir. Esta en {@link #MinimumWidth} y
- * {@link #MinimumHeight}, que son publicos justamente para que un aspecto los pueda mirar.
+ * <p>It is 262 x 90, written down. A dialog smaller than that looks like a mistake even if its
+ * content fits, and the number does not depend on anything that can be measured. It is in
+ * {@link #MinimumWidth} and {@link #MinimumHeight}, which are public precisely so that a look
+ * and feel can look at them.
  *
- * <h2>Los botones no son botones todavia</h2>
+ * <h2>The buttons are not buttons yet</h2>
  *
- * <p>{@link #getButtons} no devuelve {@code JButton}: devuelve <em>descripciones</em> de boton. La
- * diferencia importa porque el panel de opciones acepta que le pasen cualquier objeto como opcion
- * --una cadena, un icono, un componente ya hecho-- y quien decide como se convierte en algo
- * apretable es {@link #addButtonComponents}, no esta lista.
+ * <p>{@link #getButtons} does not return {@code JButton}s: it returns button
+ * <em>descriptions</em>. The difference matters because the option pane accepts being passed
+ * any object as an option -- a string, an icon, a ready-made component -- and who decides how
+ * it turns into something pressable is {@link #addButtonComponents}, not this list.
  *
- * <p>{@link #getSizeButtonsToSameWidth} dice que si: todos los botones de un dialogo miden lo
- * mismo, aunque "Si" sea mucho mas corto que "Cancelar".
+ * <p>{@link #getSizeButtonsToSameWidth} says yes: every button of a dialog measures the same,
+ * even though "Yes" is much shorter than "Cancel".
  *
- * <h2>Sin separador</h2>
+ * <h2>No separator</h2>
  *
- * <p>{@link #createSeparator} devuelve {@code null}. Es un gancho para el aspecto que quiera una
- * linea entre el mensaje y los botones; el basico no la dibuja. Medido.
+ * <p>{@link #createSeparator} returns {@code null}. It is a hook for the look and feel that
+ * wants a line between the message and the buttons; the basic one does not draw it. Measured.
  *
- * <h2>Lo que queda dicho</h2>
+ * <h2>What is left said</h2>
  *
- * <p>Los iconos de los cuatro tipos de mensaje --informacion, pregunta, advertencia, error-- son
- * imagenes de 32 x 32 que vienen de la tabla del aspecto. Sin tabla no hay ninguna, asi que
- * {@link #getIconForType} devuelve {@code null} y el dialogo mide menos de ancho que el del JDK. Es
- * el mismo hueco de siempre y no cambia nada de la estructura.
+ * <p>The icons of the four message types -- information, question, warning, error -- are 32 x 32
+ * images that come from the look and feel's table. With no table there is none, so
+ * {@link #getIconForType} returns {@code null} and the dialog measures less in width than the
+ * JDK's. It is the same gap as always and it changes nothing of the structure.
  */
 public class BasicOptionPaneUI extends OptionPaneUI {
 
-    /** El ancho minimo de un dialogo; ver la nota de la clase. */
+    /** A dialog's minimum width; see the class note. */
     public static final int MinimumWidth = 262;
 
-    /** Y el alto. */
+    /** And the height. */
     public static final int MinimumHeight = 90;
 
     protected JOptionPane optionPane;
     protected Dimension minimumSize;
 
-    /** El componente donde el usuario escribe, si el dialogo pide algo. */
+    /** The component where the user types, if the dialog asks for something. */
     protected JComponent inputComponent;
 
-    /** El que se lleva el foco al abrir. */
+    /** The one that takes the focus on opening. */
     protected Component initialFocusComponent;
 
-    /** Si el mensaje trajo componentes propios; de eso depende si el dialogo se puede reusar. */
+    /**
+     * Whether the message brought components of its own; whether the dialog can be reused depends
+     * on that.
+     */
     protected boolean hasCustomComponents;
 
     protected PropertyChangeListener propertyChangeListener;
 
-    private static final ColorUIResource FONDO = new ColorUIResource(238, 238, 238);
-    private static final ColorUIResource FRENTE = new ColorUIResource(51, 51, 51);
-    private static final FontUIResource FUENTE = new FontUIResource("Dialog", Font.PLAIN, 12);
+    private static final ColorUIResource BACKGROUND = new ColorUIResource(238, 238, 238);
+    private static final ColorUIResource FOREGROUND = new ColorUIResource(51, 51, 51);
+    private static final FontUIResource FONT = new FontUIResource("Dialog", Font.PLAIN, 12);
 
     public BasicOptionPaneUI() {
     }
 
-    /** Uno nuevo por panel: guarda el componente y lo que armo adentro. */
+    /** A new one per pane: it keeps the component and what it built inside. */
     public static ComponentUI createUI(JComponent x) {
         return new BasicOptionPaneUI();
     }
@@ -120,19 +125,21 @@ public class BasicOptionPaneUI extends OptionPaneUI {
         optionPane = null;
     }
 
-    /** Colores, fuente, borde y el tamano minimo; los valores son los de {@code OptionPane.*}. */
+    /**
+     * Colours, typeface, border and the minimum size; the values are those of {@code OptionPane.*}.
+     */
     protected void installDefaults() {
-        Color fondo = optionPane.getBackground();
-        if (fondo == null || fondo instanceof UIResource) {
-            optionPane.setBackground(FONDO);
+        Color background = optionPane.getBackground();
+        if (background == null || background instanceof UIResource) {
+            optionPane.setBackground(BACKGROUND);
         }
-        Color frente = optionPane.getForeground();
-        if (frente == null || frente instanceof UIResource) {
-            optionPane.setForeground(FRENTE);
+        Color foreground = optionPane.getForeground();
+        if (foreground == null || foreground instanceof UIResource) {
+            optionPane.setForeground(FOREGROUND);
         }
-        Font fuente = optionPane.getFont();
-        if (fuente == null || fuente instanceof UIResource) {
-            optionPane.setFont(FUENTE);
+        Font font = optionPane.getFont();
+        if (font == null || font instanceof UIResource) {
+            optionPane.setFont(FONT);
         }
         javax.swing.border.Border b = optionPane.getBorder();
         if (b == null || b instanceof UIResource) {
@@ -143,7 +150,7 @@ public class BasicOptionPaneUI extends OptionPaneUI {
         LookAndFeel.installProperty(optionPane, "opaque", Boolean.TRUE);
     }
 
-    /** No saca nada; ver {@link BasicPanelUI#uninstallDefaults}. */
+    /** It removes nothing; see {@link BasicPanelUI#uninstallDefaults}. */
     protected void uninstallDefaults() {
     }
 
@@ -161,19 +168,19 @@ public class BasicOptionPaneUI extends OptionPaneUI {
         return new Handler(this);
     }
 
-    /** Sin atajos propios: Escape y Enter los ata el dialogo que lo contiene. */
+    /** With no shortcuts of its own: Escape and Enter are tied by the dialog that contains it. */
     protected void installKeyboardActions() {
     }
 
     protected void uninstallKeyboardActions() {
     }
 
-    /** Uno vertical: las tres franjas, una debajo de la otra. */
+    /** A vertical one: the three strips, one below the other. */
     protected LayoutManager createLayoutManager() {
         return new BoxLayout(optionPane, BoxLayout.Y_AXIS);
     }
 
-    /** Arma las tres franjas; ver la nota de la clase. */
+    /** It builds the three strips; see the class note. */
     protected void installComponents() {
         hasCustomComponents = false;
         inputComponent = null;
@@ -198,11 +205,11 @@ public class BasicOptionPaneUI extends OptionPaneUI {
         optionPane.removeAll();
     }
 
-    /** La franja del mensaje: el icono a la izquierda y el mensaje a la derecha. */
+    /** The message's strip: the icon on the left and the message on the right. */
     protected Container createMessageArea() {
         JPanel top = new JPanel();
         top.setBorder(new javax.swing.plaf.BorderUIResource.EmptyBorderUIResource(0, 0, 0, 0));
-        top.setLayout(new BorderLayoutDeMensaje());
+        top.setLayout(new MessageBorderLayout());
         addIcon(top);
 
         JPanel realBody = new JPanel();
@@ -220,7 +227,7 @@ public class BasicOptionPaneUI extends OptionPaneUI {
         return top;
     }
 
-    /** Le pone el icono del tipo de mensaje, si lo hay; ver la nota de la clase. */
+    /** It gives it the message type's icon, if there is one; see the class note. */
     protected void addIcon(Container top) {
         Icon sideIcon = getIcon();
         if (sideIcon != null) {
@@ -232,11 +239,11 @@ public class BasicOptionPaneUI extends OptionPaneUI {
     }
 
     /**
-     * Desarma el mensaje y lo agrega a la franja.
+     * It takes the message apart and adds it to the strip.
      *
-     * <p>Un arreglo se recorre; un componente se agrega tal cual y se anota que el mensaje traia
-     * cosas propias; un icono se envuelve en una etiqueta; y cualquier otra cosa se convierte a
-     * texto y se corta en renglones.
+     * <p>An array is walked through; a component is added as it is and it is noted that the
+     * message brought things of its own; an icon is wrapped in a label; and anything else is
+     * converted to text and cut into lines.
      */
     protected void addMessageComponents(Container container, GridBagConstraints cons, Object msg,
             int maxll, boolean internallyCreated) {
@@ -275,10 +282,10 @@ public class BasicOptionPaneUI extends OptionPaneUI {
     }
 
     /**
-     * Corta ese texto en renglones y los agrega uno debajo del otro.
+     * It cuts that text into lines and adds them one below the other.
      *
-     * <p>Corta por salto de linea y, si un renglon pasa de {@code maxll}, tambien por el ultimo
-     * espacio que entre. Con el maximo en infinito --que es lo de omision-- solo corta por saltos.
+     * <p>It cuts at line breaks and, if a line goes over {@code maxll}, also at the last space
+     * that fits. With the maximum at infinity -- which is the default -- it only cuts at breaks.
      */
     protected void burstStringInto(Container c, String d, int maxll) {
         int nl = d.indexOf('\n');
@@ -288,12 +295,12 @@ public class BasicOptionPaneUI extends OptionPaneUI {
             return;
         }
         if (d.length() > maxll && maxll > 0) {
-            int corte = d.lastIndexOf(' ', maxll);
-            if (corte <= 0) {
-                corte = maxll;
+            int cut = d.lastIndexOf(' ', maxll);
+            if (cut <= 0) {
+                cut = maxll;
             }
-            burstStringInto(c, d.substring(0, corte), maxll);
-            burstStringInto(c, d.substring(corte).trim(), maxll);
+            burstStringInto(c, d.substring(0, cut), maxll);
+            burstStringInto(c, d.substring(cut).trim(), maxll);
             return;
         }
         JLabel label = new JLabel(d, SwingConstants.LEADING);
@@ -301,27 +308,27 @@ public class BasicOptionPaneUI extends OptionPaneUI {
         c.add(label);
     }
 
-    /** {@code null}; ver la nota de la clase. */
+    /** {@code null}; see the class note. */
     protected Container createSeparator() {
         return null;
     }
 
-    /** La franja de los botones, todos del mismo ancho. */
+    /** The buttons' strip, all of the same width. */
     protected Container createButtonArea() {
         JPanel bottom = new JPanel();
         bottom.setName("OptionPane.buttonArea");
         bottom.setBorder(new javax.swing.plaf.BorderUIResource.EmptyBorderUIResource(6, 0, 0, 0));
-        bottom.setLayout(new AcomodadorDeBotones(getSizeButtonsToSameWidth()));
+        bottom.setLayout(new ButtonLayout(getSizeButtonsToSameWidth()));
         addButtonComponents(bottom, getButtons(), getInitialValueIndex());
         return bottom;
     }
 
     /**
-     * Convierte cada opcion en algo apretable y lo agrega.
+     * It turns each option into something pressable and adds it.
      *
-     * <p>Una opcion que ya es un componente se agrega tal cual; cualquier otra cosa se vuelve un
-     * boton que, al apretarse, le pasa el valor al panel. Ese es el punto donde se cierra el
-     * dialogo, y es por eso que el escucha sabe cual opcion es cual.
+     * <p>An option that is already a component is added as it is; anything else becomes a button
+     * that, when pressed, passes the value on to the pane. That is the point where the dialog is
+     * closed, and that is why the listener knows which option is which.
      */
     protected void addButtonComponents(Container container, Object[] buttons,
             int initialIndex) {
@@ -329,47 +336,47 @@ public class BasicOptionPaneUI extends OptionPaneUI {
             return;
         }
         for (int i = 0; i < buttons.length; i++) {
-            Object opcion = buttons[i];
-            Component boton;
-            if (opcion instanceof Component) {
-                boton = (Component) opcion;
+            Object option = buttons[i];
+            Component button;
+            if (option instanceof Component) {
+                button = (Component) option;
                 hasCustomComponents = true;
-            } else if (opcion instanceof DescripcionDeBoton) {
-                DescripcionDeBoton d = (DescripcionDeBoton) opcion;
-                JButton b = new JButton(d.texto);
+            } else if (option instanceof ButtonDescription) {
+                ButtonDescription d = (ButtonDescription) option;
+                JButton b = new JButton(d.text);
                 b.setName("OptionPane.button");
-                if (d.icono != null) {
-                    b.setIcon(d.icono);
+                if (d.icon != null) {
+                    b.setIcon(d.icon);
                 }
-                if (d.mnemonico != 0) {
-                    b.setMnemonic(d.mnemonico);
+                if (d.mnemonic != 0) {
+                    b.setMnemonic(d.mnemonic);
                 }
                 b.addActionListener(createButtonActionListener(i));
-                boton = b;
-            } else if (opcion instanceof Icon) {
-                JButton b = new JButton((Icon) opcion);
+                button = b;
+            } else if (option instanceof Icon) {
+                JButton b = new JButton((Icon) option);
                 b.setName("OptionPane.button");
                 b.addActionListener(createButtonActionListener(i));
-                boton = b;
+                button = b;
             } else {
-                JButton b = new JButton(opcion.toString());
+                JButton b = new JButton(option.toString());
                 b.setName("OptionPane.button");
                 b.addActionListener(createButtonActionListener(i));
-                boton = b;
+                button = b;
             }
-            container.add(boton);
+            container.add(button);
             if (i == initialIndex) {
-                initialFocusComponent = boton;
+                initialFocusComponent = button;
             }
         }
     }
 
-    /** El que le pasa al panel el valor de esa opcion. */
+    /** The one that passes that option's value on to the pane. */
     protected ActionListener createButtonActionListener(int buttonIndex) {
-        return new AccionDeBoton(this, buttonIndex);
+        return new ButtonAction(this, buttonIndex);
     }
 
-    /** Las opciones: las que puso el programa, o las que corresponden al tipo de dialogo. */
+    /** The options: the ones the program set, or the ones that correspond to the dialog's type. */
     protected Object[] getButtons() {
         if (optionPane == null) {
             return null;
@@ -381,32 +388,32 @@ public class BasicOptionPaneUI extends OptionPaneUI {
         int type = optionPane.getOptionType();
         if (type == JOptionPane.YES_NO_OPTION) {
             return new Object[] {
-                new DescripcionDeBoton("Yes", 'Y'),
-                new DescripcionDeBoton("No", 'N'),
+                new ButtonDescription("Yes", 'Y'),
+                new ButtonDescription("No", 'N'),
             };
         }
         if (type == JOptionPane.YES_NO_CANCEL_OPTION) {
             return new Object[] {
-                new DescripcionDeBoton("Yes", 'Y'),
-                new DescripcionDeBoton("No", 'N'),
-                new DescripcionDeBoton("Cancel", 'C'),
+                new ButtonDescription("Yes", 'Y'),
+                new ButtonDescription("No", 'N'),
+                new ButtonDescription("Cancel", 'C'),
             };
         }
         if (type == JOptionPane.OK_CANCEL_OPTION) {
             return new Object[] {
-                new DescripcionDeBoton("OK", 'O'),
-                new DescripcionDeBoton("Cancel", 'C'),
+                new ButtonDescription("OK", 'O'),
+                new ButtonDescription("Cancel", 'C'),
             };
         }
-        return new Object[] {new DescripcionDeBoton("OK", 'O')};
+        return new Object[] {new ButtonDescription("OK", 'O')};
     }
 
-    /** Si; ver la nota de la clase. */
+    /** Yes; see the class note. */
     protected boolean getSizeButtonsToSameWidth() {
         return true;
     }
 
-    /** Cual opcion se lleva el foco al abrir. */
+    /** Which option takes the focus on opening. */
     protected int getInitialValueIndex() {
         if (optionPane == null) {
             return -1;
@@ -427,7 +434,7 @@ public class BasicOptionPaneUI extends OptionPaneUI {
         return -1;
     }
 
-    /** El mensaje que hay que mostrar. */
+    /** The message that has to be shown. */
     protected Object getMessage() {
         inputComponent = null;
         if (optionPane != null) {
@@ -436,7 +443,7 @@ public class BasicOptionPaneUI extends OptionPaneUI {
         return null;
     }
 
-    /** El icono del panel, o el que corresponda a su tipo de mensaje. */
+    /** The pane's icon, or the one that corresponds to its message type. */
     protected Icon getIcon() {
         Icon mIcon = (optionPane == null) ? null : optionPane.getIcon();
         if (mIcon == null && optionPane != null) {
@@ -445,17 +452,17 @@ public class BasicOptionPaneUI extends OptionPaneUI {
         return mIcon;
     }
 
-    /** {@code null}; ver la nota de la clase. */
+    /** {@code null}; see the class note. */
     protected Icon getIconForType(int messageType) {
         return null;
     }
 
-    /** Infinito: el basico no corta el texto salvo por saltos de linea. Medido. */
+    /** Infinite: the basic one does not cut the text except at line breaks. Measured. */
     protected int getMaxCharactersPerLineCount() {
         return Integer.MAX_VALUE;
     }
 
-    /** 262 x 90; ver la nota de la clase. */
+    /** 262 x 90; see the class note. */
     public Dimension getMinimumOptionPaneSize() {
         if (minimumSize == null) {
             return new Dimension(MinimumWidth, MinimumHeight);
@@ -463,7 +470,7 @@ public class BasicOptionPaneUI extends OptionPaneUI {
         return new Dimension(minimumSize.width, minimumSize.height);
     }
 
-    /** Lo que pida el contenido, pero nunca menos que el minimo. */
+    /** Whatever the content asks for, but never less than the minimum. */
     public Dimension getPreferredSize(JComponent c) {
         if (c == optionPane) {
             Dimension ourMin = getMinimumOptionPaneSize();
@@ -481,7 +488,7 @@ public class BasicOptionPaneUI extends OptionPaneUI {
         return null;
     }
 
-    /** Le da el foco a la opcion inicial. */
+    /** It gives the focus to the initial option. */
     public void selectInitialValue(JOptionPane op) {
         if (initialFocusComponent != null) {
             initialFocusComponent.requestFocus();
@@ -499,7 +506,7 @@ public class BasicOptionPaneUI extends OptionPaneUI {
         return hasCustomComponents;
     }
 
-    /** Deja el componente de entrada con el valor que tenga el panel. */
+    /** It leaves the input component with whatever value the pane has. */
     protected void resetInputValue() {
         if (inputComponent instanceof javax.swing.JTextField) {
             ((javax.swing.JTextField) inputComponent).setText(
@@ -508,33 +515,33 @@ public class BasicOptionPaneUI extends OptionPaneUI {
     }
 
     /**
-     * Una opcion que todavia no es un boton; ver la nota de la clase.
+     * An option that is not a button yet; see the class note.
      *
-     * <p>El JDK la llama {@code ButtonFactory} y es privada; aca el nombre es descriptivo porque no
-     * se ve: lo que se ve del arreglo es su tamano, no el tipo de sus elementos.
+     * <p>The JDK calls it {@code ButtonFactory} and it is private; here the name is descriptive
+     * because it is not seen: what is seen of the array is its size, not its elements' type.
      */
-    private static class DescripcionDeBoton {
+    private static class ButtonDescription {
 
-        final String texto;
-        final int mnemonico;
-        final Icon icono;
+        final String text;
+        final int mnemonic;
+        final Icon icon;
 
-        DescripcionDeBoton(String texto, char mnemonico) {
-            this.texto = texto;
-            this.mnemonico = mnemonico;
-            this.icono = null;
+        ButtonDescription(String text, char mnemonic) {
+            this.text = text;
+            this.mnemonic = mnemonic;
+            this.icon = null;
         }
     }
 
-    /** Le pasa al panel el valor de la opcion apretada. */
-    private static class AccionDeBoton implements ActionListener {
+    /** It passes the pressed option's value on to the pane. */
+    private static class ButtonAction implements ActionListener {
 
         private final BasicOptionPaneUI ui;
-        private final int indice;
+        private final int index;
 
-        AccionDeBoton(BasicOptionPaneUI ui, int indice) {
+        ButtonAction(BasicOptionPaneUI ui, int index) {
             this.ui = ui;
-            this.indice = indice;
+            this.index = index;
         }
 
         public void actionPerformed(ActionEvent e) {
@@ -542,29 +549,29 @@ public class BasicOptionPaneUI extends OptionPaneUI {
             if (op == null) {
                 return;
             }
-            Object[] botones = ui.getButtons();
-            Object valor;
-            if (op.getOptions() != null && indice < op.getOptions().length) {
-                valor = op.getOptions()[indice];
-            } else if (botones != null && indice < botones.length) {
-                // Sin opciones propias, el valor es el numero de la opcion, que es lo que
-                // `showConfirmDialog` devuelve.
-                valor = Integer.valueOf(indice);
+            Object[] buttons = ui.getButtons();
+            Object value;
+            if (op.getOptions() != null && index < op.getOptions().length) {
+                value = op.getOptions()[index];
+            } else if (buttons != null && index < buttons.length) {
+                // With no options of its own, the value is the option's number, which is what
+                                // `showConfirmDialog` returns.
+                value = Integer.valueOf(index);
             } else {
-                valor = null;
+                value = null;
             }
-            op.setValue(valor);
+            op.setValue(value);
         }
     }
 
     /**
-     * El acomodador de la franja del mensaje: icono a la izquierda, mensaje en el centro.
+     * The message strip's layout: icon on the left, message in the centre.
      *
-     * <p>Es un {@code BorderLayout} de a mentiras -- solo entiende {@code "West"} y
-     * {@code "Center"} --, y esta escrito porque el de verdad estira el centro a lo alto y el icono
-     * tiene que quedar arriba.
+     * <p>It is a make-believe {@code BorderLayout} -- it only understands {@code "West"} and
+     * {@code "Center"} --, and it is written because the real one stretches the centre
+     * vertically and the icon has to stay at the top.
      */
-    private static class BorderLayoutDeMensaje implements LayoutManager {
+    private static class MessageBorderLayout implements LayoutManager {
 
         private Component oeste;
         private Component centro;
@@ -600,26 +607,26 @@ public class BasicOptionPaneUI extends OptionPaneUI {
         public void layoutContainer(Container parent) {
             Insets in = parent.getInsets();
             int x = in.left;
-            int alto = parent.getHeight() - in.top - in.bottom;
+            int height = parent.getHeight() - in.top - in.bottom;
             if (oeste != null) {
                 Dimension o = oeste.getPreferredSize();
-                oeste.setBounds(x, in.top, o.width, alto);
+                oeste.setBounds(x, in.top, o.width, height);
                 x += o.width;
             }
             if (centro != null) {
-                centro.setBounds(x, in.top, parent.getWidth() - in.right - x, alto);
+                centro.setBounds(x, in.top, parent.getWidth() - in.right - x, height);
             }
         }
     }
 
-    /** El acomodador de los botones: todos del mismo ancho y pegados a la derecha. */
-    private static class AcomodadorDeBotones implements LayoutManager {
+    /** The buttons' layout: all of the same width and stuck to the right. */
+    private static class ButtonLayout implements LayoutManager {
 
-        private final boolean mismoAncho;
-        private final int separacion = 6;
+        private final boolean sameWidth;
+        private final int gap = 6;
 
-        AcomodadorDeBotones(boolean mismoAncho) {
-            this.mismoAncho = mismoAncho;
+        ButtonLayout(boolean sameWidth) {
+            this.sameWidth = sameWidth;
         }
 
         public void addLayoutComponent(String name, Component comp) {
@@ -628,7 +635,7 @@ public class BasicOptionPaneUI extends OptionPaneUI {
         public void removeLayoutComponent(Component comp) {
         }
 
-        private int anchoDeCadaUno(Container parent) {
+        private int widthOfEach(Container parent) {
             int w = 0;
             for (int i = 0; i < parent.getComponentCount(); i++) {
                 w = Math.max(w, parent.getComponent(i).getPreferredSize().width);
@@ -641,17 +648,17 @@ public class BasicOptionPaneUI extends OptionPaneUI {
             if (n == 0) {
                 return new Dimension(0, 0);
             }
-            int alto = 0;
-            int ancho = 0;
-            int cada = mismoAncho ? anchoDeCadaUno(parent) : 0;
+            int height = 0;
+            int width = 0;
+            int each = sameWidth ? widthOfEach(parent) : 0;
             for (int i = 0; i < n; i++) {
                 Dimension d = parent.getComponent(i).getPreferredSize();
-                alto = Math.max(alto, d.height);
-                ancho += mismoAncho ? cada : d.width;
+                height = Math.max(height, d.height);
+                width += sameWidth ? each : d.width;
             }
-            ancho += separacion * (n - 1);
+            width += gap * (n - 1);
             Insets in = parent.getInsets();
-            return new Dimension(ancho + in.left + in.right, alto + in.top + in.bottom);
+            return new Dimension(width + in.left + in.right, height + in.top + in.bottom);
         }
 
         public Dimension minimumLayoutSize(Container parent) {
@@ -664,20 +671,20 @@ public class BasicOptionPaneUI extends OptionPaneUI {
                 return;
             }
             Insets in = parent.getInsets();
-            int cada = mismoAncho ? anchoDeCadaUno(parent) : 0;
+            int each = sameWidth ? widthOfEach(parent) : 0;
             Dimension pref = preferredLayoutSize(parent);
             int x = (parent.getWidth() - pref.width) / 2 + in.left;
-            int alto = pref.height - in.top - in.bottom;
+            int height = pref.height - in.top - in.bottom;
             for (int i = 0; i < n; i++) {
                 Component c = parent.getComponent(i);
-                int w = mismoAncho ? cada : c.getPreferredSize().width;
-                c.setBounds(x, in.top, w, alto);
-                x += w + separacion;
+                int w = sameWidth ? each : c.getPreferredSize().width;
+                c.setBounds(x, in.top, w, height);
+                x += w + gap;
             }
         }
     }
 
-    /** Rehace el contenido cuando cambia el mensaje, el tipo o las opciones. */
+    /** It rebuilds the content when the message, the type or the options change. */
     private static class Handler implements PropertyChangeListener {
 
         private final BasicOptionPaneUI ui;
@@ -690,19 +697,19 @@ public class BasicOptionPaneUI extends OptionPaneUI {
             if (e.getSource() != ui.optionPane) {
                 return;
             }
-            String nombre = e.getPropertyName();
-            if (JOptionPane.ICON_PROPERTY.equals(nombre)
-                    || JOptionPane.MESSAGE_PROPERTY.equals(nombre)
-                    || JOptionPane.OPTIONS_PROPERTY.equals(nombre)
-                    || JOptionPane.INITIAL_VALUE_PROPERTY.equals(nombre)
-                    || JOptionPane.MESSAGE_TYPE_PROPERTY.equals(nombre)
-                    || JOptionPane.OPTION_TYPE_PROPERTY.equals(nombre)
-                    || JOptionPane.WANTS_INPUT_PROPERTY.equals(nombre)
-                    || JOptionPane.SELECTION_VALUES_PROPERTY.equals(nombre)) {
+            String name = e.getPropertyName();
+            if (JOptionPane.ICON_PROPERTY.equals(name)
+                    || JOptionPane.MESSAGE_PROPERTY.equals(name)
+                    || JOptionPane.OPTIONS_PROPERTY.equals(name)
+                    || JOptionPane.INITIAL_VALUE_PROPERTY.equals(name)
+                    || JOptionPane.MESSAGE_TYPE_PROPERTY.equals(name)
+                    || JOptionPane.OPTION_TYPE_PROPERTY.equals(name)
+                    || JOptionPane.WANTS_INPUT_PROPERTY.equals(name)
+                    || JOptionPane.SELECTION_VALUES_PROPERTY.equals(name)) {
                 ui.uninstallComponents();
                 ui.installComponents();
                 ui.optionPane.validate();
-            } else if (JOptionPane.INITIAL_SELECTION_VALUE_PROPERTY.equals(nombre)) {
+            } else if (JOptionPane.INITIAL_SELECTION_VALUE_PROPERTY.equals(name)) {
                 ui.resetInputValue();
             }
         }

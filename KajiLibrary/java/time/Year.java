@@ -19,13 +19,13 @@ public final class Year implements Temporal, TemporalAdjuster, Comparable<Year>,
         this.year = year;
     }
 
-    /** El año mas temprano representable. */
+    /** The earliest representable year. */
     public static final int MIN_VALUE = -999999999;
 
-    /** El mas tardio. */
+    /** The latest. */
     public static final int MAX_VALUE = 999999999;
 
-    /** El año que `temporal` tiene. */
+    /** The year `temporal` holds. */
     public static Year from(java.time.temporal.TemporalAccessor temporal) {
         if (temporal == null) {
             throw new NullPointerException("temporal");
@@ -36,7 +36,7 @@ public final class Year implements Temporal, TemporalAdjuster, Comparable<Year>,
         return Year.of(temporal.get(ChronoField.YEAR));
     }
 
-    /** El año que marca `clock`. La forma testeable de `now()`. */
+    /** The year `clock` reads. The testable form of `now()`. */
     public static Year now(java.time.Clock clock) {
         if (clock == null) {
             throw new NullPointerException("clock");
@@ -44,7 +44,7 @@ public final class Year implements Temporal, TemporalAdjuster, Comparable<Year>,
         return Year.of(LocalDate.now(clock).getYear());
     }
 
-    /** El año en esa zona, ahora. */
+    /** The year in that zone, right now. */
     public static Year now(ZoneId zone) {
         if (zone == null) {
             throw new NullPointerException("zone");
@@ -77,25 +77,25 @@ public final class Year implements Temporal, TemporalAdjuster, Comparable<Year>,
     }
 
     /**
-     * Si ese dia-y-mes existe en este año.
+     * Whether that month-and-day exists in this year.
      *
-     * <p>El unico caso en que no es el 29 de febrero de un año comun -- y es exactamente para eso
-     * que el metodo existe.
+     * <p>The only case in which it does not is the 29th of February of a common year -- and that is
+     * exactly what the method exists for.
      */
     public boolean isValidMonthDay(MonthDay monthDay) {
         return monthDay != null && monthDay.isValidYear(this.getValue());
     }
 
     /**
-     * El dia numero `dayOfYear` de este año.
+     * Day number `dayOfYear` of this year.
      *
-     * @throws java.time.DateTimeException si el dia no existe -- el 366 en un año comun
+     * @throws java.time.DateTimeException if the day does not exist -- the 366th in a common year
      */
     public LocalDate atDay(int dayOfYear) {
         return LocalDate.ofYearDay(this.getValue(), dayOfYear);
     }
 
-    /** Este año con ese dia-y-mes. */
+    /** This year with that month-and-day. */
     public LocalDate atMonthDay(MonthDay monthDay) {
         if (monthDay == null) {
             throw new NullPointerException("monthDay");
@@ -103,7 +103,7 @@ public final class Year implements Temporal, TemporalAdjuster, Comparable<Year>,
         return monthDay.atYear(this.getValue());
     }
 
-    /** Este año con ese mes. */
+    /** This year with that month. */
     public YearMonth atMonth(int month) {
         return YearMonth.of(this.getValue(), month);
     }
@@ -116,9 +116,9 @@ public final class Year implements Temporal, TemporalAdjuster, Comparable<Year>,
     }
 
     /**
-     * Este año formateado.
+     * This year formatted.
      *
-     * @throws java.time.DateTimeException si no se puede formatear
+     * @throws java.time.DateTimeException if it cannot be formatted
      */
     public String format(java.time.format.DateTimeFormatter formatter) {
         if (formatter == null) {
@@ -128,9 +128,9 @@ public final class Year implements Temporal, TemporalAdjuster, Comparable<Year>,
     }
 
     /**
-     * Este año mas `amountToAdd` unidades.
+     * This year plus `amountToAdd` units.
      *
-     * @throws java.time.DateTimeException si la unidad no es de año
+     * @throws java.time.DateTimeException if the unit is not a year-based one
      */
     public Year plus(long amountToAdd, java.time.temporal.TemporalUnit unit) {
         if (unit == null) {
@@ -149,7 +149,7 @@ public final class Year implements Temporal, TemporalAdjuster, Comparable<Year>,
             return this.plusYears(amountToAdd * 1000L);
         }
         if (unit == ChronoUnit.ERAS) {
-            // Una era ISO son todos los años de un signo: sumar una lleva del año `y` al `1-y`.
+            // An ISO era is every year of one sign: adding one takes year `y` to `1-y`.
             long era = this.getLong(ChronoField.ERA);
             return (Year) this.with(ChronoField.ERA, era + amountToAdd);
         }
@@ -160,7 +160,7 @@ public final class Year implements Temporal, TemporalAdjuster, Comparable<Year>,
         return this.plus(-amountToSubtract, unit);
     }
 
-    /** Este año con `field` puesto en `newValue`. */
+    /** This year with `field` set to `newValue`. */
     public Year with(java.time.temporal.TemporalField field, long newValue) {
         if (field == null) {
             throw new NullPointerException("field");
@@ -174,7 +174,7 @@ public final class Year implements Temporal, TemporalAdjuster, Comparable<Year>,
         }
         if (field == ChronoField.ERA) {
             ChronoField.ERA.checkValidValue(newValue);
-            // Cambiar de era refleja el año sobre el 1: el año 5 de la era anterior es el -4.
+            // Changing era reflects the year about 1: year 5 of the earlier era is -4.
             long yoe = this.getLong(ChronoField.YEAR_OF_ERA);
             return Year.of(newValue == 0L ? (int) (1L - yoe) : (int) yoe);
         }
@@ -212,11 +212,12 @@ public final class Year implements Temporal, TemporalAdjuster, Comparable<Year>,
     }
 
     /**
-     * El valor de ese campo.
+     * That field's value.
      *
-     * <p>`ERA` y `YEAR_OF_ERA` son el mismo anio dicho de otra forma --la era, y la cuenta dentro de
-     * ella-- asi que se deducen sin nada que decidir. Faltaban, y por eso un formateador con `G` o con
-     * `yyyy` en un calendario con eras se topaba con un rechazo donde habia informacion de sobra.
+     * <p>`ERA` and `YEAR_OF_ERA` are the same year said another way --the era, and the count within
+     * it-- so they are derived with nothing to decide. They used to be missing, and that is why a
+     * formatter with `G` or with `yyyy` in a calendar with eras met a rejection where there was
+     * information to spare.
      */
     public long getLong(TemporalField field) {
         if (field == ChronoField.YEAR) {
@@ -343,21 +344,21 @@ public final class Year implements Temporal, TemporalAdjuster, Comparable<Year>,
     }
 
     /**
-     * Lee `text` con ese formateador.
+     * It reads `text` with that formatter.
      *
-     * <p>El que decide que campos hay es el formateador; esta clase solo dice **cual de ellos
-     * quiere**, pasando su propio `from`. Por eso un patron que no traiga el anio
-     * falla aca y no al usar el resultado.
+     * <p>The one that decides which fields are there is the formatter; this class only says
+     * **which of them it wants**, by passing its own `from`. That is why a pattern that brings no year
+     * fails here and not when the result is used.
      *
-     * @throws java.time.format.DateTimeParseException si el texto no encaja con el patron, o si lo
-     *     que encaja no alcanza para un anio
+     * @throws java.time.format.DateTimeParseException if the text does not fit the pattern, or what
+     *     fits is not enough for a year
      */
     public static Year parse(CharSequence text, java.time.format.DateTimeFormatter formatter) {
         if (formatter == null) {
             throw new NullPointerException("formatter");
         }
-        // Ligado a una local: encadenar por un intermedio de tipo interfaz se pierde (#108).
-        java.time.temporal.TemporalQuery<Year> consulta = Year::from;
-        return formatter.parse(text, consulta);
+        // Bound to a local: chaining through an interface-typed intermediate gets lost (#108).
+        java.time.temporal.TemporalQuery<Year> queryOf = Year::from;
+        return formatter.parse(text, queryOf);
     }
 }

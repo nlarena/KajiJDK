@@ -1,6 +1,6 @@
 package java.security;
 
-// Fallo generico de un almacen de claves.
+// A generic failure of a key store.
 public class KeyStoreException extends GeneralSecurityException {
 
     public KeyStoreException() {

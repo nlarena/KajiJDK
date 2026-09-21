@@ -6,51 +6,52 @@ import java.nio.file.attribute.FileAttribute;
 import java.nio.file.attribute.FileAttributeView;
 import java.util.Set;
 
-// Un `DirectoryStream` sobre el que se puede operar **relativo al directorio abierto**, sin volver a
-// resolver la ruta completa.
+// A `DirectoryStream` that can be operated on **relative to the open directory**, without resolving
+// the full path again.
 //
-// **De que protege.** Si entre que se listo `/tmp/x` y que se borra `/tmp/x/y` alguien reemplaza
-// `/tmp/x` por un enlace a otro lado, borrar por ruta absoluta borra el archivo equivocado. Este
-// tipo opera contra el directorio ya abierto, asi que el cambio de abajo no lo redirige.
+// **What it protects against.** If between listing `/tmp/x` and deleting `/tmp/x/y` somebody
+// replaces `/tmp/x` with a link elsewhere, deleting by absolute path deletes the wrong file. This
+// type operates against the already-open directory, so the change underneath does not redirect it.
 //
-// **La interfaz esta entera.** `newByteChannel` estuvo omitido mientras
-// `java.nio.channels.SeekableByteChannel` no existia en esta biblioteca --no se puede declarar un
-// metodo que devuelve un tipo que no esta escrito--; ahora existe, con `FileChannel` detras, asi que
-// el metodo se declara.
+// **The interface is complete.** `newByteChannel` was omitted while
+// `java.nio.channels.SeekableByteChannel` did not exist in this library --a method returning a type
+// that is not written cannot be declared--; it exists now, with `FileChannel` behind it, so the
+// method is declared.
 //
-// KajiJDK no produce ninguno: no hay `DirectoryStream` que funcione, ver `Files.newDirectoryStream`.
-// Es una interfaz sin implementaciones, y eso esta bien: es el tipo que las firmas nombran, y el
-// dia que haya un nativo que enumere directorios lo unico que falta es la clase.
+// KajiJDK produces none. This note used to blame there being no working `DirectoryStream`; there is
+// one (`KajiDirectoryStream`, over `Fs.list`), and what is missing is the *secure* part --
+// operating against an already-open directory needs a directory handle, and `Fs` works by path. It
+// is an interface with no implementations, and that is right: it is the type the signatures name.
 //
-// @param <T> el tipo de las entradas
+// @param <T> the entries' type
 public interface SecureDirectoryStream<T> extends DirectoryStream<T> {
 
-    /** Abre un subdirectorio relativo a este. */
+    /** It opens a subdirectory relative to this one. */
     SecureDirectoryStream<T> newDirectoryStream(T path, LinkOption... options) throws IOException;
 
     /**
-     * Abre un canal sobre una entrada relativa a este directorio.
+     * It opens a channel over an entry relative to this directory.
      *
-     * <p>Sin `CREATE` ni `CREATE_NEW` en `options` el archivo tiene que existir; con `CREATE_NEW`
-     * la creacion es atomica respecto de este directorio abierto, que es de lo que este tipo
-     * protege.
+     * <p>With neither `CREATE` nor `CREATE_NEW` in `options` the file has to exist; with
+     * `CREATE_NEW` the creation is atomic with respect to this open directory, which is what this
+     * type protects.
      */
     SeekableByteChannel newByteChannel(T path, Set<? extends OpenOption> options,
             FileAttribute<?>... attrs) throws IOException;
 
-    /** Borra un archivo relativo a este directorio. */
+    /** It deletes a file relative to this directory. */
     void deleteFile(T path) throws IOException;
 
-    /** Borra un subdirectorio (vacio) relativo a este. */
+    /** It deletes an (empty) subdirectory relative to this one. */
     void deleteDirectory(T path) throws IOException;
 
-    /** Mueve una entrada de este directorio a otro, tambien abierto. */
+    /** It moves an entry from this directory to another, also open. */
     void move(T srcpath, SecureDirectoryStream<T> targetdir, T targetpath) throws IOException;
 
-    /** Una vista de atributos del propio directorio abierto. */
+    /** A view of the open directory's own attributes. */
     <V extends FileAttributeView> V getFileAttributeView(Class<V> type);
 
-    /** Una vista de atributos de una entrada relativa a este directorio. */
+    /** A view of the attributes of an entry relative to this directory. */
     <V extends FileAttributeView> V getFileAttributeView(T path, Class<V> type,
             LinkOption... options);
 }

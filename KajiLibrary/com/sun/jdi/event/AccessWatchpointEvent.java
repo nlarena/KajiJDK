@@ -1,7 +1,7 @@
 package com.sun.jdi.event;
 
 /**
- * Se leyo un campo vigilado.
+ * A watched field was read.
  *
  * @since 1.3
  */

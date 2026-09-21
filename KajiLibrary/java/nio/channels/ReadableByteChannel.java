@@ -5,22 +5,23 @@ import java.nio.ByteBuffer;
 
 // KajiLibrary's java.nio.channels.ReadableByteChannel -- a channel that can be read into a buffer.
 //
-// Un solo metodo, y esa es toda la interfaz. Lo que la hace util es que la fuente la aporta **quien
-// llama**: `new Scanner(canal)` no necesita que la biblioteca sepa abrir archivos ni sockets, porque
-// el canal ya viene abierto de afuera. Por eso se puede implementar de verdad en KajiJDK, que no
-// tiene acceso al sistema de archivos, mientras que `new Scanner(File)` no.
+// A single method, and that is the whole interface. What makes it useful is that the source is
+// provided by **the caller**: `new Scanner(channel)` does not need the library to know how to open
+// files or sockets, because the channel comes already open from outside. That is why it can really
+// be implemented in KajiJDK, which has no access to the file system, while `new Scanner(File)`
+// cannot.
 public interface ReadableByteChannel extends Channel {
 
     /**
-     * Lee una secuencia de bytes en `dst`, y devuelve **cuantos** leyo.
+     * Reads a sequence of bytes into `dst`, and returns **how many** it read.
      *
-     * <p>Devuelve `-1` en fin de flujo, `0` si `dst` no tenia lugar (o si un canal no bloqueante no
-     * tenia nada listo), y entre 1 y `dst.remaining()` en el caso normal. Los tres son resultados
-     * legitimos y distintos: un lector que trate el `0` como fin de flujo se cuelga o se corta
-     * antes de tiempo, segun el canal.
+     * <p>It returns `-1` at end of stream, `0` if `dst` had no room (or if a non-blocking channel
+     * had nothing ready), and between 1 and `dst.remaining()` in the normal case. The three are
+     * legitimate and different results: a reader that treats the `0` as end of stream either hangs
+     * or stops early, depending on the channel.
      *
-     * <p>Un canal solo admite **una** lectura a la vez: si otro hilo esta leyendo, esta llamada se
-     * bloquea hasta que la primera termine.
+     * <p>A channel admits **one** read at a time: if another thread is reading, this call blocks
+     * until the first one finishes.
      */
     int read(ByteBuffer dst) throws IOException;
 }

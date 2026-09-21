@@ -3,21 +3,21 @@ package java.nio.file.attribute;
 import java.io.IOException;
 import java.util.List;
 
-// La vista `"acl"`: la lista de control de acceso al estilo NFSv4, que es la que usa Windows.
+// The `"acl"` view: the NFSv4-style access control list, which is the one Windows uses.
 //
-// La ACL es una **lista** y no un conjunto porque el orden decide: se evalua de arriba hacia abajo y
-// la primera entrada que aplica gana, asi que una `DENY` antes de una `ALLOW` no es lo mismo que al
-// reves.
+// The ACL is a **list** and not a set because the order decides: it is evaluated from the top down
+// and the first entry that applies wins, so a `DENY` before an `ALLOW` is not the same as the other
+// way round.
 //
-// Sin implementacion en KajiJDK: no hay nativo que lea ni escriba ACLs.
+// Without an implementation in KajiJDK: there is no native that reads or writes ACLs.
 public interface AclFileAttributeView extends FileOwnerAttributeView {
 
-    /** Siempre `"acl"`. */
+    /** Always `"acl"`. */
     String name();
 
-    /** La ACL, en orden de evaluacion. */
+    /** The ACL, in evaluation order. */
     List<AclEntry> getAcl() throws IOException;
 
-    /** Reemplaza la ACL entera. */
+    /** It replaces the whole ACL. */
     void setAcl(List<AclEntry> acl) throws IOException;
 }

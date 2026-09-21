@@ -4,14 +4,14 @@ import java.lang.classfile.Instruction;
 import java.lang.classfile.constantpool.ClassEntry;
 import jdk.internal.classfile.impl.Instructions;
 
-// `anewarray`. La entrada del pool nombra al COMPONENTE, no al arreglo: `anewarray String` crea un
-// `String[]`. Es lo contrario de `multianewarray`, donde la entrada es el arreglo entero.
+// `anewarray`. The pool entry names the COMPONENT, not the array: `anewarray String` creates a
+// `String[]`. It is the opposite of `multianewarray`, where the entry is the whole array.
 public interface NewReferenceArrayInstruction extends Instruction {
 
-    /** El tipo del componente. */
+    /** The component's type. */
     ClassEntry componentType();
 
-    /** El `anewarray` de este componente. */
+    /** This component's `anewarray`. */
     public static NewReferenceArrayInstruction of(ClassEntry componentType) {
         return Instructions.newReferenceArray(componentType);
     }

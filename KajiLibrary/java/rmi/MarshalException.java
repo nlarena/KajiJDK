@@ -1,27 +1,26 @@
 package java.rmi;
 
 /**
- * KajiLibrary's java.rmi.MarshalException -- Fallo al escribir los argumentos.
+ * KajiLibrary's java.rmi.MarshalException -- writing the arguments failed.
  *
- * <p>Es del lado que <b>envia</b>: no se pudieron serializar los argumentos de la llamada, o el
- * identificador del metodo. Su espejo es {@link UnmarshalException}, del lado que recibe.
+ * <p>It is on the <b>sending</b> side: the call's arguments, or the method's identifier, could not
+ * be serialised. Its mirror is {@link UnmarshalException}, on the receiving side.
  *
- * <p>Tiene una consecuencia que conviene tener presente: como la llamada nunca salio completa, el
- * metodo remoto <b>no se ejecuto</b>. Es de las pocas excepciones de RMI de las que se puede afirmar
- * eso.
+ * <p>It has a consequence worth keeping in mind: since the call never went out whole, the remote
+ * method <b>did not run</b>. It is one of the few RMI exceptions of which that can be asserted.
  */
 public class MarshalException extends RemoteException {
 
     private static final long serialVersionUID = 6223554758134037936L;
 
-    /** @param s el mensaje */
+    /** @param s the message */
     public MarshalException(String s) {
         super(s);
     }
 
     /**
-     * @param s el mensaje
-     * @param ex la causa
+     * @param s the message
+     * @param ex the cause
      */
     public MarshalException(String s, Exception ex) {
         super(s, ex);

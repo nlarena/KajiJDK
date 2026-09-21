@@ -6,12 +6,12 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Cuanto tiene que durar el evento para que valga la pena grabarlo.
+ * How long the event has to last for it to be worth recording.
  *
- * <p>Los eventos cortos son los que mas hay y los que menos dicen. Un umbral de {@code "20 ms"}
- * descarta el ruido y deja las esperas que un humano notaria.
+ * <p>The short events are the ones there are most of and the ones that say least. A threshold of
+ * {@code "20 ms"} discards the noise and leaves the waits a human would notice.
  *
- * <p>El valor por omision, {@code "0 ns"}, graba todo.
+ * <p>The default value, {@code "0 ns"}, records everything.
  *
  * @since 9
  */
@@ -20,13 +20,13 @@ import java.lang.annotation.Target;
 @MetadataDefinition
 public @interface Threshold {
 
-    /** El nombre del ajuste que esta anotacion configura. */
+    /** The name of the setting this annotation configures. */
     String NAME = "threshold";
 
     /**
-     * El valor de la anotacion.
+     * The value of the annotation.
      *
-     * @return el valor
+     * @return the value
      */
     String value() default "0 ns";
 }

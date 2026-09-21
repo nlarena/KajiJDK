@@ -19,52 +19,52 @@ import javax.swing.plaf.ComponentUI;
 import javax.swing.plaf.LabelUI;
 
 /**
- * El aspecto basico de una etiqueta: ubica texto e icono y los pinta.
+ * The basic look and feel of a label: it places text and icon and paints them.
  *
- * <h2>Un solo objeto para todas las etiquetas</h2>
+ * <h2>A single object for every label</h2>
  *
- * <p>{@link #createUI} devuelve siempre la misma instancia, y puede porque este UI
- * <strong>no guarda nada del componente</strong>: cada metodo recibe la etiqueta y trabaja sobre
- * ella. Es la razon de que los rectangulos de trabajo sean locales y no campos — un campo
- * compartido entre mil etiquetas seria un dato de la ultima que se pinto.
+ * <p>{@link #createUI} always returns the same instance, and it can because this look and feel
+ * <strong>keeps nothing of the component</strong>: each method receives the label and works on
+ * it. It is the reason the working rectangles are locals and not fields -- a field shared
+ * between a thousand labels would be a datum of the last one that was painted.
  *
- * <h2>Lo que instala, y de donde salen los valores</h2>
+ * <h2>What it installs, and where the values come from</h2>
  *
- * <p>{@link #installDefaults} pone la fuente y los colores que en el JDK vienen de
- * {@code UIManager} bajo {@code Label.font}, {@code Label.foreground} y
- * {@code Label.background}. Sin {@code UIManager}, son los valores <em>medidos</em> en el aspecto
- * Metal del JDK 25: Dialog negrita 12, gris (51, 51, 51) y (238, 238, 238). Se instalan solo donde
- * el componente no tiene nada: el JDK distingue "lo puso el usuario" de "lo puso un aspecto" con
- * las clases {@code UIResource}, que no estan, y la aproximacion honesta es no pisar lo que ya
- * habia.
+ * <p>{@link #installDefaults} sets the typeface and the colours that in the JDK come from
+ * {@code UIManager} under {@code Label.font}, {@code Label.foreground} and
+ * {@code Label.background}. With no {@code UIManager}, they are the values <em>measured</em> in
+ * the JDK 25 Metal look and feel: Dialog bold 12, grey (51, 51, 51) and (238, 238, 238). They
+ * are installed only where the component has nothing: the JDK tells "the user set it" from
+ * "a look and feel set it" with the {@code UIResource} classes, which are not there, and the
+ * honest approximation is not to overwrite what was already there.
  *
- * <p>La negrita es la de la API: el rasterizador de esta VM dibuja toda fuente con la misma cara
- * regular, asi que el texto sale regular aunque {@code getFont} diga negrita. Es la sustitucion de
- * {@code jdk.internal.awt.FuenteBitmap}, dicha en cada lugar donde se nota.
+ * <p>The bold is the API's: this VM's rasterizer draws every typeface with the same regular
+ * face, so the text comes out regular even though {@code getFont} says bold. It is the
+ * substitution of {@code jdk.internal.awt.BitmapFont}, said at every place where it shows.
  */
 public class BasicLabelUI extends LabelUI implements PropertyChangeListener {
 
-    /** La instancia compartida; ver la nota de la clase. */
+    /** The shared instance; see the class note. */
     protected static BasicLabelUI labelUI = new BasicLabelUI();
 
-    private static final Font FUENTE_POR_OMISION = new Font("Dialog", Font.BOLD, 12);
-    private static final Color FRENTE_POR_OMISION = new Color(51, 51, 51);
-    private static final Color FONDO_POR_OMISION = new Color(238, 238, 238);
+    private static final Font DEFAULT_FONT = new Font("Dialog", Font.BOLD, 12);
+    private static final Color DEFAULT_FOREGROUND = new Color(51, 51, 51);
+    private static final Color DEFAULT_BACKGROUND = new Color(238, 238, 238);
 
-    /** Un aspecto nuevo. Lo normal es pedir el de {@link #createUI}. */
+    /** A new look and feel. The usual thing is to ask for {@link #createUI}'s. */
     public BasicLabelUI() {
     }
 
-    /** El aspecto compartido. */
+    /** The shared look and feel. */
     public static ComponentUI createUI(JComponent c) {
         return labelUI;
     }
 
     /**
-     * Ubica texto e icono; devuelve el texto, posiblemente recortado.
+     * It places text and icon; it returns the text, possibly clipped.
      *
-     * <p>Delegar en {@link SwingUtilities#layoutCompoundLabel} es lo que hace que una etiqueta y un
-     * boton coloquen su texto igual: es un solo algoritmo con dos llamadores.
+     * <p>Delegating to {@link SwingUtilities#layoutCompoundLabel} is what makes a label and a
+     * button place their text the same way: it is a single algorithm with two callers.
      */
     protected String layoutCL(JLabel label, FontMetrics fontMetrics, String text, Icon icon,
             Rectangle viewR, Rectangle iconR, Rectangle textR) {
@@ -74,131 +74,132 @@ public class BasicLabelUI extends LabelUI implements PropertyChangeListener {
                 viewR, iconR, textR, label.getIconTextGap());
     }
 
-    /** Pinta el texto de una etiqueta habilitada, con su mnemonico subrayado. */
+    /** It paints an enabled label's text, with its mnemonic underlined. */
     protected void paintEnabledText(JLabel l, Graphics g, String s, int textX, int textY) {
-        int indice = l.getDisplayedMnemonicIndex();
+        int index = l.getDisplayedMnemonicIndex();
         g.setColor(l.getForeground());
-        BasicGraphicsUtils.drawStringUnderlineCharAt(g, s, indice, textX, textY);
+        BasicGraphicsUtils.drawStringUnderlineCharAt(g, s, index, textX, textY);
     }
 
     /**
-     * Pinta el texto de una etiqueta deshabilitada, en relieve.
+     * It paints a disabled label's text, in relief.
      *
-     * <p>Dos pasadas: el fondo aclarado un pixel abajo y a la derecha, y el fondo oscurecido en su
-     * lugar. El texto queda como grabado en el fondo, que es como el aspecto basico dice "esto no
-     * responde".
+     * <p>Two passes: the background lightened one pixel down and to the right, and the background
+     * darkened in its place. The text ends up as though etched into the background, which is how
+     * the basic look and feel says "this does not answer".
      */
     protected void paintDisabledText(JLabel l, Graphics g, String s, int textX, int textY) {
-        int indice = l.getDisplayedMnemonicIndex();
-        Color fondo = l.getBackground();
-        g.setColor(fondo.brighter());
-        BasicGraphicsUtils.drawStringUnderlineCharAt(g, s, indice, textX + 1, textY + 1);
-        g.setColor(fondo.darker());
-        BasicGraphicsUtils.drawStringUnderlineCharAt(g, s, indice, textX, textY);
+        int index = l.getDisplayedMnemonicIndex();
+        Color background = l.getBackground();
+        g.setColor(background.brighter());
+        BasicGraphicsUtils.drawStringUnderlineCharAt(g, s, index, textX + 1, textY + 1);
+        g.setColor(background.darker());
+        BasicGraphicsUtils.drawStringUnderlineCharAt(g, s, index, textX, textY);
     }
 
     /**
-     * Pinta icono y texto.
+     * It paints icon and text.
      *
-     * <p>El fondo no se pinta aca: lo pinta {@link #update} si la etiqueta es opaca, que por omision
-     * no lo es. De ahi que una etiqueta sobre un panel de otro color se vea transparente.
+     * <p>The background is not painted here: it is painted by {@link #update} if the label is
+     * opaque, which by default it is not. Hence a label over a panel of another colour looks
+     * transparent.
      */
     public void paint(Graphics g, JComponent c) {
         JLabel label = (JLabel) c;
-        String texto = label.getText();
-        Icon icono = label.isEnabled() ? label.getIcon() : label.getDisabledIcon();
-        if (icono == null && texto == null) {
+        String text = label.getText();
+        Icon icon = label.isEnabled() ? label.getIcon() : label.getDisabledIcon();
+        if (icon == null && text == null) {
             return;
         }
         FontMetrics fm = label.getFontMetrics(label.getFont());
         Insets insets = c.getInsets(new Insets(0, 0, 0, 0));
-        Rectangle vistaR = new Rectangle(insets.left, insets.top,
+        Rectangle viewRect = new Rectangle(insets.left, insets.top,
                 c.getWidth() - (insets.left + insets.right),
                 c.getHeight() - (insets.top + insets.bottom));
-        Rectangle iconoR = new Rectangle();
-        Rectangle textoR = new Rectangle();
-        String recortado = layoutCL(label, fm, texto, icono, vistaR, iconoR, textoR);
-        if (icono != null) {
-            icono.paintIcon(c, g, iconoR.x, iconoR.y);
+        Rectangle iconRect = new Rectangle();
+        Rectangle textRect = new Rectangle();
+        String clipped = layoutCL(label, fm, text, icon, viewRect, iconRect, textRect);
+        if (icon != null) {
+            icon.paintIcon(c, g, iconRect.x, iconRect.y);
         }
-        if (texto != null) {
-            int textoX = textoR.x;
-            int textoY = textoR.y + fm.getAscent();
+        if (text != null) {
+            int textX = textRect.x;
+            int textY = textRect.y + fm.getAscent();
             if (label.isEnabled()) {
-                paintEnabledText(label, g, recortado, textoX, textoY);
+                paintEnabledText(label, g, clipped, textX, textY);
             } else {
-                paintDisabledText(label, g, recortado, textoX, textoY);
+                paintDisabledText(label, g, clipped, textX, textY);
             }
         }
     }
 
     /**
-     * El tamano preferido: lo que ocupan texto e icono ubicados en una vista infinita, mas los
+     * The preferred size: what text and icon take up placed in an infinite view, plus the
      * insets.
      *
-     * <p>La vista infinita es el truco: sin limite de ancho nada se recorta, y la caja que queda es
-     * el tamano natural de la etiqueta.
+     * <p>The infinite view is the trick: with no width limit nothing is clipped, and the box that
+     * is left is the label's natural size.
      */
     public Dimension getPreferredSize(JComponent c) {
         JLabel label = (JLabel) c;
-        String texto = label.getText();
-        Icon icono = label.isEnabled() ? label.getIcon() : label.getDisabledIcon();
+        String text = label.getText();
+        Icon icon = label.isEnabled() ? label.getIcon() : label.getDisabledIcon();
         Insets insets = label.getInsets(new Insets(0, 0, 0, 0));
-        Font fuente = label.getFont();
+        Font font = label.getFont();
         int dx = insets.left + insets.right;
         int dy = insets.top + insets.bottom;
 
-        if (icono == null && (texto == null || fuente == null)) {
+        if (icon == null && (text == null || font == null)) {
             return new Dimension(dx, dy);
         }
-        if (texto == null || (icono != null && fuente == null)) {
-            return new Dimension(icono.getIconWidth() + dx, icono.getIconHeight() + dy);
+        if (text == null || (icon != null && font == null)) {
+            return new Dimension(icon.getIconWidth() + dx, icon.getIconHeight() + dy);
         }
-        FontMetrics fm = label.getFontMetrics(fuente);
-        Rectangle iconoR = new Rectangle();
-        Rectangle textoR = new Rectangle();
-        Rectangle vistaR = new Rectangle(dx, dy, Short.MAX_VALUE, Short.MAX_VALUE);
-        layoutCL(label, fm, texto, icono, vistaR, iconoR, textoR);
-        int x1 = Math.min(iconoR.x, textoR.x);
-        int x2 = Math.max(iconoR.x + iconoR.width, textoR.x + textoR.width);
-        int y1 = Math.min(iconoR.y, textoR.y);
-        int y2 = Math.max(iconoR.y + iconoR.height, textoR.y + textoR.height);
+        FontMetrics fm = label.getFontMetrics(font);
+        Rectangle iconRect = new Rectangle();
+        Rectangle textRect = new Rectangle();
+        Rectangle viewRect = new Rectangle(dx, dy, Short.MAX_VALUE, Short.MAX_VALUE);
+        layoutCL(label, fm, text, icon, viewRect, iconRect, textRect);
+        int x1 = Math.min(iconRect.x, textRect.x);
+        int x2 = Math.max(iconRect.x + iconRect.width, textRect.x + textRect.width);
+        int y1 = Math.min(iconRect.y, textRect.y);
+        int y2 = Math.max(iconRect.y + iconRect.height, textRect.y + textRect.height);
         Dimension rv = new Dimension(x2 - x1, y2 - y1);
         rv.width = rv.width + dx;
         rv.height = rv.height + dy;
         return rv;
     }
 
-    /** El minimo es el preferido: una etiqueta no se achica sin recortar. */
+    /** The minimum is the preferred one: a label does not shrink without clipping. */
     public Dimension getMinimumSize(JComponent c) {
         return getPreferredSize(c);
     }
 
-    /** El maximo es el preferido: una etiqueta no crece por si sola. */
+    /** The maximum is the preferred one: a label does not grow by itself. */
     public Dimension getMaximumSize(JComponent c) {
         return getPreferredSize(c);
     }
 
-    /** La linea de base del texto, ubicado en esa caja; {@code -1} sin texto. */
+    /** The baseline of the text, placed in that box; {@code -1} with no text. */
     public int getBaseline(JComponent c, int width, int height) {
         super.getBaseline(c, width, height);
         JLabel label = (JLabel) c;
-        String texto = label.getText();
-        if (texto == null || texto.isEmpty() || label.getFont() == null) {
+        String text = label.getText();
+        if (text == null || text.isEmpty() || label.getFont() == null) {
             return -1;
         }
         FontMetrics fm = label.getFontMetrics(label.getFont());
         Insets insets = label.getInsets(new Insets(0, 0, 0, 0));
-        Rectangle vistaR = new Rectangle(insets.left, insets.top,
+        Rectangle viewRect = new Rectangle(insets.left, insets.top,
                 width - (insets.left + insets.right), height - (insets.top + insets.bottom));
-        Rectangle iconoR = new Rectangle();
-        Rectangle textoR = new Rectangle();
-        layoutCL(label, fm, texto, label.isEnabled() ? label.getIcon() : label.getDisabledIcon(),
-                vistaR, iconoR, textoR);
-        return textoR.y + fm.getAscent();
+        Rectangle iconRect = new Rectangle();
+        Rectangle textRect = new Rectangle();
+        layoutCL(label, fm, text, label.isEnabled() ? label.getIcon() : label.getDisabledIcon(),
+                viewRect, iconRect, textRect);
+        return textRect.y + fm.getAscent();
     }
 
-    /** Como se mueve la linea de base: segun donde este alineado el texto verticalmente. */
+    /** How the baseline moves: according to where the text is aligned vertically. */
     public Component$BaselineResizeBehavior getBaselineResizeBehavior(JComponent c) {
         super.getBaselineResizeBehavior(c);
         JLabel label = (JLabel) c;
@@ -231,36 +232,39 @@ public class BasicLabelUI extends LabelUI implements PropertyChangeListener {
         uninstallKeyboardActions(label);
     }
 
-    /** Fuente y colores por omision, solo donde no hay nada; ver la nota de la clase. */
+    /** Default typeface and colours, only where there is nothing; see the class note. */
     protected void installDefaults(JLabel c) {
         if (c.getFont() == null) {
-            c.setFont(FUENTE_POR_OMISION);
+            c.setFont(DEFAULT_FONT);
         }
         if (c.getForeground() == null) {
-            c.setForeground(FRENTE_POR_OMISION);
+            c.setForeground(DEFAULT_FOREGROUND);
         }
         if (c.getBackground() == null) {
-            c.setBackground(FONDO_POR_OMISION);
+            c.setBackground(DEFAULT_BACKGROUND);
         }
     }
 
-    /** Este UI escucha los cambios de propiedad de la etiqueta. */
+    /** This look and feel listens to the label's property changes. */
     protected void installListeners(JLabel c) {
         c.addPropertyChangeListener(this);
     }
 
-    /** Una etiqueta no tiene subcomponentes; nada que instalar. */
+    /** A label has no subcomponents; nothing to install. */
     protected void installComponents(JLabel c) {
     }
 
     /**
-     * Nada: las acciones por teclado de una etiqueta —darle el foco a su {@code labelFor} con el
-     * mnemonico— necesitan {@code InputMap} y {@code ActionMap}, que no estan.
+     * Nothing: a label's keyboard actions -- giving the focus to its {@code labelFor} with the
+     * mnemonic -- need {@code InputMap} and {@code ActionMap}, which are not there.
      */
     protected void installKeyboardActions(JLabel l) {
     }
 
-    /** Lo instalado quedo en el componente y puede seguir ahi; el JDK tampoco lo borra. */
+    /**
+     * What was installed stayed in the component and may go on being there; the JDK does not erase
+     * it either.
+     */
     protected void uninstallDefaults(JLabel c) {
     }
 
@@ -275,11 +279,11 @@ public class BasicLabelUI extends LabelUI implements PropertyChangeListener {
     }
 
     /**
-     * Cambio una propiedad de la etiqueta.
+     * A property of the label changed.
      *
-     * <p>El JDK usa esto para renovar las acciones por teclado cuando cambian el texto, el
-     * mnemonico o el {@code labelFor}. Sin acciones por teclado no hay nada que renovar: el
-     * repintado y el relayout ya los pide la propia etiqueta al cambiar.
+     * <p>The JDK uses this in order to renew the keyboard actions when the text, the mnemonic or
+     * the {@code labelFor} change. With no keyboard actions there is nothing to renew: the repaint
+     * and the relayout are already asked for by the label itself on changing.
      */
     public void propertyChange(PropertyChangeEvent e) {
     }

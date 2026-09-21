@@ -3,33 +3,36 @@ package org.xml.sax.ext;
 import org.xml.sax.Locator;
 
 /**
- * KajiLibrary's org.xml.sax.ext.Locator2 -- el `Locator` mas la version y la codificacion de la
- * entidad en la que el parser esta parado ahora.
+ * KajiLibrary's org.xml.sax.ext.Locator2 -- the `Locator` plus the version and the encoding of the
+ * entity the parser is standing in now.
  *
- * <p>No es lo mismo que "la version y la codificacion del documento", y ahi esta el detalle: un
- * documento XML 1.0 puede incluir entidades externas con su propia declaracion, y mientras se lee
- * una de ellas estos dos metodos contestan por **esa** entidad. Como el `Locator` es vivo --sigue
- * contestando por la posicion actual a medida que el analisis avanza--, las respuestas cambian
- * durante el recorrido. Quien quiera la version del documento la tiene que leer temprano, o
- * quedarsela via `ContentHandler.declaration`.
+ * <p>It is not the same as "the version and the encoding of the document", and there lies the
+ * detail: an XML 1.0 document may include external entities with their own declaration, and while
+ * one of them is being read these two methods answer for **that** entity. As the `Locator` is alive
+ * --it keeps answering for the current position as the analysis advances--, the answers change
+ * during the walk. Whoever wants the version of the document has to read it early, or keep it via
+ * `ContentHandler.declaration`.
  *
- * <p>Se descubre como {@link Attributes2}: el objeto que llega a `setDocumentLocator` puede ser uno
- * de estos, y el codigo lo averigua con `instanceof`. No hay feature que lo prenda.
+ * <p>It is discovered like {@link Attributes2}: the object that arrives at `setDocumentLocator` may
+ * be one of these, and the code finds out with `instanceof`. There is no feature that switches it
+ * on.
  *
- * <p>Las dos respuestas pueden ser `null`, y significan cosas distintas segun el metodo: en
- * `getEncoding` es "no se sabe" --pasa cuando la codificacion vino de afuera, por ejemplo de una
- * cabecera HTTP, y el parser no la propago--; en `getXMLVersion` no deberia pasar durante el
- * analisis, porque una entidad sin declaracion es 1.0 por definicion.
+ * <p>Both answers may be `null`, and they mean different things depending on the method: in
+ * `getEncoding` it is "not known" --it happens when the encoding came from outside, for example
+ * from an HTTP header, and the parser did not propagate it--; in `getXMLVersion` it should not
+ * happen during the analysis, because an entity with no declaration is 1.0 by definition.
  */
 public interface Locator2 extends Locator {
 
-    /** `"1.0"` o `"1.1"`. Es la de la entidad actual, no necesariamente la del documento. */
+    /**
+     * `"1.0"` or `"1.1"`. It is that of the current entity, not necessarily that of the document.
+     */
     String getXMLVersion();
 
     /**
-     * El nombre de la codificacion en uso. Si el documento lo declaro, es lo declarado; si se
-     * dedujo del BOM o de los primeros bytes, es lo deducido; si vino de un `InputSource` con
-     * `Reader` ya armado, el parser no la sabe y devuelve `null`.
+     * The name of the encoding in use. If the document declared it, it is what was declared; if it
+     * was deduced from the BOM or from the first bytes, it is what was deduced; if it came from an
+     * `InputSource` with a ready-made `Reader`, the parser does not know it and returns `null`.
      */
     String getEncoding();
 }

@@ -5,17 +5,17 @@ import java.math.BigInteger;
 import java.util.GregorianCalendar;
 
 /**
- * La {@link DatatypeFactory} concreta de esta biblioteca: la que devuelve
- * {@link DatatypeFactory#newDefaultInstance()}.
+ * This library's concrete {@link DatatypeFactory}: the one {@link
+ * DatatypeFactory#newDefaultInstance()} returns.
  *
- * <p>Interna, y muy corta a proposito. Los siete metodos abstractos de la fabrica son los
- * generales, y los doce concretos ya estan escritos en {@code DatatypeFactory} en terminos de
- * ellos. Asi que todo lo que hay aca es enchufar las dos implementaciones --{@link KajiDuration} y
- * {@link KajiXMLGregorianCalendar}-- y el resto de la API queda funcionando por herencia.
+ * <p>Internal, and very short on purpose. The factory's seven abstract methods are the general
+ * ones, and the fourteen concrete ones are already written in {@code DatatypeFactory} in terms of
+ * them. So all there is here is plugging in the two implementations --{@link KajiDuration} and
+ * {@link KajiXMLGregorianCalendar}-- and the rest of the API works by inheritance.
  */
 final class KajiDatatypeFactory extends DatatypeFactory {
 
-    /** Publico dentro del paquete: lo instancia {@link DatatypeFactory#newDefaultInstance()}. */
+    /** Public within the package: {@link DatatypeFactory#newDefaultInstance()} instantiates it. */
     KajiDatatypeFactory() {
     }
 

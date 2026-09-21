@@ -15,13 +15,13 @@ import java.time.Instant;
 // matters more than keeping methods: it is what lets a subclass written against the JDK's Calendar
 // compile here unchanged.
 //
-// What it deliberately does NOT have, and why:
+// This note used to list as absent: getInstance(), getTimeZone()/setTimeZone(), getDisplayName(),
+// getWeekYear() and isWeekDateSupported(), for want of TimeZone, Locale and a concrete
+// GregorianCalendar. All three of those exist now and all of those members are declared below.
 //
-//   getInstance()          needs TimeZone, Locale AND a concrete GregorianCalendar. None exist.
-//                          A getInstance() that returned null would hand every caller an NPE at a
-//                          place that has nothing to do with the cause.
-//   getTimeZone()/setTimeZone(), getDisplayName(), getWeekYear(), isWeekDateSupported()
-//                          need TimeZone / Locale support that is not modelled.
+// What survives is narrower and is said at each declaration: getDisplayName and getDisplayNames
+// return null, which in the JDK's contract means "there is no name for this style" -- the names come
+// out of the locale bundles, and those are not here.
 //
 // A missing member is a legal subset; a member that lies is not. The same rule as ClassLoader
 // (#205) and ProtectionDomain (#267).
@@ -155,10 +155,10 @@ public abstract class Calendar implements Comparable<Calendar>, Serializable, Cl
     // --- the fields -----------------------------------------------------------------
 
     public int get(int field) {
-        // `complete()` y no solo `computeFields()`: si el llamador hizo `set(...)`, el instante
-        // quedo desactualizado y hay que recalcularlo ANTES de partirlo en campos. Recomputar
-        // solo los campos leeria el instante viejo y devolveria la fecha anterior — que es
-        // exactamente el defecto que tenia esto.
+        // `complete()` and not just `computeFields()`: if the caller did a `set(...)`, the instant
+        // is out of date and has to be recomputed BEFORE being split into fields. Recomputing only
+        // the fields would read the old instant and return the previous date — which is exactly the
+        // defect this had.
         this.complete();
         return this.fields[field];
     }
@@ -166,25 +166,25 @@ public abstract class Calendar implements Comparable<Calendar>, Serializable, Cl
     public void set(int field, int value) {
         this.fields[field] = value;
         this.isSet[field] = true;
-        // Las DOS banderas. Invalidar solo el instante no alcanza: los demas campos siguen
-        // marcados como validos, asi que un `get` posterior devolveria los viejos sin recalcular.
+        // BOTH flags. Invalidating only the instant is not enough: the other fields stay marked as
+        // valid, so a later `get` would return the old ones without recomputing.
         this.isTimeSet = false;
         this.areFieldsSet = false;
     }
 
-    public void set(int year, int month, int date) {
+    public final void set(int year, int month, int date) {
         this.set(YEAR, year);
         this.set(MONTH, month);
         this.set(DATE, date);
     }
 
-    public void set(int year, int month, int date, int hourOfDay, int minute) {
+    public final void set(int year, int month, int date, int hourOfDay, int minute) {
         this.set(year, month, date);
         this.set(HOUR_OF_DAY, hourOfDay);
         this.set(MINUTE, minute);
     }
 
-    public void set(int year, int month, int date, int hourOfDay, int minute, int second) {
+    public final void set(int year, int month, int date, int hourOfDay, int minute, int second) {
         this.set(year, month, date, hourOfDay, minute);
         this.set(SECOND, second);
     }
@@ -265,11 +265,11 @@ public abstract class Calendar implements Comparable<Calendar>, Serializable, Cl
         return (int) (millis ^ (millis >>> 32));
     }
 
-    // ---- estilos de nombre para getDisplayName ----------------------------------------------
+    // ---- name styles for getDisplayName ------------------------------------------------------
     //
-    // Los STANDALONE llevan el bit 0x8000 sobre su equivalente FORMAT, que es como el JDK
-    // distingue "enero" (nombre suelto) de "de enero" (dentro de una fecha) en los idiomas que
-    // hacen esa diferencia. En español no se nota; en ruso o finés, si.
+    // The STANDALONE ones carry the bit 0x8000 over their FORMAT equivalent, which is how the JDK
+    // tells "January" (a name on its own) from "of January" (inside a date) in the languages that
+    // make that difference. In English it does not show; in Russian or Finnish it does.
 
     public static final int ALL_STYLES = 0;
     public static final int SHORT_FORMAT = 1;
@@ -281,20 +281,20 @@ public abstract class Calendar implements Comparable<Calendar>, Serializable, Cl
     public static final int LONG_STANDALONE = 32770;
     public static final int NARROW_STANDALONE = 32772;
 
-    // La zona horaria de este calendario. Nunca null.
+    // This calendar's time zone. Never null.
     private TimeZone zone = TimeZone.getDefault();
 
-    // El primer dia de la semana y cuantos dias necesita la primera semana del año.
+    // The first day of the week and how many days the year's first week needs.
     //
-    // Son configurables porque no hay acuerdo: en gran parte del mundo la semana arranca el
-    // lunes, en Estados Unidos el domingo, y la "primera semana del año" es la que tiene 4 dias
-    // en la norma ISO y la que tiene 1 en el uso estadounidense. Un calendario que fije una sola
-    // convencion da fechas equivocadas en la otra mitad del planeta.
+    // They are configurable because there is no agreement: in much of the world the week starts on
+    // Monday, in the United States on Sunday, and "the year's first week" is the one with 4 days in
+    // the ISO standard and the one with 1 in American usage. A calendar that fixes a single
+    // convention gives wrong dates in the other half of the planet.
     private int firstDayOfWeek = 1;          // SUNDAY
     private int minimalDaysInFirstWeek = 1;
 
-    // Un calendario en la zona y el locale dados. `locale` se acepta y se ignora: no hay datos de
-    // locale en esta biblioteca, la misma decision que ya tomaron TimeZone y Currency.
+    // A calendar in the given zone and locale. `locale` is accepted and ignored: there is no locale
+    // data in this library, the same decision TimeZone and Currency already took.
     protected Calendar(TimeZone zone, Locale aLocale) {
         this();
         if (zone != null) {
@@ -302,13 +302,13 @@ public abstract class Calendar implements Comparable<Calendar>, Serializable, Cl
         }
     }
 
-    // La zona horaria.
+    // The time zone.
     public TimeZone getTimeZone() {
         return this.zone;
     }
 
-    // Cambia la zona horaria. Los campos quedan invalidados: el mismo instante se lee distinto en
-    // otra zona.
+    // It changes the time zone. The fields are invalidated: the same instant reads differently in
+    // another zone.
     public void setTimeZone(TimeZone value) {
         if (value == null) {
             throw new NullPointerException();
@@ -335,16 +335,16 @@ public abstract class Calendar implements Comparable<Calendar>, Serializable, Cl
         return this.minimalDaysInFirstWeek;
     }
 
-    // El valor crudo de un campo, SIN recalcular.
+    // A field's raw value, WITHOUT recomputing.
     //
-    // Es la diferencia con `get(int)` y el motivo de que sea `protected`: `get` completa el
-    // calendario antes de leer, y llamarlo desde `computeFields` seria recursion infinita. Las
-    // subclases leen con este.
+    // It is the difference from `get(int)` and the reason it is `protected`: `get` completes the
+    // calendar before reading, and calling it from `computeFields` would be infinite recursion. The
+    // subclasses read with this one.
     protected final int internalGet(int field) {
         return this.fields[field];
     }
 
-    // Recalcula lo que falte para que todos los campos esten al dia.
+    // It recomputes whatever is missing so every field is up to date.
     protected void complete() {
         if (!this.isTimeSet) {
             this.computeTime();
@@ -356,7 +356,7 @@ public abstract class Calendar implements Comparable<Calendar>, Serializable, Cl
         }
     }
 
-    // Un calendario para la zona y el locale por defecto.
+    // A calendar for the default zone and locale.
     public static Calendar getInstance() {
         return new GregorianCalendar(TimeZone.getDefault(), Locale.getDefault());
     }
@@ -373,7 +373,7 @@ public abstract class Calendar implements Comparable<Calendar>, Serializable, Cl
         return new GregorianCalendar(zone, aLocale);
     }
 
-    // Los locales para los que hay calendario. A KajiLibrary subset: los que declara `Locale`.
+    // The locales there is a calendar for. A KajiLibrary subset: the ones `Locale` declares.
     public static synchronized Locale[] getAvailableLocales() {
         Locale[] out = new Locale[8];
         out[0] = Locale.ROOT;
@@ -387,47 +387,48 @@ public abstract class Calendar implements Comparable<Calendar>, Serializable, Cl
         return out;
     }
 
-    // Los tipos de calendario disponibles. Aca solo el gregoriano.
+    // The available calendar types. Here only the Gregorian one.
     public static Set<String> getAvailableCalendarTypes() {
         HashSet<String> out = new HashSet<String>();
         out.add("gregory");
         return out;
     }
 
-    // El identificador del tipo de calendario.
+    // The calendar type's identifier.
     public String getCalendarType() {
         return "gregory";
     }
 
-    // El menor valor que un campo puede tomar **en esta fecha concreta**.
+    // The smallest value a field can take **on this concrete date**.
     //
-    // Distinto de `getMinimum`, que es el menor de cualquier fecha. La diferencia importa en
-    // DAY_OF_MONTH: el minimo siempre es 1, pero el maximo real es 28, 29, 30 o 31 segun el mes.
+    // Different from `getMinimum`, which is the smallest over any date. The difference matters for
+    // DAY_OF_MONTH: the minimum is always 1, but the inner maximum is 28, 29, 30 or 31 by month.
     public int getActualMinimum(int field) {
         return this.getMinimum(field);
     }
 
-    // El mayor valor que un campo puede tomar en esta fecha concreta.
+    // The largest value a field can take on this concrete date.
     //
-    // La implementacion generica busca por tanteo entre el maximo garantizado y el maximo
-    // posible; una subclase que sepa la respuesta —GregorianCalendar la sabe— la sobreescribe.
+    // The generic implementation searches by trial between the guaranteed maximum and the possible
+    // one; a subclass that knows the answer —GregorianCalendar does— overrides it.
     public int getActualMaximum(int field) {
         return this.getLeastMaximum(field);
     }
 
-    // Suma `amount` al campo sin tocar los mas grandes: `roll(MONTH, 1)` sobre diciembre da enero
-    // del MISMO año.
+    // It adds `amount` to the field without touching the larger ones: `roll(MONTH, 1)` on December
+    // gives January of the SAME year.
     public void roll(int field, int amount) {
-        boolean arriba = amount >= 0;
-        int veces = arriba ? amount : -amount;
+        boolean upwards = amount >= 0;
+        int times = upwards ? amount : -amount;
         int i = 0;
-        while (i < veces) {
-            this.roll(field, arriba);
+        while (i < times) {
+            this.roll(field, upwards);
             i = i + 1;
         }
     }
 
-    // Si este calendario soporta fechas por semana ISO. El gregoriano si; la clase base no.
+    // Whether this calendar supports ISO week dates. The Gregorian one does; the base class does
+    // not.
     public boolean isWeekDateSupported() {
         return false;
     }
@@ -444,12 +445,12 @@ public abstract class Calendar implements Comparable<Calendar>, Serializable, Cl
         throw new UnsupportedOperationException();
     }
 
-    // El nombre de un valor de campo en el estilo y locale dados.
+    // The name of a field value in the given style and locale.
     //
-    // A KajiLibrary subset: devuelve **null**, que en el contrato del JDK significa "no hay nombre
-    // para este estilo". Los nombres salen de los bundles de locale, que aca no existen — la
-    // misma decision que TimeZone.getDisplayName y Currency.getSymbol. Devolver null es correcto
-    // segun el contrato; inventar "enero" en ingles seria mentir.
+    // A KajiLibrary subset: it returns **null**, which in the JDK's contract means "there is no name
+    // for this style". The names come out of the locale bundles, which are not here — the same
+    // decision as TimeZone.getDisplayName and Currency.getSymbol. Returning null is correct under the
+    // contract; inventing "January" would be lying.
     public String getDisplayName(int field, int style, Locale locale) {
         if (locale == null) {
             throw new NullPointerException();
@@ -457,7 +458,7 @@ public abstract class Calendar implements Comparable<Calendar>, Serializable, Cl
         return null;
     }
 
-    // Todos los nombres de un campo. A KajiLibrary subset: null, por lo mismo que arriba.
+    // Every name of a field. A KajiLibrary subset: null, for the same reason as above.
     public Map<String, Integer> getDisplayNames(int field, int style, Locale locale) {
         if (locale == null) {
             throw new NullPointerException();
@@ -465,7 +466,7 @@ public abstract class Calendar implements Comparable<Calendar>, Serializable, Cl
         return null;
     }
 
-    // Este calendario como Instant.
+    // This calendar as an Instant.
     public final Instant toInstant() {
         return Instant.ofEpochMilli(this.getTimeInMillis());
     }

@@ -3,58 +3,60 @@ package java.security;
 import java.nio.ByteBuffer;
 import java.security.spec.AlgorithmParameterSpec;
 
-// Firma digital: producirla y verificarla.
+// Digital signature: producing it and verifying it.
 //
 // ===============================================================================================
-// EL CONTRATO QUE HAY QUE LEER DOS VECES
+// THE CONTRACT THAT HAS TO BE READ TWICE
 // ===============================================================================================
 //
-// `verify()` **devuelve un boolean**, al reves que `Certificate.verify()`, que no devuelve nada y
-// lanza si falla. La diferencia es deliberada y es donde se cometen los errores: aca, una firma
-// invalida **no lanza ninguna excepcion**, devuelve `false`. El codigo que hace
+// `verify()` **returns a boolean**, the other way round from `Certificate.verify()`, which returns
+// nothing and throws if it fails. The difference is deliberate and it is where the mistakes are
+// made: here, an invalid signature **throws no exception**, it returns `false`. Code that does
 //
-//     s.initVerify(k); s.update(datos); s.verify(firma);
+//     s.initVerify(k); s.update(data); s.verify(signature);
 //
-// sin mirar el resultado acepta cualquier firma. La excepcion se reserva para "el objeto no estaba
-// inicializado" o "el proveedor se rompio", que son errores del programa, no del atacante.
+// without looking at the result accepts any signature. The exception is reserved for "the object
+// was not initialised" or "the provider broke", which are errors of the program, not of the
+// attacker.
 //
-// El otro punto es el orden: hay que inicializar **antes** de alimentar datos, y cada `sign()` o
-// `verify()` deja el objeto listo para otra operacion con la misma clave. Alimentar datos sin
-// inicializar tira `SignatureException`, que es lo correcto: firmar con estado indefinido daria una
-// firma sin significado.
+// The other point is the order: one has to initialise **before** feeding data, and each `sign()` or
+// `verify()` leaves the object ready for another operation with the same key. Feeding data without
+// initialising throws `SignatureException`, which is right: signing with undefined state would give
+// a signature with no meaning.
 //
 // ===============================================================================================
-// POR QUE NO HAY NINGUN ALGORITMO, Y POR QUE NO HAY SecureRandom
+// WHY THERE IS NO ALGORITHM, AND WHY THERE IS NO SecureRandom
 // ===============================================================================================
 //
-// **No hay ningun proveedor de `Signature` registrado**, asi que las tres sobrecargas de
-// `getInstance` tiran siempre `NoSuchAlgorithmException`. Es la decision central de todo este
-// paquete: un `Signature.verify()` que devuelva true sin verificar no es deuda tecnica, es un
-// agujero, y la unica forma de no tenerlo es no ofrecer el algoritmo. La estructura entera esta
-// —`SignatureSpi` es la interfaz completa— asi que un proveedor que sepa RSA o ECDSA se enchufa y
-// todo lo demas funciona.
+// **There is no registered `Signature` provider**, so the three overloads of `getInstance` always
+// throw `NoSuchAlgorithmException`. It is the central decision of this whole package: a
+// `Signature.verify()` that returns true without verifying is not technical debt, it is a hole, and
+// the only way of not having it is not offering the algorithm. The whole structure is there
+// —`SignatureSpi` is the complete interface— so a provider that knows RSA or ECDSA plugs in and
+// everything else works.
 //
-// `initSign(PrivateKey, SecureRandom)` si esta, y la fuente que recibe importa mas de lo que parece:
-// es de donde sale el nonce de DSA y ECDSA. Ver `SignatureSpi` para que pasa si ese nonce se repite.
+// `initSign(PrivateKey, SecureRandom)` is there, and the source it receives matters more than it
+// seems: it is where the nonce of DSA and ECDSA comes from. See `SignatureSpi` for what happens if
+// that nonce repeats.
 public abstract class Signature extends SignatureSpi {
 
-    // Todavia no se dijo si se firma o se verifica.
+    // It has not been said yet whether it signs or verifies.
     protected static final int UNINITIALIZED = 0;
 
-    // Listo para firmar.
+    // Ready to sign.
     protected static final int SIGN = 2;
 
-    // Listo para verificar.
+    // Ready to verify.
     protected static final int VERIFY = 3;
 
-    // En cual de los tres estados esta. Es `protected` y no privado porque las subclases directas
-    // —las que escribe un proveedor sin pasar por un SPI aparte— lo miran.
+    // Which of the three states it is in. It is `protected` and not private because the direct
+    // subclasses —the ones a provider writes without going through a separate SPI— look at it.
     protected int state = UNINITIALIZED;
 
     private final String algorithm;
 
-    // El proveedor solo lo tiene la instancia que sale de `getInstance`; una subclase escrita a mano
-    // no tiene ninguno.
+    // The provider is only had by the instance that comes out of `getInstance`; a subclass written
+    // by hand has none.
     Provider provider;
 
     protected Signature(String algorithm) {
@@ -70,7 +72,7 @@ public abstract class Signature extends SignatureSpi {
         while (i < provs.length) {
             Provider.Service s = provs[i].getService("Signature", algorithm);
             if (s != null) {
-                return armar(s, algorithm);
+                return build(s, algorithm);
             }
             i = i + 1;
         }
@@ -102,45 +104,45 @@ public abstract class Signature extends SignatureSpi {
             throw new NoSuchAlgorithmException(
                 "no such algorithm: " + algorithm + " for provider " + provider.getName());
         }
-        return armar(s, algorithm);
+        return build(s, algorithm);
     }
 
-    private static Signature armar(Provider.Service s, String algorithm)
+    private static Signature build(Provider.Service s, String algorithm)
             throws NoSuchAlgorithmException {
         Object o = s.newInstance(null);
         if (!(o instanceof SignatureSpi)) {
             throw new NoSuchAlgorithmException(
                 "class configured for Signature is not a SignatureSpi: " + s.getClassName());
         }
-        SignatureDelegada d = new SignatureDelegada((SignatureSpi) o, algorithm);
+        SignatureDelegate d = new SignatureDelegate((SignatureSpi) o, algorithm);
         d.provider = s.getProvider();
         return d;
     }
 
-    // El proveedor que resolvio el algoritmo, o null si esta instancia no salio de `getInstance`.
+    // The provider that resolved the algorithm, or null if this instance did not come out of
+    // `getInstance`.
     public final Provider getProvider() {
         return this.provider;
     }
 
-    // Prepara para verificar con esta clave publica. Descarta cualquier dato que se hubiera
-    // alimentado antes.
+    // It prepares to verify with this public key. It discards any data that had been fed before.
     public final void initVerify(PublicKey publicKey) throws InvalidKeyException {
         this.engineInitVerify(publicKey);
         this.state = VERIFY;
     }
 
-    // Prepara para verificar con la clave que trae un certificado.
+    // It prepares to verify with the key a certificate brings.
     //
-    // No es solo un atajo: comprueba la extension KeyUsage antes de aceptar la clave. Si el
-    // certificado dice que su clave no sirve para firmar —el bit 0, digitalSignature, apagado— se
-    // rechaza. Sin eso, un certificado emitido para cifrar podria usarse para validar firmas, que es
-    // exactamente lo que KeyUsage existe para impedir.
+    // It is not only a shortcut: it checks the KeyUsage extension before accepting the key. If the
+    // certificate says that its key does not serve for signing —bit 0, digitalSignature, off— it is
+    // rejected. Without that, a certificate issued for encrypting could be used for validating
+    // signatures, which is exactly what KeyUsage exists to prevent.
     //
-    // El detalle que importa, y que es facil de leer al reves: **solo se mira si la extension viene
-    // marcada como critica**. Es lo que hace el JDK y es coherente con el modelo de X.509 —una
-    // extension no critica es una recomendacion que quien no la entienda puede ignorar— pero deja
-    // pasar certificados con un KeyUsage no critico que dice que no. Quien necesite la regla
-    // estricta tiene que mirar `getKeyUsage()` el mismo.
+    // The detail that matters, and that is easy to read the wrong way round: **it is only looked at
+    // if the extension comes marked as critical**. It is what the JDK does and it is coherent with
+    // the model of X.509 —a non-critical extension is a recommendation whoever does not understand
+    // it can ignore— but it lets through certificates with a non-critical KeyUsage that says no.
+    // Whoever needs the strict rule has to look at `getKeyUsage()` themselves.
     public final void initVerify(java.security.cert.Certificate certificate)
             throws InvalidKeyException {
         if (certificate instanceof java.security.cert.X509Certificate) {
@@ -148,8 +150,8 @@ public abstract class Signature extends SignatureSpi {
                 (java.security.cert.X509Certificate) certificate;
             java.util.Set<String> criticas = cert.getCriticalExtensionOIDs();
             if (criticas != null && !criticas.isEmpty() && criticas.contains("2.5.29.15")) {
-                boolean[] usos = cert.getKeyUsage();
-                if (usos != null && !usos[0]) {
+                boolean[] uses = cert.getKeyUsage();
+                if (uses != null && !uses[0]) {
                     throw new InvalidKeyException("Wrong key usage");
                 }
             }
@@ -159,17 +161,17 @@ public abstract class Signature extends SignatureSpi {
         this.state = VERIFY;
     }
 
-    // Prepara para firmar con esta clave privada.
+    // It prepares to sign with this private key.
     public final void initSign(PrivateKey privateKey) throws InvalidKeyException {
         this.engineInitSign(privateKey);
         this.state = SIGN;
     }
 
     /**
-     * Idem, diciendo de donde sale el azar.
+     * The same, saying where the randomness comes from.
      *
-     * <p>La fuente es la del nonce por firma. Ver {@link SignatureSpi} para por que un nonce
-     * repetido en ECDSA revela la clave privada.
+     * <p>The source is the one of the nonce per signature. See {@link SignatureSpi} for why a
+     * repeated nonce in ECDSA reveals the private key.
      */
     public final void initSign(PrivateKey privateKey, SecureRandom random)
             throws InvalidKeyException {
@@ -177,8 +179,8 @@ public abstract class Signature extends SignatureSpi {
         this.state = SIGN;
     }
 
-    // Cierra la operacion y devuelve la firma. El objeto queda listo para firmar de nuevo con la
-    // misma clave.
+    // It closes the operation and returns the signature. The object is left ready to sign again
+    // with the same key.
     public final byte[] sign() throws SignatureException {
         if (this.state == SIGN) {
             return this.engineSign();
@@ -186,7 +188,7 @@ public abstract class Signature extends SignatureSpi {
         throw new SignatureException("object not initialized for signing");
     }
 
-    // Igual, dejando la firma en un buffer. Devuelve cuantos bytes ocupo.
+    // The same, leaving the signature in a buffer. It returns how many bytes it took.
     public final int sign(byte[] outbuf, int offset, int len) throws SignatureException {
         if (this.state != SIGN) {
             throw new SignatureException("object not initialized for signing");
@@ -204,7 +206,8 @@ public abstract class Signature extends SignatureSpi {
         return this.engineSign(outbuf, offset, len);
     }
 
-    // Verifica. **Devuelve false si la firma no vale; no lanza.** Ver la nota de la clase.
+    // It verifies. **It returns false if the signature is not valid; it does not throw.** See the
+    // note of the class.
     public final boolean verify(byte[] signature) throws SignatureException {
         if (this.state == VERIFY) {
             return this.engineVerify(signature);
@@ -267,7 +270,7 @@ public abstract class Signature extends SignatureSpi {
         }
     }
 
-    // Alimenta desde un buffer. Lo consume entero: al volver, `position` quedo en `limit`.
+    // It feeds from a buffer. It consumes it whole: on returning, `position` was left at `limit`.
     public final void update(ByteBuffer data) throws SignatureException {
         if (this.state != SIGN && this.state != VERIFY) {
             throw new SignatureException("object not initialized for signature or verification");
@@ -278,40 +281,40 @@ public abstract class Signature extends SignatureSpi {
         this.engineUpdate(data);
     }
 
-    // El nombre del algoritmo: "SHA256withRSA".
+    // The name of the algorithm: "SHA256withRSA".
     public final String getAlgorithm() {
         return this.algorithm;
     }
 
     @Override
     public String toString() {
-        String estado = "";
+        String label = "";
         if (this.state == UNINITIALIZED) {
-            estado = "<not initialized>";
+            label = "<not initialized>";
         } else if (this.state == VERIFY) {
-            estado = "<initialized for verifying>";
+            label = "<initialized for verifying>";
         } else if (this.state == SIGN) {
-            estado = "<initialized for signing>";
+            label = "<initialized for signing>";
         }
-        return "Signature object: " + this.getAlgorithm() + estado;
+        return "Signature object: " + this.getAlgorithm() + label;
     }
 
-    // Parametros por nombre. Desaconsejado desde el JDK 1.2: los nombres nunca se estandarizaron,
-    // asi que el mismo string significaba cosas distintas segun el proveedor.
+    // Parameters by name. Discouraged since JDK 1.2: the names were never standardised, so the same
+    // string meant different things depending on the provider.
     public final void setParameter(String param, Object value) throws InvalidParameterException {
         this.engineSetParameter(param, value);
     }
 
-    // La forma buena de pasar parametros. Para RSASSA-PSS no es opcional: sin `PSSParameterSpec`,
-    // el hash y el largo de sal quedan a criterio del proveedor y la firma no verifica del otro
-    // lado.
+    // The good way of passing parameters. For RSASSA-PSS it is not optional: without
+    // `PSSParameterSpec`, the hash and the length of the salt are left to the provider's criterion
+    // and the signature does not verify on the other side.
     public final void setParameter(AlgorithmParameterSpec params)
             throws InvalidAlgorithmParameterException {
         this.engineSetParameter(params);
     }
 
-    // Los parametros efectivos, incluidos los que el proveedor eligio solo. Sirve para averiguar
-    // que se uso realmente y poder repetirlo del otro lado.
+    // The effective parameters, including the ones the provider chose by itself. It serves for
+    // finding out what was really used and being able to repeat it on the other side.
     public final AlgorithmParameters getParameters() {
         return this.engineGetParameters();
     }

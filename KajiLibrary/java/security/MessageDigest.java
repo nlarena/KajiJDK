@@ -2,50 +2,53 @@ package java.security;
 
 import java.nio.ByteBuffer;
 
-// Una funcion de hash criptografica, con la fabrica que la busca entre los proveedores.
+// A cryptographic hash function, with the factory that looks for it among the providers.
 //
 // ===============================================================================================
-// QUE HAY DE VERDAD ACA, Y QUE NO
+// WHAT IS REAL HERE, AND WHAT IS NOT
 // ===============================================================================================
 //
-// Esta es la unica fabrica de `java.security` en KajiLibrary que tiene algoritmos **de verdad**
-// detras. `KajiProvider` registra seis, escritos de cero en esta biblioteca y verificados byte a
-// byte contra los del JDK 25 y contra los vectores de las especificaciones (RFC 1321 para MD5,
-// FIPS 180-4 para la familia SHA):
+// This is the only factory of `java.security` in KajiLibrary that has **real** algorithms behind
+// it. `KajiProvider` registers six, written from scratch in this library and checked byte by byte
+// against those of JDK 25 and against the vectors of the specifications (RFC 1321 for MD5, FIPS
+// 180-4 for the SHA family):
 //
 //     MD5, SHA-1, SHA-224, SHA-256, SHA-384, SHA-512
 //
-// Todo lo demas que se le pida a `getInstance` tira `NoSuchAlgorithmException`, que es la respuesta
-// correcta: no hay proveedor que lo ofrezca. En particular **no** hay SHA-3 ni SHAKE — la
-// permutacion Keccak es otro algoritmo entero y no se escribio.
+// Everything else asked of `getInstance` throws `NoSuchAlgorithmException`, which is the right
+// answer: there is no provider that offers it. In particular there is **no** SHA-3 and no SHAKE —
+// the Keccak permutation is another whole algorithm and was not written.
 //
-// MD5 y SHA-1 estan **rotos para uso criptografico** y se registran igual. No es una contradiccion
-// con la regla de no mentir: la clase no promete que el algoritmo sea seguro, promete que devuelve
-// el digest que la especificacion define, y eso lo cumple exactamente. Se siguen necesitando para
-// leer formatos viejos, checksums y HMAC heredados, y omitirlos no vuelve seguro a nadie: lo unico
-// que hace es que el que los necesita se escriba una version peor.
+// MD5 and SHA-1 are **broken for cryptographic use** and are registered all the same. It is not a
+// contradiction with the rule of not lying: the class does not promise that the algorithm is
+// secure, it promises that it returns the digest the specification defines, and that it fulfils
+// exactly. They are still needed for reading old formats, checksums and inherited HMACs, and
+// omitting them makes nobody safe: the only thing it does is make whoever needs them write a worse
+// version.
 //
-// Lo que no esta: `getInstance` no lee `java.security` de disco ni descubre proveedores por
-// `ServiceLoader`; la lista de proveedores es la que `Security` tiene en memoria.
+// What is not there: `getInstance` does not read `java.security` from disk and does not discover
+// providers through `ServiceLoader`; the list of providers is the one `Security` has in memory.
 public abstract class MessageDigest extends MessageDigestSpi {
 
     private final String algorithm;
 
-    // De donde salio esta instancia. Lo setea la fabrica; una subclase construida a mano lo tiene
-    // en null hasta que alguien la registre.
+    // Where this instance came from. The factory sets it; a subclass built by hand has it null
+    // until somebody registers it.
     private Provider provider;
 
-    // Si desde el ultimo `digest()` o `reset()` entro algun byte. Solo lo usa `toString`.
-    private boolean enCurso;
+    // Whether any byte has gone in since the last `digest()` or `reset()`. Only `toString` uses
+    // it.
+    private boolean inProgress;
 
     protected MessageDigest(String algorithm) {
         this.algorithm = algorithm;
     }
 
-    // Un digest del algoritmo pedido, del primer proveedor que lo ofrezca.
+    // A digest of the algorithm asked for, of the first provider that offers it.
     //
-    // El orden importa y es el de `Security.getProviders()`: gana el primero, y por eso insertar un
-    // proveedor en la posicion 1 alcanza para reemplazar un algoritmo en todo el proceso.
+    // The order matters and it is that of `Security.getProviders()`: the first wins, and that is
+    // why inserting a provider at position 1 is enough to replace an algorithm in the whole
+    // process.
     public static MessageDigest getInstance(String algorithm) throws NoSuchAlgorithmException {
         if (algorithm == null) {
             throw new NullPointerException("null algorithm name");
@@ -55,7 +58,7 @@ public abstract class MessageDigest extends MessageDigestSpi {
         while (i < provs.length) {
             Provider.Service s = provs[i].getService("MessageDigest", algorithm);
             if (s != null) {
-                return armar(s, algorithm);
+                return build(s, algorithm);
             }
             i = i + 1;
         }
@@ -87,22 +90,22 @@ public abstract class MessageDigest extends MessageDigestSpi {
             throw new NoSuchAlgorithmException(
                 "no such algorithm: " + algorithm + " for provider " + provider.getName());
         }
-        return armar(s, algorithm);
+        return build(s, algorithm);
     }
 
-    // Instancia el servicio y lo envuelve si hace falta.
+    // It instantiates the service and wraps it if need be.
     //
-    // Si lo que devuelve el proveedor ya es un `MessageDigest`, se usa tal cual; si es solo un
-    // `MessageDigestSpi`, se envuelve en un delegado. Los dos casos existen porque un algoritmo
-    // que vive dentro de la biblioteca puede ahorrarse el objeto de mas.
-    private static MessageDigest armar(Provider.Service s, String algorithm)
+    // If what the provider returns is a `MessageDigest` already, it is used as it is; if it is only
+    // a `MessageDigestSpi`, it is wrapped in a delegate. Both cases exist because an algorithm that
+    // lives inside the library can save itself the extra object.
+    private static MessageDigest build(Provider.Service s, String algorithm)
             throws NoSuchAlgorithmException {
         Object o = s.newInstance(null);
         MessageDigest md;
         if (o instanceof MessageDigest) {
             md = (MessageDigest) o;
         } else if (o instanceof MessageDigestSpi) {
-            md = new DigestDelegado((MessageDigestSpi) o, algorithm);
+            md = new DigestDelegate((MessageDigestSpi) o, algorithm);
         } else {
             throw new NoSuchAlgorithmException(
                 "class configured for MessageDigest is not a MessageDigestSpi: " + s.getClassName());
@@ -111,19 +114,19 @@ public abstract class MessageDigest extends MessageDigestSpi {
         return md;
     }
 
-    // El proveedor del que salio, o null si se construyo a mano.
+    // The provider it came from, or null if it was built by hand.
     public final Provider getProvider() {
         return this.provider;
     }
 
-    // Package-private: `Security` y las fabricas del paquete necesitan poder marcarlo.
+    // Package-private: `Security` and the factories of the package need to be able to set it.
     final void setProvider(Provider p) {
         this.provider = p;
     }
 
     public void update(byte input) {
         this.engineUpdate(input);
-        this.enCurso = true;
+        this.inProgress = true;
     }
 
     public void update(byte[] input, int offset, int len) {
@@ -134,7 +137,7 @@ public abstract class MessageDigest extends MessageDigestSpi {
             throw new IllegalArgumentException("Input buffer too short");
         }
         this.engineUpdate(input, offset, len);
-        this.enCurso = true;
+        this.inProgress = true;
     }
 
     public void update(byte[] input) {
@@ -142,7 +145,7 @@ public abstract class MessageDigest extends MessageDigestSpi {
             throw new IllegalArgumentException("No input buffer given");
         }
         this.engineUpdate(input, 0, input.length);
-        this.enCurso = true;
+        this.inProgress = true;
     }
 
     public final void update(ByteBuffer input) {
@@ -150,14 +153,14 @@ public abstract class MessageDigest extends MessageDigestSpi {
             throw new NullPointerException();
         }
         this.engineUpdate(input);
-        this.enCurso = true;
+        this.inProgress = true;
     }
 
-    // Cierra el digest y lo devuelve. Despues de esto el objeto queda reseteado y listo para
-    // volver a usarse — no hay que construir uno nuevo por mensaje.
+    // It closes the digest and returns it. After this the object is left reset and ready to be used
+    // again — there is no need to build a new one per message.
     public byte[] digest() {
         byte[] result = this.engineDigest();
-        this.enCurso = false;
+        this.inProgress = false;
         return result;
     }
 
@@ -170,11 +173,12 @@ public abstract class MessageDigest extends MessageDigestSpi {
                 "Output buffer too small for specified offset and length");
         }
         int numBytes = this.engineDigest(buf, offset, len);
-        this.enCurso = false;
+        this.inProgress = false;
         return numBytes;
     }
 
-    // Agrega `input` y cierra, todo junto. Es el atajo para el caso de un solo bloque de datos.
+    // It adds `input` and closes, all together. It is the shortcut for the case of a single block
+    // of data.
     public byte[] digest(byte[] input) {
         this.update(input);
         return this.digest();
@@ -182,27 +186,28 @@ public abstract class MessageDigest extends MessageDigestSpi {
 
     @Override
     public String toString() {
-        String nombreProv = this.provider == null ? "(no provider)" : this.provider.getName();
-        String estado = this.enCurso ? "<in progress>" : "<initialized>";
-        return this.algorithm + " Message Digest from " + nombreProv + ", " + estado + "\n";
+        String provName = this.provider == null ? "(no provider)" : this.provider.getName();
+        String stateText = this.inProgress ? "<in progress>" : "<initialized>";
+        return this.algorithm + " Message Digest from " + provName + ", " + stateText + "\n";
     }
 
-    // Compara dos digests **en tiempo constante** respecto de en que byte difieren.
+    // It compares two digests **in constant time** with respect to which byte they differ at.
     //
-    // Este metodo es la razon por la que no alcanza con `Arrays.equals`. Un `equals` normal corta
-    // en la primera diferencia, y esa diferencia de tiempo es medible: quien controla uno de los
-    // dos arreglos puede ir descubriendo el otro byte por byte, con 256 intentos por posicion en
-    // vez de 256^n por el total. Aca se recorren siempre todos los bytes y se acumula con OR.
+    // This method is the reason why `Arrays.equals` is not enough. A normal `equals` stops at the
+    // first difference, and that difference of time is measurable: whoever controls one of the two
+    // arrays can go on discovering the other byte by byte, with 256 attempts per position instead
+    // of 256^n for the total. Here every byte is always walked and it is accumulated with OR.
     //
-    // El largo si se filtra —no hay forma de no filtrarlo— pero el largo de un digest es publico.
-    public static boolean isEqual(byte[] digesta, byte[] digestb) {
-        if (digesta == digestb) {
+    // The length does leak —there is no way of not leaking it— but the length of a digest is
+    // public.
+    public static boolean isEqual(byte[] digestOf, byte[] digestb) {
+        if (digestOf == digestb) {
             return true;
         }
-        if (digesta == null || digestb == null) {
+        if (digestOf == null || digestb == null) {
             return false;
         }
-        int lenA = digesta.length;
+        int lenA = digestOf.length;
         int lenB = digestb.length;
         if (lenB == 0) {
             return lenA == 0;
@@ -210,13 +215,13 @@ public abstract class MessageDigest extends MessageDigestSpi {
         int result = 0;
         result = result | (lenA - lenB);
 
-        // Se recorre siempre `lenA` entero. Cuando `i` se pasa de `lenB` el indice se colapsa a 0
-        // —el shift de signo da 0 en vez de 1— asi que se relee un byte ya visto en lugar de
-        // salirse del arreglo, y el bucle no cambia de largo segun los datos.
+        // `lenA` is always walked whole. When `i` goes past `lenB` the index collapses to 0 —the
+        // sign shift gives 0 instead of 1— so a byte already seen is reread instead of going
+        // outside the array, and the loop does not change length according to the data.
         int i = 0;
         while (i < lenA) {
             int indexB = ((i - lenB) >>> 31) * i;
-            result = result | (digesta[i] ^ digestb[indexB]);
+            result = result | (digestOf[i] ^ digestb[indexB]);
             i = i + 1;
         }
         return result == 0;
@@ -224,19 +229,19 @@ public abstract class MessageDigest extends MessageDigestSpi {
 
     public void reset() {
         this.engineReset();
-        this.enCurso = false;
+        this.inProgress = false;
     }
 
     public final String getAlgorithm() {
         return this.algorithm;
     }
 
-    // El largo del digest en bytes.
+    // The length of the digest in bytes.
     public final int getDigestLength() {
         return this.engineGetDigestLength();
     }
 
-    // Un clon con el mismo estado intermedio, si la implementacion lo permite.
+    // A clone with the same intermediate state, if the implementation allows it.
     @Override
     public Object clone() throws CloneNotSupportedException {
         if (this instanceof Cloneable) {
@@ -246,16 +251,16 @@ public abstract class MessageDigest extends MessageDigestSpi {
     }
 }
 
-// La cara publica de un spi que no es a la vez un `MessageDigest`.
+// The public face of a spi that is not at the same time a `MessageDigest`.
 //
-// Reenvia cada `engineX` al spi envuelto. Existe solo para el caso en que un proveedor externo
-// entrega un `MessageDigestSpi` pelado; los digests de esta biblioteca extienden `MessageDigest`
-// directamente y no pasan por aca.
-final class DigestDelegado extends MessageDigest implements Cloneable {
+// It forwards each `engineX` to the wrapped spi. It exists only for the case where an external
+// provider hands over a bare `MessageDigestSpi`; the digests of this library extend `MessageDigest`
+// directly and do not go through here.
+final class DigestDelegate extends MessageDigest implements Cloneable {
 
     private MessageDigestSpi spi;
 
-    DigestDelegado(MessageDigestSpi spi, String algorithm) {
+    DigestDelegate(MessageDigestSpi spi, String algorithm) {
         super(algorithm);
         this.spi = spi;
     }
@@ -295,12 +300,12 @@ final class DigestDelegado extends MessageDigest implements Cloneable {
         this.spi.engineReset();
     }
 
-    // El clon tiene que llevarse **su propio** spi: dos delegados compartiendo el spi serian el
-    // mismo digest con dos nombres, que es justo lo contrario de lo que se pide al clonar.
+    // The clone has to take **its own** spi: two delegates sharing the spi would be the same digest
+    // with two names, which is just the opposite of what is asked when cloning.
     @Override
     public Object clone() throws CloneNotSupportedException {
-        DigestDelegado copia = (DigestDelegado) super.clone();
-        copia.spi = (MessageDigestSpi) this.spi.clone();
-        return copia;
+        DigestDelegate copy = (DigestDelegate) super.clone();
+        copy.spi = (MessageDigestSpi) this.spi.clone();
+        return copy;
     }
 }

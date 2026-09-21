@@ -1,17 +1,18 @@
 package java.nio.channels;
 
 /**
- * KajiLibrary's java.nio.channels.AsynchronousCloseException — El canal lo cerro **otro hilo** mientras esta operacion estaba en curso.
+ * KajiLibrary's java.nio.channels.AsynchronousCloseException — the channel was closed by **another
+ * thread** while this operation was under way.
  *
- * <p>Extiende `ClosedChannelException` y agrega la parte que importa para diagnosticar: el canal
- * no estaba cerrado cuando la operacion empezo. Quien la reciba sabe que no se equivoco de orden;
- * le cerraron el canal debajo.
+ * <p>It extends `ClosedChannelException` and adds the part that matters for diagnosing: the channel
+ * was not closed when the operation started. Whoever receives it knows they did not get the order
+ * wrong; the channel was closed underneath them.
  */
 public class AsynchronousCloseException extends ClosedChannelException {
 
     private static final long serialVersionUID = 1000000003L;
 
-    /** Construye una. Sin mensaje: el nombre de la clase **es** el mensaje. */
+    /** Builds one. With no message: the name of the class **is** the message. */
     public AsynchronousCloseException() {
         super();
     }

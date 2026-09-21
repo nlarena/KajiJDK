@@ -8,131 +8,132 @@ import java.util.List;
 import java.util.function.BiFunction;
 
 /**
- * Un {@link Socket} que cifra.
+ * A {@link Socket} that encrypts.
  *
- * <h2>La promesa, y lo que hay que hacer para que sea cierta</h2>
+ * <h2>The promise, and what has to be done for it to be true</h2>
  *
- * <p>Todo lo de {@code Socket} sigue valiendo: se lee y se escribe igual, y el cifrado pasa abajo.
- * Eso es lo que permite tomar codigo que hablaba en claro y volverlo seguro cambiando quien crea el
- * socket.
+ * <p>Everything about {@code Socket} still holds: it is read and written the same, and the
+ * encryption happens underneath. That is what allows taking code that talked in the clear and
+ * making it secure by changing who creates the socket.
  *
- * <p>Con una salvedad que cuesta cara: <strong>por omision no se verifica la identidad del
- * servidor</strong>. Un socket recien creado cifra contra quien sea, incluido un intermediario con
- * un certificado legitimo de otro dominio. Encender esa verificacion es poner
- * {@link SSLParameters#setEndpointIdentificationAlgorithm} en {@code "HTTPS"}. No hacerlo es la
- * forma mas frecuente de tener TLS que no protege de nada.
+ * <p>With one caveat that costs dearly: <strong>by default the server's identity is not
+ * checked</strong>. A freshly created socket encrypts against anybody, including a middleman with a
+ * legitimate certificate for another domain. Turning that check on is setting
+ * {@link SSLParameters#setEndpointIdentificationAlgorithm} to {@code "HTTPS"}. Not doing it is the
+ * most frequent way of having TLS that protects against nothing.
  *
- * <h2>Cuando pasa el handshake</h2>
+ * <h2>When the handshake happens</h2>
  *
- * <p>No al crear el socket: en la primera lectura o escritura, o cuando se lo pida
- * {@link #startHandshake}. Por eso un error de certificado no aparece donde uno lo espera sino en
- * el primer {@code read} — y por eso conviene llamar a {@code startHandshake} explicitamente cuando
- * se quiere fallar temprano.
+ * <p>Not when creating the socket: on the first read or write, or when {@link #startHandshake} asks
+ * for it. That is why a certificate error does not show where one expects it but on the first
+ * {@code read} — and why it is worth calling {@code startHandshake} explicitly when one wants to
+ * fail early.
  */
 public abstract class SSLSocket extends Socket {
 
-    /** Sin conectar. */
+    /** Unconnected. */
     protected SSLSocket() {
         super();
     }
 
-    /** Conectado a un host por nombre. */
+    /** Connected to a host by name. */
     protected SSLSocket(String host, int port) throws IOException, UnknownHostException {
         super(host, port);
     }
 
-    /** Conectado a una direccion. */
+    /** Connected to an address. */
     protected SSLSocket(InetAddress address, int port) throws IOException {
         super(address, port);
     }
 
-    /** Conectado, ligando ademas una direccion local. */
+    /** Connected, also binding a local address. */
     protected SSLSocket(String host, int port, InetAddress clientAddress, int clientPort)
             throws IOException, UnknownHostException {
         super(host, port, clientAddress, clientPort);
     }
 
-    /** Igual, con la direccion remota ya resuelta. */
+    /** The same, with the remote address already resolved. */
     protected SSLSocket(InetAddress address, int port, InetAddress clientAddress, int clientPort)
             throws IOException {
         super(address, port, clientAddress, clientPort);
     }
 
-    /** Todas las suites que este socket conoce. */
+    /** All the suites this socket knows. */
     public abstract String[] getSupportedCipherSuites();
 
-    /** Las habilitadas ahora. */
+    /** The ones enabled now. */
     public abstract String[] getEnabledCipherSuites();
 
-    /** Fija las suites habilitadas. */
+    /** Sets the enabled suites. */
     public abstract void setEnabledCipherSuites(String[] suites);
 
-    /** Todos los protocolos que conoce. */
+    /** All the protocols it knows. */
     public abstract String[] getSupportedProtocols();
 
-    /** Los habilitados ahora. */
+    /** The ones enabled now. */
     public abstract String[] getEnabledProtocols();
 
-    /** Fija los protocolos habilitados. */
+    /** Sets the enabled protocols. */
     public abstract void setEnabledProtocols(String[] protocols);
 
     /**
-     * La sesion, forzando el handshake si todavia no paso.
+     * The session, forcing the handshake if it did not happen yet.
      *
-     * <p>Bloquea, y si el handshake falla <strong>no tira</strong>: devuelve una sesion invalida con
-     * suite {@code SSL_NULL_WITH_NULL_NULL}. Es una firma vieja que no podia declarar excepcion, y
-     * la trampa esta en que el error se ve solo si uno mira la suite.
+     * <p>It blocks, and if the handshake fails <strong>it does not throw</strong>: it returns an
+     * invalid session with suite {@code SSL_NULL_WITH_NULL_NULL}. It is an old signature that could
+     * not declare an exception, and the trap is that the error only shows if one looks at the
+     * suite.
      */
     public abstract SSLSession getSession();
 
-    /** La sesion en negociacion, o {@code null} si no hay handshake en curso. */
+    /** The session being negotiated, or {@code null} if there is no handshake in progress. */
     public SSLSession getHandshakeSession() {
-        throw new UnsupportedOperationException("este socket no expone la sesion en negociacion");
+        throw new UnsupportedOperationException("socket exposes no handshake session");
     }
 
-    /** Agrega quien se entere de cada handshake terminado. */
+    /** Adds somebody to find out about each finished handshake. */
     public abstract void addHandshakeCompletedListener(HandshakeCompletedListener listener);
 
-    /** Saca un oyente. */
+    /** Removes a listener. */
     public abstract void removeHandshakeCompletedListener(HandshakeCompletedListener listener);
 
     /**
-     * Fuerza el handshake, o renegocia si ya hubo uno.
+     * Forces the handshake, or renegotiates if there already was one.
      *
-     * @throws IOException si el handshake falla — a diferencia de {@link #getSession}, aca el error
-     *     si llega como excepcion, que es la razon para llamarlo explicitamente
+     * @throws IOException if the handshake fails — unlike {@link #getSession}, here the error does
+     *     arrive as an exception, which is the reason to call it explicitly
      */
     public abstract void startHandshake() throws IOException;
 
     /**
-     * Si este socket es el cliente.
+     * Whether this socket is the client.
      *
-     * @throws IllegalArgumentException si el handshake ya empezo
+     * @throws IllegalArgumentException if the handshake already started
      */
     public abstract void setUseClientMode(boolean mode);
 
-    /** Si es el cliente. */
+    /** Whether it is the client. */
     public abstract boolean getUseClientMode();
 
-    /** Exige autenticacion de cliente; solo del lado servidor. */
+    /** Requires client authentication; server side only. */
     public abstract void setNeedClientAuth(boolean need);
 
-    /** Si se exige. */
+    /** Whether it is required. */
     public abstract boolean getNeedClientAuth();
 
-    /** Pide autenticacion de cliente sin exigirla. */
+    /** Requests client authentication without requiring it. */
     public abstract void setWantClientAuth(boolean want);
 
-    /** Si se pide. */
+    /** Whether it is requested. */
     public abstract boolean getWantClientAuth();
 
-    /** Si se pueden crear sesiones nuevas. */
+    /** Whether new sessions can be created. */
     public abstract void setEnableSessionCreation(boolean flag);
 
-    /** Si se pueden crear sesiones nuevas. */
+    /** Whether new sessions can be created. */
     public abstract boolean getEnableSessionCreation();
 
-    /** Toda la configuracion junta. */
+    /** All the configuration together. */
     public SSLParameters getSSLParameters() {
         SSLParameters p = new SSLParameters();
         p.setCipherSuites(getEnabledCipherSuites());
@@ -145,7 +146,7 @@ public abstract class SSLSocket extends Socket {
         return p;
     }
 
-    /** Aplica la configuracion; solo lo que no sea {@code null}. */
+    /** Applies the configuration; only what is not {@code null}. */
     public void setSSLParameters(SSLParameters params) {
         String[] s = params.getCipherSuites();
         if (s != null) {
@@ -164,24 +165,24 @@ public abstract class SSLSocket extends Socket {
         }
     }
 
-    /** El protocolo de aplicacion acordado por ALPN. */
+    /** The application protocol agreed by ALPN. */
     public String getApplicationProtocol() {
-        throw new UnsupportedOperationException("este socket no soporta ALPN");
+        throw new UnsupportedOperationException("this socket does not support ALPN");
     }
 
-    /** El que se va acordando durante el handshake. */
+    /** The one being agreed during the handshake. */
     public String getHandshakeApplicationProtocol() {
-        throw new UnsupportedOperationException("este socket no soporta ALPN");
+        throw new UnsupportedOperationException("this socket does not support ALPN");
     }
 
-    /** Elige el protocolo de aplicacion con una funcion propia. */
+    /** Chooses the application protocol with a function of its own. */
     public void setHandshakeApplicationProtocolSelector(
             BiFunction<SSLSocket, List<String>, String> selector) {
-        throw new UnsupportedOperationException("este socket no soporta ALPN");
+        throw new UnsupportedOperationException("this socket does not support ALPN");
     }
 
-    /** El selector puesto, o {@code null}. */
+    /** The selector set, or {@code null}. */
     public BiFunction<SSLSocket, List<String>, String> getHandshakeApplicationProtocolSelector() {
-        throw new UnsupportedOperationException("este socket no soporta ALPN");
+        throw new UnsupportedOperationException("this socket does not support ALPN");
     }
 }

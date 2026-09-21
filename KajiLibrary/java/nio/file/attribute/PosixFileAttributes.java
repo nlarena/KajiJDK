@@ -2,21 +2,21 @@ package java.nio.file.attribute;
 
 import java.util.Set;
 
-// Los atributos de POSIX: dueño, grupo y los nueve bits de permiso.
+// POSIX's attributes: owner, group and the nine permission bits.
 //
-// Sin implementacion en KajiJDK por la misma razon que `BasicFileAttributes`: no hay nativo que
-// devuelva uid/gid ni el modo del archivo. Notar que `stat` **si** sabe si se puede leer y escribir,
-// pero eso es el permiso **efectivo para este proceso**, que no es lo mismo que los bits del archivo
-// -- traducir uno al otro (por ejemplo, poner `OWNER_READ` porque el proceso puede leer) seria
-// inventar informacion sobre el grupo y los otros.
+// Without an implementation in KajiJDK: there is no native that returns uid/gid nor the file's mode.
+// Note that `stat` **does** know whether it can be read and written, but that is the permission
+// **effective for this process**, which is not the same as the file's bits -- translating one into
+// the other (setting `OWNER_READ` because the process can read, say) would be inventing information
+// about the group and the others.
 public interface PosixFileAttributes extends BasicFileAttributes {
 
-    /** El dueño. */
+    /** The owner. */
     UserPrincipal owner();
 
-    /** El grupo. */
+    /** The group. */
     GroupPrincipal group();
 
-    /** Los permisos. */
+    /** The permissions. */
     Set<PosixFilePermission> permissions();
 }

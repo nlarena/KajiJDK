@@ -9,53 +9,54 @@ import java.util.Collections;
 import java.util.Set;
 
 /**
- * El {@link ServerSocketChannel} de esta biblioteca, sobre la costura TCP de la VM.
+ * This library's {@link ServerSocketChannel}, over the TCP seam of the VM.
  *
- * <h2>El `accept` que devuelve null</h2>
+ * <h2>The `accept` that returns null</h2>
  *
- * <p>Es la diferencia entera con un {@link java.net.ServerSocket}, y es la que encaja mas limpio con
- * esta VM: en modo no bloqueante {@link #accept()} devuelve `null` cuando todavia no hay nadie
- * esperando. El nativo de la VM ya contesta eso --un -3, "todavia no"-- porque no puede quedarse
- * esperando sin colgar el interprete. Lo que en la costura es un codigo de error es aca el contrato
- * palabra por palabra.
+ * <p>It is the whole difference from a {@link java.net.ServerSocket}, and it is the one that fits
+ * most cleanly with this VM: in non-blocking mode {@link #accept()} returns `null` when there is
+ * nobody waiting yet. The native of the VM answers exactly that already --a -3, "not yet"-- because
+ * it cannot sit waiting without hanging the interpreter. What in the seam is an error code is here
+ * the contract word for word.
  *
- * <p>En modo bloqueante se insiste con un `Thread.sleep` corto entre intentos: dormir suelta el
- * interprete, asi que el hilo que espera una conexion no le impide avanzar al que la va a abrir.
+ * <p>In blocking mode it insists with a short `Thread.sleep` between attempts: sleeping releases the
+ * interpreter, so the thread that waits for a connection does not stop the one that is going to open
+ * it from advancing.
  *
- * <h2>Las opciones</h2>
+ * <h2>The options</h2>
  *
- * <p>Ninguna de las opciones estandar de un socket a la escucha --`SO_REUSEADDR`, `SO_RCVBUF`-- llega
- * al sistema desde esta VM, asi que {@link #supportedOptions} viene **vacio** y `setOption` tira
- * {@link UnsupportedOperationException}, que es lo que el contrato manda para una opcion que el canal
- * no sostiene. Guardar el valor y devolverlo desde el getter mentiria en lo unico que importa: que la
- * opcion tenga efecto.
+ * <p>None of the standard options of a listening socket --`SO_REUSEADDR`, `SO_RCVBUF`-- reaches the
+ * system from this VM, so {@link #supportedOptions} comes back **empty** and `setOption` throws
+ * {@link UnsupportedOperationException}, which is what the contract requires for an option the
+ * channel does not sustain. Keeping the value and returning it from the getter would lie about the
+ * one thing that matters: that the option have an effect.
  */
 final class KajiServerSocketChannel extends ServerSocketChannel {
 
-    /** El socket a la escucha de la VM, o -1 si todavia no se ato. */
+    /** The listening socket of the VM, or -1 if it has not been tied yet. */
     private int handle = -1;
 
     KajiServerSocketChannel(SelectorProvider provider) {
         super(provider);
     }
 
-    private void exigirAbierto() throws ClosedChannelException {
+    private void requireOpen() throws ClosedChannelException {
         if (!this.isOpen()) {
             throw new ClosedChannelException();
         }
     }
 
-    // ---- atar --------------------------------------------------------------------------------
+    // ---- binding --------------------------------------------------------------------------------
 
     public ServerSocketChannel bind(SocketAddress local, int backlog) throws IOException {
-        this.exigirAbierto();
+        this.requireOpen();
         if (this.handle >= 0) {
             throw new AlreadyBoundException();
         }
-        // Sin direccion, el comodin en un puerto que elija el sistema: es lo que el JDK documenta
-        // para `bind(null)`.
+        // With no address, the wildcard on a port the system chooses: it is what the JDK documents
+        // for `bind(null)`.
         String host = "0.0.0.0";
-        int puerto = 0;
+        int port = 0;
         if (local != null) {
             if (!(local instanceof InetSocketAddress)) {
                 throw new UnsupportedAddressTypeException();
@@ -67,19 +68,19 @@ final class KajiServerSocketChannel extends ServerSocketChannel {
             if (d.getAddress() != null && !d.getAddress().isAnyLocalAddress()) {
                 host = d.getAddress().getHostAddress();
             }
-            puerto = d.getPort();
+            port = d.getPort();
         }
-        int h = jdk.internal.net.Net.listen(host, puerto, backlog <= 0 ? 50 : backlog);
+        int h = jdk.internal.net.Net.listen(host, port, backlog <= 0 ? 50 : backlog);
         if (h < 0) {
             throw new java.net.BindException("Cannot assign requested address: " + host + ":"
-                    + puerto);
+                    + port);
         }
         this.handle = h;
         return this;
     }
 
     public SocketAddress getLocalAddress() throws IOException {
-        this.exigirAbierto();
+        this.requireOpen();
         if (this.handle < 0) {
             return null;
         }
@@ -95,10 +96,10 @@ final class KajiServerSocketChannel extends ServerSocketChannel {
         return (java.net.ServerSocket) jdk.internal.net.Adoption.server(this.handle);
     }
 
-    // ---- aceptar -----------------------------------------------------------------------------
+    // ---- accepting -----------------------------------------------------------------------------
 
     public SocketChannel accept() throws IOException {
-        this.exigirAbierto();
+        this.requireOpen();
         if (this.handle < 0) {
             throw new NotYetBoundException();
         }
@@ -116,7 +117,7 @@ final class KajiServerSocketChannel extends ServerSocketChannel {
             h = jdk.internal.net.Net.accept(this.handle);
         }
         if (h == -3) {
-            // Sin bloquear y sin nadie esperando: `null`, que es el contrato.
+            // Without blocking and with nobody waiting: `null`, which is the contract.
             return null;
         }
         if (h < 0) {
@@ -125,10 +126,10 @@ final class KajiServerSocketChannel extends ServerSocketChannel {
         return new KajiSocketChannel(this.provider(), h);
     }
 
-    // ---- opciones ----------------------------------------------------------------------------
+    // ---- options ----------------------------------------------------------------------------
 
     public <T> ServerSocketChannel setOption(SocketOption<T> name, T value) throws IOException {
-        this.exigirAbierto();
+        this.requireOpen();
         if (name == null) {
             throw new NullPointerException("name");
         }
@@ -136,7 +137,7 @@ final class KajiServerSocketChannel extends ServerSocketChannel {
     }
 
     public <T> T getOption(SocketOption<T> name) throws IOException {
-        this.exigirAbierto();
+        this.requireOpen();
         if (name == null) {
             throw new NullPointerException("name");
         }
@@ -147,7 +148,7 @@ final class KajiServerSocketChannel extends ServerSocketChannel {
         return Collections.emptySet();
     }
 
-    // ---- cierre ------------------------------------------------------------------------------
+    // ---- closing ------------------------------------------------------------------------------
 
     protected void implCloseSelectableChannel() throws IOException {
         if (this.handle >= 0) {
@@ -157,8 +158,8 @@ final class KajiServerSocketChannel extends ServerSocketChannel {
     }
 
     protected void implConfigureBlocking(boolean block) throws IOException {
-        // Nada que decirle al sistema: el socket de la VM siempre es no bloqueante, y el modo lo
-        // decide `accept()` al elegir si insiste. Ver la nota de la clase.
+        // Nothing to say to the system: the socket of the VM is always non-blocking, and the mode is
+        // decided by `accept()` when it chooses whether to insist. See the note of the class.
     }
 
     /**

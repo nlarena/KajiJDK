@@ -13,12 +13,13 @@ import java.util.Locale;
 // keep their own native fast path, and the byte writes encode through the same seam. The underlying
 // {@code out} is therefore only decorative for the console (it may be null) — the VM owns the sink.
 // A {@code PrintStream} over the console works; one asked to open a FILE fails honestly, because
-// KajiJDK has no filesystem to write to, so the file constructors throw {@link FileNotFoundException}.
+// KajiJDK has no filesystem to write to, so the file constructors throw {@link
+// FileNotFoundException}.
 public class PrintStream extends FilterOutputStream implements Appendable, Closeable {
 
-    private boolean autoFlush;
+    private final boolean autoFlush;
     private boolean trouble;
-    private Charset charset;
+    private final Charset charset;
 
     // The single text seam: write the string's bytes to stdout, no newline. Native, like the two
     // `println` overloads below, because the actual console write lives in the VM.
@@ -94,12 +95,13 @@ public class PrintStream extends FilterOutputStream implements Appendable, Close
     // ---- lifecycle ----
 
     /**
-     * Vacia lo pendiente.
+     * It flushes what is pending.
      *
-     * <p>No declara `throws IOException`, como en el JDK: un `PrintStream` **no tira** por fallas de
-     * E/S, las anota y se las cuenta a quien pregunte por {@link #checkError()}. Es toda la razon de
-     * ser de esta clase --que `System.out.println` no obligue a atrapar nada-- y por eso el `catch`
-     * de aca no es un descuido sino el contrato.
+     * <p>It does not declare `throws IOException`, as in the JDK: a `PrintStream` **does not
+     * throw** on I/O failures, it records them and reports them to whoever asks through {@link
+     * #checkError()}. It is this class's whole reason for being --that `System.out.println` should
+     * not force anyone to catch anything-- and that is why the `catch` here is not an oversight but
+     * the contract.
      */
     public void flush() {
         if (out != null) {
@@ -111,7 +113,8 @@ public class PrintStream extends FilterOutputStream implements Appendable, Close
         }
     }
 
-    /** Cierra. Sin `throws`, como el JDK: la falla se anota y se consulta con {@link #checkError()}. */
+    /** Closes. No `throws`, like the JDK: the failure is recorded and asked about with
+     * {@link #checkError()}. */
     public void close() {
         flush();
         if (out != null) {
@@ -125,22 +128,23 @@ public class PrintStream extends FilterOutputStream implements Appendable, Close
 
     /** Whether an error has been seen on this stream. Never, here — the console does not fail. */
     /**
-     * Marca que este flujo tuvo un problema.
+     * It marks that this stream has had a problem.
      *
-     * <p>Existe porque `PrintStream` **no tira**: los `print` tragan la `IOException` y encienden
-     * esta bandera, que es la unica forma de enterarse. Una subclase que haga su propia escritura
-     * necesita poder encenderla, o su fallo seria invisible.
+     * <p>It exists because `PrintStream` **does not throw**: the `print`s swallow the `IOException`
+     * and turn this flag on, which is the only way of hearing about it. A subclass doing its own
+     * writing needs to be able to turn it on, or its failure would be invisible.
      */
     protected void setError() {
         this.trouble = true;
     }
 
     /**
-     * Apaga la bandera de error.
+     * It turns the error flag off.
      *
-     * <p>Es `protected` a proposito y el javadoc del JDK lo dice de frente: permite que un flujo se
-     * "recupere" de un error, y eso **oculta** el fallo a quien llame `checkError` despues. Solo
-     * tiene sentido para una subclase que sepa que el problema se resolvio de verdad.
+     * <p>It is `protected` on purpose and the JDK's javadoc says so outright: it lets a stream
+     * "recover" from an error, and that **hides** the failure from whoever calls `checkError`
+     * afterwards. It only makes sense for a subclass that knows the problem really has been
+     * settled.
      */
     protected void clearError() {
         this.trouble = false;

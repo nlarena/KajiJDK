@@ -5,98 +5,99 @@ import javax.xml.stream.events.XMLEvent;
 import javax.xml.stream.util.XMLEventConsumer;
 
 /**
- * KajiLibrary's javax.xml.stream.XMLEventWriter -- escribir XML entregando objetos de evento en vez
- * de llamando un metodo por pieza.
+ * KajiLibrary's javax.xml.stream.XMLEventWriter -- writing XML by handing over event objects
+ * instead of calling one method per piece.
  *
- * <p>Es a {@link XMLStreamWriter} lo que {@link XMLEventReader} es a {@link XMLStreamReader}. La
- * ventaja practica esta en {@link #add(XMLEventReader)}: enchufar un lector de eventos a un escritor
- * copia un documento entero en una linea, y con un {@link EventFilter} en el medio se lo filtra sin
- * escribir el bucle. Eso con el modelo de cursor no se puede porque un evento de cursor no es un
- * objeto que se pueda pasar de mano en mano.
+ * <p>It is to {@link XMLStreamWriter} what {@link XMLEventReader} is to {@link XMLStreamReader}.
+ * The practical advantage is in {@link #add(XMLEventReader)}: plugging an event reader into a
+ * writer copies a whole document in one line, and with an {@link EventFilter} in between it is
+ * filtered without writing the loop. That cannot be done with the cursor model because a cursor
+ * event is not an object that can be passed from hand to hand.
  *
- * <p>Extiende {@link XMLEventConsumer}, que es lo que permite que un
- * {@link javax.xml.stream.util.XMLEventAllocator} escriba directo aca sin saber que hay del otro
- * lado.
+ * <p>It extends {@link XMLEventConsumer}, which is what lets a {@link
+ * javax.xml.stream.util.XMLEventAllocator} write straight here without knowing what is on the other
+ * side.
  *
- * <h2>Que hay escrito aca</h2>
+ * <h2>What is written here</h2>
  *
- * <p>Los nueve metodos. Sin implementacion, por lo mismo que el resto del paquete: no hay proveedor
- * de StAX en esta biblioteca. Ver {@link XMLOutputFactory}.
+ * <p>The nine methods. This package's implementation is {@code KajiEventWriter}, which {@link
+ * XMLOutputFactory} returns. (The note said there is no implementation because this library has no
+ * StAX provider; it has one now.)
  */
 public interface XMLEventWriter extends XMLEventConsumer {
 
     /**
-     * Vuelca al destino lo que este en el buffer.
+     * Flushes whatever is in the buffer to the destination.
      *
-     * @throws XMLStreamException si falla la escritura
+     * @throws XMLStreamException if it fails to write
      */
     void flush() throws XMLStreamException;
 
     /**
-     * Libera lo que el escritor tenga tomado, sin cerrar el flujo de destino.
+     * Frees whatever the writer holds, without closing the destination stream.
      *
-     * @throws XMLStreamException si falla
+     * @throws XMLStreamException if it fails
      */
     void close() throws XMLStreamException;
 
     /**
-     * Escribe un evento.
+     * Writes an event.
      *
-     * @param event el evento
-     * @throws XMLStreamException si falla la escritura
+     * @param event the event
+     * @throws XMLStreamException if it fails to write
      */
     void add(XMLEvent event) throws XMLStreamException;
 
     /**
-     * Escribe todo lo que quede en un lector de eventos, y lo deja vacio.
+     * Writes everything left in an event reader, and leaves it empty.
      *
-     * <p>La copia de un documento en una linea; ver el encabezado.
+     * <p>The one-line copy of a document; see the header.
      *
-     * @param reader de donde sacar los eventos
-     * @throws XMLStreamException si falla la lectura o la escritura
+     * @param reader where to take the events from
+     * @throws XMLStreamException if reading or writing fails
      */
     void add(XMLEventReader reader) throws XMLStreamException;
 
     /**
-     * El prefijo ligado a un espacio de nombres, o null.
+     * The prefix bound to a namespace, or null.
      *
-     * @param uri el espacio de nombres
-     * @return el prefijo
-     * @throws XMLStreamException si falla
+     * @param uri the namespace
+     * @return the prefix
+     * @throws XMLStreamException if it fails
      */
     String getPrefix(String uri) throws XMLStreamException;
 
     /**
-     * Liga un prefijo a un espacio de nombres para lo que se escriba de aca en mas.
+     * Binds a prefix to a namespace for whatever is written from here on.
      *
-     * <p>Como en {@link XMLStreamWriter#setPrefix}, no escribe la declaracion.
+     * <p>As in {@link XMLStreamWriter#setPrefix}, it does not write the declaration.
      *
-     * @param prefix el prefijo
-     * @param uri el espacio de nombres
-     * @throws XMLStreamException si falla
+     * @param prefix the prefix
+     * @param uri the namespace
+     * @throws XMLStreamException if it fails
      */
     void setPrefix(String prefix, String uri) throws XMLStreamException;
 
     /**
-     * Liga el espacio de nombres por omision, sin escribir la declaracion.
+     * Binds the default namespace, without writing the declaration.
      *
-     * @param uri el espacio de nombres
-     * @throws XMLStreamException si falla
+     * @param uri the namespace
+     * @throws XMLStreamException if it fails
      */
     void setDefaultNamespace(String uri) throws XMLStreamException;
 
     /**
-     * Reemplaza el contexto de espacios de nombres, solo antes del elemento raiz.
+     * Replaces the namespace context, only before the root element.
      *
-     * @param context el contexto nuevo
-     * @throws XMLStreamException si falla o si ya es tarde
+     * @param context the new context
+     * @throws XMLStreamException if it fails or if it is too late
      */
     void setNamespaceContext(NamespaceContext context) throws XMLStreamException;
 
     /**
-     * Las ligaduras vigentes.
+     * The bindings in force.
      *
-     * @return el contexto
+     * @return the context
      */
     NamespaceContext getNamespaceContext();
 }

@@ -1,43 +1,43 @@
 package javax.accessibility;
 
 /**
- * Lo implementa lo que se puede **hacer**: apretar, alternar, seguir un enlace.
+ * Implemented by what can be **done**: pressing, toggling, following a link.
  *
- * <p>Un objeto puede tener varias acciones y la 0 es la principal — la que pasa al hacer doble clic.
- * Describirlas con una cadena y ejecutarlas por número es lo que permite que una ayuda técnica
- * ofrezca "apretar el botón Aceptar" sin saber qué es un botón.
+ * <p>An object may have several actions and 0 is the main one -- the one that happens on a double
+ * click. Describing them with a string and running them by number is what allows an assistive
+ * technology to offer "press the OK button" without knowing what a button is.
  */
 public interface AccessibleAction {
 
-    /** Alternar el estado de expandido de un nodo. */
+    /** Toggle the expanded state of a node. */
     String TOGGLE_EXPAND = "toggleexpand";
 
-    /** Aumentar el valor. */
+    /** Increase the value. */
     String INCREMENT = "increment";
 
-    /** Disminuir el valor. */
+    /** Decrease the value. */
     String DECREMENT = "decrement";
 
-    /** Empezar a reproducir. */
+    /** Start playing. */
     String CLICK = "click";
 
-    /** Abrir el menú contextual. */
+    /** Open the context menu. */
     String TOGGLE_POPUP = "toggle popup";
 
-    /** Cuántas acciones hay. */
+    /** How many actions there are. */
     int getAccessibleActionCount();
 
     /**
-     * Qué hace esa acción, en palabras.
+     * What that action does, in words.
      *
-     * @return la descripción, o `null` si el número no existe
+     * @return the description, or `null` if the number does not exist
      */
     String getAccessibleActionDescription(int i);
 
     /**
-     * Ejecuta esa acción.
+     * Runs that action.
      *
-     * @return `true` si se ejecutó
+     * @return `true` if it ran
      */
     boolean doAccessibleAction(int i);
 }

@@ -10,60 +10,62 @@ import javax.accessibility.Accessible;
 import javax.accessibility.AccessibleContext;
 
 /**
- * El lugar donde viven los componentes que dibujan celdas.
+ * The place where the components that draw cells live.
  *
- * <h2>Por que hace falta un contenedor que no contiene</h2>
+ * <h2>Why a container that does not contain is needed</h2>
  *
- * <p>Una lista de mil elementos no tiene mil componentes: tiene <em>uno</em>, que se configura y se
- * dibuja mil veces en mil lugares distintos. Ese componente prestado tiene que estar en algun lado
- * -- Swing pide que un componente tenga padre para medirse y para dibujarse --, pero no tiene que
- * participar de nada: no se lo puede recorrer con el tabulador, no se lo repinta cuando cambia, no
- * hereda la validacion.
+ * <p>A list of a thousand elements does not have a thousand components: it has <em>one</em>,
+ * which is configured and drawn a thousand times in a thousand different places. That borrowed
+ * component has to be somewhere -- Swing asks that a component have a parent in order to
+ * measure itself and to draw itself --, but it must not take part in anything: it cannot be
+ * walked through with the tab key, it is not repainted when it changes, it does not inherit
+ * the validation.
  *
- * <p>Este panel es ese lugar. Es un contenedor de verdad, pero <strong>desactivado a proposito</strong>:
+ * <p>This pane is that place. It is a real container, but
+ * <strong>switched off on purpose</strong>:
  *
  * <ul>
- * <li>{@link #invalidate} no hace nada -- un dibujante que se invalida no tiene que invalidar a la
- *     lista entera;</li>
- * <li>{@link #paint} y {@link #update} no hacen nada -- los dibujantes los pinta quien los usa,
- *     cuando le toca, y no este panel por su cuenta;</li>
- * <li>{@link #addImpl} saca al componente de donde estuviera antes de agregarlo.</li>
+ * <li>{@link #invalidate} does nothing -- a renderer that invalidates itself must not
+ *     invalidate the whole list;</li>
+ * <li>{@link #paint} and {@link #update} do nothing -- the renderers are painted by whoever
+ *     uses them, when their turn comes, and not by this pane on its own;</li>
+ * <li>{@link #addImpl} takes the component out of wherever it was before adding it.</li>
  * </ul>
  *
- * <h2>Como se lo usa</h2>
+ * <h2>How it is used</h2>
  *
- * <p>Con {@link #paintComponent}: se le pasa el dibujante ya configurado, el {@code Graphics} de la
- * lista y el rectangulo donde va. El panel lo coloca, lo dibuja ahi y lo deja como estaba. El
- * componente nunca se entera de que fue dibujado mil veces.
+ * <p>With {@link #paintComponent}: it is passed the already configured renderer, the list's
+ * {@code Graphics} and the rectangle it goes in. The pane places it, draws it there and leaves
+ * it as it was. The component never learns that it was drawn a thousand times.
  */
 public class CellRendererPane extends Container implements Accessible {
 
     protected AccessibleContext accessibleContext = null;
 
-    /** Un panel vacio, invisible y sin acomodador. */
+    /** An empty pane, invisible and with no layout. */
     public CellRendererPane() {
         super();
         setLayout(null);
         setVisible(false);
     }
 
-    /** No hace nada; ver la nota de la clase. */
+    /** It does nothing; see the class note. */
     public void invalidate() {
     }
 
-    /** No hace nada; ver la nota de la clase. */
+    /** It does nothing; see the class note. */
     public void paint(Graphics g) {
     }
 
-    /** No hace nada; ni siquiera borra el fondo. */
+    /** It does nothing; it does not even clear the background. */
     public void update(Graphics g) {
     }
 
     /**
-     * Agrega el componente, sacandolo antes de donde estuviera.
+     * It adds the component, taking it out of wherever it was first.
      *
-     * <p>Un dibujante que se comparte entre dos listas terminaria de padre en la ultima que lo uso;
-     * esto lo mueve en vez de dejarlo en las dos.
+     * <p>A renderer shared between two lists would end up with the last one that used it as its
+     * parent; this moves it instead of leaving it in both.
      */
     protected void addImpl(Component x, Object constraints, int index) {
         if (x.getParent() == this) {
@@ -73,17 +75,18 @@ public class CellRendererPane extends Container implements Accessible {
     }
 
     /**
-     * Dibuja el componente en ese rectangulo del {@code Graphics} dado.
+     * It draws the component in that rectangle of the given {@code Graphics}.
      *
-     * <p>Con {@code shouldValidate} en cierto se lo valida antes; hace falta cuando el dibujante
-     * tiene hijos que acomodar, y es caro, por eso no es lo de siempre.
+     * <p>With {@code shouldValidate} at true it is validated first; that is needed when the
+     * renderer has children to lay out, and it is expensive, which is why it is not the usual
+     * thing.
      */
     public void paintComponent(Graphics g, Component c, Container p, int x, int y, int w, int h,
             boolean shouldValidate) {
         if (c == null) {
             if (p != null) {
-                Color fondo = p.getBackground();
-                g.setColor(fondo);
+                Color background = p.getBackground();
+                g.setColor(background);
                 g.fillRect(x, y, w, h);
             }
             return;
@@ -95,25 +98,25 @@ public class CellRendererPane extends Container implements Accessible {
         if (shouldValidate) {
             c.validate();
         }
-        // Se traslada el origen en vez de pedirle un Graphics propio al componente: el componente no
-        // esta en pantalla y no tiene uno.
+        // The origin is translated instead of asking the component for a {@code Graphics} of its
+                // own: the component is not on the screen and does not have one.
         Graphics cg = g.create(x, y, w, h);
         try {
             c.paint(cg);
         } finally {
             cg.dispose();
         }
-        // Se lo saca de donde quedo para que un repintado de la lista no lo dibuje otra vez por su
-        // cuenta, ahora en el ultimo lugar donde estuvo.
+        // It is taken out of where it ended up so that a repaint of the list does not draw it
+                // again on its own, now at the last place it was.
         c.setBounds(-w, -h, 0, 0);
     }
 
-    /** Sin validar. */
+    /** Without validating. */
     public void paintComponent(Graphics g, Component c, Container p, int x, int y, int w, int h) {
         paintComponent(g, c, p, x, y, w, h, false);
     }
 
-    /** Con el rectangulo dado de una. */
+    /** With the rectangle given in one go. */
     public void paintComponent(Graphics g, Component c, Container p, Rectangle r) {
         paintComponent(g, c, p, r.x, r.y, r.width, r.height);
     }

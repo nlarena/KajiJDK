@@ -4,24 +4,24 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLParameters;
 
 /**
- * Decide como se configura TLS en cada conexion entrante de un {@link HttpsServer}.
+ * It decides how TLS is configured on each incoming connection of an {@link HttpsServer}.
  *
- * <h2>Por que es una clase con un metodo sobrescribible y no un objeto de configuracion</h2>
+ * <h2>Why it is a class with an overridable method and not a configuration object</h2>
  *
- * <p>Porque la configuracion puede depender <strong>de quien se conecta</strong>. {@link #configure}
- * recibe unos {@link HttpsParameters} que ya traen la direccion del cliente, asi que se puede exigir
- * certificado a unos y a otros no, o restringir las suites por origen. Un objeto fijo no permitiria
- * eso.
+ * <p>Because the configuration may depend <strong>on who connects</strong>.
+ * {@link #configure} receives {@link HttpsParameters} that already bring the client's address,
+ * so a certificate may be required of some and not of others, or the suites restricted by
+ * origin. A fixed object would not allow that.
  *
- * <p>La implementacion por omision aplica los parametros por omision del contexto, que es lo
- * razonable cuando no hace falta distinguir.
+ * <p>The default implementation applies the context's default parameters, which is what is
+ * reasonable when there is no need to distinguish.
  */
 public class HttpsConfigurator {
 
     private final SSLContext context;
 
     /**
-     * @throws NullPointerException si el contexto es {@code null}
+     * @throws NullPointerException if the context is {@code null}
      */
     public HttpsConfigurator(SSLContext context) {
         if (context == null) {
@@ -30,16 +30,16 @@ public class HttpsConfigurator {
         this.context = context;
     }
 
-    /** El contexto que provee las credenciales y la politica de confianza. */
+    /** The context that provides the credentials and the trust policy. */
     public SSLContext getSSLContext() {
         return this.context;
     }
 
     /**
-     * Ajusta los parametros de una conexion entrante.
+     * It adjusts an incoming connection's parameters.
      *
-     * <p>Por omision le pone los del contexto. Quien la sobrescriba tiene que llamar a
-     * {@link HttpsParameters#setSSLParameters} o la conexion queda sin configurar.
+     * <p>By default it gives it the context's. Whoever overrides it has to call
+     * {@link HttpsParameters#setSSLParameters} or the connection is left unconfigured.
      */
     public void configure(HttpsParameters params) {
         params.setSSLParameters(getSSLContext().getDefaultSSLParameters());

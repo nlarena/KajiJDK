@@ -17,7 +17,7 @@ import java.util.Map;
 // **Where the pattern comes from, and why it is possible now.** `DateTimeFormatterBuilder`'s header
 // said `appendLocalized` was out because the pattern of a short date --`M/d/yy` in the United
 // States, `dd.MM.yy` in Germany-- is CLDR data and cannot be deduced. That is still true, but the
-// data is no longer missing: `java.text.PatronesLocales` brings it, extracted from JDK 25, and it
+// data is no longer missing: `java.text.LocalePatterns` brings it, extracted from JDK 25, and it
 // is reached through `DateFormat.getDateInstance(style, locale)`.
 //
 // And it is not an assumed equivalence: it was measured against the real JDK for the four styles,

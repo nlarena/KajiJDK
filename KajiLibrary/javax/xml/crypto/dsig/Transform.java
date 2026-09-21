@@ -8,49 +8,51 @@ import javax.xml.crypto.XMLCryptoContext;
 import javax.xml.crypto.XMLStructure;
 
 /**
- * KajiLibrary's javax.xml.crypto.dsig.Transform -- un paso del camino entre el dato y su resumen.
+ * KajiLibrary's javax.xml.crypto.dsig.Transform -- one step of the path between the datum and its
+ * digest.
  *
- * <p>Las transformaciones se encadenan: la salida de una es la entrada de la siguiente, y lo que sale
- * de la ultima es lo que se resume. Cada una puede convertir nodos en nodos o nodos en bytes, y
- * encadenar dos que no encajan es el error clasico al armar una firma a mano.
+ * <p>Transforms are chained: the output of one is the input of the next, and what comes out of the
+ * last is what is digested. Each one can turn nodes into nodes or nodes into bytes, and chaining
+ * two that do not fit is the classic mistake when building a signature by hand.
  *
- * <p>{@link #ENVELOPED} es la que casi siempre aparece: saca el elemento de la propia firma del
- * documento antes de resumirlo. Sin ella, firmar un documento que va a contener la firma es
- * imposible -- el resumen incluiria la firma que todavia no existe.
+ * <p>{@link #ENVELOPED} is the one that almost always appears: it takes the signature's own element
+ * out of the document before digesting it. Without it, signing a document that is going to contain
+ * the signature is impossible -- the digest would include the signature that does not exist yet.
  *
- * <p>{@link #XSLT} y {@link #XPATH} son las peligrosas: ejecutan codigo o expresiones que eligio
- * quien firmo. Ver {@code XSLTTransformParameterSpec}.
+ * <p>{@link #XSLT} and {@link #XPATH} are the dangerous ones: they run code or expressions chosen
+ * by whoever signed. See {@code XSLTTransformParameterSpec}.
  *
- * <p>La sobrecarga de {@link #transform(Data, XMLCryptoContext, OutputStream)} escribe ademas a un
- * flujo. Sirve para ver que salio de cada paso, que es como se depura una cadena que no cierra.
+ * <p>The overload {@link #transform(Data, XMLCryptoContext, OutputStream)} also writes to a stream.
+ * It serves to see what came out of each step, which is how a chain that does not check out is
+ * debugged.
  */
 public interface Transform extends XMLStructure, AlgorithmMethod {
 
-    /** Decodifica base 64. */
+    /** Decodes base 64. */
     static final String BASE64 = "http://www.w3.org/2000/09/xmldsig#base64";
 
-    /** Saca el elemento de la firma. Ver la nota de la clase. */
+    /** Takes the signature element out. See the class note. */
     static final String ENVELOPED = "http://www.w3.org/2000/09/xmldsig#enveloped-signature";
 
-    /** Selecciona nodos con una expresion XPath, nodo por nodo. */
+    /** Selects nodes with an XPath expression, node by node. */
     static final String XPATH = "http://www.w3.org/TR/1999/REC-xpath-19991116";
 
-    /** Idem, por subarboles: mucho mas rapida. */
+    /** Likewise, by subtrees: much faster. */
     static final String XPATH2 = "http://www.w3.org/2002/06/xmldsig-filter2";
 
-    /** Aplica una hoja de estilo. Ver la nota de la clase. */
+    /** Applies a stylesheet. See the class note. */
     static final String XSLT = "http://www.w3.org/TR/1999/REC-xslt-19991116";
 
-    /** Los parametros de esta transformacion, o null. */
+    /** The parameters of this transform, or null. */
     AlgorithmParameterSpec getParameterSpec();
 
     /**
-     * Aplica la transformacion.
+     * Applies the transform.
      *
-     * @throws TransformException si no se puede aplicar a esos datos
+     * @throws TransformException if it cannot be applied to that data
      */
     Data transform(Data data, XMLCryptoContext context) throws TransformException;
 
-    /** Idem, escribiendo tambien a un flujo. Ver la nota de la clase. */
+    /** Likewise, also writing to a stream. See the class note. */
     Data transform(Data data, XMLCryptoContext context, OutputStream os) throws TransformException;
 }

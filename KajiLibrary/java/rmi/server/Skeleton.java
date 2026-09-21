@@ -3,16 +3,16 @@ package java.rmi.server;
 import java.rmi.Remote;
 
 /**
- * El lado servidor de un stub generado: recibe la llamada y la despacha al objeto.
+ * The server side of a generated stub: it receives the call and dispatches it to the object.
  *
- * @deprecated reemplazado por los proxies dinamicos.
+ * @deprecated replaced by dynamic proxies.
  */
 @Deprecated(since = "1.1")
 public interface Skeleton {
 
-    /** Despacha una llamada al objeto. */
+    /** It dispatches a call to the object. */
     void dispatch(Remote obj, RemoteCall theCall, int opnum, long hash) throws Exception;
 
-    /** Las operaciones que este skeleton conoce. */
+    /** The operations this skeleton knows. */
     Operation[] getOperations();
 }

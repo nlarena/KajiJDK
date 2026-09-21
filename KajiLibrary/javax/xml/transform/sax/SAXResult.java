@@ -5,28 +5,28 @@ import org.xml.sax.ContentHandler;
 import org.xml.sax.ext.LexicalHandler;
 
 /**
- * KajiLibrary's javax.xml.transform.sax.SAXResult -- la salida sale por eventos.
+ * KajiLibrary's javax.xml.transform.sax.SAXResult -- the output comes out as events.
  *
- * <p>En vez de escribir texto o armar un arbol, el transformador le va avisando a un
- * {@link ContentHandler} lo que produce. Es la via para encadenar transformaciones sin materializar
- * el paso intermedio, y para consumir una salida grande sin tenerla entera en memoria.
+ * <p>Instead of writing text or building a tree, the transformer keeps telling a {@link
+ * ContentHandler} what it produces. It is the way to chain transformations without materializing
+ * the intermediate step, and to consume a large output without having it all in memory.
  *
- * <h2>Por que hay un segundo manejador</h2>
+ * <h2>Why there is a second handler</h2>
  *
- * <p>{@link #setLexicalHandler} es opcional y no es un duplicado: {@code ContentHandler} no tiene
- * metodos para <b>comentarios</b>, secciones CDATA ni entidades. Sin un manejador lexico, todo eso
- * pasa sin que nadie se entere -- que casi siempre esta bien, y que es un problema cuando lo que se
- * esta armando tiene que conservar los comentarios del original.
+ * <p>{@link #setLexicalHandler} is optional and not a duplicate: {@code ContentHandler} has no
+ * methods for <b>comments</b>, CDATA sections or entities. Without a lexical handler, all that goes
+ * by without anybody noticing -- which is almost always fine, and which is a problem when what is
+ * being built has to keep the original's comments.
  *
- * <p>Los dos se ponen por separado aunque un mismo objeto implemente las dos interfaces: poner el
- * de contenido <b>no</b> instala el lexico, y {@link #getLexicalHandler} sigue devolviendo null
- * hasta que alguien lo ponga. Conviene saberlo porque invita al error de esperar comentarios que
- * nunca llegan. El JDK hace lo mismo -- la deduccion, cuando la hay, la hace el transformador y no
- * esta clase.
+ * <p>The two are set separately even if the same object implements both interfaces: setting the
+ * content one does <b>not</b> install the lexical one, and {@link #getLexicalHandler} keeps
+ * returning null until somebody sets it. It is worth knowing because it invites the mistake of
+ * expecting comments that never arrive. The JDK does the same -- the deduction, when there is one,
+ * is made by the transformer and not by this class.
  */
 public class SAXResult implements Result {
 
-    /** Con esto se le pregunta a un {@code TransformerFactory} si acepta este destino. */
+    /** With this a {@code TransformerFactory} is asked whether it accepts this destination. */
     public static final String FEATURE = "http://javax.xml.transform.sax.SAXResult/feature";
 
     private ContentHandler handler;
@@ -35,16 +35,16 @@ public class SAXResult implements Result {
 
     private String systemId;
 
-    /** Vacio, para llenarlo. */
+    /** Empty, to be filled. */
     public SAXResult() {
     }
 
-    /** Con el manejador que va a recibir la salida. */
+    /** With the handler that is going to receive the output. */
     public SAXResult(ContentHandler handler) {
         setHandler(handler);
     }
 
-    /** Quien recibe los eventos de la salida. */
+    /** Who receives the events of the output. */
     public void setHandler(ContentHandler handler) {
         this.handler = handler;
     }
@@ -54,17 +54,17 @@ public class SAXResult implements Result {
         return this.handler;
     }
 
-    /** Quien recibe comentarios, CDATA y entidades. Ver la nota de la clase. */
+    /** Who receives comments, CDATA and entities. See the class note. */
     public void setLexicalHandler(LexicalHandler handler) {
         this.lexicalHandler = handler;
     }
 
-    /** Ver {@link #setLexicalHandler}; null si nadie puso uno. */
+    /** See {@link #setLexicalHandler}; null if nobody set one. */
     public LexicalHandler getLexicalHandler() {
         return this.lexicalHandler;
     }
 
-    /** De donde sale el resultado; informativo. */
+    /** Where the result comes from; informative. */
     public void setSystemId(String systemId) {
         this.systemId = systemId;
     }

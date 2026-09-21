@@ -3,12 +3,12 @@ package com.sun.source.doctree;
 import java.util.List;
 
 /**
- * El nodo de `@param`. {@link #isTypeParameter} distingue `@param x` de
- * `@param <T>`, que se escriben casi igual y documentan cosas completamente distintas.
+ * The node of `@param`. {@link #isTypeParameter} tells `@param x` from
+ * `@param <T>`, which are written almost alike and document completely different things.
  */
 public interface ParamTree extends BlockTagTree {
 
-    /** Si documenta un parametro de tipo (`@param <T>`) y no uno comun. */
+    /** Whether it documents a type parameter (`@param <T>`) and not a common one. */
     boolean isTypeParameter();
 
     IdentifierTree getName();

@@ -3,28 +3,28 @@ package javax.swing.event;
 import java.util.EventObject;
 
 /**
- * El cursor de texto se movio.
+ * The text cursor moved.
  *
- * <p>Lleva <strong>dos</strong> posiciones y no una, y ahi esta todo el contenido de la clase: el
- * <em>punto</em> es donde esta el cursor y la <em>marca</em> es donde empezo la seleccion. Cuando
- * coinciden no hay nada seleccionado.
+ * <p>It carries <strong>two</strong> positions and not one, and there is the whole content of the
+ * class: the <em>dot</em> is where the cursor is and the <em>mark</em> is where the selection
+ * started. When they coincide nothing is selected.
  *
- * <p>La marca puede ser mayor que el punto —seleccionando hacia atras— asi que quien quiera el rango
- * tiene que ordenarlos. Devolver siempre el menor primero perderia la direccion, que es lo que
- * decide hacia donde crece la seleccion si el usuario sigue arrastrando.
+ * <p>The mark may be greater than the dot --selecting backwards-- so whoever wants the range has
+ * to order them. Always returning the lower one first would lose the direction, which is what
+ * decides which way the selection grows if the user goes on dragging.
  */
 public abstract class CaretEvent extends EventObject {
 
     private static final long serialVersionUID = 1L;
 
-    /** @param source de quien es el cursor */
+    /** @param source whose cursor it is */
     public CaretEvent(Object source) {
         super(source);
     }
 
-    /** Donde esta el cursor. */
+    /** Where the cursor is. */
     public abstract int getDot();
 
-    /** Donde empezo la seleccion; igual al punto si no hay seleccion. */
+    /** Where the selection started; the same as the dot if there is no selection. */
     public abstract int getMark();
 }

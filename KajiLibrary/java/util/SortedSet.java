@@ -23,11 +23,12 @@ public interface SortedSet<E> extends Set<E>, SequencedSet<E> {
     E last();
 
     /**
-     * Una **vista** de este conjunto en orden inverso.
+     * A **view** of this set in reverse order.
      *
-     * <p>Vista y no copia: lo que se agregue de un lado se ve del otro. El recorrido hacia atras lo
-     * arma `ReverseSortedSet` con `last()` y `headSet()`, sin materializar nada -- ver la nota larga
-     * de `ReverseViews.java`.
+     * <p>A view and not a copy: what is added on one side is seen on the other. The backward
+     * traversal is built by `ReverseSortedSet` out of `last()` and `headSet()`, materialising
+     * nothing -- see that file's long note. (The note here used to point at `ReverseViews.java`,
+     * which does not exist.)
      */
     default SortedSet<E> reversed() {
         return new ReverseSortedSet<E>(this);

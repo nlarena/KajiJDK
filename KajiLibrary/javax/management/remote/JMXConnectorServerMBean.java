@@ -4,59 +4,60 @@ import java.io.IOException;
 import java.util.Map;
 
 /**
- * KajiLibrary's javax.management.remote.JMXConnectorServerMBean -- la cara de MBean de un servidor de
- * conectores.
+ * KajiLibrary's javax.management.remote.JMXConnectorServerMBean -- a connector server's MBean
+ * face.
  *
- * <p>Existe para que el servidor se pueda <b>registrar en el propio servidor de MBeans que expone</b>.
- * Suena circular y es util: asi se lo puede arrancar, parar y consultar por las mismas vias que
- * cualquier otro MBean, incluso desde una consola remota conectada a traves de el.
+ * <p>It exists so that the server can be <b>registered in the very MBean server it exposes</b>.
+ * It sounds circular and it is useful: that way it can be started, stopped and queried through
+ * the same paths as any other MBean, even from a remote console connected through it.
  *
- * <p>Es una interfaz de MBean estandar: el nombre termina en {@code MBean} y la clase que lo cumple es
- * {@link JMXConnectorServer}, sin el sufijo. Esa convencion es lo que hace que el registro funcione.
+ * <p>It is a standard MBean interface: the name ends in {@code MBean} and the class that fulfils
+ * it is {@link JMXConnectorServer}, without the suffix. That convention is what makes the
+ * registration work.
  */
 public interface JMXConnectorServerMBean {
 
     /**
-     * Empieza a escuchar.
+     * Starts listening.
      *
-     * @throws IOException si no se pudo
-     * @throws IllegalStateException si ya se paro; un servidor parado no se reinicia
+     * @throws IOException if it could not
+     * @throws IllegalStateException if it was already stopped; a stopped server is not restarted
      */
     void start() throws IOException;
 
     /**
-     * Deja de escuchar y cierra las conexiones abiertas.
+     * Stops listening and closes the open connections.
      *
-     * <p>Es definitivo: despues de esto, {@link #start} falla.
+     * <p>It is final: after this, {@link #start} fails.
      *
-     * @throws IOException si algo fallo al cerrar
+     * @throws IOException if something failed while closing
      */
     void stop() throws IOException;
 
-    /** Si esta escuchando. */
+    /** Whether it is listening. */
     boolean isActive();
 
-    /** Encadena un interceptor delante del servidor de MBeans. Ver {@link MBeanServerForwarder}. */
+    /** Chains an interceptor in front of the MBean server. See {@link MBeanServerForwarder}. */
     void setMBeanServerForwarder(MBeanServerForwarder mbsf);
 
-    /** Los identificadores de las conexiones abiertas. */
+    /** The identifiers of the open connections. */
     String[] getConnectionIds();
 
-    /** La direccion donde escucha, o null si no arranco. */
+    /** The address where it listens, or null if it did not start. */
     JMXServiceURL getAddress();
 
-    /** El entorno con el que se creo, de solo lectura. */
+    /** The environment it was created with, read-only. */
     Map<String, ?> getAttributes();
 
     /**
-     * Un conector cliente hacia este mismo servidor.
+     * A client connector towards this same server.
      *
-     * <p>Es lo que permite que algo del mismo proceso hable con el servidor por el camino remoto, sin
-     * atajos. Sirve para probar.
+     * <p>It is what allows something in the same process to talk to the server through the remote
+     * path, without shortcuts. It serves for testing.
      *
-     * @throws UnsupportedOperationException si este servidor no lo soporta
-     * @throws IllegalStateException si no esta activo
-     * @throws IOException si no se pudo
+     * @throws UnsupportedOperationException if this server does not support it
+     * @throws IllegalStateException if it is not active
+     * @throws IOException if it could not
      */
     JMXConnector toJMXConnector(Map<String, ?> env) throws IOException;
 }

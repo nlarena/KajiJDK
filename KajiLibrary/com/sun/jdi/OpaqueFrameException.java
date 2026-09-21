@@ -1,24 +1,24 @@
 package com.sun.jdi;
 
 /**
- * El marco no deja hacer esa operacion.
+ * The frame does not allow that operation.
  *
- * <p>Pasa con los marcos nativos y con los de un hilo virtual montado: no hay pila de Java que
- * manipular.
+ * <p>It happens with native frames and with those of a mounted virtual thread: there is no Java
+ * stack to manipulate.
  *
  * @since 1.3
  */
 public class OpaqueFrameException extends RuntimeException {
 
-    /** Sin detalle. */
+    /** With no detail. */
     public OpaqueFrameException() {
         super();
     }
 
     /**
-     * Con un mensaje.
+     * With a message.
      *
-     * @param s el mensaje
+     * @param s the message
      */
     public OpaqueFrameException(String s) {
         super(s);

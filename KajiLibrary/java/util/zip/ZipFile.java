@@ -10,35 +10,36 @@ import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.List;
 
-// Acceso **aleatorio** a un archivo comprimido: listar las entradas sin leerlas, y despues abrir
-// solo la que se quiere. Esa es toda la diferencia con `ZipInputStream`, y descansa entera en poder
-// **saltar**: se va al final del archivo, se lee el directorio central, y desde ahi se conoce el
-// desplazamiento de cada entrada.
+// **Random** access to a compressed archive: listing the entries without reading them, and then
+// opening only the one wanted. That is the whole difference from `ZipInputStream`, and it rests
+// entirely on being able to **seek**: it goes to the end of the file, reads the central directory,
+// and from there knows each entry's offset.
 //
-// **Antes esto no se podia y el constructor tiraba.** La nota que estaba aca decia "cuando lleguen
-// los nativos de archivo, esto se vuelve un salto mas la misma decodificacion de campos". Llegaron
-// --`jdk.internal.io.Fs`-- y eso es exactamente lo que hace ahora.
+// **This used not to be possible and the constructor threw.** The note that was here said "when the
+// file intrinsics arrive, this becomes a seek plus the same field decoding". They arrived
+// --`jdk.internal.io.Fs`-- and that is exactly what it does now.
 //
-// La diferencia con el JDK, y es la de siempre en esta biblioteca: **el archivo se lee entero de una
-// vez**, no hay descriptor abierto ni posicion. Un ZIP de un giga entra en memoria; a cambio no hay
-// ningun estado que se pueda quedar colgado, y `close()` no puede perder nada porque no hay nada
-// pendiente. Cuando haga falta streaming de verdad, la puerta es agregar un handle en `Fs`: los
-// metodos de aca hablan con un `byte[]`, no con el nativo, asi que no se enteran.
+// The difference from the JDK, and it is this library's usual one: **the file is read whole in one
+// go**, there is no open descriptor and no position. A one-gigabyte ZIP fits in memory; in exchange
+// there is no state that can be left dangling, and `close()` cannot lose anything because nothing is
+// pending. When real streaming is needed, the door is adding a handle in `Fs`: the methods here talk
+// to a `byte[]`, not to the intrinsic, so they never find out.
 //
-// El formato, en la parte que importa: al final del archivo hay un registro **EOCD** que dice
-// cuantas entradas hay y donde arranca el directorio central; el directorio es una lista de
-// cabeceras, una por entrada, cada una con el desplazamiento de su cabecera **local**; y la cabecera
-// local dice cuanto miden el nombre y el campo extra, que es lo unico que hace falta para saber
-// donde empiezan los datos.
+// The format, in the part that matters: at the end of the file there is an **EOCD** record saying
+// how many entries there are and where the central directory starts; the directory is a list of
+// headers, one per entry, each with the offset of its **local** header; and the local header says
+// how long the name and the extra field are, which is all that is needed to know where the data
+// begins.
 //
-// Se busca el EOCD **desde el final hacia atras** porque puede haber un comentario de archivo
-// despues, de largo variable: no hay forma de saber donde arranca sin buscar su firma.
+// The EOCD is searched for **from the end backwards** because there may be an archive comment after
+// it, of variable length: there is no way of knowing where it starts without looking for its
+// signature.
 //
-// **Como se senializa un error**: el JDK declara `throws IOException` en los constructores y en
-// `getInputStream`. Aca se envuelve en `UncheckedIOException`, que es la convencion que la biblioteca
-// ya fijo en `FileInputStream`/`FileOutputStream`: las bases de `java.io` de aca se escribieron sin
-// `throws`, y un override no puede ensanchar las excepciones chequeadas (JLS 8.4.8.3). El motivo no
-// se pierde -- la `ZipException` original va adentro.
+// **How an error is signalled**: the JDK declares `throws IOException` on the constructors and on
+// `getInputStream`. Here it is wrapped in an `UncheckedIOException`, which is the convention the
+// library already set in `FileInputStream`/`FileOutputStream`: this tree's `java.io` bases were
+// written with no `throws`, and an override cannot widen the checked exceptions (JLS 8.4.8.3). The
+// reason is not lost -- the original `ZipException` goes inside.
 public class ZipFile implements Closeable {
 
     public static final int OPEN_READ = 0x1;
@@ -50,18 +51,18 @@ public class ZipFile implements Closeable {
 
     private final String name;
     private final Charset charset;
-    private final byte[] datos;
+    private final byte[] data;
     private final List<ZipEntry> entries;
-    // El desplazamiento de la cabecera **local** de cada entrada, en paralelo a `entries`.
+    // The offset of each entry's **local** header, parallel to `entries`.
     private final List<Long> offsets;
-    private boolean cerrado;
+    private boolean closedFlag;
 
-    /** Abre el archivo de ese nombre, con los nombres de entrada en UTF-8. */
+    /** It opens the file by that name, with the entry names in UTF-8. */
     public ZipFile(String name) {
         this(name, StandardCharsets.UTF_8);
     }
 
-    /** Abre el archivo de ese nombre, decodificando los nombres con `charset`. */
+    /** It opens the file by that name, decoding the names with `charset`. */
     public ZipFile(String name, Charset charset) {
         if (name == null) {
             throw new NullPointerException("name");
@@ -71,123 +72,124 @@ public class ZipFile implements Closeable {
         }
         this.name = name;
         this.charset = charset;
-        byte[] leidos = jdk.internal.io.Fs.readAllBytes(name);
-        if (leidos == null) {
+        byte[] readSoFar = jdk.internal.io.Fs.readAllBytes(name);
+        if (readSoFar == null) {
             throw new java.io.UncheckedIOException(
-                    new java.io.FileNotFoundException(name + " (no se pudo leer)"));
+                    new java.io.FileNotFoundException(name + " (it could not be read)"));
         }
-        this.datos = leidos;
+        this.data = readSoFar;
         this.entries = new ArrayList<ZipEntry>();
         this.offsets = new ArrayList<Long>();
-        this.leerDirectorio();
+        this.readDirectory();
     }
 
-    /** Abre ese archivo. */
+    /** It opens that file. */
     public ZipFile(File file) {
         this(file.getPath(), StandardCharsets.UTF_8);
     }
 
-    /** Abre ese archivo con ese charset. */
+    /** It opens that file with that charset. */
     public ZipFile(File file, Charset charset) {
         this(file.getPath(), charset);
     }
 
     /**
-     * Abre ese archivo con esos modos.
+     * It opens that file with those modes.
      *
-     * <p>`OPEN_DELETE` se acepta y **no se honra**: pide borrar el archivo al cerrarlo, y como aca
-     * se lo lee entero al abrir, borrarlo despues no cambiaria nada de lo que ya se leyo -- pero si
-     * borraria un archivo que el que llama quizas todavia quiere. Se prefiere no borrar y decirlo.
+     * <p>`OPEN_DELETE` is accepted and **not honoured**: it asks for the file to be deleted on
+     * closing, and since here it is read whole on opening, deleting it afterwards would change
+     * nothing of what was already read -- but it would delete a file the caller may still want. Not
+     * deleting, and saying so, is preferred.
      *
-     * @throws IllegalArgumentException si `mode` no es una combinacion de `OPEN_READ`/`OPEN_DELETE`
+     * @throws IllegalArgumentException if `mode` is not a combination of `OPEN_READ`/`OPEN_DELETE`
      */
     public ZipFile(File file, int mode) {
         this(file, mode, StandardCharsets.UTF_8);
     }
 
-    /** El de arriba, con charset. */
+    /** The one above, with a charset. */
     public ZipFile(File file, int mode, Charset charset) {
-        this(comprobarModo(file, mode).getPath(), charset);
+        this(checkMode(file, mode).getPath(), charset);
     }
 
-    private static File comprobarModo(File file, int mode) {
+    private static File checkMode(File file, int mode) {
         if ((mode & ~(OPEN_READ | OPEN_DELETE)) != 0 || (mode & OPEN_READ) == 0) {
             throw new IllegalArgumentException("Illegal mode: 0x" + Integer.toHexString(mode));
         }
         return file;
     }
 
-    // ---- lectura del formato ----------------------------------------------------------------------
+    // ---- reading the format -----------------------------------------------------------------------
 
     private int u16(int at) {
-        return (this.datos[at] & 0xff) | ((this.datos[at + 1] & 0xff) << 8);
+        return (this.data[at] & 0xff) | ((this.data[at + 1] & 0xff) << 8);
     }
 
     private int u32(int at) {
-        return (this.datos[at] & 0xff) | ((this.datos[at + 1] & 0xff) << 8)
-                | ((this.datos[at + 2] & 0xff) << 16) | ((this.datos[at + 3] & 0xff) << 24);
+        return (this.data[at] & 0xff) | ((this.data[at + 1] & 0xff) << 8)
+                | ((this.data[at + 2] & 0xff) << 16) | ((this.data[at + 3] & 0xff) << 24);
     }
 
-    private long u32sinSigno(int at) {
+    private long u32Unsigned(int at) {
         return (long) this.u32(at) & 0xffffffffL;
     }
 
-    private void leerDirectorio() {
-        int eocd = this.buscarEocd();
+    private void readDirectory() {
+        int eocd = this.findEocd();
         if (eocd < 0) {
             throw new java.io.UncheckedIOException(
-                    new ZipException("no es un archivo ZIP: no se encontro el registro final"));
+                    new ZipException("not a ZIP file: the end-of-central-directory record was not found"));
         }
-        int cuantas = this.u16(eocd + 10);
-        int inicioCen = (int) this.u32sinSigno(eocd + 16);
-        int at = inicioCen;
+        int howMany = this.u16(eocd + 10);
+        int cenStart = (int) this.u32Unsigned(eocd + 16);
+        int at = cenStart;
         int i = 0;
-        while (i < cuantas && at + 46 <= this.datos.length) {
+        while (i < howMany && at + 46 <= this.data.length) {
             if (this.u32(at) != CEN_SIG) {
                 throw new java.io.UncheckedIOException(
                         new ZipException("directorio central corrupto en " + at));
             }
-            int metodo = this.u16(at + 10);
+            int methodOf = this.u16(at + 10);
             int dosTime = this.u32(at + 12);
-            long crc = this.u32sinSigno(at + 16);
-            long csize = this.u32sinSigno(at + 20);
-            long size = this.u32sinSigno(at + 24);
-            int largoNombre = this.u16(at + 28);
-            int largoExtra = this.u16(at + 30);
-            int largoComentario = this.u16(at + 32);
-            long offsetLocal = this.u32sinSigno(at + 42);
+            long crc = this.u32Unsigned(at + 16);
+            long csize = this.u32Unsigned(at + 20);
+            long size = this.u32Unsigned(at + 24);
+            int nameLength = this.u16(at + 28);
+            int extraLength = this.u16(at + 30);
+            int commentLength = this.u16(at + 32);
+            long localOffset = this.u32Unsigned(at + 42);
 
-            byte[] crudo = new byte[largoNombre];
-            System.arraycopy(this.datos, at + 46, crudo, 0, largoNombre);
-            ZipEntry entrada = new ZipEntry(new String(crudo, this.charset));
-            entrada.setMethod(metodo);
-            entrada.setTime(dosTime);
-            entrada.setCrc(crc);
-            entrada.setCompressedSize(csize);
-            entrada.setSize(size);
-            if (largoComentario > 0) {
-                byte[] c = new byte[largoComentario];
-                System.arraycopy(this.datos, at + 46 + largoNombre + largoExtra, c, 0,
-                        largoComentario);
-                entrada.setComment(new String(c, this.charset));
+            byte[] rawName = new byte[nameLength];
+            System.arraycopy(this.data, at + 46, rawName, 0, nameLength);
+            ZipEntry entryOf = new ZipEntry(new String(rawName, this.charset));
+            entryOf.setMethod(methodOf);
+            entryOf.setTime(dosTime);
+            entryOf.setCrc(crc);
+            entryOf.setCompressedSize(csize);
+            entryOf.setSize(size);
+            if (commentLength > 0) {
+                byte[] c = new byte[commentLength];
+                System.arraycopy(this.data, at + 46 + nameLength + extraLength, c, 0,
+                        commentLength);
+                entryOf.setComment(new String(c, this.charset));
             }
-            this.entries.add(entrada);
-            this.offsets.add(Long.valueOf(offsetLocal));
-            at = at + 46 + largoNombre + largoExtra + largoComentario;
+            this.entries.add(entryOf);
+            this.offsets.add(Long.valueOf(localOffset));
+            at = at + 46 + nameLength + extraLength + commentLength;
             i = i + 1;
         }
     }
 
-    // Se busca **de atras para adelante** porque despues del EOCD puede haber un comentario de
-    // archivo de largo variable, y no hay forma de saber donde arranca sin buscar su firma. El
-    // comentario mide como mucho 65535, asi que no hace falta mirar mas atras que eso.
-    private int buscarEocd() {
-        int minimo = this.datos.length - 22 - 65535;
-        if (minimo < 0) {
-            minimo = 0;
+    // It is searched for **back to front** because after the EOCD there may be an archive comment of
+    // variable length, and there is no way of knowing where it starts without looking for its
+    // signature. The comment is at most 65535 long, so there is no need to look further back.
+    private int findEocd() {
+        int min = this.data.length - 22 - 65535;
+        if (min < 0) {
+            min = 0;
         }
-        int at = this.datos.length - 22;
-        while (at >= minimo) {
+        int at = this.data.length - 22;
+        while (at >= min) {
             if (this.u32(at) == EOCD_SIG) {
                 return at;
             }
@@ -196,38 +198,38 @@ public class ZipFile implements Closeable {
         return -1;
     }
 
-    // ---- la superficie publica ---------------------------------------------------------------------
+    // ---- the public surface -----------------------------------------------------------------------
 
     public String getName() {
         return this.name;
     }
 
-    /** El comentario del archivo, o `null` si no tiene. */
+    /** The archive's comment, or `null` if it has none. */
     public String getComment() {
-        this.comprobarAbierto();
-        int eocd = this.buscarEocd();
+        this.checkOpen();
+        int eocd = this.findEocd();
         if (eocd < 0) {
             return null;
         }
-        int largo = this.u16(eocd + 20);
-        if (largo == 0) {
+        int length = this.u16(eocd + 20);
+        if (length == 0) {
             return null;
         }
-        byte[] c = new byte[largo];
-        System.arraycopy(this.datos, eocd + 22, c, 0, largo);
+        byte[] c = new byte[length];
+        System.arraycopy(this.data, eocd + 22, c, 0, length);
         return new String(c, this.charset);
     }
 
     public ZipEntry getEntry(String entryName) {
-        this.comprobarAbierto();
-        int i = this.indiceDe(entryName);
+        this.checkOpen();
+        int i = this.indexFor(entryName);
         if (i < 0) {
             return null;
         }
         return this.entries.get(i);
     }
 
-    private int indiceDe(String entryName) {
+    private int indexFor(String entryName) {
         int i = 0;
         while (i < this.entries.size()) {
             if (this.entries.get(i).getName().equals(entryName)) {
@@ -239,20 +241,20 @@ public class ZipFile implements Closeable {
     }
 
     /**
-     * Un flujo con el contenido **descomprimido** de esa entrada.
+     * A stream with that entry's **decompressed** content.
      *
-     * <p>El salto a los datos necesita la cabecera **local** y no la del directorio: los largos del
-     * nombre y del campo extra pueden diferir entre las dos, y el que vale para saber donde empiezan
-     * los bytes es el de la local.
+     * <p>The seek to the data needs the **local** header and not the directory's: the name's and the
+     * extra field's lengths can differ between the two, and the one that counts for knowing where
+     * the bytes start is the local one's.
      *
-     * @throws NullPointerException si `entry` es `null`
+     * @throws NullPointerException if `entry` is `null`
      */
     public InputStream getInputStream(ZipEntry entry) throws java.io.IOException {
-        this.comprobarAbierto();
+        this.checkOpen();
         if (entry == null) {
             throw new NullPointerException("entry");
         }
-        int i = this.indiceDe(entry.getName());
+        int i = this.indexFor(entry.getName());
         if (i < 0) {
             return null;
         }
@@ -261,48 +263,48 @@ public class ZipFile implements Closeable {
             throw new java.io.UncheckedIOException(
                     new ZipException("cabecera local corrupta en " + local));
         }
-        int largoNombre = this.u16(local + 26);
-        int largoExtra = this.u16(local + 28);
-        int datosAt = local + 30 + largoNombre + largoExtra;
+        int nameLength = this.u16(local + 26);
+        int extraLength = this.u16(local + 28);
+        int dataAt = local + 30 + nameLength + extraLength;
         ZipEntry e = this.entries.get(i);
-        int comprimido = (int) e.getCompressedSize();
-        byte[] crudo = new byte[comprimido];
-        System.arraycopy(this.datos, datosAt, crudo, 0, comprimido);
+        int compressed = (int) e.getCompressedSize();
+        byte[] rawName = new byte[compressed];
+        System.arraycopy(this.data, dataAt, rawName, 0, compressed);
         if (e.getMethod() == ZipEntry.STORED) {
-            return new ByteArrayInputStream(crudo);
+            return new ByteArrayInputStream(rawName);
         }
-        return new InflaterInputStream(new ByteArrayInputStream(crudo), new Inflater(true));
+        return new InflaterInputStream(new ByteArrayInputStream(rawName), new Inflater(true));
     }
 
     public Enumeration<ZipEntry> entries() {
-        this.comprobarAbierto();
+        this.checkOpen();
         return new ZipEntryEnumeration(this.entries);
     }
 
-    /** Las entradas como flujo. Es la forma moderna de `entries()`. */
+    /** The entries as a stream. It is the modern form of `entries()`. */
     public java.util.stream.Stream<ZipEntry> stream() {
-        this.comprobarAbierto();
+        this.checkOpen();
         return this.entries.stream();
     }
 
     public int size() {
-        this.comprobarAbierto();
+        this.checkOpen();
         return this.entries.size();
     }
 
     /**
-     * Cierra el archivo.
+     * It closes the archive.
      *
-     * <p>No hay nada que soltar --el contenido ya esta en memoria-- pero el objeto queda **cerrado**,
-     * y usarlo despues falla. Eso no es ceremonia: es lo que hace que el codigo escrito contra esta
-     * clase se comporte igual el dia que haya un descriptor de verdad.
+     * <p>There is nothing to release --the content is already in memory-- but the object is left
+     * **closed**, and using it afterwards fails. That is not ceremony: it is what makes code written
+     * against this class behave the same the day there is a real descriptor.
      */
     public void close() throws java.io.IOException {
-        this.cerrado = true;
+        this.closedFlag = true;
     }
 
-    private void comprobarAbierto() {
-        if (this.cerrado) {
+    private void checkOpen() {
+        if (this.closedFlag) {
             throw new IllegalStateException("zip file closed");
         }
     }

@@ -6,35 +6,35 @@ import java.security.PrivateKey;
 import java.security.cert.X509Certificate;
 
 /**
- * Elige que certificado propio presentar, entre los que haya.
+ * Chooses which own certificate to present, among the ones there are.
  *
- * <h2>Los alias, y por que hay dos niveles</h2>
+ * <h2>The aliases, and why there are two levels</h2>
  *
- * <p>{@link #getClientAliases} y {@link #getServerAliases} <em>enumeran</em> los candidatos;
- * {@link #chooseClientAlias} y {@link #chooseServerAlias} <em>eligen</em> uno. Estan separados
- * porque enumerar es una consulta sin contexto y elegir depende de con quien se esta hablando — de
- * ahi que los segundos reciban el {@link Socket}.
+ * <p>{@link #getClientAliases} and {@link #getServerAliases} <em>enumerate</em> the candidates;
+ * {@link #chooseClientAlias} and {@link #chooseServerAlias} <em>choose</em> one. They are separate
+ * because enumerating is a query without context and choosing depends on whom one is talking to —
+ * hence the latter receive the {@link Socket}.
  *
- * <p>El parametro {@code issuers} es la lista de emisores que el par declaro aceptar. Presentar un
- * certificado firmado por alguien que no esta en esa lista es garantia de rechazo.
+ * <p>The {@code issuers} parameter is the list of issuers the peer declared it accepts. Presenting
+ * a certificate signed by somebody not on that list is a guarantee of rejection.
  */
 public interface X509KeyManager extends KeyManager {
 
-    /** Los alias de cliente utilizables para ese tipo de clave y esos emisores. */
+    /** The usable client aliases for that key type and those issuers. */
     String[] getClientAliases(String keyType, Principal[] issuers);
 
-    /** Elige el alias de cliente, o {@code null} si ninguno sirve. */
+    /** Chooses the client alias, or {@code null} if none serves. */
     String chooseClientAlias(String[] keyType, Principal[] issuers, Socket socket);
 
-    /** Los alias de servidor utilizables. */
+    /** The usable server aliases. */
     String[] getServerAliases(String keyType, Principal[] issuers);
 
-    /** Elige el alias de servidor, o {@code null}. */
+    /** Chooses the server alias, or {@code null}. */
     String chooseServerAlias(String keyType, Principal[] issuers, Socket socket);
 
-    /** La cadena de certificados de ese alias. */
+    /** That alias's certificate chain. */
     X509Certificate[] getCertificateChain(String alias);
 
-    /** La clave privada de ese alias. */
+    /** That alias's private key. */
     PrivateKey getPrivateKey(String alias);
 }

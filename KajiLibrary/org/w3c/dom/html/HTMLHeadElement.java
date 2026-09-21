@@ -1,13 +1,13 @@
 package org.w3c.dom.html;
 
 /**
- * Un `<head>`.
+ * A `<head>`.
  */
 public interface HTMLHeadElement extends HTMLElement {
 
-    /** El atributo `profile`. */
+    /** The `profile` attribute. */
     String getProfile();
 
-    /** Fija el atributo `profile`. */
+    /** It sets the `profile` attribute. */
     void setProfile(String profile);
 }

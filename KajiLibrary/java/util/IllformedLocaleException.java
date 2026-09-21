@@ -1,33 +1,33 @@
 package java.util;
 
-// Un argumento de `Locale.Builder` no cumple la sintaxis de BCP 47.
+// An argument of `Locale.Builder` does not satisfy BCP 47's syntax.
 //
-// Ademas del mensaje lleva el **indice** donde se rompio, que es lo que la distingue de una
-// IllegalArgumentException cualquiera: al validar una etiqueta de idioma el error casi siempre
-// esta en un subtag concreto de una cadena larga, y decir "en el caracter 12" es la diferencia
-// entre un mensaje util y uno que obliga a adivinar.
+// Besides the message it carries the **index** where it broke, which is what tells it from any old
+// IllegalArgumentException: when validating a language tag the error is almost always in a concrete
+// subtag of a long string, and saying "at character 12" is the difference between a useful message
+// and one that forces guesswork.
 public class IllformedLocaleException extends RuntimeException {
 
-    // Donde se rompio, o -1 si no se sabe.
+    // Where it broke, or -1 if it is not known.
     private int errorIndex = -1;
 
-    // Sin mensaje ni indice.
+    // With neither message nor index.
     public IllformedLocaleException() {
         super();
     }
 
-    // Con el mensaje dado y sin indice.
+    // With the given message and no index.
     public IllformedLocaleException(String message) {
         super(message);
     }
 
-    // Con el mensaje dado y el indice donde se detecto el error.
+    // With the given message and the index where the error was detected.
     public IllformedLocaleException(String message, int errorIndex) {
         super(message + (errorIndex < 0 ? "" : " [at index " + errorIndex + "]"));
         this.errorIndex = errorIndex;
     }
 
-    // El indice donde se rompio, o -1.
+    // The index where it broke, or -1.
     public int getErrorIndex() {
         return this.errorIndex;
     }

@@ -2,20 +2,20 @@ package org.w3c.dom.css;
 
 import org.w3c.dom.DOMException;
 
-/** Un `@page`: las declaraciones que aplican a una pagina impresa. */
+/** A `@page`: the declarations that apply to a printed page. */
 public interface CSSPageRule extends CSSRule {
 
-    /** El selector de la pagina --`:first`, `:left`--, o la cadena vacia. */
+    /** The selector of the page --`:first`, `:left`--, or the empty string. */
     String getSelectorText();
 
     /**
-     * Cambia el selector de pagina.
+     * It changes the page selector.
      *
-     * @throws DOMException `SYNTAX_ERR` si no parsea; `NO_MODIFICATION_ALLOWED_ERR` si la regla es
-     *     de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if it does not parse; `NO_MODIFICATION_ALLOWED_ERR` if the
+     *     rule is read-only
      */
     void setSelectorText(String selectorText) throws DOMException;
 
-    /** Las declaraciones de la pagina. */
+    /** The declarations of the page. */
     CSSStyleDeclaration getStyle();
 }

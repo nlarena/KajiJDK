@@ -1,16 +1,16 @@
 package java.sql;
 
 /**
- * KajiLibrary's java.sql.DataTruncation -- un dato no entro y se corto.
+ * KajiLibrary's java.sql.DataTruncation -- a value did not fit and was cut.
  *
- * <p>Es {@link SQLWarning} al **leer** y {@link SQLException} al **escribir**, y la asimetria tiene
- * sentido: leer de menos deja al programa con un dato incompleto que quizas le alcanza; escribir de
- * menos deja a la **base** con un dato incompleto, que ya no se puede deshacer. Que la misma clase
- * sirva para las dos cosas es posible porque hereda de `SQLWarning`, que a su vez es una
- * `SQLException`.
+ * <p>It is reported as a {@link SQLWarning} when **reading** and thrown as an {@link SQLException}
+ * when **writing**, and the asymmetry makes sense: reading short leaves the program with an
+ * incomplete value that may be enough for it; writing short leaves the **database** with an
+ * incomplete value, which can no longer be undone. That the same class serves both is possible
+ * because it inherits from `SQLWarning`, which in turn is an `SQLException`.
  *
- * <p>{@link #getDataSize} y {@link #getTransferSize} son los dos numeros que importan: cuanto habia y
- * cuanto paso.
+ * <p>{@link #getDataSize} and {@link #getTransferSize} are the two numbers that matter: how much
+ * there was and how much got through.
  */
 public class DataTruncation extends SQLWarning {
 
@@ -27,8 +27,8 @@ public class DataTruncation extends SQLWarning {
 
     public DataTruncation(int index, boolean parameter, boolean read, int dataSize,
             int transferSize, Throwable cause) {
-        // Los dos `SQLState` del estandar: `01004` avisa, `22001` falla. Se elige por `read`, que es
-        // lo que distingue leer de escribir.
+        // The standard's two `SQLState`s: `01004` warns, `22001` fails. It is chosen by `read`,
+        // which is what tells reading from writing.
         super("Data truncation", read ? "01004" : "22001", 0, cause);
         this.index = index;
         this.parameter = parameter;
@@ -37,27 +37,27 @@ public class DataTruncation extends SQLWarning {
         this.transferSize = transferSize;
     }
 
-    /** El indice de la columna o del parametro; -1 si no se sabe. */
+    /** The index of the column or parameter; -1 if unknown. */
     public int getIndex() {
         return this.index;
     }
 
-    /** Si fue un parametro (`true`) o una columna (`false`). */
+    /** Whether it was a parameter (`true`) or a column (`false`). */
     public boolean getParameter() {
         return this.parameter;
     }
 
-    /** Si fue al leer (`true`) o al escribir (`false`). */
+    /** Whether it was on reading (`true`) or on writing (`false`). */
     public boolean getRead() {
         return this.read;
     }
 
-    /** Cuantos bytes o caracteres habia; -1 si no se sabe. */
+    /** How many bytes or characters there were; -1 if unknown. */
     public int getDataSize() {
         return this.dataSize;
     }
 
-    /** Cuantos pasaron de verdad; -1 si no se sabe. */
+    /** How many actually got through; -1 if unknown. */
     public int getTransferSize() {
         return this.transferSize;
     }

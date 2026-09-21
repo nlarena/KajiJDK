@@ -12,42 +12,43 @@ import java.text.AttributedCharacterIterator;
 import java.util.Map;
 
 /**
- * Dibujo en coordenadas continuas, con transformación, trazo, relleno y composición.
+ * Drawing in continuous coordinates, with a transform, a stroke, a paint and a composite.
  *
- * <p>Es {@link Graphics} llevado de píxeles a geometría, y el salto no es de comodidad sino de
- * modelo. Allá había un color y unas coordenadas enteras; acá hay cuatro cosas que se combinan en
- * cada operación:
+ * <p>It is {@link Graphics} carried from pixels to geometry, and the jump is not one of convenience
+ * but of model. There there was a colour and some integer coordinates; here there are four things
+ * that combine on every operation:
  *
  * <ul>
- *   <li>la <strong>transformación</strong>, que dice dónde caen las coordenadas de usuario;
- *   <li>el <strong>trazo</strong> ({@link Stroke}), que convierte una línea en la figura de su
- *       grosor, sus puntas y su punteado;
- *   <li>la <strong>pintura</strong> ({@link Paint}), que decide de qué color es cada punto y por eso
- *       puede ser un degradé o una textura y no sólo un color;
- *   <li>la <strong>composición</strong> ({@link Composite}), que dice cómo se mezcla lo que se
- *       dibuja con lo que había.
+ *   <li>the <strong>transform</strong>, which says where the user coordinates land;
+ *   <li>the <strong>stroke</strong> ({@link Stroke}), which turns a line into the figure of its
+ *       thickness, its ends and its dashing;
+ *   <li>the <strong>paint</strong> ({@link Paint}), which decides what colour each point is and can
+ *       therefore be a gradient or a texture and not only a colour;
+ *   <li>the <strong>composite</strong> ({@link Composite}), which says how what is drawn mixes with
+ *       what was there.
  * </ul>
  *
- * <p>De ahí sale la simetría de la clase: {@link #draw} es rellenar la figura que el trazo genera a
- * partir del contorno, y {@link #fill} es rellenar la figura misma. Una sola operación de fondo con
- * dos entradas distintas.
+ * <p>From there comes the symmetry of the class: {@link #draw} is filling the figure the stroke
+ * generates out of the outline, and {@link #fill} is filling the figure itself. One single
+ * underlying operation with two different inputs.
  *
- * <p>El color y la pintura son el mismo estado visto de dos maneras. `setColor` es `setPaint` con un
- * color, y `getPaint` después de un `setColor` devuelve ese color; pero `getColor` después de un
- * degradé devuelve el último color liso, no el degradé. Eso explica por qué {@link #draw3DRect}
- * guarda la pintura y no el color antes de tocar nada.
+ * <p>The colour and the paint are the same state seen in two ways. `setColor` is `setPaint` with a
+ * colour, and `getPaint` after a `setColor` returns that colour; but `getColor` after a gradient
+ * returns the last plain colour, not the gradient. That explains why {@link #draw3DRect} saves the
+ * paint and not the colour before touching anything.
  */
 public abstract class Graphics2D extends Graphics {
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected Graphics2D() {
     }
 
     /**
-     * Un rectángulo con relieve.
+     * A rectangle in relief.
      *
-     * <p>Se redefine respecto de {@link Graphics} porque acá el estado que hay que preservar es la
-     * **pintura** y no el color: si venía un degradé, restaurar sólo el color lo perdería.
+     * <p>It is overridden with respect to {@link Graphics} because here the state that has to be
+     * preserved is the **paint** and not the colour: if a gradient was set, restoring only the
+     * colour would lose it.
      */
     public void draw3DRect(int x, int y, int width, int height, boolean raised) {
         Paint p = this.getPaint();
@@ -63,7 +64,7 @@ public abstract class Graphics2D extends Graphics {
         this.setPaint(p);
     }
 
-    /** Un rectángulo relleno con relieve. */
+    /** A filled rectangle in relief. */
     public void fill3DRect(int x, int y, int width, int height, boolean raised) {
         Paint p = this.getPaint();
         Color c = this.getColor();
@@ -84,142 +85,143 @@ public abstract class Graphics2D extends Graphics {
         this.setPaint(p);
     }
 
-    /** El contorno de una figura, con el trazo actual. */
+    /** The outline of a shape, with the current stroke. */
     public abstract void draw(Shape s);
 
-    /** Dibuja una imagen transformada. */
+    /** Draws a transformed image. */
     public abstract boolean drawImage(Image img, AffineTransform xform, ImageObserver obs);
 
-    /** Aplica una operación a una imagen y la dibuja en `(x, y)`. */
+    /** Applies an operation to an image and draws it at `(x, y)`. */
     public abstract void drawImage(BufferedImage img, BufferedImageOp op, int x, int y);
 
-    /** Dibuja una imagen ya rasterizada, transformada. */
+    /** Draws an already rasterised image, transformed. */
     public abstract void drawRenderedImage(RenderedImage img, AffineTransform xform);
 
     /**
-     * Dibuja una imagen sin resolución, transformada.
+     * Draws an image with no resolution of its own, transformed.
      *
-     * <p>La imagen se rasteriza **a la escala en la que va a quedar**, así que ampliarla no pixela:
-     * se vuelve a dibujar más grande.
+     * <p>The image is rasterised **at the scale it is going to end up at**, so enlarging it does
+     * not pixelate: it is drawn again, bigger.
      */
     public abstract void drawRenderableImage(RenderableImage img, AffineTransform xform);
 
-    /** Dibuja un texto con el comienzo de la línea de base en `(x, y)`. */
+    /** Draws a text with the start of the baseline at `(x, y)`. */
     public abstract void drawString(String str, int x, int y);
 
-    /** Lo mismo, en coordenadas continuas. */
+    /** The same, in continuous coordinates. */
     public abstract void drawString(String str, float x, float y);
 
-    /** Dibuja un texto con atributos. */
+    /** Draws a text with attributes. */
     public abstract void drawString(AttributedCharacterIterator iterator, int x, int y);
 
-    /** Lo mismo, en coordenadas continuas. */
+    /** The same, in continuous coordinates. */
     public abstract void drawString(AttributedCharacterIterator iterator, float x, float y);
 
     /**
-     * Dibuja glifos ya colocados.
+     * Draws glyphs that are already placed.
      *
-     * <p>Es el camino de abajo: acá ya no hay caracteres que interpretar ni texto que armar, sólo
-     * dibujos con coordenadas. Sirve para dibujar dos veces el mismo texto sin volver a armarlo.
+     * <p>It is the low road: here there are no characters left to interpret nor text to lay out,
+     * only drawings with coordinates. It serves to draw the same text twice without laying it out
+     * again.
      */
     public abstract void drawGlyphVector(GlyphVector g, float x, float y);
 
-    /** Rellena una figura con la pintura actual. */
+    /** Fills a shape with the current paint. */
     public abstract void fill(Shape s);
 
     /**
-     * Si una figura toca ese rectángulo del dispositivo.
+     * Whether a shape touches that rectangle of the device.
      *
-     * <p>Con `onStroke` se pregunta por el contorno trazado en vez de por el interior, que es la
-     * diferencia entre acertarle a una línea fina y acertarle a lo que encierra.
+     * <p>With `onStroke` the question is about the stroked outline instead of about the inside,
+     * which is the difference between hitting a thin line and hitting what it encloses.
      */
     public abstract boolean hit(Rectangle rect, Shape s, boolean onStroke);
 
-    /** La configuración del dispositivo sobre el que se está dibujando. */
+    /** The configuration of the device being drawn on. */
     public abstract GraphicsConfiguration getDeviceConfiguration();
 
-    /** Cambia cómo se mezcla lo que se dibuja con lo que había. */
+    /** Changes how what is drawn mixes with what was there. */
     public abstract void setComposite(Composite comp);
 
-    /** Cambia con qué se pinta. */
+    /** Changes what things are painted with. */
     public abstract void setPaint(Paint paint);
 
-    /** Cambia el grosor, las puntas y el punteado de las líneas. */
+    /** Changes the thickness, the ends and the dashing of the lines. */
     public abstract void setStroke(Stroke s);
 
-    /** Cambia una pista de calidad. */
+    /** Changes a quality hint. */
     public abstract void setRenderingHint(RenderingHints.Key hintKey, Object hintValue);
 
-    /** El valor de una pista, o `null` si no está puesta. */
+    /** The value of a hint, or `null` if it is not set. */
     public abstract Object getRenderingHint(RenderingHints.Key hintKey);
 
-    /** Reemplaza todas las pistas. */
+    /** Replaces every hint. */
     public abstract void setRenderingHints(Map<?, ?> hints);
 
-    /** Agrega pistas sin borrar las que ya había. */
+    /** Adds hints without erasing the ones already there. */
     public abstract void addRenderingHints(Map<?, ?> hints);
 
-    /** Todas las pistas. */
+    /** Every hint. */
     public abstract RenderingHints getRenderingHints();
 
-    /** Corre el origen. */
+    /** Shifts the origin. */
     public abstract void translate(int x, int y);
 
-    /** Corre el origen, en coordenadas continuas. */
+    /** Shifts the origin, in continuous coordinates. */
     public abstract void translate(double tx, double ty);
 
-    /** Gira alrededor del origen, en radianes y en sentido horario. */
+    /** Rotates around the origin, in radians and clockwise. */
     public abstract void rotate(double theta);
 
-    /** Gira alrededor de ese punto. */
+    /** Rotates around that point. */
     public abstract void rotate(double theta, double x, double y);
 
-    /** Escala los dos ejes. */
+    /** Scales both axes. */
     public abstract void scale(double sx, double sy);
 
-    /** Inclina los dos ejes. */
+    /** Shears both axes. */
     public abstract void shear(double shx, double shy);
 
-    /** Compone una transformación con la que ya hay. */
+    /** Composes a transform with the one already there. */
     public abstract void transform(AffineTransform Tx);
 
     /**
-     * Reemplaza la transformación entera.
+     * Replaces the whole transform.
      *
-     * <p>Peligroso sobre un contexto prestado: descarta la que había, incluida la que el sistema
-     * puso para ubicar al componente. Para cambios propios va {@link #transform}.
+     * <p>Dangerous on a borrowed context: it discards the one that was there, including the one the
+     * system set to place the component. For changes of one's own there is {@link #transform}.
      */
     public abstract void setTransform(AffineTransform Tx);
 
-    /** La transformación actual. */
+    /** The current transform. */
     public abstract AffineTransform getTransform();
 
-    /** Con qué se pinta. */
+    /** What things are painted with. */
     public abstract Paint getPaint();
 
-    /** Cómo se mezcla lo que se dibuja con lo que había. */
+    /** How what is drawn mixes with what was there. */
     public abstract Composite getComposite();
 
     /**
-     * Cambia el color de fondo, que es el que usa {@link Graphics#clearRect}.
+     * Changes the background colour, which is the one {@link Graphics#clearRect} uses.
      *
-     * <p>No es el color con el que se dibuja: es con lo que se borra.
+     * <p>It is not the colour things are drawn with: it is what things are erased with.
      */
     public abstract void setBackground(Color color);
 
-    /** El color de fondo. */
+    /** The background colour. */
     public abstract Color getBackground();
 
-    /** El trazo actual. */
+    /** The current stroke. */
     public abstract Stroke getStroke();
 
     /**
-     * Reduce el recorte a la intersección con esa figura.
+     * Reduces the clip to the intersection with that shape.
      *
-     * <p>Como {@link Graphics#clipRect}, nunca lo agranda.
+     * <p>Like {@link Graphics#clipRect}, it never enlarges it.
      */
     public abstract void clip(Shape s);
 
-    /** Las condiciones en las que se va a medir y dibujar el texto. */
+    /** The conditions text is going to be measured and drawn under. */
     public abstract FontRenderContext getFontRenderContext();
 }

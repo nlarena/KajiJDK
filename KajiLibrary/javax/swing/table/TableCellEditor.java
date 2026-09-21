@@ -6,19 +6,19 @@ import javax.swing.CellEditor;
 import javax.swing.JTable;
 
 /**
- * Como se edita una celda de una tabla.
+ * How a table cell is edited.
  *
- * <p>Es {@link CellEditor} mas la forma de conseguir el componente de edicion. La division no es
- * caprichosa: el ciclo de vida de una edicion es el mismo en una tabla, un arbol o una lista, y solo
- * cambia que se le pasa para ubicarse.
+ * <p>It is {@link CellEditor} plus the way of getting the editing component. The division is not
+ * capricious: an edit's life cycle is the same in a table, a tree or a list, and the only thing
+ * that changes is what it is passed to place itself.
  *
- * <p>A diferencia de {@link TableCellRenderer}, aca el componente <strong>si</strong> es de verdad:
- * hay uno solo a la vez —el de la celda que se esta editando— asi que recibe el foco, escucha el
- * teclado y vive hasta que la edicion termina.
+ * <p>Unlike {@link TableCellRenderer}, here the component <strong>is</strong> real: there is only
+ * one at a time --the one of the cell being edited-- so it takes the focus, listens to the
+ * keyboard and lives until the editing ends.
  */
 public interface TableCellEditor extends CellEditor {
 
-    /** Configura y devuelve el componente con el que editar esa celda. */
+    /** Configures and returns the component to edit that cell with. */
     Component getTableCellEditorComponent(JTable table, Object value, boolean isSelected,
             int row, int column);
 }

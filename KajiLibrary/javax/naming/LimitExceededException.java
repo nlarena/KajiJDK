@@ -1,14 +1,13 @@
 package javax.naming;
 
 /**
- * Se lanza cuando la operacion se corto por un limite pactado --de resultados o de tiempo-- y
- * no por un error.
-
- * <p>No es abstracta, a diferencia de `NamingSecurityException`: un proveedor puede haber chocado
- * con un limite que no es ni de tamano ni de tiempo, y entonces lanza esta. Lo que llega es
- * **parcial**, no vacio.
+ * Thrown when the operation was cut short by an agreed limit --on results or on time-- and not
+ * by an error.
  *
- * <p>La jerarquia entera y el estado que arrastra estan explicados en `NamingException`.
+ * <p>It is not abstract, unlike `NamingSecurityException`: a provider may have hit a limit that is
+ * neither size nor time, and then it throws this one. What arrives is **partial**, not empty.
+ *
+ * <p>The whole hierarchy and the state it carries are explained in `NamingException`.
  */
 public class LimitExceededException extends NamingException {
 

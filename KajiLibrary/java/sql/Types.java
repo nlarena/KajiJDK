@@ -1,19 +1,19 @@
 package java.sql;
 
 /**
- * KajiLibrary's java.sql.Types -- el catalogo de tipos SQL, como enteros.
+ * KajiLibrary's java.sql.Types -- the catalogue of SQL types, as integers.
  *
- * <p>Los numeros no siguen ningun orden: vienen del estandar X/Open y de agregados posteriores, y por
- * eso conviven los negativos con los de cuatro cifras. No hay nada que deducir de ellos -- son
- * etiquetas, y el unico contrato es que estos son los valores.
+ * <p>The numbers follow no order: they come from the X/Open standard and later additions, which is
+ * why negative ones live alongside four-digit ones. There is nothing to deduce from them -- they
+ * are labels, and the only contract is that these are the values.
  *
- * <p>Existe {@link JDBCType}, que es el mismo catalogo como enum y por lo tanto con nombre y con
- * chequeo del compilador. Esta clase queda porque las firmas que reciben un `int sqlType` son
- * anteriores y no se pueden cambiar.
+ * <p>There is {@link JDBCType}, which is the same catalogue as an enum and therefore with names and
+ * with compiler checking. This class stays because the signatures that take an `int sqlType` are
+ * older and cannot be changed.
  */
 public class Types {
 
-    // Una clase de constantes no se instancia; el constructor privado es lo que lo hace cumplir.
+    // A class of constants is not instantiated; the private constructor is what enforces it.
     private Types() {
     }
 

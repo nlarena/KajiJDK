@@ -18,9 +18,9 @@ import java.nio.channels.spi.AsynchronousChannelProvider;
 // ===============================================================================================
 //
 // One read and one write pending per channel, and not one more: asking for a second read before the
-// first finishes is `ReadPendingException`. It is not a limitation of this implementation, it is the
-// API's rule, and the reason is a good one: with two reads in flight over one byte stream, the order
-// they complete in decides where the bytes land, and nobody controls that.
+// first finishes is `ReadPendingException`. It is not a limitation of this implementation, it is
+// the API's rule, and the reason is a good one: with two reads in flight over one byte stream, the
+// order they complete in decides where the bytes land, and nobody controls that.
 //
 // Here it is also genuinely necessary: underneath there is ONE blocking socket, and two threads
 // reading it at once would split the stream between them at random.
@@ -29,10 +29,10 @@ import java.nio.channels.spi.AsynchronousChannelProvider;
 // THE TIMEOUTS
 // ===============================================================================================
 //
-// On running out, the operation fails with `InterruptedByTimeoutException` and **the channel is left
-// useless**: there is no telling how many bytes the thread stuck inside the read managed to move, so
-// going on using it would be going on over a misaligned stream. It is marked and the following
-// operations fail.
+// On running out, the operation fails with `InterruptedByTimeoutException` and **the channel is
+// left useless**: there is no telling how many bytes the thread stuck inside the read managed to
+// move, so going on using it would be going on over a misaligned stream. It is marked and the
+// following operations fail.
 //
 // Package-private on purpose: it is reached through `AsynchronousSocketChannel.open`.
 final class AsyncSocketChannelImpl extends AsynchronousSocketChannel {
@@ -315,9 +315,9 @@ final class AsyncSocketChannelImpl extends AsynchronousSocketChannel {
     /**
      * Sets this operation's timeout on the socket.
      *
-     * <p>Underneath there is a blocking socket, so the limit is met with its own: the read comes back
-     * with {@code SocketTimeoutException} and here it is translated into the one the API declares,
-     * marking the channel misaligned.
+     * <p>Underneath there is a blocking socket, so the limit is met with its own: the read comes
+     * back with {@code SocketTimeoutException} and here it is translated into the one the API
+     * declares, marking the channel misaligned.
      */
     private static void applyTimeout(AsyncSocketChannelImpl owner, long limit, TimeUnit unit)
             throws IOException {

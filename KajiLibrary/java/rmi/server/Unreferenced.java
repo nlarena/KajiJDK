@@ -1,20 +1,20 @@
 package java.rmi.server;
 
 /**
- * Un objeto remoto que quiere enterarse cuando ya no lo referencia ningun cliente.
+ * A remote object that wants to find out when no client references it any more.
  *
- * <h2>Por que hace falta un aviso explicito</h2>
+ * <h2>Why an explicit notice is needed</h2>
  *
- * <p>Porque el recolector local no ve las referencias remotas: para el, un objeto exportado esta
- * vivo mientras el runtime de RMI lo tenga. Quien lleva la cuenta de los clientes es el recolector
- * distribuido, y este metodo es como avisa que la cuenta llego a cero — el momento de soltar lo que
- * el objeto tuviera tomado.
+ * <p>Because the local collector does not see remote references: to it, an exported object is alive
+ * while the RMI runtime holds it. What keeps count of the clients is the distributed collector, and
+ * this method is how it announces that the count reached zero — the moment to let go of whatever
+ * the object was holding.
  *
- * <p>No es una promesa de finalizacion: el objeto puede volver a ser referenciado despues si alguien
- * conserva su stub, y entonces {@link #unreferenced} se llama de nuevo mas adelante.
+ * <p>It is not a promise of finalisation: the object can be referenced again later if somebody kept
+ * its stub, and then {@link #unreferenced} is called again further on.
  */
 public interface Unreferenced {
 
-    /** Ya no queda ningun cliente con una referencia. */
+    /** No client with a reference is left. */
     void unreferenced();
 }

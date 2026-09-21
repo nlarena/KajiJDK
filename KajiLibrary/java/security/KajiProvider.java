@@ -4,44 +4,44 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
-// El unico proveedor que KajiLibrary registra de fabrica.
+// The only provider KajiLibrary registers as stock.
 //
-// Ofrece **digests y un generador aleatorio**, y solo lo que se puede cumplir de verdad: los
-// digests estan escritos de cero en esta biblioteca y verificados contra el JDK y contra los
-// vectores de las especificaciones, y el generador es un pase directo al del sistema operativo. No
-// hay `Signature`, ni `Cipher`, ni `KeyPairGenerator`: registrar un servicio que no se puede
-// cumplir seria peor que no tenerlo, porque `getInstance` devolveria un objeto que despues no hace
-// lo que promete.
+// It offers **digests and a random generator**, and only what can really be fulfilled: the digests
+// are written from scratch in this library and checked against the JDK and against the vectors of
+// the specifications, and the generator is a direct pass to the operating system's. There is no
+// `Signature`, no `Cipher`, no `KeyPairGenerator`: registering a service that cannot be fulfilled
+// would be worse than not having it, because `getInstance` would return an object that afterwards
+// does not do what it promises.
 //
-// El generador se llama `OS-PRNG` y no `SHA1PRNG` ni `DRBG` a proposito. Esos dos nombres designan
-// construcciones concretas, y devolver otra cosa bajo ese nombre seria mentir sobre que algoritmo
-// esta corriendo. `new SecureRandom()` --que es como lo pide casi todo el mundo-- no nombra
-// ninguno y por lo tanto funciona.
+// The generator is called `OS-PRNG` and not `SHA1PRNG` or `DRBG` on purpose. Those two names
+// designate concrete constructions, and returning something else under that name would be lying
+// about which algorithm is running. `new SecureRandom()` --which is how almost everybody asks for
+// it-- names none and therefore works.
 //
-// Se registra **solo si el sistema puede dar entropia**. Un `SecureRandom` que existe y no puede
-// entregar bytes es peor que su ausencia: el llamador se entera en el peor momento.
+// It is registered **only if the system can give entropy**. A `SecureRandom` that exists and cannot
+// hand over bytes is worse than its absence: the caller finds out at the worst moment.
 //
-// Package-private a proposito: no es API del JDK, y hacerlo publico agregaria a `java.security` un
-// nombre que el JDK no tiene.
+// Package-private on purpose: it is not API of the JDK, and making it public would add to
+// `java.security` a name the JDK does not have.
 final class KajiProvider extends Provider {
 
     KajiProvider() {
         super("Kaji", "1.0", "Kaji digest provider (MD5, SHA-1, SHA-2 family)");
 
-        this.registrar("MD5", "java.security.DigestMD5", new String[] {"1.2.840.113549.2.5"});
-        this.registrar("SHA-1", "java.security.DigestSHA1", new String[] {"SHA", "SHA1"});
-        this.registrar("SHA-224", "java.security.DigestSHA2", new String[] {"SHA224"});
-        this.registrar("SHA-256", "java.security.DigestSHA2", new String[] {"SHA256"});
-        this.registrar("SHA-384", "java.security.DigestSHA5", new String[] {"SHA384"});
-        this.registrar("SHA-512", "java.security.DigestSHA5", new String[] {"SHA512"});
+        this.register("MD5", "java.security.DigestMD5", new String[] {"1.2.840.113549.2.5"});
+        this.register("SHA-1", "java.security.DigestSHA1", new String[] {"SHA", "SHA1"});
+        this.register("SHA-224", "java.security.DigestSHA2", new String[] {"SHA224"});
+        this.register("SHA-256", "java.security.DigestSHA2", new String[] {"SHA256"});
+        this.register("SHA-384", "java.security.DigestSHA5", new String[] {"SHA384"});
+        this.register("SHA-512", "java.security.DigestSHA5", new String[] {"SHA512"});
 
         if (OsEntropy.available()) {
             this.putService(new OsPrngService(this));
         }
     }
 
-    // El servicio del generador. Construye directo por lo mismo que `ServicioDigest`: la clase es
-    // detalle de implementacion de `java.security` y no se alcanza por reflexion.
+    // The service of the generator. It builds directly for the same reason as `DigestService`: the
+    // class is an implementation detail of `java.security` and is not reachable by reflection.
     private static final class OsPrngService extends Provider.Service {
 
         OsPrngService(Provider p) {
@@ -52,8 +52,9 @@ final class KajiProvider extends Provider {
         @Override
         public Object newInstance(Object constructorParameter) throws NoSuchAlgorithmException {
             if (constructorParameter != null) {
-                // Los parametros solo los entiende un DRBG, y este no lo es. Se rechaza en vez de
-                // ignorarlos: quien los pasa esta pidiendo una configuracion que no se va a aplicar.
+                // The parameters are only understood by a DRBG, and this is not one. They are
+                // rejected instead of being ignored: whoever passes them is asking for a
+                // configuration that is not going to be applied.
                 throw new NoSuchAlgorithmException(
                     "OS-PRNG does not accept SecureRandomParameters");
             }
@@ -61,30 +62,30 @@ final class KajiProvider extends Provider {
         }
     }
 
-    private void registrar(String algoritmo, String clase, String[] alias) {
-        List<String> lista = new ArrayList<String>();
+    private void register(String algorithmName, String className, String[] alias) {
+        List<String> list = new ArrayList<String>();
         int i = 0;
         while (i < alias.length) {
-            lista.add(alias[i]);
+            list.add(alias[i]);
             i = i + 1;
         }
-        this.putService(new ServicioDigest(this, algoritmo, clase, lista));
+        this.putService(new DigestService(this, algorithmName, className, list));
     }
 
-    // Instancia los digests **sin reflexion**.
+    // It instantiates the digests **without reflection**.
     //
-    // La implementacion base de `Provider.Service` hace `Class.forName(className).newInstance()`, y
-    // eso funciona para un proveedor externo cuyas clases son publicas. Las de aca no lo son —son
-    // detalle de implementacion de `java.security`— asi que este servicio construye directo. El
-    // `getClassName()` sigue diciendo la verdad: es el nombre real de la clase que se va a
-    // instanciar, aunque desde afuera no se pueda alcanzar por reflexion.
-    private static final class ServicioDigest extends Provider.Service {
+    // The base implementation of `Provider.Service` does `Class.forName(className).newInstance()`,
+    // and that works for an external provider whose classes are public. The ones here are not —they
+    // are an implementation detail of `java.security`— so this service builds directly. The
+    // `getClassName()` goes on telling the truth: it is the real name of the class that is going to
+    // be instantiated, although from outside it cannot be reached by reflection.
+    private static final class DigestService extends Provider.Service {
 
-        private final String algoritmo;
+        private final String algorithmName;
 
-        ServicioDigest(Provider p, String algoritmo, String clase, List<String> alias) {
-            super(p, "MessageDigest", algoritmo, clase, alias, new HashMap<String, String>());
-            this.algoritmo = algoritmo;
+        DigestService(Provider p, String algorithmName, String className, List<String> alias) {
+            super(p, "MessageDigest", algorithmName, className, alias, new HashMap<String, String>());
+            this.algorithmName = algorithmName;
         }
 
         @Override
@@ -93,25 +94,25 @@ final class KajiProvider extends Provider {
                 throw new InvalidParameterException(
                     "constructorParameter not used with MessageDigest engines");
             }
-            if (this.algoritmo.equals("MD5")) {
+            if (this.algorithmName.equals("MD5")) {
                 return new DigestMD5();
             }
-            if (this.algoritmo.equals("SHA-1")) {
+            if (this.algorithmName.equals("SHA-1")) {
                 return new DigestSHA1();
             }
-            if (this.algoritmo.equals("SHA-224")) {
+            if (this.algorithmName.equals("SHA-224")) {
                 return DigestSHA2.sha224();
             }
-            if (this.algoritmo.equals("SHA-256")) {
+            if (this.algorithmName.equals("SHA-256")) {
                 return DigestSHA2.sha256();
             }
-            if (this.algoritmo.equals("SHA-384")) {
+            if (this.algorithmName.equals("SHA-384")) {
                 return DigestSHA5.sha384();
             }
-            if (this.algoritmo.equals("SHA-512")) {
+            if (this.algorithmName.equals("SHA-512")) {
                 return DigestSHA5.sha512();
             }
-            throw new NoSuchAlgorithmException(this.algoritmo);
+            throw new NoSuchAlgorithmException(this.algorithmName);
         }
     }
 }

@@ -1,20 +1,20 @@
 package java.nio.file;
 
-// Las opciones estandar de `Files.copy` y `Files.move`.
+// `Files.copy`'s and `Files.move`'s standard options.
 //
-// **KajiJDK honra `REPLACE_EXISTING` y rechaza las otras dos.** `COPY_ATTRIBUTES` pide llevarse las
-// marcas de tiempo y los permisos, y no hay nativo que los lea ni los escriba; `ATOMIC_MOVE` pide
-// una garantia que un mover hecho de copiar-y-borrar no puede dar. En los dos casos se levanta la
-// excepcion que la spec ya prevee --`UnsupportedOperationException` y
-// `AtomicMoveNotSupportedException`-- en vez de aceptarlas y no cumplirlas.
+// **KajiJDK honours `REPLACE_EXISTING` and rejects the other two.** `COPY_ATTRIBUTES` asks for the
+// timestamps and the permissions to be carried over, and there is no native that reads or writes
+// the permissions; `ATOMIC_MOVE` asks for a guarantee a move made of copy-and-delete cannot give.
+// In both cases the exception the spec already foresees is thrown --`UnsupportedOperationException`
+// and `AtomicMoveNotSupportedException`-- rather than accepting them and not honouring them.
 public enum StandardCopyOption implements CopyOption {
 
-    /** Si el destino existe, pisarlo. */
+    /** If the target exists, overwrite it. */
     REPLACE_EXISTING,
 
-    /** Copiar tambien los atributos. KajiJDK no la soporta. */
+    /** Copy the attributes too. KajiJDK does not support it. */
     COPY_ATTRIBUTES,
 
-    /** Mover como una operacion atomica. KajiJDK no la soporta. */
+    /** Move as an atomic operation. KajiJDK does not support it. */
     ATOMIC_MOVE
 }

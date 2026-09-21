@@ -17,39 +17,40 @@ import javax.management.NotificationListener;
 import javax.management.ObjectName;
 
 /**
- * El servicio que administra tipos de relacion y relaciones, y las mantiene consistentes.
+ * The service that manages relation types and relations, and keeps them consistent.
  *
- * <h2>Que problema resuelve, dicho una vez</h2>
+ * <h2>What problem it solves, said once</h2>
  *
- * <p>JMX modela objetos administrados sueltos. Cuando entre ellos hay vinculos, la solucion casera
- * es que cada MBean guarde el {@link ObjectName} del otro en un atributo — y ahi aparecen tres
- * problemas que nadie resuelve: nadie limpia cuando el otro se desregistra, no se puede recorrer el
- * vinculo al reves, y la cardinalidad no esta escrita en ningun lado.
+ * <p>JMX models managed objects in isolation. When there are links between them, the homemade
+ * solution is for each MBean to keep the other's {@link ObjectName} in an attribute -- and there
+ * three problems appear that nobody solves: nobody cleans up when the other is unregistered, the
+ * link cannot be walked backwards, and the cardinality is written nowhere.
  *
- * <p>Este servicio se hace cargo de los tres. Es la razon de que exista todo el paquete.
+ * <p>This service takes charge of all three. It is the reason the whole package exists.
  *
- * <h2>Las tres estructuras que lleva adentro</h2>
+ * <h2>The three structures it keeps inside</h2>
  *
  * <ul>
- * <li>los <strong>tipos</strong>, por nombre — el esquema contra el que se valida;</li>
- * <li>las <strong>relaciones</strong>, por identificador;</li>
- * <li>el <strong>indice inverso</strong>: de {@link ObjectName} a las relaciones y roles donde
- *     aparece. Es lo que hace que {@link #findReferencingRelations} sea una consulta y no un
- *     recorrido de todo.</li>
+ * <li>the <b>types</b>, by name -- the schema everything is validated against;</li>
+ * <li>the <b>relations</b>, by identifier;</li>
+ * <li>the <b>reverse index</b>: from {@link ObjectName} to the relations and roles it appears in.
+ *     It is what makes {@link #findReferencingRelations} a query and not a walk over
+ *     everything.</li>
  * </ul>
  *
- * <p>El indice inverso es tambien lo que obliga a que las relaciones avisen cuando cambian un rol
- * ({@link #updateRoleMap}): sin ese aviso quedaria desactualizado y las consultas mentirian.
+ * <p>The reverse index is also what forces relations to report when they change a role
+ * ({@link #updateRoleMap}): without that report it would go stale and the queries would lie.
  *
- * <h2>Por que escucha al servidor de MBeans</h2>
+ * <h2>Why it listens to the MBean server</h2>
  *
- * <p>Implementa {@link NotificationListener} y se suscribe a los desregistros. Sin eso, un MBean que
- * desaparece dejaria relaciones apuntando a nada — y el que lo desregistro no tiene por que saber
- * que estaba en una relacion.
+ * <p>It implements {@link NotificationListener} and subscribes to unregistrations. Without that,
+ * an MBean that disappears would leave relations pointing at nothing -- and whoever unregistered it
+ * has no reason to know it was in a relation.
  *
- * <p>Que hacer despues es la {@link #setPurgeFlag bandera de purga}: limpiar enseguida, o marcar y
- * dejar que alguien llame a {@link #purgeRelations}. Existe la opcion porque limpiar es caro y
- * porque hay sistemas donde desregistrar y volver a registrar es parte de la operacion normal.
+ * <p>What to do afterwards is the {@link #setPurgeFlag purge flag}: clean up right away, or mark
+ * and let someone call {@link #purgeRelations}. The option exists because cleaning is expensive
+ * and because there are systems where unregistering and registering again is part of normal
+ * operation.
  */
 public class RelationService extends NotificationBroadcasterSupport
         implements RelationServiceMBean, MBeanRegistration, NotificationListener {
@@ -61,7 +62,7 @@ public class RelationService extends NotificationBroadcasterSupport
     private final Map<ObjectName, String> myRelMBeanObjName2RelIdMap =
             new HashMap<ObjectName, String>();
 
-    /** El indice inverso: MBean -> { relacion -> roles }. Ver la nota de la clase. */
+    /** The reverse index: MBean -> { relation -> roles }. See the class note. */
     private final Map<ObjectName, Map<String, List<String>>> myRefedMBeanObjName2RelIdsMap =
             new HashMap<ObjectName, Map<String, List<String>>>();
 
@@ -71,7 +72,7 @@ public class RelationService extends NotificationBroadcasterSupport
     private long myNtfSeqNumber = 0;
 
     /**
-     * @param purgeFlag si limpiar sola las relaciones que quedan inconsistentes
+     * @param purgeFlag whether to clean up on its own the relations left inconsistent
      */
     public RelationService(boolean purgeFlag) {
         super();
@@ -82,28 +83,28 @@ public class RelationService extends NotificationBroadcasterSupport
     public void isActive() throws RelationServiceNotRegisteredException {
         if (this.myMBeanServer == null) {
             throw new RelationServiceNotRegisteredException(
-                    "el servicio de relaciones no esta registrado en ningun servidor de MBeans");
+                    "the relation service is not registered in any MBean server");
         }
     }
 
-    /** Guarda el servidor: es lo que habilita todo lo demas. */
+    /** It keeps the server: it is what enables everything else. */
     public ObjectName preRegister(MBeanServer server, ObjectName name) throws Exception {
         this.myMBeanServer = server;
         this.myObjName = name;
         return name;
     }
 
-    /** Sin nada que hacer despues de registrarse. */
+    /** Nothing to do after registering. */
     public void postRegister(Boolean registrationDone) {
     }
 
-    /** Suelta el servidor: el servicio vuelve a estar inactivo. */
+    /** Releases the server: the service goes back to being inactive. */
     public void preDeregister() throws Exception {
         this.myMBeanServer = null;
         this.myObjName = null;
     }
 
-    /** Sin nada que hacer despues. */
+    /** Nothing to do afterwards. */
     public void postDeregister() {
     }
 
@@ -122,10 +123,11 @@ public class RelationService extends NotificationBroadcasterSupport
             RoleInfo[] roleInfoArray)
             throws IllegalArgumentException, InvalidRelationTypeException {
         if (relationTypeName == null) {
-            throw new IllegalArgumentException("falta el nombre del tipo");
+            throw new IllegalArgumentException("the type name is missing");
         }
         if (this.myRelType2ObjMap.containsKey(relationTypeName)) {
-            throw new InvalidRelationTypeException("ya hay un tipo llamado " + relationTypeName);
+            throw new InvalidRelationTypeException(
+                    "there is already a type named " + relationTypeName);
         }
         RelationTypeSupport t = new RelationTypeSupport(relationTypeName, roleInfoArray);
         t.setRelationServiceFlag(true);
@@ -136,23 +138,23 @@ public class RelationService extends NotificationBroadcasterSupport
     public synchronized void addRelationType(RelationType relationTypeObj)
             throws IllegalArgumentException, InvalidRelationTypeException {
         if (relationTypeObj == null) {
-            throw new IllegalArgumentException("falta el tipo");
+            throw new IllegalArgumentException("the type is missing");
         }
-        String nombre = relationTypeObj.getRelationTypeName();
-        if (nombre == null) {
-            throw new InvalidRelationTypeException("el tipo no tiene nombre");
+        String name = relationTypeObj.getRelationTypeName();
+        if (name == null) {
+            throw new InvalidRelationTypeException("the type has no name");
         }
-        if (this.myRelType2ObjMap.containsKey(nombre)) {
-            throw new InvalidRelationTypeException("ya hay un tipo llamado " + nombre);
+        if (this.myRelType2ObjMap.containsKey(name)) {
+            throw new InvalidRelationTypeException("there is already a type named " + name);
         }
         List<RoleInfo> infos = relationTypeObj.getRoleInfos();
         if (infos == null || infos.isEmpty()) {
-            throw new InvalidRelationTypeException("el tipo " + nombre + " no declara roles");
+            throw new InvalidRelationTypeException("the type " + name + " declares no roles");
         }
         if (relationTypeObj instanceof RelationTypeSupport) {
             ((RelationTypeSupport) relationTypeObj).setRelationServiceFlag(true);
         }
-        this.myRelType2ObjMap.put(nombre, relationTypeObj);
+        this.myRelType2ObjMap.put(name, relationTypeObj);
     }
 
     /** {@inheritDoc} */
@@ -163,24 +165,24 @@ public class RelationService extends NotificationBroadcasterSupport
     /** {@inheritDoc} */
     public synchronized List<RoleInfo> getRoleInfos(String relationTypeName)
             throws IllegalArgumentException, RelationTypeNotFoundException {
-        return tipo(relationTypeName).getRoleInfos();
+        return type(relationTypeName).getRoleInfos();
     }
 
     /** {@inheritDoc} */
     public synchronized RoleInfo getRoleInfo(String relationTypeName, String roleInfoName)
             throws IllegalArgumentException, RelationTypeNotFoundException,
             RoleInfoNotFoundException {
-        return tipo(relationTypeName).getRoleInfo(roleInfoName);
+        return type(relationTypeName).getRoleInfo(roleInfoName);
     }
 
-    private RelationType tipo(String nombre)
+    private RelationType type(String name)
             throws IllegalArgumentException, RelationTypeNotFoundException {
-        if (nombre == null) {
-            throw new IllegalArgumentException("falta el nombre del tipo");
+        if (name == null) {
+            throw new IllegalArgumentException("the type name is missing");
         }
-        RelationType t = this.myRelType2ObjMap.get(nombre);
+        RelationType t = this.myRelType2ObjMap.get(name);
         if (t == null) {
-            throw new RelationTypeNotFoundException("no hay un tipo llamado " + nombre);
+            throw new RelationTypeNotFoundException("there is no type named " + name);
         }
         return t;
     }
@@ -190,17 +192,17 @@ public class RelationService extends NotificationBroadcasterSupport
             throws RelationServiceNotRegisteredException, IllegalArgumentException,
             RelationTypeNotFoundException {
         isActive();
-        tipo(relationTypeName);
-        // Las relaciones de ese tipo se van con el: dejarlas seria dejarlas sin esquema.
-        List<String> aBorrar = new ArrayList<String>();
+        type(relationTypeName);
+        // The relations of that type go with it: leaving them would leave them without a schema.
+        List<String> toRemove = new ArrayList<String>();
         for (Map.Entry<String, String> e : this.myRelId2RelTypeMap.entrySet()) {
             if (e.getValue().equals(relationTypeName)) {
-                aBorrar.add(e.getKey());
+                toRemove.add(e.getKey());
             }
         }
-        for (int i = 0; i < aBorrar.size(); i++) {
+        for (int i = 0; i < toRemove.size(); i++) {
             try {
-                removeRelation(aBorrar.get(i));
+                removeRelation(toRemove.get(i));
             } catch (RelationNotFoundException e) {
                 continue;
             }
@@ -219,23 +221,23 @@ public class RelationService extends NotificationBroadcasterSupport
             InvalidRoleValueException {
         isActive();
         if (relationId == null) {
-            throw new IllegalArgumentException("falta el identificador");
+            throw new IllegalArgumentException("the identifier is missing");
         }
         if (this.myRelId2ObjMap.containsKey(relationId)) {
-            throw new InvalidRelationIdException("ya hay una relacion " + relationId);
+            throw new InvalidRelationIdException("there is already a relation " + relationId);
         }
-        tipo(relationTypeName);
+        type(relationTypeName);
         RelationSupport rel = new RelationSupport(relationId, this.myObjName,
                 relationTypeName, roleList);
         rel.setRelationServiceManagementFlag(Boolean.TRUE);
         this.myRelId2ObjMap.put(relationId, rel);
         this.myRelId2RelTypeMap.put(relationId, relationTypeName);
-        indexar(relationId, rel.retrieveAllRoles());
+        index(relationId, rel.retrieveAllRoles());
         try {
             sendRelationCreationNotification(relationId);
         } catch (RelationNotFoundException e) {
-            // Imposible: la acabamos de poner en el mapa dos lineas arriba. Se atrapa porque el
-            // metodo la declara para el caso general, no porque pueda pasar aca.
+            // Impossible: we just put it in the map two lines above. It is caught because the
+            // method declares it for the general case, not because it can happen here.
             throw new IllegalStateException(e.getMessage());
         }
     }
@@ -248,17 +250,17 @@ public class RelationService extends NotificationBroadcasterSupport
             RoleNotFoundException, InvalidRoleValueException {
         isActive();
         if (relationObjectName == null) {
-            throw new IllegalArgumentException("falta el nombre del MBean");
+            throw new IllegalArgumentException("the MBean name is missing");
         }
         throw new InvalidRelationServiceException(
-                "esta VM no tiene servidor de MBeans con el que consultar a "
+                "this VM has no MBean server to query "
                 + relationObjectName.toString());
     }
 
     /** {@inheritDoc} */
     public synchronized ObjectName isRelationMBean(String relationId)
             throws IllegalArgumentException, RelationNotFoundException {
-        relacion(relationId);
+        relation(relationId);
         for (Map.Entry<ObjectName, String> e : this.myRelMBeanObjName2RelIdMap.entrySet()) {
             if (e.getValue().equals(relationId)) {
                 return e.getKey();
@@ -271,7 +273,7 @@ public class RelationService extends NotificationBroadcasterSupport
     public synchronized String isRelation(ObjectName objectName)
             throws IllegalArgumentException {
         if (objectName == null) {
-            throw new IllegalArgumentException("falta el nombre del MBean");
+            throw new IllegalArgumentException("the MBean name is missing");
         }
         return this.myRelMBeanObjName2RelIdMap.get(objectName);
     }
@@ -279,7 +281,7 @@ public class RelationService extends NotificationBroadcasterSupport
     /** {@inheritDoc} */
     public synchronized Boolean hasRelation(String relationId) throws IllegalArgumentException {
         if (relationId == null) {
-            throw new IllegalArgumentException("falta el identificador");
+            throw new IllegalArgumentException("the identifier is missing");
         }
         return Boolean.valueOf(this.myRelId2ObjMap.containsKey(relationId));
     }
@@ -289,14 +291,14 @@ public class RelationService extends NotificationBroadcasterSupport
         return new ArrayList<String>(this.myRelId2ObjMap.keySet());
     }
 
-    private Object relacion(String relationId)
+    private Object relation(String relationId)
             throws IllegalArgumentException, RelationNotFoundException {
         if (relationId == null) {
-            throw new IllegalArgumentException("falta el identificador");
+            throw new IllegalArgumentException("the identifier is missing");
         }
         Object o = this.myRelId2ObjMap.get(relationId);
         if (o == null) {
-            throw new RelationNotFoundException("no hay una relacion " + relationId);
+            throw new RelationNotFoundException("there is no relation " + relationId);
         }
         return o;
     }
@@ -305,9 +307,9 @@ public class RelationService extends NotificationBroadcasterSupport
     public synchronized Integer checkRoleReading(String roleName, String relationTypeName)
             throws IllegalArgumentException, RelationTypeNotFoundException {
         if (roleName == null) {
-            throw new IllegalArgumentException("falta el nombre del rol");
+            throw new IllegalArgumentException("the role name is missing");
         }
-        RelationType t = tipo(relationTypeName);
+        RelationType t = type(relationTypeName);
         RoleInfo info;
         try {
             info = t.getRoleInfo(roleName);
@@ -321,9 +323,9 @@ public class RelationService extends NotificationBroadcasterSupport
     public synchronized Integer checkRoleWriting(Role role, String relationTypeName,
             Boolean initFlag) throws IllegalArgumentException, RelationTypeNotFoundException {
         if (role == null || initFlag == null) {
-            throw new IllegalArgumentException("faltan el rol o la bandera");
+            throw new IllegalArgumentException("the role or the flag is missing");
         }
-        RelationType t = tipo(relationTypeName);
+        RelationType t = type(relationTypeName);
         RoleInfo info;
         try {
             info = t.getRoleInfo(role.getRoleName());
@@ -334,7 +336,8 @@ public class RelationService extends NotificationBroadcasterSupport
             return Integer.valueOf(RoleStatus.ROLE_NOT_WRITABLE);
         }
         int n = role.getRoleValue().size();
-        // En la escritura inicial el minimo no se exige: una relacion se crea y se llena despues.
+        // On the initial write the minimum is not required: a relation is created and filled in
+        // afterwards.
         if (!initFlag.booleanValue() && !info.checkMinDegree(n)) {
             return Integer.valueOf(RoleStatus.LESS_THAN_MIN_ROLE_DEGREE);
         }
@@ -347,13 +350,13 @@ public class RelationService extends NotificationBroadcasterSupport
     /** {@inheritDoc} */
     public synchronized void sendRelationCreationNotification(String relationId)
             throws IllegalArgumentException, RelationNotFoundException {
-        relacion(relationId);
+        relation(relationId);
         ObjectName mb = isRelationMBean(relationId);
-        String tipoNtf = mb == null
+        String notifType = mb == null
                 ? RelationNotification.RELATION_BASIC_CREATION
                 : RelationNotification.RELATION_MBEAN_CREATION;
-        sendNotification(new RelationNotification(tipoNtf, this, nextSeq(),
-                System.currentTimeMillis(), "se creo la relacion " + relationId,
+        sendNotification(new RelationNotification(notifType, this, nextSeq(),
+                System.currentTimeMillis(), "relation created: " + relationId,
                 relationId, this.myRelId2RelTypeMap.get(relationId), mb, null));
     }
 
@@ -362,15 +365,15 @@ public class RelationService extends NotificationBroadcasterSupport
             List<ObjectName> oldRoleValue)
             throws IllegalArgumentException, RelationNotFoundException {
         if (newRole == null || oldRoleValue == null) {
-            throw new IllegalArgumentException("faltan el rol nuevo o el valor viejo");
+            throw new IllegalArgumentException("the new role or the old value is missing");
         }
-        relacion(relationId);
+        relation(relationId);
         ObjectName mb = isRelationMBean(relationId);
-        String tipoNtf = mb == null
+        String notifType = mb == null
                 ? RelationNotification.RELATION_BASIC_UPDATE
                 : RelationNotification.RELATION_MBEAN_UPDATE;
-        sendNotification(new RelationNotification(tipoNtf, this, nextSeq(),
-                System.currentTimeMillis(), "cambio el rol " + newRole.getRoleName(),
+        sendNotification(new RelationNotification(notifType, this, nextSeq(),
+                System.currentTimeMillis(), "role changed: " + newRole.getRoleName(),
                 relationId, this.myRelId2RelTypeMap.get(relationId), mb,
                 newRole.getRoleName(), newRole.getRoleValue(), oldRoleValue));
     }
@@ -379,13 +382,13 @@ public class RelationService extends NotificationBroadcasterSupport
     public synchronized void sendRelationRemovalNotification(String relationId,
             List<ObjectName> unregMBeanList)
             throws IllegalArgumentException, RelationNotFoundException {
-        relacion(relationId);
+        relation(relationId);
         ObjectName mb = isRelationMBean(relationId);
-        String tipoNtf = mb == null
+        String notifType = mb == null
                 ? RelationNotification.RELATION_BASIC_REMOVAL
                 : RelationNotification.RELATION_MBEAN_REMOVAL;
-        sendNotification(new RelationNotification(tipoNtf, this, nextSeq(),
-                System.currentTimeMillis(), "se saco la relacion " + relationId,
+        sendNotification(new RelationNotification(notifType, this, nextSeq(),
+                System.currentTimeMillis(), "relation removed: " + relationId,
                 relationId, this.myRelId2RelTypeMap.get(relationId), mb, unregMBeanList));
     }
 
@@ -401,57 +404,57 @@ public class RelationService extends NotificationBroadcasterSupport
             RelationNotFoundException {
         isActive();
         if (newRole == null || oldRoleValue == null) {
-            throw new IllegalArgumentException("faltan el rol nuevo o el valor viejo");
+            throw new IllegalArgumentException("the new role or the old value is missing");
         }
-        relacion(relationId);
+        relation(relationId);
         String rol = newRole.getRoleName();
         for (int i = 0; i < oldRoleValue.size(); i++) {
-            desindexar(oldRoleValue.get(i), relationId, rol);
+            unindex(oldRoleValue.get(i), relationId, rol);
         }
         for (ObjectName on : newRole.getRoleValue()) {
-            indexarUno(on, relationId, rol);
+            indexOne(on, relationId, rol);
         }
     }
 
-    private void indexar(String relationId, RoleList roles) {
+    private void index(String relationId, RoleList roles) {
         for (Role r : roles.asList()) {
             for (ObjectName on : r.getRoleValue()) {
-                indexarUno(on, relationId, r.getRoleName());
+                indexOne(on, relationId, r.getRoleName());
             }
         }
     }
 
-    private void indexarUno(ObjectName on, String relationId, String rol) {
-        Map<String, List<String>> porRel = this.myRefedMBeanObjName2RelIdsMap.get(on);
-        if (porRel == null) {
-            porRel = new HashMap<String, List<String>>();
-            this.myRefedMBeanObjName2RelIdsMap.put(on, porRel);
+    private void indexOne(ObjectName on, String relationId, String rol) {
+        Map<String, List<String>> byRelation = this.myRefedMBeanObjName2RelIdsMap.get(on);
+        if (byRelation == null) {
+            byRelation = new HashMap<String, List<String>>();
+            this.myRefedMBeanObjName2RelIdsMap.put(on, byRelation);
         }
-        List<String> roles = porRel.get(relationId);
+        List<String> roles = byRelation.get(relationId);
         if (roles == null) {
             roles = new ArrayList<String>();
-            porRel.put(relationId, roles);
+            byRelation.put(relationId, roles);
         }
         if (!roles.contains(rol)) {
             roles.add(rol);
         }
     }
 
-    private void desindexar(ObjectName on, String relationId, String rol) {
-        Map<String, List<String>> porRel = this.myRefedMBeanObjName2RelIdsMap.get(on);
-        if (porRel == null) {
+    private void unindex(ObjectName on, String relationId, String rol) {
+        Map<String, List<String>> byRelation = this.myRefedMBeanObjName2RelIdsMap.get(on);
+        if (byRelation == null) {
             return;
         }
-        List<String> roles = porRel.get(relationId);
+        List<String> roles = byRelation.get(relationId);
         if (roles != null) {
             roles.remove(rol);
             if (roles.isEmpty()) {
-                porRel.remove(relationId);
+                byRelation.remove(relationId);
             }
         }
-        // Un MBean sin relaciones sale del indice: dejarlo con un mapa vacio lo haria crecer sin
-        // limite en un sistema donde las relaciones van y vienen.
-        if (porRel.isEmpty()) {
+        // An MBean with no relations leaves the index: leaving it with an empty map would make it
+        // grow without bound in a system where relations come and go.
+        if (byRelation.isEmpty()) {
             this.myRefedMBeanObjName2RelIdsMap.remove(on);
         }
     }
@@ -461,13 +464,13 @@ public class RelationService extends NotificationBroadcasterSupport
             throws RelationServiceNotRegisteredException, IllegalArgumentException,
             RelationNotFoundException {
         isActive();
-        Object rel = relacion(relationId);
-        List<ObjectName> aDesregistrar = new ArrayList<ObjectName>();
+        Object rel = relation(relationId);
+        List<ObjectName> toUnregister = new ArrayList<ObjectName>();
         ObjectName mb = isRelationMBean(relationId);
         if (mb != null) {
-            aDesregistrar.add(mb);
+            toUnregister.add(mb);
         }
-        sendRelationRemovalNotification(relationId, aDesregistrar);
+        sendRelationRemovalNotification(relationId, toUnregister);
         if (rel instanceof RelationSupport) {
             ((RelationSupport) rel).setRelationServiceManagementFlag(Boolean.FALSE);
         }
@@ -476,16 +479,16 @@ public class RelationService extends NotificationBroadcasterSupport
         if (mb != null) {
             this.myRelMBeanObjName2RelIdMap.remove(mb);
         }
-        List<ObjectName> vacias = new ArrayList<ObjectName>();
+        List<ObjectName> empty = new ArrayList<ObjectName>();
         for (Map.Entry<ObjectName, Map<String, List<String>>> e
                 : this.myRefedMBeanObjName2RelIdsMap.entrySet()) {
             e.getValue().remove(relationId);
             if (e.getValue().isEmpty()) {
-                vacias.add(e.getKey());
+                empty.add(e.getKey());
             }
         }
-        for (int i = 0; i < vacias.size(); i++) {
-            this.myRefedMBeanObjName2RelIdsMap.remove(vacias.get(i));
+        for (int i = 0; i < empty.size(); i++) {
+            this.myRefedMBeanObjName2RelIdsMap.remove(empty.get(i));
         }
     }
 
@@ -495,10 +498,10 @@ public class RelationService extends NotificationBroadcasterSupport
     }
 
     /**
-     * Atiende los desregistros del servidor de MBeans.
+     * Handles the MBean server's unregistrations.
      *
-     * <p>Es lo que mantiene consistentes las relaciones cuando un MBean desaparece sin que quien lo
-     * desregistro sepa que estaba en una.
+     * <p>It is what keeps relations consistent when an MBean disappears without whoever
+     * unregistered it knowing it was in one.
      */
     public void handleNotification(Notification notification, Object handback) {
         if (!(notification instanceof MBeanServerNotification)) {
@@ -517,9 +520,9 @@ public class RelationService extends NotificationBroadcasterSupport
         }
     }
 
-    /** Los seis tipos de {@link RelationNotification} que este servicio emite. */
+    /** The six {@link RelationNotification} types this service emits. */
     public MBeanNotificationInfo[] getNotificationInfo() {
-        String[] tipos = new String[] {
+        String[] types = new String[] {
             RelationNotification.RELATION_BASIC_CREATION,
             RelationNotification.RELATION_MBEAN_CREATION,
             RelationNotification.RELATION_BASIC_UPDATE,
@@ -528,8 +531,8 @@ public class RelationService extends NotificationBroadcasterSupport
             RelationNotification.RELATION_MBEAN_REMOVAL,
         };
         return new MBeanNotificationInfo[] {
-            new MBeanNotificationInfo(tipos, RelationNotification.class.getName(),
-                    "notificaciones del servicio de relaciones"),
+            new MBeanNotificationInfo(types, RelationNotification.class.getName(),
+                    "relation service notifications"),
         };
     }
 
@@ -537,14 +540,14 @@ public class RelationService extends NotificationBroadcasterSupport
     public synchronized Map<String, List<String>> findReferencingRelations(ObjectName mbeanName,
             String relationTypeName, String roleName) throws IllegalArgumentException {
         if (mbeanName == null) {
-            throw new IllegalArgumentException("falta el nombre del MBean");
+            throw new IllegalArgumentException("the MBean name is missing");
         }
         Map<String, List<String>> out = new HashMap<String, List<String>>();
-        Map<String, List<String>> porRel = this.myRefedMBeanObjName2RelIdsMap.get(mbeanName);
-        if (porRel == null) {
+        Map<String, List<String>> byRelation = this.myRefedMBeanObjName2RelIdsMap.get(mbeanName);
+        if (byRelation == null) {
             return out;
         }
-        for (Map.Entry<String, List<String>> e : porRel.entrySet()) {
+        for (Map.Entry<String, List<String>> e : byRelation.entrySet()) {
             if (relationTypeName != null
                     && !relationTypeName.equals(this.myRelId2RelTypeMap.get(e.getKey()))) {
                 continue;
@@ -560,10 +563,10 @@ public class RelationService extends NotificationBroadcasterSupport
     /** {@inheritDoc} */
     public synchronized Map<ObjectName, List<String>> findAssociatedMBeans(ObjectName mbeanName,
             String relationTypeName, String roleName) throws IllegalArgumentException {
-        Map<String, List<String>> relaciones =
+        Map<String, List<String>> relations =
                 findReferencingRelations(mbeanName, relationTypeName, roleName);
         Map<ObjectName, List<String>> out = new HashMap<ObjectName, List<String>>();
-        for (String relId : relaciones.keySet()) {
+        for (String relId : relations.keySet()) {
             Map<ObjectName, List<String>> refs;
             try {
                 refs = getReferencedMBeans(relId);
@@ -571,7 +574,7 @@ public class RelationService extends NotificationBroadcasterSupport
                 continue;
             }
             for (ObjectName on : refs.keySet()) {
-                // El propio MBean no es un asociado de si mismo.
+                // The MBean itself is not an associate of itself.
                 if (on.equals(mbeanName)) {
                     continue;
                 }
@@ -591,7 +594,7 @@ public class RelationService extends NotificationBroadcasterSupport
     /** {@inheritDoc} */
     public synchronized List<String> findRelationsOfType(String relationTypeName)
             throws IllegalArgumentException, RelationTypeNotFoundException {
-        tipo(relationTypeName);
+        type(relationTypeName);
         List<String> out = new ArrayList<String>();
         for (Map.Entry<String, String> e : this.myRelId2RelTypeMap.entrySet()) {
             if (e.getValue().equals(relationTypeName)) {
@@ -606,7 +609,7 @@ public class RelationService extends NotificationBroadcasterSupport
             throws RelationServiceNotRegisteredException, IllegalArgumentException,
             RelationNotFoundException, RoleNotFoundException {
         isActive();
-        return ((Relation) relacion(relationId)).getRole(roleName);
+        return ((Relation) relation(relationId)).getRole(roleName);
     }
 
     /** {@inheritDoc} */
@@ -614,7 +617,7 @@ public class RelationService extends NotificationBroadcasterSupport
             throws RelationServiceNotRegisteredException, IllegalArgumentException,
             RelationNotFoundException {
         isActive();
-        return ((Relation) relacion(relationId)).getRoles(roleNameArray);
+        return ((Relation) relation(relationId)).getRoles(roleNameArray);
     }
 
     /** {@inheritDoc} */
@@ -622,13 +625,13 @@ public class RelationService extends NotificationBroadcasterSupport
             throws IllegalArgumentException, RelationNotFoundException,
             RelationServiceNotRegisteredException {
         isActive();
-        return ((Relation) relacion(relationId)).getAllRoles();
+        return ((Relation) relation(relationId)).getAllRoles();
     }
 
     /** {@inheritDoc} */
     public synchronized Integer getRoleCardinality(String relationId, String roleName)
             throws IllegalArgumentException, RelationNotFoundException, RoleNotFoundException {
-        return ((Relation) relacion(relationId)).getRoleCardinality(roleName);
+        return ((Relation) relation(relationId)).getRoleCardinality(roleName);
     }
 
     /** {@inheritDoc} */
@@ -637,16 +640,16 @@ public class RelationService extends NotificationBroadcasterSupport
             RelationNotFoundException, RoleNotFoundException, InvalidRoleValueException,
             RelationTypeNotFoundException {
         isActive();
-        Relation rel = (Relation) relacion(relationId);
-        List<ObjectName> viejo;
+        Relation rel = (Relation) relation(relationId);
+        List<ObjectName> old;
         try {
-            viejo = rel.getRole(role.getRoleName());
+            old = rel.getRole(role.getRoleName());
         } catch (RoleNotFoundException e) {
-            viejo = new ArrayList<ObjectName>();
+            old = new ArrayList<ObjectName>();
         }
         rel.setRole(role);
-        updateRoleMap(relationId, role, viejo);
-        sendRoleUpdateNotification(relationId, role, viejo);
+        updateRoleMap(relationId, role, old);
+        sendRoleUpdateNotification(relationId, role, old);
     }
 
     /** {@inheritDoc} */
@@ -654,7 +657,7 @@ public class RelationService extends NotificationBroadcasterSupport
             throws RelationServiceNotRegisteredException, IllegalArgumentException,
             RelationNotFoundException {
         isActive();
-        Relation rel = (Relation) relacion(relationId);
+        Relation rel = (Relation) relation(relationId);
         try {
             return rel.setRoles(roleList);
         } catch (RelationTypeNotFoundException e) {
@@ -665,13 +668,13 @@ public class RelationService extends NotificationBroadcasterSupport
     /** {@inheritDoc} */
     public synchronized Map<ObjectName, List<String>> getReferencedMBeans(String relationId)
             throws IllegalArgumentException, RelationNotFoundException {
-        return ((Relation) relacion(relationId)).getReferencedMBeans();
+        return ((Relation) relation(relationId)).getReferencedMBeans();
     }
 
     /** {@inheritDoc} */
     public synchronized String getRelationTypeName(String relationId)
             throws IllegalArgumentException, RelationNotFoundException {
-        relacion(relationId);
+        relation(relationId);
         return this.myRelId2RelTypeMap.get(relationId);
     }
 }

@@ -12,73 +12,72 @@ import java.util.Set;
 import java.util.Vector;
 
 /**
- * Una imagen con los píxeles **en memoria**, accesibles y modificables.
+ * An image with the pixels **in memory**, readable and writable.
  *
- * <p>Es donde se juntan las tres piezas del paquete: un {@link WritableRaster} que tiene los
- * píxeles, un {@link ColorModel} que dice qué color son, y la interfaz {@link Image} que la hace
- * dibujable en cualquier lado. Todo lo demás de `java.awt.image` existe para producir una de éstas o
- * para transformarla.
+ * <p>It is where the three pieces of the package come together: a {@link WritableRaster} that has
+ * the pixels, a {@link ColorModel} that says what colour they are, and the {@link Image} interface
+ * that makes it drawable anywhere. Everything else in `java.awt.image` exists to produce one of
+ * these or to transform it.
  *
- * <p>Las constantes `TYPE_*` son atajos para las combinaciones usuales de modelo de color y
- * disposición, y elegir bien importa más de lo que parece: `TYPE_INT_RGB` guarda cuatro bytes por
- * píxel para tres componentes y se dibuja rapidísimo; `TYPE_3BYTE_BGR` guarda tres y es más lento.
- * `TYPE_CUSTOM` no es un formato sino la respuesta "esto no es ninguno de los otros".
+ * <p>The `TYPE_*` constants are shortcuts for the usual combinations of colour model and layout,
+ * and choosing well matters more than it seems: `TYPE_INT_RGB` stores four bytes per pixel for
+ * three components and draws very fast; `TYPE_3BYTE_BGR` stores three and is slower. `TYPE_CUSTOM`
+ * is not a format but the answer "this is none of the others".
  *
- * <p>La familia `_PRE` guarda el color ya multiplicado por el alfa. No es una variante decorativa:
- * componer imágenes premultiplicadas es sumar, y sin premultiplicar hay una multiplicación por píxel
- * y por operación. Se paga al crearla y se ahorra en cada dibujado.
+ * <p>The `_PRE` family stores the colour already multiplied by the alpha. It is not a decorative
+ * variant: compositing premultiplied images is adding, and without premultiplying there is one
+ * multiplication per pixel and per operation. It is paid when creating it and saved on every draw.
  *
- * <p>Es una {@link RenderedImage} de **un solo mosaico**, y de ahí salen casi todas sus respuestas
- * sobre mosaicos: uno a lo ancho, uno a lo alto, el (0,0), del tamaño de la imagen.
+ * <p>It is a {@link RenderedImage} of **a single tile**, and from that come almost all of its
+ * answers about tiles: one across, one down, the (0,0) one, of the size of the image.
  *
- * <p><strong>No se puede dibujar encima.</strong> {@link #createGraphics} y {@link #getGraphics}
- * tiran `UnsupportedOperationException`: devolver un {@link Graphics2D} exige un rasterizador
- * —relleno por barrido, recorte, trazo, composición— que esta biblioteca todavía no tiene. Todo lo
- * demás de la clase funciona: leer y escribir píxeles, recortar, copiar, convertir y filtrar. Un
- * miembro que falta es un subconjunto legal; uno que miente, no.
+ * <p><strong>It can be drawn on.</strong> This note used to say that {@link #createGraphics} and
+ * {@link #getGraphics} threw `UnsupportedOperationException` for want of a rasteriser; both return
+ * one now —see their own notes for what it does and what it only records— and everything else of
+ * the class works as well: reading and writing pixels, cropping, copying, converting and filtering.
  */
 public class BufferedImage extends Image implements WritableRenderedImage, Transparency {
 
-    /** Ninguno de los formatos con nombre. */
+    /** None of the named formats. */
     public static final int TYPE_CUSTOM = 0;
 
-    /** Un `int` por píxel, sin alfa: 8 bits de relleno y 8 por componente. */
+    /** One `int` per pixel, with no alpha: 8 bits of padding and 8 per component. */
     public static final int TYPE_INT_RGB = 1;
 
-    /** Un `int` por píxel, con alfa. */
+    /** One `int` per pixel, with alpha. */
     public static final int TYPE_INT_ARGB = 2;
 
-    /** Como el anterior, con el color ya multiplicado por el alfa. */
+    /** Like the previous one, with the colour already multiplied by the alpha. */
     public static final int TYPE_INT_ARGB_PRE = 3;
 
-    /** Un `int` por píxel con las componentes al revés: azul en los bits altos. */
+    /** One `int` per pixel with the components the other way round: blue in the high bits. */
     public static final int TYPE_INT_BGR = 4;
 
-    /** Tres bytes por píxel, en orden azul, verde, rojo. */
+    /** Three bytes per pixel, in blue, green, red order. */
     public static final int TYPE_3BYTE_BGR = 5;
 
-    /** Cuatro bytes por píxel, en orden alfa, azul, verde, rojo. */
+    /** Four bytes per pixel, in alpha, blue, green, red order. */
     public static final int TYPE_4BYTE_ABGR = 6;
 
-    /** Como el anterior, con el color ya multiplicado por el alfa. */
+    /** Like the previous one, with the colour already multiplied by the alpha. */
     public static final int TYPE_4BYTE_ABGR_PRE = 7;
 
-    /** Dieciséis bits por píxel repartidos 5-6-5. */
+    /** Sixteen bits per pixel split 5-6-5. */
     public static final int TYPE_USHORT_565_RGB = 8;
 
-    /** Quince bits por píxel repartidos 5-5-5. */
+    /** Fifteen bits per pixel split 5-5-5. */
     public static final int TYPE_USHORT_555_RGB = 9;
 
-    /** Un byte por píxel, en gris. */
+    /** One byte per pixel, in grey. */
     public static final int TYPE_BYTE_GRAY = 10;
 
-    /** Dieciséis bits por píxel, en gris. */
+    /** Sixteen bits per pixel, in grey. */
     public static final int TYPE_USHORT_GRAY = 11;
 
-    /** Uno, dos o cuatro bits por píxel, con paleta. */
+    /** One, two or four bits per pixel, with a palette. */
     public static final int TYPE_BYTE_BINARY = 12;
 
-    /** Un byte por píxel, con paleta de hasta 256 colores. */
+    /** One byte per pixel, with a palette of up to 256 colours. */
     public static final int TYPE_BYTE_INDEXED = 13;
 
     private int imageType = TYPE_CUSTOM;
@@ -88,10 +87,10 @@ public class BufferedImage extends Image implements WritableRenderedImage, Trans
     private ImageProducer source;
 
     /**
-     * Una imagen de uno de los formatos con nombre.
+     * An image of one of the named formats.
      *
-     * @throws IllegalArgumentException si el tipo no es uno de los catorce, si es
-     *     {@link #TYPE_CUSTOM}, o si el tamaño es vacío
+     * @throws IllegalArgumentException if the type is not one of the fourteen, if it is
+     *     {@link #TYPE_CUSTOM}, or if the size is empty
      */
     public BufferedImage(int width, int height, int imageType) {
         ColorModel cm;
@@ -147,8 +146,9 @@ public class BufferedImage extends Image implements WritableRenderedImage, Trans
             cm = new IndexColorModel(1, 2, arr, arr, arr);
             wr = cm.createCompatibleWritableRaster(width, height);
         } else if (imageType == TYPE_BYTE_INDEXED) {
-            // Un cubo de 6x6x6 colores, que son 216, y el resto una rampa de grises: es la paleta
-            // de 256 con la que cualquier imagen queda razonable sin tener que calcularle una.
+            // A cube of 6x6x6 colours, which is 216, and the rest a ramp of greys: it is the
+            // palette of 256 any image looks reasonable with, without having to work one out for
+            // it.
             int[] cmap = new int[256];
             int i = 0;
             for (int r = 0; r < 256; r = r + 51) {
@@ -177,11 +177,11 @@ public class BufferedImage extends Image implements WritableRenderedImage, Trans
     }
 
     /**
-     * Una imagen con paleta.
+     * An image with a palette.
      *
-     * @throws IllegalArgumentException si el tipo no es {@link #TYPE_BYTE_BINARY} ni
-     *     {@link #TYPE_BYTE_INDEXED}, si la paleta tiene alfa premultiplicado, o si tiene más de 16
-     *     entradas para el tipo binario
+     * @throws IllegalArgumentException if the type is neither {@link #TYPE_BYTE_BINARY} nor {@link
+     *     #TYPE_BYTE_INDEXED}, if the palette has premultiplied alpha, or if it has more than 16
+     *     entries for the binary type
      */
     public BufferedImage(int width, int height, int imageType, IndexColorModel cm) {
         if (cm.hasAlpha() && cm.isAlphaPremultiplied()) {
@@ -217,16 +217,16 @@ public class BufferedImage extends Image implements WritableRenderedImage, Trans
     }
 
     /**
-     * Una imagen sobre un ráster y un modelo de color dados.
+     * An image over a given raster and colour model.
      *
-     * <p>Es el constructor general y el único que puede dar una imagen de {@link #TYPE_CUSTOM}. El
-     * tipo se **deduce** mirando el modelo y la disposición: si coinciden con alguno de los formatos
-     * con nombre, se declara ése.
+     * <p>It is the general constructor and the only one that can give an image of {@link
+     * #TYPE_CUSTOM}. The type is **deduced** by looking at the model and the layout: if they match
+     * one of the named formats, that one is declared.
      *
-     * @throws IllegalArgumentException si el ráster no le sirve al modelo de color, o si su ángulo
-     *     no está en el origen
-     * @throws RasterFormatException si el ráster no tiene bandas suficientes para el modelo
-     * @throws NullPointerException si falta el modelo o el ráster
+     * @throws IllegalArgumentException if the raster does not suit the colour model, or if its
+     *     corner is not at the origin
+     * @throws RasterFormatException if the raster does not have enough bands for the model
+     * @throws NullPointerException if the model or the raster is missing
      */
     public BufferedImage(ColorModel cm, WritableRaster raster, boolean isRasterPremultiplied,
             Hashtable<?, ?> properties) {
@@ -251,18 +251,18 @@ public class BufferedImage extends Image implements WritableRenderedImage, Trans
                 }
             }
         }
-        // El estado de premultiplicacion del raster tiene que coincidir con el que declara el
-        // modelo: si no, cada lectura de color estaria deshaciendo una cuenta que no se hizo.
+        // The premultiplication state of the raster has to match the one the model declares: if it
+        // did not, every colour read would be undoing a sum that was never done.
         this.coerceData(isRasterPremultiplied);
-        this.imageType = this.deducirTipo();
+        this.imageType = this.inferType();
     }
 
     /**
-     * Cuál de los formatos con nombre describe a este modelo y este ráster.
+     * Which of the named formats describes this model and this raster.
      *
-     * @return el tipo, o {@link #TYPE_CUSTOM} si no es ninguno
+     * @return the type, or {@link #TYPE_CUSTOM} if it is none of them
      */
-    private int deducirTipo() {
+    private int inferType() {
         ColorModel cm = this.colorModel;
         SampleModel sm = this.raster.getSampleModel();
         ColorSpace cs = cm.getColorSpace();
@@ -336,48 +336,49 @@ public class BufferedImage extends Image implements WritableRenderedImage, Trans
         return TYPE_CUSTOM;
     }
 
-    /** Si ese espacio es el gris de fábrica. */
+    /** Whether that space is the default grey one. */
     private static boolean srgbGris(ColorSpace cs) {
         return cs == ColorSpace.getInstance(ColorSpace.CS_GRAY);
     }
 
-    /** El formato, o {@link #TYPE_CUSTOM}. */
+    /** The format, or {@link #TYPE_CUSTOM}. */
     public int getType() {
         return this.imageType;
     }
 
-    /** El modelo de color. */
+    /** The colour model. */
     public ColorModel getColorModel() {
         return this.colorModel;
     }
 
     /**
-     * El ráster con los píxeles.
+     * The raster with the pixels.
      *
-     * <p>Es el de verdad, no una copia: escribirlo cambia la imagen.
+     * <p>It is the real one, not a copy: writing to it changes the image.
      */
     public WritableRaster getRaster() {
         return this.raster;
     }
 
     /**
-     * El canal alfa como un ráster de una banda, o `null` si no hay.
+     * The alpha channel as a one-band raster, or `null` if there is none.
      *
-     * <p>Comparte los datos con la imagen.
+     * <p>It shares the data with the image.
      */
     public WritableRaster getAlphaRaster() {
         return this.colorModel.getAlphaRaster(this.raster);
     }
 
-    /** El color de un píxel, en ARGB de ocho bits por canal. */
+    /** The colour of a pixel, in ARGB with eight bits per channel. */
     public int getRGB(int x, int y) {
         return this.colorModel.getRGB(this.raster.getDataElements(x, y, null));
     }
 
     /**
-     * Los colores de un rectángulo, en ARGB.
+     * The colours of a rectangle, in ARGB.
      *
-     * @throws ArrayIndexOutOfBoundsException si el rectángulo se sale o el arreglo no alcanza
+     * @throws ArrayIndexOutOfBoundsException if the rectangle goes outside or the array is not long
+     *     enough
      */
     public int[] getRGB(int startX, int startY, int w, int h, int[] rgbArray, int offset,
             int scansize) {
@@ -400,19 +401,20 @@ public class BufferedImage extends Image implements WritableRenderedImage, Trans
     }
 
     /**
-     * Pone el color de un píxel, dado en ARGB.
+     * Sets the colour of a pixel, given in ARGB.
      *
-     * <p>El color se convierte al formato de la imagen, y si el formato no lo puede representar se
-     * guarda el más parecido: escribir y volver a leer no siempre devuelve lo mismo.
+     * <p>The colour is converted to the format of the image, and if the format cannot represent it
+     * the closest one is stored: writing and reading back does not always return the same thing.
      */
     public void setRGB(int x, int y, int rgb) {
         this.raster.setDataElements(x, y, this.colorModel.getDataElements(rgb, null));
     }
 
     /**
-     * Pone los colores de un rectángulo, dados en ARGB.
+     * Sets the colours of a rectangle, given in ARGB.
      *
-     * @throws ArrayIndexOutOfBoundsException si el rectángulo se sale o el arreglo no alcanza
+     * @throws ArrayIndexOutOfBoundsException if the rectangle goes outside or the array is not long
+     *     enough
      */
     public void setRGB(int startX, int startY, int w, int h, int[] rgbArray, int offset,
             int scansize) {
@@ -429,31 +431,31 @@ public class BufferedImage extends Image implements WritableRenderedImage, Trans
         }
     }
 
-    /** Ancho, en píxeles. */
+    /** Width, in pixels. */
     public int getWidth() {
         return this.raster.getWidth();
     }
 
-    /** Alto, en píxeles. */
+    /** Height, in pixels. */
     public int getHeight() {
         return this.raster.getHeight();
     }
 
     /**
-     * Ancho, en píxeles.
+     * Width, in pixels.
      *
-     * <p>El observador no se usa: los píxeles ya están.
+     * <p>The observer is not used: the pixels are there already.
      */
     public int getWidth(ImageObserver observer) {
         return this.raster.getWidth();
     }
 
-    /** Alto, en píxeles; el observador no se usa. */
+    /** Height, in pixels; the observer is not used. */
     public int getHeight(ImageObserver observer) {
         return this.raster.getHeight();
     }
 
-    /** Un productor que entrega estos píxeles. */
+    /** A producer that delivers these pixels. */
     public ImageProducer getSource() {
         if (this.source == null) {
             this.source = new BufferedImageSource(this);
@@ -462,20 +464,20 @@ public class BufferedImage extends Image implements WritableRenderedImage, Trans
     }
 
     /**
-     * Una propiedad de la imagen.
+     * A property of the image.
      *
-     * @return el valor, o {@link Image#UndefinedProperty} si no está definida
-     * @throws NullPointerException si el nombre es `null`
+     * @return the value, or {@link Image#UndefinedProperty} if it is not defined
+     * @throws NullPointerException if the name is `null`
      */
     public Object getProperty(String name, ImageObserver observer) {
         return this.getProperty(name);
     }
 
     /**
-     * Una propiedad de la imagen.
+     * A property of the image.
      *
-     * @return el valor, o {@link Image#UndefinedProperty} si no está definida
-     * @throws NullPointerException si el nombre es `null`
+     * @return the value, or {@link Image#UndefinedProperty} if it is not defined
+     * @throws NullPointerException if the name is `null`
      */
     public Object getProperty(String name) {
         if (name == null) {
@@ -491,7 +493,7 @@ public class BufferedImage extends Image implements WritableRenderedImage, Trans
         return o;
     }
 
-    /** Los nombres de las propiedades, o `null` si no hay ninguna. */
+    /** The names of the properties, or `null` if there are none. */
     public String[] getPropertyNames() {
         if (this.properties == null || this.properties.isEmpty()) {
             return null;
@@ -501,64 +503,64 @@ public class BufferedImage extends Image implements WritableRenderedImage, Trans
     }
 
     /**
-     * Un contexto para dibujar sobre esta imagen.
+     * A context to draw over this image.
      *
-     * <p><strong>Funciona.</strong> Devuelve el rasterizador de esta biblioteca: lineas por
-     * Bresenham, rellenos por barrido, arcos, poligonos, recorte rectangular, traslacion, copia de
-     * areas y dibujado de otras {@code BufferedImage}. Lo unico que declina es {@code drawString},
-     * que necesita los contornos de los glifos — un subsistema aparte que todavia no esta.
+     * <p><strong>It works.</strong> It returns this library's rasteriser: lines by Bresenham, fills
+     * by scanline, arcs, polygons, rectangular clipping, translation, area copying and drawing of
+     * other {@code BufferedImage}s. The only thing it declines is {@code drawString}, which needs
+     * the outlines of the glyphs — a subsystem apart that is not there yet.
      *
-     * <p>No es lo mismo que {@link #createGraphics}: aquel promete un {@link Graphics2D}, con
-     * transformaciones afines, trazos, composicion y sugerencias de renderizado, y eso es una capa
-     * mas que esta arriba de esta.
+     * <p>It is not the same as {@link #createGraphics}: that one promises a {@link Graphics2D},
+     * with affine transforms, strokes, compositing and rendering hints, and that is one layer more
+     * on top of this.
      */
     public Graphics getGraphics() {
         return new KajiGraphics(this);
     }
 
     /**
-     * Un contexto para dibujar sobre esta imagen.
+     * A context to draw over this image.
      *
-     * <p><strong>Funciona.</strong> Devuelve el mismo objeto que {@link #getGraphics}, que es un
-     * {@link Graphics2D} completo: transformaciones afines —traslación, rotación, escala,
-     * cizalladura—, {@code draw} y {@code fill} de cualquier {@link java.awt.Shape}, grosor de
-     * trazo, recorte por figura y dibujado de imágenes con transformación.
+     * <p><strong>It works.</strong> It returns the same object as {@link #getGraphics}, which is a
+     * full {@link Graphics2D}: affine transforms —translation, rotation, scaling, shearing—, {@code
+     * draw} and {@code fill} of any {@link java.awt.Shape}, stroke width, clipping by shape and
+     * drawing of images with a transform.
      *
-     * <p>Tres cosas se guardan y se reportan pero <strong>no se aplican</strong>, y conviene
-     * saberlo: una {@link java.awt.Paint} que no sea un color uniforme, una
-     * {@link java.awt.Composite} con alfa parcial, y las sugerencias de renderizado. Las tres piden
-     * evaluación por píxel contra el destino, que es un mecanismo que este tier no tiene. Lo que sí
-     * se cumple es que {@code getPaint}, {@code getComposite} y {@code getRenderingHint} devuelvan
-     * lo que se fijó, porque hay código que las guarda y las restaura.
+     * <p>Three things are stored and reported but <strong>not applied</strong>, and it is worth
+     * knowing: a {@link java.awt.Paint} that is not a uniform colour, a {@link java.awt.Composite}
+     * with partial alpha, and the rendering hints. All three ask for per-pixel evaluation against
+     * the destination, which is a mechanism this tier does not have. What is honoured is that
+     * {@code getPaint}, {@code getComposite} and {@code getRenderingHint} return what was set,
+     * because there is code that saves them and restores them.
      *
-     * <p>Y {@code drawString} sigue declinando: necesita los contornos de los glifos.
+     * <p>And {@code drawString} goes on declining: it needs the outlines of the glyphs.
      */
     public Graphics2D createGraphics() {
         return new KajiGraphics(this);
     }
 
     /**
-     * Un recorte que comparte los píxeles con ésta.
+     * A crop that shares the pixels with this one.
      *
-     * <p>No copia nada: escribir en el recorte cambia la imagen original.
+     * <p>It copies nothing: writing into the crop changes the original image.
      *
-     * @throws RasterFormatException si el rectángulo no cae adentro
+     * @throws RasterFormatException if the rectangle does not fall inside
      */
     public BufferedImage getSubimage(int x, int y, int w, int h) {
         return new BufferedImage(this.colorModel, this.raster.createWritableChild(x, y, w, h, 0, 0,
                 null), this.colorModel.isAlphaPremultiplied(), this.properties);
     }
 
-    /** Si el color guardado ya está multiplicado por el alfa. */
+    /** Whether the stored colour is already multiplied by the alpha. */
     public boolean isAlphaPremultiplied() {
         return this.colorModel.isAlphaPremultiplied();
     }
 
     /**
-     * Premultiplica los píxeles por su alfa, o lo deshace, **en el lugar**.
+     * Premultiplies the pixels by their alpha, or undoes it, **in place**.
      *
-     * <p>La operación pierde información en un sentido: premultiplicar un píxel de alfa cero lo
-     * lleva a negro, y deshacerlo después no lo recupera.
+     * <p>The operation loses information in one direction: premultiplying a pixel of alpha zero
+     * takes it to black, and undoing it afterwards does not bring it back.
      */
     public void coerceData(boolean isAlphaPremultiplied) {
         if (this.colorModel.hasAlpha()
@@ -572,70 +574,70 @@ public class BufferedImage extends Image implements WritableRenderedImage, Trans
                 + this.imageType + " " + this.colorModel + " " + this.raster;
     }
 
-    /** Las imágenes de las que ésta se calcula: ninguna. */
+    /** The images this one is computed from: none. */
     public Vector<RenderedImage> getSources() {
         return null;
     }
 
-    /** Cómo están dispuestos los píxeles. */
+    /** How the pixels are laid out. */
     public SampleModel getSampleModel() {
         return this.raster.getSampleModel();
     }
 
-    /** Siempre 0: la imagen empieza en el origen. */
+    /** Always 0: the image starts at the origin. */
     public int getMinX() {
         return this.raster.getMinX();
     }
 
-    /** Siempre 0. */
+    /** Always 0: the image starts at the origin. */
     public int getMinY() {
         return this.raster.getMinY();
     }
 
-    /** Siempre 1: un solo mosaico. */
+    /** Always 1: a single tile. */
     public int getNumXTiles() {
         return 1;
     }
 
-    /** Siempre 1. */
+    /** Always 1: a single tile. */
     public int getNumYTiles() {
         return 1;
     }
 
-    /** Siempre 0. */
+    /** Always 0: the only tile is the (0,0) one. */
     public int getMinTileX() {
         return 0;
     }
 
-    /** Siempre 0. */
+    /** Always 0: the only tile is the (0,0) one. */
     public int getMinTileY() {
         return 0;
     }
 
-    /** El mosaico único mide lo que la imagen. */
+    /** The single tile measures what the image does. */
     public int getTileWidth() {
         return this.getWidth();
     }
 
-    /** El mosaico único mide lo que la imagen. */
+    /** The single tile measures what the image does. */
     public int getTileHeight() {
         return this.getHeight();
     }
 
-    /** Siempre 0. */
+    /** Always 0: the tile grid starts at the origin. */
     public int getTileGridXOffset() {
         return this.raster.getSampleModelTranslateX();
     }
 
-    /** Siempre 0. */
+    /** Always 0: the tile grid starts at the origin. */
     public int getTileGridYOffset() {
         return this.raster.getSampleModelTranslateY();
     }
 
     /**
-     * El mosaico único.
+     * The single tile.
      *
-     * @throws ArrayIndexOutOfBoundsException si los índices no son (0,0)
+     * @throws ArrayIndexOutOfBoundsException if the indices are not (0,0)
      */
     public Raster getTile(int tileX, int tileY) {
         if (tileX == 0 && tileY == 0) {
@@ -645,9 +647,9 @@ public class BufferedImage extends Image implements WritableRenderedImage, Trans
     }
 
     /**
-     * Una **copia** de la imagen entera.
+     * A **copy** of the whole image.
      *
-     * <p>A diferencia de {@link #getRaster}, esto copia: el resultado no comparte datos.
+     * <p>Unlike {@link #getRaster}, this copies: the result shares no data.
      */
     public Raster getData() {
         int width = this.raster.getWidth();
@@ -666,9 +668,9 @@ public class BufferedImage extends Image implements WritableRenderedImage, Trans
     }
 
     /**
-     * Una copia de una región de la imagen.
+     * A copy of a region of the image.
      *
-     * @throws NullPointerException si el rectángulo es `null`
+     * @throws NullPointerException if the rectangle is `null`
      */
     public Raster getData(Rectangle rect) {
         SampleModel sm = this.raster.getSampleModel();
@@ -687,9 +689,9 @@ public class BufferedImage extends Image implements WritableRenderedImage, Trans
     }
 
     /**
-     * Copia la imagen en el ráster dado, o en uno nuevo si es `null`.
+     * Copies the image into the given raster, or into a new one if it is `null`.
      *
-     * <p>Sólo se copia la parte donde los dos se superponen.
+     * <p>Only the part where the two overlap is copied.
      */
     public WritableRaster copyData(WritableRaster outRaster) {
         WritableRaster out = outRaster;
@@ -709,9 +711,9 @@ public class BufferedImage extends Image implements WritableRenderedImage, Trans
     }
 
     /**
-     * Escribe un ráster en la imagen.
+     * Writes a raster into the image.
      *
-     * <p>Sólo se escribe la parte que caiga adentro; el resto se descarta.
+     * <p>Only the part that falls inside is written; the rest is discarded.
      */
     public void setData(Raster r) {
         int width = r.getWidth();
@@ -736,24 +738,24 @@ public class BufferedImage extends Image implements WritableRenderedImage, Trans
     }
 
     /**
-     * Suma un observador de mosaicos.
+     * Adds a tile observer.
      *
-     * <p>No hace nada: el mosaico único de una imagen en memoria está siempre disponible para
-     * escribir, así que no hay transición de la que avisar.
+     * <p>It does nothing: the single tile of an image in memory is always available for writing, so
+     * there is no transition to report.
      */
     public void addTileObserver(TileObserver to) {
     }
 
-    /** Saca a ese observador; no hace nada, por el mismo motivo. */
+    /** Removes that observer; it does nothing, for the same reason. */
     public void removeTileObserver(TileObserver to) {
     }
 
     /**
-     * Si ese mosaico está tomado para escribir.
+     * Whether that tile is taken for writing.
      *
-     * <p>Siempre `true` para el (0,0): en una imagen en memoria el mosaico está siempre escribible.
+     * <p>Always `true` for the (0,0) one: in an image in memory the tile is always writable.
      *
-     * @throws IllegalArgumentException si los índices no son (0,0)
+     * @throws IllegalArgumentException if the indices are not (0,0)
      */
     public boolean isTileWritable(int tileX, int tileY) {
         if (tileX == 0 && tileY == 0) {
@@ -762,22 +764,22 @@ public class BufferedImage extends Image implements WritableRenderedImage, Trans
         throw new IllegalArgumentException("Only 1 tile in image");
     }
 
-    /** El índice del mosaico único. */
+    /** The index of the single tile. */
     public Point[] getWritableTileIndices() {
         Point[] p = new Point[1];
         p[0] = new Point(0, 0);
         return p;
     }
 
-    /** Siempre `true`. */
+    /** Always `true`: the single tile is always writable. */
     public boolean hasTileWriters() {
         return true;
     }
 
     /**
-     * El mosaico único, para escribir.
+     * The single tile, for writing.
      *
-     * @throws IllegalArgumentException si los índices no son (0,0)
+     * @throws IllegalArgumentException if the indices are not (0,0)
      */
     public WritableRaster getWritableTile(int tileX, int tileY) {
         if (tileX == 0 && tileY == 0) {
@@ -787,11 +789,11 @@ public class BufferedImage extends Image implements WritableRenderedImage, Trans
     }
 
     /**
-     * Devuelve el mosaico único.
+     * Gives the single tile back.
      *
-     * <p>No hace nada más que comprobar los índices: no hay cuenta de préstamos que llevar.
+     * <p>It does nothing more than check the indices: there is no count of loans to keep.
      *
-     * @throws IllegalArgumentException si los índices no son (0,0)
+     * @throws IllegalArgumentException if the indices are not (0,0)
      */
     public void releaseWritableTile(int tileX, int tileY) {
         if (tileX != 0 || tileY != 0) {
@@ -799,7 +801,7 @@ public class BufferedImage extends Image implements WritableRenderedImage, Trans
         }
     }
 
-    /** La transparencia del modelo de color. */
+    /** The transparency of the colour model. */
     public int getTransparency() {
         return this.colorModel.getTransparency();
     }

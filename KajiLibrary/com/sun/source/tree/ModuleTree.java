@@ -3,32 +3,32 @@ package com.sun.source.tree;
 import java.util.List;
 
 /**
- * La declaracion de un `module-info.java`.
+ * The declaration of a `module-info.java`.
  *
- * <p>Es un nodo de este arbol y no de otro lado porque un `module-info.java` es una unidad de
- * compilacion como cualquier otra: se parsea igual, y {@link CompilationUnitTree#getModule} es como
- * se pregunta si esta unidad era una de estas.
+ * <p>It is a node of this tree and not of somewhere else because a `module-info.java` is a
+ * compilation unit like any other: it is parsed the same, and {@link CompilationUnitTree#getModule}
+ * is how one asks whether this unit was one of these.
  */
 public interface ModuleTree extends Tree {
 
-    /** Si el modulo esta abierto entero a la reflexion. */
+    /** Whether the module is wholly open to reflection. */
     enum ModuleKind {
 
-        /** `open module M { ... }` — todos sus paquetes quedan abiertos. */
+        /** `open module M { ... }` -- all of its packages are left open. */
         OPEN,
-        /** `module M { ... }` — solo lo que diga un `opens`. */
+        /** `module M { ... }` -- only what an `opens` says. */
         STRONG
     }
 
-    /** Las anotaciones de la declaracion. */
+    /** The declaration's annotations. */
     List<? extends AnnotationTree> getAnnotations();
 
-    /** Si es un modulo abierto o no. */
+    /** Whether it is an open module or not. */
     ModuleKind getModuleType();
 
-    /** El nombre del modulo. */
+    /** The module's name. */
     ExpressionTree getName();
 
-    /** Las directivas del cuerpo: `requires`, `exports`, `opens`, `provides`, `uses`. */
+    /** The body's directives: `requires`, `exports`, `opens`, `provides`, `uses`. */
     List<? extends DirectiveTree> getDirectives();
 }

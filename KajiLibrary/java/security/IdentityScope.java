@@ -2,22 +2,22 @@ package java.security;
 
 import java.util.Enumeration;
 
-// Un conjunto de identidades, que a su vez **es** una identidad.
+// A set of identities, which is in turn **an** identity.
 //
-// Que un ambito sea tambien una identidad es lo que permite anidarlos: un ambito tiene nombre,
-// puede tener clave, y puede vivir dentro de otro. Con eso se armaba una jerarquia de espacios de
-// nombres —el ambito del sistema, el de un usuario, el de una aplicacion— donde el nombre completo
-// de una identidad la ubica sin ambigüedad.
+// That a scope is also an identity is what allows them to be nested: a scope has a name, may have a
+// key, and may live inside another. With that a hierarchy of name spaces was built —the scope of
+// the system, that of a user, that of an application— where the full name of an identity places it
+// unambiguously.
 //
-// Obsoleto desde 1.2, reemplazado por `KeyStore`. La invariante que impone —dentro de un ambito no
-// puede haber dos identidades con el mismo nombre ni dos con la misma clave— la hacen cumplir las
-// subclases en `addIdentity`; esta clase no puede, porque no guarda nada: todos los metodos que
-// tocan la coleccion son abstractos.
+// Obsolete since 1.2, replaced by `KeyStore`. The invariant it imposes —inside a scope there cannot
+// be two identities with the same name or two with the same key— is enforced by the subclasses in
+// `addIdentity`; this class cannot, because it keeps nothing: every method that touches the
+// collection is abstract.
 @Deprecated
 public abstract class IdentityScope extends Identity {
 
-    // El ambito del sistema. En KajiLibrary nadie lo instala, asi que arranca —y se queda— en
-    // null mientras nadie llame a `setSystemScope`. Devolver null es lo correcto: no hay ninguno.
+    // The scope of the system. In KajiLibrary nobody installs it, so it starts —and stays— at null
+    // while nobody calls `setSystemScope`. Returning null is right: there is none.
     private static IdentityScope scope;
 
     protected IdentityScope() {
@@ -32,27 +32,27 @@ public abstract class IdentityScope extends Identity {
         super(name, scope);
     }
 
-    // El ambito del sistema, o null si no hay ninguno instalado.
+    // The scope of the system, or null if there is none installed.
     public static IdentityScope getSystemScope() {
         return scope;
     }
 
-    // Instala el ambito del sistema. `protected` y estatico: solo una subclase puede hacerlo, que
-    // era la forma de que no cualquiera reemplazara el almacen de identidades del proceso.
+    // It installs the scope of the system. `protected` and static: only a subclass can do it, which
+    // was the way of keeping just anybody from replacing the identity store of the process.
     protected static void setSystemScope(IdentityScope scope) {
         IdentityScope.scope = scope;
     }
 
-    // Cuantas identidades hay.
+    // How many identities there are.
     public abstract int size();
 
     public abstract Identity getIdentity(String name);
 
-    // Por principal: se resuelve por nombre.
+    // By principal: it is resolved by name.
     //
-    // Concreto y no abstracto porque no aporta nada nuevo — un `Principal` es un nombre— y
-    // obligar a implementarlo daria lugar a que una subclase lo hiciera distinto de
-    // `getIdentity(String)` sin querer.
+    // Concrete and not abstract because it contributes nothing new — a `Principal` is a name— and
+    // forcing it to be implemented would give room for a subclass to do it differently from
+    // `getIdentity(String)` by accident.
     public Identity getIdentity(Principal principal) {
         return this.getIdentity(principal.getName());
     }

@@ -21,9 +21,9 @@ import java.time.ZoneOffset;
 //   - the time is stated in one of three frames — UTC, wall time, or standard time — and
 //     converting between them is what `timeDefinition` selects.
 //
-// El enum anidado `TimeDefinition` esta: se habia omitido porque un tipo anidado no resolvia
-// (finding #101), y ese finding se cerro. Adentro la definicion se sigue llevando como `int` --es lo
-// que la tabla guarda-- y el enum es la cara publica.
+// The nested `TimeDefinition` enum is here: it had been omitted because a nested type did not
+// resolve (finding #101), and that finding is closed. Inside, the definition is still carried as an
+// `int` --it is what the table stores-- and the enum is the public face.
 public final class ZoneOffsetTransitionRule {
 
     private final int month;
@@ -51,31 +51,31 @@ public final class ZoneOffsetTransitionRule {
     }
 
     /**
-     * En que **marco** esta expresada la hora de la regla.
+     * Which **frame** the rule's time is expressed in.
      *
-     * <p>Es la parte de una regla de transicion que mas confunde, y la que hace falta para que el
-     * calculo de un instante de cambio sea correcto. "El ultimo domingo de octubre a las 2" tiene
-     * tres lecturas distintas segun a que reloj se refiera ese "las 2", y las tres se usan en la
-     * base de datos IANA: el reloj de pared vigente **antes** del cambio, el reloj estandar de la
-     * zona --el de invierno--, o UTC.
+     * <p>It is the most confusing part of a transition rule, and the one needed for a change
+     * instant to be computed correctly. "The last Sunday in October at 2" has three different
+     * readings depending on which clock that "2" refers to, and all three are used in the IANA
+     * database: the wall clock in force **before** the change, the zone's standard clock --the
+     * winter one-- or UTC.
      */
     public enum TimeDefinition {
 
-        /** La hora esta en el reloj de pared vigente justo antes del cambio. */
+        /** The time is on the wall clock in force just before the change. */
         WALL,
 
-        /** La hora esta en el reloj estandar de la zona, ignorando el horario de verano. */
+        /** The time is on the zone's standard clock, ignoring daylight saving. */
         STANDARD,
 
-        /** La hora esta en UTC. */
+        /** The time is in UTC. */
         UTC;
 
         /**
-         * Convierte `dateTime`, leida en **este** marco, al reloj de pared de antes del cambio.
+         * It converts `dateTime`, read in **this** frame, to the wall clock from before the change.
          *
-         * @param dateTime la fecha y hora tal como la regla la escribe
-         * @param standardOffset el desplazamiento estandar de la zona
-         * @param wallOffset el desplazamiento vigente antes del cambio
+         * @param dateTime the date and time as the rule writes it
+         * @param standardOffset the zone's standard offset
+         * @param wallOffset the offset in force before the change
          */
         public LocalDateTime createDateTime(LocalDateTime dateTime, ZoneOffset standardOffset,
                 ZoneOffset wallOffset) {
@@ -83,14 +83,14 @@ public final class ZoneOffsetTransitionRule {
                 return dateTime.plusSeconds((long) wallOffset.getTotalSeconds());
             }
             if (this == STANDARD) {
-                int diferencia = wallOffset.getTotalSeconds() - standardOffset.getTotalSeconds();
-                return dateTime.plusSeconds((long) diferencia);
+                int difference = wallOffset.getTotalSeconds() - standardOffset.getTotalSeconds();
+                return dateTime.plusSeconds((long) difference);
             }
             return dateTime;
         }
     }
 
-    /** El marco en que esta expresada la hora de esta regla. */
+    /** The frame this rule's time is expressed in. */
     public TimeDefinition getTimeDefinition() {
         if (this.timeDefinition == 0) {
             return TimeDefinition.UTC;
@@ -102,16 +102,16 @@ public final class ZoneOffsetTransitionRule {
     }
 
     /**
-     * Una regla de transicion.
+     * A transition rule.
      *
-     * @param dayOfMonthIndicator positivo, "el primer `dayOfWeek` en o despues del dia N"; negativo,
-     *     "en o antes del dia |N| contado desde el fin del mes"
-     * @param dayOfWeek el dia de la semana buscado, o `null` para el dia exacto
-     * @param timeEndOfDay si la hora es la medianoche del **final** del dia (las 24:00)
-     * @throws NullPointerException si `month`, `time`, `timeDefinition` o alguno de los tres
-     *     desplazamientos es `null`
-     * @throws IllegalArgumentException si `dayOfMonthIndicator` es 0 o esta fuera de [-28, 31], o si
-     *     `timeEndOfDay` es cierto y la hora no es medianoche
+     * @param dayOfMonthIndicator positive, "the first `dayOfWeek` on or after day N"; negative, "on
+     *     or before day |N| counted from the end of the month"
+     * @param dayOfWeek the weekday sought, or `null` for the exact day
+     * @param timeEndOfDay whether the time is the midnight at the **end** of the day (24:00)
+     * @throws NullPointerException if `month`, `time`, `timeDefinition` or any of the three offsets
+     *     is `null`
+     * @throws IllegalArgumentException if `dayOfMonthIndicator` is 0 or falls outside [-28, 31], or
+     *     if `timeEndOfDay` is true and the time is not midnight
      */
     public static ZoneOffsetTransitionRule of(Month month, int dayOfMonthIndicator,
             DayOfWeek dayOfWeek, LocalTime time, boolean timeEndOfDay,

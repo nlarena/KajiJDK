@@ -3,38 +3,37 @@ package java.lang.management;
 import javax.management.openmbean.CompositeData;
 
 /**
- * KajiLibrary's java.lang.management.MonitorInfo -- un monitor que un hilo tiene tomado, y donde lo
- * tomo.
+ * KajiLibrary's java.lang.management.MonitorInfo -- a monitor a thread holds, and where it took it.
  *
- * <p>Agrega sobre {@link LockInfo} las dos cosas que solo tienen los monitores --los candados de
- * {@code synchronized}--: en que marco de la pila se entro, y cual es ese marco.
+ * <p>It adds to {@link LockInfo} the two things only monitors --{@code synchronized}'s locks-- have:
+ * which stack frame was entered, and which frame that is.
  *
- * <p>Esa informacion es la que hace util un volcado: no alcanza con saber que un hilo tiene tomado un
- * candado, hay que saber <b>desde donde</b> para encontrar el bloque que no termina.
+ * <p>That information is what makes a dump useful: knowing that a thread holds a lock is not enough,
+ * one has to know <b>from where</b> in order to find the block that never ends.
  *
- * <p>Los candados de {@code java.util.concurrent} no tienen esto y por eso salen como
- * {@code LockInfo} a secas: se toman con una llamada a metodo y no con un bloque, asi que no hay un
- * marco que los "contenga".
+ * <p>{@code java.util.concurrent}'s locks do not have this and so come out as plain
+ * {@code LockInfo}: they are taken with a method call and not with a block, so there is no frame
+ * "containing" them.
  *
- * <h2>La profundidad puede ser -1</h2>
+ * <h2>The depth can be -1</h2>
  *
- * <p>Significa que la maquina virtual sabe que el monitor esta tomado pero no en que marco. Ahi el
- * marco es null, y esa es la unica combinacion permitida con null: si la profundidad es 0 o mas, el
- * marco tiene que estar.
+ * <p>It means the virtual machine knows the monitor is held but not in which frame. There the frame
+ * is null, and that is the only combination allowed with null: if the depth is 0 or more, the frame
+ * has to be there.
  */
 public class MonitorInfo extends LockInfo {
 
-    /** En que marco se tomo, o -1. */
+    /** Which frame it was taken in, or -1. */
     private final int stackDepth;
 
-    /** Cual es ese marco, o null. */
+    /** Which frame that is, or null. */
     private final StackTraceElement stackFrame;
 
     /**
-     * @param stackDepth el indice del marco, o -1 si no se sabe
-     * @param stackFrame ese marco; tiene que ser null si y solo si la profundidad es negativa
-     * @throws NullPointerException si el nombre de clase es null
-     * @throws IllegalArgumentException si la profundidad y el marco no concuerdan
+     * @param stackDepth the frame's index, or -1 if it is not known
+     * @param stackFrame that frame; it has to be null if and only if the depth is negative
+     * @throws NullPointerException if the class name is null
+     * @throws IllegalArgumentException if the depth and the frame do not agree
      */
     public MonitorInfo(String className, int identityHashCode, int stackDepth,
                        StackTraceElement stackFrame) {
@@ -51,21 +50,21 @@ public class MonitorInfo extends LockInfo {
         this.stackFrame = stackFrame;
     }
 
-    /** En que marco se tomo, o -1. Ver la nota de la clase. */
+    /** Which frame it was taken in, or -1. See the class's note. */
     public int getLockedStackDepth() {
         return this.stackDepth;
     }
 
-    /** Cual es ese marco, o null. */
+    /** Which frame that is, or null. */
     public StackTraceElement getLockedStackFrame() {
         return this.stackFrame;
     }
 
     /**
-     * Lo mismo, leido de un {@link CompositeData}.
+     * The same, read out of a {@link CompositeData}.
      *
-     * @return el objeto, o null si el dato es null
-     * @throws IllegalArgumentException si el dato no describe un {@code MonitorInfo}
+     * @return the object, or null if the datum is null
+     * @throws IllegalArgumentException if the datum does not describe a {@code MonitorInfo}
      */
     public static MonitorInfo from(CompositeData cd) {
         if (cd == null) {

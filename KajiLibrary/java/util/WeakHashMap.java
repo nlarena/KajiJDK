@@ -72,14 +72,14 @@ public class WeakHashMap<K, V> extends AbstractMap<K, V> implements Map<K, V> {
         init(initialCapacity, 0.75f);
     }
 
-    // Copia los pares de otro mapa. Las claves entran como referencias **debiles**, asi que la
-    // copia no impide que se recolecten -- que es todo el punto de este mapa.
+    // It copies another map's pairs. The keys come in as **weak** references, so the copy does not
+    // stop them from being collected -- which is the whole point of this map.
     public WeakHashMap(Map<? extends K, ? extends V> m) {
         this();
         this.putAll(m);
     }
 
-    // Dimensionado para `numMappings` sin agrandarse. Misma razon que `HashSet.newHashSet`.
+    // Sized for `numMappings` without growing. The same reason as `HashSet.newHashSet`.
     public static <K, V> WeakHashMap<K, V> newWeakHashMap(int numMappings) {
         if (numMappings < 0) {
             throw new IllegalArgumentException("Negative number of mappings: " + numMappings);
@@ -206,8 +206,8 @@ public class WeakHashMap<K, V> extends AbstractMap<K, V> implements Map<K, V> {
     // Note this is not a pure accessor: it drains first, so the answer reflects the keys that
     // have died since the last call. A `size()` that could only shrink at a modification would
     // be a lie.
-    // Buckets + cadenas de colision, saltando las entradas cuya clave ya murio: `WhmEntry` es una
-    // `WeakReference`, y un `get()` nulo significa que el GC se llevo la clave (finding #205).
+    // Buckets + collision chains, skipping the entries whose key has already died: `WhmEntry` is a
+    // `WeakReference`, and a null `get()` means the GC took the key away (finding #205).
     public Set<K> keySet() {
         HashSet<K> out = new HashSet<K>();
         int i = 0;
@@ -380,11 +380,11 @@ public class WeakHashMap<K, V> extends AbstractMap<K, V> implements Map<K, V> {
     }
 
     /**
-     * Los valores de este mapa.
+     * This map's values.
      *
-     * <p>**Divergencia deliberada**, la misma que ya declara `keySet()`: la del JDK es una *vista*
-     * respaldada por el mapa; esta es una copia sacada en el momento. Y a diferencia de `keySet()`
-     * es una `Collection` y no un `Set`, porque los valores **si** pueden repetirse.
+     * <p>**A deliberate divergence**, the same one `keySet()` already declares: the JDK's is a *view*
+     * backed by the map; this one is a copy taken at the moment of asking. And unlike `keySet()` this
+     * is a `Collection` and not a `Set`, because values **can** repeat.
      */
     public java.util.Collection<V> values() {
         java.util.ArrayList<V> out = new java.util.ArrayList<V>();
@@ -396,11 +396,12 @@ public class WeakHashMap<K, V> extends AbstractMap<K, V> implements Map<K, V> {
     }
 
     /**
-     * Los pares de este mapa.
+     * This map's pairs.
      *
-     * <p>Misma divergencia que `values()`: copia, no vista. Los pares que devuelve son inmutables,
-     * asi que `setValue` sobre uno de ellos lanza en vez de escribir en el mapa — que es lo
-     * coherente con que sea una copia: escribir en un par que nadie mira seria peor que negarse.
+     * <p>The same divergence as `values()`: a copy, not a view. The pairs it returns are immutable,
+     * so `setValue` on one of them throws instead of writing into the map — which is what is
+     * consistent with it being a copy: writing into a pair nobody looks at would be worse than
+     * refusing.
      */
     public java.util.Set<java.util.Map.Entry<K, V>> entrySet() {
         java.util.HashSet<java.util.Map.Entry<K, V>> out =

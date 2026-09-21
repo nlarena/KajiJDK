@@ -1,11 +1,11 @@
 package javax.naming;
 
 /**
- * Se lanza cuando la operacion devolvio un resultado incompleto porque no se pudo seguir --por
- * ejemplo, una parte del arbol vive en otro servidor al que no se llego--. Lo ya entregado sirve;
- * lo que falta no se sabe.
+ * Thrown when the operation returned an incomplete result because it could not carry on --for
+ * example, part of the tree lives on another server that could not be reached. What was already
+ * delivered is usable; what is missing is unknown.
  *
- * <p>La jerarquia entera y el estado que arrastra estan explicados en `NamingException`.
+ * <p>The whole hierarchy and the state it carries are explained in `NamingException`.
  */
 public class PartialResultException extends NamingException {
 

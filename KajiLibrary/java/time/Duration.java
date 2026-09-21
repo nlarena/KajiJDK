@@ -12,7 +12,7 @@ import java.time.temporal.ChronoUnit;
 // KajiLibrary's java.time.Duration — a time-based amount, as seconds + nanoseconds (nanos kept
 // normalised to [0, 1e9), seconds may be negative). Immutable value type: every operation returns
 // a fresh Duration. Implements TemporalAmount (so `temporal.plus(duration)` works) and Comparable.
-// Ya no es un subconjunto: la superficie publica esta completa.
+// It is no longer a subset: the public surface is complete.
 public final class Duration implements TemporalAmount, Comparable<Duration>, Serializable {
 
     private static final long NANOS_PER_SECOND = 1000000000L;
@@ -37,7 +37,7 @@ public final class Duration implements TemporalAmount, Comparable<Duration>, Ser
         return new Duration(seconds + extraSeconds, (int) nos);
     }
 
-    /** La duracion de longitud cero. */
+    /** The duration of zero length. */
     public static final Duration ZERO = new Duration(0L, 0);
 
     public static Duration ofSeconds(long seconds) {
@@ -113,17 +113,17 @@ public final class Duration implements TemporalAmount, Comparable<Duration>, Ser
     }
 
     // Natural order by length. Synthesizes the compareTo(Object) bridge.
-    // ---- fabricas -------------------------------------------------------------------------------
+    // ---- factories ------------------------------------------------------------------------------
 
     /**
-     * `amount` unidades de `unit`.
+     * `amount` units of `unit`.
      *
-     * <p>Solo acepta unidades **exactas**: las de tiempo, y `DAYS` --que aca vale 24 horas
-     * justas--. `MONTHS` y `YEARS` se rechazan, y no es una limitacion: un mes no dura siempre lo
-     * mismo, asi que no hay una cantidad de segundos que le corresponda. Eso es lo que modela
-     * `Period`, no `Duration`.
+     * <p>It accepts only **exact** units: the time-based ones, and `DAYS` --which here is exactly 24
+     * hours--. `MONTHS` and `YEARS` are rejected, and that is not a limitation: a month does not
+     * always last the same, so there is no number of seconds that corresponds to it. That is what
+     * `Period` models, not `Duration`.
      *
-     * @throws java.time.DateTimeException si la unidad no tiene una duracion exacta
+     * @throws java.time.DateTimeException if the unit has no exact duration
      */
     public static Duration of(long amount, TemporalUnit unit) {
         if (unit == null) {
@@ -133,108 +133,108 @@ public final class Duration implements TemporalAmount, Comparable<Duration>, Ser
     }
 
     /**
-     * La duracion entre dos puntos, medida en segundos y nanos.
+     * The duration between two points, measured in seconds and nanos.
      *
-     * <p>Negativa si `end` es anterior a `start`, que es lo que la hace componible: siempre vale
-     * `start.plus(between(start, end)).equals(end)`.
+     * <p>Negative if `end` is before `start`, which is what makes it composable:
+     * `start.plus(between(start, end)).equals(end)` always holds.
      */
     public static Duration between(Temporal startInclusive, Temporal endExclusive) {
         if (startInclusive == null || endExclusive == null) {
             throw new NullPointerException();
         }
-        long segs = startInclusive.until(endExclusive, ChronoUnit.SECONDS);
+        long secs = startInclusive.until(endExclusive, ChronoUnit.SECONDS);
         long nanos = 0L;
         if (startInclusive.isSupported(ChronoField.NANO_OF_SECOND)
                 && endExclusive.isSupported(ChronoField.NANO_OF_SECOND)) {
             nanos = endExclusive.getLong(ChronoField.NANO_OF_SECOND)
                     - startInclusive.getLong(ChronoField.NANO_OF_SECOND);
         }
-        return create(segs, nanos);
+        return create(secs, nanos);
     }
 
-    /** La duracion equivalente a `amount`, que tiene que estar en unidades exactas. */
+    /** The duration equivalent to `amount`, which has to be in exact units. */
     public static Duration from(TemporalAmount amount) {
         if (amount == null) {
             throw new NullPointerException("amount");
         }
         Duration d = ZERO;
-        List<TemporalUnit> unidades = amount.getUnits();
+        List<TemporalUnit> units = amount.getUnits();
         int i = 0;
-        while (i < unidades.size()) {
-            TemporalUnit u = unidades.get(i);
+        while (i < units.size()) {
+            TemporalUnit u = units.get(i);
             d = d.plus(amount.get(u), u);
             i = i + 1;
         }
         return d;
     }
 
-    // ---- las partes ------------------------------------------------------------------------------
+    // ---- the parts -------------------------------------------------------------------------------
     //
-    // Dos familias que es facil confundir, y la diferencia importa: `toMinutes()` es la duracion
-    // **entera** expresada en minutos, y `toMinutesPart()` es el campo de los minutos dentro de la
-    // hora --de 0 a 59--. Para 3661 segundos, la primera da 61 y la segunda 1.
+    // Two families that are easy to confuse, and the difference matters: `toMinutes()` is the
+    // **whole** duration expressed in minutes, and `toMinutesPart()` is the minutes field within the
+    // hour --0 to 59--. For 3661 seconds, the first gives 61 and the second 1.
 
-    /** El total, en dias de 24 horas, truncado hacia cero. */
+    /** The total, in 24-hour days, truncated towards zero. */
     public long toDays() {
         return this.seconds / 86400L;
     }
 
-    /** El total, en horas, truncado hacia cero. */
+    /** The total, in hours, truncated towards zero. */
     public long toHours() {
         return this.seconds / 3600L;
     }
 
-    /** El total, en minutos, truncado hacia cero. */
+    /** The total, in minutes, truncated towards zero. */
     public long toMinutes() {
         return this.seconds / 60L;
     }
 
-    /** El total, en segundos, truncado hacia cero. */
+    /** The total, in seconds, truncated towards zero. */
     public long toSeconds() {
         return this.seconds;
     }
 
-    /** Los dias, como parte. Igual que `toDays()`: no hay unidad mas grande de la que sea parte. */
+    /** The days, as a part. The same as `toDays()`: there is no larger unit for it to be part of. */
     public long toDaysPart() {
         return this.seconds / 86400L;
     }
 
-    /** Las horas dentro del dia, de 0 a 23. */
+    /** The hours within the day, 0 to 23. */
     public int toHoursPart() {
         return (int) (this.toHours() % 24L);
     }
 
-    /** Los minutos dentro de la hora, de 0 a 59. */
+    /** The minutes within the hour, 0 to 59. */
     public int toMinutesPart() {
         return (int) (this.toMinutes() % 60L);
     }
 
-    /** Los segundos dentro del minuto, de 0 a 59. */
+    /** The seconds within the minute, 0 to 59. */
     public int toSecondsPart() {
         return (int) (this.seconds % 60L);
     }
 
-    /** Los milisegundos dentro del segundo, de 0 a 999. */
+    /** The milliseconds within the second, 0 to 999. */
     public int toMillisPart() {
         return this.nanos / 1000000;
     }
 
-    /** Los nanosegundos dentro del segundo, de 0 a 999999999. */
+    /** The nanoseconds within the second, 0 to 999999999. */
     public int toNanosPart() {
         return this.nanos;
     }
 
-    /** Si es estrictamente mayor que cero. El complemento de `isNegative`, sin el cero. */
+    /** Whether it is strictly greater than zero. The complement of `isNegative`, minus zero. */
     public boolean isPositive() {
         return this.seconds > 0L || (this.seconds == 0L && this.nanos > 0);
     }
 
-    // ---- aritmetica ------------------------------------------------------------------------------
+    // ---- arithmetic ------------------------------------------------------------------------------
 
     /**
-     * Esta duracion mas `amount` unidades de `unit`.
+     * This duration plus `amount` units of `unit`.
      *
-     * @throws java.time.DateTimeException si la unidad no tiene una duracion exacta
+     * @throws java.time.DateTimeException if the unit has no exact duration
      */
     public Duration plus(long amountToAdd, TemporalUnit unit) {
         if (unit == null) {
@@ -312,7 +312,7 @@ public final class Duration implements TemporalAmount, Comparable<Duration>, Ser
         return this.plusNanos(-nanosToSubtract);
     }
 
-    /** Esta duracion multiplicada por `multiplicand`. */
+    /** This duration multiplied by `multiplicand`. */
     public Duration multipliedBy(long multiplicand) {
         if (multiplicand == 0L) {
             return ZERO;
@@ -320,15 +320,15 @@ public final class Duration implements TemporalAmount, Comparable<Duration>, Ser
         if (multiplicand == 1L) {
             return this;
         }
-        // Se opera en nanos totales, que es donde la multiplicacion es una sola cuenta. El rango
-        // util queda acotado por el `long`, igual que en el JDK.
+        // It works in total nanos, which is where the multiplication is a single sum. The useful
+        // range is bounded by the `long`, just as in the JDK.
         return Duration.ofNanos(this.toNanos() * multiplicand);
     }
 
     /**
-     * Esta duracion dividida por `divisor`, truncando hacia cero.
+     * This duration divided by `divisor`, truncating towards zero.
      *
-     * @throws ArithmeticException si `divisor` es cero
+     * @throws ArithmeticException if `divisor` is zero
      */
     public Duration dividedBy(long divisor) {
         if (divisor == 0L) {
@@ -341,9 +341,9 @@ public final class Duration implements TemporalAmount, Comparable<Duration>, Ser
     }
 
     /**
-     * Cuantas veces entra `divisor` en esta duracion, truncando hacia cero.
+     * How many times `divisor` fits into this duration, truncating towards zero.
      *
-     * @throws ArithmeticException si `divisor` es cero
+     * @throws ArithmeticException if `divisor` is zero
      */
     public long dividedBy(Duration divisor) {
         if (divisor == null) {
@@ -356,20 +356,20 @@ public final class Duration implements TemporalAmount, Comparable<Duration>, Ser
         return this.toNanos() / d;
     }
 
-    /** El valor absoluto: esta misma si no es negativa, la negada si lo es. */
+    /** The absolute value: this one if it is not negative, the negated one if it is. */
     public Duration abs() {
         return this.isNegative() ? this.negated() : this;
     }
 
-    /** Esta duracion con otros segundos, conservando los nanos. */
+    /** This duration with other seconds, keeping the nanos. */
     public Duration withSeconds(long seconds) {
         return create(seconds, (long) this.nanos);
     }
 
     /**
-     * Esta duracion con otros nanos, conservando los segundos.
+     * This duration with other nanos, keeping the seconds.
      *
-     * @throws java.time.DateTimeException si `nanoOfSecond` cae fuera de [0, 999999999]
+     * @throws java.time.DateTimeException if `nanoOfSecond` falls outside [0, 999999999]
      */
     public Duration withNanos(int nanoOfSecond) {
         if (nanoOfSecond < 0 || nanoOfSecond > 999999999) {
@@ -380,12 +380,12 @@ public final class Duration implements TemporalAmount, Comparable<Duration>, Ser
     }
 
     /**
-     * Esta duracion truncada a un multiplo de `unit`.
+     * This duration truncated to a multiple of `unit`.
      *
-     * <p>Trunca **hacia abajo**, hacia el cero, y por eso no sirve cualquier unidad: tiene que
-     * dividir exactamente un dia. `HOURS` si, `DAYS` si, pero no una unidad estimada.
+     * <p>It truncates **towards zero**, and that is why not any unit will do: it has to divide a day
+     * exactly. `HOURS` yes, `DAYS` yes, but not an estimated unit.
      *
-     * @throws java.time.DateTimeException si la unidad no divide un dia
+     * @throws java.time.DateTimeException if the unit does not divide a day
      */
     public Duration truncatedTo(TemporalUnit unit) {
         if (unit == null) {
@@ -394,33 +394,35 @@ public final class Duration implements TemporalAmount, Comparable<Duration>, Ser
         if (unit == ChronoUnit.SECONDS && this.seconds >= 0 && this.nanos == 0) {
             return this;
         }
-        long unidadEnNanos = 0L;
+        long unitInNanos = 0L;
         if (unit == ChronoUnit.NANOS) {
-            unidadEnNanos = 1L;
+            unitInNanos = 1L;
         } else if (unit == ChronoUnit.MICROS) {
-            unidadEnNanos = 1000L;
+            unitInNanos = 1000L;
         } else if (unit == ChronoUnit.MILLIS) {
-            unidadEnNanos = 1000000L;
+            unitInNanos = 1000000L;
         } else if (unit == ChronoUnit.SECONDS) {
-            unidadEnNanos = NANOS_PER_SECOND;
+            unitInNanos = NANOS_PER_SECOND;
         } else if (unit == ChronoUnit.MINUTES) {
-            unidadEnNanos = 60L * NANOS_PER_SECOND;
+            unitInNanos = 60L * NANOS_PER_SECOND;
         } else if (unit == ChronoUnit.HOURS) {
-            unidadEnNanos = 3600L * NANOS_PER_SECOND;
+            unitInNanos = 3600L * NANOS_PER_SECOND;
         } else if (unit == ChronoUnit.HALF_DAYS) {
-            unidadEnNanos = 43200L * NANOS_PER_SECOND;
+            unitInNanos = 43200L * NANOS_PER_SECOND;
         } else if (unit == ChronoUnit.DAYS) {
-            unidadEnNanos = 86400L * NANOS_PER_SECOND;
+            unitInNanos = 86400L * NANOS_PER_SECOND;
         } else {
             throw new java.time.DateTimeException("Unit is too large to be used for truncation");
         }
-        // Trunca **hacia cero**, no hacia abajo: -1.5s a segundos es -1s, y -90s a minutos es -60s.
+        // It truncates **towards zero**, not downwards: -1.5s to seconds is -1s, and -90s to minutes
+        // is -60s.
         //
-        // Lo verifique contra `java` real porque lo tenia al reves. "Truncar" sugiere ir hacia abajo
-        // --que es lo que hace `Math.floorDiv`-- y aca es hacia cero, que para los negativos es la
-        // direccion opuesta. La division entera de Java ya trunca hacia cero, asi que la cuenta sale
-        // sola; lo que hacia falta era **no** corregir el resto negativo.
-        return Duration.ofNanos(this.toNanos() / unidadEnNanos * unidadEnNanos);
+        // This was checked against the real `java` because it had been the other way round.
+        // "Truncate" suggests going downwards --which is what `Math.floorDiv` does-- and here it is
+        // towards zero, which for the negatives is the opposite direction. Java's integer division
+        // already truncates towards zero, so the sum comes out by itself; what was needed was **not**
+        // to correct the negative remainder.
+        return Duration.ofNanos(this.toNanos() / unitInNanos * unitInNanos);
     }
 
     public int compareTo(Duration other) {

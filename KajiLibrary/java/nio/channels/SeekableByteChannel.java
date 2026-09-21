@@ -4,49 +4,49 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 
 /**
- * KajiLibrary's java.nio.channels.SeekableByteChannel — un canal con **posicion**.
+ * KajiLibrary's java.nio.channels.SeekableByteChannel — a channel with a **position**.
  *
- * <p>Es la diferencia entre un archivo y un socket: en un archivo se puede ir y volver, en un socket
- * los bytes pasan una sola vez. Todo lo que este tipo agrega --{@link #position()},
- * {@link #truncate}, {@link #size()}-- solo tiene sentido sobre algo que se puede recorrer.
+ * <p>It is the difference between a file and a socket: in a file one can go and come back, in a
+ * socket the bytes pass only once. Everything this type adds --{@link #position()},
+ * {@link #truncate}, {@link #size()}-- only makes sense over something that can be walked.
  *
- * <p>Redeclara `read` y `write` aunque ya los hereda, tal como el JDK, y no es redundante: es donde
- * se documenta que **las dos avanzan la posicion**, que es lo que las distingue de las del canal
- * comun.
+ * <p>It redeclares `read` and `write` although it inherits them already, just as the JDK does, and
+ * it is not redundant: it is where it is documented that **both advance the position**, which is
+ * what tells them apart from those of the ordinary channel.
  *
- * <p>La implementacion que trae esta biblioteca es {@link FileChannel}, que se obtiene con
- * {@link FileChannel#open} o con `java.nio.file.Files.newByteChannel`. La posicion ahi es
- * **simulada**: los nativos de esta VM leen y escriben el archivo entero, asi que el canal lleva la
- * cuenta por su lado y cada operacion recorre todo. Sale caro y no miente, que es el trato que
- * explica la cabecera de {@link FileChannel}.
+ * <p>The implementation this library brings is {@link FileChannel}, which is obtained with {@link
+ * FileChannel#open} or with `java.nio.file.Files.newByteChannel`. The position there is
+ * **simulated**: the natives of this VM read and write the whole file, so the channel keeps count
+ * on its own and every operation walks it all. It comes out expensive and it does not lie, which is
+ * the deal the header of {@link FileChannel} explains.
  */
 public interface SeekableByteChannel extends ByteChannel {
 
-    /** Lee desde la posicion actual y la avanza. */
+    /** Reads from the current position and advances it. */
     int read(ByteBuffer dst) throws IOException;
 
-    /** Escribe desde la posicion actual y la avanza. */
+    /** Writes from the current position and advances it. */
     int write(ByteBuffer src) throws IOException;
 
-    /** La posicion actual, en bytes desde el principio. */
+    /** The current position, in bytes from the beginning. */
     long position() throws IOException;
 
     /**
-     * Mueve la posicion.
+     * Moves the position.
      *
-     * <p>Se admite **mas alla del final**: no es un error, y leer ahi devuelve -1. Escribir ahi deja
-     * un hueco, que es como se hacen los archivos ralos.
+     * <p>**Beyond the end** is admitted: it is not an error, and reading there returns -1. Writing
+     * there leaves a hole, which is how sparse files are made.
      */
     SeekableByteChannel position(long newPosition) throws IOException;
 
-    /** El tamanio actual, en bytes. */
+    /** The current size, in bytes. */
     long size() throws IOException;
 
     /**
-     * Corta el contenido a ese tamanio.
+     * Cuts the contents down to that size.
      *
-     * <p>Si la posicion quedaba mas alla del nuevo final, pasa a ser el nuevo final: no puede quedar
-     * apuntando afuera de lo que existe.
+     * <p>If the position was left beyond the new end, it becomes the new end: it cannot be left
+     * pointing outside what exists.
      */
     SeekableByteChannel truncate(long size) throws IOException;
 }

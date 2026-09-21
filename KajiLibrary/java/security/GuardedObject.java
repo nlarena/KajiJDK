@@ -2,12 +2,12 @@ package java.security;
 
 import java.io.Serializable;
 
-// Un objeto detras de un guardia: para tenerlo hay que pasar por `getObject()`.
+// An object behind a guard: to have it one has to go through `getObject()`.
 //
-// Es el patron opuesto al de chequear el permiso antes de entregar la referencia. Ahi el chequeo
-// pasa una vez, cuando se entrega; aca pasa **cada vez que alguien lo desenvuelve**, y eso importa
-// porque la referencia puede viajar: se la puede guardar, serializar y mandar a otro lado, y el
-// guardia sigue pegado a ella.
+// It is the opposite pattern to checking the permission before handing over the reference. There
+// the check happens once, when it is handed over; here it happens **every time somebody unwraps
+// it**, and that matters because the reference can travel: it can be kept, serialised and sent
+// elsewhere, and the guard goes on being stuck to it.
 public class GuardedObject implements Serializable {
 
     private final Object object;
@@ -18,7 +18,7 @@ public class GuardedObject implements Serializable {
         this.guard = guard;
     }
 
-    // El objeto, si el guardia lo permite.
+    // The object, if the guard allows it.
     public Object getObject() throws SecurityException {
         if (this.guard != null) {
             this.guard.checkGuard(this.object);

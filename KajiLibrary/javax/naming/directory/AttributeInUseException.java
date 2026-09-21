@@ -3,22 +3,24 @@ package javax.naming.directory;
 import javax.naming.NamingException;
 
 /**
- * KajiLibrary's javax.naming.directory.AttributeInUseException -- se intento agregar un atributo que ya estaba.
+ * KajiLibrary's javax.naming.directory.AttributeInUseException -- the attribute is already there.
  *
- * <p>Sale de un {@code modifyAttributes} con {@link DirContext#ADD_ATTRIBUTE} sobre un atributo
- * que el directorio define como de un solo valor y que ya tiene uno. Con un atributo de
- * varios valores no pasa: ahi agregar es agregar.
+ * <p>The JDK's definition: an operation tried to add an attribute that already exists -- for
+ * example {@code modifyAttributes} with {@link DirContext#ADD_ATTRIBUTE}, or creating an entry,
+ * with an attribute (or value) the entry already has. An earlier note put here the case of adding a
+ * second value to a single-valued attribute; that one is a schema conflict, and the JDK documents
+ * it under {@link InvalidAttributeValueException}.
  */
 public class AttributeInUseException extends NamingException {
 
     private static final long serialVersionUID = 4437710305529322564L;
 
-    /** Sin detalle. */
+    /** With no detail. */
     public AttributeInUseException() {
         super();
     }
 
-    /** Con un mensaje que diga cual fue el problema. */
+    /** With a message saying what the problem was. */
     public AttributeInUseException(String explanation) {
         super(explanation);
     }

@@ -6,16 +6,16 @@ import javax.swing.plaf.ComponentUI;
 import javax.swing.plaf.SeparatorUI;
 
 /**
- * Una raya que separa grupos de cosas.
+ * A line that separates groups of things.
  *
- * <h2>Un componente para una raya</h2>
+ * <h2>A component for a line</h2>
  *
- * <p>Podria ser un borde o dos lineas dibujadas a mano. Es un componente porque asi lo acomoda el
- * acomodador junto con lo que separa: en una barra de herramientas que se reordena, la raya se
- * mueve con los botones sin que nadie recalcule nada.
+ * <p>It could be a border or two lines drawn by hand. It is a component because that way the
+ * layout places it along with what it separates: in a tool bar that is reordered, the line moves
+ * with the buttons without anybody recomputing anything.
  *
- * <p>Ademas el aspecto la dibuja como corresponda al sistema -- una linea, dos, un hueco -- sin que
- * quien la puso tenga que saber cual.
+ * <p>Besides, the look and feel draws it as the system requires -- one line, two, a gap --
+ * without whoever put it there having to know which.
  */
 public class JSeparator extends JComponent implements SwingConstants, Accessible {
 
@@ -24,12 +24,12 @@ public class JSeparator extends JComponent implements SwingConstants, Accessible
     private int orientation = HORIZONTAL;
     private AccessibleContext accessibleContext;
 
-    /** Una raya horizontal. */
+    /** A horizontal line. */
     public JSeparator() {
         this(HORIZONTAL);
     }
 
-    /** Una raya con esa orientacion. */
+    /** A line with that orientation. */
     public JSeparator(int orientation) {
         checkOrientation(orientation);
         this.orientation = orientation;
@@ -57,9 +57,9 @@ public class JSeparator extends JComponent implements SwingConstants, Accessible
     }
 
     /**
-     * Si la raya va acostada o parada.
+     * Whether the line goes lying down or standing up.
      *
-     * @throws IllegalArgumentException si no es una de las dos.
+     * @throws IllegalArgumentException if it is not one of the two.
      */
     public void setOrientation(int orientation) {
         if (this.orientation == orientation) {

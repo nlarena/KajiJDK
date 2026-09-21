@@ -4,40 +4,40 @@ import java.awt.image.ImageObserver;
 import java.text.AttributedCharacterIterator;
 
 /**
- * Una superficie sobre la que se dibuja, con su estado.
+ * A surface that is drawn on, with its state.
  *
- * <p>No es sólo un destino: es un destino **más** el color, la fuente, el recorte y el
- * desplazamiento del origen. Por eso {@link #create()} existe y se usa tanto — devuelve otra vista
- * del mismo destino con una copia del estado, de modo que un componente puede cambiar el color y el
- * recorte a gusto sin ensuciarle nada a quien lo llamó.
+ * <p>It is not only a destination: it is a destination **plus** the colour, the font, the clip and
+ * the shift of the origin. That is why {@link #create()} exists and gets used so much — it returns
+ * another view of the same destination with a copy of the state, so that a component can change the
+ * colour and the clip as it likes without dirtying anything for whoever called it.
  *
- * <p>El recorte es **acumulativo**: {@link #clipRect} lo interseca con el que ya había y nunca lo
- * agranda. Es lo que hace que un hijo no pueda pintar fuera de su padre por más que lo intente, y
- * por eso hay que quedarse con el que se recibe en vez de fijar el propio.
+ * <p>The clip is **cumulative**: {@link #clipRect} intersects it with whatever was there and never
+ * enlarges it. It is what keeps a child from painting outside its parent however hard it tries, and
+ * that is why one has to keep the one that is handed over instead of setting one's own.
  *
- * <p>Todo dibujo pasa por la línea de base del "modo": en modo pintura el color reemplaza al que
- * había, y en modo XOR se combina con él, de manera que dibujar dos veces lo mismo deja la
- * superficie como estaba. Eso último es lo que permitía dibujar un cursor o una selección elástica
- * sin guardar el fondo.
+ * <p>Every drawing goes through the baseline of the "mode": in paint mode the colour replaces the
+ * one that was there, and in XOR mode it is combined with it, so that drawing the same thing twice
+ * leaves the surface as it was. That last part is what made it possible to draw a cursor or a
+ * rubber band selection without saving the background.
  *
- * <p>Las coordenadas son enteras y los bordes se pintan: {@link #drawRect} de 3×3 marca un cuadrado
- * de 4×4 píxeles, porque dibuja la línea que **rodea** al rectángulo. {@link #fillRect} de 3×3
- * pinta 9. La diferencia es vieja y sorprende siempre.
+ * <p>The coordinates are integers and the edges are painted: a 3×3 {@link #drawRect} marks a square
+ * of 4×4 pixels, because it draws the line that **surrounds** the rectangle. A 3×3 {@link
+ * #fillRect} paints 9. The difference is old and surprises every time.
  */
 public abstract class Graphics {
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected Graphics() {
     }
 
-    /** Otra vista del mismo destino, con una copia de este estado. */
+    /** Another view of the same destination, with a copy of this state. */
     public abstract Graphics create();
 
     /**
-     * Otra vista con el origen corrido y el recorte reducido a ese rectángulo.
+     * Another view with the origin shifted and the clip reduced to that rectangle.
      *
-     * <p>El rectángulo se da en las coordenadas de **este** contexto, y en el que sale su ángulo
-     * superior izquierdo pasa a ser el origen.
+     * <p>The rectangle is given in the coordinates of **this** context, and in the one that comes
+     * out its top-left corner becomes the origin.
      */
     public Graphics create(int x, int y, int width, int height) {
         Graphics g = this.create();
@@ -49,78 +49,79 @@ public abstract class Graphics {
         return g;
     }
 
-    /** Corre el origen. */
+    /** Shifts the origin. */
     public abstract void translate(int x, int y);
 
-    /** El color con el que se dibuja. */
+    /** The colour things are drawn with. */
     public abstract Color getColor();
 
-    /** Cambia el color con el que se dibuja. */
+    /** Changes the colour things are drawn with. */
     public abstract void setColor(Color c);
 
-    /** Pone el modo en el que el color reemplaza a lo que había. */
+    /** Sets the mode in which the colour replaces what was there. */
     public abstract void setPaintMode();
 
     /**
-     * Pone el modo en el que el color se combina con lo que había.
+     * Sets the mode in which the colour is combined with what was there.
      *
-     * <p>Un píxel del color actual pasa al de alternancia y viceversa; el resto cambia de una manera
-     * que se deshace al repetir el dibujo. De ahí que sirva para lo que hay que borrar después.
+     * <p>A pixel of the current colour goes to the alternation colour and the other way round; the
+     * rest change in a way that undoes itself when the drawing is repeated. Hence its being good
+     * for whatever has to be erased afterwards.
      */
     public abstract void setXORMode(Color c1);
 
-    /** La fuente con la que se dibuja el texto. */
+    /** The font text is drawn with. */
     public abstract Font getFont();
 
-    /** Cambia la fuente con la que se dibuja el texto. */
+    /** Changes the font text is drawn with. */
     public abstract void setFont(Font font);
 
-    /** Las medidas de la fuente actual. */
+    /** The measures of the current font. */
     public FontMetrics getFontMetrics() {
         return this.getFontMetrics(this.getFont());
     }
 
-    /** Las medidas de esa fuente en este destino. */
+    /** The measures of that font on this destination. */
     public abstract FontMetrics getFontMetrics(Font f);
 
-    /** El rectángulo que encierra al recorte, o `null` si no hay recorte. */
+    /** The rectangle that encloses the clip, or `null` if there is no clip. */
     public abstract Rectangle getClipBounds();
 
-    /** Reduce el recorte a la intersección con ese rectángulo. */
+    /** Reduces the clip to the intersection with that rectangle. */
     public abstract void clipRect(int x, int y, int width, int height);
 
     /**
-     * Fija el recorte a ese rectángulo.
+     * Sets the clip to that rectangle.
      *
-     * <p>A diferencia de {@link #clipRect}, esto **puede agrandar** el recorte, así que usarlo sobre
-     * un contexto prestado le permite a un componente pintar afuera de lo suyo.
+     * <p>Unlike {@link #clipRect}, this **can enlarge** the clip, so using it on a borrowed context
+     * lets a component paint outside its own area.
      */
     public abstract void setClip(int x, int y, int width, int height);
 
-    /** El recorte, o `null` si no hay. */
+    /** The clip, or `null` if there is none. */
     public abstract Shape getClip();
 
-    /** Fija el recorte a esa figura. */
+    /** Sets the clip to that shape. */
     public abstract void setClip(Shape clip);
 
     /**
-     * Copia un rectángulo del destino a otro lugar del mismo destino.
+     * Copies a rectangle of the destination to another place of the same destination.
      *
-     * <p>Lo que se copie desde fuera del recorte, o desde una parte que estuviera tapada, queda sin
-     * definir: no hay de dónde sacar esos píxeles.
+     * <p>Whatever is copied from outside the clip, or from a part that was covered, is left
+     * undefined: there is nowhere to take those pixels from.
      */
     public abstract void copyArea(int x, int y, int width, int height, int dx, int dy);
 
-    /** Una línea entre dos puntos, con los dos extremos incluidos. */
+    /** A line between two points, with both ends included. */
     public abstract void drawLine(int x1, int y1, int x2, int y2);
 
-    /** Rellena un rectángulo con el color actual. */
+    /** Fills a rectangle with the current colour. */
     public abstract void fillRect(int x, int y, int width, int height);
 
     /**
-     * El contorno de un rectángulo.
+     * The outline of a rectangle.
      *
-     * <p>Cubre `width + 1` por `height + 1` píxeles: la línea rodea al rectángulo.
+     * <p>It covers `width + 1` by `height + 1` pixels: the line surrounds the rectangle.
      */
     public void drawRect(int x, int y, int width, int height) {
         if (width < 0 || height < 0) {
@@ -136,22 +137,23 @@ public abstract class Graphics {
         }
     }
 
-    /** Rellena un rectángulo con el color de fondo. */
+    /** Fills a rectangle with the background colour. */
     public abstract void clearRect(int x, int y, int width, int height);
 
-    /** El contorno de un rectángulo con las esquinas redondeadas. */
+    /** The outline of a rectangle with rounded corners. */
     public abstract void drawRoundRect(int x, int y, int width, int height, int arcWidth,
             int arcHeight);
 
-    /** Rellena un rectángulo con las esquinas redondeadas. */
+    /** Fills a rectangle with rounded corners. */
     public abstract void fillRoundRect(int x, int y, int width, int height, int arcWidth,
             int arcHeight);
 
     /**
-     * Un rectángulo con relieve.
+     * A rectangle in relief.
      *
-     * <p>El relieve se hace con dos tonos del color actual: el claro en los lados que dan a la luz y
-     * el oscuro en los otros. Invertirlos es lo que hace que se vea hundido en vez de saliente.
+     * <p>The relief is made with two shades of the current colour: the light one on the sides
+     * facing the light and the dark one on the others. Swapping them is what makes it look sunken
+     * instead of raised.
      */
     public void draw3DRect(int x, int y, int width, int height, boolean raised) {
         Color c = this.getColor();
@@ -166,7 +168,7 @@ public abstract class Graphics {
         this.setColor(c);
     }
 
-    /** Un rectángulo relleno con relieve. */
+    /** A filled rectangle in relief. */
     public void fill3DRect(int x, int y, int width, int height, boolean raised) {
         Color c = this.getColor();
         Color brighter = c.brighter();
@@ -184,64 +186,64 @@ public abstract class Graphics {
         this.setColor(c);
     }
 
-    /** El contorno de un óvalo inscripto en ese rectángulo. */
+    /** The outline of an oval inscribed in that rectangle. */
     public abstract void drawOval(int x, int y, int width, int height);
 
-    /** Rellena un óvalo inscripto en ese rectángulo. */
+    /** Fills an oval inscribed in that rectangle. */
     public abstract void fillOval(int x, int y, int width, int height);
 
     /**
-     * Un arco de un óvalo.
+     * An arc of an oval.
      *
-     * <p>Los ángulos van en grados, con el cero a las tres y creciendo en sentido antihorario.
+     * <p>The angles are in degrees, with zero at three o'clock and growing anticlockwise.
      */
     public abstract void drawArc(int x, int y, int width, int height, int startAngle,
             int arcAngle);
 
-    /** Rellena un sector de un óvalo. */
+    /** Fills a sector of an oval. */
     public abstract void fillArc(int x, int y, int width, int height, int startAngle,
             int arcAngle);
 
-    /** Una sucesión de segmentos, sin cerrar. */
+    /** A sequence of segments, not closed. */
     public abstract void drawPolyline(int[] xPoints, int[] yPoints, int nPoints);
 
-    /** El contorno de un polígono, cerrado. */
+    /** The outline of a polygon, closed. */
     public abstract void drawPolygon(int[] xPoints, int[] yPoints, int nPoints);
 
-    /** El contorno de un polígono. */
+    /** The outline of a polygon. */
     public void drawPolygon(Polygon p) {
         this.drawPolygon(p.xpoints, p.ypoints, p.npoints);
     }
 
-    /** Rellena un polígono. */
+    /** Fills a polygon. */
     public abstract void fillPolygon(int[] xPoints, int[] yPoints, int nPoints);
 
-    /** Rellena un polígono. */
+    /** Fills a polygon. */
     public void fillPolygon(Polygon p) {
         this.fillPolygon(p.xpoints, p.ypoints, p.npoints);
     }
 
     /**
-     * Dibuja un texto.
+     * Draws a text.
      *
-     * <p>`(x, y)` es el comienzo de la **línea de base**, no la esquina: el texto sube por encima de
-     * ese punto.
+     * <p>`(x, y)` is the start of the **baseline**, not the corner: the text goes up above that
+     * point.
      */
     public abstract void drawString(String str, int x, int y);
 
-    /** Dibuja un texto con atributos. */
+    /** Draws a text with attributes. */
     public abstract void drawString(AttributedCharacterIterator iterator, int x, int y);
 
-    /** Dibuja un tramo de un arreglo de caracteres. */
+    /** Draws a stretch of an array of characters. */
     public void drawChars(char[] data, int offset, int length, int x, int y) {
         this.drawString(new String(data, offset, length), x, y);
     }
 
     /**
-     * Dibuja un tramo de bytes, tomando cada uno como un carácter.
+     * Draws a stretch of bytes, taking each one as a character.
      *
-     * @deprecated no traduce correctamente los bytes a caracteres en ninguna codificación que no sea
-     *     Latin-1. Se mantiene porque está en la API desde 1.0.
+     * @deprecated it does not translate bytes into characters correctly in any encoding other than
+     *     Latin-1. It is kept because it has been in the API since 1.0.
      */
     @Deprecated
     public void drawBytes(byte[] data, int offset, int length, int x, int y) {
@@ -249,52 +251,52 @@ public abstract class Graphics {
     }
 
     /**
-     * Dibuja una imagen con su ángulo superior izquierdo en `(x, y)`.
+     * Draws an image with its top-left corner at `(x, y)`.
      *
-     * <p>Devuelve `false` si la imagen todavía no está entera; el observador se va a enterar cuando
-     * llegue el resto.
+     * <p>It returns `false` if the image is not whole yet; the observer will find out when the rest
+     * arrives.
      */
     public abstract boolean drawImage(Image img, int x, int y, ImageObserver observer);
 
-    /** Dibuja una imagen escalada a ese tamaño. */
+    /** Draws an image scaled to that size. */
     public abstract boolean drawImage(Image img, int x, int y, int width, int height,
             ImageObserver observer);
 
-    /** Dibuja una imagen pintando de `bgcolor` lo que sea transparente. */
+    /** Draws an image painting whatever is transparent in `bgcolor`. */
     public abstract boolean drawImage(Image img, int x, int y, Color bgcolor,
             ImageObserver observer);
 
-    /** Dibuja una imagen escalada, pintando de `bgcolor` lo que sea transparente. */
+    /** Draws an image scaled, painting whatever is transparent in `bgcolor`. */
     public abstract boolean drawImage(Image img, int x, int y, int width, int height,
             Color bgcolor, ImageObserver observer);
 
     /**
-     * Dibuja un recorte de una imagen dentro de un rectángulo del destino.
+     * Draws a cut-out of an image inside a rectangle of the destination.
      *
-     * <p>Si los rectángulos no miden lo mismo, la imagen se estira; si un par de coordenadas está
-     * dado al revés, se refleja. Ese reflejo es a propósito y es la única manera de espejar una
-     * imagen con esta API.
+     * <p>If the rectangles do not measure the same, the image is stretched; if a pair of
+     * coordinates is given the other way round, it is mirrored. That mirroring is on purpose and is
+     * the only way of flipping an image with this API.
      */
     public abstract boolean drawImage(Image img, int dx1, int dy1, int dx2, int dy2, int sx1,
             int sy1, int sx2, int sy2, ImageObserver observer);
 
-    /** Como el anterior, pintando de `bgcolor` lo que sea transparente. */
+    /** Like the previous one, painting whatever is transparent in `bgcolor`. */
     public abstract boolean drawImage(Image img, int dx1, int dy1, int dx2, int dy2, int sx1,
             int sy1, int sx2, int sy2, Color bgcolor, ImageObserver observer);
 
     /**
-     * Suelta los recursos de este contexto.
+     * Releases the resources of this context.
      *
-     * <p>Hay que llamarlo para todo contexto que se haya pedido con {@link #create()}. Usarlo
-     * después es un error.
+     * <p>It has to be called for every context asked for with {@link #create()}. Using it
+     * afterwards is an error.
      */
     public abstract void dispose();
 
     /**
-     * Suelta los recursos.
+     * Releases the resources.
      *
-     * @deprecated depende de la recolección de basura, que no da ninguna garantía de cuándo va a
-     *     correr ni de que vaya a correr. Hay que llamar a {@link #dispose} a mano.
+     * @deprecated it depends on garbage collection, which gives no guarantee of when it is going to
+     *     run or that it is going to run at all. {@link #dispose} has to be called by hand.
      */
     @Deprecated
     public void finalize() {
@@ -307,10 +309,10 @@ public abstract class Graphics {
     }
 
     /**
-     * El rectángulo del recorte.
+     * The rectangle of the clip.
      *
-     * @deprecated el nombre no dice que devuelve el rectángulo que **encierra** al recorte, que
-     *     puede no ser un rectángulo. Usar {@link #getClipBounds}.
+     * @deprecated the name does not say that it returns the rectangle that **encloses** the clip,
+     *     which may not be a rectangle. Use {@link #getClipBounds}.
      */
     @Deprecated
     public Rectangle getClipRect() {
@@ -318,10 +320,10 @@ public abstract class Graphics {
     }
 
     /**
-     * Si ese rectángulo toca el recorte.
+     * Whether that rectangle touches the clip.
      *
-     * <p>Puede dar `true` de más pero nunca `false` de menos: sirve para saltearse un dibujo que
-     * seguro no se ve, no para saber si se ve.
+     * <p>It may give `true` too often but never `false` too often: it serves to skip a drawing that
+     * is surely not seen, not to know whether something is seen.
      */
     public boolean hitClip(int x, int y, int width, int height) {
         Rectangle clipRect = this.getClipBounds();
@@ -332,9 +334,9 @@ public abstract class Graphics {
     }
 
     /**
-     * El rectángulo del recorte, escrito en el que se pasa.
+     * The rectangle of the clip, written into the one that is passed in.
      *
-     * <p>Existe para no crear un objeto por consulta en un bucle de dibujado.
+     * <p>It exists so as not to create an object per query in a drawing loop.
      */
     public Rectangle getClipBounds(Rectangle r) {
         Rectangle clipRect = this.getClipBounds();

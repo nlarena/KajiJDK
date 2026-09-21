@@ -8,80 +8,83 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Decide que filas se ven y cuales no.
+ * It decides which rows are seen and which are not.
  *
- * <h2>Filtrar no es borrar</h2>
+ * <h2>Filtering is not deleting</h2>
  *
- * <p>Una fila que el filtro deja afuera sigue en el modelo: lo unico que cambia es que la vista no
- * la muestra. Por eso el filtro se le pone al ordenador de filas y no al modelo, y por eso los
- * indices de vista y de modelo dejan de coincidir en cuanto hay un filtro puesto.
+ * <p>A row the filter leaves out is still in the model: the only thing that changes is that the
+ * view does not show it. That is why the filter is given to the row sorter and not to the
+ * model, and that is why the view and model indices stop agreeing as soon as there is a filter
+ * set.
  *
- * <h2>La entrada, no la fila</h2>
+ * <h2>The entry, not the row</h2>
  *
- * <p>{@link #include} no recibe una fila sino una {@link Entry}, que es una vista de solo lectura
- * de una fila: sus valores, cuantos son, y el identificador con que el modelo la reconoce. Asi el
- * mismo filtro sirve para una tabla y para un arbol, que guardan sus filas de maneras distintas.
+ * <p>{@link #include} does not receive a row but an {@link Entry}, which is a read-only view of
+ * a row: its values, how many there are, and the identifier the model recognizes it by. That
+ * way the same filter serves for a table and for a tree, which keep their rows in different
+ * ways.
  *
- * <h2>Las columnas de mas</h2>
+ * <h2>The extra columns</h2>
  *
- * <p>Las fabricas reciben un {@code int...} de columnas. <strong>Sin ninguna, miran todas</strong>,
- * y alcanza con que una encaje. Es al reves de lo que uno espera de una lista vacia, y es lo comodo:
- * un buscador de tabla se escribe con una sola llamada.
+ * <p>The factories receive an {@code int...} of columns. <strong>With none, they look at them
+ * all</strong>, and it is enough for one to match. It is the opposite of what one expects of an
+ * empty list, and it is the convenient thing: a table searcher is written with a single call.
  */
 public abstract class RowFilter<M, I> {
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected RowFilter() {
     }
 
     /**
-     * Como comparar contra el valor de referencia.
+     * How to compare against the reference value.
      *
-     * <p>{@link #BEFORE} y {@link #AFTER} se llaman asi por las fechas, pero valen igual para los
-     * numeros: son "menor" y "mayor".
+     * <p>{@link #BEFORE} and {@link #AFTER} are called that after the dates, but they hold just as
+     * well for numbers: they are "less than" and "greater than".
      */
     public enum ComparisonType {
 
-        /** Anterior, o menor. */
+        /** Before, or less than. */
         BEFORE,
 
-        /** Posterior, o mayor. */
+        /** After, or greater than. */
         AFTER,
 
-        /** Igual. */
+        /** Equal. */
         EQUAL,
 
-        /** Distinto. */
+        /** Different. */
         NOT_EQUAL;
     }
 
     /**
-     * Deja pasar las filas donde la expresion regular encuentra algo.
+     * It lets through the rows where the regular expression finds something.
      *
-     * <p>Es {@code find}, no {@code matches}: alcanza con que la expresion aparezca en alguna
-     * parte del texto, no hace falta que lo cubra entero. De ahi que {@code "ar"} sirva para buscar
-     * "Argentina" sin comodines.
+     * <p>It is {@code find}, not {@code matches}: it is enough for the expression to appear
+     * somewhere in the text, it does not have to cover it whole. Hence {@code "ar"} serves to
+     * search for "Argentina" with no wildcards.
      *
-     * <p>No se comprueba que la expresion no sea nula: se la pasa a {@code Pattern.compile}, que
-     * revienta sola. Es lo que hace el JDK y el mensaje sale de alli.
+     * <p>It is not checked that the expression is not null: it is passed to {@code
+     * Pattern.compile}, which blows up by itself. It is what the JDK does and the message comes
+     * from there.
      *
-     * @throws NullPointerException si la expresion es nula
-     * @throws java.util.regex.PatternSyntaxException si no compila
-     * @throws IllegalArgumentException si alguna columna es negativa
+     * @throws NullPointerException if the expression is null
+     * @throws java.util.regex.PatternSyntaxException if it does not compile
+     * @throws IllegalArgumentException if some column is negative
      */
     public static <M, I> RowFilter<M, I> regexFilter(String regex, int... indices) {
         return new RegexFilter<M, I>(Pattern.compile(regex), indices);
     }
 
     /**
-     * Deja pasar las filas cuya fecha compara asi contra la de referencia.
+     * It lets through the rows whose date compares like that against the reference one.
      *
-     * <p>La fecha se lee en la fabrica, antes de llegar al filtro, asi que una fecha nula sale como
-     * {@link NullPointerException} y un tipo nulo como {@link IllegalArgumentException}. La
-     * asimetria es del JDK y esta medida.
+     * <p>The date is read in the factory, before reaching the filter, so a null date comes out as
+     * {@link NullPointerException} and a null type as {@link IllegalArgumentException}. The
+     * asymmetry is the JDK's and it is measured.
      *
-     * @throws NullPointerException si la fecha es nula
-     * @throws IllegalArgumentException si el tipo es nulo o alguna columna es negativa
+     * @throws NullPointerException if the date is null
+     * @throws IllegalArgumentException if the type is null or some column is negative
      */
     public static <M, I> RowFilter<M, I> dateFilter(ComparisonType type, Date date,
             int... indices) {
@@ -89,14 +92,14 @@ public abstract class RowFilter<M, I> {
     }
 
     /**
-     * Deja pasar las filas cuyo numero compara asi contra el de referencia.
+     * It lets through the rows whose number compares like that against the reference one.
      *
-     * <p>La comparacion es por valor y no por tipo: un {@code Integer} de 3 y un {@code Double} de
-     * 3.0 dan iguales. Sin eso, un filtro escrito con un literal entero no encontraria nada en una
-     * columna de dobles.
+     * <p>The comparison is by value and not by type: an {@code Integer} of 3 and a {@code Double}
+     * of 3.0 come out equal. Without that, a filter written with an integer literal would find
+     * nothing in a column of doubles.
      *
-     * @throws IllegalArgumentException si el tipo o el numero son nulos, o si alguna columna es
-     *     negativa
+     * @throws IllegalArgumentException if the type or the number are null, or if some column is
+     *     negative
      */
     public static <M, I> RowFilter<M, I> numberFilter(ComparisonType type, Number number,
             int... indices) {
@@ -104,10 +107,10 @@ public abstract class RowFilter<M, I> {
     }
 
     /**
-     * Deja pasar lo que pase alguno de esos filtros.
+     * It lets through whatever passes one of those filters.
      *
-     * @throws NullPointerException si la coleccion es nula
-     * @throws IllegalArgumentException si trae un nulo
+     * @throws NullPointerException if the collection is null
+     * @throws IllegalArgumentException if it brings a null
      */
     public static <M, I> RowFilter<M, I> orFilter(
             Iterable<? extends RowFilter<? super M, ? super I>> filters) {
@@ -115,10 +118,10 @@ public abstract class RowFilter<M, I> {
     }
 
     /**
-     * Deja pasar lo que pase todos esos filtros.
+     * It lets through whatever passes all those filters.
      *
-     * @throws NullPointerException si la coleccion es nula
-     * @throws IllegalArgumentException si trae un nulo
+     * @throws NullPointerException if the collection is null
+     * @throws IllegalArgumentException if it brings a null
      */
     public static <M, I> RowFilter<M, I> andFilter(
             Iterable<? extends RowFilter<? super M, ? super I>> filters) {
@@ -126,60 +129,60 @@ public abstract class RowFilter<M, I> {
     }
 
     /**
-     * Da vuelta un filtro.
+     * It turns a filter round.
      *
-     * @throws IllegalArgumentException si el filtro es nulo
+     * @throws IllegalArgumentException if the filter is null
      */
     public static <M, I> RowFilter<M, I> notFilter(RowFilter<M, I> filter) {
         return new NotFilter<M, I>(filter);
     }
 
-    /** Si esa fila se ve. */
+    /** Whether that row is seen. */
     public abstract boolean include(Entry<? extends M, ? extends I> entry);
 
     /**
-     * Una fila vista desde el filtro: sus valores y con que la reconoce el modelo.
+     * A row seen from the filter: its values and what the model recognizes it by.
      *
-     * <p>Es de solo lectura a proposito. Un filtro que pudiera tocar la fila que esta evaluando
-     * cambiaria lo que se esta filtrando mientras se filtra.
+     * <p>It is read-only on purpose. A filter that could touch the row it is evaluating would
+     * change what is being filtered while it is being filtered.
      */
     public abstract static class Entry<M, I> {
 
-        /** Para las subclases. */
+        /** For the subclasses. */
         public Entry() {
         }
 
-        /** El modelo del que sale esta fila. */
+        /** The model this row comes from. */
         public abstract M getModel();
 
-        /** Cuantos valores tiene la fila. */
+        /** How many values the row has. */
         public abstract int getValueCount();
 
         /**
-         * El valor de esa columna.
+         * That column's value.
          *
-         * @throws IndexOutOfBoundsException si el indice esta fuera de rango
+         * @throws IndexOutOfBoundsException if the index is out of range
          */
         public abstract Object getValue(int index);
 
         /**
-         * El valor de esa columna como texto.
+         * That column's value as text.
          *
-         * <p>Nulo se convierte en cadena vacia, no en {@code "null"}: un filtro de texto que
-         * encontrara la palabra "null" en las celdas vacias seria una sorpresa desagradable.
+         * <p>Null is converted into the empty string, not into {@code "null"}: a text filter that
+         * found the word "null" in the empty cells would be an unpleasant surprise.
          *
-         * @throws IndexOutOfBoundsException si el indice esta fuera de rango
+         * @throws IndexOutOfBoundsException if the index is out of range
          */
         public String getStringValue(int index) {
             Object value = getValue(index);
             return (value == null) ? "" : value.toString();
         }
 
-        /** Con que reconoce el modelo a esta fila. */
+        /** What the model recognizes this row by. */
         public abstract I getIdentifier();
     }
 
-    /** La parte comun de los filtros que miran ciertas columnas; ver la nota de la clase. */
+    /** The part common to the filters that look at certain columns; see the class note. */
     private abstract static class GeneralFilter<M, I> extends RowFilter<M, I> {
 
         private final int[] columns;
@@ -205,8 +208,9 @@ public abstract class RowFilter<M, I> {
             if (columns.length > 0) {
                 for (int i = columns.length - 1; i >= 0; i--) {
                     int index = columns[i];
-                    // Una columna pedida que la fila no tiene se saltea, no revienta: distintas
-                    // filas de un arbol pueden tener distinta cantidad de valores.
+                    // A requested column the row does not have is skipped, it does not blow up:
+                    // different
+                                        // rows of a tree may have a different number of values.
                     if (index < count && include(value, index)) {
                         return true;
                     }
@@ -303,7 +307,7 @@ public abstract class RowFilter<M, I> {
                 if (number.getClass() == vClass && isComparable) {
                     compareResult = ((Comparable<Number>) number).compareTo((Number) v);
                 } else {
-                    // Distinto tipo: se comparan los valores en doble. Ver la nota de la fabrica.
+                    // A different type: the values are compared as doubles. See the factory's note.
                     compareResult = compare(number, (Number) v);
                 }
                 if (compared) {
@@ -338,13 +342,14 @@ public abstract class RowFilter<M, I> {
     }
 
     /**
-     * La parte comun de los filtros que combinan otros.
+     * The part common to the filters that combine others.
      *
-     * <p><strong>El arreglo se lee por {@link #partes} y no directo.</strong> Su tipo natural es el
-     * que esta declarado, pero este compilador pierde la cota inferior del comodin al mirar un campo
-     * <em>heredado</em> --hallazgo #516--, y entonces las subclases no pueden ni copiarlo a una
-     * variable local. El mismo tipo devuelto por un metodo heredado si se sustituye bien, asi que el
-     * rodeo es un accesor y no un cambio de tipo ni un descarte de generico.
+     * <p><strong>The array is read through {@link #parts} and not directly.</strong> Its natural
+     * type is the one that is declared, but this compiler loses the wildcard's lower bound when
+     * looking at an <em>inherited</em> field -- finding #516 --, and then the subclasses cannot
+     * even copy it to a local variable. The same type returned by an inherited method is
+     * substituted properly, so the detour is an accessor and not a change of type nor a generic
+     * discard.
      */
     private abstract static class CompoundFilter<M, I> extends RowFilter<M, I> {
 
@@ -352,8 +357,9 @@ public abstract class RowFilter<M, I> {
 
         @SuppressWarnings("unchecked")
         CompoundFilter(Iterable<? extends RowFilter<? super M, ? super I>> filters) {
-            // La coleccion nula no se comprueba: revienta sola al pedirle el iterador, que es lo
-            // que hace el JDK. Un elemento nulo si, y con mayuscula, que es como esta escrito alla.
+            // The null collection is not checked: it blows up by itself on being asked for the
+                        // iterator, which is what the JDK does. A null element is, and with a
+                        // capital, which is how it is written there.
             List<RowFilter<? super M, ? super I>> l =
                     new ArrayList<RowFilter<? super M, ? super I>>();
             Iterator<? extends RowFilter<? super M, ? super I>> it = filters.iterator();
@@ -367,8 +373,8 @@ public abstract class RowFilter<M, I> {
             this.filters = l.toArray(new RowFilter[l.size()]);
         }
 
-        /** Los filtros combinados; ver la nota de la clase. */
-        RowFilter<? super M, ? super I>[] partes() {
+        /** The combined filters; see the class note. */
+        RowFilter<? super M, ? super I>[] parts() {
             return filters;
         }
     }
@@ -381,7 +387,7 @@ public abstract class RowFilter<M, I> {
         }
 
         public boolean include(Entry<? extends M, ? extends I> value) {
-            RowFilter<? super M, ? super I>[] fs = partes();
+            RowFilter<? super M, ? super I>[] fs = parts();
             for (int i = 0; i < fs.length; i++) {
                 if (fs[i].include(value)) {
                     return true;
@@ -399,7 +405,7 @@ public abstract class RowFilter<M, I> {
         }
 
         public boolean include(Entry<? extends M, ? extends I> value) {
-            RowFilter<? super M, ? super I>[] fs = partes();
+            RowFilter<? super M, ? super I>[] fs = parts();
             for (int i = 0; i < fs.length; i++) {
                 if (!fs[i].include(value)) {
                     return false;

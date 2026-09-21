@@ -6,11 +6,8 @@ import javax.swing.JComponent;
 import javax.swing.plaf.ComponentUI;
 
 /**
- * El boton de opcion de Synth.
- *
- * <p>Un escalon mas abajo del conmutador, con el mismo cambio: el prefijo. La cadena es
- * {@code Button -> ToggleButton -> RadioButton -> CheckBox}, y cada eslabon existe nada mas que
- * para que el archivo de estilos pueda darle valores propios sin repetir el dibujo.
+ * Synth's radio button, one link below the toggle in the chain that starts at
+ * {@link SynthButtonUI}.
  */
 public class SynthRadioButtonUI extends SynthToggleButtonUI {
 

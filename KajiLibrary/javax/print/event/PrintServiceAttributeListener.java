@@ -1,13 +1,14 @@
 package javax.print.event;
 
 /**
- * KajiLibrary's javax.print.event.PrintServiceAttributeListener -- escucha cambios de la impresora.
+ * KajiLibrary's javax.print.event.PrintServiceAttributeListener -- listens to the printer's
+ * changes.
  *
- * <p>Se registra con {@code PrintService.addPrintServiceAttributeListener}. A diferencia del de
- * trabajos, este no lleva filtro: llegan todos.
+ * <p>It is registered with {@code PrintService.addPrintServiceAttributeListener}. Unlike the job
+ * one, this one carries no filter: they all arrive.
  */
 public interface PrintServiceAttributeListener {
 
-    /** Cambio algo de la impresora. */
+    /** Something about the printer changed. */
     void attributeUpdate(PrintServiceAttributeEvent psae);
 }

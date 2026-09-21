@@ -3,63 +3,63 @@ package org.w3c.dom.css;
 import org.w3c.dom.DOMException;
 
 /**
- * Un bloque de declaraciones: lo que va entre las llaves de una regla, o el `style=""` de un
- * elemento.
+ * A block of declarations: what goes between the braces of a rule, or the `style=""` of an element.
  *
- * <p>Se puede ver de dos formas y las dos son la misma: como texto (`getCssText`) o como un
- * conjunto de propiedades. Es **vivo**: escribir una propiedad cambia el texto y al reves.
+ * <p>It can be seen in two ways and both are the same: as text (`getCssText`) or as a set of
+ * properties. It is **live**: writing a property changes the text and vice versa.
  *
- * <p>Dos formas de leer una propiedad, y la diferencia importa. `getPropertyValue` da el texto y
- * anda siempre; `getPropertyCSSValue` da el valor estructurado y **devuelve nulo para las
- * propiedades abreviadas** --`background`, `font`, `margin`--, porque el valor de una abreviada no
- * es un valor sino varios. Quien quiera esos tiene que pedir las propiedades largas una por una.
+ * <p>Two ways of reading a property, and the difference matters. `getPropertyValue` gives the text
+ * and always works; `getPropertyCSSValue` gives the structured value and **returns null for the
+ * shorthand properties** --`background`, `font`, `margin`--, because the value of a shorthand is
+ * not one value but several. Whoever wants those has to ask for the longhand properties one by one.
  *
- * <p>`item(i)` recorre los **nombres** de las propiedades escritas, en el orden del documento; es
- * lo que permite listar un bloque sin saber de antemano que tiene.
+ * <p>`item(i)` walks the **names** of the written properties, in the order of the document; it is
+ * what allows listing a block without knowing beforehand what it has.
  */
 public interface CSSStyleDeclaration {
 
-    /** El bloque entero como texto. */
+    /** The whole block as text. */
     String getCssText();
 
     /**
-     * Reemplaza el bloque entero.
+     * It replaces the whole block.
      *
-     * @throws DOMException `SYNTAX_ERR` si no parsea; `NO_MODIFICATION_ALLOWED_ERR` si el bloque
-     *     es de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if it does not parse; `NO_MODIFICATION_ALLOWED_ERR` if the
+     *     block is read-only
      */
     void setCssText(String cssText) throws DOMException;
 
-    /** El valor de esa propiedad como texto, o la cadena vacia si no esta escrita. */
+    /** The value of that property as text, or the empty string if it is not written. */
     String getPropertyValue(String propertyName);
 
-    /** El valor estructurado, o nulo. Ver la nota sobre las abreviadas. */
+    /** The structured value, or null. See the note on shorthands. */
     CSSValue getPropertyCSSValue(String propertyName);
 
     /**
-     * Saca esa propiedad y devuelve el valor que tenia, o la cadena vacia si no estaba.
+     * It removes that property and returns the value it had, or the empty string if it was not
+     * there.
      *
-     * @throws DOMException `NO_MODIFICATION_ALLOWED_ERR` si el bloque es de solo lectura
+     * @throws DOMException `NO_MODIFICATION_ALLOWED_ERR` if the block is read-only
      */
     String removeProperty(String propertyName) throws DOMException;
 
-    /** `"important"` si la propiedad lo lleva, la cadena vacia si no. */
+    /** `"important"` if the property carries it, the empty string if not. */
     String getPropertyPriority(String propertyName);
 
     /**
-     * Escribe esa propiedad. `priority` es `"important"` o la cadena vacia.
+     * It writes that property. `priority` is `"important"` or the empty string.
      *
-     * @throws DOMException `SYNTAX_ERR` si el valor no parsea; `NO_MODIFICATION_ALLOWED_ERR` si el
-     *     bloque o esa propiedad son de solo lectura
+     * @throws DOMException `SYNTAX_ERR` if the value does not parse; `NO_MODIFICATION_ALLOWED_ERR`
+     *     if the block or that property is read-only
      */
     void setProperty(String propertyName, String value, String priority) throws DOMException;
 
-    /** Cuantas propiedades hay escritas. */
+    /** How many properties are written. */
     int getLength();
 
-    /** El nombre de la propiedad en esa posicion, o la cadena vacia si el indice no vale. */
+    /** The name of the property at that position, or the empty string if the index is not valid. */
     String item(int index);
 
-    /** La regla que contiene este bloque, o nulo si es el `style` de un elemento. */
+    /** The rule that contains this block, or null if it is the `style` of an element. */
     CSSRule getParentRule();
 }

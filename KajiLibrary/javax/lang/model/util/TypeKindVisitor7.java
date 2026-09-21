@@ -5,11 +5,12 @@ import javax.lang.model.SourceVersion;
 import javax.lang.model.type.UnionType;
 
 /**
- * El visitante por kind de tipo de Java 7. Ver {@link TypeKindVisitor6} por el mecanismo.
+ * The type-kind visitor for Java 7. See {@link TypeKindVisitor6} for the mechanism.
  *
- * <p>`visitUnion` entra al embudo, igual que en {@link SimpleTypeVisitor7}. Hace falta repetirlo aca
- * porque esta rama de la familia baja por `TypeKindVisitor6`, que hereda el `visitUnion` que tira de
- * {@link SimpleTypeVisitor6} — la version 7 del visitante simple no esta en su ancestro.
+ * <p>`visitUnion` enters the funnel, just as in {@link SimpleTypeVisitor7}. It has to be repeated
+ * here because this branch of the family goes down through `TypeKindVisitor6`, which inherits the
+ * throwing `visitUnion` from {@link SimpleTypeVisitor6} — version 7 of the simple visitor is not
+ * among its ancestors.
  */
 @SupportedSourceVersion(SourceVersion.RELEASE_7)
 public class TypeKindVisitor7<R, P> extends TypeKindVisitor6<R, P> {

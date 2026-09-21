@@ -7,17 +7,17 @@ import javax.swing.JFormattedTextField$AbstractFormatter;
 import javax.swing.JFormattedTextField$AbstractFormatterFactory;
 
 /**
- * Una fabrica que elige entre cuatro formateadores segun el estado del campo.
+ * A factory that chooses between four formatters according to the field's state.
  *
- * <h2>Por que cuatro</h2>
+ * <h2>Why four</h2>
  *
- * <p>El texto que se muestra y el que se edita no tienen por que ser el mismo. Un importe se
- * muestra como <code>$ 1.234,50</code> y se edita como <code>1234,5</code>: con el signo de moneda
- * adelante, el usuario tendria que saltearlo con las flechas cada vez.
+ * <p>The text that is shown and the one that is edited do not have to be the same. An amount is
+ * shown as <code>$ 1,234.50</code> and edited as <code>1234.5</code>: with the currency sign in
+ * front, the user would have to skip over it with the arrows every time.
  *
- * <p>De ahi los cuatro: uno para cuando el campo esta en blanco, uno para cuando se lo esta
- * editando, uno para cuando solo se lo mira, y uno de reserva para cuando alguno de los otros no
- * esta puesto. La mayoria de los usos ponen solo el de reserva.
+ * <p>Hence the four: one for when the field is blank, one for when it is being edited, one for
+ * when it is only being looked at, and a fallback for when one of the others is not set. Most
+ * uses set only the fallback.
  */
 public class DefaultFormatterFactory extends JFormattedTextField$AbstractFormatterFactory
         implements Serializable {
@@ -27,29 +27,29 @@ public class DefaultFormatterFactory extends JFormattedTextField$AbstractFormatt
     private JFormattedTextField$AbstractFormatter editFormat;
     private JFormattedTextField$AbstractFormatter nullFormat;
 
-    /** Una fabrica sin ningun formateador; devuelve nulo hasta que le pongan alguno. */
+    /** A factory with no formatter; it returns null until one is set on it. */
     public DefaultFormatterFactory() {
     }
 
-    /** Una fabrica con ese formateador de reserva. */
+    /** A factory with that fallback formatter. */
     public DefaultFormatterFactory(JFormattedTextField$AbstractFormatter defaultFormat) {
         this(defaultFormat, null);
     }
 
-    /** Una fabrica con el de reserva y el de solo mirar. */
+    /** A factory with the fallback and the look-only one. */
     public DefaultFormatterFactory(JFormattedTextField$AbstractFormatter defaultFormat,
             JFormattedTextField$AbstractFormatter displayFormat) {
         this(defaultFormat, displayFormat, null);
     }
 
-    /** Una fabrica con el de reserva, el de mirar y el de editar. */
+    /** A factory with the fallback, the look-only one and the editing one. */
     public DefaultFormatterFactory(JFormattedTextField$AbstractFormatter defaultFormat,
             JFormattedTextField$AbstractFormatter displayFormat,
             JFormattedTextField$AbstractFormatter editFormat) {
         this(defaultFormat, displayFormat, editFormat, null);
     }
 
-    /** Una fabrica con los cuatro. */
+    /** A factory with all four. */
     public DefaultFormatterFactory(JFormattedTextField$AbstractFormatter defaultFormat,
             JFormattedTextField$AbstractFormatter displayFormat,
             JFormattedTextField$AbstractFormatter editFormat,
@@ -60,7 +60,7 @@ public class DefaultFormatterFactory extends JFormattedTextField$AbstractFormatt
         this.nullFormat = nullFormat;
     }
 
-    /** El que se usa cuando ninguno de los otros corresponde. */
+    /** The one used when none of the others applies. */
     public void setDefaultFormatter(JFormattedTextField$AbstractFormatter atf) {
         defaultFormat = atf;
     }
@@ -69,7 +69,7 @@ public class DefaultFormatterFactory extends JFormattedTextField$AbstractFormatt
         return defaultFormat;
     }
 
-    /** El que se usa cuando el campo no tiene el foco. */
+    /** The one used when the field does not have the focus. */
     public void setDisplayFormatter(JFormattedTextField$AbstractFormatter atf) {
         displayFormat = atf;
     }
@@ -78,7 +78,7 @@ public class DefaultFormatterFactory extends JFormattedTextField$AbstractFormatt
         return displayFormat;
     }
 
-    /** El que se usa cuando el campo tiene el foco. */
+    /** The one used when the field has the focus. */
     public void setEditFormatter(JFormattedTextField$AbstractFormatter atf) {
         editFormat = atf;
     }
@@ -87,7 +87,7 @@ public class DefaultFormatterFactory extends JFormattedTextField$AbstractFormatt
         return editFormat;
     }
 
-    /** El que se usa cuando el valor es nulo. */
+    /** The one used when the value is null. */
     public void setNullFormatter(JFormattedTextField$AbstractFormatter atf) {
         nullFormat = atf;
     }
@@ -96,7 +96,7 @@ public class DefaultFormatterFactory extends JFormattedTextField$AbstractFormatt
         return nullFormat;
     }
 
-    /** Elige el formateador que corresponde al estado del campo. */
+    /** It chooses the formatter that corresponds to the field's state. */
     public JFormattedTextField$AbstractFormatter getFormatter(JFormattedTextField source) {
         JFormattedTextField$AbstractFormatter format = null;
 

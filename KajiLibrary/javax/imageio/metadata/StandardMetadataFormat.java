@@ -6,30 +6,30 @@ import java.util.List;
 import javax.imageio.ImageTypeSpecifier;
 
 /**
- * El esquema de {@code javax_imageio_1.0}, el formato de metadatos comun a todos los formatos de
- * imagen.
+ * The schema of {@code javax_imageio_1.0}, the metadata format common to all image formats.
  *
- * <p>De acceso de paquete: se llega por {@code IIOMetadataFormatImpl.getStandardFormatInstance()}.
+ * <p>Package-private: it is reached through {@code
+ * IIOMetadataFormatImpl.getStandardFormatInstance()}.
  *
- * <p>Las siete ramas de primer nivel --Chroma, Compression, Data, Dimension, Document, Text y
- * Transparency-- son las categorias en que el estandar divide todo lo que un formato de imagen puede
- * decir de si mismo. Un formato concreto llena las que sepa y deja las demas afuera.
+ * <p>The seven top-level branches --Chroma, Compression, Data, Dimension, Document, Text and
+ * Transparency-- are the categories in which the standard divides everything an image format can
+ * say about itself. A concrete format fills in the ones it can and leaves the rest out.
  *
- * <p>El esquema se transcribio del propio JDK 25 y no a mano: son mas de treinta elementos con sus
- * atributos, enumeraciones y rangos, y un valor distinto produce un formato que acepta arboles que el
- * JDK rechaza.
+ * <p>The schema was transcribed from the JDK 25 itself and not by hand: it is more than thirty
+ * elements with their attributes, enumerations and ranges, and a different value produces a
+ * format that accepts trees the JDK rejects.
  *
- * <p>{@link #canNodeAppear} devuelve <b>siempre</b> true, incluso para un nombre que el formato no
- * define. Es lo que hace el JDK 25 --se comprobo-- y tiene su logica: el formato estandar es comun a
- * todos los tipos de imagen, asi que ningun tipo puede descartar una rama, y el metodo no esta pensado
- * para validar nombres. Para eso estan {@code getChildPolicy} y companeros, que si fallan.
+ * <p>{@link #canNodeAppear} <b>always</b> returns true, even for a name the format does not define.
+ * It is what the JDK 25 does --it was checked-- and it has its logic: the standard format is common
+ * to all image types, so no type can rule out a branch, and the method is not meant to validate
+ * names. That is what {@code getChildPolicy} and friends are for, and those do fail.
  */
 final class StandardMetadataFormat extends IIOMetadataFormatImpl {
 
     StandardMetadataFormat() {
         super("javax_imageio_1.0", CHILD_POLICY_SOME);
-        // Sin paquete de recursos: las descripciones del formato estandar viven en un archivo de
-        // textos del JDK que esta biblioteca no trae, y devolver null es mejor que inventarlas.
+        // No resource bundle: the standard format's descriptions live in a JDK text file this
+        // library does not ship, and returning null is better than making them up.
         setResourceBaseName(null);
         addElement("Chroma", "javax_imageio_1.0", CHILD_POLICY_SOME);
         addElement("ColorSpaceType", "Chroma", CHILD_POLICY_EMPTY);
@@ -150,7 +150,7 @@ final class StandardMetadataFormat extends IIOMetadataFormatImpl {
         addAttribute("OpaqueTile", "y", DATATYPE_INTEGER, true, null);
     }
 
-    /** Siempre true. Ver la nota de la clase: no valida el nombre. */
+    /** Always true. See the class note: it does not validate the name. */
     @Override
     public boolean canNodeAppear(String elementName, ImageTypeSpecifier imageType) {
         return true;

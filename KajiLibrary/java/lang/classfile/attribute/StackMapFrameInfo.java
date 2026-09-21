@@ -6,41 +6,41 @@ import java.lang.constant.ClassDesc;
 import java.util.List;
 import jdk.internal.classfile.impl.TypedAttributes;
 
-// Un cuadro de `StackMapTable` (JVMS §4.7.4): el estado de tipos —variables locales y pila de
-// operandos— que el verificador espera en un punto del código al que se puede llegar por más de un
-// camino.
+// A frame of `StackMapTable` (JVMS §4.7.4): the type state --local variables and operand stack-- the
+// verifier expects at a point of the code that can be reached by more than one path.
 //
-// El formato guarda los cuadros COMPRIMIDOS: cada uno se expresa como una diferencia contra el
-// anterior (`same_frame`, `chop_frame`, `append_frame`, …) y el bci es un delta. Esta interfaz los
-// entrega ya expandidos —`locals()` y `stack()` son el estado completo— porque una diferencia sólo
-// significa algo en la posición donde está. `frameType()` conserva el byte original, que es lo que
-// hace falta para reescribir el atributo tal cual estaba.
+// The format stores the frames COMPRESSED: each one is expressed as a difference against the previous
+// one (`same_frame`, `chop_frame`, `append_frame`, ...) and the bci is a delta. This interface hands
+// them over already expanded --`locals()` and `stack()` are the complete state-- because a difference
+// only means something at the position where it sits. `frameType()` keeps the original byte, which is
+// what is needed to rewrite the attribute exactly as it was.
 public interface StackMapFrameInfo {
 
-    /** El byte `frame_type` original. */
+    /** The original `frame_type` byte. */
     int frameType();
 
-    /** El bci al que corresponde el cuadro. */
+    /** The bci the frame corresponds to. */
     Label target();
 
-    /** Las variables locales, expandidas. */
+    /** The local variables, expanded. */
     List<VerificationTypeInfo> locals();
 
-    /** La pila de operandos, expandida. */
+    /** The operand stack, expanded. */
     List<VerificationTypeInfo> stack();
 
-    /** Un cuadro con este estado, en la forma más comprimida no la elige quien lo construye. */
+    /** A frame with this state; which compressed form the file will use is not the caller's to
+     * choose. */
     public static StackMapFrameInfo of(Label target, List<VerificationTypeInfo> locals,
             List<VerificationTypeInfo> stack) {
         return TypedAttributes.stackMapFrame(target, locals, stack);
     }
 
-    /** Un tipo del verificador: qué hay en una ranura o en una posición de la pila. */
+    /** A verifier type: what is in a slot or at a position of the stack. */
     public interface VerificationTypeInfo {
 
-        /** `top`: la ranura no tiene un valor utilizable. */
+        /** `top`: the slot holds no usable value. */
         public static final int ITEM_TOP = 0;
-        /** `int`, y también `boolean`, `byte`, `char` y `short`. */
+        /** `int`, and also `boolean`, `byte`, `char` and `short`. */
         public static final int ITEM_INTEGER = 1;
         /** `float`. */
         public static final int ITEM_FLOAT = 2;
@@ -50,18 +50,18 @@ public interface StackMapFrameInfo {
         public static final int ITEM_LONG = 4;
         /** `null`. */
         public static final int ITEM_NULL = 5;
-        /** El `this` de un constructor, antes de llamar al de la superclase. */
+        /** A constructor's `this`, before calling the superclass's. */
         public static final int ITEM_UNINITIALIZED_THIS = 6;
-        /** Una referencia a una clase concreta. */
+        /** A reference to a concrete class. */
         public static final int ITEM_OBJECT = 7;
-        /** Un objeto recién creado por un `new` que todavía no se inicializó. */
+        /** An object just created by a `new` that has not been initialised yet. */
         public static final int ITEM_UNINITIALIZED = 8;
 
-        /** La etiqueta `ITEM_*`. */
+        /** The `ITEM_*` tag. */
         int tag();
     }
 
-    /** Los siete tipos del verificador que no llevan nada más que su etiqueta. */
+    /** The seven verifier types carrying nothing but their tag. */
     public enum SimpleVerificationTypeInfo implements VerificationTypeInfo {
 
         TOP(0),
@@ -83,40 +83,39 @@ public interface StackMapFrameInfo {
         }
     }
 
-    /** Una referencia a una clase concreta. */
+    /** A reference to a concrete class. */
     public interface ObjectVerificationTypeInfo extends VerificationTypeInfo {
 
-        /** La clase. */
+        /** The class. */
         ClassEntry className();
 
-        /** La clase. */
+        /** The class. */
         default ClassDesc classSymbol() {
             return className().asSymbol();
         }
 
-        /** El tipo de esta clase. */
+        /** This class's type. */
         public static ObjectVerificationTypeInfo of(ClassEntry className) {
             return TypedAttributes.objectVerificationType(className);
         }
 
-        /** El tipo de esta clase. */
+        /** This class's type. */
         public static ObjectVerificationTypeInfo of(ClassDesc classDesc) {
             return TypedAttributes.objectVerificationType(TypedAttributes.classEntry(classDesc));
         }
     }
 
     /**
-     * Un objeto creado por el `new` que está en `newTarget()` y todavía sin inicializar. El bci del
-     * `new` es parte del TIPO: dos objetos sin inicializar creados en lugares distintos son tipos
-     * distintos para el verificador, que es lo que le permite comprobar que cada uno recibe su
-     * `invokespecial`.
+     * An object created by the `new` sitting at `newTarget()` and not yet initialised. The `new`'s bci
+     * is part of the TYPE: two uninitialised objects created at different places are different types
+     * to the verifier, which is what lets it check that each one gets its own `invokespecial`.
      */
     public interface UninitializedVerificationTypeInfo extends VerificationTypeInfo {
 
-        /** El bci del `new` que lo creó. */
+        /** The bci of the `new` that created it. */
         Label newTarget();
 
-        /** El tipo del objeto creado en `newTarget`. */
+        /** The type of the object created at `newTarget`. */
         public static UninitializedVerificationTypeInfo of(Label newTarget) {
             return TypedAttributes.uninitializedVerificationType(newTarget);
         }

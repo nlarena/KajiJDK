@@ -6,45 +6,44 @@ import java.awt.Graphics;
 import java.awt.Insets;
 
 /**
- * Una linea grabada: dos pixeles, uno claro y uno oscuro, que fingen un surco o una cresta.
+ * An etched line: two pixels, one light and one dark, faking a groove or a ridge.
  *
- * <p>La misma ilusion de luz que {@link BevelBorder} pero con dos colores en vez de cuatro, y con
- * otro proposito: un bisel hace que el <em>componente</em> parezca levantado, y esto hace que
- * parezca que hay una <em>linea tallada</em> alrededor. Se usa para agrupar, no para sugerir que
- * algo se puede apretar.
+ * <p>The same illusion of light as {@link BevelBorder} but with two colours instead of four, and
+ * with another purpose: a bevel makes the <em>component</em> look raised, and this makes it look
+ * as if there were a <em>carved line</em> around it. It is used to group, not to suggest that
+ * something can be pressed.
  *
- * <p>Grabado hacia adentro y hacia afuera son —otra vez— el mismo dibujo con los dos colores
- * intercambiados.
+ * <p>Etched inwards and outwards are --again-- the same drawing with the two colours swapped.
  */
 public class EtchedBorder extends AbstractBorder {
 
     private static final long serialVersionUID = 4001244046866360638L;
 
-    /** La linea parece sobresalir. */
+    /** The line looks as if it sticks out. */
     public static final int RAISED = 0;
-    /** La linea parece un surco. */
+    /** The line looks like a groove. */
     public static final int LOWERED = 1;
 
     protected int etchType;
     protected Color highlight;
     protected Color shadow;
 
-    /** Grabado hacia adentro, con los colores derivados del fondo. */
+    /** Etched inwards, with the colours derived from the background. */
     public EtchedBorder() {
         this(LOWERED);
     }
 
-    /** Del tipo dado, con los colores derivados del fondo. */
+    /** Of the given type, with the colours derived from the background. */
     public EtchedBorder(int etchType) {
         this.etchType = etchType;
     }
 
-    /** Grabado hacia adentro, con los dos colores dados. */
+    /** Etched inwards, with the two given colours. */
     public EtchedBorder(Color highlight, Color shadow) {
         this(LOWERED, highlight, shadow);
     }
 
-    /** Del tipo y los colores dados. */
+    /** Of the given type and colours. */
     public EtchedBorder(int etchType, Color highlight, Color shadow) {
         this(etchType);
         this.highlight = highlight;
@@ -54,13 +53,13 @@ public class EtchedBorder extends AbstractBorder {
     public void paintBorder(Component c, Graphics g, int x, int y, int width, int height) {
         int w = width;
         int h = height;
-        Color viejo = g.getColor();
+        Color old = g.getColor();
 
         g.translate(x, y);
 
-        // El rectangulo de afuera lleva el color de "sombra" cuando esta hundido y el de "brillo"
-        // cuando sobresale; el de adentro, al reves. Ese intercambio es toda la diferencia entre
-        // los dos tipos.
+        // The outer rectangle carries the "shadow" colour when it is sunk and the "highlight" one
+        // when it sticks out; the inner one, the other way round. That swap is the whole difference
+        // between the two types.
         if (this.etchType == LOWERED) {
             g.setColor(getShadowColor(c));
         } else {
@@ -79,7 +78,7 @@ public class EtchedBorder extends AbstractBorder {
         g.drawLine(w - 1, h - 1, w - 1, 0);
 
         g.translate(-x, -y);
-        g.setColor(viejo);
+        g.setColor(old);
     }
 
     public Insets getBorderInsets(Component c, Insets insets) {
@@ -90,17 +89,17 @@ public class EtchedBorder extends AbstractBorder {
         return insets;
     }
 
-    /** Opaco: los dos pixeles de cada lado se pintan enteros. */
+    /** Opaque: the two pixels on each side are painted whole. */
     public boolean isBorderOpaque() {
         return true;
     }
 
-    /** {@link #RAISED} o {@link #LOWERED}. */
+    /** {@link #RAISED} or {@link #LOWERED}. */
     public int getEtchType() {
         return this.etchType;
     }
 
-    /** El color claro; derivado del fondo de {@code c} si no se fijo uno. */
+    /** The light colour; derived from {@code c}'s background if none was set. */
     public Color getHighlightColor(Component c) {
         if (this.highlight != null) {
             return this.highlight;
@@ -108,12 +107,12 @@ public class EtchedBorder extends AbstractBorder {
         return c.getBackground().brighter();
     }
 
-    /** El color claro que se fijo, o {@code null}. */
+    /** The light colour that was set, or {@code null}. */
     public Color getHighlightColor() {
         return this.highlight;
     }
 
-    /** El color oscuro; derivado del fondo de {@code c} si no se fijo uno. */
+    /** The dark colour; derived from {@code c}'s background if none was set. */
     public Color getShadowColor(Component c) {
         if (this.shadow != null) {
             return this.shadow;
@@ -121,7 +120,7 @@ public class EtchedBorder extends AbstractBorder {
         return c.getBackground().darker();
     }
 
-    /** El color oscuro que se fijo, o {@code null}. */
+    /** The dark colour that was set, or {@code null}. */
     public Color getShadowColor() {
         return this.shadow;
     }

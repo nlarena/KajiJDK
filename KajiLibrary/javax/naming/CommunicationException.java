@@ -1,10 +1,10 @@
 package javax.naming;
 
 /**
- * Se lanza cuando fallo la comunicacion con el servicio de nombres: conexion caida, protocolo
- * roto, respuesta ilegible. La causa concreta suele venir encadenada como causa raiz.
+ * Thrown when communication with the naming service failed: dropped connection, broken protocol,
+ * unreadable reply. The concrete cause usually comes chained as the root cause.
  *
- * <p>La jerarquia entera y el estado que arrastra estan explicados en `NamingException`.
+ * <p>The whole hierarchy and the state it carries are explained in `NamingException`.
  */
 public class CommunicationException extends NamingException {
 

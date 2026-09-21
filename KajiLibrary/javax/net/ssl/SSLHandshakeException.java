@@ -1,22 +1,22 @@
 package javax.net.ssl;
 
 /**
- * El handshake no llego a terminar, asi que <strong>nunca hubo sesion</strong>.
+ * The handshake did not get to finish, so <strong>there was never a session</strong>.
  *
- * <p>Es la falla mas informativa de las cuatro: significa que las dos puntas no se pudieron poner de
- * acuerdo. Las causas tipicas son que no compartan ninguna suite de cifrado, que el certificado no
- * valide, o que una pida autenticacion de cliente y la otra no la tenga.
+ * <p>It is the most informative failure of the four: it means the two ends could not agree. The
+ * typical causes are that they share no cipher suite, that the certificate does not validate, or
+ * that one asks for client authentication and the other does not have it.
  */
 public class SSLHandshakeException extends SSLException {
 
     private static final long serialVersionUID = -5045881315018326890L;
 
-    /** Con un mensaje. */
+    /** With a message. */
     public SSLHandshakeException(String reason) {
         super(reason);
     }
 
-    /** Con un mensaje y la causa de fondo. */
+    /** With a message and the underlying cause. */
     public SSLHandshakeException(String message, Throwable cause) {
         super(message, cause);
     }

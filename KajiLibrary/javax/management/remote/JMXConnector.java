@@ -9,63 +9,63 @@ import javax.management.NotificationListener;
 import javax.security.auth.Subject;
 
 /**
- * KajiLibrary's javax.management.remote.JMXConnector -- el lado cliente de una conexion JMX.
+ * KajiLibrary's javax.management.remote.JMXConnector -- the client side of a JMX connection.
  *
- * <p>Se consigue con {@link JMXConnectorFactory} y se usa asi: {@link #connect}, despues
- * {@link #getMBeanServerConnection} para operar, y {@link #close} al final. Es {@link Closeable}, asi
- * que sirve en un {@code try} con recursos.
+ * <p>It is obtained with {@link JMXConnectorFactory} and used like this: {@link #connect}, then
+ * {@link #getMBeanServerConnection} to operate, and {@link #close} at the end. It is
+ * {@link Closeable}, so it serves in a try-with-resources.
  *
- * <h2>Crear y conectar son dos pasos</h2>
+ * <h2>Creating and connecting are two steps</h2>
  *
- * <p>{@code JMXConnectorFactory.newJMXConnector} devuelve un conector <b>sin conectar</b>. Eso permite
- * registrar los escuchas de conexion antes de que pase nada, que es la unica forma de no perderse el
- * {@code OPENED}. {@code JMXConnectorFactory.connect} hace los dos pasos de una y es lo que se usa
- * cuando eso no importa.
+ * <p>{@code JMXConnectorFactory.newJMXConnector} returns an <b>unconnected</b> connector. That
+ * allows registering the connection listeners before anything happens, which is the only way not
+ * to miss the {@code OPENED}. {@code JMXConnectorFactory.connect} does both steps at once and is
+ * what is used when that does not matter.
  *
- * <h2>{@link #getMBeanServerConnection(Subject)} esta marcado</h2>
+ * <h2>{@link #getMBeanServerConnection(Subject)} is marked</h2>
  *
- * <p>La version con {@code Subject} sirve para actuar en nombre de otro; su default lanza
- * {@link UnsupportedOperationException}. Depende del mecanismo de delegacion, que quedo obsoleto junto
- * con {@link SubjectDelegationPermission}.
+ * <p>The version with a {@code Subject} serves for acting on another's behalf; its default throws
+ * {@link UnsupportedOperationException}. It depends on the delegation mechanism, which became
+ * obsolete together with {@link SubjectDelegationPermission}.
  *
- * <h2>El identificador de conexion</h2>
+ * <h2>The connection identifier</h2>
  *
- * <p>{@link #getConnectionId} es unico y <b>cambia si la conexion se reabre</b>. Comparar el que se ve
- * ahora contra el que se vio antes es como se detecta que hubo una reconexion en el medio y que el
- * estado del servidor pudo cambiar.
+ * <p>{@link #getConnectionId} is unique and <b>changes if the connection is reopened</b>.
+ * Comparing the one seen now against the one seen before is how it is detected that there was a
+ * reconnection in between and that the server's state may have changed.
  */
 public interface JMXConnector extends Closeable {
 
-    /** La clave del entorno donde van las credenciales. */
+    /** The environment key where the credentials go. */
     String CREDENTIALS = "jmx.remote.credentials";
 
     /**
-     * Conecta con el entorno que se dio al crearlo.
+     * Connects with the environment given when it was created.
      *
-     * @throws IOException si no se pudo
-     * @throws SecurityException si no lo dejaron
+     * @throws IOException if it could not
+     * @throws SecurityException if it was not allowed
      */
     void connect() throws IOException;
 
     /**
-     * Conecta con este entorno, que se suma al de creacion.
+     * Connects with this environment, which is added to the creation one.
      *
-     * @throws IOException si no se pudo
-     * @throws SecurityException si no lo dejaron
+     * @throws IOException if it could not
+     * @throws SecurityException if it was not allowed
      */
     void connect(Map<String, ?> env) throws IOException;
 
     /**
-     * Por donde se opera sobre el servidor remoto.
+     * Where operations on the remote server go through.
      *
-     * @throws IOException si no esta conectado
+     * @throws IOException if it is not connected
      */
     MBeanServerConnection getMBeanServerConnection() throws IOException;
 
     /**
-     * Idem, actuando en nombre de otro. Ver la nota de la clase.
+     * The same, acting on another's behalf. See the class note.
      *
-     * @throws UnsupportedOperationException por omision
+     * @throws UnsupportedOperationException by default
      */
     default MBeanServerConnection getMBeanServerConnection(Subject delegationSubject)
         throws IOException {
@@ -73,41 +73,42 @@ public interface JMXConnector extends Closeable {
     }
 
     /**
-     * Cierra. Se puede llamar mas de una vez.
+     * Closes. It can be called more than once.
      *
-     * @throws IOException si algo fallo al cerrar
+     * @throws IOException if something failed while closing
      */
     void close() throws IOException;
 
     /**
-     * Registra un escucha de estado de la conexion.
+     * Registers a listener of the connection's state.
      *
-     * <p>Se puede antes de conectar, y hay que hacerlo asi para no perderse el {@code OPENED}.
+     * <p>It can be done before connecting, and it has to be done that way not to miss the
+     * {@code OPENED}.
      */
     void addConnectionNotificationListener(NotificationListener listener,
                                            NotificationFilter filter, Object handback);
 
     /**
-     * Lo da de baja, en todas sus combinaciones de filtro y dato.
+     * Removes it, in all its combinations of filter and handback.
      *
-     * @throws javax.management.ListenerNotFoundException si no estaba
+     * @throws javax.management.ListenerNotFoundException if it was not there
      */
     void removeConnectionNotificationListener(NotificationListener listener)
         throws javax.management.ListenerNotFoundException;
 
     /**
-     * Da de baja esa combinacion exacta.
+     * Removes that exact combination.
      *
-     * @throws javax.management.ListenerNotFoundException si no estaba
+     * @throws javax.management.ListenerNotFoundException if it was not there
      */
     void removeConnectionNotificationListener(NotificationListener l, NotificationFilter f,
                                               Object handback)
         throws javax.management.ListenerNotFoundException;
 
     /**
-     * El identificador de esta conexion. Ver la nota de la clase.
+     * This connection's identifier. See the class note.
      *
-     * @throws IOException si no esta conectado
+     * @throws IOException if it is not connected
      */
     String getConnectionId() throws IOException;
 }

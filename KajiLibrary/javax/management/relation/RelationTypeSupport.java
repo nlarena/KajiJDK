@@ -6,21 +6,22 @@ import java.util.Map;
 import java.util.TreeMap;
 
 /**
- * La implementacion de {@link RelationType} que trae el JDK: los roles se declaran y se guardan.
+ * The {@link RelationType} implementation the JDK ships: the roles are declared and stored.
  *
- * <h2>Las dos formas de usarla</h2>
+ * <h2>The two ways of using it</h2>
  *
- * <p>Directamente, pasandole los roles al constructor; o extendiendola y llamando a
- * {@link #addRoleInfo} desde el constructor de la subclase — que es el motivo de que ese metodo sea
- * {@code protected} y de que exista el constructor de un solo argumento.
+ * <p>Directly, passing the roles to the constructor; or by extending it and calling
+ * {@link #addRoleInfo} from the subclass's constructor -- which is why that method is
+ * {@code protected} and why the one-argument constructor exists.
  *
- * <p>La segunda forma sirve para un tipo cuyos roles dependan de algo que se calcula.
+ * <p>The second form serves for a type whose roles depend on something computed.
  *
- * <h2>Por que se congela al registrarla</h2>
+ * <h2>Why it is frozen on registration</h2>
  *
- * <p>Una vez que el servicio de relaciones acepto el tipo, agregarle roles lo volveria inconsistente
- * con las relaciones que ya se crearon contra el: tendrian un rol menos del que su tipo declara, sin
- * que nadie las haya tocado. Por eso {@link #addRoleInfo} falla despues del registro.
+ * <p>Once the relation service has accepted the type, adding roles to it would make it inconsistent
+ * with the relations already created against it: they would have one role fewer than their type
+ * declares, without anyone having touched them. That is why {@link #addRoleInfo} fails after
+ * registration.
  */
 public class RelationTypeSupport implements RelationType {
 
@@ -31,15 +32,16 @@ public class RelationTypeSupport implements RelationType {
     private boolean isInRelationService = false;
 
     /**
-     * Con sus roles.
+     * With its roles.
      *
-     * @throws IllegalArgumentException si falta el nombre o los roles
-     * @throws InvalidRelationTypeException si dos roles se llaman igual, o si alguno es {@code null}
+     * @throws IllegalArgumentException if the name or the roles are missing
+     * @throws InvalidRelationTypeException if two roles have the same name, or if one is {@code
+     *     null}
      */
     public RelationTypeSupport(String relationTypeName, RoleInfo[] roleInfoArray)
             throws IllegalArgumentException, InvalidRelationTypeException {
         if (relationTypeName == null) {
-            throw new IllegalArgumentException("falta el nombre del tipo");
+            throw new IllegalArgumentException("the type name is missing");
         }
         checkRoleInfos(roleInfoArray);
         this.typeName = relationTypeName;
@@ -49,95 +51,95 @@ public class RelationTypeSupport implements RelationType {
     }
 
     /**
-     * Para las subclases, que agregan los roles con {@link #addRoleInfo}.
+     * For the subclasses, which add the roles with {@link #addRoleInfo}.
      *
-     * @throws IllegalArgumentException si falta el nombre
+     * @throws IllegalArgumentException if the name is missing
      */
     protected RelationTypeSupport(String relationTypeName) {
         if (relationTypeName == null) {
-            throw new IllegalArgumentException("falta el nombre del tipo");
+            throw new IllegalArgumentException("the type name is missing");
         }
         this.typeName = relationTypeName;
     }
 
-    /** El nombre del tipo. */
+    /** The type's name. */
     public String getRelationTypeName() {
         return this.typeName;
     }
 
-    /** Los roles que declara. */
+    /** The roles it declares. */
     public List<RoleInfo> getRoleInfos() {
         return new ArrayList<RoleInfo>(this.roleName2InfoMap.values());
     }
 
     /**
-     * La descripcion de ese rol.
+     * That role's description.
      *
-     * @throws RoleInfoNotFoundException si no lo declara
+     * @throws RoleInfoNotFoundException if it does not declare it
      */
     public RoleInfo getRoleInfo(String roleInfoName)
             throws IllegalArgumentException, RoleInfoNotFoundException {
         if (roleInfoName == null) {
-            throw new IllegalArgumentException("falta el nombre del rol");
+            throw new IllegalArgumentException("the role name is missing");
         }
         RoleInfo info = this.roleName2InfoMap.get(roleInfoName);
         if (info == null) {
             throw new RoleInfoNotFoundException(
-                    "el tipo " + this.typeName + " no declara el rol " + roleInfoName);
+                    "the type " + this.typeName + " does not declare the role " + roleInfoName);
         }
         return info;
     }
 
     /**
-     * Agrega un rol; solo antes de registrar el tipo.
+     * Adds a role; only before the type is registered.
      *
-     * @throws IllegalStateException si el tipo ya esta en el servicio de relaciones — ver la nota de
-     *     la clase
-     * @throws InvalidRelationTypeException si ya hay un rol con ese nombre
+     * @throws IllegalStateException if the type is already in the relation service -- see the class
+     *     note
+     * @throws InvalidRelationTypeException if there is already a role with that name
      */
     protected void addRoleInfo(RoleInfo roleInfo)
             throws IllegalArgumentException, InvalidRelationTypeException {
         if (roleInfo == null) {
-            throw new IllegalArgumentException("el rol no puede ser null");
+            throw new IllegalArgumentException("the role cannot be null");
         }
         if (this.isInRelationService) {
             throw new IllegalStateException(
-                    "el tipo ya esta registrado: no se le pueden agregar roles");
+                    "the type is already registered: roles cannot be added to it");
         }
         if (this.roleName2InfoMap.containsKey(roleInfo.getName())) {
             throw new InvalidRelationTypeException(
-                    "ya hay un rol llamado " + roleInfo.getName());
+                    "there is already a role named " + roleInfo.getName());
         }
         this.roleName2InfoMap.put(roleInfo.getName(), new RoleInfo(roleInfo));
     }
 
-    /** Lo llama el servicio de relaciones al registrar y al sacar el tipo. */
+    /** The relation service calls it when registering and when removing the type. */
     void setRelationServiceFlag(boolean flag) {
         this.isInRelationService = flag;
     }
 
     /**
-     * Valida un arreglo de roles antes de aceptarlo.
+     * Validates an array of roles before accepting it.
      *
-     * @throws InvalidRelationTypeException si esta vacio, si hay un {@code null} o si dos se llaman
-     *     igual — dos roles homonimos harian ambiguo todo acceso por nombre
+     * @throws InvalidRelationTypeException if it is empty, if there is a {@code null} or if two
+     *     have the same name -- two homonymous roles would make every access by name ambiguous
      */
     static void checkRoleInfos(RoleInfo[] roleInfoArray)
             throws IllegalArgumentException, InvalidRelationTypeException {
         if (roleInfoArray == null) {
-            throw new IllegalArgumentException("falta el arreglo de roles");
+            throw new IllegalArgumentException("the array of roles is missing");
         }
         if (roleInfoArray.length == 0) {
-            throw new InvalidRelationTypeException("un tipo de relacion necesita al menos un rol");
+            throw new InvalidRelationTypeException("a relation type needs at least one role");
         }
-        java.util.Set<String> vistos = new java.util.HashSet<String>();
+        java.util.Set<String> seen = new java.util.HashSet<String>();
         for (int i = 0; i < roleInfoArray.length; i++) {
             RoleInfo r = roleInfoArray[i];
             if (r == null) {
-                throw new InvalidRelationTypeException("hay un rol null en el arreglo");
+                throw new InvalidRelationTypeException("there is a null role in the array");
             }
-            if (!vistos.add(r.getName())) {
-                throw new InvalidRelationTypeException("hay dos roles llamados " + r.getName());
+            if (!seen.add(r.getName())) {
+                throw new InvalidRelationTypeException("there are two roles named " + r.getName());
             }
         }
     }

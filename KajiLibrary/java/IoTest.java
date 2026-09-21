@@ -4,14 +4,21 @@ import java.io.ObjectStreamClass;
 import java.io.Serializable;
 
 /**
- * Prueba de comportamiento de java.io, escrita para correr **igual** en esta VM y en el JDK real.
+ * Behaviour test of java.io, written to run **the same** in this VM and in the real JDK.
  *
- * <p>Cada comprobacion tiene un indice. {@code run()} devuelve -1 si pasaron todas, o el indice de
- * la primera que fallo: un solo int alcanza para comparar las dos VMs sin depender de que la salida
- * por consola coincida caracter por caracter.
+ * <p>Each check has an index. {@code run()} returns -1 if they all passed, or the index of the
+ * first one that failed: a single int is enough to compare the two VMs without depending on the
+ * console output matching character by character.
  *
- * <p>Todo lo que toca el disco va al directorio temporal del sistema y se borra al salir. Ningun
- * caso escribe dentro del proyecto: una prueba que ensucia el arbol se vuelve imposible de repetir.
+ * <p>Everything that touches the disk goes to the temporary directory of the system and is deleted
+ * on exit. No case writes inside the project: a test that dirties the tree becomes impossible to
+ * repeat.
+ *
+ * <p>The names of the serialisation fixtures --{@code Nodo}, {@code Padre}, {@code Hijo} and
+ * company-- are left as they are on purpose. They are written inside the streams of {@code
+ * ESPERADO} and they feed the expected {@code serialVersionUID}s, both of which came from running
+ * this same file on the real JDK: renaming a class here would change the bytes and the numbers, and
+ * the test would stop comparing anything until they were regenerated there.
  */
 public class IoTest {
 
@@ -31,86 +38,86 @@ public class IoTest {
             if (creado.length() != 0L) return i; i++;                  // 2
             if (!creado.getName().startsWith("kaji")) return i; i++;   // 3
             if (!creado.getName().endsWith(".txt")) return i; i++;     // 4
-            // Dos llamadas seguidas no pueden dar el mismo archivo.
+            // Two calls in a row cannot give the same file.
             File otro = File.createTempFile("kaji", ".txt");
             if (creado.equals(otro)) return i; i++;                    // 5
             otro.delete();
 
-            // El sufijo nulo es `.tmp`, y un prefijo de menos de tres letras es ilegal.
+            // The null suffix is `.tmp`, and a prefix of fewer than three letters is illegal.
             File sinSufijo = File.createTempFile("kaji", null);
             if (!sinSufijo.getName().endsWith(".tmp")) return i; i++;  // 6
             sinSufijo.delete();
             try {
                 File.createTempFile("ab", ".txt");
                 return i;                                             // 7
-            } catch (IllegalArgumentException esperada) {
+            } catch (IllegalArgumentException expected) {
                 i++;
             }
 
-            // Con directorio explicito: el padre tiene que ser el que se pidio.
+            // With an explicit directory: the parent has to be the one asked for.
             File enDir = File.createTempFile("kaji", ".txt", tmpDir());
             if (!enDir.exists()) return i; i++;                        // 8
             enDir.delete();
 
-            // --- lastModified / setLastModified ---
-            // Multiplo de 1000: hay sistemas de archivos que truncan a segundos, y la prueba no
-            // esta para medir la granularidad del disco.
+            // --- lastModified / setLastModified --- A multiple of 1000: there are file systems
+            // that truncate to seconds, and the test is not here to measure the granularity of the
+            // disk.
             long cuando = 1234567000L;
             if (!creado.setLastModified(cuando)) return i; i++;        // 9
             if (creado.lastModified() != cuando) return i; i++;        // 10
 
-            // Un archivo que no existe no tiene fecha: cero, que es lo que dice el contrato. Y el
-            // cero **no** significa "1 de enero de 1970": para eso esta el caso de abajo.
-            File ausente = new File(tmpDir(), "kaji-no-existe-nunca-jamas");
+            // A file that does not exist has no date: zero, which is what the contract says. And
+            // the zero does **not** mean "1 January 1970": that is what the case below is for.
+            File ausente = new File(tmpDir(), "kaji-never-ever-exists");
             ausente.delete();
             if (ausente.lastModified() != 0L) return i; i++;           // 11
             if (ausente.setLastModified(cuando)) return i; i++;        // 12
 
-            // La epoca es una fecha valida y se distingue de "no se sabe" porque el archivo existe.
+            // The epoch is a valid date and is told apart from "not known" because the file exists.
             if (!creado.setLastModified(0L)) return i; i++;            // 13
             if (creado.lastModified() != 0L) return i; i++;            // 14
             if (!creado.exists()) return i; i++;                       // 15
             creado.setLastModified(cuando);
 
-            // Una fecha negativa es ilegal, no un `false`.
+            // A negative date is illegal, not a `false`.
             try {
                 creado.setLastModified(-1L);
                 return i;                                             // 16
-            } catch (IllegalArgumentException esperada) {
+            } catch (IllegalArgumentException expected) {
                 i++;
             }
 
             // --- getCanonicalPath ---
             String canon = creado.getCanonicalPath();
-            // Nada de rutas "verbatim" de Windows: el JDK devuelve `C:\...`, no `\\?\C:\...`.
+            // No "verbatim" paths of Windows: the JDK returns `C:\...`, not `\\?\C:\...`.
             if (canon.startsWith("\\\\?\\")) return i; i++;            // 17
             if (!new File(canon).exists()) return i; i++;              // 18
             if (!new File(canon).isAbsolute()) return i; i++;          // 19
-            // Canonicalizar dos veces da lo mismo: es un punto fijo.
+            // Canonicalising twice gives the same: it is a fixed point.
             if (!new File(canon).getCanonicalPath().equals(canon)) return i; i++;  // 20
 
-            // Los `.` y `..` se resuelven.
-            File conPunto = new File(creado.getParent() + File.separator + "."
+            // The `.` and `..` are resolved.
+            File withDot = new File(creado.getParent() + File.separator + "."
                     + File.separator + creado.getName());
-            if (!conPunto.getCanonicalPath().equals(canon)) return i; i++;         // 21
+            if (!withDot.getCanonicalPath().equals(canon)) return i; i++;         // 21
 
-            // Un archivo que no existe igual tiene camino canonico: es una operacion sobre el
-            // nombre, no sobre el contenido.
+            // A file that does not exist still has a canonical path: it is an operation over the
+            // name, not over the contents.
             String canonAusente = ausente.getCanonicalPath();
             if (!new File(canonAusente).isAbsolute()) return i; i++;   // 22
             if (canonAusente.startsWith("\\\\?\\")) return i; i++;     // 23
             if (!canonAusente.endsWith(ausente.getName())) return i; i++;          // 24
 
-            // Una ruta relativa se canonicaliza contra el directorio de trabajo.
+            // A relative path is canonicalised against the working directory.
             String canonRel = new File("IoTest-relativo-inexistente").getCanonicalPath();
             if (!new File(canonRel).isAbsolute()) return i; i++;       // 25
 
-            // --- getCanonicalFile coincide con getCanonicalPath ---
+            // --- getCanonicalFile matches getCanonicalPath ---
             if (!creado.getCanonicalFile().getPath().equals(canon)) return i; i++; // 26
 
-            // Cada bloque siguiente numera desde una centena propia, para que agregar un caso en
-            // uno no corra los indices de los demas y una diferencia entre las dos VMs siga
-            // apuntando al mismo caso de una corrida a la otra.
+            // Each following block numbers from a hundred of its own, so that adding a case in one
+            // does not shift the indices of the others and a difference between the two VMs goes on
+            // pointing at the same case from one run to the next.
             int r = streams();
             if (r >= 0) return r;
             r = tuberias();
@@ -135,11 +142,12 @@ public class IoTest {
     }
 
     /**
-     * Streams de archivo: lo que pasa **despues** de cerrar.
+     * File streams: what happens **after** closing.
      *
-     * <p>Todo esto mide una sola cosa: que el error salga como {@link IOException} chequeada y no
-     * como una `RuntimeException`. Es la diferencia entre que un `catch (IOException e)` del que
-     * llama agarre el error o lo deje pasar de largo hasta matar el hilo.
+     * <p>All of this measures a single thing: that the error come out as a checked {@link
+     * IOException} and not as a `RuntimeException`. It is the difference between a `catch
+     * (IOException e)` of the caller catching the error and letting it go past until it kills the
+     * thread.
      */
     private static int streams() {
         int i = 100;
@@ -150,11 +158,11 @@ public class IoTest {
             java.io.FileOutputStream out = new java.io.FileOutputStream(f);
             out.write(65);
             out.close();
-            // Escribir sobre un stream cerrado es una IOException, no una RuntimeException.
+            // Writing over a closed stream is an IOException, not a RuntimeException.
             try {
                 out.write(66);
                 return i;                                              // 100
-            } catch (IOException esperada) {
+            } catch (IOException expected) {
                 i++;
             }
 
@@ -165,28 +173,28 @@ public class IoTest {
             try {
                 in.read();
                 return i;                                             // 103
-            } catch (IOException esperada) {
+            } catch (IOException expected) {
                 i++;
             }
 
-            // `reset()` sin marca valida tambien es IOException.
+            // `reset()` with no valid mark is also an IOException.
             java.io.FileInputStream in2 = new java.io.FileInputStream(f);
             try {
                 in2.reset();
                 return i;                                             // 104
-            } catch (IOException esperada) {
+            } catch (IOException expected) {
                 i++;
             } finally {
                 in2.close();
             }
 
-            // Y `available()` sobre un stream cerrado, idem.
+            // And `available()` over a closed stream, likewise.
             java.io.FileInputStream in3 = new java.io.FileInputStream(f);
             in3.close();
             try {
                 in3.available();
                 return i;                                             // 105
-            } catch (IOException esperada) {
+            } catch (IOException expected) {
                 i++;
             }
 
@@ -201,11 +209,11 @@ public class IoTest {
     }
 
     /**
-     * Tuberias: leer de una a la que se le murio el escritor.
+     * Pipes: reading from one whose writer died.
      *
-     * <p>Mismo punto que arriba. El JDK dice "Write end dead" con una {@link IOException}; si sale
-     * envuelta en una no chequeada, el lazo de lectura de cualquiera que use una tuberia se cae en
-     * vez de terminar.
+     * <p>The same point as above. The JDK says "Write end dead" with an {@link IOException}; if it
+     * came out wrapped in an unchecked one, the reading loop of anybody who uses a pipe falls over
+     * instead of finishing.
      */
     private static int tuberias() {
         int i = 200;
@@ -215,11 +223,11 @@ public class IoTest {
             po.write(7);
             if (pi.read() != 7) return i; i++;                        // 200
             pi.close();
-            // Escribir en una tuberia con el lector cerrado: IOException.
+            // Writing into a pipe with the reader closed: IOException.
             try {
                 po.write(8);
                 return i;                                             // 201
-            } catch (IOException esperada) {
+            } catch (IOException expected) {
                 i++;
             }
 
@@ -231,17 +239,17 @@ public class IoTest {
             try {
                 pw.write('y');
                 return i;                                             // 203
-            } catch (IOException esperada) {
+            } catch (IOException expected) {
                 i++;
             }
 
-            // Conectar dos veces es IOException, no una no chequeada.
+            // Connecting twice is an IOException, not an unchecked one.
             java.io.PipedOutputStream po2 = new java.io.PipedOutputStream();
             java.io.PipedInputStream pi2 = new java.io.PipedInputStream(po2);
             try {
                 po2.connect(new java.io.PipedInputStream());
                 return i;                                             // 204
-            } catch (IOException esperada) {
+            } catch (IOException expected) {
                 i++;
             }
             pi2.close();
@@ -255,19 +263,19 @@ public class IoTest {
 
     // ---- serialVersionUID (300) ------------------------------------------------------------------
     //
-    // Los numeros esperados salen del **JDK real** y no de esta implementacion: el UID no tiene un
-    // valor "razonable" que se pueda razonar, su unica definicion es "lo que calcula el otro lado".
-    // Cinco formas distintas, elegidas por lo que cada una mete en la huella: sin nada especial, con
-    // el UID declarado a mano, con inicializador estatico --el dato que no da la reflexion--, una
-    // interfaz, y una con miembros privados que **no** entran.
+    // The expected numbers come from the **real JDK** and not from this implementation: the UID has
+    // no "reasonable" value that can be reasoned out, its only definition is "what the other side
+    // computes". Five different shapes, chosen for what each one puts into the fingerprint: with
+    // nothing special, with the UID declared by hand, with a static initialiser --the datum
+    // reflection does not give--, an interface, and one with private members that do **not** go in.
 
-    /** Lo minimo: dos campos, sin `<clinit>` y sin UID declarado. */
+    /** The minimum: two fields, with no `<clinit>` and no declared UID. */
     static class Simple implements Serializable {
         int x;
         String s;
     }
 
-    /** Con el UID a mano: el calculo no corre y sale este numero tal cual. */
+    /** With the UID by hand: the computation does not run and this number comes out as it is. */
     static class ConSuid implements Serializable {
         private static final long serialVersionUID = 4242424242L;
         int x;
@@ -276,23 +284,25 @@ public class IoTest {
     }
 
     /**
-     * Con inicializador estatico. Es el caso que separa una implementacion honesta de una que
-     * adivina: el arreglo estatico genera un `<clinit>`, que entra en la huella y que
-     * `getDeclaredMethods` no muestra.
+     * With a static initialiser. It is the case that separates an honest implementation from one
+     * that guesses: the static array generates a `<clinit>`, which goes into the fingerprint and
+     * which `getDeclaredMethods` does not show.
      */
     static class ConClinit implements Serializable {
         static final int[] TABLA = new int[3];
         int x;
     }
 
-    /** Una interfaz: modificadores propios y el ABSTRACT que depende de si tiene metodos. */
+    /**
+     * An interface: modifiers of its own and the ABSTRACT that depends on whether it has methods.
+     */
     interface Marca extends Serializable {
-        int cuantos();
+        int howMany();
     }
 
     /**
-     * Con miembros privados. Un `private static` y un `private transient` quedan afuera de la
-     * huella; un `private` de instancia comun entra. Los metodos `private` quedan afuera.
+     * With private members. A `private static` and a `private transient` are left out of the
+     * fingerprint; an ordinary instance `private` goes in. The `private` methods are left out.
      */
     static class ConPrivados implements Serializable {
         private static int contador;
@@ -317,20 +327,21 @@ public class IoTest {
         if (ObjectStreamClass.lookup(ConPrivados.class).getSerialVersionUID()
                 != -1647293024607408705L) return i; i++;              // 304
 
-        // El mismo descriptor pedido dos veces da el mismo numero: el cache no puede cambiar la
-        // respuesta, y un UID que se mueve entre llamadas es peor que uno equivocado.
+        // The same descriptor asked for twice gives the same number: the cache cannot change the
+        // answer, and a UID that moves between calls is worse than a wrong one.
         ObjectStreamClass d = ObjectStreamClass.lookup(Simple.class);
         if (d.getSerialVersionUID() != d.getSerialVersionUID()) return i; i++;  // 305
 
-        // Un arreglo **si** tiene UID calculado, y no cero: es serializable, y su huella sale del
-        // nombre `[I` mas `Cloneable` y `Serializable`. Sorprende, y por eso esta el caso.
+        // An array **does** have a computed UID, and not zero: it is serialisable, and its
+        // fingerprint comes from the name `[I` plus `Cloneable` and `Serializable`. It surprises,
+        // and that is why the case is here.
         if (ObjectStreamClass.lookup(int[].class).getSerialVersionUID()
                 != 5600894804908749477L) return i; i++;               // 306
 
-        // El `toString` del JDK es la linea de la declaracion, no solo el nombre. Sobre una clase
-        // propia y no sobre `String`: en esta biblioteca `String` todavia no implementa
-        // `Serializable`, asi que `lookup` da `null` -- lo cual es correcto para lo que String es
-        // aca, y no lo que la prueba quiere medir.
+        // The `toString` of the JDK is the line of the declaration, not only the name. Over a class
+        // of our own and not over `String`: in this library `String` does not implement
+        // `Serializable` yet, so `lookup` gives `null` -- which is right for what String is here,
+        // and not what the test wants to measure.
         if (!ObjectStreamClass.lookup(ConSuid.class).toString().equals(
                 "IoTest$ConSuid: static final long serialVersionUID = 4242424242L;"))
             return i; i++;                                            // 307
@@ -339,11 +350,11 @@ public class IoTest {
     }
 
 
-    // ---- serializacion, byte por byte (400) ------------------------------------------------------
+    // ---- serialisation, byte by byte (400) ------------------------------------------------------
     //
-    // Las cadenas esperadas son el **flujo que produce el JDK real** para el mismo objeto, en hexa.
-    // Es la unica prueba que sirve para un formato de intercambio: "se puede volver a leer" lo cumple
-    // cualquier formato inventado, y lo que hace falta es que lo lea la otra JVM.
+    // The expected strings are the **stream the real JDK produces** for the same object, in
+    // hexadecimal. It is the only test that serves for an interchange format: "it can be read back"
+    // is met by any invented format, and what is needed is for the other JVM to read it.
 
     static class Punto implements Serializable {
         private static final long serialVersionUID = 1L;
@@ -352,7 +363,7 @@ public class IoTest {
         Punto(int x, int y) { this.x = x; this.y = y; }
     }
 
-    /** Con referencia compartida y con ciclo: prueba la tabla de manijas. */
+    /** With a shared reference and with a cycle: it tests the table of handles. */
     static class Nodo implements Serializable {
         private static final long serialVersionUID = 2L;
         String nombre;
@@ -360,7 +371,7 @@ public class IoTest {
         Nodo(String n) { this.nombre = n; }
     }
 
-    /** Con todos los primitivos, para el orden y el empaquetado de los campos. */
+    /** With every primitive, for the order and the packing of the fields. */
     static class Todos implements Serializable {
         private static final long serialVersionUID = 3L;
         boolean z = true;
@@ -375,7 +386,7 @@ public class IoTest {
         transient int noSale = 99;
     }
 
-    /** Con `writeObject` propio: modo bloque y TC_ENDBLOCKDATA. */
+    /** With a `writeObject` of its own: block mode and TC_ENDBLOCKDATA. */
     static class ConEscritor implements Serializable {
         private static final long serialVersionUID = 4L;
         int n = 5;
@@ -386,7 +397,7 @@ public class IoTest {
         }
     }
 
-    /** Con `putFields`: los mismos bytes que la escritura por defecto, elegidos a mano. */
+    /** With `putFields`: the same bytes as the default writing, chosen by hand. */
     static class ConPut implements Serializable {
         private static final long serialVersionUID = 7L;
         int a;
@@ -404,7 +415,7 @@ public class IoTest {
         int arriba = 11;
     }
 
-    /** Subclase: dos descriptores encadenados y los datos de arriba hacia abajo. */
+    /** A subclass: two chained descriptors and the data from the top downwards. */
     static class Hijo extends Padre implements Serializable {
         private static final long serialVersionUID = 6L;
         int abajo = 22;
@@ -436,7 +447,7 @@ public class IoTest {
         return sb.toString();
     }
 
-    /** Serializa `o` y devuelve el flujo entero en hexa. */
+    /** It serialises `o` and returns the whole stream in hexadecimal. */
     private static String ser(Object o) throws IOException {
         java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
         java.io.ObjectOutputStream oos = new java.io.ObjectOutputStream(bos);
@@ -445,7 +456,7 @@ public class IoTest {
         return hex(bos.toByteArray());
     }
 
-    /** El caso de la referencia compartida: el mismo `Nodo` dos veces en el mismo flujo. */
+    /** The case of the shared reference: the same `Nodo` twice in the same stream. */
     private static String serCompartido() throws IOException {
         Nodo n = new Nodo("uno");
         java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
@@ -456,7 +467,7 @@ public class IoTest {
         return hex(bos.toByteArray());
     }
 
-    private static String[] casos() throws IOException {
+    private static String[] cases() throws IOException {
         Nodo ciclo = new Nodo("a");
         ciclo.otro = ciclo;
         return new String[] {
@@ -499,14 +510,14 @@ public class IoTest {
     };
 
     /**
-     * Imprime los flujos de {@link #casos()} en hexa, uno por linea.
+     * It prints the streams of {@link #cases()} in hexadecimal, one per line.
      *
-     * <p>Es de donde salen las cadenas de {@code ESPERADO}: se corre contra el **JDK real** y se
-     * pega el resultado. Tambien sirve para ver cual byte difiere cuando un caso falla.
+     * <p>It is where the strings of {@code ESPERADO} come from: it is run against the **real JDK**
+     * and the result is pasted. It also serves for seeing which byte differs when a case fails.
      */
     public static int dump() {
         try {
-            String[] h = casos();
+            String[] h = cases();
             for (int k = 0; k < h.length; k++) System.out.println(h[k]);
         } catch (IOException e) {
             System.out.println("ERR " + e);
@@ -517,23 +528,24 @@ public class IoTest {
     private static int serializa() {
         int i = 400;
         try {
-            String[] hechos = casos();
+            String[] hechos = cases();
             for (int k = 0; k < ESPERADO.length; k++) {
                 if (!hechos[k].equals(ESPERADO[k])) return i + k;   // 400..415
             }
             i = i + ESPERADO.length;
 
-            // Un flujo vacio es solo la cabecera: cuatro bytes y nada mas.
+            // An empty stream is only the header: four bytes and nothing else.
             java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
             java.io.ObjectOutputStream oos = new java.io.ObjectOutputStream(bos);
             oos.flush();
             if (!hex(bos.toByteArray()).equals("aced0005")) return i; i++;   // 416
 
-            // Lo que no es serializable no sale, y avisa con la excepcion que corresponde.
+            // What is not serialisable does not come out, and it tells with the exception that
+            // corresponds.
             try {
                 ser(new Object());
                 return i;                                                    // 417
-            } catch (java.io.NotSerializableException esperada) {
+            } catch (java.io.NotSerializableException expected) {
                 i++;
             }
             return -1;
@@ -543,14 +555,14 @@ public class IoTest {
     }
 
 
-    // ---- deserializacion (500) --------------------------------------------------------------------
+    // ---- deserialisation (500) --------------------------------------------------------------------
     //
-    // El espejo del bloque de arriba, y la unica prueba que sirve para el lado que lee: las entradas
-    // son **los mismos flujos que produjo el JDK real** --las cadenas de `ESPERADO`, sin tocar-- y lo
-    // que se comprueba es que de ahi salgan los objetos que el JDK saca. "Lee lo que yo escribi" no
-    // probaria nada: dos rutinas que se equivocan igual tambien lo cumplen.
+    // The mirror of the block above, and the only test that serves for the reading side: the inputs
+    // are **the same streams the real JDK produced** --the strings of `ESPERADO`, untouched-- and
+    // what is checked is that the objects the JDK gets come out of them. "It reads what I wrote"
+    // would prove nothing: two routines that get it wrong in the same way meet that too.
 
-    /** Una clase que lee lo suyo: `defaultReadObject` y despues los datos que agrego el escritor. */
+    /** A class that reads its own: `defaultReadObject` and then the data the writer added. */
     static class Ronda implements Serializable {
         private static final long serialVersionUID = 20L;
         int n = 5;
@@ -568,7 +580,9 @@ public class IoTest {
         }
     }
 
-    /** Los campos por nombre en los dos sentidos: `putFields` al escribir, `readFields` al leer. */
+    /**
+     * The fields by name in both directions: `putFields` when writing, `readFields` when reading.
+     */
     static class Nombrados implements Serializable {
         private static final long serialVersionUID = 21L;
         int a;
@@ -585,18 +599,19 @@ public class IoTest {
             java.io.ObjectInputStream.GetField gf = in.readFields();
             this.a = gf.get("a", -1);
             this.b = (String) gf.get("b", null);
-            // Un nombre que no existe ni en el flujo ni en la clase es un error del que llama, no un
-            // campo ausente: tiene que avisar en vez de devolverle su propio valor por omision.
+            // A name that exists neither in the stream nor in the class is an error of the caller,
+            // not an absent field: it has to tell instead of returning them their own default
+            // value.
             try {
                 gf.get("nadaQueVer", 7);
-            } catch (IllegalArgumentException esperada) {
+            } catch (IllegalArgumentException expected) {
                 this.avisoDeInexistente = true;
             }
             this.porOmision = gf.defaulted("a");
         }
     }
 
-    /** Registra una validacion, que solo puede correr con el grafo entero armado. */
+    /** It registers a validation, which can only run with the whole graph assembled. */
     static class Validada implements Serializable {
         private static final long serialVersionUID = 22L;
         static int validadas;
@@ -613,7 +628,7 @@ public class IoTest {
         }
     }
 
-    /** Un filtro que rechaza una clase y no opina del resto. */
+    /** A filter that rejects a class and has no opinion about the rest. */
     static class Prohibe implements java.io.ObjectInputFilter {
         private final Class<?> vetada;
         Prohibe(Class<?> vetada) { this.vetada = vetada; }
@@ -628,9 +643,9 @@ public class IoTest {
     private static byte[] bin(String h) {
         byte[] b = new byte[h.length() / 2];
         for (int i = 0; i < b.length; i++) {
-            int alto = Character.digit(h.charAt(i * 2), 16);
-            int bajo = Character.digit(h.charAt(i * 2 + 1), 16);
-            b[i] = (byte) ((alto << 4) | bajo);
+            int high = Character.digit(h.charAt(i * 2), 16);
+            int low = Character.digit(h.charAt(i * 2 + 1), 16);
+            b[i] = (byte) ((high << 4) | low);
         }
         return b;
     }
@@ -639,13 +654,13 @@ public class IoTest {
         return new java.io.ObjectInputStream(new java.io.ByteArrayInputStream(b));
     }
 
-    /** Lee el unico objeto de `hex`, que es un flujo escrito por el JDK real. */
+    /** It reads the single object of `hex`, which is a stream written by the real JDK. */
     private static Object des(String hex) throws Exception {
         return flujo(bin(hex)).readObject();
     }
 
-    /** Escribe `o` y lo vuelve a leer en esta misma VM. */
-    private static Object vuelta(Object o) throws Exception {
+    /** It writes `o` and reads it back in this same VM. */
+    private static Object roundTrip(Object o) throws Exception {
         java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
         java.io.ObjectOutputStream oos = new java.io.ObjectOutputStream(bos);
         oos.writeObject(o);
@@ -656,7 +671,7 @@ public class IoTest {
     private static int deserializa() {
         int i = 500;
         try {
-            // --- los flujos del JDK real, leidos aca ---
+            // --- the streams of the real JDK, read here ---
             if (des(ESPERADO[0]) != null) return i; i++;                       // 500
             if (!"hola".equals(des(ESPERADO[1]))) return i; i++;               // 501
             Punto p = (Punto) des(ESPERADO[2]);
@@ -669,23 +684,24 @@ public class IoTest {
             if (!t.z || t.b != -2 || t.c != 'Z' || t.sh != -300) return i; i++;   // 505
             if (t.i != 70000 || t.j != -5000000000L) return i; i++;               // 506
             if (t.f != 1.5F || t.d != -2.25D || !t.s.equals("e\u00f1e")) return i; i++;  // 507
-            // El `transient` no viaja **y el constructor no corre**: queda en el cero de la VM, no
-            // en el 99 que le pone el inicializador de campo.
+            // The `transient` does not travel **and the constructor does not run**: it is left at
+            // the zero of the VM, not at the 99 the field initialiser gives it.
             if (t.noSale != 0) return i; i++;                                     // 508
-            // Escrito con `writeObject` propio y leido **sin** `readObject`: los campos por defecto
-            // salen, y lo que el escritor agrego se saltea por el marco de bloque sin entenderlo.
+            // Written with a `writeObject` of its own and read **without** `readObject`: the
+            // default fields come out, and what the writer added is skipped by the block frame
+            // without being understood.
             ConEscritor ce = (ConEscritor) des(ESPERADO[6]);
             if (ce.n != 5) return i; i++;                                         // 509
             Hijo h = (Hijo) des(ESPERADO[7]);
             if (h.arriba != 11 || h.abajo != 22) return i; i++;                   // 510
             Externa ex = (Externa) des(ESPERADO[8]);
             if (ex.v != 3) return i; i++;                                         // 511
-            // La constante se busca por nombre: tiene que salir **la misma instancia**, no una copia.
+            // The constant is looked up by name: **the same instance** has to come out, not a copy.
             if (des(ESPERADO[9]) != Color.VERDE) return i; i++;                    // 512
             Nodo ciclo = (Nodo) des(ESPERADO[10]);
             if (!ciclo.nombre.equals("a")) return i; i++;                          // 513
             if (ciclo.otro != ciclo) return i; i++;                                // 514
-            // Dos `writeObject` del mismo objeto: del otro lado tiene que haber **uno**.
+            // Two `writeObject`s of the same object: on the other side there has to be **one**.
             java.io.ObjectInputStream dos = flujo(bin(ESPERADO[11]));
             Object c1 = dos.readObject();
             Object c2 = dos.readObject();
@@ -699,27 +715,27 @@ public class IoTest {
             if (ad.length != 1 || ad[0] != 0.5D) return i; i++;                    // 519
             if (des(ESPERADO[15]) != Punto.class) return i; i++;                    // 520
 
-            // --- lo que solo se ve leyendo ---
-            Ronda r = (Ronda) vuelta(new Ronda());
+            // --- what is only seen by reading ---
+            Ronda r = (Ronda) roundTrip(new Ronda());
             if (r.n != 5 || r.doble != 10 || !"mas".equals(r.extra)) return i; i++;  // 521
 
-            Nombrados nb = (Nombrados) vuelta(new Nombrados());
+            Nombrados nb = (Nombrados) roundTrip(new Nombrados());
             if (nb.a != 9 || !"nueve".equals(nb.b)) return i; i++;                 // 522
             if (!nb.avisoDeInexistente) return i; i++;                             // 523
-            // `a` vino del flujo, asi que **no** salio por omision.
+            // `a` came from the stream, so it did **not** come out by default.
             if (nb.porOmision) return i; i++;                                      // 524
 
-            // La validacion corre una vez, y despues de que el grafo esta armado.
-            int antes = Validada.validadas;
-            vuelta(new Validada());
-            if (Validada.validadas != antes + 1) return i; i++;                    // 525
+            // The validation runs once, and after the graph is assembled.
+            int before = Validada.validadas;
+            roundTrip(new Validada());
+            if (Validada.validadas != before + 1) return i; i++;                    // 525
 
-            // `readUnshared`: dos lecturas del mismo objeto dan **dos** instancias.
-            Nodo uno = new Nodo("u");
+            // `readUnshared`: two readings of the same object give **two** instances.
+            Nodo one = new Nodo("u");
             java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
             java.io.ObjectOutputStream oos = new java.io.ObjectOutputStream(bos);
-            oos.writeUnshared(uno);
-            oos.writeUnshared(uno);
+            oos.writeUnshared(one);
+            oos.writeUnshared(one);
             oos.flush();
             java.io.ObjectInputStream su = flujo(bos.toByteArray());
             Object u1 = su.readUnshared();
@@ -727,27 +743,27 @@ public class IoTest {
             if (u1 == u2) return i; i++;                                           // 526
             if (!((Nodo) u1).nombre.equals("u")) return i; i++;                     // 527
 
-            // Una referencia hacia atras **no** se puede leer como no compartida: devolveria
-            // justamente el objeto que se pidio no compartir.
+            // A backward reference **cannot** be read as unshared: it would return precisely the
+            // object that was asked not to be shared.
             try {
                 java.io.ObjectInputStream sc = flujo(bin(ESPERADO[11]));
                 sc.readObject();
                 sc.readUnshared();
                 return i;                                                          // 528
-            } catch (java.io.InvalidObjectException esperada) {
+            } catch (java.io.InvalidObjectException expected) {
                 i++;
             }
 
-            // Una cabecera que no es la del formato se rechaza en el constructor, no mas tarde.
+            // A header that is not the one of the format is rejected in the constructor, not later.
             try {
                 flujo(bin("cafe000570"));
                 return i;                                                          // 529
-            } catch (java.io.StreamCorruptedException esperada) {
+            } catch (java.io.StreamCorruptedException expected) {
                 i++;
             }
 
-            // Pedir un objeto donde el flujo trae datos primitivos avisa con el largo, que es lo
-            // unico que le permite al que llama seguir leyendo.
+            // Asking for an object where the stream brings primitive data tells with the length,
+            // which is the only thing that lets the caller go on reading.
             try {
                 java.io.ByteArrayOutputStream bd = new java.io.ByteArrayOutputStream();
                 java.io.ObjectOutputStream od = new java.io.ObjectOutputStream(bd);
@@ -755,12 +771,12 @@ public class IoTest {
                 od.flush();
                 flujo(bd.toByteArray()).readObject();
                 return i;                                                          // 530
-            } catch (java.io.OptionalDataException esperada) {
-                if (esperada.length != 4 || esperada.eof) return i;
+            } catch (java.io.OptionalDataException expected) {
+                if (expected.length != 4 || expected.eof) return i;
                 i++;
             }
 
-            // Un filtro que rechaza una clase corta la lectura antes de construirla.
+            // A filter that rejects a class cuts the reading short before building it.
             try {
                 java.io.ByteArrayOutputStream bf = new java.io.ByteArrayOutputStream();
                 java.io.ObjectOutputStream of = new java.io.ObjectOutputStream(bf);
@@ -770,22 +786,22 @@ public class IoTest {
                 sf.setObjectInputFilter(new Prohibe(Punto.class));
                 sf.readObject();
                 return i;                                                          // 531
-            } catch (java.io.InvalidClassException esperada) {
+            } catch (java.io.InvalidClassException expected) {
                 i++;
             }
 
-            // El filtro se fija una sola vez: si se pudiera cambiar no seria una politica.
+            // The filter is set once and for all: if it could be changed it would not be a policy.
             try {
                 java.io.ObjectInputStream sf2 = flujo(bin(ESPERADO[1]));
                 sf2.setObjectInputFilter(new Prohibe(Punto.class));
                 sf2.setObjectInputFilter(new Prohibe(Nodo.class));
                 return i;                                                          // 532
-            } catch (IllegalStateException esperada) {
+            } catch (IllegalStateException expected) {
                 i++;
             }
 
-            // `reset()` corta la memoria del flujo: lo que ya se escribio vuelve a salir entero y
-            // del otro lado son **dos** objetos.
+            // `reset()` cuts the memory of the stream short: what was written already comes out
+            // whole again and on the other side they are **two** objects.
             Nodo comp = new Nodo("c");
             java.io.ByteArrayOutputStream br = new java.io.ByteArrayOutputStream();
             java.io.ObjectOutputStream or = new java.io.ObjectOutputStream(br);
@@ -808,10 +824,11 @@ public class IoTest {
 
     // ---- getChannel (600) -------------------------------------------------------------------------
     //
-    // Lo que `getChannel()` promete no es "un canal sobre el mismo archivo" sino que la posicion del
-    // canal y la del flujo son **el mismo numero**. Es la parte que se equivoca sola si cada uno
-    // lleva su cuenta, porque nada falla: se lee o se escribe en el lugar que no era y el que llama
-    // recibe bytes perfectamente creibles. Por eso cada caso mueve uno y mira el otro.
+    // What `getChannel()` promises is not "a channel over the same file" but that the position of
+    // the channel and that of the stream are **the same number**. It is the part that gets itself
+    // wrong if each one keeps its own count, because nothing fails: it reads or writes in the place
+    // that was not the right one and the caller receives perfectly believable bytes. That is why
+    // each case moves one and looks at the other.
 
     private static int canales() {
         int i = 600;
@@ -823,39 +840,39 @@ public class IoTest {
             fos.write(new byte[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 });
             fos.close();
 
-            // --- lectura ---
+            // --- reading ---
             java.io.FileInputStream in = new java.io.FileInputStream(f);
             java.nio.channels.FileChannel c = in.getChannel();
-            // El mismo objeto en cada llamada: el contrato dice "the unique FileChannel object".
+            // The same object at every call: the contract says "the unique FileChannel object".
             if (c != in.getChannel()) return i; i++;                     // 600
             if (c.position() != 0L) return i; i++;                       // 601
             if (c.size() != 10L) return i; i++;                          // 602
-            // Leer del flujo mueve el canal.
+            // Reading from the stream moves the channel.
             if (in.read() != 0) return i; i++;                           // 603
             if (c.position() != 1L) return i; i++;                       // 604
-            // Mover el canal cambia desde donde lee el flujo.
+            // Moving the channel changes where the stream reads from.
             c.position(5L);
             if (in.read() != 5) return i; i++;                           // 605
             if (c.position() != 6L) return i; i++;                       // 606
-            // Leer por el canal tambien mueve el flujo.
+            // Reading through the channel also moves the stream.
             java.nio.ByteBuffer bb = java.nio.ByteBuffer.allocate(2);
             if (c.read(bb) != 2) return i; i++;                          // 607
             if (bb.array()[0] != 6 || bb.array()[1] != 7) return i; i++; // 608
             if (in.read() != 8) return i; i++;                           // 609
-            // La lectura por posicion absoluta **no** mueve nada.
+            // The reading by absolute position does **not** move anything.
             java.nio.ByteBuffer abs = java.nio.ByteBuffer.allocate(1);
             if (c.read(abs, 0L) != 1 || abs.array()[0] != 0) return i; i++;  // 610
             if (c.position() != 9L) return i; i++;                        // 611
-            // Pasarse del final es legal: `position()` devuelve lo que se puso y se lee -1.
+            // Going past the end is legal: `position()` returns what was set and -1 is read.
             c.position(100L);
             if (c.position() != 100L) return i; i++;                      // 612
             if (in.read() != -1) return i; i++;                           // 613
-            // De solo lectura, como el del JDK.
+            // Read-only, like the JDK's.
             try {
                 c.write(java.nio.ByteBuffer.allocate(1));
                 return i;                                                 // 614
-            } catch (java.nio.channels.NonWritableChannelException esperada) { i++; }
-            // Cerrar el flujo cierra el canal: son la misma cosa vista de dos maneras.
+            } catch (java.nio.channels.NonWritableChannelException expected) { i++; }
+            // Closing the stream closes the channel: they are the same thing seen in two ways.
             in.close();
             if (c.isOpen()) return i; i++;                                // 615
 
@@ -865,14 +882,15 @@ public class IoTest {
             java.nio.channels.FileChannel w = out.getChannel();
             if (w != out.getChannel()) return i; i++;                     // 616
             out.write(new byte[] { 10, 11, 12 });
-            // La posicion cuenta lo escrito por el flujo, **buffer incluido**: es justo el numero
-            // que se desincronizaria si el canal no vaciara lo pendiente antes de contestar.
+            // The position counts what the stream wrote, **buffer included**: it is exactly the
+            // number that would go out of step if the channel did not flush what is pending before
+            // answering.
             if (w.position() != 3L) return i; i++;                        // 617
             if (w.size() != 3L) return i; i++;                            // 618
-            // Escribir por el canal continua donde iba el flujo.
+            // Writing through the channel continues where the stream was going.
             w.write(java.nio.ByteBuffer.wrap(new byte[] { 13 }));
             if (w.position() != 4L) return i; i++;                        // 619
-            // Y el flujo sigue despues del canal.
+            // And the stream goes on after the channel.
             out.write(14);
             out.close();
             byte[] leido = new byte[8];
@@ -882,8 +900,8 @@ public class IoTest {
             if (n != 5) return i; i++;                                    // 620
             if (leido[0] != 10 || leido[3] != 13 || leido[4] != 14) return i; i++;  // 621
 
-            // Mover el canal hacia atras cambia **donde escribe el flujo**, que es la mitad del
-            // contrato que se pierde si el flujo sigue agregando al final por su cuenta.
+            // Moving the channel backwards changes **where the stream writes**, which is the half
+            // of the contract that is lost if the stream goes on adding at the end on its own.
             java.io.FileOutputStream o2 = new java.io.FileOutputStream(g);
             java.nio.channels.FileChannel w2 = o2.getChannel();
             o2.write(new byte[] { 1, 2, 3, 4 });
@@ -909,7 +927,7 @@ public class IoTest {
     public static void main(String[] args) {
         if (args.length > 0 && args[0].equals("ser")) {
             try {
-                String[] h = casos();
+                String[] h = cases();
                 for (int k = 0; k < h.length; k++) System.out.println(h[k]);
             } catch (IOException e) {
                 System.out.println("ERR " + e);

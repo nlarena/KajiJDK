@@ -1,18 +1,18 @@
 package javax.management;
 
 /**
- * Lo implementa todo lo que lleva un {@link Descriptor} colgado.
+ * Implemented by everything that carries a {@link Descriptor}.
  *
- * <p>Existe para que el codigo que solo quiere leer metadatos no tenga que conocer cual de las seis
- * clases de `MBean*Info` tiene delante.
+ * <p>It exists so that code that only wants to read metadata does not have to know which of the
+ * {@code MBean*Info} classes it has in front of it.
  */
 public interface DescriptorRead {
 
     /**
-     * El descriptor. Nunca `null`: si no hay campos, devuelve uno vacio.
+     * The descriptor. Never {@code null}: if there are no fields, it returns an empty one.
      *
-     * <p>Es una copia, porque el descriptor de un `MBeanInfo` es inmutable de hecho aunque su tipo
-     * declarado no lo sea.
+     * <p>It is a copy, because the descriptor of an {@code MBeanInfo} is immutable in fact even
+     * though its declared type is not.
      */
     Descriptor getDescriptor();
 }

@@ -7,58 +7,59 @@ import java.awt.image.RenderedImage;
 import java.util.Vector;
 
 /**
- * KajiLibrary's java.awt.image.renderable.RenderableImageOp -- un nodo del arbol de operaciones.
+ * KajiLibrary's java.awt.image.renderable.RenderableImageOp -- a node of the operation tree.
  *
- * <p>Junta una operacion --{@link ContextualRenderedImageFactory}-- con sus argumentos --un
- * {@link ParameterBlock}-- y se presenta como una {@link RenderableImage} mas. Con eso, una cadena
- * de operaciones es simplemente un arbol de estos, y cada uno no sabe nada de los demas salvo que
- * son fuentes.
+ * <p>It joins an operation --{@link ContextualRenderedImageFactory}-- with its arguments --a
+ * {@link ParameterBlock}-- and presents itself as one more {@link RenderableImage}. With that, a
+ * chain of operations is simply a tree of these, and each one knows nothing about the others except
+ * that they are sources.
  *
- * <h2>Nada se calcula hasta que alguien pide pixeles</h2>
+ * <h2>Nothing is computed until someone asks for pixels</h2>
  *
- * <p>El constructor no renderiza. Ni siquiera {@link #getWidth} renderiza: el tamano se lo pregunta
- * a la operacion, que lo sabe calcular sin producir un solo pixel. Recien
- * {@link #createRendering} dispara trabajo, y lo hace <b>hacia atras</b>: le pregunta a la operacion
- * que necesita de cada fuente, se lo pide a la fuente, y con lo que vuelve arma el resultado.
+ * <p>The constructor does not render. Not even {@link #getWidth} renders: it asks the operation for
+ * the size, which it knows how to compute without producing a single pixel. Only {@link
+ * #createRendering} triggers work, and it does so <b>backwards</b>: it asks the operation what it
+ * needs from each source, asks the source for it, and builds the result with what comes back.
  *
- * <p>Esa es la parte que hay que entender del paquete: el pedido baja por el arbol traduciendose en
- * cada nivel, y los pixeles suben. Sin la traduccion --{@link ContextualRenderedImageFactory#mapRenderContext}--
- * habria que calcular cada nivel entero.
+ * <p>That is the part of the package to understand: the request goes down the tree being translated
+ * at each level, and the pixels come up. Without the translation
+ * --{@link ContextualRenderedImageFactory#mapRenderContext}-- each level would have to be computed
+ * whole.
  *
- * <h2>El bloque se copia al renderizar</h2>
+ * <h2>The block is copied when rendering</h2>
  *
- * <p>Al renderizar, las fuentes que son renderizables se reemplazan por lo que devolvieron, y eso se
- * hace sobre una <b>copia</b> del bloque. Tiene que ser asi: el mismo nodo se puede renderizar dos
- * veces a resoluciones distintas, y pisar sus fuentes en la primera dejaria la segunda mirando
- * pixeles de la anterior.
+ * <p>When rendering, the sources that are renderable are replaced by what they returned, and that
+ * is done on a <b>copy</b> of the block. It has to be so: the same node can be rendered twice at
+ * different resolutions, and overwriting its sources the first time would leave the second looking
+ * at the previous one's pixels.
  */
 public class RenderableImageOp implements RenderableImage {
 
-    /** La operacion. */
+    /** The operation. */
     private ContextualRenderedImageFactory crif;
 
-    /** Sus argumentos. */
+    /** Its arguments. */
     private ParameterBlock paramBlock;
 
-    /** El rectangulo en coordenadas de usuario; se pide una sola vez y se recuerda. */
+    /** The rectangle in user coordinates; asked for once and remembered. */
     private Rectangle2D boundingBox;
 
     /**
-     * @param crif la operacion
-     * @param paramBlock sus argumentos; se guarda una copia, para que cambiarlo despues no cambie
-     *     este nodo por atras
+     * @param crif the operation
+     * @param paramBlock its arguments; a copy is stored, so changing it later does not change this
+     *     node behind its back
      */
     public RenderableImageOp(ContextualRenderedImageFactory crif, ParameterBlock paramBlock) {
         this.crif = crif;
         this.paramBlock = (ParameterBlock) paramBlock.clone();
     }
 
-    /** Las fuentes que son renderizables; las que no, no entran. */
+    /** The sources that are renderable; those that are not do not count. Null if there are none. */
     public Vector<RenderableImage> getSources() {
         return getRenderableSources();
     }
 
-    /** El recorrido comun; ver {@link #getSources}. */
+    /** The shared walk; see {@link #getSources}. */
     private Vector<RenderableImage> getRenderableSources() {
         Vector<RenderableImage> sources = null;
         if (this.paramBlock.getNumSources() > 0) {
@@ -78,7 +79,7 @@ public class RenderableImageOp implements RenderableImage {
         return sources;
     }
 
-    /** Se la pregunta a la operacion, que la calcula sin renderizar. */
+    /** It asks the operation, which computes it without rendering. */
     public Object getProperty(String name) {
         return this.crif.getProperty(this.paramBlock, name);
     }
@@ -88,12 +89,12 @@ public class RenderableImageOp implements RenderableImage {
         return this.crif.getPropertyNames();
     }
 
-    /** Lo que conteste la operacion. */
+    /** Whatever the operation answers. */
     public boolean isDynamic() {
         return this.crif.isDynamic();
     }
 
-    /** El ancho en coordenadas de usuario, sin renderizar nada. */
+    /** The width in user coordinates, without rendering anything. */
     public float getWidth() {
         if (this.boundingBox == null) {
             this.boundingBox = this.crif.getBounds2D(this.paramBlock);
@@ -101,7 +102,7 @@ public class RenderableImageOp implements RenderableImage {
         return (float) this.boundingBox.getWidth();
     }
 
-    /** El alto en coordenadas de usuario. */
+    /** The height in user coordinates. */
     public float getHeight() {
         if (this.boundingBox == null) {
             this.boundingBox = this.crif.getBounds2D(this.paramBlock);
@@ -109,7 +110,7 @@ public class RenderableImageOp implements RenderableImage {
         return (float) this.boundingBox.getHeight();
     }
 
-    /** El borde izquierdo en coordenadas de usuario. */
+    /** The left edge in user coordinates. */
     public float getMinX() {
         if (this.boundingBox == null) {
             this.boundingBox = this.crif.getBounds2D(this.paramBlock);
@@ -117,7 +118,7 @@ public class RenderableImageOp implements RenderableImage {
         return (float) this.boundingBox.getMinX();
     }
 
-    /** El borde superior en coordenadas de usuario. */
+    /** The top edge in user coordinates. */
     public float getMinY() {
         if (this.boundingBox == null) {
             this.boundingBox = this.crif.getBounds2D(this.paramBlock);
@@ -126,30 +127,37 @@ public class RenderableImageOp implements RenderableImage {
     }
 
     /**
-     * Cambia los argumentos.
+     * Changes the arguments.
      *
-     * @return los que habia antes
+     * @return the ones there were before
      */
     public ParameterBlock setParameterBlock(ParameterBlock paramBlock) {
         ParameterBlock previous = this.paramBlock;
         this.paramBlock = (ParameterBlock) paramBlock.clone();
-        // El rectangulo dependia de los argumentos viejos: hay que volver a preguntarlo.
+        // The rectangle depended on the old arguments: it has to be asked for again.
         this.boundingBox = null;
         return previous;
     }
 
-    /** Una copia de los argumentos. */
+    /**
+     * The arguments themselves.
+     *
+     * <p>This javadoc said a copy. It returns the block this node renders from, as the JDK does, so
+     * changing it changes this node; the remembered rectangle is not recomputed then.
+     */
     public ParameterBlock getParameterBlock() {
         return this.paramBlock;
     }
 
     /**
-     * Renderiza a un tamano en pixeles.
+     * Renders to a size in pixels.
      *
-     * <p>Un 0 en ancho o alto significa "el que salga manteniendo la proporcion". Los dos en 0 no
-     * significa nada y se rechaza: no hay resolucion que deducir.
+     * <p>A 0 in width or height means "whatever comes out keeping the proportion". Both at 0 means
+     * nothing and is rejected: there is no resolution to deduce. The JDK's {@code
+     * RenderableImageOp} does neither: it scales by {@code w / getWidth()} and {@code h /
+     * getHeight()} as given, and throws for no combination.
      *
-     * @throws IllegalArgumentException si los dos son 0, o si alguno es negativo
+     * @throws IllegalArgumentException if both are 0, or if either is negative
      */
     public RenderedImage createScaledRendering(int w, int h, RenderingHints hints) {
         if (w < 0 || h < 0) {
@@ -174,20 +182,20 @@ public class RenderableImageOp implements RenderableImage {
         return createRendering(new RenderContext(usr2dev, hints));
     }
 
-    /** Renderiza sin escalar: una unidad de usuario, un pixel. */
+    /** Renders without scaling: one user unit, one pixel. */
     public RenderedImage createDefaultRendering() {
         return createRendering(new RenderContext(new AffineTransform()));
     }
 
     /**
-     * Renderiza con control completo.
+     * Renders with full control.
      *
-     * <p>Aca es donde el pedido baja por el arbol; ver la nota de la clase.
+     * <p>This is where the request goes down the tree; see the class note.
      *
-     * @return null si alguna fuente no pudo producir lo que se le pidio
+     * @return null if some source could not produce what was asked of it
      */
     public RenderedImage createRendering(RenderContext renderContext) {
-        // Copia: el mismo nodo se puede renderizar dos veces. Ver la nota de la clase.
+        // A copy: the same node can be rendered twice. See the class note.
         ParameterBlock rendered = (ParameterBlock) this.paramBlock.clone();
         Vector<Object> sources = this.paramBlock.getSources();
         if (sources != null && sources.size() > 0) {

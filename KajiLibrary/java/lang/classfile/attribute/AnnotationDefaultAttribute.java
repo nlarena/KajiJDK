@@ -5,17 +5,17 @@ import java.lang.classfile.Attribute;
 import java.lang.classfile.MethodElement;
 import jdk.internal.classfile.impl.TypedAttributes;
 
-// `AnnotationDefault` (JVMS §4.7.22): el valor por omisión de un elemento de un tipo de anotación.
-// Vive en el MÉTODO del tipo de anotación, no en el sitio anotado: por eso un sitio que no menciona
-// el elemento no guarda nada, y quien quiera el valor efectivo tiene que ir a buscar este atributo
-// al `.class` de la anotación.
+// `AnnotationDefault` (JVMS §4.7.22): the default value of an annotation type's element. It lives on
+// the annotation type's METHOD, not on the annotated site: that is why a site not mentioning the
+// element stores nothing, and whoever wants the effective value has to go look this attribute up in
+// the annotation's `.class`.
 public interface AnnotationDefaultAttribute
         extends Attribute<AnnotationDefaultAttribute>, MethodElement {
 
-    /** El valor por omisión. */
+    /** The default value. */
     AnnotationValue defaultValue();
 
-    /** El atributo con este valor. */
+    /** The attribute with this value. */
     public static AnnotationDefaultAttribute of(AnnotationValue annotationDefault) {
         return TypedAttributes.annotationDefault(annotationDefault);
     }

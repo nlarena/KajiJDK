@@ -3,22 +3,22 @@ package java.lang.management;
 import java.security.BasicPermission;
 
 /**
- * KajiLibrary's java.lang.management.ManagementPermission -- permiso para mirar o tocar la maquina
- * virtual.
+ * KajiLibrary's java.lang.management.ManagementPermission -- permission to look at or touch the
+ * virtual machine.
  *
- * <p>Solo dos nombres, y cualquier otro es un error de argumento:
+ * <p>Only two names, and anything else is an argument error:
  *
  * <ul>
- *   <li>{@code "monitor"} para leer -- volcados de hilos, uso de memoria, propiedades del sistema;
- *   <li>{@code "control"} para modificar -- forzar una recoleccion, cambiar umbrales, activar el
- *       seguimiento de contencion.
+ *   <li>{@code "monitor"} to read -- thread dumps, memory usage, system properties;
+ *   <li>{@code "control"} to modify -- forcing a collection, changing thresholds, switching on
+ *       contention tracking.
  * </ul>
  *
- * <p>No admite comodines, a diferencia de la mayoria de las {@link BasicPermission}. Con dos nombres
- * no haria falta, y permitirlos abriria la puerta a conceder {@code control} sin querer.
+ * <p>It admits no wildcards, unlike most {@link BasicPermission}s. With two names they would not be
+ * needed, and allowing them would open the door to granting {@code control} by accident.
  *
- * <p>Marcada para eliminacion junto con todo el mecanismo de {@code SecurityManager}, que ya no
- * controla nada. Se mantiene para que el codigo viejo compile.
+ * <p>Marked for removal along with the whole {@code SecurityManager} mechanism, which no longer
+ * controls anything. It is kept so old code compiles.
  */
 @Deprecated(since = "25", forRemoval = true)
 public final class ManagementPermission extends BasicPermission {
@@ -26,9 +26,9 @@ public final class ManagementPermission extends BasicPermission {
     private static final long serialVersionUID = 1897496590799378737L;
 
     /**
-     * @param name {@code "monitor"} o {@code "control"}
-     * @throws NullPointerException si es null
-     * @throws IllegalArgumentException si es cualquier otra cosa
+     * @param name {@code "monitor"} or {@code "control"}
+     * @throws NullPointerException if it is null
+     * @throws IllegalArgumentException if it is anything else
      */
     public ManagementPermission(String name) {
         super(name);
@@ -38,9 +38,9 @@ public final class ManagementPermission extends BasicPermission {
     }
 
     /**
-     * Idem; las acciones tienen que ser null o vacio.
+     * The same; the actions have to be null or empty.
      *
-     * @throws IllegalArgumentException si se dan acciones
+     * @throws IllegalArgumentException if actions are given
      */
     public ManagementPermission(String name, String actions) throws IllegalArgumentException {
         super(name);

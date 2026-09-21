@@ -1,14 +1,14 @@
 package javax.net.ssl;
 
 /**
- * Quien provee las credenciales propias durante un handshake: el certificado que se presenta y la
- * clave privada que lo respalda.
+ * Whoever provides the own credentials during a handshake: the certificate presented and the
+ * private key backing it.
  *
- * <p>No declara ningun metodo, y eso no es un descuido. Las credenciales dependen del tipo de
- * autenticacion —X.509, Kerberos, PSK— y cada uno necesita preguntas distintas, asi que la interfaz
- * comun no puede tener ninguna. Lo que hace es <strong>marcar</strong>: es el tipo que
- * {@link SSLContext#init} acepta, y quien lo implementa de verdad lo hace a traves de una subinterfaz
- * como {@link X509KeyManager}.
+ * <p>It declares no method, and that is not an oversight. The credentials depend on the kind of
+ * authentication --X.509, Kerberos, PSK-- and each needs different questions, so the common
+ * interface can have none. What it does is <strong>mark</strong>: it is the type
+ * {@link SSLContext#init} accepts, and whoever really implements it does so through a subinterface
+ * such as {@link X509KeyManager}.
  */
 public interface KeyManager {
 }

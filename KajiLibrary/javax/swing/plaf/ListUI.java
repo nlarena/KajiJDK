@@ -6,26 +6,26 @@ import java.awt.Rectangle;
 import javax.swing.JList;
 
 /**
- * El aspecto de una {@link JList}.
+ * A {@link JList}'s look and feel.
  *
- * <h2>Tres preguntas de geometria</h2>
+ * <h2>Three questions of geometry</h2>
  *
- * <p>Todo lo que la lista no puede contestar sola porque depende de como se dibuja: que renglon cae
- * en un punto, donde empieza un renglon, y cuanto ocupan varios. La lista se las reenvia al
- * aspecto y no las calcula, porque el alto de un renglon lo decide el dibujante y el acomodado en
- * columnas lo decide el aspecto.
+ * <p>Everything the list cannot answer on its own because it depends on how it is drawn: which
+ * row falls on a point, where a row starts, and how much several take up. The list forwards them
+ * to the look and feel and does not compute them, because a row's height is decided by whoever
+ * draws and the arrangement in columns is decided by the look and feel.
  */
 public abstract class ListUI extends ComponentUI {
 
     protected ListUI() {
     }
 
-    /** Que renglon cae en ese punto, o -1. */
+    /** Which row falls on that point, or -1. */
     public abstract int locationToIndex(JList<?> list, Point location);
 
-    /** La esquina de arriba a la izquierda de ese renglon, o nulo. */
+    /** That row's top left corner, or null. */
     public abstract Point indexToLocation(JList<?> list, int index);
 
-    /** El rectangulo que ocupan los renglones entre esos dos indices. */
+    /** The rectangle the rows between those two indices take up. */
     public abstract Rectangle getCellBounds(JList<?> list, int index1, int index2);
 }

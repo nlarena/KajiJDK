@@ -74,7 +74,8 @@ final class Bits {
      *         greater than {@code b}, treating both as unsigned
      * @implSpec This is how a carry is detected: a sum wrapped exactly when it came out SMALLER
      *           than one of its addends, and "smaller" there has to be unsigned. A signed
-     *           comparison would miss every case that crossed 2<sup>63</sup>, which is half of them.
+     *           comparison would miss every case that crossed 2<sup>63</sup>, which is half of
+     *           them.
      */
     static int compareUnsigned(long a, long b) {
         long fa = a + -9223372036854775807L - 1L;

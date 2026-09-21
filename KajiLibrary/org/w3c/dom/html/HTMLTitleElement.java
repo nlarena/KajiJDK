@@ -1,13 +1,13 @@
 package org.w3c.dom.html;
 
 /**
- * Un `<title>`.
+ * A `<title>`.
  */
 public interface HTMLTitleElement extends HTMLElement {
 
-    /** El texto que se muestra. */
+    /** The text that is shown. */
     String getText();
 
-    /** Fija el texto que se muestra. */
+    /** It sets the text that is shown. */
     void setText(String text);
 }

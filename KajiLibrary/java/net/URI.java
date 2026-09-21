@@ -85,7 +85,7 @@ public final class URI implements Comparable<URI>, Serializable {
             return;
         }
 
-        // 4. jerarquico: [ "//" autoridad ] path [ "?" consulta ]
+        // 4. hierarchical: [ "//" authority ] path [ "?" query ]
         int p = rest;
         String auth = null;
         if (p + 1 < endOfRest && str.charAt(p) == '/' && str.charAt(p + 1) == '/') {
@@ -107,8 +107,8 @@ public final class URI implements Comparable<URI>, Serializable {
         this.query = (qmark < 0) ? null : str.substring(qmark + 1, endOfRest);
     }
 
-    // The same as the constructor but for strings known to be well formed (the program's constants):
-    // it turns the failure into an unchecked one, as in the JDK.
+    // The same as the constructor but for strings known to be well formed (the program's
+    // constants): it turns the failure into an unchecked one, as in the JDK.
     public static URI create(String str) {
         try {
             return new URI(str);
@@ -133,7 +133,7 @@ public final class URI implements Comparable<URI>, Serializable {
 
     public String getRawAuthority() { return this.authority; }
 
-    // De "user@host:port", la parte anterior al '@', ya decodificada.
+    // Of "user@host:port", the part before the '@', already decoded.
     public String getUserInfo() { return unescape(getRawUserInfo()); }
 
     public String getRawUserInfo() {
@@ -171,22 +171,22 @@ public final class URI implements Comparable<URI>, Serializable {
 
     // ---- the four by-parts constructors -----------------------------------------------------------
     //
-    // They take the components RAW and escape them; the single-`String` constructor takes them already
-    // escaped. That is the whole difference between the two, and it is what gives the
+    // They take the components RAW and escape them; the single-`String` constructor takes them
+    // already escaped. That is the whole difference between the two, and it is what gives the
     // `getPath()`/`getRawPath()` pair its point: without escaping here, "raw" had nothing different
     // to show.
     //
-    // The escaping goes in the constructors and **not** inside `build`, even though it would be in a
-    // single place there: `build` is also used by `resolve`, `normalize` and `relativize`, which pass
-    // it components that are ALREADY escaped --they come out of `this.path`, `this.query`. Escaping
-    // there would escape them twice, and a `%20` would become `%2520` on every `resolve`.
+    // The escaping goes in the constructors and **not** inside `build`, even though it would be in
+    // a single place there: `build` is also used by `resolve`, `normalize` and `relativize`, which
+    // pass it components that are ALREADY escaped --they come out of `this.path`, `this.query`.
+    // Escaping there would escape them twice, and a `%20` would become `%2520` on every `resolve`.
     //
-    // They assemble the string and then **reparse** it. It may look like a detour --the pieces are in
-    // hand-- but it is what guarantees that a URI built from parts and one parsed from the same text
-    // are indistinguishable: same `toString`, same `equals`, same `hashCode`. Building the fields by
-    // hand would open the door to a URI whose text does not match its parts.
+    // They assemble the string and then **reparse** it. It may look like a detour --the pieces are
+    // in hand-- but it is what guarantees that a URI built from parts and one parsed from the same
+    // text are indistinguishable: same `toString`, same `equals`, same `hashCode`. Building the
+    // fields by hand would open the door to a URI whose text does not match its parts.
 
-    /** Un URI opaque: esquema, parte especifica y fragmento. */
+    /** An opaque URI: scheme, scheme-specific part and fragment. */
     public URI(String scheme, String ssp, String fragment) throws URISyntaxException {
         this(build(scheme, null, null, -1, escape(ssp, LEGAL_URIC), null,
                 escape(fragment, LEGAL_URIC), true));
@@ -259,14 +259,14 @@ public final class URI implements Comparable<URI>, Serializable {
         return sb.toString();
     }
 
-    // ---- el algebra de caminos ---------------------------------------------------------------------
+    // ---- the algebra of paths --------------------------------------------------------------------
 
     /**
      * This URI with the `.` and `..` of its path resolved.
      *
      * <p>The trap is in the `..`, and it is the reason this is not a `replace`: removing a `..` is
-     * **not** deleting the previous segment if that segment was itself a `..`. `a/../../b` is `../b`,
-     * not `b` -- a relative URI may legitimately climb higher than its own text.
+     * **not** deleting the previous segment if that segment was itself a `..`. `a/../../b` is
+     * `../b`, not `b` -- a relative URI may legitimately climb higher than its own text.
      *
      * <p>An opaque URI has no path to normalize and is returned as it stands.
      */
@@ -332,8 +332,8 @@ public final class URI implements Comparable<URI>, Serializable {
      * Resolves `that` against this URI, which acts as the base (RFC 3986 §5.2.2).
      *
      * <p>The rules in order, which is how the RFC writes them: if `that` is absolute or opaque, it
-     * wins whole; if it has only a fragment, it is pasted onto the base; if its path is absolute, it
-     * replaces; and if it is relative, it is hung off the base's directory.
+     * wins whole; if it has only a fragment, it is pasted onto the base; if its path is absolute,
+     * it replaces; and if it is relative, it is hung off the base's directory.
      */
     public URI resolve(URI that) {
         if (that == null) {
@@ -365,7 +365,7 @@ public final class URI implements Comparable<URI>, Serializable {
                 normalizePath(newPath), that.query, that.fragment, false));
     }
 
-    /** El de arriba, parseando `str` primero. */
+    /** The one above, parsing `str` first. */
     public URI resolve(String str) {
         return this.resolve(URI.create(str));
     }
@@ -391,8 +391,8 @@ public final class URI implements Comparable<URI>, Serializable {
      * Expresses `that` as relative to this URI, if it can.
      *
      * <p>It is {@link #resolve}'s partial inverse: if they do not share scheme and authority, or if
-     * `that` does not hang off the base's path, there **is no** relative form and `that` is returned
-     * untouched. That is not a failure: it is that the correct answer is the absolute URI.
+     * `that` does not hang off the base's path, there **is no** relative form and `that` is
+     * returned untouched. That is not a failure: it is that the correct answer is the absolute URI.
      */
     public URI relativize(URI that) {
         if (that == null) {
@@ -401,7 +401,7 @@ public final class URI implements Comparable<URI>, Serializable {
         if (this.isOpaque() || that.isOpaque()) {
             return that;
         }
-        if (!iguales(this.scheme, that.scheme) || !iguales(this.authority, that.authority)) {
+        if (!same(this.scheme, that.scheme) || !same(this.authority, that.authority)) {
             return that;
         }
         String base = normalizePath(nullToEmpty(this.path));
@@ -430,8 +430,9 @@ public final class URI implements Comparable<URI>, Serializable {
     /**
      * This same URI, checking that its authority has server form (user, host, port).
      *
-     * <p>It exists because a URI's authority may be anything --the RFC leaves a "registry-based" form
-     * for odd schemes-- and whoever needs a host and a port wants to fail early if there are none.
+     * <p>It exists because a URI's authority may be anything --the RFC leaves a "registry-based"
+     * form for odd schemes-- and whoever needs a host and a port wants to fail early if there are
+     * none.
      *
      * @throws URISyntaxException if the authority does not have server form
      */
@@ -446,9 +447,9 @@ public final class URI implements Comparable<URI>, Serializable {
     }
 
     /**
-     * Este URI como {@link java.net.URL}.
+     * This URI as a {@link java.net.URL}.
      *
-     * @throws IllegalArgumentException si el URI no es absolute
+     * @throws IllegalArgumentException if the URI is not absolute
      * @throws java.net.MalformedURLException if the scheme cannot be turned into a URL
      */
     public java.net.URL toURL() throws java.net.MalformedURLException {
@@ -458,7 +459,7 @@ public final class URI implements Comparable<URI>, Serializable {
         return new java.net.URL(this.string);
     }
 
-    private static boolean iguales(String a, String b) {
+    private static boolean same(String a, String b) {
         if (a == null) {
             return b == null;
         }
@@ -470,8 +471,8 @@ public final class URI implements Comparable<URI>, Serializable {
     }
 
     // Every `resolve`/`relativize`/`normalize` produces text that **already** is a valid URI --it
-    // comes out of pieces that were-- so a parse failure here would be a defect of this class and not
-    // of the caller. That is why it is relabelled as `IllegalArgumentException`, just like
+    // comes out of pieces that were-- so a parse failure here would be a defect of this class and
+    // not of the caller. That is why it is relabelled as `IllegalArgumentException`, just like
     // `URI.create`.
     private static URI createOrSame(String text) {
         return URI.create(text);
@@ -494,9 +495,9 @@ public final class URI implements Comparable<URI>, Serializable {
     /**
      * The URI written with **ASCII only**.
      *
-     * <p>Non-ASCII characters are kept literal --`toString()` of a URI with an accented "e" shows it
-     * accented, and the JDK does the same--; this is the form to be sent over a channel that only
-     * accepts ASCII, and it is the only difference between the two methods.
+     * <p>Non-ASCII characters are kept literal --`toString()` of a URI with an accented "e" shows
+     * it accented, and the JDK does the same--; this is the form to be sent over a channel that
+     * only accepts ASCII, and it is the only difference between the two methods.
      */
     public String toASCIIString() {
         StringBuilder out = new StringBuilder();
@@ -510,8 +511,8 @@ public final class URI implements Comparable<URI>, Serializable {
                 continue;
             }
             // A supplementary character is TWO `char`s, and the whole pair has to be taken before
-            // passing it to UTF-8: encoding each surrogate separately gives a sequence that does not
-            // come back.
+            // passing it to UTF-8: encoding each surrogate separately gives a sequence that does
+            // not come back.
             int cp = this.string.codePointAt(i);
             byte[] bytes = new String(Character.toChars(cp)).getBytes(StandardCharsets.UTF_8);
             int k = 0;
@@ -538,7 +539,7 @@ public final class URI implements Comparable<URI>, Serializable {
 
     // ---- parsing helpers (our String has no indexOf) ----
 
-    // Primer `ch` en [from, to), o -1.
+    // The first `ch` in [from, to), or -1.
     private static int scanFor(String s, int from, int to, char ch) {
         int i = from;
         while (i < to) {
@@ -558,10 +559,10 @@ public final class URI implements Comparable<URI>, Serializable {
 
     // ---- percent-encoding (RFC 3986) --------------------------------------------------------------
     //
-    // What gets escaped depends on the COMPONENT, and that is why there are four sets and not one: a
-    // '?' inside a path has to be escaped --otherwise it cuts the path short and starts the query--
-    // but inside the query it is just another character and leaving it is correct. Escaping too much
-    // is an error too: it changes the component's value.
+    // What gets escaped depends on the COMPONENT, and that is why there are four sets and not one:
+    // a '?' inside a path has to be escaped --otherwise it cuts the path short and starts the
+    // query-- but inside the query it is just another character and leaving it is correct. Escaping
+    // too much is an error too: it changes the component's value.
     //
     // The sets are the JDK's, which uses RFC 2396's definition of "unreserved" --it includes the
     // "mark" characters !~*'()-- and not RFC 3986's shorter one. Verified against the real JDK.
@@ -569,20 +570,20 @@ public final class URI implements Comparable<URI>, Serializable {
     // What is NEVER escaped here: the non-ASCII characters. The JDK leaves them literal in
     // `toString()` and in `getRawPath()`, and encodes them only in `toASCIIString()`.
 
-    private static final String NO_RESERVADOS =
+    private static final String UNRESERVED =
             "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.!~*'()";
 
     /** Legal in a path: the unreserved ones, plus the separators a path may contain. */
-    private static final String LEGAL_PATH = NO_RESERVADOS + ":@&=+$,/";
+    private static final String LEGAL_PATH = UNRESERVED + ":@&=+$,/";
 
     /** Legal in a query or a fragment: there '/' and '?' no longer separate anything. */
-    private static final String LEGAL_URIC = NO_RESERVADOS + ";/?:@&=+$,[]";
+    private static final String LEGAL_URIC = UNRESERVED + ";/?:@&=+$,[]";
 
     /** Legal in an authority; the brackets belong to literal IPv6 addresses. */
-    private static final String LEGAL_AUTHORITY = NO_RESERVADOS + "$,;:@&=+[]";
+    private static final String LEGAL_AUTHORITY = UNRESERVED + "$,;:@&=+[]";
 
     /** Legal in the user part: it carries no '@', which is precisely what terminates it. */
-    private static final String LEGAL_USERINFO = NO_RESERVADOS + ";:&=+$,";
+    private static final String LEGAL_USERINFO = UNRESERVED + ";:&=+$,";
 
     private static final String HEX = "0123456789ABCDEF";
 
@@ -637,15 +638,15 @@ public final class URI implements Comparable<URI>, Serializable {
                     continue;
                 }
             }
-            volcarBytes(out, bytes);
+            dumpBytes(out, bytes);
             out.append(c);
             i = i + 1;
         }
-        volcarBytes(out, bytes);
+        dumpBytes(out, bytes);
         return out.toString();
     }
 
-    private static void volcarBytes(StringBuilder out, java.io.ByteArrayOutputStream bytes) {
+    private static void dumpBytes(StringBuilder out, java.io.ByteArrayOutputStream bytes) {
         if (bytes.size() == 0) {
             return;
         }

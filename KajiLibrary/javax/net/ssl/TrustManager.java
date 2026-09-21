@@ -1,11 +1,10 @@
 package javax.net.ssl;
 
 /**
- * Quien decide si las credenciales del <em>otro</em> son de fiar.
+ * Whoever decides whether the <em>other</em> side's credentials are trustworthy.
  *
- * <p>La contraparte de {@link KeyManager}: uno presenta, el otro juzga. Tambien es una interfaz
- * marcadora, y por la misma razon — ver {@link X509TrustManager} para la forma que se usa en la
- * practica.
+ * <p>The counterpart of {@link KeyManager}: one presents, the other judges. It is also a marker
+ * interface, and for the same reason — see {@link X509TrustManager} for the form used in practice.
  */
 public interface TrustManager {
 }

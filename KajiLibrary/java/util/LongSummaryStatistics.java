@@ -3,14 +3,15 @@ package java.util;
 import java.util.function.IntConsumer;
 import java.util.function.LongConsumer;
 
-// Cuenta, suma, minimo, maximo y promedio de una corriente de `long`, en una sola pasada.
+// Count, sum, minimum, maximum and average of a stream of `long`s, in a single pass.
 //
-// Implementa **las dos** interfaces, `LongConsumer` e `IntConsumer`, y no es un descuido del JDK:
-// un `int` entra en un `long` sin perder nada, asi que el mismo resumen sirve para una corriente
-// de enteros sin obligar al llamador a convertir. `accept(int)` delega en `accept(long)`.
+// It implements **both** interfaces, `LongConsumer` and `IntConsumer`, and that is no oversight of
+// the JDK's: an `int` fits in a `long` losing nothing, so the same summary serves a stream of
+// integers without forcing the caller to convert. `accept(int)` delegates to `accept(long)`.
 //
-// A diferencia de IntSummaryStatistics, aca la suma **puede** desbordar: es `long` igual que los
-// elementos. El JDK acepta ese limite en vez de cargar un acumulador mas ancho, y se replica.
+// Unlike IntSummaryStatistics, here the sum **can** overflow: it is a `long`, the same as the
+// elements. The JDK accepts that limit rather than carry a wider accumulator, and it is
+// replicated.
 public class LongSummaryStatistics implements LongConsumer, IntConsumer {
 
     private long count;
@@ -18,11 +19,11 @@ public class LongSummaryStatistics implements LongConsumer, IntConsumer {
     private long min = 9223372036854775807L;   // Long.MAX_VALUE
     private long max = -9223372036854775808L;  // Long.MIN_VALUE
 
-    // Un resumen vacio, con los extremos invertidos para que el primer `accept` los fije.
+    // An empty summary, with the extremes inverted so the first `accept` sets them.
     public LongSummaryStatistics() {
     }
 
-    // Un resumen con valores ya calculados, para reconstruir uno guardado.
+    // A summary with values already computed, for rebuilding a stored one.
     public LongSummaryStatistics(long count, long min, long max, long sum) {
         if (count < 0) {
             throw new IllegalArgumentException("Negative count value");
@@ -31,8 +32,8 @@ public class LongSummaryStatistics implements LongConsumer, IntConsumer {
             if (min > max) {
                 throw new IllegalArgumentException("Minimum greater than maximum");
             }
-            long promedio = sum / count;
-            if (promedio < min || promedio > max) {
+            long average = sum / count;
+            if (average < min || average > max) {
                 throw new IllegalArgumentException("Average is out of range");
             }
         }
@@ -42,12 +43,12 @@ public class LongSummaryStatistics implements LongConsumer, IntConsumer {
         this.max = max;
     }
 
-    // Suma un `int`, ensanchado a `long`.
+    // It adds an `int`, widened to a `long`.
     public void accept(int value) {
         this.accept((long) value);
     }
 
-    // Suma un valor al resumen.
+    // It adds a value to the summary.
     public void accept(long value) {
         this.count = this.count + 1;
         this.sum = this.sum + value;
@@ -55,7 +56,7 @@ public class LongSummaryStatistics implements LongConsumer, IntConsumer {
         this.max = Math.max(this.max, value);
     }
 
-    // Absorbe otro resumen.
+    // It absorbs another summary.
     public void combine(LongSummaryStatistics other) {
         this.count = this.count + other.count;
         this.sum = this.sum + other.sum;
@@ -71,17 +72,17 @@ public class LongSummaryStatistics implements LongConsumer, IntConsumer {
         return this.sum;
     }
 
-    // El minimo, o Long.MAX_VALUE si no se acepto nada.
+    // The minimum, or Long.MAX_VALUE if nothing was accepted.
     public final long getMin() {
         return this.min;
     }
 
-    // El maximo, o Long.MIN_VALUE si no se acepto nada.
+    // The maximum, or Long.MIN_VALUE if nothing was accepted.
     public final long getMax() {
         return this.max;
     }
 
-    // El promedio, o 0.0 si no se acepto nada.
+    // The average, or 0.0 if nothing was accepted.
     public final double getAverage() {
         if (this.count > 0) {
             return (double) this.sum / this.count;

@@ -7,49 +7,50 @@ import java.util.ArrayList;
 import java.util.Set;
 
 /**
- * El gestor de foco que trae AWT puesto.
+ * The focus manager AWT comes with.
  *
- * <p>Le pone comportamiento a los abstractos de {@link KeyboardFocusManager}: reparte los eventos de
- * teclado por la cadena de repartidores, atiende las teclas de recorrido, y guarda los eventos que
- * llegan mientras el foco está en tránsito para entregárselos al componente correcto.
+ * <p>It puts behaviour on the abstract methods of {@link KeyboardFocusManager}: it dispatches the
+ * keyboard events through the chain of dispatchers, handles the traversal keys, and holds the
+ * events that arrive while the focus is in transit so as to deliver them to the right component.
  *
- * <p>La cola de eventos en tránsito es lo menos obvio y lo más necesario. Cuando el foco se pide, la
- * respuesta del sistema de ventanas tarda; en el medio pueden llegar teclas. Entregárselas al que
- * todavía tiene el foco sería escribir en el campo que se está por dejar. Por eso
- * {@link #enqueueKeyEvents} las aparta hasta que {@link #dequeueKeyEvents} avisa que el foco llegó.
+ * <p>The queue of events in transit is the least obvious part and the most necessary. When the
+ * focus is requested, the answer of the windowing system takes a while; keys can arrive in the
+ * meantime. Delivering them to the one that still has the focus would be writing into the field
+ * that is about to be left. That is why {@link #enqueueKeyEvents} sets them aside until {@link
+ * #dequeueKeyEvents} says the focus has arrived.
  *
- * <p>Sin sistema de ventanas ese tránsito no ocurre nunca —nadie pide el foco de verdad— así que la
- * cola queda vacía. La mecánica está entera igual: si algo llama a `enqueueKeyEvents`, se guarda, y
- * `dequeueKeyEvents` lo suelta.
+ * <p>Without a windowing system that transit never happens —nobody really asks for the focus— so
+ * the queue stays empty. The mechanism is all there anyway: if something calls `enqueueKeyEvents`,
+ * the events are held, and `dequeueKeyEvents` releases them.
  */
 public class DefaultKeyboardFocusManager extends KeyboardFocusManager {
 
-    /** Un evento apartado esperando que el foco llegue a su destinatario. */
-    private static final class Apartado {
-        private final long marca;
-        private final Component destino;
-        private final ArrayList<KeyEvent> eventos = new ArrayList<KeyEvent>();
+    /** An event set aside waiting for the focus to reach its addressee. */
+    private static final class HeldEvents {
+        private final long timestamp;
+        private final Component target;
+        private final ArrayList<KeyEvent> events = new ArrayList<KeyEvent>();
 
-        private Apartado(long marca, Component destino) {
-            this.marca = marca;
-            this.destino = destino;
+        private HeldEvents(long timestamp, Component target) {
+            this.timestamp = timestamp;
+            this.target = target;
         }
     }
 
-    /** Los tramos apartados, en el orden en que se pidieron. */
-    private final ArrayList<Apartado> apartados = new ArrayList<Apartado>();
+    /** The stretches set aside, in the order they were asked for. */
+    private final ArrayList<HeldEvents> held = new ArrayList<HeldEvents>();
 
-    /** Un gestor de fábrica. */
+    /** A default manager. */
     public DefaultKeyboardFocusManager() {
     }
 
     /**
-     * Reparte el evento al componente que corresponda.
+     * Dispatches the event to whichever component it belongs to.
      *
-     * <p>Los eventos de foco y de ventana **actualizan el estado global** además de entregarse: es
-     * acá donde el gestor se entera de que el foco se movió. Los demás se entregan y ya.
+     * <p>The focus and window events **update the global state** besides being delivered: it is
+     * here that the manager learns the focus moved. The rest are delivered and that is all.
      *
-     * @return `true` si lo entregó
+     * @return `true` if it delivered it
      */
     public boolean dispatchEvent(AWTEvent e) {
         int id = e.getID();
@@ -104,9 +105,10 @@ public class DefaultKeyboardFocusManager extends KeyboardFocusManager {
     }
 
     /**
-     * Reparte un evento de teclado por la cadena de repartidores y después al que tiene el foco.
+     * Dispatches a keyboard event through the chain of dispatchers and then to the one with the
+     * focus.
      *
-     * @return `true` si alguien lo consumió
+     * @return `true` if someone consumed it
      */
     public boolean dispatchKeyEvent(KeyEvent e) {
         java.util.List<KeyEventDispatcher> ds = this.getKeyEventDispatchers();
@@ -117,33 +119,33 @@ public class DefaultKeyboardFocusManager extends KeyboardFocusManager {
                 }
             }
         }
-        Component destino = this.getFocusOwner();
-        if (destino == null && e.getSource() instanceof Component) {
-            destino = (Component) e.getSource();
+        Component target = this.getFocusOwner();
+        if (target == null && e.getSource() instanceof Component) {
+            target = (Component) e.getSource();
         }
-        if (destino == null) {
+        if (target == null) {
             return false;
         }
-        // El tránsito manda: si hay un tramo apartado esperando, la tecla se guarda en vez de
-        // entregarse. Si no, se atienden primero las teclas de recorrido y recién después se entrega.
+        // Transit wins: if there is a stretch set aside waiting, the key is held instead of being
+        // delivered. If not, the traversal keys are handled first and only then is it delivered.
         synchronized (this) {
-            if (!this.apartados.isEmpty()) {
-                this.apartados.get(0).eventos.add(e);
+            if (!this.held.isEmpty()) {
+                this.held.get(0).events.add(e);
                 return true;
             }
         }
-        this.processKeyEvent(destino, e);
+        this.processKeyEvent(target, e);
         if (e.isConsumed()) {
             return true;
         }
-        this.redispatchEvent(destino, e);
+        this.redispatchEvent(target, e);
         return e.isConsumed();
     }
 
     /**
-     * Le da el evento a los posprocesadores.
+     * Gives the event to the post-processors.
      *
-     * @return `true` si alguno lo consumió
+     * @return `true` if any of them consumed it
      */
     public boolean postProcessKeyEvent(KeyEvent e) {
         java.util.List<KeyEventPostProcessor> ps = this.getKeyEventPostProcessors();
@@ -158,10 +160,11 @@ public class DefaultKeyboardFocusManager extends KeyboardFocusManager {
     }
 
     /**
-     * Atiende las teclas de recorrido de ese componente.
+     * Handles the traversal keys of that component.
      *
-     * <p>Si la tecla es una de las cuatro de recorrido, mueve el foco y **consume el evento**: si no
-     * lo consumiera, el Tab llegaría además al componente y escribiría una tabulación.
+     * <p>If the key is one of the four traversal ones, it moves the focus and **consumes the
+     * event**: if it did not consume it, the Tab would also reach the component and write a
+     * tabulation.
      */
     public void processKeyEvent(Component focusedComponent, KeyEvent e) {
         if (e.getID() != KeyEvent.KEY_PRESSED || focusedComponent == null) {
@@ -169,8 +172,8 @@ public class DefaultKeyboardFocusManager extends KeyboardFocusManager {
         }
         AWTKeyStroke k = AWTKeyStroke.getAWTKeyStrokeForEvent(e);
         for (int id = 0; id < 4; id++) {
-            Set<AWTKeyStroke> teclas = focusedComponent.getFocusTraversalKeys(id);
-            if (teclas == null || !teclas.contains(k)) {
+            Set<AWTKeyStroke> keys = focusedComponent.getFocusTraversalKeys(id);
+            if (keys == null || !keys.contains(k)) {
                 continue;
             }
             if (!focusedComponent.getFocusTraversalKeysEnabled()) {
@@ -191,86 +194,86 @@ public class DefaultKeyboardFocusManager extends KeyboardFocusManager {
     }
 
     /**
-     * Aparta los eventos de teclado hasta que el foco llegue a ese componente.
+     * Sets the keyboard events aside until the focus reaches that component.
      *
-     * @param after la marca de tiempo desde la que apartar
-     * @param untilFocused el componente que va a recibir el foco
+     * @param after the timestamp from which to set them aside
+     * @param untilFocused the component that is going to receive the focus
      */
     protected synchronized void enqueueKeyEvents(long after, Component untilFocused) {
-        this.apartados.add(new Apartado(after, untilFocused));
+        this.held.add(new HeldEvents(after, untilFocused));
     }
 
     /**
-     * Suelta los eventos apartados para ese componente: el foco ya llegó.
+     * Releases the events set aside for that component: the focus has arrived.
      *
-     * <p>Los eventos soltados se entregan **en orden**, que es lo único que los hace útiles: una
-     * ráfaga de teclas tiene que llegar como se escribió.
+     * <p>The released events are delivered **in order**, which is the only thing that makes them
+     * useful: a burst of keys has to arrive as it was typed.
      */
     protected synchronized void dequeueKeyEvents(long after, Component untilFocused) {
-        int i = this.buscar(after, untilFocused);
+        int i = this.findHeld(after, untilFocused);
         if (i < 0) {
             return;
         }
-        Apartado a = this.apartados.remove(i);
-        for (int j = 0; j < a.eventos.size(); j++) {
-            KeyEvent e = a.eventos.get(j);
-            if (a.destino != null) {
-                this.redispatchEvent(a.destino, e);
+        HeldEvents a = this.held.remove(i);
+        for (int j = 0; j < a.events.size(); j++) {
+            KeyEvent e = a.events.get(j);
+            if (a.target != null) {
+                this.redispatchEvent(a.target, e);
             }
         }
     }
 
     /**
-     * Tira los eventos apartados para ese componente.
+     * Throws away the events set aside for that component.
      *
-     * <p>Es lo que corresponde cuando el foco **no** va a llegarle —el pedido se canceló, o el
-     * componente se sacó del árbol—: entregárselos igual sería darle teclas que el usuario escribió
-     * para otro.
+     * <p>It is what is right when the focus is **not** going to reach it —the request was
+     * cancelled, or the component was taken out of the tree—: delivering them anyway would be
+     * giving it keys the user typed for another one.
      */
     protected synchronized void discardKeyEvents(Component comp) {
         int i = 0;
-        while (i < this.apartados.size()) {
-            if (this.apartados.get(i).destino == comp) {
-                this.apartados.remove(i);
+        while (i < this.held.size()) {
+            if (this.held.get(i).target == comp) {
+                this.held.remove(i);
             } else {
                 i = i + 1;
             }
         }
     }
 
-    /** El tramo apartado para ese componente desde esa marca, o -1. */
-    private int buscar(long after, Component untilFocused) {
-        for (int i = 0; i < this.apartados.size(); i++) {
-            Apartado a = this.apartados.get(i);
-            if (a.destino == untilFocused && a.marca == after) {
+    /** The stretch set aside for that component from that timestamp, or -1. */
+    private int findHeld(long after, Component untilFocused) {
+        for (int i = 0; i < this.held.size(); i++) {
+            HeldEvents a = this.held.get(i);
+            if (a.target == untilFocused && a.timestamp == after) {
                 return i;
             }
         }
         return -1;
     }
 
-    /** Le pasa el foco al siguiente del recorrido. */
+    /** Passes the focus to the next one in the traversal. */
     public void focusNextComponent(Component aComponent) {
         if (aComponent != null) {
             aComponent.transferFocus();
         }
     }
 
-    /** Se lo pasa al anterior. */
+    /** Passes it to the previous one. */
     public void focusPreviousComponent(Component aComponent) {
         if (aComponent != null) {
             aComponent.transferFocusBackward();
         }
     }
 
-    /** Sube un nivel de ciclo de foco. */
+    /** Goes up one focus cycle level. */
     public void upFocusCycle(Component aComponent) {
         if (aComponent != null) {
             aComponent.transferFocusUpCycle();
         }
     }
 
-    /** Baja un nivel, entrando en ese contenedor. */
+    /** Goes down one level, entering that container. */
     public void downFocusCycle(Container aContainer) {
         if (aContainer != null && aContainer.isFocusCycleRoot()) {
             aContainer.transferFocusDownCycle();

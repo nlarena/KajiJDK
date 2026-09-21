@@ -4,8 +4,8 @@ import javax.annotation.processing.SupportedSourceVersion;
 import javax.lang.model.SourceVersion;
 
 /**
- * El visitante simple de valores de anotacion de Java 14 en adelante. Ver
- * {@link SimpleAnnotationValueVisitor6}.
+ * The simple annotation value visitor for Java 14 onwards. See {@link
+ * SimpleAnnotationValueVisitor6}.
  */
 @SupportedSourceVersion(SourceVersion.RELEASE_25)
 public class SimpleAnnotationValueVisitor14<R, P> extends SimpleAnnotationValueVisitor9<R, P> {

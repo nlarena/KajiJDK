@@ -3,27 +3,26 @@ package java.net;
 // An IPv6 address: sixteen bytes, and optionally a scope.
 //
 // The scope is the surprising part. A link-local address like fe80::1 **does not identify a host**:
-// it identifies a host *on a link*, and the same address may exist on two different interfaces of the
-// same machine. That is why the literal admits the "%N" suffix, and why the scope is part of the
-// object but **not** of `equals`: two objects with the same address and different scopes are equal,
-// because the address is the same; what changes is the way out. The JDK does exactly this and it is
-// not an oversight.
+// it identifies a host *on a link*, and the same address may exist on two different interfaces of
+// the same machine. That is why the literal admits the "%N" suffix, and why the scope is part of
+// the object but **not** of `equals`: two objects with the same address and different scopes are
+// equal, because the address is the same; what changes is the way out. The JDK does exactly this
+// and it is not an oversight.
 //
-// The scope is kept with a separate flag and not as "zero means none", because zero is a legal scope:
-// `getByAddress(host, addr, 0)` produces an address that prints as "...%0", while `ofLiteral("::1")`
-// prints nothing. Collapsing them would lose that difference.
+// The scope is kept with a separate flag and not as "zero means none", because zero is a legal
+// scope: `getByAddress(host, addr, 0)` produces an address that prints as "...%0", while
+// `ofLiteral("::1")` prints nothing. Collapsing them would lose that difference.
 //
 // On the "IPv4-mapped" form (::ffff:a.b.c.d): that address **is** an IPv4, and both the parsers and
 // `InetAddress.getByAddress` collapse it to an `Inet4Address`. It is what the JDK does, and the
 // reason is that otherwise the same machine would have two different, unequal objects for the same
-// address. The "IPv4-compatible" form (::a.b.c.d, without the ffff) is **not** collapsed: that one is
-// a real IPv6, deprecated but distinct.
+// address. The "IPv4-compatible" form (::a.b.c.d, without the ffff) is **not** collapsed: that one
+// is a real IPv6, deprecated but distinct.
 //
-// The scope can be named in both the ways the JDK admits: by number
-// (`getByAddress(String, byte[], int)`, `getScopeId()`) and by interface
-// (`getByAddress(String, byte[], NetworkInterface)`, `getScopedInterface()`). This class used to say
-// the second did not go in because `NetworkInterface` did not exist in this tree; it exists, and it
-// does.
+// The scope can be named in both the ways the JDK admits: by number (`getByAddress(String, byte[],
+// int)`, `getScopeId()`) and by interface (`getByAddress(String, byte[], NetworkInterface)`,
+// `getScopedInterface()`). This class used to say the second did not go in because
+// `NetworkInterface` did not exist in this tree; it exists, and it does.
 //
 // The two forms are not interchangeable and that is why both are kept: an interface's index can be
 // taken from the interface, but the interface **cannot** be taken from an index without enumerating
@@ -38,10 +37,10 @@ public final class Inet6Address extends InetAddress {
     private final int scopeId;
     private final boolean scopeIdSet;
 
-    // The interface it was created with, if it was created with one. `transient` because this class's
-    // serialized form --the JDK's, which this tree respects-- carries the scope as a number and
-    // nothing else: an interface cannot be reconstructed on another machine, and storing it would
-    // change the format.
+    // The interface it was created with, if it was created with one. `transient` because this
+    // class's serialized form --the JDK's, which this tree respects-- carries the scope as a number
+    // and nothing else: an interface cannot be reconstructed on another machine, and storing it
+    // would change the format.
     private final transient NetworkInterface scopedInterface;
 
     Inet6Address(String hostName, byte[] addr) {
@@ -53,8 +52,8 @@ public final class Inet6Address extends InetAddress {
 
     Inet6Address(String hostName, byte[] addr, int scopeId) {
         super(hostName, addr);
-        // Un scope negativo se ignora en vez de rechazarse: es como el JDK distingue "no me pasaron
-        // scope" de "me pasaron el scope cero".
+        // A negative scope is ignored instead of rejected: it is how the JDK tells "I was given no
+        // scope" from "I was given scope zero".
         if (scopeId >= 0) {
             this.scopeId = scopeId;
             this.scopeIdSet = true;
@@ -75,7 +74,7 @@ public final class Inet6Address extends InetAddress {
         return this.b(0) == 0xff;
     }
 
-    /** La direccion sin especificar, "::". */
+    /** The unspecified address, "::". */
     public boolean isAnyLocalAddress() {
         int i = 0;
         while (i < INADDRSZ) {
@@ -164,8 +163,8 @@ public final class Inet6Address extends InetAddress {
     }
 
     // The sum of the four groups of four bytes, read as signed integers. It is the JDK's algorithm;
-    // it is not much as a hash, but changing it would make two JDKs disagree on the iteration order of
-    // a HashSet of addresses, and that gets noticed.
+    // it is not much as a hash, but changing it would make two JDKs disagree on the iteration order
+    // of a HashSet of addresses, and that gets noticed.
     public int hashCode() {
         int hash = 0;
         int i = 0;
@@ -182,7 +181,7 @@ public final class Inet6Address extends InetAddress {
         return hash;
     }
 
-    // Sin el scope: ver la cabecera.
+    // Without the scope: see the header.
     public boolean equals(Object obj) {
         if (!(obj instanceof Inet6Address)) {
             return false;
@@ -226,8 +225,8 @@ public final class Inet6Address extends InetAddress {
      * <p>It returns an {@link Inet4Address} if the literal is of the IPv4-mapped form, which is why
      * the declared type is {@code InetAddress} and not {@code Inet6Address}.
      *
-     * <p>The scope is accepted in numeric form only: a "%eth0" would name an interface, and turning a
-     * name into an index means enumerating the machine's interfaces, which this VM cannot do (see
+     * <p>The scope is accepted in numeric form only: a "%eth0" would name an interface, and turning
+     * a name into an index means enumerating the machine's interfaces, which this VM cannot do (see
      * `NetworkInterface`'s header).
      *
      * @throws IllegalArgumentException if it is not a valid IPv6 literal
@@ -257,8 +256,8 @@ public final class Inet6Address extends InetAddress {
         return sb.toString();
     }
 
-    // The first ten bytes zero and the next two 0xff: the mark of an IPv4 written as IPv6. It returns
-    // the four real bytes, or null if it is not of that form.
+    // The first ten bytes zero and the next two 0xff: the mark of an IPv4 written as IPv6. It
+    // returns the four real bytes, or null if it is not of that form.
     static byte[] convertFromIPv4MappedAddress(byte[] addr) {
         if (addr.length != INADDRSZ) {
             return null;
@@ -435,8 +434,8 @@ public final class Inet6Address extends InetAddress {
         return dst;
     }
 
-    // The constructor that takes the interface. The numeric scope comes from its index, which is what
-    // goes into the textual and the serialized form.
+    // The constructor that takes the interface. The numeric scope comes from its index, which is
+    // what goes into the textual and the serialized form.
     Inet6Address(String hostName, byte[] addr, NetworkInterface nif) {
         super(hostName, addr);
         if (nif == null) {
@@ -452,8 +451,8 @@ public final class Inet6Address extends InetAddress {
     /**
      * The address of those bytes, with the interface {@code nif}'s scope.
      *
-     * <p>The numeric scope that results is the interface's index. With a null {@code nif} the address
-     * is left **with no scope**, which is not the same as with scope zero.
+     * <p>The numeric scope that results is the interface's index. With a null {@code nif} the
+     * address is left **with no scope**, which is not the same as with scope zero.
      *
      * @throws UnknownHostException if {@code addr} is not sixteen bytes long
      */
@@ -473,8 +472,9 @@ public final class Inet6Address extends InetAddress {
     /**
      * The interface this address was created with, or null.
      *
-     * <p>Null too when the scope was given as a number: the interface cannot be taken from an index,
-     * and returning whichever one has that index today would be inventing. It is what the JDK does.
+     * <p>Null too when the scope was given as a number: the interface cannot be taken from an
+     * index, and returning whichever one has that index today would be inventing. It is what the
+     * JDK does.
      */
     public NetworkInterface getScopedInterface() {
         return this.scopedInterface;

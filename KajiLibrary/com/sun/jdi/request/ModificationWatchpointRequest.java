@@ -1,7 +1,7 @@
 package com.sun.jdi.request;
 
 /**
- * Pedir aviso cuando se escriba un campo.
+ * Ask to be told when a field is written.
  *
  * @since 1.3
  */

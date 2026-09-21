@@ -14,27 +14,28 @@ import javax.swing.plaf.ComponentUI;
 import javax.swing.plaf.SliderUI;
 
 /**
- * Una perilla que se arrastra para elegir un numero de un rango.
+ * A knob that is dragged in order to choose a number from a range.
  *
- * <h2>Un rango con extension</h2>
+ * <h2>A range with an extent</h2>
  *
- * <p>El modelo es un {@link BoundedRangeModel}, el mismo de las barras de desplazamiento, y trae
- * una <em>extension</em> que en un control deslizante casi siempre es cero. Que sea cero no es un
- * detalle: con extension {@code e} el valor no puede pasar de {@code maximo - e}, asi que una
- * extension distinta de cero corre el tope sin que nadie lo haya pedido.
+ * <p>The model is a {@link BoundedRangeModel}, the same as the scroll bars', and it brings an
+ * <em>extent</em> which in a slider is almost always zero. That it is zero is not a detail:
+ * with an extent of {@code e} the value cannot go past {@code maximum - e}, so an extent other
+ * than zero shifts the cap without anybody having asked for it.
  *
- * <h2>Los avisos se reenvian, no se reemiten</h2>
+ * <h2>The notices are forwarded, not re-emitted</h2>
  *
- * <p>El control se anota como oyente de su propio modelo y convierte cada aviso del modelo en un
- * aviso propio, con el control como origen. Por eso {@link #createChangeListener} es protegido: una
- * subclase puede cambiar que se hace con el aviso del modelo, no de donde viene.
+ * <p>The control signs itself up as a listener of its own model and turns each notice of the
+ * model into a notice of its own, with the control as the source. That is why
+ * {@link #createChangeListener} is protected: a subclass may change what is done with the
+ * model's notice, not where it comes from.
  *
- * <h2>Las etiquetas</h2>
+ * <h2>The labels</h2>
  *
- * <p>{@link #setLabelTable} recibe un diccionario de valor a componente. Hay que dibujarlas aparte
- * ({@link #setPaintLabels}), y el orden entre las dos llamadas no importa. Lo que si importa es que
- * poner etiquetas apaga el espaciado automatico: son dos formas distintas de decidir donde va cada
- * marca.
+ * <p>{@link #setLabelTable} receives a dictionary from value to component. They have to be
+ * drawn separately ({@link #setPaintLabels}), and the order between the two calls does not
+ * matter. What does matter is that setting labels switches the automatic spacing off: they are
+ * two different ways of deciding where each tick goes.
  */
 public class JSlider extends JComponent implements SwingConstants, Accessible {
 
@@ -45,59 +46,59 @@ public class JSlider extends JComponent implements SwingConstants, Accessible {
     private boolean paintLabels = false;
     private boolean isInverted = false;
 
-    /** El rango; ver la nota de la clase. */
+    /** The range; see the class note. */
     protected BoundedRangeModel sliderModel;
 
-    /** Cada cuanto va una marca grande, o cero si no hay. */
+    /** Every how much a big tick goes, or zero if there are none. */
     protected int majorTickSpacing;
 
-    /** Cada cuanto va una marca chica, o cero si no hay. */
+    /** Every how much a small tick goes, or zero if there are none. */
     protected int minorTickSpacing;
 
-    /** Si el valor salta a la marca mas cercana. */
+    /** Whether the value jumps to the nearest tick. */
     protected boolean snapToTicks = false;
 
     boolean snapToValue = true;
 
-    /** Horizontal o vertical. */
+    /** Horizontal or vertical. */
     protected int orientation;
 
-    /** El puente entre el modelo y este control; ver la nota de la clase. */
+    /** The bridge between the model and this control; see the class note. */
     protected ChangeListener changeListener = createChangeListener();
 
-    /** El evento, armado una vez y reusado. */
+    /** The event, built once and reused. */
     protected transient ChangeEvent changeEvent = null;
 
     private Dictionary<?, ?> labelTable;
 
-    /** De 0 a 100, arrancando en 50, horizontal. */
+    /** From 0 to 100, starting at 50, horizontal. */
     public JSlider() {
         this(HORIZONTAL, 0, 100, 50);
     }
 
     /**
-     * De 0 a 100, arrancando en 50, con esa orientacion.
+     * From 0 to 100, starting at 50, with that orientation.
      *
-     * @throws IllegalArgumentException si la orientacion no es horizontal ni vertical.
+     * @throws IllegalArgumentException if the orientation is neither horizontal nor vertical.
      */
     public JSlider(int orientation) {
         this(orientation, 0, 100, 50);
     }
 
-    /** Horizontal, en ese rango, arrancando en el medio. */
+    /** Horizontal, in that range, starting in the middle. */
     public JSlider(int min, int max) {
         this(HORIZONTAL, min, max, (min + max) / 2);
     }
 
-    /** Horizontal, en ese rango, arrancando en ese valor. */
+    /** Horizontal, in that range, starting at that value. */
     public JSlider(int min, int max, int value) {
         this(HORIZONTAL, min, max, value);
     }
 
     /**
-     * Todo puesto a mano.
+     * Everything set by hand.
      *
-     * @throws IllegalArgumentException si la orientacion no es horizontal ni vertical.
+     * @throws IllegalArgumentException if the orientation is neither horizontal nor vertical.
      */
     public JSlider(int orientation, int min, int max, int value) {
         checkOrientation(orientation);
@@ -106,7 +107,7 @@ public class JSlider extends JComponent implements SwingConstants, Accessible {
         updateUI();
     }
 
-    /** Con ese modelo, horizontal. */
+    /** With that model, horizontal. */
     public JSlider(BoundedRangeModel brm) {
         this.orientation = JSlider.HORIZONTAL;
         setModel(brm);
@@ -122,9 +123,10 @@ public class JSlider extends JComponent implements SwingConstants, Accessible {
     }
 
     /**
-     * Vuelve a pedir el aspecto.
+     * It asks for the look and feel again.
      *
-     * <p>Tambien les avisa a las etiquetas: son componentes propios que el control no repinta solo.
+     * <p>It also tells the labels: they are components of its own that the control does not
+     * repaint by itself.
      */
     public void updateUI() {
         updateLabelUIs();
@@ -134,7 +136,7 @@ public class JSlider extends JComponent implements SwingConstants, Accessible {
         return uiClassID;
     }
 
-    /** El puente entre el modelo y este control; ver la nota de la clase. */
+    /** The bridge between the model and this control; see the class note. */
     protected ChangeListener createChangeListener() {
         return new ModelListener(this);
     }
@@ -151,7 +153,7 @@ public class JSlider extends JComponent implements SwingConstants, Accessible {
         return listenerList.getListeners(ChangeListener.class);
     }
 
-    /** Reparte un aviso de cambio con este control como origen. */
+    /** It hands out a change notice with this control as the source. */
     protected void fireStateChanged() {
         Object[] listeners = listenerList.getListenerList();
         for (int i = listeners.length - 2; i >= 0; i = i - 2) {
@@ -169,15 +171,16 @@ public class JSlider extends JComponent implements SwingConstants, Accessible {
     }
 
     /**
-     * Cambia el rango.
+     * It changes the range.
      *
-     * <p>El oyente se muda del modelo viejo al nuevo: dejarlo puesto haria que el control siguiera
-     * reaccionando a un rango que ya no muestra.
+     * <p>The listener moves from the old model to the new one: leaving it set would make the
+     * control go on reacting to a range it no longer shows.
      *
-     * <p><strong>Acepta nulo</strong>, y esto esta medido: el JDK no valida, guarda el nulo y avisa
-     * el cambio. Lo que pasa despues es que casi todo lo demas del control revienta al preguntarle
-     * el valor al modelo. Se copia igual, porque rechazarlo aca cambiaria en que llamada aparece el
-     * error y esa es justamente la clase de diferencia que se paga cara.
+     * <p><strong>It accepts null</strong>, and this is measured: the JDK does not validate, it
+     * keeps the null and gives notice of the change. What happens afterwards is that almost
+     * everything else in the control blows up on asking the model for the value. It is copied all
+     * the same, because rejecting it here would change which call the error appears in and that is
+     * precisely the kind of difference that is paid for dearly.
      */
     public void setModel(BoundedRangeModel newModel) {
         BoundedRangeModel oldModel = getModel();
@@ -224,25 +227,26 @@ public class JSlider extends JComponent implements SwingConstants, Accessible {
         firePropertyChange("maximum", Integer.valueOf(oldMax), Integer.valueOf(maximum));
     }
 
-    /** Si el usuario esta en medio de un arrastre. */
+    /** Whether the user is in the middle of a drag. */
     public boolean getValueIsAdjusting() {
         return getModel().getValueIsAdjusting();
     }
 
     /**
-     * Marca que el valor esta cambiando.
+     * It marks that the value is changing.
      *
-     * <p>Sirve para no recalcular en cada pixel del arrastre: quien escucha puede esperar a que
-     * vuelva a falso.
+     * <p>It serves in order not to recompute at every pixel of the drag: whoever listens may wait
+     * for it to go back to false.
      */
     public void setValueIsAdjusting(boolean b) {
         BoundedRangeModel m = getModel();
         m.setValueIsAdjusting(b);
-        // No hay aviso de propiedad: el unico que sale es el del modelo, reenviado como cambio de
-        // estado. El JDK avisa por accesibilidad y nada mas, y esta medido.
+        // There is no property notice: the only one that comes out is the model's, forwarded as a
+                // change of state. The JDK gives notice through accessibility and nothing else, and
+                // it is measured.
     }
 
-    /** La extension; ver la nota de la clase. */
+    /** The extent; see the class note. */
     public int getExtent() {
         return getModel().getExtent();
     }
@@ -256,9 +260,9 @@ public class JSlider extends JComponent implements SwingConstants, Accessible {
     }
 
     /**
-     * Horizontal o vertical.
+     * Horizontal or vertical.
      *
-     * @throws IllegalArgumentException si no es una de las dos.
+     * @throws IllegalArgumentException if it is not one of the two.
      */
     public void setOrientation(int orientation) {
         checkOrientation(orientation);
@@ -276,7 +280,7 @@ public class JSlider extends JComponent implements SwingConstants, Accessible {
         }
     }
 
-    /** Cambia la tipografia, y con ella la de las etiquetas. */
+    /** It changes the typeface, and with it the labels'. */
     public void setFont(Font font) {
         super.setFont(font);
         updateLabelSizes();
@@ -289,7 +293,7 @@ public class JSlider extends JComponent implements SwingConstants, Accessible {
         return super.imageUpdate(img, infoflags, x, y, w, h);
     }
 
-    /** Las etiquetas, o nulo si no hay; ver la nota de la clase. */
+    /** The labels, or null if there are none; see the class note. */
     public Dictionary<?, ?> getLabelTable() {
         return labelTable;
     }
@@ -305,7 +309,7 @@ public class JSlider extends JComponent implements SwingConstants, Accessible {
         }
     }
 
-    /** Les vuelve a pedir el aspecto a las etiquetas. */
+    /** It asks the look and feel for the labels again. */
     protected void updateLabelUIs() {
         Dictionary<?, ?> labelTable = getLabelTable();
         if (labelTable == null) {
@@ -331,16 +335,16 @@ public class JSlider extends JComponent implements SwingConstants, Accessible {
         }
     }
 
-    /** Etiquetas cada tantos, arrancando en el minimo. */
+    /** Labels every so many, starting at the minimum. */
     public Hashtable<Integer, JComponent> createStandardLabels(int increment) {
         return createStandardLabels(increment, getMinimum());
     }
 
     /**
-     * Etiquetas cada tantos, arrancando en ese valor.
+     * Labels every so many, starting at that value.
      *
-     * @throws IllegalArgumentException si el paso no es positivo o el arranque cae fuera del
-     *     rango.
+     * @throws IllegalArgumentException if the step is not positive or the start falls outside the
+     *     range.
      */
     public Hashtable<Integer, JComponent> createStandardLabels(int increment, int start) {
         if (start > getMaximum() || start < getMinimum()) {
@@ -358,7 +362,7 @@ public class JSlider extends JComponent implements SwingConstants, Accessible {
         return table;
     }
 
-    /** Si el minimo va del lado que normalmente ocupa el maximo. */
+    /** Whether the minimum goes on the side the maximum normally takes. */
     public boolean getInverted() {
         return isInverted;
     }
@@ -372,7 +376,7 @@ public class JSlider extends JComponent implements SwingConstants, Accessible {
         }
     }
 
-    /** Cada cuanto va una marca grande; cero apaga. */
+    /** Every how much a big tick goes; zero switches them off. */
     public int getMajorTickSpacing() {
         return majorTickSpacing;
     }
@@ -402,7 +406,7 @@ public class JSlider extends JComponent implements SwingConstants, Accessible {
         }
     }
 
-    /** Si el valor salta a la marca mas cercana al soltar. */
+    /** Whether the value jumps to the nearest tick on releasing. */
     public boolean getSnapToTicks() {
         return snapToTicks;
     }
@@ -437,7 +441,7 @@ public class JSlider extends JComponent implements SwingConstants, Accessible {
         }
     }
 
-    /** Si se dibuja el riel; apagarlo deja solo la perilla y las marcas. */
+    /** Whether the track is drawn; switching it off leaves only the knob and the ticks. */
     public boolean getPaintTrack() {
         return paintTrack;
     }
@@ -452,10 +456,10 @@ public class JSlider extends JComponent implements SwingConstants, Accessible {
     }
 
     /**
-     * Si se dibujan las etiquetas.
+     * Whether the labels are drawn.
      *
-     * <p>Prenderlo sin etiquetas puestas y con marcas grandes definidas las arma solo, que es lo
-     * que hace que el caso comun sea una sola llamada.
+     * <p>Switching it on with no labels set and with big ticks defined builds them by itself,
+     * which is what makes the common case a single call.
      */
     public boolean getPaintLabels() {
         return paintLabels;
@@ -482,7 +486,7 @@ public class JSlider extends JComponent implements SwingConstants, Accessible {
         return accessibleContext;
     }
 
-    /** Convierte el aviso del modelo en uno del control; ver la nota de la clase. */
+    /** It turns the model's notice into one of the control's; see the class note. */
     private static class ModelListener implements ChangeListener, java.io.Serializable {
 
         private final JSlider control;

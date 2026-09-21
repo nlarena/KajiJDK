@@ -3,7 +3,7 @@ package com.sun.source.doctree;
 import java.util.List;
 
 /**
- * El nodo de `@spec`, que enlaza a una especificacion externa.
+ * The node of `@spec`, which links to an external specification.
  */
 public interface SpecTree extends BlockTagTree {
 

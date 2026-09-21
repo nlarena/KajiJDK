@@ -12,72 +12,74 @@ import javax.swing.text.Position;
 import javax.swing.text.View;
 
 /**
- * El aspecto de un componente de texto: el puente entre el componente y su arbol de vistas.
+ * A text component's look and feel: the bridge between the component and its view tree.
  *
- * <p>Es el UI de Swing que mas metodos agrega, y por una razon: el componente no sabe nada de como
- * se ve su texto. Donde cae una posicion, que posicion hay en un punto, que hay que repintar
- * cuando cambia un tramo, todo eso lo sabe el arbol de vistas, y el UI es quien lo tiene.
+ * <p>It is the Swing UI that adds the most methods, and for a reason: the component knows
+ * nothing about how its text looks. Where a position falls, which position is at a point, what
+ * has to be repainted when a stretch changes, all of that is known by the view tree, and the UI
+ * is the one that has it.
  *
- * <p>Los pares {@code modelToView}/{@code modelToView2D} y
- * {@code viewToModel}/{@code viewToModel2D} son lo mismo con coordenadas enteras o fraccionarias;
- * las fraccionarias llegaron despues, para pantallas donde un pixel logico no es uno fisico.
+ * <p>The pairs {@code modelToView}/{@code modelToView2D} and
+ * {@code viewToModel}/{@code viewToModel2D} are the same thing with integer or fractional
+ * coordinates; the fractional ones came later, for screens where a logical pixel is not a
+ * physical one.
  */
 public abstract class TextUI extends ComponentUI {
 
     protected TextUI() {
     }
 
-    /** @deprecated es {@link #modelToView2D}. */
+    /** @deprecated it is {@link #modelToView2D}. */
     @Deprecated
     public abstract Rectangle modelToView(JTextComponent t, int pos) throws BadLocationException;
 
-    /** @deprecated es {@link #modelToView2D}. */
+    /** @deprecated it is {@link #modelToView2D}. */
     @Deprecated
     public abstract Rectangle modelToView(JTextComponent t, int pos, Position.Bias bias)
             throws BadLocationException;
 
-    /** Donde cae esa posicion del documento, en coordenadas del componente. */
+    /** Where that document position falls, in the component's coordinates. */
     public Rectangle2D modelToView2D(JTextComponent t, int pos, Position.Bias bias)
             throws BadLocationException {
         return modelToView(t, pos, bias);
     }
 
-    /** @deprecated es {@link #viewToModel2D}. */
+    /** @deprecated it is {@link #viewToModel2D}. */
     @Deprecated
     public abstract int viewToModel(JTextComponent t, Point pt);
 
-    /** @deprecated es {@link #viewToModel2D}. */
+    /** @deprecated it is {@link #viewToModel2D}. */
     @Deprecated
     public abstract int viewToModel(JTextComponent t, Point pt, Position.Bias[] biasReturn);
 
-    /** Que posicion del documento hay en ese punto. */
+    /** Which document position is at that point. */
     public int viewToModel2D(JTextComponent t, Point2D pt, Position.Bias[] biasReturn) {
         return viewToModel(t, new Point((int) pt.getX(), (int) pt.getY()), biasReturn);
     }
 
-    /** A donde va el cursor desde esa posicion en esa direccion. */
+    /** Where the cursor goes from that position in that direction. */
     public abstract int getNextVisualPositionFrom(JTextComponent t, int pos, Position.Bias b,
             int direction, Position.Bias[] biasRet) throws BadLocationException;
 
-    /** Marca ese tramo como que hay que repintarlo. */
+    /** Marks that stretch as needing a repaint. */
     public abstract void damageRange(JTextComponent t, int p0, int p1);
 
     public abstract void damageRange(JTextComponent t, int p0, int p1, Position.Bias firstBias,
             Position.Bias secondBias);
 
-    /** El juego de herramientas de edicion que el componente usa. */
+    /** The editor kit the component uses. */
     public abstract EditorKit getEditorKit(JTextComponent t);
 
-    /** La raiz del arbol de vistas. */
+    /** The root of the view tree. */
     public abstract View getRootView(JTextComponent t);
 
-    /** @deprecated es {@link #getToolTipText2D}. */
+    /** @deprecated it is {@link #getToolTipText2D}. */
     @Deprecated
     public String getToolTipText(JTextComponent t, Point pt) {
         return null;
     }
 
-    /** El texto de ayuda en ese punto, si el contenido tiene alguno. */
+    /** The tooltip text at that point, if the content has one. */
     public String getToolTipText2D(JTextComponent t, Point2D pt) {
         return getToolTipText(t, new Point((int) pt.getX(), (int) pt.getY()));
     }

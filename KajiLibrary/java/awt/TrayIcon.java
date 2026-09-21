@@ -7,78 +7,78 @@ import java.awt.event.MouseListener;
 import java.awt.event.MouseMotionListener;
 
 /**
- * Un ícono en la bandeja del sistema, al lado del reloj.
+ * An icon in the system tray, next to the clock.
  *
- * <p>No es un {@link Component}, y eso es lo primero que sorprende: vive en una zona que maneja el
- * sistema operativo, no en el árbol de ventanas del programa. Por eso tiene sus propios oyentes en
- * vez de heredarlos, no tiene padre, y su menú es un {@link PopupMenu} suelto que no está agregado a
- * nada.
+ * <p>It is not a {@link Component}, and that is the first thing that surprises: it lives in an area
+ * the operating system manages, not in the program's tree of windows. That is why it has listeners
+ * of its own instead of inheriting them, has no parent, and its menu is a loose {@link PopupMenu}
+ * that is not added to anything.
  *
- * <p>El {@link ActionEvent} que dispara es el del **doble clic** (o el clic simple, según el
- * sistema), no el de cualquier clic: los clics comunes llegan como {@link MouseEvent}. Es la
- * diferencia entre "me apretaron" y "me eligieron".
+ * <p>The {@link ActionEvent} it fires is the **double click** one (or the single click, depending
+ * on the system), not any click at all: ordinary clicks arrive as {@link MouseEvent}. It is the
+ * difference between "I was pressed" and "I was chosen".
  *
- * <p><strong>Sin bandeja no se puede construir.</strong> Los tres constructores tiran
- * {@link HeadlessException}, igual que en el JDK. Sería tentador dejarlo construir —su estado es todo
- * memoria y no necesita pantalla para guardarse— pero no compraría nada: un ícono que nadie puede
- * agregar a ninguna bandeja no sirve para nada ni sostiene a ninguna otra clase. Donde sí vale la
- * pena divergir es en {@link Window}, que construye igual porque de ella cuelga todo el árbol de
- * componentes; acá no cuelga nadie.
+ * <p><strong>Without a tray it cannot be built.</strong> The three constructors throw
+ * {@link HeadlessException}, just as in the JDK. It would be tempting to let it be built —its state
+ * is all memory and needs no screen to be kept— but it would buy nothing: an icon nobody can add to
+ * any tray is good for nothing and holds up no other class. Where diverging is worth it is in
+ * {@link Window}, which does build, because the whole tree of components hangs off it; here nothing
+ * hangs off this.
  *
- * <p>Los métodos de instancia están declarados porque son parte de la clase, pero no hay forma de
- * llegar a ellos: no existe ninguna instancia.
+ * <p>The instance methods are declared because they are part of the class, but there is no way to
+ * reach them: no instance exists.
  */
 public class TrayIcon {
 
-    /** Qué tipo de globo de aviso mostrar. */
+    /** Which kind of notification balloon to show. */
     public static enum MessageType {
 
-        /** Un error: ícono de error. */
+        /** An error: error icon. */
         ERROR,
 
-        /** Una advertencia. */
+        /** A warning. */
         WARNING,
 
-        /** Información. */
+        /** Information. */
         INFO,
 
-        /** Sin ícono. */
+        /** No icon. */
         NONE
     }
 
-    /** El dibujo del ícono. */
+    /** The icon's drawing. */
     private Image image;
 
-    /** El menú que sale con el botón derecho. */
+    /** The menu that comes up with the right button. */
     private PopupMenu popup;
 
-    /** El texto que sale al pasar el mouse por encima. */
+    /** The text that comes up when the mouse passes over it. */
     private String tooltip;
 
-    /** Si el dibujo se escala al tamaño de la bandeja. */
+    /** Whether the drawing is scaled to the size of the tray. */
     private boolean autosize;
 
-    /** El comando que manda al elegirlo. */
+    /** The command it sends when chosen. */
     private String actionCommand;
 
-    /** Los oyentes de mouse, encadenados. */
+    /** The mouse listeners, chained. */
     transient MouseListener mouseListener;
 
-    /** Los de movimiento. */
+    /** The motion ones. */
     transient MouseMotionListener mouseMotionListener;
 
-    /** Los de acción. */
+    /** The action ones. */
     transient ActionListener actionListener;
 
     /**
-     * Un ícono con ese dibujo.
+     * An icon with that drawing.
      *
-     * <p>La falta de pantalla se comprueba **antes** que la imagen, y ése es el orden del JDK: sin
-     * bandeja no hay ícono que armar, así que la validación del dibujo ni llega a correr. Con
-     * pantalla y una imagen `null`, en cambio, sí se avisa que el dibujo falta.
+     * <p>The lack of a screen is checked **before** the image, and that is the JDK's order: without
+     * a tray there is no icon to build, so the check on the drawing never gets to run. With a
+     * screen and a `null` image, on the other hand, the missing drawing is reported.
      *
-     * @throws HeadlessException si no hay pantalla, o sea siempre acá
-     * @throws IllegalArgumentException si hay pantalla y la imagen es `null`
+     * @throws HeadlessException if there is no screen, that is to say always here
+     * @throws IllegalArgumentException if there is a screen and the image is `null`
      */
     public TrayIcon(Image image) {
         if (GraphicsEnvironment.isHeadless()) {
@@ -91,9 +91,9 @@ public class TrayIcon {
     }
 
     /**
-     * Un ícono con ese dibujo y ese texto emergente.
+     * An icon with that drawing and that tooltip.
      *
-     * @throws HeadlessException si no hay pantalla
+     * @throws HeadlessException if there is no screen
      */
     public TrayIcon(Image image, String tooltip) {
         this(image);
@@ -101,9 +101,9 @@ public class TrayIcon {
     }
 
     /**
-     * Un ícono con ese dibujo, ese texto emergente y ese menú.
+     * An icon with that drawing, that tooltip and that menu.
      *
-     * @throws HeadlessException si no hay pantalla
+     * @throws HeadlessException if there is no screen
      */
     public TrayIcon(Image image, String tooltip, PopupMenu popup) {
         this(image, tooltip);
@@ -111,12 +111,12 @@ public class TrayIcon {
     }
 
     /**
-     * Cambia el dibujo.
+     * Changes the drawing.
      *
-     * <p>La imagen anterior **no** se libera: quien la creó sigue siendo su dueño y puede estar
-     * usándola en otro lado.
+     * <p>The previous image is **not** released: whoever created it is still its owner and may be
+     * using it somewhere else.
      *
-     * @throws NullPointerException si la imagen es `null`
+     * @throws NullPointerException if the image is `null`
      */
     public void setImage(Image image) {
         if (image == null) {
@@ -125,80 +125,80 @@ public class TrayIcon {
         this.image = image;
     }
 
-    /** El dibujo. */
+    /** The drawing. */
     public Image getImage() {
         return this.image;
     }
 
     /**
-     * Cambia el menú del botón derecho.
+     * Changes the right-button menu.
      *
-     * <p>Un menú que ya es de **otro** ícono se ignora: un `PopupMenu` no puede estar en dos lugares,
-     * y robárselo al otro sería peor que no hacer nada.
+     * <p>A menu that already belongs to **another** icon is ignored: a `PopupMenu` cannot be in two
+     * places, and stealing it from the other one would be worse than doing nothing.
      *
-     * @param popup el menú, o `null` para sacarlo
+     * @param popup the menu, or `null` to take it away
      */
     public void setPopupMenu(PopupMenu popup) {
         if (popup == this.popup) {
             return;
         }
         synchronized (TrayIcon.class) {
-            if (popup != null && popup.duenoDeBandeja != null && popup.duenoDeBandeja != this) {
+            if (popup != null && popup.trayOwner != null && popup.trayOwner != this) {
                 return;
             }
             if (this.popup != null) {
-                this.popup.duenoDeBandeja = null;
+                this.popup.trayOwner = null;
             }
             if (popup != null) {
-                popup.duenoDeBandeja = this;
+                popup.trayOwner = this;
             }
             this.popup = popup;
         }
     }
 
     /**
-     * El menú del botón derecho.
+     * The right-button menu.
      *
-     * @return el menú, o `null` si no tiene
+     * @return the menu, or `null` if it has none
      */
     public PopupMenu getPopupMenu() {
         return this.popup;
     }
 
     /**
-     * Cambia el texto emergente.
+     * Changes the tooltip.
      *
-     * @param tooltip el texto, o `null` para no mostrar ninguno
+     * @param tooltip the text, or `null` to show none
      */
     public void setToolTip(String tooltip) {
         this.tooltip = tooltip;
     }
 
     /**
-     * El texto emergente.
+     * The tooltip.
      *
-     * @return el texto, o `null`
+     * @return the text, or `null`
      */
     public String getToolTip() {
         return this.tooltip;
     }
 
     /**
-     * Dice si escalar el dibujo al tamaño de la bandeja.
+     * Says whether to scale the drawing to the size of the tray.
      *
-     * <p>Con `false` —lo de fábrica— la imagen se recorta o se rellena, que es lo correcto cuando ya
-     * viene del tamaño justo: escalar una imagen que ya encaja sólo la ensucia.
+     * <p>With `false` —the default— the image is cropped or padded, which is what is right when it
+     * already comes at the exact size: scaling an image that already fits only dirties it.
      */
     public void setImageAutoSize(boolean autosize) {
         this.autosize = autosize;
     }
 
-    /** Si el dibujo se escala. */
+    /** Whether the drawing is scaled. */
     public boolean isImageAutoSize() {
         return this.autosize;
     }
 
-    /** Agrega un oyente de mouse; `null` no hace nada. */
+    /** Adds a mouse listener; `null` does nothing. */
     public synchronized void addMouseListener(MouseListener listener) {
         if (listener == null) {
             return;
@@ -206,7 +206,7 @@ public class TrayIcon {
         this.mouseListener = AWTEventMulticaster.add(this.mouseListener, listener);
     }
 
-    /** Saca un oyente de mouse. */
+    /** Removes a mouse listener. */
     public synchronized void removeMouseListener(MouseListener listener) {
         if (listener == null) {
             return;
@@ -214,12 +214,12 @@ public class TrayIcon {
         this.mouseListener = AWTEventMulticaster.remove(this.mouseListener, listener);
     }
 
-    /** Los oyentes de mouse. */
+    /** The mouse listeners. */
     public synchronized MouseListener[] getMouseListeners() {
         return AWTEventMulticaster.getListeners(this.mouseListener, MouseListener.class);
     }
 
-    /** Agrega un oyente de movimiento; `null` no hace nada. */
+    /** Adds a motion listener; `null` does nothing. */
     public synchronized void addMouseMotionListener(MouseMotionListener listener) {
         if (listener == null) {
             return;
@@ -227,7 +227,7 @@ public class TrayIcon {
         this.mouseMotionListener = AWTEventMulticaster.add(this.mouseMotionListener, listener);
     }
 
-    /** Saca un oyente de movimiento. */
+    /** Removes a motion listener. */
     public synchronized void removeMouseMotionListener(MouseMotionListener listener) {
         if (listener == null) {
             return;
@@ -235,27 +235,27 @@ public class TrayIcon {
         this.mouseMotionListener = AWTEventMulticaster.remove(this.mouseMotionListener, listener);
     }
 
-    /** Los oyentes de movimiento. */
+    /** The motion listeners. */
     public synchronized MouseMotionListener[] getMouseMotionListeners() {
         return AWTEventMulticaster.getListeners(this.mouseMotionListener,
                 MouseMotionListener.class);
     }
 
     /**
-     * El comando que manda al elegirlo.
+     * The command it sends when chosen.
      *
-     * @return el comando, o `null` si no se fijó ninguno
+     * @return the command, or `null` if none was set
      */
     public String getActionCommand() {
         return this.actionCommand;
     }
 
-    /** Fija el comando que manda al elegirlo. */
+    /** Sets the command it sends when chosen. */
     public void setActionCommand(String command) {
         this.actionCommand = command;
     }
 
-    /** Agrega un oyente de acción; `null` no hace nada. */
+    /** Adds an action listener; `null` does nothing. */
     public synchronized void addActionListener(ActionListener listener) {
         if (listener == null) {
             return;
@@ -263,7 +263,7 @@ public class TrayIcon {
         this.actionListener = AWTEventMulticaster.add(this.actionListener, listener);
     }
 
-    /** Saca un oyente de acción. */
+    /** Removes an action listener. */
     public synchronized void removeActionListener(ActionListener listener) {
         if (listener == null) {
             return;
@@ -271,19 +271,19 @@ public class TrayIcon {
         this.actionListener = AWTEventMulticaster.remove(this.actionListener, listener);
     }
 
-    /** Los oyentes de acción. */
+    /** The action listeners. */
     public synchronized ActionListener[] getActionListeners() {
         return AWTEventMulticaster.getListeners(this.actionListener, ActionListener.class);
     }
 
     /**
-     * Muestra un globo de aviso al lado del ícono.
+     * Shows a notification balloon next to the icon.
      *
-     * <p>No hace nada: el globo lo dibuja el sistema operativo en su bandeja, y no hay bandeja.
-     * Tampoco tira, porque el JDK tampoco lo hace cuando el sistema no admite globos —un aviso que no
-     * se ve no es motivo para romper el programa—.
+     * <p>It does nothing: the balloon is drawn by the operating system in its tray, and there is no
+     * tray. It does not throw either, because the JDK does not throw when the system does not
+     * support balloons —a notice that is not seen is no reason to break the program—.
      *
-     * @throws NullPointerException si el título y el texto son los dos `null`
+     * @throws NullPointerException if the caption and the text are both `null`
      */
     public void displayMessage(String caption, String text, MessageType messageType) {
         if (caption == null && text == null) {
@@ -292,15 +292,15 @@ public class TrayIcon {
     }
 
     /**
-     * Cuánto mide el ícono en la bandeja.
+     * How big the icon is in the tray.
      *
-     * @return lo que diga {@link SystemTray#getTrayIconSize}
+     * @return whatever {@link SystemTray#getTrayIconSize} says
      */
     public Dimension getSize() {
         return SystemTray.getSystemTray().getTrayIconSize();
     }
 
-    /** Les avisa a los oyentes que corresponda. */
+    /** Tells whichever listeners correspond. */
     void processEvent(AWTEvent e) {
         if (e instanceof ActionEvent) {
             this.processActionEvent((ActionEvent) e);
@@ -315,7 +315,7 @@ public class TrayIcon {
         }
     }
 
-    /** Les avisa a los oyentes de mouse. */
+    /** Tells the mouse listeners. */
     void processMouseEvent(MouseEvent e) {
         MouseListener l = this.mouseListener;
         if (l == null) {
@@ -335,7 +335,7 @@ public class TrayIcon {
         }
     }
 
-    /** Les avisa a los de movimiento. */
+    /** Tells the motion ones. */
     void processMouseMotionEvent(MouseEvent e) {
         MouseMotionListener l = this.mouseMotionListener;
         if (l == null) {
@@ -348,7 +348,7 @@ public class TrayIcon {
         }
     }
 
-    /** Les avisa a los de acción. */
+    /** Tells the action ones. */
     void processActionEvent(ActionEvent e) {
         ActionListener l = this.actionListener;
         if (l != null) {

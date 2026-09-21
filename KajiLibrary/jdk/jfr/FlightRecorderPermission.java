@@ -3,14 +3,14 @@ package jdk.jfr;
 import java.security.BasicPermission;
 
 /**
- * El permiso que historicamente guardaba las operaciones de JFR.
+ * The permission that historically guarded the operations of JFR.
  *
- * <p>Los nombres son {@code accessFlightRecorder}, para manejar grabaciones, y
- * {@code registerEvent}, para registrar tipos de evento propios.
+ * <p>The names are {@code accessFlightRecorder}, for handling recordings, and
+ * {@code registerEvent}, for registering types of event of one's own.
  *
- * <p>Se conserva porque es API publica, aunque el {@code SecurityManager} este deshabilitado
- * permanentemente desde JDK 24 y el chequeo ya no ocurra. Construir uno sigue funcionando; lo que
- * ya no pasa es que alguien lo consulte.
+ * <p>It is kept because it is public API, even though the {@code SecurityManager} has been
+ * permanently disabled since JDK 24 and the check no longer happens. Building one still works; what
+ * no longer happens is that somebody consults it.
  *
  * @since 9
  */
@@ -19,11 +19,11 @@ public final class FlightRecorderPermission extends BasicPermission {
     private static final long serialVersionUID = -6989096058590316034L;
 
     /**
-     * Un permiso con ese nombre.
+     * A permission with that name.
      *
-     * @param name {@code "accessFlightRecorder"} o {@code "registerEvent"}
-     * @throws NullPointerException si el nombre es {@code null}
-     * @throws IllegalArgumentException si el nombre es vacio
+     * @param name {@code "accessFlightRecorder"} or {@code "registerEvent"}
+     * @throws NullPointerException if the name is {@code null}
+     * @throws IllegalArgumentException if the name is empty
      */
     public FlightRecorderPermission(String name) {
         super(name);

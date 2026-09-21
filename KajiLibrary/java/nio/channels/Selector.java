@@ -7,45 +7,45 @@ import java.util.Set;
 import java.util.function.Consumer;
 
 /**
- * KajiLibrary's java.nio.channels.Selector — el que vigila muchos canales a la vez.
+ * KajiLibrary's java.nio.channels.Selector — the one that watches many channels at a time.
  *
- * <p>Un hilo bloqueado en {@link #select()} se despierta cuando **alguno** de los canales
- * registrados tiene algo listo. Eso es lo que permite atender diez mil conexiones con un pu&ntilde;ado
- * de hilos en vez de con diez mil, que es la razon de existir de todo `java.nio`.
+ * <p>A thread blocked in {@link #select()} wakes up when **one** of the registered channels has
+ * something ready. That is what allows ten thousand connections to be attended with a handful of
+ * threads instead of with ten thousand, which is the reason the whole of `java.nio` exists.
  *
- * <p>Hay tres juegos de llaves y confundirlos es el error clasico:
+ * <p>There are three sets of keys and confusing them is the classic mistake:
  *
  * <ul>
- *   <li>{@link #keys()} — todo lo registrado. No se toca desde afuera;
- *   <li>{@link #selectedKeys()} — lo que tuvo actividad. <strong>Hay que vaciarlo a mano</strong>:
- *       el selector agrega ahi pero nunca saca, asi que una llave que no se remueve vuelve a
- *       aparecer en la vuelta siguiente aunque ya no tenga nada, y el lazo gira al vacio para
- *       siempre. Es el bug numero uno de quien empieza con selectores;
- *   <li>las canceladas — internas, se limpian solas en la seleccion siguiente.
+ *   <li>{@link #keys()} — everything registered. It is not touched from outside;
+ *   <li>{@link #selectedKeys()} — what had activity. <strong>It has to be emptied by hand</strong>:
+ *       the selector adds there but never removes, so a key that is not removed appears again in
+ *       the next round even though it has nothing any more, and the loop spins empty for ever. It
+ *       is the number one bug of whoever starts with selectors;
+ *   <li>the cancelled ones — internal, they clean themselves up in the next selection.
  * </ul>
  *
- * <p>{@link #wakeup()} existe porque un `select()` puede quedarse quieto indefinidamente y a veces
- * hay que sacarlo de ahi sin que ningun canal tenga nada: apagar el servidor, por ejemplo. Es la
- * unica operacion del selector que se puede llamar desde otro hilo con seguridad.
+ * <p>{@link #wakeup()} exists because a `select()` can stay still indefinitely and sometimes it has
+ * to be got out of there without any channel having anything: shutting the server down, for
+ * example. It is the only operation of the selector that can safely be called from another thread.
  *
- * <h2>Estado en esta biblioteca</h2>
+ * <h2>State in this library</h2>
  *
- * <p><strong>No hay `Selector.open()`.</strong> Ese estatico pide el selector al proveedor del
- * sistema, y esta VM no tiene proveedor del sistema porque no tiene nativos de red --ver
- * {@link SelectorProvider}--. Un `open()` que tirara seria peor que su ausencia: quien lo escribiera
- * compilaria bien y descubriria el problema en produccion, mientras que asi lo descubre al compilar,
- * que es donde corresponde.
+ * <p><strong>There is a `Selector.open()`.</strong> This note used to say there was none, because
+ * that static asks the system provider for the selector and this VM had no system provider for want
+ * of network natives. It has them now: `open()` goes through {@link
+ * java.nio.channels.spi.SelectorProvider#provider()}, which hands over the installed provider if
+ * there is one and the in-house one if not.
  *
- * <p>Todo lo demas esta, incluidas las tres formas con {@link Consumer} --que en el JDK tampoco son
- * abstractas-- expresadas en terminos de las abstractas. Quien implemente un selector propio hereda
- * de {@link java.nio.channels.spi.AbstractSelector}, pone lo suyo, y estas le funcionan gratis.
+ * <p>Everything else is here, including the three forms with {@link Consumer} --which in the JDK
+ * are not abstract either-- expressed in terms of the abstract ones. Whoever implements a selector
+ * of their own inherits from {@link java.nio.channels.spi.AbstractSelector}, puts in their part,
+ * and these work for them free of charge.
  */
 public abstract class Selector implements Closeable {
 
     protected Selector() {
     }
 
-    /** Si el selector sigue abierto. */
     /**
      * Opens a selector.
      *
@@ -56,39 +56,41 @@ public abstract class Selector implements Closeable {
         return SelectorProvider.provider().openSelector();
     }
 
+    /** Whether the selector is still open. */
     public abstract boolean isOpen();
 
-    /** El proveedor que lo fabrico. */
+    /** The provider that made it. */
     public abstract SelectorProvider provider();
 
-    /** Todas las llaves registradas. El conjunto no se puede modificar desde afuera. */
+    /** Every registered key. The set cannot be modified from outside. */
     public abstract Set<SelectionKey> keys();
 
-    /** Las llaves con actividad. **Se vacia a mano**; ver la nota de la clase. */
+    /** The keys with activity. **It is emptied by hand**; see the note of the class. */
     public abstract Set<SelectionKey> selectedKeys();
 
-    /** Mira y vuelve en el acto, haya o no algo listo. */
+    /** It looks and returns on the spot, whether or not there is something ready. */
     public abstract int selectNow() throws IOException;
 
     /**
-     * Espera hasta que haya algo listo o hasta que pasen `timeout` milisegundos.
+     * Waits until there is something ready or until `timeout` milliseconds have passed.
      *
-     * @param timeout `0` significa esperar sin limite, no "no esperar"; eso es {@link #selectNow()}
+     * @param timeout `0` means waiting with no limit, not "do not wait"; that is {@link
+     *     #selectNow()}
      */
     public abstract int select(long timeout) throws IOException;
 
-    /** Espera sin limite. */
+    /** Waits with no limit. */
     public abstract int select() throws IOException;
 
     /**
-     * Como {@link #select(long)}, pero corre `action` por cada llave lista en vez de dejarlas en
-     * {@link #selectedKeys()}.
+     * Like {@link #select(long)}, but it runs `action` for each ready key instead of leaving them
+     * in {@link #selectedKeys()}.
      *
-     * <p>Es la forma que no se puede usar mal: el conjunto de seleccionadas no participa, asi que no
-     * hay nada que olvidarse de vaciar.
+     * <p>It is the form that cannot be used wrongly: the set of selected ones does not take part,
+     * so there is nothing one can forget to empty.
      *
-     * @return cuantas veces se corrio `action`, que puede ser mas que la cantidad de llaves si una
-     *         se puso lista de nuevo durante la misma seleccion
+     * @return how many times `action` was run, which can be more than the number of keys if one
+     *         became ready again during the same selection
      */
     public int select(Consumer<SelectionKey> action, long timeout) throws IOException {
         if (action == null) {
@@ -97,61 +99,62 @@ public abstract class Selector implements Closeable {
         if (timeout < 0) {
             throw new IllegalArgumentException("timeout negativo");
         }
-        return this.recorrer(action, this.select(timeout));
+        return this.walk(action, this.select(timeout));
     }
 
-    /** Como el otro, sin limite de espera. */
+    /** Like the other one, with no limit to the wait. */
     public int select(Consumer<SelectionKey> action) throws IOException {
         if (action == null) {
             throw new NullPointerException();
         }
-        return this.recorrer(action, this.select());
+        return this.walk(action, this.select());
     }
 
-    /** Como el otro, sin esperar nada. */
+    /** Like the other one, without waiting at all. */
     public int selectNow(Consumer<SelectionKey> action) throws IOException {
         if (action == null) {
             throw new NullPointerException();
         }
-        return this.recorrer(action, this.selectNow());
+        return this.walk(action, this.selectNow());
     }
 
-    // Las tres formas con `Consumer` se apoyan en las abstractas y despues vacian el conjunto: es lo
-    // que hace que no haya nada que el que llama pueda olvidarse de limpiar.
-    private int recorrer(Consumer<SelectionKey> action, int n) {
+    // The three forms with `Consumer` lean on the abstract ones and then empty the set: it is what
+    // makes there be nothing the caller can forget to clean up.
+    private int walk(Consumer<SelectionKey> action, int n) {
         if (n == 0) {
             return 0;
         }
-        Set<SelectionKey> listas = this.selectedKeys();
-        int corridas = 0;
-        // Se copia antes de recorrer: `action` tiene derecho a cancelar llaves, y cancelar mientras
-        // se itera el conjunto vivo es una `ConcurrentModificationException` esperando su turno.
-        Object[] copia = listas.toArray();
-        listas.clear();
+        Set<SelectionKey> ready = this.selectedKeys();
+        int runs = 0;
+        // It is copied before walking it: `action` has the right to cancel keys, and cancelling
+        // while the live set is being iterated is a `ConcurrentModificationException` waiting its
+        // turn.
+        Object[] copied = ready.toArray();
+        ready.clear();
         int i = 0;
-        while (i < copia.length) {
-            action.accept((SelectionKey) copia[i]);
-            corridas = corridas + 1;
+        while (i < copied.length) {
+            action.accept((SelectionKey) copied[i]);
+            runs = runs + 1;
             i = i + 1;
         }
-        return corridas;
+        return runs;
     }
 
     /**
-     * Despierta a un `select` bloqueado, o hace que el proximo no llegue a bloquearse.
+     * Wakes a blocked `select` up, or makes the next one not get as far as blocking.
      *
-     * <p>Lo segundo importa tanto como lo primero: si el aviso solo valiera para un `select` ya
-     * empezado, quien llame justo antes de que empiece perderia el despertar y el hilo se quedaria
-     * dormido igual.
+     * <p>The second matters as much as the first: if the notice were only good for a `select` that
+     * had started already, whoever called just before it started would lose the waking and the
+     * thread would stay asleep all the same.
      */
     public abstract Selector wakeup();
 
     /**
-     * Cierra el selector; las llaves quedan invalidas y los canales se desregistran.
+     * Closes the selector; the keys are left invalid and the channels are unregistered.
      *
-     * <p>Sin `throws IOException`, y el JDK la declara: `java.io.Closeable` de esta biblioteca no la
-     * declara y §8.4.8.3 prohibe ensanchar. La divergencia nace en `Closeable`; esta anotada igual
-     * en {@link Channel}.
+     * <p>Without `throws IOException`, and the JDK declares it: this library's `java.io.Closeable`
+     * does not declare it and §8.4.8.3 forbids widening. The divergence is born in `Closeable`; it
+     * is noted the same way in {@link Channel}.
      */
     public abstract void close();
 }

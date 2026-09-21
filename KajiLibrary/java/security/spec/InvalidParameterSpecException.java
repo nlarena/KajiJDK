@@ -2,7 +2,7 @@ package java.security.spec;
 
 import java.security.GeneralSecurityException;
 
-// La spec de parametros que se dio no corresponde al algoritmo.
+// The parameter spec given does not match the algorithm.
 public class InvalidParameterSpecException extends GeneralSecurityException {
 
     public InvalidParameterSpecException() {

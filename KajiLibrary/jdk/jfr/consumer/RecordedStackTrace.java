@@ -6,31 +6,30 @@ import java.util.List;
 import jdk.jfr.ValueDescriptor;
 
 /**
- * Una pila de llamadas grabada.
+ * A recorded stack of calls.
  *
- * <h2>Por que puede estar truncada</h2>
+ * <h2>Why it may be truncated</h2>
  *
- * <p>Porque las pilas profundas cuestan: caminarlas lleva tiempo y guardarlas lleva espacio, y JFR
- * tiene un tope configurable. {@link #isTruncated} dice si se llego a ese tope.
+ * <p>Because deep stacks cost: walking them takes time and keeping them takes space, and JFR has a
+ * configurable cap. {@link #isTruncated} says whether that cap was reached.
  *
- * <p>Ignorarlo lleva a una conclusion falsa clasica: agrupar por el marco mas profundo y creer que
- * ahi esta el costo, cuando en las pilas truncadas ese marco es simplemente donde JFR dejo de
- * mirar.
+ * <p>Ignoring it leads to a classic false conclusion: grouping by the deepest frame and believing
+ * that the cost is there, when in truncated stacks that frame is simply where JFR stopped looking.
  *
- * <p>Los marcos vienen del mas reciente al mas antiguo, igual que en un volcado de pila.
+ * <p>The frames come from the most recent to the oldest, just as in a stack dump.
  *
  * @since 9
  */
 public final class RecordedStackTrace extends RecordedObject {
 
-    RecordedStackTrace(List<ValueDescriptor> descriptores, Object[] valores) {
-        super(descriptores, valores);
+    RecordedStackTrace(List<ValueDescriptor> descriptors, Object[] values) {
+        super(descriptors, values);
     }
 
     /**
-     * Los marcos, del mas reciente al mas antiguo.
+     * The frames, from the most recent to the oldest.
      *
-     * @return los marcos
+     * @return the frames
      */
     public List<RecordedFrame> getFrames() {
         final List<RecordedFrame> v = getValue("frames");
@@ -38,9 +37,9 @@ public final class RecordedStackTrace extends RecordedObject {
     }
 
     /**
-     * Si la pila se corto por llegar al tope de profundidad.
+     * Whether the stack was cut short by reaching the cap of depth.
      *
-     * @return si esta truncada
+     * @return whether it is truncated
      */
     public boolean isTruncated() {
         return getBoolean("truncated");

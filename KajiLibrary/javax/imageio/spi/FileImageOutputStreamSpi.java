@@ -7,9 +7,9 @@ import javax.imageio.stream.FileImageOutputStream;
 import javax.imageio.stream.ImageOutputStream;
 
 /**
- * Envuelve un {@link File} en un flujo de salida de imagenes.
+ * Wraps a {@link File} in an image output stream.
  *
- * <p>De acceso de paquete: no es API. Ver {@link FileImageInputStreamSpi}.
+ * <p>Package-private: it is not API. See {@link FileImageInputStreamSpi}.
  */
 final class FileImageOutputStreamSpi extends ImageOutputStreamSpi {
 

@@ -1,19 +1,19 @@
 package org.w3c.dom.html;
 
 /**
- * Un `<optgroup>`.
+ * An `<optgroup>`.
  */
 public interface HTMLOptGroupElement extends HTMLElement {
 
-    /** Si esta deshabilitado. */
+    /** Whether it is disabled. */
     boolean getDisabled();
 
-    /** Fija si esta deshabilitado. */
+    /** It sets whether it is disabled. */
     void setDisabled(boolean disabled);
 
-    /** El atributo `label`. */
+    /** The `label` attribute. */
     String getLabel();
 
-    /** Fija el atributo `label`. */
+    /** It sets the `label` attribute. */
     void setLabel(String label);
 }

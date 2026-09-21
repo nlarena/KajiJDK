@@ -1,38 +1,37 @@
 package jdk.incubator.vector;
 
 /**
- * Aritmetica que satura y aritmetica sin signo, en su version escalar.
+ * Saturating arithmetic and unsigned arithmetic, in their scalar version.
  *
- * <h2>Por que hace falta que exista para escalares</h2>
+ * <h2>Why it has to exist for scalars</h2>
  *
- * <p>Estas operaciones son las que las instrucciones vectoriales de la maquina hacen de verdad --
- * saturar en vez de dar la vuelta es lo normal en el hardware de senales y de imagen. Java no las
- * tiene: su aritmetica siempre da la vuelta.
+ * <p>These operations are what the machine's vector instructions really do -- saturating instead of
+ * wrapping around is the norm in signal and image hardware. Java does not have them: its arithmetic
+ * always wraps around.
  *
- * <p>Tener la version escalar aca sirve para dos cosas. Para escribir la version de referencia de un
- * algoritmo vectorial y comparar; y para el remanente, las pocas posiciones que sobran al final de
- * un arreglo cuando no completan un vector entero.
+ * <p>Having the scalar version here serves two things. Writing the reference version of a vector
+ * algorithm and comparing; and the remainder, the few lanes left over at the end of an array when
+ * they do not fill a whole vector.
  *
- * <h2>Saturar y dar la vuelta</h2>
+ * <h2>Saturating and wrapping around</h2>
  *
- * <p>Con {@code byte}, {@code 100 + 100} da {@code -56} en Java: se paso de 127 y volvio por abajo.
- * {@link #addSaturating(byte, byte)} da {@code 127}.
+ * <p>With {@code byte}, {@code 100 + 100} gives {@code -56} in Java: it went past 127 and came back
+ * from below. {@link #addSaturating(byte, byte)} gives {@code 127}.
  *
- * <p>La diferencia importa donde el numero representa una magnitud fisica. En una imagen, un pixel
- * muy iluminado tiene que quedar blanco; con la aritmetica de Java queda <strong>negro</strong>, que
- * es el peor error posible.
+ * <p>The difference matters where the number represents a physical magnitude. In an image, a very
+ * bright pixel has to stay white; with Java's arithmetic it turns <strong>black</strong>, which is
+ * the worst possible error.
  *
- * <h2>Sin signo</h2>
+ * <h2>Unsigned</h2>
  *
- * <p>Java no tiene enteros sin signo, asi que un {@code byte} de valor 200 se guarda como
- * {@code -56}. Comparar dos de esos con {@code <} da el resultado equivocado. Los
- * {@code minUnsigned} y {@code maxUnsigned} comparan como si no tuvieran signo, que es lo que hace
- * falta para datos que vienen de afuera de Java.
+ * <p>Java has no unsigned integers, so a {@code byte} of value 200 is stored as {@code -56}.
+ * Comparing two of those with {@code <} gives the wrong result. {@code minUnsigned} and {@code
+ * maxUnsigned} compare as if they had no sign, which is what data coming from outside Java needs.
  *
- * <h2>Estado en esta VM</h2>
+ * <h2>State on this VM</h2>
  *
- * <p>Todo esto es aritmetica entera y no necesita nada de la maquina: esta implementado de verdad y
- * comprobado contra el JDK 25 en todos los valores de borde.
+ * <p>All of this is integer arithmetic and needs nothing from the machine: it is really implemented
+ * and checked against JDK 25 on every edge value.
  *
  * @since 19
  */
@@ -44,36 +43,36 @@ public final class VectorMath {
     // ---- long ----
 
     /**
-     * El menor de los dos, comparados sin signo.
+     * The smaller of the two, compared unsigned.
      *
-     * @param a el primero
-     * @param b el segundo
-     * @return el menor
+     * @param a the first
+     * @param b the second
+     * @return the smaller
      */
     public static long minUnsigned(long a, long b) {
         return Long.compareUnsigned(a, b) < 0 ? a : b;
     }
 
     /**
-     * El mayor de los dos, comparados sin signo.
+     * The larger of the two, compared unsigned.
      *
-     * @param a el primero
-     * @param b el segundo
-     * @return el mayor
+     * @param a the first
+     * @param b the second
+     * @return the larger
      */
     public static long maxUnsigned(long a, long b) {
         return Long.compareUnsigned(a, b) > 0 ? a : b;
     }
 
     /**
-     * Suma con signo que satura en los extremos en vez de dar la vuelta.
+     * Signed addition that saturates at the ends instead of wrapping around.
      *
-     * <p>El desbordamiento se detecta por el signo: solo puede haber si los dos sumandos tienen el
-     * mismo signo y el resultado tiene el otro. Con signos distintos la suma nunca se pasa.
+     * <p>The overflow is detected by the sign: there can only be one if both addends have the same
+     * sign and the result has the other. With different signs the sum never goes past.
      *
-     * @param a el primero
-     * @param b el segundo
-     * @return la suma, o el extremo del rango
+     * @param a the first
+     * @param b the second
+     * @return the sum, or the end of the range
      */
     public static long addSaturating(long a, long b) {
         final long r = a + b;
@@ -84,11 +83,11 @@ public final class VectorMath {
     }
 
     /**
-     * Resta con signo que satura en los extremos.
+     * Signed subtraction that saturates at the ends.
      *
-     * @param a el minuendo
-     * @param b el sustraendo
-     * @return la resta, o el extremo del rango
+     * @param a the minuend
+     * @param b the subtrahend
+     * @return the difference, or the end of the range
      */
     public static long subSaturating(long a, long b) {
         final long r = a - b;
@@ -99,14 +98,14 @@ public final class VectorMath {
     }
 
     /**
-     * Suma sin signo que satura arriba.
+     * Unsigned addition that saturates at the top.
      *
-     * <p>Se paso si el resultado es menor que cualquiera de los dos sumandos, comparando sin signo.
-     * El tope es todo unos, que como {@code long} con signo se escribe {@code -1}.
+     * <p>It went past if the result is less than either addend, comparing unsigned. The cap is all
+     * ones, which as a signed {@code long} is written {@code -1}.
      *
-     * @param a el primero
-     * @param b el segundo
-     * @return la suma, o el maximo sin signo
+     * @param a the first
+     * @param b the second
+     * @return the sum, or the unsigned maximum
      */
     public static long addSaturatingUnsigned(long a, long b) {
         final long r = a + b;
@@ -114,11 +113,11 @@ public final class VectorMath {
     }
 
     /**
-     * Resta sin signo que satura en cero.
+     * Unsigned subtraction that saturates at zero.
      *
-     * @param a el minuendo
-     * @param b el sustraendo
-     * @return la resta, o cero
+     * @param a the minuend
+     * @param b the subtrahend
+     * @return the difference, or zero
      */
     public static long subSaturatingUnsigned(long a, long b) {
         return Long.compareUnsigned(a, b) < 0 ? 0L : a - b;
@@ -127,33 +126,33 @@ public final class VectorMath {
     // ---- int ----
 
     /**
-     * El menor de los dos, comparados sin signo.
+     * The smaller of the two, compared unsigned.
      *
-     * @param a el primero
-     * @param b el segundo
-     * @return el menor
+     * @param a the first
+     * @param b the second
+     * @return the smaller
      */
     public static int minUnsigned(int a, int b) {
         return Integer.compareUnsigned(a, b) < 0 ? a : b;
     }
 
     /**
-     * El mayor de los dos, comparados sin signo.
+     * The larger of the two, compared unsigned.
      *
-     * @param a el primero
-     * @param b el segundo
-     * @return el mayor
+     * @param a the first
+     * @param b the second
+     * @return the larger
      */
     public static int maxUnsigned(int a, int b) {
         return Integer.compareUnsigned(a, b) > 0 ? a : b;
     }
 
     /**
-     * Suma con signo que satura en los extremos.
+     * Signed addition that saturates at the ends.
      *
-     * @param a el primero
-     * @param b el segundo
-     * @return la suma, o el extremo del rango
+     * @param a the first
+     * @param b the second
+     * @return the sum, or the end of the range
      */
     public static int addSaturating(int a, int b) {
         final int r = a + b;
@@ -164,11 +163,11 @@ public final class VectorMath {
     }
 
     /**
-     * Resta con signo que satura en los extremos.
+     * Signed subtraction that saturates at the ends.
      *
-     * @param a el minuendo
-     * @param b el sustraendo
-     * @return la resta, o el extremo del rango
+     * @param a the minuend
+     * @param b the subtrahend
+     * @return the difference, or the end of the range
      */
     public static int subSaturating(int a, int b) {
         final int r = a - b;
@@ -179,11 +178,11 @@ public final class VectorMath {
     }
 
     /**
-     * Suma sin signo que satura arriba.
+     * Unsigned addition that saturates at the top.
      *
-     * @param a el primero
-     * @param b el segundo
-     * @return la suma, o el maximo sin signo
+     * @param a the first
+     * @param b the second
+     * @return the sum, or the unsigned maximum
      */
     public static int addSaturatingUnsigned(int a, int b) {
         final int r = a + b;
@@ -191,11 +190,11 @@ public final class VectorMath {
     }
 
     /**
-     * Resta sin signo que satura en cero.
+     * Unsigned subtraction that saturates at zero.
      *
-     * @param a el minuendo
-     * @param b el sustraendo
-     * @return la resta, o cero
+     * @param a the minuend
+     * @param b the subtrahend
+     * @return the difference, or zero
      */
     public static int subSaturatingUnsigned(int a, int b) {
         return Integer.compareUnsigned(a, b) < 0 ? 0 : a - b;
@@ -203,60 +202,60 @@ public final class VectorMath {
 
     // ---- short ----
     //
-    // Con short y byte se calcula en int y se recorta al final. Es lo que hay que hacer: Java
-    // promueve los dos a int antes de operar, asi que el desbordamiento del tipo chico no se puede
-    // detectar mirando el resultado de la suma -- nunca se desborda un int.
+    // With short and byte it is computed in int and clamped at the end. It is what has to be done:
+    // Java promotes both to int before operating, so the overflow of the small type cannot be
+    // detected by looking at the result of the sum -- an int never overflows.
 
     /**
-     * El menor de los dos, comparados sin signo.
+     * The smaller of the two, compared unsigned.
      *
-     * @param a el primero
-     * @param b el segundo
-     * @return el menor
+     * @param a the first
+     * @param b the second
+     * @return the smaller
      */
     public static short minUnsigned(short a, short b) {
         return (a & 0xFFFF) < (b & 0xFFFF) ? a : b;
     }
 
     /**
-     * El mayor de los dos, comparados sin signo.
+     * The larger of the two, compared unsigned.
      *
-     * @param a el primero
-     * @param b el segundo
-     * @return el mayor
+     * @param a the first
+     * @param b the second
+     * @return the larger
      */
     public static short maxUnsigned(short a, short b) {
         return (a & 0xFFFF) > (b & 0xFFFF) ? a : b;
     }
 
     /**
-     * Suma con signo que satura en los extremos del {@code short}.
+     * Signed addition that saturates at the ends of {@code short}.
      *
-     * @param a el primero
-     * @param b el segundo
-     * @return la suma, o el extremo del rango
+     * @param a the first
+     * @param b the second
+     * @return the sum, or the end of the range
      */
     public static short addSaturating(short a, short b) {
-        return recortar(a + b);
+        return saturate(a + b);
     }
 
     /**
-     * Resta con signo que satura en los extremos del {@code short}.
+     * Signed subtraction that saturates at the ends of {@code short}.
      *
-     * @param a el minuendo
-     * @param b el sustraendo
-     * @return la resta, o el extremo del rango
+     * @param a the minuend
+     * @param b the subtrahend
+     * @return the difference, or the end of the range
      */
     public static short subSaturating(short a, short b) {
-        return recortar(a - b);
+        return saturate(a - b);
     }
 
     /**
-     * Suma sin signo que satura en 65535.
+     * Unsigned addition that saturates at 65535.
      *
-     * @param a el primero
-     * @param b el segundo
-     * @return la suma, o el maximo sin signo
+     * @param a the first
+     * @param b the second
+     * @return the sum, or the unsigned maximum
      */
     public static short addSaturatingUnsigned(short a, short b) {
         final int r = (a & 0xFFFF) + (b & 0xFFFF);
@@ -264,18 +263,18 @@ public final class VectorMath {
     }
 
     /**
-     * Resta sin signo que satura en cero.
+     * Unsigned subtraction that saturates at zero.
      *
-     * @param a el minuendo
-     * @param b el sustraendo
-     * @return la resta, o cero
+     * @param a the minuend
+     * @param b the subtrahend
+     * @return the difference, or zero
      */
     public static short subSaturatingUnsigned(short a, short b) {
         final int r = (a & 0xFFFF) - (b & 0xFFFF);
         return (short) (r < 0 ? 0 : r);
     }
 
-    private static short recortar(final int r) {
+    private static short saturate(final int r) {
         if (r > Short.MAX_VALUE) {
             return Short.MAX_VALUE;
         }
@@ -288,55 +287,55 @@ public final class VectorMath {
     // ---- byte ----
 
     /**
-     * El menor de los dos, comparados sin signo.
+     * The smaller of the two, compared unsigned.
      *
-     * @param a el primero
-     * @param b el segundo
-     * @return el menor
+     * @param a the first
+     * @param b the second
+     * @return the smaller
      */
     public static byte minUnsigned(byte a, byte b) {
         return (a & 0xFF) < (b & 0xFF) ? a : b;
     }
 
     /**
-     * El mayor de los dos, comparados sin signo.
+     * The larger of the two, compared unsigned.
      *
-     * @param a el primero
-     * @param b el segundo
-     * @return el mayor
+     * @param a the first
+     * @param b the second
+     * @return the larger
      */
     public static byte maxUnsigned(byte a, byte b) {
         return (a & 0xFF) > (b & 0xFF) ? a : b;
     }
 
     /**
-     * Suma con signo que satura en los extremos del {@code byte}.
+     * Signed addition that saturates at the ends of {@code byte}.
      *
-     * @param a el primero
-     * @param b el segundo
-     * @return la suma, o el extremo del rango
+     * @param a the first
+     * @param b the second
+     * @return the sum, or the end of the range
      */
     public static byte addSaturating(byte a, byte b) {
-        return recortarByte(a + b);
+        return saturateByte(a + b);
     }
 
     /**
-     * Resta con signo que satura en los extremos del {@code byte}.
+     * Signed subtraction that saturates at the ends of {@code byte}.
      *
-     * @param a el minuendo
-     * @param b el sustraendo
-     * @return la resta, o el extremo del rango
+     * @param a the minuend
+     * @param b the subtrahend
+     * @return the difference, or the end of the range
      */
     public static byte subSaturating(byte a, byte b) {
-        return recortarByte(a - b);
+        return saturateByte(a - b);
     }
 
     /**
-     * Suma sin signo que satura en 255.
+     * Unsigned addition that saturates at 255.
      *
-     * @param a el primero
-     * @param b el segundo
-     * @return la suma, o el maximo sin signo
+     * @param a the first
+     * @param b the second
+     * @return the sum, or the unsigned maximum
      */
     public static byte addSaturatingUnsigned(byte a, byte b) {
         final int r = (a & 0xFF) + (b & 0xFF);
@@ -344,18 +343,18 @@ public final class VectorMath {
     }
 
     /**
-     * Resta sin signo que satura en cero.
+     * Unsigned subtraction that saturates at zero.
      *
-     * @param a el minuendo
-     * @param b el sustraendo
-     * @return la resta, o cero
+     * @param a the minuend
+     * @param b the subtrahend
+     * @return the difference, or zero
      */
     public static byte subSaturatingUnsigned(byte a, byte b) {
         final int r = (a & 0xFF) - (b & 0xFF);
         return (byte) (r < 0 ? 0 : r);
     }
 
-    private static byte recortarByte(final int r) {
+    private static byte saturateByte(final int r) {
         if (r > Byte.MAX_VALUE) {
             return Byte.MAX_VALUE;
         }

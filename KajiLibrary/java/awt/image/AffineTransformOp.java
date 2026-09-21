@@ -7,30 +7,32 @@ import java.awt.geom.Point2D;
 import java.awt.geom.Rectangle2D;
 
 /**
- * Mueve los píxeles: rota, escala, inclina o traslada una imagen con una transformación afín.
+ * Moves the pixels: rotates, scales, shears or translates an image with an affine transformation.
  *
- * <p>Es la única operación del paquete que cambia **dónde** está cada píxel, y de ahí que sea la
- * única cuyo {@link #getPoint2D} hace algo interesante.
+ * <p>It is the only operation of the package that changes **where** each pixel is, and hence the
+ * only one whose {@link #getPoint2D} does anything interesting.
  *
- * <p>El recorrido va al revés de lo que uno esperaría. No se toma cada píxel del origen y se calcula
- * dónde cae —eso dejaría agujeros al ampliar y colisiones al achicar—, sino que se toma cada píxel
- * del **destino** y se calcula de dónde viene, invirtiendo la transformación. Por eso el constructor
- * exige que la transformación sea invertible: sin inversa no hay de dónde leer.
+ * <p>The walk goes the other way round from what one would expect. Each pixel of the source is not
+ * taken and its landing place computed —that would leave holes when enlarging and collisions when
+ * shrinking—, but rather each pixel of the **destination** is taken and where it comes from is
+ * computed, inverting the transformation. That is why the constructor demands that the
+ * transformation be invertible: with no inverse there is nowhere to read from.
  *
- * <p>Ese punto de origen casi nunca cae justo en un píxel, y ahí entra la interpolación.
- * {@link #TYPE_NEAREST_NEIGHBOR} agarra el más cercano y es rápido y con escalones;
- * {@link #TYPE_BILINEAR} promedia los cuatro que lo rodean; {@link #TYPE_BICUBIC} usa dieciséis y
- * una curva que conserva mejor los bordes, a costa de poder pasarse del rango y necesitar recorte.
+ * <p>That source point almost never falls right on a pixel, and that is where the interpolation
+ * comes in. {@link #TYPE_NEAREST_NEIGHBOR} grabs the nearest one and is fast and stepped;
+ * {@link #TYPE_BILINEAR} averages the four that surround it; {@link #TYPE_BICUBIC} uses sixteen and
+ * a curve that preserves the edges better, at the cost of being able to overshoot the range and
+ * needing clamping.
  */
 public class AffineTransformOp implements BufferedImageOp, RasterOp {
 
-    /** El píxel más cercano. */
+    /** The nearest pixel. */
     public static final int TYPE_NEAREST_NEIGHBOR = 1;
 
-    /** Promedio pesado de los cuatro vecinos. */
+    /** Weighted average of the four neighbours. */
     public static final int TYPE_BILINEAR = 2;
 
-    /** Curva cúbica sobre dieciséis vecinos. */
+    /** Cubic curve over sixteen neighbours. */
     public static final int TYPE_BICUBIC = 3;
 
     private final AffineTransform xform;
@@ -38,13 +40,13 @@ public class AffineTransformOp implements BufferedImageOp, RasterOp {
     private final RenderingHints hints;
 
     /**
-     * Con el tipo de interpolación dado.
+     * With the given interpolation type.
      *
-     * @throws ImagingOpException si la transformación no es invertible
-     * @throws IllegalArgumentException si el tipo de interpolación no es uno de los tres
+     * @throws ImagingOpException if the transformation is not invertible
+     * @throws IllegalArgumentException if the interpolation type is not one of the three
      */
     public AffineTransformOp(AffineTransform xform, int interpolationType) {
-        this.validar(xform);
+        this.requireInvertible(xform);
         if (interpolationType != TYPE_NEAREST_NEIGHBOR && interpolationType != TYPE_BILINEAR
                 && interpolationType != TYPE_BICUBIC) {
             throw new IllegalArgumentException("Unknown interpolation type: " + interpolationType);
@@ -55,62 +57,64 @@ public class AffineTransformOp implements BufferedImageOp, RasterOp {
     }
 
     /**
-     * Con el tipo de interpolación tomado de las pistas.
+     * With the interpolation type taken from the hints.
      *
-     * <p>Sin pistas, o sin la pista de interpolación, se usa el vecino más cercano: es lo más rápido
-     * y lo que corresponde cuando nadie pidió calidad.
+     * <p>With no hints, or with no interpolation hint, the nearest neighbour is used: it is the
+     * fastest and what fits when nobody asked for quality. There is one exception, and this note
+     * used to leave it out: with no interpolation hint but with {@code KEY_RENDERING} set to {@code
+     * VALUE_RENDER_QUALITY}, bilinear is used.
      *
-     * @throws ImagingOpException si la transformación no es invertible
+     * @throws ImagingOpException if the transformation is not invertible
      */
     public AffineTransformOp(AffineTransform xform, RenderingHints hints) {
-        this.validar(xform);
+        this.requireInvertible(xform);
         this.xform = (AffineTransform) xform.clone();
         this.hints = hints;
-        int tipo = TYPE_NEAREST_NEIGHBOR;
+        int type = TYPE_NEAREST_NEIGHBOR;
         if (hints != null) {
             Object value = hints.get(RenderingHints.KEY_INTERPOLATION);
             if (value == null) {
-                Object calidad = hints.get(RenderingHints.KEY_RENDERING);
-                if (calidad == RenderingHints.VALUE_RENDER_QUALITY) {
-                    tipo = TYPE_BILINEAR;
+                Object quality = hints.get(RenderingHints.KEY_RENDERING);
+                if (quality == RenderingHints.VALUE_RENDER_QUALITY) {
+                    type = TYPE_BILINEAR;
                 }
             } else if (value == RenderingHints.VALUE_INTERPOLATION_BILINEAR) {
-                tipo = TYPE_BILINEAR;
+                type = TYPE_BILINEAR;
             } else if (value == RenderingHints.VALUE_INTERPOLATION_BICUBIC) {
-                tipo = TYPE_BICUBIC;
+                type = TYPE_BICUBIC;
             }
         }
-        this.interpolationType = tipo;
+        this.interpolationType = type;
     }
 
     /**
-     * Comprueba que la transformación se pueda invertir.
+     * Checks that the transformation can be inverted.
      *
-     * @throws ImagingOpException si el determinante es cero o casi
+     * @throws ImagingOpException if the determinant is zero or nearly so
      */
-    private void validar(AffineTransform xform) {
+    private void requireInvertible(AffineTransform xform) {
         double det = xform.getDeterminant();
         if (Math.abs(det) <= Double.MIN_VALUE) {
             throw new ImagingOpException("Unable to invert transform " + xform);
         }
     }
 
-    /** El tipo de interpolación. */
+    /** The interpolation type. */
     public final int getInterpolationType() {
         return this.interpolationType;
     }
 
-    /** La transformación. */
+    /** The transformation. */
     public final AffineTransform getTransform() {
         return (AffineTransform) this.xform.clone();
     }
 
     /**
-     * Aplica la transformación a una imagen.
+     * Applies the transformation to an image.
      *
-     * @param dst el destino, o `null` para que se cree
-     * @throws IllegalArgumentException si el origen y el destino son el mismo objeto
-     * @throws ImagingOpException si la transformación no se puede invertir
+     * @param dst the destination, or `null` for it to be created
+     * @throws IllegalArgumentException if the source and the destination are the same object
+     * @throws ImagingOpException if the transformation cannot be inverted
      */
     public final BufferedImage filter(BufferedImage src, BufferedImage dst) {
         if (src == null) {
@@ -119,86 +123,86 @@ public class AffineTransformOp implements BufferedImageOp, RasterOp {
         if (src == dst) {
             throw new IllegalArgumentException("src image cannot be the same as the dst image");
         }
-        BufferedImage destino = dst;
-        if (destino == null) {
-            destino = this.createCompatibleDestImage(src, src.getColorModel());
+        BufferedImage dest = dst;
+        if (dest == null) {
+            dest = this.createCompatibleDestImage(src, src.getColorModel());
         }
-        // Se transforma en ARGB y no en el formato de la imagen: interpolar exige promediar
-        // colores, y promediar indices de paleta o campos de bits no significa nada.
+        // It is transformed in ARGB and not in the format of the image: interpolating demands
+        // averaging colours, and averaging palette indices or bit fields means nothing.
         int sw = src.getWidth();
         int sh = src.getHeight();
-        int dw = destino.getWidth();
-        int dh = destino.getHeight();
-        int[] origen = new int[sw * sh];
-        src.getRGB(0, 0, sw, sh, origen, 0, sw);
-        int[] salida = new int[dw * dh];
+        int dw = dest.getWidth();
+        int dh = dest.getHeight();
+        int[] source = new int[sw * sh];
+        src.getRGB(0, 0, sw, sh, source, 0, sw);
+        int[] out = new int[dw * dh];
         AffineTransform inv;
         try {
             inv = this.xform.createInverse();
         } catch (NoninvertibleTransformException e) {
             throw new ImagingOpException("Unable to invert transform " + this.xform);
         }
-        double[] punto = new double[2];
+        double[] pt = new double[2];
         for (int y = 0; y < dh; y++) {
             for (int x = 0; x < dw; x++) {
-                punto[0] = x + 0.5;
-                punto[1] = y + 0.5;
-                inv.transform(punto, 0, punto, 0, 1);
-                salida[y * dw + x] = this.muestrear(origen, sw, sh, punto[0] - 0.5,
-                        punto[1] - 0.5);
+                pt[0] = x + 0.5;
+                pt[1] = y + 0.5;
+                inv.transform(pt, 0, pt, 0, 1);
+                out[y * dw + x] = this.sample(source, sw, sh, pt[0] - 0.5,
+                        pt[1] - 0.5);
             }
         }
-        destino.setRGB(0, 0, dw, dh, salida, 0, dw);
-        return destino;
+        dest.setRGB(0, 0, dw, dh, out, 0, dw);
+        return dest;
     }
 
-    /** El color ARGB que corresponde a esa coordenada continua del origen. */
-    private int muestrear(int[] src, int w, int h, double x, double y) {
+    /** The ARGB colour that corresponds to that continuous coordinate of the source. */
+    private int sample(int[] src, int w, int h, double x, double y) {
         if (this.interpolationType == TYPE_NEAREST_NEIGHBOR) {
             int ix = (int) Math.floor(x + 0.5);
             int iy = (int) Math.floor(y + 0.5);
-            return leer(src, w, h, ix, iy);
+            return pixelAt(src, w, h, ix, iy);
         }
         int x0 = (int) Math.floor(x);
         int y0 = (int) Math.floor(y);
         double fx = x - x0;
         double fy = y - y0;
         if (this.interpolationType == TYPE_BILINEAR) {
-            int[] canales = new int[4];
+            int[] channels = new int[4];
             for (int c = 0; c < 4; c++) {
-                double a = canal(leer(src, w, h, x0, y0), c);
-                double b = canal(leer(src, w, h, x0 + 1, y0), c);
-                double d = canal(leer(src, w, h, x0, y0 + 1), c);
-                double e = canal(leer(src, w, h, x0 + 1, y0 + 1), c);
-                double arriba = a + (b - a) * fx;
-                double abajo = d + (e - d) * fx;
-                canales[c] = recortar(arriba + (abajo - arriba) * fy);
+                double a = channel(pixelAt(src, w, h, x0, y0), c);
+                double b = channel(pixelAt(src, w, h, x0 + 1, y0), c);
+                double d = channel(pixelAt(src, w, h, x0, y0 + 1), c);
+                double e = channel(pixelAt(src, w, h, x0 + 1, y0 + 1), c);
+                double top = a + (b - a) * fx;
+                double bottom = d + (e - d) * fx;
+                channels[c] = clamp(top + (bottom - top) * fy);
             }
-            return armar(canales);
+            return packArgb(channels);
         }
-        int[] canales = new int[4];
+        int[] channels = new int[4];
         for (int c = 0; c < 4; c++) {
-            double[] filas = new double[4];
+            double[] rows = new double[4];
             for (int j = 0; j < 4; j++) {
                 double[] v = new double[4];
                 for (int i = 0; i < 4; i++) {
-                    v[i] = canal(leer(src, w, h, x0 - 1 + i, y0 - 1 + j), c);
+                    v[i] = channel(pixelAt(src, w, h, x0 - 1 + i, y0 - 1 + j), c);
                 }
-                filas[j] = cubica(v, fx);
+                rows[j] = cubic(v, fx);
             }
-            canales[c] = recortar(cubica(filas, fy));
+            channels[c] = clamp(cubic(rows, fy));
         }
-        return armar(canales);
+        return packArgb(channels);
     }
 
     /**
-     * La curva cúbica de Catmull-Rom sobre cuatro valores.
+     * The Catmull-Rom cubic curve over four values.
      *
-     * <p>Pasa exactamente por los dos del medio y usa los de los costados sólo para la pendiente,
-     * que es lo que le da los bordes más limpios que la bilineal — y también lo que le permite
-     * pasarse del rango y necesitar recorte.
+     * <p>It passes exactly through the two in the middle and uses the ones at the sides only for
+     * the slope, which is what gives it cleaner edges than the bilinear one — and also what lets it
+     * overshoot the range and need clamping.
      */
-    private static double cubica(double[] v, double t) {
+    private static double cubic(double[] v, double t) {
         double a = v[3] - v[2] - v[0] + v[1];
         double b = v[0] - v[1] - a;
         double c = v[2] - v[0];
@@ -206,21 +210,21 @@ public class AffineTransformOp implements BufferedImageOp, RasterOp {
         return a * t * t * t + b * t * t + c * t + d;
     }
 
-    /** El píxel de esa posición, o transparente si cae afuera. */
-    private static int leer(int[] src, int w, int h, int x, int y) {
+    /** The pixel of that position, or transparent if it falls outside. */
+    private static int pixelAt(int[] src, int w, int h, int x, int y) {
         if (x < 0 || y < 0 || x >= w || y >= h) {
             return 0;
         }
         return src[y * w + x];
     }
 
-    /** El canal `c` de un ARGB: 0 alfa, 1 rojo, 2 verde, 3 azul. */
-    private static int canal(int argb, int c) {
+    /** Channel `c` of an ARGB: 0 alpha, 1 red, 2 green, 3 blue. */
+    private static int channel(int argb, int c) {
         return (argb >> (24 - c * 8)) & 0xFF;
     }
 
-    /** Un valor llevado a 0..255. */
-    private static int recortar(double v) {
+    /** A value brought to 0..255. */
+    private static int clamp(double v) {
         int i = (int) (v + 0.5);
         if (i < 0) {
             return 0;
@@ -231,18 +235,18 @@ public class AffineTransformOp implements BufferedImageOp, RasterOp {
         return i;
     }
 
-    /** Los cuatro canales de vuelta en un ARGB. */
-    private static int armar(int[] canales) {
-        return (canales[0] << 24) | (canales[1] << 16) | (canales[2] << 8) | canales[3];
+    /** The four channels back in one ARGB. */
+    private static int packArgb(int[] channels) {
+        return (channels[0] << 24) | (channels[1] << 16) | (channels[2] << 8) | channels[3];
     }
 
     /**
-     * Aplica la transformación a un ráster.
+     * Applies the transformation to a raster.
      *
-     * @param dst el destino, o `null` para que se cree
-     * @throws IllegalArgumentException si el origen y el destino son el mismo objeto, o si no tienen
-     *     la misma cantidad de bandas
-     * @throws ImagingOpException si la transformación no se puede invertir
+     * @param dst the destination, or `null` for it to be created
+     * @throws IllegalArgumentException if the source and the destination are the same object, or if
+     *     they do not have the same number of bands
+     * @throws ImagingOpException if the transformation cannot be inverted
      */
     public final WritableRaster filter(Raster src, WritableRaster dst) {
         if (src == null) {
@@ -251,12 +255,12 @@ public class AffineTransformOp implements BufferedImageOp, RasterOp {
         if (src == dst) {
             throw new IllegalArgumentException("src image cannot be the same as the dst image");
         }
-        WritableRaster destino = dst;
-        if (destino == null) {
-            destino = this.createCompatibleDestRaster(src);
-        } else if (src.getNumBands() != destino.getNumBands()) {
+        WritableRaster dest = dst;
+        if (dest == null) {
+            dest = this.createCompatibleDestRaster(src);
+        } else if (src.getNumBands() != dest.getNumBands()) {
             throw new IllegalArgumentException("Number of src bands (" + src.getNumBands()
-                    + ") does not match number of dst bands (" + destino.getNumBands() + ")");
+                    + ") does not match number of dst bands (" + dest.getNumBands() + ")");
         }
         AffineTransform inv;
         try {
@@ -268,68 +272,68 @@ public class AffineTransformOp implements BufferedImageOp, RasterOp {
         int sh = src.getHeight();
         int sx = src.getMinX();
         int sy = src.getMinY();
-        int dw = destino.getWidth();
-        int dh = destino.getHeight();
-        int bandas = src.getNumBands();
-        int[] pixel = new int[bandas];
-        double[] punto = new double[2];
+        int dw = dest.getWidth();
+        int dh = dest.getHeight();
+        int bands = src.getNumBands();
+        int[] pixel = new int[bands];
+        double[] pt = new double[2];
         for (int y = 0; y < dh; y++) {
             for (int x = 0; x < dw; x++) {
-                punto[0] = x + 0.5;
-                punto[1] = y + 0.5;
-                inv.transform(punto, 0, punto, 0, 1);
-                int ix = (int) Math.floor(punto[0]);
-                int iy = (int) Math.floor(punto[1]);
+                pt[0] = x + 0.5;
+                pt[1] = y + 0.5;
+                inv.transform(pt, 0, pt, 0, 1);
+                int ix = (int) Math.floor(pt[0]);
+                int iy = (int) Math.floor(pt[1]);
                 if (ix < 0 || iy < 0 || ix >= sw || iy >= sh) {
-                    for (int b = 0; b < bandas; b++) {
+                    for (int b = 0; b < bands; b++) {
                         pixel[b] = 0;
                     }
                 } else {
                     pixel = src.getPixel(sx + ix, sy + iy, pixel);
                 }
-                destino.setPixel(destino.getMinX() + x, destino.getMinY() + y, pixel);
+                dest.setPixel(dest.getMinX() + x, dest.getMinY() + y, pixel);
             }
         }
-        return destino;
+        return dest;
     }
 
-    /** El rectángulo que va a ocupar el resultado. */
+    /** The rectangle the result is going to take. */
     public final Rectangle2D getBounds2D(BufferedImage src) {
         return this.getBounds2D(src.getRaster());
     }
 
-    /** El rectángulo que va a ocupar el resultado. */
+    /** The rectangle the result is going to take. */
     public final Rectangle2D getBounds2D(Raster src) {
         int w = src.getWidth();
         int h = src.getHeight();
-        double[] esquinas = new double[8];
-        esquinas[0] = 0;
-        esquinas[1] = 0;
-        esquinas[2] = w;
-        esquinas[3] = 0;
-        esquinas[4] = w;
-        esquinas[5] = h;
-        esquinas[6] = 0;
-        esquinas[7] = h;
-        this.xform.transform(esquinas, 0, esquinas, 0, 4);
-        double minX = esquinas[0];
-        double maxX = esquinas[0];
-        double minY = esquinas[1];
-        double maxY = esquinas[1];
+        double[] corners = new double[8];
+        corners[0] = 0;
+        corners[1] = 0;
+        corners[2] = w;
+        corners[3] = 0;
+        corners[4] = w;
+        corners[5] = h;
+        corners[6] = 0;
+        corners[7] = h;
+        this.xform.transform(corners, 0, corners, 0, 4);
+        double minX = corners[0];
+        double maxX = corners[0];
+        double minY = corners[1];
+        double maxY = corners[1];
         for (int i = 2; i < 8; i = i + 2) {
-            minX = Math.min(minX, esquinas[i]);
-            maxX = Math.max(maxX, esquinas[i]);
-            minY = Math.min(minY, esquinas[i + 1]);
-            maxY = Math.max(maxY, esquinas[i + 1]);
+            minX = Math.min(minX, corners[i]);
+            maxX = Math.max(maxX, corners[i]);
+            minY = Math.min(minY, corners[i + 1]);
+            maxY = Math.max(maxY, corners[i + 1]);
         }
         return new Rectangle2D.Double(minX, minY, maxX - minX, maxY - minY);
     }
 
     /**
-     * Una imagen vacía del tamaño que va a ocupar el resultado.
+     * An empty image of the size the result is going to take.
      *
-     * <p>El tamaño sale de {@link #getBounds2D} y no del origen: rotar una imagen cuadrada necesita
-     * un destino más grande.
+     * <p>The size comes from {@link #getBounds2D} and not from the source: rotating a square image
+     * needs a bigger destination.
      */
     public BufferedImage createCompatibleDestImage(BufferedImage src, ColorModel destCM) {
         ColorModel cm = destCM;
@@ -346,19 +350,19 @@ public class AffineTransformOp implements BufferedImageOp, RasterOp {
         return new BufferedImage(cm, wr, cm.isAlphaPremultiplied(), null);
     }
 
-    /** Un ráster vacío del tamaño que va a ocupar el resultado. */
+    /** An empty raster of the size the result is going to take. */
     public WritableRaster createCompatibleDestRaster(Raster src) {
         Rectangle2D r = this.getBounds2D(src);
         return src.createCompatibleWritableRaster((int) r.getX(), (int) r.getY(),
                 (int) Math.ceil(r.getWidth()), (int) Math.ceil(r.getHeight()));
     }
 
-    /** A dónde va a parar ese punto. */
+    /** Where that point ends up. */
     public final Point2D getPoint2D(Point2D srcPt, Point2D dstPt) {
         return this.xform.transform(srcPt, dstPt);
     }
 
-    /** Las pistas de dibujo, o `null` si no hay. */
+    /** The rendering hints, or `null` if there are none. */
     public final RenderingHints getRenderingHints() {
         return this.hints;
     }

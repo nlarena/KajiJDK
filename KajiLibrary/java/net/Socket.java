@@ -20,29 +20,29 @@ import java.util.Set;
 // settable-- can be fulfilled here a hundred per cent, and it is what this class gives.
 //
 // **IT REALLY CONNECTS NOW.** This header used to say that nothing needing a peer on the other side
-// went in --`connect`, the six connecting constructors, the two streams-- and that was true while the
-// VM had nothing to open a socket with. It has it now: `jdk.internal.net.Net`, the same kind of seam
-// as `Proc`. So `connect(SocketAddress)`, `connect(SocketAddress, int)`, `Socket(String,int)`,
+// went in --`connect`, the six connecting constructors, the two streams-- and that was true while
+// the VM had nothing to open a socket with. It has it now: `jdk.internal.net.Net`, the same kind of
+// seam as `Proc`. So `connect(SocketAddress)`, `connect(SocketAddress, int)`, `Socket(String,int)`,
 // `Socket(InetAddress,int)`, `getInputStream()` and `getOutputStream()` are here and speak TCP.
 //
-// **AND THE SIX THAT WERE MISSING ARE HERE TOO.** The two constructors with a **local address** really
-// choose the local end, and with them `sendUrgentData(int)`: all three need what `std::net` does not
-// expose --binding before connecting, and sending with the out-of-band flag-- and that is why the VM
-// goes down to the system calls (`socket`/`bind`/`connect`/`send`), declared by hand like any other
-// seam in this house.
+// **AND THE SIX THAT WERE MISSING ARE HERE TOO.** The two constructors with a **local address**
+// really choose the local end, and with them `sendUrgentData(int)`: all three need what `std::net`
+// does not expose --binding before connecting, and sending with the out-of-band flag-- and that is
+// why the VM goes down to the system calls (`socket`/`bind`/`connect`/`send`), declared by hand
+// like any other seam in this house.
 //
-// The two with the **`stream`** flag go in for a different reason and it is worth saying, because it
-// is the one case in this file where the contract changed: they promised a **UDP** socket wearing a
-// `Socket`'s face when given `false`, and the JDK stopped standing behind that -- it throws
-// `IllegalArgumentException("Socket constructor does not support creation of datagram sockets")`. It
-// was checked against JDK 25 and this class does exactly that. What was impossible to fulfil stopped
-// being part of the contract.
+// The two with the **`stream`** flag go in for a different reason and it is worth saying, because
+// it is the one case in this file where the contract changed: they promised a **UDP** socket
+// wearing a `Socket`'s face when given `false`, and the JDK stopped standing behind that -- it
+// throws `IllegalArgumentException("Socket constructor does not support creation of datagram
+// sockets")`. It was checked against JDK 25 and this class does exactly that. What was impossible
+// to fulfil stopped being part of the contract.
 //
 // **Everything else is real**: the eleven socket options with their validations, the state
 // (`isConnected`, `isBound`, `isClosed`, `isInputShutdown`, `isOutputShutdown`), `close`,
-// `shutdownInput`/`shutdownOutput` --which throw `SocketException("Socket is not connected")`, which
-// is what the JDK throws over an unconnected socket--, `toString`, the implementation factory and the
-// `setOption`/`getOption`/`supportedOptions` trio.
+// `shutdownInput`/`shutdownOutput` --which throw `SocketException("Socket is not connected")`,
+// which is what the JDK throws over an unconnected socket--, `toString`, the implementation factory
+// and the `setOption`/`getOption`/`supportedOptions` trio.
 //
 // The options' default values are set by this class and are documented; in the JDK the operating
 // system sets them and they vary from machine to machine, which is why the JDK never promises them.
@@ -142,11 +142,11 @@ public class Socket implements Closeable {
             throw new IllegalArgumentException("Unsupported address type");
         }
         // It is recorded, and the `connect` that follows goes out through it. **It does not reserve
-        // the port yet**: for that the socket would have to be open from now on, and this class does
-        // not open it until it knows where it is going --its `connect` creates the socket with the
-        // destination's family, which is unknown until then. The difference shows in a single case:
-        // two sockets bound to the same local port fail only when the second connects, not when it
-        // binds. It is said here and in the method's javadoc.
+        // the port yet**: for that the socket would have to be open from now on, and this class
+        // does not open it until it knows where it is going --its `connect` creates the socket with
+        // the destination's family, which is unknown until then. The difference shows in a single
+        // case: two sockets bound to the same local port fail only when the second connects, not
+        // when it binds. It is said here and in the method's javadoc.
         if (bindpoint == null) {
             this.bindHost = "";
             this.bindPort = 0;
@@ -159,7 +159,7 @@ public class Socket implements Closeable {
         this.bound = true;
     }
 
-    // ---- estado ----
+    // ---- state ----
 
     /** The far end's address, or null if it is not connected. */
     public InetAddress getInetAddress() {
@@ -174,8 +174,8 @@ public class Socket implements Closeable {
             // It is a numeric literal, so this consults no DNS.
             return InetAddress.getByName(d);
         } catch (UnknownHostException e) {
-            // It cannot happen with a numeric literal; if it did, "I do not know" is `null`, which is
-            // what this method returns for an unconnected socket.
+            // It cannot happen with a numeric literal; if it did, "I do not know" is `null`, which
+            // is what this method returns for an unconnected socket.
             return null;
         }
     }
@@ -191,10 +191,11 @@ public class Socket implements Closeable {
             String d = jdk.internal.net.Net.localAddress(this.handle);
             if (d != null) {
                 try {
-                    // Es un literal numerico: esto no consulta ningun DNS.
+                    // It is a numeric literal: this queries no DNS.
                     return InetAddress.getByName(d);
                 } catch (UnknownHostException e) {
-                    // It cannot happen with a numeric literal; if it did, it falls to the wildcard below.
+                    // It cannot happen with a numeric literal; if it did, it falls to the wildcard
+                    // below.
                 }
             }
         }
@@ -270,7 +271,7 @@ public class Socket implements Closeable {
         return this.shutOut;
     }
 
-    // ---- opciones ----
+    // ---- options ----
 
     /**
      * Sends the data as soon as it is written, without gathering it into a full packet (Nagle's
@@ -294,8 +295,8 @@ public class Socket implements Closeable {
     /**
      * How many seconds {@link #close} waits for the output buffer to empty.
      *
-     * <p>Switching it off and the value are a single state, and that is why there is a single getter:
-     * off reads as -1.
+     * <p>Switching it off and the value are a single state, and that is why there is a single
+     * getter: off reads as -1.
      *
      * @throws IllegalArgumentException if it is on with a negative value
      */
@@ -397,9 +398,9 @@ public class Socket implements Closeable {
     }
 
     /**
-     * El campo "type of service" de la cabecera IP.
+     * The "type of service" field of the IP header.
      *
-     * @throws IllegalArgumentException si no entra en 0..255
+     * @throws IllegalArgumentException if it is not in 0..255
      */
     public void setTrafficClass(int tc) throws SocketException {
         this.checkOpen();
@@ -428,9 +429,9 @@ public class Socket implements Closeable {
     /**
      * What matters most about this connection: connection time, latency or bandwidth.
      *
-     * <p>It is a **suggestion**, and the JDK documents that an implementation may ignore it entirely.
-     * This one ignores it, which is one of the answers the contract allows -- not an unfulfilled
-     * promise.
+     * <p>It is a **suggestion**, and the JDK documents that an implementation may ignore it
+     * entirely. This one ignores it, which is one of the answers the contract allows -- not an
+     * unfulfilled promise.
      */
     public void setPerformancePreferences(int connectionTime, int latency, int bandwidth) {
     }
@@ -513,13 +514,13 @@ public class Socket implements Closeable {
         return Collections.unmodifiableSet(s);
     }
 
-    // ---- cierre ----
+    // ---- closing ----
 
     /**
      * Closes the reading half.
      *
-     * @throws SocketException if the socket is not connected -- which is exactly what the JDK throws
-     *     over an unconnected socket
+     * @throws SocketException if the socket is not connected -- which is exactly what the JDK
+     *     throws over an unconnected socket
      */
     public void shutdownInput() throws IOException {
         this.checkOpen();
@@ -583,7 +584,7 @@ public class Socket implements Closeable {
      * Installs the implementation factory for the whole VM. Once only.
      *
      * @throws Error if one had already been installed
-     * @deprecated el JDK deprecio el mecanismo de {@link SocketImpl}
+     * @deprecated the JDK deprecated the {@link SocketImpl} mechanism
      */
     @Deprecated
     public static synchronized void setSocketImplFactory(SocketImplFactory fac) throws IOException {
@@ -593,7 +594,7 @@ public class Socket implements Closeable {
         factory = fac;
     }
 
-    // ---- conectar ---------------------------------------------------------------------------
+    // ---- connecting -------------------------------------------------------------------------
 
     /**
      * Connects to that address, with no time limit.
@@ -611,8 +612,8 @@ public class Socket implements Closeable {
      * @param timeout zero means no limit, as in the JDK
      * @throws IOException if it could not connect
      * @throws SocketTimeoutException if the deadline expired
-     * @throws IllegalArgumentException if the address is not an {@link InetSocketAddress}, or if the
-     *     deadline is negative
+     * @throws IllegalArgumentException if the address is not an {@link InetSocketAddress}, or if
+     *     the deadline is negative
      */
     public void connect(SocketAddress endpoint, int timeout) throws IOException {
         if (endpoint == null) {
@@ -634,17 +635,17 @@ public class Socket implements Closeable {
         }
         String host = isa.getAddress().getHostAddress();
         if (!this.bindHost.isEmpty() || this.bindPort != 0) {
-            // There was a `bind` before: it has to go out through there, and that needs the path that
-            // binds first.
-            this.conectarDesde(isa.getAddress(), isa.getPort(), InetAddress.getByName(
+            // There was a `bind` before: it has to go out through there, and that needs the path
+            // that binds first.
+            this.connectFrom(isa.getAddress(), isa.getPort(), InetAddress.getByName(
                     this.bindHost.isEmpty() ? "0.0.0.0" : this.bindHost), this.bindPort);
             return;
         }
         int h = jdk.internal.net.Net.connect(host, isa.getPort(), timeout);
         if (h < 0) {
             // The native does not tell "refused" from "no route" from "deadline expired", so the
-            // message names the only thing known for certain: where the connection was attempted to.
-            // Inventing a reason would be guessing which of the three it was.
+            // message names the only thing known for certain: where the connection was attempted
+            // to. Inventing a reason would be guessing which of the three it was.
             throw new java.net.ConnectException(
                     "Connection refused: " + host + ":" + isa.getPort());
         }
@@ -659,10 +660,10 @@ public class Socket implements Closeable {
     }
 
     /**
-     * Un socket ya conectado a ese host y puerto.
+     * A socket already connected to that host and port.
      *
-     * @throws UnknownHostException si el nombre no resuelve
-     * @throws IOException si no se pudo conectar
+     * @throws UnknownHostException if the name does not resolve
+     * @throws IOException if it could not connect
      */
     public Socket(String host, int port) throws IOException {
         this.proxy = null;
@@ -687,10 +688,11 @@ public class Socket implements Closeable {
     /**
      * The bytes arriving from the peer.
      *
-     * <p>Always the same object: closing it closes the socket, so two different streams over the same
-     * socket would leave one believing itself open after the other was closed.
+     * <p>Always the same object: closing it closes the socket, so two different streams over the
+     * same socket would leave one believing itself open after the other was closed.
      *
-     * @throws IOException if the socket is closed, unconnected, or its reading half is already closed
+     * @throws IOException if the socket is closed, unconnected, or its reading half is already
+     *     closed
      */
     public InputStream getInputStream() throws IOException {
         this.checkOpen();
@@ -732,7 +734,7 @@ public class Socket implements Closeable {
         return this.handle;
     }
 
-    boolean cerrado() {
+    boolean closed() {
         return this.closed;
     }
 
@@ -750,25 +752,25 @@ public class Socket implements Closeable {
     // ---- the constructors that choose the local end -------------------------------------------
 
     /**
-     * A socket connected to {@code host}:{@code port}, **going out through** {@code localAddr}:{@code
-     * localPort}.
+     * A socket connected to {@code host}:{@code port}, **going out through** {@code
+     * localAddr}:{@code localPort}.
      *
-     * <p>Choosing the local end serves two real purposes: going out through a particular interface on
-     * a machine with several, and taking a source port the other side expects. A null
-     * {@code localAddr} is the wildcard and a {@code localPort} of zero lets the system choose, which
-     * is the same as asking for nothing.
+     * <p>Choosing the local end serves two real purposes: going out through a particular interface
+     * on a machine with several, and taking a source port the other side expects. A null {@code
+     * localAddr} is the wildcard and a {@code localPort} of zero lets the system choose, which is
+     * the same as asking for nothing.
      *
      * @throws UnknownHostException if the name does not resolve
      * @throws IOException if it could not bind or could not connect
      */
     public Socket(String host, int port, InetAddress localAddr, int localPort) throws IOException {
         this.proxy = null;
-        this.conectarDesde(InetAddress.getByName(host), port, localAddr, localPort);
+        this.connectFrom(InetAddress.getByName(host), port, localAddr, localPort);
     }
 
     /**
-     * A socket connected to {@code address}:{@code port}, going out through {@code localAddr}:{@code
-     * localPort}. See {@link #Socket(String, int, InetAddress, int)}.
+     * A socket connected to {@code address}:{@code port}, going out through {@code
+     * localAddr}:{@code localPort}. See {@link #Socket(String, int, InetAddress, int)}.
      *
      * @throws NullPointerException if {@code address} is null
      * @throws IOException if it could not bind or could not connect
@@ -779,12 +781,12 @@ public class Socket implements Closeable {
         if (address == null) {
             throw new NullPointerException("address");
         }
-        this.conectarDesde(address, port, localAddr, localPort);
+        this.connectFrom(address, port, localAddr, localPort);
     }
 
-    // The body of both. The waiting is on this side: the native starts the connect on a system thread
-    // --it has to block in order to bind first-- and answers through a pigeonhole.
-    private void conectarDesde(InetAddress address, int port, InetAddress localAddr, int localPort)
+    // The body of both. The waiting is on this side: the native starts the connect on a system
+    // thread --it has to block in order to bind first-- and answers through a pigeonhole.
+    private void connectFrom(InetAddress address, int port, InetAddress localAddr, int localPort)
             throws IOException {
         if (port < 0 || port > 0xFFFF) {
             throw new IllegalArgumentException("port out of range:" + port);
@@ -793,14 +795,14 @@ public class Socket implements Closeable {
             throw new IllegalArgumentException("localPort out of range:" + localPort);
         }
         String local = localAddr == null ? "" : localAddr.getHostAddress();
-        int casillero = jdk.internal.net.Net.connectFromStart(
+        int slot = jdk.internal.net.Net.connectFromStart(
                 address.getHostAddress(), port, local, localPort);
         int h;
-        if (casillero < 0) {
+        if (slot < 0) {
             h = -1;
         } else {
             try {
-                h = jdk.internal.net.Net.answerPoll(casillero);
+                h = jdk.internal.net.Net.answerPoll(slot);
                 while (h == -3) {
                     try {
                         Thread.sleep(1);
@@ -808,16 +810,16 @@ public class Socket implements Closeable {
                         Thread.currentThread().interrupt();
                         throw new java.io.InterruptedIOException("connect interrupted");
                     }
-                    h = jdk.internal.net.Net.answerPoll(casillero);
+                    h = jdk.internal.net.Net.answerPoll(slot);
                 }
             } finally {
-                jdk.internal.net.Net.answerFree(casillero);
+                jdk.internal.net.Net.answerFree(slot);
             }
         }
         if (h < 0) {
-            // The native does not tell "could not bind" from "could not connect", and both are equally
-            // likely here --a taken local port is as common as a downed destination. The message names
-            // both ends, which is the only thing known for certain.
+            // The native does not tell "could not bind" from "could not connect", and both are
+            // equally likely here --a taken local port is as common as a downed destination. The
+            // message names both ends, which is the only thing known for certain.
             throw new java.net.ConnectException("Connection failed: "
                     + (local.isEmpty() ? "*" : local) + ":" + localPort
                     + " -> " + address.getHostAddress() + ":" + port);
@@ -839,28 +841,28 @@ public class Socket implements Closeable {
      *     {@link IllegalArgumentException}. This does the same, word for word.
      * @throws IllegalArgumentException if {@code stream} is false
      * @throws IOException if it could not connect
-     * @deprecated as in the JDK: use {@link #Socket(String, int)} for TCP and {@link DatagramSocket}
-     *     for UDP
+     * @deprecated as in the JDK: use {@link #Socket(String, int)} for TCP and {@link
+     *     DatagramSocket} for UDP
      */
     @Deprecated
     public Socket(String host, int port, boolean stream) throws IOException {
         this.proxy = null;
-        Socket.exigirFlujo(stream);
+        Socket.requireStream(stream);
         this.connect(new InetSocketAddress(InetAddress.getByName(host), port), 0);
     }
 
     /**
-     * Un socket conectado a {@code address}:{@code port}. Ver {@link #Socket(String, int, boolean)}.
+     * A socket connected to {@code address}:{@code port}. See {@link #Socket(String, int, boolean)}.
      *
-     * @throws IllegalArgumentException si {@code stream} es false
-     * @throws NullPointerException si {@code address} es null
-     * @throws IOException si no se pudo conectar
-     * @deprecated como en el JDK
+     * @throws IllegalArgumentException if {@code stream} is false
+     * @throws NullPointerException if {@code address} is null
+     * @throws IOException if it could not connect
+     * @deprecated as in the JDK
      */
     @Deprecated
     public Socket(InetAddress address, int port, boolean stream) throws IOException {
         this.proxy = null;
-        Socket.exigirFlujo(stream);
+        Socket.requireStream(stream);
         if (address == null) {
             throw new NullPointerException("address");
         }
@@ -869,14 +871,14 @@ public class Socket implements Closeable {
 
     // The message is JDK 25's, and it was checked against it: a datagram `Socket` stopped existing,
     // and whoever passes `false` has to find that out and not a connection failure.
-    private static void exigirFlujo(boolean stream) {
+    private static void requireStream(boolean stream) {
         if (!stream) {
             throw new IllegalArgumentException(
                     "Socket constructor does not support creation of datagram sockets");
         }
     }
 
-    // ---- fuera de banda -----------------------------------------------------------------------
+    // ---- out of band -----------------------------------------------------------------------------
 
     /**
      * Sends a byte **out of band**.
@@ -902,8 +904,9 @@ public class Socket implements Closeable {
 }
 
 
-// The bytes arriving from a socket. It is a view over the handle and not a buffer of its own: reading
-// from here reads from the connection at that moment, which is what an `InputStream` promises.
+// The bytes arriving from a socket. It is a view over the handle and not a buffer of its own:
+// reading from here reads from the connection at that moment, which is what an `InputStream`
+// promises.
 final class SocketInput extends InputStream {
 
     private final Socket socket;
@@ -913,13 +916,13 @@ final class SocketInput extends InputStream {
     }
 
     public int read() throws IOException {
-        byte[] uno = new byte[1];
-        int n = this.read(uno, 0, 1);
+        byte[] one = new byte[1];
+        int n = this.read(one, 0, 1);
         if (n <= 0) {
             return -1;
         }
         // To 0..255: `read()` returns an unsigned byte and -1 means end.
-        return uno[0] & 0xFF;
+        return one[0] & 0xFF;
     }
 
     public int read(byte[] b, int off, int len) throws IOException {
@@ -932,21 +935,21 @@ final class SocketInput extends InputStream {
         if (len == 0) {
             return 0;
         }
-        if (this.socket.cerrado()) {
+        if (this.socket.closed()) {
             throw new SocketException("Socket is closed");
         }
         // The native does not wait: -3 is "nothing has arrived yet". The waiting is done here,
-        // sleeping a little between attempts, because sleeping releases the VM's interpreter and lets
-        // the thread that has to write on the other side run. It is also what allows the deadline to
-        // be counted for real: the -2 is decided by this side, not by the system.
+        // sleeping a little between attempts, because sleeping releases the VM's interpreter and
+        // lets the thread that has to write on the other side run. It is also what allows the
+        // deadline to be counted for real: the -2 is decided by this side, not by the system.
         int deadline = this.socket.readDeadline();
-        long comienzo = System.currentTimeMillis();
+        long start = System.currentTimeMillis();
         int n = jdk.internal.net.Net.read(this.socket.handle(), b, off, len);
         while (n == -3) {
-            if (this.socket.cerrado()) {
+            if (this.socket.closed()) {
                 throw new SocketException("Socket is closed");
             }
-            if (deadline > 0 && System.currentTimeMillis() - comienzo >= deadline) {
+            if (deadline > 0 && System.currentTimeMillis() - start >= deadline) {
                 // An expired deadline is not end of stream: the connection is still alive, only
                 // quiet.
                 throw new SocketTimeoutException("Read timed out");
@@ -995,7 +998,7 @@ final class SocketOutput extends OutputStream {
         if (len == 0) {
             return;
         }
-        if (this.socket.cerrado()) {
+        if (this.socket.closed()) {
             throw new SocketException("Socket is closed");
         }
         if (!jdk.internal.net.Net.write(this.socket.handle(), b, off, len)) {

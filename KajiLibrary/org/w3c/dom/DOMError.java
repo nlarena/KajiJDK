@@ -1,55 +1,55 @@
 package org.w3c.dom;
 
 /**
- * KajiLibrary's org.w3c.dom.DOMError -- un problema encontrado al procesar un documento.
+ * KajiLibrary's org.w3c.dom.DOMError -- a problem found while processing a document.
  *
- * <p>No tiene nada que ver con {@link DOMException} y conviene no mezclarlas. Una
- * {@code DOMException} se **lanza** cuando el llamador pidio algo imposible y corta ahi mismo; un
- * {@code DOMError} se **reporta** a un {@link DOMErrorHandler} durante una operacion larga
- * --{@link Document#normalizeDocument}, una validacion, una carga-- que quiere seguir adelante y
- * juntar todos los problemas en vez de morir en el primero.
+ * <p>It has nothing to do with {@link DOMException} and it is as well not to mix them. A
+ * {@code DOMException} is **thrown** when the caller asked for something impossible and it cuts
+ * right there; a {@code DOMError} is **reported** to a {@link DOMErrorHandler} during a long
+ * operation --{@link Document#normalizeDocument}, a validation, a load-- that wants to carry on and
+ * collect all the problems instead of dying at the first.
  *
- * <p>De ahi las tres severidades, que como en cualquier reporte de errores no se distinguen por
- * gravedad sino por **que puede pasar despues**: con {@link #SEVERITY_WARNING} el procesamiento
- * sigue normal; con {@link #SEVERITY_ERROR} se puede seguir pero el resultado ya no es confiable; y
- * con {@link #SEVERITY_FATAL_ERROR} no se puede continuar.
+ * <p>Hence the three severities, which as in any error report are not told apart by gravity but by
+ * **what can happen next**: with {@link #SEVERITY_WARNING} the processing goes on normally; with
+ * {@link #SEVERITY_ERROR} one can go on but the result is no longer reliable; and with
+ * {@link #SEVERITY_FATAL_ERROR} one cannot continue.
  *
- * <p>Los tres valores son 1, 2 y 3 y salen de la especificacion.
+ * <p>The three values are 1, 2 and 3 and come from the specification.
  *
- * <p>Interfaz declarada entera.
+ * <p>The interface is declared whole.
  */
 public interface DOMError {
 
-    /** El procesamiento sigue normalmente. */
+    /** The processing goes on normally. */
     public static final short SEVERITY_WARNING = 1;
 
-    /** Se puede continuar, pero el resultado ya no es confiable. */
+    /** One can continue, but the result is no longer reliable. */
     public static final short SEVERITY_ERROR = 2;
 
-    /** No se puede continuar. */
+    /** One cannot continue. */
     public static final short SEVERITY_FATAL_ERROR = 3;
 
-    /** Una de las tres constantes {@code SEVERITY_*}. */
+    /** One of the three {@code SEVERITY_*} constants. */
     public short getSeverity();
 
-    /** El mensaje para leer, en el idioma de la implementacion. */
+    /** The message to read, in the language of the implementation. */
     public String getMessage();
 
     /**
-     * El tipo del error, una cadena de la norma como {@code "wf-invalid-character"} o
+     * The type of the error, a string of the standard such as {@code "wf-invalid-character"} or
      * {@code "unbound-prefix-in-entity-reference"}.
      *
-     * <p>Es lo que hay que mirar para decidir por programa: el mensaje esta pensado para una
-     * persona, esto para un {@code switch}.
+     * <p>It is what one has to look at to decide in code: the message is meant for a person, this
+     * for a {@code switch}.
      */
     public String getType();
 
-    /** La excepcion que lo origino, si la hubo. */
+    /** The exception that caused it, if there was one. */
     public Object getRelatedException();
 
-    /** El dato relacionado --tipicamente el nodo culpable-- o {@code null}. */
+    /** The related datum --typically the offending node-- or {@code null}. */
     public Object getRelatedData();
 
-    /** Donde ocurrio. */
+    /** Where it happened. */
     public DOMLocator getLocation();
 }

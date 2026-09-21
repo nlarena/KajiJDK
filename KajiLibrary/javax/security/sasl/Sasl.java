@@ -11,98 +11,99 @@ import java.util.Set;
 import javax.security.auth.callback.CallbackHandler;
 
 /**
- * KajiLibrary's javax.security.sasl.Sasl -- por donde se entra a SASL.
+ * KajiLibrary's javax.security.sasl.Sasl -- the way into SASL.
  *
- * <p>Metodos estaticos y una lista larga de constantes. Las constantes son los nombres de las
- * propiedades que se le pasan a la negociacion, y se dividen en dos grupos que conviene no mezclar:
+ * <p>Static methods and a long list of constants. The constants are the names of the properties
+ * passed to the negotiation, and they split into two groups that are best not mixed:
  *
  * <ul>
- *   <li>las de <b>configuracion</b> --{@link #QOP}, {@link #STRENGTH}, {@link #MAX_BUFFER}-- dicen
- *       que se quiere;
- *   <li>las de <b>politica</b> --las {@code POLICY_*}-- dicen que <b>no</b> se acepta, y actuan
- *       antes: filtran que mecanismos se ofrecen siquiera.
+ *   <li>the <b>configuration</b> ones --{@link #QOP}, {@link #STRENGTH}, {@link #MAX_BUFFER}-- say
+ *       what is wanted;
+ *   <li>the <b>policy</b> ones --the {@code POLICY_*}-- say what is <b>not</b> accepted, and act
+ *       earlier: they filter which mechanisms are even offered.
  * </ul>
  *
- * <p>La distincion importa porque las de politica son las que de verdad protegen.
- * {@link #POLICY_NOPLAINTEXT} saca de la lista a los mecanismos que mandan la contrasena en claro, y
- * eso es mas fuerte que pedir cifrado: un mecanismo que no esta en la lista no se puede elegir ni
- * por error ni porque el servidor lo empuje.
+ * <p>The distinction matters because the policy ones are the ones that really protect.
+ * {@link #POLICY_NOPLAINTEXT} takes the mechanisms that send the password in the clear off the
+ * list, and that is stronger than asking for encryption: a mechanism that is not on the list cannot
+ * be chosen either by mistake or because the server pushes it.
  *
- * <h2>Devolver null no es fallar</h2>
+ * <h2>Returning null is not failing</h2>
  *
- * <p>{@link #createSaslClient} y {@link #createSaslServer} devuelven <b>null</b> cuando ninguna
- * fabrica registrada puede con lo que se pidio. Es lo correcto y hay que atajarlo: significa "no hay
- * un mecanismo en comun", que es una respuesta normal de una negociacion, no una excepcion.
+ * <p>{@link #createSaslClient} and {@link #createSaslServer} return <b>null</b> when no registered
+ * factory can handle what was asked. It is the right thing and it has to be caught: it means "there
+ * is no mechanism in common", which is a normal answer of a negotiation, not an exception.
  *
  * <h2>A KajiLibrary subset</h2>
  *
- * <p>Esta biblioteca no registra ninguna fabrica SASL, asi que los dos {@code create} devuelven null
- * y las dos enumeraciones vienen vacias. La busqueda esta implementada de verdad --recorre los
- * proveedores de seguridad buscando servicios {@code SaslClientFactory} y
- * {@code SaslServerFactory}-- asi que registrar una fabrica alcanza para que todo funcione.
+ * <p>This library registers no SASL factory, so both {@code create}s return null and both
+ * enumerations come empty. The lookup is really implemented --it walks the security providers
+ * looking for {@code SaslClientFactory} and {@code SaslServerFactory} services-- so registering a
+ * factory is enough for everything to work.
  */
 public class Sasl {
 
-    /** La calidad de proteccion pedida: {@code auth}, {@code auth-int} o {@code auth-conf}. */
+    /** The requested quality of protection: {@code auth}, {@code auth-int} or {@code auth-conf}. */
     public static final String QOP = "javax.security.sasl.qop";
 
-    /** La fuerza del cifrado: {@code low}, {@code medium} o {@code high}. */
+    /** The strength of the encryption: {@code low}, {@code medium} or {@code high}. */
     public static final String STRENGTH = "javax.security.sasl.strength";
 
-    /** Si el servidor tambien tiene que autenticarse. */
+    /** Whether the server also has to authenticate. */
     public static final String SERVER_AUTH = "javax.security.sasl.server.authentication";
 
-    /** El nombre del servidor al que el canal esta atado. */
+    /** The name of the server the channel is bound to. */
     public static final String BOUND_SERVER_NAME = "javax.security.sasl.bound.server.name";
 
-    /** El tamano maximo de un bloque recibido. */
+    /** The maximum size of a received block. */
     public static final String MAX_BUFFER = "javax.security.sasl.maxbuffer";
 
-    /** El tamano maximo de un bloque enviado. */
+    /** The maximum size of a sent block. */
     public static final String RAW_SEND_SIZE = "javax.security.sasl.rawsendsize";
 
-    /** Si se puede reusar una sesion ya autenticada. */
+    /** Whether an already authenticated session can be reused. */
     public static final String REUSE = "javax.security.sasl.reuse";
 
-    /** No aceptar mecanismos que manden la contrasena en claro. Ver la nota de la clase. */
+    /** Do not accept mechanisms that send the password in the clear. See the class note. */
     public static final String POLICY_NOPLAINTEXT = "javax.security.sasl.policy.noplaintext";
 
-    /** No aceptar mecanismos vulnerables a un atacante activo. */
+    /** Do not accept mechanisms vulnerable to an active attacker. */
     public static final String POLICY_NOACTIVE = "javax.security.sasl.policy.noactive";
 
-    /** No aceptar mecanismos vulnerables a un ataque de diccionario. */
+    /** Do not accept mechanisms vulnerable to a dictionary attack. */
     public static final String POLICY_NODICTIONARY = "javax.security.sasl.policy.nodictionary";
 
-    /** No aceptar autenticacion anonima. */
+    /** Do not accept anonymous authentication. */
     public static final String POLICY_NOANONYMOUS = "javax.security.sasl.policy.noanonymous";
 
-    /** Solo mecanismos con secreto hacia adelante. */
+    /** Only mechanisms with forward secrecy. */
     public static final String POLICY_FORWARD_SECRECY = "javax.security.sasl.policy.forward";
 
-    /** Solo mecanismos que pasen credenciales del cliente. */
+    /** Only mechanisms that pass on client credentials. */
     public static final String POLICY_PASS_CREDENTIALS = "javax.security.sasl.policy.credentials";
 
-    /** Las credenciales a usar, cuando el mecanismo las toma de afuera. */
+    /** The credentials to use, when the mechanism takes them from outside. */
     public static final String CREDENTIALS = "javax.security.sasl.credentials";
 
-    /** El tipo de servicio de las fabricas de cliente. */
+    /** The service type of the client factories. */
     private static final String CLIENT_SERVICE = "SaslClientFactory";
 
-    /** El de las fabricas de servidor. */
+    /** That of the server factories. */
     private static final String SERVER_SERVICE = "SaslServerFactory";
 
-    /** Privado: la clase es solo metodos estaticos. */
+    /** Private: the class is static methods only. */
     private Sasl() {
     }
 
     /**
-     * Un cliente para el primero de esos mecanismos que alguna fabrica pueda atender.
+     * A client for the first of those mechanisms that some factory can handle.
      *
-     * <p>Recorre las fabricas registradas en orden de proveedor. La primera que devuelva algo gana.
+     * <p>It walks the registered factories in provider order. The first that returns something
+     * wins.
      *
-     * @param mechanisms los mecanismos aceptables, en orden de preferencia
-     * @return null si ninguna puede; ver la nota de la clase
-     * @throws SaslException si una fabrica falla al construir
+     * @param mechanisms the acceptable mechanisms, in order of preference
+     * @return null if none can; see the class note
+     * @throws SaslException if a factory fails while building
      */
     public static SaslClient createSaslClient(String[] mechanisms, String authorizationId,
                                               String protocol, String serverName,
@@ -130,9 +131,9 @@ public class Sasl {
     }
 
     /**
-     * Un servidor para ese mecanismo.
+     * A server for that mechanism.
      *
-     * @return null si ninguna fabrica puede
+     * @return null if no factory can
      */
     public static SaslServer createSaslServer(String mechanism, String protocol, String serverName,
                                               Map<String, ?> props, CallbackHandler cbh)
@@ -154,10 +155,11 @@ public class Sasl {
     }
 
     /**
-     * Todas las fabricas de cliente registradas.
+     * All the registered client factories.
      *
-     * <p>Devuelve una {@code Enumeration} y no un {@code Iterator} porque la clase es de 2002, y
-     * cambiarlo ahora rompe a quien la use.
+     * <p>It returns an {@code Enumeration} and not an {@code Iterator} because that is how the JDK
+     * declares it, and changing it now would break whoever uses it. (The note said the class is
+     * from 2002; the JDK marks it {@code @since 1.5}, and its file header starts in 1999.)
      */
     public static Enumeration<SaslClientFactory> getSaslClientFactories() {
         List<SaslClientFactory> found = new ArrayList<SaslClientFactory>();
@@ -169,7 +171,7 @@ public class Sasl {
         return Collections.enumeration(found);
     }
 
-    /** Todas las fabricas de servidor registradas. */
+    /** All the registered server factories. */
     public static Enumeration<SaslServerFactory> getSaslServerFactories() {
         List<SaslServerFactory> found = new ArrayList<SaslServerFactory>();
         for (Object o : allFactories(SERVER_SERVICE)) {
@@ -180,7 +182,7 @@ public class Sasl {
         return Collections.enumeration(found);
     }
 
-    /** Las fabricas de cliente que atienden ese mecanismo. */
+    /** The client factories that handle that mechanism. */
     private static List<SaslClientFactory> clientFactoriesFor(String mech) throws SaslException {
         List<SaslClientFactory> found = new ArrayList<SaslClientFactory>();
         for (Object o : factoriesFor(CLIENT_SERVICE, mech)) {
@@ -191,7 +193,7 @@ public class Sasl {
         return found;
     }
 
-    /** Las de servidor. */
+    /** The server ones. */
     private static List<SaslServerFactory> serverFactoriesFor(String mech) throws SaslException {
         List<SaslServerFactory> found = new ArrayList<SaslServerFactory>();
         for (Object o : factoriesFor(SERVER_SERVICE, mech)) {
@@ -202,7 +204,7 @@ public class Sasl {
         return found;
     }
 
-    /** Las instancias registradas para ese tipo de servicio y ese mecanismo. */
+    /** The registered instances for that service type and that mechanism. */
     private static List<Object> factoriesFor(String type, String mech) throws SaslException {
         List<Object> found = new ArrayList<Object>();
         Provider[] provs = Security.getProviders();
@@ -224,10 +226,10 @@ public class Sasl {
     }
 
     /**
-     * Todas las instancias de ese tipo de servicio, sin filtrar por mecanismo.
+     * All the instances of that service type, without filtering by mechanism.
      *
-     * <p>Una fabrica que atiende varios mecanismos aparece una sola vez: se la busca por su nombre
-     * de clase, que es lo que la identifica.
+     * <p>A factory that handles several mechanisms appears only once: it is looked up by its class
+     * name, which is what identifies it.
      */
     private static List<Object> allFactories(String type) {
         List<Object> found = new ArrayList<Object>();
@@ -247,8 +249,8 @@ public class Sasl {
                 try {
                     found.add(s.newInstance(null));
                 } catch (Exception e) {
-                    // Una fabrica que no se puede construir no se enumera. Es lo unico que se puede
-                    // hacer: el metodo no declara excepcion.
+                    // A factory that cannot be built is not enumerated. It is the only thing that
+                    // can be done: the method declares no exception.
                 }
             }
             i = i + 1;

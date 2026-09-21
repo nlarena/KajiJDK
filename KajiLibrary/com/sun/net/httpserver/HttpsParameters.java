@@ -5,16 +5,16 @@ import java.net.InetSocketAddress;
 import javax.net.ssl.SSLParameters;
 
 /**
- * Los parametros de TLS de <strong>una</strong> conexion entrante, para que
- * {@link HttpsConfigurator#configure} los ajuste.
+ * The TLS parameters of <strong>one</strong> incoming connection, for
+ * {@link HttpsConfigurator#configure} to adjust them.
  *
- * <p>Trae {@link #getClientAddress}, que es lo que hace util a todo el mecanismo: la configuracion
- * puede depender de quien se esta conectando. Sin ese dato esto seria un objeto de configuracion
- * global y no haria falta pasarlo por conexion.
+ * <p>It brings {@link #getClientAddress}, which is what makes the whole mechanism useful: the
+ * configuration may depend on who is connecting. Without that datum this would be a global
+ * configuration object and there would be no need to pass it per connection.
  *
- * <p>Los setters propios existen para el caso simple —cambiar solo las suites, solo los protocolos—
- * sin tener que construir un {@link SSLParameters} entero. {@link #setSSLParameters} es la via
- * completa, y la que el configurador por omision usa.
+ * <p>The setters of its own exist for the simple case -- changing only the suites, only the
+ * protocols -- without having to build a whole {@link SSLParameters}.
+ * {@link #setSSLParameters} is the complete way, and the one the default configurator uses.
  */
 public abstract class HttpsParameters {
 
@@ -23,55 +23,55 @@ public abstract class HttpsParameters {
     private boolean wantClientAuth;
     private boolean needClientAuth;
 
-    /** Para las implementaciones. */
+    /** For the implementations. */
     protected HttpsParameters() {
     }
 
-    /** El configurador que dio origen a esta conexion. */
+    /** The configurator this connection came from. */
     public abstract HttpsConfigurator getHttpsConfigurator();
 
-    /** De donde viene el cliente; ver la nota de la clase. */
+    /** Where the client comes from; see the class note. */
     public abstract InetSocketAddress getClientAddress();
 
-    /** Aplica una configuracion completa. */
+    /** It applies a complete configuration. */
     public abstract void setSSLParameters(SSLParameters params);
 
-    /** Las suites fijadas, o {@code null}. */
+    /** The suites that were fixed, or {@code null}. */
     public String[] getCipherSuites() {
         return this.cipherSuites == null ? null : this.cipherSuites.clone();
     }
 
-    /** Fija las suites. */
+    /** It fixes the suites. */
     public void setCipherSuites(String[] cipherSuites) {
         this.cipherSuites = cipherSuites == null ? null : cipherSuites.clone();
     }
 
-    /** Los protocolos fijados, o {@code null}. */
+    /** The protocols that were fixed, or {@code null}. */
     public String[] getProtocols() {
         return this.protocols == null ? null : this.protocols.clone();
     }
 
-    /** Fija los protocolos. */
+    /** It fixes the protocols. */
     public void setProtocols(String[] protocols) {
         this.protocols = protocols == null ? null : protocols.clone();
     }
 
-    /** Si se pide certificado de cliente sin exigirlo. */
+    /** Whether a client certificate is asked for without requiring it. */
     public boolean getWantClientAuth() {
         return this.wantClientAuth;
     }
 
-    /** Lo pide sin exigirlo. */
+    /** It asks for it without requiring it. */
     public void setWantClientAuth(boolean wantClientAuth) {
         this.wantClientAuth = wantClientAuth;
     }
 
-    /** Si se exige certificado de cliente. */
+    /** Whether a client certificate is required. */
     public boolean getNeedClientAuth() {
         return this.needClientAuth;
     }
 
-    /** Lo exige: sin certificado, no hay conexion. */
+    /** It requires it: with no certificate, there is no connection. */
     public void setNeedClientAuth(boolean needClientAuth) {
         this.needClientAuth = needClientAuth;
     }

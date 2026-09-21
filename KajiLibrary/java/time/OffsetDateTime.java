@@ -11,19 +11,19 @@ import java.time.temporal.ChronoField;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.ValueRange;
 
-// KajiLibrary's java.time.OffsetDateTime -- una fecha y hora con desplazamiento fijo respecto de
-// UTC, como 2026-08-04T15:30+05:30. Compone un `LocalDateTime` y un `ZoneOffset`.
+// KajiLibrary's java.time.OffsetDateTime -- a date and time with a fixed offset from UTC, such as
+// 2026-08-04T15:30+05:30. It composes a `LocalDateTime` and a `ZoneOffset`.
 //
-// Vale la misma nota que `OffsetTime` sobre los dos `withOffset*`, y aca importa mas porque el
-// corrimiento puede cambiar el **dia**:
+// `OffsetTime`'s note on the two `withOffset*` holds here too, and here it matters more because the
+// shift can change the **day**:
 //
-//   - `withOffsetSameLocal` deja la fecha y hora escritas y cambia el instante;
-//   - `withOffsetSameInstant` conserva el instante y corrige la fecha y hora.
+//   - `withOffsetSameLocal` keeps the date and time as written and changes the instant;
+//   - `withOffsetSameInstant` keeps the instant and corrects the date and time.
 //
-// La diferencia entre esta clase y `ZonedDateTime` es que aca el desplazamiento es **fijo**: no hay
-// horario de verano, no hay reglas, no hay saltos. Es lo que se quiere para guardar un momento --un
-// registro, una marca de tiempo-- y lo que **no** se quiere para agendar algo a futuro, donde la
-// zona puede cambiar sus reglas antes de que llegue la fecha.
+// The difference between this class and `ZonedDateTime` is that here the offset is **fixed**: no
+// daylight saving, no rules, no jumps. It is what is wanted for recording a moment --a log entry, a
+// timestamp-- and what is **not** wanted for scheduling something in the future, where the zone can
+// change its rules before the date arrives.
 public final class OffsetDateTime implements Temporal, TemporalAdjuster, Comparable<OffsetDateTime>, Serializable {
 
     private final LocalDateTime dateTime;
@@ -34,18 +34,18 @@ public final class OffsetDateTime implements Temporal, TemporalAdjuster, Compara
         this.offset = offset;
     }
 
-    /** El menor valor representable. */
+    /** The smallest representable value. */
     public static final OffsetDateTime MIN = new OffsetDateTime(LocalDateTime.MIN, ZoneOffset.MAX);
 
-    /** El mayor. */
+    /** The largest. */
     public static final OffsetDateTime MAX = new OffsetDateTime(LocalDateTime.MAX, ZoneOffset.MIN);
 
-    /** Ahora, en la zona por defecto. */
+    /** Now, in the default zone. */
     public static OffsetDateTime now() {
         return OffsetDateTime.now(Clock.systemDefaultZone());
     }
 
-    /** El que marca `clock`. La forma testeable de `now()`. */
+    /** The one `clock` reads. The testable form of `now()`. */
     public static OffsetDateTime now(Clock clock) {
         if (clock == null) {
             throw new NullPointerException("clock");
@@ -53,7 +53,7 @@ public final class OffsetDateTime implements Temporal, TemporalAdjuster, Compara
         return OffsetDateTime.ofInstant(clock.instant(), clock.getZone());
     }
 
-    /** El de esa zona, ahora. */
+    /** That zone's, right now. */
     public static OffsetDateTime now(ZoneId zone) {
         if (zone == null) {
             throw new NullPointerException("zone");
@@ -61,7 +61,7 @@ public final class OffsetDateTime implements Temporal, TemporalAdjuster, Compara
         return OffsetDateTime.ofInstant(Instant.now(), zone);
     }
 
-    /** La fecha y hora local de ese instante en esa zona, con el desplazamiento de la zona. */
+    /** That instant's local date and time in that zone, with the zone's offset. */
     public static OffsetDateTime ofInstant(Instant instant, ZoneId zone) {
         if (instant == null || zone == null) {
             throw new NullPointerException();
@@ -71,7 +71,7 @@ public final class OffsetDateTime implements Temporal, TemporalAdjuster, Compara
                 LocalDateTime.ofEpochSecond(instant.getEpochSecond(), instant.getNano(), off), off);
     }
 
-    /** La fecha y hora con desplazamiento que `temporal` tiene. */
+    /** The offset date and time `temporal` holds. */
     public static OffsetDateTime from(TemporalAccessor temporal) {
         if (temporal == null) {
             throw new NullPointerException("temporal");
@@ -82,37 +82,37 @@ public final class OffsetDateTime implements Temporal, TemporalAdjuster, Compara
         return new OffsetDateTime(LocalDateTime.from(temporal), ZoneOffset.from(temporal));
     }
 
-    /** Parsea la forma ISO, `yyyy-MM-ddTHH:mm:ss+HH:MM`. */
+    /** It parses the ISO form, `yyyy-MM-ddTHH:mm:ss+HH:MM`. */
     public static OffsetDateTime parse(CharSequence text) {
         if (text == null) {
             throw new NullPointerException("text");
         }
         String s = text.toString();
-        // El desplazamiento arranca despues de la `T`: buscar desde el principio encontraria los
-        // guiones de la fecha.
+        // The offset starts after the `T`: searching from the beginning would find the date's
+        // hyphens.
         int t = s.indexOf('T');
         if (t < 0) {
             throw new java.time.format.DateTimeParseException(
                     "Text '" + s + "' could not be parsed: no time part", text, 0);
         }
         int i = t + 1;
-        int corte = -1;
-        while (i < s.length() && corte < 0) {
+        int cut = -1;
+        while (i < s.length() && cut < 0) {
             char c = s.charAt(i);
             if (c == '+' || c == '-' || c == 'Z') {
-                corte = i;
+                cut = i;
             }
             i = i + 1;
         }
-        if (corte < 0) {
+        if (cut < 0) {
             throw new java.time.format.DateTimeParseException(
                     "Text '" + s + "' could not be parsed: no offset", text, 0);
         }
-        return new OffsetDateTime(LocalDateTime.parse(s.substring(0, corte)),
-                ZoneOffset.of(s.substring(corte)));
+        return new OffsetDateTime(LocalDateTime.parse(s.substring(0, cut)),
+                ZoneOffset.of(s.substring(cut)));
     }
 
-    /** Con el mes como enum. */
+    /** With the month as an enum. */
     public static OffsetDateTime of(int year, Month month, int dayOfMonth, int hour, int minute,
             int second, int nanoOfSecond, ZoneOffset offset) {
         if (month == null) {
@@ -193,13 +193,13 @@ public final class OffsetDateTime implements Temporal, TemporalAdjuster, Compara
         return this.dateTime.getMonth();
     }
 
-    // ---- los dos `withOffset` -------------------------------------------------------------------
+    // ---- the two `withOffset` -------------------------------------------------------------------
 
     /**
-     * Otro desplazamiento, **la misma fecha y hora escritas**. Es otro instante.
+     * Another offset, **the same date and time as written**. It is another instant.
      *
-     * <p>Ver la nota de la clase: elegir esta cuando se queria la otra corre el momento por la
-     * diferencia entre los dos desplazamientos, sin que nada lo avise.
+     * <p>See the class's note: choosing this one when the other was meant shifts the moment by the
+     * difference between the two offsets, with nothing to warn of it.
      */
     public OffsetDateTime withOffsetSameLocal(ZoneOffset offset) {
         if (offset == null) {
@@ -209,8 +209,7 @@ public final class OffsetDateTime implements Temporal, TemporalAdjuster, Compara
     }
 
     /**
-     * Otro desplazamiento, **el mismo instante**: la fecha y hora se corrigen, y pueden cambiar de
-     * dia.
+     * Another offset, **the same instant**: the date and time are corrected, and can change day.
      */
     public OffsetDateTime withOffsetSameInstant(ZoneOffset offset) {
         if (offset == null) {
@@ -219,88 +218,88 @@ public final class OffsetDateTime implements Temporal, TemporalAdjuster, Compara
         if (offset.equals(this.offset)) {
             return this;
         }
-        int diferencia = offset.getTotalSeconds() - this.offset.getTotalSeconds();
-        return new OffsetDateTime(this.dateTime.plusSeconds((long) diferencia), offset);
+        int difference = offset.getTotalSeconds() - this.offset.getTotalSeconds();
+        return new OffsetDateTime(this.dateTime.plusSeconds((long) difference), offset);
     }
 
-    // ---- `with*` de campo -----------------------------------------------------------------------
+    // ---- the per-field `with*` -----------------------------------------------------------------
 
     public OffsetDateTime withYear(int year) {
-        return this.con(this.dateTime.withYear(year));
+        return this.resolveLocal(this.dateTime.withYear(year));
     }
 
     public OffsetDateTime withMonth(int month) {
-        return this.con(this.dateTime.withMonth(month));
+        return this.resolveLocal(this.dateTime.withMonth(month));
     }
 
     public OffsetDateTime withDayOfMonth(int dayOfMonth) {
-        return this.con(this.dateTime.withDayOfMonth(dayOfMonth));
+        return this.resolveLocal(this.dateTime.withDayOfMonth(dayOfMonth));
     }
 
     public OffsetDateTime withDayOfYear(int dayOfYear) {
-        return this.con(this.dateTime.withDayOfYear(dayOfYear));
+        return this.resolveLocal(this.dateTime.withDayOfYear(dayOfYear));
     }
 
     public OffsetDateTime withHour(int hour) {
-        return this.con(this.dateTime.withHour(hour));
+        return this.resolveLocal(this.dateTime.withHour(hour));
     }
 
     public OffsetDateTime withMinute(int minute) {
-        return this.con(this.dateTime.withMinute(minute));
+        return this.resolveLocal(this.dateTime.withMinute(minute));
     }
 
     public OffsetDateTime withSecond(int second) {
-        return this.con(this.dateTime.withSecond(second));
+        return this.resolveLocal(this.dateTime.withSecond(second));
     }
 
     public OffsetDateTime withNano(int nanoOfSecond) {
-        return this.con(this.dateTime.withNano(nanoOfSecond));
+        return this.resolveLocal(this.dateTime.withNano(nanoOfSecond));
     }
 
     public OffsetDateTime truncatedTo(TemporalUnit unit) {
-        return this.con(this.dateTime.truncatedTo(unit));
+        return this.resolveLocal(this.dateTime.truncatedTo(unit));
     }
 
-    private OffsetDateTime con(LocalDateTime nuevo) {
-        return nuevo.equals(this.dateTime) ? this : new OffsetDateTime(nuevo, this.offset);
+    private OffsetDateTime resolveLocal(LocalDateTime newOne) {
+        return newOne.equals(this.dateTime) ? this : new OffsetDateTime(newOne, this.offset);
     }
 
-    // ---- aritmetica -----------------------------------------------------------------------------
+    // ---- arithmetic -----------------------------------------------------------------------------
     //
-    // Toda va a la fecha y hora local, conservando el desplazamiento. Sumar un dia a
-    // 2026-03-28T23:00+01:00 da 2026-03-29T23:00+01:00: la hora escrita no se mueve. Es la
-    // diferencia con `ZonedDateTime`, donde el mismo dia puede tener 23 o 25 horas.
+    // All of it goes to the local date and time, keeping the offset. Adding a day to
+    // 2026-03-28T23:00+01:00 gives 2026-03-29T23:00+01:00: the written time does not move. That is
+    // the difference from `ZonedDateTime`, where the same day can have 23 or 25 hours.
 
     public OffsetDateTime plusYears(long years) {
-        return this.con(this.dateTime.plusYears(years));
+        return this.resolveLocal(this.dateTime.plusYears(years));
     }
 
     public OffsetDateTime plusMonths(long months) {
-        return this.con(this.dateTime.plusMonths(months));
+        return this.resolveLocal(this.dateTime.plusMonths(months));
     }
 
     public OffsetDateTime plusWeeks(long weeks) {
-        return this.con(this.dateTime.plusWeeks(weeks));
+        return this.resolveLocal(this.dateTime.plusWeeks(weeks));
     }
 
     public OffsetDateTime plusDays(long days) {
-        return this.con(this.dateTime.plusDays(days));
+        return this.resolveLocal(this.dateTime.plusDays(days));
     }
 
     public OffsetDateTime plusHours(long hours) {
-        return this.con(this.dateTime.plusHours(hours));
+        return this.resolveLocal(this.dateTime.plusHours(hours));
     }
 
     public OffsetDateTime plusMinutes(long minutes) {
-        return this.con(this.dateTime.plusMinutes(minutes));
+        return this.resolveLocal(this.dateTime.plusMinutes(minutes));
     }
 
     public OffsetDateTime plusSeconds(long seconds) {
-        return this.con(this.dateTime.plusSeconds(seconds));
+        return this.resolveLocal(this.dateTime.plusSeconds(seconds));
     }
 
     public OffsetDateTime plusNanos(long nanos) {
-        return this.con(this.dateTime.plusNanos(nanos));
+        return this.resolveLocal(this.dateTime.plusNanos(nanos));
     }
 
     public OffsetDateTime minusYears(long years) {
@@ -336,7 +335,7 @@ public final class OffsetDateTime implements Temporal, TemporalAdjuster, Compara
     }
 
     public OffsetDateTime plus(long amountToAdd, TemporalUnit unit) {
-        return this.con(this.dateTime.plus(amountToAdd, unit));
+        return this.resolveLocal(this.dateTime.plus(amountToAdd, unit));
     }
 
     public OffsetDateTime minus(long amountToSubtract, TemporalUnit unit) {
@@ -363,7 +362,7 @@ public final class OffsetDateTime implements Temporal, TemporalAdjuster, Compara
         }
         if (adjuster instanceof LocalDate || adjuster instanceof LocalTime
                 || adjuster instanceof LocalDateTime) {
-            return this.con((LocalDateTime) LocalDateTime.from(
+            return this.resolveLocal((LocalDateTime) LocalDateTime.from(
                     (TemporalAccessor) adjuster.adjustInto(this.dateTime)));
         }
         if (adjuster instanceof ZoneOffset) {
@@ -388,7 +387,7 @@ public final class OffsetDateTime implements Temporal, TemporalAdjuster, Compara
                     Instant.ofEpochSecond(newValue, (long) this.getNano()), this.offset);
         }
         if (field instanceof ChronoField) {
-            return this.con(this.dateTime.with(field, newValue));
+            return this.resolveLocal(this.dateTime.with(field, newValue));
         }
         return (OffsetDateTime) field.adjustInto(this, newValue);
     }
@@ -396,15 +395,15 @@ public final class OffsetDateTime implements Temporal, TemporalAdjuster, Compara
     // ---- TemporalAccessor / Temporal -------------------------------------------------------------
 
     /**
-     * Los campos que una fecha y hora con desplazamiento tiene: **todos** los de `ChronoField`.
+     * The fields an offset date and time has: **all** of `ChronoField`'s.
      *
-     * <p>Y esa es la respuesta correcta, no una simplificacion: al tener fecha, hora y
-     * desplazamiento, hay con que contestar `INSTANT_SECONDS` --que es lo que un `LocalDateTime`
-     * solo no puede-- y tambien los de fecha y los de hora.
+     * <p>And that is the right answer, not a simplification: having a date, a time and an offset,
+     * there is enough to answer `INSTANT_SECONDS` --which is what a `LocalDateTime` alone cannot--
+     * and the date ones and the time ones as well.
      *
-     * <p>Lo que estaba escrito era `field != INSTANT_SECONDS || true`, que es siempre cierto: la
-     * primera mitad no hace nada. Daba la respuesta correcta por accidente, y el `|| true` escondia
-     * la intencion -- alguien que lo leyera se preguntaria que caso se quiso excluir.
+     * <p>What was written was `field != INSTANT_SECONDS || true`, which is always true: the first
+     * half does nothing. It gave the right answer by accident, and the `|| true` hid the intent --
+     * anyone reading it would wonder which case had been meant to be excluded.
      */
     public boolean isSupported(TemporalField field) {
         if (field instanceof ChronoField) {
@@ -469,20 +468,21 @@ public final class OffsetDateTime implements Temporal, TemporalAdjuster, Compara
     }
 
     /**
-     * Cuantas `unit` hay hasta `endExclusive`.
+     * How many `unit` there are to `endExclusive`.
      *
-     * <p>El otro se lleva **a este desplazamiento** antes de contar, conservando su instante. Sin
-     * eso, la diferencia entre 15:00+02:00 y 15:00+00:00 daria cero horas cuando son dos.
+     * <p>The other one is brought **to this offset** before counting, keeping its instant. Without
+     * that, the difference between 15:00+02:00 and 15:00+00:00 would give zero hours when it is
+     * two.
      */
     public long until(Temporal endExclusive, TemporalUnit unit) {
-        OffsetDateTime fin = OffsetDateTime.from(endExclusive);
-        fin = fin.withOffsetSameInstant(this.offset);
-        return this.dateTime.until(fin.dateTime, unit);
+        OffsetDateTime end = OffsetDateTime.from(endExclusive);
+        end = end.withOffsetSameInstant(this.offset);
+        return this.dateTime.until(end.dateTime, unit);
     }
 
-    // ---- conversiones y comparacion --------------------------------------------------------------
+    // ---- conversions and comparison --------------------------------------------------------------
 
-    /** Esta fecha y hora en esa zona, **conservando el instante**. */
+    /** This date and time in that zone, **keeping the instant**. */
     public ZonedDateTime atZoneSameInstant(ZoneId zone) {
         if (zone == null) {
             throw new NullPointerException("zone");
@@ -491,10 +491,10 @@ public final class OffsetDateTime implements Temporal, TemporalAdjuster, Compara
     }
 
     /**
-     * Esta fecha y hora en esa zona, **conservando la fecha y hora escritas**.
+     * This date and time in that zone, **keeping the date and time as written**.
      *
-     * <p>Es otro instante, y ademas puede caer en un hueco o en una superposicion del horario de
-     * verano -- ahi manda la zona, no este objeto.
+     * <p>It is another instant, and it can also fall into a daylight-saving gap or overlap -- there
+     * the zone rules, not this object.
      */
     public ZonedDateTime atZoneSimilarLocal(ZoneId zone) {
         if (zone == null) {
@@ -503,31 +503,31 @@ public final class OffsetDateTime implements Temporal, TemporalAdjuster, Compara
         return ZonedDateTime.of(this.dateTime, zone);
     }
 
-    /** Esta fecha y hora como `ZonedDateTime` con el desplazamiento como zona. */
+    /** This date and time as a `ZonedDateTime` with the offset as the zone. */
     public ZonedDateTime toZonedDateTime() {
         return ZonedDateTime.of(this.dateTime, this.offset);
     }
 
     /**
-     * El orden **solo por instante**, ignorando el desplazamiento.
+     * The order **by instant alone**, ignoring the offset.
      *
-     * <p>Es el complemento de `compareTo`, que desempata por fecha y hora local. Este dice "el mismo
-     * momento es el mismo momento", y sirve para ordenar registros de husos distintos por cuando
-     * ocurrieron.
+     * <p>It is the complement of `compareTo`, which breaks ties by local date and time. This one says
+     * "the same moment is the same moment", and serves to order records from different offsets by
+     * when they happened.
      *
-     * <p>Ojo con usarlo en un `TreeSet`: al no desempatar, dos fechas del mismo instante y distinto
-     * desplazamiento comparan 0 y el conjunto se queda con una sola.
+     * <p>Beware of using it in a `TreeSet`: breaking no ties, two dates of the same instant and
+     * different offset compare 0 and the set keeps only one.
      */
     public static java.util.Comparator<OffsetDateTime> timeLineOrder() {
-        return new OdtLineaDeTiempo();
+        return new OdtTimeLine();
     }
 
-    /** Solo la hora, con este desplazamiento. */
+    /** The time alone, with this offset. */
     public OffsetTime toOffsetTime() {
         return OffsetTime.of(this.toLocalTime(), this.offset);
     }
 
-    /** El dia epoch de la fecha local. */
+    /** The local date's epoch day. */
     public long toEpochDay() {
         return this.toLocalDate().toEpochDay();
     }
@@ -540,7 +540,7 @@ public final class OffsetDateTime implements Temporal, TemporalAdjuster, Compara
         return formatter.format(this);
     }
 
-    /** Si designan el **mismo instante**, aunque su fecha y hora escritas difieran. */
+    /** Whether they name the **same instant**, even if their written date and time differ. */
     public boolean isEqual(OffsetDateTime other) {
         return this.toEpochSecond() == other.toEpochSecond()
                 && this.getNano() == other.getNano();
@@ -589,10 +589,10 @@ public final class OffsetDateTime implements Temporal, TemporalAdjuster, Compara
     }
 
     /**
-     * Por instante, y a igual instante por fecha y hora local.
+     * By instant, and at equal instants by local date and time.
      *
-     * <p>El desempate no es decoracion: sin el, 15:00+02:00 y 13:00+00:00 comparan 0 sin ser
-     * `equals`, y un `TreeSet` se quedaria con una sola de las dos en silencio.
+     * <p>The tie-break is not decoration: without it, 15:00+02:00 and 13:00+00:00 compare 0 without
+     * being `equals`, and a `TreeSet` would silently keep only one of the two.
      */
     public int compareTo(OffsetDateTime other) {
         if (this.offset.equals(other.offset)) {
@@ -618,27 +618,27 @@ public final class OffsetDateTime implements Temporal, TemporalAdjuster, Compara
     }
 
     /**
-     * Lee `text` con ese formateador.
+     * It reads `text` with that formatter.
      *
-     * <p>El que decide que campos hay es el formateador; esta clase solo dice **cual de ellos
-     * quiere**, pasando su propio `from`. Por eso un patron que no traiga fecha, hora y
-     * desplazamiento falla aca y no al usar el resultado.
+     * <p>The one that decides which fields are there is the formatter; this class only says
+     * **which of them it wants**, by passing its own `from`. That is why a pattern that brings no date, time and
+     * offset fails here and not when the result is used.
      *
-     * @throws java.time.format.DateTimeParseException si el texto no encaja con el patron, o si lo
-     *     que encaja no alcanza para una fecha y hora con desplazamiento
+     * @throws java.time.format.DateTimeParseException if the text does not fit the pattern, or what
+     *     fits is not enough for a date and time with an offset
      */
     public static OffsetDateTime parse(CharSequence text, java.time.format.DateTimeFormatter formatter) {
         if (formatter == null) {
             throw new NullPointerException("formatter");
         }
-        // Ligado a una local: encadenar por un intermedio de tipo interfaz se pierde (#108).
-        java.time.temporal.TemporalQuery<OffsetDateTime> consulta = OffsetDateTime::from;
-        return formatter.parse(text, consulta);
+        // Bound to a local: chaining through an interface-typed intermediate gets lost (#108).
+        java.time.temporal.TemporalQuery<OffsetDateTime> queryOf = OffsetDateTime::from;
+        return formatter.parse(text, queryOf);
     }
 }
 
-// El comparador que devuelve `OffsetDateTime.timeLineOrder()`: solo el instante.
-final class OdtLineaDeTiempo implements java.util.Comparator<OffsetDateTime> {
+// The comparator `OffsetDateTime.timeLineOrder()` returns: the instant alone.
+final class OdtTimeLine implements java.util.Comparator<OffsetDateTime> {
 
     public int compare(OffsetDateTime a, OffsetDateTime b) {
         int c = Long.compare(a.toEpochSecond(), b.toEpochSecond());

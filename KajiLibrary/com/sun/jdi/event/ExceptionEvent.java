@@ -4,27 +4,27 @@ import com.sun.jdi.Location;
 import com.sun.jdi.ObjectReference;
 
 /**
- * Se lanzo una excepcion en la maquina depurada.
+ * An exception was thrown in the debugged machine.
  *
- * <p>{@link #catchLocation} devuelve donde se va a atrapar, o {@code null} si no la atrapa nadie.
- * Esa distincion es la que separa "romper en cualquier excepcion" de "romper solo en las que van a
- * matar al programa", que es lo que casi siempre se quiere.
+ * <p>{@link #catchLocation} returns where it is going to be caught, or {@code null} if nobody
+ * catches it. That distinction is what separates "break on any exception" from "break only on
+ * those that are going to kill the program", which is what is almost always wanted.
  *
  * @since 1.3
  */
 public interface ExceptionEvent extends LocatableEvent {
 
     /**
-     * El exception.
+     * The exception.
      *
-     * @return el resultado
+     * @return the result
      */
     ObjectReference exception();
 
     /**
-     * El catch location.
+     * The catch location.
      *
-     * @return el resultado
+     * @return the result
      */
     Location catchLocation();
 }

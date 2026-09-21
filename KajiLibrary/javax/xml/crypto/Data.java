@@ -1,16 +1,17 @@
 package javax.xml.crypto;
 
 /**
- * KajiLibrary's javax.xml.crypto.Data -- lo que se firma o se transforma.
+ * KajiLibrary's javax.xml.crypto.Data -- what is signed or transformed.
  *
- * <p>Una interfaz <b>marcadora</b>, sin metodos. Los dos que importan son sus dos implementaciones:
- * {@link NodeSetData}, que es un conjunto de nodos, y {@link OctetStreamData}, que es un flujo de
+ * <p>A <b>marker</b> interface, without methods. The two that matter are its two implementations:
+ * {@link NodeSetData}, which is a set of nodes, and {@link OctetStreamData}, which is a stream of
  * bytes.
  *
- * <p>La division no es de comodidad: una transformacion de XML-DSig recibe una cosa y devuelve la
- * otra, y cual es cual determina si la cadena de transformaciones cierra. Una canonicalizacion
- * convierte nodos en bytes; una de XPath convierte nodos en nodos. Encadenar dos que no encajan es el
- * error mas comun al armar una firma a mano, y el tipo lo hace visible.
+ * <p>The division is not one of convenience: an XML-DSig transform receives one thing and returns
+ * the other, and which is which determines whether the chain of transforms fits together. A
+ * canonicalization turns nodes into bytes; an XPath one turns nodes into nodes. Chaining two that
+ * do not fit is the commonest mistake when building a signature by hand, and the type makes it
+ * visible.
  */
 public interface Data {
 }

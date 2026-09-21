@@ -76,7 +76,7 @@ public abstract class HttpURLConnection extends URLConnection {
 
     // The methods the JDK accepts. The list is closed on purpose: an arbitrary method is refused,
     // because `URLConnection` would not know how to assemble the request.
-    private static final String[] METODOS = {
+    private static final String[] METHODS = {
         "GET", "POST", "HEAD", "OPTIONS", "PUT", "DELETE", "TRACE"};
 
     /** Builds the connection without connecting it. */
@@ -126,8 +126,8 @@ public abstract class HttpURLConnection extends URLConnection {
         if (this.connected) {
             throw new ProtocolException("Can't reset method: already connected");
         }
-        for (int i = 0; i < METODOS.length; i++) {
-            if (METODOS[i].equals(method)) {
+        for (int i = 0; i < METHODS.length; i++) {
+            if (METHODS[i].equals(method)) {
                 this.method = method;
                 return;
             }
@@ -325,18 +325,18 @@ public abstract class HttpURLConnection extends URLConnection {
      */
     @Override
     public long getHeaderFieldDate(String name, long Default) {
-        String texto = getHeaderField(name);
-        if (texto == null) {
+        String text = getHeaderField(name);
+        if (text == null) {
             return Default;
         }
-        if (texto.indexOf("GMT") == -1) {
-            texto = texto + " GMT";
+        if (text.indexOf("GMT") == -1) {
+            text = text + " GMT";
         }
-        long parseada = HttpCookie.parseCookieDate(texto);
-        if (parseada == Long.MIN_VALUE) {
+        long parsed = HttpCookie.parseCookieDate(text);
+        if (parsed == Long.MIN_VALUE) {
             return Default;
         }
-        return parseada;
+        return parsed;
     }
 
     /**

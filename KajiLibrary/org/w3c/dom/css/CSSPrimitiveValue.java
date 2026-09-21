@@ -3,30 +3,30 @@ package org.w3c.dom.css;
 import org.w3c.dom.DOMException;
 
 /**
- * Un valor CSS que no se descompone: un numero con su unidad, un color, una cadena, un `url()`.
+ * A CSS value that does not break down: a number with its unit, a colour, a string, a `url()`.
  *
- * <p>Las veintiseis constantes son las unidades y las formas que CSS 2 define, y {@link
- * #getPrimitiveType} dice cual es. De ahi se deduce que accesor sirve: `getFloatValue` para los que
- * son numeros con unidad, `getStringValue` para los textuales, y los tres especificos para
- * `counter()`, `rect()` y un color.
+ * <p>The twenty-six constants are the units and the forms CSS 2 defines, and
+ * {@link #getPrimitiveType} says which one it is. From there it follows which accessor serves:
+ * `getFloatValue` for the ones that are numbers with a unit, `getStringValue` for the textual ones,
+ * and the three specific ones for `counter()`, `rect()` and a colour.
  *
- * <p><strong>`getFloatValue` convierte.</strong> Pedir `CSS_MM` a un valor guardado en `CSS_CM` da
- * el numero convertido, no un error, y eso es lo que hace util al metodo. Pero solo convierte
- * **dentro de la misma familia** --longitudes con longitudes, angulos con angulos, tiempos con
- * tiempos--: pedirle centimetros a un angulo es `INVALID_ACCESS_ERR`. Ojo con las longitudes
- * relativas: `em` y `ex` dependen de la fuente, asi que no se convierten a absolutas.
+ * <p><strong>`getFloatValue` converts.</strong> Asking for `CSS_MM` of a value kept in `CSS_CM`
+ * gives the converted number, not an error, and that is what makes the method useful. But it only
+ * converts **within the same family** --lengths with lengths, angles with angles, times with
+ * times--: asking an angle for centimetres is `INVALID_ACCESS_ERR`. Careful with the relative
+ * lengths: `em` and `ex` depend on the font, so they are not converted to absolute ones.
  */
 public interface CSSPrimitiveValue extends CSSValue {
 
-    /** La unidad no se conoce. */
+    /** The unit is not known. */
     public static final short CSS_UNKNOWN = 0;
-    /** Un numero sin unidad. */
+    /** A number with no unit. */
     public static final short CSS_NUMBER = 1;
-    /** Un porcentaje. */
+    /** A percentage. */
     public static final short CSS_PERCENTAGE = 2;
-    /** `em`: el tamano de la fuente actual. */
+    /** `em`: the size of the current font. */
     public static final short CSS_EMS = 3;
-    /** `ex`: la altura de la x de la fuente actual. */
+    /** `ex`: the height of the x of the current font. */
     public static final short CSS_EXS = 4;
     /** `px`. */
     public static final short CSS_PX = 5;
@@ -54,75 +54,75 @@ public interface CSSPrimitiveValue extends CSSValue {
     public static final short CSS_HZ = 16;
     /** `kHz`. */
     public static final short CSS_KHZ = 17;
-    /** Un numero con una unidad que esta implementacion no reconoce. */
+    /** A number with a unit this implementation does not recognise. */
     public static final short CSS_DIMENSION = 18;
-    /** Una cadena entre comillas. */
+    /** A string in quotes. */
     public static final short CSS_STRING = 19;
-    /** Un `url()`. */
+    /** A `url()`. */
     public static final short CSS_URI = 20;
-    /** Un identificador, como `auto` o `red`. */
+    /** An identifier, such as `auto` or `red`. */
     public static final short CSS_IDENT = 21;
-    /** Un `attr()`. */
+    /** An `attr()`. */
     public static final short CSS_ATTR = 22;
-    /** Un `counter()` o `counters()`. */
+    /** A `counter()` or `counters()`. */
     public static final short CSS_COUNTER = 23;
-    /** Un `rect()`. */
+    /** A `rect()`. */
     public static final short CSS_RECT = 24;
-    /** Un color. */
+    /** A colour. */
     public static final short CSS_RGBCOLOR = 25;
 
-    /** Cual de las veintiseis formas es. */
+    /** Which of the twenty-six forms it is. */
     short getPrimitiveType();
 
     /**
-     * Fija el valor como un numero con esa unidad.
+     * It sets the value as a number with that unit.
      *
-     * @throws DOMException `INVALID_ACCESS_ERR` si la unidad no sirve para este valor;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el valor es de solo lectura
+     * @throws DOMException `INVALID_ACCESS_ERR` if the unit does not serve for this value;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the value is read-only
      */
     void setFloatValue(short unitType, float floatValue) throws DOMException;
 
     /**
-     * El valor numerico en esa unidad, **convirtiendo** si hace falta. Ver la nota de la clase.
+     * The numeric value in that unit, **converting** if need be. See the note of the class.
      *
-     * @throws DOMException `INVALID_ACCESS_ERR` si este valor no es numerico, o si la unidad
-     *     pedida es de otra familia que la suya
+     * @throws DOMException `INVALID_ACCESS_ERR` if this value is not numeric, or if the unit asked
+     *     for is of a family other than its own
      */
     float getFloatValue(short unitType) throws DOMException;
 
     /**
-     * Fija el valor como texto de esa forma.
+     * It sets the value as text of that form.
      *
-     * @throws DOMException `INVALID_ACCESS_ERR` si la forma no es textual;
-     *     `NO_MODIFICATION_ALLOWED_ERR` si el valor es de solo lectura
+     * @throws DOMException `INVALID_ACCESS_ERR` if the form is not textual;
+     *     `NO_MODIFICATION_ALLOWED_ERR` if the value is read-only
      */
     void setStringValue(short stringType, String stringValue) throws DOMException;
 
     /**
-     * El valor como texto, sin las comillas ni el `url(...)` de alrededor.
+     * The value as text, without the quotes or the `url(...)` around it.
      *
-     * @throws DOMException `INVALID_ACCESS_ERR` si este valor no es textual
+     * @throws DOMException `INVALID_ACCESS_ERR` if this value is not textual
      */
     String getStringValue() throws DOMException;
 
     /**
-     * El valor como contador.
+     * The value as a counter.
      *
-     * @throws DOMException `INVALID_ACCESS_ERR` si no es un `counter()`
+     * @throws DOMException `INVALID_ACCESS_ERR` if it is not a `counter()`
      */
     Counter getCounterValue() throws DOMException;
 
     /**
-     * El valor como rectangulo.
+     * The value as a rectangle.
      *
-     * @throws DOMException `INVALID_ACCESS_ERR` si no es un `rect()`
+     * @throws DOMException `INVALID_ACCESS_ERR` if it is not a `rect()`
      */
     Rect getRectValue() throws DOMException;
 
     /**
-     * El valor como color.
+     * The value as a colour.
      *
-     * @throws DOMException `INVALID_ACCESS_ERR` si no es un color
+     * @throws DOMException `INVALID_ACCESS_ERR` if it is not a colour
      */
     RGBColor getRGBColorValue() throws DOMException;
 }

@@ -7,33 +7,34 @@ import java.io.Reader;
 import javax.xml.transform.Source;
 
 /**
- * KajiLibrary's javax.xml.transform.stream.StreamSource -- un documento XML que llega como bytes.
+ * KajiLibrary's javax.xml.transform.stream.StreamSource -- an XML document arriving as bytes.
  *
- * <p>Es la implementacion de {@link Source} que no supone nada sobre el documento: no hay arbol, no
- * hay eventos, hay un flujo sin parsear. Por eso es la mas barata --el procesador parsea una sola
- * vez, a su modo-- y la unica que sirve cuando el documento todavia no se leyo.
+ * <p>It is the implementation of {@link Source} that assumes nothing about the document: there is
+ * no tree, there are no events, there is an unparsed stream. That is why it is the cheapest --the
+ * processor parses only once, its own way-- and the only one that serves when the document has not
+ * been read yet.
  *
- * <p>Hay **tres** formas de decir de donde salen los bytes, y el orden en que el procesador las mira
- * es parte del contrato y no un detalle: primero el {@link Reader}, despues el {@link InputStream},
- * y al final el identificador de sistema. Poner dos es legal y gana el de mas arriba; poner solo la
- * URI hace que el procesador la abra el mismo.
+ * <p>There are **three** ways of saying where the bytes come from, and the order in which the
+ * processor looks at them is part of the contract and not a detail: first the {@link Reader}, then
+ * the {@link InputStream}, and last the system identifier. Setting two is legal and the one higher
+ * up wins; setting only the URI makes the processor open it itself.
  *
- * <p>Que el `Reader` le gane al `InputStream` tiene una consecuencia que muerde: un `Reader` ya
- * decidio la codificacion, asi que la declaracion `&lt;?xml encoding="..."?&gt;` del documento **no
- * se puede respetar**. Con un `InputStream` el parser la lee y elige; con un `Reader` llega tarde.
- * Cuando la codificacion importa, lo que se pasa es el flujo de bytes.
+ * <p>That the `Reader` beats the `InputStream` has a consequence that bites: a `Reader` has already
+ * decided the encoding, so the document's `&lt;?xml encoding="..."?&gt;` declaration **cannot be
+ * honoured**. With an `InputStream` the parser reads it and chooses; with a `Reader` it arrives too
+ * late. When the encoding matters, what is passed is the byte stream.
  *
- * <p>El identificador de sistema sigue haciendo falta aunque los bytes ya esten: es la URI base
- * contra la que se resuelven los `href` relativos del documento. Un flujo sin URI es un documento
- * que no puede tener referencias relativas.
+ * <p>The system identifier is still needed even if the bytes are already there: it is the base URI
+ * against which the document's relative `href`s are resolved. A stream without a URI is a document
+ * that cannot have relative references.
  */
 public class StreamSource implements Source {
 
     /**
-     * El nombre con el que se le pregunta a una fabrica si acepta esta clase de fuente.
+     * The name with which a factory is asked whether it accepts this kind of source.
      *
-     * <p>Nunca se le pasa a {@code setFeature}: es de solo lectura, y el `true` que devuelve
-     * significa "sabe leer un StreamSource", no una opcion que se prenda.
+     * <p>It is never passed to {@code setFeature}: it is read-only, and the `true` it returns means
+     * "it can read a StreamSource", not an option that is turned on.
      */
     public static final String FEATURE = "http://javax.xml.transform.stream.StreamSource/feature";
 
@@ -43,28 +44,29 @@ public class StreamSource implements Source {
     private Reader reader;
 
     /**
-     * Vacia, para llenarla despues con los `set`.
+     * Empty, to be filled later with the `set`s.
      *
-     * <p>Existe porque hay codigo que arma la fuente en varios pasos --recibe la URI de un lado y el
-     * flujo de otro-- y no puede pasar todo por el constructor.
+     * <p>It exists because there is code that builds the source in several steps --it receives the
+     * URI from one place and the stream from another-- and cannot pass everything through the
+     * constructor.
      */
     public StreamSource() {
     }
 
     /**
-     * Desde un flujo de bytes.
+     * From a byte stream.
      *
-     * @param inputStream de donde leer
+     * @param inputStream where to read from
      */
     public StreamSource(InputStream inputStream) {
         setInputStream(inputStream);
     }
 
     /**
-     * Desde un flujo de bytes, con la URI base.
+     * From a byte stream, with the base URI.
      *
-     * @param inputStream de donde leer
-     * @param systemId la URI base para las referencias relativas
+     * @param inputStream where to read from
+     * @param systemId the base URI for relative references
      */
     public StreamSource(InputStream inputStream, String systemId) {
         setInputStream(inputStream);
@@ -72,19 +74,19 @@ public class StreamSource implements Source {
     }
 
     /**
-     * Desde un flujo de caracteres. Ojo con la codificacion: ver el encabezado.
+     * From a character stream. Watch the encoding: see the header.
      *
-     * @param reader de donde leer
+     * @param reader where to read from
      */
     public StreamSource(Reader reader) {
         setReader(reader);
     }
 
     /**
-     * Desde un flujo de caracteres, con la URI base.
+     * From a character stream, with the base URI.
      *
-     * @param reader de donde leer
-     * @param systemId la URI base para las referencias relativas
+     * @param reader where to read from
+     * @param systemId the base URI for relative references
      */
     public StreamSource(Reader reader, String systemId) {
         setReader(reader);
@@ -92,153 +94,152 @@ public class StreamSource implements Source {
     }
 
     /**
-     * Desde una URI, que el procesador abre el mismo.
+     * From a URI, which the processor opens itself.
      *
-     * @param systemId la URI del documento
+     * @param systemId the URI of the document
      */
     public StreamSource(String systemId) {
         this.systemId = systemId;
     }
 
     /**
-     * Desde un archivo. La URI se arma con {@link #setSystemId(File)}.
+     * From a file. The URI is built with {@link #setSystemId(File)}.
      *
-     * @param f el archivo
+     * @param f the file
      */
     public StreamSource(File f) {
         setSystemId(f);
     }
 
-    // ---- de donde salen los bytes ------------------------------------------------------------
+    // ---- where the bytes come from --------------------------------------------------------------
 
     /**
-     * Fija el flujo de bytes.
+     * Sets the byte stream.
      *
-     * @param inputStream de donde leer, o null
+     * @param inputStream where to read from, or null
      */
     public void setInputStream(InputStream inputStream) {
         this.inputStream = inputStream;
     }
 
-    /** El flujo de bytes, o null. */
+    /** The byte stream, or null. */
     public InputStream getInputStream() {
         return inputStream;
     }
 
     /**
-     * Fija el flujo de caracteres, que le gana al de bytes.
+     * Sets the character stream, which wins over the byte one.
      *
-     * @param reader de donde leer, o null
+     * @param reader where to read from, or null
      */
     public void setReader(Reader reader) {
         this.reader = reader;
     }
 
-    /** El flujo de caracteres, o null. */
+    /** The character stream, or null. */
     public Reader getReader() {
         return reader;
     }
 
-    // ---- identificacion ----------------------------------------------------------------------
+    // ---- identification ----------------------------------------------------------------------
 
     /**
-     * Fija el identificador publico.
+     * Sets the public identifier.
      *
-     * <p>Es puramente informativo --sirve para los mensajes de error-- porque el procesador resuelve
-     * por la URI. Que exista igual es herencia de SAX, donde un catalogo puede mapearlo.
+     * <p>It is purely informative --it serves for error messages-- because the processor resolves
+     * by the URI. That it exists anyway is an inheritance from SAX, where a catalog can map it.
      *
-     * @param publicId el identificador, o null
+     * @param publicId the identifier, or null
      */
     public void setPublicId(String publicId) {
         this.publicId = publicId;
     }
 
-    /** El identificador publico, o null. */
+    /** The public identifier, or null. */
     public String getPublicId() {
         return publicId;
     }
 
     /**
-     * Fija la URI base.
+     * Sets the base URI.
      *
-     * @param systemId la URI, o null
+     * @param systemId the URI, or null
      */
     public void setSystemId(String systemId) {
         this.systemId = systemId;
     }
 
-    /** La URI base, o null. */
+    /** The base URI, or null. */
     public String getSystemId() {
         return systemId;
     }
 
     /**
-     * Fija la URI base a partir de un archivo, convertido a {@code file:}.
+     * Sets the base URI from a file, converted to {@code file:}.
      *
-     * <p>La conversion pasa por {@link File#toURI()} y despues a ASCII, que es lo que hace falta:
-     * una URI con un espacio o una eñe no es una URI valida hasta que esos caracteres estan
-     * percent-encoded, y un `href` relativo resuelto contra una base invalida no da nada.
+     * <p>The conversion goes through {@link File#toURI()} and then to ASCII, which is what is
+     * needed: a URI with a space or an n with a tilde is not a valid URI until those characters are
+     * percent-encoded, and a relative {@code href} resolved against an invalid base gives nothing.
      *
-     * <p><b>Techo, y esta afuera de esta clase.</b> El JDK no delega en {@code File.toURI()} aca:
-     * hace su propia conversion de ruta a URI. Delegar es lo correcto igual --una sola fuente de
-     * verdad-- pero hoy arrastra dos defectos de las clases de las que depende, y conviene que
-     * quede escrito: {@code java.net.URI} **no percent-encodea** (un espacio sale crudo), y
-     * {@code File.getAbsolutePath()} no puede resolver una ruta relativa porque {@code user.dir} no
-     * esta definida en esta VM. Con una ruta absoluta y sin caracteres que escapar, la salida
-     * coincide con la del JDK. Arreglarlo aca seria tapar el agujero en la hoja en vez de en la
-     * raiz; el dia que esas dos se arreglen, este metodo ya esta bien.
+     * <p>The JDK does not delegate to {@code File.toURI()} here: it does its own path-to-URI
+     * conversion. Delegating is right anyway --a single source of truth--. The note said this
+     * carried two defects of the classes it depends on: that {@code java.net.URI} does not
+     * percent-encode and that {@code File.getAbsolutePath()} cannot resolve a relative path because
+     * {@code user.dir} is not defined in this VM. Neither holds any more: run on KajiJVM, {@code
+     * File("C:/tmp/a b/c.xml")} gives {@code file:/C:/tmp/a%20b/c.xml}, the same as the JDK, and a
+     * relative path resolves against {@code user.dir}.
      *
-     * @param f el archivo
+     * @param f the file
      */
     public void setSystemId(File f) {
         this.systemId = f.toURI().toASCIIString();
     }
 
-    // ---- vacia o no --------------------------------------------------------------------------
+    // ---- empty or not ---------------------------------------------------------------------------
 
     /**
-     * Si esta fuente no tiene documento ninguno.
+     * Whether this source has no document at all.
      *
-     * <p>Vacia es **las dos cosas a la vez**: ni bytes por leer, ni URI que abrir. Y la URI cuenta
-     * por {@code null}, no por su contenido: la cadena vacia es una URI --mala, pero puesta a
-     * proposito-- y una fuente que la lleva no es una fuente sin nada.
+     * <p>Empty is **both things at once**: no bytes to read, and no URI to open. And the URI counts
+     * by {@code null}, not by its content: the empty string is a URI --a bad one, but set on
+     * purpose-- and a source carrying it is not a source with nothing.
      */
     public boolean isEmpty() {
-        return flujoVacio() && systemId == null;
+        return streamEmpty() && systemId == null;
     }
 
     /**
-     * Si el flujo, si lo hay, no tiene un solo caracter.
+     * Whether the stream, if there is one, has not a single character.
      *
-     * <p>Mirar esto **sin consumir nada** es todo el problema, porque quien pregunte "esta vacia?"
-     * espera despues poder leerla entera. Se resuelve con `mark`/`reset`: se marca, se lee un
-     * caracter, se vuelve.
+     * <p>Looking at this **without consuming anything** is the whole problem, because whoever asks
+     * "is it empty?" expects to be able to read it whole afterwards. It is solved with
+     * `mark`/`reset`: mark, read one character, go back.
      *
-     * <p>Un flujo que no soporta marcas no se puede mirar sin romperlo, y ahi la respuesta es
-     * **"no esta vacia"**. No es una suposicion optimista sino la unica segura de las dos: decir
-     * que esta vacia haria que el llamador la descarte, y un documento perdido es peor que un
-     * documento vacio que igual se intenta leer.
+     * <p>A stream that does not support marks cannot be looked at without breaking it, and there
+     * the answer is **"it is not empty"**. It is not an optimistic assumption but the only safe one
+     * of the two: saying it is empty would make the caller discard it, and a lost document is worse
+     * than an empty document that is still attempted.
      */
-    private boolean flujoVacio() {
-        boolean vacio = true;
+    private boolean streamEmpty() {
+        boolean empty = true;
         if (inputStream != null) {
-            // La marca se chequea **antes** de leer, no despues: sobre un flujo que no la soporta,
-            // `mark` no hace nada y el `read` de prueba se comeria el primer byte del documento --
-            // justo lo que este metodo promete no hacer.
+            // The mark is checked **before** reading, not after: on a stream that does not support
+            // it, `mark` does nothing and the test `read` would eat the document's first byte --
+            // just what this method promises not to do.
             //
-            // Y `catch (Throwable)` en vez de `catch (IOException)`: el `InputStream` de esta
-            // biblioteca no declara `IOException` en `read`/`mark`/`reset`, asi que nombrarla en el
-            // `catch` no compila aca --y si compilaria contra el JDK, donde si la declara--.
-            // `Throwable` es lo unico que vale en los dos.
+            // And `catch (Throwable)` instead of `catch (IOException)`. The note said this
+            // library's `InputStream` does not declare `IOException` in `read`/`mark`/`reset`, so
+            // naming it would not compile here; `read()` and `reset()` do declare it now.
+            // `Throwable` still covers whatever the stream throws.
             if (!inputStream.markSupported()) {
                 return false;
             }
             try {
                 inputStream.mark(1);
-                vacio = (inputStream.read() == -1);
+                empty = (inputStream.read() == -1);
                 inputStream.reset();
-            } catch (Throwable noSePuedeMirar) {
-                vacio = false;
+            } catch (Throwable cannotPeek) {
+                empty = false;
             }
         }
         if (reader != null) {
@@ -247,12 +248,12 @@ public class StreamSource implements Source {
             }
             try {
                 reader.mark(1);
-                vacio = (reader.read() == -1);
+                empty = (reader.read() == -1);
                 reader.reset();
-            } catch (Throwable noSePuedeMirar) {
-                vacio = false;
+            } catch (Throwable cannotPeek) {
+                empty = false;
             }
         }
-        return vacio;
+        return empty;
     }
 }

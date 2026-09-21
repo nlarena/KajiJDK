@@ -1,22 +1,23 @@
 package jdk.internal.vm;
 
 /**
- * KajiLibrary's jdk.internal.vm.PostVMInitHook — lo que corre cuando la VM terminó de arrancar.
+ * KajiLibrary's jdk.internal.vm.PostVMInitHook -- what runs when the VM has finished starting up.
  *
- * <p>Hay cosas que no se pueden hacer durante la inicialización porque necesitan una VM ya en pie:
- * en el JDK, este gancho es el que arma el soporte de gestión cuando se pidió por línea de comandos.
- * La VM lo invoca por nombre, una vez, después del arranque y antes del `main`.
+ * <p>There are things that cannot be done during initialisation because they need a VM already up:
+ * in the JDK, this hook is the one that sets up the management support when it was asked for on the
+ * command line. The VM invokes it by name, once, after start-up and before `main`.
  *
- * <p>Acá **no hace nada, y no queda pendiente**: no hay agentes de gestión ni JMX que inicializar,
- * así que la lista de cosas por hacer después del arranque está vacía. La clase existe con la forma
- * que el JDK declara, para que ese punto de invocación tenga a quién llamar si algún día lo hay.
+ * <p>Here it **does nothing, and nothing is pending**: there are no management agents nor JMX to
+ * initialise, so the list of things to do after start-up is empty. The class exists with the shape
+ * the JDK declares, so that that point of invocation has somebody to call if some day there is
+ * something.
  */
 public class PostVMInitHook {
 
     public PostVMInitHook() {
     }
 
-    /** Lo invoca la VM una vez, ya arrancada. */
+    /** The VM invokes it once, already started. */
     public static void run() {
     }
 }

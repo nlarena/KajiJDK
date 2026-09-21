@@ -6,35 +6,36 @@ import java.nio.ByteBuffer;
 import java.util.concurrent.Future;
 
 /**
- * KajiLibrary's java.nio.channels.AsynchronousFileChannel — un canal de archivo cuyas operaciones se
- * piden y se contestan despues.
+ * KajiLibrary's java.nio.channels.AsynchronousFileChannel — a file channel whose operations are
+ * asked for and answered afterwards.
  *
- * <p>No hereda de {@link FileChannel} y no es un descuido: son dos jerarquias distintas sobre el
- * mismo archivo. La diferencia visible es que **no tiene posicion corriente**. Todas sus lecturas y
- * escrituras llevan la posicion como argumento, y tiene que ser asi: con varias operaciones en vuelo
- * a la vez, una posicion compartida no significaria nada --cual de las tres la avanzo primero?--.
+ * <p>It does not inherit from {@link FileChannel} and that is not an oversight: they are two
+ * different hierarchies over the same file. The visible difference is that **it has no current
+ * position**. All of its reads and writes carry the position as an argument, and it has to be that
+ * way: with several operations in flight at a time, a shared position would mean nothing --which of
+ * the three advanced it first?--.
  *
- * <p>Cada operacion se puede pedir de dos maneras, y las dos estan por una razon distinta: con
- * {@link CompletionHandler} para el codigo que reacciona a eventos, y devolviendo un
- * {@link Future} para el que en algun momento quiere sentarse a esperar.
+ * <p>Each operation can be asked for in two ways, and both are there for a different reason: with a
+ * {@link CompletionHandler} for code that reacts to events, and returning a {@link Future} for code
+ * that at some moment wants to sit down and wait.
  *
- * <h2>Estado en esta biblioteca</h2>
+ * <h2>State in this library</h2>
  *
- * <p><strong>Los dos {@code open()} ya estan.</strong> Esta nota argumentaba que un pool de hilos
- * sobre lecturas bloqueantes seria una fachada, porque prometeria las propiedades por las que uno
- * elige esta API. Vale la pena separar cuales:
+ * <p><strong>Both {@code open()}s are here.</strong> This note used to argue that a thread pool
+ * over blocking reads would be a facade, because it would promise the properties one chooses this
+ * API for. It is worth separating which:
  *
  * <ul>
- *   <li><strong>No atar un hilo del programa por operacion</strong> --que es por lo que se elige--
- *       se cumple: pedir una lectura vuelve en el acto y el resultado llega por un `Future` o por un
- *       manejador;
- *   <li><strong>una operacion por hilo del sistema</strong> no se cumple, y no se puede: los nativos
- *       de archivo de esta VM son sincronicos. Es exactamente lo que le pasa al JDK en las
- *       plataformas sin `aio`, donde usa un pool igual que este.
+ *   <li><strong>Not tying up a thread of the program per operation</strong> --which is what it is
+ *       chosen for-- is fulfilled: asking for a read returns on the spot and the result arrives
+ *       through a `Future` or through a handler;
+ *   <li><strong>one operation per thread of the system</strong> is not fulfilled, and cannot be:
+ *       the file natives of this VM are synchronous. It is exactly what happens to the JDK on the
+ *       platforms without `aio`, where it uses a pool just like this one.
  * </ul>
  *
- * <p>Lo que queda por decir es el costo, y esta dicho donde corresponde: el {@link FileChannel} de
- * abajo lee el archivo entero en cada operacion. Ver {@code AsyncFileChannelImpl}.
+ * <p>What is left to say is the cost, and it is said where it belongs: the {@link FileChannel}
+ * underneath reads the whole file on every operation. See {@code AsyncFileChannelImpl}.
  *
  * <p><strong>The six locking members are in.</strong> This note used to say they were out because a
  * file lock excludes **other processes** and the VM had nothing to do it with. It does now -- see
@@ -42,52 +43,51 @@ import java.util.concurrent.Future;
  * for: {@link #lock(long, long, boolean)} hands back a {@link java.util.concurrent.Future} instead
  * of parking the caller.
  *
- * <p>Queda entonces el contrato: {@link #size()}, {@link #truncate}, {@link #force} y las cuatro
- * formas de leer y escribir, que es lo que cualquier implementacion tiene que cumplir.
+ * <p>What remains, then, is the contract: {@link #size()}, {@link #truncate}, {@link #force} and
+ * the four ways of reading and writing, which is what any implementation has to fulfil.
  */
 public abstract class AsynchronousFileChannel implements AsynchronousChannel {
 
     protected AsynchronousFileChannel() {
     }
 
-    /** El tama&ntilde;o del archivo. Es sincronico, tambien en el JDK: no hay nada que esperar. */
     /**
-     * Abre un canal asincronico sobre ese archivo, en el grupo de omision.
+     * Opens an asynchronous channel over that file, in the default group.
      *
-     * <p>Sin ninguna opcion se abre para lectura, igual que {@link FileChannel#open}.
+     * <p>With no option it is opened for reading, just as in {@link FileChannel#open}.
      *
-     * @param file el archivo
-     * @param options como abrirlo
-     * @return el canal
-     * @throws IOException si no se puede abrir
+     * @param file the file
+     * @param options how to open it
+     * @return the channel
+     * @throws IOException if it cannot be opened
      */
     public static AsynchronousFileChannel open(java.nio.file.Path file,
             java.nio.file.OpenOption... options) throws IOException {
-        final java.util.Set<java.nio.file.OpenOption> conjunto =
+        final java.util.Set<java.nio.file.OpenOption> set =
                 new java.util.HashSet<java.nio.file.OpenOption>();
         if (options != null) {
             for (int i = 0; i < options.length; i++) {
-                conjunto.add(options[i]);
+                set.add(options[i]);
             }
         }
-        if (conjunto.isEmpty()) {
-            conjunto.add(java.nio.file.StandardOpenOption.READ);
+        if (set.isEmpty()) {
+            set.add(java.nio.file.StandardOpenOption.READ);
         }
-        return open(file, conjunto, null);
+        return open(file, set, null);
     }
 
     /**
-     * Lo mismo, diciendo en que pool corren los manejadores y con que atributos crear el archivo.
+     * The same, saying in which pool the handlers run and with which attributes to create the file.
      *
-     * <p>El pool va suelto y no como grupo porque es lo que la firma del JDK pide. Se lo envuelve en
-     * un grupo aca; si es {@code null}, se usa el de omision.
+     * <p>The pool goes loose and not as a group because that is what the JDK's signature asks for.
+     * It is wrapped in a group here; if it is {@code null}, the default one is used.
      *
-     * @param file el archivo
-     * @param options como abrirlo
-     * @param executor donde corren los manejadores, o {@code null} para el pool de omision
-     * @param attrs los atributos con que crearlo
-     * @return el canal
-     * @throws IOException si no se puede abrir
+     * @param file the file
+     * @param options how to open it
+     * @param executor where the handlers run, or {@code null} for the default pool
+     * @param attrs the attributes to create it with
+     * @return the channel
+     * @throws IOException if it cannot be opened
      */
     public static AsynchronousFileChannel open(java.nio.file.Path file,
             java.util.Set<? extends java.nio.file.OpenOption> options,
@@ -96,14 +96,14 @@ public abstract class AsynchronousFileChannel implements AsynchronousChannel {
         if (options == null) {
             throw new NullPointerException("options");
         }
-        final java.nio.file.OpenOption[] arreglo =
+        final java.nio.file.OpenOption[] array =
                 options.toArray(new java.nio.file.OpenOption[options.size()]);
-        final FileChannel bruto = FileChannel.open(file, arreglo);
-        final AsynchronousChannelGroup grupo = executor == null
+        final FileChannel raw = FileChannel.open(file, array);
+        final AsynchronousChannelGroup group = executor == null
                 ? AsynchronousChannelProvider.provider().openAsynchronousChannelGroup(
                         java.util.concurrent.Executors.newCachedThreadPool(), 0)
                 : AsynchronousChannelGroup.withThreadPool(executor);
-        return AsyncChannelFactory.file(bruto, grupo);
+        return AsyncChannelFactory.file(raw, group);
     }
 
     // ---- locks -----------------------------------------------------------------------------------
@@ -175,30 +175,33 @@ public abstract class AsynchronousFileChannel implements AsynchronousChannel {
      */
     public abstract FileLock tryLock(long position, long size, boolean shared) throws IOException;
 
+    /**
+     * The size of the file. It is synchronous, in the JDK as well: there is nothing to wait for.
+     */
     public abstract long size() throws IOException;
 
-    /** Corta el archivo a `size`. Si ya era mas chico, no hace nada. */
+    /** Cuts the file down to `size`. If it was smaller already, it does nothing. */
     public abstract AsynchronousFileChannel truncate(long size) throws IOException;
 
-    /** Fuerza al disco lo que este pendiente. */
+    /** Forces whatever is pending to the disk. */
     public abstract void force(boolean metaData) throws IOException;
 
     /**
-     * Lee desde `position` y avisa a `handler` cuando termina.
+     * Reads from `position` and tells `handler` when it finishes.
      *
-     * <p>`attachment` viaja hasta el handler sin que nada lo toque: es como se lleva el contexto de
-     * la operacion sin un mapa aparte.
+     * <p>`attachment` travels as far as the handler without anything touching it: it is how the
+     * context of the operation is carried without a separate map.
      */
     public abstract <A> void read(ByteBuffer dst, long position, A attachment,
             CompletionHandler<Integer, ? super A> handler);
 
-    /** Como el otro, devolviendo el resultado como {@link Future}. */
+    /** Like the other one, returning the result as a {@link Future}. */
     public abstract Future<Integer> read(ByteBuffer dst, long position);
 
-    /** Escribe en `position` y avisa a `handler` cuando termina. */
+    /** Writes at `position` and tells `handler` when it finishes. */
     public abstract <A> void write(ByteBuffer src, long position, A attachment,
             CompletionHandler<Integer, ? super A> handler);
 
-    /** Como el otro, devolviendo el resultado como {@link Future}. */
+    /** Like the other one, returning the result as a {@link Future}. */
     public abstract Future<Integer> write(ByteBuffer src, long position);
 }

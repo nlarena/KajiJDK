@@ -1,19 +1,19 @@
 package org.w3c.dom.views;
 
 /**
- * KajiLibrary's org.w3c.dom.views.AbstractView -- una vista de un documento.
+ * KajiLibrary's org.w3c.dom.views.AbstractView -- a view of a document.
  *
- * <p>Un mismo documento se puede estar mostrando de varias formas a la vez: una ventana, una
- * impresion, un lector de pantalla. Cada una de esas es una vista, y la interfaz existe para poder
- * <b>nombrarlas</b> sin decir nada sobre ellas -- por eso solo tiene un metodo, y es el que devuelve
- * el documento del que es vista.
+ * <p>One same document may be shown in several ways at a time: a window, a printout, a screen
+ * reader. Each of those is a view, and the interface exists to be able to <b>name</b> them without
+ * saying anything about them -- that is why it has only one method, and it is the one that returns
+ * the document it is a view of.
  *
- * <p>El modulo Views del DOM nunca creció mas alla de este par de interfaces. Sigue en el API porque
- * {@code UIEvent} necesita decir en <b>que</b> vista ocurrio un evento, y sin este tipo no habria
- * como.
+ * <p>The Views module of the DOM never grew beyond this pair of interfaces. It is still in the API
+ * because {@code UIEvent} needs to say in <b>which</b> view an event happened, and without this
+ * type there would be no way.
  */
 public interface AbstractView {
 
-    /** El documento del que esta es una vista. */
+    /** The document this is a view of. */
     DocumentView getDocument();
 }

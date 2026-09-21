@@ -3,30 +3,30 @@ package javax.swing.event;
 import java.util.EventListener;
 
 /**
- * Quien quiere enterarse de que las columnas de una tabla cambiaron.
+ * Whoever wants to hear that a table's columns changed.
  *
- * <p>Los cinco metodos no reciben el mismo tipo de evento, y eso es deliberado: agregar, sacar y
- * mover columnas son cambios de <em>estructura</em> y llegan como {@link TableColumnModelEvent},
- * mientras que el margen es un {@link ChangeEvent} —no hay indices que informar— y la seleccion es
- * un {@link ListSelectionEvent}, el mismo que usa cualquier lista.
+ * <p>The five methods do not receive the same kind of event, and that is deliberate: adding,
+ * removing and moving columns are changes of <em>structure</em> and arrive as
+ * {@link TableColumnModelEvent}, while the margin is a {@link ChangeEvent} --there are no indices
+ * to report-- and the selection is a {@link ListSelectionEvent}, the same one any list uses.
  *
- * <p>Reusar esos dos ultimos en vez de inventar eventos propios es lo que permite que un mismo
- * oyente de seleccion sirva para filas y para columnas.
+ * <p>Reusing those last two instead of inventing events of its own is what allows one same
+ * selection listener to serve for rows and for columns.
  */
 public interface TableColumnModelListener extends EventListener {
 
-    /** Se agrego una columna. */
+    /** A column was added. */
     void columnAdded(TableColumnModelEvent e);
 
-    /** Se saco una columna. */
+    /** A column was removed. */
     void columnRemoved(TableColumnModelEvent e);
 
-    /** Se movio una columna. */
+    /** A column was moved. */
     void columnMoved(TableColumnModelEvent e);
 
-    /** Cambio el espacio entre columnas. */
+    /** The space between columns changed. */
     void columnMarginChanged(ChangeEvent e);
 
-    /** Cambio que columnas estan seleccionadas. */
+    /** Which columns are selected changed. */
     void columnSelectionChanged(ListSelectionEvent e);
 }

@@ -5,11 +5,11 @@ import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.TypeElement;
 
 /**
- * El alcance lexico en un punto del programa, para preguntar que nombres son visibles.
+ * The lexical scope at a point of the program, in order to ask what names are visible.
  *
- * <p>Como {@link LineMap}, no es un nodo: es una vista *resuelta* del arbol, y por eso devuelve
- * {@code Element} del modelo de elementos y no nodos del arbol. La cadena de
- * {@link #getEnclosingScope} es lo que hace la busqueda de un nombre.
+ * <p>Like {@link LineMap}, it is not a node: it is a *resolved* view of the tree, and that is why
+ * it returns {@code Element} of the element model and not nodes of the tree. The chain of
+ * {@link #getEnclosingScope} is what does the lookup of a name.
  */
 public interface Scope {
 

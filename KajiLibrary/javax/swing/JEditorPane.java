@@ -17,39 +17,40 @@ import javax.swing.text.EditorKit;
 import javax.swing.text.JTextComponent;
 
 /**
- * Un componente de texto que cambia de personalidad segun el tipo de contenido.
+ * A text component that changes personality according to the content type.
  *
- * <h2>El tipo manda</h2>
+ * <h2>The type rules</h2>
  *
- * <p>Decirle {@code setContentType("text/html")} le cambia el {@link EditorKit}, y con el cambian
- * el documento, las vistas y las acciones. La tabla de tipos a juegos es estatica y se puede
- * ampliar ({@link #registerEditorKitForContentType}), que es como una aplicacion agrega su propio
- * formato.
+ * <p>Telling it {@code setContentType("text/html")} changes its {@link EditorKit}, and with it
+ * change the document, the views and the actions. The table from types to kits is static and
+ * can be extended ({@link #registerEditorKitForContentType}), which is how an application adds
+ * its own format.
  *
- * <p>Los juegos registrados por omision son los tres del JDK —texto plano, HTML y RTF—; en esta
- * biblioteca solo el de texto plano existe, asi que los otros dos se piden y no aparecen. Esta
- * dicho aca porque el sintoma —un documento HTML que se ve como texto— confundiria.
+ * <p>The kits registered by default are the JDK's three -- plain text, HTML and RTF --; in this
+ * library only the plain text one exists, so the other two are asked for and do not appear. It
+ * is said here because the symptom -- an HTML document that is seen as text -- would confuse.
  *
- * <h2>Las paginas</h2>
+ * <h2>The pages</h2>
  *
- * <p>{@link #setPage} lee de una direccion. Funciona con las direcciones que
- * {@code java.net.URL} sepa abrir en esta VM; la carga es sincronica, sin el hilo de fondo que el
- * JDK usa para documentos grandes ({@code AsynchronousLoadPriority}).
+ * <p>{@link #setPage} reads from an address. It works with the addresses
+ * {@code java.net.URL} knows how to open on this VM; the loading is synchronous, without the
+ * background thread the JDK uses for large documents
+ * ({@code AsynchronousLoadPriority}).
  */
 public class JEditorPane extends JTextComponent {
 
     private static final String uiClassID = "EditorPaneUI";
 
-    /** La propiedad del documento con los datos de un formulario enviado. */
+    /** The document's property with the data of a submitted form. */
     public static final String PostDataProperty = "javax.swing.JEditorPane.postdata";
 
-    /** La propiedad que pide interpretar las unidades de largo como manda el W3C. */
+    /** The property that asks for the length units to be interpreted as the W3C requires. */
     public static final String W3C_LENGTH_UNITS = "JEditorPane.w3cLengthUnits";
 
-    /** La propiedad que pide respetar la fuente y el color del componente. */
+    /** The property that asks for the component's typeface and colour to be respected. */
     public static final String HONOR_DISPLAY_PROPERTIES = "JEditorPane.honorDisplayProperties";
 
-    /** Los juegos de edicion por omision, por tipo de contenido. */
+    /** The default editor kits, by content type. */
     static final Map<String, String> defaultEditorKitMap = new Hashtable<String, String>(0);
 
     private static final Hashtable<String, String> kitRegistry =
@@ -61,25 +62,25 @@ public class JEditorPane extends JTextComponent {
     private URL pageUrl;
     private boolean isUserSetEditorKit;
 
-    /** Un panel vacio de texto plano. */
+    /** An empty plain text pane. */
     public JEditorPane() {
         super();
         setFocusCycleRoot(true);
     }
 
-    /** Un panel que muestra esa direccion. */
+    /** A pane that shows that address. */
     public JEditorPane(URL initialPage) throws IOException {
         this();
         setPage(initialPage);
     }
 
-    /** Un panel que muestra esa direccion, escrita como texto. */
+    /** A pane that shows that address, written as text. */
     public JEditorPane(String url) throws IOException {
         this();
         setPage(url);
     }
 
-    /** Un panel con ese tipo de contenido y ese texto. */
+    /** A pane with that content type and that text. */
     public JEditorPane(String type, String text) {
         this();
         setContentType(type);
@@ -98,7 +99,7 @@ public class JEditorPane extends JTextComponent {
         return listenerList.getListeners(HyperlinkListener.class);
     }
 
-    /** Avisa que se toco un enlace; lo llama la vista que lo dibujo. */
+    /** It gives notice that a link was touched; the view that drew it calls it. */
     public void fireHyperlinkUpdate(HyperlinkEvent e) {
         Object[] listeners = listenerList.getListenerList();
         for (int i = listeners.length - 2; i >= 0; i = i - 2) {
@@ -108,7 +109,7 @@ public class JEditorPane extends JTextComponent {
         }
     }
 
-    /** Muestra esa direccion; la carga es sincronica, ver la nota de la clase. */
+    /** It shows that address; the loading is synchronous, see the class note. */
     public void setPage(URL page) throws IOException {
         if (page == null) {
             throw new IOException("invalid url");
@@ -127,7 +128,7 @@ public class JEditorPane extends JTextComponent {
         }
     }
 
-    /** Lee de un flujo con el juego de edicion instalado. */
+    /** It reads from a stream with the installed editor kit. */
     public void read(InputStream in, Object desc) throws IOException {
         if (desc instanceof URL) {
             pageUrl = (URL) desc;
@@ -140,7 +141,7 @@ public class JEditorPane extends JTextComponent {
         setDocument(doc);
     }
 
-    /** Lee de un flujo dentro de ese documento. */
+    /** It reads from a stream into that document. */
     void read(InputStream in, Document doc) throws IOException {
         try {
             String charset = (String) getClientProperty("charset");
@@ -154,7 +155,7 @@ public class JEditorPane extends JTextComponent {
         }
     }
 
-    /** El flujo de esa direccion; una subclase puede redefinirlo para leer de otro lado. */
+    /** That address's stream; a subclass may redefine it in order to read from somewhere else. */
     protected InputStream getStream(URL page) throws IOException {
         java.net.URLConnection conn = page.openConnection();
         InputStream in = conn.getInputStream();
@@ -166,9 +167,9 @@ public class JEditorPane extends JTextComponent {
     }
 
     /**
-     * Lleva la vista hasta esa referencia de la pagina.
+     * It takes the view as far as that reference of the page.
      *
-     * <p>No hace nada: sin el juego de HTML no hay anclas a las que ir.
+     * <p>It does nothing: with no HTML kit there are no anchors to go to.
      */
     public void scrollToReference(String reference) {
     }
@@ -189,12 +190,12 @@ public class JEditorPane extends JTextComponent {
         return uiClassID;
     }
 
-    /** El juego de omision: el de texto plano. */
+    /** The default kit: the plain text one. */
     protected EditorKit createDefaultEditorKit() {
         return new DefaultEditorKit();
     }
 
-    /** El juego instalado; se crea al primer uso. */
+    /** The installed kit; it is created on first use. */
     public EditorKit getEditorKit() {
         if (kit == null) {
             kit = createDefaultEditorKit();
@@ -207,11 +208,11 @@ public class JEditorPane extends JTextComponent {
         return (kit != null) ? kit.getContentType() : contentType;
     }
 
-    /** Cambia el tipo, y con el el juego de edicion; ver la nota de la clase. */
+    /** It changes the type, and with it the editor kit; see the class note. */
     public final void setContentType(String type) {
         int parm = type.indexOf(";");
         if (parm > -1) {
-            // Se descarta lo que sigue al punto y coma, salvo el juego de caracteres.
+            // What follows the semicolon is discarded, save the character set.
             String paramList = type.substring(parm);
             type = type.substring(0, parm).trim();
             int slash = paramList.toLowerCase().indexOf("charset");
@@ -232,7 +233,7 @@ public class JEditorPane extends JTextComponent {
         contentType = type;
     }
 
-    /** Instala ese juego; el documento pasa a ser uno que el juego cree. */
+    /** It installs that kit; the document becomes one the kit creates. */
     public void setEditorKit(EditorKit k) {
         EditorKit old = kit;
         isUserSetEditorKit = true;
@@ -247,7 +248,7 @@ public class JEditorPane extends JTextComponent {
         firePropertyChange("editorKit", old, k);
     }
 
-    /** El juego para ese tipo, del registro; se crea uno la primera vez. */
+    /** The kit for that type, from the registry; one is created the first time. */
     public EditorKit getEditorKitForContentType(String type) {
         if (typeHandlers == null) {
             typeHandlers = new Hashtable<String, EditorKit>(3);
@@ -272,16 +273,16 @@ public class JEditorPane extends JTextComponent {
         typeHandlers.put(type, k);
     }
 
-    /** Reemplaza la seleccion; sobre un documento de solo lectura no hace nada. */
+    /** It replaces the selection; over a read-only document it does nothing. */
     public void replaceSelection(String content) {
         super.replaceSelection(content);
     }
 
     /**
-     * Crea el juego registrado para ese tipo.
+     * It creates the kit registered for that type.
      *
-     * <p>{@code null} si no hay ninguno registrado o si su clase no se puede cargar; ver la nota
-     * de la clase sobre los juegos que faltan.
+     * <p>{@code null} if there is none registered or if its class cannot be loaded; see the class
+     * note about the missing kits.
      */
     public static EditorKit createEditorKitForContentType(String type) {
         String className = kitRegistry.get(type);
@@ -300,7 +301,7 @@ public class JEditorPane extends JTextComponent {
         kitRegistry.put(type, classname);
     }
 
-    /** Como la anterior; el cargador se ignora, esta VM tiene uno solo. */
+    /** Like the previous one; the loader is ignored, this VM has a single one. */
     public static void registerEditorKitForContentType(String type, String classname,
             ClassLoader loader) {
         registerEditorKitForContentType(type, classname);
@@ -311,10 +312,10 @@ public class JEditorPane extends JTextComponent {
     }
 
     /**
-     * El tamano preferido, agrandado hasta el de la ventana que lo muestra.
+     * The preferred size, enlarged to that of the viewport that shows it.
      *
-     * <p>Sin esto, un documento corto dentro de un panel con barras dejaria el fondo del panel a
-     * la vista debajo del texto.
+     * <p>Without this, a short document inside a pane with bars would leave the pane's background
+     * in sight below the text.
      */
     public Dimension getPreferredSize() {
         Dimension d = super.getPreferredSize();
@@ -381,7 +382,7 @@ public class JEditorPane extends JTextComponent {
         return super.paramString() + ",kit=" + kitString + ",typeHandlers=" + typeHandlersString;
     }
 
-    /** Sin contexto de accesibilidad: no hay tecnologia asistiva en esta VM. */
+    /** With no accessibility context: there is no assistive technology on this VM. */
     public AccessibleContext getAccessibleContext() {
         return null;
     }

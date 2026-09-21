@@ -1,12 +1,12 @@
 package javax.print.attribute;
 
-// Un AttributeSet que solo acepta atributos que sean `PrintServiceAttribute`. La restriccion se
-// verifica en tiempo de ejecucion; ver DocAttributeSet.
+// An AttributeSet that only accepts attributes that are `PrintServiceAttribute`s. The restriction
+// is checked at run time; see DocAttributeSet.
 public interface PrintServiceAttributeSet extends AttributeSet {
 
-    // ClassCastException si `attribute` no es un PrintServiceAttribute.
+    // ClassCastException if `attribute` is not a PrintServiceAttribute.
     boolean add(Attribute attribute);
 
-    // ClassCastException si alguno de los atributos no es un PrintServiceAttribute.
+    // ClassCastException if any of the attributes is not a PrintServiceAttribute.
     boolean addAll(AttributeSet attributes);
 }

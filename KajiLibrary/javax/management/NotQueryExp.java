@@ -1,12 +1,12 @@
 package javax.management;
 
-/** Negacion. De paquete: se fabrica con {@link Query#not}. */
+/** Negation. Package-private: it is made with {@link Query#not}. */
 class NotQueryExp extends QueryEval implements QueryExp {
 
     private static final long serialVersionUID = 5269643775896723397L;
 
     /**
-     * @serial la negada
+     * @serial the negated one
      */
     private QueryExp exp;
 

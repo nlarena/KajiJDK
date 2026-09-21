@@ -3,30 +3,31 @@ package javax.script;
 import java.io.Reader;
 
 /**
- * KajiLibrary's javax.script.Compilable -- la implementa el motor que sabe compilar una vez.
+ * KajiLibrary's javax.script.Compilable -- implemented by the engine that can compile once.
  *
- * <p>Es **opcional**: un motor la implementa si puede guardar la forma ya analizada de un script
- * para reejecutarla sin volver a parsear. Quien hospeda pregunta con `instanceof` y usa el camino
- * rapido si esta; si no esta, evalua el texto todas las veces y funciona igual, solo que mas lento.
+ * <p>It is **optional**: an engine implements it if it can keep the already parsed form of a script
+ * to run it again without parsing again. The host asks with `instanceof` and takes the fast road if
+ * it is there; if it is not, it evaluates the text every time and it works all the same, only
+ * slower.
  *
- * <p>Lo que sale es un {@link CompiledScript}, que no guarda un mundo: se compila una vez y se
- * evalua muchas, cada vez contra el contexto o los `Bindings` que se le pasen.
+ * <p>What comes out is a {@link CompiledScript}, which keeps no world: it is compiled once and
+ * evaluated many times, each time against the context or the `Bindings` it is given.
  */
 public interface Compilable {
 
     /**
-     * Compila `script`.
+     * Compiles `script`.
      *
-     * @throws ScriptException si el script no compila
-     * @throws NullPointerException si `script` es nulo
+     * @throws ScriptException if the script does not compile
+     * @throws NullPointerException if `script` is null
      */
     CompiledScript compile(String script) throws ScriptException;
 
     /**
-     * Compila lo que salga de `script`.
+     * Compiles whatever comes out of `script`.
      *
-     * @throws ScriptException si el script no compila o el lector falla
-     * @throws NullPointerException si `script` es nulo
+     * @throws ScriptException if the script does not compile or the reader fails
+     * @throws NullPointerException if `script` is null
      */
     CompiledScript compile(Reader script) throws ScriptException;
 }

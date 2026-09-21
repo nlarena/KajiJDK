@@ -1,7 +1,7 @@
 package java.time.temporal;
 
-// KajiLibrary's java.time.temporal.TemporalAccessor -- acceso de solo lectura a una fecha u hora,
-// por campo. Es la base de todos los tipos valor (LocalDate, Instant, ...).
+// KajiLibrary's java.time.temporal.TemporalAccessor -- read-only access to a date or a time, field
+// by field. It is the base of every value type (LocalDate, Instant, ...).
 public interface TemporalAccessor {
 
     boolean isSupported(TemporalField field);
@@ -14,10 +14,10 @@ public interface TemporalAccessor {
     }
 
     /**
-     * El rango de valores validos de `field` **en este** temporal.
+     * `field`'s range of valid values **in this** temporal.
      *
-     * <p>Afinado por el propio objeto: `DAY_OF_MONTH` sobre un febrero bisiesto da 1..29. El default
-     * delega en el campo, que es lo que sabe; un tipo que pueda afinar mas lo sobreescribe.
+     * <p>Refined by the object itself: `DAY_OF_MONTH` over a leap February gives 1..29. The default
+     * delegates to the field, which is what knows; a type that can refine further overrides it.
      */
     default ValueRange range(TemporalField field) {
         if (field instanceof ChronoField) {
@@ -30,10 +30,10 @@ public interface TemporalAccessor {
     }
 
     /**
-     * Consulta este temporal con una estrategia.
+     * It queries this temporal with a strategy.
      *
-     * <p>Es el punto de extension del paquete: en vez de un metodo por cada cosa que se pueda querer
-     * saber, se pasa la pregunta. `TemporalQueries` trae las estandar.
+     * <p>It is the package's extension point: instead of a method per thing one might want to know,
+     * the question is passed in. `TemporalQueries` carries the standard ones.
      */
     default <R> R query(TemporalQuery<R> query) {
         return query.queryFrom(this);

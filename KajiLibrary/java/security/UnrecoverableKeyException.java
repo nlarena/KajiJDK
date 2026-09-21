@@ -1,7 +1,7 @@
 package java.security;
 
-// El caso particular de `UnrecoverableEntryException` en el que la entrada que no se pudo
-// recuperar es una clave.
+// The particular case of `UnrecoverableEntryException` in which the entry that could not be
+// recovered is a key.
 public class UnrecoverableKeyException extends UnrecoverableEntryException {
 
     public UnrecoverableKeyException() {

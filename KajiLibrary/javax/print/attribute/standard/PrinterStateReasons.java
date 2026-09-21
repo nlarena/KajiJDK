@@ -10,24 +10,24 @@ import javax.print.attribute.Attribute;
 import javax.print.attribute.PrintServiceAttribute;
 
 /**
- * Las condiciones que tiene la impresora encima, cada una con su gravedad.
+ * The conditions the printer has on it, each one with its severity.
  *
- * <p>Es un mapa de {@link PrinterStateReason} a {@link Severity} y no un conjunto de razones,
- * porque la misma condicion no siempre pesa igual: {@code MEDIA_LOW} es un {@code WARNING} cuando
- * quedan diez hojas y un {@code ERROR} cuando no queda ninguna. La gravedad la decide la impresora
- * y por eso viaja pegada a la razon.
+ * <p>It is a map from {@link PrinterStateReason} to {@link Severity} and not a set of reasons,
+ * because the same condition does not always weigh the same: {@code MEDIA_LOW} is a {@code WARNING}
+ * when ten sheets are left and an {@code ERROR} when none is. The severity is decided by the
+ * printer and that is why it travels attached to the reason.
  *
- * <p>Como {@link JobStateReasons}, el atributo <b>es</b> la coleccion --extiende
- * {@link HashMap}-- y por lo tanto es mutable, a diferencia del resto del paquete.
+ * <p>Like {@link JobStateReasons}, the attribute <b>is</b> the collection --it extends {@link
+ * HashMap}-- and therefore it is mutable, unlike the rest of the package.
  *
- * <p>La vista por gravedad ({@link #printerStateReasonSet}) es lo unico con logica de verdad aca, y
- * es una <b>vista viva</b>, no una copia: no recorre el mapa al construirse sino que filtra al
- * iterar, asi que refleja los cambios posteriores del mapa. Es de solo lectura --hereda de
- * {@link AbstractSet} el {@code add} que tira {@code UnsupportedOperationException}-- porque
- * agregar una razon a la vista de los errores no tendria donde guardar la gravedad.
+ * <p>The view by severity ({@link #printerStateReasonSet}) is the only thing with real logic here,
+ * and it is a <b>live view</b>, not a copy: it does not walk the map when built but filters while
+ * iterating, so it reflects later changes of the map. It is read-only --it inherits from {@link
+ * AbstractSet} the {@code add} that throws {@code UnsupportedOperationException}-- because adding a
+ * reason to the errors view would have nowhere to keep the severity.
  *
- * <p>Que sea perezosa tiene un costo que conviene saber: {@code size()} no es O(1) sino que recorre
- * el mapa entero contando los que coinciden.
+ * <p>That it is lazy has a cost worth knowing: {@code size()} is not O(1) but walks the whole map
+ * counting the ones that match.
  */
 public final class PrinterStateReasons extends HashMap<PrinterStateReason, Severity>
     implements PrintServiceAttribute {
@@ -47,8 +47,8 @@ public final class PrinterStateReasons extends HashMap<PrinterStateReason, Sever
     }
 
     /**
-     * Copia otro mapa entrada por entrada --y no con el constructor de {@link HashMap}-- para que
-     * cada par pase por {@link #put} y se rechacen los null.
+     * Copies another map entry by entry --and not with {@link HashMap}'s constructor-- so that each
+     * pair goes through {@link #put} and the nulls are rejected.
      */
     public PrinterStateReasons(Map<PrinterStateReason, Severity> map) {
         this();
@@ -75,7 +75,7 @@ public final class PrinterStateReasons extends HashMap<PrinterStateReason, Sever
         return "printer-state-reasons";
     }
 
-    /** Las razones que tienen exactamente esa gravedad, como vista viva y de solo lectura. */
+    /** The reasons that have exactly that severity, as a live, read-only view. */
     public Set<PrinterStateReason> printerStateReasonSet(Severity severity) {
         if (severity == null) {
             throw new NullPointerException("severity is null");
@@ -83,16 +83,16 @@ public final class PrinterStateReasons extends HashMap<PrinterStateReason, Sever
         return new PrinterStateReasonSet(severity, this);
     }
 
-    // La vista. No guarda elementos: guarda el criterio y el mapa de afuera.
+    // The view. It keeps no elements: it keeps the criterion and the outer map.
     //
-    // Guarda el mapa y no su entrySet --que es lo que hace el JDK-- para que la vista siga siendo
-    // viva sobre el HashMap de KajiLibrary, cuyo entrySet() devuelve una copia y no una vista.
-    // Pidiendolo de nuevo en cada iterator() el resultado es el mismo que en el JDK, donde las dos
-    // formas coinciden porque ahi el entrySet si es vista.
+    // It keeps the map and not its entrySet --which is what the JDK does-- so that the view stays
+    // live over KajiLibrary's HashMap, whose entrySet() returns a copy and not a view. Asking for
+    // it again in each iterator() the result is the same as in the JDK, where the two forms
+    // coincide because there the entrySet is a view.
     //
-    // Declaradas `static` y no internas por el finding #440 del compilador: adentro de una interna
-    // no se sintetiza el argumento de la instancia externa. Da igual, porque el mapa lo reciben por
-    // constructor.
+    // Declared `static` and not inner because of the compiler's finding #440: inside an inner class
+    // the outer instance argument is not synthesized (it still reproduces with the frozen javac,
+    // 2026-09-18). It makes no difference, because they receive the map through the constructor.
     private static class PrinterStateReasonSet extends AbstractSet<PrinterStateReason> {
 
         private Severity mySeverity;
@@ -103,7 +103,7 @@ public final class PrinterStateReasons extends HashMap<PrinterStateReason, Sever
             this.myMap = map;
         }
 
-        // Contar cuesta recorrer, porque el filtro no esta materializado.
+        // Counting costs walking, because the filter is not materialized.
         public int size() {
             int result = 0;
             Iterator<PrinterStateReason> iter = iterator();
@@ -120,8 +120,8 @@ public final class PrinterStateReasons extends HashMap<PrinterStateReason, Sever
         }
     }
 
-    // El filtro. Mantiene adelantada la proxima entrada que coincide, que es lo que deja a
-    // hasNext() contestar sin consumir nada.
+    // The filter. It keeps the next matching entry ready ahead, which is what lets hasNext() answer
+    // without consuming anything.
     private static class PrinterStateReasonSetIterator implements Iterator<PrinterStateReason> {
 
         private Severity mySeverity;
@@ -136,7 +136,7 @@ public final class PrinterStateReasons extends HashMap<PrinterStateReason, Sever
             goToNext();
         }
 
-        // La gravedad se compara por identidad y no con equals: son singletons de EnumSyntax.
+        // The severity is compared by identity and not with equals: they are EnumSyntax singletons.
         private void goToNext() {
             this.myEntry = null;
             while (this.myEntry == null && this.myIterator.hasNext()) {

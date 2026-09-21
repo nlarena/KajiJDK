@@ -3,65 +3,65 @@ package javax.print.event;
 import javax.print.DocPrintJob;
 
 /**
- * KajiLibrary's javax.print.event.PrintJobEvent -- cambio de estado de un trabajo.
+ * KajiLibrary's javax.print.event.PrintJobEvent -- a job's change of state.
  *
- * <p>El tipo se lee con {@link #getPrintEventType} y es uno de las seis constantes. Vale entender en
- * que orden pueden llegar, porque no es obvio:
+ * <p>The type is read with {@link #getPrintEventType} and is one of the six constants. It is worth
+ * understanding in which order they may arrive, because it is not obvious:
  *
  * <ul>
- *   <li>{@link #DATA_TRANSFER_COMPLETE} dice que el servicio ya termino de leer el documento. No dice
- *       que se imprimio: dice que el {@code Doc} ya se puede cerrar o reusar;
- *   <li>{@link #JOB_COMPLETE}, {@link #JOB_CANCELED} y {@link #JOB_FAILED} son los tres finales
- *       posibles, y son excluyentes;
- *   <li>{@link #REQUIRES_ATTENTION} es papel trabado, sin tinta, bandeja vacia. No es final: el
- *       trabajo puede seguir cuando alguien lo resuelva;
- *   <li>{@link #NO_MORE_EVENTS} es el importante y el que se suele ignorar. Significa que el servicio
- *       <b>deja de informar</b> sobre este trabajo. Puede llegar sin que haya llegado ningun final,
- *       porque hay colas que pierden de vista el trabajo una vez entregado. Un programa que espera
- *       {@code JOB_COMPLETE} sin atajar esto se cuelga para siempre.
+ *   <li>{@link #DATA_TRANSFER_COMPLETE} says the service finished reading the document. It does not
+ *       say it was printed: it says the {@code Doc} can now be closed or reused;
+ *   <li>{@link #JOB_COMPLETE}, {@link #JOB_CANCELED} and {@link #JOB_FAILED} are the three possible
+ *       endings, and they are mutually exclusive;
+ *   <li>{@link #REQUIRES_ATTENTION} is a paper jam, no ink, an empty tray. It is not final: the job
+ *       may go on when somebody solves it;
+ *   <li>{@link #NO_MORE_EVENTS} is the important one and the one usually ignored. It means the
+ *       service <b>stops reporting</b> on this job. It may arrive without any ending having
+ *       arrived, because some queues lose sight of the job once handed over. A program that waits
+ *       for {@code JOB_COMPLETE} without catching this hangs forever.
  * </ul>
  */
 public class PrintJobEvent extends PrintEvent {
 
     private static final long serialVersionUID = -1711656903622072997L;
 
-    /** Cancelado. */
+    /** Cancelled. */
     public static final int JOB_CANCELED = 101;
 
-    /** Terminado bien. */
+    /** Finished well. */
     public static final int JOB_COMPLETE = 102;
 
-    /** Fallo. */
+    /** Failed. */
     public static final int JOB_FAILED = 103;
 
-    /** Necesita intervencion; no es final. Ver la nota de la clase. */
+    /** It needs intervention; it is not final. See the class note. */
     public static final int REQUIRES_ATTENTION = 104;
 
-    /** No se informa mas sobre este trabajo. Ver la nota de la clase. */
+    /** Nothing more is reported on this job. See the class note. */
     public static final int NO_MORE_EVENTS = 105;
 
-    /** El documento ya se leyo entero. Ver la nota de la clase. */
+    /** The document was already read whole. See the class note. */
     public static final int DATA_TRANSFER_COMPLETE = 106;
 
-    /** Cual de los seis. */
+    /** Which of the six. */
     private final int reason;
 
     /**
-     * @param source el trabajo
-     * @param reason una de las seis constantes
-     * @throws IllegalArgumentException si el trabajo es null
+     * @param source the job
+     * @param reason one of the six constants
+     * @throws IllegalArgumentException if the job is null
      */
     public PrintJobEvent(DocPrintJob source, int reason) {
         super(source);
         this.reason = reason;
     }
 
-    /** Cual de las seis constantes. */
+    /** Which of the six constants. */
     public int getPrintEventType() {
         return this.reason;
     }
 
-    /** El trabajo. */
+    /** The job. */
     public DocPrintJob getPrintJob() {
         return (DocPrintJob) getSource();
     }

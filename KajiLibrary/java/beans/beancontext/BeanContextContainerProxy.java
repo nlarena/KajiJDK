@@ -3,20 +3,20 @@ package java.beans.beancontext;
 import java.awt.Container;
 
 /**
- * Lo implementa un {@link BeanContext} que ademas es un contenedor visual.
+ * Implemented by a {@link BeanContext} that is also a visual container.
  *
- * <p>La contraparte de {@link BeanContextChildComponentProxy} del lado del contenedor, y por la
- * misma razon: un contexto no tiene por que ser visible, asi que la relacion con AWT se declara en
- * vez de heredarse.
+ * <p>The container-side counterpart of {@link BeanContextChildComponentProxy}, and for the same
+ * reason: a context does not have to be visible, so the relation to AWT is declared instead of
+ * inherited.
  *
- * <p>Sirve para lo obvio una vez dicho: si el contexto es un contenedor y sus hijos tienen
- * componente, la jerarquia de beans y la de la interfaz grafica pueden mantenerse alineadas solas.
+ * <p>What it is for is obvious once said: if the context is a container and its children have
+ * components, the bean hierarchy and the GUI hierarchy can be kept aligned.
  *
- * @deprecated ver {@link BeanContextChildComponentProxy}.
+ * @deprecated see {@link BeanContextChildComponentProxy}.
  */
 @Deprecated(since = "23", forRemoval = true)
 public interface BeanContextContainerProxy {
 
-    /** El contenedor que representa a este contexto; nunca {@code null}. */
+    /** The container that represents this context; never {@code null}. */
     Container getContainer();
 }

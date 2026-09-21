@@ -1,6 +1,6 @@
 package javax.management;
 
-/** El oyente que se quiere quitar no estaba registrado. */
+/** The listener to be removed was not registered. */
 public class ListenerNotFoundException extends OperationsException {
 
     private static final long serialVersionUID = -7242605822448519061L;

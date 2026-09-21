@@ -1,22 +1,22 @@
 package java.security;
 
-// MD5, segun el RFC 1321.
+// MD5, according to RFC 1321.
 //
-// **Esta roto para uso criptografico.** Se conocen colisiones desde 2004 y se generan en segundos
-// en una notebook: dos entradas distintas con el mismo digest. No sirve para firmar, ni para
-// integridad frente a un adversario, ni para guardar contraseñas.
+// **It is broken for cryptographic use.** Collisions have been known since 2004 and are generated
+// in seconds on a laptop: two different inputs with the same digest. It does not serve for signing,
+// or for integrity against an adversary, or for keeping passwords.
 //
-// Se implementa igual porque sigue apareciendo donde no hay adversario —checksums de formatos
-// viejos, ETags, deduplicacion— y porque la alternativa realista a no tenerlo no es que nadie lo
-// use: es que cada uno se escriba el suyo. Lo que esta clase promete es exactamente lo que hace,
-// que es devolver el MD5 que define el RFC.
+// It is implemented all the same because it still appears where there is no adversary —checksums of
+// old formats, ETags, deduplication— and because the realistic alternative to not having it is not
+// that nobody uses it: it is that everybody writes their own. What this class promises is exactly
+// what it does, which is to return the MD5 the RFC defines.
 //
-// Verificado contra los vectores del apendice A.5 del RFC 1321 y contra el JDK 25.
-final class DigestMD5 extends DigestBloque {
+// Checked against the vectors of appendix A.5 of RFC 1321 and against JDK 25.
+final class DigestMD5 extends BlockDigest {
 
-    // K[i] = floor(2^32 * |sin(i+1)|), con i en radianes. Es la unica fuente de "numeros al azar"
-    // del algoritmo: se sacan de una funcion trascendente para que nadie pueda sospechar que
-    // fueron elegidos para dejar una puerta.
+    // K[i] = floor(2^32 * |sin(i+1)|), with i in radians. It is the only source of "random numbers"
+    // of the algorithm: they are taken from a transcendental function so that nobody can suspect
+    // they were chosen to leave a door open.
     private static final int[] K = {
         0xd76aa478, 0xe8c7b756, 0x242070db, 0xc1bdceee,
         0xf57c0faf, 0x4787c62a, 0xa8304613, 0xfd469501,
@@ -36,7 +36,7 @@ final class DigestMD5 extends DigestBloque {
         0xf7537e82, 0xbd3af235, 0x2ad7d2bb, 0xeb86d391
     };
 
-    // Cuanto rota cada paso. Cuatro valores por ronda, repetidos de a cuatro pasos.
+    // How much each step rotates. Four values per round, repeated every four steps.
     private static final int[] S = {
         7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22,
         5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20,
@@ -49,8 +49,8 @@ final class DigestMD5 extends DigestBloque {
     private int c;
     private int d;
 
-    // Reusado entre bloques: son 16 palabras por bloque y pedirle 64 bytes al recolector por cada
-    // uno seria el costo dominante en entradas grandes.
+    // Reused between blocks: it is 16 words per block and asking the collector for 64 bytes for
+    // each one would be the dominant cost with big inputs.
     private final int[] x = new int[16];
 
     DigestMD5() {
@@ -59,30 +59,30 @@ final class DigestMD5 extends DigestBloque {
     }
 
     @Override
-    void reiniciarEstado() {
+    void resetState() {
         this.a = 0x67452301;
         this.b = 0xefcdab89;
         this.c = 0x98badcfe;
         this.d = 0x10325476;
     }
 
-    // MD5 lee sus palabras en little endian. Es el unico de los cuatro; venia de una epoca en que
-    // los procesadores de escritorio eran little endian y no habia una convencion de red.
+    // MD5 reads its words in little endian. It is the only one of the four; it came from a time
+    // when desktop processors were little endian and there was no network convention.
     @Override
     boolean bigEndian() {
         return false;
     }
 
     @Override
-    int bytesDeLargo() {
+    int lengthBytes() {
         return 8;
     }
 
     @Override
-    void comprimir(byte[] in, int ofs) {
+    void compress(byte[] in, int ofs) {
         int i = 0;
         while (i < 16) {
-            this.x[i] = leerIntLE(in, ofs + i * 4);
+            this.x[i] = readIntLE(in, ofs + i * 4);
             i = i + 1;
         }
         int aa = this.a;
@@ -110,7 +110,7 @@ final class DigestMD5 extends DigestBloque {
             int tmp = dd;
             dd = cc;
             cc = bb;
-            bb = bb + rotIzq(aa + f + K[paso] + this.x[g], S[paso]);
+            bb = bb + rotLeft(aa + f + K[paso] + this.x[g], S[paso]);
             aa = tmp;
             paso = paso + 1;
         }
@@ -122,21 +122,21 @@ final class DigestMD5 extends DigestBloque {
     }
 
     @Override
-    void escribirEstado(byte[] out) {
-        escribirIntLE(out, 0, this.a);
-        escribirIntLE(out, 4, this.b);
-        escribirIntLE(out, 8, this.c);
-        escribirIntLE(out, 12, this.d);
+    void writeState(byte[] out) {
+        writeIntLE(out, 0, this.a);
+        writeIntLE(out, 4, this.b);
+        writeIntLE(out, 8, this.c);
+        writeIntLE(out, 12, this.d);
     }
 
     @Override
-    DigestBloque nuevoIgual() {
+    BlockDigest freshInstance() {
         return new DigestMD5();
     }
 
     @Override
-    void copiarEstadoDe(DigestBloque otro) {
-        DigestMD5 o = (DigestMD5) otro;
+    void copyStateFrom(BlockDigest other) {
+        DigestMD5 o = (DigestMD5) other;
         this.a = o.a;
         this.b = o.b;
         this.c = o.c;

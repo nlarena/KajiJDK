@@ -5,143 +5,145 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Una forma de conseguir una {@link com.sun.jdi.VirtualMachine}.
+ * A way of getting a {@link com.sun.jdi.VirtualMachine}.
  *
- * <p>Hay tres, y son las tres subinterfaces: {@link LaunchingConnector} arranca la VM,
- * {@link AttachingConnector} se pega a una que ya corre, y {@link ListeningConnector} espera a que
- * la VM se conecte al depurador. La tercera existe porque a veces el que arranca primero es el
- * programa depurado --{@code -agentlib:jdwp=server=n}-- y entonces el depurador es el que escucha.
+ * <p>There are three, and they are the three subinterfaces: {@link LaunchingConnector} starts
+ * the VM, {@link AttachingConnector} attaches to one that is already running, and
+ * {@link ListeningConnector} waits for the VM to connect to the debugger. The third exists
+ * because sometimes the one that starts first is the debugged program
+ * -- {@code -agentlib:jdwp=server=n} -- and then the debugger is the one that listens.
  *
- * <h2>Los argumentos, y por que son tan raros</h2>
+ * <h2>The arguments, and why they are so odd</h2>
  *
- * <p>Cada conector se configura con un mapa de {@link Argument} que el propio conector entrega
- * lleno de valores por omision: el cliente pide {@link #defaultArguments()}, cambia lo que quiera y
- * lo devuelve. Es al reves de lo habitual --el que llama no arma el mapa, lo recibe-- y es a
- * proposito: cada conector tiene argumentos distintos, y un depurador generico tiene que poder
- * mostrar un formulario para uno que no conoce. Por eso cada `Argument` trae su etiqueta, su
- * descripcion, si es obligatorio y como validarse.
+ * <p>Each connector is configured with a map of {@link Argument} that the connector itself
+ * hands over filled with default values: the client asks for {@link #defaultArguments()},
+ * changes what it likes and gives it back. It is the other way round from the usual -- the
+ * caller does not build the map, it receives it -- and it is on purpose: each connector has
+ * different arguments, and a generic debugger has to be able to show a form for one it does not
+ * know. That is why each `Argument` brings its label, its description, whether it is compulsory
+ * and how to validate itself.
  *
- * <p>Las cuatro subinterfaces de `Argument` --cadena, entero, booleano y eleccion-- son las cuatro
- * clases de control que ese formulario necesita saber dibujar.
+ * <p>`Argument`'s four subinterfaces -- string, integer, boolean and choice -- are the four
+ * kinds of control that form needs to know how to draw.
  */
 public interface Connector {
 
-    /** El nombre corto del conector, por ejemplo {@code "com.sun.jdi.SocketAttach"}. */
+    /** The connector's short name, for instance {@code "com.sun.jdi.SocketAttach"}. */
     String name();
 
-    /** Una descripcion legible, para mostrarle al usuario. */
+    /** A readable description, to show the user. */
     String description();
 
-    /** El transporte por el que este conector habla. */
+    /** The transport this connector talks through. */
     Transport transport();
 
     /**
-     * Un mapa nuevo de argumentos, con los valores por omision puestos.
+     * A new map of arguments, with the default values set.
      *
-     * <p>Es una copia: modificarlo no afecta al conector, y hay que devolverselo al conectar.
+     * <p>It is a copy: modifying it does not affect the connector, and it has to be given back to
+     * it on connecting.
      */
     Map<String, Argument> defaultArguments();
 
     /**
-     * Un argumento de configuracion de un {@link Connector}.
+     * A configuration argument of a {@link Connector}.
      *
-     * <p>Es {@link Serializable} para que un depurador pueda guardar una configuracion de conexion
-     * y volver a abrirla.
+     * <p>It is {@link Serializable} so that a debugger may keep a connection configuration and
+     * open it again.
      */
     interface Argument extends Serializable {
 
-        /** El nombre con el que el argumento aparece en el mapa. */
+        /** The name the argument appears under in the map. */
         String name();
 
-        /** Una etiqueta corta, para poner al lado del control. */
+        /** A short label, to put beside the control. */
         String label();
 
-        /** Una explicacion, para la ayuda. */
+        /** An explanation, for the help. */
         String description();
 
-        /** El valor actual, como texto. */
+        /** The current value, as text. */
         String value();
 
         /**
-         * Fija el valor.
+         * It fixes the value.
          *
-         * <p>No valida: {@link #isValid} es aparte, para que una interfaz pueda mostrar un valor a
-         * medio escribir sin rechazarlo caracter por caracter.
+         * <p>It does not validate: {@link #isValid} is separate, so that an interface may show a
+         * half-typed value without rejecting it character by character.
          */
         void setValue(String value);
 
-        /** Si ese texto seria un valor aceptable para este argumento. */
+        /** Whether that text would be an acceptable value for this argument. */
         boolean isValid(String value);
 
-        /** Si el argumento tiene que tener valor antes de conectar. */
+        /** Whether the argument has to have a value before connecting. */
         boolean mustSpecify();
     }
 
-    /** Un {@link Argument} cuyo valor es texto libre. */
+    /** An {@link Argument} whose value is free text. */
     interface StringArgument extends Argument {
 
         /**
-         * Si ese texto sirve.
+         * Whether that text serves.
          *
-         * <p>Para un argumento de texto, cualquier cadena sirve: la implementacion de siempre
-         * devuelve `true`.
+         * <p>For a text argument, any string serves: the usual implementation returns `true`.
          */
         boolean isValid(String value);
     }
 
-    /** Un {@link Argument} cuyo valor es un entero acotado. */
+    /** An {@link Argument} whose value is a bounded integer. */
     interface IntegerArgument extends Argument {
 
         /**
-         * Fija el valor.
+         * It fixes the value.
          *
-         * <p>Un valor fuera de {@link #min()}..{@link #max()} se acepta igual: validar es aparte,
-         * por lo mismo que en {@link Argument#setValue}.
+         * <p>A value outside {@link #min()}..{@link #max()} is accepted all the same: validating is
+         * separate, for the same reason as in {@link Argument#setValue}.
          */
         void setValue(int value);
 
-        /** Si ese texto es un entero dentro del rango. */
+        /** Whether that text is an integer within the range. */
         boolean isValid(String value);
 
-        /** Si ese entero esta dentro del rango. */
+        /** Whether that integer is within the range. */
         boolean isValid(int value);
 
-        /** Ese entero escrito como lo escribiria este argumento. */
+        /** That integer written as this argument would write it. */
         String stringValueOf(int value);
 
-        /** El valor actual como entero. */
+        /** The current value as an integer. */
         int intValue();
 
-        /** El maximo aceptable. */
+        /** The largest acceptable one. */
         int max();
 
-        /** El minimo aceptable. */
+        /** The smallest acceptable one. */
         int min();
     }
 
-    /** Un {@link Argument} cuyo valor es `true` o `false`. */
+    /** An {@link Argument} whose value is `true` or `false`. */
     interface BooleanArgument extends Argument {
 
-        /** Fija el valor. */
+        /** It fixes the value. */
         void setValue(boolean value);
 
-        /** Si ese texto es uno de los dos valores que este argumento reconoce. */
+        /** Whether that text is one of the two values this argument recognizes. */
         boolean isValid(String value);
 
-        /** Ese booleano escrito como lo escribiria este argumento. */
+        /** That boolean written as this argument would write it. */
         String stringValueOf(boolean value);
 
-        /** El valor actual como booleano. */
+        /** The current value as a boolean. */
         boolean booleanValue();
     }
 
-    /** Un {@link Argument} cuyo valor sale de una lista cerrada. */
+    /** An {@link Argument} whose value comes from a closed list. */
     interface SelectedArgument extends Argument {
 
-        /** Los valores posibles. */
+        /** The possible values. */
         List<String> choices();
 
-        /** Si ese texto es uno de los de {@link #choices()}. */
+        /** Whether that text is one of {@link #choices()}'. */
         boolean isValid(String value);
     }
 }

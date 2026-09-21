@@ -1,22 +1,22 @@
 package java.sql;
 
 /**
- * KajiLibrary's java.sql.Ref -- una referencia a un valor estructurado de la base.
+ * KajiLibrary's java.sql.Ref -- a reference to a structured value in the database.
  *
- * <p>Es un puntero persistente: no la copia del objeto sino su direccion, que se puede guardar en
- * otra columna y seguir despues. Es la parte "objeto-relacional" de SQL, poco usada.
+ * <p>It is a persistent pointer: not a copy of the object but its address, which can be stored in
+ * another column and followed later. It is the "object-relational" part of SQL, little used.
  */
 public interface Ref {
 
-    /** El nombre del tipo SQL al que apunta. */
+    /** The name of the SQL type it points to. */
     String getBaseTypeName() throws SQLException;
 
-    /** El valor apuntado. */
+    /** The value pointed to. */
     Object getObject() throws SQLException;
 
-    /** El valor apuntado, traduciendo los tipos SQL con ese mapa. */
+    /** The value pointed to, translating the SQL types with that map. */
     Object getObject(java.util.Map<String, Class<?>> map) throws SQLException;
 
-    /** Cambia el valor apuntado. */
+    /** Changes the value pointed to. */
     void setObject(Object value) throws SQLException;
 }

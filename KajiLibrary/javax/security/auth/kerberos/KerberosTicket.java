@@ -11,44 +11,44 @@ import javax.security.auth.RefreshFailedException;
 import javax.security.auth.Refreshable;
 
 /**
- * KajiLibrary's javax.security.auth.kerberos.KerberosTicket -- un ticket de Kerberos.
+ * KajiLibrary's javax.security.auth.kerberos.KerberosTicket -- a Kerberos ticket.
  *
- * <p>Lo que el KDC le da a un cliente para hablar con un servicio: los bytes del ticket --cifrados
- * con la clave del servicio, asi que el cliente no los puede leer--, la clave de sesion, y los
- * metadatos que si son legibles: para quien es, hasta cuando vale, que se puede hacer con el.
+ * <p>What the KDC gives a client to talk to a service: the ticket's bytes --encrypted with the
+ * service's key, so the client cannot read them--, the session key, and the metadata that is
+ * readable: whom it is for, until when it is valid, what can be done with it.
  *
- * <h2>Las banderas</h2>
+ * <h2>The flags</h2>
  *
- * <p>Son treinta y dos bits de la RFC 4120 y esta clase expone los siete que importan al codigo de
- * usuario: {@link #isForwardable}, {@link #isForwarded}, {@link #isProxiable}, {@link #isProxy},
- * {@link #isPostdated}, {@link #isRenewable} e {@link #isInitial}. {@link #getFlags} da el arreglo
- * completo, siempre de al menos treinta y dos, rellenado con falsos si se dio uno mas corto.
+ * <p>They are thirty-two bits of RFC 4120 and this class exposes the seven that matter to user
+ * code: {@link #isForwardable}, {@link #isForwarded}, {@link #isProxiable}, {@link #isProxy},
+ * {@link #isPostdated}, {@link #isRenewable} and {@link #isInitial}. {@link #getFlags} gives the
+ * full array, always at least thirty-two long, padded with falses if a shorter one was given.
  *
- * <h2>{@link #isCurrent} mira solo el vencimiento</h2>
+ * <h2>{@link #isCurrent} looks only at the expiry</h2>
  *
- * <p>Un ticket es vigente si no esta destruido y no paso su hora de fin. La hora de inicio no cuenta:
- * un ticket posfechado que todavia no empezo se reporta vigente, igual que en el JDK.
+ * <p>A ticket is current if it is not destroyed and its end time has not passed. The start time
+ * does not count: a postdated ticket that has not started yet is reported current, as in the JDK.
  *
  * <h2>{@link #refresh}</h2>
  *
- * <p>Renovar es pedirle al KDC un ticket nuevo con este, y KajiJDK no habla con un KDC: un ticket
- * renovable falla al renovarse con {@link RefreshFailedException} diciendo por que. Uno no renovable
- * o destruido falla antes, con el mismo mensaje que el JDK.
+ * <p>Renewing is asking the KDC for a new ticket with this one, and KajiJDK does not talk to a KDC:
+ * a renewable ticket fails to renew with {@link RefreshFailedException} saying why. A non-renewable
+ * or destroyed one fails earlier, with the same message as the JDK.
  *
- * <h2>Se destruye</h2>
+ * <h2>It is destroyed</h2>
  *
- * <p>{@link #destroy} borra la clave de sesion y los bytes del ticket. Despues, la clave y los bytes
- * lanzan {@link IllegalStateException}; los metadatos --cliente, fechas, banderas-- devuelven null o
- * falso, que es lo que un ticket que ya no existe puede decir de si mismo.
+ * <p>{@link #destroy} erases the session key and the ticket's bytes. Afterwards, the key and the
+ * bytes throw {@link IllegalStateException}; the metadata --client, dates, flags-- return null or
+ * false, which is what a ticket that no longer exists can say about itself.
  */
 public class KerberosTicket implements Destroyable, Refreshable, Serializable {
 
     private static final long serialVersionUID = 7395334370157380539L;
 
-    /** Cuantas banderas tiene un ticket. */
+    /** How many flags a ticket has. */
     private static final int NUM_FLAGS = 32;
 
-    /** Las posiciones de las siete banderas que se exponen, en el orden de la RFC 4120. */
+    /** The positions of the seven exposed flags, in RFC 4120's order. */
     private static final int FORWARDABLE_TICKET_FLAG = 1;
     private static final int FORWARDED_TICKET_FLAG = 2;
     private static final int PROXIABLE_TICKET_FLAG = 3;
@@ -57,45 +57,45 @@ public class KerberosTicket implements Destroyable, Refreshable, Serializable {
     private static final int RENEWABLE_TICKET_FLAG = 8;
     private static final int INITIAL_TICKET_FLAG = 9;
 
-    /** Los bytes del ticket, o null si se destruyo. */
+    /** The ticket's bytes, or null if it was destroyed. */
     private byte[] asn1Encoding;
 
-    /** La clave de sesion, o null si se destruyo. */
+    /** The session key, or null if it was destroyed. */
     private EncryptionKey sessionKey;
 
-    /** Las banderas, o null si se destruyo. */
+    /** The flags, or null if it was destroyed. */
     private boolean[] flags;
 
-    /** Cuando se autentico el cliente, o null. */
+    /** When the client authenticated, or null. */
     private Date authTime;
 
-    /** Desde cuando vale, o null. */
+    /** From when it is valid, or null. */
     private Date startTime;
 
-    /** Hasta cuando vale. */
+    /** Until when it is valid. */
     private Date endTime;
 
-    /** Hasta cuando se puede renovar, o null. */
+    /** Until when it can be renewed, or null. */
     private Date renewTill;
 
-    /** Para quien es. */
+    /** Whom it is for. */
     private KerberosPrincipal client;
 
-    /** Para que servicio. */
+    /** For which service. */
     private KerberosPrincipal server;
 
-    /** Desde que direcciones se puede usar, o null. */
+    /** From which addresses it can be used, or null. */
     private InetAddress[] clientAddresses;
 
-    /** Si ya se borro. */
+    /** Whether it was already erased. */
     private transient boolean destroyed = false;
 
     /**
-     * Un ticket con todo. Los arreglos y las fechas se copian.
+     * A ticket with everything. The arrays and the dates are copied.
      *
-     * @param flags las banderas; null es ninguna, y un arreglo mas corto se rellena con falsos
-     * @throws IllegalArgumentException si los bytes, el cliente, el servidor, la clave o la hora de
-     *     fin son null
+     * @param flags the flags; null is none, and a shorter array is padded with falses
+     * @throws IllegalArgumentException if the bytes, the client, the server, the key or the end
+     *     time is null
      */
     public KerberosTicket(byte[] asn1Encoding, KerberosPrincipal client, KerberosPrincipal server,
                           byte[] sessionKey, int keyType, boolean[] flags, Date authTime,
@@ -135,20 +135,20 @@ public class KerberosTicket implements Destroyable, Refreshable, Serializable {
         this.clientAddresses = clientAddresses == null ? null : clientAddresses.clone();
     }
 
-    /** Para quien es; null si se destruyo. */
+    /** Whom it is for; null if it was destroyed. */
     public final KerberosPrincipal getClient() {
         return this.client;
     }
 
-    /** Para que servicio; null si se destruyo. */
+    /** For which service; null if it was destroyed. */
     public final KerberosPrincipal getServer() {
         return this.server;
     }
 
     /**
-     * La clave de sesion. Un objeto nuevo cada vez, igual a los anteriores.
+     * The session key. A new object each time, equal to the earlier ones.
      *
-     * @throws IllegalStateException si esta destruido
+     * @throws IllegalStateException if it is destroyed
      */
     public final SecretKey getSessionKey() {
         checkAlive();
@@ -156,100 +156,102 @@ public class KerberosTicket implements Destroyable, Refreshable, Serializable {
     }
 
     /**
-     * El tipo de la clave de sesion.
+     * The session key's type.
      *
-     * @throws IllegalStateException si esta destruido
+     * @throws IllegalStateException if it is destroyed
      */
     public final int getSessionKeyType() {
         checkAlive();
         return this.sessionKey.getKeyType();
     }
 
-    /** Si se puede pedir con el un ticket reenviable a otro host. Falso si se destruyo. */
+    /**
+     * Whether a forwardable ticket for another host can be asked for with it. False if destroyed.
+     */
     public final boolean isForwardable() {
         return flag(FORWARDABLE_TICKET_FLAG);
     }
 
-    /** Si se obtuvo reenviando otro. */
+    /** Whether it was obtained by forwarding another. */
     public final boolean isForwarded() {
         return flag(FORWARDED_TICKET_FLAG);
     }
 
-    /** Si se puede pedir con el un ticket para otro host. */
+    /** Whether a ticket for another host can be asked for with it. */
     public final boolean isProxiable() {
         return flag(PROXIABLE_TICKET_FLAG);
     }
 
-    /** Si es para otro host. */
+    /** Whether it is for another host. */
     public final boolean isProxy() {
         return flag(PROXY_TICKET_FLAG);
     }
 
-    /** Si empieza a valer en el futuro. */
+    /** Whether it starts being valid in the future. */
     public final boolean isPostdated() {
         return flag(POSTDATED_TICKET_FLAG);
     }
 
-    /** Si se puede renovar. Es la bandera, no que haya hora limite de renovacion. */
+    /** Whether it can be renewed. It is the flag, not that there is a renewal time limit. */
     public final boolean isRenewable() {
         return flag(RENEWABLE_TICKET_FLAG);
     }
 
-    /** Si se obtuvo con la contrasena y no con otro ticket. */
+    /** Whether it was obtained with the password and not with another ticket. */
     public final boolean isInitial() {
         return flag(INITIAL_TICKET_FLAG);
     }
 
-    /** Las banderas. Una copia; null si se destruyo. */
+    /** The flags. A copy; null if it was destroyed. */
     public final boolean[] getFlags() {
         return this.flags == null ? null : this.flags.clone();
     }
 
-    /** Cuando se autentico el cliente; null si no se sabe o se destruyo. */
+    /** When the client authenticated; null if not known or destroyed. */
     public final Date getAuthTime() {
         return copy(this.authTime);
     }
 
-    /** Desde cuando vale; si no se dio, la hora de autenticacion. Null si se destruyo. */
+    /** From when it is valid; if not given, the authentication time. Null if destroyed. */
     public final Date getStartTime() {
         return copy(this.startTime == null ? this.authTime : this.startTime);
     }
 
-    /** Hasta cuando vale; null si se destruyo. */
+    /** Until when it is valid; null if destroyed. */
     public final Date getEndTime() {
         return copy(this.endTime);
     }
 
-    /** Hasta cuando se puede renovar; null si no es renovable o se destruyo. */
+    /** Until when it can be renewed; null if not renewable or destroyed. */
     public final Date getRenewTill() {
         return copy(this.renewTill);
     }
 
-    /** Desde que direcciones se puede usar. Una copia; null si no esta restringido o se destruyo. */
+    /** From which addresses it can be used. A copy; null if not restricted or destroyed. */
     public final InetAddress[] getClientAddresses() {
         return this.clientAddresses == null ? null : this.clientAddresses.clone();
     }
 
     /**
-     * Los bytes del ticket. Una copia.
+     * The ticket's bytes. A copy.
      *
-     * @throws IllegalStateException si esta destruido
+     * @throws IllegalStateException if it is destroyed
      */
     public final byte[] getEncoded() {
         checkAlive();
         return this.asn1Encoding.clone();
     }
 
-    /** Si no esta destruido y no vencio. Ver la nota de la clase. */
+    /** Whether it is not destroyed and not expired. See the class note. */
     @Override
     public boolean isCurrent() {
         return !this.destroyed && System.currentTimeMillis() <= this.endTime.getTime();
     }
 
     /**
-     * Intenta renovarlo. Ver la nota de la clase: en KajiJDK siempre falla.
+     * Tries to renew it. See the class note: in KajiJDK it always fails.
      *
-     * @throws RefreshFailedException siempre
+     * @throws RefreshFailedException always
      */
     @Override
     public void refresh() throws RefreshFailedException {
@@ -263,7 +265,7 @@ public class KerberosTicket implements Destroyable, Refreshable, Serializable {
             + " and server " + this.server + " - KajiJDK has no KDC client to renew it with");
     }
 
-    /** Borra la clave y los bytes. Ver la nota de la clase. Destruir dos veces no hace nada. */
+    /** Erases the key and the bytes. See the class note. Destroying twice does nothing. */
     @Override
     public void destroy() throws DestroyFailedException {
         if (!this.destroyed) {
@@ -283,13 +285,13 @@ public class KerberosTicket implements Destroyable, Refreshable, Serializable {
         }
     }
 
-    /** Si ya se borro. */
+    /** Whether it was already erased. */
     @Override
     public boolean isDestroyed() {
         return this.destroyed;
     }
 
-    /** Un volcado legible: los bytes en hexadecimal, los principales, las banderas y las fechas. */
+    /** A readable dump: the bytes in hexadecimal, the principals, the flags and the dates. */
     @Override
     public String toString() {
         if (this.destroyed) {
@@ -327,7 +329,7 @@ public class KerberosTicket implements Destroyable, Refreshable, Serializable {
         return text.toString();
     }
 
-    /** Uno destruido vale 17. */
+    /** A destroyed one is 17. */
     @Override
     public int hashCode() {
         int result = 17;
@@ -348,12 +350,13 @@ public class KerberosTicket implements Destroyable, Refreshable, Serializable {
         if (this.renewTill != null) {
             result = result * 37 + this.renewTill.hashCode();
         }
-        // Sin direcciones el arreglo es null y su hash es cero, pero el paso se da igual.
+        // Without addresses the array is null and its hash is zero, but the step is taken all the
+        // same.
         result = result * 37 + Arrays.hashCode(this.clientAddresses);
         return result * 37 + Arrays.hashCode(this.flags);
     }
 
-    /** Iguales si todo coincide; uno destruido solo es igual a si mismo. */
+    /** Equal if everything matches; a destroyed one is only equal to itself. */
     @Override
     public boolean equals(Object other) {
         if (other == this) {
@@ -379,24 +382,24 @@ public class KerberosTicket implements Destroyable, Refreshable, Serializable {
             && sameDate(this.renewTill, that.renewTill);
     }
 
-    /** La bandera numero {@code index}; falsa si se destruyo. */
+    /** Flag number {@code index}; false if destroyed. */
     private boolean flag(int index) {
         return this.flags != null && this.flags[index];
     }
 
-    /** Lanza si ya se destruyo. */
+    /** Throws if it was already destroyed. */
     private void checkAlive() {
         if (this.destroyed) {
             throw new IllegalStateException("This ticket is no longer valid");
         }
     }
 
-    /** Una copia de la fecha, o null. */
+    /** A copy of the date, or null. */
     private static Date copy(Date date) {
         return date == null ? null : new Date(date.getTime());
     }
 
-    /** Si dos fechas que pueden ser null son la misma. */
+    /** Whether two dates that may be null are the same. */
     private static boolean sameDate(Date a, Date b) {
         if (a == null) {
             return b == null;

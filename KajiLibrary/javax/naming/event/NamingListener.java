@@ -3,24 +3,25 @@ package javax.naming.event;
 import java.util.EventListener;
 
 /**
- * KajiLibrary's javax.naming.event.NamingListener -- la base de los oyentes de un contexto.
+ * KajiLibrary's javax.naming.event.NamingListener -- the base of a context's listeners.
  *
- * <p>No declara ningun metodo de cambio: solo {@link #namingExceptionThrown}. Los cambios los
- * declaran sus dos subinterfaces, y esta division no es cosmetica -- un oyente se registra diciendo
- * <b>que</b> implementa, y el proveedor solo pide al servidor las notificaciones que alguien
- * escucha. Escuchar de mas cuesta trafico contra el directorio.
+ * <p>It declares no change method: only {@link #namingExceptionThrown}. The changes are declared by
+ * its two subinterfaces, and this split is not cosmetic -- a listener registers by saying
+ * <b>what</b> it implements, and the provider only asks the server for the notifications someone
+ * listens to. Listening to more than needed costs traffic against the directory.
  *
- * <p>{@link #namingExceptionThrown} es lo que hay que implementar siempre y lo que casi nadie mira.
- * Cuando llega, la suscripcion <b>ya se cancelo</b>: el oyente no va a recibir nada mas. Ignorarla es
- * como termina un programa mirando un directorio que dejo de avisarle hace horas.
+ * <p>{@link #namingExceptionThrown} is what always has to be implemented and what almost nobody
+ * looks at. When it arrives, the subscription <b>has already been cancelled</b>: the listener will
+ * receive nothing more. Ignoring it is how a program ends up watching a directory that stopped
+ * notifying it hours ago.
  */
 public interface NamingListener extends EventListener {
 
     /**
-     * La suscripcion fallo y quedo cancelada.
+     * The subscription failed and was cancelled.
      *
-     * <p>Ver la nota de la clase: no hay reintento automatico. Volver a escuchar es decision de
-     * quien recibe esto.
+     * <p>See the class note: there is no automatic retry. Listening again is up to whoever receives
+     * this.
      */
     void namingExceptionThrown(NamingExceptionEvent evt);
 }

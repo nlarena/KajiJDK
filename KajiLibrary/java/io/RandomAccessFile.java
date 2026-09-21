@@ -6,78 +6,82 @@ import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 
-// KajiLibrary's java.io.RandomAccessFile -- leer y escribir un archivo en cualquier orden.
+// KajiLibrary's java.io.RandomAccessFile -- reading and writing a file in any order.
 //
-// Es la unica clase de `java.io` que no es un flujo: los demas van para adelante y esta se mueve. De
-// ahi sale todo lo que la distingue -- `seek`, `getFilePointer`, `setLength` -- y tambien que
-// implemente `DataInput` **y** `DataOutput` a la vez, que ningun flujo hace.
+// It is `java.io`'s only class that is not a stream: the rest go forwards and this one moves about.
+// Everything that sets it apart comes from that -- `seek`, `getFilePointer`, `setLength` -- and so
+// does its implementing `DataInput` **and** `DataOutput` at once, which no stream does.
 //
-// <h2>Sobre que esta construida, y por que sobre eso</h2>
+// <h2>What it is built on, and why on that</h2>
 //
-// **Delega entera en un `java.nio.channels.FileChannel`.** No guarda ni la posicion ni los bytes:
-// los pide. La razon no es ahorrar codigo sino que `getChannel()` no pueda mentir.
+// **It delegates entirely to a `java.nio.channels.FileChannel`.** It stores neither the position
+// nor the bytes: it asks for them. The reason is not saving code but keeping `getChannel()` from
+// being able to lie.
 //
-// El contrato de `getChannel()` dice que la posicion del canal y el puntero del archivo son **el
-// mismo numero**: mover uno mueve el otro. Con una posicion propia aca y otra en el canal, ese
-// contrato hay que sostenerlo a mano en nueve metodos, y el dia que uno se olvide el que llama se
-// entera leyendo del lugar equivocado -- en silencio, porque leer de un offset que no era sigue
-// devolviendo bytes. Sin posicion propia no hay nada que sincronizar: hay un solo numero.
+// `getChannel()`'s contract says the channel's position and the file pointer are **the same
+// number**: moving one moves the other. With a position of its own here and another in the channel,
+// that contract has to be upheld by hand in nine methods, and the day one of them forgets, the
+// caller finds out by reading from the wrong place -- silently, because reading from the wrong
+// offset still returns bytes. With no position of its own there is nothing to keep in step: there
+// is a single number.
 //
-// Lo que se hereda de esa eleccion, para bien y para mal, esta documentado en `FileChannel`: cada
-// lectura va al disco y cada escritura reescribe el archivo entero. Es O(n) por operacion --escribir
-// un byte al final de un archivo de un mega mueve un mega-- y a cambio, cuando `write` vuelve, los
-// bytes **estan**. Para esta clase el precio pesa mas que para las otras, porque el uso tipico de un
-// archivo de acceso aleatorio es justamente muchas escrituras chicas salteadas. Quien tenga eso y le
-// importe la velocidad quiere un buffer propio, no esta clase.
+// What is inherited from that choice, for better and for worse, is documented in `FileChannel`:
+// every read goes to the disk and every write rewrites the whole file. It is O(n) per operation
+// --writing one byte at the end of a one-megabyte file moves a megabyte-- and in exchange, when
+// `write` returns, the bytes **are there**. For this class the price weighs more than for the
+// others, because the typical use of a random-access file is precisely many small scattered writes.
+// Whoever has that and cares about speed wants a buffer of their own, not this class.
 //
-// <h2>Los modos `rws` y `rwd` se aceptan porque se cumplen</h2>
+// <h2>The `rws` and `rwd` modes are accepted because they are honoured</h2>
 //
-// Los dos piden que cada escritura llegue al dispositivo antes de volver --`rwd` los datos, `rws`
-// datos y metadatos-- y aca eso ya pasa siempre, por lo de arriba. No se ignoran: se cumplen de
-// entrada. La unica diferencia con el JDK es que no cuestan nada.
+// Both ask for every write to reach the device before returning --`rwd` the data, `rws` data and
+// metadata-- and here that already happens always, by the above. They are not ignored: they are
+// honoured from the start. The only difference from the JDK is that they cost nothing.
 //
-// <h2>Lo que no es igual al JDK, dicho de frente</h2>
+// <h2>What is not the same as the JDK, said outright</h2>
 //
-// `getFD()` devuelve un `FileDescriptor` **invalido** --`valid()` da falso-- porque esta VM no
-// modela descriptores; es lo mismo que hacen `FileInputStream` y `FileOutputStream`, y ahi esta
-// explicado. Se declara igual porque la respuesta es comprobable: quien pregunte `valid()` recibe un
-// "no" y no un handle inventado que despues no sirva.
+// `getFD()` returns an **invalid** `FileDescriptor` --`valid()` gives false-- because this VM does
+// not model descriptors; it is the same thing `FileInputStream` and `FileOutputStream` do, and it
+// is explained there. It is declared all the same because the answer is checkable: whoever asks
+// `valid()` gets a "no" and not an invented handle that is no use afterwards.
 public class RandomAccessFile implements DataOutput, DataInput, Closeable {
 
-    private final FileChannel canal;
+    private final FileChannel channel;
 
-    // Si el modo permite escribir. Se guarda aparte del canal porque el rechazo tiene que salir como
-    // `IOException` --lo que promete el contrato de esta clase-- y no como la
-    // `NonWritableChannelException` no chequeada que tiraria el canal: el que llama escribio un
-    // `catch (IOException)` y esa se le escaparia por al lado.
-    private final boolean escribible;
+    // Whether the mode allows writing. It is kept apart from the channel because the refusal has to
+    // come out as an `IOException` --what this class's contract promises-- and not as the unchecked
+    // `NonWritableChannelException` the channel would throw: the caller wrote a
+    // `catch (IOException)` and that one would slip straight past them.
+    private final boolean writable;
 
-    private final String ruta;
+    private final String path;
 
-    private boolean cerrado = false;
+    private boolean closed = false;
 
     /**
-     * Abre `name` en el modo dado.
+     * Opens `name` in the given mode.
      *
-     * @throws NullPointerException si `name` o `mode` son `null`
-     * @throws IllegalArgumentException si el modo no es uno de los cuatro
-     * @throws FileNotFoundException si no existe y el modo no lo crea, o si es un directorio
+     * @throws NullPointerException if `name` or `mode` is `null`
+     * @throws IllegalArgumentException if the mode is none of the four
+     * @throws FileNotFoundException if it does not exist and the mode does not create it, or if it
+     *     is a directory
      */
     public RandomAccessFile(String name, String mode) throws FileNotFoundException {
         this(name == null ? null : new File(name), mode);
     }
 
     /**
-     * Abre `file` en el modo dado.
+     * Opens `file` in the given mode.
      *
-     * <p>`"r"` abre para lectura y **no crea**; los tres `"rw*"` crean el archivo si falta y **no lo
-     * truncan** si estaba. Lo segundo es lo que distingue a esta clase de `FileOutputStream`, y es
-     * deliberado: se abre un archivo de acceso aleatorio justamente para modificar partes de lo que
-     * ya hay.
+     * <p>`"r"` opens for reading and **does not create**; the three `"rw*"` create the file if it
+     * is missing and **do not truncate** it if it was there. The second is what sets this class
+     * apart from `FileOutputStream`, and it is deliberate: a random-access file is opened precisely
+     * in order to modify parts of what is already there.
      *
-     * @throws NullPointerException si `file` o `mode` son `null`
-     * @throws IllegalArgumentException si el modo no es uno de los cuatro
-     * @throws FileNotFoundException si no existe y el modo no lo crea, o si es un directorio
+     * @throws NullPointerException if `file` or `mode` is `null`
+     * @throws IllegalArgumentException if the mode is none of the four
+     * @throws FileNotFoundException if it does not exist and the mode does not create it, or if it
+     *     is a directory
      */
     public RandomAccessFile(File file, String mode) throws FileNotFoundException {
         if (file == null) {
@@ -86,131 +90,132 @@ public class RandomAccessFile implements DataOutput, DataInput, Closeable {
         if (mode == null) {
             throw new NullPointerException();
         }
-        boolean escribe;
+        boolean writes;
         if (mode.equals("r")) {
-            escribe = false;
+            writes = false;
         } else if (mode.equals("rw") || mode.equals("rws") || mode.equals("rwd")) {
-            escribe = true;
+            writes = true;
         } else {
             throw new IllegalArgumentException(
                 "Illegal mode \"" + mode + "\" must be one of \"r\", \"rw\", \"rws\", or \"rwd\"");
         }
-        this.escribible = escribe;
-        this.ruta = file.getPath();
+        this.writable = writes;
+        this.path = file.getPath();
 
-        // Un directorio se rechaza aparte y con su propio mensaje, igual que en `FileInputStream`:
-        // "es un directorio" y "no esta" mandan a buscar a lugares distintos.
+        // A directory is rejected apart and with a message of its own, just as in
+        // `FileInputStream`: "it is a directory" and "it is not there" send one looking in
+        // different places.
         if (file.isDirectory()) {
-            throw new FileNotFoundException(this.ruta + " (Is a directory)");
+            throw new FileNotFoundException(this.path + " (Is a directory)");
         }
         FileChannel c;
         try {
-            if (escribe) {
-                c = FileChannel.open(Path.of(this.ruta), StandardOpenOption.READ,
+            if (writes) {
+                c = FileChannel.open(Path.of(this.path), StandardOpenOption.READ,
                         StandardOpenOption.WRITE, StandardOpenOption.CREATE);
             } else {
-                c = FileChannel.open(Path.of(this.ruta), StandardOpenOption.READ);
+                c = FileChannel.open(Path.of(this.path), StandardOpenOption.READ);
             }
         } catch (NoSuchFileException ex) {
-            throw new FileNotFoundException(this.ruta + " (No such file or directory)");
+            throw new FileNotFoundException(this.path + " (No such file or directory)");
         } catch (IOException ex) {
-            throw new FileNotFoundException(this.ruta + " (" + ex.getMessage() + ")");
+            throw new FileNotFoundException(this.path + " (" + ex.getMessage() + ")");
         }
-        this.canal = c;
+        this.channel = c;
     }
 
-    // ---- el archivo como tal -------------------------------------------------------------------
+    // ---- the file as such ----------------------------------------------------------------------
 
-    /** El descriptor. Invalido a proposito; ver la nota de la clase. */
+    /** The descriptor. Invalid on purpose; see the class note. */
     public final FileDescriptor getFD() throws IOException {
-        this.exigirAbierto();
+        this.requireOpen();
         return new FileDescriptor();
     }
 
     /**
-     * El canal, que **comparte la posicion** con este objeto.
+     * The channel, which **shares the position** with this object.
      *
-     * <p>No es una copia ni una vista: es sobre el que esta clase trabaja. Por eso `seek(5)` deja el
-     * canal en 5 y `canal.position(7)` deja `getFilePointer()` en 7, que es exactamente lo que el
-     * contrato promete.
+     * <p>It is neither a copy nor a view: it is the one this class works on. That is why `seek(5)`
+     * leaves the channel at 5 and `channel.position(7)` leaves `getFilePointer()` at 7, which is
+     * exactly what the contract promises.
      */
     public final FileChannel getChannel() {
-        return this.canal;
+        return this.channel;
     }
 
     public long getFilePointer() throws IOException {
-        this.exigirAbierto();
-        return this.canal.position();
+        this.requireOpen();
+        return this.channel.position();
     }
 
     /**
-     * Mueve el puntero a `pos`.
+     * Moves the pointer to `pos`.
      *
-     * <p>Se puede pasar del final: no falla y no agranda el archivo. Es lo que permite escribir un
-     * hueco -- `seek` mas alla y escribir agranda rellenando con ceros -- y leer ahi da fin de
-     * archivo.
+     * <p>It may go past the end: it does not fail and does not grow the file. It is what allows
+     * writing a hole -- `seek` beyond and writing grows it filling with zeros -- and reading there
+     * gives end of file.
      *
-     * @throws IOException si `pos` es negativa
+     * @throws IOException if `pos` is negative
      */
     public void seek(long pos) throws IOException {
         if (pos < 0) {
             throw new IOException("Negative seek offset");
         }
-        this.exigirAbierto();
-        this.canal.position(pos);
+        this.requireOpen();
+        this.channel.position(pos);
     }
 
     public long length() throws IOException {
-        this.exigirAbierto();
-        return this.canal.size();
+        this.requireOpen();
+        return this.channel.size();
     }
 
     /**
-     * Fija el largo del archivo.
+     * Sets the file's length.
      *
-     * <p>Acortar **recorta el puntero** si quedaba mas alla del nuevo final; agrandar no lo mueve.
-     * Los bytes que aparecen al agrandar son ceros.
+     * <p>Shortening **clamps the pointer** if it was past the new end; growing does not move it.
+     * The bytes that appear on growing are zeros.
      *
-     * @throws IOException si `newLength` es negativo o si el archivo se abrio solo para lectura
+     * @throws IOException if `newLength` is negative or if the file was opened read-only
      */
     public void setLength(long newLength) throws IOException {
         if (newLength < 0) {
             throw new IOException("Negative length");
         }
-        this.exigirEscritura();
-        long actual = this.canal.size();
-        if (newLength < actual) {
-            this.canal.truncate(newLength);
-        } else if (newLength > actual) {
-            // Un solo byte en cero en la ultima posicion: el canal rellena el hueco intermedio, que
-            // es la misma mecanica con que se escribe mas alla del final.
-            this.canal.write(ByteBuffer.wrap(new byte[1]), newLength - 1);
+        this.requireWritable();
+        long currentSize = this.channel.size();
+        if (newLength < currentSize) {
+            this.channel.truncate(newLength);
+        } else if (newLength > currentSize) {
+            // A single zero byte at the last position: the channel fills the gap in between, which
+            // is the same mechanism by which one writes past the end.
+            this.channel.write(ByteBuffer.wrap(new byte[1]), newLength - 1);
         }
     }
 
     public void close() throws IOException {
-        if (this.cerrado) {
-            return;             // cerrar dos veces no es un error, y el contrato lo dice
+        if (this.closed) {
+            return;             // closing twice is no error, and the contract says so
         }
-        this.cerrado = true;
-        this.canal.close();
+        this.closed = true;
+        this.channel.close();
     }
 
-    // ---- lectura cruda -------------------------------------------------------------------------
+    // ---- raw reading ---------------------------------------------------------------------------
 
-    /** El proximo byte como 0..255, o -1 al final. */
+    /** The next byte as 0..255, or -1 at the end. */
     public int read() throws IOException {
-        this.exigirAbierto();
-        byte[] uno = new byte[1];
-        int n = this.canal.read(ByteBuffer.wrap(uno));
+        this.requireOpen();
+        byte[] one = new byte[1];
+        int n = this.channel.read(ByteBuffer.wrap(one));
         if (n <= 0) {
             return -1;
         }
-        return uno[0] & 0xFF;
+        return one[0] & 0xFF;
     }
 
     public int read(byte[] b, int off, int len) throws IOException {
-        this.exigirAbierto();
+        this.requireOpen();
         if (b == null) {
             throw new NullPointerException();
         }
@@ -218,12 +223,12 @@ public class RandomAccessFile implements DataOutput, DataInput, Closeable {
             throw new IndexOutOfBoundsException();
         }
         if (len == 0) {
-            // Cero y no -1 aunque este al final: no se pidio ningun byte, asi que no hubo nada que
-            // no se pudiera dar. El JDK distingue estos dos, y un lazo que confunda "no pedi nada"
-            // con "no hay mas" termina antes de tiempo.
+            // Zero and not -1 even at the end: no byte was asked for, so there was nothing that
+            // could not be given. The JDK tells these two apart, and a loop confusing "I asked for
+            // nothing" with "there is no more" ends before its time.
             return 0;
         }
-        return this.canal.read(ByteBuffer.wrap(b, off, len));
+        return this.channel.read(ByteBuffer.wrap(b, off, len));
     }
 
     public int read(byte[] b) throws IOException {
@@ -235,51 +240,52 @@ public class RandomAccessFile implements DataOutput, DataInput, Closeable {
     }
 
     /**
-     * Llena el tramo entero o lanza.
+     * It fills the whole stretch or throws.
      *
-     * <p>La diferencia con `read` es el contrato de fin: `read` devuelve lo que haya, `readFully`
-     * exige todo. Es lo que hace falta para leer un `int` -- cuatro bytes o nada, porque tres bytes
-     * de un entero no son un entero.
+     * <p>The difference from `read` is the end contract: `read` returns whatever there is,
+     * `readFully` demands everything. It is what is needed in order to read an `int` -- four bytes
+     * or nothing, because three bytes of an integer are not an integer.
      *
-     * @throws EOFException si el archivo se acaba antes
+     * @throws EOFException if the file runs out first
      */
     public final void readFully(byte[] b, int off, int len) throws IOException {
-        int leidos = 0;
-        while (leidos < len) {
-            int n = this.read(b, off + leidos, len - leidos);
+        int readSoFar = 0;
+        while (readSoFar < len) {
+            int n = this.read(b, off + readSoFar, len - readSoFar);
             if (n < 0) {
                 throw new EOFException();
             }
-            leidos = leidos + n;
+            readSoFar = readSoFar + n;
         }
     }
 
     /**
-     * Salta hasta `n` bytes, sin pasar del final.
+     * It skips up to `n` bytes, without going past the end.
      *
-     * <p>Devuelve cuantos salto de verdad, que puede ser menos que `n` y es cero para `n` negativo.
+     * <p>It returns how many it really skipped, which may be fewer than `n` and is zero for a
+     * negative `n`.
      */
     public int skipBytes(int n) throws IOException {
         if (n <= 0) {
             return 0;
         }
         long pos = this.getFilePointer();
-        long largo = this.length();
-        long nueva = pos + n;
-        if (nueva > largo) {
-            nueva = largo;
+        long len = this.length();
+        long fresh = pos + n;
+        if (fresh > len) {
+            fresh = len;
         }
-        this.seek(nueva);
-        return (int) (nueva - pos);
+        this.seek(fresh);
+        return (int) (fresh - pos);
     }
 
-    // ---- escritura cruda -----------------------------------------------------------------------
+    // ---- raw writing ---------------------------------------------------------------------------
 
     public void write(int b) throws IOException {
-        this.exigirEscritura();
-        byte[] uno = new byte[1];
-        uno[0] = (byte) b;
-        this.canal.write(ByteBuffer.wrap(uno));
+        this.requireWritable();
+        byte[] one = new byte[1];
+        one[0] = (byte) b;
+        this.channel.write(ByteBuffer.wrap(one));
     }
 
     public void write(byte[] b) throws IOException {
@@ -287,7 +293,7 @@ public class RandomAccessFile implements DataOutput, DataInput, Closeable {
     }
 
     public void write(byte[] b, int off, int len) throws IOException {
-        this.exigirEscritura();
+        this.requireWritable();
         if (b == null) {
             throw new NullPointerException();
         }
@@ -297,14 +303,14 @@ public class RandomAccessFile implements DataOutput, DataInput, Closeable {
         if (len == 0) {
             return;
         }
-        this.canal.write(ByteBuffer.wrap(b, off, len));
+        this.channel.write(ByteBuffer.wrap(b, off, len));
     }
 
     // ---- DataInput -----------------------------------------------------------------------------
     //
-    // Todo lo de abajo es formato, no acceso: big-endian, complemento a dos, IEEE 754 y UTF-8
-    // modificado, exactamente como `DataInputStream`. Se escribe sobre `read()` y no sobre el canal
-    // para que el avance del puntero sea uno solo.
+    // Everything below is format, not access: big-endian, two's complement, IEEE 754 and modified
+    // UTF-8, exactly like `DataInputStream`. It is written over `read()` and not over the channel
+    // so that the pointer's advance happens in one place.
 
     public final boolean readBoolean() throws IOException {
         return this.readUnsignedByte() != 0;
@@ -346,8 +352,8 @@ public class RandomAccessFile implements DataOutput, DataInput, Closeable {
 
     public final long readLong() throws IOException {
         long alta = this.readInt() & 0xFFFFFFFFL;
-        long baja = this.readInt() & 0xFFFFFFFFL;
-        return (alta << 32) | baja;
+        long low = this.readInt() & 0xFFFFFFFFL;
+        return (alta << 32) | low;
     }
 
     public final float readFloat() throws IOException {
@@ -359,38 +365,38 @@ public class RandomAccessFile implements DataOutput, DataInput, Closeable {
     }
 
     /**
-     * Una linea, terminada en `\n`, `\r` o `\r\n`; `null` si ya estaba al final.
+     * One line, ended by `\n`, `\r` or `\r\n`; `null` if it was at the end already.
      *
-     * <p>**Cada byte se convierte a un char tal cual**, sin decodificar. Es lo que dice el contrato
-     * y por eso esta clase no sirve para leer texto que no sea de un byte por caracter: un acento en
-     * UTF-8 son dos bytes y salen como dos chars distintos de el. Para texto hay `BufferedReader`
-     * sobre un `InputStreamReader`, que si decodifica.
+     * <p>**Each byte is turned into a char as it stands**, without decoding. It is what the
+     * contract says and that is why this class is no use for reading text that is not one byte per
+     * character: an accent in UTF-8 is two bytes and comes out as two chars different from it. For
+     * text there is `BufferedReader` over an `InputStreamReader`, which does decode.
      */
     public final String readLine() throws IOException {
         StringBuilder sb = new StringBuilder();
-        boolean algo = false;
+        boolean anything = false;
         while (true) {
             int c = this.read();
             if (c < 0) {
                 break;
             }
-            algo = true;
+            anything = true;
             if (c == '\n') {
                 break;
             }
             if (c == '\r') {
-                // Mirar el byte siguiente y devolverlo si no era el `\n` del par: sin esto un
-                // archivo con `\r` sueltos perderia el primer caracter de cada linea.
-                long antes = this.getFilePointer();
+                // Look at the next byte and give it back if it was not the pair's `\n`: without
+                // this, a file with lone `\r`s would lose the first character of every line.
+                long before = this.getFilePointer();
                 int sig = this.read();
                 if (sig != '\n' && sig >= 0) {
-                    this.seek(antes);
+                    this.seek(before);
                 }
                 break;
             }
             sb.append((char) c);
         }
-        if (!algo) {
+        if (!anything) {
             return null;
         }
         return sb.toString();
@@ -439,7 +445,7 @@ public class RandomAccessFile implements DataOutput, DataInput, Closeable {
         this.writeLong(Double.doubleToLongBits(v));
     }
 
-    /** Un byte por caracter, quedandose con los ocho bits de abajo. Ver la nota de `readLine`. */
+    /** One byte per character, keeping the low eight bits. See `readLine`'s note. */
     public final void writeBytes(String s) throws IOException {
         int i = 0;
         while (i < s.length()) {
@@ -448,7 +454,8 @@ public class RandomAccessFile implements DataOutput, DataInput, Closeable {
         }
     }
 
-    /** Dos bytes por caracter, big-endian, y **sin largo delante**: no es autodelimitado. */
+    /** Two bytes per character, big-endian, and **with no length in front**: it is not
+     * self-delimiting. */
     public final void writeChars(String s) throws IOException {
         int i = 0;
         while (i < s.length()) {
@@ -458,16 +465,16 @@ public class RandomAccessFile implements DataOutput, DataInput, Closeable {
     }
 
     /**
-     * El texto en UTF-8 modificado, con dos bytes de largo delante.
+     * The text in modified UTF-8, with two bytes of length in front.
      *
-     * @throws UTFDataFormatException si la codificacion pasa de 65535 bytes -- el largo va en dos
-     *     bytes y no hay donde poner mas
+     * @throws UTFDataFormatException if the encoding goes past 65535 bytes -- the length goes in
+     *     two bytes and there is nowhere to put more
      */
     public final void writeUTF(String s) throws IOException {
-        int largo = s.length();
+        int len = s.length();
         int utf = 0;
         int i = 0;
-        while (i < largo) {
+        while (i < len) {
             int c = s.charAt(i);
             if (c >= 0x0001 && c <= 0x007F) {
                 utf = utf + 1;
@@ -483,7 +490,7 @@ public class RandomAccessFile implements DataOutput, DataInput, Closeable {
         }
         this.writeShort(utf);
         i = 0;
-        while (i < largo) {
+        while (i < len) {
             int c = s.charAt(i);
             if (c >= 0x0001 && c <= 0x007F) {
                 this.write(c);
@@ -499,17 +506,17 @@ public class RandomAccessFile implements DataOutput, DataInput, Closeable {
         }
     }
 
-    // ---- guardias ------------------------------------------------------------------------------
+    // ---- guards --------------------------------------------------------------------------------
 
-    private void exigirAbierto() throws IOException {
-        if (this.cerrado) {
+    private void requireOpen() throws IOException {
+        if (this.closed) {
             throw new IOException("Stream Closed");
         }
     }
 
-    private void exigirEscritura() throws IOException {
-        this.exigirAbierto();
-        if (!this.escribible) {
+    private void requireWritable() throws IOException {
+        this.requireOpen();
+        if (!this.writable) {
             throw new IOException("Access denied");
         }
     }

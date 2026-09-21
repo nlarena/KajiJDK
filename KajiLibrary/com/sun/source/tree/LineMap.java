@@ -1,12 +1,13 @@
 package com.sun.source.tree;
 
 /**
- * La traduccion entre posiciones absolutas del archivo y pares linea/columna.
+ * The translation between absolute positions of the file and line/column pairs.
  *
- * <p>No es un nodo del arbol: los nodos guardan **posiciones absolutas**, que son un solo numero y
- * no se invalidan si el archivo se reindenta. Traducirlas a linea y columna es caro —hay que saber
- * donde estan todos los saltos de linea— y solo hace falta al mostrarle algo a una persona. De ahi
- * que sea un objeto aparte que se pide una vez por unidad de compilacion.
+ * <p>It is not a node of the tree: the nodes keep **absolute positions**, which are a single
+ * number and are not invalidated if the file is reindented. Translating them into line and column
+ * is expensive -- where all the line breaks are has to be known -- and it is only needed when
+ * showing something to a person. Hence it is a separate object that is asked for once per
+ * compilation unit.
  */
 public interface LineMap {
 

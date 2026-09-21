@@ -5,57 +5,57 @@ import javax.xml.stream.XMLStreamReader;
 import javax.xml.stream.events.XMLEvent;
 
 /**
- * KajiLibrary's javax.xml.stream.util.XMLEventAllocator -- el que convierte la posicion de un
- * cursor en un evento.
+ * KajiLibrary's javax.xml.stream.util.XMLEventAllocator -- what turns a cursor's position into an
+ * event.
  *
- * <h2>El punto de extension entre los dos modelos</h2>
+ * <h2>The extension point between the two models</h2>
  *
- * <p>Un {@link javax.xml.stream.XMLEventReader} de esta biblioteca --y de casi todas-- es un
- * {@link XMLStreamReader} mas esto: el cursor avanza y el asignador fotografia cada posicion en un
- * objeto independiente. Que sea reemplazable
- * ({@link javax.xml.stream.XMLInputFactory#ALLOCATOR}) permite devolver implementaciones de evento
- * propias --con campos extra, o mas baratas-- sin tocar el parser.
+ * <p>A {@link javax.xml.stream.XMLEventReader} of this library --and of almost all-- is an {@link
+ * XMLStreamReader} plus this: the cursor advances and the allocator takes a snapshot of each
+ * position in an independent object. Its being replaceable ({@link
+ * javax.xml.stream.XMLInputFactory#ALLOCATOR}) allows returning event implementations of one's own
+ * --with extra fields, or cheaper-- without touching the parser.
  *
- * <h2>{@link #newInstance()} es un metodo de instancia, y esta bien</h2>
+ * <h2>{@link #newInstance()} is an instance method, and that is fine</h2>
  *
- * <p>Sorprende que la forma de conseguir un asignador sea pedirselo a otro asignador. La razon es
- * que la fabrica recibe <b>una</b> instancia por configuracion y cada lector necesita la suya,
- * porque un asignador puede tener estado --tablas de nombres, buffers reutilizados--. Un metodo
- * estatico no serviria: la fabrica no conoce la clase, solo tiene el objeto. O sea que la instancia
- * configurada funciona de prototipo.
+ * <p>It is surprising that the way to get an allocator is to ask another allocator for it. The
+ * reason is that the factory receives <b>one</b> instance through configuration and each reader
+ * needs its own, because an allocator can have state --name tables, reused buffers--. A static
+ * method would not do: the factory does not know the class, it only has the object. That is, the
+ * configured instance works as a prototype.
  */
 public interface XMLEventAllocator {
 
     /**
-     * Otro asignador de la misma clase, para un lector nuevo.
+     * Another allocator of the same class, for a new reader.
      *
-     * <p>El que recibe la llamada hace de prototipo; ver el encabezado.
+     * <p>The one receiving the call acts as prototype; see the header.
      *
-     * @return un asignador nuevo, sin compartir estado con este
+     * @return a new allocator, not sharing state with this one
      */
     XMLEventAllocator newInstance();
 
     /**
-     * El evento que corresponde a la posicion actual del cursor.
+     * The event corresponding to the cursor's current position.
      *
-     * <p>No avanza el lector: lo lee donde esta.
+     * <p>It does not advance the reader: it reads it where it is.
      *
-     * @param reader el cursor, parado en un evento
-     * @return el evento como objeto propio
-     * @throws XMLStreamException si el lector falla al ser consultado
+     * @param reader the cursor, standing on an event
+     * @return the event as an object of its own
+     * @throws XMLStreamException if the reader fails when queried
      */
     XMLEvent allocate(XMLStreamReader reader) throws XMLStreamException;
 
     /**
-     * Lo mismo, pero entregandoselo a un consumidor en vez de devolverlo.
+     * The same, but handing it to a consumer instead of returning it.
      *
-     * <p>La variante existe para los casos en que una posicion del cursor da <b>mas de un</b>
-     * evento --un asignador que decida partir un texto largo, por ejemplo--, cosa que la que
-     * devuelve uno solo no puede expresar.
+     * <p>The variant exists for the cases where one position of the cursor gives <b>more than
+     * one</b> event --an allocator that decides to split a long text, for example--, which the one
+     * that returns a single event cannot express.
      *
-     * @param reader el cursor, parado en un evento
-     * @param consumer a quien darle lo que salga
-     * @throws XMLStreamException si el lector o el consumidor fallan
+     * @param reader the cursor, standing on an event
+     * @param consumer whom to give what comes out to
+     * @throws XMLStreamException if the reader or the consumer fails
      */
     void allocate(XMLStreamReader reader, XMLEventConsumer consumer) throws XMLStreamException;
 }

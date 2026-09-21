@@ -4,57 +4,59 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * La union entre una ruta y quien la atiende, con todo lo que se le cuelga alrededor.
+ * The union between a path and who attends it, with everything that is hung around it.
  *
- * <h2>Por que {@code createContext} devuelve esto y no {@code void}</h2>
+ * <h2>Why {@code createContext} returns this and not {@code void}</h2>
  *
- * <p>Porque registrar la ruta es solo el principio: despues hay que ponerle filtros, quizas un
- * autenticador, quizas atributos compartidos. Devolver el contexto deja hacer todo eso sin un
- * segundo registro y sin que el servidor tenga que exponer un metodo por cada cosa configurable.
+ * <p>Because registering the path is only the beginning: afterwards filters have to be set on
+ * it, perhaps an authenticator, perhaps shared attributes. Returning the context allows all
+ * that to be done without a second registration and without the server having to expose a
+ * method for each configurable thing.
  *
- * <p>{@link #getAttributes} es un mapa mutable y compartido por todos los pedidos de esta ruta: es
- * donde va el estado que un manejador necesita entre pedidos, y por eso mismo hay que sincronizarlo
- * si se escribe.
+ * <p>{@link #getAttributes} is a mutable map shared by every request of this path: it is where
+ * the state a handler needs between requests goes, and for that very reason it has to be
+ * synchronized if it is written.
  */
 public abstract class HttpContext {
 
-    /** Para las implementaciones. */
+    /** For the implementations. */
     protected HttpContext() {
     }
 
-    /** Quien atiende esta ruta. */
+    /** Who attends this path. */
     public abstract HttpHandler getHandler();
 
     /**
-     * Cambia quien atiende.
+     * It changes who attends.
      *
-     * @throws IllegalArgumentException si ya habia uno — se fija una sola vez
+     * @throws IllegalArgumentException if there was already one -- it is fixed only once
      */
     public abstract void setHandler(HttpHandler h);
 
-    /** La ruta, siempre absoluta y empezando con {@code /}. */
+    /** The path, always absolute and beginning with {@code /}. */
     public abstract String getPath();
 
-    /** El servidor donde vive. */
+    /** The server it lives in. */
     public abstract HttpServer getServer();
 
-    /** Los atributos compartidos; mutable, y compartido entre pedidos. */
+    /** The shared attributes; mutable, and shared between requests. */
     public abstract Map<String, Object> getAttributes();
 
     /**
-     * La lista de filtros, mutable.
+     * The list of filters, mutable.
      *
-     * <p>Se modifica agregandole elementos, no reemplazandola. El orden es el de ejecucion.
+     * <p>It is modified by adding elements to it, not by replacing it. The order is the order of
+     * execution.
      */
     public abstract List<Filter> getFilters();
 
     /**
-     * Pone el autenticador y devuelve el que estaba, o {@code null}.
+     * It sets the authenticator and returns the one that was there, or {@code null}.
      *
-     * @return el anterior
+     * @return the previous one
      */
     public abstract Authenticator setAuthenticator(Authenticator auth);
 
-    /** El autenticador actual, o {@code null}. */
+    /** The current authenticator, or {@code null}. */
     public abstract Authenticator getAuthenticator();
 }

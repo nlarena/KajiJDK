@@ -26,88 +26,91 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import jdk.internal.awt.FuenteBitmap;
+import jdk.internal.awt.BitmapFont;
 
 /**
- * El rasterizador: un {@link Graphics} concreto que dibuja sobre un {@link BufferedImage}.
+ * The rasteriser: a concrete {@link Graphics} that draws onto a {@link BufferedImage}.
  *
- * <h2>Que destraba</h2>
+ * <h2>What it unblocks</h2>
  *
- * <p>Esta biblioteca ya tenia el almacenamiento de pixeles —{@code Raster}, {@code WritableRaster},
- * {@code DataBuffer}— y {@link BufferedImage#setRGB} funcionando. Lo que faltaba era alguien que
- * <em>decidiera que pixeles pintar</em> para una linea, un ovalo o un poligono. Eso es esta clase, y
- * es la pieza sobre la que se apoya todo lo visual: sin ella, cada {@code paintBorder} de
- * {@code javax.swing.border} es codigo que nunca se ejecuta.
+ * <p>This library had the pixel storage already —{@code Raster}, {@code WritableRaster}, {@code
+ * DataBuffer}— and {@link BufferedImage#setRGB} working. What was missing was somebody to
+ * <em>decide which pixels to paint</em> for a line, an oval or a polygon. That is this class, and
+ * it is the piece everything visual rests on: without it, every {@code paintBorder} of {@code
+ * javax.swing.border} is code that never runs.
  *
- * <h2>Sin pantalla, y eso es una ventaja</h2>
+ * <h2>Without a screen, and that is an advantage</h2>
  *
- * <p>Dibuja en memoria, no en una ventana. No es una limitacion transitoria sino el orden correcto:
- * un rasterizador que escribe en un {@code BufferedImage} se puede <strong>comparar pixel por pixel
- * contra el JDK real</strong> — el mismo programa, las dos VMs, dos PNG que deben ser identicos. Es
- * exactamente el metodo de oraculo diferencial que el resto del proyecto ya usa, aplicado al
- * dibujado.
+ * <p>It draws in memory, not in a window. It is not a passing limitation but the right order: a
+ * rasteriser that writes into a {@code BufferedImage} can be <strong>compared pixel by pixel
+ * against the real JDK</strong> — the same program, the two VMs, two PNGs that have to be
+ * identical. It is exactly the differential-oracle method the rest of the project already uses,
+ * applied to drawing.
  *
- * <p>Una ventana de verdad necesita ademas hablar con el sistema, y eso es un paso posterior que se
- * apoya en este.
+ * <p>A real window also needs talking to the system, and that is a later step that rests on this
+ * one.
  *
- * <h2>Que tan igual dibuja al JDK real, medido</h2>
+ * <h2>How closely it draws like the real JDK, measured</h2>
  *
- * <p>No es una promesa: son dos corridas del mismo programa comparadas pixel por pixel.
+ * <p>It is not a promise: it is two runs of the same program compared pixel by pixel.
  *
  * <table border="1">
- * <caption>Contra el JDK 25, sobre 968 pixeles</caption>
- * <tr><th>primitivas</th><th>diferencias</th></tr>
- * <tr><td>lineas, rectangulos, recorte, traslacion, {@code copyArea}</td><td><strong>0</strong></td></tr>
- * <tr><td>ovalos, arcos, poligonos</td><td>46 (4,75%)</td></tr>
+ * <caption>Against JDK 25, over 968 pixels</caption>
+ * <tr><th>primitives</th><th>differences</th></tr>
+ * <tr><td>lines, rectangles, clipping, translation, {@code copyArea}</td>
+ *     <td><strong>0</strong></td></tr>
+ * <tr><td>ovals, arcs, polygons</td><td>46 (4.75%)</td></tr>
  * </table>
  *
- * <p>La primera fila es la que importa para decir que esto <em>anda</em>: la geometria determinista
- * —incluido el recorte, que es donde un rasterizador suele equivocarse— coincide exactamente.
+ * <p>The first row is the one that matters for saying this <em>works</em>: the deterministic
+ * geometry —clipping included, which is where a rasteriser usually gets it wrong— matches exactly.
  *
- * <p>La segunda no es un bug, y conviene ser preciso sobre por que. <strong>AWT no especifica que
- * pixeles cubre un {@code fillOval}</strong>: dice que rellena el ovalo inscripto en un rectangulo,
- * y donde cae el borde lo decide el convertidor de barrido de cada implementacion. El del JDK es
- * asimetrico —su ovalo de 12x12 ocupa <em>once</em> filas y deja vacia la de arriba— y este muestrea
- * el <em>centro</em> de cada pixel, que da doce filas y simetria. Las dos coinciden en la fila
- * central y difieren en a lo sumo un pixel en los bordes inclinados.
+ * <p>The second is not a bug, and it is worth being precise about why. <strong>AWT does not specify
+ * which pixels a {@code fillOval} covers</strong>: it says it fills the oval inscribed in a
+ * rectangle, and where the edge falls is decided by each implementation's scan converter. The JDK's
+ * is asymmetric —its 12x12 oval takes <em>eleven</em> rows and leaves the top one empty— and this
+ * one samples the <em>centre</em> of each pixel, which gives twelve rows and symmetry. The two
+ * agree on the central row and differ by at most one pixel on the slanted edges.
  *
- * <p>Se eligio la regla defendible antes que copiar el artefacto ajeno: replicar la asimetria del
- * JDK pediria reimplementar su rasterizador, y lo que se ganaria es parecerse, no estar bien.
+ * <p>The defensible rule was chosen over copying somebody else's artefact: replicating the JDK's
+ * asymmetry would ask for reimplementing its rasteriser, and what would be gained is resemblance,
+ * not correctness.
  *
- * <h2>Texto</h2>
+ * <h2>Text</h2>
  *
- * <p>{@link #drawString} dibuja con la unica fuente de esta VM, un mapa de bits extraido del JDK
- * real — ver {@code jdk.internal.awt.FuenteBitmap}, que explica por que una sola cara es una
- * sustitucion honesta y no un engano. Lo que sigue declinando es {@link #drawGlyphVector}, que
- * recibe glifos ya dispuestos por un motor tipografico que aca no existe.
+ * <p>{@link #drawString} draws with the only font of this VM, a bitmap taken from the real JDK —
+ * see {@code jdk.internal.awt.BitmapFont}, which explains why a single face is an honest
+ * substitution and not a deception. What goes on declining is {@link #drawGlyphVector}, which
+ * receives glyphs already laid out by a font engine that does not exist here.
  *
- * <h2>Como se pinta un pixel</h2>
+ * <h2>How a pixel gets painted</h2>
  *
- * <p>Vive en {@code java.awt.image} y no en {@code java.awt} por una razon practica: lo construye
- * {@link BufferedImage}, es de paquete, y asi no agrega ni una clase publica que el JDK no tenga.
- * Es el mismo criterio con el que {@code KajiFileChannel} vive al lado de lo que sirve.
+ * <p>It lives in {@code java.awt.image} and not in {@code java.awt} for a practical reason: it is
+ * built by {@link BufferedImage}, it is package-private, and this way it adds not one public class
+ * the JDK does not have. It is the same criterion by which {@code KajiFileChannel} lives next to
+ * what it serves.
  *
- * <p>Todo pasa por {@link #pintar}: aplica la traslacion, prueba el recorte y escribe. Concentrar
- * las tres cosas en un lugar es lo que hace que agregar una figura sea escribir su geometria y nada
- * mas — ninguna rutina de dibujo vuelve a mencionar el clip.
+ * <p>Everything goes through {@link #plot}: it applies the translation, tests the clip and writes.
+ * Concentrating the three things in one place is what makes adding a figure a matter of writing its
+ * geometry and nothing else — no drawing routine mentions the clip again.
  */
 class KajiGraphics extends Graphics2D {
 
-    private final BufferedImage destino;
+    private final BufferedImage dest;
 
     /**
-     * El origen, cuando la transformacion es una traslacion entera.
+     * The origin, when the transform is an integer translation.
      *
-     * <p>Se lleva aparte de {@link #transform} a proposito. Casi todo Swing dibuja con una
-     * traslacion entera y nada mas —cada componente corre el origen a su esquina— y en ese caso las
-     * rutinas de abajo trabajan con enteros puros, que es lo que las hace coincidir exactamente con
-     * el JDK. Meter todo por la transformacion general obligaria a redondear en cada punto y esa
-     * exactitud se perderia.
+     * <p>It is kept apart from {@link #transform} on purpose. Almost all of Swing draws with an
+     * integer translation and nothing else —each component shifts the origin to its corner— and in
+     * that case the routines below work with pure integers, which is what makes them match the JDK
+     * exactly. Putting everything through the general transform would force rounding at every point
+     * and that exactness would be lost.
      */
     private int transX;
     private int transY;
 
-    /** La transformacion de usuario a dispositivo. Nunca {@code null}. */
+    /** The transform from user to device. Never {@code null}. */
     private AffineTransform transform;
 
     private Paint paint;
@@ -116,18 +119,18 @@ class KajiGraphics extends Graphics2D {
     private Color background;
     private RenderingHints hints;
 
-    /** El recorte, en coordenadas del contexto. {@code null} es "todo el destino". */
+    /** The clip, in the coordinates of the context. {@code null} is "the whole destination". */
     private Rectangle clip;
 
     private Color color;
     private Font font;
 
-    /** Cuando no es {@code null}, se dibuja en XOR contra este color. */
+    /** When it is not {@code null}, drawing is done in XOR against this colour. */
     private Color xorColor;
 
-    /** Un contexto sobre {@code destino}, sin trasladar y sin recortar. */
-    KajiGraphics(BufferedImage destino) {
-        this.destino = destino;
+    /** A context over {@code dest}, with no translation and no clip. */
+    KajiGraphics(BufferedImage dest) {
+        this.dest = dest;
         this.transX = 0;
         this.transY = 0;
         this.clip = null;
@@ -142,32 +145,32 @@ class KajiGraphics extends Graphics2D {
         this.hints = new RenderingHints(null);
     }
 
-    private KajiGraphics(KajiGraphics otro) {
-        this.destino = otro.destino;
-        this.transX = otro.transX;
-        this.transY = otro.transY;
-        this.clip = otro.clip == null ? null : new Rectangle(otro.clip.x, otro.clip.y,
-                otro.clip.width, otro.clip.height);
-        this.color = otro.color;
-        this.font = otro.font;
-        this.xorColor = otro.xorColor;
-        this.transform = new AffineTransform(otro.transform);
-        this.paint = otro.paint;
-        this.stroke = otro.stroke;
-        this.composite = otro.composite;
-        this.background = otro.background;
-        this.hints = (RenderingHints) otro.hints.clone();
+    private KajiGraphics(KajiGraphics other) {
+        this.dest = other.dest;
+        this.transX = other.transX;
+        this.transY = other.transY;
+        this.clip = other.clip == null ? null : new Rectangle(other.clip.x, other.clip.y,
+                other.clip.width, other.clip.height);
+        this.color = other.color;
+        this.font = other.font;
+        this.xorColor = other.xorColor;
+        this.transform = new AffineTransform(other.transform);
+        this.paint = other.paint;
+        this.stroke = other.stroke;
+        this.composite = other.composite;
+        this.background = other.background;
+        this.hints = (RenderingHints) other.hints.clone();
     }
 
-    // -- el unico lugar donde se toca un pixel ---------------------------------------------------
+    // -- the only place where a pixel is touched -------------------------------------------------
 
     /**
-     * Pinta {@code (x, y)}, dado en coordenadas de este contexto.
+     * Paints {@code (x, y)}, given in the coordinates of this context.
      *
-     * <p>Silencioso fuera del recorte y fuera de la imagen: dibujar es una operacion best-effort y
-     * una linea que se sale por el borde no es un error del programa.
+     * <p>Silent outside the clip and outside the image: drawing is a best-effort operation and a
+     * line that goes off the edge is not an error of the program.
      */
-    private void pintar(int x, int y, int rgb) {
+    private void plot(int x, int y, int rgb) {
         if (this.clip != null) {
             if (x < this.clip.x || y < this.clip.y
                     || x >= this.clip.x + this.clip.width
@@ -177,34 +180,35 @@ class KajiGraphics extends Graphics2D {
         }
         int px = x + this.transX;
         int py = y + this.transY;
-        if (px < 0 || py < 0 || px >= this.destino.getWidth() || py >= this.destino.getHeight()) {
+        if (px < 0 || py < 0 || px >= this.dest.getWidth() || py >= this.dest.getHeight()) {
             return;
         }
         if (this.xorColor != null) {
-            // XOR contra lo que ya hay: dibujar dos veces lo mismo restaura el fondo, que es para
-            // lo que se usa (un rectangulo de seleccion que sigue al mouse).
-            int fondo = this.destino.getRGB(px, py);
-            int mezcla = fondo ^ rgb ^ this.xorColor.getRGB();
-            this.destino.setRGB(px, py, mezcla | 0xFF000000);
+            // XOR against what is there already: drawing the same thing twice restores the
+            // background, which is what it is used for (a selection rectangle that follows the
+            // mouse).
+            int bg = this.dest.getRGB(px, py);
+            int blended = bg ^ rgb ^ this.xorColor.getRGB();
+            this.dest.setRGB(px, py, blended | 0xFF000000);
             return;
         }
-        this.destino.setRGB(px, py, rgb);
+        this.dest.setRGB(px, py, rgb);
     }
 
     /**
-     * El color con el que se pinta ahora.
+     * The colour things are painted with right now.
      *
-     * <p>{@link #setPaint} y {@link #setColor} son la misma perilla cuando la pintura es un color, y
-     * asi lo pide el contrato: fijar uno cambia el otro. Una pintura que no es un {@link Color}
-     * —un degrade, una textura— necesita evaluarse por pixel, que es un mecanismo aparte; ver
+     * <p>{@link #setPaint} and {@link #setColor} are the same knob when the paint is a colour, and
+     * that is what the contract asks: setting one changes the other. A paint that is not a {@link
+     * Color} —a gradient, a texture— needs evaluating per pixel, which is a mechanism apart; see
      * {@link #setPaint}.
      */
-    private int rgbActual() {
+    private int currentRgb() {
         return this.color == null ? 0xFF000000 : this.color.getRGB();
     }
 
-    /** Si la transformacion es una traslacion de numeros enteros; ver {@link #transX}. */
-    private boolean esTrasladoEntero() {
+    /** Whether the transform is a translation by whole numbers; see {@link #transX}. */
+    private boolean isIntegerTranslate() {
         int t = this.transform.getType();
         if (t != AffineTransform.TYPE_IDENTITY && t != AffineTransform.TYPE_TRANSLATION) {
             return false;
@@ -214,7 +218,7 @@ class KajiGraphics extends Graphics2D {
         return tx == Math.rint(tx) && ty == Math.rint(ty);
     }
 
-    // -- estado ----------------------------------------------------------------------------------
+    // -- state -----------------------------------------------------------------------------------
 
     public Graphics create() {
         return new KajiGraphics(this);
@@ -224,7 +228,8 @@ class KajiGraphics extends Graphics2D {
         this.transform.translate(x, y);
         this.transX = this.transX + x;
         this.transY = this.transY + y;
-        // El recorte esta en coordenadas del contexto, asi que trasladar el origen lo corre al reves.
+        // The clip is in the coordinates of the context, so translating the origin shifts it the
+        // other way.
         if (this.clip != null) {
             this.clip.x = this.clip.x - x;
             this.clip.y = this.clip.y - y;
@@ -260,28 +265,28 @@ class KajiGraphics extends Graphics2D {
     public Rectangle getClipBounds() {
         if (this.clip == null) {
             return new Rectangle(-this.transX, -this.transY,
-                    this.destino.getWidth(), this.destino.getHeight());
+                    this.dest.getWidth(), this.dest.getHeight());
         }
         return new Rectangle(this.clip.x, this.clip.y, this.clip.width, this.clip.height);
     }
 
     /**
-     * Interseca el recorte con ese rectangulo.
+     * Intersects the clip with that rectangle.
      *
-     * <p>Interseca, no reemplaza: el recorte solo puede achicarse. Es lo que permite que un
-     * componente le pase un contexto a su hijo sabiendo que el hijo no puede dibujar fuera de lo que
-     * al padre le corresponde.
+     * <p>It intersects, it does not replace: the clip can only shrink. It is what lets a component
+     * hand a context to its child knowing that the child cannot draw outside what belongs to the
+     * parent.
      */
     public void clipRect(int x, int y, int width, int height) {
-        Rectangle nuevo = new Rectangle(x, y, width, height);
+        Rectangle fresh = new Rectangle(x, y, width, height);
         if (this.clip == null) {
-            this.clip = nuevo;
+            this.clip = fresh;
             return;
         }
-        this.clip = interseccion(this.clip, nuevo);
+        this.clip = intersection(this.clip, fresh);
     }
 
-    private Rectangle interseccion(Rectangle a, Rectangle b) {
+    private Rectangle intersection(Rectangle a, Rectangle b) {
         int x1 = Math.max(a.x, b.x);
         int y1 = Math.max(a.y, b.y);
         int x2 = Math.min(a.x + a.width, b.x + b.width);
@@ -309,11 +314,11 @@ class KajiGraphics extends Graphics2D {
     }
 
     /**
-     * Fija el recorte a partir de una figura.
+     * Sets the clip from a shape.
      *
-     * <p>Se usa su caja envolvente: recortar contra una figura arbitraria pide una mascara por
-     * pixel, que es un mecanismo distinto del rectangulo que esta clase lleva. Un recorte
-     * <em>mas grande</em> que el pedido puede dejar pintado de mas, asi que queda dicho.
+     * <p>Its bounding box is used: clipping against an arbitrary shape asks for a per-pixel mask,
+     * which is a different mechanism from the rectangle this class carries. A clip <em>bigger</em>
+     * than the one asked for can leave things painted that should not be, so it is said here.
      */
     public void setClip(Shape clip) {
         if (clip == null) {
@@ -324,49 +329,49 @@ class KajiGraphics extends Graphics2D {
         this.clip = new Rectangle(r.x, r.y, r.width, r.height);
     }
 
-    // -- figuras ---------------------------------------------------------------------------------
+    // -- shapes ----------------------------------------------------------------------------------
 
     /**
-     * Copia un rectangulo a otro lugar de la misma imagen.
+     * Copies a rectangle to another place of the same image.
      *
-     * <p>El orden del recorrido depende del sentido del desplazamiento: copiar hacia adelante sobre
-     * un area que se superpone consigo misma pisaria los pixeles que todavia faltan leer. De ahi los
-     * dos sentidos.
+     * <p>The order of the walk depends on the direction of the shift: copying forwards over an area
+     * that overlaps itself would step on the pixels still to be read. Hence the two directions.
      */
     public void copyArea(int x, int y, int width, int height, int dx, int dy) {
         if (width <= 0 || height <= 0) {
             return;
         }
-        int[] copia = new int[width * height];
+        int[] copy = new int[width * height];
         for (int j = 0; j < height; j++) {
             for (int i = 0; i < width; i++) {
                 int px = x + i + this.transX;
                 int py = y + j + this.transY;
-                if (px >= 0 && py >= 0 && px < this.destino.getWidth()
-                        && py < this.destino.getHeight()) {
-                    copia[j * width + i] = this.destino.getRGB(px, py);
+                if (px >= 0 && py >= 0 && px < this.dest.getWidth()
+                        && py < this.dest.getHeight()) {
+                    copy[j * width + i] = this.dest.getRGB(px, py);
                 } else {
-                    copia[j * width + i] = 0;
+                    copy[j * width + i] = 0;
                 }
             }
         }
         for (int j = 0; j < height; j++) {
             for (int i = 0; i < width; i++) {
-                pintar(x + dx + i, y + dy + j, copia[j * width + i]);
+                plot(x + dx + i, y + dy + j, copy[j * width + i]);
             }
         }
     }
 
     /**
-     * Una linea, por Bresenham.
+     * A line, by Bresenham.
      *
-     * <p>Entero puro: sin division ni punto flotante, decidiendo en cada paso si el error acumulado
-     * justifica avanzar en el eje menor. Es el algoritmo de 1962 y sigue siendo el correcto — un
-     * rasterizador que interpolara con {@code double} daria una linea distinta de la del JDK en los
-     * casos de empate, que es justo lo que una comparacion pixel por pixel detectaria.
+     * <p>Pure integer: no division and no floating point, deciding at each step whether the
+     * accumulated error justifies advancing on the minor axis. It is the algorithm of 1962 and it
+     * is still the right one — a rasteriser that interpolated with {@code double} would give a
+     * different line from the JDK's in the tie cases, which is just what a pixel-by-pixel
+     * comparison would detect.
      */
     public void drawLine(int x1, int y1, int x2, int y2) {
-        int rgb = rgbActual();
+        int rgb = currentRgb();
         int dx = Math.abs(x2 - x1);
         int dy = Math.abs(y2 - y1);
         int sx = x1 < x2 ? 1 : -1;
@@ -375,7 +380,7 @@ class KajiGraphics extends Graphics2D {
         int x = x1;
         int y = y1;
         while (true) {
-            pintar(x, y, rgb);
+            plot(x, y, rgb);
             if (x == x2 && y == y2) {
                 return;
             }
@@ -392,20 +397,20 @@ class KajiGraphics extends Graphics2D {
     }
 
     public void fillRect(int x, int y, int width, int height) {
-        int rgb = rgbActual();
+        int rgb = currentRgb();
         for (int j = 0; j < height; j++) {
             for (int i = 0; i < width; i++) {
-                pintar(x + i, y + j, rgb);
+                plot(x + i, y + j, rgb);
             }
         }
     }
 
     /**
-     * El contorno de un rectangulo.
+     * The outline of a rectangle.
      *
-     * <p>Inclusive en los dos extremos: un rectangulo de ancho {@code w} ocupa de {@code x} a
-     * {@code x + w}, o sea {@code w + 1} pixeles. Es la convencion de AWT y la fuente del clasico
-     * error de un pixel.
+     * <p>Inclusive at both ends: a rectangle of width {@code w} takes from {@code x} to {@code x +
+     * w}, that is, {@code w + 1} pixels. It is the AWT convention and the source of the classic
+     * off-by-one.
      */
     public void drawRect(int x, int y, int width, int height) {
         if (width < 0 || height < 0) {
@@ -418,11 +423,11 @@ class KajiGraphics extends Graphics2D {
     }
 
     public void clearRect(int x, int y, int width, int height) {
-        // Con el color de fondo de este contexto, que {@link #setBackground} puede cambiar.
+        // With the background colour of this context, which {@link #setBackground} can change.
         int rgb = this.background == null ? 0xFFFFFFFF : this.background.getRGB();
         for (int j = 0; j < height; j++) {
             for (int i = 0; i < width; i++) {
-                pintar(x + i, y + j, rgb);
+                plot(x + i, y + j, rgb);
             }
         }
     }
@@ -461,58 +466,59 @@ class KajiGraphics extends Graphics2D {
     }
 
     /**
-     * Un arco, muestreando el angulo.
+     * An arc, by sampling the angle.
      *
-     * <p>Un paso por pixel del perimetro estimado: menos deja huecos y mas repite pixeles sin
-     * agregar nada. El JDK usa una subdivision de curvas de Bezier, asi que en los bordes puede
-     * diferir de un pixel — esa es justamente la clase de diferencia que una comparacion contra el
-     * JDK real vendria a medir, y por eso conviene tenerla escrita y no supuesta.
+     * <p>One step per pixel of the estimated perimeter: fewer leaves holes and more repeats pixels
+     * without adding anything. The JDK uses a subdivision of Bézier curves, so at the edges it may
+     * differ by one pixel — that is exactly the kind of difference a comparison against the real
+     * JDK would come to measure, and that is why it is worth having it written down and not
+     * assumed.
      */
     public void drawArc(int x, int y, int width, int height, int startAngle, int arcAngle) {
         if (width <= 0 || height <= 0 || arcAngle == 0) {
             return;
         }
-        int rgb = rgbActual();
+        int rgb = currentRgb();
         double cx = x + width / 2.0;
         double cy = y + height / 2.0;
         double rx = width / 2.0;
         double ry = height / 2.0;
-        int pasos = Math.max(8, (int) ((rx + ry) * 3.15));
-        double desde = Math.toRadians(startAngle);
-        double barrido = Math.toRadians(arcAngle);
-        for (int i = 0; i <= pasos; i++) {
-            double t = desde + barrido * i / pasos;
-            // El eje Y de la pantalla crece hacia abajo y el de los angulos hacia arriba: de ahi
-            // el signo menos, sin el cual todo arco sale espejado.
+        int steps = Math.max(8, (int) ((rx + ry) * 3.15));
+        double from = Math.toRadians(startAngle);
+        double sweep = Math.toRadians(arcAngle);
+        for (int i = 0; i <= steps; i++) {
+            double t = from + sweep * i / steps;
+            // The screen's Y axis grows downwards and the angles' upwards: hence the minus sign,
+            // without which every arc comes out mirrored.
             int px = (int) Math.round(cx + rx * Math.cos(t));
             int py = (int) Math.round(cy - ry * Math.sin(t));
-            pintar(px, py, rgb);
+            plot(px, py, rgb);
         }
     }
 
-    /** Un sector de disco, por barrido horizontal contra la ecuacion de la elipse. */
+    /** A disc sector, by horizontal scanning against the equation of the ellipse. */
     public void fillArc(int x, int y, int width, int height, int startAngle, int arcAngle) {
         if (width <= 0 || height <= 0 || arcAngle == 0) {
             return;
         }
-        int rgb = rgbActual();
+        int rgb = currentRgb();
         double cx = x + width / 2.0;
         double cy = y + height / 2.0;
         double rx = width / 2.0;
         double ry = height / 2.0;
-        int desde = startAngle;
-        int barrido = arcAngle;
-        if (barrido < 0) {
-            desde = desde + barrido;
-            barrido = -barrido;
+        int from = startAngle;
+        int sweep = arcAngle;
+        if (sweep < 0) {
+            from = from + sweep;
+            sweep = -sweep;
         }
-        // Los limites son EXCLUSIVOS: un relleno de ancho `w` ocupa `w` pixeles, no `w + 1`. Es la
-        // convencion de `fillRect`, y la contraria a la de `drawRect`, que dibuja inclusive. Confundir
-        // las dos es el error de un pixel clasico de un rasterizador.
+        // The limits are EXCLUSIVE: a fill of width `w` takes `w` pixels, not `w + 1`. It is the
+        // convention of `fillRect`, and the opposite of `drawRect`, which draws inclusively.
+        // Confusing the two is a rasteriser's classic off-by-one.
         //
-        // Y se muestrea el CENTRO del pixel, no su esquina: un pixel pertenece a la figura si su
-        // centro cae adentro. Es la regla que hace el resultado simetrico y la unica defendible sin
-        // conocer el convertidor de barrido de la otra implementacion.
+        // And the CENTRE of the pixel is sampled, not its corner: a pixel belongs to the figure if
+        // its centre falls inside. It is the rule that makes the result symmetric and the only
+        // defensible one without knowing the other implementation's scan converter.
         for (int py = y; py < y + height; py++) {
             for (int px = x; px < x + width; px++) {
                 double nx = (px + 0.5 - cx) / rx;
@@ -520,23 +526,23 @@ class KajiGraphics extends Graphics2D {
                 if (nx * nx + ny * ny > 1.0) {
                     continue;
                 }
-                if (barrido >= 360) {
-                    pintar(px, py, rgb);
+                if (sweep >= 360) {
+                    plot(px, py, rgb);
                     continue;
                 }
                 double ang = Math.toDegrees(Math.atan2(-(py + 0.5 - cy), px + 0.5 - cx));
                 if (ang < 0) {
                     ang = ang + 360;
                 }
-                double rel = ang - desde;
+                double rel = ang - from;
                 while (rel < 0) {
                     rel = rel + 360;
                 }
                 while (rel >= 360) {
                     rel = rel - 360;
                 }
-                if (rel <= barrido) {
-                    pintar(px, py, rgb);
+                if (rel <= sweep) {
+                    plot(px, py, rgb);
                 }
             }
         }
@@ -557,112 +563,113 @@ class KajiGraphics extends Graphics2D {
     }
 
     /**
-     * Rellena un poligono por barrido de lineas, con la regla del par-impar.
+     * Fills a polygon by scanning lines, with the even-odd rule.
      *
-     * <p>Para cada fila se buscan los cruces con las aristas y se pinta entre el primero y el
-     * segundo, el tercero y el cuarto, y asi. La condicion de cruce es asimetrica a proposito
-     * —{@code y1 <= py} contra {@code y2 > py}— para que un vertice exactamente sobre la fila cuente
-     * una sola vez: contarlo dos veces deja una fila sin pintar, que es el agujero clasico de esta
-     * rutina.
+     * <p>For each row the crossings with the edges are looked for and the paint goes between the
+     * first and the second, the third and the fourth, and so on. The crossing condition is
+     * asymmetric on purpose —{@code y1 <= py} against {@code y2 > py}— so that a vertex exactly on
+     * the row counts once: counting it twice leaves a row unpainted, which is the classic hole of
+     * this routine.
      */
     public void fillPolygon(int[] xPoints, int[] yPoints, int nPoints) {
         if (nPoints < 3) {
             return;
         }
-        int rgb = rgbActual();
+        int rgb = currentRgb();
         int minY = yPoints[0];
         int maxY = yPoints[0];
         for (int i = 1; i < nPoints; i++) {
             minY = Math.min(minY, yPoints[i]);
             maxY = Math.max(maxY, yPoints[i]);
         }
-        double[] cruces = new double[nPoints];
+        double[] crossings = new double[nPoints];
         for (int py = minY; py <= maxY; py++) {
-            // La fila se prueba en su CENTRO, no en su borde superior. Es lo que evita que un
-            // vertice apoyado justo en una linea de pixeles decida por si solo si esa fila entra.
+            // The row is tested at its CENTRE, not at its top edge. It is what keeps a vertex
+            // resting exactly on a line of pixels from deciding by itself whether that row goes in.
             double yc = py + 0.5;
             int n = 0;
             for (int i = 0; i < nPoints; i++) {
                 int j = (i + 1) % nPoints;
                 double y1 = yPoints[i];
                 double y2 = yPoints[j];
-                // Asimetrica a proposito: un vertice exactamente sobre `yc` cuenta una sola vez.
-                // Contarlo dos deja la fila sin pintar, que es el agujero clasico de esta rutina.
-                boolean cruza = (y1 <= yc && y2 > yc) || (y2 <= yc && y1 > yc);
-                if (!cruza) {
+                // Asymmetric on purpose: a vertex exactly on `yc` counts once. Counting it twice
+                // leaves the row unpainted, which is the classic hole of this routine.
+                boolean crosses = (y1 <= yc && y2 > yc) || (y2 <= yc && y1 > yc);
+                if (!crosses) {
                     continue;
                 }
                 double x1 = xPoints[i];
                 double x2 = xPoints[j];
-                cruces[n] = x1 + (yc - y1) * (x2 - x1) / (y2 - y1);
+                crossings[n] = x1 + (yc - y1) * (x2 - x1) / (y2 - y1);
                 n = n + 1;
             }
             for (int a = 0; a < n - 1; a++) {
                 for (int b = a + 1; b < n; b++) {
-                    if (cruces[b] < cruces[a]) {
-                        double t = cruces[a];
-                        cruces[a] = cruces[b];
-                        cruces[b] = t;
+                    if (crossings[b] < crossings[a]) {
+                        double t = crossings[a];
+                        crossings[a] = crossings[b];
+                        crossings[b] = t;
                     }
                 }
             }
-            // Se pinta el pixel cuyo centro cae dentro del tramo: `[cruce, cruce)` medio abierto,
-            // para que dos poligonos que comparten una arista no se pisen ni dejen una ranura.
+            // The pixel whose centre falls inside the stretch is painted: `[crossing, crossing)`
+            // half-open, so that two polygons sharing an edge neither overlap nor leave a slit.
             for (int k = 0; k + 1 < n; k = k + 2) {
-                int desdeX = (int) Math.ceil(cruces[k] - 0.5);
-                int hastaX = (int) Math.ceil(cruces[k + 1] - 0.5);
-                for (int px = desdeX; px < hastaX; px++) {
-                    pintar(px, py, rgb);
+                int fromX = (int) Math.ceil(crossings[k] - 0.5);
+                int toX = (int) Math.ceil(crossings[k + 1] - 0.5);
+                for (int px = fromX; px < toX; px++) {
+                    plot(px, py, rgb);
                 }
             }
         }
     }
 
-    // -- texto -----------------------------------------------------------------------------------
+    // -- text ------------------------------------------------------------------------------------
 
     /**
-     * Dibuja texto con la unica fuente de esta VM, con la linea de base en {@code y}.
+     * Draws text with the only font of this VM, with the baseline at {@code y}.
      *
-     * <p>Los glifos son los que el JDK pinta para Dialog 12 sin antialias, leidos de el —ver
-     * {@code FuenteBitmap}—, asi que un texto en las dos VMs coincide pixel por pixel cuando el JDK
-     * usa esa misma configuracion. Toda {@link Font} se dibuja con esta cara: es sustitucion, y las
-     * metricas que reporta {@link #getFontMetrics} son las de esta misma tabla.
+     * <p>The glyphs are the ones the JDK paints for Dialog 12 without antialiasing, read off it
+     * —see {@code BitmapFont}—, so a text in the two VMs matches pixel by pixel when the JDK uses
+     * that same configuration. Every {@link Font} is drawn with this face: it is substitution, and
+     * the metrics {@link #getFontMetrics} reports are those of this same table.
      *
-     * <p>Va por {@link #pintar}, o sea en coordenadas del contexto: respeta la traslacion entera y el
-     * recorte. Bajo una transformacion general el texto no se transforma — se apoya en la traslacion
-     * entera, que es el unico caso en que un mapa de bits tiene sentido.
+     * <p>It goes through {@link #plot}, that is, in the coordinates of the context: it honours the
+     * integer translation and the clip. Under a general transform the text is not transformed — it
+     * rests on the integer translation, which is the only case where a bitmap makes sense.
      */
     public void drawString(String str, int x, int y) {
         if (str == null) {
-            throw new NullPointerException("La cadena no puede ser null");
+            throw new NullPointerException("the string cannot be null");
         }
-        int rgb = rgbActual();
+        int rgb = currentRgb();
         int cursor = x;
-        int arriba = y - FuenteBitmap.ASCENDENTE;
+        int top = y - BitmapFont.ASCENT;
         for (int i = 0; i < str.length(); i++) {
             char c = str.charAt(i);
-            for (int fila = 0; fila < FuenteBitmap.ALTO; fila++) {
-                int bits = FuenteBitmap.fila(c, fila);
+            for (int row = 0; row < BitmapFont.HEIGHT; row++) {
+                int bits = BitmapFont.row(c, row);
                 for (int col = 0; bits != 0; col++) {
                     if ((bits & 1) != 0) {
-                        pintar(cursor + col, arriba + fila, rgb);
+                        plot(cursor + col, top + row, rgb);
                     }
                     bits = bits >>> 1;
                 }
             }
-            cursor = cursor + FuenteBitmap.avance(c);
+            cursor = cursor + BitmapFont.advance(c);
         }
     }
 
     /**
-     * Dibuja el texto del iterador, sin sus atributos.
+     * Draws the text of the iterator, without its attributes.
      *
-     * <p>Los atributos —negrita, subrayado, otra fuente en un tramo— piden mas de una cara, y esta
-     * VM tiene una. Se dibuja el texto plano, que es lo que la sustitucion permite prometer.
+     * <p>The attributes —bold, underline, another font over a stretch— ask for more than one face,
+     * and this VM has one. The plain text is drawn, which is what the substitution allows
+     * promising.
      */
     public void drawString(AttributedCharacterIterator iterator, int x, int y) {
         if (iterator == null) {
-            throw new NullPointerException("El iterador no puede ser null");
+            throw new NullPointerException("the iterator cannot be null");
         }
         StringBuilder sb = new StringBuilder();
         for (char c = iterator.first(); c != AttributedCharacterIterator.DONE; c = iterator.next()) {
@@ -671,15 +678,15 @@ class KajiGraphics extends Graphics2D {
         drawString(sb.toString(), x, y);
     }
 
-    // -- imagenes --------------------------------------------------------------------------------
+    // -- images ----------------------------------------------------------------------------------
 
     /**
-     * Copia una imagen, si es un {@link BufferedImage}.
+     * Copies an image, if it is a {@link BufferedImage}.
      *
-     * <p>Solo esa clase, y el motivo es que es la unica que tiene pixeles que leer: las demas
-     * {@link Image} de AWT los producen de forma asincronica a traves de un productor, que es un
-     * mecanismo aparte. Devolver {@code false} es exactamente lo que el contrato pide para una
-     * imagen que todavia no esta lista.
+     * <p>Only that class, and the reason is that it is the only one with pixels to read: the other
+     * AWT {@link Image}s produce them asynchronously through a producer, which is a mechanism
+     * apart. Returning {@code false} is exactly what the contract asks for an image that is not
+     * ready yet.
      */
     public boolean drawImage(Image img, int x, int y, ImageObserver observer) {
         if (!(img instanceof BufferedImage)) {
@@ -695,18 +702,18 @@ class KajiGraphics extends Graphics2D {
             return false;
         }
         BufferedImage bi = (BufferedImage) img;
-        int origenW = bi.getWidth();
-        int origenH = bi.getHeight();
-        if (origenW <= 0 || origenH <= 0 || width <= 0 || height <= 0) {
+        int srcW = bi.getWidth();
+        int srcH = bi.getHeight();
+        if (srcW <= 0 || srcH <= 0 || width <= 0 || height <= 0) {
             return true;
         }
-        // Escalado por vecino mas cercano: sin interpolacion, que introduciria colores que no
-        // estaban en el origen. Para escalar una imagen de interfaz es lo que corresponde.
+        // Nearest-neighbour scaling: no interpolation, which would introduce colours that were not
+        // in the source. For scaling an interface image it is what corresponds.
         for (int j = 0; j < height; j++) {
-            int sy = j * origenH / height;
+            int sy = j * srcH / height;
             for (int i = 0; i < width; i++) {
-                int sx = i * origenW / width;
-                pintar(x + i, y + j, bi.getRGB(sx, sy));
+                int sx = i * srcW / width;
+                plot(x + i, y + j, bi.getRGB(sx, sy));
             }
         }
         return true;
@@ -723,10 +730,10 @@ class KajiGraphics extends Graphics2D {
     public boolean drawImage(Image img, int x, int y, int width, int height, Color bgcolor,
             ImageObserver observer) {
         if (bgcolor != null) {
-            Color antes = this.color;
+            Color before = this.color;
             this.color = bgcolor;
             fillRect(x, y, width, height);
-            this.color = antes;
+            this.color = before;
         }
         return drawImage(img, x, y, width, height, observer);
     }
@@ -749,10 +756,11 @@ class KajiGraphics extends Graphics2D {
         if (dw == 0 || dh == 0 || sw == 0 || sh == 0) {
             return true;
         }
-        // Los signos de los deltas codifican el espejado: `dx1 > dx2` significa voltear en X. Se
-        // recorre el destino y se mapea al origen, que es lo que evita huecos al agrandar.
-        int pasoX = dw > 0 ? 1 : -1;
-        int pasoY = dh > 0 ? 1 : -1;
+        // The signs of the deltas encode the mirroring: `dx1 > dx2` means flip in X. The
+        // destination is walked and mapped to the source, which is what avoids holes when
+        // enlarging.
+        int stepX = dw > 0 ? 1 : -1;
+        int stepY = dh > 0 ? 1 : -1;
         int nx = Math.abs(dw);
         int ny = Math.abs(dh);
         for (int j = 0; j < ny; j++) {
@@ -762,13 +770,16 @@ class KajiGraphics extends Graphics2D {
                 if (sx < 0 || sy < 0 || sx >= bi.getWidth() || sy >= bi.getHeight()) {
                     continue;
                 }
-                pintar(dx1 + i * pasoX, dy1 + j * pasoY, bi.getRGB(sx, sy));
+                plot(dx1 + i * stepX, dy1 + j * stepY, bi.getRGB(sx, sy));
             }
         }
         return true;
     }
 
-    /** No hay nada que liberar: los pixeles son del {@link BufferedImage}, no de este contexto. */
+    /**
+     * There is nothing to release: the pixels belong to the {@link BufferedImage}, not to this
+     * context.
+     */
     public void dispose() {
     }
 
@@ -776,71 +787,70 @@ class KajiGraphics extends Graphics2D {
     // Graphics2D
     // ============================================================================================
 
-    // -- pintado en coordenadas de dispositivo ---------------------------------------------------
+    // -- painting in device coordinates ----------------------------------------------------------
 
     /**
-     * El recorte, llevado a coordenadas del dispositivo.
+     * The clip, brought into device coordinates.
      *
-     * <p>Bajo una transformacion que no sea axial, un rectangulo de usuario deja de ser un
-     * rectangulo. Se usa su <strong>caja envolvente</strong>, que puede dejar pintado de mas en las
-     * esquinas — un recorte exacto pide una mascara por pixel, que es otro mecanismo. Queda dicho
-     * porque un recorte que promete mas de lo que cumple es peor que uno que avisa.
+     * <p>Under a transform that is not axis-aligned, a user rectangle stops being a rectangle. Its
+     * <strong>bounding box</strong> is used, which can leave things painted at the corners — an
+     * exact clip asks for a per-pixel mask, which is another mechanism. It is said here because a
+     * clip that promises more than it delivers is worse than one that warns.
      */
-    private Rectangle clipDispositivo() {
+    private Rectangle deviceClip() {
         if (this.clip == null) {
-            return new Rectangle(0, 0, this.destino.getWidth(), this.destino.getHeight());
+            return new Rectangle(0, 0, this.dest.getWidth(), this.dest.getHeight());
         }
-        Shape enDispositivo = this.transform.createTransformedShape(this.clip);
-        return enDispositivo.getBounds();
+        Shape inDevice = this.transform.createTransformedShape(this.clip);
+        return inDevice.getBounds();
     }
 
-    /** Pinta un pixel ya en coordenadas del dispositivo, respetando el recorte. */
-    private void pintarDispositivo(int px, int py, Rectangle recorte, int rgb) {
-        if (px < recorte.x || py < recorte.y
-                || px >= recorte.x + recorte.width || py >= recorte.y + recorte.height) {
+    /** Paints a pixel already in device coordinates, honouring the clip. */
+    private void plotDevice(int px, int py, Rectangle clipBox, int rgb) {
+        if (px < clipBox.x || py < clipBox.y
+                || px >= clipBox.x + clipBox.width || py >= clipBox.y + clipBox.height) {
             return;
         }
-        if (px < 0 || py < 0 || px >= this.destino.getWidth() || py >= this.destino.getHeight()) {
+        if (px < 0 || py < 0 || px >= this.dest.getWidth() || py >= this.dest.getHeight()) {
             return;
         }
         if (this.xorColor != null) {
-            int fondo = this.destino.getRGB(px, py);
-            this.destino.setRGB(px, py, (fondo ^ rgb ^ this.xorColor.getRGB()) | 0xFF000000);
+            int bg = this.dest.getRGB(px, py);
+            this.dest.setRGB(px, py, (bg ^ rgb ^ this.xorColor.getRGB()) | 0xFF000000);
             return;
         }
-        this.destino.setRGB(px, py, rgb);
+        this.dest.setRGB(px, py, rgb);
     }
 
     /**
-     * Aplana una figura a poligonos, ya transformados a coordenadas del dispositivo.
+     * Flattens a shape into polygons, already transformed into device coordinates.
      *
-     * <p>La tolerancia de aplanado es media unidad: mas fino no cambia que pixel se pinta, y mas
-     * grueso se ve. Cada {@code SEG_MOVETO} abre un contorno nuevo, que es como una figura con
-     * agujeros —una letra "o"— llega hasta el relleno con la informacion para resolverlos por la
-     * regla del par-impar.
+     * <p>The flattening tolerance is half a unit: finer does not change which pixel is painted, and
+     * coarser shows. Each {@code SEG_MOVETO} opens a new contour, which is how a shape with holes
+     * —a letter "o"— reaches the fill with the information to resolve them by the even-odd rule.
      */
-    private List<double[]> aplanar(Shape figura) {
-        List<double[]> contornos = new ArrayList<double[]>();
-        PathIterator it = figura.getPathIterator(this.transform, 0.5);
+    private List<double[]> flatten(Shape shape) {
+        List<double[]> contours = new ArrayList<double[]>();
+        PathIterator it = shape.getPathIterator(this.transform, 0.5);
         double[] seg = new double[6];
         List<Double> xs = new ArrayList<Double>();
         List<Double> ys = new ArrayList<Double>();
         while (!it.isDone()) {
-            int tipo = it.currentSegment(seg);
-            if (tipo == PathIterator.SEG_MOVETO) {
+            int kind = it.currentSegment(seg);
+            if (kind == PathIterator.SEG_MOVETO) {
                 if (xs.size() >= 2) {
-                    contornos.add(aArreglo(xs, ys));
+                    contours.add(toContourArray(xs, ys));
                 }
                 xs = new ArrayList<Double>();
                 ys = new ArrayList<Double>();
                 xs.add(Double.valueOf(seg[0]));
                 ys.add(Double.valueOf(seg[1]));
-            } else if (tipo == PathIterator.SEG_LINETO) {
+            } else if (kind == PathIterator.SEG_LINETO) {
                 xs.add(Double.valueOf(seg[0]));
                 ys.add(Double.valueOf(seg[1]));
-            } else if (tipo == PathIterator.SEG_CLOSE) {
+            } else if (kind == PathIterator.SEG_CLOSE) {
                 if (xs.size() >= 2) {
-                    contornos.add(aArreglo(xs, ys));
+                    contours.add(toContourArray(xs, ys));
                 }
                 xs = new ArrayList<Double>();
                 ys = new ArrayList<Double>();
@@ -848,13 +858,13 @@ class KajiGraphics extends Graphics2D {
             it.next();
         }
         if (xs.size() >= 2) {
-            contornos.add(aArreglo(xs, ys));
+            contours.add(toContourArray(xs, ys));
         }
-        return contornos;
+        return contours;
     }
 
-    /** Un contorno como {@code [x0, y0, x1, y1, ...]}. */
-    private double[] aArreglo(List<Double> xs, List<Double> ys) {
+    /** A contour as {@code [x0, y0, x1, y1, ...]}. */
+    private double[] toContourArray(List<Double> xs, List<Double> ys) {
         double[] out = new double[xs.size() * 2];
         for (int i = 0; i < xs.size(); i++) {
             out[i + i] = xs.get(i).doubleValue();
@@ -864,44 +874,43 @@ class KajiGraphics extends Graphics2D {
     }
 
     /**
-     * Rellena la figura, con la regla del par-impar sobre <strong>todos</strong> sus contornos a la
-     * vez.
+     * Fills the shape, with the even-odd rule over <strong>all</strong> of its contours at once.
      *
-     * <p>Que sea a la vez y no contorno por contorno es lo que hace que los agujeros sean agujeros:
-     * rellenar cada uno por separado pintaria el interior de la "o" dos veces y quedaria maciza.
+     * <p>That it is at once and not contour by contour is what makes the holes be holes: filling
+     * each one separately would paint the inside of the "o" twice and it would come out solid.
      */
     public void fill(Shape s) {
         if (s == null) {
             return;
         }
-        List<double[]> contornos = aplanar(s);
-        if (contornos.isEmpty()) {
+        List<double[]> contours = flatten(s);
+        if (contours.isEmpty()) {
             return;
         }
-        Rectangle recorte = clipDispositivo();
-        int rgb = rgbActual();
+        Rectangle clipBox = deviceClip();
+        int rgb = currentRgb();
         double minY = Double.MAX_VALUE;
         double maxY = -Double.MAX_VALUE;
-        int aristas = 0;
-        for (int c = 0; c < contornos.size(); c++) {
-            double[] p = contornos.get(c);
-            aristas = aristas + p.length / 2;
+        int edges = 0;
+        for (int c = 0; c < contours.size(); c++) {
+            double[] p = contours.get(c);
+            edges = edges + p.length / 2;
             for (int i = 1; i < p.length; i = i + 2) {
                 minY = Math.min(minY, p[i]);
                 maxY = Math.max(maxY, p[i]);
             }
         }
-        double[] cruces = new double[aristas + 4];
-        int desdeY = (int) Math.floor(minY);
-        int hastaY = (int) Math.ceil(maxY);
-        for (int py = desdeY; py <= hastaY; py++) {
+        double[] crossings = new double[edges + 4];
+        int fromY = (int) Math.floor(minY);
+        int toY = (int) Math.ceil(maxY);
+        for (int py = fromY; py <= toY; py++) {
             double yc = py + 0.5;
             int n = 0;
-            for (int c = 0; c < contornos.size(); c++) {
-                double[] p = contornos.get(c);
-                int puntos = p.length / 2;
-                for (int i = 0; i < puntos; i++) {
-                    int j = (i + 1) % puntos;
+            for (int c = 0; c < contours.size(); c++) {
+                double[] p = contours.get(c);
+                int points = p.length / 2;
+                for (int i = 0; i < points; i++) {
+                    int j = (i + 1) % points;
                     double y1 = p[i + i + 1];
                     double y2 = p[j + j + 1];
                     if (!((y1 <= yc && y2 > yc) || (y2 <= yc && y1 > yc))) {
@@ -909,116 +918,116 @@ class KajiGraphics extends Graphics2D {
                     }
                     double x1 = p[i + i];
                     double x2 = p[j + j];
-                    cruces[n] = x1 + (yc - y1) * (x2 - x1) / (y2 - y1);
+                    crossings[n] = x1 + (yc - y1) * (x2 - x1) / (y2 - y1);
                     n = n + 1;
                 }
             }
             for (int a = 0; a < n - 1; a++) {
                 for (int b = a + 1; b < n; b++) {
-                    if (cruces[b] < cruces[a]) {
-                        double t = cruces[a];
-                        cruces[a] = cruces[b];
-                        cruces[b] = t;
+                    if (crossings[b] < crossings[a]) {
+                        double t = crossings[a];
+                        crossings[a] = crossings[b];
+                        crossings[b] = t;
                     }
                 }
             }
             for (int k = 0; k + 1 < n; k = k + 2) {
-                int x1 = (int) Math.ceil(cruces[k] - 0.5);
-                int x2 = (int) Math.ceil(cruces[k + 1] - 0.5);
+                int x1 = (int) Math.ceil(crossings[k] - 0.5);
+                int x2 = (int) Math.ceil(crossings[k + 1] - 0.5);
                 for (int px = x1; px < x2; px++) {
-                    pintarDispositivo(px, py, recorte, rgb);
+                    plotDevice(px, py, clipBox, rgb);
                 }
             }
         }
     }
 
     /**
-     * Dibuja el contorno de la figura, con el grosor del {@link Stroke} actual.
+     * Draws the outline of the shape, with the thickness of the current {@link Stroke}.
      *
-     * <p>El grosor se consigue dibujando lineas paralelas desplazadas, no engordando cada pixel: lo
-     * segundo daria un trazo mas ancho en las diagonales que en las rectas. Los guiones y las formas
-     * de punta y union de un {@link BasicStroke} no se aplican — ver la nota de la clase sobre lo que
-     * este tier no hace.
+     * <p>The thickness is achieved by drawing parallel shifted lines, not by fattening each pixel:
+     * the latter would give a wider stroke on the diagonals than on the straights. The dashes and
+     * the cap and join shapes of a {@link BasicStroke} are not applied — see the note of the class
+     * about what this tier does not do.
      */
     public void draw(Shape s) {
         if (s == null) {
             return;
         }
-        List<double[]> contornos = aplanar(s);
-        Rectangle recorte = clipDispositivo();
-        int rgb = rgbActual();
-        int grosor = 1;
+        List<double[]> contours = flatten(s);
+        Rectangle clipBox = deviceClip();
+        int rgb = currentRgb();
+        int thickness = 1;
         if (this.stroke instanceof BasicStroke) {
-            grosor = Math.max(1, (int) Math.round(((BasicStroke) this.stroke).getLineWidth()));
+            thickness = Math.max(1, (int) Math.round(((BasicStroke) this.stroke).getLineWidth()));
         }
-        for (int c = 0; c < contornos.size(); c++) {
-            double[] p = contornos.get(c);
-            int puntos = p.length / 2;
-            for (int i = 0; i < puntos; i++) {
-                int j = (i + 1) % puntos;
-                if (grosor <= 1) {
-                    // Una coordenada que cae justo en el borde entre dos pixeles pertenece al de la
-                    // izquierda: el pixel `n` cubre el intervalo `[n, n+1)`. Redondear al mas cercano
-                    // mandaria un `24.5` al pixel 25, que es medio pixel a la derecha de donde el
-                    // trazo realmente esta.
-                    lineaDispositivo((int) Math.floor(p[i + i]), (int) Math.floor(p[i + i + 1]),
+        for (int c = 0; c < contours.size(); c++) {
+            double[] p = contours.get(c);
+            int points = p.length / 2;
+            for (int i = 0; i < points; i++) {
+                int j = (i + 1) % points;
+                if (thickness <= 1) {
+                    // A coordinate that falls right on the border between two pixels belongs to the
+                    // left one: pixel `n` covers the interval `[n, n+1)`. Rounding to the nearest
+                    // would send a `24.5` to pixel 25, which is half a pixel to the right of where
+                    // the stroke really is.
+                    deviceLine((int) Math.floor(p[i + i]), (int) Math.floor(p[i + i + 1]),
                             (int) Math.floor(p[j + j]), (int) Math.floor(p[j + j + 1]),
-                            recorte, rgb);
+                            clipBox, rgb);
                 } else {
-                    trazoGrueso(p[i + i], p[i + i + 1], p[j + j], p[j + j + 1], grosor,
-                            recorte, rgb);
-                    // La union entre dos segmentos: sin esto, cada cuadrilatero termina en angulo
-                    // recto contra el siguiente y la esquina queda con una muesca. Un parche
-                    // cuadrado del ancho del trazo, centrado en el vertice, es exactamente el
-                    // `JOIN_MITER` cuando el angulo es recto —el caso de todo rectangulo— y una
-                    // aproximacion razonable en los demas. Las tres formas de union que distingue
-                    // `BasicStroke` no se distinguen aca; ver la nota de la clase.
-                    unionEnVertice(p[j + j], p[j + j + 1], grosor, recorte, rgb);
+                    thickSegment(p[i + i], p[i + i + 1], p[j + j], p[j + j + 1], thickness,
+                            clipBox, rgb);
+                    // The join between two segments: without this, each quadrilateral ends at a
+                    // right angle against the next one and the corner is left with a notch. A
+                    // square patch of the width of the stroke, centred on the vertex, is exactly
+                    // `JOIN_MITER` when the angle is right —the case of every rectangle— and a
+                    // reasonable approximation in the others. The three join shapes `BasicStroke`
+                    // distinguishes are not distinguished here; see the note of the class.
+                    joinAtVertex(p[j + j], p[j + j + 1], thickness, clipBox, rgb);
                 }
             }
         }
     }
 
     /**
-     * Un segmento con grosor, como un cuadrilatero relleno.
+     * A segment with thickness, as a filled quadrilateral.
      *
-     * <p>El desplazamiento va <strong>perpendicular al segmento</strong>, no en los dos ejes: correr
-     * la linea en x y en y por separado engorda mas las diagonales que las rectas, que es
-     * exactamente lo que un trazo no debe hacer.
+     * <p>The shift goes <strong>perpendicular to the segment</strong>, not on both axes: shifting
+     * the line in x and in y separately fattens the diagonals more than the straights, which is
+     * exactly what a stroke must not do.
      */
-    private void trazoGrueso(double x1, double y1, double x2, double y2, int grosor,
-            Rectangle recorte, int rgb) {
+    private void thickSegment(double x1, double y1, double x2, double y2, int thickness,
+            Rectangle clipBox, int rgb) {
         double dx = x2 - x1;
         double dy = y2 - y1;
-        double largo = Math.sqrt(dx * dx + dy * dy);
-        if (largo == 0.0) {
+        double len = Math.sqrt(dx * dx + dy * dy);
+        if (len == 0.0) {
             return;
         }
-        double mitad = grosor / 2.0;
-        double nx = -dy / largo * mitad;
-        double ny = dx / largo * mitad;
+        double half = thickness / 2.0;
+        double nx = -dy / len * half;
+        double ny = dx / len * half;
         double[] xs = { x1 + nx, x2 + nx, x2 - nx, x1 - nx };
         double[] ys = { y1 + ny, y2 + ny, y2 - ny, y1 - ny };
-        rellenarCuadrilatero(xs, ys, recorte, rgb);
+        fillQuad(xs, ys, clipBox, rgb);
     }
 
-    /** El parche cuadrado que cierra la esquina entre dos segmentos gruesos. */
-    private void unionEnVertice(double x, double y, int grosor, Rectangle recorte, int rgb) {
-        double mitad = grosor / 2.0;
-        double[] xs = { x - mitad, x + mitad, x + mitad, x - mitad };
-        double[] ys = { y - mitad, y - mitad, y + mitad, y + mitad };
-        rellenarCuadrilatero(xs, ys, recorte, rgb);
+    /** The square patch that closes the corner between two thick segments. */
+    private void joinAtVertex(double x, double y, int thickness, Rectangle clipBox, int rgb) {
+        double half = thickness / 2.0;
+        double[] xs = { x - half, x + half, x + half, x - half };
+        double[] ys = { y - half, y - half, y + half, y + half };
+        fillQuad(xs, ys, clipBox, rgb);
     }
 
-    /** Rellena cuatro puntos en coordenadas de dispositivo, con la misma regla que {@link #fill}. */
-    private void rellenarCuadrilatero(double[] xs, double[] ys, Rectangle recorte, int rgb) {
+    /** Fills four points in device coordinates, with the same rule as {@link #fill}. */
+    private void fillQuad(double[] xs, double[] ys, Rectangle clipBox, int rgb) {
         double minY = ys[0];
         double maxY = ys[0];
         for (int i = 1; i < 4; i++) {
             minY = Math.min(minY, ys[i]);
             maxY = Math.max(maxY, ys[i]);
         }
-        double[] cruces = new double[4];
+        double[] crossings = new double[4];
         for (int py = (int) Math.floor(minY); py <= (int) Math.ceil(maxY); py++) {
             double yc = py + 0.5;
             int n = 0;
@@ -1027,30 +1036,30 @@ class KajiGraphics extends Graphics2D {
                 if (!((ys[i] <= yc && ys[j] > yc) || (ys[j] <= yc && ys[i] > yc))) {
                     continue;
                 }
-                cruces[n] = xs[i] + (yc - ys[i]) * (xs[j] - xs[i]) / (ys[j] - ys[i]);
+                crossings[n] = xs[i] + (yc - ys[i]) * (xs[j] - xs[i]) / (ys[j] - ys[i]);
                 n = n + 1;
             }
             for (int a = 0; a < n - 1; a++) {
                 for (int b = a + 1; b < n; b++) {
-                    if (cruces[b] < cruces[a]) {
-                        double t = cruces[a];
-                        cruces[a] = cruces[b];
-                        cruces[b] = t;
+                    if (crossings[b] < crossings[a]) {
+                        double t = crossings[a];
+                        crossings[a] = crossings[b];
+                        crossings[b] = t;
                     }
                 }
             }
             for (int k = 0; k + 1 < n; k = k + 2) {
-                int d1 = (int) Math.ceil(cruces[k] - 0.5);
-                int d2 = (int) Math.ceil(cruces[k + 1] - 0.5);
+                int d1 = (int) Math.ceil(crossings[k] - 0.5);
+                int d2 = (int) Math.ceil(crossings[k + 1] - 0.5);
                 for (int px = d1; px < d2; px++) {
-                    pintarDispositivo(px, py, recorte, rgb);
+                    plotDevice(px, py, clipBox, rgb);
                 }
             }
         }
     }
 
-    /** Bresenham en coordenadas del dispositivo. */
-    private void lineaDispositivo(int x1, int y1, int x2, int y2, Rectangle recorte, int rgb) {
+    /** Bresenham in device coordinates. */
+    private void deviceLine(int x1, int y1, int x2, int y2, Rectangle clipBox, int rgb) {
         int dx = Math.abs(x2 - x1);
         int dy = Math.abs(y2 - y1);
         int sx = x1 < x2 ? 1 : -1;
@@ -1059,7 +1068,7 @@ class KajiGraphics extends Graphics2D {
         int x = x1;
         int y = y1;
         while (true) {
-            pintarDispositivo(x, y, recorte, rgb);
+            plotDevice(x, y, clipBox, rgb);
             if (x == x2 && y == y2) {
                 return;
             }
@@ -1075,20 +1084,20 @@ class KajiGraphics extends Graphics2D {
         }
     }
 
-    /** Si la figura toca el rectangulo, en coordenadas del dispositivo. */
+    /** Whether the shape touches the rectangle, in device coordinates. */
     public boolean hit(Rectangle rect, Shape s, boolean onStroke) {
         if (rect == null || s == null) {
             return false;
         }
-        Shape enDispositivo = this.transform.createTransformedShape(s);
-        return enDispositivo.intersects(rect.x, rect.y, rect.width, rect.height);
+        Shape inDevice = this.transform.createTransformedShape(s);
+        return inDevice.intersects(rect.x, rect.y, rect.width, rect.height);
     }
 
-    // -- la transformacion -----------------------------------------------------------------------
+    // -- the transform ---------------------------------------------------------------------------
 
     public void translate(double tx, double ty) {
         this.transform.translate(tx, ty);
-        // El atajo entero deja de valer en cuanto la traslacion tiene parte fraccionaria.
+        // The integer shortcut stops holding as soon as the translation has a fractional part.
         if (tx == Math.rint(tx) && ty == Math.rint(ty)) {
             this.transX = this.transX + (int) tx;
             this.transY = this.transY + (int) ty;
@@ -1116,38 +1125,38 @@ class KajiGraphics extends Graphics2D {
     }
 
     /**
-     * Reemplaza la transformacion entera.
+     * Replaces the whole transform.
      *
-     * <p>Distinto de {@link #transform(AffineTransform)}, que compone. Reemplazar tira la traslacion
-     * que el llamador pudiera haber puesto, y por eso el JDK advierte que casi nunca es lo que se
-     * quiere: lo correcto es guardar la vieja, componer, y restaurar.
+     * <p>Different from {@link #transform(AffineTransform)}, which composes. Replacing throws away
+     * the translation the caller may have set, and that is why the JDK warns that it is almost
+     * never what is wanted: the right thing is to save the old one, compose, and restore.
      */
     public void setTransform(AffineTransform Tx) {
         this.transform = Tx == null ? new AffineTransform() : new AffineTransform(Tx);
         this.transX = 0;
         this.transY = 0;
-        if (esTrasladoEntero()) {
+        if (isIntegerTranslate()) {
             this.transX = (int) this.transform.getTranslateX();
             this.transY = (int) this.transform.getTranslateY();
         }
     }
 
-    /** Una copia: cambiarla no cambia este contexto. */
+    /** A copy: changing it does not change this context. */
     public AffineTransform getTransform() {
         return new AffineTransform(this.transform);
     }
 
-    // -- pintura, trazo, composicion -------------------------------------------------------------
+    // -- paint, stroke, composite ----------------------------------------------------------------
 
     /**
-     * Fija la pintura.
+     * Sets the paint.
      *
-     * <p>Si es un {@link Color}, tambien cambia el color — son la misma perilla, y asi lo pide el
-     * contrato. <strong>Cualquier otra pintura se guarda y no se usa</strong>: un degrade o una
-     * textura se evaluan por pixel a traves de un {@code PaintContext}, que es un mecanismo que este
-     * tier no tiene. Se dibuja con el ultimo color, que es lo que el JDK hace cuando no puede
-     * rasterizar la pintura pedida, y {@link #getPaint} devuelve lo que se fijo — no miente sobre lo
-     * que se guardo, aunque no lo aplique.
+     * <p>If it is a {@link Color}, it also changes the colour — they are the same knob, and that is
+     * what the contract asks. <strong>Any other paint is stored and not used</strong>: a gradient
+     * or a texture are evaluated per pixel through a {@code PaintContext}, which is a mechanism
+     * this tier does not have. Drawing goes on with the last colour, which is what the JDK does
+     * when it cannot rasterise the paint asked for, and {@link #getPaint} returns what was set — it
+     * does not lie about what was stored, even though it does not apply it.
      */
     public void setPaint(Paint paint) {
         if (paint == null) {
@@ -1163,7 +1172,7 @@ class KajiGraphics extends Graphics2D {
         return this.paint;
     }
 
-    /** Tambien fija la pintura: son la misma perilla. */
+    /** It also sets the paint: they are the same knob. */
     public void setColor(Color c) {
         if (c != null) {
             this.color = c;
@@ -1182,11 +1191,11 @@ class KajiGraphics extends Graphics2D {
     }
 
     /**
-     * Fija la composicion.
+     * Sets the composite.
      *
-     * <p>Se guarda y se reporta. Aplicarla pide mezclar por pixel con el destino, y este tier
-     * escribe opaco: un {@link AlphaComposite} con alfa parcial se guarda pero no aclara nada. Es la
-     * misma frontera que la pintura no uniforme.
+     * <p>It is stored and reported. Applying it asks for blending per pixel with the destination,
+     * and this tier writes opaque: an {@link AlphaComposite} with partial alpha is stored but
+     * lightens nothing. It is the same boundary as the non-uniform paint.
      */
     public void setComposite(Composite comp) {
         if (comp != null) {
@@ -1206,15 +1215,15 @@ class KajiGraphics extends Graphics2D {
         return this.background;
     }
 
-    // -- sugerencias de renderizado --------------------------------------------------------------
+    // -- rendering hints -------------------------------------------------------------------------
 
     /**
-     * Guarda una sugerencia.
+     * Stores a hint.
      *
-     * <p>Se guardan todas y no se aplica ninguna, y el nombre las autoriza: una <em>sugerencia</em>
-     * de antialias o de calidad de interpolacion es exactamente eso, y el contrato permite
-     * ignorarlas. Que {@link #getRenderingHint} devuelva lo que se fijo es lo que importa, porque hay
-     * codigo que las guarda y las restaura.
+     * <p>They are all stored and none is applied, and the name authorises it: a <em>hint</em> about
+     * antialiasing or interpolation quality is exactly that, and the contract allows ignoring them.
+     * That {@link #getRenderingHint} returns what was set is what matters, because there is code
+     * that saves them and restores them.
      */
     public void setRenderingHint(RenderingHints.Key hintKey, Object hintValue) {
         this.hints.put(hintKey, hintValue);
@@ -1224,13 +1233,13 @@ class KajiGraphics extends Graphics2D {
         return this.hints.get(hintKey);
     }
 
-    /** Reemplaza todas las sugerencias. */
+    /** Replaces every hint. */
     public void setRenderingHints(Map<?, ?> hints) {
         this.hints.clear();
         addRenderingHints(hints);
     }
 
-    /** Agrega sugerencias sin borrar las que hay. */
+    /** Adds hints without erasing the ones there are. */
     public void addRenderingHints(Map<?, ?> hints) {
         if (hints == null) {
             return;
@@ -1238,18 +1247,18 @@ class KajiGraphics extends Graphics2D {
         this.hints.putAll(hints);
     }
 
-    /** Una copia: cambiarla no cambia este contexto. */
+    /** A copy: changing it does not change this context. */
     public RenderingHints getRenderingHints() {
         return (RenderingHints) this.hints.clone();
     }
 
-    // -- recorte por figura ----------------------------------------------------------------------
+    // -- clipping by shape -----------------------------------------------------------------------
 
     /**
-     * Interseca el recorte con una figura.
+     * Intersects the clip with a shape.
      *
-     * <p>Con su caja envolvente, por lo mismo que {@link #setClip(Shape)}: este tier lleva un
-     * rectangulo, no una mascara.
+     * <p>With its bounding box, for the same reason as {@link #setClip(Shape)}: this tier carries a
+     * rectangle, not a mask.
      */
     public void clip(Shape s) {
         if (s == null) {
@@ -1259,9 +1268,9 @@ class KajiGraphics extends Graphics2D {
         clipRect(r.x, r.y, r.width, r.height);
     }
 
-    // -- texto -----------------------------------------------------------------------------------
+    // -- text ------------------------------------------------------------------------------------
 
-    /** Redondeando la posicion: sin metricas fraccionarias, un mapa de bits va a pixel entero. */
+    /** Rounding the position: with no fractional metrics, a bitmap goes to a whole pixel. */
     public void drawString(String str, float x, float y) {
         drawString(str, Math.round(x), Math.round(y));
     }
@@ -1270,30 +1279,31 @@ class KajiGraphics extends Graphics2D {
         drawString(iterator, Math.round(x), Math.round(y));
     }
 
-    /** @throws UnsupportedOperationException siempre, por lo mismo */
+    /** @throws UnsupportedOperationException always, for the same reason */
     public void drawGlyphVector(GlyphVector g, float x, float y) {
         throw new UnsupportedOperationException(
-                "esta VM no rasteriza glifos: falta el subsistema de fuentes");
+                "this VM does not rasterise glyphs: the font subsystem is missing");
     }
 
     /**
-     * El contexto de medicion de texto.
+     * The context text is measured in.
      *
-     * <p>Con la transformacion actual, sin antialias y sin metricas fraccionarias — que es lo
-     * coherente con un rasterizador que trabaja en pixeles enteros.
+     * <p>With the current transform, without antialiasing and without fractional metrics — which is
+     * what is coherent with a rasteriser that works in whole pixels.
      */
     public FontRenderContext getFontRenderContext() {
         return new FontRenderContext(this.transform, false, false);
     }
 
-    // -- imagenes con transformacion -------------------------------------------------------------
+    // -- images with a transform -----------------------------------------------------------------
 
     /**
-     * Dibuja una imagen aplicando {@code xform} ademas de la transformacion del contexto.
+     * Draws an image applying {@code xform} on top of the context's transform.
      *
-     * <p>Recorre el <strong>destino</strong> y mapea cada pixel al origen con la transformacion
-     * inversa. Al reves —recorrer el origen y mapear al destino— dejaria huecos en cuanto la imagen
-     * se agranda, porque dos pixeles vecinos del origen caerian separados.
+     * <p>It walks the <strong>destination</strong> and maps each pixel to the source with the
+     * inverse transform. The other way round —walking the source and mapping to the destination—
+     * would leave holes as soon as the image is enlarged, because two neighbouring source pixels
+     * would fall apart.
      */
     public boolean drawImage(Image img, AffineTransform xform, ImageObserver obs) {
         if (!(img instanceof BufferedImage)) {
@@ -1304,56 +1314,56 @@ class KajiGraphics extends Graphics2D {
         if (xform != null) {
             total.concatenate(xform);
         }
-        AffineTransform inversa;
+        AffineTransform inverse;
         try {
-            inversa = total.createInverse();
+            inverse = total.createInverse();
         } catch (java.awt.geom.NoninvertibleTransformException e) {
-            // Una transformacion singular aplasta la imagen a una linea o a un punto: no hay nada
-            // que dibujar, y no es un error.
+            // A singular transform squashes the image into a line or a point: there is nothing to
+            // draw, and it is not an error.
             return true;
         }
-        Shape caja = total.createTransformedShape(
+        Shape box = total.createTransformedShape(
                 new Rectangle(0, 0, bi.getWidth(), bi.getHeight()));
-        Rectangle destinoR = caja.getBounds();
-        Rectangle recorte = clipDispositivo();
-        double[] punto = new double[2];
-        for (int py = destinoR.y; py < destinoR.y + destinoR.height; py++) {
-            for (int px = destinoR.x; px < destinoR.x + destinoR.width; px++) {
-                punto[0] = px + 0.5;
-                punto[1] = py + 0.5;
-                inversa.transform(punto, 0, punto, 0, 1);
-                int sx = (int) Math.floor(punto[0]);
-                int sy = (int) Math.floor(punto[1]);
+        Rectangle destRect = box.getBounds();
+        Rectangle clipBox = deviceClip();
+        double[] pt = new double[2];
+        for (int py = destRect.y; py < destRect.y + destRect.height; py++) {
+            for (int px = destRect.x; px < destRect.x + destRect.width; px++) {
+                pt[0] = px + 0.5;
+                pt[1] = py + 0.5;
+                inverse.transform(pt, 0, pt, 0, 1);
+                int sx = (int) Math.floor(pt[0]);
+                int sy = (int) Math.floor(pt[1]);
                 if (sx < 0 || sy < 0 || sx >= bi.getWidth() || sy >= bi.getHeight()) {
                     continue;
                 }
-                pintarDispositivo(px, py, recorte, bi.getRGB(sx, sy));
+                plotDevice(px, py, clipBox, bi.getRGB(sx, sy));
             }
         }
         return true;
     }
 
     /**
-     * Dibuja una imagen filtrada.
+     * Draws a filtered image.
      *
-     * <p>El filtro se aplica con {@code op.filter}, que es de {@code java.awt.image} y no de este
-     * rasterizador; lo que hace esta clase es dibujar el resultado.
+     * <p>The filter is applied with {@code op.filter}, which belongs to {@code java.awt.image} and
+     * not to this rasteriser; what this class does is draw the result.
      */
     public void drawImage(BufferedImage img, BufferedImageOp op, int x, int y) {
         if (img == null) {
             return;
         }
-        BufferedImage aDibujar = img;
+        BufferedImage toDraw = img;
         if (op != null) {
-            aDibujar = op.filter(img, null);
+            toDraw = op.filter(img, null);
         }
-        drawImage(aDibujar, x, y, null);
+        drawImage(toDraw, x, y, null);
     }
 
     /**
-     * @throws UnsupportedOperationException siempre: una {@link RenderedImage} entrega sus pixeles
-     *     por mosaicos a traves de un {@code Raster}, y no toda es un {@link BufferedImage}. Este
-     *     tier solo sabe leer de las que lo son
+     * @throws UnsupportedOperationException always: a {@link RenderedImage} delivers its pixels by
+     *     tiles through a {@code Raster}, and not every one is a {@link BufferedImage}. This tier
+     *     only knows how to read from the ones that are
      */
     public void drawRenderedImage(RenderedImage img, AffineTransform xform) {
         if (img instanceof BufferedImage) {
@@ -1361,24 +1371,23 @@ class KajiGraphics extends Graphics2D {
             return;
         }
         throw new UnsupportedOperationException(
-                "solo se sabe dibujar una RenderedImage que ademas sea BufferedImage");
+                "only a RenderedImage that is also a BufferedImage can be drawn");
     }
 
     /**
-     * @throws UnsupportedOperationException siempre: una {@link RenderableImage} se
-     *     <em>produce</em> a la resolucion que se le pida, y ese productor es un subsistema que no
-     *     esta
+     * @throws UnsupportedOperationException always: a {@link RenderableImage} is <em>produced</em>
+     *     at whatever resolution is asked for, and that producer is a subsystem that is not there
      */
     public void drawRenderableImage(RenderableImage img, AffineTransform xform) {
         throw new UnsupportedOperationException(
-                "no hay productor de RenderableImage en esta VM");
+                "there is no RenderableImage producer in this VM");
     }
 
     /**
-     * La configuracion del dispositivo.
+     * The configuration of the device.
      *
-     * @return {@code null}: no hay pantalla ni configuracion grafica detras de una imagen en
-     *     memoria. Ver {@code HeadlessToolkit}
+     * @return {@code null}: there is no screen and no graphics configuration behind an image in
+     *     memory. See {@code HeadlessToolkit}
      */
     public GraphicsConfiguration getDeviceConfiguration() {
         return null;

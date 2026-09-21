@@ -5,10 +5,10 @@ import javax.print.attribute.IntegerSyntax;
 import javax.print.attribute.PrintJobAttribute;
 
 /**
- * Cuantos K-octetos del trabajo ya se procesaron.
+ * How many K-octets of the job were already processed.
  *
- * <p>El avance contra {@link JobKOctets}. Con varias copias puede pasarse del total declarado,
- * porque aca si se cuenta cada pasada.
+ * <p>The progress against {@link JobKOctets}. With several copies it may go past the declared
+ * total, because here each pass does count.
  */
 public final class JobKOctetsProcessed extends IntegerSyntax implements PrintJobAttribute {
 
@@ -18,8 +18,10 @@ public final class JobKOctetsProcessed extends IntegerSyntax implements PrintJob
         super(value, 0, Integer.MAX_VALUE);
     }
 
-    /** El {@code instanceof} es lo que impide que un JobKOctetsProcessed de igual a otro atributo
-     * entero con el mismo numero. */
+    /**
+     * The {@code instanceof} is what keeps a JobKOctetsProcessed from being equal to another
+     * integer attribute with the same number.
+     */
     public boolean equals(Object object) {
         return super.equals(object) && object instanceof JobKOctetsProcessed;
     }

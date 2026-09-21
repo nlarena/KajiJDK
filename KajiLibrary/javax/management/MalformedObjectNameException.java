@@ -1,6 +1,6 @@
 package javax.management;
 
-/** La cadena no respeta la gramatica de ObjectName. */
+/** The string does not follow the ObjectName grammar. */
 public class MalformedObjectNameException extends OperationsException {
 
     private static final long serialVersionUID = -572689714442915824L;

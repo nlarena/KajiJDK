@@ -1,10 +1,11 @@
 package com.sun.jdi;
 
 /**
- * El metodo que se invoco del otro lado lanzo una excepcion.
+ * The method that was invoked on the other side threw an exception.
  *
- * <p>{@link #exception} devuelve la excepcion <strong>de la otra VM</strong>, como
- * {@link ObjectReference}. No se puede lanzar aca ni convertir: es un objeto de otro proceso.
+ * <p>{@link #exception} returns the exception <strong>of the other VM</strong>, as an
+ * {@link ObjectReference}. It cannot be thrown here nor converted: it is an object of another
+ * process.
  *
  * @since 1.3
  */
@@ -13,12 +14,11 @@ public class InvocationException extends Exception {
     private final ObjectReference exception;
 
     /**
-     * Con la excepcion que lanzo el metodo del otro lado.
+     * With the exception the method on the other side threw.
      *
-     * <p>El mensaje es fijo, como en el JDK: el detalle esta en la excepcion misma, que vive en la
-     * otra VM y no se puede formatear desde aca.
+     * <p>The message is fixed, as in the JDK: the detail is in the exception itself, which lives
+     * in the other VM and cannot be formatted from here.
      *
-     * @param exception la excepcion de la maquina depurada
      */
     public InvocationException(ObjectReference exception) {
         super("Exception occurred in target VM");
@@ -26,9 +26,9 @@ public class InvocationException extends Exception {
     }
 
     /**
-     * La excepcion que lanzo el metodo, como objeto de la otra VM.
+     * The exception the method threw, as an object of the other VM.
      *
-     * @return la excepcion
+     * @return the exception
      */
     public ObjectReference exception() {
         return exception;

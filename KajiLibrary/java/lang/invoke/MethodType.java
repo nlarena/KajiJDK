@@ -30,8 +30,8 @@ import java.util.Optional;
 // only `OfField` this library hands to a method type). This became possible once `java.lang.Class`
 // began implementing `TypeDescriptor.OfField` and `TypeDescriptor` was modelled raw — both true now.
 //
-// `Constable` va por import y nombre simple: una referencia CALIFICADA a un tipo del classpath no
-// resuelve (finding #106a).
+// `Constable` goes through an import and a simple name: a QUALIFIED reference to a classpath type
+// does not resolve (finding #106a).
 public final class MethodType implements Constable, TypeDescriptor.OfMethod {
 
     private final Class<?> rtype;
@@ -348,24 +348,47 @@ public final class MethodType implements Constable, TypeDescriptor.OfMethod {
     }
 
     private static Class<?> convertOne(Class<?> type, boolean toWrapper) {
-        Class<?> result = type;
         if (toWrapper) {
-            result = wrapperFor(type.getName(), type);
+            return wrapperFor(type.getName(), type);
         }
-        // The `unwrap` direction stays the identity, and the reason is worth stating precisely
-        // because it is NOT the same reason as before. It is not that a name cannot be turned
-        // back into a `Class` — every wrapper has a class literal, so `wrap` above works. It is
-        // that a PRIMITIVE `Class` object has no source spelling our compiler accepts: `int.class`
-        // is rejected at the parser ("se esperaba una expresion, se encontro Int"), and there is
-        // no other expression whose value is the mirror for `int`. `Integer.TYPE` would be the
-        // classic escape hatch, and it is declared as `Integer.TYPE = int.class` — the same
-        // literal, one file away. So `unwrap` returns what it was given rather than lying about
-        // it, and the two directions are asymmetric until that literal parses.
-        return result;
+        return primitiveFor(type.getName(), type);
     }
 
-    // Primitive keyword to its box. Kept as a name switch rather than a map because a `Class`
-    // cannot be a key here — there is no primitive `Class` to key on, which is the whole problem.
+    // Box to its primitive. The mirrors come from the wrappers' `TYPE` fields, which is where a
+    // primitive `Class` is obtainable.
+    //
+    // `unwrap` used to be the identity, on the grounds that a primitive `Class` had no spelling
+    // this compiler accepted -- `int.class` was said to be rejected at the parser. It is not: both
+    // `int.class` and `Object[].class` compile now, and `TYPE` was always the classic way in any
+    // case. The asymmetry the old note described is gone, so the two directions are real inverses
+    // again.
+    private static Class<?> primitiveFor(String name, Class<?> fallback) {
+        Class<?> prim = fallback;
+        if (name.equals("java.lang.Integer")) {
+            prim = Integer.TYPE;
+        } else if (name.equals("java.lang.Long")) {
+            prim = Long.TYPE;
+        } else if (name.equals("java.lang.Double")) {
+            prim = Double.TYPE;
+        } else if (name.equals("java.lang.Float")) {
+            prim = Float.TYPE;
+        } else if (name.equals("java.lang.Short")) {
+            prim = Short.TYPE;
+        } else if (name.equals("java.lang.Byte")) {
+            prim = Byte.TYPE;
+        } else if (name.equals("java.lang.Character")) {
+            prim = Character.TYPE;
+        } else if (name.equals("java.lang.Boolean")) {
+            prim = Boolean.TYPE;
+        } else if (name.equals("java.lang.Void")) {
+            prim = Void.TYPE;
+        }
+        return prim;
+    }
+
+    // Primitive keyword to its box. A name switch and not a map, to match `primitiveFor` below:
+    // the pair reads as one table, and a map keyed by `Class` would need the mirrors built eagerly
+    // for no gain at this size.
     private static Class<?> wrapperFor(String name, Class<?> fallback) {
         Class<?> box = fallback;
         if (name.equals("int")) {
@@ -473,19 +496,22 @@ public final class MethodType implements Constable, TypeDescriptor.OfMethod {
 
     // The bridge to the nominal world: a `MethodType` (loaded classes) described as a
     // `MethodTypeDesc` (names). Always present, because a method type is always describable.
-    // Retorno `Optional` CRUDO y no `Optional<MethodTypeDesc>`: el chequeo de override contra
-    // `Constable.describeConstable()` —que vive en el classpath y devuelve
-    // `Optional<? extends ConstantDesc>`— falla con "Optional no es un subtipo de Optional",
-    // el mismo sintoma de fuente-vs-classpath del #123. La ERASURE es identica
-    // (`()Ljava/util/Optional;`), asi que el descriptor emitido es el correcto y el gate lo matchea.
+    //
+    // The return is a RAW `Optional` and not `Optional<MethodTypeDesc>`: the override check against
+    // `Constable.describeConstable()` --which lives on the classpath and returns
+    // `Optional<? extends ConstantDesc>`-- fails with "Optional is not a subtype of Optional", the
+    // same source-vs-classpath symptom as #123. The ERASURE is identical
+    // (`()Ljava/util/Optional;`), so the descriptor emitted is the right one and the gate matches
+    // it.
     public Optional describeConstable() {
-        // Con el type witness explicito: la inferencia del argumento erasa a `Optional<Object>` y
-        // el retorno queda incompatible (familia del #100). `Optional.<T>of(...)` fija el parametro.
+        // With the explicit type witness: inferring from the argument erases to `Optional<Object>`
+        // and the return comes out incompatible (the #100 family). `Optional.<T>of(...)` pins the
+        // parameter.
         MethodTypeDesc desc = MethodTypeDesc.ofDescriptor(toMethodDescriptorString());
         return Optional.<MethodTypeDesc>of(desc);
     }
 
-    // ---- nombres y descriptores ----
+    // ---- names and descriptors ----
 
     // The three cases fall out of `getName()`: an array already comes back in descriptor form
     // with dots, a primitive comes back as its keyword, and anything else is a binary name.
@@ -584,8 +610,9 @@ public final class MethodType implements Constable, TypeDescriptor.OfMethod {
     }
 
     private static Class<?> arrayOfObjectClass() {
-        // `Object[].class` no parsea (el literal de clase de un ARRAY todavia no esta soportado),
-        // asi que la clase se saca del objeto en vez de del literal. Equivalente y andando.
+        // The class is taken off the object rather than off a literal. It used to be that
+        // `Object[].class` did not parse; it does now, so this is only the shorter spelling of the
+        // same thing, not a workaround.
         Object[] empty = new Object[0];
         return empty.getClass();
     }

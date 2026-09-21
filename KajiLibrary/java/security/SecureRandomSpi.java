@@ -3,33 +3,33 @@ package java.security;
 import java.io.Serializable;
 
 /**
- * KajiLibrary's java.security.SecureRandomSpi -- lo que tiene que saber hacer un generador
- * criptografico para que {@link SecureRandom} lo pueda usar.
+ * KajiLibrary's java.security.SecureRandomSpi -- what a cryptographic generator has to know how to
+ * do so that {@link SecureRandom} can use it.
  *
- * <p>Es un contrato, no una implementacion: tres metodos abstractos y tres con un default. Los tres
- * abstractos son el minimo que cualquier generador sabe hacer -- aceptar semilla, entregar bytes,
- * fabricar semilla -- y los tres con default son de la extension de 2017 para DRBGs, que un
- * generador viejo no tiene por que conocer.
+ * <p>It is a contract, not an implementation: three abstract methods and three with a default. The
+ * three abstract ones are the minimum any generator knows how to do -- accept a seed, hand over
+ * bytes, make a seed -- and the three with a default are of the 2017 extension for DRBGs, which an
+ * old generator has no reason to know about.
  *
- * <h2>La diferencia entre nextBytes y generateSeed</h2>
+ * <h2>The difference between nextBytes and generateSeed</h2>
  *
- * <p>Los dos devuelven bytes y no son lo mismo, y confundirlos es el error clasico:
+ * <p>Both return bytes and they are not the same thing, and confusing them is the classic mistake:
  *
  * <ul>
- *   <li>{@code engineNextBytes} entrega la <b>salida</b> del generador. Puede ser todo lo rapida
- *       que quiera y sale de expandir el estado interno.
- *   <li>{@code engineGenerateSeed} entrega <b>entropia</b>, para sembrar a otro generador. Puede
- *       ser lenta, puede bloquear, y no debe salir de expandir nada: sembrar un generador con la
- *       salida de otro no agrega entropia, solo la reparte.
+ *   <li>{@code engineNextBytes} hands over the <b>output</b> of the generator. It can be as fast as
+ *       it likes and comes from expanding the internal state.
+ *   <li>{@code engineGenerateSeed} hands over <b>entropy</b>, for seeding another generator. It can
+ *       be slow, it can block, and it must not come from expanding anything: seeding a generator
+ *       with the output of another adds no entropy, it only spreads it out.
  * </ul>
  *
- * <h2>Los defaults son los seguros</h2>
+ * <h2>The defaults are the safe ones</h2>
  *
- * <p>{@code engineReseed} y {@code engineNextBytes(byte[], SecureRandomParameters)} lanzan
- * {@code UnsupportedOperationException}, y {@code engineGetParameters} devuelve null. Es a
- * proposito: un generador que no es un DRBG no tiene estado que resembrar ni parametros que
- * contestar, y decir que si -- devolviendo bytes sin resembrar de verdad -- dejaria al llamador
- * creyendo que refresco el estado cuando no paso nada.
+ * <p>{@code engineReseed} and {@code engineNextBytes(byte[], SecureRandomParameters)} throw
+ * {@code UnsupportedOperationException}, and {@code engineGetParameters} returns null. It is on
+ * purpose: a generator that is not a DRBG has no state to reseed and no parameters to answer, and
+ * saying yes -- returning bytes without really reseeding -- would leave the caller believing they
+ * refreshed the state when nothing happened.
  */
 public abstract class SecureRandomSpi implements Serializable {
 
@@ -37,15 +37,15 @@ public abstract class SecureRandomSpi implements Serializable {
 
     private final SecureRandomParameters params;
 
-    /** Un generador sin parametros: el caso de cualquier generador que no sea un DRBG. */
+    /** A generator with no parameters: the case of any generator that is not a DRBG. */
     public SecureRandomSpi() {
         this.params = null;
     }
 
     /**
-     * Un generador con parametros, que es lo que declara un DRBG.
+     * A generator with parameters, which is what a DRBG declares.
      *
-     * @throws IllegalArgumentException si los parametros son null
+     * @throws IllegalArgumentException if the parameters are null
      */
     protected SecureRandomSpi(SecureRandomParameters params) {
         if (params == null) {
@@ -55,36 +55,36 @@ public abstract class SecureRandomSpi implements Serializable {
     }
 
     /**
-     * Agrega esa semilla al estado. <b>Agrega</b>: nunca reemplaza, asi que llamarlo no puede dejar
-     * al generador mas predecible de lo que ya era.
+     * It adds that seed to the state. <b>It adds</b>: it never replaces, so calling it cannot leave
+     * the generator more predictable than it was already.
      */
     protected abstract void engineSetSeed(byte[] seed);
 
-    /** Llena el arreglo con la salida del generador. */
+    /** It fills the array with the output of the generator. */
     protected abstract void engineNextBytes(byte[] bytes);
 
     /**
-     * Idem, con parametros por llamada. El default no la soporta.
+     * The same, with parameters per call. The default does not support it.
      *
-     * @throws UnsupportedOperationException si este generador no es un DRBG
+     * @throws UnsupportedOperationException if this generator is not a DRBG
      */
     protected void engineNextBytes(byte[] bytes, SecureRandomParameters params) {
         throw new UnsupportedOperationException();
     }
 
-    /** Devuelve `numBytes` bytes de <b>entropia</b>. Ver la nota de la clase. */
+    /** It returns `numBytes` bytes of <b>entropy</b>. See the note of the class. */
     protected abstract byte[] engineGenerateSeed(int numBytes);
 
     /**
-     * Resiembra el estado interno.
+     * It reseeds the internal state.
      *
-     * @throws UnsupportedOperationException si este generador no tiene estado que resembrar
+     * @throws UnsupportedOperationException if this generator has no state to reseed
      */
     protected void engineReseed(SecureRandomParameters params) {
         throw new UnsupportedOperationException();
     }
 
-    /** Los parametros con los que se creo, o null si no tiene. */
+    /** The parameters it was created with, or null if it has none. */
     protected SecureRandomParameters engineGetParameters() {
         return this.params;
     }

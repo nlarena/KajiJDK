@@ -6,15 +6,15 @@ import javax.accessibility.AccessibleContext;
 import javax.accessibility.AccessibleRole;
 
 /**
- * Un rectángulo en blanco para dibujar encima.
+ * A blank rectangle to draw on.
  *
- * <p>Es el componente que se usa cuando ninguno de los demás sirve: se hereda de él y se redefine
- * {@link #paint} con lo que sea que haya que mostrar. Un juego, un gráfico, un visor de imágenes.
+ * <p>It is the component used when none of the others will do: one inherits from it and overrides
+ * {@link #paint} with whatever has to be shown. A game, a chart, an image viewer.
  *
- * <p><strong>Sin pantalla no dibuja nada</strong>, y no puede: {@link #paint} recibe un
- * {@link Graphics} y esta implementación no tiene rasterizador. Lo que sí funciona es todo lo demás
- * —el tamaño, la posición, los eventos, el foco— así que un lienzo sirve perfectamente como hoja del
- * árbol de componentes aunque nunca llegue a mostrarse.
+ * <p><strong>Without a screen it draws nothing</strong>, and it cannot: {@link #paint} receives a
+ * {@link Graphics} and this implementation has no rasteriser. What does work is everything else
+ * —the size, the position, the events, the focus— so a canvas serves perfectly well as a leaf of
+ * the component tree even though it never gets shown.
  */
 public class Canvas extends Component implements Accessible {
 
@@ -22,14 +22,14 @@ public class Canvas extends Component implements Accessible {
 
     private static int canvasCounter = 0;
 
-    /** Un lienzo. */
+    /** A canvas. */
     public Canvas() {
     }
 
     /**
-     * Un lienzo sobre esa configuración gráfica.
+     * A canvas on that graphics configuration.
      *
-     * @throws NullPointerException si la configuración es `null`
+     * @throws NullPointerException if the configuration is `null`
      */
     public Canvas(GraphicsConfiguration config) {
         this();
@@ -50,22 +50,23 @@ public class Canvas extends Component implements Accessible {
         }
     }
 
-    /** Lo declara mostrable. */
+    /** Declares it showable. */
     public void addNotify() {
         super.addNotify();
     }
 
     /**
-     * Dibuja el lienzo.
+     * Draws the canvas.
      *
-     * <p>El de base lo pinta del color de fondo. Acá no hace nada, porque no hay con qué: sin
-     * rasterizador no existe un {@link Graphics} que pueda rellenar un rectángulo. Una subclase que
-     * redefina esto en un entorno con pantalla sigue funcionando igual.
+     * <p>The base one paints it in the background colour. Here it does nothing, because there is
+     * nothing to do it with: without a rasteriser there is no {@link Graphics} that can fill a
+     * rectangle. A subclass that overrides this in an environment with a screen keeps working just
+     * the same.
      */
     public void paint(Graphics g) {
     }
 
-    /** Repinta; como {@link #paint} no dibuja, esto tampoco. */
+    /** Repaints; since {@link #paint} draws nothing, this does not either. */
     public void update(Graphics g) {
         this.paint(g);
     }
@@ -75,39 +76,39 @@ public class Canvas extends Component implements Accessible {
     }
 
     /**
-     * Arma un mecanismo de doble buffer.
+     * Builds a double-buffering mechanism.
      *
-     * @throws IllegalStateException siempre: el doble buffer es una cadena de superficies de dibujo,
-     *     y sin pantalla no hay ninguna que encadenar. Inventar una que no dibuje sería peor que no
-     *     tenerla.
+     * @throws IllegalStateException always: double buffering is a chain of drawing surfaces, and
+     *     without a screen there is none to chain. Inventing one that does not draw would be worse
+     *     than not having it.
      */
     public void createBufferStrategy(int numBuffers) {
         throw new IllegalStateException(
-                "sin pantalla no hay superficies de dibujo que encadenar");
+                "without a screen there are no drawing surfaces to chain");
     }
 
     /**
-     * Arma un mecanismo de doble buffer con esas capacidades.
+     * Builds a double-buffering mechanism with those capabilities.
      *
-     * @throws IllegalStateException siempre, por el mismo motivo que
-     *     {@link #createBufferStrategy(int)}
+     * @throws IllegalStateException always, for the same reason as {@link
+     *     #createBufferStrategy(int)}
      */
     public void createBufferStrategy(int numBuffers, BufferCapabilities caps)
             throws AWTException {
         throw new IllegalStateException(
-                "sin pantalla no hay superficies de dibujo que encadenar");
+                "without a screen there are no drawing surfaces to chain");
     }
 
     /**
-     * El mecanismo de doble buffer.
+     * The double-buffering mechanism.
      *
-     * @return `null` siempre: nunca se pudo crear ninguno
+     * @return `null` always: none could ever be created
      */
     public BufferStrategy getBufferStrategy() {
         return null;
     }
 
-    /** La accesibilidad del lienzo. */
+    /** The accessibility information of this canvas. */
     public AccessibleContext getAccessibleContext() {
         if (this.accessibleContext == null) {
             this.accessibleContext = new AccessibleAWTCanvas();
@@ -115,10 +116,10 @@ public class Canvas extends Component implements Accessible {
         return this.accessibleContext;
     }
 
-    /** Un lienzo, para la accesibilidad, es un lienzo. */
+    /** A canvas, for accessibility, is a canvas. */
     protected class AccessibleAWTCanvas extends AccessibleAWTComponent {
 
-        /** Para las subclases. */
+        /** For the subclasses. */
         protected AccessibleAWTCanvas() {
         }
 

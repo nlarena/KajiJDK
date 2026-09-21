@@ -5,32 +5,32 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * KajiLibrary's javax.xml.crypto.dsig.spec.XPathFilterParameterSpec -- la expresion de una
- * transformacion XPath.
+ * KajiLibrary's javax.xml.crypto.dsig.spec.XPathFilterParameterSpec -- the expression of an XPath
+ * transform.
  *
- * <p>La transformacion XPath selecciona <b>que parte</b> del documento se firma. La expresion se
- * evalua sobre cada nodo y el nodo entra si da verdadero.
+ * <p>The XPath transform selects <b>which part</b> of the document is signed. The expression is
+ * evaluated on each node and the node goes in if it gives true.
  *
- * <p>Ese modelo --nodo por nodo-- la hace lenta sobre documentos grandes, y por eso existe
- * {@link XPathFilter2ParameterSpec}, que trabaja por subarboles.
+ * <p>That model --node by node-- makes it slow on large documents, and that is why
+ * {@link XPathFilter2ParameterSpec} exists, which works by subtrees.
  *
- * <p>El mapa de espacios de nombres hace falta por lo mismo que en {@code javax.xml.xpath}: sin
- * prefijos declarados, una expresion no encuentra nada en un documento con espacios de nombres. Aca
- * pesa mas que en otros lados -- una expresion que no selecciona nada produce una firma que no cubre
- * nada, y valida igual.
+ * <p>The namespace map is needed for the same reason as in {@code javax.xml.xpath}: without
+ * declared prefixes, an expression finds nothing in a document with namespaces. Here it weighs more
+ * than elsewhere -- an expression that selects nothing produces a signature that covers nothing,
+ * and validates all the same.
  */
 public final class XPathFilterParameterSpec implements TransformParameterSpec {
 
-    /** La expresion. */
+    /** The expression. */
     private final String xPath;
 
-    /** Prefijo a espacio de nombres; nunca null. */
+    /** Prefix to namespace; never null. */
     private final Map<String, String> nsMap;
 
     /**
-     * Sin espacios de nombres.
+     * Without namespaces.
      *
-     * @throws NullPointerException si la expresion es null
+     * @throws NullPointerException if the expression is null
      */
     public XPathFilterParameterSpec(String xPath) {
         if (xPath == null) {
@@ -41,11 +41,11 @@ public final class XPathFilterParameterSpec implements TransformParameterSpec {
     }
 
     /**
-     * Con los prefijos declarados.
+     * With the declared prefixes.
      *
-     * <p>El mapa se copia. Ver la nota de la clase sobre por que casi siempre hace falta.
+     * <p>The map is copied. See the class note on why it is almost always needed.
      *
-     * @throws NullPointerException si alguno de los dos es null
+     * @throws NullPointerException if either of the two is null
      */
     public XPathFilterParameterSpec(String xPath, Map<String, String> namespaceMap) {
         if (xPath == null || namespaceMap == null) {
@@ -55,12 +55,12 @@ public final class XPathFilterParameterSpec implements TransformParameterSpec {
         this.nsMap = Collections.unmodifiableMap(new HashMap<String, String>(namespaceMap));
     }
 
-    /** La expresion. */
+    /** The expression. */
     public String getXPath() {
         return this.xPath;
     }
 
-    /** Los prefijos declarados. No modificable. */
+    /** The declared prefixes. Unmodifiable. */
     public Map<String, String> getNamespaceMap() {
         return this.nsMap;
     }

@@ -5,17 +5,18 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Set;
 
-// Una entrada de una lista de control de acceso: a quien, que tipo, que permisos y como se hereda.
+// An entry of an access control list: to whom, what type, what permissions and how it is inherited.
 //
-// **Es puro valor y por eso esta entera.** No hace falta ningun nativo para construir, comparar ni
-// imprimir una `AclEntry`; lo que KajiJDK no puede es **leerla del disco ni escribirla**, y eso vive
-// en `AclFileAttributeView`, que queda sin implementacion. La clase sirve igual: quien tenga ACLs de
-// otra fuente --un archivo de configuracion, un protocolo-- puede modelarlas con esto.
+// **It is pure value and that is why it is complete.** No native is needed to build, compare or
+// print an `AclEntry`; what KajiJDK cannot do is **read one off the disk or write one**, and that
+// lives in `AclFileAttributeView`, which is left without an implementation. The class is useful all
+// the same: whoever has ACLs from another source --a configuration file, a protocol-- can model them
+// with this.
 //
-// **Inmutable, y se construye con un `Builder`.** Son cuatro campos de los cuales dos son conjuntos
-// opcionales: un constructor de cuatro argumentos obligaria a escribir `Collections.emptySet()` dos
-// veces en el caso comun. Los conjuntos se copian al entrar --no se guarda la referencia que dio
-// quien llama-- porque si no la "inmutabilidad" duraria hasta que el llamador tocara su propio set.
+// **Immutable, and built with a `Builder`.** It is four fields of which two are optional sets: a
+// four-argument constructor would force writing `Collections.emptySet()` twice in the common case.
+// The sets are copied on the way in --the reference the caller gave is not kept-- because otherwise
+// the "immutability" would last until the caller touched their own set.
 public final class AclEntry {
 
     private final AclEntryType type;
@@ -23,8 +24,8 @@ public final class AclEntry {
     private final Set<AclEntryPermission> perms;
     private final Set<AclEntryFlag> flags;
 
-    // El hash se calcula una sola vez y se guarda; 0 significa "todavia no". Que el valor legitimo 0
-    // se recalcule cada vez es barato y evita un campo booleano extra.
+    // The hash is computed once and kept; 0 means "not yet". That the legitimate value 0 is
+    // recomputed each time is cheap and saves an extra boolean field.
     private volatile int hash;
 
     private AclEntry(AclEntryType type, UserPrincipal who, Set<AclEntryPermission> perms,
@@ -35,14 +36,14 @@ public final class AclEntry {
         this.flags = flags;
     }
 
-    /** Un constructor vacio, al que hay que darle al menos tipo y principal. */
+    /** An empty builder, which has to be given at least a type and a principal. */
     public static Builder newBuilder() {
         Set<AclEntryPermission> p = Collections.emptySet();
         Set<AclEntryFlag> f = Collections.emptySet();
         return new Builder(null, null, p, f);
     }
 
-    /** Un constructor precargado con los valores de `entry`, para copiar cambiando una cosa. */
+    /** A builder preloaded with `entry`'s values, for copying with one thing changed. */
     public static Builder newBuilder(AclEntry entry) {
         if (entry == null) {
             throw new NullPointerException();
@@ -50,27 +51,27 @@ public final class AclEntry {
         return new Builder(entry.type, entry.who, entry.perms, entry.flags);
     }
 
-    /** Si esta entrada permite, niega, audita o alarma. */
+    /** Whether this entry allows, denies, audits or alarms. */
     public AclEntryType type() {
         return this.type;
     }
 
-    /** A quien aplica. */
+    /** Whom it applies to. */
     public UserPrincipal principal() {
         return this.who;
     }
 
-    /** Los permisos, en una **copia**: modificarla no toca la entrada. */
+    /** The permissions, in a **copy**: modifying it does not touch the entry. */
     public Set<AclEntryPermission> permissions() {
         return new HashSet<AclEntryPermission>(this.perms);
     }
 
-    /** Las banderas de herencia, en una **copia**. */
+    /** The inheritance flags, in a **copy**. */
     public Set<AclEntryFlag> flags() {
         return new HashSet<AclEntryFlag>(this.flags);
     }
 
-    /** Igual si coinciden los cuatro campos. */
+    /** Equal if all four fields agree. */
     public boolean equals(Object ob) {
         if (ob == this) {
             return true;
@@ -92,8 +93,8 @@ public final class AclEntry {
     }
 
     private static int hashCodeOf(Set<?> s) {
-        // La suma de los hashes de los elementos: no depende del orden de iteracion, que en un
-        // conjunto no esta definido.
+        // The sum of the elements' hashes: it does not depend on the iteration order, which in a
+        // set is undefined.
         int h = 0;
         Iterator<?> it = s.iterator();
         while (it.hasNext()) {
@@ -116,7 +117,7 @@ public final class AclEntry {
         return h;
     }
 
-    /** Algo como `usuario:READ_DATA/WRITE_DATA:FILE_INHERIT:ALLOW`. */
+    /** Something like `user:READ_DATA/WRITE_DATA:FILE_INHERIT:ALLOW`. */
     public String toString() {
         StringBuilder sb = new StringBuilder();
         sb.append(this.who.getName());
@@ -144,11 +145,11 @@ public final class AclEntry {
     }
 
     /**
-     * El constructor de `AclEntry`.
+     * `AclEntry`'s builder.
      *
-     * <p>Los `set*` devuelven `this` para poder encadenarlos, y **mutan** el propio constructor: la
-     * inmutabilidad la garantiza `build()`, que copia los conjuntos, no el `Builder`. No es
-     * seguro compartir un `Builder` entre hilos.
+     * <p>The `set*` return `this` so they can be chained, and they **mutate** the builder itself:
+     * immutability is guaranteed by `build()`, which copies the sets, not by the `Builder`. It is not
+     * safe to share a `Builder` between threads.
      */
     public static final class Builder {
 
@@ -166,11 +167,11 @@ public final class AclEntry {
         }
 
         /**
-         * Arma la entrada.
+         * It builds the entry.
          *
-         * @throws IllegalStateException si falta el tipo o el principal -- los dos unicos campos
-         *     que no tienen un valor por omision razonable: un conjunto vacio de permisos significa
-         *     "ninguno", pero no hay una entrada sin destinatario
+         * @throws IllegalStateException if the type or the principal is missing -- the only two
+         *     fields with no reasonable default: an empty set of permissions means "none", but there
+         *     is no entry with no addressee
          */
         public AclEntry build() {
             if (this.type == null) {
@@ -184,7 +185,7 @@ public final class AclEntry {
                     new HashSet<AclEntryFlag>(this.flags));
         }
 
-        /** Fija el tipo. */
+        /** It sets the type. */
         public Builder setType(AclEntryType type) {
             if (type == null) {
                 throw new NullPointerException();
@@ -193,7 +194,7 @@ public final class AclEntry {
             return this;
         }
 
-        /** Fija a quien aplica. */
+        /** It sets whom it applies to. */
         public Builder setPrincipal(UserPrincipal who) {
             if (who == null) {
                 throw new NullPointerException();
@@ -203,76 +204,75 @@ public final class AclEntry {
         }
 
         /**
-         * Fija los permisos.
+         * It sets the permissions.
          *
-         * <p>Se copia y se revisa elemento por elemento en vez de confiar en el tipo estatico:
-         * un `Set` crudo puede traer cualquier cosa, y el `ClassCastException` aparecereria mucho
-         * mas tarde, al usarlo.
+         * <p>It copies and checks element by element rather than trust the static type: a raw `Set`
+         * can carry anything, and the `ClassCastException` would turn up much later, on use.
          */
         public Builder setPermissions(Set<AclEntryPermission> perms) {
             if (perms.isEmpty()) {
                 this.perms = Collections.emptySet();
                 return this;
             }
-            Set<AclEntryPermission> copia = new HashSet<AclEntryPermission>();
+            Set<AclEntryPermission> copied = new HashSet<AclEntryPermission>();
             Iterator<AclEntryPermission> it = perms.iterator();
             while (it.hasNext()) {
                 AclEntryPermission p = it.next();
                 if (p == null) {
                     throw new NullPointerException();
                 }
-                copia.add(p);
+                copied.add(p);
             }
-            this.perms = copia;
+            this.perms = copied;
             return this;
         }
 
-        /** Fija los permisos, sueltos. */
+        /** It sets the permissions, loose. */
         public Builder setPermissions(AclEntryPermission... perms) {
-            Set<AclEntryPermission> copia = new HashSet<AclEntryPermission>();
+            Set<AclEntryPermission> copied = new HashSet<AclEntryPermission>();
             int i = 0;
             while (i < perms.length) {
                 if (perms[i] == null) {
                     throw new NullPointerException();
                 }
-                copia.add(perms[i]);
+                copied.add(perms[i]);
                 i = i + 1;
             }
-            this.perms = copia;
+            this.perms = copied;
             return this;
         }
 
-        /** Fija las banderas de herencia. */
+        /** It sets the inheritance flags. */
         public Builder setFlags(Set<AclEntryFlag> flags) {
             if (flags.isEmpty()) {
                 this.flags = Collections.emptySet();
                 return this;
             }
-            Set<AclEntryFlag> copia = new HashSet<AclEntryFlag>();
+            Set<AclEntryFlag> copied = new HashSet<AclEntryFlag>();
             Iterator<AclEntryFlag> it = flags.iterator();
             while (it.hasNext()) {
                 AclEntryFlag f = it.next();
                 if (f == null) {
                     throw new NullPointerException();
                 }
-                copia.add(f);
+                copied.add(f);
             }
-            this.flags = copia;
+            this.flags = copied;
             return this;
         }
 
-        /** Fija las banderas de herencia, sueltas. */
+        /** It sets the inheritance flags, loose. */
         public Builder setFlags(AclEntryFlag... flags) {
-            Set<AclEntryFlag> copia = new HashSet<AclEntryFlag>();
+            Set<AclEntryFlag> copied = new HashSet<AclEntryFlag>();
             int i = 0;
             while (i < flags.length) {
                 if (flags[i] == null) {
                     throw new NullPointerException();
                 }
-                copia.add(flags[i]);
+                copied.add(flags[i]);
                 i = i + 1;
             }
-            this.flags = copia;
+            this.flags = copied;
             return this;
         }
     }

@@ -7,19 +7,19 @@ import java.util.List;
 import javax.management.ObjectName;
 
 /**
- * Un rol que no se pudo leer o escribir, con el motivo.
+ * A role that could not be read or written, with the reason.
  *
- * <h2>Por que existe este tipo</h2>
+ * <h2>Why this type exists</h2>
  *
- * <p>Porque una operacion sobre varios roles no es todo o nada. Leer cinco roles puede dar tres
- * valores y dos problemas, y las dos cosas son informacion util: cortar en el primer problema
- * perderia los tres que si estaban.
+ * <p>Because an operation over several roles is not all or nothing. Reading five roles may give
+ * three values and two problems, and both are useful information: stopping at the first problem
+ * would lose the three that were there.
  *
- * <p>Este objeto es la mitad "problema" de esa respuesta; la otra son los {@link Role} que si se
- * resolvieron. Las dos viajan juntas en un {@link RoleResult}.
+ * <p>This object is the "problem" half of that answer; the other is the {@link Role}s that did
+ * resolve. The two travel together in a {@link RoleResult}.
  *
- * <p>El valor <strong>se conserva</strong> aunque haya fallado: en una escritura rechazada, es lo
- * que permite ver que se intentaba poner y no solo que no se pudo.
+ * <p>The value <b>is kept</b> even though it failed: in a rejected write, it is what allows seeing
+ * what was being put and not only that it could not be.
  */
 public class RoleUnresolved implements Serializable {
 
@@ -30,62 +30,63 @@ public class RoleUnresolved implements Serializable {
     private int problemType;
 
     /**
-     * @param pbType uno de los codigos de {@link RoleStatus}
-     * @throws IllegalArgumentException si falta el nombre o el codigo no es de {@link RoleStatus}
+     * @param pbType one of the {@link RoleStatus} codes
+     * @throws IllegalArgumentException if the name is missing or the code is not a
+     *     {@link RoleStatus} one
      */
     public RoleUnresolved(String name, List<ObjectName> value, int pbType)
             throws IllegalArgumentException {
         if (name == null) {
-            throw new IllegalArgumentException("falta el nombre del rol");
+            throw new IllegalArgumentException("the role name is missing");
         }
         setProblemType(pbType);
         this.roleName = name;
         this.roleValue = value == null ? null : new ArrayList<ObjectName>(value);
     }
 
-    /** El nombre del rol. */
+    /** The role's name. */
     public String getRoleName() {
         return this.roleName;
     }
 
-    /** Lo que se intentaba poner, o lo que habia; {@code null} si no aplica. */
+    /** What was being put, or what was there; {@code null} if it does not apply. */
     public List<ObjectName> getRoleValue() {
         return this.roleValue;
     }
 
-    /** El codigo de {@link RoleStatus} que explica el problema. */
+    /** The {@link RoleStatus} code that explains the problem. */
     public int getProblemType() {
         return this.problemType;
     }
 
     /**
-     * @throws IllegalArgumentException si es {@code null}
+     * @throws IllegalArgumentException if it is {@code null}
      */
     public void setRoleName(String name) throws IllegalArgumentException {
         if (name == null) {
-            throw new IllegalArgumentException("el nombre no puede ser null");
+            throw new IllegalArgumentException("the name cannot be null");
         }
         this.roleName = name;
     }
 
-    /** Fija el valor; {@code null} lo saca. */
+    /** Sets the value; {@code null} removes it. */
     public void setRoleValue(List<ObjectName> value) {
         this.roleValue = value == null ? null : new ArrayList<ObjectName>(value);
     }
 
     /**
-     * @throws IllegalArgumentException si no es un codigo de {@link RoleStatus} — aceptar cualquier
-     *     entero dejaria pasar un problema que despues nadie puede interpretar
+     * @throws IllegalArgumentException if it is not a {@link RoleStatus} code -- accepting any
+     *     integer would let through a problem nobody can interpret afterwards
      */
     public void setProblemType(int pbType) throws IllegalArgumentException {
         if (!RoleStatus.isRoleStatus(pbType)) {
             throw new IllegalArgumentException(
-                    "no es un codigo de RoleStatus: " + String.valueOf(pbType));
+                    "not a RoleStatus code: " + String.valueOf(pbType));
         }
         this.problemType = pbType;
     }
 
-    /** Una copia, con su lista propia. */
+    /** A copy, with its own list. */
     public Object clone() {
         try {
             return new RoleUnresolved(this.roleName, this.roleValue, this.problemType);

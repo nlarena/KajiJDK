@@ -30,19 +30,19 @@ public final class LocalTime implements Temporal, TemporalAdjuster, Comparable<L
         this.nano = nano;
     }
 
-    /** La medianoche, 00:00. */
+    /** Midnight, 00:00. */
     public static final LocalTime MIN = new LocalTime(0, 0, 0, 0);
 
-    /** El ultimo instante representable del dia, 23:59:59.999999999. */
+    /** The last representable instant of the day, 23:59:59.999999999. */
     public static final LocalTime MAX = new LocalTime(23, 59, 59, 999999999);
 
-    /** Sinonimo de `MIN`, con el nombre que se lee mejor en una fecha. */
+    /** A synonym for `MIN`, with the name that reads better against a date. */
     public static final LocalTime MIDNIGHT = new LocalTime(0, 0, 0, 0);
 
-    /** El mediodia, 12:00. */
+    /** Noon, 12:00. */
     public static final LocalTime NOON = new LocalTime(12, 0, 0, 0);
 
-    /** La hora que `temporal` tiene. */
+    /** The time `temporal` holds. */
     public static LocalTime from(java.time.temporal.TemporalAccessor temporal) {
         if (temporal == null) {
             throw new NullPointerException("temporal");
@@ -57,7 +57,7 @@ public final class LocalTime implements Temporal, TemporalAdjuster, Comparable<L
         return LocalTime.ofNanoOfDay(temporal.getLong(ChronoField.NANO_OF_DAY));
     }
 
-    /** La hora que marca `clock`. La forma testeable de `now()`. */
+    /** The time `clock` reads. The testable form of `now()`. */
     public static LocalTime now(java.time.Clock clock) {
         if (clock == null) {
             throw new NullPointerException("clock");
@@ -65,7 +65,7 @@ public final class LocalTime implements Temporal, TemporalAdjuster, Comparable<L
         return LocalTime.ofInstant(clock.instant(), clock.getZone());
     }
 
-    /** La hora en esa zona, ahora. */
+    /** The time in that zone, right now. */
     public static LocalTime now(ZoneId zone) {
         if (zone == null) {
             throw new NullPointerException("zone");
@@ -74,19 +74,19 @@ public final class LocalTime implements Temporal, TemporalAdjuster, Comparable<L
     }
 
     /**
-     * La hora local que ese instante marca en esa zona.
+     * The local time that instant falls on in that zone.
      *
-     * <p>Se pierde la fecha a proposito: el mismo instante es la misma hora del reloj en toda la
-     * zona, y `LocalTime` es exactamente eso -- una hora sin dia.
+     * <p>The date is dropped on purpose: the same instant is the same clock time across the whole
+     * zone, and `LocalTime` is exactly that -- a time with no day.
      */
     public static LocalTime ofInstant(Instant instant, ZoneId zone) {
         if (instant == null || zone == null) {
             throw new NullPointerException();
         }
         ZoneOffset offset = zone.getRules().getOffset(instant);
-        long segsLocales = instant.getEpochSecond() + offset.getTotalSeconds();
-        int segsDelDia = (int) Math.floorMod(segsLocales, 86400L);
-        return new LocalTime(segsDelDia / 3600, (segsDelDia / 60) % 60, segsDelDia % 60,
+        long localSecs = instant.getEpochSecond() + offset.getTotalSeconds();
+        int secsOfDay = (int) Math.floorMod(localSecs, 86400L);
+        return new LocalTime(secsOfDay / 3600, (secsOfDay / 60) % 60, secsOfDay % 60,
                 instant.getNano());
     }
 
@@ -211,11 +211,11 @@ public final class LocalTime implements Temporal, TemporalAdjuster, Comparable<L
     // --- Temporal ---
 
     /**
-     * Los campos que una hora tiene.
+     * The fields a time has.
      *
-     * <p>La respuesta correcta es "todos los de tiempo", y por eso se pregunta por la categoria en vez
-     * de enumerar: una lista se desincroniza con `getLong` --paso, y `SECOND_OF_DAY` decia que no y
-     * despues se calculaba igual-- mientras que la categoria no puede.
+     * <p>The right answer is "all the time-based ones", and that is why it asks about the category
+     * instead of enumerating: a list drifts out of step with `getLong` --it happened, and
+     * `SECOND_OF_DAY` said no and was then computed all the same-- whereas the category cannot.
      */
     public boolean isSupported(TemporalField field) {
         if (field instanceof ChronoField) {
@@ -225,16 +225,16 @@ public final class LocalTime implements Temporal, TemporalAdjuster, Comparable<L
     }
 
     /**
-     * El valor de ese campo.
+     * That field's value.
      *
-     * <p>Los cuatro primeros son el estado; los otros nueve **se deducen**, y estan porque son
-     * funciones exactas de lo que hay -- no hay ninguna decision que tomar al calcularlos. Antes
-     * faltaban, y eso hacia que un formateador con `hh:mm a` o con `SSS` no pudiera leer la hora que
-     * tenia delante.
+     * <p>The first four are the state; the other nine are **derived**, and they are here because they
+     * are exact functions of what there is -- there is no decision to take in computing them. They
+     * used to be missing, and that made a formatter with `hh:mm a` or with `SSS` unable to read the
+     * time in front of it.
      *
-     * <p>Los dos `CLOCK_HOUR_*` son los unicos con una vuelta: cuentan de 1 a 12 (o de 1 a 24) en vez
-     * de 0 a 11, asi que el cero se mapea al maximo. Es lo que hace que la medianoche se escriba
-     * `12:00 AM` y no `0:00 AM`.
+     * <p>The two `CLOCK_HOUR_*` are the only ones with a twist: they count 1 to 12 (or 1 to 24)
+     * instead of 0 to 11, so zero maps to the maximum. It is what makes midnight be written
+     * `12:00 AM` and not `0:00 AM`.
      */
     public long getLong(TemporalField field) {
         if (field == ChronoField.HOUR_OF_DAY) {
@@ -284,8 +284,8 @@ public final class LocalTime implements Temporal, TemporalAdjuster, Comparable<L
             return (long) (this.hour / 12);
         }
         if (field != null && !(field instanceof ChronoField)) {
-            // Un campo de terceros sabe leerse solo: se le pasa la pelota en vez de rechazarlo por no
-            // estar en la lista.
+            // A third party's field knows how to read itself: the ball is passed to it instead of
+            // rejecting it for not being on the list.
             return field.getFrom(this);
         }
         throw new java.time.temporal.UnsupportedTemporalTypeException("Unsupported field: " + field);
@@ -296,7 +296,7 @@ public final class LocalTime implements Temporal, TemporalAdjuster, Comparable<L
             || unit == ChronoUnit.MINUTES || unit == ChronoUnit.HOURS;
     }
 
-    /** Esta hora con otra hora del dia; el resto queda igual. */
+    /** This time with another hour of the day; the rest is left alone. */
     public LocalTime withHour(int hour) {
         if (this.hour == hour) {
             return this;
@@ -330,9 +330,9 @@ public final class LocalTime implements Temporal, TemporalAdjuster, Comparable<L
     }
 
     /**
-     * Esta hora truncada a un multiplo de `unit`, contando desde la medianoche.
+     * This time truncated to a multiple of `unit`, counting from midnight.
      *
-     * @throws java.time.DateTimeException si la unidad no divide un dia
+     * @throws java.time.DateTimeException if the unit does not divide a day
      */
     public LocalTime truncatedTo(TemporalUnit unit) {
         if (unit == null) {
@@ -341,22 +341,22 @@ public final class LocalTime implements Temporal, TemporalAdjuster, Comparable<L
         if (unit == ChronoUnit.NANOS) {
             return this;
         }
-        long unidadNanos = unit.getDuration().toNanos();
-        if (unidadNanos > 86400000000000L) {
+        long unitNanos = unit.getDuration().toNanos();
+        if (unitNanos > 86400000000000L) {
             throw new java.time.temporal.UnsupportedTemporalTypeException(
                     "Unit is too large to be used for truncation");
         }
-        if (86400000000000L % unidadNanos != 0L) {
+        if (86400000000000L % unitNanos != 0L) {
             throw new java.time.temporal.UnsupportedTemporalTypeException(
                     "Unit must divide into a standard day without remainder");
         }
-        // Una hora del dia nunca es negativa, asi que la division entera alcanza -- no hace falta el
-        // `floorMod` que si necesita `Instant`, donde los segundos pueden ser anteriores a la epoca.
+        // A time of day is never negative, so integer division is enough -- there is no need for the
+        // `floorMod` that `Instant` does need, where the seconds can be before the epoch.
         long nanos = this.toNanoOfDay();
-        return LocalTime.ofNanoOfDay((nanos / unidadNanos) * unidadNanos);
+        return LocalTime.ofNanoOfDay((nanos / unitNanos) * unitNanos);
     }
 
-    /** Esta hora en esa fecha. */
+    /** This time on that date. */
     public LocalDateTime atDate(LocalDate date) {
         if (date == null) {
             throw new NullPointerException("date");
@@ -364,7 +364,7 @@ public final class LocalTime implements Temporal, TemporalAdjuster, Comparable<L
         return LocalDateTime.of(date, this);
     }
 
-    /** Esta hora con ese desplazamiento. */
+    /** This time with that offset. */
     public java.time.OffsetTime atOffset(ZoneOffset offset) {
         if (offset == null) {
             throw new NullPointerException("offset");
@@ -373,10 +373,10 @@ public final class LocalTime implements Temporal, TemporalAdjuster, Comparable<L
     }
 
     /**
-     * Los segundos desde la epoca de esta hora en esa fecha y con ese desplazamiento.
+     * The seconds since the epoch of this time on that date and with that offset.
      *
-     * <p>Hacen falta las tres cosas y no menos: una hora sola no ubica un punto en la linea de
-     * tiempo, y una fecha y hora sin desplazamiento tampoco.
+     * <p>All three are needed and no fewer: a time alone does not place a point on the timeline, and
+     * neither does a date and time with no offset.
      */
     public long toEpochSecond(LocalDate date, ZoneOffset offset) {
         if (date == null || offset == null) {
@@ -385,9 +385,10 @@ public final class LocalTime implements Temporal, TemporalAdjuster, Comparable<L
         return date.toEpochDay() * 86400L + this.toSecondOfDay() - offset.getTotalSeconds();
     }
 
-    // El retorno se estrecha a `LocalTime`, como en el JDK (override covariante, §8.4.8.3), y se
-    // cubren los campos y unidades que faltaban -- antes solo cuatro campos, y la excepcion era la
-    // equivocada: el contrato pide `UnsupportedTemporalTypeException`, no `IllegalArgumentException`.
+    // The return is narrowed to `LocalTime`, as in the JDK (a covariant override, §8.4.8.3), and the
+    // fields and units that were missing are covered -- before there were only four fields, and the
+    // exception was the wrong one: the contract asks for `UnsupportedTemporalTypeException`, not
+    // `IllegalArgumentException`.
     public LocalTime with(TemporalField field, long newValue) {
         if (field == ChronoField.HOUR_OF_DAY) {
             return new LocalTime((int) newValue, this.minute, this.second, this.nano);
@@ -559,21 +560,21 @@ public final class LocalTime implements Temporal, TemporalAdjuster, Comparable<L
     }
 
     /**
-     * Lee `text` con ese formateador.
+     * It reads `text` with that formatter.
      *
-     * <p>El que decide que campos hay es el formateador; esta clase solo dice **cual de ellos
-     * quiere**, pasando su propio `from`. Por eso un patron que no traiga una hora
-     * falla aca y no al usar el resultado.
+     * <p>The one that decides which fields are there is the formatter; this class only says
+     * **which of them it wants**, by passing its own `from`. That is why a pattern that brings no time
+     * fails here and not when the result is used.
      *
-     * @throws java.time.format.DateTimeParseException si el texto no encaja con el patron, o si lo
-     *     que encaja no alcanza para una hora
+     * @throws java.time.format.DateTimeParseException if the text does not fit the pattern, or what
+     *     fits is not enough for a time
      */
     public static LocalTime parse(CharSequence text, java.time.format.DateTimeFormatter formatter) {
         if (formatter == null) {
             throw new NullPointerException("formatter");
         }
-        // Ligado a una local: encadenar por un intermedio de tipo interfaz se pierde (#108).
-        java.time.temporal.TemporalQuery<LocalTime> consulta = LocalTime::from;
-        return formatter.parse(text, consulta);
+        // Bound to a local: chaining through an interface-typed intermediate gets lost (#108).
+        java.time.temporal.TemporalQuery<LocalTime> queryOf = LocalTime::from;
+        return formatter.parse(text, queryOf);
     }
 }

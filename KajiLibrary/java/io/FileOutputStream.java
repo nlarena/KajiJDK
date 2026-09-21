@@ -2,55 +2,59 @@ package java.io;
 
 import jdk.internal.io.Fs;
 
-// KajiLibrary's java.io.FileOutputStream -- un stream de bytes que se escriben a un archivo.
+// KajiLibrary's java.io.FileOutputStream -- a stream of bytes written to a file.
 //
-// **Lo escrito se acumula en memoria y va al disco en cada `flush`, `close` o cuando el buffer se
-// llena.** Es la contracara de `FileInputStream`, por la misma razon: el nativo escribe el archivo
-// entero de una porque esta VM no tiene descriptores abiertos.
+// **What is written gathers in memory and goes to the disk on every `flush`, `close` or when the
+// buffer fills up.** It is `FileInputStream`'s counterpart, for the same reason: the native writes
+// the whole file at once because this VM has no open descriptors.
 //
-// Dos consecuencias que conviene saber:
+// Two consequences worth knowing:
 //
-//   - **hay que cerrar o vaciar.** Un `FileOutputStream` que se abandona sin `close()` pierde lo que
-//     quedaba en el buffer. En el JDK tambien conviene cerrar, pero ahi el sistema operativo termina
-//     escribiendo lo que ya se le entrego; aca no hay nada entregado hasta el `flush`.
-//   - el archivo se **trunca al construir** (salvo en modo `append`), como el del JDK: abrir para
-//     escribir borra lo que habia, aunque despues no se escriba nada.
+//   - **it has to be closed or flushed.** A `FileOutputStream` abandoned without `close()` loses
+//     whatever was left in the buffer. In the JDK closing is advisable too, but there the operating
+//     system ends up writing what it has already been handed; here nothing is handed over until the
+//     `flush`.
+//   - the file is **truncated on construction** (except in `append` mode), like the JDK's: opening
+//     for writing erases what was there, even if nothing is written afterwards.
 //
-// **`getChannel()` comparte la posicion con el flujo**, como manda el contrato: escribir por uno
-// mueve al otro, y mover el canal cambia donde escribe el flujo. Pedirlo tiene un precio, y por eso
-// no se paga hasta que alguien lo pide: a partir de ahi el volcado deja de ser un agregado al final
-// y pasa a escribir en la posicion del canal, que en esta VM cuesta reescribir el archivo entero.
-// Quien nunca llame a `getChannel()` escribe exactamente como antes. El como esta en `Canales`.
+// **`getChannel()` shares the position with the stream**, as the contract demands: writing through
+// one moves the other, and moving the channel changes where the stream writes. Asking for it has a
+// price, and that is why it is not paid until somebody asks: from then on the dumping stops being
+// an append at the end and starts writing at the channel's position, which in this VM costs
+// rewriting the whole file. Whoever never calls `getChannel()` writes exactly as before. The how is
+// in `StreamChannels`.
 //
-// **Los errores salen como `IOException` chequeada**, igual que en el JDK. Hubo una epoca en que
-// no: las bases del paquete (`InputStream`/`OutputStream`/`Closeable`) no declaraban `throws
-// IOException`, un override no puede ensanchar las chequeadas de lo que sobreescribe (JLS 8.4.8.3),
-// y lo que aca fallaba salia envuelto en `UncheckedIOException`. Las bases ya lo declaran, asi que
-// el envoltorio se saco: un `catch (IOException e)` de quien llama tiene que agarrar esto, y con la
-// no chequeada le pasaba por al lado y le mataba el hilo.
+// **The errors come out as a checked `IOException`**, just as in the JDK. There was a time when
+// they did not: the package's bases (`InputStream`/`OutputStream`/`Closeable`) did not declare
+// `throws IOException`, an override cannot widen the checked exceptions of what it overrides (JLS
+// 8.4.8.3), and what failed here came out wrapped in an `UncheckedIOException`. The bases declare
+// it now, so the wrapper was taken out: a caller's `catch (IOException e)` has to catch this, and
+// with the unchecked one it went straight past them and killed their thread.
 public class FileOutputStream extends OutputStream {
 
-    // Mas alla de esto se vuelca solo, para que escribir un archivo grande no lo tenga entero dos
-    // veces en memoria. No cambia lo que se ve: el archivo queda igual.
-    private static final int LIMITE = 1 << 16;
+    // Past this it dumps by itself, so that writing a large file does not hold it whole twice in
+    // memory. It does not change what is seen: the file ends up the same.
+    private static final int LIMIT = 1 << 16;
 
-    // Package-private y no privados: `Canales.DeSalida` **comparte** estos con este flujo, que es
-    // de lo que se trata `getChannel()`. Ver la cabecera de `Canales`.
-    final String ruta;
+    // Package-private and not private: `StreamChannels.ForOutput` **shares** these with this
+    // stream, which is what `getChannel()` is about. See `StreamChannels`'s header.
+    final String path;
     byte[] buf = new byte[256];
-    int usados = 0;
-    boolean cerrado = false;
+    int used = 0;
+    boolean closed = false;
 
-    /** El canal de este flujo, creado a pedido. Uno solo: el contrato dice "the unique object". */
-    private Canales.DeSalida canal;
-    // Si lo que viene se agrega a lo ya volcado. Arranca en el modo pedido y pasa a `true` despues
-    // del primer volcado: el segundo trozo tiene que agregarse aunque el stream no sea de append.
-    private boolean anexar;
+    /** This stream's channel, created on demand. One only: the contract says "the unique
+     * object". */
+    private StreamChannels.ForOutput channel;
+    // Whether what comes next is appended to what has already been dumped. It starts in the mode
+    // asked for and goes to `true` after the first dump: the second chunk has to be appended even
+    // if the stream is not an appending one.
+    private boolean appending;
 
     /**
-     * Abre `name` para escritura, **truncando** lo que hubiera.
+     * Opens `name` for writing, **truncating** whatever was there.
      *
-     * @throws FileNotFoundException si no se puede escribir ahi
+     * @throws FileNotFoundException if it cannot be written to
      */
     public FileOutputStream(String name) throws FileNotFoundException {
         this(name == null ? null : new File(name), false);
@@ -65,10 +69,11 @@ public class FileOutputStream extends OutputStream {
     }
 
     /**
-     * Abre `file` para escritura.
+     * Opens `file` for writing.
      *
-     * @param append si lo escrito se agrega al final en vez de reemplazar el contenido
-     * @throws FileNotFoundException si es un directorio, o no se puede escribir ahi
+     * @param append whether what is written is appended at the end instead of replacing the
+     *     contents
+     * @throws FileNotFoundException if it is a directory, or cannot be written to
      */
     public FileOutputStream(File file, boolean append) throws FileNotFoundException {
         if (file == null) {
@@ -77,49 +82,49 @@ public class FileOutputStream extends OutputStream {
         if (file.isDirectory()) {
             throw new FileNotFoundException(file.getPath() + " (Is a directory)");
         }
-        this.ruta = file.getPath();
-        this.anexar = append;
+        this.path = file.getPath();
+        this.appending = append;
         if (!append) {
-            // Truncar **ahora**, no en el primer write: abrir para escribir borra lo que habia
-            // aunque despues no se escriba nada, y es lo que hace el del JDK.
-            if (!Fs.writeAllBytes(this.ruta, new byte[0], false)) {
-                throw new FileNotFoundException(this.ruta + " (Permission denied)");
+            // Truncate **now**, not on the first write: opening for writing erases what was there
+            // even if nothing is written afterwards, and it is what the JDK's does.
+            if (!Fs.writeAllBytes(this.path, new byte[0], false)) {
+                throw new FileNotFoundException(this.path + " (Permission denied)");
             }
-            this.anexar = true;
+            this.appending = true;
         }
     }
 
-    /** Abre por descriptor. Esta biblioteca no modela descriptores; ver la nota de la clase. */
+    /** Opens by descriptor. This library does not model descriptors; see the class note. */
     public FileOutputStream(FileDescriptor fdObj) {
         if (fdObj == null) {
             throw new NullPointerException();
         }
-        this.ruta = null;
-        this.anexar = true;
+        this.path = null;
+        this.appending = true;
     }
 
     public void write(int b) throws IOException {
-        this.comprobarAbierto();
-        this.asegurar(1);
-        this.buf[this.usados] = (byte) b;
-        this.usados = this.usados + 1;
-        if (this.usados >= LIMITE) {
+        this.checkOpen();
+        this.ensure(1);
+        this.buf[this.used] = (byte) b;
+        this.used = this.used + 1;
+        if (this.used >= LIMIT) {
             this.flush();
         }
     }
 
     public void write(byte[] b, int off, int len) throws IOException {
-        this.comprobarAbierto();
+        this.checkOpen();
         if (b == null) {
             throw new NullPointerException();
         }
         if (off < 0 || len < 0 || off + len > b.length) {
             throw new IndexOutOfBoundsException();
         }
-        this.asegurar(len);
-        System.arraycopy(b, off, this.buf, this.usados, len);
-        this.usados = this.usados + len;
-        if (this.usados >= LIMITE) {
+        this.ensure(len);
+        System.arraycopy(b, off, this.buf, this.used, len);
+        this.used = this.used + len;
+        if (this.used >= LIMIT) {
             this.flush();
         }
     }
@@ -128,74 +133,75 @@ public class FileOutputStream extends OutputStream {
         this.write(b, 0, b.length);
     }
 
-    /** Vuelca al disco lo que haya en el buffer. */
+    /** It dumps to the disk whatever is in the buffer. */
     public void flush() throws IOException {
-        if (this.usados == 0 || this.ruta == null) {
+        if (this.used == 0 || this.path == null) {
             return;
         }
-        if (this.canal != null) {
-            // Ya hay canal: el que manda es **su** posicion y no el final del archivo, asi que el
-            // volcado tiene que pasar por el. Si no, un `position()` hacia atras seguido de un
-            // `write` del flujo agregaria al final en vez de escribir donde se pidio.
-            this.canal.vaciarPendiente();
+        if (this.channel != null) {
+            // There is a channel already: the one in charge is **its** position and not the end of
+            // the file, so the dumping has to go through it. Otherwise a backwards `position()`
+            // followed by a `write` on the stream would append at the end instead of writing where
+            // it was asked to.
+            this.channel.flushPending();
             return;
         }
-        byte[] trozo = new byte[this.usados];
-        System.arraycopy(this.buf, 0, trozo, 0, this.usados);
-        if (!Fs.writeAllBytes(this.ruta, trozo, this.anexar)) {
-            throw new IOException("Could not write to " + this.ruta);
+        byte[] chunk = new byte[this.used];
+        System.arraycopy(this.buf, 0, chunk, 0, this.used);
+        if (!Fs.writeAllBytes(this.path, chunk, this.appending)) {
+            throw new IOException("Could not write to " + this.path);
         }
-        this.anexar = true;
-        this.usados = 0;
+        this.appending = true;
+        this.used = 0;
     }
 
     public void close() throws IOException {
-        if (!this.cerrado) {
+        if (!this.closed) {
             this.flush();
-            this.cerrado = true;
+            this.closed = true;
         }
-        // Cerrar el flujo cierra su canal: son la misma cosa vista de dos maneras.
-        if (this.canal != null && this.canal.isOpen()) {
-            this.canal.close();
+        // Closing the stream closes its channel: they are the same thing seen two ways.
+        if (this.channel != null && this.channel.isOpen()) {
+            this.channel.close();
         }
     }
 
     /**
-     * El canal de este flujo, **con la misma posicion**: escribir por el flujo mueve el canal y
-     * mover el canal cambia donde escribe el flujo. El porque de que sea un solo numero, y el precio
-     * de pedirlo, estan en `Canales`.
+     * This stream's channel, **with the same position**: writing through the stream moves the
+     * channel and moving the channel changes where the stream writes. The why of its being a single
+     * number, and the price of asking for it, are in `StreamChannels`.
      *
-     * <p>Pedirlo cambia como vuelca este flujo: de agregar al final pasa a escribir en la posicion
-     * del canal, que en esta VM cuesta reescribir el archivo entero. Quien no lo pida escribe como
-     * antes.
+     * <p>Asking for it changes how this stream dumps: from appending at the end it moves to writing
+     * at the channel's position, which in this VM costs rewriting the whole file. Whoever does not
+     * ask for it writes as before.
      */
     public java.nio.channels.FileChannel getChannel() {
-        if (this.canal == null) {
-            this.canal = new Canales.DeSalida(this);
+        if (this.channel == null) {
+            this.channel = new StreamChannels.ForOutput(this);
         }
-        return this.canal;
+        return this.channel;
     }
 
-    /** El descriptor. Esta biblioteca no los modela; ver la nota de la clase. */
+    /** The descriptor. This library does not model them; see the class note. */
     public final FileDescriptor getFD() throws IOException {
         return new FileDescriptor();
     }
 
-    private void asegurar(int extra) {
-        if (this.usados + extra <= this.buf.length) {
+    private void ensure(int extra) {
+        if (this.used + extra <= this.buf.length) {
             return;
         }
-        int nuevo = this.buf.length * 2;
-        while (nuevo < this.usados + extra) {
-            nuevo = nuevo * 2;
+        int fresh = this.buf.length * 2;
+        while (fresh < this.used + extra) {
+            fresh = fresh * 2;
         }
-        byte[] mas = new byte[nuevo];
-        System.arraycopy(this.buf, 0, mas, 0, this.usados);
+        byte[] mas = new byte[fresh];
+        System.arraycopy(this.buf, 0, mas, 0, this.used);
         this.buf = mas;
     }
 
-    private void comprobarAbierto() throws IOException {
-        if (this.cerrado) {
+    private void checkOpen() throws IOException {
+        if (this.closed) {
             throw new IOException("Stream Closed");
         }
     }

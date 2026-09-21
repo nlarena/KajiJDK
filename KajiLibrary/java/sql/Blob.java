@@ -1,50 +1,50 @@
 package java.sql;
 
 /**
- * KajiLibrary's java.sql.Blob -- un dato binario grande, **por referencia**.
+ * KajiLibrary's java.sql.Blob -- a large binary value, **by reference**.
  *
- * <p>La razon de que exista en vez de un `byte[]` esta en {@link #getBinaryStream}: un BLOB puede
- * pesar gigabytes, y traerlo entero para leer los primeros mil bytes seria absurdo. Este objeto es un
- * puntero del lado del cliente a un dato que sigue viviendo en la base, y solo se materializa lo que
- * se pide.
+ * <p>The reason it exists instead of a `byte[]` is in {@link #getBinaryStream}: a BLOB can weigh
+ * gigabytes, and fetching it whole to read the first thousand bytes would be absurd. This object is
+ * a client-side pointer to a value that keeps living in the database, and only what is asked for is
+ * materialized.
  *
- * <p>Eso explica {@link #free}: el puntero ata recursos del otro lado, y esperar al recolector para
- * soltarlos puede ser demasiado tarde.
+ * <p>That explains {@link #free}: the pointer ties up resources on the other side, and waiting for
+ * the collector to release them may be too late.
  *
- * <p>Las posiciones se cuentan **desde uno**, como todo en JDBC.
+ * <p>Positions are counted **from one**, like everything in JDBC.
  */
 public interface Blob {
 
-    /** Cuantos bytes tiene. */
+    /** How many bytes it has. */
     long length() throws SQLException;
 
-    /** `length` bytes a partir de `pos`. */
+    /** `length` bytes starting at `pos`. */
     byte[] getBytes(long pos, int length) throws SQLException;
 
-    /** Todo el contenido, como flujo. */
+    /** The whole content, as a stream. */
     java.io.InputStream getBinaryStream() throws SQLException;
 
-    /** `length` bytes desde `pos`, como flujo. */
+    /** `length` bytes from `pos`, as a stream. */
     java.io.InputStream getBinaryStream(long pos, long length) throws SQLException;
 
-    /** Donde empieza `pattern` a partir de `start`, o -1. */
+    /** Where `pattern` starts from `start`, or -1. */
     long position(byte[] pattern, long start) throws SQLException;
 
-    /** Igual, buscando el contenido de otro BLOB. */
+    /** The same, searching for another BLOB's content. */
     long position(Blob pattern, long start) throws SQLException;
 
-    /** Escribe esos bytes en `pos`; devuelve cuantos escribio. */
+    /** Writes those bytes at `pos`; returns how many it wrote. */
     int setBytes(long pos, byte[] bytes) throws SQLException;
 
-    /** Igual, tomando una porcion del arreglo. */
+    /** The same, taking a slice of the array. */
     int setBytes(long pos, byte[] bytes, int offset, int len) throws SQLException;
 
-    /** Un flujo para escribir desde `pos`. */
+    /** A stream to write from `pos`. */
     java.io.OutputStream setBinaryStream(long pos) throws SQLException;
 
-    /** Lo recorta a `len` bytes. */
+    /** Truncates it to `len` bytes. */
     void truncate(long len) throws SQLException;
 
-    /** Suelta los recursos del puntero. */
+    /** Releases the pointer's resources. */
     void free() throws SQLException;
 }

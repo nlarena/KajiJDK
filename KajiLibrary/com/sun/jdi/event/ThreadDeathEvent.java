@@ -3,16 +3,16 @@ package com.sun.jdi.event;
 import com.sun.jdi.ThreadReference;
 
 /**
- * Termino un hilo.
+ * A thread ended.
  *
  * @since 1.3
  */
 public interface ThreadDeathEvent extends Event {
 
     /**
-     * El thread.
+     * The thread.
      *
-     * @return el resultado
+     * @return the result
      */
     ThreadReference thread();
 }

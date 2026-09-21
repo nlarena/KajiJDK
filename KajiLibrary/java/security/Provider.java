@@ -17,38 +17,40 @@ import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
-// Un catalogo de implementaciones criptograficas: que algoritmos sabe hacer, y con que clase.
+// A catalogue of cryptographic implementations: which algorithms it knows how to do, and with
+// which class.
 //
 // ===============================================================================================
-// POR QUE ES UN `Properties` Y NO UN MAPA CUALQUIERA
+// WHY IT IS A `Properties` AND NOT JUST ANY MAP
 // ===============================================================================================
 //
-// Que herede de `Properties` parece un accidente y es historia: en 1.2 un proveedor **era** un
-// archivo de propiedades, con lineas como
+// That it inherits from `Properties` looks like an accident and is history: in 1.2 a provider
+// **was** a properties file, with lines such as
 //
-//     MessageDigest.SHA-256 = com.ejemplo.SHA256
+//     MessageDigest.SHA-256 = com.example.SHA256
 //     Alg.Alias.MessageDigest.SHA256 = SHA-256
 //     MessageDigest.SHA-256 ImplementedIn = Software
 //
-// y toda la busqueda de algoritmos era buscar una clave. En 1.5 se agrego `Provider.Service`, que
-// es la forma tipada de decir lo mismo, pero las propiedades no se pudieron sacar porque habia
-// codigo leyendolas. Entonces esta clase mantiene **las dos vistas sincronizadas**: `putService`
-// escribe tambien las propiedades, y cualquier cambio en las propiedades invalida la tabla de
-// servicios para que se reconstruya. Esa es la mayor parte de lo que hace este archivo.
+// and the whole search for algorithms was looking up a key. In 1.5 `Provider.Service` was added,
+// which is the typed way of saying the same thing, but the properties could not be taken out
+// because there was code reading them. So this class keeps **both views synchronised**:
+// `putService` writes the properties as well, and any change in the properties invalidates the
+// table of services so that it is rebuilt. That is most of what this file does.
 //
-// La reconstruccion es perezosa —una bandera y un rearmado completo— y no incremental a proposito:
-// un `putAll` o un `replaceAll` pueden tocar cualquier cosa, y seguirlos de a un cambio es donde
-// se cuelan las inconsistencias.
+// The rebuilding is lazy —a flag and a complete reassembly— and not incremental on purpose: a
+// `putAll` or a `replaceAll` can touch anything, and following them one change at a time is where
+// the inconsistencies creep in.
 //
 // ===============================================================================================
-// LO QUE NO ESTA
+// WHAT IS NOT THERE
 // ===============================================================================================
 //
-// `Provider` es abstracta y esta clase no registra ningun algoritmo: los algoritmos los pone quien
-// la extienda. En esta biblioteca el unico que lo hace es `KajiProvider`, con los seis digests.
+// `Provider` is abstract and this class registers no algorithm: the algorithms are put in by
+// whoever extends it. In this library the only one that does is `KajiProvider`, with the six
+// digests.
 //
-// No esta `getDefaultSecureRandomService()` porque es package-private en el JDK y no hay
-// `SecureRandom` que lo consuma.
+// `getDefaultSecureRandomService()` is not there because it is package-private in the JDK and there
+// is no `SecureRandom` to consume it.
 public abstract class Provider extends Properties {
 
     private final String name;
@@ -56,27 +58,27 @@ public abstract class Provider extends Properties {
     private final double version;
     private final String info;
 
-    // Servicios puestos con `putService`, por "tipo.algoritmo" en minusculas.
-    private final Map<String, Service> servicios = new LinkedHashMap<String, Service>();
+    // Services put in with `putService`, by "type.algorithm" in lower case.
+    private final Map<String, Service> services = new LinkedHashMap<String, Service>();
 
-    // "tipo.alias" -> "tipo.algoritmo". Los alias de un servicio tipado se resuelven aca y no
-    // releyendo las propiedades: si no, buscar por alias caeria en la copia deducida, que no sabe
-    // instanciarse igual que la original.
-    private final Map<String, String> aliasDeServicio = new HashMap<String, String>();
+    // "type.alias" -> "type.algorithm". The aliases of a typed service are resolved here and not by
+    // rereading the properties: if not, looking up by alias would land in the deduced copy, which
+    // does not know how to instantiate itself like the original.
+    private final Map<String, String> serviceAliases = new HashMap<String, String>();
 
-    // Servicios deducidos de las propiedades. Se rearma entero cuando `legacyCambiado`.
+    // Services deduced from the properties. It is reassembled whole when `legacyChanged`.
     private Map<String, Service> legacy = new LinkedHashMap<String, Service>();
 
-    private boolean legacyCambiado = true;
+    private boolean legacyChanged = true;
 
-    // Corta la recursion: `putService` escribe propiedades, y esas escrituras no tienen que
-    // invalidar la tabla que las genero.
-    private boolean escribiendoServicio;
+    // It cuts the recursion: `putService` writes properties, and those writes must not invalidate
+    // the table that generated them.
+    private boolean writingService;
 
-    // Un proveedor con version numerica.
+    // A provider with a numeric version.
     //
-    // Deprecado en el JDK: un `double` no sabe expresar "1.2.3" ni "21-ea", y comparar versiones
-    // por resta de flotantes ordena mal en cuanto hay tres componentes.
+    // Deprecated in the JDK: a `double` cannot express "1.2.3" or "21-ea", and comparing versions
+    // by subtracting floats orders them wrongly as soon as there are three components.
     @Deprecated
     protected Provider(String name, double version, String info) {
         this.name = name;
@@ -88,25 +90,25 @@ public abstract class Provider extends Properties {
     protected Provider(String name, String versionStr, String info) {
         this.name = name;
         this.versionStr = versionStr;
-        this.version = parsearVersion(versionStr);
+        this.version = parseVersion(versionStr);
         this.info = info;
     }
 
-    // El `double` que corresponde a los dos primeros componentes de la cadena.
+    // The `double` that corresponds to the first two components of the string.
     //
-    // Solo existe para que `getVersion()` siga contestando algo razonable. Si no se puede leer,
-    // devuelve 0: inventar un numero seria peor que decir "no se".
-    private static double parsearVersion(String s) {
+    // It only exists so that `getVersion()` goes on answering something reasonable. If it cannot be
+    // read, it returns 0: inventing a number would be worse than saying "I do not know".
+    private static double parseVersion(String s) {
         if (s == null) {
             return 0d;
         }
         int i = 0;
-        int puntos = 0;
+        int dots = 0;
         while (i < s.length()) {
             char c = s.charAt(i);
             if (c == '.') {
-                puntos = puntos + 1;
-                if (puntos > 1) {
+                dots = dots + 1;
+                if (dots > 1) {
                     break;
                 }
             } else if (c < '0' || c > '9') {
@@ -124,16 +126,17 @@ public abstract class Provider extends Properties {
         }
     }
 
-    // Devuelve un proveedor configurado con `configArg`.
+    // It returns a provider configured with `configArg`.
     //
-    // La implementacion base **no** sabe configurarse y lo dice tirando. Es el comportamiento del
-    // JDK y es el correcto: solo un proveedor que tenga algo que configurar —tipicamente uno que
-    // hable con un token PKCS#11— puede saber que significa el argumento.
+    // The base implementation does **not** know how to configure itself and says so by throwing. It
+    // is the behaviour of the JDK and it is the right one: only a provider that has something to
+    // configure —typically one that talks to a PKCS#11 token— can know what the argument means.
     public Provider configure(String configArg) {
         throw new UnsupportedOperationException("configure is not supported");
     }
 
-    // Si este proveedor no necesita configuracion, o ya la recibio. La base siempre esta lista.
+    // Whether this provider needs no configuration, or has received it already. The base one is
+    // always ready.
     public boolean isConfigured() {
         return true;
     }
@@ -161,107 +164,107 @@ public abstract class Provider extends Properties {
     }
 
     // -------------------------------------------------------------------------------------------
-    // La vista de propiedades. Todo lo que muta invalida la tabla de servicios deducida.
+    // The properties view. Everything that mutates invalidates the deduced table of services.
     // -------------------------------------------------------------------------------------------
 
     @Override
     public synchronized void clear() {
-        this.servicios.clear();
-        this.aliasDeServicio.clear();
-        this.legacyCambiado = true;
+        this.services.clear();
+        this.serviceAliases.clear();
+        this.legacyChanged = true;
         super.clear();
     }
 
     @Override
     public synchronized void load(InputStream inStream) throws IOException {
-        this.legacyCambiado = true;
+        this.legacyChanged = true;
         super.load(inStream);
     }
 
     @Override
     public synchronized void putAll(Map<?, ?> t) {
-        this.legacyCambiado = true;
+        this.legacyChanged = true;
         super.putAll(t);
     }
 
     @Override
     public synchronized Object put(Object key, Object value) {
-        if (!this.escribiendoServicio) {
-            this.legacyCambiado = true;
+        if (!this.writingService) {
+            this.legacyChanged = true;
         }
         return super.put(key, value);
     }
 
     @Override
     public synchronized Object putIfAbsent(Object key, Object value) {
-        this.legacyCambiado = true;
+        this.legacyChanged = true;
         return super.putIfAbsent(key, value);
     }
 
     @Override
     public synchronized Object remove(Object key) {
-        if (!this.escribiendoServicio) {
-            this.legacyCambiado = true;
+        if (!this.writingService) {
+            this.legacyChanged = true;
         }
         return super.remove(key);
     }
 
     @Override
     public synchronized boolean remove(Object key, Object value) {
-        this.legacyCambiado = true;
+        this.legacyChanged = true;
         return super.remove(key, value);
     }
 
     @Override
     public synchronized boolean replace(Object key, Object oldValue, Object newValue) {
-        this.legacyCambiado = true;
+        this.legacyChanged = true;
         return super.replace(key, oldValue, newValue);
     }
 
     @Override
     public synchronized Object replace(Object key, Object value) {
-        this.legacyCambiado = true;
+        this.legacyChanged = true;
         return super.replace(key, value);
     }
 
     @Override
     public synchronized void replaceAll(
             BiFunction<? super Object, ? super Object, ? extends Object> function) {
-        this.legacyCambiado = true;
+        this.legacyChanged = true;
         super.replaceAll(function);
     }
 
     @Override
     public synchronized Object compute(Object key,
             BiFunction<? super Object, ? super Object, ? extends Object> remappingFunction) {
-        this.legacyCambiado = true;
+        this.legacyChanged = true;
         return super.compute(key, remappingFunction);
     }
 
     @Override
     public synchronized Object computeIfAbsent(Object key,
             Function<? super Object, ? extends Object> mappingFunction) {
-        this.legacyCambiado = true;
+        this.legacyChanged = true;
         return super.computeIfAbsent(key, mappingFunction);
     }
 
     @Override
     public synchronized Object computeIfPresent(Object key,
             BiFunction<? super Object, ? super Object, ? extends Object> remappingFunction) {
-        this.legacyCambiado = true;
+        this.legacyChanged = true;
         return super.computeIfPresent(key, remappingFunction);
     }
 
     @Override
     public synchronized Object merge(Object key, Object value,
             BiFunction<? super Object, ? super Object, ? extends Object> remappingFunction) {
-        this.legacyCambiado = true;
+        this.legacyChanged = true;
         return super.merge(key, value, remappingFunction);
     }
 
-    // Las tres vistas se entregan **inmodificables**. No es prolijidad: mutar por la vista se
-    // saltearia los `put` de arriba y dejaria la tabla de servicios describiendo un catalogo que
-    // ya no es el que esta.
+    // The three views are handed over **unmodifiable**. It is not tidiness: mutating through the
+    // view would skip the `put`s above and leave the table of services describing a catalogue that
+    // is no longer the one that is there.
     @Override
     public synchronized Set<Map.Entry<Object, Object>> entrySet() {
         return Collections.unmodifiableSet(super.entrySet());
@@ -278,62 +281,62 @@ public abstract class Provider extends Properties {
     }
 
     // -------------------------------------------------------------------------------------------
-    // La vista de servicios.
+    // The services view.
     // -------------------------------------------------------------------------------------------
 
-    // El servicio que implementa `algorithm` para `type`, o null.
+    // The service that implements `algorithm` for `type`, or null.
     //
-    // Busca primero entre los puestos con `putService` y despues entre los deducidos de las
-    // propiedades: si los dos definen el mismo par, gana el tipado, que es el que trae los
-    // atributos completos.
+    // It looks first among the ones put in with `putService` and then among the ones deduced from
+    // the properties: if both define the same pair, the typed one wins, which is the one that
+    // brings the complete attributes.
     public synchronized Service getService(String type, String algorithm) {
         if (type == null || algorithm == null) {
             throw new NullPointerException();
         }
-        String clave = clave(type, algorithm);
-        Service s = this.servicios.get(clave);
+        String key = key(type, algorithm);
+        Service s = this.services.get(key);
         if (s != null) {
             return s;
         }
-        String canon = this.aliasDeServicio.get(clave);
-        if (canon != null) {
-            s = this.servicios.get(canon);
+        String canonical = this.serviceAliases.get(key);
+        if (canonical != null) {
+            s = this.services.get(canonical);
             if (s != null) {
                 return s;
             }
         }
-        this.asegurarLegacy();
-        return this.legacy.get(clave);
+        this.ensureLegacy();
+        return this.legacy.get(key);
     }
 
-    // Todos los servicios de este proveedor, sin repetir.
+    // Every service of this provider, without repeating.
     //
-    // Se deduplica por el par (tipo, algoritmo) **del servicio**, no por la clave con que se lo
-    // encontro: un algoritmo con tres alias esta tres veces en las tablas de busqueda y tiene que
-    // salir una sola vez de aca. Cuando el mismo par aparece tipado y deducido, gana el tipado.
+    // It is deduplicated by the pair (type, algorithm) **of the service**, not by the key it was
+    // found with: an algorithm with three aliases is three times in the lookup tables and has to
+    // come out of here only once. When the same pair appears typed and deduced, the typed one wins.
     public synchronized Set<Service> getServices() {
-        this.asegurarLegacy();
-        LinkedHashMap<String, Service> vistos = new LinkedHashMap<String, Service>();
+        this.ensureLegacy();
+        LinkedHashMap<String, Service> seen = new LinkedHashMap<String, Service>();
         Iterator<String> it = this.legacy.keySet().iterator();
         while (it.hasNext()) {
             Service s = this.legacy.get(it.next());
-            vistos.put(clave(s.getType(), s.getAlgorithm()), s);
+            seen.put(key(s.getType(), s.getAlgorithm()), s);
         }
-        Iterator<String> it2 = this.servicios.keySet().iterator();
+        Iterator<String> it2 = this.services.keySet().iterator();
         while (it2.hasNext()) {
-            Service s = this.servicios.get(it2.next());
-            vistos.put(clave(s.getType(), s.getAlgorithm()), s);
+            Service s = this.services.get(it2.next());
+            seen.put(key(s.getType(), s.getAlgorithm()), s);
         }
         LinkedHashSet<Service> out = new LinkedHashSet<Service>();
-        Iterator<String> it3 = vistos.keySet().iterator();
+        Iterator<String> it3 = seen.keySet().iterator();
         while (it3.hasNext()) {
-            out.add(vistos.get(it3.next()));
+            out.add(seen.get(it3.next()));
         }
         return Collections.unmodifiableSet(out);
     }
 
-    // Agrega un servicio, y escribe tambien las propiedades equivalentes para que quien lea el
-    // proveedor a la vieja usanza vea lo mismo.
+    // It adds a service, and writes the equivalent properties as well so that whoever reads the
+    // provider the old way sees the same thing.
     protected synchronized void putService(Service s) {
         if (s == null) {
             throw new NullPointerException();
@@ -342,25 +345,25 @@ public abstract class Provider extends Properties {
             throw new IllegalArgumentException(
                 "service.getProvider() must match this Provider object");
         }
-        String canon = clave(s.getType(), s.getAlgorithm());
-        this.servicios.put(canon, s);
-        this.escribiendoServicio = true;
+        String canonical = key(s.getType(), s.getAlgorithm());
+        this.services.put(canonical, s);
+        this.writingService = true;
         try {
             super.put(s.getType() + "." + s.getAlgorithm(), s.getClassName());
             List<String> alias = s.getAliases();
             int i = 0;
             while (i < alias.size()) {
-                this.aliasDeServicio.put(clave(s.getType(), alias.get(i)), canon);
+                this.serviceAliases.put(key(s.getType(), alias.get(i)), canonical);
                 super.put("Alg.Alias." + s.getType() + "." + alias.get(i), s.getAlgorithm());
                 i = i + 1;
             }
-            Iterator<String> at = s.nombresDeAtributos().iterator();
+            Iterator<String> at = s.attributeNames().iterator();
             while (at.hasNext()) {
                 String a = at.next();
                 super.put(s.getType() + "." + s.getAlgorithm() + " " + a, s.getAttribute(a));
             }
         } finally {
-            this.escribiendoServicio = false;
+            this.writingService = false;
         }
     }
 
@@ -368,44 +371,44 @@ public abstract class Provider extends Properties {
         if (s == null) {
             throw new NullPointerException();
         }
-        this.servicios.remove(clave(s.getType(), s.getAlgorithm()));
-        this.escribiendoServicio = true;
+        this.services.remove(key(s.getType(), s.getAlgorithm()));
+        this.writingService = true;
         try {
             super.remove(s.getType() + "." + s.getAlgorithm());
             List<String> alias = s.getAliases();
             int i = 0;
             while (i < alias.size()) {
-                this.aliasDeServicio.remove(clave(s.getType(), alias.get(i)));
+                this.serviceAliases.remove(key(s.getType(), alias.get(i)));
                 super.remove("Alg.Alias." + s.getType() + "." + alias.get(i));
                 i = i + 1;
             }
-            Iterator<String> at = s.nombresDeAtributos().iterator();
+            Iterator<String> at = s.attributeNames().iterator();
             while (at.hasNext()) {
                 super.remove(s.getType() + "." + s.getAlgorithm() + " " + at.next());
             }
         } finally {
-            this.escribiendoServicio = false;
+            this.writingService = false;
         }
     }
 
-    // Los nombres de tipo y algoritmo son insensibles a mayusculas: "SHA-256" y "sha-256" son el
-    // mismo algoritmo, y el catalogo tiene que encontrarlo escrito de cualquier forma.
-    private static String clave(String type, String algorithm) {
+    // The names of type and algorithm are case-insensitive: "SHA-256" and "sha-256" are the same
+    // algorithm, and the catalogue has to find it written either way.
+    private static String key(String type, String algorithm) {
         return type.toLowerCase() + "." + algorithm.toLowerCase();
     }
 
-    // Rearma la tabla deducida si alguna propiedad cambio.
+    // It reassembles the deduced table if any property changed.
     //
-    // Tres pasadas porque las lineas pueden venir en cualquier orden: primero las que definen
-    // clases, despues los atributos —que necesitan que el servicio ya exista— y por ultimo los
-    // alias, que apuntan a un algoritmo que puede haberse definido despues.
-    private void asegurarLegacy() {
-        if (!this.legacyCambiado) {
+    // Three passes because the lines can come in any order: first the ones that define classes,
+    // then the attributes —which need the service to exist already— and last the aliases, which
+    // point at an algorithm that may have been defined afterwards.
+    private void ensureLegacy() {
+        if (!this.legacyChanged) {
             return;
         }
-        this.legacyCambiado = false;
-        LinkedHashMap<String, Service> nuevo = new LinkedHashMap<String, Service>();
-        ArrayList<String[]> atributos = new ArrayList<String[]>();
+        this.legacyChanged = false;
+        LinkedHashMap<String, Service> fresh = new LinkedHashMap<String, Service>();
+        ArrayList<String[]> attrs = new ArrayList<String[]>();
         ArrayList<String[]> alias = new ArrayList<String[]>();
 
         Iterator<Map.Entry<Object, Object>> it = super.entrySet().iterator();
@@ -417,20 +420,20 @@ public abstract class Provider extends Properties {
             String k = ((String) e.getKey()).trim();
             String v = ((String) e.getValue()).trim();
             if (k.startsWith("Alg.Alias.")) {
-                String resto = k.substring("Alg.Alias.".length());
-                int p = resto.indexOf('.');
-                if (p > 0 && p < resto.length() - 1) {
-                    alias.add(new String[] {resto.substring(0, p), resto.substring(p + 1), v});
+                String rest = k.substring("Alg.Alias.".length());
+                int p = rest.indexOf('.');
+                if (p > 0 && p < rest.length() - 1) {
+                    alias.add(new String[] {rest.substring(0, p), rest.substring(p + 1), v});
                 }
                 continue;
             }
-            int esp = k.indexOf(' ');
-            if (esp > 0) {
-                String izq = k.substring(0, esp);
-                String attr = k.substring(esp + 1).trim();
-                int p = izq.indexOf('.');
-                if (p > 0 && p < izq.length() - 1 && !attr.isEmpty()) {
-                    atributos.add(new String[] {izq.substring(0, p), izq.substring(p + 1), attr, v});
+            int sp = k.indexOf(' ');
+            if (sp > 0) {
+                String left = k.substring(0, sp);
+                String attr = k.substring(sp + 1).trim();
+                int p = left.indexOf('.');
+                if (p > 0 && p < left.length() - 1 && !attr.isEmpty()) {
+                    attrs.add(new String[] {left.substring(0, p), left.substring(p + 1), attr, v});
                 }
                 continue;
             }
@@ -438,16 +441,16 @@ public abstract class Provider extends Properties {
             if (p > 0 && p < k.length() - 1) {
                 String type = k.substring(0, p);
                 String alg = k.substring(p + 1);
-                nuevo.put(clave(type, alg),
+                fresh.put(key(type, alg),
                     new Service(this, type, alg, v, new ArrayList<String>(),
                                 new HashMap<String, String>()));
             }
         }
 
         int i = 0;
-        while (i < atributos.size()) {
-            String[] a = atributos.get(i);
-            Service s = nuevo.get(clave(a[0], a[1]));
+        while (i < attrs.size()) {
+            String[] a = attrs.get(i);
+            Service s = fresh.get(key(a[0], a[1]));
             if (s != null) {
                 s.addAttribute(a[2], a[3]);
             }
@@ -457,24 +460,24 @@ public abstract class Provider extends Properties {
         i = 0;
         while (i < alias.size()) {
             String[] a = alias.get(i);
-            Service s = nuevo.get(clave(a[0], a[2]));
+            Service s = fresh.get(key(a[0], a[2]));
             if (s != null) {
-                s.agregarAlias(a[1]);
-                nuevo.put(clave(a[0], a[1]), s);
+                s.addAlias(a[1]);
+                fresh.put(key(a[0], a[1]), s);
             }
             i = i + 1;
         }
-        this.legacy = nuevo;
+        this.legacy = fresh;
     }
 
     // ===========================================================================================
-    // Un algoritmo concreto ofrecido por un proveedor.
+    // A concrete algorithm offered by a provider.
     // ===========================================================================================
     //
-    // Lo que aporta sobre la linea de propiedades equivalente es que **sabe instanciarse**: en vez
-    // de que cada fabrica lea un nombre de clase y haga reflexion por su cuenta, se le pide al
-    // servicio y el decide como. Un proveedor que tenga las clases a mano puede subclasear esto y
-    // devolverlas directamente, sin reflexion — que es lo que hace `KajiProvider`.
+    // What it contributes over the equivalent properties line is that it **knows how to instantiate
+    // itself**: instead of each factory reading a class name and doing reflection on its own, the
+    // service is asked and it decides how. A provider that has the classes to hand can subclass
+    // this and return them directly, without reflection — which is what `KajiProvider` does.
     public static class Service {
 
         private final Provider provider;
@@ -528,7 +531,7 @@ public abstract class Provider extends Properties {
             return this.attributes.get(name.toLowerCase());
         }
 
-        // Los alias de este algoritmo. Package-private en el JDK; aca tambien.
+        // The aliases of this algorithm. Package-private in the JDK; here too.
         final List<String> getAliases() {
             return this.aliases;
         }
@@ -541,22 +544,23 @@ public abstract class Provider extends Properties {
             this.attributes.remove(type.toLowerCase());
         }
 
-        final void agregarAlias(String alias) {
+        final void addAlias(String alias) {
             if (!this.aliases.contains(alias)) {
                 this.aliases.add(alias);
             }
         }
 
-        final Set<String> nombresDeAtributos() {
+        final Set<String> attributeNames() {
             return this.attributes.keySet();
         }
 
-        // Una instancia nueva de la implementacion.
+        // A new instance of the implementation.
         //
-        // La base carga la clase por nombre y usa el constructor sin argumentos. `constructorParameter`
-        // solo lo aceptan unos pocos tipos de servicio en el JDK —los que reciben una clave o unos
-        // parametros al construirse— y ninguno de ellos existe en esta biblioteca, asi que aca
-        // pasar algo distinto de null es un error del llamador y se dice como tal.
+        // The base one loads the class by name and uses the no-argument constructor.
+        // `constructorParameter` is only accepted by a few types of service in the JDK —the ones
+        // that receive a key or some parameters when they are built— and none of them exists in
+        // this library, so here passing something other than null is an error of the caller and is
+        // said as such.
         public Object newInstance(Object constructorParameter)
                 throws NoSuchAlgorithmException {
             if (constructorParameter != null) {
@@ -574,10 +578,10 @@ public abstract class Provider extends Properties {
             }
         }
 
-        // Si este servicio puede usarse con el parametro dado.
+        // Whether this service can be used with the given parameter.
         //
-        // Ningun tipo de servicio de esta biblioteca usa parametro, asi que la unica respuesta
-        // honesta para un parametro no nulo es rechazarlo, y para null es que si.
+        // No type of service of this library uses a parameter, so the only honest answer for a
+        // non-null parameter is to reject it, and for null it is yes.
         public boolean supportsParameter(Object parameter) {
             if (parameter != null) {
                 throw new InvalidParameterException(

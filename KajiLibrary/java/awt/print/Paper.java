@@ -1,35 +1,35 @@
 package java.awt.print;
 
 /**
- * KajiLibrary's java.awt.print.Paper -- la hoja fisica y su area imprimible.
+ * KajiLibrary's java.awt.print.Paper -- the physical sheet and its imageable area.
  *
- * <p>Dos rectangulos: el tamano de la hoja, y adentro el pedazo donde la impresora puede poner tinta.
- * El resto es el margen mecanico, que existe porque los rodillos tienen que agarrar el papel de algun
- * lado.
+ * <p>Two rectangles: the size of the sheet, and inside it the part where the printer can put ink.
+ * The rest is the mechanical margin, which exists because the rollers have to grab the paper
+ * somewhere.
  *
- * <p>Todo esta en <b>puntos</b>: 1/72 de pulgada. Una carta es 612 por 792, y eso es lo que trae por
- * omision, con una pulgada de margen por lado.
+ * <p>Everything is in <b>points</b>: 1/72 of an inch. A letter page is 612 by 792, and that is the
+ * default, with one inch of margin on each side.
  *
- * <h2>No valida nada</h2>
+ * <h2>It validates nothing</h2>
  *
- * <p>{@link #setImageableArea} acepta un area que se sale de la hoja, o negativa. Es deliberado en el
- * JDK y lo respetamos: quien corrige es {@code PrinterJob.validatePage}, que sabe contra que impresora
- * validar. Un {@code Paper} suelto no tiene con que.
+ * <p>{@link #setImageableArea} accepts an area that goes outside the sheet, or a negative one. That
+ * is deliberate in the JDK and we respect it: what corrects it is {@code PrinterJob.validatePage},
+ * which knows which printer to validate against. A lone {@code Paper} has nothing to validate with.
  *
- * <p>Es mutable y {@link Cloneable}; por eso {@link PageFormat#getPaper} devuelve una copia.
+ * <p>It is mutable and {@link Cloneable}; that is why {@link PageFormat#getPaper} returns a copy.
  */
 public class Paper implements Cloneable {
 
-    /** Una pulgada en puntos. */
+    /** One inch in points. */
     private static final int INCH = 72;
 
-    /** Ancho de la hoja. */
+    /** Width of the sheet. */
     private double mHeight;
 
-    /** Alto de la hoja. */
+    /** Height of the sheet. */
     private double mWidth;
 
-    /** El area imprimible. */
+    /** The imageable area. */
     private double mImageableX;
 
     private double mImageableY;
@@ -38,7 +38,7 @@ public class Paper implements Cloneable {
 
     private double mImageableHeight;
 
-    /** Una carta con una pulgada de margen. */
+    /** A letter page with one inch of margin. */
     public Paper() {
         this.mHeight = 11.0 * INCH;
         this.mWidth = 8.5 * INCH;
@@ -48,34 +48,34 @@ public class Paper implements Cloneable {
         this.mImageableHeight = this.mHeight - 2.0 * INCH;
     }
 
-    /** Una copia independiente. */
+    /** An independent copy. */
     @Override
     public Object clone() {
         try {
             return super.clone();
         } catch (CloneNotSupportedException e) {
-            // Paper es Cloneable, asi que esto no puede pasar.
+            // Paper is Cloneable, so this cannot happen.
             throw new InternalError(e);
         }
     }
 
-    /** El ancho de la hoja, en puntos. */
+    /** The width of the sheet, in points. */
     public double getWidth() {
         return this.mWidth;
     }
 
-    /** El alto de la hoja, en puntos. */
+    /** The height of the sheet, in points. */
     public double getHeight() {
         return this.mHeight;
     }
 
-    /** Cambia el tamano de la hoja. No toca el area imprimible. */
+    /** Changes the size of the sheet. It does not touch the imageable area. */
     public void setSize(double width, double height) {
         this.mWidth = width;
         this.mHeight = height;
     }
 
-    /** Cambia el area imprimible. No valida; ver la nota de la clase. */
+    /** Changes the imageable area. It does not validate; see the class note. */
     public void setImageableArea(double x, double y, double width, double height) {
         this.mImageableX = x;
         this.mImageableY = y;
@@ -83,22 +83,22 @@ public class Paper implements Cloneable {
         this.mImageableHeight = height;
     }
 
-    /** Borde izquierdo del area imprimible. */
+    /** Left edge of the imageable area. */
     public double getImageableX() {
         return this.mImageableX;
     }
 
-    /** Borde superior. */
+    /** The top edge. */
     public double getImageableY() {
         return this.mImageableY;
     }
 
-    /** Ancho del area imprimible. */
+    /** Width of the imageable area. */
     public double getImageableWidth() {
         return this.mImageableWidth;
     }
 
-    /** Alto del area imprimible. */
+    /** Height of the imageable area. */
     public double getImageableHeight() {
         return this.mImageableHeight;
     }

@@ -1,44 +1,44 @@
 package org.w3c.dom.html;
 
 /**
- * Un `<body>`. Sus propiedades son las de presentacion de HTML 3.2
- * --colores y fondo-- que HTML 4 desaconseja en favor de la hoja de estilos.
+ * A `<body>`. Its properties are the presentational ones of HTML 3.2 --colours and background--
+ * that HTML 4 deprecates in favour of the style sheet.
  */
 public interface HTMLBodyElement extends HTMLElement {
 
-    /** El atributo `aLink`. */
+    /** The `aLink` attribute. */
     String getALink();
 
-    /** Fija el atributo `aLink`. */
+    /** It sets the `aLink` attribute. */
     void setALink(String aLink);
 
-    /** El atributo `background`. */
+    /** The `background` attribute. */
     String getBackground();
 
-    /** Fija el atributo `background`. */
+    /** It sets the `background` attribute. */
     void setBackground(String background);
 
-    /** El atributo `bgColor`. */
+    /** The `bgColor` attribute. */
     String getBgColor();
 
-    /** Fija el atributo `bgColor`. */
+    /** It sets the `bgColor` attribute. */
     void setBgColor(String bgColor);
 
-    /** El atributo `link`. */
+    /** The `link` attribute. */
     String getLink();
 
-    /** Fija el atributo `link`. */
+    /** It sets the `link` attribute. */
     void setLink(String link);
 
-    /** El texto que se muestra. */
+    /** The text that is shown. */
     String getText();
 
-    /** Fija el texto que se muestra. */
+    /** It sets the text that is shown. */
     void setText(String text);
 
-    /** El atributo `vLink`. */
+    /** The `vLink` attribute. */
     String getVLink();
 
-    /** Fija el atributo `vLink`. */
+    /** It sets the `vLink` attribute. */
     void setVLink(String vLink);
 }

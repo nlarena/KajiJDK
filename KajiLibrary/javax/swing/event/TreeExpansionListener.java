@@ -3,13 +3,13 @@ package javax.swing.event;
 import java.util.EventListener;
 
 /**
- * Quien quiere enterarse de que una rama se abrio o se cerro.
+ * Whoever wants to hear that a branch was opened or closed.
  */
 public interface TreeExpansionListener extends EventListener {
 
-    /** La rama se abrio. */
+    /** The branch was opened. */
     void treeExpanded(TreeExpansionEvent e);
 
-    /** La rama se cerro. */
+    /** The branch was closed. */
     void treeCollapsed(TreeExpansionEvent e);
 }

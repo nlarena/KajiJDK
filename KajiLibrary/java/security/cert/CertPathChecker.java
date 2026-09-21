@@ -1,24 +1,27 @@
 package java.security.cert;
 
-// Una comprobacion que se aplica a cada certificado de un camino, uno por uno.
+// A check that is applied to each certificate of a path, one at a time.
 //
-// Es el mecanismo de extension de la validacion: quien necesite una regla que PKIX no trae —una
-// politica interna, una lista propia— la escribe aca en vez de reimplementar la validacion entera.
+// It is the extension mechanism of the validation: whoever needs a rule PKIX does not bring —an
+// internal policy, a list of one's own— writes it here instead of reimplementing the whole
+// validation.
 //
-// `init(boolean forward)` no es un detalle. Un camino se puede recorrer desde el sujeto hacia la
-// raiz o al reves, y hay comprobaciones que solo tienen sentido en un sentido —las que necesitan
-// saber quien firmo antes de mirar al firmado, por ejemplo—. Por eso el checker declara con
-// `isForwardCheckingSupported()` que sabe hacer, e `init` le dice cual le toco esta vez.
+// `init(boolean forward)` is not a detail. A path can be walked from the subject towards the root
+// or the other way round, and there are checks that only make sense in one direction —the ones that
+// need to know who signed before looking at the signed one, for example—. That is why the checker
+// declares with `isForwardCheckingSupported()` what it knows how to do, and `init` tells it which
+// one it got this time.
 public interface CertPathChecker {
 
-    // Prepara el checker y le dice en que sentido se va a recorrer. Se llama antes de la primera
-    // comprobacion, y sirve tambien para resetear el estado entre usos.
+    // It prepares the checker and tells it in which direction the walk is going to be. It is called
+    // before the first check, and it also serves for resetting the state between uses.
     void init(boolean forward) throws CertPathValidatorException;
 
-    // Si sabe comprobar en el sentido sujeto -> raiz.
+    // Whether it knows how to check in the subject -> root direction.
     boolean isForwardCheckingSupported();
 
-    // Comprueba un certificado. **Sin valor de retorno**: si no lanza, paso. Es el mismo contrato
-    // que `Certificate.verify`, y trae el mismo riesgo: un `catch` vacio aca acepta cualquier cosa.
+    // It checks a certificate. **With no return value**: if it does not throw, it passed. It is the
+    // same contract as `Certificate.verify`, and it brings the same risk: an empty `catch` here
+    // accepts anything.
     void check(Certificate cert) throws CertPathValidatorException;
 }

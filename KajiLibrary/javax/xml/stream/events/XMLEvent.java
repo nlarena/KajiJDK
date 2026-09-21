@@ -8,173 +8,174 @@ import javax.xml.stream.XMLStreamConstants;
 import javax.xml.stream.XMLStreamException;
 
 /**
- * KajiLibrary's javax.xml.stream.events.XMLEvent -- una pieza del documento como objeto propio, que
- * se puede guardar.
+ * KajiLibrary's javax.xml.stream.events.XMLEvent -- a piece of the document as an object of its
+ * own, which can be kept.
  *
- * <h2>El otro modelo de StAX, y por que hay dos</h2>
+ * <h2>StAX's other model, and why there are two</h2>
  *
- * <p>{@link javax.xml.stream.XMLStreamReader} y este paquete son las dos caras de StAX y resuelven
- * la misma lectura con un compromiso opuesto. El lector de cursor <b>es</b> el evento: no crea
- * objetos, y a cambio nada de lo que devuelve sobrevive al proximo {@code next()}. Aca cada evento
- * es un objeto inmutable e independiente: se puede guardar en una lista, comparar con otro, o pasar
- * a otro hilo.
+ * <p>{@link javax.xml.stream.XMLStreamReader} and this package are the two faces of StAX and solve
+ * the same reading with opposite trade-offs. The cursor reader <b>is</b> the event: it creates no
+ * objects, and in exchange nothing it returns survives the next {@code next()}. Here each event is
+ * an immutable, independent object: it can be kept in a list, compared with another, or passed to
+ * another thread.
  *
- * <p>El precio es un objeto por evento, que en un documento grande es exactamente el costo que el
- * modelo de cursor existe para evitar. La regla practica: cursor cuando se procesa al vuelo y se
- * descarta, eventos cuando hace falta mirar hacia atras --un mapeo que necesita el elemento padre,
- * un buffer que se reordena, un filtro que decide despues--.
+ * <p>The price is one object per event, which in a large document is exactly the cost the cursor
+ * model exists to avoid. The practical rule: cursor when processing on the fly and discarding,
+ * events when one has to look back --a mapping that needs the parent element, a buffer that is
+ * reordered, a filter that decides later--.
  *
- * <h2>Los diez {@code isXxx} y los tres {@code asXxx}</h2>
+ * <h2>The ten {@code isXxx} and the three {@code asXxx}</h2>
  *
- * <p>La jerarquia usa {@code instanceof} disfrazado: {@link #isStartElement()} y compania dicen de
- * que subtipo es, y {@link #asStartElement()} hace el downcast. Es de antes de que el lenguaje
- * tuviera {@code instanceof} con patron, y sigue siendo la forma canonica de recorrer un
- * {@link javax.xml.stream.XMLEventReader}.
+ * <p>The hierarchy uses disguised {@code instanceof}: {@link #isStartElement()} and company say
+ * which subtype it is, and {@link #asStartElement()} does the downcast. It predates
+ * pattern-matching {@code instanceof} in the language, and it is still the canonical way of walking
+ * a {@link javax.xml.stream.XMLEventReader}.
  *
- * <p>{@link #getEventType()} devuelve la constante de {@link XMLStreamConstants} correspondiente, o
- * sea que los dos modelos comparten el vocabulario de tipos de evento; eso es lo que permite
- * convertir de uno al otro sin traducir nada.
+ * <p>{@link #getEventType()} returns the corresponding {@link XMLStreamConstants} constant, that
+ * is, both models share the vocabulary of event types; that is what allows converting from one to
+ * the other without translating anything.
  *
- * <h2>Que hay aca y que no</h2>
+ * <h2>What is here</h2>
  *
- * <p>La interfaz completa. Las implementaciones de esta biblioteca son las que devuelve
- * {@link javax.xml.stream.XMLEventFactory}, que construye eventos <b>a partir de datos que le
- * pasa el llamador</b> y no de un documento: para eso no hace falta ningun parser, y por eso esa
- * fabrica si funciona. Lo que no hay es un evento que salga de leer XML, porque no hay parser; ver
- * {@link javax.xml.stream.XMLInputFactory}.
+ * <p>The complete interface. This library's implementations are returned both by {@link
+ * javax.xml.stream.XMLEventFactory}, which builds events <b>from data the caller passes</b>, and by
+ * the event reader of {@link javax.xml.stream.XMLInputFactory}, which builds them from reading a
+ * document. (The note said no event comes from reading XML because there is no parser; there is one
+ * now.)
  */
 public interface XMLEvent extends XMLStreamConstants {
 
     /**
-     * Que clase de evento es, con el vocabulario de {@link XMLStreamConstants}.
+     * What kind of event it is, with the vocabulary of {@link XMLStreamConstants}.
      *
      * @return {@link XMLStreamConstants#START_ELEMENT}, {@link XMLStreamConstants#CHARACTERS}, etc.
      */
     int getEventType();
 
     /**
-     * Donde estaba este evento en el documento.
+     * Where this event was in the document.
      *
-     * <p>A diferencia del modelo de cursor, aca la ubicacion se guarda con el evento, asi que sigue
-     * siendo util despues de haber seguido leyendo.
+     * <p>Unlike the cursor model, here the location is kept with the event, so it is still useful
+     * after reading on.
      *
-     * @return la ubicacion; puede ser una sin datos, no null
+     * @return the location; it may be one without data, not null
      */
     Location getLocation();
 
     /**
-     * Si es la apertura de un elemento.
+     * Whether it is the start of an element.
      *
-     * @return true si {@link #asStartElement()} va a andar
+     * @return true if {@link #asStartElement()} is going to work
      */
     boolean isStartElement();
 
     /**
-     * Si es un atributo.
+     * Whether it is an attribute.
      *
-     * <p>Un atributo es un evento pero <b>no</b> aparece en el flujo: viene colgado del
-     * {@link StartElement}. El tipo existe para poder tratarlo como evento cuando hace falta.
+     * <p>An attribute is an event but does <b>not</b> appear in the stream: it comes hanging from
+     * the {@link StartElement}. The type exists so that it can be treated as an event when needed.
      *
-     * @return true si es un {@link Attribute}
+     * @return true if it is an {@link Attribute}
      */
     boolean isAttribute();
 
     /**
-     * Si es una declaracion de espacio de nombres.
+     * Whether it is a namespace declaration.
      *
-     * @return true si es un {@link Namespace}
+     * @return true if it is a {@link Namespace}
      */
     boolean isNamespace();
 
     /**
-     * Si es el cierre de un elemento.
+     * Whether it is the end of an element.
      *
-     * @return true si {@link #asEndElement()} va a andar
+     * @return true if {@link #asEndElement()} is going to work
      */
     boolean isEndElement();
 
     /**
-     * Si es una referencia a entidad.
+     * Whether it is an entity reference.
      *
-     * @return true si es un {@link EntityReference}
+     * @return true if it is an {@link EntityReference}
      */
     boolean isEntityReference();
 
     /**
-     * Si es una instruccion de procesamiento.
+     * Whether it is a processing instruction.
      *
-     * @return true si es un {@link ProcessingInstruction}
+     * @return true if it is a {@link ProcessingInstruction}
      */
     boolean isProcessingInstruction();
 
     /**
-     * Si es texto.
+     * Whether it is text.
      *
-     * <p>Contesta true tambien para {@link XMLStreamConstants#CDATA} y para
-     * {@link XMLStreamConstants#SPACE}: los tres son {@link Characters} y se distinguen con
-     * {@link Characters#isCData()} y {@link Characters#isIgnorableWhiteSpace()}.
+     * <p>It also answers true for {@link XMLStreamConstants#CDATA} and {@link
+     * XMLStreamConstants#SPACE}: the three are {@link Characters} and are told apart with {@link
+     * Characters#isCData()} and {@link Characters#isIgnorableWhiteSpace()}.
      *
-     * @return true si {@link #asCharacters()} va a andar
+     * @return true if {@link #asCharacters()} is going to work
      */
     boolean isCharacters();
 
     /**
-     * Si es el comienzo del documento.
+     * Whether it is the start of the document.
      *
-     * @return true si es un {@link StartDocument}
+     * @return true if it is a {@link StartDocument}
      */
     boolean isStartDocument();
 
     /**
-     * Si es el final del documento.
+     * Whether it is the end of the document.
      *
-     * @return true si es un {@link EndDocument}
+     * @return true if it is an {@link EndDocument}
      */
     boolean isEndDocument();
 
     /**
-     * Este evento como apertura de elemento.
+     * This event as the start of an element.
      *
-     * @return el mismo objeto, con el tipo mas preciso
-     * @throws ClassCastException si no es una apertura de elemento
+     * @return the same object, with the more precise type
+     * @throws ClassCastException if it is not the start of an element
      */
     StartElement asStartElement();
 
     /**
-     * Este evento como cierre de elemento.
+     * This event as the end of an element.
      *
-     * @return el mismo objeto, con el tipo mas preciso
-     * @throws ClassCastException si no es un cierre de elemento
+     * @return the same object, with the more precise type
+     * @throws ClassCastException if it is not the end of an element
      */
     EndElement asEndElement();
 
     /**
-     * Este evento como texto.
+     * This event as text.
      *
-     * @return el mismo objeto, con el tipo mas preciso
-     * @throws ClassCastException si no es texto
+     * @return the same object, with the more precise type
+     * @throws ClassCastException if it is not text
      */
     Characters asCharacters();
 
     /**
-     * El tipo de esquema de este evento, si alguien se lo asigno.
+     * The schema type of this event, if someone assigned it.
      *
-     * <p>Existe para las implementaciones que validan mientras leen y pueden anotar cada evento con
-     * el tipo que le corresponde. Una que no valide devuelve null, que es lo normal.
+     * <p>It exists for implementations that validate while reading and can annotate each event with
+     * the type that corresponds to it. One that does not validate returns null, which is the normal
+     * thing.
      *
-     * @return el nombre calificado del tipo, o null
+     * @return the qualified name of the type, or null
      */
     QName getSchemaType();
 
     /**
-     * Escribe este evento como XML.
+     * Writes this event as XML.
      *
-     * <p>Es la operacion que hace que un {@code List<XMLEvent>} sea un documento: un bucle que
-     * llama a esto sobre cada evento escribe el documento entero. El texto se escapa como
-     * corresponda al tipo de evento.
+     * <p>It is the operation that makes a {@code List<XMLEvent>} a document: a loop that calls this
+     * on each event writes the whole document. The text is escaped as appropriate for the event
+     * type.
      *
-     * @param writer a donde escribir; no puede ser null
-     * @throws XMLStreamException si el escritor falla
+     * @param writer where to write; cannot be null
+     * @throws XMLStreamException if the writer fails
      */
     void writeAsEncodedUnicode(Writer writer) throws XMLStreamException;
 }

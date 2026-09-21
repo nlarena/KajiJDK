@@ -6,31 +6,30 @@ import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.NoSuchElementException;
 
-// El marcador de un permiso que la politica menciona pero cuya clase todavia no se pudo cargar.
+// The marker of a permission the policy mentions but whose class could not be loaded yet.
 //
 // ===============================================================================================
-// POR QUE ESTO EXISTE
+// WHY THIS EXISTS
 // ===============================================================================================
 //
-// La politica se lee al arrancar, cuando la mitad de las clases de permiso todavia no estan: las
-// que trae una aplicacion en su propio jar no se pueden cargar antes que la aplicacion. Habria dos
-// salidas malas —fallar al leer la politica, o descartar la linea— y una buena: guardar los
-// **strings** y resolverlos cuando la clase aparezca. Esta clase es esa guardada.
+// The policy is read on starting, when half the classes of permission are not there yet: the ones
+// an application brings in its own jar cannot be loaded before the application. There would be two
+// bad ways out —failing when reading the policy, or discarding the line— and one good one: keeping
+// the **strings** and resolving them when the class appears. This class is that keeping.
 //
 // ===============================================================================================
-// `implies` DEVUELVE SIEMPRE `false`, Y ESO ES LO CORRECTO
+// `implies` ALWAYS RETURNS `false`, AND THAT IS RIGHT
 // ===============================================================================================
 //
-// Un permiso sin resolver no concede nada. No es una limitacion de esta implementacion: un
-// `UnresolvedPermission` **no sabe** que significa el permiso que representa, porque el que lo
-// sabe es el `implies` de la clase que todavia no se cargo. Contestar cualquier cosa distinta de
-// `false` seria conceder por adelantado un permiso cuya semantica se desconoce.
+// An unresolved permission grants nothing. It is not a limitation of this implementation: an
+// `UnresolvedPermission` **does not know** what the permission it represents means, because the one
+// that knows is the `implies` of the class that has not been loaded yet. Answering anything other
+// than `false` would be granting in advance a permission whose semantics is unknown.
 //
-// A KajiLibrary subset: falta la resolucion propiamente dicha —el metodo `resolve` es
-// package-private en el JDK y lo llama el cargador de politicas, que aca no existe— porque
-// construir el permiso real por reflexion no tiene a quien servirle mientras no haya una `Policy`
-// instalable. Lo que si esta es todo lo que se necesita para transportar la informacion hasta que
-// alguien pueda resolverla.
+// A KajiLibrary subset: the resolution proper is missing —the `resolve` method is package-private
+// in the JDK and is called by the policy loader, which does not exist here— because building the
+// real permission by reflection has nobody to serve while there is no installable `Policy`. What is
+// there is everything needed for carrying the information until somebody can resolve it.
 public final class UnresolvedPermission extends Permission implements Serializable {
 
     private final String type;
@@ -38,10 +37,10 @@ public final class UnresolvedPermission extends Permission implements Serializab
     private final String actions;
     private final Certificate[] certs;
 
-    // `type` es el nombre de la clase de permiso; `name` y `actions` son sus argumentos tal como
-    // aparecian en la politica. `certs` son los certificados con los que la clase de permiso tiene
-    // que estar firmada para que la resolucion sea aceptada — sin esa condicion, cualquiera que
-    // pueda poner una clase con ese nombre en el classpath define que significa el permiso.
+    // `type` is the name of the class of permission; `name` and `actions` are its arguments as they
+    // appeared in the policy. `certs` are the certificates the class of permission has to be signed
+    // with for the resolution to be accepted — without that condition, anybody who can put a class
+    // with that name in the classpath defines what the permission means.
     public UnresolvedPermission(String type, String name, String actions, Certificate[] certs) {
         super(type);
         if (type == null) {
@@ -50,16 +49,16 @@ public final class UnresolvedPermission extends Permission implements Serializab
         this.type = type;
         this.name = name;
         this.actions = actions;
-        this.certs = certs == null ? null : copiar(certs);
+        this.certs = certs == null ? null : copyOf(certs);
     }
 
-    private static Certificate[] copiar(Certificate[] a) {
+    private static Certificate[] copyOf(Certificate[] a) {
         Certificate[] c = new Certificate[a.length];
         System.arraycopy(a, 0, c, 0, a.length);
         return c;
     }
 
-    // Siempre `false`. Ver la cabecera.
+    // Always `false`. See the header.
     @Override
     public boolean implies(Permission p) {
         return false;
@@ -77,36 +76,36 @@ public final class UnresolvedPermission extends Permission implements Serializab
         if (!this.type.equals(that.type)) {
             return false;
         }
-        if (!iguales(this.name, that.name) || !iguales(this.actions, that.actions)) {
+        if (!same(this.name, that.name) || !same(this.actions, that.actions)) {
             return false;
         }
-        // Los certificados se comparan como conjunto en las dos direcciones: el orden en que la
-        // politica los listo no cambia la condicion que expresan.
-        return contieneTodos(this.certs, that.certs) && contieneTodos(that.certs, this.certs);
+        // The certificates are compared as a set in both directions: the order in which the policy
+        // listed them does not change the condition they express.
+        return containsAll(this.certs, that.certs) && containsAll(that.certs, this.certs);
     }
 
-    private static boolean iguales(String a, String b) {
+    private static boolean same(String a, String b) {
         if (a == null) {
             return b == null;
         }
         return a.equals(b);
     }
 
-    private static boolean contieneTodos(Certificate[] conjunto, Certificate[] buscados) {
-        if (buscados == null || buscados.length == 0) {
+    private static boolean containsAll(Certificate[] set, Certificate[] wanted) {
+        if (wanted == null || wanted.length == 0) {
             return true;
         }
-        if (conjunto == null) {
+        if (set == null) {
             return false;
         }
         int i = 0;
-        while (i < buscados.length) {
+        while (i < wanted.length) {
             boolean hallado = false;
             int j = 0;
-            while (j < conjunto.length) {
-                if (buscados[i].equals(conjunto[j])) {
+            while (j < set.length) {
+                if (wanted[i].equals(set[j])) {
                     hallado = true;
-                    j = conjunto.length;
+                    j = set.length;
                 } else {
                     j = j + 1;
                 }
@@ -131,10 +130,10 @@ public final class UnresolvedPermission extends Permission implements Serializab
         return hash;
     }
 
-    // "" — las acciones del permiso sin resolver estan en `getUnresolvedActions()`, no aca.
+    // "" — the actions of the unresolved permission are in `getUnresolvedActions()`, not here.
     //
-    // La distincion no es una formalidad: `getActions()` es lo que devuelve **este** permiso, y
-    // este permiso no tiene acciones porque no permite nada.
+    // The distinction is not a formality: `getActions()` is what **this** permission returns, and
+    // this permission has no actions because it permits nothing.
     @Override
     public String getActions() {
         return "";
@@ -153,7 +152,7 @@ public final class UnresolvedPermission extends Permission implements Serializab
     }
 
     public Certificate[] getUnresolvedCerts() {
-        return this.certs == null ? null : copiar(this.certs);
+        return this.certs == null ? null : copyOf(this.certs);
     }
 
     @Override
@@ -163,18 +162,18 @@ public final class UnresolvedPermission extends Permission implements Serializab
 
     @Override
     public PermissionCollection newPermissionCollection() {
-        return new ColeccionSinResolver();
+        return new UnresolvedCollection();
     }
 }
 
-// La coleccion de permisos sin resolver.
+// The collection of unresolved permissions.
 //
-// Su `implies` devuelve `false` sin mirar nada, por la misma razon que el de cada elemento:
-// ninguno de ellos concede nada todavia. Guarda igual, porque el sentido de la coleccion es tener
-// donde ir a buscar cuando las clases aparezcan.
-final class ColeccionSinResolver extends PermissionCollection {
+// Its `implies` returns `false` without looking at anything, for the same reason as that of each
+// element: none of them grants anything yet. It keeps them all the same, because the point of the
+// collection is to have somewhere to go and look when the classes appear.
+final class UnresolvedCollection extends PermissionCollection {
 
-    private final ArrayList<Permission> permisos = new ArrayList<Permission>();
+    private final ArrayList<Permission> perms = new ArrayList<Permission>();
 
     @Override
     public void add(Permission permission) {
@@ -185,7 +184,7 @@ final class ColeccionSinResolver extends PermissionCollection {
             throw new SecurityException(
                 "attempt to add a Permission to a readonly PermissionCollection");
         }
-        this.permisos.add(permission);
+        this.perms.add(permission);
     }
 
     @Override
@@ -195,28 +194,28 @@ final class ColeccionSinResolver extends PermissionCollection {
 
     @Override
     public Enumeration<Permission> elements() {
-        return new EnumSinResolver(this.permisos);
+        return new EnumSinResolver(this.perms);
     }
 }
 
 final class EnumSinResolver implements Enumeration<Permission> {
 
-    private final ArrayList<Permission> lista;
+    private final ArrayList<Permission> list;
     private int cursor;
 
-    EnumSinResolver(ArrayList<Permission> lista) {
-        this.lista = lista;
+    EnumSinResolver(ArrayList<Permission> list) {
+        this.list = list;
     }
 
     public boolean hasMoreElements() {
-        return this.cursor < this.lista.size();
+        return this.cursor < this.list.size();
     }
 
     public Permission nextElement() {
-        if (this.cursor >= this.lista.size()) {
+        if (this.cursor >= this.list.size()) {
             throw new NoSuchElementException();
         }
-        Permission p = this.lista.get(this.cursor);
+        Permission p = this.list.get(this.cursor);
         this.cursor = this.cursor + 1;
         return p;
     }

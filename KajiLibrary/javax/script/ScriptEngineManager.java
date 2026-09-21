@@ -11,81 +11,81 @@ import java.util.ServiceLoader;
 import java.util.Set;
 
 /**
- * KajiLibrary's javax.script.ScriptEngineManager -- el que encuentra motores y no encuentra
- * ninguno.
+ * KajiLibrary's javax.script.ScriptEngineManager -- the one that finds engines and finds none.
  *
- * <p>Hace tres cosas. Descubre las {@link ScriptEngineFactory} que haya en el classpath via
- * {@link ServiceLoader}; busca entre ellas por nombre corto, por extension de archivo o por tipo
- * MIME; y mantiene el {@link Bindings} global que comparten todos los motores que salgan de aca --
- * eso ultimo es la razon por la que el manager existe y no alcanza con un `ServiceLoader` pelado.
+ * <p>It does three things. It discovers the {@link ScriptEngineFactory}s there are on the class
+ * path via {@link ServiceLoader}; it searches among them by short name, by file extension or by
+ * MIME type; and it keeps the global {@link Bindings} shared by all the engines that come out of
+ * here -- that last one is the reason the manager exists and a bare `ServiceLoader` is not enough.
  *
- * <h2>Que va a devolver esto en la practica</h2>
+ * <h2>What this is going to return in practice</h2>
  *
- * <p><b>Nulo.</b> {@code getEngineByName("js")} devuelve nulo, y {@code getEngineFactories()}
- * devuelve una lista vacia. No es una limitacion de KajiLibrary: **un JDK 25 real hace exactamente
- * lo mismo**. Nashorn, el unico motor que el JDK traia, se marco obsoleto en 11 y se elimino en
- * 15; desde entonces `java.scripting` es la API sin ninguna implementacion adentro, y un
- * `ScriptEngineManager` recien construido no tiene nada que ofrecer salvo que el classpath traiga
- * un motor de terceros. Se comprueba corriendo el mismo programa con el `java` de verdad.
+ * <p><b>Null.</b> {@code getEngineByName("js")} returns null, and {@code getEngineFactories()}
+ * returns an empty list. It is not a limitation of KajiLibrary: **a real JDK 25 does exactly the
+ * same**. Nashorn, the only engine the JDK shipped, was deprecated in 11 and removed in 15; since
+ * then `java.scripting` is the API with no implementation inside, and a freshly built
+ * `ScriptEngineManager` has nothing to offer unless the class path brings a third-party engine. It
+ * is checked by running the same program with the real `java`.
  *
- * <p>Nuestro techo esta un escalon mas abajo y conviene decirlo igual: aca no se encontraria un
- * motor de terceros ni aunque estuviera bien declarado en el classpath. La diferencia no se ve
- * desde afuera mientras no haya motores, pero existe, y son **dos** frenos independientes --
- * arreglar uno solo no alcanza:
+ * <p>Our ceiling is one step lower and it is as well to say so all the same: here a third-party
+ * engine would not be found even if it were properly declared on the class path. The difference is
+ * not visible from outside while there are no engines, but it exists, and there are **two**
+ * independent brakes -- fixing only one is not enough:
  *
  * <ul>
- *   <li>{@code ServiceLoader} no lee `META-INF/services`: su paso de descubrimiento devuelve la
- *       lista vacia sin consultar ningun recurso. Todo el resto de esa clase --parseo del archivo,
- *       instanciado, `ServiceConfigurationError`-- esta escrito y anda sobre lo que ese paso
- *       devuelva.
- *   <li>La busqueda de recursos de {@link ClassLoader} existe como API pero no sirve nada:
- *       {@code getSystemResource("java/lang/Object.class")} devuelve nulo, y eso que es la clase
- *       con la que se arranco. No es que el recurso no este en el classpath; es que
- *       `findResource`/`findResources` no lo miran.
+ *   <li>{@code ServiceLoader} does not read `META-INF/services`: its discovery step returns the
+ *       empty list without consulting any resource. All the rest of that class --parsing the file,
+ *       instantiating, `ServiceConfigurationError`-- is written and works on whatever that step
+ *       returns.
+ *   <li>{@link ClassLoader}'s resource lookup exists as API but serves nothing: {@code
+ *       getSystemResource("java/lang/Object.class")} returns null, even though it is the class the
+ *       program started with. It is not that the resource is not on the class path; it is that the
+ *       built-in loaders' `findResource`/`findResources` do not look.
  * </ul>
  *
- * <p>Comprobado con el mismo programa contra las dos VMs, con un `META-INF/services` de verdad en
- * el classpath: el `java` del JDK 25 encuentra el recurso y el proveedor, y nosotros contamos cero
- * en las dos cosas. (El comentario de nuestro `ServiceLoader` atribuye esto a que falta
- * `ClassLoader.getResources`; ese metodo hoy **existe**, asi que la razon que da quedo vieja.)
+ * <p>Checked with the same program against both VMs, with a real `META-INF/services` on the class
+ * path: JDK 25's `java` finds the resource and the provider, and we count zero in both. (The note
+ * said our `ServiceLoader`'s comment blamed a missing `ClassLoader.getResources`; that comment has
+ * since been corrected and names the built-in loaders' `findResources`, which is the second brake
+ * above.)
  *
- * <p>Lo que si funciona de punta a punta es el registro manual --
- * {@link #registerEngineName(String, ScriptEngineFactory)} y sus dos hermanos --, que no depende
- * del descubrimiento: quien tenga una fabrica en la mano la asocia a un nombre y la busqueda la
- * encuentra. Las asociaciones manuales se miran **antes** que las descubiertas.
+ * <p>What does work end to end is the manual registration --
+ * {@link #registerEngineName(String, ScriptEngineFactory)} and its two siblings --, which does not
+ * depend on discovery: whoever has a factory in hand associates it with a name and the search finds
+ * it. The manual associations are looked at **before** the discovered ones.
  */
 public class ScriptEngineManager {
 
-    /** Las fabricas descubiertas. Orden de descubrimiento. */
+    /** The discovered factories. Discovery order. */
     private final Set<ScriptEngineFactory> engineSpis;
 
-    /** Nombre corto -&gt; fabrica, registrado a mano. */
+    /** Short name -&gt; factory, registered by hand. */
     private final HashMap<String, ScriptEngineFactory> nameAssociations;
 
-    /** Extension -&gt; fabrica, registrado a mano. */
+    /** Extension -&gt; factory, registered by hand. */
     private final HashMap<String, ScriptEngineFactory> extensionAssociations;
 
-    /** Tipo MIME -&gt; fabrica, registrado a mano. */
+    /** MIME type -&gt; factory, registered by hand. */
     private final HashMap<String, ScriptEngineFactory> mimeTypeAssociations;
 
-    /** El ambito global que se le pone a cada motor que sale de aca. */
+    /** The global scope given to every engine that comes out of here. */
     private Bindings globalScope;
 
     /**
-     * Descubre con el cargador de contexto del hilo actual.
+     * Discovers with the current thread's context loader.
      *
-     * <p>Ese cargador es el que un contenedor cambia por aplicacion, y por eso es el correcto
-     * cuando el manager se construye desde adentro de una.
+     * <p>That loader is the one a container changes per application, and that is why it is the
+     * right one when the manager is built from inside one.
      */
     public ScriptEngineManager() {
         this(Thread.currentThread().getContextClassLoader());
     }
 
     /**
-     * Descubre con `loader`.
+     * Discovers with `loader`.
      *
-     * <p>Con `loader` nulo se buscan solo los motores instalados con la plataforma, que en un JDK
-     * moderno son cero.
+     * <p>With a null `loader` only the engines installed with the platform are looked for, which in
+     * a modern JDK are zero.
      */
     public ScriptEngineManager(ClassLoader loader) {
         engineSpis = new LinkedHashSet<ScriptEngineFactory>();
@@ -97,10 +97,10 @@ public class ScriptEngineManager {
     }
 
     /**
-     * Junta las fabricas que el `ServiceLoader` sepa dar.
+     * Gathers the factories the `ServiceLoader` can give.
      *
-     * <p>Una fabrica rota no voltea el descubrimiento: se saltea y se sigue con las demas, que es
-     * lo unico razonable cuando el classpath lo arma otro.
+     * <p>A broken factory does not bring discovery down: it is skipped and the rest go on, which is
+     * the only reasonable thing when somebody else puts the class path together.
      */
     private void initEngines(ClassLoader loader) {
         try {
@@ -116,16 +116,16 @@ public class ScriptEngineManager {
                 }
             }
         } catch (ServiceConfigurationError err) {
-            // Un proveedor mal declarado no puede dejar al manager sin construir.
+            // A badly declared provider cannot leave the manager unbuilt.
         } catch (RuntimeException exp) {
-            // Idem para una fabrica que explota en su propio constructor.
+            // Likewise for a factory that blows up in its own constructor.
         }
     }
 
     /**
-     * Cambia el ambito global.
+     * Changes the global scope.
      *
-     * @throws IllegalArgumentException si `bindings` es nulo -- ojo, no es un NPE
+     * @throws IllegalArgumentException if `bindings` is null -- careful, it is not an NPE
      */
     public void setBindings(Bindings bindings) {
         if (bindings == null) {
@@ -134,104 +134,104 @@ public class ScriptEngineManager {
         globalScope = bindings;
     }
 
-    /** El ambito global. Nunca es nulo. */
+    /** The global scope. Never null. */
     public Bindings getBindings() {
         return globalScope;
     }
 
     /**
-     * Define `key` en el ambito global.
+     * Defines `key` in the global scope.
      *
-     * @throws NullPointerException si `key` es nulo
-     * @throws IllegalArgumentException si `key` es vacio
+     * @throws NullPointerException if `key` is null
+     * @throws IllegalArgumentException if `key` is empty
      */
     public void put(String key, Object value) {
         globalScope.put(key, value);
     }
 
     /**
-     * Lo que valga `key` en el ambito global.
+     * Whatever `key` is worth in the global scope.
      *
-     * @throws NullPointerException si `key` es nulo
-     * @throws IllegalArgumentException si `key` es vacio
+     * @throws NullPointerException if `key` is null
+     * @throws IllegalArgumentException if `key` is empty
      */
     public Object get(String key) {
         return globalScope.get(key);
     }
 
     /**
-     * Un motor cuyo nombre corto sea `shortName`, o nulo si no hay ninguno.
+     * An engine whose short name is `shortName`, or null if there is none.
      *
-     * @throws NullPointerException si `shortName` es nulo
+     * @throws NullPointerException if `shortName` is null
      */
     public ScriptEngine getEngineByName(String shortName) {
         Objects.requireNonNull(shortName);
-        return buscar(shortName, nameAssociations, CLAVE_NOMBRES);
+        return find(shortName, nameAssociations, KEY_NAMES);
     }
 
     /**
-     * Un motor que atienda la extension `extension`, o nulo.
+     * An engine that serves the extension `extension`, or null.
      *
-     * @throws NullPointerException si `extension` es nulo
+     * @throws NullPointerException if `extension` is null
      */
     public ScriptEngine getEngineByExtension(String extension) {
         Objects.requireNonNull(extension);
-        return buscar(extension, extensionAssociations, CLAVE_EXTENSIONES);
+        return find(extension, extensionAssociations, KEY_EXTENSIONS);
     }
 
     /**
-     * Un motor que atienda el tipo MIME `mimeType`, o nulo.
+     * An engine that serves the MIME type `mimeType`, or null.
      *
-     * @throws NullPointerException si `mimeType` es nulo
+     * @throws NullPointerException if `mimeType` is null
      */
     public ScriptEngine getEngineByMimeType(String mimeType) {
         Objects.requireNonNull(mimeType);
-        return buscar(mimeType, mimeTypeAssociations, CLAVE_TIPOS);
+        return find(mimeType, mimeTypeAssociations, KEY_MIME_TYPES);
     }
 
-    /** Cual de las tres listas de una fabrica mirar. Interno, no forma parte del contrato. */
-    private static final int CLAVE_NOMBRES = 0;
-    private static final int CLAVE_EXTENSIONES = 1;
-    private static final int CLAVE_TIPOS = 2;
+    /** Which of a factory's three lists to look at. Internal, not part of the contract. */
+    private static final int KEY_NAMES = 0;
+    private static final int KEY_EXTENSIONS = 1;
+    private static final int KEY_MIME_TYPES = 2;
 
-    /** Las claves que `spi` publica para el criterio pedido. */
-    private static List<String> clavesDe(ScriptEngineFactory spi, int criterio) {
-        if (criterio == CLAVE_NOMBRES) {
+    /** The keys `spi` publishes for the criterion asked for. */
+    private static List<String> keysOf(ScriptEngineFactory spi, int criterion) {
+        if (criterion == KEY_NAMES) {
             return spi.getNames();
-        } else if (criterio == CLAVE_EXTENSIONES) {
+        } else if (criterion == KEY_EXTENSIONS) {
             return spi.getExtensions();
         }
         return spi.getMimeTypes();
     }
 
     /**
-     * Primero lo registrado a mano, despues lo descubierto; el primero que sirva.
+     * First what was registered by hand, then what was discovered; the first one that serves.
      *
-     * <p>Que lo manual gane no es un detalle: registrar es la forma de decir "para este nombre
-     * quiero esta", y no serviria de nada si una descubierta pudiera adelantarsele.
+     * <p>That the manual one wins is not a detail: registering is the way of saying "for this name
+     * I want this one", and it would be useless if a discovered one could get ahead of it.
      */
-    private ScriptEngine buscar(String clave, Map<String, ScriptEngineFactory> asociadas,
-            int criterio) {
-        ScriptEngineFactory registrada = asociadas.get(clave);
-        if (registrada != null) {
-            ScriptEngine engine = motorDe(registrada);
+    private ScriptEngine find(String key, Map<String, ScriptEngineFactory> registered,
+            int criterion) {
+        ScriptEngineFactory factory = registered.get(key);
+        if (factory != null) {
+            ScriptEngine engine = engineOf(factory);
             if (engine != null) {
                 return engine;
             }
         }
         for (ScriptEngineFactory spi : engineSpis) {
-            List<String> claves;
+            List<String> keys;
             try {
-                claves = clavesDe(spi, criterio);
+                keys = keysOf(spi, criterion);
             } catch (RuntimeException exp) {
                 continue;
             }
-            if (claves == null) {
+            if (keys == null) {
                 continue;
             }
-            for (String c : claves) {
-                if (clave.equals(c)) {
-                    ScriptEngine engine = motorDe(spi);
+            for (String c : keys) {
+                if (key.equals(c)) {
+                    ScriptEngine engine = engineOf(spi);
                     if (engine != null) {
                         return engine;
                     }
@@ -242,13 +242,13 @@ public class ScriptEngineManager {
     }
 
     /**
-     * Un motor de esa fabrica, ya conectado al ambito global del manager, o nulo si la fabrica
-     * fallo.
+     * An engine from that factory, already connected to the manager's global scope, or null if the
+     * factory failed.
      *
-     * <p>Conectar el global aca es todo el valor agregado del manager: dos motores pedidos al
-     * mismo manager comparten lo que se puso con {@link #put(String, Object)}.
+     * <p>Connecting the global scope here is all the value the manager adds: two engines asked of
+     * the same manager share what was put with {@link #put(String, Object)}.
      */
-    private ScriptEngine motorDe(ScriptEngineFactory spi) {
+    private ScriptEngine engineOf(ScriptEngineFactory spi) {
         try {
             ScriptEngine engine = spi.getScriptEngine();
             if (engine != null) {
@@ -261,47 +261,47 @@ public class ScriptEngineManager {
     }
 
     /**
-     * Las fabricas descubiertas, en una lista inmutable.
+     * The discovered factories, in an immutable list.
      *
-     * <p>No incluye las registradas a mano, igual que el original: `register*` asocia una clave,
-     * no agrega un proveedor.
+     * <p>It does not include the ones registered by hand, just like the original: `register*`
+     * associates a key, it does not add a provider.
      */
     public List<ScriptEngineFactory> getEngineFactories() {
         return List.copyOf(new ArrayList<ScriptEngineFactory>(engineSpis));
     }
 
     /**
-     * Asocia el nombre corto `name` a `factory`.
+     * Associates the short name `name` with `factory`.
      *
-     * @throws NullPointerException si alguno es nulo
+     * @throws NullPointerException if either is null
      */
     public void registerEngineName(String name, ScriptEngineFactory factory) {
-        asociar(nameAssociations, name, factory);
+        register(nameAssociations, name, factory);
     }
 
     /**
-     * Asocia el tipo MIME `type` a `factory`.
+     * Associates the MIME type `type` with `factory`.
      *
-     * @throws NullPointerException si alguno es nulo
+     * @throws NullPointerException if either is null
      */
     public void registerEngineMimeType(String type, ScriptEngineFactory factory) {
-        asociar(mimeTypeAssociations, type, factory);
+        register(mimeTypeAssociations, type, factory);
     }
 
     /**
-     * Asocia la extension `extension` a `factory`.
+     * Associates the extension `extension` with `factory`.
      *
-     * @throws NullPointerException si alguno es nulo
+     * @throws NullPointerException if either is null
      */
     public void registerEngineExtension(String extension, ScriptEngineFactory factory) {
-        asociar(extensionAssociations, extension, factory);
+        register(extensionAssociations, extension, factory);
     }
 
-    /** Las tres registraciones son la misma con distinto mapa. */
-    private static void asociar(Map<String, ScriptEngineFactory> mapa, String clave,
+    /** The three registrations are the same one with a different map. */
+    private static void register(Map<String, ScriptEngineFactory> map, String key,
             ScriptEngineFactory factory) {
-        Objects.requireNonNull(clave);
+        Objects.requireNonNull(key);
         Objects.requireNonNull(factory);
-        mapa.put(clave, factory);
+        map.put(key, factory);
     }
 }

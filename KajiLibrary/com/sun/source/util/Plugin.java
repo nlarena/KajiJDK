@@ -1,28 +1,29 @@
 package com.sun.source.util;
 
 /**
- * Un complemento que se engancha al compilador desde afuera.
+ * A plugin that is hooked to the compiler from outside.
  *
- * <h2>Como llega a correr</h2>
+ * <h2>How it comes to run</h2>
  *
- * <p>Se lo encuentra por {@link java.util.ServiceLoader} y se lo elige por nombre con la opcion
- * {@code -Xplugin}. La diferencia con un procesador de anotaciones es el <strong>momento</strong>:
- * un procesador corre en su ronda y ve elementos ya resueltos; un plugin recibe el
- * {@link JavacTask} y puede registrar un {@link TaskListener}, o sea meterse en cada fase — antes de
- * parsear, despues de analizar, al generar.
+ * <p>It is found by {@link java.util.ServiceLoader} and chosen by name with the
+ * {@code -Xplugin} option. The difference with an annotation processor is the
+ * <strong>moment</strong>: a processor runs in its round and sees elements that are already
+ * resolved; a plugin receives the {@link JavacTask} and may register a {@link TaskListener},
+ * that is, get into each phase -- before parsing, after analysing, on generating.
  *
- * <p>{@link #autoStart} llego despues, con cuerpo, para no romper a los que ya existian: por omision
- * un plugin arranca solo si lo nombran, y devolver {@code false} exige que lo hagan explicitamente.
+ * <p>{@link #autoStart} arrived later, with a body, so as not to break those that already
+ * existed: by default a plugin starts only if it is named, and returning {@code false} requires
+ * it to be named explicitly.
  */
 public interface Plugin {
 
-    /** El nombre con el que se lo nombra en {@code -Xplugin}. */
+    /** The name it is named with in {@code -Xplugin}. */
     String getName();
 
-    /** Se lo llama una vez, con la tarea de compilacion y los argumentos que le hayan pasado. */
+    /** It is called once, with the compilation task and the arguments it was passed. */
     void init(JavacTask task, String... args);
 
-    /** Si arranca sin que lo nombren explicitamente. */
+    /** Whether it starts without being named explicitly. */
     default boolean autoStart() {
         return true;
     }

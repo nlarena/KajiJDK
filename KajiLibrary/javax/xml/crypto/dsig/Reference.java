@@ -7,62 +7,64 @@ import javax.xml.crypto.URIReference;
 import javax.xml.crypto.XMLStructure;
 
 /**
- * KajiLibrary's javax.xml.crypto.dsig.Reference -- un dato cubierto por la firma.
+ * KajiLibrary's javax.xml.crypto.dsig.Reference -- a datum covered by the signature.
  *
- * <p>Apunta a algo por URI, dice que transformaciones aplicarle, y guarda el resumen del resultado.
- * Validar una referencia es rehacer ese camino y comparar el resumen.
+ * <p>It points to something by URI, says which transforms to apply to it, and keeps the digest of
+ * the result. Validating a reference is redoing that path and comparing the digest.
  *
- * <h2>Los dos resumenes</h2>
+ * <h2>The two digests</h2>
  *
- * <p>{@link #getDigestValue} es el que <b>dice el documento</b> y {@link #getCalculatedDigestValue}
- * el que se obtuvo al validar. Que sean dos metodos distintos es lo que permite diagnosticar: si no
- * coinciden, el dato cambio despues de firmarse.
+ * <p>{@link #getDigestValue} is the one <b>the document says</b> and {@link
+ * #getCalculatedDigestValue} the one obtained when validating. That they are two different methods
+ * is what allows diagnosing: if they do not match, the datum changed after being signed.
  *
- * <p>{@link #getDigestInputStream} y {@link #getDereferencedData} sirven para lo mismo un nivel mas
- * abajo: muestran que datos se resolvieron y que bytes entraron al resumen. Sin ellos, una referencia
- * que no valida es una pared.
+ * <p>{@link #getDigestInputStream} and {@link #getDereferencedData} serve the same purpose one
+ * level down: they show which data were resolved and which bytes went into the digest. Without
+ * them, a reference that does not validate is a wall.
  *
- * <p>Los tres devuelven algo util solo <b>despues</b> de validar, y null antes.
+ * <p>The three return something useful only <b>after</b> validating, and null before. The last two
+ * also need reference caching turned on in the context; without it they stay null even after
+ * validating.
  */
 public interface Reference extends URIReference, XMLStructure {
 
-    /** Las transformaciones, en orden de aplicacion. No modificable. */
+    /** The transforms, in order of application. Unmodifiable. */
     List<Transform> getTransforms();
 
-    /** Con que algoritmo se resume. */
+    /** What algorithm it is digested with. */
     DigestMethod getDigestMethod();
 
-    /** El identificador del elemento, o null. */
+    /** The element's identifier, or null. */
     String getId();
 
-    /** El resumen que dice el documento. */
+    /** The digest the document says. */
     byte[] getDigestValue();
 
     /**
-     * El resumen que se calculo al validar.
+     * The digest computed when validating.
      *
-     * @return null si todavia no se valido
+     * @return null if it has not been validated yet
      */
     byte[] getCalculatedDigestValue();
 
     /**
-     * Si esta referencia cierra.
+     * Whether this reference checks out.
      *
-     * @throws XMLSignatureException si no se pudo resolver o transformar
+     * @throws XMLSignatureException if it could not be resolved or transformed
      */
     boolean validate(XMLValidateContext validateContext) throws XMLSignatureException;
 
     /**
-     * Los datos que el URI resolvio.
+     * The data the URI resolved to.
      *
-     * @return null si todavia no se resolvio
+     * @return null if it has not been resolved yet or caching is off
      */
     Data getDereferencedData();
 
     /**
-     * Los bytes que entraron al resumen.
+     * The bytes that went into the digest.
      *
-     * @return null si todavia no se calculo
+     * @return null if it has not been computed yet or caching is off
      */
     InputStream getDigestInputStream();
 }

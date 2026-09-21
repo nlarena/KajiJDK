@@ -9,30 +9,31 @@ import java.util.Map;
 import java.util.TimeZone;
 
 /**
- * La base abstracta de los formateadores de fecha y hora.
+ * The abstract base of the date and time formatters.
  *
- * <p><b>Sobre la nota vieja del proyecto.</b> Este archivo faltaba porque
- * "{@code DateFormat}/{@code SimpleDateFormat} están bloqueadas — toda su API se apoya en
- * {@code java.util.Date}, {@code Calendar} y {@code TimeZone}, que no existen". Ya no es cierto:
- * los tres existen y están completos, así que la clase se pudo escribir entera. No quedó ni un
- * miembro afuera por falta de dependencias.
+ * <p><b>On the project's old note.</b> This file was missing because
+ * "{@code DateFormat}/{@code SimpleDateFormat} are blocked -- their whole API leans on
+ * {@code java.util.Date}, {@code Calendar} and {@code TimeZone}, which do not exist". That is no
+ * longer true: all three exist and are complete, so the class could be written whole. Not one member
+ * was left out for want of dependencies.
  *
- * <p><b>Qué hace realmente esta clase.</b> No formatea: reparte. Un {@code Date} es un instante —un
- * número de milisegundos— y no sabe nada de años ni de meses; el que sabe es el {@link Calendar},
- * que traduce ese instante a campos según una zona horaria y un calendario. Por eso el
- * {@code calendar} es un campo {@code protected} y no un detalle interno: cambiarlo cambia el
- * resultado, y {@link #setTimeZone} no es más que un atajo para tocarlo.
+ * <p><b>What this class really does.</b> It does not format: it delegates. A {@code Date} is an
+ * instant --a number of milliseconds-- and knows nothing of years or months; the one that knows is
+ * the {@link Calendar}, which translates that instant into fields according to a time zone and a
+ * calendar. That is why {@code calendar} is a {@code protected} field and not an internal detail:
+ * changing it changes the result, and {@link #setTimeZone} is no more than a shortcut for touching
+ * it.
  *
- * <p>El {@code numberFormat} está por el mismo motivo un escalón más abajo: los campos de una fecha
- * se escriben con dígitos, y qué dígitos usa cada locale lo decide un {@link NumberFormat}.
+ * <p>The {@code numberFormat} is there for the same reason one step further down: a date's fields
+ * are written with digits, and which digits each locale uses is decided by a {@link NumberFormat}.
  *
- * <p><b>Los estilos van al revés de lo que uno espera</b>: {@code FULL} es 0 y {@code SHORT} es 3,
- * así que el estilo "más grande" es el número más chico. Está así en la API original y no se puede
- * cambiar; conviene tenerlo presente al leer cualquier comparación entre estilos.
+ * <p><b>The styles run the opposite way to what one expects</b>: {@code FULL} is 0 and {@code SHORT}
+ * is 3, so the "largest" style is the smallest number. It is like that in the original API and
+ * cannot be changed; it is worth bearing in mind when reading any comparison between styles.
  *
- * @implNote Los patrones por locale y estilo salen de {@code PatronesLocales}, que cubre seis
- *           locales; uno desconocido cae en ROOT, igual que en el JDK cuando no tiene datos. Los
- *           nombres —meses, días, am/pm— salen de {@link DateFormatSymbols}.
+ * @implNote The per-locale, per-style patterns come from {@code LocalePatterns}, which covers six
+ *           locales; an unknown one falls back to ROOT, just as in the JDK when it has no data. The
+ *           names --months, days, am/pm-- come from {@link DateFormatSymbols}.
  */
 public abstract class DateFormat extends Format {
 
@@ -62,21 +63,22 @@ public abstract class DateFormat extends Format {
     public static final int DEFAULT = 2;
 
     /**
-     * La clave con que un formateador de fechas marca cada campo del texto que produjo.
+     * The key a date formatter marks each field of the text it produced with.
      *
-     * <p>A diferencia de {@link java.text.NumberFormat.Field}, ésta lleva además el campo de {@link Calendar}
-     * equivalente: es la que hace de puente entre las dos formas de nombrar un campo de fecha —la
-     * de {@code java.text} y la de {@code java.util}— y por eso tiene {@link #getCalendarField()} y
-     * {@link #ofCalendarField(int)}, que {@code java.text.NumberFormat.Field} no necesita.
+     * <p>Unlike {@link java.text.NumberFormat.Field}, this one also carries the equivalent
+     * {@link Calendar} field: it is the bridge between the two ways of naming a date field --
+     * {@code java.text}'s and {@code java.util}'s -- and that is why it has
+     * {@link #getCalendarField()} and {@link #ofCalendarField(int)}, which
+     * {@code java.text.NumberFormat.Field} does not need.
      */
     public static class Field extends java.text.Format.Field {
 
-        private static final Map<String, java.text.DateFormat.Field> POR_NOMBRE =
+        private static final Map<String, java.text.DateFormat.Field> BY_NAME =
                 new HashMap<String, java.text.DateFormat.Field>();
 
-        // Índice por campo de Calendar, para ofCalendarField. Un arreglo y no un Map porque las
-        // claves son los enteros densos 0..FIELD_COUNT y el arreglo ES el índice.
-        private static final java.text.DateFormat.Field[] POR_CAMPO = new java.text.DateFormat.Field[Calendar.FIELD_COUNT];
+        // An index by Calendar field, for ofCalendarField. An array and not a Map because the keys
+        // are the dense integers 0..FIELD_COUNT and the array IS the index.
+        private static final java.text.DateFormat.Field[] BY_FIELD = new java.text.DateFormat.Field[Calendar.FIELD_COUNT];
 
         private final int calendarField;
 
@@ -84,25 +86,25 @@ public abstract class DateFormat extends Format {
             super(name);
             this.calendarField = calendarField;
             if (this.getClass() == java.text.DateFormat.Field.class) {
-                POR_NOMBRE.put(name, this);
+                BY_NAME.put(name, this);
                 if (calendarField >= 0 && calendarField < Calendar.FIELD_COUNT) {
-                    POR_CAMPO[calendarField] = this;
+                    BY_FIELD[calendarField] = this;
                 }
             }
         }
 
         /**
-         * La clave que corresponde a un campo de {@link Calendar}.
+         * The key corresponding to a {@link Calendar} field.
          *
-         * @throws IllegalArgumentException si el entero no nombra un campo de Calendar. Se lanza en
-         *         lugar de devolver {@code null} porque un campo inexistente es un error del
-         *         llamador, no un "no hay dato".
+         * @throws IllegalArgumentException if the integer names no Calendar field. It is thrown
+         *         instead of returning {@code null} because a non-existent field is the caller's
+         *         mistake, not a "there is no datum".
          */
         public static java.text.DateFormat.Field ofCalendarField(int calendarField) {
             if (calendarField < 0 || calendarField >= Calendar.FIELD_COUNT) {
                 throw new IllegalArgumentException("Unknown Calendar constant " + calendarField);
             }
-            return POR_CAMPO[calendarField];
+            return BY_FIELD[calendarField];
         }
 
         public int getCalendarField() {
@@ -113,7 +115,7 @@ public abstract class DateFormat extends Format {
             if (this.getClass() != java.text.DateFormat.Field.class) {
                 throw new InvalidObjectException("subclass didn't correctly implement readResolve");
             }
-            java.text.DateFormat.Field f = POR_NOMBRE.get(this.getName());
+            java.text.DateFormat.Field f = BY_NAME.get(this.getName());
             if (f != null) {
                 return f;
             }
@@ -150,13 +152,13 @@ public abstract class DateFormat extends Format {
     }
 
     /**
-     * El calendario que traduce el instante a campos. Es {@code protected} porque una subclase lo
-     * lee directamente para formatear, y porque cambiarlo es la forma documentada de cambiar la
-     * zona horaria o el sistema calendárico.
+     * The calendar that translates the instant into fields. It is {@code protected} because a
+     * subclass reads it directly in order to format, and because changing it is the documented way
+     * of changing the time zone or the calendar system.
      */
     protected Calendar calendar;
 
-    /** Con qué se escriben los dígitos de cada campo. */
+    /** What each field's digits are written with. */
     protected NumberFormat numberFormat;
 
     protected DateFormat() {
@@ -167,8 +169,8 @@ public abstract class DateFormat extends Format {
             return this.format((Date) obj, toAppendTo, fieldPosition);
         }
         if (obj instanceof Number) {
-            // Un Number se interpreta como milisegundos desde la época. No es una conveniencia
-            // caprichosa: es lo que hace que un MessageFormat con {0,date} acepte el long crudo.
+            // A Number is read as milliseconds since the epoch. It is not a whimsical convenience:
+            // it is what makes a MessageFormat with {0,date} accept the raw long.
             return this.format(new Date(((Number) obj).longValue()), toAppendTo, fieldPosition);
         }
         throw new IllegalArgumentException("Cannot format given Object as a Date");
@@ -195,7 +197,7 @@ public abstract class DateFormat extends Format {
         return this.parse(source, pos);
     }
 
-    // ---- fábricas ----
+    // ---- factories ----
 
     public static final DateFormat getTimeInstance() {
         return DateFormat.getTimeInstance(DateFormat.DEFAULT, Locale.getDefault());
@@ -205,8 +207,8 @@ public abstract class DateFormat extends Format {
         return DateFormat.getTimeInstance(style, Locale.getDefault());
     }
 
-    public static final DateFormat getTimeInstance(int style, Locale aLocale) {
-        return new SimpleDateFormat(PatronesLocales.hora(DateFormat.verificar(style), aLocale), aLocale);
+    public static final DateFormat getTimeInstance(int style, Locale toLocale) {
+        return new SimpleDateFormat(LocalePatterns.hour(DateFormat.check(style), toLocale), toLocale);
     }
 
     public static final DateFormat getDateInstance() {
@@ -217,8 +219,8 @@ public abstract class DateFormat extends Format {
         return DateFormat.getDateInstance(style, Locale.getDefault());
     }
 
-    public static final DateFormat getDateInstance(int style, Locale aLocale) {
-        return new SimpleDateFormat(PatronesLocales.fecha(DateFormat.verificar(style), aLocale), aLocale);
+    public static final DateFormat getDateInstance(int style, Locale toLocale) {
+        return new SimpleDateFormat(LocalePatterns.date(DateFormat.check(style), toLocale), toLocale);
     }
 
     public static final DateFormat getDateTimeInstance() {
@@ -230,17 +232,17 @@ public abstract class DateFormat extends Format {
         return DateFormat.getDateTimeInstance(dateStyle, timeStyle, Locale.getDefault());
     }
 
-    public static final DateFormat getDateTimeInstance(int dateStyle, int timeStyle, Locale aLocale) {
-        return new SimpleDateFormat(PatronesLocales.fechaHora(DateFormat.verificar(dateStyle),
-                DateFormat.verificar(timeStyle), aLocale), aLocale);
+    public static final DateFormat getDateTimeInstance(int dateStyle, int timeStyle, Locale toLocale) {
+        return new SimpleDateFormat(LocalePatterns.dateTime(DateFormat.check(dateStyle),
+                DateFormat.check(timeStyle), toLocale), toLocale);
     }
 
-    /** Fecha y hora, las dos en estilo SHORT: el "dame algo corto" de la API. */
+    /** Date and time, both in the SHORT style: the API's "give me something short". */
     public static final DateFormat getInstance() {
         return DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT);
     }
 
-    private static int verificar(int style) {
+    private static int check(int style) {
         if (style < DateFormat.FULL || style > DateFormat.SHORT) {
             throw new IllegalArgumentException("Illegal date/time style " + style);
         }
@@ -248,14 +250,14 @@ public abstract class DateFormat extends Format {
     }
 
     /**
-     * Los locales con datos propios. Son los mismos seis de {@link NumberFormat}: patrones y
-     * nombres salen de las dos tablas del paquete, y las dos cubren las mismas filas.
+     * The locales with data of their own. They are {@link NumberFormat}'s same six: patterns and
+     * names come from the package's two tables, and both cover the same rows.
      */
     public static Locale[] getAvailableLocales() {
         return DecimalFormatSymbols.getAvailableLocales();
     }
 
-    // ---- estado ----
+    // ---- state  ----
 
     public void setCalendar(Calendar newCalendar) {
         this.calendar = newCalendar;
@@ -273,8 +275,9 @@ public abstract class DateFormat extends Format {
         return this.numberFormat;
     }
 
-    // La zona no se guarda acá: vive en el calendario, que es el único que la usa. Tener una copia
-    // sería tener dos verdades, y la que manda al formatear siempre sería la del calendario.
+    // The zone is not kept here: it lives in the calendar, which is the only one that uses it.
+    // Keeping a copy would be keeping two truths, and the one that rules when formatting would always
+    // be the calendar's.
     public void setTimeZone(TimeZone zone) {
         this.calendar.setTimeZone(zone);
     }
@@ -306,9 +309,9 @@ public abstract class DateFormat extends Format {
         return this.calendar.getFirstDayOfWeek() == other.calendar.getFirstDayOfWeek()
                 && this.calendar.getMinimalDaysInFirstWeek() == other.calendar.getMinimalDaysInFirstWeek()
                 && this.calendar.isLenient() == other.calendar.isLenient()
-                // Por ID y no por equals: nuestro java.util.TimeZone no redefine equals, así que
-                // dos instancias de la MISMA zona pedidas por separado saldrían distintas y dos
-                // formateadores idénticos nunca serían iguales.
+                // By ID and not by equals: our java.util.TimeZone does not redefine equals, so two
+                // instances of the SAME zone asked for separately would come out different and two
+                // identical formatters would never be equal.
                 && this.calendar.getTimeZone().getID().equals(other.calendar.getTimeZone().getID())
                 && this.numberFormat.equals(other.numberFormat);
     }

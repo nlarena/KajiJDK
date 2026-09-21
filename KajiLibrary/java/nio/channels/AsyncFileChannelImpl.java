@@ -22,9 +22,9 @@ import java.util.concurrent.Future;
 // platforms with no `aio`, so the shape is its own; what changes is the cost of the operation
 // underneath, and that is documented where it belongs.
 //
-// **Cancellation is the JDK's on those same platforms**: `Future.cancel(true)` interrupts the thread
-// that is in the operation. If the operation has already started writing, cancelling it does not
-// undo it.
+// **Cancellation is the JDK's on those same platforms**: `Future.cancel(true)` interrupts the
+// thread that is in the operation. If the operation has already started writing, cancelling it does
+// not undo it.
 //
 // Package-private on purpose: it is reached through `AsynchronousFileChannel.open`.
 final class AsyncFileChannelImpl extends AsynchronousFileChannel {
@@ -105,9 +105,9 @@ final class AsyncFileChannelImpl extends AsynchronousFileChannel {
     /**
      * Claims the region before going to the pool.
      *
-     * <p>An overlap has to be refused on the caller's thread: the API throws
-     * {@link java.nio.channels.OverlappingFileLockException} instead of delivering it through the
-     * future, so the check cannot wait. `IOException` cannot be thrown from here either -- these two
+     * <p>An overlap has to be refused on the caller's thread: the API throws {@link
+     * java.nio.channels.OverlappingFileLockException} instead of delivering it through the future,
+     * so the check cannot wait. `IOException` cannot be thrown from here either -- these two
      * methods do not declare it -- so a failure to even check becomes a reservation that the pool
      * will fail on.
      */

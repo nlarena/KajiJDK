@@ -1,24 +1,24 @@
 package javax.swing;
 
 /**
- * Una lista que ademas tiene un elemento elegido.
+ * A list that also has a chosen element.
  *
- * <h2>Por que el elegido va en el modelo</h2>
+ * <h2>Why the chosen one goes in the model</h2>
  *
- * <p>Podria estar en el componente. Que este en el modelo permite que dos listas desplegables
- * compartan modelo y muestren siempre lo mismo, y que el elegido sobreviva a cambiar el aspecto.
+ * <p>It could be in the component. Having it in the model allows two combo boxes to share a
+ * model and always show the same, and the chosen one to survive changing the look and feel.
  *
- * <p>{@link #getSelectedItem} devuelve {@code Object} y no {@code E} a proposito: en una lista
- * editable el usuario puede escribir algo que no esta en la lista, y eso no tiene por que ser del
- * tipo de los elementos.
+ * <p>{@link #getSelectedItem} returns {@code Object} and not {@code E} on purpose: in an
+ * editable combo box the user may type something that is not in the list, and that does not have
+ * to be of the elements' type.
  *
- * @param <E> el tipo de los elementos.
+ * @param <E> the elements' type.
  */
 public interface ComboBoxModel<E> extends ListModel<E> {
 
-    /** Elige ese elemento; deberia avisar a quien escucha. */
+    /** It chooses that element; it should give notice to whoever listens. */
     void setSelectedItem(Object anItem);
 
-    /** El elegido, que puede no estar en la lista; ver la nota de la clase. */
+    /** The chosen one, which may not be in the list; see the class note. */
     Object getSelectedItem();
 }

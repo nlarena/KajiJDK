@@ -13,82 +13,83 @@ import java.util.Objects;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Una grabacion: que eventos capturar, con que limites y adonde va el resultado.
+ * A recording: which events to capture, with what limits and where the result goes.
  *
- * <h2>Los tres limites, y por que son tres</h2>
+ * <h2>The three limits, and why there are three</h2>
  *
- * <p>{@link #setDuration} corta por tiempo desde que arranca. {@link #setMaxAge} descarta lo mas
- * viejo de un buffer circular. {@link #setMaxSize} descarta lo mas viejo al llegar a un tamano.
+ * <p>{@link #setDuration} cuts by time from when it starts. {@link #setMaxAge} discards the oldest
+ * of a circular buffer. {@link #setMaxSize} discards the oldest on reaching a size.
  *
- * <p>Los dos ultimos no son lo mismo aunque lo parezcan, y la diferencia importa: con
- * {@code maxAge} se sabe cuanto tiempo hacia atras se tiene y no cuanto ocupa; con {@code maxSize}
- * se sabe cuanto ocupa y no cuanto tiempo cubre. En un pico de actividad, el mismo tamano cubre
- * muchos menos minutos.
+ * <p>The last two are not the same thing even though they look it, and the difference matters: with
+ * {@code maxAge} one knows how far back one has and not how much it takes up; with {@code maxSize}
+ * one knows how much it takes up and not how much time it covers. In a peak of activity, the same
+ * size covers many fewer minutes.
  *
- * <p>{@code duration} es de otra clase: los otros dos dejan la grabacion andando para siempre y
- * descartan lo viejo, este la termina.
+ * <p>{@code duration} is of another kind: the other two leave the recording running forever and
+ * discard the old, this one ends it.
  *
- * <h2>Los dos usos</h2>
+ * <h2>The two uses</h2>
  *
- * <p><strong>Grabar y volcar</strong>: arrancar, esperar, parar, {@link #dump}. Es lo que se hace
- * para investigar algo que se puede reproducir.
+ * <p><strong>Record and dump</strong>: start, wait, stop, {@link #dump}. It is what one does in
+ * order to investigate something that can be reproduced.
  *
- * <p><strong>Dejar puesta y sacar una instantanea</strong>: arrancar con {@code maxAge} y sin
- * destino, y cuando algo sale mal, {@link FlightRecorder#takeSnapshot}. Es lo que se hace en
- * produccion para tener los ultimos minutos de lo que ya paso.
+ * <p><strong>Leave it on and take a snapshot</strong>: start with {@code maxAge} and with no
+ * destination, and when something goes wrong, {@link FlightRecorder#takeSnapshot}. It is what one
+ * does in production in order to have the last few minutes of what has already happened.
  *
- * <h2>Cerrar sin volcar pierde los datos</h2>
+ * <h2>Closing without dumping loses the data</h2>
  *
- * <p>{@link #close} suelta todo. Una grabacion detenida todavia tiene sus datos y una cerrada no,
- * asi que el {@code try}-con-recursos, que cierra al salir del bloque, borra la grabacion si el
- * {@link #dump} no ocurrio adentro. Es el error mas comun con esta API.
+ * <p>{@link #close} releases everything. A stopped recording still has its data and a closed one
+ * does not, so the {@code try}-with-resources, which closes on leaving the block, erases the
+ * recording if the {@link #dump} did not happen inside. It is the most common mistake with this
+ * API.
  *
- * <h2>Estado en esta VM</h2>
+ * <h2>State in this VM</h2>
  *
- * <p>Toda la <strong>configuracion</strong> es real: nombre, ajustes, limites, destino, estado. Se
- * puede construir una grabacion, configurarla y leerla, y {@link #copy} y {@link #getSettings}
- * hacen lo que dicen.
+ * <p>All the <strong>configuration</strong> is real: name, settings, limits, destination, state. A
+ * recording can be built, configured and read, and {@link #copy} and {@link #getSettings} do what
+ * they say.
  *
- * <p>Lo que no puede funcionar es lo que necesita el grabador: {@link #start}, {@link #stop},
- * {@link #dump}, {@link #getStream} y {@link #getSize} fallan con {@link IllegalStateException},
- * que es lo mismo que la API define para una VM sin JFR. El objeto no miente sobre su estado — se
- * queda en {@link RecordingState#NEW} porque nunca arranco.
+ * <p>What cannot work is what needs the recorder: {@link #start}, {@link #stop}, {@link #dump},
+ * {@link #getStream} and {@link #getSize} fail with {@link IllegalStateException}, which is the
+ * same as what the API defines for a VM with no JFR. The object does not lie about its state -- it
+ * stays at {@link RecordingState#NEW} because it never started.
  *
  * @since 9
  */
 public final class Recording implements Closeable {
 
-    private static final String NO_DISPONIBLE = "Flight Recorder no esta disponible en esta VM";
+    private static final String NOT_AVAILABLE = "Flight Recorder is not available in this VM";
 
-    private static final AtomicLong PROXIMO_ID = new AtomicLong(1);
+    private static final AtomicLong NEXT_ID = new AtomicLong(1);
 
-    private final long id = PROXIMO_ID.getAndIncrement();
-    private final Map<String, String> ajustes = new LinkedHashMap<String, String>();
+    private final long id = NEXT_ID.getAndIncrement();
+    private final Map<String, String> settings = new LinkedHashMap<String, String>();
 
-    private String nombre;
-    private RecordingState estado = RecordingState.NEW;
+    private String name;
+    private RecordingState state = RecordingState.NEW;
     private long maxSize;
     private Duration maxAge;
-    private Duration duracion;
-    private Path destino;
+    private Duration duration;
+    private Path destination;
     private boolean dumpOnExit;
     private boolean toDisk = true;
 
     /**
-     * Una grabacion sin ajustes.
+     * A recording with no settings.
      *
-     * <p>El nombre arranca siendo el identificador, como en el JDK: una grabacion sin nombre igual
-     * tiene que poder distinguirse de otra en una lista.
+     * <p>The name starts out being the identifier, as in the JDK: a recording with no name still
+     * has to be able to be told apart from another in a list.
      */
     public Recording() {
-        this.nombre = String.valueOf(id);
+        this.name = String.valueOf(id);
     }
 
     /**
-     * Una grabacion con esos ajustes.
+     * A recording with those settings.
      *
-     * @param settings los ajustes, con la clave {@code "evento#ajuste"}
-     * @throws NullPointerException si es {@code null}
+     * @param settings the settings, with the key {@code "event#setting"}
+     * @throws NullPointerException if it is {@code null}
      */
     public Recording(final Map<String, String> settings) {
         this();
@@ -96,10 +97,10 @@ public final class Recording implements Closeable {
     }
 
     /**
-     * Una grabacion con los ajustes de una configuracion.
+     * A recording with the settings of a configuration.
      *
-     * @param configuration la configuracion
-     * @throws NullPointerException si es {@code null}
+     * @param configuration the configuration
+     * @throws NullPointerException if it is {@code null}
      */
     public Recording(final Configuration configuration) {
         this();
@@ -107,381 +108,382 @@ public final class Recording implements Closeable {
     }
 
     /**
-     * Arranca la grabacion.
+     * It starts the recording.
      *
-     * @throws IllegalStateException en esta VM, o si la grabacion ya arranco o se cerro
+     * @throws IllegalStateException in this VM, or if the recording already started or was closed
      */
     public void start() {
-        throw new IllegalStateException(NO_DISPONIBLE);
+        throw new IllegalStateException(NOT_AVAILABLE);
     }
 
     /**
-     * Programa el arranque para dentro de ese tiempo.
+     * It schedules the start for that much time from now.
      *
-     * @param delay cuanto esperar
-     * @throws NullPointerException si es {@code null}
-     * @throws IllegalStateException en esta VM
+     * @param delay how long to wait
+     * @throws NullPointerException if it is {@code null}
+     * @throws IllegalStateException in this VM
      */
     public void scheduleStart(final Duration delay) {
         Objects.requireNonNull(delay, "delay");
-        throw new IllegalStateException(NO_DISPONIBLE);
+        throw new IllegalStateException(NOT_AVAILABLE);
     }
 
     /**
-     * Detiene la grabacion, conservando los datos.
+     * It stops the recording, keeping the data.
      *
-     * @return si estaba grabando
-     * @throws IllegalStateException en esta VM
+     * @return whether it was recording
+     * @throws IllegalStateException in this VM
      */
     public boolean stop() {
-        throw new IllegalStateException(NO_DISPONIBLE);
+        throw new IllegalStateException(NOT_AVAILABLE);
     }
 
     /**
-     * Los ajustes.
+     * The settings.
      *
-     * @return una copia de los ajustes
+     * @return a copy of the settings
      */
     public Map<String, String> getSettings() {
-        return new LinkedHashMap<String, String>(ajustes);
+        return new LinkedHashMap<String, String>(settings);
     }
 
     /**
-     * Cuanto ocupa la grabacion.
+     * How much the recording takes up.
      *
-     * @return los bytes
-     * @throws IllegalStateException en esta VM, porque no hay datos que medir
+     * @return the bytes
+     * @throws IllegalStateException in this VM, because there are no data to measure
      */
     public long getSize() {
-        throw new IllegalStateException(NO_DISPONIBLE);
+        throw new IllegalStateException(NOT_AVAILABLE);
     }
 
     /**
-     * Cuando se detuvo.
+     * When it stopped.
      *
-     * @return el momento, o {@code null} si no se detuvo
+     * @return the moment, or {@code null} if it did not stop
      */
     public Instant getStopTime() {
         return null;
     }
 
     /**
-     * Cuando arranco.
+     * When it started.
      *
-     * @return el momento, o {@code null} si no arranco
+     * @return the moment, or {@code null} if it did not start
      */
     public Instant getStartTime() {
         return null;
     }
 
     /**
-     * El tamano maximo.
+     * The maximum size.
      *
-     * @return los bytes; cero es sin limite
+     * @return the bytes; zero is no limit
      */
     public long getMaxSize() {
         return maxSize;
     }
 
     /**
-     * La antiguedad maxima de los datos.
+     * The maximum age of the data.
      *
-     * @return la duracion, o {@code null} si no hay limite
+     * @return the duration, or {@code null} if there is no limit
      */
     public Duration getMaxAge() {
         return maxAge;
     }
 
     /**
-     * El nombre.
+     * The name.
      *
-     * @return el nombre
+     * @return the name
      */
     public String getName() {
-        return nombre;
+        return name;
     }
 
     /**
-     * Reemplaza los ajustes.
+     * It replaces the settings.
      *
-     * <p>Reemplaza y no fusiona: los que estaban y no vienen en el mapa nuevo se pierden. Es lo que
-     * hace el JDK, y es lo coherente con que una grabacion se configure a partir de una
-     * {@link Configuration} completa y no a fuerza de retoques.
+     * <p>It replaces and does not merge: the ones that were there and do not come in the new map
+     * are lost. It is what the JDK does, and it is coherent with a recording being configured from
+     * a complete {@link Configuration} and not by dint of touch-ups.
      *
-     * @param settings los ajustes
-     * @throws NullPointerException si es {@code null}
+     * @param settings the settings
+     * @throws NullPointerException if it is {@code null}
      */
     public void setSettings(final Map<String, String> settings) {
         Objects.requireNonNull(settings, "settings");
-        ajustes.clear();
-        ajustes.putAll(settings);
+        this.settings.clear();
+        this.settings.putAll(settings);
     }
 
     /**
-     * En que punto de su vida esta.
+     * At what point of its life it is.
      *
-     * @return el estado
+     * @return the state
      */
     public RecordingState getState() {
-        return estado;
+        return state;
     }
 
     /**
-     * Suelta los datos y los recursos.
+     * It releases the data and the resources.
      *
-     * <p>No falla aunque JFR no este: cerrar algo que nunca arranco es legitimo, y hacerlo fallar
-     * romperia cualquier {@code try}-con-recursos.
+     * <p>It does not fail even if JFR is not there: closing something that never started is
+     * legitimate, and making it fail would break any {@code try}-with-resources.
      */
     public void close() {
-        estado = RecordingState.CLOSED;
+        state = RecordingState.CLOSED;
     }
 
     /**
-     * Una copia de esta grabacion.
+     * A copy of this recording.
      *
-     * @param stop si la copia tiene que quedar detenida
-     * @return la copia, con su propio identificador
+     * @param stop whether the copy has to be left stopped
+     * @return the copy, with an identifier of its own
      */
     public Recording copy(final boolean stop) {
         final Recording r = new Recording(getSettings());
-        r.nombre = nombre;
+        r.name = name;
         r.maxSize = maxSize;
         r.maxAge = maxAge;
-        r.duracion = duracion;
-        r.destino = destino;
+        r.duration = duration;
+        r.destination = destination;
         r.dumpOnExit = dumpOnExit;
         r.toDisk = toDisk;
-        r.estado = stop ? RecordingState.STOPPED : estado;
+        r.state = stop ? RecordingState.STOPPED : state;
         return r;
     }
 
     /**
-     * Escribe los datos en un archivo.
+     * It writes the data into a file.
      *
-     * @param destination el archivo
-     * @throws IOException si no se pudo escribir
-     * @throws NullPointerException si es {@code null}
-     * @throws IllegalStateException en esta VM, porque no hay datos que escribir
+     * @param destination the file
+     * @throws IOException if it could not be written
+     * @throws NullPointerException if it is {@code null}
+     * @throws IllegalStateException in this VM, because there are no data to write
      */
     public void dump(final Path destination) throws IOException {
         Objects.requireNonNull(destination, "destination");
-        throw new IllegalStateException(NO_DISPONIBLE);
+        throw new IllegalStateException(NOT_AVAILABLE);
     }
 
     /**
-     * Si los datos se escriben a disco mientras se graba.
+     * Whether the data are written to disk while recording.
      *
-     * @return si van a disco
+     * @return whether they go to disk
      */
     public boolean isToDisk() {
         return toDisk;
     }
 
     /**
-     * Fija el tamano maximo.
+     * It sets the maximum size.
      *
-     * @param maxSize los bytes; cero para sin limite
-     * @throws IllegalArgumentException si es negativo
+     * @param maxSize the bytes; zero for no limit
+     * @throws IllegalArgumentException if it is negative
      */
     public void setMaxSize(final long maxSize) {
         if (maxSize < 0) {
-            throw new IllegalArgumentException("el tamano maximo no puede ser negativo");
+            throw new IllegalArgumentException("the maximum size cannot be negative");
         }
         this.maxSize = maxSize;
     }
 
     /**
-     * Fija la antiguedad maxima de los datos.
+     * It sets the maximum age of the data.
      *
-     * @param maxAge la duracion, o {@code null} para sin limite
-     * @throws IllegalArgumentException si es negativa
+     * @param maxAge the duration, or {@code null} for no limit
+     * @throws IllegalArgumentException if it is negative
      */
     public void setMaxAge(final Duration maxAge) {
         if (maxAge != null && maxAge.isNegative()) {
-            throw new IllegalArgumentException("la antiguedad maxima no puede ser negativa");
+            throw new IllegalArgumentException("the maximum age cannot be negative");
         }
         this.maxAge = maxAge;
     }
 
     /**
-     * Fija adonde volcar los datos al terminar.
+     * It sets where to dump the data on finishing.
      *
-     * @param destination el archivo, o {@code null} para no volcar
-     * @throws IOException si el destino no sirve
+     * @param destination the file, or {@code null} for not dumping
+     * @throws IOException if the destination does not serve
      */
     public void setDestination(final Path destination) throws IOException {
-        this.destino = destination;
+        this.destination = destination;
     }
 
     /**
-     * El destino configurado.
+     * The configured destination.
      *
-     * @return el archivo, o {@code null}
+     * @return the file, or {@code null}
      */
     public Path getDestination() {
-        return destino;
+        return destination;
     }
 
     /**
-     * El identificador de la grabacion.
+     * The identifier of the recording.
      *
-     * @return el identificador
+     * @return the identifier
      */
     public long getId() {
         return id;
     }
 
     /**
-     * Fija el nombre.
+     * It sets the name.
      *
-     * @param name el nombre
-     * @throws NullPointerException si es {@code null}
+     * @param name the name
+     * @throws NullPointerException if it is {@code null}
      */
     public void setName(final String name) {
-        this.nombre = Objects.requireNonNull(name, "name");
+        this.name = Objects.requireNonNull(name, "name");
     }
 
     /**
-     * Si volcar los datos cuando la VM termine.
+     * Whether to dump the data when the VM ends.
      *
-     * <p>Solo tiene efecto con un destino puesto: sin el no hay adonde volcar.
+     * <p>It only has an effect with a destination set: without it there is nowhere to dump to.
      *
-     * @param dumpOnExit si volcar
+     * @param dumpOnExit whether to dump
      */
     public void setDumpOnExit(final boolean dumpOnExit) {
         this.dumpOnExit = dumpOnExit;
     }
 
     /**
-     * Si va a volcar al terminar la VM.
+     * Whether it is going to dump when the VM ends.
      *
-     * @return si vuelca
+     * @return whether it dumps
      */
     public boolean getDumpOnExit() {
         return dumpOnExit;
     }
 
     /**
-     * Si escribir a disco mientras se graba.
+     * Whether to write to disk while recording.
      *
-     * <p>En memoria es mas rapido y limita cuanto se puede guardar; a disco aguanta grabaciones
-     * largas y cuesta entrada y salida.
+     * <p>In memory is faster and limits how much can be kept; to disk it stands long recordings and
+     * costs input and output.
      *
-     * @param toDisk si escribir a disco
+     * @param toDisk whether to write to disk
      */
     public void setToDisk(final boolean toDisk) {
         this.toDisk = toDisk;
     }
 
     /**
-     * Un flujo con los eventos de ese intervalo.
+     * A stream with the events of that interval.
      *
-     * @param start el comienzo del intervalo, o {@code null} para desde el principio
-     * @param end el final, o {@code null} para hasta el final
-     * @return el flujo
-     * @throws IOException si no se pudo leer
-     * @throws IllegalStateException en esta VM, porque no hay datos que leer
+     * @param start the beginning of the interval, or {@code null} for from the start
+     * @param end the end, or {@code null} for up to the end
+     * @return the stream
+     * @throws IOException if it could not be read
+     * @throws IllegalStateException in this VM, because there are no data to read
      */
     public InputStream getStream(final Instant start, final Instant end) throws IOException {
-        throw new IllegalStateException(NO_DISPONIBLE);
+        throw new IllegalStateException(NOT_AVAILABLE);
     }
 
     /**
-     * Cuanto va a durar la grabacion.
+     * How long the recording is going to last.
      *
-     * @return la duracion, o {@code null} si no tiene limite
+     * @return the duration, or {@code null} if it has no limit
      */
     public Duration getDuration() {
-        return duracion;
+        return duration;
     }
 
     /**
-     * Fija cuanto va a durar.
+     * It sets how long it is going to last.
      *
-     * @param duration la duracion, o {@code null} para sin limite
+     * @param duration the duration, or {@code null} for no limit
      */
     public void setDuration(final Duration duration) {
-        this.duracion = duration;
+        this.duration = duration;
     }
 
     /**
-     * Habilita un evento por nombre y devuelve sus ajustes para seguir configurandolo.
+     * It enables an event by name and returns its settings in order to go on configuring it.
      *
-     * @param name el nombre del evento
-     * @return los ajustes de ese evento
-     * @throws NullPointerException si es {@code null}
+     * @param name the name of the event
+     * @return the settings of that event
+     * @throws NullPointerException if it is {@code null}
      */
     public EventSettings enable(final String name) {
-        return ajustesDe(Objects.requireNonNull(name, "name"), "true");
+        return settingsOf(Objects.requireNonNull(name, "name"), "true");
     }
 
     /**
-     * Deshabilita un evento por nombre.
+     * It disables an event by name.
      *
-     * @param name el nombre del evento
-     * @return los ajustes de ese evento
-     * @throws NullPointerException si es {@code null}
+     * @param name the name of the event
+     * @return the settings of that event
+     * @throws NullPointerException if it is {@code null}
      */
     public EventSettings disable(final String name) {
-        return ajustesDe(Objects.requireNonNull(name, "name"), "false");
+        return settingsOf(Objects.requireNonNull(name, "name"), "false");
     }
 
     /**
-     * Habilita un evento por su clase.
+     * It enables an event by its class.
      *
-     * @param eventClass la clase del evento
-     * @return los ajustes de ese evento
-     * @throws NullPointerException si es {@code null}
+     * @param eventClass the class of the event
+     * @return the settings of that event
+     * @throws NullPointerException if it is {@code null}
      */
     public EventSettings enable(final Class<? extends Event> eventClass) {
-        return enable(nombreDe(eventClass));
+        return enable(nameOf(eventClass));
     }
 
     /**
-     * Deshabilita un evento por su clase.
+     * It disables an event by its class.
      *
-     * @param eventClass la clase del evento
-     * @return los ajustes de ese evento
-     * @throws NullPointerException si es {@code null}
+     * @param eventClass the class of the event
+     * @return the settings of that event
+     * @throws NullPointerException if it is {@code null}
      */
     public EventSettings disable(final Class<? extends Event> eventClass) {
-        return disable(nombreDe(eventClass));
+        return disable(nameOf(eventClass));
     }
 
     /**
-     * El nombre con el que el evento aparece en la grabacion.
+     * The name under which the event appears in the recording.
      *
-     * <p>Respeta el {@link Name} de la clase: habilitar por clase y habilitar por nombre tienen que
-     * llegar a la misma clave, o una de las dos formas no funcionaria.
+     * <p>It respects the {@link Name} of the class: enabling by class and enabling by name have to
+     * arrive at the same key, or one of the two ways would not work.
      */
-    private static String nombreDe(final Class<? extends Event> eventClass) {
+    private static String nameOf(final Class<? extends Event> eventClass) {
         Objects.requireNonNull(eventClass, "eventClass");
         final Name n = eventClass.getAnnotation(Name.class);
         return n != null ? n.value() : eventClass.getName();
     }
 
-    private EventSettings ajustesDe(final String evento, final String habilitado) {
-        ajustes.put(evento + "#" + Enabled.NAME, habilitado);
-        return new AjustesDeEvento(evento);
+    private EventSettings settingsOf(final String event, final String enabled) {
+        settings.put(event + "#" + Enabled.NAME, enabled);
+        return new EventSettingsImpl(event);
     }
 
     /**
-     * Los ajustes de un evento, escribiendo directo en el mapa de la grabacion.
+     * The settings of an event, writing straight into the map of the recording.
      *
-     * <p>Con nombre y no anonima por #482: el generador de bytecode no emite una clase anonima que
-     * este en el inicializador de un campo, y conviene no depender de en que contexto se instancia.
+     * <p>With a name and not anonymous because of #482: the bytecode generator does not emit an
+     * anonymous class that is in the initialiser of a field, and it is as well not to depend on the
+     * context it is instantiated in.
      */
-    private final class AjustesDeEvento extends EventSettings {
+    private final class EventSettingsImpl extends EventSettings {
 
-        private final String evento;
+        private final String event;
 
-        AjustesDeEvento(final String evento) {
-            this.evento = evento;
+        EventSettingsImpl(final String event) {
+            this.event = event;
         }
 
         public EventSettings with(final String name, final String value) {
             Objects.requireNonNull(name, "name");
-            ajustes.put(evento + "#" + name, value);
+            settings.put(event + "#" + name, value);
             return this;
         }
     }

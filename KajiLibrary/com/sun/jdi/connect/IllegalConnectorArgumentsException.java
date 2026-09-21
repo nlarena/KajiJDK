@@ -5,26 +5,26 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * Uno o varios argumentos de un {@link Connector} estaban mal.
+ * One or several arguments of a {@link Connector} were wrong.
  *
- * <p>Lleva **la lista de nombres** de los argumentos culpables, y no solo un mensaje. Es la
- * diferencia entre un depurador que puede marcar en rojo los dos campos que estan mal y uno que
- * solo puede mostrar un cartel: el formulario de conexion se arma desde
- * {@link Connector#defaultArguments()}, asi que quien lo dibujo tiene los controles indexados por
- * ese mismo nombre.
+ * <p>It carries **the list of names** of the guilty arguments, and not only a message. It is
+ * the difference between a debugger that can mark in red the two fields that are wrong and one
+ * that can only show a notice: the connection form is built from
+ * {@link Connector#defaultArguments()}, so whoever drew it has the controls indexed by that
+ * same name.
  */
 public class IllegalConnectorArgumentsException extends Exception {
 
     private static final long serialVersionUID = -3042212603611350941L;
 
-    /** Los nombres de los argumentos que estaban mal. De paquete, como en el JDK. */
+    /** The names of the arguments that were wrong. Package-private, as in the JDK. */
     List<String> names;
 
     /**
-     * Un fallo sobre un solo argumento.
+     * A failure about a single argument.
      *
-     * @param s el detalle
-     * @param name el nombre del argumento
+     * @param s the detail
+     * @param name the argument's name
      */
     public IllegalConnectorArgumentsException(String s, String name) {
         super(s);
@@ -33,17 +33,17 @@ public class IllegalConnectorArgumentsException extends Exception {
     }
 
     /**
-     * Un fallo sobre varios argumentos.
+     * A failure about several arguments.
      *
-     * @param s el detalle
-     * @param names los nombres; se copian
+     * @param s the detail
+     * @param names the names; they are copied
      */
     public IllegalConnectorArgumentsException(String s, List<String> names) {
         super(s);
         this.names = new ArrayList<String>(names);
     }
 
-    /** Los nombres de los argumentos que estaban mal, en una lista que no se puede modificar. */
+    /** The names of the arguments that were wrong, in a list that cannot be modified. */
     public List<String> argumentNames() {
         return Collections.unmodifiableList(this.names);
     }

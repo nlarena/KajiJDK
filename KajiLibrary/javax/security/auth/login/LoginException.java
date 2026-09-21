@@ -3,20 +3,20 @@ package javax.security.auth.login;
 import java.security.GeneralSecurityException;
 
 /**
- * KajiLibrary's javax.security.auth.login.LoginException -- la autenticacion fallo.
+ * KajiLibrary's javax.security.auth.login.LoginException -- the authentication failed.
  *
- * <p>Es la raiz de una jerarquia deliberadamente <b>chata en lo que informa</b>: sus subclases
- * distinguen la cuenta de la credencial --{@code AccountExpiredException} contra
- * {@code CredentialExpiredException}-- pero ninguna dice "esa cuenta no existe" cuando el modulo
- * eligio no decirlo.
+ * <p>It is the root of a hierarchy that is deliberately <b>flat in what it reports</b>: its
+ * subclasses tell the account from the credential --{@code AccountExpiredException} against {@code
+ * CredentialExpiredException}-- but none says "that account does not exist" when the module chose
+ * not to say it.
  *
- * <p>Eso no es una carencia del API: un servicio que conteste "usuario incorrecto" y "clave
- * incorrecta" por separado le regala a quien prueba una lista de usuarios validos. Por eso un modulo
- * de login prudente lanza {@code FailedLoginException} a secas en los dos casos, y el API le permite
- * ser tan preciso o tan reservado como quiera.
+ * <p>That is not a shortcoming of the API: a service that answers "wrong user" and "wrong password"
+ * separately hands whoever is probing a list of valid users. That is why a prudent login module
+ * throws a plain {@code FailedLoginException} in both cases, and the API lets it be as precise or
+ * as reserved as it wants.
  *
- * <p>Extiende {@code GeneralSecurityException}, que es la raiz de {@code java.security}: una falla de
- * autenticacion es una falla de seguridad y se puede atrapar junto con las demas.
+ * <p>It extends {@code GeneralSecurityException}, which is the root of {@code java.security}: an
+ * authentication failure is a security failure and can be caught together with the others.
  */
 public class LoginException extends GeneralSecurityException {
 

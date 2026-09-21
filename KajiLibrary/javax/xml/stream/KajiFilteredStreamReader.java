@@ -3,15 +3,15 @@ package javax.xml.stream;
 import javax.xml.stream.util.StreamReaderDelegate;
 
 /**
- * Un lector de cursor que solo se detiene donde el filtro deja.
+ * A cursor reader that only stops where the filter lets it.
  *
- * <p>Es {@link StreamReaderDelegate} con {@link #next()} redefinido, que es exactamente para lo que
- * esa clase existe.
+ * <p>It is {@link StreamReaderDelegate} with {@link #next()} redefined, which is exactly what that
+ * class exists for.
  *
- * <p>La sutileza esta en el constructor: el lector de abajo puede estar parado en un evento que el
- * filtro rechaza --{@code START_DOCUMENT} lo es casi siempre-- asi que hay que avanzar hasta el
- * primero aceptado antes de devolver el objeto. Si no, la primera consulta al cursor, sin ningun
- * {@code next()} de por medio, contestaria sobre un evento filtrado.
+ * <p>The subtlety is in the constructor: the underlying reader may be standing on an event the
+ * filter rejects --{@code START_DOCUMENT} almost always is-- so it has to advance to the first
+ * accepted one before returning the object. Otherwise, the first query to the cursor, without any
+ * {@code next()} in between, would answer about a filtered event.
  */
 final class KajiFilteredStreamReader extends StreamReaderDelegate {
 
@@ -46,7 +46,7 @@ final class KajiFilteredStreamReader extends StreamReaderDelegate {
             t = next();
         }
         if (t != XMLStreamConstants.START_ELEMENT && t != XMLStreamConstants.END_ELEMENT) {
-            throw new XMLStreamException("se esperaba una etiqueta y vino el evento " + t,
+            throw new XMLStreamException("expected a tag and got event " + t,
                     getLocation());
         }
         return t;

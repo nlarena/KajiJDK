@@ -1,60 +1,61 @@
 package java.awt.image;
 
 /**
- * Qué es un píxel dentro de un {@link DataBuffer}: cuántas bandas tiene y dónde está cada una.
+ * What a pixel is inside a {@link DataBuffer}: how many bands it has and where each one is.
  *
- * <p>Es la segunda de las tres capas de `java.awt.image` y la que da sentido a la primera. El
- * buffer es un arreglo de números sin estructura; este modelo dice que el número 17 es la banda
- * verde del píxel (5,2). Lo que **no** dice es qué color es ese verde — eso lo dice un
- * {@link ColorModel}.
+ * <p>It is the second of the three layers of `java.awt.image` and the one that gives the first one
+ * its meaning. The buffer is an array of numbers with no structure; this model says that number 17
+ * is the green band of pixel (5,2). What it does **not** say is what colour that green is — that is
+ * said by a {@link ColorModel}.
  *
- * <p>La separación es lo que permite leer la misma memoria de dos formas sin copiarla, y es lo que
- * hace que un recorte de una imagen sea un modelo nuevo sobre el mismo buffer en vez de una copia.
+ * <p>The separation is what makes it possible to read the same memory in two ways without copying
+ * it, and it is what makes a crop of an image be a new model over the same buffer instead of a
+ * copy.
  *
- * <h2>Muestras contra elementos de datos</h2>
+ * <h2>Samples versus data elements</h2>
  *
- * <p>Hay dos familias de accesores y confundirlas es el error clásico:
+ * <p>There are two families of accessors and confusing them is the classic mistake:
  *
  * <ul>
- * <li>Las **muestras** ({@code getSample}, {@code getPixel}) dan los valores de cada banda ya
- *     desempaquetados, siempre como `int`, `float` o `double`. Es lo que uno quiere para hacer
- *     cuentas.</li>
- * <li>Los **elementos de datos** ({@code getDataElements}) dan la representación cruda, en el tipo
- *     del buffer y con el empaquetado que el modelo use. Es lo que uno quiere para **copiar** de
- *     una imagen a otra del mismo tipo, porque no desempaqueta ni vuelve a empaquetar.</li>
+ * <li>The **samples** ({@code getSample}, {@code getPixel}) give the values of each band already
+ *     unpacked, always as `int`, `float` or `double`. It is what one wants for doing
+ *     arithmetic.</li>
+ * <li>The **data elements** ({@code getDataElements}) give the raw representation, in the buffer's
+ *     type and with whatever packing the model uses. It is what one wants for **copying** from one
+ *     image to another of the same type, because it neither unpacks nor packs again.</li>
  * </ul>
  *
- * <p>De ahí que `getDataElements` devuelva `Object`: el tipo real es `byte[]`, `short[]`, `int[]`,
- * `float[]` o `double[]` según {@link #getTransferType}, y no hay un supertipo común de arreglos de
- * primitivos.
+ * <p>Hence `getDataElements` returning `Object`: the real type is `byte[]`, `short[]`, `int[]`,
+ * `float[]` or `double[]` according to {@link #getTransferType}, and there is no common supertype
+ * of arrays of primitives.
  *
- * <h2>Qué implementa una subclase</h2>
+ * <h2>What a subclass implements</h2>
  *
- * <p>Sólo seis miembros: {@code getSample}, {@code setSample}, las dos formas de un solo píxel de
- * {@code getDataElements}/{@code setDataElements}, y los tres `create...` más
- * {@code getSampleSize}. Todo el resto de esta clase está escrito en términos de ésos — los
- * rectángulos son bucles sobre el píxel, y las variantes `float`/`double` son conversiones. Una
- * subclase puede redefinirlos para ir más rápido, pero no tiene que hacerlo para ser correcta.
+ * <p>Six members only: {@code getSample}, {@code setSample}, the two single-pixel forms of
+ * {@code getDataElements}/{@code setDataElements}, and the three `create...` methods plus
+ * {@code getSampleSize}. All the rest of this class is written in terms of those — the rectangles
+ * are loops over the pixel, and the `float`/`double` variants are conversions. A subclass can
+ * override them to go faster, but it does not have to in order to be correct.
  */
 public abstract class SampleModel {
 
-    /** El ancho en píxeles. */
+    /** The width in pixels. */
     protected int width;
 
-    /** El alto en píxeles. */
+    /** The height in pixels. */
     protected int height;
 
-    /** Cuántas bandas tiene cada píxel. */
+    /** How many bands each pixel has. */
     protected int numBands;
 
-    /** El tipo de los datos del buffer: una constante `DataBuffer.TYPE_`. */
+    /** The type of the buffer's data: a `DataBuffer.TYPE_` constant. */
     protected int dataType;
 
     /**
-     * Un modelo de `w` por `h` con `numBands` bandas sobre datos de ese tipo.
+     * A model of `w` by `h` with `numBands` bands over data of that type.
      *
-     * @throws IllegalArgumentException si el ancho o el alto no son positivos, si su producto se
-     *     pasa de `Integer.MAX_VALUE`, o si el tipo no es uno de los seis
+     * @throws IllegalArgumentException if the width or the height are not positive, if their
+     *     product goes past `Integer.MAX_VALUE`, or if the type is not one of the six
      */
     public SampleModel(int dataType, int w, int h, int numBands) {
         long size = (long) w * h;
@@ -79,47 +80,47 @@ public abstract class SampleModel {
         this.numBands = numBands;
     }
 
-    /** El ancho. */
+    /** The width. */
     public final int getWidth() {
         return this.width;
     }
 
-    /** El alto. */
+    /** The height. */
     public final int getHeight() {
         return this.height;
     }
 
-    /** Cuántas bandas. */
+    /** How many bands. */
     public final int getNumBands() {
         return this.numBands;
     }
 
-    /** Cuántos elementos del buffer ocupa un píxel. Ver la nota sobre elementos de datos. */
+    /** How many elements of the buffer a pixel takes. See the note about data elements. */
     public abstract int getNumDataElements();
 
-    /** El tipo de los datos del buffer. */
+    /** The type of the buffer's data. */
     public final int getDataType() {
         return this.dataType;
     }
 
     /**
-     * El tipo de los arreglos de {@link #getDataElements}.
+     * The type of the arrays of {@link #getDataElements}.
      *
-     * <p>Por omisión es el mismo que el del buffer, y casi siempre lo es. Se separa porque un
-     * modelo empaquetado puede transferir en un tipo más ancho que el que guarda -- por ejemplo,
-     * guardar en `byte[]` y transferir en `int` cuando un píxel no entra en un byte.
+     * <p>By default it is the same as the buffer's, and it almost always is. It is kept apart
+     * because a packed model can transfer in a type wider than the one it stores in -- for
+     * instance, storing in `byte[]` and transferring in `int` when a pixel does not fit in a byte.
      */
     public int getTransferType() {
         return this.dataType;
     }
 
-    // ---- un píxel, por muestras -----------------------------------------------------------
+    // ---- one pixel, by samples ------------------------------------------------------------
 
     /**
-     * Las bandas de ese píxel.
+     * The bands of that pixel.
      *
-     * @param iArray dónde dejarlas, o nulo para que se reserve
-     * @throws ArrayIndexOutOfBoundsException si el píxel cae fuera del modelo
+     * @param iArray where to leave them, or null to have one reserved
+     * @throws ArrayIndexOutOfBoundsException if the pixel falls outside the model
      */
     public int[] getPixel(int x, int y, int[] iArray, DataBuffer data) {
         int[] out = iArray == null ? new int[this.numBands] : iArray;
@@ -129,7 +130,7 @@ public abstract class SampleModel {
         return out;
     }
 
-    /** Como {@link #getPixel(int, int, int[], DataBuffer)}, en `float`. */
+    /** Like {@link #getPixel(int, int, int[], DataBuffer)}, in `float`. */
     public float[] getPixel(int x, int y, float[] fArray, DataBuffer data) {
         float[] out = fArray == null ? new float[this.numBands] : fArray;
         for (int i = 0; i < this.numBands; i++) {
@@ -138,7 +139,7 @@ public abstract class SampleModel {
         return out;
     }
 
-    /** Como {@link #getPixel(int, int, int[], DataBuffer)}, en `double`. */
+    /** Like {@link #getPixel(int, int, int[], DataBuffer)}, in `double`. */
     public double[] getPixel(int x, int y, double[] dArray, DataBuffer data) {
         double[] out = dArray == null ? new double[this.numBands] : dArray;
         for (int i = 0; i < this.numBands; i++) {
@@ -147,33 +148,33 @@ public abstract class SampleModel {
         return out;
     }
 
-    /** Escribe las bandas de ese píxel. */
+    /** Writes the bands of that pixel. */
     public void setPixel(int x, int y, int[] iArray, DataBuffer data) {
         for (int i = 0; i < this.numBands; i++) {
             this.setSample(x, y, i, iArray[i], data);
         }
     }
 
-    /** Escribe las bandas de ese píxel, desde `float`. */
+    /** Writes the bands of that pixel, from `float`. */
     public void setPixel(int x, int y, float[] fArray, DataBuffer data) {
         for (int i = 0; i < this.numBands; i++) {
             this.setSample(x, y, i, fArray[i], data);
         }
     }
 
-    /** Escribe las bandas de ese píxel, desde `double`. */
+    /** Writes the bands of that pixel, from `double`. */
     public void setPixel(int x, int y, double[] dArray, DataBuffer data) {
         for (int i = 0; i < this.numBands; i++) {
             this.setSample(x, y, i, dArray[i], data);
         }
     }
 
-    // ---- un rectángulo, por muestras ------------------------------------------------------
+    // ---- one rectangle, by samples -------------------------------------------------------
     //
-    // El orden es por filas y dentro de cada píxel por banda, que es el que espera cualquier
-    // código que recorra el arreglo linealmente.
+    // The order is by rows and within each pixel by band, which is the one any code that walks the
+    // array linearly expects.
 
-    /** Las bandas de todos los píxeles de ese rectángulo. */
+    /** The bands of every pixel of that rectangle. */
     public int[] getPixels(int x, int y, int w, int h, int[] iArray, DataBuffer data) {
         int[] out = iArray == null ? new int[w * h * this.numBands] : iArray;
         int k = 0;
@@ -188,7 +189,7 @@ public abstract class SampleModel {
         return out;
     }
 
-    /** Como el anterior, en `float`. */
+    /** Like the previous one, in `float`. */
     public float[] getPixels(int x, int y, int w, int h, float[] fArray, DataBuffer data) {
         float[] out = fArray == null ? new float[w * h * this.numBands] : fArray;
         int k = 0;
@@ -203,7 +204,7 @@ public abstract class SampleModel {
         return out;
     }
 
-    /** Como el anterior, en `double`. */
+    /** Like the previous one, in `double`. */
     public double[] getPixels(int x, int y, int w, int h, double[] dArray, DataBuffer data) {
         double[] out = dArray == null ? new double[w * h * this.numBands] : dArray;
         int k = 0;
@@ -218,7 +219,7 @@ public abstract class SampleModel {
         return out;
     }
 
-    /** Escribe las bandas de todos los píxeles de ese rectángulo. */
+    /** Writes the bands of every pixel of that rectangle. */
     public void setPixels(int x, int y, int w, int h, int[] iArray, DataBuffer data) {
         int k = 0;
         for (int j = y; j < y + h; j++) {
@@ -231,7 +232,7 @@ public abstract class SampleModel {
         }
     }
 
-    /** Como el anterior, desde `float`. */
+    /** Like the previous one, from `float`. */
     public void setPixels(int x, int y, int w, int h, float[] fArray, DataBuffer data) {
         int k = 0;
         for (int j = y; j < y + h; j++) {
@@ -244,7 +245,7 @@ public abstract class SampleModel {
         }
     }
 
-    /** Como el anterior, desde `double`. */
+    /** Like the previous one, from `double`. */
     public void setPixels(int x, int y, int w, int h, double[] dArray, DataBuffer data) {
         int k = 0;
         for (int j = y; j < y + h; j++) {
@@ -257,39 +258,39 @@ public abstract class SampleModel {
         }
     }
 
-    // ---- una banda ------------------------------------------------------------------------
+    // ---- one band -------------------------------------------------------------------------
 
     /**
-     * El valor de una banda de un píxel.
+     * The value of one band of one pixel.
      *
-     * @throws ArrayIndexOutOfBoundsException si el píxel o la banda caen fuera
+     * @throws ArrayIndexOutOfBoundsException if the pixel or the band fall outside
      */
     public abstract int getSample(int x, int y, int b, DataBuffer data);
 
-    /** El valor de una banda, como `float`. */
+    /** The value of one band, as a `float`. */
     public float getSampleFloat(int x, int y, int b, DataBuffer data) {
         return this.getSample(x, y, b, data);
     }
 
-    /** El valor de una banda, como `double`. */
+    /** The value of one band, as a `double`. */
     public double getSampleDouble(int x, int y, int b, DataBuffer data) {
         return this.getSample(x, y, b, data);
     }
 
-    /** Escribe el valor de una banda. */
+    /** Writes the value of one band. */
     public abstract void setSample(int x, int y, int b, int s, DataBuffer data);
 
-    /** Escribe el valor de una banda desde un `float`. En un modelo entero se trunca. */
+    /** Writes the value of one band from a `float`. In an integer model it is truncated. */
     public void setSample(int x, int y, int b, float s, DataBuffer data) {
         this.setSample(x, y, b, (int) s, data);
     }
 
-    /** Escribe el valor de una banda desde un `double`. En un modelo entero se trunca. */
+    /** Writes the value of one band from a `double`. In an integer model it is truncated. */
     public void setSample(int x, int y, int b, double s, DataBuffer data) {
         this.setSample(x, y, b, (int) s, data);
     }
 
-    /** Los valores de una banda en todo un rectángulo. */
+    /** The values of one band over a whole rectangle. */
     public int[] getSamples(int x, int y, int w, int h, int b, int[] iArray, DataBuffer data) {
         int[] out = iArray == null ? new int[w * h] : iArray;
         int k = 0;
@@ -302,7 +303,7 @@ public abstract class SampleModel {
         return out;
     }
 
-    /** Como el anterior, en `float`. */
+    /** Like the previous one, in `float`. */
     public float[] getSamples(int x, int y, int w, int h, int b, float[] fArray, DataBuffer data) {
         float[] out = fArray == null ? new float[w * h] : fArray;
         int k = 0;
@@ -315,7 +316,7 @@ public abstract class SampleModel {
         return out;
     }
 
-    /** Como el anterior, en `double`. */
+    /** Like the previous one, in `double`. */
     public double[] getSamples(int x, int y, int w, int h, int b, double[] dArray,
             DataBuffer data) {
         double[] out = dArray == null ? new double[w * h] : dArray;
@@ -329,7 +330,7 @@ public abstract class SampleModel {
         return out;
     }
 
-    /** Escribe los valores de una banda en todo un rectángulo. */
+    /** Writes the values of one band over a whole rectangle. */
     public void setSamples(int x, int y, int w, int h, int b, int[] iArray, DataBuffer data) {
         int k = 0;
         for (int j = y; j < y + h; j++) {
@@ -340,7 +341,7 @@ public abstract class SampleModel {
         }
     }
 
-    /** Como el anterior, desde `float`. */
+    /** Like the previous one, from `float`. */
     public void setSamples(int x, int y, int w, int h, int b, float[] fArray, DataBuffer data) {
         int k = 0;
         for (int j = y; j < y + h; j++) {
@@ -351,7 +352,7 @@ public abstract class SampleModel {
         }
     }
 
-    /** Como el anterior, desde `double`. */
+    /** Like the previous one, from `double`. */
     public void setSamples(int x, int y, int w, int h, int b, double[] dArray, DataBuffer data) {
         int k = 0;
         for (int j = y; j < y + h; j++) {
@@ -362,194 +363,194 @@ public abstract class SampleModel {
         }
     }
 
-    // ---- elementos de datos ---------------------------------------------------------------
+    // ---- data elements ----------------------------------------------------------------------
 
     /**
-     * La representación cruda de un píxel. Ver la nota de la clase.
+     * The raw representation of a pixel. See the note of the class.
      *
-     * @param obj dónde dejarla — un arreglo del tipo de {@link #getTransferType} — o nulo
+     * @param obj where to leave it — an array of the type of {@link #getTransferType} — or null
      */
     public abstract Object getDataElements(int x, int y, Object obj, DataBuffer data);
 
     /**
-     * La representación cruda de un rectángulo.
+     * The raw representation of a rectangle.
      *
-     * <p>Reserva el arreglo del tipo que corresponda y delega píxel por píxel. Una subclase que
-     * pueda copiar bloques enteros lo redefine; ésta es la versión correcta, no la rápida.
+     * <p>It reserves the array of whichever type applies and delegates pixel by pixel. A subclass
+     * that can copy whole blocks overrides it; this is the correct version, not the fast one.
      *
-     * @throws IllegalArgumentException si el tipo de transferencia no es uno de los seis
+     * @throws IllegalArgumentException if the transfer type is not one of the six
      */
     public Object getDataElements(int x, int y, int w, int h, Object obj, DataBuffer data) {
         int n = this.getNumDataElements();
         int total = w * h * n;
-        int tipo = this.getTransferType();
-        Object destino = obj;
-        if (tipo == DataBuffer.TYPE_BYTE) {
-            byte[] out = destino == null ? new byte[total] : (byte[]) destino;
-            byte[] uno = null;
+        int type = this.getTransferType();
+        Object dest = obj;
+        if (type == DataBuffer.TYPE_BYTE) {
+            byte[] out = dest == null ? new byte[total] : (byte[]) dest;
+            byte[] one = null;
             int k = 0;
             for (int j = y; j < y + h; j++) {
                 for (int i = x; i < x + w; i++) {
-                    uno = (byte[]) this.getDataElements(i, j, uno, data);
-                    System.arraycopy(uno, 0, out, k, n);
+                    one = (byte[]) this.getDataElements(i, j, one, data);
+                    System.arraycopy(one, 0, out, k, n);
                     k = k + n;
                 }
             }
             return out;
         }
-        if (tipo == DataBuffer.TYPE_USHORT || tipo == DataBuffer.TYPE_SHORT) {
-            short[] out = destino == null ? new short[total] : (short[]) destino;
-            short[] uno = null;
+        if (type == DataBuffer.TYPE_USHORT || type == DataBuffer.TYPE_SHORT) {
+            short[] out = dest == null ? new short[total] : (short[]) dest;
+            short[] one = null;
             int k = 0;
             for (int j = y; j < y + h; j++) {
                 for (int i = x; i < x + w; i++) {
-                    uno = (short[]) this.getDataElements(i, j, uno, data);
-                    System.arraycopy(uno, 0, out, k, n);
+                    one = (short[]) this.getDataElements(i, j, one, data);
+                    System.arraycopy(one, 0, out, k, n);
                     k = k + n;
                 }
             }
             return out;
         }
-        if (tipo == DataBuffer.TYPE_INT) {
-            int[] out = destino == null ? new int[total] : (int[]) destino;
-            int[] uno = null;
+        if (type == DataBuffer.TYPE_INT) {
+            int[] out = dest == null ? new int[total] : (int[]) dest;
+            int[] one = null;
             int k = 0;
             for (int j = y; j < y + h; j++) {
                 for (int i = x; i < x + w; i++) {
-                    uno = (int[]) this.getDataElements(i, j, uno, data);
-                    System.arraycopy(uno, 0, out, k, n);
+                    one = (int[]) this.getDataElements(i, j, one, data);
+                    System.arraycopy(one, 0, out, k, n);
                     k = k + n;
                 }
             }
             return out;
         }
-        if (tipo == DataBuffer.TYPE_FLOAT) {
-            float[] out = destino == null ? new float[total] : (float[]) destino;
-            float[] uno = null;
+        if (type == DataBuffer.TYPE_FLOAT) {
+            float[] out = dest == null ? new float[total] : (float[]) dest;
+            float[] one = null;
             int k = 0;
             for (int j = y; j < y + h; j++) {
                 for (int i = x; i < x + w; i++) {
-                    uno = (float[]) this.getDataElements(i, j, uno, data);
-                    System.arraycopy(uno, 0, out, k, n);
+                    one = (float[]) this.getDataElements(i, j, one, data);
+                    System.arraycopy(one, 0, out, k, n);
                     k = k + n;
                 }
             }
             return out;
         }
-        if (tipo == DataBuffer.TYPE_DOUBLE) {
-            double[] out = destino == null ? new double[total] : (double[]) destino;
-            double[] uno = null;
+        if (type == DataBuffer.TYPE_DOUBLE) {
+            double[] out = dest == null ? new double[total] : (double[]) dest;
+            double[] one = null;
             int k = 0;
             for (int j = y; j < y + h; j++) {
                 for (int i = x; i < x + w; i++) {
-                    uno = (double[]) this.getDataElements(i, j, uno, data);
-                    System.arraycopy(uno, 0, out, k, n);
+                    one = (double[]) this.getDataElements(i, j, one, data);
+                    System.arraycopy(one, 0, out, k, n);
                     k = k + n;
                 }
             }
             return out;
         }
-        throw new IllegalArgumentException("Unsupported transfer type: " + tipo);
+        throw new IllegalArgumentException("Unsupported transfer type: " + type);
     }
 
-    /** Escribe la representación cruda de un píxel. */
+    /** Writes the raw representation of a pixel. */
     public abstract void setDataElements(int x, int y, Object obj, DataBuffer data);
 
     /**
-     * Escribe la representación cruda de un rectángulo.
+     * Writes the raw representation of a rectangle.
      *
-     * @throws IllegalArgumentException si el tipo de transferencia no es uno de los seis
+     * @throws IllegalArgumentException if the transfer type is not one of the six
      */
     public void setDataElements(int x, int y, int w, int h, Object obj, DataBuffer data) {
         int n = this.getNumDataElements();
-        int tipo = this.getTransferType();
-        if (tipo == DataBuffer.TYPE_BYTE) {
+        int type = this.getTransferType();
+        if (type == DataBuffer.TYPE_BYTE) {
             byte[] src = (byte[]) obj;
-            byte[] uno = new byte[n];
+            byte[] one = new byte[n];
             int k = 0;
             for (int j = y; j < y + h; j++) {
                 for (int i = x; i < x + w; i++) {
-                    System.arraycopy(src, k, uno, 0, n);
-                    this.setDataElements(i, j, uno, data);
+                    System.arraycopy(src, k, one, 0, n);
+                    this.setDataElements(i, j, one, data);
                     k = k + n;
                 }
             }
             return;
         }
-        if (tipo == DataBuffer.TYPE_USHORT || tipo == DataBuffer.TYPE_SHORT) {
+        if (type == DataBuffer.TYPE_USHORT || type == DataBuffer.TYPE_SHORT) {
             short[] src = (short[]) obj;
-            short[] uno = new short[n];
+            short[] one = new short[n];
             int k = 0;
             for (int j = y; j < y + h; j++) {
                 for (int i = x; i < x + w; i++) {
-                    System.arraycopy(src, k, uno, 0, n);
-                    this.setDataElements(i, j, uno, data);
+                    System.arraycopy(src, k, one, 0, n);
+                    this.setDataElements(i, j, one, data);
                     k = k + n;
                 }
             }
             return;
         }
-        if (tipo == DataBuffer.TYPE_INT) {
+        if (type == DataBuffer.TYPE_INT) {
             int[] src = (int[]) obj;
-            int[] uno = new int[n];
+            int[] one = new int[n];
             int k = 0;
             for (int j = y; j < y + h; j++) {
                 for (int i = x; i < x + w; i++) {
-                    System.arraycopy(src, k, uno, 0, n);
-                    this.setDataElements(i, j, uno, data);
+                    System.arraycopy(src, k, one, 0, n);
+                    this.setDataElements(i, j, one, data);
                     k = k + n;
                 }
             }
             return;
         }
-        if (tipo == DataBuffer.TYPE_FLOAT) {
+        if (type == DataBuffer.TYPE_FLOAT) {
             float[] src = (float[]) obj;
-            float[] uno = new float[n];
+            float[] one = new float[n];
             int k = 0;
             for (int j = y; j < y + h; j++) {
                 for (int i = x; i < x + w; i++) {
-                    System.arraycopy(src, k, uno, 0, n);
-                    this.setDataElements(i, j, uno, data);
+                    System.arraycopy(src, k, one, 0, n);
+                    this.setDataElements(i, j, one, data);
                     k = k + n;
                 }
             }
             return;
         }
-        if (tipo == DataBuffer.TYPE_DOUBLE) {
+        if (type == DataBuffer.TYPE_DOUBLE) {
             double[] src = (double[]) obj;
-            double[] uno = new double[n];
+            double[] one = new double[n];
             int k = 0;
             for (int j = y; j < y + h; j++) {
                 for (int i = x; i < x + w; i++) {
-                    System.arraycopy(src, k, uno, 0, n);
-                    this.setDataElements(i, j, uno, data);
+                    System.arraycopy(src, k, one, 0, n);
+                    this.setDataElements(i, j, one, data);
                     k = k + n;
                 }
             }
             return;
         }
-        throw new IllegalArgumentException("Unsupported transfer type: " + tipo);
+        throw new IllegalArgumentException("Unsupported transfer type: " + type);
     }
 
-    // ---- fábricas -------------------------------------------------------------------------
+    // ---- factories ------------------------------------------------------------------------
 
-    /** Un modelo igual a éste pero de otro tamaño. */
+    /** A model like this one but of another size. */
     public abstract SampleModel createCompatibleSampleModel(int w, int h);
 
     /**
-     * Un modelo con sólo algunas de las bandas de éste.
+     * A model with only some of the bands of this one.
      *
-     * <p>Es lo que permite mirar el canal rojo de una imagen RGB **sin copiarla**: el modelo nuevo
-     * apunta al mismo buffer y sólo cambia qué se considera un píxel.
+     * <p>It is what makes it possible to look at the red channel of an RGB image **without copying
+     * it**: the new model points at the same buffer and only changes what counts as a pixel.
      */
     public abstract SampleModel createSubsetSampleModel(int[] bands);
 
-    /** Un buffer del tamaño y el tipo que este modelo necesita. */
+    /** A buffer of the size and type this model needs. */
     public abstract DataBuffer createDataBuffer();
 
-    /** Cuántos bits usa cada banda. */
+    /** How many bits each band uses. */
     public abstract int[] getSampleSize();
 
-    /** Cuántos bits usa esa banda. */
+    /** How many bits that band uses. */
     public abstract int getSampleSize(int band);
 }

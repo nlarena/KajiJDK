@@ -3,28 +3,28 @@ package java.rmi.server;
 import java.net.MalformedURLException;
 
 /**
- * El punto de extension detras de {@link RMIClassLoader}.
+ * The extension point behind {@link RMIClassLoader}.
  *
- * <p>Existe porque de donde se bajan las clases es una decision de despliegue y no del programa: un
- * entorno puede querer resolver el codebase contra un repositorio propio, o prohibirlo del todo. Sin
- * este SPI habria que elegir entre la politica del JDK y ninguna.
+ * <p>It exists because where classes are downloaded from is a deployment decision, not the
+ * program's: an environment may want to resolve the codebase against a repository of its own, or
+ * forbid it altogether. Without this SPI the choice would be between the JDK's policy and none.
  */
 public abstract class RMIClassLoaderSpi {
 
     public RMIClassLoaderSpi() {
     }
 
-    /** Carga una clase desde ese codebase. */
+    /** It loads a class from that codebase. */
     public abstract Class<?> loadClass(String codebase, String name, ClassLoader defaultLoader)
             throws MalformedURLException, ClassNotFoundException;
 
-    /** Carga un proxy que implementa esas interfaces. */
+    /** It loads a proxy that implements those interfaces. */
     public abstract Class<?> loadProxyClass(String codebase, String[] interfaces,
             ClassLoader defaultLoader) throws MalformedURLException, ClassNotFoundException;
 
-    /** El cargador para ese codebase. */
+    /** The loader for that codebase. */
     public abstract ClassLoader getClassLoader(String codebase) throws MalformedURLException;
 
-    /** El codebase que se anuncia junto con esa clase al serializarla. */
+    /** The codebase announced along with that class when it is serialised. */
     public abstract String getClassAnnotation(Class<?> cl);
 }

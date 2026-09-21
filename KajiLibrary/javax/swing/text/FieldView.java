@@ -11,21 +11,22 @@ import javax.swing.BoundedRangeModel;
 import javax.swing.event.DocumentEvent;
 
 /**
- * La vista de un campo de una sola linea.
+ * The view of a single-line field.
  *
- * <h2>Dos cosas que un area de texto no hace</h2>
+ * <h2>Two things a text area does not do</h2>
  *
  * <ul>
- * <li><strong>Se desplaza sola.</strong> Un campo no tiene barra: cuando el texto no entra, la
- * vista se corre para que el cursor quede visible. Eso es {@link #adjustAllocation}, que devuelve
- * un rectangulo mas ancho que el campo y corrido hacia la izquierda.
- * <li><strong>Se alinea.</strong> Si el texto entra de sobra, se ubica a la izquierda, al centro o
- * a la derecha segun lo que diga el componente, y en vertical siempre centrado. Un campo con el
- * texto pegado arriba se ve mal, y eso es lo que evita.
+ * <li><strong>It scrolls itself.</strong> A field has no bar: when the text does not fit, the
+ * view shifts so that the cursor stays visible. That is {@link #adjustAllocation}, which returns
+ * a rectangle wider than the field and shifted to the left.
+ * <li><strong>It aligns itself.</strong> If the text fits with room to spare, it is placed to
+ * the left, in the centre or to the right according to what the component says, and vertically
+ * always centred. A field with the text stuck to the top looks wrong, and that is what this
+ * avoids.
  * </ul>
  *
- * <p>Hereda de {@link PlainView} porque el dibujado de la linea es el mismo; lo unico que cambia es
- * donde cae esa linea.
+ * <p>It inherits from {@link PlainView} because the drawing of the line is the same; the only
+ * thing that changes is where that line falls.
  */
 public class FieldView extends PlainView {
 
@@ -33,18 +34,18 @@ public class FieldView extends PlainView {
         super(elem);
     }
 
-    /** Las metricas del componente. */
+    /** The component's metrics. */
     protected FontMetrics getFontMetrics() {
         Container c = getContainer();
         return c.getFontMetrics(c.getFont());
     }
 
     /**
-     * Corre y centra el rectangulo; ver la nota de la clase.
+     * It shifts and centres the rectangle; see the class note.
      *
-     * <p>Devuelve un rectangulo del ancho del <em>texto</em>, no del campo, ubicado segun la
-     * alineacion y el desplazamiento. Todo lo demas de la vista trabaja con ese rectangulo y no se
-     * entera de nada.
+     * <p>It returns a rectangle of the <em>text</em>'s width, not the field's, placed according to
+     * the alignment and the scrolling. Everything else in the view works with that rectangle and
+     * hears about nothing.
      */
     protected Shape adjustAllocation(Shape a) {
         if (a != null) {
@@ -61,10 +62,10 @@ public class FieldView extends PlainView {
             if (c instanceof JTextComponent) {
                 JTextComponent tc = (JTextComponent) c;
                 if (hspan < bounds.width) {
-                    // Entra de sobra: se alinea.
+                    // It fits with room to spare: it is aligned.
                     bounds.width = hspan;
                 } else {
-                    // No entra: se corre para que se vea el cursor.
+                    // It does not fit: it shifts so that the cursor is seen.
                     int x0 = bounds.x;
                     bounds.width = hspan;
                     Caret caret = tc.getCaret();
@@ -82,7 +83,7 @@ public class FieldView extends PlainView {
                                 bounds.x = bounds.x + dx;
                             }
                         } catch (BadLocationException e) {
-                            // Sin cursor ubicable, se deja donde estaba.
+                            // With no placeable cursor, it is left where it was.
                         }
                     }
                 }
@@ -92,7 +93,7 @@ public class FieldView extends PlainView {
         return null;
     }
 
-    /** Acomoda el modelo de desplazamiento del campo, si lo hay. */
+    /** It fixes up the field's scrolling model, if there is one. */
     void updateVisibilityModel() {
     }
 
@@ -106,7 +107,7 @@ public class FieldView extends PlainView {
         return adjustAllocation(a);
     }
 
-    /** El ancho es el del texto; el alto, el de una linea. */
+    /** The width is the text's; the height, that of one line. */
     public float getPreferredSpan(int axis) {
         if (axis == View.X_AXIS) {
             Segment buff = getLineBuffer();
@@ -128,7 +129,7 @@ public class FieldView extends PlainView {
         throw new IllegalArgumentException("Invalid axis: " + axis);
     }
 
-    /** Se estira a lo ancho y no a lo alto: un campo tiene una sola linea. */
+    /** It stretches widthwise and not heightwise: a field has a single line. */
     public int getResizeWeight(int axis) {
         if (axis == View.X_AXIS) {
             return 1;

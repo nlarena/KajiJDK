@@ -13,39 +13,41 @@ import javax.swing.event.ListDataListener;
 import javax.swing.filechooser.FileSystemView;
 
 /**
- * La lista de archivos que muestra un {@link JFileChooser}.
+ * The list of files a {@link JFileChooser} shows.
  *
- * <h2>Primero las carpetas, despues los archivos</h2>
+ * <h2>Folders first, files afterwards</h2>
  *
- * <p>El modelo guarda dos listas separadas y las presenta como una sola: {@link #getElementAt} sirve
- * primero las carpetas y despues los archivos. No es una preferencia estetica -- es lo que hace que
- * navegar sea rapido: las carpetas son a donde se va, y estan siempre arriba, en el mismo lugar.
+ * <p>The model keeps two separate lists and presents them as one: {@link #getElementAt} serves
+ * the folders first and the files afterwards. It is not an aesthetic preference -- it is what
+ * makes navigating fast: folders are where one goes, and they are always at the top, in the
+ * same place.
  *
- * <p>Dentro de cada grupo el orden lo decide {@link #lt}, que compara por nombre sin distinguir
- * mayusculas. Una subclase que quiera ordenar por fecha o por tamano redefine ese metodo y no toca
- * nada mas.
+ * <p>Within each group the order is decided by {@link #lt}, which compares by name ignoring
+ * case. A subclass that wants to sort by date or by size redefines that method and touches
+ * nothing else.
  *
- * <h2>La carga es sincronica, y en el JDK no</h2>
+ * <h2>The loading is synchronous, and in the JDK it is not</h2>
  *
- * <p>El JDK lee la carpeta en otro hilo, porque listar una carpeta de red o un disco dormido puede
- * tardar y congelaria la ventana. Aca se lee en el hilo que llama, y es a proposito: esta VM tiene
- * un problema de recoleccion por el cual {@code new File(padre, hijo)} en un hilo secundario mata
- * el hilo sin tirar nada -- ver {@code java/BxDbgF.java}, que lo reproduce en tres lineas --, y el
- * cargador quedaria haciendo exactamente eso. Un modelo que contesta cero para siempre es peor que
- * uno que tarda.
+ * <p>The JDK reads the folder in another thread, because listing a network folder or a sleeping
+ * disk may take a while and would freeze the window. Here it is read in the calling thread, and
+ * it is on purpose: this VM has a collection problem whereby {@code new File(parent, child)} in
+ * a secondary thread kills the thread without throwing anything -- see {@code java/BxDbgF.java},
+ * which reproduces it in three lines --, and the loader would be doing exactly that. A model
+ * that answers zero for ever is worse than one that takes a while.
  *
- * <p>La diferencia que se ve es a favor: en el JDK {@link #getSize} puede contestar cero justo
- * despues de crear el modelo y el numero de verdad unos milisegundos mas tarde; aca ya esta.
- * Cuando el problema de la VM se arregle, esto vuelve a ser un hilo.
+ * <p>The difference that shows is in our favour: in the JDK {@link #getSize} may answer zero
+ * right after creating the model and the real number a few milliseconds later; here it is
+ * already there. When the VM's problem is fixed, this goes back to being a thread.
  *
- * <p>{@link #invalidateFileCache} tira lo leido y {@link #validateFileCache} vuelve a leer; el
- * {@link JFileChooser} las llama cuando cambia de carpeta, de filtro, o de si muestra los ocultos.
+ * <p>{@link #invalidateFileCache} throws away what was read and {@link #validateFileCache}
+ * reads again; the {@link JFileChooser} calls them when it changes folder, filter, or whether
+ * it shows the hidden ones.
  *
- * <h2>Fuera de rango revienta</h2>
+ * <h2>Out of range blows up</h2>
  *
- * <p>{@link #getElementAt} con un indice que no existe tira
- * {@code ArrayIndexOutOfBoundsException}, para los dos lados. No comprueba nada: deja que reviente
- * el {@link Vector} de adentro, y esta medido.
+ * <p>{@link #getElementAt} with an index that does not exist throws
+ * {@code ArrayIndexOutOfBoundsException}, on both sides. It checks nothing: it lets the
+ * {@link Vector} inside blow up, and it is measured.
  */
 public class BasicDirectoryModel extends AbstractListModel<Object>
         implements PropertyChangeListener {
@@ -56,13 +58,13 @@ public class BasicDirectoryModel extends AbstractListModel<Object>
     private Vector<File> files;
     private final PropertyChangeSupport changeSupport = new PropertyChangeSupport(this);
 
-    /** Para ese selector; empieza a leer su carpeta enseguida. */
+    /** For that chooser; it starts reading its folder right away. */
     public BasicDirectoryModel(JFileChooser filechooser) {
         this.filechooser = filechooser;
         validateFileCache();
     }
 
-    /** Tira lo leido y vuelve a leer; ver la nota de la clase. */
+    /** It throws away what was read and reads again; see the class note. */
     public void propertyChange(PropertyChangeEvent e) {
         String prop = e.getPropertyName();
         if (JFileChooser.DIRECTORY_CHANGED_PROPERTY.equals(prop)
@@ -77,104 +79,105 @@ public class BasicDirectoryModel extends AbstractListModel<Object>
         }
     }
 
-    /** Olvida las dos listas derivadas; la proxima consulta las vuelve a armar. */
+    /** It forgets the two derived lists; the next query builds them again. */
     public void invalidateFileCache() {
         directories = null;
         files = null;
     }
 
     /**
-     * Las carpetas, con {@code ".."} adelante.
+     * The folders, with {@code ".."} in front.
      *
-     * <p>Ese primer elemento no esta en el modelo -- {@link #getSize} no lo cuenta y
-     * {@link #getElementAt} no lo devuelve --: es el atajo al directorio de arriba, que el selector
-     * dibuja aparte. Esta medido, y es facil de confundir: {@code getDirectories().size()} mas
-     * {@code getFiles().size()} da uno mas que {@code getSize()}.
+     * <p>That first element is not in the model -- {@link #getSize} does not count it and
+     * {@link #getElementAt} does not return it --: it is the shortcut to the directory above,
+     * which the chooser draws separately. It is measured, and it is easy to get confused:
+     * {@code getDirectories().size()} plus {@code getFiles().size()} gives one more than
+     * {@code getSize()}.
      */
     public Vector<File> getDirectories() {
         synchronized (fileCache) {
             if (directories != null) {
                 return directories;
             }
-            armarListas();
+            buildLists();
             return directories;
         }
     }
 
     /**
-     * Los archivos que no son carpetas.
+     * The files that are not folders.
      *
-     * <p>Ojo con el nombre: no es "todo lo que hay", es "lo que no es carpeta". Todo junto se pide
-     * recorriendo el modelo con {@link #getElementAt}.
+     * <p>Mind the name: it is not "everything there is", it is "what is not a folder". The whole
+     * lot is asked for by going through the model with {@link #getElementAt}.
      */
     public Vector<File> getFiles() {
         synchronized (fileCache) {
             if (files != null) {
                 return files;
             }
-            armarListas();
+            buildLists();
             return files;
         }
     }
 
-    /** Parte lo leido en carpetas y archivos; ver {@link #getDirectories}. */
-    private void armarListas() {
-        Vector<File> nuevasCarpetas = new Vector<File>();
-        Vector<File> nuevosArchivos = new Vector<File>();
-        nuevasCarpetas.addElement(filechooser.getFileSystemView()
+    /** It splits what was read into folders and files; see {@link #getDirectories}. */
+    private void buildLists() {
+        Vector<File> newFolders = new Vector<File>();
+        Vector<File> newFiles = new Vector<File>();
+        newFolders.addElement(filechooser.getFileSystemView()
                 .createFileObject(filechooser.getCurrentDirectory(), ".."));
         for (int i = 0; i < fileCache.size(); i++) {
             File f = fileCache.get(i);
             if (filechooser.isTraversable(f)) {
-                nuevasCarpetas.addElement(f);
+                newFolders.addElement(f);
             } else {
-                nuevosArchivos.addElement(f);
+                newFiles.addElement(f);
             }
         }
-        directories = nuevasCarpetas;
-        files = nuevosArchivos;
+        directories = newFolders;
+        files = newFiles;
     }
 
-    /** Lee la carpeta; ver la nota de la clase sobre por que no es en otro hilo. */
+    /** It reads the folder; see the class note about why it is not in another thread. */
     public void validateFileCache() {
         File currentDirectory = filechooser.getCurrentDirectory();
         if (currentDirectory == null) {
             return;
         }
         FileSystemView fsv = filechooser.getFileSystemView();
-        File[] leidos = fsv.getFiles(currentDirectory, filechooser.isFileHidingEnabled());
-        if (leidos == null) {
+        File[] read = fsv.getFiles(currentDirectory, filechooser.isFileHidingEnabled());
+        if (read == null) {
             return;
         }
-        Vector<File> traversables = new Vector<File>();
-        Vector<File> sueltos = new Vector<File>();
-        for (int i = 0; i < leidos.length; i++) {
-            File f = leidos[i];
+        Vector<File> traversable = new Vector<File>();
+        Vector<File> loose = new Vector<File>();
+        for (int i = 0; i < read.length; i++) {
+            File f = read[i];
             if (!filechooser.accept(f)) {
                 continue;
             }
             if (filechooser.isTraversable(f)) {
-                traversables.addElement(f);
+                traversable.addElement(f);
             } else if (filechooser.isFileSelectionEnabled()) {
-                sueltos.addElement(f);
+                loose.addElement(f);
             }
         }
-        sort(traversables);
-        sort(sueltos);
-        Vector<File> nuevoCache = new Vector<File>();
-        nuevoCache.addAll(traversables);
-        nuevoCache.addAll(sueltos);
+        sort(traversable);
+        sort(loose);
+        Vector<File> newCache = new Vector<File>();
+        newCache.addAll(traversable);
+        newCache.addAll(loose);
         synchronized (this) {
-            fileCache = nuevoCache;
+            fileCache = newCache;
             invalidateFileCache();
         }
         fireContentsChanged();
     }
 
     /**
-     * Cambia el nombre de un archivo.
+     * It changes a file's name.
      *
-     * <p>Si sale bien, vuelve a leer la carpeta: el archivo cambia de lugar en el orden.
+     * <p>If it goes well, it reads the folder again: the file changes place in the order.
      */
     public boolean renameFile(File oldFile, File newFile) {
         synchronized (this) {
@@ -186,7 +189,7 @@ public class BasicDirectoryModel extends AbstractListModel<Object>
         }
     }
 
-    /** Avisa que la lista entera cambio. */
+    /** It tells that the whole list changed. */
     public void fireContentsChanged() {
         fireContentsChanged(this, 0, getSize() - 1);
     }
@@ -204,51 +207,51 @@ public class BasicDirectoryModel extends AbstractListModel<Object>
     }
 
     /**
-     * El elemento de esa posicion: primero las carpetas, despues los archivos.
+     * The element at that position: the folders first, the files afterwards.
      *
-     * @throws ArrayIndexOutOfBoundsException si el indice no existe; ver la nota de la clase
+     * @throws ArrayIndexOutOfBoundsException if the index does not exist; see the class note
      */
     public Object getElementAt(int index) {
         return fileCache.elementAt(index);
     }
 
-    /** No hace nada: el modelo se entera de los cambios por su cuenta, no por eventos. */
+    /** It does nothing: the model learns about the changes on its own, not through events. */
     public void intervalAdded(ListDataEvent e) {
     }
 
-    /** Idem. */
+    /** The same. */
     public void intervalRemoved(ListDataEvent e) {
     }
 
     /**
-     * Ordena la lista con {@link #lt}.
+     * It sorts the list with {@link #lt}.
      *
-     * <p>Ordenamiento por insercion: la lista tiene el tamano de una carpeta y el codigo se lee de
-     * una sentada. Con carpetas de cien mil archivos habria que cambiarlo.
+     * <p>Insertion sort: the list is the size of a folder and the code is read in one sitting.
+     * With folders of a hundred thousand files it would have to be changed.
      */
     protected void sort(Vector<? extends File> v) {
         for (int i = 1; i < v.size(); i++) {
-            File actual = v.get(i);
+            File current = v.get(i);
             int j = i - 1;
-            while (j >= 0 && lt(actual, v.get(j))) {
-                ponerEn(v, j + 1, v.get(j));
+            while (j >= 0 && lt(current, v.get(j))) {
+                putAt(v, j + 1, v.get(j));
                 j--;
             }
-            ponerEn(v, j + 1, actual);
+            putAt(v, j + 1, current);
         }
     }
 
-    /** El {@code set} con el comodin puesto; ver el hallazgo #516 sobre esto. */
+    /** The {@code set} with the wildcard in place; see finding #516 about this. */
     @SuppressWarnings("unchecked")
-    private static void ponerEn(Vector<? extends File> v, int i, File f) {
+    private static void putAt(Vector<? extends File> v, int i, File f) {
         ((Vector<File>) v).set(i, f);
     }
 
     /**
-     * Si {@code a} va antes que {@code b}.
+     * Whether {@code a} goes before {@code b}.
      *
-     * <p>Por nombre y sin distinguir mayusculas: en una lista de archivos, {@code Documentos} y
-     * {@code documentos} tienen que quedar juntos, no uno en cada punta.
+     * <p>By name and ignoring case: in a list of files, {@code Documents} and {@code documents}
+     * have to end up together, not one at each end.
      */
     protected boolean lt(File a, File b) {
         return a.getName().compareToIgnoreCase(b.getName()) < 0;
@@ -266,7 +269,7 @@ public class BasicDirectoryModel extends AbstractListModel<Object>
         return changeSupport.getPropertyChangeListeners();
     }
 
-    /** Para avisar de los cambios propios del modelo; ver {@link #addPropertyChangeListener}. */
+    /** In order to tell about the model's own changes; see {@link #addPropertyChangeListener}. */
     protected void firePropertyChange(String propertyName, Object oldValue, Object newValue) {
         changeSupport.firePropertyChange(propertyName, oldValue, newValue);
     }

@@ -1,98 +1,103 @@
 package java.nio.channels;
 
 /**
- * KajiLibrary's java.nio.channels.SelectionKey — la anotacion de un canal en un selector.
+ * KajiLibrary's java.nio.channels.SelectionKey — the note of a channel in a selector.
  *
- * <p>Una llave junta tres cosas: **que canal**, **que le interesa** ({@link #interestOps()}) y **que
- * tiene listo** ({@link #readyOps()}). La distincion entre las dos ultimas es todo el mecanismo: uno
- * declara lo que quiere escuchar, el selector contesta lo que ocurrio, y el resto es leer bits.
+ * <p>A key joins three things: **which channel**, **what it is interested in**
+ * ({@link #interestOps()}) and **what it has ready** ({@link #readyOps()}). The distinction between
+ * the last two is the whole mechanism: one declares what one wants to listen for, the selector
+ * answers what happened, and the rest is reading bits.
  *
- * <p>Los cuatro bits no son consecutivos --1, 4, 8, 16 y no 1, 2, 4, 8-- y no es un error de
- * transcripcion: es asi en el JDK desde el principio y hay codigo que tiene los numeros escritos a
- * mano, asi que cambiarlos ahora seria romperlo. Se copian tal cual.
+ * <p>The four bits are not consecutive --1, 4, 8, 16 and not 1, 2, 4, 8-- and it is not a
+ * transcription error: it is like that in the JDK from the start and there is code with the numbers
+ * written by hand, so changing them now would break it. They are copied as they are.
  *
- * <p>El {@link #attach adjunto} existe para no tener que mantener un mapa de canal a estado en
- * paralelo: la llave viaja con el evento, asi que colgarle ahi el contexto de la conexion es lo que
- * evita el `HashMap` global y su candado.
+ * <p>The {@link #attach attachment} exists so as not to have to keep a map from channel to state in
+ * parallel: the key travels with the event, so hanging the context of the connection there is what
+ * avoids the global `HashMap` and its lock.
  *
- * <h2>Estado en esta biblioteca</h2>
+ * <h2>State in this library</h2>
  *
- * <p>La clase esta entera. Lo abstracto queda abstracto --lo pone quien implemente un selector-- y
- * lo calculable esta implementado: los cuatro `is*` son una mascara sobre {@link #readyOps()}, el
- * adjunto es un campo, y {@link #interestOpsOr}/{@link #interestOpsAnd} son lo mismo que el JDK,
- * leer y volver a fijar.
+ * <p>The class is whole. What is abstract stays abstract --it is put in by whoever implements a
+ * selector-- and what is computable is implemented: the four `is*` are a mask over {@link
+ * #readyOps()}, the attachment is a field, and {@link #interestOpsOr}/{@link #interestOpsAnd} are
+ * the same as the JDK's, read and set again.
  *
- * <p>No se puede obtener una instancia porque no hay selectores que fabricar, y eso no la vuelve
- * inutil: {@link java.nio.channels.spi.AbstractSelectionKey} hereda de aca con la parte de
- * validez ya resuelta, que es lo que necesita quien traiga su propio transporte.
+ * <p>Instances can be obtained: this note used to say they could not, because there were no
+ * selectors to make. There are —see {@link Selector#open()}—, and
+ * {@link java.nio.channels.spi.AbstractSelectionKey} goes on inheriting from here with the validity
+ * part already solved, which is what whoever brings their own transport needs.
  */
 public abstract class SelectionKey {
 
-    /** Listo para leer. */
+    /** Ready to read. */
     public static final int OP_READ = 1 << 0;
 
-    /** Listo para escribir. */
+    /** Ready to write. */
     public static final int OP_WRITE = 1 << 2;
 
-    /** Listo para terminar de conectar. */
+    /** Ready to finish connecting. */
     public static final int OP_CONNECT = 1 << 3;
 
-    /** Listo para aceptar una conexion. */
+    /** Ready to accept a connection. */
     public static final int OP_ACCEPT = 1 << 4;
 
-    private Object adjunto;
+    private Object attached;
 
     protected SelectionKey() {
     }
 
-    /** El canal de esta llave. Lo devuelve aunque la llave este cancelada. */
+    /** The channel of this key. It returns it even if the key is cancelled. */
     public abstract SelectableChannel channel();
 
-    /** El selector de esta llave. Lo devuelve aunque la llave este cancelada. */
+    /** The selector of this key. It returns it even if the key is cancelled. */
     public abstract Selector selector();
 
-    /** Si la llave sigue valida. Deja de serlo al cancelarla, al cerrar el canal o el selector. */
+    /**
+     * Whether the key is still valid. It stops being so on cancelling it, on closing the channel
+     * or the selector.
+     */
     public abstract boolean isValid();
 
     /**
-     * Cancela el registro.
+     * Cancels the registration.
      *
-     * <p>La llave queda invalida en el acto, pero el canal se saca del selector recien en la
-     * seleccion siguiente: sacarlo ahora seria modificar el juego de llaves por debajo de un
-     * `select` que podria estar corriendo en otro hilo.
+     * <p>The key is left invalid on the spot, but the channel is taken out of the selector only in
+     * the next selection: taking it out now would be modifying the set of keys underneath a
+     * `select` that could be running in another thread.
      */
     public abstract void cancel();
 
-    /** Las operaciones que se estan esperando. */
+    /** The operations that are being waited for. */
     public abstract int interestOps();
 
-    /** Cambia las operaciones que se esperan. */
+    /** Changes the operations that are waited for. */
     public abstract SelectionKey interestOps(int ops);
 
     /**
-     * Agrega `ops` a lo que se espera y devuelve lo que habia antes.
+     * Adds `ops` to what is waited for and returns what was there before.
      *
-     * <p>Devolver el valor viejo es lo que la hace util frente a leer y fijar por separado: dos
-     * hilos que agreguen bits a la vez no se pisan.
+     * <p>Returning the old value is what makes it useful against reading and setting separately:
+     * two threads that add bits at the same time do not step on each other.
      */
     public int interestOpsOr(int ops) {
         synchronized (this) {
-            int antes = this.interestOps();
-            this.interestOps(antes | ops);
-            return antes;
+            int before = this.interestOps();
+            this.interestOps(before | ops);
+            return before;
         }
     }
 
-    /** Deja solo los bits que tambien esten en `ops`, y devuelve lo que habia antes. */
+    /** Leaves only the bits that are also in `ops`, and returns what was there before. */
     public int interestOpsAnd(int ops) {
         synchronized (this) {
-            int antes = this.interestOps();
-            this.interestOps(antes & ops);
-            return antes;
+            int before = this.interestOps();
+            this.interestOps(before & ops);
+            return before;
         }
     }
 
-    /** Las operaciones que el selector encontro listas. */
+    /** The operations the selector found ready. */
     public abstract int readyOps();
 
     public final boolean isReadable() {
@@ -111,15 +116,15 @@ public abstract class SelectionKey {
         return (this.readyOps() & OP_ACCEPT) != 0;
     }
 
-    /** Cuelga `ob` de la llave y devuelve lo que colgaba antes. `null` descuelga. */
+    /** Hangs `ob` from the key and returns what was hanging before. `null` unhangs. */
     public final Object attach(Object ob) {
-        Object antes = this.adjunto;
-        this.adjunto = ob;
-        return antes;
+        Object before = this.attached;
+        this.attached = ob;
+        return before;
     }
 
-    /** Lo que cuelga de la llave, o `null`. */
+    /** What hangs from the key, or `null`. */
     public final Object attachment() {
-        return this.adjunto;
+        return this.attached;
     }
 }

@@ -1,66 +1,66 @@
 package javax.swing;
 
 /**
- * Quien decide como se comportan las ventanas internas de un escritorio.
+ * Who decides how a desktop's internal frames behave.
  *
- * <h2>Por que existe</h2>
+ * <h2>Why it exists</h2>
  *
- * <p>Un {@link JInternalFrame} no se cierra, no se agranda ni se mueve por su cuenta: le pide al
- * administrador del escritorio que lo haga. Asi el escritorio puede imponer su politica -- una
- * ventana maximizada que tapa a las demas, iconos ordenados en una fila, arrastre con contorno en
- * vez de en vivo -- sin que cada ventana sepa nada de eso.
+ * <p>A {@link JInternalFrame} does not close, enlarge or move on its own: it asks the desktop's
+ * manager to do it. That way the desktop can impose its policy -- a maximized frame that covers
+ * the others, icons lined up in a row, dragging with an outline instead of live -- without each
+ * frame knowing anything about it.
  *
- * <h2>Las tres tandas de metodos</h2>
+ * <h2>The three rounds of methods</h2>
  *
- * <p>Los primeros ocho son cambios de estado que pide la ventana. Los seis del medio son las tres
- * etapas -- empezar, seguir, terminar -- de arrastrar y de redimensionar; estan separadas porque el
- * modo de contorno solo dibuja durante el medio y recien mueve al terminar. El ultimo,
- * {@link #setBoundsForFrame}, es el que finalmente mueve algo.
+ * <p>The first eight are changes of state the frame asks for. The six in the middle are the
+ * three stages -- begin, go on, end -- of dragging and of resizing; they are separate because
+ * the outline mode only draws during the middle and moves only at the end. The last,
+ * {@link #setBoundsForFrame}, is the one that finally moves something.
  */
 public interface DesktopManager {
 
-    /** La ventana se agrego al escritorio y hay que mostrarla. */
+    /** The frame was added to the desktop and has to be shown. */
     void openFrame(JInternalFrame f);
 
-    /** Saca la ventana del escritorio. */
+    /** It removes the frame from the desktop. */
     void closeFrame(JInternalFrame f);
 
-    /** Agranda la ventana a todo el escritorio. */
+    /** It enlarges the frame to the whole desktop. */
     void maximizeFrame(JInternalFrame f);
 
-    /** Devuelve la ventana a su tamano anterior. */
+    /** It gives the frame back its previous size. */
     void minimizeFrame(JInternalFrame f);
 
-    /** Reemplaza la ventana por su icono. */
+    /** It replaces the frame with its icon. */
     void iconifyFrame(JInternalFrame f);
 
-    /** Devuelve la ventana en lugar de su icono. */
+    /** It gives the frame back in place of its icon. */
     void deiconifyFrame(JInternalFrame f);
 
-    /** La ventana paso a ser la activa. */
+    /** The frame became the active one. */
     void activateFrame(JInternalFrame f);
 
-    /** La ventana dejo de ser la activa. */
+    /** The frame stopped being the active one. */
     void deactivateFrame(JInternalFrame f);
 
-    /** Empieza un arrastre; ver la nota de la interfaz. */
+    /** It begins a drag; see the interface note. */
     void beginDraggingFrame(JComponent f);
 
-    /** El arrastre va por esa posicion. */
+    /** The drag is going by that position. */
     void dragFrame(JComponent f, int newX, int newY);
 
-    /** Termina el arrastre. */
+    /** It ends the drag. */
     void endDraggingFrame(JComponent f);
 
-    /** Empieza a redimensionar desde ese borde. */
+    /** It begins resizing from that edge. */
     void beginResizingFrame(JComponent f, int direction);
 
-    /** El redimensionado va por ese rectangulo. */
+    /** The resizing is going by that rectangle. */
     void resizeFrame(JComponent f, int newX, int newY, int newWidth, int newHeight);
 
-    /** Termina el redimensionado. */
+    /** It ends the resizing. */
     void endResizingFrame(JComponent f);
 
-    /** Mueve y redimensiona la ventana; es el unico que cambia algo de verdad. */
+    /** It moves and resizes the frame; it is the only one that really changes anything. */
     void setBoundsForFrame(JComponent f, int newX, int newY, int newWidth, int newHeight);
 }

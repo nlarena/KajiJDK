@@ -4,10 +4,10 @@ import java.io.IOException;
 import java.security.spec.AlgorithmParameterSpec;
 import java.security.spec.InvalidParameterSpecException;
 
-// La cara del proveedor para un juego de parametros de algoritmo.
+// The provider's face for a set of algorithm parameters.
 //
-// Todos sus metodos son abstractos, y eso hace que esta clase no pueda mentir: la implementacion
-// la escribe entera quien conozca el algoritmo. KajiLibrary no trae ninguna.
+// All of its methods are abstract, and that makes this class unable to lie: the implementation is
+// written whole by whoever knows the algorithm. KajiLibrary brings none.
 public abstract class AlgorithmParametersSpi {
 
     public AlgorithmParametersSpi() {

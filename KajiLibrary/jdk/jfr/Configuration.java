@@ -15,122 +15,123 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * Un conjunto de ajustes con nombre: lo que un archivo {@code .jfc} contiene.
+ * A set of settings with a name: what a {@code .jfc} file contains.
  *
- * <h2>Que problema resuelve</h2>
+ * <h2>What problem it solves</h2>
  *
- * <p>Una grabacion util configura cientos de ajustes —cada evento tiene los suyos— y nadie los
- * escribe a mano. El JDK trae dos configuraciones armadas, {@code default} y {@code profile}, y la
- * diferencia entre ellas es cuanto cuestan: la primera esta pensada para dejarla puesta en
- * produccion, la segunda para una investigacion con la maquina dedicada.
+ * <p>A useful recording configures hundreds of settings --each event has its own-- and nobody
+ * writes them by hand. The JDK brings two ready-made configurations, {@code default} and {@code
+ * profile}, and the difference between them is how much they cost: the first one is meant to be
+ * left on in production, the second one for an investigation with the machine dedicated.
  *
- * <p>Elegir entre esas dos es la decision que casi todo el mundo toma, y esta clase es como se
- * nombran.
+ * <p>Choosing between those two is the decision almost everybody takes, and this class is how they
+ * are named.
  *
- * <h2>El formato</h2>
+ * <h2>The format</h2>
  *
- * <p>Un {@code .jfc} es XML: un elemento raiz con nombre, etiqueta y proveedor, y adentro un
- * {@code <event>} por tipo con un {@code <setting>} por perilla. {@link #getSettings} devuelve eso
- * aplanado a {@code "jdk.CPULoad#period" -> "1 s"}, que es la forma en que los ajustes viajan por
- * el resto de la API.
+ * <p>A {@code .jfc} is XML: a root element with a name, a label and a provider, and inside it an
+ * {@code <event>} per type with a {@code <setting>} per knob. {@link #getSettings} returns that
+ * flattened to {@code "jdk.CPULoad#period" -> "1 s"}, which is the form in which the settings
+ * travel through the rest of the API.
  *
- * <h2>Estado en esta VM</h2>
+ * <h2>State in this VM</h2>
  *
- * <p>{@link #create(Reader)} y {@link #create(Path)} <strong>leen y analizan de verdad</strong> un
- * archivo {@code .jfc}: el analizador esta escrito aca y devuelve una configuracion con sus ajustes
- * cargados. Se puede usar para inspeccionar una configuracion sin JFR.
+ * <p>{@link #create(Reader)} and {@link #create(Path)} <strong>really read and analyse</strong> a
+ * {@code .jfc} file: the analyser is written here and returns a configuration with its settings
+ * loaded. It can be used to inspect a configuration with no JFR.
  *
- * <p>{@link #getConfigurations} y {@link #getConfiguration(String)} son las que no pueden dar nada:
- * buscan en el directorio {@code lib/jfr} de la instalacion del JDK, que esta biblioteca no tiene.
- * La lista sale vacia y la busqueda por nombre falla diciendo que no hay ninguna instalada — no
- * inventan una configuracion vacia con ese nombre, que es lo que confundiria al que llama.
+ * <p>{@link #getConfigurations} and {@link #getConfiguration(String)} are the ones that can give
+ * nothing: they look in the {@code lib/jfr} directory of the installation of the JDK, which this
+ * library does not have. The list comes out empty and the search by name fails saying that there is
+ * none installed -- they do not invent an empty configuration with that name, which is what would
+ * confuse the caller.
  *
  * @since 9
  */
 public final class Configuration {
 
-    private final String nombre;
-    private final String etiqueta;
-    private final String descripcion;
-    private final String proveedor;
-    private final String contenido;
-    private final Map<String, String> ajustes;
+    private final String name;
+    private final String label;
+    private final String description;
+    private final String provider;
+    private final String contents;
+    private final Map<String, String> settings;
 
-    private Configuration(final String nombre, final String etiqueta, final String descripcion,
-            final String proveedor, final String contenido, final Map<String, String> ajustes) {
-        this.nombre = nombre;
-        this.etiqueta = etiqueta;
-        this.descripcion = descripcion;
-        this.proveedor = proveedor;
-        this.contenido = contenido;
-        this.ajustes = Collections.unmodifiableMap(ajustes);
+    private Configuration(final String name, final String label, final String description,
+            final String provider, final String contents, final Map<String, String> settings) {
+        this.name = name;
+        this.label = label;
+        this.description = description;
+        this.provider = provider;
+        this.contents = contents;
+        this.settings = Collections.unmodifiableMap(settings);
     }
 
     /**
-     * Los ajustes, con la clave {@code "evento#ajuste"}.
+     * The settings, with the key {@code "event#setting"}.
      *
-     * @return los ajustes
+     * @return the settings
      */
     public Map<String, String> getSettings() {
-        return ajustes;
+        return settings;
     }
 
     /**
-     * El nombre de la configuracion.
+     * The name of the configuration.
      *
-     * @return el nombre, o {@code null} si el archivo no lo trae
+     * @return the name, or {@code null} if the file does not bring it
      */
     public String getName() {
-        return nombre;
+        return name;
     }
 
     /**
-     * El nombre legible.
+     * The readable name.
      *
-     * @return la etiqueta, o {@code null}
+     * @return the label, or {@code null}
      */
     public String getLabel() {
-        return etiqueta;
+        return label;
     }
 
     /**
-     * La explicacion de para que sirve esta configuracion.
+     * The explanation of what this configuration is for.
      *
-     * @return la descripcion, o {@code null}
+     * @return the description, or {@code null}
      */
     public String getDescription() {
-        return descripcion;
+        return description;
     }
 
     /**
-     * Quien la escribio.
+     * Who wrote it.
      *
-     * @return el proveedor, o {@code null}
+     * @return the provider, or {@code null}
      */
     public String getProvider() {
-        return proveedor;
+        return provider;
     }
 
     /**
-     * El texto original del archivo.
+     * The original text of the file.
      *
-     * <p>Se guarda entero, sin volver a generarlo desde los ajustes: asi una configuracion que se
-     * lee y se vuelve a escribir queda igual que estaba, con sus comentarios y su orden.
+     * <p>It is kept whole, without generating it again from the settings: that way a configuration
+     * that is read and written again is left just as it was, with its comments and its order.
      *
-     * @return el contenido
+     * @return the contents
      */
     public String getContents() {
-        return contenido;
+        return contents;
     }
 
     /**
-     * Lee una configuracion de un archivo.
+     * It reads a configuration from a file.
      *
-     * @param path el archivo
-     * @return la configuracion
-     * @throws IOException si no se pudo leer
-     * @throws ParseException si el XML esta mal formado
-     * @throws NullPointerException si es {@code null}
+     * @param path the file
+     * @return the configuration
+     * @throws IOException if it could not be read
+     * @throws ParseException if the XML is malformed
+     * @throws NullPointerException if it is {@code null}
      */
     public static Configuration create(final Path path) throws IOException, ParseException {
         Objects.requireNonNull(path, "path");
@@ -143,13 +144,13 @@ public final class Configuration {
     }
 
     /**
-     * Lee una configuracion de un flujo.
+     * It reads a configuration from a stream.
      *
-     * @param reader de donde leer
-     * @return la configuracion
-     * @throws IOException si no se pudo leer
-     * @throws ParseException si el XML esta mal formado
-     * @throws NullPointerException si es {@code null}
+     * @param reader where to read from
+     * @return the configuration
+     * @throws IOException if it could not be read
+     * @throws ParseException if the XML is malformed
+     * @throws NullPointerException if it is {@code null}
      */
     public static Configuration create(final Reader reader) throws IOException, ParseException {
         Objects.requireNonNull(reader, "reader");
@@ -161,133 +162,133 @@ public final class Configuration {
         while ((n = br.read(buf)) > 0) {
             sb.append(buf, 0, n);
         }
-        return analizar(sb.toString());
+        return parse(sb.toString());
     }
 
     /**
-     * Una configuracion instalada, por nombre.
+     * An installed configuration, by name.
      *
-     * @param name el nombre, por ejemplo {@code "default"}
-     * @return la configuracion
-     * @throws IOException si no hay configuraciones instaladas o no se pudo leer
-     * @throws ParseException si el XML esta mal formado
+     * @param name the name, for example {@code "default"}
+     * @return the configuration
+     * @throws IOException if there are no installed configurations or it could not be read
+     * @throws ParseException if the XML is malformed
      */
     public static Configuration getConfiguration(final String name)
             throws IOException, ParseException {
         Objects.requireNonNull(name, "name");
         throw new IOException(
-                "no hay configuraciones instaladas: las trae el directorio lib/jfr de una "
-                + "instalacion del JDK, que esta biblioteca no incluye. Para leer una propia, "
-                + "usar create(Path)");
+                "there are no installed configurations: the lib/jfr directory of an installation "
+                + "of the JDK brings them, and this library does not include it. To read one of "
+                + "your own, use create(Path)");
     }
 
     /**
-     * Las configuraciones instaladas.
+     * The installed configurations.
      *
-     * <p>Vacia en esta biblioteca. Es una lista y no un fallo porque el contrato no permite avisar,
-     * y porque "no hay ninguna instalada" es una respuesta legitima que el que llama tiene que
-     * poder manejar igual.
+     * <p>Empty in this library. It is a list and not a failure because the contract does not allow
+     * one to warn, and because "there is none installed" is a legitimate answer the caller has to
+     * be able to handle all the same.
      *
-     * @return la lista, vacia
+     * @return the list, empty
      */
     public static List<Configuration> getConfigurations() {
         return Collections.emptyList();
     }
 
-    // ---- el analizador ----
+    // ---- the analyser ----
     //
-    // Es un analizador de XML acotado a la forma de un .jfc y no un analizador general: la
-    // alternativa era arrastrar un parser completo para leer un archivo cuya estructura son tres
-    // elementos. Reconoce etiquetas de apertura con atributos, texto, cierres y comentarios, que es
-    // todo lo que un .jfc usa.
+    // It is an XML analyser bounded to the shape of a .jfc and not a general analyser: the
+    // alternative was dragging a complete parser along in order to read a file whose structure is
+    // three elements. It recognises opening tags with attributes, text, closings and comments,
+    // which is everything a .jfc uses.
 
-    private static Configuration analizar(final String xml) throws ParseException {
-        String nombre = null;
-        String etiqueta = null;
-        String descripcion = null;
-        String proveedor = null;
-        String eventoActual = null;
-        String ajusteActual = null;
-        final Map<String, String> ajustes = new LinkedHashMap<String, String>();
+    private static Configuration parse(final String xml) throws ParseException {
+        String name = null;
+        String label = null;
+        String description = null;
+        String provider = null;
+        String currentEvent = null;
+        String currentSetting = null;
+        final Map<String, String> settings = new LinkedHashMap<String, String>();
 
         int i = 0;
         while (i < xml.length()) {
-            final int abre = xml.indexOf('<', i);
-            if (abre < 0) {
+            final int open = xml.indexOf('<', i);
+            if (open < 0) {
                 break;
             }
-            if (xml.startsWith("<!--", abre)) {
-                final int fin = xml.indexOf("-->", abre);
-                if (fin < 0) {
-                    throw new ParseException("comentario sin cerrar", abre);
+            if (xml.startsWith("<!--", open)) {
+                final int end = xml.indexOf("-->", open);
+                if (end < 0) {
+                    throw new ParseException("unclosed comment", open);
                 }
-                i = fin + 3;
+                i = end + 3;
                 continue;
             }
-            if (xml.startsWith("<?", abre) || xml.startsWith("<!", abre)) {
-                final int fin = xml.indexOf('>', abre);
-                if (fin < 0) {
-                    throw new ParseException("declaracion sin cerrar", abre);
+            if (xml.startsWith("<?", open) || xml.startsWith("<!", open)) {
+                final int end = xml.indexOf('>', open);
+                if (end < 0) {
+                    throw new ParseException("unclosed declaration", open);
                 }
-                i = fin + 1;
+                i = end + 1;
                 continue;
             }
-            final int cierra = xml.indexOf('>', abre);
-            if (cierra < 0) {
-                throw new ParseException("etiqueta sin cerrar", abre);
+            final int close = xml.indexOf('>', open);
+            if (close < 0) {
+                throw new ParseException("unclosed tag", open);
             }
-            String etq = xml.substring(abre + 1, cierra).trim();
-            final boolean vacia = etq.endsWith("/");
-            if (vacia) {
-                etq = etq.substring(0, etq.length() - 1).trim();
+            String tag = xml.substring(open + 1, close).trim();
+            final boolean empty = tag.endsWith("/");
+            if (empty) {
+                tag = tag.substring(0, tag.length() - 1).trim();
             }
 
-            if (etq.startsWith("/")) {
-                final String cerrado = etq.substring(1).trim();
-                if ("setting".equals(cerrado)) {
-                    ajusteActual = null;
-                } else if ("event".equals(cerrado)) {
-                    eventoActual = null;
+            if (tag.startsWith("/")) {
+                final String closed = tag.substring(1).trim();
+                if ("setting".equals(closed)) {
+                    currentSetting = null;
+                } else if ("event".equals(closed)) {
+                    currentEvent = null;
                 }
-                i = cierra + 1;
+                i = close + 1;
                 continue;
             }
 
-            final int sp = primerEspacio(etq);
-            final String elem = sp < 0 ? etq : etq.substring(0, sp);
+            final int sp = firstSpace(tag);
+            final String elem = sp < 0 ? tag : tag.substring(0, sp);
             final Map<String, String> attrs =
-                    sp < 0 ? Collections.<String, String>emptyMap() : atributos(etq.substring(sp));
+                    sp < 0 ? Collections.<String, String>emptyMap() : attributes(tag.substring(sp));
 
             if ("configuration".equals(elem)) {
-                nombre = attrs.get("name");
-                etiqueta = attrs.get("label");
-                descripcion = attrs.get("description");
-                proveedor = attrs.get("provider");
+                name = attrs.get("name");
+                label = attrs.get("label");
+                description = attrs.get("description");
+                provider = attrs.get("provider");
             } else if ("event".equals(elem)) {
-                eventoActual = attrs.get("name");
+                currentEvent = attrs.get("name");
             } else if ("setting".equals(elem)) {
-                ajusteActual = attrs.get("name");
-                if (vacia && eventoActual != null && ajusteActual != null) {
-                    // <setting name="x"/> sin texto: el ajuste queda en cadena vacia, que es lo que
-                    // el formato significa con eso.
-                    ajustes.put(eventoActual + "#" + ajusteActual, "");
-                    ajusteActual = null;
+                currentSetting = attrs.get("name");
+                if (empty && currentEvent != null && currentSetting != null) {
+                    // <setting name="x"/> with no text: the setting is left at the empty string,
+                    // which is what the format means by that.
+                    settings.put(currentEvent + "#" + currentSetting, "");
+                    currentSetting = null;
                 }
             }
 
-            i = cierra + 1;
+            i = close + 1;
 
-            if (ajusteActual != null && !vacia && eventoActual != null) {
-                final int prox = xml.indexOf('<', i);
-                final String txt = prox < 0 ? xml.substring(i) : xml.substring(i, prox);
-                ajustes.put(eventoActual + "#" + ajusteActual, txt.trim());
+            if (currentSetting != null && !empty && currentEvent != null) {
+                final int next = xml.indexOf('<', i);
+                final String txt = next < 0 ? xml.substring(i) : xml.substring(i, next);
+                settings.put(currentEvent + "#" + currentSetting, txt.trim());
             }
         }
 
-        return new Configuration(nombre, etiqueta, descripcion, proveedor, xml, ajustes);
+        return new Configuration(name, label, description, provider, xml, settings);
     }
 
-    private static int primerEspacio(final String s) {
+    private static int firstSpace(final String s) {
         for (int i = 0; i < s.length(); i++) {
             final char c = s.charAt(i);
             if (c == ' ' || c == '\t' || c == '\n' || c == '\r') {
@@ -297,8 +298,8 @@ public final class Configuration {
         return -1;
     }
 
-    /** Atributos {@code clave="valor"}, con comillas simples o dobles. */
-    private static Map<String, String> atributos(final String s) throws ParseException {
+    /** Attributes {@code key="value"}, with single or double quotes. */
+    private static Map<String, String> attributes(final String s) throws ParseException {
         final Map<String, String> out = new LinkedHashMap<String, String>();
         int i = 0;
         while (i < s.length()) {
@@ -308,31 +309,31 @@ public final class Configuration {
             if (i >= s.length()) {
                 break;
             }
-            final int igual = s.indexOf('=', i);
-            if (igual < 0) {
+            final int eq = s.indexOf('=', i);
+            if (eq < 0) {
                 break;
             }
-            final String clave = s.substring(i, igual).trim();
-            int j = igual + 1;
+            final String key = s.substring(i, eq).trim();
+            int j = eq + 1;
             while (j < s.length() && Character.isWhitespace(s.charAt(j))) {
                 j++;
             }
             if (j >= s.length() || (s.charAt(j) != '"' && s.charAt(j) != '\'')) {
-                throw new ParseException("atributo sin comillas: " + clave, j);
+                throw new ParseException("attribute with no quotes: " + key, j);
             }
-            final char comilla = s.charAt(j);
-            final int fin = s.indexOf(comilla, j + 1);
-            if (fin < 0) {
-                throw new ParseException("atributo sin cerrar: " + clave, j);
+            final char quote = s.charAt(j);
+            final int end = s.indexOf(quote, j + 1);
+            if (end < 0) {
+                throw new ParseException("unclosed attribute: " + key, j);
             }
-            out.put(clave, desescapar(s.substring(j + 1, fin)));
-            i = fin + 1;
+            out.put(key, unescape(s.substring(j + 1, end)));
+            i = end + 1;
         }
         return out;
     }
 
-    /** Las cinco entidades que XML define; un {@code .jfc} no usa otras. */
-    private static String desescapar(final String s) {
+    /** The five entities XML defines; a {@code .jfc} uses no others. */
+    private static String unescape(final String s) {
         if (s.indexOf('&') < 0) {
             return s;
         }
@@ -340,8 +341,8 @@ public final class Configuration {
                 .replace("&apos;", "'").replace("&amp;", "&");
     }
 
-    /** Para las pruebas: analiza un texto sin pasar por un archivo. */
-    static Configuration desdeTexto(final String xml) throws IOException, ParseException {
+    /** For the tests: it analyses a text without going through a file. */
+    static Configuration fromText(final String xml) throws IOException, ParseException {
         return create(new StringReader(xml));
     }
 }

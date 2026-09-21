@@ -4,25 +4,25 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 
 /**
- * KajiLibrary's java.nio.channels.GatheringByteChannel — escribe juntando varios buffers.
+ * KajiLibrary's java.nio.channels.GatheringByteChannel — writes gathering several buffers.
  *
- * <p>El simetrico de {@link ScatteringByteChannel}: una sola escritura vacia el primer buffer, sigue
- * con el segundo, y asi. Es lo que permite mandar encabezado y cuerpo en una sola operacion sin
- * armar antes un buffer unico con todo copiado adentro.
+ * <p>The symmetric one of {@link ScatteringByteChannel}: a single write empties the first buffer,
+ * goes on with the second, and so on. It is what allows sending header and body in a single
+ * operation without first building one buffer with everything copied inside.
  */
 public interface GatheringByteChannel extends WritableByteChannel {
 
     /**
-     * Escribe juntando los buffers indicados.
+     * Writes gathering the given buffers.
      *
-     * @param srcs los buffers
-     * @param offset el primero a usar
-     * @param length cuantos usar
-     * @return cuantos bytes escribio en total
-     * @throws IOException si falla la escritura
+     * @param srcs the buffers
+     * @param offset the first one to use
+     * @param length how many to use
+     * @return how many bytes it wrote in total
+     * @throws IOException if the writing fails
      */
     long write(ByteBuffer[] srcs, int offset, int length) throws IOException;
 
-    /** Escribe juntando todos los buffers. */
+    /** Writes gathering every buffer. */
     long write(ByteBuffer[] srcs) throws IOException;
 }

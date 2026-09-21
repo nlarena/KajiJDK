@@ -3,10 +3,10 @@ package javax.swing.event;
 import java.util.EventListener;
 
 /**
- * Quien quiere enterarse de que la seleccion de una lista cambio.
+ * Whoever wants to hear that a list's selection changed.
  */
 public interface ListSelectionListener extends EventListener {
 
-    /** La seleccion cambio. */
+    /** The selection changed. */
     void valueChanged(ListSelectionEvent e);
 }

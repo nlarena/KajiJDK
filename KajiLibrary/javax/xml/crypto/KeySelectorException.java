@@ -4,57 +4,57 @@ import java.io.PrintStream;
 import java.io.PrintWriter;
 
 /**
- * KajiLibrary's javax.xml.crypto.KeySelectorException -- el selector no pudo elegir una clave.
+ * KajiLibrary's javax.xml.crypto.KeySelectorException -- the selector could not choose a key.
  *
- * <p>Es comprobada porque no poder elegir una clave es un resultado <b>esperable</b> de
- * validar una firma ajena: el {@code KeyInfo} nombra una clave que no se conoce, o no
- * nombra ninguna. Quien valida tiene que decidir que hacer, y el compilador lo obliga a
- * mirarlo.
+ * <p>It is checked because not being able to choose a key is an <b>expectable</b> result of
+ * validating somebody else's signature: the {@code KeyInfo} names a key that is not known, or names
+ * none. Whoever validates has to decide what to do, and the compiler makes them look at it.
  *
- * <p>Redefine {@code getCause} y los tres {@code printStackTrace} porque en el JDK guarda su causa
- * en un campo propio, de cuando {@code Throwable} todavia no las tenia. Aca la causa es la de
- * {@code Throwable} y las redefiniciones delegan: mismo comportamiento, sin dos copias del dato.
+ * <p>It redefines {@code getCause} and the three {@code printStackTrace}s because in the JDK it
+ * keeps its cause in a field of its own, from when {@code Throwable} did not have one yet. Here the
+ * cause is {@code Throwable}'s and the redefinitions delegate: same behaviour, without two copies
+ * of the datum.
  */
 public class KeySelectorException extends Exception {
 
     private static final long serialVersionUID = -7155660112864185370L;
 
-    /** Sin detalle. */
+    /** Without detail. */
     public KeySelectorException() {
         super();
     }
 
-    /** Con un mensaje. */
+    /** With a message. */
     public KeySelectorException(String message) {
         super(message);
     }
 
-    /** Con un mensaje y la causa de abajo. */
+    /** With a message and the underlying cause. */
     public KeySelectorException(String message, Throwable cause) {
         super(message, cause);
     }
 
-    /** Solo con la causa; el mensaje sale de su {@code toString}. */
+    /** With the cause only; the message comes from its {@code toString}. */
     public KeySelectorException(Throwable cause) {
         super(cause);
     }
 
-    /** La causa, o null. */
+    /** The cause, or null. */
     public Throwable getCause() {
         return super.getCause();
     }
 
-    /** A la salida de error. */
+    /** To standard error. */
     public void printStackTrace() {
         super.printStackTrace();
     }
 
-    /** A ese flujo. */
+    /** To that stream. */
     public void printStackTrace(PrintStream s) {
         super.printStackTrace(s);
     }
 
-    /** A ese escritor. */
+    /** To that writer. */
     public void printStackTrace(PrintWriter s) {
         super.printStackTrace(s);
     }

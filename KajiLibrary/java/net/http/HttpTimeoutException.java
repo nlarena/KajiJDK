@@ -3,14 +3,15 @@ package java.net.http;
 import java.io.IOException;
 
 /**
- * Se vencio el plazo de un pedido HTTP.
+ * The timeout of an HTTP request ran out.
  *
- * <p>Es una {@link IOException} porque para quien la recibe es eso: la operacion no se completo. Lo
- * que agrega sobre una comun es que <strong>el plazo lo puso quien llamo</strong> — no es que la red
- * fallara, es que tardo mas de lo que se le concedio. La diferencia importa al decidir si reintentar.
+ * <p>It is an {@link IOException} because for whoever receives it that is what it is: the operation
+ * did not complete. What it adds over a plain one is that <strong>the timeout was set by the
+ * caller</strong> — it is not that the network failed, it is that it took longer than it was
+ * allowed. The difference matters when deciding whether to retry.
  *
- * <p>Su subclase {@link HttpConnectTimeoutException} distingue el caso mas util: vencerse
- * <em>conectando</em>.
+ * <p>Its subclass {@link HttpConnectTimeoutException} separates the most useful case: running out
+ * <em>while connecting</em>.
  *
  * @since 11
  */
@@ -18,7 +19,7 @@ public class HttpTimeoutException extends IOException {
 
     private static final long serialVersionUID = 981344271622632951L;
 
-    /** Con un mensaje. */
+    /** With a message. */
     public HttpTimeoutException(String message) {
         super(message);
     }

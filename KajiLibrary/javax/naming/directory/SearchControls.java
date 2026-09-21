@@ -3,43 +3,43 @@ package javax.naming.directory;
 import java.io.Serializable;
 
 /**
- * KajiLibrary's javax.naming.directory.SearchControls -- cuanto buscar y que traer.
+ * KajiLibrary's javax.naming.directory.SearchControls -- how much to search and what to fetch.
  *
- * <p>Seis opciones, y las tres primeras son las que deciden si una busqueda es viable o tumba el
- * directorio:
+ * <p>Six options, and the first three are the ones that decide whether a search is viable or brings
+ * the directory down:
  *
  * <ul>
- *   <li>el <b>alcance</b>. {@link #OBJECT_SCOPE} mira una sola entrada, {@link #ONELEVEL_SCOPE} sus
- *       hijos directos, y {@link #SUBTREE_SCOPE} el arbol entero. El tercero sobre la raiz de un
- *       directorio grande es la forma clasica de hacer un pedido que tarda minutos;
- *   <li>el <b>limite de cantidad</b>, que corta despues de tantos resultados;
- *   <li>el <b>limite de tiempo</b>, en milisegundos.
+ *   <li>the <b>scope</b>. {@link #OBJECT_SCOPE} looks at a single entry, {@link #ONELEVEL_SCOPE} at
+ *       its direct children, and {@link #SUBTREE_SCOPE} at the whole tree. The third on the root of
+ *       a large directory is the classic way to make a request that takes minutes;
+ *   <li>the <b>count limit</b>, which cuts off after so many results;
+ *   <li>the <b>time limit</b>, in milliseconds.
  * </ul>
  *
- * <p>Los dos limites en 0 significan <b>sin limite</b>, que es el valor por omision de los dos. Vale
- * saberlo: los defaults de esta clase son los mas permisivos, no los mas seguros.
+ * <p>Both limits at 0 mean <b>no limit</b>, which is the default for both. Worth knowing: this
+ * class's defaults are the most permissive, not the safest.
  *
- * <h2>Que atributos vuelven</h2>
+ * <h2>Which attributes come back</h2>
  *
- * <p>{@link #setReturningAttributes} con null trae <b>todos</b>, y con un arreglo <b>vacio</b> no
- * trae ninguno. Los dos son utiles y confundirlos es facil: el arreglo vacio sirve para preguntar
- * "cuales entradas coinciden" sin traer sus datos, que sobre un directorio remoto es la diferencia
- * entre unos kilobytes y unos megabytes.
+ * <p>{@link #setReturningAttributes} with null fetches <b>all</b>, and with an <b>empty</b> array
+ * fetches none. Both are useful and easy to mix up: the empty array serves to ask "which entries
+ * match" without fetching their data, which on a remote directory is the difference between a few
+ * kilobytes and a few megabytes.
  *
- * <p>{@link #setReturningObjFlag} pide que ademas venga el <b>objeto</b> de cada entrada y no solo
- * sus atributos. Cuesta caro y por eso arranca apagado.
+ * <p>{@link #setReturningObjFlag} asks for each entry's <b>object</b> to come too, not just its
+ * attributes. It is expensive and that is why it starts off.
  */
 public class SearchControls implements Serializable {
 
     private static final long serialVersionUID = -9138475345988518376L;
 
-    /** Solo la entrada nombrada. */
+    /** Only the named entry. */
     public static final int OBJECT_SCOPE = 0;
 
-    /** Sus hijos directos, sin ella. */
+    /** Its direct children, without itself. */
     public static final int ONELEVEL_SCOPE = 1;
 
-    /** Ella y todo su subarbol. */
+    /** Itself and its whole subtree. */
     public static final int SUBTREE_SCOPE = 2;
 
     private int searchScope;
@@ -55,9 +55,9 @@ public class SearchControls implements Serializable {
     private String[] attributesToReturn;
 
     /**
-     * Los valores por omision: un nivel, sin limites, todos los atributos, sin objetos.
+     * The defaults: one level, no limits, all attributes, no objects.
      *
-     * <p>Ver la nota de la clase: los limites por omision son ninguno.
+     * <p>See the class note: the default limits are none.
      */
     public SearchControls() {
         this.searchScope = ONELEVEL_SCOPE;
@@ -69,14 +69,14 @@ public class SearchControls implements Serializable {
     }
 
     /**
-     * Todo explicito.
+     * Everything explicit.
      *
-     * @param scope una de las tres constantes
-     * @param countlim cuantos resultados como maximo; 0 es sin limite
-     * @param timelim milisegundos; 0 es sin limite
-     * @param attrs que atributos traer; null son todos y vacio es ninguno
-     * @param retobj si ademas viene el objeto de cada entrada
-     * @param deref si se siguen los enlaces
+     * @param scope one of the three constants
+     * @param countlim the maximum number of results; 0 is no limit
+     * @param timelim milliseconds; 0 is no limit
+     * @param attrs which attributes to fetch; null is all and empty is none
+     * @param retobj whether each entry's object comes too
+     * @param deref whether links are followed
      */
     public SearchControls(int scope, long countlim, int timelim, String[] attrs, boolean retobj,
                           boolean deref) {
@@ -88,32 +88,32 @@ public class SearchControls implements Serializable {
         this.attributesToReturn = attrs;
     }
 
-    /** El alcance. */
+    /** The scope. */
     public int getSearchScope() {
         return this.searchScope;
     }
 
-    /** El limite de tiempo en milisegundos; 0 es sin limite. */
+    /** The time limit in milliseconds; 0 is no limit. */
     public int getTimeLimit() {
         return this.timeLimit;
     }
 
-    /** Si se siguen los enlaces. */
+    /** Whether links are followed. */
     public boolean getDerefLinkFlag() {
         return this.derefLink;
     }
 
-    /** Si ademas viene el objeto de cada entrada. */
+    /** Whether each entry's object comes too. */
     public boolean getReturningObjFlag() {
         return this.returnObj;
     }
 
-    /** El limite de cantidad; 0 es sin limite. */
+    /** The count limit; 0 is no limit. */
     public long getCountLimit() {
         return this.countLimit;
     }
 
-    /** Que atributos traer. Ver la nota de la clase sobre null contra vacio. */
+    /** Which attributes to fetch. See the class note about null versus empty. */
     public String[] getReturningAttributes() {
         return this.attributesToReturn;
     }

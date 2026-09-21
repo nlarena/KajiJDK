@@ -3,63 +3,64 @@ package org.xml.sax.ext;
 import org.xml.sax.SAXException;
 
 /**
- * KajiLibrary's org.xml.sax.ext.LexicalHandler -- los eventos que SAX2 tira a la basura porque no
- * cambian *que* dice el documento, solo *como* estaba escrito.
+ * KajiLibrary's org.xml.sax.ext.LexicalHandler -- the events SAX2 throws away because they do not
+ * change *what* the document says, only *how* it was written.
  *
- * <p>Un `ContentHandler` no se entera de los comentarios, ni de donde empezaba y terminaba una
- * seccion `CDATA`, ni de que un texto vino de expandir una entidad, ni de que habia una DTD. Para
- * leer el documento eso sobra: `&lt;a&gt;x&lt;/a&gt;` y `&lt;a&gt;&lt;![CDATA[x]]&gt;&lt;/a&gt;`
- * son el mismo documento. Para **reescribirlo** no: un editor o un serializador que pierda esos
- * limites devuelve un archivo distinto del que le dieron. Esta interfaz existe para esa segunda
- * clase de consumidor.
+ * <p>A `ContentHandler` does not find out about comments, nor where a `CDATA` section started and
+ * ended, nor that a text came from expanding an entity, nor that there was a DTD. For reading the
+ * document that is superfluous: `&lt;a&gt;x&lt;/a&gt;` and `&lt;a&gt;&lt;![CDATA[x]]&gt;&lt;/a&gt;`
+ * are the same document. For **rewriting** it, it is not: an editor or a serialiser that loses
+ * those boundaries returns a file different from the one it was given. This interface exists for
+ * that second kind of consumer.
  *
- * <p>No se instala con un `setXxxHandler` como los cuatro manejadores basicos, sino con la
- * propiedad `http://xml.org/sax/properties/lexical-handler` del `XMLReader`. Es una extension: un
- * parser conforme puede no reconocerla, y entonces tira `SAXNotRecognizedException`. Esa es la
- * diferencia practica entre el nucleo y `ext`.
+ * <p>It is not installed with a `setXxxHandler` like the four basic handlers, but with the
+ * `http://xml.org/sax/properties/lexical-handler` property of the `XMLReader`. It is an extension:
+ * a conforming parser may not recognise it, and then it throws `SAXNotRecognizedException`. That is
+ * the practical difference between the core and `ext`.
  *
- * <p>Los eventos anidan de verdad, y esa es la unica forma de interpretarlos: entre `startCDATA` y
- * `endCDATA` el texto sigue llegando por `ContentHandler.characters` --aca no llega ningun texto--,
- * y entre `startEntity` y `endEntity` llegan los eventos del contenido de la entidad. El manejador
- * no recibe el contenido dos veces; recibe marcas que le dicen de donde salio.
+ * <p>The events really nest, and that is the only way of interpreting them: between `startCDATA`
+ * and `endCDATA` the text keeps arriving through `ContentHandler.characters` --no text arrives
+ * here--, and between `startEntity` and `endEntity` the events of the contents of the entity
+ * arrive. The handler does not receive the contents twice; it receives marks that tell it where
+ * they came from.
  *
- * <p>Sobre el orden respecto de `startDocument`: `startDTD`/`endDTD` van **despues** de
- * `startDocument` y **antes** del primer evento del elemento raiz, y todo lo que el `DTDHandler` y
- * el {@link DeclHandler} reporten cae adentro de ese par. Un comentario que este afuera del
- * elemento raiz llega igual, antes o despues.
+ * <p>About the order with respect to `startDocument`: `startDTD`/`endDTD` go **after**
+ * `startDocument` and **before** the first event of the root element, and everything the
+ * `DTDHandler` and the {@link DeclHandler} report falls inside that pair. A comment that is outside
+ * the root element arrives all the same, before or after.
  *
- * <p><strong>En KajiLibrary nadie produce estos eventos todavia</strong>, porque el arbol no trae
- * un parser XML (ver `org.xml.sax.helpers.XMLReaderFactory`). La interfaz esta completa y un driver
- * externo que se instale por la propiedad `org.xml.sax.driver` la va a poder usar; lo que no hay es
- * un emisor propio.
+ * <p><strong>In KajiLibrary nobody produces these events yet</strong>, because the tree brings no
+ * XML parser (see `org.xml.sax.helpers.XMLReaderFactory`). The interface is complete and an
+ * external driver installed through the `org.xml.sax.driver` property will be able to use it; what
+ * there is not is an emitter of its own.
  */
 public interface LexicalHandler {
 
     /**
-     * El `&lt;!DOCTYPE&gt;`. `publicId` y `systemId` pueden ser `null` cuando la DTD es solo
-     * interna. Todo lo que llegue hasta `endDTD` describe la declaracion, no el documento.
+     * The `&lt;!DOCTYPE&gt;`. `publicId` and `systemId` may be `null` when the DTD is only
+     * internal. Everything that arrives until `endDTD` describes the declaration, not the document.
      */
     void startDTD(String name, String publicId, String systemId) throws SAXException;
 
     void endDTD() throws SAXException;
 
     /**
-     * Empieza el contenido de una entidad. El nombre es `[dtd]` para el subconjunto externo, y
-     * lleva `%` adelante cuando es una entidad de parametro; los dos casos son nombres que XML no
-     * le deja usar a nadie mas, asi que no hay ambiguedad con una entidad general.
+     * The contents of an entity begin. The name is `[dtd]` for the external subset, and carries a
+     * `%` in front when it is a parameter entity; both cases are names XML lets nobody else use, so
+     * there is no ambiguity with a general entity.
      */
     void startEntity(String name) throws SAXException;
 
     void endEntity(String name) throws SAXException;
 
-    /** El texto de adentro sigue llegando por `characters`; esto solo marca el limite. */
+    /** The text inside keeps arriving through `characters`; this only marks the boundary. */
     void startCDATA() throws SAXException;
 
     void endCDATA() throws SAXException;
 
     /**
-     * Un comentario, con el arreglo prestado igual que en `characters`: vale dentro de la llamada
-     * y el parser lo reusa despues. Quien quiera conservarlo copia.
+     * A comment, with the array lent just as in `characters`: it is valid inside the call and the
+     * parser reuses it afterwards. Whoever wants to keep it copies.
      */
     void comment(char ch[], int start, int length) throws SAXException;
 }

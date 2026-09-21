@@ -4,166 +4,170 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Member;
 
 /**
- * KajiLibrary's jdk.internal.reflect.ConstantPool — acceso reflexivo al pool de constantes de una
- * clase ya cargada.
+ * KajiLibrary's jdk.internal.reflect.ConstantPool -- reflective access to the constant pool of a
+ * class that is already loaded.
  *
- * <p>Existe para una sola cosa: las anotaciones. El atributo `RuntimeVisibleAnnotations` no guarda
- * texto sino **índices al pool de constantes** de la clase que las declara, así que quien quiera
- * parsear esos bytes crudos necesita, además de los bytes, el pool contra el cual resolverlos. Esta
- * clase es ese segundo argumento: es el tipo que el JDK nombra en
- * {@code VMSupport.encodeAnnotations(byte[], Class, ConstantPool, boolean, Class[])}.
+ * <p>It exists for one single thing: the annotations. The `RuntimeVisibleAnnotations` attribute
+ * does not keep text but **indices into the constant pool** of the class that declares them, so
+ * whoever wants to parse those raw bytes needs, besides the bytes, the pool to resolve them
+ * against. This class is that second argument: it is the type the JDK names in {@code
+ * VMSupport.encodeAnnotations(byte[], Class, ConstantPool, boolean, Class[])}.
  *
- * <p><strong>Ese método sigue sin estar en nuestro {@link jdk.internal.vm.VMSupport}</strong>, y no
- * se enlaza acá justamente por eso —un `@link` a un miembro que no existe promete algo que no está—.
- * Tener `ConstantPool` era necesario para poder siquiera escribir esa firma, pero no alcanza: el
- * cuerpo del JDK necesita además `sun.reflect.annotation.AnnotationParser`, que no está en esta
- * biblioteca, y un pool **con datos**, que por lo que sigue no puede existir. Los motivos completos
- * están en el encabezado de `VMSupport`.
+ * <p><strong>That method is still not in our {@link jdk.internal.vm.VMSupport}</strong>, and it is
+ * not linked here precisely for that reason --a `@link` to a member that does not exist promises
+ * something that is not there--. Having `ConstantPool` was necessary in order to be able even to
+ * write that signature, but it is not enough: the body of the JDK also needs
+ * `sun.reflect.annotation.AnnotationParser`, which is not in this library, and a pool **with
+ * data**, which for what follows cannot exist. The complete reasons are in the header of
+ * `VMSupport`.
  *
- * <h2>Es una superficie, y la razón es del otro lado de la frontera</h2>
+ * <h2>It is a surface, and the reason is on the other side of the border</h2>
  *
- * <p>En el JDK **los veinte métodos son un `native` de una línea**: cada uno le pasa al VM el campo
- * privado `constantPoolOop`, que es un puntero al pool interno de HotSpot y que **lo escribe el VM**
- * al fabricar el objeto. No hay constructor que lo llene: un `new ConstantPool()` en el JDK también
- * sale con el campo en `null` y todos sus métodos fallan. El único camino legítimo es que el VM te dé
- * uno, por `JavaLangAccess.getConstantPool(Class)`.
+ * <p>In the JDK **the twenty methods are a one-line `native`**: each one passes the VM the private
+ * field `constantPoolOop`, which is a pointer to the internal pool of HotSpot and which **the VM
+ * writes** when manufacturing the object. There is no constructor that fills it: a
+ * `new ConstantPool()` in the JDK also comes out with the field at `null` and all its methods fail.
+ * The only legitimate road is for the VM to give you one, through
+ * `JavaLangAccess.getConstantPool(Class)`.
  *
- * <p>Esta VM no expone su pool de constantes a Java — no hay `JavaLangAccess.getConstantPool` ni nada
- * equivalente. Así que **no hay manera de que exista una instancia con datos**, y los métodos tiran
- * {@link UnsupportedOperationException} diciéndolo. Es la misma decisión que
- * {@link jdk.internal.vm.ContinuationSupport#ensureSupported()} y que {@code java.lang.StackWalker}:
- * el miembro está, con su firma y su tipo de retorno correctos, y corta apenas se lo usa en vez de
- * devolver un cero o un `null` que el que llama tomaría por un dato.
+ * <p>This VM does not expose its constant pool to Java -- there is no
+ * `JavaLangAccess.getConstantPool` nor anything equivalent. So **there is no way for an instance
+ * with data to exist**, and the methods throw {@link UnsupportedOperationException} saying so. It
+ * is the same decision as {@link jdk.internal.vm.ContinuationSupport#ensureSupported()} and as
+ * {@code java.lang.StackWalker}: the member is there, with its signature and its return type
+ * correct, and it cuts as soon as it is used instead of returning a zero or a `null` that the
+ * caller would take for a datum.
  *
- * <p><strong>Acá ningún método es `native`, y en el JDK los internos sí lo son.</strong> Es la misma
- * justificación que ya está escrita en {@code VMSupport.getVMTemporaryDirectory()} y en
- * {@code Continuation.pin()}: en esta VM un método `native` sin implementación registrada **no tira
- * una excepción, voltea el proceso**. Un `native` fiel al modificador mataría al programa que lo
- * llame; un método Java que tira deja al que llama con un error que puede atrapar y leer. Los
- * `native` del JDK son todos privados, así que la superficie pública no cambia.
+ * <p><strong>Here no method is `native`, and in the JDK the internal ones are.</strong> It is the
+ * same justification that is already written in {@code VMSupport.getVMTemporaryDirectory()} and in
+ * {@code Continuation.pin()}: in this VM a `native` method with no registered implementation **does
+ * not throw an exception, it brings the process down**. A `native` faithful to the modifier would
+ * kill the program that calls it; a Java method that throws leaves the caller with an error they
+ * can catch and read. The `native`s of the JDK are all private, so the public surface does not
+ * change.
  *
- * <p>El día que la VM entregue su pool, lo que cambia son los cuerpos y el campo — la firma de cada
- * método ya es la definitiva.
+ * <p>The day the VM hands over its pool, what changes are the bodies and the field -- the signature
+ * of each method is already the definitive one.
  */
 public class ConstantPool {
 
-    // El nombre lo conoce el VM en HotSpot; acá nadie lo escribe, y queda como la marca de por que
-    // los metodos no pueden contestar. Se declara igual porque es lo que hace que la clase tenga una
-    // sola razon de fallar en vez de veinte.
+    // The VM knows the name in HotSpot; here nobody writes it, and it is left as the mark of why
+    // the methods cannot answer. It is declared all the same because it is what makes the class
+    // have one single reason to fail instead of twenty.
     private Object constantPoolOop;
 
     public ConstantPool() {
     }
 
-    /** La cantidad de entradas, o sea el índice válido más grande. */
+    /** The number of entries, that is the largest valid index. */
     public int getSize() {
-        throw ConstantPool.sinPool("getSize");
+        throw ConstantPool.noPool("getSize");
     }
 
-    /** La clase de la entrada `index`, cargándola si hace falta. */
+    /** The class of the entry `index`, loading it if need be. */
     public Class<?> getClassAt(int index) {
-        throw ConstantPool.sinPool("getClassAt");
+        throw ConstantPool.noPool("getClassAt");
     }
 
-    /** Igual, pero `null` si esa clase todavía no está cargada. */
+    /** The same, but `null` if that class is not loaded yet. */
     public Class<?> getClassAtIfLoaded(int index) {
-        throw ConstantPool.sinPool("getClassAtIfLoaded");
+        throw ConstantPool.noPool("getClassAtIfLoaded");
     }
 
-    /** El índice de la referencia de clase de un método o un campo. */
+    /** The index of the class reference of a method or a field. */
     public int getClassRefIndexAt(int index) {
-        throw ConstantPool.sinPool("getClassRefIndexAt");
+        throw ConstantPool.noPool("getClassRefIndexAt");
     }
 
     /**
-     * El método de la entrada `index`.
+     * The method of the entry `index`.
      *
-     * <p>Devuelve `Member` y no `Method` porque también puede ser un constructor, y los
-     * inicializadores estáticos vuelven como `Method`. Es del JDK, no una generalización nuestra.
+     * <p>It returns `Member` and not `Method` because it may also be a constructor, and the static
+     * initialisers come back as `Method`. It is of the JDK, not a generalisation of ours.
      */
     public Member getMethodAt(int index) {
-        throw ConstantPool.sinPool("getMethodAt");
+        throw ConstantPool.noPool("getMethodAt");
     }
 
-    /** Igual, pero `null` si la clase que lo declara no está cargada. */
+    /** The same, but `null` if the class that declares it is not loaded. */
     public Member getMethodAtIfLoaded(int index) {
-        throw ConstantPool.sinPool("getMethodAtIfLoaded");
+        throw ConstantPool.noPool("getMethodAtIfLoaded");
     }
 
-    /** El campo de la entrada `index`. */
+    /** The field of the entry `index`. */
     public Field getFieldAt(int index) {
-        throw ConstantPool.sinPool("getFieldAt");
+        throw ConstantPool.noPool("getFieldAt");
     }
 
-    /** Igual, pero `null` si la clase que lo declara no está cargada. */
+    /** The same, but `null` if the class that declares it is not loaded. */
     public Field getFieldAtIfLoaded(int index) {
-        throw ConstantPool.sinPool("getFieldAtIfLoaded");
+        throw ConstantPool.noPool("getFieldAtIfLoaded");
     }
 
-    /** Nombre de clase, nombre de miembro y descriptor, en ese orden y sin cargar nada. */
+    /** Class name, member name and descriptor, in that order and loading nothing. */
     public String[] getMemberRefInfoAt(int index) {
-        throw ConstantPool.sinPool("getMemberRefInfoAt");
+        throw ConstantPool.noPool("getMemberRefInfoAt");
     }
 
-    /** El índice de la entrada `NameAndType` de un método, un campo o un `invokedynamic`. */
+    /** The index of the `NameAndType` entry of a method, a field or an `invokedynamic`. */
     public int getNameAndTypeRefIndexAt(int index) {
-        throw ConstantPool.sinPool("getNameAndTypeRefIndexAt");
+        throw ConstantPool.noPool("getNameAndTypeRefIndexAt");
     }
 
-    /** El nombre y el descriptor de una entrada `NameAndType`, en ese orden. */
+    /** The name and the descriptor of a `NameAndType` entry, in that order. */
     public String[] getNameAndTypeRefInfoAt(int index) {
-        throw ConstantPool.sinPool("getNameAndTypeRefInfoAt");
+        throw ConstantPool.noPool("getNameAndTypeRefInfoAt");
     }
 
-    /** La constante `int` de la entrada `index`. */
+    /** The `int` constant of the entry `index`. */
     public int getIntAt(int index) {
-        throw ConstantPool.sinPool("getIntAt");
+        throw ConstantPool.noPool("getIntAt");
     }
 
-    /** La constante `long`. */
+    /** The `long` constant. */
     public long getLongAt(int index) {
-        throw ConstantPool.sinPool("getLongAt");
+        throw ConstantPool.noPool("getLongAt");
     }
 
-    /** La constante `float`. */
+    /** The `float` constant. */
     public float getFloatAt(int index) {
-        throw ConstantPool.sinPool("getFloatAt");
+        throw ConstantPool.noPool("getFloatAt");
     }
 
-    /** La constante `double`. */
+    /** The `double` constant. */
     public double getDoubleAt(int index) {
-        throw ConstantPool.sinPool("getDoubleAt");
+        throw ConstantPool.noPool("getDoubleAt");
     }
 
-    /** La constante `String` — la entrada `CONSTANT_String`, ya resuelta. */
+    /** The `String` constant -- the `CONSTANT_String` entry, already resolved. */
     public String getStringAt(int index) {
-        throw ConstantPool.sinPool("getStringAt");
+        throw ConstantPool.noPool("getStringAt");
     }
 
-    /** El texto crudo de una entrada `CONSTANT_Utf8`. */
+    /** The raw text of a `CONSTANT_Utf8` entry. */
     public String getUTF8At(int index) {
-        throw ConstantPool.sinPool("getUTF8At");
+        throw ConstantPool.noPool("getUTF8At");
     }
 
-    /** Qué clase de entrada es la `index`. */
+    /** What kind of entry the `index` one is. */
     public Tag getTagAt(int index) {
-        throw ConstantPool.sinPool("getTagAt");
+        throw ConstantPool.noPool("getTagAt");
     }
 
-    // Un solo lugar donde se dice por que, para que los veinte metodos den el mismo motivo y no
-    // veinte variantes del mismo texto.
-    private static UnsupportedOperationException sinPool(String metodo) {
+    // One single place where the reason is said, so that the twenty methods give the same reason
+    // and not twenty variants of the same text.
+    private static UnsupportedOperationException noPool(String method) {
         return new UnsupportedOperationException(
-                "ConstantPool." + metodo + ": esta VM no expone el pool de constantes a Java");
+                "ConstantPool." + method + ": this VM does not expose the constant pool to Java");
     }
 
     /**
-     * Qué clase de entrada es una del pool.
+     * What kind of entry one of the pool is.
      *
-     * <p>Los códigos son los de la especificación del formato `.class` (tabla 4.4-A), y por eso la
-     * enumeración los lleva adentro en vez de depender del orden de las constantes. {@link #INVALID}
-     * con código 0 es del JDK: cubre las entradas que el VM marca como no usables, que en la
-     * especificación no tienen código propio.
+     * <p>The codes are those of the specification of the `.class` format (table 4.4-A), and that is
+     * why the enumeration carries them inside instead of depending on the order of the constants.
+     * {@link #INVALID} with code 0 is of the JDK: it covers the entries the VM marks as unusable,
+     * which in the specification have no code of their own.
      */
     public static enum Tag {
         /** `CONSTANT_Utf8`. */
@@ -194,24 +198,24 @@ public class ConstantPool {
         METHODTYPE(16),
         /** `CONSTANT_InvokeDynamic`. */
         INVOKEDYNAMIC(18),
-        /** Ninguna de las anteriores. */
+        /** None of the above. */
         INVALID(0);
 
-        private final int codigo;
+        private final int code;
 
-        private Tag(int codigo) {
-            this.codigo = codigo;
+        private Tag(int code) {
+            this.code = code;
         }
 
-        // Del byte de la especificacion a la constante. Privado, igual que en el JDK: el codigo
-        // numerico es un detalle del formato y no parte del contrato de la enumeracion.
-        private static Tag deCodigo(byte v) {
+        // From the byte of the specification to the constant. Private, just as in the JDK: the
+        // numeric code is a detail of the format and not part of the contract of the enumeration.
+        private static Tag fromCode(byte v) {
             for (Tag t : Tag.values()) {
-                if (t.codigo == v) {
+                if (t.code == v) {
                     return t;
                 }
             }
-            throw new IllegalArgumentException("codigo de tag desconocido " + v);
+            throw new IllegalArgumentException("unknown tag code " + v);
         }
     }
 }

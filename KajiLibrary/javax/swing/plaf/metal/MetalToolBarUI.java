@@ -13,23 +13,23 @@ import javax.swing.plaf.ComponentUI;
 import javax.swing.plaf.basic.BasicToolBarUI;
 
 /**
- * La barra de herramientas de Metal.
+ * Metal's tool bar.
  *
- * <h2>Dos escuchas que a proposito no existen</h2>
+ * <h2>Two listeners that deliberately do not exist</h2>
  *
- * <p>{@link #createContainerListener} y {@link #createRolloverListener} devuelven {@code null}, y
- * eso esta medido. No es un olvido: el basico usa esos dos escuchas para enterarse de que se agrego
- * un boton y ponerle el borde de relieve. Metal no los necesita porque le pone el borde a cada
- * boton cuando lo dibuja, no cuando lo agregan.
+ * <p>{@link #createContainerListener} and {@link #createRolloverListener} return {@code null},
+ * and that is measured. It is not an oversight: the basic one uses those two listeners to hear
+ * that a button was added and put the rollover border on it. Metal does not need them because it
+ * puts the border on each button when it draws it, not when it is added.
  *
- * <p>Los campos {@link #contListener} y {@link #rolloverListener} quedan por eso en {@code null}
- * despues de instalar, que es lo que contesta el JDK.
+ * <p>The fields {@link #contListener} and {@link #rolloverListener} are therefore left at
+ * {@code null} after installing, which is what the JDK answers.
  *
- * <h2>El borde es el mismo con relieve y sin el</h2>
+ * <h2>The border is the same with rollover and without it</h2>
  *
- * <p>Los dos {@code createXxxBorder} devuelven un borde compuesto del mismo tipo. El basico usa uno
- * distinto para cada estado; Metal dibuja el relieve adentro del borde segun el modelo del boton,
- * asi que le alcanza con uno.
+ * <p>Both {@code createXxxBorder} return a compound border of the same kind. The basic one uses
+ * a different one for each state; Metal draws the relief inside the border according to the
+ * button's model, so one is enough.
  */
 public class MetalToolBarUI extends BasicToolBarUI {
 
@@ -63,12 +63,12 @@ public class MetalToolBarUI extends BasicToolBarUI {
         rolloverListener = null;
     }
 
-    /** Ninguno; ver la nota de la clase. */
+    /** None; see the class note. */
     protected ContainerListener createContainerListener() {
         return null;
     }
 
-    /** Tampoco. */
+    /** Neither; see the class note. */
     protected PropertyChangeListener createRolloverListener() {
         return null;
     }
@@ -89,15 +89,15 @@ public class MetalToolBarUI extends BasicToolBarUI {
         return new MetalDockingListener(toolBar);
     }
 
-    /** El del basico, que el de Metal envuelve; ver el hallazgo #400. */
-    private MouseInputListener arrastreDelBasico() {
-        if (arrastreDelBasico == null) {
-            arrastreDelBasico = super.createDockingListener();
+    /** The basic one's, which Metal's wraps; see finding #400. */
+    private MouseInputListener basicDragWindow() {
+        if (basicDragWindow == null) {
+            basicDragWindow = super.createDockingListener();
         }
-        return arrastreDelBasico;
+        return basicDragWindow;
     }
 
-    private MouseInputListener arrastreDelBasico;
+    private MouseInputListener basicDragWindow;
 
     protected void setDragOffset(Point p) {
     }
@@ -107,11 +107,11 @@ public class MetalToolBarUI extends BasicToolBarUI {
     }
 
     /**
-     * El que arrastra la barra para sacarla a flotar.
+     * The one that drags the bar out to float.
      *
-     * <p>Metal lo redefine para una sola cosa: agarrar la barra <em>en cualquier parte</em> y no
-     * solo por la manija. El nombre se ve por {@code getClass().getName()} y por eso la clase
-     * existe aunque casi no agregue codigo.
+     * <p>Metal redefines it for a single thing: grabbing the bar <em>anywhere</em> and not only by
+     * the handle. The name is seen through {@code getClass().getName()} and that is why the class
+     * exists even though it adds almost no code.
      */
     protected class MetalDockingListener implements MouseInputListener {
 
@@ -119,31 +119,31 @@ public class MetalToolBarUI extends BasicToolBarUI {
         }
 
         public void mousePressed(java.awt.event.MouseEvent e) {
-            arrastreDelBasico().mousePressed(e);
+            basicDragWindow().mousePressed(e);
         }
 
         public void mouseReleased(java.awt.event.MouseEvent e) {
-            arrastreDelBasico().mouseReleased(e);
+            basicDragWindow().mouseReleased(e);
         }
 
         public void mouseClicked(java.awt.event.MouseEvent e) {
-            arrastreDelBasico().mouseClicked(e);
+            basicDragWindow().mouseClicked(e);
         }
 
         public void mouseEntered(java.awt.event.MouseEvent e) {
-            arrastreDelBasico().mouseEntered(e);
+            basicDragWindow().mouseEntered(e);
         }
 
         public void mouseExited(java.awt.event.MouseEvent e) {
-            arrastreDelBasico().mouseExited(e);
+            basicDragWindow().mouseExited(e);
         }
 
         public void mouseDragged(java.awt.event.MouseEvent e) {
-            arrastreDelBasico().mouseDragged(e);
+            basicDragWindow().mouseDragged(e);
         }
 
         public void mouseMoved(java.awt.event.MouseEvent e) {
-            arrastreDelBasico().mouseMoved(e);
+            basicDragWindow().mouseMoved(e);
         }
     }
 }

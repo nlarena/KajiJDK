@@ -4,11 +4,11 @@ import javax.print.attribute.Attribute;
 import javax.print.attribute.EnumSyntax;
 
 /**
- * Una razon suelta de por que el trabajo esta en el {@link JobState} en el que esta.
+ * A single reason why the job is in the {@link JobState} it is in.
  *
- * <p>No se archiva sola: implementa {@link javax.print.attribute.Attribute Attribute} pero el que
- * va en un conjunto de atributos es {@link JobStateReasons}, que junta varias. Un trabajo puede
- * tener cero, una o muchas razones a la vez --de ahi que sea un conjunto y no un valor unico.
+ * <p>It is not filed alone: it implements {@link javax.print.attribute.Attribute Attribute} but the
+ * one that goes into an attribute set is {@link JobStateReasons}, which gathers several. A job may
+ * have zero, one or many reasons at once --hence it being a set and not a single value.
  */
 public class JobStateReason extends EnumSyntax implements Attribute {
 

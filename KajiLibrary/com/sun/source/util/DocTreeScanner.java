@@ -3,42 +3,43 @@ package com.sun.source.util;
 import com.sun.source.doctree.*;
 
 /**
- * Un visitante que recorre el arbol de un comentario entero y combina lo que devuelve cada nodo.
+ * A visitor that walks a whole comment's tree and combines what each node returns.
  *
- * <h2>Que aporta sobre implementar el visitante a mano</h2>
+ * <h2>What it contributes over implementing the visitor by hand</h2>
  *
- * <p>El recorrido. Cada {@code visitXxx} de aca ya sabe cuales son los hijos de ese nodo y los
- * visita; quien extiende esta clase sobrescribe solo los que le interesan y llama a
- * {@code super.visitXxx(node, p)} para que el resto siga bajando. Sin eso, olvidarse un hijo en uno
- * de los 40 metodos deja una rama del arbol sin recorrer, y no hay error que lo diga.
+ * <p>The walk. Each {@code visitXxx} here already knows which that node's children are and
+ * visits them; whoever extends this class overrides only those that are of interest and calls
+ * {@code super.visitXxx(node, p)} so that the rest go on going down. Without that, forgetting a
+ * child in one of the 40 methods leaves a branch of the tree unwalked, and there is no error
+ * that says so.
  *
- * <h2>Como se combinan los resultados</h2>
+ * <h2>How the results are combined</h2>
  *
- * <p>Con {@link #reduce}, que por omision devuelve el primero que no sea {@code null}. Sirve para
- * "encontrar el primero que cumpla"; para acumular —contar, juntar en una lista— hay que
- * sobrescribirlo.
+ * <p>With {@link #reduce}, which by default returns the first that is not {@code null}. It
+ * serves for "find the first that holds"; for accumulating -- counting, gathering into a list
+ * -- it has to be overridden.
  *
- * @param <R> lo que devuelve cada visita
- * @param <P> el dato que se arrastra por el recorrido
+ * @param <R> what each visit returns
+ * @param <P> the datum that is carried along the walk
  */
 public class DocTreeScanner<R, P> implements DocTreeVisitor<R, P> {
 
     public DocTreeScanner() {
     }
 
-    /** Visita un nodo, o {@code null} si no hay. */
+    /** It visits a node, or {@code null} if there is none. */
     public R scan(DocTree node, P p) {
         return node == null ? null : node.accept(this, p);
     }
 
-    /** Visita todos los de la lista, combinando lo que devuelvan. */
+    /** It visits every one of the list, combining what they return. */
     public R scan(Iterable<? extends DocTree> nodes, P p) {
         R r = null;
         if (nodes != null) {
-            boolean primero = true;
+            boolean first = true;
             for (DocTree node : nodes) {
-                r = primero ? scan(node, p) : reduce(scan(node, p), r);
-                primero = false;
+                r = first ? scan(node, p) : reduce(scan(node, p), r);
+                first = false;
             }
         }
         return r;
@@ -53,10 +54,11 @@ public class DocTreeScanner<R, P> implements DocTreeVisitor<R, P> {
     }
 
     /**
-     * Combina dos resultados.
+     * It combines two results.
      *
-     * <p>Por omision gana el que no sea {@code null}, con preferencia por el primero. Es la
-     * semantica de "busqueda": el recorrido sigue igual, pero lo que vuelve es el primer hallazgo.
+     * <p>By default the one that is not {@code null} wins, with preference for the first. It is
+     * the semantics of a "search": the walk goes on all the same, but what comes back is the
+     * first find.
      */
     public R reduce(R r1, R r2) {
         return r1 != null ? r1 : r2;

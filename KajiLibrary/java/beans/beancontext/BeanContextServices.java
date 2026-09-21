@@ -4,54 +4,54 @@ import java.util.Iterator;
 import java.util.TooManyListenersException;
 
 /**
- * Un {@link BeanContext} que además reparte **servicios**.
+ * A {@link BeanContext} that also hands out **services**.
  *
- * <p>Un servicio es un objeto identificado por su clase que el contexto le consigue a quien lo pida.
- * La diferencia con simplemente instanciarlo es la búsqueda: si este contexto no lo tiene, el pedido
- * **sube por la jerarquía**, así que un hijo hondo puede usar algo que registró la raíz sin saber
- * dónde está.
+ * <p>A service is an object identified by its class that the context obtains for whoever asks. The
+ * difference from simply instantiating it is the lookup: if this context does not have it, the
+ * request **climbs the hierarchy**, so a deeply nested child can use something the root registered
+ * without knowing where it is.
  *
- * <p>Implementa {@link BeanContextServicesListener} porque un contexto anidado es a la vez oyente de
- * su padre: así se entera de los servicios que aparecen más arriba y se los reenvía a sus propios
- * hijos.
+ * <p>It extends {@link BeanContextServicesListener} because a nested context is at the same time a
+ * listener of its parent: that is how it learns of the services that appear further up.
  */
 public interface BeanContextServices extends BeanContext, BeanContextServicesListener {
 
-    /** Da de alta un proveedor para esa clase de servicio. `false` si ya había uno. */
+    /** Registers a provider for that service class. `false` if there already was one. */
     boolean addService(Class serviceClass, BeanContextServiceProvider serviceProvider);
 
     /**
-     * Da de baja ese servicio.
+     * Revokes that service.
      *
-     * @param revokeCurrentServicesNow si además hay que invalidar las instancias ya entregadas
+     * @param revokeCurrentServicesNow whether the instances already handed out must be invalidated
+     *     too
      */
     void revokeService(Class serviceClass, BeanContextServiceProvider serviceProvider,
             boolean revokeCurrentServicesNow);
 
-    /** Si el servicio está disponible acá o más arriba. */
+    /** Whether the service is available here or further up. */
     boolean hasService(Class serviceClass);
 
     /**
-     * Una instancia del servicio para ese hijo.
+     * An instance of the service for that child.
      *
-     * @throws TooManyListenersException si el oyente de revocación no se pudo registrar
+     * @throws TooManyListenersException if the revocation listener could not be registered
      */
     Object getService(BeanContextChild child, Object requestor, Class serviceClass,
             Object serviceSelector, BeanContextServiceRevokedListener bcsrl)
             throws TooManyListenersException;
 
-    /** El hijo ya no necesita esa instancia. */
+    /** The child no longer needs that instance. */
     void releaseService(BeanContextChild child, Object requestor, Object service);
 
-    /** Las clases de servicio disponibles. */
+    /** The available service classes. */
     Iterator getCurrentServiceClasses();
 
-    /** Los selectores que acepta ese servicio, o `null` si no usa selectores. */
+    /** The selectors that service accepts, or `null` if it uses no selectors. */
     Iterator getCurrentServiceSelectors(Class serviceClass);
 
-    /** Registra un oyente de altas y bajas de servicios. */
+    /** Registers a listener for services being added and revoked. */
     void addBeanContextServicesListener(BeanContextServicesListener bcsl);
 
-    /** Lo quita. */
+    /** Removes it. */
     void removeBeanContextServicesListener(BeanContextServicesListener bcsl);
 }

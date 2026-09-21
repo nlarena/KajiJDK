@@ -13,136 +13,112 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * KajiLibrary's jdk.internal.reflect.Reflection — las reglas de acceso de la reflexion, y el filtro
- * de miembros que la reflexion no debe entregar.
+ * KajiLibrary's jdk.internal.reflect.Reflection -- the rules of access of reflection, and the
+ * filter of members reflection must not hand over.
  *
- * <h2>Dos mitades independientes</h2>
+ * <h2>Two independent halves</h2>
  *
- * <p>La <strong>primera</strong> es el chequeo de acceso: {@link #verifyMemberAccess} contesta la
- * pregunta que la JLS §6.6 le hace a cada acceso —¿puede esta clase tocar este miembro?— y es
- * aritmetica pura sobre modificadores, paquetes, nidos y la jerarquia de herencia. No necesita nada
- * del VM que esta biblioteca no tenga ya, asi que esta entera y contesta lo mismo que el JDK.
+ * <p>The <strong>first</strong> one is the check of access: {@link #verifyMemberAccess} answers the
+ * question JLS 6.6 asks of every access --may this class touch this member?-- and it is pure
+ * arithmetic over modifiers, packages, nests and the hierarchy of inheritance. It needs nothing of
+ * the VM that this library does not already have, so it is whole and answers the same as the JDK.
  *
- * <p>La <strong>segunda</strong> es el registro de filtrado: una clase puede declarar que ciertos
- * campos o metodos suyos <em>no existen</em> para la reflexion, y {@link #filterFields} /
- * {@link #filterMethods} los sacan del arreglo. El mapa arranca con las mismas entradas que el del
- * JDK, que son las que impiden que {@code ClassLoader.getDeclaredFields()} entregue las tripas del
- * cargador de clases.
+ * <p>The <strong>second</strong> one is the register of filtering: a class may declare that certain
+ * fields or methods of its own <em>do not exist</em> for reflection, and {@link #filterFields} /
+ * {@link #filterMethods} take them out of the array. The map starts with the same entries as that
+ * of the JDK, which are the ones that keep {@code ClassLoader.getDeclaredFields()} from handing
+ * over the guts of the class loader.
  *
- * <p>Vale decir en que difiere aca: en el JDK ese filtro esta <em>enchufado</em>, porque
- * {@code Class.getDeclaredFields0} pasa por el. En esta VM {@code Class.getDeclaredFields} es un
- * nativo que no consulta a nadie, asi que el filtro es una funcion que hay que llamar y no una que se
- * aplique sola. La funcion hace lo que promete; lo que no hay es el gancho que la llamaria, y eso es
- * de {@code java.lang.Class}, no de esta clase.
+ * <p>It is worth saying how it differs here: in the JDK that filter is <em>plugged in</em>, because
+ * {@code Class.getDeclaredFields0} goes through it. In this VM {@code Class.getDeclaredFields} is a
+ * native that consults nobody, so the filter is a function that has to be called and not one that
+ * applies itself. The function does what it promises; what there is not is the hook that would call
+ * it, and that belongs to {@code java.lang.Class}, not to this class.
  *
- * <h2>Los cinco miembros que no estan</h2>
+ * <h2>What the header used to say about missing members, and what is true</h2>
  *
- * <ul>
- * <li><strong>{@code getCallerClass()}</strong> — es el gancho: en HotSpot el VM recorre la pila
- *     salteando los frames de la maquinaria reflexiva y de los metodos marcados
- *     {@code @CallerSensitive}. Esta VM expone la pila por {@code jdk.internal.vm.Stack.frames()},
- *     pero como texto ({@code String[]}) y no como {@code Class[]}: reconstruir la clase de un nombre
- *     impreso pasa por {@code Class.forName}, que carga y <em>inicializa</em>, y el resultado seria
- *     otra clase que la del frame en cuanto haya dos cargadores. Devolver eso seria peor que no
- *     devolver nada, porque el que llama lo usaria para decidir un acceso.</li>
- * <li><strong>{@code getClassAccessFlags(Class)}</strong> — su razon de ser es diferir de
- *     {@link Class#getModifiers()}: devuelve los bits crudos del archivo de clase, sin la correccion
- *     que {@code getModifiers} hace leyendo el atributo {@code InnerClasses}. Aca
- *     {@code getModifiers} ya devuelve los crudos —no hay tal correccion— salvo por un bit:
- *     {@code ACC_SUPER}, que el nativo saca a proposito para que {@code Modifier.toString} no imprima
- *     clases "synchronized". O sea que el valor honesto y el que hay difieren justo en el bit que
- *     este metodo existe para no perder. Un miembro que devuelve el numero casi correcto es la clase
- *     de miembro que no se escribe.</li>
- * <li><strong>{@code isCallerSensitive(Method)}</strong> — es leerle una anotacion a un
- *     {@link Method}, y la reflexion de anotaciones a nivel metodo no esta cableada en esta
- *     biblioteca ({@code Method} ni siquiera define {@code getDeclaredAnnotations}). Contestar
- *     {@code false} siempre seria correcto por accidente hoy y falso el dia que se cablee.</li>
- * <li><strong>{@code isTrustedFinalField(Field)}</strong> — pregunta por el bit {@code trustedFinal}
- *     que el VM le escribe al {@code Field} al fabricarlo, y que no es derivable de la superficie
- *     publica: "final de verdad" no es "final". El VM de aca no lo escribe.</li>
- * <li><strong>{@code ensureNativeAccess(...)}</strong> — es un control, y su respuesta correcta
- *     depende de un permiso por modulo ({@code --enable-native-access}) que este runtime no modela.
- *     Un control que siempre deja pasar no es un control laxo, es un control que miente.</li>
- * </ul>
+ * <p>This javadoc listed five members as absent --{@code getCallerClass()},
+ * {@code getClassAccessFlags(Class)}, {@code isCallerSensitive(Method)},
+ * {@code isTrustedFinalField(Field)} and {@code ensureNativeAccess(...)}-- and gave a reason for
+ * each. <strong>The five are in this file</strong>, declared and documented further down, and they
+ * came in after that note was written. Their own javadoc is the one that holds: read
+ * {@link #getCallerClass()}, {@link #getClassAccessFlags(Class)},
+ * {@link #isCallerSensitive(Method)}, {@link #isTrustedFinalField(Field)} and
+ * {@link #ensureNativeAccess(Class, Class, String, Class)}.
  *
- * <h2>Y las tres clases del paquete que tampoco estan</h2>
- *
- * <p>Este es el lugar donde anotarlas porque las tres cuelgan de lo de arriba.
+ * <p>The same note listed three classes of the package as absent.
+ * <strong>{@link CallerSensitive} is there</strong>, which is what makes
+ * {@link #isCallerSensitive(Method)} able to answer. The other two are not, and for these reasons:
  *
  * <ul>
- * <li><strong>{@code @CallerSensitive}</strong> y <strong>{@code @CallerSensitiveAdapter}</strong>.
- *     Son declaraciones puras, y por eso la tentacion: una anotacion no tiene cuerpo que pueda
- *     mentir. Pero una marca no significa nada sin quien la lea, y en el JDK la lee <em>el VM</em>:
- *     es lo que hace que {@code getCallerClass} saltee el frame del metodo marcado. Sin ese lector
- *     —y aca no esta, por lo que dice el primer item de la lista de arriba— traerlas seria darle a
- *     alguien la manera de escribir {@code @CallerSensitive} sobre un metodo suyo y creer que dijo
- *     algo. No es el caso de {@code VMSupport.AnnotationDecoder}, que si entro siendo una
- *     declaracion sin usuarios: el contrato de esa interfaz es entre quien la llama y quien la
- *     implementa, y se cumple entero adentro de Java.</li>
- * <li><strong>{@code AccessorUtils}</strong>. Su superficie publica es, entera, un constructor sin
- *     argumentos: el unico metodo que tiene —{@code isIllegalArgument}— es package-private, o sea que
- *     no es API ni en el JDK. Y lo que hace es decidir si un {@code ClassCastException} salido de un
- *     {@code MethodHandle} nacio del accesor o del metodo destino, que es una pregunta que solo
- *     existe si los accesores estan hechos de {@code MethodHandle} — y los de aca no lo estan.
- *     Traerla sumaria una clase al conteo y cero comportamiento, que es exactamente lo que no se
- *     hace.</li>
+ * <li><strong>{@code CallerSensitiveAdapter}</strong>. It marks the alternative method the runtime
+ *     calls with the real caller when a {@code @CallerSensitive} one is reached reflectively. It
+ *     only means something when the machinery interposes frames, and this one does not: see the
+ *     note of {@link #getCallerClass()}.</li>
+ * <li><strong>{@code AccessorUtils}</strong>. Its public surface is, in its entirety, a constructor
+ *     with no arguments: the only method it has --{@code isIllegalArgument}-- is package-private,
+ *     that is to say it is not API even in the JDK. And what it does is decide whether a {@code
+ *     ClassCastException} that came out of a {@code MethodHandle} was born of the accessor or of
+ *     the destination method, which is a question that only exists if the accessors are made of
+ *     {@code MethodHandle} -- and the ones here are not. Bringing it in would add a class to the
+ *     count and zero behaviour, which is exactly what is not done.</li>
  * </ul>
  */
 public class Reflection {
 
-    // El comodin. El JDK lo compara por contenido y no por identidad, asi que cualquier conjunto que
-    // lo contenga filtra todo -- `ALL_MEMBERS` es la manera comoda de escribirlo, no la unica.
-    private static final String COMODIN = "*";
+    // The wildcard. The JDK compares it by contents and not by identity, so any set that contains
+    // it filters everything -- `ALL_MEMBERS` is the convenient way of writing it, not the only one.
+    private static final String WILDCARD = "*";
 
-    /** El conjunto que, registrado para una clase, esconde <em>todos</em> sus miembros. */
-    public static final Set<String> ALL_MEMBERS = Set.of(Reflection.COMODIN);
+    /** The set that, registered for a class, hides <em>all</em> of its members. */
+    public static final Set<String> ALL_MEMBERS = Set.of(Reflection.WILDCARD);
 
-    // Copia-al-escribir: `filterFields` lee sin candado y `registerFieldsToFilter` publica un mapa
-    // nuevo entero. Es lo que permite que el registro sea `synchronized` y la lectura no, que importa
-    // porque se filtra en cada `getDeclaredFields` y se registra un puñado de veces en la vida del
-    // proceso.
-    private static volatile Map<Class<?>, Set<String>> filtroDeCampos;
-    private static volatile Map<Class<?>, Set<String>> filtroDeMetodos;
+    // Copy on write: `filterFields` reads with no lock and `registerFieldsToFilter` publishes a
+    // whole new map. It is what allows the registration to be `synchronized` and the reading not,
+    // which matters because filtering happens on every `getDeclaredFields` and registering a
+    // handful of times in the life of the process.
+    private static volatile Map<Class<?>, Set<String>> fieldFilter;
+    private static volatile Map<Class<?>, Set<String>> methodFilter;
 
     static {
-        // Las mismas entradas que el JDK. Son las clases cuyos campos internos, entregados por
-        // reflexion, dejarian escribir el cargador de clases o el bit de accesibilidad de un
-        // `AccessibleObject` -- o sea, saltarse todo lo demas que hay en este archivo.
-        Map<Class<?>, Set<String>> campos = new HashMap<Class<?>, Set<String>>();
-        campos.put(Reflection.class, Reflection.ALL_MEMBERS);
-        campos.put(AccessibleObject.class, Reflection.ALL_MEMBERS);
-        campos.put(Class.class, Set.of("classLoader", "classData", "modifiers", "protectionDomain",
+        // The same entries as the JDK. They are the classes whose internal fields, handed over by
+        // reflection, would let one write the class loader or the bit of accessibility of an
+        // `AccessibleObject` -- that is to say, skip everything else there is in this file.
+        Map<Class<?>, Set<String>> fields = new HashMap<Class<?>, Set<String>>();
+        fields.put(Reflection.class, Reflection.ALL_MEMBERS);
+        fields.put(AccessibleObject.class, Reflection.ALL_MEMBERS);
+        fields.put(Class.class, Set.of("classLoader", "classData", "modifiers", "protectionDomain",
                 "primitive"));
-        campos.put(ClassLoader.class, Reflection.ALL_MEMBERS);
-        campos.put(Constructor.class, Reflection.ALL_MEMBERS);
-        campos.put(Field.class, Reflection.ALL_MEMBERS);
-        campos.put(Method.class, Reflection.ALL_MEMBERS);
-        campos.put(Module.class, Reflection.ALL_MEMBERS);
-        Reflection.filtroDeCampos = campos;
-        Reflection.filtroDeMetodos = new HashMap<Class<?>, Set<String>>();
+        fields.put(ClassLoader.class, Reflection.ALL_MEMBERS);
+        fields.put(Constructor.class, Reflection.ALL_MEMBERS);
+        fields.put(Field.class, Reflection.ALL_MEMBERS);
+        fields.put(Method.class, Reflection.ALL_MEMBERS);
+        fields.put(Module.class, Reflection.ALL_MEMBERS);
+        Reflection.fieldFilter = fields;
+        Reflection.methodFilter = new HashMap<Class<?>, Set<String>>();
     }
 
     public Reflection() {
     }
 
-    // ---- el chequeo de acceso (JLS 6.6) ----
+    // ---- the check of access (JLS 6.6) ----
 
     /**
      * Whether {@code currentClass} may touch a member of {@code memberClass} with these modifiers.
      *
-     * @param currentClass quien accede
-     * @param memberClass quien declara el miembro
-     * @param targetClass el tipo estatico del receptor, o {@code null} si el miembro es estatico.
-     *                    Solo lo mira la regla de los {@code protected} de instancia (JLS 6.6.2).
-     * @param modifiers los modificadores del miembro
-     * @return si el acceso es legal
+     * @param currentClass the one that accesses
+     * @param memberClass the one that declares the member
+     * @param targetClass the static type of the receiver, or {@code null} if the member is static.
+     *                    Only the rule of the instance {@code protected} looks at it (JLS 6.6.2).
+     * @param modifiers the modifiers of the member
+     * @return whether the access is legal
      */
     public static boolean verifyMemberAccess(Class<?> currentClass, Class<?> memberClass,
                                              Class<?> targetClass, int modifiers) {
         Objects.requireNonNull(currentClass);
         Objects.requireNonNull(memberClass);
 
-        // Una clase siempre puede consigo misma, incluido lo privado.
+        // A class can always with itself, the private included.
         if (currentClass == memberClass) {
             return true;
         }
@@ -150,60 +126,61 @@ public class Reflection {
             return false;
         }
 
-        // Dos preguntas de paquete distintas y la misma respuesta: se calcula a lo sumo una vez
-        // porque comparar paquetes toca el cargador de clases.
-        boolean sePregunto = false;
-        boolean mismoPaquete = false;
+        // Two different questions of package and the same answer: it is calculated at most once
+        // because comparing packages touches the class loader.
+        boolean wasAsked = false;
+        boolean samePackage = false;
 
         if (!Modifier.isPublic(memberClass.getModifiers())) {
-            mismoPaquete = Reflection.mismoPaqueteDeClase(currentClass, memberClass);
-            sePregunto = true;
-            if (!mismoPaquete) {
+            samePackage = Reflection.sameClassPackage(currentClass, memberClass);
+            wasAsked = true;
+            if (!samePackage) {
                 return false;
             }
         }
 
-        // Desde aca se sabe que `currentClass` alcanza a `memberClass`; falta el miembro.
+        // From here it is known that `currentClass` reaches `memberClass`; the member is left.
         if (Modifier.isPublic(modifiers)) {
             return true;
         }
 
-        // Un `private` cruza la frontera de clase si las dos comparten nido -- que es lo que un nido
-        // es. `targetClass` puede quedar afuera y no importa: lo que se accede es el miembro.
+        // A `private` crosses the border of the class if the two share a nest -- which is what a
+        // nest is. `targetClass` may be left outside and it does not matter: what is accessed is
+        // the member.
         if (Modifier.isPrivate(modifiers)) {
             if (Reflection.areNestMates(currentClass, memberClass)) {
                 return true;
             }
         }
 
-        boolean bienHastaAca = false;
+        boolean okSoFar = false;
         if (Modifier.isProtected(modifiers)) {
             if (Reflection.isSubclassOf(currentClass, memberClass)) {
-                bienHastaAca = true;
+                okSoFar = true;
             }
         }
-        if (!bienHastaAca && !Modifier.isPrivate(modifiers)) {
-            if (!sePregunto) {
-                mismoPaquete = Reflection.mismoPaqueteDeClase(currentClass, memberClass);
-                sePregunto = true;
+        if (!okSoFar && !Modifier.isPrivate(modifiers)) {
+            if (!wasAsked) {
+                samePackage = Reflection.sameClassPackage(currentClass, memberClass);
+                wasAsked = true;
             }
-            if (mismoPaquete) {
-                bienHastaAca = true;
+            if (samePackage) {
+                okSoFar = true;
             }
         }
-        if (!bienHastaAca) {
+        if (!okSoFar) {
             return false;
         }
 
-        // JLS 6.6.2: heredar un `protected` de otro paquete te deja usarlo sobre TU tipo, no sobre
-        // cualquier otro subtipo del que lo declara. Es la regla que impide que una subclase use el
-        // `clone()` protegido de `Object` sobre un objeto ajeno.
+        // JLS 6.6.2: inheriting a `protected` from another package lets you use it on YOUR type,
+        // not on any other subtype of the one that declares it. It is the rule that keeps a
+        // subclass from using the protected `clone()` of `Object` on somebody else's object.
         if (targetClass != null && Modifier.isProtected(modifiers) && targetClass != currentClass) {
-            if (!sePregunto) {
-                mismoPaquete = Reflection.mismoPaqueteDeClase(currentClass, memberClass);
-                sePregunto = true;
+            if (!wasAsked) {
+                samePackage = Reflection.sameClassPackage(currentClass, memberClass);
+                wasAsked = true;
             }
-            if (!mismoPaquete) {
+            if (!samePackage) {
                 if (!Reflection.isSubclassOf(targetClass, currentClass)) {
                     return false;
                 }
@@ -213,13 +190,13 @@ public class Reflection {
     }
 
     /**
-     * {@link #verifyMemberAccess} pero tirando en vez de contestar que no.
+     * {@link #verifyMemberAccess} but throwing instead of answering no.
      *
-     * @param currentClass quien accede
-     * @param memberClass quien declara el miembro
-     * @param targetClass el tipo estatico del receptor, o {@code null}
-     * @param modifiers los modificadores del miembro
-     * @throws IllegalAccessException si el acceso no es legal
+     * @param currentClass the one that accesses
+     * @param memberClass the one that declares the member
+     * @param targetClass the static type of the receiver, or {@code null}
+     * @param modifiers the modifiers of the member
+     * @throws IllegalAccessException if the access is not legal
      */
     public static void ensureMemberAccess(Class<?> currentClass, Class<?> memberClass,
                                           Class<?> targetClass, int modifiers)
@@ -231,13 +208,13 @@ public class Reflection {
     }
 
     /**
-     * El caso barato del chequeo: un miembro publico de un tipo publico en un paquete exportado sin
-     * condicion. Sirve para saltearse {@link #verifyMemberAccess} cuando la respuesta no depende de
-     * quien pregunte.
+     * The cheap case of the check: a public member of a public type in a package exported with no
+     * condition. It serves for skipping {@link #verifyMemberAccess} when the answer does not depend
+     * on who asks.
      *
-     * @param memberClass quien declara el miembro
-     * @param modifiers los modificadores del miembro
-     * @return si cualquiera puede
+     * @param memberClass the one that declares the member
+     * @param modifiers the modifiers of the member
+     * @return whether anybody may
      */
     public static boolean verifyPublicMemberAccess(Class<?> memberClass, int modifiers) {
         Module m = memberClass.getModule();
@@ -247,14 +224,15 @@ public class Reflection {
     }
 
     /**
-     * Si el modulo de {@code memberClass} le exporta su paquete a {@code currentModule}.
+     * Whether the module of {@code memberClass} exports its package to {@code currentModule}.
      *
-     * <p>En este runtime todo vive en el modulo sin nombre, que exporta todo; la respuesta es siempre
-     * que si, y no por atajo sino porque ese <em>es</em> el grafo de modulos que hay.
+     * <p>In this runtime everything lives in the unnamed module, which exports everything; the
+     * answer is always yes, and not by shortcut but because that <em>is</em> the graph of modules
+     * there is.
      *
-     * @param currentModule el modulo que accede
-     * @param memberClass quien declara el miembro
-     * @return si el paquete esta exportado hacia el
+     * @param currentModule the module that accesses
+     * @param memberClass the one that declares the member
+     * @return whether the package is exported towards it
      */
     public static boolean verifyModuleAccess(Module currentModule, Class<?> memberClass) {
         Module memberModule = memberClass.getModule();
@@ -265,13 +243,13 @@ public class Reflection {
     }
 
     /**
-     * La excepcion que describe un acceso ilegal, ya redactada.
+     * The exception that describes an illegal access, already worded.
      *
-     * @param currentClass quien accede
-     * @param memberClass quien declara el miembro
-     * @param targetClass el tipo estatico del receptor, o {@code null}
-     * @param modifiers los modificadores del miembro
-     * @return la excepcion, sin tirar
+     * @param currentClass the one that accesses
+     * @param memberClass the one that declares the member
+     * @param targetClass the static type of the receiver, or {@code null}
+     * @param modifiers the modifiers of the member
+     * @return the exception, without throwing it
      */
     public static IllegalAccessException newIllegalAccessException(Class<?> currentClass,
                                                                    Class<?> memberClass,
@@ -280,10 +258,10 @@ public class Reflection {
         StringBuilder m = new StringBuilder();
         m.append("class ").append(currentClass.getName());
         m.append(" cannot access ");
-        String visibilidad = Modifier.isPublic(modifiers) ? "public"
+        String visibility = Modifier.isPublic(modifiers) ? "public"
                 : Modifier.isProtected(modifiers) ? "protected"
                 : Modifier.isPrivate(modifiers) ? "private" : "package-private";
-        m.append(visibilidad).append(" member of class ").append(memberClass.getName());
+        m.append(visibility).append(" member of class ").append(memberClass.getName());
         if (targetClass != null && targetClass != memberClass) {
             m.append(" with modifiers \"").append(Modifier.toString(modifiers)).append('"');
         }
@@ -291,67 +269,68 @@ public class Reflection {
     }
 
     /**
-     * Si las dos clases comparten nido, y por lo tanto los miembros privados una de la otra.
+     * Whether the two classes share a nest, and therefore the private members of one another.
      *
-     * <p>En el JDK es un {@code native} porque el nido lo resuelve el VM; aca
-     * {@link Class#isNestmateOf} ya hace exactamente esa pregunta contra el mismo nativo, asi que
-     * este metodo es el nombre que la maquinaria reflexiva le da a la de alla.
+     * <p>In the JDK it is a {@code native} because the VM resolves the nest; here {@link
+     * Class#isNestmateOf} already asks exactly that question against the same native, so this
+     * method is the name the reflective machinery gives to that one.
      *
-     * @param currentClass una clase
-     * @param memberClass la otra
-     * @return si estan en el mismo nido
+     * @param currentClass one class
+     * @param memberClass the other
+     * @return whether they are in the same nest
      */
     public static boolean areNestMates(Class<?> currentClass, Class<?> memberClass) {
         return currentClass.isNestmateOf(memberClass);
     }
 
-    // ---- el registro de filtrado ----
+    // ---- the register of filtering ----
 
     /**
-     * Declara que la reflexion no debe entregar esos campos de {@code containingClass}.
+     * It declares that reflection must not hand over those fields of {@code containingClass}.
      *
-     * @param containingClass la clase que los declara
-     * @param fieldNames los nombres a esconder, o {@link #ALL_MEMBERS} para todos
-     * @throws IllegalArgumentException si esa clase ya tiene un filtro; registrar dos veces
-     *                                  <em>reemplazaria</em> el primero, que es como se lo saltearia
+     * @param containingClass the class that declares them
+     * @param fieldNames the names to hide, or {@link #ALL_MEMBERS} for all of them
+     * @throws IllegalArgumentException if that class already has a filter; registering twice would
+     *                                  <em>replace</em> the first one, which is how it would be
+     *                                  skipped
      */
     public static synchronized void registerFieldsToFilter(Class<?> containingClass,
                                                            Set<String> fieldNames) {
-        Reflection.filtroDeCampos = Reflection.registrar(Reflection.filtroDeCampos, containingClass,
+        Reflection.fieldFilter = Reflection.register(Reflection.fieldFilter, containingClass,
                 fieldNames);
     }
 
     /**
-     * Declara que la reflexion no debe entregar esos metodos de {@code containingClass}.
+     * It declares that reflection must not hand over those methods of {@code containingClass}.
      *
-     * @param containingClass la clase que los declara
-     * @param methodNames los nombres a esconder, o {@link #ALL_MEMBERS} para todos
-     * @throws IllegalArgumentException si esa clase ya tiene un filtro
+     * @param containingClass the class that declares them
+     * @param methodNames the names to hide, or {@link #ALL_MEMBERS} for all of them
+     * @throws IllegalArgumentException if that class already has a filter
      */
     public static synchronized void registerMethodsToFilter(Class<?> containingClass,
                                                             Set<String> methodNames) {
-        Reflection.filtroDeMetodos = Reflection.registrar(Reflection.filtroDeMetodos,
+        Reflection.methodFilter = Reflection.register(Reflection.methodFilter,
                 containingClass, methodNames);
     }
 
-    /** {@code fields} sin los que {@code containingClass} haya declarado escondidos. */
+    /** {@code fields} without the ones {@code containingClass} has declared hidden. */
     public static Field[] filterFields(Class<?> containingClass, Field[] fields) {
-        if (Reflection.filtroDeCampos.isEmpty()) {
+        if (Reflection.fieldFilter.isEmpty()) {
             return fields;
         }
-        return (Field[]) Reflection.filtrar(fields, Reflection.filtroDeCampos.get(containingClass));
+        return (Field[]) Reflection.filter(fields, Reflection.fieldFilter.get(containingClass));
     }
 
-    /** {@code methods} sin los que {@code containingClass} haya declarado escondidos. */
+    /** {@code methods} without the ones {@code containingClass} has declared hidden. */
     public static Method[] filterMethods(Class<?> containingClass, Method[] methods) {
-        if (Reflection.filtroDeMetodos.isEmpty()) {
+        if (Reflection.methodFilter.isEmpty()) {
             return methods;
         }
-        return (Method[]) Reflection.filtrar(methods,
-                Reflection.filtroDeMetodos.get(containingClass));
+        return (Method[]) Reflection.filter(methods,
+                Reflection.methodFilter.get(containingClass));
     }
 
-    // ---- lo interno ----
+    // ---- the internal part ----
 
     static boolean isSubclassOf(Class<?> queryClass, Class<?> ofClass) {
         Class<?> c = queryClass;
@@ -364,109 +343,111 @@ public class Reflection {
         return false;
     }
 
-    // Dos clases estan en el mismo paquete solo si ademas las cargo el mismo cargador: dos paquetes
-    // homonimos de dos cargadores distintos son paquetes distintos, y confundirlos seria justamente
-    // la manera de colarse en uno ajeno.
-    private static boolean mismoPaqueteDeClase(Class<?> c1, Class<?> c2) {
+    // Two classes are in the same package only if the same loader also loaded them: two packages of
+    // the same name from two different loaders are different packages, and confusing them would be
+    // precisely the way of sneaking into somebody else's.
+    private static boolean sameClassPackage(Class<?> c1, Class<?> c2) {
         if (c1.getClassLoader() != c2.getClassLoader()) {
             return false;
         }
         return Objects.equals(c1.getPackageName(), c2.getPackageName());
     }
 
-    private static Map<Class<?>, Set<String>> registrar(Map<Class<?>, Set<String>> mapa,
-                                                        Class<?> c, Set<String> nombres) {
-        if (mapa.get(c) != null) {
+    private static Map<Class<?>, Set<String>> register(Map<Class<?>, Set<String>> map,
+                                                        Class<?> c, Set<String> names) {
+        if (map.get(c) != null) {
             throw new IllegalArgumentException("Filter already registered: " + c);
         }
-        Map<Class<?>, Set<String>> nuevo = new HashMap<Class<?>, Set<String>>(mapa);
-        nuevo.put(c, nombres);
-        return nuevo;
+        Map<Class<?>, Set<String>> fresh = new HashMap<Class<?>, Set<String>>(map);
+        fresh.put(c, names);
+        return fresh;
     }
 
-    private static Member[] filtrar(Member[] miembros, Set<String> escondidos) {
-        if (escondidos == null || miembros.length == 0) {
-            return miembros;
+    private static Member[] filter(Member[] members, Set<String> hidden) {
+        if (hidden == null || members.length == 0) {
+            return members;
         }
-        // El arreglo de salida tiene que ser del tipo del de entrada -- `Field[]` o `Method[]` -- y
-        // el unico lugar de donde sacarlo sin un parametro `Class` de mas es un elemento.
-        Class<?> tipo = miembros[0].getClass();
-        if (escondidos.contains(Reflection.COMODIN)) {
-            return (Member[]) Array.newInstance(tipo, 0);
+        // The output array has to be of the type of the input one -- `Field[]` or `Method[]` -- and
+        // the only place to get it from without an extra `Class` parameter is an element.
+        Class<?> type = members[0].getClass();
+        if (hidden.contains(Reflection.WILDCARD)) {
+            return (Member[]) Array.newInstance(type, 0);
         }
-        int cuantos = 0;
+        int howMany = 0;
         int i = 0;
-        while (i < miembros.length) {
-            if (!escondidos.contains(miembros[i].getName())) {
-                cuantos = cuantos + 1;
+        while (i < members.length) {
+            if (!hidden.contains(members[i].getName())) {
+                howMany = howMany + 1;
             }
             i = i + 1;
         }
-        Member[] salida = (Member[]) Array.newInstance(tipo, cuantos);
-        int destino = 0;
+        Member[] out = (Member[]) Array.newInstance(type, howMany);
+        int target = 0;
         i = 0;
-        while (i < miembros.length) {
-            if (!escondidos.contains(miembros[i].getName())) {
-                salida[destino] = miembros[i];
-                destino = destino + 1;
+        while (i < members.length) {
+            if (!hidden.contains(members[i].getName())) {
+                out[target] = members[i];
+                target = target + 1;
             }
             i = i + 1;
         }
-        return salida;
+        return out;
     }
 
     /**
-     * La clase que llamo al metodo que llama a este.
+     * The class that called the method that calls this one.
      *
-     * <p>Es un intrinseco de la VM y no un native del puente: hay que mirar <b>los marcos</b>, y el
-     * puente solo ve el metaspace y el heap. Devuelve null si no hay tanta pila -- llamarlo desde el
-     * metodo de entrada es legitimo y la respuesta correcta ahi es "nadie".
+     * <p>It is an intrinsic of the VM and not a native of the bridge: one has to look at <b>the
+     * frames</b>, and the bridge only sees the metaspace and the heap. It returns null if there is
+     * not that much stack -- calling it from the entry method is legitimate and the right answer
+     * there is "nobody".
      *
-     * <p><b>Diferencia anotada con el JDK</b>: alla este metodo <b>lanza</b>
-     * {@code InternalError} si el metodo que lo llama no esta marcado con {@link CallerSensitive}.
-     * Aca no. No es una guardia que falte, es una que no hace falta: el JDK la necesita porque su
-     * maquinaria de reflexion <b>interpone marcos generados</b> entre el llamador de verdad y el
-     * metodo, y su implementacion cuenta profundidad fija; la marca es lo que le dice al runtime que
-     * no los interponga. Esta VM no interpone ninguno --{@code Method.invoke} es un intrinseco que
-     * empuja el marco del destino y nada mas-- asi que el recorrido da el llamador correcto lo
-     * marquen o no.
+     * <p><b>Difference noted with the JDK</b>: over there this method <b>throws</b> {@code
+     * InternalError} if the method that calls it is not marked with {@link CallerSensitive}. Here
+     * it does not. It is not a guard that is missing, it is one that is not needed: the JDK needs
+     * it because its machinery of reflection <b>interposes generated frames</b> between the real
+     * caller and the method, and its implementation counts a fixed depth; the mark is what tells
+     * the runtime not to interpose them. This VM interposes none --{@code Method.invoke} is an
+     * intrinsic that pushes the frame of the destination and nothing else-- so the walk gives the
+     * right caller whether they are marked or not.
      *
-     * <p>Marcar igual el metodo que lo use sigue siendo lo correcto: es lo que documenta que su
-     * respuesta depende de la pila, y es lo que {@link #isCallerSensitive} lee.
+     * <p>Marking the method that uses it is still the right thing: it is what documents that its
+     * answer depends on the stack, and it is what {@link #isCallerSensitive} reads.
      */
     public static native Class<?> getCallerClass();
 
     /**
-     * Los {@code access_flags} <b>crudos</b> del class file.
+     * The <b>raw</b> {@code access_flags} of the class file.
      *
-     * <p>No es lo mismo que {@code Class.getModifiers()}: para una clase anidada, aquel devuelve los
-     * modificadores que declara el atributo {@code InnerClasses} --que es donde vive el
-     * {@code private} de una clase interna-- y este los del encabezado, donde ese {@code private} no
-     * se puede representar. Para decidir accesos hacen falta los crudos.
+     * <p>It is not the same as {@code Class.getModifiers()}: for a nested class, that one returns
+     * the modifiers the {@code InnerClasses} attribute declares --which is where the {@code
+     * private} of an inner class lives-- and this one those of the header, where that {@code
+     * private} cannot be represented. In order to decide accesses the raw ones are needed.
      */
     public static native int getClassAccessFlags(Class<?> c);
 
     /**
-     * Si ese metodo esta marcado con {@link CallerSensitive}.
+     * Whether that method is marked with {@link CallerSensitive}.
      *
-     * <p>Se lee del {@code .class} y no de una lista: la marca viaja con el metodo, asi que un
-     * metodo sensible al llamador de una biblioteca de terceros se reconoce igual que uno del JDK.
+     * <p>It is read from the {@code .class} and not from a list: the mark travels with the method,
+     * so a method sensitive to the caller of a third-party library is recognised just like one of
+     * the JDK.
      */
     public static boolean isCallerSensitive(Method m) {
         return m.getAnnotation(CallerSensitive.class) != null;
     }
 
     /**
-     * Si ese campo es un {@code final} en el que se puede <b>confiar</b>: uno que ni siquiera la
-     * reflexion con {@code setAccessible} puede escribir.
+     * Whether that field is a {@code final} one can <b>trust</b>: one that not even reflection with
+     * {@code setAccessible} can write.
      *
-     * <p>Son dos: los campos de un {@code record} y los de una clase oculta. En los dos casos la
-     * inmutabilidad es parte del contrato del tipo --el {@code equals} de un record y el desarme de
-     * una lambda dependen de ella-- asi que dejarlos escribir romperia invariantes que el
-     * compilador ya dio por buenas al optimizar.
+     * <p>There are two: the fields of a {@code record} and those of a hidden class. In both cases
+     * the immutability is part of the contract of the type --the {@code equals} of a record and the
+     * taking apart of a lambda depend on it-- so letting them be written would break invariants the
+     * compiler has already taken for granted when optimising.
      *
-     * <p>Un campo {@code static} nunca lo es: los estaticos se escriben en el {@code <clinit>}, y
-     * ahi la escritura es legitima.
+     * <p>A {@code static} field never is: the static ones are written in the {@code <clinit>}, and
+     * there the writing is legitimate.
      */
     public static boolean isTrustedFinalField(Field f) {
         if (!Modifier.isFinal(f.getModifiers()) || Modifier.isStatic(f.getModifiers())) {
@@ -477,18 +458,18 @@ public class Reflection {
     }
 
     /**
-     * Comprueba que ese modulo tenga habilitado el acceso nativo.
+     * It checks that that module has native access enabled.
      *
-     * <p>Es el gancho que llaman los metodos restringidos de {@code java.lang.foreign}: en el JDK
-     * lanza {@code IllegalCallerException} si el modulo del llamador no arranco con
-     * {@code --enable-native-access}.
+     * <p>It is the hook the restricted methods of {@code java.lang.foreign} call: in the JDK it
+     * throws {@code IllegalCallerException} if the module of the caller did not start with {@code
+     * --enable-native-access}.
      *
-     * <p><b>Aca no lanza nunca</b>, y hay que decir por que no es un atajo. La bandera existe para
-     * que una aplicacion pueda decidir <b>que modulos</b> pueden llamar codigo nativo; esta
-     * biblioteca no tiene sistema de modulos, asi que no hay a quien preguntarle ni a quien negarle.
-     * Simular una negativa seria inventar una politica; simular una aprobacion --que es lo que hace
-     * el JDK cuando el acceso esta habilitado-- es la unica respuesta que se corresponde con el
-     * estado real del runtime.
+     * <p><b>Here it never throws</b>, and one has to say why that is not a shortcut. The flag
+     * exists so that an application can decide <b>which modules</b> may call native code; this
+     * library has no system of modules, so there is nobody to ask and nobody to refuse. Simulating
+     * a refusal would be inventing a policy; simulating an approval --which is what the JDK does
+     * when the access is enabled-- is the only answer that corresponds to the real state of the
+     * runtime.
      */
     public static void ensureNativeAccess(Class<?> currentClass, Class<?> owner, String methodName,
             boolean jni) {

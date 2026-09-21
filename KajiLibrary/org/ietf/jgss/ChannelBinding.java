@@ -3,25 +3,27 @@ package org.ietf.jgss;
 import java.net.InetAddress;
 
 /**
- * KajiLibrary's org.ietf.jgss.ChannelBinding -- ata la autenticacion al canal por donde viaja.
+ * KajiLibrary's org.ietf.jgss.ChannelBinding -- it ties the authentication to the channel it
+ * travels on.
  *
- * <p>Es la defensa contra el intermediario que se limita a <b>reenviar</b>. Sin esto, alguien puede
- * dejarse en el medio, pasar los tokens de un lado al otro sin tocarlos, y quedarse con el canal:
- * los dos extremos se autentican correctamente entre si, pero cada uno esta hablando con el
- * intermediario.
+ * <p>It is the defence against the man in the middle who limits himself to <b>forwarding</b>.
+ * Without this, somebody can sit in the middle, pass the tokens from one side to the other without
+ * touching them, and keep the channel: the two ends authenticate each other correctly, but each one
+ * is talking to the intermediary.
  *
- * <p>Con esto, las dos partes meten en el intercambio una descripcion del canal --las direcciones,
- * y lo que la aplicacion quiera agregar-- y si no coinciden, la autenticacion falla con
- * {@link GSSException#BAD_BINDINGS}. El intermediario no puede hacerlas coincidir porque las
- * direcciones que ve cada extremo son las suyas.
+ * <p>With this, the two parties put into the exchange a description of the channel --the addresses,
+ * and whatever the application wants to add-- and if they do not match, the authentication fails
+ * with {@link GSSException#BAD_BINDINGS}. The intermediary cannot make them match because the
+ * addresses each end sees are its own.
  *
- * <p>Los datos de la aplicacion son lo mas util de los tres campos, y a la vez lo menos usado: ahi
- * es donde va, por ejemplo, el resumen del certificado TLS del canal. Es lo que ata la autenticacion
- * a <b>esa</b> conexion y no a cualquiera entre las mismas dos maquinas.
+ * <p>The application data are the most useful of the three fields, and at the same time the least
+ * used: that is where, for example, the digest of the TLS certificate of the channel goes. It is
+ * what ties the authentication to <b>that</b> connection and not to any one between the same two
+ * machines.
  *
- * <p>El objeto es inmutable: los tres campos se fijan al construir y no hay setters. Tiene sentido
- * para algo que participa de una decision de seguridad -- si se pudiera cambiar despues de pasarlo,
- * lo que se verifico no seria lo que se pidio.
+ * <p>The object is immutable: the three fields are fixed on construction and there are no setters.
+ * It makes sense for something that takes part in a security decision -- if it could be changed
+ * after being passed, what was verified would not be what was asked for.
  */
 public class ChannelBinding {
 
@@ -32,11 +34,11 @@ public class ChannelBinding {
     private final byte[] appData;
 
     /**
-     * Con las dos direcciones.
+     * With the two addresses.
      *
-     * @param initAddr la del que inicia, o null si no se quiere atar a ella
-     * @param acceptAddr la del que acepta, o null
-     * @param appData lo que la aplicacion quiera agregar, o null
+     * @param initAddr the one of the initiator, or null if one does not want to tie to it
+     * @param acceptAddr the one of the acceptor, or null
+     * @param appData whatever the application wants to add, or null
      */
     public ChannelBinding(InetAddress initAddr, InetAddress acceptAddr, byte[] appData) {
         this.initiator = initAddr;
@@ -44,31 +46,31 @@ public class ChannelBinding {
         this.appData = copyOf(appData);
     }
 
-    /** Solo con los datos de la aplicacion. */
+    /** Only with the application data. */
     public ChannelBinding(byte[] appData) {
         this(null, null, appData);
     }
 
-    /** La direccion del que inicia, o null. */
+    /** The address of the initiator, or null. */
     public InetAddress getInitiatorAddress() {
         return this.initiator;
     }
 
-    /** La del que acepta, o null. */
+    /** The one of the acceptor, or null. */
     public InetAddress getAcceptorAddress() {
         return this.acceptor;
     }
 
-    /** Los datos de la aplicacion, o null. Copia. */
+    /** The application data, or null. A copy. */
     public byte[] getApplicationData() {
         return copyOf(this.appData);
     }
 
     /**
-     * Iguales si coinciden las tres cosas.
+     * Equal if the three things match.
      *
-     * <p>Los datos se comparan byte a byte, no por identidad: dos etiquetas con el mismo contenido
-     * atan al mismo canal, que es lo unico que importa aca.
+     * <p>The data are compared byte by byte, not by identity: two labels with the same contents tie
+     * to the same channel, which is the only thing that matters here.
      */
     public boolean equals(Object other) {
         if (this == other) {
@@ -100,7 +102,7 @@ public class ChannelBinding {
         return true;
     }
 
-    /** Coherente con {@link #equals}. */
+    /** Coherent with {@link #equals}. */
     public int hashCode() {
         if (this.initiator != null) {
             return this.initiator.hashCode();
@@ -120,12 +122,12 @@ public class ChannelBinding {
         return result;
     }
 
-    /** Dos direcciones que pueden ser null. */
+    /** Two addresses that may be null. */
     private static boolean sameAddress(InetAddress a, InetAddress b) {
         return (a == null) ? b == null : a.equals(b);
     }
 
-    /** Copia defensiva de un arreglo que puede ser null. */
+    /** A defensive copy of an array that may be null. */
     private static byte[] copyOf(byte[] data) {
         if (data == null) {
             return null;

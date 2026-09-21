@@ -9,92 +9,92 @@ import java.util.Map;
 import java.util.StringTokenizer;
 import java.util.TreeSet;
 
-// KajiLibrary's java.util.prefs.AbstractPreferences -- toda la logica del arbol, para que un
-// deposito nuevo sea nueve metodos y no cuarenta y ocho.
+// KajiLibrary's java.util.prefs.AbstractPreferences -- the whole logic of the tree, so that a new
+// store is nine methods and not thirty-four.
 //
-// EL REPARTO. Los nueve `...Spi` son lo unico que una subclase escribe, y son deliberadamente
-// tontos: `getSpi`/`putSpi`/`removeSpi` tocan **una** clave de **este** nodo, `keysSpi` y
-// `childrenNamesSpi` enumeran, `childSpi` fabrica un hijo, `removeNodeSpi` borra este nodo,
-// `flushSpi`/`syncSpi` hablan con el deposito. Ninguno valida nada, ninguno avisa a nadie, ninguno
-// sabe que existe una ruta. Todo eso --validar largos, partir rutas, heredar por omision, mantener
-// la cache de hijos, disparar los avisos, marcar el nodo como borrado-- pasa aca arriba una sola
-// vez.
+// THE SPLIT. The nine `...Spi` are the only thing a subclass writes, and they are deliberately
+// stupid: `getSpi`/`putSpi`/`removeSpi` touch **one** key of **this** node, `keysSpi` and
+// `childrenNamesSpi` enumerate, `childSpi` makes a child, `removeNodeSpi` removes this node,
+// `flushSpi`/`syncSpi` talk to the store. None of them validates anything, none of them tells
+// anyone, none of them knows a path exists. All of that --validating lengths, splitting paths,
+// falling back to the default, keeping the child cache, firing the notifications, marking the node
+// as removed-- happens up here, once.
 //
-// LA CACHE DE HIJOS ES EL CORAZON. Un nodo que ya se materializo queda en `kidCache` y no se
-// vuelve a fabricar, y de eso dependen dos cosas del contrato. La primera es que `node("/a/b")`
-// llamado dos veces devuelve **el mismo objeto**, que es lo que hace que registrar un oyente sobre
-// el resultado sirva de algo. La segunda es `childrenNames()`, que une lo que dice el deposito con
-// lo que hay en la cache: un hijo recien creado y todavia no escrito tiene que aparecer igual.
+// THE CHILD CACHE IS THE HEART. A node that has already been materialised stays in `kidCache` and is
+// not made again, and two things in the contract depend on that. The first is that `node("/a/b")`
+// called twice returns **the same object**, which is what makes registering a listener on the result
+// worth anything. The second is `childrenNames()`, which joins what the store says with what is in
+// the cache: a freshly created child not yet written has to show up all the same.
 //
-// EL NODO BORRADO NO SE REVIVE. Despues de `removeNode()` casi todo tira `IllegalStateException`,
-// incluso los `get`. Las dos excepciones estan puestas a mano y valen la pena: `nodeExists("")`
-// devuelve `false` en vez de tirar --es la unica manera de preguntar "seguis vivo?" sin un
-// `try`-- y `flush()` funciona, porque hay depositos que necesitan ese ultimo empujon para que el
-// borrado llegue a disco. Ojo con la asimetria: `node("")` **si** tira sobre un nodo borrado,
-// porque ahi la comprobacion viene antes.
+// A REMOVED NODE DOES NOT COME BACK. After `removeNode()` almost everything throws
+// `IllegalStateException`, the `get`s included. The two exceptions are put in by hand and they are
+// worth it: `nodeExists("")` returns `false` instead of throwing --it is the only way to ask "are
+// you still alive?" without a `try`-- and `flush()` works, because there are stores that need that
+// last push for the removal to reach disk. Mind the asymmetry: `node("")` **does** throw on a
+// removed node, because there the check comes first.
 //
-// LOS AVISOS SALEN FUERA DEL CANDADO. El JDK los encola y los entrega en un hilo aparte; aca se
-// entregan en el hilo que hizo el cambio, pero **despues** de soltar `lock`. Es una diferencia real
-// y conviene tenerla clara: a favor, el aviso ya llego cuando `put()` vuelve --deterministico, sin
-// un hilo demonio vivo para siempre-- y un oyente que reentre al nodo no se traba contra su propio
-// candado. En contra, un oyente lento demora al que escribio. El contrato no dice nada sobre cual
-// hilo entrega ni cuando, asi que ninguna de las dos formas lo incumple.
+// THE NOTIFICATIONS GO OUT OUTSIDE THE LOCK. The JDK queues them and delivers them on a separate
+// thread; here they are delivered on the thread that made the change, but **after** releasing
+// `lock`. It is a real difference and it is worth being clear about: in favour, the notification has
+// already arrived when `put()` returns --deterministic, with no daemon thread alive forever-- and a
+// listener that re-enters the node does not jam against its own lock. Against, a slow listener holds
+// up whoever wrote. The contract says nothing about which thread delivers nor when, so neither of
+// the two ways breaks it.
 public abstract class AbstractPreferences extends Preferences {
 
     private final String name;
     private final AbstractPreferences parent;
 
-    // La raiz del arbol. Se guarda y no se recorre cada vez porque `isUserNode()` la compara por
-    // identidad en cada llamada.
+    // The root of the tree. It is kept and not walked every time because `isUserNode()` compares it
+    // by identity on every call.
     final AbstractPreferences root;
 
     private final String absolutePath;
 
     /**
-     * El candado de este nodo. Es `protected` y no privado porque una subclase que necesite hacer
-     * dos operaciones del deposito de forma atomica tiene que poder tomarlo.
+     * This node's lock. It is `protected` and not private because a subclass that needs to do two
+     * store operations atomically has to be able to take it.
      *
-     * <p>Es **por nodo** y no uno global: dos nodos distintos se pueden tocar en paralelo. El precio
-     * es que las operaciones que cruzan niveles --`removeNode`, `node` con ruta-- toman varios, y por
-     * eso siempre lo hacen **de arriba hacia abajo**, que es lo que evita el abrazo mortal.
+     * <p>It is **per node** and not a global one: two different nodes can be touched in parallel. The
+     * price is that the operations crossing levels --`removeNode`, `node` with a path-- take several,
+     * and that is why they always do it **from the top down**, which is what avoids the deadlock.
      */
     protected final Object lock = new Object();
 
     /**
-     * Si este nodo no existia en el deposito cuando {@link #childSpi} lo fabrico.
+     * Whether this node did not exist in the store when {@link #childSpi} made it.
      *
-     * <p>Lo pone la subclase en el constructor, y de eso depende que se dispare o no
-     * {@link NodeChangeListener#childAdded}: sin esta bandera esta clase no tiene como distinguir
-     * un nodo recien creado de uno que ya estaba en disco.
+     * <p>The subclass sets it in the constructor, and whether {@link NodeChangeListener#childAdded}
+     * fires depends on it: without this flag this class has no way of telling a freshly created node
+     * from one that was already on disk.
      */
     protected boolean newNode = false;
 
-    // Los hijos ya materializados, por nombre simple.
+    // The children already materialised, by simple name.
     private final Map<String, AbstractPreferences> kidCache =
             new HashMap<String, AbstractPreferences>();
 
     private boolean removed = false;
 
-    private final ArrayList<PreferenceChangeListener> oyentesDeClave =
+    private final ArrayList<PreferenceChangeListener> keyListeners =
             new ArrayList<PreferenceChangeListener>();
-    private final ArrayList<NodeChangeListener> oyentesDeNodo =
+    private final ArrayList<NodeChangeListener> nodeListeners =
             new ArrayList<NodeChangeListener>();
 
-    private static final String[] SIN_CADENAS = new String[0];
-    private static final AbstractPreferences[] SIN_NODOS = new AbstractPreferences[0];
+    private static final String[] NO_STRINGS = new String[0];
+    private static final AbstractPreferences[] NO_NODES = new AbstractPreferences[0];
 
     /**
-     * Un nodo llamado `name` colgando de `parent`.
+     * A node named `name` hanging off `parent`.
      *
-     * <p>La raiz se construye con `parent` en `null` y `name` en `""`, y las dos cosas van juntas:
-     * una raiz con nombre o un hijo sin nombre serian arboles que no se pueden recorrer, asi que
-     * las dos combinaciones tiran `IllegalArgumentException`. Un nombre con `/` tambien: la barra
-     * es el separador de rutas y un nodo que la lleve en el nombre haria ambigua cualquier ruta que
-     * lo atraviese.
+     * <p>The root is built with `parent` at `null` and `name` at `""`, and the two go together: a
+     * root with a name or a child without one would be trees that cannot be walked, so both
+     * combinations throw `IllegalArgumentException`. A name with `/` does too: the slash is the path
+     * separator and a node carrying it in its name would make ambiguous any path that goes through
+     * it.
      *
-     * <p>El largo del nombre **no** se comprueba aca --lo comprueba `node()` antes de llamar a
-     * `childSpi`-- porque una subclase puede legitimamente reconstruir desde el deposito un nodo
-     * que escribio una version anterior.
+     * <p>The name's length is **not** checked here --`node()` checks it before calling `childSpi`--
+     * because a subclass may legitimately rebuild from the store a node an earlier version wrote.
      */
     protected AbstractPreferences(AbstractPreferences parent, String name) {
         if (parent == null) {
@@ -118,7 +118,7 @@ public abstract class AbstractPreferences extends Preferences {
         this.parent = parent;
     }
 
-    // ---- claves y valores ------------------------------------------------------------------
+    // ---- keys and values  ------------------------------------------------------------------
 
     public void put(String key, String value) {
         if (key == null || value == null) {
@@ -136,7 +136,7 @@ public abstract class AbstractPreferences extends Preferences {
             }
             putSpi(key, value);
         }
-        avisarCambioDeClave(key, value);
+        firePreferenceChange(key, value);
     }
 
     public String get(String key, String def) {
@@ -151,8 +151,8 @@ public abstract class AbstractPreferences extends Preferences {
             try {
                 result = getSpi(key);
             } catch (Exception e) {
-                // El deposito fallo. No hay a quien contarselo --`get` no tira-- y el contrato ya
-                // tiene una respuesta prevista para "no esta": el valor por omision.
+                // The store failed. There is nobody to tell --`get` does not throw-- and the
+                // contract already has an answer ready for "it is not there": the default value.
             }
             return result == null ? def : result;
         }
@@ -168,14 +168,14 @@ public abstract class AbstractPreferences extends Preferences {
             }
             removeSpi(key);
         }
-        avisarCambioDeClave(key, null);
+        firePreferenceChange(key, null);
     }
 
     public void clear() throws BackingStoreException {
         synchronized (lock) {
-            String[] claves = keys();
-            for (int i = 0; i < claves.length; i++) {
-                remove(claves[i]);
+            String[] keyNames = keys();
+            for (int i = 0; i < keyNames.length; i++) {
+                remove(keyNames[i]);
             }
         }
     }
@@ -192,8 +192,7 @@ public abstract class AbstractPreferences extends Preferences {
                 result = Integer.parseInt(value);
             }
         } catch (NumberFormatException e) {
-            // Un valor mal tipado se comporta como una clave ausente: ver el encabezado de
-            // Preferences.
+            // A badly typed value behaves like a missing key: see Preferences's header.
         }
         return result;
     }
@@ -222,8 +221,8 @@ public abstract class AbstractPreferences extends Preferences {
         boolean result = def;
         String value = get(key, null);
         if (value != null) {
-            // Sin `Boolean.parseBoolean`: ese devuelve `false` para cualquier cosa que no sea
-            // "true", y aca "cualquier cosa" tiene que dar el valor por omision, no `false`.
+            // No `Boolean.parseBoolean`: that one returns `false` for anything that is not "true",
+            // and here "anything" has to give the default value, not `false`.
             if (value.equalsIgnoreCase("true")) {
                 result = true;
             } else if (value.equalsIgnoreCase("false")) {
@@ -274,9 +273,9 @@ public abstract class AbstractPreferences extends Preferences {
         String value = get(key, null);
         try {
             if (value != null) {
-                // El largo multiplo de cuatro se exige a mano: el decodificador de `java.util`
-                // tolera la falta de relleno y el deposito no, asi que sin esto un valor truncado
-                // se leeria como bytes buenos en vez de caer en el valor por omision.
+                // The length being a multiple of four is required by hand: `java.util`'s decoder
+                // tolerates missing padding and the store does not, so without this a truncated value
+                // would read back as good bytes instead of falling to the default.
                 if (value.length() % 4 != 0) {
                     return def;
                 }
@@ -297,28 +296,28 @@ public abstract class AbstractPreferences extends Preferences {
         }
     }
 
-    // ---- el arbol --------------------------------------------------------------------------
+    // ---- the tree --------------------------------------------------------------------------
 
     public String[] childrenNames() throws BackingStoreException {
         synchronized (lock) {
             if (removed) {
                 throw new IllegalStateException("Node has been removed.");
             }
-            // La union de lo que hay en disco y lo que hay en la cache: un hijo recien creado
-            // todavia puede no estar escrito, y omitirlo seria decir que no existe.
+            // The union of what is on disk and what is in the cache: a freshly created child may
+            // not be written yet, and leaving it out would be saying it does not exist.
             TreeSet<String> s = new TreeSet<String>(kidCache.keySet());
-            String[] delDeposito = childrenNamesSpi();
-            for (int i = 0; i < delDeposito.length; i++) {
-                s.add(delDeposito[i]);
+            String[] fromStore = childrenNamesSpi();
+            for (int i = 0; i < fromStore.length; i++) {
+                s.add(fromStore[i]);
             }
-            return s.toArray(SIN_CADENAS);
+            return s.toArray(NO_STRINGS);
         }
     }
 
-    /** Los hijos que ya estan materializados en memoria, sin tocar el deposito. */
+    /** The children already materialised in memory, without touching the store. */
     protected final AbstractPreferences[] cachedChildren() {
         synchronized (lock) {
-            return kidCache.values().toArray(SIN_NODOS);
+            return kidCache.values().toArray(NO_NODES);
         }
     }
 
@@ -332,8 +331,8 @@ public abstract class AbstractPreferences extends Preferences {
     }
 
     public Preferences node(String path) {
-        ArrayList<AbstractPreferences> nuevos = new ArrayList<AbstractPreferences>();
-        Preferences resultado;
+        ArrayList<AbstractPreferences> fresh = new ArrayList<AbstractPreferences>();
+        Preferences result;
         synchronized (lock) {
             if (removed) {
                 throw new IllegalStateException("Node has been removed.");
@@ -345,19 +344,20 @@ public abstract class AbstractPreferences extends Preferences {
                 return root;
             }
             if (path.charAt(0) != '/') {
-                resultado = node(new StringTokenizer(path, "/", true), nuevos);
-                avisarAltasDeNodo(nuevos);
-                return resultado;
+                result = node(new StringTokenizer(path, "/", true), fresh);
+                fireChildAdded(fresh);
+                return result;
             }
         }
-        // Ruta absoluta. Se sale del candado propio a proposito antes de tomar el de la raiz:
-        // tomarlos al reves --de abajo hacia arriba-- es la unica forma de trabar dos hilos.
-        resultado = root.node(new StringTokenizer(path.substring(1), "/", true), nuevos);
-        avisarAltasDeNodo(nuevos);
-        return resultado;
+        // An absolute path. This node's own lock is released on purpose before taking the root's:
+        // taking them the other way round --from the bottom up-- is the only way to jam two
+        // threads.
+        result = root.node(new StringTokenizer(path.substring(1), "/", true), fresh);
+        fireChildAdded(fresh);
+        return result;
     }
 
-    private Preferences node(StringTokenizer path, ArrayList<AbstractPreferences> nuevos) {
+    private Preferences node(StringTokenizer path, ArrayList<AbstractPreferences> fresh) {
         String token = path.nextToken();
         if (token.equals("/")) {
             throw new IllegalArgumentException("Consecutive slashes in path");
@@ -370,25 +370,25 @@ public abstract class AbstractPreferences extends Preferences {
                 }
                 child = childSpi(token);
                 if (child.newNode) {
-                    nuevos.add(child);
+                    fresh.add(child);
                 }
                 kidCache.put(token, child);
             }
             if (!path.hasMoreTokens()) {
                 return child;
             }
-            path.nextToken(); // consume la barra
+            path.nextToken(); // consume the slash
             if (!path.hasMoreTokens()) {
                 throw new IllegalArgumentException("Path ends with slash");
             }
-            return child.node(path, nuevos);
+            return child.node(path, fresh);
         }
     }
 
     public boolean nodeExists(String path) throws BackingStoreException {
         synchronized (lock) {
-            // "" antes que la comprobacion de borrado, y no al reves: es la unica pregunta que un
-            // nodo borrado tiene que poder contestar.
+            // "" before the removal check, and not the other way round: it is the only question a
+            // removed node has to be able to answer.
             if (path.equals("")) {
                 return !removed;
             }
@@ -435,44 +435,44 @@ public abstract class AbstractPreferences extends Preferences {
 
     public void removeNode() throws BackingStoreException {
         if (this == root) {
-            // No hay a quien sacarlo: la raiz no tiene padre que la olvide, y `Preferences.userRoot()`
-            // la volveria a entregar acto seguido.
+            // There is nobody to take it out of: the root has no parent to forget it, and
+            // `Preferences.userRoot()` would hand it back the moment after.
             throw new UnsupportedOperationException("Can't remove the root!");
         }
-        ArrayList<AbstractPreferences> bajas = new ArrayList<AbstractPreferences>();
+        ArrayList<AbstractPreferences> removals = new ArrayList<AbstractPreferences>();
         synchronized (parent.lock) {
-            removeNode2(bajas);
+            removeNode2(removals);
             parent.kidCache.remove(name);
         }
-        avisarBajasDeNodo(bajas);
+        fireChildRemoved(removals);
     }
 
-    private void removeNode2(ArrayList<AbstractPreferences> bajas) throws BackingStoreException {
+    private void removeNode2(ArrayList<AbstractPreferences> removals) throws BackingStoreException {
         synchronized (lock) {
             if (removed) {
                 throw new IllegalStateException("Node already removed.");
             }
-            // Los hijos que estan en disco pero todavia no en memoria se materializan aca: sin eso
-            // el borrado dejaria descendientes vivos en el deposito.
-            String[] nombres = childrenNamesSpi();
-            for (int i = 0; i < nombres.length; i++) {
-                if (!kidCache.containsKey(nombres[i])) {
-                    kidCache.put(nombres[i], childSpi(nombres[i]));
+            // The children that are on disk but not yet in memory are materialised here: without
+            // that the removal would leave live descendants in the store.
+            String[] names = childrenNamesSpi();
+            for (int i = 0; i < names.length; i++) {
+                if (!kidCache.containsKey(names[i])) {
+                    kidCache.put(names[i], childSpi(names[i]));
                 }
             }
             for (Iterator<AbstractPreferences> i = kidCache.values().iterator(); i.hasNext();) {
                 AbstractPreferences child = i.next();
                 try {
-                    child.removeNode2(bajas);
+                    child.removeNode2(removals);
                 } catch (BackingStoreException x) {
-                    // Un hijo que no se pudo borrar no puede abortar el borrado del padre: el
-                    // arbol quedaria a medio camino y sin forma de terminarlo.
+                    // A child that could not be removed cannot abort the parent's removal: the tree
+                    // would be left half way with no way of finishing it.
                 }
                 i.remove();
             }
             removeNodeSpi();
             removed = true;
-            bajas.add(this);
+            removals.add(this);
         }
     }
 
@@ -492,7 +492,7 @@ public abstract class AbstractPreferences extends Preferences {
         return (isUserNode() ? "User" : "System") + " Preference Node: " + absolutePath();
     }
 
-    // ---- avisos ----------------------------------------------------------------------------
+    // ---- notifications --------------------------------------------------------------------------
 
     public void addPreferenceChangeListener(PreferenceChangeListener pcl) {
         if (pcl == null) {
@@ -502,8 +502,8 @@ public abstract class AbstractPreferences extends Preferences {
             if (removed) {
                 throw new IllegalStateException("Node has been removed.");
             }
-            synchronized (oyentesDeClave) {
-                oyentesDeClave.add(pcl);
+            synchronized (keyListeners) {
+                keyListeners.add(pcl);
             }
         }
     }
@@ -513,8 +513,8 @@ public abstract class AbstractPreferences extends Preferences {
             if (removed) {
                 throw new IllegalStateException("Node has been removed.");
             }
-            synchronized (oyentesDeClave) {
-                if (!oyentesDeClave.remove(pcl)) {
+            synchronized (keyListeners) {
+                if (!keyListeners.remove(pcl)) {
                     throw new IllegalArgumentException("Listener not registered.");
                 }
             }
@@ -529,8 +529,8 @@ public abstract class AbstractPreferences extends Preferences {
             if (removed) {
                 throw new IllegalStateException("Node has been removed.");
             }
-            synchronized (oyentesDeNodo) {
-                oyentesDeNodo.add(ncl);
+            synchronized (nodeListeners) {
+                nodeListeners.add(ncl);
             }
         }
     }
@@ -540,79 +540,80 @@ public abstract class AbstractPreferences extends Preferences {
             if (removed) {
                 throw new IllegalStateException("Node has been removed.");
             }
-            synchronized (oyentesDeNodo) {
-                if (!oyentesDeNodo.remove(ncl)) {
+            synchronized (nodeListeners) {
+                if (!nodeListeners.remove(ncl)) {
                     throw new IllegalArgumentException("Listener not registered.");
                 }
             }
         }
     }
 
-    private void avisarCambioDeClave(String key, String nuevo) {
-        PreferenceChangeListener[] copia;
-        synchronized (oyentesDeClave) {
-            if (oyentesDeClave.isEmpty()) {
+    private void firePreferenceChange(String key, String isNew) {
+        PreferenceChangeListener[] copy;
+        synchronized (keyListeners) {
+            if (keyListeners.isEmpty()) {
                 return;
             }
-            copia = oyentesDeClave.toArray(new PreferenceChangeListener[0]);
+            copy = keyListeners.toArray(new PreferenceChangeListener[0]);
         }
-        PreferenceChangeEvent evt = new PreferenceChangeEvent(this, key, nuevo);
-        for (int i = 0; i < copia.length; i++) {
-            copia[i].preferenceChange(evt);
-        }
-    }
-
-    private static void avisarAltasDeNodo(ArrayList<AbstractPreferences> nuevos) {
-        for (int i = 0; i < nuevos.size(); i++) {
-            AbstractPreferences hijo = nuevos.get(i);
-            hijo.parent.avisarNodo(hijo, true);
+        PreferenceChangeEvent evt = new PreferenceChangeEvent(this, key, isNew);
+        for (int i = 0; i < copy.length; i++) {
+            copy[i].preferenceChange(evt);
         }
     }
 
-    private static void avisarBajasDeNodo(ArrayList<AbstractPreferences> bajas) {
-        for (int i = 0; i < bajas.size(); i++) {
-            AbstractPreferences hijo = bajas.get(i);
-            hijo.parent.avisarNodo(hijo, false);
+    private static void fireChildAdded(ArrayList<AbstractPreferences> fresh) {
+        for (int i = 0; i < fresh.size(); i++) {
+            AbstractPreferences child = fresh.get(i);
+            child.parent.fireNodeChange(child, true);
         }
     }
 
-    private void avisarNodo(AbstractPreferences hijo, boolean alta) {
-        NodeChangeListener[] copia;
-        synchronized (oyentesDeNodo) {
-            if (oyentesDeNodo.isEmpty()) {
+    private static void fireChildRemoved(ArrayList<AbstractPreferences> removals) {
+        for (int i = 0; i < removals.size(); i++) {
+            AbstractPreferences child = removals.get(i);
+            child.parent.fireNodeChange(child, false);
+        }
+    }
+
+    private void fireNodeChange(AbstractPreferences child, boolean added) {
+        NodeChangeListener[] copy;
+        synchronized (nodeListeners) {
+            if (nodeListeners.isEmpty()) {
                 return;
             }
-            copia = oyentesDeNodo.toArray(new NodeChangeListener[0]);
+            copy = nodeListeners.toArray(new NodeChangeListener[0]);
         }
-        NodeChangeEvent evt = new NodeChangeEvent(this, hijo);
-        for (int i = 0; i < copia.length; i++) {
-            if (alta) {
-                copia[i].childAdded(evt);
+        NodeChangeEvent evt = new NodeChangeEvent(this, child);
+        for (int i = 0; i < copy.length; i++) {
+            if (added) {
+                copy[i].childAdded(evt);
             } else {
-                copia[i].childRemoved(evt);
+                copy[i].childRemoved(evt);
             }
         }
     }
 
-    // ---- deposito --------------------------------------------------------------------------
+    // ---- backing store --------------------------------------------------------------------------
 
     public void sync() throws BackingStoreException {
         sync2();
     }
 
     private void sync2() throws BackingStoreException {
-        AbstractPreferences[] hijos;
+        AbstractPreferences[] children;
         synchronized (lock) {
             if (removed) {
                 throw new IllegalStateException("Node has been removed");
             }
             syncSpi();
-            hijos = cachedChildren();
+            children = cachedChildren();
         }
-        // Los hijos se recorren **fuera** del candado del padre: hacerlo adentro tomaria todo el
-        // subarbol de una y cualquier otro hilo que tocara una hoja quedaria esperando la raiz.
-        for (int i = 0; i < hijos.length; i++) {
-            hijos[i].sync2();
+        // The children are walked **outside** the parent's lock: doing it inside would take the
+        // whole subtree at once and any other thread touching a leaf would end up waiting on the
+        // root.
+        for (int i = 0; i < children.length; i++) {
+            children[i].sync2();
         }
     }
 
@@ -621,22 +622,22 @@ public abstract class AbstractPreferences extends Preferences {
     }
 
     private void flush2() throws BackingStoreException {
-        AbstractPreferences[] hijos;
+        AbstractPreferences[] children;
         synchronized (lock) {
             flushSpi();
-            // A diferencia de `sync`, sobre un nodo borrado no tira: hay depositos que necesitan
-            // este ultimo `flushSpi` para que el borrado llegue a disco.
+            // Unlike `sync`, on a removed node it does not throw: there are stores that need this
+            // last `flushSpi` for the removal to reach disk.
             if (removed) {
                 return;
             }
-            hijos = cachedChildren();
+            children = cachedChildren();
         }
-        for (int i = 0; i < hijos.length; i++) {
-            hijos[i].flush2();
+        for (int i = 0; i < children.length; i++) {
+            children[i].flush2();
         }
     }
 
-    /** Si este nodo ya fue borrado. */
+    /** Whether this node has already been removed. */
     protected boolean isRemoved() {
         synchronized (lock) {
             return removed;
@@ -644,18 +645,18 @@ public abstract class AbstractPreferences extends Preferences {
     }
 
     /**
-     * El hijo llamado `nodeName` si **ya existe** en el deposito, o `null`.
+     * The child named `nodeName` if it **already exists** in the store, or `null`.
      *
-     * <p>Es la contracara de {@link #childSpi}, que crea. La implementacion por omision enumera y
-     * compara, que sirve siempre pero cuesta; una subclase con manera de preguntar directamente por
-     * un nodo deberia reemplazarla.
+     * <p>It is the other side of {@link #childSpi}, which creates. The default implementation
+     * enumerates and compares, which always works but costs; a subclass with a way of asking about a
+     * node directly should replace it.
      */
     protected AbstractPreferences getChild(String nodeName) throws BackingStoreException {
         synchronized (lock) {
-            String[] nombres = childrenNames();
-            for (int i = 0; i < nombres.length; i++) {
-                if (nombres[i].equals(nodeName)) {
-                    return childSpi(nombres[i]);
+            String[] names = childrenNames();
+            for (int i = 0; i < names.length; i++) {
+                if (names[i].equals(nodeName)) {
+                    return childSpi(names[i]);
                 }
             }
         }
@@ -665,50 +666,50 @@ public abstract class AbstractPreferences extends Preferences {
     // ---- XML -------------------------------------------------------------------------------
 
     public void exportNode(OutputStream os) throws IOException, BackingStoreException {
-        Xml.exportar(os, this, false);
+        Xml.export(os, this, false);
     }
 
     public void exportSubtree(OutputStream os) throws IOException, BackingStoreException {
-        Xml.exportar(os, this, true);
+        Xml.export(os, this, true);
     }
 
-    // ---- lo que escribe la subclase --------------------------------------------------------
+    // ---- what the subclass writes   --------------------------------------------------------
 
-    /** Asocia `value` a `key` en este nodo, sin validar nada. */
+    /** It associates `value` with `key` in this node, validating nothing. */
     protected abstract void putSpi(String key, String value);
 
-    /** El valor de `key` en este nodo, o `null` si no esta. */
+    /** `key`'s value in this node, or `null` if it is not there. */
     protected abstract String getSpi(String key);
 
-    /** Borra `key` de este nodo. */
+    /** It removes `key` from this node. */
     protected abstract void removeSpi(String key);
 
     /**
-     * Borra este nodo del deposito.
+     * It removes this node from the store.
      *
-     * <p>Lo llama {@link #removeNode} cuando los hijos ya se borraron, asi que la implementacion
-     * puede dar por sentado que el nodo esta vacio de descendientes.
+     * <p>{@link #removeNode} calls it once the children have been removed, so the implementation can
+     * take for granted that the node is empty of descendants.
      */
     protected abstract void removeNodeSpi() throws BackingStoreException;
 
-    /** Las claves de este nodo. Nunca `null`. */
+    /** This node's keys. Never `null`. */
     protected abstract String[] keysSpi() throws BackingStoreException;
 
-    /** Los nombres simples de los hijos que hay en el deposito. Nunca `null`. */
+    /** The simple names of the children the store has. Never `null`. */
     protected abstract String[] childrenNamesSpi() throws BackingStoreException;
 
     /**
-     * El objeto que representa al hijo `name`, creandolo en el deposito si no existia.
+     * The object standing for the child `name`, creating it in the store if it did not exist.
      *
-     * <p>No tiene que consultar `kidCache` --de eso se encarga {@link #node}, que es el unico que lo
-     * llama y solo cuando el hijo no esta en la cache-- pero **si** tiene que poner
-     * {@link #newNode} cuando lo acaba de crear.
+     * <p>It does not have to consult `kidCache` --{@link #node} takes care of that, and it is the
+     * only caller and only when the child is not in the cache-- but it **does** have to set
+     * {@link #newNode} when it has just created it.
      */
     protected abstract AbstractPreferences childSpi(String name);
 
-    /** Empuja al deposito los cambios de este nodo. */
+    /** It pushes this node's changes to the store. */
     protected abstract void flushSpi() throws BackingStoreException;
 
-    /** Como {@link #flushSpi}, y ademas trae los cambios que hizo otro proceso. */
+    /** Like {@link #flushSpi}, and it also brings in the changes another process made. */
     protected abstract void syncSpi() throws BackingStoreException;
 }

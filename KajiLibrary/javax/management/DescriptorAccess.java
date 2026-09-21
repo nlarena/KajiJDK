@@ -1,14 +1,14 @@
 package javax.management;
 
 /**
- * Lectura y escritura del descriptor.
+ * Reading and writing the descriptor.
  *
- * <p>Solo lo implementan las piezas de `javax.management.modelmbean`, que son las que se configuran
- * en caliente. Los `MBean*Info` de este paquete son inmutables y por eso se quedan en
- * {@link DescriptorRead}.
+ * <p>Only the pieces of {@code javax.management.modelmbean} implement it, which are the ones
+ * configured at run time. The {@code MBean*Info} of this package are immutable and that is why
+ * they stay at {@link DescriptorRead}.
  */
 public interface DescriptorAccess extends DescriptorRead {
 
-    /** Reemplaza el descriptor entero. */
+    /** Replaces the whole descriptor. */
     void setDescriptor(Descriptor inDescriptor);
 }

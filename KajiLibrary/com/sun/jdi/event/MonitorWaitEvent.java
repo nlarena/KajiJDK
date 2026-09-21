@@ -4,30 +4,30 @@ import com.sun.jdi.ObjectReference;
 import com.sun.jdi.ThreadReference;
 
 /**
- * Un hilo entro en un {@code wait}.
+ * A thread entered a {@code wait}.
  *
  * @since 1.3
  */
 public interface MonitorWaitEvent extends LocatableEvent {
 
     /**
-     * El thread.
+     * The thread.
      *
-     * @return el resultado
+     * @return the result
      */
     ThreadReference thread();
 
     /**
-     * El monitor.
+     * The monitor.
      *
-     * @return el resultado
+     * @return the result
      */
     ObjectReference monitor();
 
     /**
-     * El timeout.
+     * The timeout.
      *
-     * @return el resultado
+     * @return the result
      */
     long timeout();
 }

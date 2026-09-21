@@ -1,27 +1,28 @@
 package java.sql;
 
 /**
- * KajiLibrary's java.sql.ConnectionBuilder -- pide una conexion con mas datos que usuario y clave.
+ * KajiLibrary's java.sql.ConnectionBuilder -- asks for a connection with more data than user and
+ * password.
  *
- * <p>Existe porque `getConnection(user, password)` se quedo corto: con bases particionadas hay que
- * decir **a que particion** se quiere ir, y agregar sobrecargas por cada combinacion habria dado una
- * familia de metodos que nadie recuerda. Un constructor encadenable agrega un dato nuevo sin tocar
- * ninguna firma existente.
+ * <p>It exists because `getConnection(user, password)` fell short: with sharded databases one has
+ * to say **which shard** to go to, and adding overloads for each combination would have given a
+ * family of methods nobody remembers. A chainable builder adds a new piece of data without touching
+ * any existing signature.
  */
 public interface ConnectionBuilder {
 
-    /** El usuario. */
+    /** The user. */
     ConnectionBuilder user(String username);
 
-    /** La clave. */
+    /** The password. */
     ConnectionBuilder password(String password);
 
-    /** La particion a la que ir. */
+    /** The shard to go to. */
     ConnectionBuilder shardingKey(ShardingKey shardingKey);
 
-    /** La particion **de nivel superior**, cuando el esquema tiene dos niveles. */
+    /** The **top-level** shard, when the scheme has two levels. */
     ConnectionBuilder superShardingKey(ShardingKey superShardingKey);
 
-    /** La conexion. */
+    /** The connection. */
     Connection build() throws SQLException;
 }

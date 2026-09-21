@@ -1,42 +1,42 @@
 package java.util.concurrent.locks;
 
-// Un nodo de la cola de espera de un `AbstractQueued(Long)Synchronizer`: **un hilo bloqueado**.
-// Clase de paquete y de primer nivel --no anidada-- porque la comparten los dos sincronizadores
-// y la `ConditionObject` de cada uno; nada de esto sale al contrato publico.
+// A node of an `AbstractQueued(Long)Synchronizer`'s wait queue: **a blocked thread**. A
+// package-private, top-level class --not a nested one-- because both synchronizers and each one's
+// `ConditionObject` share it; none of this reaches the public contract.
 //
-// Hay **dos** monitores en juego y conviene no confundirlos:
+// There are **two** monitors in play and they are worth not confusing:
 //
-//   - el monitor interno del sincronizador guarda los enlaces de la cola (`anterior`,
-//     `siguiente`, `encolado`, `compartido`) y el `state`;
-//   - el monitor **de este nodo** (`synchronized (nodo)`) guarda `liberado`, que es el permiso
-//     del nodo, y es donde el hilo duerme.
+//   - the synchronizer's internal monitor guards the queue's links (`prev`, `next`,
+//     `inQueue`, `shared`) and the `state`;
+//   - **this node's** monitor (`synchronized (node)`) guards `released`, which is the node's permit,
+//     and is where the thread sleeps.
 //
-// Esa separacion es la que hace imposible el despertar perdido: quien libera hace
-// `synchronized (n) { n.liberado = true; n.notifyAll(); }` y quien espera comprueba `liberado`
-// **bajo el mismo monitor** antes de dormirse. Si la senial llego primero, la bandera ya esta
-// puesta y el hilo no llega a dormirse; si llega despues, el `notifyAll` lo encuentra dormido.
-// No hay ventana entre las dos cosas porque las dos pasan adentro del mismo monitor.
+// That separation is what makes the lost wake-up impossible: the releaser does
+// `synchronized (n) { n.released = true; n.notifyAll(); }` and the waiter checks `released`
+// **under the same monitor** before falling asleep. If the signal arrived first, the flag is already
+// set and the thread never gets to sleep; if it arrives later, the `notifyAll` finds it asleep.
+// There is no window between the two because both happen inside the same monitor.
 //
-// Y por eso el nodo se bloquea con `Object.wait()` y no con `LockSupport.park()`, aunque el JDK
-// use lo segundo: `wait` tiene forma **con plazo** y lanza `InterruptedException` donde el
-// contrato dice que hay que lanzarla. `park` de nuestra VM no tiene plazo, y ademas *lanza*
-// `InterruptedException` en vez de retornar (ver el encabezado de `LockSupport`).
+// And that is why the node blocks with `Object.wait()` and not with `LockSupport.park()`, even
+// though the JDK uses the latter: `wait` has a **timed** form and throws `InterruptedException`
+// where the contract says it should. Our VM's `park` has no deadline, and it also *throws*
+// `InterruptedException` instead of returning (see `LockSupport`'s header).
 final class SyncWaiter {
 
-    // El hilo que espera en este nodo; `null` una vez que salio de la cola.
-    Thread hilo;
+    // The thread waiting on this node; `null` once it has left the queue.
+    Thread thread;
 
-    // Enlaces de la cola FIFO. Los guarda el monitor interno del sincronizador.
-    SyncWaiter siguiente;
-    SyncWaiter anterior;
+    // The FIFO queue's links. They are guarded by the synchronizer's internal monitor.
+    SyncWaiter next;
+    SyncWaiter prev;
 
-    // Si el nodo espera en modo compartido (`acquireShared`) o exclusivo (`acquire`).
-    boolean compartido;
+    // Whether the node waits in shared mode (`acquireShared`) or exclusive (`acquire`).
+    boolean shared;
 
-    // Si todavia esta en la cola. Sirve para que un desencolado repetido --el que hace un
-    // `tryAcquireNanos` que vence justo cuando lo estaban por atender-- no rompa los enlaces.
-    boolean encolado;
+    // Whether it is still in the queue. It keeps a repeated dequeue --the one a `tryAcquireNanos`
+    // does when it expires just as it was about to be served-- from breaking the links.
+    boolean inQueue;
 
-    // El permiso del nodo. Lo guarda el monitor **de este nodo**.
-    boolean liberado;
+    // The node's permit. It is guarded by **this node's** monitor.
+    boolean released;
 }

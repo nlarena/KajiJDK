@@ -9,31 +9,31 @@ import javax.xml.crypto.XMLStructure;
 import javax.xml.crypto.dsig.Transform;
 
 /**
- * KajiLibrary's javax.xml.crypto.dsig.keyinfo.RetrievalMethod -- donde ir a buscar la clave.
+ * KajiLibrary's javax.xml.crypto.dsig.keyinfo.RetrievalMethod -- where to fetch the key from.
  *
- * <p>En vez de traer la clave, trae un URI de donde sacarla, con transformaciones opcionales para
- * extraerla de lo que se encuentre ahi.
+ * <p>Instead of bringing the key, it brings a URI to get it from, with optional transforms to
+ * extract it from whatever is found there.
  *
- * <p>Es el elemento de {@link KeyInfo} que mas cuidado pide, porque {@link #dereference} <b>va a
- * buscar</b> algo que eligio quien firmo. Sobre una firma de origen desconocido eso es un pedido de
- * red o una lectura de archivo que el programa no pidio -- el mismo problema que
- * {@code URIDereferencer} existe para controlar.
+ * <p>It is the element of {@link KeyInfo} that calls for most care, because {@link #dereference}
+ * <b>goes and fetches</b> something whoever signed chose. On a signature of unknown origin that is
+ * a network request or a file read the program did not ask for -- the same problem {@code
+ * URIDereferencer} exists to control.
  *
- * <p>Su uso legitimo es adentro de un mismo documento: una firma que apunta al {@code KeyInfo} de
- * otra para no repetir el certificado.
+ * <p>Its legitimate use is inside one document: a signature that points to another's {@code
+ * KeyInfo} so as not to repeat the certificate.
  */
 public interface RetrievalMethod extends URIReference, XMLStructure {
 
-    /** Las transformaciones a aplicar a lo que se encuentre. No modificable. */
+    /** The transforms to apply to whatever is found. Unmodifiable. */
     List<Transform> getTransforms();
 
-    /** Adonde apunta. */
+    /** Where it points. */
     String getURI();
 
     /**
-     * Va a buscarlo. Ver la nota de la clase.
+     * Goes and fetches it. See the class note.
      *
-     * @throws URIReferenceException si no se puede resolver
+     * @throws URIReferenceException if it cannot be resolved
      */
     Data dereference(XMLCryptoContext context) throws URIReferenceException;
 }

@@ -3,11 +3,11 @@ package com.sun.source.doctree;
 import java.util.List;
 
 /**
- * Un tag de bloque que este arbol no conoce.
+ * A block tag this tree does not know.
  *
- * <p>Existe porque javadoc es extensible: una herramienta puede definir sus propios tags, y el
- * parser tiene que poder representarlos sin entenderlos. Sin este nodo, un tag desconocido seria
- * un error de sintaxis en vez de una extension.
+ * <p>It exists because javadoc is extensible: a tool may define tags of its own, and the parser
+ * has to be able to represent them without understanding them. Without this node, an unknown tag
+ * would be a syntax error instead of an extension.
  */
 public interface UnknownBlockTagTree extends BlockTagTree {
 

@@ -32,105 +32,105 @@ import java.util.List;
 import java.util.Optional;
 import java.util.function.Consumer;
 
-// El modelo de una clase leída. El archivo se recorre entero en el constructor: encabezado,
-// interfaces, campos, métodos y atributos. Nada queda "para después" salvo el cuerpo de los métodos,
-// que se decodifica la primera vez que se pide.
+// The model of a read class. The file is walked whole in the constructor: header, interfaces,
+// fields, methods and attributes. Nothing is left "for later" except the body of the methods, which
+// is decoded the first time it is asked for.
 public final class ClassModelImpl implements ClassModel {
 
-    private final ClassReaderImpl lector;
-    private final int mayor;
-    private final int menor;
-    private final AccessFlags banderas;
-    private final ClassEntry estaClase;
-    private final ClassEntry superClase;
+    private final ClassReaderImpl reader;
+    private final int major;
+    private final int minor;
+    private final AccessFlags flags;
+    private final ClassEntry thisClass;
+    private final ClassEntry superClass;
     private final List<ClassEntry> interfaces;
-    private final List<FieldModel> campos;
-    private final List<MethodModel> metodos;
-    private final List<Attribute<?>> atributos;
+    private final List<FieldModel> fields;
+    private final List<MethodModel> methods;
+    private final List<Attribute<?>> attributes;
 
-    public ClassModelImpl(ClassReaderImpl lector) {
-        this.lector = lector;
-        this.menor = lector.readU2(4);
-        this.mayor = lector.readU2(6);
-        this.banderas = new AccessFlagsImpl(lector.flags(), Location.CLASS);
-        this.estaClase = lector.thisClassEntry();
-        this.superClase = lector.superclassEntry().orElse(null);
+    public ClassModelImpl(ClassReaderImpl reader) {
+        this.reader = reader;
+        this.minor = reader.readU2(4);
+        this.major = reader.readU2(6);
+        this.flags = new AccessFlagsImpl(reader.flags(), Location.CLASS);
+        this.thisClass = reader.thisClassEntry();
+        this.superClass = reader.superclassEntry().orElse(null);
 
-        int p = lector.offsetCabecera + 6;
-        int nInterfaces = lector.readU2(p);
+        int p = reader.headerOffset + 6;
+        int nInterfaces = reader.readU2(p);
         p += 2;
         List<ClassEntry> ifs = new ArrayList<ClassEntry>();
         for (int i = 0; i < nInterfaces; i++) {
-            ClassEntry ce = lector.readEntry(p, ClassEntry.class);
+            ClassEntry ce = reader.readEntry(p, ClassEntry.class);
             ifs.add(ce);
             p += 2;
         }
         this.interfaces = Collections.unmodifiableList(ifs);
 
-        int nCampos = lector.readU2(p);
+        int nFields = reader.readU2(p);
         p += 2;
         List<FieldModel> cs = new ArrayList<FieldModel>();
-        for (int i = 0; i < nCampos; i++) {
-            FieldModelImpl f = new FieldModelImpl(this, lector, p);
+        for (int i = 0; i < nFields; i++) {
+            FieldModelImpl f = new FieldModelImpl(this, reader, p);
             cs.add(f);
-            p = f.fin();
+            p = f.end();
         }
-        this.campos = Collections.unmodifiableList(cs);
+        this.fields = Collections.unmodifiableList(cs);
 
-        int nMetodos = lector.readU2(p);
+        int nMethods = reader.readU2(p);
         p += 2;
         List<MethodModel> ms = new ArrayList<MethodModel>();
-        for (int i = 0; i < nMetodos; i++) {
-            MethodModelImpl m = new MethodModelImpl(this, lector, p);
+        for (int i = 0; i < nMethods; i++) {
+            MethodModelImpl m = new MethodModelImpl(this, reader, p);
             ms.add(m);
-            p = m.fin();
+            p = m.end();
         }
-        this.metodos = Collections.unmodifiableList(ms);
+        this.methods = Collections.unmodifiableList(ms);
 
-        Atributos as = new Atributos(lector, p, this);
-        this.atributos = Collections.unmodifiableList(as.lista);
-        if (as.fin != lector.classfileLength()) {
-            throw new IllegalArgumentException("sobran " + (lector.classfileLength() - as.fin)
-                    + " bytes después del último atributo de la clase");
+        AttributeList as = new AttributeList(reader, p, this);
+        this.attributes = Collections.unmodifiableList(as.list);
+        if (as.end != reader.classfileLength()) {
+            throw new IllegalArgumentException("there are " + (reader.classfileLength() - as.end)
+                    + " bytes left over after the class's last attribute");
         }
-        // La tabla de arranque tiene que quedar armada antes de que alguien resuelva una entrada
-        // dinámica del pool, y este es el primer momento en que se sabe dónde está.
-        int bsm = as.offsetDe(Attributes.NAME_BOOTSTRAP_METHODS);
+        // The bootstrap table has to be built before anybody resolves a dynamic pool entry, and
+        // this is the first moment at which it is known where it is.
+        int bsm = as.offsetOfAttribute(Attributes.NAME_BOOTSTRAP_METHODS);
         if (bsm >= 0) {
-            lector.tablaDeArranque(bsm);
+            reader.bootstrapTable(bsm);
         }
     }
 
     public ConstantPool constantPool() {
-        return this.lector;
+        return this.reader;
     }
 
     public AccessFlags flags() {
-        return this.banderas;
+        return this.flags;
     }
 
     public ClassEntry thisClass() {
-        return this.estaClase;
+        return this.thisClass;
     }
 
     public int majorVersion() {
-        return this.mayor;
+        return this.major;
     }
 
     public int minorVersion() {
-        return this.menor;
+        return this.minor;
     }
 
     public List<FieldModel> fields() {
-        return this.campos;
+        return this.fields;
     }
 
     public List<MethodModel> methods() {
-        return this.metodos;
+        return this.methods;
     }
 
     public Optional<ClassEntry> superclass() {
-        return Optional.ofNullable(this.superClase);
+        return Optional.ofNullable(this.superClass);
     }
 
     public List<ClassEntry> interfaces() {
@@ -138,72 +138,72 @@ public final class ClassModelImpl implements ClassModel {
     }
 
     public boolean isModuleInfo() {
-        return (this.banderas.flagsMask() & ClassFile.ACC_MODULE) != 0
-                && this.estaClase.asInternalName().equals("module-info");
+        return (this.flags.flagsMask() & ClassFile.ACC_MODULE) != 0
+                && this.thisClass.asInternalName().equals("module-info");
     }
 
     public List<Attribute<?>> attributes() {
-        return this.atributos;
+        return this.attributes;
     }
 
-    // El orden es el del archivo leído de arriba abajo: versión, banderas, superclase, interfaces,
-    // campos, métodos y atributos.
+    // The order is the file's, read from top to bottom: version, flags, superclass, interfaces,
+    // fields, methods and attributes.
     public void forEach(Consumer<? super ClassElement> consumer) {
-        consumer.accept(ClassFileVersion.of(this.mayor, this.menor));
-        consumer.accept(this.banderas);
-        if (this.superClase != null) {
-            consumer.accept(Superclass.of(this.superClase));
+        consumer.accept(ClassFileVersion.of(this.major, this.minor));
+        consumer.accept(this.flags);
+        if (this.superClass != null) {
+            consumer.accept(Superclass.of(this.superClass));
         }
         consumer.accept(Interfaces.of(this.interfaces));
-        for (int i = 0; i < this.campos.size(); i++) {
-            consumer.accept((ClassElement) this.campos.get(i));
+        for (int i = 0; i < this.fields.size(); i++) {
+            consumer.accept((ClassElement) this.fields.get(i));
         }
-        for (int i = 0; i < this.metodos.size(); i++) {
-            consumer.accept((ClassElement) this.metodos.get(i));
+        for (int i = 0; i < this.methods.size(); i++) {
+            consumer.accept((ClassElement) this.methods.get(i));
         }
-        for (int i = 0; i < this.atributos.size(); i++) {
-            consumer.accept((ClassElement) this.atributos.get(i));
+        for (int i = 0; i < this.attributes.size(); i++) {
+            consumer.accept((ClassElement) this.attributes.get(i));
         }
     }
 
     public String toString() {
-        return "ClassModel[" + this.estaClase.asInternalName() + "]";
+        return "ClassModel[" + this.thisClass.asInternalName() + "]";
     }
 }
 
-// Los atributos de un lugar del archivo, leídos de corrido. Guarda además el offset del cuerpo de
-// cada uno: el modelo lo necesita para volver a entrar en `Code` y en `BootstrapMethods`, que son los
-// dos atributos cuya estructura este lector sí interpreta.
-final class Atributos {
+// The attributes of a place in the file, read in one run. It also keeps the offset of each one's
+// body: the model needs it to get back into `Code` and `BootstrapMethods`, which are the two
+// attributes whose structure this reader does interpret.
+final class AttributeList {
 
-    final List<Attribute<?>> lista = new ArrayList<Attribute<?>>();
-    final List<String> nombres = new ArrayList<String>();
+    final List<Attribute<?>> list = new ArrayList<Attribute<?>>();
+    final List<String> names = new ArrayList<String>();
     final int[] offsets;
-    final int fin;
+    final int end;
 
-    Atributos(ClassReaderImpl lector, int p, AttributedElement duenio) {
-        int n = lector.readU2(p);
+    AttributeList(ClassReaderImpl reader, int p, AttributedElement owner) {
+        int n = reader.readU2(p);
         p += 2;
         this.offsets = new int[n];
         for (int i = 0; i < n; i++) {
-            Utf8Entry name = lector.readEntry(p, Utf8Entry.class);
-            int largo = lector.readInt(p + 2);
-            if (largo < 0 || p + 6 + largo > lector.classfileLength()) {
-                throw new IllegalArgumentException("el atributo " + name.stringValue()
-                        + " dice medir " + largo + " bytes y no entra en el archivo");
+            Utf8Entry name = reader.readEntry(p, Utf8Entry.class);
+            int length = reader.readInt(p + 2);
+            if (length < 0 || p + 6 + length > reader.classfileLength()) {
+                throw new IllegalArgumentException("attribute " + name.stringValue()
+                        + " claims length " + length + " bytes and does not fit in the file");
             }
             AttributeMapper<RawAttribute> mapper = Mappers.forName(name.stringValue());
-            this.lista.add(mapper.readAttribute(duenio, lector, p + 6));
-            this.nombres.add(name.stringValue());
+            this.list.add(mapper.readAttribute(owner, reader, p + 6));
+            this.names.add(name.stringValue());
             this.offsets[i] = p + 6;
-            p += 6 + largo;
+            p += 6 + length;
         }
-        this.fin = p;
+        this.end = p;
     }
 
-    int offsetDe(String name) {
-        for (int i = 0; i < this.nombres.size(); i++) {
-            if (this.nombres.get(i).equals(name)) {
+    int offsetOfAttribute(String name) {
+        for (int i = 0; i < this.names.size(); i++) {
+            if (this.names.get(i).equals(name)) {
                 return this.offsets[i];
             }
         }
@@ -211,36 +211,36 @@ final class Atributos {
     }
 }
 
-// Un campo leído.
+// A read field.
 final class FieldModelImpl implements FieldModel {
 
-    private final ClassModel duenio;
-    private final AccessFlags banderas;
+    private final ClassModel owner;
+    private final AccessFlags flags;
     private final Utf8Entry name;
     private final Utf8Entry descriptor;
-    private final List<Attribute<?>> atributos;
-    private final int fin;
+    private final List<Attribute<?>> attributes;
+    private final int end;
 
-    FieldModelImpl(ClassModel duenio, ClassReaderImpl lector, int p) {
-        this.duenio = duenio;
-        this.banderas = new AccessFlagsImpl(lector.readU2(p), Location.FIELD);
-        this.name = lector.readEntry(p + 2, Utf8Entry.class);
-        this.descriptor = lector.readEntry(p + 4, Utf8Entry.class);
-        Atributos as = new Atributos(lector, p + 6, this);
-        this.atributos = Collections.unmodifiableList(as.lista);
-        this.fin = as.fin;
+    FieldModelImpl(ClassModel owner, ClassReaderImpl reader, int p) {
+        this.owner = owner;
+        this.flags = new AccessFlagsImpl(reader.readU2(p), Location.FIELD);
+        this.name = reader.readEntry(p + 2, Utf8Entry.class);
+        this.descriptor = reader.readEntry(p + 4, Utf8Entry.class);
+        AttributeList as = new AttributeList(reader, p + 6, this);
+        this.attributes = Collections.unmodifiableList(as.list);
+        this.end = as.end;
     }
 
-    int fin() {
-        return this.fin;
+    int end() {
+        return this.end;
     }
 
     public AccessFlags flags() {
-        return this.banderas;
+        return this.flags;
     }
 
     public Optional<ClassModel> parent() {
-        return Optional.of(this.duenio);
+        return Optional.of(this.owner);
     }
 
     public Utf8Entry fieldName() {
@@ -252,13 +252,13 @@ final class FieldModelImpl implements FieldModel {
     }
 
     public List<Attribute<?>> attributes() {
-        return this.atributos;
+        return this.attributes;
     }
 
     public void forEach(Consumer<? super FieldElement> consumer) {
-        consumer.accept(this.banderas);
-        for (int i = 0; i < this.atributos.size(); i++) {
-            consumer.accept((FieldElement) this.atributos.get(i));
+        consumer.accept(this.flags);
+        for (int i = 0; i < this.attributes.size(); i++) {
+            consumer.accept((FieldElement) this.attributes.get(i));
         }
     }
 
@@ -267,41 +267,41 @@ final class FieldModelImpl implements FieldModel {
     }
 }
 
-// Un método leído. El cuerpo se decodifica la primera vez que se pide.
+// A read method. The body is decoded the first time it is asked for.
 final class MethodModelImpl implements MethodModel {
 
-    private final ClassModel duenio;
-    private final ClassReaderImpl lector;
-    private final AccessFlags banderas;
+    private final ClassModel owner;
+    private final ClassReaderImpl reader;
+    private final AccessFlags flags;
     private final Utf8Entry name;
     private final Utf8Entry descriptor;
-    private final List<Attribute<?>> atributos;
-    private final int offsetDelCodigo;
-    private final int fin;
-    private CodeModel cuerpo;
+    private final List<Attribute<?>> attributes;
+    private final int codeOffset;
+    private final int end;
+    private CodeModel body;
 
-    MethodModelImpl(ClassModel duenio, ClassReaderImpl lector, int p) {
-        this.duenio = duenio;
-        this.lector = lector;
-        this.banderas = new AccessFlagsImpl(lector.readU2(p), Location.METHOD);
-        this.name = lector.readEntry(p + 2, Utf8Entry.class);
-        this.descriptor = lector.readEntry(p + 4, Utf8Entry.class);
-        Atributos as = new Atributos(lector, p + 6, this);
-        this.atributos = Collections.unmodifiableList(as.lista);
-        this.offsetDelCodigo = as.offsetDe(Attributes.NAME_CODE);
-        this.fin = as.fin;
+    MethodModelImpl(ClassModel owner, ClassReaderImpl reader, int p) {
+        this.owner = owner;
+        this.reader = reader;
+        this.flags = new AccessFlagsImpl(reader.readU2(p), Location.METHOD);
+        this.name = reader.readEntry(p + 2, Utf8Entry.class);
+        this.descriptor = reader.readEntry(p + 4, Utf8Entry.class);
+        AttributeList as = new AttributeList(reader, p + 6, this);
+        this.attributes = Collections.unmodifiableList(as.list);
+        this.codeOffset = as.offsetOfAttribute(Attributes.NAME_CODE);
+        this.end = as.end;
     }
 
-    int fin() {
-        return this.fin;
+    int end() {
+        return this.end;
     }
 
     public AccessFlags flags() {
-        return this.banderas;
+        return this.flags;
     }
 
     public Optional<ClassModel> parent() {
-        return Optional.of(this.duenio);
+        return Optional.of(this.owner);
     }
 
     public Utf8Entry methodName() {
@@ -313,29 +313,30 @@ final class MethodModelImpl implements MethodModel {
     }
 
     public List<Attribute<?>> attributes() {
-        return this.atributos;
+        return this.attributes;
     }
 
     public Optional<CodeModel> code() {
-        if (this.offsetDelCodigo < 0) {
+        if (this.codeOffset < 0) {
             return Optional.empty();
         }
-        if (this.cuerpo == null) {
-            this.cuerpo = new CodeModelImpl(this, this.lector, this.offsetDelCodigo);
+        if (this.body == null) {
+            this.body = new CodeModelImpl(this, this.reader, this.codeOffset);
         }
-        return Optional.of(this.cuerpo);
+        return Optional.of(this.body);
     }
 
-    // Banderas, cuerpo y atributos. El atributo `Code` NO se emite como atributo: se emite el
-    // `CodeModel`, que es lo que el JDK hace y lo que evita que el cuerpo aparezca dos veces.
+    // Flags, body and attributes. The `Code` attribute is NOT emitted as an attribute: the
+    // `CodeModel` is emitted, which is what the JDK does and what keeps the body from appearing
+    // twice.
     public void forEach(Consumer<? super MethodElement> consumer) {
-        consumer.accept(this.banderas);
+        consumer.accept(this.flags);
         Optional<CodeModel> c = code();
         if (c.isPresent()) {
             consumer.accept(c.get());
         }
-        for (int i = 0; i < this.atributos.size(); i++) {
-            Attribute<?> a = this.atributos.get(i);
+        for (int i = 0; i < this.attributes.size(); i++) {
+            Attribute<?> a = this.attributes.get(i);
             if (!a.attributeName().equalsString(Attributes.NAME_CODE)) {
                 consumer.accept((MethodElement) a);
             }
@@ -347,168 +348,171 @@ final class MethodModelImpl implements MethodModel {
     }
 }
 
-// El cuerpo de un método: el atributo `Code` (§4.7.3) decodificado.
+// The body of a method: the `Code` attribute (§4.7.3) decoded.
 final class CodeModelImpl implements CodeModel {
 
-    private final MethodModel duenio;
-    private final List<ExceptionCatch> manejadores;
-    private final List<Attribute<?>> atributos;
-    private final List<Instruction> instrucciones;
+    private final MethodModel owner;
+    private final List<ExceptionCatch> handlers;
+    private final List<Attribute<?>> attributes;
+    private final List<Instruction> instructions;
     private final int maxStack;
     private final int maxLocals;
 
-    CodeModelImpl(MethodModel duenio, ClassReaderImpl lector, int p) {
-        this.duenio = duenio;
-        this.maxStack = lector.readU2(p);
-        this.maxLocals = lector.readU2(p + 2);
-        int largoDelCodigo = lector.readInt(p + 4);
-        if (largoDelCodigo <= 0 || p + 8 + largoDelCodigo > lector.classfileLength()) {
-            throw new IllegalArgumentException("code_length inválido: " + largoDelCodigo);
+    CodeModelImpl(MethodModel owner, ClassReaderImpl reader, int p) {
+        this.owner = owner;
+        this.maxStack = reader.readU2(p);
+        this.maxLocals = reader.readU2(p + 2);
+        int codeLength = reader.readInt(p + 4);
+        if (codeLength <= 0 || p + 8 + codeLength > reader.classfileLength()) {
+            throw new IllegalArgumentException("invalid code_length: " + codeLength);
         }
-        int inicio = p + 8;
-        this.instrucciones = decode(lector, inicio, largoDelCodigo);
+        int start = p + 8;
+        this.instructions = decode(reader, start, codeLength);
 
-        int q = inicio + largoDelCodigo;
-        int nManejadores = lector.readU2(q);
+        int q = start + codeLength;
+        int nHandlers = reader.readU2(q);
         q += 2;
         List<ExceptionCatch> hs = new ArrayList<ExceptionCatch>();
-        for (int i = 0; i < nManejadores; i++) {
-            int desde = lector.readU2(q);
-            int hasta = lector.readU2(q + 2);
-            int manejador = lector.readU2(q + 4);
-            ClassEntry type = lector.readEntryOrNull(q + 6, ClassEntry.class);
-            if (desde > largoDelCodigo || hasta > largoDelCodigo || manejador >= largoDelCodigo) {
+        for (int i = 0; i < nHandlers; i++) {
+            int from = reader.readU2(q);
+            int to = reader.readU2(q + 2);
+            int handler = reader.readU2(q + 4);
+            ClassEntry type = reader.readEntryOrNull(q + 6, ClassEntry.class);
+            if (from > codeLength || to > codeLength || handler >= codeLength) {
                 throw new IllegalArgumentException(
-                        "un manejador de excepción apunta fuera del arreglo code");
+                        "an exception handler points outside the code array");
             }
-            hs.add(new ExceptionCatchImpl(new LabelImpl(manejador), new LabelImpl(desde),
-                    new LabelImpl(hasta), Optional.ofNullable(type)));
+            hs.add(new ExceptionCatchImpl(new LabelImpl(handler), new LabelImpl(from),
+                    new LabelImpl(to), Optional.ofNullable(type)));
             q += 8;
         }
-        this.manejadores = Collections.unmodifiableList(hs);
-        Atributos as = new Atributos(lector, q, this);
-        this.atributos = Collections.unmodifiableList(as.lista);
+        this.handlers = Collections.unmodifiableList(hs);
+        AttributeList as = new AttributeList(reader, q, this);
+        this.attributes = Collections.unmodifiableList(as.list);
     }
 
-    // El recorrido del arreglo `code`. Los dos casos que no son "sumá `sizeIfFixed()`" son los que
-    // rompen a un lector ingenuo: `wide`, que cambia el espacio de opcodes, y los dos switches, cuyo
-    // largo depende del relleno hasta el próximo múltiplo de 4 *desde el inicio del método*.
-    private static List<Instruction> decode(ClassReaderImpl lector, int inicio, int largo) {
-        List<Instruction> salida = new ArrayList<Instruction>();
+    // The walk of the `code` array. The two cases that are not "add `sizeIfFixed()`" are the ones
+    // that break a naive reader: `wide`, which changes the opcode space, and the two switches,
+    // whose length depends on the padding up to the next multiple of 4 *from the start of the
+    // method*.
+    private static List<Instruction> decode(ClassReaderImpl reader, int start, int length) {
+        List<Instruction> out = new ArrayList<Instruction>();
         int bci = 0;
-        while (bci < largo) {
-            int b = lector.readU1(inicio + bci);
+        while (bci < length) {
+            int b = reader.readU1(start + bci);
             Opcode op;
-            int tam;
+            int size;
             if (b == OpcodeTable.WIDE) {
-                if (bci + 1 >= largo) {
-                    throw new IllegalArgumentException("un wide al final del arreglo code");
+                if (bci + 1 >= length) {
+                    throw new IllegalArgumentException("a wide at the end of the code array");
                 }
-                op = OpcodeTable.wide(lector.readU1(inicio + bci + 1));
+                op = OpcodeTable.wide(reader.readU1(start + bci + 1));
                 if (op == null) {
                     throw new IllegalArgumentException(
-                            "wide seguido de un opcode que no lo admite, en el bci " + bci);
+                            "wide followed by an opcode that does not admit it, at bci " + bci);
                 }
-                tam = op.sizeIfFixed();
+                size = op.sizeIfFixed();
             } else {
                 op = OpcodeTable.simple(b);
                 if (op == null) {
                     throw new IllegalArgumentException(
-                            "opcode desconocido 0x" + Integer.toHexString(b) + " en el bci " + bci);
+                            "unknown opcode 0x" + Integer.toHexString(b) + " at bci " + bci);
                 }
-                tam = op.sizeIfFixed();
-                if (tam < 0) {
-                    tam = largoDeSwitch(lector, inicio, bci, op, largo);
+                size = op.sizeIfFixed();
+                if (size < 0) {
+                    size = switchLength(reader, start, bci, op, length);
                 }
             }
-            if (bci + tam > largo) {
+            if (bci + size > length) {
                 throw new IllegalArgumentException(
-                        "la instrucción del bci " + bci + " se sale del arreglo code");
+                        "the instruction at bci " + bci + " runs off the code array");
             }
-            salida.add(Instructions.decode(lector, inicio, bci, op, tam));
-            bci += tam;
+            out.add(Instructions.decode(reader, start, bci, op, size));
+            bci += size;
         }
-        return Collections.unmodifiableList(salida);
+        return Collections.unmodifiableList(out);
     }
 
-    private static int largoDeSwitch(ClassReaderImpl lector, int inicio, int bci, Opcode op,
-            int largo) {
+    private static int switchLength(ClassReaderImpl reader, int start, int bci, Opcode op,
+            int length) {
         int p = bci + 1;
         while ((p & 3) != 0) {
             p++;
         }
         if (op == Opcode.TABLESWITCH) {
-            if (inicio + p + 12 > lector.classfileLength()) {
-                throw new IllegalArgumentException("un tableswitch truncado en el bci " + bci);
+            if (start + p + 12 > reader.classfileLength()) {
+                throw new IllegalArgumentException("a truncated tableswitch at bci " + bci);
             }
-            int bajo = lector.readInt(inicio + p + 4);
-            int alto = lector.readInt(inicio + p + 8);
-            if (alto < bajo) {
-                throw new IllegalArgumentException("tableswitch con high < low en el bci " + bci);
+            int low = reader.readInt(start + p + 4);
+            int high = reader.readInt(start + p + 8);
+            if (high < low) {
+                throw new IllegalArgumentException("tableswitch with high < low at bci " + bci);
             }
-            long n = (long) alto - (long) bajo + 1L;
-            long tam = (long) p + 12L + n * 4L - bci;
-            if (tam > largo) {
-                throw new IllegalArgumentException("un tableswitch que no entra en el arreglo code");
+            long n = (long) high - (long) low + 1L;
+            long size = (long) p + 12L + n * 4L - bci;
+            if (size > length) {
+                throw new IllegalArgumentException("a tableswitch that overruns the code array");
             }
-            return (int) tam;
+            return (int) size;
         }
-        if (inicio + p + 8 > lector.classfileLength()) {
-            throw new IllegalArgumentException("un lookupswitch truncado en el bci " + bci);
+        if (start + p + 8 > reader.classfileLength()) {
+            throw new IllegalArgumentException("a truncated lookupswitch at bci " + bci);
         }
-        int n = lector.readInt(inicio + p + 4);
+        int n = reader.readInt(start + p + 4);
         if (n < 0) {
-            throw new IllegalArgumentException("lookupswitch con npairs negativo en el bci " + bci);
+            throw new IllegalArgumentException("lookupswitch with negative npairs at bci " + bci);
         }
-        long tam = (long) p + 8L + (long) n * 8L - bci;
-        if (tam > largo) {
-            throw new IllegalArgumentException("un lookupswitch que no entra en el arreglo code");
+        long size = (long) p + 8L + (long) n * 8L - bci;
+        if (size > length) {
+            throw new IllegalArgumentException("a lookupswitch that overruns the code array");
         }
-        return (int) tam;
+        return (int) size;
     }
 
     public Optional<MethodModel> parent() {
-        return Optional.of(this.duenio);
+        return Optional.of(this.owner);
     }
 
     public List<ExceptionCatch> exceptionHandlers() {
-        return this.manejadores;
+        return this.handlers;
     }
 
     public List<Attribute<?>> attributes() {
-        return this.atributos;
+        return this.attributes;
     }
 
-    /** El `max_stack` del atributo. No es API del JDK; está porque el lector ya lo tiene. */
+    /**
+     * The attribute's `max_stack`. It is not JDK API; it is here because the reader already has it.
+     */
     public int maxStack() {
         return this.maxStack;
     }
 
-    /** El `max_locals` del atributo. */
+    /** The attribute's `max_locals`. */
     public int maxLocals() {
         return this.maxLocals;
     }
 
-    // Manejadores, instrucciones y atributos del código.
+    // Handlers, instructions and attributes of the code.
     //
-    // Lo que NO se emite: las pseudoinstrucciones de depuración —`LabelTarget`, `LineNumber`,
-    // `LocalVariable`, `LocalVariableType`, `CharacterRange`— intercaladas entre las instrucciones.
-    // Los datos están: siguen ahí como los atributos `LineNumberTable` y compañía, que este
-    // recorrido sí emite. Es el mismo cuerpo que produce el JDK con `DebugElementsOption.DROP_DEBUG`
-    // y `DeadLabelsOption`, no una pérdida de información.
+    // What is NOT emitted: the debugging pseudo-instructions --`LabelTarget`, `LineNumber`,
+    // `LocalVariable`, `LocalVariableType`, `CharacterRange`-- interleaved between the
+    // instructions. The data is there: it is still there as the `LineNumberTable` attributes and
+    // company, which this walk does emit. It is the same body the JDK produces with
+    // `DebugElementsOption.DROP_DEBUG` and `DeadLabelsOption`, not a loss of information.
     public void forEach(Consumer<? super CodeElement> consumer) {
-        for (int i = 0; i < this.manejadores.size(); i++) {
-            consumer.accept(this.manejadores.get(i));
+        for (int i = 0; i < this.handlers.size(); i++) {
+            consumer.accept(this.handlers.get(i));
         }
-        for (int i = 0; i < this.instrucciones.size(); i++) {
-            consumer.accept(this.instrucciones.get(i));
+        for (int i = 0; i < this.instructions.size(); i++) {
+            consumer.accept(this.instructions.get(i));
         }
-        for (int i = 0; i < this.atributos.size(); i++) {
-            consumer.accept((CodeElement) this.atributos.get(i));
+        for (int i = 0; i < this.attributes.size(); i++) {
+            consumer.accept((CodeElement) this.attributes.get(i));
         }
     }
 
     public String toString() {
-        return "CodeModel[" + this.instrucciones.size() + " instrucciones]";
+        return "CodeModel[" + this.instructions.size() + " instructions]";
     }
 }

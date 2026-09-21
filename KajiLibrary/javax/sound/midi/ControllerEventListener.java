@@ -3,21 +3,21 @@ package javax.sound.midi;
 import java.util.EventListener;
 
 /**
- * KajiLibrary's javax.sound.midi.ControllerEventListener -- avisa cuando el secuenciador pasa por un
- * cambio de controlador.
+ * KajiLibrary's javax.sound.midi.ControllerEventListener -- tells when the sequencer goes through a
+ * controller change.
  *
- * <p>Se registra con {@code Sequencer.addControllerEventListener}, que ademas recibe <b>que
- * controladores</b> interesan. Sin ese filtro un archivo con automatizacion genera cientos de eventos
- * por segundo.
+ * <p>It is registered with {@code Sequencer.addControllerEventListener}, which also receives
+ * <b>which controllers</b> are of interest. Without that filter a file with automation generates
+ * hundreds of events per second.
  *
- * <p>Ese metodo devuelve el arreglo de los que <b>efectivamente</b> quedaron registrados, que puede
- * ser mas chico que el que se pidio. Hay que mirarlo: pedir un controlador que el secuenciador no
- * sigue no falla, simplemente no llega.
+ * <p>That method returns the array of the ones that <b>actually</b> got registered, which can be
+ * smaller than the one asked for. It has to be looked at: asking for a controller the sequencer
+ * does not follow does not fail, it simply never arrives.
  *
- * <p>El aviso llega en el hilo del secuenciador. Bloquearlo desacomoda la reproduccion.
+ * <p>The notice arrives on the sequencer's thread. Blocking it throws playback off.
  */
 public interface ControllerEventListener extends EventListener {
 
-    /** Paso un cambio de controlador de los que se pidieron. */
+    /** A controller change among the ones asked for went by. */
     void controlChange(ShortMessage event);
 }

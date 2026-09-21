@@ -3,7 +3,7 @@ package com.sun.source.doctree;
 import java.util.List;
 
 /**
- * El nodo de `@since`.
+ * The node of `@since`.
  */
 public interface SinceTree extends BlockTagTree {
 

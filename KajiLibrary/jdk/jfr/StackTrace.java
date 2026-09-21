@@ -6,11 +6,11 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Si al grabar el evento se guarda la pila de llamadas.
+ * Whether the stack of calls is kept when the event is recorded.
  *
- * <p>Es el dato mas util y el mas caro: caminar la pila cuesta, y guardarla multiplica el tamano de
- * cada evento. Para un evento que ocurre miles de veces por segundo, apagarla es la diferencia
- * entre una grabacion usable y una que llena el disco.
+ * <p>It is the most useful datum and the most expensive: walking the stack costs, and keeping it
+ * multiplies the size of each event. For an event that happens thousands of times per second,
+ * switching it off is the difference between a usable recording and one that fills the disk.
  *
  * @since 9
  */
@@ -19,13 +19,13 @@ import java.lang.annotation.Target;
 @MetadataDefinition
 public @interface StackTrace {
 
-    /** El nombre del ajuste que esta anotacion configura. */
+    /** The name of the setting this annotation configures. */
     String NAME = "stackTrace";
 
     /**
-     * El valor de la anotacion.
+     * The value of the annotation.
      *
-     * @return el valor
+     * @return the value
      */
     boolean value() default true;
 }

@@ -3,14 +3,14 @@ package java.lang.classfile.instruction;
 import java.lang.classfile.PseudoInstruction;
 import jdk.internal.classfile.impl.Instructions;
 
-// Una fila del `LineNumberTable` vista desde el cuerpo del método: a partir de acá, las
-// instrucciones vienen de esta línea del fuente.
+// A row of the `LineNumberTable` seen from the method's body: from here on, the instructions come
+// from this line of the source.
 public interface LineNumber extends PseudoInstruction {
 
-    /** El número de línea. */
+    /** The line number. */
     int line();
 
-    /** La marca de esta línea. */
+    /** This line's mark. */
     public static LineNumber of(int line) {
         return Instructions.lineNumber(line);
     }

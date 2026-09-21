@@ -4,11 +4,11 @@ import javax.print.attribute.Attribute;
 import javax.print.attribute.EnumSyntax;
 
 /**
- * Cuanto molesta una {@link PrinterStateReason}: {@code REPORT} es informativo, {@code WARNING}
- * deja seguir imprimiendo, {@code ERROR} para la impresora.
+ * How much a {@link PrinterStateReason} bothers: {@code REPORT} is informative, {@code WARNING}
+ * lets printing go on, {@code ERROR} stops the printer.
  *
- * <p>Nunca aparece sola en un conjunto de atributos: es el valor de las entradas de {@link
- * PrinterStateReasons}.
+ * <p>It never appears alone in an attribute set: it is the value of {@link PrinterStateReasons}'
+ * entries.
  */
 public final class Severity extends EnumSyntax implements Attribute {
 

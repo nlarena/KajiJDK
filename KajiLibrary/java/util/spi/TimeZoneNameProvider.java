@@ -3,20 +3,20 @@ package java.util.spi;
 import java.util.Locale;
 
 /**
- * KajiLibrary's java.util.spi.TimeZoneNameProvider -- como se llama una zona horaria.
+ * KajiLibrary's java.util.spi.TimeZoneNameProvider -- what a time zone is called.
  *
- * <h2>Especifico contra generico, que son cosas distintas</h2>
+ * <h2>Specific against generic, which are different things</h2>
  *
  * <ul>
- *   <li>{@link #getDisplayName} da el nombre <b>de una de las dos mitades del año</b>: "hora
- *       estandar del este" o "hora de verano del este". El booleano elige cual.
- *   <li>{@link #getGenericDisplayName} da el que sirve para las dos: "hora del este". Es el que hay
- *       que mostrar cuando no hay una fecha concreta -- en un selector de zona, por ejemplo, donde
- *       decir "hora de verano" seria falso la mitad del año.
+ *   <li>{@link #getDisplayName} gives the name <b>of one of the year's two halves</b>: "Eastern
+ *       Standard Time" or "Eastern Daylight Time". The boolean chooses which.
+ *   <li>{@link #getGenericDisplayName} gives the one that serves both: "Eastern Time". It is the one
+ *       to show when there is no concrete date -- in a zone picker, say, where saying "Daylight
+ *       Time" would be false half the year.
  * </ul>
  *
- * <p>El generico tiene default y devuelve null porque muchas zonas no tienen uno: una zona sin
- * horario de verano no necesita distinguir, y otras simplemente no tienen nombre acordado.
+ * <p>The generic one has a default and returns null because many zones do not have one: a zone with
+ * no daylight saving needs no distinction, and others simply have no agreed name.
  */
 public abstract class TimeZoneNameProvider extends LocaleServiceProvider {
 
@@ -24,16 +24,16 @@ public abstract class TimeZoneNameProvider extends LocaleServiceProvider {
     }
 
     /**
-     * El nombre de una de las dos mitades del año.
+     * The name of one of the year's two halves.
      *
-     * @param ID       el identificador de la zona ({@code "America/Argentina/Buenos_Aires"})
-     * @param daylight si se pide el nombre del horario de verano
-     * @param style    {@code TimeZone.LONG} o {@code TimeZone.SHORT}
-     * @return null si este proveedor no lo tiene
+     * @param ID       the zone's identifier ({@code "America/Argentina/Buenos_Aires"})
+     * @param daylight whether the daylight-saving name is being asked for
+     * @param style    {@code TimeZone.LONG} or {@code TimeZone.SHORT}
+     * @return null if this provider does not have it
      */
     public abstract String getDisplayName(String ID, boolean daylight, int style, Locale locale);
 
-    /** El nombre que sirve para las dos mitades. Ver la nota de la clase. */
+    /** The name that serves both halves. See the class's note. */
     public String getGenericDisplayName(String ID, int style, Locale locale) {
         return null;
     }

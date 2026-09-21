@@ -10,29 +10,29 @@ import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentEvent$ElementChange;
 
 /**
- * Una vista de tabla: filas de celdas alineadas en columnas.
+ * A table view: rows of cells aligned in columns.
  *
- * <h2>El problema que resuelve</h2>
+ * <h2>The problem it solves</h2>
  *
- * <p>Una tabla no es una caja de cajas. Si cada fila se maquetara sola, las celdas de una columna
- * quedarian de distinto ancho. El ancho lo decide la <em>tabla</em>, mirando todas las filas a la
- * vez, y despues se lo impone a cada fila.
+ * <p>A table is not a box of boxes. If each row laid itself out, the cells of a column would end
+ * up of different widths. The width is decided by the <em>table</em>, looking at every row at
+ * once, and afterwards it imposes it on each row.
  *
- * <h2>Celdas que ocupan varias columnas</h2>
+ * <h2>Cells that take up several columns</h2>
  *
- * <p>Una celda puede abarcar varias columnas o varias filas. Eso rompe la cuenta simple de "el
- * ancho de la columna es el maximo de sus celdas": una celda que abarca tres columnas no manda
- * sobre ninguna de las tres por si sola. Aca se hace lo mismo que en el JDK: las celdas de una sola
- * columna fijan los anchos, y despues se reparte lo que falte entre las columnas que una celda
- * ancha necesite.
+ * <p>A cell may span several columns or several rows. That breaks the simple rule of "the
+ * column's width is the maximum of its cells": a cell that spans three columns does not rule
+ * over any of the three on its own. Here the same is done as in the JDK: the single-column cells
+ * fix the widths, and afterwards whatever is missing is shared out among the columns a wide cell
+ * needs.
  *
- * <p>Las filas ocupadas por una celda que abarca varias se anotan en un {@link BitSet} por columna,
- * asi la fila de abajo sabe que esa columna ya esta tomada y no pone nada ahi.
+ * <p>The rows taken up by a cell that spans several are noted in a {@link BitSet} per column, so
+ * the row below knows that that column is already taken and puts nothing there.
  *
- * <h2>Es abstracta a proposito</h2>
+ * <h2>It is abstract on purpose</h2>
  *
- * <p>No sabe de que elementos sale una tabla: eso depende del formato. Quien la use dice cuales
- * elementos son filas sobrescribiendo {@link #createTableRow}.
+ * <p>It does not know which elements a table comes from: that depends on the format. Whoever
+ * uses it says which elements are rows by overriding {@link #createTableRow}.
  */
 public abstract class TableView extends BoxView {
 
@@ -43,22 +43,22 @@ public abstract class TableView extends BoxView {
     boolean gridValid;
     static final BitSet EMPTY = new BitSet();
 
-    /** Una tabla sobre ese elemento; las filas son sus hijos. */
+    /** A table over that element; the rows are its children. */
     public TableView(Element elem) {
         super(elem, View.Y_AXIS);
         rows = new Vector<TableRow>();
         gridValid = false;
     }
 
-    /** Una fila; sobrescribir para decidir que elementos son filas. */
+    /** A row; override to decide which elements are rows. */
     protected TableRow createTableRow(Element elem) {
         return new TableRow(this, elem);
     }
 
     /**
-     * Una celda.
+     * A cell.
      *
-     * @deprecated Las celdas ahora salen de la fabrica de vistas, como cualquier otra vista.
+     * @deprecated Cells now come from the view factory, like any other view.
      */
     @Deprecated
     protected TableCell createTableCell(Element elem) {
@@ -69,7 +69,7 @@ public abstract class TableView extends BoxView {
         return columnSpans.length;
     }
 
-    /** Donde empieza esa columna, en coordenadas de la tabla. */
+    /** Where that column starts, in the table's coordinates. */
     int getColumnOffset(int col) {
         return columnOffsets[col];
     }
@@ -102,14 +102,14 @@ public abstract class TableView extends BoxView {
     }
 
     /**
-     * Rearma la grilla: cuenta columnas y ubica cada celda.
+     * It rebuilds the grid: it counts columns and places each cell.
      *
-     * <p>Se hace en dos pasadas porque no se sabe cuantas columnas hay hasta haber mirado todas las
-     * filas, y no se puede ubicar una celda sin saber cuantas columnas hay.
+     * <p>It is done in two passes because how many columns there are is not known until every row
+     * has been looked at, and a cell cannot be placed without knowing how many columns there are.
      */
     void updateGrid() {
         if (!gridValid) {
-            // Primera pasada: contar columnas.
+        // First pass: count columns.
             rows.removeAllElements();
             int n = getViewCount();
             for (int i = 0; i < n; i++) {
@@ -133,7 +133,7 @@ public abstract class TableView extends BoxView {
 
             int[] columnCounts = new int[nrows];
 
-            // Segunda pasada: ubicar cada celda salteando lo que ya ocupa una celda alta.
+            // Second pass: place each cell, skipping what a tall cell already takes up.
             for (int row = 0; row < nrows; row++) {
                 TableRow rv = getRow(row);
                 rv.clearFilledColumns();
@@ -142,7 +142,7 @@ public abstract class TableView extends BoxView {
                 for (int cell = 0; cell < rv.getViewCount(); cell++, col++) {
                     View cv = rv.getView(cell);
                     for (; rv.isFilled(col); col++) {
-                        // Ya la ocupa una celda que baja de una fila de arriba.
+                        // It is already taken by a cell coming down from a row above.
                     }
                     int rowSpan = getRowsOccupied(cv);
                     int colSpan = getColumnsOccupied(cv);
@@ -171,12 +171,12 @@ public abstract class TableView extends BoxView {
         }
     }
 
-    /** Cuantas columnas ocupa esa celda. */
+    /** How many columns that cell takes up. */
     protected int getColumnsOccupied(View v) {
         return 1;
     }
 
-    /** Cuantas filas ocupa esa celda. */
+    /** How many rows that cell takes up. */
     protected int getRowsOccupied(View v) {
         return 1;
     }
@@ -188,7 +188,7 @@ public abstract class TableView extends BoxView {
     protected void forwardUpdate(DocumentEvent$ElementChange ec, DocumentEvent e, Shape a,
             ViewFactory f) {
         super.forwardUpdate(ec, e, a, f);
-        // Un cambio en una fila puede cambiar toda la tabla, no solo esa fila.
+        // A change in one row may change the whole table, not only that row.
         if (a != null) {
             Rectangle alloc = a.getBounds();
             java.awt.Component c = getContainer();
@@ -204,17 +204,17 @@ public abstract class TableView extends BoxView {
     }
 
     /**
-     * Reparte el ancho entre las columnas.
+     * It shares the width out among the columns.
      *
-     * <p>El reparto es proporcional a lo que cada columna prefiere, con el minimo como piso: dar de
-     * menos a una columna la haria mostrar texto cortado.
+     * <p>The sharing out is proportional to what each column prefers, with the minimum as a floor:
+     * giving a column less would make it show cut text.
      */
     protected void layoutColumns(int targetSpan, int[] offsets, int[] spans,
             SizeRequirements[] reqs) {
         SizeRequirements.calculateTiledPositions(targetSpan, null, reqs, offsets, spans);
     }
 
-    /** Maqueta el eje menor: primero las columnas, despues cada fila con esos anchos. */
+    /** It lays out the minor axis: first the columns, then each row with those widths. */
     protected void layoutMinorAxis(int targetSpan, int axis, int[] offsets, int[] spans) {
         updateGrid();
         calculateColumnRequirements(axis);
@@ -253,11 +253,11 @@ public abstract class TableView extends BoxView {
     }
 
     /**
-     * Junta lo que pide cada columna.
+     * It gathers what each column asks for.
      *
-     * <p>Las celdas anchas se dejan para el final: primero se sabe cuanto piden las columnas por su
-     * cuenta, y recien despues se ve si a una celda ancha le falta lugar. Al reves, una celda ancha
-     * inflaria la primera columna que toque.
+     * <p>The wide cells are left for the end: first what the columns ask for on their own is known,
+     * and only afterwards is it seen whether a wide cell is short of room. The other way round, a
+     * wide cell would inflate the first column it touched.
      */
     void calculateColumnRequirements(int axis) {
         for (int i = 0; i < columnRequirements.length; i++) {
@@ -276,7 +276,7 @@ public abstract class TableView extends BoxView {
             for (int cell = 0; cell < ncells; cell++, col++) {
                 View cv = row.getView(cell);
                 for (; row.isFilled(col); col++) {
-                    // Columna tomada por una celda de otra fila.
+                    // A column taken by a cell of another row.
                 }
                 int rowSpan = getRowsOccupied(cv);
                 int colSpan = getColumnsOccupied(cv);
@@ -308,7 +308,7 @@ public abstract class TableView extends BoxView {
         int ncells = row.getViewCount();
         for (int cell = 0; cell < ncells; cell++, col++) {
             for (; row.isFilled(col); col++) {
-                // Igual que arriba.
+                // The same as above.
             }
             if (row.getView(cell) == cv) {
                 return col;
@@ -318,7 +318,7 @@ public abstract class TableView extends BoxView {
         return -1;
     }
 
-    /** Una celda de una sola columna manda directamente sobre esa columna. */
+    /** A single-column cell rules directly over that column. */
     void checkSingleColumnCell(int axis, int col, View v) {
         SizeRequirements req = columnRequirements[col];
         req.minimum = Math.max((int) v.getMinimumSpan(axis), req.minimum);
@@ -326,9 +326,10 @@ public abstract class TableView extends BoxView {
     }
 
     /**
-     * Reparte lo que le falta a una celda ancha entre las columnas que abarca.
+     * It shares out what a wide cell is short of among the columns it spans.
      *
-     * <p>Solo agrega lo que falta: si las columnas ya suman lo suficiente, la celda no cambia nada.
+     * <p>It only adds what is missing: if the columns already add up to enough, the cell changes
+     * nothing.
      */
     void checkMultiColumnCell(int axis, int col, int ncols, View v) {
         long min = 0;
@@ -353,14 +354,14 @@ public abstract class TableView extends BoxView {
         }
     }
 
-    /** Reparte un sobrante en partes iguales, con el resto en las primeras columnas. */
-    private void expandColumns(int col, int ncols, int extra, boolean minimo) {
+    /** It shares a surplus out in equal parts, with the remainder in the first columns. */
+    private void expandColumns(int col, int ncols, int extra, boolean min) {
         int perCol = extra / ncols;
-        int resto = extra - (perCol * ncols);
+        int rest = extra - (perCol * ncols);
         for (int i = 0; i < ncols; i++) {
             SizeRequirements req = columnRequirements[col + i];
-            int add = perCol + ((i < resto) ? 1 : 0);
-            if (minimo) {
+            int add = perCol + ((i < rest) ? 1 : 0);
+            if (min) {
                 req.minimum = req.minimum + add;
                 req.preferred = Math.max(req.preferred, req.minimum);
             } else {
@@ -393,23 +394,23 @@ public abstract class TableView extends BoxView {
     }
 
     /**
-     * Una fila de la tabla.
+     * A row of the table.
      *
-     * <p>En el JDK es una clase interna; aca es estatica y recibe la tabla como primer parametro,
-     * que es exactamente la firma que el JDK genera en el archivo compilado. El compilador de esta
-     * biblioteca todavia no arma clases internas que se creen entre hermanas (hallazgos #507 y
-     * #508 en <code>COMPILER_FINDINGS.md</code>).
+     * <p>In the JDK it is an inner class; here it is static and takes the table as its first
+     * parameter, which is exactly the signature the JDK generates in the compiled file. This
+     * library's compiler does not yet build inner classes that create each other as siblings
+     * (findings #507 and #508 in <code>COMPILER_FINDINGS.md</code>).
      */
     public static class TableRow extends BoxView {
 
-        private final TableView tabla;
+        private final TableView table;
         private BitSet fillColumns;
         private int row;
 
-        /** Una fila de esa tabla sobre ese elemento. */
-        public TableRow(TableView tabla, Element elem) {
+        /** A row of that table over that element. */
+        public TableRow(TableView table, Element elem) {
             super(elem, View.X_AXIS);
-            this.tabla = tabla;
+            this.table = table;
             fillColumns = new BitSet();
         }
 
@@ -417,7 +418,7 @@ public abstract class TableView extends BoxView {
             fillColumns.and(EMPTY);
         }
 
-        /** Anota que esas columnas quedan tomadas por una celda que las abarca. */
+        /** It notes that those columns are taken by a cell that spans them. */
         void fillColumns(int col, int ncols, int nrows) {
             for (int i = 0; i < ncols; i++) {
                 fillColumns.set(col + i);
@@ -436,7 +437,7 @@ public abstract class TableView extends BoxView {
             this.row = row;
         }
 
-        /** Cuantas columnas hay antes de esa celda, contando las tomadas. */
+        /** How many columns there are before that cell, counting the taken ones. */
         int getColumnCount() {
             int nfill = 0;
             int n = fillColumns.size();
@@ -450,20 +451,20 @@ public abstract class TableView extends BoxView {
 
         public void replace(int offset, int length, View[] views) {
             super.replace(offset, length, views);
-            if (tabla != null) {
-                tabla.invalidateGrid();
+            if (table != null) {
+                table.invalidateGrid();
             }
         }
 
-        /** El ancho de la fila es el de la tabla, no la suma de sus celdas. */
+        /** The row's width is the table's, not the sum of its cells'. */
         protected SizeRequirements calculateMajorAxisRequirements(int axis,
                 SizeRequirements r) {
-            return tabla.calculateMinorAxisRequirements(axis, r);
+            return table.calculateMinorAxisRequirements(axis, r);
         }
 
         public float getMinimumSpan(int axis) {
             if (axis == View.X_AXIS) {
-                return tabla.getMinimumSpan(axis);
+                return table.getMinimumSpan(axis);
             }
             return super.getMinimumSpan(axis);
         }
@@ -477,29 +478,29 @@ public abstract class TableView extends BoxView {
 
         public float getPreferredSpan(int axis) {
             if (axis == View.X_AXIS) {
-                return tabla.getPreferredSpan(axis);
+                return table.getPreferredSpan(axis);
             }
             return super.getPreferredSpan(axis);
         }
 
-        /** Las celdas van donde diga la tabla: ver la nota de la clase que la contiene. */
+        /** The cells go where the table says: see the note of the class that contains it. */
         protected void layoutMajorAxis(int targetSpan, int axis, int[] offsets, int[] spans) {
-            tabla.updateGrid();
+            table.updateGrid();
             int col = 0;
             int ncells = getViewCount();
             for (int cell = 0; cell < ncells; cell++, col++) {
                 View cv = getView(cell);
                 for (; isFilled(col); col++) {
-                    // Columna tomada.
+                // Column taken.
                 }
-                int ncols = tabla.getColumnsOccupied(cv);
-                offsets[cell] = tabla.columnOffsets[col];
-                spans[cell] = tabla.columnSpans[col];
+                int ncols = table.getColumnsOccupied(cv);
+                offsets[cell] = table.columnOffsets[col];
+                spans[cell] = table.columnSpans[col];
                 if (ncols > 1) {
-                    int n = tabla.getColumnCount();
+                    int n = table.getColumnCount();
                     for (int j = 1; j < ncols; j++) {
                         if ((col + j) < n) {
-                            spans[cell] = spans[cell] + tabla.columnSpans[col + j];
+                            spans[cell] = spans[cell] + table.columnSpans[col + j];
                         }
                     }
                     col = col + ncols - 1;
@@ -507,7 +508,7 @@ public abstract class TableView extends BoxView {
             }
         }
 
-        /** Todas las celdas de una fila tienen el alto de la fila. */
+        /** Every cell of a row has the row's height. */
         protected void layoutMinorAxis(int targetSpan, int axis, int[] offsets, int[] spans) {
             super.layoutMinorAxis(targetSpan, axis, offsets, spans);
             int col = 0;
@@ -515,24 +516,24 @@ public abstract class TableView extends BoxView {
             for (int cell = 0; cell < ncells; cell++, col++) {
                 View cv = getView(cell);
                 for (; isFilled(col); col++) {
-                    // Columna tomada.
+                // Column taken.
                 }
-                int nrows = tabla.getRowsOccupied(cv);
+                int nrows = table.getRowsOccupied(cv);
                 if (nrows > 1) {
                     int rowSpan = spans[cell];
-                    int r = tabla.getRow(this);
+                    int r = table.getRow(this);
                     for (int j = 1; j < nrows; j++) {
-                        if ((r + j) < tabla.getRowCount()) {
-                            rowSpan = rowSpan + tabla.getRowSpan(r + j);
+                        if ((r + j) < table.getRowCount()) {
+                            rowSpan = rowSpan + table.getRowSpan(r + j);
                         }
                     }
                     spans[cell] = rowSpan;
                 }
-                col = col + tabla.getColumnsOccupied(cv) - 1;
+                col = col + table.getColumnsOccupied(cv) - 1;
             }
         }
 
-        /** Una fila no se estira por su cuenta: el ancho lo pone la tabla. */
+        /** A row does not stretch on its own: the width is set by the table. */
         public int getResizeWeight(int axis) {
             return 1;
         }
@@ -562,9 +563,9 @@ public abstract class TableView extends BoxView {
     }
 
     /**
-     * Una celda de la tabla.
+     * A cell of the table.
      *
-     * @deprecated Una celda ya no necesita una clase propia: cualquier vista sirve.
+     * @deprecated A cell no longer needs a class of its own: any view serves.
      */
     @Deprecated
     public static class TableCell extends BoxView implements GridCell {
@@ -572,8 +573,8 @@ public abstract class TableView extends BoxView {
         private int row;
         private int col;
 
-        /** Una celda de esa tabla sobre ese elemento. */
-        public TableCell(TableView tabla, Element elem) {
+        /** A cell of that table over that element. */
+        public TableCell(TableView table, Element elem) {
             super(elem, View.Y_AXIS);
         }
 
@@ -585,7 +586,7 @@ public abstract class TableView extends BoxView {
             return 1;
         }
 
-        /** Donde quedo la celda en la grilla; la ubica la tabla. */
+        /** Where the cell ended up in the grid; the table places it. */
         public void setGridLocation(int row, int col) {
             this.row = row;
             this.col = col;
@@ -600,7 +601,7 @@ public abstract class TableView extends BoxView {
         }
     }
 
-    /** Lo que la tabla necesita saber de una celda para ubicarla. */
+    /** What the table needs to know about a cell in order to place it. */
     interface GridCell {
 
         void setGridLocation(int row, int col);

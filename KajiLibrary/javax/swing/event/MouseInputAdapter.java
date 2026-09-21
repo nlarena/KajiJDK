@@ -3,17 +3,19 @@ package javax.swing.event;
 import java.awt.event.MouseAdapter;
 
 /**
- * Un {@link MouseInputListener} con todos los metodos vacios.
+ * A {@link MouseInputListener} with every method empty.
  *
- * <p>Sirve para escribir uno solo: sin esto, atender nada mas que el clic obliga a escribir siete
- * metodos vacios. Es el patron adaptador de AWT aplicado a la union de los dos oyentes.
+ * <p>It serves for writing a single one: without this, attending to nothing but the click forces
+ * writing seven empty methods. It is AWT's adapter pattern applied to the union of the two
+ * listeners.
  *
- * <p>Hereda los cuerpos de {@link MouseAdapter} —que ya los tiene todos— y solo agrega la interfaz.
- * De ahi que el cuerpo de esta clase este vacio: no hay nada que escribir, y eso es el punto.
+ * <p>It inherits the bodies from {@link MouseAdapter} --which already has them all-- and only
+ * adds the interface. Hence this class's body is empty: there is nothing to write, and that is
+ * the point.
  */
 public abstract class MouseInputAdapter extends MouseAdapter implements MouseInputListener {
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected MouseInputAdapter() {
     }
 }

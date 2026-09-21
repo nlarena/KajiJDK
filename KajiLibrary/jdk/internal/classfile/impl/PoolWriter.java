@@ -21,33 +21,35 @@ import java.lang.classfile.constantpool.Utf8Entry;
 import java.util.List;
 
 /**
- * Serializa el pool de constantes (JVMS 4.4) y el atributo `BootstrapMethods` que lo acompana.
+ * It serialises the constant pool (JVMS 4.4) and the `BootstrapMethods` attribute that goes with
+ * it.
  *
- * <p>Va aparte del escritor de la clase por una razon de orden y no de tamano: el pool se escribe
- * **al final** aunque vaya al principio del archivo. Las entradas se van creando mientras se
- * escriben los metodos --cada `invokevirtual` puede agregar una-- asi que no se sabe cuantas hay
- * hasta que no se escribio todo lo demas. El escritor de la clase arma el cuerpo primero, pregunta
- * el pool despues, y recien ahi los pega en el orden del formato.
+ * <p>It is separate from the class writer for a reason of order and not of size: the pool is
+ * written **at the end** even though it goes at the start of the file. The entries keep being
+ * created while the methods are written --each `invokevirtual` may add one-- so how many there are
+ * is not known until everything else has been written. The class writer builds the body first, asks
+ * for the pool afterwards, and only then joins them in the order of the format.
  *
- * <h2>El UTF-8 **modificado**</h2>
+ * <h2>The **modified** UTF-8</h2>
  *
- * <p>La codificacion de un `CONSTANT_Utf8` no es UTF-8. Se aparta en dos puntos, y los dos importan:
- * el caracter nulo va en **dos** bytes en vez de uno --para que ningun byte del contenido sea cero-- y
- * los caracteres de fuera del plano basico van como **dos pares subrogados codificados por separado**,
- * seis bytes, en vez de los cuatro del UTF-8 de verdad. Usar el UTF-8 del sistema produce un archivo
- * que la JVM rechaza en cuanto aparece un emoji en una constante de texto.
+ * <p>The encoding of a `CONSTANT_Utf8` is not UTF-8. It departs from it at two points, and both
+ * matter: the null character goes in **two** bytes instead of one --so that no byte of the contents
+ * is zero-- and the characters outside the basic plane go as **two surrogate pairs encoded
+ * separately**, six bytes, instead of the four of real UTF-8. Using the system's UTF-8 produces a
+ * file the JVM rejects as soon as an emoji appears in a text constant.
  */
 final class PoolWriter {
 
     private PoolWriter() {
     }
 
-    /** El pool entero: la cantidad y despues cada entrada. */
+    /** The whole pool: the count and then each entry. */
     static void writePool(BufWriterImpl buf, ConstantPoolBuilder pool) {
         int n = pool.size();
         buf.writeU2(n);
-        // Desde 1: el indice 0 no existe en el formato. Un `long` o un `double` ocupan dos indices y
-        // el segundo queda vacio -- por eso se pregunta por la entrada y se saltea la que no hay.
+        // From 1: index 0 does not exist in the format. A `long` or a `double` takes two indices
+        // and the second one is left empty -- that is why the entry is asked for and the missing
+        // one is skipped.
         for (int i = 1; i < n; i++) {
             PoolEntry e = pool.entryByIndex(i);
             if (e == null) {
@@ -125,10 +127,10 @@ final class PoolWriter {
             buf.writeIndex(((PackageEntry) e).name());
             return;
         }
-        throw new IllegalArgumentException("etiqueta de pool desconocida: " + tag);
+        throw new IllegalArgumentException("unknown pool tag: " + tag);
     }
 
-    /** El atributo `BootstrapMethods`, o nada si el pool no tiene ninguno. */
+    /** The `BootstrapMethods` attribute, or nothing if the pool has none. */
     static void writeBootstrapMethods(BufWriterImpl buf, ConstantPoolBuilder pool) {
         int n = pool.bootstrapMethodCount();
         buf.writeIndex(pool.utf8Entry("BootstrapMethods"));
@@ -147,26 +149,26 @@ final class PoolWriter {
         buf.patchInt(lenPos, 4, buf.size() - lenPos - 4);
     }
 
-    /** Si hace falta escribir `BootstrapMethods`. */
+    /** Whether `BootstrapMethods` has to be written. */
     static boolean hasBootstrapMethods(ConstantPoolBuilder pool) {
         return pool.bootstrapMethodCount() > 0;
     }
 
-    // El UTF-8 modificado del JVMS 4.4.7. Ver la nota de la clase sobre en que se aparta del de
-    // verdad.
+    // The modified UTF-8 of JVMS 4.4.7. See the class note on where it departs from the real one.
     //
-    // El largo va adelante en dos bytes y **es el de los bytes, no el de los caracteres**: hay que
-    // codificar primero para saberlo, o dejar el hueco y taparlo. Se hace lo segundo.
+    // The length goes in front in two bytes and **it is that of the bytes, not that of the
+    // characters**: one has to encode first to know it, or leave the gap and fill it. The second is
+    // done.
     private static void writeModifiedUtf8(BufWriterImpl buf, String s) {
         int lenPos = buf.size();
         buf.writeU2(0);
-        int desde = buf.size();
+        int from = buf.size();
         for (int i = 0; i < s.length(); i++) {
             char c = s.charAt(i);
             if (c >= 0x0001 && c <= 0x007F) {
                 buf.writeU1(c);
             } else if (c <= 0x07FF) {
-                // El nulo cae acá y no arriba: por eso el rango de un byte empieza en 1.
+                // The null falls here and not above: that is why the one-byte range starts at 1.
                 buf.writeU1(0xC0 | ((c >> 6) & 0x1F));
                 buf.writeU1(0x80 | (c & 0x3F));
             } else {
@@ -175,11 +177,11 @@ final class PoolWriter {
                 buf.writeU1(0x80 | (c & 0x3F));
             }
         }
-        int largo = buf.size() - desde;
-        if (largo > 65535) {
+        int length = buf.size() - from;
+        if (length > 65535) {
             throw new IllegalArgumentException(
-                    "una constante de texto no puede pasar de 65535 bytes; esta mide " + largo);
+                    "a text constant cannot exceed 65535 bytes; this one measures " + length);
         }
-        buf.patchInt(lenPos, 2, largo);
+        buf.patchInt(lenPos, 2, length);
     }
 }

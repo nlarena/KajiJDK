@@ -5,11 +5,12 @@ import javax.lang.model.SourceVersion;
 import javax.lang.model.type.NoType;
 
 /**
- * El visitante por kind de tipo de Java 9. Ver {@link TypeKindVisitor6} por el mecanismo.
+ * The type-kind visitor for Java 9. See {@link TypeKindVisitor6} for the mechanism.
  *
- * <p>Con los modulos en el lenguaje, `visitNoTypeAsModule` pasa de `visitUnknown` a `defaultAction`.
- * Esta es la clase por la que la rama de kinds necesita una version 9 y la rama simple no: es el unico
- * lugar donde el pseudotipo `MODULE` se distingue de los otros tres `NoType`.
+ * <p>With modules in the language, `visitNoTypeAsModule` moves from `visitUnknown` to
+ * `defaultAction`. This is the class for which the kinds branch needs a version 9 and the simple
+ * branch does not: it is the only place where the `MODULE` pseudo-type is told apart from the other
+ * three `NoType`s.
  */
 @SupportedSourceVersion(SourceVersion.RELEASE_14)
 public class TypeKindVisitor9<R, P> extends TypeKindVisitor8<R, P> {

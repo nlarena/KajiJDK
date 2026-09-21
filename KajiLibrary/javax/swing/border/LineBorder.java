@@ -6,50 +6,50 @@ import java.awt.Graphics;
 import java.awt.Insets;
 
 /**
- * Una linea del mismo grosor en los cuatro lados.
+ * A line of the same thickness on all four sides.
  *
- * <p>El borde mas simple que dibuja algo. Los dos {@code create*} devuelven instancias
- * <strong>compartidas</strong>: un borde no guarda nada del componente que lo usa, asi que el mismo
- * objeto sirve para todos los que quieran una linea negra de un pixel.
+ * <p>The simplest border that draws something. The two {@code create*} methods return
+ * <strong>shared</strong> instances: a border keeps nothing of the component that uses it, so the
+ * same object serves everybody who wants a one-pixel black line.
  */
 public class LineBorder extends AbstractBorder {
 
     private static final long serialVersionUID = -787563427772288970L;
 
-    private static Border lineaNegra;
-    private static Border lineaGris;
+    private static Border BLACK_LINE;
+    private static Border GRAY_LINE;
 
     protected int thickness;
     protected Color lineColor;
     protected boolean roundedCorners;
 
-    /** Una linea negra de un pixel, compartida. */
+    /** A one-pixel black line, shared. */
     public static Border createBlackLineBorder() {
-        if (lineaNegra == null) {
-            lineaNegra = new LineBorder(Color.black, 1);
+        if (BLACK_LINE == null) {
+            BLACK_LINE = new LineBorder(Color.black, 1);
         }
-        return lineaNegra;
+        return BLACK_LINE;
     }
 
-    /** Una linea gris de un pixel, compartida. */
+    /** A one-pixel grey line, shared. */
     public static Border createGrayLineBorder() {
-        if (lineaGris == null) {
-            lineaGris = new LineBorder(Color.gray, 1);
+        if (GRAY_LINE == null) {
+            GRAY_LINE = new LineBorder(Color.gray, 1);
         }
-        return lineaGris;
+        return GRAY_LINE;
     }
 
-    /** Una linea de un pixel del color dado. */
+    /** A one-pixel line of the given colour. */
     public LineBorder(Color color) {
         this(color, 1, false);
     }
 
-    /** Una linea del color y grosor dados. */
+    /** A line of the given colour and thickness. */
     public LineBorder(Color color, int thickness) {
         this(color, thickness, false);
     }
 
-    /** Igual, eligiendo si las esquinas van redondeadas. */
+    /** The same, choosing whether the corners are rounded. */
     public LineBorder(Color color, int thickness, boolean roundedCorners) {
         this.lineColor = color;
         this.thickness = thickness;
@@ -60,10 +60,10 @@ public class LineBorder extends AbstractBorder {
         if (this.thickness <= 0) {
             return;
         }
-        Color viejo = g.getColor();
+        Color old = g.getColor();
         g.setColor(this.lineColor);
-        // Un rectangulo por cada pixel de grosor, encogiendo hacia adentro. El menos uno es porque
-        // drawRect dibuja inclusive: un rectangulo de ancho w ocupa desde x hasta x+w.
+        // One rectangle per pixel of thickness, shrinking inwards. The minus one is because
+        // drawRect draws inclusively: a rectangle of width w goes from x to x+w.
         for (int i = 0; i < this.thickness; i++) {
             if (this.roundedCorners) {
                 g.drawRoundRect(x + i, y + i, width - i - i - 1, height - i - i - 1,
@@ -72,7 +72,7 @@ public class LineBorder extends AbstractBorder {
                 g.drawRect(x + i, y + i, width - i - i - 1, height - i - i - 1);
             }
         }
-        g.setColor(viejo);
+        g.setColor(old);
     }
 
     public Insets getBorderInsets(Component c, Insets insets) {
@@ -83,26 +83,26 @@ public class LineBorder extends AbstractBorder {
         return insets;
     }
 
-    /** El color de la linea. */
+    /** The line's colour. */
     public Color getLineColor() {
         return this.lineColor;
     }
 
-    /** El grosor en pixeles. */
+    /** The thickness in pixels. */
     public int getThickness() {
         return this.thickness;
     }
 
-    /** Si las esquinas van redondeadas. */
+    /** Whether the corners are rounded. */
     public boolean getRoundedCorners() {
         return this.roundedCorners;
     }
 
     /**
-     * Opaco solo si las esquinas son rectas.
+     * Opaque only if the corners are square.
      *
-     * <p>Con esquinas redondeadas quedan cuatro pedacitos sin pintar, asi que prometer opacidad
-     * dejaria basura justo ahi. Es el ejemplo mas claro de para que sirve ese metodo.
+     * <p>With rounded corners four little pieces are left unpainted, so promising opacity would
+     * leave rubbish right there. It is the clearest example of what that method is for.
      */
     public boolean isBorderOpaque() {
         return !this.roundedCorners;

@@ -13,169 +13,173 @@ import javax.security.auth.callback.TextOutputCallback;
 import javax.security.auth.callback.UnsupportedCallbackException;
 
 /**
- * El manejador de callbacks que habla por la terminal.
+ * The callback handler that talks over the terminal.
  *
- * <p>JAAS separa <em>que</em> dato hace falta de <em>como</em> se pide: un modulo de login dice que
- * le falta un nombre de usuario armando un {@link NameCallback}, y no sabe ni le importa si eso
- * termina en un dialogo grafico, en un archivo de configuracion o —como aca— en un prompt de texto.
- * Esta clase es la implementacion mas simple posible de ese lado: escribe el prompt y lee una linea.
+ * <p>JAAS separates <em>which</em> datum is needed from <em>how</em> it is asked for: a login
+ * module says that it is missing a user name by building a {@link NameCallback}, and it
+ * neither knows nor cares whether that ends in a graphical dialogue, in a configuration file
+ * or -- as here -- in a text prompt. This class is the simplest possible implementation of
+ * that side: it writes the prompt and reads a line.
  *
- * <p>Reconoce cuatro callbacks y <strong>rechaza el resto</strong> con
- * {@link UnsupportedCallbackException}, que es exactamente el contrato: un manejador no esta
- * obligado a saber responder todo, y decir "esto no lo se pedir" es una respuesta valida y
- * distinguible de haber fallado.
+ * <p>It recognizes four callbacks and <strong>rejects the rest</strong> with
+ * {@link UnsupportedCallbackException}, which is exactly the contract: a handler is not
+ * obliged to know how to answer everything, and saying "I do not know how to ask for this" is
+ * a valid answer and one that may be told from having failed.
  *
- * <h2>Una limitacion que conviene saber</h2>
+ * <h2>A limitation that is worth knowing</h2>
  *
- * <p>{@link PasswordCallback#isEchoOn} pide que la clave <em>no</em> se muestre mientras se tipea.
- * Apagar el eco no es cosa de Java sino de la terminal —el JDK lo hace a traves de
- * {@link System#console()}, que da acceso al modo crudo del dispositivo—, y esta VM no expone esa
- * consola. Se lee igual, por {@link System#in}, y <strong>la clave se ve</strong>. Queda dicho aca y
- * no escondido: un manejador que promete no mostrarla y la muestra es peor que uno que avisa.
+ * <p>{@link PasswordCallback#isEchoOn} asks that the password should <em>not</em> be shown
+ * while it is typed. Turning the echo off is not Java's business but the terminal's -- the JDK
+ * does it through {@link System#console()}, which gives access to the device's raw mode -- and
+ * this VM does not expose that console. It is read all the same, over {@link System#in}, and
+ * <strong>the password is seen</strong>. It is said here and not hidden: a handler that
+ * promises not to show it and shows it is worse than one that says so.
  */
 public class TextCallbackHandler implements CallbackHandler {
 
-    /** Un manejador nuevo. No tiene estado: todo lo que necesita llega en cada {@link #handle}. */
+    /** A new handler. It has no state: everything it needs arrives in each {@link #handle}. */
     public TextCallbackHandler() {
     }
 
     /**
-     * Atiende cada callback del arreglo, en orden.
+     * It attends to each callback of the array, in order.
      *
-     * @throws UnsupportedCallbackException con el primero que no sepa atender — y con <em>ese</em>
-     *     callback adentro, para que quien llamo pueda ver cual fue
+     * @throws UnsupportedCallbackException with the first one it does not know how to attend to --
+     *     and with <em>that</em> callback inside, so that whoever called may see which it was
      */
     public void handle(Callback[] callbacks) throws IOException, UnsupportedCallbackException {
-        BufferedReader entrada = new BufferedReader(new InputStreamReader(System.in));
+        BufferedReader input = new BufferedReader(new InputStreamReader(System.in));
         for (int i = 0; i < callbacks.length; i++) {
             Callback c = callbacks[i];
             if (c instanceof TextOutputCallback) {
-                mostrar((TextOutputCallback) c);
+                show((TextOutputCallback) c);
             } else if (c instanceof NameCallback) {
-                pedirNombre((NameCallback) c, entrada);
+                askName((NameCallback) c, input);
             } else if (c instanceof PasswordCallback) {
-                pedirClave((PasswordCallback) c, entrada);
+                askPassword((PasswordCallback) c, input);
             } else if (c instanceof ConfirmationCallback) {
-                confirmar((ConfirmationCallback) c, entrada);
+                confirm((ConfirmationCallback) c, input);
             } else {
                 throw new UnsupportedCallbackException(c);
             }
         }
     }
 
-    private void mostrar(TextOutputCallback c) throws IOException {
-        // El tipo desconocido es `IllegalArgumentException` y no `UnsupportedCallbackException`: el
-        // callback si esta soportado, lo que esta mal es su contenido. Confundirlos le diria a quien
-        // llamo que pruebe con otro manejador, cuando el problema lo tiene el suyo.
-        // Esto querria ser un `switch`, y no lo es por el finding #461: el plegado de constantes
-        // que corre sobre las etiquetas de `case` solo mira los tipos de la unidad de compilacion
-        // actual, asi que `TextOutputCallback.INFORMATION` —una constante de otro archivo— se
-        // rechaza como si no fuera constante. Fuera de una etiqueta la misma constante se pliega
-        // bien, que es justamente lo que hace esta cadena.
-        int tipo = c.getMessageType();
-        if (tipo == TextOutputCallback.INFORMATION) {
+    private void show(TextOutputCallback c) throws IOException {
+        // The unknown type is an `IllegalArgumentException` and not an
+                // `UnsupportedCallbackException`: the callback is supported, what is wrong is its
+                // contents. Confusing them would tell whoever called to try with another handler,
+                // when the problem is theirs. This would like to be a `switch`, and it is not
+                // because of finding #461: the constant folding that runs over the labels of a
+                // `case` only looks at the types of the current compilation unit, so
+                // `TextOutputCallback.INFORMATION` -- a constant of another file -- is rejected as
+                // if it were not a constant. Outside a label the same constant folds well, which is
+                // precisely what this chain does.
+        int type = c.getMessageType();
+        if (type == TextOutputCallback.INFORMATION) {
             System.err.println(c.getMessage());
-        } else if (tipo == TextOutputCallback.WARNING) {
-            System.err.println("Advertencia: " + c.getMessage());
-        } else if (tipo == TextOutputCallback.ERROR) {
+        } else if (type == TextOutputCallback.WARNING) {
+            System.err.println("Warning: " + c.getMessage());
+        } else if (type == TextOutputCallback.ERROR) {
             System.err.println("Error: " + c.getMessage());
         } else {
-            throw new IllegalArgumentException("tipo de mensaje desconocido: "
-                    + String.valueOf(tipo));
+            throw new IllegalArgumentException("unknown message type: "
+                    + String.valueOf(type));
         }
     }
 
-    private void pedirNombre(NameCallback c, BufferedReader entrada) throws IOException {
-        String porDefecto = c.getDefaultName();
-        if (porDefecto == null) {
+    private void askName(NameCallback c, BufferedReader input) throws IOException {
+        String defaultName = c.getDefaultName();
+        if (defaultName == null) {
             System.err.print(c.getPrompt() + " ");
         } else {
-            System.err.print(c.getPrompt() + " [" + porDefecto + "] ");
+            System.err.print(c.getPrompt() + " [" + defaultName + "] ");
         }
         System.err.flush();
-        String linea = entrada.readLine();
-        // Una linea vacia significa "dejame el que ya venia", no "mi nombre es la cadena vacia".
-        if (linea == null || linea.isEmpty()) {
-            c.setName(porDefecto);
+        String line = input.readLine();
+        // An empty line means "leave me the one that was already there", not "my name is the
+                // empty string".
+        if (line == null || line.isEmpty()) {
+            c.setName(defaultName);
         } else {
-            c.setName(linea);
+            c.setName(line);
         }
     }
 
-    private void pedirClave(PasswordCallback c, BufferedReader entrada) throws IOException {
+    private void askPassword(PasswordCallback c, BufferedReader input) throws IOException {
         System.err.print(c.getPrompt() + " ");
         System.err.flush();
-        String linea = entrada.readLine();
-        if (linea == null) {
+        String line = input.readLine();
+        if (line == null) {
             c.setPassword(null);
             return;
         }
-        c.setPassword(linea.toCharArray());
+        c.setPassword(line.toCharArray());
     }
 
-    private void confirmar(ConfirmationCallback c, BufferedReader entrada) throws IOException {
-        String[] opciones = c.getOptions();
-        boolean propias = opciones != null;
-        if (!propias) {
-            opciones = opcionesDe(c.getOptionType());
+    private void confirm(ConfirmationCallback c, BufferedReader input) throws IOException {
+        String[] options = c.getOptions();
+        boolean ownOptions = options != null;
+        if (!ownOptions) {
+            options = optionsOf(c.getOptionType());
         }
         if (c.getPrompt() != null) {
             System.err.println(c.getPrompt());
         }
-        for (int i = 0; i < opciones.length; i++) {
-            System.err.println(String.valueOf(i) + ". " + opciones[i]);
+        for (int i = 0; i < options.length; i++) {
+            System.err.println(String.valueOf(i) + ". " + options[i]);
         }
-        System.err.print("Elegi [" + String.valueOf(c.getDefaultOption()) + "] ");
+        System.err.print("Choose [" + String.valueOf(c.getDefaultOption()) + "] ");
         System.err.flush();
 
-        String linea = entrada.readLine();
-        int elegida = c.getDefaultOption();
-        if (linea != null && !linea.isEmpty()) {
+        String line = input.readLine();
+        int chosen = c.getDefaultOption();
+        if (line != null && !line.isEmpty()) {
             try {
-                elegida = Integer.parseInt(linea.trim());
+                chosen = Integer.parseInt(line.trim());
             } catch (NumberFormatException e) {
-                elegida = c.getDefaultOption();
+                chosen = c.getDefaultOption();
             }
         }
-        if (elegida < 0 || elegida >= opciones.length) {
-            elegida = c.getDefaultOption();
+        if (chosen < 0 || chosen >= options.length) {
+            chosen = c.getDefaultOption();
         }
-        // Con opciones propias el indice ES la respuesta. Con las predefinidas hay que traducir: en
-        // `YES_NO_OPTION` la posicion 0 de la lista es `YES`, que vale 0 — pero en
-        // `OK_CANCEL_OPTION` la posicion 0 es `OK`, que vale 3. Devolver el indice crudo ahi seria
-        // contestar `YES` cuando el usuario dijo `OK`.
-        if (propias) {
-            c.setSelectedIndex(elegida);
+        // With one's own options the index IS the answer. With the predefined ones it has to be
+                // translated: in `YES_NO_OPTION` position 0 of the list is `YES`, which is worth 0
+                // -- but in `OK_CANCEL_OPTION` position 0 is `OK`, which is worth 3. Returning the
+                // raw index there would be answering `YES` when the user said `OK`.
+        if (ownOptions) {
+            c.setSelectedIndex(chosen);
         } else {
-            c.setSelectedIndex(valoresDe(c.getOptionType())[elegida]);
+            c.setSelectedIndex(valuesOf(c.getOptionType())[chosen]);
         }
     }
 
-    private String[] opcionesDe(int tipo) {
-        // Cadena de `if` y no `switch`: ver #461, igual que en `mostrar`.
-        if (tipo == ConfirmationCallback.YES_NO_OPTION) {
-            return new String[] { "Si", "No" };
+    private String[] optionsOf(int type) {
+        // A chain of `if` and not a `switch`: see #461, the same as in `show`.
+        if (type == ConfirmationCallback.YES_NO_OPTION) {
+            return new String[] { "Yes", "No" };
         }
-        if (tipo == ConfirmationCallback.YES_NO_CANCEL_OPTION) {
-            return new String[] { "Si", "No", "Cancelar" };
+        if (type == ConfirmationCallback.YES_NO_CANCEL_OPTION) {
+            return new String[] { "Yes", "No", "Cancel" };
         }
-        if (tipo == ConfirmationCallback.OK_CANCEL_OPTION) {
-            return new String[] { "Aceptar", "Cancelar" };
+        if (type == ConfirmationCallback.OK_CANCEL_OPTION) {
+            return new String[] { "OK", "Cancel" };
         }
-        throw new IllegalArgumentException("tipo de opcion desconocido: " + String.valueOf(tipo));
+        throw new IllegalArgumentException("unknown option type: " + String.valueOf(type));
     }
 
-    private int[] valoresDe(int tipo) {
-        if (tipo == ConfirmationCallback.YES_NO_OPTION) {
+    private int[] valuesOf(int type) {
+        if (type == ConfirmationCallback.YES_NO_OPTION) {
             return new int[] { ConfirmationCallback.YES, ConfirmationCallback.NO };
         }
-        if (tipo == ConfirmationCallback.YES_NO_CANCEL_OPTION) {
+        if (type == ConfirmationCallback.YES_NO_CANCEL_OPTION) {
             return new int[] { ConfirmationCallback.YES, ConfirmationCallback.NO,
                     ConfirmationCallback.CANCEL };
         }
-        if (tipo == ConfirmationCallback.OK_CANCEL_OPTION) {
+        if (type == ConfirmationCallback.OK_CANCEL_OPTION) {
             return new int[] { ConfirmationCallback.OK, ConfirmationCallback.CANCEL };
         }
-        throw new IllegalArgumentException("tipo de opcion desconocido: " + String.valueOf(tipo));
+        throw new IllegalArgumentException("unknown option type: " + String.valueOf(type));
     }
 }

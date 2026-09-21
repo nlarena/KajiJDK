@@ -1,6 +1,6 @@
 package java.lang.classfile;
 
-// Una pieza que aparece al nivel de la clase: sus banderas, su superclase, sus interfaces, su
-// versión, sus campos, sus métodos y sus atributos de clase.
+// A piece appearing at the class level: its flags, its superclass, its interfaces, its version, its
+// fields, its methods and its class attributes.
 public interface ClassElement extends ClassFileElement {
 }

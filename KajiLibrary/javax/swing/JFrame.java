@@ -13,35 +13,35 @@ import javax.accessibility.Accessible;
 import javax.accessibility.AccessibleContext;
 
 /**
- * Una ventana con decoracion, del lado de Swing.
+ * A window with decoration, on Swing's side.
  *
- * <p>Es un {@link Frame} de AWT con un panel raiz adentro; de ahi sale casi toda su API --el panel
- * de contenido, el panel de vidrio, las capas-- y tambien su rareza mas conocida: agregarle un
- * componente directamente no lo agrega al `JFrame` sino a su panel de contenido, porque el `JFrame`
- * mismo no admite mas hijo que el panel raiz.
+ * <p>It is an AWT {@link Frame} with a root pane inside; from there comes almost all its API
+ * -- the content pane, the glass pane, the layers -- and also its best-known oddity: adding a
+ * component to it directly does not add it to the `JFrame` but to its content pane, because the
+ * `JFrame` itself admits no child other than the root pane.
  *
- * <h2>Los hijos van al contenido</h2>
+ * <h2>The children go to the content</h2>
  *
- * <p>{@link #addImpl} redirige solo, y la redireccion se apaga mientras el constructor arma el panel
- * raiz -- si estuviera prendida, agregar el panel raiz se redirigiria a si mismo. Es exactamente lo
- * mismo que hacen {@link JDialog} y {@link JWindow}.
+ * <p>{@link #addImpl} redirects by itself, and the redirection is switched off while the
+ * constructor builds the root pane -- if it were switched on, adding the root pane would
+ * redirect to itself. It is exactly the same as {@link JDialog} and {@link JWindow} do.
  *
- * <h2>La politica de cierre</h2>
+ * <h2>The closing policy</h2>
  *
- * <p>{@link #setDefaultCloseOperation} decide entre esconder, destruir, no hacer nada, o terminar el
- * programa; {@link #processWindowEvent} la aplica al llegar el evento de cierre. Sin reparto de
- * eventos de ventana ese evento no llega solo, pero el metodo esta y hace lo que dice si alguien se
- * lo entrega.
+ * <p>{@link #setDefaultCloseOperation} decides between hiding, destroying, doing nothing, or
+ * ending the program; {@link #processWindowEvent} applies it when the closing event arrives.
+ * With no handing out of window events that event does not arrive by itself, but the method is
+ * there and does what it says if somebody delivers it to it.
  *
  * @see WindowConstants
  */
 public class JFrame extends Frame implements WindowConstants, Accessible, RootPaneContainer,
         TransferHandler.HasGetTransferHandler {
 
-    /** El panel raiz; ver la nota de la clase. */
+    /** The root pane; see the class note. */
     protected JRootPane rootPane;
 
-    /** Si agregar redirige al contenido. */
+    /** Whether adding redirects to the content. */
     protected boolean rootPaneCheckingEnabled = false;
 
     protected AccessibleContext accessibleContext;
@@ -49,16 +49,16 @@ public class JFrame extends Frame implements WindowConstants, Accessible, RootPa
     private TransferHandler transferHandler;
 
 
-    /** Si las ventanas nuevas se decoran con el `LookAndFeel` en vez de con el sistema. */
+    /** Whether new windows are decorated with the `LookAndFeel` instead of with the system. */
     private static boolean defaultLookAndFeelDecorated = false;
 
-    /** Que hacer al cerrarla; una de las constantes de {@link WindowConstants}. */
+    /** What to do on closing it; one of {@link WindowConstants}' constants. */
     private int defaultCloseOperation = HIDE_ON_CLOSE;
 
     /**
-     * Una ventana sin titulo, todavia invisible.
+     * A window with no title, still invisible.
      *
-     * @throws HeadlessException si el entorno no tiene pantalla
+     * @throws HeadlessException if the environment has no screen
      */
     public JFrame() throws HeadlessException {
         super();
@@ -66,9 +66,9 @@ public class JFrame extends Frame implements WindowConstants, Accessible, RootPa
     }
 
     /**
-     * Una ventana sin titulo en esa configuracion grafica.
+     * A window with no title in that graphics configuration.
      *
-     * @param gc la pantalla y el modo, o `null` para los de siempre
+     * @param gc the screen and the mode, or `null` for the usual ones
      */
     public JFrame(GraphicsConfiguration gc) {
         super(gc);
@@ -76,10 +76,10 @@ public class JFrame extends Frame implements WindowConstants, Accessible, RootPa
     }
 
     /**
-     * Una ventana con ese titulo, todavia invisible.
+     * A window with that title, still invisible.
      *
-     * @param title el titulo, o `null` para ninguno
-     * @throws HeadlessException si el entorno no tiene pantalla
+     * @param title the title, or `null` for none
+     * @throws HeadlessException if the environment has no screen
      */
     public JFrame(String title) throws HeadlessException {
         super(title);
@@ -87,10 +87,10 @@ public class JFrame extends Frame implements WindowConstants, Accessible, RootPa
     }
 
     /**
-     * Una ventana con ese titulo en esa configuracion grafica.
+     * A window with that title in that graphics configuration.
      *
-     * @param title el titulo, o `null` para ninguno
-     * @param gc la pantalla y el modo, o `null` para los de siempre
+     * @param title the title, or `null` for none
+     * @param gc the screen and the mode, or `null` for the usual ones
      */
     public JFrame(String title, GraphicsConfiguration gc) {
         super(title, gc);
@@ -98,12 +98,12 @@ public class JFrame extends Frame implements WindowConstants, Accessible, RootPa
     }
 
     /**
-     * Fija que hacer cuando el usuario la cierre.
+     * It fixes what to do when the user closes it.
      *
-     * <p>La aplica {@link #processWindowEvent}; ver la nota de la clase.
+     * <p>{@link #processWindowEvent} applies it; see the class note.
      *
-     * @param operation una de las constantes de {@link WindowConstants}
-     * @throws IllegalArgumentException si no es una de las cuatro
+     * @param operation one of {@link WindowConstants}' constants
+     * @throws IllegalArgumentException if it is not one of the four
      */
     public void setDefaultCloseOperation(int operation) {
         if (operation != DO_NOTHING_ON_CLOSE && operation != HIDE_ON_CLOSE
@@ -114,31 +114,32 @@ public class JFrame extends Frame implements WindowConstants, Accessible, RootPa
         this.defaultCloseOperation = operation;
     }
 
-    /** Que se haria al cerrarla. Por omision, {@link WindowConstants#HIDE_ON_CLOSE}. */
+    /** What would be done on closing it. By default, {@link WindowConstants#HIDE_ON_CLOSE}. */
     public int getDefaultCloseOperation() {
         return this.defaultCloseOperation;
     }
 
     /**
-     * Si las ventanas creadas de aca en mas se decoran con el `LookAndFeel`.
+     * Whether the windows created from now on are decorated with the `LookAndFeel`.
      *
-     * <p>Solo afecta a las que se creen despues: la decoracion se elige al construirlas.
+     * <p>It only affects those created afterwards: the decoration is chosen when they are
+     * built.
      */
     public static void setDefaultLookAndFeelDecorated(boolean defaultLookAndFeelDecorated) {
         JFrame.defaultLookAndFeelDecorated = defaultLookAndFeelDecorated;
     }
 
-    /** Si las ventanas nuevas se decoran con el `LookAndFeel`. Por omision, no. */
+    /** Whether new windows are decorated with the `LookAndFeel`. By default, no. */
     public static boolean isDefaultLookAndFeelDecorated() {
         return defaultLookAndFeelDecorated;
     }
 
-    // -- el panel raiz --------------------------------------------------------------------------
+    // -- the root pane -------------------------------------------------------------------------
 
     /**
-     * Arma el panel raiz.
+     * It builds the root pane.
      *
-     * <p>La redireccion se prende recien al final; ver la nota de la clase.
+     * <p>The redirection is switched on only at the end; see the class note.
      */
     protected void frameInit() {
         enableEvents(java.awt.AWTEvent.KEY_EVENT_MASK | java.awt.AWTEvent.WINDOW_EVENT_MASK);
@@ -158,7 +159,7 @@ public class JFrame extends Frame implements WindowConstants, Accessible, RootPa
         return rp;
     }
 
-    /** Atiende el cierre segun {@link #setDefaultCloseOperation}. */
+    /** It attends the closing according to {@link #setDefaultCloseOperation}. */
     protected void processWindowEvent(WindowEvent e) {
         super.processWindowEvent(e);
         if (e.getID() == WindowEvent.WINDOW_CLOSING) {
@@ -184,9 +185,10 @@ public class JFrame extends Frame implements WindowConstants, Accessible, RootPa
     }
 
     /**
-     * Dibuja sin borrar el fondo primero.
+     * It draws without clearing the background first.
      *
-     * <p>Swing dibuja cada pixel que le toca, asi que borrar antes solo produce un parpadeo.
+     * <p>Swing draws every pixel that falls to it, so clearing beforehand only produces a
+     * flicker.
      */
     public void update(Graphics g) {
         paint(g);
@@ -209,10 +211,10 @@ public class JFrame extends Frame implements WindowConstants, Accessible, RootPa
     }
 
     /**
-     * Agrega al contenido, no a la ventana.
+     * It adds to the content, not to the window.
      *
-     * @throws IllegalArgumentException si se intenta agregar el panel raiz con la redireccion
-     *     prendida
+     * @throws IllegalArgumentException if the root pane is added with the redirection switched
+     *     on
      */
     protected void addImpl(Component comp, Object constraints, int index) {
         if (isRootPaneCheckingEnabled()) {
@@ -222,7 +224,7 @@ public class JFrame extends Frame implements WindowConstants, Accessible, RootPa
         }
     }
 
-    /** Saca del contenido, salvo que sea el panel raiz. */
+    /** It removes from the content, unless it is the root pane. */
     public void remove(Component comp) {
         if (comp == rootPane) {
             super.remove(comp);
@@ -231,7 +233,7 @@ public class JFrame extends Frame implements WindowConstants, Accessible, RootPa
         }
     }
 
-    /** Le pone acomodador al contenido, no a la ventana. */
+    /** It gives the layout to the content, not to the window. */
     public void setLayout(LayoutManager manager) {
         if (isRootPaneCheckingEnabled()) {
             getContentPane().setLayout(manager);
@@ -252,7 +254,7 @@ public class JFrame extends Frame implements WindowConstants, Accessible, RootPa
         if (rootPane != null) {
             boolean checkingEnabled = isRootPaneCheckingEnabled();
             try {
-                // Apagado mientras se agrega el panel raiz; ver la nota de la clase.
+                // Switched off while the root pane is added; see the class note.
                 setRootPaneCheckingEnabled(false);
                 add(rootPane, java.awt.BorderLayout.CENTER);
             } finally {

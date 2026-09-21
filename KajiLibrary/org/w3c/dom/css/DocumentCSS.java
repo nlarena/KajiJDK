@@ -4,18 +4,18 @@ import org.w3c.dom.Element;
 import org.w3c.dom.stylesheets.DocumentStyle;
 
 /**
- * Un documento que admite estilos de anulacion.
+ * A document that admits override styles.
  *
- * <p>El estilo de anulacion es una capa que gana sobre todas las hojas y sobre el `style` del
- * elemento: la cascada del usuario, en terminos de CSS 2. Se lo pide vacio y se lo escribe, y a
- * partir de ahi lo que diga tiene la ultima palabra.
+ * <p>The override style is a layer that wins over all the sheets and over the `style` of the
+ * element: the user's cascade, in CSS 2 terms. It is asked for empty and written, and from then on
+ * what it says has the last word.
  */
 public interface DocumentCSS extends DocumentStyle {
 
     /**
-     * El bloque de anulacion de ese elemento, para leerlo o escribirlo.
+     * The override block of that element, to read it or write it.
      *
-     * @param pseudoElt el pseudo-elemento --`:first-line`--, o la cadena vacia
+     * @param pseudoElt the pseudo-element --`:first-line`--, or the empty string
      */
     CSSStyleDeclaration getOverrideStyle(Element elt, String pseudoElt);
 }

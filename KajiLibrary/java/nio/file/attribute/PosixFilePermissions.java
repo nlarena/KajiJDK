@@ -4,19 +4,19 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
-// Las utilidades para pasar de `"rwxr-xr-x"` a un `Set<PosixFilePermission>` y volver.
+// The utilities for going from `"rwxr-xr-x"` to a `Set<PosixFilePermission>` and back.
 //
-// **Es puro texto y por eso esta entera**, aunque el paquete que la rodea no pueda leer permisos del
-// disco: convertir la cadena no necesita ningun nativo. Sirve por si sola --por ejemplo para leer
-// un modo de un archivo de configuracion o de un tar-- y ademas es lo que hace que
-// `asFileAttribute` tenga sentido el dia que haya un nativo que fije permisos al crear.
+// **It is pure text and that is why it is complete**, even though the package around it cannot read
+// permissions off the disk: converting the string needs no native. It is useful on its own --for
+// reading a mode out of a configuration file or a tar, say-- and it is also what makes
+// `asFileAttribute` mean something the day there is a native that sets permissions on creation.
 public final class PosixFilePermissions {
 
-    // Es una clase de utilidades: no hay nada que instanciar.
+    // It is a utility class: there is nothing to instantiate.
     private PosixFilePermissions() {
     }
 
-    private static void escribir(StringBuilder sb, Set<PosixFilePermission> perms,
+    private static void writeTo(StringBuilder sb, Set<PosixFilePermission> perms,
             PosixFilePermission r, PosixFilePermission w, PosixFilePermission x) {
         sb.append(perms.contains(r) ? 'r' : '-');
         sb.append(perms.contains(w) ? 'w' : '-');
@@ -24,23 +24,23 @@ public final class PosixFilePermissions {
     }
 
     /**
-     * El modo en las nueve letras de `ls -l`, sin el primer caracter de tipo: `"rwxr-x---"`.
+     * The mode in `ls -l`'s nine letters, without the leading type character: `"rwxr-x---"`.
      *
-     * <p>Siempre nueve caracteres: un permiso ausente es un guion, no una posicion que se saltea.
+     * <p>Always nine characters: an absent permission is a dash, not a position that is skipped.
      */
     public static String toString(Set<PosixFilePermission> perms) {
         StringBuilder sb = new StringBuilder(9);
-        escribir(sb, perms, PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE,
+        writeTo(sb, perms, PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE,
                 PosixFilePermission.OWNER_EXECUTE);
-        escribir(sb, perms, PosixFilePermission.GROUP_READ, PosixFilePermission.GROUP_WRITE,
+        writeTo(sb, perms, PosixFilePermission.GROUP_READ, PosixFilePermission.GROUP_WRITE,
                 PosixFilePermission.GROUP_EXECUTE);
-        escribir(sb, perms, PosixFilePermission.OTHERS_READ, PosixFilePermission.OTHERS_WRITE,
+        writeTo(sb, perms, PosixFilePermission.OTHERS_READ, PosixFilePermission.OTHERS_WRITE,
                 PosixFilePermission.OTHERS_EXECUTE);
         return sb.toString();
     }
 
-    private static boolean esPuesto(char c, char esperado) {
-        if (c == esperado) {
+    private static boolean isSet(char c, char expected) {
+        if (c == expected) {
             return true;
         }
         if (c == '-') {
@@ -50,58 +50,58 @@ public final class PosixFilePermissions {
     }
 
     /**
-     * Lo inverso de `toString`.
+     * `toString`'s inverse.
      *
-     * <p>Se exige la longitud exacta y la letra exacta en cada posicion --`r` solo en la primera de
-     * cada terna, `w` en la segunda, `x` en la tercera--. Aceptar `"rwx"` a secas o `"xwrxwrxwr"`
-     * seria adivinar que quiso decir quien llamo, y una cadena de modo mal escrita es justo el lugar
-     * donde conviene fallar fuerte.
+     * <p>The exact length and the exact letter at each position are required --`r` only in the first
+     * of each triple, `w` in the second, `x` in the third. Accepting a plain `"rwx"` or
+     * `"xwrxwrxwr"` would be guessing what the caller meant, and a badly written mode string is
+     * exactly the place to fail hard.
      *
-     * @throws IllegalArgumentException si la cadena no tiene nueve caracteres o alguno no
-     *     corresponde a su posicion
+     * @throws IllegalArgumentException if the string is not nine characters or one of them does not
+     *     match its position
      */
     public static Set<PosixFilePermission> fromString(String perms) {
         if (perms.length() != 9) {
             throw new IllegalArgumentException("Invalid mode");
         }
-        Set<PosixFilePermission> resultado = new HashSet<PosixFilePermission>();
-        if (esPuesto(perms.charAt(0), 'r')) {
-            resultado.add(PosixFilePermission.OWNER_READ);
+        Set<PosixFilePermission> result = new HashSet<PosixFilePermission>();
+        if (isSet(perms.charAt(0), 'r')) {
+            result.add(PosixFilePermission.OWNER_READ);
         }
-        if (esPuesto(perms.charAt(1), 'w')) {
-            resultado.add(PosixFilePermission.OWNER_WRITE);
+        if (isSet(perms.charAt(1), 'w')) {
+            result.add(PosixFilePermission.OWNER_WRITE);
         }
-        if (esPuesto(perms.charAt(2), 'x')) {
-            resultado.add(PosixFilePermission.OWNER_EXECUTE);
+        if (isSet(perms.charAt(2), 'x')) {
+            result.add(PosixFilePermission.OWNER_EXECUTE);
         }
-        if (esPuesto(perms.charAt(3), 'r')) {
-            resultado.add(PosixFilePermission.GROUP_READ);
+        if (isSet(perms.charAt(3), 'r')) {
+            result.add(PosixFilePermission.GROUP_READ);
         }
-        if (esPuesto(perms.charAt(4), 'w')) {
-            resultado.add(PosixFilePermission.GROUP_WRITE);
+        if (isSet(perms.charAt(4), 'w')) {
+            result.add(PosixFilePermission.GROUP_WRITE);
         }
-        if (esPuesto(perms.charAt(5), 'x')) {
-            resultado.add(PosixFilePermission.GROUP_EXECUTE);
+        if (isSet(perms.charAt(5), 'x')) {
+            result.add(PosixFilePermission.GROUP_EXECUTE);
         }
-        if (esPuesto(perms.charAt(6), 'r')) {
-            resultado.add(PosixFilePermission.OTHERS_READ);
+        if (isSet(perms.charAt(6), 'r')) {
+            result.add(PosixFilePermission.OTHERS_READ);
         }
-        if (esPuesto(perms.charAt(7), 'w')) {
-            resultado.add(PosixFilePermission.OTHERS_WRITE);
+        if (isSet(perms.charAt(7), 'w')) {
+            result.add(PosixFilePermission.OTHERS_WRITE);
         }
-        if (esPuesto(perms.charAt(8), 'x')) {
-            resultado.add(PosixFilePermission.OTHERS_EXECUTE);
+        if (isSet(perms.charAt(8), 'x')) {
+            result.add(PosixFilePermission.OTHERS_EXECUTE);
         }
-        return resultado;
+        return result;
     }
 
-    // El `FileAttribute` que devuelve `asFileAttribute`. Guarda una copia inmutable del conjunto
-    // para que el atributo no cambie si quien llamo modifica el suyo despues.
-    private static final class AtributoPosix implements FileAttribute<Set<PosixFilePermission>> {
+    // The `FileAttribute` `asFileAttribute` returns. It keeps an immutable copy of the set so the
+    // attribute does not change if the caller modifies their own afterwards.
+    private static final class PosixAttr implements FileAttribute<Set<PosixFilePermission>> {
 
         private final Set<PosixFilePermission> perms;
 
-        AtributoPosix(Set<PosixFilePermission> perms) {
+        PosixAttr(Set<PosixFilePermission> perms) {
             this.perms = perms;
         }
 
@@ -115,27 +115,27 @@ public final class PosixFilePermissions {
     }
 
     /**
-     * Envuelve los permisos como el `FileAttribute` que reciben `Files.createFile` y compania.
+     * It wraps the permissions as the `FileAttribute` `Files.createFile` and company take.
      *
-     * <p>El conjunto se **copia y se revisa** aca y no al usarlo: si trae algo que no es un
-     * `PosixFilePermission` --posible con un `Set` crudo-- el error tiene que aparecer donde se
-     * armo el atributo, no adentro de la creacion del archivo.
+     * <p>The set is **copied and checked** here and not on use: if it carries something that is not
+     * a `PosixFilePermission` --possible with a raw `Set`-- the error has to turn up where the
+     * attribute was built, not inside the file's creation.
      *
-     * <p>Ojo: KajiJDK no puede honrar el atributo. `Files.createFile` con un `FileAttribute` no
-     * vacio levanta `UnsupportedOperationException`, porque el nativo que crea archivos no toma
-     * permisos.
+     * <p>Mind that KajiJDK cannot honour the attribute. `Files.createFile` with a non-empty
+     * `FileAttribute` throws `UnsupportedOperationException`, because the native that creates files
+     * takes no permissions.
      */
     public static FileAttribute<Set<PosixFilePermission>> asFileAttribute(
             Set<PosixFilePermission> perms) {
-        Set<PosixFilePermission> copia = new HashSet<PosixFilePermission>();
+        Set<PosixFilePermission> copied = new HashSet<PosixFilePermission>();
         java.util.Iterator<PosixFilePermission> it = perms.iterator();
         while (it.hasNext()) {
             PosixFilePermission p = it.next();
             if (p == null) {
                 throw new NullPointerException();
             }
-            copia.add(p);
+            copied.add(p);
         }
-        return new AtributoPosix(Collections.unmodifiableSet(copia));
+        return new PosixAttr(Collections.unmodifiableSet(copied));
     }
 }

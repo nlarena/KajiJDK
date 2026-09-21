@@ -3,24 +3,25 @@ package com.sun.jdi.connect.spi;
 import java.io.IOException;
 
 /**
- * La conexión se cerró o se rompió mientras se la usaba.
+ * The connection closed or broke while it was being used.
  *
- * <p>Es una {@link IOException} y no algo propio porque para quien la recibe es exactamente eso: una
- * operación de entrada/salida que no se pudo completar. Lo que agrega sobre una {@code IOException}
- * cualquiera es la <em>causa</em>, y es una distinción que importa — un fin de flujo ordenado se
- * reporta con un paquete de largo cero desde {@link Connection#readPacket}, no con esta excepción.
- * Verla significa que la conexión ya no sirve, no que el otro lado terminó de hablar.
+ * <p>It is an {@link IOException} and not something of its own because for whoever receives it
+ * that is exactly what it is: an input/output operation that could not be completed. What it
+ * adds over any {@code IOException} is the <em>cause</em>, and it is a distinction that matters
+ * -- an orderly end of stream is reported with a packet of length zero from
+ * {@link Connection#readPacket}, not with this exception. Seeing it means that the connection
+ * no longer serves, not that the other side has finished talking.
  */
 public class ClosedConnectionException extends IOException {
 
     private static final long serialVersionUID = 3877032124297204774L;
 
-    /** Sin detalle. */
+    /** With no detail. */
     public ClosedConnectionException() {
         super();
     }
 
-    /** Con un mensaje que explique qué la cerró. */
+    /** With a message that explains what closed it. */
     public ClosedConnectionException(String message) {
         super(message);
     }

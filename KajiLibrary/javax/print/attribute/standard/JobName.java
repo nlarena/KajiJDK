@@ -7,9 +7,9 @@ import javax.print.attribute.PrintRequestAttribute;
 import javax.print.attribute.TextSyntax;
 
 /**
- * El nombre del trabajo, el que se ve en la cola y en la caratula.
+ * The job's name, the one seen in the queue and on the cover sheet.
  *
- * <p>Si no se pide, la impresora inventa uno --normalmente el del primer documento.
+ * <p>If it is not requested, the printer makes one up --normally the first document's.
  */
 public final class JobName extends TextSyntax implements PrintRequestAttribute, PrintJobAttribute {
 

@@ -6,207 +6,209 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 
 /**
- * KajiLibrary's java.io.ObjectInputStream -- el lado que lee del formato de serializacion.
+ * KajiLibrary's java.io.ObjectInputStream -- the reading side of the serialization format.
  *
- * <p>Es la contraparte exacta de {@link ObjectOutputStream}: lo que aquel escribe, este lo arma de
- * vuelta. La prueba de esta clase no es "lee lo que yo escribi" --eso lo cumple cualquier par de
- * rutinas que se equivoquen igual-- sino que lee **el flujo que produce el JDK real**, byte por
- * byte, y que un flujo escrito aca lo lee el JDK.
+ * <p>It is {@link ObjectOutputStream}'s exact counterpart: what that one writes, this one builds
+ * back up. This class's test is not "it reads what I wrote" --any pair of routines that get it
+ * wrong the same way passes that-- but that it reads **the stream the real JDK produces**, byte for
+ * byte, and that a stream written here is read by the JDK.
  *
- * <h2>Reconstruir no es construir</h2>
+ * <h2>Rebuilding is not constructing</h2>
  *
- * <p>El objeto se saca de {@link ObjectStreamClass#allocateInstance}, que da una instancia con todos
- * los campos en su valor por defecto y **sin correr ningun constructor**. No es un atajo: correr el
- * constructor ejecutaria sus efectos --validaciones, contadores, altas en tablas globales-- por un
- * objeto que no se esta creando sino leyendo, y ademas pisaria despues con los valores del flujo lo
- * que el constructor acababa de calcular. La especificacion dice exactamente eso, y suena al reves
- * de lo que uno esperaria.
+ * <p>The object comes out of {@link ObjectStreamClass#allocateInstance}, which gives an instance
+ * with every field at its default value and **without running any constructor**. It is no shortcut:
+ * running the constructor would carry out its effects --validations, counters, registrations in
+ * global tables-- for an object that is not being created but read, and it would then overwrite
+ * with the stream's values what the constructor had just worked out. The specification says exactly
+ * that, and it sounds the reverse of what one would expect.
  *
- * <p>La consecuencia que hay que tener presente: **la clase no puede defenderse en el
- * constructor**. Cualquier invariante que dependa de validar en el constructor no vale para un
- * objeto que llego por aca; para eso estan {@code readObject} propio,
- * {@link #registerValidation} y {@link ObjectInputFilter}.
+ * <p>The consequence to keep in mind: **the class cannot defend itself in the constructor**. Any
+ * invariant depending on validation in the constructor does not hold for an object that arrived
+ * this way; for that there are a `readObject` of one's own, {@link #registerValidation} and {@link
+ * ObjectInputFilter}.
  *
- * <h2>Las tres capas, del lado que lee</h2>
+ * <h2>The three layers, from the reading side</h2>
  *
  * <ol>
- *   <li><b>Los bytes de bloque.</b> Todo lo que un {@code writeObject} de usuario escribio salio
- *       envuelto en registros {@code TC_BLOCKDATA} con su largo adelante. Aca eso se desenvuelve, y
- *       --lo importante-- se puede **saltear**: cuando la clase de este lado no tiene el
- *       {@code readObject} que la del otro tenia, sus datos se descartan hasta el
- *       {@code TC_ENDBLOCKDATA} sin necesidad de entenderlos. Sin ese marco, un solo campo de mas
- *       del otro lado desalinearia el flujo para siempre.
- *   <li><b>Las manijas.</b> Cada objeto, cadena, clase y descriptor que sale del flujo se numera en
- *       el mismo orden en que el escritor lo numero, y un {@code TC_REFERENCE} devuelve **el mismo
- *       objeto** que ya se armo. Es lo que hace que un grafo con ciclos termine y lo que conserva
- *       la identidad compartida. La manija se reserva **antes** de leer los campos, justamente para
- *       que un campo que apunta al objeto que lo contiene la encuentre ya numerada.
- *   <li><b>Los descriptores.</b> La forma de la clase viene en el flujo y **manda sobre la de este
- *       lado**: los campos se leen en el orden y con los tipos que dice el flujo, y recien despues
- *       se busca a que campo local le toca cada valor. Un campo que el flujo trae y la clase local
- *       ya no tiene se descarta; uno que la clase local tiene y el flujo no trae queda en su valor
- *       por defecto. Eso es lo que permite leer un objeto escrito por otra version de la clase.
+ *   <li><b>The block bytes.</b> Everything a user's {@code writeObject} wrote came out wrapped in
+ *       {@code TC_BLOCKDATA} records with their length in front. Here that is unwrapped, and --the
+ *       important part-- it can be **skipped**: when the class on this side does not have the
+ *       {@code readObject} the other's had, its data is discarded up to the
+ *       {@code TC_ENDBLOCKDATA} with no need to understand it. Without that framing, a single extra
+ *       field on the other side would misalign the stream for ever.
+ *   <li><b>The handles.</b> Every object, string, class and desc coming out of the stream is
+ *       numbered in the same order the writer numbered it, and a {@code TC_REFERENCE} returns **the
+ *       same object** that was built already. It is what makes a graph with cycles terminate and
+ *       what preserves shared identity. The handle is reserved **before** the fields are read,
+ *       precisely so that a field pointing at the object containing it finds it numbered already.
+ *   <li><b>The descriptors.</b> The class's shape comes in the stream and **rules over this
+ *       side's**: the fields are read in the order and with the types the stream states, and only
+ *       then is it looked up which local field each value belongs to. A field the stream brings and
+ *       the local class no longer has is discarded; one the local class has and the stream does not
+ *       bring stays at its default value. That is what allows reading an object written by another
+ *       version of the class.
  * </ol>
  *
- * <h2>Lo que esta clase no hace, y por que</h2>
+ * <h2>What this class does not do, and why</h2>
  *
- * <p><b>{@code readResolve} no se consulta.</b> Es la unica desviacion del formato, y es la misma
- * --y por la misma razon-- que {@code writeReplace} en {@link ObjectOutputStream}: decidir si el
- * metodo vale pide reproducir las reglas de accesibilidad de la especificacion (privado de la
- * clase, o accesible desde ella por herencia dentro del mismo paquete) y equivocarse en cualquiera
- * de los dos sentidos devuelve, en silencio, un objeto distinto del que el JDK devolveria. Se avisa
- * aca en vez de adivinar. Como los dos lados de esta biblioteca hacen lo mismo, siguen
- * entendiendose entre si; contra el JDK real la diferencia se nota en las clases que usan
- * {@code readResolve} para preservar un singleton.
+ * <p><b>{@code readResolve} is not consulted.</b> It is the only deviation from the format, and it
+ * is the same one --and for the same reason-- as {@code writeReplace} in {@link
+ * ObjectOutputStream}: deciding whether the method counts asks for reproducing the specification's
+ * accessibility rules (private to the class, or reachable from it by inheritance within the same
+ * package) and getting it wrong in either direction returns, silently, an object different from the
+ * one the JDK would return. Notice is given here instead of guessing. Since both sides of this
+ * library do the same, they go on understanding each other; against the real JDK the difference
+ * shows in the classes that use {@code readResolve} to preserve a singleton.
  *
- * <p><b>{@code readObjectNoData} no se llama.</b> Solo aplica cuando el flujo **no** trae datos
- * para un tramo de la jerarquia que la clase local si tiene, que es el caso de una superclase
- * agregada despues de escribir. Los campos de ese tramo quedan en su valor por defecto, que es lo
- * que hubiera pasado igual si el metodo no estuviera declarado.
+ * <p><b>{@code readObjectNoData} is not called.</b> It only applies when the stream does **not**
+ * bring data for a stretch of the hierarchy the local class does have, which is the case of a
+ * superclass added after writing. That stretch's fields stay at their default value, which is what
+ * would have happened anyway if the method had not been declared.
  *
- * <p><b>Una clase que el flujo nombra y de este lado no existe corta la lectura.</b> Sus bytes se
- * consumen enteros --el flujo no queda desalineado a mitad de ese objeto-- y despues sale
- * {@link ClassNotFoundException}. El JDK difiere esa excepcion hasta el final del
- * {@code readObject} de arriba de todo para poder devolver el resto del grafo con ese campo en
- * {@code null}; aca no, porque llevar la excepcion a cuestas por todo el grafo y decidir en cada
- * campo si se propaga o se deja en {@code null} es justamente la clase de detalle que se equivoca
- * en silencio. Lo que se pierde es poder seguir usando el flujo despues del error.
+ * <p><b>A class the stream names and that does not exist on this side cuts the reading short.</b>
+ * Its bytes are consumed whole --the stream is not left misaligned in the middle of that object--
+ * and then {@link ClassNotFoundException} comes out. The JDK defers that exception to the end of
+ * the topmost {@code readObject} so as to be able to return the rest of the graph with that field
+ * at {@code null}; here it does not, because carrying the exception around the whole graph and
+ * deciding at each field whether it propagates or is left at {@code null} is precisely the kind of
+ * detail that gets it wrong silently. What is lost is being able to go on using the stream after
+ * the error.
  */
 public class ObjectInputStream extends InputStream implements ObjectInput, ObjectStreamConstants {
 
     /**
-     * Lo que se pone en la tabla en lugar de un objeto leido con {@link #readUnshared}.
+     * What is put in the table in place of an object read with {@link #readUnshared}.
      *
-     * <p>La manija se reserva igual --el escritor la conto y los numeros tienen que coincidir-- pero
-     * apunta a esto y no al objeto. Asi, un {@code TC_REFERENCE} posterior a esa manija se detecta y
-     * se rechaza en vez de devolver el objeto que justamente se pidio no compartir.
+     * <p>The handle is reserved all the same --the writer counted it and the numbers have to
+     * match-- but it points at this and not at the object. That way a later {@code TC_REFERENCE} to
+     * that handle is detected and rejected instead of returning the very object that was asked not
+     * to be shared.
      */
-    private static final Object SIN_COMPARTIR = new Object();
+    private static final Object UNSHARED_MARKER = new Object();
 
-    private final EntradaBloques bin;
+    private final BlockInput bin;
 
-    /** Numerados en el mismo orden que los numero el escritor; ver la nota de la clase. */
-    private Object[] manijas = new Object[16];
-    private int cuantasManijas;
+    /** Numbered in the same order the writer numbered them; see the class note. */
+    private Object[] handles = new Object[16];
+    private int handleCount;
 
-    /** Un flujo construido con el constructor sin argumentos: no hay bytes abajo. */
-    private final boolean delegado;
+    /** A stream constructed with the no-argument constructor: there are no bytes underneath. */
+    private final boolean delegating;
 
-    private boolean resolucionHabilitada;
-    private ObjectInputFilter filtro;
-    private boolean filtroFijado;
+    private boolean resolveEnabled;
+    private ObjectInputFilter filter;
+    private boolean filterSet;
 
-    // Estado del tramo que se esta leyendo, para `defaultReadObject` y `readFields`.
-    private Object objetoActual;
-    private ObjectStreamClass descActual;
-    private GetFieldImpl getActual;
+    // The state of the stretch being read, for `defaultReadObject` and `readFields`.
+    private Object currentObject;
+    private ObjectStreamClass currentDesc;
+    private GetFieldImpl currentGet;
 
-    /** Anidamiento de {@code readObject}; el objeto de arriba de todo esta en 1. */
-    private int profundidad;
+    /** {@code readObject}'s nesting; the topmost object is at 1. */
+    private int depth;
 
-    private ObjectInputValidation[] validaciones = new ObjectInputValidation[4];
-    private int[] prioridades = new int[4];
-    private int cuantasValidaciones;
+    private ObjectInputValidation[] validations = new ObjectInputValidation[4];
+    private int[] priorities = new int[4];
+    private int validationCount;
 
     /**
-     * Lee la cabecera del flujo y deja todo listo para el primer {@link #readObject}.
+     * It reads the stream's header and leaves everything ready for the first {@link #readObject}.
      *
-     * @throws StreamCorruptedException si los cuatro primeros bytes no son los del formato
+     * @throws StreamCorruptedException if the first four bytes are not the format's
      */
     public ObjectInputStream(InputStream in) throws IOException {
         if (in == null) {
             throw new NullPointerException();
         }
-        this.bin = new EntradaBloques(in);
-        this.delegado = false;
-        this.bin.modoBloque(false);
+        this.bin = new BlockInput(in);
+        this.delegating = false;
+        this.bin.blockMode(false);
         this.readStreamHeader();
-        this.bin.modoBloque(true);
+        this.bin.blockMode(true);
     }
 
     /**
-     * Para una subclase que reimplementa la deserializacion entera.
+     * For a subclass that reimplements deserialization entirely.
      *
-     * <p>No hay flujo abajo: {@link #readObject} llama a {@link #readObjectOverride} y todo metodo
-     * que leeria bytes falla. Es `protected` porque solo tiene sentido desde adentro de una
-     * subclase.
+     * <p>There is no stream underneath: {@link #readObject} calls {@link #readObjectOverride} and
+     * every method that would read bytes fails. It is `protected` because it only makes sense from
+     * inside a subclass.
      */
     protected ObjectInputStream() throws IOException, SecurityException {
         this.bin = null;
-        this.delegado = true;
+        this.delegating = true;
     }
 
-    // ---- la cabecera y los ganchos de subclase ---------------------------------------------------
+    // ---- the header and the subclass hooks -------------------------------------------------------
 
-    /** Los cuatro bytes con que empieza todo flujo: el magico y la version. */
+    /** The four bytes every stream begins with: the magic and the version. */
     protected void readStreamHeader() throws IOException, StreamCorruptedException {
-        short magico = (short) this.bin.leerUnsignedShort();
-        short version = (short) this.bin.leerUnsignedShort();
-        if (magico != ObjectStreamConstants.STREAM_MAGIC
+        short magic = (short) this.bin.readUnsignedShort0();
+        short version = (short) this.bin.readUnsignedShort0();
+        if (magic != ObjectStreamConstants.STREAM_MAGIC
                 || version != ObjectStreamConstants.STREAM_VERSION) {
             throw new StreamCorruptedException("invalid stream header: "
-                    + hex4(magico & 0xFFFF) + hex4(version & 0xFFFF));
+                    + hex4(magic & 0xFFFF) + hex4(version & 0xFFFF));
         }
     }
 
     /**
-     * Lee un descriptor de clase del flujo. El espejo de
-     * {@link ObjectOutputStream#writeClassDescriptor}: una subclase que cambio alla el formato tiene
-     * que cambiarlo aca igual.
+     * It reads a class desc from the stream. {@link ObjectOutputStream#writeClassDescriptor}'s
+     * mirror: a subclass that changed the format over there has to change it here too.
      *
-     * <p>Lo que devuelve es un descriptor **del flujo**: nombre, UID, banderas y campos tal como
-     * vinieron, todavia sin clase local. Quien la resuelve es {@link #resolveClass}.
+     * <p>What it returns is a desc **from the stream**: name, UID, flags and fields as they
+     * came, still with no local class. The one that resolves that is {@link #resolveClass}.
      */
     protected ObjectStreamClass readClassDescriptor() throws IOException, ClassNotFoundException {
-        String nombre = this.bin.leerUtf();
-        long uid = this.bin.leerLong();
-        int banderas = this.bin.leerUnsignedByte();
-        int cuantos = this.bin.leerUnsignedShort();
-        ObjectStreamField[] campos = cuantos == 0
+        String name = this.bin.readUtf();
+        long uid = this.bin.readLong0();
+        int flags = this.bin.readUnsignedByte0();
+        int howMany = this.bin.readUnsignedShort0();
+        ObjectStreamField[] fields = howMany == 0
                 ? ObjectStreamClass.NO_FIELDS
-                : new ObjectStreamField[cuantos];
+                : new ObjectStreamField[howMany];
         int i = 0;
-        while (i < cuantos) {
-            char tipo = (char) this.bin.leerUnsignedByte();
-            String nom = this.bin.leerUtf();
-            String firma;
-            if (tipo == 'L' || tipo == '[') {
-                // El nombre del tipo es **una cadena del flujo con su propia manija**, no un UTF
-                // suelto: el escritor la comparte entre todos los campos de la misma firma, y
-                // leerla como UTF crudo se saltearia una manija y correria todos los numeros.
-                firma = this.readTypeString();
+        while (i < howMany) {
+            char kind = (char) this.bin.readUnsignedByte0();
+            String nm = this.bin.readUtf();
+            String signature;
+            if (kind == 'L' || kind == '[') {
+                // The type's name is **a stream string with a handle of its own**, not a loose UTF:
+                // the writer shares it across every field of the same signature, and reading it as
+                // a raw UTF would skip a handle and shift every number.
+                signature = this.readTypeString();
             } else {
-                firma = String.valueOf(tipo);
+                signature = String.valueOf(kind);
             }
-            if (firma == null) {
+            if (signature == null) {
                 throw new StreamCorruptedException("null field type string");
             }
-            campos[i] = new ObjectStreamField(nom, firma);
+            fields[i] = new ObjectStreamField(nm, signature);
             i = i + 1;
         }
-        return new ObjectStreamClass(nombre, uid, banderas, campos);
+        return new ObjectStreamClass(name, uid, flags, fields);
     }
 
     /**
-     * La clase local que le corresponde a un descriptor del flujo.
+     * The local class corresponding to a stream desc.
      *
-     * <p>Aca por nombre y nada mas. El JDK busca con el cargador de clases del llamador mas cercano
-     * en la pila --lo que le permite resolver una clase que solo ese cargador ve--; esta VM tiene un
-     * solo cargador, asi que la busqueda por nombre es la misma respuesta y no una aproximacion.
+     * <p>Here by name and nothing else. The JDK looks it up with the class loader of the nearest
+     * caller on the stack --which lets it resolve a class only that loader sees-- and this VM has a
+     * single loader, so the lookup by name is the same answer and not an approximation.
      */
     protected Class<?> resolveClass(ObjectStreamClass desc) throws IOException, ClassNotFoundException {
-        String nombre = desc.getName();
-        Class<?> prim = primitivaPorNombre(nombre);
+        String name = desc.getName();
+        Class<?> prim = primitiveByName(name);
         if (prim != null) {
             return prim;
         }
-        return Class.forName(nombre);
+        return Class.forName(name);
     }
 
     /**
-     * La clase proxy que implementa `interfaces`.
+     * The proxy class implementing `interfaces`.
      *
-     * @throws ClassNotFoundException si alguna de las interfaces no existe de este lado
+     * @throws ClassNotFoundException if some of the interfaces do not exist on this side
      */
     protected Class<?> resolveProxyClass(String[] interfaces)
             throws IOException, ClassNotFoundException {
@@ -220,478 +222,482 @@ public class ObjectInputStream extends InputStream implements ObjectInput, Objec
     }
 
     /**
-     * A donde va {@link #readObject} cuando el flujo se construyo con el constructor sin argumentos.
-     * Devuelve `null` aca, como en el JDK: la subclase que usa ese constructor es la que tiene que
-     * leer.
+     * Where {@link #readObject} goes when the stream was constructed with the no-argument
+     * constructor. It returns `null` here, as in the JDK: the subclass using that constructor is
+     * the one that has to read.
      */
     protected Object readObjectOverride() throws IOException, ClassNotFoundException {
         return null;
     }
 
     /**
-     * El ultimo filtro antes de devolver: si {@link #enableResolveObject} esta activo, cada objeto
-     * pasa por aca y se devuelve lo que este metodo diga. Identidad aca, como en el JDK.
+     * The last filter before returning: if {@link #enableResolveObject} is on, every object goes
+     * through here and what this method says is what is returned. Identity here, as in the JDK.
      */
     protected Object resolveObject(Object obj) throws IOException {
         return obj;
     }
 
     /**
-     * Prende o apaga el filtro de {@link #resolveObject}, y devuelve como estaba.
+     * It turns {@link #resolveObject}'s filter on or off, and returns how it was.
      *
-     * <p>El JDK le pide permiso al gestor de seguridad, porque cambiar objetos al vuelo es una forma
-     * de que el flujo diga una cosa y entregue otra. Aca no hay gestor, asi que la bandera se toma
-     * tal cual.
+     * <p>The JDK asks the security manager for permission, because swapping objects in mid-flight
+     * is a way for the stream to say one thing and hand over another. Here there is no manager, so
+     * the flag is taken as it stands.
      */
     protected boolean enableResolveObject(boolean enable) {
-        boolean antes = this.resolucionHabilitada;
-        this.resolucionHabilitada = enable;
-        return antes;
+        boolean before = this.resolveEnabled;
+        this.resolveEnabled = enable;
+        return before;
     }
 
-    // ---- leer objetos ---------------------------------------------------------------------------
+    // ---- reading objects ------------------------------------------------------------------------
 
     /**
-     * Lee el proximo objeto y todo lo que cuelgue de el.
+     * It reads the next object and everything hanging off it.
      *
-     * <p>Es `final` como en el JDK: la subclase que quiera cambiar que se lee tiene
-     * {@link #readObjectOverride} y {@link #resolveObject}, y dejar redefinir la entrada permitiria
-     * leer un objeto salteando las manijas, que es como se rompe un grafo con ciclos.
+     * <p>It is `final` as in the JDK: a subclass wanting to change what gets read has {@link
+     * #readObjectOverride} and {@link #resolveObject}, and allowing the entry point to be
+     * overridden would permit reading an object while skipping the handles, which is how a graph
+     * with cycles gets broken.
      *
-     * @throws ClassNotFoundException si el flujo nombra una clase que de este lado no existe
-     * @throws OptionalDataException si lo que sigue son datos primitivos y no un objeto
+     * @throws ClassNotFoundException if the stream names a class that does not exist on this side
+     * @throws OptionalDataException if what follows is primitive data and not an object
      */
     public final Object readObject() throws IOException, ClassNotFoundException {
-        if (this.delegado) {
+        if (this.delegating) {
             return this.readObjectOverride();
         }
-        return this.leerDeArriba(false);
+        return this.readTopLevel(false);
     }
 
     /**
-     * Lee el proximo objeto **sin compartir**: no queda asociado a una manija reusable, asi que una
-     * referencia posterior a el se rechaza en vez de devolverlo.
+     * It reads the next object **unshared**: it is not tied to a reusable handle, so a later
+     * reference to it is rejected instead of returning it.
      *
-     * <p>Es la contraparte de {@link ObjectOutputStream#writeUnshared}, y sirve para lo mismo: un
-     * campo que tiene que ser privado del objeto que lo contiene.
+     * <p>It is {@link ObjectOutputStream#writeUnshared}'s counterpart, and it serves the same
+     * purpose: a field that has to be private to the object containing it.
      *
-     * @throws InvalidObjectException si lo que hay en el flujo es una referencia a algo ya leido
+     * @throws InvalidObjectException if what is in the stream is a reference to something already
+     *     read
      */
     public Object readUnshared() throws IOException, ClassNotFoundException {
-        if (this.delegado) {
+        if (this.delegating) {
             return this.readObjectOverride();
         }
-        return this.leerDeArriba(true);
+        return this.readTopLevel(true);
     }
 
     /**
-     * Un {@code readObject} de arriba de todo: lee y, si nadie mas estaba leyendo, corre las
-     * validaciones que se hayan registrado.
+     * A topmost {@code readObject}: it reads and, if nobody else was reading, runs whatever
+     * validations were registered.
      */
-    private Object leerDeArriba(boolean sinCompartir) throws IOException, ClassNotFoundException {
-        boolean raiz = this.profundidad == 0;
-        Object obj = this.leerObjeto0(sinCompartir);
-        if (raiz) {
-            this.correrValidaciones();
+    private Object readTopLevel(boolean unshared) throws IOException, ClassNotFoundException {
+        boolean atRoot = this.depth == 0;
+        Object obj = this.readObject0(unshared);
+        if (atRoot) {
+            this.runValidations();
         }
         return obj;
     }
 
-    private Object leerObjeto0(boolean sinCompartir) throws IOException, ClassNotFoundException {
-        boolean bloqueAntes = this.bin.enModoBloque();
-        if (bloqueAntes) {
-            // Adentro de un `readObject` de usuario, lo que queda del registro de bloque en curso
-            // son datos primitivos que el que llama todavia no leyo: pedirle un objeto ahi no es un
-            // error del flujo sino un desencuentro entre lo que se escribio y lo que se esta
-            // leyendo, y por eso sale como `OptionalDataException` con el largo, que es la unica
-            // forma de que el que llama pueda seguir.
-            int quedan = this.bin.cuantosQuedan();
-            if (quedan > 0) {
-                throw new OptionalDataException(quedan);
+    private Object readObject0(boolean unshared) throws IOException, ClassNotFoundException {
+        boolean blockBefore = this.bin.inBlockMode();
+        if (blockBefore) {
+            // Inside a user's `readObject`, what is left of the block record in progress is
+            // primitive data the caller has not read yet: asking it for an object there is no error
+            // of the stream's but a mismatch between what was written and what is being read, and
+            // that is why it comes out as an `OptionalDataException` with the length, which is the
+            // only way for the caller to be able to carry on.
+            int left = this.bin.refill();
+            if (left > 0) {
+                throw new OptionalDataException(left);
             }
-            this.bin.modoBloque(false);
+            this.bin.blockMode(false);
         }
-        this.profundidad = this.profundidad + 1;
+        this.depth = this.depth + 1;
         try {
-            int tc = this.bin.mirarObligatorio();
+            int tc = this.bin.peekRequired();
             while (tc == ObjectStreamConstants.TC_RESET) {
-                if (this.profundidad > 1) {
+                if (this.depth > 1) {
                     throw new StreamCorruptedException("unexpected reset");
                 }
-                this.bin.leerByteCrudo();
-                this.limpiarManijas();
-                tc = this.bin.mirarObligatorio();
+                this.bin.readRawByte();
+                this.clearHandles();
+                tc = this.bin.peekRequired();
             }
             if (tc == ObjectStreamConstants.TC_NULL) {
-                this.bin.leerByteCrudo();
+                this.bin.readRawByte();
                 return null;
             }
             if (tc == ObjectStreamConstants.TC_REFERENCE) {
-                return this.filtrarSalida(this.leerReferencia(sinCompartir));
+                return this.replaceOnRead(this.readHandleRef(unshared));
             }
             if (tc == ObjectStreamConstants.TC_CLASS) {
-                return this.filtrarSalida(this.leerClase(sinCompartir));
+                return this.replaceOnRead(this.readClass(unshared));
             }
             if (tc == ObjectStreamConstants.TC_CLASSDESC
                     || tc == ObjectStreamConstants.TC_PROXYCLASSDESC) {
-                return this.filtrarSalida(this.leerDesc(sinCompartir));
+                return this.replaceOnRead(this.readDesc(unshared));
             }
             if (tc == ObjectStreamConstants.TC_STRING
                     || tc == ObjectStreamConstants.TC_LONGSTRING) {
-                return this.filtrarSalida(this.leerCadena(sinCompartir));
+                return this.replaceOnRead(this.readString(unshared));
             }
             if (tc == ObjectStreamConstants.TC_ARRAY) {
-                this.bin.leerByteCrudo();
-                return this.filtrarSalida(this.leerArreglo(sinCompartir));
+                this.bin.readRawByte();
+                return this.replaceOnRead(this.readArray(unshared));
             }
             if (tc == ObjectStreamConstants.TC_ENUM) {
-                this.bin.leerByteCrudo();
-                return this.filtrarSalida(this.leerEnum(sinCompartir));
+                this.bin.readRawByte();
+                return this.replaceOnRead(this.readEnum(unshared));
             }
             if (tc == ObjectStreamConstants.TC_OBJECT) {
-                this.bin.leerByteCrudo();
-                return this.filtrarSalida(this.leerObjetoComun(sinCompartir));
+                this.bin.readRawByte();
+                return this.replaceOnRead(this.readOrdinaryObject(unshared));
             }
             if (tc == ObjectStreamConstants.TC_EXCEPTION) {
-                this.bin.leerByteCrudo();
-                // El escritor se cayo a mitad del grafo y dejo escrita la excepcion en lugar del
-                // resto. Se lee con la tabla limpia --el JDK hace lo mismo-- porque las manijas del
-                // grafo que se abortó no valen para el que la lee.
-                this.limpiarManijas();
-                Object causa = this.leerObjeto0(false);
-                this.limpiarManijas();
-                throw new WriteAbortedException("writing aborted", (Exception) causa);
+                this.bin.readRawByte();
+                // The writer fell over in the middle of the graph and wrote the exception in place
+                // of the rest. It is read with a clean table --the JDK does the same-- because the
+                // handles of the aborted graph are no use to whoever reads it.
+                this.clearHandles();
+                Object cause = this.readObject0(false);
+                this.clearHandles();
+                throw new WriteAbortedException("writing aborted", (Exception) cause);
             }
             if (tc == ObjectStreamConstants.TC_BLOCKDATA
                     || tc == ObjectStreamConstants.TC_BLOCKDATALONG) {
-                this.bin.modoBloque(true);
-                throw new OptionalDataException(this.bin.cuantosQuedan());
+                this.bin.blockMode(true);
+                throw new OptionalDataException(this.bin.refill());
             }
             if (tc == ObjectStreamConstants.TC_ENDBLOCKDATA) {
                 throw new OptionalDataException(true);
             }
             throw new StreamCorruptedException("invalid type code: " + hex2(tc));
         } finally {
-            this.profundidad = this.profundidad - 1;
-            if (bloqueAntes) {
-                this.bin.modoBloque(true);
+            this.depth = this.depth - 1;
+            if (blockBefore) {
+                this.bin.blockMode(true);
             }
         }
     }
 
-    /** El gancho de {@link #resolveObject}, si esta activo. */
-    private Object filtrarSalida(Object obj) throws IOException {
-        if (this.resolucionHabilitada && obj != null) {
+    /** {@link #resolveObject}'s hook, if it is on. */
+    private Object replaceOnRead(Object obj) throws IOException {
+        if (this.resolveEnabled && obj != null) {
             return this.resolveObject(obj);
         }
         return obj;
     }
 
-    private Object leerReferencia(boolean sinCompartir) throws IOException {
-        this.bin.leerByteCrudo();
-        int m = this.bin.leerInt() - ObjectStreamConstants.baseWireHandle;
-        if (m < 0 || m >= this.cuantasManijas) {
+    private Object readHandleRef(boolean unshared) throws IOException {
+        this.bin.readRawByte();
+        int m = this.bin.readInt0() - ObjectStreamConstants.baseWireHandle;
+        if (m < 0 || m >= this.handleCount) {
             throw new StreamCorruptedException("invalid handle value: " + hex4(m));
         }
-        if (sinCompartir) {
+        if (unshared) {
             throw new InvalidObjectException("cannot read back reference as unshared");
         }
-        Object o = this.manijas[m];
-        if (o == SIN_COMPARTIR) {
+        Object o = this.handles[m];
+        if (o == UNSHARED_MARKER) {
             throw new InvalidObjectException("cannot read back reference to unshared object");
         }
         return o;
     }
 
-    private String leerCadena(boolean sinCompartir) throws IOException {
-        int tc = this.bin.leerByteCrudo();
+    private String readString(boolean unshared) throws IOException {
+        int tc = this.bin.readRawByte();
         String s;
         if (tc == ObjectStreamConstants.TC_LONGSTRING) {
-            long largo = this.bin.leerLong();
-            if (largo < 0 || largo > Integer.MAX_VALUE) {
-                throw new StreamCorruptedException("long string length out of range: " + largo);
+            long len = this.bin.readLong0();
+            if (len < 0 || len > Integer.MAX_VALUE) {
+                throw new StreamCorruptedException("long string length out of range: " + len);
             }
-            s = this.bin.leerUtfCruda(largo);
+            s = this.bin.readRawUtf(len);
         } else {
-            s = this.bin.leerUtf();
+            s = this.bin.readUtf();
         }
-        this.asignarManija(sinCompartir ? SIN_COMPARTIR : s);
+        this.assignHandle(unshared ? UNSHARED_MARKER : s);
         return s;
     }
 
     /**
-     * El tipo de un campo de referencia dentro de un descriptor.
+     * A reference field's type inside a desc.
      *
-     * <p>Package-private y no publico, igual que en el JDK: es una cadena del flujo con manija
-     * propia, y leerla desde afuera correria la numeracion.
+     * <p>Package-private and not public, just as in the JDK: it is a stream string with a handle of
+     * its own, and reading it from outside would shift the numbering.
      */
     String readTypeString() throws IOException {
-        int tc = this.bin.mirarObligatorio();
+        int tc = this.bin.peekRequired();
         if (tc == ObjectStreamConstants.TC_NULL) {
-            this.bin.leerByteCrudo();
+            this.bin.readRawByte();
             return null;
         }
         if (tc == ObjectStreamConstants.TC_REFERENCE) {
-            return (String) this.leerReferencia(false);
+            return (String) this.readHandleRef(false);
         }
         if (tc == ObjectStreamConstants.TC_STRING || tc == ObjectStreamConstants.TC_LONGSTRING) {
-            return this.leerCadena(false);
+            return this.readString(false);
         }
         throw new StreamCorruptedException("invalid type code: " + hex2(tc));
     }
 
-    private Class<?> leerClase(boolean sinCompartir) throws IOException, ClassNotFoundException {
-        this.bin.leerByteCrudo();
-        ObjectStreamClass desc = this.leerDesc(false);
+    private Class<?> readClass(boolean unshared) throws IOException, ClassNotFoundException {
+        this.bin.readRawByte();
+        ObjectStreamClass desc = this.readDesc(false);
         Class<?> cl = desc == null ? null : desc.forClass();
-        this.asignarManija(sinCompartir ? SIN_COMPARTIR : cl);
+        this.assignHandle(unshared ? UNSHARED_MARKER : cl);
         if (cl == null) {
-            throw new ClassNotFoundException(desc == null ? "null class descriptor" : desc.getName());
+            throw new ClassNotFoundException(desc == null ? "null class desc" : desc.getName());
         }
         return cl;
     }
 
-    // ---- descriptores ---------------------------------------------------------------------------
+    // ---- descriptors ----------------------------------------------------------------------------
 
-    private ObjectStreamClass leerDesc(boolean sinCompartir) throws IOException, ClassNotFoundException {
-        int tc = this.bin.mirarObligatorio();
+    private ObjectStreamClass readDesc(boolean unshared) throws IOException, ClassNotFoundException {
+        int tc = this.bin.peekRequired();
         if (tc == ObjectStreamConstants.TC_NULL) {
-            this.bin.leerByteCrudo();
+            this.bin.readRawByte();
             return null;
         }
         if (tc == ObjectStreamConstants.TC_REFERENCE) {
-            Object o = this.leerReferencia(sinCompartir);
+            Object o = this.readHandleRef(unshared);
             if (!(o instanceof ObjectStreamClass)) {
-                throw new StreamCorruptedException("handle does not refer to a class descriptor");
+                throw new StreamCorruptedException("handle does not refer to a class desc");
             }
             return (ObjectStreamClass) o;
         }
         if (tc == ObjectStreamConstants.TC_PROXYCLASSDESC) {
-            return this.leerDescProxy(sinCompartir);
+            return this.readProxyDesc(unshared);
         }
         if (tc == ObjectStreamConstants.TC_CLASSDESC) {
-            return this.leerDescNoProxy(sinCompartir);
+            return this.readNonProxyDesc(unshared);
         }
         throw new StreamCorruptedException("invalid type code: " + hex2(tc));
     }
 
-    private ObjectStreamClass leerDescNoProxy(boolean sinCompartir)
+    private ObjectStreamClass readNonProxyDesc(boolean unshared)
             throws IOException, ClassNotFoundException {
-        this.bin.leerByteCrudo();
-        // La manija se reserva **antes** de leer el cuerpo, y con eso queda en el mismo numero que
-        // el escritor le dio: el escribe el nombre y el UID antes de numerar, y en esos dos no hay
-        // nada que consuma manijas. Un campo cuyo tipo es la clase misma la referencia por este
-        // numero, asi que reservarla despues rompería la primera clase recursiva que apareciera.
-        int m = this.asignarManija(null);
+        this.bin.readRawByte();
+        // The handle is reserved **before** the body is read, and with that it lands on the same
+        // number the writer gave it: it writes the name and the UID before numbering, and in those
+        // two there is nothing that consumes handles. A field whose type is the class itself
+        // references it by this number, so reserving it afterwards would break the first recursive
+        // class that turned up.
+        int m = this.assignHandle(null);
         ObjectStreamClass desc = this.readClassDescriptor();
-        if (!sinCompartir) {
-            this.manijas[m] = desc;
+        if (!unshared) {
+            this.handles[m] = desc;
         } else {
-            this.manijas[m] = SIN_COMPARTIR;
+            this.handles[m] = UNSHARED_MARKER;
         }
 
-        // El bloque de anotacion se lee en modo bloque, para que un `resolveClass` redefinido pueda
-        // leer lo que su `annotateClass` escribio.
-        this.bin.modoBloque(true);
+        // The annotation block is read in block mode, so that an overridden `resolveClass` can read
+        // what its `annotateClass` wrote.
+        this.bin.blockMode(true);
         Class<?> cl = null;
         try {
             cl = this.resolveClass(desc);
-        } catch (ClassNotFoundException noEsta) {
+        } catch (ClassNotFoundException missing) {
             cl = null;
         }
-        this.saltearDatosPropios();
-        desc.resolvioA(cl);
-        desc.superiorFlujo(this.leerDesc(false));
+        this.skipCustomData();
+        desc.resolvedTo(cl);
+        desc.streamSuper(this.readDesc(false));
         return desc;
     }
 
-    private ObjectStreamClass leerDescProxy(boolean sinCompartir)
+    private ObjectStreamClass readProxyDesc(boolean unshared)
             throws IOException, ClassNotFoundException {
-        this.bin.leerByteCrudo();
-        int m = this.asignarManija(null);
-        int cuantas = this.bin.leerInt();
-        if (cuantas < 0) {
-            throw new StreamCorruptedException("invalid interface count: " + cuantas);
+        this.bin.readRawByte();
+        int m = this.assignHandle(null);
+        int howMany = this.bin.readInt0();
+        if (howMany < 0) {
+            throw new StreamCorruptedException("invalid interface count: " + howMany);
         }
-        String[] nombres = new String[cuantas];
+        String[] names = new String[howMany];
         int i = 0;
-        while (i < cuantas) {
-            nombres[i] = this.bin.leerUtf();
+        while (i < howMany) {
+            names[i] = this.bin.readUtf();
             i = i + 1;
         }
-        this.bin.modoBloque(true);
+        this.bin.blockMode(true);
         Class<?> cl = null;
         try {
-            cl = this.resolveProxyClass(nombres);
-        } catch (ClassNotFoundException noEsta) {
+            cl = this.resolveProxyClass(names);
+        } catch (ClassNotFoundException missing) {
             cl = null;
         }
-        this.saltearDatosPropios();
-        // Un proxy no aporta campos propios y no lleva UID: su forma serializada es la de su
-        // manejador, que viaja como campo de la superclase `java.lang.reflect.Proxy`.
+        this.skipCustomData();
+        // A proxy contributes no fields of its own and carries no UID: its serialized form is its
+        // handler's, which travels as a field of the superclass `java.lang.reflect.Proxy`.
         ObjectStreamClass desc = new ObjectStreamClass(
                 cl == null ? "" : cl.getName(), 0L,
                 ObjectStreamConstants.SC_SERIALIZABLE, ObjectStreamClass.NO_FIELDS);
-        desc.resolvioA(cl);
-        this.manijas[m] = sinCompartir ? SIN_COMPARTIR : desc;
-        desc.superiorFlujo(this.leerDesc(false));
+        desc.resolvedTo(cl);
+        this.handles[m] = unshared ? UNSHARED_MARKER : desc;
+        desc.streamSuper(this.readDesc(false));
         return desc;
     }
 
     /**
-     * Consume lo que un {@code annotateClass} o un {@code writeObject} de usuario haya escrito de
-     * mas, hasta el {@code TC_ENDBLOCKDATA} que lo cierra.
+     * It consumes whatever a user's {@code annotateClass} or {@code writeObject} wrote in excess,
+     * up to the {@code TC_ENDBLOCKDATA} that closes it.
      *
-     * <p>Es lo unico que hace que una version vieja del codigo pueda leer un flujo escrito por una
-     * nueva: los datos que no se entienden se tiran sin tener que interpretarlos. Los objetos que
-     * aparezcan sueltos ahi adentro **si** hay que leerlos, no saltearlos: cada uno consume manijas,
-     * y descartarlos por largo correria la numeracion de todo lo que viene despues.
+     * <p>It is the only thing that lets an old version of the code read a stream written by a new
+     * one: the data that is not understood is thrown away without having to interpret it. The
+     * objects that turn up loose in there **do** have to be read, not skipped: each one consumes
+     * handles, and discarding them by length would shift the numbering of everything that comes
+     * afterwards.
      */
-    private void saltearDatosPropios() throws IOException, ClassNotFoundException {
+    private void skipCustomData() throws IOException, ClassNotFoundException {
         for (;;) {
-            if (this.bin.enModoBloque()) {
-                this.bin.saltarBloque();
-                this.bin.modoBloque(false);
+            if (this.bin.inBlockMode()) {
+                this.bin.skipBlock();
+                this.bin.blockMode(false);
             }
-            int tc = this.bin.mirarObligatorio();
+            int tc = this.bin.peekRequired();
             if (tc == ObjectStreamConstants.TC_BLOCKDATA
                     || tc == ObjectStreamConstants.TC_BLOCKDATALONG) {
-                this.bin.modoBloque(true);
+                this.bin.blockMode(true);
             } else if (tc == ObjectStreamConstants.TC_ENDBLOCKDATA) {
-                this.bin.leerByteCrudo();
+                this.bin.readRawByte();
                 return;
             } else {
-                this.leerObjeto0(false);
+                this.readObject0(false);
             }
         }
     }
 
-    // ---- objetos, arreglos y enums ---------------------------------------------------------------
+    // ---- objects, arrays and enums ---------------------------------------------------------------
 
-    private Object leerArreglo(boolean sinCompartir) throws IOException, ClassNotFoundException {
-        ObjectStreamClass desc = this.leerDesc(false);
-        int largo = this.bin.leerInt();
-        if (largo < 0) {
-            throw new StreamCorruptedException("invalid array length: " + largo);
+    private Object readArray(boolean unshared) throws IOException, ClassNotFoundException {
+        ObjectStreamClass desc = this.readDesc(false);
+        int len = this.bin.readInt0();
+        if (len < 0) {
+            throw new StreamCorruptedException("invalid array length: " + len);
         }
         Class<?> cl = desc == null ? null : desc.forClass();
         Class<?> comp = cl == null ? null : cl.getComponentType();
-        this.consultarFiltro(cl, largo);
+        this.checkFilter(cl, len);
 
-        Object arr = comp == null ? null : Array.newInstance(comp, largo);
-        int m = this.asignarManija(sinCompartir ? SIN_COMPARTIR : arr);
+        Object arr = comp == null ? null : Array.newInstance(comp, len);
+        int m = this.assignHandle(unshared ? UNSHARED_MARKER : arr);
         if (comp != null && comp.isPrimitive()) {
-            this.leerPrimitivos(arr, comp, largo);
+            this.readPrimitives(arr, comp, len);
         } else {
-            // `(Object[])` y no `Array.set`: todo arreglo de referencias **es** un `Object[]`, y el
-            // almacenamiento comprueba el tipo del elemento igual (`ArrayStoreException`). Es la
-            // misma via que usa el escritor, y no depende de un nativo de reflexion.
+            // `(Object[])` and not `Array.set`: every array of references **is** an `Object[]`, and
+            // the store checks the element's type all the same (`ArrayStoreException`). It is the
+            // same route the writer uses, and it does not depend on a reflection native.
             Object[] a = (Object[]) arr;
             int i = 0;
-            while (i < largo) {
-                Object v = this.leerObjeto0(false);
+            while (i < len) {
+                Object v = this.readObject0(false);
                 if (a != null) {
                     a[i] = v;
                 }
                 i = i + 1;
             }
         }
-        if (!sinCompartir) {
-            this.manijas[m] = arr;
+        if (!unshared) {
+            this.handles[m] = arr;
         }
         if (arr == null) {
-            throw new ClassNotFoundException(desc == null ? "null array descriptor" : desc.getName());
+            throw new ClassNotFoundException(desc == null ? "null array desc" : desc.getName());
         }
         return arr;
     }
 
-    private void leerPrimitivos(Object arr, Class<?> comp, int largo) throws IOException {
+    private void readPrimitives(Object arr, Class<?> comp, int len) throws IOException {
         int i = 0;
         if (comp == Byte.TYPE) {
             byte[] a = (byte[]) arr;
-            while (i < largo) {
-                a[i] = (byte) this.bin.leerUnsignedByte();
+            while (i < len) {
+                a[i] = (byte) this.bin.readUnsignedByte0();
                 i = i + 1;
             }
         } else if (comp == Boolean.TYPE) {
             boolean[] a = (boolean[]) arr;
-            while (i < largo) {
-                a[i] = this.bin.leerUnsignedByte() != 0;
+            while (i < len) {
+                a[i] = this.bin.readUnsignedByte0() != 0;
                 i = i + 1;
             }
         } else if (comp == Character.TYPE) {
             char[] a = (char[]) arr;
-            while (i < largo) {
-                a[i] = (char) this.bin.leerUnsignedShort();
+            while (i < len) {
+                a[i] = (char) this.bin.readUnsignedShort0();
                 i = i + 1;
             }
         } else if (comp == Short.TYPE) {
             short[] a = (short[]) arr;
-            while (i < largo) {
-                a[i] = (short) this.bin.leerUnsignedShort();
+            while (i < len) {
+                a[i] = (short) this.bin.readUnsignedShort0();
                 i = i + 1;
             }
         } else if (comp == Integer.TYPE) {
             int[] a = (int[]) arr;
-            while (i < largo) {
-                a[i] = this.bin.leerInt();
+            while (i < len) {
+                a[i] = this.bin.readInt0();
                 i = i + 1;
             }
         } else if (comp == Long.TYPE) {
             long[] a = (long[]) arr;
-            while (i < largo) {
-                a[i] = this.bin.leerLong();
+            while (i < len) {
+                a[i] = this.bin.readLong0();
                 i = i + 1;
             }
         } else if (comp == Float.TYPE) {
             float[] a = (float[]) arr;
-            while (i < largo) {
-                a[i] = Float.intBitsToFloat(this.bin.leerInt());
+            while (i < len) {
+                a[i] = Float.intBitsToFloat(this.bin.readInt0());
                 i = i + 1;
             }
         } else {
             double[] a = (double[]) arr;
-            while (i < largo) {
-                a[i] = Double.longBitsToDouble(this.bin.leerLong());
+            while (i < len) {
+                a[i] = Double.longBitsToDouble(this.bin.readLong0());
                 i = i + 1;
             }
         }
     }
 
-    private Object leerEnum(boolean sinCompartir) throws IOException, ClassNotFoundException {
-        ObjectStreamClass desc = this.leerDesc(false);
+    private Object readEnum(boolean unshared) throws IOException, ClassNotFoundException {
+        ObjectStreamClass desc = this.readDesc(false);
         Class<?> cl = desc == null ? null : desc.forClass();
-        this.consultarFiltro(cl, -1);
-        int m = this.asignarManija(sinCompartir ? SIN_COMPARTIR : null);
-        String nombre = this.leerCadena(false);
-        Object valor = null;
+        this.checkFilter(cl, -1);
+        int m = this.assignHandle(unshared ? UNSHARED_MARKER : null);
+        String name = this.readString(false);
+        Object value = null;
         if (cl != null) {
-            // Por nombre y no por ordinal: reordenar las constantes de un enum es un cambio que la
-            // fuente permite y que no toca la forma serializada, y leer por posicion devolveria
-            // otra constante en silencio.
-            valor = constanteEnum(cl, nombre);
-            if (valor == null) {
-                throw new InvalidObjectException("enum constant " + nombre + " does not exist in "
+            // By name and not by ordinal: reordering an enum's constants is a change the source
+            // permits and that does not touch the serialized form, and reading by position would
+            // return another constant silently.
+            value = enumConstant(cl, name);
+            if (value == null) {
+                throw new InvalidObjectException("enum constant " + name + " does not exist in "
                         + cl.getName());
             }
         }
-        if (!sinCompartir) {
-            this.manijas[m] = valor;
+        if (!unshared) {
+            this.handles[m] = value;
         }
         if (cl == null) {
-            throw new ClassNotFoundException(desc == null ? "null enum descriptor" : desc.getName());
+            throw new ClassNotFoundException(desc == null ? "null enum desc" : desc.getName());
         }
-        return valor;
+        return value;
     }
 
-    private static Object constanteEnum(Class<?> cl, String nombre) {
+    private static Object enumConstant(Class<?> cl, String name) {
         Object[] cs = cl.getEnumConstants();
         if (cs == null) {
             return null;
         }
         int i = 0;
         while (i < cs.length) {
-            if (((Enum<?>) cs[i]).name().equals(nombre)) {
+            if (((Enum<?>) cs[i]).name().equals(name)) {
                 return cs[i];
             }
             i = i + 1;
@@ -699,32 +705,33 @@ public class ObjectInputStream extends InputStream implements ObjectInput, Objec
         return null;
     }
 
-    private Object leerObjetoComun(boolean sinCompartir) throws IOException, ClassNotFoundException {
-        ObjectStreamClass desc = this.leerDesc(false);
+    private Object readOrdinaryObject(boolean unshared) throws IOException, ClassNotFoundException {
+        ObjectStreamClass desc = this.readDesc(false);
         if (desc == null) {
-            throw new StreamCorruptedException("null class descriptor for object");
+            throw new StreamCorruptedException("null class desc for object");
         }
         Class<?> cl = desc.forClass();
-        this.consultarFiltro(cl, -1);
+        this.checkFilter(cl, -1);
 
         Object obj = null;
         if (cl != null) {
             obj = ObjectStreamClass.allocateInstance(cl);
             if (obj == null) {
-                // Una interfaz, una abstracta o algo que esta VM no puede instanciar. No se puede
-                // seguir: los datos se podrian consumir, pero no habria donde ponerlos y devolver
-                // `null` haria pasar un flujo ilegible por uno que traia un `null`.
+                // An interface, an abstract class or something this VM cannot instantiate. It
+                // cannot carry on: the data could be consumed, but there would be nowhere to put it
+                // and returning `null` would pass off an unreadable stream as one that carried a
+                // `null`.
                 throw new InvalidClassException(desc.getName(), "unable to create instance");
             }
         }
-        int m = this.asignarManija(sinCompartir ? SIN_COMPARTIR : obj);
-        if ((desc.banderasFlujo() & ObjectStreamConstants.SC_EXTERNALIZABLE) != 0) {
-            this.leerDatosExternos(obj, desc);
+        int m = this.assignHandle(unshared ? UNSHARED_MARKER : obj);
+        if ((desc.streamFlags() & ObjectStreamConstants.SC_EXTERNALIZABLE) != 0) {
+            this.readExternalData(obj, desc);
         } else {
-            this.leerDatosSerie(obj, desc);
+            this.readSerialData(obj, desc);
         }
-        if (!sinCompartir) {
-            this.manijas[m] = obj;
+        if (!unshared) {
+            this.handles[m] = obj;
         }
         if (cl == null) {
             throw new ClassNotFoundException(desc.getName());
@@ -732,175 +739,178 @@ public class ObjectInputStream extends InputStream implements ObjectInput, Objec
         return obj;
     }
 
-    private void leerDatosExternos(Object obj, ObjectStreamClass desc)
+    private void readExternalData(Object obj, ObjectStreamClass desc)
             throws IOException, ClassNotFoundException {
-        // `SC_BLOCK_DATA` es lo que distingue al protocolo 2 del 1: con el, lo que escribio
-        // `writeExternal` viene enmarcado y se puede saltear; sin el viene crudo, y si de este lado
-        // no hay con que leerlo no queda mas remedio que abandonar.
-        boolean enmarcado = (desc.banderasFlujo() & ObjectStreamConstants.SC_BLOCK_DATA) != 0;
+        // `SC_BLOCK_DATA` is what tells protocol 2 from 1: with it, what `writeExternal` wrote
+        // comes framed and can be skipped; without it, it comes raw, and if there is nothing on
+        // this side to read it with there is no choice but to give up.
+        boolean framed = (desc.streamFlags() & ObjectStreamConstants.SC_BLOCK_DATA) != 0;
         Externalizable ext = obj instanceof Externalizable ? (Externalizable) obj : null;
-        if (ext == null && !enmarcado) {
+        if (ext == null && !framed) {
             throw new StreamCorruptedException(
                     "unreadable external data for " + desc.getName() + " (protocol 1)");
         }
-        Object objAntes = this.objetoActual;
-        ObjectStreamClass descAntes = this.descActual;
-        GetFieldImpl getAntes = this.getActual;
-        this.objetoActual = obj;
-        this.descActual = null;
-        this.getActual = null;
+        Object objBefore = this.currentObject;
+        ObjectStreamClass descBefore = this.currentDesc;
+        GetFieldImpl getBefore = this.currentGet;
+        this.currentObject = obj;
+        this.currentDesc = null;
+        this.currentGet = null;
         try {
-            if (enmarcado) {
-                this.bin.modoBloque(true);
+            if (framed) {
+                this.bin.blockMode(true);
             }
             if (ext != null) {
                 ext.readExternal(this);
             }
         } finally {
-            this.objetoActual = objAntes;
-            this.descActual = descAntes;
-            this.getActual = getAntes;
+            this.currentObject = objBefore;
+            this.currentDesc = descBefore;
+            this.currentGet = getBefore;
         }
-        if (enmarcado) {
-            this.saltearDatosPropios();
+        if (framed) {
+            this.skipCustomData();
         }
     }
 
     /**
-     * Los datos de un objeto comun, **de la superclase serializable mas alta hacia abajo**, que es
-     * el sentido en que el escritor los puso.
+     * An ordinary object's data, **from the highest serializable superclass downwards**, which is
+     * the direction the writer put it in.
      */
-    private void leerDatosSerie(Object obj, ObjectStreamClass desc)
+    private void readSerialData(Object obj, ObjectStreamClass desc)
             throws IOException, ClassNotFoundException {
-        ObjectStreamClass[] tramos = cadenaDeFlujo(desc);
+        ObjectStreamClass[] slots = streamChain(desc);
         int i = 0;
-        while (i < tramos.length) {
-            ObjectStreamClass slot = tramos[i];
+        while (i < slots.length) {
+            ObjectStreamClass slot = slots[i];
             Class<?> cl = slot.forClass();
-            boolean conMetodo = (slot.banderasFlujo() & ObjectStreamConstants.SC_WRITE_METHOD) != 0;
-            Method lector = cl == null ? null : metodoReadObject(cl);
-            if (obj != null && lector != null) {
-                Object objAntes = this.objetoActual;
-                ObjectStreamClass descAntes = this.descActual;
-                GetFieldImpl getAntes = this.getActual;
-                this.objetoActual = obj;
-                this.descActual = slot;
-                this.getActual = null;
+            boolean hasWriteMethod = (slot.streamFlags() & ObjectStreamConstants.SC_WRITE_METHOD) != 0;
+            Method reader = cl == null ? null : readObjectMethod(cl);
+            if (obj != null && reader != null) {
+                Object objBefore = this.currentObject;
+                ObjectStreamClass descBefore = this.currentDesc;
+                GetFieldImpl getBefore = this.currentGet;
+                this.currentObject = obj;
+                this.currentDesc = slot;
+                this.currentGet = null;
                 try {
-                    if (conMetodo) {
-                        this.bin.modoBloque(true);
+                    if (hasWriteMethod) {
+                        this.bin.blockMode(true);
                     }
-                    lector.invoke(obj, new Object[] { this });
+                    reader.invoke(obj, new Object[] { this });
                 } finally {
-                    this.objetoActual = objAntes;
-                    this.descActual = descAntes;
-                    this.getActual = getAntes;
+                    this.currentObject = objBefore;
+                    this.currentDesc = descBefore;
+                    this.currentGet = getBefore;
                 }
             } else {
-                // Sin metodo local: los campos por defecto igual hay que consumirlos, tenga o no
-                // esta VM donde ponerlos. Si el escritor uso un `writeObject` propio, los campos
-                // estan solo si el llamo a `defaultWriteObject`; lo demas lo limpia el salteo de
-                // abajo, que es exactamente para lo que existe el marco de bloque.
-                this.leerCamposPorDefecto(obj, cl, slot);
+                // With no local method: the default fields have to be consumed all the same,
+                // whether or not this VM has anywhere to put them. If the writer used a
+                // `writeObject` of its own, the fields are there only if it called
+                // `defaultWriteObject`; the rest is cleaned up by the skip below, which is exactly
+                // what the block framing exists for.
+                this.readDefaultFieldValues(obj, cl, slot);
             }
-            if (conMetodo) {
-                this.saltearDatosPropios();
+            if (hasWriteMethod) {
+                this.skipCustomData();
             }
             i = i + 1;
         }
     }
 
-    /** La cadena de descriptores del flujo, invertida: `[0]` es la superclase mas alta. */
-    private static ObjectStreamClass[] cadenaDeFlujo(ObjectStreamClass desc) {
-        int cuantos = 0;
+    /** The stream's chain of descriptors, reversed: `[0]` is the highest superclass. */
+    private static ObjectStreamClass[] streamChain(ObjectStreamClass desc) {
+        int howMany = 0;
         ObjectStreamClass d = desc;
         while (d != null) {
-            cuantos = cuantos + 1;
-            d = d.superiorFlujo();
+            howMany = howMany + 1;
+            d = d.streamSuper();
         }
-        ObjectStreamClass[] out = new ObjectStreamClass[cuantos];
+        ObjectStreamClass[] out = new ObjectStreamClass[howMany];
         d = desc;
-        int i = cuantos - 1;
+        int i = howMany - 1;
         while (i >= 0) {
             out[i] = d;
-            d = d.superiorFlujo();
+            d = d.streamSuper();
             i = i - 1;
         }
         return out;
     }
 
     /**
-     * Lee los campos de un tramo tal como los describe el flujo y los deja en `obj`.
+     * It reads a stretch's fields as the stream describes them and leaves them in `obj`.
      *
-     * <p>El orden y los tipos los manda **el flujo**, no la clase local: primero todos los
-     * primitivos pegados, despues las referencias. Recien con el valor ya leido se busca a que campo
-     * local le toca, y si no hay ninguno se descarta. Hacerlo al reves --recorrer los campos locales
-     * y buscar el valor-- desalinearia el flujo apenas la otra version tuviera un campo de mas.
+     * <p>The order and the types are dictated by **the stream**, not by the local class: first
+     * every primitive packed together, then the references. Only with the value already read is it
+     * looked up which local field it belongs to, and if there is none it is discarded. Doing it the
+     * other way round --walking the local fields and looking for the value-- would misalign the
+     * stream as soon as the other version had one extra field.
      *
-     * <p>`obj` puede ser `null`: es como se consume el tramo de una clase que de este lado no
-     * existe sin perder la alineacion.
+     * <p>`obj` may be `null`: it is how the stretch of a class that does not exist on this side is
+     * consumed without losing the alignment.
      */
-    private void leerCamposPorDefecto(Object obj, Class<?> cl, ObjectStreamClass slot)
+    private void readDefaultFieldValues(Object obj, Class<?> cl, ObjectStreamClass slot)
             throws IOException, ClassNotFoundException {
-        ObjectStreamField[] campos = slot.getFields();
-        // La forma serializada **local** es la que decide a que campo se puede escribir: un campo
-        // `transient` o `static` de este lado no participa, y una clase con `serialPersistentFields`
-        // decide ella cuales son los suyos. Ir directo a `getDeclaredField` se saltearia las dos
-        // reglas y escribiria en campos que la clase habia sacado del formato a proposito.
+        ObjectStreamField[] fields = slot.getFields();
+        // The **local** serialized form is what decides which field may be written to: a
+        // `transient` or `static` field on this side does not take part, and a class with
+        // `serialPersistentFields` decides for itself which are its own. Going straight to
+        // `getDeclaredField` would skip both rules and write into fields the class had taken out of
+        // the format on purpose.
         ObjectStreamClass local = (obj == null || cl == null) ? null : ObjectStreamClass.lookup(cl);
         int i = 0;
-        while (i < campos.length && campos[i].isPrimitive()) {
-            char t = campos[i].getTypeCode();
-            Field f = campoLocal(local, cl, campos[i]);
-            // Los `setXxx` con tipo y no `set` con envoltorio: son el espejo exacto de los
-            // `getXxx` que uso el escritor, y no dependen de que el desenvoltorio de `set`
-            // acierte la conversion.
+        while (i < fields.length && fields[i].isPrimitive()) {
+            char t = fields[i].getTypeCode();
+            Field f = localField(local, cl, fields[i]);
+            // The typed `setXxx` and not `set` with a wrapper: they are the exact mirror of the
+            // `getXxx` the writer used, and they do not depend on `set`'s unwrapping getting the
+            // conversion right.
             if (t == 'B') {
-                byte v = (byte) this.bin.leerUnsignedByte();
+                byte v = (byte) this.bin.readUnsignedByte0();
                 if (f != null) {
                     f.setByte(obj, v);
                 }
             } else if (t == 'Z') {
-                boolean v = this.bin.leerUnsignedByte() != 0;
+                boolean v = this.bin.readUnsignedByte0() != 0;
                 if (f != null) {
                     f.setBoolean(obj, v);
                 }
             } else if (t == 'C') {
-                char v = (char) this.bin.leerUnsignedShort();
+                char v = (char) this.bin.readUnsignedShort0();
                 if (f != null) {
                     f.setChar(obj, v);
                 }
             } else if (t == 'S') {
-                short v = (short) this.bin.leerUnsignedShort();
+                short v = (short) this.bin.readUnsignedShort0();
                 if (f != null) {
                     f.setShort(obj, v);
                 }
             } else if (t == 'I') {
-                int v = this.bin.leerInt();
+                int v = this.bin.readInt0();
                 if (f != null) {
                     f.setInt(obj, v);
                 }
             } else if (t == 'J') {
-                long v = this.bin.leerLong();
+                long v = this.bin.readLong0();
                 if (f != null) {
                     f.setLong(obj, v);
                 }
             } else if (t == 'F') {
-                float v = Float.intBitsToFloat(this.bin.leerInt());
+                float v = Float.intBitsToFloat(this.bin.readInt0());
                 if (f != null) {
                     f.setFloat(obj, v);
                 }
             } else {
-                double v = Double.longBitsToDouble(this.bin.leerLong());
+                double v = Double.longBitsToDouble(this.bin.readLong0());
                 if (f != null) {
                     f.setDouble(obj, v);
                 }
             }
             i = i + 1;
         }
-        while (i < campos.length) {
-            Object v = this.leerObjeto0(campos[i].isUnshared());
-            Field f = campoLocal(local, cl, campos[i]);
+        while (i < fields.length) {
+            Object v = this.readObject0(fields[i].isUnshared());
+            Field f = localField(local, cl, fields[i]);
             if (f != null && (v == null || f.getType().isInstance(v))) {
                 f.set(obj, v);
             }
@@ -909,140 +919,140 @@ public class ObjectInputStream extends InputStream implements ObjectInput, Objec
     }
 
     /**
-     * El campo local que le corresponde a un campo del flujo, o `null` si no hay ninguno que sirva.
+     * The local field corresponding to a stream field, or `null` if there is none that will do.
      *
-     * <p>Tienen que coincidir **el nombre y la firma**: un campo con el mismo nombre y otro tipo es
-     * otro campo, y meterle el valor del flujo escribiria basura donde el que compilo esperaba lo
-     * suyo. Devolver `null` no es un error: es como se descarta un campo que la version que escribio
-     * tenia y esta ya no.
+     * <p>**The name and the signature** have to match: a field with the same name and another type
+     * is another field, and putting the stream's value into it would write rubbish where whoever
+     * compiled expected their own. Returning `null` is no error: it is how a field the writing
+     * version had and this one no longer does gets discarded.
      */
-    private static Field campoLocal(ObjectStreamClass local, Class<?> cl, ObjectStreamField campo) {
+    private static Field localField(ObjectStreamClass local, Class<?> cl, ObjectStreamField fld) {
         if (local == null) {
             return null;
         }
-        ObjectStreamField lf = local.getField(campo.getName());
+        ObjectStreamField lf = local.getField(fld.getName());
         if (lf == null) {
             return null;
         }
-        String firmaLocal = lf.isPrimitive()
+        String localSignature = lf.isPrimitive()
                 ? String.valueOf(lf.getTypeCode()) : lf.getTypeString();
-        String firmaFlujo = campo.isPrimitive()
-                ? String.valueOf(campo.getTypeCode()) : campo.getTypeString();
-        if (!firmaLocal.equals(firmaFlujo)) {
+        String streamSignature = fld.isPrimitive()
+                ? String.valueOf(fld.getTypeCode()) : fld.getTypeString();
+        if (!localSignature.equals(streamSignature)) {
             return null;
         }
-        return ObjectOutputStream.campoReal(cl, lf.getName(), lf.getType());
+        return ObjectOutputStream.realField(cl, lf.getName(), lf.getType());
     }
 
     /**
-     * El {@code private void readObject(ObjectInputStream)} declarado por `cl`, o `null`.
+     * The {@code private void readObject(ObjectInputStream)} declared by `cl`, or `null`.
      *
-     * <p>Tiene que ser **privado y declarado por esa clase exacta**, por lo mismo que su contraparte
-     * de escritura: no es un override sino un gancho por posicion en la jerarquia, y uno heredado
-     * correria dos veces leyendo los mismos datos.
+     * <p>It has to be **private and declared by that exact class**, for the same reason as its
+     * writing counterpart: it is not an override but a hook keyed on a position in the hierarchy,
+     * and an inherited one would run twice reading the same data.
      */
-    static Method metodoReadObject(Class<?> cl) {
-        return ObjectOutputStream.metodoSerial(cl, "readObject", ObjectInputStream.class, void.class);
+    static Method readObjectMethod(Class<?> cl) {
+        return ObjectOutputStream.serialMethod(cl, "readObject", ObjectInputStream.class, void.class);
     }
 
-    // ---- lo que un readObject de usuario puede llamar ---------------------------------------------
+    // ---- what a user's readObject may call --------------------------------------------------------
 
     /**
-     * Lee los campos por defecto del tramo que se esta deserializando.
+     * It reads the default fields of the stretch being deserialized.
      *
-     * <p>Existe para que un {@code readObject} propio pueda hacer "lo de siempre y ademas esto":
-     * llamarlo primero y despues leer lo suyo es el patron normal de una clase que agrego datos sin
-     * cambiar la forma de sus campos.
+     * <p>It exists so that a `readObject` of one's own can do "the usual and this as well": calling
+     * it first and then reading one's own things is the normal pattern of a class that added data
+     * without changing its fields' shape.
      *
-     * @throws NotActiveException si no se esta leyendo un objeto
+     * @throws NotActiveException if no object is being read
      */
     public void defaultReadObject() throws IOException, ClassNotFoundException {
-        if (this.objetoActual == null || this.descActual == null) {
+        if (this.currentObject == null || this.currentDesc == null) {
             throw new NotActiveException("not in call to readObject");
         }
-        boolean bloqueAntes = this.bin.modoBloque(false);
+        boolean blockBefore = this.bin.blockMode(false);
         try {
-            this.leerCamposPorDefecto(this.objetoActual, this.descActual.forClass(), this.descActual);
+            this.readDefaultFieldValues(this.currentObject, this.currentDesc.forClass(), this.currentDesc);
         } finally {
-            this.bin.modoBloque(bloqueAntes);
+            this.bin.blockMode(blockBefore);
         }
     }
 
     /**
-     * Los campos del tramo en curso, por nombre, para leerlos sin depender de que la clase local
-     * todavia declare cada uno.
+     * The current stretch's fields, by name, so as to read them without depending on the local
+     * class still declaring each one.
      *
-     * <p>Es la contraparte de {@link ObjectOutputStream#putFields}, y la salida de una clase que
-     * cambio sus campos: {@link GetField#get(String, int)} y sus hermanos devuelven el valor por
-     * omision cuando el flujo no traia ese campo, asi que una version nueva puede leer un flujo
-     * viejo sin adivinar que traia.
+     * <p>It is {@link ObjectOutputStream#putFields}'s counterpart, and the way out for a class that
+     * changed its fields: {@link GetField#get(String, int)} and its siblings return the default
+     * value when the stream did not bring that field, so a new version can read an old stream
+     * without guessing what it carried.
      *
-     * @throws NotActiveException si no se esta leyendo un objeto
+     * @throws NotActiveException if no object is being read
      */
     public ObjectInputStream.GetField readFields() throws IOException, ClassNotFoundException {
-        if (this.objetoActual == null || this.descActual == null) {
+        if (this.currentObject == null || this.currentDesc == null) {
             throw new NotActiveException("not in call to readObject");
         }
-        if (this.getActual == null) {
-            GetFieldImpl g = new GetFieldImpl(this.descActual);
-            boolean bloqueAntes = this.bin.modoBloque(false);
+        if (this.currentGet == null) {
+            GetFieldImpl g = new GetFieldImpl(this.currentDesc);
+            boolean blockBefore = this.bin.blockMode(false);
             try {
-                g.leer(this);
+                g.read0(this);
             } finally {
-                this.bin.modoBloque(bloqueAntes);
+                this.bin.blockMode(blockBefore);
             }
-            this.getActual = g;
+            this.currentGet = g;
         }
-        return this.getActual;
+        return this.currentGet;
     }
 
     /**
-     * Pide que se llame a {@code obj.validateObject()} cuando el grafo entero este armado.
+     * It asks for {@code obj.validateObject()} to be called once the whole graph is built.
      *
-     * <p>Sirve para las invariantes que cruzan varios objetos: adentro de un {@code readObject} las
-     * referencias del objeto pueden apuntar a instancias cuyos campos todavia no se llenaron, asi
-     * que comprobarlas ahi da falsos negativos. Las validaciones corren de mayor a menor prioridad.
+     * <p>It serves for the invariants that span several objects: inside a {@code readObject} the
+     * object's references may point at instances whose fields have not been filled in yet, so
+     * checking them there gives false negatives. The validations run from higher to lower priority.
      *
-     * @throws NotActiveException si no se esta leyendo un objeto
-     * @throws InvalidObjectException si `obj` es `null`
+     * @throws NotActiveException if no object is being read
+     * @throws InvalidObjectException if `obj` is `null`
      */
     public void registerValidation(ObjectInputValidation obj, int prio)
             throws NotActiveException, InvalidObjectException {
-        if (this.profundidad == 0) {
+        if (this.depth == 0) {
             throw new NotActiveException("stream inactive");
         }
         if (obj == null) {
             throw new InvalidObjectException("null callback");
         }
-        if (this.cuantasValidaciones == this.validaciones.length) {
-            ObjectInputValidation[] v2 = new ObjectInputValidation[this.cuantasValidaciones * 2];
-            int[] p2 = new int[this.cuantasValidaciones * 2];
-            System.arraycopy(this.validaciones, 0, v2, 0, this.cuantasValidaciones);
-            System.arraycopy(this.prioridades, 0, p2, 0, this.cuantasValidaciones);
-            this.validaciones = v2;
-            this.prioridades = p2;
+        if (this.validationCount == this.validations.length) {
+            ObjectInputValidation[] v2 = new ObjectInputValidation[this.validationCount * 2];
+            int[] p2 = new int[this.validationCount * 2];
+            System.arraycopy(this.validations, 0, v2, 0, this.validationCount);
+            System.arraycopy(this.priorities, 0, p2, 0, this.validationCount);
+            this.validations = v2;
+            this.priorities = p2;
         }
-        this.validaciones[this.cuantasValidaciones] = obj;
-        this.prioridades[this.cuantasValidaciones] = prio;
-        this.cuantasValidaciones = this.cuantasValidaciones + 1;
+        this.validations[this.validationCount] = obj;
+        this.priorities[this.validationCount] = prio;
+        this.validationCount = this.validationCount + 1;
     }
 
-    private void correrValidaciones() throws InvalidObjectException {
-        int cuantas = this.cuantasValidaciones;
-        if (cuantas == 0) {
+    private void runValidations() throws InvalidObjectException {
+        int howMany = this.validationCount;
+        if (howMany == 0) {
             return;
         }
-        ObjectInputValidation[] vs = this.validaciones;
-        int[] ps = this.prioridades;
-        // La tabla se vacia **antes** de correr nada: una validacion que fallara dejaria si no las
-        // suyas registradas para el proximo `readObject` de este mismo flujo.
-        this.validaciones = new ObjectInputValidation[4];
-        this.prioridades = new int[4];
-        this.cuantasValidaciones = 0;
-        // De mayor a menor prioridad, y estable entre iguales (insercion sobre pocos elementos: son
-        // las que una lectura registro, no una coleccion).
+        ObjectInputValidation[] vs = this.validations;
+        int[] ps = this.priorities;
+        // The table is emptied **before** anything runs: a validation that failed would otherwise
+        // leave its own registered for this same stream's next `readObject`.
+        this.validations = new ObjectInputValidation[4];
+        this.priorities = new int[4];
+        this.validationCount = 0;
+        // From higher to lower priority, and stable among equals (insertion sort over few elements:
+        // they are the ones one read registered, not a collection).
         int i = 1;
-        while (i < cuantas) {
+        while (i < howMany) {
             ObjectInputValidation v = vs[i];
             int p = ps[i];
             int j = i - 1;
@@ -1056,85 +1066,85 @@ public class ObjectInputStream extends InputStream implements ObjectInput, Objec
             i = i + 1;
         }
         i = 0;
-        while (i < cuantas) {
+        while (i < howMany) {
             vs[i].validateObject();
             i = i + 1;
         }
     }
 
-    // ---- el filtro ------------------------------------------------------------------------------
+    // ---- the filter -----------------------------------------------------------------------------
 
-    /** El filtro instalado en este flujo, o `null` si no hay ninguno. */
+    /** The filter installed on this stream, or `null` if there is none. */
     public final ObjectInputFilter getObjectInputFilter() {
-        return this.filtro;
+        return this.filter;
     }
 
     /**
-     * Instala el filtro que decide que clases puede reconstruir este flujo.
+     * It installs the filter that decides which classes this stream may rebuild.
      *
-     * <p>Se puede fijar **una sola vez y antes de leer nada**: un filtro que se pudiera cambiar a
-     * mitad de un grafo no seria una politica sino una sugerencia, porque bastaria que el propio
-     * flujo llevara a ejecutar el cambio para desactivarlo.
+     * <p>It can be set **once only and before anything is read**: a filter that could be changed in
+     * the middle of a graph would not be a policy but a suggestion, because it would be enough for
+     * the stream itself to lead to the change being carried out in order to switch it off.
      *
-     * @throws IllegalStateException si ya se fijo uno, o si ya se leyo algun objeto
+     * @throws IllegalStateException if one was set already, or if some object has already been read
      */
     public final void setObjectInputFilter(ObjectInputFilter filter) {
-        if (this.filtroFijado) {
+        if (this.filterSet) {
             throw new IllegalStateException("filter can not be set more than once");
         }
-        if (this.cuantasManijas != 0) {
+        if (this.handleCount != 0) {
             throw new IllegalStateException("filter can not be set after an object has been read");
         }
-        this.filtro = filter;
-        this.filtroFijado = true;
+        this.filter = filter;
+        this.filterSet = true;
     }
 
     /**
-     * Le pregunta al filtro por la clase que esta por armarse.
+     * It asks the filter about the class that is about to be built.
      *
-     * @throws InvalidClassException si el filtro la rechaza
+     * @throws InvalidClassException if the filter rejects it
      */
-    private void consultarFiltro(Class<?> cl, long largoArreglo) throws InvalidClassException {
-        if (this.filtro == null) {
+    private void checkFilter(Class<?> cl, long arrayLength) throws InvalidClassException {
+        if (this.filter == null) {
             return;
         }
-        ObjectInputFilter.Status s = this.filtro.checkInput(
-                new InfoFiltro(cl, largoArreglo, this.profundidad,
-                        this.cuantasManijas, this.bin.bytesLeidos()));
+        ObjectInputFilter.Status s = this.filter.checkInput(
+                new FilterInfoImpl(cl, arrayLength, this.depth,
+                        this.handleCount, this.bin.bytesRead()));
         if (s == null || s == ObjectInputFilter.Status.REJECTED) {
             throw new InvalidClassException("filter status: " + s);
         }
     }
 
-    private static final class InfoFiltro implements ObjectInputFilter.FilterInfo {
-        private final Class<?> clase;
-        private final long largo;
-        private final long profundidad;
-        private final long referencias;
+    private static final class FilterInfoImpl implements ObjectInputFilter.FilterInfo {
+        private final Class<?> cls;
+        private final long len;
+        private final long depth;
+        private final long references;
         private final long bytes;
 
-        InfoFiltro(Class<?> clase, long largo, long profundidad, long referencias, long bytes) {
-            this.clase = clase;
-            this.largo = largo;
-            this.profundidad = profundidad;
-            this.referencias = referencias;
+        FilterInfoImpl(Class<?> cls, long len, long depth, long references, long bytes) {
+            this.cls = cls;
+            this.len = len;
+            this.depth = depth;
+            this.references = references;
             this.bytes = bytes;
         }
 
         public Class<?> serialClass() {
-            return this.clase;
+            return this.cls;
         }
 
         public long arrayLength() {
-            return this.largo;
+            return this.len;
         }
 
         public long depth() {
-            return this.profundidad;
+            return this.depth;
         }
 
         public long references() {
-            return this.referencias;
+            return this.references;
         }
 
         public long streamBytes() {
@@ -1142,32 +1152,32 @@ public class ObjectInputStream extends InputStream implements ObjectInput, Objec
         }
     }
 
-    // ---- las manijas ----------------------------------------------------------------------------
+    // ---- the handles ----------------------------------------------------------------------------
 
-    private int asignarManija(Object o) {
-        if (this.cuantasManijas == this.manijas.length) {
-            Object[] n = new Object[this.cuantasManijas * 2];
-            System.arraycopy(this.manijas, 0, n, 0, this.cuantasManijas);
-            this.manijas = n;
+    private int assignHandle(Object o) {
+        if (this.handleCount == this.handles.length) {
+            Object[] n = new Object[this.handleCount * 2];
+            System.arraycopy(this.handles, 0, n, 0, this.handleCount);
+            this.handles = n;
         }
-        this.manijas[this.cuantasManijas] = o;
-        this.cuantasManijas = this.cuantasManijas + 1;
-        return this.cuantasManijas - 1;
+        this.handles[this.handleCount] = o;
+        this.handleCount = this.handleCount + 1;
+        return this.handleCount - 1;
     }
 
-    private void limpiarManijas() {
+    private void clearHandles() {
         int i = 0;
-        while (i < this.cuantasManijas) {
-            this.manijas[i] = null;
+        while (i < this.handleCount) {
+            this.handles[i] = null;
             i = i + 1;
         }
-        this.cuantasManijas = 0;
+        this.handleCount = 0;
     }
 
     // ---- DataInput y InputStream ------------------------------------------------------------------
 
     public int read() throws IOException {
-        return this.bin.leer();
+        return this.bin.read0();
     }
 
     public int read(byte[] buf, int off, int len) throws IOException {
@@ -1177,55 +1187,55 @@ public class ObjectInputStream extends InputStream implements ObjectInput, Objec
         if (off < 0 || len < 0 || len > buf.length - off) {
             throw new IndexOutOfBoundsException();
         }
-        return this.bin.leer(buf, off, len);
+        return this.bin.read0(buf, off, len);
     }
 
     public int available() throws IOException {
-        return this.bin.disponibles();
+        return this.bin.available();
     }
 
     public void close() throws IOException {
-        this.bin.cerrar();
+        this.bin.close();
     }
 
     public boolean readBoolean() throws IOException {
-        return this.bin.leerUnsignedByte() != 0;
+        return this.bin.readUnsignedByte0() != 0;
     }
 
     public byte readByte() throws IOException {
-        return (byte) this.bin.leerUnsignedByte();
+        return (byte) this.bin.readUnsignedByte0();
     }
 
     public int readUnsignedByte() throws IOException {
-        return this.bin.leerUnsignedByte();
+        return this.bin.readUnsignedByte0();
     }
 
     public char readChar() throws IOException {
-        return (char) this.bin.leerUnsignedShort();
+        return (char) this.bin.readUnsignedShort0();
     }
 
     public short readShort() throws IOException {
-        return (short) this.bin.leerUnsignedShort();
+        return (short) this.bin.readUnsignedShort0();
     }
 
     public int readUnsignedShort() throws IOException {
-        return this.bin.leerUnsignedShort();
+        return this.bin.readUnsignedShort0();
     }
 
     public int readInt() throws IOException {
-        return this.bin.leerInt();
+        return this.bin.readInt0();
     }
 
     public long readLong() throws IOException {
-        return this.bin.leerLong();
+        return this.bin.readLong0();
     }
 
     public float readFloat() throws IOException {
-        return Float.intBitsToFloat(this.bin.leerInt());
+        return Float.intBitsToFloat(this.bin.readInt0());
     }
 
     public double readDouble() throws IOException {
-        return Double.longBitsToDouble(this.bin.leerLong());
+        return Double.longBitsToDouble(this.bin.readLong0());
     }
 
     public void readFully(byte[] buf) throws IOException {
@@ -1238,7 +1248,7 @@ public class ObjectInputStream extends InputStream implements ObjectInput, Objec
         }
         int i = 0;
         while (i < len) {
-            buf[off + i] = (byte) this.bin.leerUnsignedByte();
+            buf[off + i] = (byte) this.bin.readUnsignedByte0();
             i = i + 1;
         }
     }
@@ -1246,7 +1256,7 @@ public class ObjectInputStream extends InputStream implements ObjectInput, Objec
     public int skipBytes(int len) throws IOException {
         int i = 0;
         while (i < len) {
-            if (this.bin.leer() < 0) {
+            if (this.bin.read0() < 0) {
                 return i;
             }
             i = i + 1;
@@ -1255,57 +1265,59 @@ public class ObjectInputStream extends InputStream implements ObjectInput, Objec
     }
 
     /**
-     * Una linea de bytes, cada uno ensanchado a `char`.
+     * A line of bytes, each widened to a `char`.
      *
-     * @deprecated No convierte de bytes a caracteres: cada byte se vuelve el `char` de su valor, lo
-     *     que solo coincide con el texto para Latin-1. Para leer texto va un {@link BufferedReader}
-     *     sobre un {@link InputStreamReader} con el juego de caracteres explicito.
+     * @deprecated It does not convert from bytes to characters: each byte becomes the `char` of its
+     *     value, which only coincides with the text for Latin-1. For reading text there is a
+     *     {@link BufferedReader} over an {@link InputStreamReader} with the character set stated.
      */
     @Deprecated
     public String readLine() throws IOException {
         StringBuilder sb = new StringBuilder();
-        int c = this.bin.leer();
+        int c = this.bin.read0();
         if (c < 0) {
             return null;
         }
         while (c >= 0 && c != '\n') {
             if (c == '\r') {
-                // El `\r\n` se consume entero, pero un `\r` suelto tambien termina la linea: mirar
-                // el siguiente byte sin consumirlo es la unica forma de distinguirlos sin comerse
-                // el primer caracter de la linea que viene.
-                if (this.bin.mirar() == '\n') {
-                    this.bin.leer();
+                // The `\r\n` is consumed whole, but a lone `\r` also ends the line: looking at the
+                // next byte without consuming it is the only way of telling them apart without
+                // eating the first character of the line that follows.
+                if (this.bin.peek() == '\n') {
+                    this.bin.read0();
                 }
                 return sb.toString();
             }
             sb.append((char) c);
-            c = this.bin.leer();
+            c = this.bin.read0();
         }
         return sb.toString();
     }
 
     public String readUTF() throws IOException {
-        return this.bin.leerUtf();
+        return this.bin.readUtf();
     }
 
     // ---- GetField --------------------------------------------------------------------------------
 
     /**
-     * Los campos del tramo en curso, leidos por nombre.
+     * The current stretch's fields, read by name.
      *
-     * <p>Todo `get` lleva un valor por omision, y ese es el punto: el flujo pudo haber sido escrito
-     * por una version de la clase que no tenia ese campo, y lo que se devuelve entonces es el valor
-     * que el que llama eligio. {@link #defaulted} distingue las dos situaciones cuando importa.
+     * <p>Every `get` takes a default value, and that is the point: the stream may have been written
+     * by a version of the class that did not have that field, and what is returned then is the
+     * value the caller chose. {@link #defaulted} tells the two situations apart when it matters.
      */
     public abstract static class GetField {
 
-        /** El descriptor del tramo, tal como vino del flujo. */
+        /** The stretch's desc, as it came from the stream. */
         public abstract ObjectStreamClass getObjectStreamClass();
 
         /**
-         * Si `name` **no** vino en el flujo y por lo tanto su `get` devolveria el valor por omision.
+         * Whether `name` did **not** come in the stream and therefore its `get` would return the
+         * default value.
          *
-         * @throws IllegalArgumentException si `name` no es un campo de este tramo ni de la clase
+         * @throws IllegalArgumentException if `name` is a field neither of this stretch nor of the
+         *     class
          */
         public abstract boolean defaulted(String name) throws IOException;
 
@@ -1329,46 +1341,47 @@ public class ObjectInputStream extends InputStream implements ObjectInput, Objec
     }
 
     /**
-     * Los valores del tramo, ya leidos del flujo y guardados hasta que alguien los pida.
+     * The stretch's values, already read from the stream and stored until somebody asks for them.
      *
-     * <p>Se leen todos de una y no de a uno bajo demanda porque el flujo es secuencial: dejar la
-     * lectura para cuando se llame a `get` ataria el orden de los `get` al orden del formato, y
-     * quien pidiera dos campos al reves leeria uno en lugar del otro.
+     * <p>They are all read at once and not one by one on demand because the stream is sequential:
+     * leaving the reading until `get` is called would tie the order of the `get`s to the format's
+     * order, and whoever asked for two fields the other way round would read one instead of the
+     * other.
      */
     private static final class GetFieldImpl extends ObjectInputStream.GetField {
         private final ObjectStreamClass desc;
-        private final ObjectStreamField[] campos;
-        private final byte[] primitivos;
-        private final Object[] referencias;
+        private final ObjectStreamField[] fields;
+        private final byte[] primitives;
+        private final Object[] references;
 
         GetFieldImpl(ObjectStreamClass desc) {
             this.desc = desc;
-            this.campos = desc.getFields();
+            this.fields = desc.getFields();
             int bytes = 0;
             int refs = 0;
             int i = 0;
-            while (i < this.campos.length) {
-                if (this.campos[i].isPrimitive()) {
-                    bytes = bytes + ancho(this.campos[i].getTypeCode());
+            while (i < this.fields.length) {
+                if (this.fields[i].isPrimitive()) {
+                    bytes = bytes + widthOf(this.fields[i].getTypeCode());
                 } else {
                     refs = refs + 1;
                 }
                 i = i + 1;
             }
-            this.primitivos = new byte[bytes];
-            this.referencias = new Object[refs];
+            this.primitives = new byte[bytes];
+            this.references = new Object[refs];
         }
 
-        void leer(ObjectInputStream in) throws IOException, ClassNotFoundException {
+        void read0(ObjectInputStream in) throws IOException, ClassNotFoundException {
             int i = 0;
-            while (i < this.campos.length && this.campos[i].isPrimitive()) {
-                in.bin.leerCrudo(this.primitivos, this.campos[i].getOffset(),
-                        ancho(this.campos[i].getTypeCode()));
+            while (i < this.fields.length && this.fields[i].isPrimitive()) {
+                in.bin.readRaw(this.primitives, this.fields[i].getOffset(),
+                        widthOf(this.fields[i].getTypeCode()));
                 i = i + 1;
             }
-            while (i < this.campos.length) {
-                this.referencias[this.campos[i].getOffset()] =
-                        in.leerObjeto0(this.campos[i].isUnshared());
+            while (i < this.fields.length) {
+                this.references[this.fields[i].getOffset()] =
+                        in.readObject0(this.fields[i].isUnshared());
                 i = i + 1;
             }
         }
@@ -1378,49 +1391,50 @@ public class ObjectInputStream extends InputStream implements ObjectInput, Objec
         }
 
         public boolean defaulted(String name) throws IOException {
-            return this.buscar(name, (char) 0) == null;
+            return this.lookUp(name, (char) 0) == null;
         }
 
         /**
-         * El campo `name` dentro del flujo, o `null` si el flujo no lo trajo pero la clase local si
-         * lo tiene --que es el caso en que corresponde devolver el valor por omision--.
+         * The field `name` inside the stream, or `null` if the stream did not bring it but the
+         * local class does have it --which is the case where returning the default value is right.
          *
-         * <p>Las tres respuestas son distintas y hay que distinguirlas. Que el flujo no traiga un
-         * campo que la clase tiene es lo normal al leer algo escrito por una version anterior.
-         * Preguntar por un nombre que **no existe en ninguno de los dos lados** no es eso: es que el
-         * que llama se equivoco de nombre --o de tipo--, y devolverle su propio valor por omision le
-         * escondería el error para siempre, porque nunca veria nada distinto de lo que el paso.
+         * <p>The three answers are different and have to be told apart. The stream not bringing a
+         * field the class has is the normal thing when reading something written by an earlier
+         * version. Asking about a name that **exists on neither side** is not that: it means the
+         * caller got the name --or the type-- wrong, and returning them their own default value
+         * would hide the mistake from them for ever, because they would never see anything other
+         * than what they passed in.
          *
-         * @throws IllegalArgumentException si `name` con ese tipo no es un campo ni del flujo ni de
-         *     la clase
+         * @throws IllegalArgumentException if `name` with that type is a field neither of the
+         *     stream nor of the class
          */
-        private ObjectStreamField buscar(String name, char tipo) {
+        private ObjectStreamField lookUp(String name, char kind) {
             if (name == null) {
                 throw new NullPointerException();
             }
-            ObjectStreamField f = coincide(this.campos, name, tipo);
+            ObjectStreamField f = coincide(this.fields, name, kind);
             if (f != null) {
                 return f;
             }
             ObjectStreamClass local = this.desc.forClass() == null
                     ? null : ObjectStreamClass.lookup(this.desc.forClass());
-            if (local != null && coincide(local.getFields(), name, tipo) != null) {
+            if (local != null && coincide(local.getFields(), name, kind) != null) {
                 return null;
             }
             throw new IllegalArgumentException("no such field " + name + " with type "
-                    + nombreTipo(tipo));
+                    + typeName(kind));
         }
 
-        private static ObjectStreamField coincide(ObjectStreamField[] cs, String name, char tipo) {
+        private static ObjectStreamField coincide(ObjectStreamField[] cs, String name, char kind) {
             int i = 0;
             while (i < cs.length) {
                 if (cs[i].getName().equals(name)) {
                     char t = cs[i].getTypeCode();
-                    // `tipo == 0` es la consulta de `defaulted`, que pregunta solo por el nombre.
-                    // `'L'` pedido casa con cualquier referencia --arreglos incluidos-- porque la
-                    // firma de `get(String, Object)` no puede decir cual; los primitivos tienen que
-                    // dar exacto, que un `int` no es un `short`.
-                    if (tipo == 0 || (tipo == 'L' ? (t == 'L' || t == '[') : t == tipo)) {
+                    // `kind == 0` is `defaulted`'s query, which asks by name alone. An `'L'` asked
+                    // for matches any reference --arrays included-- because `get(String, Object)`'s
+                    // signature cannot say which; the primitives have to match exactly, since an
+                    // `int` is not a `short`.
+                    if (kind == 0 || (kind == 'L' ? (t == 'L' || t == '[') : t == kind)) {
                         return cs[i];
                     }
                     return null;
@@ -1430,95 +1444,95 @@ public class ObjectInputStream extends InputStream implements ObjectInput, Objec
             return null;
         }
 
-        private static String nombreTipo(char tipo) {
-            if (tipo == 'Z') {
+        private static String typeName(char kind) {
+            if (kind == 'Z') {
                 return "boolean";
             }
-            if (tipo == 'B') {
+            if (kind == 'B') {
                 return "byte";
             }
-            if (tipo == 'C') {
+            if (kind == 'C') {
                 return "char";
             }
-            if (tipo == 'S') {
+            if (kind == 'S') {
                 return "short";
             }
-            if (tipo == 'I') {
+            if (kind == 'I') {
                 return "int";
             }
-            if (tipo == 'J') {
+            if (kind == 'J') {
                 return "long";
             }
-            if (tipo == 'F') {
+            if (kind == 'F') {
                 return "float";
             }
-            if (tipo == 'D') {
+            if (kind == 'D') {
                 return "double";
             }
             return "class java.lang.Object";
         }
 
         public boolean get(String name, boolean val) throws IOException {
-            ObjectStreamField f = this.buscar(name, 'Z');
-            return f == null ? val : this.primitivos[f.getOffset()] != 0;
+            ObjectStreamField f = this.lookUp(name, 'Z');
+            return f == null ? val : this.primitives[f.getOffset()] != 0;
         }
 
         public byte get(String name, byte val) throws IOException {
-            ObjectStreamField f = this.buscar(name, 'B');
-            return f == null ? val : this.primitivos[f.getOffset()];
+            ObjectStreamField f = this.lookUp(name, 'B');
+            return f == null ? val : this.primitives[f.getOffset()];
         }
 
         public char get(String name, char val) throws IOException {
-            ObjectStreamField f = this.buscar(name, 'C');
-            return f == null ? val : (char) this.corto(f.getOffset());
+            ObjectStreamField f = this.lookUp(name, 'C');
+            return f == null ? val : (char) this.shortAt(f.getOffset());
         }
 
         public short get(String name, short val) throws IOException {
-            ObjectStreamField f = this.buscar(name, 'S');
-            return f == null ? val : (short) this.corto(f.getOffset());
+            ObjectStreamField f = this.lookUp(name, 'S');
+            return f == null ? val : (short) this.shortAt(f.getOffset());
         }
 
         public int get(String name, int val) throws IOException {
-            ObjectStreamField f = this.buscar(name, 'I');
-            return f == null ? val : this.entero(f.getOffset());
+            ObjectStreamField f = this.lookUp(name, 'I');
+            return f == null ? val : this.intAt(f.getOffset());
         }
 
         public long get(String name, long val) throws IOException {
-            ObjectStreamField f = this.buscar(name, 'J');
-            return f == null ? val : this.largo(f.getOffset());
+            ObjectStreamField f = this.lookUp(name, 'J');
+            return f == null ? val : this.len(f.getOffset());
         }
 
         public float get(String name, float val) throws IOException {
-            ObjectStreamField f = this.buscar(name, 'F');
-            return f == null ? val : Float.intBitsToFloat(this.entero(f.getOffset()));
+            ObjectStreamField f = this.lookUp(name, 'F');
+            return f == null ? val : Float.intBitsToFloat(this.intAt(f.getOffset()));
         }
 
         public double get(String name, double val) throws IOException {
-            ObjectStreamField f = this.buscar(name, 'D');
-            return f == null ? val : Double.longBitsToDouble(this.largo(f.getOffset()));
+            ObjectStreamField f = this.lookUp(name, 'D');
+            return f == null ? val : Double.longBitsToDouble(this.len(f.getOffset()));
         }
 
         public Object get(String name, Object val) throws IOException, ClassNotFoundException {
-            ObjectStreamField f = this.buscar(name, 'L');
-            return f == null ? val : this.referencias[f.getOffset()];
+            ObjectStreamField f = this.lookUp(name, 'L');
+            return f == null ? val : this.references[f.getOffset()];
         }
 
-        private int corto(int off) {
-            return ((this.primitivos[off] & 0xFF) << 8) | (this.primitivos[off + 1] & 0xFF);
+        private int shortAt(int off) {
+            return ((this.primitives[off] & 0xFF) << 8) | (this.primitives[off + 1] & 0xFF);
         }
 
-        private int entero(int off) {
-            return ((this.primitivos[off] & 0xFF) << 24)
-                    | ((this.primitivos[off + 1] & 0xFF) << 16)
-                    | ((this.primitivos[off + 2] & 0xFF) << 8)
-                    | (this.primitivos[off + 3] & 0xFF);
+        private int intAt(int off) {
+            return ((this.primitives[off] & 0xFF) << 24)
+                    | ((this.primitives[off + 1] & 0xFF) << 16)
+                    | ((this.primitives[off + 2] & 0xFF) << 8)
+                    | (this.primitives[off + 3] & 0xFF);
         }
 
-        private long largo(int off) {
-            return (((long) this.entero(off)) << 32) | (((long) this.entero(off + 4)) & 0xFFFFFFFFL);
+        private long len(int off) {
+            return (((long) this.intAt(off)) << 32) | (((long) this.intAt(off + 4)) & 0xFFFFFFFFL);
         }
 
-        private static int ancho(char c) {
+        private static int widthOf(char c) {
             if (c == 'Z' || c == 'B') {
                 return 1;
             }
@@ -1532,151 +1546,152 @@ public class ObjectInputStream extends InputStream implements ObjectInput, Objec
         }
     }
 
-    // ---- la capa de bloques -----------------------------------------------------------------------
+    // ---- the block layer --------------------------------------------------------------------------
 
     /**
-     * La capa que desenvuelve los registros de bloque, espejo de la `SalidaBloques` del escritor.
+     * The layer that unwraps the block records, mirror of the writer's `BlockOutput`.
      *
-     * <p>En modo bloque cada lectura sale del registro {@code TC_BLOCKDATA} en curso, y cuando se
-     * acaba **no se sigue de largo**: hay que ver si lo que viene es otro registro o el
-     * {@code TC_ENDBLOCKDATA} que cierra. Fuera de modo bloque los bytes salen crudos, que es como
-     * se leen los typecodes y los campos por defecto.
+     * <p>In block mode each read comes out of the {@code TC_BLOCKDATA} record in progress, and when
+     * that runs out it **does not carry straight on**: it has to see whether what comes next is
+     * another record or the {@code TC_ENDBLOCKDATA} that closes it. Outside block mode the bytes
+     * come out raw, which is how the typecodes and the default fields are read.
      *
-     * <p>Alcanza con **un byte de anticipo**: todo lo que hay que decidir --si sigue un registro,
-     * si sigue un typecode-- se decide mirando el proximo byte, y nunca hay que devolver mas de uno.
+     * <p>**One byte of look-ahead** is enough: everything there is to decide --whether a record
+     * follows, whether a typecode follows-- is decided by looking at the next byte, and more than
+     * one never has to be given back.
      */
-    private static final class EntradaBloques {
+    private static final class BlockInput {
         private final InputStream in;
 
-        /** El byte leido y no consumido, o -1 si no hay ninguno guardado. */
-        private int mirado = -1;
-        private boolean bloque;
-        /** Bytes que quedan del registro de bloque en curso. */
-        private int restan;
-        private long consumidos;
+        /** The byte read and not consumed, or -1 if none is stored. */
+        private int peeked = -1;
+        private boolean inBlock;
+        /** Bytes left of the block record in progress. */
+        private int remaining;
+        private long consumed;
 
-        EntradaBloques(InputStream in) {
+        BlockInput(InputStream in) {
             this.in = in;
         }
 
-        boolean enModoBloque() {
-            return this.bloque;
+        boolean inBlockMode() {
+            return this.inBlock;
         }
 
-        /** Cambia de modo y devuelve el anterior. */
-        boolean modoBloque(boolean nuevo) throws IOException {
-            boolean antes = this.bloque;
-            if (antes != nuevo) {
-                if (antes && this.restan > 0) {
-                    // Salir de modo bloque con datos sin consumir haria que el proximo byte de datos
-                    // se leyera como typecode: todo lo que viniera despues quedaria desalineado, y
-                    // el sintoma aparecería muy lejos de la causa.
+        /** It changes mode and returns the previous one. */
+        boolean blockMode(boolean fresh) throws IOException {
+            boolean before = this.inBlock;
+            if (before != fresh) {
+                if (before && this.remaining > 0) {
+                    // Leaving block mode with unconsumed data would make the next data byte be read
+                    // as a typecode: everything that came afterwards would be misaligned, and the
+                    // symptom would turn up a long way from the cause.
                     throw new IllegalStateException("unread block data");
                 }
-                this.bloque = nuevo;
-                this.restan = 0;
+                this.inBlock = fresh;
+                this.remaining = 0;
             }
-            return antes;
+            return before;
         }
 
-        long bytesLeidos() {
-            return this.consumidos;
+        long bytesRead() {
+            return this.consumed;
         }
 
-        /** El proximo byte sin consumirlo, o -1 en fin de flujo. */
-        int mirar() throws IOException {
-            if (this.mirado < 0) {
-                this.mirado = this.in.read();
+        /** The next byte without consuming it, or -1 at end of stream. */
+        int peek() throws IOException {
+            if (this.peeked < 0) {
+                this.peeked = this.in.read();
             }
-            return this.mirado;
+            return this.peeked;
         }
 
-        int leerByteCrudo() throws IOException {
-            int b = this.mirar();
-            this.mirado = -1;
+        int readRawByte() throws IOException {
+            int b = this.peek();
+            this.peeked = -1;
             if (b >= 0) {
-                this.consumidos = this.consumidos + 1;
+                this.consumed = this.consumed + 1;
             }
             return b;
         }
 
         /**
-         * Deja `restan` con los bytes disponibles del registro en curso, leyendo la cabecera del
-         * siguiente si hiciera falta. Al volver, `restan == 0` significa que lo que sigue **no** es
-         * un registro de bloque.
+         * It leaves `remaining` holding the bytes available in the record in progress, reading the
+         * next one's header if need be. On returning, `remaining == 0` means what follows is
+         * **not** a block record.
          */
-        private void asegurarBloque() throws IOException {
-            while (this.bloque && this.restan == 0) {
-                int tc = this.mirar();
+        private void ensureBlock() throws IOException {
+            while (this.inBlock && this.remaining == 0) {
+                int tc = this.peek();
                 if (tc == ObjectStreamConstants.TC_BLOCKDATA) {
-                    this.leerByteCrudo();
-                    int n = this.leerByteCrudo();
+                    this.readRawByte();
+                    int n = this.readRawByte();
                     if (n < 0) {
                         throw new EOFException();
                     }
-                    this.restan = n;
+                    this.remaining = n;
                 } else if (tc == ObjectStreamConstants.TC_BLOCKDATALONG) {
-                    this.leerByteCrudo();
-                    int n = this.leerIntCrudo();
+                    this.readRawByte();
+                    int n = this.readRawInt();
                     if (n < 0) {
                         throw new StreamCorruptedException("illegal block data header length: " + n);
                     }
-                    this.restan = n;
+                    this.remaining = n;
                 } else {
                     return;
                 }
             }
         }
 
-        /** Cuantos bytes de datos quedan en el registro en curso. */
-        int cuantosQuedan() throws IOException {
-            this.asegurarBloque();
-            return this.restan;
+        /** How many data bytes are left in the record in progress. */
+        int refill() throws IOException {
+            this.ensureBlock();
+            return this.remaining;
         }
 
-        void saltarBloque() throws IOException {
+        void skipBlock() throws IOException {
             for (;;) {
-                this.asegurarBloque();
-                if (this.restan == 0) {
+                this.ensureBlock();
+                if (this.remaining == 0) {
                     return;
                 }
-                while (this.restan > 0) {
-                    if (this.leerByteCrudo() < 0) {
+                while (this.remaining > 0) {
+                    if (this.readRawByte() < 0) {
                         throw new EOFException();
                     }
-                    this.restan = this.restan - 1;
+                    this.remaining = this.remaining - 1;
                 }
             }
         }
 
-        /** Un byte de datos; falla en fin de flujo. Es lo que usan los `readXxx` de `DataInput`. */
-        private int unByte() throws IOException {
-            int b = this.leer();
+        /** One data byte; it fails at end of stream. It is what `DataInput`'s `readXxx` use. */
+        private int oneByte() throws IOException {
+            int b = this.read0();
             if (b < 0) {
                 throw new EOFException();
             }
             return b;
         }
 
-        /** Un byte de datos, o -1 cuando no hay mas. Es lo que usa `read()`. */
-        int leer() throws IOException {
-            if (this.bloque) {
-                this.asegurarBloque();
-                if (this.restan == 0) {
+        /** One data byte, or -1 when there is no more. It is what `read()` uses. */
+        int read0() throws IOException {
+            if (this.inBlock) {
+                this.ensureBlock();
+                if (this.remaining == 0) {
                     return -1;
                 }
-                this.restan = this.restan - 1;
+                this.remaining = this.remaining - 1;
             }
-            return this.leerByteCrudo();
+            return this.readRawByte();
         }
 
-        int leer(byte[] buf, int off, int len) throws IOException {
+        int read0(byte[] buf, int off, int len) throws IOException {
             if (len == 0) {
                 return 0;
             }
             int i = 0;
             while (i < len) {
-                int b = this.leer();
+                int b = this.read0();
                 if (b < 0) {
                     return i == 0 ? -1 : i;
                 }
@@ -1686,119 +1701,119 @@ public class ObjectInputStream extends InputStream implements ObjectInput, Objec
             return i;
         }
 
-        /** Exactamente `len` bytes de datos; falla si no estan. */
-        void leerCrudo(byte[] buf, int off, int len) throws IOException {
+        /** Exactly `len` data bytes; it fails if they are not there. */
+        void readRaw(byte[] buf, int off, int len) throws IOException {
             int i = 0;
             while (i < len) {
-                buf[off + i] = (byte) this.unByte();
+                buf[off + i] = (byte) this.oneByte();
                 i = i + 1;
             }
         }
 
-        /** El proximo typecode. No hay modo bloque aca: un typecode nunca va enmarcado. */
-        int mirarObligatorio() throws IOException {
-            int b = this.mirar();
+        /** The next typecode. There is no block mode here: a typecode is never framed. */
+        int peekRequired() throws IOException {
+            int b = this.peek();
             if (b < 0) {
                 throw new EOFException();
             }
             return b;
         }
 
-        int leerUnsignedByte() throws IOException {
-            return this.unByte();
+        int readUnsignedByte0() throws IOException {
+            return this.oneByte();
         }
 
-        int leerUnsignedShort() throws IOException {
-            return (this.unByte() << 8) | this.unByte();
+        int readUnsignedShort0() throws IOException {
+            return (this.oneByte() << 8) | this.oneByte();
         }
 
-        int leerInt() throws IOException {
-            return (this.unByte() << 24) | (this.unByte() << 16) | (this.unByte() << 8)
-                    | this.unByte();
+        int readInt0() throws IOException {
+            return (this.oneByte() << 24) | (this.oneByte() << 16) | (this.oneByte() << 8)
+                    | this.oneByte();
         }
 
-        private int leerIntCrudo() throws IOException {
-            int a = this.leerByteCrudo();
-            int b = this.leerByteCrudo();
-            int c = this.leerByteCrudo();
-            int d = this.leerByteCrudo();
+        private int readRawInt() throws IOException {
+            int a = this.readRawByte();
+            int b = this.readRawByte();
+            int c = this.readRawByte();
+            int d = this.readRawByte();
             if ((a | b | c | d) < 0) {
                 throw new EOFException();
             }
             return (a << 24) | (b << 16) | (c << 8) | d;
         }
 
-        long leerLong() throws IOException {
-            long alta = this.leerInt();
-            long baja = this.leerInt();
-            return (alta << 32) | (baja & 0xFFFFFFFFL);
+        long readLong0() throws IOException {
+            long alta = this.readInt0();
+            long low = this.readInt0();
+            return (alta << 32) | (low & 0xFFFFFFFFL);
         }
 
-        String leerUtf() throws IOException {
-            return this.leerUtfCruda(this.leerUnsignedShort());
+        String readUtf() throws IOException {
+            return this.readRawUtf(this.readUnsignedShort0());
         }
 
         /**
-         * UTF-8 **modificado**: el cero viene en dos bytes y cada `char` esta codificado por su
-         * cuenta, asi que un par suplente son dos secuencias de tres bytes y no una de cuatro.
-         * Decodificarlo con un UTF-8 de verdad daria mal justo esos dos casos.
+         * **Modified** UTF-8: the zero comes in two bytes and each `char` is encoded on its own, so
+         * a surrogate pair is two three-byte sequences and not one of four. Decoding it with real
+         * UTF-8 would get exactly those two cases wrong.
          */
-        String leerUtfCruda(long bytes) throws IOException {
+        String readRawUtf(long bytes) throws IOException {
             StringBuilder sb = new StringBuilder();
-            long leidos = 0;
-            while (leidos < bytes) {
-                int b1 = this.unByte();
-                leidos = leidos + 1;
+            long done = 0;
+            while (done < bytes) {
+                int b1 = this.oneByte();
+                done = done + 1;
                 if (b1 < 0x80) {
                     if (b1 == 0) {
                         throw new UTFDataFormatException("malformed input: zero byte");
                     }
                     sb.append((char) b1);
                 } else if ((b1 & 0xE0) == 0xC0) {
-                    if (leidos >= bytes) {
+                    if (done >= bytes) {
                         throw new UTFDataFormatException("malformed input: partial character at end");
                     }
-                    int b2 = this.unByte();
-                    leidos = leidos + 1;
+                    int b2 = this.oneByte();
+                    done = done + 1;
                     if ((b2 & 0xC0) != 0x80) {
-                        throw new UTFDataFormatException("malformed input around byte " + leidos);
+                        throw new UTFDataFormatException("malformed input around byte " + done);
                     }
                     sb.append((char) (((b1 & 0x1F) << 6) | (b2 & 0x3F)));
                 } else if ((b1 & 0xF0) == 0xE0) {
-                    if (leidos + 1 >= bytes) {
+                    if (done + 1 >= bytes) {
                         throw new UTFDataFormatException("malformed input: partial character at end");
                     }
-                    int b2 = this.unByte();
-                    int b3 = this.unByte();
-                    leidos = leidos + 2;
+                    int b2 = this.oneByte();
+                    int b3 = this.oneByte();
+                    done = done + 2;
                     if ((b2 & 0xC0) != 0x80 || (b3 & 0xC0) != 0x80) {
-                        throw new UTFDataFormatException("malformed input around byte " + leidos);
+                        throw new UTFDataFormatException("malformed input around byte " + done);
                     }
                     sb.append((char) (((b1 & 0x0F) << 12) | ((b2 & 0x3F) << 6) | (b3 & 0x3F)));
                 } else {
-                    throw new UTFDataFormatException("malformed input around byte " + leidos);
+                    throw new UTFDataFormatException("malformed input around byte " + done);
                 }
             }
             return sb.toString();
         }
 
-        int disponibles() throws IOException {
-            if (this.bloque) {
-                this.asegurarBloque();
-                return this.restan;
+        int available() throws IOException {
+            if (this.inBlock) {
+                this.ensureBlock();
+                return this.remaining;
             }
             int n = this.in.available();
-            return this.mirado >= 0 ? n + 1 : n;
+            return this.peeked >= 0 ? n + 1 : n;
         }
 
-        void cerrar() throws IOException {
+        void close() throws IOException {
             this.in.close();
         }
     }
 
-    // ---- utilidades ------------------------------------------------------------------------------
+    // ---- utilities -------------------------------------------------------------------------------
 
-    private static Class<?> primitivaPorNombre(String n) {
+    private static Class<?> primitiveByName(String n) {
         if (n.equals("int")) {
             return Integer.TYPE;
         }

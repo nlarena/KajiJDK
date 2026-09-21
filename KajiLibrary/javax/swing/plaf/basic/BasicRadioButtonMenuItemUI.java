@@ -9,22 +9,22 @@ import javax.swing.MenuSelectionManager;
 import javax.swing.plaf.ComponentUI;
 
 /**
- * El aspecto basico de un item de menu de opcion.
+ * The basic look and feel of a radio button menu item.
  *
- * <p>Igual que {@link BasicCheckBoxMenuItemUI} salvo el icono: un punto de 6 x 6 en vez de un tilde
- * de 9 x 9. La diferencia de dibujo es toda la diferencia -- un tilde dice "esto esta prendido" y
- * un punto dice "de este grupo, este" --, y quien hace cumplir el "de este grupo" no es el aspecto
- * sino el {@code ButtonGroup} que agrupa los items.
+ * <p>The same as {@link BasicCheckBoxMenuItemUI} save for the icon: a 6 x 6 dot instead of a
+ * 9 x 9 tick. The difference in drawing is the whole difference -- a tick says "this is on" and
+ * a dot says "of this group, this one" --, and who enforces the "of this group" is not the look
+ * and feel but the {@code ButtonGroup} that groups the items.
  *
- * <p>Vale la misma nota que en el marcable: el punto del basico mide 6 x 6 y el de Metal 10 x 10,
- * asi que el ancho preferido no coincide con el del JDK.
+ * <p>The same note as in the tickable one holds: the basic dot measures 6 x 6 and Metal's
+ * 10 x 10, so the preferred width does not match the JDK's.
  */
 public class BasicRadioButtonMenuItemUI extends BasicMenuItemUI {
 
     public BasicRadioButtonMenuItemUI() {
     }
 
-    /** Uno nuevo por item: guarda el componente y sus escuchas. */
+    /** A new one per item: it keeps the component and its listeners. */
     public static ComponentUI createUI(JComponent c) {
         return new BasicRadioButtonMenuItemUI();
     }
@@ -33,13 +33,13 @@ public class BasicRadioButtonMenuItemUI extends BasicMenuItemUI {
         return "RadioButtonMenuItem";
     }
 
-    /** Lo de siempre mas el punto; ver la nota de la clase. */
+    /** The usual plus the dot; see the class note. */
     protected void installDefaults() {
         super.installDefaults();
         checkIcon = BasicIconFactory.getRadioButtonMenuItemIcon();
     }
 
-    /** Igual que en el marcable: soltar encima dispara y cierra. */
+    /** The same as in the tickable one: releasing over it fires and closes. */
     public void processMouseEvent(JMenuItem item, MouseEvent e, MenuElement[] path,
             MenuSelectionManager manager) {
         java.awt.Point p = e.getPoint();

@@ -1,21 +1,22 @@
 package javax.naming;
 
 /**
- * Un `NameClassPair` **con el objeto adentro**: lo que devuelve `Context.listBindings()`.
+ * A `NameClassPair` **with the object inside**: what `Context.listBindings()` returns.
  *
- * <p>La diferencia con listar nombres es el costo, y esta explicada en `NameClassPair`. Lo que esta
- * clase agrega es el objeto ya materializado, para el que de verdad los va a usar a todos.
+ * <p>The difference from listing names is the cost, and it is explained in `NameClassPair`. What
+ * this class adds is the already materialized object, for whoever really is going to use them all.
  *
- * <h2>Por que hay ocho constructores y por que `getClassName` esta redefinido</h2>
+ * <h2>Why there are four constructors and why `getClassName` is redefined</h2>
  *
- * <p>El nombre de clase se puede deducir del objeto, asi que la mitad de los constructores no lo
- * piden: `getClassName()` mira primero el que se declaro y, si no hay, pregunta
- * `getObject().getClass().getName()`. La deduccion no siempre alcanza --el proveedor puede saber
- * que el objeto atado es de una clase que aca ni existe, o el objeto puede ser `null` y el nombre
- * de clase saberse igual--, y por eso los otros constructores dejan declararlo.
+ * <p>The class name can be deduced from the object, so half of the constructors do not ask for it:
+ * `getClassName()` looks first at the declared one and, if there is none, asks
+ * `getObject().getClass().getName()`. The deduction is not always enough --the provider may know
+ * that the bound object is of a class that does not even exist here, or the object may be `null`
+ * and the class name known anyway--, which is why the other constructors let you declare it. (An
+ * earlier note said eight constructors; there are four, as in the JDK.)
  *
- * <p>Y devuelve `null` cuando no hay ninguna de las dos cosas, en vez de tirar: un `list` de un
- * contexto medio roto tiene que poder devolver la fila.
+ * <p>And it returns `null` when there is neither, instead of throwing: a `list` of a half-broken
+ * context must still be able to return the row.
  */
 public class Binding extends NameClassPair {
 
@@ -23,7 +24,7 @@ public class Binding extends NameClassPair {
 
     private Object boundObj;
 
-    /** El nombre de clase queda sin declarar: se deduce del objeto en `getClassName()`. */
+    /** The class name is left undeclared: it is deduced from the object in `getClassName()`. */
     public Binding(String name, Object obj) {
         super(name, null);
         this.boundObj = obj;
@@ -44,7 +45,9 @@ public class Binding extends NameClassPair {
         this.boundObj = obj;
     }
 
-    /** El declarado gana; si no hay, se deduce del objeto; si tampoco hay objeto, `null`. */
+    /**
+     * The declared one wins; if there is none, it is deduced from the object; if no object, `null`.
+     */
     @Override
     public String getClassName() {
         String cname = super.getClassName();

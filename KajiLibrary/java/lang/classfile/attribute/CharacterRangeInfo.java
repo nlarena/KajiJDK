@@ -2,28 +2,28 @@ package java.lang.classfile.attribute;
 
 import jdk.internal.classfile.impl.TypedAttributes;
 
-// Una fila de `CharacterRangeTable`, la versión "tabla" de
-// {@link java.lang.classfile.instruction.CharacterRange}: mientras aquélla usa etiquetas, ésta usa
-// los bci crudos del archivo. Ver ahí la explicación del atributo y del empaquetado de línea y
-// columna en un `int`.
+// A row of `CharacterRangeTable`, the "table" version of
+// {@link java.lang.classfile.instruction.CharacterRange}: where that one uses labels, this one uses
+// the file's raw bci. See there for the explanation of the attribute and of how line and column are
+// packed into an `int`.
 public interface CharacterRangeInfo {
 
-    /** El bci donde empieza el tramo de bytecode. */
+    /** The bci where the bytecode stretch starts. */
     int startPc();
 
-    /** El bci donde termina, sin incluirlo. */
+    /** The bci where it ends, exclusive. */
     int endPc();
 
-    /** Línea y columna donde empieza el tramo de fuente. */
+    /** Line and column where the source stretch starts. */
     int characterRangeStart();
 
-    /** Línea y columna donde termina. */
+    /** Line and column where it ends. */
     int characterRangeEnd();
 
-    /** Las banderas `CharacterRange.FLAG_*` combinadas con or. */
+    /** The `CharacterRange.FLAG_*` flags or-ed together. */
     int flags();
 
-    /** La fila con estos valores. */
+    /** The row with these values. */
     public static CharacterRangeInfo of(int startPc, int endPc, int characterRangeStart,
             int characterRangeEnd, int flags) {
         return TypedAttributes.characterRangeInfo(startPc, endPc, characterRangeStart,

@@ -3,27 +3,28 @@ package javax.management.monitor;
 import javax.management.JMRuntimeException;
 
 /**
- * KajiLibrary's javax.management.monitor.MonitorSettingException -- el monitor esta mal configurado.
+ * KajiLibrary's javax.management.monitor.MonitorSettingException -- the monitor is misconfigured.
  *
- * <p>Es una {@link JMRuntimeException}, o sea <b>no comprobada</b>, y eso vale explicarlo: la
- * lanza el hilo del monitor mientras observa, no quien lo configuro. Para cuando salta, el que se
- * equivoco al configurar ya se fue, asi que obligarlo a atajarla no habria servido de nada.
+ * <p>It is a {@link JMRuntimeException}, that is, <b>unchecked</b>, and that is worth explaining:
+ * the monitor's thread throws it while observing, not whoever configured it. By the time it fires,
+ * whoever got the configuration wrong is long gone, so forcing them to catch it would have served
+ * no purpose.
  *
- * <p>En la practica casi no se ve: la mayoria de los errores de configuracion los ataja el propio
- * setter con un {@code IllegalArgumentException} en el momento. Esta queda para lo que solo se puede
- * saber mirando el atributo de verdad --un umbral de un tipo que no compara con el valor observado--
- * y eso recien pasa cuando el monitor esta corriendo.
+ * <p>In practice it is hardly ever seen: most configuration errors are caught by the setter itself
+ * with an {@code IllegalArgumentException} on the spot. This one is left for what can only be known
+ * by looking at the real attribute --a threshold of a type that does not compare with the observed
+ * value-- and that only happens once the monitor is running.
  */
 public class MonitorSettingException extends JMRuntimeException {
 
     private static final long serialVersionUID = -8807913418190202007L;
 
-    /** Sin detalle. */
+    /** Without detail. */
     public MonitorSettingException() {
         super();
     }
 
-    /** Con un mensaje que diga que setting esta mal. */
+    /** With a message saying which setting is wrong. */
     public MonitorSettingException(String message) {
         super(message);
     }

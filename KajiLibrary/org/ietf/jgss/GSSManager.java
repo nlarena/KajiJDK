@@ -3,117 +3,117 @@ package org.ietf.jgss;
 import java.security.Provider;
 
 /**
- * KajiLibrary's org.ietf.jgss.GSSManager -- por donde se entra a GSS-API.
+ * KajiLibrary's org.ietf.jgss.GSSManager -- where one enters GSS-API.
  *
- * <p>Es la fabrica de todo lo demas: nombres, credenciales y contextos. No tiene constructor publico
- * util --se llega por {@link #getInstance}-- porque la instancia lleva la lista de mecanismos
- * disponibles y esa lista es del proceso.
+ * <p>It is the factory of everything else: names, credentials and contexts. It has no useful public
+ * constructor --one gets there through {@link #getInstance}-- because the instance carries the list
+ * of available mechanisms and that list belongs to the process.
  *
- * <p>Los {@code addProviderAt*} son lo que hace que esa lista sea configurable en caliente:
- * {@code Front} le da prioridad a un proveedor sobre los que ya estaban y {@code End} lo deja de
- * ultimo. Sirve para forzar que un mecanismo lo atienda una implementacion concreta sin tocar la
- * instalacion.
+ * <p>The {@code addProviderAt*} are what make that list configurable on the fly: {@code Front}
+ * gives a provider priority over the ones that were already there and {@code End} leaves it last.
+ * It serves for forcing a concrete implementation to attend to a mechanism without touching the
+ * installation.
  *
  * <h2>A KajiLibrary subset</h2>
  *
- * <p>Esta biblioteca <b>no trae ningun mecanismo</b> GSS-API: no hay Kerberos, y sin un mecanismo no
- * hay nombres que resolver ni contextos que establecer. {@link #getInstance} devuelve un gestor sin
- * mecanismos, y eso se nota asi:
+ * <p>This library <b>brings no GSS-API mechanism</b>: there is no Kerberos, and without a mechanism
+ * there are no names to resolve nor contexts to establish. {@link #getInstance} returns a manager
+ * with no mechanisms, and that shows like this:
  *
  * <ul>
- *   <li>{@link #getMechs} y {@link #getMechsForName} devuelven arreglos <b>vacios</b>, que es la
- *       verdad --no hay ninguno-- y no una falla;
- *   <li>los {@code createName}, {@code createCredential} y {@code createContext} lanzan
- *       {@link GSSException} con {@link GSSException#UNAVAILABLE}, y {@link #getNamesForMech} con
- *       {@link GSSException#BAD_MECH}. Los dos codigos estan declarados y significan exactamente lo
- *       que pasa;
- *   <li>los {@code addProviderAt*} lanzan {@code UNAVAILABLE}: no hay donde agregarlo.
+ *   <li>{@link #getMechs} and {@link #getMechsForName} return <b>empty</b> arrays, which is the
+ *       truth --there is none-- and not a failure;
+ *   <li>the {@code createName}, {@code createCredential} and {@code createContext} throw {@link
+ *       GSSException} with {@link GSSException#UNAVAILABLE}, and {@link #getNamesForMech} with
+ *       {@link GSSException#BAD_MECH}. The two codes are declared and mean exactly what is
+ *       happening;
+ *   <li>the {@code addProviderAt*} throw {@code UNAVAILABLE}: there is nowhere to add it.
  * </ul>
  *
- * <p>Lo que <b>si</b> anda entero es el resto del paquete: {@link Oid} codifica y decodifica DER de
- * verdad, y {@link GSSException}, {@link MessageProp} y {@link ChannelBinding} son completos. Una
- * implementacion de mecanismo que se escriba contra estas interfaces no necesita nada mas de aca.
+ * <p>What <b>does</b> work whole is the rest of the package: {@link Oid} encodes and decodes DER
+ * for real, and {@link GSSException}, {@link MessageProp} and {@link ChannelBinding} are complete.
+ * An implementation of a mechanism written against these interfaces needs nothing more from here.
  */
 public abstract class GSSManager {
 
-    /** Publico porque las subclases lo necesitan; para conseguir uno va {@link #getInstance}. */
+    /** Public because the subclasses need it; to get one, go through {@link #getInstance}. */
     public GSSManager() {
     }
 
     /**
-     * El gestor por omision.
+     * The default manager.
      *
-     * <p>En KajiLibrary, uno sin mecanismos; ver la nota de la clase.
+     * <p>In KajiLibrary, one with no mechanisms; see the note of the class.
      */
     public static GSSManager getInstance() {
         return new EmptyManager();
     }
 
-    /** Los mecanismos disponibles. */
+    /** The available mechanisms. */
     public abstract Oid[] getMechs();
 
     /**
-     * Los tipos de nombre que ese mecanismo entiende.
+     * The types of name that mechanism understands.
      *
-     * @throws GSSException con {@link GSSException#BAD_MECH} si no conoce ese mecanismo
+     * @throws GSSException with {@link GSSException#BAD_MECH} if it does not know that mechanism
      */
     public abstract Oid[] getNamesForMech(Oid mech) throws GSSException;
 
-    /** Los mecanismos que entienden ese tipo de nombre. */
+    /** The mechanisms that understand that type of name. */
     public abstract Oid[] getMechsForName(Oid nameType);
 
-    /** Un nombre desde texto. */
+    /** A name from text. */
     public abstract GSSName createName(String nameStr, Oid nameType) throws GSSException;
 
-    /** Un nombre desde bytes. */
+    /** A name from bytes. */
     public abstract GSSName createName(byte[] name, Oid nameType) throws GSSException;
 
-    /** Un nombre desde texto, ya resuelto para un mecanismo. */
+    /** A name from text, already resolved for a mechanism. */
     public abstract GSSName createName(String nameStr, Oid nameType, Oid mech) throws GSSException;
 
-    /** Un nombre desde bytes, ya resuelto para un mecanismo. */
+    /** A name from bytes, already resolved for a mechanism. */
     public abstract GSSName createName(byte[] name, Oid nameType, Oid mech) throws GSSException;
 
     /**
-     * La credencial por omision.
+     * The default credential.
      *
-     * @param usage una de las constantes de {@link GSSCredential}
+     * @param usage one of the constants of {@link GSSCredential}
      */
     public abstract GSSCredential createCredential(int usage) throws GSSException;
 
-    /** Una credencial para esa identidad y ese mecanismo. */
+    /** A credential for that identity and that mechanism. */
     public abstract GSSCredential createCredential(GSSName name, int lifetime, Oid mech, int usage)
         throws GSSException;
 
-    /** Idem, para varios mecanismos de una. */
+    /** The same, for several mechanisms at once. */
     public abstract GSSCredential createCredential(GSSName name, int lifetime, Oid[] mechs,
                                                    int usage) throws GSSException;
 
-    /** Un contexto del lado que inicia. */
+    /** A context on the initiating side. */
     public abstract GSSContext createContext(GSSName peer, Oid mech, GSSCredential myCred,
                                              int lifetime) throws GSSException;
 
-    /** Un contexto del lado que acepta. */
+    /** A context on the accepting side. */
     public abstract GSSContext createContext(GSSCredential myCred) throws GSSException;
 
-    /** Un contexto reconstruido desde {@link GSSContext#export}. */
+    /** A context rebuilt from {@link GSSContext#export}. */
     public abstract GSSContext createContext(byte[] interProcessToken) throws GSSException;
 
-    /** Pone ese proveedor primero para ese mecanismo. */
+    /** It puts that provider first for that mechanism. */
     public abstract void addProviderAtFront(Provider p, Oid mech) throws GSSException;
 
-    /** Lo pone ultimo. */
+    /** It puts it last. */
     public abstract void addProviderAtEnd(Provider p, Oid mech) throws GSSException;
 
     /**
-     * El gestor sin mecanismos que devuelve {@link #getInstance}.
+     * The manager with no mechanisms {@link #getInstance} returns.
      *
-     * <p>Ver la nota de la clase: contesta vacio donde vacio es la verdad, y lanza el codigo que
-     * corresponde donde no hay nada que devolver.
+     * <p>See the note of the class: it answers empty where empty is the truth, and throws the code
+     * that corresponds where there is nothing to return.
      */
     private static final class EmptyManager extends GSSManager {
 
-        /** Vacio: no hay ninguno. */
+        /** Empty: there is none. */
         public Oid[] getMechs() {
             return new Oid[0];
         }
@@ -123,7 +123,7 @@ public abstract class GSSManager {
                 "KajiLibrary includes no GSS-API mechanism");
         }
 
-        /** Vacio: ningun mecanismo entiende ningun tipo de nombre. */
+        /** Empty: no mechanism understands any type of name. */
         public Oid[] getMechsForName(Oid nameType) {
             return new Oid[0];
         }
@@ -179,7 +179,7 @@ public abstract class GSSManager {
             throw unavailable();
         }
 
-        /** El mismo motivo para todos los que no tienen nada que devolver. */
+        /** The same reason for all the ones that have nothing to return. */
         private static GSSException unavailable() {
             return new GSSException(GSSException.UNAVAILABLE, 0,
                 "KajiLibrary includes no GSS-API mechanism");

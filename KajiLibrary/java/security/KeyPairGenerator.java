@@ -1,17 +1,18 @@
 package java.security;
 
-// Genera pares de claves publica/privada.
+// It generates public/private key pairs.
 //
-// Igual que `Signature`, extiende a su propio SPI en vez de contenerlo: es una rareza historica del
-// API que permitia que un proveedor escribiera una subclase directa.
+// Just like `Signature`, it extends its own SPI instead of containing it: it is a historical oddity
+// of the API that allowed a provider to write a direct subclass.
 //
-// A KajiLibrary subset: **ningun proveedor registra este servicio**, asi que las tres sobrecargas
-// de `getInstance` tiran siempre `NoSuchAlgorithmException`. La clase esta entera igual, porque su
-// forma es la que tiene que cumplir cualquier proveedor que se agregue despues.
+// A KajiLibrary subset: **no provider registers this service**, so the three overloads of
+// `getInstance` always throw `NoSuchAlgorithmException`. The class is whole all the same, because
+// its shape is the one any provider added later has to fulfil.
 //
-// Los cuatro `initialize` vienen en pares: uno con fuente de azar explicita y otro sin ella. El que
-// no la recibe usa el generador por omision --el del sistema operativo-- y no una fuente inventada;
-// ver `KeyPairGeneratorSpi` para por que esa distincion es la que mas importa de toda la clase.
+// The four `initialize`s come in pairs: one with an explicit source of randomness and another
+// without it. The one that does not receive it uses the default generator --the operating
+// system's-- and not an invented source; see `KeyPairGeneratorSpi` for why that distinction is what
+// matters most in the whole class.
 public abstract class KeyPairGenerator extends KeyPairGeneratorSpi {
 
     private final String algorithm;
@@ -35,7 +36,7 @@ public abstract class KeyPairGenerator extends KeyPairGeneratorSpi {
         while (i < provs.length) {
             Provider.Service s = provs[i].getService("KeyPairGenerator", algorithm);
             if (s != null) {
-                return armar(s, algorithm);
+                return build(s, algorithm);
             }
             i = i + 1;
         }
@@ -67,10 +68,10 @@ public abstract class KeyPairGenerator extends KeyPairGeneratorSpi {
             throw new NoSuchAlgorithmException(
                 "no such algorithm: " + algorithm + " for provider " + provider.getName());
         }
-        return armar(s, algorithm);
+        return build(s, algorithm);
     }
 
-    private static KeyPairGenerator armar(Provider.Service s, String algorithm)
+    private static KeyPairGenerator build(Provider.Service s, String algorithm)
             throws NoSuchAlgorithmException {
         Object o = s.newInstance(null);
         if (!(o instanceof KeyPairGeneratorSpi)) {
@@ -78,8 +79,8 @@ public abstract class KeyPairGenerator extends KeyPairGeneratorSpi {
                 "class configured for KeyPairGenerator is not a KeyPairGeneratorSpi: "
                 + s.getClassName());
         }
-        KeyPairGeneradorDelegado d =
-            new KeyPairGeneradorDelegado((KeyPairGeneratorSpi) o, algorithm);
+        KeyPairGeneratorDelegate d =
+            new KeyPairGeneratorDelegate((KeyPairGeneratorSpi) o, algorithm);
         d.provider = s.getProvider();
         return d;
     }
@@ -88,16 +89,16 @@ public abstract class KeyPairGenerator extends KeyPairGeneratorSpi {
         return this.provider;
     }
 
-    // El alias historico de `generateKeyPair()`. Existen los dos porque uno se agrego en 1.1 y el
-    // otro en 1.2, y ninguno se pudo sacar.
+    // The historical alias of `generateKeyPair()`. Both exist because one was added in 1.1 and the
+    // other in 1.2, and neither could be taken out.
     public final KeyPair genKeyPair() {
         return this.generateKeyPair();
     }
 
     /**
-     * Configura el tamaño de clave, con el generador de azar por omision.
+     * It configures the key size, with the default generator of randomness.
      *
-     * <p>"Por omision" no quiere decir "sin azar": es el del sistema operativo. Ver
+     * <p>"Default" does not mean "without randomness": it is the operating system's. See
      * {@link SecureRandom}.
      */
     public void initialize(int keysize) {
@@ -105,40 +106,40 @@ public abstract class KeyPairGenerator extends KeyPairGeneratorSpi {
     }
 
     /**
-     * Idem, diciendo de donde sale el azar.
+     * The same, saying where the randomness comes from.
      *
-     * <p>La implementacion base no hace nada, igual que en el JDK: quien llega aca es un proveedor
-     * que escribio una subclase de {@code KeyPairGenerator} y decidio no aceptar configuracion, y
-     * en ese caso genera con sus valores por omision.
+     * <p>The base implementation does nothing, just as in the JDK: whoever gets here is a provider
+     * that wrote a subclass of {@code KeyPairGenerator} and decided not to accept configuration,
+     * and in that case it generates with its default values.
      */
     @Override
     public void initialize(int keysize, SecureRandom random) {
     }
 
     /**
-     * Configura con parametros concretos -- una curva, un grupo -- y el generador por omision.
+     * It configures with concrete parameters -- a curve, a group -- and the default generator.
      *
-     * @throws InvalidAlgorithmParameterException si el proveedor no los entiende
+     * @throws InvalidAlgorithmParameterException if the provider does not understand them
      */
     public void initialize(java.security.spec.AlgorithmParameterSpec params)
             throws InvalidAlgorithmParameterException {
         this.initialize(params, new SecureRandom());
     }
 
-    /** Idem, diciendo de donde sale el azar. */
+    /** The same, saying where the randomness comes from. */
     @Override
     public void initialize(java.security.spec.AlgorithmParameterSpec params, SecureRandom random)
             throws InvalidAlgorithmParameterException {
         super.initialize(params, random);
     }
 
-    // Genera el par. Sin haber configurado nada, el proveedor usa sus valores por default.
+    // It generates the pair. With nothing configured, the provider uses its default values.
     //
-    // La implementacion base devuelve **null**, que es lo que hace el JDK y hay que replicar aunque
-    // se vea mal. La razon es que aca nunca se llega: o el proveedor escribio una subclase de
-    // `KeyPairGenerator` que lo sobreescribe, o escribio un `KeyPairGeneratorSpi` y entonces el que
-    // corre es el reenvio de `KeyPairGeneradorDelegado`. Este cuerpo existe solo para que la clase
-    // no tenga que declararse abstracta en el metodo.
+    // The base implementation returns **null**, which is what the JDK does and has to be replicated
+    // even though it looks bad. The reason is that this is never reached: either the provider wrote
+    // a subclass of `KeyPairGenerator` that overrides it, or it wrote a `KeyPairGeneratorSpi` and
+    // then what runs is the forwarding of `KeyPairGeneratorDelegate`. This body exists only so that
+    // the class does not have to declare itself abstract in the method.
     @Override
     public KeyPair generateKeyPair() {
         return null;

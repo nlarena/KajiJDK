@@ -1,6 +1,7 @@
 package java.lang;
 
-// Por import y nombre simple: calificar el tipo en el uso no resuelve desde java.lang
+// Through an import and a simple name: qualifying the type at the use site does not resolve
+// from java.lang
 // (finding #210).
 import java.util.stream.IntStream;
 

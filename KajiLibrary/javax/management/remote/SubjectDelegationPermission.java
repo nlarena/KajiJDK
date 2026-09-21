@@ -3,17 +3,18 @@ package javax.management.remote;
 import java.security.BasicPermission;
 
 /**
- * KajiLibrary's javax.management.remote.SubjectDelegationPermission -- permiso para actuar en nombre
- * de otro.
+ * KajiLibrary's javax.management.remote.SubjectDelegationPermission -- permission to act on
+ * another's behalf.
  *
- * <p>Un cliente JMX autenticado como uno puede pedir que sus operaciones corran como otro; este era el
- * permiso que lo habilitaba, con el nombre del delegado como objetivo.
+ * <p>A JMX client authenticated as one may ask that its operations run as another; this was the
+ * permission that enabled it, with the delegate's name as the target.
  *
- * <p>Marcada para eliminacion junto con todo el {@code SecurityManager}: sin gestor de seguridad no
- * hay quien la controle, asi que ya no protege nada. Se mantiene para que el codigo viejo compile.
+ * <p>Marked for removal together with the whole {@code SecurityManager}: without a security
+ * manager there is nobody to check it, so it no longer protects anything. It is kept so that old
+ * code compiles.
  *
- * <p>Hereda de {@link BasicPermission}, asi que soporta comodines: {@code "*"} permite delegar en
- * cualquiera y {@code "a.b.*"} en cualquiera de ese prefijo.
+ * <p>It inherits from {@link BasicPermission}, so it supports wildcards: {@code "*"} allows
+ * delegating to anybody and {@code "a.b.*"} to anybody with that prefix.
  */
 @Deprecated(since = "25", forRemoval = true)
 public final class SubjectDelegationPermission extends BasicPermission {
@@ -21,18 +22,18 @@ public final class SubjectDelegationPermission extends BasicPermission {
     private static final long serialVersionUID = 1481618113008682343L;
 
     /**
-     * @param name el objetivo, con comodines opcionales
-     * @throws NullPointerException si es null
-     * @throws IllegalArgumentException si esta vacio
+     * @param name the target, with optional wildcards
+     * @throws NullPointerException if it is null
+     * @throws IllegalArgumentException if it is empty
      */
     public SubjectDelegationPermission(String name) {
         super(name);
     }
 
     /**
-     * Idem; las acciones tienen que ser null o vacio.
+     * The same; the actions have to be null or empty.
      *
-     * @throws IllegalArgumentException si se dan acciones
+     * @throws IllegalArgumentException if actions are given
      */
     public SubjectDelegationPermission(String name, String actions) {
         super(name, actions);

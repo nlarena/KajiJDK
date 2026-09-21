@@ -1,32 +1,32 @@
 package javax.security.sasl;
 
 /**
- * KajiLibrary's javax.security.sasl.AuthenticationException -- las credenciales no sirven.
+ * KajiLibrary's javax.security.sasl.AuthenticationException -- the credentials are no good.
  *
- * <p>Separa "no te pude autenticar" de "algo salio mal en el camino", que es la unica distincion que
- * de verdad importa al fallar una negociacion: la primera no se arregla reintentando y la segunda
- * quizas si.
+ * <p>It separates "I could not authenticate you" from "something went wrong on the way", which is
+ * the only distinction that really matters when a negotiation fails: the first is not fixed by
+ * retrying and the second maybe is.
  *
- * <p>La nota que trae la especificacion vale repetirla: un servidor no deberia mandarle esta
- * distincion al cliente. Decirle a quien intenta entrar que la contrasena estaba mal --y no que el
- * usuario no existe-- le confirma que el usuario existe, que es medio trabajo hecho para quien esta
- * probando nombres. Esta clase es para el registro del lado del servidor, no para la respuesta.
+ * <p>The note the specification carries is worth repeating: a server should not send this
+ * distinction to the client. Telling whoever tries to get in that the password was wrong --and not
+ * that the user does not exist-- confirms that the user exists, which is half the work done for
+ * someone probing names. This class is for the server side's log, not for the answer.
  */
 public class AuthenticationException extends SaslException {
 
     private static final long serialVersionUID = -3579708765071815007L;
 
-    /** Sin detalle. */
+    /** Without detail. */
     public AuthenticationException() {
         super();
     }
 
-    /** Con un mensaje. */
+    /** With a message. */
     public AuthenticationException(String detail) {
         super(detail);
     }
 
-    /** Con la causa de abajo. */
+    /** With the underlying cause. */
     public AuthenticationException(String detail, Throwable ex) {
         super(detail, ex);
     }

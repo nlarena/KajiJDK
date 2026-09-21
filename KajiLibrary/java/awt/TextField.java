@@ -8,14 +8,15 @@ import javax.accessibility.AccessibleState;
 import javax.accessibility.AccessibleStateSet;
 
 /**
- * Un renglón donde escribir.
+ * One line to type in.
  *
- * <p>Dispara un {@link ActionEvent} cuando el usuario aprieta Enter, que es lo que lo hace útil para
- * un buscador o un cuadro de diálogo: el campo mismo avisa que terminaron de escribir.
+ * <p>It fires an {@link ActionEvent} when the user presses Enter, which is what makes it useful for
+ * a search box or a dialog: the field itself reports that the typing is done. Without a windowing
+ * system nobody presses anything, so that event only arrives if something posts it.
  *
- * <p>Tiene un modo de contraseña: {@link #setEchoChar} hace que muestre siempre el mismo carácter en
- * vez de lo que se escribió. Ojo con que **el texto se guarda igual**, en claro, y
- * {@link #getText} lo devuelve tal cual: el eco es cosmético, no es cifrado.
+ * <p>It has a password mode: {@link #setEchoChar} makes it always show the same character instead
+ * of what was typed. Mind that **the text is stored all the same**, in the clear, and {@link
+ * #getText} returns it as it is: the echo is cosmetic, it is not encryption.
  */
 public class TextField extends TextComponent {
 
@@ -23,35 +24,35 @@ public class TextField extends TextComponent {
 
     private static int textFieldCounter = 0;
 
-    /** Cuántas letras de ancho pide. */
+    /** How many letters wide it asks to be. */
     int columns;
 
-    /** Qué muestra en vez de lo escrito, o 0 si muestra lo escrito. */
+    /** What it shows instead of what was typed, or 0 if it shows what was typed. */
     char echoChar;
 
-    /** Los oyentes de acción, encadenados. */
+    /** The action listeners, chained. */
     transient ActionListener actionListener;
 
-    /** Un campo vacío. */
+    /** An empty field. */
     public TextField() throws HeadlessException {
         this("", 0);
     }
 
-    /** Un campo con ese texto, del ancho del texto. */
+    /** A field with that text, as wide as the text. */
     public TextField(String text) throws HeadlessException {
         this(text, text == null ? 0 : text.length());
     }
 
-    /** Un campo vacío de ese ancho. */
+    /** An empty field of that width. */
     public TextField(int columns) throws HeadlessException {
         this("", columns);
     }
 
     /**
-     * Un campo con ese texto y ese ancho.
+     * A field with that text and that width.
      *
-     * <p>Un ancho negativo se toma como cero, en vez de romper: el ancho es una sugerencia de
-     * distribución, no un invariante.
+     * <p>A negative width is taken as zero instead of breaking: the width is a layout suggestion,
+     * not an invariant.
      */
     public TextField(String text, int columns) throws HeadlessException {
         super(text);
@@ -66,58 +67,65 @@ public class TextField extends TextComponent {
         }
     }
 
-    /** Lo declara mostrable. */
+    /** Declares it showable. */
     public void addNotify() {
         super.addNotify();
     }
 
     /**
-     * Qué muestra en vez de lo escrito.
+     * What it shows instead of what was typed.
      *
-     * @return el carácter de eco, o 0 si muestra lo escrito
+     * @return the echo character, or 0 if it shows what was typed
      */
     public char getEchoChar() {
         return this.echoChar;
     }
 
     /**
-     * Hace que muestre siempre ese carácter.
+     * Makes it always show that character.
      *
-     * @param c el carácter, o 0 para volver a mostrar lo escrito
+     * @param c the character, or 0 to go back to showing what is typed
      */
     public void setEchoChar(char c) {
         this.setEchoCharacter(c);
     }
 
     /**
-     * Hace que muestre siempre ese carácter.
+     * Makes it always show that character.
      *
-     * @deprecated es del nombrado de 1.0. Usar {@link #setEchoChar}.
+     * @deprecated it is from the 1.0 naming. Use {@link #setEchoChar}.
      */
     @Deprecated
     public synchronized void setEchoCharacter(char c) {
         this.echoChar = c;
     }
 
-    /** Cambia el texto y manda el cursor al principio. */
+    /**
+     * Changes the text.
+     *
+     * <p>Against what this note used to say, it does not send the caret to the start: it delegates
+     * to {@link TextComponent#setText}, which only clamps the selection to the new text. The JDK
+     * also replaces the line separators with spaces here —a field is one line— and this one does
+     * not.
+     */
     public void setText(String t) {
         super.setText(t);
     }
 
-    /** Si está en modo de eco. */
+    /** Whether it is in echo mode. */
     public boolean echoCharIsSet() {
         return this.echoChar != 0;
     }
 
-    /** Cuántas letras de ancho pide. */
+    /** How many letters wide it asks to be. */
     public int getColumns() {
         return this.columns;
     }
 
     /**
-     * Cambia el ancho pedido.
+     * Changes the width it asks for.
      *
-     * @throws IllegalArgumentException si es negativo
+     * @throws IllegalArgumentException if it is negative
      */
     public void setColumns(int columns) {
         synchronized (this) {
@@ -128,15 +136,20 @@ public class TextField extends TextComponent {
         }
     }
 
-    /** Lo que necesitaría un campo de ese ancho. */
+    /**
+     * What a field of that width would need.
+     *
+     * <p>It answers the current size and ignores the number of columns: working out what a given
+     * number of letters measures needs the font measured on a screen.
+     */
     public Dimension getPreferredSize(int columns) {
         return this.getSize();
     }
 
     /**
-     * Lo que necesitaría un campo de ese ancho.
+     * What a field of that width would need.
      *
-     * @deprecated es del nombrado de 1.0. Usar {@link #getPreferredSize(int)}.
+     * @deprecated it is from the 1.0 naming. Use {@link #getPreferredSize(int)}.
      */
     @Deprecated
     public Dimension preferredSize(int columns) {
@@ -148,24 +161,28 @@ public class TextField extends TextComponent {
     }
 
     /**
-     * Lo que necesita.
+     * What it needs.
      *
-     * @deprecated es del nombrado de 1.0. Usar {@link #getPreferredSize()}.
+     * @deprecated it is from the 1.0 naming. Use {@link #getPreferredSize()}.
      */
     @Deprecated
     public Dimension preferredSize() {
         return this.getPreferredSize();
     }
 
-    /** Lo mínimo para un campo de ese ancho. */
+    /**
+     * The minimum for a field of that width.
+     *
+     * <p>Like {@link #getPreferredSize(int)}, it answers the current size and ignores the columns.
+     */
     public Dimension getMinimumSize(int columns) {
         return this.getSize();
     }
 
     /**
-     * Lo mínimo para ese ancho.
+     * The minimum for that width.
      *
-     * @deprecated es del nombrado de 1.0. Usar {@link #getMinimumSize(int)}.
+     * @deprecated it is from the 1.0 naming. Use {@link #getMinimumSize(int)}.
      */
     @Deprecated
     public Dimension minimumSize(int columns) {
@@ -177,16 +194,16 @@ public class TextField extends TextComponent {
     }
 
     /**
-     * Lo mínimo que necesita.
+     * The minimum it needs.
      *
-     * @deprecated es del nombrado de 1.0. Usar {@link #getMinimumSize()}.
+     * @deprecated it is from the 1.0 naming. Use {@link #getMinimumSize()}.
      */
     @Deprecated
     public Dimension minimumSize() {
         return this.getMinimumSize();
     }
 
-    /** Agrega un oyente de acción; `null` no hace nada. */
+    /** Adds an action listener; `null` does nothing. */
     public synchronized void addActionListener(ActionListener l) {
         if (l == null) {
             return;
@@ -195,7 +212,7 @@ public class TextField extends TextComponent {
         this.enableEvents(AWTEvent.ACTION_EVENT_MASK);
     }
 
-    /** Saca un oyente de acción. */
+    /** Removes an action listener. */
     public synchronized void removeActionListener(ActionListener l) {
         if (l == null) {
             return;
@@ -203,7 +220,7 @@ public class TextField extends TextComponent {
         this.actionListener = AWTEventMulticaster.remove(this.actionListener, l);
     }
 
-    /** Los oyentes de acción. */
+    /** The action listeners. */
     public synchronized ActionListener[] getActionListeners() {
         return AWTEventMulticaster.getListeners(this.actionListener, ActionListener.class);
     }
@@ -223,7 +240,7 @@ public class TextField extends TextComponent {
         super.processEvent(e);
     }
 
-    /** Les avisa a los oyentes de acción. */
+    /** Tells the action listeners. */
     protected void processActionEvent(ActionEvent e) {
         ActionListener l = this.actionListener;
         if (l != null) {
@@ -239,7 +256,7 @@ public class TextField extends TextComponent {
         return s;
     }
 
-    /** La accesibilidad del campo. */
+    /** The accessibility information of this field. */
     public AccessibleContext getAccessibleContext() {
         if (this.accessibleContext == null) {
             this.accessibleContext = new AccessibleAWTTextField();
@@ -248,14 +265,14 @@ public class TextField extends TextComponent {
     }
 
     /**
-     * La accesibilidad de un campo de texto.
+     * The accessibility of a text field.
      *
-     * <p>Lo único que agrega es el estado `SINGLE_LINE`, que ya viene de
-     * {@link TextComponent.AccessibleAWTTextComponent}: es de un renglón por definición.
+     * <p>The only thing it adds is the `SINGLE_LINE` state, which already comes from
+     * {@link TextComponent.AccessibleAWTTextComponent}: it is one line by definition.
      */
     protected class AccessibleAWTTextField extends AccessibleAWTTextComponent {
 
-        /** Para las subclases. */
+        /** For the subclasses. */
         protected AccessibleAWTTextField() {
         }
 

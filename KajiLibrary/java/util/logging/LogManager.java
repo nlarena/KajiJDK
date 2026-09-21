@@ -1,28 +1,28 @@
 package java.util.logging;
 
 /**
- * KajiLibrary's java.util.logging.LogManager -- el registro de los {@link Logger} por nombre, y la
- * configuracion.
+ * KajiLibrary's java.util.logging.LogManager -- the registry of {@link Logger}s by name, and the
+ * configuration.
  *
- * <p>Es lo que hace que `Logger.getLogger("a.b.c")` devuelva **el mismo** objeto dos veces, que es lo
- * que permite configurar un logger en un lado y usarlo en otro.
+ * <p>It is what makes `Logger.getLogger("a.b.c")` return **the same** object twice, which is what
+ * lets a logger be configured in one place and used in another.
  *
- * <p>La otra mitad es la configuracion por propiedades, y ahi lo importante es **cuando** se aplica:
- * un `a.b.level=FINE` en el archivo alcanza a un logger que todavia no existe, porque el nivel se le
- * pone al crearlo. Sin eso la configuracion solo serviria para los loggers que ya se hubieran creado,
- * o sea para ninguno, porque el archivo se lee antes que nada.
+ * <p>The other half is configuration by properties, and there what matters is **when** it is
+ * applied: an `a.b.level=FINE` in the file reaches a logger that does not exist yet, because the
+ * level is set on it as it is created. Without that the configuration would serve only the loggers
+ * already created, which is to say none, because the file is read before anything.
  *
- * <p><strong>De donde sale la configuracion por omision.</strong> El JDK la lee de
- * `$JAVA_HOME/conf/logging.properties`. En este arbol no hay directorio `conf` --ni
- * `System.getProperty("java.home")` que lo encuentre--, asi que **el mismo contenido** que el JDK
- * distribuye esta escrito aca adentro. Es la unica diferencia y es de donde salen los bytes, no de
- * que dicen: `getProperty("handlers")` contesta lo mismo en los dos. Lo que si es de verdad es
- * `java.util.logging.config.file`: si esa propiedad del sistema apunta a un archivo, se lee ese.
+ * <p><strong>Where the default configuration comes from.</strong> The JDK reads it from
+ * `$JAVA_HOME/conf/logging.properties`. In this tree there is no `conf` directory --nor a
+ * `System.getProperty("java.home")` that would find it-- so **the same content** the JDK ships is
+ * written in here. That is the only difference and it is about where the bytes come from, not about
+ * what they say: `getProperty("handlers")` answers the same in both. What IS real is
+ * `java.util.logging.config.file`: if that system property points at a file, that file is read.
  */
 public class LogManager {
 
-    // El contenido exacto de `conf/logging.properties` del JDK. Ver la nota de arriba.
-    private static final String POR_OMISION =
+    // The exact content of the JDK's `conf/logging.properties`. See the note above.
+    private static final String DEFAULT_CONFIG =
             "handlers= java.util.logging.ConsoleHandler\n"
             + ".level= INFO\n"
             + "java.util.logging.FileHandler.pattern = %h/java%u.log\n"
@@ -33,117 +33,117 @@ public class LogManager {
             + "java.util.logging.ConsoleHandler.level = INFO\n"
             + "java.util.logging.ConsoleHandler.formatter = java.util.logging.SimpleFormatter\n";
 
-    private static final LogManager UNICO = new LogManager();
+    private static final LogManager THE_ONE = new LogManager();
 
     private final java.util.HashMap<String, Logger> loggers = new java.util.HashMap<String, Logger>();
 
     private final java.util.Properties props = new java.util.Properties();
 
-    private final java.util.ArrayList<Runnable> oyentes = new java.util.ArrayList<Runnable>();
+    private final java.util.ArrayList<Runnable> listeners = new java.util.ArrayList<Runnable>();
 
     protected LogManager() {
-        this.cargarPorOmision();
+        this.loadDefault();
     }
 
-    private void cargarPorOmision() {
+    private void loadDefault() {
         try {
-            this.props.load(new java.io.StringReader(POR_OMISION));
+            this.props.load(new java.io.StringReader(DEFAULT_CONFIG));
         } catch (java.io.IOException e) {
-            // Leer de una cadena en memoria no puede fallar; si fallara, quedar sin configuracion es
-            // preferible a no poder ni construir el gestor.
+            // Reading from an in-memory string cannot fail; if it did, being left with no
+            // configuration is preferable to not even being able to build the manager.
         }
     }
 
-    /** El gestor unico. */
+    /** The one manager. */
     public static LogManager getLogManager() {
-        return UNICO;
+        return THE_ONE;
     }
 
     /**
-     * Registra ese logger si no habia otro con su nombre.
+     * It registers that logger if there was no other by its name.
      *
-     * @return `false` si ya habia uno -- y entonces el que se agrego se descarta
+     * @return `false` if there already was one -- and then the one added is discarded
      */
     public boolean addLogger(Logger logger) {
         if (logger == null) {
             throw new NullPointerException("logger");
         }
-        String nombre = logger.getName();
-        if (nombre == null) {
+        String name = logger.getName();
+        if (name == null) {
             return false;
         }
         synchronized (this.loggers) {
-            if (this.loggers.containsKey(nombre)) {
+            if (this.loggers.containsKey(name)) {
                 return false;
             }
-            this.loggers.put(nombre, logger);
-            this.acomodarEnElArbol(logger, nombre);
+            this.loggers.put(name, logger);
+            this.placeInTree(logger, name);
         }
-        this.configurar(logger, nombre);
+        this.configure(logger, name);
         return true;
     }
 
     /**
-     * Cuelga al recien llegado de su ancestro mas cercano, y le pasa los descendientes que le tocan.
+     * It hangs the newcomer off its nearest ancestor, and hands it the descendants that are its.
      *
-     * <p>La segunda mitad es la que se olvida y la que importa: los loggers no llegan en orden, asi
-     * que `com.acme.db` puede existir antes que `com.acme`. Cuando aparece el intermedio hay que
-     * **recolgar** a los que estaban colgados mas arriba, o el `setLevel` sobre el intermedio no
-     * afectaria a nadie -- que es justo lo que uno espera que haga.
+     * <p>The second half is the one that gets forgotten and the one that matters: loggers do not
+     * arrive in order, so `com.acme.db` can exist before `com.acme`. When the intermediate appears,
+     * those hanging further up have to be **rehung**, or a `setLevel` on the intermediate would
+     * affect nobody -- which is exactly what one expects it to do.
      */
-    private void acomodarEnElArbol(Logger nuevo, String nombre) {
-        // El ancestro mas cercano: se van sacando segmentos desde la derecha hasta encontrar uno.
-        String padre = nombre;
+    private void placeInTree(Logger newOne, String name) {
+        // The nearest ancestor: segments are dropped from the right until one is found.
+        String parent = name;
         while (true) {
-            int punto = padre.lastIndexOf('.');
-            if (punto < 0) {
+            int dot = parent.lastIndexOf('.');
+            if (dot < 0) {
                 break;
             }
-            padre = padre.substring(0, punto);
-            Logger cand = this.loggers.get(padre);
+            parent = parent.substring(0, dot);
+            Logger cand = this.loggers.get(parent);
             if (cand != null) {
-                nuevo.setParent(cand);
+                newOne.setParent(cand);
                 break;
             }
         }
-        if (nuevo.getParent() == null && !nombre.isEmpty()) {
-            Logger raiz = this.loggers.get("");
-            if (raiz != null) {
-                nuevo.setParent(raiz);
+        if (newOne.getParent() == null && !name.isEmpty()) {
+            Logger root = this.loggers.get("");
+            if (root != null) {
+                newOne.setParent(root);
             }
         }
-        if (nombre.isEmpty()) {
+        if (name.isEmpty()) {
             return;
         }
-        // Y los que ahora tienen un ancestro mas cercano que el que tenian.
-        String prefijo = nombre + ".";
-        for (Logger otro : this.loggers.values()) {
-            String n = otro.getName();
-            if (n == null || otro == nuevo || !n.startsWith(prefijo)) {
+        // And those that now have a nearer ancestor than the one they had.
+        String prefix = name + ".";
+        for (Logger other : this.loggers.values()) {
+            String n = other.getName();
+            if (n == null || other == newOne || !n.startsWith(prefix)) {
                 continue;
             }
-            Logger p = otro.getParent();
-            String actual = p == null ? "" : p.getName();
-            if (actual == null) {
-                actual = "";
+            Logger p = other.getParent();
+            String current = p == null ? "" : p.getName();
+            if (current == null) {
+                current = "";
             }
-            if (actual.length() < nombre.length()) {
-                otro.setParent(nuevo);
+            if (current.length() < name.length()) {
+                other.setParent(newOne);
             }
         }
     }
 
-    // Le aplica al logger recien creado lo que la configuracion diga de el. La raiz usa las claves
-    // sin nombre --`.level`, `handlers`-- y los demas las suyas con el prefijo.
-    private void configurar(Logger logger, String nombre) {
-        String pref = nombre.isEmpty() ? "" : nombre;
-        Level nivel = this.getLevelProperty(pref + ".level", null);
-        if (nivel != null) {
-            logger.setLevel(nivel);
+    // It applies to the newly created logger whatever the configuration says about it. The root uses
+    // the unnamed keys --`.level`, `handlers`-- and the rest their own, with the prefix.
+    private void configure(Logger logger, String name) {
+        String pref = name.isEmpty() ? "" : name;
+        Level level = this.getLevelProperty(pref + ".level", null);
+        if (level != null) {
+            logger.setLevel(level);
         }
-        String hs = this.getProperty(nombre.isEmpty() ? "handlers" : nombre + ".handlers");
+        String hs = this.getProperty(name.isEmpty() ? "handlers" : name + ".handlers");
         if (hs != null) {
-            this.ponerManejadores(logger, hs);
+            this.installHandlers(logger, hs);
         }
         String uph = this.getProperty(pref + ".useParentHandlers");
         if (uph != null) {
@@ -151,29 +151,29 @@ public class LogManager {
         }
     }
 
-    private void ponerManejadores(Logger logger, String lista) {
-        String[] nombres = partir(lista);
+    private void installHandlers(Logger logger, String list) {
+        String[] names = splitList(list);
         int i = 0;
-        while (i < nombres.length) {
+        while (i < names.length) {
             try {
-                logger.addHandler((Handler) crear(nombres[i]));
+                logger.addHandler((Handler) build(names[i]));
             } catch (Exception e) {
-                // Un manejador que no se puede crear no debe impedir que se creen los otros ni que el
-                // programa arranque: el resto de la traza sigue funcionando sin el.
-                System.err.println("Can't load log handler \"" + nombres[i] + "\": " + e);
+                // A handler that cannot be created must not stop the others being created nor the
+                // program starting: the rest of the logging goes on working without it.
+                System.err.println("Can't load log handler \"" + names[i] + "\": " + e);
             }
             i = i + 1;
         }
     }
 
-    /** El logger de ese nombre, o `null`. */
+    /** The logger by that name, or `null`. */
     public Logger getLogger(String name) {
         synchronized (this.loggers) {
             return this.loggers.get(name);
         }
     }
 
-    /** Los nombres registrados. */
+    /** The registered names. */
     public java.util.Enumeration<String> getLoggerNames() {
         synchronized (this.loggers) {
             return java.util.Collections.enumeration(
@@ -181,47 +181,47 @@ public class LogManager {
         }
     }
 
-    // ---- la vista de administracion --------------------------------------------------------------
+    // ---- the management view ---------------------------------------------------------------------
 
     /**
-     * El nombre con el que se registra el {@link LoggingMXBean} en un servidor MBean.
+     * The name the {@link LoggingMXBean} is registered under in an MBean server.
      *
-     * <p>Es una cadena, no un `ObjectName`: el tipo que la sabe interpretar vive en JMX y aca no
-     * esta. Que no haya donde registrarlo no cambia cual es el nombre, asi que la constante dice lo
-     * mismo que en el JDK.
+     * <p>It is a string, not an `ObjectName`: the type that knows how to read it lives in JMX and is
+     * not here. That there is nowhere to register it does not change what the name is, so the
+     * constant says the same as in the JDK.
      */
     public static final String LOGGING_MXBEAN_NAME = "java.util.logging:type=Logging";
 
-    // Uno solo, y perezoso: el JDK devuelve siempre la misma instancia y hay codigo que compara con
-    // `==` para saber si ya lo tenia.
+    // A single one, and lazy: the JDK always returns the same instance and there is code that
+    // compares with `==` to know whether it already had it.
     private static LoggingMXBean bean;
 
     /**
-     * La vista de administracion del arbol de loggers.
+     * The management view of the logger tree.
      *
-     * <p>Lo que el JDK deja para JMX es **publicar** este objeto; responder sus cuatro preguntas es
-     * cosa de este registro y de nadie mas, asi que se responden. Ver {@link LoggingMXBean} para por
-     * que la interfaz se puede traer sin `java.lang.management`.
+     * <p>What the JDK leaves to JMX is **publishing** this object; answering its four questions is
+     * this registry's business and nobody else's, so they are answered. See {@link LoggingMXBean} for
+     * why the interface can be brought in without `java.lang.management`.
      *
-     * @deprecated Junto con {@link LoggingMXBean}.
+     * @deprecated Along with {@link LoggingMXBean}.
      */
     @Deprecated(since = "9")
     public static synchronized LoggingMXBean getLoggingMXBean() {
         if (bean == null) {
-            bean = new Administracion();
+            bean = new Management();
         }
         return bean;
     }
 
     /**
-     * La implementacion de {@link LoggingMXBean}: toda pregunta se contesta mirando el registro.
+     * {@link LoggingMXBean}'s implementation: every question is answered by looking at the registry.
      *
-     * <p>El unico cuidado esta en no crear loggers sin querer. Las cuatro operaciones usan
-     * {@link #getLogger} --que devuelve `null` si no esta-- y nunca `Logger.getLogger`, que lo
-     * crearia. Preguntar por el nivel de algo que no existe tiene que poder contestar "no existe"; si
-     * la pregunta lo creara, la respuesta nunca seria esa.
+     * <p>The one care needed is not to create loggers by accident. All four operations use
+     * {@link #getLogger} --which returns `null` if it is not there-- and never `Logger.getLogger`,
+     * which would create it. Asking for the level of something that does not exist has to be able to
+     * answer "it does not exist"; if the question created it, the answer never would be.
      */
-    private static final class Administracion implements LoggingMXBean {
+    private static final class Management implements LoggingMXBean {
 
         @Override
         public java.util.List<String> getLoggerNames() {
@@ -235,7 +235,8 @@ public class LogManager {
                 return null;
             }
             Level n = l.getLevel();
-            // Vacio y no `null`: `null` ya significa "no hay tal logger" y son dos cosas distintas.
+            // Empty and not `null`: `null` already means "there is no such logger" and they are two
+            // different things.
             return n == null ? "" : n.getName();
         }
 
@@ -245,9 +246,9 @@ public class LogManager {
             if (l == null) {
                 throw new IllegalArgumentException("logger desconocido: " + loggerName);
             }
-            // `null` no es un error sino la forma de sacarle el nivel propio y volver a heredar; por
-            // eso se pasa tal cual en vez de rechazarlo. Un nombre que no es un nivel si es error, y
-            // `Level.parse` ya tira `IllegalArgumentException`.
+            // `null` is not an error but the way of taking its own level away and going back to
+            // inheriting; that is why it is passed through instead of rejected. A name that is not a
+            // level IS an error, and `Level.parse` already throws `IllegalArgumentException`.
             l.setLevel(levelName == null ? null : Level.parse(levelName));
         }
 
@@ -258,17 +259,19 @@ public class LogManager {
                 return null;
             }
             Logger p = l.getParent();
-            // La raiz no tiene padre y contesta `""`, otra vez para dejarle `null` al caso de arriba.
+            // The root has no parent and answers `""`, again to leave `null` to the case above.
             return p == null ? "" : p.getName();
         }
     }
 
     /**
-     * Deja el registro sin configuracion: sin propiedades, sin manejadores y sin niveles propios.
+     * It leaves the registry with no configuration: no properties, no handlers and no levels of
+     * their own.
      *
-     * <p>La raiz es la excepcion y queda en {@link Level#INFO} en vez de en `null`. Tiene que quedar
-     * en algo: es la unica que no tiene de quien heredar, y dejarla en `null` haria que el nivel
-     * efectivo saliera de un valor por omision escondido en vez de de un nivel que se puede leer.
+     * <p>The root is the exception and is left at {@link Level#INFO} instead of at `null`. It has to
+     * be left at something: it is the only one with nobody to inherit from, and leaving it `null`
+     * would make the effective level come out of a hidden default instead of a level that can be
+     * read.
      */
     public void reset() {
         synchronized (this.props) {
@@ -282,7 +285,7 @@ public class LogManager {
                     try {
                         hs[i].close();
                     } catch (Exception e) {
-                        // Cerrar un manejador no debe impedir cerrar los demas.
+                        // Closing one handler must not stop the others being closed.
                     }
                     l.removeHandler(hs[i]);
                     i = i + 1;
@@ -293,7 +296,7 @@ public class LogManager {
         }
     }
 
-    /** El valor de esa propiedad de configuracion, o `null` si no esta. */
+    /** That configuration property's value, or `null` if it is not there. */
     public String getProperty(String name) {
         synchronized (this.props) {
             return this.props.getProperty(name);
@@ -301,41 +304,42 @@ public class LogManager {
     }
 
     /**
-     * Antes verificaba el permiso {@link LoggingPermission}; ahora no hace nada.
+     * It used to check the {@link LoggingPermission}; now it does nothing.
      *
-     * <p>No es una omision: lo que verificaba era el gestor de seguridad, que ya no puede existir.
-     * Sin gestor no hay a quien preguntarle, y "no hay quien lo prohiba" es exactamente pasar.
+     * <p>It is not an omission: what checked was the security manager, which can no longer exist.
+     * With no manager there is nobody to ask, and "there is nobody to forbid it" is exactly passing.
      *
-     * @deprecated Junto con el gestor de seguridad.
+     * @deprecated Along with the security manager.
      */
     @Deprecated(since = "17", forRemoval = true)
     public void checkAccess() throws SecurityException {
     }
 
-    // ---- la configuracion ------------------------------------------------------------------------
+    // ---- the configuration -----------------------------------------------------------------------
 
     /**
-     * Relee la configuracion de donde salga por omision, tirando la que hubiera.
+     * It rereads the configuration from wherever it comes from by default, throwing away whatever
+     * there was.
      *
-     * <p>Con `java.util.logging.config.class`, esa clase se instancia y se hace responsable de
-     * configurar; con `java.util.logging.config.file`, se lee ese archivo; sin ninguna de las dos, la
-     * configuracion incorporada.
+     * <p>With `java.util.logging.config.class`, that class is instantiated and made responsible for
+     * configuring; with `java.util.logging.config.file`, that file is read; with neither, the
+     * built-in configuration.
      */
     public void readConfiguration() throws java.io.IOException, SecurityException {
-        String clase = System.getProperty("java.util.logging.config.class");
-        if (clase != null) {
+        String cls = System.getProperty("java.util.logging.config.class");
+        if (cls != null) {
             try {
-                // Instanciarla ES la configuracion: se espera que su constructor llame a
-                // `readConfiguration(InputStream)` con lo que sea que ella sepa leer.
-                crear(clase);
+                // Instantiating it IS the configuration: its constructor is expected to call
+                // `readConfiguration(InputStream)` with whatever it knows how to read.
+                build(cls);
                 return;
             } catch (Exception e) {
-                System.err.println("Logging configuration class \"" + clase + "\" failed: " + e);
+                System.err.println("Logging configuration class \"" + cls + "\" failed: " + e);
             }
         }
-        String archivo = System.getProperty("java.util.logging.config.file");
-        if (archivo != null) {
-            java.io.InputStream in = new java.io.FileInputStream(archivo);
+        String file = System.getProperty("java.util.logging.config.file");
+        if (file != null) {
+            java.io.InputStream in = new java.io.FileInputStream(file);
             try {
                 this.readConfiguration(in);
             } finally {
@@ -345,74 +349,74 @@ public class LogManager {
         }
         this.reset();
         synchronized (this.props) {
-            this.cargarPorOmision();
+            this.loadDefault();
         }
-        this.aplicar();
-        this.avisar();
+        this.applyTo();
+        this.notifyListeners();
     }
 
     /**
-     * Relee la configuracion de ese flujo, tirando la que hubiera.
+     * It rereads the configuration from that stream, throwing away whatever there was.
      *
-     * <p>El {@link #reset} va primero y es lo que hace que esto sea "releer" y no "agregar": una
-     * configuracion nueva que dejara vivos los manejadores de la anterior duplicaria cada mensaje.
+     * <p>The {@link #reset} goes first and is what makes this "reread" and not "add": a new
+     * configuration that left the previous one's handlers alive would duplicate every message.
      */
     public void readConfiguration(java.io.InputStream ins)
             throws java.io.IOException, SecurityException {
         if (ins == null) {
             throw new NullPointerException("ins");
         }
-        java.util.Properties nuevas = new java.util.Properties();
-        nuevas.load(ins);
+        java.util.Properties newProps = new java.util.Properties();
+        newProps.load(ins);
         this.reset();
         synchronized (this.props) {
-            for (String k : nuevas.stringPropertyNames()) {
-                this.props.setProperty(k, nuevas.getProperty(k));
+            for (String k : newProps.stringPropertyNames()) {
+                this.props.setProperty(k, newProps.getProperty(k));
             }
         }
-        this.aplicar();
-        this.avisar();
+        this.applyTo();
+        this.notifyListeners();
     }
 
-    // Le pasa la configuracion actual a todos los loggers que ya existen, y corre las clases de
-    // `config`. Los que todavia no existen la reciben al crearse, en `addLogger`.
-    private void aplicar() {
+    // It hands the current configuration to every logger that already exists, and runs `config`'s
+    // classes. Those that do not exist yet receive it as they are created, in `addLogger`.
+    private void applyTo() {
         String cfg = this.getProperty("config");
         if (cfg != null) {
-            String[] clases = partir(cfg);
+            String[] classes = splitList(cfg);
             int i = 0;
-            while (i < clases.length) {
+            while (i < classes.length) {
                 try {
-                    crear(clases[i]);
+                    build(classes[i]);
                 } catch (Exception e) {
-                    System.err.println("Can't load config class \"" + clases[i] + "\": " + e);
+                    System.err.println("Can't load config class \"" + classes[i] + "\": " + e);
                 }
                 i = i + 1;
             }
         }
-        java.util.ArrayList<Logger> copia;
+        java.util.ArrayList<Logger> copy;
         synchronized (this.loggers) {
-            copia = new java.util.ArrayList<Logger>(this.loggers.values());
+            copy = new java.util.ArrayList<Logger>(this.loggers.values());
         }
-        for (Logger l : copia) {
+        for (Logger l : copy) {
             String n = l.getName();
             if (n != null) {
-                this.configurar(l, n);
+                this.configure(l, n);
             }
         }
     }
 
     /**
-     * Mezcla esa configuracion con la que hay, decidiendo clave por clave con `mapper`.
+     * It merges that configuration with the one there is, deciding key by key with `mapper`.
      *
-     * <p>La diferencia con {@link #readConfiguration(java.io.InputStream)} es que aca **no** hay
-     * `reset`: lo que la configuracion nueva no menciona sigue como estaba. Es lo que hace falta para
-     * cambiar el nivel de un logger en un programa que ya esta corriendo sin tirarle abajo los
-     * manejadores, que es cuando uno quiere subir el detalle para mirar algo.
+     * <p>The difference from {@link #readConfiguration(java.io.InputStream)} is that here there is
+     * **no** `reset`: what the new configuration does not mention stays as it was. It is what is
+     * needed for changing a logger's level in a program that is already running without tearing down
+     * its handlers, which is when one wants to raise the detail to look at something.
      *
-     * <p>`mapper` recibe el nombre de cada propiedad --de la union de la vieja y la nueva-- y devuelve
-     * una funcion de (valor viejo, valor nuevo) al valor que queda; `null` borra la propiedad. Un
-     * `mapper` nulo equivale a quedarse con el nuevo.
+     * <p>`mapper` receives each property's name --from the union of the old and the new-- and returns
+     * a function from (old value, new value) to the value that remains; `null` deletes the property.
+     * A null `mapper` amounts to keeping the new one.
      */
     public void updateConfiguration(java.util.function.Function<String,
             java.util.function.BiFunction<String, String, String>> mapper)
@@ -420,86 +424,87 @@ public class LogManager {
         this.updateConfiguration(null, mapper);
     }
 
-    /** El de arriba, con la configuracion nueva leida de ese flujo. */
+    /** The one above, with the new configuration read from that stream. */
     public void updateConfiguration(java.io.InputStream ins,
             java.util.function.Function<String,
                     java.util.function.BiFunction<String, String, String>> mapper)
             throws java.io.IOException {
-        java.util.Properties nuevas = new java.util.Properties();
+        java.util.Properties newProps = new java.util.Properties();
         if (ins != null) {
-            nuevas.load(ins);
+            newProps.load(ins);
         } else {
-            String archivo = System.getProperty("java.util.logging.config.file");
-            if (archivo != null) {
-                java.io.InputStream in = new java.io.FileInputStream(archivo);
+            String file = System.getProperty("java.util.logging.config.file");
+            if (file != null) {
+                java.io.InputStream in = new java.io.FileInputStream(file);
                 try {
-                    nuevas.load(in);
+                    newProps.load(in);
                 } finally {
                     in.close();
                 }
             } else {
-                nuevas.load(new java.io.StringReader(POR_OMISION));
+                newProps.load(new java.io.StringReader(DEFAULT_CONFIG));
             }
         }
 
-        java.util.HashSet<String> claves = new java.util.HashSet<String>();
-        java.util.Properties viejas;
+        java.util.HashSet<String> keys = new java.util.HashSet<String>();
+        java.util.Properties oldProps;
         synchronized (this.props) {
-            viejas = new java.util.Properties();
+            oldProps = new java.util.Properties();
             for (String k : this.props.stringPropertyNames()) {
-                viejas.setProperty(k, this.props.getProperty(k));
-                claves.add(k);
+                oldProps.setProperty(k, this.props.getProperty(k));
+                keys.add(k);
             }
         }
-        for (String k : nuevas.stringPropertyNames()) {
-            claves.add(k);
+        for (String k : newProps.stringPropertyNames()) {
+            keys.add(k);
         }
 
-        java.util.Properties resultado = new java.util.Properties();
-        for (String k : claves) {
-            String viejo = viejas.getProperty(k);
-            String nuevo = nuevas.getProperty(k);
-            String queda = nuevo;
+        java.util.Properties result = new java.util.Properties();
+        for (String k : keys) {
+            String old = oldProps.getProperty(k);
+            String newOne = newProps.getProperty(k);
+            String left = newOne;
             if (mapper != null) {
                 java.util.function.BiFunction<String, String, String> f = mapper.apply(k);
-                queda = f == null ? nuevo : f.apply(viejo, nuevo);
+                left = f == null ? newOne : f.apply(old, newOne);
             }
-            if (queda != null) {
-                resultado.setProperty(k, queda);
+            if (left != null) {
+                result.setProperty(k, left);
             }
         }
 
         synchronized (this.props) {
             this.props.clear();
-            for (String k : resultado.stringPropertyNames()) {
-                this.props.setProperty(k, resultado.getProperty(k));
+            for (String k : result.stringPropertyNames()) {
+                this.props.setProperty(k, result.getProperty(k));
             }
         }
 
-        // Solo se toca lo que **cambio**. Un logger cuyo `.level` no aparecio en ningun lado se queda
-        // con el que tenia, que es el sentido entero de que esto no sea un `readConfiguration`.
-        java.util.ArrayList<Logger> copia;
+        // Only what **changed** is touched. A logger whose `.level` appeared nowhere keeps the one
+        // it had, which is the whole point of this not being a `readConfiguration`.
+        java.util.ArrayList<Logger> copy;
         synchronized (this.loggers) {
-            copia = new java.util.ArrayList<Logger>(this.loggers.values());
+            copy = new java.util.ArrayList<Logger>(this.loggers.values());
         }
-        for (Logger l : copia) {
+        for (Logger l : copy) {
             String n = l.getName();
             if (n == null) {
                 continue;
             }
-            // El nivel se toca **solo si** la configuracion nueva lo dice. Que una propiedad
-            // desaparezca no significa "volve a heredar": el nivel puede haberlo puesto el programa
-            // por codigo, y una actualizacion que no habla del asunto no tiene por que pisarlo.
-            String claveNivel = n + ".level";
-            String nivelNuevo = resultado.getProperty(claveNivel);
-            if (nivelNuevo != null && !igual(viejas.getProperty(claveNivel), nivelNuevo)) {
-                Level lv = this.getLevelProperty(claveNivel, null);
+            // The level is touched **only if** the new configuration says so. That a property
+            // disappears does not mean "go back to inheriting": the level may have been set by the
+            // program in code, and an update that does not speak of the matter has no business
+            // overwriting it.
+            String levelKey = n + ".level";
+            String newLevel = result.getProperty(levelKey);
+            if (newLevel != null && !same(oldProps.getProperty(levelKey), newLevel)) {
+                Level lv = this.getLevelProperty(levelKey, null);
                 if (lv != null) {
                     l.setLevel(lv);
                 }
             }
-            String claveH = n.isEmpty() ? "handlers" : n + ".handlers";
-            if (!igual(viejas.getProperty(claveH), resultado.getProperty(claveH))) {
+            String handlersKey = n.isEmpty() ? "handlers" : n + ".handlers";
+            if (!same(oldProps.getProperty(handlersKey), result.getProperty(handlersKey))) {
                 Handler[] hs = l.getHandlers();
                 int i = 0;
                 while (i < hs.length) {
@@ -511,115 +516,115 @@ public class LogManager {
                     l.removeHandler(hs[i]);
                     i = i + 1;
                 }
-                String lista = resultado.getProperty(claveH);
-                if (lista != null) {
-                    this.ponerManejadores(l, lista);
+                String list = result.getProperty(handlersKey);
+                if (list != null) {
+                    this.installHandlers(l, list);
                 }
             }
-            String claveU = n + ".useParentHandlers";
-            if (!igual(viejas.getProperty(claveU), resultado.getProperty(claveU))) {
-                String v = resultado.getProperty(claveU);
+            String useParentKey = n + ".useParentHandlers";
+            if (!same(oldProps.getProperty(useParentKey), result.getProperty(useParentKey))) {
+                String v = result.getProperty(useParentKey);
                 l.setUseParentHandlers(v == null || Boolean.parseBoolean(v.trim()));
             }
         }
-        this.avisar();
+        this.notifyListeners();
     }
 
-    private static boolean igual(String a, String b) {
+    private static boolean same(String a, String b) {
         return a == null ? b == null : a.equals(b);
     }
 
     /**
-     * Agrega un oyente que corre cada vez que la configuracion se relee o se actualiza.
+     * It adds a listener that runs every time the configuration is reread or updated.
      *
-     * <p>Es lo que necesita el codigo que **deriva** algo de la configuracion --un `boolean` cacheado
-     * de si la traza fina esta prendida-- para enterarse de que ese algo quedo viejo.
+     * <p>It is what code that **derives** something from the configuration --a cached `boolean` of
+     * whether fine logging is on-- needs in order to find out that that something has gone stale.
      *
-     * @return este mismo gestor, para encadenar
-     * @throws NullPointerException si `listener` es `null`
+     * @return this same manager, for chaining
+     * @throws NullPointerException if `listener` is `null`
      */
     public LogManager addConfigurationListener(Runnable listener) {
         if (listener == null) {
             throw new NullPointerException("listener");
         }
-        synchronized (this.oyentes) {
-            this.oyentes.add(listener);
+        synchronized (this.listeners) {
+            this.listeners.add(listener);
         }
         return this;
     }
 
-    /** Saca un oyente; si no estaba, no pasa nada. */
+    /** It removes a listener; if it was not there, nothing happens. */
     public void removeConfigurationListener(Runnable listener) {
         if (listener == null) {
             throw new NullPointerException("listener");
         }
-        synchronized (this.oyentes) {
-            this.oyentes.remove(listener);
+        synchronized (this.listeners) {
+            this.listeners.remove(listener);
         }
     }
 
-    private void avisar() {
-        java.util.ArrayList<Runnable> copia;
-        synchronized (this.oyentes) {
-            copia = new java.util.ArrayList<Runnable>(this.oyentes);
+    private void notifyListeners() {
+        java.util.ArrayList<Runnable> copy;
+        synchronized (this.listeners) {
+            copy = new java.util.ArrayList<Runnable>(this.listeners);
         }
-        for (Runnable r : copia) {
+        for (Runnable r : copy) {
             try {
                 r.run();
             } catch (Exception e) {
-                // Un oyente que falla no puede impedir que corran los demas ni invalidar la
-                // configuracion, que ya esta aplicada.
+                // A listener that fails cannot stop the others running nor invalidate the
+                // configuration, which is already applied.
             }
         }
     }
 
-    // ---- lo que leen los manejadores -------------------------------------------------------------
+    // ---- what the handlers read ------------------------------------------------------------------
     //
-    // No son API publica --en el JDK tampoco--: son los accesos con conversion y valor por omision
-    // que cada manejador usa para leer su propia configuracion. Todos comparten la misma regla: si la
-    // propiedad falta o no se puede convertir, vale el valor por omision. Un `.level=CUALQUIERA` mal
-    // escrito no puede tumbar el arranque del programa.
+    // They are not public API --they are not in the JDK either--: they are the converting,
+    // defaulting accessors each handler uses to read its own configuration. They all share the same
+    // rule: if the property is missing or cannot be converted, the default applies. A misspelled
+    // `.level=WHATEVER` cannot bring down the program's start-up.
 
-    Level getLevelProperty(String name, Level porOmision) {
+    Level getLevelProperty(String name, Level byDefault) {
         String v = this.getProperty(name);
         if (v == null) {
-            return porOmision;
+            return byDefault;
         }
         try {
             return Level.parse(v.trim());
         } catch (Exception e) {
-            return porOmision;
+            return byDefault;
         }
     }
 
-    int getIntProperty(String name, int porOmision) {
+    int getIntProperty(String name, int byDefault) {
         String v = this.getProperty(name);
         if (v == null) {
-            return porOmision;
+            return byDefault;
         }
         try {
             return Integer.parseInt(v.trim());
         } catch (Exception e) {
-            return porOmision;
+            return byDefault;
         }
     }
 
-    long getLongProperty(String name, long porOmision) {
+    long getLongProperty(String name, long byDefault) {
         String v = this.getProperty(name);
         if (v == null) {
-            return porOmision;
+            return byDefault;
         }
         try {
             return Long.parseLong(v.trim());
         } catch (Exception e) {
-            return porOmision;
+            return byDefault;
         }
     }
 
-    boolean getBooleanProperty(String name, boolean porOmision) {
+    boolean getBooleanProperty(String name, boolean byDefault) {
         String v = this.getProperty(name);
         if (v == null) {
-            return porOmision;
+            return byDefault;
         }
         v = v.toLowerCase().trim();
         if (v.equals("true") || v.equals("1")) {
@@ -628,64 +633,64 @@ public class LogManager {
         if (v.equals("false") || v.equals("0")) {
             return false;
         }
-        return porOmision;
+        return byDefault;
     }
 
-    String getStringProperty(String name, String porOmision) {
+    String getStringProperty(String name, String byDefault) {
         String v = this.getProperty(name);
-        return v == null ? porOmision : v.trim();
+        return v == null ? byDefault : v.trim();
     }
 
-    Filter getFilterProperty(String name, Filter porOmision) {
-        String v = this.getProperty(name);
-        if (v == null) {
-            return porOmision;
-        }
-        try {
-            return (Filter) crear(v.trim());
-        } catch (Exception e) {
-            return porOmision;
-        }
-    }
-
-    Formatter getFormatterProperty(String name, Formatter porOmision) {
+    Filter getFilterProperty(String name, Filter byDefault) {
         String v = this.getProperty(name);
         if (v == null) {
-            return porOmision;
+            return byDefault;
         }
         try {
-            return (Formatter) crear(v.trim());
+            return (Filter) build(v.trim());
         } catch (Exception e) {
-            return porOmision;
+            return byDefault;
         }
     }
 
-    // Una instancia de esa clase por su constructor sin argumentos.
-    static Object crear(String nombreClase) throws Exception {
-        Class<?> c = Class.forName(nombreClase);
+    Formatter getFormatterProperty(String name, Formatter byDefault) {
+        String v = this.getProperty(name);
+        if (v == null) {
+            return byDefault;
+        }
+        try {
+            return (Formatter) build(v.trim());
+        } catch (Exception e) {
+            return byDefault;
+        }
+    }
+
+    // An instance of that class through its no-argument constructor.
+    static Object build(String className) throws Exception {
+        Class<?> c = Class.forName(className);
         return c.getDeclaredConstructor().newInstance();
     }
 
-    // La configuracion separa las listas por espacios o por comas, indistintamente.
-    private static String[] partir(String lista) {
-        java.util.ArrayList<String> salida = new java.util.ArrayList<String>();
+    // The configuration separates lists by spaces or by commas, indifferently.
+    private static String[] splitList(String list) {
+        java.util.ArrayList<String> out = new java.util.ArrayList<String>();
         int i = 0;
-        StringBuilder actual = new StringBuilder();
-        while (i < lista.length()) {
-            char c = lista.charAt(i);
+        StringBuilder current = new StringBuilder();
+        while (i < list.length()) {
+            char c = list.charAt(i);
             if (c == ',' || c == ' ' || c == '\t') {
-                if (actual.length() > 0) {
-                    salida.add(actual.toString());
-                    actual.setLength(0);
+                if (current.length() > 0) {
+                    out.add(current.toString());
+                    current.setLength(0);
                 }
             } else {
-                actual.append(c);
+                current.append(c);
             }
             i = i + 1;
         }
-        if (actual.length() > 0) {
-            salida.add(actual.toString());
+        if (current.length() > 0) {
+            out.add(current.toString());
         }
-        return salida.toArray(new String[salida.size()]);
+        return out.toArray(new String[out.size()]);
     }
 }

@@ -2,12 +2,13 @@ package java.io;
 
 import java.io.DataInput;
 
-// KajiLibrary's java.io.ObjectInput -- `DataInput` mas la capacidad de leer objetos enteros: el
-// lado que lee del contrato de serializacion.
+// KajiLibrary's java.io.ObjectInput -- `DataInput` plus the ability to read whole objects: the
+// reading side of the serialization contract.
 //
-// Su implementador es `ObjectInputStream`, que **ya esta**. La interfaz igual se declara aparte y no
-// se disuelve en el: `Externalizable.readExternal` recibe un `ObjectInput` y no un flujo concreto,
-// que es lo que le permite a una clase definir su forma serializada sin atarse a quien la lee.
+// Its implementor is `ObjectInputStream`, which **is here**. The interface is declared apart all
+// the same and not dissolved into it: `Externalizable.readExternal` receives an `ObjectInput` and
+// not a concrete stream, which is what lets a class define its serialized form without tying itself
+// to whoever reads it.
 public interface ObjectInput extends DataInput, AutoCloseable {
 
     Object readObject() throws ClassNotFoundException, IOException;

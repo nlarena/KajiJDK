@@ -16,125 +16,131 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
 /**
- * KajiLibrary's java.nio.channels.Channels — el puente entre `java.io` y `java.nio.channels`.
+ * KajiLibrary's java.nio.channels.Channels — the bridge between `java.io` and `java.nio.channels`.
  *
- * <p>Existe porque las dos jerarquias nunca se unificaron: media biblioteca habla `InputStream` y la
- * otra media habla `ReadableByteChannel`, y sin este puente cada quien copiaria a mano el mismo lazo
- * de `byte[]` a `ByteBuffer`. Todo lo de aca es adaptacion pura --no abre nada, no crea recursos--
- * y por eso **esta implementado entero y de verdad**, a diferencia del resto del paquete: recibe
- * algo que ya funciona y lo devuelve con la otra cara puesta.
+ * <p>It exists because the two hierarchies were never unified: half the library speaks
+ * `InputStream` and the other half speaks `ReadableByteChannel`, and without this bridge everybody
+ * would copy the same loop from `byte[]` to `ByteBuffer` by hand. Everything here is pure
+ * adaptation --it opens nothing, it creates no resources-- and that is why it is **implemented
+ * whole and for real** without a single native: it receives something that works already and gives
+ * it back with the other face on.
  *
- * <h2>Lo unico que hay que saber antes de usarlo</h2>
+ * <h2>The only thing to know before using it</h2>
  *
- * <p>Los adaptadores **no bufferean**: una lectura sobre el `InputStream` que envuelve un canal es
- * una lectura sobre el canal. Es a proposito --meter un buffer cambiaria cuantos bytes pide el de
- * abajo y cuando, y eso sobre un canal se nota-- pero significa que leer de a un byte de uno de
- * estos es tan caro como leer de a un byte del canal. Envolver en `BufferedInputStream` es la
- * respuesta, y es decision de quien llama, no de aca.
+ * <p>The adapters **do not buffer**: a read over the `InputStream` that wraps a channel is a read
+ * over the channel. It is on purpose --putting a buffer in would change how many bytes the one
+ * underneath asks for and when, and over a channel that shows-- but it means that reading one byte
+ * at a time from one of these is as expensive as reading one byte at a time from the channel.
+ * Wrapping in `BufferedInputStream` is the answer, and it is the caller's decision, not this
+ * class's.
  *
- * <p>Cerrar el adaptador **cierra lo adaptado**. Es lo que el JDK hace y lo que hay que hacer: el
- * adaptador no tiene recursos propios, asi que si su `close()` no cerrara el de abajo no cerraria
- * absolutamente nada y seria una trampa silenciosa.
+ * <p>Closing the adapter **closes what was adapted**. It is what the JDK does and what has to be
+ * done: the adapter has no resources of its own, so if its `close()` did not close the one
+ * underneath it would close absolutely nothing and would be a silent trap.
  *
- * <h2>Excepciones: la misma torcedura de siempre</h2>
+ * <h2>Exceptions: the same old twist</h2>
  *
- * <p>`java.io.InputStream.read()` de esta biblioteca **no declara `IOException`** (ver la nota de
- * `java.io.IOException`), pero {@link ReadableByteChannel#read} si. Al ir de canal a stream la
- * excepcion no tiene por donde salir, asi que sale envuelta en {@link UncheckedIOException}: el
- * motivo no se pierde, cambia de tipo. En el sentido contrario --de stream a canal-- no hay
- * problema, porque estrechar lo que se declara siempre es legal.
+ * <p>This library's `java.io.InputStream.read()` **does not declare `IOException`** (see the note
+ * of `java.io.IOException`), but {@link ReadableByteChannel#read} does. Going from channel to
+ * stream the exception has no way out, so it comes out wrapped in {@link UncheckedIOException}: the
+ * reason is not lost, it changes type. In the other direction --from stream to channel-- there is
+ * no problem, because narrowing what is declared is always legal.
  *
- * <h2>Lo que quedo afuera</h2>
+ * <h2>What was left out</h2>
  *
- * <p><strong>Nada.</strong> Los doce metodos publicos del JDK 25 estan. Los dos que toman
- * {@link AsynchronousByteChannel} tambien, y no contradicen que este paquete no sepa **fabricar**
- * canales asincronicos: estos no fabrican ninguno, adaptan el que les den. Si alguien consigue uno,
- * envolverlo funciona.
+ * <p><strong>Nothing.</strong> The twelve public methods of JDK 25 are here. The two that take an
+ * {@link AsynchronousByteChannel} as well, and they never depended on this package being able to
+ * **make** asynchronous channels: they make none, they adapt the one they are given. It can make
+ * them now —see {@link AsynchronousFileChannel#open}—, and wrapping one works just the same.
  */
 public final class Channels {
 
-    // Sin instancias: es un cajon de estaticos.
+    // No instances: it is a drawer of statics.
     private Channels() {
-        throw new AssertionError("no instanciar");
+        throw new AssertionError("do not instantiate");
     }
 
-    // ---- de canal a stream -----------------------------------------------------------------------
+    // ---- from channel to stream ------------------------------------------------------------------
 
     /**
-     * Un {@link InputStream} que lee de `ch`.
+     * An {@link InputStream} that reads from `ch`.
      *
-     * <p>Sin buffer; ver la nota de la clase.
+     * <p>With no buffer; see the note of the class.
      */
     public static InputStream newInputStream(ReadableByteChannel ch) {
         if (ch == null) {
             throw new NullPointerException();
         }
-        return new StreamDeCanal(ch);
+        return new ChannelInputStream(ch);
     }
 
-    /** Un {@link OutputStream} que escribe en `ch`. Sin buffer; ver la nota de la clase. */
+    /** An {@link OutputStream} that writes into `ch`. With no buffer; see the note of the class. */
     public static OutputStream newOutputStream(WritableByteChannel ch) {
         if (ch == null) {
             throw new NullPointerException();
         }
-        return new StreamACanal(ch);
+        return new ChannelOutputStream(ch);
     }
 
     /**
-     * Un {@link InputStream} que lee de un canal asincronico, **bloqueando**.
+     * An {@link InputStream} that reads from an asynchronous channel, **blocking**.
      *
-     * <p>Que la fuente sea asincronica no cambia que un `InputStream` sea sincronico: cada `read`
-     * lanza la operacion y espera su resultado. Sirve para pasarle un canal asincronico a codigo
-     * que solo sabe de streams, no para ganar concurrencia.
+     * <p>That the source is asynchronous does not change that an `InputStream` is synchronous: each
+     * `read` launches the operation and waits for its result. It serves for passing an asynchronous
+     * channel to code that only knows about streams, not for gaining concurrency.
      */
     public static InputStream newInputStream(AsynchronousByteChannel ch) {
         if (ch == null) {
             throw new NullPointerException();
         }
-        return new StreamDeCanalAsinc(ch);
+        return new AsyncChannelInputStream(ch);
     }
 
-    /** Un {@link OutputStream} que escribe en un canal asincronico, bloqueando en cada `write`. */
+    /**
+     * An {@link OutputStream} that writes into an asynchronous channel, blocking on each `write`.
+     */
     public static OutputStream newOutputStream(AsynchronousByteChannel ch) {
         if (ch == null) {
             throw new NullPointerException();
         }
-        return new StreamACanalAsinc(ch);
+        return new AsyncChannelOutputStream(ch);
     }
 
-    // ---- de stream a canal -----------------------------------------------------------------------
+    // ---- from stream to channel ------------------------------------------------------------------
 
     /**
-     * Un {@link ReadableByteChannel} que lee de `in`.
+     * A {@link ReadableByteChannel} that reads from `in`.
      *
-     * <p>El canal que sale **no es interrumpible ni selectable**, y no por omision: un
-     * `InputStream` no ofrece manera de abortar una lectura empezada, asi que prometer
-     * {@link InterruptibleChannel} seria prometer algo que el de abajo no puede dar.
+     * <p>The channel that comes out **is neither interruptible nor selectable**, and not by
+     * omission: an `InputStream` offers no way of aborting a started read, so promising {@link
+     * InterruptibleChannel} would be promising something the one underneath cannot give.
      */
     public static ReadableByteChannel newChannel(InputStream in) {
         if (in == null) {
             throw new NullPointerException();
         }
-        return new CanalDeStream(in);
+        return new StreamReadableChannel(in);
     }
 
-    /** Un {@link WritableByteChannel} que escribe en `out`. Mismas salvedades que el de lectura. */
+    /**
+     * A {@link WritableByteChannel} that writes into `out`. The same caveats as the reading one.
+     */
     public static WritableByteChannel newChannel(OutputStream out) {
         if (out == null) {
             throw new NullPointerException();
         }
-        return new CanalAStream(out);
+        return new StreamWritableChannel(out);
     }
 
-    // ---- de canal a texto ------------------------------------------------------------------------
+    // ---- from channel to text --------------------------------------------------------------------
 
     /**
-     * Un {@link Reader} que decodifica lo que sale de `ch` con `dec`.
+     * A {@link Reader} that decodes what comes out of `ch` with `dec`.
      *
-     * <p>`minBufferCap` es un **piso sugerido** para el buffer interno, no un tamanio exacto ni una
-     * garantia; `-1` pide el que la implementacion prefiera. Aca se acepta y se ignora: el buffer lo
-     * elige `InputStreamReader`, y fingir que se lo respeta no cambiaria nada salvo la creencia de
-     * quien lee el codigo.
+     * <p>`minBufferCap` is a **suggested floor** for the internal buffer, not an exact size and not
+     * a guarantee; `-1` asks for the one the implementation prefers. Here it is accepted and
+     * ignored: the buffer is chosen by `InputStreamReader`, and pretending to respect it would
+     * change nothing except the belief of whoever reads the code.
      */
     public static Reader newReader(ReadableByteChannel ch, CharsetDecoder dec, int minBufferCap) {
         if (ch == null || dec == null) {
@@ -143,7 +149,7 @@ public final class Channels {
         return new InputStreamReader(newInputStream(ch), dec);
     }
 
-    /** Como el otro, con el juego de caracteres nombrado. */
+    /** Like the other one, with the named character set. */
     public static Reader newReader(ReadableByteChannel ch, String csName) {
         if (csName == null) {
             throw new NullPointerException();
@@ -152,10 +158,10 @@ public final class Channels {
     }
 
     /**
-     * Como el otro, con `charset`.
+     * Like the other one, with `charset`.
      *
-     * <p>Los bytes malformados se **reemplazan**, no hacen fallar la lectura: es lo que hace el
-     * decodificador por omision y lo que el JDK especifica para esta forma.
+     * <p>Malformed bytes are **replaced**, they do not make the reading fail: it is what the
+     * default decoder does and what the JDK specifies for this form.
      */
     public static Reader newReader(ReadableByteChannel ch, Charset charset) {
         if (ch == null || charset == null) {
@@ -164,7 +170,7 @@ public final class Channels {
         return new InputStreamReader(newInputStream(ch), charset);
     }
 
-    /** Un {@link Writer} que codifica con `enc` hacia `ch`. `minBufferCap`, como en `newReader`. */
+    /** A {@link Writer} that encodes with `enc` towards `ch`. `minBufferCap`, as in `newReader`. */
     public static Writer newWriter(WritableByteChannel ch, CharsetEncoder enc, int minBufferCap) {
         if (ch == null || enc == null) {
             throw new NullPointerException();
@@ -172,7 +178,7 @@ public final class Channels {
         return new OutputStreamWriter(newOutputStream(ch), enc);
     }
 
-    /** Como el otro, con el juego de caracteres nombrado. */
+    /** Like the other one, with the named character set. */
     public static Writer newWriter(WritableByteChannel ch, String csName) {
         if (csName == null) {
             throw new NullPointerException();
@@ -180,7 +186,7 @@ public final class Channels {
         return newWriter(ch, Charset.forName(csName));
     }
 
-    /** Como el otro, con `cs`. */
+    /** Like the other one, with `cs`. */
     public static Writer newWriter(WritableByteChannel ch, Charset cs) {
         if (ch == null || cs == null) {
             throw new NullPointerException();
@@ -188,25 +194,25 @@ public final class Channels {
         return new OutputStreamWriter(newOutputStream(ch), cs);
     }
 
-    // ---- adaptadores -----------------------------------------------------------------------------
+    // ---- the adapters ----------------------------------------------------------------------------
 
-    // Un stream sobre un canal. `read(byte[],int,int)` es el que hace el trabajo y `read()` se
-    // apoya en el: al reves --uno a uno-- cada byte costaria una llamada al canal.
-    private static final class StreamDeCanal extends InputStream {
+    // A stream over a channel. `read(byte[],int,int)` is the one that does the work and `read()`
+    // leans on it: the other way round --one by one-- each byte would cost a call to the channel.
+    private static final class ChannelInputStream extends InputStream {
 
-        private final ReadableByteChannel canal;
-        private final byte[] uno = new byte[1];
+        private final ReadableByteChannel channel;
+        private final byte[] one = new byte[1];
 
-        StreamDeCanal(ReadableByteChannel canal) {
-            this.canal = canal;
+        ChannelInputStream(ReadableByteChannel channel) {
+            this.channel = channel;
         }
 
         public int read() {
-            int n = this.read(this.uno, 0, 1);
+            int n = this.read(this.one, 0, 1);
             if (n <= 0) {
                 return -1;
             }
-            return this.uno[0] & 0xff;
+            return this.one[0] & 0xff;
         }
 
         public int read(byte[] b, int off, int len) {
@@ -220,35 +226,36 @@ public final class Channels {
                 return 0;
             }
             try {
-                return this.canal.read(ByteBuffer.wrap(b, off, len));
+                return this.channel.read(ByteBuffer.wrap(b, off, len));
             } catch (IOException e) {
                 throw new UncheckedIOException(e);
             }
         }
 
         public int available() {
-            // Un canal no sabe decir cuanto tiene listo, y `0` es la respuesta honesta: el contrato
-            // de `available` es "cuantos se pueden leer sin bloquear", y de eso aca no hay dato.
+            // A channel cannot say how much it has ready, and `0` is the honest answer: the
+            // contract of `available` is "how many can be read without blocking", and of that there
+            // is no datum here.
             return 0;
         }
 
         public void close() throws java.io.IOException {
-            this.canal.close();
+            this.channel.close();
         }
     }
 
-    private static final class StreamACanal extends OutputStream {
+    private static final class ChannelOutputStream extends OutputStream {
 
-        private final WritableByteChannel canal;
-        private final byte[] uno = new byte[1];
+        private final WritableByteChannel channel;
+        private final byte[] one = new byte[1];
 
-        StreamACanal(WritableByteChannel canal) {
-            this.canal = canal;
+        ChannelOutputStream(WritableByteChannel channel) {
+            this.channel = channel;
         }
 
         public void write(int b) {
-            this.uno[0] = (byte) b;
-            this.write(this.uno, 0, 1);
+            this.one[0] = (byte) b;
+            this.write(this.one, 0, 1);
         }
 
         public void write(byte[] b, int off, int len) {
@@ -260,13 +267,13 @@ public final class Channels {
             }
             ByteBuffer bb = ByteBuffer.wrap(b, off, len);
             try {
-                // El lazo no es defensivo de mas: un canal puede escribir menos de lo que se le da,
-                // y `OutputStream.write` promete que escribe todo. Sin el lazo, esa promesa es falsa
-                // justo en el caso raro, que es el peor lugar donde puede estarlo.
+                // The loop is not over-defensive: a channel can write less than it is given, and
+                // `OutputStream.write` promises that it writes everything. Without the loop, that
+                // promise is false exactly in the rare case, which is the worst place for it to be.
                 while (bb.hasRemaining()) {
-                    int n = this.canal.write(bb);
+                    int n = this.channel.write(bb);
                     if (n <= 0 && bb.hasRemaining()) {
-                        throw new IOException("el canal no acepta mas bytes");
+                        throw new IOException("the channel accepts no more bytes");
                     }
                 }
             } catch (IOException e) {
@@ -275,39 +282,39 @@ public final class Channels {
         }
 
         public void close() throws java.io.IOException {
-            this.canal.close();
+            this.channel.close();
         }
     }
 
-    // Un canal sobre un stream. Se aprovecha el arreglo del buffer cuando lo tiene: sin eso habria
-    // que copiar dos veces --stream a temporal, temporal a buffer-- para nada.
-    private static final class CanalDeStream implements ReadableByteChannel {
+    // A channel over a stream. The buffer's array is taken advantage of when it has one: without
+    // that there would be two copies --stream to temporary, temporary to buffer-- for nothing.
+    private static final class StreamReadableChannel implements ReadableByteChannel {
 
-        private final InputStream fuente;
-        private boolean abierto = true;
+        private final InputStream source;
+        private boolean openFlag = true;
 
-        CanalDeStream(InputStream fuente) {
-            this.fuente = fuente;
+        StreamReadableChannel(InputStream source) {
+            this.source = source;
         }
 
         public int read(ByteBuffer dst) throws IOException {
-            if (!this.abierto) {
+            if (!this.openFlag) {
                 throw new ClosedChannelException();
             }
-            int libres = dst.remaining();
-            if (libres == 0) {
+            int room = dst.remaining();
+            if (room == 0) {
                 return 0;
             }
             if (dst.hasArray() && !dst.isReadOnly()) {
                 int base = dst.arrayOffset() + dst.position();
-                int n = this.fuente.read(dst.array(), base, libres);
+                int n = this.source.read(dst.array(), base, room);
                 if (n > 0) {
                     dst.position(dst.position() + n);
                 }
                 return n;
             }
-            byte[] tmp = new byte[libres];
-            int n = this.fuente.read(tmp, 0, libres);
+            byte[] tmp = new byte[room];
+            int n = this.source.read(tmp, 0, room);
             if (n > 0) {
                 dst.put(tmp, 0, n);
             }
@@ -315,28 +322,28 @@ public final class Channels {
         }
 
         public boolean isOpen() {
-            return this.abierto;
+            return this.openFlag;
         }
 
         public void close() throws java.io.IOException {
-            if (this.abierto) {
-                this.abierto = false;
-                this.fuente.close();
+            if (this.openFlag) {
+                this.openFlag = false;
+                this.source.close();
             }
         }
     }
 
-    private static final class CanalAStream implements WritableByteChannel {
+    private static final class StreamWritableChannel implements WritableByteChannel {
 
-        private final OutputStream destino;
-        private boolean abierto = true;
+        private final OutputStream sink;
+        private boolean openFlag = true;
 
-        CanalAStream(OutputStream destino) {
-            this.destino = destino;
+        StreamWritableChannel(OutputStream sink) {
+            this.sink = sink;
         }
 
         public int write(ByteBuffer src) throws IOException {
-            if (!this.abierto) {
+            if (!this.openFlag) {
                 throw new ClosedChannelException();
             }
             int n = src.remaining();
@@ -345,33 +352,33 @@ public final class Channels {
             }
             if (src.hasArray()) {
                 int base = src.arrayOffset() + src.position();
-                this.destino.write(src.array(), base, n);
+                this.sink.write(src.array(), base, n);
             } else {
                 byte[] tmp = new byte[n];
                 src.get(src.position(), tmp, 0, n);
-                this.destino.write(tmp, 0, n);
+                this.sink.write(tmp, 0, n);
             }
-            // Un `OutputStream` escribe todo o tira, asi que llegar aca significa que entraron los
-            // `n`: la posicion avanza entera y no hay escritura parcial que reportar.
+            // An `OutputStream` writes everything or throws, so getting here means the `n` went in:
+            // the position advances whole and there is no partial write to report.
             src.position(src.position() + n);
             return n;
         }
 
         public boolean isOpen() {
-            return this.abierto;
+            return this.openFlag;
         }
 
         public void close() throws java.io.IOException {
-            if (this.abierto) {
-                this.abierto = false;
-                this.destino.close();
+            if (this.openFlag) {
+                this.openFlag = false;
+                this.sink.close();
             }
         }
     }
 
-    // Los dos asincronicos comparten la manera de esperar, que es la parte delicada: una
-    // `ExecutionException` esconde la causa real y devolverla tal cual haria perder el motivo.
-    private static int esperar(Future<Integer> f) throws IOException {
+    // The two asynchronous ones share the way of waiting, which is the delicate part: an
+    // `ExecutionException` hides the real cause and returning it as it is would lose the reason.
+    private static int await(Future<Integer> f) throws IOException {
         try {
             Integer n = f.get();
             if (n == null) {
@@ -379,40 +386,41 @@ public final class Channels {
             }
             return n.intValue();
         } catch (InterruptedException e) {
-            // Se repone la marca antes de salir: tragarse una interrupcion deja al hilo creyendo que
-            // nunca lo interrumpieron, y el que decide que hacer con eso esta mas arriba.
+            // The mark is put back before leaving: swallowing an interruption leaves the thread
+            // believing it was never interrupted, and whoever decides what to do about that is
+            // further up.
             Thread.currentThread().interrupt();
             throw new ClosedByInterruptException();
         } catch (ExecutionException e) {
-            Throwable causa = e.getCause();
-            if (causa instanceof IOException) {
-                throw (IOException) causa;
+            Throwable cause = e.getCause();
+            if (cause instanceof IOException) {
+                throw (IOException) cause;
             }
-            if (causa instanceof RuntimeException) {
-                throw (RuntimeException) causa;
+            if (cause instanceof RuntimeException) {
+                throw (RuntimeException) cause;
             }
-            if (causa instanceof Error) {
-                throw (Error) causa;
+            if (cause instanceof Error) {
+                throw (Error) cause;
             }
-            throw new IOException(causa);
+            throw new IOException(cause);
         }
     }
 
-    private static final class StreamDeCanalAsinc extends InputStream {
+    private static final class AsyncChannelInputStream extends InputStream {
 
-        private final AsynchronousByteChannel canal;
-        private final byte[] uno = new byte[1];
+        private final AsynchronousByteChannel channel;
+        private final byte[] one = new byte[1];
 
-        StreamDeCanalAsinc(AsynchronousByteChannel canal) {
-            this.canal = canal;
+        AsyncChannelInputStream(AsynchronousByteChannel channel) {
+            this.channel = channel;
         }
 
         public int read() {
-            int n = this.read(this.uno, 0, 1);
+            int n = this.read(this.one, 0, 1);
             if (n <= 0) {
                 return -1;
             }
-            return this.uno[0] & 0xff;
+            return this.one[0] & 0xff;
         }
 
         public int read(byte[] b, int off, int len) {
@@ -426,29 +434,29 @@ public final class Channels {
                 return 0;
             }
             try {
-                return esperar(this.canal.read(ByteBuffer.wrap(b, off, len)));
+                return await(this.channel.read(ByteBuffer.wrap(b, off, len)));
             } catch (IOException e) {
                 throw new UncheckedIOException(e);
             }
         }
 
         public void close() throws java.io.IOException {
-            this.canal.close();
+            this.channel.close();
         }
     }
 
-    private static final class StreamACanalAsinc extends OutputStream {
+    private static final class AsyncChannelOutputStream extends OutputStream {
 
-        private final AsynchronousByteChannel canal;
-        private final byte[] uno = new byte[1];
+        private final AsynchronousByteChannel channel;
+        private final byte[] one = new byte[1];
 
-        StreamACanalAsinc(AsynchronousByteChannel canal) {
-            this.canal = canal;
+        AsyncChannelOutputStream(AsynchronousByteChannel channel) {
+            this.channel = channel;
         }
 
         public void write(int b) {
-            this.uno[0] = (byte) b;
-            this.write(this.uno, 0, 1);
+            this.one[0] = (byte) b;
+            this.write(this.one, 0, 1);
         }
 
         public void write(byte[] b, int off, int len) {
@@ -461,9 +469,9 @@ public final class Channels {
             ByteBuffer bb = ByteBuffer.wrap(b, off, len);
             try {
                 while (bb.hasRemaining()) {
-                    int n = esperar(this.canal.write(bb));
+                    int n = await(this.channel.write(bb));
                     if (n <= 0 && bb.hasRemaining()) {
-                        throw new IOException("el canal no acepta mas bytes");
+                        throw new IOException("the channel accepts no more bytes");
                     }
                 }
             } catch (IOException e) {
@@ -472,7 +480,7 @@ public final class Channels {
         }
 
         public void close() throws java.io.IOException {
-            this.canal.close();
+            this.channel.close();
         }
     }
 }

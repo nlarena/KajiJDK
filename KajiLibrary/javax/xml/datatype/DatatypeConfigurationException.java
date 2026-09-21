@@ -1,56 +1,57 @@
 package javax.xml.datatype;
 
 /**
- * KajiLibrary's javax.xml.datatype.DatatypeConfigurationException -- no se pudo conseguir una
- * {@link DatatypeFactory}.
+ * KajiLibrary's javax.xml.datatype.DatatypeConfigurationException -- a {@link DatatypeFactory}
+ * could not be obtained.
  *
- * <p>Es la excepcion de la busqueda de implementacion, no la de los datos: un valor lexico mal
- * escrito levanta {@link IllegalArgumentException}, no esto. Esto significa que no hay ninguna
- * implementacion disponible, o que la que se nombro no se pudo cargar.
+ * <p>It is the exception of the search for an implementation, not of the data: a badly written
+ * lexical value raises {@link IllegalArgumentException}, not this. This means there is no
+ * implementation available, or that the one named could not be loaded.
  *
- * <p>Es <b>verificada</b>, y a proposito: es un problema de despliegue --falta un jar, sobra una
- * propiedad del sistema-- que quien llama tiene que decidir como manejar. Fijarse el contraste con
- * {@link javax.xml.stream.FactoryConfigurationError}, que para el mismo problema es un
- * {@code Error}; las dos APIs se escribieron con criterios distintos y cada una se quedo con el
- * suyo.
+ * <p>It is <b>checked</b>, and on purpose: it is a deployment problem --a missing jar, a stray
+ * system property-- that the caller has to decide how to handle. Note the contrast with {@link
+ * javax.xml.stream.FactoryConfigurationError}, which for the same problem is an {@code Error}; the
+ * two APIs were written with different criteria and each kept its own.
  *
- * <p>Los cuatro constructores son los de siempre. Los dos que toman causa la pasan al constructor de
- * {@link Exception}, asi que {@code getCause()} anda: no hay campo propio ni
- * {@code initCause} manual.
+ * <p>The four constructors are the usual ones. The two that take a cause pass it to {@link
+ * Exception}'s constructor, so {@code getCause()} works: there is no field of its own nor manual
+ * {@code initCause}.
  */
 public class DatatypeConfigurationException extends Exception {
 
-    /** El mismo del original, para que una instancia serializada cruce entre las dos bibliotecas. */
+    /**
+     * The same as the original's, so that a serialized instance crosses between the two libraries.
+     */
     private static final long serialVersionUID = -1699373159027047238L;
 
-    /** Sin mensaje ni causa. */
+    /** Without message nor cause. */
     public DatatypeConfigurationException() {
         super();
     }
 
     /**
-     * Con mensaje.
+     * With a message.
      *
-     * @param message que paso
+     * @param message what happened
      */
     public DatatypeConfigurationException(String message) {
         super(message);
     }
 
     /**
-     * Con mensaje y causa.
+     * With message and cause.
      *
-     * @param message que paso
-     * @param cause la excepcion de abajo
+     * @param message what happened
+     * @param cause the underlying exception
      */
     public DatatypeConfigurationException(String message, Throwable cause) {
         super(message, cause);
     }
 
     /**
-     * Solo con causa; el mensaje sale de ella.
+     * With a cause only; the message comes from it.
      *
-     * @param cause la excepcion de abajo
+     * @param cause the underlying exception
      */
     public DatatypeConfigurationException(Throwable cause) {
         super(cause);

@@ -5,11 +5,12 @@ import java.security.cert.Certificate;
 import java.util.EventObject;
 
 /**
- * Termino un handshake sobre un {@link SSLSocket}.
+ * A handshake finished over an {@link SSLSocket}.
  *
- * <p>Casi todos sus metodos delegan en la {@link SSLSession}, y eso no lo vuelve superfluo: lo que
- * aporta es <strong>congelar el momento</strong>. Un socket puede renegociar y cambiar de sesion, y
- * este evento sigue apuntando a la que se acababa de acordar cuando se lo emitio.
+ * <p>Almost all its methods delegate to the {@link SSLSession}, and that does not make it
+ * superfluous: what it contributes is <strong>freezing the moment</strong>. A socket can
+ * renegotiate and change session, and this event keeps pointing at the one just agreed when it was
+ * emitted.
  */
 public class HandshakeCompletedEvent extends EventObject {
 
@@ -22,34 +23,34 @@ public class HandshakeCompletedEvent extends EventObject {
         this.session = s;
     }
 
-    /** La sesion que quedo acordada. */
+    /** The session that was agreed. */
     public SSLSession getSession() {
         return this.session;
     }
 
-    /** La suite de cifrado acordada. */
+    /** The agreed cipher suite. */
     public String getCipherSuite() {
         return this.session.getCipherSuite();
     }
 
-    /** Los certificados que se presentaron, o {@code null}. */
+    /** The certificates that were presented, or {@code null}. */
     public Certificate[] getLocalCertificates() {
         return this.session.getLocalCertificates();
     }
 
     /**
-     * Los certificados del par.
+     * The peer's certificates.
      *
-     * @throws SSLPeerUnverifiedException si el par no se autentico
+     * @throws SSLPeerUnverifiedException if the peer did not authenticate
      */
     public Certificate[] getPeerCertificates() throws SSLPeerUnverifiedException {
         return this.session.getPeerCertificates();
     }
 
     /**
-     * Los certificados del par, en el tipo obsoleto.
+     * The peer's certificates, in the obsolete type.
      *
-     * @deprecated {@code javax.security.cert} quedo obsoleto; usar {@link #getPeerCertificates}
+     * @deprecated {@code javax.security.cert} became obsolete; use {@link #getPeerCertificates}
      */
     @Deprecated(since = "9")
     public javax.security.cert.X509Certificate[] getPeerCertificateChain()
@@ -58,20 +59,20 @@ public class HandshakeCompletedEvent extends EventObject {
     }
 
     /**
-     * Quien es el par.
+     * Who the peer is.
      *
-     * @throws SSLPeerUnverifiedException si no se autentico
+     * @throws SSLPeerUnverifiedException if it did not authenticate
      */
     public Principal getPeerPrincipal() throws SSLPeerUnverifiedException {
         return this.session.getPeerPrincipal();
     }
 
-    /** Quien nos presentamos como, o {@code null}. */
+    /** Who we presented ourselves as, or {@code null}. */
     public Principal getLocalPrincipal() {
         return this.session.getLocalPrincipal();
     }
 
-    /** El socket donde paso. */
+    /** The socket where it happened. */
     public SSLSocket getSocket() {
         return (SSLSocket) getSource();
     }

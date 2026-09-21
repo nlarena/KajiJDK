@@ -8,81 +8,83 @@ import java.beans.VetoableChangeSupport;
 import java.io.Serializable;
 
 /**
- * La implementación reusable de {@link BeanContextChild}.
+ * The reusable implementation of {@link BeanContextChild}.
  *
- * <p>Sirve de dos maneras, y por eso tiene dos constructores: una clase la **extiende**, o un bean
- * que ya extiende otra cosa la usa por **delegación** pasándose a sí mismo en el constructor. En el
- * segundo caso {@link #isDelegated} da `true` y todos los eventos salen a nombre del bean que
- * delega, no de este soporte — que es lo que un oyente espera ver.
+ * <p>It serves two ways, which is why it has two constructors: a class **extends** it, or a bean
+ * that already extends something else uses it by **delegation**, passing itself to the constructor.
+ * In the second case {@link #isDelegated} is `true` and every event goes out in the name of the
+ * delegating bean, not of this support — which is what a listener expects to see.
  *
- * <h2>El veto de la mudanza, y `rejectedSetBCOnce`</h2>
+ * <h2>The veto on moving, and `rejectedSetBCOnce`</h2>
  *
- * <p>Cambiar de contexto es una propiedad **vetable**: antes de mudarse se pregunta, y si alguien se
- * opone, la mudanza no ocurre. La parte que se lee mal es la bandera `rejectedSetBCOnce`, y merece
- * el párrafo:
+ * <p>Changing context is a **vetoable** property: before moving, the question is asked, and if
+ * anyone objects the move does not happen. The part that reads badly is the `rejectedSetBCOnce`
+ * flag, and it deserves the paragraph:
  *
- * <p>Un contexto que expulsa a un hijo llama a `setBeanContext(null)`. Si el hijo vetara esa baja,
- * quedaría en un estado imposible — fuera de la colección del contexto pero creyéndose adentro—.
- * Por eso el veto se admite **una sola vez**: la primera negativa se respeta, y si el mismo cambio
- * vuelve a intentarse, se aplica igual. La bandera es lo que recuerda que ya hubo una negativa, y se
- * limpia en cuanto una mudanza termina bien.
+ * <p>A context that expels a child calls `setBeanContext(null)`. A child that could veto that every
+ * time could never be removed. So the veto is honoured **once**: the first refusal stands, and the
+ * next call goes through without asking. This note said that only "the same change" attempted again
+ * goes through. The flag does not remember which change was refused, so the next `setBeanContext`
+ * —whatever context it names— skips both {@link #validatePendingSetBeanContext} and the veto
+ * listeners. The flag is cleared as soon as a move completes.
  */
 public class BeanContextChildSupport implements BeanContextChild, BeanContextServicesListener,
         Serializable {
 
-    /** El bean a nombre del cual salen los eventos: este mismo, o el que delegó en él. */
+    /** The bean events go out in the name of: this one, or the one that delegated to it. */
     public BeanContextChild beanContextChildPeer;
 
-    /** Los oyentes de cambio de propiedad. */
+    /** The property change listeners. */
     protected PropertyChangeSupport pcSupport;
 
-    /** Los oyentes de veto. */
+    /** The veto listeners. */
     protected VetoableChangeSupport vcSupport;
 
-    /** El contexto actual, o `null`. */
+    /** The current context, or `null`. */
     protected transient BeanContext beanContext;
 
-    /** Si ya se rechazó una vez este cambio de contexto. Ver la nota de la clase. */
+    /** Whether a context change has already been refused once. See the class note. */
     protected transient boolean rejectedSetBCOnce;
 
-    // El contexto al que se está mudando mientras se pregunta por el veto. No es lo mismo que
-    // `beanContext`: durante la consulta el hijo sigue en el de antes, y si alguien veta se queda
-    // ahí. Recién cuando nadie vetó pasa a ser el actual.
+    // The context being moved to while the veto is asked. Not the same as `beanContext`: during the
+    // query the child is still in the old one, and if anyone vetoes it stays there. Nothing reads
+    // this field; it is only set before the veto query and cleared after it.
     private transient BeanContext pendingContext;
 
-    /** Un soporte que actúa a nombre de sí mismo. */
+    /** A support that acts in its own name. */
     public BeanContextChildSupport() {
         this.beanContextChildPeer = this;
         this.pcSupport = new PropertyChangeSupport(this.beanContextChildPeer);
         this.vcSupport = new VetoableChangeSupport(this.beanContextChildPeer);
     }
 
-    /** Un soporte que actúa a nombre de `bcc`. `null` significa a nombre de sí mismo. */
+    /** A support that acts in the name of `bcc`. `null` means in its own name. */
     public BeanContextChildSupport(BeanContextChild bcc) {
         this.beanContextChildPeer = bcc == null ? this : bcc;
         this.pcSupport = new PropertyChangeSupport(this.beanContextChildPeer);
         this.vcSupport = new VetoableChangeSupport(this.beanContextChildPeer);
     }
 
-    /** El bean a nombre del cual actúa. */
+    /** The bean it acts in the name of. */
     public BeanContextChild getBeanContextChildPeer() {
         return this.beanContextChildPeer;
     }
 
-    /** Si actúa a nombre de otro bean en vez de a nombre propio. */
+    /** Whether it acts in the name of another bean instead of its own. */
     public boolean isDelegated() {
         return this.beanContextChildPeer != this;
     }
 
     /**
-     * Muda este hijo a ese contexto.
+     * Moves this child to that context.
      *
-     * <p>El orden importa y es el que fija el contrato: primero se consulta el veto, después se
-     * sueltan los recursos del contexto viejo, después se cambia, y recién al final se toman los del
-     * nuevo y se avisa del cambio. Soltar antes de preguntar dejaría al hijo sin recursos si alguien
-     * vetaba.
+     * <p>The order matters and is the one the contract sets: first the veto is asked, then the old
+     * context's resources are released, then the context changes, then the change is announced, and
+     * only last are the new context's resources taken. Releasing before asking would leave the
+     * child without resources if someone vetoed.
      *
-     * @throws PropertyVetoException si un oyente se opone y todavía no había vetado este cambio
+     * @throws PropertyVetoException if {@link #validatePendingSetBeanContext} or a listener objects
+     *     and no change had been refused since the last completed move
      */
     public synchronized void setBeanContext(BeanContext bc) throws PropertyVetoException {
         if (bc == this.beanContext) {
@@ -92,7 +94,7 @@ public class BeanContextChildSupport implements BeanContextChild, BeanContextSer
         if (!this.rejectedSetBCOnce) {
             if (!this.validatePendingSetBeanContext(bc)) {
                 this.rejectedSetBCOnce = true;
-                throw new PropertyVetoException("el hijo rechaza el cambio de contexto",
+                throw new PropertyVetoException("the child refuses the context change",
                         new java.beans.PropertyChangeEvent(this.beanContextChildPeer,
                                 "beanContext", old, bc));
             }
@@ -117,64 +119,66 @@ public class BeanContextChildSupport implements BeanContextChild, BeanContextSer
         }
     }
 
-    /** El contexto actual, o `null`. */
+    /** The current context, or `null`. */
     public synchronized BeanContext getBeanContext() {
         return this.beanContext;
     }
 
     /**
-     * La oportunidad de la subclase de rechazar una mudanza sin registrar un oyente.
+     * The subclass's chance to refuse a move without registering a listener.
      *
-     * <p>Por omisión acepta todo. Redefinirla es lo más barato que hay para un hijo que sólo puede
-     * vivir en cierta clase de contexto.
+     * <p>By default it accepts everything. Overriding it is the cheapest option for a child that
+     * can only live in a certain kind of context.
      */
     public boolean validatePendingSetBeanContext(BeanContext newValue) {
         return true;
     }
 
     /**
-     * El gancho para tomar los recursos del contexto nuevo.
+     * The hook for taking the new context's resources.
      *
-     * <p>Vacío acá y no abstracto: la mayoría de los hijos no necesita ninguno, y obligarlos a
-     * escribir un método vacío sería ruido. Se llama **después** de que el contexto ya cambió, así
-     * que dentro se puede usar {@link #getBeanContext}.
+     * <p>Empty here rather than abstract: most children need none, and forcing them to write an
+     * empty method would be noise. It is called **after** the context has changed, so {@link
+     * #getBeanContext} can be used inside.
      */
     protected void initializeBeanContextResources() {
     }
 
-    /** El gancho para soltarlos. Se llama **antes** de cambiar, con el contexto viejo todavía puesto. */
+    /**
+     * The hook for releasing them. Called **before** the change, with the old context still set.
+     */
     protected void releaseBeanContextResources() {
     }
 
-    /** Registra un oyente para los cambios de esa propiedad. */
+    /** Registers a listener for changes to that property. */
     public void addPropertyChangeListener(String name, PropertyChangeListener pcl) {
         this.pcSupport.addPropertyChangeListener(name, pcl);
     }
 
-    /** Lo quita. */
+    /** Removes it. */
     public void removePropertyChangeListener(String name, PropertyChangeListener pcl) {
         this.pcSupport.removePropertyChangeListener(name, pcl);
     }
 
-    /** Registra un oyente que puede vetar los cambios de esa propiedad. */
+    /** Registers a listener that can veto changes to that property. */
     public void addVetoableChangeListener(String name, VetoableChangeListener vcl) {
         this.vcSupport.addVetoableChangeListener(name, vcl);
     }
 
-    /** Lo quita. */
+    /** Removes it. */
     public void removeVetoableChangeListener(String name, VetoableChangeListener vcl) {
         this.vcSupport.removeVetoableChangeListener(name, vcl);
     }
 
-    /** Avisa de un cambio de propiedad a nombre del bean. */
+    /** Announces a property change in the bean's name. */
     public void firePropertyChange(String name, Object oldValue, Object newValue) {
         this.pcSupport.firePropertyChange(name, oldValue, newValue);
     }
 
     /**
-     * Consulta el veto de un cambio de propiedad.
+     * Asks for vetoes on a property change.
      *
-     * @throws PropertyVetoException si algún oyente se opone
+     * @throws PropertyVetoException if some listener objects
      */
     public void fireVetoableChange(String name, Object oldValue, Object newValue)
             throws PropertyVetoException {
@@ -182,15 +186,15 @@ public class BeanContextChildSupport implements BeanContextChild, BeanContextSer
     }
 
     /**
-     * Un servicio nuevo apareció.
+     * A new service appeared.
      *
-     * <p>Vacío por omisión, y es lo correcto: un hijo que no usa servicios no tiene nada que hacer
-     * acá, y esta clase existe justamente para que no tenga que escribirlo.
+     * <p>Empty by default, and rightly so: a child that uses no services has nothing to do here,
+     * and this class exists precisely so it does not have to write it.
      */
     public void serviceAvailable(BeanContextServiceAvailableEvent bcsae) {
     }
 
-    /** Un servicio fue revocado. Vacío por omisión, por lo mismo. */
+    /** A service was revoked. Empty by default, for the same reason. */
     public void serviceRevoked(BeanContextServiceRevokedEvent bcsre) {
     }
 }

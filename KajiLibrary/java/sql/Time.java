@@ -1,25 +1,25 @@
 package java.sql;
 
 /**
- * KajiLibrary's java.sql.Time -- una hora **sin fecha**, para una columna `TIME`.
+ * KajiLibrary's java.sql.Time -- a time **with no date**, for a `TIME` column.
  *
- * <p>El reverso exacto de {@link Date}: hereda de `java.util.Date` y el contrato pide que la parte de
- * fecha sea el 1 de enero de 1970. Y por la misma razon {@link #getYear} y compania fallan -- "1970"
- * seria una respuesta inventada a una pregunta que no aplica.
+ * <p>The exact reverse of {@link Date}: it inherits from `java.util.Date`, and the contract asks
+ * that the date part be 1 January 1970. And for the same reason {@link #getYear} and company fail
+ * -- "1970" would be an invented answer to a question that does not apply.
  */
 public class Time extends java.util.Date {
 
     /**
-     * La hora de esa hora, minuto y segundo.
+     * The time of that hour, minute and second.
      *
-     * @deprecated usar {@link #Time(long)} o {@link #valueOf(java.time.LocalTime)}
+     * @deprecated use {@link #Time(long)} or {@link #valueOf(java.time.LocalTime)}
      */
     @Deprecated
     public Time(int hour, int minute, int second) {
         super(70, 0, 1, hour, minute, second);
     }
 
-    /** La hora de ese instante en milisegundos. */
+    /** The time of that instant in milliseconds. */
     public Time(long time) {
         super(time);
     }
@@ -29,98 +29,98 @@ public class Time extends java.util.Date {
     }
 
     /**
-     * La hora escrita `hh:mm:ss`.
+     * The time written `hh:mm:ss`.
      *
-     * @throws IllegalArgumentException si no tiene esa forma
+     * @throws IllegalArgumentException if it does not have that shape
      */
     public static Time valueOf(String s) {
         if (s == null) {
             throw new IllegalArgumentException("null");
         }
-        int primera = s.indexOf(':');
-        int segunda = primera < 0 ? -1 : s.indexOf(':', primera + 1);
-        if (primera <= 0 || segunda <= primera + 1 || segunda == s.length() - 1) {
+        int firstColon = s.indexOf(':');
+        int secondColon = firstColon < 0 ? -1 : s.indexOf(':', firstColon + 1);
+        if (firstColon <= 0 || secondColon <= firstColon + 1 || secondColon == s.length() - 1) {
             throw new IllegalArgumentException(s);
         }
-        int hora;
-        int minuto;
-        int segundo;
+        int hour;
+        int minute;
+        int second;
         try {
-            hora = Integer.parseInt(s.substring(0, primera));
-            minuto = Integer.parseInt(s.substring(primera + 1, segunda));
-            segundo = Integer.parseInt(s.substring(segunda + 1, s.length()));
+            hour = Integer.parseInt(s.substring(0, firstColon));
+            minute = Integer.parseInt(s.substring(firstColon + 1, secondColon));
+            second = Integer.parseInt(s.substring(secondColon + 1, s.length()));
         } catch (NumberFormatException e) {
             throw new IllegalArgumentException(s);
         }
-        return new Time(hora, minuto, segundo);
+        return new Time(hour, minute, second);
     }
 
-    /** La hora de ese {@link java.time.LocalTime}. */
+    /** The time of that {@link java.time.LocalTime}. */
     public static Time valueOf(java.time.LocalTime time) {
         return new Time(time.getHour(), time.getMinute(), time.getSecond());
     }
 
-    /** Esta hora como {@link java.time.LocalTime}. */
+    /** This time as a {@link java.time.LocalTime}. */
     public java.time.LocalTime toLocalTime() {
         return java.time.LocalTime.of(this.getHours(), this.getMinutes(), this.getSeconds());
     }
 
-    /** `hh:mm:ss`, con ceros a la izquierda. */
+    /** `hh:mm:ss`, zero-padded. */
     public String toString() {
         StringBuilder sb = new StringBuilder();
-        dosDigitos(sb, this.getHours());
+        twoDigits(sb, this.getHours());
         sb.append(':');
-        dosDigitos(sb, this.getMinutes());
+        twoDigits(sb, this.getMinutes());
         sb.append(':');
-        dosDigitos(sb, this.getSeconds());
+        twoDigits(sb, this.getSeconds());
         return sb.toString();
     }
 
-    private static void dosDigitos(StringBuilder sb, int v) {
+    private static void twoDigits(StringBuilder sb, int v) {
         if (v < 10) {
             sb.append('0');
         }
         sb.append(v);
     }
 
-    // ---- lo que no aplica ----------------------------------------------------------------------------
+    // ---- what does not apply --------------------------------------------------------------------
 
-    /** @throws IllegalArgumentException siempre: una hora SQL no tiene fecha */
+    /** @throws IllegalArgumentException always: an SQL time has no date */
     public int getYear() {
         throw new IllegalArgumentException();
     }
 
-    /** @throws IllegalArgumentException siempre */
+    /** @throws IllegalArgumentException always */
     public int getMonth() {
         throw new IllegalArgumentException();
     }
 
-    /** @throws IllegalArgumentException siempre */
+    /** @throws IllegalArgumentException always */
     public int getDay() {
         throw new IllegalArgumentException();
     }
 
-    /** @throws IllegalArgumentException siempre */
+    /** @throws IllegalArgumentException always */
     public int getDate() {
         throw new IllegalArgumentException();
     }
 
-    /** @throws IllegalArgumentException siempre */
+    /** @throws IllegalArgumentException always */
     public void setYear(int i) {
         throw new IllegalArgumentException();
     }
 
-    /** @throws IllegalArgumentException siempre */
+    /** @throws IllegalArgumentException always */
     public void setMonth(int i) {
         throw new IllegalArgumentException();
     }
 
-    /** @throws IllegalArgumentException siempre */
+    /** @throws IllegalArgumentException always */
     public void setDate(int i) {
         throw new IllegalArgumentException();
     }
 
-    /** @throws UnsupportedOperationException siempre: falta la fecha */
+    /** @throws UnsupportedOperationException always: the date is missing */
     public java.time.Instant toInstant() {
         throw new UnsupportedOperationException();
     }

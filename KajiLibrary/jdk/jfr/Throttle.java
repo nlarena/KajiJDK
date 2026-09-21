@@ -6,14 +6,14 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Un tope de cuantos eventos por unidad de tiempo se graban.
+ * A cap on how many events per unit of time are recorded.
  *
- * <p>Se escribe como {@code "100/s"}. A diferencia de {@link Threshold}, que descarta por lo que el
- * evento <strong>es</strong>, esto descarta por cuantos hubo: cuando se pasa del tope, JFR muestrea
- * en lugar de grabar todo.
+ * <p>It is written as {@code "100/s"}. Unlike {@link Threshold}, which discards by what the event
+ * <strong>is</strong>, this discards by how many there were: when the cap is passed, JFR samples
+ * instead of recording everything.
  *
- * <p>Es la herramienta para un evento cuyo volumen no se puede predecir, donde un umbral no alcanza
- * porque el problema no es que cada evento sea caro sino que son demasiados.
+ * <p>It is the tool for an event whose volume cannot be predicted, where a threshold is not enough
+ * because the problem is not that each event is expensive but that there are too many of them.
  *
  * @since 9
  */
@@ -22,13 +22,13 @@ import java.lang.annotation.Target;
 @MetadataDefinition
 public @interface Throttle {
 
-    /** El nombre del ajuste que esta anotacion configura. */
+    /** The name of the setting this annotation configures. */
     String NAME = "throttle";
 
     /**
-     * El valor de la anotacion.
+     * The value of the annotation.
      *
-     * @return el valor
+     * @return the value
      */
     String value() default "off";
 }

@@ -1,17 +1,17 @@
 package java.sql;
 
 /**
- * KajiLibrary's java.sql.ShardingKeyBuilder -- arma una {@link ShardingKey} pieza por pieza.
+ * KajiLibrary's java.sql.ShardingKeyBuilder -- builds a {@link ShardingKey} piece by piece.
  *
- * <p>Hay constructor y no un constructor de clase porque una clave de particion puede ser
- * **compuesta**: varias subclaves con su tipo, en orden. Encadenar `subkey(...)` es lo que expresa
- * ese orden sin inventar una lista.
+ * <p>There is a builder and not a constructor because a sharding key can be **composite**: several
+ * subkeys with their type, in order. Chaining `subkey(...)` is what expresses that order without
+ * inventing a list.
  */
 public interface ShardingKeyBuilder {
 
-    /** Agrega una subclave con su tipo. */
+    /** Adds a subkey with its type. */
     ShardingKeyBuilder subkey(Object subkey, SQLType subkeyType);
 
-    /** La clave que forman las subclaves agregadas. */
+    /** The key the added subkeys form. */
     ShardingKey build() throws SQLException;
 }

@@ -5,14 +5,13 @@ import javax.print.attribute.SetOfIntegerSyntax;
 import javax.print.attribute.SupportedValuesAttribute;
 
 /**
- * Que valores de {@link JobMediaSheets} acepta la impresora.
+ * Which values of {@link JobMediaSheets} the printer accepts.
  *
- * <p>Ver la cabecera de familia en {@link CopiesSupported} para el mecanismo. A diferencia de
- * aquel el minimo legal es cero, por la misma razon que en {@link JobMediaSheets}: es una medida, no una
- * cantidad que se pide.
+ * <p>See the family header in {@link CopiesSupported} for the mechanism. Unlike that one the legal
+ * minimum is zero, for the same reason as in {@link JobMediaSheets}: it is a measure, not a
+ * quantity one asks for.
  *
- * <p>Solo tiene el constructor de rango. Un unico valor soportado se declara con los dos extremos
- * iguales.
+ * <p>It only has the range constructor. A single supported value is declared with both ends equal.
  */
 public final class JobMediaSheetsSupported extends SetOfIntegerSyntax implements SupportedValuesAttribute {
 

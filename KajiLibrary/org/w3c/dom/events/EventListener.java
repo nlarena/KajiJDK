@@ -1,14 +1,14 @@
 package org.w3c.dom.events;
 
 /**
- * KajiLibrary's org.w3c.dom.events.EventListener -- quien recibe un evento.
+ * KajiLibrary's org.w3c.dom.events.EventListener -- the one who receives an event.
  *
- * <p>Un solo metodo, y sin valor de retorno a proposito: un escucha <b>no decide</b> si el evento
- * sigue. Para eso estan {@code Event.stopPropagation()} y {@code Event.preventDefault()}, que dicen
- * dos cosas distintas y se confunden -- ver {@link Event}.
+ * <p>One single method, and with no return value on purpose: a listener <b>does not decide</b>
+ * whether the event goes on. {@code Event.stopPropagation()} and {@code Event.preventDefault()} are
+ * there for that, which say two different things and get confused -- see {@link Event}.
  */
 public interface EventListener {
 
-    /** Recibe el evento. */
+    /** It receives the event. */
     void handleEvent(Event evt);
 }

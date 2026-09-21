@@ -3,33 +3,34 @@ package javax.management.openmbean;
 import javax.management.MBeanParameterInfo;
 
 /**
- * La descripción de una operación de un MBean abierto.
+ * The description of an operation of an open MBean.
  *
- * <p>Hay dos formas de preguntar por lo que devuelve y no son redundantes: `getReturnType` da el
- * nombre de clase, que es lo que hereda de `MBeanOperationInfo`, y `getReturnOpenType` da el tipo
- * abierto, que es lo que este paquete agrega. El primero se puede deducir del segundo pero no al
- * revés.
+ * <p>There are two ways of asking about what it returns and they are not redundant:
+ * {@code getReturnType} gives the class name, which is what it inherits from
+ * {@code MBeanOperationInfo}, and {@code getReturnOpenType} gives the open type, which is what this
+ * package adds. The first can be deduced from the second but not the other way round.
  *
- * <p>Sobre el tipo de `getSignature`, vale la misma nota que en {@link OpenMBeanConstructorInfo}.
+ * <p>About the type of {@code getSignature}, the same note as in
+ * {@link OpenMBeanConstructorInfo} applies.
  */
 public interface OpenMBeanOperationInfo {
 
-    /** La descripción, para una persona. */
+    /** The description, for a person. */
     String getDescription();
 
-    /** El nombre de la operación. */
+    /** The operation's name. */
     String getName();
 
-    /** Los parámetros. */
+    /** The parameters. */
     MBeanParameterInfo[] getSignature();
 
-    /** Si lee, escribe, hace las dos cosas, o no se sabe. Ver `MBeanOperationInfo`. */
+    /** Whether it reads, writes, both, or is unknown. See {@code MBeanOperationInfo}. */
     int getImpact();
 
-    /** El nombre de clase de lo que devuelve. */
+    /** The class name of what it returns. */
     String getReturnType();
 
-    /** El tipo abierto de lo que devuelve. */
+    /** The open type of what it returns. */
     OpenType<?> getReturnOpenType();
 
     boolean equals(Object obj);

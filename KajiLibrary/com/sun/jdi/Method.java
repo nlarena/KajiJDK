@@ -3,218 +3,218 @@ package com.sun.jdi;
 import java.util.List;
 
 /**
- * Un metodo de un tipo de la maquina depurada.
+ * A method of a type of the debugged machine.
  *
- * <p>{@code arguments} necesita la tabla de variables locales y puede no estar;
- * {@code argumentTypeNames} sale de la firma y siempre esta. Es la diferencia entre saber como se
- * llamaban los parametros y saber de que tipo eran.
+ * <p>{@code arguments} needs the local variable table and it may not be there;
+ * {@code argumentTypeNames} comes from the signature and is always there. It is the difference
+ * between knowing what the parameters were called and knowing what type they were.
  *
- * <p>{@code isObsolete} marca un metodo cuyo codigo se reemplazo en caliente: la referencia sigue
- * valiendo y el codigo que representaba ya no existe.
+ * <p>{@code isObsolete} marks a method whose code was replaced on the fly: the reference still
+ * holds and the code it represented no longer exists.
  *
  * @since 1.3
  */
 public interface Method extends TypeComponent, Locatable, Comparable<Method> {
 
     /**
-     * El return type name.
+     * The return type name.
      *
-     * @return el resultado
+     * @return the result
      */
     String returnTypeName();
 
     /**
-     * El return type.
+     * The return type.
      *
-     * @return el resultado
-     * @throws ClassNotLoadedException si corresponde
+     * @return the result
+     * @throws ClassNotLoadedException if it applies
      */
     Type returnType()
             throws ClassNotLoadedException;
 
     /**
-     * El argument type names.
+     * The argument type names.
      *
-     * @return el resultado
+     * @return the result
      */
     List<String> argumentTypeNames();
 
     /**
-     * El argument types.
+     * The argument types.
      *
-     * @return el resultado
-     * @throws ClassNotLoadedException si corresponde
+     * @return the result
+     * @throws ClassNotLoadedException if it applies
      */
     List<Type> argumentTypes()
             throws ClassNotLoadedException;
 
     /**
-     * Si abstract.
+     * Whether abstract.
      *
-     * @return el resultado
+     * @return the result
      */
     boolean isAbstract();
 
     /**
-     * Si default.
+     * Whether default.
      *
-     * @return el resultado
+     * @return the result
      */
     boolean isDefault();
 
     /**
-     * Si synchronized.
+     * Whether synchronized.
      *
-     * @return el resultado
+     * @return the result
      */
     boolean isSynchronized();
 
     /**
-     * Si native.
+     * Whether native.
      *
-     * @return el resultado
+     * @return the result
      */
     boolean isNative();
 
     /**
-     * Si var args.
+     * Whether var args.
      *
-     * @return el resultado
+     * @return the result
      */
     boolean isVarArgs();
 
     /**
-     * Si bridge.
+     * Whether bridge.
      *
-     * @return el resultado
+     * @return the result
      */
     boolean isBridge();
 
     /**
-     * Si constructor.
+     * Whether constructor.
      *
-     * @return el resultado
+     * @return the result
      */
     boolean isConstructor();
 
     /**
-     * Si static initializer.
+     * Whether static initializer.
      *
-     * @return el resultado
+     * @return the result
      */
     boolean isStaticInitializer();
 
     /**
-     * Si obsolete.
+     * Whether obsolete.
      *
-     * @return el resultado
+     * @return the result
      */
     boolean isObsolete();
 
     /**
-     * Todos los line locations, heredados incluidos.
+     * Every line locations, the inherited ones included.
      *
-     * @return el resultado
-     * @throws AbsentInformationException si corresponde
+     * @return the result
+     * @throws AbsentInformationException if it applies
      */
     List<Location> allLineLocations()
             throws AbsentInformationException;
 
     /**
-     * Todos los line locations, heredados incluidos.
+     * Every line locations, the inherited ones included.
      *
-     * @param name el String
-     * @param name2 el String
-     * @return el resultado
-     * @throws AbsentInformationException si corresponde
+     * @param name the String
+     * @param name2 the String
+     * @return the result
+     * @throws AbsentInformationException if it applies
      */
     List<Location> allLineLocations(String name, String name2)
             throws AbsentInformationException;
 
     /**
-     * El locations of line.
+     * The locations of line.
      *
-     * @param index el int
-     * @return el resultado
-     * @throws AbsentInformationException si corresponde
+     * @param index the int
+     * @return the result
+     * @throws AbsentInformationException if it applies
      */
     List<Location> locationsOfLine(int index)
             throws AbsentInformationException;
 
     /**
-     * El locations of line.
+     * The locations of line.
      *
-     * @param name el String
-     * @param name2 el String
-     * @param index el int
-     * @return el resultado
-     * @throws AbsentInformationException si corresponde
+     * @param name the String
+     * @param name2 the String
+     * @param index the int
+     * @return the result
+     * @throws AbsentInformationException if it applies
      */
     List<Location> locationsOfLine(String name, String name2, int index)
             throws AbsentInformationException;
 
     /**
-     * El location of code index.
+     * The location of code index.
      *
-     * @param index el long
-     * @return el resultado
+     * @param index the long
+     * @return the result
      */
     Location locationOfCodeIndex(long index);
 
     /**
-     * El variables.
+     * The variables.
      *
-     * @return el resultado
-     * @throws AbsentInformationException si corresponde
+     * @return the result
+     * @throws AbsentInformationException if it applies
      */
     List<LocalVariable> variables()
             throws AbsentInformationException;
 
     /**
-     * El variables by name.
+     * The variables by name.
      *
-     * @param name el String
-     * @return el resultado
-     * @throws AbsentInformationException si corresponde
+     * @param name the String
+     * @return the result
+     * @throws AbsentInformationException if it applies
      */
     List<LocalVariable> variablesByName(String name)
             throws AbsentInformationException;
 
     /**
-     * El arguments.
+     * The arguments.
      *
-     * @return el resultado
-     * @throws AbsentInformationException si corresponde
+     * @return the result
+     * @throws AbsentInformationException if it applies
      */
     List<LocalVariable> arguments()
             throws AbsentInformationException;
 
     /**
-     * El bytecodes.
+     * The bytecodes.
      *
-     * @return el resultado
+     * @return the result
      */
     byte[] bytecodes();
 
     /**
-     * El location.
+     * The location.
      *
-     * @return el resultado
+     * @return the result
      */
     Location location();
 
     /**
-     * Dos reflejos son iguales si nombran a lo mismo en la misma VM.
+     * Two mirrors are equal if they name the same thing in the same VM.
      *
-     * @param obj el Object
-     * @return el resultado
+     * @param obj the Object
+     * @return the result
      */
     boolean equals(Object obj);
 
     /**
-     * Coherente con {@link #equals}.
+     * Consistent with {@link #equals}.
      *
-     * @return el resultado
+     * @return the result
      */
     int hashCode();
 }

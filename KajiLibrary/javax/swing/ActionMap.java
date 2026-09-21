@@ -5,35 +5,35 @@ import java.util.HashMap;
 import java.util.Set;
 
 /**
- * Una tabla de nombre a accion, encadenada con otra.
+ * A table from name to action, chained with another.
  *
- * <h2>Para que sirve la cadena</h2>
+ * <h2>What the chain is for</h2>
  *
- * <p>Un componente tiene tres capas de acciones: las que le puso el programa, las que le puso el
- * aspecto, y las que hereda de su clase. Encadenar tres tablas permite que el programa tape una sola
- * accion del aspecto sin copiar las otras, y que cambiar el aspecto reemplace su capa sin tocar lo
- * que puso el programa.
+ * <p>A component has three layers of actions: the ones the program set, the ones the look and
+ * feel set, and the ones it inherits from its class. Chaining three tables allows the program to
+ * cover a single action of the look and feel without copying the others, and changing the look
+ * and feel to replace its layer without touching what the program set.
  *
- * <p>{@link #keys} devuelve solo las de esta tabla y {@link #allKeys} las de toda la cadena. La
- * diferencia importa: para guardar la configuracion se quieren las propias, y para saber que teclas
- * responden hay que mirar todas.
+ * <p>{@link #keys} returns only this table's and {@link #allKeys} the whole chain's. The
+ * difference matters: for saving the configuration one wants one's own, and for knowing which
+ * keys answer one has to look at them all.
  *
- * <h2>Poner nulo borra</h2>
+ * <h2>Putting null erases</h2>
  *
- * <p>{@code put(clave, null)} saca la entrada en lugar de guardar un nulo. Es lo que hace el JDK, y
- * la consecuencia util es que no se puede tapar una accion del padre con "ninguna accion": para eso
- * hay que sacarla de la cadena entera.
+ * <p>{@code put(key, null)} removes the entry instead of keeping a null. It is what the JDK
+ * does, and the useful consequence is that a parent's action cannot be covered with "no
+ * action": for that it has to be removed from the whole chain.
  */
 public class ActionMap implements Serializable {
 
     private transient HashMap<Object, Action> arrayTable;
     private ActionMap parent;
 
-    /** Una tabla vacia, sin padre. */
+    /** An empty table, with no parent. */
     public ActionMap() {
     }
 
-    /** La tabla que se consulta cuando esta no tiene la clave. */
+    /** The table that is consulted when this one does not have the key. */
     public void setParent(ActionMap map) {
         this.parent = map;
     }
@@ -42,7 +42,7 @@ public class ActionMap implements Serializable {
         return parent;
     }
 
-    /** Guarda una accion; con {@code null} la saca. Ver la nota de la clase. */
+    /** It keeps an action; with {@code null} it removes it. See the class note. */
     public void put(Object key, Action action) {
         if (key == null) {
             return;
@@ -57,7 +57,7 @@ public class ActionMap implements Serializable {
         arrayTable.put(key, action);
     }
 
-    /** La accion de esa clave, buscando en la cadena. */
+    /** That key's action, looking through the chain. */
     public Action get(Object key) {
         Action value = (arrayTable == null) ? null : arrayTable.get(key);
         if (value == null) {
@@ -75,18 +75,19 @@ public class ActionMap implements Serializable {
         }
     }
 
-    /** Vacia esta tabla; el padre no se toca. */
+    /** It empties this table; the parent is not touched. */
     public void clear() {
         if (arrayTable != null) {
             arrayTable.clear();
         }
     }
 
-    /** Las claves de esta tabla, sin las del padre. */
+    /** This table's keys, without the parent's. */
     public Object[] keys() {
         if (arrayTable == null || arrayTable.isEmpty()) {
-            // Vacia devuelve nulo, no un arreglo de cero. Es lo que hace el JDK y hay codigo que
-            // distingue "no hay tabla" de "hay tabla sin nada"; aca los dos dan lo mismo.
+            // Empty it returns null, not an array of zero. It is what the JDK does and there is
+                        // code that tells "there is no table" from "there is a table with nothing";
+                        // here the two give the same.
             return null;
         }
         Set<Object> ks = arrayTable.keySet();
@@ -104,10 +105,10 @@ public class ActionMap implements Serializable {
     }
 
     /**
-     * Las claves de toda la cadena, sin repetir.
+     * The keys of the whole chain, without repeating.
      *
-     * <p>Devuelve nulo si no hay ninguna, no un arreglo vacio. Es lo que hace el JDK y hay codigo
-     * que distingue los dos casos.
+     * <p>It returns null if there is none, not an empty array. It is what the JDK does and
+     * there is code that tells the two cases apart.
      */
     public Object[] allKeys() {
         int count = size();
@@ -123,16 +124,16 @@ public class ActionMap implements Serializable {
         if (mk == null) {
             return pk;
         }
-        HashMap<Object, Object> junta = new HashMap<Object, Object>();
+        HashMap<Object, Object> merge = new HashMap<Object, Object>();
         for (int i = 0; i < pk.length; i++) {
-            junta.put(pk[i], pk[i]);
+            merge.put(pk[i], pk[i]);
         }
         for (int i = 0; i < mk.length; i++) {
-            junta.put(mk[i], mk[i]);
+            merge.put(mk[i], mk[i]);
         }
-        Object[] out = new Object[junta.size()];
+        Object[] out = new Object[merge.size()];
         int i = 0;
-        for (Object k : junta.keySet()) {
+        for (Object k : merge.keySet()) {
             out[i] = k;
             i++;
         }

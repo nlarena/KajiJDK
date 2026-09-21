@@ -4,35 +4,38 @@ import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 
 /**
- * Decide si una cadena de certificados X.509 es de fiar.
+ * Decides whether an X.509 certificate chain is trustworthy.
  *
- * <h2>Por que los metodos no devuelven un booleano</h2>
+ * <h2>Why the methods do not return a boolean</h2>
  *
- * <p>Porque una excepcion puede decir <em>por que</em> no, y un {@code false} no. Rechazar por
- * certificado vencido, por firma invalida o por emisor desconocido son tres situaciones distintas,
- * y quien llama —o quien lee un log— necesita distinguirlas. Devolver normalmente es aceptar.
+ * <p>Because an exception can say <em>why</em> not, and a {@code false} cannot. Rejecting for an
+ * expired certificate, an invalid signature or an unknown issuer are three different situations,
+ * and the caller --or whoever reads a log-- needs to tell them apart. Returning normally is
+ * accepting.
  *
- * <p>La asimetria entre los dos metodos es real y no decorativa: al servidor se lo valida contra su
- * nombre, y al cliente contra la lista de emisores aceptados. No es la misma pregunta con los roles
- * cambiados.
+ * <p>The two methods are not the same question with the roles swapped: for the client the list of
+ * accepted issuers matters (see {@link #getAcceptedIssuers}), for the server its identity does. The
+ * note said the server is validated here against its name; these methods receive only the chain and
+ * the authentication type, so the name never reaches them -- checking it is what
+ * {@link X509ExtendedTrustManager} adds.
  */
 public interface X509TrustManager extends TrustManager {
 
     /**
-     * @throws CertificateException si el cliente no es de fiar, con el motivo adentro
+     * @throws CertificateException if the client is not trustworthy, with the reason inside
      */
     void checkClientTrusted(X509Certificate[] chain, String authType) throws CertificateException;
 
     /**
-     * @throws CertificateException si el servidor no es de fiar
+     * @throws CertificateException if the server is not trustworthy
      */
     void checkServerTrusted(X509Certificate[] chain, String authType) throws CertificateException;
 
     /**
-     * Los emisores que este manejador acepta.
+     * The issuers this manager accepts.
      *
-     * <p>No es solo informativo: es lo que el servidor le manda al cliente para decirle que
-     * certificados le sirven. Sin eso el cliente tendria que adivinar cual de los suyos presentar.
+     * <p>It is not merely informative: it is what the server sends the client to tell it which
+     * certificates will do. Without it the client would have to guess which of its own to present.
      */
     X509Certificate[] getAcceptedIssuers();
 }

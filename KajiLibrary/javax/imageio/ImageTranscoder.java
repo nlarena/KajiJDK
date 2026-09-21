@@ -3,38 +3,39 @@ package javax.imageio;
 import javax.imageio.metadata.IIOMetadata;
 
 /**
- * KajiLibrary's javax.imageio.ImageTranscoder -- traduce metadatos de un formato a otro.
+ * KajiLibrary's javax.imageio.ImageTranscoder -- translates metadata from one format to another.
  *
- * <p>Convertir el <b>pixel</b> de PNG a JPEG es facil: se decodifica y se codifica. Lo que se pierde
- * en el camino son los metadatos, porque cada formato los guarda a su manera. Esta interfaz es como se
- * conservan.
+ * <p>Converting the <b>pixels</b> from PNG to JPEG is easy: decode and encode. What gets lost on
+ * the way is the metadata, because each format stores it its own way. This interface is how it is
+ * kept.
  *
- * <p>Los dos metodos toman los metadatos del formato de origen y devuelven los equivalentes en el de
- * destino. La traduccion pasa por el <b>formato estandar</b> de {@code javax.imageio.metadata}: el de
- * origen se expresa en el arbol comun, y de ahi el de destino toma lo que entiende.
+ * <p>Both methods take the metadata of the source format and return the equivalent in the target
+ * one. The translation goes through the <b>standard format</b> of {@code javax.imageio.metadata}:
+ * the source is expressed in the common tree, and from there the target takes what it
+ * understands.
  *
- * <p>Lo que el destino no sepa expresar se pierde, y no hay forma de que no sea asi. Devolver null es
- * valido y significa "de esto no puedo traducir nada".
+ * <p>What the target cannot express is lost, and there is no way around that. Returning null is
+ * valid and means "I cannot translate anything of this".
  *
- * <p>Los dos metodos existen porque hay metadatos del <b>flujo</b> --que valen para todas las imagenes
- * de un archivo con varias-- y metadatos de <b>cada imagen</b>.
+ * <p>There are two methods because there is <b>stream</b> metadata --valid for all the images of a
+ * file with several-- and metadata of <b>each image</b>.
  */
 public interface ImageTranscoder {
 
     /**
-     * Traduce los metadatos del flujo.
+     * Translates the stream metadata.
      *
-     * @param inData los del formato de origen
-     * @param param los parametros de escritura, o null
-     * @return los del formato de destino, o null si no se puede traducir nada
+     * @param inData the source format's
+     * @param param the write parameters, or null
+     * @return the target format's, or null if nothing can be translated
      */
     IIOMetadata convertStreamMetadata(IIOMetadata inData, ImageWriteParam param);
 
     /**
-     * Traduce los metadatos de una imagen.
+     * Translates an image's metadata.
      *
-     * @param imageType de que tipo va a ser la imagen escrita
-     * @return los del formato de destino, o null
+     * @param imageType what type the written image will be
+     * @return the target format's, or null
      */
     IIOMetadata convertImageMetadata(IIOMetadata inData, ImageTypeSpecifier imageType,
                                      ImageWriteParam param);

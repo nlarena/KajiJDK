@@ -6,75 +6,76 @@ import java.io.Writer;
 import javax.xml.transform.Result;
 
 /**
- * KajiLibrary's javax.xml.stream.XMLOutputFactory -- la puerta de entrada a la escritura con StAX.
+ * KajiLibrary's javax.xml.stream.XMLOutputFactory -- the way into writing with StAX.
  *
- * <h2>Escribir es mas facil que leer, y por eso esto funciona entero</h2>
+ * <h2>Writing is easier than reading, and that is why this works whole</h2>
  *
- * <p>Un escritor de XML no analiza nada: recibe llamadas ya estructuradas --abri este elemento,
- * pone este atributo, escribi este texto-- y las convierte en caracteres, escapando lo que haga
- * falta. No hay gramatica que reconocer. Asi que aca no hay nada omitido: los dos modelos, el de
- * cursor y el de eventos, escriben de verdad.
+ * <p>An XML writer parses nothing: it receives already structured calls --open this element, put
+ * this attribute, write this text-- and turns them into characters, escaping what is needed. There
+ * is no grammar to recognize. So nothing is left out here: both models, the cursor one and the
+ * event one, really write.
  *
- * <h2>La unica propiedad, y lo que decide</h2>
+ * <h2>The only property, and what it decides</h2>
  *
- * <p>{@link #IS_REPAIRING_NAMESPACES} es la que separa dos maneras muy distintas de usar la API.
+ * <p>{@link #IS_REPAIRING_NAMESPACES} is the one that separates two very different ways of using
+ * the API.
  *
- * <p>Apagada --el valor por omision-- el escritor hace lo que se le dice y nada mas: si se escribe
- * un elemento con prefijo {@code p} y nadie declaro {@code p}, sale un documento con un prefijo sin
- * declarar, que no es XML valido. La responsabilidad de llamar a {@code writeNamespace} en el lugar
- * correcto es del llamador.
+ * <p>Off --the default value-- the writer does what it is told and nothing more: if an element is
+ * written with prefix {@code p} and nobody declared {@code p}, a document with an undeclared prefix
+ * comes out, which is not valid XML. The responsibility for calling {@code writeNamespace} in the
+ * right place is the caller's.
  *
- * <p>Encendida, el escritor se hace cargo: cuando ve un nombre calificado cuyo espacio de nombres
- * no esta declarado en el alcance actual, emite la declaracion el mismo, inventando un prefijo si
- * hace falta. A cambio, deja de respetar exactamente lo que se le pide --puede cambiar un prefijo
- * por otro-- lo cual es correcto en cuanto al significado pero cambia el texto.
+ * <p>On, the writer takes charge: when it sees a qualified name whose namespace is not declared in
+ * the current scope, it emits the declaration itself, inventing a prefix if needed. In exchange, it
+ * stops respecting exactly what it is asked for --it may change one prefix for another-- which is
+ * correct as far as meaning goes but changes the text.
  *
- * <p>La eleccion no es de estilo: en el modo reparador el llamador puede ignorar los espacios de
- * nombres por completo, y en el otro tiene que llevar la cuenta. Los dos estan implementados aca.
+ * <p>The choice is not one of style: in repairing mode the caller can ignore namespaces completely,
+ * and in the other one they have to keep track. Both are implemented here.
  */
 public abstract class XMLOutputFactory {
 
     /**
-     * {@code javax.xml.stream.isRepairingNamespaces}: si el escritor declara solo los espacios de
-     * nombres que hagan falta.
+     * {@code javax.xml.stream.isRepairingNamespaces}: whether the writer declares by itself the
+     * namespaces that are needed.
      *
-     * <p>Por omision false; ver el encabezado de la clase.
+     * <p>False by default; see the class header.
      */
     public static final String IS_REPAIRING_NAMESPACES = "javax.xml.stream.isRepairingNamespaces";
 
-    /** La propiedad de sistema con que se enchufa otra implementacion. */
+    /** The system property another implementation is plugged in with. */
     static final String PROPERTY = "javax.xml.stream.XMLOutputFactory";
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected XMLOutputFactory() {
     }
 
-    // ---- descubrimiento ---------------------------------------------------------------------
+    // ---- discovery --------------------------------------------------------------------------
 
     /**
-     * La implementacion de la plataforma, sin mirar la configuracion.
+     * The platform implementation, without looking at the configuration.
      *
-     * @return la fabrica de escritura de esta biblioteca; nunca null
+     * @return this library's writing factory; never null
      */
     public static XMLOutputFactory newDefaultFactory() {
         return new KajiOutputFactory();
     }
 
     /**
-     * La fabrica configurada, o la de la plataforma si no hay ninguna.
+     * The configured factory, or the platform's if there is none.
      *
-     * @return la fabrica; nunca null
-     * @throws FactoryConfigurationError si la configuracion nombra una clase que no se puede usar
+     * @return the factory; never null
+     * @throws FactoryConfigurationError if the configuration names a class that cannot be used
      */
     public static XMLOutputFactory newInstance() {
         return newFactory();
     }
 
     /**
-     * Lo mismo que {@link #newInstance()}, con el nombre nuevo.
+     * The same as {@link #newInstance()}, with the new name.
      *
-     * @return la fabrica; nunca null
-     * @throws FactoryConfigurationError si la configuracion nombra una clase que no se puede usar
+     * @return the factory; never null
+     * @throws FactoryConfigurationError if the configuration names a class that cannot be used
      */
     public static XMLOutputFactory newFactory() {
         Object f = Factories.fromSystemProperty(PROPERTY, XMLOutputFactory.class);
@@ -85,35 +86,37 @@ public abstract class XMLOutputFactory {
     }
 
     /**
-     * La fabrica de <b>entrada</b> nombrada explicitamente.
+     * The <b>input</b> factory named explicitly.
      *
-     * <p>Si, devuelve un {@link XMLInputFactory}, y no es una errata de esta biblioteca: la firma es
-     * asi en la API original desde StAX 1.0. Fue un error de copiar y pegar en la especificacion, y
-     * cuando se noto ya habia codigo compilado contra ella; cambiar el tipo de retorno rompe la
-     * compatibilidad binaria, asi que quedo.
+     * <p>Yes, it returns an {@link XMLInputFactory}, and it is not a typo of this library: the
+     * signature is like that in the original API since StAX 1.0. It was a copy-and-paste mistake in
+     * the specification, and by the time it was noticed there was already code compiled against it;
+     * changing the return type breaks binary compatibility, so it stayed.
      *
-     * <p>Se reproduce tal cual porque el contrato es el contrato: una fuente que compila con el JDK
-     * tiene que compilar aca. Para conseguir una fabrica de salida por nombre esta
-     * {@link #newFactory(String, ClassLoader)}, que es la que hace lo que uno espera.
+     * <p>It is reproduced as is because the contract is the contract: a source that compiles with
+     * the JDK has to compile here. To get an output factory by name there is {@link
+     * #newFactory(String, ClassLoader)}, which is the one that does what one expects.
      *
-     * @param factoryId el nombre de la clase
-     * @param classLoader el cargador con que buscarla; null usa el del contexto
-     * @return la fabrica de entrada nombrada
-     * @throws FactoryConfigurationError si la clase no se puede cargar o no es una fabrica
+     * @param factoryId the name of the class (in JDK 25, the name of a property that holds it)
+     * @param classLoader the loader to look for it with; null uses the context one
+     * @return the named input factory
+     * @throws FactoryConfigurationError if the class cannot be loaded or is not a factory
      */
     public static XMLInputFactory newInstance(String factoryId, ClassLoader classLoader) {
         return XMLInputFactory.newFactory(factoryId, classLoader);
     }
 
     /**
-     * La fabrica de salida nombrada explicitamente.
+     * The output factory named explicitly.
      *
-     * <p>La que hay que usar; ver {@link #newInstance(String, ClassLoader)}.
+     * <p>The one to use; see {@link #newInstance(String, ClassLoader)}.
      *
-     * @param factoryId el nombre de la clase; null cae en {@link #newFactory()}
-     * @param classLoader el cargador con que buscarla; null usa el del contexto
-     * @return la fabrica; nunca null
-     * @throws FactoryConfigurationError si la clase no se puede cargar o no es una fabrica
+     * @param factoryId the name of the factory class; null falls back to {@link #newFactory()}. In
+     *     JDK 25 it is instead the name of a property that holds the class name, and a class name
+     *     there fails
+     * @param classLoader the loader to look for it with; null uses the context one
+     * @return the factory; never null
+     * @throws FactoryConfigurationError if the class cannot be loaded or is not a factory
      */
     public static XMLOutputFactory newFactory(String factoryId, ClassLoader classLoader) {
         if (factoryId == null) {
@@ -123,111 +126,111 @@ public abstract class XMLOutputFactory {
                 Factories.instantiate(factoryId, classLoader, XMLOutputFactory.class);
     }
 
-    // ---- escritores -------------------------------------------------------------------------
+    // ---- writers ----------------------------------------------------------------------------
 
     /**
-     * Un escritor de cursor sobre un {@link Writer}.
+     * A cursor writer over a {@link Writer}.
      *
-     * @param stream a donde escribir
-     * @return el escritor
-     * @throws XMLStreamException si no se puede construir
+     * @param stream where to write
+     * @return the writer
+     * @throws XMLStreamException if it cannot be built
      */
     public abstract XMLStreamWriter createXMLStreamWriter(Writer stream) throws XMLStreamException;
 
     /**
-     * Un escritor de cursor sobre un flujo de bytes, en UTF-8.
+     * A cursor writer over a byte stream, in UTF-8.
      *
-     * @param stream a donde escribir
-     * @return el escritor
-     * @throws XMLStreamException si no se puede construir
+     * @param stream where to write
+     * @return the writer
+     * @throws XMLStreamException if it cannot be built
      */
     public abstract XMLStreamWriter createXMLStreamWriter(OutputStream stream)
             throws XMLStreamException;
 
     /**
-     * Un escritor de cursor sobre un flujo de bytes con la codificacion dada.
+     * A cursor writer over a byte stream with the given encoding.
      *
-     * @param stream a donde escribir
-     * @param encoding la codificacion
-     * @return el escritor
-     * @throws XMLStreamException si la codificacion no se conoce
+     * @param stream where to write
+     * @param encoding the encoding
+     * @return the writer
+     * @throws XMLStreamException if the encoding is not known
      */
     public abstract XMLStreamWriter createXMLStreamWriter(OutputStream stream, String encoding)
             throws XMLStreamException;
 
     /**
-     * Un escritor de cursor sobre un {@link Result}.
+     * A cursor writer over a {@link Result}.
      *
-     * @param result a donde escribir
-     * @return el escritor
-     * @throws XMLStreamException si el tipo de {@code Result} no se soporta
+     * @param result where to write
+     * @return the writer
+     * @throws XMLStreamException if the type of {@code Result} is not supported
      */
     public abstract XMLStreamWriter createXMLStreamWriter(Result result) throws XMLStreamException;
 
     /**
-     * Un escritor de eventos sobre un {@link Result}.
+     * An event writer over a {@link Result}.
      *
-     * @param result a donde escribir
-     * @return el escritor
-     * @throws XMLStreamException si el tipo de {@code Result} no se soporta
+     * @param result where to write
+     * @return the writer
+     * @throws XMLStreamException if the type of {@code Result} is not supported
      */
     public abstract XMLEventWriter createXMLEventWriter(Result result) throws XMLStreamException;
 
     /**
-     * Un escritor de eventos sobre un flujo de bytes, en UTF-8.
+     * An event writer over a byte stream, in UTF-8.
      *
-     * @param stream a donde escribir
-     * @return el escritor
-     * @throws XMLStreamException si no se puede construir
+     * @param stream where to write
+     * @return the writer
+     * @throws XMLStreamException if it cannot be built
      */
     public abstract XMLEventWriter createXMLEventWriter(OutputStream stream)
             throws XMLStreamException;
 
     /**
-     * Un escritor de eventos sobre un flujo de bytes con la codificacion dada.
+     * An event writer over a byte stream with the given encoding.
      *
-     * @param stream a donde escribir
-     * @param encoding la codificacion
-     * @return el escritor
-     * @throws XMLStreamException si la codificacion no se conoce
+     * @param stream where to write
+     * @param encoding the encoding
+     * @return the writer
+     * @throws XMLStreamException if the encoding is not known
      */
     public abstract XMLEventWriter createXMLEventWriter(OutputStream stream, String encoding)
             throws XMLStreamException;
 
     /**
-     * Un escritor de eventos sobre un {@link Writer}.
+     * An event writer over a {@link Writer}.
      *
-     * @param stream a donde escribir
-     * @return el escritor
-     * @throws XMLStreamException si no se puede construir
+     * @param stream where to write
+     * @return the writer
+     * @throws XMLStreamException if it cannot be built
      */
     public abstract XMLEventWriter createXMLEventWriter(Writer stream) throws XMLStreamException;
 
-    // ---- configuracion ----------------------------------------------------------------------
+    // ---- configuration ----------------------------------------------------------------------
 
     /**
-     * Cambia una propiedad de la fabrica.
+     * Changes a property of the factory.
      *
-     * @param name el nombre de la propiedad
-     * @param value el valor
-     * @throws IllegalArgumentException si la propiedad no se conoce
+     * @param name the name of the property
+     * @param value the value
+     * @throws IllegalArgumentException if the property is not known
      */
     public abstract void setProperty(String name, Object value) throws IllegalArgumentException;
 
     /**
-     * El valor de una propiedad.
+     * The value of a property.
      *
-     * @param name el nombre de la propiedad
-     * @return el valor
-     * @throws IllegalArgumentException si la propiedad no se conoce
+     * @param name the name of the property
+     * @return the value
+     * @throws IllegalArgumentException if the property is not known
      */
     public abstract Object getProperty(String name) throws IllegalArgumentException;
 
     /**
-     * Si la fabrica conoce una propiedad.
+     * Whether the factory knows a property.
      *
-     * @param name el nombre de la propiedad
-     * @return true si la conoce
+     * @param name the name of the property
+     * @return true if it knows it
      */
     public abstract boolean isPropertySupported(String name);
 }

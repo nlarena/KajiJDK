@@ -3,28 +3,28 @@ package javax.imageio.spi;
 import java.util.Locale;
 
 /**
- * KajiLibrary's javax.imageio.spi.IIOServiceProvider -- la base de todos los proveedores de imagenes.
+ * KajiLibrary's javax.imageio.spi.IIOServiceProvider -- the base of all image providers.
  *
- * <p>Lo que comparten los seis tipos de proveedor: quien lo hizo, que version, y una descripcion
- * traducible.
+ * <p>What all the provider kinds share: who made it, which version, and a localizable
+ * description.
  *
- * <p>Implementa {@link RegisterableService} con los dos metodos vacios, asi que una subclase que no
- * necesite enterarse de nada no tiene que escribirlos.
+ * <p>It implements {@link RegisterableService} with both methods empty, so a subclass that does not
+ * need to be told anything does not have to write them.
  *
- * <p>El constructor sin argumentos existe para los proveedores que se cargan por
- * {@link java.util.ServiceLoader}, que exige uno publico sin parametros. Deja los dos campos en null,
- * y la subclase los tiene que llenar antes de que alguien los lea.
+ * <p>The no-argument constructor exists for providers loaded by {@link java.util.ServiceLoader},
+ * which requires a public one without parameters. It leaves both fields null, and the subclass has
+ * to fill them in before anyone reads them.
  */
 public abstract class IIOServiceProvider implements RegisterableService {
 
-    /** Quien lo hizo. */
+    /** Who made it. */
     protected String vendorName;
 
-    /** Que version. */
+    /** Which version. */
     protected String version;
 
     /**
-     * @throws IllegalArgumentException si alguno de los dos es null
+     * @throws IllegalArgumentException if either of the two is null
      */
     public IIOServiceProvider(String vendorName, String version) {
         if (vendorName == null) {
@@ -37,32 +37,32 @@ public abstract class IIOServiceProvider implements RegisterableService {
         this.version = version;
     }
 
-    /** El que exige el cargador de servicios. Ver la nota de la clase. */
+    /** The one the service loader requires. See the class note. */
     public IIOServiceProvider() {
     }
 
-    /** No hace nada; una subclase que necesite enterarse lo redefine. */
+    /** Does nothing; a subclass that needs to be told redefines it. */
     public void onRegistration(ServiceRegistry registry, Class<?> category) {
     }
 
-    /** No hace nada. */
+    /** Does nothing. */
     public void onDeregistration(ServiceRegistry registry, Class<?> category) {
     }
 
-    /** Quien lo hizo. */
+    /** Who made it. */
     public String getVendorName() {
         return this.vendorName;
     }
 
-    /** Que version. */
+    /** Which version. */
     public String getVersion() {
         return this.version;
     }
 
     /**
-     * Que hace este proveedor, en palabras.
+     * What this provider does, in words.
      *
-     * @param locale en que idioma, o null para el del sistema
+     * @param locale in which locale, or null for the system's
      */
     public abstract String getDescription(Locale locale);
 }

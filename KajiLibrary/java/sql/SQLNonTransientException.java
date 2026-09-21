@@ -1,12 +1,12 @@
 package java.sql;
 
 /**
- * KajiLibrary's java.sql.SQLNonTransientException -- fallo que **no** se arregla reintentando.
+ * KajiLibrary's java.sql.SQLNonTransientException -- a failure that retrying does **not** fix.
  *
- * <p>La division entre esta y `SQLTransientException` es lo unico que aportan: le dicen a quien
- * atrapa si tiene sentido volver a intentar. Un error de sintaxis no mejora por reintentarse; un
- * bloqueo momentaneo si. Sin esta distincion, cada capa de reintento tendria que mirar codigos de
- * proveedor para decidir.
+ * <p>The split between this one and `SQLTransientException` is all they contribute: they tell
+ * whoever catches whether it makes sense to try again. A syntax error does not improve by retrying;
+ * a momentary lock does. Without this distinction, every retry layer would have to look at vendor
+ * codes to decide.
  */
 public class SQLNonTransientException extends SQLException {
 

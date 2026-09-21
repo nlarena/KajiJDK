@@ -5,18 +5,18 @@ import javax.swing.text.BadLocationException;
 import javax.swing.text.Document;
 
 /**
- * Un campo que muestra un caracter de eco en vez de lo que se escribe.
+ * A field that shows an echo character instead of what is typed.
  *
- * <h2>Que protege y que no</h2>
+ * <h2>What it protects and what it does not</h2>
  *
- * <p>Protege contra quien mira la pantalla, no contra el programa: el texto esta entero en el
- * documento. Lo que si hace esta clase es <strong>quitar los caminos comodos</strong> hacia el:
- * {@link #cut} y {@link #copy} no copian nada, y {@link #getText} esta desaconsejado en favor de
- * {@link #getPassword}, que devuelve un arreglo de caracteres.
+ * <p>It protects against whoever looks at the screen, not against the program: the text is whole
+ * in the document. What this class does do is <strong>remove the comfortable paths</strong> to
+ * it: {@link #cut} and {@link #copy} copy nothing, and {@link #getText} is discouraged in favour
+ * of {@link #getPassword}, which returns an array of characters.
  *
- * <p>La diferencia entre los dos no es cosmetica. Un {@code String} vive en memoria hasta que el
- * recolector lo levante y no se puede borrar; un arreglo se puede llenar de ceros apenas se usa.
- * Es toda la razon de que {@code getPassword} exista.
+ * <p>The difference between the two is not cosmetic. A {@code String} lives in memory until the
+ * collector picks it up and cannot be erased; an array can be filled with zeros as soon as it is
+ * used. It is the whole reason {@code getPassword} exists.
  */
 public class JPasswordField extends JTextField {
 
@@ -25,7 +25,7 @@ public class JPasswordField extends JTextField {
     private char echoChar;
     private boolean echoCharSet = false;
 
-    /** Un campo vacio con el eco por omision. */
+    /** An empty field with the default echo. */
     public JPasswordField() {
         this(null, null, 0);
     }
@@ -62,7 +62,9 @@ public class JPasswordField extends JTextField {
         return echoChar;
     }
 
-    /** Cambia el caracter de eco; cero lo apaga y el campo se ve como uno comun. */
+    /**
+     * It changes the echo character; zero switches it off and the field looks like an ordinary one.
+     */
     public void setEchoChar(char c) {
         echoChar = c;
         echoCharSet = true;
@@ -74,23 +76,23 @@ public class JPasswordField extends JTextField {
         return echoChar != 0;
     }
 
-    /** No hace nada: ver la nota de la clase. */
+    /** It does nothing: see the class note. */
     public void cut() {
         java.awt.Toolkit.getDefaultToolkit().beep();
     }
 
-    /** No hace nada: ver la nota de la clase. */
+    /** It does nothing: see the class note. */
     public void copy() {
         java.awt.Toolkit.getDefaultToolkit().beep();
     }
 
-    /** @deprecated es {@link #getPassword}; ver la nota de la clase. */
+    /** @deprecated it is {@link #getPassword}; see the class note. */
     @Deprecated
     public String getText() {
         return super.getText();
     }
 
-    /** @deprecated es {@link #getPassword}. */
+    /** @deprecated it is {@link #getPassword}. */
     @Deprecated
     public String getText(int offs, int len) throws BadLocationException {
         return super.getText(offs, len);
@@ -100,7 +102,7 @@ public class JPasswordField extends JTextField {
         super.setText(t);
     }
 
-    /** La contrasena en un arreglo que el llamador puede borrar; ver la nota de la clase. */
+    /** The password in an array the caller may erase; see the class note. */
     public char[] getPassword() {
         Document doc = getDocument();
         javax.swing.text.Segment txt = new javax.swing.text.Segment();
@@ -118,7 +120,7 @@ public class JPasswordField extends JTextField {
         return super.paramString() + ",echoChar=" + echoChar;
     }
 
-    /** El eco no se toma de la tabla de un aspecto si el usuario lo puso. */
+    /** The echo is not taken from a look and feel's table if the user set it. */
     boolean customSetUIProperty(String propertyName, Object value) {
         if ("echoChar".equals(propertyName)) {
             if (!echoCharSet) {
@@ -130,7 +132,7 @@ public class JPasswordField extends JTextField {
         return false;
     }
 
-    /** Sin contexto de accesibilidad: no hay tecnologia asistiva en esta VM. */
+    /** With no accessibility context: there is no assistive technology on this VM. */
     public AccessibleContext getAccessibleContext() {
         return null;
     }

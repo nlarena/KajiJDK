@@ -3,24 +3,25 @@ package javax.swing.plaf;
 import javax.swing.JComboBox;
 
 /**
- * El aspecto de una {@link JComboBox}.
+ * A {@link JComboBox}'s look and feel.
  *
- * <h2>Solo lo del desplegable</h2>
+ * <h2>Only the drop-down part</h2>
  *
- * <p>Los tres metodos son sobre la parte que la lista no puede manejar sola: la ventanita que se
- * abre. Abrirla y cerrarla es del aspecto porque depende de si se dibuja adentro de la ventana o en
- * una propia, y eso lo decide el aspecto segun el tamano y lo que haya alrededor.
+ * <p>The three methods are about the part the list cannot handle on its own: the little window
+ * that opens. Opening and closing it belongs to the look and feel because it depends on whether
+ * it is drawn inside the window or in one of its own, and that is decided by the look and feel
+ * according to the size and what is around.
  */
 public abstract class ComboBoxUI extends ComponentUI {
 
     protected ComboBoxUI() {
     }
 
-    /** Abre o cierra el desplegable. */
+    /** Opens or closes the drop-down. */
     public abstract void setPopupVisible(JComboBox<?> c, boolean v);
 
     public abstract boolean isPopupVisible(JComboBox<?> c);
 
-    /** Si la lista puede recibir el foco con el tabulador. */
+    /** Whether the list can take the focus with the tab key. */
     public abstract boolean isFocusTraversable(JComboBox<?> c);
 }

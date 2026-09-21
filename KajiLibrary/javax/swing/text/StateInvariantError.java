@@ -1,14 +1,15 @@
 package javax.swing.text;
 
 /**
- * Un {@link Error} de invariante rota: el documento quedaria en un estado imposible.
+ * An {@link Error} of a broken invariant: the document would be left in an impossible state.
  *
- * <p>Es un error y no una excepcion a proposito. No se lanza por lo que hizo el usuario —eso es
- * {@link BadLocationException}— sino por lo que hizo el programa: cambiar atributos sin el candado
- * de escritura, o soltar un candado de lectura que nunca se tomo. Nada de eso se puede manejar; se
- * arregla en el codigo.
+ * <p>It is an error and not an exception on purpose. It is not thrown because of what the user
+ * did --that is {@link BadLocationException}-- but because of what the program did: changing
+ * attributes without the write lock, or releasing a read lock that was never taken. None of that
+ * can be handled; it is fixed in the code.
  *
- * <p>No es publica: el JDK tampoco la expone, y quien la vea la vera como {@code Error}.
+ * <p>It is not public: the JDK does not expose it either, and whoever sees it will see it as an
+ * {@code Error}.
  */
 class StateInvariantError extends Error {
 

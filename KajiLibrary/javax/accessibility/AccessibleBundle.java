@@ -3,44 +3,44 @@ package javax.accessibility;
 import java.util.Locale;
 
 /**
- * La base de las categorías con nombre traducible: roles, estados y relaciones.
+ * The base of the categories with a translatable name: roles, states and relations.
  *
- * <p>El truco de la clase es que las constantes son **objetos**, no cadenas ni enteros. Cada rol o
- * estado es una instancia única con una clave adentro, así que se comparan por identidad y se pueden
- * mostrar traducidos sin que el programa toque nunca el texto.
+ * <p>The trick of the class is that the constants are **objects**, not strings or integers. Each
+ * role or state is a unique instance with a key inside, so they are compared by identity and can be
+ * shown translated without the program ever touching the text.
  *
- * <p>Eso también es lo que permite que una aplicación invente sus propias categorías: hereda de acá,
- * declara su constante, y el resto del paquete la trata igual que a las de fábrica.
+ * <p>That is also what lets an application invent its own categories: it inherits from here,
+ * declares its constant, and the rest of the package treats it the same as the built-in ones.
  *
- * <p>Sin catálogo de traducciones, {@link #toDisplayString()} devuelve la clave. Es lo que hace el
- * JDK cuando no encuentra el paquete de recursos del idioma, así que no es un relleno: es la
- * respuesta por omisión, y una clave legible es mejor que una cadena vacía.
+ * <p>Without a catalogue of translations, {@link #toDisplayString()} returns the key. It is what
+ * the JDK does when it does not find the language's resource bundle, so it is not filler: it is the
+ * default answer, and a readable key is better than an empty string.
  */
 public abstract class AccessibleBundle {
 
-    /** La clave que identifica a esta categoría. */
+    /** The key that identifies this category. */
     protected String key;
 
-    /** Para las subclases. */
+    /** For subclasses. */
     public AccessibleBundle() {
     }
 
     /**
-     * El nombre para mostrar, buscado en ese catálogo y ese idioma.
+     * The display name, looked up in that catalogue and that language.
      *
-     * <p>Devuelve la clave: esta biblioteca no trae catálogos de traducción.
+     * <p>It returns the key: this library ships no translation catalogues.
      */
     protected String toDisplayString(String resourceBundleName, Locale locale) {
         return this.key;
     }
 
-    /** El nombre para mostrar en ese idioma. */
+    /** The display name in that language. */
     public String toDisplayString(Locale locale) {
         return this.toDisplayString("com.sun.accessibility.internal.resources.accessibility",
                 locale);
     }
 
-    /** El nombre para mostrar en el idioma por omisión. */
+    /** The display name in the default language. */
     public String toDisplayString() {
         return this.toDisplayString(Locale.getDefault());
     }

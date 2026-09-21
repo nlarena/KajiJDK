@@ -8,45 +8,45 @@ import org.xml.sax.SAXNotRecognizedException;
 import org.xml.sax.SAXNotSupportedException;
 
 /**
- * KajiLibrary's javax.xml.parsers.SAXParserFactory -- de donde salen los {@link SAXParser}.
+ * KajiLibrary's javax.xml.parsers.SAXParserFactory -- where the {@link SAXParser}s come from.
  *
- * <p>Misma idea y mismos seis {@code newInstance} que {@link DocumentBuilderFactory}, con el que
- * conviene leerla en paralelo: la busqueda por propiedad de sistema, servicio o implementacion de la
- * plataforma esta explicada alla y aca es identica, cambiando el nombre de la propiedad.
+ * <p>The same idea and the same six {@code newInstance}s as {@link DocumentBuilderFactory}, with
+ * which it is worth reading in parallel: the search by system property, service or platform
+ * implementation is explained there and here it is identical, changing the name of the property.
  *
- * <p>Lo que si es distinto es cuanto se puede configurar: aca no hay banderas de comentarios, de
- * espacio en blanco ni de CDATA. No es una omision -- son opciones sobre <b>que se guarda en el
- * arbol</b>, y SAX no arma ningun arbol. Lo que en DOM es una bandera, en SAX es simplemente un
- * metodo del manejador que uno no escribe.
+ * <p>What is different is how much can be configured: here there are no comment, whitespace or
+ * CDATA flags. It is not an omission -- they are options about <b>what is kept in the tree</b>, and
+ * SAX builds no tree. What in DOM is a flag, in SAX is simply a handler method one does not write.
  *
- * <h2>Por que {@code setFeature} lanza tres excepciones</h2>
+ * <h2>Why {@code setFeature} throws three exceptions</h2>
  *
- * <p>Son tres respuestas distintas y vale distinguirlas: {@link SAXNotRecognizedException} es "no se
- * que es eso", {@link SAXNotSupportedException} es "se que es pero no lo hago", y
- * {@link ParserConfigurationException} es "lo hago, pero no con el resto de lo que ya me pediste".
- * La ultima es la unica que se arregla cambiando otra cosa.
+ * <p>They are three different answers and it is worth telling them apart: {@link
+ * SAXNotRecognizedException} is "I do not know what that is", {@link SAXNotSupportedException} is
+ * "I know what it is but I do not do it", and {@link ParserConfigurationException} is "I do it, but
+ * not with the rest of what you already asked me". The last is the only one fixed by changing
+ * something else.
  *
  * <h2>A KajiLibrary subset</h2>
  *
- * <p>{@link #newDefaultInstance} lanza {@link FactoryConfigurationError}; ver la nota equivalente en
- * {@link DocumentBuilderFactory}.
+ * <p>{@link #newDefaultInstance} throws {@link FactoryConfigurationError}; see the equivalent note
+ * in {@link DocumentBuilderFactory}.
  */
 public abstract class SAXParserFactory {
 
-    /** La propiedad de sistema que nombra la fabrica. */
+    /** The system property that names the factory. */
     private static final String PROPERTY = "javax.xml.parsers.SAXParserFactory";
 
     private boolean namespaceAware = false;
     private boolean validating = false;
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected SAXParserFactory() {
     }
 
     /**
-     * La fabrica de la plataforma, ya puesta en {@code namespaceAware}.
+     * The platform's factory, already set to {@code namespaceAware}.
      *
-     * @throws FactoryConfigurationError siempre en KajiLibrary; ver la nota de la clase
+     * @throws FactoryConfigurationError always in KajiLibrary; see the class note
      */
     public static SAXParserFactory newDefaultNSInstance() {
         SAXParserFactory factory = newDefaultInstance();
@@ -54,14 +54,14 @@ public abstract class SAXParserFactory {
         return factory;
     }
 
-    /** Como {@link #newInstance()}, ya puesta en {@code namespaceAware}. */
+    /** Like {@link #newInstance()}, already set to {@code namespaceAware}. */
     public static SAXParserFactory newNSInstance() {
         SAXParserFactory factory = newInstance();
         factory.setNamespaceAware(true);
         return factory;
     }
 
-    /** Como {@link #newInstance(String, ClassLoader)}, ya puesta en {@code namespaceAware}. */
+    /** Like {@link #newInstance(String, ClassLoader)}, already set to {@code namespaceAware}. */
     public static SAXParserFactory newNSInstance(String factoryClassName,
                                                  ClassLoader classLoader) {
         SAXParserFactory factory = newInstance(factoryClassName, classLoader);
@@ -70,9 +70,9 @@ public abstract class SAXParserFactory {
     }
 
     /**
-     * La fabrica de la plataforma, sin mirar propiedades ni servicios.
+     * The platform's factory, without looking at properties or services.
      *
-     * @throws FactoryConfigurationError siempre en KajiLibrary; ver la nota de la clase
+     * @throws FactoryConfigurationError always in KajiLibrary; see the class note
      */
     public static SAXParserFactory newDefaultInstance() {
         throw new FactoryConfigurationError(
@@ -81,16 +81,16 @@ public abstract class SAXParserFactory {
     }
 
     /**
-     * La fabrica configurada, buscandola en orden.
+     * The configured factory, searched for in order.
      *
-     * @throws FactoryConfigurationError si no hay ninguna
+     * @throws FactoryConfigurationError if there is none
      */
     public static SAXParserFactory newInstance() {
         String configured = null;
         try {
             configured = System.getProperty(PROPERTY);
         } catch (SecurityException e) {
-            // Sin permiso para leerla: se sigue con los servicios.
+            // Without permission to read it: carry on with the services.
         }
         if (configured != null && configured.length() > 0) {
             return newInstance(configured, null);
@@ -104,10 +104,10 @@ public abstract class SAXParserFactory {
     }
 
     /**
-     * Esa fabrica y ninguna otra.
+     * That factory and no other.
      *
-     * @param classLoader con el que se carga; null significa el del contexto o el de esta clase
-     * @throws FactoryConfigurationError si no se puede construir
+     * @param classLoader the one it is loaded with; null means the context one or this class's
+     * @throws FactoryConfigurationError if it cannot be built
      */
     public static SAXParserFactory newInstance(String factoryClassName, ClassLoader classLoader) {
         if (factoryClassName == null) {
@@ -133,10 +133,10 @@ public abstract class SAXParserFactory {
     }
 
     /**
-     * Un analizador con la configuracion que tiene ahora la fabrica.
+     * A parser with the configuration the factory has now.
      *
-     * @throws ParserConfigurationException si esta implementacion no puede dar lo que se pidio
-     * @throws SAXException si el analizador de abajo falla al construirse
+     * @throws ParserConfigurationException if this implementation cannot provide what was asked
+     * @throws SAXException if the underlying parser fails while being built
      */
     public abstract SAXParser newSAXParser() throws ParserConfigurationException, SAXException;
 
@@ -145,7 +145,7 @@ public abstract class SAXParserFactory {
         this.namespaceAware = awareness;
     }
 
-    /** Si los analizadores validan contra la DTD del documento. */
+    /** Whether the parsers validate against the document's DTD. */
     public void setValidating(boolean validating) {
         this.validating = validating;
     }
@@ -161,21 +161,21 @@ public abstract class SAXParserFactory {
     }
 
     /**
-     * Una bandera de SAX o de la implementacion.
+     * A SAX or implementation flag.
      *
-     * <p>Ver la nota de la clase sobre las tres excepciones.
+     * <p>See the class note on the three exceptions.
      */
     public abstract void setFeature(String name, boolean value)
         throws ParserConfigurationException, SAXNotRecognizedException, SAXNotSupportedException;
 
-    /** El valor de una bandera. */
+    /** The value of a flag. */
     public abstract boolean getFeature(String name)
         throws ParserConfigurationException, SAXNotRecognizedException, SAXNotSupportedException;
 
     /**
-     * El esquema con el que validan los analizadores que salgan de aca, o null.
+     * The schema the parsers coming out of here validate with, or null.
      *
-     * @throws UnsupportedOperationException por omision
+     * @throws UnsupportedOperationException by default
      */
     public Schema getSchema() {
         throw new UnsupportedOperationException(
@@ -183,13 +183,12 @@ public abstract class SAXParserFactory {
     }
 
     /**
-     * Pone el esquema.
+     * Sets the schema.
      *
-     * <p>No mezclarlo con {@link #setValidating}; ver
-     * {@link DocumentBuilderFactory#setSchema}.
+     * <p>Do not mix it with {@link #setValidating}; see {@link DocumentBuilderFactory#setSchema}.
      *
-     * @param schema null lo quita
-     * @throws UnsupportedOperationException por omision
+     * @param schema null removes it
+     * @throws UnsupportedOperationException by default
      */
     public void setSchema(Schema schema) {
         throw new UnsupportedOperationException(
@@ -197,11 +196,12 @@ public abstract class SAXParserFactory {
     }
 
     /**
-     * Pide resolver XInclude.
+     * Asks for XInclude to be resolved.
      *
-     * <p>Pedirlo en false no hace nada; ver {@link DocumentBuilderFactory#setXIncludeAware}.
+     * <p>Asking for false does nothing; see {@link DocumentBuilderFactory#setXIncludeAware}.
      *
-     * @throws UnsupportedOperationException al pedir true en una implementacion que no lo soporta
+     * @throws UnsupportedOperationException when asking for true on an implementation that does not
+     *     support it
      */
     public void setXIncludeAware(boolean state) {
         if (state) {
@@ -211,9 +211,9 @@ public abstract class SAXParserFactory {
     }
 
     /**
-     * Si resuelve XInclude.
+     * Whether it resolves XInclude.
      *
-     * @throws UnsupportedOperationException por omision
+     * @throws UnsupportedOperationException by default
      */
     public boolean isXIncludeAware() {
         throw new UnsupportedOperationException(

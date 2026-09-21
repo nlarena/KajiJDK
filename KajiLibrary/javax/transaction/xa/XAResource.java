@@ -1,84 +1,85 @@
 package javax.transaction.xa;
 
 /**
- * KajiLibrary's javax.transaction.xa.XAResource -- un recurso que sabe participar de una transaccion
- * que abarca a otros.
+ * KajiLibrary's javax.transaction.xa.XAResource -- a resource that knows how to take part in a
+ * transaction that spans others.
  *
- * <p>Es el **compromiso en dos fases** puesto en una interfaz: primero se le pregunta a cada
- * participante si puede confirmar ({@link #prepare}), y solo si todos dicen que si se les ordena
- * hacerlo ({@link #commit}). Esa separacion es lo que permite que dos bases distintas se confirmen
- * como si fueran una: entre el "puedo" y el "hacelo" ya no queda nada que pueda fallar del lado del
- * recurso.
+ * <p>It is the **two-phase commit** put into an interface: first each participant is asked whether
+ * it can commit ({@link #prepare}), and only if they all say yes are they ordered to do it
+ * ({@link #commit}). That separation is what allows two different databases to commit as if they
+ * were one: between the "I can" and the "do it" there is nothing left that can fail on the
+ * resource's side.
  *
- * <p>El precio esta en {@link XAException#XA_HEURMIX}: si un participante se cansa de esperar entre
- * las dos fases y decide solo, la atomicidad se rompe y ningun protocolo la recupera.
+ * <p>The price is in {@link XAException#XA_HEURMIX}: if a participant tires of waiting between the
+ * two phases and decides on its own, the atomicity breaks and no protocol recovers it.
  */
 public interface XAResource {
 
-    /** La rama se puede confirmar. */
+    /** The branch can be committed. */
     int XA_OK = 0;
 
-    /** La rama era de solo lectura: ya esta, no hace falta segunda fase. */
+    /** The branch was read-only: that is that, no second phase is needed. */
     int XA_RDONLY = 3;
 
-    /** Sin banderas. */
+    /** No flags. */
     int TMNOFLAGS = 0;
 
-    /** Unirse a una rama que ya existe. */
+    /** To join a branch that exists already. */
     int TMJOIN = 2097152;
 
-    /** Terminar de recorrer las transacciones en duda. */
+    /** To finish walking the in-doubt transactions. */
     int TMENDRSCAN = 8388608;
 
-    /** El trabajo de la rama fallo. */
+    /** The work of the branch failed. */
     int TMFAIL = 536870912;
 
-    /** Confirmar en una sola fase: se puede solo si el recurso es el unico participante. */
+    /** To commit in a single phase: possible only if the resource is the only participant. */
     int TMONEPHASE = 1073741824;
 
-    /** Retomar una rama suspendida. */
+    /** To resume a suspended branch. */
     int TMRESUME = 134217728;
 
-    /** Empezar a recorrer las transacciones en duda. */
+    /** To start walking the in-doubt transactions. */
     int TMSTARTRSCAN = 16777216;
 
-    /** El trabajo de la rama termino bien. */
+    /** The work of the branch finished well. */
     int TMSUCCESS = 67108864;
 
-    /** Suspender la rama sin terminarla. */
+    /** To suspend the branch without ending it. */
     int TMSUSPEND = 33554432;
 
-    /** Empieza el trabajo de esa rama. */
+    /** The work of that branch starts. */
     void start(Xid xid, int flags) throws XAException;
 
-    /** Termina el trabajo de esa rama. */
+    /** The work of that branch ends. */
     void end(Xid xid, int flags) throws XAException;
 
     /**
-     * Primera fase: si el recurso puede confirmar.
+     * First phase: whether the resource can commit.
      *
-     * @return {@link #XA_OK}, o {@link #XA_RDONLY} si no habia nada que escribir
+     * @return {@link #XA_OK}, or {@link #XA_RDONLY} if there was nothing to write
      */
     int prepare(Xid xid) throws XAException;
 
-    /** Segunda fase: confirmar. `onePhase` saltea la primera, valido solo si no hay otros. */
+    /** Second phase: commit. `onePhase` skips the first, valid only if there are no others. */
     void commit(Xid xid, boolean onePhase) throws XAException;
 
-    /** Deshacer la rama. */
+    /** To roll the branch back. */
     void rollback(Xid xid) throws XAException;
 
-    /** Olvidar una rama que se decidio por cuenta propia. */
+    /** To forget a branch that decided on its own. */
     void forget(Xid xid) throws XAException;
 
     /**
-     * Las transacciones que quedaron **en duda**.
+     * The transactions that were left **in doubt**.
      *
-     * <p>Es como se sale de una caida entre las dos fases: al reiniciar, el coordinador pregunta que
-     * quedo preparado sin resolver y lo termina.
+     * <p>It is how one gets out of a crash between the two phases: on restarting, the coordinator asks
+     * what was left prepared and unresolved and finishes it.
      */
     Xid[] recover(int flag) throws XAException;
 
-    /** Si este recurso y el otro son el mismo gestor -- decide si comparten rama. */
+    /** Whether this resource and the other are the same manager -- it decides whether they share a
+     * branch. */
     boolean isSameRM(XAResource xares) throws XAException;
 
     int getTransactionTimeout() throws XAException;

@@ -1,68 +1,67 @@
 package javax.xml.stream;
 
 /**
- * KajiLibrary's javax.xml.stream.XMLStreamException -- lo que se lanza cuando la lectura o la
- * escritura de XML no puede seguir.
+ * KajiLibrary's javax.xml.stream.XMLStreamException -- what is thrown when reading or writing XML
+ * cannot go on.
  *
- * <p>Es una excepcion **chequeada**, y eso esta puesto a proposito: casi todo metodo de
- * {@link XMLStreamReader} y {@link XMLStreamWriter} la declara, asi que el compilador obliga a
- * decidir que se hace con un documento mal formado. La alternativa --una no chequeada-- convertiria
- * el caso mas comun de todos (entrada invalida) en algo que se descubre en produccion.
+ * <p>It is a **checked** exception, and that is on purpose: almost every method of {@link
+ * XMLStreamReader} and {@link XMLStreamWriter} declares it, so the compiler forces a decision about
+ * what to do with a malformed document. The alternative --an unchecked one-- would turn the most
+ * common case of all (invalid input) into something discovered in production.
  *
- * <h2>Dos campos protegidos que hoy no se escribirian</h2>
+ * <h2>Two protected fields that would not be written today</h2>
  *
- * <p>{@link #nested} y {@link #location} son {@code protected} porque la clase es de 2004 y
- * {@code Throwable} recien habia estrenado las causas encadenadas. Hoy {@link #nested} seria
- * redundante con {@link Throwable#getCause()} --y de hecho los constructores que la reciben la
- * ponen en los dos lados-- pero se mantiene tal cual porque hay subclases afuera que la leen.
+ * <p>{@link #nested} and {@link #location} are {@code protected} because the class is from 2004 and
+ * {@code Throwable} had only just gained chained causes. Today {@link #nested} would be redundant
+ * with {@link Throwable#getCause()} --and in fact the constructors that receive it put it on both
+ * sides-- but it is kept as is because there are subclasses outside that read it.
  *
- * <p>La asimetria que si sorprende y que esta reproducida: el constructor de
- * {@linkplain #XMLStreamException(String, Location) mensaje mas ubicacion} deja
- * {@code getCause()} en null, mientras que el de
- * {@linkplain #XMLStreamException(String, Location, Throwable) mensaje, ubicacion y causa} la pone.
- * No es un descuido de aca sino la conducta del contrato.
+ * <p>The asymmetry that does surprise and that is reproduced: the {@linkplain
+ * #XMLStreamException(String, Location) message plus location} constructor leaves {@code
+ * getCause()} null, while the {@linkplain #XMLStreamException(String, Location, Throwable) message,
+ * location and cause} one sets it. It is not an oversight here but the contract's behaviour.
  *
- * <h2>El mensaje se arma, no se guarda</h2>
+ * <h2>The message is built, not kept</h2>
  *
- * <p>Los dos constructores que reciben una {@link Location} no guardan el mensaje que se les dio:
- * lo envuelven en {@code "ParseError at [row,col]:[L,C]\nMessage: ..."} antes de pasarlo a
- * {@code super}. Es feo y sale en dos lineas, pero es el texto que los usuarios de StAX ya conocen y
- * que hay herramientas que parsean, asi que se copia al caracter.
+ * <p>The two constructors that receive a {@link Location} do not keep the message they were given:
+ * they wrap it in {@code "ParseError at [row,col]:[L,C]\nMessage: ..."} before passing it to {@code
+ * super}. It is ugly and comes out on two lines, but it is the text StAX users already know and
+ * that tools parse, so it is copied to the character.
  */
 public class XMLStreamException extends Exception {
 
     /**
-     * La excepcion de mas adentro, si la hay.
+     * The inner exception, if there is one.
      *
-     * <p>Duplica {@link Throwable#getCause()} cuando el constructor recibio las dos cosas; ver el
-     * encabezado.
+     * <p>It duplicates {@link Throwable#getCause()} when the constructor received both; see the
+     * header.
      */
     protected Throwable nested;
 
-    /** Donde paso, o null si quien lanzo no lo sabia. */
+    /** Where it happened, or null if whoever threw did not know. */
     protected Location location;
 
-    /** Sin mensaje, sin causa y sin ubicacion. */
+    /** Without message, cause or location. */
     public XMLStreamException() {
         super();
     }
 
     /**
-     * Con mensaje solo.
+     * With a message only.
      *
-     * @param msg el mensaje
+     * @param msg the message
      */
     public XMLStreamException(String msg) {
         super(msg);
     }
 
     /**
-     * Envolviendo otra excepcion.
+     * Wrapping another exception.
      *
-     * <p>El mensaje resultante es el {@code toString()} de la envuelta, que es lo que hace
-     * {@code Throwable(Throwable)}.
+     * <p>The resulting message is the wrapped one's {@code toString()}, which is what
+     * {@code Throwable(Throwable)} does.
      *
-     * @param th la excepcion de mas adentro
+     * @param th the inner exception
      */
     public XMLStreamException(Throwable th) {
         super(th);
@@ -70,10 +69,10 @@ public class XMLStreamException extends Exception {
     }
 
     /**
-     * Con mensaje propio y causa.
+     * With its own message and a cause.
      *
-     * @param msg el mensaje
-     * @param th la excepcion de mas adentro
+     * @param msg the message
+     * @param th the inner exception
      */
     public XMLStreamException(String msg, Throwable th) {
         super(msg, th);
@@ -81,11 +80,11 @@ public class XMLStreamException extends Exception {
     }
 
     /**
-     * Con mensaje, ubicacion y causa.
+     * With message, location and cause.
      *
-     * @param msg el mensaje, que se envuelve en el formato {@code ParseError at [row,col]}
-     * @param location donde paso
-     * @param th la excepcion de mas adentro
+     * @param msg the message, which is wrapped in the {@code ParseError at [row,col]} format
+     * @param location where it happened
+     * @param th the inner exception
      */
     public XMLStreamException(String msg, Location location, Throwable th) {
         super("ParseError at [row,col]:[" + location.getLineNumber() + ","
@@ -95,12 +94,12 @@ public class XMLStreamException extends Exception {
     }
 
     /**
-     * Con mensaje y ubicacion.
+     * With message and location.
      *
-     * <p>Deja {@code getCause()} y {@link #getNestedException()} en null; ver el encabezado.
+     * <p>It leaves {@code getCause()} and {@link #getNestedException()} null; see the header.
      *
-     * @param msg el mensaje, que se envuelve en el formato {@code ParseError at [row,col]}
-     * @param location donde paso
+     * @param msg the message, which is wrapped in the {@code ParseError at [row,col]} format
+     * @param location where it happened
      */
     public XMLStreamException(String msg, Location location) {
         super("ParseError at [row,col]:[" + location.getLineNumber() + ","
@@ -109,18 +108,18 @@ public class XMLStreamException extends Exception {
     }
 
     /**
-     * La excepcion envuelta, o null.
+     * The wrapped exception, or null.
      *
-     * @return la de mas adentro
+     * @return the inner one
      */
     public Throwable getNestedException() {
         return nested;
     }
 
     /**
-     * Donde paso, o null si no se sabe.
+     * Where it happened, or null if not known.
      *
-     * @return la ubicacion
+     * @return the location
      */
     public Location getLocation() {
         return location;

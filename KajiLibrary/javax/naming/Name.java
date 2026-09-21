@@ -3,31 +3,32 @@ package javax.naming;
 import java.util.Enumeration;
 
 /**
- * Un nombre como **secuencia ordenada de componentes**, no como cadena.
+ * A name as an **ordered sequence of components**, not as a string.
  *
- * <p>Esa es toda la idea del tipo. `"a/b/c"` es una cadena; `{"a","b","c"}` es un nombre. La
- * conversion entre las dos formas depende de una sintaxis --que separa, que cita, que escapa-- y
- * es justamente lo que cambia de un espacio de nombres a otro: LDAP separa con coma y de derecha
- * a izquierda, un sistema de archivos con barra y de izquierda a derecha, y un espacio plano no
- * separa nada. Manipular componentes en vez de cadenas es lo que permite escribir codigo que
- * atraviesa espacios de nombres sin saber la sintaxis de ninguno.
+ * <p>That is the whole idea of the type. `"a/b/c"` is a string; `{"a","b","c"}` is a name.
+ * Converting between the two forms depends on a syntax --what separates, what quotes, what
+ * escapes-- and that is exactly what changes from one namespace to another: LDAP separates with a
+ * comma and right to left, a file system with a slash and left to right, and a flat namespace
+ * separates nothing. Handling components instead of strings is what allows writing code that
+ * crosses namespaces without knowing the syntax of any of them.
  *
- * <p>Las dos implementaciones del paquete son `CompositeName` --sintaxis fija, la que sirve para
- * atravesar varios espacios de nombres-- y `CompoundName` --sintaxis dada por un `Properties`,
- * la que representa un nombre **dentro** de un espacio--.
+ * <p>The package's two implementations are `CompositeName` --fixed syntax, the one for crossing
+ * several namespaces-- and `CompoundName` --syntax given by a `Properties`, the one representing a
+ * name **within** a namespace.
  *
- * <h2>Dos cosas que sorprenden y son del contrato</h2>
+ * <h2>Two things that surprise and are part of the contract</h2>
  *
- * <p><strong>Es mutable.</strong> `add`, `addAll` y `remove` cambian el nombre en el lugar y
- * devuelven `this` para poder encadenar. Por eso todo el resto del paquete clona antes de guardar
- * un `Name` (ver los setters de `NamingException`).
+ * <p><strong>It is mutable.</strong> `add`, `addAll` and `remove` change the name in place and
+ * return `this` for chaining. That is why the rest of the package clones before storing a `Name`
+ * (see `NamingException`'s setters).
  *
- * <p><strong>`compareTo` toma `Object` y no `Name`.</strong> La interfaz es `Comparable<Object>`,
- * que hoy se escribiria `Comparable<Name>`. Quedo asi de la epoca previa a los genericos y no se
- * puede arreglar sin romper a todo el que ya implemento la interfaz. Lo mismo con `remove`, que
- * devuelve `Object` --siempre es un `String`-- y con `clone`, que devuelve `Object`.
+ * <p><strong>`compareTo` takes `Object` and not `Name`.</strong> The interface is
+ * `Comparable<Object>`, which today would be written `Comparable<Name>`. It stayed that way from
+ * before generics and cannot be fixed without breaking everyone who already implemented the
+ * interface. The same goes for `remove`, which returns `Object` --always a `String`--, and for
+ * `clone`, which returns `Object`.
  *
- * <p>La interfaz es `Serializable`: la forma serial la define cada implementacion.
+ * <p>The interface is `Serializable`: each implementation defines the serial form.
  */
 public interface Name extends Cloneable, java.io.Serializable, Comparable<Object> {
 
@@ -36,10 +37,10 @@ public interface Name extends Cloneable, java.io.Serializable, Comparable<Object
     Object clone();
 
     /**
-     * Orden entre nombres del **mismo** tipo; tira `ClassCastException` si no lo son.
+     * Order between names of the **same** type; throws `ClassCastException` if they are not.
      *
-     * <p>El orden es lexicografico por componentes, y lo normaliza la sintaxis **de este** nombre
-     * --no la del otro--: si esta sintaxis ignora mayusculas, la comparacion tambien.
+     * <p>The order is lexicographic by components, normalized by **this** name's syntax --not the
+     * other's--: if this syntax ignores case, so does the comparison.
      */
     int compareTo(Object obj);
 
@@ -47,31 +48,34 @@ public interface Name extends Cloneable, java.io.Serializable, Comparable<Object
 
     boolean isEmpty();
 
-    /** Los componentes en orden, del cero al ultimo. Es `Enumeration` por la edad de la API. */
+    /**
+     * The components in order, from zero to the last. It is an `Enumeration` because of the API's
+     * age.
+     */
     Enumeration<String> getAll();
 
     String get(int posn);
 
-    /** Los primeros `posn` componentes, como un nombre nuevo. `posn == size()` da una copia entera. */
+    /** The first `posn` components, as a new name. `posn == size()` gives a full copy. */
     Name getPrefix(int posn);
 
-    /** Del `posn` al final, como un nombre nuevo. `posn == size()` da el nombre vacio. */
+    /** From `posn` to the end, as a new name. `posn == size()` gives the empty name. */
     Name getSuffix(int posn);
 
     boolean startsWith(Name n);
 
     boolean endsWith(Name n);
 
-    /** Pega `suffix` al final y devuelve `this`, ya modificado. */
+    /** Appends `suffix` at the end and returns `this`, already modified. */
     Name addAll(Name suffix) throws InvalidNameException;
 
-    /** Inserta los componentes de `n` a partir de `posn` y devuelve `this`. */
+    /** Inserts the components of `n` starting at `posn` and returns `this`. */
     Name addAll(int posn, Name n) throws InvalidNameException;
 
     Name add(String comp) throws InvalidNameException;
 
     Name add(int posn, String comp) throws InvalidNameException;
 
-    /** Saca el componente `posn` y lo devuelve; siempre es un `String`. */
+    /** Removes component `posn` and returns it; it is always a `String`. */
     Object remove(int posn) throws InvalidNameException;
 }

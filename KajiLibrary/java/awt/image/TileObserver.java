@@ -1,17 +1,17 @@
 package java.awt.image;
 
 /**
- * Quien quiere enterarse de que una parte de una imagen por mosaicos se puso o se dejó de escribir.
+ * Whoever wants to hear that a part of a tiled image has been taken for writing or released.
  *
- * <p>Sirve para saber cuándo un mosaico terminó de modificarse y se puede volcar a disco o a
- * pantalla sin agarrarlo a medio escribir.
+ * <p>It serves for knowing when a tile has finished being modified and can be dumped to disk or to
+ * the screen without catching it half written.
  */
 public interface TileObserver {
 
     /**
-     * Avisa que un mosaico se tomó para escribir, o se soltó.
+     * Tells that a tile was taken for writing, or released.
      *
-     * @param willBeWritable `true` si se acaba de tomar, `false` si se soltó
+     * @param willBeWritable `true` if it has just been taken, `false` if it was released
      */
     void tileUpdate(WritableRenderedImage source, int tileX, int tileY, boolean willBeWritable);
 }

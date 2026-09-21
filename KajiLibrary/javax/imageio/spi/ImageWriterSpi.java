@@ -7,47 +7,47 @@ import javax.imageio.ImageWriter;
 import javax.imageio.stream.ImageOutputStream;
 
 /**
- * KajiLibrary's javax.imageio.spi.ImageWriterSpi -- el proveedor de un escritor de imagenes.
+ * KajiLibrary's javax.imageio.spi.ImageWriterSpi -- the provider of an image writer.
  *
- * <p>El espejo de {@link ImageReaderSpi}. La diferencia esta en la pregunta que responde: aquel
- * pregunta si <b>reconoce</b> lo que hay en un flujo, este si <b>puede escribir</b> cierto tipo de
- * imagen.
+ * <p>The mirror of {@link ImageReaderSpi}. The difference is in the question it answers: that one
+ * asks whether it <b>recognizes</b> what is in a stream, this one whether it <b>can write</b> a
+ * certain type of image.
  *
- * <p>Y esa pregunta no necesita tocar el flujo, asi que no tiene la regla de rebobinar.
+ * <p>And that question does not need to touch the stream, so it has no rewind rule.
  *
- * <h2>{@link #canEncodeImage} es la parte importante</h2>
+ * <h2>{@link #canEncodeImage} is the important part</h2>
  *
- * <p>Un formato acepta unos tipos de pixel y no otros: un GIF no guarda color verdadero, un JPEG
- * clasico no guarda transparencia. Preguntar antes es lo que evita escribir un archivo que pierde la
- * mitad de la imagen en silencio.
+ * <p>A format accepts some pixel types and not others: a GIF does not store true colour, a classic
+ * JPEG does not store transparency. Asking beforehand is what avoids writing a file that silently
+ * loses half the image.
  *
- * <p>{@link #isFormatLossless} dice si el formato conserva todo. Por omision <b>true</b>, que es el
- * valor conservador: un escritor con perdida tiene que decirlo.
+ * <p>{@link #isFormatLossless} says whether the format keeps everything. By default <b>true</b>,
+ * which is the conservative value: a lossy writer has to say so.
  */
 public abstract class ImageWriterSpi extends ImageReaderWriterSpi {
 
     /**
-     * El tipo de salida que casi todos aceptan.
+     * The output type almost all of them accept.
      *
-     * <p>Un arreglo de un elemento con {@code ImageOutputStream.class}; ver
-     * {@link ImageReaderSpi#STANDARD_INPUT_TYPE}.
+     * <p>A one-element array with {@code ImageOutputStream.class}; see
+     * {@link ImageReaderSpi#STANDARD_INPUT_TYPE} (the JDK deprecates this one too).
      */
     public static final Class<?>[] STANDARD_OUTPUT_TYPE = { ImageOutputStream.class };
 
-    /** Que tipos de salida acepta. */
+    /** Which output types it accepts. */
     protected Class<?>[] outputTypes = null;
 
-    /** Los lectores del mismo formato. */
+    /** The readers of the same format. */
     protected String[] readerSpiNames = null;
 
-    /** El que exige el cargador de servicios. */
+    /** The one the service loader requires. */
     protected ImageWriterSpi() {
     }
 
     /**
-     * El constructor completo.
+     * The full constructor.
      *
-     * @throws IllegalArgumentException si los tipos de salida faltan o estan vacios
+     * @throws IllegalArgumentException if the output types are missing or empty
      */
     public ImageWriterSpi(String vendorName, String version, String[] names, String[] suffixes,
                           String[] MIMETypes, String writerClassName, Class<?>[] outputTypes,
@@ -80,23 +80,23 @@ public abstract class ImageWriterSpi extends ImageReaderWriterSpi {
         }
     }
 
-    /** Si el formato conserva todo. Ver la nota de la clase: por omision true. */
+    /** Whether the format keeps everything. See the class note: true by default. */
     public boolean isFormatLossless() {
         return true;
     }
 
-    /** Que tipos de salida acepta. Una copia. */
+    /** Which output types it accepts. A copy. */
     public Class<?>[] getOutputTypes() {
         return ImageReaderSpi.copyClasses(this.outputTypes);
     }
 
-    /** Si puede escribir imagenes de ese tipo. Ver la nota de la clase. */
+    /** Whether it can write images of that type. See the class note. */
     public abstract boolean canEncodeImage(ImageTypeSpecifier type);
 
     /**
-     * Idem, preguntando por una imagen concreta.
+     * Same, asking about a concrete image.
      *
-     * @throws IllegalArgumentException si es null
+     * @throws IllegalArgumentException if it is null
      */
     public boolean canEncodeImage(RenderedImage im) {
         if (im == null) {
@@ -106,22 +106,22 @@ public abstract class ImageWriterSpi extends ImageReaderWriterSpi {
     }
 
     /**
-     * Un escritor nuevo.
+     * A new writer.
      *
-     * @throws IOException si no se pudo crear
+     * @throws IOException if it could not be created
      */
     public ImageWriter createWriterInstance() throws IOException {
         return createWriterInstance(null);
     }
 
     /**
-     * Idem, con configuracion propia del complemento.
+     * Same, with the plug-in's own configuration.
      *
-     * @throws IOException si no se pudo crear
+     * @throws IOException if it could not be created
      */
     public abstract ImageWriter createWriterInstance(Object extension) throws IOException;
 
-    /** Si ese escritor lo creo este proveedor. Ver {@link ImageReaderSpi#isOwnReader}. */
+    /** Whether this provider created that writer. See {@link ImageReaderSpi#isOwnReader}. */
     public boolean isOwnWriter(ImageWriter writer) {
         if (writer == null) {
             throw new IllegalArgumentException("writer == null!");
@@ -130,7 +130,7 @@ public abstract class ImageWriterSpi extends ImageReaderWriterSpi {
         return name.equals(this.pluginClassName);
     }
 
-    /** Los lectores del mismo formato, o null. */
+    /** The readers of the same format, or null. */
     public String[] getImageReaderSpiNames() {
         return copyOrNull(this.readerSpiNames);
     }

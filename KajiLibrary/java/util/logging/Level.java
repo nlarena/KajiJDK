@@ -1,46 +1,46 @@
 package java.util.logging;
 
 /**
- * KajiLibrary's java.util.logging.Level -- cuanto importa un mensaje.
+ * KajiLibrary's java.util.logging.Level -- how much a message matters.
  *
- * <p>Es una clase y no un enum, y eso es deliberado en el JDK: el constructor es `protected`
- * justamente para que alguien pueda inventar un nivel intermedio. Lo que realmente ordena es
- * {@link #intValue}, no la identidad -- comparar niveles por `==` funciona para los nueve estandar y
- * falla para cualquier nivel propio.
+ * <p>It is a class and not an enum, and that is deliberate in the JDK: the constructor is
+ * `protected` precisely so that somebody can invent an intermediate level. What really orders is
+ * {@link #intValue}, not identity -- comparing levels with `==` works for the nine standard ones and
+ * fails for any level of one's own.
  *
- * <p>Los valores no son consecutivos (1000, 900, 800, 700, 500, 400, 300) y esa es la razon de que se
- * pueda intercalar uno nuevo sin renumerar nada.
+ * <p>The values are not consecutive (1000, 900, 800, 700, 500, 400, 300) and that is the reason a
+ * new one can be slotted in without renumbering anything.
  *
- * <p>{@link #OFF} y {@link #ALL} no son niveles de mensaje sino de **filtro**: nada los alcanza o
- * todo los pasa, y por eso valen `Integer.MAX_VALUE` y `Integer.MIN_VALUE`.
+ * <p>{@link #OFF} and {@link #ALL} are not message levels but **filter** ones: nothing reaches them
+ * or everything passes them, and that is why they are `Integer.MAX_VALUE` and `Integer.MIN_VALUE`.
  */
 public class Level implements java.io.Serializable {
 
-    /** Nada se registra. */
+    /** Nothing is recorded. */
     public static final Level OFF = new Level("OFF", Integer.MAX_VALUE);
 
-    /** Un fallo serio, de los que le importan a quien usa el programa. */
+    /** A serious failure, of the kind that matters to whoever uses the program. */
     public static final Level SEVERE = new Level("SEVERE", 1000);
 
-    /** Algo que conviene mirar. */
+    /** Something worth looking at. */
     public static final Level WARNING = new Level("WARNING", 900);
 
-    /** Informacion normal. */
+    /** Normal information. */
     public static final Level INFO = new Level("INFO", 800);
 
-    /** Mensajes de configuracion, para diagnosticar el entorno. */
+    /** Configuration messages, for diagnosing the environment. */
     public static final Level CONFIG = new Level("CONFIG", 700);
 
-    /** Traza gruesa, para seguir el programa. */
+    /** Coarse logging, for following the program. */
     public static final Level FINE = new Level("FINE", 500);
 
-    /** Traza mas detallada; entradas y salidas de metodo. */
+    /** More detailed logging; method entries and exits. */
     public static final Level FINER = new Level("FINER", 400);
 
-    /** Todo el detalle. */
+    /** All the detail. */
     public static final Level FINEST = new Level("FINEST", 300);
 
-    /** Todo se registra. */
+    /** Everything is recorded. */
     public static final Level ALL = new Level("ALL", Integer.MIN_VALUE);
 
     private final String name;
@@ -60,22 +60,22 @@ public class Level implements java.io.Serializable {
         this.resourceBundleName = resourceBundleName;
     }
 
-    /** El nombre del nivel. */
+    /** The level's name. */
     public String getName() {
         return this.name;
     }
 
-    /** El nombre traducido; aca, el mismo: no hay localizacion. */
+    /** The translated name; here, the same: there is no localisation. */
     public String getLocalizedName() {
         return this.name;
     }
 
-    /** El paquete de recursos para traducirlo, o `null`. */
+    /** The resource bundle to translate it with, or `null`. */
     public String getResourceBundleName() {
         return this.resourceBundleName;
     }
 
-    /** El numero que ordena este nivel contra los demas. */
+    /** The number that orders this level against the others. */
     public final int intValue() {
         return this.value;
     }
@@ -85,41 +85,41 @@ public class Level implements java.io.Serializable {
     }
 
     /**
-     * El nivel de ese nombre, o el de ese numero escrito como texto.
+     * The level by that name, or the one of that number written as text.
      *
-     * <p>Acepta las dos formas porque la configuracion viene de cadenas: `"FINE"` y `"500"` designan
-     * al mismo nivel, y un numero que no corresponde a ninguno estandar da un nivel nuevo -- que es
-     * lo que permite configurar un nivel intercalado sin declararlo.
+     * <p>It accepts both forms because the configuration comes from strings: `"FINE"` and `"500"`
+     * name the same level, and a number corresponding to no standard one gives a new level -- which
+     * is what lets a slotted-in level be configured without declaring it.
      *
-     * @throws IllegalArgumentException si no es ni un nombre conocido ni un numero
+     * @throws IllegalArgumentException if it is neither a known name nor a number
      */
     public static synchronized Level parse(String name) throws IllegalArgumentException {
         if (name == null) {
             throw new NullPointerException("name");
         }
-        Level[] conocidos = new Level[] {OFF, SEVERE, WARNING, INFO, CONFIG, FINE, FINER, FINEST,
+        Level[] known = new Level[] {OFF, SEVERE, WARNING, INFO, CONFIG, FINE, FINER, FINEST,
                 ALL};
         int i = 0;
-        while (i < conocidos.length) {
-            if (conocidos[i].name.equals(name)) {
-                return conocidos[i];
+        while (i < known.length) {
+            if (known[i].name.equals(name)) {
+                return known[i];
             }
             i = i + 1;
         }
-        int valor;
+        int value;
         try {
-            valor = Integer.parseInt(name);
+            value = Integer.parseInt(name);
         } catch (NumberFormatException e) {
             throw new IllegalArgumentException("Bad level \"" + name + "\"");
         }
         i = 0;
-        while (i < conocidos.length) {
-            if (conocidos[i].value == valor) {
-                return conocidos[i];
+        while (i < known.length) {
+            if (known[i].value == value) {
+                return known[i];
             }
             i = i + 1;
         }
-        return new Level(name, valor);
+        return new Level(name, value);
     }
 
     public boolean equals(Object ox) {

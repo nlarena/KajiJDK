@@ -5,29 +5,31 @@ import java.awt.geom.Point2D;
 import java.awt.geom.Rectangle2D;
 
 /**
- * Convolución: cada píxel de salida es una suma pesada de sus vecinos, con los pesos de un
+ * Convolution: each output pixel is a weighted sum of its neighbours, with the weights of a
  * {@link Kernel}.
  *
- * <p>Es la operación de la que salen casi todos los efectos que miran más de un píxel. Con un núcleo
- * de valores iguales que sumen 1, desenfoque; con uno que reste los vecinos al centro, realce; con
- * uno asimétrico, detección de bordes o relieve. El código es el mismo y cambia la tabla.
+ * <p>It is the operation almost every effect that looks at more than one pixel comes out of. With a
+ * kernel of equal values that add up to 1, blur; with one that subtracts the neighbours from the
+ * centre, sharpening; with an asymmetric one, edge detection or embossing. The code is the same and
+ * the table changes.
  *
- * <p>El **borde** es el problema real y por eso está declarado. Los píxeles del borde no tienen
- * todos sus vecinos, y hay dos respuestas posibles: {@link #EDGE_ZERO_FILL} los pone en cero, lo que
- * deja un marco oscuro; {@link #EDGE_NO_OP} los copia sin tocar, lo que deja un marco sin filtrar.
- * Ninguna es correcta —la información no está—, y elegir cuál mentira se prefiere es parte de la
- * operación.
+ * <p>The **edge** is the real problem and that is why it is declared. The pixels of the edge do not
+ * have all of their neighbours, and there are two possible answers: {@link #EDGE_ZERO_FILL} sets
+ * them to zero, which leaves a dark frame; {@link #EDGE_NO_OP} copies them untouched, which leaves
+ * an unfiltered frame. Neither is right —the information is not there—, and choosing which lie one
+ * prefers is part of the operation.
  *
- * <p>El origen se lee entero antes de escribir el destino, así que **origen y destino pueden ser el
- * mismo**: cada salida depende de las entradas vecinas, y escribir sobre la entrada mientras se lee
- * contaminaría los píxeles siguientes.
+ * <p>The source and the destination **may not be the same object**, and this note used to say the
+ * opposite: {@link #filter} rejects it with an {@link IllegalArgumentException}. The reason is that
+ * each output depends on the neighbouring inputs, so writing over the source while reading it would
+ * contaminate the following pixels.
  */
 public class ConvolveOp implements BufferedImageOp, RasterOp {
 
-    /** Los píxeles del borde salen en cero. */
+    /** The pixels of the edge come out as zero. */
     public static final int EDGE_ZERO_FILL = 0;
 
-    /** Los píxeles del borde se copian sin filtrar. */
+    /** The pixels of the edge are copied unfiltered. */
     public static final int EDGE_NO_OP = 1;
 
     private final Kernel kernel;
@@ -35,9 +37,9 @@ public class ConvolveOp implements BufferedImageOp, RasterOp {
     private final RenderingHints hints;
 
     /**
-     * Con el núcleo, la condición de borde y las pistas.
+     * With the kernel, the edge condition and the hints.
      *
-     * @throws NullPointerException si el núcleo es `null`
+     * @throws NullPointerException if the kernel is `null`
      */
     public ConvolveOp(Kernel kernel, int edgeCondition, RenderingHints hints) {
         this.kernel = kernel;
@@ -46,9 +48,9 @@ public class ConvolveOp implements BufferedImageOp, RasterOp {
     }
 
     /**
-     * Con el núcleo y el borde en cero.
+     * With the kernel and the edge in zero.
      *
-     * @throws NullPointerException si el núcleo es `null`
+     * @throws NullPointerException if the kernel is `null`
      */
     public ConvolveOp(Kernel kernel) {
         this.kernel = kernel;
@@ -56,22 +58,22 @@ public class ConvolveOp implements BufferedImageOp, RasterOp {
         this.hints = null;
     }
 
-    /** Qué se hace con los píxeles del borde. */
+    /** What is done with the pixels of the edge. */
     public int getEdgeCondition() {
         return this.edgeHint;
     }
 
-    /** El núcleo. */
+    /** The kernel. */
     public final Kernel getKernel() {
         return (Kernel) this.kernel.clone();
     }
 
     /**
-     * Aplica la convolución a una imagen.
+     * Applies the convolution to an image.
      *
-     * @param dst el destino, o `null` para que se cree
-     * @throws IllegalArgumentException si el origen y el destino son el mismo objeto, si el origen
-     *     tiene paleta, o si los tamaños no coinciden
+     * @param dst the destination, or `null` for it to be created
+     * @throws IllegalArgumentException if the source and the destination are the same object, if
+     *     the source has a palette, or if the sizes do not match
      */
     public final BufferedImage filter(BufferedImage src, BufferedImage dst) {
         if (src == dst) {
@@ -82,117 +84,119 @@ public class ConvolveOp implements BufferedImageOp, RasterOp {
             throw new IllegalArgumentException("ConvolveOp cannot be performed on an indexed "
                     + "image");
         }
-        BufferedImage destino = dst;
-        if (destino == null) {
-            destino = this.createCompatibleDestImage(src, null);
-        } else if (src.getWidth() != destino.getWidth()
-                || src.getHeight() != destino.getHeight()) {
+        BufferedImage dest = dst;
+        if (dest == null) {
+            dest = this.createCompatibleDestImage(src, null);
+        } else if (src.getWidth() != dest.getWidth()
+                || src.getHeight() != dest.getHeight()) {
             throw new IllegalArgumentException("Width or height of BufferedImages do not match");
         }
-        // Se convoluciona con el alfa **premultiplicado**: sin premultiplicar, el color de un pixel
-        // invisible pesaria lo mismo que el de uno opaco y sangraria sobre sus vecinos.
-        BufferedImage origen = src;
+        // It convolves with the alpha **premultiplied**: without premultiplying, the colour of an
+        // invisible pixel would weigh the same as that of an opaque one and would bleed over its
+        // neighbours.
+        BufferedImage source = src;
         if (srcCM.hasAlpha() && !srcCM.isAlphaPremultiplied()) {
             ColorModel cm = srcCM;
             WritableRaster wr = cm.createCompatibleWritableRaster(src.getWidth(),
                     src.getHeight());
-            origen = new BufferedImage(cm, wr, cm.isAlphaPremultiplied(), null);
-            origen.setData(src.getRaster());
-            origen.coerceData(true);
+            source = new BufferedImage(cm, wr, cm.isAlphaPremultiplied(), null);
+            source.setData(src.getRaster());
+            source.coerceData(true);
         }
-        this.convolucionar(origen.getRaster(), destino.getRaster());
-        if (destino.getColorModel().hasAlpha()
-                && !destino.getColorModel().isAlphaPremultiplied()) {
-            destino.coerceData(true);
-            destino.coerceData(false);
+        this.convolve(source.getRaster(), dest.getRaster());
+        if (dest.getColorModel().hasAlpha()
+                && !dest.getColorModel().isAlphaPremultiplied()) {
+            dest.coerceData(true);
+            dest.coerceData(false);
         }
-        return destino;
+        return dest;
     }
 
     /**
-     * Aplica la convolución a un ráster.
+     * Applies the convolution to a raster.
      *
-     * @param dst el destino, o `null` para que se cree
-     * @throws IllegalArgumentException si el origen y el destino son el mismo objeto, o si los
-     *     tamaños o la cantidad de bandas no coinciden
+     * @param dst the destination, or `null` for it to be created
+     * @throws IllegalArgumentException if the source and the destination are the same object, or if
+     *     the sizes or the number of bands do not match
      */
     public final WritableRaster filter(Raster src, WritableRaster dst) {
         if (dst == src) {
             throw new IllegalArgumentException("src image cannot be the same as the dst image");
         }
-        WritableRaster destino = dst;
-        if (destino == null) {
-            destino = this.createCompatibleDestRaster(src);
+        WritableRaster dest = dst;
+        if (dest == null) {
+            dest = this.createCompatibleDestRaster(src);
         } else {
-            if (src.getNumBands() != destino.getNumBands()) {
+            if (src.getNumBands() != dest.getNumBands()) {
                 throw new IllegalArgumentException("Number of src bands (" + src.getNumBands()
-                        + ") does not match number of dst bands (" + destino.getNumBands() + ")");
+                        + ") does not match number of dst bands (" + dest.getNumBands() + ")");
             }
-            if (src.getWidth() != destino.getWidth() || src.getHeight() != destino.getHeight()) {
+            if (src.getWidth() != dest.getWidth() || src.getHeight() != dest.getHeight()) {
                 throw new IllegalArgumentException("Width or height of Rasters do not match");
             }
         }
-        this.convolucionar(src, destino);
-        return destino;
+        this.convolve(src, dest);
+        return dest;
     }
 
-    /** La cuenta, banda por banda. */
-    private void convolucionar(Raster src, WritableRaster dst) {
+    /** The sum, band by band. */
+    private void convolve(Raster src, WritableRaster dst) {
         int w = src.getWidth();
         int h = src.getHeight();
-        int bandas = Math.min(src.getNumBands(), dst.getNumBands());
+        int bands = Math.min(src.getNumBands(), dst.getNumBands());
         int kw = this.kernel.getWidth();
         int kh = this.kernel.getHeight();
         int kx = this.kernel.getXOrigin();
         int ky = this.kernel.getYOrigin();
-        float[] pesos = this.kernel.getKernelData(null);
+        float[] weights = this.kernel.getKernelData(null);
         int sx = src.getMinX();
         int sy = src.getMinY();
         int dx = dst.getMinX();
         int dy = dst.getMinY();
-        for (int b = 0; b < bandas; b++) {
+        for (int b = 0; b < bands; b++) {
             int max = (1 << dst.getSampleModel().getSampleSize(b)) - 1;
-            int[] entrada = src.getSamples(sx, sy, w, h, b, (int[]) null);
-            int[] salida = new int[w * h];
+            int[] in = src.getSamples(sx, sy, w, h, b, (int[]) null);
+            int[] out = new int[w * h];
             for (int y = 0; y < h; y++) {
                 for (int x = 0; x < w; x++) {
-                    boolean borde = x < kx || y < ky || x >= w - (kw - kx - 1)
+                    boolean edge = x < kx || y < ky || x >= w - (kw - kx - 1)
                             || y >= h - (kh - ky - 1);
-                    if (borde) {
+                    if (edge) {
                         if (this.edgeHint == EDGE_NO_OP) {
-                            salida[y * w + x] = entrada[y * w + x];
+                            out[y * w + x] = in[y * w + x];
                         } else {
-                            salida[y * w + x] = 0;
+                            out[y * w + x] = 0;
                         }
                         continue;
                     }
-                    float acum = 0.0f;
+                    float sum = 0.0f;
                     int k = 0;
                     for (int j = 0; j < kh; j++) {
                         int fy = y + j - ky;
                         for (int i = 0; i < kw; i++) {
                             int fx = x + i - kx;
-                            acum = acum + pesos[k] * entrada[fy * w + fx];
+                            sum = sum + weights[k] * in[fy * w + fx];
                             k = k + 1;
                         }
                     }
-                    int v = (int) (acum + 0.5f);
+                    int v = (int) (sum + 0.5f);
                     if (v < 0) {
                         v = 0;
                     } else if (v > max) {
                         v = max;
                     }
-                    salida[y * w + x] = v;
+                    out[y * w + x] = v;
                 }
             }
-            dst.setSamples(dx, dy, w, h, b, salida);
+            dst.setSamples(dx, dy, w, h, b, out);
         }
     }
 
     /**
-     * Una imagen vacía del tamaño y formato que corresponde.
+     * An empty image of the size and format that fits.
      *
-     * @throws IllegalArgumentException si el origen tiene paleta y no se da otro modelo de color
+     * @throws IllegalArgumentException if the source has a palette and no other colour model is
+     *     given
      */
     public BufferedImage createCompatibleDestImage(BufferedImage src, ColorModel destCM) {
         ColorModel cm = destCM;
@@ -209,22 +213,22 @@ public class ConvolveOp implements BufferedImageOp, RasterOp {
         return new BufferedImage(cm, wr, cm.isAlphaPremultiplied(), null);
     }
 
-    /** Un ráster vacío del mismo tamaño y disposición. */
+    /** An empty raster of the same size and layout. */
     public WritableRaster createCompatibleDestRaster(Raster src) {
         return src.createCompatibleWritableRaster();
     }
 
-    /** El mismo rectángulo: esta operación no mueve nada de lugar. */
+    /** The same rectangle: this operation moves nothing about. */
     public final Rectangle2D getBounds2D(BufferedImage src) {
         return this.getBounds2D(src.getRaster());
     }
 
-    /** El mismo rectángulo. */
+    /** The same rectangle. */
     public final Rectangle2D getBounds2D(Raster src) {
         return src.getBounds();
     }
 
-    /** El mismo punto. */
+    /** The same point. */
     public final Point2D getPoint2D(Point2D srcPt, Point2D dstPt) {
         Point2D out = dstPt;
         if (out == null) {
@@ -234,7 +238,7 @@ public class ConvolveOp implements BufferedImageOp, RasterOp {
         return out;
     }
 
-    /** Las pistas de dibujo, o `null` si no hay. */
+    /** The rendering hints, or `null` if there are none. */
     public final RenderingHints getRenderingHints() {
         return this.hints;
     }

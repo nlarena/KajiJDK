@@ -5,46 +5,46 @@ import javax.crypto.SecretKey;
 import javax.security.auth.DestroyFailedException;
 
 /**
- * KajiLibrary's javax.security.auth.kerberos.KerberosKey -- una clave de largo plazo de un principal.
+ * KajiLibrary's javax.security.auth.kerberos.KerberosKey -- a principal's long-term key.
  *
- * <p>Es lo que hay en un keytab: la clave de un servicio, con su principal y su numero de version.
- * Se distingue de {@link EncryptionKey} --que es solo material-- en que sabe de quien es.
+ * <p>It is what there is in a keytab: a service's key, with its principal and its version number.
+ * It differs from {@link EncryptionKey} --which is only material-- in that it knows whose it is.
  *
- * <h2>El constructor con contrasena</h2>
+ * <h2>The constructor with a password</h2>
  *
- * <p>El JDK deriva la clave de una contrasena con el algoritmo <i>string-to-key</i> del tipo pedido,
- * que necesita DES o AES. KajiLibrary no tiene esos cifradores, asi que ese constructor lanza
- * {@link IllegalArgumentException} con el mismo mensaje que el JDK usa para un algoritmo que no
- * conoce. Es una omision declarada y no una clave inventada: una derivada mal seria peor que
- * ninguna.
+ * <p>The JDK derives the key from a password with the requested type's <i>string-to-key</i>
+ * algorithm, which needs DES or AES. KajiLibrary does not have those ciphers, so that constructor
+ * throws {@link IllegalArgumentException} with the same message the JDK uses for an algorithm it
+ * does not know. It is a declared omission and not a made-up key: a badly derived one would be
+ * worse than none.
  *
- * <h2>Se destruye</h2>
+ * <h2>It is destroyed</h2>
  *
- * <p>Igual que {@link EncryptionKey}: despues de {@link #destroy} todo lo que pregunte por la clave
- * --incluso el principal y la version-- lanza {@link IllegalStateException}.
+ * <p>Like {@link EncryptionKey}: after {@link #destroy} everything that asks about the key --even
+ * the principal and the version-- throws {@link IllegalStateException}.
  */
 public class KerberosKey implements SecretKey {
 
     private static final long serialVersionUID = -4625402278148246993L;
 
-    /** De quien es, o null si no se sabe. */
+    /** Whose it is, or null if not known. */
     private KerberosPrincipal principal;
 
-    /** El numero de version en el keytab. */
+    /** The version number in the keytab. */
     private final int versionNum;
 
-    /** El material. */
+    /** The material. */
     private EncryptionKey key;
 
-    /** Si ya se borro. */
+    /** Whether it was already erased. */
     private transient boolean destroyed = false;
 
     /**
-     * Con esos bytes. El arreglo se copia.
+     * With those bytes. The array is copied.
      *
-     * @param principal de quien es, o null
-     * @param versionNum el numero de version; 0 si no se sabe
-     * @throws NullPointerException si los bytes son null
+     * @param principal whose it is, or null
+     * @param versionNum the version number; 0 if not known
+     * @throws NullPointerException if the bytes are null
      */
     public KerberosKey(KerberosPrincipal principal, byte[] keyBytes, int keyType, int versionNum) {
         this.principal = principal;
@@ -53,12 +53,12 @@ public class KerberosKey implements SecretKey {
     }
 
     /**
-     * Derivada de una contrasena. Ver la nota de la clase: en KajiLibrary siempre falla.
+     * Derived from a password. See the class note: in KajiLibrary it always fails.
      *
      * @param algorithm {@code "DES"}, {@code "DESede"}, {@code "AES128"}, {@code "AES256"},
-     *     {@code "ArcFourHmac"}, o null por {@code "DES"}
-     * @throws NullPointerException si el principal es null
-     * @throws IllegalArgumentException siempre, porque no hay cifradores con que derivarla
+     *     {@code "ArcFourHmac"}, or null for {@code "DES"}
+     * @throws NullPointerException if the principal is null
+     * @throws IllegalArgumentException always, because there are no ciphers to derive it with
      */
     public KerberosKey(KerberosPrincipal principal, char[] password, String algorithm) {
         if (principal == null) {
@@ -69,9 +69,9 @@ public class KerberosKey implements SecretKey {
     }
 
     /**
-     * De quien es, o null.
+     * Whose it is, or null.
      *
-     * @throws IllegalStateException si esta destruida
+     * @throws IllegalStateException if it is destroyed
      */
     public final KerberosPrincipal getPrincipal() {
         checkAlive();
@@ -79,9 +79,9 @@ public class KerberosKey implements SecretKey {
     }
 
     /**
-     * El numero de version.
+     * The version number.
      *
-     * @throws IllegalStateException si esta destruida
+     * @throws IllegalStateException if it is destroyed
      */
     public final int getVersionNumber() {
         checkAlive();
@@ -89,9 +89,9 @@ public class KerberosKey implements SecretKey {
     }
 
     /**
-     * El numero de tipo.
+     * The type number.
      *
-     * @throws IllegalStateException si esta destruida
+     * @throws IllegalStateException if it is destroyed
      */
     public final int getKeyType() {
         checkAlive();
@@ -99,9 +99,9 @@ public class KerberosKey implements SecretKey {
     }
 
     /**
-     * Como se llama el tipo.
+     * What the type is called.
      *
-     * @throws IllegalStateException si esta destruida
+     * @throws IllegalStateException if it is destroyed
      */
     @Override
     public final String getAlgorithm() {
@@ -110,9 +110,9 @@ public class KerberosKey implements SecretKey {
     }
 
     /**
-     * Siempre {@code "RAW"}.
+     * Always {@code "RAW"}.
      *
-     * @throws IllegalStateException si esta destruida
+     * @throws IllegalStateException if it is destroyed
      */
     @Override
     public final String getFormat() {
@@ -121,9 +121,9 @@ public class KerberosKey implements SecretKey {
     }
 
     /**
-     * Los bytes. Una copia.
+     * The bytes. A copy.
      *
-     * @throws IllegalStateException si esta destruida
+     * @throws IllegalStateException if it is destroyed
      */
     @Override
     public final byte[] getEncoded() {
@@ -131,7 +131,7 @@ public class KerberosKey implements SecretKey {
         return this.key.getEncoded();
     }
 
-    /** Borra la clave. Destruir dos veces no hace nada. */
+    /** Erases the key. Destroying twice does nothing. */
     @Override
     public void destroy() throws DestroyFailedException {
         if (!this.destroyed) {
@@ -141,13 +141,13 @@ public class KerberosKey implements SecretKey {
         }
     }
 
-    /** Si ya se borro. */
+    /** Whether it was already erased. */
     @Override
     public boolean isDestroyed() {
         return this.destroyed;
     }
 
-    /** El principal, la version y el tipo; nunca los bytes. */
+    /** The principal, the version and the type; never the bytes. */
     @Override
     public String toString() {
         if (this.destroyed) {
@@ -157,7 +157,7 @@ public class KerberosKey implements SecretKey {
             + ", key " + this.key.toString().substring("EncryptionKey: ".length());
     }
 
-    /** Una destruida vale 17. */
+    /** A destroyed one is 17. */
     @Override
     public int hashCode() {
         int result = 17;
@@ -173,8 +173,8 @@ public class KerberosKey implements SecretKey {
     }
 
     /**
-     * Iguales si tienen el mismo principal, version, tipo y bytes; una destruida solo es igual a si
-     * misma.
+     * Equal if they have the same principal, version, type and bytes; a destroyed one is only equal
+     * to itself.
      */
     @Override
     public boolean equals(Object other) {
@@ -197,7 +197,7 @@ public class KerberosKey implements SecretKey {
         return this.principal.equals(that.principal);
     }
 
-    /** Lanza si ya se destruyo. */
+    /** Throws if it was already destroyed. */
     private void checkAlive() {
         if (this.destroyed) {
             throw new IllegalStateException("This key is no longer valid");

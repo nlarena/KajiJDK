@@ -8,267 +8,269 @@ import com.sun.jdi.ThreadReference;
 import java.util.List;
 
 /**
- * De donde salen todos los pedidos, y quien lleva la lista de los que hay.
+ * Where every request comes from, and who keeps the list of those there are.
  *
- * <p>Se obtiene de {@code VirtualMachine.eventRequestManager()}. Hay un {@code createXxx} por tipo
- * de evento y un {@code xxxRequests()} para enumerar los vivos.
+ * <p>It is obtained from {@code VirtualMachine.eventRequestManager()}. There is one
+ * {@code createXxx} per event type and one {@code xxxRequests()} for enumerating the live
+ * ones.
  *
- * <p>{@link #deleteEventRequest} no es opcional: los pedidos viven en la otra VM y cuestan ahi. Un
- * depurador que crea pedidos y no los borra degrada al programa depurado.
+ * <p>{@link #deleteEventRequest} is not optional: the requests live in the other VM and cost
+ * there. A debugger that creates requests and does not delete them degrades the debugged
+ * program.
  *
  * @since 1.3
  */
 public interface EventRequestManager extends Mirror {
 
     /**
-     * Crea un class prepare request.
+     * It creates a class prepare request.
      *
-     * @return el resultado
+     * @return the result
      */
     ClassPrepareRequest createClassPrepareRequest();
 
     /**
-     * Crea un class unload request.
+     * It creates a class unload request.
      *
-     * @return el resultado
+     * @return the result
      */
     ClassUnloadRequest createClassUnloadRequest();
 
     /**
-     * Crea un thread start request.
+     * It creates a thread start request.
      *
-     * @return el resultado
+     * @return the result
      */
     ThreadStartRequest createThreadStartRequest();
 
     /**
-     * Crea un thread death request.
+     * It creates a thread death request.
      *
-     * @return el resultado
+     * @return the result
      */
     ThreadDeathRequest createThreadDeathRequest();
 
     /**
-     * Crea un exception request.
+     * It creates a exception request.
      *
-     * @param type el ReferenceType
-     * @param flag el boolean
-     * @param flag2 el boolean
-     * @return el resultado
+     * @param type the ReferenceType
+     * @param flag the boolean
+     * @param flag2 the boolean
+     * @return the result
      */
     ExceptionRequest createExceptionRequest(ReferenceType type, boolean flag, boolean flag2);
 
     /**
-     * Crea un method entry request.
+     * It creates a method entry request.
      *
-     * @return el resultado
+     * @return the result
      */
     MethodEntryRequest createMethodEntryRequest();
 
     /**
-     * Crea un method exit request.
+     * It creates a method exit request.
      *
-     * @return el resultado
+     * @return the result
      */
     MethodExitRequest createMethodExitRequest();
 
     /**
-     * Crea un monitor contended enter request.
+     * It creates a monitor contended enter request.
      *
-     * @return el resultado
+     * @return the result
      */
     MonitorContendedEnterRequest createMonitorContendedEnterRequest();
 
     /**
-     * Crea un monitor contended entered request.
+     * It creates a monitor contended entered request.
      *
-     * @return el resultado
+     * @return the result
      */
     MonitorContendedEnteredRequest createMonitorContendedEnteredRequest();
 
     /**
-     * Crea un monitor wait request.
+     * It creates a monitor wait request.
      *
-     * @return el resultado
+     * @return the result
      */
     MonitorWaitRequest createMonitorWaitRequest();
 
     /**
-     * Crea un monitor waited request.
+     * It creates a monitor waited request.
      *
-     * @return el resultado
+     * @return the result
      */
     MonitorWaitedRequest createMonitorWaitedRequest();
 
     /**
-     * Crea un step request.
+     * It creates a step request.
      *
-     * @param thread el ThreadReference
-     * @param index el int
-     * @param index2 el int
-     * @return el resultado
+     * @param thread the ThreadReference
+     * @param index the int
+     * @param index2 the int
+     * @return the result
      */
     StepRequest createStepRequest(ThreadReference thread, int index, int index2);
 
     /**
-     * Crea un breakpoint request.
+     * It creates a breakpoint request.
      *
-     * @param location el Location
-     * @return el resultado
+     * @param location the Location
+     * @return the result
      */
     BreakpointRequest createBreakpointRequest(Location location);
 
     /**
-     * Crea un access watchpoint request.
+     * It creates a access watchpoint request.
      *
-     * @param field el Field
-     * @return el resultado
+     * @param field the Field
+     * @return the result
      */
     AccessWatchpointRequest createAccessWatchpointRequest(Field field);
 
     /**
-     * Crea un modification watchpoint request.
+     * It creates a modification watchpoint request.
      *
-     * @param field el Field
-     * @return el resultado
+     * @param field the Field
+     * @return the result
      */
     ModificationWatchpointRequest createModificationWatchpointRequest(Field field);
 
     /**
-     * Crea un v m death request.
+     * It creates a v m death request.
      *
-     * @return el resultado
+     * @return the result
      */
     VMDeathRequest createVMDeathRequest();
 
     /**
-     * El delete event request.
+     * The delete event request.
      *
-     * @param request el EventRequest
+     * @param request the EventRequest
      */
     void deleteEventRequest(EventRequest request);
 
     /**
-     * El delete event requests.
+     * The delete event requests.
      *
-     * @param values el List<? extends EventRequest>
+     * @param values the List<? extends EventRequest>
      */
     void deleteEventRequests(List<? extends EventRequest> values);
 
     /**
-     * El delete all breakpoints.
+     * The delete all breakpoints.
      */
     void deleteAllBreakpoints();
 
     /**
-     * El step requests.
+     * The step requests.
      *
-     * @return el resultado
+     * @return the result
      */
     List<StepRequest> stepRequests();
 
     /**
-     * El class prepare requests.
+     * The class prepare requests.
      *
-     * @return el resultado
+     * @return the result
      */
     List<ClassPrepareRequest> classPrepareRequests();
 
     /**
-     * El class unload requests.
+     * The class unload requests.
      *
-     * @return el resultado
+     * @return the result
      */
     List<ClassUnloadRequest> classUnloadRequests();
 
     /**
-     * El thread start requests.
+     * The thread start requests.
      *
-     * @return el resultado
+     * @return the result
      */
     List<ThreadStartRequest> threadStartRequests();
 
     /**
-     * El thread death requests.
+     * The thread death requests.
      *
-     * @return el resultado
+     * @return the result
      */
     List<ThreadDeathRequest> threadDeathRequests();
 
     /**
-     * El exception requests.
+     * The exception requests.
      *
-     * @return el resultado
+     * @return the result
      */
     List<ExceptionRequest> exceptionRequests();
 
     /**
-     * El breakpoint requests.
+     * The breakpoint requests.
      *
-     * @return el resultado
+     * @return the result
      */
     List<BreakpointRequest> breakpointRequests();
 
     /**
-     * El access watchpoint requests.
+     * The access watchpoint requests.
      *
-     * @return el resultado
+     * @return the result
      */
     List<AccessWatchpointRequest> accessWatchpointRequests();
 
     /**
-     * El modification watchpoint requests.
+     * The modification watchpoint requests.
      *
-     * @return el resultado
+     * @return the result
      */
     List<ModificationWatchpointRequest> modificationWatchpointRequests();
 
     /**
-     * El method entry requests.
+     * The method entry requests.
      *
-     * @return el resultado
+     * @return the result
      */
     List<MethodEntryRequest> methodEntryRequests();
 
     /**
-     * El method exit requests.
+     * The method exit requests.
      *
-     * @return el resultado
+     * @return the result
      */
     List<MethodExitRequest> methodExitRequests();
 
     /**
-     * El monitor contended enter requests.
+     * The monitor contended enter requests.
      *
-     * @return el resultado
+     * @return the result
      */
     List<MonitorContendedEnterRequest> monitorContendedEnterRequests();
 
     /**
-     * El monitor contended entered requests.
+     * The monitor contended entered requests.
      *
-     * @return el resultado
+     * @return the result
      */
     List<MonitorContendedEnteredRequest> monitorContendedEnteredRequests();
 
     /**
-     * El monitor wait requests.
+     * The monitor wait requests.
      *
-     * @return el resultado
+     * @return the result
      */
     List<MonitorWaitRequest> monitorWaitRequests();
 
     /**
-     * El monitor waited requests.
+     * The monitor waited requests.
      *
-     * @return el resultado
+     * @return the result
      */
     List<MonitorWaitedRequest> monitorWaitedRequests();
 
     /**
-     * El vm death requests.
+     * The vm death requests.
      *
-     * @return el resultado
+     * @return the result
      */
     List<VMDeathRequest> vmDeathRequests();
 }

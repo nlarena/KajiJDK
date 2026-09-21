@@ -5,38 +5,38 @@ import java.awt.geom.Point2D;
 import java.awt.geom.Rectangle2D;
 
 /**
- * Una operación de una {@link BufferedImage} a otra.
+ * An operation from one {@link BufferedImage} to another.
  *
- * <p>A diferencia de {@link RasterOp}, ve el **color**: sabe en qué espacio están los píxeles de
- * origen y de destino, y puede convertir entre ellos.
+ * <p>Unlike {@link RasterOp}, it sees the **colour**: it knows which space the source and
+ * destination pixels are in, and can convert between them.
  */
 public interface BufferedImageOp {
 
     /**
-     * Aplica la operación.
+     * Applies the operation.
      *
-     * @param dest el destino, o `null` para que se cree uno
-     * @return el destino
+     * @param dest the destination, or `null` for one to be created
+     * @return the destination
      */
     BufferedImage filter(BufferedImage src, BufferedImage dest);
 
-    /** El rectángulo que va a ocupar el resultado. */
+    /** The rectangle the result is going to take. */
     Rectangle2D getBounds2D(BufferedImage src);
 
     /**
-     * Un destino vacío del tamaño y formato que corresponde.
+     * An empty destination of the size and format that fits.
      *
-     * @param destCM el modelo de color del destino, o `null` para usar el del origen
+     * @param destCM the colour model of the destination, or `null` to use the source's
      */
     BufferedImage createCompatibleDestImage(BufferedImage src, ColorModel destCM);
 
     /**
-     * A dónde va a parar ese punto.
+     * Where that point ends up.
      *
-     * @param dstPt dónde escribir el resultado, o `null` para que se cree uno
+     * @param dstPt where to write the result, or `null` for one to be created
      */
     Point2D getPoint2D(Point2D srcPt, Point2D dstPt);
 
-    /** Las pistas de dibujo, o `null` si no hay. */
+    /** The rendering hints, or `null` if there are none. */
     RenderingHints getRenderingHints();
 }

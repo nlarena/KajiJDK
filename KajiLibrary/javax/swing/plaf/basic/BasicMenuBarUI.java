@@ -19,20 +19,20 @@ import javax.swing.plaf.MenuBarUI;
 import javax.swing.plaf.UIResource;
 
 /**
- * El aspecto basico de una barra de menu.
+ * The basic look and feel of a menu bar.
  *
- * <h2>Lo unico propio es el acomodador</h2>
+ * <h2>The only thing of its own is the layout</h2>
  *
- * <p>Una barra de menu no dibuja nada: lo que se ve son sus menus. Lo que si hace es ponerle
- * {@link DefaultMenuLayout} en el eje horizontal, y eso no es un detalle -- es lo que hace que los
- * menus queden pegados a la izquierda uno atras del otro y no repartidos, que es lo que haria un
- * {@code FlowLayout}.
+ * <p>A menu bar draws nothing: what is seen are its menus. What it does do is give it
+ * {@link DefaultMenuLayout} on the horizontal axis, and that is not a detail -- it is what makes
+ * the menus end up stuck to the left one after the other and not spread out, which is what a
+ * {@code FlowLayout} would do.
  *
- * <h2>Los tres tamanos son {@code null}</h2>
+ * <h2>The three sizes are {@code null}</h2>
  *
- * <p>Preferido, minimo y maximo: los tres. La barra deja que conteste el acomodador, que es el
- * unico que sabe cuanto miden los menus que tiene adentro. Esta medido, y es distinto de casi todos
- * los demas UI, que al menos contestan el preferido.
+ * <p>Preferred, minimum and maximum: all three. The bar lets the layout answer, which is the
+ * only one that knows how much the menus it holds measure. It is measured, and it is different
+ * from almost every other look and feel, which at least answer the preferred one.
  */
 public class BasicMenuBarUI extends MenuBarUI {
 
@@ -40,14 +40,14 @@ public class BasicMenuBarUI extends MenuBarUI {
     protected ContainerListener containerListener;
     protected ChangeListener changeListener;
 
-    private static final ColorUIResource FONDO = new ColorUIResource(238, 238, 238);
-    private static final ColorUIResource FRENTE = new ColorUIResource(51, 51, 51);
-    private static final FontUIResource FUENTE = new FontUIResource("Dialog", Font.BOLD, 12);
+    private static final ColorUIResource BACKGROUND = new ColorUIResource(238, 238, 238);
+    private static final ColorUIResource FOREGROUND = new ColorUIResource(51, 51, 51);
+    private static final FontUIResource FONT = new FontUIResource("Dialog", Font.BOLD, 12);
 
     public BasicMenuBarUI() {
     }
 
-    /** Uno nuevo por barra: guarda el componente y sus escuchas. */
+    /** A new one per bar: it keeps the component and its listeners. */
     public static ComponentUI createUI(JComponent c) {
         return new BasicMenuBarUI();
     }
@@ -66,31 +66,32 @@ public class BasicMenuBarUI extends MenuBarUI {
         menuBar = null;
     }
 
-    /** Colores, fuente y el acomodador; ver la nota de la clase. */
+    /** Colours, typeface and the layout; see the class note. */
     protected void installDefaults() {
         if (menuBar.getLayout() == null || menuBar.getLayout() instanceof UIResource) {
             menuBar.setLayout(new DefaultMenuLayout(menuBar, BoxLayout.LINE_AXIS));
         }
-        Color fondo = menuBar.getBackground();
-        if (fondo == null || fondo instanceof UIResource) {
-            menuBar.setBackground(FONDO);
+        Color background = menuBar.getBackground();
+        if (background == null || background instanceof UIResource) {
+            menuBar.setBackground(BACKGROUND);
         }
-        Color frente = menuBar.getForeground();
-        if (frente == null || frente instanceof UIResource) {
-            menuBar.setForeground(FRENTE);
+        Color foreground = menuBar.getForeground();
+        if (foreground == null || foreground instanceof UIResource) {
+            menuBar.setForeground(FOREGROUND);
         }
-        Font fuente = menuBar.getFont();
-        if (fuente == null || fuente instanceof UIResource) {
-            menuBar.setFont(FUENTE);
+        Font font = menuBar.getFont();
+        if (font == null || font instanceof UIResource) {
+            menuBar.setFont(FONT);
         }
         if (menuBar.getBorder() == null || menuBar.getBorder() instanceof UIResource) {
-            // Dos pixeles abajo y nada mas: la linea que separa la barra del contenido.
-            menuBar.setBorder(new BasicBorders.MenuBarBorder(FRENTE, FONDO));
+            // Two pixels at the bottom and nothing else: the line that separates the bar from the
+            // content.
+            menuBar.setBorder(new BasicBorders.MenuBarBorder(FOREGROUND, BACKGROUND));
         }
         LookAndFeel.installProperty(menuBar, "opaque", Boolean.TRUE);
     }
 
-    /** No saca nada; ver {@link BasicPanelUI#uninstallDefaults}. */
+    /** It removes nothing; see {@link BasicPanelUI#uninstallDefaults}. */
     protected void uninstallDefaults() {
     }
 
@@ -118,33 +119,33 @@ public class BasicMenuBarUI extends MenuBarUI {
         changeListener = null;
     }
 
-    /** Sin atajos propios: la letra subrayada de cada menu la maneja el menu. */
+    /** With no shortcuts of its own: each menu's underlined letter is handled by the menu. */
     protected void installKeyboardActions() {
     }
 
     protected void uninstallKeyboardActions() {
     }
 
-    /** El que engancha y desengancha el escucha de cambio de los menus que entran y salen. */
+    /** The one that hooks and unhooks the change listener of the menus that come and go. */
     protected ContainerListener createContainerListener() {
-        return new EscuchaDeContenedor();
+        return new ContainerListenerImpl();
     }
 
     protected ChangeListener createChangeListener() {
-        return new EscuchaDeCambio();
+        return new ChangeListenerImpl();
     }
 
-    /** {@code null}; ver la nota de la clase. */
+    /** {@code null}; see the class note. */
     public Dimension getMinimumSize(JComponent c) {
         return null;
     }
 
-    /** {@code null}; ver la nota de la clase. */
+    /** {@code null}; see the class note. */
     public Dimension getMaximumSize(JComponent c) {
         return null;
     }
 
-    private class EscuchaDeContenedor implements ContainerListener {
+    private class ContainerListenerImpl implements ContainerListener {
 
         public void componentAdded(ContainerEvent e) {
             java.awt.Component c = e.getChild();
@@ -161,7 +162,7 @@ public class BasicMenuBarUI extends MenuBarUI {
         }
     }
 
-    private class EscuchaDeCambio implements ChangeListener {
+    private class ChangeListenerImpl implements ChangeListener {
 
         public void stateChanged(ChangeEvent e) {
             if (menuBar != null) {

@@ -1,21 +1,21 @@
 package com.sun.jdi;
 
 /**
- * El marco ya no vale: el hilo se reanudo desde que se lo obtuvo.
+ * The frame no longer holds: the thread was resumed since it was obtained.
  *
  * @since 1.3
  */
 public class InvalidStackFrameException extends RuntimeException {
 
-    /** Sin detalle. */
+    /** With no detail. */
     public InvalidStackFrameException() {
         super();
     }
 
     /**
-     * Con un mensaje.
+     * With a message.
      *
-     * @param s el mensaje
+     * @param s the message
      */
     public InvalidStackFrameException(String s) {
         super(s);

@@ -1,13 +1,13 @@
 package javax.naming;
 
 /**
- * Raiz abstracta de las tres fallas de seguridad, para poder atraparlas juntas.
-
- * <p>Es `abstract` porque "problema de seguridad" no es una causa: es una **categoria**. Lanzarla
- * tal cual no le diria al que la atrapa si le faltan credenciales, si el mecanismo no se soporta o
- * si simplemente no tiene permiso, que son tres reacciones distintas.
+ * Abstract root of the three security failures, so they can be caught together.
  *
- * <p>La jerarquia entera y el estado que arrastra estan explicados en `NamingException`.
+ * <p>It is `abstract` because "security problem" is not a cause: it is a **category**. Throwing it
+ * as is would not tell whoever catches it whether credentials are missing, the mechanism is not
+ * supported or they simply lack permission, which are three different reactions.
+ *
+ * <p>The whole hierarchy and the state it carries are explained in `NamingException`.
  */
 public abstract class NamingSecurityException extends NamingException {
 

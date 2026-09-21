@@ -6,56 +6,55 @@ import javax.naming.NamingEnumeration;
 import javax.naming.NamingException;
 
 /**
- * KajiLibrary's javax.naming.directory.BasicAttributes -- un conjunto de atributos armado en memoria.
+ * KajiLibrary's javax.naming.directory.BasicAttributes -- a set of attributes built in memory.
  *
- * <p>La implementacion de {@link Attributes} que se usa para construir lo que se le manda al
- * directorio.
+ * <p>The implementation of {@link Attributes} used to build what is sent to the directory.
  *
- * <p>La decision que la define es {@link #isCaseIgnored}, y se fija al construir. Con la regla que
- * ignora mayusculas --que es la que corresponde a LDAP-- guardar {@code "CN"} y despues pedir
- * {@code "cn"} funciona; con la otra, no. Poner la regla equivocada da un sintoma confuso: los
- * atributos "no estan" aunque se los vea en un volcado.
+ * <p>The decision that defines it is {@link #isCaseIgnored}, and it is fixed at construction. With
+ * the rule that ignores case --the one that fits LDAP-- storing {@code "CN"} and then asking for
+ * {@code "cn"} works; with the other, it does not. Getting the rule wrong gives a confusing
+ * symptom: the attributes "are not there" even though they show up in a dump.
  *
- * <p>Se guarda una lista y no un mapa a proposito. Con la regla que ignora mayusculas haria falta
- * normalizar la clave, y normalizar pierde la forma original del identificador -- que es la que hay
- * que mandarle al directorio. Con pocos atributos por entrada, recorrer no cuesta nada.
+ * <p>A list is kept and not a map, on purpose. With the case-ignoring rule the key would need
+ * normalizing, and normalizing loses the identifier's original form -- which is the one that has to
+ * be sent to the directory. With few attributes per entry, walking the list costs nothing.
  */
 public class BasicAttributes implements Attributes {
 
     private static final long serialVersionUID = 4980164073184639448L;
 
-    /** Si los identificadores se comparan sin distinguir mayusculas. */
+    /** Whether identifiers are compared ignoring case. */
     private final boolean ignoreCase;
 
-    /** Los atributos, en orden de alta. Ver la nota de la clase. */
+    /** The attributes, in insertion order. See the class note. */
     private final List<Attribute> attrs = new ArrayList<Attribute>();
 
-    /** Vacio, distinguiendo mayusculas. */
+    /** Empty, case-sensitive. */
     public BasicAttributes() {
         this(false);
     }
 
-    /** Vacio, con la regla de comparacion elegida. */
+    /** Empty, with the chosen comparison rule. */
     public BasicAttributes(boolean ignoreCase) {
         this.ignoreCase = ignoreCase;
     }
 
-    /** Con un atributo de un solo valor, distinguiendo mayusculas. */
+    /** With one single-valued attribute, case-sensitive. */
     public BasicAttributes(String attrID, Object val) {
         this(attrID, val, false);
     }
 
-    /** Con un atributo de un solo valor y la regla elegida. */
+    /** With one single-valued attribute and the chosen rule. */
     public BasicAttributes(String attrID, Object val, boolean ignoreCase) {
         this(ignoreCase);
         this.attrs.add(new BasicAttribute(attrID, val));
     }
 
     /**
-     * Una copia.
+     * A copy.
      *
-     * <p>Copia la lista, no los atributos: los {@link Attribute} son los mismos objetos. Es lo que
-     * hace el JDK, y hay que saberlo si alguien va a modificar uno.
+     * <p>It copies the list, not the attributes: the {@link Attribute}s are the same objects. It is
+     * what the JDK does, and worth knowing if someone is going to modify one.
      */
     public Object clone() {
         BasicAttributes copy = new BasicAttributes(this.ignoreCase);
@@ -63,32 +62,32 @@ public class BasicAttributes implements Attributes {
         return copy;
     }
 
-    /** Si los identificadores se comparan sin distinguir mayusculas. */
+    /** Whether identifiers are compared ignoring case. */
     public boolean isCaseIgnored() {
         return this.ignoreCase;
     }
 
-    /** Cuantos atributos hay. */
+    /** How many attributes there are. */
     public int size() {
         return this.attrs.size();
     }
 
     /**
-     * El atributo con ese identificador.
+     * The attribute with that identifier.
      *
-     * @return null si no esta
+     * @return null if it is not there
      */
     public Attribute get(String attrID) {
         int i = indexOf(attrID);
         return (i < 0) ? null : this.attrs.get(i);
     }
 
-    /** Todos los atributos. */
+    /** All the attributes. */
     public NamingEnumeration<Attribute> getAll() {
         return new ListEnumeration<Attribute>(new ArrayList<Attribute>(this.attrs));
     }
 
-    /** Solo los identificadores. */
+    /** Only the identifiers. */
     public NamingEnumeration<String> getIDs() {
         List<String> ids = new ArrayList<String>();
         int i = 0;
@@ -99,15 +98,15 @@ public class BasicAttributes implements Attributes {
         return new ListEnumeration<String>(ids);
     }
 
-    /** Agrega un atributo de un solo valor. */
+    /** Adds a single-valued attribute. */
     public Attribute put(String attrID, Object val) {
         return put(new BasicAttribute(attrID, val));
     }
 
     /**
-     * Agrega un atributo ya armado.
+     * Adds an already built attribute.
      *
-     * @return el que estaba con ese identificador, o null
+     * @return the one that was there with that identifier, or null
      */
     public Attribute put(Attribute attr) {
         int i = indexOf(attr.getID());
@@ -120,7 +119,7 @@ public class BasicAttributes implements Attributes {
         return old;
     }
 
-    /** Lo saca y lo devuelve. */
+    /** Removes it and returns it. */
     public Attribute remove(String attrID) {
         int i = indexOf(attrID);
         if (i < 0) {
@@ -129,7 +128,7 @@ public class BasicAttributes implements Attributes {
         return this.attrs.remove(i);
     }
 
-    /** Los atributos, para un registro. */
+    /** The attributes, for a log. */
     public String toString() {
         if (this.attrs.isEmpty()) {
             return "No attributes";
@@ -147,9 +146,9 @@ public class BasicAttributes implements Attributes {
     }
 
     /**
-     * Iguales si tienen la misma regla y los mismos atributos.
+     * Equal if they have the same rule and the same attributes.
      *
-     * <p>El orden no cuenta: los atributos de una entrada son un conjunto.
+     * <p>Order does not count: an entry's attributes are a set.
      */
     public boolean equals(Object obj) {
         if (this == obj) {
@@ -177,7 +176,7 @@ public class BasicAttributes implements Attributes {
         return true;
     }
 
-    /** Coherente con {@link #equals}: suma, para no depender del orden. */
+    /** Consistent with {@link #equals}: a sum, so as not to depend on order. */
     public int hashCode() {
         int hash = this.ignoreCase ? 1 : 0;
         int i = 0;
@@ -188,7 +187,7 @@ public class BasicAttributes implements Attributes {
         return hash;
     }
 
-    /** La posicion de ese identificador segun la regla de comparacion, o -1. */
+    /** The position of that identifier under the comparison rule, or -1. */
     private int indexOf(String attrID) {
         int i = 0;
         while (i < this.attrs.size()) {
@@ -202,7 +201,7 @@ public class BasicAttributes implements Attributes {
         return -1;
     }
 
-    /** La enumeracion sobre una copia. */
+    /** The enumeration over a copy. */
     private static final class ListEnumeration<T> implements NamingEnumeration<T> {
 
         private final List<T> snapshot;

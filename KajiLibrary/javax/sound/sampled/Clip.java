@@ -3,83 +3,83 @@ package javax.sound.sampled;
 import java.io.IOException;
 
 /**
- * KajiLibrary's javax.sound.sampled.Clip -- audio cargado entero en memoria.
+ * KajiLibrary's javax.sound.sampled.Clip -- audio loaded whole into memory.
  *
- * <p>La diferencia con {@link SourceDataLine} es de modelo, no de calidad: aquella recibe audio en
- * tandas mientras suena, esta lo tiene todo antes de empezar.
+ * <p>The difference from {@link SourceDataLine} is one of model, not of quality: that one receives
+ * audio in batches while it plays, this one has it all before starting.
  *
- * <p>Eso es lo que permite lo unico que aquella no puede: <b>saltar a una posicion</b> y
- * <b>repetir</b>. Un clip es lo correcto para un efecto de sonido corto que se repite; un flujo largo
- * va por la otra.
+ * <p>That is what allows the only thing the other cannot: <b>jumping to a position</b> and
+ * <b>looping</b>. A clip is right for a short sound effect that repeats; a long stream goes the
+ * other way.
  *
- * <p>El costo es la memoria: un clip ocupa el audio entero descomprimido. Un minuto de estereo de 16
- * bits a 44100 Hz son diez megabytes.
+ * <p>The cost is memory: a clip takes the whole audio uncompressed. A minute of 16-bit stereo at
+ * 44100 Hz is ten megabytes.
  *
- * <h2>{@link #loop} y los puntos de repeticion</h2>
+ * <h2>{@link #loop} and the loop points</h2>
  *
- * <p>{@link #setLoopPoints} marca el pedazo que se repite, en cuadros. {@code loop(n)} lo repite
- * {@code n} veces mas, y {@link #LOOP_CONTINUOUSLY} para siempre.
+ * <p>{@link #setLoopPoints} marks the piece that repeats, in frames. {@code loop(n)} repeats it
+ * {@code n} more times, and {@link #LOOP_CONTINUOUSLY} forever.
  *
- * <p>El detalle que se olvida: {@code loop(0)} es valido y significa "no repitas". No es lo mismo que
- * no llamar a {@code loop}, porque igual arranca la reproduccion.
+ * <p>The detail that gets forgotten: {@code loop(0)} is valid and means "do not repeat". It is not
+ * the same as not calling {@code loop}, because it starts playback all the same.
  *
- * <p>Para cortar una repeticion infinita hay que llamar {@link DataLine#stop}, o
- * {@code loop(0)} para que termine la vuelta actual y pare.
+ * <p>To cut an endless loop, {@link DataLine#stop} has to be called, or {@code loop(0)} so that the
+ * current round finishes and it stops.
  */
 public interface Clip extends DataLine {
 
-    /** Repetir para siempre. */
+    /** Repeat forever. */
     int LOOP_CONTINUOUSLY = -1;
 
     /**
-     * Carga audio desde un arreglo de bytes.
+     * Loads audio from a byte array.
      *
-     * @param offset desde donde
-     * @param bufferSize cuantos bytes; tiene que ser multiplo del cuadro
-     * @throws LineUnavailableException si el recurso no esta disponible
-     * @throws IllegalArgumentException si el formato no se soporta o el largo no es multiplo del
-     *     cuadro
-     * @throws IllegalStateException si ya estaba abierto
+     * @param offset from where
+     * @param bufferSize how many bytes; it has to be a multiple of the frame
+     * @throws LineUnavailableException if the resource is not available
+     * @throws IllegalArgumentException if the format is not supported or the length is not a
+     *     multiple of the frame
+     * @throws IllegalStateException if it was already open
      */
     void open(AudioFormat format, byte[] data, int offset, int bufferSize)
         throws LineUnavailableException;
 
     /**
-     * Carga audio desde un flujo, hasta el final.
+     * Loads audio from a stream, up to the end.
      *
-     * @throws LineUnavailableException si el recurso no esta disponible
-     * @throws IOException si no se pudo leer
-     * @throws IllegalArgumentException si el formato no se soporta
-     * @throws IllegalStateException si ya estaba abierto
+     * @throws LineUnavailableException if the resource is not available
+     * @throws IOException if it could not be read
+     * @throws IllegalArgumentException if the format is not supported
+     * @throws IllegalStateException if it was already open
      */
     void open(AudioInputStream stream) throws LineUnavailableException, IOException;
 
-    /** Cuantos cuadros tiene. */
+    /** How many frames it has. */
     int getFrameLength();
 
-    /** Cuanto dura, en microsegundos. */
+    /** How long it lasts, in microseconds. */
     long getMicrosecondLength();
 
-    /** Salta a ese cuadro. */
+    /** Jumps to that frame. */
     void setFramePosition(int frames);
 
-    /** Salta a ese microsegundo; se redondea al cuadro mas cercano. */
+    /** Jumps to that microsecond; it is rounded to the nearest frame. */
     void setMicrosecondPosition(long microseconds);
 
     /**
-     * Marca el pedazo que se repite.
+     * Marks the piece that repeats.
      *
-     * @param end el ultimo cuadro del pedazo; -1 significa hasta el final
-     * @throws IllegalArgumentException si los puntos no son validos
+     * @param end the last frame of the piece; -1 means up to the end
+     * @throws IllegalArgumentException if the points are not valid
      */
     void setLoopPoints(int start, int end);
 
     /**
-     * Repite el pedazo marcado.
+     * Repeats the marked piece.
      *
-     * <p>Ver la nota de la clase: {@code loop(0)} reproduce sin repetir.
+     * <p>See the class note: {@code loop(0)} plays without repeating.
      *
-     * @param count cuantas veces mas, o {@link #LOOP_CONTINUOUSLY}
+     * @param count how many more times, or {@link #LOOP_CONTINUOUSLY}
      */
     void loop(int count);
 }

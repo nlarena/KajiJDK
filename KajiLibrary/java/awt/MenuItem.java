@@ -10,16 +10,20 @@ import javax.accessibility.AccessibleState;
 import javax.accessibility.AccessibleStateSet;
 
 /**
- * Una opción de menú: una línea que se puede elegir.
+ * A menu option: a line that can be chosen.
  *
- * <p>Cuando se elige dispara un {@link ActionEvent}, igual que un botón, y por la misma razón: para
- * quien escucha, "el usuario pidió guardar" es lo mismo venga del menú, del botón de la barra o del
- * atajo de teclado. Ese es el sentido de que la acción sea el evento de más alto nivel de AWT.
+ * <p>When it is chosen it fires an {@link ActionEvent}, just like a button, and for the same
+ * reason: for whoever listens, "the user asked to save" is the same whether it comes from the menu,
+ * from the toolbar button or from the keyboard shortcut. That is the point of the action being the
+ * highest-level event of AWT.
  *
- * <p>El **comando** identifica qué acción es, y si no se le pone uno se usa la etiqueta. Eso último
- * es una trampa conocida: al traducir la interfaz cambia la etiqueta y con ella el comando, y el
- * código que comparaba contra el texto en inglés deja de funcionar. Por eso conviene ponerlo
- * explícito.
+ * <p>The **command** identifies which action it is, and if none is given the label is used. That
+ * last part is a known trap: translating the interface changes the label and with it the command,
+ * and the code that compared against the English text stops working. That is why setting it
+ * explicitly is better.
+ *
+ * <p>Its constructors declare {@link HeadlessException} like the JDK's and never throw it; see
+ * {@link MenuComponent}.
  */
 public class MenuItem extends MenuComponent implements Accessible {
 
@@ -31,65 +35,53 @@ public class MenuItem extends MenuComponent implements Accessible {
     private String actionCommand;
     private transient ActionListener actionListener;
 
-    /** Qué familias de eventos pidió recibir. */
+    /** Which families of events it asked to receive. */
     long eventMask;
 
-    /**
-     * Una opción sin etiqueta.
-     *
-     * @throws HeadlessException si no hay pantalla
-     */
+    /** An option without a label. */
     public MenuItem() throws HeadlessException {
         this("", null);
     }
 
-    /**
-     * Con esa etiqueta.
-     *
-     * @throws HeadlessException si no hay pantalla
-     */
+    /** With that label. */
     public MenuItem(String label) throws HeadlessException {
         this(label, null);
     }
 
-    /**
-     * Con etiqueta y atajo de teclado.
-     *
-     * @throws HeadlessException si no hay pantalla
-     */
+    /** With a label and a keyboard shortcut. */
     public MenuItem(String label, MenuShortcut s) throws HeadlessException {
         this.label = label;
         this.shortcut = s;
     }
 
-    /** Avisa que puede mostrarse. */
+    /** Notifies that it can be shown. */
     public void addNotify() {
     }
 
-    /** El texto de la opción. */
+    /** The text of the option. */
     public String getLabel() {
         return this.label;
     }
 
-    /** Cambia el texto. */
+    /** Changes the text. */
     public synchronized void setLabel(String label) {
         this.label = label;
     }
 
-    /** Si se puede elegir. */
+    /** Whether it can be chosen. */
     public boolean isEnabled() {
         return this.enabled;
     }
 
-    /** La habilita o la deshabilita. */
+    /** Enables or disables it. */
     public synchronized void setEnabled(boolean b) {
         this.enabled = b;
     }
 
     /**
-     * La habilita.
+     * Enables it.
      *
-     * @deprecated es del modelo de 1.0. Usar {@link #setEnabled}.
+     * @deprecated it is from the 1.0 model. Use {@link #setEnabled}.
      */
     @Deprecated
     public synchronized void enable() {
@@ -97,9 +89,9 @@ public class MenuItem extends MenuComponent implements Accessible {
     }
 
     /**
-     * La habilita o la deshabilita.
+     * Enables or disables it.
      *
-     * @deprecated es del modelo de 1.0. Usar {@link #setEnabled}.
+     * @deprecated it is from the 1.0 model. Use {@link #setEnabled}.
      */
     @Deprecated
     public void enable(boolean b) {
@@ -107,54 +99,54 @@ public class MenuItem extends MenuComponent implements Accessible {
     }
 
     /**
-     * La deshabilita.
+     * Disables it.
      *
-     * @deprecated es del modelo de 1.0. Usar {@link #setEnabled}.
+     * @deprecated it is from the 1.0 model. Use {@link #setEnabled}.
      */
     @Deprecated
     public synchronized void disable() {
         this.setEnabled(false);
     }
 
-    /** El atajo de teclado, o `null`. */
+    /** The keyboard shortcut, or `null`. */
     public MenuShortcut getShortcut() {
         return this.shortcut;
     }
 
-    /** Le pone atajo de teclado. */
+    /** Gives it a keyboard shortcut. */
     public void setShortcut(MenuShortcut s) {
         this.shortcut = s;
     }
 
-    /** Le saca el atajo. */
+    /** Takes its shortcut away. */
     public void deleteShortcut() {
         this.shortcut = null;
     }
 
     /**
-     * Pide recibir esas familias de eventos.
+     * Asks to receive those families of events.
      *
-     * <p>Es la contrapartida de registrar un oyente: sin la máscara prendida, el evento no se
-     * entrega aunque haya quien lo escuche.
+     * <p>It is the counterpart of registering a listener: without the mask on, the event is not
+     * delivered even if there is someone listening.
      */
     protected final void enableEvents(long eventsToEnable) {
         this.eventMask = this.eventMask | eventsToEnable;
     }
 
-    /** Deja de recibirlas. */
+    /** Stops receiving them. */
     protected final void disableEvents(long eventsToDisable) {
         this.eventMask = this.eventMask & ~eventsToDisable;
     }
 
-    /** Cambia qué acción identifica esta opción. */
+    /** Changes which action this option identifies. */
     public void setActionCommand(String command) {
         this.actionCommand = command;
     }
 
     /**
-     * Qué acción identifica.
+     * Which action it identifies.
      *
-     * <p>Si no se le puso uno, la etiqueta — con la trampa de que cambia al traducir.
+     * <p>If none was given, the label — with the trap that it changes when translating.
      */
     public String getActionCommand() {
         if (this.actionCommand == null) {
@@ -163,7 +155,7 @@ public class MenuItem extends MenuComponent implements Accessible {
         return this.actionCommand;
     }
 
-    /** Suma alguien a quien avisarle cuando se elija; un `null` se ignora. */
+    /** Adds someone to tell when it is chosen; a `null` is ignored. */
     public synchronized void addActionListener(ActionListener l) {
         if (l == null) {
             return;
@@ -172,7 +164,7 @@ public class MenuItem extends MenuComponent implements Accessible {
         this.enableEvents(AWTEvent.ACTION_EVENT_MASK);
     }
 
-    /** Saca a ese oyente. */
+    /** Removes that listener. */
     public synchronized void removeActionListener(ActionListener l) {
         if (l == null) {
             return;
@@ -180,15 +172,18 @@ public class MenuItem extends MenuComponent implements Accessible {
         this.actionListener = AWTEventMulticaster.remove(this.actionListener, l);
     }
 
-    /** Los oyentes registrados. */
+    /** The registered listeners. */
     public synchronized ActionListener[] getActionListeners() {
         return AWTEventMulticaster.getListeners(this.actionListener, ActionListener.class);
     }
 
     /**
-     * Los oyentes de esa clase.
+     * The listeners of that class.
      *
-     * @throws ClassCastException si la clase no es de oyente
+     * <p>The {@code T extends EventListener} bound is what keeps the question well posed: a class
+     * that is not a listener one cannot be passed without raw types.
+     *
+     * @throws NullPointerException if the class is `null`
      */
     public <T extends EventListener> T[] getListeners(Class<T> listenerType) {
         EventListener l = null;
@@ -198,14 +193,14 @@ public class MenuItem extends MenuComponent implements Accessible {
         return AWTEventMulticaster.getListeners(l, listenerType);
     }
 
-    /** Reparte el evento al método que corresponda. */
+    /** Dispatches the event to the method that corresponds. */
     protected void processEvent(AWTEvent e) {
         if (e instanceof ActionEvent) {
             this.processActionEvent((ActionEvent) e);
         }
     }
 
-    /** Les avisa a los oyentes de acción. */
+    /** Tells the action listeners. */
     protected void processActionEvent(ActionEvent e) {
         ActionListener listener = this.actionListener;
         if (listener != null) {
@@ -221,7 +216,7 @@ public class MenuItem extends MenuComponent implements Accessible {
         return super.paramString() + s;
     }
 
-    /** La información de accesibilidad de esta opción. */
+    /** The accessibility information of this option. */
     public AccessibleContext getAccessibleContext() {
         if (this.accessibleContext == null) {
             this.accessibleContext = new AccessibleAWTMenuItem();
@@ -229,24 +224,24 @@ public class MenuItem extends MenuComponent implements Accessible {
         return this.accessibleContext;
     }
 
-    /** La accesibilidad de una opción de menú. */
+    /** The accessibility of a menu option. */
     protected class AccessibleAWTMenuItem extends AccessibleAWTMenuComponent {
 
-        /** Para las subclases. */
+        /** For the subclasses. */
         protected AccessibleAWTMenuItem() {
         }
 
-        /** La etiqueta. */
+        /** The label. */
         public String getAccessibleName() {
             return MenuItem.this.getLabel();
         }
 
-        /** Es una opción de menú. */
+        /** It is a menu option. */
         public AccessibleRole getAccessibleRole() {
             return AccessibleRole.MENU_ITEM;
         }
 
-        /** Habilitado o no, que es lo único que se puede saber sin pantalla. */
+        /** Enabled or not, which is the only thing that can be known without a screen. */
         public AccessibleStateSet getAccessibleStateSet() {
             AccessibleStateSet s = new AccessibleStateSet();
             if (MenuItem.this.isEnabled()) {

@@ -6,77 +6,88 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * El registro de RMI, de antes de que existiera una API de logging.
+ * RMI's log, from before a logging API existed.
  *
- * @deprecated no hay reemplazo dentro de RMI: quien quiera registrar usa
- *     {@code java.lang.System.Logger} o la biblioteca que prefiera. Vive porque
- *     {@link RemoteServer#getLog} devuelve un {@link PrintStream} y esta era su implementacion.
+ * @deprecated there is no replacement inside RMI: whoever wants to log uses
+ *     {@code java.lang.System.Logger} or the library they prefer. This note used to say it lives
+ *     on because {@link RemoteServer#getLog} returns a {@link PrintStream} and this was its
+ *     implementation; here {@code RemoteServer.setLog} builds a plain {@link PrintStream} and
+ *     nothing in the library uses this class (checked with grep), so it lives on only as public
+ *     API of {@code java.rmi.server}.
  */
 @Deprecated(since = "1.1")
 public class LogStream extends PrintStream {
 
-    /** Sin registro. */
+    /** No logging. */
     public static final int SILENT = 0;
 
-    /** Solo lo esencial. */
+    /** Only the essentials. */
     public static final int BRIEF = 10;
 
-    /** Todo. */
+    /** Everything. */
     public static final int VERBOSE = 20;
 
-    private static final Map<String, LogStream> CONOCIDOS = new HashMap<String, LogStream>();
-    private static PrintStream porDefecto = System.err;
+    private static final Map<String, LogStream> KNOWN = new HashMap<String, LogStream>();
+    private static PrintStream defaultStream = System.err;
 
-    private OutputStream salida;
+    private OutputStream logOut;
 
     private LogStream(OutputStream out) {
         super(out);
-        this.salida = out;
+        this.logOut = out;
     }
 
     /**
-     * El registro con ese nombre, creandolo si no estaba.
+     * The log with that name, creating it if it was not there.
      *
-     * <p>Uno por nombre y compartido, que es lo que permite que dos partes del programa escriban en
-     * el mismo sin pasarselo.
+     * <p>One per name and shared, which is what lets two parts of the program write to the same one
+     * without passing it around.
      */
     public static LogStream log(String name) {
-        synchronized (CONOCIDOS) {
-            LogStream l = CONOCIDOS.get(name);
+        synchronized (KNOWN) {
+            LogStream l = KNOWN.get(name);
             if (l == null) {
-                l = new LogStream(porDefecto);
-                CONOCIDOS.put(name, l);
+                l = new LogStream(defaultStream);
+                KNOWN.put(name, l);
             }
             return l;
         }
     }
 
-    /** Adonde van los registros nuevos. */
+    /** Where new logs go. */
     public static synchronized PrintStream getDefaultStream() {
-        return porDefecto;
+        return defaultStream;
     }
 
-    /** Cambia adonde van los registros nuevos; los ya creados no se mueven. */
+    /** It changes where new logs go; the ones already created do not move. */
     public static synchronized void setDefaultStream(PrintStream newDefault) {
-        porDefecto = newDefault;
+        defaultStream = newDefault;
     }
 
-    /** Adonde escribe este registro. */
+    /** Where this log writes. */
     public synchronized OutputStream getOutputStream() {
-        return this.salida;
+        return this.logOut;
     }
 
-    /** Cambia adonde escribe este registro. */
+    /**
+     * It changes the stream {@link #getOutputStream} reports.
+     *
+     * <p>This note used to say it changes where this log writes; it does not: {@code write} goes
+     * through {@code super.write}, which never looks at {@code logOut}, and {@link PrintStream}
+     * sends every write to the native {@code writeString}, which prints to the VM's stdout whatever
+     * stream was given (checked in {@code java/io/PrintStream.java} and the VM's
+     * {@code natives.rs}).
+     */
     public synchronized void setOutputStream(OutputStream out) {
-        this.salida = out;
+        this.logOut = out;
     }
 
-    /** Escribe un byte. */
+    /** It writes a byte. */
     public void write(int b) {
         super.write(b);
     }
 
-    /** Escribe un tramo. */
+    /** It writes a slice. */
     public void write(byte[] b, int off, int len) {
         super.write(b, off, len);
     }
@@ -86,9 +97,9 @@ public class LogStream extends PrintStream {
     }
 
     /**
-     * Traduce {@code "SILENT"}, {@code "BRIEF"} o {@code "VERBOSE"} a su numero.
+     * It translates {@code "SILENT"}, {@code "BRIEF"} or {@code "VERBOSE"} to its number.
      *
-     * @return el nivel, o {@code -1} si el nombre no es ninguno de los tres
+     * @return the level, or {@code -1} if the name is none of the three
      */
     public static int parseLevel(String s) {
         if (s == null) {

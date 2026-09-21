@@ -6,31 +6,31 @@ import java.util.Calendar;
 import java.util.Date;
 
 /**
- * Un formateador de fechas.
+ * A date formatter.
  *
- * <h2>Casi todo lo hereda</h2>
+ * <h2>It inherits almost everything</h2>
  *
- * <p>Lo unico que agrega sobre {@link InternationalFormatter} es saber subir y bajar el campo donde
- * esta el cursor: en una fecha, la flecha arriba sobre el mes suma un mes, no un dia. Para eso
- * traduce el campo del formato al campo del {@link Calendar} correspondiente.
+ * <p>The only thing it adds over {@link InternationalFormatter} is knowing how to increase and
+ * decrease the field the cursor is in: in a date, the up arrow over the month adds a month, not a
+ * day. For that it translates the format's field into the corresponding {@link Calendar} field.
  *
- * <p>Sumar un mes no es sumar treinta dias, y por eso la cuenta la hace el {@code Calendar} y no
- * una suma de milisegundos.
+ * <p>Adding a month is not adding thirty days, and that is why the {@code Calendar} does the sum
+ * and not an addition of milliseconds.
  */
 public class DateFormatter extends InternationalFormatter {
 
-    /** Un formateador con el formato de fecha corto del idioma del sistema. */
+    /** A formatter with the short date format of the system's language. */
     public DateFormatter() {
         this(DateFormat.getDateInstance());
     }
 
-    /** Un formateador que usa ese formato de fecha. */
+    /** A formatter that uses that date format. */
     public DateFormatter(DateFormat format) {
         super(format);
         setFormat(format);
     }
 
-    /** El formato de fecha; el valor debe ser un {@link Date}. */
+    /** The date format; the value must be a {@link Date}. */
     public void setFormat(DateFormat format) {
         super.setFormat(format);
     }
@@ -40,10 +40,10 @@ public class DateFormatter extends InternationalFormatter {
     }
 
     /**
-     * Suma o resta uno al campo donde esta el cursor.
+     * It adds or subtracts one from the field the cursor is in.
      *
-     * <p>Si el cursor no cae en ningun campo conocido, no hace nada: adivinar cual mover seria
-     * peor que no moverse.
+     * <p>If the cursor falls in no known field, it does nothing: guessing which one to move would
+     * be worse than not moving.
      */
     void adjustValue(int direction) {
         javax.swing.JFormattedTextField ftf = getFormattedTextField();
@@ -54,22 +54,22 @@ public class DateFormatter extends InternationalFormatter {
         if (!(value instanceof Date)) {
             return;
         }
-        int campo = calendarField(getFields(ftf.getCaretPosition()));
-        if (campo == -1) {
+        int field = calendarField(getFields(ftf.getCaretPosition()));
+        if (field == -1) {
             return;
         }
         Calendar cal = Calendar.getInstance();
         cal.setTime((Date) value);
-        cal.add(campo, direction);
+        cal.add(field, direction);
         try {
             ftf.setText(valueToString(cal.getTime()));
             ftf.commitEdit();
         } catch (java.text.ParseException pe) {
-            // La fecha nueva no se pudo formatear: se deja la anterior.
+            // The new date could not be formatted: the previous one is left.
         }
     }
 
-    /** El campo del calendario que corresponde a esos campos del formato. */
+    /** The calendar field that corresponds to those format fields. */
     private int calendarField(Format.Field[] fields) {
         for (int i = 0; i < fields.length; i++) {
             if (fields[i] instanceof DateFormat.Field) {

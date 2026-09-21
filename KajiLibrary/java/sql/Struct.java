@@ -1,19 +1,19 @@
 package java.sql;
 
 /**
- * KajiLibrary's java.sql.Struct -- un valor de un tipo estructurado de SQL.
+ * KajiLibrary's java.sql.Struct -- a value of an SQL structured type.
  *
- * <p>Los atributos vienen como `Object[]` y no con nombres: el orden es el de la declaracion del
- * tipo, y quien lee tiene que saberlo. Es crudo, y es lo que hay.
+ * <p>The attributes come as an `Object[]` and not with names: the order is that of the type's
+ * declaration, and whoever reads has to know it. It is raw, and it is what there is.
  */
 public interface Struct {
 
-    /** El nombre SQL del tipo. */
+    /** The SQL name of the type. */
     String getSQLTypeName() throws SQLException;
 
-    /** Los atributos, en el orden en que el tipo los declara. */
+    /** The attributes, in the order in which the type declares them. */
     Object[] getAttributes() throws SQLException;
 
-    /** Igual, traduciendo los tipos SQL con ese mapa. */
+    /** The same, translating the SQL types with that map. */
     Object[] getAttributes(java.util.Map<String, Class<?>> map) throws SQLException;
 }

@@ -4,56 +4,57 @@ import javax.accessibility.Accessible;
 import javax.accessibility.AccessibleContext;
 
 /**
- * Un item de menu que se elige entre varios.
+ * A menu item that is chosen among several.
  *
- * <h2>El grupo no viene puesto</h2>
+ * <h2>The group does not come set</h2>
  *
- * <p>La clase sola no apaga a nadie: para que elegir uno apague al anterior hay que meterlos a
- * todos en un {@link ButtonGroup}. Sin grupo se comporta igual que un {@link JCheckBoxMenuItem},
- * solo que se dibuja redondo. Es el error mas comun con esta clase y no da ningun aviso.
+ * <p>The class on its own switches nobody off: for choosing one to switch the previous one off,
+ * they all have to be put into a {@link ButtonGroup}. With no group it behaves just like a
+ * {@link JCheckBoxMenuItem}, only it is drawn round. It is the commonest mistake with this class
+ * and it gives no warning.
  */
 public class JRadioButtonMenuItem extends JMenuItem implements Accessible {
 
     private static final String uiClassID = "RadioButtonMenuItemUI";
 
-    /** Sin texto ni icono, sin elegir. */
+    /** With neither text nor icon, unchosen. */
     public JRadioButtonMenuItem() {
         this(null, null, false);
     }
 
-    /** Con ese icono. */
+    /** With that icon. */
     public JRadioButtonMenuItem(Icon icon) {
         this(null, icon, false);
     }
 
-    /** Con ese texto. */
+    /** With that text. */
     public JRadioButtonMenuItem(String text) {
         this(text, null, false);
     }
 
-    /** Tomando texto, icono y demas de esa accion. */
+    /** Taking text, icon and the rest from that action. */
     public JRadioButtonMenuItem(Action a) {
         this();
         setAction(a);
     }
 
-    /** Con texto e icono. */
+    /** With text and icon. */
     public JRadioButtonMenuItem(String text, Icon icon) {
         this(text, icon, false);
     }
 
-    /** Con ese texto, elegido o no. */
+    /** With that text, chosen or not. */
     public JRadioButtonMenuItem(String text, boolean selected) {
         this(text);
         setSelected(selected);
     }
 
-    /** Con ese icono, elegido o no. */
+    /** With that icon, chosen or not. */
     public JRadioButtonMenuItem(Icon icon, boolean selected) {
         this(null, icon, selected);
     }
 
-    /** Con texto, icono y estado. */
+    /** With text, icon and state. */
     public JRadioButtonMenuItem(String text, Icon icon, boolean selected) {
         super(text, icon);
         setModel(new JToggleButton.ToggleButtonModel());
@@ -69,7 +70,7 @@ public class JRadioButtonMenuItem extends JMenuItem implements Accessible {
         return super.paramString();
     }
 
-    /** Toma su estado de la accion; ver {@code AbstractButton}. */
+    /** It takes its state from the action; see {@code AbstractButton}. */
     boolean shouldUpdateSelectedStateFromAction() {
         return true;
     }

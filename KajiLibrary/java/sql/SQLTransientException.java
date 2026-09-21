@@ -1,10 +1,10 @@
 package java.sql;
 
 /**
- * KajiLibrary's java.sql.SQLTransientException -- Fallo que **puede** desaparecer si se reintenta.
+ * KajiLibrary's java.sql.SQLTransientException -- a failure that **may** go away if retried.
 
- * <p>Es la mitad util de la division: quien atrapa esto sabe que reintentar tiene sentido, sin tener
- * que interpretar codigos de proveedor. La otra mitad es {@link SQLNonTransientException}.
+ * <p>It is the useful half of the split: whoever catches this knows that retrying makes sense,
+ * without having to interpret vendor codes. The other half is {@link SQLNonTransientException}.
  */
 public class SQLTransientException extends SQLException {
 

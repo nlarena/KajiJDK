@@ -7,15 +7,16 @@ import java.awt.geom.Rectangle2D;
 import java.awt.image.ColorModel;
 
 /**
- * Un degradé lineal entre **dos** colores.
+ * A linear gradient between **two** colours.
  *
- * <p>Se define por dos puntos y dos colores: en el primer punto el color es el primero, en el
- * segundo el segundo, y en el medio se interpola sobre la recta que los une. Perpendicularmente a
- * esa recta el color no cambia, que es lo que hace que un degradé se vea como bandas paralelas.
+ * <p>It is defined by two points and two colours: at the first point the colour is the first, at
+ * the second the second, and in between it is interpolated along the line joining them.
+ * Perpendicular to that line the colour does not change, which is what makes a gradient look like
+ * parallel bands.
  *
- * <p>Fuera del segmento hay dos comportamientos. Sin ciclo, el color se estira: todo lo que esté más
- * allá del segundo punto queda del segundo color. Con ciclo, el degradé rebota entre los dos puntos,
- * y como rebota **en espejo** no queda costura donde se repite.
+ * <p>Outside the segment there are two behaviours. Without cycling, the colour is stretched:
+ * everything beyond the second point stays the second colour. With cycling, the gradient bounces
+ * between the two points, and since it bounces **as a mirror** no seam is left where it repeats.
  */
 public class GradientPaint implements Paint {
 
@@ -26,27 +27,27 @@ public class GradientPaint implements Paint {
     private final boolean cyclic;
 
     /**
-     * Con los dos puntos dados por coordenadas, sin ciclo.
+     * With the two points given by coordinates, without cycling.
      *
-     * @throws NullPointerException si falta alguno de los dos colores
+     * @throws NullPointerException if either of the two colours is missing
      */
     public GradientPaint(float x1, float y1, Color color1, float x2, float y2, Color color2) {
         this(x1, y1, color1, x2, y2, color2, false);
     }
 
     /**
-     * Con los dos puntos dados como objetos, sin ciclo.
+     * With the two points given as objects, without cycling.
      *
-     * @throws NullPointerException si falta alguno de los cuatro
+     * @throws NullPointerException if any of the four is missing
      */
     public GradientPaint(Point2D pt1, Color color1, Point2D pt2, Color color2) {
         this(pt1, color1, pt2, color2, false);
     }
 
     /**
-     * Con los dos puntos dados por coordenadas.
+     * With the two points given by coordinates.
      *
-     * @throws NullPointerException si falta alguno de los dos colores
+     * @throws NullPointerException if either of the two colours is missing
      */
     public GradientPaint(float x1, float y1, Color color1, float x2, float y2, Color color2,
             boolean cyclic) {
@@ -61,9 +62,9 @@ public class GradientPaint implements Paint {
     }
 
     /**
-     * Con los dos puntos dados como objetos.
+     * With the two points given as objects.
      *
-     * @throws NullPointerException si falta alguno de los cuatro
+     * @throws NullPointerException if any of the four is missing
      */
     public GradientPaint(Point2D pt1, Color color1, Point2D pt2, Color color2, boolean cyclic) {
         if (color1 == null || color2 == null || pt1 == null || pt2 == null) {
@@ -76,32 +77,32 @@ public class GradientPaint implements Paint {
         this.cyclic = cyclic;
     }
 
-    /** El punto donde el color es {@link #getColor1}. */
+    /** The point where the colour is {@link #getColor1}. */
     public Point2D getPoint1() {
         return new Point2D.Float(this.p1.x, this.p1.y);
     }
 
-    /** El color del primer punto. */
+    /** The colour of the first point. */
     public Color getColor1() {
         return this.color1;
     }
 
-    /** El punto donde el color es {@link #getColor2}. */
+    /** The point where the colour is {@link #getColor2}. */
     public Point2D getPoint2() {
         return new Point2D.Float(this.p2.x, this.p2.y);
     }
 
-    /** El color del segundo punto. */
+    /** The colour of the second point. */
     public Color getColor2() {
         return this.color2;
     }
 
-    /** Si el degradé rebota entre los dos puntos en vez de estirarse. */
+    /** Whether the gradient bounces between the two points instead of stretching. */
     public boolean isCyclic() {
         return this.cyclic;
     }
 
-    /** `OPAQUE` si los dos colores son opacos, `TRANSLUCENT` si alguno no. */
+    /** `OPAQUE` if both colours are opaque, `TRANSLUCENT` if either is not. */
     public int getTransparency() {
         if (this.color1.getAlpha() == 0xFF && this.color2.getAlpha() == 0xFF) {
             return Transparency.OPAQUE;
@@ -110,47 +111,47 @@ public class GradientPaint implements Paint {
     }
 
     /**
-     * Arma la máquina que genera los píxeles.
+     * Builds the machine that generates the pixels.
      *
-     * <p>Si la transformación no se puede invertir, el degradé se degrada a un color plano: el
-     * primero. Es lo único que se puede hacer sin poder llevar un píxel de vuelta a coordenadas de
-     * usuario, y es preferible a tirar en medio de un dibujado.
+     * <p>If the transformation cannot be inverted, the gradient degrades to a flat colour: the
+     * first one. It is the only thing that can be done without being able to take a pixel back to
+     * user coordinates, and it is preferable to throwing in the middle of drawing.
      */
     public PaintContext createContext(ColorModel cm, Rectangle deviceBounds,
             Rectangle2D userBounds, AffineTransform xform, RenderingHints hints) {
         try {
-            return new Contexto(xform);
+            return new GradientContext(xform);
         } catch (NoninvertibleTransformException e) {
             return this.color1.createContext(cm, deviceBounds, userBounds, xform, hints);
         }
     }
 
-    /** El contexto que calcula el degradé punto por punto. */
-    private final class Contexto extends RasterPaintContext {
+    /** The context that computes the gradient point by point. */
+    private final class GradientContext extends RasterPaintContext {
 
         private final double dx;
         private final double dy;
-        private final double largo2;
+        private final double lengthSq;
 
-        Contexto(AffineTransform xform) throws NoninvertibleTransformException {
+        GradientContext(AffineTransform xform) throws NoninvertibleTransformException {
             super(xform);
             this.dx = GradientPaint.this.p2.x - GradientPaint.this.p1.x;
             this.dy = GradientPaint.this.p2.y - GradientPaint.this.p1.y;
-            this.largo2 = this.dx * this.dx + this.dy * this.dy;
+            this.lengthSq = this.dx * this.dx + this.dy * this.dy;
         }
 
-        int colorDe(double ux, double uy) {
-            if (this.largo2 == 0.0) {
+        int colorAt(double ux, double uy) {
+            if (this.lengthSq == 0.0) {
                 return GradientPaint.this.color2.getRGB();
             }
-            // La proyeccion escalar del punto sobre el segmento, normalizada: cuanto del camino de
-            // p1 a p2 llevamos recorrido. Lo perpendicular al segmento no interviene, y por eso el
-            // color no cambia en esa direccion.
+            // The scalar projection of the point onto the segment, normalized: how much of the way
+            // from p1 to p2 has been covered. What is perpendicular to the segment does not take
+            // part, and that is why the colour does not change in that direction.
             double t = ((ux - GradientPaint.this.p1.x) * this.dx
-                    + (uy - GradientPaint.this.p1.y) * this.dy) / this.largo2;
+                    + (uy - GradientPaint.this.p1.y) * this.dy) / this.lengthSq;
             if (GradientPaint.this.cyclic) {
-                double doble = t - Math.floor(t / 2) * 2;
-                t = doble > 1.0 ? 2.0 - doble : doble;
+                double folded = t - Math.floor(t / 2) * 2;
+                t = folded > 1.0 ? 2.0 - folded : folded;
             } else if (t < 0.0) {
                 t = 0.0;
             } else if (t > 1.0) {
@@ -158,16 +159,16 @@ public class GradientPaint implements Paint {
             }
             Color a = GradientPaint.this.color1;
             Color b = GradientPaint.this.color2;
-            int al = redondear(a.getAlpha() + (b.getAlpha() - a.getAlpha()) * t);
-            int r = redondear(a.getRed() + (b.getRed() - a.getRed()) * t);
-            int g = redondear(a.getGreen() + (b.getGreen() - a.getGreen()) * t);
-            int bl = redondear(a.getBlue() + (b.getBlue() - a.getBlue()) * t);
+            int al = toByte(a.getAlpha() + (b.getAlpha() - a.getAlpha()) * t);
+            int r = toByte(a.getRed() + (b.getRed() - a.getRed()) * t);
+            int g = toByte(a.getGreen() + (b.getGreen() - a.getGreen()) * t);
+            int bl = toByte(a.getBlue() + (b.getBlue() - a.getBlue()) * t);
             return (al << 24) | (r << 16) | (g << 8) | bl;
         }
     }
 
-    /** Un valor llevado a un byte. */
-    private static int redondear(double v) {
+    /** A value brought into a byte. */
+    private static int toByte(double v) {
         int i = (int) (v + 0.5);
         if (i < 0) {
             return 0;

@@ -4,27 +4,27 @@ import java.util.Iterator;
 import java.util.Map;
 
 /**
- * Lo que comparten las dos fabricas de este paquete.
+ * What the two factories of this package share.
  *
- * <p>De acceso de paquete: no es API. Existe para que la busqueda por nombre deducido y el control del
- * entorno esten escritos una sola vez, en lugar de duplicados en
- * {@link JMXConnectorFactory} y {@link JMXConnectorServerFactory}.
+ * <p>Package access: it is not API. It exists so that the search by deduced name and the
+ * environment check are written only once, instead of duplicated in
+ * {@link JMXConnectorFactory} and {@link JMXConnectorServerFactory}.
  */
 final class FactorySupport {
 
-    /** Los paquetes que se prueban si nadie dice otra cosa. */
+    /** The packages that are tried if nobody says otherwise. */
     private static final String DEFAULT_PACKAGES = "com.sun.jmx.remote.protocol";
 
     private FactorySupport() {
     }
 
     /**
-     * Comprueba que las claves del entorno sean cadenas.
+     * Checks that the environment's keys are strings.
      *
-     * <p>El tipo {@code Map<String,?>} no alcanza: por borrado de tipos puede llegar un mapa con
-     * claves de cualquier cosa, y el error saldria mucho despues.
+     * <p>The {@code Map<String,?>} type is not enough: through erasure a map with keys of anything
+     * may arrive, and the error would come out much later.
      *
-     * @throws IllegalArgumentException si alguna clave no es una cadena
+     * @throws IllegalArgumentException if some key is not a string
      */
     static void checkKeys(Map<?, ?> env) {
         Iterator<?> it = env.keySet().iterator();
@@ -37,12 +37,12 @@ final class FactorySupport {
     }
 
     /**
-     * Busca un proveedor por el nombre de clase que se deduce del protocolo.
+     * Looks for a provider by the class name deduced from the protocol.
      *
-     * <p>Ver la nota de {@link JMXConnectorFactory} sobre la traduccion del protocolo a paquete.
+     * <p>See {@link JMXConnectorFactory}'s note on the translation from protocol to package.
      *
-     * @param suffix {@code "ClientProvider"} o {@code "ServerProvider"}
-     * @return el proveedor, o null si no hay ninguno con ese nombre
+     * @param suffix {@code "ClientProvider"} or {@code "ServerProvider"}
+     * @return the provider, or null if there is none with that name
      */
     static <T> T byName(Map<String, Object> env, String protocol, String suffix, Class<T> type) {
         String packages = packagesFrom(env);
@@ -72,7 +72,7 @@ final class FactorySupport {
         return null;
     }
 
-    /** Del entorno, de la propiedad del sistema, o los de siempre. */
+    /** From the environment, from the system property, or the usual ones. */
     private static String packagesFrom(Map<String, Object> env) {
         Object v = env.get(JMXConnectorFactory.PROTOCOL_PROVIDER_PACKAGES);
         if (v instanceof String) {
@@ -90,7 +90,7 @@ final class FactorySupport {
         return DEFAULT_PACKAGES;
     }
 
-    /** El del entorno, o el del contexto. */
+    /** The environment's, or the context's. */
     private static ClassLoader loaderFrom(Map<String, Object> env) {
         Object v = env.get(JMXConnectorFactory.PROTOCOL_PROVIDER_CLASS_LOADER);
         if (v instanceof ClassLoader) {
@@ -103,7 +103,7 @@ final class FactorySupport {
         }
     }
 
-    /** Carga esa clase y la instancia, o null si no esta o no sirve. */
+    /** Loads that class and instantiates it, or null if it is not there or does not serve. */
     private static <T> T tryClass(String name, ClassLoader loader, Class<T> type) {
         Class<?> c;
         try {

@@ -4,74 +4,75 @@ import java.awt.DefaultKeyboardFocusManager;
 import java.awt.KeyboardFocusManager;
 
 /**
- * El administrador de foco de Swing.
+ * Swing's focus manager.
  *
- * <h2>Una clase que quedo de otra epoca</h2>
+ * <h2>A class left over from another time</h2>
  *
- * <p>Antes de Java 1.4, Swing tenia su propio administrador de foco y esta era la puerta de entrada.
- * Desde entonces el foco lo maneja AWT con {@link KeyboardFocusManager}, y esta clase quedo como una
- * fachada: {@link #getCurrentManager} y {@link #setCurrentManager} son el administrador de AWT visto
- * a traves de un tipo mas viejo.
+ * <p>Before Java 1.4, Swing had its own focus manager and this was the way in. Since then the
+ * focus is handled by AWT with {@link KeyboardFocusManager}, and this class stayed as a facade:
+ * {@link #getCurrentManager} and {@link #setCurrentManager} are AWT's manager seen through an
+ * older type.
  *
- * <p>{@link #disableSwingFocusManager} y {@link #isFocusManagerEnabled} ya no hacen nada util --
- * estan marcadas obsoletas en el JDK y se conservan porque son publicas --. Vale la pena saberlo
- * antes de escribir codigo que dependa de ellas.
+ * <p>{@link #disableSwingFocusManager} and {@link #isFocusManagerEnabled} no longer do anything
+ * useful -- they are marked obsolete in the JDK and are kept because they are public --. It is
+ * worth knowing before writing code that depends on them.
  */
 public abstract class FocusManager extends DefaultKeyboardFocusManager {
 
     /**
-     * La clave con la que se pedia otro administrador.
+     * The key another manager was asked for with.
      *
-     * <p>Ya no la lee nadie; ver la nota de la clase.
+     * <p>Nobody reads it any more; see the class note.
      */
     public static final String FOCUS_MANAGER_CLASS_PROPERTY = "FocusManagerClassName";
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected FocusManager() {
     }
 
     /**
-     * El administrador de foco de este contexto.
+     * This context's focus manager.
      *
-     * <p>Si el que hay no es de este tipo -- lo normal, porque el de AWT no lo es -- se lo devuelve
-     * envuelto: el metodo promete un {@code FocusManager} y hay que cumplirlo.
+     * <p>If the one there is is not of this type -- which is the usual thing, because AWT's is not
+     * -- it is returned wrapped: the method promises a {@code FocusManager} and that has to be
+     * kept.
      */
     public static FocusManager getCurrentManager() {
         KeyboardFocusManager m = KeyboardFocusManager.getCurrentKeyboardFocusManager();
         if (m instanceof FocusManager) {
             return (FocusManager) m;
         }
-        return new DelegadoDeAwt();
+        return new AwtDelegate();
     }
 
     /**
-     * Cambia el administrador.
+     * It changes the manager.
      *
-     * <p>Uno envuelto vuelve a ser el de AWT: pasarle a AWT su propia envoltura lo dejaria
-     * apuntandose a si mismo.
+     * <p>A wrapped one goes back to being AWT's: passing AWT its own wrapper would leave it
+     * pointing at itself.
      *
-     * @throws SecurityException si el contexto no lo permite
+     * @throws SecurityException if the context does not allow it
      */
     public static void setCurrentManager(FocusManager aFocusManager) {
         KeyboardFocusManager toSet = aFocusManager;
-        if (aFocusManager instanceof DelegadoDeAwt) {
+        if (aFocusManager instanceof AwtDelegate) {
             toSet = null;
         }
         KeyboardFocusManager.setCurrentKeyboardFocusManager(toSet);
     }
 
     /**
-     * No hace nada.
+     * It does nothing.
      *
-     * @deprecated Como en el JDK: el administrador de Swing ya no existe, asi que no hay nada que
-     *     apagar.
+     * @deprecated As in the JDK: Swing's manager no longer exists, so there is nothing to switch
+     *     off.
      */
     @Deprecated
     public static void disableSwingFocusManager() {
     }
 
     /**
-     * Siempre cierto.
+     * Always true.
      *
      * @deprecated Ver {@link #disableSwingFocusManager}.
      */
@@ -81,13 +82,14 @@ public abstract class FocusManager extends DefaultKeyboardFocusManager {
     }
 
     /**
-     * Envuelve el administrador de AWT para poder devolverlo con este tipo.
+     * It wraps AWT's manager so as to be able to return it with this type.
      *
-     * <p>No agrega comportamiento: todo lo hereda de {@link DefaultKeyboardFocusManager}.
+     * <p>It adds no behaviour: it inherits everything from
+     * {@link DefaultKeyboardFocusManager}.
      */
-    private static class DelegadoDeAwt extends FocusManager {
+    private static class AwtDelegate extends FocusManager {
 
-        DelegadoDeAwt() {
+        AwtDelegate() {
             super();
         }
     }

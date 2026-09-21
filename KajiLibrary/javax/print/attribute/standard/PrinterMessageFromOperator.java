@@ -6,9 +6,9 @@ import javax.print.attribute.PrintServiceAttribute;
 import javax.print.attribute.TextSyntax;
 
 /**
- * Un mensaje del operador sobre la impresora entera, no sobre un trabajo.
+ * A message from the operator about the whole printer, not about a job.
  *
- * <p>"Se quedo sin toner, vuelve el lunes". El equivalente por trabajo es {@link
+ * <p>"It ran out of toner, back on Monday". The per-job equivalent is {@link
  * JobMessageFromOperator}.
  */
 public final class PrinterMessageFromOperator extends TextSyntax implements PrintServiceAttribute {

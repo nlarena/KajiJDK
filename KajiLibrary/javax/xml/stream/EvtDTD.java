@@ -9,12 +9,12 @@ import javax.xml.stream.events.EntityDeclaration;
 import javax.xml.stream.events.NotationDeclaration;
 
 /**
- * Una declaracion de tipo de documento como evento, guardada como texto crudo.
+ * A document type declaration as an event, kept as raw text.
  *
- * <p>{@link #getEntities()}, {@link #getNotations()} y {@link #getProcessedDTD()} devuelven null
- * porque el parser no interpreta el DTD: null es la respuesta que la interfaz reserva justamente
- * para eso, y devolver listas vacias seria peor --diria "lo lei y no habia nada" cuando lo cierto es
- * "no lo lei"--.
+ * <p>{@link #getEntities()}, {@link #getNotations()} and {@link #getProcessedDTD()} return null
+ * because the parser does not interpret the DTD: null is the answer the interface reserves
+ * precisely for that, and returning empty lists would be worse --it would say "I read it and there
+ * was nothing" when the truth is "I did not read it"--.
  */
 final class EvtDTD extends EvtBase implements DTD {
 
@@ -43,7 +43,7 @@ final class EvtDTD extends EvtBase implements DTD {
 
     public void writeAsEncodedUnicode(Writer writer) throws XMLStreamException {
         if (writer == null) {
-            throw new XMLStreamException("el escritor no puede ser null");
+            throw new XMLStreamException("the writer cannot be null");
         }
         try {
             writer.write(text);

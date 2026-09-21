@@ -1,109 +1,110 @@
 package jdk.jfr;
 
 /**
- * La clase de la que hereda todo evento propio de JFR.
+ * The class every event of one's own in JFR inherits from.
  *
- * <h2>Como se usa</h2>
+ * <h2>How it is used</h2>
  *
- * <p>Se hereda, se le agregan campos publicos —cada campo es un dato del evento— y se emite:
+ * <p>It is inherited from, public fields are added to it --each field is a datum of the event-- and
+ * it is emitted:
  *
  * <pre>{@code
- * class Pedido extends Event {
- *     @Label("Ruta") String ruta;
+ * class Request extends Event {
+ *     @Label("Path") String path;
  *     @Label("Bytes") @DataAmount long bytes;
  * }
  *
- * Pedido e = new Pedido();
+ * Request e = new Request();
  * e.begin();
- * ... hacer el trabajo ...
- * e.ruta = ruta;
+ * ... do the work ...
+ * e.path = path;
  * e.end();
  * if (e.shouldCommit()) { e.commit(); }
  * }</pre>
  *
- * <h2>Por que los metodos estan vacios</h2>
+ * <h2>Why the methods are empty</h2>
  *
- * <p>Porque asi estan en el JDK, y no es una omision: la VM <strong>reescribe el bytecode</strong>
- * de cada subclase al cargarla, reemplazando estas llamadas por el codigo que escribe el evento en
- * el buffer. El metodo que se ve aca nunca corre.
+ * <p>Because that is how they are in the JDK, and it is not an omission: the VM <strong>rewrites
+ * the bytecode</strong> of each subclass when it loads it, replacing these calls by the code that
+ * writes the event into the buffer. The method one sees here never runs.
  *
- * <p>Eso explica dos cosas que de otro modo son raras. Que todos sean {@code final}: si una
- * subclase los redefiniera, la reescritura no tendria donde engancharse. Y que un evento en un
- * programa sin JFR activo cueste literalmente nada — los cuerpos vacios se eliminan en linea y no
- * queda ni la llamada.
+ * <p>That explains two things that are otherwise odd. That they are all {@code final}: if a
+ * subclass redefined them, the rewriting would have nowhere to hook onto. And that an event in a
+ * program with no JFR active costs literally nothing -- the empty bodies are inlined away and not
+ * even the call is left.
  *
- * <p>En esta biblioteca las clases son las mismas y la reescritura no ocurre, asi que los eventos
- * no se graban. {@link #isEnabled} y {@link #shouldCommit} contestan {@code false}, que es la
- * respuesta correcta: no hay nada escuchando.
+ * <p>In this library the classes are the same and the rewriting does not happen, so the events are
+ * not recorded. {@link #isEnabled} and {@link #shouldCommit} answer {@code false}, which is the
+ * correct answer: there is nothing listening.
  *
- * <h2>El par {@code shouldCommit} / {@code commit}</h2>
+ * <h2>The pair {@code shouldCommit} / {@code commit}</h2>
  *
- * <p>Preguntar antes de emitir no es una optimizacion opcional. Llenar los campos de un evento
- * puede costar —formatear una cadena, recorrer una estructura— y {@code shouldCommit} contesta si
- * ese trabajo va a servir de algo, mirando el umbral y los filtros configurados.
+ * <p>Asking before emitting is not an optional optimisation. Filling the fields of an event may
+ * cost --formatting a string, walking a structure-- and {@code shouldCommit} answers whether that
+ * work is going to be of any use, looking at the threshold and the configured filters.
  *
  * @since 9
  */
 public abstract class Event extends jdk.internal.event.Event {
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     protected Event() {
     }
 
     /**
-     * Marca el comienzo del evento y arranca su cronometro.
+     * It marks the beginning of the event and starts its stopwatch.
      *
-     * <p>No hace falta para un evento sin duracion: si no se llama, el evento queda con duracion
-     * cero y la marca de tiempo la pone {@link #commit}.
+     * <p>It is not needed for an event with no duration: if it is not called, the event is left
+     * with duration zero and the time mark is put by {@link #commit}.
      */
     public final void begin() {
     }
 
     /**
-     * Marca el final del evento y detiene su cronometro.
+     * It marks the end of the event and stops its stopwatch.
      *
-     * <p>Separado de {@link #commit} para que la duracion medida sea la del trabajo y no incluya lo
-     * que cueste llenar los campos del evento despues.
+     * <p>Separated from {@link #commit} so that the measured duration is that of the work and does
+     * not include whatever it costs to fill the fields of the event afterwards.
      */
     public final void end() {
     }
 
     /**
-     * Emite el evento.
+     * It emits the event.
      *
-     * <p>Si no se llamo a {@link #end}, lo llama por su cuenta.
+     * <p>If {@link #end} was not called, it calls it on its own.
      */
     public final void commit() {
     }
 
     /**
-     * Si alguien esta grabando este tipo de evento.
+     * Whether somebody is recording this type of event.
      *
-     * @return {@code false} en esta biblioteca, porque no hay grabador
+     * @return {@code false} in this library, because there is no recorder
      */
     public final boolean isEnabled() {
         return false;
     }
 
     /**
-     * Si este evento pasaria los filtros configurados —umbral incluido— y por lo tanto vale la pena
-     * terminar de armarlo.
+     * Whether this event would pass the configured filters --threshold included-- and therefore
+     * whether it is worth finishing putting it together.
      *
-     * @return {@code false} en esta biblioteca, porque no hay grabador
+     * @return {@code false} in this library, because there is no recorder
      */
     public final boolean shouldCommit() {
         return false;
     }
 
     /**
-     * Fija un campo por su indice, para los eventos armados en tiempo de ejecucion con
+     * It sets a field by its index, for the events put together at run time with
      * {@link EventFactory}.
      *
-     * <p>Un evento hecho a mano tiene campos con nombre y se les asigna directamente; uno fabricado
-     * dinamicamente no tiene campos Java, y esta es la unica forma de llenarlo.
+     * <p>An event made by hand has fields with a name and they are assigned to directly; one
+     * manufactured dynamically has no Java fields, and this is the only way of filling it.
      *
-     * @param index el indice del campo, en el orden en que se declararon
-     * @param value el valor
+     * @param index the index of the field, in the order in which they were declared
+     * @param value the value
      */
     public final void set(int index, Object value) {
     }

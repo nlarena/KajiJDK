@@ -10,30 +10,31 @@ import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentEvent$ElementChange;
 
 /**
- * Una caja que maqueta a sus hijos en otro hilo.
+ * A box that lays its children out on another thread.
  *
- * <h2>Para que no se congele la pantalla</h2>
+ * <h2>So that the screen does not freeze</h2>
  *
- * <p>Maquetar un documento grande lleva tiempo. Si eso pasa en el hilo de eventos, la ventana no
- * responde mientras dura. Esta vista pone cada hijo en una cola ({@link LayoutQueue}) y lo maqueta
- * en un hilo aparte; mientras tanto, contesta con estimaciones.
+ * <p>Laying out a large document takes time. If that happens on the event thread, the window
+ * does not respond while it lasts. This view puts each child in a queue ({@link LayoutQueue})
+ * and lays it out on a separate thread; meanwhile, it answers with estimates.
  *
- * <h2>El precio: nada es exacto hasta que termina</h2>
+ * <h2>The price: nothing is exact until it finishes</h2>
  *
- * <p>Como los hijos se van midiendo de a uno, el largo total es una estimacion que se corrige a
- * medida que llegan los resultados. Por eso {@link ChildState} guarda por hijo si su maquetado ya
- * vale, y el {@link ChildLocator} recuerda hasta donde los desplazamientos son de fiar: mas alla de
- * ese punto los calcula suponiendo que los que faltan miden lo que dice la estimacion.
+ * <p>As the children are measured one at a time, the total length is an estimate that is
+ * corrected as the results arrive. That is why {@link ChildState} keeps per child whether its
+ * layout already holds, and the {@link ChildLocator} remembers up to where the offsets are
+ * trustworthy: beyond that point it computes them assuming that those still missing measure what
+ * the estimate says.
  *
- * <h2>Dos hilos sobre los mismos datos</h2>
+ * <h2>Two threads over the same data</h2>
  *
- * <p>El hilo de maquetado escribe los tamanos y el de eventos los lee. Todo lo que se comparte se
- * toca bajo el candado de la vista o el del hijo, y nunca los dos a la vez en distinto orden: eso
- * es lo que evita un abrazo mortal entre pintar y maquetar.
+ * <p>The layout thread writes the sizes and the event one reads them. Everything shared is
+ * touched under the view's lock or the child's, and never both at once in a different order:
+ * that is what avoids a deadlock between painting and laying out.
  */
 public class AsyncBoxView extends View {
 
-    /** Quien sabe donde cae cada hijo. */
+    /** Who knows where each child falls. */
     protected ChildLocator locator;
 
     int axis;
@@ -53,7 +54,7 @@ public class AsyncBoxView extends View {
     boolean minorChanged;
     Runnable flushTask;
 
-    /** Una caja asincronica sobre ese eje. */
+    /** An asynchronous box on that axis. */
     public AsyncBoxView(Element elem, int axis) {
         super(elem);
         stats = new ArrayList<ChildState>();
@@ -63,12 +64,12 @@ public class AsyncBoxView extends View {
         minorSpan = Short.MAX_VALUE;
     }
 
-    /** El eje en el que se apilan los hijos. */
+    /** The axis the children are stacked on. */
     public int getMajorAxis() {
         return axis;
     }
 
-    /** El otro. */
+    /** The other one. */
     public int getMinorAxis() {
         return (axis == X_AXIS) ? Y_AXIS : X_AXIS;
     }
@@ -105,14 +106,14 @@ public class AsyncBoxView extends View {
         rightInset = i;
     }
 
-    /** Cuanto se come el margen en ese eje. */
+    /** How much the margin eats on that axis. */
     protected float getInsetSpan(int axis) {
         float margin = (axis == X_AXIS)
                 ? getLeftInset() + getRightInset() : getTopInset() + getBottomInset();
         return margin;
     }
 
-    /** Si el largo total todavia es una estimacion; ver la nota de la clase. */
+    /** Whether the total length is still an estimate; see the class note. */
     protected void setEstimatedMajorSpan(boolean isEstimated) {
         estimatedMajorSpan = isEstimated;
     }
@@ -121,7 +122,7 @@ public class AsyncBoxView extends View {
         return estimatedMajorSpan;
     }
 
-    /** El estado del hijo numero tal. */
+    /** The state of child number such and such. */
     protected ChildState getChildState(int index) {
         synchronized (stats) {
             if ((index >= 0) && (index < stats.size())) {
@@ -131,7 +132,7 @@ public class AsyncBoxView extends View {
         }
     }
 
-    /** La cola donde se encolan los maquetados. */
+    /** The queue where the layouts are queued. */
     protected LayoutQueue getLayoutQueue() {
         return LayoutQueue.getDefaultQueue();
     }
@@ -141,10 +142,10 @@ public class AsyncBoxView extends View {
     }
 
     /**
-     * Un hijo cambio de largo: se corrige el total sin remaquetar todo.
+     * A child changed length: the total is corrected without laying everything out again.
      *
-     * <p>Se resta lo que media y se suma lo que mide ahora. Recalcular la suma entera cada vez
-     * seria cuadratico en la cantidad de hijos.
+     * <p>What it measured is subtracted and what it measures now is added. Recomputing the whole
+     * sum every time would be quadratic in the number of children.
      */
     protected synchronized void majorRequirementChange(ChildState cs, float delta) {
         if (!estimatedMajorSpan) {
@@ -153,12 +154,12 @@ public class AsyncBoxView extends View {
         majorChanged = true;
     }
 
-    /** Un hijo cambio de ancho: puede cambiar el ancho de la caja. */
+    /** A child changed width: the box's width may change. */
     protected synchronized void minorRequirementChange(ChildState cs) {
         minorChanged = true;
     }
 
-    /** Avisa al padre de los cambios juntados hasta ahora. */
+    /** It reports to the parent the changes gathered so far. */
     protected void flushRequirementChanges() {
         AbstractDocument doc = (AbstractDocument) getDocument();
         try {
@@ -197,7 +198,7 @@ public class AsyncBoxView extends View {
         }
     }
 
-    /** Cambia los hijos y encola el maquetado de los nuevos. */
+    /** It swaps the children and queues the layout of the new ones. */
     public void replace(int offset, int length, View[] views) {
         synchronized (stats) {
             for (int i = 0; i < length; i++) {
@@ -246,7 +247,7 @@ public class AsyncBoxView extends View {
 
     protected void updateLayout(DocumentEvent$ElementChange ec, DocumentEvent e, Shape a) {
         if (ec != null) {
-            // Los hijos cambiaron: el maquetado guardado ya no sirve.
+            // The children changed: the kept layout no longer serves.
             locator.childChanged(null);
         }
     }
@@ -280,7 +281,7 @@ public class AsyncBoxView extends View {
         }
     }
 
-    /** Al cambiar el tamano solo cambia el eje menor: el mayor lo deciden los hijos. */
+    /** On a size change only the minor axis changes: the major one is decided by the children. */
     public void setSize(float width, float height) {
         setSpanOnAxis(X_AXIS, width);
         setSpanOnAxis(Y_AXIS, height);
@@ -299,7 +300,7 @@ public class AsyncBoxView extends View {
             float targetSpan = span - margin;
             if (targetSpan != minorSpan) {
                 minorSpan = targetSpan;
-                // Cambiar el ancho invalida el alto de todos los hijos.
+                // Changing the width invalidates every child's height.
                 int n = getViewCount();
                 LayoutQueue q = getLayoutQueue();
                 for (int i = 0; i < n; i++) {
@@ -310,7 +311,7 @@ public class AsyncBoxView extends View {
                 q.addTask(flushTask);
             }
         } else {
-            // El eje mayor no se impone: se acepta lo que midan los hijos.
+            // The major axis is not imposed: whatever the children measure is accepted.
             if (estimatedMajorSpan) {
                 majorSpan = span - margin;
             }
@@ -354,7 +355,7 @@ public class AsyncBoxView extends View {
         return Integer.MAX_VALUE;
     }
 
-    /** El ancho es el del hijo mas ancho medido hasta ahora. */
+    /** The width is that of the widest child measured so far. */
     float getMinorSpan() {
         float span = 0;
         int n = getViewCount();
@@ -417,17 +418,17 @@ public class AsyncBoxView extends View {
     }
 
     /**
-     * Lo que la caja sabe de un hijo: su tamano, si vale y donde empieza.
+     * What the box knows about a child: its size, whether it holds and where it starts.
      *
-     * <p>Es tambien la tarea que se encola: {@link #run} es lo que corre el hilo de maquetado.
+     * <p>It is also the task that is queued: {@link #run} is what the layout thread runs.
      *
-     * <p>En el JDK es una clase interna; aca es estatica y recibe la caja como primer parametro,
-     * que es la misma firma que el JDK genera en el archivo compilado. Ver la nota de
-     * {@link TableView.TableRow}.
+     * <p>In the JDK it is an inner class; here it is static and takes the box as its first
+     * parameter, which is the same signature the JDK generates in the compiled file. See
+     * {@link TableView.TableRow}'s note.
      */
     public static class ChildState implements Runnable {
 
-        private final AsyncBoxView caja;
+        private final AsyncBoxView box;
         private View child;
         private float majorSpan;
         private float minorSpan;
@@ -439,14 +440,14 @@ public class AsyncBoxView extends View {
         private boolean minorValid;
         private boolean majorValid;
 
-        /** El estado de ese hijo, todavia sin medir. */
-        public ChildState(AsyncBoxView caja, View v) {
-            this.caja = caja;
+        /** That child's state, still unmeasured. */
+        public ChildState(AsyncBoxView box, View v) {
+            this.box = box;
             child = v;
             minorValid = false;
             majorValid = false;
             childSizeValid = false;
-            child.setParent(caja);
+            child.setParent(box);
         }
 
         public View getChildView() {
@@ -454,23 +455,23 @@ public class AsyncBoxView extends View {
         }
 
         /**
-         * Mide el hijo. La corre el hilo de maquetado.
+         * It measures the child. The layout thread runs it.
          *
-         * <p>Toma el candado de lectura del documento: sin eso, el documento podria cambiar en la
-         * mitad de la medicion y el resultado no valdria para ningun estado del documento.
+         * <p>It takes the document's read lock: without that, the document could change in the
+         * middle of the measurement and the result would hold for no state of the document.
          */
         public void run() {
-            AbstractDocument doc = (AbstractDocument) caja.getDocument();
+            AbstractDocument doc = (AbstractDocument) box.getDocument();
             try {
                 doc.readLock();
                 if (minorValid && majorValid && childSizeValid) {
                     return;
                 }
-                if (child.getParent() == caja) {
-                    // Puede haber sido sacado mientras esperaba en la cola.
+                if (child.getParent() == box) {
+                    // It may have been removed while it waited in the queue.
                     updateChild();
                     while (!(minorValid && majorValid && childSizeValid)
-                            && child.getParent() == caja) {
+                            && child.getParent() == box) {
                         updateChild();
                     }
                 }
@@ -483,7 +484,7 @@ public class AsyncBoxView extends View {
             boolean minorUpdated = false;
             synchronized (this) {
                 if (!minorValid) {
-                    int minorAxis = caja.getMinorAxis();
+                    int minorAxis = box.getMinorAxis();
                     minorMin = child.getMinimumSpan(minorAxis);
                     minorPref = child.getPreferredSpan(minorAxis);
                     minorMax = child.getMaximumSpan(minorAxis);
@@ -492,7 +493,7 @@ public class AsyncBoxView extends View {
                 }
             }
             if (minorUpdated) {
-                caja.minorRequirementChange(this);
+                box.minorRequirementChange(this);
             }
 
             boolean majorUpdated = false;
@@ -500,22 +501,22 @@ public class AsyncBoxView extends View {
             synchronized (this) {
                 if (!majorValid) {
                     float oldSpan = majorSpan;
-                    majorSpan = child.getPreferredSpan(caja.axis);
+                    majorSpan = child.getPreferredSpan(box.axis);
                     delta = majorSpan - oldSpan;
                     majorValid = true;
                     majorUpdated = true;
                 }
             }
             if (majorUpdated) {
-                caja.majorRequirementChange(this, delta);
-                caja.locator.childChanged(this);
+                box.majorRequirementChange(this, delta);
+                box.locator.childChanged(this);
             }
 
             synchronized (this) {
                 if (!childSizeValid) {
                     float w;
                     float h;
-                    if (caja.axis == X_AXIS) {
+                    if (box.axis == X_AXIS) {
                         w = majorSpan;
                         h = getMinorSpan();
                     } else {
@@ -528,19 +529,19 @@ public class AsyncBoxView extends View {
             }
         }
 
-        /** El ancho del hijo, dentro de lo que la caja le da. */
+        /** The child's width, within what the box gives it. */
         public float getMinorSpan() {
-            if (minorMax < caja.minorSpan) {
+            if (minorMax < box.minorSpan) {
                 return minorMax;
             }
-            return Math.max(minorMin, caja.minorSpan);
+            return Math.max(minorMin, box.minorSpan);
         }
 
-        /** Donde arranca el hijo en el eje menor, segun su alineacion. */
+        /** Where the child starts on the minor axis, according to its alignment. */
         public float getMinorOffset() {
-            if (minorMax < caja.minorSpan) {
-                float align = child.getAlignment(caja.getMinorAxis());
-                return ((caja.minorSpan - minorMax) * align);
+            if (minorMax < box.minorSpan) {
+                float align = child.getAlignment(box.getMinorAxis());
+                return ((box.minorSpan - minorMax) * align);
             }
             return 0f;
         }
@@ -553,14 +554,14 @@ public class AsyncBoxView extends View {
             return majorOffset;
         }
 
-        /** Lo pone el {@link ChildLocator} al recorrer los hijos. */
+        /** The {@link ChildLocator} sets it while walking the children. */
         public void setMajorOffset(float offs) {
             majorOffset = offs;
         }
 
-        /** Marca lo que hay que volver a medir y encola el trabajo. */
+        /** It marks what has to be measured again and queues the work. */
         public void preferenceChanged(boolean width, boolean height) {
-            if (caja.axis == X_AXIS) {
+            if (box.axis == X_AXIS) {
                 if (width) {
                     majorValid = false;
                 }
@@ -584,33 +585,33 @@ public class AsyncBoxView extends View {
     }
 
     /**
-     * Sabe donde cae cada hijo dentro de la caja.
+     * It knows where each child falls inside the box.
      *
-     * <p>Guarda hasta que hijo los desplazamientos ya se calcularon. Cuando uno cambia de tamano,
-     * los de mas abajo dejan de valer y se recalculan recien cuando alguien los pide: recalcular
-     * todos en cada cambio seria cuadratico.
+     * <p>It keeps up to which child the offsets have already been computed. When one changes size,
+     * those below it stop holding and are recomputed only when somebody asks for them: recomputing
+     * them all on every change would be quadratic.
      */
     public static class ChildLocator {
 
-        private final AsyncBoxView caja;
+        private final AsyncBoxView box;
 
-        /** El ultimo hijo cuyo desplazamiento vale. */
+        /** The last child whose offset holds. */
         protected ChildState lastValidOffset;
 
-        /** El lugar que se le dio a la caja la ultima vez que se pinto. */
+        /** The place given to the box the last time it was painted. */
         protected Rectangle lastAlloc;
 
-        /** Un rectangulo que se reusa para no reservar uno por hijo. */
+        /** A rectangle that is reused so as not to allocate one per child. */
         protected Rectangle childAlloc;
 
-        /** Un ubicador para esa caja. */
-        public ChildLocator(AsyncBoxView caja) {
-            this.caja = caja;
+        /** A locator for that box. */
+        public ChildLocator(AsyncBoxView box) {
+            this.box = box;
             lastAlloc = new Rectangle();
             childAlloc = new Rectangle();
         }
 
-        /** Un hijo cambio: desde el, los desplazamientos dejan de valer. */
+        /** A child changed: from it on, the offsets stop holding. */
         public synchronized void childChanged(ChildState cs) {
             if (lastValidOffset == null) {
                 return;
@@ -621,16 +622,16 @@ public class AsyncBoxView extends View {
             }
         }
 
-        /** Dibuja los hijos que caen dentro del recorte. */
+        /** It draws the children that fall inside the clip. */
         public synchronized void paintChildren(Graphics g) {
             Rectangle clip = g.getClipBounds();
-            float targetOffset = (caja.axis == X_AXIS)
+            float targetOffset = (box.axis == X_AXIS)
                     ? clip.x - lastAlloc.x : clip.y - lastAlloc.y;
             int index = getViewIndexAtVisualOffset(targetOffset);
-            int n = caja.getViewCount();
-            float offs = caja.getChildState(index).getMajorOffset();
+            int n = box.getViewCount();
+            float offs = box.getChildState(index).getMajorOffset();
             for (int i = index; i < n; i++) {
-                ChildState cs = caja.getChildState(i);
+                ChildState cs = box.getChildState(i);
                 cs.setMajorOffset(offs);
                 Shape ca = getChildAllocation(i);
                 if (intersectsClip(ca, clip)) {
@@ -639,7 +640,7 @@ public class AsyncBoxView extends View {
                         v.paint(g, ca);
                     }
                 } else {
-                    // Ya se paso del recorte: lo que viene tampoco se ve.
+                    // It already went past the clip: what follows is not seen either.
                     break;
                 }
                 offs = offs + cs.getMajorSpan();
@@ -654,14 +655,14 @@ public class AsyncBoxView extends View {
             return r.intersects(clip);
         }
 
-        /** El lugar del hijo numero tal, dentro de ese lugar. */
+        /** The place of child number such and such, within that place. */
         public synchronized Shape getChildAllocation(int index, Shape a) {
             if (a == null) {
                 return null;
             }
             setAllocation(a);
-            ChildState cs = caja.getChildState(index);
-            if (cs.getChildView().getParent() != caja) {
+            ChildState cs = box.getChildState(index);
+            if (cs.getChildView().getParent() != box) {
                 return null;
             }
             updateChildOffsetsToIndex(index);
@@ -675,21 +676,21 @@ public class AsyncBoxView extends View {
             }
         }
 
-        /** Que hijo cae en ese punto. */
+        /** Which child falls on that point. */
         public int getViewIndexAtPoint(float x, float y, Shape a) {
             setAllocation(a);
-            float targetOffset = (caja.axis == X_AXIS) ? x - lastAlloc.x : y - lastAlloc.y;
+            float targetOffset = (box.axis == X_AXIS) ? x - lastAlloc.x : y - lastAlloc.y;
             int index = getViewIndexAtVisualOffset(targetOffset);
             return index;
         }
 
-        /** El lugar del hijo numero tal, en el ultimo lugar dado a la caja. */
+        /** The place of child number such and such, in the last place given to the box. */
         protected Shape getChildAllocation(int index) {
-            ChildState cs = caja.getChildState(index);
+            ChildState cs = box.getChildState(index);
             if (!cs.isLayoutValid()) {
                 cs.run();
             }
-            if (caja.axis == X_AXIS) {
+            if (box.axis == X_AXIS) {
                 childAlloc.x = lastAlloc.x + (int) cs.getMajorOffset();
                 childAlloc.y = lastAlloc.y + (int) cs.getMinorOffset();
                 childAlloc.width = (int) cs.getMajorSpan();
@@ -703,39 +704,39 @@ public class AsyncBoxView extends View {
             return childAlloc;
         }
 
-        /** Recuerda el lugar dado a la caja, ya sin margenes. */
+        /** It remembers the place given to the box, already without margins. */
         protected void setAllocation(Shape a) {
             if (a instanceof Rectangle) {
                 lastAlloc.setBounds((Rectangle) a);
             } else {
                 lastAlloc.setBounds(a.getBounds());
             }
-            caja.setSize(lastAlloc.width, lastAlloc.height);
-            lastAlloc.x = lastAlloc.x + (int) caja.getLeftInset();
-            lastAlloc.y = lastAlloc.y + (int) caja.getTopInset();
+            box.setSize(lastAlloc.width, lastAlloc.height);
+            lastAlloc.x = lastAlloc.x + (int) box.getLeftInset();
+            lastAlloc.y = lastAlloc.y + (int) box.getTopInset();
             lastAlloc.width = lastAlloc.width
-                    - (int) (caja.getLeftInset() + caja.getRightInset());
+                    - (int) (box.getLeftInset() + box.getRightInset());
             lastAlloc.height = lastAlloc.height
-                    - (int) (caja.getTopInset() + caja.getBottomInset());
+                    - (int) (box.getTopInset() + box.getBottomInset());
         }
 
-        /** Que hijo empieza a esa distancia del principio. */
+        /** Which child starts at that distance from the beginning. */
         protected int getViewIndexAtVisualOffset(float targetOffset) {
-            int n = caja.getViewCount();
+            int n = box.getViewCount();
             if (n > 0) {
                 boolean lastValid = (lastValidOffset != null);
                 if (lastValidOffset == null) {
-                    lastValidOffset = caja.getChildState(0);
+                    lastValidOffset = box.getChildState(0);
                 }
-                if (targetOffset > caja.majorSpan) {
-                    targetOffset = caja.majorSpan;
+                if (targetOffset > box.majorSpan) {
+                    targetOffset = box.majorSpan;
                 }
                 if (targetOffset > lastValidOffset.getMajorOffset()) {
                     return updateChildOffsets(targetOffset);
                 }
                 float offs = 0f;
                 for (int i = 0; i < n; i++) {
-                    ChildState cs = caja.getChildState(i);
+                    ChildState cs = box.getChildState(i);
                     float nextOffs = offs + cs.getMajorSpan();
                     if (targetOffset < nextOffs) {
                         return i;
@@ -746,15 +747,15 @@ public class AsyncBoxView extends View {
             return n - 1;
         }
 
-        /** Sigue calculando desplazamientos hasta llegar a esa distancia. */
+        /** It goes on computing offsets until it reaches that distance. */
         int updateChildOffsets(float targetOffset) {
-            int n = caja.getViewCount();
+            int n = box.getViewCount();
             int targetIndex = n - 1;
-            int pos = caja.stats.indexOf(lastValidOffset);
+            int pos = box.stats.indexOf(lastValidOffset);
             float start = lastValidOffset.getMajorOffset();
             float lastOffset = start;
             for (int i = pos; i < n; i++) {
-                ChildState cs = caja.getChildState(i);
+                ChildState cs = box.getChildState(i);
                 cs.setMajorOffset(lastOffset);
                 lastOffset = lastOffset + cs.getMajorSpan();
                 lastValidOffset = cs;
@@ -766,15 +767,15 @@ public class AsyncBoxView extends View {
             return targetIndex;
         }
 
-        /** Sigue calculando desplazamientos hasta ese hijo. */
+        /** It goes on computing offsets up to that child. */
         void updateChildOffsetsToIndex(int index) {
-            int pos = (lastValidOffset != null) ? caja.stats.indexOf(lastValidOffset) : 0;
+            int pos = (lastValidOffset != null) ? box.stats.indexOf(lastValidOffset) : 0;
             if (index <= pos) {
                 return;
             }
             float lastOffset = (lastValidOffset != null) ? lastValidOffset.getMajorOffset() : 0f;
             for (int i = pos; i <= index; i++) {
-                ChildState cs = caja.getChildState(i);
+                ChildState cs = box.getChildState(i);
                 cs.setMajorOffset(lastOffset);
                 lastOffset = lastOffset + cs.getMajorSpan();
                 lastValidOffset = cs;
@@ -782,17 +783,17 @@ public class AsyncBoxView extends View {
         }
     }
 
-    /** La tarea que avisa los cambios juntados; se encola al final de cada tanda. */
+    /** The task that reports the gathered changes; it is queued at the end of each batch. */
     static class FlushTask implements Runnable {
 
-        private final AsyncBoxView caja;
+        private final AsyncBoxView box;
 
-        FlushTask(AsyncBoxView caja) {
-            this.caja = caja;
+        FlushTask(AsyncBoxView box) {
+            this.box = box;
         }
 
         public void run() {
-            caja.flushRequirementChanges();
+            box.flushRequirementChanges();
         }
     }
 }

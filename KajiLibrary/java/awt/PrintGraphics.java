@@ -1,14 +1,14 @@
 package java.awt;
 
 /**
- * La marca que lleva un {@link Graphics} que está dibujando **sobre una impresión**.
+ * The mark a {@link Graphics} carries when it is drawing **onto a print**.
  *
- * <p>Es cómo un componente se entera de que lo están imprimiendo y no pintando en pantalla, sin
- * mirar la clase concreta: si el `Graphics` que recibió es un `PrintGraphics`, va a papel. Sirve
- * para no dibujar lo que no tiene sentido impreso —un cursor, un resaltado de selección—.
+ * <p>It is how a component finds out it is being printed rather than painted on screen, without
+ * looking at the concrete class: if the `Graphics` it received is a `PrintGraphics`, it goes to
+ * paper. It serves to avoid drawing what makes no sense printed —a cursor, a selection highlight—.
  */
 public interface PrintGraphics {
 
-    /** El trabajo de impresión al que pertenece. */
+    /** The print job it belongs to. */
     PrintJob getPrintJob();
 }

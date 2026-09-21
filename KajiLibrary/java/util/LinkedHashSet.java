@@ -92,32 +92,32 @@ public class LinkedHashSet<E> extends AbstractSet<E> implements Set<E>, Sequence
     }
 
     /**
-     * Agrega `e` al **principio** del orden, moviendolo si ya estaba.
+     * It adds `e` at the **front** of the order, moving it if it was already there.
      *
-     * <p>Mover es la parte que sorprende y es lo que dice el contrato: a diferencia de `add`, que
-     * sobre un elemento presente no hace nada, `addFirst` lo trae al frente.
+     * <p>Moving is the part that surprises and it is what the contract says: unlike `add`, which does
+     * nothing on an element that is present, `addFirst` brings it to the front.
      */
     public void addFirst(E e) {
         map.putFirst(e, PRESENT);
     }
 
-    /** Idem, al final. */
+    /** The same, at the end. */
     public void addLast(E e) {
         map.putLast(e, PRESENT);
     }
 
     /**
-     * Una **vista** del conjunto al reves, no una copia: comparte el mapa de atras, asi que un
-     * cambio de un lado se ve del otro.
+     * A **view** of the set backwards, not a copy: it shares the map behind, so a change on one side
+     * is seen on the other.
      */
     public SequencedSet<E> reversed() {
         return new LhmKeySet<E, Object>(map, true);
     }
 
     /**
-     * Un conjunto dimensionado para `numElements` elementos.
+     * A set sized for `numElements` elements.
      *
-     * @throws IllegalArgumentException si `numElements` es negativo
+     * @throws IllegalArgumentException if `numElements` is negative
      */
     public static <T> LinkedHashSet<T> newLinkedHashSet(int numElements) {
         if (numElements < 0) {
@@ -129,7 +129,7 @@ public class LinkedHashSet<E> extends AbstractSet<E> implements Set<E>, Sequence
     // --- the ends of the order ------------------------------------------------------
 
     public E getFirst() {
-        LhmEntry<E, Object> e = map.primeraEntrada();
+        LhmEntry<E, Object> e = map.firstEntryOf();
         if (e == null) {
             throw new NoSuchElementException();
         }
@@ -137,7 +137,7 @@ public class LinkedHashSet<E> extends AbstractSet<E> implements Set<E>, Sequence
     }
 
     public E getLast() {
-        LhmEntry<E, Object> e = map.ultimaEntrada();
+        LhmEntry<E, Object> e = map.lastEntryOf();
         if (e == null) {
             throw new NoSuchElementException();
         }
@@ -180,7 +180,7 @@ final class LinkedHashSetItr<E> implements Iterator<E> {
 
     LinkedHashSetItr(LinkedHashMap<E, Object> map) {
         this.map = map;
-        this.next = map.primeraEntrada();
+        this.next = map.firstEntryOf();
     }
 
     public boolean hasNext() {

@@ -2,12 +2,12 @@ package java.security;
 
 import java.io.Serializable;
 
-// Las dos mitades de un par asimetrico juntas.
+// The two halves of an asymmetric pair together.
 //
-// Es un contenedor y nada mas —no verifica que las dos claves se correspondan, porque para eso
-// habria que hacer criptografia y este tipo no la hace— pero es el contenedor correcto: un par
-// generado se entrega de a dos o no se entrega, y separarlos en dos valores sueltos es como se
-// termina firmando con la clave de otro par.
+// It is a container and nothing else —it does not check that the two keys correspond, because for
+// that one would have to do cryptography and this type does not— but it is the right container: a
+// generated pair is handed over as two or is not handed over, and separating them into two loose
+// values is how one ends up signing with the key of another pair.
 public final class KeyPair implements Serializable, DEREncodable {
 
     private final PublicKey publicKey;

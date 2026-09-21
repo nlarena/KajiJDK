@@ -1,53 +1,53 @@
 package javax.swing.text;
 
 /**
- * Un nodo de la estructura de un documento: un parrafo, una linea, un tramo con el mismo formato.
+ * A node of a document's structure: a paragraph, a line, a run with the same formatting.
  *
- * <h2>Dos vistas del mismo texto</h2>
+ * <h2>Two views of the same text</h2>
  *
- * <p>Un documento es a la vez una secuencia plana de caracteres y un arbol de elementos. Los
- * elementos no guardan texto: guardan <strong>un tramo</strong> —{@link #getStartOffset} a
- * {@link #getEndOffset}— y los atributos que valen ahi. Por eso editar el texto no reconstruye el
- * arbol: los tramos se corren.
+ * <p>A document is at the same time a flat sequence of characters and a tree of elements. The
+ * elements do not keep text: they keep <strong>a stretch</strong> --{@link #getStartOffset} to
+ * {@link #getEndOffset}-- and the attributes that hold there. That is why editing the text does
+ * not rebuild the tree: the stretches shift.
  *
- * <p>Un mismo documento puede tener <em>varios</em> arboles a la vez sobre el mismo texto — uno de
- * parrafos y otro de lineas visuales, que no coinciden cuando hay ajuste de linea. De ahi que
- * {@link Document#getRootElements} devuelva un arreglo y no uno solo.
+ * <p>One same document may have <em>several</em> trees at once over the same text -- one of
+ * paragraphs and another of visual lines, which do not coincide when there is line wrapping.
+ * Hence {@link Document#getRootElements} returns an array and not a single one.
  */
 public interface Element {
 
-    /** El documento al que pertenece. */
+    /** The document it belongs to. */
     Document getDocument();
 
-    /** El elemento que lo contiene, o {@code null} si es raiz. */
+    /** The element that contains it, or {@code null} if it is a root. */
     Element getParentElement();
 
-    /** El nombre del tipo de elemento. */
+    /** The element type's name. */
     String getName();
 
-    /** Los atributos que valen en este tramo. */
+    /** The attributes that hold in this stretch. */
     AttributeSet getAttributes();
 
-    /** Donde empieza el tramo. */
+    /** Where the stretch starts. */
     int getStartOffset();
 
-    /** Donde termina el tramo. */
+    /** Where the stretch ends. */
     int getEndOffset();
 
-    /** Cual de los hijos cubre la posicion {@code offset}. */
+    /** Which of the children covers position {@code offset}. */
     int getElementIndex(int offset);
 
-    /** Cuantos hijos tiene. */
+    /** How many children it has. */
     int getElementCount();
 
-    /** El hijo numero {@code index}. */
+    /** Child number {@code index}. */
     Element getElement(int index);
 
     /**
-     * Si no tiene hijos.
+     * Whether it has no children.
      *
-     * <p>No es lo mismo que {@code getElementCount() == 0}: un elemento con hijos puede quedar
-     * momentaneamente vacio durante una edicion sin dejar de ser una rama.
+     * <p>It is not the same as {@code getElementCount() == 0}: an element with children may be left
+     * momentarily empty during an edit without ceasing to be a branch.
      */
     boolean isLeaf();
 }

@@ -1,18 +1,18 @@
 package javax.management;
 
 /**
- * El nombre de la clase del MBean, usado como si fuera un atributo.
+ * The MBean's class name, used as if it were an attribute.
  *
- * <p>De paquete: se fabrica con {@link Query#classattr}. Es un atributo virtual --ningun MBean
- * declara uno que se llame {@code Class}-- y por eso reemplaza la lectura entera y no solo el
- * nombre.
+ * <p>Package-private: it is made with {@link Query#classattr}. It is a virtual attribute --no MBean
+ * declares one called {@code Class}-- and that is why it replaces the whole read and not just the
+ * name.
  */
 class ClassAttributeValueExp extends AttributeValueExp {
 
     private static final long serialVersionUID = -1081892073854801359L;
 
     /**
-     * @serial siempre "Class"
+     * @serial always "Class"
      */
     private String attr;
 
@@ -38,7 +38,7 @@ class ClassAttributeValueExp extends AttributeValueExp {
         return "Class";
     }
 
-    /** El nombre de la clase segun el agente. */
+    /** The class name according to the agent. */
     protected Object getValue(ObjectName name) {
         try {
             MBeanServer server = QueryEval.getMBeanServer();

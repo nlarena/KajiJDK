@@ -3,47 +3,50 @@ package java.lang.annotation;
 import java.lang.reflect.Method;
 
 /**
- * KajiLibrary's java.lang.annotation.AnnotationTypeMismatchException — el elemento de una anotacion
- * guarda un valor de un tipo distinto al que declara.
+ * KajiLibrary's java.lang.annotation.AnnotationTypeMismatchException — an annotation's element holds
+ * a value of a type other than the one it declares.
  *
- * <p>Es el sintoma de una recompilacion a medias. Alguien escribio {@code int value();}, un tercero
- * compilo {@code @Config(3)}, despues el autor cambio el elemento a {@code String value();} y
- * recompilo <strong>solo su</strong> anotacion. El `.class` del usuario sigue con un entero
- * adentro; el de la anotacion ya promete un texto. Nadie miente en el momento en que se compilo:
- * quedaron desfasados. Recien cuando la reflexion los junta se descubre el choque, y por eso vive
- * en tiempo de ejecucion y no la puede detectar el compilador.
+ * <p>It is the symptom of a half-finished recompilation. Someone wrote {@code int value();}, a third
+ * party compiled {@code @Config(3)}, then the author changed the element to {@code String value();}
+ * and recompiled <strong>only their own</strong> annotation. The user's `.class` still has an
+ * integer inside; the annotation's already promises a text. Nobody is lying at the moment they were
+ * compiled: they drifted apart. The clash is only discovered when reflection brings them together,
+ * and that is why it lives at run time and the compiler cannot detect it.
  *
- * <p>Se distingue de {@link AnnotationFormatError} en que aca los bytes estan bien formados; lo que
- * falla es la concordancia entre dos archivos. Y de {@link IncompleteAnnotationException} en que
- * alli el elemento directamente <strong>no esta</strong>, mientras que aca esta con el tipo
- * equivocado.
+ * <p>It differs from {@link AnnotationFormatError} in that here the bytes are well formed; what
+ * fails is the agreement between two files. And from {@link IncompleteAnnotationException} in that
+ * there the element is simply <strong>not present</strong>, whereas here it is present with the
+ * wrong type.
  *
- * <p>La clase esta completa. Quien la construye normalmente es el proxy de anotaciones al leer un
- * elemento, cosa que esta VM todavia no hace; el tipo igual hace falta porque cualquier codigo que
- * llame a {@code getAnnotation(...).valor()} tiene que poder atraparla.
- *
- * <p>No se declara `serialVersionUID` por la misma razon que en el resto del paquete: no es API
- * publica y esta biblioteca no tiene serializacion de objetos que lo consulte.
+ * <p>The class is complete. What normally constructs it is the annotation proxy when reading an
+ * element, which this VM does not do yet; the type is needed all the same, because any code calling
+ * {@code getAnnotation(...).value()} has to be able to catch it.
+ * <p>The UID is left to be computed instead of being declared. `ObjectStreamClass` works it out
+ * per the specification --SHA-1 over the canonical form, static initializer included-- so a
+ * computed one is right by construction, while a hand-written constant copied from nowhere would be
+ * a number two JVMs could disagree on with nothing to notice it by. That is the worst way of being
+ * wrong this API has; see {@code ObjectStreamClass}'s note.
  */
 public class AnnotationTypeMismatchException extends RuntimeException {
 
     /**
-     * `transient` porque un {@link Method} no viaja: al deserializar la excepcion el campo vuelve
-     * en `null`, y por eso {@link #element()} documenta que puede no estar disponible. El
-     * {@link #foundType} si viaja, y es lo unico que sobrevive de un lado al otro.
+     * `transient` because a {@link Method} does not travel: on deserialising the exception the field
+     * comes back `null`, which is why {@link #element()} documents that it may not be available.
+     * {@link #foundType} does travel, and it is the only thing that survives from one side to the
+     * other.
      */
     private final transient Method element;
 
     private final String foundType;
 
     /**
-     * El mensaje se arma aca, en el `super`, y no en un `getMessage()` sobrescrito.
+     * The message is built here, in the `super`, and not in an overridden `getMessage()`.
      *
-     * <p>Tiene que ser antes de asignar los campos --es la regla del lenguaje-- y por eso el texto
-     * se construye a partir de los parametros. Los dos aceptan `null` a proposito: quien detecta el
-     * choque puede no tener a mano el {@link Method}, y la concatenacion los vuelve el literal
-     * "null" sin explotar. Cambiar eso por un chequeo que tire {@code NullPointerException}
-     * convertiria un diagnostico pobre en un fallo, que es peor.
+     * <p>It has to come before the fields are assigned --that is the language's rule-- and so the
+     * text is built out of the parameters. Both accept `null` on purpose: whoever detects the clash
+     * may not have the {@link Method} to hand, and the concatenation turns them into the literal
+     * "null" without blowing up. Trading that for a check that throws
+     * {@code NullPointerException} would turn a poor diagnostic into a failure, which is worse.
      */
     public AnnotationTypeMismatchException(Method element, String foundType) {
         super("Incorrectly typed data found for annotation element " + element

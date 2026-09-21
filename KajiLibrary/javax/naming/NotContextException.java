@@ -1,11 +1,11 @@
 package javax.naming;
 
 /**
- * Se lanza cuando la resolucion llego a un objeto que no es un contexto y todavia quedaba
- * nombre por resolver --o cuando se pidio una operacion de contexto sobre algo que no lo es--.
- * Resolver `a/b/c` donde `a/b` es un archivo y no un directorio da esto.
+ * Thrown when resolution reached an object that is not a context while there was still name left
+ * to resolve --or when a context operation was requested on something that is not one. Resolving
+ * `a/b/c` where `a/b` is a file and not a directory gives this.
  *
- * <p>La jerarquia entera y el estado que arrastra estan explicados en `NamingException`.
+ * <p>The whole hierarchy and the state it carries are explained in `NamingException`.
  */
 public class NotContextException extends NamingException {
 

@@ -98,7 +98,7 @@ public abstract class Collator implements Comparator<Object>, Cloneable {
      *
      * @return a new collator
      */
-    public static Collator getInstance() {
+    public static synchronized Collator getInstance() {
         return Collator.getInstance(Locale.getDefault());
     }
 
@@ -205,7 +205,7 @@ public abstract class Collator implements Comparator<Object>, Cloneable {
      * @implNote One rule set serves every locale here, so the honest answer is the one locale whose
      *           rules were actually written down.
      */
-    public static Locale[] getAvailableLocales() {
+    public static synchronized Locale[] getAvailableLocales() {
         return new Locale[] {Locale.US};
     }
 

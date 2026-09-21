@@ -7,47 +7,49 @@ import javax.naming.NamingException;
 import javax.naming.ReferralException;
 
 /**
- * El servidor no tiene lo que se le pidio y dice donde buscarlo.
+ * The server does not have what it was asked for and says where to look for it.
  *
- * <h2>Por que una excepcion y no un valor de retorno</h2>
+ * <h2>Why an exception and not a return value</h2>
  *
- * <p>Porque una referencia interrumpe la operacion: lo que se pidio no esta <em>aca</em>. Modelarla
- * como resultado obligaria a que toda llamada devolviera "o el dato o una redireccion", y eso
- * contaminaria la API entera por un caso que casi nunca pasa.
+ * <p>Because a referral interrupts the operation: what was asked for is not <em>here</em>.
+ * Modelling it as a result would force every call to return "either the data or a redirection", and
+ * that would pollute the whole API for a case that almost never happens.
  *
- * <p>Lo raro de esta excepcion es que se <strong>continua</strong>: {@link #getReferralContext}
- * devuelve un contexto ya apuntando al otro servidor, y ahi se repite la operacion. Puede haber
- * varias referencias encadenadas, asi que el patron es un bucle que atrapa, sigue y reintenta.
+ * <p>The odd thing about this exception is that it is <strong>continued</strong>:
+ * {@link #getReferralContext} returns a context already pointing at the other server, and the
+ * operation is repeated there. There may be several chained referrals, so the pattern is a loop
+ * that catches, follows and retries.
  *
- * <p>La sobrecarga con {@link Control}{@code []} es lo que agrega LDAP sobre
- * {@link ReferralException}: los controles del contexto original no viajan solos al servidor nuevo,
- * y hay que decidir cuales llevar.
+ * <p>The overload with {@link Control}{@code []} is what LDAP adds over {@link ReferralException}:
+ * the original context's controls do not travel on their own to the new server, and you have to
+ * decide which ones to take.
  */
 public abstract class LdapReferralException extends ReferralException {
 
     private static final long serialVersionUID = -1668992791764950804L;
 
-    /** Con un mensaje. */
+    /** With a message. */
     protected LdapReferralException(String explanation) {
         super(explanation);
     }
 
-    /** Sin mensaje. */
+    /** Without a message. */
     protected LdapReferralException() {
         super();
     }
 
-    /** Un contexto apuntando al servidor referido. */
+    /** A context pointing at the referred server. */
     public abstract Context getReferralContext() throws NamingException;
 
-    /** Igual, con otro entorno. */
+    /** Same, with another environment. */
     public abstract Context getReferralContext(Hashtable<?, ?> env) throws NamingException;
 
     /**
-     * Igual, con otro entorno y esos controles de conexion.
+     * Same, with another environment and those connection controls.
      *
-     * <p>Los controles no se heredan del contexto original: el servidor nuevo puede no soportarlos,
-     * y mandarlos como criticos alla haria fallar la operacion que se estaba intentando salvar.
+     * <p>The controls are not inherited from the original context: the new server may not support
+     * them, and sending them as critical there would make the operation you were trying to rescue
+     * fail.
      */
     public abstract Context getReferralContext(Hashtable<?, ?> env, Control[] reqCtls)
             throws NamingException;

@@ -8,20 +8,21 @@ import jdk.internal.util.random.RandomSupport;
  * The same LXM recipe as L64X128MixRandom with
  * a BIGGER xor-shift half: xoshiro256 instead of xoroshiro128.
  *
- * <p>What buying 128 more bits of state actually gets you is EQUIDISTRIBUTION, not a longer period in
- * any practical sense (2<sup>64</sup> x (2<sup>128</sup> - 1) is already unreachable). A generator is k-equidistributed
- * when every possible k-tuple of consecutive outputs appears equally often; more XBG state raises
- * k, which matters when the values are consumed in groups — shuffling, sampling coordinates,
- * generating vectors. That is the axis the LXM family scales along, and it is why there are four
- * XBG sizes rather than one.
+ * <p>What buying 128 more bits of state actually gets you is EQUIDISTRIBUTION, not a longer period
+ * in any practical sense (2<sup>64</sup> x (2<sup>128</sup> - 1) is already unreachable). A
+ * generator is k-equidistributed when every possible k-tuple of consecutive outputs appears equally
+ * often; more XBG state raises k, which matters when the values are consumed in groups — shuffling,
+ * sampling coordinates, generating vectors. That is the axis the LXM family scales along, and it is
+ * why there are four XBG sizes rather than one.
  *
  * <p>The XBG here is exactly the transition of Xoshiro256PlusPlus (shift 17, rotate 45) — only the
  * scrambler differs, because in LXM the output comes from mixing the LCG and XBG states together
  * rather than from the XBG alone.
  *
- * @implNote An INTERNAL class. A KajiLibrary subset: the JDK's extends an abstract splittable base and
- *           implements the nested SplittableGenerator interface (finding #101), so {@code split} is omitted, as are
- *           the byte[] seed constructor and the no-arg one (which needs a shared AtomicLong counter).
+ * @implNote An INTERNAL class. A KajiLibrary subset: the JDK's extends an abstract splittable base
+ *           and implements the nested SplittableGenerator interface (finding #101), so {@code
+ *           split} is omitted, as are the byte[] seed constructor and the no-arg one (which needs a
+ *           shared AtomicLong counter).
  */
 public final class L64X256MixRandom implements RandomGenerator.SplittableGenerator {
 
@@ -121,27 +122,27 @@ public final class L64X256MixRandom implements RandomGenerator.SplittableGenerat
         return result;
     }
 
-    // ---- las tres entradas que faltaban ----------------------------------------------------------
+    // ---- the three entry points that were missing -----------------------------------------------
 
-    // La semilla de los generadores sin argumentos. Es un contador compartido que avanza de a
-    // GOLDEN_RATIO_64: dos generadores creados uno detras del otro no arrancan en estados vecinos,
-    // que es lo unico que se le pide.
+    // The seed of the generators with no arguments. It is a shared counter that advances by
+    // GOLDEN_RATIO_64: two generators created one after the other do not start at neighbouring
+    // states, which is the only thing asked of it.
     private static final java.util.concurrent.atomic.AtomicLong SEMILLERO =
             new java.util.concurrent.atomic.AtomicLong(RandomSupport.initialSeed());
 
-    /** Un generador con una semilla elegida sola, distinta en cada llamada. */
+    /** A generator with a seed chosen by itself, different on each call. */
     public L64X256MixRandom() {
         this(SEMILLERO.getAndAdd(RandomSupport.GOLDEN_RATIO_64));
     }
 
     /**
-     * Un generador sembrado desde bytes.
+     * A generator seeded from bytes.
      *
-     * <p>Los bytes se reparten en las palabras del estado y, si no alcanzan, el resto se rellena con
-     * un generador auxiliar -- una semilla corta dejaria el estado casi en cero, que para un
-     * xor-shift es un punto fijo. Lo hace {@link RandomSupport#convertSeedBytesToLongs}, con los
-     * mismos 6 y 4 que usa el JDK para este algoritmo, asi que la misma semilla da el mismo
-     * generador.
+     * <p>The bytes are spread over the words of the state and, if they are not enough, the rest is
+     * filled in with an auxiliary generator -- a short seed would leave the state almost at zero,
+     * which for a xor-shift is a fixed point. {@link RandomSupport#convertSeedBytesToLongs} does
+     * it, with the same 6 and 4 the JDK uses for this algorithm, so the same seed gives the same
+     * generator.
      */
     public L64X256MixRandom(byte[] seed) {
         long[] data = RandomSupport.convertSeedBytesToLongs(seed, 6, 4);
@@ -153,37 +154,38 @@ public final class L64X256MixRandom implements RandomGenerator.SplittableGenerat
         this.x3 = data[5];
     }
 
-    // ---- particion ---------------------------------------------------------------------------------
+    // ---- splitting ------------------------------------------------------------------------------
     //
-    // Partir no es "sembrar otro al azar": dos semillas cercanas pueden dar secuencias que se pisan.
-    // La garantia sale de que el **addend** del LCG --la `a`-- del hijo se toma de la salmuera
-    // (`brine`) y no del azar, con lo cual cada hijo recorre una orbita distinta del mismo espacio.
+    // Splitting is not "seeding another one at random": two nearby seeds may give sequences that
+    // overlap. The guarantee comes from the **addend** of the LCG --the `a`-- of the child being
+    // taken from the brine and not from chance, with which each child walks a different orbit of
+    // the same space.
     //
-    // El corrimiento `brine << 1` deja el bit bajo libre, que es donde el constructor fuerza el
-    // impar. Sin eso, la mitad de las salmueras darian el mismo addend.
+    // The shift `brine << 1` leaves the low bit free, which is where the constructor forces it odd.
+    // Without that, half the brines would give the same addend.
 
-    /** Un generador independiente de este, con la entropia de este. */
+    /** A generator independent of this one, with the entropy of this one. */
     public SplittableGenerator split() {
         return this.split(this);
     }
 
-    /** Un generador independiente de este, con la entropia de `source`. */
+    /** A generator independent of this one, with the entropy of `source`. */
     public SplittableGenerator split(SplittableGenerator source) {
         return this.split(source, source.nextLong());
     }
 
-    /** El de arriba con la salmuera explicita: es el que hace el trabajo. */
+    /** The one above with the brine made explicit: it is the one that does the work. */
     public SplittableGenerator split(SplittableGenerator source, long brine) {
         return new L64X256MixRandom(brine << 1, source.nextLong(),
                 source.nextLong(), source.nextLong(), source.nextLong(), source.nextLong());
     }
 
-    /** `streamSize` generadores independientes, con la entropia de este. */
+    /** `streamSize` independent generators, with the entropy of this one. */
     public java.util.stream.Stream<SplittableGenerator> splits(long streamSize) {
         return this.splits(streamSize, this);
     }
 
-    /** `streamSize` generadores independientes, con la entropia de `source`. */
+    /** `streamSize` independent generators, with the entropy of `source`. */
     public java.util.stream.Stream<SplittableGenerator> splits(long streamSize,
             SplittableGenerator source) {
         return Splits.de(this, streamSize, source);

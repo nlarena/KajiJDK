@@ -9,22 +9,21 @@ import java.lang.classfile.TypeAnnotation;
 import java.util.List;
 import jdk.internal.classfile.impl.TypedAttributes;
 
-// `RuntimeVisibleTypeAnnotations` (JVMS §4.7.20/§4.7.21): las anotaciones de TIPO
-// visibles por reflexión. A
-// diferencia de las anotaciones comunes, éstas también pueden aparecer dentro del atributo `Code`,
-// porque un tipo anotado puede estar en un `instanceof` o en un cast.
+// `RuntimeVisibleTypeAnnotations` (JVMS §4.7.20/§4.7.21): the TYPE annotations visible by reflection.
+// Unlike ordinary annotations, these can also appear inside the `Code` attribute, because an annotated
+// type can be in an `instanceof` or in a cast.
 public interface RuntimeVisibleTypeAnnotationsAttribute extends Attribute<RuntimeVisibleTypeAnnotationsAttribute>,
         ClassElement, MethodElement, FieldElement, CodeElement {
 
-    /** Las anotaciones de tipo, en el orden del archivo. */
+    /** The type annotations, in file order. */
     List<TypeAnnotation> annotations();
 
-    /** El atributo con estas anotaciones. */
+    /** The attribute with these annotations. */
     public static RuntimeVisibleTypeAnnotationsAttribute of(List<TypeAnnotation> annotations) {
         return TypedAttributes.runtimeVisibleTypeAnnotations(annotations);
     }
 
-    /** El atributo con estas anotaciones. */
+    /** The attribute with these annotations. */
     public static RuntimeVisibleTypeAnnotationsAttribute of(TypeAnnotation... annotations) {
         return TypedAttributes.runtimeVisibleTypeAnnotations(TypedAttributes.listOfTypeAnnotations(annotations));
     }

@@ -3,10 +3,10 @@ package javax.print.attribute;
 import java.io.Serializable;
 import java.util.Locale;
 
-// La clase de sintaxis de los atributos cuyo valor es texto con un locale asociado.
+// The syntax class of the attributes whose value is text with an associated locale.
 //
-// El locale importa: el mismo texto en distinto idioma son dos valores distintos, y entra en
-// `equals` y en `hashCode`. Un locale null se reemplaza por el de la maquina; un texto null es un
+// The locale matters: the same text in a different language is two different values, and it goes
+// into `equals` and `hashCode`. A null locale is replaced with the machine's; a null text is an
 // error.
 public abstract class TextSyntax implements Serializable, Cloneable {
 
@@ -27,7 +27,7 @@ public abstract class TextSyntax implements Serializable, Cloneable {
         return value;
     }
 
-    // Un locale null no es un error: significa "el de por aca".
+    // A null locale is not an error: it means "the local one".
     private static Locale verify(Locale locale) {
         if (locale == null) {
             return Locale.getDefault();
@@ -55,7 +55,7 @@ public abstract class TextSyntax implements Serializable, Cloneable {
         return this.value.equals(other.value) && this.locale.equals(other.locale);
     }
 
-    // Solo el texto: el locale no se muestra.
+    // Only the text: the locale is not shown.
     public String toString() {
         return this.value;
     }

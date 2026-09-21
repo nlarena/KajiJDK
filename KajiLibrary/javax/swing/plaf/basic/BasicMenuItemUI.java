@@ -35,46 +35,50 @@ import javax.swing.plaf.MenuItemUI;
 import javax.swing.plaf.UIResource;
 
 /**
- * El aspecto basico de un item de menu.
+ * The basic look and feel of a menu item.
  *
- * <h2>Un item de menu no es un boton con otro borde</h2>
+ * <h2>A menu item is not a button with another border</h2>
  *
- * <p>Se le parece --tiene modelo, texto e icono-- pero tiene tres columnas propias que un boton no
- * tiene: la del tilde a la izquierda, la del acelerador a la derecha, y la de la flecha de submenu
- * al final. Ubicar esas tres es casi todo lo que hace esta clase.
+ * <p>It looks like one -- it has a model, text and an icon -- but it has three columns of its
+ * own that a button does not have: the tick's on the left, the accelerator's on the right, and
+ * the submenu arrow's at the end. Placing those three is almost everything this class does.
  *
- * <h2>La cuenta del tamano, y por que termina en impar</h2>
+ * <h2>The size's arithmetic, and why it ends up odd</h2>
  *
- * <p>El ancho se arma sumando de izquierda a derecha: los margenes, el tilde con su separacion, el
- * icono con la suya, el texto con la suya, el acelerador con la suya, la flecha con la suya, y un
- * ultimo respiro. Todas las separaciones son el mismo {@link #defaultTextIconGap}.
+ * <p>The width is built up by adding from left to right: the margins, the tick with its gap,
+ * the icon with its own, the text with its own, the accelerator with its own, the arrow with
+ * its own, and one last breath. Every gap is the same {@link #defaultTextIconGap}.
  *
- * <p>Y despues, si el ancho o el alto quedaron pares, se les suma uno. Esa es una rareza del JDK
- * que <em>hay</em> que copiar: los iconos de tilde se dibujan centrados, y un ancho par los deja
- * medio pixel corridos y con el borde comido. Esta medido en doce casos --texto vacio, con icono,
- * con tilde, con tres aceleradores distintos, menu suelto y menu de barra-- y la formula da el
- * numero exacto en los doce.
+ * <p>And afterwards, if the width or the height came out even, one is added to them. That is an
+ * oddity of the JDK that <em>has</em> to be copied: the tick icons are drawn centred, and an
+ * even width leaves them half a pixel out of place and with the border eaten. It is measured in
+ * twelve cases -- empty text, with an icon, with a tick, with three different accelerators, a
+ * loose menu and a bar menu -- and the formula gives the exact number in all twelve.
  *
- * <p>El texto vacio no reserva alto de linea: un item sin texto mide lo que mida su flecha.
+ * <p>Empty text reserves no line height: an item with no text measures whatever its arrow
+ * measures.
  *
- * <h2>Ni minimo ni maximo</h2>
+ * <h2>Neither minimum nor maximum</h2>
  *
- * <p>{@link #getMinimumSize} y {@link #getMaximumSize} devuelven {@code null}. No es un olvido: un
- * item de menu no se estira ni se achica solo, y quien lo acomoda es {@code DefaultMenuLayout},
- * que reparte el ancho de la ventana emergente entera. Contestar un numero seria mentirle.
+ * <p>{@link #getMinimumSize} and {@link #getMaximumSize} return {@code null}. It is not an
+ * oversight: a menu item neither stretches nor shrinks by itself, and who lays it out is
+ * {@code DefaultMenuLayout}, which hands out the width of the whole popup window. Answering a
+ * number would be lying to it.
  *
- * <h2>Lo que instala, y de donde sale</h2>
+ * <h2>What it installs, and where it comes from</h2>
  *
- * <p>Los valores de {@code MenuItem.*} medidos en Metal (JDK 25): fuente Dialog negrita 12, frente
- * (51, 51, 51), fondo (238, 238, 238), seleccion (163, 184, 204) sobre (51, 51, 51), apagado
- * (153, 153, 153), acelerador (99, 130, 191) en Dialog 10, separador de acelerador "-", separacion
- * 4, margen (2, 2, 2, 2), y sin tilde --el tilde solo lo tienen los items marcables--.
+ * <p>The values of {@code MenuItem.*} measured in Metal (JDK 25): typeface Dialog bold 12,
+ * foreground (51, 51, 51), background (238, 238, 238), selection (163, 184, 204) over
+ * (51, 51, 51), disabled (153, 153, 153), accelerator (99, 130, 191) in Dialog 10, accelerator
+ * separator "-", gap 4, margin (2, 2, 2, 2), and with no tick -- only tickable items have the
+ * tick --.
  *
- * <h2>Cuando no hay tilde ni flecha</h2>
+ * <h2>When there is neither tick nor arrow</h2>
  *
- * <p>Un menu que cuelga directamente de la barra no lleva ninguna de las dos: no tiene estado que
- * marcar y su submenu se abre para abajo, no para el costado. {@link #useCheckAndArrow} es quien lo
- * decide, y de ahi salen los ocho pixeles de diferencia entre un menu de barra y uno de adentro.
+ * <p>A menu that hangs directly from the bar carries neither of the two: it has no state to
+ * mark and its submenu opens downwards, not to the side. {@link #useCheckAndArrow} is the one
+ * that decides it, and that is where the eight pixels of difference between a bar menu and an
+ * inside one come from.
  */
 public class BasicMenuItemUI extends MenuItemUI {
 
@@ -85,7 +89,7 @@ public class BasicMenuItemUI extends MenuItemUI {
     protected Color acceleratorForeground;
     protected Color acceleratorSelectionForeground;
 
-    /** Lo que va entre las teclas de un acelerador: {@code "Ctrl-O"}. */
+    /** What goes between an accelerator's keys: {@code "Ctrl-O"}. */
     protected String acceleratorDelimiter;
 
     protected int defaultTextIconGap;
@@ -99,22 +103,24 @@ public class BasicMenuItemUI extends MenuItemUI {
     protected Icon arrowIcon = null;
     protected Icon checkIcon = null;
 
-    /** Si el item pintaba su borde antes de que lo instalaran; se restaura al sacarlo. */
+    /**
+     * Whether the item painted its border before it was installed; it is restored on removing it.
+     */
     protected boolean oldBorderPainted;
 
-    private static final ColorUIResource FONDO = new ColorUIResource(238, 238, 238);
-    private static final ColorUIResource FRENTE = new ColorUIResource(51, 51, 51);
-    private static final ColorUIResource SELECCION = new ColorUIResource(163, 184, 204);
-    private static final ColorUIResource APAGADO = new ColorUIResource(153, 153, 153);
-    private static final ColorUIResource ACELERADOR = new ColorUIResource(99, 130, 191);
-    private static final FontUIResource FUENTE = new FontUIResource("Dialog", Font.BOLD, 12);
-    private static final FontUIResource FUENTE_ACELERADOR =
+    private static final ColorUIResource BACKGROUND = new ColorUIResource(238, 238, 238);
+    private static final ColorUIResource FOREGROUND = new ColorUIResource(51, 51, 51);
+    private static final ColorUIResource SELECTION = new ColorUIResource(163, 184, 204);
+    private static final ColorUIResource DISABLED = new ColorUIResource(153, 153, 153);
+    private static final ColorUIResource ACCELERATOR = new ColorUIResource(99, 130, 191);
+    private static final FontUIResource FONT = new FontUIResource("Dialog", Font.BOLD, 12);
+    private static final FontUIResource ACCELERATOR_FONT =
             new FontUIResource("Dialog", Font.PLAIN, 10);
 
     public BasicMenuItemUI() {
     }
 
-    /** Uno nuevo por item: guarda el componente y sus escuchas. */
+    /** A new one per item: it keeps the component and its listeners. */
     public static ComponentUI createUI(JComponent c) {
         return new BasicMenuItemUI();
     }
@@ -136,43 +142,44 @@ public class BasicMenuItemUI extends MenuItemUI {
         menuItem = null;
     }
 
-    /** El prefijo con el que se buscan los valores del aspecto. */
+    /** The prefix the look and feel's values are looked up with. */
     protected String getPropertyPrefix() {
         return "MenuItem";
     }
 
-    /** Colores, fuentes, iconos y margen; ver la nota de la clase. */
+    /** Colours, typefaces, icons and margin; see the class note. */
     protected void installDefaults() {
-        Color fondo = menuItem.getBackground();
-        if (fondo == null || fondo instanceof UIResource) {
-            menuItem.setBackground(FONDO);
+        Color background = menuItem.getBackground();
+        if (background == null || background instanceof UIResource) {
+            menuItem.setBackground(BACKGROUND);
         }
-        Color frente = menuItem.getForeground();
-        if (frente == null || frente instanceof UIResource) {
-            menuItem.setForeground(FRENTE);
+        Color foreground = menuItem.getForeground();
+        if (foreground == null || foreground instanceof UIResource) {
+            menuItem.setForeground(FOREGROUND);
         }
-        Font fuente = menuItem.getFont();
-        if (fuente == null || fuente instanceof UIResource) {
-            menuItem.setFont(FUENTE);
+        Font font = menuItem.getFont();
+        if (font == null || font instanceof UIResource) {
+            menuItem.setFont(FONT);
         }
-        Insets margen = menuItem.getMargin();
-        if (margen == null || margen instanceof UIResource) {
+        Insets margin = menuItem.getMargin();
+        if (margin == null || margin instanceof UIResource) {
             menuItem.setMargin(new InsetsUIResource(2, 2, 2, 2));
         }
         if (menuItem.getBorder() == null || menuItem.getBorder() instanceof UIResource) {
             menuItem.setBorder(new BasicBorders.MarginBorder());
         }
 
-        selectionBackground = SELECCION;
-        selectionForeground = FRENTE;
-        disabledForeground = APAGADO;
-        acceleratorForeground = ACELERADOR;
-        acceleratorSelectionForeground = FRENTE;
-        acceleratorFont = FUENTE_ACELERADOR;
+        selectionBackground = SELECTION;
+        selectionForeground = FOREGROUND;
+        disabledForeground = DISABLED;
+        acceleratorForeground = ACCELERATOR;
+        acceleratorSelectionForeground = FOREGROUND;
+        acceleratorFont = ACCELERATOR_FONT;
         acceleratorDelimiter = "-";
         defaultTextIconGap = 4;
 
-        // El item comun no lleva tilde; el marcable y el de opcion lo ponen en su propia clase.
+        // The ordinary item carries no tick; the tickable one and the option one set it in their
+        // own class.
         checkIcon = null;
         arrowIcon = BasicIconFactory.getMenuItemArrowIcon();
 
@@ -183,7 +190,7 @@ public class BasicMenuItemUI extends MenuItemUI {
         menuItem.setHorizontalAlignment(SwingConstants.LEADING);
     }
 
-    /** Devuelve el pintado de borde a como estaba; ver {@link #oldBorderPainted}. */
+    /** It gives the border painting back the way it was; see {@link #oldBorderPainted}. */
     protected void uninstallDefaults() {
         LookAndFeel.installProperty(menuItem, "borderPainted",
                 Boolean.valueOf(oldBorderPainted));
@@ -197,7 +204,7 @@ public class BasicMenuItemUI extends MenuItemUI {
         checkIcon = null;
     }
 
-    /** Arma la vista de HTML si el texto la necesita. */
+    /** It builds the HTML view if the text needs it. */
     protected void installComponents(JMenuItem menuItem) {
         BasicHTML.updateRenderer(menuItem, menuItem.getText());
     }
@@ -246,7 +253,10 @@ public class BasicMenuItemUI extends MenuItemUI {
         propertyChangeListener = null;
     }
 
-    /** Sin atajos propios: los de un item los maneja el acelerador del propio {@link JMenuItem}. */
+    /**
+     * With no shortcuts of its own: an item's are handled by the {@link JMenuItem}'s own
+     * accelerator.
+     */
     protected void installKeyboardActions() {
     }
 
@@ -262,11 +272,11 @@ public class BasicMenuItemUI extends MenuItemUI {
     }
 
     /**
-     * Ninguno.
+     * None.
      *
-     * <p>Un item comun no escucha teclas: la letra subrayada la maneja el menu que lo contiene, y
-     * el acelerador el propio {@link JMenuItem}. Devolver {@code null} deja el campo en nulo, y eso
-     * es lo que se ve del otro lado. Medido.
+     * <p>An ordinary item does not listen to keys: the underlined letter is handled by the menu
+     * that contains it, and the accelerator by the {@link JMenuItem} itself. Returning
+     * {@code null} leaves the field null, and that is what is seen from the other side. Measured.
      */
     protected MenuKeyListener createMenuKeyListener(JComponent c) {
         return null;
@@ -276,32 +286,32 @@ public class BasicMenuItemUI extends MenuItemUI {
         return new Handler();
     }
 
-    /** Ver la nota de la clase: lo calcula {@link #getPreferredMenuItemSize}. */
+    /** See the class note: it is computed by {@link #getPreferredMenuItemSize}. */
     public Dimension getPreferredSize(JComponent c) {
         return getPreferredMenuItemSize(c, checkIcon, arrowIcon, defaultTextIconGap);
     }
 
-    /** {@code null}; ver la nota de la clase. */
+    /** {@code null}; see the class note. */
     public Dimension getMinimumSize(JComponent c) {
         return null;
     }
 
-    /** {@code null}; ver la nota de la clase. */
+    /** {@code null}; see the class note. */
     public Dimension getMaximumSize(JComponent c) {
         return null;
     }
 
     /**
-     * Si este item lleva columna de tilde y de flecha.
+     * Whether this item carries a tick column and an arrow one.
      *
-     * <p>No la lleva el menu que cuelga de la barra; ver la nota de la clase.
+     * <p>The menu that hangs from the bar does not; see the class note.
      */
     private boolean useCheckAndArrow() {
         return !(menuItem instanceof JMenu && ((JMenu) menuItem).isTopLevelMenu());
     }
 
-    /** El texto del acelerador, ya armado: {@code "Ctrl-O"}. */
-    private String textoDelAcelerador() {
+    /** The accelerator's text, already built: {@code "Ctrl-O"}. */
+    private String getAcceleratorText() {
         KeyStroke accelerator = menuItem.getAccelerator();
         if (accelerator == null) {
             return "";
@@ -320,63 +330,63 @@ public class BasicMenuItemUI extends MenuItemUI {
         return s;
     }
 
-    /** La cuenta entera; ver la nota de la clase. */
+    /** The whole arithmetic; see the class note. */
     protected Dimension getPreferredMenuItemSize(JComponent c, Icon checkIcon, Icon arrowIcon,
             int defaultTextIconGap) {
         JMenuItem b = (JMenuItem) c;
         Icon icon = b.getIcon();
         String text = b.getText();
-        String acceleratorText = textoDelAcelerador();
-        boolean hayTexto = text != null && !text.equals("");
-        boolean conColumnas = useCheckAndArrow();
+        String acceleratorText = getAcceleratorText();
+        boolean hasText = text != null && !text.equals("");
+        boolean withColumns = useCheckAndArrow();
 
         FontMetrics fm = b.getFontMetrics(b.getFont());
         FontMetrics fmAccel = b.getFontMetrics(acceleratorFont);
 
-        int anchoTexto = 0;
-        int altoTexto = 0;
-        if (hayTexto) {
+        int textWidth = 0;
+        int textHeight = 0;
+        if (hasText) {
             javax.swing.text.View v =
                     (javax.swing.text.View) b.getClientProperty(BasicHTML.propertyKey);
             if (v != null) {
-                anchoTexto = (int) v.getPreferredSpan(javax.swing.text.View.X_AXIS);
-                altoTexto = (int) v.getPreferredSpan(javax.swing.text.View.Y_AXIS);
+                textWidth = (int) v.getPreferredSpan(javax.swing.text.View.X_AXIS);
+                textHeight = (int) v.getPreferredSpan(javax.swing.text.View.Y_AXIS);
             } else {
-                anchoTexto = fm.stringWidth(text);
-                altoTexto = fm.getHeight();
+                textWidth = fm.stringWidth(text);
+                textHeight = fm.getHeight();
             }
         }
 
         Insets insets = b.getInsets();
         int w = insets.left + insets.right;
-        int alto = altoTexto;
+        int height = textHeight;
 
-        if (conColumnas && checkIcon != null) {
+        if (withColumns && checkIcon != null) {
             w += checkIcon.getIconWidth() + defaultTextIconGap;
-            alto = Math.max(alto, checkIcon.getIconHeight());
+            height = Math.max(height, checkIcon.getIconHeight());
         }
         if (icon != null) {
             w += icon.getIconWidth() + defaultTextIconGap;
-            alto = Math.max(alto, icon.getIconHeight());
+            height = Math.max(height, icon.getIconHeight());
         }
-        w += anchoTexto;
-        if (hayTexto) {
+        w += textWidth;
+        if (hasText) {
             w += defaultTextIconGap;
         }
         if (!acceleratorText.equals("")) {
             w += fmAccel.stringWidth(acceleratorText) + defaultTextIconGap;
-            alto = Math.max(alto, fmAccel.getHeight());
+            height = Math.max(height, fmAccel.getHeight());
         }
-        if (conColumnas && arrowIcon != null) {
+        if (withColumns && arrowIcon != null) {
             w += arrowIcon.getIconWidth() + defaultTextIconGap;
-            alto = Math.max(alto, arrowIcon.getIconHeight());
+            height = Math.max(height, arrowIcon.getIconHeight());
         }
-        // El respiro del final.
+        // The breath at the end.
         w += defaultTextIconGap;
 
-        int h = alto + insets.top + insets.bottom;
+        int h = height + insets.top + insets.bottom;
 
-        // Ver la nota de la clase: par se vuelve impar.
+        // See the class note: even becomes odd.
         if (w % 2 == 0) {
             w++;
         }
@@ -386,7 +396,10 @@ public class BasicMenuItemUI extends MenuItemUI {
         return new Dimension(w, h);
     }
 
-    /** Rellena el fondo --con el color de seleccion si esta elegido-- y despues pinta el item. */
+    /**
+     * It fills the background -- with the selection colour if it is chosen -- and then paints the
+     * item.
+     */
     public void update(Graphics g, JComponent c) {
         paint(g, c);
     }
@@ -397,10 +410,10 @@ public class BasicMenuItemUI extends MenuItemUI {
     }
 
     /**
-     * El item entero: fondo, tilde, icono, texto, acelerador y flecha.
+     * The whole item: background, tick, icon, text, accelerator and arrow.
      *
-     * <p>Las cinco piezas se ubican con la misma cuenta que {@link #getPreferredMenuItemSize}, en
-     * el mismo orden.
+     * <p>The five pieces are placed with the same arithmetic as
+     * {@link #getPreferredMenuItemSize}, in the same order.
      */
     protected void paintMenuItem(Graphics g, JComponent c, Icon checkIcon, Icon arrowIcon,
             Color background, Color foreground, int defaultTextIconGap) {
@@ -410,18 +423,18 @@ public class BasicMenuItemUI extends MenuItemUI {
         int menuHeight = b.getHeight();
         Insets i = c.getInsets();
 
-        Color viejoColor = g.getColor();
-        Font viejaFuente = g.getFont();
+        Color oldColor = g.getColor();
+        Font oldFont = g.getFont();
         g.setFont(b.getFont());
 
         paintBackground(g, b, background);
 
         Rectangle viewRect = new Rectangle(i.left, i.top,
                 menuWidth - (i.right + i.left), menuHeight - (i.bottom + i.top));
-        boolean conColumnas = useCheckAndArrow();
+        boolean withColumns = useCheckAndArrow();
         int x = viewRect.x;
 
-        if (conColumnas && checkIcon != null) {
+        if (withColumns && checkIcon != null) {
             checkIcon.paintIcon(c, g,
                     x, viewRect.y + (viewRect.height - checkIcon.getIconHeight()) / 2);
             x += checkIcon.getIconWidth() + defaultTextIconGap;
@@ -430,9 +443,9 @@ public class BasicMenuItemUI extends MenuItemUI {
         if (!model.isEnabled()) {
             icon = b.getDisabledIcon();
         } else if (model.isPressed() && model.isArmed()) {
-            Icon apretado = b.getPressedIcon();
-            if (apretado != null) {
-                icon = apretado;
+            Icon pressed = b.getPressedIcon();
+            if (pressed != null) {
+                icon = pressed;
             }
         }
         if (icon != null) {
@@ -449,12 +462,12 @@ public class BasicMenuItemUI extends MenuItemUI {
             paintText(g, b, textRect, text);
         }
 
-        String acceleratorText = textoDelAcelerador();
+        String acceleratorText = getAcceleratorText();
         if (!acceleratorText.equals("")) {
             FontMetrics fmAccel = b.getFontMetrics(acceleratorFont);
-            int ancho = fmAccel.stringWidth(acceleratorText);
-            int ax = viewRect.x + viewRect.width - ancho;
-            if (conColumnas && arrowIcon != null) {
+            int width = fmAccel.stringWidth(acceleratorText);
+            int ax = viewRect.x + viewRect.width - width;
+            if (withColumns && arrowIcon != null) {
                 ax -= arrowIcon.getIconWidth() + defaultTextIconGap;
             }
             g.setFont(acceleratorFont);
@@ -465,25 +478,25 @@ public class BasicMenuItemUI extends MenuItemUI {
                             + fmAccel.getAscent());
         }
 
-        if (conColumnas && arrowIcon != null) {
+        if (withColumns && arrowIcon != null) {
             arrowIcon.paintIcon(c, g,
                     viewRect.x + viewRect.width - arrowIcon.getIconWidth(),
                     viewRect.y + (viewRect.height - arrowIcon.getIconHeight()) / 2);
         }
 
-        g.setColor(viejoColor);
-        g.setFont(viejaFuente);
+        g.setColor(oldColor);
+        g.setFont(oldFont);
     }
 
     /**
-     * El fondo: el color de seleccion si el item esta apuntado, y el suyo si no.
+     * The background: the selection colour if the item is pointed at, and its own if not.
      *
-     * <p>Un item transparente no pinta nada salvo que este apuntado: ahi si, porque la barra que
-     * marca donde esta el mouse tiene que verse aunque el menu de atras sea transparente.
+     * <p>A transparent item paints nothing unless it is pointed at: there it does, because the bar
+     * that marks where the mouse is has to be seen even if the menu behind is transparent.
      */
     protected void paintBackground(Graphics g, JMenuItem menuItem, Color bgColor) {
         ButtonModel model = menuItem.getModel();
-        Color viejo = g.getColor();
+        Color old = g.getColor();
         int menuWidth = menuItem.getWidth();
         int menuHeight = menuItem.getHeight();
 
@@ -498,10 +511,10 @@ public class BasicMenuItemUI extends MenuItemUI {
             g.setColor(bgColor);
             g.fillRect(0, 0, menuWidth, menuHeight);
         }
-        g.setColor(viejo);
+        g.setColor(old);
     }
 
-    /** El texto, con el color que corresponda al estado. */
+    /** The text, with the colour that corresponds to the state. */
     protected void paintText(Graphics g, JMenuItem menuItem, Rectangle textRect, String text) {
         ButtonModel model = menuItem.getModel();
         FontMetrics fm = menuItem.getFontMetrics(menuItem.getFont());
@@ -524,10 +537,10 @@ public class BasicMenuItemUI extends MenuItemUI {
     }
 
     /**
-     * Aprieta el item y cierra el menu.
+     * It presses the item and closes the menu.
      *
-     * <p>Primero se cierra y despues se dispara: al reves, la accion correria con el menu todavia
-     * abierto, y una accion que muestre un dialogo lo dejaria colgado encima.
+     * <p>First it closes and then it fires: the other way round, the action would run with the
+     * menu still open, and an action that shows a dialog would leave it hanging on top.
      */
     protected void doClick(MenuSelectionManager msm) {
         if (msm == null) {
@@ -538,10 +551,11 @@ public class BasicMenuItemUI extends MenuItemUI {
     }
 
     /**
-     * El camino de menus hasta este item.
+     * The path of menus down to this item.
      *
-     * <p>Vacio si no hay ningun menu abierto. Si lo hay, es el camino que ya estaba mas este item;
-     * y si el camino terminaba en un hermano, se corta hasta el padre comun antes de agregarlo.
+     * <p>Empty if there is no menu open. If there is, it is the path that was already there plus
+     * this item; and if the path ended in a sibling, it is cut back to the common parent before
+     * adding it.
      */
     public MenuElement[] getPath() {
         MenuSelectionManager m = MenuSelectionManager.defaultManager();
@@ -571,10 +585,10 @@ public class BasicMenuItemUI extends MenuItemUI {
     }
 
     /**
-     * El que escucha todo: mouse, arrastre sobre el menu y cambios de propiedad.
+     * The one that listens to everything: mouse, dragging over the menu and property changes.
      *
-     * <p>Uno solo en vez de tres porque los tres reaccionan a lo mismo --donde esta el mouse-- y
-     * separarlos obligaria a compartir estado entre ellos.
+     * <p>A single one instead of three because all three react to the same thing -- where the
+     * mouse is -- and separating them would force state to be shared between them.
      */
     private class Handler implements MouseInputListener, MenuDragMouseListener,
             PropertyChangeListener {

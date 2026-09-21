@@ -6,204 +6,205 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * JFR manejado por JMX: grabar en una VM desde otro proceso.
+ * JFR handled by JMX: recording in one VM from another process.
  *
- * <h2>Por que existe si ya esta {@code jdk.jfr}</h2>
+ * <h2>Why it exists if {@code jdk.jfr} is already there</h2>
  *
- * <p>Porque {@code jdk.jfr} solo se puede usar desde adentro de la VM que se quiere observar. Una
- * consola de monitoreo esta afuera, y lo unico que la cruza es JMX.
+ * <p>Because {@code jdk.jfr} can only be used from inside the VM one wants to observe. A monitoring
+ * console is outside, and the only thing that crosses is JMX.
  *
- * <p>Es tambien lo que hace posible grabar en un proceso que no fue escrito para eso: no hay que
- * agregarle codigo, alcanza con conectarse.
+ * <p>It is also what makes it possible to record in a process that was not written for that:
+ * nothing has to be added to it, connecting is enough.
  *
- * <h2>Por que todo se maneja con un {@code long}</h2>
+ * <h2>Why everything is handled with a {@code long}</h2>
  *
- * <p>{@link #newRecording} devuelve un numero y todos los demas metodos lo reciben. Es asi porque a
- * traves de JMX no puede viajar un objeto {@link jdk.jfr.Recording}: lo unico que cruza son tipos
- * abiertos. El numero es el identificador de la grabacion del otro lado, y esta interfaz es un
- * control remoto sobre ella.
+ * <p>{@link #newRecording} returns a number and every other method receives it. It is so because a
+ * {@link jdk.jfr.Recording} object cannot travel through JMX: the only thing that crosses are open
+ * types. The number is the identifier of the recording on the other side, and this interface is a
+ * remote control over it.
  *
- * <p>Lo mismo con {@link #openStream}, que devuelve otro numero: los datos se traen a pedazos con
- * {@link #readStream}, hasta que devuelva {@code null}. Una grabacion puede pesar cientos de megas
- * y no se puede mandar de una.
+ * <p>The same with {@link #openStream}, which returns another number: the data are brought in
+ * pieces with {@link #readStream}, until it returns {@code null}. A recording may weigh hundreds of
+ * megabytes and cannot be sent in one go.
  *
- * <h2>Las dos formas de llevarse los datos</h2>
+ * <h2>The two ways of taking the data away</h2>
  *
- * <p>{@link #copyTo} le pide a la VM remota que escriba el archivo <strong>en su propio
- * disco</strong>; el flujo lo trae por la red. La primera es mucho mas rapida y deja el archivo
- * alla, que sirve cuando alguien va a buscarlo despues.
+ * <p>{@link #copyTo} asks the remote VM to write the file <strong>on its own disk</strong>; the
+ * stream brings it over the network. The first one is much faster and leaves the file over there,
+ * which is of use when somebody is going to fetch it later.
  *
  * @since 9
  */
 public interface FlightRecorderMXBean extends PlatformManagedObject {
 
-    /** El nombre del MBean en el servidor de la plataforma. */
+    /** The name of the MBean in the platform server. */
     String MXBEAN_NAME = "jdk.management.jfr:type=FlightRecorder";
 
     /**
-     * Crea una grabacion y devuelve su identificador.
+     * It creates a recording and returns its identifier.
      *
-     * @return el identificador
-     * @throws IllegalStateException si JFR no esta disponible
+     * @return the identifier
+     * @throws IllegalStateException if JFR is not available
      */
     long newRecording() throws IllegalStateException;
 
     /**
-     * Una grabacion con lo que haya en los buffers en este momento.
+     * A recording with whatever is in the buffers at this moment.
      *
-     * @return el identificador de la instantanea
+     * @return the identifier of the snapshot
      */
     long takeSnapshot();
 
     /**
-     * Copia una grabacion.
+     * It copies a recording.
      *
-     * @param recordingId el identificador de la original
-     * @param stop si la copia queda detenida
-     * @return el identificador de la copia
-     * @throws IllegalArgumentException si no existe esa grabacion
+     * @param recordingId the identifier of the original
+     * @param stop whether the copy is left stopped
+     * @return the identifier of the copy
+     * @throws IllegalArgumentException if that recording does not exist
      */
     long cloneRecording(long recordingId, boolean stop) throws IllegalArgumentException;
 
     /**
-     * Arranca una grabacion.
+     * It starts a recording.
      *
-     * @param recordingId el identificador
-     * @throws IllegalStateException si ya arranco o se cerro
+     * @param recordingId the identifier
+     * @throws IllegalStateException if it already started or was closed
      */
     void startRecording(long recordingId) throws IllegalStateException;
 
     /**
-     * Detiene una grabacion.
+     * It stops a recording.
      *
-     * @param recordingId el identificador
-     * @return si estaba grabando
-     * @throws IllegalArgumentException si no existe esa grabacion
-     * @throws IllegalStateException si no se puede detener
+     * @param recordingId the identifier
+     * @return whether it was recording
+     * @throws IllegalArgumentException if that recording does not exist
+     * @throws IllegalStateException if it cannot be stopped
      */
     boolean stopRecording(long recordingId) throws IllegalArgumentException, IllegalStateException;
 
     /**
-     * Cierra una grabacion y suelta sus datos.
+     * It closes a recording and releases its data.
      *
-     * @param recordingId el identificador
-     * @throws IOException si no se pudo cerrar
+     * @param recordingId the identifier
+     * @throws IOException if it could not be closed
      */
     void closeRecording(long recordingId) throws IOException;
 
     /**
-     * Abre un flujo para traerse los datos de una grabacion.
+     * It opens a stream in order to bring over the data of a recording.
      *
-     * @param recordingId el identificador de la grabacion
-     * @param streamOptions opciones del flujo, como el intervalo de tiempo
-     * @return el identificador del flujo
-     * @throws IOException si no se pudo abrir
+     * @param recordingId the identifier of the recording
+     * @param streamOptions options of the stream, such as the interval of time
+     * @return the identifier of the stream
+     * @throws IOException if it could not be opened
      */
     long openStream(long recordingId, Map<String, String> streamOptions) throws IOException;
 
     /**
-     * Cierra un flujo.
+     * It closes a stream.
      *
-     * @param streamId el identificador del flujo
-     * @throws IOException si no se pudo cerrar
+     * @param streamId the identifier of the stream
+     * @throws IOException if it could not be closed
      */
     void closeStream(long streamId) throws IOException;
 
     /**
-     * El proximo pedazo de un flujo.
+     * The next piece of a stream.
      *
-     * @param streamId el identificador del flujo
-     * @return los bytes, o {@code null} cuando no queda nada
-     * @throws IOException si no se pudo leer
+     * @param streamId the identifier of the stream
+     * @return the bytes, or {@code null} when nothing is left
+     * @throws IOException if it could not be read
      */
     byte[] readStream(long streamId) throws IOException;
 
     /**
-     * Las opciones de una grabacion: nombre, duracion, destino, limites.
+     * The options of a recording: name, duration, destination, limits.
      *
-     * @param recordingId el identificador
-     * @return las opciones
-     * @throws IllegalArgumentException si no existe esa grabacion
+     * @param recordingId the identifier
+     * @return the options
+     * @throws IllegalArgumentException if that recording does not exist
      */
     Map<String, String> getRecordingOptions(long recordingId) throws IllegalArgumentException;
 
     /**
-     * Los ajustes de eventos de una grabacion.
+     * The event settings of a recording.
      *
-     * <p>Distinto de {@link #getRecordingOptions}: los ajustes dicen que grabar, las opciones dicen
-     * como.
+     * <p>Different from {@link #getRecordingOptions}: the settings say what to record, the options
+     * say how.
      *
-     * @param recordingId el identificador
-     * @return los ajustes
-     * @throws IllegalArgumentException si no existe esa grabacion
+     * @param recordingId the identifier
+     * @return the settings
+     * @throws IllegalArgumentException if that recording does not exist
      */
     Map<String, String> getRecordingSettings(long recordingId) throws IllegalArgumentException;
 
     /**
-     * Fija los ajustes a partir del texto de un archivo {@code .jfc}.
+     * It sets the settings from the text of a {@code .jfc} file.
      *
-     * @param recordingId el identificador
-     * @param contents el contenido del archivo
-     * @throws IllegalArgumentException si no existe esa grabacion o el contenido no sirve
+     * @param recordingId the identifier
+     * @param contents the contents of the file
+     * @throws IllegalArgumentException if that recording does not exist or the contents do not
+     *     serve
      */
     void setConfiguration(long recordingId, String contents) throws IllegalArgumentException;
 
     /**
-     * Fija los ajustes a partir de una configuracion instalada, por nombre.
+     * It sets the settings from an installed configuration, by name.
      *
-     * @param recordingId el identificador
-     * @param name el nombre, por ejemplo {@code "default"}
-     * @throws IllegalArgumentException si no existe esa grabacion o esa configuracion
+     * @param recordingId the identifier
+     * @param name the name, for example {@code "default"}
+     * @throws IllegalArgumentException if that recording or that configuration does not exist
      */
     void setPredefinedConfiguration(long recordingId, String name) throws IllegalArgumentException;
 
     /**
-     * Fija los ajustes de eventos.
+     * It sets the event settings.
      *
-     * @param recordingId el identificador
-     * @param settings los ajustes
-     * @throws IllegalArgumentException si no existe esa grabacion
+     * @param recordingId the identifier
+     * @param settings the settings
+     * @throws IllegalArgumentException if that recording does not exist
      */
     void setRecordingSettings(long recordingId, Map<String, String> settings)
             throws IllegalArgumentException;
 
     /**
-     * Fija las opciones de la grabacion.
+     * It sets the options of the recording.
      *
-     * @param recordingId el identificador
-     * @param options las opciones
-     * @throws IllegalArgumentException si no existe esa grabacion
+     * @param recordingId the identifier
+     * @param options the options
+     * @throws IllegalArgumentException if that recording does not exist
      */
     void setRecordingOptions(long recordingId, Map<String, String> options)
             throws IllegalArgumentException;
 
     /**
-     * Las grabaciones que hay en la VM remota.
+     * The recordings there are in the remote VM.
      *
-     * @return las grabaciones
+     * @return the recordings
      */
     List<RecordingInfo> getRecordings();
 
     /**
-     * Las configuraciones instaladas en la VM remota.
+     * The configurations installed in the remote VM.
      *
-     * @return las configuraciones
+     * @return the configurations
      */
     List<ConfigurationInfo> getConfigurations();
 
     /**
-     * Los tipos de evento que la VM remota conoce.
+     * The types of event the remote VM knows.
      *
-     * @return los tipos
+     * @return the types
      */
     List<EventTypeInfo> getEventTypes();
 
     /**
-     * Le pide a la VM remota que escriba la grabacion en su propio disco.
+     * It asks the remote VM to write the recording on its own disk.
      *
-     * @param recordingId el identificador
-     * @param outputFile la ruta, interpretada en la maquina remota
-     * @throws IOException si no se pudo escribir
+     * @param recordingId the identifier
+     * @param outputFile the path, interpreted on the remote machine
+     * @throws IOException if it could not be written
      */
     void copyTo(long recordingId, String outputFile) throws IOException;
 }

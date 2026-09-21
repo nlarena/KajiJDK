@@ -4,30 +4,32 @@ import java.util.List;
 import javax.xml.crypto.XMLStructure;
 
 /**
- * KajiLibrary's javax.xml.crypto.dsig.XMLObject -- contenido que viaja adentro de la firma.
+ * KajiLibrary's javax.xml.crypto.dsig.XMLObject -- content that travels inside the signature.
  *
- * <p>Un contenedor libre: puede llevar cualquier XML. Es el mecanismo de extension de XML-DSig, y se
- * usa sobre todo para dos cosas: llevar los datos firmados adentro de la propia firma --la firma
- * <b>envolvente</b>-- y llevar propiedades sobre la firma, como el momento en que se hizo.
+ * <p>A free container: it can carry any XML. It is XML-DSig's extension mechanism, and it is used
+ * above all for two things: carrying the signed data inside the signature itself --the
+ * <b>enveloping</b> signature-- and carrying properties about the signature, like the moment it was
+ * made.
  *
- * <p>Vale insistir en algo: estar adentro de la firma <b>no</b> significa estar firmado. Un
- * {@code Object} solo queda cubierto si alguna {@link Reference} lo apunta. Es la confusion mas
- * frecuente del paquete, y produce firmas donde el dato interesante no esta protegido.
+ * <p>It is worth insisting on something: being inside the signature does <b>not</b> mean being
+ * signed. An {@code Object} is only covered if some {@link Reference} points to it. It is the most
+ * frequent confusion of the package, and it produces signatures where the interesting datum is not
+ * protected.
  */
 public interface XMLObject extends XMLStructure {
 
-    /** El URI de tipo de este elemento. */
+    /** The type URI of this element. */
     static final String TYPE = "http://www.w3.org/2000/09/xmldsig#Object";
 
-    /** Lo que lleva adentro. No modificable. */
+    /** What it carries inside. Unmodifiable. */
     List<XMLStructure> getContent();
 
-    /** El identificador; es lo que una {@link Reference} apunta. */
+    /** The identifier; it is what a {@link Reference} points to. */
     String getId();
 
-    /** El tipo de contenido, o null. */
+    /** The content type, or null. */
     String getMimeType();
 
-    /** Como esta codificado, o null. */
+    /** How it is encoded, or null. */
     String getEncoding();
 }

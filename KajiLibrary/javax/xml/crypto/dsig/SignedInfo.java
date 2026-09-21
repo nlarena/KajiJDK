@@ -5,37 +5,38 @@ import java.util.List;
 import javax.xml.crypto.XMLStructure;
 
 /**
- * KajiLibrary's javax.xml.crypto.dsig.SignedInfo -- lo unico que la firma cubre.
+ * KajiLibrary's javax.xml.crypto.dsig.SignedInfo -- the only thing the signature covers.
  *
- * <p>Ver la nota de {@link XMLSignature}: la firma criptografica se calcula sobre esto, y esto
- * contiene los resumenes de los datos. Todo lo que este adentro esta protegido; todo lo que no, no.
+ * <p>See the note of {@link XMLSignature}: the cryptographic signature is computed over this, and
+ * this contains the digests of the data. Everything inside it is protected; everything that is not,
+ * is not.
  *
- * <p>Lleva los dos algoritmos --como canonicalizar y como firmar-- adentro de lo firmado, y eso es
- * deliberado: si el algoritmo estuviera afuera, un atacante podria cambiarlo por uno debil sin
- * romper la firma.
+ * <p>It carries both algorithms --how to canonicalize and how to sign-- inside what is signed, and
+ * that is deliberate: if the algorithm were outside, an attacker could swap it for a weak one
+ * without breaking the signature.
  *
- * <p>{@link #getCanonicalizedData} devuelve exactamente los bytes que se firmaron. Es la unica forma
- * de depurar una firma que no valida: comparar esos bytes de los dos lados muestra en que difiere la
- * canonicalizacion, que es la causa mas comun.
+ * <p>{@link #getCanonicalizedData} returns exactly the bytes that were signed. It is the only way
+ * to debug a signature that does not validate: comparing those bytes on both sides shows where the
+ * canonicalization differs, which is the commonest cause.
  */
 public interface SignedInfo extends XMLStructure {
 
-    /** Como se convierte a bytes lo que se firma. */
+    /** How what is signed is turned into bytes. */
     CanonicalizationMethod getCanonicalizationMethod();
 
-    /** Con que algoritmo se firma. */
+    /** What algorithm it is signed with. */
     SignatureMethod getSignatureMethod();
 
-    /** Los datos cubiertos, uno por referencia. No modificable y nunca vacia. */
+    /** The covered data, one per reference. Unmodifiable and never empty. */
     List<Reference> getReferences();
 
-    /** El identificador del elemento, o null. */
+    /** The element's identifier, or null. */
     String getId();
 
     /**
-     * Los bytes que de verdad se firmaron.
+     * The bytes that were really signed.
      *
-     * @return null si todavia no se calcularon
+     * @return null if they have not been computed yet
      */
     InputStream getCanonicalizedData();
 }

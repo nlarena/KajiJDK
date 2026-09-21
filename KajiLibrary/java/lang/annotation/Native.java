@@ -1,28 +1,29 @@
 package java.lang.annotation;
 
 /**
- * KajiLibrary's java.lang.annotation.Native — marca una constante que tiene que aparecer en un
- * header nativo.
+ * KajiLibrary's java.lang.annotation.Native — it marks a constant that has to appear in a native
+ * header.
  *
- * <p>No la lee la VM ni nadie en tiempo de ejecucion: es una senal para las herramientas que
- * generan headers C a partir de clases Java (historicamente {@code javah}, hoy {@code javac -h}).
- * Un {@code static final int} marcado asi aparece como {@code #define} en el {@code .h}, y asi el
- * codigo nativo deja de repetir a mano un numero que vive en Java.
+ * <p>Neither the VM nor anybody else reads it at run time: it is a signal for the tools that
+ * generate C headers out of Java classes (historically {@code javah}, today {@code javac -h}). A
+ * {@code static final int} marked this way shows up as a {@code #define} in the {@code .h}, and
+ * that way the native code stops repeating by hand a number that lives in Java.
  *
- * <p>De ahi salen sus dos meta-anotaciones, que no son decorativas:
+ * <p>Its two meta-annotations follow from that, and they are not decoration:
  *
  * <ul>
- *   <li>{@code @Retention(SOURCE)} — la anotacion <strong>no llega al `.class`</strong>. Quien la
- *       consume es un procesador que ya tiene el codigo fuente delante, asi que guardarla en el
- *       archivo compilado seria peso muerto. Consecuencia practica: no hay forma de encontrarla por
- *       reflexion, y una prueba que la busque con {@code getAnnotation} tiene que esperar
+ *   <li>{@code @Retention(SOURCE)} — the annotation <strong>does not reach the `.class`</strong>.
+ *       What consumes it is a processor that already has the source in front of it, so keeping it in
+ *       the compiled file would be dead weight. The practical consequence: there is no way of
+ *       finding it by reflection, and a test looking for it with {@code getAnnotation} has to expect
  *       {@code null};
- *   <li>{@code @Target(FIELD)} — solo campos. Una constante es lo unico que un header puede
- *       reproducir; un metodo o una clase no tienen valor que copiar.
+ *   <li>{@code @Target(FIELD)} — fields only. A constant is the only thing a header can reproduce;
+ *       a method or a class has no value to copy.
  * </ul>
  *
- * <p>Esta biblioteca no trae la herramienta que la consume, y aun asi el tipo hace falta: sin el,
- * el codigo de terceros que anota sus constantes con {@code @Native} no compila contra este JDK.
+ * <p>This library does not bring the tool that consumes it, and the type is needed all the same:
+ * without it, third-party code annotating its constants with {@code @Native} does not compile
+ * against this JDK.
  */
 @Documented
 @Target(ElementType.FIELD)

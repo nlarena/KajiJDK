@@ -1,63 +1,65 @@
 package javax.swing.undo;
 
 /**
- * Algo que se hizo y se puede deshacer.
+ * Something that was done and can be undone.
  *
- * <h2>El ciclo de vida, que es lo que hay que entender</h2>
+ * <h2>The life cycle, which is what has to be understood</h2>
  *
- * <p>Una edicion nace ya <em>hecha</em>. A partir de ahi alterna entre deshecha y rehecha, y en
- * cualquier momento puede <strong>morir</strong> con {@link #die}: eso la saca de juego para siempre
- * y libera lo que estuviera reteniendo. El estado muerto no es lo mismo que deshecho — de uno se
- * vuelve, del otro no.
+ * <p>An edit is born already <em>done</em>. From there it alternates between undone and redone,
+ * and at any moment it can <strong>die</strong> with {@link #die}: that takes it out of play for
+ * good and releases whatever it was holding. The dead state is not the same as undone -- from one
+ * there is a way back, from the other there is not.
  *
- * <p>De ahi que haya cuatro metodos donde parecerian alcanzar dos: {@link #canUndo} y
- * {@link #canRedo} no son la negacion uno del otro, porque una edicion muerta contesta {@code false}
- * a los dos.
+ * <p>Hence there are four methods where two would seem to be enough: {@link #canUndo} and
+ * {@link #canRedo} are not each other's negation, because a dead edit answers {@code false} to
+ * both.
  *
- * <h2>Fusion: {@link #addEdit} y {@link #replaceEdit}</h2>
+ * <h2>Merging: {@link #addEdit} and {@link #replaceEdit}</h2>
  *
- * <p>Sin fusion, tipear una palabra dejaria una edicion por letra y deshacer seria letra por letra.
- * Los dos metodos son las dos direcciones de absorber al vecino: {@code addEdit} pregunta "¿te
- * podes tragar a este que viene?", {@code replaceEdit} pregunta "¿te podes tragar al que ya
- * estaba?". Contestar {@code false} a los dos es siempre valido y da el comportamiento sin fusion.
+ * <p>Without merging, typing a word would leave one edit per letter and undoing would be letter
+ * by letter. The two methods are the two directions of absorbing the neighbour:
+ * {@code addEdit} asks "can you swallow this one that is coming?", {@code replaceEdit} asks
+ * "can you swallow the one that was already there?". Answering {@code false} to both is always
+ * valid and gives the behaviour without merging.
  */
 public interface UndoableEdit {
 
-    /** Revierte lo que esta edicion hizo. */
+    /** Reverts what this edit did. */
     void undo() throws CannotUndoException;
 
-    /** Si se puede deshacer ahora. */
+    /** Whether it can be undone now. */
     boolean canUndo();
 
-    /** Vuelve a aplicar lo que esta edicion hizo. */
+    /** Applies again what this edit did. */
     void redo() throws CannotRedoException;
 
-    /** Si se puede rehacer ahora. */
+    /** Whether it can be redone now. */
     boolean canRedo();
 
-    /** La saca de juego para siempre y libera lo que retenia. */
+    /** Takes it out of play for good and releases what it was holding. */
     void die();
 
-    /** Intenta absorber a {@code anEdit}, que viene despues de esta. */
+    /** Tries to absorb {@code anEdit}, which comes after this one. */
     boolean addEdit(UndoableEdit anEdit);
 
-    /** Intenta absorber a {@code anEdit}, que estaba antes que esta. */
+    /** Tries to absorb {@code anEdit}, which was before this one. */
     boolean replaceEdit(UndoableEdit anEdit);
 
     /**
-     * Si vale la pena mostrarla como un paso propio.
+     * Whether it is worth showing as a step of its own.
      *
-     * <p>Una edicion insignificante se deshace junto con la siguiente significativa en vez de
-     * consumir un paso del usuario. Es como se evita que mover el cursor cuente como una accion.
+     * <p>An insignificant edit is undone together with the next significant one instead of
+     * consuming a step of the user's. It is how moving the cursor is kept from counting as an
+     * action.
      */
     boolean isSignificant();
 
-    /** El nombre para mostrarle a una persona. */
+    /** The name to show to a person. */
     String getPresentationName();
 
-    /** El nombre para el comando de deshacer, tipicamente "Deshacer" mas el anterior. */
+    /** The name for the undo command, typically "Undo" plus the previous one. */
     String getUndoPresentationName();
 
-    /** El nombre para el comando de rehacer. */
+    /** The name for the redo command. */
     String getRedoPresentationName();
 }

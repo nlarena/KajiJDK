@@ -4,14 +4,14 @@ import java.io.IOException;
 import java.net.ServerSocket;
 
 /**
- * Como el servidor escucha por un objeto remoto.
+ * How the server listens on behalf of a remote object.
  *
- * <p>La contraparte de {@link RMIClientSocketFactory}, con una diferencia importante: esta
- * <strong>no</strong> viaja. Se queda del lado del servidor, que es donde tiene sentido — y donde
- * viven las claves privadas si la conexion es cifrada.
+ * <p>The counterpart of {@link RMIClientSocketFactory}, with one important difference: this one
+ * does <strong>not</strong> travel. It stays on the server side, which is where it makes sense —
+ * and where the private keys live if the connection is encrypted.
  */
 public interface RMIServerSocketFactory {
 
-    /** Abre un socket de escucha; el puerto {@code 0} deja elegir al sistema. */
+    /** It opens a listening socket; port {@code 0} lets the system choose. */
     ServerSocket createServerSocket(int port) throws IOException;
 }

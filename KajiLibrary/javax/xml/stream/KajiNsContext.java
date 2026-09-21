@@ -8,45 +8,45 @@ import javax.xml.XMLConstants;
 import javax.xml.namespace.NamespaceContext;
 
 /**
- * El alcance de espacios de nombres, como pila de pares prefijo-URI.
+ * The namespace scope, as a stack of prefix-URI pairs.
  *
- * <p>Dos arreglos paralelos y una pila de marcas: abrir un elemento apila una marca, cerrarlo
- * descarta todo lo que se declaro despues de ella. Buscar un prefijo es recorrer hacia atras, con
- * lo cual la declaracion mas interna gana sin que haya que copiar nada al entrar en cada elemento
- * --que es el costo que tiene la version con un mapa por nivel--.
+ * <p>Two parallel arrays and a stack of marks: opening an element pushes a mark, closing it
+ * discards everything declared after it. Looking up a prefix is walking backwards, so the innermost
+ * declaration wins without anything having to be copied when entering each element --which is the
+ * cost of the version with one map per level--.
  *
- * <p>Recorrer hacia atras es lineal en la cantidad de declaraciones vivas. En un documento real eso
- * es un punado; un mapa seria mas rapido en el caso patologico y mas lento en todos los demas,
- * ademas de necesitar deshacer las sombras al desapilar.
+ * <p>Walking backwards is linear in the number of live declarations. In a real document that is a
+ * handful; a map would be faster in the pathological case and slower in all the others, besides
+ * needing the shadowing to be undone when popping.
  *
- * <p>Los dos prefijos que la especificacion fija --{@code xml} y {@code xmlns}-- se contestan
- * aparte y no se pueden pisar, que es lo que pide {@link NamespaceContext}.
+ * <p>The two prefixes the specification fixes --{@code xml} and {@code xmlns}-- are answered
+ * separately and cannot be overridden, which is what {@link NamespaceContext} asks for.
  *
- * <p>{@link #instantanea()} devuelve una copia inmutable, que es lo que necesita un
- * {@link javax.xml.stream.events.StartElement}: el evento sobrevive al parser, asi que no puede
- * quedarse mirando una pila que va a seguir cambiando.
+ * <p>{@link #snapshot()} returns an immutable copy, which is what a {@link
+ * javax.xml.stream.events.StartElement} needs: the event survives the parser, so it cannot keep
+ * looking at a stack that is going to keep changing.
  */
 class KajiNsContext implements NamespaceContext {
 
-    /** Prefijos declarados, del mas viejo al mas nuevo. */
+    /** Declared prefixes, from oldest to newest. */
     String[] prefixes = new String[8];
 
-    /** URIs, en paralelo con {@link #prefijos}. */
+    /** URIs, parallel to {@link #prefixes}. */
     String[] uris = new String[8];
 
-    /** Cuantas declaraciones vivas hay. */
+    /** How many live declarations there are. */
     int n;
 
-    /** Donde empieza cada nivel abierto. */
+    /** Where each open level starts. */
     int[] marks = new int[8];
 
-    /** Cuantos niveles hay abiertos. */
+    /** How many levels are open. */
     int levels;
 
     KajiNsContext() {
     }
 
-    /** Abre un nivel: lo que se declare de aca en mas muere con el. */
+    /** Opens a level: whatever is declared from here on dies with it. */
     void openScope() {
         if (levels == marks.length) {
             int[] bigger = new int[marks.length * 2];
@@ -57,7 +57,7 @@ class KajiNsContext implements NamespaceContext {
         levels++;
     }
 
-    /** Cierra el nivel de arriba y descarta sus declaraciones. */
+    /** Closes the top level and discards its declarations. */
     void closeScope() {
         if (levels > 0) {
             levels--;
@@ -65,7 +65,7 @@ class KajiNsContext implements NamespaceContext {
         }
     }
 
-    /** Cuantas declaraciones hizo el nivel de arriba. */
+    /** How many declarations the top level made. */
     int declaredInScope() {
         if (levels == 0) {
             return n;
@@ -73,7 +73,7 @@ class KajiNsContext implements NamespaceContext {
         return n - marks[levels - 1];
     }
 
-    /** La i-esima declaracion del nivel de arriba. */
+    /** The i-th declaration of the top level. */
     int indexInScope(int i) {
         if (levels == 0) {
             return i;
@@ -81,7 +81,7 @@ class KajiNsContext implements NamespaceContext {
         return marks[levels - 1] + i;
     }
 
-    /** Declara un prefijo en el nivel de arriba. */
+    /** Declares a prefix in the top level. */
     void declare(String prefix, String uri) {
         if (n == prefixes.length) {
             String[] p = new String[n * 2];
@@ -98,7 +98,7 @@ class KajiNsContext implements NamespaceContext {
 
     public String getNamespaceURI(String prefix) {
         if (prefix == null) {
-            throw new IllegalArgumentException("el prefijo no puede ser null");
+            throw new IllegalArgumentException("the prefix cannot be null");
         }
         if (prefix.equals(XMLConstants.XML_NS_PREFIX)) {
             return XMLConstants.XML_NS_URI;
@@ -116,7 +116,7 @@ class KajiNsContext implements NamespaceContext {
 
     public String getPrefix(String namespaceURI) {
         if (namespaceURI == null) {
-            throw new IllegalArgumentException("el espacio de nombres no puede ser null");
+            throw new IllegalArgumentException("the namespace cannot be null");
         }
         if (namespaceURI.equals(XMLConstants.XML_NS_URI)) {
             return XMLConstants.XML_NS_PREFIX;
@@ -134,7 +134,7 @@ class KajiNsContext implements NamespaceContext {
 
     public Iterator<String> getPrefixes(String namespaceURI) {
         if (namespaceURI == null) {
-            throw new IllegalArgumentException("el espacio de nombres no puede ser null");
+            throw new IllegalArgumentException("the namespace cannot be null");
         }
         List<String> r = new ArrayList<String>();
         if (namespaceURI.equals(XMLConstants.XML_NS_URI)) {
@@ -155,7 +155,7 @@ class KajiNsContext implements NamespaceContext {
         return r.iterator();
     }
 
-    /** Una copia congelada, para colgarla de un evento que va a sobrevivir al parser. */
+    /** A frozen copy, to hang on an event that is going to outlive the parser. */
     KajiNsContext snapshot() {
         KajiNsContext c = new KajiNsContext();
         c.prefixes = new String[n < 1 ? 1 : n];

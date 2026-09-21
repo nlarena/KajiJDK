@@ -5,23 +5,23 @@ import java.io.Writer;
 import java.util.Enumeration;
 
 /**
- * La base de los que escriben un documento a texto.
+ * The base of those that write a document out as text.
  *
- * <h2>Que resuelve, y que no</h2>
+ * <h2>What it solves, and what it does not</h2>
  *
- * <p>No sabe nada del formato de salida: eso lo pone {@link #write()}, que cada subclase escribe.
- * Lo que trae hecho es todo lo aburrido que igual hay que hacer bien: recorrer los elementos del
- * rango pedido, sangrar, cortar lineas en el ancho maximo sin partir palabras, y sacar el texto de
- * un elemento hoja.
+ * <p>It knows nothing about the output format: that is put in by {@link #write()}, which each
+ * subclass writes. What it brings done is all the boring things that still have to be done
+ * right: walking the elements of the requested range, indenting, breaking lines at the maximum
+ * width without splitting words, and getting the text out of a leaf element.
  *
- * <h2>El corte de linea</h2>
+ * <h2>The line break</h2>
  *
- * <p>Cuando el corte esta prendido, cada escritura busca un espacio hacia atras y corta ahi. Si no
- * hay ningun espacio, la linea se pasa de largo: partir una palabra al medio seria peor que una
- * linea larga, porque cambiaria el contenido.
+ * <p>When breaking is on, every write looks backwards for a space and breaks there. If there is
+ * no space at all, the line runs over: splitting a word in the middle would be worse than a long
+ * line, because it would change the content.
  *
- * <p>La sangria se escribe recien cuando hay algo que poner en la linea. Escribirla antes dejaria
- * lineas con espacios y nada mas.
+ * <p>The indentation is written only when there is something to put on the line. Writing it
+ * before would leave lines with spaces and nothing else.
  */
 public abstract class AbstractWriter {
 
@@ -44,15 +44,15 @@ public abstract class AbstractWriter {
     private char[] newlineChars;
     private Segment segment;
 
-    /** El fin de linea que se usa si nadie pide otro. */
+    /** The line ending used if nobody asks for another. */
     protected static final char NEWLINE = '\n';
 
-    /** Escribe el documento entero. */
+    /** It writes the whole document. */
     protected AbstractWriter(Writer w, Document doc) {
         this(w, doc, 0, doc.getLength());
     }
 
-    /** Escribe el tramo pedido del documento. */
+    /** It writes the requested stretch of the document. */
     protected AbstractWriter(Writer w, Document doc, int pos, int len) {
         this.doc = doc;
         it = new ElementIterator(doc.getDefaultRootElement());
@@ -67,7 +67,7 @@ public abstract class AbstractWriter {
             try {
                 newline = System.getProperty("line.separator");
             } catch (SecurityException se) {
-                // Sin permiso para leerla: se usa la de siempre.
+                // With no permission to read it: the usual one is used.
             }
             if (newline == null) {
                 newline = "\n";
@@ -77,12 +77,12 @@ public abstract class AbstractWriter {
         canWrapLines = true;
     }
 
-    /** Escribe el arbol que cuelga de ese elemento. */
+    /** It writes the tree hanging from that element. */
     protected AbstractWriter(Writer w, Element root) {
         this(w, root, 0, root.getEndOffset());
     }
 
-    /** Escribe el tramo pedido del arbol de ese elemento. */
+    /** It writes the requested stretch of that element's tree. */
     protected AbstractWriter(Writer w, Element root, int pos, int len) {
         this.doc = root.getDocument();
         it = new ElementIterator(root);
@@ -112,7 +112,7 @@ public abstract class AbstractWriter {
         return doc;
     }
 
-    /** Si ese elemento se pisa con el tramo que se esta escribiendo. */
+    /** Whether that element overlaps the stretch being written. */
     protected boolean inRange(Element next) {
         int startOffset = getStartOffset();
         int endOffset = getEndOffset();
@@ -124,19 +124,19 @@ public abstract class AbstractWriter {
         return false;
     }
 
-    /** Lo que hace la subclase: escribir el documento en su formato. */
+    /** What the subclass does: write the document in its format. */
     protected abstract void write() throws IOException, BadLocationException;
 
-    /** El texto de ese elemento, recortado al tramo pedido. */
+    /** That element's text, trimmed to the requested stretch. */
     protected String getText(Element elem) throws BadLocationException {
         return doc.getText(elem.getStartOffset(), elem.getEndOffset() - elem.getStartOffset());
     }
 
     /**
-     * Escribe el texto de un elemento hoja, recortado al tramo.
+     * It writes a leaf element's text, trimmed to the stretch.
      *
-     * <p>Recortar aca y no en {@link #getText} es lo que permite escribir media hoja cuando el
-     * tramo empieza o termina en el medio de una.
+     * <p>Trimming here and not in {@link #getText} is what allows writing half a leaf when the
+     * stretch starts or ends in the middle of one.
      */
     protected void text(Element elem) throws BadLocationException, IOException {
         int start = Math.max(getStartOffset(), elem.getStartOffset());
@@ -152,7 +152,7 @@ public abstract class AbstractWriter {
         }
     }
 
-    /** El ancho maximo de linea; ver la nota de la clase. */
+    /** The maximum line width; see the class note. */
     protected void setLineLength(int l) {
         maxLineLength = l;
     }
@@ -170,7 +170,7 @@ public abstract class AbstractWriter {
         return currLength;
     }
 
-    /** Si en esta linea no se escribio nada todavia (la sangria no cuenta). */
+    /** Whether nothing has been written on this line yet (the indentation does not count). */
     protected boolean isLineEmpty() {
         return isLineEmpty;
     }
@@ -183,7 +183,7 @@ public abstract class AbstractWriter {
         return canWrapLines;
     }
 
-    /** Cuantos espacios vale un nivel de sangria. */
+    /** How many spaces one level of indentation is worth. */
     protected void setIndentSpace(int space) {
         indentSpace = space;
     }
@@ -201,7 +201,7 @@ public abstract class AbstractWriter {
     }
 
     protected void incrIndent() {
-        // El nivel sube salvo que la sangria ya se pase del ancho de linea.
+        // The level goes up unless the indentation already exceeds the line width.
         if (offsetIndent > 0 || ((indentLevel + 1) * getIndentSpace()) < getLineLength()) {
             indentLevel++;
         } else {
@@ -221,7 +221,7 @@ public abstract class AbstractWriter {
         return indentLevel;
     }
 
-    /** Escribe la sangria de la linea que viene. */
+    /** It writes the indentation of the coming line. */
     protected void indent() throws IOException {
         int max = getIndentLevel() * getIndentSpace();
         if (indentChars == null || max > indentChars.length) {
@@ -270,14 +270,14 @@ public abstract class AbstractWriter {
     }
 
     /**
-     * Escribe ese texto, cortando lineas si hace falta.
+     * It writes that text, breaking lines if needed.
      *
-     * <p>Toda escritura pasa por aca: es donde vive el corte y donde se cuenta el largo. Lo que va
-     * de verdad al {@link Writer} sale por {@link #output}.
+     * <p>Every write goes through here: it is where the breaking lives and where the length is
+     * counted. What really goes to the {@link Writer} goes out through {@link #output}.
      */
     protected void write(char[] chars, int startIndex, int length) throws IOException {
         if (!getCanWrapLines()) {
-            // Sin corte: se busca solo el fin de linea para no perder la cuenta.
+            // Without breaking: only the line ending is looked for so as not to lose the count.
             int lastIndex = startIndex;
             int endIndex = startIndex + length;
             int newlineIndex = indexOf(chars, NEWLINE, startIndex, endIndex);
@@ -318,7 +318,7 @@ public abstract class AbstractWriter {
                     }
                     lastIndex = endIndex;
                 } else {
-                    // No entra: se busca un espacio hacia atras.
+                    // It does not fit: a space is looked for backwards.
                     int breakPoint = -1;
                     int maxBreak = Math.min(endIndex - lastIndex,
                             maxLength - lineLength - 1);
@@ -333,7 +333,7 @@ public abstract class AbstractWriter {
                         output(chars, lastIndex, breakPoint - lastIndex);
                         lastIndex = breakPoint;
                     } else {
-                        // Ni un espacio: la linea se pasa. Ver la nota de la clase.
+                        // Not even a space: the line runs over. See the class note.
                         boolean done = false;
                         int check = lastIndex + maxBreak;
                         maxBreak = endIndex;
@@ -370,7 +370,7 @@ public abstract class AbstractWriter {
         }
     }
 
-    /** Escribe los atributos de ese conjunto, uno por linea. */
+    /** It writes that set's attributes, one per line. */
     protected void writeAttributes(AttributeSet attr) throws IOException {
         Enumeration<?> names = attr.getAttributeNames();
         while (names.hasMoreElements()) {
@@ -380,10 +380,10 @@ public abstract class AbstractWriter {
     }
 
     /**
-     * La unica salida de verdad al {@link Writer}.
+     * The only real outlet to the {@link Writer}.
      *
-     * <p>Una subclase que quiera espiar o cambiar lo que sale solo tiene que sobrescribir esto, sin
-     * repetir la logica de corte de {@link #write(char[], int, int)}.
+     * <p>A subclass that wants to spy on or change what goes out only has to override this,
+     * without repeating {@link #write(char[], int, int)}'s breaking logic.
      */
     protected void output(char[] content, int start, int length) throws IOException {
         getWriter().write(content, start, length);

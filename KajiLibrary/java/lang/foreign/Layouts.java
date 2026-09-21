@@ -4,267 +4,266 @@ import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.List;
 
-// La fabrica de layouts y el recorredor de caminos. De paquete: es el lugar donde viven las
-// validaciones compartidas, para que las quince implementaciones no las repitan cada una a su
-// manera -- que es como terminan divergiendo.
+// The layout factory and the path walker. Package-private: it is where the shared validations live,
+// so the fifteen implementations do not each repeat them their own way -- which is how they end up
+// diverging.
 final class Layouts {
 
     private Layouts() {
     }
 
-    // ---- validaciones compartidas ----------------------------------------------------------------
+    // ---- shared validations ----------------------------------------------------------------------
 
-    static String exigirNombre(String nombre) {
-        if (nombre == null) {
-            throw new IllegalArgumentException("el nombre no puede ser null");
+    static String requireName(String name) {
+        if (name == null) {
+            throw new IllegalArgumentException("the name cannot be null");
         }
-        return nombre;
+        return name;
     }
 
-    // Un alineamiento tiene que ser una potencia de dos positiva. La comprobacion es el truco de
-    // siempre: un numero es potencia de dos si tiene exactamente un bit encendido, y `n & (n-1)`
-    // apaga el bit mas bajo.
-    static long exigirAlineamiento(long alineamiento) {
-        if (alineamiento <= 0L || (alineamiento & (alineamiento - 1L)) != 0L) {
+    // An alignment has to be a positive power of two. The check is the usual trick: a number is a
+    // power of two if it has exactly one bit set, and `n & (n-1)` clears the lowest bit.
+    static long requireAlignment(long alignment) {
+        if (alignment <= 0L || (alignment & (alignment - 1L)) != 0L) {
             throw new IllegalArgumentException(
-                    "el alineamiento tiene que ser una potencia de dos positiva: " + alineamiento);
+                    "the alignment has to be a positive power of two: " + alignment);
         }
-        return alineamiento;
+        return alignment;
     }
 
-    static ByteOrder exigirOrden(ByteOrder orden) {
-        if (orden == null) {
-            throw new IllegalArgumentException("el orden no puede ser null");
+    static ByteOrder requireOrder(ByteOrder order) {
+        if (order == null) {
+            throw new IllegalArgumentException("the order cannot be null");
         }
-        return orden;
+        return order;
     }
 
-    static void completarNombre(StringBuilder sb, String nombre) {
-        if (nombre != null) {
+    static void appendName(StringBuilder sb, String name) {
+        if (name != null) {
             sb.append('(');
-            sb.append(nombre);
+            sb.append(name);
             sb.append(')');
         }
     }
 
-    // ---- las constantes de ValueLayout ------------------------------------------------------------
+    // ---- ValueLayout's constants ------------------------------------------------------------------
     //
-    // El orden por defecto es little-endian **fijo**, y no el de la maquina. El JDK usa
-    // `ByteOrder.nativeOrder()`; aca no hay forma de preguntarselo a la VM, y elegir mal seria peor
-    // que elegir fijo -- todas las plataformas donde esto corre hoy son little-endian, y el que
-    // necesite la otra lo dice con `withOrder`.
+    // The default order is **fixed** little-endian, and not the machine's. The JDK uses
+    // `ByteOrder.nativeOrder()`; here there is no way of asking the VM, and choosing wrong would be
+    // worse than choosing fixed -- every platform this runs on today is little-endian, and whoever
+    // needs the other one says so with `withOrder`.
 
-    static ValueLayout.OfBoolean booleano() {
-        return new ValorBoolean(1L, null, ByteOrder.LITTLE_ENDIAN);
+    static ValueLayout.OfBoolean ofBoolean() {
+        return new ValueBoolean(1L, null, ByteOrder.LITTLE_ENDIAN);
     }
 
-    static ValueLayout.OfByte deByte() {
-        return new ValorByte(1L, null, ByteOrder.LITTLE_ENDIAN);
+    static ValueLayout.OfByte ofByte() {
+        return new ValueByte(1L, null, ByteOrder.LITTLE_ENDIAN);
     }
 
-    static ValueLayout.OfChar deChar(long alineamiento) {
-        return new ValorChar(alineamiento, null, ByteOrder.LITTLE_ENDIAN);
+    static ValueLayout.OfChar ofChar(long alignment) {
+        return new ValueChar(alignment, null, ByteOrder.LITTLE_ENDIAN);
     }
 
-    static ValueLayout.OfShort deShort(long alineamiento) {
-        return new ValorShort(alineamiento, null, ByteOrder.LITTLE_ENDIAN);
+    static ValueLayout.OfShort ofShort(long alignment) {
+        return new ValueShort(alignment, null, ByteOrder.LITTLE_ENDIAN);
     }
 
-    static ValueLayout.OfInt deInt(long alineamiento) {
-        return new ValorInt(alineamiento, null, ByteOrder.LITTLE_ENDIAN);
+    static ValueLayout.OfInt ofInt(long alignment) {
+        return new ValueInt(alignment, null, ByteOrder.LITTLE_ENDIAN);
     }
 
-    static ValueLayout.OfLong deLong(long alineamiento) {
-        return new ValorLong(alineamiento, null, ByteOrder.LITTLE_ENDIAN);
+    static ValueLayout.OfLong ofLong(long alignment) {
+        return new ValueLong(alignment, null, ByteOrder.LITTLE_ENDIAN);
     }
 
-    static ValueLayout.OfFloat deFloat(long alineamiento) {
-        return new ValorFloat(alineamiento, null, ByteOrder.LITTLE_ENDIAN);
+    static ValueLayout.OfFloat ofFloat(long alignment) {
+        return new ValueFloat(alignment, null, ByteOrder.LITTLE_ENDIAN);
     }
 
-    static ValueLayout.OfDouble deDouble(long alineamiento) {
-        return new ValorDouble(alineamiento, null, ByteOrder.LITTLE_ENDIAN);
+    static ValueLayout.OfDouble ofDouble(long alignment) {
+        return new ValueDouble(alignment, null, ByteOrder.LITTLE_ENDIAN);
     }
 
-    static AddressLayout direccion(long alineamiento) {
-        return new Direccion(alineamiento, null, ByteOrder.LITTLE_ENDIAN, null);
+    static AddressLayout address(long alignment) {
+        return new ValueAddress(alignment, null, ByteOrder.LITTLE_ENDIAN, null);
     }
 
-    // ---- las cuatro fabricas compuestas -----------------------------------------------------------
+    // ---- the four composite factories -------------------------------------------------------------
 
-    static PaddingLayout padding(long tamanio) {
-        if (tamanio <= 0L) {
-            throw new IllegalArgumentException("el relleno tiene que ocupar algo: " + tamanio);
+    static PaddingLayout padding(long size) {
+        if (size <= 0L) {
+            throw new IllegalArgumentException("padding has to take up something: " + size);
         }
-        return new Relleno(tamanio, 1L, null);
+        return new Padding(size, 1L, null);
     }
 
-    static SequenceLayout sequence(long cantidad, MemoryLayout elemento) {
-        if (elemento == null) {
-            throw new IllegalArgumentException("el elemento no puede ser null");
+    static SequenceLayout sequence(long count, MemoryLayout element) {
+        if (element == null) {
+            throw new IllegalArgumentException("the element cannot be null");
         }
-        if (cantidad < 0L) {
-            throw new IllegalArgumentException("cantidad negativa: " + cantidad);
+        if (count < 0L) {
+            throw new IllegalArgumentException("negative count: " + count);
         }
-        long tam = elemento.byteSize();
-        // El desborde se comprueba **antes** de construir: una secuencia cuyo tamanio no entra en un
-        // `long` no es un layout invalido que se descubre despues, es uno que no existe.
-        if (tam != 0L && cantidad > Long.MAX_VALUE / tam) {
-            throw new IllegalArgumentException("el tamanio total no entra en un long");
+        long sz = element.byteSize();
+        // Overflow is checked **before** building: a sequence whose size does not fit in a `long`
+        // is not an invalid layout to be discovered later, it is one that does not exist.
+        if (sz != 0L && count > Long.MAX_VALUE / sz) {
+            throw new IllegalArgumentException("the total size does not fit in a long");
         }
-        return new Secuencia(cantidad, elemento, elemento.byteAlignment(), null);
+        return new Sequence(count, element, element.byteAlignment(), null);
     }
 
-    static StructLayout struct(MemoryLayout... elementos) {
-        List<MemoryLayout> ms = enLista(elementos);
-        long alineamiento = 1L;
+    static StructLayout struct(MemoryLayout... elements0) {
+        List<MemoryLayout> ms = asList(elements0);
+        long alignment = 1L;
         long offset = 0L;
         int i = 0;
         while (i < ms.size()) {
             MemoryLayout m = ms.get(i);
             long a = m.byteAlignment();
-            // La regla del struct, y la que mas sorprende: cada miembro tiene que caer en un offset
-            // multiplo de **su** alineamiento. No se acomoda solo -- el relleno va explicito, y sin
-            // el la construccion falla. Ver la nota de `StructLayout`.
+            // The struct's rule, and the most surprising one: each member has to fall at an offset
+            // that is a multiple of **its** alignment. It does not arrange itself -- padding goes in
+            // explicitly, and without it the construction fails. See `StructLayout`'s note.
             if (offset % a != 0L) {
                 throw new IllegalArgumentException(
-                        "el miembro " + m + " cae en el offset " + offset
-                                + ", que no es multiplo de su alineamiento " + a
-                                + "; agregue MemoryLayout.paddingLayout(" + (a - offset % a) + ")");
+                        "member " + m + " falls at offset " + offset
+                                + ", which is not a multiple of its alignment " + a
+                                + "; add MemoryLayout.paddingLayout(" + (a - offset % a) + ")");
             }
-            if (a > alineamiento) {
-                alineamiento = a;
+            if (a > alignment) {
+                alignment = a;
             }
             offset = offset + m.byteSize();
             i = i + 1;
         }
-        return new Estructura(ms, alineamiento, null);
+        return new Struct(ms, alignment, null);
     }
 
-    static UnionLayout union(MemoryLayout... elementos) {
-        List<MemoryLayout> ms = enLista(elementos);
-        long alineamiento = 1L;
+    static UnionLayout union(MemoryLayout... elements0) {
+        List<MemoryLayout> ms = asList(elements0);
+        long alignment = 1L;
         int i = 0;
         while (i < ms.size()) {
             long a = ms.get(i).byteAlignment();
-            if (a > alineamiento) {
-                alineamiento = a;
+            if (a > alignment) {
+                alignment = a;
             }
             i = i + 1;
         }
-        // No hay regla de offsets que comprobar: todos empiezan en cero, y con el alineamiento
-        // maximo todos caen bien por construccion.
-        return new Union(ms, alineamiento, null);
+        // There is no offset rule to check: they all start at zero, and with the maximum alignment
+        // they all fall right by construction.
+        return new Union(ms, alignment, null);
     }
 
-    private static List<MemoryLayout> enLista(MemoryLayout[] elementos) {
-        if (elementos == null) {
-            throw new IllegalArgumentException("los miembros no pueden ser null");
+    private static List<MemoryLayout> asList(MemoryLayout[] elements0) {
+        if (elements0 == null) {
+            throw new IllegalArgumentException("the members cannot be null");
         }
         List<MemoryLayout> ms = new ArrayList<MemoryLayout>();
         int i = 0;
-        while (i < elementos.length) {
-            if (elementos[i] == null) {
-                throw new IllegalArgumentException("un miembro es null");
+        while (i < elements0.length) {
+            if (elements0[i] == null) {
+                throw new IllegalArgumentException("a member is null");
             }
-            ms.add(elementos[i]);
+            ms.add(elements0[i]);
             i = i + 1;
         }
         return ms;
     }
 
-    // ---- los pasos de un camino --------------------------------------------------------------------
+    // ---- a path's steps ----------------------------------------------------------------------------
 
-    static final int POR_NOMBRE = 0;
-    static final int POR_POSICION = 1;
-    static final int ELEMENTO = 2;
-    static final int TODOS = 3;
-    static final int RANGO = 4;
-    static final int DEREFERENCIA = 5;
+    static final int BY_NAME = 0;
+    static final int BY_POSITION = 1;
+    static final int ELEMENT = 2;
+    static final int ALL = 3;
+    static final int RANGE = 4;
+    static final int DEREFERENCE = 5;
 
-    static MemoryLayout.PathElement porNombre(String nombre) {
-        return new Paso(POR_NOMBRE, exigirNombre(nombre), 0L, 0L);
+    static MemoryLayout.PathElement byName(String name) {
+        return new Step(BY_NAME, requireName(name), 0L, 0L);
     }
 
-    static MemoryLayout.PathElement porPosicion(long indice) {
-        return new Paso(POR_POSICION, null, indice, 0L);
+    static MemoryLayout.PathElement byPosition(long index) {
+        return new Step(BY_POSITION, null, index, 0L);
     }
 
-    static MemoryLayout.PathElement elemento(long indice) {
-        return new Paso(ELEMENTO, null, indice, 0L);
+    static MemoryLayout.PathElement element(long index) {
+        return new Step(ELEMENT, null, index, 0L);
     }
 
-    static MemoryLayout.PathElement todosLosElementos() {
-        return new Paso(TODOS, null, 0L, 0L);
+    static MemoryLayout.PathElement allElements() {
+        return new Step(ALL, null, 0L, 0L);
     }
 
-    static MemoryLayout.PathElement elementos(long desde, long paso) {
-        return new Paso(RANGO, null, desde, paso);
+    static MemoryLayout.PathElement elements0(long from, long step) {
+        return new Step(RANGE, null, from, step);
     }
 
-    static MemoryLayout.PathElement dereferencia() {
-        return new Paso(DEREFERENCIA, null, 0L, 0L);
+    static MemoryLayout.PathElement dereference() {
+        return new Step(DEREFERENCE, null, 0L, 0L);
     }
 
-    // ---- recorrer un camino ------------------------------------------------------------------------
+    // ---- walking a path ----------------------------------------------------------------------------
     //
-    // Los dos recorridos --el que suma offsets y el que devuelve el layout-- comparten el mismo
-    // paseo y difieren solo en que se llevan. Se escriben juntos para que no se puedan desincronizar:
-    // un `select` que baje distinto de como baja `byteOffset` daria un layout que no esta donde el
-    // offset dice.
+    // The two walks --the one adding offsets up and the one returning the layout-- share the same
+    // stroll and differ only in what they take away. They are written together so they cannot fall
+    // out of step: a `select` going down differently from how `byteOffset` goes down would give a
+    // layout that is not where the offset says.
 
-    static long offsetPorCamino(MemoryLayout raiz, MemoryLayout.PathElement... camino) {
-        return recorrer(raiz, camino, true).offset;
+    static long offsetByPath(MemoryLayout root, MemoryLayout.PathElement... path) {
+        return walk(root, path, true).offset;
     }
 
-    static MemoryLayout seleccionarPorCamino(MemoryLayout raiz, MemoryLayout.PathElement... camino) {
-        return recorrer(raiz, camino, false).layout;
+    static MemoryLayout selectByPath(MemoryLayout root, MemoryLayout.PathElement... path) {
+        return walk(root, path, false).layout;
     }
 
     /**
-     * El {@link java.lang.invoke.VarHandle} de ese camino.
+     * That path's {@link java.lang.invoke.VarHandle}.
      *
-     * <p>Es el tercer recorrido, y el unico que acepta pasos **abiertos**: donde `byteOffset` se
-     * planta --un paso sobre todos los elementos no designa una posicion-- este anota cuanto mide el
-     * elemento y sigue. Ese numero es el **paso** con el que despues se multiplica el indice que el
-     * llamador da al acceder, y es exactamente para lo que el paso abierto existe.
+     * <p>It is the third walk, and the only one accepting **open** steps: where `byteOffset` stops
+     * short --a step over all the elements designates no position-- this one notes how much the
+     * element measures and carries on. That number is the **stride** the index the caller gives on
+     * access is later multiplied by, and it is exactly what the open step exists for.
      *
-     * @param pasoDeArreglo un paso extra al **principio**, para `arrayElementVarHandle`; cero si no
+     * @param arrayStride an extra stride at the **front**, for `arrayElementVarHandle`; zero if not
      */
-    static java.lang.invoke.VarHandle handleDeCamino(MemoryLayout raiz, long pasoDeArreglo,
-            MemoryLayout.PathElement... camino) {
-        java.util.ArrayList<Long> abiertos = new java.util.ArrayList<Long>();
-        if (pasoDeArreglo > 0L) {
-            abiertos.add(Long.valueOf(pasoDeArreglo));
+    static java.lang.invoke.VarHandle pathHandle(MemoryLayout root, long arrayStride,
+            MemoryLayout.PathElement... path) {
+        java.util.ArrayList<Long> open = new java.util.ArrayList<Long>();
+        if (arrayStride > 0L) {
+            open.add(Long.valueOf(arrayStride));
         }
-        Parada fin = recorrer(raiz, camino, true, abiertos);
-        long[] pasos = new long[abiertos.size()];
+        Stop end = walk(root, path, true, open);
+        long[] steps = new long[open.size()];
         int i = 0;
-        while (i < pasos.length) {
-            pasos[i] = abiertos.get(i).longValue();
+        while (i < steps.length) {
+            steps[i] = open.get(i).longValue();
             i = i + 1;
         }
-        return java.lang.invoke.VarHandles.deSegmento(fin.layout, fin.offset, pasos);
+        return java.lang.invoke.VarHandles.ofSegment(end.layout, end.offset, steps);
     }
 
-    /** Los tres `MethodHandle` de `MemoryLayout`, que comparten el mismo recorrido. */
-    static java.lang.invoke.MethodHandle handleDeOffset(MemoryLayout raiz,
-            MemoryLayout.PathElement... camino) {
-        java.util.ArrayList<Long> abiertos = new java.util.ArrayList<Long>();
-        Parada fin = recorrer(raiz, camino, true, abiertos);
-        return java.lang.invoke.VarHandles.offsetDeCamino(raiz, fin.layout, fin.offset,
-                aLargos(abiertos));
+    /** `MemoryLayout`'s three `MethodHandle`s, which share the same walk. */
+    static java.lang.invoke.MethodHandle offsetHandle(MemoryLayout root,
+            MemoryLayout.PathElement... path) {
+        java.util.ArrayList<Long> open = new java.util.ArrayList<Long>();
+        Stop end = walk(root, path, true, open);
+        return java.lang.invoke.VarHandles.pathOffsetHandle(root, end.layout, end.offset,
+                toLongs(open));
     }
 
-    static java.lang.invoke.MethodHandle handleDeRebanada(MemoryLayout raiz,
-            MemoryLayout.PathElement... camino) {
-        java.util.ArrayList<Long> abiertos = new java.util.ArrayList<Long>();
-        Parada fin = recorrer(raiz, camino, true, abiertos);
-        return java.lang.invoke.VarHandles.rebanadaDeCamino(raiz, fin.layout, fin.offset,
-                aLargos(abiertos));
+    static java.lang.invoke.MethodHandle sliceHandle0(MemoryLayout root,
+            MemoryLayout.PathElement... path) {
+        java.util.ArrayList<Long> open = new java.util.ArrayList<Long>();
+        Stop end = walk(root, path, true, open);
+        return java.lang.invoke.VarHandles.pathSliceHandle(root, end.layout, end.offset,
+                toLongs(open));
     }
 
-    private static long[] aLargos(java.util.List<Long> xs) {
+    private static long[] toLongs(java.util.List<Long> xs) {
         long[] out = new long[xs.size()];
         int i = 0;
         while (i < out.length) {
@@ -274,41 +273,41 @@ final class Layouts {
         return out;
     }
 
-    private static Parada recorrer(MemoryLayout raiz, MemoryLayout.PathElement[] camino,
-            boolean pidiendoOffset) {
-        return recorrer(raiz, camino, pidiendoOffset, null);
+    private static Stop walk(MemoryLayout root, MemoryLayout.PathElement[] path,
+            boolean wantOffset) {
+        return walk(root, path, wantOffset, null);
     }
 
-    // `abiertos` no nulo = se esta armando un `VarHandle`, y entonces un paso sobre todos los
-    // elementos no es un error sino un indice libre: se anota su tamano y se baja.
-    private static Parada recorrer(MemoryLayout raiz, MemoryLayout.PathElement[] camino,
-            boolean pidiendoOffset, java.util.List<Long> abiertos) {
-        if (camino == null) {
-            throw new IllegalArgumentException("el camino no puede ser null");
+    // A non-null `open` = a `VarHandle` is being built, and then a step over all the elements is not
+    // an error but a free index: its size is noted and the walk goes down.
+    private static Stop walk(MemoryLayout root, MemoryLayout.PathElement[] path,
+            boolean wantOffset, java.util.List<Long> open) {
+        if (path == null) {
+            throw new IllegalArgumentException("the path cannot be null");
         }
-        MemoryLayout actual = raiz;
+        MemoryLayout current = root;
         long offset = 0L;
         int i = 0;
-        while (i < camino.length) {
-            if (!(camino[i] instanceof Paso)) {
-                throw new IllegalArgumentException("paso de camino desconocido: " + camino[i]);
+        while (i < path.length) {
+            if (!(path[i] instanceof Step)) {
+                throw new IllegalArgumentException("unknown path step: " + path[i]);
             }
-            Paso p = (Paso) camino[i];
-            if (p.clase == POR_NOMBRE || p.clase == POR_POSICION) {
-                if (!(actual instanceof GroupLayout)) {
+            Step p = (Step) path[i];
+            if (p.kind == BY_NAME || p.kind == BY_POSITION) {
+                if (!(current instanceof GroupLayout)) {
                     throw new IllegalArgumentException(
-                            "no es un grupo, no tiene miembros: " + actual);
+                            "not a group, it has no members: " + current);
                 }
-                GroupLayout g = (GroupLayout) actual;
+                GroupLayout g = (GroupLayout) current;
                 List<MemoryLayout> ms = g.memberLayouts();
-                int pos = p.clase == POR_NOMBRE ? buscarPorNombre(ms, p.nombre) : (int) p.indice;
+                int pos = p.kind == BY_NAME ? findByName(ms, p.name) : (int) p.index;
                 if (pos < 0 || pos >= ms.size()) {
                     throw new IllegalArgumentException(
-                            "no hay miembro " + (p.nombre != null ? p.nombre : String.valueOf(p.indice))
-                                    + " en " + actual);
+                            "there is no member " + (p.name != null ? p.name : String.valueOf(p.index))
+                                    + " en " + current);
                 }
-                // En un struct el offset es la suma de los anteriores; en una union todos empiezan
-                // en cero, que es lo que la union **es**.
+                // In a struct the offset is the sum of the previous ones; in a union they all
+                // start at zero, which is what a union **is**.
                 if (g instanceof StructLayout) {
                     int k = 0;
                     while (k < pos) {
@@ -316,76 +315,76 @@ final class Layouts {
                         k = k + 1;
                     }
                 }
-                actual = ms.get(pos);
-            } else if (p.clase == ELEMENTO) {
-                SequenceLayout s = comoSecuencia(actual);
-                if (!pidiendoOffset) {
-                    // `select` **rechaza** un indice, y la razon es buena: el indice no cambia el
-                    // layout que hay ahi --todos los elementos son iguales-- asi que aceptarlo
-                    // sugeriria que si. Para preguntar que hay, el paso abierto.
+                current = ms.get(pos);
+            } else if (p.kind == ELEMENT) {
+                SequenceLayout s = asSequence(current);
+                if (!wantOffset) {
+                    // `select` **refuses** an index, and the reason is a good one: the index does
+                    // not change the layout that is there --all the elements are alike-- so
+                    // accepting it would suggest that it does. To ask what is there, the open step.
                     throw new IllegalArgumentException(
-                            "select no acepta un elemento indexado; use sequenceElement()");
+                            "select does not accept an indexed element; use sequenceElement()");
                 }
-                if (p.indice < 0L || p.indice >= s.elementCount()) {
-                    throw new IndexOutOfBoundsException("elemento " + p.indice + " de " + actual);
+                if (p.index < 0L || p.index >= s.elementCount()) {
+                    throw new IndexOutOfBoundsException("element " + p.index + " of " + current);
                 }
-                offset = offset + p.indice * s.elementLayout().byteSize();
-                actual = s.elementLayout();
-            } else if (p.clase == RANGO) {
-                SequenceLayout s = comoSecuencia(actual);
-                // Un rango no designa ni una posicion ni un layout distinto: se rechaza en los dos.
+                offset = offset + p.index * s.elementLayout().byteSize();
+                current = s.elementLayout();
+            } else if (p.kind == RANGE) {
+                SequenceLayout s = asSequence(current);
+                // A range designates neither a position nor a different layout: refused in both.
                 throw new IllegalArgumentException(
-                        "un rango de elementos no designa ni un offset ni un layout propio");
-            } else if (p.clase == TODOS) {
-                SequenceLayout s = comoSecuencia(actual);
-                if (abiertos != null) {
-                    abiertos.add(Long.valueOf(s.elementLayout().byteSize()));
-                    actual = s.elementLayout();
+                        "a range of elements designates neither an offset nor a layout of its own");
+            } else if (p.kind == ALL) {
+                SequenceLayout s = asSequence(current);
+                if (open != null) {
+                    open.add(Long.valueOf(s.elementLayout().byteSize()));
+                    current = s.elementLayout();
                     i = i + 1;
                     continue;
                 }
-                if (pidiendoOffset) {
-                    // Un paso que abre **todos** los elementos no designa una posicion, y por lo
-                    // tanto no tiene un offset. En el JDK ese paso existe para construir un
-                    // `VarHandle` con un indice libre; aca esos no estan (ver `MemoryLayout`), asi
-                    // que el unico uso que le queda es `select`.
+                if (wantOffset) {
+                    // A step opening **all** the elements designates no position, and therefore has
+                    // no offset. Its other use is building a `VarHandle` with a free index, which is
+                    // the branch just above; here the walk was asked for an offset, so there is
+                    // nothing to answer.
                     throw new IllegalArgumentException(
-                            "un paso sobre todos los elementos no designa un offset; use"
-                                    + " sequenceElement(indice)");
+                            "a step over all the elements designates no offset; use"
+                                    + " sequenceElement(index)");
                 }
-                actual = s.elementLayout();
+                current = s.elementLayout();
             } else {
-                // DEREFERENCIA. Se rechaza en los dos recorridos, y por la misma razon: seguir un
-                // puntero **sale** de este layout, asi que ni el offset se mide desde aca ni el
-                // layout de destino es una parte de este.
+                // DEREFERENCE. Refused in the offset and the layout walks, and for the same reason:
+                // following a pointer **leaves** this layout, so neither is the offset measured from
+                // here nor is the target layout a part of this one.
                 //
-                // En el JDK el paso existe igual, pero solo para los metodos que fabrican un
-                // `VarHandle` --que ahi si pueden dereferenciar al acceder--. Esos no estan en esta
-                // biblioteca (ver la nota de `MemoryLayout`), asi que el paso no tiene ningun uso
-                // valido y se lo dice de frente en vez de dejar que falle mas adelante.
-                if (!(actual instanceof AddressLayout)) {
-                    throw new IllegalArgumentException("no es una direccion: " + actual);
+                // In the JDK the step is also good for the methods that build a `VarHandle`, which
+                // there can dereference on access. Those methods do exist here, but this walk does
+                // not implement the dereferencing access they would need, so the step is refused for
+                // them too -- said to the caller's face instead of failing further along.
+                if (!(current instanceof AddressLayout)) {
+                    throw new IllegalArgumentException("not an address: " + current);
                 }
                 throw new IllegalArgumentException(
-                        "un paso de dereferencia solo vale para los metodos que fabrican un"
-                                + " VarHandle, que esta biblioteca no trae");
+                        "a dereference step is not supported by this implementation's path"
+                                + " walk");
             }
             i = i + 1;
         }
-        return new Parada(offset, actual);
+        return new Stop(offset, current);
     }
 
-    private static SequenceLayout comoSecuencia(MemoryLayout l) {
+    private static SequenceLayout asSequence(MemoryLayout l) {
         if (!(l instanceof SequenceLayout)) {
-            throw new IllegalArgumentException("no es una secuencia: " + l);
+            throw new IllegalArgumentException("not a sequence: " + l);
         }
         return (SequenceLayout) l;
     }
 
-    private static int buscarPorNombre(List<MemoryLayout> ms, String nombre) {
+    private static int findByName(List<MemoryLayout> ms, String name) {
         int i = 0;
         while (i < ms.size()) {
-            if (ms.get(i).name().isPresent() && ms.get(i).name().get().equals(nombre)) {
+            if (ms.get(i).name().isPresent() && ms.get(i).name().get().equals(name)) {
                 return i;
             }
             i = i + 1;
@@ -393,60 +392,60 @@ final class Layouts {
         return -1;
     }
 
-    static long escalar(MemoryLayout layout, long offset, long index) {
+    static long scaled(MemoryLayout layout, long offset, long index) {
         if (offset < 0L) {
-            throw new IllegalArgumentException("offset negativo: " + offset);
+            throw new IllegalArgumentException("negative offset: " + offset);
         }
         if (index < 0L) {
-            throw new IllegalArgumentException("indice negativo: " + index);
+            throw new IllegalArgumentException("negative index: " + index);
         }
         return offset + index * layout.byteSize();
     }
 }
 
-// Un paso del camino. Se guarda la clase como `int` y no como enum porque las seis variantes no
-// tienen comportamiento propio: el que decide que hacer es el recorredor.
-final class Paso implements MemoryLayout.PathElement {
+// One step of the path. The kind is kept as an `int` and not as an enum because the six variants
+// have no behaviour of their own: the one deciding what to do is the walker.
+final class Step implements MemoryLayout.PathElement {
 
-    final int clase;
-    final String nombre;
-    final long indice;
-    final long salto;
+    final int kind;
+    final String name;
+    final long index;
+    final long stride;
 
-    Paso(int clase, String nombre, long indice, long salto) {
-        this.clase = clase;
-        this.nombre = nombre;
-        this.indice = indice;
-        this.salto = salto;
+    Step(int kind, String name, long index, long stride) {
+        this.kind = kind;
+        this.name = name;
+        this.index = index;
+        this.stride = stride;
     }
 
     public String toString() {
-        if (this.clase == Layouts.POR_NOMBRE) {
-            return "groupElement(" + this.nombre + ")";
+        if (this.kind == Layouts.BY_NAME) {
+            return "groupElement(" + this.name + ")";
         }
-        if (this.clase == Layouts.POR_POSICION) {
-            return "groupElement(" + this.indice + ")";
+        if (this.kind == Layouts.BY_POSITION) {
+            return "groupElement(" + this.index + ")";
         }
-        if (this.clase == Layouts.ELEMENTO) {
-            return "sequenceElement(" + this.indice + ")";
+        if (this.kind == Layouts.ELEMENT) {
+            return "sequenceElement(" + this.index + ")";
         }
-        if (this.clase == Layouts.TODOS) {
+        if (this.kind == Layouts.ALL) {
             return "sequenceElement()";
         }
-        if (this.clase == Layouts.RANGO) {
-            return "sequenceElement(" + this.indice + ", " + this.salto + ")";
+        if (this.kind == Layouts.RANGE) {
+            return "sequenceElement(" + this.index + ", " + this.stride + ")";
         }
         return "dereferenceElement()";
     }
 }
 
-// Donde quedo un recorrido: el offset acumulado y el layout alcanzado.
-final class Parada {
+// Where a walk ended up: the accumulated offset and the layout reached.
+final class Stop {
 
     final long offset;
     final MemoryLayout layout;
 
-    Parada(long offset, MemoryLayout layout) {
+    Stop(long offset, MemoryLayout layout) {
         this.offset = offset;
         this.layout = layout;
     }

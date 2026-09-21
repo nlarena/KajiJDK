@@ -1,22 +1,22 @@
 package javax.net.ssl;
 
 /**
- * Un error en el protocolo mismo.
+ * An error in the protocol itself.
  *
- * <p>Lo que llego no es SSL/TLS valido: un mensaje mal formado, un campo fuera de rango, un orden
- * imposible. Distinta de {@link SSLHandshakeException}, donde los mensajes eran correctos y lo que
- * fallo fue el acuerdo.
+ * <p>What arrived is not valid SSL/TLS: a malformed message, a field out of range, an impossible
+ * order. Different from {@link SSLHandshakeException}, where the messages were correct and what
+ * failed was the agreement.
  */
 public class SSLProtocolException extends SSLException {
 
     private static final long serialVersionUID = 5445067063799134928L;
 
-    /** Con un mensaje. */
+    /** With a message. */
     public SSLProtocolException(String reason) {
         super(reason);
     }
 
-    /** Con un mensaje y la causa de fondo. */
+    /** With a message and the underlying cause. */
     public SSLProtocolException(String message, Throwable cause) {
         super(message, cause);
     }

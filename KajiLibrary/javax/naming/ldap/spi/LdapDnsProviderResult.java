@@ -5,41 +5,44 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * KajiLibrary's javax.naming.ldap.spi.LdapDnsProviderResult -- a que servidores LDAP ir.
+ * KajiLibrary's javax.naming.ldap.spi.LdapDnsProviderResult -- which LDAP servers to go to.
  *
- * <p>Lo que devuelve un {@link LdapDnsProvider}: el dominio que resolvio y la lista de puntos finales,
- * en la forma {@code ldap://maquina:puerto}.
+ * <p>What an {@link LdapDnsProvider} returns: the domain it resolved and the list of endpoints, in
+ * the form {@code ldap://host:port}.
  *
- * <p>La <b>lista</b> es el punto de la clase. Un dominio LDAP no es un servidor sino varios, y el
- * orden importa: JNDI los prueba en ese orden y se queda con el primero que responda. Un proveedor que
- * los ordene por cercania o por carga esta haciendo balanceo, y esta clase es como lo comunica.
+ * <p>The <b>list</b> is the point of the class. An LDAP domain is not one server but several, and
+ * the order matters: JNDI tries them in that order and keeps the first that answers. A provider
+ * that orders them by proximity or load is doing balancing, and this class is how it says so.
  *
- * <p>Es inmutable: la lista se copia al construir y {@link #getEndpoints} la devuelve de solo lectura.
+ * <p>It is immutable: the list is copied on construction and {@link #getEndpoints} returns it
+ * read-only.
  */
 public final class LdapDnsProviderResult {
 
-    /** El dominio que se resolvio. */
+    /** The domain that was resolved. */
     private final String domainName;
 
-    /** Los servidores, en orden de preferencia. */
+    /** The servers, in order of preference. */
     private final List<String> endpoints;
 
     /**
-     * @param domainName el dominio resuelto
-     * @param endpoints los servidores, en orden de preferencia; se copia
-     * @throws NullPointerException si la lista es null
+     * @param domainName the resolved domain; kept as given, even null (the JDK turns null into
+     *     {@code ""})
+     * @param endpoints the servers, in order of preference; copied, null elements included (the
+     *     JDK's {@code List.copyOf} rejects them with {@code NullPointerException})
+     * @throws NullPointerException if the list is null
      */
     public LdapDnsProviderResult(String domainName, List<String> endpoints) {
         this.domainName = domainName;
         this.endpoints = Collections.unmodifiableList(new ArrayList<String>(endpoints));
     }
 
-    /** El dominio resuelto. */
+    /** The resolved domain. */
     public String getDomainName() {
         return this.domainName;
     }
 
-    /** Los servidores, en orden y de solo lectura. Ver la nota de la clase. */
+    /** The servers, in order and read-only. See the class note. */
     public List<String> getEndpoints() {
         return this.endpoints;
     }

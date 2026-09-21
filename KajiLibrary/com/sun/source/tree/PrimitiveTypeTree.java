@@ -3,8 +3,8 @@ package com.sun.source.tree;
 import javax.lang.model.type.TypeKind;
 
 /**
- * Un tipo primitivo escrito en el fuente. Reusa el {@code TypeKind} del
- * modelo de elementos en vez de definir su propio enum.
+ * A primitive type written in the source. It reuses the {@code TypeKind} of the
+ * element model instead of defining an enum of its own.
  */
 public interface PrimitiveTypeTree extends Tree {
 

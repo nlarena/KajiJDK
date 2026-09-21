@@ -4,143 +4,144 @@ import javax.sql.RowSetReader;
 import javax.sql.RowSetWriter;
 
 /**
- * Quien sabe llevar y traer los datos entre un {@code RowSet} desconectado y su origen.
+ * Whoever knows how to carry the data back and forth between a disconnected {@code RowSet} and its
+ * source.
  *
- * <h2>El problema que resuelve</h2>
+ * <h2>The problem it solves</h2>
  *
- * <p>Un {@code CachedRowSet} se llena, se desconecta, viaja, se modifica y vuelve. Entre que se leyo
- * y que se escribe pueden pasar minutos, y en ese rato otro pudo cambiar las mismas filas. Alguien
- * tiene que decidir que hacer con eso, y ese alguien es el proveedor de sincronizacion.
+ * <p>A {@code CachedRowSet} fills up, disconnects, travels, is modified and comes back. Minutes can
+ * pass between reading and writing, and in that while somebody else may have changed the same rows.
+ * Somebody has to decide what to do about that, and that somebody is the synchronization provider.
  *
- * <h2>Los grados, que son una escala de cuanto se controla</h2>
+ * <h2>The grades, which are a scale of how much is controlled</h2>
  *
- * <p>{@link #GRADE_NONE} no chequea nada: lo que se escribe pisa lo que haya. Los dos
- * {@code GRADE_CHECK_*} comparan al escribir —solo las filas modificadas, o todas— y fallan si algo
- * cambio. Los dos {@code GRADE_LOCK_*} directamente impiden que cambie, tomando candados en el
- * origen.
+ * <p>{@link #GRADE_NONE} checks nothing: what is written overwrites whatever there is. The two
+ * {@code GRADE_CHECK_*} compare when writing —only the modified rows, or all— and fail if something
+ * changed. The two {@code GRADE_LOCK_*} outright prevent it from changing, by taking locks in the
+ * source.
  *
- * <p>La escala es de menor a mayor seguridad y tambien de menor a mayor costo, y esa es la decision
- * que hay detras: los candados dan la garantia mas fuerte y son los que peor escalan, porque
- * mantienen bloqueado el origen mientras el {@code RowSet} anda desconectado por ahi. Por eso el
- * grado por omision de los proveedores es de chequeo y no de candado.
+ * <p>The scale goes from less to more safety and also from less to more cost, and that is the
+ * decision behind it: locks give the strongest guarantee and are the ones that scale worst, because
+ * they keep the source locked while the {@code RowSet} wanders around disconnected. That is why the
+ * default grade of the providers is a check and not a lock.
  *
- * <h2>Por que un {@code RowSet} no habla directo con la base</h2>
+ * <h2>Why a {@code RowSet} does not talk to the database directly</h2>
  *
- * <p>Porque asi el mismo {@code RowSet} sirve para una base SQL, para un archivo XML o para lo que
- * sea: cambiar el proveedor cambia el origen sin tocar el codigo que usa las filas. El lector y el
- * escritor que devuelven {@link #getRowSetReader} y {@link #getRowSetWriter} son las dos mitades de
- * ese acoplamiento.
+ * <p>Because that way the same {@code RowSet} serves for an SQL database, an XML file or whatever:
+ * changing the provider changes the source without touching the code that uses the rows. The reader
+ * and the writer returned by {@link #getRowSetReader} and {@link #getRowSetWriter} are the two
+ * halves of that coupling.
  *
  * @since 1.5
  */
 public abstract class SyncProvider {
 
-    /** No se chequea nada al escribir. */
+    /** Nothing is checked when writing. */
     public static final int GRADE_NONE = 1;
 
-    /** Al escribir se chequea que las filas modificadas no hayan cambiado en el origen. */
+    /** When writing, it is checked that the modified rows have not changed in the source. */
     public static final int GRADE_CHECK_MODIFIED_AT_COMMIT = 2;
 
-    /** Al escribir se chequean todas las filas, no solo las modificadas. */
+    /** When writing, all the rows are checked, not only the modified ones. */
     public static final int GRADE_CHECK_ALL_AT_COMMIT = 3;
 
-    /** Se toma un candado sobre las filas al modificarlas. */
+    /** A lock is taken on the rows when modifying them. */
     public static final int GRADE_LOCK_WHEN_MODIFIED = 4;
 
-    /** Se toma un candado sobre las filas al cargarlas. */
+    /** A lock is taken on the rows when loading them. */
     public static final int GRADE_LOCK_WHEN_LOADED = 5;
 
-    /** No se toma ningun candado en el origen. */
+    /** No lock is taken in the source. */
     public static final int DATASOURCE_NO_LOCK = 1;
 
-    /** Se toman candados de fila. */
+    /** Row locks are taken. */
     public static final int DATASOURCE_ROW_LOCK = 2;
 
-    /** Se toman candados de tabla. */
+    /** Table locks are taken. */
     public static final int DATASOURCE_TABLE_LOCK = 3;
 
-    /** Se toma un candado sobre toda la base. */
+    /** A lock is taken on the whole database. */
     public static final int DATASOURCE_DB_LOCK = 4;
 
-    /** El proveedor puede sincronizar contra una vista actualizable. */
+    /** The provider can synchronize against an updatable view. */
     public static final int UPDATABLE_VIEW_SYNC = 5;
 
-    /** El proveedor no puede sincronizar contra una vista. */
+    /** The provider cannot synchronize against a view. */
     public static final int NONUPDATABLE_VIEW_SYNC = 6;
 
-    /** Para las subclases. */
+    /** For the subclasses. */
     public SyncProvider() {
     }
 
     /**
-     * El identificador unico de este proveedor, en forma de nombre de paquete invertido.
+     * The unique identifier of this provider, in the form of a reversed package name.
      *
-     * <p>Es lo que se le pasa a {@link SyncFactory#getInstance} para pedirlo, asi que tiene que ser
-     * unico entre todos los proveedores instalados.
+     * <p>It is what is passed to {@link SyncFactory#getInstance} to ask for it, so it has to be
+     * unique among all the installed providers.
      *
-     * @return el identificador
+     * @return the identifier
      */
     public abstract String getProviderID();
 
     /**
-     * El lector que llena el {@code RowSet} desde el origen.
+     * The reader that fills the {@code RowSet} from the source.
      *
-     * @return el lector
+     * @return the reader
      */
     public abstract RowSetReader getRowSetReader();
 
     /**
-     * El escritor que devuelve los cambios al origen.
+     * The writer that returns the changes to the source.
      *
-     * @return el escritor
+     * @return the writer
      */
     public abstract RowSetWriter getRowSetWriter();
 
     /**
-     * El grado de sincronizacion que este proveedor ofrece.
+     * The synchronization grade this provider offers.
      *
-     * @return una de las constantes {@code GRADE_}
+     * @return one of the {@code GRADE_} constants
      */
     public abstract int getProviderGrade();
 
     /**
-     * Pide un nivel de candado en el origen.
+     * Asks for a lock level in the source.
      *
-     * <p>Es un pedido, no una orden: un proveedor que no sepa tomar ese candado tiene que fallar y
-     * no bajar en silencio a uno mas debil. Bajar sin avisar le daria al que llama una garantia que
-     * cree tener y no tiene.
+     * <p>It is a request, not an order: a provider that cannot take that lock has to fail and not
+     * drop silently to a weaker one. Dropping without warning would give the caller a guarantee
+     * they think they have and do not.
      *
-     * @param datasourceLock una de las constantes {@code DATASOURCE_}
-     * @throws SyncProviderException si el proveedor no soporta ese nivel
+     * @param datasourceLock one of the {@code DATASOURCE_} constants
+     * @throws SyncProviderException if the provider does not support that level
      */
     public abstract void setDataSourceLock(int datasourceLock) throws SyncProviderException;
 
     /**
-     * El nivel de candado que se esta usando.
+     * The lock level being used.
      *
-     * @return una de las constantes {@code DATASOURCE_}
-     * @throws SyncProviderException si no se pudo averiguar
+     * @return one of the {@code DATASOURCE_} constants
+     * @throws SyncProviderException if it could not be found out
      */
     public abstract int getDataSourceLock() throws SyncProviderException;
 
     /**
-     * Si puede sincronizar contra una vista.
+     * Whether it can synchronize against a view.
      *
-     * @return {@link #UPDATABLE_VIEW_SYNC} o {@link #NONUPDATABLE_VIEW_SYNC}
+     * @return {@link #UPDATABLE_VIEW_SYNC} or {@link #NONUPDATABLE_VIEW_SYNC}
      */
     public abstract int supportsUpdatableView();
 
     /**
-     * La version de este proveedor.
+     * The version of this provider.
      *
-     * @return la version
+     * @return the version
      */
     public abstract String getVersion();
 
     /**
-     * Quien lo hizo.
+     * Who made it.
      *
-     * @return el nombre del proveedor
+     * @return the vendor's name
      */
     public abstract String getVendor();
 }

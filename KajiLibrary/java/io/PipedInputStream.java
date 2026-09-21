@@ -1,44 +1,45 @@
 package java.io;
 
-// KajiLibrary's java.io.PipedInputStream -- la punta de lectura de una tuberia entre dos hilos.
+// KajiLibrary's java.io.PipedInputStream -- the reading end of a pipe between two threads.
 //
 // ===============================================================================================
-// QUE ES Y POR QUE SE PUEDE ESCRIBIR ENTERA
+// WHAT IT IS AND WHY IT CAN BE WRITTEN IN FULL
 // ===============================================================================================
 //
-// Un buffer circular con espera. No toca el disco ni la red ni el sistema operativo: lo unico que
-// necesita es un monitor, y `wait`/`notifyAll` ya funcionan en esta VM. Por eso esta clase se
-// implementa completa y sin concesiones, a diferencia de los streams de archivo.
+// A circular buffer with waiting. It touches neither the disk nor the network nor the operating
+// system: all it needs is a monitor, and `wait`/`notifyAll` already work on this VM. That is why
+// this class is implemented complete and without concessions, unlike the file streams.
 //
-// El buffer es circular con la convencion clasica: `out` es el proximo byte a leer, `in` el proximo
-// lugar a escribir, y **`in == -1` significa vacio**. Hace falta ese valor centinela porque con
-// solo dos indices `in == out` seria ambiguo --lleno y vacio se verian igual-- y la alternativa
-// (dejar un lugar sin usar) desperdiciaria espacio. Con el centinela, `in == out` significa
-// **lleno** sin ambiguedad.
+// The buffer is circular with the classic convention: `out` is the next byte to read, `in` the next
+// place to write, and **`in == -1` means empty**. That sentinel value is needed because with two
+// indices alone `in == out` would be ambiguous --full and empty would look the same-- and the
+// alternative (leaving one place unused) would waste space. With the sentinel, `in == out` means
+// **full** unambiguously.
 //
 // ===============================================================================================
-// LAS ESPERAS Y LOS AVISOS
+// THE WAITS AND THE NOTIFICATIONS
 // ===============================================================================================
 //
-// Igual que el JDK: se espera con `wait(1000)` y se avisa con `notifyAll()`. El plazo no es para
-// no perderse un aviso --los avisos estan todos-- sino para poder **revisar si el hilo del otro
-// lado sigue vivo**: un extremo cuyo hilo se muere sin cerrar no manda ningun aviso, y sin
-// despertarse cada tanto el otro se quedaria esperando para siempre en vez de romper con
-// "Pipe broken".
+// Just like the JDK: it waits with `wait(1000)` and notifies with `notifyAll()`. The deadline is
+// not there so as not to miss a notification --every notification is in place-- but so as to be
+// able to **check whether the thread on the other side is still alive**: an end whose thread dies
+// without closing sends no notification, and without waking up every so often the other one would
+// wait for ever instead of breaking with "Pipe broken".
 //
-// El `notifyAll()` esta en cada punto donde **cambia el estado**: despues de dejar datos (los dos
-// `receive`), despues de consumir (los dos `read`), al esperar lugar y al cerrar. El de `receive`
-// es el que importa y el que faltaba: sin el, el lector solo se enteraba de que habia datos cuando
-// vencia su propio plazo, y una transferencia grande se clavaba con el escritor sin poder entrar al
-// monitor. Se arreglo junto con el bug de la VM que lo tapaba --ver el finding #471, donde un
-// `wait` con plazo vencido dejaba al hilo dentro del conjunto de espera del monitor--.
+// The `notifyAll()` is at every point where **the state changes**: after leaving data (both
+// `receive`s), after consuming (both `read`s), when waiting for room and when closing. The one in
+// `receive` is the one that matters and the one that was missing: without it, the reader only heard
+// that there was data when its own deadline expired, and a large transfer got stuck with the writer
+// unable to get into the monitor. It was fixed together with the VM bug that was hiding it --see
+// finding #471, where a `wait` with an expired deadline left the thread inside the monitor's wait
+// set.
 //
-// **Las excepciones son las del JDK y son chequeadas.** Esto no siempre fue asi: mientras
-// `InputStream.read()` no declaraba `throws IOException`, un override tampoco podia --JLS 8.4.8.3
-// prohibe ensanchar las chequeadas-- y "Pipe not connected", "Pipe broken" y "Write end dead"
-// salian envueltos en `UncheckedIOException`. La base ya lo declara, asi que el envoltorio se fue:
-// dejarlo era lo peor de los dos mundos, una firma que promete `IOException` y un cuerpo que tira
-// algo que ningun `catch (IOException)` agarra.
+// **The exceptions are the JDK's and they are checked.** It was not always so: while
+// `InputStream.read()` did not declare `throws IOException`, an override could not either --JLS
+// 8.4.8.3 forbids widening the checked ones-- and "Pipe not connected", "Pipe broken" and "Write
+// end dead" came out wrapped in an `UncheckedIOException`. The base declares it now, so the wrapper
+// went: leaving it was the worst of both worlds, a signature promising `IOException` and a body
+// throwing something no `catch (IOException)` catches.
 public class PipedInputStream extends InputStream {
 
     boolean closedByWriter = false;
@@ -47,56 +48,57 @@ public class PipedInputStream extends InputStream {
 
     boolean connected = false;
 
-    // Quien lee y quien escribe, para poder preguntar si el del otro lado sigue vivo. Es la unica
-    // forma de distinguir "todavia no escribio nada" de "se murio y no va a escribir nunca".
+    // Who reads and who writes, so as to be able to ask whether the one on the other side is still
+    // alive. It is the only way of telling "it has not written anything yet" from "it has died and
+    // is never going to write".
     Thread readSide;
     Thread writeSide;
 
     private static final int DEFAULT_PIPE_SIZE = 1024;
 
-    /** El tamano del buffer cuando no se pide otro. */
+    /** The buffer's size when no other is asked for. */
     protected static final int PIPE_SIZE = DEFAULT_PIPE_SIZE;
 
-    /** El buffer circular. */
+    /** The circular buffer. */
     protected byte[] buffer;
 
-    /** Donde se escribe el proximo byte; **-1 si la tuberia esta vacia**. */
+    /** Where the next byte is written; **-1 if the pipe is empty**. */
     protected int in = -1;
 
-    /** De donde se lee el proximo byte. */
+    /** Where the next byte is read from. */
     protected int out = 0;
 
-    /** Conecta esta punta a `src` con el buffer del tamano por omision. */
+    /** Connects this end to `src` with the default-sized buffer. */
     public PipedInputStream(PipedOutputStream src) throws IOException {
         this(src, DEFAULT_PIPE_SIZE);
     }
 
     /**
-     * Conecta esta punta a `src`.
+     * Connects this end to `src`.
      *
-     * @param pipeSize el tamano del buffer
-     * @throws IllegalArgumentException si `pipeSize` no es positivo
+     * @param pipeSize the buffer's size
+     * @throws IllegalArgumentException if `pipeSize` is not positive
      */
     public PipedInputStream(PipedOutputStream src, int pipeSize) throws IOException {
-        this.iniciarBuffer(pipeSize);
+        this.initBuffer(pipeSize);
         this.connect(src);
     }
 
-    /** Sin conectar: hace falta un `connect` antes de usarla. */
+    /** Unconnected: a `connect` is needed before using it. */
     public PipedInputStream() {
-        this.iniciarBuffer(DEFAULT_PIPE_SIZE);
+        this.initBuffer(DEFAULT_PIPE_SIZE);
     }
 
     /**
-     * Sin conectar, con el buffer del tamano dado.
+     * Unconnected, with a buffer of the given size.
      *
-     * @throws IllegalArgumentException si `pipeSize` no es positivo
+     * @throws IllegalArgumentException if `pipeSize` is not positive
      */
     public PipedInputStream(int pipeSize) {
-        this.iniciarBuffer(pipeSize);
+        this.initBuffer(pipeSize);
     }
 
-    private void iniciarBuffer(int pipeSize) {
+    private void initBuffer(int pipeSize) {
         if (pipeSize <= 0) {
             throw new IllegalArgumentException("Pipe Size <= 0");
         }
@@ -104,24 +106,24 @@ public class PipedInputStream extends InputStream {
     }
 
     /**
-     * Conecta esta punta al `PipedOutputStream` dado.
+     * Connects this end to the given `PipedOutputStream`.
      *
-     * @throws IOException si alguna de las dos puntas ya estaba conectada
+     * @throws IOException if either of the two ends was already connected
      */
     public void connect(PipedOutputStream src) throws IOException {
         src.connect(this);
     }
 
     /**
-     * Recibe un byte del escritor. **Bloquea si la tuberia esta llena.**
+     * It receives a byte from the writer. **It blocks if the pipe is full.**
      *
-     * @throws IOException si la tuberia esta rota, cerrada o sin conectar
+     * @throws IOException if the pipe is broken, closed or unconnected
      */
     protected synchronized void receive(int b) throws IOException {
-        this.revisarParaRecibir();
+        this.checkCanReceive();
         this.writeSide = Thread.currentThread();
         if (this.in == this.out) {
-            this.esperarLugar();
+            this.waitForRoom();
         }
         if (this.in < 0) {
             this.in = 0;
@@ -132,54 +134,54 @@ public class PipedInputStream extends InputStream {
         if (this.in >= this.buffer.length) {
             this.in = 0;
         }
-        // El buffer paso de vacio a con algo: hay que despertar al lector. Sin este aviso el
-        // lector solo se entera cuando vence su propio plazo, y con esperas sin plazo no se
-        // entera nunca.
+        // The buffer went from empty to holding something: the reader has to be woken. Without this
+        // notification the reader only hears when its own deadline expires, and with deadline-less
+        // waits it never hears at all.
         this.notifyAll();
     }
 
-    // Recibe un bloque. Es de paquete porque solo `PipedOutputStream` la llama.
+    // It receives a block. It is package-private because only `PipedOutputStream` calls it.
     synchronized void receive(byte[] b, int off, int len) throws IOException {
-        this.revisarParaRecibir();
+        this.checkCanReceive();
         this.writeSide = Thread.currentThread();
         int bytesToTransfer = len;
-        int desde = off;
+        int from = off;
         while (bytesToTransfer > 0) {
             if (this.in == this.out) {
-                this.esperarLugar();
+                this.waitForRoom();
             }
             int nextTransferAmount = 0;
             if (this.out < this.in) {
-                // Los datos estan en un tramo: el lugar libre va desde `in` hasta el final.
+                // The data is in one stretch: the free room runs from `in` to the end.
                 nextTransferAmount = this.buffer.length - this.in;
             } else if (this.in < this.out) {
                 if (this.in == -1) {
-                    // Vacia: se puede escribir todo el buffer desde el principio.
+                    // Empty: the whole buffer can be written from the start.
                     this.in = 0;
                     this.out = 0;
                     nextTransferAmount = this.buffer.length - this.in;
                 } else {
-                    // El lugar libre va desde `in` hasta `out`.
+                    // The free room runs from `in` to `out`.
                     nextTransferAmount = this.out - this.in;
                 }
             }
             if (nextTransferAmount > bytesToTransfer) {
                 nextTransferAmount = bytesToTransfer;
             }
-            System.arraycopy(b, desde, this.buffer, this.in, nextTransferAmount);
+            System.arraycopy(b, from, this.buffer, this.in, nextTransferAmount);
             bytesToTransfer = bytesToTransfer - nextTransferAmount;
-            desde = desde + nextTransferAmount;
+            from = from + nextTransferAmount;
             this.in = this.in + nextTransferAmount;
             if (this.in >= this.buffer.length) {
                 this.in = 0;
             }
-            // Uno por tramo y no uno al final: si el bloque no entra de una, el lector tiene que
-            // poder consumir lo que ya hay para hacer lugar al resto.
+            // One per stretch and not one at the end: if the block does not fit at once, the reader
+            // has to be able to consume what is already there in order to make room for the rest.
             this.notifyAll();
         }
     }
 
-    private void revisarParaRecibir() throws IOException {
+    private void checkCanReceive() throws IOException {
         if (!this.connected) {
             throw new IOException("Pipe not connected");
         }
@@ -191,12 +193,12 @@ public class PipedInputStream extends InputStream {
         }
     }
 
-    // Espera a que el lector haga lugar. El `notifyAll` de adentro no es de cortesia: si el lector
-    // esta dormido esperando datos y el escritor esta dormido esperando lugar, alguien tiene que
-    // despertar al otro.
-    private void esperarLugar() throws IOException {
+    // It waits for the reader to make room. The `notifyAll` inside is not a courtesy: if the reader
+    // is asleep waiting for data and the writer is asleep waiting for room, somebody has to wake
+    // the other.
+    private void waitForRoom() throws IOException {
         while (this.in == this.out) {
-            this.revisarParaRecibir();
+            this.checkCanReceive();
             this.notifyAll();
             try {
                 this.wait(1000);
@@ -206,17 +208,17 @@ public class PipedInputStream extends InputStream {
         }
     }
 
-    // Avisa que el escritor cerro. Lo que quede en el buffer todavia se puede leer: recien cuando
-    // se vacie el lector va a ver el fin de stream.
+    // It reports that the writer has closed. Whatever is left in the buffer can still be read: only
+    // when it empties will the reader see end of stream.
     synchronized void receivedLast() {
         this.closedByWriter = true;
         this.notifyAll();
     }
 
     /**
-     * Lee un byte. **Bloquea hasta que haya uno**, o hasta que el escritor cierre.
+     * Reads one byte. **It blocks until there is one**, or until the writer closes.
      *
-     * @return el byte, o -1 si se acabo
+     * @return the byte, or -1 if it has run out
      */
     public synchronized int read() throws IOException {
         if (!this.connected) {
@@ -231,8 +233,8 @@ public class PipedInputStream extends InputStream {
         }
 
         this.readSide = Thread.currentThread();
-        // Dos vueltas de gracia antes de declarar rota la tuberia: el escritor puede haber
-        // terminado justo despues de dejar datos, y en ese caso hay que entregarlos.
+        // Two rounds of grace before declaring the pipe broken: the writer may have finished right
+        // after leaving data, and in that case it has to be handed over.
         int trials = 2;
         while (this.in < 0) {
             if (this.closedByWriter) {
@@ -263,10 +265,10 @@ public class PipedInputStream extends InputStream {
     }
 
     /**
-     * Lee hasta `len` bytes. Bloquea hasta que haya **al menos uno**, y despues devuelve lo que
-     * haya sin esperar a llenar el arreglo.
+     * Reads up to `len` bytes. It blocks until there is **at least one**, and then returns whatever
+     * there is without waiting to fill the array.
      *
-     * @return cuantos se leyeron, o -1 si se acabo
+     * @return how many were read, or -1 if it has run out
      */
     public synchronized int read(byte[] b, int off, int len) throws IOException {
         if (b == null) {
@@ -279,14 +281,15 @@ public class PipedInputStream extends InputStream {
             return 0;
         }
 
-        // El primero va por `read()`, que es el que espera y el que reporta el fin de stream.
+        // The first one goes through `read()`, which is the one that waits and the one that reports
+        // end of stream.
         int c = this.read();
         if (c < 0) {
             return -1;
         }
         b[off] = (byte) c;
         int rlen = 1;
-        // A partir de aca no se espera mas: `in >= 0` mientras quede algo en el buffer.
+        // From here on it waits no longer: `in >= 0` while anything is left in the buffer.
         while (this.in >= 0 && rlen < len) {
             int available;
             if (this.in > this.out) {
@@ -310,7 +313,7 @@ public class PipedInputStream extends InputStream {
         return rlen;
     }
 
-    /** Cuantos bytes se pueden leer sin bloquear. */
+    /** How many bytes can be read without blocking. */
     public synchronized int available() throws IOException {
         if (this.in < 0) {
             return 0;
@@ -324,7 +327,7 @@ public class PipedInputStream extends InputStream {
         return this.in + this.buffer.length - this.out;
     }
 
-    /** Cierra la punta de lectura. El escritor que siga escribiendo va a fallar. */
+    /** Closes the reading end. A writer that goes on writing is going to fail. */
     public void close() throws IOException {
         this.closedByReader = true;
         synchronized (this) {

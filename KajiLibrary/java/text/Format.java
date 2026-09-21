@@ -21,19 +21,20 @@ import java.io.Serializable;
 // The convenience `format(Object)` is final precisely because it is the trivial wrapper: subclasses
 // override the three-argument form, and every entry point funnels there.
 //
-// La mitad de PARSEO ya no falta. `parseObject(String, ParsePosition)` es abstracto igual que en el
-// JDK: obliga a cada formateador concreto a decir cómo se lee lo que escribe, y la variante de un
-// solo argumento es el envoltorio que traduce "no avanzó el cursor" a ParseException.
+// The PARSING half is no longer missing. `parseObject(String, ParsePosition)` is abstract just as
+// in the JDK: it forces every concrete formatter to say how what it writes is read back, and the
+// one-argument variant is the wrapper translating "the cursor did not advance" into a
+// ParseException.
 public abstract class Format implements Serializable, Cloneable {
 
     /**
-     * La clave de atributo con la que un formateador marca los campos del texto que produce.
+     * The attribute key a formatter marks the fields of the text it produces with.
      *
-     * <p>Es una clase vacía a propósito: no agrega comportamiento sobre
-     * {@link AttributedCharacterIterator.Attribute}, sólo un nivel de tipo. Ese nivel es lo que
-     * permite que {@code FieldPosition} pida "el campo entero" sin poder recibir por error una
-     * clave de idioma, y que cada subclase (NumberFormat.Field, DateFormat.Field) cuelgue de un
-     * ancestro común.
+     * <p>It is an empty class on purpose: it adds no behaviour over
+     * {@link AttributedCharacterIterator.Attribute}, only a level of type. That level is what lets
+     * {@code FieldPosition} ask for "the integer field" without being able to receive a language key
+     * by mistake, and lets every subclass (NumberFormat.Field, DateFormat.Field) hang off a common
+     * ancestor.
      */
     public static class Field extends AttributedCharacterIterator.Attribute {
 
@@ -54,12 +55,12 @@ public abstract class Format implements Serializable, Cloneable {
     public abstract StringBuffer format(Object obj, StringBuffer toAppendTo, FieldPosition pos);
 
     /**
-     * Formatea y devuelve el resultado con los campos marcados como atributos.
+     * It formats and returns the result with the fields marked as attributes.
      *
-     * <p>La implementación de base no marca nada: devuelve el texto sin atributos, que es
-     * exactamente lo que el contrato manda para un formateador que no informa campos. No es un
-     * cuerpo de relleno — es la respuesta correcta para quien no tiene información de campos que
-     * dar, y las subclases que sí la tienen lo redefinen.
+     * <p>The base implementation marks nothing: it returns the text without attributes, which is
+     * exactly what the contract demands of a formatter that reports no fields. It is not a filler
+     * body -- it is the right answer for one that has no field information to give, and the
+     * subclasses that do have it override it.
      */
     public AttributedCharacterIterator formatToCharacterIterator(Object obj) {
         if (obj == null) {
@@ -71,11 +72,12 @@ public abstract class Format implements Serializable, Cloneable {
     public abstract Object parseObject(String source, ParsePosition pos);
 
     /**
-     * Parsea desde el principio del texto, y falla con excepción en lugar de con un cursor.
+     * It parses from the beginning of the text, and fails with an exception instead of with a
+     * cursor.
      *
-     * <p>El criterio de fracaso es "el cursor no avanzó", no "devolvió null": un formateador puede
-     * parsear legítimamente a null, y distinguir los dos casos es justamente para lo que existe
-     * ParsePosition.
+     * <p>The failure criterion is "the cursor did not advance", not "it returned null": a formatter
+     * can legitimately parse to null, and telling the two cases apart is precisely what ParsePosition
+     * exists for.
      */
     public Object parseObject(String source) throws ParseException {
         ParsePosition pos = new ParsePosition(0);

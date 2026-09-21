@@ -1,48 +1,49 @@
 package java.sql;
 
 /**
- * KajiLibrary's java.sql.PreparedStatement -- una sentencia con huecos, y los valores aparte.
+ * KajiLibrary's java.sql.PreparedStatement -- a statement with holes, and the values apart.
  *
- * <p>Dos razones para preferirla siempre, y la segunda importa mas de lo que parece. La primera es
- * el rendimiento: la base analiza la sentencia una vez y la reutiliza con distintos valores. La
- * segunda es que **no hay inyeccion SQL posible**: el valor viaja por un canal distinto del texto de
- * la sentencia, asi que un valor que contenga `'; drop table` es un valor que contiene esos
- * caracteres y nunca codigo. No es que se escapen bien -- es que no se mezclan.
+ * <p>Two reasons to prefer it always, and the second matters more than it looks. The first is
+ * performance: the database parses the statement once and reuses it with different values. The
+ * second is that **no SQL injection is possible**: the value travels by a channel different from
+ * the statement's text, so a value containing `'; drop table` is a value containing those
+ * characters and never code. It is not that they are escaped well -- it is that they are not mixed.
  *
- * <p>Los parametros se numeran **desde uno**, como las columnas.
+ * <p>The parameters are numbered **from one**, like the columns.
  *
- * <p><strong>Subconjunto declarado.</strong> Estan los `setXxx` de los tipos que esta biblioteca
- * tiene y la ejecucion; quedan afuera los que reciben tipos SQL propios (`setBlob`, `setArray`,
- * `setSQLXML`, los flujos con longitud) por la misma razon que en {@link ResultSet}.
+ * <p><strong>The interface is complete.</strong> This note used to say the setters taking SQL types
+ * of their own (`setBlob`, `setArray`, `setSQLXML`, the streams with a length) were left out; all
+ * of them are declared, and the section further down already describes the whole family.
  */
 public interface PreparedStatement extends Statement {
 
-    /** Ejecuta la consulta con los parametros que tiene puestos. */
+    /** It runs the query with the parameters currently set. */
     ResultSet executeQuery() throws SQLException;
 
-    /** Ejecuta la modificacion y devuelve cuantas filas toco. */
+    /** It runs the modification and returns how many rows it touched. */
     int executeUpdate() throws SQLException;
 
     long executeLargeUpdate() throws SQLException;
 
     boolean execute() throws SQLException;
 
-    /** Agrega los parametros actuales al lote. */
+    /** It adds the current parameters to the batch. */
     void addBatch() throws SQLException;
 
-    /** Olvida los parametros puestos. */
+    /** It forgets the parameters that were set. */
     void clearParameters() throws SQLException;
 
-    /** Que columnas devolveria, **sin ejecutarla**. */
+    /** What columns it would return, **without running it**. */
     ResultSetMetaData getMetaData() throws SQLException;
 
-    // ---- los parametros ------------------------------------------------------------------------------
+    // ---- the parameters -------------------------------------------------------------------------
 
     /**
-     * Pone nulo.
+     * It sets null.
      *
-     * <p>Pide el tipo porque un nulo tambien lo tiene: la base necesita saber de que columna es el
-     * nulo para elegir el plan, y no puede deducirlo de un valor que no esta.
+     * <p>It asks for the type because a null has one too: the database needs to know which column
+     * the null is for in order to choose the plan, and cannot deduce it from a value that is not
+     * there.
      */
     void setNull(int parameterIndex, int sqlType) throws SQLException;
 
@@ -70,20 +71,21 @@ public interface PreparedStatement extends Statement {
 
     void setObject(int parameterIndex, Object x, int targetSqlType) throws SQLException;
 
-    // ---- el resto de los parametros ------------------------------------------------------------------
+    // ---- the rest of the parameters -------------------------------------------------------------
     //
-    // La familia entera, y conviene ver por que es tan grande. Hay tres ejes que se multiplican: el
-    // **tipo** del valor, si se pasa el dato o un puntero a el (`setBlob(int, Blob)` contra
-    // `setBlob(int, InputStream)`), y si se dice cuanto mide. Las variantes con longitud existen
-    // porque un driver que sabe el tamano de antemano puede reservarlo de una vez en lugar de ir
-    // creciendo; las que no la piden llegaron despues, cuando quedo claro que el llamador casi nunca
-    // la sabe.
+    // The whole family, and it is worth seeing why it is so large. There are three axes that
+    // multiply: the value's **type**, whether the datum or a pointer to it is passed (`setBlob(int,
+    // Blob)` against `setBlob(int, InputStream)`), and whether its size is stated. The variants
+    // with a length exist because a driver that knows the size up front can reserve it in one go
+    // instead of growing; the ones that do not ask for it came later, when it became clear the
+    // caller almost never knows it.
     //
-    // Los `setN*` son la version en juego de caracteres nacional, la misma distincion que separa
-    // `NClob` de `Clob`.
+    // The `setN*` are the national character set version, the same distinction that separates
+    // `NClob` from `Clob`.
     //
-    // Y `setUnicodeStream` esta obsoleto desde 1999: recibia el texto en un UTF-16 propio de JDBC que
-    // nunca quedo bien definido. Se declara porque la firma es el contrato, no porque haya que usarlo.
+    // And `setUnicodeStream` has been deprecated since 1999: it took the text in a JDBC-specific
+    // UTF-16 that was never properly defined. It is declared because the signature is the contract,
+    // not because it should be used.
 
     java.sql.ParameterMetaData getParameterMetaData() throws java.sql.SQLException;
 
@@ -140,11 +142,11 @@ public interface PreparedStatement extends Statement {
     void setObject(int parameterIndex, java.lang.Object x, int targetSqlType, int scaleOrLength) throws java.sql.SQLException;
 
     default void setObject(int parameterIndex, java.lang.Object x, java.sql.SQLType targetSqlType) throws java.sql.SQLException {
-        throw new java.sql.SQLFeatureNotSupportedException("setObject no esta implementado");
+        throw new java.sql.SQLFeatureNotSupportedException("setObject not implemented");
     }
 
     default void setObject(int parameterIndex, java.lang.Object x, java.sql.SQLType targetSqlType, int scaleOrLength) throws java.sql.SQLException {
-        throw new java.sql.SQLFeatureNotSupportedException("setObject no esta implementado");
+        throw new java.sql.SQLFeatureNotSupportedException("setObject not implemented");
     }
 
     void setRef(int parameterIndex, java.sql.Ref x) throws java.sql.SQLException;

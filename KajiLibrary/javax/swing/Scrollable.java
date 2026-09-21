@@ -4,37 +4,37 @@ import java.awt.Dimension;
 import java.awt.Rectangle;
 
 /**
- * Lo que un componente puede contarle al {@link JScrollPane} que lo muestra.
+ * What a component may tell the {@link JScrollPane} that shows it.
  *
- * <p>Sin esto, un panel con barras trata a su contenido como un rectangulo mudo: lo desplaza de a
- * un pixel y lo deja de su tamano preferido. Implementarla es como una lista dice "una rueda mueve
- * una fila, no tres pixeles" y como un area de texto dice "hazme tan ancho como la ventana y no me
- * pongas barra horizontal".
+ * <p>Without this, a pane with bars treats its content as a dumb rectangle: it scrolls it one
+ * pixel at a time and leaves it at its preferred size. Implementing it is how a list says "a
+ * wheel moves one row, not three pixels" and how a text area says "make me as wide as the
+ * viewport and do not give me a horizontal bar".
  *
- * <p>Las dos ultimas son las que mas cambian lo que se ve: contestar {@code true} en
- * {@link #getScrollableTracksViewportWidth} obliga al contenido a medir lo que mide la ventana, y
- * entonces nunca hace falta desplazar en esa direccion.
+ * <p>The last two are the ones that change what is seen most: answering {@code true} in
+ * {@link #getScrollableTracksViewportWidth} forces the content to measure what the viewport
+ * measures, and then there is never any need to scroll in that direction.
  */
 public interface Scrollable {
 
-    /** Que tamano querria tener la ventana que lo muestra. */
+    /** What size the viewport that shows it would like to have. */
     Dimension getPreferredScrollableViewportSize();
 
     /**
-     * Cuanto avanzar en un paso chico —una flecha, una muesca de rueda—, en pixeles.
+     * How much to advance in a small step -- an arrow, a wheel notch --, in pixels.
      *
-     * @param visibleRect lo que se ve ahora, en coordenadas del componente
-     * @param orientation {@code SwingConstants.VERTICAL} u {@code HORIZONTAL}
-     * @param direction negativo hacia arriba o a la izquierda, positivo al reves
+     * @param visibleRect what is seen now, in the component's coordinates
+     * @param orientation {@code SwingConstants.VERTICAL} or {@code HORIZONTAL}
+     * @param direction negative upwards or to the left, positive the other way round
      */
     int getScrollableUnitIncrement(Rectangle visibleRect, int orientation, int direction);
 
-    /** Cuanto avanzar en un paso grande —clic en la pista, av pag—, en pixeles. */
+    /** How much to advance in a big step -- a click on the track, page down --, in pixels. */
     int getScrollableBlockIncrement(Rectangle visibleRect, int orientation, int direction);
 
-    /** Si su ancho debe ser siempre el de la ventana; ver la nota de la interfaz. */
+    /** Whether its width must always be the viewport's; see the interface note. */
     boolean getScrollableTracksViewportWidth();
 
-    /** Si su alto debe ser siempre el de la ventana. */
+    /** Whether its height must always be the viewport's. */
     boolean getScrollableTracksViewportHeight();
 }

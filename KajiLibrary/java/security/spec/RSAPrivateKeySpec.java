@@ -2,13 +2,14 @@ package java.security.spec;
 
 import java.math.BigInteger;
 
-// Una clave privada RSA en su forma minima: el modulo n y el exponente privado d.
+// An RSA private key in its minimal form: the modulus n and the private exponent d.
 //
-// Con (n, d) alcanza para descifrar y firmar, pero cuesta caro: una exponenciacion modular con un
-// exponente del tamaño de n. `RSAPrivateCrtKeySpec` guarda ademas los factores para poder hacerlo
-// por el teorema chino del resto, que es unas cuatro veces mas rapido. Que esta clase sea la base y
-// la otra la subclase no es casualidad: lo que la subclase agrega es **redundante** —los factores se
-// deducen de d, aunque no facilmente— y por eso es lo opcional.
+// (n, d) is enough to decrypt and sign, but it is expensive: a modular exponentiation with an
+// exponent the size of n. `RSAPrivateCrtKeySpec` also keeps the factors so it can do it by the
+// Chinese remainder theorem, which is about four times faster. That this class is the base and the
+// other the subclass is no accident: what the subclass adds is **redundant**, and so it is the
+// optional part. This note said the factors can be deduced from d "though not easily"; together
+// with the public exponent, a standard probabilistic algorithm recovers them quickly.
 public class RSAPrivateKeySpec implements KeySpec {
 
     private final BigInteger modulus;

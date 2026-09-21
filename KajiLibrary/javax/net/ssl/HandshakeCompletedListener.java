@@ -3,15 +3,15 @@ package javax.net.ssl;
 import java.util.EventListener;
 
 /**
- * Se entera cuando un handshake termino sobre un {@link SSLSocket}.
+ * Finds out when a handshake finished over an {@link SSLSocket}.
  *
- * <p>Sirve porque el handshake no es solo el arranque: TLS admite <em>renegociar</em> sobre una
- * conexion en curso, y ahi la sesion cambia — otra suite de cifrado, otro certificado del par. Un
- * programa que decidio algo mirando la sesion tiene que poder enterarse de que esa decision quedo
- * vieja.
+ * <p>It is useful because the handshake is not only the start: TLS allows <em>renegotiating</em>
+ * over a connection in progress, and then the session changes — another cipher suite, another peer
+ * certificate. A program that decided something by looking at the session has to be able to find
+ * out that the decision went stale.
  */
 public interface HandshakeCompletedListener extends EventListener {
 
-    /** El handshake termino; el evento trae la sesion que quedo. */
+    /** The handshake finished; the event brings the resulting session. */
     void handshakeCompleted(HandshakeCompletedEvent event);
 }

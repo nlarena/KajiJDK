@@ -2,13 +2,13 @@ package java.security.spec;
 
 import java.math.BigInteger;
 
-// Una clave privada EC en claro: el escalar s, mas los parametros de dominio.
+// An EC private key in the clear: the scalar s, plus the domain parameters.
 //
-// Es el tipo mas peligroso de todo el paquete y no por lo que hace sino por lo que contiene: el
-// `BigInteger` es la clave privada entera, en memoria, sin proteccion. No hay forma de borrarlo
-// —`BigInteger` es inmutable y no expone su arreglo— y por eso el API real prefiere que una clave
-// privada viva detras de una `PrivateKey` opaca. Esta spec existe para el momento en que hay que
-// construir una clave desde sus numeros, no para andar guardandola asi.
+// It is the most dangerous type in the whole package, not because of what it does but because of
+// what it holds: the `BigInteger` is the whole private key, in memory, unprotected. There is no way
+// to erase it —`BigInteger` is immutable and does not expose its array— and that is why the real
+// API prefers a private key to live behind an opaque `PrivateKey`. This spec exists for the moment
+// a key has to be built from its numbers, not for keeping it around like this.
 public class ECPrivateKeySpec implements KeySpec {
 
     private final BigInteger s;
@@ -25,7 +25,7 @@ public class ECPrivateKeySpec implements KeySpec {
         this.params = params;
     }
 
-    // El escalar privado.
+    // The private scalar.
     public BigInteger getS() {
         return this.s;
     }

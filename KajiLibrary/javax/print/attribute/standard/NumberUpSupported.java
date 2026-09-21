@@ -5,14 +5,14 @@ import javax.print.attribute.SetOfIntegerSyntax;
 import javax.print.attribute.SupportedValuesAttribute;
 
 /**
- * Que valores de {@link NumberUp} acepta la impresora.
+ * Which values of {@link NumberUp} the printer accepts.
  *
- * <p>Ver la cabecera de familia en {@link CopiesSupported} para el mecanismo. Este es el caso donde
- * el conjunto gana de verdad: lo tipico es soportar 1, 2, 4, 6, 9 y 16 --las potencias y los
- * cuadrados que parten bien la hoja-- y no un rango corrido, asi que hace falta el constructor de
- * {@code int[][]}.
+ * <p>See the family header in {@link CopiesSupported} for the mechanism. This is the case where the
+ * set really pays off: the typical thing is supporting 1, 2, 4, 6, 9 and 16 --the powers and
+ * squares that divide the sheet well-- and not a contiguous range, so the {@code int[][]}
+ * constructor is needed.
  *
- * <p>El minimo es 1, igual que en {@link NumberUp}.
+ * <p>The minimum is 1, as in {@link NumberUp}.
  */
 public final class NumberUpSupported extends SetOfIntegerSyntax
     implements SupportedValuesAttribute {
@@ -20,8 +20,8 @@ public final class NumberUpSupported extends SetOfIntegerSyntax
     private static final long serialVersionUID = -1041573395759141805L;
 
     /**
-     * Los rangos crudos, en cualquier orden y con solapamientos: la base los canonicaliza antes de
-     * que este constructor los revise.
+     * The raw ranges, in any order and overlapping: the base canonicalizes them before this
+     * constructor checks them.
      */
     public NumberUpSupported(int[][] members) {
         super(members);

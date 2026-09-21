@@ -5,21 +5,21 @@ import java.io.PrintStream;
 import java.io.PrintWriter;
 
 // KajiLibrary's java.lang.Throwable — the superclass of all errors and exceptions. Carries a detail
-// message and an optional cause (another Throwable), with the JDK's `cause == this` sentinel meaning
-// "not yet initialised". The message/cause plumbing is pure Java. Stack-trace **capture** needs the
-// VM (there is no native `fillInStackTrace`), so the trace is empty unless one is set with
-// `setStackTrace`; the suppressed-exception list (try-with-resources) is modelled in full.
+// message and an optional cause (another Throwable), with the JDK's `cause == this` sentinel
+// meaning "not yet initialised". The message/cause plumbing is pure Java. Stack-trace **capture**
+// needs the VM (there is no native `fillInStackTrace`), so the trace is empty unless one is set
+// with `setStackTrace`; the suppressed-exception list (try-with-resources) is modelled in full.
 public class Throwable implements Serializable {
 
     private String message;
     private Throwable cause;
-    // El stack trace: `null` significa "sin capturar" (KajiJDK no captura de forma nativa), y se
-    // reporta como un array vacío. `setStackTrace` puede fijar uno.
+    // The stack trace: `null` means "not captured" (KajiJDK does not capture natively), and it is
+    // reported as an empty array. `setStackTrace` can set one.
     private StackTraceElement[] stackTrace;
-    // Las excepciones **suprimidas** (§14.20.3.1, try-with-resources): crece de a una.
+    // The **suppressed** exceptions (§14.20.3.1, try-with-resources): it grows one at a time.
     private Throwable[] suppressed;
-    // Los dos interruptores del constructor de cuatro argumentos. Arrancan en `true` porque es lo
-    // que hacen los otros cuatro constructores.
+    // The four-argument constructor's two switches. They start `true` because that is what the
+    // other four constructors do.
     private boolean suppressionEnabled = true;
     private boolean stackTraceWritable = true;
 
@@ -39,20 +39,21 @@ public class Throwable implements Serializable {
     }
 
     /**
-     * El constructor con los dos interruptores, para una subclase que quiera apagarlos.
+     * The constructor with the two switches, for a subclass that wants to turn them off.
      *
-     * <p>Los dos existen por la misma razon: hay excepciones que se lanzan **muchisimas veces** como
-     * senal de control --el fin de un iterador, un salto de flujo-- y para esas, guardar la pila y la
-     * lista de suprimidas es trabajo puro que nadie va a mirar. Apagarlos es lo que permite que una
-     * excepcion singleton sea barata.
+     * <p>Both exist for the same reason: there are exceptions thrown **a great many times** as a
+     * control signal --an iterator's end, a jump in the flow-- and for those, keeping the stack and
+     * the suppressed list is pure work nobody is going to look at. Turning them off is what makes
+     * a singleton exception cheap.
      *
-     * <p>Con `enableSuppression` en `false`, `addSuppressed` **no hace nada** (no tira) y
-     * `getSuppressed` devuelve siempre vacio. Con `writableStackTrace` en `false`, ni
-     * `fillInStackTrace` ni `setStackTrace` cambian nada y el trace queda vacio para siempre.
+     * <p>With `enableSuppression` at `false`, `addSuppressed` **does nothing** (it does not throw)
+     * and `getSuppressed` always returns empty. With `writableStackTrace` at `false`, neither
+     * `fillInStackTrace` nor `setStackTrace` changes anything and the trace stays empty for
+     * good.
      *
-     * <p>Nota propia de esta biblioteca: KajiJDK **no captura la pila de forma nativa**, asi que el
-     * trace ya venia vacio con el interruptor en `true`. Lo que el `false` agrega de verdad aca es
-     * que `setStackTrace` deje de tener efecto, que es la mitad observable del contrato.
+     * <p>A note of this library's own: KajiJDK **does not capture the stack natively**, so the
+     * trace came out empty with the switch at `true` already. What the `false` genuinely adds here
+     * is that `setStackTrace` stops having an effect, which is the observable half of the contract.
      */
     protected Throwable(String message, Throwable cause, boolean enableSuppression,
             boolean writableStackTrace) {
@@ -87,22 +88,23 @@ public class Throwable implements Serializable {
     }
 
     /**
-     * Fija la causa, y **solo una vez**.
+     * It sets the cause, and **only once**.
      *
-     * <p>Las dos guardas son parte del contrato y no adornos. La primera --no se puede pisar una
-     * causa ya puesta-- existe porque la cadena de causas es lo que explica un error, y dejarla
-     * reescribir permitiria borrar el motivo original desde cualquier `catch` de por medio. Por eso
-     * tampoco se puede usar sobre una excepcion construida **con** causa: ahi ya se fijo.
+     * <p>Both guards are part of the contract and not decoration. The first --an already set cause
+     * cannot be overwritten-- exists because the chain of causes is what explains an error, and
+     * letting it be rewritten would allow erasing the original reason from any `catch` along the
+     * way. That is also why it cannot be used on an exception constructed **with** a cause: there
+     * it is set already.
      *
-     * <p>La segunda evita que una excepcion sea su propia causa, que dejaria a `printStackTrace` en
-     * un bucle infinito.
+     * <p>The second stops an exception being its own cause, which would leave `printStackTrace` in
+     * an infinite loop.
      *
-     * <p>El centinela de "sin fijar" es `cause == this`, igual que en el JDK. Es lo que permite
-     * distinguir "todavia no se fijo" de "se fijo en null", que son dos estados distintos: el
-     * segundo tambien queda cerrado a futuras llamadas.
+     * <p>The "not set" sentinel is `cause == this`, just as in the JDK. It is what allows telling
+     * "not set yet" from "set to null", which are two different states: the second is closed to
+     * future calls as well.
      *
-     * @throws IllegalStateException si la causa ya se habia fijado
-     * @throws IllegalArgumentException si se pasa a si misma
+     * @throws IllegalStateException if the cause had already been set
+     * @throws IllegalArgumentException if it is passed itself
      */
     public synchronized Throwable initCause(Throwable cause) {
         if (this.cause != this) {
@@ -126,8 +128,8 @@ public class Throwable implements Serializable {
 
     // ---- stack trace ----
     //
-    // KajiJDK no captura la pila de forma nativa: `fillInStackTrace` no hace nada y el trace queda
-    // vacío salvo que se fije con `setStackTrace`. La superficie es la del JDK.
+    // KajiJDK does not capture the stack natively: `fillInStackTrace` does nothing and the trace
+    // stays empty unless it is set with `setStackTrace`. The surface is the JDK's.
 
     /**
      * Fill in the execution stack trace. In the JDK this is native and records the current stack;
@@ -152,9 +154,9 @@ public class Throwable implements Serializable {
     /**
      * Replace the stack trace with a copy of {@code stackTrace}.
      *
-     * <p>No hace nada si el objeto se construyo con `writableStackTrace` en `false`. Los chequeos
-     * del argumento corren igual --el `null` se rechaza siempre-- porque son del contrato del
-     * argumento y no del interruptor.
+     * <p>It does nothing if the object was constructed with `writableStackTrace` at `false`. The
+     * argument's checks run all the same --a `null` is always rejected-- because they belong to the
+     * argument's contract and not to the switch.
      */
     public void setStackTrace(StackTraceElement[] stackTrace) {
         StackTraceElement[] copy = stackTrace.clone();
@@ -182,13 +184,13 @@ public class Throwable implements Serializable {
      */
     public final synchronized void addSuppressed(Throwable exception) {
         if (exception == this) {
-            throw new IllegalArgumentException("no se puede suprimir a sí misma", exception);
+            throw new IllegalArgumentException("it cannot suppress itself", exception);
         }
         if (exception == null) {
-            throw new NullPointerException("la excepción suprimida es null");
+            throw new NullPointerException("the suppressed exception is null");
         }
-        // Los dos chequeos de arriba valen igual: son del contrato del argumento, no del
-        // interruptor. Recien aca la supresion apagada se vuelve un no-op, como en el JDK.
+        // Both checks above hold all the same: they belong to the argument's contract, not to the
+        // switch. Only here does suppression being off become a no-op, as in the JDK.
         if (!this.suppressionEnabled) {
             return;
         }
@@ -215,13 +217,13 @@ public class Throwable implements Serializable {
     /**
      * Print this throwable and its backtrace to the standard **error** stream.
      *
-     * <p>A `System.err`, como el JDK. El comentario que estaba acá decia que iba a `System.out`
-     * porque "no hay `System.err` en esta biblioteca todavia" -- y `System.err` existe desde hace
-     * rato, asi que la nota quedo vieja y el destino equivocado.
+     * <p>To `System.err`, like the JDK. The comment that used to be here said it went to
+     * `System.out` because "there is no `System.err` in this library yet" -- and `System.err` has
+     * existed for a good while, so the note had gone stale and the destination was wrong.
      *
-     * <p>No es un detalle cosmetico: una traza en la salida estandar se mezcla con lo que el programa
-     * imprime, y un `programa > archivo` se lleva el error adentro del resultado en vez de dejarlo en
-     * la consola. Que los dos flujos esten separados es justamente para que eso no pase.
+     * <p>It is no cosmetic detail: a trace on standard output mixes with whatever the program
+     * prints, and a `program > file` carries the error inside the result instead of leaving it on
+     * the console. That the two streams are separate is precisely so that does not happen.
      */
     public void printStackTrace() {
         printStackTrace(System.err);

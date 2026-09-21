@@ -7,42 +7,42 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Iteración sobre texto que además lleva <em>atributos</em> pegados a cada tramo.
+ * Iteration over text that also carries <em>attributes</em> attached to each run.
  *
- * <p>Un {@link CharacterIterator} entrega caracteres; éste entrega caracteres y, en cada posición,
- * el conjunto de pares atributo/valor que rigen ahí. La pregunta que agrega no es "¿qué carácter
- * hay?" sino "¿hasta dónde llega el tramo que comparte estos atributos?" — de ahí
- * {@code getRunStart}/{@code getRunLimit}, que existen para que un renderer pueda pintar de a
- * tramos en vez de consultar atributo por carácter.
+ * <p>A {@link CharacterIterator} hands out characters; this one hands out characters and, at each
+ * position, the set of attribute/value pairs that rule there. The question it adds is not "what
+ * character is here?" but "how far does the run sharing these attributes reach?" -- hence
+ * {@code getRunStart}/{@code getRunLimit}, which exist so a renderer can paint run by run instead of
+ * asking about attributes character by character.
  *
- * <p>Ese es también el motivo de que exista en {@code java.text}: es el tipo de retorno de
- * {@code Format.formatToCharacterIterator}, la forma en que un formateador cuenta <em>dónde</em>
- * quedó cada campo del resultado sin que el llamador tenga que reparsear el texto.
+ * <p>That is also why it lives in {@code java.text}: it is
+ * {@code Format.formatToCharacterIterator}'s return type, the way a formatter tells <em>where</em>
+ * each field of the result ended up without the caller having to reparse the text.
  *
- * <p>Las tres sobrecargas de {@code getRunStart} no son azúcar: sin argumento el tramo es el que
- * comparte <em>todos</em> los atributos, con un atributo es el de ese solo, y con un conjunto es el
- * de esos. Un tramo de "negrita" puede cruzar varios tramos de "idioma", así que colapsarlas daría
- * el límite equivocado.
+ * <p>{@code getRunStart}'s three overloads are not sugar: with no argument the run is the one
+ * sharing <em>every</em> attribute, with one attribute it is that one's alone, and with a set it is
+ * those. A "bold" run can cross several "language" runs, so collapsing them would give the wrong
+ * limit.
  */
 public interface AttributedCharacterIterator extends CharacterIterator {
 
     /**
-     * La clave de un atributo. Es una clase y no un enum ni un {@code String} a propósito: las
-     * claves son extensibles (AWT define las suyas, {@link Format} define {@code Format.Field}) y
-     * al mismo tiempo tienen que ser comparables por identidad, no por nombre, para que dos
-     * paquetes distintos no colisionen usando la misma palabra.
+     * An attribute's key. It is a class and not an enum nor a {@code String} on purpose: the keys
+     * are extensible (AWT defines its own, {@link Format} defines {@code Format.Field}) and at the
+     * same time they have to be comparable by identity, not by name, so that two different packages
+     * do not collide using the same word.
      *
-     * <p>Por eso {@code equals} y {@code hashCode} son {@code final} y son los de {@code Object}:
-     * la subclase no puede debilitar la identidad. El nombre existe sólo para {@code toString} y
-     * para resolver la deserialización.
+     * <p>That is why {@code equals} and {@code hashCode} are {@code final} and are {@code Object}'s:
+     * a subclass cannot weaken the identity. The name exists only for {@code toString} and for
+     * resolving deserialisation.
      */
     public static class Attribute implements Serializable {
 
-        // Registro de las constantes definidas por ESTA clase, para readResolve. Sólo se puebla
-        // cuando el objeto construido es un Attribute exacto: una subclase que no lleve su propio
-        // registro no debe contaminar el de acá, porque dos subclases distintas pueden usar el
-        // mismo nombre legítimamente.
-        private static final Map<String, AttributedCharacterIterator.Attribute> INSTANCIAS =
+        // A register of the constants defined by THIS class, for readResolve. It is only populated
+        // when the object built is an exact Attribute: a subclass that keeps no register of its own
+        // must not contaminate this one, because two different subclasses may legitimately use the
+        // same name.
+        private static final Map<String, AttributedCharacterIterator.Attribute> INSTANCES =
                 new HashMap<String, AttributedCharacterIterator.Attribute>();
 
         private final String name;
@@ -50,23 +50,23 @@ public interface AttributedCharacterIterator extends CharacterIterator {
         protected Attribute(String name) {
             this.name = name;
             if (this.getClass() == AttributedCharacterIterator.Attribute.class) {
-                INSTANCIAS.put(name, this);
+                INSTANCES.put(name, this);
             }
         }
 
-        /** El idioma del tramo; el valor es un {@link java.util.Locale}. */
+        /** The run's language; the value is a {@link java.util.Locale}. */
         public static final AttributedCharacterIterator.Attribute LANGUAGE =
                 new AttributedCharacterIterator.Attribute("language");
 
         /**
-         * La lectura del tramo — la pronunciación de un texto cuya escritura no la determina.
-         * Existe por el japonés: los kanji de un nombre propio no dicen cómo se leen, y el furigana
-         * viaja acá.
+         * The run's reading -- the pronunciation of a text whose spelling does not determine it.
+         * It exists because of Japanese: a proper name's kanji do not say how they are read, and the
+         * furigana travels here.
          */
         public static final AttributedCharacterIterator.Attribute READING =
                 new AttributedCharacterIterator.Attribute("reading");
 
-        /** Un segmento entregado por un método de entrada; el valor es {@link Annotation}. */
+        /** A segment handed over by an input method; the value is an {@link Annotation}. */
         public static final AttributedCharacterIterator.Attribute INPUT_METHOD_SEGMENT =
                 new AttributedCharacterIterator.Attribute("input_method_segment");
 
@@ -87,21 +87,21 @@ public interface AttributedCharacterIterator extends CharacterIterator {
         }
 
         /**
-         * Devuelve la constante equivalente al objeto deserializado, para que la identidad
-         * sobreviva a un viaje por un stream.
+         * It returns the constant equivalent to the deserialised object, so that identity survives
+         * a trip through a stream.
          *
-         * <p>Se implementa aunque KajiLibrary todavía no deserialice: el contrato del método está
-         * definido y el cuerpo puede cumplirlo hoy. La guarda del tipo exacto es parte de ese
-         * contrato — una subclase que no la reimplemente <em>tiene</em> que fallar, porque si no
-         * devolvería una constante de la superclase en lugar de la suya.
+         * <p>It is implemented even though KajiLibrary does not deserialise yet: the method's
+         * contract is defined and the body can honour it today. The exact-type guard is part of that
+         * contract -- a subclass that does not reimplement it <em>has</em> to fail, because otherwise
+         * it would return a constant of the superclass instead of its own.
          */
         protected Object readResolve() throws InvalidObjectException {
             if (this.getClass() != AttributedCharacterIterator.Attribute.class) {
                 throw new InvalidObjectException("subclass didn't correctly implement readResolve");
             }
-            AttributedCharacterIterator.Attribute instancia = INSTANCIAS.get(this.getName());
-            if (instancia != null) {
-                return instancia;
+            AttributedCharacterIterator.Attribute instance = INSTANCES.get(this.getName());
+            if (instance != null) {
+                return instance;
             }
             throw new InvalidObjectException("unknown attribute name");
         }

@@ -3,13 +3,13 @@ package javax.swing.event;
 import java.util.EventListener;
 
 /**
- * Quien quiere enterarse de que una celda termino de editarse.
+ * Whoever wants to hear that a cell finished being edited.
  */
 public interface CellEditorListener extends EventListener {
 
-    /** La edicion termino y el valor se acepta. */
+    /** The editing finished and the value is accepted. */
     void editingStopped(ChangeEvent e);
 
-    /** La edicion se abandono; el valor no cambia. */
+    /** The editing was abandoned; the value does not change. */
     void editingCanceled(ChangeEvent e);
 }

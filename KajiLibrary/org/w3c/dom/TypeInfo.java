@@ -1,47 +1,48 @@
 package org.w3c.dom;
 
 /**
- * KajiLibrary's org.w3c.dom.TypeInfo -- el tipo que un esquema le asigno a un elemento o atributo.
+ * KajiLibrary's org.w3c.dom.TypeInfo -- the type a schema assigned to an element or attribute.
  *
- * <p>La devuelven {@link Element#getSchemaTypeInfo} y {@link Attr#getSchemaTypeInfo}, y valen
- * {@code null} mientras no haya habido validacion: sin gramatica no hay tipos, solo texto.
+ * <p>{@link Element#getSchemaTypeInfo} and {@link Attr#getSchemaTypeInfo} return it, and they are
+ * {@code null} as long as there has been no validation: with no grammar there are no types, only
+ * text.
  *
- * <p>Las cuatro constantes {@code DERIVATION_*} son **una mascara de bits** --1, 2, 4, 8-- y no una
- * enumeracion, porque a {@link #isDerivedFrom} se le pregunta por varias formas de derivacion a la
- * vez combinandolas con OR. Un {@code 0} en ese argumento tiene un significado propio y util: "por
- * cualquier via", que es lo que uno quiere casi siempre.
+ * <p>The four {@code DERIVATION_*} constants are **a bit mask** --1, 2, 4, 8-- and not an
+ * enumeration, because {@link #isDerivedFrom} is asked about several forms of derivation at once by
+ * combining them with OR. A {@code 0} in that argument has a meaning of its own and a useful one:
+ * "by any road", which is what one almost always wants.
  *
- * <p>Interfaz declarada entera.
+ * <p>The interface is declared whole.
  */
 public interface TypeInfo {
 
-    /** Derivacion por restriccion. */
+    /** Derivation by restriction. */
     public static final int DERIVATION_RESTRICTION = 0x00000001;
 
-    /** Derivacion por extension. */
+    /** Derivation by extension. */
     public static final int DERIVATION_EXTENSION = 0x00000002;
 
-    /** El tipo participa de una union. */
+    /** The type takes part in a union. */
     public static final int DERIVATION_UNION = 0x00000004;
 
-    /** El tipo es el de los items de una lista. */
+    /** The type is that of the items of a list. */
     public static final int DERIVATION_LIST = 0x00000008;
 
-    /** El nombre del tipo, o {@code null} si es anonimo. */
+    /** The name of the type, or {@code null} if it is anonymous. */
     public String getTypeName();
 
     /**
-     * El espacio de nombres del tipo, o {@code null}.
+     * The namespace of the type, or {@code null}.
      *
-     * <p>Para un tipo del DTD --{@code ID}, {@code CDATA}, {@code IDREF}-- es
-     * {@code "http://www.w3.org/TR/REC-xml"}, no el de XML Schema.
+     * <p>For a DTD type --{@code ID}, {@code CDATA}, {@code IDREF}-- it is
+     * {@code "http://www.w3.org/TR/REC-xml"}, not that of XML Schema.
      */
     public String getTypeNamespace();
 
     /**
-     * Si este tipo deriva de ese otro por alguna de las vias pedidas.
+     * Whether this type derives from that other one by any of the roads asked for.
      *
-     * @param derivationMethod una OR de los {@code DERIVATION_*}, o {@code 0} para "por cualquier via"
+     * @param derivationMethod an OR of the {@code DERIVATION_*}, or {@code 0} for "by any road"
      */
     public boolean isDerivedFrom(String typeNamespaceArg, String typeNameArg, int derivationMethod);
 }

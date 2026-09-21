@@ -3,1938 +3,1941 @@ package javax.swing.plaf.synth;
 import java.awt.Graphics;
 
 /**
- * Quien dibuja cada parte de cada componente.
+ * Who draws each part of each component.
  *
- * <h2>Ciento treinta y seis metodos que no hacen nada</h2>
+ * <h2>A hundred and thirty-six methods that do nothing</h2>
  *
- * <p>Todos los metodos de esta clase estan vacios, y eso es lo que tiene que ser. Un aspecto grafico
- * redefine los que le interesan --el fondo de un boton, el borde de un campo de texto-- y hereda
- * vacios los demas, que es como se dice "esa parte no la dibujo yo".
+ * <p>Every method of this class is empty, and that is what it has to be. A look and feel
+ * redefines the ones that interest it --a button's background, a text field's border-- and
+ * inherits the rest empty, which is how "I do not draw that part" is said.
  *
- * <p>Si fueran abstractos, escribir un aspecto que solo cambia el color de los botones obligaria a
- * escribir ciento treinta y cinco metodos vacios a mano. Si lanzaran una excepcion, cualquier
- * componente que el aspecto no previo dejaria de funcionar en vez de verse por omision.
+ * <p>If they were abstract, writing a look and feel that only changes the colour of the buttons
+ * would force writing a hundred and thirty-five empty methods by hand. If they threw an
+ * exception, any component the look and feel did not foresee would stop working instead of
+ * looking like the default.
  *
- * <h2>Fondo, borde y primer plano</h2>
+ * <h2>Background, border and foreground</h2>
  *
- * <p>Casi toda parte tiene tres: el fondo se dibuja primero, el borde encima, y el primer plano al
- * final. Estan separados porque un aspecto suele querer cambiar uno solo.
+ * <p>Almost every part has three: the background is drawn first, the border on top, and the
+ * foreground at the end. They are separate because a look and feel usually wants to change only
+ * one.
  *
- * <p>Los que llevan un cuarto parametro de orientacion --{@code paintArrowButtonForeground}, los de
- * las barras-- lo necesitan porque la misma parte se dibuja distinto segun para donde apunte.
+ * <p>Those that carry a fourth orientation parameter --{@code paintArrowButtonForeground}, the
+ * bars' ones-- need it because the same part is drawn differently according to which way it
+ * points.
  *
  * @since 1.5
  */
 public abstract class SynthPainter {
 
-    /** Uno; las subclases redefinen lo que dibujan. */
+    /** One; the subclasses redefine what they draw. */
     public SynthPainter() {
     }
 
     /**
-     * Dibuja el fondo de arrow button.
+     * It draws arrow button's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintArrowButtonBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el borde de arrow button.
+     * It draws arrow button's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintArrowButtonBorder(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el primer plano de arrow button.
+     * It draws arrow button's foreground.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
-     * @param orientation para donde va: una de las constantes de {@code SwingConstants}
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
+     * @param orientation which way it goes: one of {@code SwingConstants}' constants
      */
     public void paintArrowButtonForeground(
             SynthContext context, Graphics g, int x, int y, int w, int h, int orientation) {
     }
 
     /**
-     * Dibuja el fondo de button.
+     * It draws button's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintButtonBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el borde de button.
+     * It draws button's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintButtonBorder(SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el fondo de check box menu item.
+     * It draws check box menu item's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintCheckBoxMenuItemBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el borde de check box menu item.
+     * It draws check box menu item's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintCheckBoxMenuItemBorder(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el fondo de check box.
+     * It draws check box's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintCheckBoxBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el borde de check box.
+     * It draws check box's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintCheckBoxBorder(SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el fondo de color chooser.
+     * It draws color chooser's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintColorChooserBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el borde de color chooser.
+     * It draws color chooser's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintColorChooserBorder(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el fondo de combo box.
+     * It draws combo box's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintComboBoxBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el borde de combo box.
+     * It draws combo box's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintComboBoxBorder(SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el fondo de desktop icon.
+     * It draws desktop icon's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintDesktopIconBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el borde de desktop icon.
+     * It draws desktop icon's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintDesktopIconBorder(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el fondo de desktop pane.
+     * It draws desktop pane's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintDesktopPaneBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el borde de desktop pane.
+     * It draws desktop pane's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintDesktopPaneBorder(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el fondo de editor pane.
+     * It draws editor pane's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintEditorPaneBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el borde de editor pane.
+     * It draws editor pane's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintEditorPaneBorder(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el fondo de file chooser.
+     * It draws file chooser's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintFileChooserBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el borde de file chooser.
+     * It draws file chooser's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintFileChooserBorder(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el fondo de formatted text field.
+     * It draws formatted text field's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintFormattedTextFieldBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el borde de formatted text field.
+     * It draws formatted text field's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintFormattedTextFieldBorder(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el fondo de internal frame title pane.
+     * It draws internal frame title pane's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintInternalFrameTitlePaneBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el borde de internal frame title pane.
+     * It draws internal frame title pane's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintInternalFrameTitlePaneBorder(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el fondo de internal frame.
+     * It draws internal frame's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintInternalFrameBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el borde de internal frame.
+     * It draws internal frame's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintInternalFrameBorder(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el fondo de label.
+     * It draws label's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintLabelBackground(SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el borde de label.
+     * It draws label's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintLabelBorder(SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el fondo de list.
+     * It draws list's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintListBackground(SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el borde de list.
+     * It draws list's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintListBorder(SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el fondo de menu bar.
+     * It draws menu bar's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintMenuBarBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el borde de menu bar.
+     * It draws menu bar's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintMenuBarBorder(SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el fondo de menu item.
+     * It draws menu item's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintMenuItemBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el borde de menu item.
+     * It draws menu item's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintMenuItemBorder(SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el fondo de menu.
+     * It draws menu's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintMenuBackground(SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el borde de menu.
+     * It draws menu's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintMenuBorder(SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el fondo de option pane.
+     * It draws option pane's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintOptionPaneBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el borde de option pane.
+     * It draws option pane's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintOptionPaneBorder(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el fondo de panel.
+     * It draws panel's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintPanelBackground(SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el borde de panel.
+     * It draws panel's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintPanelBorder(SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el fondo de password field.
+     * It draws password field's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintPasswordFieldBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el borde de password field.
+     * It draws password field's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintPasswordFieldBorder(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el fondo de popup menu.
+     * It draws popup menu's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintPopupMenuBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el borde de popup menu.
+     * It draws popup menu's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintPopupMenuBorder(SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el fondo de progress bar.
+     * It draws progress bar's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintProgressBarBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el fondo de progress bar.
+     * It draws progress bar's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
-     * @param orientation para donde va: una de las constantes de {@code SwingConstants}
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
+     * @param orientation which way it goes: one of {@code SwingConstants}' constants
      */
     public void paintProgressBarBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h, int orientation) {
     }
 
     /**
-     * Dibuja el borde de progress bar.
+     * It draws progress bar's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintProgressBarBorder(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el borde de progress bar.
+     * It draws progress bar's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
-     * @param orientation para donde va: una de las constantes de {@code SwingConstants}
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
+     * @param orientation which way it goes: one of {@code SwingConstants}' constants
      */
     public void paintProgressBarBorder(
             SynthContext context, Graphics g, int x, int y, int w, int h, int orientation) {
     }
 
     /**
-     * Dibuja el primer plano de progress bar.
+     * It draws progress bar's foreground.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
-     * @param orientation para donde va: una de las constantes de {@code SwingConstants}
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
+     * @param orientation which way it goes: one of {@code SwingConstants}' constants
      */
     public void paintProgressBarForeground(
             SynthContext context, Graphics g, int x, int y, int w, int h, int orientation) {
     }
 
     /**
-     * Dibuja el fondo de radio button menu item.
+     * It draws radio button menu item's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintRadioButtonMenuItemBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el borde de radio button menu item.
+     * It draws radio button menu item's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintRadioButtonMenuItemBorder(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el fondo de radio button.
+     * It draws radio button's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintRadioButtonBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el borde de radio button.
+     * It draws radio button's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintRadioButtonBorder(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el fondo de root pane.
+     * It draws root pane's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintRootPaneBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el borde de root pane.
+     * It draws root pane's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintRootPaneBorder(SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el fondo de scroll bar.
+     * It draws scroll bar's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintScrollBarBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el fondo de scroll bar.
+     * It draws scroll bar's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
-     * @param orientation para donde va: una de las constantes de {@code SwingConstants}
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
+     * @param orientation which way it goes: one of {@code SwingConstants}' constants
      */
     public void paintScrollBarBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h, int orientation) {
     }
 
     /**
-     * Dibuja el borde de scroll bar.
+     * It draws scroll bar's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintScrollBarBorder(SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el borde de scroll bar.
+     * It draws scroll bar's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
-     * @param orientation para donde va: una de las constantes de {@code SwingConstants}
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
+     * @param orientation which way it goes: one of {@code SwingConstants}' constants
      */
     public void paintScrollBarBorder(
             SynthContext context, Graphics g, int x, int y, int w, int h, int orientation) {
     }
 
     /**
-     * Dibuja el fondo de scroll bar thumb.
+     * It draws scroll bar thumb's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
-     * @param orientation para donde va: una de las constantes de {@code SwingConstants}
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
+     * @param orientation which way it goes: one of {@code SwingConstants}' constants
      */
     public void paintScrollBarThumbBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h, int orientation) {
     }
 
     /**
-     * Dibuja el borde de scroll bar thumb.
+     * It draws scroll bar thumb's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
-     * @param orientation para donde va: una de las constantes de {@code SwingConstants}
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
+     * @param orientation which way it goes: one of {@code SwingConstants}' constants
      */
     public void paintScrollBarThumbBorder(
             SynthContext context, Graphics g, int x, int y, int w, int h, int orientation) {
     }
 
     /**
-     * Dibuja el fondo de scroll bar track.
+     * It draws scroll bar track's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintScrollBarTrackBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el fondo de scroll bar track.
+     * It draws scroll bar track's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
-     * @param orientation para donde va: una de las constantes de {@code SwingConstants}
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
+     * @param orientation which way it goes: one of {@code SwingConstants}' constants
      */
     public void paintScrollBarTrackBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h, int orientation) {
     }
 
     /**
-     * Dibuja el borde de scroll bar track.
+     * It draws scroll bar track's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintScrollBarTrackBorder(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el borde de scroll bar track.
+     * It draws scroll bar track's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
-     * @param orientation para donde va: una de las constantes de {@code SwingConstants}
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
+     * @param orientation which way it goes: one of {@code SwingConstants}' constants
      */
     public void paintScrollBarTrackBorder(
             SynthContext context, Graphics g, int x, int y, int w, int h, int orientation) {
     }
 
     /**
-     * Dibuja el fondo de scroll pane.
+     * It draws scroll pane's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintScrollPaneBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el borde de scroll pane.
+     * It draws scroll pane's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintScrollPaneBorder(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el fondo de separator.
+     * It draws separator's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintSeparatorBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el fondo de separator.
+     * It draws separator's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
-     * @param orientation para donde va: una de las constantes de {@code SwingConstants}
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
+     * @param orientation which way it goes: one of {@code SwingConstants}' constants
      */
     public void paintSeparatorBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h, int orientation) {
     }
 
     /**
-     * Dibuja el borde de separator.
+     * It draws separator's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintSeparatorBorder(SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el borde de separator.
+     * It draws separator's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
-     * @param orientation para donde va: una de las constantes de {@code SwingConstants}
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
+     * @param orientation which way it goes: one of {@code SwingConstants}' constants
      */
     public void paintSeparatorBorder(
             SynthContext context, Graphics g, int x, int y, int w, int h, int orientation) {
     }
 
     /**
-     * Dibuja el primer plano de separator.
+     * It draws separator's foreground.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
-     * @param orientation para donde va: una de las constantes de {@code SwingConstants}
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
+     * @param orientation which way it goes: one of {@code SwingConstants}' constants
      */
     public void paintSeparatorForeground(
             SynthContext context, Graphics g, int x, int y, int w, int h, int orientation) {
     }
 
     /**
-     * Dibuja el fondo de slider.
+     * It draws slider's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintSliderBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el fondo de slider.
+     * It draws slider's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
-     * @param orientation para donde va: una de las constantes de {@code SwingConstants}
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
+     * @param orientation which way it goes: one of {@code SwingConstants}' constants
      */
     public void paintSliderBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h, int orientation) {
     }
 
     /**
-     * Dibuja el borde de slider.
+     * It draws slider's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintSliderBorder(SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el borde de slider.
+     * It draws slider's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
-     * @param orientation para donde va: una de las constantes de {@code SwingConstants}
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
+     * @param orientation which way it goes: one of {@code SwingConstants}' constants
      */
     public void paintSliderBorder(
             SynthContext context, Graphics g, int x, int y, int w, int h, int orientation) {
     }
 
     /**
-     * Dibuja el fondo de slider thumb.
+     * It draws slider thumb's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
-     * @param orientation para donde va: una de las constantes de {@code SwingConstants}
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
+     * @param orientation which way it goes: one of {@code SwingConstants}' constants
      */
     public void paintSliderThumbBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h, int orientation) {
     }
 
     /**
-     * Dibuja el borde de slider thumb.
+     * It draws slider thumb's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
-     * @param orientation para donde va: una de las constantes de {@code SwingConstants}
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
+     * @param orientation which way it goes: one of {@code SwingConstants}' constants
      */
     public void paintSliderThumbBorder(
             SynthContext context, Graphics g, int x, int y, int w, int h, int orientation) {
     }
 
     /**
-     * Dibuja el fondo de slider track.
+     * It draws slider track's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintSliderTrackBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el fondo de slider track.
+     * It draws slider track's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
-     * @param orientation para donde va: una de las constantes de {@code SwingConstants}
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
+     * @param orientation which way it goes: one of {@code SwingConstants}' constants
      */
     public void paintSliderTrackBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h, int orientation) {
     }
 
     /**
-     * Dibuja el borde de slider track.
+     * It draws slider track's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintSliderTrackBorder(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el borde de slider track.
+     * It draws slider track's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
-     * @param orientation para donde va: una de las constantes de {@code SwingConstants}
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
+     * @param orientation which way it goes: one of {@code SwingConstants}' constants
      */
     public void paintSliderTrackBorder(
             SynthContext context, Graphics g, int x, int y, int w, int h, int orientation) {
     }
 
     /**
-     * Dibuja el fondo de spinner.
+     * It draws spinner's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintSpinnerBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el borde de spinner.
+     * It draws spinner's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintSpinnerBorder(SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el fondo de split pane divider.
+     * It draws split pane divider's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintSplitPaneDividerBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el fondo de split pane divider.
+     * It draws split pane divider's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
-     * @param orientation para donde va: una de las constantes de {@code SwingConstants}
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
+     * @param orientation which way it goes: one of {@code SwingConstants}' constants
      */
     public void paintSplitPaneDividerBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h, int orientation) {
     }
 
     /**
-     * Dibuja el primer plano de split pane divider.
+     * It draws split pane divider's foreground.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
-     * @param orientation para donde va: una de las constantes de {@code SwingConstants}
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
+     * @param orientation which way it goes: one of {@code SwingConstants}' constants
      */
     public void paintSplitPaneDividerForeground(
             SynthContext context, Graphics g, int x, int y, int w, int h, int orientation) {
     }
 
     /**
-     * Dibuja esa parte.
+     * It draws that part.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
-     * @param orientation para donde va: una de las constantes de {@code SwingConstants}
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
+     * @param orientation which way it goes: one of {@code SwingConstants}' constants
      */
     public void paintSplitPaneDragDivider(
             SynthContext context, Graphics g, int x, int y, int w, int h, int orientation) {
     }
 
     /**
-     * Dibuja el fondo de split pane.
+     * It draws split pane's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintSplitPaneBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el borde de split pane.
+     * It draws split pane's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintSplitPaneBorder(SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el fondo de tabbed pane.
+     * It draws tabbed pane's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintTabbedPaneBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el borde de tabbed pane.
+     * It draws tabbed pane's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintTabbedPaneBorder(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el fondo de tabbed pane tab area.
+     * It draws tabbed pane tab area's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintTabbedPaneTabAreaBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el fondo de tabbed pane tab area.
+     * It draws tabbed pane tab area's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
-     * @param orientation para donde va: una de las constantes de {@code SwingConstants}
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
+     * @param orientation which way it goes: one of {@code SwingConstants}' constants
      */
     public void paintTabbedPaneTabAreaBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h, int orientation) {
     }
 
     /**
-     * Dibuja el borde de tabbed pane tab area.
+     * It draws tabbed pane tab area's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintTabbedPaneTabAreaBorder(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el borde de tabbed pane tab area.
+     * It draws tabbed pane tab area's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
-     * @param orientation para donde va: una de las constantes de {@code SwingConstants}
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
+     * @param orientation which way it goes: one of {@code SwingConstants}' constants
      */
     public void paintTabbedPaneTabAreaBorder(
             SynthContext context, Graphics g, int x, int y, int w, int h, int orientation) {
     }
 
     /**
-     * Dibuja el fondo de tabbed pane tab.
+     * It draws tabbed pane tab's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
-     * @param orientation para donde va: una de las constantes de {@code SwingConstants}
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
+     * @param orientation which way it goes: one of {@code SwingConstants}' constants
      */
     public void paintTabbedPaneTabBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h, int orientation) {
     }
 
     /**
-     * Dibuja el fondo de tabbed pane tab.
+     * It draws tabbed pane tab's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
-     * @param orientation para donde va: una de las constantes de {@code SwingConstants}
-     * @param a7 el {@code int}
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
+     * @param orientation which way it goes: one of {@code SwingConstants}' constants
+     * @param a7 the {@code int}
      */
     public void paintTabbedPaneTabBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h, int orientation, int a7) {
     }
 
     /**
-     * Dibuja el borde de tabbed pane tab.
+     * It draws tabbed pane tab's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
-     * @param orientation para donde va: una de las constantes de {@code SwingConstants}
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
+     * @param orientation which way it goes: one of {@code SwingConstants}' constants
      */
     public void paintTabbedPaneTabBorder(
             SynthContext context, Graphics g, int x, int y, int w, int h, int orientation) {
     }
 
     /**
-     * Dibuja el borde de tabbed pane tab.
+     * It draws tabbed pane tab's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
-     * @param orientation para donde va: una de las constantes de {@code SwingConstants}
-     * @param a7 el {@code int}
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
+     * @param orientation which way it goes: one of {@code SwingConstants}' constants
+     * @param a7 the {@code int}
      */
     public void paintTabbedPaneTabBorder(
             SynthContext context, Graphics g, int x, int y, int w, int h, int orientation, int a7) {
     }
 
     /**
-     * Dibuja el fondo de tabbed pane content.
+     * It draws tabbed pane content's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintTabbedPaneContentBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el borde de tabbed pane content.
+     * It draws tabbed pane content's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintTabbedPaneContentBorder(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el fondo de table header.
+     * It draws table header's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintTableHeaderBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el borde de table header.
+     * It draws table header's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintTableHeaderBorder(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el fondo de table.
+     * It draws table's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintTableBackground(SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el borde de table.
+     * It draws table's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintTableBorder(SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el fondo de text area.
+     * It draws text area's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintTextAreaBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el borde de text area.
+     * It draws text area's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintTextAreaBorder(SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el fondo de text pane.
+     * It draws text pane's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintTextPaneBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el borde de text pane.
+     * It draws text pane's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintTextPaneBorder(SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el fondo de text field.
+     * It draws text field's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintTextFieldBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el borde de text field.
+     * It draws text field's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintTextFieldBorder(SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el fondo de toggle button.
+     * It draws toggle button's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintToggleButtonBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el borde de toggle button.
+     * It draws toggle button's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintToggleButtonBorder(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el fondo de tool bar.
+     * It draws tool bar's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintToolBarBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el fondo de tool bar.
+     * It draws tool bar's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
-     * @param orientation para donde va: una de las constantes de {@code SwingConstants}
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
+     * @param orientation which way it goes: one of {@code SwingConstants}' constants
      */
     public void paintToolBarBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h, int orientation) {
     }
 
     /**
-     * Dibuja el borde de tool bar.
+     * It draws tool bar's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintToolBarBorder(SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el borde de tool bar.
+     * It draws tool bar's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
-     * @param orientation para donde va: una de las constantes de {@code SwingConstants}
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
+     * @param orientation which way it goes: one of {@code SwingConstants}' constants
      */
     public void paintToolBarBorder(
             SynthContext context, Graphics g, int x, int y, int w, int h, int orientation) {
     }
 
     /**
-     * Dibuja el fondo de tool bar content.
+     * It draws tool bar content's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintToolBarContentBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el fondo de tool bar content.
+     * It draws tool bar content's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
-     * @param orientation para donde va: una de las constantes de {@code SwingConstants}
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
+     * @param orientation which way it goes: one of {@code SwingConstants}' constants
      */
     public void paintToolBarContentBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h, int orientation) {
     }
 
     /**
-     * Dibuja el borde de tool bar content.
+     * It draws tool bar content's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintToolBarContentBorder(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el borde de tool bar content.
+     * It draws tool bar content's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
-     * @param orientation para donde va: una de las constantes de {@code SwingConstants}
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
+     * @param orientation which way it goes: one of {@code SwingConstants}' constants
      */
     public void paintToolBarContentBorder(
             SynthContext context, Graphics g, int x, int y, int w, int h, int orientation) {
     }
 
     /**
-     * Dibuja el fondo de tool bar drag window.
+     * It draws tool bar drag window's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintToolBarDragWindowBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el fondo de tool bar drag window.
+     * It draws tool bar drag window's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
-     * @param orientation para donde va: una de las constantes de {@code SwingConstants}
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
+     * @param orientation which way it goes: one of {@code SwingConstants}' constants
      */
     public void paintToolBarDragWindowBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h, int orientation) {
     }
 
     /**
-     * Dibuja el borde de tool bar drag window.
+     * It draws tool bar drag window's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintToolBarDragWindowBorder(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el borde de tool bar drag window.
+     * It draws tool bar drag window's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
-     * @param orientation para donde va: una de las constantes de {@code SwingConstants}
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
+     * @param orientation which way it goes: one of {@code SwingConstants}' constants
      */
     public void paintToolBarDragWindowBorder(
             SynthContext context, Graphics g, int x, int y, int w, int h, int orientation) {
     }
 
     /**
-     * Dibuja el fondo de tool tip.
+     * It draws tool tip's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintToolTipBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el borde de tool tip.
+     * It draws tool tip's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintToolTipBorder(SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el fondo de tree.
+     * It draws tree's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintTreeBackground(SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el borde de tree.
+     * It draws tree's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintTreeBorder(SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el fondo de tree cell.
+     * It draws tree cell's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintTreeCellBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el borde de tree cell.
+     * It draws tree cell's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintTreeCellBorder(SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja esa parte.
+     * It draws that part.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintTreeCellFocus(SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el fondo de viewport.
+     * It draws viewport's background.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintViewportBackground(
             SynthContext context, Graphics g, int x, int y, int w, int h) {
     }
 
     /**
-     * Dibuja el borde de viewport.
+     * It draws viewport's border.
      *
-     * @param context que se esta dibujando y en que estado
-     * @param g donde dibujar
-     * @param x la esquina izquierda
-     * @param y la esquina de arriba
-     * @param w el ancho
-     * @param h el alto
+     * @param context what is being drawn and in what state
+     * @param g where to draw
+     * @param x the left corner
+     * @param y the top corner
+     * @param w the width
+     * @param h the height
      */
     public void paintViewportBorder(SynthContext context, Graphics g, int x, int y, int w, int h) {
     }

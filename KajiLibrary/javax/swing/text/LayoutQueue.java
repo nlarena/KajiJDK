@@ -3,15 +3,16 @@ package javax.swing.text;
 import java.util.Vector;
 
 /**
- * La cola de trabajos de maquetado que corren fuera del hilo de eventos.
+ * The queue of layout jobs that run off the event thread.
  *
- * <p>Existe para las vistas que se calculan solas mientras el documento se muestra —un documento
- * largo que se va midiendo de a poco, {@code AsyncBoxView}—: la vista encola el trabajo y sigue,
- * y un hilo aparte lo hace.
+ * <p>It exists for the views that compute themselves while the document is shown --a long
+ * document that is measured bit by bit, {@code AsyncBoxView}--: the view queues the job and goes
+ * on, and a separate thread does it.
  *
- * <p>En esta VM la cola guarda los trabajos y {@link #waitForWork} los entrega, pero
- * <strong>nadie los saca</strong>: no hay hilo de maquetado. Una vista que dependa de esta cola
- * para medirse no se va a medir sola; las que estan hoy en la biblioteca miden en el momento.
+ * <p>In this VM the queue keeps the jobs and {@link #waitForWork} hands them out, but
+ * <strong>nobody takes them</strong>: there is no layout thread. A view that depends on this
+ * queue to measure itself will not measure itself; those that are in the library today measure
+ * on the spot.
  */
 public class LayoutQueue {
 
@@ -22,7 +23,7 @@ public class LayoutQueue {
     public LayoutQueue() {
     }
 
-    /** La cola compartida. */
+    /** The shared queue. */
     public static LayoutQueue getDefaultQueue() {
         if (defaultQueue == null) {
             defaultQueue = new LayoutQueue();
@@ -30,12 +31,12 @@ public class LayoutQueue {
         return defaultQueue;
     }
 
-    /** Cambia la cola compartida; sirve para poner una que corra los trabajos de otra forma. */
+    /** It changes the shared queue; it serves for putting one that runs the jobs another way. */
     public static void setDefaultQueue(LayoutQueue q) {
         defaultQueue = q;
     }
 
-    /** Encola un trabajo y avisa a quien este esperando. */
+    /** It queues a job and notifies whoever is waiting. */
     public synchronized void addTask(Runnable task) {
         if (task != null) {
             tasks.addElement(task);
@@ -44,9 +45,9 @@ public class LayoutQueue {
     }
 
     /**
-     * Espera a que haya trabajo y devuelve el primero.
+     * It waits until there is work and returns the first one.
      *
-     * <p>Bloquea al que llama; ver la nota de la clase sobre por que en esta VM no lo llama nadie.
+     * <p>It blocks the caller; see the class note about why in this VM nobody calls it.
      */
     protected synchronized Runnable waitForWork() {
         while (tasks.size() == 0) {

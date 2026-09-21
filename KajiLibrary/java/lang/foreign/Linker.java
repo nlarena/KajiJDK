@@ -4,58 +4,58 @@ import java.lang.invoke.MethodHandle;
 import java.util.Map;
 
 /**
- * KajiLibrary's java.lang.foreign.Linker -- el puente entre Java y una funcion nativa.
+ * KajiLibrary's java.lang.foreign.Linker -- the bridge between Java and a native function.
  *
- * <p><strong>No hay enlazador en esta biblioteca, y {@link #nativeLinker()} lo dice.</strong> La
- * interfaz esta entera porque es parte de la forma del paquete y porque el codigo que la nombra
- * tiene que poder compilar; lo que no hay es una implementacion, y no puede haberla: enlazar con una
- * funcion nativa pide generar codigo de llamada para la convencion de la plataforma, cargar
- * bibliotecas dinamicas, y mover argumentos entre la pila de Java y la del sistema. Eso es
- * maquinaria de la VM, no biblioteca.
+ * <p><strong>There is no linker in this library, and {@link #nativeLinker()} says so.</strong> The
+ * interface is here in full because it is part of the package's shape and because code naming it has
+ * to be able to compile; what there is not is an implementation, and there cannot be one: linking to
+ * a native function calls for generating call code for the platform's convention, loading dynamic
+ * libraries, and moving arguments between Java's stack and the system's. That is VM machinery, not
+ * library.
  *
- * <p>Que `nativeLinker()` tire **no es una mentira sino la rama que el contrato define**: su javadoc
- * dice que lanza `UnsupportedOperationException` si la plataforma nativa subyacente no esta
- * soportada, y esa es exactamente la situacion. Un enlazador que devolviera algo daria un
- * `MethodHandle` sobre el que ninguna invocacion puede funcionar, que es peor.
+ * <p>That `nativeLinker()` throws is **not a lie but the branch the contract defines**: its javadoc
+ * says it throws `UnsupportedOperationException` if the underlying native platform is not supported,
+ * and that is exactly the situation. A linker that returned something would give a `MethodHandle` no
+ * invocation on which can work, which is worse.
  *
- * <p>Lo que **si** sirve de este paquete es todo lo que describe memoria: los layouts,
- * {@link FunctionDescriptor}, y los segmentos sobre arreglos de Java. Ver {@link MemorySegment}.
+ * <p>What this package **is** good for is everything that describes memory: the layouts,
+ * {@link FunctionDescriptor}, and the segments over Java arrays. See {@link MemorySegment}.
  */
 public interface Linker {
 
     /**
-     * El enlazador de la plataforma.
+     * The platform's linker.
      *
-     * @throws UnsupportedOperationException siempre, en esta biblioteca. Ver la nota de la interfaz.
+     * @throws UnsupportedOperationException always, in this library. See the interface's note.
      */
     static Linker nativeLinker() {
         throw new UnsupportedOperationException(
-                "KajiJDK no tiene enlazador nativo: enlazar pide generar codigo de llamada para la"
-                        + " convencion de la plataforma, que es maquinaria de la VM");
+                "KajiJDK has no native linker: linking calls for generating call code for the"
+                        + " platform's convention, which is VM machinery");
     }
 
-    /** Un handle para llamar a la funcion que este en esa direccion. */
+    /** A handle for calling the function sitting at that address. */
     MethodHandle downcallHandle(MemorySegment address, FunctionDescriptor function,
             Linker.Option... options);
 
-    /** Un handle sin direccion fija: la direccion se pasa como primer argumento. */
+    /** A handle with no fixed address: the address is passed as the first argument. */
     MethodHandle downcallHandle(FunctionDescriptor function, Linker.Option... options);
 
-    /** Un segmento que, llamado desde codigo nativo, ejecuta ese metodo de Java. */
+    /** A segment that, called from native code, runs that Java method. */
     MemorySegment upcallStub(MethodHandle target, FunctionDescriptor function, Arena arena,
             Linker.Option... options);
 
-    /** La busqueda de simbolos por defecto de la plataforma. */
+    /** The platform's default symbol lookup. */
     SymbolLookup defaultLookup();
 
-    /** Los layouts canonicos de los tipos de C en esta plataforma (int, long, size_t...). */
+    /** The canonical layouts of C's types on this platform (int, long, size_t...). */
     Map<String, MemoryLayout> canonicalLayouts();
 
     /**
-     * Una opcion de enlace.
+     * A linking option.
      *
-     * <p>Se declara vacia a proposito: sus fabricas del JDK solo tienen sentido con un enlazador
-     * detras, y sin el serian constructores de objetos que nadie consume.
+     * <p>It is declared empty on purpose: its JDK factories only make sense with a linker behind
+     * them, and without one they would be constructors of objects nobody consumes.
      */
     interface Option {
     }

@@ -26,38 +26,38 @@ import javax.swing.table.TableCellRenderer;
 import javax.swing.table.TableColumn;
 
 /**
- * El aspecto basico de una tabla.
+ * The basic look and feel of a table.
  *
- * <h2>El alto sale de la ultima fila, no de una multiplicacion</h2>
+ * <h2>The height comes from the last row, not from a multiplication</h2>
  *
- * <p>Podria ser {@code filas * altoDeFila}, y no lo es: {@link #getPreferredSize} le pregunta a la
- * tabla donde termina la ultima fila. La diferencia importa apenas las filas dejan de medir todas
- * lo mismo -- una tabla con alturas por fila, que es lo que hace {@code JTable.setRowHeight(fila,
- * alto)} --, y ahi la multiplicacion daria cualquier cosa.
+ * <p>It could be {@code rows * rowHeight}, and it is not: {@link #getPreferredSize} asks the
+ * table where the last row ends. The difference matters as soon as the rows stop all measuring
+ * the same -- a table with per-row heights, which is what {@code JTable.setRowHeight(row,
+ * height)} does --, and there the multiplication would give anything.
  *
- * <p>El ancho si es una suma: los anchos preferidos de las columnas. El minimo y el maximo son la
- * misma cuenta con los minimos y los maximos, y los tres comparten el alto: una tabla no se estira
- * verticalmente por su cuenta, la estira quien la contiene.
+ * <p>The width is a sum: the columns' preferred widths. The minimum and the maximum are the
+ * same arithmetic with the minimums and the maximums, and all three share the height: a table
+ * does not stretch vertically on its own, it is stretched by whatever contains it.
  *
- * <p>Una tabla sin filas ni columnas mide cero por cero en los tres.
+ * <p>A table with no rows and no columns measures zero by zero in all three.
  *
- * <h2>El dibujante de la linea de base es uno solo</h2>
+ * <h2>The baseline's renderer is a single one</h2>
  *
- * <p>Y no tiene nada que ver con el contenido: se lo carga con una letra y se le pregunta. Tiene que
- * ser asi -- quien pregunta por la linea de base es un acomodador, que llama antes de que haya
- * datos --, y ademas seria carisimo hacerlo con la primera celda de verdad.
+ * <p>And it has nothing to do with the content: it is loaded with a letter and asked. It has to
+ * be like that -- whoever asks for the baseline is a layout, which calls before there is any
+ * data -- and besides it would be terribly expensive to do it with the real first cell.
  *
- * <h2>Sin escucha de teclado</h2>
+ * <h2>No key listener</h2>
  *
- * <p>{@link #keyListener} queda en {@code null}. La navegacion con flechas de una tabla no es un
- * escucha de teclas: son cuarenta y cuatro acciones con nombre en el mapa de acciones, atadas a
- * teclas por la tabla del aspecto. Medido, y es la misma historia que en
+ * <p>{@link #keyListener} is left {@code null}. A table's arrow navigation is not a key
+ * listener: they are forty-four named actions in the action map, tied to keys by the look and
+ * feel's table. Measured, and it is the same story as in
  * {@link BasicMenuItemUI#createMenuKeyListener}.
  *
- * <h2>Lo que queda dicho</h2>
+ * <h2>What is left said</h2>
  *
- * <p>Las teclas no estan atadas: las acciones existen en el mapa, pero que tecla dispara cual sale
- * de la tabla del aspecto, y sin tabla no hay ninguna. Es el mismo hueco que en
+ * <p>The keys are not tied: the actions exist in the map, but which key fires which comes from
+ * the look and feel's table, and with no table there is none. It is the same gap as in
  * {@link BasicDesktopPaneUI}.
  */
 public class BasicTableUI extends TableUI {
@@ -68,19 +68,19 @@ public class BasicTableUI extends TableUI {
     protected FocusListener focusListener;
     protected MouseInputListener mouseInputListener;
 
-    private static final ColorUIResource FONDO = new ColorUIResource(255, 255, 255);
-    private static final ColorUIResource FRENTE = new ColorUIResource(51, 51, 51);
-    private static final ColorUIResource SELECCION = new ColorUIResource(184, 207, 229);
-    private static final ColorUIResource CUADRICULA = new ColorUIResource(122, 138, 153);
-    private static final FontUIResource FUENTE = new FontUIResource("Dialog", Font.PLAIN, 12);
+    private static final ColorUIResource BACKGROUND = new ColorUIResource(255, 255, 255);
+    private static final ColorUIResource FOREGROUND = new ColorUIResource(51, 51, 51);
+    private static final ColorUIResource SELECTION = new ColorUIResource(184, 207, 229);
+    private static final ColorUIResource GRID = new ColorUIResource(122, 138, 153);
+    private static final FontUIResource FONT = new FontUIResource("Dialog", Font.PLAIN, 12);
 
-    /** El dibujante con el que se mide la linea de base; ver la nota de la clase. */
-    private static Component dibujanteDeBase;
+    /** The renderer the baseline is measured with; see the class note. */
+    private static Component baseRenderer;
 
     public BasicTableUI() {
     }
 
-    /** Uno nuevo por tabla: guarda el componente y su panel de dibujantes. */
+    /** A new one per table: it keeps the component and its renderer pane. */
     public static ComponentUI createUI(JComponent c) {
         return new BasicTableUI();
     }
@@ -103,36 +103,36 @@ public class BasicTableUI extends TableUI {
         table = null;
     }
 
-    /** Colores, fuente y cuadricula; los valores son los de {@code Table.*} en Metal. */
+    /** Colours, typeface and grid; the values are those of {@code Table.*} in Metal. */
     protected void installDefaults() {
-        Color fondo = table.getBackground();
-        if (fondo == null || fondo instanceof UIResource) {
-            table.setBackground(FONDO);
+        Color background = table.getBackground();
+        if (background == null || background instanceof UIResource) {
+            table.setBackground(BACKGROUND);
         }
-        Color frente = table.getForeground();
-        if (frente == null || frente instanceof UIResource) {
-            table.setForeground(FRENTE);
+        Color foreground = table.getForeground();
+        if (foreground == null || foreground instanceof UIResource) {
+            table.setForeground(FOREGROUND);
         }
-        Font fuente = table.getFont();
-        if (fuente == null || fuente instanceof UIResource) {
-            table.setFont(FUENTE);
+        Font font = table.getFont();
+        if (font == null || font instanceof UIResource) {
+            table.setFont(FONT);
         }
         Color sbg = table.getSelectionBackground();
         if (sbg == null || sbg instanceof UIResource) {
-            table.setSelectionBackground(SELECCION);
+            table.setSelectionBackground(SELECTION);
         }
         Color sfg = table.getSelectionForeground();
         if (sfg == null || sfg instanceof UIResource) {
-            table.setSelectionForeground(FRENTE);
+            table.setSelectionForeground(FOREGROUND);
         }
         Color grid = table.getGridColor();
         if (grid == null || grid instanceof UIResource) {
-            table.setGridColor(CUADRICULA);
+            table.setGridColor(GRID);
         }
         LookAndFeel.installProperty(table, "opaque", Boolean.TRUE);
     }
 
-    /** No saca nada; ver {@link BasicPanelUI#uninstallDefaults}. */
+    /** It removes nothing; see {@link BasicPanelUI#uninstallDefaults}. */
     protected void uninstallDefaults() {
     }
 
@@ -160,7 +160,7 @@ public class BasicTableUI extends TableUI {
         mouseInputListener = null;
     }
 
-    /** Las acciones con nombre; ver la nota de la clase sobre las teclas. */
+    /** The named actions; see the class note about the keys. */
     protected void installKeyboardActions() {
     }
 
@@ -171,7 +171,7 @@ public class BasicTableUI extends TableUI {
         return new Handler();
     }
 
-    /** Ninguno; ver la nota de la clase. */
+    /** None; see the class note. */
     protected KeyListener createKeyListener() {
         return null;
     }
@@ -180,8 +180,8 @@ public class BasicTableUI extends TableUI {
         return new Handler();
     }
 
-    /** El ancho pedido y el alto de la ultima fila; ver la nota de la clase. */
-    private Dimension tamanio(long width) {
+    /** The requested width and the last row's height; see the class note. */
+    private Dimension size(long width) {
         int height = 0;
         int rowCount = table.getRowCount();
         if (rowCount > 0 && table.getColumnCount() > 0) {
@@ -200,7 +200,7 @@ public class BasicTableUI extends TableUI {
         while (e.hasMoreElements()) {
             width = width + e.nextElement().getMinWidth();
         }
-        return tamanio(width);
+        return size(width);
     }
 
     public Dimension getPreferredSize(JComponent c) {
@@ -209,7 +209,7 @@ public class BasicTableUI extends TableUI {
         while (e.hasMoreElements()) {
             width = width + e.nextElement().getPreferredWidth();
         }
-        return tamanio(width);
+        return size(width);
     }
 
     public Dimension getMaximumSize(JComponent c) {
@@ -218,24 +218,24 @@ public class BasicTableUI extends TableUI {
         while (e.hasMoreElements()) {
             width = width + e.nextElement().getMaxWidth();
         }
-        return tamanio(width);
+        return size(width);
     }
 
     /**
-     * Donde apoya el texto de la primera fila; ver la nota de la clase.
+     * Where the first row's text rests; see the class note.
      *
-     * @throws NullPointerException si el componente es nulo
-     * @throws IllegalArgumentException si el ancho o el alto son negativos
+     * @throws NullPointerException if the component is null
+     * @throws IllegalArgumentException if the width or the height are negative
      */
     public int getBaseline(JComponent c, int width, int height) {
         super.getBaseline(c, width, height);
-        Component renderer = dibujanteDeBase;
+        Component renderer = baseRenderer;
         if (renderer == null) {
             javax.swing.table.DefaultTableCellRenderer tableRenderer =
                     new javax.swing.table.DefaultTableCellRenderer();
             renderer = tableRenderer.getTableCellRendererComponent(table, "a", false, false,
                     -1, -1);
-            dibujanteDeBase = renderer;
+            baseRenderer = renderer;
         }
         renderer.setFont(table.getFont());
         int rowMargin = table.getRowMargin();
@@ -244,16 +244,16 @@ public class BasicTableUI extends TableUI {
     }
 
     /**
-     * {@code CONSTANT_ASCENT}: la primera fila esta siempre arriba de todo.
+     * {@code CONSTANT_ASCENT}: the first row is always at the very top.
      *
-     * @throws NullPointerException si el componente es nulo
+     * @throws NullPointerException if the component is null
      */
     public Component.BaselineResizeBehavior getBaselineResizeBehavior(JComponent c) {
         super.getBaselineResizeBehavior(c);
         return Component.BaselineResizeBehavior.CONSTANT_ASCENT;
     }
 
-    /** La cuadricula y las celdas que se ven. */
+    /** The grid and the cells that are seen. */
     public void paint(Graphics g, JComponent c) {
         Rectangle clip = g.getClipBounds();
         Rectangle bounds = table.getBounds();
@@ -283,12 +283,12 @@ public class BasicTableUI extends TableUI {
             cMax = table.getColumnCount() - 1;
         }
 
-        pintarCuadricula(g, rMin, rMax, cMin, cMax);
-        pintarCeldas(g, rMin, rMax, cMin, cMax);
+        paintGrid(g, rMin, rMax, cMin, cMax);
+        paintCells(g, rMin, rMax, cMin, cMax);
         rendererPane.removeAll();
     }
 
-    private void pintarCuadricula(Graphics g, int rMin, int rMax, int cMin, int cMax) {
+    private void paintGrid(Graphics g, int rMin, int rMax, int cMin, int cMax) {
         g.setColor(table.getGridColor());
         Rectangle minCell = table.getCellRect(rMin, cMin, true);
         Rectangle maxCell = table.getCellRect(rMax, cMax, true);
@@ -312,16 +312,16 @@ public class BasicTableUI extends TableUI {
         }
     }
 
-    private void pintarCeldas(Graphics g, int rMin, int rMax, int cMin, int cMax) {
+    private void paintCells(Graphics g, int rMin, int rMax, int cMin, int cMax) {
         for (int row = rMin; row <= rMax; row++) {
             for (int column = cMin; column <= cMax; column++) {
                 Rectangle cellRect = table.getCellRect(row, column, false);
-                pintarCelda(g, cellRect, row, column);
+                paintCell(g, cellRect, row, column);
             }
         }
     }
 
-    private void pintarCelda(Graphics g, Rectangle cellRect, int row, int column) {
+    private void paintCell(Graphics g, Rectangle cellRect, int row, int column) {
         if (table.isEditing() && table.getEditingRow() == row
                 && table.getEditingColumn() == column) {
             Component component = table.getEditorComponent();
@@ -336,27 +336,27 @@ public class BasicTableUI extends TableUI {
     }
 
     /**
-     * El que escucha el foco y el mouse.
+     * The one that listens to the focus and to the mouse.
      *
-     * <p>La seleccion con el mouse la resuelve aca y no en la tabla, porque depende de las teclas
-     * que esten apretadas al mismo tiempo -- control agrega, mayusculas extiende -- y eso es
-     * convencion de plataforma, no del modelo.
+     * <p>Selection with the mouse is resolved here and not in the table, because it depends on the
+     * keys that are held down at the same time -- control adds, shift extends -- and that is a
+     * platform convention, not the model's.
      */
     private class Handler implements FocusListener, MouseInputListener {
 
         public void focusGained(FocusEvent e) {
-            repintarSeleccion();
+            repaintSelection();
         }
 
         public void focusLost(FocusEvent e) {
-            repintarSeleccion();
+            repaintSelection();
         }
 
-        private void repintarSeleccion() {
-            int fila = table.getSelectionModel().getLeadSelectionIndex();
+        private void repaintSelection() {
+            int row = table.getSelectionModel().getLeadSelectionIndex();
             int col = table.getColumnModel().getSelectionModel().getLeadSelectionIndex();
-            if (fila >= 0 && col >= 0) {
-                table.repaint(table.getCellRect(fila, col, false));
+            if (row >= 0 && col >= 0) {
+                table.repaint(table.getCellRect(row, col, false));
             }
         }
 

@@ -3,176 +3,179 @@ package java.nio.channels;
 import java.io.IOException;
 
 /**
- * KajiLibrary's java.nio.channels.FileLock — un candado sobre un tramo de archivo.
+ * KajiLibrary's java.nio.channels.FileLock — a lock over a stretch of file.
  *
- * <p>Un candado es un **rango**, no un archivo: `[position, position+size)`, y puede ser compartido
- * --varios lectores a la vez-- o exclusivo. Que el rango pueda pasarse del final del archivo no es
- * un descuido del dise&ntilde;o sino lo que permite reservar de antemano la zona donde uno va a
- * escribir, antes de que exista.
+ * <p>A lock is a **range**, not a file: `[position, position+size)`, and it can be shared --several
+ * readers at a time-- or exclusive. That the range can go beyond the end of the file is not an
+ * oversight of the design but what allows reserving beforehand the zone one is going to write in,
+ * before it exists.
  *
- * <p>El candado lo toma **la VM entera**, no el hilo: dos hilos de este proceso que pidan el mismo
- * rango no se excluyen entre si, se excluyen de **otros procesos**. Es la fuente clasica de
- * confusion con esta clase y por eso esta escrito primero.
+ * <p>The lock is taken by **the whole VM**, not by the thread: two threads of this process that ask
+ * for the same range do not exclude each other, they exclude **other processes**. It is the classic
+ * source of confusion with this class and that is why it is written first.
  *
- * <h2>Por que esta declarada si nadie puede conseguir una</h2>
+ * <h2>Where one is obtained</h2>
  *
- * <p>{@link FileChannel} de esta biblioteca **no trae `lock()` ni `tryLock()`**, y el porque esta en
- * su cabecera: lo unico implementable sobre esta VM seria un candado entre hilos de este proceso, es
- * decir la garantia **opuesta** a la que el nombre promete. Sin esos dos metodos no hay forma de
- * obtener una instancia de esta clase, asi que nadie puede creerse protegido por algo que no lo
- * protege.
+ * <p>From {@link FileChannel#lock} and {@link FileChannel#tryLock}. This note used to say that
+ * neither was there, because the only thing implementable over this VM would have been a lock
+ * between the threads of this process --that is, the **opposite** guarantee to the one the name
+ * promises--, and that without those two methods nobody could believe themselves protected by
+ * something that did not protect them. The VM grew {@code Fs.lock} —{@code LockFileEx} on Windows,
+ * {@code fcntl} on Unix— and with it the lock excludes other processes, which is what this class is
+ * for; both methods are there.
  *
- * <p>Lo que si aporta declararla: es un tipo abstracto cuyo contrato se lee y se entiende, y sus
- * partes calculables --{@link #overlaps}, {@link #position()}, {@link #size()},
- * {@link #isShared()}-- estan implementadas de verdad, porque son aritmetica sobre los campos y no
- * dependen de ningun nativo. Quien implemente un sistema de archivos propio hereda de aca y solo
- * tiene que poner {@link #isValid()} y {@link #release()}.
+ * <p>What declaring it contributes besides: it is an abstract type whose contract can be read and
+ * understood, and its computable parts --{@link #overlaps}, {@link #position()}, {@link #size()},
+ * {@link #isShared()}-- are really implemented, because they are arithmetic over the fields and
+ * depend on no native. Whoever implements a file system of their own inherits from here and only
+ * has to put in {@link #isValid()} and {@link #release()}.
  *
- * <h2>Lo que quedo afuera</h2>
+ * <h2>What was left out</h2>
  *
- * <p><strong>Nada.</strong> Los dos constructores y los nueve metodos publicos estan.
+ * <p><strong>Nothing.</strong> The two constructors and the nine public methods are here.
  */
 public abstract class FileLock implements AutoCloseable {
 
-    // El canal se guarda como `Channel` y no como `FileChannel` porque los dos constructores
-    // aceptan jerarquias distintas; `channel()` y `acquiredBy()` son las dos vistas de este campo.
-    private final Channel canal;
-    private final long posicion;
-    private final long largo;
-    private final boolean compartido;
+    // The channel is kept as a `Channel` and not as a `FileChannel` because the two constructors
+    // accept different hierarchies; `channel()` and `acquiredBy()` are the two views of this field.
+    private final Channel lockedChannel;
+    private final long pos;
+    private final long len;
+    private final boolean sharedFlag;
 
     /**
-     * Para un candado sobre un canal de archivo.
+     * For a lock over a file channel.
      *
-     * @throws IllegalArgumentException si el rango es negativo o se desborda
+     * @throws IllegalArgumentException if the range is negative or overflows
      */
     protected FileLock(FileChannel channel, long position, long size, boolean shared) {
-        comprobar(position, size);
+        check(position, size);
         if (channel == null) {
             throw new NullPointerException();
         }
-        this.canal = channel;
-        this.posicion = position;
-        this.largo = size;
-        this.compartido = shared;
+        this.lockedChannel = channel;
+        this.pos = position;
+        this.len = size;
+        this.sharedFlag = shared;
 
     }
 
     /**
-     * Para un candado sobre un canal de archivo asincronico.
+     * For a lock over an asynchronous file channel.
      *
-     * <p>Existe por separado del otro porque {@link AsynchronousFileChannel} no hereda de
-     * {@link FileChannel}: son dos jerarquias distintas que dan sobre el mismo archivo.
+     * <p>It exists apart from the other one because {@link AsynchronousFileChannel} does not
+     * inherit from {@link FileChannel}: they are two different hierarchies that give onto the same
+     * file.
      */
     protected FileLock(AsynchronousFileChannel channel, long position, long size, boolean shared) {
-        comprobar(position, size);
+        check(position, size);
         if (channel == null) {
             throw new NullPointerException();
         }
-        this.canal = channel;
-        this.posicion = position;
-        this.largo = size;
-        this.compartido = shared;
+        this.lockedChannel = channel;
+        this.pos = position;
+        this.len = size;
+        this.sharedFlag = shared;
 
     }
 
-    private static void comprobar(long position, long size) {
+    private static void check(long position, long size) {
         if (position < 0) {
-            throw new IllegalArgumentException("posicion negativa");
+            throw new IllegalArgumentException("negative position");
         }
         if (size < 0) {
-            throw new IllegalArgumentException("tamanio negativo");
+            throw new IllegalArgumentException("negative size");
         }
-        // El desborde se ataja aca y no al comparar rangos: un `position+size` que da vuelta el
-        // signo convertiria un candado enorme en uno que no solapa con nada.
+        // The overflow is caught here and not when comparing ranges: a `position+size` that turns
+        // the sign round would turn a huge lock into one that overlaps with nothing.
         if (position + size < 0) {
-            throw new IllegalArgumentException("el rango se desborda");
+            throw new IllegalArgumentException("the range overflows");
         }
     }
 
     /**
-     * El canal sobre el que se tomo, o `null` si fue un {@link AsynchronousFileChannel}.
+     * The channel it was taken over, or `null` if it was an {@link AsynchronousFileChannel}.
      *
-     * <p>Devolver `null` en ese caso es lo que hace el JDK, y es incomodo pero coherente: el tipo de
-     * retorno es {@link FileChannel} y un canal asincronico no lo es. {@link #acquiredBy()} es la
-     * forma sin sorpresas de preguntar lo mismo.
+     * <p>Returning `null` in that case is what the JDK does, and it is uncomfortable but coherent:
+     * the return type is {@link FileChannel} and an asynchronous channel is not one. {@link
+     * #acquiredBy()} is the way of asking the same thing without surprises.
      */
     public final FileChannel channel() {
-        if (this.canal instanceof FileChannel) {
-            return (FileChannel) this.canal;
+        if (this.lockedChannel instanceof FileChannel) {
+            return (FileChannel) this.lockedChannel;
         }
         return null;
     }
 
-    /** El canal sobre el que se tomo, sea del tipo que sea. */
+    /** The channel it was taken over, whatever its type. */
     public Channel acquiredBy() {
-        return this.canal;
+        return this.lockedChannel;
     }
 
-    /** Donde empieza el tramo trabado. */
+    /** Where the locked stretch starts. */
     public final long position() {
-        return this.posicion;
+        return this.pos;
     }
 
     /**
-     * Cuantos bytes abarca.
+     * How many bytes it covers.
      *
-     * <p>Puede pasarse del final del archivo, y entonces el tama&ntilde;o del candado no cambia
-     * aunque el archivo crezca: lo que se reservo se reservo.
+     * <p>It can go beyond the end of the file, and then the size of the lock does not change even
+     * if the file grows: what was reserved was reserved.
      */
     public final long size() {
-        return this.largo;
+        return this.len;
     }
 
-    /** Si es compartido; si no, es exclusivo. */
+    /** Whether it is shared; if not, it is exclusive. */
     public final boolean isShared() {
-        return this.compartido;
+        return this.sharedFlag;
     }
 
-    /** Si este candado y el rango dado pisan aunque sea un byte en comun. */
+    /** Whether this lock and the given range step on at least one byte in common. */
     public final boolean overlaps(long position, long size) {
-        if (position + size <= this.posicion) {
+        if (position + size <= this.pos) {
             return false;
         }
-        if (this.posicion + this.largo <= position) {
+        if (this.pos + this.len <= position) {
             return false;
         }
         return true;
     }
 
     /**
-     * Si el candado sigue valido.
+     * Whether the lock is still valid.
      *
-     * <p>Deja de serlo al soltarlo, al cerrar el canal, o al apagarse la VM.
+     * <p>It stops being so on releasing it, on closing the channel, or on the VM shutting down.
      */
     public abstract boolean isValid();
 
-    /** Suelta el candado. Sobre uno ya invalido no hace nada. */
+    /** Releases the lock. Over an already invalid one it does nothing. */
     public abstract void release() throws IOException;
 
     /**
-     * Lo mismo que {@link #release()}, para `try`-con-recursos.
+     * The same as {@link #release()}, for `try`-with-resources.
      *
-     * <p>Es la razon de que la clase implemente `AutoCloseable`: un candado que se olvida de soltar
-     * traba a los demas hasta que muere el proceso.
+     * <p>It is the reason the class implements `AutoCloseable`: a lock one forgets to release
+     * blocks the others until the process dies.
      */
     public final void close() throws IOException {
         this.release();
     }
 
     public final String toString() {
-        String modo;
-        if (this.compartido) {
-            modo = "shared";
+        String mode;
+        if (this.sharedFlag) {
+            mode = "shared";
         } else {
-            modo = "exclusive";
+            mode = "exclusive";
         }
-        String estado;
+        String state;
         if (this.isValid()) {
-            estado = "valid";
+            state = "valid";
         } else {
-            estado = "invalid";
+            state = "invalid";
         }
-        return "FileLock[" + modo + " " + this.posicion + ":" + this.largo + " " + estado + "]";
+        return "FileLock[" + mode + " " + this.pos + ":" + this.len + " " + state + "]";
     }
 }

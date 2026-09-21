@@ -46,19 +46,17 @@ import jdk.internal.random.Xoshiro256PlusPlus;
  *           {@code ()Ljava/util/random/RandomGenerator;}. Declaring the erased form directly gives
  *           the right descriptor and needs no allowlist entry.
  *
- * @implNote A KajiLibrary subset:
- *           <ul>
- *           <li>The no-argument {@code create()} is omitted. It would need an entropy source to
- *               vary the seed between runs, and {@code System.currentTimeMillis} is not yet a
- *               native — a {@code create()} that silently returned the same stream on every run
- *               would be worse than none.</li>
- *           <li>{@code create(byte[])} is omitted.</li>
- *           </ul>
+ * @implNote This note used to list the no-argument {@code create()} and {@code create(byte[])} as
+ *           omitted, the first because {@code System.currentTimeMillis} was not yet a native. It
+ *           is one now, and both are declared below: {@code create()} seeds itself from the clock
+ *           mixed with a per-call counter, and {@code create(byte[])} refuses for the two
+ *           algorithms whose state is defined from a {@code long} -- which is said where it is
+ *           declared.
  */
 public final class RandomGeneratorFactory {
 
-    // El contador que hace distintos a dos generadores creados en el mismo milisegundo.
-    private static final java.util.concurrent.atomic.AtomicLong SIGUIENTE_SEMILLA =
+    // The counter that makes two generators created in the same millisecond different.
+    private static final java.util.concurrent.atomic.AtomicLong NEXT_SEED =
             new java.util.concurrent.atomic.AtomicLong(1L);
 
 
@@ -328,10 +326,10 @@ public final class RandomGeneratorFactory {
      *           is exactly the trap this method exists to avoid.
      */
     public RandomGenerator create() {
-        long n = SIGUIENTE_SEMILLA.getAndIncrement();
+        long n = NEXT_SEED.getAndIncrement();
         long seed = System.currentTimeMillis() ^ (n * -7046029254386353131L);
-        // El mismo mezclador de 64 bits que usa `SplittableRandom`: sin el, semillas consecutivas
-        // quedan consecutivas, y varios generadores arrancarian en estados vecinos.
+        // The same 64-bit mixer `SplittableRandom` uses: without it consecutive seeds stay
+        // consecutive, and several generators would start in neighbouring states.
         seed = (seed ^ (seed >>> 30)) * -4658895280553007687L;
         seed = (seed ^ (seed >>> 27)) * -7723592293110705685L;
         seed = seed ^ (seed >>> 31);
@@ -339,18 +337,19 @@ public final class RandomGeneratorFactory {
     }
 
     /**
-     * Un generador sembrado desde bytes.
+     * A generator seeded from bytes.
      *
-     * <p>La forma que existe para semillas que **no son un numero**: una clave, un hash, la salida
-     * de un generador criptografico. Los bytes se reparten en las palabras del estado del algoritmo
-     * y, si no alcanzan, el resto se rellena -- ver
+     * <p>The form that exists for seeds that are **not a number**: a key, a hash, the output of a
+     * cryptographic generator. The bytes are shared out among the words of the algorithm's state
+     * and, if they do not go round, the rest is filled in -- see
      * {@link jdk.internal.util.random.RandomSupport#convertSeedBytesToLongs}.
      *
-     * @throws NullPointerException si `seed` es `null`
-     * @throws UnsupportedOperationException si el algoritmo no admite una semilla de bytes. Los dos
-     *     heredados --`Random` y `SplittableRandom`-- estan en ese caso: son anteriores a esta API y
-     *     su estado se define desde un `long`. Escribirles una conversion propia daria un generador
-     *     que **no es** el que el JDK arma con esos mismos bytes, y eso es peor que no ofrecerlo.
+     * @throws NullPointerException if `seed` is `null`
+     * @throws UnsupportedOperationException if the algorithm does not admit a byte seed. The two
+     *     inherited ones --`Random` and `SplittableRandom`-- are in that case: they predate this API
+     *     and their state is defined from a `long`. Writing them a conversion of our own would give
+     *     a generator that is **not** the one the JDK builds from those same bytes, and that is
+     *     worse than not offering it.
      */
     public RandomGenerator create(byte[] seed) {
         if (seed == null) {
@@ -388,7 +387,7 @@ public final class RandomGeneratorFactory {
             return new Xoshiro256PlusPlus(seed);
         }
         throw new UnsupportedOperationException(
-                "el algoritmo " + this.name() + " no admite una semilla de bytes");
+                "the algorithm " + this.name() + " does not admit a byte seed");
     }
 
     public RandomGenerator create(long seed) {

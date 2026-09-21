@@ -1,25 +1,26 @@
 package javax.security.auth.callback;
 
 /**
- * KajiLibrary's javax.security.auth.callback.PasswordCallback -- pide una clave.
+ * KajiLibrary's javax.security.auth.callback.PasswordCallback -- asks for a password.
  *
- * <h2>Por que es char[] y no String</h2>
+ * <h2>Why it is char[] and not String</h2>
  *
- * <p>Un {@code String} es inmutable y vive hasta que el recolector lo levante: una clave guardada
- * ahi queda en memoria un tiempo que nadie controla, y aparece entera en un volcado. Un
- * {@code char[]} se puede <b>pisar</b> apenas se uso, y eso es lo que hace {@link #clearPassword()}.
- * Es la misma razon por la que {@code Console.readPassword()} tambien devuelve un arreglo.
+ * <p>A {@code String} is immutable and lives until the collector picks it up: a password kept there
+ * stays in memory for a time nobody controls, and shows up whole in a dump. A {@code char[]} can be
+ * <b>overwritten</b> as soon as it was used, and that is what {@link #clearPassword()} does. It is
+ * the same reason {@code Console.readPassword()} also returns an array.
  *
- * <p>El arreglo se copia al entrar y al salir. Sin la copia de entrada, quien llamo a
- * {@code setPassword} podria pisar el suyo y dejar este objeto con la clave rota; sin la de salida,
- * quien lee la clave podria pisarla y romper una segunda lectura.
+ * <p>The array is copied on the way in and on the way out. Without the copy on the way in, whoever
+ * called {@code setPassword} could overwrite theirs and leave this object with a broken password;
+ * without the one on the way out, whoever reads the password could overwrite it and break a second
+ * read.
  *
- * <h2>El detalle de clearPassword que se olvida</h2>
+ * <h2>The detail of clearPassword that gets forgotten</h2>
  *
- * <p><b>No pone el arreglo en null: lo llena de espacios.</b> Despues de llamarlo,
- * {@link #getPassword()} sigue devolviendo un arreglo del mismo largo, lleno de blancos. Es del JDK
- * y tiene sentido -- borrar es pisar los bytes, no soltar la referencia, que dejaria los bytes
- * donde estaban -- pero sorprende a quien espera un null.
+ * <p><b>It does not set the array to null: it fills it with spaces.</b> After calling it, {@link
+ * #getPassword()} still returns an array of the same length, full of blanks. It is the JDK's and it
+ * makes sense -- erasing is overwriting the bytes, not letting go of the reference, which would
+ * leave the bytes where they were -- but it surprises whoever expects a null.
  */
 public class PasswordCallback implements Callback, java.io.Serializable {
 
@@ -30,9 +31,9 @@ public class PasswordCallback implements Callback, java.io.Serializable {
     private char[] inputPassword;
 
     /**
-     * @param echoOn si lo que el usuario escribe se puede mostrar en pantalla. Casi siempre false;
-     *     true es para los casos donde no hay secreto que proteger
-     * @throws IllegalArgumentException si el prompt es null o vacio
+     * @param echoOn whether what the user types can be shown on screen. Almost always false; true
+     *     is for the cases where there is no secret to protect
+     * @throws IllegalArgumentException if the prompt is null or empty
      */
     public PasswordCallback(String prompt, boolean echoOn) {
         if (prompt == null || prompt.length() == 0) {
@@ -50,21 +51,21 @@ public class PasswordCallback implements Callback, java.io.Serializable {
         return this.echoOn;
     }
 
-    /** Guarda una <b>copia</b> de la clave. Ver la nota de la clase. */
+    /** Keeps a <b>copy</b> of the password. See the class note. */
     public void setPassword(char[] password) {
         this.inputPassword = password == null ? null : copy(password);
     }
 
-    /** Una <b>copia</b> de la clave, o null si todavia nadie contesto. */
+    /** A <b>copy</b> of the password, or null if nobody answered yet. */
     public char[] getPassword() {
         return this.inputPassword == null ? null : copy(this.inputPassword);
     }
 
     /**
-     * Pisa la clave con espacios.
+     * Overwrites the password with spaces.
      *
-     * <p>No la pone en null; ver la nota de la clase. Llamarlo dos veces, o sin clave puesta, no
-     * hace nada.
+     * <p>It does not set it to null; see the class note. Calling it twice, or with no password set,
+     * does nothing.
      */
     public void clearPassword() {
         if (this.inputPassword != null) {

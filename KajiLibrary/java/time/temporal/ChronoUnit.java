@@ -3,9 +3,9 @@ package java.time.temporal;
 // KajiLibrary's java.time.temporal.ChronoUnit — the standard TemporalUnits, from NANOS to
 // FOREVER. Each carries whether it's date-based or time-based; the operations delegate to the
 // temporal (between → temporal1.until(temporal2, this), isSupportedBy → temporal.isSupported(this)).
-// Cada una lleva ademas su duracion: exacta para las de tiempo, **estimada** para las de fecha
-// -- un mes son 30.4368 dias en promedio, y `isDurationEstimated` es lo que avisa que ese
-// numero no sirve para aritmetica exacta.
+// Each also carries its duration: exact for the time-based ones, **estimated** for the date-based
+// ones -- a month is 30.4368 days on average, and `isDurationEstimated` is what warns that that
+// number is no good for exact arithmetic.
 public enum ChronoUnit implements TemporalUnit {
 
     NANOS(false, true),
@@ -34,11 +34,12 @@ public enum ChronoUnit implements TemporalUnit {
     }
 
     /**
-     * Cuanto dura esta unidad.
+     * How long this unit lasts.
      *
-     * <p>Las de fecha son **estimadas**: el año son 365.2425 dias --el promedio gregoriano-- y el mes
-     * la doceava parte de eso. No es el valor a usar para sumar meses a una fecha; para eso esta
-     * `LocalDate.plusMonths`, que respeta las longitudes reales. `isDurationEstimated` lo distingue.
+     * <p>The date-based ones are **estimated**: the year is 365.2425 days --the Gregorian average--
+     * and the month a twelfth of that. It is not the value to use for adding months to a date; for
+     * that there is `LocalDate.plusMonths`, which respects the real lengths.
+     * `isDurationEstimated` tells them apart.
      */
     public java.time.Duration getDuration() {
         if (this == NANOS) {
@@ -89,7 +90,7 @@ public enum ChronoUnit implements TemporalUnit {
         return java.time.Duration.ofSeconds(Long.MAX_VALUE, 999999999L);   // FOREVER
     }
 
-    /** Devuelve `temporal` mas `amount` de esta unidad. */
+    /** It returns `temporal` plus `amount` of this unit. */
     public <R extends Temporal> R addTo(R temporal, long amount) {
         return (R) temporal.plus(amount, this);
     }

@@ -14,12 +14,12 @@ import javax.xml.stream.events.Namespace;
 import javax.xml.stream.events.StartElement;
 
 /**
- * La apertura de un elemento como evento.
+ * The start of an element as an event.
  *
- * <p>Copia las dos listas al construirse: el que lo crea suele pasarle iteradores sobre estructuras
- * que va a reusar --el parser reusa sus arreglos en cada elemento-- y el evento tiene que
- * sobrevivir a eso. Es el costo del modelo de eventos, y esta puesto aca a proposito para que sea
- * visible.
+ * <p>It copies both lists when constructed: whoever creates it usually passes iterators over
+ * structures they are going to reuse --the parser reuses its arrays for each element-- and the
+ * event has to survive that. It is the cost of the event model, and it is put here on purpose so
+ * that it is visible.
  */
 final class EvtStartElement extends EvtBase implements StartElement {
 
@@ -88,7 +88,7 @@ final class EvtStartElement extends EvtBase implements StartElement {
 
     public void writeAsEncodedUnicode(Writer writer) throws XMLStreamException {
         if (writer == null) {
-            throw new XMLStreamException("el escritor no puede ser null");
+            throw new XMLStreamException("the writer cannot be null");
         }
         try {
             writer.write('<');

@@ -43,25 +43,25 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * El {@link CodeBuilder} que escribe bytes de verdad.
+ * The {@link CodeBuilder} that writes real bytes.
  *
- * <p>Junta los elementos que le dan y al cerrarse los serializa en un atributo `Code`. La escritura
- * es de una pasada con parches: cada salto deja su operando en blanco y se anota que hay que
- * completarlo; al terminar se conocen todos los offsets y se tapan los huecos. Es la unica forma de
- * escribir un salto hacia adelante sin recorrer el metodo dos veces.
+ * <p>It gathers the elements it is given and on closing serialises them into a `Code` attribute.
+ * The writing is one pass with patches: each jump leaves its operand blank and notes that it has to
+ * be completed; at the end all the offsets are known and the gaps are filled. It is the only way of
+ * writing a forward jump without walking the method twice.
  *
- * <h2>Lo que este escritor NO hace, y hay que saberlo</h2>
+ * <h2>What this writer does NOT do, and it has to be known</h2>
  *
- * <p><strong>No sintetiza un `StackMapTable`.</strong> Si el llamador agrega uno --y puede, con
- * {@link java.lang.classfile.attribute.StackMapTableAttribute}-- se escribe tal cual; si no, el
- * `Code` sale sin el. La consecuencia es concreta y conviene tenerla presente: una clase de version
- * 50 o mayor con saltos y sin `StackMapTable` **no pasa el verificador de una JVM**. El JDK lo
- * calcula solo; esto no, y calcularlo no es un detalle sino una inferencia de tipos sobre todo el
- * grafo de flujo, con el supertipo comun de cada union -- que es justamente para lo que existe
- * {@link java.lang.classfile.ClassHierarchyResolver}.
+ * <p><strong>It does not synthesise a `StackMapTable`.</strong> If the caller adds one --and it
+ * can, with {@link java.lang.classfile.attribute.StackMapTableAttribute}-- it is written as it
+ * stands; if not, the `Code` comes out without it. The consequence is concrete and worth keeping in
+ * mind: a class of version 50 or higher with jumps and without `StackMapTable` **does not pass a
+ * JVM's verifier**. The JDK computes it by itself; this does not, and computing it is not a detail
+ * but a type inference over the whole flow graph, with the common supertype of each join -- which
+ * is exactly what {@link java.lang.classfile.ClassHierarchyResolver} exists for.
  *
- * <p>Lo que si hace, y hace bien: `max_stack` por recorrido del grafo (ver {@link StackCounter}),
- * `max_locals` por el mayor slot usado, la tabla de excepciones, y los atributos de depuracion.
+ * <p>What it does do, and does well: `max_stack` by walking the graph (see {@link StackCounter}),
+ * `max_locals` by the highest slot used, the exception table, and the debugging attributes.
  */
 public final class DirectCodeBuilder implements CodeBuilder {
 
@@ -74,8 +74,8 @@ public final class DirectCodeBuilder implements CodeBuilder {
     private int nextSlot;
 
     /**
-     * @param descriptor el descriptor del metodo, para saber en que slot cae cada parametro
-     * @param isStatic si no hay receptor
+     * @param descriptor the method's descriptor, to know which slot each parameter falls in
+     * @param isStatic whether there is no receiver
      */
     DirectCodeBuilder(ConstantPoolBuilder pool, String descriptor, boolean isStatic) {
         this.pool = pool;
@@ -102,8 +102,8 @@ public final class DirectCodeBuilder implements CodeBuilder {
             j = j + 1;
         }
         if (j < desc.length() && desc.charAt(j) == 'L') {
-            int fin = desc.indexOf(';', j);
-            return fin < 0 ? desc.length() : fin + 1;
+            int end = desc.indexOf(';', j);
+            return end < 0 ? desc.length() : end + 1;
         }
         return j + 1;
     }
@@ -131,14 +131,14 @@ public final class DirectCodeBuilder implements CodeBuilder {
 
     public int receiverSlot() {
         if (this.isStatic) {
-            throw new IllegalStateException("un metodo estatico no tiene receptor");
+            throw new IllegalStateException("a static method has no receiver");
         }
         return 0;
     }
 
     public int parameterSlot(int paramNo) {
         if (paramNo < 0 || paramNo >= this.paramSlots.length) {
-            throw new IndexOutOfBoundsException("no hay parametro " + paramNo);
+            throw new IndexOutOfBoundsException("there is no parameter " + paramNo);
         }
         return this.paramSlots[paramNo];
     }
@@ -157,9 +157,9 @@ public final class DirectCodeBuilder implements CodeBuilder {
         return Transforms.chainedCodeBuilder(this, transform);
     }
 
-    // ---- serializacion --------------------------------------------------------------------------
+    // ---- serialisation --------------------------------------------------------------------------
 
-    /** El atributo `Code` con todo lo que se acumulo. */
+    /** The `Code` attribute with everything accumulated. */
     void writeCode(BufWriterImpl buf) {
         Emission em = this.emit();
         buf.writeIndex(this.pool.utf8Entry("Code"));
@@ -207,8 +207,8 @@ public final class DirectCodeBuilder implements CodeBuilder {
         }
     }
 
-    // El resultado de recorrer los elementos: los bytes del codigo, donde cayo cada etiqueta, y todo
-    // lo que va afuera del arreglo `code`.
+    // The result of walking the elements: the bytes of the code, where each label fell, and
+    // everything that goes outside the `code` array.
     private static final class Emission {
 
         byte[] code;
@@ -228,7 +228,7 @@ public final class DirectCodeBuilder implements CodeBuilder {
             Integer at = this.offsets.get(l);
             if (at == null) {
                 throw new IllegalStateException(
-                        "hay una etiqueta a la que nadie ato a ninguna posicion");
+                        "there is a label nobody bound to any position");
             }
             return at.intValue();
         }
@@ -283,7 +283,7 @@ public final class DirectCodeBuilder implements CodeBuilder {
                 this.emitOne(code, ins, fixups);
                 continue;
             }
-            throw new IllegalArgumentException("no se sabe escribir el elemento " + e);
+            throw new IllegalArgumentException("cannot write the element " + e);
         }
         em.offsets.put(this.end, Integer.valueOf(code.size()));
 
@@ -293,8 +293,8 @@ public final class DirectCodeBuilder implements CodeBuilder {
         em.maxLocals = maxSlot;
         em.maxStack = StackCounter.maxStack(instructions, em.handlers,
                 StackCounter.indexLabels(raw));
-        // Las etiquetas de los atributos de depuracion se resuelven recien acá, cuando ya se sabe
-        // donde cayeron todas: un `LocalVariable` puede nombrar una etiqueta que se ata despues.
+        // The labels of the debugging attributes are resolved only here, when it is already known
+        // where all of them fell: a `LocalVariable` may name a label that is bound later.
         DirectCodeBuilder.resolvePending(em);
         return em;
     }
@@ -315,8 +315,8 @@ public final class DirectCodeBuilder implements CodeBuilder {
         return 0;
     }
 
-    // Cada parche es (posicion, ancho, etiqueta, base): el offset se escribe **relativo** a la
-    // instruccion de salto, no absoluto, que es como el formato los guarda.
+    // Each patch is (position, width, label, base): the offset is written **relative** to the jump
+    // instruction, not absolute, which is how the format keeps them.
     private static void patch(byte[] bytes, List<Object[]> fixups, Emission em) {
         for (int i = 0; i < fixups.size(); i++) {
             Object[] f = fixups.get(i);
@@ -343,9 +343,9 @@ public final class DirectCodeBuilder implements CodeBuilder {
         }
     }
 
-    // La codificacion de una instruccion. El reparto es por la **clase** del opcode y no por su
-    // valor: el formato agrupa por forma --sin operando, con un indice, con un slot-- y esa es la
-    // agrupacion que hace corto este metodo.
+    // The encoding of an instruction. The dispatch is by the opcode's **kind** and not by its
+    // value: the format groups by shape --no operand, with an index, with a slot-- and that is the
+    // grouping that makes this method short.
     private void emitOne(BufWriterImpl code, Instruction ins, List<Object[]> fixups) {
         Opcode op = ins.opcode();
         Opcode.Kind k = op.kind();
@@ -370,8 +370,8 @@ public final class DirectCodeBuilder implements CodeBuilder {
             code.writeInt(0);
             code.writeInt(ts.lowValue());
             code.writeInt(ts.highValue());
-            // La tabla tiene una entrada por valor del rango, no una por caso: los huecos apuntan al
-            // destino por omision. Es lo que distingue a un `tableswitch` de un `lookupswitch`.
+            // The table has one entry per value of the range, not one per case: the gaps point at
+            // the default target. It is what tells a `tableswitch` from a `lookupswitch`.
             for (int v = ts.lowValue(); v <= ts.highValue(); v++) {
                 Label t = DirectCodeBuilder.caseTarget(ts.cases(), v, ts.defaultTarget());
                 fixups.add(new Object[] { Integer.valueOf(code.size()), Integer.valueOf(4), t,
@@ -401,13 +401,13 @@ public final class DirectCodeBuilder implements CodeBuilder {
             int slot = k == Opcode.Kind.LOAD ? ((LoadInstruction) ins).slot()
                     : ((StoreInstruction) ins).slot();
             if (op.sizeIfFixed() == 1) {
-                code.writeU1(op.bytecode()); // las formas `_0`..`_3`, que llevan el slot en el opcode
+                code.writeU1(op.bytecode()); // the `_0`..`_3` forms carry the slot in the opcode
                 return;
             }
             if (slot > 255) {
-                // `wide`: el mismo opcode con el slot en dos bytes. Es la unica forma de nombrar un
-                // slot alto, y un metodo generado con muchas variables llega ahi mas rapido de lo
-                // que uno espera.
+                // `wide`: the same opcode with the slot in two bytes. It is the only way of naming
+                // a high slot, and a generated method with many variables gets there sooner than
+                // one expects.
                 code.writeU1(0xC4);
                 code.writeU1(op.bytecode());
                 code.writeU2(slot);
@@ -444,7 +444,7 @@ public final class DirectCodeBuilder implements CodeBuilder {
             java.lang.classfile.constantpool.MemberRefEntry mr = inv.method();
             code.writeIndex(mr);
             if (op == Opcode.INVOKEINTERFACE) {
-                // El `count` y el cero de relleno que solo lleva esta forma.
+                // The `count` and the padding zero that only this form carries.
                 code.writeU1(inv.count());
                 code.writeU1(0);
             }
@@ -496,16 +496,18 @@ public final class DirectCodeBuilder implements CodeBuilder {
             this.emitConstant(code, ins, op);
             return;
         }
-        // Los que no llevan operando: el opcode y nada mas.
+        // The ones that carry no operand: the opcode and nothing else.
         code.writeU1(op.bytecode());
     }
 
     private void emitConstant(BufWriterImpl code, Instruction ins, Opcode op) {
         if (op == Opcode.BIPUSH || op == Opcode.SIPUSH) {
-            // Se pregunta por `ConstantInstruction` y se castea, en vez de por
-            // `ArgumentConstantInstruction`, que estrecha el retorno a `Integer`: nuestro javac no
-            // resuelve un metodo declarado en una interfaz ANIDADA que redefine al de la que la
-            // encierra. Por el supertipo resuelve, y el valor es el mismo.
+            // It asks for `ConstantInstruction` and casts, instead of asking for
+            // `ArgumentConstantInstruction`, which narrows the return to `Integer`. The note said
+            // our javac does not resolve a method declared in a NESTED interface that overrides the
+            // one of the interface enclosing it; the frozen javac does now, and binds
+            // `constantValue()` with the `Integer` return (checked 2026-09-18). Through the
+            // supertype works as well, and the value is the same.
             java.lang.constant.ConstantDesc cv = ((ConstantInstruction) ins).constantValue();
             Integer v = (Integer) cv;
             code.writeU1(op.bytecode());
@@ -517,16 +519,16 @@ public final class DirectCodeBuilder implements CodeBuilder {
             return;
         }
         if (op == Opcode.LDC || op == Opcode.LDC_W || op == Opcode.LDC2_W) {
-            // Con el local del tipo declarado en el medio: nuestro javac no siempre encadena a
-            // traves de un metodo heredado del supertipo del retorno.
+            // With the local of the declared type in between: our javac does not always chain
+            // through a method inherited from the return's supertype.
             java.lang.classfile.constantpool.LoadableConstantEntry entry =
                     Instructions.constantEntryOf(ins);
-            // Por `indexOf` y no por `entry.index()`: la entrada puede venir del pool del
-            // modelo original, y su indice ahi no significa nada aca.
+            // Through `indexOf` and not through `entry.index()`: the entry may come from the
+            // original model's pool, and its index there means nothing here.
             int index = code.indexOf(entry);
-            // `ldc` nombra la entrada en UN byte. Una entrada de indice alto no entra, y ahi la
-            // forma ancha no es una opcion sino la unica que existe -- por eso se corrige el opcode
-            // en vez de fallar.
+            // `ldc` names the entry in ONE byte. An entry with a high index does not fit, and there
+            // the wide form is not an option but the only one that exists -- that is why the opcode
+            // is corrected instead of failing.
             if (op == Opcode.LDC && index > 255) {
                 code.writeU1(Opcode.LDC_W.bytecode());
                 code.writeU2(index);
@@ -540,12 +542,12 @@ public final class DirectCodeBuilder implements CodeBuilder {
             }
             return;
         }
-        // Los `iconst_*`, `aconst_null` y compania: el opcode lleva el valor.
+        // The `iconst_*`, `aconst_null` and company: the opcode carries the value.
         code.writeU1(op.bytecode());
     }
 
-    // El relleno de un switch: su tabla arranca en el proximo multiplo de 4 **contado desde el
-    // inicio del metodo**, no desde el opcode.
+    // The padding of a switch: its table starts at the next multiple of 4 **counted from the start
+    // of the method**, not from the opcode.
     private void pad(BufWriterImpl code, int opcodeAt) {
         int pad = (4 - ((opcodeAt + 1) % 4)) % 4;
         for (int i = 0; i < pad; i++) {
@@ -562,7 +564,7 @@ public final class DirectCodeBuilder implements CodeBuilder {
         return byDefault;
     }
 
-    // ---- las entradas de depuracion que esperan a que se resuelvan las etiquetas -----------------
+    // ---- the debugging entries that wait for the labels to be resolved --------------------------
 
     private static final class PendingLocal
             implements java.lang.classfile.attribute.LocalVariableInfo {
@@ -675,9 +677,9 @@ public final class DirectCodeBuilder implements CodeBuilder {
     }
 }
 
-// Una etiqueta que todavia no sabe donde cae. Se compara por identidad --es lo que manda el contrato
-// de `Label`-- y por eso no lleva ningun estado: dos etiquetas distintas nunca son iguales aunque
-// terminen en el mismo offset.
+// A label that does not know yet where it falls. It is compared by identity --it is what the
+// contract of `Label` demands-- and that is why it carries no state: two different labels are never
+// equal even if they end up at the same offset.
 final class BuilderLabel implements Label {
 
     public String toString() {
@@ -685,8 +687,8 @@ final class BuilderLabel implements Label {
     }
 }
 
-// El constructor de `catch` de `CodeBuilder.trying`. Cada `catching` escribe el cuerpo del manejador
-// y agrega la entrada a la tabla de excepciones.
+// The `catch` builder of `CodeBuilder.trying`. Each `catching` writes the body of the handler and
+// adds the entry to the exception table.
 final class CatchBuilderImpl implements CodeBuilder.CatchBuilder {
 
     private final CodeBuilder builder;
@@ -704,10 +706,10 @@ final class CatchBuilderImpl implements CodeBuilder.CatchBuilder {
 
     public CodeBuilder.CatchBuilder catching(java.lang.constant.ClassDesc exceptionType,
             java.util.function.Consumer<CodeBuilder> catchHandler) {
-        List<java.lang.constant.ClassDesc> uno =
+        List<java.lang.constant.ClassDesc> single =
                 new ArrayList<java.lang.constant.ClassDesc>();
-        uno.add(exceptionType);
-        return this.catchingMulti(uno, catchHandler);
+        single.add(exceptionType);
+        return this.catchingMulti(single, catchHandler);
     }
 
     public CodeBuilder.CatchBuilder catchingMulti(
@@ -715,7 +717,7 @@ final class CatchBuilderImpl implements CodeBuilder.CatchBuilder {
             java.util.function.Consumer<CodeBuilder> catchHandler) {
         if (this.closed) {
             throw new IllegalStateException(
-                    "despues de catchingAll no puede haber otro manejador: seria inalcanzable");
+                    "there can be no other handler after catchingAll: it would be unreachable");
         }
         Label handler = this.builder.newBoundLabel();
         for (int i = 0; i < exceptionTypes.size(); i++) {
@@ -729,7 +731,7 @@ final class CatchBuilderImpl implements CodeBuilder.CatchBuilder {
 
     public void catchingAll(java.util.function.Consumer<CodeBuilder> catchAllHandler) {
         if (this.closed) {
-            throw new IllegalStateException("ya hay un catchingAll");
+            throw new IllegalStateException("there is already a catchingAll");
         }
         this.closed = true;
         Label handler = this.builder.newBoundLabel();

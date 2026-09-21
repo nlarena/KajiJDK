@@ -9,13 +9,13 @@ import javax.accessibility.AccessibleContext;
 import javax.accessibility.AccessibleRole;
 
 /**
- * Un botón: se aprieta y pasa algo.
+ * A button: it is pressed and something happens.
  *
- * <p>Al apretarlo dispara un {@link ActionEvent} con un **comando**, que es la cadena que identifica
- * qué hay que hacer. Si nadie lo fijó, el comando es la leyenda del botón, y ahí está la trampa
- * clásica: traducir la interfaz a otro idioma cambia la leyenda y, con ella, el comando, así que el
- * `if` que comparaba contra "Aceptar" deja de andar. Por eso conviene fijar el comando a mano con
- * {@link #setActionCommand}.
+ * <p>Pressing it fires an {@link ActionEvent} with a **command**, which is the string that
+ * identifies what has to be done. If nobody set one, the command is the button's caption, and there
+ * is the classic trap: translating the interface into another language changes the caption and,
+ * with it, the command, so the `if` that compared against "OK" stops working. That is why setting
+ * the command by hand with {@link #setActionCommand} is better.
  */
 public class Button extends Component implements Accessible {
 
@@ -23,21 +23,21 @@ public class Button extends Component implements Accessible {
 
     private static int buttonCounter = 0;
 
-    /** La leyenda. */
+    /** The caption. */
     String label;
 
-    /** El comando que manda al apretarlo, o `null` para usar la leyenda. */
+    /** The command it sends when pressed, or `null` to use the caption. */
     String actionCommand;
 
-    /** Los oyentes, encadenados. */
+    /** The listeners, chained. */
     transient ActionListener actionListener;
 
-    /** Un botón sin leyenda. */
+    /** A button without a caption. */
     public Button() throws HeadlessException {
         this("");
     }
 
-    /** Un botón con esa leyenda. */
+    /** A button with that caption. */
     public Button(String label) throws HeadlessException {
         this.label = label;
     }
@@ -50,53 +50,53 @@ public class Button extends Component implements Accessible {
         }
     }
 
-    /** Lo declara mostrable. */
+    /** Declares it showable. */
     public void addNotify() {
         super.addNotify();
     }
 
     /**
-     * La leyenda.
+     * The caption.
      *
-     * @return la leyenda, o `null` si no tiene
+     * @return the caption, or `null` if it has none
      */
     public String getLabel() {
         return this.label;
     }
 
-    /** Cambia la leyenda. */
+    /** Changes the caption. */
     public void setLabel(String label) {
-        boolean cambio;
+        boolean changed;
         synchronized (this) {
-            cambio = label != this.label && (this.label == null || !this.label.equals(label));
-            if (cambio) {
+            changed = label != this.label && (this.label == null || !this.label.equals(label));
+            if (changed) {
                 this.label = label;
             }
         }
-        if (cambio) {
+        if (changed) {
             this.invalidate();
         }
     }
 
     /**
-     * Fija el comando que manda al apretarlo.
+     * Sets the command it sends when pressed.
      *
-     * @param command el comando, o `null` para volver a usar la leyenda
+     * @param command the command, or `null` to go back to using the caption
      */
     public void setActionCommand(String command) {
         this.actionCommand = command;
     }
 
     /**
-     * El comando que manda al apretarlo.
+     * The command it sends when pressed.
      *
-     * @return el comando, o la leyenda si no se fijó ninguno
+     * @return the command, or the caption if none was set
      */
     public String getActionCommand() {
         return this.actionCommand == null ? this.label : this.actionCommand;
     }
 
-    /** Agrega un oyente; `null` no hace nada. */
+    /** Adds a listener; `null` does nothing. */
     public synchronized void addActionListener(ActionListener l) {
         if (l == null) {
             return;
@@ -105,7 +105,7 @@ public class Button extends Component implements Accessible {
         this.enableEvents(AWTEvent.ACTION_EVENT_MASK);
     }
 
-    /** Saca un oyente. */
+    /** Removes a listener. */
     public synchronized void removeActionListener(ActionListener l) {
         if (l == null) {
             return;
@@ -113,7 +113,7 @@ public class Button extends Component implements Accessible {
         this.actionListener = AWTEventMulticaster.remove(this.actionListener, l);
     }
 
-    /** Los oyentes puestos. */
+    /** The listeners that are set. */
     public synchronized ActionListener[] getActionListeners() {
         return AWTEventMulticaster.getListeners(this.actionListener, ActionListener.class);
     }
@@ -133,7 +133,7 @@ public class Button extends Component implements Accessible {
         super.processEvent(e);
     }
 
-    /** Les avisa a los oyentes de acción. */
+    /** Tells the action listeners. */
     protected void processActionEvent(ActionEvent e) {
         ActionListener l = this.actionListener;
         if (l != null) {
@@ -145,7 +145,7 @@ public class Button extends Component implements Accessible {
         return super.paramString() + ",label=" + this.label;
     }
 
-    /** La accesibilidad del botón. */
+    /** The accessibility information of this button. */
     public AccessibleContext getAccessibleContext() {
         if (this.accessibleContext == null) {
             this.accessibleContext = new AccessibleAWTButton();
@@ -154,15 +154,15 @@ public class Button extends Component implements Accessible {
     }
 
     /**
-     * La accesibilidad de un botón.
+     * The accessibility of a button.
      *
-     * <p>Ofrece **una** acción, apretarlo, y ejecutarla dispara el mismo evento que un clic. Eso es
-     * lo que le permite a un lector de pantalla activar el botón sin mouse.
+     * <p>It offers **one** action, pressing it, and running that fires the same event as a click.
+     * That is what lets a screen reader activate the button without a mouse.
      */
     protected class AccessibleAWTButton extends AccessibleAWTComponent
             implements AccessibleAction {
 
-        /** Para las subclases. */
+        /** For the subclasses. */
         protected AccessibleAWTButton() {
         }
 
@@ -181,15 +181,15 @@ public class Button extends Component implements Accessible {
             return AccessibleRole.PUSH_BUTTON;
         }
 
-        /** Una sola: apretarlo. */
+        /** Just one: pressing it. */
         public int getAccessibleActionCount() {
             return 1;
         }
 
         /**
-         * Cómo se llama esa acción.
+         * What that action is called.
          *
-         * @return "click" para la 0, `null` para cualquier otra
+         * @return "click" for 0, `null` for any other
          */
         public String getAccessibleActionDescription(int i) {
             if (i == 0) {
@@ -199,9 +199,9 @@ public class Button extends Component implements Accessible {
         }
 
         /**
-         * Aprieta el botón.
+         * Presses the button.
          *
-         * @return `true` si la acción existía
+         * @return `true` if the action existed
          */
         public boolean doAccessibleAction(int i) {
             if (i != 0) {

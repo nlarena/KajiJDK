@@ -11,28 +11,30 @@ import javax.swing.JTextField;
 import javax.swing.border.Border;
 
 /**
- * El campo de texto de un combo editable.
+ * The text field of an editable combo box.
  *
- * <h2>Devolver el tipo, no el texto</h2>
+ * <h2>Returning the type, not the text</h2>
  *
- * <p>Es lo unico dificil de esta clase. El campo guarda texto, pero el combo puede tener items que
- * no son cadenas -- numeros, fechas, colores --, y si al editar uno el combo recibiera de vuelta una
- * cadena, el modelo terminaria con tipos mezclados.
+ * <p>It is the only difficult thing about this class. The field keeps text, but the combo box
+ * may have items that are not strings -- numbers, dates, colours --, and if on editing one the
+ * combo box got a string back, the model would end up with mixed types.
  *
- * <p>Asi que {@link #getItem} se acuerda del ultimo valor que le pusieron y de que clase era. Si el
- * texto no cambio, devuelve <em>ese mismo objeto</em>. Y si cambio, busca por reflexion un
- * {@code valueOf(String)} en la clase del valor viejo y lo usa para armar uno nuevo del mismo tipo.
- * Si no lo encuentra, o si falla, devuelve el texto: es peor, pero es mejor que romper.
+ * <p>So {@link #getItem} remembers the last value it was given and what class it was. If the
+ * text did not change, it returns <em>that very object</em>. And if it changed, it looks up by
+ * reflection a {@code valueOf(String)} in the old value's class and uses it to build a new one
+ * of the same type. If it does not find it, or if it fails, it returns the text: it is worse,
+ * but it is better than breaking.
  *
- * <h2>El campo sin borde</h2>
+ * <h2>The field with no border</h2>
  *
- * <p>El campo va adentro del combo, que ya tiene su propio borde; uno mas se veria como un marco
- * dentro de otro. Por eso {@link #createEditorComponent} le saca el borde de entrada, y por eso el
- * campo no vuelve a escribir el texto si es el mismo que ya tiene: reescribirlo moveria el cursor
- * mientras alguien escribe.
+ * <p>The field goes inside the combo box, which already has a border of its own; one more would
+ * look like a frame inside another. That is why {@link #createEditorComponent} takes away its
+ * entry border, and that is why the field does not write the text again if it is the same one
+ * it already has: rewriting it would move the caret while somebody is typing.
  *
- * <p>La clase se llama {@code BorderlessTextField} y su {@code setBorder} <em>parece</em> filtrar
- * los bordes del aspecto, pero no filtra ninguno; ver la nota de ese metodo.
+ * <p>The class is called {@code BorderlessTextField} and its {@code setBorder}
+ * <em>looks like</em> it filters out the look and feel's borders, but it filters none out; see
+ * that method's note.
  */
 public class BasicComboBoxEditor implements ComboBoxEditor, FocusListener {
 
@@ -47,18 +49,19 @@ public class BasicComboBoxEditor implements ComboBoxEditor, FocusListener {
         return editor;
     }
 
-    /** Ver la nota de la clase: nueve columnas y sin borde. */
+    /** See the class note: nine columns and no border. */
     protected JTextField createEditorComponent() {
-        JTextField campo = new BorderlessTextField("", 9);
-        campo.setBorder(null);
-        return campo;
+        JTextField field = new BorderlessTextField("", 9);
+        field.setBorder(null);
+        return field;
     }
 
     /**
-     * Pone ese valor en el campo.
+     * It puts that value into the field.
      *
-     * <p>Un valor nulo deja el campo vacio y <em>no</em> olvida el valor anterior: el tipo del
-     * anterior es lo que {@link #getItem} necesita para devolver algo del tipo correcto.
+     * <p>A null value leaves the field empty and does <em>not</em> forget the previous value: the
+     * previous one's type is what {@link #getItem} needs in order to return something of the right
+     * type.
      */
     public void setItem(Object anObject) {
         String text;
@@ -80,7 +83,7 @@ public class BasicComboBoxEditor implements ComboBoxEditor, FocusListener {
         }
     }
 
-    /** Ver la nota de la clase. */
+    /** See the class note. */
     public Object getItem() {
         Object newValue = editor.getText();
         if (oldValue != null && !(oldValue instanceof String)) {
@@ -92,8 +95,9 @@ public class BasicComboBoxEditor implements ComboBoxEditor, FocusListener {
                 Method method = cls.getMethod("valueOf", new Class<?>[] {String.class});
                 newValue = method.invoke(oldValue, new Object[] {editor.getText()});
             } catch (Exception ex) {
-                // Sin `valueOf` no hay manera de recuperar el tipo, y devolver el texto es lo
-                // unico que queda. Ver la nota de la clase.
+                // With no `valueOf` there is no way of recovering the type, and returning the text
+                // is the
+                                // only thing left. See the class note.
             }
         }
         return newValue;
@@ -104,11 +108,11 @@ public class BasicComboBoxEditor implements ComboBoxEditor, FocusListener {
         editor.requestFocus();
     }
 
-    /** No hace nada: el combo se entera del foco por su cuenta. */
+    /** It does nothing: the combo box learns about the focus on its own. */
     public void focusGained(FocusEvent e) {
     }
 
-    /** Idem. */
+    /** The same. */
     public void focusLost(FocusEvent e) {
     }
 
@@ -120,14 +124,17 @@ public class BasicComboBoxEditor implements ComboBoxEditor, FocusListener {
         editor.removeActionListener(l);
     }
 
-    /** Ver la nota de la clase. */
+    /** See the class note. */
     static class BorderlessTextField extends JTextField {
 
         public BorderlessTextField(String value, int n) {
             super(value, n);
         }
 
-        /** No reescribe el mismo texto: hacerlo moveria el cursor mientras alguien escribe. */
+        /**
+         * It does not rewrite the same text: doing so would move the caret while somebody is
+         * typing.
+         */
         public void setText(String s) {
             if (getText().equals(s)) {
                 return;
@@ -136,18 +143,18 @@ public class BasicComboBoxEditor implements ComboBoxEditor, FocusListener {
         }
 
         /**
-         * Acepta cualquier borde, y la comprobacion que parece rechazar alguno no rechaza ninguno.
+         * It accepts any border, and the check that looks as though it rejects some rejects none.
          *
-         * <p>La intencion del JDK era rechazar los bordes que pone el aspecto -- de ahi el nombre
-         * de la clase --, y la comprobacion dice {@code b instanceof UIResource}. Pero adentro de
-         * {@link BasicComboBoxEditor} el nombre {@code UIResource} no es
-         * {@link javax.swing.plaf.UIResource}: es {@link BasicComboBoxEditor.UIResource}, la clase
-         * anidada de aca al lado. Un borde nunca es una instancia de <em>esa</em>, asi que la
-         * comprobacion siempre pasa y el borde siempre se pone.
+         * <p>The JDK's intention was to reject the borders the look and feel sets -- hence the
+         * class's name --, and the check says {@code b instanceof UIResource}. But inside {@link
+         * BasicComboBoxEditor} the name {@code UIResource} is not {@link
+         * javax.swing.plaf.UIResource}: it is {@link BasicComboBoxEditor.UIResource}, the nested
+         * class right here. A border is never an instance of <em>that</em> one, so the check always
+         * passes and the border is always set.
          *
-         * <p>Esta medido -- un {@code EmptyBorderUIResource} entra sin problema -- y se copia con
-         * el mismo tipo, no con el que la intencion pedia: cambiarlo dejaria a los combos de esta
-         * biblioteca sin el borde que el JDK si les pone.
+         * <p>It is measured -- an {@code EmptyBorderUIResource} goes in without trouble -- and it
+         * is copied with the same type, not with the one the intention called for: changing it
+         * would leave this library's combo boxes without the border the JDK does give them.
          */
         public void setBorder(Border b) {
             if (!(b instanceof BasicComboBoxEditor.UIResource)) {
@@ -157,9 +164,9 @@ public class BasicComboBoxEditor implements ComboBoxEditor, FocusListener {
     }
 
     /**
-     * El mismo editor, marcado como puesto por el aspecto.
+     * The same editor, marked as set by the look and feel.
      *
-     * <p>Ver {@link BasicComboBoxRenderer.UIResource}.
+     * <p>See {@link BasicComboBoxRenderer.UIResource}.
      */
     public static class UIResource extends BasicComboBoxEditor
             implements javax.swing.plaf.UIResource {

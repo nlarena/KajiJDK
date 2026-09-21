@@ -1,14 +1,14 @@
 package java.security.cert;
 
-// Un criterio para elegir CRLs de un `CertStore`.
+// A criterion for choosing CRLs of a `CertStore`.
 //
-// Extiende `Cloneable` y **redeclara** `clone()` como publico, que es lo que `Cloneable` sola no
-// hace. La razon es del contrato: un `CertStore` se queda con el selector que le pasan, y si no
-// pudiera copiarlo, quien se lo dio podria cambiarlo despues y alterar por atras que devuelve una
-// consulta.
+// It extends `Cloneable` and **redeclares** `clone()` as public, which `Cloneable` alone does not
+// do. The reason is of the contract: a `CertStore` keeps the selector it is passed, and if it could
+// not copy it, whoever gave it could change it afterwards and alter from behind what a query
+// returns.
 public interface CRLSelector extends Cloneable {
 
-    // Si esta CRL cumple el criterio.
+    // Whether this CRL meets the criterion.
     boolean match(CRL crl);
 
     Object clone();

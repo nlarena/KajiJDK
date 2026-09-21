@@ -7,17 +7,17 @@ import java.awt.image.Raster;
 import java.awt.image.WritableRaster;
 
 /**
- * La parte común de todos los contextos de pintado que se calculan punto por punto.
+ * The common part of all painting contexts computed point by point.
  *
- * <p>Hace el trabajo que no cambia entre un degradé y una textura: invertir la transformación,
- * recorrer el rectángulo pedido, llevar cada píxel de coordenadas de dispositivo a coordenadas de
- * usuario y armar el ráster. Lo único que cada pintura pone es {@link #colorDe}.
+ * <p>It does the work that does not change between a gradient and a texture: inverting the
+ * transformation, walking the requested rectangle, taking each pixel from device coordinates to
+ * user coordinates and building the raster. The only thing each paint supplies is {@link #colorAt}.
  *
- * <p>El píxel se muestrea en su **centro** —de ahí el medio píxel que se suma— y no en su esquina.
- * Muestrear en la esquina corre el degradé medio píxel, que se nota como una costura cuando dos
- * figuras pintadas con el mismo degradé se tocan.
+ * <p>The pixel is sampled at its **centre** —hence the half pixel that is added— and not at its
+ * corner. Sampling at the corner shifts the gradient half a pixel, which shows as a seam when two
+ * shapes painted with the same gradient touch.
  *
- * <p>No es pública: es un detalle de cómo están escritas las pinturas de este paquete.
+ * <p>It is not public: it is a detail of how this package's paints are written.
  */
 abstract class RasterPaintContext implements PaintContext {
 
@@ -25,40 +25,40 @@ abstract class RasterPaintContext implements PaintContext {
     private final ColorModel model = ColorModel.getRGBdefault();
 
     /**
-     * Con la transformación de usuario a dispositivo, que se invierte una sola vez.
+     * With the user-to-device transformation, which is inverted only once.
      *
-     * @throws NoninvertibleTransformException si la transformación aplasta el plano
+     * @throws NoninvertibleTransformException if the transformation flattens the plane
      */
     RasterPaintContext(AffineTransform xform) throws NoninvertibleTransformException {
         this.inverse = xform.createInverse();
     }
 
-    /** No hay nada que soltar: el ráster se arma en cada pedido. */
+    /** There is nothing to release: the raster is built on each request. */
     public void dispose() {
     }
 
-    /** Siempre ARGB de ocho bits por canal. */
+    /** Always 8-bit-per-channel ARGB. */
     public ColorModel getColorModel() {
         return this.model;
     }
 
-    /** Los píxeles de ese rectángulo del dispositivo. */
+    /** The pixels of that device rectangle. */
     public Raster getRaster(int x, int y, int w, int h) {
         WritableRaster r = this.model.createCompatibleWritableRaster(w, h);
         double[] p = new double[2];
-        int[] fila = new int[w];
+        int[] row = new int[w];
         for (int j = 0; j < h; j++) {
             for (int i = 0; i < w; i++) {
                 p[0] = x + i + 0.5;
                 p[1] = y + j + 0.5;
                 this.inverse.transform(p, 0, p, 0, 1);
-                fila[i] = this.colorDe(p[0], p[1]);
+                row[i] = this.colorAt(p[0], p[1]);
             }
-            r.setDataElements(0, j, w, 1, fila);
+            r.setDataElements(0, j, w, 1, row);
         }
         return r;
     }
 
-    /** El color ARGB que le toca a ese punto en coordenadas de usuario. */
-    abstract int colorDe(double ux, double uy);
+    /** The ARGB colour that belongs to that point in user coordinates. */
+    abstract int colorAt(double ux, double uy);
 }

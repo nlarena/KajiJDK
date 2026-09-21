@@ -6,22 +6,23 @@ import java.util.Enumeration;
 import javax.swing.event.TreeModelEvent;
 
 /**
- * La cuenta de filas para un arbol donde todas miden lo mismo.
+ * The row bookkeeping for a tree where every row measures the same.
  *
- * <h2>Por que hay dos caches</h2>
+ * <h2>Why there are two caches</h2>
  *
- * <p>Con todas las filas del mismo alto, saber en que fila cae un pixel es una division y saber
- * donde empieza una fila es una multiplicacion. Eso vale para un arbol de cualquier tamano y sin
- * medir un solo nodo. La otra cache -- {@link VariableHeightLayoutCache} -- tiene que preguntarle a
- * cada nodo cuanto mide y sumar.
+ * <p>With every row the same height, knowing which row a pixel falls in is a division and knowing
+ * where a row starts is a multiplication. That holds for a tree of any size and without measuring
+ * a single node. The other cache -- {@link VariableHeightLayoutCache} -- has to ask each node how
+ * much it measures and add up.
  *
- * <p>El resto -- que nodos se ven, en que orden, cual es la fila de cual -- es igual en las dos.
+ * <p>The rest -- which nodes are seen, in what order, which row belongs to which -- is the same
+ * in both.
  */
 public class FixedHeightLayoutCache extends AbstractLayoutCache {
 
-    private final NucleoDeCache nucleo = new NucleoDeCache();
+    private final LayoutCacheCore core = new LayoutCacheCore();
 
-    /** Una cache vacia. */
+    /** An empty cache. */
     public FixedHeightLayoutCache() {
         super();
         setRowHeight(1);
@@ -29,7 +30,7 @@ public class FixedHeightLayoutCache extends AbstractLayoutCache {
 
     public void setModel(TreeModel newModel) {
         super.setModel(newModel);
-        nucleo.setModelo(newModel);
+        core.setTreeModel(newModel);
         if (newModel != null && newModel.getRoot() != null) {
             setExpandedState(new TreePath(newModel.getRoot()), true);
         }
@@ -38,7 +39,7 @@ public class FixedHeightLayoutCache extends AbstractLayoutCache {
     public void setRootVisible(boolean rootVisible) {
         if (isRootVisible() != rootVisible) {
             super.setRootVisible(rootVisible);
-            nucleo.setRaizVisible(rootVisible);
+            core.setRootVisible(rootVisible);
         }
     }
 
@@ -53,35 +54,35 @@ public class FixedHeightLayoutCache extends AbstractLayoutCache {
     }
 
     public int getRowCount() {
-        return nucleo.cuantas();
+        return core.howMany();
     }
 
-    /** No hace nada: con altura fija no hay medida guardada que tirar. */
+    /** It does nothing: with a fixed height there is no kept measurement to throw away. */
     public void invalidatePathBounds(TreePath path) {
     }
 
-    /** No hace nada; ver {@link #invalidatePathBounds}. */
+    /** It does nothing; see {@link #invalidatePathBounds}. */
     public void invalidateSizes() {
     }
 
     public boolean isExpanded(TreePath path) {
-        return nucleo.estaMarcado(path);
+        return core.isMarkedExpanded(path);
     }
 
     /**
-     * Donde va ese nodo.
+     * Where that node goes.
      *
-     * <p>El alto y la posicion vertical salen de la fila; el ancho y la posicion horizontal, del
-     * medidor. Sin medidor no hay ancho que dar y devuelve nulo.
+     * <p>The height and the vertical position come from the row; the width and the horizontal
+     * position, from the measurer. With no measurer there is no width to give and it returns null.
      */
     public Rectangle getBounds(TreePath path, Rectangle placeIn) {
         int row = getRowForPath(path);
         if (row < 0) {
             return null;
         }
-        Object nodo = path.getLastPathComponent();
-        Rectangle r = getNodeDimensions(nodo, row, path.getPathCount() - 1,
-                nucleo.estaMarcado(path), placeIn);
+        Object node = path.getLastPathComponent();
+        Rectangle r = getNodeDimensions(node, row, path.getPathCount() - 1,
+                core.isMarkedExpanded(path), placeIn);
         if (r == null) {
             return null;
         }
@@ -91,18 +92,18 @@ public class FixedHeightLayoutCache extends AbstractLayoutCache {
     }
 
     public TreePath getPathForRow(int row) {
-        return nucleo.caminoDeFila(row);
+        return core.pathForRow(row);
     }
 
     public int getRowForPath(TreePath path) {
-        return nucleo.filaDeCamino(path);
+        return core.rowForPath(path);
     }
 
     /**
-     * El nodo mas cercano a ese punto.
+     * The node nearest that point.
      *
-     * <p>La coordenada horizontal no se mira: una fila ocupa todo el ancho, aunque su dibujo no.
-     * Un clic a la derecha del texto sigue siendo un clic en esa fila.
+     * <p>The horizontal coordinate is not looked at: a row takes up the whole width, even if its
+     * drawing does not. A click to the right of the text is still a click on that row.
      */
     public TreePath getPathClosestTo(int x, int y) {
         int n = getRowCount();
@@ -119,34 +120,34 @@ public class FixedHeightLayoutCache extends AbstractLayoutCache {
     }
 
     public int getVisibleChildCount(TreePath path) {
-        return nucleo.hijosVisibles(path);
+        return core.visibleChildren(path);
     }
 
     public Enumeration<TreePath> getVisiblePathsFrom(TreePath path) {
-        return nucleo.desde(path);
+        return core.from(path);
     }
 
     public void setExpandedState(TreePath path, boolean isExpanded) {
-        nucleo.setDesplegado(path, isExpanded);
+        core.setExpanded(path, isExpanded);
     }
 
     public boolean getExpandedState(TreePath path) {
-        return nucleo.desplegadoDeVerdad(path);
+        return core.reallyExpanded(path);
     }
 
-    /** Un nodo que cambia no cambia ninguna fila: con altura fija, nada se mueve. */
+    /** A node that changes changes no row: with a fixed height, nothing moves. */
     public void treeNodesChanged(TreeModelEvent e) {
     }
 
     public void treeNodesInserted(TreeModelEvent e) {
-        nucleo.invalidar();
+        core.invalidate();
     }
 
     public void treeNodesRemoved(TreeModelEvent e) {
-        nucleo.invalidar();
+        core.invalidate();
     }
 
     public void treeStructureChanged(TreeModelEvent e) {
-        nucleo.invalidar();
+        core.invalidate();
     }
 }

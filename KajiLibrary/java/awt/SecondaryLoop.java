@@ -1,32 +1,32 @@
 package java.awt;
 
 /**
- * Una espera que no bloquea el hilo de eventos.
+ * A wait that does not block the event thread.
  *
- * <p>Resuelve la contradicción de un diálogo modal: la llamada que lo abre tiene que **no volver**
- * hasta que se cierre, pero si esa llamada vino del hilo de eventos y se queda esperando, la interfaz
- * entera se congela y el diálogo nunca se puede cerrar.
+ * <p>It resolves the contradiction of a modal dialog: the call that opens it has to **not return**
+ * until it closes, but if that call came from the event thread and stays waiting, the whole
+ * interface freezes and the dialog can never be closed.
  *
- * <p>La salida es un segundo bucle de eventos anidado: {@link #enter} sigue atendiendo eventos
- * mientras espera, y {@link #exit} lo corta. Por eso el bucle es un objeto y no un método — hay que
- * poder terminarlo desde adentro del propio despacho.
+ * <p>The way out is a second, nested event loop: {@link #enter} keeps dispatching events while it
+ * waits, and {@link #exit} stops it. That is why the loop is an object and not a method — it has to
+ * be possible to end it from inside dispatch itself.
  *
- * <p>Un bucle se usa **una sola vez**: {@link #enter} sobre uno que ya está corriendo devuelve
- * `false` en vez de anidarse.
+ * <p>A loop is used **only once**: {@link #enter} on one that is already running returns `false`
+ * instead of nesting.
  */
 public interface SecondaryLoop {
 
     /**
-     * Entra al bucle y no vuelve hasta que alguien llame a {@link #exit}.
+     * Enters the loop and does not return until someone calls {@link #exit}.
      *
-     * @return `true` si el bucle terminó normalmente, `false` si ya estaba corriendo
+     * @return `true` if the loop ended normally, `false` if it was already running
      */
     boolean enter();
 
     /**
-     * Corta el bucle.
+     * Stops the loop.
      *
-     * @return `true` si había un bucle que cortar
+     * @return `true` if there was a loop to stop
      */
     boolean exit();
 }

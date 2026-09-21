@@ -1,21 +1,21 @@
 package java.nio.file;
 
-// Lo que un `FileVisitor` le contesta al recorrido para decidir como sigue.
+// What a `FileVisitor` answers the walk with to decide how it carries on.
 //
-// Son cuatro y no un booleano porque el corte tiene tres alcances distintos: parar todo
-// (`TERMINATE`), no bajar a este directorio (`SKIP_SUBTREE`), o no mirar mas hermanos de este nivel
-// (`SKIP_SIBLINGS`).
+// There are four and not a boolean because the cut has three different reaches: stop everything
+// (`TERMINATE`), do not descend into this directory (`SKIP_SUBTREE`), or look at no more siblings
+// at this level (`SKIP_SIBLINGS`).
 public enum FileVisitResult {
 
-    /** Seguir normalmente. */
+    /** To go on normally. */
     CONTINUE,
 
-    /** Terminar el recorrido entero. */
+    /** End the whole walk. */
     TERMINATE,
 
-    /** No entrar a este directorio; seguir con los hermanos. */
+    /** Do not go into this directory; carry on with the siblings. */
     SKIP_SUBTREE,
 
-    /** No mirar los hermanos que quedan; subir un nivel. */
+    /** Do not look at the remaining siblings; go up a level. */
     SKIP_SIBLINGS
 }

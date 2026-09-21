@@ -1,29 +1,29 @@
 package java.util.logging;
 
 /**
- * KajiLibrary's java.util.logging.LoggingPermission -- el unico permiso del paquete.
+ * KajiLibrary's java.util.logging.LoggingPermission -- the package's only permission.
  *
- * <p>Tiene un solo nombre valido, `"control"`, y ninguna accion. Esa pobreza es el diseno: el
- * paquete no distingue "puede leer la configuracion" de "puede cambiarla", porque cambiar el nivel de
- * un logger ya alcanza para apagar la traza de auditoria de otro. Si hay una sola cosa que proteger,
- * hay un solo permiso.
+ * <p>It has a single valid name, `"control"`, and no actions. That poverty is the design: the
+ * package does not tell "may read the configuration" from "may change it", because changing one
+ * logger's level is already enough to switch off another's audit log. If there is a single thing to
+ * protect, there is a single permission.
  *
- * <p>El constructor **rechaza** cualquier otro nombre y cualquier accion no vacia en vez de
- * ignorarlos. Es lo correcto para un permiso: un `new LoggingPermission("controll", null)` mal
- * escrito que se construyera en silencio seria un permiso que nunca implica nada y una politica que
- * parece decir algo y no dice nada.
+ * <p>The constructor **rejects** any other name and any non-empty action rather than ignoring them.
+ * It is the right thing for a permission: a misspelled `new LoggingPermission("controll", null)`
+ * that was constructed in silence would be a permission that never implies anything and a policy
+ * that seems to say something and says nothing.
  *
- * <p>Esta deprecada para remocion en el JDK junto con el gestor de seguridad, que es lo unico que la
- * consultaba. Se trae igual porque sigue siendo parte de la API y porque
- * {@link java.security.BasicPermission} --de donde sale toda la logica de implicacion-- esta completo
- * en este arbol: aca no hay nada que simular.
+ * <p>It is deprecated for removal in the JDK along with the security manager, which was the only
+ * thing that consulted it. It is brought in all the same because it is still part of the API and
+ * because {@link java.security.BasicPermission} --where all the implication logic comes from-- is
+ * complete in this tree: there is nothing to simulate here.
  */
 @Deprecated(since = "17", forRemoval = true)
 public final class LoggingPermission extends java.security.BasicPermission {
 
     /**
-     * @throws NullPointerException si `name` es `null`
-     * @throws IllegalArgumentException si `name` no es `"control"`, o si `actions` no es vacio
+     * @throws NullPointerException if `name` is `null`
+     * @throws IllegalArgumentException if `name` is not `"control"`, or if `actions` is not empty
      */
     public LoggingPermission(String name, String actions) throws IllegalArgumentException {
         super(name);

@@ -4,10 +4,10 @@ import javax.xml.stream.events.XMLEvent;
 import javax.xml.stream.util.EventReaderDelegate;
 
 /**
- * Un lector de eventos que solo entrega los que el filtro acepta.
+ * An event reader that only delivers the ones the filter accepts.
  *
- * <p>Mas facil que su equivalente de cursor, porque un evento es un objeto: filtrar es descartarlo,
- * y {@link #peek()} se resuelve guardando el primero aceptado sin tener que deshacer nada.
+ * <p>Easier than its cursor equivalent, because an event is an object: filtering is discarding it,
+ * and {@link #peek()} is solved by keeping the first accepted one without having to undo anything.
  */
 final class KajiFilteredEventReader extends EventReaderDelegate {
 
@@ -43,7 +43,7 @@ final class KajiFilteredEventReader extends EventReaderDelegate {
     public XMLEvent nextEvent() throws XMLStreamException {
         XMLEvent e = advance();
         if (e == null) {
-            throw new java.util.NoSuchElementException("no quedan eventos aceptados");
+            throw new java.util.NoSuchElementException("no accepted events left");
         }
         peeked = null;
         return e;

@@ -3,22 +3,22 @@ package org.w3c.dom.html;
 import org.w3c.dom.Node;
 
 /**
- * Una lista de elementos indexable por posicion y por nombre.
+ * A list of elements indexable by position and by name.
  *
- * <p>Es **viva**, como las de {@link HTMLDocument}: lo que devuelve refleja el arbol en el momento
- * de la consulta.
+ * <p>It is **live**, like those of {@link HTMLDocument}: what it returns reflects the tree at the
+ * moment of the query.
  *
- * <p>`namedItem` busca primero por `id` y despues por `name`, en ese orden. Importa cuando los dos
- * atributos existen y no coinciden: gana el `id`.
+ * <p>`namedItem` looks first by `id` and then by `name`, in that order. It matters when the two
+ * attributes exist and do not match: the `id` wins.
  */
 public interface HTMLCollection {
 
-    /** La cantidad. */
+    /** The count. */
     int getLength();
 
-    /** El elemento en esa posicion, o nulo si el indice esta fuera de rango. */
+    /** The element at that position, or null if the index is out of range. */
     Node item(int index);
 
-    /** El elemento con ese `id`, o en su defecto con ese `name`; nulo si no hay. */
+    /** The element with that `id`, or failing that with that `name`; null if there is none. */
     Node namedItem(String name);
 }

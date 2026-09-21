@@ -6,34 +6,35 @@ import java.io.IOException;
 import java.io.RandomAccessFile;
 
 /**
- * KajiLibrary's javax.imageio.stream.FileImageInputStream -- lee un archivo, con acceso directo.
+ * KajiLibrary's javax.imageio.stream.FileImageInputStream -- reads a file, with random access.
  *
- * <p>La implementacion mas simple y la mas eficiente: sobre un {@link RandomAccessFile} no hace falta
- * guardar nada para poder volver atras, porque el archivo ya se puede posicionar.
+ * <p>The simplest and most efficient implementation: over a {@link RandomAccessFile} nothing needs
+ * to be kept to be able to go back, because the file can already seek.
  *
- * <p>Por eso {@link #isCached} devuelve false. No es una carencia: es que no hay nada que cachear.
+ * <p>That is why {@link #isCached} returns false. It is not a shortcoming: there is nothing to
+ * cache.
  *
- * <h2>Quien cierra que</h2>
+ * <h2>Who closes what</h2>
  *
- * <p>Los dos constructores se comportan distinto y no esta escrito en ningun lado obvio:
+ * <p>The two constructors behave differently and it is not written anywhere obvious:
  *
  * <ul>
- *   <li>el que toma un {@link File} abre el archivo y {@link #close} lo cierra;
- *   <li>el que toma un {@link RandomAccessFile} <b>tambien</b> lo cierra, aunque no lo haya abierto
- *       el. Es lo que hace el JDK, y hay que tenerlo presente si el archivo se comparte.
+ *   <li>the one that takes a {@link File} opens the file and {@link #close} closes it;
+ *   <li>the one that takes a {@link RandomAccessFile} closes it <b>too</b>, even though it did not
+ *       open it. It is what the JDK does, and it has to be kept in mind if the file is shared.
  * </ul>
  */
 public class FileImageInputStream extends ImageInputStreamImpl {
 
-    /** El archivo. */
+    /** The file. */
     private RandomAccessFile raf;
 
     /**
-     * Abre ese archivo para leer.
+     * Opens that file for reading.
      *
-     * @throws IllegalArgumentException si es null
-     * @throws FileNotFoundException si no existe o no se puede leer
-     * @throws IOException si fallo al abrirlo
+     * @throws IllegalArgumentException if it is null
+     * @throws FileNotFoundException if it does not exist or cannot be read
+     * @throws IOException if opening it failed
      */
     public FileImageInputStream(File f) throws FileNotFoundException, IOException {
         if (f == null) {
@@ -43,9 +44,9 @@ public class FileImageInputStream extends ImageInputStreamImpl {
     }
 
     /**
-     * Usa ese archivo ya abierto. Ver la nota de la clase sobre quien lo cierra.
+     * Uses that already open file. See the class note about who closes it.
      *
-     * @throws IllegalArgumentException si es null
+     * @throws IllegalArgumentException if it is null
      */
     public FileImageInputStream(RandomAccessFile raf) {
         if (raf == null) {
@@ -54,7 +55,7 @@ public class FileImageInputStream extends ImageInputStreamImpl {
         this.raf = raf;
     }
 
-    /** Un byte. */
+    /** One byte. */
     @Override
     public int read() throws IOException {
         checkClosed();
@@ -66,7 +67,7 @@ public class FileImageInputStream extends ImageInputStreamImpl {
         return val;
     }
 
-    /** Hasta {@code len} bytes. */
+    /** Up to {@code len} bytes. */
     @Override
     public int read(byte[] b, int off, int len) throws IOException {
         checkClosed();
@@ -78,7 +79,7 @@ public class FileImageInputStream extends ImageInputStreamImpl {
         return nbytes;
     }
 
-    /** El tamano del archivo, o -1 si no se puede saber. */
+    /** The size of the file, or -1 if it cannot be known. */
     @Override
     public long length() {
         try {
@@ -89,7 +90,7 @@ public class FileImageInputStream extends ImageInputStreamImpl {
         }
     }
 
-    /** Se posiciona; el archivo tambien. */
+    /** Seeks; the file too. */
     @Override
     public void seek(long pos) throws IOException {
         checkClosed();
@@ -101,7 +102,7 @@ public class FileImageInputStream extends ImageInputStreamImpl {
         this.streamPos = this.raf.getFilePointer();
     }
 
-    /** Cierra, y cierra el archivo. Ver la nota de la clase. */
+    /** Closes, and closes the file. See the class note. */
     @Override
     public void close() throws IOException {
         super.close();
@@ -109,10 +110,10 @@ public class FileImageInputStream extends ImageInputStreamImpl {
         this.raf = null;
     }
 
-    /** Cierra si nadie lo hizo; ver {@link ImageInputStreamImpl#finalize}. */
+    /** Closes it if nobody did; see {@link ImageInputStreamImpl#finalize}. */
     @Override
     protected void finalize() throws Throwable {
-        // La clase base ya cierra lo suyo; aca no hay nada mas que hacer que dejarla trabajar.
+        // The base class already closes its own part; there is nothing to do here but let it work.
         super.finalize();
     }
 }

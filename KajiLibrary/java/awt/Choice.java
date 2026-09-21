@@ -10,13 +10,13 @@ import javax.accessibility.AccessibleContext;
 import javax.accessibility.AccessibleRole;
 
 /**
- * Una lista desplegable: muestra un renglón y despliega el resto al apretarla.
+ * A drop-down list: it shows one line and unfolds the rest when pressed.
  *
- * <p>Siempre hay **exactamente uno** seleccionado mientras haya algo en la lista, y no se puede
- * volver a un estado sin selección. Agregar la primera entrada la selecciona sola.
+ * <p>There is always **exactly one** selected while there is anything in the list, and there is no
+ * going back to a state with no selection. Adding the first entry selects it by itself.
  *
- * <p>Como en {@link Checkbox}, cambiar la selección por programa con {@link #select} no dispara
- * eventos: son de la interacción del usuario.
+ * <p>As in {@link Checkbox}, changing the selection from a program with {@link #select} fires no
+ * events: those belong to the user's interaction.
  */
 public class Choice extends Component implements ItemSelectable, Accessible {
 
@@ -24,16 +24,16 @@ public class Choice extends Component implements ItemSelectable, Accessible {
 
     private static int choiceCounter = 0;
 
-    /** Las entradas. */
+    /** The entries. */
     Vector<String> pItems = new Vector<String>();
 
-    /** Cuál está seleccionada, o -1 si la lista está vacía. */
+    /** Which one is selected, or -1 if the list is empty. */
     int selectedIndex = -1;
 
-    /** Los oyentes, encadenados. */
+    /** The listeners, chained. */
     transient ItemListener itemListener;
 
-    /** Una lista vacía. */
+    /** An empty list. */
     public Choice() throws HeadlessException {
     }
 
@@ -45,20 +45,20 @@ public class Choice extends Component implements ItemSelectable, Accessible {
         }
     }
 
-    /** La declara mostrable. */
+    /** Declares it showable. */
     public void addNotify() {
         super.addNotify();
     }
 
-    /** Cuántas entradas tiene. */
+    /** How many entries it has. */
     public int getItemCount() {
         return this.pItems.size();
     }
 
     /**
-     * Cuántas entradas tiene.
+     * How many entries it has.
      *
-     * @deprecated es del nombrado de 1.0. Usar {@link #getItemCount}.
+     * @deprecated it is from the 1.0 naming. Use {@link #getItemCount}.
      */
     @Deprecated
     public int countItems() {
@@ -66,9 +66,9 @@ public class Choice extends Component implements ItemSelectable, Accessible {
     }
 
     /**
-     * La entrada de esa posición.
+     * The entry at that position.
      *
-     * @throws ArrayIndexOutOfBoundsException si la posición no existe
+     * @throws ArrayIndexOutOfBoundsException if there is no such position
      */
     public String getItem(int index) {
         return this.getItemImpl(index);
@@ -79,22 +79,22 @@ public class Choice extends Component implements ItemSelectable, Accessible {
     }
 
     /**
-     * Agrega una entrada al final.
+     * Adds an entry at the end.
      *
-     * <p>La primera queda seleccionada: una lista desplegable no puede estar sin selección.
+     * <p>The first one ends up selected: a drop-down list cannot be left with no selection.
      *
-     * @throws NullPointerException si la entrada es `null`
+     * @throws NullPointerException if the entry is `null`
      */
     public void add(String item) {
         synchronized (this) {
-            this.agregar(item, this.pItems.size());
+            this.insertAt(item, this.pItems.size());
         }
     }
 
     /**
-     * Agrega una entrada al final.
+     * Adds an entry at the end.
      *
-     * @deprecated es del nombrado de 1.0. Usar {@link #add(String)}.
+     * @deprecated it is from the 1.0 naming. Use {@link #add(String)}.
      */
     @Deprecated
     public void addItem(String item) {
@@ -102,14 +102,14 @@ public class Choice extends Component implements ItemSelectable, Accessible {
     }
 
     /**
-     * Inserta una entrada en esa posición.
+     * Inserts an entry at that position.
      *
-     * <p>Si la insertada cae en la posición de la seleccionada o antes, **la selección pasa a la
-     * primera**. Suena arbitrario y lo es, pero es lo que hace AWT y cambiarlo sería mentir: el
-     * llamador que insertó arriba de la selección se encuentra con la primera seleccionada, no con
-     * la que tenía corrida un lugar.
+     * <p>If the inserted one lands at the position of the selected one or before it, **the
+     * selection moves to the first one**. It sounds arbitrary and it is, but it is what AWT does
+     * and changing it would be lying: the caller who inserted above the selection finds the first
+     * one selected, not the one they had shifted by one place.
      *
-     * @throws IllegalArgumentException si la posición es negativa
+     * @throws IllegalArgumentException if the position is negative
      */
     public void insert(String item, int index) {
         synchronized (this) {
@@ -117,15 +117,15 @@ public class Choice extends Component implements ItemSelectable, Accessible {
                 throw new IllegalArgumentException("index less than zero.");
             }
             int i = Math.min(index, this.pItems.size());
-            this.agregar(item, i);
+            this.insertAt(item, i);
             if (this.selectedIndex < 0 || this.selectedIndex >= i) {
                 this.select(0);
             }
         }
     }
 
-    /** Mete la entrada y selecciona la primera si era la única. */
-    private void agregar(String item, int index) {
+    /** Puts the entry in and selects the first one if it was the only one. */
+    private void insertAt(String item, int index) {
         if (item == null) {
             throw new NullPointerException("cannot add null item to Choice");
         }
@@ -136,9 +136,9 @@ public class Choice extends Component implements ItemSelectable, Accessible {
     }
 
     /**
-     * Saca la primera entrada que diga eso.
+     * Removes the first entry that says that.
      *
-     * @throws IllegalArgumentException si no hay ninguna que diga eso
+     * @throws IllegalArgumentException if there is none that says that
      */
     public void remove(String item) {
         synchronized (this) {
@@ -151,12 +151,12 @@ public class Choice extends Component implements ItemSelectable, Accessible {
     }
 
     /**
-     * Saca la entrada de esa posición.
+     * Removes the entry at that position.
      *
-     * <p>Sacar la seleccionada pasa la selección a la primera que quede; si no queda ninguna, la
-     * lista se queda sin selección, que es el único caso en que eso puede pasar.
+     * <p>Removing the selected one moves the selection to the first one left; if none is left, the
+     * list ends up with no selection, which is the only case where that can happen.
      *
-     * @throws IndexOutOfBoundsException si la posición no existe
+     * @throws IndexOutOfBoundsException if there is no such position
      */
     public void remove(int position) {
         synchronized (this) {
@@ -171,7 +171,7 @@ public class Choice extends Component implements ItemSelectable, Accessible {
         }
     }
 
-    /** Vacía la lista. */
+    /** Empties the list. */
     public void removeAll() {
         synchronized (this) {
             this.pItems.removeAllElements();
@@ -180,9 +180,9 @@ public class Choice extends Component implements ItemSelectable, Accessible {
     }
 
     /**
-     * Lo que dice la entrada seleccionada.
+     * What the selected entry says.
      *
-     * @return el texto, o `null` si la lista está vacía
+     * @return the text, or `null` if the list is empty
      */
     public synchronized String getSelectedItem() {
         if (this.selectedIndex < 0) {
@@ -192,9 +192,9 @@ public class Choice extends Component implements ItemSelectable, Accessible {
     }
 
     /**
-     * Lo que está seleccionado.
+     * What is selected.
      *
-     * @return un arreglo de un elemento, o `null` si la lista está vacía
+     * @return an array of one element, or `null` if the list is empty
      */
     public synchronized Object[] getSelectedObjects() {
         if (this.selectedIndex < 0) {
@@ -206,18 +206,18 @@ public class Choice extends Component implements ItemSelectable, Accessible {
     }
 
     /**
-     * Qué posición está seleccionada.
+     * Which position is selected.
      *
-     * @return la posición, o -1 si la lista está vacía
+     * @return the position, or -1 if the list is empty
      */
     public int getSelectedIndex() {
         return this.selectedIndex;
     }
 
     /**
-     * Selecciona esa posición.
+     * Selects that position.
      *
-     * @throws IllegalArgumentException si la posición no existe
+     * @throws IllegalArgumentException if there is no such position
      */
     public synchronized void select(int pos) {
         if (pos >= this.pItems.size() || pos < 0) {
@@ -229,9 +229,10 @@ public class Choice extends Component implements ItemSelectable, Accessible {
     }
 
     /**
-     * Selecciona la primera entrada que diga eso.
+     * Selects the first entry that says that.
      *
-     * <p>Si no hay ninguna no pasa nada, y es lo correcto: la selección anterior sigue siendo válida.
+     * <p>If there is none nothing happens, and that is right: the previous selection is still
+     * valid.
      */
     public synchronized void select(String str) {
         int i = this.pItems.indexOf(str);
@@ -240,7 +241,7 @@ public class Choice extends Component implements ItemSelectable, Accessible {
         }
     }
 
-    /** Agrega un oyente; `null` no hace nada. */
+    /** Adds a listener; `null` does nothing. */
     public synchronized void addItemListener(ItemListener l) {
         if (l == null) {
             return;
@@ -249,7 +250,7 @@ public class Choice extends Component implements ItemSelectable, Accessible {
         this.enableEvents(AWTEvent.ITEM_EVENT_MASK);
     }
 
-    /** Saca un oyente. */
+    /** Removes a listener. */
     public synchronized void removeItemListener(ItemListener l) {
         if (l == null) {
             return;
@@ -257,7 +258,7 @@ public class Choice extends Component implements ItemSelectable, Accessible {
         this.itemListener = AWTEventMulticaster.remove(this.itemListener, l);
     }
 
-    /** Los oyentes puestos. */
+    /** The listeners that are set. */
     public synchronized ItemListener[] getItemListeners() {
         return AWTEventMulticaster.getListeners(this.itemListener, ItemListener.class);
     }
@@ -277,7 +278,7 @@ public class Choice extends Component implements ItemSelectable, Accessible {
         super.processEvent(e);
     }
 
-    /** Les avisa a los oyentes de selección. */
+    /** Tells the selection listeners. */
     protected void processItemEvent(ItemEvent e) {
         ItemListener l = this.itemListener;
         if (l != null) {
@@ -289,7 +290,7 @@ public class Choice extends Component implements ItemSelectable, Accessible {
         return super.paramString() + ",current=" + this.getSelectedItem();
     }
 
-    /** La accesibilidad de la lista. */
+    /** The accessibility information of this list. */
     public AccessibleContext getAccessibleContext() {
         if (this.accessibleContext == null) {
             this.accessibleContext = new AccessibleAWTChoice();
@@ -298,20 +299,20 @@ public class Choice extends Component implements ItemSelectable, Accessible {
     }
 
     /**
-     * La accesibilidad de una lista desplegable.
+     * The accessibility of a drop-down list.
      *
-     * <p>Implementa {@link AccessibleAction} pero informa **cero** acciones, que es lo que hace el
-     * JDK: la acción sería desplegar la lista, y eso lo hace el widget del sistema. Declarar una que
-     * no se puede ejecutar sería peor que no declarar ninguna.
+     * <p>It implements {@link AccessibleAction} but reports **zero** actions, which is what the JDK
+     * does: the action would be unfolding the list, and that is done by the system's widget.
+     * Declaring one that cannot be run would be worse than declaring none.
      *
-     * <p><strong>No</strong> implementa {@link javax.accessibility.AccessibleSelection}, y no es un
-     * olvido: tampoco lo hace el JDK, así que {@code getAccessibleSelection()} devuelve `null`.
-     * Agregarlo sería más útil y sería divergir.
+     * <p>It does **not** implement {@link javax.accessibility.AccessibleSelection}, and that is not
+     * an oversight: the JDK does not do it either, so {@code getAccessibleSelection()} returns
+     * `null`. Adding it would be more useful and would be diverging.
      */
     protected class AccessibleAWTChoice extends AccessibleAWTComponent
             implements AccessibleAction {
 
-        /** Para las subclases. */
+        /** For the subclasses. */
         protected AccessibleAWTChoice() {
         }
 
@@ -323,24 +324,24 @@ public class Choice extends Component implements ItemSelectable, Accessible {
             return AccessibleRole.COMBO_BOX;
         }
 
-        /** Ninguna. */
+        /** None: see the class note. */
         public int getAccessibleActionCount() {
             return 0;
         }
 
         /**
-         * Cómo se llama esa acción.
+         * What that action is called.
          *
-         * @return `null` siempre: no hay ninguna
+         * @return `null` always: there is none
          */
         public String getAccessibleActionDescription(int i) {
             return null;
         }
 
         /**
-         * Ejecuta esa acción.
+         * Runs that action.
          *
-         * @return `false` siempre, por lo mismo
+         * @return `false` always, for the same reason
          */
         public boolean doAccessibleAction(int i) {
             return false;

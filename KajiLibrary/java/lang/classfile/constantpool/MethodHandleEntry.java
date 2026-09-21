@@ -3,18 +3,19 @@ package java.lang.classfile.constantpool;
 import java.lang.constant.ConstantDesc;
 import java.lang.constant.DirectMethodHandleDesc;
 
-// `CONSTANT_MethodHandle_info` (JVMS §4.4.8): un `reference_kind` de 1 a 9 y la referencia a miembro
-// sobre la que actúa. El `kind` decide qué clase de referencia es legal: 1..4 exigen un `Fieldref`,
-// 5, 6, 7 y 9 un `Methodref` o un `InterfaceMethodref`, y 8 un `Methodref` a un `<init>`.
+// `CONSTANT_MethodHandle_info` (JVMS §4.4.8): a `reference_kind` from 1 to 9 and the member
+// reference it acts on. The `kind` decides which sort of reference is legal: 1..4 demand a
+// `Fieldref`, 5, 6, 7 and 9 a `Methodref` or an `InterfaceMethodref`, and 8 a `Methodref` to an
+// `<init>`.
 public interface MethodHandleEntry extends LoadableConstantEntry {
 
-    /** El `reference_kind`, de 1 a 9. */
+    /** The `reference_kind`, from 1 to 9. */
     int kind();
 
-    /** El miembro al que apunta. */
+    /** The member it points at. */
     MemberRefEntry reference();
 
-    /** El descriptor nominal del method handle. */
+    /** The method handle's nominal descriptor. */
     DirectMethodHandleDesc asSymbol();
 
     default ConstantDesc constantValue() {

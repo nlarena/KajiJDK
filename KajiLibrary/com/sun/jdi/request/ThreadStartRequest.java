@@ -3,21 +3,21 @@ package com.sun.jdi.request;
 import com.sun.jdi.ThreadReference;
 
 /**
- * Pedir aviso cuando arranque un hilo.
+ * Ask to be told when a thread starts.
  *
  * @since 1.3
  */
 public interface ThreadStartRequest extends EventRequest {
 
     /**
-     * Filtra por thread; solo con el pedido deshabilitado.
+     * It filters by thread; only with the request disabled.
      *
-     * @param thread el ThreadReference
+     * @param thread the ThreadReference
      */
     void addThreadFilter(ThreadReference thread);
 
     /**
-     * Filtra por platform threads only; solo con el pedido deshabilitado.
+     * It filters by platform threads only; only with the request disabled.
      */
     void addPlatformThreadsOnlyFilter();
 }

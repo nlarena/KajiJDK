@@ -1,19 +1,19 @@
 package org.w3c.dom;
 
 /**
- * KajiLibrary's org.w3c.dom.EntityReference -- un {@code &nombre;} que quedo sin expandir.
+ * KajiLibrary's org.w3c.dom.EntityReference -- a {@code &name;} that was left unexpanded.
  *
- * <p>Sin miembros propios: lo que dice es **que el arbol conservo la referencia** en vez de haberla
- * reemplazado por su contenido. Un parser que expande entidades no produce ninguno de estos nodos y
- * un arbol perfectamente valido puede no tener ni uno; que aparezcan o no es decision de la
- * implementacion, y por eso el codigo que recorre un DOM tiene que tolerar las dos formas.
+ * <p>With no members of its own: what it says is **that the tree kept the reference** instead of
+ * having replaced it by its contents. A parser that expands entities produces none of these nodes
+ * and a perfectly valid tree may not have a single one; whether they appear or not is a decision of
+ * the implementation, and that is why code that walks a DOM has to tolerate both forms.
  *
- * <p>Cuando aparecen, sus hijos son una copia del contenido de la {@link Entity} y son **de solo
- * lectura**, junto con todo lo que cuelgue de ahi: cambiar la expansion de una referencia y no la de
- * otra dejaria dos copias del mismo texto diciendo cosas distintas. Para cambiar el texto hay que
- * reemplazar la referencia entera.
+ * <p>When they appear, their children are a copy of the contents of the {@link Entity} and are
+ * **read-only**, together with everything that hangs from there: changing the expansion of one
+ * reference and not that of another would leave two copies of the same text saying different
+ * things. To change the text the whole reference has to be replaced.
  *
- * <p>Interfaz declarada entera; el JDK tampoco declara miembros aca.
+ * <p>The interface is declared whole; the JDK does not declare members here either.
  */
 public interface EntityReference extends Node {
 }

@@ -42,9 +42,10 @@ public class Semaphore implements Serializable {
             if (this.permits < permits) {
                 Thread me = Thread.currentThread();
                 waiters.add(me);
-                // El `finally` no es adorno: si interrumpen la espera, `wait` sale por excepcion y
-                // el hilo quedaria listado como encolado para siempre -- getQueueLength contaria un
-                // esperador que ya no existe, y hasQueuedThreads no volveria a dar false nunca.
+                // The `finally` is not ornament: if the wait is interrupted, `wait` leaves by
+                // exception and the thread would be listed as queued forever -- getQueueLength would
+                // count a waiter that no longer exists, and hasQueuedThreads would never give false
+                // again.
                 try {
                     while (this.permits < permits) {
                         sync.wait();
@@ -58,29 +59,30 @@ public class Semaphore implements Serializable {
     }
 
     /**
-     * Toma un permiso **sin** poder ser interrumpido.
+     * It takes a permit **without** being interruptible.
      *
-     * <p>La nota que estaba aca decia que era identico a `acquire()` porque KajiJDK no tenia
-     * interrupcion. La tiene: la diferencia es real y es esta -- `acquire()` aborta si interrumpen,
-     * esta sigue esperando y **remarca** el hilo al salir, para que la interrupcion no se pierda.
+     * <p>The note that used to be here said it was identical to `acquire()` because KajiJDK had no
+     * interruption. It has: the difference is real and it is this -- `acquire()` aborts if
+     * interrupted, this one goes on waiting and **re-marks** the thread on leaving, so the
+     * interruption is not lost.
      */
     public void acquireUninterruptibly() {
         acquireUninterruptibly(1);
     }
 
-    /** El de arriba, con varios permisos. */
+    /** The one above, with several permits. */
     public void acquireUninterruptibly(int permits) {
-        boolean interrumpido = false;
-        boolean listo = false;
-        while (!listo) {
+        boolean interrupted = false;
+        boolean ready = false;
+        while (!ready) {
             try {
                 acquire(permits);
-                listo = true;
+                ready = true;
             } catch (InterruptedException e) {
-                interrumpido = true;
+                interrupted = true;
             }
         }
-        if (interrumpido) {
+        if (interrupted) {
             Thread.currentThread().interrupt();
         }
     }

@@ -21,7 +21,7 @@ public class Encoder {
 
     // The register of delegates is static, as in the JDK: `setPersistenceDelegate` changes how
     // that type is stored for every encoder, not for this one.
-    private static final Map<Class<?>, PersistenceDelegate> registro =
+    private static final Map<Class<?>, PersistenceDelegate> registry =
         new java.util.HashMap<Class<?>, PersistenceDelegate>();
 
     private final Map<Object, Expression> links = new IdentityHashMap<Object, Expression>();
@@ -68,15 +68,15 @@ public class Encoder {
     }
 
     private static synchronized PersistenceDelegate readRegistry(Class<?> type) {
-        return type == null ? null : registro.get(type);
+        return type == null ? null : registry.get(type);
     }
 
     private static synchronized void writeRegistry(Class<?> type, PersistenceDelegate d) {
         if (type != null) {
             if (d == null) {
-                registro.remove(type);
+                registry.remove(type);
             } else {
-                registro.put(type, d);
+                registry.put(type, d);
             }
         }
     }
@@ -151,7 +151,7 @@ public class Encoder {
 
     // It translates a call from the old world into the new one: every object appearing as target
     // or as argument is written first and replaced by its counterpart.
-    private Statement clonar(Statement oldExp) {
+    private Statement cloneStatement(Statement oldExp) {
         Object newTarget = this.writeObject1(oldExp.getTarget());
         Object[] oldArgs = oldExp.getArguments();
         Object[] newArgs = new Object[oldArgs.length];
@@ -165,7 +165,7 @@ public class Encoder {
 
     // A call with no value: it is run on the copy and discarded.
     public void writeStatement(Statement oldStm) {
-        Statement newStm = this.clonar(oldStm);
+        Statement newStm = this.cloneStatement(oldStm);
         if (oldStm.getTarget() != this) {
             try {
                 newStm.execute();
@@ -184,7 +184,7 @@ public class Encoder {
     public void writeExpression(Expression oldExp) {
         Object oldValue = this.valueOf(oldExp);
         if (this.get(oldValue) == null) {
-            this.links.put(oldValue, (Expression) this.clonar(oldExp));
+            this.links.put(oldValue, (Expression) this.cloneStatement(oldExp));
             this.writeObject(oldValue);
         }
     }

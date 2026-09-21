@@ -6,40 +6,40 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * KajiLibrary's javax.security.auth.PrivateCredentialPermission -- permiso para leer una credencial
- * privada de un {@link Subject}.
+ * KajiLibrary's javax.security.auth.PrivateCredentialPermission -- permission to read a private
+ * credential of a {@link Subject}.
  *
- * <p>El nombre del permiso es una gramatica chiquita y vale la pena escribirla porque el parseo es
- * casi toda la clase:
+ * <p>The permission's name is a small grammar and it is worth writing it down because the parsing
+ * is almost the whole class:
  *
  * <pre>
- *   ClaseDeCredencial ClaseDePrincipal "NombreDePrincipal" [ClaseDePrincipal "NombreDePrincipal"]*
+ *   CredentialClass PrincipalClass "PrincipalName" [PrincipalClass "PrincipalName"]*
  * </pre>
  *
- * <p>Por ejemplo {@code "java.lang.String javax.security.auth.x500.X500Principal \"cn=juan\""}. Los
- * nombres de principal van entre comillas <b>siempre</b>, incluso el comodin, y tiene que haber al
- * menos un par: una clase de credencial suelta no dice de quien es la credencial, y ese es el dato
- * que decide si se puede leer o no.
+ * <p>For example {@code "java.lang.String javax.security.auth.x500.X500Principal \"cn=john\""}. The
+ * principal names go in quotes <b>always</b>, even the wildcard, and there has to be at least one
+ * pair: a loose credential class does not say whose the credential is, and that is the datum that
+ * decides whether it can be read or not.
  *
- * <h2>Los comodines y la regla que los ata</h2>
+ * <h2>The wildcards and the rule that binds them</h2>
  *
- * <p>Tanto la clase de credencial como cada par de principal aceptan {@code *}. Pero hay una
- * combinacion prohibida: una <b>clase</b> de principal comodin con un <b>nombre</b> concreto. Tiene
- * sentido -- "cualquier clase de principal que se llame juan" es una condicion que no se puede
- * evaluar, porque el nombre solo significa algo dentro de un espacio de nombres. El JDK la rechaza
- * en el constructor y aca tambien.
+ * <p>Both the credential class and each principal pair accept {@code *}. But there is a forbidden
+ * combination: a wildcard principal <b>class</b> with a concrete <b>name</b>. It makes sense --
+ * "any principal class named john" is a condition that cannot be evaluated, because the name only
+ * means something within a name space. The JDK rejects it in the constructor and so does this.
  *
- * <h2>Como se lee implies</h2>
+ * <h2>How implies reads</h2>
  *
- * <p>{@code a.implies(b)} pregunta si tener {@code a} alcanza para lo que pide {@code b}, y la
- * direccion sorprende: un permiso con <b>menos</b> principals implica a uno con mas, no al reves.
- * La razon es que cada principal es una condicion adicional sobre el mismo Subject -- pedir
- * "credencial de un Subject que es P1 <i>y ademas</i> P2" es pedir menos que "credencial de un
- * Subject que es P1" --, asi que quien tiene el permiso mas laxo tiene tambien el mas estricto.
+ * <p>{@code a.implies(b)} asks whether having {@code a} is enough for what {@code b} asks for, and
+ * the direction surprises: a permission with <b>fewer</b> principals implies one with more, not the
+ * other way round. The reason is that each principal is an additional condition on the same Subject
+ * -- asking for "a credential of a Subject that is P1 <i>and also</i> P2" is asking for less than
+ * "a credential of a Subject that is P1" --, so whoever has the looser permission also has the
+ * stricter one.
  *
- * <p>Nota sobre para que sirve hoy: igual que {@link AuthPermission}, ningun chequeo de la
- * biblioteca lo consulta porque el gestor de seguridad ya no se puede habilitar. La clase existe
- * porque su forma -- parseo, {@code implies}, {@code equals} -- es parte del API.
+ * <p>A note on what it serves today: like {@link AuthPermission}, no check in the library consults
+ * it because the security manager can no longer be enabled. The class exists because its form --
+ * parsing, {@code implies}, {@code equals} -- is part of the API.
  */
 public final class PrivateCredentialPermission extends Permission {
 
@@ -48,15 +48,16 @@ public final class PrivateCredentialPermission extends Permission {
     private static final String WILDCARD = "*";
 
     private final String credentialClass;
-    // Pares (clase, nombre), en el orden en el que aparecieron. Se guarda el orden y no un conjunto
-    // porque `getPrincipals()` y `getName()` lo devuelven, aunque `implies` no lo mire.
+    // (class, name) pairs, in the order they appeared. The order is kept and not a set because
+    // `getPrincipals()` and `getName()` return it, although `implies` does not look at it.
     private final String[][] principals;
     private final String actions;
 
     public PrivateCredentialPermission(String name, String actions) {
         super(name);
-        // "read" es la unica accion que existe. Cualquier otra cosa --null incluido-- se rechaza en
-        // vez de ignorarse: un permiso construido con "write" leeria como si diera permiso de leer.
+        // "read" is the only action that exists. Anything else --null included-- is rejected
+        // instead of ignored: a permission built with "write" would read as if it granted
+        // permission to read.
         if (actions == null || !actions.equalsIgnoreCase("read")) {
             throw new IllegalArgumentException("actions can only be 'read'");
         }
@@ -72,9 +73,9 @@ public final class PrivateCredentialPermission extends Permission {
         this.principals = pairs.toArray(new String[pairs.size()][]);
     }
 
-    // Devuelve la clase de credencial y llena `pairs`. El texto se recorre a mano y no con un
-    // separador de espacios porque los nombres van entre comillas y pueden llevar espacios adentro
-    // --`"cn=Juan Perez"` es un nombre solo--.
+    // Returns the credential class and fills `pairs`. The text is walked by hand and not with a
+    // space separator because the names go in quotes and may carry spaces inside --`"cn=John
+    // Smith"` is a single name--.
     private static String parse(String name, List<String[]> pairs) {
         int i = 0;
         int n = name.length();
@@ -97,8 +98,8 @@ public final class PrivateCredentialPermission extends Permission {
                         "Credential Class not followed by a Principal Class and Name");
                 }
                 String principalName = name.substring(i + 1, close);
-                // Ver la nota de la clase: una clase comodin con un nombre concreto no se puede
-                // evaluar, asi que se rechaza en vez de aceptarse y no cumplirse nunca.
+                // See the class note: a wildcard class with a concrete name cannot be evaluated, so
+                // it is rejected instead of accepted and never met.
                 if (WILDCARD.equals(principalClass) && !WILDCARD.equals(principalName)) {
                     throw new IllegalArgumentException("PrivateCredentialPermission Principal "
                         + "Class can not be a wildcard (*) value if Principal Name is not a "
@@ -119,7 +120,7 @@ public final class PrivateCredentialPermission extends Permission {
             } else if (principalClass == null) {
                 principalClass = word;
             } else {
-                // Dos clases seguidas sin nombre en el medio: falta el par.
+                // Two classes in a row with no name in between: the pair is missing.
                 throw invalid(name, "Principal Name must be surrounded by quotes");
             }
         }
@@ -139,17 +140,18 @@ public final class PrivateCredentialPermission extends Permission {
         return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f';
     }
 
-    private static IllegalArgumentException invalid(String name, String que) {
-        return new IllegalArgumentException("permission name [" + name + "] syntax invalid: " + que);
+    private static IllegalArgumentException invalid(String name, String what) {
+        return new IllegalArgumentException("permission name [" + name + "] syntax invalid: " + what);
     }
 
-    /** La clase de la credencial, o {@code "*"}. */
+    /** The credential's class, or {@code "*"}. */
     public String getCredentialClass() {
         return this.credentialClass;
     }
 
     /**
-     * Los pares (clase, nombre) del principal. Copia: tocar lo que sale de aca no cambia el permiso.
+     * The principal's (class, name) pairs. A copy: touching what comes out of here does not change
+     * the permission.
      */
     public String[][] getPrincipals() {
         String[][] copyOf = new String[this.principals.length][];
@@ -161,15 +163,15 @@ public final class PrivateCredentialPermission extends Permission {
         return copyOf;
     }
 
-    /** Siempre {@code "read"}. */
+    /** Always {@code "read"}. */
     @Override
     public String getActions() {
         return this.actions;
     }
 
     /**
-     * Si tener este permiso alcanza para lo que pide {@code p}. Ver la nota de la clase sobre la
-     * direccion, que es al reves de lo que uno espera.
+     * Whether having this permission is enough for what {@code p} asks for. See the class note
+     * about the direction, which is the opposite of what one expects.
      */
     @Override
     public boolean implies(Permission p) {
@@ -181,20 +183,20 @@ public final class PrivateCredentialPermission extends Permission {
                 && !this.credentialClass.equals(other.credentialClass)) {
             return false;
         }
-        // Cada condicion de este permiso tiene que estar cubierta por alguna del otro. Si a este no
-        // le queda ninguna condicion sin cubrir, entonces el otro pide al menos lo mismo.
+        // Each condition of this permission has to be covered by some condition of the other. If
+        // this one has no condition left uncovered, then the other asks for at least the same.
         int i = 0;
         while (i < this.principals.length) {
-            boolean cubierta = false;
+            boolean covered = false;
             int j = 0;
             while (j < other.principals.length) {
                 if (covers(this.principals[i], other.principals[j])) {
-                    cubierta = true;
+                    covered = true;
                     break;
                 }
                 j = j + 1;
             }
-            if (!cubierta) {
+            if (!covered) {
                 return false;
             }
             i = i + 1;
@@ -202,19 +204,19 @@ public final class PrivateCredentialPermission extends Permission {
         return other.principals.length > 0;
     }
 
-    private static boolean covers(String[] mio, String[] suyo) {
-        if (!WILDCARD.equals(mio[0]) && !mio[0].equals(suyo[0])) {
+    private static boolean covers(String[] mio, String[] theirs) {
+        if (!WILDCARD.equals(mio[0]) && !mio[0].equals(theirs[0])) {
             return false;
         }
-        return WILDCARD.equals(mio[1]) || mio[1].equals(suyo[1]);
+        return WILDCARD.equals(mio[1]) || mio[1].equals(theirs[1]);
     }
 
     /**
-     * Dos permisos son el mismo si cada uno implica al otro.
+     * Two permissions are the same if each implies the other.
      *
-     * <p>Se define asi y no comparando los nombres porque el orden de los pares no significa nada:
-     * {@code "C P1 \"a\" P2 \"b\""} y {@code "C P2 \"b\" P1 \"a\""} son el mismo permiso escrito de
-     * dos formas.
+     * <p>It is defined this way and not by comparing the names because the order of the pairs means
+     * nothing: {@code "C P1 \"a\" P2 \"b\""} and {@code "C P2 \"b\" P1 \"a\""} are the
+     * same permission written two ways.
      */
     @Override
     public boolean equals(Object obj) {
@@ -229,11 +231,11 @@ public final class PrivateCredentialPermission extends Permission {
     }
 
     /**
-     * Solo la clase de credencial.
+     * Only the credential class.
      *
-     * <p>Es un hash pobre a proposito: tiene que ser consistente con un {@code equals} que ignora el
-     * orden de los pares y trata los comodines, y la clase de credencial es lo unico que dos
-     * permisos iguales comparten siempre.
+     * <p>It is a poor hash on purpose: it has to be consistent with an {@code equals} that ignores
+     * the order of the pairs and handles wildcards, and the credential class is the only thing two
+     * equal permissions always share.
      */
     @Override
     public int hashCode() {
@@ -241,8 +243,8 @@ public final class PrivateCredentialPermission extends Permission {
     }
 
     /**
-     * Null, igual que en el JDK: no hay una coleccion especializada para este permiso, asi que quien
-     * lo guarde tiene que usar la generica.
+     * Null, as in the JDK: there is no specialised collection for this permission, so whoever
+     * stores it has to use the generic one.
      */
     @Override
     public PermissionCollection newPermissionCollection() {

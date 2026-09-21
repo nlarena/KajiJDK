@@ -6,56 +6,56 @@ import java.io.Reader;
 import javax.print.attribute.DocAttributeSet;
 
 /**
- * KajiLibrary's javax.print.Doc -- un documento para imprimir.
+ * KajiLibrary's javax.print.Doc -- a document to print.
  *
- * <p>Junta tres cosas: el dato, el {@link DocFlavor} que dice de que tipo es, y los atributos que
- * valen solo para este documento.
+ * <p>It brings together three things: the data, the {@link DocFlavor} saying what type it is, and
+ * the attributes that hold only for this document.
  *
- * <h2>Los tres accesores al dato</h2>
+ * <h2>The three accessors to the data</h2>
  *
- * <p>{@link #getPrintData} devuelve el dato en su forma declarada. Los otros dos son atajos para el
- * servicio, y <b>devuelven null si no aplican</b>:
+ * <p>{@link #getPrintData} returns the data in its declared form. The other two are shortcuts for
+ * the service, and <b>return null if they do not apply</b>:
  *
  * <ul>
- *   <li>{@link #getReaderForText} solo si el dato es texto de caracteres;
- *   <li>{@link #getStreamForBytes} solo si el dato es bytes.
+ *   <li>{@link #getReaderForText} only if the data is character text;
+ *   <li>{@link #getStreamForBytes} only if the data is bytes.
  * </ul>
  *
- * <p>Devolver null es lo correcto, no un error. Un servicio prueba el que le sirve y si le dan null usa
- * {@code getPrintData}.
+ * <p>Returning null is right, not an error. A service tries the one that suits it and if it is
+ * given null uses {@code getPrintData}.
  *
- * <h2>Se lee una sola vez</h2>
+ * <h2>It is read only once</h2>
  *
- * <p>Los tres metodos tienen que devolver <b>el mismo</b> objeto en cada llamada, no uno nuevo. Es lo
- * que permite que el dato sea un flujo que no se puede rebobinar. La contracara es que un {@code Doc}
- * se puede imprimir una sola vez.
+ * <p>The three methods have to return <b>the same</b> object on each call, not a new one. It is
+ * what allows the data to be a stream that cannot be rewound. The flip side is that a {@code Doc}
+ * can be printed only once.
  */
 public interface Doc {
 
-    /** De que tipo es el dato. */
+    /** What type the data is. */
     DocFlavor getDocFlavor();
 
     /**
-     * El dato, en la clase que declara el formato.
+     * The data, in the class the format declares.
      *
-     * @throws IOException si el dato es un flujo y no se pudo abrir
+     * @throws IOException if the data is a stream and it could not be opened
      */
     Object getPrintData() throws IOException;
 
-    /** Los atributos propios de este documento, o null. */
+    /** This document's own attributes, or null. */
     DocAttributeSet getAttributes();
 
     /**
-     * El dato como caracteres, o null si no es texto. Siempre el mismo lector.
+     * The data as characters, or null if it is not text. Always the same reader.
      *
-     * @throws IOException si no se pudo abrir
+     * @throws IOException if it could not be opened
      */
     Reader getReaderForText() throws IOException;
 
     /**
-     * El dato como bytes, o null si no lo es. Siempre el mismo flujo.
+     * The data as bytes, or null if it is not. Always the same stream.
      *
-     * @throws IOException si no se pudo abrir
+     * @throws IOException if it could not be opened
      */
     InputStream getStreamForBytes() throws IOException;
 }

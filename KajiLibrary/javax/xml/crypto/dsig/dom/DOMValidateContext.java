@@ -7,37 +7,38 @@ import javax.xml.crypto.dsig.XMLValidateContext;
 import org.w3c.dom.Node;
 
 /**
- * KajiLibrary's javax.xml.crypto.dsig.dom.DOMValidateContext -- que firma validar, sobre DOM.
+ * KajiLibrary's javax.xml.crypto.dsig.dom.DOMValidateContext -- which signature to validate, over
+ * DOM.
  *
- * <p>El espejo de {@link DOMSignContext}, y mas simple: un solo nodo, el elemento
- * {@code Signature} que se quiere validar. No hay padre ni hermano porque validar <b>no modifica</b>
- * el arbol.
+ * <p>The mirror of {@link DOMSignContext}, and simpler: a single node, the {@code Signature}
+ * element one wants to validate. There is no parent nor sibling because validating <b>does not
+ * modify</b> the tree.
  *
- * <h2>Clave o selector: aca la diferencia importa</h2>
+ * <h2>Key or selector: here the difference matters</h2>
  *
- * <p>Con una {@link Key} se valida contra esa clave y solo esa. Con un {@link KeySelector} la clave se
- * elige mirando el {@code KeyInfo} de la propia firma.
+ * <p>With a {@link Key} it validates against that key and only that one. With a {@link KeySelector}
+ * the key is chosen by looking at the signature's own {@code KeyInfo}.
  *
- * <p>Y ahi esta el riesgo que hay que entender: un {@code KeyInfo} lo escribe quien firmo, que puede
- * ser cualquiera. Un selector que confie en el valida cualquier firma bien armada, con la clave que el
- * atacante quiera. La clave directa, o un selector que consulte un almacen de confianza propio, son
- * las dos formas correctas.
+ * <p>And there lies the risk to understand: a {@code KeyInfo} is written by whoever signed, who can
+ * be anybody. A selector that trusts it validates any well-built signature, with the key the
+ * attacker wants. The direct key, or a selector that consults a trust store of one's own, are the
+ * two correct ways.
  *
- * <h2>Los identificadores</h2>
+ * <h2>The identifiers</h2>
  *
- * <p>Si la firma tiene referencias de la forma {@code #id}, hay que registrar esos identificadores con
- * {@code setIdAttributeNS} antes de validar; ver {@link DOMCryptoContext}. Es la parte que mas seguido
- * hace fallar una validacion que deberia andar.
+ * <p>If the signature has references of the form {@code #id}, those identifiers have to be
+ * registered with {@code setIdAttributeNS} before validating; see {@link DOMCryptoContext}. It is
+ * the part that most often makes a validation that should work fail.
  */
 public class DOMValidateContext extends DOMCryptoContext implements XMLValidateContext {
 
-    /** El elemento de firma a validar. */
+    /** The signature element to validate. */
     private Node node;
 
     /**
-     * Valida lo que el selector elija. Ver la nota de la clase sobre el riesgo.
+     * Validates with whatever the selector chooses. See the class note on the risk.
      *
-     * @throws NullPointerException si alguno de los dos es null
+     * @throws NullPointerException if either of the two is null
      */
     public DOMValidateContext(KeySelector ks, Node node) {
         if (ks == null) {
@@ -51,9 +52,9 @@ public class DOMValidateContext extends DOMCryptoContext implements XMLValidateC
     }
 
     /**
-     * Valida contra esa clave y solo esa.
+     * Validates against that key and only that one.
      *
-     * @throws NullPointerException si alguno de los dos es null
+     * @throws NullPointerException if either of the two is null
      */
     public DOMValidateContext(Key validatingKey, Node node) {
         if (validatingKey == null) {
@@ -67,9 +68,9 @@ public class DOMValidateContext extends DOMCryptoContext implements XMLValidateC
     }
 
     /**
-     * Cambia el elemento a validar.
+     * Changes the element to validate.
      *
-     * @throws NullPointerException si es null
+     * @throws NullPointerException if it is null
      */
     public void setNode(Node node) {
         if (node == null) {
@@ -78,7 +79,7 @@ public class DOMValidateContext extends DOMCryptoContext implements XMLValidateC
         this.node = node;
     }
 
-    /** El elemento a validar. */
+    /** The element to validate. */
     public Node getNode() {
         return this.node;
     }

@@ -7,40 +7,40 @@ import javax.swing.event.DocumentEvent$EventType;
 import javax.swing.undo.UndoableEdit;
 
 /**
- * Un documento sin estilos: solo texto, y una estructura de una sola capa de lineas.
+ * A document with no styles: only text, and a structure of a single layer of lines.
  *
- * <h2>La estructura es la lista de lineas</h2>
+ * <h2>The structure is the list of lines</h2>
  *
- * <p>La raiz tiene un hijo por linea, y cada hijo va desde el principio de la linea hasta despues
- * de su fin de linea. No hay parrafos ni tramos con estilo: es lo que hace que este documento sea
- * barato y lo que usa un area de texto comun.
+ * <p>The root has one child per line, and each child goes from the beginning of the line to after
+ * its line ending. There are no paragraphs or styled runs: it is what makes this document cheap
+ * and what an ordinary text area uses.
  *
- * <p>Toda la clase es mantener esa lista cuando se inserta o se borra. Insertar un texto con dos
- * fines de linea parte una linea en tres; borrar un tramo que cruza fines de linea junta las que
- * quedaron a medias en una sola.
+ * <p>The whole class is keeping that list when something is inserted or removed. Inserting a text
+ * with two line endings splits one line into three; removing a stretch that crosses line endings
+ * joins those left half-done into a single one.
  *
- * <p>{@link #tabSizeAttribute} y {@link #lineLimitAttribute} son propiedades del documento, no
- * atributos de texto: el que dibuja las lee para saber cada cuanto va una tabulacion y donde
- * cortar las lineas.
+ * <p>{@link #tabSizeAttribute} and {@link #lineLimitAttribute} are document properties, not text
+ * attributes: whoever draws reads them to know how often a tab goes and where to break the
+ * lines.
  */
 public class PlainDocument extends AbstractDocument {
 
-    /** La cantidad de espacios de una tabulacion. */
+    /** The number of spaces of a tab. */
     public static final String tabSizeAttribute = "tabSize";
 
-    /** El ancho maximo de una linea, en caracteres. */
+    /** The maximum width of a line, in characters. */
     public static final String lineLimitAttribute = "lineLimit";
 
     private AbstractElement defaultRoot;
     private Vector<Element> added = new Vector<Element>();
     private Vector<Element> removed = new Vector<Element>();
 
-    /** Un documento vacio sobre un contenido con hueco. */
+    /** An empty document over a gap content. */
     public PlainDocument() {
         this(new GapContent());
     }
 
-    /** Un documento sobre ese contenido. */
+    /** A document over that content. */
     public PlainDocument(Content c) {
         super(c);
         putProperty(tabSizeAttribute, Integer.valueOf(8));
@@ -48,10 +48,10 @@ public class PlainDocument extends AbstractDocument {
     }
 
     /**
-     * Inserta texto.
+     * It inserts text.
      *
-     * <p>Los atributos se ignoran —este documento no los guarda— salvo que traigan la marca de
-     * texto internacional, que se propaga como propiedad del documento.
+     * <p>The attributes are ignored --this document does not keep them-- unless they carry the
+     * international text mark, which is propagated as a document property.
      */
     public void insertString(int offs, String str, AttributeSet a) throws BadLocationException {
         super.insertString(offs, str, a);
@@ -61,7 +61,7 @@ public class PlainDocument extends AbstractDocument {
         return defaultRoot;
     }
 
-    /** La raiz con una sola linea, que es lo que hay en un documento vacio. */
+    /** The root with a single line, which is what there is in an empty document. */
     protected AbstractElement createDefaultRoot() {
         BranchElement map = (BranchElement) createBranchElement(null, null);
         Element line = createLeafElement(map, null, 0, 1);
@@ -71,7 +71,7 @@ public class PlainDocument extends AbstractDocument {
         return map;
     }
 
-    /** En este documento un parrafo es una linea. */
+    /** In this document a paragraph is a line. */
     public Element getParagraphElement(int pos) {
         Element lineMap = getDefaultRootElement();
         int lineIndex = lineMap.getElementIndex(pos);
@@ -79,11 +79,11 @@ public class PlainDocument extends AbstractDocument {
     }
 
     /**
-     * Parte lineas si el texto insertado trae fines de linea.
+     * It splits lines if the inserted text carries line endings.
      *
-     * <p>La linea donde cayo la insercion se reemplaza por tantas como fines de linea haya, mas el
-     * resto. Que se reemplace la linea entera y no se la corte a mano es lo que hace que el evento
-     * lleve la lista exacta de lo que se fue y lo que llego.
+     * <p>The line the insertion fell in is replaced by as many as there are line endings, plus the
+     * rest. That the whole line is replaced and not cut by hand is what makes the event carry the
+     * exact list of what left and what arrived.
      */
     protected void insertUpdate(DefaultDocumentEvent chng, AttributeSet attr) {
         removed.removeAllElements();
@@ -136,10 +136,10 @@ public class PlainDocument extends AbstractDocument {
     }
 
     /**
-     * Junta las lineas que el borrado dejo a medias.
+     * It joins the lines the removal left half-done.
      *
-     * <p>Solo hace algo si el tramo borrado cruzaba al menos un fin de linea: si no, la linea
-     * sigue siendo la misma, solo que mas corta, y sus posiciones ya se acomodaron solas.
+     * <p>It only does something if the removed stretch crossed at least one line ending: if not,
+     * the line is still the same one, only shorter, and its positions already fixed themselves up.
      */
     protected void removeUpdate(DefaultDocumentEvent chng) {
         removed.removeAllElements();

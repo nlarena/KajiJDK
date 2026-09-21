@@ -7,14 +7,14 @@ import java.util.List;
 import javax.management.openmbean.CompositeData;
 
 /**
- * Un {@link jdk.jfr.EventType} visto desde el otro lado de una conexion JMX.
+ * A {@link jdk.jfr.EventType} seen from the other side of a JMX connection.
  *
- * <p>Trae lo que hace falta para <strong>elegir</strong> que grabar: nombre, etiqueta, categorias y
- * los ajustes que admite.
+ * <p>It brings what is needed in order to <strong>choose</strong> what to record: name, label,
+ * categories and the settings it admits.
  *
- * <p>Lo que no trae son los campos del evento ({@code getFields}). Es coherente con para que sirve:
- * una consola remota usa esto para armar la pantalla de configuracion, y los campos recien importan
- * al leer la grabacion, que se hace con el archivo en la mano.
+ * <p>What it does not bring are the fields of the event ({@code getFields}). It is coherent with
+ * what it is for: a remote console uses this to put together the configuration screen, and the
+ * fields only matter when reading the recording, which is done with the file at hand.
  *
  * @since 9
  */
@@ -40,76 +40,76 @@ public final class EventTypeInfo {
     }
 
     /**
-     * El nombre del tipo de evento.
+     * The name of the type of event.
      *
-     * @return el valor
+     * @return the value
      */
     public String getName() {
         return name;
     }
 
     /**
-     * El nombre legible.
+     * The readable name.
      *
-     * @return el valor
+     * @return the value
      */
     public String getLabel() {
         return label;
     }
 
     /**
-     * Que registra este evento.
+     * What this event records.
      *
-     * @return el valor
+     * @return the value
      */
     public String getDescription() {
         return description;
     }
 
     /**
-     * El identificador del tipo.
+     * The identifier of the type.
      *
-     * @return el valor
+     * @return the value
      */
     public long getId() {
         return id;
     }
 
     /**
-     * Las categorias, de la mas general a la mas especifica.
+     * The categories, from the most general to the most specific.
      *
-     * @return el valor
+     * @return the value
      */
     public List<String> getCategoryNames() {
         return categoryNames;
     }
 
     /**
-     * Los ajustes que este tipo de evento admite.
+     * The settings this type of event admits.
      *
-     * @return el valor
+     * @return the value
      */
     public List<SettingDescriptorInfo> getSettingDescriptors() {
         return settingDescriptors;
     }
 
     /**
-     * Reconstruye el objeto desde su forma abierta.
+     * It rebuilds the object from its open form.
      *
-     * <p>Es el camino por el que este dato llega de una VM remota: lo que viaja por JMX es un
-     * {@link CompositeData} generico y esto lo vuelve a convertir.
+     * <p>It is the road by which this datum arrives from a remote VM: what travels over JMX is a
+     * generic {@link CompositeData} and this turns it back.
      *
-     * @param cd la forma abierta, o {@code null}
-     * @return el objeto, o {@code null} si {@code cd} era {@code null}
-     * @throws IllegalArgumentException si no tiene la forma esperada
+     * @param cd the open form, or {@code null}
+     * @return the object, or {@code null} if {@code cd} was {@code null}
+     * @throws IllegalArgumentException if it does not have the expected shape
      */
     public static EventTypeInfo from(final CompositeData cd) {
         if (cd == null) {
             return null;
         }
         throw new IllegalArgumentException(
-                "reconstruir un EventTypeInfo necesita el soporte de tipos abiertos de JFR, que"
-                + " esta biblioteca no implementa");
+                "rebuilding an EventTypeInfo needs the support of open types of JFR, which"
+                + " this library does not implement");
     }
 
     /** {@inheritDoc} */

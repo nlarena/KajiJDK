@@ -5,30 +5,30 @@ import java.nio.channels.spi.AbstractSelectableChannel;
 import java.nio.channels.spi.SelectorProvider;
 
 /**
- * KajiLibrary's java.nio.channels.Pipe — dos canales unidos, uno que escribe y otro que lee.
+ * KajiLibrary's java.nio.channels.Pipe — two joined channels, one that writes and one that reads.
  *
- * <p>Es el unico canal selectable que no habla con el mundo: lo que entra por el
- * {@link SinkChannel sumidero} sale por la {@link SourceChannel fuente}, dentro del mismo proceso.
- * Su razon de ser es poder **despertar un selector desde otro hilo**: se registra la fuente, y
- * escribir un byte en el sumidero hace que el `select` vuelva. Es como se implementa
- * {@link Selector#wakeup()} en varias plataformas.
+ * <p>It is the only selectable channel that does not talk to the world: what goes in through the
+ * {@link SinkChannel sink} comes out through the {@link SourceChannel source}, inside the same
+ * process. Its reason for being is to be able to **wake a selector up from another thread**: the
+ * source is registered, and writing a byte into the sink makes the `select` return. It is how
+ * {@link Selector#wakeup()} is implemented on several platforms.
  *
- * <h2>Por que tampoco hay `Pipe.open()`</h2>
+ * <h2>Why there is a `Pipe.open()`</h2>
  *
- * <p>Aca la razon <strong>no</strong> es la de los canales de red. Un pipe se podria implementar
- * entero en memoria --una cola de bytes entre las dos puntas-- sin tocar el sistema. Lo que lo
- * impide es otra cosa: las dos puntas son {@link AbstractSelectableChannel}, y un canal selectable
- * solo sirve si hay un {@link Selector} donde registrarlo. Sin selectores, un pipe se reduce a una
- * cola de bytes con una interfaz mucho mas cara que la de una cola de bytes, y su unico proposito
- * --despertar a un selector-- no existe.
+ * <p>This note used to explain why there was none, and the reason was never the one of the network
+ * channels: a pipe could be implemented whole in memory --a queue of bytes between the two ends--
+ * without touching the system. What stopped it was something else: both ends are
+ * {@link AbstractSelectableChannel}, and a selectable channel is only of use if there is a
+ * {@link Selector} to register it in. Without selectors a pipe came down to a queue of bytes with an
+ * interface much more expensive than that of a queue of bytes, and its only purpose --waking a
+ * selector up-- did not exist. Worse: {@link AbstractSelectableChannel#register} demands a
+ * {@link Selector} and asks it for the key, so a pipe made here would have compiled, worked for
+ * reading and writing, and **thrown at the moment of registering it**, which is just what one asked
+ * for it for.
  *
- * <p>Peor: {@link AbstractSelectableChannel#register} exige un {@link Selector} y le pide la llave.
- * Un pipe fabricado aca compilaria, andaria para leer y escribir, y <strong>tiraria en el momento de
- * registrarlo</strong>, que es justo para lo que uno lo pidio. Eso es la definicion de un metodo que
- * miente, asi que {@code open()} no esta.
- *
- * <p>La clase y sus dos anidadas si estan, con sus tipos y su jerarquia correctos. Cuando esta VM
- * tenga selectores, esto se completa con un {@code open()} y nada de lo de arriba cambia.
+ * <p>There are selectors now --see {@link Selector#open()}--, so `open()` is here and none of the
+ * above had to change: the class and its two nested ones always had their types and their hierarchy
+ * right.
  */
 public abstract class Pipe {
 
@@ -45,17 +45,18 @@ public abstract class Pipe {
         return SelectorProvider.provider().openPipe();
     }
 
-    /** La punta por la que se lee. */
+    /** The end that is read through. */
     public abstract SourceChannel source();
 
-    /** La punta por la que se escribe. */
+    /** The end that is written through. */
     public abstract SinkChannel sink();
 
     /**
-     * La punta de lectura de un pipe.
+     * The reading end of a pipe.
      *
-     * <p>Es una clase y no una interfaz --tambien en el JDK-- porque tiene que heredar toda la
-     * maquinaria de canal selectable; lo unico que agrega es fijar {@link #validOps()} en lectura.
+     * <p>It is a class and not an interface --in the JDK as well-- because it has to inherit the whole
+     * machinery of a selectable channel; the only thing it adds is fixing {@link #validOps()} at
+     * reading.
      */
     public abstract static class SourceChannel extends AbstractSelectableChannel
             implements ReadableByteChannel, ScatteringByteChannel {
@@ -64,13 +65,13 @@ public abstract class Pipe {
             super(provider);
         }
 
-        /** Solo lectura: por esta punta no se escribe nunca. */
+        /** Reading only: nothing is ever written through this end. */
         public final int validOps() {
             return SelectionKey.OP_READ;
         }
     }
 
-    /** La punta de escritura de un pipe. */
+    /** The writing end of a pipe. */
     public abstract static class SinkChannel extends AbstractSelectableChannel
             implements WritableByteChannel, GatheringByteChannel {
 
@@ -78,7 +79,7 @@ public abstract class Pipe {
             super(provider);
         }
 
-        /** Solo escritura. */
+        /** Writing only. */
         public final int validOps() {
             return SelectionKey.OP_WRITE;
         }

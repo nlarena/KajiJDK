@@ -1,22 +1,22 @@
 package jdk.internal.vm;
 
 /**
- * KajiLibrary's jdk.internal.vm.ForeignLinkerSupport — si esta plataforma tiene enlazador nativo.
+ * KajiLibrary's jdk.internal.vm.ForeignLinkerSupport -- whether this platform has a native linker.
  *
- * <p>Una sola pregunta, y la respuesta acá es **no**. `java.lang.foreign.Linker` necesita llamar a
- * código nativo con la convención de llamada del sistema, y esta VM no lo hace.
+ * <p>One single question, and the answer here is **no**. `java.lang.foreign.Linker` needs to call
+ * native code with the calling convention of the system, and this VM does not do it.
  *
- * <p>Que la respuesta sea negativa es justamente lo que hace útil a esta clase: existe para que quien
- * pregunte pueda tomar otro camino en vez de estrellarse. Devolver `true` sería la mentira; devolver
- * `false` es información correcta, y coincide con lo que `Linker.nativeLinker()` ya hace en esta
- * biblioteca.
+ * <p>That the answer is negative is precisely what makes this class useful: it exists so that
+ * whoever asks can take another road instead of crashing. Returning `true` would be the lie;
+ * returning `false` is correct information, and it matches what `Linker.nativeLinker()` already
+ * does in this library.
  */
 public final class ForeignLinkerSupport {
 
     private ForeignLinkerSupport() {
     }
 
-    /** Si hay enlazador nativo. En esta VM, `false`. */
+    /** Whether there is a native linker. On this VM, `false`. */
     public static boolean isSupported() {
         return false;
     }

@@ -1,5 +1,8 @@
 package java.lang;
 
+import java.lang.constant.ConstantDesc;
+import java.util.Optional;
+
 // KajiLibrary's java.lang.Float — the boxed-float wrapper (extends Number, implements
 // Comparable). The narrowing views (intValue/longValue) need an explicit cast.
 public final class Float extends Number implements Comparable<Float>, ConstantDesc {

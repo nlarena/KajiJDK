@@ -12,16 +12,16 @@ import javax.xml.stream.util.XMLEventAllocator;
 import javax.xml.stream.util.XMLEventConsumer;
 
 /**
- * El puente entre el cursor y los eventos: fotografia la posicion actual del lector.
+ * The bridge between the cursor and the events: it takes a snapshot of the reader's current
+ * position.
  *
- * <p>Es donde se paga el costo del modelo de eventos, y esta bueno que sea visible. Cada
- * {@code START_ELEMENT} construye un {@link QName}, una lista de atributos, una lista de
- * declaraciones y una copia del contexto de espacios de nombres. El cursor no construia ninguna de
- * las cuatro.
+ * <p>It is where the cost of the event model is paid, and it is good that it is visible. Each
+ * {@code START_ELEMENT} builds a {@link QName}, an attribute list, a declaration list and a copy of
+ * the namespace context. The cursor built none of the four.
  *
- * <p>No tiene estado, asi que {@link #newInstance()} podria devolverse a si mismo. Devuelve uno
- * nuevo igual, porque el contrato dice "un asignador nuevo" y una subclase que si tenga estado
- * heredaria la respuesta equivocada.
+ * <p>It has no state, so {@link #newInstance()} could return itself. It returns a new one anyway,
+ * because the contract says "a new allocator" and a subclass that does have state would inherit the
+ * wrong answer.
  */
 final class KajiAllocator implements XMLEventAllocator {
 
@@ -77,7 +77,7 @@ final class KajiAllocator implements XMLEventAllocator {
         if (t == XMLStreamConstants.END_DOCUMENT) {
             return new EvtEndDocument(u);
         }
-        throw new XMLStreamException("tipo de evento inesperado: " + t, u);
+        throw new XMLStreamException("unexpected event type: " + t, u);
     }
 
     private static List<Namespace> namespacesOf(XMLStreamReader reader, Location u) {

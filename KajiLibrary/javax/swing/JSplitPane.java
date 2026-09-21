@@ -9,49 +9,50 @@ import javax.swing.plaf.ComponentUI;
 import javax.swing.plaf.SplitPaneUI;
 
 /**
- * Dos componentes separados por una division que se puede arrastrar.
+ * Two components separated by a division that can be dragged.
  *
- * <h2>Los hijos se ponen por posicion, no por orden</h2>
+ * <h2>The children are set by position, not by order</h2>
  *
- * <p>{@code add(comp, JSplitPane.LEFT)} y {@code setLeftComponent(comp)} son lo mismo. Agregar sin
- * decir donde pone el primero a la izquierda y el segundo a la derecha, y el tercero reemplaza al
- * primero: un panel dividido tiene exactamente dos lugares.
+ * <p>{@code add(comp, JSplitPane.LEFT)} and {@code setLeftComponent(comp)} are the same.
+ * Adding without saying where puts the first on the left and the second on the right, and the
+ * third replaces the first: a split pane has exactly two places.
  *
- * <h2>Donde queda la division al cambiar de tamano</h2>
+ * <h2>Where the division ends up on changing size</h2>
  *
- * <p>Lo decide {@link #setResizeWeight}: cero le da todo el espacio nuevo al de la derecha, uno al
- * de la izquierda, y un medio lo reparte. Es la propiedad que mas se olvida y la que explica por
- * que un panel dividido "no respeta" el tamano que uno le puso.
+ * <p>{@link #setResizeWeight} decides it: zero gives all the new space to the right one, one to
+ * the left one, and a half shares it out. It is the most forgotten property and the one that
+ * explains why a split pane "does not respect" the size one gave it.
  *
- * <h2>Continuo o no</h2>
+ * <h2>Continuous or not</h2>
  *
- * <p>Con {@link #setContinuousLayout} prendido, arrastrar la division reacomoda los dos lados a
- * cada pixel. Apagado, solo se mueve una raya y el reacomodo ocurre al soltar. Apagado existe
- * porque reacomodar contenido caro sesenta veces por segundo se siente peor que una raya.
+ * <p>With {@link #setContinuousLayout} switched on, dragging the division lays the two sides
+ * out at every pixel. Switched off, only a line moves and the laying out happens on releasing.
+ * Switched off exists because laying an expensive content out sixty times a second feels worse
+ * than a line.
  */
 public class JSplitPane extends JComponent implements javax.accessibility.Accessible {
 
     private static final String uiClassID = "SplitPaneUI";
 
-    /** Los componentes van uno arriba del otro. */
+    /** The components go one above the other. */
     public static final int VERTICAL_SPLIT = 0;
 
-    /** Uno al lado del otro. */
+    /** One beside the other. */
     public static final int HORIZONTAL_SPLIT = 1;
 
-    /** El lugar de la izquierda. */
+    /** The left-hand place. */
     public static final String LEFT = "left";
 
-    /** El de la derecha. */
+    /** The right-hand one. */
     public static final String RIGHT = "right";
 
-    /** El de arriba; es el mismo lugar que {@link #LEFT}. */
+    /** The top one; it is the same place as {@link #LEFT}. */
     public static final String TOP = "top";
 
-    /** El de abajo; el mismo que {@link #RIGHT}. */
+    /** The bottom one; the same as {@link #RIGHT}. */
     public static final String BOTTOM = "bottom";
 
-    /** La division misma, que el aspecto agrega como hijo. */
+    /** The division itself, which the look and feel adds as a child. */
     public static final String DIVIDER = "divider";
 
     public static final String ORIENTATION_PROPERTY = "orientation";
@@ -62,56 +63,56 @@ public class JSplitPane extends JComponent implements javax.accessibility.Access
     public static final String DIVIDER_LOCATION_PROPERTY = "dividerLocation";
     public static final String RESIZE_WEIGHT_PROPERTY = "resizeWeight";
 
-    /** {@link #HORIZONTAL_SPLIT} o {@link #VERTICAL_SPLIT}. */
+    /** {@link #HORIZONTAL_SPLIT} or {@link #VERTICAL_SPLIT}. */
     protected int orientation;
 
-    /** Si arrastrar reacomoda a cada paso; ver la nota de la clase. */
+    /** Whether dragging lays out at each step; see the class note. */
     protected boolean continuousLayout;
 
-    /** El componente de la izquierda o de arriba. */
+    /** The left-hand or top component. */
     protected Component leftComponent;
 
-    /** El de la derecha o de abajo. */
+    /** The right-hand or bottom one. */
     protected Component rightComponent;
 
-    /** El ancho de la division. */
+    /** The division's width. */
     protected int dividerSize;
 
-    /** Si la division tiene flechitas para plegar un lado de un clic. */
+    /** Whether the division has little arrows for folding one side with one click. */
     protected boolean oneTouchExpandable;
 
-    /** Donde estaba la division antes del ultimo movimiento. */
+    /** Where the division was before the last movement. */
     protected int lastDividerLocation;
 
     private double resizeWeight;
     private boolean dividerSizeSet = false;
     private AccessibleContext accessibleContext;
 
-    /** Un panel dividido en dos a lo ancho, vacio. */
+    /** A pane divided in two across, empty. */
     public JSplitPane() {
         this(HORIZONTAL_SPLIT, false, new JButton("left"), new JButton("right"));
     }
 
-    /** Un panel dividido con esa orientacion. */
+    /** A pane divided with that orientation. */
     public JSplitPane(int newOrientation) {
         this(newOrientation, false);
     }
 
-    /** Con esa orientacion y ese modo de arrastre. */
+    /** With that orientation and that dragging mode. */
     public JSplitPane(int newOrientation, boolean newContinuousLayout) {
         this(newOrientation, newContinuousLayout, null, null);
     }
 
-    /** Con esa orientacion y esos dos componentes. */
+    /** With that orientation and those two components. */
     public JSplitPane(int newOrientation, Component newLeftComponent,
             Component newRightComponent) {
         this(newOrientation, false, newLeftComponent, newRightComponent);
     }
 
     /**
-     * El constructor completo.
+     * The complete constructor.
      *
-     * @throws IllegalArgumentException si la orientacion no es una de las dos.
+     * @throws IllegalArgumentException if the orientation is not one of the two.
      */
     public JSplitPane(int newOrientation, boolean newContinuousLayout,
             Component newLeftComponent, Component newRightComponent) {
@@ -164,7 +165,7 @@ public class JSplitPane extends JComponent implements javax.accessibility.Access
         return uiClassID;
     }
 
-    /** El ancho de la division, en pixeles. */
+    /** The division's width, in pixels. */
     public void setDividerSize(int newSize) {
         int oldSize = dividerSize;
         dividerSizeSet = true;
@@ -178,7 +179,7 @@ public class JSplitPane extends JComponent implements javax.accessibility.Access
         return dividerSize;
     }
 
-    /** El componente de la izquierda o de arriba. */
+    /** The left-hand or top component. */
     public void setLeftComponent(Component comp) {
         if (comp == null) {
             if (leftComponent != null) {
@@ -194,7 +195,7 @@ public class JSplitPane extends JComponent implements javax.accessibility.Access
         return leftComponent;
     }
 
-    /** El mismo lugar que {@link #setLeftComponent}. */
+    /** The same place as {@link #setLeftComponent}. */
     public void setTopComponent(Component comp) {
         setLeftComponent(comp);
     }
@@ -226,7 +227,7 @@ public class JSplitPane extends JComponent implements javax.accessibility.Access
         return rightComponent;
     }
 
-    /** Si la division lleva flechitas para plegar un lado. */
+    /** Whether the division carries little arrows for folding one side. */
     public void setOneTouchExpandable(boolean newValue) {
         boolean oldValue = oneTouchExpandable;
         oneTouchExpandable = newValue;
@@ -239,10 +240,10 @@ public class JSplitPane extends JComponent implements javax.accessibility.Access
     }
 
     /**
-     * Donde estaba la division antes.
+     * Where the division was before.
      *
-     * <p>Es lo que usan las flechitas para volver: plegar y desplegar tiene que dejar la division
-     * donde estaba, no en un lugar calculado.
+     * <p>It is what the little arrows use in order to go back: folding and unfolding has to leave
+     * the division where it was, not at a computed place.
      */
     public void setLastDividerLocation(int newLastLocation) {
         int oldLocation = lastDividerLocation;
@@ -255,9 +256,9 @@ public class JSplitPane extends JComponent implements javax.accessibility.Access
     }
 
     /**
-     * Si los componentes van al lado o uno sobre otro.
+     * Whether the components go side by side or one over the other.
      *
-     * @throws IllegalArgumentException si no es una de las dos.
+     * @throws IllegalArgumentException if it is not one of the two.
      */
     public void setOrientation(int orientation) {
         if ((orientation != VERTICAL_SPLIT) && (orientation != HORIZONTAL_SPLIT)) {
@@ -273,7 +274,7 @@ public class JSplitPane extends JComponent implements javax.accessibility.Access
         return orientation;
     }
 
-    /** Si arrastrar reacomoda a cada paso; ver la nota de la clase. */
+    /** Whether dragging lays out at each step; see the class note. */
     public void setContinuousLayout(boolean newContinuousLayout) {
         boolean oldCD = continuousLayout;
         continuousLayout = newContinuousLayout;
@@ -285,9 +286,9 @@ public class JSplitPane extends JComponent implements javax.accessibility.Access
     }
 
     /**
-     * Como se reparte el espacio nuevo al agrandar.
+     * How the new space is shared out on enlarging.
      *
-     * @throws IllegalArgumentException si no esta entre cero y uno.
+     * @throws IllegalArgumentException if it is not between zero and one.
      */
     public void setResizeWeight(double value) {
         if (value < 0 || value > 1) {
@@ -302,7 +303,7 @@ public class JSplitPane extends JComponent implements javax.accessibility.Access
         return resizeWeight;
     }
 
-    /** Pone la division donde los dos lados tengan su tamano preferido. */
+    /** It puts the division where both sides have their preferred size. */
     public void resetToPreferredSizes() {
         SplitPaneUI ui = getUI();
         if (ui != null) {
@@ -311,18 +312,14 @@ public class JSplitPane extends JComponent implements javax.accessibility.Access
     }
 
     /**
-     * Mueve la division a ese pixel.
+     * The divider's position as a proportion of the space.
      *
-     * <p>Un valor negativo significa "acomodala sola", que es lo que hace un panel recien armado.
-     */
-    /**
-     * La posicion del divisor como proporcion del espacio.
+     * <p>Zero sticks it to the beginning, one to the end, {@code 0.5} leaves it in the middle. It
+     * is translated into pixels <strong>now</strong>, with the size the pane has at this moment:
+     * it is not a proportion that is kept on changing size -- that is what the resize weight is
+     * for.
      *
-     * <p>Cero lo pega al principio, uno al final, {@code 0.5} lo deja al medio. Se traduce a pixeles
-     * <strong>ahora</strong>, con el tamano que el panel tiene en este momento: no es una
-     * proporcion que se mantenga al cambiar de tamano -- para eso esta el peso de redimensionado.
-     *
-     * @throws IllegalArgumentException si no esta entre cero y uno
+     * @throws IllegalArgumentException if it is not between zero and one
      */
     public void setDividerLocation(double proportionalLocation) {
         if (proportionalLocation < 0.0 || proportionalLocation > 1.0) {
@@ -338,6 +335,12 @@ public class JSplitPane extends JComponent implements javax.accessibility.Access
         }
     }
 
+    /**
+     * It moves the division to that pixel.
+     *
+     * <p>A negative value means "lay it out by yourself", which is what a newly built pane
+     * does.
+     */
     public void setDividerLocation(int location) {
         int oldValue = dividerLocation;
         dividerLocation = location;
@@ -352,7 +355,7 @@ public class JSplitPane extends JComponent implements javax.accessibility.Access
         return dividerLocation;
     }
 
-    /** Lo mas a la izquierda que la division puede ir sin achicar de mas al primero. */
+    /** The furthest left the division may go without shrinking the first one too much. */
     public int getMinimumDividerLocation() {
         SplitPaneUI ui = getUI();
         return (ui != null) ? ui.getMinimumDividerLocation(this) : -1;
@@ -363,7 +366,7 @@ public class JSplitPane extends JComponent implements javax.accessibility.Access
         return (ui != null) ? ui.getMaximumDividerLocation(this) : -1;
     }
 
-    /** Saca un componente y olvida su lugar. */
+    /** It removes a component and forgets its place. */
     public void remove(Component component) {
         if (component == leftComponent) {
             leftComponent = null;
@@ -396,21 +399,21 @@ public class JSplitPane extends JComponent implements javax.accessibility.Access
     }
 
     /**
-     * Si un cambio adentro se puede acomodar sin rehacer la ventana entera.
+     * Whether a change inside can be laid out without rebuilding the whole window.
      *
-     * <p>Siempre cierto. El panel dividido reparte un espacio fijo entre dos lados: lo que pase
-     * adentro de cualquiera de ellos no cambia lo que el panel ocupa, asi que el reacomodo puede
-     * frenar aca en lugar de subir hasta la ventana.
+     * <p>Always true. The split pane shares a fixed space out between two sides: whatever happens
+     * inside either of them does not change what the pane takes up, so the laying out may stop
+     * here instead of going up as far as the window.
      */
     public boolean isValidateRoot() {
         return true;
     }
 
     /**
-     * Agrega un hijo en el lugar que diga la restriccion.
+     * It adds a child in the place the constraint says.
      *
-     * <p>Sin restriccion, el primero va a la izquierda y el segundo a la derecha. Es lo que hace
-     * que {@code add(a); add(b);} arme el panel que uno espera.
+     * <p>With no constraint, the first goes on the left and the second on the right. It is what
+     * makes {@code add(a); add(b);} build the pane one expects.
      */
     protected void addImpl(Component comp, Object constraints, int index) {
         Component toRemove;
@@ -449,7 +452,7 @@ public class JSplitPane extends JComponent implements javax.accessibility.Access
         repaint();
     }
 
-    /** Dibuja los hijos y despues deja que el aspecto termine la division. */
+    /** It draws the children and then lets the look and feel finish the division. */
     protected void paintChildren(Graphics g) {
         super.paintChildren(g);
         SplitPaneUI ui = getUI();

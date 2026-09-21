@@ -9,18 +9,18 @@ import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentEvent$ElementChange;
 
 /**
- * Apila a sus hijos sobre un eje: la vista que hace de columna o de fila.
+ * It stacks its children on an axis: the view that acts as a column or as a row.
  *
- * <h2>El eje mayor y el menor</h2>
+ * <h2>The major and the minor axis</h2>
  *
- * <p>Sobre el eje elegido los hijos van uno detras de otro y se reparten el espacio; sobre el otro
- * se encabalgan y se alinean. Es la misma idea de {@code BoxLayout}, y de hecho las cuentas son
- * las mismas: {@link SizeRequirements} las hace para los dos.
+ * <p>On the chosen axis the children go one after another and share out the space; on the other
+ * they overlap and are aligned. It is the same idea as {@code BoxLayout}'s, and in fact the sums
+ * are the same: {@link SizeRequirements} does them for both.
  *
- * <p>El maquetado se guarda en cuatro arreglos —desplazamiento y largo por eje— y se recalcula
- * solo cuando algo lo invalida. De ahi los dos pares de banderas: una vista puede tener el eje
- * mayor bien calculado y el menor no, y rehacer solo lo que hace falta es lo que permite que
- * escribir una letra no vuelva a medir el documento entero.
+ * <p>The layout is kept in four arrays --offset and length per axis-- and is recomputed only
+ * when something invalidates it. Hence the two pairs of flags: a view may have the major axis
+ * well computed and the minor one not, and redoing only what is needed is what allows typing a
+ * letter not to measure the whole document again.
  */
 public class BoxView extends CompositeView {
 
@@ -43,7 +43,7 @@ public class BoxView extends CompositeView {
 
     Rectangle tempRect = new Rectangle();
 
-    /** Una caja sobre ese eje: {@link View#X_AXIS} o {@link View#Y_AXIS}. */
+    /** A box on that axis: {@link View#X_AXIS} or {@link View#Y_AXIS}. */
     public BoxView(Element elem, int axis) {
         super(elem);
         tempRect = new Rectangle();
@@ -63,7 +63,7 @@ public class BoxView extends CompositeView {
         return majorAxis;
     }
 
-    /** Cambia el eje; invalida todo lo calculado, que dejo de valer. */
+    /** It changes the axis; it invalidates everything computed, which stopped holding. */
     public void setAxis(int axis) {
         boolean axisChanged = (axis != majorAxis);
         majorAxis = axis;
@@ -72,7 +72,7 @@ public class BoxView extends CompositeView {
         }
     }
 
-    /** Marca que hay que rehacer el maquetado sobre ese eje. */
+    /** It marks that the layout on that axis has to be redone. */
     public void layoutChanged(int axis) {
         if (axis == majorAxis) {
             majorAllocValid = false;
@@ -88,7 +88,7 @@ public class BoxView extends CompositeView {
         return minorAllocValid;
     }
 
-    /** Dibuja un hijo; separado para que una subclase pinte algo alrededor. */
+    /** It draws a child; separate so that a subclass can paint something around it. */
     protected void paintChild(Graphics g, Rectangle alloc, int index) {
         View child = getView(index);
         child.paint(g, alloc);
@@ -107,7 +107,7 @@ public class BoxView extends CompositeView {
         minorAllocValid = false;
     }
 
-    /** Agranda o achica un arreglo de maquetado para que siga teniendo un lugar por hijo. */
+    /** It grows or shrinks a layout array so that it goes on having one place per child. */
     int[] updateLayoutArray(int[] oldArray, int offset, int nInserted) {
         int n = getViewCount();
         int[] newArray = new int[n];
@@ -122,7 +122,7 @@ public class BoxView extends CompositeView {
         boolean wasValid = isLayoutValid(majorAxis);
         super.forwardUpdate(ec, e, a, f);
 
-        // Si el maquetado se invalido con este aviso, hay que repintar todo lo de abajo.
+        // If the layout was invalidated by this notice, everything below has to be repainted.
         if (wasValid && !isLayoutValid(majorAxis)) {
             java.awt.Container c = getContainer();
             if (a != null && c != null) {
@@ -131,7 +131,7 @@ public class BoxView extends CompositeView {
         }
     }
 
-    /** Un hijo cambio de tamano: hay que rehacer el maquetado del eje que corresponda. */
+    /** A child changed size: the layout of the corresponding axis has to be redone. */
     public void preferenceChanged(View child, boolean width, boolean height) {
         boolean majorChanged = (majorAxis == X_AXIS) ? width : height;
         boolean minorChanged = (majorAxis == X_AXIS) ? height : width;
@@ -146,7 +146,7 @@ public class BoxView extends CompositeView {
         super.preferenceChanged(child, width, height);
     }
 
-    /** Se estira sobre el eje menor, no sobre el mayor. */
+    /** It stretches on the minor axis, not on the major one. */
     public int getResizeWeight(int axis) {
         checkRequests(axis);
         if (axis == majorAxis) {
@@ -163,7 +163,7 @@ public class BoxView extends CompositeView {
         return 0;
     }
 
-    /** Le fija el largo sobre un eje y rehace lo que haga falta. */
+    /** It fixes its length on an axis and redoes whatever is needed. */
     void setSpanOnAxis(int axis, float span) {
         if (axis == majorAxis) {
             if (majorSpan != (int) span) {
@@ -190,7 +190,7 @@ public class BoxView extends CompositeView {
         }
     }
 
-    /** Les pasa a los hijos el tamano que les toco. */
+    /** It passes the children the size they got. */
     void updateChildSizes() {
         int n = getViewCount();
         if (majorAxis == X_AXIS) {
@@ -218,7 +218,7 @@ public class BoxView extends CompositeView {
                 Math.max(0, (int) (height - getTopInset() - getBottomInset())));
     }
 
-    /** Dibuja los hijos que caigan dentro del recorte. */
+    /** It draws the children that fall inside the clip. */
     public void paint(Graphics g, Shape allocation) {
         Rectangle alloc = (allocation instanceof Rectangle) ? (Rectangle) allocation
                 : allocation.getBounds();
@@ -241,7 +241,7 @@ public class BoxView extends CompositeView {
         if (a != null) {
             Shape ca = super.getChildAllocation(index, a);
             if ((ca != null) && (!isAllocationValid())) {
-                // Sin maquetado valido no hay lugar que dar.
+                // Without a valid layout there is no place to give.
                 Rectangle r = (ca instanceof Rectangle) ? (Rectangle) ca : ca.getBounds();
                 if ((r.width == 0) && (r.height == 0)) {
                     return null;
@@ -268,7 +268,7 @@ public class BoxView extends CompositeView {
         return super.viewToModel(x, y, a, bias);
     }
 
-    /** La alineacion sale de las cuentas de {@link SizeRequirements}. */
+    /** The alignment comes from {@link SizeRequirements}'s sums. */
     public float getAlignment(int axis) {
         checkRequests(axis);
         if (axis == majorAxis) {
@@ -311,7 +311,7 @@ public class BoxView extends CompositeView {
         return (majorAllocValid && minorAllocValid);
     }
 
-    /** Si ese punto queda antes del principio de la caja, sobre el eje mayor. */
+    /** Whether that point falls before the box's beginning, on the major axis. */
     protected boolean isBefore(int x, int y, Rectangle innerAlloc) {
         if (majorAxis == View.X_AXIS) {
             return (x < innerAlloc.x);
@@ -326,7 +326,7 @@ public class BoxView extends CompositeView {
         return (y > (innerAlloc.height + innerAlloc.y));
     }
 
-    /** El hijo que esta en ese punto, buscando sobre el eje mayor. */
+    /** The child at that point, searching on the major axis. */
     protected View getViewAtPoint(int x, int y, Rectangle alloc) {
         int n = getViewCount();
         if (majorAxis == View.X_AXIS) {
@@ -365,7 +365,7 @@ public class BoxView extends CompositeView {
         alloc.height = getSpan(Y_AXIS, index);
     }
 
-    /** Rehace el maquetado de los dos ejes para ese tamano. */
+    /** It redoes the layout of both axes for that size. */
     protected void layout(int width, int height) {
         setSpanOnAxis(X_AXIS, width);
         setSpanOnAxis(Y_AXIS, height);
@@ -394,16 +394,16 @@ public class BoxView extends CompositeView {
     }
 
     /**
-     * Reparte el eje mayor: los hijos uno detras de otro.
+     * It shares out the major axis: the children one after another.
      *
-     * <p>La cuenta esta escrita aca y no delegada en {@link SizeRequirements}, aunque el reparto se
-     * parezca. La diferencia es el redondeo: aca el ajuste de cada hijo se <em>redondea</em>, y
-     * alla se trunca. Con tres hijos y un sobrante de 35 pixeles eso da un pixel de diferencia en
-     * el ultimo, que es justo el que tiene que llegar al borde. Truncar deja una franja sin pintar
-     * abajo de todo.
+     * <p>The sum is written here and not delegated to {@link SizeRequirements}, even though the
+     * sharing out looks alike. The difference is the rounding: here each child's adjustment is
+     * <em>rounded</em>, and there it is truncated. With three children and 35 pixels left over that
+     * gives one pixel of difference in the last one, which is exactly the one that has to reach the
+     * edge. Truncating leaves an unpainted strip at the very bottom.
      */
     protected void layoutMajorAxis(int targetSpan, int axis, int[] offsets, int[] spans) {
-        // Primera pasada: lo que cada hijo prefiere.
+        // First pass: what each child prefers.
         long preferred = 0;
         int n = getViewCount();
         for (int i = 0; i < n; i++) {
@@ -412,7 +412,7 @@ public class BoxView extends CompositeView {
             preferred = preferred + spans[i];
         }
 
-        // Segunda pasada: estirar o encoger hasta el tamano pedido.
+        // Second pass: stretch or shrink up to the requested size.
         long desiredAdjustment = targetSpan - preferred;
         float adjustmentFactor = 0.0f;
         int[] diffs = null;
@@ -451,14 +451,14 @@ public class BoxView extends CompositeView {
         }
     }
 
-    /** Reparte el eje menor: cada hijo toma lo que pueda, alineado. */
+    /** It shares out the minor axis: each child takes what it can, aligned. */
     protected void layoutMinorAxis(int targetSpan, int axis, int[] offsets, int[] spans) {
         int n = getViewCount();
         for (int i = 0; i < n; i++) {
             View v = getView(i);
             int max = (int) v.getMaximumSpan(axis);
             if (max < targetSpan) {
-                // No llena: se alinea dentro de lo que hay.
+                // It does not fill: it is aligned within what there is.
                 float align = v.getAlignment(axis);
                 offsets[i] = (int) ((targetSpan - max) * align);
                 spans[i] = max;
@@ -470,7 +470,7 @@ public class BoxView extends CompositeView {
         }
     }
 
-    /** Lo que piden los hijos sobre el eje mayor: la suma. */
+    /** What the children ask for on the major axis: the sum. */
     protected SizeRequirements calculateMajorAxisRequirements(int axis, SizeRequirements r) {
         int n = getViewCount();
         SizeRequirements[] childRequests = new SizeRequirements[n];
@@ -483,7 +483,7 @@ public class BoxView extends CompositeView {
         return SizeRequirements.getTiledSizeRequirements(childRequests);
     }
 
-    /** Lo que piden sobre el eje menor: el maximo, no la suma. */
+    /** What they ask for on the minor axis: the maximum, not the sum. */
     protected SizeRequirements calculateMinorAxisRequirements(int axis, SizeRequirements r) {
         int min = 0;
         long pref = 0;
@@ -506,7 +506,7 @@ public class BoxView extends CompositeView {
         return r;
     }
 
-    /** Recalcula lo que piden los hijos, si hizo falta. */
+    /** It recomputes what the children ask for, if it was needed. */
     void checkRequests(int axis) {
         if ((axis != X_AXIS) && (axis != Y_AXIS)) {
             throw new IllegalArgumentException("Invalid axis: " + axis);
@@ -522,7 +522,7 @@ public class BoxView extends CompositeView {
         }
     }
 
-    /** Reparte alineando por la linea de base; lo usa una fila de texto. */
+    /** It shares out aligning by the baseline; a row of text uses it. */
     protected void baselineLayout(int targetSpan, int axis, int[] offsets, int[] spans) {
         int totalAscent = (int) (targetSpan * getAlignment(axis));
         int totalDescent = targetSpan - totalAscent;
@@ -551,7 +551,7 @@ public class BoxView extends CompositeView {
         }
     }
 
-    /** Lo que pide una fila alineada por su linea de base. */
+    /** What a row aligned by its baseline asks for. */
     protected SizeRequirements baselineRequirements(int axis, SizeRequirements r) {
         SizeRequirements totalAscent = new SizeRequirements();
         SizeRequirements totalDescent = new SizeRequirements();
@@ -595,13 +595,13 @@ public class BoxView extends CompositeView {
         return r;
     }
 
-    /** Donde empieza ese hijo sobre ese eje. */
+    /** Where that child starts on that axis. */
     protected int getOffset(int axis, int childIndex) {
         int[] offsets = (axis == majorAxis) ? majorOffsets : minorOffsets;
         return offsets[childIndex];
     }
 
-    /** Cuanto mide ese hijo sobre ese eje. */
+    /** How much that child measures on that axis. */
     protected int getSpan(int axis, int childIndex) {
         int[] spans = (axis == majorAxis) ? majorSpans : minorSpans;
         return spans[childIndex];

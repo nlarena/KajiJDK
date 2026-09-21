@@ -3,15 +3,15 @@ package com.sun.source.doctree;
 import java.util.List;
 
 /**
- * El nodo de `@return` y de `{@return}`.
+ * The node of `@return` and of `{@return}`.
  *
- * <p>El unico nodo del paquete que implementa las **dos** jerarquias de tag, porque `@return`
- * existe en las dos formas: como tag de bloque al final, y desde Java 16 tambien en linea al
- * principio de la descripcion. {@link #isInline} dice cual se escribio.
+ * <p>The only node of the package that implements **both** tag hierarchies, because `@return`
+ * exists in the two forms: as a block tag at the end, and from Java 16 on also inline at the
+ * beginning of the description. {@link #isInline} says which one was written.
  */
 public interface ReturnTree extends BlockTagTree, InlineTagTree {
 
-    /** Si se escribio como `{@return ...}` y no como `@return ...`. */
+    /** Whether it was written as `{@return ...}` and not as `@return ...`. */
     default boolean isInline() {
         return false;
     }

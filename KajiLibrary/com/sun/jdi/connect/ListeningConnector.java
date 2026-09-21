@@ -5,59 +5,61 @@ import java.io.IOException;
 import java.util.Map;
 
 /**
- * El conector que **espera** a que la VM depurada se conecte al depurador.
+ * The connector that **waits** for the debugged VM to connect to the debugger.
  *
- * <p>Los papeles estan al reves de {@link AttachingConnector}: aca el depurador escucha y la VM
- * llama, que es lo que pasa cuando el programa arranca con {@code server=n} y una direccion. Sirve
- * cuando la VM esta detras de algo que no deja conectarse hacia ella, o cuando arranca sola --en un
- * arranque del sistema, en un contenedor-- y el depurador no controla el momento.
+ * <p>The roles are the other way round from {@link AttachingConnector}: here the debugger
+ * listens and the VM calls, which is what happens when the program starts with {@code server=n}
+ * and an address. It serves when the VM is behind something that does not allow connecting to
+ * it, or when it starts by itself -- at system start-up, in a container -- and the debugger does
+ * not control the moment.
  *
- * <p>Por eso el ciclo son tres pasos y no uno: {@link #startListening} devuelve la direccion que
- * hay que pasarle a la VM, {@link #accept} espera la conexion, y {@link #stopListening} cierra.
+ * <p>That is why the cycle is three steps and not one: {@link #startListening} returns the
+ * address that has to be passed to the VM, {@link #accept} waits for the connection, and
+ * {@link #stopListening} closes.
  */
 public interface ListeningConnector extends Connector {
 
     /**
-     * Si este conector puede aceptar varias conexiones sobre la misma escucha.
+     * Whether this connector may accept several connections over the same listen.
      *
-     * <p>Con `false` hay que volver a {@link #startListening} para cada VM; y como la direccion
-     * puede cambiar, no se puede repartir de antemano.
+     * <p>With `false` one has to go back to {@link #startListening} for each VM; and as the
+     * address may change, it cannot be handed out in advance.
      */
     boolean supportsMultipleConnections();
 
     /**
-     * Empieza a escuchar.
+     * It starts listening.
      *
-     * @param arguments el mapa que salio de {@link #defaultArguments()}, con los valores puestos
-     * @return la direccion a la que la VM se tiene que conectar, en el formato del transporte
-     * @throws IOException si no se pudo abrir la escucha
-     * @throws IllegalConnectorArgumentsException si algun argumento falta o no sirve
+     * @param arguments the map that came out of {@link #defaultArguments()}, with the values set
+     * @return the address the VM has to connect to, in the transport's format
+     * @throws IOException if the listen could not be opened
+     * @throws IllegalConnectorArgumentsException if some argument is missing or does not serve
      */
     String startListening(Map<String, ? extends Connector.Argument> arguments)
             throws IOException, IllegalConnectorArgumentsException;
 
     /**
-     * Deja de escuchar.
+     * It stops listening.
      *
-     * <p>Los argumentos tienen que ser los mismos que los de {@link #startListening}: es como se
-     * identifica cual de las escuchas se cierra.
+     * <p>The arguments have to be the same as {@link #startListening}'s: it is how which of the
+     * listens is closed is identified.
      *
-     * @throws IOException si no se pudo cerrar
-     * @throws IllegalConnectorArgumentsException si algun argumento falta o no sirve
+     * @throws IOException if it could not be closed
+     * @throws IllegalConnectorArgumentsException if some argument is missing or does not serve
      */
     void stopListening(Map<String, ? extends Connector.Argument> arguments)
             throws IOException, IllegalConnectorArgumentsException;
 
     /**
-     * Espera a que una VM se conecte.
+     * It waits for a VM to connect.
      *
-     * <p>Bloquea. Si los argumentos traen un plazo y se vence, sale
-     * {@link TransportTimeoutException}, que es una {@link IOException}.
+     * <p>It blocks. If the arguments bring a term and it runs out,
+     * {@link TransportTimeoutException} comes out, which is an {@link IOException}.
      *
-     * @param arguments los mismos que los de {@link #startListening}
-     * @return la VM depurada
-     * @throws IOException si fallo la espera o se vencio el plazo
-     * @throws IllegalConnectorArgumentsException si algun argumento falta o no sirve
+     * @param arguments the same as {@link #startListening}'s
+     * @return the debugged VM
+     * @throws IOException if the wait failed or the term ran out
+     * @throws IllegalConnectorArgumentsException if some argument is missing or does not serve
      */
     VirtualMachine accept(Map<String, ? extends Connector.Argument> arguments)
             throws IOException, IllegalConnectorArgumentsException;

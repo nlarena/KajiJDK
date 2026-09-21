@@ -50,56 +50,59 @@ import javax.swing.tree.TreeSelectionModel;
 import javax.swing.tree.VariableHeightLayoutCache;
 
 /**
- * El aspecto basico de un arbol.
+ * The basic look and feel of a tree.
  *
- * <h2>El UI no sabe donde esta cada fila</h2>
+ * <h2>The look and feel does not know where each row is</h2>
  *
- * <p>Lo sabe {@link #treeState}, que es un {@link AbstractLayoutCache}: una tabla de que fila esta
- * en que coordenada. Todo lo que este UI contesta sobre posiciones -- {@link #getPathBounds},
- * {@link #getRowForPath}, {@link #getClosestPathForLocation} -- se lo pregunta a esa tabla.
+ * <p>{@link #treeState} knows, which is an {@link AbstractLayoutCache}: a table of which row is
+ * at which coordinate. Everything this look and feel answers about positions
+ * -- {@link #getPathBounds}, {@link #getRowForPath}, {@link #getClosestPathForLocation} -- it
+ * asks that table.
  *
- * <p>Hay dos tablas y la eleccion importa: con filas de altura fija se usa
- * {@link FixedHeightLayoutCache}, que resuelve "que fila esta en la coordenada y" con una division;
- * con alturas distintas, {@link VariableHeightLayoutCache}, que tiene que recorrer. Un arbol de un
- * millon de nodos con la segunda es inusable, y por eso existe {@code largeModel}.
+ * <p>There are two tables and the choice matters: with rows of a fixed height
+ * {@link FixedHeightLayoutCache} is used, which resolves "which row is at coordinate y" with a
+ * division; with different heights, {@link VariableHeightLayoutCache}, which has to walk along.
+ * A tree of a million nodes with the second one is unusable, and that is why {@code largeModel}
+ * exists.
  *
- * <h2>La sangria son dos numeros, no uno</h2>
+ * <h2>The indent is two numbers, not one</h2>
  *
- * <p>{@link #leftChildIndent} es lo que hay entre el borde del padre y el centro de la manija, y
- * {@link #rightChildIndent} entre el centro de la manija y el texto del hijo. La suma
- * -- {@link #totalChildIndent} -- es lo que se corre cada nivel. Estan separados porque la manija se
- * dibuja <em>en el medio</em>, y el aspecto que la quiera mas grande cambia uno solo.
+ * <p>{@link #leftChildIndent} is what there is between the parent's edge and the handle's
+ * centre, and {@link #rightChildIndent} between the handle's centre and the child's text. The
+ * sum -- {@link #totalChildIndent} -- is what each level shifts. They are separate because the
+ * handle is drawn <em>in the middle</em>, and the look and feel that wants it bigger changes
+ * only one.
  *
- * <p>{@link #depthOffset} es el ajuste por si la raiz se ve o no y por si tiene manija: un arbol sin
- * raiz visible tiene sus hijos al nivel cero, no al uno.
+ * <p>{@link #depthOffset} is the adjustment for whether the root is seen or not and for whether
+ * it has a handle: a tree with no visible root has its children at level zero, not at one.
  *
- * <h2>El alto de fila cero</h2>
+ * <h2>The row height of zero</h2>
  *
- * <p>{@link #getRowHeight} devuelve cero, y eso no significa que las filas midan cero: significa
- * "cada una lo que necesite", que es lo que hace que la tabla de posiciones sea la de altura
- * variable. Un numero positivo ahi es lo que la vuelve fija. Medido.
+ * <p>{@link #getRowHeight} returns zero, and that does not mean the rows measure zero: it means
+ * "each one whatever it needs", which is what makes the table of positions the
+ * variable-height one. A positive number there is what turns it fixed. Measured.
  *
- * <h2>Lo que queda dicho</h2>
+ * <h2>What is left said</h2>
  *
- * <p>Los dos iconos de manija -- expandido y colapsado -- vienen de la tabla del aspecto, que esta
- * biblioteca no tiene: quedan en {@code null} y el arbol se dibuja sin manijas. El ancho preferido
- * es por eso menor que el del JDK.
+ * <p>The two handle icons -- expanded and collapsed -- come from the look and feel's table,
+ * which this library does not have: they are left {@code null} and the tree is drawn with no
+ * handles. The preferred width is therefore smaller than the JDK's.
  *
- * <p>Editar una celda necesita un editor instalado y foco; los metodos estan y
- * {@link #isEditing} contesta que no.
+ * <p>Editing a cell needs an installed editor and focus; the methods are there and
+ * {@link #isEditing} answers no.
  */
 public class BasicTreeUI extends TreeUI {
 
     protected transient Icon collapsedIcon;
     protected transient Icon expandedIcon;
 
-    /** Entre el borde del padre y el centro de la manija; ver la nota de la clase. */
+    /** Between the parent's edge and the handle's centre; see the class note. */
     protected int leftChildIndent;
 
-    /** Entre el centro de la manija y el texto del hijo. */
+    /** Between the handle's centre and the child's text. */
     protected int rightChildIndent;
 
-    /** La suma de los dos. */
+    /** The sum of the two. */
     protected int totalChildIndent;
 
     protected Dimension preferredMinSize;
@@ -110,17 +113,17 @@ public class BasicTreeUI extends TreeUI {
     protected transient TreeCellEditor cellEditor;
     protected boolean createdCellEditor;
 
-    /** Si al terminar de editar hay que parar el editor o cancelarlo. */
+    /** Whether on finishing editing the editor has to be stopped or cancelled. */
     protected boolean stopEditingInCompleteEditing;
 
     protected CellRendererPane rendererPane;
     protected Dimension preferredSize;
     protected boolean validCachedPreferredSize;
 
-    /** La tabla de posiciones; ver la nota de la clase. */
+    /** The table of positions; see the class note. */
     protected AbstractLayoutCache treeState;
 
-    /** Los caminos ya dibujados, para no rehacer la cuenta en cada repintado. */
+    /** The paths already drawn, so as not to redo the arithmetic on every repaint. */
     protected Hashtable<TreePath, Boolean> drawingCache;
 
     protected boolean largeModel;
@@ -128,7 +131,7 @@ public class BasicTreeUI extends TreeUI {
     protected TreeModel treeModel;
     protected TreeSelectionModel treeSelectionModel;
 
-    /** El ajuste por raiz visible y manijas; ver la nota de la clase. */
+    /** The adjustment for visible root and handles; see the class note. */
     protected int depthOffset;
 
     protected Component editingComponent;
@@ -148,15 +151,15 @@ public class BasicTreeUI extends TreeUI {
     private ComponentListener componentListener;
     private CellEditorListener cellEditorListener;
 
-    private static final ColorUIResource FONDO = new ColorUIResource(255, 255, 255);
-    private static final ColorUIResource LINEA = new ColorUIResource(184, 207, 229);
-    private static final FontUIResource FUENTE = new FontUIResource("Dialog", Font.PLAIN, 12);
+    private static final ColorUIResource BACKGROUND = new ColorUIResource(255, 255, 255);
+    private static final ColorUIResource LINE = new ColorUIResource(184, 207, 229);
+    private static final FontUIResource FONT = new FontUIResource("Dialog", Font.PLAIN, 12);
 
     public BasicTreeUI() {
         super();
     }
 
-    /** Uno nuevo por arbol: guarda su tabla de posiciones. */
+    /** A new one per tree: it keeps its table of positions. */
     public static ComponentUI createUI(JComponent x) {
         return new BasicTreeUI();
     }
@@ -184,7 +187,7 @@ public class BasicTreeUI extends TreeUI {
         completeUIUninstall();
     }
 
-    /** Arma el estado antes de instalar nada. */
+    /** It builds the state before installing anything. */
     protected void prepareForUIInstall() {
         drawingCache = new Hashtable<TreePath, Boolean>(7);
         largeModel = (tree.isLargeModel() && tree.getRowHeight() > 0);
@@ -194,7 +197,7 @@ public class BasicTreeUI extends TreeUI {
         setModel(tree.getModel());
     }
 
-    /** Y termina de armarlo despues. */
+    /** And finishes building it afterwards. */
     protected void completeUIInstall() {
         setShowsRootHandles(tree.getShowsRootHandles());
         updateRenderer();
@@ -225,17 +228,17 @@ public class BasicTreeUI extends TreeUI {
         tree = null;
     }
 
-    /** Colores, fuente y sangrias; los valores son los de {@code Tree.*} en Metal. */
+    /** Colours, typeface and indents; the values are those of {@code Tree.*} in Metal. */
     protected void installDefaults() {
         if (tree.getBackground() == null || tree.getBackground() instanceof UIResource) {
-            tree.setBackground(FONDO);
+            tree.setBackground(BACKGROUND);
         }
         if (getHashColor() == null || getHashColor() instanceof UIResource) {
-            setHashColor(LINEA);
+            setHashColor(LINE);
         }
-        Font fuente = tree.getFont();
-        if (fuente == null || fuente instanceof UIResource) {
-            tree.setFont(FUENTE);
+        Font font = tree.getFont();
+        if (font == null || font instanceof UIResource) {
+            tree.setFont(FONT);
         }
         setExpandedIcon(null);
         setCollapsedIcon(null);
@@ -246,11 +249,11 @@ public class BasicTreeUI extends TreeUI {
         largeModel = (tree.isLargeModel() && tree.getRowHeight() > 0);
     }
 
-    /** No saca nada; ver {@link BasicPanelUI#uninstallDefaults}. */
+    /** It removes nothing; see {@link BasicPanelUI#uninstallDefaults}. */
     protected void uninstallDefaults() {
     }
 
-    /** Pone el panel donde se dibujan las celdas. */
+    /** It sets the pane the cells are drawn in. */
     protected void installComponents() {
         if (rendererPane == null) {
             rendererPane = createCellRendererPane();
@@ -322,7 +325,7 @@ public class BasicTreeUI extends TreeUI {
         treeModelListener = null;
     }
 
-    /** Sin atajos propios: las flechas las ata la tabla del aspecto. */
+    /** With no shortcuts of its own: the arrows are tied by the look and feel's table. */
     protected void installKeyboardActions() {
     }
 
@@ -345,7 +348,7 @@ public class BasicTreeUI extends TreeUI {
         return new Handler(this);
     }
 
-    /** Ninguno: la navegacion con teclas es de la tabla de acciones. */
+    /** None: keyboard navigation belongs to the action table. */
     protected KeyListener createKeyListener() {
         return null;
     }
@@ -374,7 +377,7 @@ public class BasicTreeUI extends TreeUI {
         return new DefaultTreeCellRenderer();
     }
 
-    /** La de altura variable, salvo que el arbol pida el modelo grande. */
+    /** The variable-height one, unless the tree asks for the large model. */
     protected AbstractLayoutCache createLayoutCache() {
         if (isLargeModel()) {
             return new FixedHeightLayoutCache();
@@ -386,7 +389,7 @@ public class BasicTreeUI extends TreeUI {
         return new NodeDimensionsHandler(this);
     }
 
-    /** Le pasa a la tabla de posiciones el modelo, el dibujante y el alto de fila. */
+    /** It passes the model, the renderer and the row height on to the table of positions. */
     protected void configureLayoutCache() {
         if (treeState == null) {
             return;
@@ -465,7 +468,7 @@ public class BasicTreeUI extends TreeUI {
         }
     }
 
-    /** El del arbol; y si no tiene, uno de fabrica que se anota como propio. */
+    /** The tree's; and if it does not have one, a factory one that is noted as its own. */
     private void updateRenderer() {
         if (tree == null) {
             return;
@@ -494,10 +497,10 @@ public class BasicTreeUI extends TreeUI {
     }
 
     /**
-     * Un editor de fabrica, envuelto en el dibujante que ya haya.
+     * A factory editor, wrapped in whatever renderer there already is.
      *
-     * <p>Envolverlo importa: el editor dibuja el icono de la celda a la izquierda del campo de
-     * texto, y lo saca del dibujante. Sin dibujante que le sirva, va sin icono.
+     * <p>Wrapping it matters: the editor draws the cell's icon to the left of the text field, and
+     * it takes it from the renderer. With no renderer that serves, it goes with no icon.
      */
     protected TreeCellEditor createDefaultCellEditor() {
         if (currentCellRenderer instanceof DefaultTreeCellRenderer) {
@@ -507,12 +510,13 @@ public class BasicTreeUI extends TreeUI {
     }
 
     /**
-     * El editor del arbol.
+     * The tree's editor.
      *
-     * <p>Toma el que el arbol tenga, sea o no editable: un editor puesto no se tira cuando el arbol
-     * deja de ser editable, porque volver a serlo tiene que devolver el mismo. Solo fabrica uno
-     * cuando no hay ninguno <em>y</em> el arbol es editable, y en ese caso -- y solo en ese --
-     * {@link #createdCellEditor} queda en `true`, que es lo que despues autoriza a sacarlo. Medido.
+     * <p>It takes the one the tree has, whether it is editable or not: an editor that was set is
+     * not thrown away when the tree stops being editable, because becoming editable again has to
+     * give the same one back. It only makes one when there is none <em>and</em> the tree is
+     * editable, and in that case -- and only in that one -- {@link #createdCellEditor} is left at
+     * `true`, which is what afterwards authorizes removing it. Measured.
      */
     protected void updateCellEditor() {
         completeEditing();
@@ -520,18 +524,19 @@ public class BasicTreeUI extends TreeUI {
             cellEditor = null;
             return;
         }
-        TreeCellEditor nuevo = tree.getCellEditor();
-        if (nuevo == null && tree.isEditable()) {
-            nuevo = createDefaultCellEditor();
-            if (nuevo != null) {
-                // Ponerlo avisa al arbol, que vuelve a entrar aca; por eso se asigna despues.
-                tree.setCellEditor(nuevo);
-                cellEditor = nuevo;
+        TreeCellEditor newEditor = tree.getCellEditor();
+        if (newEditor == null && tree.isEditable()) {
+            newEditor = createDefaultCellEditor();
+            if (newEditor != null) {
+                // Setting it tells the tree, which comes back in here; that is why it is assigned
+                // afterwards.
+                tree.setCellEditor(newEditor);
+                cellEditor = newEditor;
                 createdCellEditor = true;
                 return;
             }
         }
-        cellEditor = nuevo;
+        cellEditor = newEditor;
         createdCellEditor = false;
     }
 
@@ -618,7 +623,7 @@ public class BasicTreeUI extends TreeUI {
         }
     }
 
-    /** Cero: cada fila mide lo que necesite; ver la nota de la clase. */
+    /** Zero: each row measures whatever it needs; see the class note. */
     protected int getRowHeight() {
         return (tree == null) ? -1 : tree.getRowHeight();
     }
@@ -644,7 +649,7 @@ public class BasicTreeUI extends TreeUI {
         return treeSelectionModel;
     }
 
-    /** El ajuste por raiz visible y manijas; ver la nota de la clase. */
+    /** The adjustment for visible root and handles; see the class note. */
     protected void updateDepthOffset() {
         if (isRootVisible()) {
             depthOffset = getShowsRootHandles() ? 1 : 0;
@@ -659,7 +664,7 @@ public class BasicTreeUI extends TreeUI {
         }
     }
 
-    /** Le cuenta a la tabla que caminos estan abiertos. */
+    /** It tells the table which paths are open. */
     protected void updateExpandedDescendants(TreePath path) {
         completeEditing();
         if (treeState == null) {
@@ -679,7 +684,7 @@ public class BasicTreeUI extends TreeUI {
         updateSize();
     }
 
-    /** El ultimo hijo de ese camino, para saber hasta donde llega la linea vertical. */
+    /** That path's last child, in order to know how far the vertical line goes. */
     protected TreePath getLastChildPath(TreePath parent) {
         if (treeModel == null || parent == null) {
             return null;
@@ -700,17 +705,17 @@ public class BasicTreeUI extends TreeUI {
         return lastSelectedRow;
     }
 
-    /** Cuanto se corre una fila segun su profundidad; ver la nota de la clase. */
+    /** How much a row shifts according to its depth; see the class note. */
     protected int getRowX(int row, int depth) {
         return totalChildIndent * (depth + depthOffset);
     }
 
-    /** Cero: el basico no deja aire extra entre la manija y la linea. */
+    /** Zero: the basic one leaves no extra air between the handle and the line. */
     protected int getHorizontalLegBuffer() {
         return 0;
     }
 
-    /** Cero. */
+    /** Zero. */
     protected int getVerticalLegBuffer() {
         return 0;
     }
@@ -723,7 +728,7 @@ public class BasicTreeUI extends TreeUI {
         return treeModel.isLeaf(path.getLastPathComponent());
     }
 
-    /** Marca el tamano como viejo y le avisa al arbol. */
+    /** It marks the size as stale and tells the tree. */
     protected void updateSize() {
         validCachedPreferredSize = false;
         if (tree != null) {
@@ -731,7 +736,7 @@ public class BasicTreeUI extends TreeUI {
         }
     }
 
-    /** Rehace el tamano preferido a partir de la tabla de posiciones. */
+    /** It rebuilds the preferred size from the table of positions. */
     protected void updateCachedPreferredSize() {
         if (treeState != null && tree != null) {
             Insets i = tree.getInsets();
@@ -747,7 +752,7 @@ public class BasicTreeUI extends TreeUI {
         return getPreferredSize(c, true);
     }
 
-    /** El de la tabla de posiciones, nunca menor que {@link #getPreferredMinSize}. */
+    /** The table of positions', never smaller than {@link #getPreferredMinSize}. */
     public Dimension getPreferredSize(JComponent c, boolean checkConsistency) {
         if (!validCachedPreferredSize) {
             updateCachedPreferredSize();
@@ -763,12 +768,12 @@ public class BasicTreeUI extends TreeUI {
         return new Dimension(preferredSize.width, preferredSize.height);
     }
 
-    /** Cero: un arbol se puede achicar hasta desaparecer. */
+    /** Zero: a tree can be shrunk until it disappears. */
     public Dimension getMinimumSize(JComponent c) {
         return new Dimension(0, 0);
     }
 
-    /** El mismo que el preferido. */
+    /** The same as the preferred one. */
     public Dimension getMaximumSize(JComponent c) {
         if (tree != null) {
             return getPreferredSize(tree);
@@ -841,7 +846,7 @@ public class BasicTreeUI extends TreeUI {
         return editingPath;
     }
 
-    /** Termina la edicion como diga {@link #stopEditingInCompleteEditing}. */
+    /** It ends the editing as {@link #stopEditingInCompleteEditing} says. */
     protected void completeEditing() {
         if (stopEditingInCompleteEditing && editingComponent != null) {
             cellEditor.stopCellEditing();
@@ -871,7 +876,7 @@ public class BasicTreeUI extends TreeUI {
         updateSize();
     }
 
-    /** Arranca la edicion de ese camino; devuelve si pudo. */
+    /** It starts the editing of that path; it returns whether it could. */
     protected boolean startEditing(TreePath path, MouseEvent event) {
         if (isEditing(tree) && tree.getInvokesStopCellEditing() && !stopEditing(tree)) {
             return false;
@@ -894,7 +899,7 @@ public class BasicTreeUI extends TreeUI {
         return true;
     }
 
-    /** Abre o cierra ese camino. */
+    /** It opens or closes that path. */
     protected void toggleExpandState(TreePath path) {
         if (!tree.isExpanded(path)) {
             tree.expandPath(path);
@@ -915,12 +920,12 @@ public class BasicTreeUI extends TreeUI {
         }
     }
 
-    /** Un click sobre la manija, no sobre el texto. */
+    /** A click on the handle, not on the text. */
     protected void handleExpandControlClick(TreePath path, int mouseX, int mouseY) {
         toggleExpandState(path);
     }
 
-    /** Si ese punto cayo en la manija, la acciona. */
+    /** If that point fell on the handle, it works it. */
     protected void checkForClickInExpandControl(TreePath path, int mouseX, int mouseY) {
         if (isLocationInExpandControl(path, mouseX, mouseY)) {
             handleExpandControlClick(path, mouseX, mouseY);
@@ -928,43 +933,46 @@ public class BasicTreeUI extends TreeUI {
     }
 
     /**
-     * Si ese punto cae en la manija de esa fila.
+     * Whether that point falls on that row's handle.
      *
-     * <p>Solo mira la horizontal, y a proposito: la vertical ya la resolvio quien eligio el camino
-     * a partir de la coordenada del click. Preguntar de nuevo por la vertical la haria mas
-     * estricta que el resto del aspecto, y un click al ras del borde de una fila dejaria de abrir.
+     * <p>It looks only at the horizontal, and on purpose: the vertical was already resolved by
+     * whoever chose the path from the click's coordinate. Asking about the vertical again would
+     * make it stricter than the rest of the look and feel, and a click flush with a row's edge
+     * would stop opening.
      *
-     * <p>Una hoja no tiene manija, asi que nunca.
+     * <p>A leaf has no handle, so never.
      *
-     * <p>El ancho de la caja sale del icono expandido; cuando no hay -- que es el caso de esta
-     * biblioteca, sin tabla de aspecto -- son ocho pixeles, que es lo que el JDK usa de reserva.
+     * <p>The box's width comes from the expanded icon; when there is none -- which is this
+     * library's case, with no look and feel table -- it is eight pixels, which is what the JDK
+     * uses in reserve.
      *
-     * <p>La caja va centrada en el punto que {@link #rightChildIndent} deja a la izquierda del
-     * texto, y de ahi el {@code /2}: la manija se dibuja centrada en ese punto, no apoyada en el.
-     * El intervalo es abierto por izquierda y cerrado por derecha -- medido -- asi que una caja de
-     * dieciocho acepta dieciocho columnas y no diecinueve.
+     * <p>The box goes centred on the point {@link #rightChildIndent} leaves to the left of the
+     * text, and hence the {@code /2}: the handle is drawn centred on that point, not resting on
+     * it. The interval is open on the left and closed on the right -- measured -- so a box of
+     * eighteen accepts eighteen columns and not nineteen.
      */
     protected boolean isLocationInExpandControl(TreePath path, int mouseX, int mouseY) {
         if (tree == null || treeModel == null
                 || treeModel.isLeaf(path.getLastPathComponent())) {
             return false;
         }
-        int ancho = (getExpandedIcon() != null) ? getExpandedIcon().getIconWidth() : 8;
+        int width = (getExpandedIcon() != null) ? getExpandedIcon().getIconWidth() : 8;
         Insets i = tree.getInsets();
-        int izquierda = getRowX(tree.getRowForPath(path), path.getPathCount() - 1)
-                - getRightChildIndent() - ancho / 2 + i.left;
-        return mouseX > izquierda && mouseX <= izquierda + ancho;
+        int left = getRowX(tree.getRowForPath(path), path.getPathCount() - 1)
+                - getRightChildIndent() - width / 2 + i.left;
+        return mouseX > left && mouseX <= left + width;
     }
 
     /**
-     * Corre el arbol para que ese tramo de filas se vea.
+     * It scrolls the tree so that that stretch of rows is seen.
      *
-     * <p>Cuando el tramo es una sola fila se pide su banda entera. Cuando son varias no se pide el
-     * bloque completo: se pide desde la primera y tan alto como la parte visible, porque pedir mas
-     * de lo que entra hace que el arbol muestre el final del tramo y esconda el principio, que es
-     * justo al reves de lo que quiere quien acaba de abrir una rama.
+     * <p>When the stretch is a single row its whole band is asked for. When they are several the
+     * complete block is not asked for: it is asked for from the first one and as tall as the
+     * visible part, because asking for more than fits makes the tree show the end of the stretch
+     * and hide the beginning, which is just the opposite of what whoever has just opened a branch
+     * wants.
      *
-     * <p>El ancho pedido es uno solo: mover en horizontal no es asunto de este metodo.
+     * <p>The width asked for is one single: moving horizontally is not this method's business.
      */
     protected void ensureRowsAreVisible(int beginRow, int endRow) {
         if (tree == null || beginRow < 0 || endRow >= getRowCount(tree)) {
@@ -979,16 +987,16 @@ public class BasicTreeUI extends TreeUI {
             }
             return;
         }
-        Rectangle primera = getPathBounds(tree, getPathForRow(tree, beginRow));
-        if (primera == null) {
+        Rectangle first = getPathBounds(tree, getPathForRow(tree, beginRow));
+        if (first == null) {
             return;
         }
         Rectangle visible = tree.getVisibleRect();
         tree.scrollRectToVisible(
-                new Rectangle(visible.x, primera.y, 1, visible.height));
+                new Rectangle(visible.x, first.y, 1, visible.height));
     }
 
-    /** Si la fila lleva manija: solo las que tienen hijos. */
+    /** Whether the row carries a handle: only those that have children. */
     protected boolean shouldPaintExpandControl(TreePath path, int row, boolean isExpanded,
             boolean hasBeenExpanded, boolean isLeaf) {
         if (isLeaf) {
@@ -1007,7 +1015,7 @@ public class BasicTreeUI extends TreeUI {
         return javax.swing.SwingUtilities.isLeftMouseButton(event) && event.isShiftDown();
     }
 
-    /** Doble click: abre o cierra. */
+    /** Double click: it opens or closes. */
     protected boolean isToggleEvent(MouseEvent event) {
         if (!javax.swing.SwingUtilities.isLeftMouseButton(event)) {
             return false;
@@ -1016,7 +1024,7 @@ public class BasicTreeUI extends TreeUI {
         return clickCount > 0 && event.getClickCount() == clickCount;
     }
 
-    /** Elige lo que corresponda segun las teclas que esten apretadas. */
+    /** It chooses whatever applies according to the keys that are held down. */
     protected void selectPathForEvent(TreePath path, MouseEvent event) {
         if (isToggleSelectionEvent(event)) {
             if (tree.isPathSelected(path)) {
@@ -1039,10 +1047,10 @@ public class BasicTreeUI extends TreeUI {
     }
 
     /**
-     * Donde apoya el texto de la primera fila.
+     * Where the first row's text rests.
      *
-     * @throws NullPointerException si el componente es nulo
-     * @throws IllegalArgumentException si el ancho o el alto son negativos
+     * @throws NullPointerException if the component is null
+     * @throws IllegalArgumentException if the width or the height are negative
      */
     public int getBaseline(JComponent c, int width, int height) {
         super.getBaseline(c, width, height);
@@ -1064,9 +1072,9 @@ public class BasicTreeUI extends TreeUI {
     }
 
     /**
-     * {@code CONSTANT_ASCENT}: la primera fila esta siempre arriba de todo.
+     * {@code CONSTANT_ASCENT}: the first row is always at the very top.
      *
-     * @throws NullPointerException si el componente es nulo
+     * @throws NullPointerException if the component is null
      */
     public Component.BaselineResizeBehavior getBaselineResizeBehavior(JComponent c) {
         super.getBaselineResizeBehavior(c);
@@ -1111,7 +1119,7 @@ public class BasicTreeUI extends TreeUI {
         }
     }
 
-    /** Una fila: la manija si lleva, y la celda dibujada por el dibujante. */
+    /** One row: the handle if it carries one, and the cell drawn by the renderer. */
     protected void paintRow(Graphics g, Rectangle clipBounds, Insets insets, Rectangle bounds,
             TreePath path, int row, boolean isExpanded, boolean hasBeenExpanded, boolean isLeaf) {
         if (editingComponent != null && editingRow == row) {
@@ -1129,7 +1137,7 @@ public class BasicTreeUI extends TreeUI {
         }
     }
 
-    /** La manija de abrir o cerrar. */
+    /** The open or close handle. */
     protected void paintExpandControl(Graphics g, Rectangle clipBounds, Insets insets,
             Rectangle bounds, TreePath path, int row, boolean isExpanded,
             boolean hasBeenExpanded, boolean isLeaf) {
@@ -1142,7 +1150,7 @@ public class BasicTreeUI extends TreeUI {
         drawCentered(tree, g, icon, middleXOfKnob, middleYOfKnob);
     }
 
-    /** La parte vertical de la linea que une un padre con sus hijos. */
+    /** The vertical part of the line that joins a parent with its children. */
     protected void paintVerticalPartOfLeg(Graphics g, Rectangle clipBounds, Insets insets,
             TreePath path) {
         if (!tree.isVisible(path)) {
@@ -1157,7 +1165,7 @@ public class BasicTreeUI extends TreeUI {
         paintVerticalLine(g, tree, lineX, clipBounds.y, clipBounds.y + clipBounds.height);
     }
 
-    /** Y la horizontal, del tronco a la fila. */
+    /** And the horizontal one, from the trunk to the row. */
     protected void paintHorizontalPartOfLeg(Graphics g, Rectangle clipBounds, Insets insets,
             Rectangle bounds, TreePath path, int row, boolean isExpanded,
             boolean hasBeenExpanded, boolean isLeaf) {
@@ -1183,7 +1191,7 @@ public class BasicTreeUI extends TreeUI {
         drawDashedVerticalLine(g, x, top, bottom);
     }
 
-    /** Una linea punteada: un pixel si y uno no. */
+    /** A dotted line: one pixel on and one off. */
     protected void drawDashedHorizontalLine(Graphics g, int y, int x1, int x2) {
         x1 += (x1 % 2);
         for (int x = x1; x <= x2; x += 2) {
@@ -1198,13 +1206,13 @@ public class BasicTreeUI extends TreeUI {
         }
     }
 
-    /** Dibuja un icono centrado en ese punto. */
+    /** It draws an icon centred on that point. */
     protected void drawCentered(Component c, Graphics graphics, Icon icon, int x, int y) {
         icon.paintIcon(c, graphics, x - icon.getIconWidth() / 2 - 1,
                 y - icon.getIconHeight() / 2);
     }
 
-    /** La linea que marca donde caeria algo que se esta arrastrando. */
+    /** The line that marks where something that is being dragged would fall. */
     protected boolean isDropLine(JTree.DropLocation loc) {
         return loc != null && loc.getPath() != null && loc.getChildIndex() != -1;
     }
@@ -1217,10 +1225,10 @@ public class BasicTreeUI extends TreeUI {
     }
 
     /**
-     * Cuanto mide cada nodo; se lo pregunta la tabla de posiciones.
+     * How much each node measures; the table of positions asks it.
      *
-     * <p>Estatica y con el UI como primer parametro, que es la firma que el JDK genera para una
-     * clase interna; ver el hallazgo #518.
+     * <p>Static and with the look and feel as the first parameter, which is the signature the JDK
+     * generates for an inner class; see finding #518.
      */
     public static class NodeDimensionsHandler extends AbstractLayoutCache.NodeDimensions {
 
@@ -1260,9 +1268,11 @@ public class BasicTreeUI extends TreeUI {
     }
 
     /**
-     * El que escucha todo: el modelo, la seleccion, la expansion, el mouse, el foco y el tamano.
+     * The one that listens to everything: the model, the selection, the expansion, the mouse,
+     * the focus and the size.
      *
-     * <p>Estatico y con el UI como campo, por lo mismo que en todo el paquete.
+     * <p>Static and with the look and feel as a field, for the same reason as everywhere in the
+     * package.
      */
     private static class Handler implements PropertyChangeListener, MouseListener, FocusListener,
             ComponentListener, TreeSelectionListener, TreeModelListener, TreeExpansionListener,
@@ -1324,7 +1334,7 @@ public class BasicTreeUI extends TreeUI {
                 return;
             }
             if (e.getX() < bounds.x) {
-                // A la izquierda del texto: es la manija.
+                // To the left of the text: it is the handle.
                 if (ui.shouldPaintExpandControl(path, ui.getRowForPath(tree, path),
                         tree.isExpanded(path), true,
                         ui.treeModel.isLeaf(path.getLastPathComponent()))) {

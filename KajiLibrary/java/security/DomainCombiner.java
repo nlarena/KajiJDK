@@ -1,14 +1,15 @@
 package java.security;
 
-// Sabe combinar dos listas de dominios de proteccion en la que finalmente se usa.
+// It knows how to combine two lists of protection domains into the one that is finally used.
 //
-// Existe para el caso en que los permisos efectivos no son simplemente la interseccion de la pila
-// de llamadas: el ejemplo canonico es JAAS, donde a los dominios del codigo hay que agregarles los
-// del sujeto autenticado. Sin este gancho, "quien sos" no podria influir sobre "que podes hacer".
+// It exists for the case where the effective permissions are not simply the intersection of the
+// call stack: the canonical example is JAAS, where to the domains of the code one has to add those
+// of the authenticated subject. Without this hook, "who you are" could not influence "what you can
+// do".
 @Deprecated
 public interface DomainCombiner {
 
-    // Combina los dominios de la ejecucion actual con los heredados del contexto.
+    // Combines the domains of the current execution with the ones inherited from the context.
     ProtectionDomain[] combine(ProtectionDomain[] currentDomains,
                                ProtectionDomain[] assignedDomains);
 }

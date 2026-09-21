@@ -24,84 +24,87 @@ import javax.management.remote.NotificationResult;
 import javax.security.auth.Subject;
 
 /**
- * El objeto remoto por el que viaja cada llamada a un {@code MBeanServer} de otra maquina.
+ * The remote object through which every call to another machine's {@code MBeanServer} travels.
  *
- * <h2>Es el MBeanServer, mas dos cosas</h2>
+ * <h2>It is the MBeanServer, plus two things</h2>
  *
- * <p>Los veintipico de metodos son los de {@link javax.management.MBeanServer} con dos diferencias
- * sistematicas, y entender esas dos diferencias es entender la interfaz entera.
+ * <p>The twenty-odd methods are {@link javax.management.MBeanServer}'s with two systematic
+ * differences, and understanding those two differences is understanding the whole interface.
  *
- * <p><strong>Un {@link Subject} al final.</strong> Quien abrio la conexion se autentico una vez;
- * este parametro dice en nombre de quien se hace <strong>esta</strong> llamada. Es lo que permite
- * que un servidor intermedio hable con el MBeanServer en representacion de varios usuarios sin
- * abrir una conexion por cada uno. Con {@code null} la llamada va a nombre del que se autentico.
+ * <p><strong>A {@link Subject} at the end.</strong> Whoever opened the connection authenticated
+ * once; this parameter says on whose behalf <strong>this</strong> call is made. It is what
+ * allows an intermediate server to talk to the MBeanServer on behalf of several users without
+ * opening one connection per user. With {@code null} the call goes on behalf of whoever
+ * authenticated.
  *
- * <p><strong>{@link MarshalledObject} en lugar de los objetos.</strong> Los parametros que podrian
- * ser de clases que el servidor no conoce —un filtro de notificaciones propio, el argumento de una
- * operacion— viajan serializados y se deserializan del otro lado, con el cargador de clases de la
- * conexion. Si viajaran como objetos, RMI los deserializaria al recibirlos, antes de que nadie
- * pudiera decidir con que cargador; y ese momento es justamente donde hay que decidirlo.
+ * <p><strong>{@link MarshalledObject} instead of the objects.</strong> The parameters that could
+ * be of classes the server does not know --a notification filter of one's own, an operation's
+ * argument-- travel serialized and are deserialized on the other side, with the connection's
+ * class loader. If they travelled as objects, RMI would deserialize them on receipt, before
+ * anybody could decide with which loader; and that moment is exactly where it has to be decided.
  *
- * <p>Esa envoltura es tambien la que hace posible poner un filtro de deserializacion por conexion:
- * los bytes se pueden mirar antes de convertirlos en objetos.
+ * <p>That wrapping is also what makes a per-connection deserialization filter possible: the bytes
+ * can be looked at before turning them into objects.
  *
- * <h2>Las notificaciones van al reves</h2>
+ * <h2>The notifications go the other way round</h2>
  *
- * <p>{@code fetchNotifications} es el unico metodo que no tiene equivalente en {@code MBeanServer}.
- * El cliente <strong>pregunta</strong> por las notificaciones acumuladas en vez de recibirlas: para
- * que el servidor pudiera llamarlo, el cliente tendria que ser el tambien un objeto remoto
- * alcanzable desde el servidor, y eso no sobrevive a un cortafuegos ni a un NAT.
+ * <p>{@code fetchNotifications} is the only method with no equivalent in {@code MBeanServer}.
+ * The client <strong>asks</strong> for the accumulated notifications instead of receiving them:
+ * for the server to be able to call it, the client would have to be a remote object too,
+ * reachable from the server, and that does not survive a firewall or a NAT.
  *
  * @since 1.5
  */
 public interface RMIConnection extends Closeable, Remote {
 
     /**
-     * El identificador de esta conexion, el mismo que ve el servidor.
-     * @return lo que conteste el MBeanServer del otro lado
-     * @throws IOException si se corto la comunicacion con el servidor
+     * This connection's identifier, the same one the server sees.
+     * @return whatever the MBeanServer on the other side answers
+     * @throws IOException if communication with the server was cut
      */
     String getConnectionId() throws IOException;
 
     /**
-     * Cierra la conexion y libera lo que el servidor tenia reservado para ella.
-     * @throws IOException si se corto la comunicacion con el servidor
+     * Closes the connection and frees what the server had reserved for it.
+     * @throws IOException if communication with the server was cut
      */
     void close() throws IOException;
 
     /**
-     * Reenvia la operacion del mismo nombre de {@code MBeanServer}.
+     * Forwards the {@code MBeanServer} operation of the same name.
      *
-     * @param className el nombre de la clase del MBean
-     * @param name el nombre del MBean
-     * @param delegationSubject en nombre de quien se hace, o {@code null} para el autenticado
-     * @return lo que conteste el MBeanServer del otro lado
-     * @throws ReflectionException si fallo la reflexion al construir o al llamar
-     * @throws InstanceAlreadyExistsException si ya hay un MBean con ese nombre
-     * @throws MBeanRegistrationException si el MBean se opuso a registrarse o a darse de baja
-     * @throws MBeanException si el propio MBean lanzo una excepcion
-     * @throws NotCompliantMBeanException si la clase no cumple con lo que un MBean tiene que ser
-     * @throws IOException si se corto la comunicacion con el servidor
+     * @param className the MBean's class name
+     * @param name the MBean's name
+     * @param delegationSubject on whose behalf it is done, or {@code null} for the authenticated
+     *     one
+     * @return whatever the MBeanServer on the other side answers
+     * @throws ReflectionException if reflection failed while constructing or calling
+     * @throws InstanceAlreadyExistsException if there is already an MBean with that name
+     * @throws MBeanRegistrationException if the MBean objected to being registered or unregistered
+     * @throws MBeanException if the MBean itself threw an exception
+     * @throws NotCompliantMBeanException if the class does not meet what an MBean has to be
+     * @throws IOException if communication with the server was cut
      */
     ObjectInstance createMBean(String className, ObjectName name, Subject delegationSubject)
             throws ReflectionException, InstanceAlreadyExistsException, MBeanRegistrationException,
                    MBeanException, NotCompliantMBeanException, IOException;
 
     /**
-     * Reenvia la operacion del mismo nombre de {@code MBeanServer}.
+     * Forwards the {@code MBeanServer} operation of the same name.
      *
-     * @param className el nombre de la clase del MBean
-     * @param name el nombre del MBean
-     * @param loaderName el cargador de clases a usar
-     * @param delegationSubject en nombre de quien se hace, o {@code null} para el autenticado
-     * @return lo que conteste el MBeanServer del otro lado
-     * @throws ReflectionException si fallo la reflexion al construir o al llamar
-     * @throws InstanceAlreadyExistsException si ya hay un MBean con ese nombre
-     * @throws MBeanRegistrationException si el MBean se opuso a registrarse o a darse de baja
-     * @throws MBeanException si el propio MBean lanzo una excepcion
-     * @throws NotCompliantMBeanException si la clase no cumple con lo que un MBean tiene que ser
-     * @throws InstanceNotFoundException si no hay ningun MBean con ese nombre
-     * @throws IOException si se corto la comunicacion con el servidor
+     * @param className the MBean's class name
+     * @param name the MBean's name
+     * @param loaderName the class loader to use
+     * @param delegationSubject on whose behalf it is done, or {@code null} for the authenticated
+     *     one
+     * @return whatever the MBeanServer on the other side answers
+     * @throws ReflectionException if reflection failed while constructing or calling
+     * @throws InstanceAlreadyExistsException if there is already an MBean with that name
+     * @throws MBeanRegistrationException if the MBean objected to being registered or unregistered
+     * @throws MBeanException if the MBean itself threw an exception
+     * @throws NotCompliantMBeanException if the class does not meet what an MBean has to be
+     * @throws InstanceNotFoundException if there is no MBean with that name
+     * @throws IOException if communication with the server was cut
      */
     ObjectInstance createMBean(String className, ObjectName name, ObjectName loaderName,
             Subject delegationSubject)
@@ -110,20 +113,21 @@ public interface RMIConnection extends Closeable, Remote {
                    IOException;
 
     /**
-     * Reenvia la operacion del mismo nombre de {@code MBeanServer}.
+     * Forwards the {@code MBeanServer} operation of the same name.
      *
-     * @param className el nombre de la clase del MBean
-     * @param name el nombre del MBean
-     * @param params los argumentos, serializados
-     * @param signature la firma de los argumentos
-     * @param delegationSubject en nombre de quien se hace, o {@code null} para el autenticado
-     * @return lo que conteste el MBeanServer del otro lado
-     * @throws ReflectionException si fallo la reflexion al construir o al llamar
-     * @throws InstanceAlreadyExistsException si ya hay un MBean con ese nombre
-     * @throws MBeanRegistrationException si el MBean se opuso a registrarse o a darse de baja
-     * @throws MBeanException si el propio MBean lanzo una excepcion
-     * @throws NotCompliantMBeanException si la clase no cumple con lo que un MBean tiene que ser
-     * @throws IOException si se corto la comunicacion con el servidor
+     * @param className the MBean's class name
+     * @param name the MBean's name
+     * @param params the arguments, serialized
+     * @param signature the arguments' signature
+     * @param delegationSubject on whose behalf it is done, or {@code null} for the authenticated
+     *     one
+     * @return whatever the MBeanServer on the other side answers
+     * @throws ReflectionException if reflection failed while constructing or calling
+     * @throws InstanceAlreadyExistsException if there is already an MBean with that name
+     * @throws MBeanRegistrationException if the MBean objected to being registered or unregistered
+     * @throws MBeanException if the MBean itself threw an exception
+     * @throws NotCompliantMBeanException if the class does not meet what an MBean has to be
+     * @throws IOException if communication with the server was cut
      */
     ObjectInstance createMBean(String className, ObjectName name, MarshalledObject params,
             String[] signature, Subject delegationSubject)
@@ -131,22 +135,23 @@ public interface RMIConnection extends Closeable, Remote {
                    MBeanException, NotCompliantMBeanException, IOException;
 
     /**
-     * Reenvia la operacion del mismo nombre de {@code MBeanServer}.
+     * Forwards the {@code MBeanServer} operation of the same name.
      *
-     * @param className el nombre de la clase del MBean
-     * @param name el nombre del MBean
-     * @param loaderName el cargador de clases a usar
-     * @param params los argumentos, serializados
-     * @param signature la firma de los argumentos
-     * @param delegationSubject en nombre de quien se hace, o {@code null} para el autenticado
-     * @return lo que conteste el MBeanServer del otro lado
-     * @throws ReflectionException si fallo la reflexion al construir o al llamar
-     * @throws InstanceAlreadyExistsException si ya hay un MBean con ese nombre
-     * @throws MBeanRegistrationException si el MBean se opuso a registrarse o a darse de baja
-     * @throws MBeanException si el propio MBean lanzo una excepcion
-     * @throws NotCompliantMBeanException si la clase no cumple con lo que un MBean tiene que ser
-     * @throws InstanceNotFoundException si no hay ningun MBean con ese nombre
-     * @throws IOException si se corto la comunicacion con el servidor
+     * @param className the MBean's class name
+     * @param name the MBean's name
+     * @param loaderName the class loader to use
+     * @param params the arguments, serialized
+     * @param signature the arguments' signature
+     * @param delegationSubject on whose behalf it is done, or {@code null} for the authenticated
+     *     one
+     * @return whatever the MBeanServer on the other side answers
+     * @throws ReflectionException if reflection failed while constructing or calling
+     * @throws InstanceAlreadyExistsException if there is already an MBean with that name
+     * @throws MBeanRegistrationException if the MBean objected to being registered or unregistered
+     * @throws MBeanException if the MBean itself threw an exception
+     * @throws NotCompliantMBeanException if the class does not meet what an MBean has to be
+     * @throws InstanceNotFoundException if there is no MBean with that name
+     * @throws IOException if communication with the server was cut
      */
     ObjectInstance createMBean(String className, ObjectName name, ObjectName loaderName,
             MarshalledObject params, String[] signature, Subject delegationSubject)
@@ -155,287 +160,306 @@ public interface RMIConnection extends Closeable, Remote {
                    IOException;
 
     /**
-     * Reenvia la operacion del mismo nombre de {@code MBeanServer}.
+     * Forwards the {@code MBeanServer} operation of the same name.
      *
-     * @param name el nombre del MBean
-     * @param delegationSubject en nombre de quien se hace, o {@code null} para el autenticado
-     * @throws InstanceNotFoundException si no hay ningun MBean con ese nombre
-     * @throws MBeanRegistrationException si el MBean se opuso a registrarse o a darse de baja
-     * @throws IOException si se corto la comunicacion con el servidor
+     * @param name the MBean's name
+     * @param delegationSubject on whose behalf it is done, or {@code null} for the authenticated
+     *     one
+     * @throws InstanceNotFoundException if there is no MBean with that name
+     * @throws MBeanRegistrationException if the MBean objected to being registered or unregistered
+     * @throws IOException if communication with the server was cut
      */
     void unregisterMBean(ObjectName name, Subject delegationSubject)
             throws InstanceNotFoundException, MBeanRegistrationException, IOException;
 
     /**
-     * Reenvia la operacion del mismo nombre de {@code MBeanServer}.
+     * Forwards the {@code MBeanServer} operation of the same name.
      *
-     * @param name el nombre del MBean
-     * @param delegationSubject en nombre de quien se hace, o {@code null} para el autenticado
-     * @return lo que conteste el MBeanServer del otro lado
-     * @throws InstanceNotFoundException si no hay ningun MBean con ese nombre
-     * @throws IOException si se corto la comunicacion con el servidor
+     * @param name the MBean's name
+     * @param delegationSubject on whose behalf it is done, or {@code null} for the authenticated
+     *     one
+     * @return whatever the MBeanServer on the other side answers
+     * @throws InstanceNotFoundException if there is no MBean with that name
+     * @throws IOException if communication with the server was cut
      */
     ObjectInstance getObjectInstance(ObjectName name, Subject delegationSubject)
             throws InstanceNotFoundException, IOException;
 
     /**
-     * Reenvia la operacion del mismo nombre de {@code MBeanServer}.
+     * Forwards the {@code MBeanServer} operation of the same name.
      *
-     * @param name el nombre del MBean
-     * @param query el filtro de consulta, serializado
-     * @param delegationSubject en nombre de quien se hace, o {@code null} para el autenticado
-     * @return lo que conteste el MBeanServer del otro lado
-     * @throws IOException si se corto la comunicacion con el servidor
+     * @param name the MBean's name
+     * @param query the query filter, serialized
+     * @param delegationSubject on whose behalf it is done, or {@code null} for the authenticated
+     *     one
+     * @return whatever the MBeanServer on the other side answers
+     * @throws IOException if communication with the server was cut
      */
     Set<ObjectInstance> queryMBeans(ObjectName name, MarshalledObject query,
             Subject delegationSubject)
             throws IOException;
 
     /**
-     * Reenvia la operacion del mismo nombre de {@code MBeanServer}.
+     * Forwards the {@code MBeanServer} operation of the same name.
      *
-     * @param name el nombre del MBean
-     * @param query el filtro de consulta, serializado
-     * @param delegationSubject en nombre de quien se hace, o {@code null} para el autenticado
-     * @return lo que conteste el MBeanServer del otro lado
-     * @throws IOException si se corto la comunicacion con el servidor
+     * @param name the MBean's name
+     * @param query the query filter, serialized
+     * @param delegationSubject on whose behalf it is done, or {@code null} for the authenticated
+     *     one
+     * @return whatever the MBeanServer on the other side answers
+     * @throws IOException if communication with the server was cut
      */
     Set<ObjectName> queryNames(ObjectName name, MarshalledObject query, Subject delegationSubject)
             throws IOException;
 
     /**
-     * Reenvia la operacion del mismo nombre de {@code MBeanServer}.
+     * Forwards the {@code MBeanServer} operation of the same name.
      *
-     * @param name el nombre del MBean
-     * @param delegationSubject en nombre de quien se hace, o {@code null} para el autenticado
-     * @return lo que conteste el MBeanServer del otro lado
-     * @throws IOException si se corto la comunicacion con el servidor
+     * @param name the MBean's name
+     * @param delegationSubject on whose behalf it is done, or {@code null} for the authenticated
+     *     one
+     * @return whatever the MBeanServer on the other side answers
+     * @throws IOException if communication with the server was cut
      */
     boolean isRegistered(ObjectName name, Subject delegationSubject) throws IOException;
 
     /**
-     * Reenvia la operacion del mismo nombre de {@code MBeanServer}.
+     * Forwards the {@code MBeanServer} operation of the same name.
      *
-     * @param delegationSubject en nombre de quien se hace, o {@code null} para el autenticado
-     * @return lo que conteste el MBeanServer del otro lado
-     * @throws IOException si se corto la comunicacion con el servidor
+     * @param delegationSubject on whose behalf it is done, or {@code null} for the authenticated
+     *     one
+     * @return whatever the MBeanServer on the other side answers
+     * @throws IOException if communication with the server was cut
      */
     Integer getMBeanCount(Subject delegationSubject) throws IOException;
 
     /**
-     * Reenvia la operacion del mismo nombre de {@code MBeanServer}.
+     * Forwards the {@code MBeanServer} operation of the same name.
      *
-     * @param name el nombre del MBean
-     * @param attribute el atributo
-     * @param delegationSubject en nombre de quien se hace, o {@code null} para el autenticado
-     * @return lo que conteste el MBeanServer del otro lado
-     * @throws MBeanException si el propio MBean lanzo una excepcion
-     * @throws AttributeNotFoundException si el MBean no tiene ese atributo
-     * @throws InstanceNotFoundException si no hay ningun MBean con ese nombre
-     * @throws ReflectionException si fallo la reflexion al construir o al llamar
-     * @throws IOException si se corto la comunicacion con el servidor
+     * @param name the MBean's name
+     * @param attribute the attribute
+     * @param delegationSubject on whose behalf it is done, or {@code null} for the authenticated
+     *     one
+     * @return whatever the MBeanServer on the other side answers
+     * @throws MBeanException if the MBean itself threw an exception
+     * @throws AttributeNotFoundException if the MBean has no such attribute
+     * @throws InstanceNotFoundException if there is no MBean with that name
+     * @throws ReflectionException if reflection failed while constructing or calling
+     * @throws IOException if communication with the server was cut
      */
     Object getAttribute(ObjectName name, String attribute, Subject delegationSubject)
             throws MBeanException, AttributeNotFoundException, InstanceNotFoundException,
                    ReflectionException, IOException;
 
     /**
-     * Reenvia la operacion del mismo nombre de {@code MBeanServer}.
+     * Forwards the {@code MBeanServer} operation of the same name.
      *
-     * @param name el nombre del MBean
-     * @param attributes los atributos
-     * @param delegationSubject en nombre de quien se hace, o {@code null} para el autenticado
-     * @return lo que conteste el MBeanServer del otro lado
-     * @throws InstanceNotFoundException si no hay ningun MBean con ese nombre
-     * @throws ReflectionException si fallo la reflexion al construir o al llamar
-     * @throws IOException si se corto la comunicacion con el servidor
+     * @param name the MBean's name
+     * @param attributes the attributes
+     * @param delegationSubject on whose behalf it is done, or {@code null} for the authenticated
+     *     one
+     * @return whatever the MBeanServer on the other side answers
+     * @throws InstanceNotFoundException if there is no MBean with that name
+     * @throws ReflectionException if reflection failed while constructing or calling
+     * @throws IOException if communication with the server was cut
      */
     AttributeList getAttributes(ObjectName name, String[] attributes, Subject delegationSubject)
             throws InstanceNotFoundException, ReflectionException, IOException;
 
     /**
-     * Reenvia la operacion del mismo nombre de {@code MBeanServer}.
+     * Forwards the {@code MBeanServer} operation of the same name.
      *
-     * @param name el nombre del MBean
-     * @param attribute el atributo
-     * @param delegationSubject en nombre de quien se hace, o {@code null} para el autenticado
-     * @throws InstanceNotFoundException si no hay ningun MBean con ese nombre
-     * @throws AttributeNotFoundException si el MBean no tiene ese atributo
-     * @throws InvalidAttributeValueException si el valor no sirve para ese atributo
-     * @throws MBeanException si el propio MBean lanzo una excepcion
-     * @throws ReflectionException si fallo la reflexion al construir o al llamar
-     * @throws IOException si se corto la comunicacion con el servidor
+     * @param name the MBean's name
+     * @param attribute the attribute
+     * @param delegationSubject on whose behalf it is done, or {@code null} for the authenticated
+     *     one
+     * @throws InstanceNotFoundException if there is no MBean with that name
+     * @throws AttributeNotFoundException if the MBean has no such attribute
+     * @throws InvalidAttributeValueException if the value does not fit that attribute
+     * @throws MBeanException if the MBean itself threw an exception
+     * @throws ReflectionException if reflection failed while constructing or calling
+     * @throws IOException if communication with the server was cut
      */
     void setAttribute(ObjectName name, MarshalledObject attribute, Subject delegationSubject)
             throws InstanceNotFoundException, AttributeNotFoundException,
                    InvalidAttributeValueException, MBeanException, ReflectionException, IOException;
 
     /**
-     * Reenvia la operacion del mismo nombre de {@code MBeanServer}.
+     * Forwards the {@code MBeanServer} operation of the same name.
      *
-     * @param name el nombre del MBean
-     * @param attributes los atributos
-     * @param delegationSubject en nombre de quien se hace, o {@code null} para el autenticado
-     * @return lo que conteste el MBeanServer del otro lado
-     * @throws InstanceNotFoundException si no hay ningun MBean con ese nombre
-     * @throws ReflectionException si fallo la reflexion al construir o al llamar
-     * @throws IOException si se corto la comunicacion con el servidor
+     * @param name the MBean's name
+     * @param attributes the attributes
+     * @param delegationSubject on whose behalf it is done, or {@code null} for the authenticated
+     *     one
+     * @return whatever the MBeanServer on the other side answers
+     * @throws InstanceNotFoundException if there is no MBean with that name
+     * @throws ReflectionException if reflection failed while constructing or calling
+     * @throws IOException if communication with the server was cut
      */
     AttributeList setAttributes(ObjectName name, MarshalledObject attributes,
             Subject delegationSubject)
             throws InstanceNotFoundException, ReflectionException, IOException;
 
     /**
-     * Reenvia la operacion del mismo nombre de {@code MBeanServer}.
+     * Forwards the {@code MBeanServer} operation of the same name.
      *
-     * @param name el nombre del MBean
-     * @param operationName el nombre de la operacion
-     * @param params los argumentos, serializados
-     * @param signature la firma de los argumentos
-     * @param delegationSubject en nombre de quien se hace, o {@code null} para el autenticado
-     * @return lo que conteste el MBeanServer del otro lado
-     * @throws InstanceNotFoundException si no hay ningun MBean con ese nombre
-     * @throws MBeanException si el propio MBean lanzo una excepcion
-     * @throws ReflectionException si fallo la reflexion al construir o al llamar
-     * @throws IOException si se corto la comunicacion con el servidor
+     * @param name the MBean's name
+     * @param operationName the operation's name
+     * @param params the arguments, serialized
+     * @param signature the arguments' signature
+     * @param delegationSubject on whose behalf it is done, or {@code null} for the authenticated
+     *     one
+     * @return whatever the MBeanServer on the other side answers
+     * @throws InstanceNotFoundException if there is no MBean with that name
+     * @throws MBeanException if the MBean itself threw an exception
+     * @throws ReflectionException if reflection failed while constructing or calling
+     * @throws IOException if communication with the server was cut
      */
     Object invoke(ObjectName name, String operationName, MarshalledObject params,
             String[] signature, Subject delegationSubject)
             throws InstanceNotFoundException, MBeanException, ReflectionException, IOException;
 
     /**
-     * Reenvia la operacion del mismo nombre de {@code MBeanServer}.
+     * Forwards the {@code MBeanServer} operation of the same name.
      *
-     * @param delegationSubject en nombre de quien se hace, o {@code null} para el autenticado
-     * @return lo que conteste el MBeanServer del otro lado
-     * @throws IOException si se corto la comunicacion con el servidor
+     * @param delegationSubject on whose behalf it is done, or {@code null} for the authenticated
+     *     one
+     * @return whatever the MBeanServer on the other side answers
+     * @throws IOException if communication with the server was cut
      */
     String getDefaultDomain(Subject delegationSubject) throws IOException;
 
     /**
-     * Reenvia la operacion del mismo nombre de {@code MBeanServer}.
+     * Forwards the {@code MBeanServer} operation of the same name.
      *
-     * @param delegationSubject en nombre de quien se hace, o {@code null} para el autenticado
-     * @return lo que conteste el MBeanServer del otro lado
-     * @throws IOException si se corto la comunicacion con el servidor
+     * @param delegationSubject on whose behalf it is done, or {@code null} for the authenticated
+     *     one
+     * @return whatever the MBeanServer on the other side answers
+     * @throws IOException if communication with the server was cut
      */
     String[] getDomains(Subject delegationSubject) throws IOException;
 
     /**
-     * Reenvia la operacion del mismo nombre de {@code MBeanServer}.
+     * Forwards the {@code MBeanServer} operation of the same name.
      *
-     * @param name el nombre del MBean
-     * @param delegationSubject en nombre de quien se hace, o {@code null} para el autenticado
-     * @return lo que conteste el MBeanServer del otro lado
-     * @throws InstanceNotFoundException si no hay ningun MBean con ese nombre
-     * @throws IntrospectionException si no se pudo averiguar la forma del MBean
-     * @throws ReflectionException si fallo la reflexion al construir o al llamar
-     * @throws IOException si se corto la comunicacion con el servidor
+     * @param name the MBean's name
+     * @param delegationSubject on whose behalf it is done, or {@code null} for the authenticated
+     *     one
+     * @return whatever the MBeanServer on the other side answers
+     * @throws InstanceNotFoundException if there is no MBean with that name
+     * @throws IntrospectionException if the MBean's shape could not be found out
+     * @throws ReflectionException if reflection failed while constructing or calling
+     * @throws IOException if communication with the server was cut
      */
     MBeanInfo getMBeanInfo(ObjectName name, Subject delegationSubject)
             throws InstanceNotFoundException, IntrospectionException, ReflectionException,
                    IOException;
 
     /**
-     * Reenvia la operacion del mismo nombre de {@code MBeanServer}.
+     * Forwards the {@code MBeanServer} operation of the same name.
      *
-     * @param name el nombre del MBean
-     * @param className el nombre de la clase del MBean
-     * @param delegationSubject en nombre de quien se hace, o {@code null} para el autenticado
-     * @return lo que conteste el MBeanServer del otro lado
-     * @throws InstanceNotFoundException si no hay ningun MBean con ese nombre
-     * @throws IOException si se corto la comunicacion con el servidor
+     * @param name the MBean's name
+     * @param className the MBean's class name
+     * @param delegationSubject on whose behalf it is done, or {@code null} for the authenticated
+     *     one
+     * @return whatever the MBeanServer on the other side answers
+     * @throws InstanceNotFoundException if there is no MBean with that name
+     * @throws IOException if communication with the server was cut
      */
     boolean isInstanceOf(ObjectName name, String className, Subject delegationSubject)
             throws InstanceNotFoundException, IOException;
 
     /**
-     * Reenvia la operacion del mismo nombre de {@code MBeanServer}.
+     * Forwards the {@code MBeanServer} operation of the same name.
      *
-     * @param name el nombre del MBean
-     * @param listener el oyente
-     * @param filter el filtro, serializado
-     * @param handback el objeto que se devuelve con cada notificacion, serializado
-     * @param delegationSubject en nombre de quien se hace, o {@code null} para el autenticado
-     * @throws InstanceNotFoundException si no hay ningun MBean con ese nombre
-     * @throws IOException si se corto la comunicacion con el servidor
+     * @param name the MBean's name
+     * @param listener the listener
+     * @param filter the filter, serialized
+     * @param handback the object handed back with each notification, serialized
+     * @param delegationSubject on whose behalf it is done, or {@code null} for the authenticated
+     *     one
+     * @throws InstanceNotFoundException if there is no MBean with that name
+     * @throws IOException if communication with the server was cut
      */
     void addNotificationListener(ObjectName name, ObjectName listener, MarshalledObject filter,
             MarshalledObject handback, Subject delegationSubject)
             throws InstanceNotFoundException, IOException;
 
     /**
-     * Reenvia la operacion del mismo nombre de {@code MBeanServer}.
+     * Forwards the {@code MBeanServer} operation of the same name.
      *
-     * @param name el nombre del MBean
-     * @param listener el oyente
-     * @param delegationSubject en nombre de quien se hace, o {@code null} para el autenticado
-     * @throws InstanceNotFoundException si no hay ningun MBean con ese nombre
-     * @throws ListenerNotFoundException si ese oyente no estaba registrado
-     * @throws IOException si se corto la comunicacion con el servidor
+     * @param name the MBean's name
+     * @param listener the listener
+     * @param delegationSubject on whose behalf it is done, or {@code null} for the authenticated
+     *     one
+     * @throws InstanceNotFoundException if there is no MBean with that name
+     * @throws ListenerNotFoundException if that listener was not registered
+     * @throws IOException if communication with the server was cut
      */
     void removeNotificationListener(ObjectName name, ObjectName listener, Subject delegationSubject)
             throws InstanceNotFoundException, ListenerNotFoundException, IOException;
 
     /**
-     * Reenvia la operacion del mismo nombre de {@code MBeanServer}.
+     * Forwards the {@code MBeanServer} operation of the same name.
      *
-     * @param name el nombre del MBean
-     * @param listener el oyente
-     * @param filter el filtro, serializado
-     * @param handback el objeto que se devuelve con cada notificacion, serializado
-     * @param delegationSubject en nombre de quien se hace, o {@code null} para el autenticado
-     * @throws InstanceNotFoundException si no hay ningun MBean con ese nombre
-     * @throws ListenerNotFoundException si ese oyente no estaba registrado
-     * @throws IOException si se corto la comunicacion con el servidor
+     * @param name the MBean's name
+     * @param listener the listener
+     * @param filter the filter, serialized
+     * @param handback the object handed back with each notification, serialized
+     * @param delegationSubject on whose behalf it is done, or {@code null} for the authenticated
+     *     one
+     * @throws InstanceNotFoundException if there is no MBean with that name
+     * @throws ListenerNotFoundException if that listener was not registered
+     * @throws IOException if communication with the server was cut
      */
     void removeNotificationListener(ObjectName name, ObjectName listener, MarshalledObject filter,
             MarshalledObject handback, Subject delegationSubject)
             throws InstanceNotFoundException, ListenerNotFoundException, IOException;
 
     /**
-     * Registra varios oyentes de una, y devuelve un identificador por cada uno.
+     * Registers several listeners at once, and returns one identifier for each.
      *
-     * <p>De a varios porque cada registro es un viaje de ida y vuelta por la red. Los
-     * identificadores son lo que despues permite sacarlos sin volver a mandar el filtro.
+     * <p>Several at once because each registration is a round trip over the network. The
+     * identifiers are what later allows removing them without sending the filter again.
      *
-     * @param names los nombres de los MBeans
-     * @param filters los filtros, serializados
-     * @param delegationSubjects en nombre de quien se hace cada llamada
-     * @return lo que conteste el MBeanServer del otro lado
-     * @throws InstanceNotFoundException si no hay ningun MBean con ese nombre
-     * @throws IOException si se corto la comunicacion con el servidor
+     * @param names the MBeans' names
+     * @param filters the filters, serialized
+     * @param delegationSubjects on whose behalf each call is made
+     * @return whatever the MBeanServer on the other side answers
+     * @throws InstanceNotFoundException if there is no MBean with that name
+     * @throws IOException if communication with the server was cut
      */
     Integer[] addNotificationListeners(ObjectName[] names, MarshalledObject[] filters,
             Subject[] delegationSubjects)
             throws InstanceNotFoundException, IOException;
 
     /**
-     * Reenvia la operacion del mismo nombre de {@code MBeanServer}.
+     * Forwards the {@code MBeanServer} operation of the same name.
      *
-     * @param name el nombre del MBean
-     * @param listenerIDs los identificadores que devolvio {@code addNotificationListeners}
-     * @param delegationSubject en nombre de quien se hace, o {@code null} para el autenticado
-     * @throws InstanceNotFoundException si no hay ningun MBean con ese nombre
-     * @throws ListenerNotFoundException si ese oyente no estaba registrado
-     * @throws IOException si se corto la comunicacion con el servidor
+     * @param name the MBean's name
+     * @param listenerIDs the identifiers {@code addNotificationListeners} returned
+     * @param delegationSubject on whose behalf it is done, or {@code null} for the authenticated
+     *     one
+     * @throws InstanceNotFoundException if there is no MBean with that name
+     * @throws ListenerNotFoundException if that listener was not registered
+     * @throws IOException if communication with the server was cut
      */
     void removeNotificationListeners(ObjectName name, Integer[] listenerIDs,
             Subject delegationSubject)
             throws InstanceNotFoundException, ListenerNotFoundException, IOException;
 
     /**
-     * Trae las notificaciones que se acumularon del lado del servidor.
+     * Fetches the notifications that accumulated on the server side.
      *
-     * <p>Es el corazon del modelo: las notificaciones no se empujan al cliente, el cliente
-     * las viene a buscar. Con RMI no hay forma de que el servidor llame al cliente sin que
-     * el cliente sea a su vez un objeto remoto, y eso no sobrevive a un cortafuegos.
+     * <p>It is the heart of the model: notifications are not pushed to the client, the client comes
+     * to get them. With RMI there is no way for the server to call the client without the client
+     * being a remote object itself, and that does not survive a firewall.
      *
-     * @param clientSequenceNumber desde que numero de secuencia traer
-     * @param maxNotifications cuantas traer como maximo
-     * @param timeout cuanto esperar si no hay ninguna
-     * @return lo que conteste el MBeanServer del otro lado
-     * @throws IOException si se corto la comunicacion con el servidor
+     * @param clientSequenceNumber from which sequence number to fetch
+     * @param maxNotifications how many to fetch at most
+     * @param timeout how long to wait if there is none
+     * @return whatever the MBeanServer on the other side answers
+     * @throws IOException if communication with the server was cut
      */
     NotificationResult fetchNotifications(long clientSequenceNumber, int maxNotifications,
             long timeout)

@@ -1,11 +1,11 @@
 package org.w3c.dom.css;
 
 /**
- * Una regla `@` que esta implementacion no reconoce.
+ * An `@` rule this implementation does not recognise.
  *
- * <p>No agrega ningun miembro, y eso es lo que dice: de una regla desconocida se conserva el texto
- * --que esta en `getCssText`, heredado-- y nada mas. Existir como tipo propio es lo que permite
- * conservarla en la hoja en vez de descartarla.
+ * <p>It adds no member, and that is what it says: of an unknown rule the text is kept --which is in
+ * `getCssText`, inherited-- and nothing else. Existing as a type of its own is what allows it to be
+ * kept in the sheet instead of discarded.
  */
 public interface CSSUnknownRule extends CSSRule {
 }

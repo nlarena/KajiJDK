@@ -1,15 +1,15 @@
 package java.nio.file;
 
-// Se intento escribir en un sistema de archivos montado de solo lectura.
+// Writing to a filesystem mounted read-only was attempted.
 //
-// **Hereda de `UnsupportedOperationException`, no de `IOException`**, y la distincion es util: no es
-// que la escritura fallo, es que en ese sistema **no existe** la operacion. Reintentar no tiene
-// sentido.
+// **It inherits from `UnsupportedOperationException`, not from `IOException`**, and the distinction
+// is useful: it is not that the write failed, it is that on that system the operation **does not
+// exist**. Retrying makes no sense.
 public class ReadOnlyFileSystemException extends UnsupportedOperationException {
 
     private static final long serialVersionUID = -6822409595617487197L;
 
-    /** Sin mensaje. */
+    /** With no message. */
     public ReadOnlyFileSystemException() {
     }
 }

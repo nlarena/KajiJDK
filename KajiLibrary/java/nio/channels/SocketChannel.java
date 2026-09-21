@@ -8,30 +8,30 @@ import java.nio.channels.spi.AbstractSelectableChannel;
 import java.nio.channels.spi.SelectorProvider;
 
 /**
- * KajiLibrary's java.nio.channels.SocketChannel — un canal sobre una conexion TCP.
+ * KajiLibrary's java.nio.channels.SocketChannel — a channel over a TCP connection.
  *
- * <p>Lo que lo separa de un `java.net.Socket` es que se puede poner en modo no bloqueante y meter en
- * un {@link Selector}. De ahi salen las dos rarezas que definen su ciclo de vida:
+ * <p>What separates it from a `java.net.Socket` is that it can be put into non-blocking mode and
+ * put into a {@link Selector}. Out of that come the two oddities that define its life cycle:
  *
  * <ul>
- *   <li>{@link #connect} puede volver con `false`. Significa "arranque, todavia no termino", no un
- *       fracaso. Quien lo llame en modo no bloqueante tiene que esperar `OP_CONNECT` y despues
- *       llamar a {@link #finishConnect()};
- *   <li>{@link #shutdownOutput()} no es {@link #close()}. Cierra **una mitad**: el otro extremo ve
- *       fin de datos y puede seguir mandando. Es como se despide un protocolo de pedido y respuesta
- *       sin cortarle la palabra a la respuesta.
+ *   <li>{@link #connect} may come back with `false`. It means "I started, I have not finished yet",
+ *       not a failure. Whoever calls it in non-blocking mode has to wait for `OP_CONNECT` and then
+ *       call {@link #finishConnect()};
+ *   <li>{@link #shutdownOutput()} is not {@link #close()}. It closes **one half**: the other end
+ *       sees end of data and can go on sending. It is how a request and response protocol says
+ *       goodbye without cutting the answer short.
  * </ul>
  *
- * <h2>Los `open()`, que antes no estaban</h2>
+ * <h2>The `open()`s, which used not to be there</h2>
  *
- * <p>Este archivo decia que la VM no tenia ningun nativo de red y que por eso no habia manera de
- * fabricar un canal. Ya los tiene, y los tres {@code open()} estan, con la implementacion de la casa
- * detras. Tambien {@link #socket()}, que faltaba porque devuelve `java.net.Socket` y esa clase no
- * existia en este arbol.
+ * <p>This file used to say that the VM had no network native at all and that there was therefore no
+ * way of making a channel. It has them now, and the three {@code open()}s are there, with the
+ * in-house implementation behind them. Also {@link #socket()}, which was missing because it returns
+ * `java.net.Socket` and that class did not exist in this tree.
  *
- * <p>El canal que sale de {@code open()} es el del proveedor **instalado**, si alguien instalo uno
- * por el mecanismo de `spi`; el de la casa solo cuando no hay ninguno. Un proveedor propio reemplaza
- * al nuestro, nunca al reves.
+ * <p>The channel that comes out of {@code open()} is the one of the **installed** provider, if
+ * somebody installed one through the `spi` mechanism; the in-house one only when there is none. A
+ * provider of one's own replaces ours, never the other way round.
  */
 public abstract class SocketChannel extends AbstractSelectableChannel
         implements ByteChannel, ScatteringByteChannel, GatheringByteChannel, NetworkChannel {
@@ -41,52 +41,53 @@ public abstract class SocketChannel extends AbstractSelectableChannel
     }
 
     /**
-     * Lectura, escritura y conexion; nunca aceptacion.
+     * Reading, writing and connecting; never accepting.
      *
-     * <p>Es `final` y no abstracto porque el juego no depende del estado: aunque el canal todavia no
-     * este conectado, las operaciones **validas** para su tipo son siempre estas tres.
+     * <p>It is `final` and not abstract because the set does not depend on the state: even if the
+     * channel is not connected yet, the operations **valid** for its type are always these three.
      */
     public final int validOps() {
         return SelectionKey.OP_READ | SelectionKey.OP_WRITE | SelectionKey.OP_CONNECT;
     }
 
-    /** Ata el canal a una direccion local. */
+    /** Ties the channel to a local address. */
     public abstract SocketChannel bind(SocketAddress local) throws IOException;
 
-    /** Fija una opcion de socket. */
+    /** Sets a socket option. */
     public abstract <T> SocketChannel setOption(SocketOption<T> name, T value) throws IOException;
 
     /**
-     * Cierra la mitad de lectura: lo que llegue despues se descarta y `read` devuelve -1.
+     * Closes the reading half: whatever arrives afterwards is discarded and `read` returns -1.
      */
     public abstract SocketChannel shutdownInput() throws IOException;
 
-    /** Cierra la mitad de escritura: el otro extremo ve fin de datos. */
+    /** Closes the writing half: the other end sees end of data. */
     public abstract SocketChannel shutdownOutput() throws IOException;
 
-    /** Si la conexion esta hecha. */
+    /** Whether the connection is made. */
     public abstract boolean isConnected();
 
-    /** Si hay una conexion empezada y sin terminar. */
+    /** Whether there is a connection started and unfinished. */
     public abstract boolean isConnectionPending();
 
     /**
-     * Conecta a `remote`.
+     * Connects to `remote`.
      *
-     * @return `true` si quedo conectado; `false` si arranco y hay que terminar con
-     *         {@link #finishConnect()}. Lo segundo solo pasa en modo no bloqueante
+     * @return `true` if it was left connected; `false` if it started and has to be finished with
+     *         {@link #finishConnect()}. The second only happens in non-blocking mode
      */
     public abstract boolean connect(SocketAddress remote) throws IOException;
 
     /**
-     * Termina una conexion empezada.
+     * Finishes a started connection.
      *
-     * <p>Hay que llamarlo aunque el selector diga que esta listo: es donde aparece el error si la
-     * conexion fallo. Sin este paso, un rechazo del otro extremo se veria como un canal conectado.
+     * <p>It has to be called even if the selector says it is ready: it is where the error appears
+     * if the connection failed. Without this step, a refusal by the other end would look like a
+     * connected channel.
      */
     public abstract boolean finishConnect() throws IOException;
 
-    /** La direccion del otro extremo, o `null` si no esta conectado. */
+    /** The address of the other end, or `null` if it is not connected. */
     public abstract SocketAddress getRemoteAddress() throws IOException;
 
     public abstract int read(ByteBuffer dst) throws IOException;
@@ -105,39 +106,39 @@ public abstract class SocketChannel extends AbstractSelectableChannel
         return this.write(srcs, 0, srcs.length);
     }
 
-    /** La direccion local, o `null` si no esta atado. */
+    /** The local address, or `null` if it is not tied. */
     public abstract SocketAddress getLocalAddress() throws IOException;
 
     /**
-     * Un canal sin conectar.
+     * An unconnected channel.
      *
-     * <p>El canal nace en modo bloqueante, como manda el contrato: quien quiera el otro modo llama a
-     * {@link #configureBlocking}.
+     * <p>The channel is born in blocking mode, as the contract requires: whoever wants the other
+     * mode calls {@link #configureBlocking}.
      *
-     * @throws IOException si no se pudo abrir
+     * @throws IOException if it could not be opened
      */
     public static SocketChannel open() throws IOException {
-        return KajiSelectorProvider.actual().openSocketChannel();
+        return KajiSelectorProvider.current().openSocketChannel();
     }
 
     /**
-     * Un canal sin conectar de esa familia de protocolos.
+     * An unconnected channel of that protocol family.
      *
-     * @throws UnsupportedOperationException si el proveedor no sostiene esa familia
-     * @throws IOException si no se pudo abrir
+     * @throws UnsupportedOperationException if the provider does not sustain that family
+     * @throws IOException if it could not be opened
      */
     public static SocketChannel open(java.net.ProtocolFamily family) throws IOException {
-        return KajiSelectorProvider.actual().openSocketChannel(family);
+        return KajiSelectorProvider.current().openSocketChannel(family);
     }
 
     /**
-     * Un canal **ya conectado** a esa direccion.
+     * A channel **already connected** to that address.
      *
-     * <p>Es la conveniencia que el JDK documenta: abrir, conectar en modo bloqueante, y devolver. Si
-     * la conexion falla el canal se cierra, para no dejar un descriptor colgado de una llamada que
-     * tiro.
+     * <p>It is the convenience the JDK documents: open, connect in blocking mode, and return. If
+     * the connection fails the channel is closed, so as not to leave a descriptor hanging from a
+     * call that threw.
      *
-     * @throws IOException si no se pudo abrir o no se pudo conectar
+     * @throws IOException if it could not be opened or could not be connected
      */
     public static SocketChannel open(SocketAddress remote) throws IOException {
         SocketChannel c = SocketChannel.open();
@@ -154,10 +155,10 @@ public abstract class SocketChannel extends AbstractSelectableChannel
     }
 
     /**
-     * El socket que envuelve a este canal.
+     * The socket that wraps this channel.
      *
-     * <p>Comparte el descriptor: cerrar cualquiera de los dos cierra el mismo socket, que es lo que
-     * promete el contrato para el par canal/socket.
+     * <p>It shares the descriptor: closing either of the two closes the same socket, which is what
+     * the contract promises for the channel/socket pair.
      */
     public abstract java.net.Socket socket();
 }

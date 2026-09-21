@@ -2,18 +2,18 @@ package java.util.prefs;
 
 import java.util.EventObject;
 
-// Una clave de un nodo cambio: quien es el nodo, cual es la clave y con que quedo.
+// A node's key changed: which node, which key and what it ended up as.
 //
-// `getNewValue()` devuelve `null` cuando la clave se borro, y esa es la unica manera de distinguir
-// un borrado de una escritura. No hay `getOldValue()`: el JDK no lo expone porque el aviso se arma
-// despues de aplicar el cambio y el valor anterior ya no esta en ningun lado que se pueda consultar
-// sin volver a tocar el deposito.
+// `getNewValue()` returns `null` when the key was removed, and that is the only way of telling a
+// removal from a write. There is no `getOldValue()`: the JDK does not expose one because the notice
+// is built after applying the change and the previous value is no longer anywhere that can be
+// consulted without touching the store again.
 //
-// **Sobre serializar.** Hereda de `EventObject`, que es `Serializable`, pero un evento de
-// preferencias no se puede serializar: arrastraria el nodo, y un nodo es una posicion en un arbol
-// vivo, no un dato. El JDK lo resuelve con un `writeObject` privado que tira
-// `NotSerializableException`; aca la clase simplemente nunca se serializa con exito porque
-// `Preferences` no es `Serializable`.
+// **On serialising.** It inherits from `EventObject`, which is `Serializable`, but a preferences
+// event cannot be serialised: it would drag the node along, and a node is a position in a live tree,
+// not a datum. The JDK settles it with a private `writeObject` that throws
+// `NotSerializableException`; here the class simply never serialises successfully because
+// `Preferences` is not `Serializable`.
 public class PreferenceChangeEvent extends EventObject {
 
     private static final long serialVersionUID = 793724513368024975L;
@@ -21,25 +21,25 @@ public class PreferenceChangeEvent extends EventObject {
     private final String key;
     private final String newValue;
 
-    // El aviso de que `key` quedo valiendo `newValue` en `node`. `newValue` en `null` significa que
-    // la clave se borro.
+    // The notice that `key` ended up worth `newValue` in `node`. `newValue` at `null` means the key
+    // was removed.
     public PreferenceChangeEvent(Preferences node, String key, String newValue) {
         super(node);
         this.key = key;
         this.newValue = newValue;
     }
 
-    // El nodo donde ocurrio el cambio.
+    // The node where the change happened.
     public Preferences getNode() {
         return (Preferences) getSource();
     }
 
-    // La clave que cambio.
+    // The key that changed.
     public String getKey() {
         return key;
     }
 
-    // El valor nuevo, o `null` si la clave se borro.
+    // The new value, or `null` if the key was removed.
     public String getNewValue() {
         return newValue;
     }

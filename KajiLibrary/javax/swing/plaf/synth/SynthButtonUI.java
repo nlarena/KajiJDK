@@ -13,27 +13,27 @@ import javax.swing.ButtonModel;
 import javax.swing.Icon;
 
 /**
- * El boton de Synth, y la raiz de otras tres clases.
+ * Synth's button, and the root of three other classes.
  *
- * <p>De aca salen {@link SynthToggleButtonUI}, {@link SynthRadioButtonUI} y
- * {@link SynthCheckBoxUI}, en cadena, y cada una cambia una sola cosa: el prefijo del que leen sus
- * valores. Es lo contrario de lo que pasa en Metal, donde el boton y el conmutador no comparten
- * una linea porque heredan de distinto lado; aca la cadena esta bien puesta desde el principio.
+ * <p>{@link SynthToggleButtonUI}, {@link SynthRadioButtonUI} and {@link SynthCheckBoxUI} come
+ * from here, in a chain, and each one changes a single thing: the prefix their values are read
+ * from. It is the opposite of what happens in Metal, where the button and the toggle share not
+ * a line because they inherit from different places; here the chain is well set from the start.
  *
- * <h2>El estado es mas que encendido o apagado</h2>
+ * <h2>The state is more than on or off</h2>
  *
- * <p>Un boton es el componente donde mas se nota para que sirve {@link SynthContext}: al estado
- * general -- encendido, apagado, con el foco -- le suma lo que dice su modelo. Apretado, con el
- * cursor encima, elegido, y {@code DEFAULT} si es el boton por omision del dialogo. Cada
- * combinacion puede tener su propia imagen de fondo, y de eso vive el aspecto.
+ * <p>A button is the component where what {@link SynthContext} is for shows most: to the general
+ * state -- on, off, focused -- it adds what its model says. Pressed, with the cursor over it,
+ * selected, and {@code DEFAULT} if it is the dialog's default button. Each combination may have
+ * its own background image, and that is what a look and feel lives on.
  *
- * <h2>Tres metodos para un icono</h2>
+ * <h2>Three methods for one icon</h2>
  *
- * <p>{@link #getIcon} es el que se dibuja: el del boton si lo tiene, y si no el del estilo.
- * {@link #getDefaultIcon} es el del estilo solo. {@link #getSizingIcon} es el que se usa para
- * <strong>medir</strong>, y no siempre es el mismo que se dibuja: si el icono cambia de tamano
- * entre estados, medir con el de ahora haria que el boton cambiara de tamano al pasarle el mouse
- * por encima.
+ * <p>{@link #getIcon} is the one that is drawn: the button's if it has one, and otherwise the
+ * style's. {@link #getDefaultIcon} is the style's alone. {@link #getSizingIcon} is the one used
+ * to <strong>measure</strong>, and it is not always the same as the one drawn: if the icon
+ * changes size between states, measuring with the current one would make the button change size
+ * when the mouse passed over it.
  */
 public class SynthButtonUI extends javax.swing.plaf.basic.BasicButtonUI implements SynthUI, PropertyChangeListener {
 
@@ -44,32 +44,33 @@ public class SynthButtonUI extends javax.swing.plaf.basic.BasicButtonUI implemen
     }
 
     public SynthContext getContext(JComponent c) {
-        return getContext(c, estadoDelBoton(c));
+        return getContext(c, buttonState(c));
     }
 
     /**
-     * El contexto con ese estado.
+     * The context with that state.
      *
-     * <p>La region sale del componente y no de una constante fija, y eso importa en las cadenas de
-     * herencia: {@code SynthCheckBoxUI} hereda este metodo de {@code SynthButtonUI} y tiene que
-     * contestar {@code CheckBox}, no {@code Button}. Medido.
+     * <p>The region comes from the component and not from a fixed constant, and that matters in the
+     * chains of inheritance: {@code SynthCheckBoxUI} inherits this method from {@code
+     * SynthButtonUI} and has to answer {@code CheckBox}, not {@code Button}. Measured.
      */
     private SynthContext getContext(JComponent c, int state) {
         Region r = SynthLookAndFeel.getRegion(c);
         return new SynthContext(c, (r != null) ? r : Region.BUTTON, style, state, true);
     }
 
-    /** Le pide el estilo a la fabrica; revienta si no hay, y esta medido. */
+    /** It asks the factory for the style; it blows up if there is none, and it is measured. */
     private void updateStyle(JComponent c) {
-        style = SynthLookAndFeel.actualizar(getContext(c, SynthConstants.ENABLED));
+        style = SynthLookAndFeel.update(getContext(c, SynthConstants.ENABLED));
     }
 
     /**
-     * Dibuja el fondo y despues el contenido.
+     * It draws the background and then the content.
      *
-     * <p>Synth separa las dos cosas: el fondo lo pinta el estilo -- que sabe en que estado esta el
-     * componente -- y el contenido lo pinta el aspecto basico. Por eso {@code update} no es
-     * {@code paint} con un relleno adelante, como en el basico, sino dos pasos distintos.
+     * <p>Synth separates the two things: the background is painted by the style -- which knows what
+     * state the component is in -- and the content is painted by the basic look and feel. That is
+     * why {@code update} is not {@code paint} with a fill in front, as in the basic one, but two
+     * different steps.
      */
     public void update(Graphics g, JComponent c) {
         SynthContext context = getContext(c);
@@ -88,7 +89,7 @@ public class SynthButtonUI extends javax.swing.plaf.basic.BasicButtonUI implemen
         super.paint(g, context.getComponent());
     }
 
-    /** El borde lo dibuja el estilo, no un {@code Border}; ver {@link SynthUI}. */
+    /** The border is drawn by the style, not by a {@code Border}; see {@link SynthUI}. */
     public void paintBorder(SynthContext context, Graphics g, int x, int y, int w, int h) {
         if (context != null && context.getStyle() != null) {
             context.getStyle().getPainter(context)
@@ -96,7 +97,7 @@ public class SynthButtonUI extends javax.swing.plaf.basic.BasicButtonUI implemen
         }
     }
 
-    /** Cualquier cambio puede querer otro estilo; ver {@link SynthLookAndFeel#actualizar}. */
+    /** Any change may want another style; see {@link SynthLookAndFeel#update}. */
     public void propertyChange(PropertyChangeEvent e) {
         Object o = e.getSource();
         if (o instanceof JComponent) {
@@ -125,15 +126,15 @@ public class SynthButtonUI extends javax.swing.plaf.basic.BasicButtonUI implemen
         super.uninstallListeners(b);
     }
 
-    /** El estado general mas lo que diga el modelo; ver la nota de la clase. */
-    private int estadoDelBoton(JComponent c) {
+    /** The general state plus whatever the model says; see the class note. */
+    private int buttonState(JComponent c) {
         if (!(c instanceof AbstractButton)) {
-            return SynthLookAndFeel.estadoDe(c);
+            return SynthLookAndFeel.stateOf(c);
         }
         ButtonModel m = ((AbstractButton) c).getModel();
         int state = SynthConstants.ENABLED;
-        // Apretado no se SUMA a encendido: lo reemplaza. Un boton apretado no esta ademas
-        // encendido; esta apretado, que es otro dibujo. Medido: da 4 y no 5.
+        // Pressed is not ADDED to enabled: it replaces it. A pressed button is not also
+                // enabled; it is pressed, which is another drawing. Measured: it gives 4 and not 5.
         if (m.isPressed()) {
             state = m.isArmed() ? SynthConstants.PRESSED : SynthConstants.MOUSE_OVER;
         }
@@ -143,7 +144,7 @@ public class SynthButtonUI extends javax.swing.plaf.basic.BasicButtonUI implemen
         if (m.isSelected()) {
             state |= SynthConstants.SELECTED;
         }
-        // Y apagado pisa todo lo anterior, apretado incluido. Tambien medido.
+        // And disabled overrides everything before it, pressed included. Also measured.
         if (!c.isEnabled()) {
             state = SynthConstants.DISABLED;
         }
@@ -156,13 +157,13 @@ public class SynthButtonUI extends javax.swing.plaf.basic.BasicButtonUI implemen
         return state;
     }
 
-    /** El del boton, o el del estilo si el boton no tiene. */
+    /** The button's, or the style's if the button has none. */
     protected Icon getIcon(AbstractButton b) {
         Icon i = b.getIcon();
         return (i != null) ? i : getDefaultIcon(b);
     }
 
-    /** El del estilo; nulo sin estilo. */
+    /** The style's; null with no style. */
     protected Icon getDefaultIcon(AbstractButton b) {
         SynthContext context = getContext(b);
         if (context.getStyle() == null) {
@@ -171,7 +172,7 @@ public class SynthButtonUI extends javax.swing.plaf.basic.BasicButtonUI implemen
         return context.getStyle().getIcon(context, getPropertyPrefix() + "icon");
     }
 
-    /** El de medir, que no siempre es el de dibujar; ver la nota de la clase. */
+    /** The measuring one, which is not always the drawing one; see the class note. */
     protected Icon getSizingIcon(AbstractButton b) {
         Icon i = getDefaultIcon(b);
         return (i != null) ? i : getIcon(b);

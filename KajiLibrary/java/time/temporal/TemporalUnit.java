@@ -5,18 +5,19 @@ package java.time.temporal;
 public interface TemporalUnit {
 
     /**
-     * Devuelve `temporal` mas `amount` de esta unidad.
+     * It returns `temporal` plus `amount` of this unit.
      *
-     * <p>El tipo de retorno repite el del parametro para que el resultado conserve el tipo concreto:
-     * sumarle dias a un `LocalDate` devuelve un `LocalDate`.
+     * <p>The return type repeats the parameter's so the result keeps the concrete type: adding days
+     * to a `LocalDate` returns a `LocalDate`.
      */
     <R extends Temporal> R addTo(R temporal, long amount);
 
     /**
-     * Cuanto dura esta unidad.
+     * How long this unit lasts.
      *
-     * <p>Para las unidades **estimadas** --meses, años-- es un promedio, y por eso `isDurationEstimated`
-     * existe: usar este valor para aritmetica exacta sobre esas unidades da un resultado equivocado.
+     * <p>For the **estimated** units --months, years-- it is an average, and that is why
+     * `isDurationEstimated` exists: using this value for exact arithmetic over those units gives a
+     * wrong result.
      */
     java.time.Duration getDuration();
 

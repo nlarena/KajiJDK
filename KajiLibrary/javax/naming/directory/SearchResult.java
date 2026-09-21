@@ -3,53 +3,53 @@ package javax.naming.directory;
 import javax.naming.Binding;
 
 /**
- * KajiLibrary's javax.naming.directory.SearchResult -- una entrada que coincidio con la busqueda.
+ * KajiLibrary's javax.naming.directory.SearchResult -- an entry that matched the search.
  *
- * <p>Un {@link Binding} --nombre y objeto-- mas los atributos que se pidieron. Extiende
- * {@code Binding} y no lo copia porque un resultado de busqueda <b>es</b> una asociacion nombre-objeto;
- * lo que agrega el directorio son los atributos.
+ * <p>A {@link Binding} --name and object-- plus the attributes that were asked for. It extends
+ * {@code Binding} instead of copying it because a search result <b>is</b> a name-object binding;
+ * what the directory adds is the attributes.
  *
- * <p>El nombre puede ser relativo o absoluto y eso importa al usarlo: con
- * {@link javax.naming.NameClassPair#isRelative} en false, el nombre es un URL completo y no se puede
- * pasar a {@code lookup} del mismo contexto. Pasa cuando la busqueda cruzo una referencia a otro
- * servidor.
+ * <p>The name may be relative or absolute and that matters when using it: with
+ * {@link javax.naming.NameClassPair#isRelative} false, the name is a full URL and cannot be passed
+ * to {@code lookup} on the same context. It happens when the search crossed a referral to another
+ * server.
  *
- * <p>El objeto viene solo si se pidio con {@link SearchControls#setReturningObjFlag}; si no, es null
- * y lo unico util son el nombre y los atributos.
+ * <p>The object comes only if asked for with {@link SearchControls#setReturningObjFlag}; otherwise
+ * it is null and the only useful things are the name and the attributes.
  */
 public class SearchResult extends Binding {
 
     private static final long serialVersionUID = -9158063327699723172L;
 
-    /** Los atributos que se pidieron traer. */
+    /** The attributes that were asked for. */
     private Attributes attrs;
 
-    /** Nombre relativo, objeto y atributos. */
+    /** Relative name, object and attributes. */
     public SearchResult(String name, Object obj, Attributes attrs) {
         super(name, obj);
         this.attrs = attrs;
     }
 
-    /** Idem, diciendo si el nombre es relativo. */
+    /** Same, stating whether the name is relative. */
     public SearchResult(String name, Object obj, Attributes attrs, boolean isRelative) {
         super(name, obj, isRelative);
         this.attrs = attrs;
     }
 
-    /** Idem, con el nombre de clase explicito. */
+    /** Same, with an explicit class name. */
     public SearchResult(String name, String className, Object obj, Attributes attrs) {
         super(name, className, obj);
         this.attrs = attrs;
     }
 
-    /** Todo explicito. */
+    /** Everything explicit. */
     public SearchResult(String name, String className, Object obj, Attributes attrs,
                         boolean isRelative) {
         super(name, className, obj, isRelative);
         this.attrs = attrs;
     }
 
-    /** Los atributos. */
+    /** The attributes. */
     public Attributes getAttributes() {
         return this.attrs;
     }
@@ -59,7 +59,7 @@ public class SearchResult extends Binding {
         this.attrs = attrs;
     }
 
-    /** Lo del {@link Binding} mas los atributos. */
+    /** What {@link Binding} has, plus the attributes. */
     public String toString() {
         return super.toString() + ":" + getAttributes();
     }

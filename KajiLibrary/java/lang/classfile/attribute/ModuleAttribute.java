@@ -16,46 +16,46 @@ import java.util.Set;
 import java.util.function.Consumer;
 import jdk.internal.classfile.impl.TypedAttributes;
 
-// `Module` (JVMS §4.7.25): la declaración entera de un módulo. Es el atributo más grande del
-// formato y el único que reemplaza al contenido de la clase en vez de acompañarlo — un
-// `module-info.class` no tiene campos ni métodos, sólo esto.
+// `Module` (JVMS §4.7.25): a module's whole declaration. It is the format's largest attribute and the
+// only one that replaces the class's contents instead of accompanying them -- a `module-info.class`
+// has no fields and no methods, only this.
 public interface ModuleAttribute extends Attribute<ModuleAttribute>, ClassElement {
 
-    /** El nombre del módulo. */
+    /** The module's name. */
     ModuleEntry moduleName();
 
-    /** Las banderas del módulo, como máscara. */
+    /** The module's flags, as a mask. */
     int moduleFlagsMask();
 
-    /** Las banderas del módulo, como conjunto. */
+    /** The module's flags, as a set. */
     default Set<AccessFlag> moduleFlags() {
         return AccessFlag.maskToAccessFlags(moduleFlagsMask(), AccessFlag.Location.MODULE);
     }
 
-    /** Si esta bandera está puesta. */
+    /** Whether this flag is set. */
     default boolean has(AccessFlag flag) {
         return (moduleFlagsMask() & flag.mask()) != 0;
     }
 
-    /** La versión del módulo, si está. */
+    /** The module's version, if it is there. */
     Optional<Utf8Entry> moduleVersion();
 
-    /** Las cláusulas `requires`. */
+    /** The `requires` clauses. */
     List<ModuleRequireInfo> requires();
 
-    /** Las cláusulas `exports`. */
+    /** The `exports` clauses. */
     List<ModuleExportInfo> exports();
 
-    /** Las cláusulas `opens`. */
+    /** The `opens` clauses. */
     List<ModuleOpenInfo> opens();
 
-    /** Los servicios que el módulo usa. */
+    /** The services the module uses. */
     List<ClassEntry> uses();
 
-    /** Las cláusulas `provides`. */
+    /** The `provides` clauses. */
     List<ModuleProvideInfo> provides();
 
-    /** El atributo con todas sus partes. */
+    /** The attribute with all its parts. */
     public static ModuleAttribute of(ModuleEntry moduleName, int moduleFlags,
             Utf8Entry moduleVersion, Collection<ModuleRequireInfo> requires,
             Collection<ModuleExportInfo> exports, Collection<ModuleOpenInfo> opens,
@@ -64,86 +64,86 @@ public interface ModuleAttribute extends Attribute<ModuleAttribute>, ClassElemen
                 opens, uses, provides);
     }
 
-    /** El atributo que arma `handler` sobre un constructor vacío. */
+    /** The attribute `handler` builds on top of an empty builder. */
     public static ModuleAttribute of(ModuleDesc moduleName,
             Consumer<ModuleAttributeBuilder> handler) {
         return of(TypedAttributes.moduleEntry(moduleName), handler);
     }
 
-    /** El atributo que arma `handler` sobre un constructor vacío. */
+    /** The attribute `handler` builds on top of an empty builder. */
     public static ModuleAttribute of(ModuleEntry moduleName,
             Consumer<ModuleAttributeBuilder> handler) {
         return TypedAttributes.buildModule(moduleName, handler);
     }
 
     /**
-     * El constructor incremental de un `Module`. Cada método devuelve el mismo constructor, así que
-     * las cláusulas se encadenan; `moduleName` y las banderas se pisan, las cláusulas se acumulan.
+     * A `Module`'s incremental builder. Every method returns the same builder, so the clauses chain;
+     * `moduleName` and the flags overwrite, the clauses accumulate.
      */
     public interface ModuleAttributeBuilder {
 
-        /** Cambia el nombre del módulo. */
+        /** It changes the module's name. */
         ModuleAttributeBuilder moduleName(ModuleDesc moduleName);
 
-        /** Pone las banderas del módulo. */
+        /** It sets the module's flags. */
         ModuleAttributeBuilder moduleFlags(int flagsMask);
 
-        /** Pone las banderas del módulo. */
+        /** It sets the module's flags. */
         default ModuleAttributeBuilder moduleFlags(AccessFlag... moduleFlags) {
             return moduleFlags(TypedAttributes.mask(moduleFlags));
         }
 
-        /** Pone la versión del módulo. */
+        /** It sets the module's version. */
         ModuleAttributeBuilder moduleVersion(String version);
 
-        /** Agrega un `requires`. */
+        /** It adds a `requires`. */
         ModuleAttributeBuilder requires(ModuleDesc module, int requiresFlagsMask, String version);
 
-        /** Agrega un `requires`. */
+        /** It adds a `requires`. */
         default ModuleAttributeBuilder requires(ModuleDesc module,
                 Collection<AccessFlag> requiresFlags, String version) {
             return requires(module, TypedAttributes.mask(requiresFlags), version);
         }
 
-        /** Agrega un `requires` ya armado. */
+        /** It adds an already built `requires`. */
         ModuleAttributeBuilder requires(ModuleRequireInfo requires);
 
-        /** Agrega un `exports`. */
+        /** It adds an `exports`. */
         ModuleAttributeBuilder exports(PackageDesc pkge, int exportsFlagsMask,
                 ModuleDesc... exportsToModules);
 
-        /** Agrega un `exports`. */
+        /** It adds an `exports`. */
         default ModuleAttributeBuilder exports(PackageDesc pkge, Collection<AccessFlag> exportsFlags,
                 ModuleDesc... exportsToModules) {
             return exports(pkge, TypedAttributes.mask(exportsFlags), exportsToModules);
         }
 
-        /** Agrega un `exports` ya armado. */
+        /** It adds an already built `exports`. */
         ModuleAttributeBuilder exports(ModuleExportInfo exports);
 
-        /** Agrega un `opens`. */
+        /** It adds an `opens`. */
         ModuleAttributeBuilder opens(PackageDesc pkge, int opensFlagsMask,
                 ModuleDesc... opensToModules);
 
-        /** Agrega un `opens`. */
+        /** It adds an `opens`. */
         default ModuleAttributeBuilder opens(PackageDesc pkge, Collection<AccessFlag> opensFlags,
                 ModuleDesc... opensToModules) {
             return opens(pkge, TypedAttributes.mask(opensFlags), opensToModules);
         }
 
-        /** Agrega un `opens` ya armado. */
+        /** It adds an already built `opens`. */
         ModuleAttributeBuilder opens(ModuleOpenInfo opens);
 
-        /** Agrega un servicio usado. */
+        /** It adds a used service. */
         ModuleAttributeBuilder uses(ClassDesc service);
 
-        /** Agrega un servicio usado. */
+        /** It adds a used service. */
         ModuleAttributeBuilder uses(ClassEntry uses);
 
-        /** Agrega un `provides`. */
+        /** It adds a `provides`. */
         ModuleAttributeBuilder provides(ClassDesc service, ClassDesc... implClasses);
 
-        /** Agrega un `provides` ya armado. */
+        /** It adds an already built `provides`. */
         ModuleAttributeBuilder provides(ModuleProvideInfo provides);
     }
 }

@@ -7,28 +7,30 @@ import javax.lang.model.type.PrimitiveType;
 import javax.lang.model.type.TypeKind;
 
 /**
- * KajiLibrary's javax.lang.model.util.TypeKindVisitor6 — el visitante que reparte por {@link TypeKind} y
- * no solo por interfaz.
+ * KajiLibrary's javax.lang.model.util.TypeKindVisitor6 — the visitor that dispatches by
+ * {@link TypeKind} and not only by interface.
  *
- * <p>Misma idea que {@link ElementKindVisitor6}, del lado de los tipos, y con dos repartos en vez de
- * tres. Son los dos lugares donde una interfaz del modelo tapa varias formas distintas:
+ * <p>Same idea as {@link ElementKindVisitor6}, on the side of types, and with two dispatches
+ * instead of three. They are the two places where one model interface covers several different
+ * forms:
  *
  * <ul>
- * <li>{@link PrimitiveType} tapa los ocho primitivos. `visitPrimitive` los abre en
- *     `visitPrimitiveAsInt`, `visitPrimitiveAsBoolean` y demas — que es lo que hace falta casi siempre,
- *     porque un visitante que trate `int` y `double` igual es raro.</li>
- * <li>{@link NoType} tapa los pseudotipos: `void`, el de un paquete, el de un modulo y `NONE`. Cuatro
- *     cosas que no son tipos, por cuatro razones distintas, bajo una sola interfaz.</li>
+ * <li>{@link PrimitiveType} covers the eight primitives. `visitPrimitive` opens them into
+ *     `visitPrimitiveAsInt`, `visitPrimitiveAsBoolean` and so on — which is what is needed almost
+ *     always, because a visitor that treats `int` and `double` alike is rare.</li>
+ * <li>{@link NoType} covers the pseudo-types: `void`, a package's, a module's and `NONE`. Four
+ *     things that are not types, for four different reasons, under a single interface.</li>
  * </ul>
  *
- * <p>El resto de las formas de tipo — array, declarado, comodin — tienen su interfaz propia y no
- * necesitan reparto, asi que se heredan tal cual de {@link SimpleTypeVisitor6}.
+ * <p>The rest of the forms of type — array, declared, wildcard — have their own interface and need
+ * no dispatch, so they are inherited as they are from {@link SimpleTypeVisitor6}.
  *
- * <p>El `AssertionError` del final de cada reparto significa lo mismo que en `ElementKindVisitor6`: un
- * `PrimitiveType` cuyo kind no es primitivo es un modelo roto, no una construccion nueva del lenguaje.
+ * <p>The `AssertionError` at the end of each dispatch means the same as in `ElementKindVisitor6`: a
+ * `PrimitiveType` whose kind is not primitive is a broken model, not a new language construct.
  *
- * <p>`visitNoTypeAsModule` es el unico caso que cae en `visitUnknown`: el pseudotipo `MODULE` es de Java
- * 9 y este visitante es de 6. {@link TypeKindVisitor9} lo pasa al embudo.
+ * <p>`visitNoTypeAsModule` is the only case that falls into `visitUnknown`: the `MODULE`
+ * pseudo-type is from Java 9 and this visitor is from 6. {@link TypeKindVisitor9} passes it to the
+ * funnel.
  */
 @SupportedSourceVersion(SourceVersion.RELEASE_6)
 public class TypeKindVisitor6<R, P> extends SimpleTypeVisitor6<R, P> {
@@ -43,7 +45,9 @@ public class TypeKindVisitor6<R, P> extends SimpleTypeVisitor6<R, P> {
         super(defaultValue);
     }
 
-    // `if` encadenados y no `switch`, por lo mismo que en ElementKindVisitor6 (COMPILER_FINDINGS #401).
+    // Chained `if`s and not a `switch`, for the same reason as in ElementKindVisitor6 (the frozen
+    // javac does not lower a switch on an enum from the class path; #401/#538 are closed in the
+    // source).
 
     public R visitPrimitive(PrimitiveType t, P p) {
         TypeKind k = t.getKind();
@@ -131,7 +135,7 @@ public class TypeKindVisitor6<R, P> extends SimpleTypeVisitor6<R, P> {
         return this.defaultAction(t, p);
     }
 
-    /** El pseudotipo de un modulo es de Java 9: ver el encabezado. */
+    /** A module's pseudo-type is from Java 9: see the header. */
     public R visitNoTypeAsModule(NoType t, P p) {
         return this.visitUnknown(t, p);
     }

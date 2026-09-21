@@ -1,8 +1,8 @@
 package com.sun.source.doctree;
 
 /**
- * El nodo de `{@value}`, que sustituye el valor de una constante.
- * {@link #getFormat} es el formato opcional que se le puede dar.
+ * The node of `{@value}`, which substitutes a constant's value.
+ * {@link #getFormat} is the optional format that may be given to it.
  */
 public interface ValueTree extends InlineTagTree {
 

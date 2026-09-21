@@ -6,329 +6,333 @@ import java.io.IOException;
 import java.nio.ByteOrder;
 
 /**
- * KajiLibrary's javax.imageio.stream.ImageInputStream -- un flujo de lectura pensado para formatos de
- * imagen.
+ * KajiLibrary's javax.imageio.stream.ImageInputStream -- a read stream designed for image formats.
  *
- * <p>Es un {@link DataInput} con tres cosas que {@code DataInputStream} no tiene, y cada una responde
- * a un problema real de leer imagenes:
+ * <p>It is a {@link DataInput} with three things {@code DataInputStream} lacks, and each answers a
+ * real problem of reading images:
  *
  * <ul>
- *   <li><b>orden de bytes configurable</b>. TIFF viene en los dos ordenes y lo dice en su encabezado;
- *       BMP es chico primero, PNG grande primero. Con {@code DataInput} habria que dar vuelta cada
- *       valor a mano;
- *   <li><b>posicionamiento</b>. {@link #seek} y {@link #getStreamPosition} permiten saltar a un
- *       desplazamiento que el propio archivo indica -- que es como esta hecho TIFF entero;
- *   <li><b>lectura por bits</b>. {@link #readBit} y {@link #readBits} leen campos que no estan
- *       alineados a byte, que es lo normal en los formatos comprimidos.
+ *   <li><b>configurable byte order</b>. TIFF comes in both orders and says so in its header; BMP
+ *       is little-endian, PNG big-endian. With {@code DataInput} every value would have to be
+ *       flipped by hand;
+ *   <li><b>seeking</b>. {@link #seek} and {@link #getStreamPosition} allow jumping to an offset the
+ *       file itself gives -- which is how the whole of TIFF is built;
+ *   <li><b>bit reading</b>. {@link #readBit} and {@link #readBits} read fields that are not
+ *       byte-aligned, which is normal in compressed formats.
  * </ul>
  *
- * <h2>La posicion de descarte</h2>
+ * <h2>The flushed position</h2>
  *
- * <p>{@link #flushBefore} promete que no se va a volver antes de esa posicion, y con eso el flujo
- * puede tirar lo que tenia guardado. Es lo que permite leer una imagen enorme desde un socket sin
- * juntarla entera en memoria.
+ * <p>{@link #flushBefore} promises not to go back before that position, and with that the stream
+ * can drop what it had kept. It is what allows reading a huge image from a socket without
+ * collecting it whole in memory.
  *
- * <p>La contracara: despues de eso, {@link #seek} a una posicion anterior lanza
- * {@link IndexOutOfBoundsException}. No es un error del flujo sino de quien prometio que no iba a
- * volver.
+ * <p>The flip side: after that, {@link #seek} to an earlier position throws
+ * {@link IndexOutOfBoundsException}. It is not the stream's error but that of whoever promised not
+ * to go back.
  *
- * <h2>{@link #mark} se apila</h2>
+ * <h2>{@link #mark} stacks</h2>
  *
- * <p>A diferencia del de {@code InputStream}, este es una <b>pila</b>: dos {@code mark} seguidos y dos
- * {@code reset} vuelven a la segunda marca y despues a la primera. Y no lleva limite de lectura, porque
- * el flujo se puede posicionar.
+ * <p>Unlike {@code InputStream}'s, this one is a <b>stack</b>: two {@code mark} in a row and two
+ * {@code reset} go back to the second mark and then to the first. And it has no read limit,
+ * because the stream can seek.
  *
- * <h2>El desplazamiento de bit se limpia solo</h2>
+ * <h2>The bit offset clears itself</h2>
  *
- * <p>Cualquier lectura de byte o mayor pone {@link #getBitOffset} en cero. Es lo que hace que se pueda
- * alternar entre campos de bits y campos de bytes sin llevar la cuenta a mano.
+ * <p>Any read of a byte or more sets {@link #getBitOffset} to zero. It is what allows alternating
+ * between bit fields and byte fields without keeping count by hand.
  */
 public interface ImageInputStream extends DataInput, Closeable {
 
     /**
-     * Con que orden de bytes leer los valores de mas de un byte. Ver la nota de la clase.
+     * Which byte order to read multi-byte values with. See the class note.
      *
-     * <p>No afecta a {@link #readUTF}, que siempre lee en orden de red.
+     * <p>It does not affect {@link #readUTF}, which always reads in network order.
      */
     void setByteOrder(ByteOrder byteOrder);
 
-    /** Cual esta puesto. */
+    /** Which one is set. */
     ByteOrder getByteOrder();
 
     /**
-     * Un byte, de 0 a 255, o -1 al final.
+     * One byte, from 0 to 255, or -1 at the end.
      *
-     * @throws IOException si fallo la lectura
+     * @throws IOException if reading failed
      */
     int read() throws IOException;
 
     /**
-     * Hasta llenar el arreglo.
+     * Until the array is full.
      *
-     * @return cuantos se leyeron, o -1 al final
-     * @throws IOException si fallo la lectura
+     * @return how many were read, or -1 at the end
+     * @throws IOException if reading failed
      */
     int read(byte[] b) throws IOException;
 
     /**
-     * Hasta {@code len} bytes.
+     * Up to {@code len} bytes.
      *
-     * @return cuantos se leyeron, o -1 al final
-     * @throws IOException si fallo la lectura
+     * @return how many were read, or -1 at the end
+     * @throws IOException if reading failed
      */
     int read(byte[] b, int off, int len) throws IOException;
 
     /**
-     * Hasta {@code len} bytes, <b>sin copiar</b>. Ver {@link IIOByteBuffer}.
+     * Up to {@code len} bytes, <b>without copying</b>. See {@link IIOByteBuffer}.
      *
-     * @throws IOException si fallo la lectura
+     * @throws IOException if reading failed
      */
     void readBytes(IIOByteBuffer buf, int len) throws IOException;
 
     /**
-     * Un byte como booleano.
+     * One byte as a boolean.
      *
-     * @throws java.io.EOFException si no hay mas
+     * @throws java.io.EOFException if there is no more
      */
     boolean readBoolean() throws IOException;
 
     /**
-     * Un byte con signo.
+     * One signed byte.
      *
-     * @throws java.io.EOFException si no hay mas
+     * @throws java.io.EOFException if there is no more
      */
     byte readByte() throws IOException;
 
     /**
-     * Un byte sin signo.
+     * One unsigned byte.
      *
-     * @throws java.io.EOFException si no hay mas
+     * @throws java.io.EOFException if there is no more
      */
     int readUnsignedByte() throws IOException;
 
     /**
-     * Dos bytes con signo, en el orden configurado.
+     * Two signed bytes, in the configured order.
      *
-     * @throws java.io.EOFException si no hay suficientes
+     * @throws java.io.EOFException if there are not enough
      */
     short readShort() throws IOException;
 
     /**
-     * Dos bytes sin signo.
+     * Two unsigned bytes.
      *
-     * @throws java.io.EOFException si no hay suficientes
+     * @throws java.io.EOFException if there are not enough
      */
     int readUnsignedShort() throws IOException;
 
     /**
-     * Dos bytes como caracter.
+     * Two bytes as a char.
      *
-     * @throws java.io.EOFException si no hay suficientes
+     * @throws java.io.EOFException if there are not enough
      */
     char readChar() throws IOException;
 
     /**
-     * Cuatro bytes con signo.
+     * Four signed bytes.
      *
-     * @throws java.io.EOFException si no hay suficientes
+     * @throws java.io.EOFException if there are not enough
      */
     int readInt() throws IOException;
 
     /**
-     * Cuatro bytes sin signo, como {@code long}.
+     * Four unsigned bytes, as a {@code long}.
      *
-     * <p>Devuelve {@code long} porque un entero de 32 bits sin signo no entra en un {@code int}. Es un
-     * tipo que los formatos de imagen usan todo el tiempo.
+     * <p>It returns {@code long} because a 32-bit unsigned integer does not fit in an {@code int}.
+     * It is a type image formats use all the time.
      *
-     * @throws java.io.EOFException si no hay suficientes
+     * @throws java.io.EOFException if there are not enough
      */
     long readUnsignedInt() throws IOException;
 
     /**
-     * Ocho bytes.
+     * Eight bytes.
      *
-     * @throws java.io.EOFException si no hay suficientes
+     * @throws java.io.EOFException if there are not enough
      */
     long readLong() throws IOException;
 
     /**
-     * Cuatro bytes como coma flotante.
+     * Four bytes as floating point.
      *
-     * @throws java.io.EOFException si no hay suficientes
+     * @throws java.io.EOFException if there are not enough
      */
     float readFloat() throws IOException;
 
     /**
-     * Ocho bytes como coma flotante.
+     * Eight bytes as floating point.
      *
-     * @throws java.io.EOFException si no hay suficientes
+     * @throws java.io.EOFException if there are not enough
      */
     double readDouble() throws IOException;
 
     /**
-     * Una linea de texto, un byte por caracter.
+     * A line of text, one byte per character.
      *
-     * <p>Hereda el problema de {@code DataInputStream.readLine}: no decodifica nada, asi que cualquier
-     * cosa que no sea ASCII sale mal.
+     * <p>It inherits the problem of {@code DataInputStream.readLine}: it decodes nothing, so
+     * anything that is not ASCII comes out wrong.
      *
-     * @return la linea, o null al final del flujo
+     * @return the line, or null at the end of the stream
      */
     String readLine() throws IOException;
 
     /**
-     * Una cadena en UTF modificado.
+     * A string in modified UTF-8.
      *
-     * <p>Siempre en orden de red, sin importar {@link #setByteOrder}. Es una correccion vieja del JDK:
-     * el formato lo define asi y respetar el orden configurado producia cadenas ilegibles.
+     * <p>Always in network order, regardless of {@link #setByteOrder}. It is an old JDK fix: the
+     * format defines it that way and honouring the configured order produced unreadable strings.
      *
-     * @throws java.io.UTFDataFormatException si los bytes no son UTF modificado valido
+     * @throws java.io.UTFDataFormatException if the bytes are not valid modified UTF-8
      */
     String readUTF() throws IOException;
 
     /**
-     * Llena esa parte del arreglo.
+     * Fills that part of the array.
      *
-     * @throws java.io.EOFException si no hay suficientes
+     * @throws java.io.EOFException if there are not enough
      */
     void readFully(byte[] b, int off, int len) throws IOException;
 
     /**
-     * Llena el arreglo.
+     * Fills the array.
      *
-     * @throws java.io.EOFException si no hay suficientes
+     * @throws java.io.EOFException if there are not enough
      */
     void readFully(byte[] b) throws IOException;
 
     /**
-     * Llena esa parte, dos bytes por elemento y en el orden configurado.
+     * Fills that part, two bytes per element and in the configured order.
      *
-     * @throws java.io.EOFException si no hay suficientes
+     * @throws java.io.EOFException if there are not enough
      */
     void readFully(short[] s, int off, int len) throws IOException;
 
     /**
-     * Idem, con caracteres.
+     * Same, with chars.
      *
-     * @throws java.io.EOFException si no hay suficientes
+     * @throws java.io.EOFException if there are not enough
      */
     void readFully(char[] c, int off, int len) throws IOException;
 
     /**
-     * Idem, cuatro bytes por elemento.
+     * Same, four bytes per element.
      *
-     * @throws java.io.EOFException si no hay suficientes
+     * @throws java.io.EOFException if there are not enough
      */
     void readFully(int[] i, int off, int len) throws IOException;
 
     /**
-     * Idem, ocho bytes por elemento.
+     * Same, eight bytes per element.
      *
-     * @throws java.io.EOFException si no hay suficientes
+     * @throws java.io.EOFException if there are not enough
      */
     void readFully(long[] l, int off, int len) throws IOException;
 
     /**
-     * Idem, en coma flotante de cuatro bytes.
+     * Same, as four-byte floating point.
      *
-     * @throws java.io.EOFException si no hay suficientes
+     * @throws java.io.EOFException if there are not enough
      */
     void readFully(float[] f, int off, int len) throws IOException;
 
     /**
-     * Idem, de ocho bytes.
+     * Same, eight-byte.
      *
-     * @throws java.io.EOFException si no hay suficientes
+     * @throws java.io.EOFException if there are not enough
      */
     void readFully(double[] d, int off, int len) throws IOException;
 
-    /** En que byte va la lectura. */
+    /** At which byte reading is. */
     long getStreamPosition() throws IOException;
 
-    /** En que bit dentro de ese byte, de 0 a 7. Ver la nota de la clase. */
+    /** At which bit within that byte, from 0 to 7. See the class note. */
     int getBitOffset() throws IOException;
 
     /**
-     * Lo fija.
+     * Sets it.
      *
-     * @throws IllegalArgumentException si no esta entre 0 y 7
+     * @throws IllegalArgumentException if it is not between 0 and 7
      */
     void setBitOffset(int bitOffset) throws IOException;
 
     /**
-     * Un bit, 0 o 1. Avanza el desplazamiento de bit.
+     * One bit, 0 or 1. Advances the bit offset.
      *
-     * @throws java.io.EOFException si no hay mas
+     * @throws java.io.EOFException if there is no more
      */
     int readBit() throws IOException;
 
     /**
-     * Hasta 64 bits, alineados a la derecha del resultado.
+     * Up to 64 bits, right-aligned in the result.
      *
-     * @param numBits de 0 a 64
-     * @throws IllegalArgumentException si se piden mas de 64
-     * @throws java.io.EOFException si no hay suficientes
+     * @param numBits from 0 to 64
+     * @throws IllegalArgumentException if more than 64 are asked for
+     * @throws java.io.EOFException if there are not enough
      */
     long readBits(int numBits) throws IOException;
 
-    /** Cuantos bytes tiene, o -1 si no se sabe. */
+    /** How many bytes it has, or -1 if unknown. */
     long length() throws IOException;
 
     /**
-     * Saltea bytes.
+     * Skips bytes.
      *
-     * @return cuantos se saltearon de verdad
+     * @return how many were really skipped
      */
     int skipBytes(int n) throws IOException;
 
-    /** Idem, con un salto que puede pasar de dos gigabytes. */
+    /** Same, with a skip that may go past two gigabytes. */
     long skipBytes(long n) throws IOException;
 
     /**
-     * Se posiciona en ese byte.
+     * Seeks to that byte.
      *
-     * @throws IndexOutOfBoundsException si es anterior a la posicion de descarte; ver la nota de la
-     *     clase
+     * @throws IndexOutOfBoundsException if it is before the flushed position; see the class note
      */
     void seek(long pos) throws IOException;
 
-    /** Apila la posicion actual. Ver la nota de la clase: se apila. */
+    /** Pushes the current position. See the class note: it stacks. */
     void mark();
 
     /**
-     * Vuelve a la ultima marca.
+     * Goes back to the last mark.
      *
-     * @throws IOException si no hay marca, o si quedo antes de la posicion de descarte
+     * <p>Without a mark it does nothing, as the JDK specifies. (An earlier note said it throws in
+     * that case; neither this library's implementation nor the JDK's does.)
+     *
+     * @throws IOException if the mark lies before the flushed position
      */
     void reset() throws IOException;
 
     /**
-     * Promete no volver antes de esa posicion. Ver la nota de la clase.
+     * Promises not to go back before that position. See the class note.
      *
-     * @throws IndexOutOfBoundsException si es anterior a la posicion de descarte actual, o posterior
-     *     a la posicion actual
+     * @throws IndexOutOfBoundsException if it is before the current flushed position, or after the
+     *     current position
      */
     void flushBefore(long pos) throws IOException;
 
-    /** Descarta todo lo anterior a la posicion actual. */
+    /** Discards everything before the current position. */
     void flush() throws IOException;
 
-    /** Hasta donde se descarto. */
+    /** How far it was flushed. */
     long getFlushedPosition();
 
-    /** Si guarda lo leido en algun lado para poder volver. */
+    /** Whether it keeps what was read somewhere to be able to go back. */
     boolean isCached();
 
-    /** Si lo guarda en memoria. */
+    /** Whether it keeps it in memory. */
     boolean isCachedMemory();
 
-    /** Si lo guarda en un archivo temporal. */
+    /** Whether it keeps it in a temporary file. */
     boolean isCachedFile();
 
     /**
-     * Cierra.
+     * Closes.
      *
-     * <p>No cierra el flujo de abajo: quien lo abrio es quien lo cierra. Es lo contrario de lo que
-     * hace casi todo {@code java.io} y hay que tenerlo presente.
+     * <p>Whether the underlying object is closed depends on the implementation: the cache streams
+     * over an {@code InputStream} or {@code OutputStream} leave it open --whoever opened it closes
+     * it, the opposite of almost all of {@code java.io}--, while {@link FileImageInputStream}
+     * closes its {@code RandomAccessFile} even when it was handed one. (An earlier note stated the
+     * first rule for every implementation.)
      */
     void close() throws IOException;
 }

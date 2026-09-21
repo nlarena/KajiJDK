@@ -12,15 +12,15 @@ import javax.swing.JSeparator;
 import javax.swing.SwingConstants;
 
 /**
- * El separador de Synth.
+ * Synth's separator.
  *
- * <p>Es la unica clase del paquete que <strong>no</strong> hereda de una {@code BasicXxxUI}: sale
- * directo de {@link javax.swing.plaf.SeparatorUI}. Un separador de Synth es una imagen del estilo
- * de punta a punta, y no le queda nada que reutilizar del basico -- ni siquiera las dos lineas de
- * relieve, que son justo lo que Synth reemplaza --.
+ * <p>It is the only class in the package that does <strong>not</strong> inherit from a
+ * {@code BasicXxxUI}: it comes straight from {@link javax.swing.plaf.SeparatorUI}. A Synth
+ * separator is an image from the style end to end, and it has nothing left to reuse from the
+ * basic one -- not even the two relief lines, which are exactly what Synth replaces.
  *
- * <p>Por eso los tres tamanos los tiene que dar esta clase, y salen del estilo: la clave
- * {@code "Separator.thickness"}, con dos por omision.
+ * <p>That is why the three sizes have to be given by this class, and they come from the style:
+ * the key {@code "Separator.thickness"}, with two by default.
  */
 public class SynthSeparatorUI extends javax.swing.plaf.SeparatorUI implements SynthUI, PropertyChangeListener {
 
@@ -31,32 +31,33 @@ public class SynthSeparatorUI extends javax.swing.plaf.SeparatorUI implements Sy
     }
 
     public SynthContext getContext(JComponent c) {
-        return getContext(c, SynthLookAndFeel.estadoDe(c));
+        return getContext(c, SynthLookAndFeel.stateOf(c));
     }
 
     /**
-     * El contexto con ese estado.
+     * The context with that state.
      *
-     * <p>La region sale del componente y no de una constante fija, y eso importa en las cadenas de
-     * herencia: {@code SynthCheckBoxUI} hereda este metodo de {@code SynthButtonUI} y tiene que
-     * contestar {@code CheckBox}, no {@code Button}. Medido.
+     * <p>The region comes from the component and not from a fixed constant, and that matters in the
+     * chains of inheritance: {@code SynthCheckBoxUI} inherits this method from {@code
+     * SynthButtonUI} and has to answer {@code CheckBox}, not {@code Button}. Measured.
      */
     private SynthContext getContext(JComponent c, int state) {
         Region r = SynthLookAndFeel.getRegion(c);
         return new SynthContext(c, (r != null) ? r : Region.SEPARATOR, style, state, true);
     }
 
-    /** Le pide el estilo a la fabrica; revienta si no hay, y esta medido. */
+    /** It asks the factory for the style; it blows up if there is none, and it is measured. */
     private void updateStyle(JComponent c) {
-        style = SynthLookAndFeel.actualizar(getContext(c, SynthConstants.ENABLED));
+        style = SynthLookAndFeel.update(getContext(c, SynthConstants.ENABLED));
     }
 
     /**
-     * Dibuja el fondo y despues el contenido.
+     * It draws the background and then the content.
      *
-     * <p>Synth separa las dos cosas: el fondo lo pinta el estilo -- que sabe en que estado esta el
-     * componente -- y el contenido lo pinta el aspecto basico. Por eso {@code update} no es
-     * {@code paint} con un relleno adelante, como en el basico, sino dos pasos distintos.
+     * <p>Synth separates the two things: the background is painted by the style -- which knows what
+     * state the component is in -- and the content is painted by the basic look and feel. That is
+     * why {@code update} is not {@code paint} with a fill in front, as in the basic one, but two
+     * different steps.
      */
     public void update(Graphics g, JComponent c) {
         SynthContext context = getContext(c);
@@ -72,10 +73,10 @@ public class SynthSeparatorUI extends javax.swing.plaf.SeparatorUI implements Sy
     }
 
     protected void paint(SynthContext context, Graphics g) {
-        // El separador es todo fondo; ver la nota de la clase.
+        // The separator is all background; see the class note.
     }
 
-    /** El borde lo dibuja el estilo, no un {@code Border}; ver {@link SynthUI}. */
+    /** The border is drawn by the style, not by a {@code Border}; see {@link SynthUI}. */
     public void paintBorder(SynthContext context, Graphics g, int x, int y, int w, int h) {
         if (context != null && context.getStyle() != null) {
             context.getStyle().getPainter(context)
@@ -83,7 +84,7 @@ public class SynthSeparatorUI extends javax.swing.plaf.SeparatorUI implements Sy
         }
     }
 
-    /** Cualquier cambio puede querer otro estilo; ver {@link SynthLookAndFeel#actualizar}. */
+    /** Any change may want another style; see {@link SynthLookAndFeel#update}. */
     public void propertyChange(PropertyChangeEvent e) {
         Object o = e.getSource();
         if (o instanceof JComponent) {
@@ -120,8 +121,8 @@ public class SynthSeparatorUI extends javax.swing.plaf.SeparatorUI implements Sy
         c.removePropertyChangeListener(this);
     }
 
-    /** El grosor sale del estilo; dos si no lo dice. */
-    private int grosor(JComponent c) {
+    /** The thickness comes from the style; two if it does not say. */
+    private int thickness(JComponent c) {
         SynthContext context = getContext(c);
         if (context.getStyle() == null) {
             return 2;
@@ -130,7 +131,7 @@ public class SynthSeparatorUI extends javax.swing.plaf.SeparatorUI implements Sy
     }
 
     public Dimension getPreferredSize(JComponent c) {
-        int g = grosor(c);
+        int g = thickness(c);
         if (((JSeparator) c).getOrientation() == SwingConstants.VERTICAL) {
             return new Dimension(g, 0);
         }
@@ -141,9 +142,9 @@ public class SynthSeparatorUI extends javax.swing.plaf.SeparatorUI implements Sy
         return getPreferredSize(c);
     }
 
-    /** Sin tope a lo largo: un separador se estira todo lo que haga falta. */
+    /** With no cap lengthwise: a separator stretches as much as needed. */
     public Dimension getMaximumSize(JComponent c) {
-        int g = grosor(c);
+        int g = thickness(c);
         if (((JSeparator) c).getOrientation() == SwingConstants.VERTICAL) {
             return new Dimension(g, Integer.MAX_VALUE);
         }

@@ -18,112 +18,114 @@ import com.sun.source.doctree.EntityTree;
 import com.sun.source.tree.CompilationUnitTree;
 
 /**
- * {@link Trees} extendido con todo lo que hace falta para trabajar con la documentacion.
+ * {@link Trees} extended with everything that is needed in order to work with the
+ * documentation.
  *
- * <h2>Lo que agrega, y por que no estaba en {@link Trees}</h2>
+ * <h2>What it adds, and why it was not in {@link Trees}</h2>
  *
- * <p>Porque el arbol de documentacion es opcional: un compilador puede no parsear los comentarios
- * —le cuesta tiempo y no cambia el {@code .class}— y por eso el acceso a ellos vive en una subclase
- * que solo existe cuando alguien la pide.
+ * <p>Because the documentation tree is optional: a compiler may not parse the comments -- it
+ * costs it time and does not change the {@code .class} -- and that is why access to them lives
+ * in a subclass that only exists when somebody asks for it.
  *
- * <h2>El {@link BreakIterator}, que es lo menos obvio</h2>
+ * <h2>The {@link BreakIterator}, which is the least obvious thing</h2>
  *
- * <p>Javadoc muestra la <strong>primera oracion</strong> en sus tablas de resumen, y decidir donde
- * termina una oracion no es buscar un punto: {@code "Ver el Sr. Perez."} tiene dos puntos y una sola
- * oracion, y hay idiomas donde el criterio es completamente distinto. De ahi que sea configurable —
- * y que {@link #getFirstSentence} exista como metodo en vez de resolverse en el parser.
+ * <p>Javadoc shows the <strong>first sentence</strong> in its summary tables, and deciding
+ * where a sentence ends is not looking for a full stop: {@code "See Mr. Perez."} has two full
+ * stops and a single sentence, and there are languages where the criterion is completely
+ * different. Hence it is configurable -- and hence {@link #getFirstSentence} exists as a method
+ * instead of being resolved in the parser.
  *
- * <p>{@link #setBreakIterator} con {@code null} vuelve al criterio simple del propio javadoc, que es
- * el comportamiento historico.
+ * <p>{@link #setBreakIterator} with {@code null} goes back to javadoc's own simple criterion,
+ * which is the historical behaviour.
  */
 public abstract class DocTrees extends Trees {
 
-    /** Para las implementaciones. */
+    /** For the implementations. */
     public DocTrees() {
     }
 
     /**
-     * La instancia asociada a esa tarea de compilacion.
+     * The instance associated with that compilation task.
      *
-     * @throws IllegalArgumentException si la tarea no es de un compilador que sepa proveerla — que
-     *     es siempre, en esta VM; ver {@link Trees}
+     * @throws IllegalArgumentException if the task is not from a compiler that knows how to provide
+     *     it -- which is always, on this VM; see {@link Trees}
      */
     public static DocTrees instance(JavaCompiler.CompilationTask task) {
         throw new IllegalArgumentException(
-                "el javac de este proyecto no expone la implementacion de DocTrees");
+                "this project's javac does not expose the implementation of DocTrees");
     }
 
     /**
-     * La instancia asociada a un entorno de procesamiento.
+     * The instance associated with a processing environment.
      *
-     * @throws IllegalArgumentException idem
+     * @throws IllegalArgumentException the same
      */
     public static DocTrees instance(ProcessingEnvironment env) {
         throw new IllegalArgumentException(
-                "el javac de este proyecto no expone la implementacion de DocTrees");
+                "this project's javac does not expose the implementation of DocTrees");
     }
 
-    /** Como se decide donde termina una oracion, o {@code null} para el criterio de javadoc. */
+    /** How where a sentence ends is decided, or {@code null} for javadoc's criterion. */
     public abstract BreakIterator getBreakIterator();
 
-    /** Cambia ese criterio; ver la nota de la clase. */
+    /** It changes that criterion; see the class note. */
     public abstract void setBreakIterator(BreakIterator breakiterator);
 
-    /** Si el comentario es tradicional o Markdown. */
+    /** Whether the comment is traditional or Markdown. */
     public abstract Elements.DocCommentKind getDocCommentKind(TreePath path);
 
-    /** El comentario de esa declaracion, ya parseado. */
+    /** That declaration's comment, already parsed. */
     public abstract DocCommentTree getDocCommentTree(TreePath path);
 
-    /** El comentario de ese elemento. */
+    /** That element's comment. */
     public abstract DocCommentTree getDocCommentTree(Element e);
 
     /**
-     * El contenido de un archivo suelto, parseado como documentacion.
+     * The contents of a loose file, parsed as documentation.
      *
-     * <p>Es como se leen los {@code overview.html} y los {@code package.html}: documentacion que no
-     * cuelga de ninguna declaracion.
+     * <p>It is how the {@code overview.html} and the {@code package.html} are read: documentation
+     * that hangs off no declaration.
      */
     public abstract DocCommentTree getDocCommentTree(FileObject fileObject);
 
-    /** El comentario de un archivo relativo a ese elemento. */
+    /** The comment of a file relative to that element. */
     public abstract DocCommentTree getDocCommentTree(Element e, String relativePath)
             throws java.io.IOException;
 
-    /** El camino de documentacion de un archivo de paquete. */
+    /** A package file's documentation path. */
     public abstract DocTreePath getDocTreePath(FileObject fileObject, PackageElement packageElement);
 
     /**
-     * El elemento al que apunta una referencia.
+     * The element a reference points at.
      *
-     * <p>Es lo que convierte el texto de un {@code {@link Foo#bar}} en el metodo que nombra, y
-     * necesita el camino entero porque la referencia se resuelve en el contexto de importaciones de
-     * donde esta escrita.
+     * <p>It is what turns the text of a {@code {@link Foo#bar}} into the method it names, and it
+     * needs the whole path because the reference is resolved in the import context of where it is
+     * written.
      */
     public abstract Element getElement(DocTreePath path);
 
-    /** El tipo al que apunta una referencia. */
+    /** The type a reference points at. */
     public abstract TypeMirror getType(DocTreePath path);
 
-    /** La primera oracion de esa lista; ver la nota sobre el {@link BreakIterator}. */
+    /** That list's first sentence; see the note about the {@link BreakIterator}. */
     public abstract List<DocTree> getFirstSentence(List<? extends DocTree> list);
 
-    /** Las posiciones, incluidas las de los nodos de documentacion. */
+    /** The positions, including those of the documentation nodes. */
     public abstract DocSourcePositions getSourcePositions();
 
-    /** Reporta un diagnostico ubicado en un nodo de documentacion. */
+    /** It reports a diagnostic placed at a documentation node. */
     public abstract void printMessage(Diagnostic.Kind kind, CharSequence msg, DocTree t,
             DocCommentTree c, CompilationUnitTree root);
 
-    /** Con que construir nodos de documentacion nuevos. */
+    /** What to build new documentation nodes with. */
     public abstract DocTreeFactory getDocTreeFactory();
 
     /**
-     * El texto que representa una entidad HTML, o {@code null} si no se reconoce.
+     * The text an HTML entity represents, or {@code null} if it is not recognized.
      *
-     * <p>Resuelve {@code &amp;} a {@code "&"}. El arbol la conserva sin resolver —ver
-     * {@link EntityTree}— porque una herramienta que reemite HTML tiene que poder escribirla igual;
-     * esto es para las que necesitan el texto.
+     * <p>It resolves {@code &amp;} to {@code "&"}. The tree keeps it unresolved -- see
+     * {@link EntityTree} -- because a tool that re-emits HTML has to be able to write it the same;
+     * this is for those that need the text.
      */
     public abstract String getCharacters(EntityTree tree);
 }

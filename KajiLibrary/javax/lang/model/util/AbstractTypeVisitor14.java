@@ -4,11 +4,11 @@ import javax.annotation.processing.SupportedSourceVersion;
 import javax.lang.model.SourceVersion;
 
 /**
- * El visitante de tipos de Java 14 en adelante. Ver {@link AbstractTypeVisitor6} por el mecanismo.
+ * The type visitor for Java 14 onwards. See {@link AbstractTypeVisitor6} for the mechanism.
  *
- * <p>Los registros tampoco trajeron una forma de tipo nueva: el tipo de un registro es un
- * `DeclaredType` como el de cualquier clase. Desde Java 8 que no aparece una, y por eso esta clase y la
- * de 9 no agregan nada — la familia de tipos se estabilizo mucho antes que la de elementos.
+ * <p>Records did not bring a new form of type either: a record's type is a `DeclaredType` like any
+ * class's. None has appeared since Java 8, and that is why this class and the 9 one add nothing —
+ * the type family settled much earlier than the element one.
  */
 @SupportedSourceVersion(SourceVersion.RELEASE_25)
 public abstract class AbstractTypeVisitor14<R, P> extends AbstractTypeVisitor9<R, P> {

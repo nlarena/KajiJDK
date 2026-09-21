@@ -6,10 +6,11 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * El nombre legible de un evento o de un campo.
+ * The readable name of an event or of a field.
  *
- * <p>Sirve para lo que se le muestra a una persona. El nombre del campo es {@code allocationSize} y
- * su etiqueta es "Allocation Size": el primero lo usa el codigo, el segundo la interfaz.
+ * <p>It serves for what is shown to a person. The name of the field is {@code allocationSize} and
+ * its label is "Allocation Size": the first one is used by the code, the second one by the
+ * interface.
  *
  * @since 9
  */
@@ -19,9 +20,9 @@ import java.lang.annotation.Target;
 public @interface Label {
 
     /**
-     * El valor de la anotacion.
+     * The value of the annotation.
      *
-     * @return el valor
+     * @return the value
      */
     String value();
 }

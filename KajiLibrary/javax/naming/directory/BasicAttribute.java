@@ -6,62 +6,66 @@ import javax.naming.NamingException;
 import javax.naming.OperationNotSupportedException;
 
 /**
- * KajiLibrary's javax.naming.directory.BasicAttribute -- un atributo armado en memoria.
+ * KajiLibrary's javax.naming.directory.BasicAttribute -- an attribute built in memory.
  *
- * <p>La implementacion de {@link Attribute} que se usa para <b>construir</b> lo que se le va a mandar
- * al directorio. Lo que vuelve de una consulta suele ser otra implementacion, la del proveedor.
+ * <p>The implementation of {@link Attribute} used to <b>build</b> what is going to be sent to the
+ * directory. What comes back from a query is usually another implementation, the provider's.
  *
- * <h2>La comparacion de valores</h2>
+ * <h2>Comparing values</h2>
  *
- * <p>{@link #contains}, {@link #remove} y {@link #equals} comparan con {@code equals}, con una
- * excepcion importante: si el valor es un <b>arreglo</b>, se comparan sus elementos. Sin eso, dos
- * atributos con los mismos bytes no serian iguales --{@code byte[].equals} es identidad-- y los
- * valores binarios de un directorio son justamente arreglos de bytes.
+ * <p>{@link #contains}, {@link #remove} and {@link #equals} compare with {@code equals}, with one
+ * important exception: if the value is an <b>array</b>, its elements are compared. Without that,
+ * two attributes with the same bytes would not be equal --{@code byte[].equals} is identity-- and a
+ * directory's binary values are precisely byte arrays.
  *
- * <h2>Los dos metodos de esquema no hacen nada</h2>
+ * <h2>The two schema methods do nothing</h2>
  *
- * <p>{@link #getAttributeDefinition} y {@link #getAttributeSyntaxDefinition} lanzan
- * {@link OperationNotSupportedException}. No es una limitacion de esta biblioteca: un atributo armado
- * en memoria no viene de ningun directorio, asi que no hay esquema del que hablar. El JDK hace lo
- * mismo.
+ * <p>{@link #getAttributeDefinition} and {@link #getAttributeSyntaxDefinition} throw {@link
+ * OperationNotSupportedException}. It is not a limitation of this library: an attribute built in
+ * memory comes from no directory, so there is no schema to speak of. The JDK does the same.
  */
 public class BasicAttribute implements Attribute {
 
     private static final long serialVersionUID = 6743528196119291326L;
 
-    /** El identificador. */
+    /** The identifier. */
     protected String attrID;
 
-    /** Los valores. Transitorio porque se serializa a mano; protegido como en el JDK. */
+    /**
+     * The values. {@code protected} as in the JDK, and {@code transient} because the JDK writes
+     * them by hand in {@code writeObject}. This class has no {@code writeObject}/{@code
+     * readObject}, so the values are not written at all: an earlier note said they were serialized
+     * by hand.
+     */
     protected transient Vector<Object> values;
 
-    /** Si los valores son una lista y no un conjunto. */
+    /** Whether the values are a list and not a set. */
     protected boolean ordered;
 
-    /** Sin valores, sin orden. */
+    /** No values, unordered. */
     public BasicAttribute(String id) {
         this(id, false);
     }
 
-    /** Con un valor, sin orden. */
+    /** With one value, unordered. */
     public BasicAttribute(String id, Object value) {
         this(id, value, false);
     }
 
-    /** Sin valores, diciendo si lleva orden. */
+    /** No values, stating whether it is ordered. */
     public BasicAttribute(String id, boolean ordered) {
         this.attrID = id;
         this.values = new Vector<Object>();
         this.ordered = ordered;
     }
 
-    /** Con un valor, diciendo si lleva orden. */
+    /** With one value, stating whether it is ordered. */
     public BasicAttribute(String id, Object value, boolean ordered) {
         this(id, ordered);
         this.values.addElement(value);
     }
 
-    /** Una copia con los mismos valores. */
+    /** A copy with the same values. */
     public Object clone() {
         BasicAttribute copy = new BasicAttribute(this.attrID, this.ordered);
         copy.values = new Vector<Object>(this.values);
@@ -69,10 +73,10 @@ public class BasicAttribute implements Attribute {
     }
 
     /**
-     * Iguales si coinciden el identificador, el orden y los valores.
+     * Equal if the identifier, the ordering and the values match.
      *
-     * <p>Sin orden, los valores se comparan como conjuntos: mismo contenido en cualquier orden. Con
-     * orden, posicion por posicion.
+     * <p>Unordered, the values are compared as sets: same content in any order. Ordered, position
+     * by position.
      */
     public boolean equals(Object obj) {
         if (this == obj) {
@@ -111,7 +115,7 @@ public class BasicAttribute implements Attribute {
         return true;
     }
 
-    /** Coherente con {@link #equals}: no depende del orden cuando el atributo no lo tiene. */
+    /** Consistent with {@link #equals}: it does not depend on order when the attribute has none. */
     public int hashCode() {
         int hash = this.attrID.hashCode();
         int i = 0;
@@ -125,7 +129,7 @@ public class BasicAttribute implements Attribute {
         return hash;
     }
 
-    /** El identificador y los valores, para un registro. */
+    /** The identifier and the values, for a log. */
     public String toString() {
         StringBuilder sb = new StringBuilder(this.attrID).append(": ");
         if (this.values.size() == 0) {
@@ -143,15 +147,15 @@ public class BasicAttribute implements Attribute {
         return sb.toString();
     }
 
-    /** Todos los valores. */
+    /** All the values. */
     public NamingEnumeration<?> getAll() throws NamingException {
         return new ValueEnumeration(new Vector<Object>(this.values));
     }
 
     /**
-     * El primero de los valores.
+     * The first of the values.
      *
-     * @throws javax.naming.NoSuchElementException si no tiene ninguno
+     * @throws java.util.NoSuchElementException if it has none
      */
     public Object get() throws NamingException {
         if (this.values.size() == 0) {
@@ -160,25 +164,25 @@ public class BasicAttribute implements Attribute {
         return this.values.elementAt(0);
     }
 
-    /** Cuantos valores tiene. */
+    /** How many values it has. */
     public int size() {
         return this.values.size();
     }
 
-    /** El identificador. */
+    /** The identifier. */
     public String getID() {
         return this.attrID;
     }
 
-    /** Si tiene ese valor. Ver la nota de la clase sobre los arreglos. */
+    /** Whether it has that value. See the class note about arrays. */
     public boolean contains(Object attrVal) {
         return indexOf(attrVal) >= 0;
     }
 
     /**
-     * Agrega un valor.
+     * Adds a value.
      *
-     * @return false si el atributo no lleva orden y ya lo tenia
+     * @return false if the attribute is unordered and already had it
      */
     public boolean add(Object attrVal) {
         if (!this.ordered && contains(attrVal)) {
@@ -188,7 +192,7 @@ public class BasicAttribute implements Attribute {
         return true;
     }
 
-    /** Saca la primera aparicion de ese valor. */
+    /** Removes the first occurrence of that value. */
     public boolean remove(Object attrval) {
         int i = indexOf(attrval);
         if (i < 0) {
@@ -198,33 +202,33 @@ public class BasicAttribute implements Attribute {
         return true;
     }
 
-    /** Saca todos. */
+    /** Removes them all. */
     public void clear() {
         this.values.setSize(0);
     }
 
-    /** Si los valores son una lista y no un conjunto. */
+    /** Whether the values are a list and not a set. */
     public boolean isOrdered() {
         return this.ordered;
     }
 
     /**
-     * El valor de esa posicion.
+     * The value at that position.
      *
-     * @throws IndexOutOfBoundsException si no existe
+     * @throws IndexOutOfBoundsException if it does not exist
      */
     public Object get(int ix) throws NamingException {
         return this.values.elementAt(ix);
     }
 
-    /** Saca el de esa posicion. */
+    /** Removes the one at that position. */
     public Object remove(int ix) {
         Object old = this.values.elementAt(ix);
         this.values.removeElementAt(ix);
         return old;
     }
 
-    /** Inserta en esa posicion. */
+    /** Inserts at that position. */
     public void add(int ix, Object attrVal) {
         if (!this.ordered && contains(attrVal)) {
             throw new IllegalStateException(
@@ -233,7 +237,7 @@ public class BasicAttribute implements Attribute {
         this.values.insertElementAt(attrVal, ix);
     }
 
-    /** Reemplaza el de esa posicion. */
+    /** Replaces the one at that position. */
     public Object set(int ix, Object attrVal) {
         if (!this.ordered && contains(attrVal)) {
             throw new IllegalStateException(
@@ -245,24 +249,24 @@ public class BasicAttribute implements Attribute {
     }
 
     /**
-     * No hay esquema.
+     * There is no schema.
      *
-     * @throws OperationNotSupportedException siempre; ver la nota de la clase
+     * @throws OperationNotSupportedException always; see the class note
      */
     public DirContext getAttributeSyntaxDefinition() throws NamingException {
         throw new OperationNotSupportedException("attribute syntax");
     }
 
     /**
-     * No hay esquema.
+     * There is no schema.
      *
-     * @throws OperationNotSupportedException siempre
+     * @throws OperationNotSupportedException always
      */
     public DirContext getAttributeDefinition() throws NamingException {
         throw new OperationNotSupportedException("attribute definition");
     }
 
-    /** La posicion de ese valor, o -1. Ver la nota de la clase sobre los arreglos. */
+    /** The position of that value, or -1. See the class note about arrays. */
     private int indexOf(Object candidate) {
         int i = 0;
         while (i < this.values.size()) {
@@ -274,7 +278,7 @@ public class BasicAttribute implements Attribute {
         return -1;
     }
 
-    /** Igualdad de valores, con los arreglos comparados por contenido. */
+    /** Value equality, with arrays compared by content. */
     private static boolean sameValue(Object a, Object b) {
         if (a == null || b == null) {
             return a == b;
@@ -297,7 +301,7 @@ public class BasicAttribute implements Attribute {
         return a.equals(b);
     }
 
-    /** Hash de un valor, coherente con {@link #sameValue}. */
+    /** Hash of a value, consistent with {@link #sameValue}. */
     private static int valueHash(Object v) {
         if (!v.getClass().isArray()) {
             return v.hashCode();
@@ -313,7 +317,7 @@ public class BasicAttribute implements Attribute {
         return hash;
     }
 
-    /** La enumeracion sobre una copia de los valores. */
+    /** The enumeration over a copy of the values. */
     private static final class ValueEnumeration implements NamingEnumeration<Object> {
 
         private final Vector<Object> snapshot;

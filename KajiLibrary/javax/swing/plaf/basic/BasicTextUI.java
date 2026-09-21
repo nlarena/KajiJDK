@@ -34,30 +34,30 @@ import javax.swing.text.View;
 import javax.swing.text.ViewFactory;
 
 /**
- * El aspecto comun de todos los componentes de texto.
+ * The look and feel common to every text component.
  *
- * <h2>Que hace, en una linea</h2>
+ * <h2>What it does, in one line</h2>
  *
- * <p>Arma un arbol de vistas sobre el documento y lo dibuja. Todo lo demas -- el cursor, el
- * resaltado, las teclas -- lo delega en objetos que se pueden reemplazar.
+ * <p>It builds a tree of views over the document and draws it. Everything else -- the caret,
+ * the highlighting, the keys -- it delegates to objects that can be replaced.
  *
- * <h2>La vista raiz</h2>
+ * <h2>The root view</h2>
  *
- * <p>Entre el componente y la vista del documento hay una vista de mas, la {@link RootView}. No es
- * decorativa: la vista del documento la cambia el juego de edicion cada vez que cambia el
- * documento, y algo tiene que quedar fijo para que el componente tenga siempre a quien preguntarle.
- * La raiz es ese punto fijo. Ademas es la que traduce entre las coordenadas del componente, que
- * tienen margenes, y las de las vistas, que no.
+ * <p>Between the component and the document's view there is one view more, the
+ * {@link RootView}. It is not decorative: the document's view is changed by the editor kit
+ * every time the document changes, and something has to stay fixed so that the component always
+ * has somebody to ask. The root is that fixed point. It is also the one that translates between
+ * the component's coordinates, which have margins, and the views', which do not.
  *
- * <p>La raiz tambien hace de fabrica: cuando la vista de abajo pide una vista para un elemento, la
- * raiz le pregunta primero al juego de edicion y, si no tiene, al aspecto. Por eso
- * {@code BasicTextUI} implementa {@link ViewFactory}.
+ * <p>The root also acts as a factory: when the view below asks for a view for an element, the
+ * root asks the editor kit first and, if it does not have one, the look and feel. That is why
+ * {@code BasicTextUI} implements {@link ViewFactory}.
  *
- * <h2>Que se dibuja y que no</h2>
+ * <h2>What is drawn and what is not</h2>
  *
- * <p>Sin ventana no hay nada que dibujar, pero las cuentas se hacen igual: el arbol de vistas se
- * arma, se maqueta y contesta {@link #modelToView} y {@link #viewToModel} exactamente igual. Lo
- * unico que falta es el destinatario del {@link Graphics}.
+ * <p>With no window there is nothing to draw, but the arithmetic is done all the same: the tree
+ * of views is built, laid out and answers {@link #modelToView} and {@link #viewToModel}
+ * exactly the same. The only thing missing is the {@link Graphics}' addressee.
  */
 public abstract class BasicTextUI extends TextUI implements ViewFactory {
 
@@ -65,24 +65,24 @@ public abstract class BasicTextUI extends TextUI implements ViewFactory {
     private RootView rootView;
     private boolean painted;
     private Handler handler;
-    private transient boolean creandoUI;
+    private transient boolean creatingUI;
 
-    /** Un aspecto sin componente; se completa en {@link #installUI}. */
+    /** A look and feel with no component; it is completed in {@link #installUI}. */
     public BasicTextUI() {
         painted = false;
     }
 
-    /** El cursor que se pone si el componente no trae uno propio. */
+    /** The caret that is set if the component does not bring one of its own. */
     protected Caret createCaret() {
         return new BasicCaret();
     }
 
-    /** El resaltador que se pone si el componente no trae uno propio. */
+    /** The highlighter that is set if the component does not bring one of its own. */
     protected Highlighter createHighlighter() {
         return new BasicHighlighter();
     }
 
-    /** El nombre del mapa de teclas compartido por los componentes de este tipo. */
+    /** The name of the key map shared by the components of this type. */
     protected String getKeymapName() {
         String nm = getClass().getName();
         int index = nm.lastIndexOf('.');
@@ -93,10 +93,10 @@ public abstract class BasicTextUI extends TextUI implements ViewFactory {
     }
 
     /**
-     * Arma el mapa de teclas.
+     * It builds the key map.
      *
-     * <p>Es compartido entre todos los componentes del mismo tipo: armar uno por componente
-     * multiplicaria la misma tabla por cada campo de texto de la pantalla.
+     * <p>It is shared between every component of the same type: building one per component would
+     * multiply the same table by each text field on the screen.
      */
     protected Keymap createKeymap() {
         String nm = getKeymapName();
@@ -108,70 +108,70 @@ public abstract class BasicTextUI extends TextUI implements ViewFactory {
         return map;
     }
 
-    /** Reacciona a los cambios del componente que obligan a rehacer las vistas. */
+    /** It reacts to the component's changes that force the views to be rebuilt. */
     protected void propertyChange(PropertyChangeEvent evt) {
     }
 
-    /** El prefijo con el que se buscan los valores del aspecto, por ejemplo {@code TextField}. */
+    /** The prefix the look and feel's values are looked up with, for instance {@code TextField}. */
     protected abstract String getPropertyPrefix();
 
-    private static final javax.swing.plaf.FontUIResource FUENTE =
+    private static final javax.swing.plaf.FontUIResource FONT =
             new javax.swing.plaf.FontUIResource("Dialog", java.awt.Font.PLAIN, 12);
-    private static final javax.swing.plaf.ColorUIResource FONDO =
+    private static final javax.swing.plaf.ColorUIResource BACKGROUND =
             new javax.swing.plaf.ColorUIResource(255, 255, 255);
-    private static final javax.swing.plaf.ColorUIResource FRENTE =
+    private static final javax.swing.plaf.ColorUIResource FOREGROUND =
             new javax.swing.plaf.ColorUIResource(51, 51, 51);
-    private static final javax.swing.plaf.ColorUIResource SELECCION =
+    private static final javax.swing.plaf.ColorUIResource SELECTION =
             new javax.swing.plaf.ColorUIResource(184, 207, 229);
 
     /**
-     * El margen que le toca a este componente.
+     * The margin that falls to this component.
      *
-     * <p>Cero en los campos y en el area, tres en los dos paneles de edicion. La diferencia tiene
-     * sentido: un panel de edicion muestra un documento y el texto pegado al borde se lee mal; un
-     * campo de una linea ya viene con el aire que le da su borde. Medido en Metal (JDK 25).
+     * <p>Zero in the fields and in the area, three in the two editor panes. The difference makes
+     * sense: an editor pane shows a document and text stuck to the edge reads badly; a one-line
+     * field already comes with the air its border gives it. Measured in Metal (JDK 25).
      */
-    private java.awt.Insets margenPorOmision() {
-        String prefijo = getPropertyPrefix();
-        if ("EditorPane".equals(prefijo) || "TextPane".equals(prefijo)) {
+    private java.awt.Insets defaultMargin() {
+        String prefix = getPropertyPrefix();
+        if ("EditorPane".equals(prefix) || "TextPane".equals(prefix)) {
             return new javax.swing.plaf.InsetsUIResource(3, 3, 3, 3);
         }
         return new javax.swing.plaf.InsetsUIResource(0, 0, 0, 0);
     }
 
     /**
-     * Pone colores, tipografia y margenes.
+     * It sets colours, typeface and margins.
      *
-     * <p>Solo donde el componente no traiga un valor propio: si sobrescribiera un color puesto a
-     * mano, cambiar de aspecto borraria lo que el programa configuro.
+     * <p>Only where the component does not bring a value of its own: if it overwrote a colour set
+     * by hand, changing the look and feel would erase what the program configured.
      */
     protected void installDefaults() {
         if (editor.getFont() == null || editor.getFont() instanceof UIResource) {
-            editor.setFont(FUENTE);
+            editor.setFont(FONT);
         }
         if (editor.getBackground() == null || editor.getBackground() instanceof UIResource) {
-            editor.setBackground(FONDO);
+            editor.setBackground(BACKGROUND);
         }
         if (editor.getForeground() == null || editor.getForeground() instanceof UIResource) {
-            editor.setForeground(FRENTE);
+            editor.setForeground(FOREGROUND);
         }
         if (editor.getCaretColor() == null || editor.getCaretColor() instanceof UIResource) {
-            editor.setCaretColor(FRENTE);
+            editor.setCaretColor(FOREGROUND);
         }
         if (editor.getSelectionColor() == null
                 || editor.getSelectionColor() instanceof UIResource) {
-            editor.setSelectionColor(SELECCION);
+            editor.setSelectionColor(SELECTION);
         }
         if (editor.getSelectedTextColor() == null
                 || editor.getSelectedTextColor() instanceof UIResource) {
-            editor.setSelectedTextColor(FRENTE);
+            editor.setSelectedTextColor(FOREGROUND);
         }
         if (editor.getDisabledTextColor() == null
                 || editor.getDisabledTextColor() instanceof UIResource) {
-            editor.setDisabledTextColor(SELECCION);
+            editor.setDisabledTextColor(SELECTION);
         }
         if (editor.getMargin() == null || editor.getMargin() instanceof UIResource) {
-            editor.setMargin(margenPorOmision());
+            editor.setMargin(defaultMargin());
         }
         Caret caret = editor.getCaret();
         if (caret == null || caret instanceof UIResource) {
@@ -202,7 +202,7 @@ public abstract class BasicTextUI extends TextUI implements ViewFactory {
         editor.setKeymap(null);
     }
 
-    /** Rellena el fondo con el color del componente. */
+    /** It fills the background with the component's colour. */
     protected void paintBackground(Graphics g) {
         g.setColor(editor.getBackground());
         g.fillRect(0, 0, editor.getWidth(), editor.getHeight());
@@ -212,7 +212,7 @@ public abstract class BasicTextUI extends TextUI implements ViewFactory {
         return editor;
     }
 
-    /** Rehace el arbol de vistas; se llama cuando el documento cambia. */
+    /** It rebuilds the tree of views; it is called when the document changes. */
     protected void modelChanged() {
         ViewFactory f = rootView.getViewFactory();
         Document doc = editor.getDocument();
@@ -222,7 +222,7 @@ public abstract class BasicTextUI extends TextUI implements ViewFactory {
         }
     }
 
-    /** Cuelga esa vista de la raiz. */
+    /** It hangs that view from the root. */
     protected final void setView(View v) {
         rootView.setView(v);
         painted = false;
@@ -231,10 +231,10 @@ public abstract class BasicTextUI extends TextUI implements ViewFactory {
     }
 
     /**
-     * Dibuja el texto, el resaltado y el cursor, en ese orden.
+     * It draws the text, the highlighting and the caret, in that order.
      *
-     * <p>El orden importa: el resaltado va abajo del texto para no taparlo, y el cursor arriba de
-     * todo para que se vea sobre la seleccion.
+     * <p>The order matters: the highlighting goes below the text so as not to cover it, and the
+     * caret above everything so that it is seen over the selection.
      */
     protected void paintSafely(Graphics g) {
         painted = true;
@@ -264,7 +264,8 @@ public abstract class BasicTextUI extends TextUI implements ViewFactory {
         painted = false;
         rootView = new RootView(this);
 
-        // El documento va primero: instalar el cursor sin documento lo dejaria sin donde pararse.
+        // The document goes first: installing the caret with no document would leave it with
+        // nowhere to stand.
         Document doc = editor.getDocument();
         if (doc == null) {
             editor.setDocument(getEditorKit(editor).createDefaultDocument());
@@ -314,11 +315,11 @@ public abstract class BasicTextUI extends TextUI implements ViewFactory {
     }
 
     /**
-     * Dibuja el componente.
+     * It draws the component.
      *
-     * <p>Es final: lo que una subclase quiera cambiar va en {@link #paintSafely}, que corre con el
-     * documento tomado para lectura. Dibujar sin ese candado podria leer un documento a medio
-     * cambiar.
+     * <p>It is final: whatever a subclass wants to change goes in {@link #paintSafely}, which runs
+     * with the document taken for reading. Drawing without that lock could read a half-changed
+     * document.
      */
     public final void paint(Graphics g, JComponent c) {
         if ((rootView.getViewCount() > 0) && (rootView.getView(0) != null)) {
@@ -348,7 +349,7 @@ public abstract class BasicTextUI extends TextUI implements ViewFactory {
             if ((d.width > (i.left + i.right)) && (d.height > (i.top + i.bottom))) {
                 rootView.setSize(d.width - i.left - i.right, d.height - i.top - i.bottom);
             } else if (d.width == 0 && d.height == 0) {
-                // Todavia sin tamano: se deja crecer para que la vista diga cuanto quiere.
+                // Still with no size: it is let grow so that the view says how much it wants.
                 rootView.setSize(Integer.MAX_VALUE, Integer.MAX_VALUE);
             }
             d.width = (int) Math.min((long) rootView.getPreferredSpan(View.X_AXIS)
@@ -401,7 +402,7 @@ public abstract class BasicTextUI extends TextUI implements ViewFactory {
         return d;
     }
 
-    /** El rectangulo donde va el texto: el componente menos los margenes. */
+    /** The rectangle the text goes in: the component minus the margins. */
     protected Rectangle getVisibleEditorRect() {
         Rectangle alloc = editor.getBounds();
         if ((alloc.width > 0) && (alloc.height > 0)) {
@@ -427,7 +428,7 @@ public abstract class BasicTextUI extends TextUI implements ViewFactory {
         return (r == null) ? null : r.getBounds();
     }
 
-    /** Donde cae esa posicion del documento en la pantalla. */
+    /** Where that position of the document falls on the screen. */
     public Rectangle2D modelToView2D(JTextComponent tc, int pos, Position.Bias bias)
             throws BadLocationException {
         Document doc = editor.getDocument();
@@ -459,7 +460,7 @@ public abstract class BasicTextUI extends TextUI implements ViewFactory {
         return viewToModel2D(tc, pt, biasReturn);
     }
 
-    /** Que posicion del documento cae en ese punto de la pantalla. */
+    /** Which position of the document falls at that point of the screen. */
     public int viewToModel2D(JTextComponent tc, Point2D pt, Position.Bias[] biasReturn) {
         int offs = -1;
         Document doc = editor.getDocument();
@@ -505,10 +506,10 @@ public abstract class BasicTextUI extends TextUI implements ViewFactory {
     }
 
     /**
-     * Manda repintar el tramo entre esas dos posiciones.
+     * It orders the stretch between those two positions to be repainted.
      *
-     * <p>Si las dos caen en la misma linea repinta solo ese pedazo; si no, repinta el ancho
-     * entero, porque el tramo se derrama hasta el borde.
+     * <p>If the two fall on the same line it repaints only that piece; if not, it repaints the
+     * whole width, because the stretch spills as far as the edge.
      */
     public void damageRange(JTextComponent t, int p0, int p1, Position.Bias p0Bias,
             Position.Bias p1Bias) {
@@ -526,7 +527,7 @@ public abstract class BasicTextUI extends TextUI implements ViewFactory {
                             ? (Rectangle) toDamage : toDamage.getBounds();
                     editor.repaint(rect.x, rect.y, rect.width, rect.height);
                 } catch (BadLocationException e) {
-                    // El tramo dejo de existir: no hay nada que repintar.
+                    // The stretch stopped existing: there is nothing to repaint.
                 } finally {
                     if (doc instanceof javax.swing.text.AbstractDocument) {
                         ((javax.swing.text.AbstractDocument) doc).readUnlock();
@@ -546,7 +547,7 @@ public abstract class BasicTextUI extends TextUI implements ViewFactory {
         return rootView;
     }
 
-    /** El texto de ayuda que corresponde a ese punto; ninguno, salvo que una vista lo diga. */
+    /** The tool tip text that corresponds to that point; none, unless a view says so. */
     public String getToolTipText(JTextComponent t, Point pt) {
         if (!painted) {
             return null;
@@ -569,21 +570,21 @@ public abstract class BasicTextUI extends TextUI implements ViewFactory {
         return tt;
     }
 
-    /** Una vista para ese elemento; la de siempre no sabe de ninguno en particular. */
+    /** A view for that element; the usual one knows about none in particular. */
     public View create(Element elem) {
         return null;
     }
 
-    /** Una vista para ese tramo del elemento. */
+    /** A view for that stretch of the element. */
     public View create(Element elem, int p0, int p1) {
         return null;
     }
 
     /**
-     * La vista que esta entre el componente y la vista del documento.
+     * The view that is between the component and the document's view.
      *
-     * <p>Ver la nota de la clase que la contiene: existe para que el componente tenga un punto fijo
-     * al que preguntarle y para traducir coordenadas.
+     * <p>See the note of the class that contains it: it exists so that the component has a fixed
+     * point to ask and in order to translate coordinates.
      */
     static class RootView extends View {
 
@@ -758,7 +759,7 @@ public abstract class BasicTextUI extends TextUI implements ViewFactory {
             return ui.editor;
         }
 
-        /** Le pregunta primero al juego de edicion y despues al aspecto; ver la nota. */
+        /** It asks the editor kit first and the look and feel afterwards; see the note. */
         public ViewFactory getViewFactory() {
             EditorKit kit = ui.getEditorKit(ui.editor);
             ViewFactory f = kit.getViewFactory();
@@ -769,7 +770,7 @@ public abstract class BasicTextUI extends TextUI implements ViewFactory {
         }
     }
 
-    /** Escucha los cambios del componente que obligan a rehacer las vistas. */
+    /** It listens to the component's changes that force the views to be rebuilt. */
     static class Handler implements PropertyChangeListener {
 
         private final BasicTextUI ui;
@@ -787,14 +788,14 @@ public abstract class BasicTextUI extends TextUI implements ViewFactory {
         }
     }
 
-    /** El cursor que pone el aspecto; se reconoce como suyo y se puede reemplazar. */
+    /** The caret the look and feel sets; it is recognized as its own and can be replaced. */
     public static class BasicCaret extends DefaultCaret implements UIResource {
 
         public BasicCaret() {
         }
     }
 
-    /** El resaltador que pone el aspecto. */
+    /** The highlighter the look and feel sets. */
     public static class BasicHighlighter extends DefaultHighlighter implements UIResource {
 
         public BasicHighlighter() {

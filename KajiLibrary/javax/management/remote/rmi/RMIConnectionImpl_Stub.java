@@ -27,24 +27,24 @@ import javax.management.remote.NotificationResult;
 import javax.security.auth.Subject;
 
 /**
- * El stub de {@link RMIConnectionImpl}: la conexion tal como la ve el cliente.
+ * {@link RMIConnectionImpl}'s stub: the connection as the client sees it.
  *
- * <h2>Que hace cada metodo</h2>
+ * <h2>What each method does</h2>
  *
- * <p>Lo mismo, siempre: mete los argumentos en un arreglo, se lo pasa a la {@link RemoteRef} junto
- * con el numero que identifica al metodo --ver {@link Hash}--, y convierte lo que vuelve. Las
- * excepciones declaradas se dejan pasar tal cual; cualquier otra excepcion comprobada seria un
- * incumplimiento del contrato de la interfaz, y por eso se la envuelve en
- * {@link UnexpectedException}.
+ * <p>The same thing, always: it puts the arguments in an array, passes it to the
+ * {@link RemoteRef} together with the number that identifies the method --see {@link Hash}--,
+ * and converts what comes back. The declared exceptions are let through as they are; any other
+ * checked exception would be a breach of the interface's contract, and that is why it is wrapped
+ * in {@link UnexpectedException}.
  *
- * <p>Es codigo generado tambien en el JDK, donde lo escribe {@code rmic}. La unica diferencia es
- * que alla los numeros son literales y aca se calculan al cargar la clase.
+ * <p>It is generated code in the JDK too, where {@code rmic} writes it. The only difference is
+ * that there the numbers are literals and here they are computed when the class is loaded.
  *
- * <h2>Estado en esta VM</h2>
+ * <h2>State in this VM</h2>
  *
- * <p>La clase funciona; lo que no hay es de donde sacar una {@link RemoteRef} viva, porque eso
- * es el transporte de RMI. Para hablar con un {@link RMIConnectionImpl} de este mismo proceso
- * no hace falta stub: se lo usa directamente, que es lo que hace {@link RMIConnector}.
+ * <p>The class works; what there is not is anywhere to get a live {@link RemoteRef} from,
+ * because that is the RMI transport. To talk to an {@link RMIConnectionImpl} of this same
+ * process no stub is needed: it is used directly, which is what {@link RMIConnector} does.
  *
  * @since 1.5
  */
@@ -200,19 +200,19 @@ public final class RMIConnectionImpl_Stub extends RemoteStub implements RMIConne
     }
 
     /**
-     * Un stub sobre esa referencia.
+     * A stub over that reference.
      *
-     * @param ref la referencia que sabe llegar al objeto remoto
+     * @param ref the reference that knows how to reach the remote object
      */
     public RMIConnectionImpl_Stub(RemoteRef ref) {
         super(ref);
     }
 
     /**
-     * El identificador de esta conexion, el mismo que ve el servidor.
-     * @return lo que conteste el otro lado
-     * @throws RemoteException si se corto la comunicacion con el servidor
-     * @throws IOException si se corto la comunicacion con el servidor
+     * This connection's identifier, the same one the server sees.
+     * @return whatever the other side answers
+     * @throws RemoteException if communication with the server was cut
+     * @throws IOException if communication with the server was cut
      */
     public String getConnectionId() throws IOException {
         try {
@@ -231,9 +231,9 @@ public final class RMIConnectionImpl_Stub extends RemoteStub implements RMIConne
     }
 
     /**
-     * Cierra la conexion y libera lo que el servidor tenia reservado para ella.
-     * @throws RemoteException si se corto la comunicacion con el servidor
-     * @throws IOException si se corto la comunicacion con el servidor
+     * Closes the connection and frees what the server had reserved for it.
+     * @throws RemoteException if communication with the server was cut
+     * @throws IOException if communication with the server was cut
      */
     public void close() throws IOException {
         try {
@@ -250,19 +250,20 @@ public final class RMIConnectionImpl_Stub extends RemoteStub implements RMIConne
     }
 
     /**
-     * Reenvia la operacion al otro lado de la conexion.
+     * Forwards the operation to the other side of the connection.
      *
-     * @param className el nombre de la clase del MBean
-     * @param name el nombre del MBean
-     * @param delegationSubject en nombre de quien se hace, o {@code null} para el autenticado
-     * @return lo que conteste el otro lado
-     * @throws RemoteException si se corto la comunicacion con el servidor
-     * @throws ReflectionException si fallo la reflexion al construir o al llamar
-     * @throws InstanceAlreadyExistsException si ya hay un MBean con ese nombre
-     * @throws MBeanRegistrationException si el MBean se opuso a registrarse o a darse de baja
-     * @throws MBeanException si el propio MBean lanzo una excepcion
-     * @throws NotCompliantMBeanException si la clase no cumple con lo que un MBean tiene que ser
-     * @throws IOException si se corto la comunicacion con el servidor
+     * @param className the MBean's class name
+     * @param name the MBean's name
+     * @param delegationSubject on whose behalf it is done, or {@code null} for the authenticated
+     *     one
+     * @return whatever the other side answers
+     * @throws RemoteException if communication with the server was cut
+     * @throws ReflectionException if reflection failed while constructing or calling
+     * @throws InstanceAlreadyExistsException if there is already an MBean with that name
+     * @throws MBeanRegistrationException if the MBean objected to being registered or unregistered
+     * @throws MBeanException if the MBean itself threw an exception
+     * @throws NotCompliantMBeanException if the class does not meet what an MBean has to be
+     * @throws IOException if communication with the server was cut
      */
     public ObjectInstance createMBean(String className, ObjectName name, Subject delegationSubject)
             throws ReflectionException, InstanceAlreadyExistsException, MBeanRegistrationException,
@@ -293,21 +294,22 @@ public final class RMIConnectionImpl_Stub extends RemoteStub implements RMIConne
     }
 
     /**
-     * Reenvia la operacion al otro lado de la conexion.
+     * Forwards the operation to the other side of the connection.
      *
-     * @param className el nombre de la clase del MBean
-     * @param name el nombre del MBean
-     * @param loaderName el cargador de clases a usar
-     * @param delegationSubject en nombre de quien se hace, o {@code null} para el autenticado
-     * @return lo que conteste el otro lado
-     * @throws RemoteException si se corto la comunicacion con el servidor
-     * @throws ReflectionException si fallo la reflexion al construir o al llamar
-     * @throws InstanceAlreadyExistsException si ya hay un MBean con ese nombre
-     * @throws MBeanRegistrationException si el MBean se opuso a registrarse o a darse de baja
-     * @throws MBeanException si el propio MBean lanzo una excepcion
-     * @throws NotCompliantMBeanException si la clase no cumple con lo que un MBean tiene que ser
-     * @throws InstanceNotFoundException si no hay ningun MBean con ese nombre
-     * @throws IOException si se corto la comunicacion con el servidor
+     * @param className the MBean's class name
+     * @param name the MBean's name
+     * @param loaderName the class loader to use
+     * @param delegationSubject on whose behalf it is done, or {@code null} for the authenticated
+     *     one
+     * @return whatever the other side answers
+     * @throws RemoteException if communication with the server was cut
+     * @throws ReflectionException if reflection failed while constructing or calling
+     * @throws InstanceAlreadyExistsException if there is already an MBean with that name
+     * @throws MBeanRegistrationException if the MBean objected to being registered or unregistered
+     * @throws MBeanException if the MBean itself threw an exception
+     * @throws NotCompliantMBeanException if the class does not meet what an MBean has to be
+     * @throws InstanceNotFoundException if there is no MBean with that name
+     * @throws IOException if communication with the server was cut
      */
     public ObjectInstance createMBean(String className, ObjectName name, ObjectName loaderName,
             Subject delegationSubject)
@@ -343,21 +345,22 @@ public final class RMIConnectionImpl_Stub extends RemoteStub implements RMIConne
     }
 
     /**
-     * Reenvia la operacion al otro lado de la conexion.
+     * Forwards the operation to the other side of the connection.
      *
-     * @param className el nombre de la clase del MBean
-     * @param name el nombre del MBean
-     * @param params los argumentos, serializados
-     * @param signature la firma de los argumentos
-     * @param delegationSubject en nombre de quien se hace, o {@code null} para el autenticado
-     * @return lo que conteste el otro lado
-     * @throws RemoteException si se corto la comunicacion con el servidor
-     * @throws ReflectionException si fallo la reflexion al construir o al llamar
-     * @throws InstanceAlreadyExistsException si ya hay un MBean con ese nombre
-     * @throws MBeanRegistrationException si el MBean se opuso a registrarse o a darse de baja
-     * @throws MBeanException si el propio MBean lanzo una excepcion
-     * @throws NotCompliantMBeanException si la clase no cumple con lo que un MBean tiene que ser
-     * @throws IOException si se corto la comunicacion con el servidor
+     * @param className the MBean's class name
+     * @param name the MBean's name
+     * @param params the arguments, serialized
+     * @param signature the arguments' signature
+     * @param delegationSubject on whose behalf it is done, or {@code null} for the authenticated
+     *     one
+     * @return whatever the other side answers
+     * @throws RemoteException if communication with the server was cut
+     * @throws ReflectionException if reflection failed while constructing or calling
+     * @throws InstanceAlreadyExistsException if there is already an MBean with that name
+     * @throws MBeanRegistrationException if the MBean objected to being registered or unregistered
+     * @throws MBeanException if the MBean itself threw an exception
+     * @throws NotCompliantMBeanException if the class does not meet what an MBean has to be
+     * @throws IOException if communication with the server was cut
      */
     public ObjectInstance createMBean(String className, ObjectName name, MarshalledObject params,
             String[] signature, Subject delegationSubject)
@@ -390,23 +393,24 @@ public final class RMIConnectionImpl_Stub extends RemoteStub implements RMIConne
     }
 
     /**
-     * Reenvia la operacion al otro lado de la conexion.
+     * Forwards the operation to the other side of the connection.
      *
-     * @param className el nombre de la clase del MBean
-     * @param name el nombre del MBean
-     * @param loaderName el cargador de clases a usar
-     * @param params los argumentos, serializados
-     * @param signature la firma de los argumentos
-     * @param delegationSubject en nombre de quien se hace, o {@code null} para el autenticado
-     * @return lo que conteste el otro lado
-     * @throws RemoteException si se corto la comunicacion con el servidor
-     * @throws ReflectionException si fallo la reflexion al construir o al llamar
-     * @throws InstanceAlreadyExistsException si ya hay un MBean con ese nombre
-     * @throws MBeanRegistrationException si el MBean se opuso a registrarse o a darse de baja
-     * @throws MBeanException si el propio MBean lanzo una excepcion
-     * @throws NotCompliantMBeanException si la clase no cumple con lo que un MBean tiene que ser
-     * @throws InstanceNotFoundException si no hay ningun MBean con ese nombre
-     * @throws IOException si se corto la comunicacion con el servidor
+     * @param className the MBean's class name
+     * @param name the MBean's name
+     * @param loaderName the class loader to use
+     * @param params the arguments, serialized
+     * @param signature the arguments' signature
+     * @param delegationSubject on whose behalf it is done, or {@code null} for the authenticated
+     *     one
+     * @return whatever the other side answers
+     * @throws RemoteException if communication with the server was cut
+     * @throws ReflectionException if reflection failed while constructing or calling
+     * @throws InstanceAlreadyExistsException if there is already an MBean with that name
+     * @throws MBeanRegistrationException if the MBean objected to being registered or unregistered
+     * @throws MBeanException if the MBean itself threw an exception
+     * @throws NotCompliantMBeanException if the class does not meet what an MBean has to be
+     * @throws InstanceNotFoundException if there is no MBean with that name
+     * @throws IOException if communication with the server was cut
      */
     public ObjectInstance createMBean(String className, ObjectName name, ObjectName loaderName,
             MarshalledObject params, String[] signature, Subject delegationSubject)
@@ -442,14 +446,15 @@ public final class RMIConnectionImpl_Stub extends RemoteStub implements RMIConne
     }
 
     /**
-     * Reenvia la operacion al otro lado de la conexion.
+     * Forwards the operation to the other side of the connection.
      *
-     * @param name el nombre del MBean
-     * @param delegationSubject en nombre de quien se hace, o {@code null} para el autenticado
-     * @throws RemoteException si se corto la comunicacion con el servidor
-     * @throws InstanceNotFoundException si no hay ningun MBean con ese nombre
-     * @throws MBeanRegistrationException si el MBean se opuso a registrarse o a darse de baja
-     * @throws IOException si se corto la comunicacion con el servidor
+     * @param name the MBean's name
+     * @param delegationSubject on whose behalf it is done, or {@code null} for the authenticated
+     *     one
+     * @throws RemoteException if communication with the server was cut
+     * @throws InstanceNotFoundException if there is no MBean with that name
+     * @throws MBeanRegistrationException if the MBean objected to being registered or unregistered
+     * @throws IOException if communication with the server was cut
      */
     public void unregisterMBean(ObjectName name, Subject delegationSubject)
             throws InstanceNotFoundException, MBeanRegistrationException, IOException {
@@ -472,14 +477,15 @@ public final class RMIConnectionImpl_Stub extends RemoteStub implements RMIConne
     }
 
     /**
-     * Reenvia la operacion al otro lado de la conexion.
+     * Forwards the operation to the other side of the connection.
      *
-     * @param name el nombre del MBean
-     * @param delegationSubject en nombre de quien se hace, o {@code null} para el autenticado
-     * @return lo que conteste el otro lado
-     * @throws RemoteException si se corto la comunicacion con el servidor
-     * @throws InstanceNotFoundException si no hay ningun MBean con ese nombre
-     * @throws IOException si se corto la comunicacion con el servidor
+     * @param name the MBean's name
+     * @param delegationSubject on whose behalf it is done, or {@code null} for the authenticated
+     *     one
+     * @return whatever the other side answers
+     * @throws RemoteException if communication with the server was cut
+     * @throws InstanceNotFoundException if there is no MBean with that name
+     * @throws IOException if communication with the server was cut
      */
     public ObjectInstance getObjectInstance(ObjectName name, Subject delegationSubject)
             throws InstanceNotFoundException, IOException {
@@ -501,14 +507,15 @@ public final class RMIConnectionImpl_Stub extends RemoteStub implements RMIConne
     }
 
     /**
-     * Reenvia la operacion al otro lado de la conexion.
+     * Forwards the operation to the other side of the connection.
      *
-     * @param name el nombre del MBean
-     * @param query el filtro de consulta, serializado
-     * @param delegationSubject en nombre de quien se hace, o {@code null} para el autenticado
-     * @return lo que conteste el otro lado
-     * @throws RemoteException si se corto la comunicacion con el servidor
-     * @throws IOException si se corto la comunicacion con el servidor
+     * @param name the MBean's name
+     * @param query the query filter, serialized
+     * @param delegationSubject on whose behalf it is done, or {@code null} for the authenticated
+     *     one
+     * @return whatever the other side answers
+     * @throws RemoteException if communication with the server was cut
+     * @throws IOException if communication with the server was cut
      */
     public Set<ObjectInstance> queryMBeans(ObjectName name, MarshalledObject query,
             Subject delegationSubject)
@@ -529,14 +536,15 @@ public final class RMIConnectionImpl_Stub extends RemoteStub implements RMIConne
     }
 
     /**
-     * Reenvia la operacion al otro lado de la conexion.
+     * Forwards the operation to the other side of the connection.
      *
-     * @param name el nombre del MBean
-     * @param query el filtro de consulta, serializado
-     * @param delegationSubject en nombre de quien se hace, o {@code null} para el autenticado
-     * @return lo que conteste el otro lado
-     * @throws RemoteException si se corto la comunicacion con el servidor
-     * @throws IOException si se corto la comunicacion con el servidor
+     * @param name the MBean's name
+     * @param query the query filter, serialized
+     * @param delegationSubject on whose behalf it is done, or {@code null} for the authenticated
+     *     one
+     * @return whatever the other side answers
+     * @throws RemoteException if communication with the server was cut
+     * @throws IOException if communication with the server was cut
      */
     public Set<ObjectName> queryNames(ObjectName name, MarshalledObject query,
             Subject delegationSubject)
@@ -557,13 +565,14 @@ public final class RMIConnectionImpl_Stub extends RemoteStub implements RMIConne
     }
 
     /**
-     * Reenvia la operacion al otro lado de la conexion.
+     * Forwards the operation to the other side of the connection.
      *
-     * @param name el nombre del MBean
-     * @param delegationSubject en nombre de quien se hace, o {@code null} para el autenticado
-     * @return lo que conteste el otro lado
-     * @throws RemoteException si se corto la comunicacion con el servidor
-     * @throws IOException si se corto la comunicacion con el servidor
+     * @param name the MBean's name
+     * @param delegationSubject on whose behalf it is done, or {@code null} for the authenticated
+     *     one
+     * @return whatever the other side answers
+     * @throws RemoteException if communication with the server was cut
+     * @throws IOException if communication with the server was cut
      */
     public boolean isRegistered(ObjectName name, Subject delegationSubject) throws IOException {
         try {
@@ -582,12 +591,13 @@ public final class RMIConnectionImpl_Stub extends RemoteStub implements RMIConne
     }
 
     /**
-     * Reenvia la operacion al otro lado de la conexion.
+     * Forwards the operation to the other side of the connection.
      *
-     * @param delegationSubject en nombre de quien se hace, o {@code null} para el autenticado
-     * @return lo que conteste el otro lado
-     * @throws RemoteException si se corto la comunicacion con el servidor
-     * @throws IOException si se corto la comunicacion con el servidor
+     * @param delegationSubject on whose behalf it is done, or {@code null} for the authenticated
+     *     one
+     * @return whatever the other side answers
+     * @throws RemoteException if communication with the server was cut
+     * @throws IOException if communication with the server was cut
      */
     public Integer getMBeanCount(Subject delegationSubject) throws IOException {
         try {
@@ -606,18 +616,19 @@ public final class RMIConnectionImpl_Stub extends RemoteStub implements RMIConne
     }
 
     /**
-     * Reenvia la operacion al otro lado de la conexion.
+     * Forwards the operation to the other side of the connection.
      *
-     * @param name el nombre del MBean
-     * @param attribute el atributo
-     * @param delegationSubject en nombre de quien se hace, o {@code null} para el autenticado
-     * @return lo que conteste el otro lado
-     * @throws RemoteException si se corto la comunicacion con el servidor
-     * @throws MBeanException si el propio MBean lanzo una excepcion
-     * @throws AttributeNotFoundException si el MBean no tiene ese atributo
-     * @throws InstanceNotFoundException si no hay ningun MBean con ese nombre
-     * @throws ReflectionException si fallo la reflexion al construir o al llamar
-     * @throws IOException si se corto la comunicacion con el servidor
+     * @param name the MBean's name
+     * @param attribute the attribute
+     * @param delegationSubject on whose behalf it is done, or {@code null} for the authenticated
+     *     one
+     * @return whatever the other side answers
+     * @throws RemoteException if communication with the server was cut
+     * @throws MBeanException if the MBean itself threw an exception
+     * @throws AttributeNotFoundException if the MBean has no such attribute
+     * @throws InstanceNotFoundException if there is no MBean with that name
+     * @throws ReflectionException if reflection failed while constructing or calling
+     * @throws IOException if communication with the server was cut
      */
     public Object getAttribute(ObjectName name, String attribute, Subject delegationSubject)
             throws MBeanException, AttributeNotFoundException, InstanceNotFoundException,
@@ -646,16 +657,17 @@ public final class RMIConnectionImpl_Stub extends RemoteStub implements RMIConne
     }
 
     /**
-     * Reenvia la operacion al otro lado de la conexion.
+     * Forwards the operation to the other side of the connection.
      *
-     * @param name el nombre del MBean
-     * @param attributes los atributos
-     * @param delegationSubject en nombre de quien se hace, o {@code null} para el autenticado
-     * @return lo que conteste el otro lado
-     * @throws RemoteException si se corto la comunicacion con el servidor
-     * @throws InstanceNotFoundException si no hay ningun MBean con ese nombre
-     * @throws ReflectionException si fallo la reflexion al construir o al llamar
-     * @throws IOException si se corto la comunicacion con el servidor
+     * @param name the MBean's name
+     * @param attributes the attributes
+     * @param delegationSubject on whose behalf it is done, or {@code null} for the authenticated
+     *     one
+     * @return whatever the other side answers
+     * @throws RemoteException if communication with the server was cut
+     * @throws InstanceNotFoundException if there is no MBean with that name
+     * @throws ReflectionException if reflection failed while constructing or calling
+     * @throws IOException if communication with the server was cut
      */
     public AttributeList getAttributes(ObjectName name, String[] attributes,
             Subject delegationSubject)
@@ -680,18 +692,19 @@ public final class RMIConnectionImpl_Stub extends RemoteStub implements RMIConne
     }
 
     /**
-     * Reenvia la operacion al otro lado de la conexion.
+     * Forwards the operation to the other side of the connection.
      *
-     * @param name el nombre del MBean
-     * @param attribute el atributo
-     * @param delegationSubject en nombre de quien se hace, o {@code null} para el autenticado
-     * @throws RemoteException si se corto la comunicacion con el servidor
-     * @throws InstanceNotFoundException si no hay ningun MBean con ese nombre
-     * @throws AttributeNotFoundException si el MBean no tiene ese atributo
-     * @throws InvalidAttributeValueException si el valor no sirve para ese atributo
-     * @throws MBeanException si el propio MBean lanzo una excepcion
-     * @throws ReflectionException si fallo la reflexion al construir o al llamar
-     * @throws IOException si se corto la comunicacion con el servidor
+     * @param name the MBean's name
+     * @param attribute the attribute
+     * @param delegationSubject on whose behalf it is done, or {@code null} for the authenticated
+     *     one
+     * @throws RemoteException if communication with the server was cut
+     * @throws InstanceNotFoundException if there is no MBean with that name
+     * @throws AttributeNotFoundException if the MBean has no such attribute
+     * @throws InvalidAttributeValueException if the value does not fit that attribute
+     * @throws MBeanException if the MBean itself threw an exception
+     * @throws ReflectionException if reflection failed while constructing or calling
+     * @throws IOException if communication with the server was cut
      */
     public void setAttribute(ObjectName name, MarshalledObject attribute, Subject delegationSubject)
             throws InstanceNotFoundException, AttributeNotFoundException,
@@ -721,16 +734,17 @@ public final class RMIConnectionImpl_Stub extends RemoteStub implements RMIConne
     }
 
     /**
-     * Reenvia la operacion al otro lado de la conexion.
+     * Forwards the operation to the other side of the connection.
      *
-     * @param name el nombre del MBean
-     * @param attributes los atributos
-     * @param delegationSubject en nombre de quien se hace, o {@code null} para el autenticado
-     * @return lo que conteste el otro lado
-     * @throws RemoteException si se corto la comunicacion con el servidor
-     * @throws InstanceNotFoundException si no hay ningun MBean con ese nombre
-     * @throws ReflectionException si fallo la reflexion al construir o al llamar
-     * @throws IOException si se corto la comunicacion con el servidor
+     * @param name the MBean's name
+     * @param attributes the attributes
+     * @param delegationSubject on whose behalf it is done, or {@code null} for the authenticated
+     *     one
+     * @return whatever the other side answers
+     * @throws RemoteException if communication with the server was cut
+     * @throws InstanceNotFoundException if there is no MBean with that name
+     * @throws ReflectionException if reflection failed while constructing or calling
+     * @throws IOException if communication with the server was cut
      */
     public AttributeList setAttributes(ObjectName name, MarshalledObject attributes,
             Subject delegationSubject)
@@ -755,19 +769,20 @@ public final class RMIConnectionImpl_Stub extends RemoteStub implements RMIConne
     }
 
     /**
-     * Reenvia la operacion al otro lado de la conexion.
+     * Forwards the operation to the other side of the connection.
      *
-     * @param name el nombre del MBean
-     * @param operationName el nombre de la operacion
-     * @param params los argumentos, serializados
-     * @param signature la firma de los argumentos
-     * @param delegationSubject en nombre de quien se hace, o {@code null} para el autenticado
-     * @return lo que conteste el otro lado
-     * @throws RemoteException si se corto la comunicacion con el servidor
-     * @throws InstanceNotFoundException si no hay ningun MBean con ese nombre
-     * @throws MBeanException si el propio MBean lanzo una excepcion
-     * @throws ReflectionException si fallo la reflexion al construir o al llamar
-     * @throws IOException si se corto la comunicacion con el servidor
+     * @param name the MBean's name
+     * @param operationName the operation's name
+     * @param params the arguments, serialized
+     * @param signature the arguments' signature
+     * @param delegationSubject on whose behalf it is done, or {@code null} for the authenticated
+     *     one
+     * @return whatever the other side answers
+     * @throws RemoteException if communication with the server was cut
+     * @throws InstanceNotFoundException if there is no MBean with that name
+     * @throws MBeanException if the MBean itself threw an exception
+     * @throws ReflectionException if reflection failed while constructing or calling
+     * @throws IOException if communication with the server was cut
      */
     public Object invoke(ObjectName name, String operationName, MarshalledObject params,
             String[] signature, Subject delegationSubject)
@@ -795,12 +810,13 @@ public final class RMIConnectionImpl_Stub extends RemoteStub implements RMIConne
     }
 
     /**
-     * Reenvia la operacion al otro lado de la conexion.
+     * Forwards the operation to the other side of the connection.
      *
-     * @param delegationSubject en nombre de quien se hace, o {@code null} para el autenticado
-     * @return lo que conteste el otro lado
-     * @throws RemoteException si se corto la comunicacion con el servidor
-     * @throws IOException si se corto la comunicacion con el servidor
+     * @param delegationSubject on whose behalf it is done, or {@code null} for the authenticated
+     *     one
+     * @return whatever the other side answers
+     * @throws RemoteException if communication with the server was cut
+     * @throws IOException if communication with the server was cut
      */
     public String getDefaultDomain(Subject delegationSubject) throws IOException {
         try {
@@ -819,12 +835,13 @@ public final class RMIConnectionImpl_Stub extends RemoteStub implements RMIConne
     }
 
     /**
-     * Reenvia la operacion al otro lado de la conexion.
+     * Forwards the operation to the other side of the connection.
      *
-     * @param delegationSubject en nombre de quien se hace, o {@code null} para el autenticado
-     * @return lo que conteste el otro lado
-     * @throws RemoteException si se corto la comunicacion con el servidor
-     * @throws IOException si se corto la comunicacion con el servidor
+     * @param delegationSubject on whose behalf it is done, or {@code null} for the authenticated
+     *     one
+     * @return whatever the other side answers
+     * @throws RemoteException if communication with the server was cut
+     * @throws IOException if communication with the server was cut
      */
     public String[] getDomains(Subject delegationSubject) throws IOException {
         try {
@@ -843,16 +860,17 @@ public final class RMIConnectionImpl_Stub extends RemoteStub implements RMIConne
     }
 
     /**
-     * Reenvia la operacion al otro lado de la conexion.
+     * Forwards the operation to the other side of the connection.
      *
-     * @param name el nombre del MBean
-     * @param delegationSubject en nombre de quien se hace, o {@code null} para el autenticado
-     * @return lo que conteste el otro lado
-     * @throws RemoteException si se corto la comunicacion con el servidor
-     * @throws InstanceNotFoundException si no hay ningun MBean con ese nombre
-     * @throws IntrospectionException si no se pudo averiguar la forma del MBean
-     * @throws ReflectionException si fallo la reflexion al construir o al llamar
-     * @throws IOException si se corto la comunicacion con el servidor
+     * @param name the MBean's name
+     * @param delegationSubject on whose behalf it is done, or {@code null} for the authenticated
+     *     one
+     * @return whatever the other side answers
+     * @throws RemoteException if communication with the server was cut
+     * @throws InstanceNotFoundException if there is no MBean with that name
+     * @throws IntrospectionException if the MBean's shape could not be found out
+     * @throws ReflectionException if reflection failed while constructing or calling
+     * @throws IOException if communication with the server was cut
      */
     public MBeanInfo getMBeanInfo(ObjectName name, Subject delegationSubject)
             throws InstanceNotFoundException, IntrospectionException, ReflectionException,
@@ -879,15 +897,16 @@ public final class RMIConnectionImpl_Stub extends RemoteStub implements RMIConne
     }
 
     /**
-     * Reenvia la operacion al otro lado de la conexion.
+     * Forwards the operation to the other side of the connection.
      *
-     * @param name el nombre del MBean
-     * @param className el nombre de la clase del MBean
-     * @param delegationSubject en nombre de quien se hace, o {@code null} para el autenticado
-     * @return lo que conteste el otro lado
-     * @throws RemoteException si se corto la comunicacion con el servidor
-     * @throws InstanceNotFoundException si no hay ningun MBean con ese nombre
-     * @throws IOException si se corto la comunicacion con el servidor
+     * @param name the MBean's name
+     * @param className the MBean's class name
+     * @param delegationSubject on whose behalf it is done, or {@code null} for the authenticated
+     *     one
+     * @return whatever the other side answers
+     * @throws RemoteException if communication with the server was cut
+     * @throws InstanceNotFoundException if there is no MBean with that name
+     * @throws IOException if communication with the server was cut
      */
     public boolean isInstanceOf(ObjectName name, String className, Subject delegationSubject)
             throws InstanceNotFoundException, IOException {
@@ -909,16 +928,17 @@ public final class RMIConnectionImpl_Stub extends RemoteStub implements RMIConne
     }
 
     /**
-     * Reenvia la operacion al otro lado de la conexion.
+     * Forwards the operation to the other side of the connection.
      *
-     * @param name el nombre del MBean
-     * @param listener el oyente
-     * @param filter el filtro, serializado
-     * @param handback el objeto que se devuelve con cada notificacion, serializado
-     * @param delegationSubject en nombre de quien se hace, o {@code null} para el autenticado
-     * @throws RemoteException si se corto la comunicacion con el servidor
-     * @throws InstanceNotFoundException si no hay ningun MBean con ese nombre
-     * @throws IOException si se corto la comunicacion con el servidor
+     * @param name the MBean's name
+     * @param listener the listener
+     * @param filter the filter, serialized
+     * @param handback the object handed back with each notification, serialized
+     * @param delegationSubject on whose behalf it is done, or {@code null} for the authenticated
+     *     one
+     * @throws RemoteException if communication with the server was cut
+     * @throws InstanceNotFoundException if there is no MBean with that name
+     * @throws IOException if communication with the server was cut
      */
     public void addNotificationListener(ObjectName name, ObjectName listener,
             MarshalledObject filter, MarshalledObject handback, Subject delegationSubject)
@@ -941,15 +961,16 @@ public final class RMIConnectionImpl_Stub extends RemoteStub implements RMIConne
     }
 
     /**
-     * Reenvia la operacion al otro lado de la conexion.
+     * Forwards the operation to the other side of the connection.
      *
-     * @param name el nombre del MBean
-     * @param listener el oyente
-     * @param delegationSubject en nombre de quien se hace, o {@code null} para el autenticado
-     * @throws RemoteException si se corto la comunicacion con el servidor
-     * @throws InstanceNotFoundException si no hay ningun MBean con ese nombre
-     * @throws ListenerNotFoundException si ese oyente no estaba registrado
-     * @throws IOException si se corto la comunicacion con el servidor
+     * @param name the MBean's name
+     * @param listener the listener
+     * @param delegationSubject on whose behalf it is done, or {@code null} for the authenticated
+     *     one
+     * @throws RemoteException if communication with the server was cut
+     * @throws InstanceNotFoundException if there is no MBean with that name
+     * @throws ListenerNotFoundException if that listener was not registered
+     * @throws IOException if communication with the server was cut
      */
     public void removeNotificationListener(ObjectName name, ObjectName listener,
             Subject delegationSubject)
@@ -974,17 +995,18 @@ public final class RMIConnectionImpl_Stub extends RemoteStub implements RMIConne
     }
 
     /**
-     * Reenvia la operacion al otro lado de la conexion.
+     * Forwards the operation to the other side of the connection.
      *
-     * @param name el nombre del MBean
-     * @param listener el oyente
-     * @param filter el filtro, serializado
-     * @param handback el objeto que se devuelve con cada notificacion, serializado
-     * @param delegationSubject en nombre de quien se hace, o {@code null} para el autenticado
-     * @throws RemoteException si se corto la comunicacion con el servidor
-     * @throws InstanceNotFoundException si no hay ningun MBean con ese nombre
-     * @throws ListenerNotFoundException si ese oyente no estaba registrado
-     * @throws IOException si se corto la comunicacion con el servidor
+     * @param name the MBean's name
+     * @param listener the listener
+     * @param filter the filter, serialized
+     * @param handback the object handed back with each notification, serialized
+     * @param delegationSubject on whose behalf it is done, or {@code null} for the authenticated
+     *     one
+     * @throws RemoteException if communication with the server was cut
+     * @throws InstanceNotFoundException if there is no MBean with that name
+     * @throws ListenerNotFoundException if that listener was not registered
+     * @throws IOException if communication with the server was cut
      */
     public void removeNotificationListener(ObjectName name, ObjectName listener,
             MarshalledObject filter, MarshalledObject handback, Subject delegationSubject)
@@ -1009,18 +1031,18 @@ public final class RMIConnectionImpl_Stub extends RemoteStub implements RMIConne
     }
 
     /**
-     * Registra varios oyentes de una, y devuelve un identificador por cada uno.
+     * Registers several listeners at once, and returns one identifier for each.
      *
-     * <p>De a varios porque cada registro es un viaje de ida y vuelta por la red. Los
-     * identificadores son lo que despues permite sacarlos sin volver a mandar el filtro.
+     * <p>Several at once because each registration is a round trip over the network. The
+     * identifiers are what later allows removing them without sending the filter again.
      *
-     * @param names los nombres de los MBeans
-     * @param filters los filtros, serializados
-     * @param delegationSubjects en nombre de quien se hace cada llamada
-     * @return lo que conteste el otro lado
-     * @throws RemoteException si se corto la comunicacion con el servidor
-     * @throws InstanceNotFoundException si no hay ningun MBean con ese nombre
-     * @throws IOException si se corto la comunicacion con el servidor
+     * @param names the MBeans' names
+     * @param filters the filters, serialized
+     * @param delegationSubjects on whose behalf each call is made
+     * @return whatever the other side answers
+     * @throws RemoteException if communication with the server was cut
+     * @throws InstanceNotFoundException if there is no MBean with that name
+     * @throws IOException if communication with the server was cut
      */
     public Integer[] addNotificationListeners(ObjectName[] names, MarshalledObject[] filters,
             Subject[] delegationSubjects)
@@ -1044,15 +1066,16 @@ public final class RMIConnectionImpl_Stub extends RemoteStub implements RMIConne
     }
 
     /**
-     * Reenvia la operacion al otro lado de la conexion.
+     * Forwards the operation to the other side of the connection.
      *
-     * @param name el nombre del MBean
-     * @param listenerIDs los identificadores que devolvio {@code addNotificationListeners}
-     * @param delegationSubject en nombre de quien se hace, o {@code null} para el autenticado
-     * @throws RemoteException si se corto la comunicacion con el servidor
-     * @throws InstanceNotFoundException si no hay ningun MBean con ese nombre
-     * @throws ListenerNotFoundException si ese oyente no estaba registrado
-     * @throws IOException si se corto la comunicacion con el servidor
+     * @param name the MBean's name
+     * @param listenerIDs the identifiers {@code addNotificationListeners} returned
+     * @param delegationSubject on whose behalf it is done, or {@code null} for the authenticated
+     *     one
+     * @throws RemoteException if communication with the server was cut
+     * @throws InstanceNotFoundException if there is no MBean with that name
+     * @throws ListenerNotFoundException if that listener was not registered
+     * @throws IOException if communication with the server was cut
      */
     public void removeNotificationListeners(ObjectName name, Integer[] listenerIDs,
             Subject delegationSubject)
@@ -1077,18 +1100,18 @@ public final class RMIConnectionImpl_Stub extends RemoteStub implements RMIConne
     }
 
     /**
-     * Trae las notificaciones que se acumularon del lado del servidor.
+     * Fetches the notifications that accumulated on the server side.
      *
-     * <p>Es el corazon del modelo: las notificaciones no se empujan al cliente, el cliente
-     * las viene a buscar. Con RMI no hay forma de que el servidor llame al cliente sin que
-     * el cliente sea a su vez un objeto remoto, y eso no sobrevive a un cortafuegos.
+     * <p>It is the heart of the model: notifications are not pushed to the client, the client
+     * comes to get them. With RMI there is no way for the server to call the client without the
+     * client being a remote object itself, and that does not survive a firewall.
      *
-     * @param clientSequenceNumber desde que numero de secuencia traer
-     * @param maxNotifications cuantas traer como maximo
-     * @param timeout cuanto esperar si no hay ninguna
-     * @return lo que conteste el otro lado
-     * @throws RemoteException si se corto la comunicacion con el servidor
-     * @throws IOException si se corto la comunicacion con el servidor
+     * @param clientSequenceNumber from which sequence number to fetch
+     * @param maxNotifications how many to fetch at most
+     * @param timeout how long to wait if there is none
+     * @return whatever the other side answers
+     * @throws RemoteException if communication with the server was cut
+     * @throws IOException if communication with the server was cut
      */
     public NotificationResult fetchNotifications(long clientSequenceNumber, int maxNotifications,
             long timeout)

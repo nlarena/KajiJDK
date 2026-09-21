@@ -1,14 +1,14 @@
 package java.sql;
 
 /**
- * KajiLibrary's java.sql.SQLPermission -- el permiso para las operaciones sensibles de JDBC.
+ * KajiLibrary's java.sql.SQLPermission -- the permission for JDBC's sensitive operations.
  *
- * <p>Los nombres que reconoce son `setLog`, `callAbort`, `setSyncFactory`, `setNetworkTimeout` y
- * `deregisterDriver`: todas operaciones que un codigo poco confiable podria usar para espiar o
- * cortar las conexiones de otro.
+ * <p>The names it recognizes are `setLog`, `callAbort`, `setSyncFactory`, `setNetworkTimeout` and
+ * `deregisterDriver`: all operations that untrusted code could use to spy on or cut another's
+ * connections.
  *
- * <p>Hereda de `BasicPermission`, o sea que admite el comodin `*` y el sufijo `.*`. No tiene acciones
- * -- el permiso es o no es.
+ * <p>It inherits from `BasicPermission`, so it accepts the `*` wildcard and the `.*` suffix. It has
+ * no actions -- the permission is or is not.
  */
 public final class SQLPermission extends java.security.BasicPermission {
 
@@ -16,7 +16,7 @@ public final class SQLPermission extends java.security.BasicPermission {
         super(name);
     }
 
-    /** El de arriba; `actions` se ignora, que es lo que hace `BasicPermission`. */
+    /** The one above; `actions` is ignored, which is what `BasicPermission` does. */
     public SQLPermission(String name, String actions) {
         super(name, actions);
     }

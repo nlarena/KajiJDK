@@ -4,27 +4,27 @@ import java.lang.classfile.Attribute;
 import java.lang.classfile.CodeModel;
 import java.lang.classfile.Label;
 
-// `Code` (JVMS §4.7.3) visto como atributo. Es la vista de BAJO nivel del mismo objeto que
-// {@link CodeModel} muestra pieza por pieza: acá están los bytes crudos y los bci, allá las
-// instrucciones. Los dos son la misma instancia — por eso esta interfaz extiende a aquélla.
+// `Code` (JVMS §4.7.3) seen as an attribute. It is the LOW-level view of the same object
+// {@link CodeModel} shows piece by piece: here are the raw bytes and the bci, there the instructions.
+// The two are the same instance -- which is why this interface extends that one.
 //
-// No tiene fábrica: un `Code` sólo existe dentro de un método y su contenido se arma con un
-// `CodeBuilder`, que es a la vez quien resuelve las etiquetas a bci. Fabricarlo suelto daría un
-// atributo cuyos `labelToBci` no significan nada.
+// It has no factory: a `Code` only exists inside a method and its contents are built with a
+// `CodeBuilder`, which is also what resolves labels to bci. Making one loose would give an attribute
+// whose `labelToBci` means nothing.
 public interface CodeAttribute extends Attribute<CodeAttribute>, CodeModel {
 
-    /** El `max_locals` del atributo. */
+    /** The attribute's `max_locals`. */
     int maxLocals();
 
-    /** El `max_stack` del atributo. */
+    /** The attribute's `max_stack`. */
     int maxStack();
 
-    /** El largo del arreglo `code`. */
+    /** The length of the `code` array. */
     int codeLength();
 
-    /** Una copia del arreglo `code`. */
+    /** A copy of the `code` array. */
     byte[] codeArray();
 
-    /** El bci de esta etiqueta, o -1 si no es de este cuerpo. */
+    /** This label's bci, or -1 if it does not belong to this body. */
     int labelToBci(Label label);
 }

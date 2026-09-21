@@ -1,12 +1,12 @@
 package java.lang.classfile;
 
-// Una instrucción del arreglo `code` (JVMS §6). Lo único común a todas es qué opcode son y cuántos
-// bytes ocupan; el resto —operandos, destino de salto, entrada del pool— lo dice cada subtipo.
+// An instruction of the `code` array (JVMS §6). All they have in common is which opcode they are and
+// how many bytes they take; the rest --operands, jump target, pool entry-- each subtype says.
 public interface Instruction extends CodeElement {
 
-    /** El opcode. */
+    /** The opcode. */
     Opcode opcode();
 
-    /** Cuántos bytes ocupa, incluido el opcode. */
+    /** How many bytes it takes, the opcode included. */
     int sizeInBytes();
 }

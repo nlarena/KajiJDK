@@ -6,16 +6,16 @@ import java.awt.datatransfer.Transferable;
 import java.util.List;
 
 /**
- * Se soltó algo sobre el componente.
+ * Something was dropped over the component.
  *
- * <p>Es el único momento en que {@link #getTransferable} entrega datos de verdad, y aun así hay un
- * orden que respetar: **primero {@link #acceptDrop}, después los datos, y al final
- * {@link #dropComplete}**. Saltearse el primero da {@link InvalidDnDOperationException}, y olvidarse
- * del último deja al origen esperando para siempre sin saber si tiene que borrar el original.
+ * <p>It is the only moment when {@link #getTransferable} delivers real data, and even then there is
+ * an order to respect: **first {@link #acceptDrop}, then the data, and at the end {@link
+ * #dropComplete}**. Skipping the first gives {@link InvalidDnDOperationException}, and forgetting
+ * the last leaves the source waiting forever without knowing whether it has to delete the original.
  *
- * <p>{@link #isLocalTransfer} distingue un arrastre dentro de la misma máquina virtual de uno que
- * vino de otro programa. Importa porque en el primer caso los datos son el objeto mismo y en el
- * segundo pasaron por el portapapeles del sistema y se serializaron.
+ * <p>{@link #isLocalTransfer} tells a drag inside the same virtual machine apart from one that came
+ * from another program. It matters because in the first case the data are the object itself and in
+ * the second they went through the system clipboard and were serialised.
  */
 public class DropTargetDropEvent extends DropTargetEvent {
 
@@ -27,10 +27,10 @@ public class DropTargetDropEvent extends DropTargetEvent {
     private final boolean isLocalTx;
 
     /**
-     * Con el contexto, el punto y las acciones; transferencia entre programas.
+     * With the context, the point and the actions; transfer between programs.
      *
-     * @throws NullPointerException si falta el contexto o el punto
-     * @throws IllegalArgumentException si alguna acción no es válida
+     * @throws NullPointerException if the context or the point is missing
+     * @throws IllegalArgumentException if one of the actions is not valid
      */
     public DropTargetDropEvent(DropTargetContext dtc, Point cursorLocn, int dropAction,
             int srcActions) {
@@ -38,10 +38,10 @@ public class DropTargetDropEvent extends DropTargetEvent {
     }
 
     /**
-     * Como el anterior, diciendo si el arrastre viene de la misma máquina virtual.
+     * Like the previous one, saying whether the drag comes from the same virtual machine.
      *
-     * @throws NullPointerException si falta el contexto o el punto
-     * @throws IllegalArgumentException si alguna acción no es válida
+     * @throws NullPointerException if the context or the point is missing
+     * @throws IllegalArgumentException if one of the actions is not valid
      */
     public DropTargetDropEvent(DropTargetContext dtc, Point cursorLocn, int dropAction,
             int srcActions, boolean isLocal) {
@@ -63,70 +63,70 @@ public class DropTargetDropEvent extends DropTargetEvent {
         this.isLocalTx = isLocal;
     }
 
-    /** Dónde se soltó, relativo al componente. */
+    /** Where it was dropped, relative to the component. */
     public Point getLocation() {
         return this.location;
     }
 
-    /** En qué formatos se puede entregar. */
+    /** In which formats it can be delivered. */
     public DataFlavor[] getCurrentDataFlavors() {
         return this.context.getCurrentDataFlavors();
     }
 
-    /** Lo mismo, como lista. */
+    /** The same, as a list. */
     public List<DataFlavor> getCurrentDataFlavorsAsList() {
         return this.context.getCurrentDataFlavorsAsList();
     }
 
-    /** Si se puede entregar en ese formato. */
+    /** Whether it can be delivered in that format. */
     public boolean isDataFlavorSupported(DataFlavor df) {
         return this.context.isDataFlavorSupported(df);
     }
 
-    /** Todo lo que el origen acepta hacer. */
+    /** Everything the source accepts doing. */
     public int getSourceActions() {
         return this.actions;
     }
 
-    /** Qué acción eligió el usuario. */
+    /** Which action the user chose. */
     public int getDropAction() {
         return this.dropAction;
     }
 
     /**
-     * Los datos.
+     * The data.
      *
-     * @throws InvalidDnDOperationException si no se llamó antes a {@link #acceptDrop}
+     * @throws InvalidDnDOperationException if {@link #acceptDrop} was not called first
      */
     public Transferable getTransferable() {
         return this.context.getTransferable();
     }
 
     /**
-     * Acepta el soltado con esa acción.
+     * Accepts the drop with that action.
      *
-     * <p>Hay que llamarlo **antes** de pedir los datos.
+     * <p>It has to be called **before** asking for the data.
      */
     public void acceptDrop(int dropAction) {
         this.context.acceptDrop(dropAction);
     }
 
-    /** Rechaza el soltado. */
+    /** Rejects the drop. */
     public void rejectDrop() {
         this.context.rejectDrop();
     }
 
     /**
-     * Avisa que se terminó de recibir, y si salió bien.
+     * Tells that the receiving is finished, and whether it went well.
      *
-     * <p>Es lo que le dice al origen si tiene que borrar el original. Olvidarlo deja el arrastre a
-     * medio terminar del otro lado.
+     * <p>It is what tells the source whether it has to delete the original. Forgetting it leaves
+     * the drag half finished on the other side.
      */
     public void dropComplete(boolean success) {
         this.context.dropComplete(success);
     }
 
-    /** Si el arrastre viene de esta misma máquina virtual. */
+    /** Whether the drag comes from this same virtual machine. */
     public boolean isLocalTransfer() {
         return this.isLocalTx;
     }

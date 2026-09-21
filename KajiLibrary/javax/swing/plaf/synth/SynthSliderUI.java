@@ -10,12 +10,12 @@ import javax.swing.JComponent;
 import javax.swing.plaf.ComponentUI;
 
 /**
- * El deslizador de Synth.
+ * Synth's slider.
  *
- * <p>Tres regiones, como la barra de desplazamiento: {@code Slider}, {@code SliderTrack} y
- * {@code SliderThumb}. Y una vuelta mas: el pulgar de un deslizador de Synth puede tener un
- * <strong>tamano distinto por estado</strong>, porque su icono es un {@link SynthIcon}. Un pulgar
- * que crece al pasarle el mouse es algo que el basico no puede expresar.
+ * <p>Three regions, like the scroll bar: {@code Slider}, {@code SliderTrack} and
+ * {@code SliderThumb}. And one turn more: a Synth slider's thumb may have a <strong>different
+ * size per state</strong>, because its icon is a {@link SynthIcon}. A thumb that grows when the
+ * mouse passes over it is something the basic one cannot express.
  */
 public class SynthSliderUI extends javax.swing.plaf.basic.BasicSliderUI implements SynthUI, PropertyChangeListener {
 
@@ -26,32 +26,33 @@ public class SynthSliderUI extends javax.swing.plaf.basic.BasicSliderUI implemen
     }
 
     public SynthContext getContext(JComponent c) {
-        return getContext(c, SynthLookAndFeel.estadoDe(c));
+        return getContext(c, SynthLookAndFeel.stateOf(c));
     }
 
     /**
-     * El contexto con ese estado.
+     * The context with that state.
      *
-     * <p>La region sale del componente y no de una constante fija, y eso importa en las cadenas de
-     * herencia: {@code SynthCheckBoxUI} hereda este metodo de {@code SynthButtonUI} y tiene que
-     * contestar {@code CheckBox}, no {@code Button}. Medido.
+     * <p>The region comes from the component and not from a fixed constant, and that matters in the
+     * chains of inheritance: {@code SynthCheckBoxUI} inherits this method from {@code
+     * SynthButtonUI} and has to answer {@code CheckBox}, not {@code Button}. Measured.
      */
     private SynthContext getContext(JComponent c, int state) {
         Region r = SynthLookAndFeel.getRegion(c);
         return new SynthContext(c, (r != null) ? r : Region.SLIDER, style, state, true);
     }
 
-    /** Le pide el estilo a la fabrica; revienta si no hay, y esta medido. */
+    /** It asks the factory for the style; it blows up if there is none, and it is measured. */
     private void updateStyle(JComponent c) {
-        style = SynthLookAndFeel.actualizar(getContext(c, SynthConstants.ENABLED));
+        style = SynthLookAndFeel.update(getContext(c, SynthConstants.ENABLED));
     }
 
     /**
-     * Dibuja el fondo y despues el contenido.
+     * It draws the background and then the content.
      *
-     * <p>Synth separa las dos cosas: el fondo lo pinta el estilo -- que sabe en que estado esta el
-     * componente -- y el contenido lo pinta el aspecto basico. Por eso {@code update} no es
-     * {@code paint} con un relleno adelante, como en el basico, sino dos pasos distintos.
+     * <p>Synth separates the two things: the background is painted by the style -- which knows what
+     * state the component is in -- and the content is painted by the basic look and feel. That is
+     * why {@code update} is not {@code paint} with a fill in front, as in the basic one, but two
+     * different steps.
      */
     public void update(Graphics g, JComponent c) {
         SynthContext context = getContext(c);
@@ -71,11 +72,11 @@ public class SynthSliderUI extends javax.swing.plaf.basic.BasicSliderUI implemen
     }
 
     /**
-     * La pista, en su region propia.
+     * The track, in its own region.
      *
-     * @param context el contexto de la pista
-     * @param g donde dibujar
-     * @param trackBounds donde va
+     * @param context the track's context
+     * @param g where to draw
+     * @param trackBounds where it goes
      */
     protected void paintTrack(SynthContext context, Graphics g, Rectangle trackBounds) {
         if (context != null && context.getStyle() != null) {
@@ -86,11 +87,11 @@ public class SynthSliderUI extends javax.swing.plaf.basic.BasicSliderUI implemen
     }
 
     /**
-     * El pulgar, en la suya.
+     * The thumb, in its own.
      *
-     * @param context el contexto del pulgar
-     * @param g donde dibujar
-     * @param thumbBounds donde va
+     * @param context the thumb's context
+     * @param g where to draw
+     * @param thumbBounds where it goes
      */
     protected void paintThumb(SynthContext context, Graphics g, Rectangle thumbBounds) {
         if (context != null && context.getStyle() != null) {
@@ -102,17 +103,16 @@ public class SynthSliderUI extends javax.swing.plaf.basic.BasicSliderUI implemen
     }
 
     /**
-     * Rehace los seis rectangulos.
+     * It redoes the six rectangles.
      *
-     * <p>Se llama sola cada vez que hace falta y no forma parte de instalar nada: el pulgar de
-     * Synth puede cambiar de tamano al cambiar de estado, asi que la distribucion no se puede
-     * calcular una sola vez.
+     * <p>It is called by itself every time it is needed and is not part of installing anything:
+     * Synth's thumb may change size when it changes state, so the layout cannot be computed once.
      */
     protected void layout() {
         calculateGeometry();
     }
 
-    /** El borde lo dibuja el estilo, no un {@code Border}; ver {@link SynthUI}. */
+    /** The border is drawn by the style, not by a {@code Border}; see {@link SynthUI}. */
     public void paintBorder(SynthContext context, Graphics g, int x, int y, int w, int h) {
         if (context != null && context.getStyle() != null) {
             context.getStyle().getPainter(context)
@@ -120,7 +120,7 @@ public class SynthSliderUI extends javax.swing.plaf.basic.BasicSliderUI implemen
         }
     }
 
-    /** Cualquier cambio puede querer otro estilo; ver {@link SynthLookAndFeel#actualizar}. */
+    /** Any change may want another style; see {@link SynthLookAndFeel#update}. */
     public void propertyChange(PropertyChangeEvent e) {
         Object o = e.getSource();
         if (o instanceof JComponent) {
@@ -129,13 +129,14 @@ public class SynthSliderUI extends javax.swing.plaf.basic.BasicSliderUI implemen
     }
 
     /**
-     * Uno para ese deslizador.
+     * One for that slider.
      *
-     * <p>Es el unico constructor y es {@code protected}: quien instala es {@link #createUI}. No hay
-     * version sin argumentos, y no es un olvido -- un deslizador de Synth necesita el componente
-     * desde el principio para poder preguntarle su estado --. Medido.
+     * <p>It is the only constructor and it is {@code protected}: who installs is
+     * {@link #createUI}. There is no no-argument version, and it is not an oversight -- a Synth
+     * slider needs the component from the start in order to be able to ask it for its state --.
+     * Measured.
      *
-     * @param c el deslizador
+     * @param c the slider
      */
     protected SynthSliderUI(javax.swing.JSlider c) {
         super(c);

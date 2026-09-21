@@ -1,41 +1,42 @@
 package com.sun.nio.sctp;
 
 /**
- * La asociacion cambio de estado.
+ * The association changed state.
  *
- * <p>Es la notificacion que cuenta el ciclo de vida entero: nacio, se murio, se reinicio, se
- * esta cerrando, o no se pudo establecer. {@link AssocChangeEvent} es cual de las cinco.
+ * <p>It is the notification that tells the whole life cycle: it was born, it died, it
+ * restarted, it is closing, or it could not be established. {@link AssocChangeEvent} is which
+ * of the five.
  */
 public abstract class AssociationChangeNotification implements Notification {
 
     /**
-     * Que le paso a la asociacion.
+     * What happened to the association.
      *
-     * <p>La distincion que mas importa es {@link #COMM_LOST} contra {@link #SHUTDOWN}: la primera
-     * es que se perdio, la segunda que se cerro como corresponde. Confundirlas hace que un cierre
-     * normal se reporte como una falla de red.
+     * <p>The distinction that matters most is {@link #COMM_LOST} against {@link #SHUTDOWN}: the
+     * first is that it was lost, the second that it was closed as it should be. Confusing them
+     * makes a normal close be reported as a network failure.
      */
     public enum AssocChangeEvent {
 
-        /** Quedo establecida y se puede usar. */
+        /** It was established and may be used. */
         COMM_UP,
-        /** Se perdio: el par dejo de responder. */
+        /** It was lost: the peer stopped answering. */
         COMM_LOST,
-        /** El par la reinicio. Lo que estaba en vuelo se perdio. */
+        /** The peer restarted it. What was in flight was lost. */
         RESTART,
-        /** Se cerro ordenadamente. */
+        /** It was closed in an orderly way. */
         SHUTDOWN,
-        /** No se pudo establecer. */
+        /** It could not be established. */
         CANT_START
     }
 
-    /** Para las implementaciones de SCTP. */
+    /** For the SCTP implementations. */
     protected AssociationChangeNotification() {
     }
 
-    /** La asociacion; puede ser {@code null} con {@link AssocChangeEvent#CANT_START}. */
+    /** The association; it may be {@code null} with {@link AssocChangeEvent#CANT_START}. */
     public abstract Association association();
 
-    /** Cual de los cinco eventos fue. */
+    /** Which of the five events it was. */
     public abstract AssocChangeEvent event();
 }

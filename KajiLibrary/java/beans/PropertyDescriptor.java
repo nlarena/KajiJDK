@@ -66,8 +66,8 @@ public class PropertyDescriptor extends FeatureDescriptor {
             if (r == null) {
                 // The first attempt assumes boolean (`isX`); if it is not there, `getX` is tried.
                 // That the error message keeps the ORIGINAL name is what the JDK does.
-                String alternativo = "get" + capitalize(propertyName);
-                r = findMethod(beanClass, alternativo, 0);
+                String alternative = "get" + capitalize(propertyName);
+                r = findMethod(beanClass, alternative, 0);
             }
             if (r == null) {
                 throw new IntrospectionException("Method not found: " + readName);
@@ -237,17 +237,17 @@ public class PropertyDescriptor extends FeatureDescriptor {
     }
 
     public boolean equals(Object obj) {
-        boolean igual = this == obj;
-        if (!igual && obj instanceof PropertyDescriptor) {
-            PropertyDescriptor otro = (PropertyDescriptor) obj;
-            igual = mismos(this.getReadMethod(), otro.getReadMethod())
-                 && mismos(this.getWriteMethod(), otro.getWriteMethod())
-                 && this.getPropertyType() == otro.getPropertyType()
-                 && this.getPropertyEditorClass() == otro.getPropertyEditorClass()
-                 && this.bound == otro.bound
-                 && this.constrained == otro.constrained;
+        boolean same = this == obj;
+        if (!same && obj instanceof PropertyDescriptor) {
+            PropertyDescriptor other = (PropertyDescriptor) obj;
+            same = sameMethods(this.getReadMethod(), other.getReadMethod())
+                 && sameMethods(this.getWriteMethod(), other.getWriteMethod())
+                 && this.getPropertyType() == other.getPropertyType()
+                 && this.getPropertyEditorClass() == other.getPropertyEditorClass()
+                 && this.bound == other.bound
+                 && this.constrained == other.constrained;
         }
-        return igual;
+        return same;
     }
 
     public int hashCode() {
@@ -257,7 +257,7 @@ public class PropertyDescriptor extends FeatureDescriptor {
         return h;
     }
 
-    private static boolean mismos(Object a, Object b) {
+    private static boolean sameMethods(Object a, Object b) {
         return a == null ? b == null : a.equals(b);
     }
 

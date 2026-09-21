@@ -30,50 +30,52 @@ import javax.swing.plaf.ProgressBarUI;
 import javax.swing.plaf.UIResource;
 
 /**
- * El aspecto basico de una barra de progreso.
+ * The basic look and feel of a progress bar.
  *
- * <h2>Dos barras distintas en una clase</h2>
+ * <h2>Two different bars in one class</h2>
  *
- * <p>Una barra <em>determinada</em> sabe cuanto falta y se llena de a poco: es una regla de tres
- * entre el valor del modelo y el ancho disponible. Una <em>indeterminada</em> no sabe nada y lo
- * unico que dice es "sigo trabajando": un bloque que va y viene. Las dos comparten el borde, los
- * colores y el texto, y ahi se acaba el parecido, por eso hay dos metodos de pintado.
+ * <p>A <em>determinate</em> bar knows how much is left and fills up bit by bit: it is a rule of
+ * three between the model's value and the available width. An <em>indeterminate</em> one knows
+ * nothing and the only thing it says is "I am still working": a block that comes and goes. The
+ * two share the border, the colours and the text, and there the likeness ends, which is why
+ * there are two painting methods.
  *
- * <h2>El bloque que rebota</h2>
+ * <h2>The block that bounces</h2>
  *
- * <p>El bloque mide un sexto del largo disponible --{@link #getBoxLength}, redondeado-- y recorre el
- * largo de ida y de vuelta en {@link #getFrameCount} cuadros. El numero de cuadros no es una
- * constante: sale de dividir cuanto dura el ciclo entre cada cuanto se repinta, y en Metal eso da
- * sesenta.
+ * <p>The block measures a sixth of the available length -- {@link #getBoxLength}, rounded --
+ * and travels the length there and back in {@link #getFrameCount} frames. The number of frames
+ * is not a constant: it comes from dividing how long the cycle lasts by how often it is
+ * repainted, and in Metal that gives sixty.
  *
- * <p><strong>{@link #getBox} revienta si la barra todavia no fue indeterminada.</strong> Las medidas
- * internas que necesita se calculan cuando la barra <em>entra</em> en modo indeterminado, y antes de
- * eso son nulas. Esta medido: el JDK tira {@code NullPointerException} ahi, y se copia -- una
- * subclase que llame a {@code getBox} fuera de {@code paintIndeterminate} tiene que romperse igual
- * en las dos bibliotecas.
+ * <p><strong>{@link #getBox} blows up if the bar has not been indeterminate yet.</strong> The
+ * internal measurements it needs are computed when the bar <em>enters</em> indeterminate mode,
+ * and before that they are null. It is measured: the JDK throws {@code NullPointerException}
+ * there, and it is copied -- a subclass that calls {@code getBox} outside
+ * {@code paintIndeterminate} has to break the same way in both libraries.
  *
- * <h2>Las celdas que ya no se usan</h2>
+ * <h2>The cells that are no longer used</h2>
  *
- * <p>{@link #getCellLength} y {@link #getCellSpacing} valen 1 y 0, y nadie los mira. Son de cuando
- * la barra se dibujaba como una fila de bloquecitos separados; el aspecto basico la dibuja llena.
- * Quedan porque una subclase puede volver a ese estilo.
+ * <p>{@link #getCellLength} and {@link #getCellSpacing} hold 1 and 0, and nobody looks at them.
+ * They are from when the bar was drawn as a row of separate little blocks; the basic look and
+ * feel draws it filled. They stay because a subclass may go back to that style.
  *
- * <h2>El minimo no depende del borde</h2>
+ * <h2>The minimum does not depend on the border</h2>
  *
- * <p>El ancho minimo de una barra horizontal es diez pixeles, y punto: no se le suman los margenes.
- * Es raro --el preferido si los suma-- y esta medido con dos bordes distintos.
+ * <p>A horizontal bar's minimum width is ten pixels, and that is that: the margins are not
+ * added to it. It is odd -- the preferred one does add them -- and it is measured with two
+ * different borders.
  *
- * <h2>Linea de base</h2>
+ * <h2>Baseline</h2>
  *
- * <p>Solo la tiene si la barra muestra su texto. Sin texto no hay nada que apoyar y la respuesta es
- * -1 con comportamiento {@code OTHER}.
+ * <p>It only has one if the bar shows its text. With no text there is nothing to rest and the
+ * answer is -1 with behaviour {@code OTHER}.
  */
 public class BasicProgressBarUI extends ProgressBarUI {
 
     protected JProgressBar progressBar;
     protected ChangeListener changeListener;
 
-    /** El rectangulo del bloque que rebota; nulo hasta que la barra sea indeterminada. */
+    /** The bouncing block's rectangle; null until the bar has been indeterminate. */
     protected Rectangle boxRect;
 
     private PropertyChangeListener propertyListener;
@@ -85,25 +87,27 @@ public class BasicProgressBarUI extends ProgressBarUI {
     private Color selectionForeground;
     private Color selectionBackground;
 
-    /** El area de adentro del borde; nula hasta el primer modo indeterminado. */
+    /** The area inside the border; null until the first indeterminate mode. */
     private Rectangle componentInnards;
 
-    private static final ColorUIResource FONDO = new ColorUIResource(238, 238, 238);
-    private static final ColorUIResource FRENTE = new ColorUIResource(163, 184, 204);
-    private static final ColorUIResource SEL_FONDO = new ColorUIResource(99, 130, 191);
-    private static final ColorUIResource SEL_FRENTE = new ColorUIResource(238, 238, 238);
-    private static final FontUIResource FUENTE = new FontUIResource("Dialog", Font.BOLD, 12);
-    private static final DimensionUIResource INTERNO_H = new DimensionUIResource(146, 12);
-    private static final DimensionUIResource INTERNO_V = new DimensionUIResource(12, 146);
+    private static final ColorUIResource BACKGROUND = new ColorUIResource(238, 238, 238);
+    private static final ColorUIResource FOREGROUND = new ColorUIResource(163, 184, 204);
+    private static final ColorUIResource SEL_BACKGROUND = new ColorUIResource(99, 130, 191);
+    private static final ColorUIResource SEL_FOREGROUND = new ColorUIResource(238, 238, 238);
+    private static final FontUIResource FONT = new FontUIResource("Dialog", Font.BOLD, 12);
+    private static final DimensionUIResource INNER_H = new DimensionUIResource(146, 12);
+    private static final DimensionUIResource INNER_V = new DimensionUIResource(12, 146);
 
-    /** Cuanto dura una ida y vuelta, y cada cuanto se repinta; de ahi salen los cuadros. */
-    private static final int DURACION_DEL_CICLO = 3000;
-    private static final int INTERVALO_DE_REPINTADO = 50;
+    /**
+     * How long a there-and-back lasts, and how often it is repainted; the frames come from that.
+     */
+    private static final int CYCLE_TIME = 3000;
+    private static final int REPAINT_INTERVAL = 50;
 
     public BasicProgressBarUI() {
     }
 
-    /** Uno nuevo por barra: guarda el componente y el estado de la animacion. */
+    /** A new one per bar: it keeps the component and the animation's state. */
     public static ComponentUI createUI(JComponent x) {
         return new BasicProgressBarUI();
     }
@@ -113,45 +117,48 @@ public class BasicProgressBarUI extends ProgressBarUI {
         installDefaults();
         installListeners();
         if (progressBar.isIndeterminate()) {
-            arrancarIndeterminado();
+            startIndeterminate();
         }
     }
 
     public void uninstallUI(JComponent c) {
         if (progressBar.isIndeterminate()) {
-            pararIndeterminado();
+            stopIndeterminate();
         }
         uninstallDefaults();
         uninstallListeners();
         progressBar = null;
     }
 
-    /** Colores, fuente, borde y opacidad; los valores son los de {@code ProgressBar.*} en Metal. */
+    /**
+     * Colours, typeface, border and opacity; the values are those of {@code ProgressBar.*} in
+     * Metal.
+     */
     protected void installDefaults() {
-        Color fondo = progressBar.getBackground();
-        if (fondo == null || fondo instanceof UIResource) {
-            progressBar.setBackground(FONDO);
+        Color background = progressBar.getBackground();
+        if (background == null || background instanceof UIResource) {
+            progressBar.setBackground(BACKGROUND);
         }
-        Color frente = progressBar.getForeground();
-        if (frente == null || frente instanceof UIResource) {
-            progressBar.setForeground(FRENTE);
+        Color foreground = progressBar.getForeground();
+        if (foreground == null || foreground instanceof UIResource) {
+            progressBar.setForeground(FOREGROUND);
         }
-        Font fuente = progressBar.getFont();
-        if (fuente == null || fuente instanceof UIResource) {
-            progressBar.setFont(FUENTE);
+        Font font = progressBar.getFont();
+        if (font == null || font instanceof UIResource) {
+            progressBar.setFont(FONT);
         }
-        Border borde = progressBar.getBorder();
-        if (borde == null || borde instanceof UIResource) {
-            progressBar.setBorder(new BorderUIResource.LineBorderUIResource(SEL_FONDO, 1));
+        Border border = progressBar.getBorder();
+        if (border == null || border instanceof UIResource) {
+            progressBar.setBorder(new BorderUIResource.LineBorderUIResource(SEL_BACKGROUND, 1));
         }
         LookAndFeel.installProperty(progressBar, "opaque", Boolean.TRUE);
-        selectionBackground = SEL_FONDO;
-        selectionForeground = SEL_FRENTE;
+        selectionBackground = SEL_BACKGROUND;
+        selectionForeground = SEL_FOREGROUND;
         cellLength = 1;
         cellSpacing = 0;
     }
 
-    /** No saca nada; ver {@link BasicPanelUI#uninstallDefaults}. */
+    /** It removes nothing; see {@link BasicPanelUI#uninstallDefaults}. */
     protected void uninstallDefaults() {
     }
 
@@ -169,17 +176,17 @@ public class BasicProgressBarUI extends ProgressBarUI {
         propertyListener = null;
     }
 
-    /** Cuantos cuadros dura una ida y vuelta; cero hasta que la barra sea indeterminada. */
+    /** How many frames a there-and-back lasts; zero until the bar has been indeterminate. */
     protected final int getFrameCount() {
         return numFrames;
     }
 
-    /** En que cuadro va la animacion. */
+    /** Which frame the animation is on. */
     protected int getAnimationIndex() {
         return animationIndex;
     }
 
-    /** Lo pone y repinta. */
+    /** It sets it and repaints. */
     protected void setAnimationIndex(int newValue) {
         if (animationIndex != newValue) {
             animationIndex = newValue;
@@ -189,16 +196,16 @@ public class BasicProgressBarUI extends ProgressBarUI {
         }
     }
 
-    /** Pasa al cuadro siguiente, volviendo a cero al terminar el ciclo. */
+    /** It goes to the next frame, going back to zero at the end of the cycle. */
     protected void incrementAnimationIndex() {
         int newValue = getAnimationIndex() + 1;
         setAnimationIndex((numFrames > 0 && newValue < numFrames) ? newValue : 0);
     }
 
-    /** Arranca el reloj de la animacion. */
+    /** It starts the animation's timer. */
     protected void startAnimationTimer() {
         if (animator == null) {
-            animator = new Timer(INTERVALO_DE_REPINTADO, new java.awt.event.ActionListener() {
+            animator = new Timer(REPAINT_INTERVAL, new java.awt.event.ActionListener() {
                 public void actionPerformed(java.awt.event.ActionEvent e) {
                     incrementAnimationIndex();
                 }
@@ -214,19 +221,19 @@ public class BasicProgressBarUI extends ProgressBarUI {
         setAnimationIndex(0);
     }
 
-    private void arrancarIndeterminado() {
-        numFrames = DURACION_DEL_CICLO / INTERVALO_DE_REPINTADO;
+    private void startIndeterminate() {
+        numFrames = CYCLE_TIME / REPAINT_INTERVAL;
         componentInnards = new Rectangle();
         boxRect = new Rectangle();
-        actualizarInternas();
+        updateInner();
         startAnimationTimer();
     }
 
-    private void pararIndeterminado() {
+    private void stopIndeterminate() {
         stopAnimationTimer();
     }
 
-    private void actualizarInternas() {
+    private void updateInner() {
         Insets b = progressBar.getInsets();
         componentInnards.setBounds(b.left, b.top,
                 progressBar.getWidth() - (b.left + b.right),
@@ -257,58 +264,59 @@ public class BasicProgressBarUI extends ProgressBarUI {
         return selectionBackground;
     }
 
-    /** Un sexto del largo, redondeado; ver la nota de la clase. */
+    /** A sixth of the length, rounded; see the class note. */
     protected int getBoxLength(int availableLength, int otherDimension) {
         return (int) Math.round(availableLength / 6.0);
     }
 
     /**
-     * Donde esta el bloque que rebota en este cuadro.
+     * Where the bouncing block is on this frame.
      *
-     * @throws NullPointerException si la barra todavia no fue indeterminada; ver la nota de la clase
+     * @throws NullPointerException if the bar has not been indeterminate yet; see the class note
      */
     protected Rectangle getBox(Rectangle r) {
-        // Esta llamada es la que revienta antes de tiempo, y es a proposito: `componentInnards`
-        // es nulo hasta que la barra entra en modo indeterminado. Ver la nota de la clase.
-        actualizarInternas();
+        // This call is the one that blows up ahead of time, and it is on purpose:
+                // `componentInnards` is null until the bar enters indeterminate mode. See the class
+                // note.
+        updateInner();
         if (r == null) {
             r = new Rectangle();
         }
-        int cuadros = (numFrames > 0) ? numFrames : 1;
+        int frames = (numFrames > 0) ? numFrames : 1;
         boolean horizontal = progressBar.getOrientation() == SwingConstants.HORIZONTAL;
-        int largo = horizontal ? componentInnards.width : componentInnards.height;
-        int grueso = horizontal ? componentInnards.height : componentInnards.width;
-        int bloque = getBoxLength(largo, grueso);
-        int recorrido = largo - bloque;
-        if (recorrido < 0) {
-            recorrido = 0;
+        int length = horizontal ? componentInnards.width : componentInnards.height;
+        int thick = horizontal ? componentInnards.height : componentInnards.width;
+        int block = getBoxLength(length, thick);
+        int walk = length - block;
+        if (walk < 0) {
+            walk = 0;
         }
-        // La ida ocupa la mitad de los cuadros y la vuelta la otra mitad.
-        int mitad = cuadros / 2;
+        // The way there takes half the frames and the way back the other half.
+        int half = frames / 2;
         int i = getAnimationIndex();
         int paso;
-        if (mitad == 0) {
+        if (half == 0) {
             paso = 0;
-        } else if (i < mitad) {
-            paso = recorrido * i / mitad;
+        } else if (i < half) {
+            paso = walk * i / half;
         } else {
-            paso = recorrido * (cuadros - i) / mitad;
+            paso = walk * (frames - i) / half;
         }
         if (horizontal) {
             r.x = componentInnards.x + paso;
             r.y = componentInnards.y;
-            r.width = bloque;
+            r.width = block;
             r.height = componentInnards.height;
         } else {
             r.x = componentInnards.x;
             r.y = componentInnards.y + paso;
             r.width = componentInnards.width;
-            r.height = bloque;
+            r.height = block;
         }
         return r;
     }
 
-    /** Cuanto de la barra esta lleno, en pixeles. */
+    /** How much of the bar is full, in pixels. */
     protected int getAmountFull(Insets b, int width, int height) {
         int amountFull = 0;
         BoundedRangeModel model = progressBar.getModel();
@@ -323,30 +331,30 @@ public class BasicProgressBarUI extends ProgressBarUI {
     }
 
     protected Dimension getPreferredInnerHorizontal() {
-        return new DimensionUIResource(INTERNO_H.width, INTERNO_H.height);
+        return new DimensionUIResource(INNER_H.width, INNER_H.height);
     }
 
     protected Dimension getPreferredInnerVertical() {
-        return new DimensionUIResource(INTERNO_V.width, INTERNO_V.height);
+        return new DimensionUIResource(INNER_V.width, INNER_V.height);
     }
 
-    /** El interior mas los margenes, agrandado si el texto no entra. */
+    /** The inside plus the margins, enlarged if the text does not fit. */
     public Dimension getPreferredSize(JComponent c) {
         Dimension size;
         Insets border = progressBar.getInsets();
         FontMetrics fontSizer = progressBar.getFontMetrics(progressBar.getFont());
         if (progressBar.getOrientation() == SwingConstants.HORIZONTAL) {
-            // Una copia, y en un `Dimension` pelado: lo que devuelve `getPreferredInnerHorizontal`
-            // es del aspecto, y el tamano preferido de un componente no lo es.
+            // A copy, and in a bare `Dimension`: what `getPreferredInnerHorizontal` returns
+                        // belongs to the look and feel, and a component's preferred size does not.
             size = new Dimension(getPreferredInnerHorizontal());
             if (progressBar.isStringPainted()) {
                 int stringHeight = fontSizer.getHeight() + fontSizer.getDescent();
                 if (stringHeight > size.height) {
                     size.height = stringHeight;
                 }
-                String texto = progressBar.getString();
-                if (texto != null) {
-                    int stringWidth = fontSizer.stringWidth(texto);
+                String text = progressBar.getString();
+                if (text != null) {
+                    int stringWidth = fontSizer.stringWidth(text);
                     if (stringWidth > size.width) {
                         size.width = stringWidth;
                     }
@@ -359,9 +367,9 @@ public class BasicProgressBarUI extends ProgressBarUI {
                 if (stringWidth > size.width) {
                     size.width = stringWidth;
                 }
-                String texto = progressBar.getString();
-                if (texto != null) {
-                    int stringHeight = fontSizer.stringWidth(texto);
+                String text = progressBar.getString();
+                if (text != null) {
+                    int stringHeight = fontSizer.stringWidth(text);
                     if (stringHeight > size.height) {
                         size.height = stringHeight;
                     }
@@ -373,7 +381,7 @@ public class BasicProgressBarUI extends ProgressBarUI {
         return size;
     }
 
-    /** Diez pixeles de largo; ver la nota de la clase. */
+    /** Ten pixels long; see the class note. */
     public Dimension getMinimumSize(JComponent c) {
         Dimension pref = getPreferredSize(progressBar);
         if (progressBar.getOrientation() == SwingConstants.HORIZONTAL) {
@@ -384,7 +392,7 @@ public class BasicProgressBarUI extends ProgressBarUI {
         return pref;
     }
 
-    /** Se estira a lo largo y nada a lo ancho. */
+    /** It stretches lengthwise and not at all widthwise. */
     public Dimension getMaximumSize(JComponent c) {
         Dimension pref = getPreferredSize(progressBar);
         if (progressBar.getOrientation() == SwingConstants.HORIZONTAL) {
@@ -396,10 +404,10 @@ public class BasicProgressBarUI extends ProgressBarUI {
     }
 
     /**
-     * Donde apoya el texto, o -1 si no hay texto; ver la nota de la clase.
+     * Where the text rests, or -1 if there is no text; see the class note.
      *
-     * @throws NullPointerException si el componente es nulo
-     * @throws IllegalArgumentException si el ancho o el alto son negativos
+     * @throws NullPointerException if the component is null
+     * @throws IllegalArgumentException if the width or the height are negative
      */
     public int getBaseline(JComponent c, int width, int height) {
         super.getBaseline(c, width, height);
@@ -409,14 +417,15 @@ public class BasicProgressBarUI extends ProgressBarUI {
         FontMetrics metrics = progressBar.getFontMetrics(progressBar.getFont());
         Insets insets = progressBar.getInsets();
         int y = insets.top;
-        int alto = height - insets.top - insets.bottom;
-        return y + (alto - metrics.getAscent() - metrics.getDescent()) / 2 + metrics.getAscent();
+        int innerHeight = height - insets.top - insets.bottom;
+        int ascent = metrics.getAscent();
+        return y + (innerHeight - ascent - metrics.getDescent()) / 2 + ascent;
     }
 
     /**
-     * {@code CENTER_OFFSET} con texto y {@code OTHER} sin el.
+     * {@code CENTER_OFFSET} with text and {@code OTHER} without it.
      *
-     * @throws NullPointerException si el componente es nulo
+     * @throws NullPointerException if the component is null
      */
     public Component.BaselineResizeBehavior getBaselineResizeBehavior(JComponent c) {
         super.getBaselineResizeBehavior(c);
@@ -434,7 +443,7 @@ public class BasicProgressBarUI extends ProgressBarUI {
         }
     }
 
-    /** La parte llena, y el texto encima si corresponde. */
+    /** The filled part, and the text on top if it applies. */
     protected void paintDeterminate(Graphics g, JComponent c) {
         Insets b = progressBar.getInsets();
         int barRectWidth = progressBar.getWidth() - (b.right + b.left);
@@ -447,7 +456,7 @@ public class BasicProgressBarUI extends ProgressBarUI {
         if (progressBar.getOrientation() == SwingConstants.HORIZONTAL) {
             g.fillRect(b.left, b.top, amountFull, barRectHeight);
         } else {
-            // La barra vertical se llena de abajo hacia arriba.
+            // The vertical bar fills from the bottom upwards.
             g.fillRect(b.left, b.top + (barRectHeight - amountFull),
                     barRectWidth, amountFull);
         }
@@ -456,7 +465,7 @@ public class BasicProgressBarUI extends ProgressBarUI {
         }
     }
 
-    /** El bloque que rebota, y el texto encima si corresponde. */
+    /** The bouncing block, and the text on top if it applies. */
     protected void paintIndeterminate(Graphics g, JComponent c) {
         Insets b = progressBar.getInsets();
         int barRectWidth = progressBar.getWidth() - (b.right + b.left);
@@ -475,11 +484,11 @@ public class BasicProgressBarUI extends ProgressBarUI {
     }
 
     /**
-     * El texto, con el color cambiado sobre la parte llena.
+     * The text, with the colour changed over the filled part.
      *
-     * <p>El texto se pinta dos veces con recortes distintos: una con el color de siempre sobre el
-     * fondo y otra con el de seleccion sobre la parte llena. Sin eso, el texto quedaria ilegible en
-     * la mitad de la barra.
+     * <p>The text is painted twice with different clips: once with the usual colour over the
+     * background and once with the selection one over the filled part. Without that, the text
+     * would be unreadable in half the bar.
      */
     protected void paintString(Graphics g, int x, int y, int width, int height, int amountFull,
             Insets b) {
@@ -509,7 +518,7 @@ public class BasicProgressBarUI extends ProgressBarUI {
         }
     }
 
-    /** Donde arranca el texto: centrado en la barra. */
+    /** Where the text starts: centred in the bar. */
     protected Point getStringPlacement(Graphics g, String progressString, int x, int y,
             int width, int height) {
         FontMetrics fontSizer = progressBar.getFontMetrics(progressBar.getFont());
@@ -524,7 +533,9 @@ public class BasicProgressBarUI extends ProgressBarUI {
                 y + Math.round(height / 2 - stringWidth / 2));
     }
 
-    /** Repinta al cambiar el valor, y arranca o para la animacion al cambiar de modo. */
+    /**
+     * It repaints when the value changes, and starts or stops the animation when the mode changes.
+     */
     private class Handler implements ChangeListener, PropertyChangeListener {
 
         public void stateChanged(ChangeEvent e) {
@@ -534,9 +545,9 @@ public class BasicProgressBarUI extends ProgressBarUI {
         public void propertyChange(PropertyChangeEvent e) {
             if ("indeterminate".equals(e.getPropertyName())) {
                 if (Boolean.TRUE.equals(e.getNewValue())) {
-                    arrancarIndeterminado();
+                    startIndeterminate();
                 } else {
-                    pararIndeterminado();
+                    stopIndeterminate();
                 }
                 progressBar.repaint();
             }

@@ -9,27 +9,27 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * La implementación de {@link TabularData}, sobre un `HashMap` de clave a fila.
+ * The implementation of {@link TabularData}, over a {@code HashMap} from key to row.
  *
- * <p>Implementa además `Map&lt;Object, Object&gt;`, y de ahí sale la única rareza de esta clase:
- * **hay dos juegos de métodos con el mismo nombre**. `get(Object[])` es el de la tabla y
- * `get(Object)` el del mapa; `put(CompositeData)` es el de la tabla y `put(Object, Object)` el del
- * mapa. No son sobrecargas cómodas: los del mapa existen porque `Map` los exige.
+ * <p>It also implements {@code Map<Object, Object>}, and from there comes this class's only
+ * oddity: <b>there are two sets of methods with the same name</b>. {@code get(Object[])} is the
+ * table's and {@code get(Object)} the map's; {@code put(CompositeData)} is the table's and
+ * {@code put(Object, Object)} the map's. They are not convenience overloads: the map's exist
+ * because {@code Map} requires them.
  *
- * <p>Los del mapa se comportan como los de la tabla en lo que se puede, con dos diferencias que hay
- * que saber:
+ * <p>The map's behave like the table's where possible, with two differences worth knowing:
  *
  * <ul>
- * <li>`put(clave, valor)` **ignora la clave** y usa la que se calcula del valor. Poner una clave
- *     distinta de la que la fila implica describiría una tabla imposible, así que se descarta en
- *     vez de guardarse.</li>
- * <li>`get(Object)` espera un `Object[]`; con cualquier otra cosa devuelve nulo, que es lo que un
- *     `Map` contesta para una clave que no tiene.</li>
+ * <li>{@code put(key, value)} <b>ignores the key</b> and uses the one computed from the value.
+ *     Putting a key different from the one the row implies would describe an impossible table, so
+ *     it is discarded instead of stored.</li>
+ * <li>{@code get(Object)} expects an {@code Object[]}; with anything else it returns null, which is
+ *     what a {@code Map} answers for a key it does not have.</li>
  * </ul>
  *
- * <p>La clave interna es una `List` y no el `Object[]`: dos arreglos con el mismo contenido no son
- * iguales ni comparten `hashCode`, así que usarlos de clave haría que ninguna fila se encontrara
- * nunca. La lista sí compara por contenido.
+ * <p>The internal key is a {@code List} and not the {@code Object[]}: two arrays with the same
+ * content are neither equal nor share a {@code hashCode}, so using them as keys would mean no row
+ * was ever found. A list does compare by content.
  */
 public class TabularDataSupport
         implements TabularData, Map<Object, Object>, Cloneable, Serializable {
@@ -38,22 +38,22 @@ public class TabularDataSupport
 
     private final TabularType tabularType;
     private final Map<Object, Object> dataMap;
-    // Los nombres de índice, en orden: se leen una vez porque se usan en cada `put`.
+    // The index names, in order: read once because they are used on every `put`.
     private final transient String[] indexNames;
 
-    /** Una tabla vacía de ese tipo. */
+    /** An empty table of that type. */
     public TabularDataSupport(TabularType tabularType) {
         this(tabularType, 16, 0.75f);
     }
 
     /**
-     * Una tabla vacía de ese tipo, con esa capacidad inicial y ese factor de carga.
+     * An empty table of that type, with that initial capacity and load factor.
      *
-     * @throws IllegalArgumentException si el tipo es nulo
+     * @throws IllegalArgumentException if the type is null
      */
     public TabularDataSupport(TabularType tabularType, int initialCapacity, float loadFactor) {
         if (tabularType == null) {
-            throw new IllegalArgumentException("el tipo tabular no puede ser nulo");
+            throw new IllegalArgumentException("the tabular type cannot be null");
         }
         this.tabularType = tabularType;
         this.dataMap = new HashMap<Object, Object>(initialCapacity, loadFactor);
@@ -76,42 +76,42 @@ public class TabularDataSupport
 
     private void requireRow(CompositeData value) {
         if (value == null) {
-            throw new NullPointerException("la fila no puede ser nula");
+            throw new NullPointerException("the row cannot be null");
         }
         if (!this.tabularType.getRowType().equals(value.getCompositeType())) {
-            throw new InvalidOpenTypeException("la fila no es de tipo "
+            throw new InvalidOpenTypeException("the row is not of type "
                     + this.tabularType.getRowType().getTypeName());
         }
     }
 
-    // La clave de verdad: una lista, que compara por contenido. Ver la nota de la clase.
+    // The real key: a list, which compares by content. See the class note.
     private static List<Object> asKey(Object[] key) {
         List<Object> l = new ArrayList<Object>();
         for (int i = 0; i < key.length; i++) {
             l.add(key[i]);
         }
-        // De solo lectura porque `keySet()` las expone: una clave que el llamador pudiera cambiar
-        // desincronizaria el mapa de su propio indice.
+        // Read-only because `keySet()` exposes them: a key the caller could change would put the
+        // map out of sync with its own index.
         return java.util.Collections.unmodifiableList(l);
     }
 
-    // El reparto entre las dos excepciones no es simetrico y esta comprobado contra el JDK 25:
-    // una clave nula O VACIA es `NullPointerException`, y una de largo equivocado pero no vacia es
-    // `InvalidKeyException`. Es raro y es el contrato; escribirlo al reves hace que un cliente que
-    // atrapa una de las dos deje de funcionar contra el JDK real.
+    // The split between the two exceptions is not symmetric and was checked against the JDK 25: a
+    // null OR EMPTY key is `NullPointerException`, and one of the wrong length but not empty is
+    // `InvalidKeyException`. It is odd and it is the contract; writing it the other way round makes
+    // a client that catches one of the two stop working against the real JDK.
     private void requireKey(Object[] key) {
         if (key == null || key.length == 0) {
-            throw new NullPointerException("la clave no puede ser nula ni vacia");
+            throw new NullPointerException("the key cannot be null or empty");
         }
         if (key.length != this.indexNames.length) {
-            throw new InvalidKeyException("la clave tiene " + key.length
-                    + " valores y el tipo pide " + this.indexNames.length);
+            throw new InvalidKeyException("the key has " + key.length
+                    + " values and the type asks for " + this.indexNames.length);
         }
         for (int i = 0; i < key.length; i++) {
             OpenType<?> t = this.tabularType.getRowType().getType(this.indexNames[i]);
             if (key[i] != null && !t.isValue(key[i])) {
-                throw new InvalidKeyException("el valor de índice " + this.indexNames[i]
-                        + " no es de tipo " + t.getTypeName());
+                throw new InvalidKeyException("the value of index " + this.indexNames[i]
+                        + " is not of type " + t.getTypeName());
             }
         }
     }
@@ -161,15 +161,15 @@ public class TabularDataSupport
         Object[] key = this.calculateIndex(value);
         List<Object> k = asKey(key);
         if (this.dataMap.containsKey(k)) {
-            throw new KeyAlreadyExistsException("ya hay una fila con esa key");
+            throw new KeyAlreadyExistsException("there is already a row with that key");
         }
         this.dataMap.put(k, value);
     }
 
     /**
-     * Agrega esa fila, **ignorando la clave**. Ver la nota de la clase.
+     * Adds that row, <b>ignoring the key</b>. See the class note.
      *
-     * @return siempre nulo: no puede reemplazar, así que nunca hay un valor anterior que devolver
+     * @return always null: it cannot replace, so there is never a previous value to return
      */
     public Object put(Object key, Object value) {
         this.put((CompositeData) value);
@@ -193,11 +193,11 @@ public class TabularDataSupport
     }
 
     /**
-     * Agrega todas esas filas, o ninguna.
+     * Adds all those rows, or none.
      *
-     * <p>Se valida todo primero y recién después se escribe. Sin eso, un arreglo con la última fila
-     * repetida dejaría las anteriores puestas y la tabla a medio cargar -- que es peor que no haber
-     * empezado, porque el que llamó no sabe dónde quedó.
+     * <p>Everything is validated first and only then written. Without that, an array with the last
+     * row repeated would leave the earlier ones in and the table half loaded -- which is worse than
+     * not having started, because the caller does not know where it stopped.
      */
     public void putAll(CompositeData[] values) {
         if (values == null || values.length == 0) {
@@ -208,14 +208,14 @@ public class TabularDataSupport
             Object[] key = this.calculateIndex(values[i]);
             List<Object> k = asKey(key);
             if (this.dataMap.containsKey(k) || pending.containsKey(k)) {
-                throw new KeyAlreadyExistsException("ya hay una fila con esa key");
+                throw new KeyAlreadyExistsException("there is already a row with that key");
             }
             pending.put(k, values[i]);
         }
         this.dataMap.putAll(pending);
     }
 
-    /** Agrega todas las filas de ese mapa. Las claves se ignoran, como en {@link #put}. */
+    /** Adds all the rows of that map. The keys are ignored, as in {@link #put}. */
     public void putAll(Map<?, ?> t) {
         if (t == null || t.isEmpty()) {
             return;
@@ -254,10 +254,10 @@ public class TabularDataSupport
     }
 
     /**
-     * Una copia superficial.
+     * A shallow copy.
      *
-     * <p>Superficial alcanza: las filas son {@link CompositeData}, que son inmutables, así que
-     * compartirlas entre la copia y el original no permite que una cambie a la otra.
+     * <p>Shallow is enough: the rows are {@link CompositeData}, which are immutable, so sharing
+     * them between the copy and the original does not let one change the other.
      */
     public Object clone() {
         TabularDataSupport copy = new TabularDataSupport(this.tabularType);
@@ -265,7 +265,7 @@ public class TabularDataSupport
         return copy;
     }
 
-    /** Igualdad por tipo y filas, contra cualquier {@link TabularData}. */
+    /** Equality by type and rows, against any {@link TabularData}. */
     public boolean equals(Object obj) {
         if (this == obj) {
             return true;
@@ -288,7 +288,7 @@ public class TabularDataSupport
         return true;
     }
 
-    /** La suma del hash del tipo y de los de las filas, como manda el contrato. */
+    /** The sum of the type's hash and the rows', as the contract dictates. */
     public int hashCode() {
         int h = this.tabularType.hashCode();
         for (Object v : this.dataMap.values()) {

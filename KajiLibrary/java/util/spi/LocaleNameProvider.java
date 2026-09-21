@@ -3,16 +3,17 @@ package java.util.spi;
 import java.util.Locale;
 
 /**
- * KajiLibrary's java.util.spi.LocaleNameProvider -- como se llama un idioma <b>en otro idioma</b>.
+ * KajiLibrary's java.util.spi.LocaleNameProvider -- what a language is called <b>in another
+ * language</b>.
  *
- * <p>Los dos argumentos de cada metodo son el codigo que se traduce y el local <b>en el que se lo
- * escribe</b>: {@code getDisplayLanguage("de", Locale.forLanguageTag("es"))} es {@code "aleman"} y
- * con {@code "fr"} es {@code "allemand"}. Confundirlos da la lista de idiomas escrita cada uno en el
- * suyo, que es justo lo que un selector de idioma no quiere.
+ * <p>Each method's two arguments are the code being translated and the locale <b>it is written
+ * in</b>: {@code getDisplayLanguage("de", Locale.forLanguageTag("es"))} is {@code "aleman"} and with
+ * {@code "fr"} it is {@code "allemand"}. Confusing them gives the list of languages each written in
+ * its own, which is exactly what a language picker does not want.
  *
- * <p>Los cuatro con default devuelven null --"no lo tengo"-- y no una cadena vacia: un proveedor
- * puede conocer los idiomas y no los tipos de extension Unicode, y devolver vacio se mostraria como
- * un hueco en la interfaz.
+ * <p>The four with a default return null --"I do not have it"-- and not an empty string: a provider
+ * may know the languages and not the Unicode extension types, and returning empty would show up as a
+ * gap in the interface.
  */
 public abstract class LocaleNameProvider extends LocaleServiceProvider {
 
@@ -20,40 +21,40 @@ public abstract class LocaleNameProvider extends LocaleServiceProvider {
     }
 
     /**
-     * El nombre del idioma.
+     * The language's name.
      *
-     * @param languageCode el codigo ISO 639 en minusculas
-     * @return null si este proveedor no lo tiene
+     * @param languageCode the ISO 639 code in lower case
+     * @return null if this provider does not have it
      */
     public abstract String getDisplayLanguage(String languageCode, Locale locale);
 
     /**
-     * El nombre del sistema de escritura ({@code "Latn"}, {@code "Cyrl"}).
+     * The writing system's name ({@code "Latn"}, {@code "Cyrl"}).
      *
-     * <p>Con default porque los scripts llegaron despues que el resto del API: un proveedor viejo
-     * sigue compilando.
+     * <p>With a default because scripts arrived after the rest of the API: an old provider goes on
+     * compiling.
      */
     public String getDisplayScript(String scriptCode, Locale locale) {
         return null;
     }
 
     /**
-     * El nombre del pais o region.
+     * The country's or region's name.
      *
-     * @param countryCode el codigo ISO 3166 en mayusculas
-     * @return null si este proveedor no lo tiene
+     * @param countryCode the ISO 3166 code in upper case
+     * @return null if this provider does not have it
      */
     public abstract String getDisplayCountry(String countryCode, Locale locale);
 
-    /** El nombre de la variante. */
+    /** The variant's name. */
     public abstract String getDisplayVariant(String variant, Locale locale);
 
-    /** El nombre de una clave de extension Unicode ({@code "ca"} para calendario). */
+    /** The name of a Unicode extension key ({@code "ca"} for calendar). */
     public String getDisplayUnicodeExtensionKey(String key, Locale locale) {
         return null;
     }
 
-    /** El nombre de un valor de extension Unicode ({@code "buddhist"} para la clave {@code "ca"}). */
+    /** The name of a Unicode extension value ({@code "buddhist"} for the key {@code "ca"}). */
     public String getDisplayUnicodeExtensionType(String type, String key, Locale locale) {
         return null;
     }

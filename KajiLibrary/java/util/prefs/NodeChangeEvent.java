@@ -2,33 +2,33 @@ package java.util.prefs;
 
 import java.util.EventObject;
 
-// A un nodo le nacio o se le murio un hijo: quien es el padre y quien el hijo.
+// A node has gained or lost a child: which one is the parent and which one the child.
 //
-// El mismo evento sirve para las dos cosas --lo que las distingue es a cual de los dos metodos de
-// {@link NodeChangeListener} llego-- y por eso no hay ninguna bandera adentro que decir si fue alta
-// o baja.
+// The same event serves for both --what tells them apart is which of {@link NodeChangeListener}'s
+// two methods it arrived at-- and that is why there is no flag inside saying whether it was an
+// addition or a removal.
 //
-// Cuidado con el hijo de un `childRemoved`: llega **ya borrado**, asi que casi todo lo que se le
-// pregunte va a tirar `IllegalStateException`. Lo unico seguro de leerle es `name()` y
-// `absolutePath()`, que no consultan el deposito.
+// Careful with a `childRemoved`'s child: it arrives **already removed**, so almost anything asked of
+// it will throw `IllegalStateException`. The only things safe to read off it are `name()` and
+// `absolutePath()`, which do not consult the store.
 public class NodeChangeEvent extends EventObject {
 
     private static final long serialVersionUID = 8068949086596572957L;
 
     private final Preferences child;
 
-    // El aviso de que `child` nacio de --o murio bajo-- `parent`.
+    // The notice that `child` was born of --or died under-- `parent`.
     public NodeChangeEvent(Preferences parent, Preferences child) {
         super(parent);
         this.child = child;
     }
 
-    // El nodo padre.
+    // The parent node.
     public Preferences getParent() {
         return (Preferences) getSource();
     }
 
-    // El hijo que se agrego o se quito.
+    // The child that was added or removed.
     public Preferences getChild() {
         return child;
     }

@@ -3,14 +3,15 @@ package java.security;
 import java.io.Serializable;
 import java.security.cert.CertPath;
 
-// Quien firmo: su cadena de certificados y, si la hubo, la marca de tiempo de la firma.
+// Who signed: their chain of certificates and, if there was one, the timestamp of the signature.
 //
-// La marca es opcional y esa opcionalidad importa. Sin ella la firma solo vale mientras el
-// certificado del firmante siga vigente; con ella sigue valiendo despues, porque se puede
-// comprobar que en el momento de firmar el certificado estaba bien. Por eso `getTimestamp()`
-// devolviendo null no es un detalle: es una firma con fecha de vencimiento.
+// The timestamp is optional and that optionality matters. Without it the signature is only worth
+// something while the signer's certificate is still in force; with it it goes on being worth
+// something afterwards, because it can be checked that at the moment of signing the certificate was
+// fine. That is why `getTimestamp()` returning null is not a detail: it is a signature with an
+// expiry date.
 //
-// Igual que `Timestamp`, esta clase guarda y compara; no verifica nada.
+// Just like `Timestamp`, this class keeps and compares; it verifies nothing.
 public final class CodeSigner implements Serializable {
 
     private final CertPath signerCertPath;
@@ -28,7 +29,7 @@ public final class CodeSigner implements Serializable {
         return this.signerCertPath;
     }
 
-    // La marca de tiempo, o null si la firma no fue sellada.
+    // The timestamp, or null if the signature was not stamped.
     public Timestamp getTimestamp() {
         return this.timestamp;
     }
@@ -53,8 +54,8 @@ public final class CodeSigner implements Serializable {
         if (!this.signerCertPath.equals(that.signerCertPath)) {
             return false;
         }
-        // Firmado sin sellar y firmado con sello son cosas distintas, aunque el firmante sea el
-        // mismo: solo una de las dos sobrevive al vencimiento del certificado.
+        // Signed without a stamp and signed with a stamp are different things, even if the signer
+        // is the same: only one of the two survives the expiry of the certificate.
         if (this.timestamp == null) {
             return that.timestamp == null;
         }

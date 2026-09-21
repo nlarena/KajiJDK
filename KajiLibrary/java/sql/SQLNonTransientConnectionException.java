@@ -1,7 +1,8 @@
 package java.sql;
 
 /**
- * KajiLibrary's java.sql.SQLNonTransientConnectionException -- La conexion fallo por algo que no va a cambiar: la URL, las credenciales, el servidor.
+ * KajiLibrary's java.sql.SQLNonTransientConnectionException -- the connection failed for something
+ * that will not change: the URL, the credentials, the server.
  */
 public class SQLNonTransientConnectionException extends SQLNonTransientException {
 

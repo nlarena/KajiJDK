@@ -54,7 +54,7 @@ public final class JapaneseChronology extends AbstractChronology {
         return EraTable.prolepticYear(japaneseEra, yearOfEra);
     }
 
-    // ---- lo que el calendario tiene que saber contestar ------------------------------------------
+    // ---- what the calendar has to know how to answer ---------------------------------------------
 
     public JapaneseDate date(TemporalAccessor temporal) {
         if (temporal instanceof JapaneseDate) {
@@ -80,8 +80,8 @@ public final class JapaneseChronology extends AbstractChronology {
         if (clock == null) {
             throw new NullPointerException("clock");
         }
-        LocalDate hoy = LocalDate.now(clock);
-        return this.dateEpochDay(hoy.toEpochDay());
+        LocalDate today = LocalDate.now(clock);
+        return this.dateEpochDay(today.toEpochDay());
     }
 
     public JapaneseDate date(Era era, int yearOfEra, int month, int dayOfMonth) {
@@ -92,32 +92,32 @@ public final class JapaneseChronology extends AbstractChronology {
         return this.dateYearDay(this.prolepticYear(era, yearOfEra), dayOfYear);
     }
 
-    /** Si: los meses, los dias y los anios bisiestos son exactamente los del ISO. */
+    /** Yes: the months, the days and the leap years are exactly ISO's. */
     public boolean isIsoBased() {
         return true;
     }
 
     public ValueRange range(ChronoField field) {
-        // El anio proleptico japones **es** el anio ISO: los meses, los dias y los anios bisiestos
-        // son los mismos. Lo unico propio es la capa de eras, y por eso son los dos unicos campos
-        // con un rango distinto.
+        // The Japanese proleptic year **is** the ISO year: the months, the days and the leap years
+        // are the same. The only thing of its own is the era layer, and that is why those are the
+        // only two fields with a different range.
         if (field == ChronoField.ERA) {
-            return EraTable.rangoDeEras();
+            return EraTable.eraRange();
         }
         if (field == ChronoField.YEAR_OF_ERA) {
-            return EraTable.rangoDeAnioDeEra();
+            return EraTable.yearOfEraRange();
         }
         return field.range();
     }
 
     public List<Era> eras() {
-        return EraTable.todas();
+        return EraTable.all();
     }
 
     public JapaneseDate resolveDate(java.util.Map<java.time.temporal.TemporalField, Long> fieldValues,
             java.time.format.ResolverStyle resolverStyle) {
-        // Ligado a una local: encadenar por un intermedio de tipo interfaz se pierde (#108).
-        ChronoLocalDate resuelta = super.resolveDate(fieldValues, resolverStyle);
-        return (JapaneseDate) resuelta;
+        // Bound to a local: chaining through an interface-typed intermediate gets lost (#108).
+        ChronoLocalDate resolvedOne = super.resolveDate(fieldValues, resolverStyle);
+        return (JapaneseDate) resolvedOne;
     }
 }

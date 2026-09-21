@@ -68,17 +68,17 @@ public final class BigInteger extends Number implements Comparable<BigInteger> {
         return new BigInteger(sign, m);
     }
 
-    // Base diez, con signo opcional. Es `BigInteger(val, 10)`.
+    // Base ten, with an optional sign. It is `BigInteger(val, 10)`.
     public BigInteger(String val) {
         this(val, 10);
     }
 
     /**
-     * El entero escrito en la base dada, con signo opcional.
+     * The integer written in the given base, with an optional sign.
      *
-     * <p>Faltaba, y con el faltaba tambien `Scanner.nextBigInteger(radix)`, que es su unico usuario
-     * evidente. El cuerpo es el mismo Horner de siempre --`acc = acc * base + digito`-- con la base
-     * como parametro en vez de fija en diez: la version decimal ahora delega aca.
+     * <p>It was missing, and with it `Scanner.nextBigInteger(radix)` was missing too, which is its
+     * one obvious user. The body is the same Horner as always --`acc = acc * base + digit`-- with
+     * the base as a parameter instead of fixed at ten: the decimal version now delegates here.
      */
     public BigInteger(String val, int radix) {
         int start = 0;
@@ -99,7 +99,7 @@ public final class BigInteger extends Number implements Comparable<BigInteger> {
         if (radix < Character.MIN_RADIX || radix > Character.MAX_RADIX) {
             throw new NumberFormatException("Radix out of range");
         }
-        // Horner sobre la magnitud: acc = acc * radix + digito.
+        // Horner over the magnitude: acc = acc * radix + digit.
         int[] acc = new int[0];
         int i = start;
         while (i < val.length()) {
@@ -744,7 +744,8 @@ public final class BigInteger extends Number implements Comparable<BigInteger> {
         if (this.signum >= 0) {
             return magInt;
         }
-        // Negative: below the first non-zero word it's the two's complement (-magInt); above, ~magInt.
+        // Negative: below the first non-zero word it's the two's complement (-magInt); above,
+        // ~magInt.
         if (n <= this.firstNonzeroIntNum()) {
             return -magInt;
         }
@@ -760,7 +761,9 @@ public final class BigInteger extends Number implements Comparable<BigInteger> {
         return this.mag.length - i - 1;
     }
 
-    /** This value as a big-endian two's-complement byte array (minimal length, at least one byte). */
+    /**
+     * This value as a big-endian two's-complement byte array (minimal length, at least one byte).
+     */
     public byte[] toByteArray() {
         int byteLen = this.bitLength() / 8 + 1;
         byte[] result = new byte[byteLen];
@@ -860,7 +863,8 @@ public final class BigInteger extends Number implements Comparable<BigInteger> {
 
     // big-endian NEGATIVE two's-complement bytes -> magnitude of the absolute value
     private static int[] makePositive(byte[] a, int off, int len) {
-        // Number of leading 0xFF bytes (the sign extension), then leading zero bytes after negating.
+        // Number of leading 0xFF bytes (the sign extension), then leading zero bytes after
+        // negating.
         int keep = off;
         while (keep < off + len && a[keep] == -1) {
             keep = keep + 1;
@@ -1244,7 +1248,9 @@ public final class BigInteger extends Number implements Comparable<BigInteger> {
         this.signum = (m.length == 0) ? 0 : 1;
     }
 
-    /** A random probable prime of exactly {@code bitLength} bits (failure prob. under 2^-certainty). */
+    /**
+     * A random probable prime of exactly {@code bitLength} bits (failure prob. under 2^-certainty).
+     */
     public BigInteger(int bitLength, int certainty, Random rnd) {
         if (bitLength < 2) {
             throw new ArithmeticException("bitLength < 2");

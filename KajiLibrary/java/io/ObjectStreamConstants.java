@@ -1,155 +1,156 @@
 package java.io;
 
-// KajiLibrary's java.io.ObjectStreamConstants -- las constantes del formato de serializacion de
-// Java.
+// KajiLibrary's java.io.ObjectStreamConstants -- the constants of Java's serialization format.
 //
-// **Esto no es una eleccion de implementacion: es el formato, y esta especificado byte a byte** en
-// la Java Object Serialization Specification. Los valores de abajo son los que hay, no los que a
-// alguien le parecieron comodos, porque un `.ser` escrito por una VM lo tiene que poder leer otra.
-// Cambiar cualquiera de estos numeros no "cambia nuestro formato": produce un archivo que ningun
-// lector de Java entiende.
+// **This is no implementation choice: it is the format, and it is specified byte by byte** in the
+// Java Object Serialization Specification. The values below are the ones that exist, not the ones
+// somebody found convenient, because a `.ser` written by one VM has to be readable by another.
+// Changing any of these numbers does not "change our format": it produces a file no Java reader
+// understands.
 //
-// Vale por si sola aunque nadie la use: con estas constantes se puede reconocer o recorrer un
-// stream serializado sin depender de las clases que lo producen, y son puro dato verificable contra
-// la especificacion. Hoy ademas tiene sus dos usuarios, `ObjectOutputStream` y `ObjectInputStream`.
+// It is worth having on its own even if nobody uses it: with these constants a serialized stream
+// can be recognized or walked without depending on the classes that produce it, and they are pure
+// data checkable against the specification. It also has its two users today, `ObjectOutputStream`
+// and `ObjectInputStream`.
 //
-// Un stream serializado empieza siempre con `STREAM_MAGIC` y `STREAM_VERSION`: los cuatro bytes
-// `AC ED 00 05`. Si un archivo no arranca asi, no es un stream de serializacion de Java.
+// A serialized stream always begins with `STREAM_MAGIC` and `STREAM_VERSION`: the four bytes
+// `AC ED 00 05`. If a file does not start like that, it is not a Java serialization stream.
 //
-// Nada falta aca. `ObjectOutputStream` y `ObjectInputStream` **ya estan**, y producen y leen los
-// mismos bytes que el JDK: la prueba es `java/IoTest.java`, que le da al lector los flujos que
-// escribio el JDK real y compara el resultado, en las dos VM.
+// Nothing is missing here. `ObjectOutputStream` and `ObjectInputStream` **are here**, and they
+// produce and read the same bytes as the JDK: the proof is `java/IoTest.java`, which gives the
+// reader the streams the real JDK wrote and compares the result, on both VMs.
 public interface ObjectStreamConstants {
 
     // -------------------------------------------------------------------------------------------
-    // La cabecera
+    // The header
     // -------------------------------------------------------------------------------------------
 
-    /** Los dos primeros bytes de todo stream serializado: `0xACED`, como `short` con signo. */
+    /** The first two bytes of every serialized stream: `0xACED`, as a signed `short`. */
     short STREAM_MAGIC = (short) 0xaced;
 
-    /** La version del formato. Vale 5 desde JDK 1.2 y no cambio desde entonces. */
+    /** The format's version. It has been 5 since JDK 1.2 and has not changed since. */
     short STREAM_VERSION = 5;
 
     // -------------------------------------------------------------------------------------------
-    // Los codigos de tipo: que viene a continuacion en el stream
+    // The type codes: what comes next in the stream
     // -------------------------------------------------------------------------------------------
 
-    /** El primero de los codigos. Es un piso, no un codigo: `TC_NULL` vale lo mismo. */
+    /** The first of the codes. It is a floor, not a code: `TC_NULL` is worth the same. */
     byte TC_BASE = 0x70;
 
-    /** Una referencia nula. */
+    /** A null reference. */
     byte TC_NULL = (byte) 0x70;
 
-    /** Una referencia a un objeto que ya salio en el stream, por su handle. */
+    /** A reference to an object that already came out in the stream, by its handle. */
     byte TC_REFERENCE = (byte) 0x71;
 
-    /** La descripcion de una clase: nombre, serialVersionUID, banderas y campos. */
+    /** A class's description: name, serialVersionUID, flags and fields. */
     byte TC_CLASSDESC = (byte) 0x72;
 
-    /** Un objeto nuevo. */
+    /** A new object. */
     byte TC_OBJECT = (byte) 0x73;
 
-    /** Un `String` de hasta 65535 bytes en UTF modificado. */
+    /** A `String` of up to 65535 bytes in modified UTF. */
     byte TC_STRING = (byte) 0x74;
 
-    /** Un arreglo. */
+    /** An array. */
     byte TC_ARRAY = (byte) 0x75;
 
-    /** Un `Class`. */
+    /** A `Class`. */
     byte TC_CLASS = (byte) 0x76;
 
-    /** Un bloque de datos primitivos de hasta 255 bytes, con el largo en un byte. */
+    /** A block of primitive data of up to 255 bytes, with the length in one byte. */
     byte TC_BLOCKDATA = (byte) 0x77;
 
-    /** El final de los datos de un objeto escritos por su propio `writeObject`. */
+    /** The end of an object's data written by its own `writeObject`. */
     byte TC_ENDBLOCKDATA = (byte) 0x78;
 
-    /** Borra la tabla de handles: lo que ya salio vuelve a escribirse entero. */
+    /** It clears the handle table: what already came out is written whole again. */
     byte TC_RESET = (byte) 0x79;
 
-    /** Un bloque de datos primitivos con el largo en cuatro bytes, para los que no entran en uno. */
+    /** A block of primitive data with the length in four bytes, for those that do not fit in
+     * one. */
     byte TC_BLOCKDATALONG = (byte) 0x7A;
 
-    /** Una excepcion ocurrida mientras se escribia. */
+    /** An exception that happened while writing. */
     byte TC_EXCEPTION = (byte) 0x7B;
 
-    /** Un `String` de mas de 65535 bytes, con el largo en ocho bytes. */
+    /** A `String` of more than 65535 bytes, with the length in eight bytes. */
     byte TC_LONGSTRING = (byte) 0x7C;
 
-    /** La descripcion de una clase proxy dinamica. */
+    /** A dynamic proxy class's description. */
     byte TC_PROXYCLASSDESC = (byte) 0x7D;
 
-    /** Una constante de enum: se serializa por nombre, no por campos. */
+    /** An enum constant: it is serialized by name, not by fields. */
     byte TC_ENUM = (byte) 0x7E;
 
-    /** El ultimo de los codigos. Es un techo, no un codigo. */
+    /** The last of the codes. It is a ceiling, not a code. */
     byte TC_MAX = (byte) 0x7E;
 
     // -------------------------------------------------------------------------------------------
-    // Los handles
+    // The handles
     // -------------------------------------------------------------------------------------------
 
     /**
-     * El primer handle que se reparte. Cada objeto, string o descriptor de clase que sale por
-     * primera vez se queda con el siguiente numero, y las apariciones posteriores se escriben como
-     * `TC_REFERENCE` mas ese numero.
+     * The first handle handed out. Every object, string or class descriptor coming out for the
+     * first time keeps the next number, and later appearances are written as `TC_REFERENCE` plus
+     * that number.
      *
-     * <p>Ese es el mecanismo que hace que la serializacion preserve <b>la forma del grafo</b> y no
-     * solo los valores: dos campos que apuntan al mismo objeto siguen apuntando al mismo objeto
-     * despues de deserializar, y un ciclo no cuelga al escritor.
+     * <p>That is the mechanism that makes serialization preserve <b>the graph's shape</b> and not
+     * just the values: two fields pointing at the same object go on pointing at the same object
+     * after deserializing, and a cycle does not hang the writer.
      */
     int baseWireHandle = 0x7E0000;
 
     // -------------------------------------------------------------------------------------------
-    // Las banderas de un descriptor de clase
+    // A class descriptor's flags
     // -------------------------------------------------------------------------------------------
 
-    /** La clase define su propio `writeObject`, asi que sus datos vienen en bloques. */
+    /** The class defines its own `writeObject`, so its data comes in blocks. */
     byte SC_WRITE_METHOD = 0x01;
 
-    /** Los datos del `Externalizable` vienen en bloques (protocolo 2). */
+    /** The `Externalizable`'s data comes in blocks (protocol 2). */
     byte SC_BLOCK_DATA = 0x08;
 
-    /** La clase es `Serializable`. */
+    /** The class is `Serializable`. */
     byte SC_SERIALIZABLE = 0x02;
 
-    /** La clase es `Externalizable`: se escribe y se lee a si misma. */
+    /** The class is `Externalizable`: it writes and reads itself. */
     byte SC_EXTERNALIZABLE = 0x04;
 
-    /** La clase es un enum. */
+    /** The class is an enum. */
     byte SC_ENUM = 0x10;
 
     // -------------------------------------------------------------------------------------------
-    // Los permisos
+    // The permissions
     // -------------------------------------------------------------------------------------------
 
-    /** Permite cambiar un objeto por otro al escribir o al leer. */
+    /** It allows swapping one object for another when writing or reading. */
     SerializablePermission SUBSTITUTION_PERMISSION =
         new SerializablePermission("enableSubstitution");
 
-    /** Permite subclasear los streams de objetos y cambiar como se escriben o se leen. */
+    /** It allows subclassing the object streams and changing how they are written or read. */
     SerializablePermission SUBCLASS_IMPLEMENTATION_PERMISSION =
         new SerializablePermission("enableSubclassImplementation");
 
-    /** Permite poner el filtro de deserializacion de toda la VM. */
+    /** It allows setting the whole VM's deserialization filter. */
     SerializablePermission SERIAL_FILTER_PERMISSION =
         new SerializablePermission("serialFilter");
 
     // -------------------------------------------------------------------------------------------
-    // Las versiones del protocolo
+    // The protocol versions
     // -------------------------------------------------------------------------------------------
 
     /**
-     * El protocolo de JDK 1.1. Los datos de un `Externalizable` van sin delimitar, asi que un
-     * lector que no conozca la clase no puede saltearlos.
+     * JDK 1.1's protocol. An `Externalizable`'s data goes undelimited, so a reader that does not
+     * know the class cannot skip over it.
      */
     int PROTOCOL_VERSION_1 = 1;
 
     /**
-     * El protocolo de JDK 1.2 en adelante, que es el que se usa. Los datos de un `Externalizable`
-     * van en bloques con largo, asi que se pueden saltear sin entenderlos -- que es lo que permite
-     * leer un stream con clases que no se tienen.
+     * The protocol from JDK 1.2 on, which is the one used. An `Externalizable`'s data goes in
+     * blocks with a length, so it can be skipped without being understood -- which is what allows
+     * reading a stream with classes one does not have.
      */
     int PROTOCOL_VERSION_2 = 2;
 }

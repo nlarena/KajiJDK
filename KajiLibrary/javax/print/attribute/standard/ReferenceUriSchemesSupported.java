@@ -4,11 +4,11 @@ import javax.print.attribute.Attribute;
 import javax.print.attribute.EnumSyntax;
 
 /**
- * Un esquema de URI que la impresora sabe ir a buscar cuando el documento se manda por referencia
- * en vez de por valor.
+ * A URI scheme the printer knows how to fetch when the document is sent by reference instead of by
+ * value.
  *
- * <p>La lista es la de IPP de 1999 y por eso incluye {@code GOPHER} y {@code WAIS}; se conserva tal
- * cual porque los enteros son los del protocolo y cambiarlos romperia el cable.
+ * <p>The list is IPP's from 1999 and that is why it includes {@code GOPHER} and {@code WAIS}; it is
+ * kept as it is because the integers are the protocol's and changing them would break the wire.
  */
 public class ReferenceUriSchemesSupported extends EnumSyntax implements Attribute {
 

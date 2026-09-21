@@ -3,19 +3,19 @@ package com.sun.jdi.event;
 import com.sun.jdi.ThreadReference;
 
 /**
- * La maquina depurada arranco y esta lista.
+ * The debugged machine started and is ready.
  *
- * <p>Llega con el hilo principal suspendido antes de la primera instruccion, que es la unica
- * ventana para configurar cosas antes de que el programa haga nada.
+ * <p>It arrives with the main thread suspended before the first instruction, which is the only
+ * window for configuring things before the program does anything.
  *
  * @since 1.3
  */
 public interface VMStartEvent extends Event {
 
     /**
-     * El thread.
+     * The thread.
      *
-     * @return el resultado
+     * @return the result
      */
     ThreadReference thread();
 }

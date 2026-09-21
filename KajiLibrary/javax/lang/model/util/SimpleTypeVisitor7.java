@@ -5,10 +5,11 @@ import javax.lang.model.SourceVersion;
 import javax.lang.model.type.UnionType;
 
 /**
- * El visitante simple de tipos de Java 7. Ver {@link SimpleTypeVisitor6} por el mecanismo.
+ * The simple type visitor for Java 7. See {@link SimpleTypeVisitor6} for the mechanism.
  *
- * <p>Con el tipo union ya en el lenguaje, `visitUnion` entra al embudo: hereda de
- * {@link AbstractTypeVisitor6} un cuerpo que cae en `visitUnknown`, y aca pasa a `defaultAction`.
+ * <p>With the union type in the language, `visitUnion` enters the funnel: it inherits from
+ * {@link AbstractTypeVisitor6} a body that falls into `visitUnknown`, and here it goes to
+ * `defaultAction`.
  */
 @SupportedSourceVersion(SourceVersion.RELEASE_7)
 public class SimpleTypeVisitor7<R, P> extends SimpleTypeVisitor6<R, P> {

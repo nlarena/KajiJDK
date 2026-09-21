@@ -4,64 +4,67 @@ import java.io.IOException;
 import java.net.InetAddress;
 
 /**
- * KajiLibrary's java.nio.channels.MembershipKey — el comprobante de estar en un grupo de
- * multidifusion.
+ * KajiLibrary's java.nio.channels.MembershipKey — the receipt of being in a multicast group.
  *
- * <p>Es lo que devuelve un `join` y lo unico con lo que despues se puede dar de baja
- * ({@link #drop()}). Que la baja se pida por la llave y no por la direccion no es capricho: un mismo
- * canal puede estar en el mismo grupo por dos placas distintas, y sin la llave no habria forma de
- * decir cual de las dos se quiere soltar.
+ * <p>It is what a `join` returns and the only thing with which one can afterwards drop out ({@link
+ * #drop()}). That the dropping is asked for by the key and not by the address is not a whim: one
+ * same channel can be in the same group through two different cards, and without the key there
+ * would be no way of saying which of the two one wants to let go of.
  *
- * <p>{@link #block} y {@link #unblock} filtran **emisores** dentro del grupo. Sirven para el caso
- * feo y frecuente: un grupo donde alguien inunda, y uno quiere seguir escuchando a los demas. El
- * filtro es del sistema, no del programa, asi que el trafico bloqueado ni siquiera sube.
+ * <p>{@link #block} and {@link #unblock} filter **senders** inside the group. They serve for the
+ * ugly and frequent case: a group where somebody floods, and one wants to go on listening to the
+ * others. The filter is the system's, not the program's, so the blocked traffic does not even come
+ * up.
  *
- * <p>{@code networkInterface()} faltaba porque devuelve `java.net.NetworkInterface`, que no existia
- * en este arbol. Ya existe, y el metodo tambien; es el dato que completa la llave, porque la misma
- * direccion de grupo por dos placas distintas son dos membresias distintas.
+ * <p>{@code networkInterface()} was missing because it returns `java.net.NetworkInterface`, which
+ * did not exist in this tree. It exists now, and so does the method; it is the datum that completes
+ * the key, because the same group address through two different cards are two different
+ * memberships.
  */
 public abstract class MembershipKey {
 
     protected MembershipKey() {
     }
 
-    /** Si la membresia sigue vigente. Deja de estarlo al darla de baja o al cerrar el canal. */
+    /** Whether the membership is still current. It stops being so on dropping it or on closing the
+     * channel. */
     public abstract boolean isValid();
 
     /**
-     * Da de baja la membresia.
+     * Drops the membership.
      *
-     * <p>Sobre una llave ya invalida no hace nada, y esa idempotencia es a proposito: la baja
-     * tambien ocurre sola al cerrar el canal, asi que el `drop()` explicito y el cierre se pisan
-     * seguido y ninguno de los dos tiene que fallar por eso.
+     * <p>Over an already invalid key it does nothing, and that idempotence is on purpose: the
+     * dropping also happens by itself when the channel is closed, so the explicit `drop()` and the
+     * closing step on each other often and neither of the two has to fail because of that.
      */
     public abstract void drop();
 
     /**
-     * Deja de recibir lo que mande `source` dentro de este grupo.
+     * Stops receiving whatever `source` sends inside this group.
      *
-     * @throws IllegalStateException si la membresia se pidio para una fuente especifica: filtrar
-     *         dentro de un grupo que ya esta filtrado a un solo emisor no significa nada
+     * @throws IllegalStateException if the membership was asked for a specific source: filtering
+     *         inside a group that is already filtered to a single sender means nothing
      */
     public abstract MembershipKey block(InetAddress source) throws IOException;
 
-    /** Deshace un {@link #block}. */
+    /** Undoes a {@link #block}. */
     public abstract MembershipKey unblock(InetAddress source);
 
-    /** El canal de esta membresia. */
+    /** The channel of this membership. */
     public abstract MulticastChannel channel();
 
-    /** La direccion del grupo. */
+    /** The address of the group. */
     public abstract InetAddress group();
 
-    /** La fuente, si la membresia se pidio para una sola; `null` si es para todo el grupo. */
+    /** The source, if the membership was asked for a single one; `null` if it is for the whole
+     * group. */
     public abstract InetAddress sourceAddress();
 
     /**
-     * La placa por la que se pidio la membresia.
+     * The card the membership was asked for through.
      *
-     * <p>Es la mitad que le falta a {@link #group()} para identificar la membresia: el mismo grupo
-     * por dos placas son dos llaves, y esta es la que dice cual es cual.
+     * <p>It is the half {@link #group()} is missing in order to identify the membership: the same
+     * group through two cards are two keys, and this is the one that says which is which.
      */
     public abstract java.net.NetworkInterface networkInterface();
 }

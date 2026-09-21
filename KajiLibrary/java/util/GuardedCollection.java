@@ -1,32 +1,32 @@
 package java.util;
 
-// Los envoltorios que devuelven las tres familias de Collections: unmodifiableX, synchronizedX y
-// checkedX. Package-private, porque el contrato solo promete la interfaz de vuelta.
+// The wrappers Collections's three families return: unmodifiableX, synchronizedX and checkedX.
+// Package-private, because the contract only promises the interface back.
 //
-// El JDK tiene una clase por familia y por interfaz -- UnmodifiableList, SynchronizedList,
-// CheckedList, y asi por cada una de las ocho. Aca hay una sola familia con tres interruptores,
-// porque las tres hacen exactamente lo mismo (delegar) y solo cambian en que hacen ANTES:
+// The JDK has one class per family and per interface -- UnmodifiableList, SynchronizedList,
+// CheckedList, and so on for each of the eight. Here there is a single family with three switches,
+// because the three do exactly the same thing (delegate) and differ only in what they do BEFORE:
 //
-//   readOnly   los mutadores tiran UnsupportedOperationException en vez de delegar
-//   type       add/set validan la clase del elemento y tiran ClassCastException en el acto
-//   (cerrojo)  todo pasa por el monitor de `this`
+//   readOnly   the mutators throw UnsupportedOperationException instead of delegating
+//   type       add/set validate the element's class and throw ClassCastException on the spot
+//   (lock)     everything goes through `this`'s monitor
 //
-// Sobre el cerrojo hay que ser claro: **todos** los envoltorios toman el monitor, no solo los de
-// synchronizedX. Es un monitor que en los de solo lectura nadie mas mira, asi que el costo es un
-// monitorenter sin contienda, y a cambio no hay que escribir cada metodo dos veces. Para el que
-// SI sincroniza, el monitor es el envoltorio mismo, que es lo que documenta el JDK: quien
-// necesite recorrerlo entero tiene que hacer `synchronized (lista) { ... }` por su cuenta,
-// porque un iterador no se puede proteger desde adentro.
+// About the lock one has to be clear: **every** wrapper takes the monitor, not only synchronizedX's.
+// It is a monitor nobody else looks at in the read-only ones, so the cost is an uncontended
+// monitorenter, and in exchange each method does not have to be written twice. For the one that DOES
+// synchronise, the monitor is the wrapper itself, which is what the JDK documents: whoever needs to
+// walk the whole thing has to do `synchronized (list) { ... }` themselves, because an iterator cannot
+// be protected from the inside.
 //
-// Lo que checkedX aporta no es obvio hasta que se ve el agujero que tapa: con genericos borrados,
-// un `List<String>` pasado como `List` cruda acepta un Integer sin chistar, y la ClassCastException
-// aparece mucho despues, en el `get`, lejos de quien la causo. `checkedList` mueve el error al
-// momento del `add`.
+// What checkedX brings is not obvious until the hole it plugs is seen: with erased generics, a
+// `List<String>` passed as a raw `List` accepts an Integer without complaint, and the
+// ClassCastException turns up much later, at the `get`, far from whoever caused it. `checkedList`
+// moves the error to the moment of the `add`.
 class GuardedCollection<E> implements Collection<E> {
 
     final Collection<E> back;
 
-    // La clase que se exige a cada elemento que entra, o null si no se valida nada.
+    // The class each element coming in is required to be, or null if nothing is validated.
     final Class<E> type;
 
     final boolean readOnly;
@@ -40,14 +40,15 @@ class GuardedCollection<E> implements Collection<E> {
         this.readOnly = readOnly;
     }
 
-    // Corta cualquier mutacion si el envoltorio es de solo lectura.
+    // It cuts off any mutation if the wrapper is read-only.
     final void noWrite() {
         if (this.readOnly) {
             throw new UnsupportedOperationException();
         }
     }
 
-    // Valida la clase del elemento que entra. Devuelve el mismo elemento para poder encadenar.
+    // It validates the class of the element coming in. It returns the same element so it can be
+    // chained.
     final E check(E e) {
         if (this.type != null && e != null && !this.type.isInstance(e)) {
             throw new ClassCastException("Attempt to insert " + e.getClass().getName()
@@ -56,7 +57,7 @@ class GuardedCollection<E> implements Collection<E> {
         return e;
     }
 
-    // Valida una coleccion entera antes de insertarla, para no dejarla a medio agregar.
+    // It validates a whole collection before inserting it, so as not to leave it half added.
     final Collection<E> checkAll(Collection<? extends E> c) {
         Object[] a = c.toArray();
         int i = 0;
@@ -103,10 +104,10 @@ class GuardedCollection<E> implements Collection<E> {
         }
     }
 
-    // El iterador se envuelve solo cuando hace falta: si el envoltorio es de solo lectura hay que
-    // tapar `remove()`, que si no seria la puerta de atras para modificar. En los otros dos casos
-    // se devuelve el de adentro tal cual -- envolverlo no aportaria nada, y para el sincronizado
-    // seria enganoso: proteger cada llamada por separado no hace segura la recorrida completa.
+    // The iterator is wrapped only when it has to be: if the wrapper is read-only, `remove()` has to
+    // be plugged, or it would be the back door for modifying. In the other two cases the inner one is
+    // returned as it is -- wrapping it would bring nothing, and for the synchronised one it would be
+    // misleading: protecting each call separately does not make the whole walk safe.
     public Iterator<E> iterator() {
         synchronized (this) {
             if (this.readOnly) {
@@ -158,9 +159,9 @@ class GuardedCollection<E> implements Collection<E> {
         }
     }
 
-    // Los defaults de Collection que mutan tambien tienen que respetar el candado: `removeIf`
-    // llega a `iterator().remove()` o a `remove(Object)`, y sin esto un envoltorio de solo
-    // lectura fallaria con la excepcion equivocada -- o peor, borraria algo antes de fallar.
+    // Collection's defaults that mutate also have to respect the lock: `removeIf` reaches
+    // `iterator().remove()` or `remove(Object)`, and without this a read-only wrapper would fail with
+    // the wrong exception -- or worse, would remove something before failing.
     public boolean removeIf(java.util.function.Predicate<? super E> filter) {
         this.noWrite();
         synchronized (this) {
@@ -181,7 +182,7 @@ class GuardedCollection<E> implements Collection<E> {
     }
 }
 
-// La version con orden de encuentro: agrega los dos extremos.
+// The version with encounter order: it adds the two ends.
 class GuardedSequencedCollection<E> extends GuardedCollection<E> implements SequencedCollection<E> {
 
     GuardedSequencedCollection(SequencedCollection<E> back, Class<E> type, boolean readOnly) {
@@ -239,9 +240,9 @@ class GuardedSequencedCollection<E> extends GuardedCollection<E> implements Sequ
     }
 }
 
-// El envoltorio de List. `equals`/`hashCode` delegan porque List los define por contenido: una
-// lista envuelta tiene que seguir siendo igual a la de adentro, o `unmodifiableList(x).equals(x)`
-// daria false y ningun `assertEquals` pasaria.
+// List's wrapper. `equals`/`hashCode` delegate because List defines them by content: a wrapped list
+// has to go on being equal to the one inside, or `unmodifiableList(x).equals(x)` would give false and
+// no `assertEquals` would pass.
 class GuardedList<E> extends GuardedSequencedCollection<E> implements List<E> {
 
     GuardedList(List<E> back, Class<E> type, boolean readOnly) {
@@ -308,8 +309,8 @@ class GuardedList<E> extends GuardedSequencedCollection<E> implements List<E> {
         }
     }
 
-    // La sublista se envuelve con la misma guardia, si no seria el agujero por donde escribir en
-    // una lista de solo lectura.
+    // The sublist is wrapped with the same guard, or it would be the hole through which to write
+    // into a read-only list.
     public List<E> subList(int fromIndex, int toIndex) {
         synchronized (this) {
             return new GuardedList<E>(this.list().subList(fromIndex, toIndex), this.type, this.readOnly);
@@ -403,8 +404,8 @@ class GuardedSequencedSet<E> extends GuardedSequencedCollection<E> implements Se
     }
 }
 
-// Los tres cortes de un SortedSet vuelven envueltos con la misma guardia, por la misma razon que
-// la sublista.
+// A SortedSet's three slices come back wrapped with the same guard, for the same reason as the
+// sublist.
 class GuardedSortedSet<E> extends GuardedSequencedSet<E> implements SortedSet<E> {
 
     GuardedSortedSet(SortedSet<E> back, Class<E> type, boolean readOnly) {
@@ -552,7 +553,7 @@ class GuardedQueue<E> extends GuardedCollection<E> implements Queue<E> {
         }
     }
 
-    // `poll` saca, asi que cuenta como mutador aunque su nombre no lo diga.
+    // `poll` takes out, so it counts as a mutator even though its name does not say so.
     public E poll() {
         this.noWrite();
         synchronized (this) {
@@ -567,7 +568,7 @@ class GuardedQueue<E> extends GuardedCollection<E> implements Queue<E> {
     }
 }
 
-// El iterador de solo lectura: lo unico que cambia es que `remove()` se niega.
+// The read-only iterator: the only thing that changes is that `remove()` refuses.
 final class GuardedItr<E> implements Iterator<E> {
 
     private final Iterator<E> back;
@@ -589,9 +590,9 @@ final class GuardedItr<E> implements Iterator<E> {
     }
 }
 
-// El ListIterator envuelto. Ademas de tapar los mutadores cuando corresponde, valida el tipo en
-// `set` y en `add`: son la otra via de entrada a una lista, y checkedList no serviria de mucho si
-// se pudiera esquivar pasando por el iterador.
+// The wrapped ListIterator. Besides plugging the mutators where called for, it validates the type in
+// `set` and in `add`: they are the other way into a list, and checkedList would not be worth much if
+// it could be dodged by going through the iterator.
 final class GuardedLitr<E> implements ListIterator<E> {
 
     private final ListIterator<E> back;

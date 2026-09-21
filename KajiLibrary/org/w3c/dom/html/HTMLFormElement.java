@@ -1,61 +1,61 @@
 package org.w3c.dom.html;
 
 /**
- * Un `<form>`.
+ * A `<form>`.
  *
- * <p>`getElements` da los controles del formulario, no sus hijos: un `<input>` metido dentro de un
- * `<div>` que a su vez esta en el formulario aparece igual. La coleccion es viva.
+ * <p>`getElements` gives the controls of the form, not its children: an `<input>` put inside a
+ * `<div>` that is in turn in the form appears all the same. The collection is live.
  *
- * <p>`submit()` envia el formulario **sin disparar el evento `onsubmit`**, que es la diferencia
- * observable con apretar el boton. `reset()` si dispara `onreset`.
+ * <p>`submit()` submits the form **without firing the `onsubmit` event**, which is the observable
+ * difference with pressing the button. `reset()` does fire `onreset`.
  */
 public interface HTMLFormElement extends HTMLElement {
 
-    /** Los controles, en una coleccion viva. */
+    /** The controls, in a live collection. */
     HTMLCollection getElements();
 
-    /** La cantidad. */
+    /** The count. */
     int getLength();
 
-    /** El atributo `name`. */
+    /** The `name` attribute. */
     String getName();
 
-    /** Fija el atributo `name`. */
+    /** It sets the `name` attribute. */
     void setName(String name);
 
-    /** El atributo `acceptCharset`. */
+    /** The `acceptCharset` attribute. */
     String getAcceptCharset();
 
-    /** Fija el atributo `acceptCharset`. */
+    /** It sets the `acceptCharset` attribute. */
     void setAcceptCharset(String acceptCharset);
 
-    /** El atributo `action`. */
+    /** The `action` attribute. */
     String getAction();
 
-    /** Fija el atributo `action`. */
+    /** It sets the `action` attribute. */
     void setAction(String action);
 
-    /** El atributo `enctype`. */
+    /** The `enctype` attribute. */
     String getEnctype();
 
-    /** Fija el atributo `enctype`. */
+    /** It sets the `enctype` attribute. */
     void setEnctype(String enctype);
 
-    /** El atributo `method`. */
+    /** The `method` attribute. */
     String getMethod();
 
-    /** Fija el atributo `method`. */
+    /** It sets the `method` attribute. */
     void setMethod(String method);
 
-    /** El marco de destino. */
+    /** The target frame. */
     String getTarget();
 
-    /** Fija el marco de destino. */
+    /** It sets the target frame. */
     void setTarget(String target);
 
-    /** Envia el formulario, **sin** disparar `onsubmit`. */
+    /** It submits the form, **without** firing `onsubmit`. */
     void submit();
 
-    /** Vuelve los controles a sus valores por omision y dispara `onreset`. */
+    /** It returns the controls to their default values and fires `onreset`. */
     void reset();
 }

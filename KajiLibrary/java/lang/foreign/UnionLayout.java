@@ -1,12 +1,11 @@
 package java.lang.foreign;
 
 /**
- * KajiLibrary's java.lang.foreign.UnionLayout -- los miembros **superpuestos**, todos desde el
- * offset cero.
+ * KajiLibrary's java.lang.foreign.UnionLayout -- the members **overlaid**, all from offset zero.
  *
- * <p>El tamanio es el del mas grande y el alineamiento el mas estricto. A diferencia del
- * {@link StructLayout} no hay regla de offsets que respetar: si todos empiezan en cero y el
- * alineamiento de la union es el maximo de los suyos, todos caen bien por construccion.
+ * <p>The size is that of the largest and the alignment the strictest. Unlike {@link StructLayout}
+ * there is no offset rule to respect: if they all start at zero and the union's alignment is the
+ * greatest of theirs, they all fall right by construction.
  */
 public interface UnionLayout extends GroupLayout {
 

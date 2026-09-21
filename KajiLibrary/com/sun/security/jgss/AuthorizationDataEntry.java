@@ -1,16 +1,16 @@
 package com.sun.security.jgss;
 
 /**
- * Una entrada de datos de autorizacion de un ticket de Kerberos 5.
+ * An entry of authorization data of a Kerberos 5 ticket.
  *
- * <p>El campo `AuthorizationData` de un ticket es una lista de pares (tipo, bytes) que el KDC mete
- * y que el servicio interpreta. El contenido depende del tipo --el `AD-IF-RELEVANT` de RFC 4120, el
- * `PAC` de Windows-- y esta clase no lo mira: entrega los bytes crudos y deja la interpretacion al
- * que sepa.
+ * <p>A ticket's `AuthorizationData` field is a list of (type, bytes) pairs that the KDC puts in
+ * and that the service interprets. The content depends on the type --RFC 4120's `AD-IF-RELEVANT`,
+ * Windows's `PAC`-- and this class does not look at it: it hands over the raw bytes and leaves
+ * the interpretation to whoever knows.
  *
- * <p>Es inmutable, y los `byte[]` se copian al entrar y al salir. Sin la copia, quien recibiera la
- * entrada podria modificar los datos de autorizacion de un ticket ya validado, que es exactamente
- * lo que un dato de autorizacion no puede permitir.
+ * <p>It is immutable, and the `byte[]`s are copied on the way in and on the way out. Without the
+ * copy, whoever received the entry could modify the authorization data of an already validated
+ * ticket, which is exactly what a datum of authorization cannot allow.
  *
  * @see InquireType#KRB5_GET_AUTHZ_DATA
  */
@@ -20,22 +20,22 @@ public final class AuthorizationDataEntry {
     private final byte[] data;
 
     /**
-     * Una entrada con ese tipo y esos datos.
+     * An entry with that type and those data.
      *
-     * @param type el numero de tipo, de los que registra RFC 4120
-     * @param data los bytes; se copian
+     * @param type the type number, of those RFC 4120 registers
+     * @param data the bytes; they are copied
      */
     public AuthorizationDataEntry(int type, byte[] data) {
         this.type = type;
         this.data = data.clone();
     }
 
-    /** El numero de tipo. */
+    /** The type number. */
     public int getType() {
         return this.type;
     }
 
-    /** Una copia de los bytes. */
+    /** A copy of the bytes. */
     public byte[] getData() {
         return this.data.clone();
     }

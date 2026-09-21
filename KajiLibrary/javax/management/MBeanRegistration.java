@@ -1,39 +1,39 @@
 package javax.management;
 
 /**
- * Lo implementa el MBean que quiere enterarse de su propio registro.
+ * Implemented by the MBean that wants to know about its own registration.
  *
- * <p>Da dos poderes que no se ven a primera vista:
+ * <p>It gives two powers that are not seen at first sight:
  *
  * <ul>
- *   <li>{@link #preRegister} <b>devuelve</b> un {@link ObjectName}. Un MBean puede elegir su propio
- *       nombre, y de hecho se puede registrar con `null` y dejar que el se nombre;
- *   <li>{@link #preRegister} puede tirar, y eso <b>cancela</b> el registro. Es la unica forma que
- *       tiene un MBean de negarse a existir en un agente que no le sirve.
+ *   <li>{@link #preRegister} <b>returns</b> an {@link ObjectName}. An MBean can choose its own
+ *       name, and in fact it can be registered with {@code null} and let it name itself;
+ *   <li>{@link #preRegister} can throw, and that <b>cancels</b> the registration. It is the only
+ *       way an MBean has of refusing to exist in an agent that does not suit it.
  * </ul>
  *
- * <p>{@link #postRegister} recibe un `Boolean` --no un `boolean`-- porque tambien se llama cuando el
- * registro fracaso.
+ * <p>{@link #postRegister} receives a {@code Boolean} --not a {@code boolean}-- because it is also
+ * called when the registration failed.
  */
 public interface MBeanRegistration {
 
     /**
-     * Antes de registrar. Devuelve el nombre definitivo.
+     * Before registering. Returns the final name.
      *
-     * @throws Exception cancela el registro
+     * @throws Exception cancels the registration
      */
     ObjectName preRegister(MBeanServer server, ObjectName name) throws Exception;
 
-    /** Despues de intentar registrar; `registrationDone` dice si salio. */
+    /** After trying to register; {@code registrationDone} says whether it worked. */
     void postRegister(Boolean registrationDone);
 
     /**
-     * Antes de dar de baja.
+     * Before unregistering.
      *
-     * @throws Exception cancela la baja
+     * @throws Exception cancels the unregistration
      */
     void preDeregister() throws Exception;
 
-    /** Despues de la baja. */
+    /** After unregistering. */
     void postDeregister();
 }

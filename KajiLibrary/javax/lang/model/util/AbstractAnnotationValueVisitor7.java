@@ -4,8 +4,8 @@ import javax.annotation.processing.SupportedSourceVersion;
 import javax.lang.model.SourceVersion;
 
 /**
- * El visitante de valores de anotacion de Java 7. Ver {@link AbstractAnnotationValueVisitor6} por el
- * mecanismo y por que ninguna version de esta familia agrega nada.
+ * The annotation value visitor for Java 7. See {@link AbstractAnnotationValueVisitor6} for the
+ * mechanism and for why no version of this family adds anything.
  */
 @SupportedSourceVersion(SourceVersion.RELEASE_7)
 public abstract class AbstractAnnotationValueVisitor7<R, P>

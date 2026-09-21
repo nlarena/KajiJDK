@@ -17,9 +17,9 @@ import java.time.chrono.IsoChronology;
 // conversion (toEpochDay / ofEpochDay), the classic java.time algorithm — everything else is
 // layered on it. Implements Temporal, TemporalAdjuster and Comparable. A KajiLibrary subset
 // (toString/parse, more fields/units, from(TemporalAccessor) deferred).
-// NO declara `Comparable<LocalDate>`: hereda `Comparable<ChronoLocalDate>` de `ChronoLocalDate`
-// (#276), y una clase no puede implementar dos parametrizaciones de la misma interfaz. Es tambien
-// lo que hace el JDK, y por la misma razon.
+// It does NOT declare `Comparable<LocalDate>`: it inherits `Comparable<ChronoLocalDate>` from
+// `ChronoLocalDate` (#276), and a class cannot implement two parameterisations of the same
+// interface. It is also what the JDK does, and for the same reason.
 public final class LocalDate implements Temporal, TemporalAdjuster, ChronoLocalDate, Serializable {
 
     private static final long DAYS_0000_TO_1970 = 719528L;
@@ -35,17 +35,17 @@ public final class LocalDate implements Temporal, TemporalAdjuster, ChronoLocalD
     }
 
     /**
-     * La fecha de ese anio, mes y dia.
+     * The date of that year, month and day.
      *
-     * <p>**Valida el dia contra el largo del mes**, y eso no es una cortesia: sin la comprobacion,
-     * `LocalDate.of(2023, 2, 30)` devolvia un objeto que se imprimia `2023-02-30` --una fecha que no
-     * existe-- y cuyo `toEpochDay()` era el del 2 de marzo. O sea que la aritmetica y el texto
-     * decian cosas distintas, y ninguna de las dos avisaba.
+     * <p>**It validates the day against the month's length**, and that is not a courtesy: without
+     * the check, `LocalDate.of(2023, 2, 30)` returned an object that printed as `2023-02-30` --a
+     * date that does not exist-- and whose `toEpochDay()` was the 2nd of March's. Which is to say
+     * the arithmetic and the text said different things, and neither of them warned.
      *
-     * <p>El anio bisiesto entra en la cuenta: el 29 de febrero es valido en 2024 y no en 2023.
+     * <p>The leap year counts: the 29th of February is valid in 2024 and not in 2023.
      *
-     * @throws java.time.DateTimeException si el mes no esta en [1, 12], o si el dia no esta en
-     *     [1, largo del mes]
+     * @throws java.time.DateTimeException if the month is not in [1, 12], or the day is not in
+     *     [1, length of the month]
      */
     public static LocalDate of(int year, int month, int day) {
         if (month < 1 || month > 12) {
@@ -54,11 +54,11 @@ public final class LocalDate implements Temporal, TemporalAdjuster, ChronoLocalD
         if (day < 1 || day > 31) {
             throw new java.time.DateTimeException("Invalid value for DayOfMonth: " + day);
         }
-        int largo = Month.of(month).length(LocalDate.isLeapYear(year));
-        if (day > largo) {
-            // El mensaje distingue los dos casos como el JDK, porque mandan a mirar cosas distintas:
-            // un 29 de febrero de un anio no bisiesto suele ser un anio mal calculado, y un 31 de
-            // abril es un mes mal calculado.
+        int length = Month.of(month).length(LocalDate.isLeapYear(year));
+        if (day > length) {
+            // The message tells the two cases apart as the JDK does, because they send you to look
+            // at different things: a 29th of February in a non-leap year is usually a miscomputed
+            // year, and a 31st of April a miscomputed month.
             if (day == 29 && month == 2) {
                 throw new java.time.DateTimeException(
                         "Invalid date 'February 29' as '" + year + "' is not a leap year");
@@ -70,16 +70,16 @@ public final class LocalDate implements Temporal, TemporalAdjuster, ChronoLocalD
     }
 
 
-    /** 1970-01-01, el dia cero. */
+    /** 1970-01-01, day zero. */
     public static final LocalDate EPOCH = LocalDate.ofEpochDay(0L);
 
-    /** La fecha mas temprana representable, -999999999-01-01. */
+    /** The earliest representable date, -999999999-01-01. */
     public static final LocalDate MIN = LocalDate.of(-999999999, 1, 1);
 
-    /** La mas tardia, +999999999-12-31. */
+    /** The latest, +999999999-12-31. */
     public static final LocalDate MAX = LocalDate.of(999999999, 12, 31);
 
-    /** La fecha que marca `clock`. La forma testeable de `now()`. */
+    /** The date `clock` reads. The testable form of `now()`. */
     public static LocalDate now(java.time.Clock clock) {
         if (clock == null) {
             throw new NullPointerException("clock");
@@ -87,7 +87,7 @@ public final class LocalDate implements Temporal, TemporalAdjuster, ChronoLocalD
         return LocalDate.ofInstant(clock.instant(), clock.getZone());
     }
 
-    /** La fecha en esa zona, ahora. */
+    /** The date in that zone, right now. */
     public static LocalDate now(ZoneId zone) {
         if (zone == null) {
             throw new NullPointerException("zone");
@@ -96,21 +96,21 @@ public final class LocalDate implements Temporal, TemporalAdjuster, ChronoLocalD
     }
 
     /**
-     * La fecha local que ese instante marca en esa zona.
+     * The local date that instant falls on in that zone.
      *
-     * <p>El mismo instante es un dia distinto segun donde se lo mire: por eso hace falta la zona y
-     * no alcanza con el instante.
+     * <p>The same instant is a different day depending on where it is looked at from: that is why
+     * the zone is needed and the instant alone is not enough.
      */
     public static LocalDate ofInstant(Instant instant, ZoneId zone) {
         if (instant == null || zone == null) {
             throw new NullPointerException();
         }
         ZoneOffset offset = zone.getRules().getOffset(instant);
-        long segsLocales = instant.getEpochSecond() + offset.getTotalSeconds();
-        return LocalDate.ofEpochDay(Math.floorDiv(segsLocales, 86400L));
+        long localSecs = instant.getEpochSecond() + offset.getTotalSeconds();
+        return LocalDate.ofEpochDay(Math.floorDiv(localSecs, 86400L));
     }
 
-    /** La fecha con ese año y ese mes. */
+    /** The date with that year and month. */
     public static LocalDate of(int year, Month month, int dayOfMonth) {
         if (month == null) {
             throw new NullPointerException("month");
@@ -119,26 +119,27 @@ public final class LocalDate implements Temporal, TemporalAdjuster, ChronoLocalD
     }
 
     /**
-     * La fecha del dia `dayOfYear` de `year`.
+     * The date of day `dayOfYear` of `year`.
      *
-     * @throws java.time.DateTimeException si el dia no existe en ese año -- el 366 en uno comun
+     * @throws java.time.DateTimeException if the day does not exist in that year -- the 366th in a
+     *     common one
      */
     public static LocalDate ofYearDay(int year, int dayOfYear) {
         ChronoField.YEAR.checkValidValue((long) year);
         ChronoField.DAY_OF_YEAR.checkValidValue((long) dayOfYear);
-        boolean bisiesto = java.time.chrono.IsoChronology.INSTANCE.isLeapYear((long) year);
-        if (dayOfYear == 366 && !bisiesto) {
+        boolean leap = java.time.chrono.IsoChronology.INSTANCE.isLeapYear((long) year);
+        if (dayOfYear == 366 && !leap) {
             throw new java.time.DateTimeException(
                     "Invalid date 'DayOfYear 366' as '" + year + "' is not a leap year");
         }
-        Month mes = Month.of((dayOfYear - 1) / 31 + 1);
-        // El calculo de arriba puede quedarse corto por un mes: se avanza si hace falta.
-        int finDelMes = mes.firstDayOfYear(bisiesto) + mes.length(bisiesto) - 1;
-        if (dayOfYear > finDelMes) {
-            mes = mes.plus(1L);
+        Month month = Month.of((dayOfYear - 1) / 31 + 1);
+        // The computation above can fall a month short: it steps forward if it has to.
+        int endOfMonth = month.firstDayOfYear(leap) + month.length(leap) - 1;
+        if (dayOfYear > endOfMonth) {
+            month = month.plus(1L);
         }
-        int dia = dayOfYear - mes.firstDayOfYear(bisiesto) + 1;
-        return LocalDate.of(year, mes.getValue(), dia);
+        int day = dayOfYear - month.firstDayOfYear(leap) + 1;
+        return LocalDate.of(year, month.getValue(), day);
     }
 
     public static LocalDate now() {
@@ -175,14 +176,14 @@ public final class LocalDate implements Temporal, TemporalAdjuster, ChronoLocalD
     }
 
     /**
-     * La fecha que `temporal` tiene.
+     * The date `temporal` holds.
      *
-     * <p>Se lee por `EPOCH_DAY`, que es el campo que **todo** temporal con fecha sabe dar --sea un
-     * `LocalDate`, un `LocalDateTime` o un `ZonedDateTime`--. Leer año/mes/dia por separado tambien
-     * andaria y seria peor: tres campos que pueden venir de calendarios distintos, contra uno que ya
-     * es absoluto.
+     * <p>It is read through `EPOCH_DAY`, the field that **every** temporal with a date knows how to
+     * give --be it a `LocalDate`, a `LocalDateTime` or a `ZonedDateTime`--. Reading year/month/day
+     * separately would work too and would be worse: three fields that may come from different
+     * calendars, against one that is already absolute.
      *
-     * @throws java.time.DateTimeException si `temporal` no tiene fecha
+     * @throws java.time.DateTimeException if `temporal` has no date
      */
     public static LocalDate from(java.time.temporal.TemporalAccessor temporal) {
         if (temporal == null) {
@@ -310,13 +311,14 @@ public final class LocalDate implements Temporal, TemporalAdjuster, ChronoLocalD
     // --- comparison ---
 
     /**
-     * El orden natural. La firma toma {@link ChronoLocalDate} y no {@code LocalDate} porque es la
-     * que declara la interfaz -- y es la que declara el JDK-: una clase no puede implementar
-     * {@code Comparable} dos veces con parametros distintos.
+     * The natural order. The signature takes {@link ChronoLocalDate} and not {@code LocalDate}
+     * because that is what the interface declares -- and what the JDK declares: a class cannot
+     * implement {@code Comparable} twice with different parameters.
      *
-     * <p>Con otro {@code LocalDate} compara por campos, que es mas barato que ir al dia epocal.
-     * Con una fecha de otro calendario cae al orden general: dia epocal y, si empatan, el id de la
-     * cronologia -- el desempate que evita que dos fechas que no son iguales comparen 0.
+     * <p>Against another {@code LocalDate} it compares field by field, which is cheaper than going
+     * to the epoch day. Against a date of another calendar it falls back to the general order: epoch
+     * day and, on a tie, the chronology's id -- the tie-break that keeps two dates that are not
+     * equal from comparing 0.
      */
     @Override
     public int compareTo(ChronoLocalDate other) {
@@ -344,11 +346,11 @@ public final class LocalDate implements Temporal, TemporalAdjuster, ChronoLocalD
     }
 
     /**
-     * Si esta fecha es anterior a `other`, que puede ser de **otro calendario**.
+     * Whether this date is before `other`, which may belong to **another calendar**.
      *
-     * <p>Compara por dia epoch y no por año/mes/dia: es la unica forma de que la comparacion entre
-     * calendarios distintos signifique algo. Un 1 de enero japones y uno ISO son el mismo dia si
-     * caen en el mismo punto de la linea, sin importar como cada uno lo numere.
+     * <p>It compares by epoch day and not by year/month/day: it is the only way for a comparison
+     * across calendars to mean anything. A Japanese 1st of January and an ISO one are the same day
+     * if they fall at the same point on the line, however each of them numbers it.
      */
     public boolean isBefore(java.time.chrono.ChronoLocalDate other) {
         return this.toEpochDay() < other.toEpochDay();
@@ -359,31 +361,31 @@ public final class LocalDate implements Temporal, TemporalAdjuster, ChronoLocalD
     }
 
     /**
-     * Si designan el **mismo dia**, aunque sean de calendarios distintos.
+     * Whether they name the **same day**, even if they belong to different calendars.
      *
-     * <p>Distinto de `equals`, que exige ademas el mismo calendario. Es la diferencia entre "es el
-     * mismo dia" y "es la misma fecha".
+     * <p>Unlike `equals`, which also demands the same calendar. It is the difference between "it is
+     * the same day" and "it is the same date".
      */
     public boolean isEqual(java.time.chrono.ChronoLocalDate other) {
         return this.toEpochDay() == other.toEpochDay();
     }
 
-    /** La era ISO: `CE` para los años positivos, `BCE` para el resto. */
+    /** The ISO era: `CE` for the positive years, `BCE` for the rest. */
     public java.time.chrono.IsoEra getEra() {
         return this.getYear() >= 1 ? java.time.chrono.IsoEra.CE : java.time.chrono.IsoEra.BCE;
     }
 
-    /** Esta fecha a la medianoche. */
+    /** This date at midnight. */
     public LocalDateTime atStartOfDay() {
         return LocalDateTime.of(this, LocalTime.MIDNIGHT);
     }
 
     /**
-     * Esta fecha al comienzo del dia en esa zona.
+     * This date at the start of the day in that zone.
      *
-     * <p>**No siempre es la medianoche**: en los dias en que empieza el horario de verano puede no
-     * existir la 00:00, y el comienzo del dia es la primera hora que si existe. Por eso este metodo
-     * no es `atStartOfDay().atZone(zone)`.
+     * <p>**It is not always midnight**: on the days daylight saving begins, 00:00 may not exist, and
+     * the start of the day is the first time that does. That is why this method is not
+     * `atStartOfDay().atZone(zone)`.
      */
     public ZonedDateTime atStartOfDay(ZoneId zone) {
         if (zone == null) {
@@ -392,7 +394,7 @@ public final class LocalDate implements Temporal, TemporalAdjuster, ChronoLocalD
         return ZonedDateTime.of(this.atStartOfDay(), zone);
     }
 
-    /** Esta fecha con esa hora y ese desplazamiento. */
+    /** This date with that time and that offset. */
     public java.time.OffsetDateTime atTime(java.time.OffsetTime time) {
         if (time == null) {
             throw new NullPointerException("time");
@@ -401,7 +403,7 @@ public final class LocalDate implements Temporal, TemporalAdjuster, ChronoLocalD
                 time.getOffset());
     }
 
-    /** El periodo entre esta fecha y `endDateExclusive`, en años, meses y dias. */
+    /** The period between this date and `endDateExclusive`, in years, months and days. */
     public Period until(java.time.chrono.ChronoLocalDate endDateExclusive) {
         if (endDateExclusive == null) {
             throw new NullPointerException("endDateExclusive");
@@ -409,7 +411,7 @@ public final class LocalDate implements Temporal, TemporalAdjuster, ChronoLocalD
         return Period.between(this, LocalDate.ofEpochDay(endDateExclusive.toEpochDay()));
     }
 
-    /** Los segundos desde la epoca de esta fecha a esa hora y con ese desplazamiento. */
+    /** The seconds since the epoch of this date at that time and with that offset. */
     public long toEpochSecond(LocalTime time, ZoneOffset offset) {
         if (time == null || offset == null) {
             throw new NullPointerException();
@@ -418,20 +420,21 @@ public final class LocalDate implements Temporal, TemporalAdjuster, ChronoLocalD
     }
 
     /**
-     * Las fechas desde esta (inclusive) hasta `endExclusive`, de a un dia.
+     * The dates from this one (inclusive) to `endExclusive`, one day at a time.
      *
-     * <p>El flujo es **ansioso** en esta biblioteca --se materializa entero--, asi que un rango
-     * enorme cuesta memoria. Con el rango vacio o invertido devuelve un flujo vacio, que es lo que
-     * hace el JDK.
+     * <p>The stream is **eager** in this library --it is materialised whole-- so a huge range costs
+     * memory. With an empty or inverted range it returns an empty stream, which is what the JDK
+     * does.
      */
     public java.util.stream.Stream<LocalDate> datesUntil(LocalDate endExclusive) {
         return this.datesUntil(endExclusive, Period.ofDays(1));
     }
 
     /**
-     * Idem, avanzando de a `step`.
+     * The same, advancing by `step`.
      *
-     * @throws IllegalArgumentException si el paso es cero, o su signo no lleva hacia el final
+     * @throws IllegalArgumentException if the step is zero, or its sign does not lead towards the
+     *     end
      */
     public java.util.stream.Stream<LocalDate> datesUntil(LocalDate endExclusive, Period step) {
         if (endExclusive == null || step == null) {
@@ -440,19 +443,19 @@ public final class LocalDate implements Temporal, TemporalAdjuster, ChronoLocalD
         if (step.isZero()) {
             throw new IllegalArgumentException("step is zero");
         }
-        boolean haciaAdelante = !step.isNegative();
+        boolean forwards = !step.isNegative();
         java.util.List<LocalDate> out = new java.util.ArrayList<LocalDate>();
-        LocalDate actual = this;
-        // El signo del paso tiene que llevar hacia el final; si no, el bucle no terminaria.
-        if (haciaAdelante && this.toEpochDay() < endExclusive.toEpochDay()) {
-            while (actual.toEpochDay() < endExclusive.toEpochDay()) {
-                out.add(actual);
-                actual = actual.plus(step);
+        LocalDate current = this;
+        // The step's sign has to lead towards the end; otherwise the loop would never finish.
+        if (forwards && this.toEpochDay() < endExclusive.toEpochDay()) {
+            while (current.toEpochDay() < endExclusive.toEpochDay()) {
+                out.add(current);
+                current = current.plus(step);
             }
-        } else if (!haciaAdelante && this.toEpochDay() > endExclusive.toEpochDay()) {
-            while (actual.toEpochDay() > endExclusive.toEpochDay()) {
-                out.add(actual);
-                actual = actual.plus(step);
+        } else if (!forwards && this.toEpochDay() > endExclusive.toEpochDay()) {
+            while (current.toEpochDay() > endExclusive.toEpochDay()) {
+                out.add(current);
+                current = current.plus(step);
             }
         }
         Object[] a = new Object[out.size()];
@@ -475,11 +478,11 @@ public final class LocalDate implements Temporal, TemporalAdjuster, ChronoLocalD
     // --- Temporal ---
 
     /**
-     * Los campos que una fecha tiene: **todos** los de fecha.
+     * The fields a date has: **all** the date ones.
      *
-     * <p>Se pregunta por la categoria en vez de enumerar seis nombres. La lista se desincronizaba con
-     * `getLong` --y de hecho lo estaba: `ERA` y `PROLEPTIC_MONTH` decian que no-- mientras que la
-     * categoria no puede.
+     * <p>It asks about the category instead of enumerating six names. The list drifted out of step
+     * with `getLong` --and in fact was: `ERA` and `PROLEPTIC_MONTH` said no-- whereas the category
+     * cannot.
      */
     public boolean isSupported(TemporalField field) {
         if (field instanceof ChronoField) {
@@ -489,20 +492,21 @@ public final class LocalDate implements Temporal, TemporalAdjuster, ChronoLocalD
     }
 
     /**
-     * El valor de ese campo.
+     * That field's value.
      *
-     * <p>Tres son el estado --anio, mes, dia-- y el resto **se deduce**. Estan porque son funciones
-     * exactas de esos tres, sin ninguna decision que tomar: un formateador con `G` o con `yyyy` en un
-     * calendario con eras necesita `ERA` y `YEAR_OF_ERA`, y antes se encontraba con un rechazo.
+     * <p>Three of them are the state --year, month, day-- and the rest are **derived**. They are here
+     * because they are exact functions of those three, with no decision to take: a formatter with `G`
+     * or with `yyyy` in a calendar with eras needs `ERA` and `YEAR_OF_ERA`, and used to meet a
+     * rejection.
      *
-     * <p>Los `ALIGNED_*` son la unica familia que pide explicacion. Alinean las semanas al **dia 1**
-     * del mes o del anio en vez de al lunes: el dia 1 empieza siempre la semana 1, el 8 la semana 2, y
-     * asi. Por eso son `(dia - 1) / 7 + 1` y `(dia - 1) % 7 + 1` y no dependen de en que dia de la
-     * semana cayo nada.
+     * <p>The `ALIGNED_*` family is the only one that asks for an explanation. They align the weeks to
+     * **day 1** of the month or of the year instead of to Monday: day 1 always begins week 1, the 8th
+     * week 2, and so on. That is why they are `(day - 1) / 7 + 1` and `(day - 1) % 7 + 1` and do not
+     * depend on what weekday anything fell on.
      *
-     * <p>`ERA` es 1 para las fechas de anio positivo y 0 para el resto, y `YEAR_OF_ERA` cuenta hacia
-     * atras dentro de la era anterior --el anio 0 proleptico es el 1 antes de Cristo--, que es lo que
-     * hace que las dos juntas reconstruyan el anio.
+     * <p>`ERA` is 1 for the dates of positive year and 0 for the rest, and `YEAR_OF_ERA` counts
+     * backwards inside the earlier era --proleptic year 0 is 1 BC-- which is what makes the two of
+     * them together reconstruct the year.
      */
     public long getLong(TemporalField field) {
         if (field == ChronoField.DAY_OF_MONTH) {
@@ -545,7 +549,7 @@ public final class LocalDate implements Temporal, TemporalAdjuster, ChronoLocalD
             return (long) (this.year >= 1 ? 1 : 0);
         }
         if (field != null && !(field instanceof ChronoField)) {
-            // Un campo de terceros sabe leerse solo.
+            // A third party's field knows how to read itself.
             return field.getFrom(this);
         }
         throw new java.time.temporal.UnsupportedTemporalTypeException("Unsupported field: " + field);
@@ -556,7 +560,7 @@ public final class LocalDate implements Temporal, TemporalAdjuster, ChronoLocalD
             || unit == ChronoUnit.MONTHS || unit == ChronoUnit.YEARS;
     }
 
-    // Retorno estrechado a `LocalDate`, como en el JDK (override covariante, §8.4.8.3).
+    // The return narrowed to `LocalDate`, as in the JDK (a covariant override, §8.4.8.3).
     public LocalDate with(TemporalField field, long newValue) {
         if (field == ChronoField.DAY_OF_MONTH) {
             return new LocalDate(this.year, this.month, (int) newValue);
@@ -797,21 +801,21 @@ public final class LocalDate implements Temporal, TemporalAdjuster, ChronoLocalD
     }
 
     /**
-     * Lee `text` con ese formateador.
+     * It reads `text` with that formatter.
      *
-     * <p>El que decide que campos hay es el formateador; esta clase solo dice **cual de ellos
-     * quiere**, pasando su propio `from`. Por eso un patron que no traiga una fecha
-     * falla aca y no al usar el resultado.
+     * <p>The one that decides which fields are there is the formatter; this class only says **which
+     * of them it wants**, by passing its own `from`. That is why a pattern that brings no date fails
+     * here and not when the result is used.
      *
-     * @throws java.time.format.DateTimeParseException si el texto no encaja con el patron, o si lo
-     *     que encaja no alcanza para una fecha
+     * @throws java.time.format.DateTimeParseException if the text does not fit the pattern, or what
+     *     fits is not enough for a date
      */
     public static LocalDate parse(CharSequence text, java.time.format.DateTimeFormatter formatter) {
         if (formatter == null) {
             throw new NullPointerException("formatter");
         }
-        // Ligado a una local: encadenar por un intermedio de tipo interfaz se pierde (#108).
-        java.time.temporal.TemporalQuery<LocalDate> consulta = LocalDate::from;
-        return formatter.parse(text, consulta);
+        // Bound to a local: chaining through an interface-typed intermediate gets lost (#108).
+        java.time.temporal.TemporalQuery<LocalDate> queryOf = LocalDate::from;
+        return formatter.parse(text, queryOf);
     }
 }

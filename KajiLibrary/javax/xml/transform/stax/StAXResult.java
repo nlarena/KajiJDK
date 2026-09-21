@@ -5,33 +5,33 @@ import javax.xml.stream.XMLStreamWriter;
 import javax.xml.transform.Result;
 
 /**
- * KajiLibrary's javax.xml.transform.stax.StAXResult -- un escritor StAX como destino de una
- * transformacion.
+ * KajiLibrary's javax.xml.transform.stax.StAXResult -- a StAX writer as the destination of a
+ * transformation.
  *
- * <p>El espejo de {@link StAXSource}: lleva <b>uno</b> de los dos escritores y el getter del otro
- * devuelve null.
+ * <p>The mirror of {@link StAXSource}: it carries <b>one</b> of the two writers and the getter of
+ * the other returns null.
  *
- * <p>Sirve para encadenar sin materializar nada en el medio: la salida de una transformacion se
- * escribe directo por el mismo escritor con el que el programa ya venia escribiendo, en vez de
- * pasar por un arbol o por texto.
+ * <p>It serves to chain without materializing anything in between: the output of a transformation
+ * is written directly through the same writer the program was already writing with, instead of
+ * going through a tree or through text.
  *
- * <p>{@link #setSystemId} lanza, por la misma razon que en {@link StAXSource}: el destino lo decide
- * el escritor, no quien arma el {@code Result}.
+ * <p>{@link #setSystemId} throws, for the same reason as in {@link StAXSource}: the destination is
+ * decided by the writer, not by whoever builds the {@code Result}.
  */
 public class StAXResult implements Result {
 
-    /** Con esto se le pregunta a un {@code TransformerFactory} si acepta este destino. */
+    /** With this a {@code TransformerFactory} is asked whether it accepts this destination. */
     public static final String FEATURE = "http://javax.xml.transform.stax.StAXResult/feature";
 
-    /** Uno de los dos es null. */
+    /** One of the two is null. */
     private XMLEventWriter eventWriter;
 
     private XMLStreamWriter streamWriter;
 
     /**
-     * Con un escritor de eventos.
+     * With an event writer.
      *
-     * @throws IllegalArgumentException si es null
+     * @throws IllegalArgumentException if it is null
      */
     public StAXResult(XMLEventWriter writer) {
         if (writer == null) {
@@ -42,9 +42,9 @@ public class StAXResult implements Result {
     }
 
     /**
-     * Con un escritor de flujo.
+     * With a stream writer.
      *
-     * @throws IllegalArgumentException si es null
+     * @throws IllegalArgumentException if it is null
      */
     public StAXResult(XMLStreamWriter writer) {
         if (writer == null) {
@@ -54,27 +54,27 @@ public class StAXResult implements Result {
         this.streamWriter = writer;
     }
 
-    /** El escritor de eventos, o null si se construyo con el de flujo. */
+    /** The event writer, or null if it was built with the stream one. */
     public XMLEventWriter getXMLEventWriter() {
         return this.eventWriter;
     }
 
-    /** El escritor de flujo, o null si se construyo con el de eventos. */
+    /** The stream writer, or null if it was built with the event one. */
     public XMLStreamWriter getXMLStreamWriter() {
         return this.streamWriter;
     }
 
     /**
-     * No se puede cambiar.
+     * Cannot be changed.
      *
-     * @throws UnsupportedOperationException siempre; ver la nota de la clase
+     * @throws UnsupportedOperationException always; see the class note
      */
     public void setSystemId(String systemId) {
         throw new UnsupportedOperationException(
             "StAXResult#setSystemId(systemId) cannot set the system identifier for a StAXResult");
     }
 
-    /** Siempre null: el destino lo sabe el escritor. */
+    /** Always null: the writer knows the destination. */
     public String getSystemId() {
         return null;
     }

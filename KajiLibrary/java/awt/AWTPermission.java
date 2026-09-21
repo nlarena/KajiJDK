@@ -3,16 +3,16 @@ package java.awt;
 import java.security.BasicPermission;
 
 /**
- * Un permiso del AWT: "mostrar una ventana sin el cartel de advertencia", "leer el portapapeles",
- * "mover el mouse por codigo".
+ * An AWT permission: "show a window without the warning banner", "read the clipboard", "move the
+ * mouse from code".
  *
- * <p>No agrega ni un metodo a {@code BasicPermission}: toda la logica --el comodin {@code "*"}, la
- * comparacion por nombre, la coleccion de permisos-- ya esta ahi. Existe solo para que el nombre de
- * la clase distinga la familia, que es como se escriben las politicas de seguridad.
+ * <p>It adds not a single method to {@code BasicPermission}: all the logic --the {@code "*"}
+ * wildcard, comparison by name, the permission collection-- is already there. It exists only so
+ * that the class name tells the family apart, which is how security policies are written.
  *
- * <p>El constructor con acciones ignora el segundo parametro. Esta en la API porque toda subclase
- * de {@code Permission} tiene que tenerlo para que el cargador de politicas pueda instanciarla por
- * reflexion; un AWTPermission no tiene acciones y {@code getActions()} devuelve la cadena vacia.
+ * <p>The constructor with actions ignores the second parameter. It is in the API because a policy
+ * instantiates permissions through that signature; an AWTPermission has no actions and
+ * {@code getActions()} returns the empty string.
  */
 public final class AWTPermission extends BasicPermission {
 

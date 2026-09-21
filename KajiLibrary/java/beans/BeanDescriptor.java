@@ -17,9 +17,9 @@ public class BeanDescriptor extends FeatureDescriptor {
         this.customizerClass = customizerClass;
         if (beanClass != null) {
             String n = beanClass.getName();
-            int punto = n.lastIndexOf('.');
-            if (punto >= 0) {
-                n = n.substring(punto + 1);
+            int dot = n.lastIndexOf('.');
+            if (dot >= 0) {
+                n = n.substring(dot + 1);
             }
             this.setName(n);
         }

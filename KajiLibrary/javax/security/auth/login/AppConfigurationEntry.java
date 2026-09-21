@@ -4,18 +4,18 @@ import java.util.Collections;
 import java.util.Map;
 
 /**
- * KajiLibrary's javax.security.auth.login.AppConfigurationEntry -- un modulo en la cadena de login.
+ * KajiLibrary's javax.security.auth.login.AppConfigurationEntry -- a module in the login chain.
  *
- * <p>Tres cosas: que modulo cargar, que tan obligatorio es, y con que opciones. Una aplicacion se
- * autentica contra una <b>lista</b> de estos, y las banderas de {@link LoginModuleControlFlag} son
- * lo que hace que la lista sea un programa y no una enumeracion.
+ * <p>Three things: which module to load, how mandatory it is, and with which options. An
+ * application authenticates against a <b>list</b> of these, and the flags of {@link
+ * LoginModuleControlFlag} are what make the list a program and not an enumeration.
  *
- * <h2>El mapa no se copia</h2>
+ * <h2>The map is not copied</h2>
  *
- * <p>{@link #getOptions} devuelve una vista <b>no modificable</b> del mapa que se paso, no una
- * copia. La diferencia se nota: quien construyo la entrada puede seguir cambiando su mapa y esos
- * cambios se ven desde aca. Es como esta especificado y por eso se replica, pero conviene pasarle un
- * mapa que uno no vaya a tocar mas.
+ * <p>{@link #getOptions} returns an <b>unmodifiable view</b> of the map that was passed, not a
+ * copy. The difference shows: whoever built the entry can keep changing their map and those changes
+ * are seen from here. It is how it is specified and so it is replicated, but it is as well to pass
+ * it a map one is not going to touch any more.
  */
 public class AppConfigurationEntry {
 
@@ -24,11 +24,11 @@ public class AppConfigurationEntry {
     private final Map<String, ?> options;
 
     /**
-     * @param loginModuleName el nombre completo de la clase del modulo
-     * @param controlFlag que tan obligatorio es; ver {@link LoginModuleControlFlag}
-     * @param options lo que se le pasa al modulo al inicializarlo
-     * @throws IllegalArgumentException si el nombre es null o vacio, o si la bandera o las opciones
-     *     son null
+     * @param loginModuleName the fully qualified name of the module's class
+     * @param controlFlag how mandatory it is; see {@link LoginModuleControlFlag}
+     * @param options what is passed to the module when initializing it
+     * @throws IllegalArgumentException if the name is null or empty, or if the flag or the options
+     *     are null
      */
     public AppConfigurationEntry(String loginModuleName, LoginModuleControlFlag controlFlag,
                                  Map<String, ?> options) {
@@ -43,72 +43,74 @@ public class AppConfigurationEntry {
         }
         this.loginModuleName = loginModuleName;
         this.controlFlag = controlFlag;
-        // Vista, no copia; ver la nota de la clase.
+        // A view, not a copy; see the class note.
         this.options = Collections.unmodifiableMap(options);
     }
 
-    /** El nombre de la clase del modulo. */
+    /** The name of the module's class. */
     public String getLoginModuleName() {
         return this.loginModuleName;
     }
 
-    /** Que tan obligatorio es. */
+    /** How mandatory it is. */
     public LoginModuleControlFlag getControlFlag() {
         return this.controlFlag;
     }
 
-    /** Las opciones, sin poder modificarlas. Ver la nota de la clase. */
+    /** The options, without being able to modify them. See the class note. */
     public Map<String, ?> getOptions() {
         return this.options;
     }
 
     /**
-     * Que tan obligatorio es un modulo dentro de la cadena.
+     * How mandatory a module is within the chain.
      *
-     * <p>Las cuatro banderas responden dos preguntas independientes: si el modulo <b>tiene</b> que
-     * andar para que el login cierre, y si su resultado <b>corta</b> el recorrido de la lista.
+     * <p>The four flags answer two independent questions: whether the module <b>has</b> to succeed
+     * for the login to go through, and whether its result <b>cuts</b> the walk of the list.
      *
      * <ul>
-     *   <li><b>REQUIRED</b> -- tiene que andar; si falla, la cadena sigue igual. Seguir es a
-     *       proposito: si se cortara, quien intenta entrar podria deducir <b>cual</b> modulo lo
-     *       rechazo por lo rapido que vuelve la respuesta;
-     *   <li><b>REQUISITE</b> -- tiene que andar y ademas corta al fallar. Se usa cuando los modulos
-     *       que siguen no tienen sentido sin este;
-     *   <li><b>SUFFICIENT</b> -- no hace falta que ande, pero si anda --y ningun obligatorio fallo
-     *       antes-- alcanza y se corta ahi;
-     *   <li><b>OPTIONAL</b> -- ni hace falta ni corta. Sirve para juntar datos en el sujeto sin que
-     *       eso decida nada.
+     *   <li><b>REQUIRED</b> -- it has to succeed; if it fails, the chain goes on all the same.
+     *       Going on is on purpose: if it cut, whoever tries to get in could deduce <b>which</b>
+     *       module rejected them from how quickly the answer comes back;
+     *   <li><b>REQUISITE</b> -- it has to succeed and it also cuts on failure. It is used when the
+     *       modules that follow make no sense without this one;
+     *   <li><b>SUFFICIENT</b> -- it does not need to succeed, but if it does --and no mandatory one
+     *       failed before-- that is enough and the walk is cut there;
+     *   <li><b>OPTIONAL</b> -- it neither needs to succeed nor cuts. It serves to gather data in
+     *       the subject without that deciding anything.
      * </ul>
      *
-     * <p>No es un enum: la clase es de 1999, anterior a que Java tuviera enums, y cambiarla ahora
-     * romperia la serializacion de cualquier configuracion guardada.
+     * <p>It is not an enum because it is older than enums: JAAS entered the platform in 1.4 and
+     * enums arrived in Java 5. (The note said the class was from 1999 and that making it an enum
+     * now would break the serialization of saved configurations; the JDK marks it {@code @since
+     * 1.4} and it is not {@code Serializable}, neither there nor here.)
      */
     public static class LoginModuleControlFlag {
 
         private final String name;
 
-        /** Tiene que andar; no corta. */
+        /** It has to succeed; it does not cut. */
         public static final LoginModuleControlFlag REQUIRED =
             new LoginModuleControlFlag("required");
 
-        /** Tiene que andar; corta al fallar. */
+        /** It has to succeed; it cuts on failure. */
         public static final LoginModuleControlFlag REQUISITE =
             new LoginModuleControlFlag("requisite");
 
-        /** No hace falta; corta al andar. */
+        /** It does not need to; it cuts on success. */
         public static final LoginModuleControlFlag SUFFICIENT =
             new LoginModuleControlFlag("sufficient");
 
-        /** Ni hace falta ni corta. */
+        /** It neither needs to succeed nor cuts. */
         public static final LoginModuleControlFlag OPTIONAL =
             new LoginModuleControlFlag("optional");
 
-        /** Privado: las cuatro constantes son las unicas que hay. */
+        /** Private: the four constants are the only ones there are. */
         private LoginModuleControlFlag(String name) {
             this.name = name;
         }
 
-        /** La forma que espera quien lee un registro: {@code "LoginModuleControlFlag: required"}. */
+        /** The form whoever reads a log expects: {@code "LoginModuleControlFlag: required"}. */
         public String toString() {
             return "LoginModuleControlFlag: " + this.name;
         }

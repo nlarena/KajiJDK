@@ -5,48 +5,49 @@ import java.util.EventObject;
 import javax.swing.event.CellEditorListener;
 
 /**
- * Quien edita una celda de una tabla, un arbol o una lista.
+ * Who edits a cell of a table, a tree or a list.
  *
- * <h2>Por que la edicion es un objeto aparte</h2>
+ * <h2>Why editing is a separate object</h2>
  *
- * <p>Editar una celda tiene un ciclo de vida que no cabe en un componente: empieza con un gesto
- * —un clic, dos, una tecla—, sigue mientras el usuario tipea, y termina de dos maneras distintas.
- * Esta interfaz es ese ciclo.
+ * <p>Editing a cell has a life cycle that does not fit in a component: it begins with a gesture
+ * -- one click, two, a key --, goes on while the user types, and ends in two different ways.
+ * This interface is that cycle.
  *
- * <h2>Terminar no es una sola cosa</h2>
+ * <h2>Finishing is not one single thing</h2>
  *
- * <p>{@link #stopCellEditing} acepta el valor y <strong>puede negarse</strong>: devuelve
- * {@code false} si lo que se escribio no es valido, y la edicion sigue abierta con el foco donde
- * estaba. {@link #cancelCellEditing} descarta y no puede fallar.
+ * <p>{@link #stopCellEditing} accepts the value and <strong>may refuse</strong>: it returns
+ * {@code false} if what was typed is not valid, and the editing stays open with the focus where
+ * it was. {@link #cancelCellEditing} discards and cannot fail.
  *
- * <p>Esa asimetria es lo que permite validar sin perder lo que el usuario tipeo. Un solo metodo
- * {@code stop} que no pudiera negarse obligaria a aceptar basura o a borrarla.
+ * <p>That asymmetry is what allows validating without losing what the user typed. A single
+ * {@code stop} method that could not refuse would force one to accept rubbish or to erase it.
  *
- * <h2>{@link #isCellEditable} recibe el evento, no la celda</h2>
+ * <h2>{@link #isCellEditable} receives the event, not the cell</h2>
  *
- * <p>Porque la pregunta no es "¿esta celda se puede editar?" sino "¿<em>este gesto</em> empieza una
- * edicion?". Un solo clic selecciona y dos editan, y solo el evento distingue los dos casos.
+ * <p>Because the question is not "can this cell be edited?" but "does <em>this gesture</em>
+ * start an editing?". A single click chooses and two edit, and only the event tells the two
+ * cases apart.
  */
 public interface CellEditor {
 
-    /** Lo que el usuario dejo escrito. */
+    /** What the user left written. */
     Object getCellEditorValue();
 
-    /** Si {@code anEvent} debe empezar una edicion; ver la nota de la interfaz. */
+    /** Whether {@code anEvent} should start an editing; see the interface note. */
     boolean isCellEditable(EventObject anEvent);
 
-    /** Si el gesto que empieza la edicion tambien debe seleccionar la celda. */
+    /** Whether the gesture that starts the editing should also choose the cell. */
     boolean shouldSelectCell(EventObject anEvent);
 
-    /** Termina aceptando; {@code false} si el valor no es valido y la edicion sigue. */
+    /** It finishes accepting; {@code false} if the value is not valid and the editing goes on. */
     boolean stopCellEditing();
 
-    /** Termina descartando. No puede fallar. */
+    /** It finishes discarding. It cannot fail. */
     void cancelCellEditing();
 
-    /** Agrega un oyente. */
+    /** It adds a listener. */
     void addCellEditorListener(CellEditorListener l);
 
-    /** Saca un oyente. */
+    /** It removes a listener. */
     void removeCellEditorListener(CellEditorListener l);
 }

@@ -1,28 +1,29 @@
 package javax.swing.tree;
 
 /**
- * Un nodo de arbol al que se le pueden agregar y sacar hijos.
+ * A tree node to which children can be added and removed.
  *
- * <p>{@link TreeNode} solo deja mirar. Esta agrega lo que hace falta para construir el arbol y para
- * moverlo, y es la que espera {@link DefaultTreeModel} cuando se le pide cambiar algo.
+ * <p>{@link TreeNode} only allows looking. This one adds what is needed to build the tree and to
+ * move it, and it is what {@link DefaultTreeModel} expects when it is asked to change something.
  *
- * <p>{@link #removeFromParent} y {@link #setParent} van juntos: mover un nodo es sacarlo de un
- * padre y ponerlo en otro, y hacerlo en un solo paso dejaria al arbol con un nodo en dos lugares.
+ * <p>{@link #removeFromParent} and {@link #setParent} go together: moving a node is taking it out
+ * of one parent and putting it in another, and doing it in a single step would leave the tree
+ * with a node in two places.
  */
 public interface MutableTreeNode extends TreeNode {
 
-    /** Inserta ese hijo en esa posicion. */
+    /** Inserts that child at that position. */
     void insert(MutableTreeNode child, int index);
 
     void remove(int index);
 
     void remove(MutableTreeNode node);
 
-    /** El objeto que este nodo representa. */
+    /** The object this node represents. */
     void setUserObject(Object object);
 
     void removeFromParent();
 
-    /** Lo llama el padre; ver la nota de la interfaz. */
+    /** The parent calls it; see the interface note. */
     void setParent(MutableTreeNode newParent);
 }

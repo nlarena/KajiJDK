@@ -4,26 +4,26 @@ import java.util.Hashtable;
 import java.util.Vector;
 
 /**
- * Un productor cuya imagen **ya está** en un arreglo en memoria.
+ * A producer whose image **is already** in an array in memory.
  *
- * <p>Es el extremo simple de la tubería: no hay nada que descargar ni que decodificar, así que la
- * entrega es una sola llamada con el arreglo entero. Sirve para hacer una imagen a partir de píxeles
- * calculados.
+ * <p>It is the simple end of the pipe: there is nothing to download and nothing to decode, so the
+ * delivery is a single call with the whole array. It serves for making an image out of computed
+ * pixels.
  *
- * <p>También sirve para lo contrario de lo que su nombre sugiere: con {@link #setAnimated} el mismo
- * objeto pasa a ser una imagen **viva**. Los consumidores no se dan de baja al terminar y cada
- * {@link #newPixels()} les vuelve a mandar lo que haya en el arreglo, así que escribir en el arreglo
- * y avisar es todo lo que hace falta para animar.
+ * <p>It also serves for the opposite of what its name suggests: with {@link #setAnimated} the same
+ * object becomes a **live** image. The consumers are not unsubscribed when it finishes and every
+ * {@link #newPixels()} sends them whatever is in the array again, so writing into the array and
+ * giving notice is all it takes to animate.
  *
- * <p>{@link #setFullBufferUpdates} decide si cada actualización manda la imagen entera o sólo el
- * rectángulo que cambió. Mandar de más cuesta ancho de banda; mandar de menos obliga al consumidor a
- * aceptar píxeles en cualquier orden, y eso le impide a un filtro como
- * {@link AreaAveragingScaleFilter} hacer su trabajo. Por eso la decisión se declara: cambia las
- * pistas que reciben los consumidores.
+ * <p>{@link #setFullBufferUpdates} decides whether each update sends the whole image or only the
+ * rectangle that changed. Sending too much costs bandwidth; sending too little forces the consumer
+ * to accept pixels in any order, and that stops a filter such as
+ * {@link AreaAveragingScaleFilter} from doing its job. That is why the decision is declared: it
+ * changes the hints the consumers receive.
  *
- * <p>El arreglo no se copia. Escribirlo cambia lo que van a ver los próximos consumidores, que es
- * justamente lo que hace posible la animación, y también lo que hace que compartirlo entre hilos sin
- * cuidado sea un problema.
+ * <p>The array is not copied. Writing into it changes what the next consumers are going to see,
+ * which is exactly what makes the animation possible, and also what makes sharing it between
+ * threads without care a problem.
  */
 public class MemoryImageSource implements ImageProducer {
 
@@ -38,39 +38,39 @@ public class MemoryImageSource implements ImageProducer {
     private boolean animating;
     private boolean fullbuffers;
 
-    /** Con píxeles de un byte y el modelo de color dado. */
+    /** With pixels of one byte and the given colour model. */
     public MemoryImageSource(int w, int h, ColorModel cm, byte[] pix, int off, int scan) {
         this.initialize(w, h, cm, pix, off, scan, null);
     }
 
-    /** Como el anterior, con propiedades. */
+    /** Like the previous one, with properties. */
     public MemoryImageSource(int w, int h, ColorModel cm, byte[] pix, int off, int scan,
             Hashtable<?, ?> props) {
         this.initialize(w, h, cm, pix, off, scan, props);
     }
 
-    /** Con píxeles de un `int` y el modelo de color dado. */
+    /** With pixels of one `int` and the given colour model. */
     public MemoryImageSource(int w, int h, ColorModel cm, int[] pix, int off, int scan) {
         this.initialize(w, h, cm, pix, off, scan, null);
     }
 
-    /** Como el anterior, con propiedades. */
+    /** Like the previous one, with properties. */
     public MemoryImageSource(int w, int h, ColorModel cm, int[] pix, int off, int scan,
             Hashtable<?, ?> props) {
         this.initialize(w, h, cm, pix, off, scan, props);
     }
 
-    /** Con píxeles ARGB de ocho bits por canal. */
+    /** With ARGB pixels of eight bits per channel. */
     public MemoryImageSource(int w, int h, int[] pix, int off, int scan) {
         this.initialize(w, h, ColorModel.getRGBdefault(), pix, off, scan, null);
     }
 
-    /** Como el anterior, con propiedades. */
+    /** Like the previous one, with properties. */
     public MemoryImageSource(int w, int h, int[] pix, int off, int scan, Hashtable<?, ?> props) {
         this.initialize(w, h, ColorModel.getRGBdefault(), pix, off, scan, props);
     }
 
-    /** Guarda todo lo que describe a la imagen. */
+    /** Stores everything that describes the image. */
     private void initialize(int w, int h, ColorModel cm, Object pix, int off, int scan,
             Hashtable<?, ?> props) {
         this.width = w;
@@ -83,10 +83,10 @@ public class MemoryImageSource implements ImageProducer {
     }
 
     /**
-     * Suma un consumidor y le entrega la imagen entera en el acto.
+     * Adds a consumer and delivers the whole image to it on the spot.
      *
-     * <p>Si no está animada, además se lo da de baja al terminar: no va a haber más nada que
-     * mandarle.
+     * <p>If it is not animated, it also unsubscribes it when it finishes: there is not going to be
+     * anything more to send it.
      */
     public synchronized void addConsumer(ImageConsumer ic) {
         if (this.theConsumers.contains(ic)) {
@@ -111,41 +111,41 @@ public class MemoryImageSource implements ImageProducer {
         }
     }
 
-    /** Si ese consumidor está registrado. */
+    /** Whether that consumer is registered. */
     public synchronized boolean isConsumer(ImageConsumer ic) {
         return this.theConsumers.contains(ic);
     }
 
-    /** Saca a ese consumidor. */
+    /** Removes that consumer. */
     public synchronized void removeConsumer(ImageConsumer ic) {
         this.theConsumers.removeElement(ic);
     }
 
-    /** Lo registra y le entrega la imagen. */
+    /** Registers it and delivers the image to it. */
     public void startProduction(ImageConsumer ic) {
         this.addConsumer(ic);
     }
 
     /**
-     * Vuelve a mandarle la imagen de arriba abajo.
+     * Sends it the image again from top to bottom.
      *
-     * <p>Es gratis: los píxeles ya están en memoria y siempre se mandan en ese orden.
+     * <p>It is free: the pixels are in memory already and they are always sent in that order.
      */
     public void requestTopDownLeftRightResend(ImageConsumer ic) {
-        // No hace falta nada: esta fuente ya entrega de arriba abajo y de una sola vez.
+        // Nothing is needed: this source already delivers from top to bottom and in one go.
     }
 
     /**
-     * Declara si la imagen va a cambiar con el tiempo.
+     * Declares whether the image is going to change over time.
      *
-     * <p>Hay que llamarlo **antes** de que se registre el primer consumidor: los que ya recibieron
-     * una imagen estática se dieron de baja y no van a ver los cambios.
+     * <p>It has to be called **before** the first consumer registers: the ones that have received a
+     * static image already unsubscribed and are not going to see the changes.
      */
     public synchronized void setAnimated(boolean animated) {
         this.animating = animated;
         if (!this.animating) {
-            // Los consumidores que quedan estaban esperando mas cuadros; hay que cerrarles la
-            // entrega antes de soltarlos, o se quedan esperando para siempre.
+            // The consumers that are left were waiting for more frames; the delivery has to be
+            // closed for them before letting them go, or they wait forever.
             int n = this.theConsumers.size();
             for (int i = 0; i < n; i++) {
                 ImageConsumer ic = this.theConsumers.elementAt(i);
@@ -156,9 +156,9 @@ public class MemoryImageSource implements ImageProducer {
     }
 
     /**
-     * Declara si cada actualización manda la imagen entera.
+     * Declares whether each update sends the whole image.
      *
-     * <p>Sólo tiene efecto sobre una imagen animada.
+     * <p>It only has an effect on an animated image.
      */
     public synchronized void setFullBufferUpdates(boolean fullbuffers) {
         if (this.fullbuffers == fullbuffers) {
@@ -176,21 +176,21 @@ public class MemoryImageSource implements ImageProducer {
         }
     }
 
-    /** Manda la imagen entera de nuevo. */
+    /** Sends the whole image again. */
     public void newPixels() {
         this.newPixels(0, 0, this.width, this.height, true);
     }
 
-    /** Manda ese rectángulo de nuevo. */
+    /** Sends that rectangle again. */
     public synchronized void newPixels(int x, int y, int w, int h) {
         this.newPixels(x, y, w, h, true);
     }
 
     /**
-     * Manda ese rectángulo de nuevo, avisando o no que se completó un cuadro.
+     * Sends that rectangle again, giving notice or not that a frame was completed.
      *
-     * <p>No avisar sirve para mandar varios pedazos y recién después declarar el cuadro completo,
-     * para que el consumidor no dibuje una imagen a medio actualizar.
+     * <p>Not giving notice serves for sending several pieces and only afterwards declaring the
+     * frame complete, so that the consumer does not draw a half-updated image.
      */
     public synchronized void newPixels(int x, int y, int w, int h, boolean framenotify) {
         if (!this.animating) {
@@ -236,7 +236,7 @@ public class MemoryImageSource implements ImageProducer {
         }
     }
 
-    /** Cambia el arreglo de píxeles por uno de bytes y manda la imagen entera. */
+    /** Changes the pixel array for one of bytes and sends the whole image. */
     public synchronized void newPixels(byte[] newpix, ColorModel newmodel, int offset,
             int scansize) {
         this.pixels = newpix;
@@ -246,7 +246,7 @@ public class MemoryImageSource implements ImageProducer {
         this.newPixels();
     }
 
-    /** Cambia el arreglo de píxeles por uno de enteros y manda la imagen entera. */
+    /** Changes the pixel array for one of ints and sends the whole image. */
     public synchronized void newPixels(int[] newpix, ColorModel newmodel, int offset,
             int scansize) {
         this.pixels = newpix;
@@ -256,7 +256,7 @@ public class MemoryImageSource implements ImageProducer {
         this.newPixels();
     }
 
-    /** Le anuncia al consumidor el tamaño, las propiedades, el modelo y las pistas. */
+    /** Announces the size, the properties, the model and the hints to the consumer. */
     private void initConsumer(ImageConsumer ic) {
         if (this.isConsumer(ic)) {
             ic.setDimensions(this.width, this.height);
@@ -283,7 +283,7 @@ public class MemoryImageSource implements ImageProducer {
         }
     }
 
-    /** Le manda un rectángulo de píxeles, sin copiar el arreglo. */
+    /** Sends it a rectangle of pixels, without copying the array. */
     private void sendPixels(ImageConsumer ic, int x, int y, int w, int h) {
         int off = this.pixeloffset + this.pixelscan * y + x;
         int w1 = w < 0 ? this.width - x : w;

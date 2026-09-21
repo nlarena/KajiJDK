@@ -1,16 +1,16 @@
 package javax.management.remote;
 
 /**
- * KajiLibrary's javax.management.remote.JMXAddressable -- esto tiene una direccion.
+ * KajiLibrary's javax.management.remote.JMXAddressable -- this has an address.
  *
- * <p>Un solo metodo. La implementan los conectores y servidores que pueden decir a que
- * {@link JMXServiceURL} corresponden.
+ * <p>A single method. The connectors and servers that can say which {@link JMXServiceURL} they
+ * correspond to implement it.
  *
- * <p>Es opcional, y por eso es una interfaz aparte: hay conectores que se arman sobre una conexion ya
- * abierta y no tienen ninguna direccion que dar. Se pregunta con {@code instanceof}.
+ * <p>It is optional, and that is why it is a separate interface: there are connectors built over
+ * an already open connection that have no address to give. It is asked with {@code instanceof}.
  */
 public interface JMXAddressable {
 
-    /** La direccion, o null si todavia no se sabe. */
+    /** The address, or null if it is not known yet. */
     JMXServiceURL getAddress();
 }

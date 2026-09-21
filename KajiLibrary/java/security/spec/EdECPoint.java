@@ -2,15 +2,16 @@ package java.security.spec;
 
 import java.math.BigInteger;
 
-// Un punto de una curva de Edwards, en la forma comprimida de RFC 8032: la coordenada y entera, mas
-// **un solo bit** de x.
+// A point of an Edwards curve, in RFC 8032's compressed form: the whole y coordinate, plus **a
+// single bit** of x.
 //
-// Que alcance con un bit es la propiedad que hace compacto a Ed25519. La ecuacion de la curva
-// determina x^2 a partir de y, asi que quedan dos candidatos, x y -x; saber si x es par o impar
-// elige uno. Una clave publica Ed25519 son entonces 32 bytes en vez de 64.
+// That one bit is enough is the property that makes Ed25519 compact. The curve equation determines
+// x^2 from y, so two candidates remain, x and -x; knowing whether x is even or odd picks one. An
+// Ed25519 public key is therefore 32 bytes instead of 64.
 //
-// Esta clase no descomprime: no calcula x a partir de y, porque para eso hace falta una raiz
-// cuadrada modular sobre la curva concreta, que aca no esta. Guarda los dos datos y los devuelve.
+// This class does not decompress: it does not compute x from y, because that needs a modular square
+// root over the concrete curve, which is not here. It keeps the two pieces of data and returns
+// them.
 public final class EdECPoint {
 
     private final boolean xOdd;
@@ -24,7 +25,7 @@ public final class EdECPoint {
         this.y = y;
     }
 
-    // Si la coordenada x es impar: el bit que desempata entre x y -x.
+    // Whether the x coordinate is odd: the bit that breaks the tie between x and -x.
     public boolean isXOdd() {
         return this.xOdd;
     }

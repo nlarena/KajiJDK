@@ -23,47 +23,47 @@ public final class Period implements TemporalAmount, java.time.chrono.ChronoPeri
         this.days = days;
     }
 
-    /** El periodo de longitud cero. */
+    /** The period of zero length. */
     public static final Period ZERO = new Period(0, 0, 0);
 
     /**
-     * El periodo entre dos fechas, en años, meses y dias.
+     * The period between two dates, in years, months and days.
      *
-     * <p>**Los tres campos son independientes y eso es el punto de la clase.** Entre el 31 de enero
-     * y el 1 de marzo hay "1 mes y 1 dia", no una cantidad de dias: cuantos dias sean depende de si
-     * el año es bisiesto. Por eso `Period` no se puede convertir a `Duration` sin una fecha de
-     * referencia, y por eso existen las dos clases.
+     * <p>**The three fields are independent and that is the point of the class.** Between the 31st of
+     * January and the 1st of March there is "1 month and 1 day", not a number of days: how many days
+     * it is depends on whether the year is a leap one. That is why a `Period` cannot be converted to
+     * a `Duration` without a reference date, and why both classes exist.
      *
-     * <p>El calculo toma primero los meses completos y despues los dias que sobran, que es lo que
-     * hace que valga `start.plus(between(start, end)).equals(end)`. Si se hiciera al reves --dias
-     * primero-- esa igualdad se rompe en los meses de distinta longitud.
+     * <p>The computation takes the whole months first and then the days left over, which is what
+     * makes `start.plus(between(start, end)).equals(end)` hold. Done the other way round --days
+     * first-- that equality breaks in the months of different length.
      */
     public static Period between(LocalDate startDateInclusive, LocalDate endDateExclusive) {
         if (startDateInclusive == null || endDateExclusive == null) {
             throw new NullPointerException();
         }
-        long mesesTotales = (long) endDateExclusive.getYear() * 12L
+        long totalMonths = (long) endDateExclusive.getYear() * 12L
                 + (endDateExclusive.getMonthValue() - 1)
                 - ((long) startDateInclusive.getYear() * 12L
                         + (startDateInclusive.getMonthValue() - 1));
-        int dias = endDateExclusive.getDayOfMonth() - startDateInclusive.getDayOfMonth();
-        if (mesesTotales > 0 && dias < 0) {
-            // El dia del mes destino quedo antes: el ultimo mes no se completo. Se le resta y los
-            // dias se cuentan desde la fecha ya avanzada esos meses.
-            mesesTotales = mesesTotales - 1;
-            LocalDate avanzada = startDateInclusive.plusMonths(mesesTotales);
-            dias = (int) (endDateExclusive.toEpochDay() - avanzada.toEpochDay());
-        } else if (mesesTotales < 0 && dias > 0) {
-            mesesTotales = mesesTotales + 1;
-            dias = dias - endDateExclusive.lengthOfMonth();
+        int days = endDateExclusive.getDayOfMonth() - startDateInclusive.getDayOfMonth();
+        if (totalMonths > 0 && days < 0) {
+            // The target's day of the month fell earlier: the last month was not completed. One is
+            // taken off and the days are counted from the date already advanced by those months.
+            totalMonths = totalMonths - 1;
+            LocalDate advanced = startDateInclusive.plusMonths(totalMonths);
+            days = (int) (endDateExclusive.toEpochDay() - advanced.toEpochDay());
+        } else if (totalMonths < 0 && days > 0) {
+            totalMonths = totalMonths + 1;
+            days = days - endDateExclusive.lengthOfMonth();
         }
-        return Period.of((int) (mesesTotales / 12L), (int) (mesesTotales % 12L), dias);
+        return Period.of((int) (totalMonths / 12L), (int) (totalMonths % 12L), days);
     }
 
     /**
-     * El periodo equivalente a `amount`.
+     * The period equivalent to `amount`.
      *
-     * @throws java.time.DateTimeException si `amount` usa unidades que no son años, meses o dias
+     * @throws java.time.DateTimeException if `amount` uses units other than years, months or days
      */
     public static Period from(TemporalAmount amount) {
         if (amount == null) {
@@ -75,10 +75,10 @@ public final class Period implements TemporalAmount, java.time.chrono.ChronoPeri
         int y = 0;
         int m = 0;
         int d = 0;
-        List<TemporalUnit> unidades = amount.getUnits();
+        List<TemporalUnit> units = amount.getUnits();
         int i = 0;
-        while (i < unidades.size()) {
-            TemporalUnit u = unidades.get(i);
+        while (i < units.size()) {
+            TemporalUnit u = units.get(i);
             long v = amount.get(u);
             if (u == ChronoUnit.YEARS) {
                 y = (int) v;
@@ -164,12 +164,12 @@ public final class Period implements TemporalAmount, java.time.chrono.ChronoPeri
         return new Period((int) (totalMonths / 12), (int) (totalMonths % 12), this.days);
     }
 
-    /** El calendario de este periodo: el ISO, que es el unico que `Period` modela. */
+    /** This period's calendar: ISO, the only one `Period` models. */
     public java.time.chrono.IsoChronology getChronology() {
         return java.time.chrono.IsoChronology.INSTANCE;
     }
 
-    /** Este periodo con otros años, dejando meses y dias como estan. */
+    /** This period with other years, leaving months and days as they are. */
     public Period withYears(int years) {
         return years == this.years ? this : Period.of(years, this.months, this.days);
     }
@@ -183,24 +183,24 @@ public final class Period implements TemporalAmount, java.time.chrono.ChronoPeri
     }
 
     /**
-     * Este periodo mas `amountToAdd`, **campo a campo**.
+     * This period plus `amountToAdd`, **field by field**.
      *
-     * <p>Los años se suman a los años y los dias a los dias: no hay conversion entre unidades,
-     * porque no existe una. Sumar "1 mes" a "30 dias" da "1 mes y 30 dias", no "60 dias".
+     * <p>Years are added to years and days to days: there is no conversion between units, because
+     * none exists. Adding "1 month" to "30 days" gives "1 month and 30 days", not "60 days".
      *
-     * @throws java.time.DateTimeException si `amountToAdd` usa otras unidades
+     * @throws java.time.DateTimeException if `amountToAdd` uses other units
      */
     public Period plus(TemporalAmount amountToAdd) {
-        Period otro = Period.from(amountToAdd);
-        return Period.of(this.years + otro.years, this.months + otro.months, this.days + otro.days);
+        Period other = Period.from(amountToAdd);
+        return Period.of(this.years + other.years, this.months + other.months, this.days + other.days);
     }
 
     public Period minus(TemporalAmount amountToSubtract) {
-        Period otro = Period.from(amountToSubtract);
-        return Period.of(this.years - otro.years, this.months - otro.months, this.days - otro.days);
+        Period other = Period.from(amountToSubtract);
+        return Period.of(this.years - other.years, this.months - other.months, this.days - other.days);
     }
 
-    /** Cada campo multiplicado por `scalar`. */
+    /** Each field multiplied by `scalar`. */
     public Period multipliedBy(int scalar) {
         if (scalar == 1 || this.isZero()) {
             return this;
@@ -208,7 +208,7 @@ public final class Period implements TemporalAmount, java.time.chrono.ChronoPeri
         return Period.of(this.years * scalar, this.months * scalar, this.days * scalar);
     }
 
-    /** Cada campo con el signo cambiado. */
+    /** Each field with its sign flipped. */
     public Period negated() {
         return this.multipliedBy(-1);
     }

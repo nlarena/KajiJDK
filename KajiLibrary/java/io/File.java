@@ -7,29 +7,31 @@ import java.net.URL;
 import java.nio.file.Path;
 import jdk.internal.io.Fs;
 
-// KajiLibrary's java.io.File -- un nombre de ruta abstracto.
+// KajiLibrary's java.io.File -- an abstract path name.
 //
-// La mitad que manipula rutas esta entera (nombres, padres, absolutizacion, normalizacion,
-// conversion a URI/URL, orden). La otra mitad --la que toca el disco-- se apoya en
-// `jdk.internal.io.Fs`, y hoy contesta de verdad: existencia y permisos (`stat`), tamaño (`size`),
-// fecha (`mtime`/`setMtime`), listado (`list`), camino canonico (`canonical`), creacion y borrado.
+// The half that manipulates paths is complete (names, parents, absolutization, normalization,
+// conversion to URI/URL, ordering). The other half --the one that touches the disk-- rests on
+// `jdk.internal.io.Fs`, and today it really answers: existence and permissions (`stat`), size
+// (`size`), date (`mtime`/`setMtime`), listing (`list`), canonical path (`canonical`), creation and
+// deletion.
 //
-// **Lo que sigue inerte, y por que.** Cuatro grupos de metodos devuelven `false`, `0` o vacio
-// porque el nativo que los contestaria no existe. No inventan una respuesta: dicen que no pudieron,
-// que es lo que el contrato permite decir.
+// **What is still inert, and why.** Four groups of methods return `false`, `0` or empty because the
+// native that would answer them does not exist. They do not invent an answer: they say they could
+// not, which is what the contract allows them to say.
 //
-//   - `renameTo` -- renombrar necesita un nativo propio. Simularlo con copiar-y-borrar no seria un
-//     renombre: no es atomico, no funciona sobre directorios, y pierde los metadatos.
-//   - `setReadOnly` / `setWritable` / `setReadable` / `setExecutable` -- cambiar permisos. Devolver
-//     `true` sin haberlos cambiado convertiria un "no pude" en un "listo".
-//   - `getTotalSpace` / `getFreeSpace` / `getUsableSpace` -- `0L` es lo que el contrato manda
-//     devolver cuando la particion no se puede consultar.
-//   - `listRoots` -- un arreglo vacio, que el contrato admite explicitamente.
+//   - `renameTo` -- renaming needs a native of its own. Simulating it with copy-and-delete would
+//     not be a rename: it is not atomic, it does not work over directories, and it loses the
+//     metadata.
+//   - `setReadOnly` / `setWritable` / `setReadable` / `setExecutable` -- changing permissions.
+//     Returning `true` without having changed them would turn an "I could not" into a "done".
+//   - `getTotalSpace` / `getFreeSpace` / `getUsableSpace` -- `0L` is what the contract orders to be
+//     returned when the partition cannot be queried.
+//   - `listRoots` -- an empty array, which the contract explicitly admits.
 //
-// `isHidden` mira el punto inicial del nombre, que es la regla de Unix. En Windows lo oculto es un
-// atributo del archivo y no una convencion de nombre, asi que ahi la respuesta puede diferir de la
-// del JDK; se deja porque es la unica regla que se puede aplicar sin nativo, y equivocarse hacia
-// "no esta oculto" no rompe nada que dependa de esto.
+// `isHidden` looks at the name's leading dot, which is Unix's rule. On Windows being hidden is an
+// attribute of the file and not a naming convention, so there the answer may differ from the JDK's;
+// it is left because it is the only rule that can be applied with no native, and erring towards "it
+// is not hidden" breaks nothing that depends on this.
 //
 public class File implements Serializable, Comparable<File> {
 
@@ -145,70 +147,72 @@ public class File implements Serializable, Comparable<File> {
     }
 
     /**
-     * El camino **canonico**: absoluto, sin `.` ni `..`, con los enlaces resueltos y --en Windows--
-     * con las mayusculas que el disco tiene de verdad.
+     * The **canonical** path: absolute, with no `.` and no `..`, with the links resolved and --on
+     * Windows-- with the capitalization the disk really has.
      *
-     * <p>Se lo pide al sistema (`Fs.canonical`) y no se calcula sobre la cadena, porque es la unica
-     * forma de que dos rutas distintas que nombran el mismo archivo den el mismo resultado: en
-     * Windows `C:\A.TXT` y `c:\a.txt` son el mismo archivo, y ninguna manipulacion de texto lo sabe.
+     * <p>It is asked of the system (`Fs.canonical`) and not worked out over the string, because it
+     * is the only way for two different paths naming the same file to give the same result: on
+     * Windows `C:\A.TXT` and `c:\a.txt` are the same file, and no text manipulation knows that.
      *
-     * <p><strong>Un archivo que no existe igual tiene camino canonico.</strong> El contrato lo pide
-     * --canonicalizar es una operacion sobre el nombre-- y el nativo no puede darlo, porque
-     * canonicalizar lo que no esta no tiene respuesta del sistema. Asi que para esos se canonicaliza
-     * el ancestro mas cercano que **si** exista y se le vuelven a colgar los nombres que faltaban.
-     * El resultado tiene las mayusculas reales hasta donde el disco pudo decirlas y las escritas de
-     * ahi en adelante, que es exactamente lo que hace el JDK.
+     * <p><strong>A file that does not exist has a canonical path all the same.</strong> The
+     * contract asks for it --canonicalizing is an operation on the name-- and the native cannot
+     * give it, because canonicalizing what is not there has no answer from the system. So for those
+     * the nearest ancestor that **does** exist is canonicalized and the missing names are hung back
+     * onto it. The result has the real capitalization as far as the disk could tell it and the
+     * written one from there on, which is exactly what the JDK does.
      *
-     * @throws IOException si ni siquiera se pudo armar la ruta absoluta
+     * @throws IOException if not even the absolute path could be built
      */
     public String getCanonicalPath() throws IOException {
-        String abs = normalizarPuntos(this.getAbsolutePath());
-        String directo = despojarVerbatim(Fs.canonical(abs));
-        if (directo != null) {
-            return directo;
+        String abs = normalizeDots(this.getAbsolutePath());
+        String direct = stripVerbatim(Fs.canonical(abs));
+        if (direct != null) {
+            return direct;
         }
-        // No existe: se sube hasta el primer ancestro que si, y se reconstruye desde ahi.
-        StringBuilder cola = new StringBuilder();
-        String actual = abs;
+        // It does not exist: it climbs to the first ancestor that does, and rebuilds from there.
+        StringBuilder tail = new StringBuilder();
+        String current = abs;
         while (true) {
-            int corte = actual.lastIndexOf(separatorChar);
-            if (corte < 0) {
-                return abs;                       // sin padre que consultar: la absoluta y listo
+            int cut = current.lastIndexOf(separatorChar);
+            if (cut < 0) {
+                return abs;                       // no parent to ask: the absolute one and done
             }
-            String nombre = actual.substring(corte + 1);
-            actual = corte == 0 ? separator : actual.substring(0, corte);
-            if (nombre.length() != 0) {
-                cola.insert(0, nombre);
-                cola.insert(0, separatorChar);
+            String name = current.substring(cut + 1);
+            current = cut == 0 ? separator : current.substring(0, cut);
+            if (name.length() != 0) {
+                tail.insert(0, name);
+                tail.insert(0, separatorChar);
             }
-            String base = despojarVerbatim(Fs.canonical(actual));
+            String base = stripVerbatim(Fs.canonical(current));
             if (base != null) {
-                // Una raiz ya termina en separador (`C:\`); pegarle otro daria `C:\\x`.
+                // A root already ends in a separator (`C:\`); sticking another on would give
+                // `C:\\x`.
                 if (base.length() > 0 && base.charAt(base.length() - 1) == separatorChar) {
-                    return base + cola.substring(1);
+                    return base + tail.substring(1);
                 }
-                return base + cola;
+                return base + tail;
             }
-            if (actual.equals(separator) || actual.length() == 0) {
+            if (current.equals(separator) || current.length() == 0) {
                 return abs;
             }
         }
     }
 
-    /** El camino canonico, como {@code File}. */
+    /** The canonical path, as a {@code File}. */
     public File getCanonicalFile() throws IOException {
         return new File(this.getCanonicalPath());
     }
 
     /**
-     * Le saca a una ruta de Windows el prefijo "verbatim" (`\\?\`) con el que vuelve del sistema.
+     * It takes off a Windows path the "verbatim" prefix (`\\?\`) it comes back from the system
+     * with.
      *
-     * <p>El nativo devuelve la forma extendida porque es la que usa el sistema por dentro; el JDK
-     * devuelve `C:\x` y no `\\?\C:\x`, y quien compare el resultado de `getCanonicalPath()` con una
-     * ruta escrita a mano espera la corta. `\\?\UNC\servidor\share` vuelve a ser
-     * `\\servidor\share`, que es su forma normal.
+     * <p>The native returns the extended form because it is the one the system uses inside; the JDK
+     * returns `C:\x` and not `\\?\C:\x`, and whoever compares `getCanonicalPath()`'s result with a
+     * hand-written path expects the short one. `\\?\UNC\server\share` goes back to being
+     * `\\server\share`, which is its normal form.
      */
-    private static String despojarVerbatim(String p) {
+    private static String stripVerbatim(String p) {
         if (p == null) {
             return null;
         }
@@ -222,42 +226,42 @@ public class File implements Serializable, Comparable<File> {
     }
 
     /**
-     * Resuelve `.` y `..` sobre el texto de una ruta ya absoluta.
+     * It resolves `.` and `..` over the text of an already absolute path.
      *
-     * <p>Es lo que se le pasa al nativo. Hacerlo antes importa porque `..` se resuelve **sobre los
-     * nombres** y no sobre los enlaces: si el nativo falla --el archivo no existe-- la ruta que
-     * queda para el camino de respaldo ya esta limpia.
+     * <p>It is what gets handed to the native. Doing it beforehand matters because `..` is resolved
+     * **over the names** and not over the links: if the native fails --the file does not exist--
+     * the path left for the fallback route is already clean.
      */
-    private static String normalizarPuntos(String p) {
-        // Se parte a mano y no con `split`: `split` es una expresion regular, y meter
-        // `java.util.regex` en `java.io.File` --que es de las primeras clases que se cargan-- por
-        // separar en dos caracteres seria pagar media biblioteca por un `indexOf`.
-        String[] partes = new String[contarPartes(p)];
-        int cuantas = 0;
-        int desde = 0;
+    private static String normalizeDots(String p) {
+        // It is split by hand and not with `split`: `split` is a regular expression, and dragging
+        // `java.util.regex` into `java.io.File` --which is among the first classes loaded-- for the
+        // sake of splitting on two characters would be paying half a library for an `indexOf`.
+        String[] parts = new String[countParts(p)];
+        int howMany = 0;
+        int from = 0;
         for (int k = 0; k <= p.length(); k++) {
             if (k == p.length() || p.charAt(k) == '\\' || p.charAt(k) == '/') {
-                partes[cuantas] = p.substring(desde, k);
-                cuantas = cuantas + 1;
-                desde = k + 1;
+                parts[howMany] = p.substring(from, k);
+                howMany = howMany + 1;
+                from = k + 1;
             }
         }
-        String[] pila = new String[partes.length];
+        String[] stack = new String[parts.length];
         int n = 0;
-        for (int i = 0; i < partes.length; i++) {
-            String s = partes[i];
+        for (int i = 0; i < parts.length; i++) {
+            String s = parts[i];
             if (s.equals(".") || (s.length() == 0 && i != 0)) {
                 continue;
             }
-            // Un `..` al principio de una ruta absoluta no tiene a donde subir: se descarta, que es
-            // lo que hace el sistema con `C:\..`.
+            // A `..` at the start of an absolute path has nowhere to climb to: it is discarded,
+            // which is what the system does with `C:\..`.
             if (s.equals("..")) {
                 if (n > 1) {
                     n = n - 1;
                 }
                 continue;
             }
-            pila[n] = s;
+            stack[n] = s;
             n = n + 1;
         }
         StringBuilder sb = new StringBuilder();
@@ -265,14 +269,15 @@ public class File implements Serializable, Comparable<File> {
             if (i > 0) {
                 sb.append(separatorChar);
             }
-            sb.append(pila[i]);
+            sb.append(stack[i]);
         }
         String r = sb.toString();
         return r.length() == 0 ? separator : r;
     }
 
-    /** Cuantos tramos deja partir por separadores. Se cuenta antes para dimensionar el arreglo. */
-    private static int contarPartes(String p) {
+    /** How many stretches splitting on separators leaves. It is counted beforehand so as to size
+     * the array. */
+    private static int countParts(String p) {
         int n = 1;
         for (int i = 0; i < p.length(); i++) {
             if (p.charAt(i) == '\\' || p.charAt(i) == '/') {
@@ -286,25 +291,27 @@ public class File implements Serializable, Comparable<File> {
 
     /** A {@code file:} URI for this abstract path. */
     public URI toURI() {
-        // La ruta se le pasa EN CRUDO al constructor por partes de `URI`, y es el quien la escapa.
+        // The path is handed RAW to `URI`'s multi-part constructor, and it is that one that escapes
+        // it.
         //
-        // Armar el texto a mano y pasarlo por `URI.create` --que es lo que hacia antes-- no puede
-        // andar: el constructor de un solo `String` espera un URI **ya escapado**, asi que un nombre
-        // de archivo con un espacio producia `file:/a b/c`, que no es un URI valido, y `getRawPath()`
-        // devolvia el espacio sin codificar. El constructor por partes existe justamente para esto.
+        // Building the text by hand and passing it through `URI.create` --which is what it used to
+        // do-- cannot work: the single-`String` constructor expects an **already escaped** URI, so
+        // a file name with a space produced `file:/a b/c`, which is not a valid URI, and
+        // `getRawPath()` returned the space unencoded. The multi-part constructor exists precisely
+        // for this.
         try {
-            return new URI("file", null, barrear(this.getAbsolutePath(), this.isDirectory()), null);
-        } catch (URISyntaxException imposible) {
-            // Una ruta absoluta ya escapada siempre es un URI valido; si no lo fuera seria un
-            // defecto de esta clase y no algo que el que llama pueda manejar.
-            throw new Error(imposible);
+            return new URI("file", null, withSlashes(this.getAbsolutePath(), this.isDirectory()), null);
+        } catch (URISyntaxException impossible) {
+            // An already escaped absolute path is always a valid URI; if it were not, that would be
+            // a defect of this class and not something the caller could handle.
+            throw new Error(impossible);
         }
     }
 
-    // La ruta con las barras del URI: separador de este sistema a '/', barra inicial si falta, y
-    // barra final para un directorio -- eso ultimo es lo que hace que `resolve` contra el URI de un
-    // directorio agregue al directorio en vez de reemplazar su ultimo segmento.
-    private static String barrear(String p, boolean esDirectorio) {
+    // The path with the URI's slashes: this system's separator turned into '/', a leading slash if
+    // missing, and a trailing slash for a directory -- that last one is what makes `resolve`
+    // against a directory's URI add to the directory instead of replacing its last segment.
+    private static String withSlashes(String p, boolean directory) {
         StringBuilder sb = new StringBuilder();
         if (p.length() == 0 || p.charAt(0) != separatorChar) {
             sb.append('/');
@@ -315,7 +322,7 @@ public class File implements Serializable, Comparable<File> {
             sb.append(c == separatorChar ? '/' : c);
             i = i + 1;
         }
-        if (esDirectorio && (sb.length() == 0 || sb.charAt(sb.length() - 1) != '/')) {
+        if (directory && (sb.length() == 0 || sb.charAt(sb.length() - 1) != '/')) {
             sb.append('/');
         }
         return sb.toString();
@@ -329,44 +336,44 @@ public class File implements Serializable, Comparable<File> {
         return new URL(this.toURI().toString());
     }
 
-    // ---- el estado en el disco ----
+    // ---- the state on the disk ----
     //
-    // Los seis salen de **una sola** llamada a `Fs.stat`, que devuelve las banderas juntas. Es a
-    // proposito: preguntarlas por separado tocaria el disco una vez por cada una y --peor-- podria
-    // dar respuestas de momentos distintos si algo cambia en el medio. Aca cada metodo hace su
-    // propia consulta igual, porque una `File` no cachea nada: el archivo puede aparecer o
-    // desaparecer entre dos llamadas, y una respuesta guardada seria una mentira con fecha.
+    // All six come out of **one single** call to `Fs.stat`, which returns the flags together. It is
+    // on purpose: asking for them separately would touch the disk once per flag and --worse-- could
+    // give answers from different moments if something changed in between. Here each method does
+    // its own query all the same, because a `File` caches nothing: the file may appear or disappear
+    // between two calls, and a stored answer would be a lie with a date on it.
 
     public boolean canRead() {
-        return (Fs.stat(this.path) & Fs.SE_LEE) != 0;
+        return (Fs.stat(this.path) & Fs.CAN_READ) != 0;
     }
 
     public boolean canWrite() {
-        return (Fs.stat(this.path) & Fs.SE_ESCRIBE) != 0;
+        return (Fs.stat(this.path) & Fs.CAN_WRITE) != 0;
     }
 
     /**
-     * Si se puede ejecutar.
+     * Whether it can be executed.
      *
-     * <p>Se responde con "se puede leer", que en Windows es lo mismo para cualquier archivo y en
-     * POSIX no. Es la unica de las tres que esta biblioteca no distingue, y se documenta en vez de
-     * devolver `false` --que seria mentir sobre todo ejecutable-- o `true` --que lo seria sobre
-     * todo lo demas--.
+     * <p>It is answered with "it can be read", which on Windows is the same thing for any file and
+     * on POSIX is not. It is the only one of the three this library does not tell apart, and it is
+     * documented instead of returning `false` --which would be lying about every executable-- or
+     * `true` --which would be lying about everything else.
      */
     public boolean canExecute() {
-        return (Fs.stat(this.path) & Fs.SE_LEE) != 0;
+        return (Fs.stat(this.path) & Fs.CAN_READ) != 0;
     }
 
     public boolean exists() {
-        return (Fs.stat(this.path) & Fs.EXISTE) != 0;
+        return (Fs.stat(this.path) & Fs.EXISTS) != 0;
     }
 
     public boolean isDirectory() {
-        return (Fs.stat(this.path) & Fs.ES_DIRECTORIO) != 0;
+        return (Fs.stat(this.path) & Fs.IS_DIRECTORY) != 0;
     }
 
     public boolean isFile() {
-        return (Fs.stat(this.path) & Fs.ES_ARCHIVO) != 0;
+        return (Fs.stat(this.path) & Fs.IS_FILE) != 0;
     }
 
     public boolean isHidden() {
@@ -374,13 +381,13 @@ public class File implements Serializable, Comparable<File> {
     }
 
     /**
-     * Cuando se modifico por ultima vez, en milisegundos desde la epoca; `0L` si no se pudo saber.
+     * When it was last modified, in milliseconds since the epoch; `0L` if it could not be known.
      *
-     * <p>El cero del contrato es ambiguo a proposito y hay que conocerlo: significa "no existe o
-     * fallo la consulta", **y tambien** es la fecha valida del 1 de enero de 1970. Por eso el nativo
-     * no usa cero como centinela sino `Long.MIN_VALUE`, y la traduccion a cero se hace aca, en el
-     * unico lugar donde el contrato la obliga. Quien necesite distinguir los dos casos tiene
-     * {@link #exists()}.
+     * <p>The contract's zero is ambiguous on purpose and one has to know it: it means "it does not
+     * exist or the query failed", **and it is also** the valid date of the 1st of January 1970.
+     * That is why the native does not use zero as a sentinel but `Long.MIN_VALUE`, and the
+     * translation to zero is done here, in the only place the contract forces it. Whoever needs to
+     * tell the two cases apart has {@link #exists()}.
      */
     public long lastModified() {
         long t = Fs.mtime(this.path);
@@ -391,15 +398,15 @@ public class File implements Serializable, Comparable<File> {
         return Fs.size(this.path);
     }
 
-    // ---- mutacion ----
+    // ---- mutation ----
 
     /**
-     * Crea el archivo si no existe. `true` si lo creo esta llamada.
+     * It creates the file if it does not exist. `true` if this call created it.
      *
-     * <p>La comprobacion y la creacion **no** son atomicas aca, a diferencia del JDK: entre el
-     * `exists()` y el `writeAllBytes` otro proceso puede crear el archivo, y entonces esto devuelve
-     * `true` habiendolo pisado con vacio. Se dice de frente porque el javadoc del JDK promete
-     * atomicidad y este no la tiene.
+     * <p>The check and the creation are **not** atomic here, unlike the JDK's: between the
+     * `exists()` and the `writeAllBytes` another process may create the file, and then this returns
+     * `true` having overwritten it with emptiness. It is said outright because the JDK's javadoc
+     * promises atomicity and this one does not have it.
      */
     public boolean createNewFile() throws IOException {
         if (this.exists()) {
@@ -416,45 +423,45 @@ public class File implements Serializable, Comparable<File> {
     }
 
     /**
-     * Los nombres **simples** de lo que hay en este directorio, o `null`.
+     * The **simple** names of what is in this directory, or `null`.
      *
-     * <p>`null` no es un caso de error accidental: el contrato dice que se devuelve cuando esto no es
-     * un directorio o hubo una falla de E/S, y es lo que distingue "no pude mirar" de "mire y esta
-     * vacio" --que es un arreglo de largo cero--. Perder esa distincion convertiria un error en un
-     * resultado, y quien recorra el arbol nunca se enteraria de que le falto una rama.
+     * <p>`null` is no accidental error case: the contract says it is returned when this is not a
+     * directory or there was an I/O failure, and it is what tells "I could not look" from "I looked
+     * and it is empty" --which is a zero-length array. Losing that distinction would turn an error
+     * into a result, and whoever walks the tree would never hear that a branch was missing.
      *
-     * <p>Los nombres son simples, sin la ruta de este directorio adelante. {@link #listFiles()} es la
-     * variante que la agrega.
+     * <p>The names are simple, without this directory's path in front. {@link #listFiles()} is the
+     * variant that adds it.
      *
-     * <p>El orden es el que da el sistema de archivos: el contrato **no garantiza ninguno**, y
-     * ordenarlo aca haria que alguien se apoyara en uno que otra plataforma no le va a dar.
+     * <p>The order is the one the file system gives: the contract **guarantees none**, and sorting
+     * it here would make somebody lean on one that another platform is not going to give them.
      */
     public String[] list() {
         return Fs.list(this.path);
     }
 
-    /** Idem, quedandose solo con los nombres que el filtro acepta. */
+    /** The same, keeping only the names the filter accepts. */
     public String[] list(FilenameFilter filter) {
-        String[] todos = this.list();
-        if (todos == null) {
+        String[] all = this.list();
+        if (all == null) {
             return null;
         }
         if (filter == null) {
-            return todos;
+            return all;
         }
-        // Se cuenta y despues se copia, en vez de usar una lista: es el mismo recorrido dos veces a
-        // cambio de no depender de `java.util` desde `java.io`, que se carga antes.
+        // It counts and then copies, instead of using a list: it is the same walk twice in exchange
+        // for not depending on `java.util` from `java.io`, which is loaded earlier.
         int n = 0;
-        for (String nombre : todos) {
-            if (filter.accept(this, nombre)) {
+        for (String name : all) {
+            if (filter.accept(this, name)) {
                 n = n + 1;
             }
         }
         String[] out = new String[n];
         int k = 0;
-        for (String nombre : todos) {
-            if (filter.accept(this, nombre)) {
-                out[k] = nombre;
+        for (String name : all) {
+            if (filter.accept(this, name)) {
+                out[k] = name;
                 k = k + 1;
             }
         }
@@ -462,57 +469,59 @@ public class File implements Serializable, Comparable<File> {
     }
 
     /**
-     * Lo que hay en este directorio, como `File`, o `null`.
+     * What is in this directory, as `File`s, or `null`.
      *
-     * <p>Cada uno se arma con **este** archivo como padre, asi que las rutas quedan completas y
-     * relativas o absolutas segun lo sea esta. Es la diferencia con {@link #list()}, que da nombres
-     * pelados.
+     * <p>Each one is built with **this** file as its parent, so the paths come out complete and
+     * relative or absolute according to what this one is. It is the difference from {@link
+     * #list()}, which gives bare names.
      */
     public File[] listFiles() {
-        String[] nombres = this.list();
-        if (nombres == null) {
+        String[] names = this.list();
+        if (names == null) {
             return null;
         }
-        File[] out = new File[nombres.length];
-        for (int i = 0; i < nombres.length; i++) {
-            out[i] = new File(this, nombres[i]);
+        File[] out = new File[names.length];
+        for (int i = 0; i < names.length; i++) {
+            out[i] = new File(this, names[i]);
         }
         return out;
     }
 
     /**
-     * Idem, filtrando por nombre.
+     * The same, filtering by name.
      *
-     * <p>El filtro recibe el **directorio y el nombre**, no el `File` armado: es la diferencia con
-     * {@link #listFiles(FileFilter)}, y sirve para filtrar sin construir un objeto por entrada.
+     * <p>The filter receives the **directory and the name**, not the built `File`: it is the
+     * difference from {@link #listFiles(FileFilter)}, and it serves to filter without constructing
+     * an object per entry.
      */
     public File[] listFiles(FilenameFilter filter) {
-        String[] nombres = this.list(filter);
-        if (nombres == null) {
+        String[] names = this.list(filter);
+        if (names == null) {
             return null;
         }
-        File[] out = new File[nombres.length];
-        for (int i = 0; i < nombres.length; i++) {
-            out[i] = new File(this, nombres[i]);
+        File[] out = new File[names.length];
+        for (int i = 0; i < names.length; i++) {
+            out[i] = new File(this, names[i]);
         }
         return out;
     }
 
-    /** Idem, filtrando por el `File` ya armado --que es lo que permite preguntarle si es directorio--. */
+    /** The same, filtering by the already built `File` --which is what allows asking it whether it
+     * is a directory. */
     public File[] listFiles(FileFilter filter) {
-        File[] todos = this.listFiles();
-        if (todos == null || filter == null) {
-            return todos;
+        File[] all = this.listFiles();
+        if (all == null || filter == null) {
+            return all;
         }
         int n = 0;
-        for (File f : todos) {
+        for (File f : all) {
             if (filter.accept(f)) {
                 n = n + 1;
             }
         }
         File[] out = new File[n];
         int k = 0;
-        for (File f : todos) {
+        for (File f : all) {
             if (filter.accept(f)) {
                 out[k] = f;
                 k = k + 1;
@@ -525,7 +534,7 @@ public class File implements Serializable, Comparable<File> {
         return Fs.mkdir(this.path, false);
     }
 
-    /** Idem, creando tambien los directorios padres que falten. */
+    /** The same, also creating whatever parent directories are missing. */
     public boolean mkdirs() {
         return Fs.mkdir(this.path, true);
     }
@@ -535,10 +544,11 @@ public class File implements Serializable, Comparable<File> {
     }
 
     /**
-     * Fija la fecha de ultima modificacion.
+     * It sets the last-modification date.
      *
-     * @throws IllegalArgumentException si `time` es negativo -- el contrato lo pide, y es distinto
-     *     de devolver `false`: un `false` dice "no se pudo", esto dice "no se puede pedir eso"
+     * @throws IllegalArgumentException if `time` is negative -- the contract asks for it, and it is
+     *     different from returning `false`: a `false` says "it could not be done", this says "that
+     *     cannot be asked for"
      */
     public boolean setLastModified(long time) {
         if (time < 0L) {
@@ -594,24 +604,24 @@ public class File implements Serializable, Comparable<File> {
         return 0L;
     }
 
-    // Contador de nombres temporales. Empieza en la hora para que dos corridas seguidas del mismo
-    // programa no arranquen por el mismo nombre y se pisen entre si.
-    private static long semillaTemp = System.nanoTime();
+    // A counter of temporary names. It starts at the clock so that two consecutive runs of the same
+    // program do not start from the same name and overwrite each other.
+    private static long tempSeed = System.nanoTime();
 
     /**
-     * Crea un archivo temporal **vacio** en `directory` (o en `java.io.tmpdir` si es nulo) y
-     * devuelve el {@code File} que lo nombra.
+     * It creates an **empty** temporary file in `directory` (or in `java.io.tmpdir` if that is
+     * null) and returns the {@code File} that names it.
      *
-     * <p><strong>No es atomico, y en el JDK si.</strong> El JDK crea el archivo con la bandera
-     * "fallar si existe" del sistema, una sola operacion; aca se pregunta si existe y despues se
-     * crea, en dos. Entre las dos, otro proceso puede crear ese mismo nombre y esta llamada lo
-     * pisaria con vacio. La ventana es minuscula --el nombre lleva un contador y la hora en
-     * nanosegundos-- pero existe, y quien use esto como candado entre procesos se va a llevar una
-     * sorpresa. Es la misma limitacion de {@link #createNewFile()}, y por la misma razon: el nativo
-     * escribe el archivo entero, no lo abre con banderas.
+     * <p><strong>It is not atomic, and in the JDK it is.</strong> The JDK creates the file with the
+     * system's "fail if it exists" flag, one single operation; here it asks whether it exists and
+     * then creates it, in two. Between the two, another process may create that same name and this
+     * call would overwrite it with emptiness. The window is tiny --the name carries a counter and
+     * the clock in nanoseconds-- but it exists, and whoever uses this as a lock between processes
+     * is in for a surprise. It is the same limitation as {@link #createNewFile()}'s, and for the
+     * same reason: the native writes the whole file, it does not open it with flags.
      *
-     * @throws IllegalArgumentException si `prefix` tiene menos de tres caracteres
-     * @throws IOException si despues de varios intentos no se pudo crear ninguno
+     * @throws IllegalArgumentException if `prefix` has fewer than three characters
+     * @throws IOException if after several attempts none could be created
      */
     public static File createTempFile(String prefix, String suffix, File directory) throws IOException {
         if (prefix == null) {
@@ -621,7 +631,7 @@ public class File implements Serializable, Comparable<File> {
             throw new IllegalArgumentException("Prefix string \"" + prefix
                     + "\" too short: length must be at least 3");
         }
-        String sufijo = suffix == null ? ".tmp" : suffix;
+        String effectiveSuffix = suffix == null ? ".tmp" : suffix;
         File dir = directory;
         if (dir == null) {
             String t = System.getProperty("java.io.tmpdir");
@@ -630,12 +640,12 @@ public class File implements Serializable, Comparable<File> {
             }
             dir = new File(t);
         }
-        // Varios intentos y no uno: el nombre podria estar tomado. Un numero fijo de vueltas para
-        // que un directorio que no se puede escribir termine en excepcion y no en un cuelgue.
-        for (int intento = 0; intento < 1000; intento++) {
-            semillaTemp = semillaTemp * 6364136223846793005L + 1442695040888963407L;
-            long n = semillaTemp >>> 1;         // sin signo: el nombre no lleva un menos adelante
-            File f = new File(dir, prefix + n + sufijo);
+        // Several attempts and not one: the name might be taken. A fixed number of rounds so that a
+        // directory that cannot be written to ends in an exception and not in a hang.
+        for (int attempt = 0; attempt < 1000; attempt++) {
+            tempSeed = tempSeed * 6364136223846793005L + 1442695040888963407L;
+            long n = tempSeed >>> 1;         // unsigned: the name does not carry a minus in front
+            File f = new File(dir, prefix + n + effectiveSuffix);
             if (f.exists()) {
                 continue;
             }
@@ -646,7 +656,7 @@ public class File implements Serializable, Comparable<File> {
         throw new IOException("Unable to create temporary file in " + dir.getPath());
     }
 
-    /** Idem, en el directorio temporal del sistema. */
+    /** The same, in the system's temporary directory. */
     public static File createTempFile(String prefix, String suffix) throws IOException {
         return createTempFile(prefix, suffix, null);
     }

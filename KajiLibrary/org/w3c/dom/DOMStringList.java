@@ -1,26 +1,27 @@
 package org.w3c.dom;
 
 /**
- * KajiLibrary's org.w3c.dom.DOMStringList -- una lista ordenada de cadenas.
+ * KajiLibrary's org.w3c.dom.DOMStringList -- an ordered list of strings.
  *
- * <p>La usa {@link DOMConfiguration#getParameterNames}. Es la misma forma minima que
- * {@link NodeList} pero para cadenas, y existe por la misma razon que aquella: el DOM se
- * especifico en IDL y no podia devolver un {@code java.util.List}.
+ * <p>{@link DOMConfiguration#getParameterNames} uses it. It is the same minimal shape as
+ * {@link NodeList} but for strings, and it exists for the same reason as that one: the DOM was
+ * specified in IDL and could not return a {@code java.util.List}.
  *
- * <p>El detalle propio esta en {@link #contains}, que compara **sin distinguir mayusculas**: los
- * nombres de parametro del DOM son insensibles a la caja, y una lista que compare exacto haria
- * fallar la mitad de las consultas.
+ * <p>The note said that {@link #contains} compares **case-insensitively** because DOM parameter
+ * names are case-insensitive. The specification does not say that: it defines {@code contains} only
+ * as "whether the string is part of this list". Parameter names are case-insensitive in
+ * {@link DOMConfiguration}, which is a different interface.
  *
- * <p>Interfaz declarada entera.
+ * <p>The interface is declared whole.
  */
 public interface DOMStringList {
 
-    /** La cadena en esa posicion, o {@code null} si el indice se fue de rango. */
+    /** The string at that position, or {@code null} if the index went out of range. */
     public String item(int index);
 
-    /** Cuantas cadenas hay. */
+    /** How many strings there are. */
     public int getLength();
 
-    /** Si esa cadena esta en la lista, comparando sin distinguir mayusculas. */
+    /** Whether that string is in the list. See the note of the class on case. */
     public boolean contains(String str);
 }

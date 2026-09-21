@@ -3,64 +3,64 @@ package org.w3c.dom.html;
 import org.w3c.dom.DOMException;
 
 /**
- * Un `<tr>`.
+ * A `<tr>`.
  *
- * <p>`insertCell(-1)` agrega al final, igual que `insertRow` en la tabla. `getRowIndex` es la
- * posicion en la tabla entera y `getSectionRowIndex` la posicion dentro de su seccion: en una tabla
- * con cabecera, la primera fila del cuerpo tiene los dos numeros distintos.
+ * <p>`insertCell(-1)` appends at the end, just like `insertRow` on the table. `getRowIndex` is the
+ * position in the whole table and `getSectionRowIndex` the position inside its section: in a table
+ * with a header, the first row of the body has the two numbers different.
  */
 public interface HTMLTableRowElement extends HTMLElement {
 
-    /** La posicion en la tabla. */
+    /** The position in the table. */
     int getRowIndex();
 
-    /** La posicion dentro de su seccion. */
+    /** The position inside its section. */
     int getSectionRowIndex();
 
-    /** Las celdas, en una coleccion viva. */
+    /** The cells, in a live collection. */
     HTMLCollection getCells();
 
-    /** La alineacion (presentacion; HTML 4 la desaconseja). */
+    /** The alignment (presentational; HTML 4 deprecates it). */
     String getAlign();
 
-    /** Fija la alineacion (presentacion; HTML 4 la desaconseja). */
+    /** It sets the alignment (presentational; HTML 4 deprecates it). */
     void setAlign(String align);
 
-    /** El atributo `bgColor`. */
+    /** The `bgColor` attribute. */
     String getBgColor();
 
-    /** Fija el atributo `bgColor`. */
+    /** It sets the `bgColor` attribute. */
     void setBgColor(String bgColor);
 
-    /** El atributo `ch`. */
+    /** The `ch` attribute. */
     String getCh();
 
-    /** Fija el atributo `ch`. */
+    /** It sets the `ch` attribute. */
     void setCh(String ch);
 
-    /** El atributo `chOff`. */
+    /** The `chOff` attribute. */
     String getChOff();
 
-    /** Fija el atributo `chOff`. */
+    /** It sets the `chOff` attribute. */
     void setChOff(String chOff);
 
-    /** El atributo `vAlign`. */
+    /** The `vAlign` attribute. */
     String getVAlign();
 
-    /** Fija el atributo `vAlign`. */
+    /** It sets the `vAlign` attribute. */
     void setVAlign(String vAlign);
 
     /**
-     * Inserta una celda en esa posicion; -1 agrega al final.
+     * It inserts a cell at that position; -1 appends at the end.
      *
-     * @throws DOMException `INDEX_SIZE_ERR` si el indice esta fuera de rango
+     * @throws DOMException `INDEX_SIZE_ERR` if the index is out of range
      */
     HTMLElement insertCell(int index) throws org.w3c.dom.DOMException;
 
     /**
-     * Borra la celda de esa posicion; -1 borra la ultima.
+     * It deletes the cell at that position; -1 deletes the last one.
      *
-     * @throws DOMException `INDEX_SIZE_ERR` si el indice esta fuera de rango
+     * @throws DOMException `INDEX_SIZE_ERR` if the index is out of range
      */
     void deleteCell(int index) throws org.w3c.dom.DOMException;
 }

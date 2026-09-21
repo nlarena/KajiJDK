@@ -6,14 +6,14 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Marca a una anotacion como parte de los <strong>metadatos</strong> de un evento.
+ * It marks an annotation as part of the <strong>metadata</strong> of an event.
  *
- * <p>Es la anotacion de las anotaciones: sin ella, una anotacion puesta sobre un evento la ve el
- * compilador y no la ve JFR. Con ella, JFR la copia al archivo de grabacion y una herramienta que
- * lo abra despues puede leerla.
+ * <p>It is the annotation of the annotations: without it, an annotation put on an event is seen by
+ * the compiler and not seen by JFR. With it, JFR copies it to the recording file and a tool that
+ * opens it later can read it.
  *
- * <p>Eso es lo que permite que un evento propio lleve informacion propia sin que JFR tenga que
- * conocerla de antemano.
+ * <p>That is what allows an event of one's own to carry information of its own without JFR having
+ * to know it beforehand.
  *
  * @since 9
  */

@@ -4,23 +4,23 @@ import java.lang.classfile.constantpool.Utf8Entry;
 import java.lang.constant.ClassDesc;
 import java.util.Optional;
 
-// Un campo ya leído. Es también un {@link ClassElement}: al recorrer la clase, cada campo aparece
-// como una de sus piezas.
+// A field already read. It is also a {@link ClassElement}: when walking the class, each field shows
+// up as one of its pieces.
 public interface FieldModel extends CompoundElement<FieldElement>, AttributedElement, ClassElement {
 
-    /** El `access_flags` del campo. */
+    /** The field's `access_flags`. */
     AccessFlags flags();
 
-    /** La clase que lo declara, si este modelo salió de leer una. */
+    /** The class declaring it, if this model came out of reading one. */
     Optional<ClassModel> parent();
 
-    /** El nombre. */
+    /** The name. */
     Utf8Entry fieldName();
 
-    /** El descriptor. */
+    /** The descriptor. */
     Utf8Entry fieldType();
 
-    /** El tipo del campo. */
+    /** The field's type. */
     default ClassDesc fieldTypeSymbol() {
         return ClassDesc.ofDescriptor(fieldType().stringValue());
     }

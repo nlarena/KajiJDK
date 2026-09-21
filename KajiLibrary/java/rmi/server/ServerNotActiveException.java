@@ -1,22 +1,22 @@
 package java.rmi.server;
 
 /**
- * Se pidio {@link RemoteServer#getClientHost} fuera de la atencion de una llamada remota.
+ * {@link RemoteServer#getClientHost} was asked for outside the handling of a remote call.
  *
- * <p>No es un error del servidor sino una pregunta mal ubicada: "quien es el cliente" solo tiene
- * respuesta mientras se esta atendiendo a uno. Preguntarlo desde otro hilo, o antes de que llegue
- * la llamada, no tiene sentido — y devolver {@code null} lo habria disimulado.
+ * <p>It is not a server error but a misplaced question: "who is the client" only has an answer
+ * while one is being served. Asking it from another thread, or before the call arrives, makes no
+ * sense — and returning {@code null} would have hidden that.
  */
 public class ServerNotActiveException extends Exception {
 
     private static final long serialVersionUID = 4687940720827538231L;
 
-    /** Sin detalle. */
+    /** With no detail. */
     public ServerNotActiveException() {
         super();
     }
 
-    /** Con un mensaje. */
+    /** With a message. */
     public ServerNotActiveException(String s) {
         super(s);
     }

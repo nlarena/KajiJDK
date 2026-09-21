@@ -3,10 +3,10 @@ package java.security.cert;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
-// Un `GeneralName` de X.509: una de nueve formas de nombrar algo.
+// A `GeneralName` of X.509: one of nine ways of naming something.
 //
 // ===============================================================================================
-// QUE ES Y POR QUE VIVE EN SU PROPIA CLASE
+// WHAT IT IS AND WHY IT LIVES IN A CLASS OF ITS OWN
 // ===============================================================================================
 //
 //   GeneralName ::= CHOICE {
@@ -20,22 +20,23 @@ import java.nio.charset.StandardCharsets;
 //       iPAddress                 [7] OCTET STRING,
 //       registeredID              [8] OBJECT IDENTIFIER }
 //
-// Aparece en tres lugares que este paquete necesita --SubjectAltName, IssuerAltName y
-// NameConstraints-- y en los tres hace falta lo mismo: leerlo, escribirlo, compararlo, y decidir si
-// un nombre cae **adentro** de otro. Ese ultimo es el que importa y el que no es obvio, asi que
-// tiene su propio metodo con su propia explicacion (`contains`).
+// It appears in three places this package needs --SubjectAltName, IssuerAltName and
+// NameConstraints-- and in all three the same thing is needed: reading it, writing it, comparing
+// it, and deciding whether a name falls **inside** another. That last one is the one that matters
+// and the one that is not obvious, so it has its own method with its own explanation (`contains`).
 //
 // ===============================================================================================
-// LO QUE SE ENTIENDE Y LO QUE SE TRANSPORTA
+// WHAT IS UNDERSTOOD AND WHAT IS CARRIED
 // ===============================================================================================
 //
-// Seis de las nueve formas se entienden de verdad: rfc822Name, dNSName, directoryName, URI,
-// iPAddress y registeredID. Las otras tres --otherName, x400Address y ediPartyName-- se guardan
-// como bytes y **solo se comparan por igualdad exacta**. Es lo honesto: son estructuras con
-// semantica propia que casi nadie usa, y un `contains` inventado para ellas seria decir que un
-// nombre esta adentro de un subarbol sin saberlo.
+// Six of the nine forms are really understood: rfc822Name, dNSName, directoryName, URI, iPAddress
+// and registeredID. The other three --otherName, x400Address and ediPartyName-- are kept as bytes
+// and **are only compared by exact equality**. It is the honest thing: they are structures with
+// semantics of their own that hardly anybody uses, and a `contains` invented for them would be
+// saying that a name is inside a subtree without knowing it.
 //
-// Por eso `ofString` las rechaza, igual que el JDK: no hay una forma de texto acordada para ellas.
+// That is why `ofString` rejects them, just as the JDK does: there is no agreed text form for
+// them.
 final class GeneralNameValue {
 
     static final int OTHER = 0;
@@ -52,12 +53,12 @@ final class GeneralNameValue {
     private static final String OID_EMAIL_ADDRESS = "1.2.840.113549.1.9.1";
 
     private final int type;
-    // Para las formas de texto (1, 2, 6, 8). Null en las demas.
+    // For the text forms (1, 2, 6, 8). Null in the others.
     private final String text;
-    // Para iPAddress (la direccion, o direccion+mascara en un subarbol) y para las tres opacas.
+    // For iPAddress (the address, or address+mask in a subtree) and for the three opaque ones.
     private final byte[] bytes;
-    // Para directoryName. Se guarda el principal y no los bytes porque la comparacion de nombres
-    // X.500 es por forma canonica, no por codificacion.
+    // For directoryName. The principal is kept and not the bytes because the comparison of X.500
+    // names is by canonical form, not by encoding.
     private final javax.security.auth.x500.X500Principal dn;
 
     private GeneralNameValue(int type, String text, byte[] bytes,
@@ -73,9 +74,9 @@ final class GeneralNameValue {
     }
 
     /**
-     * Un nombre escrito como texto, en la forma que le corresponde a su tipo.
+     * A name written as text, in the form that corresponds to its type.
      *
-     * @throws IOException si el tipo no tiene forma de texto, o si el texto no es valido para el
+     * @throws IOException if the type has no text form, or if the text is not valid for it
      */
     static GeneralNameValue ofString(int type, String name) throws IOException {
         if (name == null) {
@@ -91,8 +92,8 @@ final class GeneralNameValue {
                 checkDns(name);
                 return new GeneralNameValue(type, name, null, null);
             case URI:
-                // Tiene que traer esquema: sin el no hay host que comparar, y el host es lo unico
-                // que una restriccion de nombres mira de una URI.
+                // It has to bring a scheme: without it there is no host to compare, and the host is
+                // the only thing a name constraint looks at in a URI.
                 if (name.indexOf(':') < 0) {
                     throw new IOException("URI name must include a scheme: " + name);
                 }
@@ -110,17 +111,17 @@ final class GeneralNameValue {
                     throw new IOException("Incorrect AVA format", e);
                 }
             default:
-                // otherName, x400Address, ediPartyName y cualquier numero fuera de rango.
+                // otherName, x400Address, ediPartyName and any number out of range.
                 throw new IOException("unable to parse String names of type " + type);
         }
     }
 
     /**
-     * Un nombre a partir del DER de su **valor**, sin la etiqueta de contexto: un IA5String para
-     * los de texto, un `Name` para directoryName, un OCTET STRING para iPAddress.
+     * A name from the DER of its **value**, without the context tag: an IA5String for the text
+     * ones, a `Name` for directoryName, an OCTET STRING for iPAddress.
      *
-     * <p>Es la forma que espera {@code X509CertSelector.addSubjectAlternativeName(int, byte[])}, y
-     * conviene decirlo porque la otra --con la etiqueta puesta-- es la que uno espera.
+     * <p>It is the form {@code X509CertSelector.addSubjectAlternativeName(int, byte[])} expects,
+     * and it is worth saying because the other one --with the tag on-- is the one you would expect.
      */
     static GeneralNameValue ofValueDer(int type, byte[] der) throws IOException {
         DerReader d = new DerReader(der, 0, der.length);
@@ -155,7 +156,7 @@ final class GeneralNameValue {
         }
     }
 
-    /** Un directoryName a partir del DER de su `Name`. */
+    /** A directoryName from the DER of its `Name`. */
     static GeneralNameValue ofDirectory(byte[] nameDer) throws IOException {
         try {
             return new GeneralNameValue(DIRECTORY, null, null,
@@ -166,11 +167,11 @@ final class GeneralNameValue {
     }
 
     /**
-     * Un nombre leido de una lista --SubjectAltName o un subarbol-- donde viene **con** su etiqueta
-     * de contexto.
+     * A name read from a list --SubjectAltName or a subtree-- where it comes **with** its context
+     * tag.
      *
-     * @param at    donde empieza el TLV completo
-     * @param total cuanto ocupa, cabecera incluida
+     * @param at    where the complete TLV starts
+     * @param total how much it takes, header included
      */
     static GeneralNameValue ofTagged(byte[] buf, int at, int total) throws IOException {
         DerReader d = new DerReader(buf, at, total);
@@ -188,7 +189,8 @@ final class GeneralNameValue {
             case IP:
                 return new GeneralNameValue(type, null, d.copy(from, len), null);
             case DIRECTORY:
-                // [4] es CONSTRUIDO y envuelve el `Name` entero, asi que adentro hay otro SEQUENCE.
+                // [4] is CONSTRUCTED and wraps the whole `Name`, so inside there is another
+                // SEQUENCE.
                 return ofDirectory(d.copy(from, len));
             default:
                 return new GeneralNameValue(type, null, d.copy(at, total), null);
@@ -196,8 +198,8 @@ final class GeneralNameValue {
     }
 
     /**
-     * El valor tal como lo devuelve {@code getSubjectAlternativeNames()}: un {@code String} para las
-     * formas de texto, un {@code byte[]} para las demas.
+     * The value as {@code getSubjectAlternativeNames()} returns it: a {@code String} for the text
+     * forms, a {@code byte[]} for the others.
      */
     Object storedValue() {
         if (this.type == DIRECTORY) {
@@ -219,11 +221,11 @@ final class GeneralNameValue {
             return false;
         }
         if (this.type == DIRECTORY) {
-            // Por forma canonica: dos nombres X.500 escritos distinto son el mismo nombre.
+            // By canonical form: two X.500 names written differently are the same name.
             return this.dn.equals(other.dn);
         }
         if (this.type == DNS || this.type == RFC822 || this.type == URI) {
-            // La caja no cuenta en un nombre de host ni en un dominio de correo.
+            // Case does not count in a host name or in a mail domain.
             return this.text.equalsIgnoreCase(other.text);
         }
         if (this.text != null) {
@@ -258,11 +260,11 @@ final class GeneralNameValue {
     }
 
     /**
-     * Si <b>este</b> nombre, tomado como la base de un subarbol, contiene a {@code name}.
+     * Whether <b>this</b> name, taken as the base of a subtree, contains {@code name}.
      *
-     * <p>Es la operacion que decide si un certificado cae adentro de lo que su CA tenia permitido,
-     * asi que cada regla esta escrita con su motivo. Un nombre de otro tipo nunca esta contenido:
-     * eso lo decide {@code NameConstraints}, no este metodo.
+     * <p>It is the operation that decides whether a certificate falls inside what its CA was
+     * allowed, so each rule is written with its reason. A name of another type is never contained:
+     * that is decided by {@code NameConstraints}, not by this method.
      */
     boolean contains(GeneralNameValue name) {
         if (name.type != this.type) {
@@ -280,20 +282,20 @@ final class GeneralNameValue {
             case DIRECTORY:
                 return containsDirectory(this.dn, name.dn);
             default:
-                // registeredID y las tres opacas: solo igualdad. Ver la nota de la clase.
+                // registeredID and the three opaque ones: equality only. See the note of the class.
                 return this.equals(name);
         }
     }
 
-    // El corte va en el punto, no en cualquier lugar: `acme.com` contiene a `www.acme.com` pero
-    // **no** a `xacme.com`. Sin esa condicion, quien registre `malacme.com` quedaria adentro del
-    // subarbol de `acme.com`, que es exactamente el agujero que las restricciones evitan.
+    // The cut goes at the dot, not just anywhere: `acme.com` contains `www.acme.com` but **not**
+    // `xacme.com`. Without that condition, whoever registered `malacme.com` would be inside the
+    // subtree of `acme.com`, which is exactly the hole the constraints avoid.
     private static boolean containsDns(String base, String name) {
         String b = base.toLowerCase();
         String n = name.toLowerCase();
-        // Una base con punto adelante viene de certificados que escriben asi los subdominios. No es
-        // la forma del RFC para dNSName, pero se encuentra, y leerla como sufijo es lo unico que
-        // puede querer decir.
+        // A base with a leading dot comes from certificates that write subdomains that way. It is
+        // not the form of the RFC for dNSName, but it is found, and reading it as a suffix is the
+        // only thing it can mean.
         if (b.startsWith(".")) {
             return n.endsWith(b);
         }
@@ -304,32 +306,34 @@ final class GeneralNameValue {
             && n.charAt(n.length() - b.length() - 1) == '.';
     }
 
-    // Tres formas, y las tres distintas:
+    // Three forms, and all three different:
     //
-    //   - `u@acme.com` (con arroba) es un buzon: solo ese.
-    //   - `.acme.com` (con punto adelante) son los subdominios: `u@sub.acme.com` si, `u@acme.com` no.
-    //   - `acme.com` (pelado) es **ese host exacto**: `u@acme.com` si, `u@sub.acme.com` no.
+    //   - `u@acme.com` (with an at sign) is a mailbox: only that one.
+    //   - `.acme.com` (with a leading dot) is the subdomains: `u@sub.acme.com` yes, `u@acme.com`
+    //   no.
+    //   - `acme.com` (bare) is **that exact host**: `u@acme.com` yes, `u@sub.acme.com` no.
     //
-    // La tercera es la que sorprende, porque en dNSName el nombre pelado si abarca los subdominios.
+    // The third is the one that surprises, because in dNSName the bare name does cover the
+    // subdomains.
     private static boolean containsRfc822(String base, String name) {
         String b = base.toLowerCase();
         String n = name.toLowerCase();
         if (b.indexOf('@') >= 0) {
             return n.equals(b);
         }
-        int arroba = n.indexOf('@');
-        String host = arroba < 0 ? n : n.substring(arroba + 1);
+        int atSign = n.indexOf('@');
+        String host = atSign < 0 ? n : n.substring(atSign + 1);
         if (b.startsWith(".")) {
-            // Un host que termina en `.acme.com` es un subdominio; `acme.com` pelado no termina
-            // asi, y por eso queda afuera -- que es lo que la forma con punto significa.
+            // A host that ends in `.acme.com` is a subdomain; bare `acme.com` does not end that
+            // way, and that is why it is left out -- which is what the form with the dot means.
             return host.endsWith(b);
         }
         return host.equals(b);
     }
 
-    // De una URI solo se mira el **host**: el camino y la consulta no dicen de quien es el nombre.
-    // Con punto adelante son los subdominios; sin punto es el host exacto --y aca no abarca
-    // subdominios, a diferencia de dNSName--.
+    // Of a URI only the **host** is looked at: the path and the query do not say whose the name is.
+    // With a leading dot it is the subdomains; without a dot it is the exact host --and here it
+    // does not cover subdomains, unlike dNSName--.
     private static boolean containsUri(String base, String name) {
         String host = hostOf(name);
         if (host == null) {
@@ -343,7 +347,7 @@ final class GeneralNameValue {
         return h.equals(b);
     }
 
-    // El host de una URI, sin usuario ni puerto. Null si no tiene autoridad.
+    // The host of a URI, without user or port. Null if it has no authority.
     private static String hostOf(String uri) {
         int scheme = uri.indexOf("://");
         if (scheme < 0) {
@@ -361,9 +365,9 @@ final class GeneralNameValue {
             i = i + 1;
         }
         String authority = uri.substring(from, end);
-        int arroba = authority.lastIndexOf('@');
-        if (arroba >= 0) {
-            authority = authority.substring(arroba + 1);
+        int atSign = authority.lastIndexOf('@');
+        if (atSign >= 0) {
+            authority = authority.substring(atSign + 1);
         }
         int colon = authority.lastIndexOf(':');
         if (colon >= 0 && authority.indexOf(']') < colon) {
@@ -372,8 +376,8 @@ final class GeneralNameValue {
         return authority.length() == 0 ? null : authority;
     }
 
-    // En un subarbol la direccion viene con su mascara pegada atras: 8 bytes para IPv4 y 32 para
-    // IPv6. En un nombre viene sola. Se comparan los bits que la mascara deja pasar.
+    // In a subtree the address comes with its mask stuck behind: 8 bytes for IPv4 and 32 for IPv6.
+    // In a name it comes alone. The bits the mask lets through are compared.
     private static boolean containsIp(byte[] base, byte[] name) {
         if (name == null || base == null) {
             return false;
@@ -395,18 +399,19 @@ final class GeneralNameValue {
         return true;
     }
 
-    // El subarbol es un **prefijo** del nombre en el orden del DER, que es el orden inverso al del
-    // texto RFC 2253. Por eso aca se compara por sufijo: `o=acme` contiene a `cn=juan,o=acme`.
+    // The subtree is a **prefix** of the name in the order of the DER, which is the reverse order
+    // to that of the RFC 2253 text. That is why here it is compared by suffix: `o=acme` contains
+    // `cn=juan,o=acme`.
     //
-    // Se compara sobre la forma canonica --minusculas, espacios colapsados-- porque dos nombres
-    // X.500 escritos distinto son el mismo nombre, y el corte va en la coma: en forma canonica una
-    // coma adentro de un valor viene escapada, asi que una coma pelada siempre separa.
+    // It is compared over the canonical form --lower case, collapsed spaces-- because two X.500
+    // names written differently are the same name, and the cut goes at the comma: in canonical form
+    // a comma inside a value comes escaped, so a bare comma always separates.
     private static boolean containsDirectory(javax.security.auth.x500.X500Principal base,
             javax.security.auth.x500.X500Principal name) {
         String b = base.getName(javax.security.auth.x500.X500Principal.CANONICAL);
         String n = name.getName(javax.security.auth.x500.X500Principal.CANONICAL);
         if (b.length() == 0) {
-            // La raiz del directorio contiene a todos.
+            // The root of the directory contains them all.
             return true;
         }
         if (n.equals(b)) {
@@ -416,9 +421,9 @@ final class GeneralNameValue {
             && n.charAt(n.length() - b.length() - 1) == ',';
     }
 
-    // Un nombre DNS: al menos una etiqueta, etiquetas de letras, digitos y guiones, sin punto al
-    // principio ni al final ni dos seguidos. Es lo que valida el JDK y por eso `CN=Juan Perez` no
-    // se toma por un nombre de host y `CN=x` si.
+    // A DNS name: at least one label, labels of letters, digits and hyphens, with no dot at the
+    // start or at the end and no two in a row. It is what the JDK validates and that is why
+    // `CN=Juan Perez` is not taken for a host name and `CN=x` is.
     private static void checkDns(String name) throws IOException {
         if (name.length() == 0) {
             throw new IOException("DNSName must not be null or empty");
@@ -447,18 +452,20 @@ final class GeneralNameValue {
     }
 
     /**
-     * Un nombre de texto leido de un DER, sin la validacion de forma.
+     * A text name read from a DER, without the validation of form.
      *
-     * <p>La validacion es para lo que <b>escribe</b> el llamador: un nombre mal escrito ahi es un
-     * error suyo y hay que decirselo. Lo que ya esta adentro de un certificado, en cambio, hay que
-     * poder leerlo aunque no sea del todo conforme -- rechazarlo no lo arregla, solo deja al
-     * certificado sin comparar, que es peor.
+     * <p>The validation is for what the caller <b>writes</b>: a badly written name there is a
+     * mistake of theirs and they have to be told. What is inside a certificate already, on the
+     * other hand, has to be readable even if it is not entirely conforming -- rejecting it does not
+     * fix it, it only leaves the certificate uncompared, which is worse.
      */
     private static GeneralNameValue ofDerText(int type, String text) {
         return new GeneralNameValue(type, text, null, null);
     }
 
-    /** Si ese texto sirve como nombre DNS. Lo usa la regla del CN de {@code NameConstraints}. */
+    /**
+     * Whether that text serves as a DNS name. It is used by the CN rule of {@code NameConstraints}.
+     */
     static boolean looksLikeDns(String text) {
         try {
             checkDns(text);
@@ -469,12 +476,13 @@ final class GeneralNameValue {
     }
 
     /**
-     * Una direccion IP escrita como texto, o una direccion con mascara para un subarbol.
+     * An IP address written as text, or an address with a mask for a subtree.
      *
-     * <p><b>Diferencia anotada con el JDK</b>: el JDK pasa por {@code InetAddress}, que acepta ademas
-     * las formas abreviadas de BSD --{@code "10.0.0"}, {@code "10.1"}-- donde la ultima parte llena
-     * los bytes que faltan. Aca se exigen las cuatro partes. La diferencia es siempre hacia el lado
-     * seguro: lo que aca se rechaza, alla se aceptaba con un valor que casi nadie predice bien.
+     * <p><b>Noted difference with the JDK</b>: the JDK goes through {@code InetAddress}, which also
+     * accepts the abbreviated forms of BSD --{@code "10.0.0"}, {@code "10.1"}-- where the last part
+     * fills the bytes that are missing. Here the four parts are demanded. The difference is always
+     * towards the safe side: what is rejected here was accepted there with a value hardly anybody
+     * predicts rightly.
      */
     private static byte[] parseIp(String name) throws IOException {
         int slash = name.indexOf('/');
@@ -511,11 +519,11 @@ final class GeneralNameValue {
         byte[] m = new byte[size];
         int i = 0;
         while (i < size) {
-            int enEste = n - i * 8;
-            if (enEste >= 8) {
+            int inThisOne = n - i * 8;
+            if (inThisOne >= 8) {
                 m[i] = (byte) 0xff;
-            } else if (enEste > 0) {
-                m[i] = (byte) (0xff << (8 - enEste));
+            } else if (inThisOne > 0) {
+                m[i] = (byte) (0xff << (8 - inThisOne));
             }
             i = i + 1;
         }
@@ -526,14 +534,14 @@ final class GeneralNameValue {
         if (s.indexOf(':') >= 0) {
             return parseIpv6(s);
         }
-        String[] partes = split(s, '.');
-        if (partes.length != 4) {
+        String[] parts = split(s, '.');
+        if (parts.length != 4) {
             throw new IOException("not an IPv4 address: " + s);
         }
         byte[] b = new byte[4];
         int i = 0;
         while (i < 4) {
-            int v = numberAt(partes[i], 10, s);
+            int v = numberAt(parts[i], 10, s);
             if (v < 0 || v > 255) {
                 throw new IOException("IPv4 octet out of range: " + s);
             }
@@ -543,8 +551,9 @@ final class GeneralNameValue {
         return b;
     }
 
-    // IPv6 con `::` una sola vez. No se aceptan los ultimos cuatro bytes en forma decimal
-    // (`::ffff:10.0.0.1`): esa forma tiene dos codificaciones del mismo valor y no aporta nada aca.
+    // IPv6 with `::` a single time. The last four bytes in decimal form are not accepted
+    // (`::ffff:10.0.0.1`): that form has two encodings of the same value and contributes nothing
+    // here.
     private static byte[] parseIpv6(String s) throws IOException {
         int doble = s.indexOf("::");
         if (doble != s.lastIndexOf("::")) {
@@ -620,12 +629,12 @@ final class GeneralNameValue {
         return out;
     }
 
-    /** El OID del atributo `CN`, para la regla heredada de {@code NameConstraints}. */
+    /** The OID of the `CN` attribute, for the rule inherited from {@code NameConstraints}. */
     static String commonNameOid() {
         return OID_COMMON_NAME;
     }
 
-    /** El OID del atributo `EMAILADDRESS`, idem. */
+    /** The OID of the `EMAILADDRESS` attribute, likewise. */
     static String emailAddressOid() {
         return OID_EMAIL_ADDRESS;
     }

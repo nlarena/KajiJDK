@@ -7,27 +7,28 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Una {@link Action} lista para heredar: guarda las propiedades y avisa cuando cambian; el que
- * hereda pone solo {@code actionPerformed}.
+ * An {@link Action} ready to be inherited from: it keeps the properties and gives notice when
+ * they change; whoever inherits only puts in {@code actionPerformed}.
  *
- * <p>Las propiedades van en un mapa por clave; "enabled" no, que tiene su campo y su avisador
- * propios porque es la que todos consultan. Los avisos salen por un {@link SwingPropertyChangeSupport}
- * con la accion como origen, y {@link #putValue} avisa solo si el valor cambio de verdad: un
- * boton que escucha no tiene por que repintarse por un {@code putValue} que no cambio nada.
+ * <p>The properties go in a map by key; "enabled" does not, which has a field and a notifier
+ * of its own because it is the one everybody consults. The notices go out through a
+ * {@link SwingPropertyChangeSupport} with the action as the source, and {@link #putValue} gives
+ * notice only if the value really changed: a button that listens has no reason to repaint
+ * itself for a {@code putValue} that changed nothing.
  *
- * <p>El JDK guarda las propiedades en una tabla propia ({@code ArrayTable}) que es un arreglo hasta
- * ocho entradas y un mapa despues; aca es un mapa desde el principio. Es un detalle de memoria,
- * no de comportamiento.
+ * <p>The JDK keeps the properties in a table of its own ({@code ArrayTable}) that is an array up
+ * to eight entries and a map afterwards; here it is a map from the start. It is a detail of
+ * memory, not of behaviour.
  */
 public abstract class AbstractAction implements Action, Cloneable, Serializable {
 
-    /** Si esta habilitada; la consulta {@link #isEnabled}. */
+    /** Whether it is enabled; {@link #isEnabled} consults it. */
     protected boolean enabled = true;
 
-    /** El avisador de cambios; se crea con el primer escucha. */
+    /** The change notifier; it is created with the first listener. */
     protected SwingPropertyChangeSupport changeSupport;
 
-    private Map<String, Object> valores;
+    private Map<String, Object> values;
 
     public AbstractAction() {
     }
@@ -41,45 +42,45 @@ public abstract class AbstractAction implements Action, Cloneable, Serializable 
         putValue(Action.SMALL_ICON, icon);
     }
 
-    /** La propiedad con esa clave; "enabled" tambien se puede pedir por aca. */
+    /** The property with that key; "enabled" can be asked for through here too. */
     public Object getValue(String key) {
         if ("enabled".equals(key)) {
             return Boolean.valueOf(enabled);
         }
-        if (valores == null) {
+        if (values == null) {
             return null;
         }
-        return valores.get(key);
+        return values.get(key);
     }
 
     /**
-     * Pone una propiedad, avisando si cambio.
+     * It sets a property, giving notice if it changed.
      *
-     * <p>Un valor {@code null} borra la clave. "enabled" con un {@code Boolean} va a
-     * {@link #setEnabled}, para que los dos caminos avisen igual.
+     * <p>A {@code null} value erases the key. "enabled" with a {@code Boolean} goes to
+     * {@link #setEnabled}, so that both paths give notice the same way.
      */
     public void putValue(String key, Object newValue) {
-        Object viejo = null;
+        Object old = null;
         if ("enabled".equals(key)) {
             if (newValue == null || !(newValue instanceof Boolean)) {
                 newValue = Boolean.FALSE;
             }
-            viejo = Boolean.valueOf(enabled);
+            old = Boolean.valueOf(enabled);
             enabled = ((Boolean) newValue).booleanValue();
         } else {
-            if (valores == null) {
-                valores = new HashMap<String, Object>();
+            if (values == null) {
+                values = new HashMap<String, Object>();
             }
-            if (valores.containsKey(key)) {
-                viejo = valores.get(key);
+            if (values.containsKey(key)) {
+                old = values.get(key);
             }
             if (newValue == null) {
-                valores.remove(key);
+                values.remove(key);
             } else {
-                valores.put(key, newValue);
+                values.put(key, newValue);
             }
         }
-        firePropertyChange(key, viejo, newValue);
+        firePropertyChange(key, old, newValue);
     }
 
     public boolean isEnabled() {
@@ -87,25 +88,25 @@ public abstract class AbstractAction implements Action, Cloneable, Serializable 
     }
 
     public void setEnabled(boolean newValue) {
-        boolean viejo = this.enabled;
-        if (viejo != newValue) {
+        boolean old = this.enabled;
+        if (old != newValue) {
             this.enabled = newValue;
-            firePropertyChange("enabled", Boolean.valueOf(viejo), Boolean.valueOf(newValue));
+            firePropertyChange("enabled", Boolean.valueOf(old), Boolean.valueOf(newValue));
         }
     }
 
-    /** Las claves con valor, en un arreglo nuevo; {@code null} si nunca se puso ninguna. */
+    /** The keys with a value, in a new array; {@code null} if none was ever set. */
     public Object[] getKeys() {
-        if (valores == null) {
+        if (values == null) {
             return null;
         }
-        return valores.keySet().toArray();
+        return values.keySet().toArray();
     }
 
     /**
-     * Avisa un cambio de propiedad, salvo que el valor sea el mismo.
+     * It gives notice of a property change, unless the value is the same.
      *
-     * <p>El mismo por {@code equals}, no por identidad: dos cadenas iguales no son un cambio.
+     * <p>The same by {@code equals}, not by identity: two equal strings are not a change.
      */
     protected void firePropertyChange(String propertyName, Object oldValue, Object newValue) {
         if (changeSupport == null || (oldValue != null && newValue != null
@@ -129,7 +130,7 @@ public abstract class AbstractAction implements Action, Cloneable, Serializable 
         changeSupport.removePropertyChangeListener(listener);
     }
 
-    /** Los escuchas registrados, en un arreglo nuevo; vacio si no hay. */
+    /** The registered listeners, in a new array; empty if there are none. */
     public synchronized PropertyChangeListener[] getPropertyChangeListeners() {
         if (changeSupport == null) {
             return new PropertyChangeListener[0];
@@ -137,13 +138,13 @@ public abstract class AbstractAction implements Action, Cloneable, Serializable 
         return changeSupport.getPropertyChangeListeners();
     }
 
-    /** Una copia con las mismas propiedades, en un mapa propio; los escuchas no se copian. */
+    /** A copy with the same properties, in a map of its own; the listeners are not copied. */
     protected Object clone() throws CloneNotSupportedException {
-        AbstractAction copia = (AbstractAction) super.clone();
-        if (valores != null) {
-            copia.valores = new HashMap<String, Object>(valores);
+        AbstractAction copy = (AbstractAction) super.clone();
+        if (values != null) {
+            copy.values = new HashMap<String, Object>(values);
         }
-        copia.changeSupport = null;
-        return copia;
+        copy.changeSupport = null;
+        return copy;
     }
 }

@@ -7,87 +7,88 @@ import java.util.Comparator;
 import java.util.List;
 
 /**
- * Recorre el foco en el orden que diga un comparador, no en el orden en que se agregaron.
+ * It walks the focus in the order a comparator says, not in the order things were added.
  *
- * <h2>Por que hace falta ordenar</h2>
+ * <h2>Why sorting is needed</h2>
  *
- * <p>La politica de AWT recorre los componentes en el orden en que estan en el contenedor, que es el
- * orden en que alguien los agrego. Eso casi nunca coincide con como se ven: un formulario armado con
- * una grilla puede tener los campos agregados por columnas y verse por filas, y entonces el
- * tabulador salta de arriba a abajo cuando el usuario espera izquierda a derecha.
+ * <p>AWT's policy walks the components in the order they are in the container, which is the
+ * order somebody added them in. That almost never agrees with how they are seen: a form built
+ * with a grid may have the fields added by columns and be seen by rows, and then the tab key
+ * jumps top to bottom when the user expects left to right.
  *
- * <p>Esta politica ordena antes de recorrer. Con que criterio lo decide el {@link Comparator}, y el
- * unico que usa Swing de verdad ordena por posicion en pantalla: es {@link LayoutFocusTraversalPolicy}.
+ * <p>This policy sorts before walking. With what criterion is decided by the {@link Comparator},
+ * and the only one Swing really uses sorts by position on the screen: it is
+ * {@link LayoutFocusTraversalPolicy}.
  *
- * <h2>Bajar al ciclo de adentro</h2>
+ * <h2>Going down into the inner cycle</h2>
  *
- * <p>Un contenedor que es raiz de su propio ciclo -- una ventana interna, un panel marcado como tal
- * -- normalmente se saltea entero: el tabulador pasa de largo. Con
- * {@link #setImplicitDownCycleTraversal} prendido -- que es lo de omision -- el foco <em>entra</em> y
- * recorre lo de adentro antes de seguir.
+ * <p>A container that is the root of its own cycle -- an internal frame, a panel marked as such
+ * -- is normally skipped whole: the tab key passes by. With
+ * {@link #setImplicitDownCycleTraversal} switched on -- which is the default -- the focus
+ * <em>goes in</em> and walks what is inside before going on.
  *
- * <h2>Que componentes entran</h2>
+ * <h2>Which components go in</h2>
  *
- * <p>{@link #accept} decide. Uno visible, habilitado y que puede recibir el foco; los demas se
- * saltean. Una subclase la ajusta para saltear tambien los que estan tapados o de solo lectura.
+ * <p>{@link #accept} decides. One that is visible, enabled and can receive the focus; the others
+ * are skipped. A subclass adjusts it in order to skip those that are covered or read-only too.
  */
 public class SortingFocusTraversalPolicy extends InternalFrameFocusTraversalPolicy {
 
     private Comparator<? super Component> comparator;
     private boolean implicitDownCycleTraversal = true;
 
-    /** Sin comparador; una subclase tiene que ponerlo antes de usarla. */
+    /** With no comparator; a subclass has to set it before using it. */
     protected SortingFocusTraversalPolicy() {
     }
 
-    /** Con ese criterio de orden. */
+    /** With that sorting criterion. */
     public SortingFocusTraversalPolicy(Comparator<? super Component> comparator) {
         this.comparator = comparator;
     }
 
     /**
-     * Los componentes del ciclo, ya ordenados y filtrados.
+     * The cycle's components, already sorted and filtered.
      *
-     * <p>Se arma la lista entera y despues se busca: recorrer y ordenar a la vez seria mas rapido y
-     * mucho mas dificil de entender, y esta lista tiene el tamano de una pantalla.
+     * <p>The whole list is built and afterwards it is searched: walking and sorting at once would
+     * be faster and much harder to understand, and this list is the size of a screen.
      */
     private List<Component> ciclo(Container aContainer) {
-        List<Component> lista = new ArrayList<Component>();
-        juntar(aContainer, lista);
+        List<Component> list = new ArrayList<Component>();
+        merge(aContainer, list);
         Comparator<? super Component> c = getComparator();
         if (c != null) {
-            java.util.Collections.sort(lista, c);
+            java.util.Collections.sort(list, c);
         }
-        return lista;
+        return list;
     }
 
-    private void juntar(Container padre, List<Component> lista) {
-        int n = padre.getComponentCount();
+    private void merge(Container parent, List<Component> list) {
+        int n = parent.getComponentCount();
         for (int i = 0; i < n; i++) {
-            Component comp = padre.getComponent(i);
+            Component comp = parent.getComponent(i);
             if (comp instanceof Container) {
                 Container cont = (Container) comp;
                 if (!cont.isFocusCycleRoot() && !cont.isFocusTraversalPolicyProvider()) {
-                    // No es raiz de su propio ciclo: sus hijos son parte de este.
-                    juntar(cont, lista);
+                    // It is not the root of its own cycle: its children are part of this one.
+                    merge(cont, list);
                     continue;
                 }
                 if (getImplicitDownCycleTraversal() && accept(cont)) {
-                    lista.add(cont);
+                    list.add(cont);
                     continue;
                 }
                 if (getImplicitDownCycleTraversal()) {
-                    juntar(cont, lista);
+                    merge(cont, list);
                     continue;
                 }
             }
             if (accept(comp)) {
-                lista.add(comp);
+                list.add(comp);
             }
         }
     }
 
-    /** El contenedor mas alto que sea proveedor de politica, entre ese y el componente. */
+    /** The highest container that is a policy provider, between that one and the component. */
     Container getTopmostProvider(Container focusCycleRoot, Component aComponent) {
         Container aCont = aComponent.getParent();
         Container ftp = null;
@@ -104,101 +105,101 @@ public class SortingFocusTraversalPolicy extends InternalFrameFocusTraversalPoli
     }
 
     /**
-     * El que sigue.
+     * The one that comes next.
      *
-     * <p>Al llegar al final vuelve al principio: un ciclo de foco es un ciclo.
+     * <p>On reaching the end it goes back to the beginning: a focus cycle is a cycle.
      *
-     * @throws IllegalArgumentException si alguno es nulo
+     * @throws IllegalArgumentException if either is null
      */
     public Component getComponentAfter(Container aContainer, Component aComponent) {
-        exigir(aContainer, aComponent);
-        exigirRaiz(aContainer);
-        List<Component> lista = ciclo(aContainer);
-        int i = lista.indexOf(aComponent);
+        require(aContainer, aComponent);
+        requireRoot(aContainer);
+        List<Component> list = ciclo(aContainer);
+        int i = list.indexOf(aComponent);
         if (i < 0) {
             return getFirstComponent(aContainer);
         }
-        if (i == lista.size() - 1) {
-            return lista.isEmpty() ? null : lista.get(0);
+        if (i == list.size() - 1) {
+            return list.isEmpty() ? null : list.get(0);
         }
-        return lista.get(i + 1);
+        return list.get(i + 1);
     }
 
     /**
-     * El anterior; al llegar al principio salta al final.
+     * The previous one; on reaching the beginning it jumps to the end.
      *
-     * @throws IllegalArgumentException si alguno es nulo
+     * @throws IllegalArgumentException if either is null
      */
     public Component getComponentBefore(Container aContainer, Component aComponent) {
-        exigir(aContainer, aComponent);
-        exigirRaiz(aContainer);
-        List<Component> lista = ciclo(aContainer);
-        int i = lista.indexOf(aComponent);
+        require(aContainer, aComponent);
+        requireRoot(aContainer);
+        List<Component> list = ciclo(aContainer);
+        int i = list.indexOf(aComponent);
         if (i < 0) {
             return getLastComponent(aContainer);
         }
         if (i == 0) {
-            return lista.isEmpty() ? null : lista.get(lista.size() - 1);
+            return list.isEmpty() ? null : list.get(list.size() - 1);
         }
-        return lista.get(i - 1);
+        return list.get(i - 1);
     }
 
     /**
-     * @throws IllegalArgumentException si el contenedor es nulo
+     * @throws IllegalArgumentException if the container is null
      */
     public Component getFirstComponent(Container aContainer) {
-        exigirContenedor(aContainer);
-        List<Component> lista = ciclo(aContainer);
-        return lista.isEmpty() ? null : lista.get(0);
+        requireContainer(aContainer);
+        List<Component> list = ciclo(aContainer);
+        return list.isEmpty() ? null : list.get(0);
     }
 
     /**
-     * @throws IllegalArgumentException si el contenedor es nulo
+     * @throws IllegalArgumentException if the container is null
      */
     public Component getLastComponent(Container aContainer) {
-        exigirContenedor(aContainer);
-        List<Component> lista = ciclo(aContainer);
-        return lista.isEmpty() ? null : lista.get(lista.size() - 1);
+        requireContainer(aContainer);
+        List<Component> list = ciclo(aContainer);
+        return list.isEmpty() ? null : list.get(list.size() - 1);
     }
 
     /**
-     * Donde va el foco al entrar al ciclo: el primero.
+     * Where the focus goes on entering the cycle: the first.
      *
-     * @throws IllegalArgumentException si el contenedor es nulo
+     * @throws IllegalArgumentException if the container is null
      */
     public Component getDefaultComponent(Container aContainer) {
         return getFirstComponent(aContainer);
     }
 
-    private static void exigir(Container aContainer, Component aComponent) {
+    private static void require(Container aContainer, Component aComponent) {
         if (aContainer == null || aComponent == null) {
             throw new IllegalArgumentException("aContainer and aComponent cannot be null");
         }
     }
 
     /**
-     * Exige que el contenedor sea raiz de un ciclo de foco.
+     * It requires the container to be the root of a focus cycle.
      *
-     * <p>Solo lo piden {@link #getComponentAfter} y {@link #getComponentBefore}: preguntar "que
-     * sigue" solo tiene sentido dentro de un ciclo, mientras que "cual es el primero" se puede
-     * contestar de cualquier contenedor. La asimetria es del JDK y esta medida.
+     * <p>Only {@link #getComponentAfter} and {@link #getComponentBefore} ask for it: asking "what
+     * comes next" only makes sense inside a cycle, whereas "which is the first" can be answered
+     * of any container. The asymmetry is the JDK's and it is measured.
      *
-     * @throws IllegalArgumentException si no lo es
+     * @throws IllegalArgumentException if it is not
      */
-    private static void exigirRaiz(Container aContainer) {
+    private static void requireRoot(Container aContainer) {
         if (!aContainer.isFocusCycleRoot() && !aContainer.isFocusTraversalPolicyProvider()) {
             throw new IllegalArgumentException("aContainer should be focus cycle root or "
                     + "focus traversal policy provider");
         }
     }
 
-    private static void exigirContenedor(Container aContainer) {
+    private static void requireContainer(Container aContainer) {
         if (aContainer == null) {
             throw new IllegalArgumentException("aContainer cannot be null");
         }
     }
 
-    /** Si el foco entra a los ciclos de adentro; ver la nota de la clase. */
+    /** Whether the focus goes into the inner cycles; see the class note. */
     public void setImplicitDownCycleTraversal(boolean implicitDownCycleTraversal) {
         this.implicitDownCycleTraversal = implicitDownCycleTraversal;
     }
@@ -207,7 +208,7 @@ public class SortingFocusTraversalPolicy extends InternalFrameFocusTraversalPoli
         return implicitDownCycleTraversal;
     }
 
-    /** El criterio de orden; ver la nota de la clase. */
+    /** The sorting criterion; see the class note. */
     protected void setComparator(Comparator<? super Component> comparator) {
         this.comparator = comparator;
     }
@@ -217,10 +218,10 @@ public class SortingFocusTraversalPolicy extends InternalFrameFocusTraversalPoli
     }
 
     /**
-     * Si ese componente entra en el recorrido.
+     * Whether that component goes into the walk.
      *
-     * <p>Visible, habilitado, y que acepte el foco. Los tres hacen falta: un componente escondido no
-     * se puede enfocar aunque lo acepte, y uno apagado tampoco.
+     * <p>Visible, enabled, and accepting the focus. All three are needed: a hidden component
+     * cannot be focused even though it accepts it, and a switched-off one cannot either.
      */
     protected boolean accept(Component aComponent) {
         if (!aComponent.isVisible() || !aComponent.isDisplayable()

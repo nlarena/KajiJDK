@@ -1,21 +1,22 @@
 package java.security.spec;
 
-// Que parametros de dominio DSA generar: el largo de p, el de q y el de la semilla.
+// Which DSA domain parameters to generate: the length of p, of q and of the seed.
 //
-// Es la unica spec del paquete que valida **combinaciones** y no valores sueltos, y la razon es que
-// FIPS 186-3 no deja elegir los dos largos por separado: solo (1024, 160), (2048, 224), (2048, 256)
-// y (3072, 256) son legales. La restriccion no es burocratica —el largo de q fija el costo del mejor
-// ataque generico contra el logaritmo discreto en el subgrupo, y el de p el del mejor ataque de
-// criba sobre el grupo entero— y elegir un q chico con un p grande da un par que parece fuerte y no
-// lo es. Que la clase rechace las combinaciones invalidas en el constructor es lo que impide que ese
-// error se descubra recien cuando ya hay claves emitidas.
+// It validates **combinations** and not single values, and the reason is that FIPS 186-3 does not
+// let the two lengths be chosen separately: only (1024, 160), (2048, 224), (2048, 256) and (3072,
+// 256) are legal. (This note called it the only spec in the package that does so; `EllipticCurve`
+// also checks its coefficients against its field.) The restriction is not red tape —the length of q
+// sets the cost of the best generic attack on the discrete logarithm in the subgroup, and that of p
+// the cost of the best sieve attack on the whole group— and choosing a small q with a large p gives
+// a pair that looks strong and is not. Rejecting invalid combinations in the constructor is what
+// keeps that mistake from being discovered only once keys have been issued.
 public final class DSAGenParameterSpec implements AlgorithmParameterSpec {
 
     private final int primePLen;
     private final int subprimeQLen;
     private final int seedLen;
 
-    // Sin largo de semilla explicito se usa el de q, que es el minimo legal.
+    // Without an explicit seed length, q's is used, which is the legal minimum.
     public DSAGenParameterSpec(int primePLen, int subprimeQLen) {
         this(primePLen, subprimeQLen, subprimeQLen);
     }
@@ -43,8 +44,8 @@ public final class DSAGenParameterSpec implements AlgorithmParameterSpec {
             default:
                 throw new IllegalArgumentException("primePLen must be 1024, 2048, or 3072");
         }
-        // Una semilla mas corta que q le pondria un techo a la entropia de todo el dominio: no
-        // importa cuan grande sea p si el proceso que lo genero arranco de menos bits.
+        // A seed shorter than q would put a ceiling on the entropy of the whole domain: it does not
+        // matter how large p is if the process that generated it started from fewer bits.
         if (seedLen < subprimeQLen) {
             throw new IllegalArgumentException(
                 "seedLen must be equal to or greater than subprimeQLen");

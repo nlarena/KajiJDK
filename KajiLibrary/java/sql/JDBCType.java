@@ -1,132 +1,132 @@
 package java.sql;
 
 /**
- * KajiLibrary's java.sql.JDBCType -- el catalogo de {@link Types} como enum.
+ * KajiLibrary's java.sql.JDBCType -- {@link Types}'s catalogue as an enum.
  *
- * <p>La ventaja sobre los enteros no es cosmetica: un `int` acepta cualquier valor, asi que
- * `setNull(1, 4)` y `setNull(1, 400)` compilan igual y el segundo falla en tiempo de ejecucion. Con
- * el enum el compilador lo atrapa, y ademas se puede imprimir con nombre.
+ * <p>The advantage over the integers is not cosmetic: an `int` accepts any value, so `setNull(1,
+ * 4)` and `setNull(1, 400)` compile alike and the second fails at run time. With the enum the
+ * compiler catches it, and on top of that it can be printed by name.
  *
- * <p>Implementa {@link SQLType}, que es lo que permite que las firmas nuevas acepten tanto estos como
- * los tipos propios de un proveedor.
+ * <p>It implements {@link SQLType}, which is what allows the newer signatures to accept both these
+ * and a vendor's own types.
  */
 public enum JDBCType implements SQLType {
 
-    /** El tipo SQL `BIT`. */
+    /** The SQL type `BIT`. */
     BIT(Types.BIT),
 
-    /** El tipo SQL `TINYINT`. */
+    /** The SQL type `TINYINT`. */
     TINYINT(Types.TINYINT),
 
-    /** El tipo SQL `SMALLINT`. */
+    /** The SQL type `SMALLINT`. */
     SMALLINT(Types.SMALLINT),
 
-    /** El tipo SQL `INTEGER`. */
+    /** The SQL type `INTEGER`. */
     INTEGER(Types.INTEGER),
 
-    /** El tipo SQL `BIGINT`. */
+    /** The SQL type `BIGINT`. */
     BIGINT(Types.BIGINT),
 
-    /** El tipo SQL `FLOAT`. */
+    /** The SQL type `FLOAT`. */
     FLOAT(Types.FLOAT),
 
-    /** El tipo SQL `REAL`. */
+    /** The SQL type `REAL`. */
     REAL(Types.REAL),
 
-    /** El tipo SQL `DOUBLE`. */
+    /** The SQL type `DOUBLE`. */
     DOUBLE(Types.DOUBLE),
 
-    /** El tipo SQL `NUMERIC`. */
+    /** The SQL type `NUMERIC`. */
     NUMERIC(Types.NUMERIC),
 
-    /** El tipo SQL `DECIMAL`. */
+    /** The SQL type `DECIMAL`. */
     DECIMAL(Types.DECIMAL),
 
-    /** El tipo SQL `CHAR`. */
+    /** The SQL type `CHAR`. */
     CHAR(Types.CHAR),
 
-    /** El tipo SQL `VARCHAR`. */
+    /** The SQL type `VARCHAR`. */
     VARCHAR(Types.VARCHAR),
 
-    /** El tipo SQL `LONGVARCHAR`. */
+    /** The SQL type `LONGVARCHAR`. */
     LONGVARCHAR(Types.LONGVARCHAR),
 
-    /** El tipo SQL `DATE`. */
+    /** The SQL type `DATE`. */
     DATE(Types.DATE),
 
-    /** El tipo SQL `TIME`. */
+    /** The SQL type `TIME`. */
     TIME(Types.TIME),
 
-    /** El tipo SQL `TIMESTAMP`. */
+    /** The SQL type `TIMESTAMP`. */
     TIMESTAMP(Types.TIMESTAMP),
 
-    /** El tipo SQL `BINARY`. */
+    /** The SQL type `BINARY`. */
     BINARY(Types.BINARY),
 
-    /** El tipo SQL `VARBINARY`. */
+    /** The SQL type `VARBINARY`. */
     VARBINARY(Types.VARBINARY),
 
-    /** El tipo SQL `LONGVARBINARY`. */
+    /** The SQL type `LONGVARBINARY`. */
     LONGVARBINARY(Types.LONGVARBINARY),
 
-    /** El tipo SQL `NULL`. */
+    /** The SQL type `NULL`. */
     NULL(Types.NULL),
 
-    /** El tipo SQL `OTHER`. */
+    /** The SQL type `OTHER`. */
     OTHER(Types.OTHER),
 
-    /** El tipo SQL `JAVA_OBJECT`. */
+    /** The SQL type `JAVA_OBJECT`. */
     JAVA_OBJECT(Types.JAVA_OBJECT),
 
-    /** El tipo SQL `DISTINCT`. */
+    /** The SQL type `DISTINCT`. */
     DISTINCT(Types.DISTINCT),
 
-    /** El tipo SQL `STRUCT`. */
+    /** The SQL type `STRUCT`. */
     STRUCT(Types.STRUCT),
 
-    /** El tipo SQL `ARRAY`. */
+    /** The SQL type `ARRAY`. */
     ARRAY(Types.ARRAY),
 
-    /** El tipo SQL `BLOB`. */
+    /** The SQL type `BLOB`. */
     BLOB(Types.BLOB),
 
-    /** El tipo SQL `CLOB`. */
+    /** The SQL type `CLOB`. */
     CLOB(Types.CLOB),
 
-    /** El tipo SQL `REF`. */
+    /** The SQL type `REF`. */
     REF(Types.REF),
 
-    /** El tipo SQL `DATALINK`. */
+    /** The SQL type `DATALINK`. */
     DATALINK(Types.DATALINK),
 
-    /** El tipo SQL `BOOLEAN`. */
+    /** The SQL type `BOOLEAN`. */
     BOOLEAN(Types.BOOLEAN),
 
-    /** El tipo SQL `ROWID`. */
+    /** The SQL type `ROWID`. */
     ROWID(Types.ROWID),
 
-    /** El tipo SQL `NCHAR`. */
+    /** The SQL type `NCHAR`. */
     NCHAR(Types.NCHAR),
 
-    /** El tipo SQL `NVARCHAR`. */
+    /** The SQL type `NVARCHAR`. */
     NVARCHAR(Types.NVARCHAR),
 
-    /** El tipo SQL `LONGNVARCHAR`. */
+    /** The SQL type `LONGNVARCHAR`. */
     LONGNVARCHAR(Types.LONGNVARCHAR),
 
-    /** El tipo SQL `NCLOB`. */
+    /** The SQL type `NCLOB`. */
     NCLOB(Types.NCLOB),
 
-    /** El tipo SQL `SQLXML`. */
+    /** The SQL type `SQLXML`. */
     SQLXML(Types.SQLXML),
 
-    /** El tipo SQL `REF_CURSOR`. */
+    /** The SQL type `REF_CURSOR`. */
     REF_CURSOR(Types.REF_CURSOR),
 
-    /** El tipo SQL `TIME_WITH_TIMEZONE`. */
+    /** The SQL type `TIME_WITH_TIMEZONE`. */
     TIME_WITH_TIMEZONE(Types.TIME_WITH_TIMEZONE),
 
-    /** El tipo SQL `TIMESTAMP_WITH_TIMEZONE`. */
+    /** The SQL type `TIMESTAMP_WITH_TIMEZONE`. */
     TIMESTAMP_WITH_TIMEZONE(Types.TIMESTAMP_WITH_TIMEZONE);
 
     private final Integer type;
@@ -135,32 +135,32 @@ public enum JDBCType implements SQLType {
         this.type = type;
     }
 
-    /** El nombre del tipo; para estos, el del enum. */
+    /** The type's name; for these, the enum's. */
     public String getName() {
         return this.name();
     }
 
-    /** `"java.sql"`: son los tipos del estandar, no los de un proveedor. */
+    /** `"java.sql"`: they are the standard's types, not a vendor's. */
     public String getVendor() {
         return "java.sql";
     }
 
-    /** El entero de {@link Types} que le corresponde. */
+    /** The {@link Types} integer that matches it. */
     public Integer getVendorTypeNumber() {
         return this.type;
     }
 
     /**
-     * El `JDBCType` de ese entero de {@link Types}.
+     * The `JDBCType` for that {@link Types} integer.
      *
-     * @throws IllegalArgumentException si el entero no es ninguno
+     * @throws IllegalArgumentException if the integer is none of them
      */
     public static JDBCType valueOf(int type) {
-        JDBCType[] todos = JDBCType.values();
+        JDBCType[] all = JDBCType.values();
         int i = 0;
-        while (i < todos.length) {
-            if (todos[i].type.intValue() == type) {
-                return todos[i];
+        while (i < all.length) {
+            if (all[i].type.intValue() == type) {
+                return all[i];
             }
             i = i + 1;
         }

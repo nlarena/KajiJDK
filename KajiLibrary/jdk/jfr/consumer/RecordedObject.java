@@ -12,221 +12,230 @@ import jdk.jfr.Timestamp;
 import jdk.jfr.ValueDescriptor;
 
 /**
- * Un objeto leido de una grabacion: campos con nombre y sin clase Java.
+ * An object read from a recording: fields with a name and with no Java class.
  *
- * <h2>Por que no es un objeto normal</h2>
+ * <h2>Why it is not a normal object</h2>
  *
- * <p>Porque el proceso que lee una grabacion casi nunca tiene las clases del que la escribio. Puede
- * ser otra maquina, otra version, otro programa entero. Deserializar a objetos tipados exigiria
- * tener esas clases en el classpath, que es justamente lo que no se puede pedir.
+ * <p>Because the process that reads a recording almost never has the classes of the one that wrote
+ * it. It may be another machine, another version, another program entirely. Deserialising to typed
+ * objects would demand having those classes on the classpath, which is precisely what cannot be
+ * asked for.
  *
- * <p>La salida es esta: los datos quedan como pares nombre-valor, con los
- * {@link ValueDescriptor descriptores} al lado explicando que es cada uno. Se accede por nombre y
- * el tipo lo pone el que lee, que es el que sabe que espera.
+ * <p>The way out is this one: the data are left as name-value pairs, with the
+ * {@link ValueDescriptor descriptors} beside them explaining what each one is. They are accessed by
+ * name and the type is put by the one who reads, who is the one that knows what they expect.
  *
- * <h2>Los getters tipados no son azucar</h2>
+ * <h2>The typed getters are not sugar</h2>
  *
- * <p>{@link #getInt} podria ser {@code (int) getValue(...)} y no lo es: hace la conversion
- * <strong>ensanchando</strong>. Un campo grabado como {@code short} se lee con {@code getInt} sin
- * problema, que es lo que hace falta cuando el que lee no sabe con que ancho se grabo — y no lo
- * sabe, porque eso depende de la version del JDK que produjo el archivo.
+ * <p>{@link #getInt} could be {@code (int) getValue(...)} and it is not: it does the conversion by
+ * <strong>widening</strong>. A field recorded as a {@code short} is read with {@code getInt} with
+ * no problem, which is what is needed when the one who reads does not know with what width it was
+ * recorded -- and they do not know, because that depends on the version of the JDK that produced
+ * the file.
  *
- * <p>{@link #getDuration} y {@link #getInstant} van mas lejos: leen un {@code long} y lo
- * interpretan segun la anotacion {@link Timespan} o {@link Timestamp} del campo. Sin eso, el que
- * lee tendria que saber en que unidad se grabo cada campo de cada evento.
+ * <p>{@link #getDuration} and {@link #getInstant} go further: they read a {@code long} and
+ * interpret it according to the {@link Timespan} or {@link Timestamp} annotation of the field.
+ * Without that, the one who reads would have to know in what unit each field of each event was
+ * recorded.
  *
- * <h2>Estado en esta VM</h2>
+ * <h2>State in this VM</h2>
  *
- * <p>Toda esta clase es real y funciona: dados los descriptores y los valores, la lectura tipada,
- * la conversion de unidades y {@link #toString} hacen lo que dicen.
+ * <p>This whole class is real and works: given the descriptors and the values, the typed reading,
+ * the conversion of units and {@link #toString} do what they say.
  *
- * <p>Lo que no hay es de donde sacar esos valores, porque {@link RecordingFile} no puede leer el
- * formato binario. Con la lectura del archivo escrita, esta clase anda sin tocarla.
+ * <p>What there is not is anywhere to take those values from, because {@link RecordingFile} cannot
+ * read the binary format. With the reading of the file written, this class works without touching
+ * it.
  *
  * @since 9
  */
 public class RecordedObject {
 
-    private final List<ValueDescriptor> descriptores;
-    private final Object[] valores;
+    private final List<ValueDescriptor> descriptors;
+    private final Object[] values;
 
-    RecordedObject(final List<ValueDescriptor> descriptores, final Object[] valores) {
-        this.descriptores = Collections.unmodifiableList(
-                new ArrayList<ValueDescriptor>(descriptores));
-        this.valores = valores.clone();
+    RecordedObject(final List<ValueDescriptor> descriptors, final Object[] values) {
+        this.descriptors = Collections.unmodifiableList(
+                new ArrayList<ValueDescriptor>(descriptors));
+        this.values = values.clone();
     }
 
     /**
-     * Si el objeto tiene un campo con ese nombre.
+     * Whether the object has a field with that name.
      *
-     * <p>Acepta nombres con puntos para llegar a un campo anidado, como {@code "thread.javaName"}:
-     * un evento tiene objetos adentro y esta es la forma de recorrerlos sin ir sacando uno por uno.
+     * <p>It accepts names with dots in order to reach a nested field, such as {@code
+     * "thread.javaName"}: an event has objects inside it and this is the way of walking them
+     * without taking them out one by one.
      *
-     * @param name el nombre
-     * @return si existe
+     * @param name the name
+     * @return whether it exists
      */
     public boolean hasField(final String name) {
         Objects.requireNonNull(name, "name");
-        final int punto = name.indexOf('.');
-        if (punto < 0) {
-            return indice(name) >= 0;
+        final int dot = name.indexOf('.');
+        if (dot < 0) {
+            return indexOf(name) >= 0;
         }
-        final int i = indice(name.substring(0, punto));
+        final int i = indexOf(name.substring(0, dot));
         if (i < 0) {
             return false;
         }
-        final Object v = valores[i];
+        final Object v = values[i];
         return v instanceof RecordedObject
-                && ((RecordedObject) v).hasField(name.substring(punto + 1));
+                && ((RecordedObject) v).hasField(name.substring(dot + 1));
     }
 
     /**
-     * El valor de ese campo, sin convertir.
+     * The value of that field, unconverted.
      *
-     * <p>Acepta nombres con puntos, igual que {@link #hasField}.
+     * <p>It accepts names with dots, just like {@link #hasField}.
      *
-     * @param <T> el tipo esperado; no se comprueba
-     * @param name el nombre
-     * @return el valor
-     * @throws IllegalArgumentException si no hay un campo con ese nombre
+     * @param <T> the expected type; it is not checked
+     * @param name the name
+     * @return the value
+     * @throws IllegalArgumentException if there is no field with that name
      */
     @SuppressWarnings("unchecked")
     public final <T> T getValue(final String name) {
-        return (T) crudo(name);
+        return (T) raw(name);
     }
 
-    private Object crudo(final String name) {
+    private Object raw(final String name) {
         Objects.requireNonNull(name, "name");
-        final int punto = name.indexOf('.');
-        if (punto < 0) {
-            final int i = indice(name);
+        final int dot = name.indexOf('.');
+        if (dot < 0) {
+            final int i = indexOf(name);
             if (i < 0) {
-                throw new IllegalArgumentException("no hay un campo llamado " + name);
+                throw new IllegalArgumentException("there is no field called " + name);
             }
-            return valores[i];
+            return values[i];
         }
-        final Object v = crudo(name.substring(0, punto));
+        final Object v = raw(name.substring(0, dot));
         if (!(v instanceof RecordedObject)) {
             throw new IllegalArgumentException(
-                    "el campo " + name.substring(0, punto) + " no es un objeto");
+                    "the field " + name.substring(0, dot) + " is not an object");
         }
-        return ((RecordedObject) v).crudo(name.substring(punto + 1));
+        return ((RecordedObject) v).raw(name.substring(dot + 1));
     }
 
-    private int indice(final String name) {
-        for (int i = 0; i < descriptores.size(); i++) {
-            if (descriptores.get(i).getName().equals(name)) {
+    private int indexOf(final String name) {
+        for (int i = 0; i < descriptors.size(); i++) {
+            if (descriptors.get(i).getName().equals(name)) {
                 return i;
             }
         }
         return -1;
     }
 
-    /** El descriptor de ese campo, para leerle las anotaciones. */
+    /** The descriptor of that field, in order to read its annotations. */
     private ValueDescriptor descriptor(final String name) {
-        final int punto = name.indexOf('.');
-        if (punto < 0) {
-            final int i = indice(name);
-            return i < 0 ? null : descriptores.get(i);
+        final int dot = name.indexOf('.');
+        if (dot < 0) {
+            final int i = indexOf(name);
+            return i < 0 ? null : descriptors.get(i);
         }
-        final Object v = crudo(name.substring(0, punto));
+        final Object v = raw(name.substring(0, dot));
         return v instanceof RecordedObject
-                ? ((RecordedObject) v).descriptor(name.substring(punto + 1)) : null;
+                ? ((RecordedObject) v).descriptor(name.substring(dot + 1)) : null;
     }
 
     /**
-     * Los campos de este objeto.
+     * The fields of this object.
      *
-     * @return los descriptores
+     * @return the descriptors
      */
     public List<ValueDescriptor> getFields() {
-        return descriptores;
+        return descriptors;
     }
 
     /**
-     * El valor booleano de ese campo.
+     * The boolean value of that field.
      *
-     * @param name el nombre
-     * @return el valor
-     * @throws IllegalArgumentException si el campo no existe o no es booleano
+     * @param name the name
+     * @return the value
+     * @throws IllegalArgumentException if the field does not exist or is not boolean
      */
     public final boolean getBoolean(final String name) {
-        final Object v = crudo(name);
+        final Object v = raw(name);
         if (v instanceof Boolean) {
             return ((Boolean) v).booleanValue();
         }
-        throw noEs(name, "boolean", v);
+        throw notA(name, "boolean", v);
     }
 
     /**
-     * El valor de ese campo como {@code byte}.
+     * The value of that field as a {@code byte}.
      *
-     * @param name el nombre
-     * @return el valor
-     * @throws IllegalArgumentException si el campo no existe o no entra en un {@code byte}
+     * @param name the name
+     * @return the value
+     * @throws IllegalArgumentException if the field does not exist or does not fit in a {@code
+     *     byte}
      */
     public final byte getByte(final String name) {
-        return (byte) entero(name, Byte.MIN_VALUE, Byte.MAX_VALUE, "byte");
+        return (byte) integer(name, Byte.MIN_VALUE, Byte.MAX_VALUE, "byte");
     }
 
     /**
-     * El valor de ese campo como {@code char}.
+     * The value of that field as a {@code char}.
      *
-     * @param name el nombre
-     * @return el valor
-     * @throws IllegalArgumentException si el campo no existe o no es un caracter
+     * @param name the name
+     * @return the value
+     * @throws IllegalArgumentException if the field does not exist or is not a character
      */
     public final char getChar(final String name) {
-        final Object v = crudo(name);
+        final Object v = raw(name);
         if (v instanceof Character) {
             return ((Character) v).charValue();
         }
-        throw noEs(name, "char", v);
+        throw notA(name, "char", v);
     }
 
     /**
-     * El valor de ese campo como {@code short}.
+     * The value of that field as a {@code short}.
      *
-     * @param name el nombre
-     * @return el valor
-     * @throws IllegalArgumentException si el campo no existe o no entra en un {@code short}
+     * @param name the name
+     * @return the value
+     * @throws IllegalArgumentException if the field does not exist or does not fit in a {@code
+     *     short}
      */
     public final short getShort(final String name) {
-        return (short) entero(name, Short.MIN_VALUE, Short.MAX_VALUE, "short");
+        return (short) integer(name, Short.MIN_VALUE, Short.MAX_VALUE, "short");
     }
 
     /**
-     * El valor de ese campo como {@code int}.
+     * The value of that field as an {@code int}.
      *
-     * @param name el nombre
-     * @return el valor
-     * @throws IllegalArgumentException si el campo no existe o no entra en un {@code int}
+     * @param name the name
+     * @return the value
+     * @throws IllegalArgumentException if the field does not exist or does not fit in an {@code
+     *     int}
      */
     public final int getInt(final String name) {
-        return (int) entero(name, Integer.MIN_VALUE, Integer.MAX_VALUE, "int");
+        return (int) integer(name, Integer.MIN_VALUE, Integer.MAX_VALUE, "int");
     }
 
     /**
-     * El valor de ese campo como {@code long}.
+     * The value of that field as a {@code long}.
      *
-     * @param name el nombre
-     * @return el valor
-     * @throws IllegalArgumentException si el campo no existe o no es entero
+     * @param name the name
+     * @return the value
+     * @throws IllegalArgumentException if the field does not exist or is not an integer
      */
     public final long getLong(final String name) {
-        return entero(name, Long.MIN_VALUE, Long.MAX_VALUE, "long");
+        return integer(name, Long.MIN_VALUE, Long.MAX_VALUE, "long");
     }
 
     /**
-     * Lee un entero de cualquier ancho y comprueba que entre en el pedido.
+     * It reads an integer of any width and checks that it fits in the requested one.
      *
-     * <p>Ensanchar es el caso normal —un campo grabado como {@code short} se lee con
-     * {@code getInt}— y por eso no se rechaza. Lo que si se rechaza es <strong>angostar</strong> un
-     * valor que no entra: devolver el truncado seria un numero equivocado sin aviso, que es
-     * exactamente lo que no se quiere del lado del que lee una grabacion.
+     * <p>Widening is the normal case --a field recorded as a {@code short} is read with {@code
+     * getInt}-- and that is why it is not rejected. What is rejected is <strong>narrowing</strong>
+     * a value that does not fit: returning the truncated one would be a wrong number with no
+     * warning, which is exactly what one does not want on the side of the one who reads a
+     * recording.
      */
-    private long entero(final String name, final long min, final long max, final String comoQue) {
-        final Object v = crudo(name);
+    private long integer(final String name, final long min, final long max, final String asWhat) {
+        final Object v = raw(name);
         final long l;
         if (v instanceof Byte) {
             l = ((Byte) v).byteValue();
@@ -239,160 +248,159 @@ public class RecordedObject {
         } else if (v instanceof Character) {
             l = ((Character) v).charValue();
         } else {
-            throw noEs(name, comoQue, v);
+            throw notA(name, asWhat, v);
         }
         if (l < min || l > max) {
             throw new IllegalArgumentException(
-                    "el valor del campo " + name + " no entra en un " + comoQue + ": " + l);
+                    "the value of the field " + name + " does not fit in a " + asWhat + ": " + l);
         }
         return l;
     }
 
     /**
-     * El valor de ese campo como {@code float}.
+     * The value of that field as a {@code float}.
      *
-     * @param name el nombre
-     * @return el valor
-     * @throws IllegalArgumentException si el campo no existe o no es numerico
+     * @param name the name
+     * @return the value
+     * @throws IllegalArgumentException if the field does not exist or is not numeric
      */
     public final float getFloat(final String name) {
-        final Object v = crudo(name);
+        final Object v = raw(name);
         if (v instanceof Number) {
             return ((Number) v).floatValue();
         }
-        throw noEs(name, "float", v);
+        throw notA(name, "float", v);
     }
 
     /**
-     * El valor de ese campo como {@code double}.
+     * The value of that field as a {@code double}.
      *
-     * @param name el nombre
-     * @return el valor
-     * @throws IllegalArgumentException si el campo no existe o no es numerico
+     * @param name the name
+     * @return the value
+     * @throws IllegalArgumentException if the field does not exist or is not numeric
      */
     public final double getDouble(final String name) {
-        final Object v = crudo(name);
+        final Object v = raw(name);
         if (v instanceof Number) {
             return ((Number) v).doubleValue();
         }
-        throw noEs(name, "double", v);
+        throw notA(name, "double", v);
     }
 
     /**
-     * El valor de ese campo como texto.
+     * The value of that field as text.
      *
-     * @param name el nombre
-     * @return el valor, o {@code null} si el campo esta vacio
-     * @throws IllegalArgumentException si el campo no existe o no es texto
+     * @param name the name
+     * @return the value, or {@code null} if the field is empty
+     * @throws IllegalArgumentException if the field does not exist or is not text
      */
     public final String getString(final String name) {
-        final Object v = crudo(name);
+        final Object v = raw(name);
         if (v == null || v instanceof String) {
             return (String) v;
         }
-        throw noEs(name, "String", v);
+        throw notA(name, "String", v);
     }
 
     /**
-     * El valor de ese campo como duracion, interpretando su unidad.
+     * The value of that field as a duration, interpreting its unit.
      *
-     * <p>La unidad sale de la anotacion {@link Timespan} del campo. Sin anotacion se asume
-     * nanosegundos, que es lo que esa anotacion tiene por omision.
+     * <p>The unit comes from the {@link Timespan} annotation of the field. With no annotation
+     * nanoseconds are assumed, which is what that annotation has by default.
      *
-     * @param name el nombre
-     * @return la duracion
-     * @throws IllegalArgumentException si el campo no existe o no es numerico
+     * @param name the name
+     * @return the duration
+     * @throws IllegalArgumentException if the field does not exist or is not numeric
      */
     public final Duration getDuration(final String name) {
-        final long v = entero(name, Long.MIN_VALUE, Long.MAX_VALUE, "Duration");
+        final long v = integer(name, Long.MIN_VALUE, Long.MAX_VALUE, "Duration");
         final ValueDescriptor d = descriptor(name);
         final Timespan t = d == null ? null : d.getAnnotation(Timespan.class);
-        final String unidad = t == null ? Timespan.NANOSECONDS : t.value();
-        if (Timespan.SECONDS.equals(unidad)) {
+        final String unit = t == null ? Timespan.NANOSECONDS : t.value();
+        if (Timespan.SECONDS.equals(unit)) {
             return Duration.ofSeconds(v);
         }
-        if (Timespan.MILLISECONDS.equals(unidad)) {
+        if (Timespan.MILLISECONDS.equals(unit)) {
             return Duration.ofMillis(v);
         }
-        if (Timespan.MICROSECONDS.equals(unidad)) {
+        if (Timespan.MICROSECONDS.equals(unit)) {
             return Duration.ofNanos(v * 1000L);
         }
-        // TICKS incluido: sin la frecuencia del reloj de la maquina que grabo no hay como
-        // convertirlos, y tratarlos como nanosegundos es lo que hace el JDK.
+        // TICKS included: without the frequency of the clock of the machine that recorded there is
+        // no way of converting them, and treating them as nanoseconds is what the JDK does.
         return Duration.ofNanos(v);
     }
 
     /**
-     * El valor de ese campo como momento, interpretando su unidad.
+     * The value of that field as a moment, interpreting its unit.
      *
-     * <p>La unidad sale de la anotacion {@link Timestamp} del campo.
+     * <p>The unit comes from the {@link Timestamp} annotation of the field.
      *
-     * @param name el nombre
-     * @return el momento
-     * @throws IllegalArgumentException si el campo no existe o no es numerico
+     * @param name the name
+     * @return the moment
+     * @throws IllegalArgumentException if the field does not exist or is not numeric
      */
     public final Instant getInstant(final String name) {
-        final long v = entero(name, Long.MIN_VALUE, Long.MAX_VALUE, "Instant");
+        final long v = integer(name, Long.MIN_VALUE, Long.MAX_VALUE, "Instant");
         final ValueDescriptor d = descriptor(name);
         final Timestamp t = d == null ? null : d.getAnnotation(Timestamp.class);
-        final String unidad = t == null ? Timestamp.MILLISECONDS_SINCE_EPOCH : t.value();
-        if (Timestamp.TICKS.equals(unidad)) {
+        final String unit = t == null ? Timestamp.MILLISECONDS_SINCE_EPOCH : t.value();
+        if (Timestamp.TICKS.equals(unit)) {
             return Instant.ofEpochSecond(0L, v);
         }
         return Instant.ofEpochMilli(v);
     }
 
     /**
-     * El valor de ese campo como clase grabada.
+     * The value of that field as a recorded class.
      *
-     * @param name el nombre
-     * @return la clase, o {@code null} si el campo esta vacio
-     * @throws IllegalArgumentException si el campo no existe o no es una clase
+     * @param name the name
+     * @return the class, or {@code null} if the field is empty
+     * @throws IllegalArgumentException if the field does not exist or is not a class
      */
     public final RecordedClass getClass(final String name) {
-        final Object v = crudo(name);
+        final Object v = raw(name);
         if (v == null || v instanceof RecordedClass) {
             return (RecordedClass) v;
         }
-        throw noEs(name, "RecordedClass", v);
+        throw notA(name, "RecordedClass", v);
     }
 
     /**
-     * El valor de ese campo como hilo grabado.
+     * The value of that field as a recorded thread.
      *
-     * @param name el nombre
-     * @return el hilo, o {@code null} si el campo esta vacio
-     * @throws IllegalArgumentException si el campo no existe o no es un hilo
+     * @param name the name
+     * @return the thread, or {@code null} if the field is empty
+     * @throws IllegalArgumentException if the field does not exist or is not a thread
      */
     public final RecordedThread getThread(final String name) {
-        final Object v = crudo(name);
+        final Object v = raw(name);
         if (v == null || v instanceof RecordedThread) {
             return (RecordedThread) v;
         }
-        throw noEs(name, "RecordedThread", v);
+        throw notA(name, "RecordedThread", v);
     }
 
-    private static IllegalArgumentException noEs(final String name, final String tipo,
+    private static IllegalArgumentException notA(final String name, final String type,
             final Object v) {
-        return new IllegalArgumentException("el campo " + name + " no se puede leer como " + tipo
-                + "; es " + (v == null ? "null" : v.getClass().getName()));
+        return new IllegalArgumentException("the field " + name + " cannot be read as " + type
+                + "; it is " + (v == null ? "null" : v.getClass().getName()));
     }
 
     /**
-     * El objeto entero, un campo por linea.
+     * The whole object, one field per line.
      *
-     * <p>Es {@code final} porque el formato tiene que ser el mismo para todos los objetos grabados:
-     * quien lee un volcado de una grabacion no deberia tener que saber de que subclase era cada
-     * cosa.
+     * <p>It is {@code final} because the format has to be the same for every recorded object:
+     * whoever reads a dump of a recording should not have to know which subclass each thing was of.
      *
-     * @return el texto
+     * @return the text
      */
     public final String toString() {
         final StringBuilder sb = new StringBuilder();
         sb.append('{').append(System.lineSeparator());
-        for (int i = 0; i < descriptores.size(); i++) {
-            sb.append("  ").append(descriptores.get(i).getName()).append(" = ")
-              .append(String.valueOf(valores[i])).append(System.lineSeparator());
+        for (int i = 0; i < descriptors.size(); i++) {
+            sb.append("  ").append(descriptors.get(i).getName()).append(" = ")
+              .append(String.valueOf(values[i])).append(System.lineSeparator());
         }
         sb.append('}');
         return sb.toString();

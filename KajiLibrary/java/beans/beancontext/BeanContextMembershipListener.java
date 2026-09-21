@@ -2,12 +2,12 @@ package java.beans.beancontext;
 
 import java.util.EventListener;
 
-/** Escucha las altas y las bajas de hijos de un {@link BeanContext}. */
+/** Listens for children being added to and removed from a {@link BeanContext}. */
 public interface BeanContextMembershipListener extends EventListener {
 
-    /** Se agregaron los hijos que el evento nombra. */
+    /** The children the event names were added. */
     void childrenAdded(BeanContextMembershipEvent bcme);
 
-    /** Se quitaron los hijos que el evento nombra. */
+    /** The children the event names were removed. */
     void childrenRemoved(BeanContextMembershipEvent bcme);
 }

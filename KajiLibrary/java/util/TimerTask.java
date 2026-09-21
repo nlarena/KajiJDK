@@ -57,7 +57,7 @@ public abstract class TimerTask implements Runnable {
         }
     }
 
-    // The scheduled time of this task's most recent actual execution.
+    // The scheduled time of this task's most recent current execution.
     //
     // Meant to be called from inside run(), where it answers "when was I supposed to run?" — the
     // gap against System.currentTimeMillis() is how a fixed-rate task notices it is running late

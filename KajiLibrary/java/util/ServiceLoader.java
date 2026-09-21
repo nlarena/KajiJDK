@@ -6,46 +6,47 @@ import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.stream.Stream;
 
-// El mecanismo con el que Java carga implementaciones que no conoce en tiempo de compilacion.
+// The mechanism with which Java loads implementations it does not know at compile time.
 //
-// La idea: un programa declara que necesita una **interfaz de servicio** (`Codec`, `Driver`,
-// `CharsetProvider`) y pregunta por sus implementaciones. Quien las provee no se registra en
-// ningun lado del programa: deja un archivo de texto en su propio jar,
+// The idea: a program declares that it needs a **service interface** (`Codec`, `Driver`,
+// `CharsetProvider`) and asks for its implementations. Whoever provides them registers nowhere in
+// the program: they leave a text file in their own jar,
 //
-//     META-INF/services/com.ejemplo.Codec
+//     META-INF/services/com.example.Codec
 //
-// con el nombre completo de cada clase implementadora, una por linea. `ServiceLoader` recorre
-// **todos** los jars del classpath buscando ese archivo, junta los nombres, y carga e instancia
-// cada clase a demanda. Agregar un jar al classpath agrega proveedores; sacarlo los saca. Eso es
-// todo, y es la razon por la que JDBC no tiene que conocer a ningun motor de base de datos.
+// with the full name of each implementing class, one per line. `ServiceLoader` walks **every** jar
+// on the class path looking for that file, gathers the names, and loads and instantiates each class
+// on demand. Adding a jar to the class path adds providers; taking it away removes them. That is
+// all, and it is the reason JDBC does not have to know any database engine.
 //
-// La carga es **perezosa y con memoria**: el iterador instancia recien cuando se le pide el
-// elemento, y `reload()` es la unica forma de volver a mirar el classpath. Por eso un
-// ServiceLoader se usa una vez y se tira, o se relee explicitamente.
+// The loading is **lazy and remembered**: the iterator instantiates only when the element is asked
+// for, and `reload()` is the only way of looking at the class path again. That is why a
+// ServiceLoader is used once and thrown away, or explicitly re-read.
 //
-// ---- el techo, con nombre --------------------------------------------------------------------
+// ---- the ceiling, by name ---------------------------------------------------------------------
 //
-// **8 de los 9 miembros del contrato.** El que falta es `load(ModuleLayer, Class)`: pide
-// `java.lang.ModuleLayer`, que no existe en esta biblioteca (ni el sistema de modulos que lo
-// respalda).
+// **All 9 members of the contract.** This note used to say `load(ModuleLayer, Class)` was missing
+// because `java.lang.ModuleLayer` did not exist; the class exists and the method is declared below.
 //
-// Y hay un techo mas importante que ese, que conviene decir sin vueltas: **el descubrimiento no
-// encuentra nada todavia**. Toda la maquinaria esta --parsear el archivo de configuracion, cargar
-// la clase por nombre, verificar que sea del subtipo correcto, instanciarla, cachear-- pero el
-// primer paso, enumerar `META-INF/services/...` en el classpath, necesita
-// `ClassLoader.getResources`, y nuestro `ClassLoader` tiene `loadClass` y nada de recursos.
+// What is inner, and is the ceiling worth stating plainly: **discovery finds nothing yet**. All the
+// machinery is here --parsing the configuration file, loading the class by name, checking it is of
+// the right subtype, instantiating it, caching-- but the first step, enumerating
+// `META-INF/services/...` along the class path, is not wired. `ClassLoader.getResources` does exist
+// now; what serves no resources is the built-in loaders' `findResources`, because KajiJDK serves
+// classes off the class path and not files sitting beside them.
 //
-// Esta aislado en **un** metodo, `nombresDeProveedores`, justamente para que el dia que existan
-// los recursos sea eso lo unico que haya que escribir. Mientras tanto un `ServiceLoader` es una
-// coleccion vacia bien formada: se itera, se le pide `findFirst`, se recarga, y no rompe nada.
+// It is isolated in **one** method, `providerNames`, precisely so that wiring it is the only
+// thing to write. In the meantime a `ServiceLoader` is a well-formed empty collection: it iterates,
+// it answers `findFirst`, it reloads, and it breaks nothing.
 public final class ServiceLoader<S> implements Iterable<S> {
 
     private final Class<S> service;
     private final ClassLoader loader;
 
-    // Los nombres leidos del classpath, y las instancias ya creadas. `reload()` limpia los dos.
-    private ArrayList<String> nombres;
-    private ArrayList<S> instancias;
+    // The names read from the class path, and the instances already created. `reload()` clears
+    // both.
+    private ArrayList<String> names;
+    private ArrayList<S> instances;
 
     private ServiceLoader(Class<S> service, ClassLoader loader) {
         if (service == null) {
@@ -56,9 +57,9 @@ public final class ServiceLoader<S> implements Iterable<S> {
         this.reload();
     }
 
-    // ---- fabricas ---------------------------------------------------------------------------------
+    // ---- factories ------------------------------------------------------------------------------
 
-    // El cargador de contexto no existe en esta biblioteca, asi que se usa el del sistema.
+    // The context loader does not exist in this library, so the system one is used.
     public static <S> ServiceLoader<S> load(Class<S> service) {
         return new ServiceLoader<S>(service, ClassLoader.getSystemClassLoader());
     }
@@ -68,18 +69,18 @@ public final class ServiceLoader<S> implements Iterable<S> {
     }
 
     /**
-     * Los proveedores de las **modulos de esa capa** y sus ancestros.
+     * The providers of **that layer's modules** and its ancestors.
      *
-     * <p>Esta forma tiene una regla que sorprende y que se respeta tal cual: busca **solo** en los
-     * modulos de la capa. Un proveedor del classpath **no** aparece, aunque `load(service)` si lo
-     * encuentre. No es una limitacion, es el punto del metodo -- sirve para preguntar "que da esta
-     * capa", y contestar con lo de afuera seria contestar otra pregunta.
+     * <p>This form has a rule that surprises and that is respected as it stands: it looks **only**
+     * in the layer's modules. A provider from the class path does **not** show up, even though
+     * `load(service)` does find it. It is not a limitation, it is the point of the method -- it is
+     * for asking "what does this layer give", and answering with what is outside would be answering
+     * a different question.
      *
-     * <p>En esta biblioteca **no hay modulos con nombre**: todo vive en el modulo sin nombre, y una
-     * `ModuleLayer` nunca contiene ninguno. Asi que el resultado esta siempre vacio, y eso **es** la
-     * respuesta correcta bajo la regla de arriba, no un stub: preguntar por los proveedores de una
-     * capa sin modulos tiene que dar cero. Si algun dia hay modulos de verdad, el bucle de abajo los
-     * recorre sin cambios.
+     * <p>In this library there are **no named modules**: everything lives in the unnamed module, and
+     * a `ModuleLayer` never contains any. So the result is always empty, and that **is** the correct
+     * answer under the rule above, not a stub: asking for the providers of a layer with no modules
+     * has to give zero. If one day there are inner modules, the loop below walks them unchanged.
      */
     public static <S> ServiceLoader<S> load(ModuleLayer layer, Class<S> service) {
         if (layer == null || service == null) {
@@ -93,145 +94,146 @@ public final class ServiceLoader<S> implements Iterable<S> {
         return new ServiceLoader<S>(service, loader);
     }
 
-    // Solo los proveedores **instalados**: los de la plataforma, no los de la aplicacion.
+    // Only the **installed** providers: the platform's, not the application's.
     //
-    // La distincion es real y no cosmetica -- es la que evita que un jar cualquiera del classpath
-    // sustituya una pieza del JDK.
+    // The distinction is inner and not cosmetic -- it is what stops any old jar on the class path
+    // from replacing a piece of the JDK.
     public static <S> ServiceLoader<S> loadInstalled(Class<S> service) {
         return new ServiceLoader<S>(service, ClassLoader.getPlatformClassLoader());
     }
 
-    // ---- descubrimiento ----------------------------------------------------------------------------
+    // ---- discovery ------------------------------------------------------------------------------
 
     /**
-     * Los nombres de clase declarados en {@code META-INF/services/<servicio>} a lo largo del
-     * classpath.
+     * The class names declared in {@code META-INF/services/<service>} along the class path.
      *
-     * <p>**Este es el techo.** Enumerar ese recurso en cada elemento del classpath pide
-     * `ClassLoader.getResources(String)`, que esta biblioteca no tiene: nuestro `ClassLoader`
-     * sabe cargar clases y nada mas. Devuelve la lista vacia, y por eso un ServiceLoader no
-     * encuentra proveedores.
+     * <p>**This is the ceiling.** It returns the empty list, and that is why a ServiceLoader finds
+     * no providers. The note here used to blame a missing `ClassLoader.getResources(String)`; that
+     * method exists. What is missing is the call: this method does not make it, and the built-in
+     * loaders' `findResources` serves nothing anyway, because KajiJDK serves classes off the class
+     * path and not files sitting beside them.
      *
-     * <p>Todo lo demas de esta clase esta escrito y funciona sobre lo que esto devuelva; el dia
-     * que existan los recursos, el cambio es de este metodo para adentro.
+     * <p>Everything else in this class is written and works over whatever this returns; the change
+     * is from this method inwards.
      */
-    private ArrayList<String> nombresDeProveedores() {
+    private ArrayList<String> providerNames() {
         return new ArrayList<String>();
     }
 
-    // Parsea una linea del archivo de configuracion (§ServiceLoader): se corta en el `#`, se
-    // recortan los espacios, y una linea vacia no aporta nada.
+    // It parses a line of the configuration file (§ServiceLoader): it is cut at the `#`, the spaces
+    // are trimmed, and an empty line contributes nothing.
     //
-    // Package-private y no privado para poder ejercitarlo sin recursos, que es lo unico que se
-    // puede probar del descubrimiento hoy.
-    static String parsearLinea(String linea) {
-        int comentario = linea.indexOf('#');
-        String s = linea;
-        if (comentario >= 0) {
-            s = s.substring(0, comentario);
+    // Package-private and not private so it can be exercised without resources, which is the only
+    // part of discovery that can be tested today.
+    static String parseLine(String line) {
+        int commentText = line.indexOf('#');
+        String s = line;
+        if (commentText >= 0) {
+            s = s.substring(0, commentText);
         }
         s = s.trim();
         if (s.length() == 0) {
             return null;
         }
-        // Un nombre de clase valido: identificadores separados por puntos.
+        // A valid class name: identifiers separated by dots.
         int i = 0;
-        boolean arranque = true;
+        boolean startup = true;
         while (i < s.length()) {
             char c = s.charAt(i);
             if (c == '.') {
-                if (arranque) {
+                if (startup) {
                     throw new ServiceConfigurationError("Illegal provider-class name: " + s);
                 }
-                arranque = true;
+                startup = true;
             } else {
-                boolean ok = arranque ? Character.isJavaIdentifierStart(c)
+                boolean ok = startup ? Character.isJavaIdentifierStart(c)
                         : Character.isJavaIdentifierPart(c);
                 if (!ok) {
                     throw new ServiceConfigurationError("Illegal provider-class name: " + s);
                 }
-                arranque = false;
+                startup = false;
             }
             i = i + 1;
         }
-        if (arranque) {
+        if (startup) {
             throw new ServiceConfigurationError("Illegal provider-class name: " + s);
         }
         return s;
     }
 
-    // Carga e instancia el proveedor numero `i`, si todavia no se hizo.
+    // It loads and instantiates provider number `i`, if that has not been done yet.
     //
-    // Las tres cosas que pueden salir mal --la clase no esta, no es del subtipo, no se puede
-    // instanciar-- se reportan como ServiceConfigurationError y no como la excepcion original: el
-    // que llama pidio "las implementaciones de X", y que una este mal declarada es un error de
-    // **configuracion**, no del codigo que pregunta.
-    private S instanciar(int i) {
-        while (this.instancias.size() <= i) {
-            this.instancias.add(null);
+    // The three things that can go wrong --the class is not there, it is not of the subtype, it
+    // cannot be instantiated-- are reported as ServiceConfigurationError and not as the original
+    // exception: the caller asked for "X's implementations", and one of them being badly declared is
+    // a **configuration** error, not one in the code that asks.
+    private S instantiate(int i) {
+        while (this.instances.size() <= i) {
+            this.instances.add(null);
         }
-        S ya = this.instancias.get(i);
-        if (ya != null) {
-            return ya;
+        S cached = this.instances.get(i);
+        if (cached != null) {
+            return cached;
         }
-        String nombre = this.nombres.get(i);
+        String name = this.names.get(i);
         Class<?> c;
         try {
-            c = Class.forName(nombre, false, this.loader);
+            c = Class.forName(name, false, this.loader);
         } catch (ClassNotFoundException e) {
             throw new ServiceConfigurationError(
-                    this.service.getName() + ": Provider " + nombre + " not found");
+                    this.service.getName() + ": Provider " + name + " not found");
         }
         if (!this.service.isAssignableFrom(c)) {
             throw new ServiceConfigurationError(
-                    this.service.getName() + ": Provider " + nombre + " not a subtype");
+                    this.service.getName() + ": Provider " + name + " not a subtype");
         }
         Object o;
         try {
             o = c.newInstance();
         } catch (InstantiationException e) {
             throw new ServiceConfigurationError(
-                    this.service.getName() + ": Provider " + nombre + " could not be instantiated",
+                    this.service.getName() + ": Provider " + name + " could not be instantiated",
                     e);
         } catch (IllegalAccessException e) {
             throw new ServiceConfigurationError(
-                    this.service.getName() + ": Provider " + nombre + " could not be instantiated",
+                    this.service.getName() + ": Provider " + name + " could not be instantiated",
                     e);
         }
         S s = this.service.cast(o);
-        this.instancias.set(i, s);
+        this.instances.set(i, s);
         return s;
     }
 
-    // ---- lo que se le pide -----------------------------------------------------------------------
+    // ---- what is asked of it ----------------------------------------------------------------------
 
     public Iterator<S> iterator() {
         return new ServiceItr<S>(this);
     }
 
-    int cuantos() {
-        return this.nombres.size();
+    int howMany() {
+        return this.names.size();
     }
 
-    S dame(int i) {
-        return this.instanciar(i);
+    S providerAt(int i) {
+        return this.instantiate(i);
     }
 
-    Class<S> servicio() {
+    Class<S> serviceType() {
         return this.service;
     }
 
     /**
-     * Los proveedores como Stream, cada uno envuelto en un {@link Provider}.
+     * The providers as a Stream, each wrapped in a {@link Provider}.
      *
-     * <p>La envoltura no es decoracion: deja preguntar por la **clase** del proveedor sin
-     * instanciarlo. Es lo que permite filtrar por tipo y crear solo el que se va a usar --
-     * `loader.stream().filter(p -> p.type() == Rapido.class).findFirst().map(Provider::get)`.
+     * <p>The wrapper is not decoration: it allows asking for the provider's **class** without
+     * instantiating it. It is what makes it possible to filter by type and create only the one that
+     * will be used --
+     * `loader.stream().filter(p -> p.type() == Fast.class).findFirst().map(Provider::get)`.
      *
-     * <p>Divergencia: este es **ansioso**, junta todo antes de devolver.
+     * <p>Divergence: this one is **eager**, it gathers everything before returning.
      */
     public Stream<Provider<S>> stream() {
-        int n = this.nombres.size();
+        int n = this.names.size();
         Object[] a = new Object[n];
         int i = 0;
         while (i < n) {
@@ -241,7 +243,7 @@ public final class ServiceLoader<S> implements Iterable<S> {
         return (Stream<Provider<S>>) Stream.of(a);
     }
 
-    // El primero, si hay alguno.
+    // The first one, if there is any.
     public Optional<S> findFirst() {
         Iterator<S> it = this.iterator();
         if (it.hasNext()) {
@@ -250,13 +252,13 @@ public final class ServiceLoader<S> implements Iterable<S> {
         return Optional.empty();
     }
 
-    // Vuelve a mirar el classpath y tira las instancias que hubiera creado.
+    // It looks at the class path again and throws away whatever instances it had created.
     //
-    // Es la unica forma de que un ServiceLoader vea un proveedor que aparecio despues: la carga es
-    // perezosa pero el **descubrimiento** se hace una vez.
+    // It is the only way for a ServiceLoader to see a provider that turned up later: the loading is
+    // lazy but the **discovery** is done once.
     public void reload() {
-        this.nombres = this.nombresDeProveedores();
-        this.instancias = new ArrayList<S>();
+        this.names = this.providerNames();
+        this.instances = new ArrayList<S>();
     }
 
     public String toString() {
@@ -264,9 +266,10 @@ public final class ServiceLoader<S> implements Iterable<S> {
     }
 
     /**
-     * Un proveedor todavia **no instanciado**: su clase, y la forma de crearlo.
+     * A provider **not instantiated** yet: its class, and the way to create it.
      *
-     * <p>Existe para separar las dos preguntas que `Iterator` mezcla: "que hay" y "dame uno".
+     * <p>It exists to separate the two questions `Iterator` mixes: "what is there" and "give me
+     * one".
      */
     public interface Provider<S> {
 
@@ -276,8 +279,8 @@ public final class ServiceLoader<S> implements Iterable<S> {
     }
 }
 
-// El iterador perezoso: instancia recien en `next()`. Top-level package-private, no anidado, por
-// el miscompilado de una clase anidada dentro de una generica (#13).
+// The lazy iterator: it instantiates only at `next()`. Top-level package-private, not nested,
+// because of the miscompilation of a class nested inside a generic one (#13).
 final class ServiceItr<S> implements Iterator<S> {
 
     private final ServiceLoader<S> loader;
@@ -288,14 +291,14 @@ final class ServiceItr<S> implements Iterator<S> {
     }
 
     public boolean hasNext() {
-        return this.i < this.loader.cuantos();
+        return this.i < this.loader.howMany();
     }
 
     public S next() {
         if (!this.hasNext()) {
             throw new NoSuchElementException();
         }
-        S s = this.loader.dame(this.i);
+        S s = this.loader.providerAt(this.i);
         this.i = this.i + 1;
         return s;
     }
@@ -311,13 +314,14 @@ final class ServiceProvider<S> implements ServiceLoader.Provider<S> {
         this.i = i;
     }
 
-    // Se apoya en la instancia porque no hay forma de saber la clase sin cargarla; en el JDK el
-    // nombre alcanza porque el modulo declara el tipo. Queda dicho: aca `type()` instancia.
+    // It leans on the instance because there is no way of knowing the class without loading it; in
+    // the JDK the name is enough because the module declares the type. Said plainly: here `type()`
+    // instantiates.
     public Class<? extends S> type() {
-        return (Class<? extends S>) this.loader.dame(this.i).getClass();
+        return (Class<? extends S>) this.loader.providerAt(this.i).getClass();
     }
 
     public S get() {
-        return this.loader.dame(this.i);
+        return this.loader.providerAt(this.i);
     }
 }

@@ -11,31 +11,31 @@ import javax.swing.plaf.ComponentUI;
 import javax.swing.plaf.basic.BasicTabbedPaneUI;
 
 /**
- * El panel de solapas de Metal.
+ * Metal's tabbed pane.
  *
- * <h2>El hueco entre la solapa elegida y el contenido</h2>
+ * <h2>The gap between the chosen tab and the content</h2>
  *
- * <p>La mitad de los metodos de esta clase existen por un solo detalle de dibujo: la solapa que
- * esta elegida no tiene borde del lado que da al contenido, asi que la solapa y el panel se leen
- * como una sola pieza. Eso deja un hueco donde el borde del contenido tendria que seguir, y
- * {@link #shouldFillGap} y {@link #getColorForGap} son los que deciden si se rellena y de que
- * color.
+ * <p>Half of this class's methods exist because of a single drawing detail: the tab that is
+ * chosen has no border on the side facing the content, so the tab and the pane read as a single
+ * piece. That leaves a gap where the content's border would have to continue, and
+ * {@link #shouldFillGap} and {@link #getColorForGap} are the ones that decide whether it is
+ * filled and in what colour.
  *
- * <p>El color del hueco es el primario del tema y no el de la solapa: es el mismo que el borde que
- * se interrumpio.
+ * <p>The gap's colour is the theme's primary and not the tab's: it is the same as the border
+ * that was interrupted.
  *
- * <h2>Los cuatro lados, uno por metodo</h2>
+ * <h2>The four sides, one per method</h2>
  *
- * <p>{@code paintTopTabBorder}, {@code paintLeftTabBorder}, {@code paintBottomTabBorder} y
- * {@code paintRightTabBorder} no son el mismo dibujo rotado. Con las solapas arriba, la elegida se
- * levanta un pixel; con las solapas a la izquierda, se corre. Metal las escribe por separado
- * porque el resultado no es simetrico.
+ * <p>{@code paintTopTabBorder}, {@code paintLeftTabBorder}, {@code paintBottomTabBorder} and
+ * {@code paintRightTabBorder} are not the same drawing rotated. With the tabs at the top, the
+ * chosen one rises by a pixel; with the tabs on the left, it shifts. Metal writes them
+ * separately because the result is not symmetric.
  *
- * <h2>Los numeros</h2>
+ * <h2>The numbers</h2>
  *
- * <p>El ancho minimo de una solapa es cuarenta -- que es lo que evita que una solapa de una letra
- * quede como un boton cuadrado -- y el corrimiento de la etiqueta es cero en las dos direcciones,
- * elegida o no. Los dos, medidos; el basico corre la etiqueta y Metal no.
+ * <p>A tab's minimum width is forty -- which is what keeps a one-letter tab from looking like a
+ * square button -- and the label's shift is zero in both directions, chosen or not. Both,
+ * measured; the basic one shifts the label and Metal does not.
  */
 public class MetalTabbedPaneUI extends BasicTabbedPaneUI {
 
@@ -43,7 +43,7 @@ public class MetalTabbedPaneUI extends BasicTabbedPaneUI {
     protected Color selectHighlight;
     protected Color tabAreaBackground;
 
-    /** Cuarenta; ver la nota de la clase. */
+    /** Forty; see the class note. */
     protected int minTabWidth = 40;
 
     public MetalTabbedPaneUI() {
@@ -55,12 +55,12 @@ public class MetalTabbedPaneUI extends BasicTabbedPaneUI {
 
     protected void installDefaults() {
         super.installDefaults();
-        selectColor = MetalLookAndFeel.colorDeLaTabla("TabbedPane.selected");
-        selectHighlight = MetalLookAndFeel.colorDeLaTabla("TabbedPane.selectHighlight");
+        selectColor = MetalLookAndFeel.tableColor("TabbedPane.selected");
+        selectHighlight = MetalLookAndFeel.tableColor("TabbedPane.selectHighlight");
         if (selectHighlight == null) {
             selectHighlight = MetalLookAndFeel.getControlHighlight();
         }
-        tabAreaBackground = MetalLookAndFeel.colorDeLaTabla("TabbedPane.tabAreaBackground");
+        tabAreaBackground = MetalLookAndFeel.tableColor("TabbedPane.tabAreaBackground");
     }
 
     protected LayoutManager createLayoutManager() {
@@ -68,11 +68,11 @@ public class MetalTabbedPaneUI extends BasicTabbedPaneUI {
     }
 
     /**
-     * La distribucion de Metal.
+     * Metal's layout.
      *
-     * <p>Es la del basico sin cambios; existe solo para que {@code getClass().getName()} diga
-     * {@code MetalTabbedPaneUI$TabbedPaneLayout}, que es lo que dice el JDK y lo que una subclase
-     * podria estar mirando.
+     * <p>It is the basic one's with no changes; it exists only so that {@code getClass().getName()}
+     * says {@code MetalTabbedPaneUI$TabbedPaneLayout}, which is what the JDK says and what a
+     * subclass might be looking at.
      */
     public class TabbedPaneLayout extends BasicTabbedPaneUI.TabbedPaneLayout {
 
@@ -80,7 +80,7 @@ public class MetalTabbedPaneUI extends BasicTabbedPaneUI {
         }
     }
 
-    /** Cero: Metal no corre la etiqueta ni cuando la solapa esta elegida. */
+    /** Zero: Metal does not shift the label even when the tab is chosen. */
     protected int getTabLabelShiftX(int tabPlacement, int tabIndex, boolean isSelected) {
         return 0;
     }
@@ -93,12 +93,12 @@ public class MetalTabbedPaneUI extends BasicTabbedPaneUI {
         return 0;
     }
 
-    /** Cero: las filas de solapas de Metal no se pisan. */
+    /** Zero: Metal's tab rows do not overlap. */
     protected int getTabRunOverlay(int tabPlacement) {
         return 0;
     }
 
-    /** No: la fila elegida se queda donde esta. */
+    /** No: the chosen row stays where it is. */
     protected boolean shouldRotateTabRuns(int tabPlacement, int selectedRun) {
         return false;
     }
@@ -107,12 +107,12 @@ public class MetalTabbedPaneUI extends BasicTabbedPaneUI {
         return false;
     }
 
-    /** Si hay que tapar el hueco que deja la solapa elegida; ver la nota de la clase. */
+    /** Whether the gap the chosen tab leaves has to be covered; see the class note. */
     protected boolean shouldFillGap(int currentRun, int tabIndex, int x, int y) {
         return true;
     }
 
-    /** El primario del tema: el mismo del borde que se interrumpio. */
+    /** The theme's primary: the same as the border that was interrupted. */
     protected Color getColorForGap(int currentRun, int x, int y) {
         return MetalLookAndFeel.getPrimaryControl();
     }
@@ -138,21 +138,21 @@ public class MetalTabbedPaneUI extends BasicTabbedPaneUI {
 
     protected void paintTabBorder(Graphics g, int tabPlacement, int tabIndex,
             int x, int y, int w, int h, boolean isSelected) {
-        int fila = getRunForTab(tabPane.getTabCount(), tabIndex);
-        // Con `if` y no con `switch`: las constantes de SwingConstants no las acepta el `case`
-        // del compilador de esta casa.
+        int row = getRunForTab(tabPane.getTabCount(), tabIndex);
+        // With `if` and not with `switch`: this house's compiler does not accept SwingConstants'
+                // constants in a `case`.
         if (tabPlacement == SwingConstants.LEFT) {
-            paintLeftTabBorder(tabIndex, g, x, y, w, h, fila, tabIndex, isSelected);
+            paintLeftTabBorder(tabIndex, g, x, y, w, h, row, tabIndex, isSelected);
         } else if (tabPlacement == SwingConstants.BOTTOM) {
-            paintBottomTabBorder(tabIndex, g, x, y, w, h, fila, tabIndex, isSelected);
+            paintBottomTabBorder(tabIndex, g, x, y, w, h, row, tabIndex, isSelected);
         } else if (tabPlacement == SwingConstants.RIGHT) {
-            paintRightTabBorder(tabIndex, g, x, y, w, h, fila, tabIndex, isSelected);
+            paintRightTabBorder(tabIndex, g, x, y, w, h, row, tabIndex, isSelected);
         } else {
-            paintTopTabBorder(tabIndex, g, x, y, w, h, fila, tabIndex, isSelected);
+            paintTopTabBorder(tabIndex, g, x, y, w, h, row, tabIndex, isSelected);
         }
     }
 
-    /** Arriba: la elegida no lleva la linea de abajo. */
+    /** Top: the chosen one does not carry the bottom line. */
     protected void paintTopTabBorder(int tabIndex, Graphics g, int x, int y, int w, int h,
             int btm, int rght, boolean isSelected) {
         g.setColor(isSelected ? selectHighlight : MetalLookAndFeel.getControlHighlight());
@@ -225,7 +225,7 @@ public class MetalTabbedPaneUI extends BasicTabbedPaneUI {
             int tabIndex, Rectangle iconRect, Rectangle textRect, boolean isSelected) {
     }
 
-    /** El brillo de abajo de la solapa elegida, que la une con el contenido. */
+    /** The highlight at the bottom of the chosen tab, which joins it to the content. */
     protected void paintHighlightBelowTab() {
     }
 }

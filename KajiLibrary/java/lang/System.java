@@ -227,13 +227,14 @@ public final class System {
             "os.arch",
             "native.encoding",
             "file.encoding",
-            // Las que salen del entorno y no de una constante. `java.io.tmpdir` es la que hace
-            // usables a `Files.createTempFile`/`createTempDirectory`: sin ella no hay donde crear un
-            // temporal, y su caida a `"."` tampoco servia porque `user.dir` tambien faltaba y una
-            // ruta relativa no se podia llevar a absoluta. Eran dos ausencias que se tapaban entre si.
+            // The ones that come out of the environment and not out of a constant. `java.io.tmpdir`
+            // is the one that makes `Files.createTempFile`/`createTempDirectory` usable: without it
+            // there is nowhere to create a temporary, and its fallback to `"."` was no good either
+            // because `user.dir` was missing too and a relative path could not be made absolute. They
+            // were two absences covering for each other.
             //
-            // `user.home` es la que `FileSystemView.getDefaultDirectory` necesita para saber donde
-            // abrir un selector de archivos; sin ella el selector reventaba al construirse.
+            // `user.home` is the one `FileSystemView.getDefaultDirectory` needs in order to know
+            // where to open a file chooser; without it the chooser blew up on construction.
             "java.io.tmpdir",
             "user.dir",
             "user.home",

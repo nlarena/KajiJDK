@@ -4,9 +4,9 @@ import javax.annotation.processing.SupportedSourceVersion;
 import javax.lang.model.SourceVersion;
 
 /**
- * El visitante simple de tipos de Java 14 en adelante. Ver {@link SimpleTypeVisitor6} por el mecanismo.
+ * The simple type visitor for Java 14 onwards. See {@link SimpleTypeVisitor6} for the mechanism.
  *
- * <p>No agrega nada: desde Java 8 que no aparece una forma de tipo nueva.
+ * <p>It adds nothing: no new form of type has appeared since Java 8.
  */
 @SupportedSourceVersion(SourceVersion.RELEASE_25)
 public class SimpleTypeVisitor14<R, P> extends SimpleTypeVisitor9<R, P> {

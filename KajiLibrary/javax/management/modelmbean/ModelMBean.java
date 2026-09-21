@@ -7,42 +7,43 @@ import javax.management.PersistentMBean;
 import javax.management.RuntimeOperationsException;
 
 /**
- * KajiLibrary's javax.management.modelmbean.ModelMBean -- un MBean cuya interfaz se declara en
- * tiempo de ejecucion.
+ * KajiLibrary's javax.management.modelmbean.ModelMBean -- an MBean whose interface is declared at
+ * run time.
  *
- * <p>Es la cuarta clase de MBean, y la mas flexible. Los otros tres atan la interfaz de
- * administracion al codigo: un MBean estandar la saca de una interfaz Java, uno dinamico la declara
- * en su {@code MBeanInfo}, uno abierto ademas restringe los tipos. Un <b>model MBean</b> se
- * configura: se le da un objeto cualquiera y una descripcion de que metodos suyos exponer.
+ * <p>It is the fourth kind of MBean, and the most flexible. The other three tie the management
+ * interface to the code: a standard MBean takes it from a Java interface, a dynamic one declares
+ * it in its {@code MBeanInfo}, an open one also restricts the types. A <b>model MBean</b> is
+ * configured: it is given any object and a description of which of its methods to expose.
  *
- * <p>Con eso se puede administrar una clase que no sabe nada de JMX y que no se puede modificar. Es
- * el caso para el que existe.
+ * <p>With that, a class that knows nothing about JMX and cannot be modified can be managed. It is
+ * the case it exists for.
  *
- * <p>Junta tres interfaces y ninguna sobra: {@link DynamicMBean} para responder consultas,
- * {@link PersistentMBean} para poder guardarse y recuperarse, y
- * {@link ModelMBeanNotificationBroadcaster} para mandar avisos. Los dos metodos propios son los que
- * lo configuran: que exponer, y de que objeto.
+ * <p>It joins three interfaces and none is redundant: {@link DynamicMBean} to answer queries,
+ * {@link PersistentMBean} to be able to save and restore itself, and
+ * {@link ModelMBeanNotificationBroadcaster} to send notices. The two methods of its own are the
+ * ones that configure it: what to expose, and of what object.
  */
 public interface ModelMBean
     extends DynamicMBean, PersistentMBean, ModelMBeanNotificationBroadcaster {
 
     /**
-     * Que se expone.
+     * What is exposed.
      *
-     * <p>Tiene que llamarse <b>antes</b> de registrar el MBean en un agente: despues, la interfaz de
-     * administracion ya se publico y cambiarla dejaria a los clientes mirando algo que no existe.
+     * <p>It has to be called <b>before</b> registering the MBean in an agent: afterwards the
+     * management interface has already been published, and changing it would leave the clients
+     * looking at something that does not exist.
      *
-     * @throws RuntimeOperationsException si es null
+     * @throws RuntimeOperationsException if it is null
      */
     void setModelMBeanInfo(ModelMBeanInfo inModelMBeanInfo)
         throws MBeanException, RuntimeOperationsException;
 
     /**
-     * De que objeto.
+     * Of what object.
      *
-     * @param mr el objeto a administrar
-     * @param mr_type el tipo de referencia; ver {@link InvalidTargetObjectTypeException}
-     * @throws InvalidTargetObjectTypeException si ese tipo no esta soportado
+     * @param mr the object to manage
+     * @param mr_type the reference type; see {@link InvalidTargetObjectTypeException}
+     * @throws InvalidTargetObjectTypeException if that type is not supported
      */
     void setManagedResource(Object mr, String mr_type)
         throws MBeanException, RuntimeOperationsException, InstanceNotFoundException,

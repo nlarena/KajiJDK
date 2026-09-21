@@ -5,43 +5,43 @@ import java.util.List;
 import jdk.jfr.ValueDescriptor;
 
 /**
- * Un cargador de clases, tal como quedo grabado.
+ * A class loader, as it was recorded.
  *
- * <p>{@link #getType} devuelve la clase <strong>del cargador</strong>, no lo que cargo. Es la
- * distincion que hay que tener en la cabeza al leer esto: un {@code RecordedClassLoader} de una
- * aplicacion web dice que es un {@code WebAppClassLoader}, y las clases que cargo estan en los
- * eventos que lo referencian.
+ * <p>{@link #getType} returns the class <strong>of the loader</strong>, not what it loaded. It is
+ * the distinction one has to keep in mind when reading this: a {@code RecordedClassLoader} of a web
+ * application says that it is a {@code WebAppClassLoader}, and the classes it loaded are in the
+ * events that reference it.
  *
  * @since 9
  */
 public final class RecordedClassLoader extends RecordedObject {
 
-    RecordedClassLoader(List<ValueDescriptor> descriptores, Object[] valores) {
-        super(descriptores, valores);
+    RecordedClassLoader(List<ValueDescriptor> descriptors, Object[] values) {
+        super(descriptors, values);
     }
 
     /**
-     * La clase del cargador.
+     * The class of the loader.
      *
-     * @return la clase, o {@code null} si es el cargador de arranque
+     * @return the class, or {@code null} if it is the bootstrap loader
      */
     public RecordedClass getType() {
         return getClass("type");
     }
 
     /**
-     * El nombre del cargador.
+     * The name of the loader.
      *
-     * @return el nombre, o {@code null} si no tiene
+     * @return the name, or {@code null} if it has none
      */
     public String getName() {
         return getString("name");
     }
 
     /**
-     * El identificador que la VM que grabo le dio a este cargador.
+     * The identifier the VM that recorded gave this loader.
      *
-     * @return el identificador
+     * @return the identifier
      */
     public long getId() {
         return getLong("id");

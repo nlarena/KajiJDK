@@ -1,12 +1,12 @@
 package java.lang.classfile.constantpool;
 
-// `CONSTANT_NameAndType_info` (JVMS §4.4.6): el par (nombre simple, descriptor) que una referencia a
-// miembro o una constante dinámica usa para nombrar lo que busca, sin decir dónde está.
+// `CONSTANT_NameAndType_info` (JVMS §4.4.6): the (simple name, descriptor) pair a member reference
+// or a dynamic constant uses to name what it is after, without saying where it is.
 public interface NameAndTypeEntry extends PoolEntry {
 
-    /** El nombre simple del miembro. */
+    /** The member's simple name. */
     Utf8Entry name();
 
-    /** El descriptor de campo o de método. */
+    /** The field or method descriptor. */
     Utf8Entry type();
 }

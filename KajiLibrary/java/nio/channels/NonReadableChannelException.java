@@ -1,17 +1,18 @@
 package java.nio.channels;
 
 /**
- * KajiLibrary's java.nio.channels.NonReadableChannelException — Se leyo de un canal que no se abrio para lectura.
+ * KajiLibrary's java.nio.channels.NonReadableChannelException — a channel that was not opened for
+ * reading was read from.
  *
- * <p>El permiso se fija al abrir y no cambia. Que sea `IllegalStateException` --y no de
- * argumento-- es correcto: el argumento de `read` esta bien, lo que no corresponde es pedirselo a
- * **este** canal.
+ * <p>The permission is fixed on opening and does not change. That it is an `IllegalStateException`
+ * --and not one of argument-- is right: the argument of `read` is fine, what does not fit is asking
+ * **this** channel for it.
  */
 public class NonReadableChannelException extends IllegalStateException {
 
     private static final long serialVersionUID = 1000000015L;
 
-    /** Construye una. Sin mensaje: el nombre de la clase **es** el mensaje. */
+    /** Builds one. With no message: the name of the class **is** the message. */
     public NonReadableChannelException() {
         super();
     }

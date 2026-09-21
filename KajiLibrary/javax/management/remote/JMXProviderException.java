@@ -3,46 +3,49 @@ package javax.management.remote;
 import java.io.IOException;
 
 /**
- * KajiLibrary's javax.management.remote.JMXProviderException -- hay proveedor para ese protocolo pero
- * no se pudo usar.
+ * KajiLibrary's javax.management.remote.JMXProviderException -- there is a provider for that
+ * protocol but it could not be used.
  *
- * <p>La distincion con {@code MalformedURLException} es la que hace util a esta clase, y es sutil:
+ * <p>The distinction from {@code MalformedURLException} is what makes this class useful, and it
+ * is subtle:
  *
  * <ul>
- *   <li>si <b>no hay</b> proveedor para el protocolo, {@link JMXConnectorFactory} lanza
- *       {@code MalformedURLException} con "Unsupported protocol";
- *   <li>si <b>lo hay</b> y algo salio mal --no se pudo cargar la clase, no tiene el constructor
- *       esperado, fallo al armarse-- lanza esta.
+ *   <li>if there is <b>no</b> provider for the protocol, {@link JMXConnectorFactory} throws
+ *       {@code MalformedURLException} with "Unsupported protocol";
+ *   <li>if there <b>is</b> one and something went wrong --the class could not be loaded, it does
+ *       not have the expected constructor, it failed while building itself-- it throws this one.
  * </ul>
  *
- * <p>La primera significa "pediste algo que no existe"; esta significa "existe y esta roto". Un
- * programa que reintenta con otro protocolo solo deberia hacerlo con la primera.
+ * <p>The first means "you asked for something that does not exist"; this one means "it exists
+ * and it is broken". A program that retries with another protocol should only do so with the
+ * first.
  *
- * <p>Redefine {@link #getCause} porque es de 2003 y guarda la causa en un campo propio.
+ * <p>It overrides {@link #getCause} because it is from 2003 and keeps the cause in a field of its
+ * own.
  */
 public class JMXProviderException extends IOException {
 
     private static final long serialVersionUID = -3166703627550447198L;
 
-    /** La original. */
+    /** The original one. */
     private Throwable cause = null;
 
-    /** Sin detalle. */
+    /** Without detail. */
     public JMXProviderException() {
     }
 
-    /** Con mensaje. */
+    /** With a message. */
     public JMXProviderException(String message) {
         super(message);
     }
 
-    /** Con mensaje y causa. */
+    /** With a message and a cause. */
     public JMXProviderException(String message, Throwable cause) {
         super(message);
         this.cause = cause;
     }
 
-    /** La causa. */
+    /** The cause. */
     @Override
     public Throwable getCause() {
         return this.cause;

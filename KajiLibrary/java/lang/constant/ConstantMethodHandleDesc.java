@@ -24,8 +24,8 @@ final class ConstantMethodHandleDesc implements DirectMethodHandleDesc {
 
     // The factories of `MethodHandleDesc` delegate here instead of calling `new` themselves.
     // From that file the check "does ConstantMethodHandleDesc implement DirectMethodHandleDesc?"
-    // compares a CLASSPATH class against a CLASSPATH interface and fails ("tipo de retorno
-    // incompatible"), even though the emitted `interfaces[]` table is correct. Declaring the
+    // compares a CLASSPATH class against a CLASSPATH interface and fails ("incompatible return
+    // type"), even though the emitted `interfaces[]` table is correct. Declaring the
     // factory here makes the same relation a source-to-classpath one, which the compiler does
     // accept, and the caller then only reads the return type off this method's descriptor.
     static DirectMethodHandleDesc make(DirectMethodHandleDesc.Kind kind, ClassDesc owner, String name, String lookupDescriptor) {

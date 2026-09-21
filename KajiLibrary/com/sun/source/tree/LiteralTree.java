@@ -1,11 +1,12 @@
 package com.sun.source.tree;
 
 /**
- * Una constante escrita en el fuente. {@link #getValue} devuelve {@code Object}
- * porque el tipo depende de {@link Tree#getKind}, y es {@code null} para el literal `null`.
+ * A constant written in the source. {@link #getValue} returns {@code Object}
+ * because the type depends on {@link Tree#getKind}, and it is {@code null} for the `null`
+ * literal.
  */
 public interface LiteralTree extends ExpressionTree {
 
-    /** El valor, cuyo tipo depende de {@link Tree#getKind}; `null` para el literal `null`. */
+    /** The value, whose type depends on {@link Tree#getKind}; `null` for the `null` literal. */
     Object getValue();
 }

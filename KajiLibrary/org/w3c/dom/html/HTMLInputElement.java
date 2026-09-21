@@ -1,125 +1,125 @@
 package org.w3c.dom.html;
 
 /**
- * Un `<input>`, de cualquiera de sus tipos.
+ * An `<input>`, of any of its types.
  *
- * <p>La distincion que hay que tener presente es `defaultValue`/`value` (y `defaultChecked`/
- * `checked`): el primero es lo que dice el documento y el segundo lo que el control tiene ahora.
- * Un `reset()` del formulario devuelve el segundo al primero.
+ * <p>The distinction to keep in mind is `defaultValue`/`value` (and `defaultChecked`/`checked`):
+ * the first is what the document says and the second what the control has now. A `reset()` of the
+ * form returns the second to the first.
  */
 public interface HTMLInputElement extends HTMLElement {
 
-    /** El valor que dice el documento. */
+    /** The value the document states. */
     String getDefaultValue();
 
-    /** Fija el valor que dice el documento. */
+    /** It sets the value the document states. */
     void setDefaultValue(String defaultValue);
 
-    /** Si el documento lo marca. */
+    /** Whether the document checks it. */
     boolean getDefaultChecked();
 
-    /** Fija si el documento lo marca. */
+    /** It sets whether the document checks it. */
     void setDefaultChecked(boolean defaultChecked);
 
-    /** El formulario que lo contiene, o nulo si no esta en ninguno. */
+    /** The form that contains it, or null if it is in none. */
     HTMLFormElement getForm();
 
-    /** El atributo `accept`. */
+    /** The `accept` attribute. */
     String getAccept();
 
-    /** Fija el atributo `accept`. */
+    /** It sets the `accept` attribute. */
     void setAccept(String accept);
 
-    /** El atajo de teclado. */
+    /** The keyboard shortcut. */
     String getAccessKey();
 
-    /** Fija el atajo de teclado. */
+    /** It sets the keyboard shortcut. */
     void setAccessKey(String accessKey);
 
-    /** La alineacion (presentacion; HTML 4 la desaconseja). */
+    /** The alignment (presentational; HTML 4 deprecates it). */
     String getAlign();
 
-    /** Fija la alineacion (presentacion; HTML 4 la desaconseja). */
+    /** It sets the alignment (presentational; HTML 4 deprecates it). */
     void setAlign(String align);
 
-    /** El texto alternativo. */
+    /** The alternative text. */
     String getAlt();
 
-    /** Fija el texto alternativo. */
+    /** It sets the alternative text. */
     void setAlt(String alt);
 
-    /** Si esta marcado ahora. */
+    /** Whether it is checked now. */
     boolean getChecked();
 
-    /** Fija si esta marcado ahora. */
+    /** It sets whether it is checked now. */
     void setChecked(boolean checked);
 
-    /** Si esta deshabilitado. */
+    /** Whether it is disabled. */
     boolean getDisabled();
 
-    /** Fija si esta deshabilitado. */
+    /** It sets whether it is disabled. */
     void setDisabled(boolean disabled);
 
-    /** El atributo `maxLength`. */
+    /** The `maxLength` attribute. */
     int getMaxLength();
 
-    /** Fija el atributo `maxLength`. */
+    /** It sets the `maxLength` attribute. */
     void setMaxLength(int maxLength);
 
-    /** El atributo `name`. */
+    /** The `name` attribute. */
     String getName();
 
-    /** Fija el atributo `name`. */
+    /** It sets the `name` attribute. */
     void setName(String name);
 
-    /** Si es de solo lectura. */
+    /** Whether it is read-only. */
     boolean getReadOnly();
 
-    /** Fija si es de solo lectura. */
+    /** It sets whether it is read-only. */
     void setReadOnly(boolean readOnly);
 
-    /** El tamanio visible. */
+    /** The visible size. */
     String getSize();
 
-    /** Fija el tamanio visible. */
+    /** It sets the visible size. */
     void setSize(String size);
 
-    /** El origen. */
+    /** The source. */
     String getSrc();
 
-    /** Fija el origen. */
+    /** It sets the source. */
     void setSrc(String src);
 
-    /** La posicion en el orden de tabulacion. */
+    /** The position in the tabbing order. */
     int getTabIndex();
 
-    /** Fija la posicion en el orden de tabulacion. */
+    /** It sets the position in the tabbing order. */
     void setTabIndex(int tabIndex);
 
-    /** El tipo del control. */
+    /** The type of the control. */
     String getType();
 
-    /** El atributo `useMap`. */
+    /** The `useMap` attribute. */
     String getUseMap();
 
-    /** Fija el atributo `useMap`. */
+    /** It sets the `useMap` attribute. */
     void setUseMap(String useMap);
 
-    /** El valor actual. */
+    /** The current value. */
     String getValue();
 
-    /** Fija el valor actual. */
+    /** It sets the current value. */
     void setValue(String value);
 
-    /** Le saca el foco. */
+    /** It takes the focus away from it. */
     void blur();
 
-    /** Le da el foco. */
+    /** It gives it the focus. */
     void focus();
 
-    /** Selecciona todo su contenido. */
+    /** It selects all of its content. */
     void select();
 
-    /** Simula un clic. */
+    /** It simulates a click. */
     void click();
 }
